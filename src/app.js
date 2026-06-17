@@ -656,7 +656,7 @@ async function requestBackendAnswer(text) {
 }
 
 function buildBackendCacheKey(text) {
-  return `ocg-ruling-answer:v8:${appConfig.answerApiUrl}:${normalizeText(text).slice(0, 2000)}`;
+  return `ocg-ruling-answer:v10:${appConfig.answerApiUrl}:${normalizeText(text).slice(0, 2000)}`;
 }
 
 function readCachedBackendAnswer(key) {
@@ -800,25 +800,39 @@ function normalizeVisibleCards(cards) {
       sourceUrl: String(card.sourceUrl || "").trim(),
       ygoResourcesUrl: String(card.ygoResourcesUrl || "").trim(),
       liveId: String(card.liveId || "").trim(),
+      aliases: Array.isArray(card.aliases) ? card.aliases.map((alias) => String(alias || "").trim()).filter(Boolean) : [],
     };
     if (!normalized.name) continue;
-    const key = canonicalVisibleCardKey(normalized);
+    const key = findVisibleMergeKey(map, normalized) || canonicalVisibleCardKey(normalized);
     const existing = map.get(key);
     if (!existing) {
       map.set(key, normalized);
       continue;
     }
-    existing.effectText = existing.effectText || normalized.effectText;
+    existing.effectText = preferChineseDisplayText(existing.effectText, normalized.effectText);
     existing.matched = existing.matched || normalized.matched;
     existing.cnName = existing.cnName || normalized.cnName;
     existing.jaName = existing.jaName || normalized.jaName;
     existing.enName = existing.enName || normalized.enName;
+    existing.name = preferVisibleDisplayName(existing, normalized);
     existing.passcode = existing.passcode || normalized.passcode;
     existing.sourceUrl = existing.sourceUrl || normalized.sourceUrl;
     existing.ygoResourcesUrl = existing.ygoResourcesUrl || normalized.ygoResourcesUrl;
     existing.liveId = existing.liveId || normalized.liveId;
+    existing.aliases = [...new Set([...(existing.aliases || []), ...(normalized.aliases || [])])];
   }
   return [...map.values()];
+}
+
+function findVisibleMergeKey(map, card) {
+  const key = canonicalVisibleCardKey(card);
+  if (map.has(key)) return key;
+  const keys = visibleCardIdentityKeys(card);
+  for (const [existingKey, existing] of map.entries()) {
+    const existingKeys = visibleCardIdentityKeys(existing);
+    if ([...keys].some((item) => existingKeys.has(item))) return existingKey;
+  }
+  return "";
 }
 
 function canonicalVisibleCardKey(card) {
@@ -828,6 +842,39 @@ function canonicalVisibleCardKey(card) {
   const normalizedSourceId = normalizeCardId(sourceId);
   if (normalizedSourceId) return `id:${normalizedSourceId}`;
   return `name:${normalizeText(card.name).toLowerCase()}`;
+}
+
+function visibleCardIdentityKeys(card) {
+  const keys = new Set();
+  const numeric = normalizeCardId(card.passcode || card.id || card.liveId);
+  if (numeric) keys.add(`id:${numeric}`);
+  const sourceId = extractCardIdFromUrl(card.ygoResourcesUrl || card.sourceUrl);
+  const normalizedSourceId = normalizeCardId(sourceId);
+  if (normalizedSourceId) keys.add(`id:${normalizedSourceId}`);
+  for (const alias of [card.name, card.cnName, card.jaName, card.enName, card.matched, ...(card.aliases || [])]) {
+    const key = normalizeText(alias).toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
+    if (key.length >= 3 && !isGenericVisibleAliasKey(key)) keys.add(`alias:${key}`);
+  }
+  return keys;
+}
+
+function preferVisibleDisplayName(existing, card) {
+  const candidates = [existing.cnName, card.cnName, existing.name, card.name, existing.jaName, card.jaName, existing.enName, card.enName]
+    .map((item) => String(item || "").trim())
+    .filter(Boolean);
+  return candidates.find((item) => /[\u3400-\u9fff]/.test(item)) || candidates[0] || "";
+}
+
+function preferChineseDisplayText(left, right) {
+  const current = String(left || "").trim();
+  const next = String(right || "").trim();
+  if (!current) return next;
+  if (next && /[\u3400-\u9fff]/.test(next) && !/[\u3400-\u9fff]/.test(current)) return next;
+  return current;
+}
+
+function isGenericVisibleAliasKey(key) {
+  return /^(卡通世界|toonworld|トゥーンワールド|闪刀姬|閃刀姫|闪刀|閃刀|时空)$/.test(key);
 }
 
 function normalizeCardId(value) {
@@ -959,8 +1006,11 @@ function buildLocalImageCandidates(card) {
     `https://cdn.233.momobako.com/ygoimg/ygopro/${compactId}.jpg`,
     `https://cdn.233.momobako.com/ygoimg/ygopro/${compactId}.webp!half`,
     `https://images.ygoprodeck.com/images/cards/${compactId}.jpg`,
+    `https://images.ygoprodeck.com/images/cards_cropped/${compactId}.jpg`,
+    `https://images.ygoprodeck.com/images/cards_small/${compactId}.jpg`,
     `https://cdn.233.momobako.com/ygopro/pics/${normalizedId}.jpg`,
     `https://cdn.233.momobako.com/ygopro/pics/${normalizedId}.jpg!half`,
+    `https://cdn.233.momobako.com/ygopro/pics/${normalizedId}.jpg!thumb`,
     `https://cdn.233.momobako.com/ygoimg/ygopro/${normalizedId}.jpg`,
     `https://cdn.233.momobako.com/ygoimg/ygopro/${normalizedId}.webp!half`,
   ];
