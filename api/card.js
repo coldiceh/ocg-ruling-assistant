@@ -32,12 +32,21 @@ export default async function handler(request, response) {
       response.status(404).json({ error: "Card not found" });
       return;
     }
+    attachImageProxy(request, card);
     response.status(200).json(card);
   } catch (error) {
     response.status(502).json({
       error: error instanceof Error ? error.message : String(error),
     });
   }
+}
+
+function attachImageProxy(request, card) {
+  if (!card?.id) return;
+  const proxyUrl = buildImageProxyUrl(request, card.id);
+  if (!proxyUrl) return;
+  card.imageUrl = proxyUrl;
+  card.imageCandidates = [...new Set([proxyUrl, ...(card.imageCandidates || [])])];
 }
 
 async function loadBaigeCard({ id, names }) {
@@ -231,6 +240,19 @@ function buildImageCandidates(id) {
     `https://cdn.233.momobako.com/ygoimg/ygopro/${id}.jpg`,
     `https://cdn.233.momobako.com/ygoimg/ygopro/${id}.webp!half`,
   ];
+}
+
+function buildImageProxyUrl(request, id) {
+  const host = request.headers?.host;
+  if (!host) return "";
+  const proto = firstHeader(request.headers["x-forwarded-proto"]) || "https";
+  const url = new URL(`${proto}://${host}/api/card-image`);
+  url.searchParams.set("id", id);
+  return url.toString();
+}
+
+function firstHeader(value) {
+  return Array.isArray(value) ? value[0] : String(value || "").split(",")[0].trim();
 }
 
 function collectImageCandidates(card, id) {

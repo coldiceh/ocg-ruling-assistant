@@ -8,16 +8,17 @@ const defaultDataDir = join(projectRoot, "data");
 const snapshotCache = new Map();
 const liveIndexCache = new Map();
 const liveCardCache = new Map();
+const liveCardPayloadCache = new Map();
 const baigeSearchCache = new Map();
 const ygoResourcesBaseUrl = "https://db.ygoresources.com";
 const baigeApiBaseUrl = "https://ygocdb.com/api/v0/";
 
 const topics = [
-  { id: "activation", label: "能否发动", keywords: ["能否发动", "可以发动", "发动②", "发动2", "发动效果", "诱发"] },
+  { id: "activation", label: "能否发动", keywords: ["能否发动", "可以发动", "发动②", "发动2", "发动效果", "诱发", "発動", "発動できる"] },
   { id: "chain", label: "连锁处理", keywords: ["C1", "C2", "连锁", "处理完", "这时"] },
   { id: "control", label: "控制权变更", keywords: ["获得控制权", "控制权", "夺取", "转移控制权"] },
-  { id: "battle", label: "战斗伤害", keywords: ["攻击", "守备表示", "战斗伤害", "伤害计算", "攻击力", "守备力"] },
-  { id: "replacement", label: "代替破坏", keywords: ["代破", "代替破坏", "破坏代替"] },
+  { id: "battle", label: "战斗伤害", keywords: ["攻击", "守备表示", "战斗伤害", "伤害计算", "攻击力", "守备力", "戦闘", "ダメージ計算"] },
+  { id: "replacement", label: "代替破坏", keywords: ["代破", "代替破坏", "破坏代替", "除外", "破壊"] },
   { id: "spelltrap", label: "魔法陷阱状态", keywords: ["表侧发动中", "魔法陷阱", "永续", "场地", "装备"] },
   { id: "summon", label: "召唤处理", keywords: ["召唤", "特殊召唤", "融合召唤", "连接召唤", "同调召唤", "超量召唤"] },
   { id: "graveyard", label: "墓地", keywords: ["墓地", "送去墓地", "从墓地"] },
@@ -119,6 +120,22 @@ export async function answerQuestion(payload, options = {}) {
     }
   }
 
+  if (detectedCards.length) {
+    try {
+      const liveCards = await resolveCardsFromDetectedCards(detectedCards, snapshot.cards, env);
+      if (liveCards.length) {
+        resolutionNotes.push("部分卡片已补充实时 FAQ 索引。");
+        detectedCards = mergeCards(detectedCards, liveCards);
+      }
+      const liveEvidence = await loadLiveEvidenceForCards(detectedCards, env);
+      if (liveEvidence.length) {
+        evidence = rankEvidenceRecords([...evidence, ...liveEvidence], question, detectedCards, detectedTopics).slice(0, 10);
+      }
+    } catch (error) {
+      resolutionWarnings.push(`实时 FAQ 查询失败，已使用当前资料：${formatError(error)}`);
+    }
+  }
+
   const baseAnswer = buildEvidenceAnswer({
     question,
     detectedCards,
@@ -129,9 +146,12 @@ export async function answerQuestion(payload, options = {}) {
   });
   baseAnswer.cards = buildCardSummaries(detectedCards);
   if (resolutionWarnings.length) baseAnswer.warnings = [...(baseAnswer.warnings || []), ...resolutionWarnings];
-  if (resolutionNotes.length) baseAnswer.needsConfirmation = [...new Set([...(baseAnswer.needsConfirmation || []), ...resolutionNotes])];
+  if (resolutionNotes.length && baseAnswer.mode !== "confirmed") {
+    baseAnswer.needsConfirmation = [...new Set([...(baseAnswer.needsConfirmation || []), ...resolutionNotes])];
+  }
 
-  if (!evidence.length || options.useModel === false) return baseAnswer;
+  const hasExactRuling = evidence.some((item) => isRulingEvidence(item) && item.matchKind === "direct");
+  if (!evidence.length || options.useModel === false || (hasExactRuling && env.MODEL_ON_DIRECT_RULINGS !== "true")) return baseAnswer;
 
   try {
     const modelAnswer = await buildModelAnswer(
@@ -209,17 +229,38 @@ function buildEvidenceAnswer(context) {
     );
   }
 
-  const best = evidence[0];
-  const hasDirectRuling = evidence.some((item) => item.recordType === "qa" || item.recordType === "card-faq");
-  if (hasDirectRuling && best.recordType !== "card-text") {
+  const exactRuling = evidence.find((item) => isRulingEvidence(item) && item.matchKind === "direct");
+  if (exactRuling) {
     return {
       schemaVersion: 1,
       mode: "confirmed",
-      verdictTitle: "找到相关问答资料",
-      verdict: best.conclusion,
+      verdictTitle: "找到直接问答资料",
+      verdict: exactRuling.conclusion,
       confidence: { label: freshnessLabel(snapshotMeta, "已确认资料"), value: freshnessValue(snapshotMeta, 84), className: "is-confirmed" },
-      steps: best.steps?.length ? best.steps : ["按命中的问答资料处理。", "若场面条件不同，继续核对原文和相关 Q&A。"],
+      steps: exactRuling.steps?.length ? exactRuling.steps : ["按命中的问答资料处理。", "若场面条件不同，继续核对原文和相关 Q&A。"],
       needsConfirmation: buildNeedsConfirmation(context, false),
+      sources,
+      snapshotAt: snapshotMeta?.generatedAt || null,
+      evidenceCount: evidence.length,
+      warnings: [],
+    };
+  }
+
+  const analogousRuling = evidence.find((item) => isRulingEvidence(item));
+  if (analogousRuling) {
+    return {
+      schemaVersion: 1,
+      mode: "inferred",
+      verdictTitle: "找到相似问答资料",
+      verdict:
+        `没有命中完全同场面的问答。可作为类推依据的资料结论是：${analogousRuling.conclusion}`,
+      confidence: { label: "类推依据", value: freshnessValue(snapshotMeta, 62), className: "" },
+      steps: [
+        "先确认题目与相似问答的共通结构：触发事件、适用时点、效果处理期间、对象或适用范围。",
+        "再核对差异点是否会改变裁定；差异未排除前不能标记为已确认裁定。",
+        ...(analogousRuling.steps?.length ? analogousRuling.steps.slice(0, 2) : ["需要模型或人工把相似问答迁移到当前场面。"]),
+      ],
+      needsConfirmation: buildNeedsConfirmation(context, false, analogousRuling),
       sources,
       snapshotAt: snapshotMeta?.generatedAt || null,
       evidenceCount: evidence.length,
@@ -248,8 +289,8 @@ function buildEvidenceAnswer(context) {
 }
 
 function mergeModelAnswer(modelAnswer, baseAnswer, evidence, snapshotMeta) {
-  const hasDirectRuling = evidence.some((item) => item.recordType === "qa" || item.recordType === "card-faq");
-  const confidenceMode = hasDirectRuling ? modelAnswer.confidence : downgradeConfidence(modelAnswer.confidence);
+  const hasExactRuling = evidence.some((item) => isRulingEvidence(item) && item.matchKind === "direct");
+  const confidenceMode = hasExactRuling ? modelAnswer.confidence : downgradeConfidence(modelAnswer.confidence);
   const confidence = confidenceFromMode(confidenceMode, snapshotMeta);
 
   return {
@@ -269,18 +310,6 @@ function mergeModelAnswer(modelAnswer, baseAnswer, evidence, snapshotMeta) {
 function retrieveEvidence(question, detectedCards, detectedTopics, snapshot) {
   if (!detectedCards.length) return [];
 
-  const cardKeys = new Set(
-    detectedCards.flatMap((card) => [card.id, card.name, card.cnName, card.jaName, card.enName, card.matched, ...(card.aliases || [])].filter(Boolean).map(normalizeKey))
-  );
-  const tokens = tokenize(question);
-
-  const recordMatches = snapshot.records
-    .map((record) => {
-      const score = scoreRecord(record, cardKeys, detectedTopics, tokens);
-      return score > 0 ? { ...record, score } : null;
-    })
-    .filter(Boolean);
-
   const textMatches = detectedCards
     .filter((card) => card.effectText)
     .map((card) => ({
@@ -297,29 +326,102 @@ function retrieveEvidence(question, detectedCards, detectedTopics, snapshot) {
       score: 6,
     }));
 
-  return dedupeBy([...recordMatches, ...textMatches], (item) => item.id || `${item.title}:${item.conclusion}`)
+  return rankEvidenceRecords([...snapshot.records, ...textMatches], question, detectedCards, detectedTopics)
     .sort((a, b) => b.score - a.score)
     .slice(0, 16);
+}
+
+function rankEvidenceRecords(records, question, detectedCards, detectedTopics) {
+  if (!detectedCards.length) return [];
+
+  const cardKeys = new Set(
+    detectedCards.flatMap((card) => [card.id, card.passcode, card.liveId, card.name, card.cnName, card.jaName, card.enName, card.matched, ...(card.aliases || [])].filter(Boolean).map(normalizeKey))
+  );
+  const tokens = tokenize(question);
+
+  return dedupeBy(
+    records
+      .map((record) => {
+        const score = scoreRecord(record, cardKeys, detectedTopics, tokens);
+        return score > 0 ? { ...record, score, ...classifyEvidenceMatch(record, question, detectedCards, tokens) } : null;
+      })
+      .filter(Boolean),
+    (item) => item.id || `${item.title}:${item.conclusion}`
+  ).sort((a, b) => b.score - a.score);
+}
+
+function classifyEvidenceMatch(record, question, detectedCards, tokens) {
+  if (!isRulingEvidence(record)) {
+    return { matchKind: record.recordType === "card-text" ? "card-text" : "support", matchScore: 0, matchedCardCount: 0 };
+  }
+
+  const questionKey = normalizeKey(question);
+  const evidenceQuestion = record.question || record.questionText || record.title || "";
+  const evidenceKey = normalizeKey(
+    `${evidenceQuestion} ${record.conclusion || ""} ${(record.keywords || []).join(" ")} ${(record.cards || []).join(" ")}`
+  );
+  const similarity = questionKey && evidenceKey ? scoreTextSimilarity(questionKey, evidenceKey) : 0;
+  const tokenHits = tokens.filter((token) => token.length >= 2 && evidenceKey.includes(token)).length;
+  const tokenRatio = tokens.length ? tokenHits / tokens.length : 0;
+  const matchedCardCount = countEvidenceMatchedCards(record, detectedCards);
+  const cardRatio = detectedCards.length ? matchedCardCount / detectedCards.length : 0;
+  const exactEnough =
+    matchedCardCount > 0 &&
+    (similarity >= 0.58 ||
+      (tokenHits >= 5 && tokenRatio >= 0.28) ||
+      (cardRatio >= 0.8 && tokenHits >= 3 && tokenRatio >= 0.18));
+
+  return {
+    matchKind: exactEnough ? "direct" : "analogous",
+    matchScore: Math.round(Math.max(similarity, tokenRatio) * 100),
+    matchedCardCount,
+  };
+}
+
+function isRulingEvidence(record) {
+  return record?.recordType === "qa" || record?.recordType === "card-faq";
+}
+
+function countEvidenceMatchedCards(record, detectedCards) {
+  const evidenceKey = normalizeKey(`${(record.cards || []).join(" ")} ${record.question || record.questionText || ""} ${record.title || ""} ${record.conclusion || ""}`);
+  let count = 0;
+  for (const card of detectedCards) {
+    if (cardAliases(card).some((alias) => {
+      const key = normalizeKey(alias);
+      return key.length >= 2 && evidenceKey.includes(key);
+    })) {
+      count += 1;
+    }
+  }
+  return count;
 }
 
 function scoreRecord(record, cardKeys, detectedTopics, tokens) {
   const recordCardKeys = new Set((record.cards || []).map(normalizeKey));
   const hasCardMatch = [...recordCardKeys].some((key) => cardKeys.has(key));
-  if (!hasCardMatch) return 0;
+
+  const keywordText = [...(record.keywords || []), record.title || ""].map(normalizeKey).join(" ");
+  let topicHits = 0;
+  for (const topic of detectedTopics) {
+    if (topic.keywords.some((keyword) => keywordText.includes(normalizeKey(keyword)))) topicHits += 1;
+  }
+
+  const haystack = normalizeKey(`${record.title || ""} ${record.conclusion || ""} ${(record.keywords || []).join(" ")}`);
+  const tokenHits = tokens.filter((token) => token.length >= 2 && haystack.includes(token)).length;
+
+  if (!hasCardMatch) {
+    if (!isRulingEvidence(record)) return 0;
+    if (topicHits < 2 || tokenHits < 4) return 0;
+    return 10 + topicHits * 2 + Math.min(6, tokenHits);
+  }
 
   let score = 20;
   if (record.recordType === "qa") score += 10;
   if (record.recordType === "card-faq") score += 8;
   if (record.recordType === "card-text") score += 1;
   if (record.status === "confirmed") score += 3;
-
-  const keywordText = [...(record.keywords || []), record.title || ""].map(normalizeKey).join(" ");
-  for (const topic of detectedTopics) {
-    if (topic.keywords.some((keyword) => keywordText.includes(normalizeKey(keyword)))) score += 2;
-  }
-
-  const haystack = normalizeKey(`${record.title || ""} ${record.conclusion || ""} ${(record.keywords || []).join(" ")}`);
-  score += Math.min(8, tokens.filter((token) => token.length >= 2 && haystack.includes(token)).length);
+  score += topicHits * 2;
+  score += Math.min(8, tokenHits);
   return score;
 }
 
@@ -351,6 +453,7 @@ function normalizeRecords(records) {
       id: record.id || record.sourceId || `${record.title}:${record.updatedAt}`,
       recordType: record.recordType || inferRecordType(record),
       title: record.title || "未命名资料",
+      question: cleanText(record.question || record.questionText || ""),
       status: record.status || "confirmed",
       cards: record.cards || [],
       keywords: record.keywords || [],
@@ -736,6 +839,17 @@ async function resolveCardsFromLiveSources(resolution, existingCards, env) {
   return mergeCards(...cards);
 }
 
+async function resolveCardsFromDetectedCards(detectedCards, existingCards, env) {
+  const resolution = {
+    cards: detectedCards.map((card) => ({
+      input: card.matched || card.name,
+      candidates: cardAliases(card),
+      confidence: "high",
+    })),
+  };
+  return resolveCardsFromLiveSources(resolution, existingCards, env);
+}
+
 async function loadLiveNameIndex(language) {
   const cached = liveIndexCache.get(language);
   if (cached && Date.now() - cached.loadedAt < 60 * 60 * 1000) return cached.index;
@@ -751,10 +865,183 @@ async function loadLiveCard(id, candidates) {
   const cached = liveCardCache.get(key);
   if (cached) return cached;
 
-  const payload = await fetchJson(`${ygoResourcesBaseUrl}/data/card/${id}`);
+  const payload = await loadLiveCardPayload(id);
   const card = normalizeLiveCard(payload, id, candidates);
   if (card) liveCardCache.set(key, card);
   return card;
+}
+
+async function loadLiveCardPayload(id) {
+  const key = String(id);
+  const cached = liveCardPayloadCache.get(key);
+  if (cached) return cached;
+
+  const payload = await fetchJson(`${ygoResourcesBaseUrl}/data/card/${id}`);
+  liveCardPayloadCache.set(key, payload);
+  return payload;
+}
+
+async function loadLiveEvidenceForCards(cards, env) {
+  const maxQaPerCard = Number(env.LIVE_QA_PER_CARD || 40);
+  const maxQaTotal = Number(env.LIVE_QA_TOTAL || 80);
+  const cardEntries = dedupeBy(
+    cards
+      .map((card) => {
+        const id = card.liveId || extractYgoResourcesCardId(card.ygoResourcesUrl || card.sourceUrl);
+        return id ? { id, card } : null;
+      })
+      .filter(Boolean),
+    (entry) => entry.id
+  );
+
+  if (!cardEntries.length) return [];
+
+  const records = [];
+  const qaIds = new Set();
+
+  for (const entry of cardEntries) {
+    const payload = await loadLiveCardPayload(entry.id);
+    const liveCard = normalizeLiveCard(payload, entry.id, cardAliases(entry.card));
+    records.push(...buildLiveFaqRecords(liveCard, payload));
+    for (const qaId of collectQaIds(payload?.qaIndex || []).slice(0, maxQaPerCard)) qaIds.add(qaId);
+  }
+
+  const qaPayloads = await mapLimit([...qaIds].slice(0, maxQaTotal), 8, async (qaId) => {
+    try {
+      return { qaId, payload: await fetchJson(`${ygoResourcesBaseUrl}/data/qa/${qaId}`) };
+    } catch {
+      return null;
+    }
+  });
+
+  for (const item of qaPayloads.filter(Boolean)) {
+    const record = normalizeLiveQa(item.payload, item.qaId, cards);
+    if (record) records.push(record);
+  }
+
+  return records;
+}
+
+function buildLiveFaqRecords(card, payload) {
+  const records = [];
+  const entries = payload?.faqData?.entries || {};
+
+  for (const [effectNo, blocks] of Object.entries(entries)) {
+    const lines = [];
+    for (const block of blocks || []) {
+      const text = block.cn || block["zh-CN"] || block.ja || block.en;
+      if (text) lines.push(cleanText(text));
+    }
+    if (!lines.length) continue;
+
+    records.push({
+      id: `live-card-faq-${card.liveId || card.id}-${effectNo}`,
+      recordType: "card-faq",
+      title: `${card.name} FAQ ${effectNo}`,
+      question: "",
+      status: "confirmed",
+      cards: cardAliases(card),
+      keywords: extractKeywords(lines.join("\n")),
+      conclusion: lines.join("\n"),
+      steps: ["按命中的卡片 FAQ 处理。", "若场面条件不同，继续核对对应官方 Q&A。"],
+      questions: [],
+      sources: [{ label: "YGOResources Card FAQ", detail: card.ygoResourcesUrl || card.sourceUrl }],
+      updatedAt: payload?.faqData?.meta?.cn?.date || payload?.faqData?.meta?.ja?.date || payload?.faqData?.meta?.en?.date || card.updatedAt,
+    });
+  }
+
+  return records;
+}
+
+function normalizeLiveQa(payload, id, detectedCards) {
+  const question = firstText(payload, ["question", "q", "title"]);
+  const answer = firstText(payload, ["answer", "a", "content"]);
+  if (!question || !answer) return null;
+
+  const text = cleanText(`${question}\n${answer}`);
+  const involvedCards = detectCardsInText(text, detectedCards);
+  const cards = involvedCards.length ? involvedCards.flatMap(cardAliases) : detectedCards.flatMap(cardAliases);
+
+  return {
+    id: `live-ygoresources-qa-${id}`,
+    recordType: "qa",
+    title: truncate(cleanText(question).replace(/\s+/g, " "), 90),
+    question: cleanText(question),
+    status: "confirmed",
+    cards: [...new Set(cards)],
+    keywords: extractKeywords(text),
+    conclusion: cleanText(answer),
+    steps: ["按命中的 Q&A 结论处理。", "若对局条件与问答不同，先回到来源核对完整原文。"],
+    questions: [],
+    sources: [{ label: "YGOResources Q&A", detail: `${ygoResourcesBaseUrl}/data/qa/${id}` }],
+    sourceId: String(id),
+    sourceName: "YGOResources DB",
+    sourceUrl: `${ygoResourcesBaseUrl}/data/qa/${id}`,
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+function collectQaIds(payload) {
+  const ids = [];
+
+  function visit(value) {
+    if (!value) return;
+    if (Array.isArray(value)) {
+      for (const item of value) visit(item);
+      return;
+    }
+    if (typeof value !== "object") {
+      if (looksLikeId(value)) ids.push(String(value));
+      return;
+    }
+    const id = value.id || value.qaId || value.qid;
+    if (looksLikeId(id)) ids.push(String(id));
+    for (const child of Object.values(value)) visit(child);
+  }
+
+  visit(payload);
+  return [...new Set(ids)];
+}
+
+function firstText(payload, targetKeys) {
+  const candidates = [];
+
+  function visit(value, key = "") {
+    if (!value) return;
+    if (typeof value === "string") {
+      if (targetKeys.includes(key) && value.trim().length > 1) candidates.push(cleanText(value));
+      return;
+    }
+    if (Array.isArray(value)) {
+      for (const item of value) visit(item, key);
+      return;
+    }
+    if (typeof value === "object") {
+      for (const [childKey, child] of Object.entries(value)) {
+        if (targetKeys.includes(childKey)) {
+          if (typeof child === "string" && child.trim()) candidates.push(cleanText(child));
+          if (child && typeof child === "object") {
+            const localized = child["zh-CN"] || child.cn || child.ja || child.en || child.value || child.text;
+            if (typeof localized === "string" && localized.trim()) candidates.push(cleanText(localized));
+          }
+        }
+        visit(child, childKey);
+      }
+    }
+  }
+
+  visit(payload);
+  return candidates.sort((a, b) => b.length - a.length)[0] || "";
+}
+
+function detectCardsInText(text, cards) {
+  const normalized = normalizeKey(text);
+  return cards.filter((card) => cardAliases(card).some((alias) => normalized.includes(normalizeKey(alias))));
+}
+
+function extractYgoResourcesCardId(url) {
+  const match = String(url || "").match(/\/data\/card\/([^/?#]+)/);
+  return match ? decodeURIComponent(match[1]) : "";
 }
 
 function findLiveCardId(candidates, indexes) {
@@ -779,24 +1066,27 @@ function findLiveCardId(candidates, indexes) {
 
 function normalizeLiveCard(payload, id, candidates) {
   const cardData = payload?.cardData || {};
-  const passcode = cardData.passcode || cardData.password || payload?.passcode || payload?.password || "";
+  const passcode = normalizeId(cardData.passcode || cardData.password || payload?.passcode || payload?.password || "");
   const cnName = cardData.cn?.name || "";
   const jaName = cardData.ja?.name || "";
   const enName = cardData.en?.name || "";
   const primaryName = cnName || jaName || enName || candidates.find(Boolean) || String(id);
   const effectText = cardData.cn?.effectText || cardData.ja?.effectText || cardData.en?.effectText || "";
+  const sourceUrl = `${ygoResourcesBaseUrl}/data/card/${id}`;
 
   return {
     id: String(id),
-    passcode: String(passcode || ""),
-    name: primaryName,
-    cnName,
-    jaName,
-    enName,
-    effectText,
+    liveId: String(id),
+    passcode,
+    name: cleanText(primaryName),
+    cnName: cleanText(cnName),
+    jaName: cleanText(jaName),
+    enName: cleanText(enName),
+    effectText: cleanText(effectText),
     released: isReleased(cardData),
     aliases: [...new Set([primaryName, cnName, jaName, enName, ...candidates].filter(Boolean))],
-    sourceUrl: `${ygoResourcesBaseUrl}/data/card/${id}`,
+    sourceUrl,
+    ygoResourcesUrl: sourceUrl,
     updatedAt: new Date().toISOString(),
   };
 }
@@ -899,6 +1189,14 @@ function mergeCards(...groups) {
     existing.resolutionConfidence = existing.resolutionConfidence || card.resolutionConfidence;
     existing.effectText = existing.effectText || card.effectText;
     existing.passcode = existing.passcode || card.passcode;
+    existing.liveId = existing.liveId || card.liveId || (card.resolvedBy === "live-ygoresources" ? card.id : "");
+    existing.cnName = existing.cnName || card.cnName;
+    existing.jaName = existing.jaName || card.jaName;
+    existing.enName = existing.enName || card.enName;
+    existing.cardType = existing.cardType || card.cardType;
+    existing.ygoResourcesUrl = existing.ygoResourcesUrl || card.ygoResourcesUrl || (/db\.ygoresources\.com\/data\/card\//.test(card.sourceUrl || "") ? card.sourceUrl : "");
+    existing.sourceUrl = existing.sourceUrl || card.sourceUrl;
+    existing.aliases = [...new Set([...(existing.aliases || []), ...(card.aliases || [])].filter(Boolean))];
   }
   return [...map.values()];
 }
@@ -915,6 +1213,8 @@ function buildCardSummaries(cards) {
     cardType: cleanText(card.cardType),
     effectText: cleanText(card.effectText),
     sourceUrl: cleanText(card.sourceUrl),
+    ygoResourcesUrl: cleanText(card.ygoResourcesUrl),
+    liveId: cleanText(card.liveId),
     resolvedBy: cleanText(card.resolvedBy),
   }));
 }
@@ -963,10 +1263,16 @@ function parseChain(question) {
     .sort((a, b) => a.number - b.number);
 }
 
-function buildNeedsConfirmation(context, cardTextOnly) {
+function buildNeedsConfirmation(context, cardTextOnly, analogousRuling = null) {
   const items = [];
   const releasedUnknown = context.detectedCards.filter((card) => card.released === false).map((card) => card.name);
   if (releasedUnknown.length) items.push(`${releasedUnknown.join("、")} 可能尚未发售或同步来源缺少发售日期。`);
+  if (analogousRuling) {
+    items.push("当前是相似问答类推，不是完全同场面原题；需要核对相同结构和差异点。");
+    if (analogousRuling.matchedCardCount < context.detectedCards.length) {
+      items.push("相似资料没有覆盖题目中的全部卡片，需要确认未覆盖卡片不会改变处理。");
+    }
+  }
   if (context.chainItems.length) items.push("若连锁处理途中有控制权、区域或表示形式变化，需要逐步核对处理后的公开状态。");
   if (context.topics.some((topic) => topic.id === "activation")) items.push("需要确认被问效果的完整文本、发动位置、每回合次数和是否已满足触发事件。");
   if (context.topics.some((topic) => topic.id === "battle")) items.push("需要确认攻击目标的当前守备力以及所有伤害变更效果。");
@@ -1001,7 +1307,7 @@ function confidenceFromMode(mode, snapshotMeta) {
     return { label: freshnessLabel(snapshotMeta, "已确认资料"), value: freshnessValue(snapshotMeta, 86), className: "is-confirmed" };
   }
   if (mode === "inferred") {
-    return { label: "规则推理", value: freshnessValue(snapshotMeta, 62), className: "" };
+    return { label: "类推/规则推理", value: freshnessValue(snapshotMeta, 62), className: "" };
   }
   return { label: "不能确定", value: 30, className: "is-risky" };
 }
@@ -1124,6 +1430,22 @@ function strongerConfidence(left = "low", right = "low") {
   return rank[right] > rank[left] ? right : left;
 }
 
+function extractKeywords(text) {
+  const groups = [
+    ["发动", "能否发动", "可以发动", "発動", "発動できる"],
+    ["连锁", "C1", "C2", "チェーン"],
+    ["控制权", "获得控制权", "コントロール"],
+    ["战斗伤害", "伤害计算", "攻击", "戦闘", "ダメージ計算"],
+    ["代替破坏", "代破", "破坏", "除外", "破壊", "除外できる"],
+    ["魔法", "陷阱", "魔法・罠"],
+  ];
+  const result = [];
+  for (const group of groups) {
+    if (group.some((keyword) => String(text || "").includes(keyword))) result.push(group[0]);
+  }
+  return result;
+}
+
 function cleanText(value) {
   return decodeHtmlEntities(stripHtml(String(value || "")))
     .replace(/\u00a0/g, " ")
@@ -1165,10 +1487,32 @@ function cleanList(value, fallback = []) {
   return [...new Set(items.map(cleanText).filter(Boolean))].slice(0, 8);
 }
 
+function truncate(value, length) {
+  const text = String(value || "");
+  return text.length > length ? `${text.slice(0, length - 1)}…` : text;
+}
+
 function dedupeBy(items, getKey) {
   const map = new Map();
   for (const item of items) map.set(getKey(item), item);
   return [...map.values()];
+}
+
+async function mapLimit(items, limit, mapper) {
+  const results = new Array(items.length);
+  let nextIndex = 0;
+  const workerCount = Math.max(1, Math.min(limit, items.length || 1));
+
+  async function worker() {
+    while (nextIndex < items.length) {
+      const index = nextIndex;
+      nextIndex += 1;
+      results[index] = await mapper(items[index], index);
+    }
+  }
+
+  await Promise.all(Array.from({ length: workerCount }, worker));
+  return results;
 }
 
 function formatError(error) {
