@@ -268,7 +268,10 @@ function buildEvidenceAnswer(context) {
     };
   }
 
-  const analogousRuling = usableRulings[0];
+  const ruleInference = inferStructuredRuleAnswer(context, sources, snapshotMeta, evidence.length);
+  if (ruleInference) return ruleInference;
+
+  const analogousRuling = usableRulings.find((item) => isStrongAnalogousEvidence(item, context));
   if (analogousRuling) {
     const title = summarizeRulingConclusion(analogousRuling.conclusion, "analogous", `${context.question} ${analogousRuling.question || analogousRuling.title || ""}`);
     return {
@@ -332,6 +335,59 @@ function buildEvidenceAnswer(context) {
     evidenceCount: evidence.length,
     warnings: [],
   };
+}
+
+function inferStructuredRuleAnswer(context, sources, snapshotMeta, evidenceCount) {
+  const intent = detectQuestionIntent(context.question);
+  if (intent !== "handling") return null;
+
+  const protector = context.detectedCards.find((card) => hasTemporaryBanishText(card.effectText || ""));
+  const resolver = context.detectedCards.find((card) => card !== protector && hasDeckReturnText(`${card.effectText || ""} ${card.name || ""} ${card.matched || ""}`));
+  const otherEffect = resolver || context.detectedCards.find((card) => card !== protector);
+  if (!protector || !otherEffect) return null;
+
+  const title = resolver
+    ? "可以适用临时除外效果，怪兽不回卡组"
+    : hasPendingDestructionText(context.question)
+      ? "可以适用临时除外效果，怪兽不按原预定破坏处理"
+      : "可以适用临时除外效果";
+  const ruleRuling = { steps: [] };
+  return {
+    schemaVersion: 1,
+    mode: "inferred",
+    verdictTitle: title,
+    verdict: buildReadableRulingBody("", title, "analogous", context),
+    rulingBasis: "效果文本 + 规则推理",
+    confidence: { label: "规则推理", value: freshnessValue(snapshotMeta, 66), className: "" },
+    steps: buildRulingSteps(context, ruleRuling, title),
+    needsConfirmation: [
+      "这是按已识别卡片效果文本和处理时点作出的规则推理，不是数据库原题；仍建议核对官方 Q&A。",
+      ...buildNeedsConfirmation(context, false).filter((item) => !/当前没有命中直接/.test(item)).slice(0, 3),
+    ],
+    sources: collectCardTextSources(context.detectedCards, sources),
+    snapshotAt: snapshotMeta?.generatedAt || null,
+    evidenceCount,
+    warnings: [],
+    modelUsed: false,
+  };
+}
+
+function isStrongAnalogousEvidence(item, context) {
+  if (!item || item.matchKind !== "analogous") return false;
+  const intent = detectQuestionIntent(context.question);
+  if (intent === "handling" && (item.matchedCardCount || 0) < Math.min(2, context.detectedCards.length)) return false;
+  if (intent === "handling" && scoreHandlingOverlap(context.question, `${item.question || ""} ${item.conclusion || ""} ${(item.keywords || []).join(" ")}`) < 2) return false;
+  return (item.matchScore || 0) >= 45;
+}
+
+function collectCardTextSources(cards, fallbackSources) {
+  const cardSources = cards
+    .filter((card) => card.sourceUrl || card.ygoResourcesUrl)
+    .map((card) => ({
+      label: `${card.name || card.cnName || card.jaName || "卡片"} 的效果文本`,
+      detail: card.sourceUrl || card.ygoResourcesUrl,
+    }));
+  return cardSources.length ? dedupeBy(cardSources, (source) => `${source.label}:${source.detail}`) : fallbackSources;
 }
 
 function mergeModelAnswer(modelAnswer, baseAnswer, evidence, snapshotMeta) {
@@ -1541,6 +1597,10 @@ function summarizeRulingConclusion(value, matchKind, contextText = "") {
     return "可以适用临时除外效果，怪兽不回卡组";
   }
 
+  if ((positive || banish || apply || temporaryBanish) && hasPendingDestructionText(text) && temporaryBanish) {
+    return "可以适用临时除外效果，怪兽不按原预定破坏处理";
+  }
+
   if (notDestroyed) {
     if (banish) return "可以除外，怪兽不被破坏";
     return "不会被破坏";
@@ -1564,6 +1624,14 @@ function buildReadableRulingBody(value, title, matchKind, context = null) {
   if (title === "可以适用临时除外效果，怪兽不回卡组") {
     const names = inferInteractionCardNames(context);
     return `可以适用${names.protector}的临时除外效果，把被处理的怪兽除外到该效果处理后。因此${names.resolver}处理时，那只怪兽已经不在原本要处理的位置，不能被洗回卡组；处理后再回到场上。`;
+  }
+  if (title === "可以适用临时除外效果，怪兽不按原预定破坏处理") {
+    const names = inferInteractionCardNames(context);
+    return `可以适用${names.protector}的临时除外效果。适用后那只怪兽会暂时离开场上，直到${names.resolver}处理后再回到场上；由于原本预定被破坏的时点它已经不在原位置，不能按原预定破坏处理。`;
+  }
+  if (title === "可以适用临时除外效果") {
+    const names = inferInteractionCardNames(context);
+    return `可以适用${names.protector}的临时除外效果，把满足条件的怪兽除外到${names.resolver}处理后，再让其回到场上。`;
   }
   if (title === "可以除外，怪兽不被破坏") {
     return "可以适用相关除外效果，把战斗破坏预定的卡通怪兽除外；因此该怪兽不会被这次战斗破坏。";
@@ -1598,6 +1666,25 @@ function buildRulingSteps(context, ruling, title) {
     ];
   }
 
+  if (title === "可以适用临时除外效果，怪兽不按原预定破坏处理") {
+    const names = inferInteractionCardNames(context);
+    return [
+      `${names.resolver}的效果正在适用，进入“其他卡发动的效果适用之际”。`,
+      `此时可以适用${names.protector}的临时除外效果，把那只怪兽除外到该效果处理后。`,
+      "除外期间那只怪兽不在原本会被战斗或效果破坏的位置，因此不能按原预定破坏处理。",
+      `${names.resolver}处理完后，再按${names.protector}的临时除外效果让被除外的怪兽回到场上。`,
+    ];
+  }
+
+  if (title === "可以适用临时除外效果") {
+    const names = inferInteractionCardNames(context);
+    return [
+      `${names.resolver}的效果正在适用，检查是否满足“其他卡发动的效果适用之际”。`,
+      `满足时，可以适用${names.protector}的临时除外效果，把对应怪兽除外到该效果处理后。`,
+      `${names.resolver}继续处理；处理完后，被除外的怪兽按临时除外效果回到场上。`,
+    ];
+  }
+
   if (title === "可以除外，怪兽不被破坏") {
     const names = inferInteractionCardNames(context);
     return [
@@ -1613,7 +1700,9 @@ function buildRulingSteps(context, ruling, title) {
 }
 
 function hasDeckReturnText(value) {
-  return /(回卡组|回到卡组|返回卡组|洗回卡组|卡组|デッキ|戻|戻す|戻し|戻り|shuffle(?:d)?\s+(?:it|that card|them)?\s*(?:into|to)\s+the\s+deck)/i.test(value);
+  return /(回卡组|回到卡组|返回卡组|洗回卡组|放回卡组|回入卡组|戻.*デッキ|デッキ.*戻|デッキに加え|shuffle(?:d)?\s+(?:it|that card|them|those cards)?\s*(?:into|to)\s+the\s+deck|return(?:ed)?\s+(?:it|that card|them|those cards)?\s*(?:into|to)\s+the\s+deck)/i.test(
+    normalizeRulingText(value)
+  );
 }
 
 function hasTemporaryBanishText(value) {
@@ -1621,10 +1710,16 @@ function hasTemporaryBanishText(value) {
   return /(除外.*(处理后|處理後|戻|戻す|戻る|return)|(?:处理后|處理後|処理後).*(除外|回到|返回|特殊召唤|戻)|temporar(?:y|ily).*banish|banish.*until.*(?:resolv|after))/i.test(text);
 }
 
+function hasPendingDestructionText(value) {
+  return /(战斗.*破坏|破坏.*决定|破坏.*确定|破壊されることが決定|戦闘で破壊|破壊予定|would be destroyed|determined to be destroyed)/i.test(normalizeRulingText(value));
+}
+
 function inferInteractionCardNames(context) {
   const cards = context?.detectedCards || [];
   const protector = cards.find((card) => hasTemporaryBanishText(card.effectText || ""));
-  const resolver = cards.find((card) => card !== protector && hasDeckReturnText(`${card.effectText || ""} ${card.name || ""} ${card.matched || ""}`));
+  const resolver =
+    cards.find((card) => card !== protector && hasDeckReturnText(`${card.effectText || ""} ${card.name || ""} ${card.matched || ""}`)) ||
+    cards.find((card) => card !== protector);
   return {
     protector: formatRulingCardName(protector) || "该临时除外效果",
     resolver: formatRulingCardName(resolver) || "原本正在处理的效果",
