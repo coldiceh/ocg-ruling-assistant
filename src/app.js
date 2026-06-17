@@ -655,7 +655,7 @@ async function requestBackendAnswer(text) {
 }
 
 function buildBackendCacheKey(text) {
-  return `ocg-ruling-answer:v5:${appConfig.answerApiUrl}:${normalizeText(text).slice(0, 2000)}`;
+  return `ocg-ruling-answer:v7:${appConfig.answerApiUrl}:${normalizeText(text).slice(0, 2000)}`;
 }
 
 function readCachedBackendAnswer(key) {
@@ -887,17 +887,20 @@ function renderCardDetail(card, detail, status) {
 function setCardImage(candidates, altText) {
   const uniqueCandidates = [...new Set((candidates || []).filter(Boolean))];
   ui.cardImage.alt = altText ? `${altText} 卡图` : "卡图";
-  ui.cardImagePlaceholder.hidden = true;
+  ui.cardImagePlaceholder.hidden = false;
 
   if (!uniqueCandidates.length) {
     ui.cardImage.removeAttribute("src");
     ui.cardImage.hidden = true;
-    ui.cardImagePlaceholder.hidden = false;
     return;
   }
 
   let index = 0;
-  ui.cardImage.hidden = false;
+  ui.cardImage.hidden = true;
+  ui.cardImage.onload = () => {
+    ui.cardImage.hidden = false;
+    ui.cardImagePlaceholder.hidden = true;
+  };
   ui.cardImage.onerror = () => {
     index += 1;
     if (index >= uniqueCandidates.length) {
@@ -905,6 +908,8 @@ function setCardImage(candidates, altText) {
       ui.cardImagePlaceholder.hidden = false;
       return;
     }
+    ui.cardImage.hidden = true;
+    ui.cardImagePlaceholder.hidden = false;
     ui.cardImage.src = uniqueCandidates[index];
   };
   ui.cardImage.src = uniqueCandidates[index];
@@ -916,6 +921,7 @@ function buildLocalImageCandidates(card) {
   const normalizedId = id.length <= 8 ? id.padStart(8, "0") : id;
   const compactId = normalizedId.replace(/^0+/, "") || normalizedId;
   return [
+    getCardImageApiUrl(normalizedId),
     `https://cdn.233.momobako.com/ygopro/pics/${compactId}.jpg!half`,
     `https://cdn.233.momobako.com/ygopro/pics/${compactId}.jpg`,
     `https://cdn.233.momobako.com/ygoimg/ygopro/${compactId}.jpg`,
@@ -926,6 +932,19 @@ function buildLocalImageCandidates(card) {
     `https://cdn.233.momobako.com/ygoimg/ygopro/${normalizedId}.jpg`,
     `https://cdn.233.momobako.com/ygoimg/ygopro/${normalizedId}.webp!half`,
   ];
+}
+
+function getCardImageApiUrl(id) {
+  if (!appConfig.answerApiUrl || !id) return "";
+  try {
+    const url = new URL(appConfig.answerApiUrl);
+    url.pathname = url.pathname.replace(/\/api\/answer\/?$/, "/api/card-image");
+    url.search = "";
+    url.searchParams.set("id", id);
+    return url.toString();
+  } catch {
+    return "";
+  }
 }
 
 function cleanDisplayText(value) {
