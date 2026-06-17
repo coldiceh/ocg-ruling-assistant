@@ -41,6 +41,14 @@ const localCardAliasHints = [
     aliases: ["ip", "ip加速"],
     candidates: ["I:P Masquerena", "I：Pマスカレーナ"],
   },
+  {
+    aliases: ["时空转生", "時空転生", "快子时空转生", "快子時空転生"],
+    candidates: ["快子时空转生", "タキオン・トランスミグレイション", "Tachyon Transmigration"],
+  },
+  {
+    aliases: ["完美世界 卡通世界", "完美世界卡通世界", "完全なる世界 トゥーン・ワールド", "完全なる世界トゥーンワールド"],
+    candidates: ["完美世界 卡通世界", "完全なる世界 トゥーン・ワールド", "Perfect Toon World"],
+  },
 ];
 
 export async function answerQuestion(payload, options = {}) {
@@ -81,11 +89,15 @@ export async function answerQuestion(payload, options = {}) {
       evidence = retrieveEvidence(question, detectedCards, detectedTopics, snapshot).slice(0, 10);
     }
 
+    const combinedLocalResolution = mergeResolutions(extractedResolution, localResolution);
     try {
-      const liveLocalCards = await resolveCardsFromLiveSources(mergeResolutions(extractedResolution, localResolution), snapshot.cards, env);
-      if (liveLocalCards.length) {
+      const [liveLocalCards, baigeLocalCards] = await Promise.all([
+        resolveCardsFromLiveSources(combinedLocalResolution, snapshot.cards, env),
+        resolveCardsFromBaige(combinedLocalResolution, env),
+      ]);
+      if (liveLocalCards.length || baigeLocalCards.length) {
         resolutionNotes.push("部分卡片来自实时资料索引，静态快照尚未覆盖。");
-        detectedCards = mergeCards(detectedCards, liveLocalCards);
+        detectedCards = mergeCards(detectedCards, liveLocalCards, baigeLocalCards);
         evidence = retrieveEvidence(question, detectedCards, detectedTopics, snapshot).slice(0, 10);
       }
     } catch (error) {
@@ -231,15 +243,15 @@ function buildEvidenceAnswer(context) {
 
   const exactRuling = evidence.find((item) => isRulingEvidence(item) && item.matchKind === "direct");
   if (exactRuling) {
-    const title = summarizeRulingConclusion(exactRuling.conclusion, "direct");
+    const title = summarizeRulingConclusion(exactRuling.conclusion, "direct", `${context.question} ${exactRuling.question || exactRuling.title || ""}`);
     return {
       schemaVersion: 1,
       mode: "confirmed",
       verdictTitle: title,
-      verdict: buildReadableRulingBody(exactRuling.conclusion, title, "direct"),
+      verdict: buildReadableRulingBody(exactRuling.conclusion, title, "direct", context),
       rulingBasis: "找到直接问答资料",
       confidence: { label: freshnessLabel(snapshotMeta, "已确认资料"), value: freshnessValue(snapshotMeta, 84), className: "is-confirmed" },
-      steps: exactRuling.steps?.length ? exactRuling.steps : ["按命中的问答资料处理。", "若场面条件不同，继续核对原文和相关 Q&A。"],
+      steps: buildRulingSteps(context, exactRuling, title),
       needsConfirmation: buildDirectNeedsConfirmation(context),
       sources,
       snapshotAt: snapshotMeta?.generatedAt || null,
@@ -250,18 +262,18 @@ function buildEvidenceAnswer(context) {
 
   const analogousRuling = evidence.find((item) => isRulingEvidence(item));
   if (analogousRuling) {
-    const title = summarizeRulingConclusion(analogousRuling.conclusion, "analogous");
+    const title = summarizeRulingConclusion(analogousRuling.conclusion, "analogous", `${context.question} ${analogousRuling.question || analogousRuling.title || ""}`);
     return {
       schemaVersion: 1,
       mode: "inferred",
       verdictTitle: title,
-      verdict: `没有命中完全同场面的问答。可作为类推依据的资料结论是：${buildReadableRulingBody(analogousRuling.conclusion, title, "analogous")}`,
+      verdict: `没有命中完全同场面的问答。可作为类推依据的资料结论是：${buildReadableRulingBody(analogousRuling.conclusion, title, "analogous", context)}`,
       rulingBasis: "找到相似问答资料",
       confidence: { label: "类推依据", value: freshnessValue(snapshotMeta, 62), className: "" },
       steps: [
         "先确认题目与相似问答的共通结构：触发事件、适用时点、效果处理期间、对象或适用范围。",
         "再核对差异点是否会改变裁定；差异未排除前不能标记为已确认裁定。",
-        ...(analogousRuling.steps?.length ? analogousRuling.steps.slice(0, 2) : ["需要模型或人工把相似问答迁移到当前场面。"]),
+        ...buildRulingSteps(context, analogousRuling, title).slice(0, 3),
       ],
       needsConfirmation: buildNeedsConfirmation(context, false, analogousRuling),
       sources,
@@ -315,7 +327,9 @@ function mergeModelAnswer(modelAnswer, baseAnswer, evidence, snapshotMeta) {
 function retrieveEvidence(question, detectedCards, detectedTopics, snapshot) {
   if (!detectedCards.length) return [];
 
-  const textMatches = detectedCards
+  const uniqueCards = mergeCards(detectedCards);
+
+  const textMatches = uniqueCards
     .filter((card) => card.effectText)
     .map((card) => ({
       id: `card-effect-${card.id || card.name}`,
@@ -331,7 +345,7 @@ function retrieveEvidence(question, detectedCards, detectedTopics, snapshot) {
       score: 6,
     }));
 
-  return rankEvidenceRecords([...snapshot.records, ...textMatches], question, detectedCards, detectedTopics)
+  return rankEvidenceRecords([...snapshot.records, ...textMatches], question, uniqueCards, detectedTopics)
     .sort((a, b) => b.score - a.score)
     .slice(0, 16);
 }
@@ -370,11 +384,13 @@ function classifyEvidenceMatch(record, question, detectedCards, tokens) {
   const tokenRatio = tokens.length ? tokenHits / tokens.length : 0;
   const matchedCardCount = countEvidenceMatchedCards(record, detectedCards);
   const cardRatio = detectedCards.length ? matchedCardCount / detectedCards.length : 0;
+  const handlingOverlap = scoreHandlingOverlap(question, `${evidenceQuestion} ${record.conclusion || ""} ${(record.keywords || []).join(" ")}`);
   const exactEnough =
     matchedCardCount > 0 &&
-    (similarity >= 0.58 ||
+      (similarity >= 0.58 ||
       (tokenHits >= 5 && tokenRatio >= 0.28) ||
-      (cardRatio >= 0.8 && tokenHits >= 3 && tokenRatio >= 0.18));
+      (cardRatio >= 0.8 && tokenHits >= 3 && tokenRatio >= 0.18) ||
+      (cardRatio >= 0.8 && handlingOverlap >= 2));
 
   return {
     matchKind: exactEnough ? "direct" : "analogous",
@@ -399,6 +415,36 @@ function countEvidenceMatchedCards(record, detectedCards) {
     }
   }
   return count;
+}
+
+function scoreHandlingOverlap(question, evidenceText) {
+  const left = handlingTags(question);
+  const right = handlingTags(evidenceText);
+  let count = 0;
+  for (const tag of left) {
+    if (right.has(tag)) count += 1;
+  }
+  return count;
+}
+
+function handlingTags(value) {
+  const text = normalizeRulingText(value);
+  const tags = new Set();
+  const checks = [
+    ["negate", /(无效|康|無効|negate)/i],
+    ["deck-return", /(回卡组|回到卡组|返回卡组|洗回卡组|デッキ|戻|戻す|戻し|shuffle)/i],
+    ["temporary-banish", /(除外到.*处理后|处理后.*回|処理後.*戻|除外.*戻|temporar(?:y|ily).*banish|banish.*until)/i],
+    ["banish", /(除外|banish)/i],
+    ["field-change", /(场地换|回到场|回场|特殊召唤|フィールド|特殊召喚)/i],
+    ["destruction", /(破坏|破壊|destroy)/i],
+    ["battle", /(战斗|戦闘|伤害|ダメージ|attack|battle)/i],
+    ["activation", /(发动|発動|activate)/i],
+    ["control", /(控制权|コントロール|control)/i],
+  ];
+  for (const [tag, pattern] of checks) {
+    if (pattern.test(text)) tags.add(tag);
+  }
+  return tags;
 }
 
 function scoreRecord(record, cardKeys, detectedTopics, tokens) {
@@ -543,15 +589,42 @@ function collectQuestionCardCandidates(question) {
     addCandidate(candidates, match[1], "effect-owner");
   }
 
+  for (const match of normalized.matchAll(/(?:^|[，。；;\n\s])([A-Za-z0-9\u3040-\u30ff\u3400-\u9fff・･☆★－ー\-\s]{2,34}?)(?=把|將|将|对|對|康|无效|無効|发动|發動)/gu)) {
+    addCandidate(candidates, match[1], "action-subject");
+  }
+
+  for (const match of normalized.matchAll(/(?:有|存在|装备|裝備|适用|適用)([A-Za-z0-9\u3040-\u30ff\u3400-\u9fff・･☆★－ー\-\s]{2,34}?)(?:的|の|效果|効果|在|时|時|，|。|；|;)/gu)) {
+    addCandidate(candidates, match[1], "state-card");
+  }
+
   for (const match of normalized.matchAll(/([A-Za-z0-9\u3040-\u30ff\u3400-\u9fff・･☆★－ー\-\s]{2,34}(?:世界|姬|姫|龙|龍|王国|王國|御巫|土像|落胤|小夜|アドラ|ハヤテ|カガリ|ロゼ|レイ))/gu)) {
     addCandidate(candidates, match[1], "card-like-phrase");
   }
 
   return {
-    cards: dedupeBy(candidates, (item) => normalizeKey(item.input))
+    cards: pruneContainedCardCandidates(dedupeBy(candidates, (item) => normalizeKey(item.input)))
       .sort((left, right) => cardCandidatePriority(right) - cardCandidatePriority(left))
       .slice(0, 8),
   };
+}
+
+function pruneContainedCardCandidates(candidates) {
+  const sorted = candidates
+    .slice()
+    .sort((left, right) => cardCandidatePriority(right) - cardCandidatePriority(left));
+  const result = [];
+
+  for (const candidate of sorted) {
+    const key = normalizeKey(candidate.input);
+    if (!key) continue;
+    const containedByLonger = result.some((existing) => {
+      const existingKey = normalizeKey(existing.input);
+      return existingKey.length >= key.length + 2 && existingKey.includes(key);
+    });
+    if (!containedByLonger) result.push(candidate);
+  }
+
+  return result;
 }
 
 function extractBracketContents(text) {
@@ -587,7 +660,7 @@ function addCandidate(candidates, value, source) {
 }
 
 function cardCandidatePriority(item) {
-  const sourceScore = item.source === "quoted-name" ? 100 : item.source === "effect-owner" ? 80 : 40;
+  const sourceScore = item.source === "quoted-name" ? 100 : item.source === "effect-owner" ? 80 : item.source === "state-card" ? 72 : item.source === "action-subject" ? 68 : 40;
   return sourceScore + Math.min(30, normalizeKey(item.input).length);
 }
 
@@ -1049,6 +1122,11 @@ function extractYgoResourcesCardId(url) {
   return match ? decodeURIComponent(match[1]) : "";
 }
 
+function extractCardSourceId(url) {
+  const match = String(url || "").match(/\/(?:data\/card|card)\/([^/?#]+)/);
+  return match ? decodeURIComponent(match[1]) : "";
+}
+
 function findLiveCardId(candidates, indexes) {
   let best = null;
   for (const candidate of candidates.filter(Boolean)) {
@@ -1176,14 +1254,14 @@ function scoreTextSimilarity(left, right) {
 }
 
 function cardAliases(card) {
-  return [card.name, card.cnName, card.jaName, card.enName, ...(card.aliases || [])].filter(Boolean);
+  return [card.name, card.cnName, card.jaName, card.enName, card.matched, ...(card.aliases || [])].filter(Boolean);
 }
 
 function mergeCards(...groups) {
   const flat = groups.flat().filter(Boolean);
   const map = new Map();
   for (const card of flat) {
-    const key = canonicalCardKey(card);
+    const key = findMergeCardKey(map, card) || canonicalCardKey(card);
     const existing = map.get(key);
     if (!existing) {
       map.set(key, { ...card });
@@ -1192,31 +1270,87 @@ function mergeCards(...groups) {
     existing.matched = longerText(existing.matched, card.matched);
     existing.resolvedBy = existing.resolvedBy || card.resolvedBy;
     existing.resolutionConfidence = existing.resolutionConfidence || card.resolutionConfidence;
-    existing.effectText = existing.effectText || card.effectText;
-    existing.passcode = existing.passcode || card.passcode;
+    existing.effectText = preferChineseText(existing.effectText, card.effectText);
+    existing.passcode = mergeCardId(existing.passcode, card.passcode || card.id || card.cardId);
     existing.liveId = existing.liveId || card.liveId || (card.resolvedBy === "live-ygoresources" ? card.id : "");
     existing.cnName = existing.cnName || card.cnName;
     existing.jaName = existing.jaName || card.jaName;
     existing.enName = existing.enName || card.enName;
+    existing.name = preferDisplayName(existing, card);
     existing.cardType = existing.cardType || card.cardType;
     existing.ygoResourcesUrl = existing.ygoResourcesUrl || card.ygoResourcesUrl || (/db\.ygoresources\.com\/data\/card\//.test(card.sourceUrl || "") ? card.sourceUrl : "");
     existing.sourceUrl = existing.sourceUrl || card.sourceUrl;
-    existing.aliases = [...new Set([...(existing.aliases || []), ...(card.aliases || [])].filter(Boolean))];
+    existing.aliases = [...new Set([...(existing.aliases || []), ...(card.aliases || []), card.matched].filter(Boolean))];
   }
   return [...map.values()];
+}
+
+function mergeCardId(left, right) {
+  const leftId = normalizeId(left);
+  const rightId = normalizeId(right);
+  if (!leftId) return rightId || cleanText(right);
+  if (!rightId) return leftId || cleanText(left);
+  if (leftId === rightId) return leftId;
+  return leftId;
+}
+
+function preferDisplayName(existing, card) {
+  const candidates = [existing.cnName, card.cnName, existing.name, card.name, existing.jaName, card.jaName, existing.enName, card.enName]
+    .map(cleanText)
+    .filter(Boolean);
+  return candidates.find((item) => /[\u3400-\u9fff]/.test(item)) || candidates[0] || "";
+}
+
+function preferChineseText(left, right) {
+  const current = cleanText(left);
+  const next = cleanText(right);
+  if (!current) return next;
+  if (next && /[\u3400-\u9fff]/.test(next) && !/[\u3400-\u9fff]/.test(current)) return next;
+  return current;
+}
+
+function findMergeCardKey(map, card) {
+  const key = canonicalCardKey(card);
+  if (map.has(key)) return key;
+
+  const keys = cardIdentityKeys(card);
+  for (const [existingKey, existing] of map.entries()) {
+    const existingKeys = cardIdentityKeys(existing);
+    if ([...keys].some((item) => existingKeys.has(item))) return existingKey;
+  }
+  return "";
 }
 
 function canonicalCardKey(card) {
   const numeric = normalizeId(card.passcode || card.id || card.cardId || "");
   if (numeric) return `id:${numeric}`;
-  const sourceId = extractYgoResourcesCardId(card.ygoResourcesUrl || card.sourceUrl);
+  const sourceId = extractCardSourceId(card.ygoResourcesUrl || card.sourceUrl);
   const normalizedSourceId = normalizeId(sourceId);
   if (normalizedSourceId) return `id:${normalizedSourceId}`;
   return `name:${normalizeKey(card.name || card.cnName || card.jaName || card.enName || "")}`;
 }
 
+function cardIdentityKeys(card) {
+  const keys = new Set();
+  const numeric = normalizeId(card.passcode || card.id || card.cardId || "");
+  if (numeric) keys.add(`id:${numeric}`);
+  const sourceId = extractCardSourceId(card.ygoResourcesUrl || card.sourceUrl);
+  const normalizedSourceId = normalizeId(sourceId);
+  if (normalizedSourceId) keys.add(`id:${normalizedSourceId}`);
+
+  for (const alias of cardAliases(card)) {
+    const key = normalizeKey(alias);
+    if (key.length >= 3 && !isGenericCardAliasKey(key)) keys.add(`alias:${key}`);
+  }
+  return keys;
+}
+
+function isGenericCardAliasKey(key) {
+  return /^(卡通世界|toonworld|トゥーンワールド|闪刀姬|閃刀姫|闪刀|閃刀|时空)$/.test(key);
+}
+
 function buildCardSummaries(cards) {
-  return cards.map((card) => ({
+  return mergeCards(cards).map((card) => ({
     id: cleanText(card.id),
     passcode: cleanText(card.passcode),
     name: cleanText(card.name),
@@ -1230,6 +1364,7 @@ function buildCardSummaries(cards) {
     ygoResourcesUrl: cleanText(card.ygoResourcesUrl),
     liveId: cleanText(card.liveId),
     resolvedBy: cleanText(card.resolvedBy),
+    aliases: cleanList(card.aliases || cardAliases(card), []),
   }));
 }
 
@@ -1303,8 +1438,8 @@ function buildDirectNeedsConfirmation(context) {
   return [...new Set(items)];
 }
 
-function summarizeRulingConclusion(value, matchKind) {
-  const text = normalizeRulingText(value);
+function summarizeRulingConclusion(value, matchKind, contextText = "") {
+  const text = normalizeRulingText(`${contextText} ${value}`);
   const negative = /(できません|不能|不可以|不可|cannot|can't)/i.test(text);
   const positive = /(できます|できる|可以|能|may|can\b)/i.test(text);
   const notDestroyed = /(破壊されません|不会被破坏|不被破坏|不会破坏)/i.test(text);
@@ -1312,12 +1447,18 @@ function summarizeRulingConclusion(value, matchKind) {
   const banish = /(除外|banish)/i.test(text);
   const activate = /(発動|发动|activate)/i.test(text);
   const apply = /(適用|适用|apply)/i.test(text);
+  const deckReturn = hasDeckReturnText(text);
+  const temporaryBanish = hasTemporaryBanishText(text);
 
   if (negative) {
     if (activate) return "不能发动";
     if (apply) return "不能适用该效果";
     if (banish) return "不能除外";
     return "不能按该处理进行";
+  }
+
+  if ((positive || banish || apply || temporaryBanish) && deckReturn && temporaryBanish) {
+    return "可以适用临时除外效果，怪兽不回卡组";
   }
 
   if (notDestroyed) {
@@ -1337,8 +1478,13 @@ function summarizeRulingConclusion(value, matchKind) {
   return matchKind === "analogous" ? "可参考相似裁定，需复核差异" : "按问答结论处理";
 }
 
-function buildReadableRulingBody(value, title, matchKind) {
+function buildReadableRulingBody(value, title, matchKind, context = null) {
   const text = normalizeRulingText(value);
+  const contextText = normalizeRulingText(`${context?.question || ""} ${text}`);
+  if (title === "可以适用临时除外效果，怪兽不回卡组") {
+    const names = inferInteractionCardNames(context);
+    return `可以适用${names.protector}的临时除外效果，把被处理的怪兽除外到该效果处理后。因此${names.resolver}处理时，那只怪兽已经不在原本要处理的位置，不能被洗回卡组；处理后再回到场上。`;
+  }
   if (title === "可以除外，怪兽不被破坏") {
     return "可以适用相关除外效果，把战斗破坏预定的卡通怪兽除外；因此该怪兽不会被这次战斗破坏。";
   }
@@ -1349,10 +1495,65 @@ function buildReadableRulingBody(value, title, matchKind) {
   if (title === "可以适用该效果") return "可以按问答结论适用该效果。";
   if (title === "不能适用该效果") return "不能按该方式适用该效果。";
 
-  if (text && !hasBrokenCardMarkup(text)) return text;
+  if (text && !hasBrokenCardMarkup(text)) {
+    if (hasDeckReturnText(contextText) && hasTemporaryBanishText(contextText)) {
+      const names = inferInteractionCardNames(context);
+      return `可以适用${names.protector}的临时除外效果；被除外的怪兽不会被${names.resolver}洗回卡组。`;
+    }
+    return text;
+  }
   return matchKind === "analogous"
     ? "相似问答的原文含有卡名标记或未本地化文本，需要结合出处核对后类推。"
     : "命中的问答原文含有卡名标记或未本地化文本；已按结论关键词提炼，完整原文请打开下方出处核对。";
+}
+
+function buildRulingSteps(context, ruling, title) {
+  if (title === "可以适用临时除外效果，怪兽不回卡组") {
+    const names = inferInteractionCardNames(context);
+    return [
+      `${names.resolver}的效果开始适用时，会处理“把被无效或被处理的那张卡洗回卡组”。`,
+      `在这个“其他卡发动的效果适用之际”，可以适用${names.protector}的临时除外效果，把那只怪兽除外到该效果处理后。`,
+      `除外后，那只怪兽已经不在${names.resolver}要处理的原位置，不能被该效果洗回卡组。`,
+      `${names.resolver}处理完后，再按${names.protector}的临时除外效果让被除外的怪兽回到场上。`,
+    ];
+  }
+
+  if (title === "可以除外，怪兽不被破坏") {
+    const names = inferInteractionCardNames(context);
+    return [
+      "先确认有其他卡发动的效果正在适用，且该处理会影响自己场上的卡通怪兽。",
+      `在该效果适用之际，可以适用${names.protector}的临时除外效果，把那只怪兽除外到该效果处理后。`,
+      "除外期间该怪兽不在会被处理的位置，因此不会被该效果破坏。",
+      `该效果处理完后，再按${names.protector}的临时除外效果让其回到相应位置。`,
+    ];
+  }
+
+  if (ruling.steps?.length) return ruling.steps;
+  return ["按命中的问答资料处理。", "若场面条件不同，继续核对原文和相关 Q&A。"];
+}
+
+function hasDeckReturnText(value) {
+  return /(回卡组|回到卡组|返回卡组|洗回卡组|卡组|デッキ|戻|戻す|戻し|戻り|shuffle(?:d)?\s+(?:it|that card|them)?\s*(?:into|to)\s+the\s+deck)/i.test(value);
+}
+
+function hasTemporaryBanishText(value) {
+  const text = normalizeRulingText(value);
+  return /(除外.*(处理后|處理後|戻|戻す|戻る|return)|(?:处理后|處理後|処理後).*(除外|回到|返回|特殊召唤|戻)|temporar(?:y|ily).*banish|banish.*until.*(?:resolv|after))/i.test(text);
+}
+
+function inferInteractionCardNames(context) {
+  const cards = context?.detectedCards || [];
+  const protector = cards.find((card) => hasTemporaryBanishText(card.effectText || ""));
+  const resolver = cards.find((card) => card !== protector && hasDeckReturnText(`${card.effectText || ""} ${card.name || ""} ${card.matched || ""}`));
+  return {
+    protector: formatRulingCardName(protector) || "该临时除外效果",
+    resolver: formatRulingCardName(resolver) || "原本正在处理的效果",
+  };
+}
+
+function formatRulingCardName(card) {
+  const name = cleanText(card?.cnName || card?.name || card?.matched || card?.jaName || card?.enName || "");
+  return name ? `「${name}」` : "";
 }
 
 function normalizeRulingText(value) {

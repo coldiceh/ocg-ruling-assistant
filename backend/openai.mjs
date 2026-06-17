@@ -322,6 +322,8 @@ function buildInstructions() {
     "证据里的 matchKind=direct 才代表完全同场面或足够直接的问答；matchKind=analogous 只能作为类推依据，confidence 必须是 inferred 或 unknown。",
     "使用 analogous 证据时，必须说明共通处理结构和仍需核对的差异，不能写成官方已确认裁定。",
     "如果证据与问题场面不完全一致，必须在 needsConfirmation 中列出差异。",
+    "涉及保护、临时除外、代替、无效并回卡组等处理时，steps 必须按时点推导：哪个效果正在适用、哪个效果可否在此时适用、被处理卡是否仍在原位置、原效果剩余处理如何执行、处理后状态是什么。",
+    "不能用“通常是保护效果”这类笼统文本代替处理推导。",
     "回答要面向玩家，直接给处理步骤；但不能为了完整性编造不存在的官方出处。",
     "输出必须精简：verdict 不超过 320 个汉字，steps 不超过 6 条，needsConfirmation 不超过 5 条。",
   ].join("\n");

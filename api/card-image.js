@@ -66,12 +66,15 @@ function buildImageCandidates(id) {
   const compactId = id.replace(/^0+/, "") || id;
   return [
     `https://cdn.233.momobako.com/ygopro/pics/${compactId}.jpg!half`,
+    `https://cdn.233.momobako.com/ygopro/pics/${compactId}.jpg!thumb`,
     `https://cdn.233.momobako.com/ygopro/pics/${compactId}.jpg`,
     `https://cdn.233.momobako.com/ygoimg/ygopro/${compactId}.jpg`,
     `https://cdn.233.momobako.com/ygoimg/ygopro/${compactId}.webp!half`,
     `https://images.ygoprodeck.com/images/cards/${compactId}.jpg`,
     `https://images.ygoprodeck.com/images/cards_cropped/${compactId}.jpg`,
+    `https://images.ygoprodeck.com/images/cards_small/${compactId}.jpg`,
     `https://cdn.233.momobako.com/ygopro/pics/${id}.jpg!half`,
+    `https://cdn.233.momobako.com/ygopro/pics/${id}.jpg!thumb`,
     `https://cdn.233.momobako.com/ygopro/pics/${id}.jpg`,
     `https://cdn.233.momobako.com/ygoimg/ygopro/${id}.jpg`,
     `https://cdn.233.momobako.com/ygoimg/ygopro/${id}.webp!half`,
