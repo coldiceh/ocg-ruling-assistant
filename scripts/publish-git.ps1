@@ -2,7 +2,8 @@ param(
   [string]$RepoUrl = "https://github.com/coldiceh/ocg-ruling-assistant.git",
   [string]$Branch = "main",
   [string]$Message = "chore: update ocg ruling assistant",
-  [string]$GitPath = ""
+  [string]$GitPath = "",
+  [switch]$ForceWithLease
 )
 
 $ErrorActionPreference = "Stop"
@@ -97,6 +98,12 @@ if ($status) {
   Write-Host "No local changes to commit. Trying to push the current branch..."
 }
 
-Invoke-GitChecked push -u origin $Branch
+if ($ForceWithLease) {
+  Invoke-GitChecked fetch origin "+refs/heads/$($Branch):refs/remotes/origin/$($Branch)"
+  Write-Host "Force pushing with lease. This keeps the local workspace as the source of truth."
+  Invoke-GitChecked push --force-with-lease -u origin $Branch
+} else {
+  Invoke-GitChecked push -u origin $Branch
+}
 
 Write-Host "Published to $RepoUrl on branch $Branch."
