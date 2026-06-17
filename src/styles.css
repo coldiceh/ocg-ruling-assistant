@@ -296,6 +296,13 @@ svg {
   border-left-color: var(--red);
 }
 
+.basis-text {
+  margin: -2px 0 10px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
 .block-title {
   margin-bottom: 10px;
   color: var(--muted);
