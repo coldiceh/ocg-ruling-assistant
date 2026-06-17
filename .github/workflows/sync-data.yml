@@ -29,6 +29,12 @@ jobs:
           MAX_QA_TOTAL: "3000"
         run: node scripts/sync-ygoresources.mjs
 
+      - name: Sync OCG rule corpus
+        env:
+          OCG_RULE_BASE_URL: "https://ocg-rule.readthedocs.io/zh-cn/latest/"
+          OCG_RULE_MAX_PAGES: "240"
+        run: node scripts/sync-ocg-rule.mjs
+
       - name: Commit snapshot changes
         run: |
           git config user.name "github-actions[bot]"

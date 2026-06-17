@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": null,
+  "source": {
+    "name": "OCG Rule",
+    "url": "https://ocg-rule.readthedocs.io/zh-cn/latest/",
+    "role": "规则学习资料与裁判训练资料；回答时只能作为规则依据或测试集，不能伪装为官方数据库裁定。"
+  },
+  "records": []
+}

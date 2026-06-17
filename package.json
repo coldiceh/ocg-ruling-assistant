@@ -4,9 +4,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "check": "node --check src/app.js && node --check scripts/sync-ygoresources.mjs && node --check backend/engine.mjs && node --check backend/openai.mjs && node --check backend/server.mjs && node --check api/answer.js && node --check api/card.js && node --check api/card-image.js",
+    "check": "node --check src/app.js && node --check scripts/sync-ygoresources.mjs && node --check scripts/sync-ocg-rule.mjs && node --check backend/engine.mjs && node --check backend/openai.mjs && node --check backend/server.mjs && node --check api/answer.js && node --check api/card.js && node --check api/card-image.js",
     "dev:backend": "node backend/server.mjs",
-    "sync:data": "node scripts/sync-ygoresources.mjs"
+    "sync:data": "node scripts/sync-ygoresources.mjs",
+    "sync:rules": "node scripts/sync-ocg-rule.mjs"
   },
   "engines": {
     "node": ">=20"
