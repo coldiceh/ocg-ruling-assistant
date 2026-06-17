@@ -1,0 +1,42 @@
+name: Sync ruling data
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "20 18 * * *"
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Sync YGOResources snapshot
+        env:
+          SYNC_ALL_RELEASED_CARDS: "true"
+          SYNC_ONLY_RELEASED_CARDS: "true"
+          CARD_INDEX_LANGUAGES: "en,ja"
+          FETCH_CONCURRENCY: "8"
+          MAX_QA_TOTAL: "3000"
+        run: node scripts/sync-ygoresources.mjs
+
+      - name: Commit snapshot changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/*.json
+          if git diff --cached --quiet; then
+            echo "No data changes."
+          else
+            git commit -m "chore(data): sync ruling snapshot"
+            git push
+          fi

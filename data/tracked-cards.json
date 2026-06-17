@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "cards": [
+    {
+      "lookupName": "Triple Tactics Talent",
+      "language": "en",
+      "aliases": ["三战之才", "三战"]
+    },
+    {
+      "lookupName": "I:P Masquerena",
+      "language": "en",
+      "aliases": ["IP", "I:P", "IP伪装舞会莱娜", "IP加速"]
+    },
+    {
+      "lookupName": "S:P Little Knight",
+      "language": "en",
+      "aliases": ["小夜", "S:P小夜", "S:P Little Knight"]
+    },
+    {
+      "lookupName": "Blue-Eyes Chaos MAX Dragon",
+      "language": "en",
+      "aliases": ["青眼混沌极龙", "混沌极龙"]
+    },
+    {
+      "lookupName": "Double-Edged Sword",
+      "language": "en",
+      "aliases": ["脆刃之剑", "脆刃"]
+    },
+    {
+      "lookupName": "Ohime the Manifested Mikanko",
+      "language": "en",
+      "aliases": ["大日女之御巫", "大日女", "御巫"]
+    },
+    {
+      "lookupName": "Fallen of Albaz",
+      "language": "en",
+      "aliases": ["阿不思", "阿不思的落胤", "落胤"]
+    },
+    {
+      "lookupName": "Branded Fusion",
+      "language": "en",
+      "aliases": ["烙印融合"]
+    },
+    {
+      "lookupName": "Albion the Branded Dragon",
+      "language": "en",
+      "aliases": ["神炎龙 赫界龙", "神炎龙", "赫界龙"]
+    }
+  ]
+}
