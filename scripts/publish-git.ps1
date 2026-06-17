@@ -48,29 +48,55 @@ function Invoke-Git {
   & $git -c "safe.directory=$root" @args
 }
 
+function Invoke-GitChecked {
+  & $git -c "safe.directory=$root" @args
+  if ($LASTEXITCODE -ne 0) {
+    throw "git $($args -join ' ') failed with exit code $LASTEXITCODE."
+  }
+}
+
+function Read-GitOutput {
+  $output = & $git -c "safe.directory=$root" @args
+  if ($LASTEXITCODE -ne 0) {
+    throw "git $($args -join ' ') failed with exit code $LASTEXITCODE."
+  }
+  return $output
+}
+
+function Read-GitOptional {
+  $output = & $git -c "safe.directory=$root" @args
+  if (($LASTEXITCODE -ne 0) -and ($LASTEXITCODE -ne 1)) {
+    throw "git $($args -join ' ') failed with exit code $LASTEXITCODE."
+  }
+  return $output
+}
+
 if (-not (Test-Path (Join-Path $root ".git"))) {
   powershell -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "setup-git.ps1") -RepoUrl $RepoUrl -Branch $Branch -GitPath $git
+  if ($LASTEXITCODE -ne 0) {
+    throw "Git setup failed with exit code $LASTEXITCODE."
+  }
 }
 
-Invoke-Git remote set-url origin $RepoUrl
-Invoke-Git checkout -B $Branch
+Invoke-GitChecked remote set-url origin $RepoUrl
+Invoke-GitChecked checkout -B $Branch
 
-if (-not (Invoke-Git config user.name)) {
-  Invoke-Git config user.name "coldiceh"
+if (-not (Read-GitOptional config user.name)) {
+  Invoke-GitChecked config user.name "coldiceh"
 }
 
-if (-not (Invoke-Git config user.email)) {
-  Invoke-Git config user.email "coldiceh@users.noreply.github.com"
+if (-not (Read-GitOptional config user.email)) {
+  Invoke-GitChecked config user.email "coldiceh@users.noreply.github.com"
 }
 
-Invoke-Git add -A
-$status = Invoke-Git status --porcelain
-if (-not $status) {
-  Write-Host "No local changes to publish."
-  exit 0
+Invoke-GitChecked add -A
+$status = Read-GitOutput status --porcelain
+if ($status) {
+  Invoke-GitChecked commit -m $Message
+} else {
+  Write-Host "No local changes to commit. Trying to push the current branch..."
 }
 
-Invoke-Git commit -m $Message
-Invoke-Git push -u origin $Branch
+Invoke-GitChecked push -u origin $Branch
 
 Write-Host "Published to $RepoUrl on branch $Branch."
