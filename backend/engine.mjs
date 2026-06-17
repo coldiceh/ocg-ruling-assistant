@@ -666,13 +666,13 @@ function extractBaigeEffectText(card) {
   const direct = [card.desc, card.effect, card.effectText, card.text, card.cn_desc, card.zh_desc, card.sc_desc, card.nwbbs_text].find(
     (value) => typeof value === "string" && value.trim()
   );
-  if (direct) return direct.trim();
+  if (direct) return cleanText(direct);
 
   const texts = [];
   function visit(value, key = "") {
     if (!value) return;
     if (typeof value === "string") {
-      if (/desc|effect|text/i.test(key) && value.trim().length > 8) texts.push(value.trim());
+      if (/desc|effect|text/i.test(key) && value.trim().length > 8) texts.push(cleanText(value));
       return;
     }
     if (Array.isArray(value)) {
@@ -1125,7 +1125,39 @@ function strongerConfidence(left = "low", right = "low") {
 }
 
 function cleanText(value) {
-  return String(value || "").trim();
+  return decodeHtmlEntities(stripHtml(String(value || "")))
+    .replace(/\u00a0/g, " ")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .replace(/[ \t]{2,}/g, " ")
+    .trim();
+}
+
+function stripHtml(value) {
+  return value
+    .replace(/<\s*br\s*\/?\s*>/gi, "\n")
+    .replace(/<\/\s*(p|div|li|tr|section|article)\s*>/gi, "\n")
+    .replace(/<[^>]+>/g, "");
+}
+
+function decodeHtmlEntities(value) {
+  const named = {
+    amp: "&",
+    lt: "<",
+    gt: ">",
+    quot: '"',
+    apos: "'",
+    nbsp: " ",
+  };
+  return value.replace(/&(#x?[0-9a-f]+|[a-z]+);/gi, (match, entity) => {
+    const lower = String(entity).toLowerCase();
+    if (lower[0] === "#") {
+      const isHex = lower[1] === "x";
+      const codePoint = Number.parseInt(lower.slice(isHex ? 2 : 1), isHex ? 16 : 10);
+      return Number.isFinite(codePoint) ? String.fromCodePoint(codePoint) : match;
+    }
+    return Object.prototype.hasOwnProperty.call(named, lower) ? named[lower] : match;
+  });
 }
 
 function cleanList(value, fallback = []) {
@@ -1151,7 +1183,7 @@ function formatError(error) {
     return "外部资料或模型服务暂时连接失败，请稍后重试。";
   }
   if (/Unterminated string|Unexpected end of JSON|JSON/i.test(message)) {
-    return "模型返回内容不完整或格式异常，已回退为资料检索结果。可以稍后重试，或把 GEMINI_MAX_OUTPUT_TOKENS 调到 2600。";
+    return "模型返回内容不完整或格式异常，已回退为资料检索结果。可以稍后重试，或把 GEMINI_MAX_OUTPUT_TOKENS 调到 4096。";
   }
   return message.length > 180 ? `${message.slice(0, 180)}...` : message;
 }
