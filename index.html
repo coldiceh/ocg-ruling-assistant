@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>OCG 裁定助手</title>
+    <link rel="stylesheet" href="src/styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">OCG 快速裁定</p>
+          <h1>OCG 裁定助手</h1>
+        </div>
+        <div class="status-strip" aria-label="资料状态">
+          <span class="status-dot"></span>
+          <span id="sourceStatus">资料库</span>
+        </div>
+      </header>
+
+      <main class="workspace">
+        <section class="ask-panel" aria-labelledby="askTitle">
+          <div class="panel-head">
+            <div>
+              <h2 id="askTitle">裁定问题</h2>
+              <p>输入场面、连锁、卡名和想确认的点。</p>
+            </div>
+            <button class="icon-button ghost" id="clearButton" type="button" aria-label="清空" title="清空">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" />
+              </svg>
+            </button>
+          </div>
+
+          <textarea id="questionInput" spellcheck="false"></textarea>
+
+          <div class="actions">
+            <div class="model-strip" aria-live="polite">
+              <span>回答模型</span>
+              <strong id="modelStatusText">待分析</strong>
+            </div>
+            <button class="primary-button" id="analyzeButton" type="button">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M8 5h8M6 12h12M9 19h6" />
+              </svg>
+              分析
+            </button>
+          </div>
+
+          <div class="result-grid" id="resultGrid" hidden>
+            <section class="result-block card-panel" id="cardPanel" aria-labelledby="cardsTitle" hidden>
+              <div class="block-title">
+                <span id="cardsTitle">相关卡片</span>
+                <strong id="cardStatus"></strong>
+              </div>
+              <div class="card-tabs" id="cardTabs"></div>
+              <div class="card-preview" id="cardPreview" hidden>
+                <div class="card-image-box">
+                  <img id="cardImage" alt="" loading="lazy" />
+                  <p class="card-image-placeholder" id="cardImagePlaceholder" hidden>暂无卡图</p>
+                </div>
+                <div class="card-detail">
+                  <h3 id="cardName"></h3>
+                  <p id="cardMeta"></p>
+                  <p class="card-effect" id="cardEffect"></p>
+                  <a id="cardSourceLink" href="#" target="_blank" rel="noreferrer">在百鸽打开</a>
+                </div>
+              </div>
+            </section>
+
+            <section class="result-block verdict-block" aria-labelledby="verdictTitle">
+              <div class="block-title">
+                <span>结论</span>
+                <strong id="confidenceText">未分析</strong>
+              </div>
+              <h3 id="verdictTitle"></h3>
+              <p id="verdictBody"></p>
+            </section>
+
+            <section class="result-block" aria-labelledby="stepsTitle">
+              <div class="block-title">
+                <span id="stepsTitle">处理步骤</span>
+              </div>
+              <ol id="stepsList"></ol>
+            </section>
+
+            <section class="result-block" aria-labelledby="questionsTitle">
+              <div class="block-title">
+                <span id="questionsTitle">还需确认</span>
+              </div>
+              <ul id="questionsList"></ul>
+            </section>
+
+            <section class="result-block" aria-labelledby="sourcesTitle">
+              <div class="block-title">
+                <span id="sourcesTitle">依据</span>
+              </div>
+              <div id="sourcesList"></div>
+            </section>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="src/app.js"></script>
+  </body>
+</html>
