@@ -157,6 +157,7 @@ const ui = {
   confidenceText: document.querySelector("#confidenceText"),
   verdictBlock: document.querySelector(".verdict-block"),
   verdictTitle: document.querySelector("#verdictTitle"),
+  rulingBasisText: document.querySelector("#rulingBasisText"),
   verdictBody: document.querySelector("#verdictBody"),
   modelStatusText: document.querySelector("#modelStatusText"),
   stepsList: document.querySelector("#stepsList"),
@@ -655,7 +656,7 @@ async function requestBackendAnswer(text) {
 }
 
 function buildBackendCacheKey(text) {
-  return `ocg-ruling-answer:v7:${appConfig.answerApiUrl}:${normalizeText(text).slice(0, 2000)}`;
+  return `ocg-ruling-answer:v8:${appConfig.answerApiUrl}:${normalizeText(text).slice(0, 2000)}`;
 }
 
 function readCachedBackendAnswer(key) {
@@ -683,6 +684,7 @@ function renderPending() {
   ui.verdictBlock.className = "result-block verdict-block";
   ui.confidenceText.textContent = "分析中";
   ui.verdictTitle.textContent = "正在检索资料";
+  ui.rulingBasisText.textContent = "";
   ui.verdictBody.textContent = "后端正在匹配卡片、问答资料和处理条件。";
   renderList(ui.stepsList, ["等待后端返回。"]);
   renderList(ui.questionsList, []);
@@ -697,6 +699,7 @@ function renderBackendAnswer(answer) {
   ui.verdictBlock.className = `result-block verdict-block ${confidence.className || ""}`.trim();
   ui.confidenceText.textContent = `${confidence.label || "置信度"} ${Number(confidence.value || 0)}%`;
   ui.verdictTitle.textContent = answer?.verdictTitle || "后端没有返回结论";
+  ui.rulingBasisText.textContent = answer?.rulingBasis || basisFromBackendMode(answer?.mode);
   ui.verdictBody.textContent = answer?.verdict || "暂时不能给确定裁定。";
   renderList(ui.stepsList, answer?.steps || []);
   renderList(ui.questionsList, [...(answer?.needsConfirmation || []), ...(answer?.warnings || [])]);
@@ -718,6 +721,7 @@ function renderResult(text, bestMatch, confidence, generatedQuestions, detectedC
   if (!bestMatch) {
     ui.confidenceText.textContent = `${confidence.label} ${confidence.value}%`;
     ui.verdictTitle.textContent = "资料库没有命中";
+    ui.rulingBasisText.textContent = "资料不足";
     ui.verdictBody.textContent = "暂时不能给确定裁定。可以继续使用俗称，但需要补一点能帮助识别的线索，例如日文、英文、效果原文或卡片种类。";
     renderList(ui.stepsList, [
       "补充常用别名、日文/英文片段或效果原文，不必强制输入完整官方卡名。",
@@ -734,6 +738,7 @@ function renderResult(text, bestMatch, confidence, generatedQuestions, detectedC
   ui.confidenceText.textContent = `${confidence.label} ${confidence.value}%`;
   if (note.recordType === "card-text") {
     ui.verdictTitle.textContent = "只找到相关卡片文本";
+    ui.rulingBasisText.textContent = "缺少直接问答资料";
     ui.verdictBody.textContent =
       "资料库识别到了相关卡片，但没有命中能直接回答这个场面的官方 Q&A 或已确认裁定。不能把效果文本直接当作具体处理结论。";
     renderList(ui.stepsList, [
@@ -743,6 +748,7 @@ function renderResult(text, bestMatch, confidence, generatedQuestions, detectedC
     ]);
   } else {
     ui.verdictTitle.textContent = note.status === "confirmed" ? "可以按已确认资料处理" : "按以下方式处理";
+    ui.rulingBasisText.textContent = note.status === "confirmed" ? "本地已确认资料" : "本地资料";
     ui.verdictBody.textContent = note.conclusion;
     renderList(ui.stepsList, note.steps || []);
   }
@@ -792,9 +798,11 @@ function normalizeVisibleCards(cards) {
       cardType: String(card.cardType || "").trim(),
       effectText: String(card.effectText || "").trim(),
       sourceUrl: String(card.sourceUrl || "").trim(),
+      ygoResourcesUrl: String(card.ygoResourcesUrl || "").trim(),
+      liveId: String(card.liveId || "").trim(),
     };
     if (!normalized.name) continue;
-    const key = normalized.passcode || normalized.id || normalizeText(normalized.name).toLowerCase();
+    const key = canonicalVisibleCardKey(normalized);
     const existing = map.get(key);
     if (!existing) {
       map.set(key, normalized);
@@ -805,8 +813,32 @@ function normalizeVisibleCards(cards) {
     existing.cnName = existing.cnName || normalized.cnName;
     existing.jaName = existing.jaName || normalized.jaName;
     existing.enName = existing.enName || normalized.enName;
+    existing.passcode = existing.passcode || normalized.passcode;
+    existing.sourceUrl = existing.sourceUrl || normalized.sourceUrl;
+    existing.ygoResourcesUrl = existing.ygoResourcesUrl || normalized.ygoResourcesUrl;
+    existing.liveId = existing.liveId || normalized.liveId;
   }
   return [...map.values()];
+}
+
+function canonicalVisibleCardKey(card) {
+  const numeric = normalizeCardId(card.passcode || card.id || card.liveId);
+  if (numeric) return `id:${numeric}`;
+  const sourceId = extractCardIdFromUrl(card.ygoResourcesUrl || card.sourceUrl);
+  const normalizedSourceId = normalizeCardId(sourceId);
+  if (normalizedSourceId) return `id:${normalizedSourceId}`;
+  return `name:${normalizeText(card.name).toLowerCase()}`;
+}
+
+function normalizeCardId(value) {
+  const digits = String(value || "").replace(/\D+/g, "");
+  if (!digits) return "";
+  return digits.length <= 8 ? digits.padStart(8, "0") : digits;
+}
+
+function extractCardIdFromUrl(url) {
+  const match = String(url || "").match(/\/(?:card|data\/card)\/([^/?#]+)/);
+  return match ? decodeURIComponent(match[1]) : "";
 }
 
 function selectCard(index) {
@@ -1000,6 +1032,12 @@ function modelProviderLabel(provider) {
   if (value === "openai") return "OpenAI";
   if (value === "ollama") return "Ollama";
   return "模型";
+}
+
+function basisFromBackendMode(mode) {
+  if (mode === "confirmed") return "找到直接问答资料";
+  if (mode === "inferred") return "类推/规则推理";
+  return "资料不足";
 }
 
 function updateModelStatus(text) {

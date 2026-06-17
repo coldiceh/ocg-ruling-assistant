@@ -231,14 +231,16 @@ function buildEvidenceAnswer(context) {
 
   const exactRuling = evidence.find((item) => isRulingEvidence(item) && item.matchKind === "direct");
   if (exactRuling) {
+    const title = summarizeRulingConclusion(exactRuling.conclusion, "direct");
     return {
       schemaVersion: 1,
       mode: "confirmed",
-      verdictTitle: "找到直接问答资料",
-      verdict: exactRuling.conclusion,
+      verdictTitle: title,
+      verdict: buildReadableRulingBody(exactRuling.conclusion, title, "direct"),
+      rulingBasis: "找到直接问答资料",
       confidence: { label: freshnessLabel(snapshotMeta, "已确认资料"), value: freshnessValue(snapshotMeta, 84), className: "is-confirmed" },
       steps: exactRuling.steps?.length ? exactRuling.steps : ["按命中的问答资料处理。", "若场面条件不同，继续核对原文和相关 Q&A。"],
-      needsConfirmation: buildNeedsConfirmation(context, false),
+      needsConfirmation: buildDirectNeedsConfirmation(context),
       sources,
       snapshotAt: snapshotMeta?.generatedAt || null,
       evidenceCount: evidence.length,
@@ -248,12 +250,13 @@ function buildEvidenceAnswer(context) {
 
   const analogousRuling = evidence.find((item) => isRulingEvidence(item));
   if (analogousRuling) {
+    const title = summarizeRulingConclusion(analogousRuling.conclusion, "analogous");
     return {
       schemaVersion: 1,
       mode: "inferred",
-      verdictTitle: "找到相似问答资料",
-      verdict:
-        `没有命中完全同场面的问答。可作为类推依据的资料结论是：${analogousRuling.conclusion}`,
+      verdictTitle: title,
+      verdict: `没有命中完全同场面的问答。可作为类推依据的资料结论是：${buildReadableRulingBody(analogousRuling.conclusion, title, "analogous")}`,
+      rulingBasis: "找到相似问答资料",
       confidence: { label: "类推依据", value: freshnessValue(snapshotMeta, 62), className: "" },
       steps: [
         "先确认题目与相似问答的共通结构：触发事件、适用时点、效果处理期间、对象或适用范围。",
@@ -272,6 +275,7 @@ function buildEvidenceAnswer(context) {
     schemaVersion: 1,
     mode: "unknown",
     verdictTitle: "只找到相关卡片文本",
+    rulingBasis: "缺少直接问答资料",
     verdict:
       "后端识别到了相关卡片和效果文本，但没有命中能直接回答这个场面的 Q&A 或 FAQ。不能把效果文本直接当作确定裁定。",
     confidence: { label: "缺少问答出处", value: 45, className: "is-risky" },
@@ -298,6 +302,7 @@ function mergeModelAnswer(modelAnswer, baseAnswer, evidence, snapshotMeta) {
     mode: confidenceMode,
     verdictTitle: cleanText(modelAnswer.verdictTitle) || baseAnswer.verdictTitle,
     verdict: cleanText(modelAnswer.verdict) || baseAnswer.verdict,
+    rulingBasis: baseAnswer.rulingBasis || basisFromMode(confidenceMode),
     confidence,
     steps: cleanList(modelAnswer.steps, baseAnswer.steps),
     needsConfirmation: cleanList(modelAnswer.needsConfirmation, baseAnswer.needsConfirmation),
@@ -1178,10 +1183,10 @@ function mergeCards(...groups) {
   const flat = groups.flat().filter(Boolean);
   const map = new Map();
   for (const card of flat) {
-    const key = card.passcode || card.id || card.name;
+    const key = canonicalCardKey(card);
     const existing = map.get(key);
     if (!existing) {
-      map.set(key, card);
+      map.set(key, { ...card });
       continue;
     }
     existing.matched = longerText(existing.matched, card.matched);
@@ -1199,6 +1204,15 @@ function mergeCards(...groups) {
     existing.aliases = [...new Set([...(existing.aliases || []), ...(card.aliases || [])].filter(Boolean))];
   }
   return [...map.values()];
+}
+
+function canonicalCardKey(card) {
+  const numeric = normalizeId(card.passcode || card.id || card.cardId || "");
+  if (numeric) return `id:${numeric}`;
+  const sourceId = extractYgoResourcesCardId(card.ygoResourcesUrl || card.sourceUrl);
+  const normalizedSourceId = normalizeId(sourceId);
+  if (normalizedSourceId) return `id:${normalizedSourceId}`;
+  return `name:${normalizeKey(card.name || card.cnName || card.jaName || card.enName || "")}`;
 }
 
 function buildCardSummaries(cards) {
@@ -1281,12 +1295,91 @@ function buildNeedsConfirmation(context, cardTextOnly, analogousRuling = null) {
   return [...new Set(items)];
 }
 
+function buildDirectNeedsConfirmation(context) {
+  const items = [];
+  const releasedUnknown = context.detectedCards.filter((card) => card.released === false).map((card) => card.name);
+  if (releasedUnknown.length) items.push(`${releasedUnknown.join("、")} 可能尚未发售或同步来源缺少发售日期。`);
+  items.push("若题目条件与命中的问答原文不同，需要回到出处核对完整原文。");
+  return [...new Set(items)];
+}
+
+function summarizeRulingConclusion(value, matchKind) {
+  const text = normalizeRulingText(value);
+  const negative = /(できません|不能|不可以|不可|cannot|can't)/i.test(text);
+  const positive = /(できます|できる|可以|能|may|can\b)/i.test(text);
+  const notDestroyed = /(破壊されません|不会被破坏|不被破坏|不会破坏)/i.test(text);
+  const destroyed = /(破壊されます|被破坏|会被破坏)/i.test(text);
+  const banish = /(除外|banish)/i.test(text);
+  const activate = /(発動|发动|activate)/i.test(text);
+  const apply = /(適用|适用|apply)/i.test(text);
+
+  if (negative) {
+    if (activate) return "不能发动";
+    if (apply) return "不能适用该效果";
+    if (banish) return "不能除外";
+    return "不能按该处理进行";
+  }
+
+  if (notDestroyed) {
+    if (banish) return "可以除外，怪兽不被破坏";
+    return "不会被破坏";
+  }
+
+  if (positive) {
+    if (banish && /破壊|破坏/.test(text)) return "可以除外，怪兽不被破坏";
+    if (banish) return "可以除外";
+    if (activate) return "可以发动";
+    if (apply) return "可以适用该效果";
+    return "可以按该处理进行";
+  }
+
+  if (destroyed) return "会被破坏";
+  return matchKind === "analogous" ? "可参考相似裁定，需复核差异" : "按问答结论处理";
+}
+
+function buildReadableRulingBody(value, title, matchKind) {
+  const text = normalizeRulingText(value);
+  if (title === "可以除外，怪兽不被破坏") {
+    return "可以适用相关除外效果，把战斗破坏预定的卡通怪兽除外；因此该怪兽不会被这次战斗破坏。";
+  }
+  if (title === "可以除外") return "可以适用相关效果，将满足条件的卡除外。";
+  if (title === "不能除外") return "不能适用相关效果将其除外。";
+  if (title === "可以发动") return "满足问答所示条件时，可以发动该效果。";
+  if (title === "不能发动") return "该场面不满足问答所示条件，不能发动该效果。";
+  if (title === "可以适用该效果") return "可以按问答结论适用该效果。";
+  if (title === "不能适用该效果") return "不能按该方式适用该效果。";
+
+  if (text && !hasBrokenCardMarkup(text)) return text;
+  return matchKind === "analogous"
+    ? "相似问答的原文含有卡名标记或未本地化文本，需要结合出处核对后类推。"
+    : "命中的问答原文含有卡名标记或未本地化文本；已按结论关键词提炼，完整原文请打开下方出处核对。";
+}
+
+function normalizeRulingText(value) {
+  return cleanText(value)
+    .replace(/「\s*>\s*」/g, "该卡")
+    .replace(/『\s*>\s*』/g, "该卡")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function hasBrokenCardMarkup(value) {
+  return /「\s*>\s*」|『\s*>\s*』|>\s*>/.test(value);
+}
+
+function basisFromMode(mode) {
+  if (mode === "confirmed") return "找到直接问答资料";
+  if (mode === "inferred") return "类推/规则推理";
+  return "资料不足";
+}
+
 function buildUnknownAnswer(verdictTitle, verdict, steps, needsConfirmation, snapshotMeta) {
   return {
     schemaVersion: 1,
     mode: "unknown",
     verdictTitle,
     verdict,
+    rulingBasis: "资料不足",
     confidence: { label: "不能确定", value: 18, className: "is-risky" },
     steps,
     needsConfirmation,
