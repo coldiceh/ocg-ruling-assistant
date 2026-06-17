@@ -206,7 +206,7 @@ async function buildGeminiAnswerWithModel(context, env, apiKey, model) {
         },
       ],
       generationConfig: {
-        maxOutputTokens: Number(env.GEMINI_MAX_OUTPUT_TOKENS || 2600),
+        maxOutputTokens: Number(env.GEMINI_MAX_OUTPUT_TOKENS || 4096),
         temperature: env.GEMINI_TEMPERATURE === undefined ? 0.1 : Number(env.GEMINI_TEMPERATURE),
         candidateCount: 1,
         responseMimeType: "application/json",
@@ -254,7 +254,7 @@ async function resolveGeminiCardNamesWithModel(question, env, apiKey, model) {
         },
       ],
       generationConfig: {
-        maxOutputTokens: Number(env.GEMINI_CARD_RESOLUTION_TOKENS || 1200),
+        maxOutputTokens: Number(env.GEMINI_CARD_RESOLUTION_TOKENS || 1800),
         temperature: env.GEMINI_TEMPERATURE === undefined ? 0.1 : Number(env.GEMINI_TEMPERATURE),
         candidateCount: 1,
         responseMimeType: "application/json",
@@ -321,6 +321,7 @@ function buildInstructions() {
     "如果证据只有卡片效果文本而没有直接 Q&A/FAQ，confidence 必须是 inferred 或 unknown，不能写成已确认裁定。",
     "如果证据与问题场面不完全一致，必须在 needsConfirmation 中列出差异。",
     "回答要面向玩家，直接给处理步骤；但不能为了完整性编造不存在的官方出处。",
+    "输出必须精简：verdict 不超过 320 个汉字，steps 不超过 6 条，needsConfirmation 不超过 5 条。",
   ].join("\n");
 }
 

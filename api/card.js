@@ -153,8 +153,8 @@ function normalizeBaigeCard(card, attempt) {
     names,
     meta,
     effectText,
-    imageUrl: id ? `https://cdn.233.momobako.com/ygopro/pics/${id}.jpg` : "",
-    imageCandidates: buildImageCandidates(id),
+    imageUrl: collectImageCandidates(card, id)[0] || "",
+    imageCandidates: collectImageCandidates(card, id),
     sourceUrl: id ? `https://ygocdb.com/card/${id}` : "https://ygocdb.com/",
   };
 }
@@ -189,13 +189,13 @@ function extractEffectText(card) {
     card.sc_desc,
     card.nwbbs_text,
   ].find((value) => typeof value === "string" && value.trim());
-  if (direct) return direct.trim();
+  if (direct) return cleanText(direct);
 
   const texts = [];
   function visit(value, key = "") {
     if (!value) return;
     if (typeof value === "string") {
-      if (/desc|effect|text/i.test(key) && value.trim().length > 8) texts.push(value.trim());
+      if (/desc|effect|text/i.test(key) && value.trim().length > 8) texts.push(cleanText(value));
       return;
     }
     if (Array.isArray(value)) {
@@ -219,12 +219,96 @@ function buildAtkDef(card) {
 
 function buildImageCandidates(id) {
   if (!id) return [];
+  const compactId = id.replace(/^0+/, "") || id;
   return [
+    `https://cdn.233.momobako.com/ygopro/pics/${compactId}.jpg!half`,
+    `https://cdn.233.momobako.com/ygopro/pics/${compactId}.jpg`,
+    `https://cdn.233.momobako.com/ygoimg/ygopro/${compactId}.jpg`,
+    `https://cdn.233.momobako.com/ygoimg/ygopro/${compactId}.webp!half`,
+    `https://images.ygoprodeck.com/images/cards/${compactId}.jpg`,
     `https://cdn.233.momobako.com/ygopro/pics/${id}.jpg`,
     `https://cdn.233.momobako.com/ygopro/pics/${id}.jpg!half`,
     `https://cdn.233.momobako.com/ygoimg/ygopro/${id}.jpg`,
     `https://cdn.233.momobako.com/ygoimg/ygopro/${id}.webp!half`,
   ];
+}
+
+function collectImageCandidates(card, id) {
+  const candidates = [];
+  function add(value) {
+    if (!value) return;
+    const text = String(value).trim();
+    if (!text) return;
+    if (/^https?:\/\//i.test(text)) {
+      candidates.push(text);
+      return;
+    }
+    if (/^\/\//.test(text)) {
+      candidates.push(`https:${text}`);
+      return;
+    }
+    if (/\.(?:jpg|jpeg|png|webp)(?:!half)?(?:\?|$)/i.test(text)) {
+      try {
+        candidates.push(new URL(text, "https://ygocdb.com/").toString());
+      } catch {
+        // Ignore malformed image hints from the upstream payload.
+      }
+    }
+  }
+
+  function visit(value, key = "") {
+    if (!value) return;
+    if (typeof value === "string") {
+      if (/img|image|pic|cover|art/i.test(key) || /\.(?:jpg|jpeg|png|webp)(?:!half)?(?:\?|$)/i.test(value)) add(value);
+      return;
+    }
+    if (Array.isArray(value)) {
+      for (const item of value) visit(item, key);
+      return;
+    }
+    if (typeof value === "object") {
+      for (const [childKey, child] of Object.entries(value)) visit(child, childKey);
+    }
+  }
+
+  visit(card);
+  return [...new Set([...candidates, ...buildImageCandidates(id)])];
+}
+
+function cleanText(value) {
+  return decodeHtmlEntities(stripHtml(String(value || "")))
+    .replace(/\u00a0/g, " ")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .replace(/[ \t]{2,}/g, " ")
+    .trim();
+}
+
+function stripHtml(value) {
+  return value
+    .replace(/<\s*br\s*\/?\s*>/gi, "\n")
+    .replace(/<\/\s*(p|div|li|tr|section|article)\s*>/gi, "\n")
+    .replace(/<[^>]+>/g, "");
+}
+
+function decodeHtmlEntities(value) {
+  const named = {
+    amp: "&",
+    lt: "<",
+    gt: ">",
+    quot: '"',
+    apos: "'",
+    nbsp: " ",
+  };
+  return value.replace(/&(#x?[0-9a-f]+|[a-z]+);/gi, (match, entity) => {
+    const lower = String(entity).toLowerCase();
+    if (lower[0] === "#") {
+      const isHex = lower[1] === "x";
+      const codePoint = Number.parseInt(lower.slice(isHex ? 2 : 1), isHex ? 16 : 10);
+      return Number.isFinite(codePoint) ? String.fromCodePoint(codePoint) : match;
+    }
+    return Object.prototype.hasOwnProperty.call(named, lower) ? named[lower] : match;
+  });
 }
 
 function firstString(value) {

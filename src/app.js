@@ -655,7 +655,7 @@ async function requestBackendAnswer(text) {
 }
 
 function buildBackendCacheKey(text) {
-  return `ocg-ruling-answer:v4:${appConfig.answerApiUrl}:${normalizeText(text).slice(0, 2000)}`;
+  return `ocg-ruling-answer:v5:${appConfig.answerApiUrl}:${normalizeText(text).slice(0, 2000)}`;
 }
 
 function readCachedBackendAnswer(key) {
@@ -870,7 +870,7 @@ function getCardApiUrl() {
 function renderCardDetail(card, detail, status) {
   const name = detail?.name || cardDisplayName(card);
   const aliases = detail?.names?.filter((item) => item && item !== name).slice(0, 3) || [card.jaName, card.enName].filter(Boolean);
-  const effect = detail?.effectText || card.effectText || "暂未读取到效果文本。";
+  const effect = cleanDisplayText(detail?.effectText || card.effectText || "暂未读取到效果文本。");
   const sourceUrl = detail?.sourceUrl || card.sourceUrl || "";
 
   ui.cardName.textContent = name;
@@ -914,12 +914,52 @@ function buildLocalImageCandidates(card) {
   const id = (card.passcode || card.id || "").replace(/\D+/g, "");
   if (!id) return [];
   const normalizedId = id.length <= 8 ? id.padStart(8, "0") : id;
+  const compactId = normalizedId.replace(/^0+/, "") || normalizedId;
   return [
+    `https://cdn.233.momobako.com/ygopro/pics/${compactId}.jpg!half`,
+    `https://cdn.233.momobako.com/ygopro/pics/${compactId}.jpg`,
+    `https://cdn.233.momobako.com/ygoimg/ygopro/${compactId}.jpg`,
+    `https://cdn.233.momobako.com/ygoimg/ygopro/${compactId}.webp!half`,
+    `https://images.ygoprodeck.com/images/cards/${compactId}.jpg`,
     `https://cdn.233.momobako.com/ygopro/pics/${normalizedId}.jpg`,
     `https://cdn.233.momobako.com/ygopro/pics/${normalizedId}.jpg!half`,
     `https://cdn.233.momobako.com/ygoimg/ygopro/${normalizedId}.jpg`,
     `https://cdn.233.momobako.com/ygoimg/ygopro/${normalizedId}.webp!half`,
   ];
+}
+
+function cleanDisplayText(value) {
+  return decodeHtmlEntities(
+    String(value || "")
+      .replace(/<\s*br\s*\/?\s*>/gi, "\n")
+      .replace(/<\/\s*(p|div|li|tr|section|article)\s*>/gi, "\n")
+      .replace(/<[^>]+>/g, "")
+  )
+    .replace(/\u00a0/g, " ")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .replace(/[ \t]{2,}/g, " ")
+    .trim();
+}
+
+function decodeHtmlEntities(value) {
+  const named = {
+    amp: "&",
+    lt: "<",
+    gt: ">",
+    quot: '"',
+    apos: "'",
+    nbsp: " ",
+  };
+  return value.replace(/&(#x?[0-9a-f]+|[a-z]+);/gi, (match, entity) => {
+    const lower = String(entity).toLowerCase();
+    if (lower[0] === "#") {
+      const isHex = lower[1] === "x";
+      const codePoint = Number.parseInt(lower.slice(isHex ? 2 : 1), isHex ? 16 : 10);
+      return Number.isFinite(codePoint) ? String.fromCodePoint(codePoint) : match;
+    }
+    return Object.prototype.hasOwnProperty.call(named, lower) ? named[lower] : match;
+  });
 }
 
 function cardDisplayName(card) {
