@@ -193,15 +193,21 @@ export async function loadSnapshot(dataDir = defaultDataDir) {
   const cached = snapshotCache.get(cacheKey);
   if (cached && Date.now() - cached.loadedAt < 30_000) return cached.snapshot;
 
-  const [cardsPayload, rulingsPayload, metaPayload] = await Promise.all([
+  const [cardsPayload, rulingsPayload, metaPayload, ruleCorpusPayload, ruleTestsPayload] = await Promise.all([
     readJson(join(dataDir, "cards.json"), { records: [] }),
     readJson(join(dataDir, "rulings.json"), { records: [] }),
     readJson(join(dataDir, "snapshot-meta.json"), { generatedAt: null, sources: [] }),
+    readJson(join(dataDir, "ocg-rule-corpus.json"), { records: [] }),
+    readJson(join(dataDir, "ocg-rule-tests.json"), { records: [] }),
   ]);
 
   const snapshot = {
     cards: normalizeCards(cardsPayload.records || cardsPayload.cards || []),
-    records: normalizeRecords(rulingsPayload.records || rulingsPayload.rulings || rulingsPayload.notes || []),
+    records: normalizeRecords([
+      ...(rulingsPayload.records || rulingsPayload.rulings || rulingsPayload.notes || []),
+      ...(ruleCorpusPayload.records || []),
+      ...(ruleTestsPayload.records || []),
+    ]),
     meta: metaPayload,
   };
 
@@ -241,7 +247,9 @@ function buildEvidenceAnswer(context) {
     );
   }
 
-  const exactRuling = evidence.find((item) => isRulingEvidence(item) && item.matchKind === "direct");
+  const usableRulings = evidence.filter((item) => isRulingEvidence(item) && !item.intentMismatch);
+  const mismatchedRuling = evidence.find((item) => isRulingEvidence(item) && item.intentMismatch);
+  const exactRuling = usableRulings.find((item) => item.matchKind === "direct");
   if (exactRuling) {
     const title = summarizeRulingConclusion(exactRuling.conclusion, "direct", `${context.question} ${exactRuling.question || exactRuling.title || ""}`);
     return {
@@ -260,7 +268,7 @@ function buildEvidenceAnswer(context) {
     };
   }
 
-  const analogousRuling = evidence.find((item) => isRulingEvidence(item));
+  const analogousRuling = usableRulings[0];
   if (analogousRuling) {
     const title = summarizeRulingConclusion(analogousRuling.conclusion, "analogous", `${context.question} ${analogousRuling.question || analogousRuling.title || ""}`);
     return {
@@ -276,6 +284,28 @@ function buildEvidenceAnswer(context) {
         ...buildRulingSteps(context, analogousRuling, title).slice(0, 3),
       ],
       needsConfirmation: buildNeedsConfirmation(context, false, analogousRuling),
+      sources,
+      snapshotAt: snapshotMeta?.generatedAt || null,
+      evidenceCount: evidence.length,
+      warnings: [],
+    };
+  }
+
+  if (mismatchedRuling) {
+    return {
+      schemaVersion: 1,
+      mode: "unknown",
+      verdictTitle: "命中的资料没有回答处理问题",
+      rulingBasis: "证据类型不匹配",
+      verdict:
+        "题目是在问效果处理结果，但当前命中的资料主要是发动条件或卡片文本，不能用它来回答会回卡组、留场、除外或回场等处理。",
+      confidence: { label: "不能确定", value: 30, className: "is-risky" },
+      steps: [
+        "先补全参与处理的所有卡，尤其是题目里提到的场地、永续、装备或适用中的效果。",
+        "再确认原效果正在处理什么，以及被处理的卡在处理时是否仍在原位置。",
+        "只有命中同处理结构的 Q&A/FAQ 或规则模块后，才给具体处理结论。",
+      ],
+      needsConfirmation: buildNeedsConfirmation(context, true),
       sources,
       snapshotAt: snapshotMeta?.generatedAt || null,
       evidenceCount: evidence.length,
@@ -370,8 +400,9 @@ function rankEvidenceRecords(records, question, detectedCards, detectedTopics) {
 }
 
 function classifyEvidenceMatch(record, question, detectedCards, tokens) {
+  const questionIntent = detectQuestionIntent(question);
   if (!isRulingEvidence(record)) {
-    return { matchKind: record.recordType === "card-text" ? "card-text" : "support", matchScore: 0, matchedCardCount: 0 };
+    return { matchKind: record.recordType === "card-text" ? "card-text" : "support", matchScore: 0, matchedCardCount: 0, questionIntent, intentMismatch: false };
   }
 
   const questionKey = normalizeKey(question);
@@ -385,18 +416,45 @@ function classifyEvidenceMatch(record, question, detectedCards, tokens) {
   const matchedCardCount = countEvidenceMatchedCards(record, detectedCards);
   const cardRatio = detectedCards.length ? matchedCardCount / detectedCards.length : 0;
   const handlingOverlap = scoreHandlingOverlap(question, `${evidenceQuestion} ${record.conclusion || ""} ${(record.keywords || []).join(" ")}`);
+  const evidenceTags = handlingTags(`${evidenceQuestion} ${record.conclusion || ""} ${(record.keywords || []).join(" ")}`);
+  const intentMismatch = isIntentMismatch(questionIntent, evidenceTags, handlingOverlap);
   const exactEnough =
     matchedCardCount > 0 &&
+    !intentMismatch &&
       (similarity >= 0.58 ||
       (tokenHits >= 5 && tokenRatio >= 0.28) ||
       (cardRatio >= 0.8 && tokenHits >= 3 && tokenRatio >= 0.18) ||
       (cardRatio >= 0.8 && handlingOverlap >= 2));
 
   return {
-    matchKind: exactEnough ? "direct" : "analogous",
+    matchKind: intentMismatch ? "support" : exactEnough ? "direct" : "analogous",
     matchScore: Math.round(Math.max(similarity, tokenRatio) * 100),
     matchedCardCount,
+    questionIntent,
+    intentMismatch,
   };
+}
+
+function detectQuestionIntent(question) {
+  const text = normalizeRulingText(question);
+  const tags = handlingTags(text);
+  if (/(怎么处理|如何处理|处理时|处理是|处理后|后续|结算|怎么结算|留场|场地躲|场地换|回卡组|回到卡组|洗回卡组|破坏|除外|伤害)/i.test(text)) {
+    return "handling";
+  }
+  if (/(能否发动|能不能发动|可以发动|可否发动|发动吗|発動できますか|発動できる)/i.test(text)) return "activation";
+  if (tags.has("battle")) return "battle";
+  if (tags.has("control")) return "control";
+  return "general";
+}
+
+function isIntentMismatch(questionIntent, evidenceTags, handlingOverlap) {
+  if (questionIntent === "handling") {
+    const handlingEvidenceTags = ["deck-return", "temporary-banish", "banish", "field-change", "destruction", "battle", "control"];
+    const hasHandlingEvidence = handlingEvidenceTags.some((tag) => evidenceTags.has(tag));
+    return !hasHandlingEvidence || handlingOverlap === 0;
+  }
+  if (questionIntent === "activation") return false;
+  return false;
 }
 
 function isRulingEvidence(record) {
@@ -461,6 +519,11 @@ function scoreRecord(record, cardKeys, detectedTopics, tokens) {
   const tokenHits = tokens.filter((token) => token.length >= 2 && haystack.includes(token)).length;
 
   if (!hasCardMatch) {
+    if (record.recordType === "rule-doc" || record.recordType === "rule-test") {
+      const handlingOverlap = scoreHandlingOverlap(tokens.join(" "), haystack);
+      if (topicHits < 1 && tokenHits < 3 && handlingOverlap < 1) return 0;
+      return 6 + topicHits * 2 + Math.min(6, tokenHits) + handlingOverlap * 2;
+    }
     if (!isRulingEvidence(record)) return 0;
     if (topicHits < 2 || tokenHits < 4) return 0;
     return 10 + topicHits * 2 + Math.min(6, tokenHits);
@@ -508,7 +571,7 @@ function normalizeRecords(records) {
       status: record.status || "confirmed",
       cards: record.cards || [],
       keywords: record.keywords || [],
-      conclusion: record.conclusion || record.answer || "",
+      conclusion: cleanText(record.conclusion || record.answer || record.text || ""),
       steps: record.steps || [],
       questions: record.questions || [],
       sources: record.sources || sourceFromRecord(record),
@@ -518,6 +581,8 @@ function normalizeRecords(records) {
 }
 
 function inferRecordType(record) {
+  if (record.recordType === "rule-doc" || record.recordType === "rule-test") return record.recordType;
+  if (String(record.id || "").startsWith("ocg-rule:")) return "rule-doc";
   if (String(record.id || "").startsWith("card-text-") || /效果文本/.test(record.title || "")) return "card-text";
   if (String(record.id || "").startsWith("card-faq-") || /FAQ/i.test(record.title || "")) return "card-faq";
   if (String(record.id || "").includes("qa")) return "qa";
@@ -1414,6 +1479,7 @@ function parseChain(question) {
 
 function buildNeedsConfirmation(context, cardTextOnly, analogousRuling = null) {
   const items = [];
+  items.push(...detectMissingSceneFacts(context));
   const releasedUnknown = context.detectedCards.filter((card) => card.released === false).map((card) => card.name);
   if (releasedUnknown.length) items.push(`${releasedUnknown.join("、")} 可能尚未发售或同步来源缺少发售日期。`);
   if (analogousRuling) {
@@ -1432,10 +1498,24 @@ function buildNeedsConfirmation(context, cardTextOnly, analogousRuling = null) {
 
 function buildDirectNeedsConfirmation(context) {
   const items = [];
+  items.push(...detectMissingSceneFacts(context));
   const releasedUnknown = context.detectedCards.filter((card) => card.released === false).map((card) => card.name);
   if (releasedUnknown.length) items.push(`${releasedUnknown.join("、")} 可能尚未发售或同步来源缺少发售日期。`);
   items.push("若题目条件与命中的问答原文不同，需要回到出处核对完整原文。");
   return [...new Set(items)];
+}
+
+function detectMissingSceneFacts(context) {
+  const question = normalizeRulingText(context?.question || "");
+  const cards = context?.detectedCards || [];
+  const items = [];
+  if (/场地|フィールド魔法|Field Spell/i.test(question) && !cards.some((card) => /场地魔法|场地卡|场地区域|フィールド魔法|Field Spell/i.test(`${card.name || ""} ${card.cnName || ""} ${card.jaName || ""} ${card.enName || ""} ${card.cardType || ""} ${card.effectText || ""}`))) {
+    items.push("题目提到场地卡，但当前没有识别到具体是哪张场地卡；需要补卡名或效果文本。");
+  }
+  if (/卡通怪|トゥーンモンスター|Toon monster/i.test(question) && !cards.some((card) => /卡通|トゥーン|Toon/i.test(`${card.name || ""} ${card.cnName || ""} ${card.jaName || ""} ${card.enName || ""} ${card.effectText || ""}`))) {
+    items.push("题目提到卡通怪兽，但当前没有识别到那只怪兽或其适用中的相关效果。");
+  }
+  return items;
 }
 
 function summarizeRulingConclusion(value, matchKind, contextText = "") {
