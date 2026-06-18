@@ -61,7 +61,7 @@ export async function answerQuestion(payload, options = {}) {
   const env = options.env || globalThis.process?.env || {};
   const resolutionWarnings = [];
   const resolutionNotes = [];
-  let detectedCards = detectCards(question, snapshot.cards);
+  let detectedCards = mergeCards(detectCards(question, snapshot.cards), extractUserProvidedCards(question));
   const detectedTopics = detectTopics(question);
   const chainItems = parseChain(question);
   let evidence = retrieveEvidence(question, detectedCards, detectedTopics, snapshot).slice(0, 10);
@@ -338,6 +338,9 @@ function buildEvidenceAnswer(context) {
 }
 
 function inferStructuredRuleAnswer(context, sources, snapshotMeta, evidenceCount) {
+  const providedCardInference = inferProvidedCardRuleAnswer(context, sources, snapshotMeta, evidenceCount);
+  if (providedCardInference) return providedCardInference;
+
   const intent = detectQuestionIntent(context.question);
   if (intent !== "handling") return null;
 
@@ -372,6 +375,91 @@ function inferStructuredRuleAnswer(context, sources, snapshotMeta, evidenceCount
   };
 }
 
+function inferProvidedCardRuleAnswer(context, sources, snapshotMeta, evidenceCount) {
+  const providedCards = context.detectedCards.filter((card) => card.provisional || card.resolvedBy === "user-provided-card-text");
+  if (!providedCards.length) return null;
+
+  const text = normalizeRulingText(context.question);
+  const card = providedCards.find((item) => hasActivationAndEffectNoNegateText(item.effectText || ""));
+  if (!card) return null;
+
+  const cardText = normalizeRulingText(card.effectText || "");
+  const hasFiveFaceUpCondition = /(表侧表示卡\s*5\s*张以上|表側表示カードが\s*5\s*枚以上|face-up cards?.{0,12}5 or more)/iu.test(`${text} ${cardText}`);
+  const asksCountChange = /(处理时|处理过程中|后续|结算时|適用|解決|resolve).{0,24}(不足\s*5|少于\s*5|不满\s*5|不够\s*5|4\s*张|减少|变少|变成\s*4|less than 5|fewer than 5)/iu.test(text) ||
+    /(不足\s*5|少于\s*5|不满\s*5|不够\s*5|4\s*张|减少|变少|变成\s*4|less than 5|fewer than 5).{0,24}(还|仍|继续|会不会|是否).{0,24}(无效|無効|negate)/iu.test(text);
+  const asksRewrite = /(改写|改成|改为|改變|改变为|变成.*效果|rewrite|change.*effect|effect.*becomes|黑玛丽|暗黑界龙神王|救祓|エクソシスター|グラファ)/iu.test(text);
+  const hasDestroyActivationCondition = /(要让场上的卡破坏的怪兽的效果|场上的卡破坏的怪兽效果|フィールドのカードを破壊するモンスター効果|monster effect.{0,24}destroy.{0,24}card.{0,24}field)/iu.test(`${text} ${cardText}`);
+  const asksActivationNegateDestroy = /(发动(?:被)?无效.{0,12}破坏|无效.{0,12}发动.{0,12}破坏|発動を無効.{0,12}破壊|negate.{0,24}activation.{0,24}destroy|鲜花女男爵|鲜花|バロネス|Baronne|神之宣告|神の宣告)/iu.test(text);
+
+  if (hasFiveFaceUpCondition && asksCountChange) {
+    return buildProvidedCardInferenceAnswer(context, sources, snapshotMeta, evidenceCount, {
+      title: "发动时满足5张即可，后续减少不影响已适用保护",
+      verdict:
+        `按当前文本预览分析：如果发动${formatRulingCardName(card)}时对方场上有5张以上表侧表示卡，这次发动取得“发动和效果不会被无效化”的保护。之后效果处理中对方表侧表示卡减少到不足5张，也不会倒回去取消这次已经适用的保护。`,
+      steps: [
+        "先检查发动这一刻是否满足“对方场上有表侧表示卡5张以上存在”。",
+        "满足时，“这张卡的发动和效果不会被无效化”适用于这次发动及这次效果处理。",
+        "后续处理时场上数量变化，不会重新判断并失去这次已经取得的发动/效果不被无效化保护。",
+      ],
+    });
+  }
+
+  if (asksRewrite) {
+    return buildProvidedCardInferenceAnswer(context, sources, snapshotMeta, evidenceCount, {
+      title: "不被无效化不等于不能被改写效果",
+      verdict:
+        `按当前文本预览分析：${formatRulingCardName(card)}写的是“发动和效果不会被无效化”。这只阻止发动或效果被无效，不等于免疫“把效果改成其他处理”的效果。若对方的效果文本是改写/变更效果而不是无效化，仍可能适用。`,
+      steps: [
+        "先把“无效化”和“改写/变更效果”分开判断。",
+        "该文本只保护发动和效果不被无效化，没有写“不会被改写”“不会受其他效果影响”。",
+        "因此改写效果类资料需要按该改写效果自身的适用条件另行判断。",
+      ],
+    });
+  }
+
+  if (hasDestroyActivationCondition && asksActivationNegateDestroy) {
+    return buildProvidedCardInferenceAnswer(context, sources, snapshotMeta, evidenceCount, {
+      title: "无效发动并破坏不满足破坏场上卡的条件",
+      verdict:
+        `按当前文本预览分析：若对方发动的是“把魔法/陷阱卡的发动无效并破坏”的怪兽效果，被无效发动的那张魔法/陷阱通常不视为从场上被破坏。因此它不满足${formatRulingCardName(card)}中“要让场上的卡破坏的怪兽效果由对方发动时”这一发动条件。`,
+      steps: [
+        "先确认对方怪兽效果要破坏的对象是否是“场上的卡”。",
+        "魔法/陷阱的发动被无效并破坏时，那张卡不按“在场上被破坏”处理。",
+        "所以只有该怪兽效果还会破坏其他真正处于场上的卡时，才需要再判断是否满足这条发动条件。",
+      ],
+    });
+  }
+
+  return null;
+}
+
+function buildProvidedCardInferenceAnswer(context, sources, snapshotMeta, evidenceCount, inference) {
+  return {
+    schemaVersion: 1,
+    mode: "inferred",
+    verdictTitle: inference.title,
+    verdict: inference.verdict,
+    rulingBasis: "未发售卡文本 + 规则推理",
+    confidence: { label: "预览分析", value: freshnessValue(snapshotMeta, 54), className: "" },
+    steps: inference.steps,
+    needsConfirmation: [
+      "这是根据用户提供的新卡文本做的预览分析，不是已确认裁定。",
+      "发售后若官方数据库、FAQ 或事务局回答与这里不同，应以发售后的官方资料为准。",
+      ...buildNeedsConfirmation(context, false).filter((item) => !/可能尚未发售|当前没有命中直接/.test(item)).slice(0, 3),
+    ],
+    sources: collectCardTextSources(context.detectedCards, sources),
+    snapshotAt: snapshotMeta?.generatedAt || null,
+    evidenceCount,
+    warnings: [],
+    modelUsed: false,
+  };
+}
+
+function hasActivationAndEffectNoNegateText(value) {
+  const text = normalizeRulingText(value);
+  return /(发动和效果不会被无效化|發動和效果不會被無效化|発動と効果は無効化されない|activation and effect cannot be negated)/iu.test(text);
+}
+
 function isStrongAnalogousEvidence(item, context) {
   if (!item || item.matchKind !== "analogous") return false;
   const intent = detectQuestionIntent(context.question);
@@ -382,10 +470,10 @@ function isStrongAnalogousEvidence(item, context) {
 
 function collectCardTextSources(cards, fallbackSources) {
   const cardSources = cards
-    .filter((card) => card.sourceUrl || card.ygoResourcesUrl)
+    .filter((card) => card.provisional || card.sourceUrl || card.ygoResourcesUrl)
     .map((card) => ({
       label: `${card.name || card.cnName || card.jaName || "卡片"} 的效果文本`,
-      detail: card.sourceUrl || card.ygoResourcesUrl,
+      detail: card.provisional ? "用户输入文本" : card.sourceUrl || card.ygoResourcesUrl,
     }));
   return cardSources.length ? dedupeBy(cardSources, (source) => `${source.label}:${source.detail}`) : fallbackSources;
 }
@@ -421,12 +509,20 @@ function retrieveEvidence(question, detectedCards, detectedTopics, snapshot) {
       id: `card-effect-${card.id || card.name}`,
       recordType: "card-text",
       title: `${card.name} 的效果文本`,
-      status: "confirmed",
+      status: card.provisional ? "provisional" : "confirmed",
       cards: [card.name],
       keywords: [],
       conclusion: card.effectText,
-      steps: ["这是同步到的卡片效果文本。若问题涉及具体裁定处理，仍应继续核对 Q&A 或规则条目。"],
-      sources: card.sourceUrl ? [{ label: "YGOResources Card data", detail: card.sourceUrl }] : [],
+      steps: [
+        card.provisional
+          ? "这是用户输入的卡片文本。未发售或未同步时只能用于预览推理，发售后以官方数据库和 FAQ 为准。"
+          : "这是同步到的卡片效果文本。若问题涉及具体裁定处理，仍应继续核对 Q&A 或规则条目。",
+      ],
+      sources: card.provisional
+        ? [{ label: "用户提供的卡片文本", detail: card.name || "未命名卡" }]
+        : card.sourceUrl
+          ? [{ label: "YGOResources Card data", detail: card.sourceUrl }]
+          : [],
       updatedAt: card.updatedAt || "",
       score: 6,
     }));
@@ -659,6 +755,113 @@ function detectCards(question, cards) {
 
   matches.push(...matchLocalAliasHints(question, cards));
   return mergeCards(...matches).sort((a, b) => normalizeKey(b.matched).length - normalizeKey(a.matched).length);
+}
+
+function extractUserProvidedCards(question) {
+  const raw = String(question || "")
+    .normalize("NFKC")
+    .replace(/\r\n?/g, "\n")
+    .trim();
+  if (!raw) return [];
+
+  const blocks = extractProvidedCardBlocks(raw);
+  return blocks
+    .map(buildProvidedCardFromBlock)
+    .filter(Boolean);
+}
+
+function extractProvidedCardBlocks(raw) {
+  const blocks = [];
+  const marker = raw.match(/(?:新卡效果|卡片文本|效果文本|未发售(?:新卡)?|预览文本)\s*[:：]\s*/u);
+  if (marker) blocks.push(raw.slice(marker.index + marker[0].length).trim());
+
+  if (hasStandaloneCardTypeLine(raw) && /[①②③④⑤⑥⑦⑧⑨●]/u.test(raw)) {
+    blocks.push(raw);
+  }
+
+  return dedupeBy(blocks.filter(Boolean), (block) => normalizeKey(block).slice(0, 120));
+}
+
+function buildProvidedCardFromBlock(block) {
+  const lines = block
+    .split("\n")
+    .map((line) => cleanText(line))
+    .filter(Boolean);
+  const typeIndex = lines.findIndex(isCardTypeLine);
+  if (typeIndex < 0) return null;
+
+  const name = findProvidedCardName(lines, typeIndex);
+  if (!name) return null;
+
+  const headerAliases = lines
+    .slice(0, typeIndex)
+    .filter((line) => !isLikelySetCode(line))
+    .filter((line) => isLikelyProvidedCardAlias(line));
+  const aliases = [
+    name,
+    ...headerAliases,
+    ...extractBracketContents(block),
+    ...extractProvidedNameFragments(name),
+  ].filter(Boolean);
+
+  return {
+    id: "",
+    passcode: "",
+    name,
+    cnName: /[\u3400-\u9fff]/u.test(name) ? name : "",
+    jaName: /[\u3040-\u30ff]/u.test(name) ? name : "",
+    enName: /[A-Za-z]/u.test(name) && !/[\u3040-\u30ff\u3400-\u9fff]/u.test(name) ? name : "",
+    matched: name,
+    cardType: lines[typeIndex],
+    effectText: cleanText(lines.slice(typeIndex).join("\n")),
+    aliases: [...new Set(aliases)],
+    released: false,
+    provisional: true,
+    resolvedBy: "user-provided-card-text",
+  };
+}
+
+function hasStandaloneCardTypeLine(value) {
+  return String(value || "")
+    .split(/\r?\n/)
+    .some((line) => isCardTypeLine(cleanText(line)));
+}
+
+function isCardTypeLine(value) {
+  const text = cleanText(value);
+  return /^(通常|永续|永続|速攻|装备|装備|场地|フィールド|反击|カウンター)?\s*(魔法|陷阱|罠|Spell|Trap)(卡|カード)?$/iu.test(text) ||
+    /^(通常|效果|融合|同调|同步|超量|XYZ|连接|リンク|仪式|灵摆|ペンデュラム).{0,10}(怪兽|モンスター)$/iu.test(text);
+}
+
+function findProvidedCardName(lines, typeIndex) {
+  for (let index = typeIndex - 1; index >= 0; index -= 1) {
+    const line = lines[index];
+    if (isLikelySetCode(line)) continue;
+    if (isLikelyProvidedCardAlias(line)) return line;
+  }
+  return "";
+}
+
+function isLikelyProvidedCardAlias(value) {
+  const text = cleanText(value);
+  const key = normalizeKey(text);
+  if (key.length < 2 || key.length > 48) return false;
+  if (/[①②③④⑤⑥⑦⑧⑨●]/u.test(text)) return false;
+  if (isCardTypeLine(text) || isLikelySetCode(text)) return false;
+  if (/(发动|發動|效果|効果|对方|相手|自己|自分|场上|フィールド|墓地|卡组|デッキ|破坏|破壊|无效|無効)/iu.test(text)) return false;
+  return /[\p{L}\p{N}]/u.test(text);
+}
+
+function isLikelySetCode(value) {
+  return /^[A-Z]{2,}[0-9]{1,4}(?:[- ][A-Z0-9]+)?$/u.test(cleanText(value));
+}
+
+function extractProvidedNameFragments(name) {
+  const fragments = [];
+  const compact = cleanText(name);
+  if (compact.includes("-")) fragments.push(...compact.split("-").map((item) => item.trim()).filter((item) => normalizeKey(item).length >= 2));
+  if (compact.includes("ー")) fragments.push(...compact.split("ー").map((item) => item.trim()).filter((item) => normalizeKey(item).length >= 2));
+  return fragments;
 }
 
 function matchLocalAliasHints(question, cards) {
@@ -1401,6 +1604,8 @@ function mergeCards(...groups) {
     existing.cardType = existing.cardType || card.cardType;
     existing.ygoResourcesUrl = existing.ygoResourcesUrl || card.ygoResourcesUrl || (/db\.ygoresources\.com\/data\/card\//.test(card.sourceUrl || "") ? card.sourceUrl : "");
     existing.sourceUrl = existing.sourceUrl || card.sourceUrl;
+    existing.released = existing.released !== false || card.released !== false;
+    existing.provisional = Boolean(existing.provisional && card.provisional);
     existing.aliases = [...new Set([...(existing.aliases || []), ...(card.aliases || []), card.matched].filter(Boolean))];
   }
   return [...map.values()];
@@ -1485,6 +1690,8 @@ function buildCardSummaries(cards) {
     ygoResourcesUrl: cleanText(card.ygoResourcesUrl),
     liveId: cleanText(card.liveId),
     resolvedBy: cleanText(card.resolvedBy),
+    released: card.released !== false,
+    provisional: Boolean(card.provisional),
     aliases: cleanList(card.aliases || cardAliases(card), []),
   }));
 }

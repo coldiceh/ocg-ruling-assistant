@@ -66,6 +66,17 @@ const rulings = [
   },
 ];
 
+const mindForcePreviewText = `新卡效果：
+LoupGarou罗伽
+UT01
+聖なる心のバリア-マインドフォースー
+通常陷阱
+对方场上有表侧表示卡5张以上存在的场合，这张卡的发动和效果不会被无效化，这张卡在盖放的回合也能发动。
+①：以下任意时才能发动。对方场上的全部表侧表示卡效果无效并破坏。这张卡的发动后，直到下个回合结束时自己怪兽不能直接攻击。
+●对方场上的攻击力最高的怪兽的攻击宣言时
+●要让场上的卡破坏的怪兽的效果由对方发动时
+●自己回合对方把手卡·场上的怪兽的效果发动时`;
+
 const tests = [
   {
     name: "处理问题不能用发动条件资料回答",
@@ -104,6 +115,40 @@ const tests = [
     assert(answer) {
       assert.equal(answer.verdictTitle, "可以适用临时除外效果");
       assert.doesNotMatch(`${answer.verdictTitle}${answer.verdict}`, /不回卡组|洗回卡组/);
+    },
+  },
+  {
+    name: "未发售文本按发动时点判断不被无效化保护",
+    question: `${mindForcePreviewText}
+
+这张卡发动时对方有5张表侧表示卡，处理过程中变成4张了，发动和效果还会不会被无效？`,
+    assert(answer) {
+      assert.equal(answer.verdictTitle, "发动时满足5张即可，后续减少不影响已适用保护");
+      assert.equal(answer.rulingBasis, "未发售卡文本 + 规则推理");
+      assert.match(answer.verdict, /发动.*5张以上/);
+      assert.match(answer.needsConfirmation.join("\n"), /发售后/);
+    },
+  },
+  {
+    name: "未发售文本区分不被无效化和效果改写",
+    question: `${mindForcePreviewText}
+
+这张卡的发动和效果不会被无效化，那还能被黑玛丽或者暗黑界龙神王这种改写效果类处理改写吗？`,
+    assert(answer) {
+      assert.equal(answer.verdictTitle, "不被无效化不等于不能被改写效果");
+      assert.match(answer.verdict, /不是无效化|不是无效|改写/);
+      assert.match(answer.steps.join("\n"), /无效化/);
+    },
+  },
+  {
+    name: "未发售文本区分破坏场上卡和发动无效并破坏",
+    question: `${mindForcePreviewText}
+
+对方用怪兽效果把我方魔法陷阱的发动无效并破坏，这算不算对方发动了要让场上的卡破坏的怪兽效果，能发动这张卡吗？`,
+    assert(answer) {
+      assert.equal(answer.verdictTitle, "无效发动并破坏不满足破坏场上卡的条件");
+      assert.match(answer.verdict, /不视为从场上被破坏/);
+      assert.match(answer.steps.join("\n"), /真正处于场上的卡/);
     },
   },
 ];
