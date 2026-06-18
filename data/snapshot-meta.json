@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "status": "seed",
-  "generatedAt": null,
+  "status": "synced",
+  "generatedAt": "2026-06-18T20:41:30.468Z",
   "freshnessDays": 7,
   "sourceRevision": null,
   "sources": [
@@ -14,11 +14,10 @@
     {
       "id": "ygoresources",
       "name": "YGOResources DB",
-      "url": "https://db.ygoresources.com/",
+      "url": "https://db.ygoresources.com",
       "role": "结构化卡片与 Q&A 数据来源，用于生成 GitHub Pages 可读取的静态快照。"
     }
   ],
-  "warnings": [
-    "当前仓库还没有跑过自动同步；所有确定结论必须等同步快照或人工录入的官方出处。"
-  ]
+  "warnings": [],
+  "changedPaths": []
 }
