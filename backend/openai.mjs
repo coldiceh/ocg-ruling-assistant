@@ -26,6 +26,33 @@ const responseSchema = {
       items: { type: "string" },
       description: "Facts or official sources still needed.",
     },
+    subAnswers: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["question", "verdict", "reasoning", "source"],
+        properties: {
+          question: {
+            type: "string",
+            description: "One independent sub-question from the user.",
+          },
+          verdict: {
+            type: "string",
+            description: "Independent conclusion for this sub-question.",
+          },
+          reasoning: {
+            type: "string",
+            description: "Condition-by-condition reasoning for this sub-question.",
+          },
+          source: {
+            type: "string",
+            description: "Q&A source id/label, or [推理，需确认] when unsupported.",
+          },
+        },
+      },
+      description: "Independent answers for each sub-question. Required in practice when the question has multiple parts.",
+    },
   },
 };
 
@@ -315,17 +342,45 @@ function canTryNextGeminiModel(error) {
 
 function buildInstructions() {
   return [
-    "你是游戏王 OCG 裁定问答后端，只能根据输入的证据包和通用 OCG 处理原则回答。",
-    "必须使用简体中文。",
-    "不要引用证据包之外的卡片、Q&A 或具体裁定。",
-    "如果证据只有卡片效果文本而没有直接 Q&A/FAQ，confidence 必须是 inferred 或 unknown，不能写成已确认裁定。",
-    "证据里的 matchKind=direct 才代表完全同场面或足够直接的问答；matchKind=analogous 只能作为类推依据，confidence 必须是 inferred 或 unknown。",
-    "使用 analogous 证据时，必须说明共通处理结构和仍需核对的差异，不能写成官方已确认裁定。",
+    "你是一个游戏王OCG裁定专家。回答规则问题时，必须严格按照以下步骤：",
+    "",
+    "## 强制推理框架",
+    "",
+    "### Step 1: 问题拆解",
+    "列出用户提问中包含的所有独立子问题，逐一编号，并用 subAnswers 逐条回答。",
+    "",
+    "### Step 2: 效果识别（针对每张卡的每个相关效果）",
+    "- 效果类型：诱发/诱发即时/永续/起动",
+    "- 是否含誓约条件（このカードの効果を発動するための～）",
+    "- 是否含替代发动条件",
+    "",
+    "### Step 3: 发动条件逐一核对",
+    "针对每个子问题，列出发动条件并对照场景逐条 ✓/✗ 验证。",
+    "",
+    "### Step 4: 连锁规则",
+    "- 当前是否有连锁封锁效果存在？",
+    "- 被封锁的效果类型是否与当前效果匹配？",
+    "",
+    "### Step 5: 逐条结论",
+    "针对 Step 1 的每个子问题给出独立结论。",
+    "",
+    "## 严格规则",
+    "1. 没有检索到的Q&A支持时，必须说明“需要Q&A确认”，不得给出已确认结论。",
+    "2. 誓约效果（自身の効果による特殊召喚）不受一般连锁封锁影响——这是OCG固有规则。",
+    "3. 诱发效果的发动时机是“效果处理结束后的时点”，不是效果发动时。",
+    "4. 回答中必须指出每个结论对应的Q&A来源编号；没有来源的推理必须标注[推理，需确认]。",
+    "5. 置信度只有在找到直接对应Q&A时才能是 confirmed；否则只能是 inferred 或 unknown。",
+    "",
+    "## 禁止行为",
+    "- 禁止只给结论不给理由。",
+    "- 禁止把“卡片文本”当作裁定依据（文本不等于裁定）。",
+    "- 禁止对含5个以上子问题的提问只回答一个。",
+    "",
+    "## 输出约束",
+    "必须使用简体中文，只能根据输入的证据包和通用OCG处理原则回答。",
+    "不要引用证据包之外的具体Q&A或裁定编号。",
     "如果证据与问题场面不完全一致，必须在 needsConfirmation 中列出差异。",
-    "涉及保护、临时除外、代替、无效并回卡组等处理时，steps 必须按时点推导：哪个效果正在适用、哪个效果可否在此时适用、被处理卡是否仍在原位置、原效果剩余处理如何执行、处理后状态是什么。",
-    "不能用“通常是保护效果”这类笼统文本代替处理推导。",
-    "回答要面向玩家，直接给处理步骤；但不能为了完整性编造不存在的官方出处。",
-    "输出必须精简：verdict 不超过 320 个汉字，steps 不超过 6 条，needsConfirmation 不超过 5 条。",
+    "verdict 不超过 420 个汉字，steps 不超过 8 条，needsConfirmation 不超过 6 条。",
   ].join("\n");
 }
 
@@ -354,6 +409,8 @@ function buildUserText(context) {
   return JSON.stringify(
     {
       question: context.question,
+      questionTypes: context.questionTypes || [],
+      subQuestions: context.subQuestions || [],
       detectedCards: context.detectedCards.map((card) => ({
         name: card.name,
         matched: card.matched,

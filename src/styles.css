@@ -304,6 +304,49 @@ svg {
   line-height: 1.5;
 }
 
+.sub-answers {
+  margin-top: 14px;
+  display: grid;
+  gap: 10px;
+}
+
+.sub-answers[hidden] {
+  display: none;
+}
+
+.sub-answer {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  background: #fbfcfd;
+}
+
+.sub-q {
+  margin-bottom: 6px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.sub-verdict {
+  margin-bottom: 6px;
+  color: var(--ink);
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.sub-reasoning,
+.sub-source {
+  margin-bottom: 0;
+  line-height: 1.6;
+}
+
+.sub-source {
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
 .block-title {
   margin-bottom: 10px;
   color: var(--muted);
