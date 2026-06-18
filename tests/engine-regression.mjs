@@ -63,6 +63,18 @@ const cards = [
     effectText: "②：这张卡表侧加入额外卡组的场合才能发动。处理该效果。",
     sourceUrl: "fixture://nervedo",
   },
+  {
+    id: "71143015",
+    passcode: "",
+    name: "青眼暴君龙",
+    cnName: "青眼暴君龙",
+    jaName: "青眼のタイラント・ドラゴン",
+    enName: "Blue-Eyes Tyrant Dragon",
+    aliases: ["青眼暴君龙", "青眼暴君龍", "暴君龙", "Blue-Eyes Tyrant Dragon"],
+    effectText:
+      "1回合1次，这张卡进行战斗的伤害步骤结束时，以自己墓地1张陷阱卡为对象才能发动。那张卡在自己的魔法与陷阱区域盖放。这个效果盖放的卡在盖放的回合也能发动。",
+    sourceUrl: "fixture://blue-eyes-tyrant-dragon",
+  },
 ];
 
 const rulings = [
@@ -95,6 +107,16 @@ const rulings = [
     keywords: ["除外", "额外卡组", "结束阶段"],
     conclusion: "可以适用相关效果，将满足条件的卡除外。",
     sources: [{ label: "fixture", detail: "can-banish" }],
+  },
+  {
+    id: "perfect-toon-world-can-banish-battle-destroyed",
+    recordType: "card-faq",
+    title: "完美世界 FAQ：可以除外战斗破坏预定卡通怪兽",
+    question: "其他卡发动的效果适用之际，可以把战斗破坏确定的卡通怪兽用「完美世界 卡通世界」③除外吗？",
+    cards: ["完美世界 卡通世界"],
+    keywords: ["除外", "战斗破坏", "卡通怪兽"],
+    conclusion: "可以适用相关效果，将满足条件的卡除外。",
+    sources: [{ label: "fixture", detail: "perfect-toon-world-banish" }],
   },
 ];
 
@@ -192,6 +214,20 @@ const tests = [
       assert.equal(answer.rulingBasis, "证据目标不匹配");
       assert.doesNotMatch(`${answer.verdictTitle}${answer.verdict}`, /可以除外/);
       assert.match(answer.steps.join("\n"), /被问的是哪张卡、哪个编号的效果/);
+    },
+  },
+  {
+    name: "伤害步骤结束时战破卡通怪兽已送墓不能再用完美世界除外",
+    question:
+      "被青眼暴君龙战破的卡通怪兽，在伤害步骤结束阶段发动盖放墓地陷阱卡效果的时候：能用完美世界 卡通世界的效果除外该卡通怪兽吗？卡通怪兽还会被战破送墓吗？如果青眼暴君龙被战破的时候，这个效果是在墓地发动还是在场上发动？这个时候青眼暴君龙是已经送墓了吗？",
+    assert(answer) {
+      assert.equal(answer.verdictTitle, "伤害步骤结束时已送墓，不能用完美世界除外");
+      assert.equal(answer.rulingBasis, "伤害步骤规则 + 效果文本推理");
+      assert.match(answer.verdict, /不能用/);
+      assert.match(answer.verdict, /已经按战斗破坏送去墓地/);
+      assert.match(answer.needsConfirmation.join("\n"), /多个独立问题/);
+      assert.ok(answer.cards.some((card) => card.name === "青眼暴君龙"));
+      assert.ok(answer.cards.some((card) => card.name === "完美世界 卡通世界"));
     },
   },
 ];

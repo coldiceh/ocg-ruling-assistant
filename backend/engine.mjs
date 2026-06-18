@@ -48,6 +48,30 @@ const localCardAliasHints = [
   {
     aliases: ["完美世界 卡通世界", "完美世界卡通世界", "完全なる世界 トゥーン・ワールド", "完全なる世界トゥーンワールド"],
     candidates: ["完美世界 卡通世界", "完全なる世界 トゥーン・ワールド", "Perfect Toon World"],
+    card: {
+      name: "完美世界 卡通世界",
+      cnName: "完美世界 卡通世界",
+      jaName: "完全なる世界 トゥーン・ワールド",
+      enName: "Perfect Toon World",
+      aliases: ["完美世界 卡通世界", "完美世界卡通世界", "完全なる世界 トゥーン・ワールド", "Perfect Toon World"],
+      cardType: "场地魔法",
+      effectText:
+        "这个卡名的②效果1回合可以使用最多3次。①：这张卡只要在场地区域存在，卡名当作「卡通世界」使用。②：1回合1次，自己主要阶段才能发动。把1张「卡通」卡或者有那个卡名记述的卡从卡组加入手卡。③：其他卡发动的效果适用之际，可以把自己场上1只卡通怪兽直到那个效果处理后除外（这个回合，这个卡名的这个效果不能把原本卡名相同的怪兽除外）。",
+    },
+  },
+  {
+    aliases: ["青眼暴君龙", "青眼暴君龍", "青眼暴君", "暴君龙", "暴君龍", "blue-eyes tyrant dragon"],
+    candidates: ["青眼のタイラント・ドラゴン", "Blue-Eyes Tyrant Dragon", "青眼暴君龙"],
+    card: {
+      name: "青眼暴君龙",
+      cnName: "青眼暴君龙",
+      jaName: "青眼のタイラント・ドラゴン",
+      enName: "Blue-Eyes Tyrant Dragon",
+      aliases: ["青眼暴君龙", "青眼暴君龍", "青眼のタイラント・ドラゴン", "Blue-Eyes Tyrant Dragon", "暴君龙"],
+      cardType: "融合怪兽",
+      effectText:
+        "这张卡不受陷阱卡的效果影响。这张卡可以向对方怪兽全部各作1次攻击。1回合1次，这张卡进行战斗的伤害步骤结束时，以自己墓地1张陷阱卡为对象才能发动。那张卡在自己的魔法与陷阱区域盖放。这个效果盖放的卡在盖放的回合也能发动。",
+    },
   },
 ];
 
@@ -61,7 +85,11 @@ export async function answerQuestion(payload, options = {}) {
   const env = options.env || globalThis.process?.env || {};
   const resolutionWarnings = [];
   const resolutionNotes = [];
-  let detectedCards = mergeCards(detectCards(question, snapshot.cards), extractUserProvidedCards(question));
+  let detectedCards = mergeCards(
+    detectCards(question, snapshot.cards),
+    extractUserProvidedCards(question),
+    buildPlaceholderCards(collectLocalAliasResolutions(question))
+  );
   const detectedTopics = detectTopics(question);
   const chainItems = parseChain(question);
   let evidence = retrieveEvidence(question, detectedCards, detectedTopics, snapshot).slice(0, 10);
@@ -249,6 +277,9 @@ function buildEvidenceAnswer(context) {
 
   const usableRulings = evidence.filter((item) => isRulingEvidence(item) && !item.intentMismatch);
   const mismatchedRuling = evidence.find((item) => isRulingEvidence(item) && item.intentMismatch);
+  const preemptiveRuleInference = inferPreemptiveRuleAnswer(context, sources, snapshotMeta, evidence.length);
+  if (preemptiveRuleInference) return preemptiveRuleInference;
+
   const exactRuling = usableRulings.find((item) => item.matchKind === "direct");
   if (exactRuling) {
     const title = summarizeRulingConclusion(exactRuling.conclusion, "direct", `${context.question} ${exactRuling.question || exactRuling.title || ""}`);
@@ -364,6 +395,55 @@ function buildMismatchedEvidenceAnswer(context, mismatchedRuling, sources, snaps
     evidenceCount,
     warnings: [],
   };
+}
+
+function inferPreemptiveRuleAnswer(context, sources, snapshotMeta, evidenceCount) {
+  return inferDamageStepEndBattleDestroyedAnswer(context, sources, snapshotMeta, evidenceCount);
+}
+
+function inferDamageStepEndBattleDestroyedAnswer(context, sources, snapshotMeta, evidenceCount) {
+  const question = normalizeRulingText(context.question);
+  if (!asksToProtectBattleDestroyedMonsterAtEndOfDamageStep(question)) return null;
+
+  const protector = context.detectedCards.find((card) => hasTemporaryBanishText(card.effectText || "") || /完美世界|卡通世界|トゥーン・ワールド|Perfect Toon World/i.test(cardAliases(card).join(" ")));
+  if (!protector && !/(完美世界|卡通世界|トゥーン|Toon)/i.test(question)) return null;
+
+  const protectorName = formatRulingCardName(protector) || "「完美世界 卡通世界」";
+  return {
+    schemaVersion: 1,
+    mode: "inferred",
+    verdictTitle: "伤害步骤结束时已送墓，不能用完美世界除外",
+    verdict:
+      `不能用${protectorName}的临时除外效果把那只卡通怪兽除外。题目描述的是伤害步骤结束阶段另一个效果发动/处理的场面；这个时点，被战斗破坏确定的卡通怪兽已经按战斗破坏送去墓地，不再是自己场上的卡通怪兽，不能满足${protectorName}③要除外的范围。`,
+    rulingBasis: "伤害步骤规则 + 效果文本推理",
+    confidence: { label: freshnessLabel(snapshotMeta, "规则推理"), value: freshnessValue(snapshotMeta, 68), className: "" },
+    steps: [
+      "先处理战斗破坏：到伤害步骤结束时，被战斗破坏确定的怪兽会送去墓地。",
+      `${protectorName}③要求在其他卡效果适用之际，把自己场上1只卡通怪兽除外到那个效果处理后。`,
+      "题目中的盖放墓地陷阱卡效果在伤害步骤结束阶段发动/适用时，那只被战破的卡通怪兽已经不在场上。",
+      "因此不能适用该临时除外效果来避免这次战斗破坏；该卡通怪兽仍按战斗破坏送去墓地。",
+    ],
+    needsConfirmation: [
+      ...new Set([
+        ...buildMultiQuestionNeeds(context.question),
+        "如果还要确认「青眼暴君龙」自身被战斗破坏时能否发动、在哪里发动，需要把该问题单独拆开，并以该卡官方 FAQ/规则条目核对。",
+        ...buildNeedsConfirmation(context, false).filter((item) => !/当前没有命中直接/.test(item)).slice(0, 3),
+      ]),
+    ],
+    sources: collectCardTextSources(context.detectedCards, sources),
+    snapshotAt: snapshotMeta?.generatedAt || null,
+    evidenceCount,
+    warnings: [],
+    modelUsed: false,
+  };
+}
+
+function asksToProtectBattleDestroyedMonsterAtEndOfDamageStep(value) {
+  const text = normalizeRulingText(value);
+  return /(伤害步骤结束|伤害阶段结束|伤害步结束|ダメージステップ終了|end of the Damage Step)/iu.test(text) &&
+    /(战破|战斗破坏|被战斗破坏|戦闘で破壊|destroyed by battle)/iu.test(text) &&
+    /(卡通怪兽|卡通怪|トゥーンモンスター|Toon monster|完美世界|卡通世界|トゥーン・ワールド|Perfect Toon World)/iu.test(text) &&
+    /(除外|保护|避免|还会被|送墓|送去墓地|墓地)/iu.test(text);
 }
 
 function inferStructuredRuleAnswer(context, sources, snapshotMeta, evidenceCount) {
@@ -1795,6 +1875,7 @@ function parseChain(question) {
 
 function buildNeedsConfirmation(context, cardTextOnly, analogousRuling = null) {
   const items = [];
+  items.push(...buildMultiQuestionNeeds(context.question));
   items.push(...detectMissingSceneFacts(context));
   const releasedUnknown = context.detectedCards.filter((card) => card.released === false).map((card) => card.name);
   if (releasedUnknown.length) items.push(`${releasedUnknown.join("、")} 可能尚未发售或同步来源缺少发售日期。`);
@@ -1814,11 +1895,29 @@ function buildNeedsConfirmation(context, cardTextOnly, analogousRuling = null) {
 
 function buildDirectNeedsConfirmation(context) {
   const items = [];
+  items.push(...buildMultiQuestionNeeds(context.question));
   items.push(...detectMissingSceneFacts(context));
   const releasedUnknown = context.detectedCards.filter((card) => card.released === false).map((card) => card.name);
   if (releasedUnknown.length) items.push(`${releasedUnknown.join("、")} 可能尚未发售或同步来源缺少发售日期。`);
   items.push("若题目条件与命中的问答原文不同，需要回到出处核对完整原文。");
   return [...new Set(items)];
+}
+
+function buildMultiQuestionNeeds(question) {
+  return countIndependentQuestions(question) >= 2
+    ? ["题目里包含多个独立问题；当前回答优先处理主问题，其他问题建议拆开单独问，避免资料命中互相串题。"]
+    : [];
+}
+
+function countIndependentQuestions(question) {
+  const text = normalizeRulingText(question)
+    .replace(/[？?]/g, "?\n")
+    .replace(/(吗|呢|么|嘛)(?=\s|$)/g, "$1\n");
+  return text
+    .split(/\n+/)
+    .map((part) => part.trim())
+    .filter((part) => /(吗|呢|么|嘛|？|\?|能否|能不能|可以|是否|会不会|怎么处理|哪里发动|在.*发动|已经.*吗)/u.test(part))
+    .length;
 }
 
 function detectMissingSceneFacts(context) {
