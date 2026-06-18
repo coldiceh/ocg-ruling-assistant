@@ -583,28 +583,22 @@ function buildGeneratedQuestions(text, detectedCards, detectedTopics, chainItems
 }
 
 function confidenceFor(match, generatedQuestions) {
-  if (!match) return { label: "无Q&A支持", value: 0, className: "is-risky" };
-  if (match.note.recordType === "card-text") return { label: "仅命中效果文本", value: 0, className: "is-risky" };
+  if (!match) return { label: "无Q&A支持", className: "is-risky" };
+  if (match.note.recordType === "card-text") return { label: "仅命中效果文本", className: "is-risky" };
   const freshness = getFreshness();
-  const stalePenalty = freshness.className === "is-fresh" ? 0 : 18;
   if (match.note.status === "confirmed" && match.score >= 7 && generatedQuestions.length <= 1) {
-    const value = Math.max(60, 88 - stalePenalty);
     return {
       label: freshness.className === "is-fresh" ? "高置信" : "需复核",
-      value,
       className: freshness.className === "is-fresh" ? "is-confirmed" : "is-risky",
     };
   }
   if (match.note.status === "confirmed") {
-    const value = Math.max(52, 76 - stalePenalty);
     return {
       label: freshness.className === "is-fresh" ? "中高置信" : "需复核",
-      value,
       className: freshness.className === "is-fresh" ? "is-confirmed" : "is-risky",
     };
   }
-  if (match.note.status === "provisional") return { label: "需要Q&A确认", value: 25, className: "is-risky" };
-  return { label: "需要Q&A确认", value: Math.min(35, Math.max(0, match.score * 4)), className: "is-risky" };
+  return { label: "需要Q&A确认", className: "is-risky" };
 }
 
 async function analyzeQuestion() {
@@ -694,12 +688,12 @@ function renderPending() {
 }
 
 function renderBackendAnswer(answer) {
-  const confidence = answer?.confidence || { label: "不能确定", value: 0, className: "is-risky" };
+  const confidence = answer?.confidence || { label: "不能确定", className: "is-risky" };
   ui.resultGrid.hidden = false;
   renderCards(answer?.cards || []);
   updateModelStatus(modelStatusFromAnswer(answer));
   ui.verdictBlock.className = `result-block verdict-block ${confidence.className || ""}`.trim();
-  ui.confidenceText.textContent = `${confidence.label || "置信度"} ${Number(confidence.value || 0)}%`;
+  ui.confidenceText.textContent = confidence.label || "不能确定";
   ui.verdictTitle.textContent = answer?.verdictTitle || "后端没有返回结论";
   ui.rulingBasisText.textContent = answer?.rulingBasis || basisFromBackendMode(answer?.mode);
   ui.verdictBody.textContent = answer?.verdict || "暂时不能给确定裁定。";
@@ -722,7 +716,7 @@ function renderResult(text, bestMatch, confidence, generatedQuestions, detectedC
   ui.verdictBlock.className = `result-block verdict-block ${confidence.className}`.trim();
 
   if (!bestMatch) {
-    ui.confidenceText.textContent = `${confidence.label} ${confidence.value}%`;
+    ui.confidenceText.textContent = confidence.label;
     ui.verdictTitle.textContent = "资料库没有命中";
     ui.rulingBasisText.textContent = "资料不足";
     ui.verdictBody.textContent = "暂时不能给确定裁定。可以继续使用俗称，但需要补一点能帮助识别的线索，例如日文、英文、效果原文或卡片种类。";
@@ -739,7 +733,7 @@ function renderResult(text, bestMatch, confidence, generatedQuestions, detectedC
 
   const note = bestMatch.note;
   const questions = [...new Set([...(note.questions || []), ...generatedQuestions])];
-  ui.confidenceText.textContent = `${confidence.label} ${confidence.value}%`;
+  ui.confidenceText.textContent = confidence.label;
   if (note.recordType === "card-text") {
     ui.verdictTitle.textContent = "只找到相关卡片文本";
     ui.rulingBasisText.textContent = "缺少直接问答资料";

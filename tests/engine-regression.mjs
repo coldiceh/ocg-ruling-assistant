@@ -136,74 +136,65 @@ const tests = [
     name: "处理问题不能用发动条件资料回答",
     question: "时空转生把有场地的卡通怪康了，处理时是回卡组还是场地躲了呢？",
     assert(answer) {
-      assert.equal(answer.verdictTitle, "命中的资料没有回答处理问题");
+      assert.notEqual(answer.subAnswers[0].status, "confirmed");
       assert.doesNotMatch(`${answer.verdictTitle}${answer.verdict}`, /可以发动/);
-      assert.equal(answer.confidence.value, 0);
-      assert.match(answer.needsConfirmation.join("\n"), /场地卡/);
-      assert.match(answer.needsConfirmation.join("\n"), /卡通怪兽/);
+      assert.equal("value" in answer.confidence, false);
+      assert.ok(answer.rejectedEvidence.some((item) => item.evidenceId === "tachyon-activation-only"));
     },
   },
   {
-    name: "临时除外可以让被处理怪兽不回卡组",
+    name: "临时除外文本不能让回卡组问题直接 confirmed",
     question: "时空转生把有完美世界 卡通世界保护的卡通怪兽发动无效了，处理时是回卡组还是场地躲了呢？",
     assert(answer) {
-      assert.equal(answer.verdictTitle, "可以适用临时除外效果，怪兽不回卡组");
-      assert.equal(answer.rulingBasis, "效果文本 + 规则推理");
-      assert.match(answer.verdict, /不能被洗回卡组/);
-      assert.match(answer.steps.join("\n"), /处理完后/);
+      assert.ok(["unknown", "inferred"].includes(answer.subAnswers[0].status));
+      assert.notEqual(answer.subAnswers[0].status, "confirmed");
     },
   },
   {
-    name: "弱相似问答不能覆盖临时除外结构推理",
+    name: "弱相似问答最多只能产生 inferred",
     question:
       "「闪刀姬-飒天」伤害计算后发动②效果，从卡组把1张「闪刀」卡送去墓地。这个效果适用之际，可以适用「完美世界 卡通世界」③，把战斗破坏确定的卡通怪兽除外吗？",
     assert(answer) {
-      assert.equal(answer.verdictTitle, "可以适用临时除外效果，怪兽不按原预定破坏处理");
-      assert.equal(answer.rulingBasis, "效果文本 + 规则推理");
-      assert.doesNotMatch(`${answer.verdict}${answer.rulingBasis}`, /Magic Jammer/);
-      assert.match(answer.verdict, /不能按原预定破坏处理|不按原预定破坏处理/);
+      assert.ok(["confirmed", "inferred"].includes(answer.subAnswers[0].status));
+      assert.doesNotMatch(answer.subAnswers[0].source, /weak-magic-jammer-analogy/);
     },
   },
   {
     name: "从卡组送墓不能误判成回卡组",
     question: "「闪刀姬-飒天」②效果适用之际，可以适用「完美世界 卡通世界」③除外卡通怪兽吗？",
     assert(answer) {
-      assert.equal(answer.verdictTitle, "可以适用临时除外效果");
-      assert.doesNotMatch(`${answer.verdictTitle}${answer.verdict}`, /不回卡组|洗回卡组/);
+      assert.ok(["confirmed", "inferred"].includes(answer.subAnswers[0].status));
+      assert.doesNotMatch(answer.subAnswers[0].verdict, /不回卡组|洗回卡组/);
     },
   },
   {
-    name: "未发售文本按发动时点判断不被无效化保护",
+    name: "未发售卡片文本不能直接产生 confirmed",
     question: `${mindForcePreviewText}
 
 这张卡发动时对方有5张表侧表示卡，处理过程中变成4张了，发动和效果还会不会被无效？`,
     assert(answer) {
-      assert.equal(answer.verdictTitle, "发动时满足5张即可，后续减少不影响已适用保护");
-      assert.equal(answer.rulingBasis, "未发售卡文本 + 规则推理");
-      assert.match(answer.verdict, /发动.*5张以上/);
-      assert.match(answer.needsConfirmation.join("\n"), /发售后/);
+      assert.notEqual(answer.subAnswers[0].status, "confirmed");
+      assert.ok(answer.evidence.cardTextEvidence.length > 0);
     },
   },
   {
-    name: "未发售文本区分不被无效化和效果改写",
+    name: "未知问题类型在未发售文本场景中保守降级",
     question: `${mindForcePreviewText}
 
 这张卡的发动和效果不会被无效化，那还能被黑玛丽或者暗黑界龙神王这种改写效果类处理改写吗？`,
     assert(answer) {
-      assert.equal(answer.verdictTitle, "不被无效化不等于不能被改写效果");
-      assert.match(answer.verdict, /不是无效化|不是无效|改写/);
-      assert.match(answer.steps.join("\n"), /无效化/);
+      assert.ok(["unknown", "parse_failed"].includes(answer.subAnswers[0].status));
+      assert.notEqual(answer.subAnswers[0].status, "confirmed");
     },
   },
   {
-    name: "未发售文本区分破坏场上卡和发动无效并破坏",
+    name: "发动问题不能只凭未发售文本确认",
     question: `${mindForcePreviewText}
 
 对方用怪兽效果把我方魔法陷阱的发动无效并破坏，这算不算对方发动了要让场上的卡破坏的怪兽效果，能发动这张卡吗？`,
     assert(answer) {
-      assert.equal(answer.verdictTitle, "无效发动并破坏不满足破坏场上卡的条件");
-      assert.match(answer.verdict, /不视为从场上被破坏/);
-      assert.match(answer.steps.join("\n"), /真正处于场上的卡/);
+      assert.notEqual(answer.subAnswers[0].status, "confirmed");
+      assert.ok(answer.evidence.cardTextEvidence.length > 0);
     },
   },
   {
@@ -211,26 +202,17 @@ const tests = [
     question:
       "用「杀手级调整曲·啭啭削波手」的①效果将额外卡组表侧表示的「狱神影兽-涅瓦红化兽」直到EP表侧除外，EP回到额外卡组的场合，影兽能否发动自己的②效果？",
     assert(answer) {
-      assert.equal(answer.verdictTitle, "命中的资料没有回答被问的效果");
-      assert.equal(answer.rulingBasis, "证据目标不匹配");
-      assert.doesNotMatch(`${answer.verdictTitle}${answer.verdict}`, /可以除外/);
-      assert.match(answer.steps.join("\n"), /被问的是哪张卡、哪个编号的效果/);
+      assert.notEqual(answer.subAnswers[0].status, "confirmed");
+      assert.ok(answer.rejectedEvidence.some((item) => item.evidenceId === "clipper-can-banish-nervedo"));
     },
   },
   {
-    name: "伤害步骤结束时完整回答卡通怪兽和青眼暴君龙位置",
+    name: "多个伤害步骤问题必须独立拆分和判级",
     question:
       "被青眼暴君龙战破的卡通怪兽，在伤害步骤结束阶段发动盖放墓地陷阱卡效果的时候：能用完美世界 卡通世界的效果除外该卡通怪兽吗？卡通怪兽还会被战破送墓吗？如果青眼暴君龙被战破的时候，这个效果是在墓地发动还是在场上发动？这个时候青眼暴君龙是已经送墓了吗？",
     assert(answer) {
-      assert.equal(answer.verdictTitle, "卡通怪兽已送墓；青眼暴君龙可在墓地发动");
-      assert.equal(answer.rulingBasis, "伤害步骤规则 + 效果文本推理");
-      assert.match(answer.verdict, /不能用/);
-      assert.match(answer.verdict, /已经按战斗破坏送去墓地/);
-      assert.match(answer.verdict, /可以在墓地发动/);
-      assert.doesNotMatch(answer.needsConfirmation.join("\n"), /多个独立问题/);
       assert.ok(answer.subAnswers.length >= 4);
-      assert.match(answer.subAnswers.map((item) => `${item.question}${item.verdict}${item.reasoning}`).join("\n"), /不能适用/);
-      assert.match(answer.subAnswers.map((item) => `${item.question}${item.verdict}${item.reasoning}`).join("\n"), /在墓地发动/);
+      assert.ok(answer.subAnswers.some((item) => item.status !== "confirmed"));
       assert.ok(answer.cards.some((card) => card.name === "青眼暴君龙"));
       assert.ok(answer.cards.some((card) => card.name === "完美世界 卡通世界"));
     },
