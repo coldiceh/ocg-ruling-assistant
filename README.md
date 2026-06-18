@@ -1,4 +1,4 @@
-# OCG 裁定助手
+# 游戏王OCG文本规则相关疑问助手
 
 一个面向游戏王 OCG 对局裁定的问答工具。目标不是替代官方数据库，而是把自然语言场面描述拆成可核对的问题，并优先给出带出处、带更新时间、可复查的裁定依据。
 
@@ -75,7 +75,7 @@ POST http://localhost:8787/api/answer
 Content-Type: application/json
 
 {
-  "question": "输入裁定问题"
+  "question": "输入规则疑问"
 }
 ```
 

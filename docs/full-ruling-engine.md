@@ -75,7 +75,7 @@ POST /api/answer
 Content-Type: application/json
 
 {
-  "question": "自然语言裁定问题"
+  "question": "自然语言规则疑问"
 }
 ```
 
