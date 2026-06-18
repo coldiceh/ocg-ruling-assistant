@@ -159,6 +159,7 @@ const ui = {
   verdictTitle: document.querySelector("#verdictTitle"),
   rulingBasisText: document.querySelector("#rulingBasisText"),
   verdictBody: document.querySelector("#verdictBody"),
+  subAnswersPanel: document.querySelector("#subAnswersPanel"),
   modelStatusText: document.querySelector("#modelStatusText"),
   stepsList: document.querySelector("#stepsList"),
   questionsList: document.querySelector("#questionsList"),
@@ -582,8 +583,8 @@ function buildGeneratedQuestions(text, detectedCards, detectedTopics, chainItems
 }
 
 function confidenceFor(match, generatedQuestions) {
-  if (!match) return { label: "低置信", value: 18, className: "is-risky" };
-  if (match.note.recordType === "card-text") return { label: "仅命中效果文本", value: 45, className: "is-risky" };
+  if (!match) return { label: "无Q&A支持", value: 0, className: "is-risky" };
+  if (match.note.recordType === "card-text") return { label: "仅命中效果文本", value: 0, className: "is-risky" };
   const freshness = getFreshness();
   const stalePenalty = freshness.className === "is-fresh" ? 0 : 18;
   if (match.note.status === "confirmed" && match.score >= 7 && generatedQuestions.length <= 1) {
@@ -602,8 +603,8 @@ function confidenceFor(match, generatedQuestions) {
       className: freshness.className === "is-fresh" ? "is-confirmed" : "is-risky",
     };
   }
-  if (match.note.status === "provisional") return { label: "推定", value: 58, className: "" };
-  return { label: "待确认", value: Math.max(28, Math.min(45, match.score * 5)), className: "is-risky" };
+  if (match.note.status === "provisional") return { label: "需要Q&A确认", value: 25, className: "is-risky" };
+  return { label: "需要Q&A确认", value: Math.min(35, Math.max(0, match.score * 4)), className: "is-risky" };
 }
 
 async function analyzeQuestion() {
@@ -686,13 +687,14 @@ function renderPending() {
   ui.verdictTitle.textContent = "正在检索资料";
   ui.rulingBasisText.textContent = "";
   ui.verdictBody.textContent = "后端正在匹配卡片、问答资料和处理条件。";
+  renderSubAnswers([]);
   renderList(ui.stepsList, ["等待后端返回。"]);
   renderList(ui.questionsList, []);
   renderSources([]);
 }
 
 function renderBackendAnswer(answer) {
-  const confidence = answer?.confidence || { label: "不能确定", value: 18, className: "is-risky" };
+  const confidence = answer?.confidence || { label: "不能确定", value: 0, className: "is-risky" };
   ui.resultGrid.hidden = false;
   renderCards(answer?.cards || []);
   updateModelStatus(modelStatusFromAnswer(answer));
@@ -701,6 +703,7 @@ function renderBackendAnswer(answer) {
   ui.verdictTitle.textContent = answer?.verdictTitle || "后端没有返回结论";
   ui.rulingBasisText.textContent = answer?.rulingBasis || basisFromBackendMode(answer?.mode);
   ui.verdictBody.textContent = answer?.verdict || "暂时不能给确定裁定。";
+  renderSubAnswers(answer?.subAnswers || []);
   renderList(ui.stepsList, answer?.steps || []);
   renderList(ui.questionsList, [...(answer?.needsConfirmation || []), ...(answer?.warnings || [])]);
   renderSources(answer?.sources || []);
@@ -723,6 +726,7 @@ function renderResult(text, bestMatch, confidence, generatedQuestions, detectedC
     ui.verdictTitle.textContent = "资料库没有命中";
     ui.rulingBasisText.textContent = "资料不足";
     ui.verdictBody.textContent = "暂时不能给确定裁定。可以继续使用俗称，但需要补一点能帮助识别的线索，例如日文、英文、效果原文或卡片种类。";
+    renderSubAnswers([]);
     renderList(ui.stepsList, [
       "补充常用别名、日文/英文片段或效果原文，不必强制输入完整官方卡名。",
       "补全连锁、阶段、表示形式、控制者和效果编号。",
@@ -741,6 +745,7 @@ function renderResult(text, bestMatch, confidence, generatedQuestions, detectedC
     ui.rulingBasisText.textContent = "缺少直接问答资料";
     ui.verdictBody.textContent =
       "资料库识别到了相关卡片，但没有命中能直接回答这个场面的官方 Q&A 或已确认裁定。不能把效果文本直接当作具体处理结论。";
+    renderSubAnswers([]);
     renderList(ui.stepsList, [
       "先核对题目里的俗称对应哪张卡，以及效果编号、连锁和控制者。",
       "再查该卡相关 Q&A 或规则条目。",
@@ -750,6 +755,7 @@ function renderResult(text, bestMatch, confidence, generatedQuestions, detectedC
     ui.verdictTitle.textContent = note.status === "confirmed" ? "可以按已确认资料处理" : "按以下方式处理";
     ui.rulingBasisText.textContent = note.status === "confirmed" ? "本地已确认资料" : "本地资料";
     ui.verdictBody.textContent = note.conclusion;
+    renderSubAnswers([]);
     renderList(ui.stepsList, note.steps || []);
   }
   renderList(ui.questionsList, questions);
@@ -1093,6 +1099,46 @@ function basisFromBackendMode(mode) {
 function updateModelStatus(text) {
   if (!ui.modelStatusText) return;
   ui.modelStatusText.textContent = text;
+}
+
+function renderSubAnswers(subAnswers) {
+  if (!ui.subAnswersPanel) return;
+  clearElement(ui.subAnswersPanel);
+  const items = Array.isArray(subAnswers) ? subAnswers.filter((item) => item?.question || item?.verdict || item?.reasoning) : [];
+  if (items.length <= 1) {
+    ui.subAnswersPanel.hidden = true;
+    return;
+  }
+
+  ui.subAnswersPanel.hidden = false;
+  items.forEach((item, index) => {
+    const block = document.createElement("div");
+    block.className = "sub-answer";
+
+    const question = document.createElement("div");
+    question.className = "sub-q";
+    question.textContent = `问题${index + 1}：${item.question || "未命名子问题"}`;
+    block.appendChild(question);
+
+    const verdict = document.createElement("div");
+    verdict.className = "sub-verdict";
+    verdict.textContent = item.verdict || "需要确认";
+    block.appendChild(verdict);
+
+    if (item.reasoning) {
+      const reasoning = document.createElement("p");
+      reasoning.className = "sub-reasoning";
+      reasoning.textContent = item.reasoning;
+      block.appendChild(reasoning);
+    }
+
+    const source = document.createElement("p");
+    source.className = "sub-source";
+    source.textContent = item.source ? `来源：${item.source}` : "来源：[推理，需确认]";
+    block.appendChild(source);
+
+    ui.subAnswersPanel.appendChild(block);
+  });
 }
 
 function renderList(container, items) {

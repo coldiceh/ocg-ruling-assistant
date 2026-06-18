@@ -92,7 +92,9 @@ export async function answerQuestion(payload, options = {}) {
   );
   const detectedTopics = detectTopics(question);
   const chainItems = parseChain(question);
-  let evidence = retrieveEvidence(question, detectedCards, detectedTopics, snapshot).slice(0, 10);
+  const questionTypes = classifyQuestion(question);
+  const subQuestions = extractSubQuestions(question);
+  let evidence = retrieveEvidence(question, detectedCards, detectedTopics, snapshot, questionTypes).slice(0, 10);
 
   if (!detectedCards.length || !evidence.length) {
     const extractedResolution = collectQuestionCardCandidates(question);
@@ -101,7 +103,7 @@ export async function answerQuestion(payload, options = {}) {
       if (baigeCards.length) {
         resolutionNotes.push("部分卡片由百鸽卡查确认，静态快照尚未覆盖。");
         detectedCards = mergeCards(detectedCards, baigeCards);
-        evidence = retrieveEvidence(question, detectedCards, detectedTopics, snapshot).slice(0, 10);
+        evidence = retrieveEvidence(question, detectedCards, detectedTopics, snapshot, questionTypes).slice(0, 10);
       }
     } catch (error) {
       resolutionWarnings.push(`百鸽卡查解析失败，已继续使用本地资料：${formatError(error)}`);
@@ -111,10 +113,10 @@ export async function answerQuestion(payload, options = {}) {
     const localResolvedCards = matchModelResolvedCards(localResolution, snapshot.cards);
     if (localResolvedCards.length) {
       detectedCards = mergeCards(detectedCards, localResolvedCards);
-      evidence = retrieveEvidence(question, detectedCards, detectedTopics, snapshot).slice(0, 10);
+      evidence = retrieveEvidence(question, detectedCards, detectedTopics, snapshot, questionTypes).slice(0, 10);
     } else {
       detectedCards = mergeCards(detectedCards, buildPlaceholderCards(localResolution));
-      evidence = retrieveEvidence(question, detectedCards, detectedTopics, snapshot).slice(0, 10);
+      evidence = retrieveEvidence(question, detectedCards, detectedTopics, snapshot, questionTypes).slice(0, 10);
     }
 
     const combinedLocalResolution = mergeResolutions(extractedResolution, localResolution);
@@ -126,7 +128,7 @@ export async function answerQuestion(payload, options = {}) {
       if (liveLocalCards.length || baigeLocalCards.length) {
         resolutionNotes.push("部分卡片来自实时资料索引，静态快照尚未覆盖。");
         detectedCards = mergeCards(detectedCards, liveLocalCards, baigeLocalCards);
-        evidence = retrieveEvidence(question, detectedCards, detectedTopics, snapshot).slice(0, 10);
+        evidence = retrieveEvidence(question, detectedCards, detectedTopics, snapshot, questionTypes).slice(0, 10);
       }
     } catch (error) {
       resolutionWarnings.push(`实时资料索引查询失败，已使用本地快照：${formatError(error)}`);
@@ -149,10 +151,10 @@ export async function answerQuestion(payload, options = {}) {
         if (liveCards.length || baigeCards.length) resolutionNotes.push("部分卡片来自实时资料索引，静态快照尚未覆盖。");
         if (resolvedCards.length) {
           detectedCards = mergeCards(detectedCards, resolvedCards, liveCards, baigeCards);
-          evidence = retrieveEvidence(question, detectedCards, detectedTopics, snapshot).slice(0, 10);
+          evidence = retrieveEvidence(question, detectedCards, detectedTopics, snapshot, questionTypes).slice(0, 10);
         } else if (liveCards.length || baigeCards.length) {
           detectedCards = mergeCards(detectedCards, liveCards, baigeCards);
-          evidence = retrieveEvidence(question, detectedCards, detectedTopics, snapshot).slice(0, 10);
+          evidence = retrieveEvidence(question, detectedCards, detectedTopics, snapshot, questionTypes).slice(0, 10);
         }
       } catch (error) {
         resolutionWarnings.push(`卡名解析失败，已使用本地匹配结果：${formatError(error)}`);
@@ -169,7 +171,7 @@ export async function answerQuestion(payload, options = {}) {
       }
       const liveEvidence = await loadLiveEvidenceForCards(detectedCards, env);
       if (liveEvidence.length) {
-        evidence = rankEvidenceRecords([...evidence, ...liveEvidence], question, detectedCards, detectedTopics).slice(0, 10);
+        evidence = rankEvidenceRecords([...evidence, ...liveEvidence], question, detectedCards, detectedTopics, questionTypes).slice(0, 10);
       }
     } catch (error) {
       resolutionWarnings.push(`实时 FAQ 查询失败，已使用当前资料：${formatError(error)}`);
@@ -180,10 +182,13 @@ export async function answerQuestion(payload, options = {}) {
     question,
     detectedCards,
     topics: detectedTopics,
+    questionTypes,
+    subQuestions,
     chainItems,
     evidence,
     snapshotMeta: snapshot.meta,
   });
+  enrichAnswer(baseAnswer, { question, detectedCards, topics: detectedTopics, questionTypes, subQuestions, chainItems, evidence, snapshotMeta: snapshot.meta });
   baseAnswer.cards = buildCardSummaries(detectedCards);
   if (resolutionWarnings.length) baseAnswer.warnings = [...(baseAnswer.warnings || []), ...resolutionWarnings];
   if (resolutionNotes.length && baseAnswer.mode !== "confirmed") {
@@ -199,6 +204,8 @@ export async function answerQuestion(payload, options = {}) {
         question,
         detectedCards,
         topics: detectedTopics,
+        questionTypes,
+        subQuestions,
         chainItems,
         evidence,
         snapshotMeta: snapshot.meta,
@@ -207,7 +214,18 @@ export async function answerQuestion(payload, options = {}) {
     );
 
     if (!modelAnswer) return baseAnswer;
-    return mergeModelAnswer(modelAnswer, baseAnswer, evidence, snapshot.meta);
+    const merged = mergeModelAnswer(modelAnswer, baseAnswer, evidence, snapshot.meta, {
+      question,
+      detectedCards,
+      topics: detectedTopics,
+      questionTypes,
+      subQuestions,
+      chainItems,
+      evidence,
+      snapshotMeta: snapshot.meta,
+    });
+    enrichAnswer(merged, { question, detectedCards, topics: detectedTopics, questionTypes, subQuestions, chainItems, evidence, snapshotMeta: snapshot.meta });
+    return merged;
   } catch (error) {
     return {
       ...baseAnswer,
@@ -289,7 +307,7 @@ function buildEvidenceAnswer(context) {
       verdictTitle: title,
       verdict: buildReadableRulingBody(exactRuling.conclusion, title, "direct", context),
       rulingBasis: "找到直接问答资料",
-      confidence: { label: freshnessLabel(snapshotMeta, "已确认资料"), value: freshnessValue(snapshotMeta, 84), className: "is-confirmed" },
+      confidence: buildEvidenceConfidence(context, evidence, "confirmed"),
       steps: buildRulingSteps(context, exactRuling, title),
       needsConfirmation: buildDirectNeedsConfirmation(context),
       sources,
@@ -311,7 +329,7 @@ function buildEvidenceAnswer(context) {
       verdictTitle: title,
       verdict: `没有命中完全同场面的问答。可作为类推依据的资料结论是：${buildReadableRulingBody(analogousRuling.conclusion, title, "analogous", context)}`,
       rulingBasis: "找到相似问答资料",
-      confidence: { label: "类推依据", value: freshnessValue(snapshotMeta, 62), className: "" },
+      confidence: buildEvidenceConfidence(context, evidence, "inferred"),
       steps: [
         "先确认题目与相似问答的共通结构：触发事件、适用时点、效果处理期间、对象或适用范围。",
         "再核对差异点是否会改变裁定；差异未排除前不能标记为已确认裁定。",
@@ -336,7 +354,7 @@ function buildEvidenceAnswer(context) {
     rulingBasis: "缺少直接问答资料",
     verdict:
       "后端识别到了相关卡片和效果文本，但没有命中能直接回答这个场面的 Q&A 或 FAQ。不能把效果文本直接当作确定裁定。",
-    confidence: { label: "缺少问答出处", value: 45, className: "is-risky" },
+    confidence: buildEvidenceConfidence(context, evidence, "unknown"),
     steps: [
       "先核对题目里的俗称对应哪张卡，以及效果编号、所在区域、控制者和连锁顺序。",
       "再查该卡相关 Q&A、FAQ 或规则条目。",
@@ -359,7 +377,7 @@ function buildMismatchedEvidenceAnswer(context, mismatchedRuling, sources, snaps
       rulingBasis: "证据目标不匹配",
       verdict:
         "当前命中的资料回答的是另一项操作或处理，例如能否除外、破坏、回卡组等；但题目问的是指定卡片的效果能否发动。为保证正确性，不能把该资料直接当成答案。",
-      confidence: { label: "不能确定", value: 28, className: "is-risky" },
+      confidence: buildEvidenceConfidence(context, [mismatchedRuling], "unknown"),
       steps: [
         "先确定真正被问的是哪张卡、哪个编号的效果，以及它在什么区域发动。",
         "再确认触发事件是否发生：例如是否是“表侧加入额外卡组”“特殊召唤成功”“送去墓地”等。",
@@ -383,7 +401,7 @@ function buildMismatchedEvidenceAnswer(context, mismatchedRuling, sources, snaps
     rulingBasis: "证据类型不匹配",
     verdict:
       "题目是在问效果处理结果，但当前命中的资料主要是发动条件或卡片文本，不能用它来回答会回卡组、留场、除外或回场等处理。",
-    confidence: { label: "不能确定", value: 30, className: "is-risky" },
+    confidence: buildEvidenceConfidence(context, [mismatchedRuling], "unknown"),
     steps: [
       "先补全参与处理的所有卡，尤其是题目里提到的场地、永续、装备或适用中的效果。",
       "再确认原效果正在处理什么，以及被处理的卡在处理时是否仍在原位置。",
@@ -422,7 +440,7 @@ function inferDamageStepEndBattleDestroyedAnswer(context, sources, snapshotMeta,
     verdict:
       `伤害步骤结束时，被战斗破坏确定的卡通怪兽已经按战斗破坏送去墓地，不再是自己场上的卡通怪兽。因此不能用${protectorName}的临时除外效果把那只卡通怪兽除外，卡通怪兽仍然留在墓地。${tyrantVerdict ? ` ${tyrantVerdict}` : ""}`,
     rulingBasis: "伤害步骤规则 + 效果文本推理",
-    confidence: { label: freshnessLabel(snapshotMeta, "规则推理"), value: freshnessValue(snapshotMeta, 68), className: "" },
+    confidence: buildEvidenceConfidence(context, context.evidence || [], "inferred"),
     steps: [
       "先处理战斗破坏：到伤害步骤结束时，被战斗破坏确定的怪兽会送去墓地。",
       `${protectorName}③要求在其他卡效果适用之际，把自己场上1只卡通怪兽除外到那个效果处理后。`,
@@ -443,11 +461,48 @@ function inferDamageStepEndBattleDestroyedAnswer(context, sources, snapshotMeta,
       ]),
     ],
     sources: collectCardTextSources(context.detectedCards, sources),
+    subAnswers: buildDamageStepEndBattleDestroyedSubAnswers(question, protectorName, includesTyrantDestroyedQuestion),
     snapshotAt: snapshotMeta?.generatedAt || null,
     evidenceCount,
     warnings: [],
     modelUsed: false,
   };
+}
+
+function buildDamageStepEndBattleDestroyedSubAnswers(question, protectorName, includesTyrantDestroyedQuestion) {
+  const answers = [
+    {
+      question: "能用完美世界 卡通世界的效果除外该卡通怪兽吗？",
+      verdict: "不能适用",
+      reasoning: `伤害步骤结束时，被战斗破坏确定的卡通怪兽已经送去墓地，不再是自己场上的卡通怪兽；${protectorName}③要求除外自己场上的1只卡通怪兽，因此条件不满足。`,
+      source: "[推理，需确认]",
+    },
+    {
+      question: "卡通怪兽还会被战斗破坏送去墓地吗？",
+      verdict: "已经按战斗破坏送去墓地",
+      reasoning: "题目时点是伤害步骤结束时发动/适用其他效果；到这个时点，被战斗破坏确定的怪兽已经完成送去墓地的处理。",
+      source: "[推理，需确认]",
+    },
+  ];
+
+  if (includesTyrantDestroyedQuestion || /青眼暴君龙|青眼暴君龍|暴君龙|暴君龍|青眼のタイラント・ドラゴン|Blue-Eyes Tyrant Dragon/iu.test(question)) {
+    answers.push(
+      {
+        question: "如果青眼暴君龙被战斗破坏，这个效果是在墓地发动还是在场上发动？",
+        verdict: "在墓地发动",
+        reasoning: "「青眼暴君龙」自身被战斗破坏的场合，到了伤害步骤结束时它已经送去墓地；其“这张卡进行战斗的伤害步骤结束时”效果可以从墓地发动。",
+        source: "[推理，需确认]",
+      },
+      {
+        question: "这个时候青眼暴君龙已经送去墓地了吗？",
+        verdict: "已经送去墓地",
+        reasoning: "与其他被战斗破坏确定的怪兽相同，伤害步骤结束时进行发动判断时，战斗破坏送去墓地的处理已经完成。",
+        source: "[推理，需确认]",
+      }
+    );
+  }
+
+  return answers;
 }
 
 function asksToProtectBattleDestroyedMonsterAtEndOfDamageStep(value) {
@@ -489,7 +544,7 @@ function inferStructuredRuleAnswer(context, sources, snapshotMeta, evidenceCount
     verdictTitle: title,
     verdict: buildReadableRulingBody("", title, "analogous", context),
     rulingBasis: "效果文本 + 规则推理",
-    confidence: { label: "规则推理", value: freshnessValue(snapshotMeta, 66), className: "" },
+    confidence: buildEvidenceConfidence(context, context.evidence || [], "inferred"),
     steps: buildRulingSteps(context, ruleRuling, title),
     needsConfirmation: [
       "这是按已识别卡片效果文本和处理时点作出的规则推理，不是数据库原题；仍建议核对官方 Q&A。",
@@ -568,7 +623,7 @@ function buildProvidedCardInferenceAnswer(context, sources, snapshotMeta, eviden
     verdictTitle: inference.title,
     verdict: inference.verdict,
     rulingBasis: "未发售卡文本 + 规则推理",
-    confidence: { label: "预览分析", value: freshnessValue(snapshotMeta, 54), className: "" },
+    confidence: buildEvidenceConfidence(context, context.evidence || [], "inferred"),
     steps: inference.steps,
     needsConfirmation: [
       "这是根据用户提供的新卡文本做的预览分析，不是已确认裁定。",
@@ -606,10 +661,10 @@ function collectCardTextSources(cards, fallbackSources) {
   return cardSources.length ? dedupeBy(cardSources, (source) => `${source.label}:${source.detail}`) : fallbackSources;
 }
 
-function mergeModelAnswer(modelAnswer, baseAnswer, evidence, snapshotMeta) {
+function mergeModelAnswer(modelAnswer, baseAnswer, evidence, snapshotMeta, context = null) {
   const hasExactRuling = evidence.some((item) => isRulingEvidence(item) && item.matchKind === "direct");
   const confidenceMode = hasExactRuling ? modelAnswer.confidence : downgradeConfidence(modelAnswer.confidence);
-  const confidence = confidenceFromMode(confidenceMode, snapshotMeta);
+  const confidence = context ? buildEvidenceConfidence(context, evidence, confidenceMode) : confidenceFromMode(confidenceMode, snapshotMeta);
 
   return {
     ...baseAnswer,
@@ -620,13 +675,14 @@ function mergeModelAnswer(modelAnswer, baseAnswer, evidence, snapshotMeta) {
     confidence,
     steps: cleanList(modelAnswer.steps, baseAnswer.steps),
     needsConfirmation: cleanList(modelAnswer.needsConfirmation, baseAnswer.needsConfirmation),
+    subAnswers: cleanSubAnswers(modelAnswer.subAnswers, baseAnswer.subAnswers),
     modelUsed: true,
     modelProvider: modelAnswer.provider || "unknown",
     modelName: modelAnswer.model || null,
   };
 }
 
-function retrieveEvidence(question, detectedCards, detectedTopics, snapshot) {
+function retrieveEvidence(question, detectedCards, detectedTopics, snapshot, questionTypes = []) {
   if (!detectedCards.length) return [];
 
   const uniqueCards = mergeCards(detectedCards);
@@ -655,31 +711,32 @@ function retrieveEvidence(question, detectedCards, detectedTopics, snapshot) {
       score: 6,
     }));
 
-  return rankEvidenceRecords([...snapshot.records, ...textMatches], question, uniqueCards, detectedTopics)
+  return rankEvidenceRecords([...snapshot.records, ...textMatches], question, uniqueCards, detectedTopics, questionTypes)
     .sort((a, b) => b.score - a.score)
     .slice(0, 16);
 }
 
-function rankEvidenceRecords(records, question, detectedCards, detectedTopics) {
+function rankEvidenceRecords(records, question, detectedCards, detectedTopics, questionTypes = []) {
   if (!detectedCards.length) return [];
 
   const cardKeys = new Set(
     detectedCards.flatMap((card) => [card.id, card.passcode, card.liveId, card.name, card.cnName, card.jaName, card.enName, card.matched, ...(card.aliases || [])].filter(Boolean).map(normalizeKey))
   );
-  const tokens = tokenize(question);
+  const searchTerms = buildSearchTerms(detectedCards, questionTypes);
+  const tokens = [...new Set([...tokenize(question), ...searchTerms.map(normalizeKey).filter((item) => item.length >= 2)])];
 
   return dedupeBy(
     records
       .map((record) => {
-        const score = scoreRecord(record, cardKeys, detectedTopics, tokens);
-        return score > 0 ? { ...record, score, ...classifyEvidenceMatch(record, question, detectedCards, tokens) } : null;
+        const score = scoreRecord(record, cardKeys, detectedTopics, tokens, questionTypes);
+        return score > 0 ? { ...record, score, ...classifyEvidenceMatch(record, question, detectedCards, tokens, questionTypes) } : null;
       })
       .filter(Boolean),
     (item) => item.id || `${item.title}:${item.conclusion}`
   ).sort((a, b) => b.score - a.score);
 }
 
-function classifyEvidenceMatch(record, question, detectedCards, tokens) {
+function classifyEvidenceMatch(record, question, detectedCards, tokens, questionTypes = []) {
   const questionIntent = detectQuestionIntent(question);
   if (!isRulingEvidence(record)) {
     return { matchKind: record.recordType === "card-text" ? "card-text" : "support", matchScore: 0, matchedCardCount: 0, questionIntent, intentMismatch: false };
@@ -699,22 +756,88 @@ function classifyEvidenceMatch(record, question, detectedCards, tokens) {
   const evidenceTags = handlingTags(`${evidenceQuestion} ${record.conclusion || ""} ${(record.keywords || []).join(" ")}`);
   const targetMismatch = isAnswerTargetMismatch(question, `${evidenceQuestion} ${record.conclusion || ""} ${(record.keywords || []).join(" ")}`);
   const intentMismatch = isIntentMismatch(questionIntent, evidenceTags, handlingOverlap) || targetMismatch;
+  const typeOverlap = scoreQuestionTypeOverlap(questionTypes, `${evidenceQuestion} ${record.conclusion || ""} ${(record.keywords || []).join(" ")}`);
   const exactEnough =
     matchedCardCount > 0 &&
     !intentMismatch &&
       (similarity >= 0.58 ||
       (tokenHits >= 5 && tokenRatio >= 0.28) ||
       (cardRatio >= 0.8 && tokenHits >= 3 && tokenRatio >= 0.18) ||
-      (cardRatio >= 0.8 && handlingOverlap >= 2));
+      (cardRatio >= 0.8 && handlingOverlap >= 2 && typeOverlap >= Math.min(1, questionTypes.length)));
 
   return {
     matchKind: intentMismatch ? "support" : exactEnough ? "direct" : "analogous",
     matchScore: Math.round(Math.max(similarity, tokenRatio) * 100),
     matchedCardCount,
     questionIntent,
+    questionTypes,
+    typeOverlap,
     intentMismatch,
     mismatchReason: targetMismatch ? "answer-target" : intentMismatch ? "intent" : "",
   };
+}
+
+function classifyQuestion(question) {
+  const text = normalizeRulingText(question);
+  const patterns = {
+    timing: /时机|时点|场合|结束时|之后|以前|之前|前|后|阶段|タイミング|場合|終了時/u,
+    chain: /连锁|连锁状态|对应|优先权|不能对应|无法连锁|チェーン|対応/u,
+    condition: /条件|需要|必须|才能|发动条件|適用条件|発動条件/u,
+    covenant: /誓约|自身效果|本身效果|自身の効果|このカードの効果を発動するため|特殊召唤条件/u,
+    multiPart: /[①②③④⑤⑥⑦⑧⑨]|还是|以及|另外|然后|那么|同时|并且|？.*？|\?.*\?/u,
+    substitute: /替代|代替|当作|视为|扱う|みなす/u,
+  };
+
+  return Object.entries(patterns)
+    .filter(([, regex]) => regex.test(text))
+    .map(([type]) => type);
+}
+
+function buildSearchTerms(cards, questionTypes) {
+  const terms = cards.flatMap((card) => [card.name, card.cnName, card.jaName, card.enName, card.matched, ...(card.aliases || [])].filter(Boolean));
+
+  if (questionTypes.includes("chain")) terms.push("连锁封锁", "不能对应", "无法连锁", "不能连锁", "チェーンできない", "発動できない");
+  if (questionTypes.includes("covenant")) terms.push("誓约", "自身效果", "本身效果", "自身の効果", "特殊召唤条件", "このカードの効果を発動するため");
+  if (questionTypes.includes("timing")) terms.push("发动时机", "时点", "场合", "伤害步骤结束时", "処理後", "場合", "タイミング");
+  if (questionTypes.includes("condition")) terms.push("发动条件", "适用条件", "必须", "才能", "発動条件", "適用条件");
+  if (questionTypes.includes("substitute")) terms.push("替代", "代替", "当作", "视为", "扱う", "みなす");
+
+  return [...new Set(terms)].filter(Boolean);
+}
+
+function extractSubQuestions(question) {
+  const normalized = normalizeRulingText(question)
+    .replace(/([？?])/g, "$1\n")
+    .replace(/(吗|呢|么|嘛)(?=\s|$)/g, "$1\n");
+  const parts = normalized
+    .split(/\n+/)
+    .map((part) => cleanText(part).replace(/^[，。；;、:：\s]+/, ""))
+    .filter(Boolean)
+    .filter((part) => isQuestionLike(part));
+
+  const unique = dedupeBy(parts, normalizeKey).slice(0, 8);
+  if (!unique.length) return [{ id: 1, question: normalizeRulingText(question), keyword: inferSubQuestionKeyword(question) }];
+  return unique.map((part, index) => ({
+    id: index + 1,
+    question: part,
+    keyword: inferSubQuestionKeyword(part),
+  }));
+}
+
+function isQuestionLike(value) {
+  return /(吗|呢|么|嘛|？|\?|能否|能不能|可以|可否|是否|会不会|怎么处理|哪里发动|在.*发动|已经.*吗|还是|如何)/u.test(value);
+}
+
+function inferSubQuestionKeyword(value) {
+  const text = normalizeRulingText(value);
+  const keywords = ["发动", "除外", "送墓", "送去墓地", "回卡组", "破坏", "连锁", "誓约", "时机", "墓地", "场上", "伤害步骤"];
+  return keywords.find((keyword) => text.includes(keyword)) || tokenize(text)[0] || "";
+}
+
+function scoreQuestionTypeOverlap(questionTypes, evidenceText) {
+  if (!questionTypes.length) return 0;
+  const evidenceTypes = classifyQuestion(evidenceText);
+  return questionTypes.filter((type) => evidenceTypes.includes(type)).length;
 }
 
 function detectQuestionIntent(question) {
@@ -809,7 +932,7 @@ function handlingTags(value) {
   return tags;
 }
 
-function scoreRecord(record, cardKeys, detectedTopics, tokens) {
+function scoreRecord(record, cardKeys, detectedTopics, tokens, questionTypes = []) {
   const recordCardKeys = new Set((record.cards || []).map(normalizeKey));
   const hasCardMatch = [...recordCardKeys].some((key) => cardKeys.has(key));
 
@@ -821,16 +944,18 @@ function scoreRecord(record, cardKeys, detectedTopics, tokens) {
 
   const haystack = normalizeKey(`${record.title || ""} ${record.conclusion || ""} ${(record.keywords || []).join(" ")}`);
   const tokenHits = tokens.filter((token) => token.length >= 2 && haystack.includes(token)).length;
+  const typeHits = scoreQuestionTypeOverlap(questionTypes, `${record.title || ""} ${record.question || ""} ${record.conclusion || ""} ${(record.keywords || []).join(" ")}`);
 
   if (!hasCardMatch) {
     if (record.recordType === "rule-doc" || record.recordType === "rule-test") {
       const handlingOverlap = scoreHandlingOverlap(tokens.join(" "), haystack);
-      if (topicHits < 1 && tokenHits < 3 && handlingOverlap < 1) return 0;
-      return 6 + topicHits * 2 + Math.min(6, tokenHits) + handlingOverlap * 2;
+      if (topicHits < 1 && tokenHits < 3 && handlingOverlap < 1 && typeHits < 1) return 0;
+      return 6 + topicHits * 2 + Math.min(6, tokenHits) + handlingOverlap * 2 + typeHits * 3;
     }
     if (!isRulingEvidence(record)) return 0;
-    if (topicHits < 2 || tokenHits < 4) return 0;
-    return 10 + topicHits * 2 + Math.min(6, tokenHits);
+    if (topicHits < 2 && typeHits < 1) return 0;
+    if (tokenHits < 4 && typeHits < 2) return 0;
+    return 10 + topicHits * 2 + Math.min(8, tokenHits) + typeHits * 4;
   }
 
   let score = 20;
@@ -840,6 +965,7 @@ function scoreRecord(record, cardKeys, detectedTopics, tokens) {
   if (record.status === "confirmed") score += 3;
   score += topicHits * 2;
   score += Math.min(8, tokenHits);
+  score += typeHits * 4;
   return score;
 }
 
@@ -2134,7 +2260,7 @@ function buildUnknownAnswer(verdictTitle, verdict, steps, needsConfirmation, sna
     verdictTitle,
     verdict,
     rulingBasis: "资料不足",
-    confidence: { label: "不能确定", value: 18, className: "is-risky" },
+    confidence: { label: "不能确定", value: 0, className: "is-risky" },
     steps,
     needsConfirmation,
     sources: [],
@@ -2144,6 +2270,107 @@ function buildUnknownAnswer(verdictTitle, verdict, steps, needsConfirmation, sna
   };
 }
 
+function enrichAnswer(answer, context) {
+  if (!answer || !context) return answer;
+  answer.questionTypes = context.questionTypes || classifyQuestion(context.question || "");
+  answer.subQuestions = context.subQuestions || extractSubQuestions(context.question || "");
+  if (!answer.subAnswers?.length) answer.subAnswers = buildDefaultSubAnswers(answer, context);
+  if (!answer.confidence || typeof answer.confidence.value !== "number") {
+    answer.confidence = buildEvidenceConfidence(context, context.evidence || [], answer.mode || "unknown");
+  }
+  return answer;
+}
+
+function buildDefaultSubAnswers(answer, context) {
+  const subQuestions = context.subQuestions?.length ? context.subQuestions : extractSubQuestions(context.question || "");
+  if (subQuestions.length <= 1) {
+    return [
+      {
+        question: subQuestions[0]?.question || context.question || "",
+        verdict: answer.verdictTitle || "需要确认",
+        reasoning: answer.verdict || "",
+        source: sourceLabelForAnswer(answer),
+      },
+    ];
+  }
+
+  return subQuestions.map((subQuestion, index) => {
+    if (index === 0) {
+      return {
+        question: subQuestion.question,
+        verdict: answer.verdictTitle || "需要确认",
+        reasoning: answer.verdict || "当前回答优先覆盖主问题。",
+        source: sourceLabelForAnswer(answer),
+      };
+    }
+    return {
+      question: subQuestion.question,
+      verdict: "需要Q&A确认",
+      reasoning: "该子问题未被当前命中的资料直接覆盖，不能把主问题结论套用过去。",
+      source: "[推理，需确认]",
+    };
+  });
+}
+
+function sourceLabelForAnswer(answer) {
+  const firstSource = answer.sources?.[0];
+  if (firstSource) return cleanText([firstSource.label, firstSource.detail || firstSource.url].filter(Boolean).join("："));
+  if (answer.mode === "confirmed") return answer.rulingBasis || "直接Q&A/FAQ";
+  if (answer.mode === "inferred") return "[推理，需确认]";
+  return "需要Q&A确认";
+}
+
+function buildEvidenceConfidence(context, evidence, preferredMode = "unknown") {
+  const value = calculateConfidence(evidence, context?.questionTypes || [], context?.subQuestions || [], context?.detectedCards || []);
+  if (value >= 70 && preferredMode === "confirmed") {
+    return { label: freshnessLabel(context?.snapshotMeta, "已确认资料"), value, className: "is-confirmed" };
+  }
+  if (value >= 40) {
+    return { label: preferredMode === "confirmed" ? "资料需复核" : "类推需复核", value, className: "" };
+  }
+  if (value === 0) return { label: "无Q&A支持", value: 0, className: "is-risky" };
+  return { label: "需要Q&A确认", value, className: "is-risky" };
+}
+
+function calculateConfidence(evidence, questionTypes, subQuestions, detectedCards) {
+  const qaMatches = (evidence || []).filter((item) => isRulingEvidence(item) && !item.intentMismatch);
+  if (!qaMatches.length) return 0;
+
+  let score = 0;
+  const questionCardKeys = new Set(
+    (detectedCards || []).flatMap((card) => cardAliases(card).map(normalizeKey)).filter((key) => key.length >= 2)
+  );
+  const exactMatches = qaMatches.filter((qa) => {
+    const qaText = normalizeKey(`${(qa.cards || []).join(" ")} ${qa.question || ""} ${qa.title || ""} ${qa.conclusion || ""}`);
+    const hasCards = !questionCardKeys.size || [...questionCardKeys].some((key) => qaText.includes(key));
+    const coversTypes = !questionTypes.length || scoreQuestionTypeOverlap(questionTypes, `${qa.question || ""} ${qa.title || ""} ${qa.conclusion || ""} ${(qa.keywords || []).join(" ")}`) >= Math.min(1, questionTypes.length);
+    return qa.matchKind === "direct" && hasCards && coversTypes;
+  });
+
+  score += Math.min(60, exactMatches.length * 30);
+  if (qaMatches.some((qa) => qa.matchKind === "analogous")) score += 10;
+
+  const questions = subQuestions?.length ? subQuestions : [];
+  if (questions.length) {
+    const coveredSubQuestions = questions.filter((subQuestion) =>
+      qaMatches.some((qa) => {
+        const text = normalizeRulingText(`${qa.question || ""} ${qa.title || ""} ${qa.conclusion || ""} ${(qa.keywords || []).join(" ")}`);
+        const keyword = normalizeRulingText(subQuestion.keyword || "");
+        return keyword ? text.includes(keyword) : scoreTextSimilarity(normalizeKey(subQuestion.question), normalizeKey(text)) >= 0.45;
+      })
+    ).length;
+    score += (coveredSubQuestions / questions.length) * 40;
+  } else {
+    score += 20;
+  }
+
+  if (qaMatches.some((qa) => qa.matchKind !== "direct" || qa.intentMismatch || qa.mismatchReason)) score -= 25;
+  if (questionTypes.includes("covenant") || questionTypes.includes("chain")) score -= 10;
+  if (questionTypes.includes("multiPart") && (subQuestions?.length || 0) > 1) score -= 10;
+
+  return Math.max(0, Math.min(100, Math.round(score)));
+}
+
 function shouldResolveCardNamesWithModel(env) {
   const mode = String(env.MODEL_CARD_RESOLUTION || "auto").toLowerCase();
   return !["0", "false", "off", "none", "disabled"].includes(mode);
@@ -2151,12 +2378,12 @@ function shouldResolveCardNamesWithModel(env) {
 
 function confidenceFromMode(mode, snapshotMeta) {
   if (mode === "confirmed") {
-    return { label: freshnessLabel(snapshotMeta, "已确认资料"), value: freshnessValue(snapshotMeta, 86), className: "is-confirmed" };
+    return { label: freshnessLabel(snapshotMeta, "已确认资料"), value: freshnessValue(snapshotMeta, 78), className: "is-confirmed" };
   }
   if (mode === "inferred") {
-    return { label: "类推/规则推理", value: freshnessValue(snapshotMeta, 62), className: "" };
+    return { label: "推理需确认", value: 35, className: "is-risky" };
   }
-  return { label: "不能确定", value: 30, className: "is-risky" };
+  return { label: "不能确定", value: 0, className: "is-risky" };
 }
 
 function freshnessLabel(snapshotMeta, freshLabel) {
@@ -2332,6 +2559,19 @@ function decodeHtmlEntities(value) {
 function cleanList(value, fallback = []) {
   const items = Array.isArray(value) ? value : fallback;
   return [...new Set(items.map(cleanText).filter(Boolean))].slice(0, 8);
+}
+
+function cleanSubAnswers(value, fallback = []) {
+  const items = Array.isArray(value) && value.length ? value : fallback;
+  return items
+    .map((item) => ({
+      question: cleanText(item?.question || ""),
+      verdict: cleanText(item?.verdict || ""),
+      reasoning: cleanText(item?.reasoning || item?.reason || ""),
+      source: cleanText(item?.source || ""),
+    }))
+    .filter((item) => item.question || item.verdict || item.reasoning)
+    .slice(0, 8);
 }
 
 function truncate(value, length) {

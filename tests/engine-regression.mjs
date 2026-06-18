@@ -138,6 +138,7 @@ const tests = [
     assert(answer) {
       assert.equal(answer.verdictTitle, "命中的资料没有回答处理问题");
       assert.doesNotMatch(`${answer.verdictTitle}${answer.verdict}`, /可以发动/);
+      assert.equal(answer.confidence.value, 0);
       assert.match(answer.needsConfirmation.join("\n"), /场地卡/);
       assert.match(answer.needsConfirmation.join("\n"), /卡通怪兽/);
     },
@@ -227,6 +228,9 @@ const tests = [
       assert.match(answer.verdict, /已经按战斗破坏送去墓地/);
       assert.match(answer.verdict, /可以在墓地发动/);
       assert.doesNotMatch(answer.needsConfirmation.join("\n"), /多个独立问题/);
+      assert.ok(answer.subAnswers.length >= 4);
+      assert.match(answer.subAnswers.map((item) => `${item.question}${item.verdict}${item.reasoning}`).join("\n"), /不能适用/);
+      assert.match(answer.subAnswers.map((item) => `${item.question}${item.verdict}${item.reasoning}`).join("\n"), /在墓地发动/);
       assert.ok(answer.cards.some((card) => card.name === "青眼暴君龙"));
       assert.ok(answer.cards.some((card) => card.name === "完美世界 卡通世界"));
     },
