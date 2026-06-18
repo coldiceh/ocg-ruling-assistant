@@ -57,8 +57,9 @@ node scripts/serve.mjs
 
 - `backend/server.mjs`：本地 Node 服务。
 - `api/answer.js`：Vercel Serverless Function 入口。
-- `backend/engine.mjs`：卡名识别、资料检索、置信度和回答合并。
-- `backend/openai.mjs`：可选模型回答和卡名解析。支持 Gemini 或 OpenAI，部署环境里填对应 API key 才会启用。
+- `backend/formalQuery.mjs`：`FormalRulingQuery` schema、校验、归一化和子问题拆分。
+- `backend/engine.mjs`：卡名识别、按形式化子问题检索证据、规则匹配和结论降级。
+- `backend/openai.mjs`：只负责把自然语言解析成形式化 JSON，以及辅助解析卡名；模型不生成裁定答案。
 
 本地运行后端需要安装 Node.js 20 或更新版本；部署到 Vercel 时会自动使用项目里的 Node 配置。
 
@@ -96,6 +97,8 @@ GEMINI_MODELS=gemini-2.5-flash,gemini-3-flash,gemini-3.5-flash,gemini-3.1-flash-
 GEMINI_CARD_RESOLUTION_MODELS=gemini-3.1-flash-lite,gemini-2.5-flash-lite,gemini-2.5-flash
 GEMINI_MAX_OUTPUT_TOKENS=2600
 GEMINI_CARD_RESOLUTION_TOKENS=1200
+GEMINI_PARSER_MODELS=gemini-2.5-flash
+GEMINI_PARSER_TOKENS=2400
 GEMINI_TEMPERATURE=0.1
 ALLOWED_ORIGIN=https://coldiceh.github.io
 ```
@@ -133,7 +136,7 @@ D:\githubcli\gh.exe auth setup-git
 
 - 重点俗称和人工别名仍可写在 `data/tracked-cards.json`。
 - 适合长期共用的裁定，应整理成带来源的 JSON 条目后提交 PR。
-- 模型回答只能作为解释层；没有 Q&A、FAQ 或规则出处时，不能标记为已确认。
+- 模型只能生成形式化查询，不能生成裁定结论；没有匹配当前子问题类型的 Q&A/FAQ 时，不能标记为已确认。
 
 ## 路线图
 
@@ -142,7 +145,7 @@ D:\githubcli\gh.exe auth setup-git
 - 继续完善中文卡名、俗称、日文名、英文名的统一索引。
 - 加入“场面结构化输入”：双方场上、墓地、连锁、阶段、控制者。
 - 增加裁定变更提醒页，专门展示最近变化。
-- 接入后端检索和大模型时，只允许模型基于检索到的出处作答。
+- 持续扩充后端的形式化规则匹配；模型始终只做问题解析，不参与裁定结论。
 
 详见 [全卡裁定问答方案](docs/full-ruling-engine.md)。
 后端部署步骤见 [后端部署](docs/backend-deployment.md)。

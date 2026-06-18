@@ -1,60 +1,8 @@
-const responseSchema = {
-  type: "object",
-  additionalProperties: false,
-  required: ["verdictTitle", "verdict", "confidence", "steps", "needsConfirmation"],
-  properties: {
-    verdictTitle: {
-      type: "string",
-      description: "Short Chinese title for the answer.",
-    },
-    verdict: {
-      type: "string",
-      description: "Main answer in Simplified Chinese.",
-    },
-    confidence: {
-      type: "string",
-      enum: ["confirmed", "inferred", "unknown"],
-      description: "confirmed only when matchKind=direct Q&A or FAQ supports the exact handling; analogous evidence must be inferred or unknown.",
-    },
-    steps: {
-      type: "array",
-      items: { type: "string" },
-      description: "Concrete handling steps.",
-    },
-    needsConfirmation: {
-      type: "array",
-      items: { type: "string" },
-      description: "Facts or official sources still needed.",
-    },
-    subAnswers: {
-      type: "array",
-      items: {
-        type: "object",
-        additionalProperties: false,
-        required: ["question", "verdict", "reasoning", "source"],
-        properties: {
-          question: {
-            type: "string",
-            description: "One independent sub-question from the user.",
-          },
-          verdict: {
-            type: "string",
-            description: "Independent conclusion for this sub-question.",
-          },
-          reasoning: {
-            type: "string",
-            description: "Condition-by-condition reasoning for this sub-question.",
-          },
-          source: {
-            type: "string",
-            description: "Q&A source id/label, or [推理，需确认] when unsupported.",
-          },
-        },
-      },
-      description: "Independent answers for each sub-question. Required in practice when the question has multiple parts.",
-    },
-  },
-};
+import {
+  FormalRulingQuerySchema,
+  normalizeFormalRulingQuery,
+  validateFormalRulingQuery,
+} from "./formalQuery.mjs";
 
 const cardResolutionSchema = {
   type: "object",
@@ -87,33 +35,32 @@ const cardResolutionSchema = {
   },
 };
 
-export async function buildModelAnswer(context, env = globalThis.process?.env || {}) {
+export async function parseFormalRulingQuery(question, cardCandidates = [], env = globalThis.process?.env || {}) {
+  const text = String(question || "").trim();
+  const fallback = buildFormalQueryFallback(text, cardCandidates);
+  if (!text) return fallback;
+
   const provider = String(env.MODEL_PROVIDER || "").toLowerCase();
+  let parsed = null;
   if (provider === "gemini" || (!provider && env.GEMINI_API_KEY && (env.GEMINI_MODEL || env.GEMINI_MODELS))) {
-    return buildGeminiAnswer(context, env);
+    parsed = await parseGeminiFormalQuery(text, cardCandidates, env);
+  } else if (!provider || provider === "openai") {
+    parsed = await parseOpenAiFormalQuery(text, cardCandidates, env);
   }
 
-  if (provider && provider !== "openai") return null;
-  return buildOpenAiAnswer(context, env);
+  if (!parsed) return fallback;
+  const normalized = normalizeFormalRulingQuery({
+    ...parsed,
+    originalText: text,
+    cards: mergeFormalCards(parsed.cards, fallback.cards),
+  });
+  return validateFormalRulingQuery(normalized).valid ? normalized : fallback;
 }
 
-export async function resolveCardNamesWithModel(question, env = globalThis.process?.env || {}) {
-  const provider = String(env.MODEL_PROVIDER || "").toLowerCase();
-  if (provider === "gemini" || (!provider && env.GEMINI_API_KEY && (env.GEMINI_MODEL || env.GEMINI_MODELS))) {
-    return resolveGeminiCardNames(question, env);
-  }
-
-  if (provider && provider !== "openai") return null;
-  return resolveOpenAiCardNames(question, env);
-}
-
-async function buildOpenAiAnswer(context, env) {
+async function parseOpenAiFormalQuery(question, cardCandidates, env) {
   const apiKey = env.OPENAI_API_KEY;
-  const model = env.OPENAI_MODEL;
+  const model = env.OPENAI_PARSER_MODEL || env.OPENAI_MODEL;
   if (!apiKey || !model) return null;
-
-  const instructions = buildInstructions();
-  const userText = buildUserText(context);
 
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
@@ -124,41 +71,134 @@ async function buildOpenAiAnswer(context, env) {
     body: JSON.stringify({
       model,
       input: [
-        {
-          role: "system",
-          content: [{ type: "input_text", text: instructions }],
-        },
-        {
-          role: "user",
-          content: [
-            {
-              type: "input_text",
-              text: userText,
-            },
-          ],
-        },
+        { role: "system", content: [{ type: "input_text", text: buildFormalParserInstructions() }] },
+        { role: "user", content: [{ type: "input_text", text: buildFormalParserInput(question, cardCandidates) }] },
       ],
       text: {
         format: {
           type: "json_schema",
-          name: "ocg_ruling_answer",
-          schema: responseSchema,
-          strict: true,
+          name: "formal_ruling_query",
+          schema: FormalRulingQuerySchema,
+          strict: false,
         },
       },
-      max_output_tokens: Number(env.OPENAI_MAX_OUTPUT_TOKENS || 1400),
+      max_output_tokens: Number(env.OPENAI_PARSER_TOKENS || 1800),
     }),
   });
 
   if (!response.ok) {
     const detail = await response.text().catch(() => "");
-    throw new Error(`OpenAI API ${response.status}: ${detail.slice(0, 400)}`);
+    throw new Error(`OpenAI formal query parser ${response.status}: ${detail.slice(0, 400)}`);
+  }
+  const payload = await response.json();
+  const output = extractResponseText(payload);
+  return output ? parseJsonFromModel(output, "OpenAI formal query parser") : null;
+}
+
+async function parseGeminiFormalQuery(question, cardCandidates, env) {
+  const apiKey = env.GEMINI_API_KEY;
+  const models = getGeminiModelList(
+    env,
+    "GEMINI_PARSER_MODELS",
+    "GEMINI_PARSER_MODEL",
+    "GEMINI_MODELS",
+    "GEMINI_MODEL"
+  );
+  if (!apiKey || !models.length) return null;
+  return runGeminiFallback(models, (model) => parseGeminiFormalQueryWithModel(question, cardCandidates, env, apiKey, model));
+}
+
+async function parseGeminiFormalQueryWithModel(question, cardCandidates, env, apiKey, model) {
+  const modelPath = model.startsWith("models/") ? model : `models/${model}`;
+  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/${modelPath}:generateContent`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-goog-api-key": apiKey,
+    },
+    body: JSON.stringify({
+      systemInstruction: { parts: [{ text: buildFormalParserInstructions() }] },
+      contents: [{ role: "user", parts: [{ text: buildFormalParserInput(question, cardCandidates) }] }],
+      generationConfig: {
+        maxOutputTokens: Number(env.GEMINI_PARSER_TOKENS || 2400),
+        temperature: 0,
+        candidateCount: 1,
+        responseMimeType: "application/json",
+        responseSchema: toGeminiSchema(FormalRulingQuerySchema),
+      },
+    }),
+  });
+
+  if (!response.ok) {
+    const detail = await response.text().catch(() => "");
+    throw new Error(`Gemini formal query parser ${response.status}: ${detail.slice(0, 400)}`);
+  }
+  const payload = await response.json();
+  assertGeminiNotTruncated(payload, "Gemini formal query parser");
+  const output = extractGeminiText(payload);
+  return output ? parseJsonFromModel(output, "Gemini formal query parser") : null;
+}
+
+function buildFormalParserInstructions() {
+  return [
+    "你是游戏王 OCG 问题的结构化解析器，不是问答助手。",
+    "只输出符合 FormalRulingQuery schema 的 JSON，不得输出 Markdown 或自然语言解释。",
+    "不得回答可以、不可以、会、不会，也不得写裁定结论。askedResult 只能描述玩家想确认的结果。",
+    "无法确定的字符串字段填写 unknown，不得猜测场面事实。",
+    "一个输入包含多个独立疑问时，必须拆成多个 subQuestions；每项必须有唯一 id 和 type。",
+    "询问能否发动时，type 必须是 activation_condition。",
+    "询问处理方式、能否除外、是否回卡组或是否送墓时，使用 resolution_handling、location_change、temporary_banish、return_to_deck 或 send_to_gy。",
+    "卡片效果文本只用于识别字段，绝不能据此生成答案。",
+  ].join("\n");
+}
+
+function buildFormalParserInput(question, cardCandidates) {
+  return JSON.stringify({
+    question,
+    cardCandidates: (Array.isArray(cardCandidates) ? cardCandidates : []).map((card) => ({
+      name: String(card?.name || card?.cnName || card?.jaName || card?.enName || "unknown"),
+      aliases: [card?.cnName, card?.jaName, card?.enName, card?.matched, ...(card?.aliases || [])].filter(Boolean).slice(0, 12),
+    })),
+  });
+}
+
+function buildFormalQueryFallback(question, cardCandidates) {
+  return normalizeFormalRulingQuery({
+    originalText: question,
+    cards: (Array.isArray(cardCandidates) ? cardCandidates : []).map((card) => ({
+      name: String(card?.name || card?.cnName || card?.jaName || card?.enName || "unknown"),
+      role: "unknown",
+      effectNo: "unknown",
+      controller: "unknown",
+      zone: "unknown",
+      aliases: [card?.cnName, card?.jaName, card?.enName, card?.matched, ...(card?.aliases || [])].filter(Boolean),
+    })),
+    scenario: { turnPlayer: "unknown", phase: "unknown", chainState: "unknown", events: [] },
+    subQuestions: [],
+  });
+}
+
+function mergeFormalCards(parsedCards, fallbackCards) {
+  const result = [];
+  const seen = new Set();
+  for (const card of [...(Array.isArray(parsedCards) ? parsedCards : []), ...(fallbackCards || [])]) {
+    const name = String(card?.name || "unknown").trim() || "unknown";
+    const key = name.toLocaleLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(card);
+  }
+  return result;
+}
+
+export async function resolveCardNamesWithModel(question, env = globalThis.process?.env || {}) {
+  const provider = String(env.MODEL_PROVIDER || "").toLowerCase();
+  if (provider === "gemini" || (!provider && env.GEMINI_API_KEY && (env.GEMINI_MODEL || env.GEMINI_MODELS))) {
+    return resolveGeminiCardNames(question, env);
   }
 
-  const payload = await response.json();
-  const text = extractResponseText(payload);
-  if (!text) throw new Error("OpenAI API response did not contain output text.");
-  return { ...parseJsonFromModel(text, "OpenAI answer"), provider: "openai" };
+  if (provider && provider !== "openai") return null;
+  return resolveOpenAiCardNames(question, env);
 }
 
 async function resolveOpenAiCardNames(question, env) {
@@ -204,54 +244,6 @@ async function resolveOpenAiCardNames(question, env) {
   const payload = await response.json();
   const text = extractResponseText(payload);
   return normalizeCardResolutionPayload(text ? parseJsonFromModel(text, "OpenAI card resolver") : null);
-}
-
-async function buildGeminiAnswer(context, env) {
-  const apiKey = env.GEMINI_API_KEY;
-  const models = getGeminiModelList(env, "GEMINI_MODELS", "GEMINI_MODEL");
-  if (!apiKey || !models.length) return null;
-
-  return runGeminiFallback(models, (model) => buildGeminiAnswerWithModel(context, env, apiKey, model));
-}
-
-async function buildGeminiAnswerWithModel(context, env, apiKey, model) {
-  const modelPath = model.startsWith("models/") ? model : `models/${model}`;
-  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/${modelPath}:generateContent`, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      "x-goog-api-key": apiKey,
-    },
-    body: JSON.stringify({
-      systemInstruction: {
-        parts: [{ text: buildInstructions() }],
-      },
-      contents: [
-        {
-          role: "user",
-          parts: [{ text: buildUserText(context) }],
-        },
-      ],
-      generationConfig: {
-        maxOutputTokens: Number(env.GEMINI_MAX_OUTPUT_TOKENS || 4096),
-        temperature: env.GEMINI_TEMPERATURE === undefined ? 0.1 : Number(env.GEMINI_TEMPERATURE),
-        candidateCount: 1,
-        responseMimeType: "application/json",
-        responseSchema: toGeminiSchema(responseSchema),
-      },
-    }),
-  });
-
-  if (!response.ok) {
-    const detail = await response.text().catch(() => "");
-    throw new Error(`Gemini API ${response.status}: ${detail.slice(0, 400)}`);
-  }
-
-  const payload = await response.json();
-  assertGeminiNotTruncated(payload, "Gemini answer");
-  const text = extractGeminiText(payload);
-  if (!text) throw new Error("Gemini API response did not contain output text.");
-  return { ...parseJsonFromModel(text, "Gemini answer"), provider: "gemini", model };
 }
 
 async function resolveGeminiCardNames(question, env) {
@@ -340,50 +332,6 @@ function canTryNextGeminiModel(error) {
   );
 }
 
-function buildInstructions() {
-  return [
-    "你是一个游戏王OCG裁定专家。回答规则问题时，必须严格按照以下步骤：",
-    "",
-    "## 强制推理框架",
-    "",
-    "### Step 1: 问题拆解",
-    "列出用户提问中包含的所有独立子问题，逐一编号，并用 subAnswers 逐条回答。",
-    "",
-    "### Step 2: 效果识别（针对每张卡的每个相关效果）",
-    "- 效果类型：诱发/诱发即时/永续/起动",
-    "- 是否含誓约条件（このカードの効果を発動するための～）",
-    "- 是否含替代发动条件",
-    "",
-    "### Step 3: 发动条件逐一核对",
-    "针对每个子问题，列出发动条件并对照场景逐条 ✓/✗ 验证。",
-    "",
-    "### Step 4: 连锁规则",
-    "- 当前是否有连锁封锁效果存在？",
-    "- 被封锁的效果类型是否与当前效果匹配？",
-    "",
-    "### Step 5: 逐条结论",
-    "针对 Step 1 的每个子问题给出独立结论。",
-    "",
-    "## 严格规则",
-    "1. 没有检索到的Q&A支持时，必须说明“需要Q&A确认”，不得给出已确认结论。",
-    "2. 誓约效果（自身の効果による特殊召喚）不受一般连锁封锁影响——这是OCG固有规则。",
-    "3. 诱发效果的发动时机是“效果处理结束后的时点”，不是效果发动时。",
-    "4. 回答中必须指出每个结论对应的Q&A来源编号；没有来源的推理必须标注[推理，需确认]。",
-    "5. 置信度只有在找到直接对应Q&A时才能是 confirmed；否则只能是 inferred 或 unknown。",
-    "",
-    "## 禁止行为",
-    "- 禁止只给结论不给理由。",
-    "- 禁止把“卡片文本”当作裁定依据（文本不等于裁定）。",
-    "- 禁止对含5个以上子问题的提问只回答一个。",
-    "",
-    "## 输出约束",
-    "必须使用简体中文，只能根据输入的证据包和通用OCG处理原则回答。",
-    "不要引用证据包之外的具体Q&A或裁定编号。",
-    "如果证据与问题场面不完全一致，必须在 needsConfirmation 中列出差异。",
-    "verdict 不超过 420 个汉字，steps 不超过 8 条，needsConfirmation 不超过 6 条。",
-  ].join("\n");
-}
-
 function buildCardResolutionInstructions() {
   return [
     "你只负责从游戏王 OCG 问题中解析卡名。",
@@ -392,38 +340,6 @@ function buildCardResolutionInstructions() {
     "不要回答裁定，不要解释规则，不要编造效果。",
     "不确定时也可以给 low confidence 候选；后端只会采纳资料库中真实存在的卡。",
   ].join("\n");
-}
-
-function buildUserText(context) {
-  const evidence = context.evidence.slice(0, 10).map((item) => ({
-    type: item.recordType,
-      title: item.title,
-      matchKind: item.matchKind || "",
-      matchScore: item.matchScore || 0,
-      cards: item.cards,
-    text: item.conclusion,
-    steps: item.steps,
-    sources: item.sources,
-  }));
-
-  return JSON.stringify(
-    {
-      question: context.question,
-      questionTypes: context.questionTypes || [],
-      subQuestions: context.subQuestions || [],
-      detectedCards: context.detectedCards.map((card) => ({
-        name: card.name,
-        matched: card.matched,
-        released: card.released,
-      })),
-      topics: context.topics.map((topic) => topic.label),
-      chainItems: context.chainItems,
-      snapshotAt: context.snapshotMeta?.generatedAt || null,
-      evidence,
-    },
-    null,
-    2
-  );
 }
 
 function normalizeCardResolutionPayload(payload) {

@@ -1,7 +1,8 @@
 import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { buildModelAnswer, resolveCardNamesWithModel } from "./openai.mjs";
+import { normalizeFormalRulingQuery, validateFormalRulingQuery } from "./formalQuery.mjs";
+import { parseFormalRulingQuery, resolveCardNamesWithModel } from "./openai.mjs";
 
 const projectRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 const defaultDataDir = join(projectRoot, "data");
@@ -90,20 +91,14 @@ export async function answerQuestion(payload, options = {}) {
     extractUserProvidedCards(question),
     buildPlaceholderCards(collectLocalAliasResolutions(question))
   );
-  const detectedTopics = detectTopics(question);
-  const chainItems = parseChain(question);
-  const questionTypes = classifyQuestion(question);
-  const subQuestions = extractSubQuestions(question);
-  let evidence = retrieveEvidence(question, detectedCards, detectedTopics, snapshot, questionTypes).slice(0, 10);
 
-  if (!detectedCards.length || !evidence.length) {
+  if (!detectedCards.length) {
     const extractedResolution = collectQuestionCardCandidates(question);
     try {
       const baigeCards = await resolveCardsFromBaige(extractedResolution, env);
       if (baigeCards.length) {
         resolutionNotes.push("部分卡片由百鸽卡查确认，静态快照尚未覆盖。");
         detectedCards = mergeCards(detectedCards, baigeCards);
-        evidence = retrieveEvidence(question, detectedCards, detectedTopics, snapshot, questionTypes).slice(0, 10);
       }
     } catch (error) {
       resolutionWarnings.push(`百鸽卡查解析失败，已继续使用本地资料：${formatError(error)}`);
@@ -113,10 +108,8 @@ export async function answerQuestion(payload, options = {}) {
     const localResolvedCards = matchModelResolvedCards(localResolution, snapshot.cards);
     if (localResolvedCards.length) {
       detectedCards = mergeCards(detectedCards, localResolvedCards);
-      evidence = retrieveEvidence(question, detectedCards, detectedTopics, snapshot, questionTypes).slice(0, 10);
     } else {
       detectedCards = mergeCards(detectedCards, buildPlaceholderCards(localResolution));
-      evidence = retrieveEvidence(question, detectedCards, detectedTopics, snapshot, questionTypes).slice(0, 10);
     }
 
     const combinedLocalResolution = mergeResolutions(extractedResolution, localResolution);
@@ -128,7 +121,6 @@ export async function answerQuestion(payload, options = {}) {
       if (liveLocalCards.length || baigeLocalCards.length) {
         resolutionNotes.push("部分卡片来自实时资料索引，静态快照尚未覆盖。");
         detectedCards = mergeCards(detectedCards, liveLocalCards, baigeLocalCards);
-        evidence = retrieveEvidence(question, detectedCards, detectedTopics, snapshot, questionTypes).slice(0, 10);
       }
     } catch (error) {
       resolutionWarnings.push(`实时资料索引查询失败，已使用本地快照：${formatError(error)}`);
@@ -151,10 +143,8 @@ export async function answerQuestion(payload, options = {}) {
         if (liveCards.length || baigeCards.length) resolutionNotes.push("部分卡片来自实时资料索引，静态快照尚未覆盖。");
         if (resolvedCards.length) {
           detectedCards = mergeCards(detectedCards, resolvedCards, liveCards, baigeCards);
-          evidence = retrieveEvidence(question, detectedCards, detectedTopics, snapshot, questionTypes).slice(0, 10);
         } else if (liveCards.length || baigeCards.length) {
           detectedCards = mergeCards(detectedCards, liveCards, baigeCards);
-          evidence = retrieveEvidence(question, detectedCards, detectedTopics, snapshot, questionTypes).slice(0, 10);
         }
       } catch (error) {
         resolutionWarnings.push(`卡名解析失败，已使用本地匹配结果：${formatError(error)}`);
@@ -162,6 +152,7 @@ export async function answerQuestion(payload, options = {}) {
     }
   }
 
+  let liveEvidence = [];
   if (detectedCards.length) {
     try {
       const liveCards = await resolveCardsFromDetectedCards(detectedCards, snapshot.cards, env);
@@ -169,69 +160,349 @@ export async function answerQuestion(payload, options = {}) {
         resolutionNotes.push("部分卡片已补充实时 FAQ 索引。");
         detectedCards = mergeCards(detectedCards, liveCards);
       }
-      const liveEvidence = await loadLiveEvidenceForCards(detectedCards, env);
-      if (liveEvidence.length) {
-        evidence = rankEvidenceRecords([...evidence, ...liveEvidence], question, detectedCards, detectedTopics, questionTypes).slice(0, 10);
-      }
+      liveEvidence = await loadLiveEvidenceForCards(detectedCards, env);
     } catch (error) {
       resolutionWarnings.push(`实时 FAQ 查询失败，已使用当前资料：${formatError(error)}`);
     }
   }
 
-  const baseAnswer = buildEvidenceAnswer({
-    question,
-    detectedCards,
-    topics: detectedTopics,
-    questionTypes,
-    subQuestions,
-    chainItems,
-    evidence,
-    snapshotMeta: snapshot.meta,
-  });
-  enrichAnswer(baseAnswer, { question, detectedCards, topics: detectedTopics, questionTypes, subQuestions, chainItems, evidence, snapshotMeta: snapshot.meta });
-  baseAnswer.cards = buildCardSummaries(detectedCards);
-  if (resolutionWarnings.length) baseAnswer.warnings = [...(baseAnswer.warnings || []), ...resolutionWarnings];
-  if (resolutionNotes.length && baseAnswer.mode !== "confirmed") {
-    baseAnswer.needsConfirmation = [...new Set([...(baseAnswer.needsConfirmation || []), ...resolutionNotes])];
-  }
-
-  const hasExactRuling = evidence.some((item) => isRulingEvidence(item) && item.matchKind === "direct");
-  if (!evidence.length || options.useModel === false || (hasExactRuling && env.MODEL_ON_DIRECT_RULINGS !== "true")) return baseAnswer;
-
+  let formalQuery;
   try {
-    const modelAnswer = await buildModelAnswer(
-      {
-        question,
-        detectedCards,
-        topics: detectedTopics,
-        questionTypes,
-        subQuestions,
-        chainItems,
-        evidence,
-        snapshotMeta: snapshot.meta,
-      },
-      env
-    );
-
-    if (!modelAnswer) return baseAnswer;
-    const merged = mergeModelAnswer(modelAnswer, baseAnswer, evidence, snapshot.meta, {
-      question,
-      detectedCards,
-      topics: detectedTopics,
-      questionTypes,
-      subQuestions,
-      chainItems,
-      evidence,
-      snapshotMeta: snapshot.meta,
-    });
-    enrichAnswer(merged, { question, detectedCards, topics: detectedTopics, questionTypes, subQuestions, chainItems, evidence, snapshotMeta: snapshot.meta });
-    return merged;
+    formalQuery = await parseFormalRulingQuery(question, detectedCards, options.useModel === false ? {} : env);
   } catch (error) {
-    return {
-      ...baseAnswer,
-      warnings: [...(baseAnswer.warnings || []), `模型回答失败，已使用资料检索结果：${formatError(error)}`],
-    };
+    resolutionWarnings.push(`形式化解析模型失败，已使用本地解析：${formatError(error)}`);
+    formalQuery = await parseFormalRulingQuery(question, detectedCards, {});
   }
+
+  formalQuery = normalizeFormalRulingQuery(formalQuery);
+  const validation = validateFormalRulingQuery(formalQuery);
+  const evidenceSnapshot = { ...snapshot, records: normalizeRecords([...snapshot.records, ...liveEvidence]) };
+  const evidence = retrieveEvidenceByFormalQuery(formalQuery, detectedCards, evidenceSnapshot);
+  const subAnswers = answerEachSubQuestion(formalQuery, evidence, evidenceSnapshot, validation);
+  return mergeFormalAnswers({
+    formalQuery,
+    validation,
+    detectedCards,
+    evidence,
+    subAnswers,
+    snapshotMeta: snapshot.meta,
+    warnings: resolutionWarnings,
+    notes: resolutionNotes,
+  });
+}
+
+export function retrieveEvidenceByFormalQuery(formalQuery, detectedCards, snapshot) {
+  const query = normalizeFormalRulingQuery(formalQuery);
+  const cards = mergeCards(Array.isArray(detectedCards) ? detectedCards : []);
+  const records = Array.isArray(snapshot?.records) ? snapshot.records : [];
+  const qaRecords = records.filter(isRulingEvidence);
+  const bySubQuestion = query.subQuestions.map((subQuestion) => {
+    const questionCards = cardsForSubQuestion(subQuestion, cards);
+    const cardTextEvidence = questionCards.filter((card) => card.effectText).map((card) => buildFormalCardTextEvidence(card, subQuestion.id));
+    const rulingEvidence = [];
+    const similarRulingEvidence = [];
+    const rejectedEvidence = [];
+
+    for (const record of qaRecords) {
+      const recordText = formalEvidenceText(record);
+      const evidenceTypes = classifyFormalEvidenceTypes(recordText);
+      const matchedCardCount = countEvidenceMatchedCards(record, questionCards);
+      const matchesAnyQueryCard = countEvidenceMatchedCards(record, cards) > 0;
+      const typeCompatible = isFormalEvidenceTypeCompatible(subQuestion.type, evidenceTypes);
+      const actionOverlap = formalActionOverlap(subQuestion.askedResult, recordText);
+      const effectMismatch = hasFormalEffectMismatch(subQuestion.effectNo, recordText);
+      const base = {
+        ...record,
+        evidenceId: record.id,
+        subQuestionId: subQuestion.id,
+        evidenceTypes: [...evidenceTypes],
+      };
+
+      if (matchedCardCount > 0 && !typeCompatible) {
+        rejectedEvidence.push({ ...base, matchKind: "rejected", rejectedReason: "question_type_mismatch" });
+        continue;
+      }
+      if (matchedCardCount > 0 && effectMismatch) {
+        rejectedEvidence.push({ ...base, matchKind: "rejected", rejectedReason: "effect_number_mismatch" });
+        continue;
+      }
+      if (matchedCardCount > 0 && typeCompatible && hasDirectFormalSpecificity(subQuestion.type, evidenceTypes, actionOverlap)) {
+        if (!record.id) {
+          rejectedEvidence.push({ ...base, matchKind: "rejected", rejectedReason: "missing_evidence_id" });
+        } else {
+          rulingEvidence.push({ ...base, matchKind: "direct" });
+        }
+        continue;
+      }
+      if (typeCompatible && (matchedCardCount > 0 || actionOverlap > 0)) {
+        similarRulingEvidence.push({ ...base, matchKind: "similar" });
+        continue;
+      }
+      if (matchesAnyQueryCard) {
+        rejectedEvidence.push({
+          ...base,
+          matchKind: "rejected",
+          rejectedReason: typeCompatible ? "question_card_mismatch" : "question_type_mismatch",
+        });
+      }
+    }
+
+    return {
+      subQuestionId: subQuestion.id,
+      cardTextEvidence: dedupeBy(cardTextEvidence, (item) => item.evidenceId),
+      rulingEvidence: rankFormalEvidence(rulingEvidence, subQuestion).slice(0, 8),
+      similarRulingEvidence: rankFormalEvidence(similarRulingEvidence, subQuestion).slice(0, 8),
+      rejectedEvidence: dedupeBy(rejectedEvidence, (item) => `${item.evidenceId}:${item.rejectedReason}`).slice(0, 20),
+    };
+  });
+
+  return {
+    bySubQuestion,
+    cardTextEvidence: dedupeBy(bySubQuestion.flatMap((item) => item.cardTextEvidence), (item) => item.evidenceId),
+    rulingEvidence: dedupeBy(bySubQuestion.flatMap((item) => item.rulingEvidence), (item) => `${item.subQuestionId}:${item.evidenceId}`),
+    similarRulingEvidence: dedupeBy(
+      bySubQuestion.flatMap((item) => item.similarRulingEvidence),
+      (item) => `${item.subQuestionId}:${item.evidenceId}`
+    ),
+    rejectedEvidence: dedupeBy(
+      bySubQuestion.flatMap((item) => item.rejectedEvidence),
+      (item) => `${item.subQuestionId}:${item.evidenceId}:${item.rejectedReason}`
+    ),
+  };
+}
+
+export function answerEachSubQuestion(formalQuery, evidence, snapshot, validation = validateFormalRulingQuery(formalQuery)) {
+  const validEvidence = new Map(
+    (snapshot?.records || []).filter(isRulingEvidence).filter((record) => record.id).map((record) => [String(record.id), record])
+  );
+  return formalQuery.subQuestions.map((subQuestion, index) => {
+    const bucket = evidence.bySubQuestion.find((item) => item.subQuestionId === subQuestion.id) || {
+      cardTextEvidence: [],
+      rulingEvidence: [],
+      similarRulingEvidence: [],
+      rejectedEvidence: [],
+    };
+    const missingSlots = findMissingFormalSlots(formalQuery, subQuestion);
+    const parseErrors = validation.errors.filter((error) => error.startsWith(`subQuestions[${index}]`));
+    if (missingSlots.length || parseErrors.length) {
+      return buildFormalSubAnswer(subQuestion, "parse_failed", [], bucket, {
+        reasoning: `形式化解析缺少关键字段：${[...missingSlots, ...parseErrors].join("、")}`,
+      });
+    }
+
+    const invalidDirect = bucket.rulingEvidence.filter((item) => {
+      const source = validEvidence.get(String(item.evidenceId || ""));
+      const sourceTypes = source ? classifyFormalEvidenceTypes(formalEvidenceText(source)) : new Set();
+      return !source || !isRulingEvidence(source) || !isFormalEvidenceTypeCompatible(subQuestion.type, sourceTypes);
+    });
+    const direct = bucket.rulingEvidence.filter((item) => !invalidDirect.includes(item));
+    if (invalidDirect.length) {
+      return buildFormalSubAnswer(subQuestion, "unknown", [], bucket, {
+        reasoning: "候选直接证据的 ID 不存在或问题类型不匹配，结论已自动降级。",
+      });
+    }
+    if (direct.length) {
+      return buildFormalSubAnswer(subQuestion, "confirmed", direct, bucket, {
+        verdict: cleanText(direct[0].conclusion) || "直接 Q&A 已覆盖该子问题。",
+        reasoning: "存在与该卡、效果编号和问题类型匹配的直接 Q&A/FAQ。",
+      });
+    }
+    const validSimilar = bucket.similarRulingEvidence.filter((item) => {
+      const source = validEvidence.get(String(item.evidenceId || ""));
+      return source && isFormalEvidenceTypeCompatible(subQuestion.type, classifyFormalEvidenceTypes(formalEvidenceText(source)));
+    });
+    if (validSimilar.length) {
+      return buildFormalSubAnswer(subQuestion, "inferred", validSimilar, bucket, {
+        verdict: "仅找到同类处理的相似问答，不能当作本题的直接裁定。",
+        reasoning: "相似 Q&A 的处理类型一致，但卡片、效果编号或场面没有完全匹配。",
+      });
+    }
+    return buildFormalSubAnswer(subQuestion, "unknown", [], bucket, {
+      verdict: bucket.cardTextEvidence.length ? "只有卡片文本，没有匹配的直接 Q&A。" : "没有匹配该子问题的 Q&A。",
+      reasoning: bucket.rejectedEvidence.length
+        ? "检索到的同卡问答与当前问题类型不一致，已放入 rejectedEvidence。"
+        : "当前证据不足，不能给出确定处理结论。",
+    });
+  });
+}
+
+function mergeFormalAnswers(context) {
+  const { formalQuery, detectedCards, evidence, subAnswers, snapshotMeta, validation, warnings, notes } = context;
+  const statuses = subAnswers.map((item) => item.status);
+  let mode = "unknown";
+  if (statuses.length && statuses.every((status) => status === "confirmed")) mode = "confirmed";
+  else if (statuses.length && statuses.every((status) => status === "confirmed" || status === "inferred")) mode = "inferred";
+  else if (statuses.length && statuses.every((status) => status === "parse_failed")) mode = "parse_failed";
+
+  const counts = Object.fromEntries(["confirmed", "inferred", "unknown", "parse_failed"].map((status) => [status, statuses.filter((item) => item === status).length]));
+  const labels = {
+    confirmed: "有直接裁定依据",
+    inferred: "只有相似裁定",
+    unknown: "资料不足",
+    parse_failed: "形式化解析失败",
+  };
+  const usedEvidence = [...evidence.rulingEvidence, ...evidence.similarRulingEvidence];
+  const needsConfirmation = [];
+  if (counts.unknown) needsConfirmation.push("部分子问题只有卡片文本或没有匹配 Q&A，不能标记为已确认。");
+  if (counts.inferred) needsConfirmation.push("相似问答不是本题的直接裁定，仍需核对对应卡片 Q&A。");
+  if (counts.parse_failed) needsConfirmation.push("请补充缺失的卡名、效果编号或问题类型后重新解析。");
+  needsConfirmation.push(...notes);
+
+  return {
+    schemaVersion: 2,
+    mode,
+    verdictTitle: labels[mode],
+    verdict: `共拆分 ${subAnswers.length} 个子问题：${counts.confirmed} 个 confirmed，${counts.inferred} 个 inferred，${counts.unknown} 个 unknown，${counts.parse_failed} 个 parse_failed。`,
+    rulingBasis: mode === "confirmed" ? "直接 Q&A/FAQ" : mode === "inferred" ? "相似 Q&A/FAQ" : "没有可确认的直接问答",
+    confidence: { status: mode, label: labels[mode], className: mode === "confirmed" ? "is-confirmed" : "is-risky" },
+    formalQuery,
+    validation,
+    subQuestions: formalQuery.subQuestions,
+    subAnswers,
+    evidence,
+    rejectedEvidence: evidence.rejectedEvidence,
+    evidenceIds: subAnswers.flatMap((answer) => answer.evidenceIds),
+    steps: subAnswers.map((answer) => `${answer.id}：${answer.status} - ${answer.reasoning}`),
+    needsConfirmation: [...new Set(needsConfirmation)],
+    sources: collectSources(usedEvidence, snapshotMeta),
+    cards: buildCardSummaries(detectedCards),
+    snapshotAt: snapshotMeta?.generatedAt || null,
+    evidenceCount: usedEvidence.length,
+    warnings,
+    modelUsed: false,
+  };
+}
+
+function buildFormalSubAnswer(subQuestion, status, usedEvidence, bucket, overrides = {}) {
+  const statusLabels = {
+    confirmed: "已确认",
+    inferred: "相似裁定推定",
+    unknown: "无法确认",
+    parse_failed: "解析失败",
+  };
+  return {
+    id: subQuestion.id,
+    type: subQuestion.type,
+    status,
+    question: subQuestion.askedResult,
+    verdict: overrides.verdict || statusLabels[status],
+    reasoning: overrides.reasoning || "",
+    source: usedEvidence.length ? usedEvidence.map((item) => item.evidenceId).join(", ") : "无直接 Q&A",
+    evidenceIds: usedEvidence.map((item) => item.evidenceId).filter(Boolean),
+    cardTextEvidenceIds: bucket.cardTextEvidence.map((item) => item.evidenceId).filter(Boolean),
+    rejectedEvidence: bucket.rejectedEvidence.map((item) => ({
+      evidenceId: item.evidenceId,
+      rejectedReason: item.rejectedReason,
+    })),
+  };
+}
+
+function buildFormalCardTextEvidence(card, subQuestionId) {
+  return {
+    evidenceId: `card-text:${card.id || card.passcode || card.name}`,
+    subQuestionId,
+    recordType: "card-text",
+    evidenceClass: "cardTextEvidence",
+    title: `${card.name} 的卡片文本`,
+    cards: [card.name],
+    conclusion: card.effectText,
+    sources: card.sourceUrl ? [{ label: "卡片资料", detail: card.sourceUrl }] : [],
+  };
+}
+
+function cardsForSubQuestion(subQuestion, cards) {
+  if (!subQuestion.card || subQuestion.card === "unknown") return cards;
+  const wanted = normalizeKey(subQuestion.card);
+  const matched = cards.filter((card) => cardAliases(card).some((alias) => {
+    const key = normalizeKey(alias);
+    return key === wanted || key.includes(wanted) || wanted.includes(key);
+  }));
+  return matched.length ? matched : [];
+}
+
+function formalEvidenceText(record) {
+  return normalizeRulingText(`${record.question || ""} ${record.title || ""} ${record.conclusion || ""} ${(record.keywords || []).join(" ")}`);
+}
+
+function classifyFormalEvidenceTypes(value) {
+  const text = normalizeRulingText(value);
+  const types = new Set();
+  if (/(能否发动|能不能发动|可以发动|不能发动|发动条件|発動条件|発動でき|发动时点|发动时机|诱发时点|誘発.*タイミング)/iu.test(text)) {
+    types.add("activation_condition");
+  }
+  if (/(发动时点|发动时机|诱发时点|什么时候发动|タイミング|时点|処理後.*発動|场合才能发动)/iu.test(text)) types.add("timing");
+  if (/(对象|取对象|対象)/iu.test(text)) types.add("target");
+  if (/(cost|代价|支付|丢弃.*发动|コスト)/iu.test(text)) types.add("cost");
+  if (/(回卡组|回到卡组|返回卡组|洗回卡组|デッキ.*戻|shuffle.*deck)/iu.test(text)) types.add("return_to_deck");
+  if (/(送墓|送去墓地|送到墓地|墓地へ送|send.*(?:GY|Graveyard))/iu.test(text)) types.add("send_to_gy");
+  if (/(临时除外|暂时除外|一时的に除外|除外.{0,24}(处理后|结束阶段|回到|返回)|banish.{0,24}until)/iu.test(text)) types.add("temporary_banish");
+  if (/(除外|banish|回场|离场|区域|zone|場所を移)/iu.test(text)) types.add("location_change");
+  if (/(处理时|处理后|怎么处理|如何处理|效果处理|结算|解決|适用|適用|resolve)/iu.test(text)) types.add("resolution_handling");
+  return types;
+}
+
+function isFormalEvidenceTypeCompatible(questionType, evidenceTypes) {
+  const has = (...types) => types.some((type) => evidenceTypes.has(type));
+  if (questionType === "activation_condition") return has("activation_condition", "timing");
+  if (questionType === "timing") return has("timing", "activation_condition");
+  if (questionType === "target") return has("target");
+  if (questionType === "cost") return has("cost");
+  if (questionType === "return_to_deck") return has("return_to_deck", "resolution_handling");
+  if (questionType === "send_to_gy") return has("send_to_gy", "resolution_handling");
+  if (questionType === "temporary_banish") return has("temporary_banish", "location_change", "resolution_handling");
+  if (questionType === "location_change") return has("location_change", "temporary_banish", "return_to_deck", "send_to_gy", "resolution_handling");
+  if (questionType === "resolution_handling") return has("resolution_handling", "location_change", "temporary_banish", "return_to_deck", "send_to_gy");
+  return false;
+}
+
+function hasDirectFormalSpecificity(questionType, evidenceTypes, actionOverlap) {
+  if (questionType === "activation_condition" || questionType === "timing" || questionType === "target" || questionType === "cost") return true;
+  if (questionType === "return_to_deck") return evidenceTypes.has("return_to_deck");
+  if (questionType === "send_to_gy") return evidenceTypes.has("send_to_gy");
+  if (questionType === "temporary_banish") return evidenceTypes.has("temporary_banish") || (evidenceTypes.has("location_change") && actionOverlap > 0);
+  if (questionType === "location_change") return evidenceTypes.has("location_change") && actionOverlap > 0;
+  if (questionType === "resolution_handling") return evidenceTypes.has("resolution_handling") && actionOverlap > 0;
+  return false;
+}
+
+function formalActionOverlap(left, right) {
+  const leftTags = handlingTags(left);
+  const rightTags = handlingTags(right);
+  let count = 0;
+  for (const tag of leftTags) if (rightTags.has(tag) && tag !== "activation") count += 1;
+  return count;
+}
+
+function hasFormalEffectMismatch(effectNo, evidenceText) {
+  if (!effectNo || effectNo === "unknown") return false;
+  const marks = [...normalizeRulingText(evidenceText).matchAll(/[①②③④⑤⑥⑦⑧⑨]/gu)].map((match) => match[0]);
+  return marks.length > 0 && !marks.includes(effectNo);
+}
+
+function rankFormalEvidence(items, subQuestion) {
+  return items
+    .map((item) => ({
+      ...item,
+      formalScore:
+        countEvidenceMatchedCards(item, cardsForSubQuestion(subQuestion, [{ name: subQuestion.card, aliases: [subQuestion.card] }])) * 10 +
+        formalActionOverlap(subQuestion.askedResult, formalEvidenceText(item)) * 4,
+    }))
+    .sort((left, right) => right.formalScore - left.formalScore);
+}
+
+function findMissingFormalSlots(formalQuery, subQuestion) {
+  const missing = [];
+  for (const slot of subQuestion.requiredSlots || []) {
+    if (slot === "type" && (!subQuestion.type || subQuestion.type === "unknown")) missing.push("type");
+    if (slot === "card") {
+      const card = subQuestion.card;
+      const exists = card && card !== "unknown" && formalQuery.cards.some((item) => normalizeKey(item.name) === normalizeKey(card));
+      if (!exists) missing.push("card");
+    }
+    if (slot === "effectNo" && (!subQuestion.effectNo || subQuestion.effectNo === "unknown")) missing.push("effectNo");
+    if (slot === "timing" && (!subQuestion.timing || subQuestion.timing === "unknown")) missing.push("timing");
+  }
+  return [...new Set(missing)];
 }
 
 export async function loadSnapshot(dataDir = defaultDataDir) {
@@ -2260,7 +2531,7 @@ function buildUnknownAnswer(verdictTitle, verdict, steps, needsConfirmation, sna
     verdictTitle,
     verdict,
     rulingBasis: "资料不足",
-    confidence: { label: "不能确定", value: 0, className: "is-risky" },
+    confidence: { status: "unknown", label: "不能确定", className: "is-risky" },
     steps,
     needsConfirmation,
     sources: [],
