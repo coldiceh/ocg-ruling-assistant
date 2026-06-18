@@ -217,15 +217,16 @@ const tests = [
     },
   },
   {
-    name: "伤害步骤结束时战破卡通怪兽已送墓不能再用完美世界除外",
+    name: "伤害步骤结束时完整回答卡通怪兽和青眼暴君龙位置",
     question:
       "被青眼暴君龙战破的卡通怪兽，在伤害步骤结束阶段发动盖放墓地陷阱卡效果的时候：能用完美世界 卡通世界的效果除外该卡通怪兽吗？卡通怪兽还会被战破送墓吗？如果青眼暴君龙被战破的时候，这个效果是在墓地发动还是在场上发动？这个时候青眼暴君龙是已经送墓了吗？",
     assert(answer) {
-      assert.equal(answer.verdictTitle, "伤害步骤结束时已送墓，不能用完美世界除外");
+      assert.equal(answer.verdictTitle, "卡通怪兽已送墓；青眼暴君龙可在墓地发动");
       assert.equal(answer.rulingBasis, "伤害步骤规则 + 效果文本推理");
       assert.match(answer.verdict, /不能用/);
       assert.match(answer.verdict, /已经按战斗破坏送去墓地/);
-      assert.match(answer.needsConfirmation.join("\n"), /多个独立问题/);
+      assert.match(answer.verdict, /可以在墓地发动/);
+      assert.doesNotMatch(answer.needsConfirmation.join("\n"), /多个独立问题/);
       assert.ok(answer.cards.some((card) => card.name === "青眼暴君龙"));
       assert.ok(answer.cards.some((card) => card.name === "完美世界 卡通世界"));
     },

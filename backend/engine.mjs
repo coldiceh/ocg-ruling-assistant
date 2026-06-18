@@ -409,12 +409,18 @@ function inferDamageStepEndBattleDestroyedAnswer(context, sources, snapshotMeta,
   if (!protector && !/(完美世界|卡通世界|トゥーン|Toon)/i.test(question)) return null;
 
   const protectorName = formatRulingCardName(protector) || "「完美世界 卡通世界」";
+  const includesTyrantDestroyedQuestion = asksTyrantDragonBattleDestroyedQuestion(question);
+  const tyrantVerdict = includesTyrantDestroyedQuestion
+    ? "另一方面，如果被战斗破坏的是「青眼暴君龙」自身，伤害步骤结束时它也已经送去墓地；它的“这张卡进行战斗的伤害步骤结束时”效果可以在墓地发动，以自己墓地1张陷阱卡为对象并盖放。"
+    : "";
   return {
     schemaVersion: 1,
     mode: "inferred",
-    verdictTitle: "伤害步骤结束时已送墓，不能用完美世界除外",
+    verdictTitle: includesTyrantDestroyedQuestion
+      ? "卡通怪兽已送墓；青眼暴君龙可在墓地发动"
+      : "伤害步骤结束时已送墓，不能用完美世界除外",
     verdict:
-      `不能用${protectorName}的临时除外效果把那只卡通怪兽除外。题目描述的是伤害步骤结束阶段另一个效果发动/处理的场面；这个时点，被战斗破坏确定的卡通怪兽已经按战斗破坏送去墓地，不再是自己场上的卡通怪兽，不能满足${protectorName}③要除外的范围。`,
+      `伤害步骤结束时，被战斗破坏确定的卡通怪兽已经按战斗破坏送去墓地，不再是自己场上的卡通怪兽。因此不能用${protectorName}的临时除外效果把那只卡通怪兽除外，卡通怪兽仍然留在墓地。${tyrantVerdict ? ` ${tyrantVerdict}` : ""}`,
     rulingBasis: "伤害步骤规则 + 效果文本推理",
     confidence: { label: freshnessLabel(snapshotMeta, "规则推理"), value: freshnessValue(snapshotMeta, 68), className: "" },
     steps: [
@@ -422,12 +428,18 @@ function inferDamageStepEndBattleDestroyedAnswer(context, sources, snapshotMeta,
       `${protectorName}③要求在其他卡效果适用之际，把自己场上1只卡通怪兽除外到那个效果处理后。`,
       "题目中的盖放墓地陷阱卡效果在伤害步骤结束阶段发动/适用时，那只被战破的卡通怪兽已经不在场上。",
       "因此不能适用该临时除外效果来避免这次战斗破坏；该卡通怪兽仍按战斗破坏送去墓地。",
+      ...(includesTyrantDestroyedQuestion
+        ? ["若「青眼暴君龙」自身被战斗破坏，到了伤害步骤结束时它已经在墓地；其进行过战斗的效果可以从墓地发动。"]
+        : []),
     ],
     needsConfirmation: [
       ...new Set([
-        ...buildMultiQuestionNeeds(context.question),
-        "如果还要确认「青眼暴君龙」自身被战斗破坏时能否发动、在哪里发动，需要把该问题单独拆开，并以该卡官方 FAQ/规则条目核对。",
-        ...buildNeedsConfirmation(context, false).filter((item) => !/当前没有命中直接/.test(item)).slice(0, 3),
+        ...(includesTyrantDestroyedQuestion ? [] : buildMultiQuestionNeeds(context.question)),
+        ...(includesTyrantDestroyedQuestion ? [] : ["如果还要确认「青眼暴君龙」自身被战斗破坏时能否发动、在哪里发动，需要把该问题单独拆开，并以该卡官方 FAQ/规则条目核对。"]),
+        ...buildNeedsConfirmation(context, false)
+          .filter((item) => !/当前没有命中直接/.test(item))
+          .filter((item) => !(includesTyrantDestroyedQuestion && /多个独立问题/.test(item)))
+          .slice(0, 3),
       ]),
     ],
     sources: collectCardTextSources(context.detectedCards, sources),
@@ -444,6 +456,13 @@ function asksToProtectBattleDestroyedMonsterAtEndOfDamageStep(value) {
     /(战破|战斗破坏|被战斗破坏|戦闘で破壊|destroyed by battle)/iu.test(text) &&
     /(卡通怪兽|卡通怪|トゥーンモンスター|Toon monster|完美世界|卡通世界|トゥーン・ワールド|Perfect Toon World)/iu.test(text) &&
     /(除外|保护|避免|还会被|送墓|送去墓地|墓地)/iu.test(text);
+}
+
+function asksTyrantDragonBattleDestroyedQuestion(value) {
+  const text = normalizeRulingText(value);
+  return /(青眼暴君龙|青眼暴君龍|青眼のタイラント・ドラゴン|Blue-Eyes Tyrant Dragon|暴君龙|暴君龍)/iu.test(text) &&
+    /(被战破|被战斗破坏|戦闘で破壊|destroyed by battle)/iu.test(text) &&
+    /(墓地发动|墓地発動|在墓地|在场上|场上发动|哪里发动|送墓|已经送墓|送去墓地|sent to the GY|activate.*GY)/iu.test(text);
 }
 
 function inferStructuredRuleAnswer(context, sources, snapshotMeta, evidenceCount) {
