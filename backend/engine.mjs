@@ -295,25 +295,7 @@ function buildEvidenceAnswer(context) {
   }
 
   if (mismatchedRuling) {
-    return {
-      schemaVersion: 1,
-      mode: "unknown",
-      verdictTitle: "命中的资料没有回答处理问题",
-      rulingBasis: "证据类型不匹配",
-      verdict:
-        "题目是在问效果处理结果，但当前命中的资料主要是发动条件或卡片文本，不能用它来回答会回卡组、留场、除外或回场等处理。",
-      confidence: { label: "不能确定", value: 30, className: "is-risky" },
-      steps: [
-        "先补全参与处理的所有卡，尤其是题目里提到的场地、永续、装备或适用中的效果。",
-        "再确认原效果正在处理什么，以及被处理的卡在处理时是否仍在原位置。",
-        "只有命中同处理结构的 Q&A/FAQ 或规则模块后，才给具体处理结论。",
-      ],
-      needsConfirmation: buildNeedsConfirmation(context, true),
-      sources,
-      snapshotAt: snapshotMeta?.generatedAt || null,
-      evidenceCount: evidence.length,
-      warnings: [],
-    };
+    return buildMismatchedEvidenceAnswer(context, mismatchedRuling, sources, snapshotMeta, evidence.length);
   }
 
   return {
@@ -333,6 +315,53 @@ function buildEvidenceAnswer(context) {
     sources,
     snapshotAt: snapshotMeta?.generatedAt || null,
     evidenceCount: evidence.length,
+    warnings: [],
+  };
+}
+
+function buildMismatchedEvidenceAnswer(context, mismatchedRuling, sources, snapshotMeta, evidenceCount) {
+  if (mismatchedRuling.mismatchReason === "answer-target") {
+    return {
+      schemaVersion: 1,
+      mode: "unknown",
+      verdictTitle: "命中的资料没有回答被问的效果",
+      rulingBasis: "证据目标不匹配",
+      verdict:
+        "当前命中的资料回答的是另一项操作或处理，例如能否除外、破坏、回卡组等；但题目问的是指定卡片的效果能否发动。为保证正确性，不能把该资料直接当成答案。",
+      confidence: { label: "不能确定", value: 28, className: "is-risky" },
+      steps: [
+        "先确定真正被问的是哪张卡、哪个编号的效果，以及它在什么区域发动。",
+        "再确认触发事件是否发生：例如是否是“表侧加入额外卡组”“特殊召唤成功”“送去墓地”等。",
+        "只用回答同一被问效果能否发动的 Q&A/FAQ，或能覆盖该触发结构的规则资料下结论。",
+      ],
+      needsConfirmation: [
+        "当前命中的资料没有回答被问效果本身，不能显示为已确认裁定。",
+        ...buildNeedsConfirmation(context, true).filter((item) => !/当前没有命中直接/.test(item)).slice(0, 4),
+      ],
+      sources,
+      snapshotAt: snapshotMeta?.generatedAt || null,
+      evidenceCount,
+      warnings: [],
+    };
+  }
+
+  return {
+    schemaVersion: 1,
+    mode: "unknown",
+    verdictTitle: "命中的资料没有回答处理问题",
+    rulingBasis: "证据类型不匹配",
+    verdict:
+      "题目是在问效果处理结果，但当前命中的资料主要是发动条件或卡片文本，不能用它来回答会回卡组、留场、除外或回场等处理。",
+    confidence: { label: "不能确定", value: 30, className: "is-risky" },
+    steps: [
+      "先补全参与处理的所有卡，尤其是题目里提到的场地、永续、装备或适用中的效果。",
+      "再确认原效果正在处理什么，以及被处理的卡在处理时是否仍在原位置。",
+      "只有命中同处理结构的 Q&A/FAQ 或规则模块后，才给具体处理结论。",
+    ],
+    needsConfirmation: buildNeedsConfirmation(context, true),
+    sources,
+    snapshotAt: snapshotMeta?.generatedAt || null,
+    evidenceCount,
     warnings: [],
   };
 }
@@ -569,7 +598,8 @@ function classifyEvidenceMatch(record, question, detectedCards, tokens) {
   const cardRatio = detectedCards.length ? matchedCardCount / detectedCards.length : 0;
   const handlingOverlap = scoreHandlingOverlap(question, `${evidenceQuestion} ${record.conclusion || ""} ${(record.keywords || []).join(" ")}`);
   const evidenceTags = handlingTags(`${evidenceQuestion} ${record.conclusion || ""} ${(record.keywords || []).join(" ")}`);
-  const intentMismatch = isIntentMismatch(questionIntent, evidenceTags, handlingOverlap);
+  const targetMismatch = isAnswerTargetMismatch(question, `${evidenceQuestion} ${record.conclusion || ""} ${(record.keywords || []).join(" ")}`);
+  const intentMismatch = isIntentMismatch(questionIntent, evidenceTags, handlingOverlap) || targetMismatch;
   const exactEnough =
     matchedCardCount > 0 &&
     !intentMismatch &&
@@ -584,12 +614,14 @@ function classifyEvidenceMatch(record, question, detectedCards, tokens) {
     matchedCardCount,
     questionIntent,
     intentMismatch,
+    mismatchReason: targetMismatch ? "answer-target" : intentMismatch ? "intent" : "",
   };
 }
 
 function detectQuestionIntent(question) {
   const text = normalizeRulingText(question);
   const tags = handlingTags(text);
+  if (asksSpecificEffectActivation(text)) return "activation";
   if (/(怎么处理|如何处理|处理时|处理是|处理后|后续|结算|怎么结算|留场|场地躲|场地换|回卡组|回到卡组|洗回卡组|破坏|除外|伤害)/i.test(text)) {
     return "handling";
   }
@@ -607,6 +639,27 @@ function isIntentMismatch(questionIntent, evidenceTags, handlingOverlap) {
   }
   if (questionIntent === "activation") return false;
   return false;
+}
+
+function isAnswerTargetMismatch(question, evidenceText) {
+  const questionText = normalizeRulingText(question);
+  const evidence = normalizeRulingText(evidenceText);
+  if (!asksSpecificEffectActivation(questionText)) return false;
+  if (asksSpecificEffectActivation(evidence)) return false;
+
+  const evidenceTags = handlingTags(evidence);
+  const answersOtherOperation = ["banish", "destruction", "deck-return", "field-change", "control"].some((tag) => evidenceTags.has(tag));
+  if (!answersOtherOperation) return false;
+
+  const asksOwnEffect = /(自己(?:的)?[①②③④⑤⑥⑦⑧⑨0-9一二三四五六七八九]+(?:效果|効果)?|[①②③④⑤⑥⑦⑧⑨]\s*(?:效果|効果).{0,16}(能否|能不能|可以|可否|是否|会不会).{0,8}(发动|發動|発動))/iu.test(questionText);
+  return asksOwnEffect || /(能否|能不能|可以|可否|是否|会不会).{0,16}(发动|發動|発動)/iu.test(questionText);
+}
+
+function asksSpecificEffectActivation(value) {
+  const text = normalizeRulingText(value);
+  return /(能否|能不能|可以|可否|是否|会不会|能).{0,18}(发动|發動|発動).{0,18}(自己(?:的)?|自身(?:的)?|这张卡(?:的)?|此卡(?:的)?|[①②③④⑤⑥⑦⑧⑨0-9一二三四五六七八九]+(?:效果|効果)?)/iu.test(text) ||
+    /[①②③④⑤⑥⑦⑧⑨]\s*(?:效果|効果).{0,18}(能否|能不能|可以|可否|是否|会不会|能).{0,8}(发动|發動|発動)/iu.test(text) ||
+    /(発動できますか|発動できるか|can.{0,12}activate.{0,12}(?:its|this card|that card).{0,12}effect)/iu.test(text);
 }
 
 function isRulingEvidence(record) {

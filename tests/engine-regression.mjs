@@ -41,6 +41,28 @@ const cards = [
     effectText: "②：这张卡进行战斗的伤害计算后才能发动。从卡组把1张「闪刀」卡送去墓地。",
     sourceUrl: "fixture://hayate",
   },
+  {
+    id: "22520001",
+    passcode: "22520001",
+    name: "杀手级调整曲·啭啭削波手",
+    cnName: "杀手级调整曲·啭啭削波手",
+    jaName: "キラーチューン・クリッパー",
+    enName: "Killer Tune Clipper",
+    aliases: ["杀手级调整曲·啭啭削波手", "削波手", "啭啭削波手"],
+    effectText: "①：以额外卡组表侧表示的1只怪兽为对象才能发动。那只怪兽直到结束阶段表侧表示除外，结束阶段回到额外卡组。",
+    sourceUrl: "fixture://killer-tune-clipper",
+  },
+  {
+    id: "22520002",
+    passcode: "22520002",
+    name: "狱神影兽-涅瓦红化兽",
+    cnName: "狱神影兽-涅瓦红化兽",
+    jaName: "獄神影獣－涅瓦紅化獸",
+    enName: "Nervedo the Shadebeast Power Patron",
+    aliases: ["狱神影兽-涅瓦红化兽", "影兽", "涅瓦红化兽", "Nervedo"],
+    effectText: "②：这张卡表侧加入额外卡组的场合才能发动。处理该效果。",
+    sourceUrl: "fixture://nervedo",
+  },
 ];
 
 const rulings = [
@@ -63,6 +85,16 @@ const rulings = [
     conclusion:
       "A Spell Card that has its activation negated by Magic Jammer is not treated as being destroyed on the field. Therefore similar monsters are not destroyed by their own effects.",
     sources: [{ label: "fixture", detail: "weak-analogy" }],
+  },
+  {
+    id: "clipper-can-banish-nervedo",
+    recordType: "card-faq",
+    title: "削波手 FAQ：能否除外影兽",
+    question: "可以用「杀手级调整曲·啭啭削波手」①效果将额外卡组表侧表示的「狱神影兽-涅瓦红化兽」直到结束阶段表侧表示除外吗？",
+    cards: ["杀手级调整曲·啭啭削波手", "狱神影兽-涅瓦红化兽"],
+    keywords: ["除外", "额外卡组", "结束阶段"],
+    conclusion: "可以适用相关效果，将满足条件的卡除外。",
+    sources: [{ label: "fixture", detail: "can-banish" }],
   },
 ];
 
@@ -149,6 +181,17 @@ const tests = [
       assert.equal(answer.verdictTitle, "无效发动并破坏不满足破坏场上卡的条件");
       assert.match(answer.verdict, /不视为从场上被破坏/);
       assert.match(answer.steps.join("\n"), /真正处于场上的卡/);
+    },
+  },
+  {
+    name: "不能把能否除外的 FAQ 当成另一个效果能否发动的答案",
+    question:
+      "用「杀手级调整曲·啭啭削波手」的①效果将额外卡组表侧表示的「狱神影兽-涅瓦红化兽」直到EP表侧除外，EP回到额外卡组的场合，影兽能否发动自己的②效果？",
+    assert(answer) {
+      assert.equal(answer.verdictTitle, "命中的资料没有回答被问的效果");
+      assert.equal(answer.rulingBasis, "证据目标不匹配");
+      assert.doesNotMatch(`${answer.verdictTitle}${answer.verdict}`, /可以除外/);
+      assert.match(answer.steps.join("\n"), /被问的是哪张卡、哪个编号的效果/);
     },
   },
 ];
