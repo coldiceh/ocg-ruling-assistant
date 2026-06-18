@@ -1,5 +1,2912 @@
 {
   "schemaVersion": 1,
-  "generatedAt": null,
-  "records": []
+  "generatedAt": "2026-06-18T20:41:30.468Z",
+  "records": [
+    {
+      "id": "ygoresources-qa-24349",
+      "recordType": "qa",
+      "title": "以下のカードが破壊された場合、「<<22704>>」の『①：自分フィールドの表側表示のモンスターカードが戦闘・効果で破壊された場合に発動できる』効果を発動できますか？ （A）モン…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [
+        "魔法"
+      ],
+      "conclusion": "（A）（B）発動できます。\n\n（C）（D）発動できません。\n\nそのカードが存在しているところにかかわらず、モンスタートークンやペンデュラムモンスター等、元々の種類がモンスターであるカードがモンスターカードであり、元々の種類が魔法・罠カードであるカードはモンスターカードではありません。\n（「モンスターカード」とは元々の性質がモンスターであるカードを指します。）\n\nモンスターゾーンや魔法＆罠ゾーンに存在するモンスタートークンが破壊された場合、モンスターカードが破壊されたことになりますが、元々の種類が魔法・罠であるカードがモンスターゾーンで破壊されても、モンスターカードが破壊されたことにはなりません。",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/24349"
+        }
+      ],
+      "sourceId": "24349",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/24349",
+      "updatedAt": "2026-06-18T20:41:29.037Z"
+    },
+    {
+      "id": "ygoresources-qa-21820",
+      "recordType": "qa",
+      "title": "メインモンスターゾーンに存在する以下のカードが、相手の効果でフィールドから離れ、墓地へ送られた場合または除外された場合をきっかけとして、「<<13737>>」の『①：このカードが…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [
+        "魔法"
+      ],
+      "conclusion": "<<5234>> is still also treated as a Trap Card when it is Special Summoned as a monster by its own effect. When <<5234>> is destroyed by your opponent's card effect in this scenario, you can activate the effect of <<13737>> that Special Summons it. (After that, you can Set <<5234>> in your Spell & Trap Zone with the effect of <<13737>>.)",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/21820"
+        }
+      ],
+      "sourceId": "21820",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/21820",
+      "updatedAt": "2026-06-18T20:41:29.049Z"
+    },
+    {
+      "id": "ygoresources-qa-246",
+      "recordType": "qa",
+      "title": "相手が「<<22995>>」や「<<4962>>」を発動し、デッキから魔法・罠カードをモンスター扱いとして裏側守備表示で特殊召喚しました。 そのバトルフェイズ中に他のカードの効果…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [
+        "魔法"
+      ],
+      "conclusion": "In this situation, you can still equip the Spell/Trap Cards Special Summoned by <<4962>> to <<11988>>. However, due to the effect of <<4962>>, the equipped Spell/Trap Cards will still be destroyed during the End Step of this Battle Phase after being equipped to <<11988>>.",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/246"
+        }
+      ],
+      "sourceId": "246",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/246",
+      "updatedAt": "2026-06-18T20:41:29.061Z"
+    },
+    {
+      "id": "ygoresources-qa-24346",
+      "recordType": "qa",
+      "title": "相手フィールドに「<<23161>>」とトゥーンモンスターが存在している状況で、自分が「<<20041>>」の『①：モンスター１体のA召喚を行う。その際、自分フィールドのモンスタ…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [
+        "魔法"
+      ],
+      "conclusion": "除外したトゥーンモンスターが先に相手フィールドに戻り、そのあとに自分がアドバンス召喚を行います。\n\nしたがって、自分は、「<<23161>>」の③の効果によって除外され、フィールドに戻った相手モンスターをリリースしてアドバンス召喚することもできます。\n\n例として、以下の状況の場合も同様に、相手の「<<23161>>」の③の効果によって除外したモンスターが相手フィールドに戻ってから、アドバンス召喚やリンク召喚を行いますので、フィールドに戻った相手モンスターをリリースすることや、リンク素材等にすることもできます。\n・自分が「<<15838>>」を発動した場合\n・自分が「<<12090>>」の②の効果を発動し、アドバンス召喚する際に「<<11275>>」の効果を適用する場合\n・自分が「<<11204>>」の効果を発動し、テキストに記載されている手順で「<<18810>>」をアドバンス召喚する場合\n・自分が「<<16499>>」の①の効果を発動し、アドバンス召喚する際に「<<16545>>」の①の効果を適用する場合\n・自分が「<<22524>>」の②の効果を発動し、相手フィールドに「<<11927>>」をアドバンス召喚する場合\n・自分が「<<13625>>」や「<<14676>>」の効果を発動し、「<<15741>>」をリンク召喚する場合\n\n\n以下の効果を発動してアドバンス召喚する場合も同様に、相手の「<<23161>>」の③の効果によって除外したモンスターが相手フィールドに戻ってからアドバンス召喚を行います。\n\nモンスター効果\n「<<16498>>」①\n「<<16499>>」①\n「<<16500>>」①\n「<<16501>>」①\n「<<16503>>」①\n「<<11473>>」①\n「<<11474>>」①\n「<<11475>>」①\n「<<10441>>」②\n「<<10440>>」②\n「<<22738>>」①\n「<<22737>>」①\n「<<22965>>」①\n「<<20932>>」②\n「<<16271>>」②\n「<<16820>>」②\n「<<10563>>」②\n「<<11055>>」③\n「<<14650>>」②\n「<<16828>>」①\n「<<15257>>」①\n「<<15984>>」①\n「<<17649>>」①\n「<<16400>>」②\n「<<14206>>」①\n「<<16236>>」②\n「<<16631>>」②\n「<<19624>>」②\n「<<22204>>」②\n「<<21818>>」②\n「<<19024>>」③\n「<<20389>>」②\n「<<20489>>」①\n「<<22531>>」①\n「<<22524>>」②\n「<<22560>>」②\n\n魔法カード\n「<<16482>>」\n「<<13278>>」\n「<<14805>>」②\n「<<14505>>」③\n「<<13876>>」①\n「<<15543>>」②\n「<<13942>>」の２つ目の『●』\n「<<6849>>」①２つ目の『●』\n「<<22313>>」②\n「<<22573>>」③\n「<<17174>>」③\n「<<12969>>」②\n「<<12968>>」②\n「<<16248>>」①\n「<<13478>>」①\n「<<16298>>」②\n「<<13183>>」②\n「<<20289>>」②\n「<<21199>>」①\n「<<21472>>」②の『●』\n「<<16544>>」②\n\n罠カード\n「<<12984>>」②\n「<<12983>>」②\n「<<18753>>」②\n「<<4851>>」\n「<<11204>>」\n「<<18856>>」②",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/24346"
+        }
+      ],
+      "sourceId": "24346",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/24346",
+      "updatedAt": "2026-06-18T20:41:29.073Z"
+    },
+    {
+      "id": "ygoresources-qa-24163",
+      "recordType": "qa",
+      "title": "Can the effect of <<12950>> be activated in response when <<15296>> is activated?",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "In the case of <<15296>>, since it says『Activate 1 of these effects;』, when activated you must tell your opponent which『●』you're using.\n\nIf <<15296>> is activated by selecting the first effect,『●Draw 2 cards』, the effect of <<12950>> can be activated in response.\nIf it's activated by selecting any of the other『●』effects, the effect of <<12950>> cannot be activated in response.\n\nThis is the same for the following cards' effects, as long as the mentioned『●』effect is activated, the effect of <<12950>> can be activated in response:\n● <<21059>>: the 1st『●』\n● <<22156>>: the 1st and 2nd『●』",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/24163"
+        }
+      ],
+      "sourceId": "24163",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/24163",
+      "updatedAt": "2026-06-18T20:41:29.085Z"
+    },
+    {
+      "id": "ygoresources-qa-23610",
+      "recordType": "qa",
+      "title": "「<<17355>>」の『①：お互いのメインフェイズに、相手のメインモンスターゾーンの効果モンスター１体を対象として発動できる。その相手モンスターをそれと同じ縦列の相手の魔法＆罠…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [
+        "魔法"
+      ],
+      "conclusion": "そのモンスタートークンが元々の攻撃力を持つモンスタートークンである場合には、破壊されたモンスタートークンの攻撃力分のライフポイントを失います。ここでのモンスタートークンの元々の攻撃力とは、そのモンスタートークンを特殊召喚したカードに記載されている攻撃力を指します。\n\n（A）の場合、「<<14741>>」のテキストに記載されている「原始生命態トークン」の攻撃力は？ですので、ライフポイントは失いません。\n\n（B）の場合、「<<16748>>」のテキストに記載されている「勇者トークン」の攻撃力は２０００ですので、ライフポイントを２０００失います。",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/23610"
+        }
+      ],
+      "sourceId": "23610",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/23610",
+      "updatedAt": "2026-06-18T20:41:29.097Z"
+    },
+    {
+      "id": "ygoresources-qa-19484",
+      "recordType": "qa",
+      "title": "I activate <<12582>>'s『target 1 LIGHT Machine monster you control; equip this card to tha…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "In all of these cases, the effect that equips <<12582>> as an Equip Card cannot be applied. Therefore, <<12582>> is sent to the Graveyard. (It is not treated as having been sent to the Graveyard by a card effect.)\n\n~~~\n\nThe same applies if any of the following monsters activate their『equip this card』effects, and the targeted monster is no longer face-up in your Monster Zone by the time that activation resolves:\n● <<12583>>'s effect\n● <<12584>>'s effect\n● <<6475>>'s effect\n● <<5552>>'s effect\n● <<20285>>'s effect\n● <<5555>>'s effect\n● <<20286>>'s effect\n● <<15020>>'s effect\n● <<20498>>'s effect\n● <<8693>>'s effect\n● <<8694>>'s effect\n● <<6181>>'s effect\n● <<12585>>'s effect\n● <<9589>>'s effect\n● <<9588>>'s effect\n● <<13996>>'s effect\n● <<14538>>'s effect\n● <<8647>>'s effect\n● <<8807>>'s effect\n● <<10589>>'s effect\n● <<13250>>'s effect\n● <<14840>>'s effect\n● <<9493>>'s effect\n● <<12623>>'s effect\n● <<7412>>'s effect\n● <<15261>>'s effect\n● <<11529>>'s effect\n● <<11075>>'s effect\n● <<7298>>'s effect",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/19484"
+        }
+      ],
+      "sourceId": "19484",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/19484",
+      "updatedAt": "2026-06-18T20:41:29.109Z"
+    },
+    {
+      "id": "ygoresources-qa-20844",
+      "recordType": "qa",
+      "title": "Can I activate the effect of <<21433>> while the『Your opponent must keep their hand revea…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "You cannot activate it.\n\nIf the hand is revealed by the effect of a card such as <<4987>>, <<23162>>, <<4958>>, <<14887>>, <<4928>>, <<6119>>, <<18817>>, <<8539>>, or <<7334>> effects of cards that are activated by \"revealing a card in your hand\", such as the following examples, cannot be activated:\n\n~~~\n\nMonster effects:\n● <<22963>>'s ①st effect\n● <<22960>>'s ①st effect\n● <<22959>>'s ①st effect\n● <<22962>>'s ①st effect\n● <<22961>>'s ①st effect\n● <<22957>>'s ①st effect\n● <<22954>>'s ①st effect\n● <<22955>>'s ①st effect\n● <<22956>>'s ①st effect\n● <<21946>>'s ①st effect\n● <<21947>>'s ①st effect\n● <<22530>>'s ①st effect\n● <<21948>>'s ①st effect\n● <<21949>>'s ①st effect\n● <<21944>>'s ①st effect\n● <<21945>>'s ①st effect\n● <<21943>>'s ①st effect\n● <<22529>>'s ①st effect\n● <<21942>>'s ①st effect\n● <<9270>>'s ①st effect\n● <<21613>>'s ①st effect\n● <<18729>>'s ②nd effect\n● <<18730>>'s ②nd effect\n● <<18732>>'s ②nd effect\n● <<19160>>'s ②nd effect\n● <<18728>>'s ②nd effect\n● <<18731>>'s ②nd effect\n● <<18727>>'s ②nd effect\n● <<13978>>'s ①st effect\n● <<13980>>'s ①st effect\n● <<13981>>'s ①st effect\n● <<14067>>'s ①st effect\n● <<14068>>'s ①st effect\n● <<14069>>'s ①st effect\n● <<14070>>'s ①st effect\n● <<14351>>'s ①st effect\n● <<14550>>'s ①st effect\n● <<14551>>'s ①st effect\n● <<14553>>'s ①st effect\n● <<14554>>'s ①st effect\n● <<14555>>'s ①st effect\n● <<13732>>'s ①st effect\n● <<13733>>'s ①st effect\n● <<13911>>'s ①st effect\n● <<13910>>'s ①st effect\n● <<14109>>'s ①st effect\n● <<17428>>'s ②nd effect\n● <<16508>>'s ①st effect\n● <<21429>>'s ①st effect\n● <<21377>>'s ②nd effect\n● <<21157>>'s ①st effect\n● <<7249>>'s ①st effect\n● <<20756>>'s ①st effect\n● <<20747>>'s ①st effect\n● <<20753>>'s ①st effect\n● <<20489>>'s ①st effect\n● <<20482>>'s ①st effect\n● <<20481>>'s ①st effect\n● <<20208>>'s effect\n● <<19873>>'s ①st effect\n● <<18490>>'s ①st effect\n● <<17134>>'s ①st effect\n● <<16828>>'s ①st effect\n● <<16489>>'s ①st effect\n● <<16507>>'s ①st effect\n● <<16209>>'s ①st effect\n● <<16190>>'s ②nd effect\n● <<16212>>'s ①st effect\n● <<16184>>'s effect\n● <<15256>>'s ①st effect\n● <<14999>>'s ①st effect\n● <<14642>>'s ①st effect\n● <<12541>>'s ①st effect\n● <<13046>>'s ①st effect\n● <<12357>>'s ①st effect\n● <<10150>>'s ①st effect\n● <<8272>>'s ①st effect\n● <<7560>>'s ①st effect\n● <<21440>>'s ①st effect\n● <<18017>>'s ①st effect\n● <<16839>>'s ①st effect\n● <<19851>>'s ①st monster effect\n● <<22690>>'s ②nd effect\n● <<22716>>'s ①st effect\n● <<22533>>'s effect\n● <<22972>>'s ②nd effect\n● <<22975>>'s ①st effect\n● <<22971>>'s ①st effect\n● <<22967>>'s ①st effect\n● <<23165>>'s ②nd effect\n● <<21349>>'s ①st effect\n● <<22531>>'s effect\n● <<22498>>'s ①st effect\n\n~~~\n\nSpells:\n● <<22210>>'s ①st effect\n● <<21481>>'s ②nd effect\n● <<21191>>'s effect\n● <<15042>>'s effect\n● <<18734>>'s effect\n● <<18519>>'s ①st effect\n● <<17465>>'s ①st effect\n● <<15853>>'s ①st effect\n● <<15283>>'s ②nd effect\n● <<11581>>'s effect\n\n~~~\n\nTraps:\n● <<8504>>'s effect\n● <<20399>>'s ②nd effect\n● <<20255>>'s ②nd effect\n● <<19220>>'s effect\n● <<8515>>'s effect\n● <<8364>>'s effect\n● <<8226>>'s effect",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/20844"
+        }
+      ],
+      "sourceId": "20844",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/20844",
+      "updatedAt": "2026-06-18T20:41:29.121Z"
+    },
+    {
+      "id": "ygoresources-qa-18191",
+      "recordType": "qa",
+      "title": "The activation of a monster's effect is negated due to the『Once per turn, when another mo…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "The ATK increasing effect will no longer be applied.\n\nFrom among monster effects that change ATK/DEF, the ones that can only ever be applied to the monster itself will no longer apply when the effects of that monster are negated. (The ATK will return to normal.) The ①st effect of <<12321>> above is such an effect. Also, even if the turn ends as is and the effect of <<13631>> no longer applies, the ATK increase from its own effect won't return.\n\nFor example, this is the same if the effects of the following monsters are negated, the effect that increases its own ATK/DEF will no longer be applied, so its ATK/DEF will return to the value written on the card. (The ATK of a monster with ? ATK will become 0.)\n\n~~~\n\nEffect Monsters:\n● <<12901>>\n● <<7346>>\n● <<6939>>\n● <<6821>>\n● <<11562>>\n● <<12564>>\n● <<13351>>\n● <<13305>>\n● <<10116>>\n● <<9993>>\n● <<7546>>\n● <<11821>>\n● <<12360>>\n● <<13199>>\n● <<13685>>\n● <<12483>>\n● <<11605>>\n● <<7991>>\n● <<12440>>\n● <<8616>>\n● <<9711>>\n● <<15709>>\n● <<12413>>\n● <<17651>>\n● <<5806>>\n● <<12407>>\n● <<15315>>\n● <<5030>>\n● <<11788>>\n● <<12110>>\n● <<11769>>\n\n~~~\n\nFusion Monsters:\n● <<20212>>\n● <<14952>>\n● <<20213>>\n● <<7403>>\n● <<13358>>\n● <<13922>>\n● <<8866>>\n● <<11717>>\n\n~~~\n\nSynchro Monsters:\n● <<22550>>\n● <<12162>>\n● <<11721>>\n● <<12055>>\n● <<12448>>\n● <<10789>>\n\n~~~\n\nXyz Monsters:\n● <<21381>>\n● <<10466>>\n● <<10531>>\n● <<11570>>\n● <<12533>>\n● <<12163>>\n● <<11320>>\n● <<9656>>\n● <<11122>>\n● <<12544>>\n● <<10171>>\n● <<19185>>\n\n~~~\n\nLink Monsters:\n● <<15032>>\n● <<14496>>\n● <<13370>>\n● <<13755>>\n● <<21190>>",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/18191"
+        }
+      ],
+      "sourceId": "18191",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/18191",
+      "updatedAt": "2026-06-18T20:41:29.133Z"
+    },
+    {
+      "id": "ygoresources-qa-24096",
+      "recordType": "qa",
+      "title": "While there are no monsters in my Monster Zone, I attempt to Special Summon a monster. Du…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "発動できます。\n\n自分のモンスターはまだ特殊召喚に成功していませんので、フィールドに存在する扱いにはなっていません。\nしたがって、「<<12070>>」の効果の発動条件である『自分フィールドにモンスターが存在せず、相手モンスターの効果が発動した時』を満たしています。\n\n自分フィールドに他のカードが存在しない状況で、自分のモンスターの特殊召喚を無効にする効果を相手が発動した時、以下の効果の発動条件も満たされます。\n\n『自分・相手ターンに、自分フィールドにカードが存在しない場合、このカードを手札から捨てて発動できる』\n「<<20764>>」\n「<<20500>>」\n「<<20206>>」\n\n『自分フィールドにカードが存在しない場合、このカードの発動は手札からもできる』\n「<<13631>>」",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/24096"
+        }
+      ],
+      "sourceId": "24096",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/24096",
+      "updatedAt": "2026-06-18T20:41:29.145Z"
+    },
+    {
+      "id": "ygoresources-qa-20948",
+      "recordType": "qa",
+      "title": "When applying <<23173>>'s『you can destroy 1 face-up card on either field instead』effect, …",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "No, you cannot.\n\nWhen applying an effect that destroys another monster instead, such as that of <<23173>>, you cannot choose a card that is unaffected by that effect, such as <<11382>>, or a card that cannot be destroyed by that effect, as the card to be destroyed.\n\n~~~\n\nFor example, when applying any of the following, you cannot choose to destroy a card that is unaffected by monster effects, or cannot be destroyed by monster effects:\n● <<14935>>'s ②nd effect\n● <<9332>>'s ②nd effect\n● <<20515>>'s ③rd effect\n● <<18502>>'s ②nd effect\n● <<14773>>'s ②nd effect\n● <<17806>>'s ①st effect\n● <<13084>>'s ②nd effect\n● <<13126>>'s ③rd effect\n● <<14284>>'s ④th effect\n● <<13167>>'s effect",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/20948"
+        }
+      ],
+      "sourceId": "20948",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/20948",
+      "updatedAt": "2026-06-18T20:41:29.157Z"
+    },
+    {
+      "id": "ygoresources-qa-24348",
+      "recordType": "qa",
+      "title": "「<<4773>>」が存在する時に「<<23161>>」を対象に「<<4909>>」を発動しました。 その効果処理時に「<<23161>>」の『③：他のカードが発動した効果が適用…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "破壊されません。\n\n「<<23161>>」は「<<4773>>」が除外されている間に破壊されているためです。\n\n以下のカードの効果も同様に適用されず、破壊されません。\n「<<5478>>」\n「<<5476>>」④\n「<<4735>>」④\n「<<4733>>」④\n「<<5450>>」③\n「<<5477>>」\n「<<5475>>」",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/24348"
+        }
+      ],
+      "sourceId": "24348",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/24348",
+      "updatedAt": "2026-06-18T20:41:29.169Z"
+    },
+    {
+      "id": "ygoresources-qa-24347",
+      "recordType": "qa",
+      "title": "My opponent controls <<23161>>, and my <<13763>> battles my opponent's Toon monster. As a…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "Yes, they can.\n\nIf they do, and that monster is banished and then returns to the Monster Zone, it will no longer be considered to be determined to be destroyed by battle, and will remain in the Monster Zone.",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/24347"
+        }
+      ],
+      "sourceId": "24347",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/24347",
+      "updatedAt": "2026-06-18T20:41:29.181Z"
+    },
+    {
+      "id": "ygoresources-qa-16986",
+      "recordType": "qa",
+      "title": "Can <<4861>> be activated when <<12090>> would be Tribute Summoned due to activating the『…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "If the ②nd effect of <<12090>> was activated as Chain Link 1, <<4861>> can be activated when it would be Tribute Summoned.\n\nIf the ②nd effect of <<12090>> was activated as Chain Link 2 or higher, <<4861>> cannot be activated when it would be Tribute Summoned.\n\n~~~\n\nThis the same as <<4861>> for the effects of the following cards that \"negate a Normal or Tribute Summon\", they cannot be activated when a monster would be Normal or Tribute Summoned due to activating an effect as Chain Link 2 or higher:\n● <<9514>>'s ①st effect\n● <<14262>>'s ①st effect\n● <<11553>>'s ①st effect\n● <<9761>>'s effect\n● <<12998>>'s effect\n● <<17987>>'s ①st effect\n● <<6712>>'s effect\n● <<9144>>'s effect\n● <<8684>>'s effect\n● <<15647>>'s effect\n● <<6450>>'s effect\n● <<9791>>'s effect\n● <<8855>>'s effect\n● <<7803>>'s effect\n● <<4864>>'s effect\n● <<9008>>'s effect\n● <<11411>>'s effect\n● <<9792>>'s effect\n● <<14902>>'s effect\n\n~~~\n\nThe following examples are cards with an effect that have you Normal or Tribute Summon:\nMonster effects:\n● <<16498>>'s ①st effect\n● <<16499>>'s ①st effect\n● <<16500>>'s ①st effect\n● <<16501>>'s ①st effect\n● <<16503>>'s ①st effect\n● <<19631>>'s ①st effect\n● <<19633>>'s ②nd effect\n● <<13503>>'s ①st effect\n● <<10305>>'s effect\n● <<10304>>'s effect\n● <<11473>>'s ①st effect\n● <<11474>>'s ①st effect\n● <<11475>>'s ①st effect\n● <<10441>>'s ②nd effect\n● <<10440>>'s ②nd effect\n● <<22738>>'s ①st effect\n● <<22737>>'s ①st effect\n● <<22965>>'s ①st effect\n● <<20932>>'s ②nd effect\n● <<21796>>'s ①st effect\n● <<16271>>'s ②nd effect\n● <<16820>>'s ②nd effect\n● <<10563>>'s ②nd effect\n● <<11055>>'s ③rd effect\n● <<14650>>'s ②nd effect\n● <<16828>>'s ①st effect\n● <<15257>>'s ①st effect\n● <<15984>>'s ①st effect\n● <<17649>>'s ①st effect\n● <<16400>>'s ②nd effect\n● <<14206>>'s ①st effect\n● <<16236>>'s ②nd effect\n● <<16631>>'s ②nd effect\n● <<19624>>'s ②nd effect\n● <<22204>>'s ②nd effect\n● <<22137>>'s ③rd effect\n● <<21818>>'s ②nd effect\n● <<19024>>'s ③rd effect\n● <<20389>>'s ②nd effect\n● <<20489>>'s ①st effect\n● <<22531>>'s ①st effect\n● <<22524>>'s ②nd effect\n● <<22560>>'s ②nd effect\nSpell effects:\n● <<16482>>'s effect\n● <<13278>>'s effect\n● <<14805>>'s ②nd effect\n● <<12649>>'s ②nd effect\n● <<14505>>'s ③rd effect\n● <<13876>>'s ①st effect\n● <<15543>>'s ②nd effect\n● <<20041>>'s ①st effect\n● (Untranslated text related to <<13942>>'s effects:) 「<<13942>>」の２つ目の『●』\n● The 2nd bulleted (●) part of <<6849>>'s ①st effect\n● <<22313>>'s ②nd effect\n● <<22573>>'s ③rd effect\n● <<17174>>'s ③rd effect\n● <<12969>>'s ②nd effect\n● <<12968>>'s ②nd effect\n● <<16248>>'s ①st effect\n● <<13478>>'s ①st effect\n● <<20289>>'s ②nd effect\n● <<16298>>'s ②nd effect\n● <<13183>>'s ②nd effect\n● <<21199>>'s ①st effect\n● <<22168>>'s ②nd effect\n● (Untranslated text related to <<21472>>'s effects:) 「<<21472>>」②の『●』\n● <<16544>>'s ①st and ②nd effects\nTrap effects:\n● <<16560>>'s ①st effect\n● <<12984>>'s ②nd effect\n● <<12983>>'s ②nd effect\n● <<18753>>'s ②nd effect\n● <<4851>>'s effect\n● <<11204>>'s effect\n● <<18856>>'s ②nd effect",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/16986"
+        }
+      ],
+      "sourceId": "16986",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/16986",
+      "updatedAt": "2026-06-18T20:41:29.193Z"
+    },
+    {
+      "id": "ygoresources-qa-23949",
+      "recordType": "qa",
+      "title": "In the following scenarios, when the『negate that activation, and if you do that, destroy …",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "Ⓐ: The activation or activated effect of <<18727>> will be negated, but since it's no longer in the location where it was activated (Monster Zone) it won't be destroyed and will remain in the hand\n\nⒷ: The activation or activated effect of <<23156>> will be negated, but since it's no longer in the location where it was activated (Monster Zone) it won't be destroyed and will return to the field after the effect of <<12070>> or <<21060>> resolves\n\nⒸ: The activation or activated effect of <<19476>> will be negated, but since it's no longer in the location where it was activated (Monster Zone) it won't be destroyed and will remain in the hand\n\nⒹ: The activation or activated effect of <<23172>> will be negated, but since it's no longer in the location where it was activated (hand) it won't be destroyed and will remain in the Monster Zone\n\nThis is the same for the following effects, if the monster whose effect was activated is no longer in the location it was activated in due to a previous Chain Link, it won't be destroyed/banished:\n\n~~~\n\n『negate that [...], and if you do, destroy it』effects:\n● <<19718>>'s ①st effect\n● <<14952>>'s ③rd effect\n● <<11384>>'s ②nd effect\n● <<22145>>'s ②nd effect\n● <<16386>>'s ②nd effect\n● <<12321>>'s ①st effect\n● <<12998>>'s 1st bulleted (●) effect\n● <<7734>>'s ①st effect\n● <<22696>>'s ①st effect\n● <<11765>>'s ③rd effect\n● <<13081>>'s ①st effect\n\n~~~\n\n『negate that [...], and if you do, banish it』effects:\n● <<12849>>'s effect\n● <<15593>>'s ①st effect\n● (Untranslated text related to <<13203>>'s effects:) 「<<13203>>」『●３体：』\n● <<22715>>'s ①st effect\n● <<21188>>'s ②nd effect",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/23949"
+        }
+      ],
+      "sourceId": "23949",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/23949",
+      "updatedAt": "2026-06-18T20:41:29.206Z"
+    },
+    {
+      "id": "ygoresources-qa-16536",
+      "recordType": "qa",
+      "title": "If the opponent's hand is revealed due to the『Your opponent must keep their hand revealed…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "Yes, you can.\n(You can also apply the『add 1 \"Kewl Tune\" Spell/Trap from your Deck to your hand』effect.)\n\nSimilarly, even if your opponent's hand is revealed by effects such as those of <<4987>>, <<23162>>, <<4958>>, <<14887>>, <<4928>>, <<6119>>, <<18817>>, <<8539>>, or <<7334>>, you can still activate any of the following effects, which allow you to look at your opponent's hand:\n\n~~~\n\nMonster effects:\n● <<6768>>'s effect\n● <<21432>>'s ①st effect\n● <<6753>>'s ③rd effect\n● <<17831>>'s ②nd effect\n● The 2nd bulleted (●) part of <<21382>>'s ②nd effect\n\n~~~\n\nSpells:\n● <<5843>>'s effect\n● (Untranslated text related to <<15296>>'s effects:) 「<<15296>>」３つ目の『●』\n● (Untranslated text related to <<11984>>'s effects:) 「<<11984>>」４つ目の『●』\n\n~~~\n\nTraps:\n● <<20606>>'s ①st effect",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/16536"
+        }
+      ],
+      "sourceId": "16536",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/16536",
+      "updatedAt": "2026-06-18T20:41:29.218Z"
+    },
+    {
+      "id": "ygoresources-qa-11049",
+      "recordType": "qa",
+      "title": "（A）「<<14328>>」の『①：相手フィールドの表側表示モンスター１体を対象としてこのカードを発動できる。そのモンスターのコントロールを得る。そのモンスターは自分フィールドに…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "If the monster is flipped face-down after <<14328>> has resolved, <<14328>> stops targeting that monster.\n\nTherefore,『take control of that monster』stops applying, and control of the monster returns to your opponent. Additionally, since『while you control that monster, it cannot attack or activate effects』stops applying, the monster will be able to attack, and its effects can be activated.\n\n<<14328>> will remain face-up in the Spell & Trap Zone without a target, and thus『when that monster leaves the field, destroy this card』will also no longer apply.",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/11049"
+        }
+      ],
+      "sourceId": "11049",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/11049",
+      "updatedAt": "2026-06-18T20:41:29.230Z"
+    },
+    {
+      "id": "ygoresources-qa-24345",
+      "recordType": "qa",
+      "title": "「<<22960>>」の『①：手札のこのカードを相手に見せ、フィールドのモンスター１体を対象として発動できる。そのモンスターを破壊し、手札から雷族モンスター１体を特殊召喚する。こ…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "「<<22960>>」の①の効果の処理時に「<<23173>>」の②の効果を適用して対象の「<<23173>>」以外を破壊した場合、「<<22960>>」の効果で対象のカードを破壊できていないため、『手札から雷族モンスター１体を特殊召喚する』効果は適用されません。\n\nなお、その場合でも、『このターン、自分は手札からしか効果モンスターを特殊召喚できない』状態になります。",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/24345"
+        }
+      ],
+      "sourceId": "24345",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/24345",
+      "updatedAt": "2026-06-18T20:41:29.242Z"
+    },
+    {
+      "id": "ygoresources-qa-24344",
+      "recordType": "qa",
+      "title": "このターンに破壊され墓地へ送られた悪魔族モンスターを他の効果で特殊召喚した後に、そのモンスターをリンク素材として墓地へ送りました。 このターンのエンドフェイズに、そのモンスターを…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "できません。\n（そのモンスターはリンク素材として墓地へ送られたモンスターですので『このターンに破壊された自分の墓地の悪魔族モンスター』としては扱いません。）\n\n「<<23173>>」の①の『このターンに破壊された自分の墓地の悪魔族モンスター』は、”このターンに破壊され墓地へ送られ、そのまま墓地に残り続けているモンスター”の中から２体まで選択します。",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/24344"
+        }
+      ],
+      "sourceId": "24344",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/24344",
+      "updatedAt": "2026-06-18T20:41:29.254Z"
+    },
+    {
+      "id": "ygoresources-qa-24343",
+      "recordType": "qa",
+      "title": "自分の「<<23173>>」の『②：フィールドのこのカードが戦闘・効果で破壊される場合、代わりに自分か相手のフィールドの表側表示カード１枚を破壊できる』効果を適用する際に「<<7…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "適用しますので、「<<7298>>」が代わりに破壊されます。\n\n以下の”装備モンスターが破壊される場合、代わりにこのカードを破壊する効果”も同様に、「<<23173>>」の②の効果によって装備モンスターを選んだ場合は代わりに破壊されます。\n「<<12582>>」\n「<<12583>>」\n「<<12584>>」\n「<<6475>>」\n「<<5552>>」\n「<<20285>>」\n「<<5555>>」\n「<<20286>>」\n「<<15020>>」\n「<<20498>>」\n「<<8693>>」\n「<<8694>>」\n「<<6181>>」\n「<<12585>>」\n「<<9589>>」\n「<<9588>>」\n「<<13996>>」\n「<<14538>>」\n「<<8647>>」\n「<<8807>>」\n「<<10589>>」\n「<<13250>>」\n「<<14840>>」\n「<<9493>>」\n「<<12623>>」\n「<<7412>>」\n「<<15261>>」\n「<<11075>>」\n「<<7000>>」\n「<<7459>>」\n「<<19213>>」\n\nなお、「<<23173>>」の②の効果を適用する際に、エクシーズ素材を持つ「<<14785>>」を選んだ場合も同様に『①：このカードが戦闘・効果で破壊される場合、代わりにこのカードのX素材を１つ取り除く』効果を適用しますので、「<<14785>>」も含め、どのカードも破壊されません。",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/24343"
+        }
+      ],
+      "sourceId": "24343",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/24343",
+      "updatedAt": "2026-06-18T20:41:29.266Z"
+    },
+    {
+      "id": "ygoresources-qa-24342",
+      "recordType": "qa",
+      "title": "エクストラデッキから「<<6396>>」を見せ、「<<6390>>」を除外して特殊召喚したことで、融合素材とする場合「<<6390>>」として扱うことができる状態の「<<2297…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "できます。\n\n「<<13358>>」の『自分・相手フィールドの上記のカードを墓地へ送った場合のみEXデッキから特殊召喚できる』方法による特殊召喚は融合召喚ではありませんが、墓地へ送るモンスターは融合素材として扱います。\nそのため、融合素材とする場合に「<<6390>>」として扱える状態の「<<22973>>」を、『「<<6390>>」モンスター』の条件を満たす融合素材として墓地へ送ることができます。",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/24342"
+        }
+      ],
+      "sourceId": "24342",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/24342",
+      "updatedAt": "2026-06-18T20:41:29.278Z"
+    },
+    {
+      "id": "ygoresources-qa-24341",
+      "recordType": "qa",
+      "title": "自分が「<<22570>>」や「<<22582>>」の『デッキ・EXデッキから「道化の一座」モンスターを２体まで召喚条件を無視して特殊召喚する』効果を発動した処理時に、リンクマー…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "できません。\n\nリンクマーカーが指し示している自分のメインモンスターゾーンが１つもない状況で「<<22570>>」や「<<22582>>」の\n『デッキ・EXデッキから「道化の一座」モンスターを２体まで召喚条件を無視して特殊召喚する』処理を行う場合、特殊召喚できる「<<22991>>」は１体までとなります。",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/24341"
+        }
+      ],
+      "sourceId": "24341",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/24341",
+      "updatedAt": "2026-06-18T20:41:29.290Z"
+    },
+    {
+      "id": "ygoresources-qa-23993",
+      "recordType": "qa",
+      "title": "I control <<13763>>, which has the『This card can attack directly』effect. My opponent cont…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "Even if the effect of your opponent's <<14297>> is applying, you can attack directly with <<13763>>. The『their monsters cannot target monsters for attacks, except this one』effect only prevents you from targeting their other monsters with attacks. It does not prevent you from targeting the opposing player.\n\nIf the effect of your opponent's <<18733>> is applying, you cannot attack directly with <<13763>>. The『your opponent's monsters can only target monsters you control with the highest ATK for attacks』effect restricts choosing attack targets in general. Therefore, it also prevents you from attacking directly.\n\n~~~\n\nThe following are other examples of cards whose effects restrict the choice of attack target:\n● <<15702>>\n● <<7875>>\n● <<20588>>\n● <<19522>>\n● <<20296>>\n● <<13789>>",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/23993"
+        }
+      ],
+      "sourceId": "23993",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/23993",
+      "updatedAt": "2026-06-18T20:41:29.302Z"
+    },
+    {
+      "id": "ygoresources-qa-23306",
+      "recordType": "qa",
+      "title": "Using the effect of <<16562>> that activates in the Graveyard, what kinds of cards can be…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [
+        "魔法"
+      ],
+      "conclusion": "『カード名が記された魔法・罠カード』とは、カードテキストに特定のカードのカード名が記されたカードを差します。\n\n「<<16562>>」の『②』の効果につきましては、「<<7615>>」または特定の「D-HERO」モンスター（＝「D-HERO」と名のついたモンスター）のカード名が記されている魔法・罠カードを手札に加えることができます。以下のようなカードがこれに該当します。\n●「<<6668>>」（「<<6661>>」のカード名が記された魔法カード）\n●「<<14319>>」（「<<7615>>」のカード名が記された罠カード）\n●「Ｄ－フォース」（「<<7096>>」のカード名が記された魔法カード）\n\n\n以下は、同様の効果と、その効果で手札に加えることができるカードの例です。\n\n『「E・HERO」モンスターのカード名が記された魔法・罠カード』\n「<<17403>>」②\n「<<22593>>」②\n●手札に加えることができるカードの例：「<<14137>>」（「E・HERO」モンスターである「<<6653>>」のカード名が記された魔法カード）\n\n『「トゥーン」カードまたはそのカード名が記されたカード』\n「<<23160>>」②\n「<<23161>>」②\n●手札に加えることができるカードの例：「<<23159>>」（「トゥーン」カードである「<<4798>>」のカード名が記された魔法カード）",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/23306"
+        }
+      ],
+      "sourceId": "23306",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/23306",
+      "updatedAt": "2026-06-18T20:41:29.314Z"
+    },
+    {
+      "id": "ygoresources-qa-15361",
+      "recordType": "qa",
+      "title": "「<<5008>>」の効果や「<<19853>>」の②の効果が適用されている状況で、「<<11784>>」の『①：もう片方の自分のPゾーンに「魔術師」カードまたは「EM」カードが…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [
+        "魔法"
+      ],
+      "conclusion": "発動できます。\n（処理時に「<<5008>>」の効果や「<<19853>>」の②の効果が適用されていても、発動した場合、『このカードを破壊し、デッキから「<<11784>>」以外の「魔術師」Pモンスター１体を選び、自分のPゾーンに置く』処理が行われます。この処理は、魔法カードの発動としては扱わないためです。）\n\n以下の効果も同様に、”ペンデュラムゾーンにペンデュラムモンスターカードを置く効果”に該当しますので、魔法カードを発動できない状況でも発動でき、該当のカードを表側表示で置くことができます。\n「<<19382>>」モンスター効果の①\n「<<19381>>」モンスター効果の①\n「<<13130>>」モンスター効果の①\n「<<11835>>」モンスター効果の②\n「<<22714>>」モンスター効果の④\n「<<11948>>」２つ目の『●』\n「<<14945>>」①\n「<<14204>>」①\n「<<12230>>」①\n「<<12344>>」②\n「<<12906>>」ペンデュラム効果\n「<<22704>>」ペンデュラム効果\n「<<12933>>」ペンデュラム効果\n「<<19143>>」ペンデュラム効果の②",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/15361"
+        }
+      ],
+      "sourceId": "15361",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/15361",
+      "updatedAt": "2026-06-18T20:41:29.326Z"
+    },
+    {
+      "id": "ygoresources-qa-12895",
+      "recordType": "qa",
+      "title": "「<<13549>>」の『①：このターン、モンスター同士の戦闘で発生するお互いの戦闘ダメージは倍になる』効果が適用されているターンです。 自分の永続効果によって『②：このカードが…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "結果的に、相手に８０００の戦闘ダメージを与えます。\n\nダメージ計算に関する複数の効果が適用されている状況では、以下の順に効果を考慮してダメージを決定します。\nなお、「<<12487>>」は『倍の数値だけ戦闘ダメージを与える』効果であるため01、「<<13549>>」は『戦闘ダメージは倍になる』効果であるため08に該当します。\n\n01：倍の戦闘ダメージを与える\n02：戦闘ダメージはお互いに受ける\n03：自分への戦闘ダメージは相手も受ける、戦闘ダメージは代わりに自分／相手が受ける\n04：戦闘ダメージは効果ダメージとして扱う\n05：戦闘ダメージの数値分だけLPを回復する\n06：戦闘ダメージは０になる\n07：戦闘ダメージは半分になる\n08：戦闘ダメージは倍になる\n09：戦闘ダメージは○○○（一定の値）になる\n10：○○○以上／以下の戦闘ダメージを受けない\n（ただし、06にて戦闘ダメージが０となった場合、それ以降の効果は適用しません。）\n\n質問の状況の場合、自分の「<<12487>>」の攻撃力４０００と、相手モンスターの守備力２０００の差分の倍となる４０００のダメージが、「<<13549>>」の効果によってさらに倍となり、結果的に相手に与えられるダメージは８０００となります。\n\n01に該当する『倍の戦闘ダメージを与える』効果の例\n「<<12443>>」①\n「<<20217>>」②\n\n08に該当する『戦闘ダメージは倍になる』効果の例\n「<<11961>>」③\n「<<20506>>」①",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/12895"
+        }
+      ],
+      "sourceId": "12895",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/12895",
+      "updatedAt": "2026-06-18T20:41:29.338Z"
+    },
+    {
+      "id": "ygoresources-qa-11251",
+      "recordType": "qa",
+      "title": "「<<9590>>」の『１ターンに１度、自分フィールド上の「ヴァイロン」と名のついた装備カード１枚を、別の正しい対象となるモンスター１体に移し替える事ができる。この効果は相手ター…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [
+        "魔法"
+      ],
+      "conclusion": "（A）できます。（正しい対象となる、自分のモンスターゾーンの「ヴァイロン」モンスターに移し替えることができます。）\nまた移し替えた場合でも、「<<9589>>」や「<<9588>>」の『この効果で装備カード扱いになっている場合』の効果は適用されたままです。\n\n（B）できません。（自身の効果によって装備魔法カード扱いで装備されている「<<9377>>」等の正しい対象は、その効果で装備したモンスターのみであるためです。）\n\n（C）できません。（「<<9394>>」の効果によって装備した装備カードの正しい対象は、その「<<9394>>」自身のみであるためです。）",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/11251"
+        }
+      ],
+      "sourceId": "11251",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/11251",
+      "updatedAt": "2026-06-18T20:41:29.350Z"
+    },
+    {
+      "id": "ygoresources-qa-10487",
+      "recordType": "qa",
+      "title": "「<<9244>>」の『自分フィールドの表側表示カード１枚を手札に戻して発動できる』効果や、「<<8709>>」の『①：自分フィールドの表側表示モンスター１体を手札に戻して発動で…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [
+        "魔法"
+      ],
+      "conclusion": "いずれもできません。\n手札に戻すことができない状態のカードを、『手札に戻して発動できる』効果を発動するためのコストとして選ぶことはできません。\n\n（なお、自身の効果によって特殊召喚した「<<7849>>」が、その後に他の効果等によって魔法＆罠ゾーンに存在している場合には『この効果で特殊召喚したこのカードは、フィールドから離れた場合に除外される』効果の適用は終了していますので、その「<<7849>>」を「<<9244>>」の効果を発動する際のコストとして手札に戻すことはできます。）\n\n以下の効果を発動する際も同様です。\n「<<7531>>」\n「<<19476>>」②\n「<<12916>>」①\n「<<22959>>」②\n「<<21163>>」②\n「<<9244>>」①\n「<<11686>>」②\n「<<8469>>」③\n「<<13229>>」①\n「<<14283>>」①\n「<<13595>>」①\n「<<23000>>」２つ目の『●』\n「<<23017>>」②\n「<<23014>>」②\n「<<15878>>」①",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/10487"
+        }
+      ],
+      "sourceId": "10487",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/10487",
+      "updatedAt": "2026-06-18T20:41:29.362Z"
+    },
+    {
+      "id": "ygoresources-qa-8129",
+      "recordType": "qa",
+      "title": "If a Normal Spell Card, Quick-Play Spell Card, Ritual Spell Card, or Normal Trap Card is …",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "In cases (A) and (C), you cannot activate that effect.\n\nIn case (B), you can activate that effect.\n\n(If an effect such as that of <<9824>> resolves in response to <<4354>>, the『flip all monsters they control face-up』effect of <<4354>> will apply normally, but since <<4354>> was returned to the hand,『while this card is face-up on the field, your opponent's monsters cannot declare an attack』will not apply.)\n\nFurthermore, if a Normal Trap Card that can optionally be equipped to a monster, such as <<20547>> or <<20812>>, is activated, an effect such as that of <<9824>> cannot be activated in response by targeting it.\n\n~~~\n\nThe following are examples of (B), cards that remain on the field after activation:\n● <<6629>>\n● <<21840>>\n● <<15088>>\n● <<10810>>\n● <<13471>>\n● <<13171>>\n● <<11668>>\n● <<13784>>\n● <<12019>>\n● <<12066>>\n● <<12224>>\n● <<13286>>\n● <<13441>>\n● <<13439>>\n● <<4664>>\n● <<8511>>\n● <<13623>>\n● <<13621>>\n● <<9856>>\n● <<10961>>\n● <<6761>>\n● <<16032>>\n● <<16033>>\n● <<16034>>\n● <<16035>>\n● <<16036>>\n● <<16265>>\n● <<17479>>\n● <<16031>>\n● <<13437>>\n● <<11886>>\n● <<5120>>\n\n~~~\n\nThe following are examples of (C), cards that are Set after activation instead of being sent to the Graveyard:\n● <<12267>>\n● <<18315>>\n● <<12981>>\n● <<12980>>\n● <<12269>>",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/8129"
+        }
+      ],
+      "sourceId": "8129",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/8129",
+      "updatedAt": "2026-06-18T20:41:29.374Z"
+    },
+    {
+      "id": "ygoresources-qa-24340",
+      "recordType": "qa",
+      "title": "If a Ritual Monster is destroyed by battle while <<22121>>, <<22120>>, and <<22122>> are …",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "They can be activated.\n\nOnly 1 Trigger Effect that Special Summons the card itself, and that can be activated in the hand, can be activated in the same Chain, but the effects of <<22121>>, <<22120>>, and <<22122>> are Trigger Effects that can only be activated in the Graveyard, so since they aren't effects that can be activated in the hand, they're not considered to be \"Trigger Effects that Special Summon themselves and that can be activated in the hand\".",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/24340"
+        }
+      ],
+      "sourceId": "24340",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/24340",
+      "updatedAt": "2026-06-18T20:41:29.386Z"
+    },
+    {
+      "id": "ygoresources-qa-24151",
+      "recordType": "qa",
+      "title": "If the『Special Summon 1 Fusion Monster from your Extra Deck that mentions a \"HERO\" monste…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "On resolution, if there's an <<6653>> or a Fusion Monster that mentions <<6653>> in your hand, field, Graveyard, or banishment (face-up), and an Effect Monster, face-up, or in face-down Defense Position, in your Monster Zone, <<20768>> can be Special Summoned by returning those 2 monsters to the Deck/Extra Deck.\n\nEven if the effect of <<17471>> would be applied, the『1 Effect Monster on the field』Fusion Material mentioned on <<20768>> must be taken into consideration, so it's necessary to choose an Effect Monster in the Monster Zone.",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/24151"
+        }
+      ],
+      "sourceId": "24151",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/24151",
+      "updatedAt": "2026-06-18T20:41:29.399Z"
+    },
+    {
+      "id": "ygoresources-qa-15530",
+      "recordType": "qa",
+      "title": "While the『Your Toon monsters can attack directly』effect of my <<23160>> is being applied,…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "Ⓐ: It cannot attack directly.\nThis is because even though the effect of your <<23160>> is being applied, your <<4773>> says『this card must target a Toon monster for its attacks』. (It will attack a Toon monster that's face-up in the opponent's Monster Zone.)\n\nⒷ: It can attack directly.\nThe text of <<12431>> doesn't say『this card must target a Toon monster for its attacks』, so it can, attack the opponent's Toon monster, attack their non-Toon monster, or attack directly. (It cannot attack directly if the effect of your <<23160>> isn't being applied and there's a face-up Toon monster in the opponent's Monster Zone.)\n\n~~~\n\nLike Ⓐ, this is the same for the following cards that say『Can attack your opponent directly, unless they control a Toon monster, in which case this card must target a Toon monster for its attacks』:\n● <<4735>>\n● <<4734>>\n● <<4733>>\n● <<5450>>\n\n~~~\n\nLike Ⓑ, this is the same for the following cards that say『While you control \"<<4798>>\" and your opponent controls no Toon monsters, this card can attack your opponent directly』:\n● <<5475>>'s effect\n● <<15471>>'s effect\n● <<5476>>'s effect\n● <<11827>>'s effect\n● <<15470>>'s effect\n● <<11982>>'s effect\n● <<12146>>'s effect\n● <<11900>>'s effect\n● <<12308>>'s effect\n● A monster equipped with <<11904>>",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/15530"
+        }
+      ],
+      "sourceId": "15530",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/15530",
+      "updatedAt": "2026-06-18T20:41:29.411Z"
+    },
+    {
+      "id": "ygoresources-qa-24008",
+      "recordType": "qa",
+      "title": "I destroyed a monster whose original Attribute is FIRE with the『During your Main Phase: Y…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "In both situations, you can activate it.\n(You can activate it even if your hand is revealed due to the effect such as that of <<23162>>. Whether <<19397>> was originally in your hand or not isn't considered.)\n\nIn addition, if you destroy a monsster whose original Attribute is FIRE with the effect of <<11763>> or <<19825>>, and add <<19404>> to your hand, you can activate its『If your monster(s) that was originally FIRE is destroyed by battle or card effect: You can Special Summon this card from your hand』effect after the whole Chain finishes resolving.",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/24008"
+        }
+      ],
+      "sourceId": "24008",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/24008",
+      "updatedAt": "2026-06-18T20:41:29.423Z"
+    },
+    {
+      "id": "ygoresources-qa-24339",
+      "recordType": "qa",
+      "title": "The『Before resolving another activated card or effect, you can banish 1 Toon monster you …",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "It can be activated.\n(Even if the banished monster has already returned to the Monster Zone, it falls under『If a monster is banished by card effect』.)",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/24339"
+        }
+      ],
+      "sourceId": "24339",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/24339",
+      "updatedAt": "2026-06-18T20:41:29.435Z"
+    },
+    {
+      "id": "ygoresources-qa-12487",
+      "recordType": "qa",
+      "title": "During a turn that a <<12431>> has already activated its『Once per turn: You can discard 1…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "It can be activated.\n(The same『●』can be chosen as well.)\n\n~~~\n\nThis also applies to the following cards'『Once per turn:』effects:\n● <<10304>>'s effect\n● <<10305>>'s effect\n● <<8115>>'s effect\n● <<7547>>'s effect\n● <<21794>>'s ③rd effect\n● <<12870>>'s effect\n● <<22950>>'s ③rd effect\n● <<22110>>'s ①st effect\n● <<23160>>'s ②nd effect",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/12487"
+        }
+      ],
+      "sourceId": "12487",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/12487",
+      "updatedAt": "2026-06-18T20:41:29.447Z"
+    },
+    {
+      "id": "ygoresources-qa-24051",
+      "recordType": "qa",
+      "title": "While the effect of <<5008>>, or the effect of <<19853>>, is applying, can I activate <<1…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "Yes, you can.\n(If you do, even if the effect in question is still applying at resolution, <<17765>>'s effect resolves normally. This is because placing a \"Branded\" Continuous Spell/Trap from your Deck face-up on the field using <<17765>>'s efect is not treated as the activation of a Spell/Trap Card.)\n\n~~~\n\nSimilarly, the following effects that place Continuous Spells/Traps face-up on the field can be activated even if those cards could currently not be activated:\n● <<20602>>'s ①st effect\n● <<13328>>'s ①st effect\n● <<19474>>'s ①st effect\n● <<22958>>'s ①st effect\n● <<21790>>'s ②nd effect\n● <<22950>>'s ①st effect\n● <<23156>>'s ③rd effect\n● <<22117>>'s ②nd effect\n● <<22118>>'s ②nd effect\n● <<20749>>'s ③rd effect\n● <<21456>>'s ②nd effect\n● <<14415>>'s ②nd effect\n● <<14414>>'s ②nd effect\n● <<5224>>'s effect\n\n~~~\n\nSimilarly, the following effects that place Field Spells face-up on the field can be activated even if you cannot currently activate Spell Cards, or even if you currently explicitly cannot activate Field Spells, such as due to <<12466>> or <<12978>>. (If you do, and there is already a card in the Field Zone, that card is sent to the Graveyard before placing the card in question on the field face-up.)\n● <<21371>>'s ①st effect\n● <<22958>>'s ①st effect\n● <<23156>>'s ③rd effect\n● The 1st bulleted (●) part of <<23159>>'s ①st effect\n● <<19400>>'s ①st effect\n● <<19840>>'s effect\n● <<21064>>'s ③rd effect\n● <<21469>>'s ①st effect",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/24051"
+        }
+      ],
+      "sourceId": "24051",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/24051",
+      "updatedAt": "2026-06-18T20:41:29.459Z"
+    },
+    {
+      "id": "ygoresources-qa-23977",
+      "recordType": "qa",
+      "title": "I have activated the ①st effect of <<18917>>, but that activation, or its effect, has bee…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "No, you cannot.\n\nYou can still activate the effect of <<18917>>, but cannot choose the same『●』effect.\n(Even if the effect's activation, or that activation's effect, is negated, you have still previously chosen that『●』effect.)\n\nThe same applies for the following cards/effects:\n\n~~~\n\nMonster effects:\n● <<23159>>'s ①st effect\n● <<17037>>'s ①st effect\n● <<22991>>'s ①st effect\n● <<22538>>'s ②nd effect\n● <<22549>>'s ②nd effect\n● <<22555>>'s ②nd effect\n● <<22541>>'s ②nd effect\n● <<22524>>'s ①st effect\n\n~~~\n\nSpell effects:\n● <<22733>>'s effect\n● <<22155>>'s effect\n● <<22156>>'s effect\n● <<22167>>'s ①st effect\n● <<21059>>'s effect\n● <<21827>>'s effect\n● <<21828>>'s effect\n● <<21829>>'s effect\n● <<21834>>'s effect\n● <<21831>>'s effect\n● <<16094>>'s effect\n● <<21074>>'s effect\n● <<21075>>'s effect\n● <<21835>>'s effect\n● <<20788>>'s effect\n● <<21374>>'s effect\n● <<20236>>'s effect\n● <<20281>>'s effect\n● <<20934>>'s effect\n● <<18517>>'s effect\n● <<21832>>'s ②nd effect\n● <<21479>>'s effect\n● <<19233>>'s effect\n\n~~~\n\nTrap effects:\n● <<21487>>'s effect\n● <<19210>>'s effect\n● <<18920>>'s effect\n● <<19528>>'s effect\n● <<22582>>'s ①st effect\n● <<16299>>'s effect",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/23977"
+        }
+      ],
+      "sourceId": "23977",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/23977",
+      "updatedAt": "2026-06-18T20:41:29.471Z"
+    },
+    {
+      "id": "ygoresources-qa-23502",
+      "recordType": "qa",
+      "title": "When performing the resolution of a『Fusion Summon 1 ⁜⁜⁜ Fusion Monster from your Extra De…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "It cannot.\n\nThe monster(s) returned to the Extra Deck as Fusion Material and the monster that's Fusion Summoned from the Extra Deck must be different (the monster(s) returned to the Extra Deck as Fusion Material cannot be selected as the monster to Fusion Summon as is). For that reason, if you don't have a combination of monsters that can be used as Fusion Materials and a Fusion Monster in your Extra Deck that can be Fusion Summoned using them as materials, you cannot activate the Fusion Summoning effect.\n\n~~~\n\nThis is the same when performing a Fusion Summon due to the following cards' effects, the above conditions must be met:\nMonster effects:\n● <<20944>>'s effect\n● <<17070>>'s effect\n● <<20226>>'s effect\n● <<13493>>'s effect\n● <<17415>>'s effect\n● <<17414>>'s effect\n● <<17416>>'s effect\nSpell/Trap effects:\n● <<21476>>'s effect\n● <<13947>>'s effect\n● <<16856>>'s effect\n● <<7942>>'s effect\n● <<21612>>'s effect\n● <<13849>>'s effect\n● <<19904>>'s effect\n● <<15779>>'s effect\n● <<20788>>'s 1st bulleted (●) effect\n● <<22156>>'s 3rd bulleted (●) effect\n● The 2nd bulleted (●) part of <<23167>>'s ①st effect",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/23502"
+        }
+      ],
+      "sourceId": "23502",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/23502",
+      "updatedAt": "2026-06-18T20:41:29.483Z"
+    },
+    {
+      "id": "ygoresources-qa-16901",
+      "recordType": "qa",
+      "title": "<<5476>>'s『cannot attack the turn it is Summoned』effect is applying. Can <<5476>> attack …",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "Ⓐ: It cannot attack.\n(Even if <<5476>> is changed to face-down Defense Position, it is still a monster that was Normal or Special Summoned this turn.)\n\nⒷⒸ: It can attack.\n(<<5476>> is no longer considered to have been Summoned this turn.)\n\n~~~\n\nThis also applies to the following monsters:\n\nMonsters that cannot attack the turn they are Summoned:\n● <<15471>>\n● <<11827>>\n● <<11982>>\n● <<12146>>\n● <<12431>>\n● <<11900>>\n● <<12308>>\n● <<5659>>\n\nMonsters that cannot attack the turn they are Normal or Special Summoned:\n● <<7659>>\n● <<9114>>\n\nMonsters that cannot attack the turn they are Normal Summoned:\n● <<10120>>\n● <<18323>>\n● <<12050>>\n\nMonsters that cannot attack the turn they are Special Summoned:\n● <<4735>>\n● <<4734>>\n● <<4733>>\n● <<4773>>\n● <<13858>>\n● <<15721>>",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/16901"
+        }
+      ],
+      "sourceId": "16901",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/16901",
+      "updatedAt": "2026-06-18T20:41:29.495Z"
+    },
+    {
+      "id": "ygoresources-qa-12264",
+      "recordType": "qa",
+      "title": "I resolve the『target 1 other face-up card you control; destroy it, then add 1 face-up Pen…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "Yes, you can.\n\nSince <<12906>> is added to your hand while resolving <<13507>>'s effect, it will be in your hand by the time it is time to activate its『if a card(s) you control is destroyed by battle or card effect』effect.\n\nHowever, note that that <<12906>> is not a『monster (...) that was destroyed this turn,』and therefore you cannot choose it as the monster to『add 1 monster with the same name from your Deck to your hand.』\n\nAdditionally, if, after resolving <<13507>>'s effect, <<13507>>'s『draw 1 card』effect activates, note that this effect forms Chain Link 1. Therefore, your opponent has the opportunity to respond before you can activate <<12906>>'s effect, which you can then activate as Chain Link 2 or higher.\n(However, if your hand is revealed by an effect such as <<23162>>, you can activate <<12906>>'s effect as Chain Link 2 immediately, without your opponent having the opportunity to respond.)\n\n(TL note: allowing the opponent to respond before activating Astrograph's effect is OCG specific, due to how Trigger effects are handled differently there.)\n\nSimilarly, if you use that effect of <<13507>> to destroy an <<22704>> and add it to your hand, you can then activate <<22704>>'s『if a face-up Monster Card(s) you control is destroyed by battle or card effect』effect.",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/12264"
+        }
+      ],
+      "sourceId": "12264",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/12264",
+      "updatedAt": "2026-06-18T20:41:29.507Z"
+    },
+    {
+      "id": "ygoresources-qa-24336",
+      "recordType": "qa",
+      "title": "When my <<23173>> would be destroyed, I apply its『if this card on the field would be dest…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "No, they cannot. Therefore, their <<23173>> is destroyed.\n\n~~~\n\nSimilarly, if a card would be destroyed by applying <<23173>>'s『if this card on the field would be destroyed by battle or card effect, you can destroy 1 face-up card on either field instead』effect, the following also cannot be applied:\nMonster effects:\n● <<6969>>'s effect\n● <<6963>>'s effect\n● <<6964>>'s effect\n● <<6965>>'s effect\n● <<6966>>'s effect\n● <<6967>>'s effect\n● <<6968>>'s effect\n● <<9332>>'s effect\n● <<20515>>'s ③rd effect\n● <<7667>>'s effect\n● <<7949>>'s effect\n● <<8316>>'s effect\n● <<18148>>'s ②nd effect\n● <<13194>>'s ②nd effect\n● <<12314>>'s ③rd effect\n● <<19014>>'s ②nd effect\n● <<12387>>'s ①st effect\n● <<11923>>'s ②nd effect\n● <<13126>>'s ③rd effect\n● <<12617>>'s 2nd bulleted (●) effect\n● <<15512>>'s ①st effect\n● <<9870>>'s effect\n● <<22193>>'s ④th effect\n● <<13167>>'s effect\n● <<10128>>'s effect\n● <<14249>>'s ②nd effect\n● <<14288>>'s ②nd effect\n● <<10933>>'s ②nd effect\n● <<13923>>'s ②nd effect\n● <<13924>>'s ②nd effect\n● <<20578>>'s ③rd effect\n● <<14853>>'s ②nd effect\n● <<10857>>'s ③rd effect\n● <<14970>>'s ③rd effect\n● <<14284>>'s ④th effect\n● <<22743>>'s ③rd effect\nSpell effects:\n● <<16435>>'s ②nd effect\n● <<16243>>'s ②nd effect\n● <<12204>>'s ②nd effect\n● <<11272>>'s ②nd effect\n● <<12364>>'s ②nd effect\n● <<19401>>'s ②nd effect\n● <<16551>>'s ②nd effect\n● <<6850>>'s ②nd effect\n● <<19202>>'s ②nd effect\n● <<14137>>'s ②nd effect\nTrap effects:\n● <<17987>>'s ②nd effect",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/24336"
+        }
+      ],
+      "sourceId": "24336",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/24336",
+      "updatedAt": "2026-06-18T20:41:29.519Z"
+    },
+    {
+      "id": "ygoresources-qa-24069",
+      "recordType": "qa",
+      "title": "I resolve the『banish it, then return it to the field』effect of <<20245>> by targeting a m…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "In both cases, you can change the monster's battle position.\n\nThis also applies if the monster in question is instead banished by any of the following, and then returns to the Monster Zone during the same turn:\n● <<23161>>'s ③rd effect\n● <<23160>>'s ③rd effect\n● <<9729>>'s ②nd effect",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/24069"
+        }
+      ],
+      "sourceId": "24069",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/24069",
+      "updatedAt": "2026-06-18T20:41:29.531Z"
+    },
+    {
+      "id": "ygoresources-qa-14058",
+      "recordType": "qa",
+      "title": "Can the opponent activate <<16555>> while the『Your opponent must keep their hand revealed…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "They cannot activate it.\n\nThis is because, if the hand is currently being revealed, the『Reveal 1 monster in your hand』resolution of <<16555>> cannot be performed.\n\nIf the hand is currently being revealed due to the effect of <<4987>>, <<23162>>, <<4958>>, <<14887>>, <<4928>>, <<6119>>, <<18817>>, <<8539>>, or <<7334>>, the following example effects cannot be activated:\n\n~~~\n\nMonster effects:\n● <<18003>>'s ②nd effect\n● <<12555>>'s ②nd effect\n● <<22952>>'s ①st effect\n● <<22560>>'s ③rd effect\n● <<10271>>'s effect\n● <<14409>>'s ①st effect\n\n~~~\n\nSpell effects:\n● <<10121>>'s effect\n● <<14778>>'s ①st effect\n● <<13616>>'s ②nd effect\n● <<15876>>'s ①st effect\n● <<14507>>'s ②nd effect\n● <<14506>>'s ②nd effect\n● <<16541>>'s ①st effect\n● <<15407>>'s ②nd effect\n● <<12340>>'s ②nd effect\n● <<12005>>'s ①st effect\n● <<11727>>'s ①st effect\n● <<12037>>'s ②nd effect\n● <<16544>>'s ①st effect\n● <<16545>>'s ②nd effect\n● <<16012>>'s ①st effect\n\n~~~\n\nTrap effects:\n● <<6361>>'s effect\n● <<18859>>'s ①st effect\n● <<13365>>'s ①st effect",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/14058"
+        }
+      ],
+      "sourceId": "14058",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/14058",
+      "updatedAt": "2026-06-18T20:41:29.543Z"
+    },
+    {
+      "id": "ygoresources-qa-13693",
+      "recordType": "qa",
+      "title": "When I apply my <<23173>>'s『you can destroy 1 face-up card on either field instead』effect…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "No, they cannot.",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/13693"
+        }
+      ],
+      "sourceId": "13693",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/13693",
+      "updatedAt": "2026-06-18T20:41:29.555Z"
+    },
+    {
+      "id": "ygoresources-qa-24337",
+      "recordType": "qa",
+      "title": "While <<23162>> is already face-up in my Spell & Trap Zone, I do each of the following. A…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "Ⓐ: It begins applying as soon as the Summon succeeds.\n(It does not yet apply if an effect that negates that Summon is activated.)\n\nⒷ: It applies as soon as you activate a \"Toon\" Spell/Trap.\n(The opponent's hand is revealed, and you can look at their Spells/Traps, while the Chain is built in response to that activation.)",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/24337"
+        }
+      ],
+      "sourceId": "24337",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/24337",
+      "updatedAt": "2026-06-18T20:41:29.567Z"
+    },
+    {
+      "id": "ygoresources-qa-24335",
+      "recordType": "qa",
+      "title": "I activate <<23161>>. In response, <<4909>> resolves, attempting to destroy that <<23161>…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "No, you cannot.\n\nEven though <<23161>> is on the field at the time it is destroyed, its Spell Card activation has not yet resolved. Therefore, its『this card's name becomes \"<<4798>>\" while in the Field Zone』effect is not yet applying.\n\nThis is also true if <<4909>> is activated in response to the Spell Card activation of <<11901>>.",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/24335"
+        }
+      ],
+      "sourceId": "24335",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/24335",
+      "updatedAt": "2026-06-18T20:41:29.579Z"
+    },
+    {
+      "id": "ygoresources-qa-24334",
+      "recordType": "qa",
+      "title": "When resolving <<15015>>'s effect, I choose <<23173>> as the monster to be destroyed. I t…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "Yes, you can.\n(In the situation you describe, <<15015>> was destroyed by <<23173>>'s effect, not <<15015>>'s effect.)\n\n~~~\n\nThis also applies if a monster whose name is the same as the monster that activated the original effect is destroyed by <<23173>>'s effect:\n● <<14635>>'s ①st effect\n● <<14636>>'s ①st effect\n● <<23170>>'s ①st effect\n● <<23171>>'s ①st effect",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/24334"
+        }
+      ],
+      "sourceId": "24334",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/24334",
+      "updatedAt": "2026-06-18T20:41:29.591Z"
+    },
+    {
+      "id": "ygoresources-qa-24315",
+      "recordType": "qa",
+      "title": "If I activate the ①st effect of <<22971>> by revealing <<21040>>, can either player activ…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "Ⓐ: Neither player can activate a card effect.\nThe『this card's name becomes \"<<5231>>\" while in the Field Zone』effect of <<21040>> only begins applying once the Chain Link formed by its Spell Card activation has resolved. Therefore, its name is still <<21040>> when it's activated, and neither player can chain effects to it.\n\nⒷ: Both players can activate a card effect.\nBecause the card's activation has finished when the ③rd effect is activated, and its name has already become <<5231>>,『card with the same name as the revealed Spell/Trap』isn't true anymore.\n\nAlso, this is the same for the card activations or effect activations of the following cards:\n\n~~~\n\nSpells:\n● <<14444>>\n● <<19520>>\n● <<17809>>\n● <<14689>>\n● <<14141>>\n● <<17051>>\n● <<11901>>\n● <<23161>>\n● <<13353>>\n\n~~~\n\nTrap:\n● <<16648>>\n● <<12809>>\n● <<15308>>\n● <<13643>>\n● <<11597>>\n● <<8687>>",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/24315"
+        }
+      ],
+      "sourceId": "24315",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/24315",
+      "updatedAt": "2026-06-18T20:41:29.603Z"
+    },
+    {
+      "id": "ygoresources-qa-24161",
+      "recordType": "qa",
+      "title": "リンク召喚した「<<19188>>」の『①：このカードが融合・S・X・Lモンスターのいずれかを素材としてL召喚した場合、自分か相手のフィールド・墓地のカード１枚を対象として発動で…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "If you activate <<19188>>'s effect by targeting a card in the Graveyard, then that activation includes an effect that『●Banish[es] a card(s) from the Graveyard.』Therefore, <<13587>>'s effect can be activated in response.\n\nIf you activate <<19188>>'s effect by targeting a card on the field, then the activation does not include any effect that is listed on <<13587>>. Therefore, its effect cannot be activated in response.\n\n~~~\n\nThis applies similarly to the following effects. If they are activated by targeting a card in the Graveyard, <<13587>>'s effect can be activated in response; if they are activating by targeting only cards that are not in the Graveyard, it cannot be.\n\n『●Add a card(s) from the Graveyard to the hand, Deck, and/or Extra Deck:』\n● <<23017>>'s ③rd effect\n● <<23024>>'s ①st effect\n● <<21612>>'s effect\n● <<22539>>'s Pendulum Effect\n● <<22551>>'s ③rd effect\n● <<21056>>'s ①st effect\n● <<20491>>'s ②nd effect\n● <<19155>>'s ②nd effect\n● <<21359>>'s ①st effect\n● <<11508>>'s ②nd effect\n● <<10004>>'s effect\n● <<18008>>'s ②nd effect\n● <<13082>>'s ①st effect\n● <<18510>>'s ①st effect\n● <<13605>>'s ③rd effect\n● <<19196>>'s ②nd effect\n● <<14861>>'s ②nd effect\n● <<17998>>'s ③rd effect\n● <<15311>>'s ①st effect\n\n『●Special Summon a Monster Card(s) from the Graveyard:』\n● <<20523>>'s ②nd effect\n● <<20579>>'s effect\n● <<23006>>'s effect\n\n『●Banish a card(s) from the Graveyard:』\n● <<21039>>'s ①st effect\n● <<20711>>'s ③rd effect\n● <<21174>>'s ①st effect\n● <<12781>>'s ①st effect\n● <<16740>>'s ①st effect\n● <<17478>>'s effect\n● <<18515>>'s ①st effect\n● <<16492>>'s ③rd effect\n● <<15578>>'s ①st effect\n● <<18217>>'s effect",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/24161"
+        }
+      ],
+      "sourceId": "24161",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/24161",
+      "updatedAt": "2026-06-18T20:41:29.615Z"
+    },
+    {
+      "id": "ygoresources-qa-24129",
+      "recordType": "qa",
+      "title": "「<<21074>>」を除外して「<<14830>>」の『②：自分の墓地からこのカードと「ウィッチクラフト」魔法カード１枚を除外して発動できる。この効果は、その魔法カード発動時の…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [
+        "魔法"
+      ],
+      "conclusion": "No, you cannot activate either.\n(<<14830>>'s ②nd effect is『this effect becomes that Spell's effect when that card is activated.』It does not include \"sending a card from the Deck to the Graveyard\" or \"Special Summoning a monster\".)\n\n~~~\n\nSimilarly, if you activate <<14830>>'s ②nd effect by banishing the following, or activate the second bulleted (●) effect of <<23166>> by revealing the following, you also cannot activate <<12950>>'s effect or <<17794>>'s effect in response:\n● <<14410>>\n● <<17038>>\n● <<14411>>\n● <<15053>>\n● <<23167>>",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/24129"
+        }
+      ],
+      "sourceId": "24129",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/24129",
+      "updatedAt": "2026-06-18T20:41:29.627Z"
+    },
+    {
+      "id": "ygoresources-qa-24128",
+      "recordType": "qa",
+      "title": "What happens if I activate <<14830>>'s『this effect becomes that Spell's effect when that …",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "When you apply a Spell Card's effect due to <<14830>>'s ②nd effect, or due to <<23166>>'s 2nd bulleted (●) effect, any conditions on activating the Spell Card that are listed on that card are not considered.\n\nⒶ: These texts are conditions on activating the Spell Card <<21074>>. They are not considered when you only apply that Spell Card's effect using <<14830>>'s effect, or <<23166>>'s effect.\n(Therefore, even if you control no \"Magistus\" or \"Witchcrafter\" monsters, you can choose the first effect of <<21074>>. Additionally, you can also choose the second effect during your Main Phase, as Chain Link 1.)\n\nⒷ: You cannot do this using <<14830>>'s effect, as it is an Ignition Effect. It can only be activated as Chain Link 1, and only during your Main Phase. However, you can do this using <<23166>>'s effect, assuming it is the Main Phase or the Battle Phase.\n\nⒸ: Yes, you can.\nThe relevant text of <<21074>> is a condition on activating the Spell Card <<21074>>. It is not taken into account when you only apply that Spell Card's effect using <<14830>>'s effect, or <<23166>>'s effect.\nTherefore, you can choose the first bulleted (●) effect both when activating the Spell Card <<21074>>, and when activating <<14830>>'s effect by banishing <<21074>>, during the same turn. (This also applies to the second bulleted (●) effect.)\n\nSimilarly, this also applies when banishing the following cards to activate <<14830>>'s effect, or revealing them to activate <<23166>>'s effect:\n● <<14410>>\n● <<14412>>\n● <<17038>>\n● <<14411>>\n● <<15053>>\n● <<14413>>\n● <<23167>>",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/24128"
+        }
+      ],
+      "sourceId": "24128",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/24128",
+      "updatedAt": "2026-06-18T20:41:29.639Z"
+    },
+    {
+      "id": "ygoresources-qa-23491",
+      "recordType": "qa",
+      "title": "My opponent controls a <<16300>>, which is \"unaffected by your opponent's (= my) activate…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "The effects of <<5740>> and <<12668>> will negate the effects of <<16300>>, and the effect of <<14328>> and <<4898>> will take control of <<16300>>. <<17069>>'s effect will destroy <<16300>> during the End Phase.\n\nMonsters which are『unaffected by activated effects』will be unaffected by any effect that is applied when the Chain Link formed by an activation resolves. However, while the effects of <<5740>>, <<12668>>, <<14328>>, <<4898>>, <<12205>>, <<23162>>, etc. are effects that begin applying when the Chain Link formed by the card activation resolves, these effects will continue to apply to monsters afterwards. Therefore, these effects can affect monsters that are \"unaffected by activated effects\".\n\nSimilarly, <<17069>>'s『destroy all monsters your opponent controls during the End Phase of this turn』effect also applies after the Chain Link formed by its activation has finished resolving. Therefore, it can also affect monsters that are \"unaffected by activated effects\".\n\nExamples of monsters that are『unaffected by activated effects』include the following:\n\n~~~\n\n『Unaffected by activated card effects, except its own』:\n<<22169>> (However, the『●Cannot be destroyed by battle or card effects』effect will also be applied so it won't be destroyed with the resolution of the ③rd effect of <<17069>>.)\n\n~~~\n\n『Unaffected by your opponent's activated effects』:\n● <<22950>>'s effect\n● <<15741>>'s effect\n● <<18732>>'s effect\n● <<18008>>'s effect\n● <<17154>>'s effect\n● <<13592>>'s effect\n● <<22203>>'s effect\n● (Untranslated text related to <<22556>>'s effects:) 「<<22556>>」①の効果が適用されている状況での、自分フィールドの元々の属性が光属性の「妖精伝姫」モンスター\n● (Untranslated text related to <<23024>>'s effects:) 「<<23024>>」②の効果が適用されている状況での、『EXデッキから特殊召喚された自分フィールドの「メルフィー」モンスター』\n● (Untranslated text related to <<22580>>'s effects:) 「<<22580>>」『●３体以上：』の効果が適用されている状況での、自分のモンスターゾーンの「<<7735>>」\n● A monster Special Summoned by <<17253>>'s ②nd effect\n● A monster equipped with <<20413>>\n● (Untranslated text related to <<19900>>'s effects:) 「<<19900>>」の①の効果が適用されている状況での自分フィールドのドラゴン族・炎属性モンスター\n● Monsters on your field while <<16757>>'s ①st effect is applying\n● (Untranslated text related to <<12763>>'s effects:) 「<<12763>>」の①の効果が適用されている状況での自分フィールドの恐竜族モンスター\n\n~~~\n\n『Unaffected by activated monster effects』:\n● <<22743>>'s effect\n● <<18507>>'s effect\n● <<18811>>'s effect\n● <<14842>>'s effect\n● <<14634>>'s effect\n● <<13391>>'s effect\n● <<13214>>'s effect\n● <<12522>>'s effect\n● <<11354>>'s effect\n● <<11355>>'s effect\n● <<11356>>'s effect\n● <<11357>>'s effect\n● <<11541>>'s effect\n● <<11542>>'s effect\n● <<11543>>'s effect\n● <<11358>>'s effect\n● <<13502>>'s effect\n● <<18176>>'s effect\n● <<15272>>'s effect\n● <<13755>>'s effect\n● <<17160>>'s effect\n● \"Gimmick Puppet\" monsters in your Monster Zone while <<20235>>'s ②nd effect is applying\n● (Untranslated text related to <<15833>>'s effects:) 「<<15833>>」の②の効果が適用されている状況での、自分のモンスターゾーンの「<<8885>>」モンスター\n● \"Ancient Gear Golem\", and monsters that mention it, in your Monster Zone, while <<19913>>'s ①st effect is applying\n● (Untranslated text related to <<16538>>'s effects:) 「<<16538>>」の効果で儀式召喚されたモンスター\n● A monster Fusion Summoned by <<14621>>\n\n~~~\n\n『Unaffected by activated card effects, except \"Virtual World\" cards』:\n● <<18509>>\n\n~~~\n\n『Unaffected by your opponent's activated Spell/Trap effects and by activated effects from opponent's monsters whose original Level/Rank is lower than this card's current Level』:\n● <<22207>>\n\n~~~\n\n『Unaffected by your opponent's activated effects, unless they target this card』:\n● <<22976>>\n● <<22977>>",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/23491"
+        }
+      ],
+      "sourceId": "23491",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/23491",
+      "updatedAt": "2026-06-18T20:41:29.651Z"
+    },
+    {
+      "id": "ygoresources-qa-23050",
+      "recordType": "qa",
+      "title": "I activate <<23172>>'s『target up to 3 cards you control; destroy them, [...], then you ca…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "Yes, you can. (Whether any Monster Cards were targeted is irrelevant. Even if only cards that were originally Spells/Traps, or only face-down cards, are targeted, <<20257>> and <<12950>> can be activated in response.)\n\nSimilarly, in response to <<15538>>, both <<20257>> and <<12950>> can be activated, regardless of the cards targeted.",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/23050"
+        }
+      ],
+      "sourceId": "23050",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/23050",
+      "updatedAt": "2026-06-18T20:41:29.663Z"
+    },
+    {
+      "id": "ygoresources-qa-22858",
+      "recordType": "qa",
+      "title": "墓地の「<<14830>>」の『②：自分の墓地からこのカードと「ウィッチクラフト」魔法カード１枚を除外して発動できる。この効果は、その魔法カード発動時の効果と同じになる』モンスタ…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [
+        "魔法"
+      ],
+      "conclusion": "<<14414>>, <<14415>>, and <<23168>> are Spell Cards without an effect that applies when they resolve, you cannot banish them as the cost to activate <<14830>>'s effect.",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/22858"
+        }
+      ],
+      "sourceId": "22858",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/22858",
+      "updatedAt": "2026-06-18T20:41:29.675Z"
+    },
+    {
+      "id": "ygoresources-qa-22505",
+      "recordType": "qa",
+      "title": "My opponent controls <<6682>>, and its『any card sent to the Graveyard is banished instead…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "No, you cannot.\n\nIf you want to apply <<14415>>'s『if a \"Witchcrafter\" monster you control would discard to activate an effect, you can send this card from your field to the Graveyard instead』effect, you need to be able to successfully send <<14415>> to the Graveyard. (This also applies to <<14414>>'s ②nd effect.)\n\n~~~\n\nSimilarly, if <<6682>> is applying, the following effects also cannot be applied:\n● <<16419>>'s ④th effect\n● <<17777>>'s ②nd effect\n● <<13614>>'s ③rd effect\n● <<16248>>'s ②nd effect\n● <<23023>>'s ①st effect\n● <<23168>>'s ②nd effect",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/22505"
+        }
+      ],
+      "sourceId": "22505",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/22505",
+      "updatedAt": "2026-06-18T20:41:29.687Z"
+    },
+    {
+      "id": "ygoresources-qa-22486",
+      "recordType": "qa",
+      "title": "A \"Witchcrafter\" monster is face-up in my Monster Zone, and <<14410>> and Witchcrafter Ho…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "The effects of both <<14410>> and <<23167>> are effects that only be activated as Chain Link 1 during the End Phase.\n\nTherefore, if you wish to activate both of their『add this card to your hand』effects, you must activate and resolve each of them separately. (You cannot have them form a Chain.)\n\n~~~\n\nThe same also applies if activating the effects of multiple of the following during the End Phase:\n● <<14412>>'s ②nd effect\n● <<17038>>'s ②nd effect\n● <<14411>>'s ②nd effect\n● <<15053>>'s ②nd effect\n● <<14413>>'s ②nd effect\n● <<14414>>'s ③rd effect\n● <<14415>>'s ③rd effect",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/22486"
+        }
+      ],
+      "sourceId": "22486",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/22486",
+      "updatedAt": "2026-06-18T20:41:29.699Z"
+    },
+    {
+      "id": "ygoresources-qa-22484",
+      "recordType": "qa",
+      "title": "自分のモンスターゾーンに「<<14405>>」が表側表示で存在する状態で、自分は手札から「<<14414>>」を発動しました。 その発動にチェーンして、相手がその「<<14414…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [
+        "魔法"
+      ],
+      "conclusion": "The『if a \"Witchcrafter\" monster you control would discard to activate an effect, you can send this card from your field to the Graveyard instead』effect of <<14414>> can only be applied once the card itself has finished resolving. In this scenario, when activating the effect of a \"Witchcrafter\" monster in the same Chain as the activation of <<14414>>, you cannot apply the effect of <<14414>>.\n\nThis also applies to the following cards' effects:\n● <<14415>>'s ②nd effect\n● <<23168>>'s ②nd effect",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/22484"
+        }
+      ],
+      "sourceId": "22484",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/22484",
+      "updatedAt": "2026-06-18T20:41:29.711Z"
+    },
+    {
+      "id": "ygoresources-qa-16118",
+      "recordType": "qa",
+      "title": "If the activation of <<4798>>, <<11901>>, or <<23161>>, is negated by Magic Jammer, will …",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "A Spell Card that has its activation negated by Magic Jammer is not treated as being destroyed on the field.\n\nTherefore, even if the activation of <<4798>> is negated, <<4734>> and similar monsters are not destroyed by their own effects. (Note that when the activation of <<11901>> or <<23161>> is negated, its name is not treated as <<4798>>, so <<4734>> and similar monsters are not destroyed by their own effects.)\n\nThe following effects will similarly also not apply to destroy the respective cards:\n● <<5478>>'s effect\n● <<5476>>'s ④th effect\n● <<4735>>'s ④th effect\n● <<4733>>'s ④th effect\n● <<5450>>'s ③rd effect\n● <<4773>>'s ④th effect",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/16118"
+        }
+      ],
+      "sourceId": "16118",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/16118",
+      "updatedAt": "2026-06-18T20:41:29.723Z"
+    },
+    {
+      "id": "ygoresources-qa-24121",
+      "recordType": "qa",
+      "title": "My opponent has activated <<14944>>'s『this effect becomes that Spell's effect when that c…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "You can activate neither <<12950>>'s effect, nor <<20555>>.\n(<<14944>>'s effect is『this effect becomes that Spell's effect when that card is activated.』It is not treated as including an effect that sends a card from the Deck to the Graveyard, and is not treated as including an effect that Special Summons, regardless of what card was sent to the Graveyard to activate it.)\n\n~~~\n\nSimilarly, none of the following can be activated in response to <<14944>>'s effect, regardless of what Spell was sent to the Graveyard to activate it:\n● <<13081>>'s ①st effect\n● <<17794>>'s ②nd effect\n● <<17068>>'s effect\n● <<9008>>'s 1st bulleted (●) effect\n\n~~~\n\nAdditionally, even if <<18540>>, or the first bulleted (●) effect of <<17043>>, are activated, this activation is not considered to include an effect to『send a card from the Deck to the Graveyard,』or include an effect to『Special Summon a monster.』Therefore, you cannot activate <<12950>>'s effect, <<20555>>, <<9008>>, or similar effects, in response.",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/24121"
+        }
+      ],
+      "sourceId": "24121",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/24121",
+      "updatedAt": "2026-06-18T20:41:29.735Z"
+    },
+    {
+      "id": "ygoresources-qa-12942",
+      "recordType": "qa",
+      "title": "<<11110>>'s ②nd effect, which reads『the Levels of that monster and this card become their…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "The modified Levels remain in place. For monster effects that change Levels, if the effect also changes the Levels of other monsters, it will continue to be applied even if the effects of the monster to which the effect was applied, or the effects of the monster that applied the effect, or both, are negated.\n\n~~~\n\nThis also applies to the following cards, or their effects, that change Levels: <<9987>>, <<10369>>, <<10867>>, <<11560>>, <<12054>>, <<12255>>, <<11303>>, <<12289>>, <<11962>>, <<14079>>, <<14748>>, <<14810>>, <<16508>>, and <<18466>>.",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/12942"
+        }
+      ],
+      "sourceId": "12942",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/12942",
+      "updatedAt": "2026-06-18T20:41:29.747Z"
+    },
+    {
+      "id": "ygoresources-qa-16743",
+      "recordType": "qa",
+      "title": "Can I activate the『if a monster Special Summoned from the Extra Deck is on the field』effe…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "Ⓐ: No, you cannot.\nIf a monster that was Special Summoned from the Extra Deck is changed to face-down Defense Position, it is no longer considered to be『a monster Special Summoned from the Extra Deck』. (However, that monster is still considered to be『a Special Summoned monster』.)\n\nⒷ: Yes, you can.\nIf a monster that was Special Summoned from the Extra Deck is temporarily banished and returns to the field, it is still considered to be『a monster Special Summoned from the Extra Deck.』\n(Note: temporary banishment includes both monsters like <<12074>> or <<14356>> being temporarily banished by their own effects and then returning, or other monsters that were Special Summoned from the Extra Deck being banished by other effects, such as the ②nd effect of <<19188>>, or <<5560>>'s effect.)\n\n~~~\n\nThe following are some examples of effects related to monsters being Special Summoned from the Extra Deck:\nMonster effects:\n● <<22726>>'s ②nd effect\n● <<15240>>'s ①st effect\n● <<15241>>'s ①st effect\n● <<15242>>'s ①st effect\n● <<21792>>'s ①st effect\n● <<19484>>'s ①st effect\n● <<15266>>'s ①st effect\n● <<12064>>'s ①st effect\n● <<12920>>'s ①st effect\n● <<14616>>'s ②nd effect\n● <<11486>>'s ②nd effect\n● <<11488>>'s ②nd effect\n● <<11483>>'s ②nd effect\n● <<11484>>'s ②nd effect\n● <<22533>>'s effect\n● <<12600>>'s ①st effect\n● (Untranslated text related to <<18823>>'s effects:) 「<<18823>>」の融合素材\n● (Untranslated text related to <<14297>>'s effects:) 「<<14297>>」のリンク素材\nPendulum effects:\n● <<12405>>'s ①st effect\n● <<12919>>'s ①st effect\n● <<12592>>'s ①st effect\nSpell effects:\n● <<17105>>'s ①st effect\n● <<11847>>'s ②nd effect\n● <<17044>>'s ②nd effect\n● <<15148>>'s effect\n● <<14188>>'s effect\n● <<22570>>'s ①st effect\n● <<14621>>'s ①st effect\n● <<16538>>'s ①st effect\nTrap effects:\n● <<15065>>'s ①st effect\n● <<14526>>'s ①st effect\n● <<17108>>'s ②nd effect\n● <<22698>>'s ①st effect",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/16743"
+        }
+      ],
+      "sourceId": "16743",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/16743",
+      "updatedAt": "2026-06-18T20:41:29.759Z"
+    },
+    {
+      "id": "ygoresources-qa-22773",
+      "recordType": "qa",
+      "title": "I activate <<14757>>'s『return this card to the hand, and if you do, Special Summon 1 Leve…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "The player that activated <<14757>>'s effect will still resolve it normally.\n(They return that <<14757>> to its owner's hand, and Special Summon an appropriate monster from their hand or Graveyard.)\n\n~~~\n\nThis also applies to any of the following monster effects:\n● <<14763>>'s ②nd effect\n● <<14759>>'s ②nd effect\n● <<14761>>'s ②nd effect\n● <<15012>>'s ②nd effect\n● <<14764>>'s ③rd effect\n● <<14760>>'s ③rd effect\n● <<14758>>'s ③rd effect\n● <<14762>>'s ③rd effect\n● <<20943>>'s ③rd effect",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/22773"
+        }
+      ],
+      "sourceId": "22773",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/22773",
+      "updatedAt": "2026-06-18T20:41:29.771Z"
+    },
+    {
+      "id": "ygoresources-qa-10803",
+      "recordType": "qa",
+      "title": "<<7397>>'s『neither player can add cards from their Deck to their hand except by drawing t…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "Ⓐ: You cannot activate <<20534>>.\n\nⒷ: You can activate <<10418>>. However, if <<7397>>'s effect is still applying by the time that activation resolves, you cannot apply『add 1 Level 4 or lower Beast-Warrior monster from your Deck to your hand.』(Note that, if <<7397>>'s effect is no longer applying by that time, you can apply the effect of <<10418>>.)",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/10803"
+        }
+      ],
+      "sourceId": "10803",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/10803",
+      "updatedAt": "2026-06-18T20:41:29.783Z"
+    },
+    {
+      "id": "ygoresources-qa-10208",
+      "recordType": "qa",
+      "title": "自分のモンスターゾーンに「<<21371>>」が２体存在している場合、『②：自分・相手のメインフェイズ及び相手バトルフェイズに、１００LPを払って発動できる（同一チェーン上では１…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "Yes, you can.\n\nThis also applies to:\n● <<9118>>'s ②nd effect\n● <<11629>>'s ②nd effect\n● <<9511>>'s ②nd effect\n● <<14116>>'s ③rd effect\n● <<13714>>'s ②nd effect",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/10208"
+        }
+      ],
+      "sourceId": "10208",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/10208",
+      "updatedAt": "2026-06-18T20:41:29.795Z"
+    },
+    {
+      "id": "ygoresources-qa-24333",
+      "recordType": "qa",
+      "title": "A Spell/Trap that's Special Summoned with the effect of <<22995>> is treated as a『Normal …",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "Yes, it can.",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/24333"
+        }
+      ],
+      "sourceId": "24333",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/24333",
+      "updatedAt": "2026-06-18T20:41:29.807Z"
+    },
+    {
+      "id": "ygoresources-qa-24332",
+      "recordType": "qa",
+      "title": "Both players control a <<17069>> in their Monster Zone, which has the『you can only contro…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "You can take control of <<17069>> normally, however if you do, immediately after you do, the <<17069>> that you just gained control of will be destroyed. (It will not be treated as having been destroyed by a card effect.)\n\nFurthermore, <<17069>>'s『if this Fusion Summoned card in its owner's control leaves the field by an opponent's card』effect then cannot be activated.",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/24332"
+        }
+      ],
+      "sourceId": "24332",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/24332",
+      "updatedAt": "2026-06-18T20:41:29.819Z"
+    },
+    {
+      "id": "ygoresources-qa-24331",
+      "recordType": "qa",
+      "title": "My <<9455>> has resolved this turn. I resolve <<22692>>, Special Summoning <<4041>>, and …",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "You will draw 1 card after fully resolving <<22692>>.\n\n(In other words, since you Special Summoned <<4041>>, you will therefore『add 1 Spell/Trap that mentions \"<<4041>>\" from your Deck to your hand.』Only after that will you draw a card.)",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/24331"
+        }
+      ],
+      "sourceId": "24331",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/24331",
+      "updatedAt": "2026-06-18T20:41:29.831Z"
+    },
+    {
+      "id": "ygoresources-qa-24330",
+      "recordType": "qa",
+      "title": "「<<23002>>」の『①：自分フィールドのモンスターを融合素材とし、融合モンスター１体を融合召喚する。「召喚獣」融合モンスターを融合召喚する場合、自分・相手の除外状態のモンス…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [
+        "魔法"
+      ],
+      "conclusion": "No, you cannot.\n\nIf a banished card is returned to the Graveyard by effects such as those of <<23002>>, <<6941>>, or <<12074>>, it is not considered to have been sent to the Graveyard.\n\n~~~\n\nThe following are also cards whose『this card is sent to the Graveyard』effects cannot be activated if they are returned to the Graveyard while banished:\n● <<21358>>\n● <<21356>>\n● <<21789>>\n● <<21354>>\n● <<21355>>",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/24330"
+        }
+      ],
+      "sourceId": "24330",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/24330",
+      "updatedAt": "2026-06-18T20:41:29.843Z"
+    },
+    {
+      "id": "ygoresources-qa-24329",
+      "recordType": "qa",
+      "title": "If I resolve <<23002>> while <<14740>>'s『any card sent to the Graveyard is banished inste…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "Yes, you can.\n(You can return either player's face-up banished monsters to the Graveyard, as usual.)\n\n~~~\n\nSimilarly, if one of the following effects resolves while『any card sent to the Graveyard is banished instead,』banished cards will still return to the Graveyard normally:\n● <<6941>>'s effect\n● <<12074>>'s ②nd effect",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/24329"
+        }
+      ],
+      "sourceId": "24329",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/24329",
+      "updatedAt": "2026-06-18T20:41:29.855Z"
+    },
+    {
+      "id": "ygoresources-qa-24328",
+      "recordType": "qa",
+      "title": "If my <<22578>> resolves targeting my opponent's <<22976>>, which is『unaffected by your o…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "Yes, you can.\n\nSince <<22976>> is not unaffected by effects that target it, it can also be used as Fusion Material when resolving <<22578>>.\n\n~~~\n\nThis is the same if <<22578>> is activated by targeting any of the following monsters and the first『●』effect is applied, they can be used as Fusion Material as per the text:\n● <<22977>>\n● <<15741>>",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/24328"
+        }
+      ],
+      "sourceId": "24328",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/24328",
+      "updatedAt": "2026-06-18T20:41:29.867Z"
+    },
+    {
+      "id": "ygoresources-qa-24189",
+      "recordType": "qa",
+      "title": "While <<21460>> is the only monster on my field, I activate its『Special Summon 1 \"<<13670…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "First, resolve the effect of <<21460>> by Special Summoning both <<13670>> and <<14829>>, and then (optionally) destroying a card on the field. After that, if the effect of <<13447>> or <<7934>> is still applying, send one of <<13670>> and <<14829>> to the Graveyard.\n\nNote that if you destroy <<13447>>/<<7934>> using the effect of <<21460>>, both <<13670>> and <<14829>> will remain on the field.\n\nAdditionally, note that you cannot activate <<21460>> while <<7934>>'s effect (or <<5622>>'s effect) is already applying. However, you can activate <<21460>>'s effect even while <<13447>> is already applying, as long as you do not currently control a face-up Warrior monster.",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/24189"
+        }
+      ],
+      "sourceId": "24189",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/24189",
+      "updatedAt": "2026-06-18T20:41:29.879Z"
+    },
+    {
+      "id": "ygoresources-qa-23969",
+      "recordType": "qa",
+      "title": "My opponent controls both <<4340>> and <<17047>>, whose『each player can only control 1 fa…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "Yes, you can. When this Chain then resolves, both <<12070>> and <<12067>> are Special Summoned, the activation of <<17047>>'s effect is negated, and <<17047>> is destroyed. (Both <<12070>> and <<12067>> remain on the field.)\n\nSimilarly, <<12070>>'s effect can also be activated while <<13447>> is applying. In this case, after resolving <<12070>>'s effect normally, choose one of <<12070>> and <<12067>>, and send the chosen monster to the Graveyard.",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/23969"
+        }
+      ],
+      "sourceId": "23969",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/23969",
+      "updatedAt": "2026-06-18T20:41:29.890Z"
+    },
+    {
+      "id": "ygoresources-qa-24327",
+      "recordType": "qa",
+      "title": "Ⓐ: When resolving <<22721>>'s『Fusion Summon 1 LIGHT Machine Fusion Monster from your Extr…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "Ⓐ: No, you cannot.\n『Including \"<<6390>>\"』in <<22721>>'s text refers to the specific card \"<<6390>>\".\nEven though <<22720>>'s name contains \"<<6390>>\", it is not \"<<6390>>\" itself.\n\nⒷ: No, you cannot.\nThe requirements for <<13758>> or <<7403>> both specify the particular card name \"<<6390>>\". (However, note that cards like <<14047>>, whose name is treated as \"<<6390>>\" due to their effect, can be used.)\n\n~~~\n\nSimilarly, the mention of \"<<6390>>\" in the following effects also refers to the specific card name \"<<6390>>\", and therefore does not include <<22720>>.\nEffect monsters:\n● (Untranslated text related to <<22721>>'s effects:) 「<<22721>>」の『「<<6390>>」を含む』とは、「<<6390>>」という特定のカードを指定しています。\n● (Untranslated text related to <<22720>>'s effects:) 「<<22720>>」のカード名には「<<6390>>」と含まれていますが、「<<6390>>」と同名カードとしては扱いません。\nFusion monsters:\n● <<21163>>'s ①st and ②nd effects\n● (Untranslated text related to <<13722>>'s effects:) 「<<13722>>」②③\n● <<13723>>'s ③rd effect\n● (Untranslated text related to <<10867>>'s effects:) 「<<10867>>」②③\n● <<7412>>'s ①st effect\nXyz monsters:\n● <<10870>>'s ①st and ②nd effects\nSpell effects:\n● <<13847>>'s ②nd effect\n● <<6734>>'s effect\n● <<6397>>'s effect\n● <<6396>>'s effect\nTrap effects:\n● <<13770>>'s effect\n● <<10868>>'s effect\n● <<7556>>'s effect\n● <<6577>>'s effect",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/24327"
+        }
+      ],
+      "sourceId": "24327",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/24327",
+      "updatedAt": "2026-06-18T20:41:29.902Z"
+    },
+    {
+      "id": "ygoresources-qa-24326",
+      "recordType": "qa",
+      "title": "Ⓐ: If <<22954>> and <<15143>> are both on my field, will I gain <<15143>>'s『●1+:』effect? …",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "Ⓐ: No, you cannot.\n<<15143>>'s card text refers to the specific card names \"<<6565>>\", \"<<6563>>\", and \"<<6564>>\". Although the card names of <<22956>>, <<22954>>, and <<22955>> include \"<<6565>>\", \"<<6563>>\", \"<<6564>>\" respectively, they are not those specific names.\n\nⒷ: No, you cannot.\n(Additionally, note that while <<22956>> refers to『1 \"Sacred Beast\" monster [...], except \"<<22956>>\",』this is not specifically mentioning the card name \"<<6565>>\".)\n\nⒸ: No, you cannot.\n\n~~~\n\nSimilarly, when the following cards list \"<<6565>>\", \"<<6563>>\", or \"<<6564>>\", these do not refer to <<22956>>, <<22954>>, or <<22955>>:\nEffect monsters:\n● (Untranslated text related to <<15143>>'s effects:) 「<<15143>>」の『自分フィールドの「<<6563>>」「<<6564>>」「<<6565>>」』とは、「<<6563>>」「<<6564>>」「<<6565>>」という特定のカードを指定しています。\n● (Untranslated text related to <<22954>>'s effects:) 「<<22954>>」や「<<22955>>」、「<<22956>>」のカード名には、「<<6563>>」や「<<6564>>」、「<<6565>>」と含まれていますが、「<<6563>>」や「<<6564>>」、「<<6565>>」と同名カードとしては扱いません。\nFusion monsters:\n● <<15514>>'s text\nSpell effects:\n● <<12903>>'s ①st and ②nd effects\n● <<15137>>'s ①st effect\n● <<19469>>'s ①st effect\n● <<15139>>'s ①st effect\n● <<15136>>'s ①st effect\nTrap effects:\n● <<15142>>'s ②nd or ③rd effects",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/24326"
+        }
+      ],
+      "sourceId": "24326",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/24326",
+      "updatedAt": "2026-06-18T20:41:29.914Z"
+    },
+    {
+      "id": "ygoresources-qa-23215",
+      "recordType": "qa",
+      "title": "Can the effect of <<13587>> be chained to the『●Special Summon 1 \"<<4007>>\" from your hand…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "Yes, you can.\n(The first『●』effect of <<16653>> is an effect that『includes an effect that Special Summons a monster from the Graveyard,』regardless of whether there is a <<4007>> in the Graveyard when it is activated.)\n\nIn addition, if the effect of <<13587>> is chained when the first『●』effect is used at the same time as the card activation of <<16653>>, the card activation of <<16653>> will be negated, so it will be sent to the Graveyard.\nIn this case, <<16653>> isn't treated to be sent from the Spell & Trap Zone to the Graveyard, so the『If this face-up card is sent from the Spell & Trap Zone to the Graveyard: Destroy all monsters you control』effect won't be activated.\n\n(If the effect of <<13587>> is chained when the first『●』effect is activated while <<16653>> is already face-up in the Spell & Trap Zone, the activation of the『●』effect will be negated, but <<16653>> will remain in the Spell & Trap Zone.)\n\n~~~\n\nFor example, the following cards' effects also include『an effect that Special Summons a monster from the Graveyard』, so the effect of <<13587>> can be chained even if there are no appropriate monsters in the Graveyard, or in a situation where monsters cannot be Special Summoned from the Graveyard, when that effect is activated:\n\nMonster effects:\n● <<22984>>'s ②nd effect\n● <<21956>>'s ①st effect\n● <<22958>>'s ②nd effect\n● <<21956>>'s ①st effect\n● <<22729>>'s ②nd effect\n● <<22732>>'s ②nd effect\n● <<22704>>'s ①st monster effect\n● <<22700>>'s effect\n● <<22691>>'s ②nd effect\n● <<22199>>'s ①st effect\n● <<22162>>'s ①st effect\n● <<22127>>'s ②nd effect\n● <<22144>>'s ①st effect\n● <<22148>>'s ①st effect\n● <<22143>>'s ②nd effect\n● <<20718>>'s ①st effect\n● <<18165>>'s ③rd effect\n● <<19398>>'s ②nd effect\n● <<14192>>'s ①st effect\n● <<19851>>'s ①st effect\n● <<15274>>'s ③rd effect\n● <<20931>>'s ①st effect\n● <<16524>>'s ③rd effect\n● <<21173>>'s ①st effect\n● <<8577>>'s ①st effect\n● <<20778>>'s ②nd effect\n● <<20219>>'s ②nd effect\n● <<14800>>'s ②nd effect\n● <<20519>>'s ②nd effect\n● <<14937>>'s ③rd effect\n● <<18836>>'s ②nd effect\n● <<20609>>'s ③rd effect\n● <<10588>>'s ①st and ②nd effects\n● <<21432>>'s ①st effect\n● <<21460>>'s ②nd effect\n● <<19753>>'s ②nd effect\n● <<12068>>'s effect\n● <<12069>>'s effect\n● <<12070>>'s effect\n● <<12071>>'s effect\n● <<12072>>'s effect\n● <<15012>>'s ②nd effect\n● <<14761>>'s ②nd effect\n● <<14757>>'s ②nd effect\n● <<14763>>'s ②nd effect\n● <<14759>>'s ②nd effect\n● <<14765>>'s ①st effect\n● <<15027>>'s ①st effect\n● <<14223>>'s ②nd effect\n● <<11942>>'s ①st effect\n● <<7409>>'s ④th effect\n● <<19456>>'s ④th effect\n● <<7410>>'s ④th effect\n● <<19860>>'s ②nd effect\n● <<10142>>'s effect\n● <<12928>>'s effect\n● <<15637>>'s effect\n● <<22134>>'s ③rd monster effect\n● <<22526>>'s ③rd effect\n● <<22536>>'s ②nd effect\n● <<22548>>'s ①st effect\n● <<22546>>'s ①st effect\n● <<22554>>'s ②nd effect\nSpell effects:\n● <<13359>>'s ①st effect\n● The 1st bulleted (●) part of <<22519>>'s ①st effect\nTrap effects:\n● <<21058>>'s effect\n● <<21350>>'s ①st effect\n● <<21754>>'s effect\n● <<21374>>'s 2nd bulleted (●) effect\n● (Untranslated text related to <<17819>>'s effects:) 「<<17819>>」1つ目の『●』\n● <<20534>>'s ③rd effect\n● <<20605>>'s ①st effect\n● <<12502>>'s ①st effect\n● <<21198>>'s ①st effect\n● <<14981>>'s ①st effect\n● <<15126>>'s ①st effect\n● <<14766>>'s ①st effect\n● <<18527>>'s ①st effect\n● <<12859>>'s effect\n● <<5118>>'s effect\n● <<7743>>'s effect\n● <<19909>>'s effect\n● <<13801>>'s effect\n● <<6542>>'s effect\n● <<16080>>'s effect\n● <<15642>>'s ①st effect\n● <<11580>>'s ①st effect\n● <<16859>>'s ①st effect\n● <<12797>>'s ①st effect\n● <<17818>>'s ①st effect\n● <<17815>>'s ②nd effect\n● <<13706>>'s ①st effect\n● <<13211>>'s ①st effect\n● <<17466>>'s ①st effect\n● <<22571>>'s ①st effect\n● <<23007>>'s ①st effect\n● (Untranslated text related to <<23036>>'s effects:) 「<<23036>>」②の『●１つ：』・『●５つ：』\n● The 1st bulleted (●) part of <<23003>>'s ①st effect",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/23215"
+        }
+      ],
+      "sourceId": "23215",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/23215",
+      "updatedAt": "2026-06-18T20:41:29.926Z"
+    },
+    {
+      "id": "ygoresources-qa-21722",
+      "recordType": "qa",
+      "title": "In a situation where there's no \"Dracotail\" card in the opponent's Graveyard, the opponen…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "It can be activated.\n(Because <<21363>> includes『●Adding a card(s) from the Graveyard to the hand, Deck, and/or Extra Deck』.)\n\nThe following cards' effects also include『●Adding a card(s) from the Graveyard to the hand, Deck, and/or Extra Deck』, so even if they're activated when there's no appropriate card in the Graveyard, the effect of <<13587>> can be activated in response:\n\n~~~\n\nMonster effects:\n● <<22192>>\n● <<22154>>\n● <<22152>>\n● <<16749>>\n● <<14384>>\n● <<19475>>\n● <<17762>>\n● <<17070>>\n● <<14710>>\n● <<14110>>\n\n~~~\n\nSpells:\n● <<22200>>\n● <<22210>>\n● <<22167>>\n● <<22156>>\n● <<22157>>\n● <<15286>>\n● <<8492>>\n● <<12337>>\n● <<20526>>\n● <<5673>>\n● <<16856>>\n● <<13947>>\n● <<21476>>\n● <<21464>>\n● <<20432>>\n● <<18745>>\n● <<19904>>\n\n~~~\n\nTraps:\n● <<22178>>\n● <<21843>>\n● <<21364>>",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/21722"
+        }
+      ],
+      "sourceId": "21722",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/21722",
+      "updatedAt": "2026-06-18T20:41:29.938Z"
+    },
+    {
+      "id": "ygoresources-qa-9826",
+      "recordType": "qa",
+      "title": "My opponent has no \"Maliss\" cards in their Graveyard, and activates <<20588>>. This activ…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "Yes, you can.\n(That effect of <<20588>> includes an effect to『●Banish a card(s) from the Graveyard』)\n\nThe same goes for the following cards' effects:\n\n~~~\n\nMonster effects:\n● <<22980>>'s ①st effect\n● <<15994>>'s ①st effect\n● <<20422>>'s ①st effect\n● <<8732>>'s effect\n● <<21160>>'s ①st effect\n● <<18153>>'s ①st effect\n\n~~~\n\nSpell effects:\n● <<22993>>'s ①st effect\n● <<9132>>'s effect\n● <<11731>>'s effect\n● <<12852>>'s ①st effect\n● <<12795>>'s ①st effect\n● <<11447>>'s ①st effect\n● <<11490>>'s ①st effect\n● <<12491>>'s effect\n● <<6432>>'s effect\n● <<21939>>'s 2nd bulleted (●) effect\n● <<11895>>'s effect\n\n~~~\n\nTrap effects:\n● <<19211>>'s ①st effect\n● <<21050>>'s ②nd effect\n● <<15835>>'s ①st effect",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/9826"
+        }
+      ],
+      "sourceId": "9826",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/9826",
+      "updatedAt": "2026-06-18T20:41:29.950Z"
+    },
+    {
+      "id": "ygoresources-qa-24176",
+      "recordType": "qa",
+      "title": "I activate <<21433>>'s『reveal 1 other \"Vanquish Soul\" monster in your hand; Special Summo…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "Yes, you can.\n\nSimilarly, if you activate <<18734>> as Chain Link 1 by revealing <<18729>>, you can also reveal that same <<18729>> as the cost to activate <<18730>>'s effect later during the same chain.\n\n~~~\n\nThis also applies when revealing monsters to activate the following cards/effects.\nMonster effects:\n● <<22533>>'s effect\n● <<22963>>'s ①st effect\n● <<22961>>'s ①st effect\n● <<22959>>'s ①st effect\n● <<21433>>'s ①st and ②nd effects\n● <<18729>>'s ②nd effect\n● <<18732>>'s ②nd effect\n● <<19160>>'s ②nd effect\n● <<18728>>'s ②nd effect\n● <<18731>>'s ②nd effect\n● <<18727>>'s ②nd effect\n● <<14550>>'s ①st effect\n● <<14551>>'s ①st effect\n● <<14553>>'s ①st effect\n● <<14554>>'s ①st effect\n● <<14555>>'s ①st effect\n● <<21157>>'s ①st effect\n● <<20489>>'s ①st effect\n● <<16828>>'s ①st effect\n● <<14999>>'s ①st effect\n● <<13046>>'s ①st effect\n● <<12357>>'s ①st effect\n● <<22716>>'s ①st effect\n● <<8272>>'s ①st effect\n● <<19851>>'s ①st monster effect\n\nSpell Cards/effects:\n● <<20536>>'s ①st effect\n● <<17729>>'s ①st effect\n● <<16541>>'s ①st effect\n● <<12858>>'s ①st effect\n\nTrap Cards/effects:\n● <<19220>>'s effect\n● <<20255>>'s ②nd effect\n● <<21749>>'s effect\n● <<8515>>'s effect\n● <<8364>>'s effect\n● <<8226>>",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/24176"
+        }
+      ],
+      "sourceId": "24176",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/24176",
+      "updatedAt": "2026-06-18T20:41:29.962Z"
+    },
+    {
+      "id": "ygoresources-qa-24054",
+      "recordType": "qa",
+      "title": "The『immediately after this effect resolves, Synchro Summon using this card you control』ef…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "If <<19859>>'s effect was activated as Chain Link 1, that effect of <<12627>>, as well as <<4861>>, can each can be activated during the attempt to Synchro Summon; if the effect of <<19859>> was activated as Chain Link 2 or higher, neither can be.\n\n~~~\n\nThe following cards or their effects also can be activated if a monster is Normal, Synchro, Xyz, Pendulum, or Link Summoned immediately after resolving an effect as Chain Link 1, but they cannot be activated if the effect was activated as Chain Link 2 or higher:\n\nMonster effects:\n● <<7397>>'s effect\n● <<9612>>'s effect\n● <<9514>>'s ①st effect\n● <<14262>>'s ①st effect\n● <<11627>>'s ①st effect\n● <<13255>>'s ②nd effect\n● <<14774>>'s ②nd effect\n● <<14601>>'s ②nd effect\n● <<16522>>'s ①st effect\n● <<11380>>'s ①st effect\n● <<18925>>'s ②nd effect\n● <<19164>>'s ②nd effect\n● <<11553>>'s ①st effect\n● <<19628>>'s ①st effect\n● <<13334>>'s ②nd effect\n● <<11377>>'s 2nd bulleted (●) effect\n● <<9761>>'s 2nd bulleted (●) effect\n● <<12998>>'s 2nd bulleted (●) effect\n● <<20929>>'s ②nd effect\n● <<20228>>'s ③rd effect\n● <<15770>>'s ②nd effect\n\nTrap effects:\n● <<17987>>'s ①st effect\n● <<6712>>'s effect\n● <<4864>>'s effect\n● <<12023>>'s effect\n● <<6918>>'s effect\n● <<9144>>'s effect\n● <<8684>>'s effect\n● <<15647>>'s effect\n● <<6450>>'s effect\n● <<9791>>'s effect\n● <<8855>>'s effect\n● <<12478>>'s effect\n● <<7803>>'s effect\n● <<16561>>'s effect\n● <<9008>>'s 2nd bulleted (●) effect\n● <<12187>>'s 2nd bulleted (●) effect\n● <<11411>>'s 2nd bulleted (●) effect\n● <<9792>>'s 2nd bulleted (●) effect\n● <<14902>>'s 2nd bulleted (●) effect\n● <<9007>>'s 2nd bulleted (●) effect\n● <<12017>>'s 2nd bulleted (●) effect\n\n~~~\n\nThe following are examples of effects which have you perform a Synchro Summon, Xyz Summon, Pendulum Summon, or Link Summon immediately after they resolve:\n\nEffects that have you perform a Synchro Summon:\n● <<21954>>'s ①st effect\n● <<21958>>'s ②nd effect\n● <<21961>>'s ①st effect\n● <<22698>>'s ②nd effect\n● <<22119>>'s ②nd effect\n● <<22192>>'s ③rd effect\n● <<22551>>'s ③rd effect\n● <<19857>>'s ③rd effect\n● <<19858>>'s ③rd effect\n● <<20426>>'s ②nd effect\n● <<20419>>'s ②nd effect\n● <<14656>>'s ①st effect\n● <<16724>>'s ②nd effect\n● <<10310>>'s effect\n● <<21033>>'s ①st effect\n● <<21178>>'s ②nd effect\n● <<9118>>'s ②nd effect\n● <<11629>>'s ②nd effect\n● <<13714>>'s ②nd effect\n● <<9511>>'s ②nd effect\n● <<14116>>'s ③rd effect\n● <<19176>>'s ②nd effect\n● <<17799>>'s ①st effect\n● <<12075>>'s ①st effect\n● <<19376>>'s ③rd effect\n● <<17819>>'s 2nd bulleted (●) effect\n● <<7920>>'s effect\n● <<18442>>'s ③rd effect\n● <<20250>>'s ①st effect\n● <<15567>>'s ①st effect\n● <<21371>>'s ②nd effect\n\nEffects that have you perform a Xyz Summon:\n● <<23022>>'s ②nd effect\n● <<19400>>'s ③rd effect\n● <<20581>>'s ②nd effect\n● <<12348>>'s effect\n● <<19213>>'s ①st effect\n● <<19530>>'s ①st effect\n● <<21379>>'s ②nd effect\n● <<20419>>'s ②nd effect\n● <<11032>>'s effect\n\nEffects that have you perform a Link Summon:\n● <<14670>>'s ①st effect\n● <<14671>>'s ①st effect\n● <<14676>>'s ①st effect\n● <<22715>>'s ②nd effect\n● <<22988>>'s ②nd effect\n● <<13625>>'s effect\n● <<15632>>'s bulleted (●) effect\n● <<20254>>'s ②nd effect\n● (Untranslated text related to <<20296>>'s effects:) 「<<20296>>」の①の２つ目の『●』\n● <<19723>>'s ③rd effect\n\nEffects that have you perform a Pendulum Summon:\n● <<19189>>'s effect\n● <<15958>>'s effect",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/24054"
+        }
+      ],
+      "sourceId": "24054",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/24054",
+      "updatedAt": "2026-06-18T20:41:29.974Z"
+    },
+    {
+      "id": "ygoresources-qa-23488",
+      "recordType": "qa",
+      "title": "I have activated <<16653>> while I control a <<16809>>, whose『other cards you control can…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "The activation of <<16653>> will be negated, and it will be destroyed.\n\nEven though cards on your field cannot be destroyed by your opponent's card effects, if a card's activation is negated and the card is then destroyed, this is not considered to be destroying a card on your field.\n\n~~~\n\nThis also applies if the activation of a Spell/Trap Card is negated, and it is destroyed, while any of the following effects are applying:\n● <<13357>>'s effect\n● <<11931>>'s effect\n● <<22976>>'s effect",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/23488"
+        }
+      ],
+      "sourceId": "23488",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/23488",
+      "updatedAt": "2026-06-18T20:41:29.986Z"
+    },
+    {
+      "id": "ygoresources-qa-19485",
+      "recordType": "qa",
+      "title": "I activate <<12582>>'s『equip this card to that target』effect. If, due to some other effec…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "Ⓐ: <<12582>> remains in the Monster Zone, in face-down Defense Position.\nⒷ: <<12582>> remains in your opponent's Monster Zone.\n\n~~~\n\nThis also applies if any of the following monsters activate their『equip this card』effects, but are no longer face-up, or no longer under your control, by the time those effects resolve:\n● <<12583>>\n● <<12584>>\n● <<6475>>\n● <<5552>>\n● <<20285>>\n● <<5555>>\n● <<20286>>\n● <<15020>>\n● <<20498>>\n● <<8693>>\n● <<8694>>\n● <<6181>>\n● <<12585>>\n● <<9589>>\n● <<9588>>\n● <<13996>>\n● <<14538>>\n● <<8647>>\n● <<8807>>\n● <<10589>>\n● <<13250>>\n● <<14840>>\n● <<9493>>\n● <<12623>>\n● <<7412>>\n● <<15261>>\n● <<11529>>\n● <<11075>>\n● <<7298>>",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/19485"
+        }
+      ],
+      "sourceId": "19485",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/19485",
+      "updatedAt": "2026-06-18T20:41:29.998Z"
+    },
+    {
+      "id": "ygoresources-qa-13729",
+      "recordType": "qa",
+      "title": "If a face-up <<10816>> in the Spell & Trap Zone leaves the field, will it be banished?",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "Yes, it will be.\n\n~~~\n\nThis also applies to the following cards:\n● <<5880>>\n● <<15987>>\n● <<7392>>\n● <<18156>>\n● <<18155>>\n● <<16499>>\n● <<16500>>\n● <<16501>>",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/13729"
+        }
+      ],
+      "sourceId": "13729",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/13729",
+      "updatedAt": "2026-06-18T20:41:30.010Z"
+    },
+    {
+      "id": "ygoresources-qa-23510",
+      "recordType": "qa",
+      "title": "My opponent controls <<21441>>, and its effect that makes it unaffected by non-\"Lunalight…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "If there is no appropriate choice of monsters to be used as Fusion Materials, you cannot activate an effect that performs a Fusion Summon.\n\nTherefore, you cannot activate <<7445>> in the given situation. Also, even if you Normal or Special Summon a <<15245>>, you cannot activate its effect that performs a Fusion Summon.\n\n~~~\n\nThe following are also examples of monsters that are unaffected by the effects of, or the activated effects of, monsters or Spells.\n\nEffect Monsters:\n● <<12938>>\n● <<12939>>\n● <<11961>>\n● <<5012>>\n● <<12234>>\n● <<12541>>\n● <<7184>>\n● <<18732>>\n● <<12522>>\n● <<11358>>\n● <<6099>>\n● <<6164>>\n● <<19468>>\n● <<22950>>\n\nRitual Monsters:\n● <<22976>>\n● <<22977>>\n\nFusion Monsters:\n● <<12776>>\n● <<11880>>\n● <<12698>>\n● <<12777>>\n● <<16943>>\n● <<12955>>\n● <<15272>>\n\nSynchro Monsters:\n● <<18507>>'s effect\n● <<14751>>'s effect\n● <<13852>>'s effect\n● <<17154>>'s effect\n● A monster Special Summoned by <<17253>>'s ②nd effect\n\nXyz Monsters:\n● <<13456>>\n● <<12548>>\n● <<11296>>\n● <<12325>>\n● <<13140>>\n● <<19500>>\n● <<12222>>\n● <<18313>>\n● <<18008>>\n\nLink Monsters:\n● <<15036>>\n● <<15039>>\n● <<13755>>\n● <<15741>>\n● <<17160>>\n\n● Dinosaur monsters you control while <<12763>>'s ①st effect is applying\n● \"Gimmick Puppet\" monsters in your Monster Zone while <<20235>>'s ②nd effect is applying\n● \"Ancient Gear Golem\", and monsters that mention it, in your Monster Zone, while <<19913>>'s ①st effect is applying\n● Dark Magician or Dark Magician the Dragon Knight while <<11672>>'s effect is applying",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/23510"
+        }
+      ],
+      "sourceId": "23510",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/23510",
+      "updatedAt": "2026-06-18T20:41:30.022Z"
+    },
+    {
+      "id": "ygoresources-qa-24325",
+      "recordType": "qa",
+      "title": "In order to activate <<23014>>'s effect by『return[ing] 1 Level 7 or higher monster you co…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "Ⓐ: No, you cannot.\nTo activate that effect of <<23014>>, you need to return a Level 7 or higher monster from your face-up Monster Zone to your hand.\n\nⒷ: Yes, you can.\nIf you do, you will then Special Summon a monster that specifically lists the card \"<<22993>>\" in its card text, with a different card name from the card you returned to your hand.",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/24325"
+        }
+      ],
+      "sourceId": "24325",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/24325",
+      "updatedAt": "2026-06-18T20:41:30.034Z"
+    },
+    {
+      "id": "ygoresources-qa-24324",
+      "recordType": "qa",
+      "title": "I activate the Quick-Play Spell <<23000>>, and then, in the same Chain, activate <<23018>…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "No, you cannot.\n(You cannot return a Quick-Play Spell that was activated from your Spell & Trap Zone to your hand or Deck.)",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/24324"
+        }
+      ],
+      "sourceId": "24324",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/24324",
+      "updatedAt": "2026-06-18T20:41:30.046Z"
+    },
+    {
+      "id": "ygoresources-qa-24282",
+      "recordType": "qa",
+      "title": "Can cards like <<22593>> or <<19719>>, which are『always treated as an \"Elemental HERO\" ca…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "Yes, they can be.\nIf a monster is treated as an \"Elemental HERO\" card, that means it is also an \"Elemental HERO\" monster.\nAdditionally, they are also treated as \"HERO\" monsters.\n\n~~~\n\nThe following are also examples of monsters that are treated as (also) having a different card name from their printed name:\n● <<16854>>\n● <<22526>>\n● <<18502>>\n● <<18469>>\n● <<22202>>\n● <<18484>>\n● <<17033>>\n● <<19752>>\n● <<16397>>\n● <<16400>>\n● <<22499>>\n● <<22320>>\n● <<15480>>\n● <<15519>>\n● <<20480>>\n● <<21409>>\n● <<12290>>\n● <<21149>>\n● <<18474>>\n● <<20493>>\n● <<18228>>\n● <<20292>>\n● <<11690>>\n● <<21773>>\n● <<20490>>\n● <<15480>>\n● <<22521>>\n● <<22520>>\n● <<22522>>\n● <<17778>>\n● <<17780>>\n● <<17779>>\n● <<17147>>\n● <<16526>>\n● <<22193>>\n● <<16649>>\n● <<15519>>\n● <<19933>>\n● <<22730>>\n● <<22729>>\n● <<22728>>",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/24282"
+        }
+      ],
+      "sourceId": "24282",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/24282",
+      "updatedAt": "2026-06-18T20:41:30.058Z"
+    },
+    {
+      "id": "ygoresources-qa-23954",
+      "recordType": "qa",
+      "title": "The ②nd effect of <<18739>> Special Summons a『Level 2 or 3 \"Nouvelles\" Ritual Monster fro…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "Unless there is text on a Ritual Monster that limits the ways in which it can be Special Summoned, a Ritual Monster can also be Special Summoned from the hand or Deck by an effect that specifically allows you to Special Summon a Ritual Monster.\n\nAdditionally, as a general rule, Ritual Monsters in your hand or Deck can only be Special Summoned by Ritual Summoning them, however, as an exception, they can be Special Summoned by effects that ignore Summoning conditions.\n\n\"Effects that specifically allow you to Special Summon a Ritual Monster\" include the following effects. However, even if the Ritual Monster is Special Summoned by one of the above exceptional methods, this will not be treated as properly Special Summoning the Ritual Monster. If the monster Special Summoned this way is then sent to the Graveyard, or banished, it can no longer be Special Summoned, except by Ritual Summon.\n\n~~~\n\nMonster Effects:\n● <<18739>>'s ②nd effect\n● <<18740>>'s ②nd effect\n● <<18741>>'s ②nd effect\n● <<18742>>'s ②nd effect\n● <<18743>>'s ②nd effect\n● <<18744>>'s ②nd effect\n● <<19476>>'s ②nd effect\n\n~~~\n\nSpells:\n● <<6900>>'s effect\n● <<21617>>'s effect\n● <<22994>>'s ②nd effect\n\n~~~\n\nTraps:\n● <<9610>>'s effect\n● <<20253>>'s ①st effect",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/23954"
+        }
+      ],
+      "sourceId": "23954",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/23954",
+      "updatedAt": "2026-06-18T20:41:30.070Z"
+    },
+    {
+      "id": "ygoresources-qa-18104",
+      "recordType": "qa",
+      "title": "「<<12333>>」の『①：「竜魔王」モンスター及びPモンスター以外の「竜剣士」モンスターがフィールドに存在する場合に発動できる。お互いのフィールドのカードを全て持ち主のデッキ…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "Yes, you can Special Summon <<12316>> from the Deck using <<12333>>.\n\nHowever, note that the <<12316>> is not being Ritual Summoned. Therefore, its effect to skip the opponent's next Main Phase 1 will not be applied. Furthermore, since it was not Special Summoned properly (by Ritual Summon), if it is sent to the Graveyard, it cannot be Special Summoned by effects such as that of <<4842>>.\n\n~~~\n\nThe following effects also Special Summon monsters ignoring their Summoning conditions, and can therefore Special Summon Ritual Monsters:\n● <<12773>>'s ①st effect\n● <<12772>>'s ①st effect\n● <<18019>>'s ①st effect\n● <<14733>>'s ②nd effect\n● <<22570>>'s ①st effect\n● <<22569>>'s ①st effect\n● <<22582>>'s ①st effect\n● <<23014>>'s ②nd effect\n● <<22994>>'s ①st effect",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/18104"
+        }
+      ],
+      "sourceId": "18104",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/18104",
+      "updatedAt": "2026-06-18T20:41:30.082Z"
+    },
+    {
+      "id": "ygoresources-qa-24323",
+      "recordType": "qa",
+      "title": "In response to my <<18178>>'s『if this card is Fusion Summoned』effect, my opponent activat…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "No, you cannot.\n(<<18178>> was not in the Graveyard by the time that the『if a monster is Special Summoned by your opponent's activated monster effect』activation condition was met.)",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/24323"
+        }
+      ],
+      "sourceId": "24323",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/24323",
+      "updatedAt": "2026-06-18T20:41:30.094Z"
+    },
+    {
+      "id": "ygoresources-qa-24322",
+      "recordType": "qa",
+      "title": "I apply <<22145>>'s『if this card you control would be used as Synchro Material, you can t…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "No, you cannot.\n(The Synchro Summon was not performed using a Synchro Tuner Monster as material.)",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/24322"
+        }
+      ],
+      "sourceId": "24322",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/24322",
+      "updatedAt": "2026-06-18T20:41:30.106Z"
+    },
+    {
+      "id": "ygoresources-qa-24321",
+      "recordType": "qa",
+      "title": "I would like to activate <<22989>>'s effect, by『banish[ing] this card you control and 1 \"…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "Yes, you can.\n\nIf you do, you will activate <<22989>>'s effect by banishing both it from the field and <<16822>> from your Graveyard.\n\nSimilarly, if you apply any of the following effects, you must also still banish <<22989>> from your field to activate its effect:\n● <<16038>>'s ②nd effect\n● <<23023>>'s ①st effect",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/24321"
+        }
+      ],
+      "sourceId": "24321",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/24321",
+      "updatedAt": "2026-06-18T20:41:30.118Z"
+    },
+    {
+      "id": "ygoresources-qa-24319",
+      "recordType": "qa",
+      "title": "When resolving <<23011>>, can I reveal <<6617>> and add <<22211>> to my hand?",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "No, you cannot.\n\nThe text of <<22211>> states『you can Ritual Summon this card with an \"<<6617>>\" card.』The text『an \"<<6617>>\" card』refers to any card with \"<<6617>>\" in its name. It does not refer to the specific card name \"<<6617>>\".",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/24319"
+        }
+      ],
+      "sourceId": "24319",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/24319",
+      "updatedAt": "2026-06-18T20:41:30.130Z"
+    },
+    {
+      "id": "ygoresources-qa-24318",
+      "recordType": "qa",
+      "title": "While my opponent's <<23027>> is applying its『if your opponent would Normal or Special Su…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "In case Ⓐ, you can only Pendulum Summon one monster. When Pendulum Summoning from the Extra Deck to the Main Monster Zone, you need to Summon to a zone that a Link Monster points to. However, once you place the first monster in the leftmost Main Monster Zone, you would then need to use the Main Monster Zone in the same column as <<14676>> due to <<23027>>'s effect, which no Link Monster points to. Therefore, you cannot Pendulum Summon a second monster.\n\nIn case Ⓑ, you cannot Pendulum Summon at all.\n\nIn cases Ⓒ, Ⓓ, Ⓔ, and Ⓕ, all listed monsters can be Pendulum Summoned (but you need to use the leftmost usable zone(s)).",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/24318"
+        }
+      ],
+      "sourceId": "24318",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/24318",
+      "updatedAt": "2026-06-18T20:41:30.142Z"
+    },
+    {
+      "id": "ygoresources-qa-24317",
+      "recordType": "qa",
+      "title": "My opponent's <<23027>> is applying its『if your opponent would Normal or Special Summon a…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "Yes, you can.\n\nIf you do, any monsters Special Summoned to your own Main Monster Zone must use the leftmost usable zone(s).",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/24317"
+        }
+      ],
+      "sourceId": "24317",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/24317",
+      "updatedAt": "2026-06-18T20:41:30.154Z"
+    },
+    {
+      "id": "ygoresources-qa-24316",
+      "recordType": "qa",
+      "title": "I use <<15519>>'s『Special Summon from your Extra Deck, 1 [...] \"Xyz Dragon\" Xyz Monster […",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "Yes, you can.",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/24316"
+        }
+      ],
+      "sourceId": "24316",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/24316",
+      "updatedAt": "2026-06-18T20:41:30.166Z"
+    },
+    {
+      "id": "ygoresources-qa-23505",
+      "recordType": "qa",
+      "title": "Can I activate <<4962>> or <<22995>> in each of the following situations? Ⓐ: <<7405>>'s『n…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "Ⓐ: You cannot activate either card.\nⒷ: You can activate both cards.\nⒸ: You can activate <<4962>>, but cannot activate <<22995>>.",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/23505"
+        }
+      ],
+      "sourceId": "23505",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/23505",
+      "updatedAt": "2026-06-18T20:41:30.178Z"
+    },
+    {
+      "id": "ygoresources-qa-23504",
+      "recordType": "qa",
+      "title": "If each of the following effects have been applied this turn, and my opponent Special Sum…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "Ⓐ: You will draw a card.\nⒷ: You will not draw a card.",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/23504"
+        }
+      ],
+      "sourceId": "23504",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/23504",
+      "updatedAt": "2026-06-18T20:41:30.190Z"
+    },
+    {
+      "id": "ygoresources-qa-23429",
+      "recordType": "qa",
+      "title": "If I Special Summon a \"Spirit Message\" from the Deck using the effect of <<12572>>, or if…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "No, it cannot be activated.",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/23429"
+        }
+      ],
+      "sourceId": "23429",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/23429",
+      "updatedAt": "2026-06-18T20:41:30.202Z"
+    },
+    {
+      "id": "ygoresources-qa-23408",
+      "recordType": "qa",
+      "title": "Can <<9008>> be chained to the activation of <<4962>> or <<22995>>?",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "Yes, it can be.\n(Both cards' card activation includes an effect to Special Summon a monster.)\n\nThe following effects can also be activated in response:\n● <<21944>>'s ②nd monster effect\n● <<17794>>'s ②nd effect\n● <<13081>>'s ①st effect\n● <<20555>>'s effect\n● <<17068>>'s ①st effect\n\nAdditionally, if your opponent activates <<22995>>, you can also activate <<11829>>'s effect in response.",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/23408"
+        }
+      ],
+      "sourceId": "23408",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/23408",
+      "updatedAt": "2026-06-18T20:41:30.214Z"
+    },
+    {
+      "id": "ygoresources-qa-22086",
+      "recordType": "qa",
+      "title": "When my opponent activates <<4962>> or <<22995>> , can I chain the effect of a <<12950>> …",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "No, you cannot.",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/22086"
+        }
+      ],
+      "sourceId": "22086",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/22086",
+      "updatedAt": "2026-06-18T20:41:30.226Z"
+    },
+    {
+      "id": "ygoresources-qa-21075",
+      "recordType": "qa",
+      "title": "If a <<13183>>, which was Special Summoned in face-down Defense Position by <<4962>> or <…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "Yes, it can be.\n(The『if this card in its owner's control is destroyed by an opponent's card effect』activation condition is met.)\n\nHowever, if <<13183>> is destroyed by battle, or is destroyed by <<4962>>'s effect, it was not destroyed by an opponent's effect, and you cannot activate its effect.\n\n~~~\n\nSimilarly, if the following cards, which were Special Summoned in face-down Defense Position by the effects of <<22995>> or <<4962>>, are destroyed by an opponent's card effect, their respective effects can be activated:\nSpell Cards:\n● <<12718>>'s ②nd effect\nTrap Cards:\n● <<12505>>'s ②nd effect",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/21075"
+        }
+      ],
+      "sourceId": "21075",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/21075",
+      "updatedAt": "2026-06-18T20:41:30.239Z"
+    },
+    {
+      "id": "ygoresources-qa-15346",
+      "recordType": "qa",
+      "title": "Which monsters are the effects of \"Security Force\" monsters that apply to monsters that \"…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "The effect is applied to any opponent's monster that exists in the same column as the Monster Zone that the \"Security Force\" monster occupies.\n\nThey apply not only to monsters in your opponent's Main Monster Zone in the same column, but also to an opponent's monster in the Extra Monster Zone in the same column.\n\nThe following cards refer to a monster \"facing\" another monster:\n● <<15976>>'s ②nd effect\n● <<15704>>'s ①st effect\n● <<15705>>'s ②nd effect\n● <<15975>>'s ②nd effect\n● <<18513>>'s ①st effect\n● <<15706>>'s ②nd effect\n● <<15703>>'s ②nd effect\n● <<16821>>'s ②nd effect\n● <<21171>>'s 2nd bulleted (●) effect\n● <<6897>>'s effect\n● <<6896>>'s 2nd bulleted (●) effect\n● <<6895>>'s effect\n● <<19204>>'s ①st effect\n● <<17359>>'s ②nd effect\n● <<18737>>'s effect",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/15346"
+        }
+      ],
+      "sourceId": "15346",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/15346",
+      "updatedAt": "2026-06-18T20:41:30.251Z"
+    },
+    {
+      "id": "ygoresources-qa-14809",
+      "recordType": "qa",
+      "title": "<<11672>> was Special Summoned in face-down Defense Position as a monster by <<4962>> or …",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "Yes, it will.\n\n(This can be because it was attacked, flipped face-up as a result, and then destroyed. It can also be because it was flipped face-up and then destroyed by an opponent's card effect while face-up.)\n\nHowever, if <<11672>> is destroyed while in face-down Defense Position, either by the effect of <<4962>> or because of some other effect, its effect will not activate.\n\nThis also applies if <<8435>> or <<10123>>, which were Special Summon in face-down Defense Position by the effect of <<4962>> or <<22995>>, are then destroyed and sent to the Graveyard.",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/14809"
+        }
+      ],
+      "sourceId": "14809",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/14809",
+      "updatedAt": "2026-06-18T20:41:30.263Z"
+    },
+    {
+      "id": "ygoresources-qa-13117",
+      "recordType": "qa",
+      "title": "If <<11116>> is activated in a Chain that contains monster effects activated outside of t…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "If <<11116>> is activated, and the Chain contains monster effects that activated outside of the field (such as effects activated from the hand or Graveyard), those activations are also negated. However, those monsters do not return to the Deck. (Only cards on the field that had their activation negated will be shuffled into the Deck.)\n\nIn addition, if the Chain that <<11116>> was activated in also contains the activated effect of a Spell/Trap Card in the Graveyard, or the activation effect of a Spell/Trap Card already face-up on the field, that effect will not be negated.\n\nNote that, even if the effect activated immediately before <<11116>>'s effect is such a Spell/Trap effect, <<11116>> can still be activated, as long as a monster effect, or a Spell/Trap Card, was activated at any previous point during the Chain. (This also applies to <<6917>>.)",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/13117"
+        }
+      ],
+      "sourceId": "13117",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/13117",
+      "updatedAt": "2026-06-18T20:41:30.275Z"
+    },
+    {
+      "id": "ygoresources-qa-10689",
+      "recordType": "qa",
+      "title": "If <<12794>>, which was Special Summoned in face-down Defense Position by <<4962>> or <<2…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "Yes, it can be.\n(This meets the『if this card is destroyed by a card effect and sent to the Graveyard』activation condition. It is also met if <<12794>> is destroyed by <<4962>>'s effect at the end of the Battle Phase.)\n\nNote that if <<12794>> is destroyed by battle, it was not destroyed by a card effect, and its effect cannot be activated.\n\nThis also applies if <<12823>>, which was Special Summoned in face-down Defense Position by <<4962>> or <<22995>>, is destroyed by a card effect.",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/10689"
+        }
+      ],
+      "sourceId": "10689",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/10689",
+      "updatedAt": "2026-06-18T20:41:30.287Z"
+    },
+    {
+      "id": "ygoresources-qa-7835",
+      "recordType": "qa",
+      "title": "If <<7683>>, which was Special Summoned in face-down Defense Position by <<4962>> or <<22…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "Yes, you can.\n\n~~~\n\nSimilarly, if the following cards were Special Summoned in face-down Defense Position, and are then sent to the Graveyard, you can activate their respective effects:\nSpell Cards:\n● <<11919>>'s ③rd effect\n● <<11921>>'s ③rd effect\n● <<11920>>'s ③rd effect\nTrap Cards:\n● <<7989>>'s effect\n● <<11857>>'s ②nd effect\n● <<12511>>'s ②nd effect",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/7835"
+        }
+      ],
+      "sourceId": "7835",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/7835",
+      "updatedAt": "2026-06-18T20:41:30.299Z"
+    },
+    {
+      "id": "ygoresources-qa-24314",
+      "recordType": "qa",
+      "title": "If <<10866>> is in face-down Defense Position in my Monster Zone, will its name be treate…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "No.\n\nIf <<10866>> is in face-down Defense Position, its effect is not applying, and its name is not treated as \"<<6390>>\".\n\n(However, you can use it as part of the『1+ Machine monsters』to Special Summon <<7403>>.)\n\n~~~\n\nSimilarly, the following monsters' effects also do not apply while in face-down Defense Position:\nThe name is treated as \"<<6390>>\":\n● <<21164>>\n● <<6588>>\n● <<10867>>\n● <<13722>>\n● <<13723>>\n● <<14047>>\nThe name is treated as \"<<4068>>\":\n● <<7111>>\n● <<10563>>\n● <<10516>>\n● <<11657>>\n● <<14166>>\n● <<14165>>\n● <<15463>>\nThe name is treated as \"<<15245>>\":\n● <<17413>>\n● <<16197>>\n● <<18471>>\nThe name is treated as \"<<4756>>\":\n● <<18820>>\n● <<18821>>\n● <<19174>>\nThe name is treated as \"<<7735>>\":\n● <<11990>>\n● <<19021>>\nThe name is treated as \"<<12688>>\":\n● <<12878>>\nThe name is treated as \"<<4041>>\":\n● <<21610>>\n● <<14213>>\n● <<13357>>\n● <<22690>>\nThe name is treated as \"<<4007>>\":\n● <<12253>>\nThe name is treated as \"<<16200>>\":\n● <<17428>>",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/24314"
+        }
+      ],
+      "sourceId": "24314",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/24314",
+      "updatedAt": "2026-06-18T20:41:30.311Z"
+    },
+    {
+      "id": "ygoresources-qa-20586",
+      "recordType": "qa",
+      "title": "When my opponent activates <<11268>>, can I chain the effect of <<12950>> from my hand?",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "When your opponent activates <<11268>>, you can chain the effect of <<12950>>. (Whether or not you control any monsters Special Summoned from the Extra Deck does not matter.)\n\nSimilarly, <<12950>>'s effect can also always respond to any of the following:\n● <<21362>>\n● <<17066>>\n● <<14188>>\n● <<16481>>\n● <<11843>>\n● <<13482>>\n● <<12859>>\n● <<14304>>\n● <<11840>>\n● <<20934>>\n● <<16873>>\n● <<17188>>",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/20586"
+        }
+      ],
+      "sourceId": "20586",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/20586",
+      "updatedAt": "2026-06-18T20:41:30.323Z"
+    },
+    {
+      "id": "ygoresources-qa-17684",
+      "recordType": "qa",
+      "title": "「<<12207>>」の『①：フィールドの表側表示モンスター１体を対象として発動できる。そのモンスターの攻撃力は５００アップし、このターンに１度だけ戦闘・効果では破壊されない』効…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "Yes, it can.\n\nIn that case, the ATK of that monster is increased by 1000, but if the effect that prevents the monster from being destroyed has not been applied and the effect of a second copy of <<12207>> is applied, the monster is not destroyed by battle or card effects only once.\n\n(If the effect that prevents that monster from being destroyed has already been applied, that monster is not destroyed by battle or card effects once again as a result of the effect of the second copy of <<12207>>.)\n\n~~~\n\nThe same also applies to applying the following effects:\n● <<22699>>'s ②nd effect\n● <<10479>>'s effect",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/17684"
+        }
+      ],
+      "sourceId": "17684",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/17684",
+      "updatedAt": "2026-06-18T20:41:30.335Z"
+    },
+    {
+      "id": "ygoresources-qa-17047",
+      "recordType": "qa",
+      "title": "自分のモンスターゾーンに表側表示で存在する「<<6770>>」を対象として、「<<12338>>」の『①：自分フィールドのモンスター１体を対象として発動できる。エクストラデッキの…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "You can Special Summon <<6990>>, but not <<7175>>.\n\nThe effect of <<10213>> returns monsters to the Deck that are listed as Fusion Materials for the appropriate Fusion Monster, but those monsters returning to the Deck are not treated as Fusion Materials.\n\nTherefore, even if the effect of <<12338>> was applied to a monster returned to the Deck by the effect of <<10213>>, the monster cannot be treated as the revealed monster, so in this case the monster you must Special Summon is <<6990>>.\n\nSimilarly, if the efect of <<17455>> is applied to a monster returned to the Deck by <<10213>>, <<17455>>'s effect that allows the monster to be treated as having the revealed monster's name cannot be applied.",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/17047"
+        }
+      ],
+      "sourceId": "17047",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/17047",
+      "updatedAt": "2026-06-18T20:41:30.347Z"
+    },
+    {
+      "id": "ygoresources-qa-10035",
+      "recordType": "qa",
+      "title": "If <<11087>> is among the 5 cards in the starting hand of the Duel, can that <<11087>> be…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "It cannot be activated.\n\nTo activate <<11087>>,『you must draw it for your normal draw in your Draw Phase, reveal it, and keep it revealed until the start of Main Phase 1』.\n\nIf <<11087>> is among the 5 cards in the starting hand of the Duel, that <<11087>> isn't a card that was added to your hand for your normal draw in your Draw Phase.\n\n~~~\n\nThis is the same if any of the following cards are among the 5 cards in the starting hand of the Duel, the effect of each one cannot be activated:\n● <<22716>>'s ①st effect\n● <<12357>>'s ①st effect\n● <<14550>>'s ①st effect\n● <<14553>>'s ①st effect\n● <<14551>>'s ①st effect\n● <<14554>>'s ①st effect\n● <<14555>>'s ①st effect\n● <<16190>>'s ②nd effect\n● <<19168>>'s ①st effect\n● <<14104>>'s ①st effect\n● <<18665>>'s ①st monster effect",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/10035"
+        }
+      ],
+      "sourceId": "10035",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/10035",
+      "updatedAt": "2026-06-18T20:41:30.359Z"
+    },
+    {
+      "id": "ygoresources-qa-23897",
+      "recordType": "qa",
+      "title": "If <<5740>> is applying when <<15036>> is Special Summoned, what happens to <<15036>>'s ③…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "If <<15036>> is Special Summoned while <<5740>> is already applying, its ③rd effect that makes it unaffected by other cards' effects will be negated by <<5740>>. (Note that, if <<5740>> stops applying at a later point, the ③rd effect of <<15036>> will begin applying again.)\n\nHowever, if <<5740>> is activated after <<15036>> has already been Special Summoned, the ③rd effect of <<15036>> is already being applied normally. Therefore, <<15036>> is unaffected by <<5740>>.\n\n~~~\n\nThis also applies to the following cards:\nEffect Monsters:\n● <<12938>>\n● <<12939>>\n● <<11961>>\n● <<5012>>\n● <<12234>>\n● <<12541>>\n● <<9197>>\n● <<6478>>\n● <<7184>>\nFusion Monsters:\n● <<16842>>\n● <<21441>>\n● <<11880>>\n● <<12698>>\n● <<12777>>\n● <<12955>>\nSynchro Monsters:\n● <<14751>>\n● <<13852>>\nXyz Monsters:\n● <<13456>>\n● <<12026>>\n● <<15031>>\n● <<18313>>\n● <<12548>>\n● <<11296>>\n● <<12325>>\n● <<13140>>\n● <<19500>>\n● <<12222>>\nLink Monsters:\n● <<14203>>\n● <<16007>>\n● <<18314>>\n● <<15039>>",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/23897"
+        }
+      ],
+      "sourceId": "23897",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/23897",
+      "updatedAt": "2026-06-18T20:41:30.371Z"
+    },
+    {
+      "id": "ygoresources-qa-17838",
+      "recordType": "qa",
+      "title": "<<12253>>'s『this card cannot attack the turn this effect is activated』effect was activate…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "In both cases, <<12253>> will be able to attack.\n\n~~~\n\nThis also applies to the following effects:\n● <<15470>>'s ②nd effect\n● <<5835>>'s ①st effect\n● <<5833>>'s ①st effect\n● <<14365>>'s ②nd effect\n● <<17615>>'s ②nd effect\n● <<8817>>'s effect\n● <<10070>>'s effect\n● <<10534>>'s ②nd effect\n● <<9861>>'s ①st effect\n● <<10129>>'s ①st effect",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/17838"
+        }
+      ],
+      "sourceId": "17838",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/17838",
+      "updatedAt": "2026-06-18T20:41:30.383Z"
+    },
+    {
+      "id": "ygoresources-qa-23580",
+      "recordType": "qa",
+      "title": "I activate the『excavate 2 cards from the top of your opponent's Deck, banish 1 of them, a…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "The effect of <<21956>> will not be applied. (You also do not excavate any cards.)\n\n~~~\n\nSimilarly, if <<11243>>'s effect is applying by the time any of the following cards/effects resolve, those effects are not applied:\n● <<17770>>'s ③rd effect\n● <<16555>>'s effect\n● <<16544>>'s ①st effect\n● <<17244>>'s ①st effect\n● <<16249>>'s ①st effect",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/23580"
+        }
+      ],
+      "sourceId": "23580",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/23580",
+      "updatedAt": "2026-06-18T20:41:30.395Z"
+    },
+    {
+      "id": "ygoresources-qa-24313",
+      "recordType": "qa",
+      "title": "Can I activate <<22692>> while <<12324>>'s『neither player can Special Summon 2 or more mo…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "You can still activate <<22692>>.\n\n<<12324>>'s effect prevents either player from Special Summoning two or more monsters at the same time. However, in the case of <<22692>>, the two monsters are Special Summoned by different players. Therefore, <<22692>> can be activated, and will resolve normally, even while <<12324>>'s effect is applying.",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/24313"
+        }
+      ],
+      "sourceId": "24313",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/24313",
+      "updatedAt": "2026-06-18T20:41:30.407Z"
+    },
+    {
+      "id": "ygoresources-qa-24028",
+      "recordType": "qa",
+      "title": "After I have previously activated <<16386>>'s『negate the activation』effect, that same <<1…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "Yes, you will be able to.\n(However, note that you can only use that effect of <<16386>> once per turn.)\n\n~~~\n\nSimilarly, also for the following monsters' effects,『once while face-up on the field』is no longer considered once they are moved to the Spell & Trap Zone:\n● <<9866>>'s effect\n● <<4490>>'s effect\n● <<4377>>'s effect\n● <<4379>>'s effect\n● <<4378>>'s effect\n● <<8108>>'s effect\n● <<11189>>'s effect\n● <<12841>>'s ①st effect\n● <<11794>>'s ①st effect\n● <<12416>>'s ③rd effect\n● <<10829>>'s ①st effect\n● <<11469>>'s ②nd effect\n● <<8522>>'s ①st effect\n● <<12672>>'s ②nd effect\n● <<16079>>'s ②nd effect\n● <<11473>>'s ②nd effect\n● <<11714>>'s ①st effect\n● <<10262>>'s effect\n● <<13082>>'s ①st effect\n● <<13489>>'s ①st effect\n● <<18834>>'s ②nd effect\n● <<22559>>'s ②nd effect\n● <<22150>>'s ③rd effect",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/24028"
+        }
+      ],
+      "sourceId": "24028",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/24028",
+      "updatedAt": "2026-06-18T20:41:30.419Z"
+    },
+    {
+      "id": "ygoresources-qa-16839",
+      "recordType": "qa",
+      "title": "I control a <<12065>>, whose effect, which『can only be used once while this card is face-…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "Yes, you will be able to.\n\n~~~\n\nThis also applies to these other monster effects, among others:\n● <<16386>>'s ②nd effect (Note: you cannot activate it if you have already used the ②nd effect this turn.)\n● <<16079>>'s ②nd effect (Note: you cannot activate it if you have already used the ②nd effect this turn.)\n● <<12672>>'s ②nd effect\n● <<11714>>'s ①st effect\n● <<10262>>'s effect\n● <<4379>>'s effect\n● <<4378>>'s effect\n● <<4377>>'s effect\n● <<9866>>'s effect\n● <<8108>>'s ①st effect\n● <<12841>>'s ①st effect\n● <<12416>>'s ③rd effect\n● <<8522>>'s ①st effect\n● <<11473>>'s ②nd effect\n● <<21447>>'s ③rd effect",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/16839"
+        }
+      ],
+      "sourceId": "16839",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/16839",
+      "updatedAt": "2026-06-18T20:41:30.431Z"
+    },
+    {
+      "id": "ygoresources-qa-16838",
+      "recordType": "qa",
+      "title": "『①：S召喚したこのカードがフィールドに表側表示で存在する限り１度だけ、このカードより攻撃力が高いモンスターがフィールドに存在する場合に発動できる。フィールドの攻撃力が一番高いモ…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "Yes, you will be able to.\n\n~~~\n\nThis also applies to these other monster effects, among others:\n● <<16386>>'s ②nd effect (Note: you cannot activate it if you have already used the ②nd effect this turn.)\n● <<16079>>'s ②nd effect (Note: you cannot activate it if you have already used the ②nd effect this turn.)\n● <<12672>>'s ②nd effect\n● <<4379>>'s effect\n● <<4378>>'s effect\n● <<4377>>'s effect\n● <<9866>>'s effect\n● <<8108>>'s ①st effect\n● <<12841>>'s ①st effect\n● <<12416>>'s ③rd effect\n● <<8522>>'s ①st effect\n● <<11473>>'s ②nd effect\n● <<21447>>'s ③rd effect\n● <<11714>>'s ①st effect\n● <<10262>>'s effect\n● <<13082>>'s ①st effect\n● <<13489>>'s ①st effect\n● <<18834>>'s ②nd effect\n● <<22560>>'s ①st effect\n● <<22559>>'s ②nd effect\n● <<22150>>'s ③rd effect",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/16838"
+        }
+      ],
+      "sourceId": "16838",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/16838",
+      "updatedAt": "2026-06-18T20:41:30.443Z"
+    },
+    {
+      "id": "ygoresources-qa-16837",
+      "recordType": "qa",
+      "title": "『①：S召喚したこのカードがフィールドに表側表示で存在する限り１度だけ、このカードより攻撃力が高いモンスターがフィールドに存在する場合に発動できる。フィールドの攻撃力が一番高いモ…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "No, they cannot.\n\nThe effect of <<12065>> can only be used once while it remains face-up on the field. Therefore, even if control of <<12065>> changes to your opponent after you have used its effect, your opponent cannot use that <<12065>>'s effect.\n\n~~~\n\nFor example, this also applies to the following monster effects:\n● <<16386>>'s ②nd effect\n● <<16079>>'s ②nd effect\n● <<13489>>'s effect\n● <<13082>>'s ①st effect\n● <<12672>>'s ②nd effect\n● <<4379>>'s effect\n● <<4378>>'s effect\n● <<4377>>'s effect\n● <<9866>>'s effect\n● <<8108>>'s ①st effect\n● <<12841>>'s ①st effect\n● <<12416>>'s ③rd effect\n● <<8522>>'s ①st effect\n● <<11473>>'s ②nd effect\n● <<21447>>'s ③rd effect\n● <<11714>>'s ①st effect\n● <<10262>>'s effect\n● <<13082>>'s ①st effect\n● <<13489>>'s ①st effect\n● <<18834>>'s ②nd effect\n● <<22560>>'s ①st effect\n● <<22559>>'s ②nd effect\n● <<22150>>'s ③rd effect",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/16837"
+        }
+      ],
+      "sourceId": "16837",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/16837",
+      "updatedAt": "2026-06-18T20:41:30.455Z"
+    },
+    {
+      "id": "ygoresources-qa-8571",
+      "recordType": "qa",
+      "title": "I have resolved <<19188>>'s『banish both [targeted monsters] until the End Phase』effect, b…",
+      "status": "confirmed",
+      "cards": [],
+      "keywords": [],
+      "conclusion": "Your opponent may choose which zone their monster will return to.\n\n~~~\n\nSimilarly, if your opponent's monster is banished by any of the following effects, and then returns to the field, your opponent chooses which zone to place it in: <<18923>>'s ①st effect, <<18822>>'s ①st effect, <<18495>>'s ②nd effect, the effect granted by <<17161>>'s ②nd effect, <<16851>>'s ①st effect, <<15870>>'s ③rd effect, <<14447>>'s ②nd effect, <<14947>>'s ①st effect, <<14553>>'s ②nd effect, <<13560>>'s ①st effect, <<13504>>'s ②nd effect, <<12891>>'s ①st effect, <<12110>>'s ②nd monster effect, <<11632>>'s ③rd effect, <<12073>>'s ①st effect, <<11888>>'s ②nd effect, <<9729>>'s ②nd effect, <<8581>>, <<18319>>, <<18006>>'s ②nd effect, <<14692>>, <<8341>>, <<20245>>'s ①st or ②nd effect, <<18041>>'s ①st effect, <<19019>>, <<17479>>'s ②nd effect, <<17189>>, and <<11779>>'s ①st effect.",
+      "steps": [
+        "按同步 Q&A 的问答结论处理。",
+        "若对局条件与问答不同，先回到官方数据库核对完整原文。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Q&A",
+          "detail": "https://db.ygoresources.com/data/qa/8571"
+        }
+      ],
+      "sourceId": "8571",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/8571",
+      "updatedAt": "2026-06-18T20:41:30.467Z"
+    }
+  ]
 }
