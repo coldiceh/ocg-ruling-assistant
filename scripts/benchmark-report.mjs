@@ -17,6 +17,14 @@ export const UNKNOWN_REASON_KEYS = [
   "unknown_other",
 ];
 
+export const DIRECT_DOWNGRADE_REASON_KEYS = [
+  "evidence_mentions_action_but_not_asked_result",
+  "different_question",
+  "different_card_or_context",
+  "no_explicit_polarity",
+  "conflicting_direct_evidence",
+];
+
 export const BENCHMARK_CASES = [
   {
     id: "toon-battle-destruction-chain",
@@ -135,12 +143,15 @@ export function classifyPrimaryUnknownReason({ answer = {}, subAnswer = {}, trac
 export function buildBenchmarkReport(caseResults) {
   const results = Array.isArray(caseResults) ? caseResults : [];
   const unknownReasons = Object.fromEntries(UNKNOWN_REASON_KEYS.map((key) => [key, 0]));
+  const downgradeReasons = Object.fromEntries(DIRECT_DOWNGRADE_REASON_KEYS.map((key) => [key, 0]));
   const unsafeConfirmed = new Set();
   let totalSubQuestions = 0;
   let missingReasonCount = 0;
   let confirmedCount = 0;
   let inferredCount = 0;
   let unknownCount = 0;
+  let directEvidenceCount = 0;
+  let downgradedDirectCount = 0;
   const verdictExtractionDiagnostics = [];
 
   const perCase = results.map(({ benchmarkCase, answer }) => {
@@ -156,6 +167,13 @@ export function buildBenchmarkReport(caseResults) {
       const questionId = String(subAnswer.questionId || subAnswer.id);
       const trace = traces.get(questionId) || {};
       const formalQuestion = formalQuestions.get(questionId) || {};
+      const downgradedDirectEvidence = trace.downgradedDirectEvidence || [];
+      directEvidenceCount += (trace.directEvidence || []).length;
+      downgradedDirectCount += downgradedDirectEvidence.length;
+      for (const item of downgradedDirectEvidence) {
+        const reason = normalizeDowngradeReason(item.reason);
+        if (reason) downgradeReasons[reason] += 1;
+      }
       const key = `${benchmarkCase.id}:${questionId}`;
       if (subAnswer.status === "confirmed") {
         if (!(trace.directEvidence || []).length) unsafeConfirmed.add(`${key}:directEvidence_missing`);
@@ -214,6 +232,8 @@ export function buildBenchmarkReport(caseResults) {
         directEvidenceCount: (trace.directEvidence || []).length,
         similarEvidenceCount: (trace.similarEvidence || []).length,
         rejectedEvidenceCount: (trace.rejectedEvidence || []).length,
+        downgradedDirectCount: downgradedDirectEvidence.length,
+        downgradeReasons: downgradedDirectEvidence.map((item) => item.reason),
         extractedVerdict: trace.extractedVerdict || "unknown",
         dependencies: subAnswer.dependencies || trace.dependencies || [],
         unresolvedDependencies: subAnswer.unresolvedDependencies || trace.unresolvedDependencies || [],
@@ -258,12 +278,22 @@ export function buildBenchmarkReport(caseResults) {
     unknownCount,
     unsafeConfirmedCount: unsafeConfirmed.size,
     missingReasonCount,
+    directEvidenceCount,
+    downgradedDirectCount,
+    downgradeReasons,
     unknownReasons,
     perCase,
     verdictExtractionDiagnostics,
     topUnknownReasons,
     recommendations: topUnknownReasons.map((item) => `${item.reason}: ${item.suggestion}`),
   };
+}
+
+function normalizeDowngradeReason(reason) {
+  const value = String(reason || "");
+  if (DIRECT_DOWNGRADE_REASON_KEYS.includes(value)) return value;
+  if (value === "asked_result_not_covered") return "evidence_mentions_action_but_not_asked_result";
+  return null;
 }
 
 export async function runBenchmarkReport() {

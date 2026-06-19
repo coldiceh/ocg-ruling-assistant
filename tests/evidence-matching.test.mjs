@@ -136,6 +136,9 @@ test("effect number and scene zone conflicts prevent direct", () => {
     match: "rejected",
     reason: "effect_number_mismatch",
     matchedQuestionType: "temporary_banish",
+    answeredAskedResult: false,
+    askedResultCoverage: "different_card_or_context",
+    extractedVerdict: "unknown",
   });
 
   const locationQuestion = makeSubQuestion(
@@ -168,9 +171,22 @@ function makeQa(id, question, keywords) {
     question,
     cards: ["测试卡A"],
     keywords,
-    conclusion: question,
+    conclusion: fixtureConclusion(keywords, question),
     sources: [{ label: "fixture", detail: id }],
   };
+}
+
+function fixtureConclusion(keywords, fallback) {
+  const text = keywords.join(" ");
+  if (/暂时除外|处理时/u.test(text)) return "可以。在效果处理时将对象暂时除外，之后返回。";
+  if (/墓地发动|场上发动|除外状态发动/u.test(text)) {
+    if (/除外状态发动/u.test(text)) return "这个效果在除外状态发动。";
+    return "这个效果在墓地发动。";
+  }
+  if (/送去墓地|送墓时点/u.test(text)) return "会在战斗破坏后送去墓地。";
+  if (/可以发动|发动条件|诱发时点/u.test(text)) return "满足该条件时可以发动。";
+  if (/回到卡组/u.test(text)) return "效果处理后回到卡组。";
+  return fallback;
 }
 
 function buildFormalQuery(subQuestion) {

@@ -11,7 +11,7 @@
     "check:data": "node scripts/check-data.mjs",
     "sync:rules": "node scripts/sync-ocg-rule.mjs",
     "debug:retrieval": "node scripts/debug-retrieval.mjs",
-    "test": "node --test tests/benchmark-real-rulings.test.mjs tests/benchmark-report.test.mjs tests/verdict-extractor.test.mjs tests/condition-branches.test.mjs tests/event-timeline.test.mjs tests/subquestion-dependencies.test.mjs tests/transition-rules.test.mjs tests/data-health.test.mjs tests/e2e-real-rulings.test.mjs tests/formal-query.test.mjs tests/formal-query-parser.test.mjs tests/parser-short-cases.test.mjs tests/evidence-matching.test.mjs tests/evidence-fixture.test.mjs tests/retrieval-fixture.test.mjs tests/retrieval-debug.test.mjs tests/card-resolution.test.mjs tests/final-answer-gate.test.mjs tests/regression-rulings.test.mjs && node tests/engine-regression.mjs"
+    "test": "node --test tests/benchmark-real-rulings.test.mjs tests/benchmark-report.test.mjs tests/verdict-extractor.test.mjs tests/direct-evidence-quality.test.mjs tests/condition-branches.test.mjs tests/event-timeline.test.mjs tests/subquestion-dependencies.test.mjs tests/transition-rules.test.mjs tests/data-health.test.mjs tests/e2e-real-rulings.test.mjs tests/formal-query.test.mjs tests/formal-query-parser.test.mjs tests/parser-short-cases.test.mjs tests/evidence-matching.test.mjs tests/evidence-fixture.test.mjs tests/retrieval-fixture.test.mjs tests/retrieval-debug.test.mjs tests/card-resolution.test.mjs tests/final-answer-gate.test.mjs tests/regression-rulings.test.mjs && node tests/engine-regression.mjs"
   },
   "engines": {
     "node": ">=20"

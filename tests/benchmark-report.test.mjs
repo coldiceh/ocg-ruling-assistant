@@ -147,3 +147,47 @@ test("7. verdict extraction diagnostics retain evidence text and extractor outpu
   assert.match(diagnostic.directEvidence[0].fullText, /另一个效果可以发动/u);
   assert.equal(diagnostic.whyUnknown, "evidence_mentions_action_but_not_asked_result");
 });
+
+test("8. report counts direct-evidence quality downgrades", () => {
+  const report = buildBenchmarkReport([{
+    benchmarkCase: { id: "quality-downgrade", question: "测试卡能否发动？", expectedSafety: "may_confirm" },
+    answer: {
+      mode: "unknown",
+      parserWarnings: [],
+      subAnswers: [{
+        questionId: "q1",
+        sourceText: "测试卡能否发动？",
+        type: "activation_condition",
+        card: "测试卡",
+        status: "unknown",
+        verdict: "unknown",
+        reason: "similar_evidence",
+        evidenceIds: [],
+        dependencies: [],
+        unresolvedDependencies: [],
+      }],
+      parserDebug: {
+        evidenceTrace: [{
+          questionId: "q1",
+          resolvedCardIds: ["1"],
+          rawCandidateEvidence: [{ id: "qa-1" }, { id: "qa-2" }],
+          directEvidence: [],
+          similarEvidence: [{ id: "qa-1" }, { id: "qa-2" }],
+          rejectedEvidence: [],
+          extractedVerdict: "unknown",
+          downgradedDirectEvidence: [
+            { id: "qa-1", reason: "different_question" },
+            { id: "qa-2", reason: "conflicting_direct_evidence" },
+          ],
+        }],
+        transitionRules: { ruleApplications: [], derivedStates: [] },
+      },
+    },
+  }]);
+
+  assert.equal(report.directEvidenceCount, 0);
+  assert.equal(report.downgradedDirectCount, 2);
+  assert.equal(report.downgradeReasons.different_question, 1);
+  assert.equal(report.downgradeReasons.conflicting_direct_evidence, 1);
+  assert.equal(report.unsafeConfirmedCount, 0);
+});
