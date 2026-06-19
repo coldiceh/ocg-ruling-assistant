@@ -61,6 +61,42 @@ test("F. a banish question creates a questioned event, not a completed transitio
   assert.equal(deriveStateAtTiming(gameState, timeline, "完美世界-卡通世界").zoneStatus, "unknown");
 });
 
+for (const phrase of [
+  "青眼暴君龙送墓后，这个效果在哪里发动？",
+  "青眼暴君龙送去墓地后，这个效果在哪里发动？",
+  "青眼暴君龙送入墓地后，这个效果在哪里发动？",
+  "青眼暴君龙被战斗破坏并送去墓地，这个效果在哪里发动？",
+  "青眼暴君龙被战破并送墓，这个效果在哪里发动？",
+  "青眼暴君龙送去墓地的场合，这个效果在哪里发动？",
+]) {
+  test(`completed graveyard phrase: ${phrase}`, () => {
+    const { gameState, timeline } = build(phrase, "青眼暴君龙");
+    const entity = gameState.entities[0];
+    assert.equal(entity.wasSentToGraveyard, true);
+    assert.equal(entity.currentZone, "graveyard");
+    assert.ok(timeline.events.some((item) => item.type === "sent_to_graveyard" && item.status === "completed"));
+    assert.equal(deriveStateAtTiming(gameState, timeline, "青眼暴君龙").zoneStatus, "in_graveyard");
+  });
+}
+
+for (const phrase of [
+  "青眼暴君龙被除外后，这个效果在哪里发动？",
+  "青眼暴君龙被战斗破坏并被除外后，这个效果在哪里发动？",
+  "青眼暴君龙战斗破坏并除外后，这个效果在哪里发动？",
+  "青眼暴君龙在除外状态发动这个效果。",
+  "青眼暴君龙被除外的场合，这个效果在哪里发动？",
+  "青眼暴君龙被战斗破坏并被表侧除外后，这个效果在哪里发动？",
+]) {
+  test(`completed banished phrase: ${phrase}`, () => {
+    const { gameState, timeline } = build(phrase, "青眼暴君龙");
+    const entity = gameState.entities[0];
+    assert.equal(entity.wasBanished, true);
+    assert.equal(entity.currentZone, "banished");
+    assert.ok(timeline.events.some((item) => item.type === "temporarily_banished" && item.status === "completed"));
+    assert.equal(deriveStateAtTiming(gameState, timeline, "青眼暴君龙").zoneStatus, "banished");
+  });
+}
+
 function build(text, card, aliases = []) {
   const query = formalQuery(text, card, [card]);
   query.cards[0].aliases = aliases;

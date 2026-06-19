@@ -16,6 +16,65 @@ const realQuestion = `被青眼暴君龙战破的卡通怪兽在伤判结束阶�
 如果 青眼暴君龙 被战破的时候，这个效果是在墓地发动还是在场上发动？
 这个时候 青眼暴君龙 是否已经送墓了吗？`;
 
+test("minimal explicit graveyard state selects the graveyard activation branch", async () => {
+  const answer = await answerQuestion(
+    { question: "青眼暴君龙被战斗破坏并送去墓地后，这个效果是在墓地发动还是在场上发动？" },
+    { useModel: false, onDemandSync: false }
+  );
+  const trace = buildLayeredTrace(answer, "q1");
+  console.log(`CONDITION_BRANCH_TRACE graveyard ${JSON.stringify(trace)}`);
+  assert.equal(answer.formalQuery.subQuestions[0].card, "青眼暴君龙");
+  assert.equal(answer.formalQuery.subQuestions[0].type, "activation_location");
+  assert.equal(trace.gameState.entities[0].wasDestroyedByBattle, true);
+  assert.equal(trace.gameState.entities[0].wasSentToGraveyard, true);
+  assert.equal(trace.gameState.entities[0].currentZone, "graveyard");
+  assert.ok(trace.eventTimeline.events.some((item) => item.type === "sent_to_graveyard" && item.status === "completed"));
+  assert.equal(trace.deriveStateAtTiming.zoneStatus, "in_graveyard");
+  assert.equal(trace.branchSelectorResult.status, "selected");
+  assert.equal(trace.branchSelectorResult.verdict, "activates_in_graveyard");
+  assert.deepEqual(trace.missingConditions, []);
+  assert.equal(answer.subAnswers[0].verdict, "activates_in_graveyard");
+  assert.ok(trace.evidenceTrace.directEvidence.length > 0);
+  assert.notEqual(trace.evidenceTrace.extractedVerdict, "unknown");
+  assert.equal(answer.subAnswers[0].status, "confirmed");
+});
+
+test("minimal explicit banished state selects the banished activation branch", async () => {
+  const answer = await answerQuestion(
+    { question: "青眼暴君龙被战斗破坏并被除外后，这个效果在哪里发动？" },
+    { useModel: false, onDemandSync: false }
+  );
+  const trace = buildLayeredTrace(answer, "q1");
+  console.log(`CONDITION_BRANCH_TRACE banished ${JSON.stringify(trace)}`);
+  assert.equal(answer.formalQuery.subQuestions[0].card, "青眼暴君龙");
+  assert.equal(answer.formalQuery.subQuestions[0].type, "activation_location");
+  assert.equal(trace.gameState.entities[0].wasBanished, true);
+  assert.equal(trace.gameState.entities[0].currentZone, "banished");
+  assert.ok(trace.eventTimeline.events.some((item) => item.type === "temporarily_banished" && item.status === "completed"));
+  assert.equal(trace.deriveStateAtTiming.zoneStatus, "banished");
+  assert.equal(trace.branchSelectorResult.status, "selected");
+  assert.equal(trace.branchSelectorResult.verdict, "activates_while_banished");
+  assert.deepEqual(trace.missingConditions, []);
+  assert.equal(answer.subAnswers[0].verdict, "activates_while_banished");
+  assert.ok(trace.evidenceTrace.directEvidence.length > 0);
+  assert.notEqual(trace.evidenceTrace.extractedVerdict, "unknown");
+  assert.equal(answer.subAnswers[0].status, "confirmed");
+});
+
+test("minimal unspecified post-destruction state remains unknown", async () => {
+  const answer = await answerQuestion(
+    { question: "青眼暴君龙被战斗破坏的时候，这个效果是在墓地发动还是在场上发动？" },
+    { useModel: false, onDemandSync: false }
+  );
+  const trace = buildLayeredTrace(answer, "q1");
+  console.log(`CONDITION_BRANCH_TRACE pending ${JSON.stringify(trace)}`);
+  assert.ok(trace.eventTimeline.events.some((item) => item.type === "battle_destroyed"));
+  assert.ok(trace.eventTimeline.events.some((item) => item.type === "pending_send_to_graveyard"));
+  assert.equal(trace.eventTimeline.events.some((item) => item.type === "sent_to_graveyard" && item.status === "completed"), false);
+  assert.ok(["missing_state", "ambiguous"].includes(trace.branchSelectorResult.status));
+  assert.equal(answer.subAnswers[0].status, "unknown");
+});
+
 test("real ruling question stays structurally safe through the complete local pipeline", async () => {
   const answer = await answerQuestion(
     { question: realQuestion },
@@ -233,4 +292,30 @@ function jsonResponse(payload) {
 
 async function writeJson(path, value) {
   await writeFile(path, `${JSON.stringify(value, null, 2)}\n`, "utf8");
+}
+
+function buildLayeredTrace(answer, questionId) {
+  const evidenceTrace = answer.parserDebug.evidenceTrace.find((item) => item.questionId === questionId);
+  const subQuestion = answer.formalQuery.subQuestions.find((item) => item.id === questionId);
+  const entity = answer.parserDebug.gameState.entities.find((item) => item.name === subQuestion.card) || null;
+  return {
+    formalQuery: answer.formalQuery,
+    gameState: { entities: answer.parserDebug.gameState.entities },
+    eventTimeline: {
+      events: answer.parserDebug.eventTimeline.events,
+      pendingTransitions: answer.parserDebug.eventTimeline.pendingTransitions,
+    },
+    deriveStateAtTiming: evidenceTrace.deriveStateAtTiming,
+    conditionBranches: evidenceTrace.conditionBranches,
+    branchSelectorInput: { subQuestion, entity, derivedStateAtTiming: evidenceTrace.deriveStateAtTiming },
+    branchSelectorResult: evidenceTrace.branchSelector,
+    missingConditions: evidenceTrace.branchSelector?.missingConditions || [],
+    evidenceTrace: {
+      directEvidence: evidenceTrace.directEvidence,
+      extractedVerdict: evidenceTrace.extractedVerdict,
+      finalStatus: evidenceTrace.finalStatus,
+      finalVerdict: evidenceTrace.finalVerdict,
+      reason: evidenceTrace.reason,
+    },
+  };
 }

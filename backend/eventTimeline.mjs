@@ -280,15 +280,25 @@ function hasNegativeBattleDestruction(text, entity) {
 }
 
 function hasCompletedSendToGraveyard(text, entity) {
-  if (QUESTION_MARKERS.test(text)) return false;
   const subject = entityPattern(entity);
-  return new RegExp(`${subject}.{0,36}(?:被战斗破坏并送去墓地|被战破并送墓|已经送墓|已经送去墓地|送去墓地后|送墓后|并送去墓地)`, "iu").test(text);
+  const completedTransition = new RegExp(
+    `${subject}.{0,40}(?:被战斗破坏并(?:被)?送去墓地|被战破并送墓|送墓后|送去墓地后|送入墓地后|送去墓地的场合|并送去墓地)`,
+    "iu"
+  ).test(text);
+  const questionedAlready = new RegExp(`${subject}.{0,30}(?:是否已经|会不会|还会|是否会).{0,12}(?:送墓|送去墓地|送入墓地)`, "iu").test(text);
+  const explicitAlready = new RegExp(`${subject}.{0,30}已经(?:被)?(?:送墓|送去墓地|送入墓地)`, "iu").test(text);
+  return completedTransition || (explicitAlready && !questionedAlready);
 }
 
 function hasCompletedBanish(text, entity) {
-  if (QUESTION_MARKERS.test(text)) return false;
   const subject = entityPattern(entity);
-  return new RegExp(`${subject}.{0,36}(?:被战斗破坏并被除外|被战破并被除外|被战破并除外|已经被除外|被除外后)`, "iu").test(text);
+  const completedTransition = new RegExp(
+    `${subject}.{0,44}(?:被战斗破坏并被(?:表侧)?除外|战斗破坏并(?:表侧)?除外|被战破并被(?:表侧)?除外|被战破并(?:表侧)?除外|被(?:表侧)?除外后|被(?:表侧)?除外的场合|除外状态(?:发动|發動|発動))`,
+    "iu"
+  ).test(text);
+  const questionedAlready = new RegExp(`${subject}.{0,30}(?:是否已经|会不会|是否会).{0,12}被?除外`, "iu").test(text);
+  const explicitAlready = new RegExp(`${subject}.{0,30}已经被除外`, "iu").test(text);
+  return completedTransition || (explicitAlready && !questionedAlready);
 }
 
 function hasQuestionedBanish(text, entity) {
