@@ -1,5 +1,217 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-06-18T20:41:30.468Z",
-  "records": []
+  "generatedAt": "2026-06-19T03:29:26.958Z",
+  "records": [
+    {
+      "id": "15296",
+      "name": "三战之才",
+      "cnName": "三战之才",
+      "jaName": "三戦の才",
+      "enName": "Triple Tactics Talent",
+      "cardType": "spell",
+      "effectText": "此卡名的卡1回合仅可发动1张。\n①：对手在此回合的自己的主要阶段发动过怪兽效果的情况下，可从以下效果中选择1个发动。\n●自己抽2张。\n●直至结束阶段为止，获得对手场上的1只怪兽的控制权。\n●确认对手的手牌，从其中挑选1张放回牌组。",
+      "released": true,
+      "aliases": [
+        "三战之才",
+        "三戦の才",
+        "Triple Tactics Talent",
+        "三战"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/15296",
+      "updatedAt": "2026-06-18T18:50:42.106Z"
+    },
+    {
+      "id": "14676",
+      "name": "I：P百变莱娜",
+      "cnName": "I：P百变莱娜",
+      "jaName": "I：Pマスカレーナ",
+      "enName": "I:P Masquerena",
+      "cardType": "monster",
+      "effectText": "连接怪兽以外的怪兽2只\n此卡名的①效果1回合仅可使用1次。\n①：在对手的主要阶段可以发动。以包含此卡在内的、自己场上的怪兽作为素材进行连接召唤。\n②：以此卡作为连接素材的连接怪兽不会因对手的效果被破坏。",
+      "released": true,
+      "aliases": [
+        "I：P百变莱娜",
+        "I：Pマスカレーナ",
+        "I:P Masquerena",
+        "IP",
+        "I:P",
+        "IP伪装舞会莱娜",
+        "IP加速"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/14676",
+      "updatedAt": "2026-06-18T18:50:42.624Z"
+    },
+    {
+      "id": "19188",
+      "name": "S：P小夜骑士",
+      "cnName": "S：P小夜骑士",
+      "jaName": "S：Pリトルナイト",
+      "enName": "S:P Little Knight",
+      "cardType": "monster",
+      "effectText": "效果怪兽2只\n此卡名的①②效果1回合仅可各使用1次。\n①：此卡以融合・同步・超量・连接怪兽中的任一作为素材连接召唤的情况下，以自己或对手场上・墓地的1张卡为对象可以发动。将该卡除外。此回合，自己的怪兽不可直接攻击。\n②：对手的效果发动时，以包含自己场上的怪兽在内的、场上的2只表侧表示怪兽为对象可以发动。将该2只怪兽直至结束阶段为止除外。",
+      "released": true,
+      "aliases": [
+        "S：P小夜骑士",
+        "S：Pリトルナイト",
+        "S:P Little Knight",
+        "小夜",
+        "S:P小夜"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/19188",
+      "updatedAt": "2026-06-18T18:50:42.890Z"
+    },
+    {
+      "id": "12487",
+      "name": "青眼混沌极限龙",
+      "cnName": "青眼混沌极限龙",
+      "jaName": "ブルーアイズ・カオス・MAX・ドラゴン",
+      "enName": "Blue-Eyes Chaos MAX Dragon",
+      "cardType": "monster",
+      "effectText": "以“混沌形态”降临\n此卡仅可以仪式召唤方式特殊召唤。\n①：只要此卡存在于怪兽区域，此卡不会因对手的效果被破坏，对手不可将此卡作为效果的对象。\n②：此卡攻击守备表示怪兽的情况下，依攻击力超出该怪兽守备力的数值的两倍来给予对手战斗伤害。",
+      "released": true,
+      "aliases": [
+        "青眼混沌极限龙",
+        "ブルーアイズ・カオス・MAX・ドラゴン",
+        "Blue-Eyes Chaos MAX Dragon",
+        "青眼混沌极龙",
+        "混沌极龙"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/12487",
+      "updatedAt": "2026-06-18T18:50:42.625Z"
+    },
+    {
+      "id": "14877",
+      "name": "脆刃之剑",
+      "cnName": "脆刃之剑",
+      "jaName": "脆刃の剣",
+      "enName": "Double-Edged Sword",
+      "cardType": "spell",
+      "effectText": "①：“脆刃之剑”在自己场上仅可有１张以表侧表示形式存在。②：装备怪兽的攻击力上升２０００，因装备怪兽的战斗发生的战斗伤害由双方玩家承受。③：自己受到２０００以上的战斗伤害的情况下发动。将此卡送至墓地。",
+      "released": true,
+      "aliases": [
+        "脆刃之剑",
+        "脆刃の剣",
+        "Double-Edged Sword",
+        "脆刃"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/14877",
+      "updatedAt": "2026-06-18T18:50:42.636Z"
+    },
+    {
+      "id": "18017",
+      "name": "大日女之御巫",
+      "cnName": "大日女之御巫",
+      "jaName": "オオヒメの御巫",
+      "enName": "Ohime the Manifested Mikanko",
+      "cardType": "monster",
+      "effectText": "以“御巫神乐”降临\n此卡名的①③效果1回合仅可各使用1次。\n①：向对手出示手牌的此卡可以发动。从牌组将“大日女之御巫”以外的1张“御巫”卡加入手牌。然后，挑选自己的1张手牌舍弃。\n②：此卡不会因战斗被破坏，因此卡的战斗对自己造成的战斗伤害由对手代为承受。\n③：在自己・对手回合中，以自己墓地的1张装备魔法卡为对象可以发动。将该卡装备于场上1只可装备的怪兽。",
+      "released": true,
+      "aliases": [
+        "大日女之御巫",
+        "オオヒメの御巫",
+        "Ohime the Manifested Mikanko",
+        "大日女",
+        "御巫"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/18017",
+      "updatedAt": "2026-06-18T18:50:42.653Z"
+    },
+    {
+      "id": "15245",
+      "name": "阿尔白斯之落胤",
+      "cnName": "阿尔白斯之落胤",
+      "jaName": "アルバスの落胤",
+      "enName": "Fallen of Albaz",
+      "cardType": "monster",
+      "effectText": "此卡名的效果1回合仅可使用1次。\n①：此卡召唤・特殊召唤的情况下，舍弃1张手牌可以发动。将包含此卡在内的、自己・对手场上的怪兽作为融合素材，将1只融合怪兽融合召唤。在此之际，不可将自己场上其他的怪兽作为融合素材。",
+      "released": true,
+      "aliases": [
+        "阿尔白斯之落胤",
+        "アルバスの落胤",
+        "Fallen of Albaz",
+        "阿不思",
+        "阿不思的落胤",
+        "落胤"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/15245",
+      "updatedAt": "2026-06-18T18:50:42.617Z"
+    },
+    {
+      "id": "17066",
+      "name": "烙印融合",
+      "cnName": "烙印融合",
+      "jaName": "烙印融合",
+      "enName": "Branded Fusion",
+      "cardType": "spell",
+      "effectText": "此卡名的卡1回合仅可发动1张，发动此卡的回合中，自己从额外牌组仅可特殊召唤融合怪兽。\n①：将自己手牌・牌组・场上的2只怪兽作为融合素材，将1只需以“阿尔白斯之落胤”作为融合素材的融合怪兽融合召唤。",
+      "released": true,
+      "aliases": [
+        "烙印融合",
+        "Branded Fusion"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/17066",
+      "updatedAt": "2026-06-18T18:50:42.618Z"
+    },
+    {
+      "id": "15994",
+      "name": "烙印龙 阿尔比昂",
+      "cnName": "烙印龙 阿尔比昂",
+      "jaName": "烙印竜アルビオン",
+      "enName": "Albion the Branded Dragon",
+      "cardType": "monster",
+      "effectText": "“阿尔白斯之落胤”＋光属性怪兽\n此卡名的①②效果1回合仅可各使用1次。\n①：此卡融合召唤的情况下可以发动。将自己手牌・场上・墓地的怪兽作为融合素材除外，将除“烙印龙 阿尔比昂”以外的、1只等级8以下的融合怪兽融合召唤。\n②：在此卡被送至墓地的回合的结束阶段可以发动。从牌组挑选1张“烙印”魔法・陷阱卡，加入手牌或放置在自己场上。",
+      "released": true,
+      "aliases": [
+        "烙印龙 阿尔比昂",
+        "烙印竜アルビオン",
+        "Albion the Branded Dragon",
+        "神炎龙 赫界龙",
+        "神炎龙",
+        "赫界龙"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/15994",
+      "updatedAt": "2026-06-18T18:50:42.387Z"
+    },
+    {
+      "id": "16842",
+      "name": "青眼暴君龙",
+      "cnName": "青眼暴君龙",
+      "jaName": "ブルーアイズ・タイラント・ドラゴン",
+      "enName": "Blue-Eyes Tyrant Dragon",
+      "cardType": "monster",
+      "effectText": "“青眼白龙”＋龙族怪兽\n此卡从额外牌组仅可通过融合召唤及以下方法特殊召唤。\n●解放１只装备着融合怪兽的自己的“青眼白龙”的情况下，可从额外牌组特殊召唤。\n①：场上的此卡不受陷阱卡的效果影响。\n②：此卡可攻击所有对手怪兽各１次。\n③：１回合１次，此卡进行战斗的伤害步骤结束时，以自己墓地的１张陷阱卡为对象可以发动。将该卡放置在自己场上。",
+      "released": true,
+      "aliases": [
+        "青眼暴君龙",
+        "ブルーアイズ・タイラント・ドラゴン",
+        "Blue-Eyes Tyrant Dragon",
+        "青眼暴君龍",
+        "暴君龙"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/16842",
+      "updatedAt": "2026-06-18T18:50:42.647Z"
+    },
+    {
+      "id": "23161",
+      "liveId": "23161",
+      "passcode": "",
+      "name": "完全なる世界 トゥーン・ワールド",
+      "cnName": "",
+      "jaName": "完全なる世界 トゥーン・ワールド",
+      "enName": "Toon World the Perfect World",
+      "effectText": "このカード名の②の効果は１ターンに３度まで使用できる。\n①：このカードはフィールドゾーンに存在する限り、カード名を「トゥーン・ワールド」として扱う。\n②：１ターンに１度、自分メインフェイズに発動できる。「トゥーン」カードまたはそのカード名が記されたカード１枚をデッキから手札に加える。\n③：他のカードが発動した効果が適用される際に、自分フィールドのトゥーンモンスター１体をその効果処理後まで除外できる（このターン、このカード名のこの効果で元々のカード名が同じモンスターを除外できない）。",
+      "released": true,
+      "aliases": [
+        "完全なる世界 トゥーン・ワールド",
+        "Toon World the Perfect World",
+        "完美世界 卡通世界",
+        "Perfect Toon World"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/23161",
+      "ygoResourcesUrl": "https://db.ygoresources.com/data/card/23161",
+      "updatedAt": "2026-06-19T03:29:25.911Z",
+      "matched": "完美世界 卡通世界",
+      "resolvedBy": "live-ygoresources"
+    }
+  ]
 }

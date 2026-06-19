@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { buildCardAliasIndex, buildQaIndex } from "../backend/dataIndex.mjs";
 
 const rootDir = join(dirname(fileURLToPath(import.meta.url)), "..");
 const dataDir = join(rootDir, "data");
@@ -33,6 +34,8 @@ async function main() {
   const cardPayloads = await loadCards(cardTargets, nameIndexes);
   const cards = cardPayloads.map(({ record }) => record);
   const rulings = await loadRulings(cards, cardPayloads);
+  const cardAliasIndex = buildCardAliasIndex(cards);
+  const qaIndex = buildQaIndex(rulings, cards);
   const manifest = await loadManifest(previousMeta.sourceRevision);
 
   const generatedAt = new Date().toISOString();
@@ -58,6 +61,16 @@ async function main() {
     schemaVersion: 1,
     generatedAt,
     records: rulings,
+  });
+  await writeJson(join(dataDir, "card-alias-index.json"), {
+    schemaVersion: 1,
+    generatedAt,
+    records: cardAliasIndex,
+  });
+  await writeJson(join(dataDir, "qa-index.json"), {
+    schemaVersion: 1,
+    generatedAt,
+    records: qaIndex,
   });
   await writeJson(join(dataDir, "snapshot-meta.json"), {
     schemaVersion: 1,
@@ -87,6 +100,8 @@ async function main() {
     generatedAt,
     cardCount: cards.length,
     rulingCount: rulings.length,
+    cardAliasCount: cardAliasIndex.length,
+    qaIndexCount: qaIndex.length,
     syncAllReleasedCards,
     syncOnlyReleasedCards,
     maxCards,
@@ -95,7 +110,7 @@ async function main() {
     changedPaths: manifest.changedPaths,
   });
 
-  console.log(`Synced ${cards.length} cards and ${rulings.length} Q&A records.`);
+  console.log(`Synced ${cards.length} cards, ${cardAliasIndex.length} aliases, ${rulings.length} ruling records, and ${qaIndex.length} Q&A index entries.`);
   if (warnings.length) console.warn(warnings.join("\n"));
 }
 
@@ -296,7 +311,7 @@ function isReleased(cardData) {
       if (Number.isFinite(date.getTime())) dates.push(date);
     }
   }
-  return dates.some((date) => date <= today);
+  return !dates.length || dates.some((date) => date <= today);
 }
 
 function buildCardTextRecords(cardPayloads) {
@@ -308,6 +323,7 @@ function buildCardTextRecords(cardPayloads) {
       title: `${record.name} 的效果文本`,
       status: "confirmed",
       cards: [record.name],
+      cardIds: [record.id],
       keywords: extractKeywords(record.effectText),
       conclusion: record.effectText,
       steps: ["这是同步到的卡片效果文本。若问题涉及裁定处理，仍应继续核对相关 Q&A。"],
@@ -341,6 +357,8 @@ function buildFaqRecords(cardPayloads) {
         title: `${record.name} FAQ ${effectNo}`,
         status: "confirmed",
         cards: [record.name],
+        cardIds: [record.id],
+        question: "",
         keywords: extractKeywords(lines.join("\n")),
         conclusion: lines.join("\n"),
         steps: ["按同步 FAQ 的说明处理。", "若对局条件与 FAQ 不同，继续查对应官方 Q&A。"],
@@ -374,8 +392,10 @@ function normalizeQa(payload, id, cards) {
     id: `ygoresources-qa-${id}`,
     recordType: "qa",
     title,
+    question,
     status: "confirmed",
     cards: involvedCards.map((card) => card.name),
+    cardIds: involvedCards.map((card) => card.id).filter(Boolean),
     keywords: extractKeywords(text),
     conclusion: answer,
     steps: ["按同步 Q&A 的问答结论处理。", "若对局条件与问答不同，先回到官方数据库核对完整原文。"],

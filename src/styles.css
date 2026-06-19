@@ -289,6 +289,26 @@ svg {
   grid-column: 1 / -1;
 }
 
+.parser-debug {
+  grid-column: 1 / -1;
+}
+
+.parser-debug summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.parser-debug pre {
+  max-height: 440px;
+  margin: 14px 0 0;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
 .verdict-block.is-confirmed {
   border-left-color: var(--green);
 }

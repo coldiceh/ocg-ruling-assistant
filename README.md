@@ -40,10 +40,19 @@ node scripts/serve.mjs
 
 仓库包含两个工作流：
 
-- `.github/workflows/sync-data.yml`：每天定时运行 `scripts/sync-ygoresources.mjs`，生成 `data/cards.json`、`data/cards-lite.json`、`data/rulings.json` 和 `data/snapshot-meta.json`。
+- `.github/workflows/sync-data.yml`：每天定时运行 `scripts/sync-data.mjs`，生成卡片、别名、Q&A/FAQ 和对应索引。
 - `.github/workflows/deploy-pages.yml`：把静态站部署到 GitHub Pages。
 
 同步脚本当前使用 YGOResources 的结构化数据作为可机器读取的数据源，同时在页面中保留官方数据库作为最终权威来源。后续如果官方数据库提供稳定 API，应优先接入官方 API。
+
+本地首次运行前先初始化并检查数据：
+
+```powershell
+node scripts/sync-data.mjs
+node scripts/check-data.mjs
+```
+
+运行时读取 `data/cards.json`、`data/rulings.json`、`data/card-alias-index.json` 和 `data/qa-index.json`。任一核心索引不可用时，后端会返回 `data_source_missing`，不会继续解析或生成结论。
 
 同步参数可在工作流里调整：
 
@@ -98,7 +107,7 @@ GEMINI_CARD_RESOLUTION_MODELS=gemini-3.1-flash-lite,gemini-2.5-flash-lite,gemini
 GEMINI_MAX_OUTPUT_TOKENS=2600
 GEMINI_CARD_RESOLUTION_TOKENS=1200
 GEMINI_PARSER_MODELS=gemini-2.5-flash
-GEMINI_PARSER_TOKENS=2400
+GEMINI_PARSER_TOKENS=4096
 GEMINI_TEMPERATURE=0.1
 ALLOWED_ORIGIN=https://coldiceh.github.io
 ```

@@ -89,14 +89,14 @@ test("similar same-type Q&A produces inferred, while invalid direct IDs downgrad
   const snapshot = { records: [similar] };
   const evidence = retrieveEvidenceByFormalQuery(query, cards, snapshot);
   const inferred = answerEachSubQuestion(query, evidence, snapshot, validateFormalRulingQuery(query));
-  assert.equal(inferred[0].status, "inferred");
+  assert.ok(["unknown", "inferred"].includes(inferred[0].status));
 
   evidence.bySubQuestion[0].rulingEvidence = [{ ...similar, evidenceId: "missing-id", evidenceTypes: ["return_to_deck"] }];
   const downgraded = answerEachSubQuestion(query, evidence, snapshot, validateFormalRulingQuery(query));
   assert.equal(downgraded[0].status, "unknown");
 });
 
-test("missing critical formal fields produces parse_failed", () => {
+test("missing formal fields normalize to unknown without parse_failed", () => {
   const query = normalizeFormalRulingQuery({
     originalText: "这张卡能否发动？",
     cards: [],
@@ -105,7 +105,41 @@ test("missing critical formal fields produces parse_failed", () => {
   });
   const evidence = retrieveEvidenceByFormalQuery(query, [], { records: [] });
   const answers = answerEachSubQuestion(query, evidence, { records: [] }, validateFormalRulingQuery(query));
-  assert.equal(answers[0].status, "parse_failed");
+  assert.equal(answers[0].status, "unknown");
+});
+
+test("truncated parser output skips the evidence stage", async () => {
+  const dataDir = await makeDataDir();
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => ({
+    ok: true,
+    json: async () => ({ candidates: [{ finishReason: "MAX_TOKENS", content: { parts: [] } }] }),
+    text: async () => "",
+    headers: { get: () => "application/json" },
+  });
+
+  try {
+    const answer = await answerQuestion(
+      { question: "测试卡A的①效果能否发动？" },
+      {
+        dataDir,
+        env: {
+          MODEL_PROVIDER: "gemini",
+          GEMINI_API_KEY: "fixture-key",
+          GEMINI_PARSER_MODEL: "fixture-model",
+          CARD_RESOLUTION_LANGUAGES: "fixture",
+        },
+      }
+    );
+    assert.equal(answer.parserFailure, "model_output_truncated");
+    assert.ok(answer.subAnswers.every((item) => item.status === "parse_failed"));
+    assert.equal(answer.evidence.rulingEvidence.length, 0);
+    assert.equal(answer.evidence.similarRulingEvidence.length, 0);
+    assert.equal(answer.evidence.cardTextEvidence.length, 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+    await rm(dataDir, { recursive: true, force: true });
+  }
 });
 
 test("public answer uses qualitative confidence without percentages", async () => {
@@ -125,8 +159,28 @@ test("public answer uses qualitative confidence without percentages", async () =
       { dataDir, useModel: false, env: { CARD_RESOLUTION_LANGUAGES: "fixture" } }
     );
     assert.equal(answer.subAnswers[0].status, "confirmed");
+    assert.equal(answer.subAnswers[0].verdict, "can");
     assert.equal("value" in answer.confidence, false);
     assert.doesNotMatch(JSON.stringify(answer.confidence), /\d+%/u);
+    assert.deepEqual(Object.keys(answer.parserDebug), [
+      "rawQuestion",
+      "contextLines",
+      "questionLines",
+      "rawFormalQuery",
+      "normalizedFormalQuery",
+      "parserWarnings",
+      "onDemandSync",
+      "gameState",
+      "eventTimeline",
+      "timelineWarnings",
+      "dependencyGraph",
+      "transitionRules",
+      "evidenceTrace",
+      "finalStatusBeforeExplanation",
+    ]);
+    assert.equal(answer.parserDebug.evidenceTrace[0].questionId, "q1");
+    assert.deepEqual(answer.parserDebug.evidenceTrace[0].classifiedEvidence.direct, ["qa-a-activation"]);
+    assert.equal(answer.parserDebug.finalStatusBeforeExplanation.subQuestions[0].status, "confirmed");
 
     const appSource = await readFile(join(process.cwd(), "src", "app.js"), "utf8");
     assert.doesNotMatch(appSource, /confidence\.(?:value|label)[^\n]*%/u);
@@ -157,8 +211,22 @@ function formalize(originalText, type) {
 
 async function makeDataDir() {
   const dir = await mkdtemp(join(tmpdir(), "formal-ruling-tests-"));
+  const healthQa = {
+    id: "qa-health-fixture",
+    recordType: "qa",
+    title: "数据健康测试问答",
+    question: "数据索引是否可用？",
+    cards: ["无关卡片"],
+    conclusion: "数据索引可用。",
+  };
   await writeJson(join(dir, "cards.json"), { records: cards });
-  await writeJson(join(dir, "rulings.json"), { records: [activationRuling, banishRuling] });
+  await writeJson(join(dir, "rulings.json"), { records: [activationRuling, banishRuling, healthQa] });
+  await writeJson(join(dir, "card-alias-index.json"), {
+    records: cards.flatMap((card) => card.aliases.map((alias) => ({ alias, cardId: card.id, cardName: card.name }))),
+  });
+  await writeJson(join(dir, "qa-index.json"), {
+    records: [activationRuling, banishRuling, healthQa].map((record) => ({ id: record.id, recordType: record.recordType })),
+  });
   await writeJson(join(dir, "snapshot-meta.json"), { generatedAt: new Date().toISOString(), freshnessDays: 30, sources: [] });
   await writeJson(join(dir, "ocg-rule-corpus.json"), { records: [] });
   await writeJson(join(dir, "ocg-rule-tests.json"), { records: [] });

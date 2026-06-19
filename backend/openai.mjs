@@ -1,6 +1,7 @@
 import {
   FormalRulingQuerySchema,
   normalizeFormalRulingQuery,
+  preprocessFormalQuestion,
   validateFormalRulingQuery,
 } from "./formalQuery.mjs";
 
@@ -36,28 +37,56 @@ const cardResolutionSchema = {
 };
 
 export async function parseFormalRulingQuery(question, cardCandidates = [], env = globalThis.process?.env || {}) {
+  const result = await parseFormalRulingQueryDetailed(question, cardCandidates, env);
+  return result.query;
+}
+
+export async function parseFormalRulingQueryDetailed(question, cardCandidates = [], env = globalThis.process?.env || {}) {
   const text = String(question || "").trim();
+  const preprocessing = preprocessFormalQuestion(text);
   const fallback = buildFormalQueryFallback(text, cardCandidates);
-  if (!text) return fallback;
+  if (!text) return buildFormalParserFailure("empty_formal_query", fallback, fallback, preprocessing);
 
   const provider = String(env.MODEL_PROVIDER || "").toLowerCase();
   let parsed = null;
-  if (provider === "gemini" || (!provider && env.GEMINI_API_KEY && (env.GEMINI_MODEL || env.GEMINI_MODELS))) {
-    parsed = await parseGeminiFormalQuery(text, cardCandidates, env);
-  } else if (!provider || provider === "openai") {
-    parsed = await parseOpenAiFormalQuery(text, cardCandidates, env);
+  try {
+    if (provider === "gemini" || (!provider && env.GEMINI_API_KEY && (env.GEMINI_MODEL || env.GEMINI_MODELS))) {
+      parsed = await parseGeminiFormalQuery(text, cardCandidates, preprocessing, env);
+    } else if (!provider || provider === "openai") {
+      parsed = await parseOpenAiFormalQuery(text, cardCandidates, preprocessing, env);
+    }
+  } catch (error) {
+    if (isModelOutputTruncated(error)) {
+      return buildFormalParserFailure("model_output_truncated", null, fallback, preprocessing);
+    }
+    if (/invalid JSON|did not contain output text|JSON/i.test(error instanceof Error ? error.message : String(error))) {
+      return buildFormalParserFailure("model_output_invalid_json", null, fallback, preprocessing);
+    }
+    throw error;
   }
 
-  if (!parsed) return fallback;
+  if (!parsed) {
+    if (!fallback.subQuestions.length) {
+      return buildFormalParserFailure("empty_formal_query", fallback, fallback, preprocessing);
+    }
+    const parserWarnings = collectFormalParserWarnings(null, fallback, preprocessing);
+    return buildFormalParserResult(fallback, fallback, preprocessing, parserWarnings);
+  }
+  parsed = compactFormalQueryPayload(parsed);
   const normalized = normalizeFormalRulingQuery({
     ...parsed,
     originalText: text,
     cards: mergeFormalCards(parsed.cards, fallback.cards),
   });
-  return validateFormalRulingQuery(normalized).valid ? normalized : fallback;
+  const validation = validateFormalRulingQuery(normalized);
+  if (!validation.valid || !normalized.originalText || !normalized.subQuestions.length) {
+    return buildFormalParserFailure("empty_formal_query", parsed, normalized, preprocessing, validation.errors);
+  }
+  const parserWarnings = collectFormalParserWarnings(parsed, normalized, preprocessing);
+  return buildFormalParserResult(parsed, normalized, preprocessing, parserWarnings);
 }
 
-async function parseOpenAiFormalQuery(question, cardCandidates, env) {
+async function parseOpenAiFormalQuery(question, cardCandidates, preprocessing, env) {
   const apiKey = env.OPENAI_API_KEY;
   const model = env.OPENAI_PARSER_MODEL || env.OPENAI_MODEL;
   if (!apiKey || !model) return null;
@@ -72,7 +101,7 @@ async function parseOpenAiFormalQuery(question, cardCandidates, env) {
       model,
       input: [
         { role: "system", content: [{ type: "input_text", text: buildFormalParserInstructions() }] },
-        { role: "user", content: [{ type: "input_text", text: buildFormalParserInput(question, cardCandidates) }] },
+        { role: "user", content: [{ type: "input_text", text: buildFormalParserInput(question, cardCandidates, preprocessing) }] },
       ],
       text: {
         format: {
@@ -82,7 +111,7 @@ async function parseOpenAiFormalQuery(question, cardCandidates, env) {
           strict: false,
         },
       },
-      max_output_tokens: Number(env.OPENAI_PARSER_TOKENS || 1800),
+      max_output_tokens: Number(env.OPENAI_PARSER_TOKENS || 3200),
     }),
   });
 
@@ -91,11 +120,14 @@ async function parseOpenAiFormalQuery(question, cardCandidates, env) {
     throw new Error(`OpenAI formal query parser ${response.status}: ${detail.slice(0, 400)}`);
   }
   const payload = await response.json();
+  if (payload?.status === "incomplete" && /max_output_tokens/i.test(String(payload?.incomplete_details?.reason || ""))) {
+    throw createParserError("model_output_truncated", "OpenAI formal query parser was truncated by max output tokens.");
+  }
   const output = extractResponseText(payload);
   return output ? parseJsonFromModel(output, "OpenAI formal query parser") : null;
 }
 
-async function parseGeminiFormalQuery(question, cardCandidates, env) {
+async function parseGeminiFormalQuery(question, cardCandidates, preprocessing, env) {
   const apiKey = env.GEMINI_API_KEY;
   const models = getGeminiModelList(
     env,
@@ -105,10 +137,10 @@ async function parseGeminiFormalQuery(question, cardCandidates, env) {
     "GEMINI_MODEL"
   );
   if (!apiKey || !models.length) return null;
-  return runGeminiFallback(models, (model) => parseGeminiFormalQueryWithModel(question, cardCandidates, env, apiKey, model));
+  return runGeminiFallback(models, (model) => parseGeminiFormalQueryWithModel(question, cardCandidates, preprocessing, env, apiKey, model));
 }
 
-async function parseGeminiFormalQueryWithModel(question, cardCandidates, env, apiKey, model) {
+async function parseGeminiFormalQueryWithModel(question, cardCandidates, preprocessing, env, apiKey, model) {
   const modelPath = model.startsWith("models/") ? model : `models/${model}`;
   const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/${modelPath}:generateContent`, {
     method: "POST",
@@ -118,9 +150,9 @@ async function parseGeminiFormalQueryWithModel(question, cardCandidates, env, ap
     },
     body: JSON.stringify({
       systemInstruction: { parts: [{ text: buildFormalParserInstructions() }] },
-      contents: [{ role: "user", parts: [{ text: buildFormalParserInput(question, cardCandidates) }] }],
+      contents: [{ role: "user", parts: [{ text: buildFormalParserInput(question, cardCandidates, preprocessing) }] }],
       generationConfig: {
-        maxOutputTokens: Number(env.GEMINI_PARSER_TOKENS || 2400),
+        maxOutputTokens: Number(env.GEMINI_PARSER_TOKENS || 4096),
         temperature: 0,
         candidateCount: 1,
         responseMimeType: "application/json",
@@ -141,25 +173,110 @@ async function parseGeminiFormalQueryWithModel(question, cardCandidates, env, ap
 
 function buildFormalParserInstructions() {
   return [
-    "你是游戏王 OCG 问题的结构化解析器，不是问答助手。",
-    "只输出符合 FormalRulingQuery schema 的 JSON，不得输出 Markdown 或自然语言解释。",
-    "不得回答可以、不可以、会、不会，也不得写裁定结论。askedResult 只能描述玩家想确认的结果。",
-    "无法确定的字符串字段填写 unknown，不得猜测场面事实。",
-    "一个输入包含多个独立疑问时，必须拆成多个 subQuestions；每项必须有唯一 id 和 type。",
-    "询问能否发动时，type 必须是 activation_condition。",
-    "询问处理方式、能否除外、是否回卡组或是否送墓时，使用 resolution_handling、location_change、temporary_banish、return_to_deck 或 send_to_gy。",
-    "卡片效果文本只用于识别字段，绝不能据此生成答案。",
+    "你是 OCG 问题字段填充器，不负责拆问，也不回答规则。",
+    "只输出一行 compact JSON；禁止 Markdown、解释、reasoning、evidence、Q&A 和裁定结论。",
+    "输入中的 questionLines 已由程序确定。subQuestions 必须与 questionLines 数量和顺序完全一致，并原样复制 id 与 sourceText。",
+    "只保留 originalText、scenario、cards、subQuestions 四个顶层字段。",
+    "每个 subQuestion 只填写 id、type、card、askedResult、sourceText。无法确定的字段写 unknown，不能省略。",
+    "不得输出可以、不可以、会、不会等答案。",
   ].join("\n");
 }
 
-function buildFormalParserInput(question, cardCandidates) {
+function buildFormalParserInput(question, cardCandidates, preprocessing) {
   return JSON.stringify({
-    question,
+    originalText: question,
+    scenario: { rawContext: preprocessing.contextLines.join("\n") },
+    questionLines: preprocessing.questionLines.map((sourceText, index) => ({ id: `q${index + 1}`, sourceText })),
     cardCandidates: (Array.isArray(cardCandidates) ? cardCandidates : []).map((card) => ({
       name: String(card?.name || card?.cnName || card?.jaName || card?.enName || "unknown"),
       aliases: [card?.cnName, card?.jaName, card?.enName, card?.matched, ...(card?.aliases || [])].filter(Boolean).slice(0, 12),
     })),
   });
+}
+
+function buildFormalParserResult(rawFormalQuery, normalizedFormalQuery, preprocessing, parserWarnings = [], parseFailed = null) {
+  return {
+    query: normalizedFormalQuery,
+    rawFormalQuery,
+    normalizedFormalQuery,
+    preprocessing,
+    parserWarnings,
+    parseFailed,
+  };
+}
+
+function compactFormalQueryPayload(payload) {
+  const source = payload && typeof payload === "object" && !Array.isArray(payload) ? payload : {};
+  const scenario = source.scenario && typeof source.scenario === "object" && !Array.isArray(source.scenario)
+    ? source.scenario
+    : {};
+  return {
+    originalText: source.originalText,
+    scenario: {
+      rawContext: scenario.rawContext,
+      turnPlayer: scenario.turnPlayer,
+      phase: scenario.phase,
+      chainState: scenario.chainState,
+      events: Array.isArray(scenario.events)
+        ? scenario.events.map((event) => ({
+            actor: event?.actor,
+            card: event?.card,
+            effectNo: event?.effectNo,
+            action: event?.action,
+            fromZone: event?.fromZone,
+            toZone: event?.toZone,
+            resolved: event?.resolved,
+          }))
+        : [],
+    },
+    cards: (Array.isArray(source.cards) ? source.cards : []).map((card) => ({
+      name: card?.name,
+      role: card?.role,
+      effectNo: card?.effectNo,
+      controller: card?.controller,
+      zone: card?.zone,
+    })),
+    subQuestions: (Array.isArray(source.subQuestions) ? source.subQuestions : []).map((subQuestion) => ({
+      id: subQuestion?.id,
+      type: subQuestion?.type,
+      card: subQuestion?.card,
+      askedResult: subQuestion?.askedResult,
+      sourceText: subQuestion?.sourceText,
+    })),
+  };
+}
+
+function buildFormalParserFailure(code, rawFormalQuery, normalizedFormalQuery, preprocessing, details = []) {
+  return buildFormalParserResult(rawFormalQuery, normalizedFormalQuery, preprocessing, [code, ...details], code);
+}
+
+function collectFormalParserWarnings(rawFormalQuery, normalizedFormalQuery, preprocessing) {
+  const warnings = [];
+  const rawSubQuestions = Array.isArray(rawFormalQuery?.subQuestions) ? rawFormalQuery.subQuestions : [];
+  if (rawFormalQuery && rawSubQuestions.length !== preprocessing.questionLines.length) {
+    warnings.push("model_subquestion_count_ignored");
+  }
+  for (const [index, subQuestion] of normalizedFormalQuery.subQuestions.entries()) {
+    const raw = rawSubQuestions[index];
+    if (rawFormalQuery && (!raw || !raw.type)) warnings.push(`defaulted_type:q${index + 1}`);
+    if (rawFormalQuery && (!raw || !raw.card)) warnings.push(`defaulted_card:q${index + 1}`);
+    if (rawFormalQuery && (!raw || !raw.askedResult)) warnings.push(`defaulted_asked_result:q${index + 1}`);
+    if (subQuestion.type === "unknown") warnings.push(`unknown_type:${subQuestion.id}`);
+    if (subQuestion.card === "unknown") warnings.push(`unknown_card:${subQuestion.id}`);
+  }
+  if (!preprocessing.questionLines.length) warnings.push("no_question_lines");
+  return [...new Set(warnings)];
+}
+
+function isModelOutputTruncated(error) {
+  const message = error instanceof Error ? error.message : String(error);
+  return error?.code === "model_output_truncated" || /truncated|max output tokens|MAX_TOKENS/i.test(message);
+}
+
+function createParserError(code, message) {
+  const error = new Error(message);
+  error.code = code;
+  return error;
 }
 
 function buildFormalQueryFallback(question, cardCandidates) {

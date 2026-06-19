@@ -27,7 +27,7 @@ jobs:
           CARD_INDEX_LANGUAGES: "en,ja"
           FETCH_CONCURRENCY: "8"
           MAX_QA_TOTAL: "3000"
-        run: node scripts/sync-ygoresources.mjs
+        run: node scripts/sync-data.mjs
 
       - name: Sync OCG rule corpus
         env:

@@ -1,5 +1,169 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-06-18T20:41:30.468Z",
-  "records": []
+  "generatedAt": "2026-06-19T03:29:26.958Z",
+  "records": [
+    {
+      "id": "15296",
+      "name": "三战之才",
+      "cnName": "三战之才",
+      "jaName": "三戦の才",
+      "enName": "Triple Tactics Talent",
+      "aliases": [
+        "三战之才",
+        "三戦の才",
+        "Triple Tactics Talent",
+        "三战"
+      ],
+      "released": true
+    },
+    {
+      "id": "14676",
+      "name": "I：P百变莱娜",
+      "cnName": "I：P百变莱娜",
+      "jaName": "I：Pマスカレーナ",
+      "enName": "I:P Masquerena",
+      "aliases": [
+        "I：P百变莱娜",
+        "I：Pマスカレーナ",
+        "I:P Masquerena",
+        "IP",
+        "I:P",
+        "IP伪装舞会莱娜",
+        "IP加速"
+      ],
+      "released": true
+    },
+    {
+      "id": "19188",
+      "name": "S：P小夜骑士",
+      "cnName": "S：P小夜骑士",
+      "jaName": "S：Pリトルナイト",
+      "enName": "S:P Little Knight",
+      "aliases": [
+        "S：P小夜骑士",
+        "S：Pリトルナイト",
+        "S:P Little Knight",
+        "小夜",
+        "S:P小夜"
+      ],
+      "released": true
+    },
+    {
+      "id": "12487",
+      "name": "青眼混沌极限龙",
+      "cnName": "青眼混沌极限龙",
+      "jaName": "ブルーアイズ・カオス・MAX・ドラゴン",
+      "enName": "Blue-Eyes Chaos MAX Dragon",
+      "aliases": [
+        "青眼混沌极限龙",
+        "ブルーアイズ・カオス・MAX・ドラゴン",
+        "Blue-Eyes Chaos MAX Dragon",
+        "青眼混沌极龙",
+        "混沌极龙"
+      ],
+      "released": true
+    },
+    {
+      "id": "14877",
+      "name": "脆刃之剑",
+      "cnName": "脆刃之剑",
+      "jaName": "脆刃の剣",
+      "enName": "Double-Edged Sword",
+      "aliases": [
+        "脆刃之剑",
+        "脆刃の剣",
+        "Double-Edged Sword",
+        "脆刃"
+      ],
+      "released": true
+    },
+    {
+      "id": "18017",
+      "name": "大日女之御巫",
+      "cnName": "大日女之御巫",
+      "jaName": "オオヒメの御巫",
+      "enName": "Ohime the Manifested Mikanko",
+      "aliases": [
+        "大日女之御巫",
+        "オオヒメの御巫",
+        "Ohime the Manifested Mikanko",
+        "大日女",
+        "御巫"
+      ],
+      "released": true
+    },
+    {
+      "id": "15245",
+      "name": "阿尔白斯之落胤",
+      "cnName": "阿尔白斯之落胤",
+      "jaName": "アルバスの落胤",
+      "enName": "Fallen of Albaz",
+      "aliases": [
+        "阿尔白斯之落胤",
+        "アルバスの落胤",
+        "Fallen of Albaz",
+        "阿不思",
+        "阿不思的落胤",
+        "落胤"
+      ],
+      "released": true
+    },
+    {
+      "id": "17066",
+      "name": "烙印融合",
+      "cnName": "烙印融合",
+      "jaName": "烙印融合",
+      "enName": "Branded Fusion",
+      "aliases": [
+        "烙印融合",
+        "Branded Fusion"
+      ],
+      "released": true
+    },
+    {
+      "id": "15994",
+      "name": "烙印龙 阿尔比昂",
+      "cnName": "烙印龙 阿尔比昂",
+      "jaName": "烙印竜アルビオン",
+      "enName": "Albion the Branded Dragon",
+      "aliases": [
+        "烙印龙 阿尔比昂",
+        "烙印竜アルビオン",
+        "Albion the Branded Dragon",
+        "神炎龙 赫界龙",
+        "神炎龙",
+        "赫界龙"
+      ],
+      "released": true
+    },
+    {
+      "id": "16842",
+      "name": "青眼暴君龙",
+      "cnName": "青眼暴君龙",
+      "jaName": "ブルーアイズ・タイラント・ドラゴン",
+      "enName": "Blue-Eyes Tyrant Dragon",
+      "aliases": [
+        "青眼暴君龙",
+        "ブルーアイズ・タイラント・ドラゴン",
+        "Blue-Eyes Tyrant Dragon",
+        "青眼暴君龍",
+        "暴君龙"
+      ],
+      "released": true
+    },
+    {
+      "id": "23161",
+      "name": "完全なる世界 トゥーン・ワールド",
+      "cnName": "",
+      "jaName": "完全なる世界 トゥーン・ワールド",
+      "enName": "Toon World the Perfect World",
+      "aliases": [
+        "完全なる世界 トゥーン・ワールド",
+        "Toon World the Perfect World",
+        "完美世界 卡通世界",
+        "Perfect Toon World"
+      ],
+      "released": true
+    }
+  ]
 }
