@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "synced-with-warnings",
-  "generatedAt": "2026-06-18T18:51:33.807Z",
+  "generatedAt": "2026-06-19T20:13:10.486Z",
   "freshnessDays": 7,
   "sourceRevision": null,
   "sources": [
@@ -19,7 +19,9 @@
     }
   ],
   "warnings": [
-    "Card not resolved: Perfect Toon World"
+    "Card not resolved: Perfect Toon World",
+    "Q&A 7944 failed: 404 Not Found",
+    "Q&A 6253 failed: 404 Not Found"
   ],
   "changedPaths": []
 }
