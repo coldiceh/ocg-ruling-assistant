@@ -36,7 +36,6 @@ function buildEntityState(card, textParts, events, assumptions, contradictions, 
   const name = card.name || names[0] || "unknown";
   const relevantParts = textParts.filter((part) => names.some((candidate) => normalize(part).includes(normalize(candidate))));
   const relevant = relevantParts.join("\n");
-  const assertiveRelevant = relevantParts.filter((part) => !/(是否|会不会|还会|能否|吗[？?]?|还是)/u.test(part)).join("\n");
   const escapedNames = names.map(escapeRegExp).join("|");
   const subject = escapedNames ? `(?:${escapedNames})` : escapeRegExp(name);
   const destroyedNegative = new RegExp(`${subject}.{0,24}(?:没有|未)(?:被)?(?:战破|战斗破坏)|${subject}.{0,24}(?:不会|不能)被战斗破坏`, "iu").test(relevant);
@@ -45,13 +44,23 @@ function buildEntityState(card, textParts, events, assumptions, contradictions, 
 
   const sentQuestion = new RegExp(`${subject}.{0,30}(?:是否已经|会不会|还会|是否会).{0,12}(?:送墓|送去墓地)|${subject}.{0,30}(?:送墓|送去墓地).{0,4}[吗？?]`, "iu").test(relevant);
   const sentNegative = new RegExp(`${subject}.{0,24}(?:没有|未|不会)(?:被)?(?:送墓|送去墓地)`, "iu").test(relevant);
-  const sentPositive = new RegExp(`${subject}.{0,30}(?:被战斗破坏并送去墓地|被战破并送墓|已经送墓|已经送去墓地|送去墓地后|送墓后)`, "iu").test(assertiveRelevant);
+  const sentTransitionCompleted = new RegExp(
+    `${subject}.{0,36}(?:被战斗破坏并(?:被)?送去墓地|被战破并送墓|送墓后|送去墓地后|送入墓地后|送去墓地的场合)`,
+    "iu"
+  ).test(relevant);
+  const sentAlready = new RegExp(`${subject}.{0,30}已经(?:被)?(?:送墓|送去墓地|送入墓地)`, "iu").test(relevant);
+  const sentPositive = sentTransitionCompleted || (sentAlready && !sentQuestion);
   let wasSentToGraveyard = sentNegative ? false : sentPositive ? true : null;
   if (sentQuestion && !sentPositive && !sentNegative) wasSentToGraveyard = null;
 
   const banishedQuestion = new RegExp(`${subject}.{0,30}(?:是否|会不会|能否).{0,12}(?:被)?除外|${subject}.{0,24}除外.{0,4}[吗？?]`, "iu").test(relevant);
   const banishedNegative = new RegExp(`${subject}.{0,24}(?:没有|未|不会)(?:被)?除外`, "iu").test(relevant);
-  const banishedPositive = new RegExp(`${subject}.{0,30}(?:被战斗破坏并被除外|被战破并除外|已经被除外|被除外后)`, "iu").test(assertiveRelevant);
+  const banishedTransitionCompleted = new RegExp(
+    `${subject}.{0,40}(?:被战斗破坏并被(?:表侧)?除外|战斗破坏并(?:表侧)?除外|被战破并被(?:表侧)?除外|被战破并(?:表侧)?除外|被(?:表侧)?除外后|被(?:表侧)?除外的场合|除外状态(?:发动|發動|発動))`,
+    "iu"
+  ).test(relevant);
+  const banishedAlready = new RegExp(`${subject}.{0,30}已经被除外`, "iu").test(relevant);
+  const banishedPositive = banishedTransitionCompleted || (banishedAlready && !banishedQuestion);
   let wasBanished = banishedNegative ? false : banishedPositive ? true : null;
   if (banishedQuestion && !banishedPositive && !banishedNegative) wasBanished = null;
 
