@@ -1,15 +1,17 @@
 {
-  "generatedAt": "2026-06-18T18:51:33.807Z",
-  "cardCount": 10,
-  "rulingCount": 227,
-  "cardAliasCount": 49,
-  "qaIndexCount": 217,
-  "syncAllReleasedCards": false,
+  "generatedAt": "2026-06-19T20:13:10.486Z",
+  "cardCount": 14220,
+  "rulingCount": 41669,
+  "cardAliasCount": 35617,
+  "qaIndexCount": 27449,
+  "syncAllReleasedCards": true,
   "syncOnlyReleasedCards": true,
   "maxCards": 0,
   "maxQaTotal": 3000,
   "warnings": [
-    "Card not resolved: Perfect Toon World"
+    "Card not resolved: Perfect Toon World",
+    "Q&A 7944 failed: 404 Not Found",
+    "Q&A 6253 failed: 404 Not Found"
   ],
   "changedPaths": []
 }
