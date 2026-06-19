@@ -330,6 +330,9 @@ function traceEvidenceDescriptor(item, rawById) {
     textPreview: raw.textPreview || cleanText(`${item?.question || ""} ${item?.conclusion || ""}`).slice(0, 240),
     matchedBy: raw.matchedBy || [],
     score: Number(raw.score || item?.formalScore || 0),
+    answeredAskedResult: item?.answeredAskedResult ?? false,
+    askedResultCoverage: item?.askedResultCoverage || "unknown",
+    classificationReason: item?.classificationReason || "unknown",
   };
 }
 
@@ -437,6 +440,7 @@ export function retrieveEvidenceByFormalQuery(formalQuery, detectedCards, snapsh
     const rulingEvidence = [];
     const similarRulingEvidence = [];
     const rejectedEvidence = [];
+    const downgradedDirectEvidence = [];
     const rawCandidateEvidence = [];
     const rawClassifications = { direct: [], similar: [], rejected: [] };
 
@@ -460,7 +464,19 @@ export function retrieveEvidenceByFormalQuery(formalQuery, detectedCards, snapsh
         evidenceId: record.id,
         subQuestionId: subQuestion.id,
         evidenceTypes: classification.matchedQuestionType ? [classification.matchedQuestionType] : [],
+        answeredAskedResult: classification.answeredAskedResult,
+        askedResultCoverage: classification.askedResultCoverage,
+        extractedVerdict: classification.extractedVerdict || "unknown",
+        classificationReason: classification.reason,
       };
+
+      if (classification.downgradedFromDirect && record.id) {
+        downgradedDirectEvidence.push({
+          id: record.id,
+          reason: classification.reason,
+          askedResultCoverage: classification.askedResultCoverage,
+        });
+      }
 
       if (rawCandidate) {
         rawCandidateEvidence.push(rawCandidate);
@@ -496,6 +512,30 @@ export function retrieveEvidenceByFormalQuery(formalQuery, detectedCards, snapsh
       }
     }
 
+    const conflictExtraction = rulingEvidence.length > 1
+      ? extractVerdictFromEvidence(subQuestion, rulingEvidence)
+      : null;
+    if (conflictExtraction?.whyUnknown === "conflicting_direct_evidence") {
+      const conflicting = rulingEvidence.splice(0, rulingEvidence.length);
+      for (const item of conflicting) {
+        similarRulingEvidence.push({
+          ...item,
+          matchKind: "similar",
+          answeredAskedResult: false,
+          askedResultCoverage: "conflicting",
+          classificationReason: "conflicting_direct_evidence",
+        });
+        downgradedDirectEvidence.push({
+          id: item.evidenceId,
+          reason: "conflicting_direct_evidence",
+          askedResultCoverage: "conflicting",
+        });
+      }
+      const conflictingIds = new Set(conflicting.map((item) => String(item.evidenceId)));
+      rawClassifications.direct = rawClassifications.direct.filter((id) => !conflictingIds.has(String(id)));
+      rawClassifications.similar.push(...conflicting.map((item) => item.evidenceId));
+    }
+
     const normalizedCardText = dedupeBy(cardTextEvidence, (item) => item.evidenceId);
     const normalizedRuling = rankFormalEvidence(rulingEvidence, subQuestion).slice(0, 8);
     const normalizedSimilar = rankFormalEvidence(similarRulingEvidence, subQuestion).slice(0, 8);
@@ -517,6 +557,10 @@ export function retrieveEvidenceByFormalQuery(formalQuery, detectedCards, snapsh
       searchQueries,
       rawCandidateEvidence: normalizedRawCandidates,
       classifiedEvidence,
+      downgradedDirectEvidence: dedupeBy(
+        downgradedDirectEvidence,
+        (item) => `${item.id}:${item.reason}`
+      ),
       evidenceCoverageReason: determineEvidenceCoverageReason({
         subQuestion,
         resolvedCardIds,
@@ -563,6 +607,7 @@ function buildEmptyRetrievalTrace(subQuestion) {
     searchQueries: buildFormalEvidenceSearchQueries(subQuestion),
     rawCandidateEvidence: [],
     classifiedEvidence: { direct: [], similar: [], rejected: [] },
+    downgradedDirectEvidence: [],
     evidenceCoverageReason: "retrieval_empty",
   };
 }
@@ -1244,6 +1289,7 @@ export function classifyQaForSubQuestion(subQuestion, qa) {
   const cardMatches = qaMatchesSubQuestionCard(subQuestion, qa);
   const fullText = formalEvidenceText(qa);
   const semanticCoverage = qaCoversAskedResult(subQuestion, matchedQuestionType, fullText);
+  const askedResultAudit = auditQaAskedResultCoverage(subQuestion, qa, matchedQuestionType, semanticCoverage);
   const subEffectNumbers = extractEffectNumbers(`${subQuestion?.effectNo || ""} ${subQuestion?.sourceText || ""}`);
   const qaEffectNumbers = extractEffectNumbers(fullText);
   const effectConflict = subEffectNumbers.size > 0 && qaEffectNumbers.size > 0 && !setsOverlap(subEffectNumbers, qaEffectNumbers);
@@ -1252,20 +1298,54 @@ export function classifyQaForSubQuestion(subQuestion, qa) {
   const qaZones = extractSceneZones(fullText);
   const zoneConflict = subZones.size > 0 && qaZones.size > 0 && !setsOverlap(subZones, qaZones);
 
-  const result = (match, reason) => ({
+  const result = (match, reason, overrides = {}) => ({
     match,
     reason,
     ...(matchedQuestionType !== "unknown" ? { matchedQuestionType } : {}),
+    answeredAskedResult: askedResultAudit.answeredAskedResult,
+    askedResultCoverage: askedResultAudit.askedResultCoverage,
+    extractedVerdict: askedResultAudit.extractedVerdict,
+    ...overrides,
   });
 
   if (!typeMatches) {
-    return result("rejected", cardMatches ? "question_type_mismatch" : "card_and_question_type_mismatch");
+    return result("rejected", cardMatches ? "question_type_mismatch" : "card_and_question_type_mismatch", {
+      answeredAskedResult: false,
+      askedResultCoverage: matchedQuestionType === "unknown" ? "unknown" : "different_question",
+      extractedVerdict: "unknown",
+    });
   }
-  if (effectConflict) return result("rejected", "effect_number_mismatch");
-  if (zoneConflict) return result("rejected", "scene_zone_conflict");
-  if (!semanticCoverage) return result(cardMatches ? "similar" : "rejected", "asked_result_not_covered");
-  if (!cardMatches) return result("similar", "card_name_mismatch");
-  if (effectNotCovered) return result("similar", "effect_number_not_covered");
+  if (effectConflict) return result("rejected", "effect_number_mismatch", {
+    answeredAskedResult: false,
+    askedResultCoverage: "different_card_or_context",
+    extractedVerdict: "unknown",
+  });
+  if (zoneConflict) return result("rejected", "scene_zone_conflict", {
+    answeredAskedResult: false,
+    askedResultCoverage: "different_card_or_context",
+    extractedVerdict: "unknown",
+  });
+  if (!semanticCoverage) return result(cardMatches ? "similar" : "rejected", "asked_result_not_covered", {
+    answeredAskedResult: false,
+    askedResultCoverage: askedResultAudit.askedResultCoverage === "explicit" ? "partial" : askedResultAudit.askedResultCoverage,
+  });
+  if (!cardMatches) return result("similar", "different_card_or_context", {
+    answeredAskedResult: false,
+    askedResultCoverage: "different_card_or_context",
+    extractedVerdict: "unknown",
+  });
+  if (effectNotCovered) return result("similar", "effect_number_not_covered", {
+    answeredAskedResult: false,
+    askedResultCoverage: "partial",
+    extractedVerdict: "unknown",
+  });
+  if (askedResultAudit.askedResultCoverage !== "explicit" || !askedResultAudit.answeredAskedResult) {
+    const rejected = askedResultAudit.askedResultCoverage === "different_question"
+      || askedResultAudit.askedResultCoverage === "different_card_or_context";
+    return result(rejected ? "rejected" : "similar", askedResultAudit.reason, {
+      downgradedFromDirect: true,
+    });
+  }
   return result("direct", "card_type_effect_semantics_and_scene_match");
 }
 
@@ -1280,7 +1360,7 @@ function inferQaQuestionType(value) {
   if (/(在哪里发动|哪里发动|墓地发动|场上发动|除外状态发动|除外中发动|从墓地发动|在墓地.{0,12}发动|在场上.{0,12}发动|activate.{0,20}(?:GY|graveyard|field|banished))/iu.test(text)) {
     return "activation_location";
   }
-  if (/(能否|能不能|可以|可否|是否).{0,18}(发动|發動|発動)|(?:发动条件|發動條件|発動条件|诱发条件|誘発条件|发动时点|发动时机|诱发时点)|条件.{0,18}(发动|発動)|can.{0,12}activate/iu.test(text)) {
+  if (/(能否|能不能|可以|可否|是否|(?:^|[^不])能).{0,18}(发动|發動|発動)|(?:发动条件|發動條件|発動条件|诱发条件|誘発条件|发动时点|发动时机|诱发时点)|条件.{0,18}(发动|発動)|can.{0,12}activate/iu.test(text)) {
     return "activation_condition";
   }
   if (/(暂时除外|临时除外|一时的に除外|(?:效果处理时|处理时|处理后|结算时|解決時).{0,36}除外|除外.{0,24}(?:对象|返回|回到|结束阶段|处理后)|banish.{0,24}(?:target|until|return))/iu.test(text)) {
@@ -1332,11 +1412,125 @@ function qaCoversAskedResult(subQuestion, matchedQuestionType, fullText) {
     return coversSend && (!needsBattle || /(战斗破坏|战破|destroyed by battle)/iu.test(fullText));
   }
   if (matchedQuestionType === "activation_condition") {
-    return /(能否发动|能不能发动|可以发动|发动条件|诱发条件|发动时点|发动时机|诱发时点|条件.{0,18}发动|can.{0,12}activate)/iu.test(fullText);
+    return /(能否发动|能不能发动|可以发动|不能发动|不可以发动|发动条件|诱发条件|发动时点|发动时机|诱发时点|条件.{0,18}发动|can.{0,12}activate|cannot.{0,12}activate)/iu.test(fullText);
   }
   if (matchedQuestionType === "return_to_deck") return /(回卡组|回到卡组|返回卡组|deck)/iu.test(fullText);
   if (matchedQuestionType === "location_change") return /(已经|所在|位置|区域|送墓|除外|场上|墓地)/iu.test(fullText);
   return matchedQuestionType === subQuestion?.type;
+}
+
+function auditQaAskedResultCoverage(subQuestion, qa, matchedQuestionType, semanticCoverage) {
+  const answerText = evidenceAnswerText(qa);
+  const branchExtraction = extractConditionBranchesFromEvidence(qa);
+  if (branchesCoverSubQuestion(branchExtraction.branches, subQuestion?.type)) {
+    return {
+      answeredAskedResult: true,
+      askedResultCoverage: "explicit",
+      extractedVerdict: "unknown",
+      reason: "conditional_answer_covers_asked_result",
+      extractorWhyUnknown: "conditional_branch_not_selected",
+    };
+  }
+
+  const extracted = extractSingleEvidenceVerdict(subQuestion, qa);
+  const answerFocus = detectEvidenceAnswerFocus(answerText);
+  if (answerFocus && !answerFocusMatchesSubQuestion(answerFocus, subQuestion?.type)) {
+    return {
+      answeredAskedResult: false,
+      askedResultCoverage: "different_question",
+      extractedVerdict: "unknown",
+      reason: "different_question",
+      extractorWhyUnknown: "evidence_mentions_action_but_not_asked_result",
+    };
+  }
+  if (extracted.verdict !== "unknown") {
+    return {
+      answeredAskedResult: true,
+      askedResultCoverage: "explicit",
+      extractedVerdict: extracted.verdict,
+      reason: extracted.reason,
+      extractorWhyUnknown: null,
+    };
+  }
+
+  const whyUnknown = extracted.whyUnknown || extracted.reason || "unknown";
+  if (whyUnknown === "conditional_branch_not_selected") {
+    return {
+      answeredAskedResult: false,
+      askedResultCoverage: "partial",
+      extractedVerdict: "unknown",
+      reason: "conditional_branch_not_selected",
+      extractorWhyUnknown: whyUnknown,
+    };
+  }
+  if (whyUnknown === "evidence_mentions_action_but_not_asked_result") {
+    return {
+      answeredAskedResult: false,
+      askedResultCoverage: "mentions_action_only",
+      extractedVerdict: "unknown",
+      reason: whyUnknown,
+      extractorWhyUnknown: whyUnknown,
+    };
+  }
+  if (whyUnknown === "no_explicit_polarity" || whyUnknown === "evidence_repeats_question_without_answer") {
+    return {
+      answeredAskedResult: false,
+      askedResultCoverage: semanticCoverage ? "mentions_action_only" : "partial",
+      extractedVerdict: "unknown",
+      reason: whyUnknown === "evidence_repeats_question_without_answer" ? "no_explicit_polarity" : whyUnknown,
+      extractorWhyUnknown: whyUnknown,
+    };
+  }
+  return {
+    answeredAskedResult: false,
+    askedResultCoverage: semanticCoverage ? "partial" : "unknown",
+    extractedVerdict: "unknown",
+    reason: whyUnknown,
+    extractorWhyUnknown: whyUnknown,
+  };
+}
+
+function branchesCoverSubQuestion(branches, type) {
+  const verdicts = new Set((branches || []).map((branch) => branch.verdict));
+  if (type === "activation_location") {
+    return [...verdicts].some((verdict) => [
+      "activates_on_field",
+      "activates_in_graveyard",
+      "activates_while_banished",
+    ].includes(verdict));
+  }
+  if (type === "temporary_banish") return [...verdicts].some((verdict) => ["can_banish", "cannot_banish"].includes(verdict));
+  if (type === "send_to_gy" || type === "location_change") {
+    return [...verdicts].some((verdict) => ["sent_to_graveyard", "not_sent_to_graveyard"].includes(verdict));
+  }
+  return false;
+}
+
+function detectEvidenceAnswerFocus(value) {
+  const text = normalizeRulingText(value);
+  if (!text) return null;
+  if (/(change|changed).{0,20}battle position|battle position.{0,20}(?:change|changed)|改变.{0,12}(?:表示形式|战斗位置)|表示形式.{0,12}变更/iu.test(text)) {
+    return "battle_position_change";
+  }
+  if (/(?:在|从)(?:墓地|场上|怪兽区|除外状态).{0,16}(?:发动|發動)|(?:墓地|モンスターゾーン|除外状態)で.{0,16}発動|activat.{0,24}(?:graveyard|monster zone|field|banished)/iu.test(text)) {
+    return "activation_location";
+  }
+  if (/(?:可以|不能|不可以|能).{0,20}(?:发动|發動)|(?:発動|activate|activated)/iu.test(text)) return "activation_condition";
+  if (/(?:送墓|送去墓地|送入墓地|墓地へ送|sent to (?:the )?(?:graveyard|gy))/iu.test(text)) return "send_to_gy";
+  if (/(?:回到|返回).{0,12}卡组|デッキに戻|return.{0,12}(?:the )?deck/iu.test(text)) return "return_to_deck";
+  if (/(?:可以|不能|不可以|能).{0,24}(?:除外|适用(?:这个|该|此)?效果)|(?:除外できます|除外できません)|(?:can|cannot|can't).{0,24}banish/iu.test(text)) {
+    return "temporary_banish";
+  }
+  return null;
+}
+
+function answerFocusMatchesSubQuestion(focus, type) {
+  if (focus === "activation_condition") return type === "activation_condition" || type === "timing";
+  if (focus === "activation_location") return type === "activation_location";
+  if (focus === "temporary_banish") return type === "temporary_banish";
+  if (focus === "send_to_gy") return type === "send_to_gy" || type === "location_change";
+  if (focus === "return_to_deck") return type === "return_to_deck" || type === "location_change";
+  return false;
 }
 
 function extractEffectNumbers(value) {

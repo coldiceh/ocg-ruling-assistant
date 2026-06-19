@@ -27,5 +27,8 @@ test("a matching temporary-banish Q&A fixture is accepted as direct evidence", (
     match: "direct",
     reason: "card_type_effect_semantics_and_scene_match",
     matchedQuestionType: "temporary_banish",
+    answeredAskedResult: true,
+    askedResultCoverage: "explicit",
+    extractedVerdict: "can",
   });
 });
