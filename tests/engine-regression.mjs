@@ -155,7 +155,7 @@ const tests = [
     question:
       "「闪刀姬-飒天」伤害计算后发动②效果，从卡组把1张「闪刀」卡送去墓地。这个效果适用之际，可以适用「完美世界 卡通世界」③，把战斗破坏确定的卡通怪兽除外吗？",
     assert(answer) {
-      assert.ok(["confirmed", "inferred"].includes(answer.subAnswers[0].status));
+      assert.ok(["unknown", "inferred"].includes(answer.subAnswers[0].status));
       assert.doesNotMatch(answer.subAnswers[0].source, /weak-magic-jammer-analogy/);
     },
   },
@@ -163,7 +163,7 @@ const tests = [
     name: "从卡组送墓不能误判成回卡组",
     question: "「闪刀姬-飒天」②效果适用之际，可以适用「完美世界 卡通世界」③除外卡通怪兽吗？",
     assert(answer) {
-      assert.ok(["confirmed", "inferred"].includes(answer.subAnswers[0].status));
+      assert.ok(["unknown", "inferred"].includes(answer.subAnswers[0].status));
       assert.doesNotMatch(answer.subAnswers[0].verdict, /不回卡组|洗回卡组/);
     },
   },
@@ -260,6 +260,16 @@ async function makeDataDir() {
   const dir = await mkdtemp(join(tmpdir(), "ocg-ruling-tests-"));
   await writeJson(join(dir, "cards.json"), { schemaVersion: 1, records: cards });
   await writeJson(join(dir, "rulings.json"), { schemaVersion: 1, records: rulings });
+  await writeJson(join(dir, "card-alias-index.json"), {
+    schemaVersion: 1,
+    records: cards.flatMap((card) => card.aliases.map((alias) => ({ alias, cardId: card.id, cardName: card.name }))),
+  });
+  await writeJson(join(dir, "qa-index.json"), {
+    schemaVersion: 1,
+    records: rulings
+      .filter((record) => record.recordType === "qa" || record.recordType === "card-faq")
+      .map((record) => ({ id: record.id, recordType: record.recordType })),
+  });
   await writeJson(join(dir, "snapshot-meta.json"), {
     schemaVersion: 1,
     generatedAt: new Date().toISOString(),

@@ -1,0 +1,377 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-06-19T03:29:26.958Z",
+  "records": [
+    {
+      "alias": "三战之才",
+      "normalizedAlias": "三战之才",
+      "cardId": "15296",
+      "cardName": "三战之才",
+      "language": "zh"
+    },
+    {
+      "alias": "三戦の才",
+      "normalizedAlias": "三戦の才",
+      "cardId": "15296",
+      "cardName": "三战之才",
+      "language": "ja"
+    },
+    {
+      "alias": "Triple Tactics Talent",
+      "normalizedAlias": "triple tactics talent",
+      "cardId": "15296",
+      "cardName": "三战之才",
+      "language": "en"
+    },
+    {
+      "alias": "三战",
+      "normalizedAlias": "三战",
+      "cardId": "15296",
+      "cardName": "三战之才",
+      "language": "zh"
+    },
+    {
+      "alias": "I：P百变莱娜",
+      "normalizedAlias": "i:p百变莱娜",
+      "cardId": "14676",
+      "cardName": "I：P百变莱娜",
+      "language": "zh"
+    },
+    {
+      "alias": "I：Pマスカレーナ",
+      "normalizedAlias": "i:pマスカレ-ナ",
+      "cardId": "14676",
+      "cardName": "I：P百变莱娜",
+      "language": "ja"
+    },
+    {
+      "alias": "I:P Masquerena",
+      "normalizedAlias": "i:p masquerena",
+      "cardId": "14676",
+      "cardName": "I：P百变莱娜",
+      "language": "en"
+    },
+    {
+      "alias": "IP",
+      "normalizedAlias": "ip",
+      "cardId": "14676",
+      "cardName": "I：P百变莱娜",
+      "language": "en"
+    },
+    {
+      "alias": "I:P",
+      "normalizedAlias": "i:p",
+      "cardId": "14676",
+      "cardName": "I：P百变莱娜",
+      "language": "en"
+    },
+    {
+      "alias": "IP伪装舞会莱娜",
+      "normalizedAlias": "ip伪装舞会莱娜",
+      "cardId": "14676",
+      "cardName": "I：P百变莱娜",
+      "language": "zh"
+    },
+    {
+      "alias": "IP加速",
+      "normalizedAlias": "ip加速",
+      "cardId": "14676",
+      "cardName": "I：P百变莱娜",
+      "language": "zh"
+    },
+    {
+      "alias": "S：P小夜骑士",
+      "normalizedAlias": "s:p小夜骑士",
+      "cardId": "19188",
+      "cardName": "S：P小夜骑士",
+      "language": "zh"
+    },
+    {
+      "alias": "S：Pリトルナイト",
+      "normalizedAlias": "s:pリトルナイト",
+      "cardId": "19188",
+      "cardName": "S：P小夜骑士",
+      "language": "ja"
+    },
+    {
+      "alias": "S:P Little Knight",
+      "normalizedAlias": "s:p little knight",
+      "cardId": "19188",
+      "cardName": "S：P小夜骑士",
+      "language": "en"
+    },
+    {
+      "alias": "小夜",
+      "normalizedAlias": "小夜",
+      "cardId": "19188",
+      "cardName": "S：P小夜骑士",
+      "language": "zh"
+    },
+    {
+      "alias": "S:P小夜",
+      "normalizedAlias": "s:p小夜",
+      "cardId": "19188",
+      "cardName": "S：P小夜骑士",
+      "language": "zh"
+    },
+    {
+      "alias": "青眼混沌极限龙",
+      "normalizedAlias": "青眼混沌极限龙",
+      "cardId": "12487",
+      "cardName": "青眼混沌极限龙",
+      "language": "zh"
+    },
+    {
+      "alias": "ブルーアイズ・カオス・MAX・ドラゴン",
+      "normalizedAlias": "ブル-アイズ・カオス・max・ドラゴン",
+      "cardId": "12487",
+      "cardName": "青眼混沌极限龙",
+      "language": "ja"
+    },
+    {
+      "alias": "Blue-Eyes Chaos MAX Dragon",
+      "normalizedAlias": "blue-eyes chaos max dragon",
+      "cardId": "12487",
+      "cardName": "青眼混沌极限龙",
+      "language": "en"
+    },
+    {
+      "alias": "青眼混沌极龙",
+      "normalizedAlias": "青眼混沌极龙",
+      "cardId": "12487",
+      "cardName": "青眼混沌极限龙",
+      "language": "zh"
+    },
+    {
+      "alias": "混沌极龙",
+      "normalizedAlias": "混沌极龙",
+      "cardId": "12487",
+      "cardName": "青眼混沌极限龙",
+      "language": "zh"
+    },
+    {
+      "alias": "脆刃之剑",
+      "normalizedAlias": "脆刃之剑",
+      "cardId": "14877",
+      "cardName": "脆刃之剑",
+      "language": "zh"
+    },
+    {
+      "alias": "脆刃の剣",
+      "normalizedAlias": "脆刃の剣",
+      "cardId": "14877",
+      "cardName": "脆刃之剑",
+      "language": "ja"
+    },
+    {
+      "alias": "Double-Edged Sword",
+      "normalizedAlias": "double-edged sword",
+      "cardId": "14877",
+      "cardName": "脆刃之剑",
+      "language": "en"
+    },
+    {
+      "alias": "脆刃",
+      "normalizedAlias": "脆刃",
+      "cardId": "14877",
+      "cardName": "脆刃之剑",
+      "language": "zh"
+    },
+    {
+      "alias": "大日女之御巫",
+      "normalizedAlias": "大日女之御巫",
+      "cardId": "18017",
+      "cardName": "大日女之御巫",
+      "language": "zh"
+    },
+    {
+      "alias": "オオヒメの御巫",
+      "normalizedAlias": "オオヒメの御巫",
+      "cardId": "18017",
+      "cardName": "大日女之御巫",
+      "language": "ja"
+    },
+    {
+      "alias": "Ohime the Manifested Mikanko",
+      "normalizedAlias": "ohime the manifested mikanko",
+      "cardId": "18017",
+      "cardName": "大日女之御巫",
+      "language": "en"
+    },
+    {
+      "alias": "大日女",
+      "normalizedAlias": "大日女",
+      "cardId": "18017",
+      "cardName": "大日女之御巫",
+      "language": "zh"
+    },
+    {
+      "alias": "御巫",
+      "normalizedAlias": "御巫",
+      "cardId": "18017",
+      "cardName": "大日女之御巫",
+      "language": "zh"
+    },
+    {
+      "alias": "阿尔白斯之落胤",
+      "normalizedAlias": "阿尔白斯之落胤",
+      "cardId": "15245",
+      "cardName": "阿尔白斯之落胤",
+      "language": "zh"
+    },
+    {
+      "alias": "アルバスの落胤",
+      "normalizedAlias": "アルバスの落胤",
+      "cardId": "15245",
+      "cardName": "阿尔白斯之落胤",
+      "language": "ja"
+    },
+    {
+      "alias": "Fallen of Albaz",
+      "normalizedAlias": "fallen of albaz",
+      "cardId": "15245",
+      "cardName": "阿尔白斯之落胤",
+      "language": "en"
+    },
+    {
+      "alias": "阿不思",
+      "normalizedAlias": "阿不思",
+      "cardId": "15245",
+      "cardName": "阿尔白斯之落胤",
+      "language": "zh"
+    },
+    {
+      "alias": "阿不思的落胤",
+      "normalizedAlias": "阿不思的落胤",
+      "cardId": "15245",
+      "cardName": "阿尔白斯之落胤",
+      "language": "zh"
+    },
+    {
+      "alias": "落胤",
+      "normalizedAlias": "落胤",
+      "cardId": "15245",
+      "cardName": "阿尔白斯之落胤",
+      "language": "zh"
+    },
+    {
+      "alias": "烙印融合",
+      "normalizedAlias": "烙印融合",
+      "cardId": "17066",
+      "cardName": "烙印融合",
+      "language": "zh"
+    },
+    {
+      "alias": "Branded Fusion",
+      "normalizedAlias": "branded fusion",
+      "cardId": "17066",
+      "cardName": "烙印融合",
+      "language": "en"
+    },
+    {
+      "alias": "烙印龙 阿尔比昂",
+      "normalizedAlias": "烙印龙 阿尔比昂",
+      "cardId": "15994",
+      "cardName": "烙印龙 阿尔比昂",
+      "language": "zh"
+    },
+    {
+      "alias": "烙印竜アルビオン",
+      "normalizedAlias": "烙印竜アルビオン",
+      "cardId": "15994",
+      "cardName": "烙印龙 阿尔比昂",
+      "language": "ja"
+    },
+    {
+      "alias": "Albion the Branded Dragon",
+      "normalizedAlias": "albion the branded dragon",
+      "cardId": "15994",
+      "cardName": "烙印龙 阿尔比昂",
+      "language": "en"
+    },
+    {
+      "alias": "神炎龙 赫界龙",
+      "normalizedAlias": "神炎龙 赫界龙",
+      "cardId": "15994",
+      "cardName": "烙印龙 阿尔比昂",
+      "language": "zh"
+    },
+    {
+      "alias": "神炎龙",
+      "normalizedAlias": "神炎龙",
+      "cardId": "15994",
+      "cardName": "烙印龙 阿尔比昂",
+      "language": "zh"
+    },
+    {
+      "alias": "赫界龙",
+      "normalizedAlias": "赫界龙",
+      "cardId": "15994",
+      "cardName": "烙印龙 阿尔比昂",
+      "language": "zh"
+    },
+    {
+      "alias": "青眼暴君龙",
+      "normalizedAlias": "青眼暴君龙",
+      "cardId": "16842",
+      "cardName": "青眼暴君龙",
+      "language": "zh"
+    },
+    {
+      "alias": "ブルーアイズ・タイラント・ドラゴン",
+      "normalizedAlias": "ブル-アイズ・タイラント・ドラゴン",
+      "cardId": "16842",
+      "cardName": "青眼暴君龙",
+      "language": "ja"
+    },
+    {
+      "alias": "Blue-Eyes Tyrant Dragon",
+      "normalizedAlias": "blue-eyes tyrant dragon",
+      "cardId": "16842",
+      "cardName": "青眼暴君龙",
+      "language": "en"
+    },
+    {
+      "alias": "青眼暴君龍",
+      "normalizedAlias": "青眼暴君龍",
+      "cardId": "16842",
+      "cardName": "青眼暴君龙",
+      "language": "zh"
+    },
+    {
+      "alias": "暴君龙",
+      "normalizedAlias": "暴君龙",
+      "cardId": "16842",
+      "cardName": "青眼暴君龙",
+      "language": "zh"
+    },
+    {
+      "alias": "完全なる世界 トゥーン・ワールド",
+      "normalizedAlias": "完全なる世界 トゥ-ン・ワ-ルド",
+      "cardId": "23161",
+      "cardName": "完全なる世界 トゥーン・ワールド",
+      "language": "ja"
+    },
+    {
+      "alias": "Toon World the Perfect World",
+      "normalizedAlias": "toon world the perfect world",
+      "cardId": "23161",
+      "cardName": "完全なる世界 トゥーン・ワールド",
+      "language": "en"
+    },
+    {
+      "alias": "完美世界 卡通世界",
+      "normalizedAlias": "完美世界 卡通世界",
+      "cardId": "23161",
+      "cardName": "完全なる世界 トゥーン・ワールド",
+      "language": "zh"
+    },
+    {
+      "alias": "Perfect Toon World",
+      "normalizedAlias": "perfect toon world",
+      "cardId": "23161",
+      "cardName": "完全なる世界 トゥーン・ワールド",
+      "language": "en"
+    }
+  ]
+}

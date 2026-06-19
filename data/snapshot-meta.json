@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "status": "synced",
-  "generatedAt": "2026-06-18T20:41:30.468Z",
+  "status": "synced-with-warnings",
+  "generatedAt": "2026-06-18T18:51:33.807Z",
   "freshnessDays": 7,
   "sourceRevision": null,
   "sources": [
@@ -18,6 +18,8 @@
       "role": "结构化卡片与 Q&A 数据来源，用于生成 GitHub Pages 可读取的静态快照。"
     }
   ],
-  "warnings": [],
+  "warnings": [
+    "Card not resolved: Perfect Toon World"
+  ],
   "changedPaths": []
 }

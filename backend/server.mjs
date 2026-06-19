@@ -1,8 +1,13 @@
 import { createServer } from "node:http";
-import { answerQuestion } from "./engine.mjs";
+import { answerQuestion, getDataHealth } from "./engine.mjs";
 
 const port = Number(process.env.PORT || 8787);
 const allowedOrigin = process.env.ALLOWED_ORIGIN || "*";
+const startupDataHealth = await getDataHealth();
+
+if (!startupDataHealth.usable) {
+  console.error("数据源未初始化，请先运行 node scripts/sync-data.mjs");
+}
 
 const server = createServer(async (request, response) => {
   setCors(response);
@@ -14,7 +19,7 @@ const server = createServer(async (request, response) => {
   }
 
   if (request.method === "GET" && request.url === "/health") {
-    sendJson(response, 200, { ok: true });
+    sendJson(response, startupDataHealth.usable ? 200 : 503, { ok: startupDataHealth.usable, data: startupDataHealth });
     return;
   }
 

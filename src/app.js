@@ -160,6 +160,8 @@ const ui = {
   rulingBasisText: document.querySelector("#rulingBasisText"),
   verdictBody: document.querySelector("#verdictBody"),
   subAnswersPanel: document.querySelector("#subAnswersPanel"),
+  parserDebugPanel: document.querySelector("#parserDebugPanel"),
+  parserDebugOutput: document.querySelector("#parserDebugOutput"),
   modelStatusText: document.querySelector("#modelStatusText"),
   stepsList: document.querySelector("#stepsList"),
   questionsList: document.querySelector("#questionsList"),
@@ -651,7 +653,7 @@ async function requestBackendAnswer(text) {
 }
 
 function buildBackendCacheKey(text) {
-  return `ocg-ruling-answer:v10:${appConfig.answerApiUrl}:${normalizeText(text).slice(0, 2000)}`;
+  return `ocg-ruling-answer:v11:${appConfig.answerApiUrl}:${normalizeText(text).slice(0, 2000)}`;
 }
 
 function readCachedBackendAnswer(key) {
@@ -682,12 +684,29 @@ function renderPending() {
   ui.rulingBasisText.textContent = "";
   ui.verdictBody.textContent = "后端正在匹配卡片、问答资料和处理条件。";
   renderSubAnswers([]);
+  renderParserDebug(null);
   renderList(ui.stepsList, ["等待后端返回。"]);
   renderList(ui.questionsList, []);
   renderSources([]);
 }
 
 function renderBackendAnswer(answer) {
+  if (answer?.status === "data_source_missing") {
+    ui.resultGrid.hidden = false;
+    renderCards([]);
+    updateModelStatus("数据源未初始化");
+    ui.verdictBlock.className = "result-block verdict-block is-risky";
+    ui.confidenceText.textContent = "不可用";
+    ui.verdictTitle.textContent = "数据源未初始化";
+    ui.rulingBasisText.textContent = "数据加载失败";
+    ui.verdictBody.textContent = answer.message || "数据源未初始化，请先运行 node scripts/sync-data.mjs";
+    renderSubAnswers([]);
+    renderParserDebug({ dataHealth: answer.stats || {} });
+    renderList(ui.stepsList, ["运行 node scripts/sync-data.mjs 后重新分析。"]);
+    renderList(ui.questionsList, []);
+    renderSources([]);
+    return;
+  }
   const confidence = answer?.confidence || { label: "不能确定", className: "is-risky" };
   ui.resultGrid.hidden = false;
   renderCards(answer?.cards || []);
@@ -698,6 +717,7 @@ function renderBackendAnswer(answer) {
   ui.rulingBasisText.textContent = answer?.rulingBasis || basisFromBackendMode(answer?.mode);
   ui.verdictBody.textContent = answer?.verdict || "暂时不能给确定裁定。";
   renderSubAnswers(answer?.subAnswers || []);
+  renderParserDebug(answer?.parserDebug || null);
   renderList(ui.stepsList, answer?.steps || []);
   renderList(ui.questionsList, [...(answer?.needsConfirmation || []), ...(answer?.warnings || [])]);
   renderSources(answer?.sources || []);
@@ -706,12 +726,26 @@ function renderBackendAnswer(answer) {
 function resetAnalysis() {
   ui.resultGrid.hidden = true;
   renderCards([]);
+  renderParserDebug(null);
   updateModelStatus(appConfig.answerApiUrl ? appConfig.modelLabel || "后端自动选择" : "本地模板");
+}
+
+function renderParserDebug(debug) {
+  if (!ui.parserDebugPanel || !ui.parserDebugOutput) return;
+  if (!debug) {
+    ui.parserDebugPanel.hidden = true;
+    ui.parserDebugOutput.textContent = "";
+    return;
+  }
+  ui.parserDebugPanel.hidden = false;
+  ui.parserDebugOutput.textContent = JSON.stringify(debug, null, 2);
+  console.debug("[Formal Query Trace]", debug);
 }
 
 function renderResult(text, bestMatch, confidence, generatedQuestions, detectedCards = []) {
   ui.resultGrid.hidden = false;
   renderCards(detectedCards);
+  renderParserDebug(null);
   updateModelStatus("本地模板");
   ui.verdictBlock.className = `result-block verdict-block ${confidence.className}`.trim();
 
@@ -1124,6 +1158,44 @@ function renderSubAnswers(subAnswers) {
       reasoning.className = "sub-reasoning";
       reasoning.textContent = item.reasoning;
       block.appendChild(reasoning);
+    }
+
+    if (item.stateMessage) {
+      const stateMessage = document.createElement("p");
+      stateMessage.className = "sub-reasoning";
+      stateMessage.textContent = item.stateMessage;
+      block.appendChild(stateMessage);
+    }
+
+    if (Array.isArray(item.dependencies) && item.dependencies.length) {
+      const dependencies = document.createElement("p");
+      dependencies.className = "sub-reasoning";
+      dependencies.textContent = `依赖的问题：${item.dependencies.map((edge) => `${edge.fromQuestionId}（${edge.relation}）`).join("、")}`;
+      block.appendChild(dependencies);
+    }
+
+    if (Array.isArray(item.unresolvedDependencies) && item.unresolvedDependencies.length) {
+      const unresolved = document.createElement("p");
+      unresolved.className = "sub-reasoning";
+      unresolved.textContent = `未解决依赖：${item.unresolvedDependencies.join("、")}`;
+      block.appendChild(unresolved);
+    }
+
+    if (Array.isArray(item.transitionReasoning) && item.transitionReasoning.length) {
+      const transition = document.createElement("p");
+      transition.className = "sub-reasoning";
+      transition.textContent = `状态转移推理：${item.transitionReasoning.map((rule) => rule.reason).join("；")}`;
+      block.appendChild(transition);
+    }
+
+    if (Array.isArray(item.ruleSources) && item.ruleSources.length) {
+      const ruleSources = document.createElement("p");
+      ruleSources.className = "sub-source";
+      ruleSources.textContent = `规则来源：${item.ruleSources.map((sourceItem) => {
+        const ids = sourceItem.sourceIds?.length ? ` ${sourceItem.sourceIds.join(", ")}` : " 无证据 ID";
+        return `${sourceItem.sourceType}${ids}`;
+      }).join("；")}`;
+      block.appendChild(ruleSources);
     }
 
     const source = document.createElement("p");
