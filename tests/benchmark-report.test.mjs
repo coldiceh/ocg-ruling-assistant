@@ -84,3 +84,66 @@ test("6. a structurally safe report has zero unsafe confirmed results", () => {
   assert.equal(report.missingReasonCount, 0);
   assert.equal(report.unknownReasons.retrieval_empty, 1);
 });
+
+test("7. verdict extraction diagnostics retain evidence text and extractor output", () => {
+  const report = buildBenchmarkReport([{
+    benchmarkCase: { id: "extractor-debug", question: "测试卡能否除外？", expectedSafety: "may_confirm" },
+    answer: {
+      mode: "unknown",
+      parserWarnings: [],
+      formalQuery: {
+        subQuestions: [{ id: "q1", askedResult: "can_banish_test_card" }],
+      },
+      evidence: {
+        bySubQuestion: [{
+          subQuestionId: "q1",
+          rulingEvidence: [{
+            evidenceId: "qa-1",
+            recordType: "qa",
+            title: "测试裁定",
+            question: "测试卡能否除外？",
+            conclusion: "只说明了另一个效果可以发动。",
+          }],
+        }],
+      },
+      subAnswers: [{
+        questionId: "q1",
+        sourceText: "测试卡能否除外？",
+        type: "temporary_banish",
+        card: "测试卡",
+        status: "unknown",
+        verdict: "unknown",
+        reason: "direct_evidence_has_no_explicit_answer:evidence_mentions_action_but_not_asked_result",
+        evidenceIds: ["qa-1"],
+        dependencies: [],
+        unresolvedDependencies: [],
+      }],
+      parserDebug: {
+        evidenceTrace: [{
+          questionId: "q1",
+          sourceText: "测试卡能否除外？",
+          type: "temporary_banish",
+          card: "测试卡",
+          resolvedCardIds: ["1"],
+          rawCandidateEvidence: [{ id: "qa-1" }],
+          directEvidence: [{ id: "qa-1", source: "fixture", title: "测试裁定", matchedBy: ["type"] }],
+          similarEvidence: [],
+          rejectedEvidence: [],
+          extractedVerdict: "unknown",
+          extractorInput: [{ evidenceId: "qa-1", text: "只说明了另一个效果可以发动。" }],
+          extractorOutput: [{ evidenceId: "qa-1", verdict: "unknown" }],
+          extractorWarnings: [],
+          whyUnknown: "evidence_mentions_action_but_not_asked_result",
+        }],
+        transitionRules: { ruleApplications: [], derivedStates: [] },
+      },
+    },
+  }]);
+
+  assert.equal(report.verdictExtractionDiagnostics.length, 1);
+  const diagnostic = report.verdictExtractionDiagnostics[0];
+  assert.equal(diagnostic.askedResult, "can_banish_test_card");
+  assert.equal(diagnostic.directEvidence[0].id, "qa-1");
+  assert.match(diagnostic.directEvidence[0].fullText, /另一个效果可以发动/u);
+  assert.equal(diagnostic.whyUnknown, "evidence_mentions_action_but_not_asked_result");
+});

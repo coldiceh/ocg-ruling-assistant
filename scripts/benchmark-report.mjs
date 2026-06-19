@@ -141,17 +141,21 @@ export function buildBenchmarkReport(caseResults) {
   let confirmedCount = 0;
   let inferredCount = 0;
   let unknownCount = 0;
+  const verdictExtractionDiagnostics = [];
 
   const perCase = results.map(({ benchmarkCase, answer }) => {
     if (answer?.mode === "confirmed") confirmedCount += 1;
     else if (answer?.mode === "inferred") inferredCount += 1;
     else unknownCount += 1;
     const traces = new Map((answer?.parserDebug?.evidenceTrace || []).map((item) => [String(item.questionId), item]));
+    const formalQuestions = new Map((answer?.formalQuery?.subQuestions || []).map((item) => [String(item.id), item]));
+    const evidenceBuckets = new Map((answer?.evidence?.bySubQuestion || []).map((item) => [String(item.subQuestionId), item]));
     const parserWarnings = answer?.parserWarnings || answer?.parserDebug?.parserWarnings || [];
     const subQuestions = (answer?.subAnswers || []).map((subAnswer) => {
       totalSubQuestions += 1;
       const questionId = String(subAnswer.questionId || subAnswer.id);
       const trace = traces.get(questionId) || {};
+      const formalQuestion = formalQuestions.get(questionId) || {};
       const key = `${benchmarkCase.id}:${questionId}`;
       if (subAnswer.status === "confirmed") {
         if (!(trace.directEvidence || []).length) unsafeConfirmed.add(`${key}:directEvidence_missing`);
@@ -166,11 +170,43 @@ export function buildBenchmarkReport(caseResults) {
         : null;
       if (primaryUnknownReason) unknownReasons[primaryUnknownReason] += 1;
 
+      if (primaryUnknownReason === "verdict_extraction_unknown") {
+        const bucket = evidenceBuckets.get(questionId) || {};
+        const rawById = new Map((trace.directEvidence || []).map((item) => [String(item.id), item]));
+        const directEvidence = (bucket.rulingEvidence || bucket.directEvidence || []).map((item) => {
+          const id = String(item.evidenceId || item.id || "unknown");
+          const raw = rawById.get(id) || {};
+          return {
+            id,
+            source: raw.source || item.sources?.[0]?.label || item.recordType || "unknown",
+            title: raw.title || item.title || "",
+            textPreview: raw.textPreview || evidenceFullText(item).slice(0, 320),
+            fullText: evidenceFullText(item),
+            matchedBy: raw.matchedBy || [],
+            score: Number(raw.score || item.formalScore || 0),
+          };
+        });
+        verdictExtractionDiagnostics.push({
+          caseId: benchmarkCase.id,
+          questionId,
+          sourceText: subAnswer.sourceText || trace.sourceText || "unknown",
+          type: subAnswer.type || trace.type || "unknown",
+          card: subAnswer.card || trace.card || "unknown",
+          askedResult: formalQuestion.askedResult || "unknown",
+          directEvidence,
+          extractorInput: trace.extractorInput || [],
+          extractorOutput: trace.extractorOutput || [],
+          extractorWarnings: trace.extractorWarnings || [],
+          whyUnknown: trace.whyUnknown || subAnswer.whyUnknown || "unknown",
+        });
+      }
+
       return {
         questionId,
         sourceText: subAnswer.sourceText || trace.sourceText || "unknown",
         type: subAnswer.type || trace.type || "unknown",
         card: subAnswer.card || trace.card || "unknown",
+        askedResult: formalQuestion.askedResult || "unknown",
         finalStatus: subAnswer.status || trace.finalStatus || "unknown",
         finalVerdict: subAnswer.verdict || trace.finalVerdict || "unknown",
         primaryUnknownReason,
@@ -183,6 +219,7 @@ export function buildBenchmarkReport(caseResults) {
         unresolvedDependencies: subAnswer.unresolvedDependencies || trace.unresolvedDependencies || [],
         missingConditions: subAnswer.missingConditions || trace.branchSelector?.missingConditions || [],
         reason: subAnswer.reason || trace.reason || "",
+        whyUnknown: trace.whyUnknown || subAnswer.whyUnknown || null,
       };
     });
 
@@ -223,6 +260,7 @@ export function buildBenchmarkReport(caseResults) {
     missingReasonCount,
     unknownReasons,
     perCase,
+    verdictExtractionDiagnostics,
     topUnknownReasons,
     recommendations: topUnknownReasons.map((item) => `${item.reason}: ${item.suggestion}`),
   };
@@ -261,6 +299,19 @@ function suggestionFor(reason) {
 function preview(value) {
   const text = String(value || "").replace(/\s+/gu, " ").trim();
   return text.length > 120 ? `${text.slice(0, 117)}...` : text;
+}
+
+function evidenceFullText(evidence) {
+  return [
+    evidence?.title,
+    evidence?.question,
+    evidence?.questionText,
+    evidence?.conclusion,
+    evidence?.answer,
+    evidence?.answerText,
+    evidence?.text,
+    ...(Array.isArray(evidence?.steps) ? evidence.steps : []),
+  ].filter(Boolean).join("\n\n").trim();
 }
 
 const isMain = process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href;
