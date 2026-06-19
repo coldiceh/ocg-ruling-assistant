@@ -11,6 +11,7 @@ import { normalizeFormalRulingQuery, validateFormalRulingQuery } from "./formalQ
 import { parseFormalRulingQueryDetailed, resolveCardNamesWithModel } from "./openai.mjs";
 import { buildSubQuestionDependencyGraph } from "./subQuestionDependencies.mjs";
 import { applyTransitionRules } from "./transitionRules.mjs";
+import { detectActionVerdict } from "./verdictExtractor.mjs";
 
 const projectRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 const defaultDataDir = join(projectRoot, "data");
@@ -301,6 +302,10 @@ function buildSubQuestionEvidenceTrace(formalQuery, evidence, subAnswers = [], o
       conditionBranches: answer.conditionBranches || extracted.conditionBranches || [],
       branchSelector: answer.branchSelection || extracted.branchSelection || null,
       deriveStateAtTiming: answer.derivedStateAtTiming || extracted.derivedStateAtTiming || null,
+      extractorInput: answer.extractorInput || extracted.extractorInput || [],
+      extractorOutput: answer.extractorOutput || extracted.extractorOutput || [],
+      extractorWarnings: answer.extractorWarnings || extracted.extractorWarnings || [],
+      whyUnknown: answer.whyUnknown || extracted.whyUnknown || null,
       dependencies: answer.dependencies || [],
       unresolvedDependencies: answer.unresolvedDependencies || [],
       transitionReasoning: answer.transitionReasoning || [],
@@ -727,20 +732,35 @@ export function extractVerdictFromEvidence(subQuestion, evidenceList, context = 
     ),
   }));
   const conditionalIds = new Set(conditionEvidence.map((item) => String(item.extracted.evidenceId)));
+  const phraseEvidence = evidence
+    .filter((item) => !conditionalIds.has(String(item?.evidenceId || item?.id || "")))
+    .map((item) => ({
+      evidenceId: String(item?.evidenceId || item?.id || ""),
+      ...extractSingleEvidenceVerdict(subQuestion, item),
+    }));
   const extracted = [
     ...branchSelections
       .filter((item) => item.status === "selected" && item.verdict !== "unknown")
       .map((item) => ({ id: item.evidenceId, verdict: item.verdict, reason: item.reason })),
-    ...evidence
-      .filter((item) => !conditionalIds.has(String(item?.evidenceId || item?.id || "")))
-      .map((item) => ({ id: String(item?.evidenceId || item?.id || ""), ...extractSingleEvidenceVerdict(subQuestion, item) }))
+    ...phraseEvidence
+      .map((item) => ({ id: item.evidenceId, verdict: item.verdict, reason: item.reason }))
       .filter((item) => item.verdict !== "unknown"),
   ];
   const conditionBranches = conditionEvidence.flatMap((item) => item.extracted.branches.map((branch) => ({
     evidenceId: item.extracted.evidenceId,
     ...branch,
   })));
-  const warnings = conditionEvidence.flatMap((item) => item.extracted.warnings);
+  const warnings = [
+    ...conditionEvidence.flatMap((item) => item.extracted.warnings),
+    ...phraseEvidence.flatMap((item) => item.warnings || []),
+  ];
+  const extractorInput = phraseEvidence.map((item) => ({ evidenceId: item.evidenceId, text: item.extractorInput }));
+  const extractorOutput = phraseEvidence.map((item) => ({
+    evidenceId: item.evidenceId,
+    verdict: item.verdict,
+    reason: item.reason,
+    whyUnknown: item.whyUnknown || null,
+  }));
 
   if (!extracted.length) {
     if (branchSelections.length) {
@@ -756,23 +776,42 @@ export function extractVerdictFromEvidence(subQuestion, evidenceList, context = 
         missingConditions: selection.missingConditions || [],
         warnings: [...new Set(warnings)],
         derivedStateAtTiming: derivedState,
+        extractorInput,
+        extractorOutput,
+        extractorWarnings: [...new Set(warnings)],
+        whyUnknown: selection.status === "missing_state"
+          ? "conditional_branch_not_selected"
+          : selection.status === "ambiguous"
+            ? "conditional_branch_ambiguous"
+            : `condition_branch_${selection.status}`,
       };
     }
+    const unknownReasons = [...new Set(phraseEvidence.map((item) => item.whyUnknown || item.reason).filter(Boolean))];
+    const whyUnknown = unknownReasons.length === 1
+      ? unknownReasons[0]
+      : unknownReasons.length > 1
+        ? `multiple_unknown_reasons:${unknownReasons.join(",")}`
+        : "no_explicit_polarity";
     return {
       verdict: "unknown",
-      reason: "direct_evidence_has_no_explicit_answer",
+      reason: `direct_evidence_has_no_explicit_answer:${whyUnknown}`,
       evidenceIds,
       conditionBranches: [],
       branchSelections: [],
       branchSelection: null,
       missingConditions: [],
-      warnings: [],
+      warnings: [...new Set(warnings)],
       derivedStateAtTiming: derivedState,
+      extractorInput,
+      extractorOutput,
+      extractorWarnings: [...new Set(warnings)],
+      whyUnknown,
     };
   }
 
   const merged = mergeExtractedVerdicts(subQuestion?.type, extracted.map((item) => item.verdict));
   if (merged === "unknown") {
+    warnings.push("conflicting_direct_evidence");
     return {
       verdict: "unknown",
       reason: `conflicting_direct_evidence:${[...new Set(extracted.map((item) => item.verdict))].join(",")}`,
@@ -783,6 +822,10 @@ export function extractVerdictFromEvidence(subQuestion, evidenceList, context = 
       missingConditions: [],
       warnings: [...new Set(warnings)],
       derivedStateAtTiming: derivedState,
+      extractorInput,
+      extractorOutput,
+      extractorWarnings: [...new Set(warnings)],
+      whyUnknown: "conflicting_direct_evidence",
     };
   }
   const selectedBranch = branchSelections.find((item) => item.status === "selected" && item.verdict === merged) || null;
@@ -796,6 +839,10 @@ export function extractVerdictFromEvidence(subQuestion, evidenceList, context = 
     missingConditions: [],
     warnings: [...new Set(warnings)],
     derivedStateAtTiming: derivedState,
+    extractorInput,
+    extractorOutput,
+    extractorWarnings: [...new Set(warnings)],
+    whyUnknown: null,
   };
 }
 
@@ -933,6 +980,10 @@ function attachExtractionMetadata(answer, extracted, subQuestion) {
     branchSelection: extracted.branchSelection || null,
     missingConditions: extracted.missingConditions || [],
     derivedStateAtTiming: extracted.derivedStateAtTiming || null,
+    extractorInput: extracted.extractorInput || [],
+    extractorOutput: extracted.extractorOutput || [],
+    extractorWarnings: extracted.extractorWarnings || [],
+    whyUnknown: extracted.whyUnknown || null,
     stateMessage: buildMissingStateMessage(subQuestion, extracted.branchSelection),
   };
 }
@@ -987,64 +1038,26 @@ export function finalAnswerGate(programAnswer, evidenceBucket = {}, options = {}
 
 function extractSingleEvidenceVerdict(subQuestion, evidence) {
   const text = evidenceAnswerText(evidence);
-  if (!text) return { verdict: "unknown", reason: "evidence_answer_text_missing" };
+  if (!text) {
+    return {
+      verdict: "unknown",
+      reason: "evidence_answer_text_missing",
+      whyUnknown: "evidence_answer_text_missing",
+      warnings: [],
+      extractorInput: "",
+    };
+  }
   if (/[？?]\s*$/u.test(text) && !/(?:答|回答|结论|因此|所以|可以[。！!]|不可以[。！!]|不能[。！!])/u.test(text)) {
-    return { verdict: "unknown", reason: "evidence_repeats_question_without_answer" };
+    return {
+      verdict: "unknown",
+      reason: "evidence_repeats_question_without_answer",
+      whyUnknown: "evidence_repeats_question_without_answer",
+      warnings: [],
+      extractorInput: text,
+    };
   }
-
-  const type = subQuestion?.type || "unknown";
-  if (type === "activation_location") {
-    const inGraveyard = /(?:在|从)墓地(?:中)?(?:发动|發動|発動)|墓地で.{0,12}発動|activate.{0,12}(?:in|from).{0,8}(?:GY|graveyard)/iu.test(text);
-    const onField = /在场上(?:发动|發動|発動)|モンスターゾーンで.{0,12}発動|on the field.{0,12}activate|activate.{0,12}on the field/iu.test(text);
-    const whileBanished = /除外状態で.{0,12}発動|除外状态.{0,12}发动|activate.{0,12}(?:while )?banished/iu.test(text);
-    const locationCount = [inGraveyard, onField, whileBanished].filter(Boolean).length;
-    if (locationCount > 1) {
-      const source = String(subQuestion?.sourceText || "");
-      if (/(已经送墓|送去墓地后|战斗破坏并送墓|被战破并送墓)/u.test(source) && inGraveyard) {
-        return { verdict: "activates_in_graveyard", reason: "explicit_scene_selects_graveyard_branch" };
-      }
-      if (/(没有送墓|未送墓|没有被战斗破坏)/u.test(source) && onField) {
-        return { verdict: "activates_on_field", reason: "explicit_scene_selects_field_branch" };
-      }
-      return { verdict: "unknown", reason: "conditional_activation_location_requires_scene" };
-    }
-    if (inGraveyard) return { verdict: "activates_in_graveyard", reason: "explicit_graveyard_activation" };
-    if (onField) return { verdict: "activates_on_field", reason: "explicit_field_activation" };
-    return { verdict: "unknown", reason: "activation_location_not_answered" };
-  }
-
-  if (type === "send_to_gy" || type === "location_change") {
-    if (/(不会|不送|不被送|没有|并未|不是).{0,12}(?:送墓|送去墓地|墓地)|(?:不送去墓地|not sent to the GY)/iu.test(text)) {
-      return { verdict: "not_sent_to_graveyard", reason: "explicit_not_sent_to_graveyard" };
-    }
-    if (/(会|已经|仍然|仍会|被|要).{0,12}(?:送墓|送去墓地)|(?:送去墓地|墓地へ送られ|sent to the GY)/iu.test(text)) {
-      return { verdict: "sent_to_graveyard", reason: "explicit_sent_to_graveyard" };
-    }
-  }
-
-  if (type === "temporary_banish") {
-    if (/(不可以|不能|无法|不会).{0,16}(?:除外|banish)/iu.test(text)) return { verdict: "cannot", reason: "explicit_cannot_banish" };
-    if (/(可以|能够|能).{0,16}(?:除外|banish)/iu.test(text)) return { verdict: "can", reason: "explicit_can_banish" };
-    if (/(暂时除外|临时除外|直到.{0,18}除外|除外.{0,18}(?:返回|回到|结束阶段)|banish.{0,18}until)/iu.test(text)) {
-      return { verdict: "banished_temporarily", reason: "explicit_temporary_banish" };
-    }
-    if (/(回到|返回).{0,12}(?:原来|原本|之前).{0,8}(?:区域|位置)|returns? to (?:its )?original (?:zone|location)/iu.test(text)) {
-      return { verdict: "returns_to_original_zone", reason: "explicit_return_to_original_zone" };
-    }
-  }
-
-  if (type === "activation_condition" || type === "timing") {
-    if (/(不可以|不能|无法|不可).{0,12}(?:发动|發動|発動)|cannot activate/iu.test(text)) {
-      return { verdict: "cannot", reason: "explicit_cannot_activate" };
-    }
-    if (/(可以|能够|能).{0,12}(?:发动|發動|発動)|can activate/iu.test(text)) {
-      return { verdict: "can", reason: "explicit_can_activate" };
-    }
-  }
-
-  if (/^(?:不可以|不能|否|不是|no)[。.!！]?$/iu.test(text)) return { verdict: "no", reason: "explicit_no" };
-  if (/^(?:可以|是|会|yes)[。.!！]?$/iu.test(text)) return { verdict: "yes", reason: "explicit_yes" };
-  return { verdict: "unknown", reason: "asked_result_not_explicitly_answered" };
+  const detected = detectActionVerdict(subQuestion, text);
+  return { ...detected, extractorInput: text };
 }
 
 function evidenceAnswerText(evidence) {
