@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-06-19T20:13:10.486Z",
+  "generatedAt": "2026-06-20T20:00:52.461Z",
   "records": [
     {
       "id": "21385",
@@ -170911,6 +170911,15 @@
         "青之眼少女",
         "青き眼の乙女",
         "Maiden with Eyes of Blue"
+      ],
+      "released": true
+    },
+    {
+      "id": "23409",
+      "name": "カプセル・モンスター・チェス",
+      "jaName": "カプセル・モンスター・チェス",
+      "aliases": [
+        "カプセル・モンスター・チェス"
       ],
       "released": true
     },
