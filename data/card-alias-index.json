@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-06-21T20:12:50.533Z",
+  "generatedAt": "2026-06-22T21:23:06.597Z",
   "records": [
     {
       "alias": "“K9刑侦案件”",
@@ -1970,6 +1970,20 @@
       "language": "en"
     },
     {
+      "alias": "三幻魔の神淵",
+      "normalizedAlias": "三幻魔の神淵",
+      "cardId": "23016",
+      "cardName": "三幻魔の神淵",
+      "language": "ja"
+    },
+    {
+      "alias": "Abyss of the Sacred Beasts",
+      "normalizedAlias": "abyss of the sacred beasts",
+      "cardId": "23016",
+      "cardName": "三幻魔の神淵",
+      "language": "en"
+    },
+    {
       "alias": "邃渊鳞甲－塞特斯",
       "normalizedAlias": "邃渊鳞甲-塞特斯",
       "cardId": "10420",
@@ -3671,8 +3685,8 @@
       "language": "ja"
     },
     {
-      "alias": "Aiwass the Spirit of the Law",
-      "normalizedAlias": "aiwass the spirit of the law",
+      "alias": "Aiwass, Divine Spirit of the Law",
+      "normalizedAlias": "aiwass, divine spirit of the law",
       "cardId": "22965",
       "cardName": "法の神霊アイワス",
       "language": "en"
@@ -8893,6 +8907,55 @@
       "language": "en"
     },
     {
+      "alias": "Angelechy Bastion",
+      "normalizedAlias": "angelechy bastion",
+      "cardId": "23306",
+      "cardName": "Angelechy Bastion",
+      "language": "en"
+    },
+    {
+      "alias": "Angelechy Destrier",
+      "normalizedAlias": "angelechy destrier",
+      "cardId": "23307",
+      "cardName": "Angelechy Destrier",
+      "language": "en"
+    },
+    {
+      "alias": "Angelechy Disturbance",
+      "normalizedAlias": "angelechy disturbance",
+      "cardId": "23310",
+      "cardName": "Angelechy Disturbance",
+      "language": "en"
+    },
+    {
+      "alias": "Angelechy Enlisted",
+      "normalizedAlias": "angelechy enlisted",
+      "cardId": "23308",
+      "cardName": "Angelechy Enlisted",
+      "language": "en"
+    },
+    {
+      "alias": "Angelechy Opening to e4",
+      "normalizedAlias": "angelechy opening to e4",
+      "cardId": "23311",
+      "cardName": "Angelechy Opening to e4",
+      "language": "en"
+    },
+    {
+      "alias": "Angelechy Problem",
+      "normalizedAlias": "angelechy problem",
+      "cardId": "23309",
+      "cardName": "Angelechy Problem",
+      "language": "en"
+    },
+    {
+      "alias": "Angelechy Shatranga",
+      "normalizedAlias": "angelechy shatranga",
+      "cardId": "23305",
+      "cardName": "Angelechy Shatranga",
+      "language": "en"
+    },
+    {
       "alias": "天魔之声选器－『华耳琴璃』",
       "normalizedAlias": "天魔之声选器-『华耳琴璃』",
       "cardId": "19385",
@@ -9075,8 +9138,8 @@
       "language": "ja"
     },
     {
-      "alias": "Annihilating Retrolight",
-      "normalizedAlias": "annihilating retrolight",
+      "alias": "Annihilate Retroglight",
+      "normalizedAlias": "annihilate retroglight",
       "cardId": "23028",
       "cardName": "時空穿つ遡光",
       "language": "en"
@@ -15284,6 +15347,20 @@
       "language": "en"
     },
     {
+      "alias": "繋星の雷后",
+      "normalizedAlias": "繋星の雷后",
+      "cardId": "22972",
+      "cardName": "繋星の雷后",
+      "language": "ja"
+    },
+    {
+      "alias": "Astrazma Urania",
+      "normalizedAlias": "astrazma urania",
+      "cardId": "22972",
+      "cardName": "繋星の雷后",
+      "language": "en"
+    },
+    {
       "alias": "宙读阵魔术士",
       "normalizedAlias": "宙读阵魔术士",
       "cardId": "12906",
@@ -15323,20 +15400,6 @@
       "normalizedAlias": "astrograph sorcerer, the star magician",
       "cardId": "22704",
       "cardName": "星霜的魔术师－宙读阵魔术士",
-      "language": "en"
-    },
-    {
-      "alias": "繋星の雷后",
-      "normalizedAlias": "繋星の雷后",
-      "cardId": "22972",
-      "cardName": "繋星の雷后",
-      "language": "ja"
-    },
-    {
-      "alias": "Astrolasma Urania",
-      "normalizedAlias": "astrolasma urania",
-      "cardId": "22972",
-      "cardName": "繋星の雷后",
       "language": "en"
     },
     {
@@ -21808,20 +21871,6 @@
       "language": "en"
     },
     {
-      "alias": "黒き混沌の魔術師ブラック・カオス",
-      "normalizedAlias": "黒き混沌の魔術師ブラック・カオス",
-      "cardId": "22976",
-      "cardName": "黒き混沌の魔術師ブラック・カオス",
-      "language": "ja"
-    },
-    {
-      "alias": "Black Chaos the Dark Chaos Magician",
-      "normalizedAlias": "black chaos the dark chaos magician",
-      "cardId": "22976",
-      "cardName": "黒き混沌の魔術師ブラック・カオス",
-      "language": "en"
-    },
-    {
       "alias": "超魔剣士ブラック・カオス",
       "normalizedAlias": "超魔剣士ブラック・カオス",
       "cardId": "22950",
@@ -21829,10 +21878,24 @@
       "language": "ja"
     },
     {
-      "alias": "Black Chaos the Ultimate Magical Swordsman",
-      "normalizedAlias": "black chaos the ultimate magical swordsman",
+      "alias": "Black Chaos",
+      "normalizedAlias": "black chaos",
       "cardId": "22950",
       "cardName": "超魔剣士ブラック・カオス",
+      "language": "en"
+    },
+    {
+      "alias": "黒き混沌の魔術師ブラック・カオス",
+      "normalizedAlias": "黒き混沌の魔術師ブラック・カオス",
+      "cardId": "22976",
+      "cardName": "黒き混沌の魔術師ブラック・カオス",
+      "language": "ja"
+    },
+    {
+      "alias": "Magician of Dark Chaos - Black Chaos",
+      "normalizedAlias": "magician of dark chaos - black chaos",
+      "cardId": "22976",
+      "cardName": "黒き混沌の魔術師ブラック・カオス",
       "language": "en"
     },
     {
@@ -24384,8 +24447,8 @@
       "language": "ja"
     },
     {
-      "alias": "Blitzclique - Alternator",
-      "normalizedAlias": "blitzclique - alternator",
+      "alias": "Blitzclique Alternator",
+      "normalizedAlias": "blitzclique alternator",
       "cardId": "23018",
       "cardName": "雷盟－オルタネータ",
       "language": "en"
@@ -24412,8 +24475,8 @@
       "language": "ja"
     },
     {
-      "alias": "Blitzclique - Return Stroke",
-      "normalizedAlias": "blitzclique - return stroke",
+      "alias": "Blitzclique Return Stroke",
+      "normalizedAlias": "blitzclique return stroke",
       "cardId": "23017",
       "cardName": "雷盟－リターンストローク",
       "language": "en"
@@ -24426,8 +24489,8 @@
       "language": "ja"
     },
     {
-      "alias": "Blitzclique - Stepped Leader",
-      "normalizedAlias": "blitzclique - stepped leader",
+      "alias": "Blitzclique - Steppleader",
+      "normalizedAlias": "blitzclique - steppleader",
       "cardId": "23001",
       "cardName": "雷盟－ステップリーダ",
       "language": "en"
@@ -30649,6 +30712,20 @@
       "language": "en"
     },
     {
+      "alias": "罪禍の三幻魔－降雷皇ハモン",
+      "normalizedAlias": "罪禍の三幻魔-降雷皇ハモン",
+      "cardId": "22955",
+      "cardName": "罪禍の三幻魔－降雷皇ハモン",
+      "language": "ja"
+    },
+    {
+      "alias": "Calamity of the Sacred Beasts - Hamon, Lord of Striking Thunder",
+      "normalizedAlias": "calamity of the sacred beasts - hamon, lord of striking thunder",
+      "cardId": "22955",
+      "cardName": "罪禍の三幻魔－降雷皇ハモン",
+      "language": "en"
+    },
+    {
       "alias": "彼岸恶鬼 哈克斯帕",
       "normalizedAlias": "彼岸恶鬼 哈克斯帕",
       "cardId": "11507",
@@ -32525,6 +32602,20 @@
       "language": "en"
     },
     {
+      "alias": "エルフの聖賢者",
+      "normalizedAlias": "エルフの聖賢者",
+      "cardId": "22952",
+      "cardName": "エルフの聖賢者",
+      "language": "ja"
+    },
+    {
+      "alias": "Celtic Mystic",
+      "normalizedAlias": "celtic mystic",
+      "cardId": "22952",
+      "cardName": "エルフの聖賢者",
+      "language": "en"
+    },
+    {
       "alias": "セメタリー・ボム",
       "normalizedAlias": "セメタリ-・ボム",
       "cardId": "6148",
@@ -32921,6 +33012,13 @@
       "normalizedAlias": "ceruli, guru of dark world",
       "cardId": "9714",
       "cardName": "暗黒界の導師 セルリ",
+      "language": "en"
+    },
+    {
+      "alias": "Cerynemesia, Mystical Beast of the Forest",
+      "normalizedAlias": "cerynemesia, mystical beast of the forest",
+      "cardId": "23302",
+      "cardName": "Cerynemesia, Mystical Beast of the Forest",
       "language": "en"
     },
     {
@@ -33848,8 +33946,8 @@
       "language": "ja"
     },
     {
-      "alias": "Chaos Hats",
-      "normalizedAlias": "chaos hats",
+      "alias": "Chaos Magical Hats",
+      "normalizedAlias": "chaos magical hats",
       "cardId": "22995",
       "cardName": "カオスシルクハット",
       "language": "en"
@@ -33922,6 +34020,20 @@
       "normalizedAlias": "chaos mirage dragon",
       "cardId": "18158",
       "cardName": "混沌幻象龙",
+      "language": "en"
+    },
+    {
+      "alias": "混沌のマジック・ボックス",
+      "normalizedAlias": "混沌のマジック・ボックス",
+      "cardId": "22994",
+      "cardName": "混沌のマジック・ボックス",
+      "language": "ja"
+    },
+    {
+      "alias": "Chaos Mystic Box",
+      "normalizedAlias": "chaos mystic box",
+      "cardId": "22994",
+      "cardName": "混沌のマジック・ボックス",
       "language": "en"
     },
     {
@@ -37215,8 +37327,8 @@
       "language": "ja"
     },
     {
-      "alias": "Clown Crew Drish",
-      "normalizedAlias": "clown crew drish",
+      "alias": "Clown Crew Dristy",
+      "normalizedAlias": "clown crew dristy",
       "cardId": "22991",
       "cardName": "道化の一座 ドリッシュ",
       "language": "en"
@@ -39952,8 +40064,8 @@
       "language": "ja"
     },
     {
-      "alias": "Corrupted Ritual Records",
-      "normalizedAlias": "corrupted ritual records",
+      "alias": "Ragged Records of Rites",
+      "normalizedAlias": "ragged records of rites",
       "cardId": "23011",
       "cardName": "朽ちた祭儀要録",
       "language": "en"
@@ -40407,8 +40519,8 @@
       "language": "ja"
     },
     {
-      "alias": "Crack Blitzclique",
-      "normalizedAlias": "crack blitzclique",
+      "alias": "Crackle Blitzclique",
+      "normalizedAlias": "crackle blitzclique",
       "cardId": "22961",
       "cardName": "クラック・ブリッツクリーク",
       "language": "en"
@@ -53623,8 +53735,8 @@
       "language": "ja"
     },
     {
-      "alias": "Dead-End Power Patron Realm - Viraia",
-      "normalizedAlias": "dead-end power patron realm - viraia",
+      "alias": "Prohibitive Power Patron Purview - Vilaea",
+      "normalizedAlias": "prohibitive power patron purview - vilaea",
       "cardId": "23004",
       "cardName": "絶境なる獄神域－ヴィライア",
       "language": "en"
@@ -56409,8 +56521,8 @@
       "language": "zh"
     },
     {
-      "alias": "Destruction Chant of the Sacred Beast",
-      "normalizedAlias": "destruction chant of the sacred beast",
+      "alias": "Sacred Beasts Combined Assault",
+      "normalizedAlias": "sacred beasts combined assault",
       "cardId": "23015",
       "cardName": "三幻魔合殺",
       "language": "en"
@@ -59615,6 +59727,13 @@
       "language": "en"
     },
     {
+      "alias": "Distrust Paranoia",
+      "normalizedAlias": "distrust paranoia",
+      "cardId": "23297",
+      "cardName": "Distrust Paranoia",
+      "language": "en"
+    },
+    {
       "alias": "攪乱作戦",
       "normalizedAlias": "攪乱作戦",
       "cardId": "5546",
@@ -59626,20 +59745,6 @@
       "normalizedAlias": "disturbance strategy",
       "cardId": "5546",
       "cardName": "攪乱作戦",
-      "language": "en"
-    },
-    {
-      "alias": "三幻魔の神淵",
-      "normalizedAlias": "三幻魔の神淵",
-      "cardId": "23016",
-      "cardName": "三幻魔の神淵",
-      "language": "ja"
-    },
-    {
-      "alias": "Divine Abyss of the Sacred Beast",
-      "normalizedAlias": "divine abyss of the sacred beast",
-      "cardId": "23016",
-      "cardName": "三幻魔の神淵",
       "language": "en"
     },
     {
@@ -71991,6 +72096,20 @@
       "language": "en"
     },
     {
+      "alias": "誇り高き耀聖の詩－エルフェンノーツ",
+      "normalizedAlias": "誇り高き耀聖の詩-エルフェンノ-ツ",
+      "cardId": "22984",
+      "cardName": "誇り高き耀聖の詩－エルフェンノーツ",
+      "language": "ja"
+    },
+    {
+      "alias": "Elfnote June Pride",
+      "normalizedAlias": "elfnote june pride",
+      "cardId": "22984",
+      "cardName": "誇り高き耀聖の詩－エルフェンノーツ",
+      "language": "en"
+    },
+    {
       "alias": "耀圣之花诗 露西娜",
       "normalizedAlias": "耀圣之花诗 露西娜",
       "cardId": "22116",
@@ -76954,8 +77073,8 @@
       "language": "ja"
     },
     {
-      "alias": "Excited Melffys",
-      "normalizedAlias": "excited melffys",
+      "alias": "Melffys' Joyful Surprise",
+      "normalizedAlias": "melffys' joyful surprise",
       "cardId": "22983",
       "cardName": "わくどきメルフィーズ",
       "language": "en"
@@ -76968,8 +77087,8 @@
       "language": "ja"
     },
     {
-      "alias": "Exciting Melffy Time",
-      "normalizedAlias": "exciting melffy time",
+      "alias": "Melffy Playtime Surprise",
+      "normalizedAlias": "melffy playtime surprise",
       "cardId": "23024",
       "cardName": "どきどきメルフィータイム",
       "language": "en"
@@ -85634,6 +85753,20 @@
       "language": "en"
     },
     {
+      "alias": "嗚呼な落とし穴",
+      "normalizedAlias": "嗚呼な落とし穴",
+      "cardId": "23026",
+      "cardName": "嗚呼な落とし穴",
+      "language": "ja"
+    },
+    {
+      "alias": "Foolish Trap Hole",
+      "normalizedAlias": "foolish trap hole",
+      "cardId": "23026",
+      "cardName": "嗚呼な落とし穴",
+      "language": "en"
+    },
+    {
       "alias": "禁断の異本",
       "normalizedAlias": "禁断の異本",
       "cardId": "12186",
@@ -90849,6 +90982,20 @@
       "language": "en"
     },
     {
+      "alias": "魔法名－「新しき世界の始まり」",
+      "normalizedAlias": "魔法名-「新しき世界の始まり」",
+      "cardId": "23019",
+      "cardName": "魔法名－「新しき世界の始まり」",
+      "language": "ja"
+    },
+    {
+      "alias": "Gamma Summon",
+      "normalizedAlias": "gamma summon",
+      "cardId": "23019",
+      "cardName": "魔法名－「新しき世界の始まり」",
+      "language": "en"
+    },
+    {
       "alias": "电磁石战士伽玛",
       "normalizedAlias": "电磁石战士伽玛",
       "cardId": "12575",
@@ -91119,6 +91266,20 @@
       "normalizedAlias": "garden rose maiden",
       "cardId": "14175",
       "cardName": "花园蔷薇少女",
+      "language": "en"
+    },
+    {
+      "alias": "護石の作庭",
+      "normalizedAlias": "護石の作庭",
+      "cardId": "23029",
+      "cardName": "護石の作庭",
+      "language": "ja"
+    },
+    {
+      "alias": "Garden of Talistones",
+      "normalizedAlias": "garden of talistones",
+      "cardId": "23029",
+      "cardName": "護石の作庭",
       "language": "en"
     },
     {
@@ -103421,6 +103582,20 @@
       "language": "en"
     },
     {
+      "alias": "グリフォー",
+      "normalizedAlias": "グリフォ-",
+      "cardId": "22953",
+      "cardName": "グリフォー",
+      "language": "ja"
+    },
+    {
+      "alias": "Griffoh",
+      "normalizedAlias": "griffoh",
+      "cardId": "22953",
+      "cardName": "グリフォー",
+      "language": "en"
+    },
+    {
       "alias": "グリフォール",
       "normalizedAlias": "グリフォ-ル",
       "cardId": "4052",
@@ -104842,20 +105017,6 @@
       "language": "en"
     },
     {
-      "alias": "グリフォー",
-      "normalizedAlias": "グリフォ-",
-      "cardId": "22953",
-      "cardName": "グリフォー",
-      "language": "ja"
-    },
-    {
-      "alias": "Gurifoh",
-      "normalizedAlias": "gurifoh",
-      "cardId": "22953",
-      "cardName": "グリフォー",
-      "language": "en"
-    },
-    {
       "alias": "利刃刺刺＠伊格尼斯者",
       "normalizedAlias": "利刃刺刺@伊格尼斯者",
       "cardId": "15134",
@@ -105539,20 +105700,6 @@
       "normalizedAlias": "hamon, lord of striking thunder",
       "cardId": "6564",
       "cardName": "降雷皇哈蒙",
-      "language": "en"
-    },
-    {
-      "alias": "罪禍の三幻魔－降雷皇ハモン",
-      "normalizedAlias": "罪禍の三幻魔-降雷皇ハモン",
-      "cardId": "22955",
-      "cardName": "罪禍の三幻魔－降雷皇ハモン",
-      "language": "ja"
-    },
-    {
-      "alias": "Hamon, Lord of Striking Thunder - Sacred Beast of Sinful Catastrophe",
-      "normalizedAlias": "hamon, lord of striking thunder - sacred beast of sinful catastrophe",
-      "cardId": "22955",
-      "cardName": "罪禍の三幻魔－降雷皇ハモン",
       "language": "en"
     },
     {
@@ -109217,6 +109364,20 @@
       "language": "en"
     },
     {
+      "alias": "天空城塞クーロン",
+      "normalizedAlias": "天空城塞ク-ロン",
+      "cardId": "22999",
+      "cardName": "天空城塞クーロン",
+      "language": "ja"
+    },
+    {
+      "alias": "Hideout in the Sky, Coulomb",
+      "normalizedAlias": "hideout in the sky, coulomb",
+      "cardId": "22999",
+      "cardName": "天空城塞クーロン",
+      "language": "en"
+    },
+    {
       "alias": "潜伏的Z",
       "normalizedAlias": "潜伏的z",
       "cardId": "18175",
@@ -111709,6 +111870,20 @@
       "language": "en"
     },
     {
+      "alias": "超越召喚獣アイオーン",
+      "normalizedAlias": "超越召喚獣アイオ-ン",
+      "cardId": "22982",
+      "cardName": "超越召喚獣アイオーン",
+      "language": "ja"
+    },
+    {
+      "alias": "Hyperinvoked Aeon",
+      "normalizedAlias": "hyperinvoked aeon",
+      "cardId": "22982",
+      "cardName": "超越召喚獣アイオーン",
+      "language": "en"
+    },
+    {
       "alias": "極超辰醒",
       "normalizedAlias": "極超辰醒",
       "cardId": "14511",
@@ -112808,8 +112983,8 @@
       "language": "ja"
     },
     {
-      "alias": "Ignihorse Dragonith",
-      "normalizedAlias": "ignihorse dragonith",
+      "alias": "Ignihorse Dragonis",
+      "normalizedAlias": "ignihorse dragonis",
       "cardId": "20476",
       "cardName": "火马天龙",
       "language": "en"
@@ -113638,6 +113813,13 @@
       "normalizedAlias": "imperion magnum the superconductive battlebot",
       "cardId": "12581",
       "cardName": "超电导战机 帝皇机翁麦格农",
+      "language": "en"
+    },
+    {
+      "alias": "Imposter Shift",
+      "normalizedAlias": "imposter shift",
+      "cardId": "23303",
+      "cardName": "Imposter Shift",
       "language": "en"
     },
     {
@@ -114600,6 +114782,20 @@
       "language": "en"
     },
     {
+      "alias": "劫火の三幻魔－神炎皇ウリア",
+      "normalizedAlias": "劫火の三幻魔-神炎皇ウリア",
+      "cardId": "22954",
+      "cardName": "劫火の三幻魔－神炎皇ウリア",
+      "language": "ja"
+    },
+    {
+      "alias": "Inferno of the Sacred Beasts - Uria, Lord of Searing Flames",
+      "normalizedAlias": "inferno of the sacred beasts - uria, lord of searing flames",
+      "cardId": "22954",
+      "cardName": "劫火の三幻魔－神炎皇ウリア",
+      "language": "en"
+    },
+    {
       "alias": "焰圣骑士－里查德特",
       "normalizedAlias": "焰圣骑士-里查德特",
       "cardId": "18800",
@@ -115409,6 +115605,20 @@
       "normalizedAlias": "infinity dark",
       "cardId": "7292",
       "cardName": "インフィニティ・ダーク",
+      "language": "en"
+    },
+    {
+      "alias": "無窮の三幻魔－幻魔皇ラビエル",
+      "normalizedAlias": "無窮の三幻魔-幻魔皇ラビエル",
+      "cardId": "22956",
+      "cardName": "無窮の三幻魔－幻魔皇ラビエル",
+      "language": "ja"
+    },
+    {
+      "alias": "Infinity of the Sacred Beasts - Raviel, Lord of Phantasms",
+      "normalizedAlias": "infinity of the sacred beasts - raviel, lord of phantasms",
+      "cardId": "22956",
+      "cardName": "無窮の三幻魔－幻魔皇ラビエル",
       "language": "en"
     },
     {
@@ -116245,8 +116455,8 @@
       "language": "zh"
     },
     {
-      "alias": "Invocation \"Sword\"",
-      "normalizedAlias": "invocation \"sword\"",
+      "alias": "Invocation - \"Sword\"",
+      "normalizedAlias": "invocation - \"sword\"",
       "cardId": "23002",
       "cardName": "召喚魔術－「剣」",
       "language": "en"
@@ -116280,8 +116490,8 @@
       "language": "ja"
     },
     {
-      "alias": "Invoked Babalon",
-      "normalizedAlias": "invoked babalon",
+      "alias": "Invoked Baybarron",
+      "normalizedAlias": "invoked baybarron",
       "cardId": "22980",
       "cardName": "召喚獣ベイバロン",
       "language": "en"
@@ -116357,8 +116567,8 @@
       "language": "ja"
     },
     {
-      "alias": "Invoked Okeanos",
-      "normalizedAlias": "invoked okeanos",
+      "alias": "Invoked Oceanus",
+      "normalizedAlias": "invoked oceanus",
       "cardId": "22981",
       "cardName": "召喚獣オーケアノス",
       "language": "en"
@@ -116417,20 +116627,6 @@
       "normalizedAlias": "invoked sorath",
       "cardId": "22979",
       "cardName": "召喚獣ソラト",
-      "language": "en"
-    },
-    {
-      "alias": "超越召喚獣アイオーン",
-      "normalizedAlias": "超越召喚獣アイオ-ン",
-      "cardId": "22982",
-      "cardName": "超越召喚獣アイオーン",
-      "language": "ja"
-    },
-    {
-      "alias": "Invoked Transcendence Aeon",
-      "normalizedAlias": "invoked transcendence aeon",
-      "cardId": "22982",
-      "cardName": "超越召喚獣アイオーン",
       "language": "en"
     },
     {
@@ -118342,20 +118538,6 @@
       "normalizedAlias": "jumbo drill",
       "cardId": "10038",
       "cardName": "穿孔重機ドリルジャンボ",
-      "language": "en"
-    },
-    {
-      "alias": "誇り高き耀聖の詩－エルフェンノーツ",
-      "normalizedAlias": "誇り高き耀聖の詩-エルフェンノ-ツ",
-      "cardId": "22984",
-      "cardName": "誇り高き耀聖の詩－エルフェンノーツ",
-      "language": "ja"
-    },
-    {
-      "alias": "June Pride - Elfnotes",
-      "normalizedAlias": "june pride - elfnotes",
-      "cardId": "22984",
-      "cardName": "誇り高き耀聖の詩－エルフェンノーツ",
       "language": "en"
     },
     {
@@ -123434,20 +123616,6 @@
       "language": "en"
     },
     {
-      "alias": "天空城塞クーロン",
-      "normalizedAlias": "天空城塞ク-ロン",
-      "cardId": "22999",
-      "cardName": "天空城塞クーロン",
-      "language": "ja"
-    },
-    {
-      "alias": "Kowloon, Citadel of the Sky",
-      "normalizedAlias": "kowloon, citadel of the sky",
-      "cardId": "22999",
-      "cardName": "天空城塞クーロン",
-      "language": "en"
-    },
-    {
       "alias": "コザッキー",
       "normalizedAlias": "コザッキ-",
       "cardId": "6020",
@@ -128310,6 +128478,20 @@
       "normalizedAlias": "light and darkness dragonlord",
       "cardId": "20213",
       "cardName": "光与暗之龙王",
+      "language": "en"
+    },
+    {
+      "alias": "光と闇の儀式",
+      "normalizedAlias": "光と闇の儀式",
+      "cardId": "22993",
+      "cardName": "光と闇の儀式",
+      "language": "ja"
+    },
+    {
+      "alias": "Light and Darkness Ritual",
+      "normalizedAlias": "light and darkness ritual",
+      "cardId": "22993",
+      "cardName": "光と闇の儀式",
       "language": "en"
     },
     {
@@ -133850,8 +134032,8 @@
       "language": "ja"
     },
     {
-      "alias": "Magical King of the Swamp",
-      "normalizedAlias": "magical king of the swamp",
+      "alias": "Sorcerer of the Swamp",
+      "normalizedAlias": "sorcerer of the swamp",
       "cardId": "22973",
       "cardName": "沼地の魔道王",
       "language": "en"
@@ -134302,20 +134484,6 @@
       "normalizedAlias": "magical musketeer wild",
       "cardId": "13320",
       "cardName": "魔弹射手 狂野",
-      "language": "en"
-    },
-    {
-      "alias": "魔法名－「新しき世界の始まり」",
-      "normalizedAlias": "魔法名-「新しき世界の始まり」",
-      "cardId": "23019",
-      "cardName": "魔法名－「新しき世界の始まり」",
-      "language": "ja"
-    },
-    {
-      "alias": "Magical Name - \"Rosa Mundi\"",
-      "normalizedAlias": "magical name - \"rosa mundi\"",
-      "cardId": "23019",
-      "cardName": "魔法名－「新しき世界の始まり」",
       "language": "en"
     },
     {
@@ -142712,6 +142880,20 @@
       "language": "en"
     },
     {
+      "alias": "メルフィーがころんだ",
+      "normalizedAlias": "メルフィ-がころんだ",
+      "cardId": "23008",
+      "cardName": "メルフィーがころんだ",
+      "language": "ja"
+    },
+    {
+      "alias": "Melffy Footsteps",
+      "normalizedAlias": "melffy footsteps",
+      "cardId": "23008",
+      "cardName": "メルフィーがころんだ",
+      "language": "en"
+    },
+    {
       "alias": "メルフィーゴッド・マミィ",
       "normalizedAlias": "メルフィ-ゴッド・マミィ",
       "cardId": "22987",
@@ -142719,8 +142901,8 @@
       "language": "ja"
     },
     {
-      "alias": "Melffy God Mommy",
-      "normalizedAlias": "melffy god mommy",
+      "alias": "Melffy Godmommy",
+      "normalizedAlias": "melffy godmommy",
       "cardId": "22987",
       "cardName": "メルフィーゴッド・マミィ",
       "language": "en"
@@ -142905,20 +143087,6 @@
       "normalizedAlias": "melffy staring contest",
       "cardId": "17465",
       "cardName": "与梅尔菲瞪瞪眼",
-      "language": "en"
-    },
-    {
-      "alias": "メルフィーがころんだ",
-      "normalizedAlias": "メルフィ-がころんだ",
-      "cardId": "23008",
-      "cardName": "メルフィーがころんだ",
-      "language": "ja"
-    },
-    {
-      "alias": "Melffy Statues Game",
-      "normalizedAlias": "melffy statues game",
-      "cardId": "23008",
-      "cardName": "メルフィーがころんだ",
       "language": "en"
     },
     {
@@ -148158,6 +148326,13 @@
       "language": "en"
     },
     {
+      "alias": "Mixousia the Confounder",
+      "normalizedAlias": "mixousia the confounder",
+      "cardId": "23300",
+      "cardName": "Mixousia the Confounder",
+      "language": "en"
+    },
+    {
       "alias": "相剑师－莫邪",
       "normalizedAlias": "相剑师-莫邪",
       "cardId": "16489",
@@ -149663,6 +149838,13 @@
       "language": "en"
     },
     {
+      "alias": "Mortilux Heruvur",
+      "normalizedAlias": "mortilux heruvur",
+      "cardId": "23304",
+      "cardName": "Mortilux Heruvur",
+      "language": "en"
+    },
+    {
       "alias": "モザイク・マンティコア",
       "normalizedAlias": "モザイク・マンティコア",
       "cardId": "7064",
@@ -150762,20 +150944,6 @@
       "language": "en"
     },
     {
-      "alias": "混沌のマジック・ボックス",
-      "normalizedAlias": "混沌のマジック・ボックス",
-      "cardId": "22994",
-      "cardName": "混沌のマジック・ボックス",
-      "language": "ja"
-    },
-    {
-      "alias": "Mystic Box of Chaos",
-      "normalizedAlias": "mystic box of chaos",
-      "cardId": "22994",
-      "cardName": "混沌のマジック・ボックス",
-      "language": "en"
-    },
-    {
       "alias": "バーサーカー",
       "normalizedAlias": "バ-サ-カ-",
       "cardId": "4287",
@@ -151046,20 +151214,6 @@
       "normalizedAlias": "mystical cards of light",
       "cardId": "7631",
       "cardName": "閃光の宝札",
-      "language": "en"
-    },
-    {
-      "alias": "エルフの聖賢者",
-      "normalizedAlias": "エルフの聖賢者",
-      "cardId": "22952",
-      "cardName": "エルフの聖賢者",
-      "language": "ja"
-    },
-    {
-      "alias": "Mystical Celtic Sage",
-      "normalizedAlias": "mystical celtic sage",
-      "cardId": "22952",
-      "cardName": "エルフの聖賢者",
       "language": "en"
     },
     {
@@ -161255,20 +161409,6 @@
       "language": "en"
     },
     {
-      "alias": "嗚呼な落とし穴",
-      "normalizedAlias": "嗚呼な落とし穴",
-      "cardId": "23026",
-      "cardName": "嗚呼な落とし穴",
-      "language": "ja"
-    },
-    {
-      "alias": "Oh my Trap Hole!",
-      "normalizedAlias": "oh my trap hole!",
-      "cardId": "23026",
-      "cardName": "嗚呼な落とし穴",
-      "language": "en"
-    },
-    {
       "alias": "石油採掘",
       "normalizedAlias": "石油採掘",
       "cardId": "7054",
@@ -165000,8 +165140,8 @@
       "language": "ja"
     },
     {
-      "alias": "Pasto-Ral Theorealize",
-      "normalizedAlias": "pasto-ral theorealize",
+      "alias": "Theorealize Past Lull",
+      "normalizedAlias": "theorealize past lull",
       "cardId": "23005",
       "cardName": "予幻なき日々のまぼろし",
       "language": "en"
@@ -168339,8 +168479,8 @@
       "language": "ja"
     },
     {
-      "alias": "Phantasmal Sacred Beasts of Chaos",
-      "normalizedAlias": "phantasmal sacred beasts of chaos",
+      "alias": "The Chaotic Phantasmal Sacred Beasts",
+      "normalizedAlias": "the chaotic phantasmal sacred beasts",
       "cardId": "22978",
       "cardName": "混沌の三幻魔",
       "language": "en"
@@ -168808,8 +168948,8 @@
       "language": "ja"
     },
     {
-      "alias": "Phara, the Goddess of the Beginning",
-      "normalizedAlias": "phara, the goddess of the beginning",
+      "alias": "Phara the Primordial Goddess",
+      "normalizedAlias": "phara the primordial goddess",
       "cardId": "22971",
       "cardName": "始まりの神ファーラ",
       "language": "en"
@@ -170264,8 +170404,8 @@
       "language": "ja"
     },
     {
-      "alias": "Plasma Blast",
-      "normalizedAlias": "plasma blast",
+      "alias": "Superconductive Plasma Blast",
+      "normalizedAlias": "superconductive plasma blast",
       "cardId": "23012",
       "cardName": "超電導閃輝プラズマ・ブラスト",
       "language": "en"
@@ -170852,6 +170992,20 @@
       "language": "en"
     },
     {
+      "alias": "憑依共鳴－ウィン",
+      "normalizedAlias": "憑依共鳴-ウィン",
+      "cardId": "22829",
+      "cardName": "憑依共鳴－ウィン",
+      "language": "ja"
+    },
+    {
+      "alias": "Possessed Destiny - Wynn",
+      "normalizedAlias": "possessed destiny - wynn",
+      "cardId": "22829",
+      "cardName": "憑依共鳴－ウィン",
+      "language": "en"
+    },
+    {
       "alias": "凭依连携",
       "normalizedAlias": "凭依连携",
       "cardId": "15408",
@@ -170870,20 +171024,6 @@
       "normalizedAlias": "possessed partnerships",
       "cardId": "15408",
       "cardName": "凭依连携",
-      "language": "en"
-    },
-    {
-      "alias": "憑依共鳴－ウィン",
-      "normalizedAlias": "憑依共鳴-ウィン",
-      "cardId": "22829",
-      "cardName": "憑依共鳴－ウィン",
-      "language": "ja"
-    },
-    {
-      "alias": "Possessed Resonance - Wynn",
-      "normalizedAlias": "possessed resonance - wynn",
-      "cardId": "22829",
-      "cardName": "憑依共鳴－ウィン",
       "language": "en"
     },
     {
@@ -171377,8 +171517,8 @@
       "language": "ja"
     },
     {
-      "alias": "Power Patron Envoy of Pure Prayers",
-      "normalizedAlias": "power patron envoy of pure prayers",
+      "alias": "Purification Power Patron",
+      "normalizedAlias": "purification power patron",
       "cardId": "22988",
       "cardName": "無垢なる祈りの獄神使",
       "language": "en"
@@ -171391,8 +171531,8 @@
       "language": "ja"
     },
     {
-      "alias": "Power Patron Shadows of the End Times",
-      "normalizedAlias": "power patron shadows of the end times",
+      "alias": "Power Patron Shade of the Final Hour",
+      "normalizedAlias": "power patron shade of the final hour",
       "cardId": "23020",
       "cardName": "終刻なる獄神影",
       "language": "en"
@@ -174006,20 +174146,6 @@
       "normalizedAlias": "protective soul ailin",
       "cardId": "6422",
       "cardName": "守護霊アイリン",
-      "language": "en"
-    },
-    {
-      "alias": "護石の作庭",
-      "normalizedAlias": "護石の作庭",
-      "cardId": "23029",
-      "cardName": "護石の作庭",
-      "language": "ja"
-    },
-    {
-      "alias": "Protective Stone Gardenscaping",
-      "normalizedAlias": "protective stone gardenscaping",
-      "cardId": "23029",
-      "cardName": "護石の作庭",
       "language": "en"
     },
     {
@@ -179798,20 +179924,6 @@
       "language": "en"
     },
     {
-      "alias": "無窮の三幻魔－幻魔皇ラビエル",
-      "normalizedAlias": "無窮の三幻魔-幻魔皇ラビエル",
-      "cardId": "22956",
-      "cardName": "無窮の三幻魔－幻魔皇ラビエル",
-      "language": "ja"
-    },
-    {
-      "alias": "Raviel, Lord of Phantasms - Sacred Beast of Endless Eternity",
-      "normalizedAlias": "raviel, lord of phantasms - sacred beast of endless eternity",
-      "cardId": "22956",
-      "cardName": "無窮の三幻魔－幻魔皇ラビエル",
-      "language": "en"
-    },
-    {
       "alias": "北風と太陽",
       "normalizedAlias": "北風と太陽",
       "cardId": "4282",
@@ -179847,8 +179959,8 @@
       "language": "ja"
     },
     {
-      "alias": "Rayrage, the Twilight Fiend",
-      "normalizedAlias": "rayrage, the twilight fiend",
+      "alias": "Twilight Specter Rayrage",
+      "normalizedAlias": "twilight specter rayrage",
       "cardId": "22974",
       "cardName": "薄明の魔 レイラージュ",
       "language": "en"
@@ -186035,20 +186147,6 @@
       "language": "en"
     },
     {
-      "alias": "光と闇の儀式",
-      "normalizedAlias": "光と闇の儀式",
-      "cardId": "22993",
-      "cardName": "光と闇の儀式",
-      "language": "ja"
-    },
-    {
-      "alias": "Ritual of Light and Darkness",
-      "normalizedAlias": "ritual of light and darkness",
-      "cardId": "22993",
-      "cardName": "光と闇の儀式",
-      "language": "en"
-    },
-    {
       "alias": "斗牛士降临之仪式 黑暗游行",
       "normalizedAlias": "斗牛士降临之仪式 黑暗游行",
       "cardId": "21755",
@@ -188044,6 +188142,20 @@
       "language": "en"
     },
     {
+      "alias": "S－Force ナイトスレイヤー",
+      "normalizedAlias": "s-force ナイトスレイヤ-",
+      "cardId": "22989",
+      "cardName": "S－Force ナイトスレイヤー",
+      "language": "ja"
+    },
+    {
+      "alias": "S-Force Nightcatcher",
+      "normalizedAlias": "s-force nightcatcher",
+      "cardId": "22989",
+      "cardName": "S－Force ナイトスレイヤー",
+      "language": "en"
+    },
+    {
       "alias": "超元特防队 暗夜追缉者",
       "normalizedAlias": "超元特防队 暗夜追缉者",
       "cardId": "18513",
@@ -188062,20 +188174,6 @@
       "normalizedAlias": "s-force nightchaser",
       "cardId": "18513",
       "cardName": "超元特防队 暗夜追缉者",
-      "language": "en"
-    },
-    {
-      "alias": "S－Force ナイトスレイヤー",
-      "normalizedAlias": "s-force ナイトスレイヤ-",
-      "cardId": "22989",
-      "cardName": "S－Force ナイトスレイヤー",
-      "language": "ja"
-    },
-    {
-      "alias": "S-Force Nightslayer",
-      "normalizedAlias": "s-force nightslayer",
-      "cardId": "22989",
-      "cardName": "S－Force ナイトスレイヤー",
       "language": "en"
     },
     {
@@ -188226,8 +188324,8 @@
       "language": "ja"
     },
     {
-      "alias": "S-Force Signus",
-      "normalizedAlias": "s-force signus",
+      "alias": "S-Force Signify",
+      "normalizedAlias": "s-force signify",
       "cardId": "22969",
       "cardName": "S－Force シグナス",
       "language": "en"
@@ -188240,8 +188338,8 @@
       "language": "ja"
     },
     {
-      "alias": "S-Force Sorted World",
-      "normalizedAlias": "s-force sorted world",
+      "alias": "S-Force World Sorting",
+      "normalizedAlias": "s-force world sorting",
       "cardId": "23023",
       "cardName": "S－Force ソート・ワールド",
       "language": "en"
@@ -188947,6 +189045,34 @@
       "language": "en"
     },
     {
+      "alias": "三幻魔解放",
+      "normalizedAlias": "三幻魔解放",
+      "cardId": "22996",
+      "cardName": "三幻魔解放",
+      "language": "zh"
+    },
+    {
+      "alias": "Sacred Beasts Released",
+      "normalizedAlias": "sacred beasts released",
+      "cardId": "22996",
+      "cardName": "三幻魔解放",
+      "language": "en"
+    },
+    {
+      "alias": "三幻魔の霹靂",
+      "normalizedAlias": "三幻魔の霹靂",
+      "cardId": "22998",
+      "cardName": "三幻魔の霹靂",
+      "language": "ja"
+    },
+    {
+      "alias": "Sacred Beasts Thunderclap",
+      "normalizedAlias": "sacred beasts thunderclap",
+      "cardId": "22998",
+      "cardName": "三幻魔の霹靂",
+      "language": "en"
+    },
+    {
       "alias": "圣鸟仙鹤",
       "normalizedAlias": "圣鸟仙鹤",
       "cardId": "5883",
@@ -189049,6 +189175,20 @@
       "normalizedAlias": "sacred serpent's wake",
       "cardId": "10799",
       "cardName": "聖蛇の息吹",
+      "language": "en"
+    },
+    {
+      "alias": "神霊剣アイワス",
+      "normalizedAlias": "神霊剣アイワス",
+      "cardId": "23003",
+      "cardName": "神霊剣アイワス",
+      "language": "ja"
+    },
+    {
+      "alias": "Sacred Spirit Sword Aiwass",
+      "normalizedAlias": "sacred spirit sword aiwass",
+      "cardId": "23003",
+      "cardName": "神霊剣アイワス",
       "language": "en"
     },
     {
@@ -195471,6 +195611,13 @@
       "language": "en"
     },
     {
+      "alias": "Shamanite Shamanknight",
+      "normalizedAlias": "shamanite shamanknight",
+      "cardId": "23301",
+      "cardName": "Shamanite Shamanknight",
+      "language": "en"
+    },
+    {
       "alias": "变形妖姐",
       "normalizedAlias": "变形妖姐",
       "cardId": "10682",
@@ -199843,20 +199990,6 @@
       "normalizedAlias": "skyfaring castle of the black forest",
       "cardId": "14797",
       "cardName": "黒き森の航天閣",
-      "language": "en"
-    },
-    {
-      "alias": "三幻魔の霹靂",
-      "normalizedAlias": "三幻魔の霹靂",
-      "cardId": "22998",
-      "cardName": "三幻魔の霹靂",
-      "language": "ja"
-    },
-    {
-      "alias": "Skyfire of the Sacred Beast",
-      "normalizedAlias": "skyfire of the sacred beast",
-      "cardId": "22998",
-      "cardName": "三幻魔の霹靂",
       "language": "en"
     },
     {
@@ -204540,20 +204673,6 @@
       "normalizedAlias": "spirit shield",
       "cardId": "20391",
       "cardName": "死灵之盾",
-      "language": "en"
-    },
-    {
-      "alias": "神霊剣アイワス",
-      "normalizedAlias": "神霊剣アイワス",
-      "cardId": "23003",
-      "cardName": "神霊剣アイワス",
-      "language": "ja"
-    },
-    {
-      "alias": "Spirit Sword Aiwass",
-      "normalizedAlias": "spirit sword aiwass",
-      "cardId": "23003",
-      "cardName": "神霊剣アイワス",
       "language": "en"
     },
     {
@@ -209601,6 +209720,20 @@
       "normalizedAlias": "summoner of illusions",
       "cardId": "5249",
       "cardName": "幻想召喚師",
+      "language": "en"
+    },
+    {
+      "alias": "三幻魔の操世者",
+      "normalizedAlias": "三幻魔の操世者",
+      "cardId": "22957",
+      "cardName": "三幻魔の操世者",
+      "language": "ja"
+    },
+    {
+      "alias": "Summoner of the Sacred Beasts",
+      "normalizedAlias": "summoner of the sacred beasts",
+      "cardId": "22957",
+      "cardName": "三幻魔の操世者",
       "language": "en"
     },
     {
@@ -220146,20 +220279,6 @@
       "language": "en"
     },
     {
-      "alias": "三幻魔の操世者",
-      "normalizedAlias": "三幻魔の操世者",
-      "cardId": "22957",
-      "cardName": "三幻魔の操世者",
-      "language": "ja"
-    },
-    {
-      "alias": "The Orchestrator of the Sacred Beasts",
-      "normalizedAlias": "the orchestrator of the sacred beasts",
-      "cardId": "22957",
-      "cardName": "三幻魔の操世者",
-      "language": "en"
-    },
-    {
       "alias": "真源的帝王",
       "normalizedAlias": "真源的帝王",
       "cardId": "12095",
@@ -220328,8 +220447,8 @@
       "language": "ja"
     },
     {
-      "alias": "The Phantom Knights of Doomed Solleret",
-      "normalizedAlias": "the phantom knights of doomed solleret",
+      "alias": "The Phantom Knights of Doomed Soleret",
+      "normalizedAlias": "the phantom knights of doomed soleret",
       "cardId": "22968",
       "cardName": "幻影騎士団ドゥームソルレット",
       "language": "en"
@@ -221154,8 +221273,8 @@
       "language": "ja"
     },
     {
-      "alias": "The Three Brave Swordsouls",
-      "normalizedAlias": "the three brave swordsouls",
+      "alias": "The Three Champions of Swordsoul",
+      "normalizedAlias": "the three champions of swordsoul",
       "cardId": "22356",
       "cardName": "三英的相剑师",
       "language": "en"
@@ -223272,6 +223391,13 @@
       "normalizedAlias": "thunderclap skywolf",
       "cardId": "11556",
       "cardName": "大狼雷鳴",
+      "language": "en"
+    },
+    {
+      "alias": "Thundercrash Snarecrow",
+      "normalizedAlias": "thundercrash snarecrow",
+      "cardId": "23299",
+      "cardName": "Thundercrash Snarecrow",
       "language": "en"
     },
     {
@@ -232480,20 +232606,6 @@
       "language": "en"
     },
     {
-      "alias": "三幻魔解放",
-      "normalizedAlias": "三幻魔解放",
-      "cardId": "22996",
-      "cardName": "三幻魔解放",
-      "language": "zh"
-    },
-    {
-      "alias": "Unleashing the Sacred Beasts",
-      "normalizedAlias": "unleashing the sacred beasts",
-      "cardId": "22996",
-      "cardName": "三幻魔解放",
-      "language": "en"
-    },
-    {
       "alias": "破面龙",
       "normalizedAlias": "破面龙",
       "cardId": "11367",
@@ -232792,20 +232904,6 @@
       "normalizedAlias": "uria, lord of searing flames",
       "cardId": "6563",
       "cardName": "神炎皇乌利亚",
-      "language": "en"
-    },
-    {
-      "alias": "劫火の三幻魔－神炎皇ウリア",
-      "normalizedAlias": "劫火の三幻魔-神炎皇ウリア",
-      "cardId": "22954",
-      "cardName": "劫火の三幻魔－神炎皇ウリア",
-      "language": "ja"
-    },
-    {
-      "alias": "Uria, Lord of Searing Flames - Sacred Beast of Cataclysmic Fire",
-      "normalizedAlias": "uria, lord of searing flames - sacred beast of cataclysmic fire",
-      "cardId": "22954",
-      "cardName": "劫火の三幻魔－神炎皇ウリア",
       "language": "en"
     },
     {
@@ -236505,8 +236603,8 @@
       "language": "ja"
     },
     {
-      "alias": "Virakam the Artificial Spirit",
-      "normalizedAlias": "virakam the artificial spirit",
+      "alias": "Virakam, the Divine Spirit of Artifice",
+      "normalizedAlias": "virakam, the divine spirit of artifice",
       "cardId": "22966",
       "cardName": "人工神霊ヴィラカム",
       "language": "en"
@@ -240208,6 +240306,20 @@
       "language": "en"
     },
     {
+      "alias": "ウィスカ・ブリッツクリーク",
+      "normalizedAlias": "ウィスカ・ブリッツクリ-ク",
+      "cardId": "22959",
+      "cardName": "ウィスカ・ブリッツクリーク",
+      "language": "ja"
+    },
+    {
+      "alias": "Whisker Blitzclique",
+      "normalizedAlias": "whisker blitzclique",
+      "cardId": "22959",
+      "cardName": "ウィスカ・ブリッツクリーク",
+      "language": "en"
+    },
+    {
       "alias": "白斗气双头神龙",
       "normalizedAlias": "白斗气双头神龙",
       "cardId": "13461",
@@ -242084,20 +242196,6 @@
       "language": "en"
     },
     {
-      "alias": "ウィスカ・ブリッツクリーク",
-      "normalizedAlias": "ウィスカ・ブリッツクリ-ク",
-      "cardId": "22959",
-      "cardName": "ウィスカ・ブリッツクリーク",
-      "language": "ja"
-    },
-    {
-      "alias": "Wisca Blitzclique",
-      "normalizedAlias": "wisca blitzclique",
-      "cardId": "22959",
-      "cardName": "ウィスカ・ブリッツクリーク",
-      "language": "en"
-    },
-    {
       "alias": "慧眼的魔术师",
       "normalizedAlias": "慧眼的魔术师",
       "cardId": "11784",
@@ -242767,6 +242865,13 @@
       "normalizedAlias": "witchcrafter walpurgis",
       "cardId": "23168",
       "cardName": "魔女の聖夜行",
+      "language": "en"
+    },
+    {
+      "alias": "Witness of the Ancient",
+      "normalizedAlias": "witness of the ancient",
+      "cardId": "23296",
+      "cardName": "Witness of the Ancient",
       "language": "en"
     },
     {
@@ -246732,6 +246837,13 @@
       "language": "en"
     },
     {
+      "alias": "Yomagna the Fire Phantom",
+      "normalizedAlias": "yomagna the fire phantom",
+      "cardId": "23298",
+      "cardName": "Yomagna the Fire Phantom",
+      "language": "en"
+    },
+    {
       "alias": "黄泉へ渡る船",
       "normalizedAlias": "黄泉へ渡る船",
       "cardId": "5521",
@@ -248272,8 +248384,8 @@
       "language": "ja"
     },
     {
-      "alias": "Zenna-no-Tsuinagihime",
-      "normalizedAlias": "zenna-no-tsuinagihime",
+      "alias": "Zenna's Deceiving Doll Maidens",
+      "normalizedAlias": "zenna's deceiving doll maidens",
       "cardId": "22992",
       "cardName": "ぜんなのついなぎひめ",
       "language": "en"

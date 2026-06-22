@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-06-21T20:12:50.533Z",
+  "generatedAt": "2026-06-22T21:23:06.597Z",
   "records": [
     {
       "id": "21385",
@@ -1309,6 +1309,17 @@
       "released": true
     },
     {
+      "id": "23016",
+      "name": "三幻魔の神淵",
+      "jaName": "三幻魔の神淵",
+      "enName": "Abyss of the Sacred Beasts",
+      "aliases": [
+        "三幻魔の神淵",
+        "Abyss of the Sacred Beasts"
+      ],
+      "released": true
+    },
+    {
       "id": "10420",
       "name": "邃渊鳞甲－塞特斯",
       "cnName": "邃渊鳞甲－塞特斯",
@@ -2490,10 +2501,10 @@
       "id": "22965",
       "name": "法の神霊アイワス",
       "jaName": "法の神霊アイワス",
-      "enName": "Aiwass the Spirit of the Law",
+      "enName": "Aiwass, Divine Spirit of the Law",
       "aliases": [
         "法の神霊アイワス",
-        "Aiwass the Spirit of the Law"
+        "Aiwass, Divine Spirit of the Law"
       ],
       "released": true
     },
@@ -6114,6 +6125,69 @@
       "released": true
     },
     {
+      "id": "23306",
+      "name": "Angelechy Bastion",
+      "enName": "Angelechy Bastion",
+      "aliases": [
+        "Angelechy Bastion"
+      ],
+      "released": true
+    },
+    {
+      "id": "23307",
+      "name": "Angelechy Destrier",
+      "enName": "Angelechy Destrier",
+      "aliases": [
+        "Angelechy Destrier"
+      ],
+      "released": true
+    },
+    {
+      "id": "23310",
+      "name": "Angelechy Disturbance",
+      "enName": "Angelechy Disturbance",
+      "aliases": [
+        "Angelechy Disturbance"
+      ],
+      "released": true
+    },
+    {
+      "id": "23308",
+      "name": "Angelechy Enlisted",
+      "enName": "Angelechy Enlisted",
+      "aliases": [
+        "Angelechy Enlisted"
+      ],
+      "released": true
+    },
+    {
+      "id": "23311",
+      "name": "Angelechy Opening to e4",
+      "enName": "Angelechy Opening to e4",
+      "aliases": [
+        "Angelechy Opening to e4"
+      ],
+      "released": true
+    },
+    {
+      "id": "23309",
+      "name": "Angelechy Problem",
+      "enName": "Angelechy Problem",
+      "aliases": [
+        "Angelechy Problem"
+      ],
+      "released": true
+    },
+    {
+      "id": "23305",
+      "name": "Angelechy Shatranga",
+      "enName": "Angelechy Shatranga",
+      "aliases": [
+        "Angelechy Shatranga"
+      ],
+      "released": true
+    },
+    {
       "id": "19385",
       "name": "天魔之声选器－『华耳琴璃』",
       "cnName": "天魔之声选器－『华耳琴璃』",
@@ -6230,10 +6304,10 @@
       "id": "23028",
       "name": "時空穿つ遡光",
       "jaName": "時空穿つ遡光",
-      "enName": "Annihilating Retrolight",
+      "enName": "Annihilate Retroglight",
       "aliases": [
         "時空穿つ遡光",
-        "Annihilating Retrolight"
+        "Annihilate Retroglight"
       ],
       "released": true
     },
@@ -10404,6 +10478,17 @@
       "released": true
     },
     {
+      "id": "22972",
+      "name": "繋星の雷后",
+      "jaName": "繋星の雷后",
+      "enName": "Astrazma Urania",
+      "aliases": [
+        "繋星の雷后",
+        "Astrazma Urania"
+      ],
+      "released": true
+    },
+    {
       "id": "12906",
       "name": "宙读阵魔术士",
       "cnName": "宙读阵魔术士",
@@ -10426,17 +10511,6 @@
         "星霜的魔术师－宙读阵魔术士",
         "星霜の魔術師－アストログラフ・マジシャン",
         "Astrograph Sorcerer, the Star Magician"
-      ],
-      "released": true
-    },
-    {
-      "id": "22972",
-      "name": "繋星の雷后",
-      "jaName": "繋星の雷后",
-      "enName": "Astrolasma Urania",
-      "aliases": [
-        "繋星の雷后",
-        "Astrolasma Urania"
       ],
       "released": true
     },
@@ -14902,24 +14976,24 @@
       "released": true
     },
     {
-      "id": "22976",
-      "name": "黒き混沌の魔術師ブラック・カオス",
-      "jaName": "黒き混沌の魔術師ブラック・カオス",
-      "enName": "Black Chaos the Dark Chaos Magician",
+      "id": "22950",
+      "name": "超魔剣士ブラック・カオス",
+      "jaName": "超魔剣士ブラック・カオス",
+      "enName": "Black Chaos",
       "aliases": [
-        "黒き混沌の魔術師ブラック・カオス",
-        "Black Chaos the Dark Chaos Magician"
+        "超魔剣士ブラック・カオス",
+        "Black Chaos"
       ],
       "released": true
     },
     {
-      "id": "22950",
-      "name": "超魔剣士ブラック・カオス",
-      "jaName": "超魔剣士ブラック・カオス",
-      "enName": "Black Chaos the Ultimate Magical Swordsman",
+      "id": "22976",
+      "name": "黒き混沌の魔術師ブラック・カオス",
+      "jaName": "黒き混沌の魔術師ブラック・カオス",
+      "enName": "Magician of Dark Chaos - Black Chaos",
       "aliases": [
-        "超魔剣士ブラック・カオス",
-        "Black Chaos the Ultimate Magical Swordsman"
+        "黒き混沌の魔術師ブラック・カオス",
+        "Magician of Dark Chaos - Black Chaos"
       ],
       "released": true
     },
@@ -16696,10 +16770,10 @@
       "id": "23018",
       "name": "雷盟－オルタネータ",
       "jaName": "雷盟－オルタネータ",
-      "enName": "Blitzclique - Alternator",
+      "enName": "Blitzclique Alternator",
       "aliases": [
         "雷盟－オルタネータ",
-        "Blitzclique - Alternator"
+        "Blitzclique Alternator"
       ],
       "released": true
     },
@@ -16718,10 +16792,10 @@
       "id": "23017",
       "name": "雷盟－リターンストローク",
       "jaName": "雷盟－リターンストローク",
-      "enName": "Blitzclique - Return Stroke",
+      "enName": "Blitzclique Return Stroke",
       "aliases": [
         "雷盟－リターンストローク",
-        "Blitzclique - Return Stroke"
+        "Blitzclique Return Stroke"
       ],
       "released": true
     },
@@ -16729,10 +16803,10 @@
       "id": "23001",
       "name": "雷盟－ステップリーダ",
       "jaName": "雷盟－ステップリーダ",
-      "enName": "Blitzclique - Stepped Leader",
+      "enName": "Blitzclique - Steppleader",
       "aliases": [
         "雷盟－ステップリーダ",
-        "Blitzclique - Stepped Leader"
+        "Blitzclique - Steppleader"
       ],
       "released": true
     },
@@ -21042,6 +21116,17 @@
       "released": true
     },
     {
+      "id": "22955",
+      "name": "罪禍の三幻魔－降雷皇ハモン",
+      "jaName": "罪禍の三幻魔－降雷皇ハモン",
+      "enName": "Calamity of the Sacred Beasts - Hamon, Lord of Striking Thunder",
+      "aliases": [
+        "罪禍の三幻魔－降雷皇ハモン",
+        "Calamity of the Sacred Beasts - Hamon, Lord of Striking Thunder"
+      ],
+      "released": true
+    },
+    {
       "id": "11507",
       "name": "彼岸恶鬼 哈克斯帕",
       "cnName": "彼岸恶鬼 哈克斯帕",
@@ -22390,6 +22475,17 @@
       "released": true
     },
     {
+      "id": "22952",
+      "name": "エルフの聖賢者",
+      "jaName": "エルフの聖賢者",
+      "enName": "Celtic Mystic",
+      "aliases": [
+        "エルフの聖賢者",
+        "Celtic Mystic"
+      ],
+      "released": true
+    },
+    {
       "id": "6148",
       "name": "セメタリー・ボム",
       "jaName": "セメタリー・ボム",
@@ -22640,6 +22736,15 @@
       "aliases": [
         "暗黒界の導師 セルリ",
         "Ceruli, Guru of Dark World"
+      ],
+      "released": true
+    },
+    {
+      "id": "23302",
+      "name": "Cerynemesia, Mystical Beast of the Forest",
+      "enName": "Cerynemesia, Mystical Beast of the Forest",
+      "aliases": [
+        "Cerynemesia, Mystical Beast of the Forest"
       ],
       "released": true
     },
@@ -23287,10 +23392,10 @@
       "id": "22995",
       "name": "カオスシルクハット",
       "jaName": "カオスシルクハット",
-      "enName": "Chaos Hats",
+      "enName": "Chaos Magical Hats",
       "aliases": [
         "カオスシルクハット",
-        "Chaos Hats"
+        "Chaos Magical Hats"
       ],
       "released": true
     },
@@ -23339,6 +23444,17 @@
         "混沌幻象龙",
         "カオス・ミラージュ・ドラゴン",
         "Chaos Mirage Dragon"
+      ],
+      "released": true
+    },
+    {
+      "id": "22994",
+      "name": "混沌のマジック・ボックス",
+      "jaName": "混沌のマジック・ボックス",
+      "enName": "Chaos Mystic Box",
+      "aliases": [
+        "混沌のマジック・ボックス",
+        "Chaos Mystic Box"
       ],
       "released": true
     },
@@ -25651,10 +25767,10 @@
       "id": "22991",
       "name": "道化の一座 ドリッシュ",
       "jaName": "道化の一座 ドリッシュ",
-      "enName": "Clown Crew Drish",
+      "enName": "Clown Crew Dristy",
       "aliases": [
         "道化の一座 ドリッシュ",
-        "Clown Crew Drish"
+        "Clown Crew Dristy"
       ],
       "released": true
     },
@@ -27512,10 +27628,10 @@
       "id": "23011",
       "name": "朽ちた祭儀要録",
       "jaName": "朽ちた祭儀要録",
-      "enName": "Corrupted Ritual Records",
+      "enName": "Ragged Records of Rites",
       "aliases": [
         "朽ちた祭儀要録",
-        "Corrupted Ritual Records"
+        "Ragged Records of Rites"
       ],
       "released": true
     },
@@ -27839,10 +27955,10 @@
       "id": "22961",
       "name": "クラック・ブリッツクリーク",
       "jaName": "クラック・ブリッツクリーク",
-      "enName": "Crack Blitzclique",
+      "enName": "Crackle Blitzclique",
       "aliases": [
         "クラック・ブリッツクリーク",
-        "Crack Blitzclique"
+        "Crackle Blitzclique"
       ],
       "released": true
     },
@@ -36811,10 +36927,10 @@
       "id": "23004",
       "name": "絶境なる獄神域－ヴィライア",
       "jaName": "絶境なる獄神域－ヴィライア",
-      "enName": "Dead-End Power Patron Realm - Viraia",
+      "enName": "Prohibitive Power Patron Purview - Vilaea",
       "aliases": [
         "絶境なる獄神域－ヴィライア",
-        "Dead-End Power Patron Realm - Viraia"
+        "Prohibitive Power Patron Purview - Vilaea"
       ],
       "released": true
     },
@@ -38721,10 +38837,10 @@
       "id": "23015",
       "name": "三幻魔合殺",
       "jaName": "三幻魔合殺",
-      "enName": "Destruction Chant of the Sacred Beast",
+      "enName": "Sacred Beasts Combined Assault",
       "aliases": [
         "三幻魔合殺",
-        "Destruction Chant of the Sacred Beast"
+        "Sacred Beasts Combined Assault"
       ],
       "released": true
     },
@@ -40932,6 +41048,15 @@
       "released": true
     },
     {
+      "id": "23297",
+      "name": "Distrust Paranoia",
+      "enName": "Distrust Paranoia",
+      "aliases": [
+        "Distrust Paranoia"
+      ],
+      "released": true
+    },
+    {
       "id": "5546",
       "name": "攪乱作戦",
       "jaName": "攪乱作戦",
@@ -40939,17 +41064,6 @@
       "aliases": [
         "攪乱作戦",
         "Disturbance Strategy"
-      ],
-      "released": true
-    },
-    {
-      "id": "23016",
-      "name": "三幻魔の神淵",
-      "jaName": "三幻魔の神淵",
-      "enName": "Divine Abyss of the Sacred Beast",
-      "aliases": [
-        "三幻魔の神淵",
-        "Divine Abyss of the Sacred Beast"
       ],
       "released": true
     },
@@ -49260,6 +49374,17 @@
       "released": true
     },
     {
+      "id": "22984",
+      "name": "誇り高き耀聖の詩－エルフェンノーツ",
+      "jaName": "誇り高き耀聖の詩－エルフェンノーツ",
+      "enName": "Elfnote June Pride",
+      "aliases": [
+        "誇り高き耀聖の詩－エルフェンノーツ",
+        "Elfnote June Pride"
+      ],
+      "released": true
+    },
+    {
       "id": "22116",
       "name": "耀圣之花诗 露西娜",
       "cnName": "耀圣之花诗 露西娜",
@@ -52571,10 +52696,10 @@
       "id": "22983",
       "name": "わくどきメルフィーズ",
       "jaName": "わくどきメルフィーズ",
-      "enName": "Excited Melffys",
+      "enName": "Melffys' Joyful Surprise",
       "aliases": [
         "わくどきメルフィーズ",
-        "Excited Melffys"
+        "Melffys' Joyful Surprise"
       ],
       "released": true
     },
@@ -52582,10 +52707,10 @@
       "id": "23024",
       "name": "どきどきメルフィータイム",
       "jaName": "どきどきメルフィータイム",
-      "enName": "Exciting Melffy Time",
+      "enName": "Melffy Playtime Surprise",
       "aliases": [
         "どきどきメルフィータイム",
-        "Exciting Melffy Time"
+        "Melffy Playtime Surprise"
       ],
       "released": true
     },
@@ -58432,6 +58557,17 @@
       "released": true
     },
     {
+      "id": "23026",
+      "name": "嗚呼な落とし穴",
+      "jaName": "嗚呼な落とし穴",
+      "enName": "Foolish Trap Hole",
+      "aliases": [
+        "嗚呼な落とし穴",
+        "Foolish Trap Hole"
+      ],
+      "released": true
+    },
+    {
       "id": "12186",
       "name": "禁断の異本",
       "jaName": "禁断の異本",
@@ -62055,6 +62191,17 @@
       "released": true
     },
     {
+      "id": "23019",
+      "name": "魔法名－「新しき世界の始まり」",
+      "jaName": "魔法名－「新しき世界の始まり」",
+      "enName": "Gamma Summon",
+      "aliases": [
+        "魔法名－「新しき世界の始まり」",
+        "Gamma Summon"
+      ],
+      "released": true
+    },
+    {
       "id": "12575",
       "name": "电磁石战士伽玛",
       "cnName": "电磁石战士伽玛",
@@ -62234,6 +62381,17 @@
         "花园蔷薇少女",
         "ガーデン・ローズ・メイデン",
         "Garden Rose Maiden"
+      ],
+      "released": true
+    },
+    {
+      "id": "23029",
+      "name": "護石の作庭",
+      "jaName": "護石の作庭",
+      "enName": "Garden of Talistones",
+      "aliases": [
+        "護石の作庭",
+        "Garden of Talistones"
       ],
       "released": true
     },
@@ -70578,6 +70736,17 @@
       "released": true
     },
     {
+      "id": "22953",
+      "name": "グリフォー",
+      "jaName": "グリフォー",
+      "enName": "Griffoh",
+      "aliases": [
+        "グリフォー",
+        "Griffoh"
+      ],
+      "released": true
+    },
+    {
       "id": "4052",
       "name": "グリフォール",
       "jaName": "グリフォール",
@@ -71559,17 +71728,6 @@
       "released": true
     },
     {
-      "id": "22953",
-      "name": "グリフォー",
-      "jaName": "グリフォー",
-      "enName": "Gurifoh",
-      "aliases": [
-        "グリフォー",
-        "Gurifoh"
-      ],
-      "released": true
-    },
-    {
       "id": "15134",
       "name": "利刃刺刺＠伊格尼斯者",
       "cnName": "利刃刺刺＠伊格尼斯者",
@@ -72049,17 +72207,6 @@
         "降雷皇哈蒙",
         "降雷皇ハモン",
         "Hamon, Lord of Striking Thunder"
-      ],
-      "released": true
-    },
-    {
-      "id": "22955",
-      "name": "罪禍の三幻魔－降雷皇ハモン",
-      "jaName": "罪禍の三幻魔－降雷皇ハモン",
-      "enName": "Hamon, Lord of Striking Thunder - Sacred Beast of Sinful Catastrophe",
-      "aliases": [
-        "罪禍の三幻魔－降雷皇ハモン",
-        "Hamon, Lord of Striking Thunder - Sacred Beast of Sinful Catastrophe"
       ],
       "released": true
     },
@@ -74573,6 +74720,17 @@
       "released": true
     },
     {
+      "id": "22999",
+      "name": "天空城塞クーロン",
+      "jaName": "天空城塞クーロン",
+      "enName": "Hideout in the Sky, Coulomb",
+      "aliases": [
+        "天空城塞クーロン",
+        "Hideout in the Sky, Coulomb"
+      ],
+      "released": true
+    },
+    {
       "id": "18175",
       "name": "潜伏的Z",
       "cnName": "潜伏的Z",
@@ -76286,6 +76444,17 @@
       "released": true
     },
     {
+      "id": "22982",
+      "name": "超越召喚獣アイオーン",
+      "jaName": "超越召喚獣アイオーン",
+      "enName": "Hyperinvoked Aeon",
+      "aliases": [
+        "超越召喚獣アイオーン",
+        "Hyperinvoked Aeon"
+      ],
+      "released": true
+    },
+    {
       "id": "14511",
       "name": "極超辰醒",
       "jaName": "極超辰醒",
@@ -76988,11 +77157,11 @@
       "name": "火马天龙",
       "cnName": "火马天龙",
       "jaName": "イグニホース・ドラゴニス",
-      "enName": "Ignihorse Dragonith",
+      "enName": "Ignihorse Dragonis",
       "aliases": [
         "火马天龙",
         "イグニホース・ドラゴニス",
-        "Ignihorse Dragonith"
+        "Ignihorse Dragonis"
       ],
       "released": true
     },
@@ -77537,6 +77706,15 @@
         "超电导战机 帝皇机翁麦格农",
         "超電導戦機インペリオン・マグナム",
         "Imperion Magnum the Superconductive Battlebot"
+      ],
+      "released": true
+    },
+    {
+      "id": "23303",
+      "name": "Imposter Shift",
+      "enName": "Imposter Shift",
+      "aliases": [
+        "Imposter Shift"
       ],
       "released": true
     },
@@ -78235,6 +78413,17 @@
       "released": true
     },
     {
+      "id": "22954",
+      "name": "劫火の三幻魔－神炎皇ウリア",
+      "jaName": "劫火の三幻魔－神炎皇ウリア",
+      "enName": "Inferno of the Sacred Beasts - Uria, Lord of Searing Flames",
+      "aliases": [
+        "劫火の三幻魔－神炎皇ウリア",
+        "Inferno of the Sacred Beasts - Uria, Lord of Searing Flames"
+      ],
+      "released": true
+    },
+    {
       "id": "18800",
       "name": "焰圣骑士－里查德特",
       "cnName": "焰圣骑士－里查德特",
@@ -78757,6 +78946,17 @@
       "aliases": [
         "インフィニティ・ダーク",
         "Infinity Dark"
+      ],
+      "released": true
+    },
+    {
+      "id": "22956",
+      "name": "無窮の三幻魔－幻魔皇ラビエル",
+      "jaName": "無窮の三幻魔－幻魔皇ラビエル",
+      "enName": "Infinity of the Sacred Beasts - Raviel, Lord of Phantasms",
+      "aliases": [
+        "無窮の三幻魔－幻魔皇ラビエル",
+        "Infinity of the Sacred Beasts - Raviel, Lord of Phantasms"
       ],
       "released": true
     },
@@ -79372,10 +79572,10 @@
       "id": "23002",
       "name": "召喚魔術－「剣」",
       "jaName": "召喚魔術－「剣」",
-      "enName": "Invocation \"Sword\"",
+      "enName": "Invocation - \"Sword\"",
       "aliases": [
         "召喚魔術－「剣」",
-        "Invocation \"Sword\""
+        "Invocation - \"Sword\""
       ],
       "released": true
     },
@@ -79396,10 +79596,10 @@
       "id": "22980",
       "name": "召喚獣ベイバロン",
       "jaName": "召喚獣ベイバロン",
-      "enName": "Invoked Babalon",
+      "enName": "Invoked Baybarron",
       "aliases": [
         "召喚獣ベイバロン",
-        "Invoked Babalon"
+        "Invoked Baybarron"
       ],
       "released": true
     },
@@ -79446,10 +79646,10 @@
       "id": "22981",
       "name": "召喚獣オーケアノス",
       "jaName": "召喚獣オーケアノス",
-      "enName": "Invoked Okeanos",
+      "enName": "Invoked Oceanus",
       "aliases": [
         "召喚獣オーケアノス",
-        "Invoked Okeanos"
+        "Invoked Oceanus"
       ],
       "released": true
     },
@@ -79487,17 +79687,6 @@
       "aliases": [
         "召喚獣ソラト",
         "Invoked Sorath"
-      ],
-      "released": true
-    },
-    {
-      "id": "22982",
-      "name": "超越召喚獣アイオーン",
-      "jaName": "超越召喚獣アイオーン",
-      "enName": "Invoked Transcendence Aeon",
-      "aliases": [
-        "超越召喚獣アイオーン",
-        "Invoked Transcendence Aeon"
       ],
       "released": true
     },
@@ -80905,17 +81094,6 @@
       "aliases": [
         "穿孔重機ドリルジャンボ",
         "Jumbo Drill"
-      ],
-      "released": true
-    },
-    {
-      "id": "22984",
-      "name": "誇り高き耀聖の詩－エルフェンノーツ",
-      "jaName": "誇り高き耀聖の詩－エルフェンノーツ",
-      "enName": "June Pride - Elfnotes",
-      "aliases": [
-        "誇り高き耀聖の詩－エルフェンノーツ",
-        "June Pride - Elfnotes"
       ],
       "released": true
     },
@@ -84363,17 +84541,6 @@
       "released": true
     },
     {
-      "id": "22999",
-      "name": "天空城塞クーロン",
-      "jaName": "天空城塞クーロン",
-      "enName": "Kowloon, Citadel of the Sky",
-      "aliases": [
-        "天空城塞クーロン",
-        "Kowloon, Citadel of the Sky"
-      ],
-      "released": true
-    },
-    {
       "id": "6020",
       "name": "コザッキー",
       "jaName": "コザッキー",
@@ -87793,6 +87960,17 @@
         "光与暗之龙王",
         "光と闇の竜王",
         "Light and Darkness Dragonlord"
+      ],
+      "released": true
+    },
+    {
+      "id": "22993",
+      "name": "光と闇の儀式",
+      "jaName": "光と闇の儀式",
+      "enName": "Light and Darkness Ritual",
+      "aliases": [
+        "光と闇の儀式",
+        "Light and Darkness Ritual"
       ],
       "released": true
     },
@@ -91548,10 +91726,10 @@
       "id": "22973",
       "name": "沼地の魔道王",
       "jaName": "沼地の魔道王",
-      "enName": "Magical King of the Swamp",
+      "enName": "Sorcerer of the Swamp",
       "aliases": [
         "沼地の魔道王",
-        "Magical King of the Swamp"
+        "Sorcerer of the Swamp"
       ],
       "released": true
     },
@@ -91834,17 +92012,6 @@
         "魔弹射手 狂野",
         "魔弾の射手 ワイルド",
         "Magical Musketeer Wild"
-      ],
-      "released": true
-    },
-    {
-      "id": "23019",
-      "name": "魔法名－「新しき世界の始まり」",
-      "jaName": "魔法名－「新しき世界の始まり」",
-      "enName": "Magical Name - \"Rosa Mundi\"",
-      "aliases": [
-        "魔法名－「新しき世界の始まり」",
-        "Magical Name - \"Rosa Mundi\""
       ],
       "released": true
     },
@@ -97461,13 +97628,24 @@
       "released": true
     },
     {
+      "id": "23008",
+      "name": "メルフィーがころんだ",
+      "jaName": "メルフィーがころんだ",
+      "enName": "Melffy Footsteps",
+      "aliases": [
+        "メルフィーがころんだ",
+        "Melffy Footsteps"
+      ],
+      "released": true
+    },
+    {
       "id": "22987",
       "name": "メルフィーゴッド・マミィ",
       "jaName": "メルフィーゴッド・マミィ",
-      "enName": "Melffy God Mommy",
+      "enName": "Melffy Godmommy",
       "aliases": [
         "メルフィーゴッド・マミィ",
-        "Melffy God Mommy"
+        "Melffy Godmommy"
       ],
       "released": true
     },
@@ -97583,17 +97761,6 @@
         "与梅尔菲瞪瞪眼",
         "メルフィーとにらめっこ",
         "Melffy Staring Contest"
-      ],
-      "released": true
-    },
-    {
-      "id": "23008",
-      "name": "メルフィーがころんだ",
-      "jaName": "メルフィーがころんだ",
-      "enName": "Melffy Statues Game",
-      "aliases": [
-        "メルフィーがころんだ",
-        "Melffy Statues Game"
       ],
       "released": true
     },
@@ -101215,6 +101382,15 @@
       "released": true
     },
     {
+      "id": "23300",
+      "name": "Mixousia the Confounder",
+      "enName": "Mixousia the Confounder",
+      "aliases": [
+        "Mixousia the Confounder"
+      ],
+      "released": true
+    },
+    {
       "id": "16489",
       "name": "相剑师－莫邪",
       "cnName": "相剑师－莫邪",
@@ -102325,6 +102501,15 @@
       "released": true
     },
     {
+      "id": "23304",
+      "name": "Mortilux Heruvur",
+      "enName": "Mortilux Heruvur",
+      "aliases": [
+        "Mortilux Heruvur"
+      ],
+      "released": true
+    },
+    {
       "id": "7064",
       "name": "モザイク・マンティコア",
       "jaName": "モザイク・マンティコア",
@@ -103088,17 +103273,6 @@
       "released": true
     },
     {
-      "id": "22994",
-      "name": "混沌のマジック・ボックス",
-      "jaName": "混沌のマジック・ボックス",
-      "enName": "Mystic Box of Chaos",
-      "aliases": [
-        "混沌のマジック・ボックス",
-        "Mystic Box of Chaos"
-      ],
-      "released": true
-    },
-    {
       "id": "4287",
       "name": "バーサーカー",
       "jaName": "バーサーカー",
@@ -103292,17 +103466,6 @@
       "aliases": [
         "閃光の宝札",
         "Mystical Cards of Light"
-      ],
-      "released": true
-    },
-    {
-      "id": "22952",
-      "name": "エルフの聖賢者",
-      "jaName": "エルフの聖賢者",
-      "enName": "Mystical Celtic Sage",
-      "aliases": [
-        "エルフの聖賢者",
-        "Mystical Celtic Sage"
       ],
       "released": true
     },
@@ -110220,17 +110383,6 @@
       "released": true
     },
     {
-      "id": "23026",
-      "name": "嗚呼な落とし穴",
-      "jaName": "嗚呼な落とし穴",
-      "enName": "Oh my Trap Hole!",
-      "aliases": [
-        "嗚呼な落とし穴",
-        "Oh my Trap Hole!"
-      ],
-      "released": true
-    },
-    {
       "id": "7054",
       "name": "石油採掘",
       "jaName": "石油採掘",
@@ -112839,10 +112991,10 @@
       "id": "23005",
       "name": "予幻なき日々のまぼろし",
       "jaName": "予幻なき日々のまぼろし",
-      "enName": "Pasto-Ral Theorealize",
+      "enName": "Theorealize Past Lull",
       "aliases": [
         "予幻なき日々のまぼろし",
-        "Pasto-Ral Theorealize"
+        "Theorealize Past Lull"
       ],
       "released": true
     },
@@ -115200,10 +115352,10 @@
       "id": "22978",
       "name": "混沌の三幻魔",
       "jaName": "混沌の三幻魔",
-      "enName": "Phantasmal Sacred Beasts of Chaos",
+      "enName": "The Chaotic Phantasmal Sacred Beasts",
       "aliases": [
         "混沌の三幻魔",
-        "Phantasmal Sacred Beasts of Chaos"
+        "The Chaotic Phantasmal Sacred Beasts"
       ],
       "released": true
     },
@@ -115523,10 +115675,10 @@
       "id": "22971",
       "name": "始まりの神ファーラ",
       "jaName": "始まりの神ファーラ",
-      "enName": "Phara, the Goddess of the Beginning",
+      "enName": "Phara the Primordial Goddess",
       "aliases": [
         "始まりの神ファーラ",
-        "Phara, the Goddess of the Beginning"
+        "Phara the Primordial Goddess"
       ],
       "released": true
     },
@@ -116549,10 +116701,10 @@
       "id": "23012",
       "name": "超電導閃輝プラズマ・ブラスト",
       "jaName": "超電導閃輝プラズマ・ブラスト",
-      "enName": "Plasma Blast",
+      "enName": "Superconductive Plasma Blast",
       "aliases": [
         "超電導閃輝プラズマ・ブラスト",
-        "Plasma Blast"
+        "Superconductive Plasma Blast"
       ],
       "released": true
     },
@@ -116969,6 +117121,17 @@
       "released": true
     },
     {
+      "id": "22829",
+      "name": "憑依共鳴－ウィン",
+      "jaName": "憑依共鳴－ウィン",
+      "enName": "Possessed Destiny - Wynn",
+      "aliases": [
+        "憑依共鳴－ウィン",
+        "Possessed Destiny - Wynn"
+      ],
+      "released": true
+    },
+    {
       "id": "15408",
       "name": "凭依连携",
       "cnName": "凭依连携",
@@ -116978,17 +117141,6 @@
         "凭依连携",
         "憑依連携",
         "Possessed Partnerships"
-      ],
-      "released": true
-    },
-    {
-      "id": "22829",
-      "name": "憑依共鳴－ウィン",
-      "jaName": "憑依共鳴－ウィン",
-      "enName": "Possessed Resonance - Wynn",
-      "aliases": [
-        "憑依共鳴－ウィン",
-        "Possessed Resonance - Wynn"
       ],
       "released": true
     },
@@ -117323,10 +117475,10 @@
       "id": "22988",
       "name": "無垢なる祈りの獄神使",
       "jaName": "無垢なる祈りの獄神使",
-      "enName": "Power Patron Envoy of Pure Prayers",
+      "enName": "Purification Power Patron",
       "aliases": [
         "無垢なる祈りの獄神使",
-        "Power Patron Envoy of Pure Prayers"
+        "Purification Power Patron"
       ],
       "released": true
     },
@@ -117334,10 +117486,10 @@
       "id": "23020",
       "name": "終刻なる獄神影",
       "jaName": "終刻なる獄神影",
-      "enName": "Power Patron Shadows of the End Times",
+      "enName": "Power Patron Shade of the Final Hour",
       "aliases": [
         "終刻なる獄神影",
-        "Power Patron Shadows of the End Times"
+        "Power Patron Shade of the Final Hour"
       ],
       "released": true
     },
@@ -119159,17 +119311,6 @@
       "aliases": [
         "守護霊アイリン",
         "Protective Soul Ailin"
-      ],
-      "released": true
-    },
-    {
-      "id": "23029",
-      "name": "護石の作庭",
-      "jaName": "護石の作庭",
-      "enName": "Protective Stone Gardenscaping",
-      "aliases": [
-        "護石の作庭",
-        "Protective Stone Gardenscaping"
       ],
       "released": true
     },
@@ -123214,17 +123355,6 @@
       "released": true
     },
     {
-      "id": "22956",
-      "name": "無窮の三幻魔－幻魔皇ラビエル",
-      "jaName": "無窮の三幻魔－幻魔皇ラビエル",
-      "enName": "Raviel, Lord of Phantasms - Sacred Beast of Endless Eternity",
-      "aliases": [
-        "無窮の三幻魔－幻魔皇ラビエル",
-        "Raviel, Lord of Phantasms - Sacred Beast of Endless Eternity"
-      ],
-      "released": true
-    },
-    {
       "id": "4282",
       "name": "北風と太陽",
       "jaName": "北風と太陽",
@@ -123250,10 +123380,10 @@
       "id": "22974",
       "name": "薄明の魔 レイラージュ",
       "jaName": "薄明の魔 レイラージュ",
-      "enName": "Rayrage, the Twilight Fiend",
+      "enName": "Twilight Specter Rayrage",
       "aliases": [
         "薄明の魔 レイラージュ",
-        "Rayrage, the Twilight Fiend"
+        "Twilight Specter Rayrage"
       ],
       "released": true
     },
@@ -127453,17 +127583,6 @@
       "released": true
     },
     {
-      "id": "22993",
-      "name": "光と闇の儀式",
-      "jaName": "光と闇の儀式",
-      "enName": "Ritual of Light and Darkness",
-      "aliases": [
-        "光と闇の儀式",
-        "Ritual of Light and Darkness"
-      ],
-      "released": true
-    },
-    {
       "id": "21755",
       "name": "斗牛士降临之仪式 黑暗游行",
       "cnName": "斗牛士降临之仪式 黑暗游行",
@@ -128867,6 +128986,17 @@
       "released": true
     },
     {
+      "id": "22989",
+      "name": "S－Force ナイトスレイヤー",
+      "jaName": "S－Force ナイトスレイヤー",
+      "enName": "S-Force Nightcatcher",
+      "aliases": [
+        "S－Force ナイトスレイヤー",
+        "S-Force Nightcatcher"
+      ],
+      "released": true
+    },
+    {
       "id": "18513",
       "name": "超元特防队 暗夜追缉者",
       "cnName": "超元特防队 暗夜追缉者",
@@ -128876,17 +129006,6 @@
         "超元特防队 暗夜追缉者",
         "S－Force ナイトチェイサー",
         "S-Force Nightchaser"
-      ],
-      "released": true
-    },
-    {
-      "id": "22989",
-      "name": "S－Force ナイトスレイヤー",
-      "jaName": "S－Force ナイトスレイヤー",
-      "enName": "S-Force Nightslayer",
-      "aliases": [
-        "S－Force ナイトスレイヤー",
-        "S-Force Nightslayer"
       ],
       "released": true
     },
@@ -128983,10 +129102,10 @@
       "id": "22969",
       "name": "S－Force シグナス",
       "jaName": "S－Force シグナス",
-      "enName": "S-Force Signus",
+      "enName": "S-Force Signify",
       "aliases": [
         "S－Force シグナス",
-        "S-Force Signus"
+        "S-Force Signify"
       ],
       "released": true
     },
@@ -128994,10 +129113,10 @@
       "id": "23023",
       "name": "S－Force ソート・ワールド",
       "jaName": "S－Force ソート・ワールド",
-      "enName": "S-Force Sorted World",
+      "enName": "S-Force World Sorting",
       "aliases": [
         "S－Force ソート・ワールド",
-        "S-Force Sorted World"
+        "S-Force World Sorting"
       ],
       "released": true
     },
@@ -129447,6 +129566,28 @@
       "released": true
     },
     {
+      "id": "22996",
+      "name": "三幻魔解放",
+      "jaName": "三幻魔解放",
+      "enName": "Sacred Beasts Released",
+      "aliases": [
+        "三幻魔解放",
+        "Sacred Beasts Released"
+      ],
+      "released": true
+    },
+    {
+      "id": "22998",
+      "name": "三幻魔の霹靂",
+      "jaName": "三幻魔の霹靂",
+      "enName": "Sacred Beasts Thunderclap",
+      "aliases": [
+        "三幻魔の霹靂",
+        "Sacred Beasts Thunderclap"
+      ],
+      "released": true
+    },
+    {
       "id": "5883",
       "name": "圣鸟仙鹤",
       "cnName": "圣鸟仙鹤",
@@ -129515,6 +129656,17 @@
       "aliases": [
         "聖蛇の息吹",
         "Sacred Serpent's Wake"
+      ],
+      "released": true
+    },
+    {
+      "id": "23003",
+      "name": "神霊剣アイワス",
+      "jaName": "神霊剣アイワス",
+      "enName": "Sacred Spirit Sword Aiwass",
+      "aliases": [
+        "神霊剣アイワス",
+        "Sacred Spirit Sword Aiwass"
       ],
       "released": true
     },
@@ -133769,6 +133921,15 @@
       "released": true
     },
     {
+      "id": "23301",
+      "name": "Shamanite Shamanknight",
+      "enName": "Shamanite Shamanknight",
+      "aliases": [
+        "Shamanite Shamanknight"
+      ],
+      "released": true
+    },
+    {
       "id": "10682",
       "name": "变形妖姐",
       "cnName": "变形妖姐",
@@ -136784,17 +136945,6 @@
       "aliases": [
         "黒き森の航天閣",
         "Skyfaring Castle of the Black Forest"
-      ],
-      "released": true
-    },
-    {
-      "id": "22998",
-      "name": "三幻魔の霹靂",
-      "jaName": "三幻魔の霹靂",
-      "enName": "Skyfire of the Sacred Beast",
-      "aliases": [
-        "三幻魔の霹靂",
-        "Skyfire of the Sacred Beast"
       ],
       "released": true
     },
@@ -140075,17 +140225,6 @@
         "死灵之盾",
         "死霊の盾",
         "Spirit Shield"
-      ],
-      "released": true
-    },
-    {
-      "id": "23003",
-      "name": "神霊剣アイワス",
-      "jaName": "神霊剣アイワス",
-      "enName": "Spirit Sword Aiwass",
-      "aliases": [
-        "神霊剣アイワス",
-        "Spirit Sword Aiwass"
       ],
       "released": true
     },
@@ -143549,6 +143688,17 @@
       "aliases": [
         "幻想召喚師",
         "Summoner of Illusions"
+      ],
+      "released": true
+    },
+    {
+      "id": "22957",
+      "name": "三幻魔の操世者",
+      "jaName": "三幻魔の操世者",
+      "enName": "Summoner of the Sacred Beasts",
+      "aliases": [
+        "三幻魔の操世者",
+        "Summoner of the Sacred Beasts"
       ],
       "released": true
     },
@@ -150782,17 +150932,6 @@
       "released": true
     },
     {
-      "id": "22957",
-      "name": "三幻魔の操世者",
-      "jaName": "三幻魔の操世者",
-      "enName": "The Orchestrator of the Sacred Beasts",
-      "aliases": [
-        "三幻魔の操世者",
-        "The Orchestrator of the Sacred Beasts"
-      ],
-      "released": true
-    },
-    {
       "id": "12095",
       "name": "真源的帝王",
       "cnName": "真源的帝王",
@@ -150905,10 +151044,10 @@
       "id": "22968",
       "name": "幻影騎士団ドゥームソルレット",
       "jaName": "幻影騎士団ドゥームソルレット",
-      "enName": "The Phantom Knights of Doomed Solleret",
+      "enName": "The Phantom Knights of Doomed Soleret",
       "aliases": [
         "幻影騎士団ドゥームソルレット",
-        "The Phantom Knights of Doomed Solleret"
+        "The Phantom Knights of Doomed Soleret"
       ],
       "released": true
     },
@@ -151522,11 +151661,11 @@
       "name": "三英的相剑师",
       "cnName": "三英的相剑师",
       "jaName": "三英の相剣師",
-      "enName": "The Three Brave Swordsouls",
+      "enName": "The Three Champions of Swordsoul",
       "aliases": [
         "三英的相剑师",
         "三英の相剣師",
-        "The Three Brave Swordsouls"
+        "The Three Champions of Swordsoul"
       ],
       "released": true
     },
@@ -152989,6 +153128,15 @@
       "aliases": [
         "大狼雷鳴",
         "Thunderclap Skywolf"
+      ],
+      "released": true
+    },
+    {
+      "id": "23299",
+      "name": "Thundercrash Snarecrow",
+      "enName": "Thundercrash Snarecrow",
+      "aliases": [
+        "Thundercrash Snarecrow"
       ],
       "released": true
     },
@@ -159388,17 +159536,6 @@
       "released": true
     },
     {
-      "id": "22996",
-      "name": "三幻魔解放",
-      "jaName": "三幻魔解放",
-      "enName": "Unleashing the Sacred Beasts",
-      "aliases": [
-        "三幻魔解放",
-        "Unleashing the Sacred Beasts"
-      ],
-      "released": true
-    },
-    {
       "id": "11367",
       "name": "破面龙",
       "cnName": "破面龙",
@@ -159600,17 +159737,6 @@
         "神炎皇乌利亚",
         "神炎皇ウリア",
         "Uria, Lord of Searing Flames"
-      ],
-      "released": true
-    },
-    {
-      "id": "22954",
-      "name": "劫火の三幻魔－神炎皇ウリア",
-      "jaName": "劫火の三幻魔－神炎皇ウリア",
-      "enName": "Uria, Lord of Searing Flames - Sacred Beast of Cataclysmic Fire",
-      "aliases": [
-        "劫火の三幻魔－神炎皇ウリア",
-        "Uria, Lord of Searing Flames - Sacred Beast of Cataclysmic Fire"
       ],
       "released": true
     },
@@ -162073,10 +162199,10 @@
       "id": "22966",
       "name": "人工神霊ヴィラカム",
       "jaName": "人工神霊ヴィラカム",
-      "enName": "Virakam the Artificial Spirit",
+      "enName": "Virakam, the Divine Spirit of Artifice",
       "aliases": [
         "人工神霊ヴィラカム",
-        "Virakam the Artificial Spirit"
+        "Virakam, the Divine Spirit of Artifice"
       ],
       "released": true
     },
@@ -164708,6 +164834,17 @@
       "released": true
     },
     {
+      "id": "22959",
+      "name": "ウィスカ・ブリッツクリーク",
+      "jaName": "ウィスカ・ブリッツクリーク",
+      "enName": "Whisker Blitzclique",
+      "aliases": [
+        "ウィスカ・ブリッツクリーク",
+        "Whisker Blitzclique"
+      ],
+      "released": true
+    },
+    {
       "id": "13461",
       "name": "白斗气双头神龙",
       "cnName": "白斗气双头神龙",
@@ -166023,17 +166160,6 @@
       "released": true
     },
     {
-      "id": "22959",
-      "name": "ウィスカ・ブリッツクリーク",
-      "jaName": "ウィスカ・ブリッツクリーク",
-      "enName": "Wisca Blitzclique",
-      "aliases": [
-        "ウィスカ・ブリッツクリーク",
-        "Wisca Blitzclique"
-      ],
-      "released": true
-    },
-    {
       "id": "11784",
       "name": "慧眼的魔术师",
       "cnName": "慧眼的魔术师",
@@ -166474,6 +166600,15 @@
       "aliases": [
         "魔女の聖夜行",
         "Witchcrafter Walpurgis"
+      ],
+      "released": true
+    },
+    {
+      "id": "23296",
+      "name": "Witness of the Ancient",
+      "enName": "Witness of the Ancient",
+      "aliases": [
+        "Witness of the Ancient"
       ],
       "released": true
     },
@@ -169150,6 +169285,15 @@
       "released": true
     },
     {
+      "id": "23298",
+      "name": "Yomagna the Fire Phantom",
+      "enName": "Yomagna the Fire Phantom",
+      "aliases": [
+        "Yomagna the Fire Phantom"
+      ],
+      "released": true
+    },
+    {
       "id": "5521",
       "name": "黄泉へ渡る船",
       "jaName": "黄泉へ渡る船",
@@ -170219,10 +170363,10 @@
       "id": "22992",
       "name": "ぜんなのついなぎひめ",
       "jaName": "ぜんなのついなぎひめ",
-      "enName": "Zenna-no-Tsuinagihime",
+      "enName": "Zenna's Deceiving Doll Maidens",
       "aliases": [
         "ぜんなのついなぎひめ",
-        "Zenna-no-Tsuinagihime"
+        "Zenna's Deceiving Doll Maidens"
       ],
       "released": true
     },
