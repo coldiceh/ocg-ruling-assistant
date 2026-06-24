@@ -189,5 +189,6 @@ test("8. report counts direct-evidence quality downgrades", () => {
   assert.equal(report.downgradedDirectCount, 2);
   assert.equal(report.downgradeReasons.different_question, 1);
   assert.equal(report.downgradeReasons.conflicting_direct_evidence, 1);
+  assert.equal(Object.values(report.noDirectReasons).reduce((sum, count) => sum + count, 0), 1);
   assert.equal(report.unsafeConfirmedCount, 0);
 });

@@ -479,7 +479,12 @@ export function retrieveEvidenceByFormalQuery(formalQuery, detectedCards, snapsh
       }
 
       if (rawCandidate) {
-        rawCandidateEvidence.push(rawCandidate);
+        rawCandidateEvidence.push({
+          ...rawCandidate,
+          classification: classification.match,
+          rejectedReason: classification.match === "rejected" ? classification.reason : null,
+          askedResultCoverage: classification.askedResultCoverage || "unknown",
+        });
         const evidenceId = record.id || "unknown";
         if (classification.match === "direct" && record.id) rawClassifications.direct.push(evidenceId);
         else if (classification.match === "similar") rawClassifications.similar.push(evidenceId);
@@ -546,7 +551,9 @@ export function retrieveEvidenceByFormalQuery(formalQuery, detectedCards, snapsh
       rejected: dedupeBy(rawClassifications.rejected, (item) => `${item.id}:${item.rejectedReason}`),
     };
     const normalizedRawCandidates = dedupeBy(rawCandidateEvidence, (item) => item.id)
-      .sort((left, right) => right.score - left.score);
+      .sort((left, right) => right.score - left.score)
+      .map((item, index) => ({ ...item, rank: index + 1 }))
+      .slice(0, 50);
     const retrievalTrace = {
       questionId: subQuestion.id,
       sourceText: subQuestion.sourceText,
@@ -653,6 +660,17 @@ function buildFormalEvidenceSearchQueries(subQuestion, questionCards = [], scena
   const scenarioNames = scenarioCards.map((card) => card.name).filter((name) => name && normalizeKey(name) !== normalizeKey(searchCardName));
   const aliases = questionCards.flatMap(cardAliases);
   const combinedQueries = [];
+  const typeKeywords = semanticQueries[subQuestion?.type] || [subQuestion?.type];
+  if (searchCardName && searchCardName !== "unknown") {
+    if (subQuestion?.askedResult && subQuestion.askedResult !== "unknown") {
+      combinedQueries.push(`${searchCardName} ${subQuestion.askedResult}`);
+    }
+    for (const keyword of typeKeywords.slice(0, 4)) combinedQueries.push(`${searchCardName} ${keyword}`);
+  }
+  for (const alias of dedupeBy(aliases, (item) => normalizeKey(item)).slice(0, 12)) {
+    const aliasKeyword = multilingualTypeKeyword(subQuestion?.type, alias);
+    if (aliasKeyword) combinedQueries.push(`${alias} ${aliasKeyword}`);
+  }
   if (subQuestion?.type === "temporary_banish") {
     if (sourcePrimaryName && sourcePrimaryName !== "unknown") combinedQueries.push(`${sourcePrimaryName} 除外 卡通怪兽`);
     if (compactPrimaryName && compactPrimaryName !== "unknown") combinedQueries.push(`${compactPrimaryName} 效果处理 除外`);
@@ -662,16 +680,32 @@ function buildFormalEvidenceSearchQueries(subQuestion, questionCards = [], scena
     }
   }
   for (const scenarioName of scenarioNames.slice(0, 4)) {
-    combinedQueries.push(`${searchCardName} ${scenarioName} ${semanticQueries[subQuestion?.type]?.[0] || subQuestion?.type || ""}`.trim());
+    combinedQueries.push(`${scenarioName} ${searchCardName} ${typeKeywords[0] || ""}`.trim());
   }
   return dedupeBy([
+    subQuestion?.sourceText,
     ...combinedQueries,
     searchCardName,
-    subQuestion?.sourceText,
     subQuestion?.askedResult,
     ...scenarioNames,
-    ...(semanticQueries[subQuestion?.type] || [subQuestion?.type]),
+    ...typeKeywords,
   ].map((item) => String(item || "").trim()).filter((item) => item && item !== "unknown"), (item) => normalizeKey(item));
+}
+
+function multilingualTypeKeyword(type, alias) {
+  const text = String(alias || "");
+  const english = /[a-z]/iu.test(text) && !/[\u3040-\u30ff\u3400-\u9fff]/u.test(text);
+  const japanese = /[\u3040-\u30ff]/u.test(text);
+  const keywords = {
+    activation_condition: english ? "can activate activation condition" : japanese ? "発動条件 発動できる" : "能否发动 发动条件",
+    activation_location: english ? "Graveyard Monster Zone activated" : japanese ? "墓地 発動 モンスターゾーン" : "墓地发动 场上发动",
+    temporary_banish: english ? "temporarily banish return" : japanese ? "一時的に除外 戻る" : "效果处理 除外 返回",
+    send_to_gy: english ? "sent to the Graveyard after banished" : japanese ? "戦闘破壊 墓地へ送る" : "战斗破坏 送去墓地",
+    return_to_deck: english ? "return to the Deck" : japanese ? "デッキに戻る" : "返回卡组",
+    location_change: english ? "current location Graveyard banished" : japanese ? "現在の場所 墓地 除外" : "区域变化 已经送墓",
+    resolution_handling: english ? "effect resolution handling" : japanese ? "効果処理 解決時" : "效果处理 结算时",
+  };
+  return keywords[type] || "";
 }
 
 function extractSearchCardName(sourceText) {
@@ -1695,7 +1729,7 @@ export async function auditRetrieval(question, options = {}) {
     { gameState, eventTimeline }
   ).map((trace) => ({
     ...trace,
-    rawCandidateEvidence: trace.rawCandidateEvidence.slice(0, 20),
+    rawCandidateEvidence: trace.rawCandidateEvidence.slice(0, 50),
     evidenceCoverageReason: auditCoverageReason(trace, dataSourceStats),
   }));
 
