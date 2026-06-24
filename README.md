@@ -1,78 +1,127 @@
-# 游戏王OCG文本规则相关疑问助手
+# 游戏王 OCG 裁定 QA 助手
 
-一个面向游戏王 OCG 对局裁定的问答工具。目标不是替代官方数据库，而是把自然语言场面描述拆成可核对的问题，并优先给出带出处、带更新时间、可复查的裁定依据。
+这是一个游戏王 OCG 裁定 QA 助手。它的目标不是让 AI 直接回答规则问题，而是把玩家问题变成可追踪、可降级、可复查的结构化裁定流程。
 
-## 当前状态
+当前阶段：**安全可追踪原型 / conservative ruling pipeline prototype**。
 
-这是早期 MVP。
+现阶段优先目标不是提高 `confirmed` 数量，而是避免 `unsafe confirmed`：没有直接证据、没有明确 verdict、条件分支未选中、依赖未解决时，都不能给确定结论。
 
-- 可直接部署到 GitHub Pages。
-- 前端无构建步骤，打开 `index.html` 即可使用。
-- 已加入可部署后端 `POST /api/answer`，用于全卡资料检索和可选模型回答。
-- `data/` 目录保存静态资料快照，页面会显示同步时间和过期状态。
-- GitHub Actions 可以定时从结构化资料源同步已发售卡片、FAQ 与 Q&A 数据。
-- 没有可追溯资料时，系统只给“待确认/需补信息”，不会硬编结论。
-- 当前静态版不会把无关卡片文本当作裁定答案；若只命中效果文本，会提示需要 Q&A 或人工确认。
+## 项目定位
 
-## 正确性原则
+完整链路是：
 
-1. 官方数据库和已确认事务局裁定优先。
-2. 同步快照超过 `freshnessDays` 后，答案自动降级为“需复核”。
-3. 没有来源链接、官方 Q&A 或可信记录的条目，不能标记为确定裁定。
-4. 用户可以输入俗称或民间译名；系统先尝试解析，解析不到或条件不足时再追问关键线索。
-5. 裁定变更时，保留旧快照和更新时间，让答案能被复查。
+```text
+玩家自然语言问题
+-> 形式化解析 FormalRulingQuery
+-> 卡名 / ID 解析
+-> 数据健康检查和按需同步
+-> Q&A / FAQ / 卡片资料检索
+-> direct / similar / rejected evidence 分类
+-> verdict extractor
+-> condition branch 选择
+-> gameState / eventTimeline 推理
+-> subQuestion dependency / transitionRules
+-> final gate
+-> AI 只负责 explanationText
+```
 
-## 本地使用
+重要约束：
 
-直接打开 `index.html`。
+- AI 不能覆盖程序生成的 `status` / `verdict` / `evidenceIds`。
+- 卡片文本只能作为 `cardTextEvidence`，不能单独支撑 `confirmed`。
+- Q&A / FAQ 必须回答当前 `subQuestion.askedResult`，才可能进入 `directEvidence`。
+- 相关但不能直接回答的问题，只能进入 `similarEvidence` 或 `rejectedEvidence`。
 
-由于浏览器对本地文件读取 JSON 有限制，双击打开时可能只使用内置保守模板；部署到 GitHub Pages 后会正常读取 `data/*.json`。
+## 当前测试结果
 
-如果要在本地完整预览，可以运行：
+最近一次本地检查：
+
+- Node tests: 137/137 passing
+- Legacy engine regressions: 9/9 passing
+- Data health: `ok`
+- Readiness level: `production_ready`
+
+Benchmark：
+
+- total cases: 10
+- total subQuestions: 13
+- confirmedCount: 3
+- inferredCount: 1
+- unknownCount: 6
+- unsafeConfirmedCount: 0
+- missingReasonCount: 0
+- verdict_extraction_unknown: 0
+- no_direct_evidence: 4
+
+当前 benchmark 的结论是：系统安全门槛有效；大数据快照增加了覆盖，但多语言 matcher 和问题解析仍限制 `confirmed` 数量。
+
+## 数据状态
+
+当前本地数据是 `production_ready` 级别快照，但这只表示卡片与 Q&A / FAQ 覆盖达到较大规模；具体裁定仍必须经过 evidence gate 和 final gate。
+
+当前数据健康检查结果：
+
+- cardsCount: 14237
+- cardAliasCount: 35634
+- qaCount: 3000
+- faqCount: 24484
+- qaIndexCount: 27484
+- aliasWithoutCardIdCount: 0
+
+核心数据文件：
+
+- `data/cards.json`
+- `data/rulings.json`
+- `data/card-alias-index.json`
+- `data/qa-index.json`
+- `data/tracked-cards.json`
+- `data/snapshot-meta.json`
+
+数据脚本：
+
+- `scripts/check-data.mjs`：检查 cards / alias / Q&A / FAQ / QA index 是否可用。
+- `scripts/sync-data.mjs`：同步或生成本地数据快照，并在结束后检查数据。
+- `scripts/debug-retrieval.mjs`：针对单个问题输出 parser、卡名解析、检索和 evidence trace。
+- `scripts/benchmark-report.mjs`：输出 benchmark 安全性和 unknown reason 报告。
+- `scripts/audit-no-direct.mjs`：审计 benchmark 中的 `no_direct_evidence` 原因。
+
+运行时如果发现本地缺少卡片或该卡 Q&A / FAQ，会尝试 on-demand sync 并更新缓存；如果实时来源不可用，会在 trace 中显示 `live_source_unavailable`，并保守降级。
+
+## 运行方式
+
+初始化或检查数据：
 
 ```bash
-node scripts/serve.mjs
-```
-
-然后打开 `http://127.0.0.1:4173/`。
-
-## 自动同步
-
-仓库包含两个工作流：
-
-- `.github/workflows/sync-data.yml`：每天定时运行 `scripts/sync-data.mjs`，生成卡片、别名、Q&A/FAQ 和对应索引。
-- `.github/workflows/deploy-pages.yml`：把静态站部署到 GitHub Pages。
-
-同步脚本当前使用 YGOResources 的结构化数据作为可机器读取的数据源，同时在页面中保留官方数据库作为最终权威来源。后续如果官方数据库提供稳定 API，应优先接入官方 API。
-
-本地首次运行前先初始化并检查数据：
-
-```powershell
-node scripts/sync-data.mjs
 node scripts/check-data.mjs
+node scripts/sync-data.mjs
 ```
 
-运行时读取 `data/cards.json`、`data/rulings.json`、`data/card-alias-index.json` 和 `data/qa-index.json`。任一核心索引不可用时，后端会返回 `data_source_missing`，不会继续解析或生成结论。
+调试单个问题：
 
-同步参数可在工作流里调整：
+```bash
+node scripts/debug-retrieval.mjs "玩家问题"
+```
 
-- `SYNC_ALL_RELEASED_CARDS=true`：默认同步已发售卡基础资料。
-- `MAX_QA_TOTAL=3000`：限制每次同步的 Q&A 总量；跑得稳定后可以调大。
-- `FETCH_CONCURRENCY=8`：限制并发抓取数量。
+运行 benchmark：
 
-## 后端回答接口
+```bash
+node scripts/benchmark-report.mjs
+node scripts/audit-no-direct.mjs
+```
 
-本项目现在包含一个最小后端：
+运行测试：
 
-- `backend/server.mjs`：本地 Node 服务。
-- `api/answer.js`：Vercel Serverless Function 入口。
-- `backend/formalQuery.mjs`：`FormalRulingQuery` schema、校验、归一化和子问题拆分。
-- `backend/engine.mjs`：卡名识别、按形式化子问题检索证据、规则匹配和结论降级。
-- `backend/openai.mjs`：只负责把自然语言解析成形式化 JSON，以及辅助解析卡名；模型不生成裁定答案。
+```bash
+npm test
+```
 
-本地运行后端需要安装 Node.js 20 或更新版本；部署到 Vercel 时会自动使用项目里的 Node 配置。
+如果当前 shell 没有 `npm`，可以用 Node 直接运行 `package.json` 里 `test` script 列出的测试文件；旧回归入口是：
 
-本地运行后端：
+```bash
+node tests/engine-regression.mjs
+```
+
+本地启动后端：
 
 ```bash
 npm run dev:backend
@@ -89,75 +138,125 @@ Content-Type: application/json
 }
 ```
 
-GitHub Pages 前端无法保存 API key，所以需要把后端单独部署到 Vercel、Render、Cloudflare Worker 或自己的服务器。部署后复制 `config.example.json` 为 `config.json`，填入后端地址：
+## 可信度等级
 
-```json
-{
-  "answerApiUrl": "https://你的后端域名/api/answer"
-}
-```
+- `confirmed`：必须有 `directEvidence`，`evidenceIds` 非空，抽出的 `verdict` 非 `unknown`，并通过 final gate。
+- `inferred`：有相似证据或规则来源，但缺少足以 confirmed 的直接条件。
+- `unknown`：资料不足、条件缺失、证据冲突、依赖未解、只有卡片文本，或 verdict 无法明确抽出。
+- `parse_failed`：只用于 JSON 完全无法解析，或整个 `FormalRulingQuery` 为空。
 
-使用 Gemini 时，在后端部署平台设置：
+安全规则：
 
-```text
-MODEL_PROVIDER=gemini
-GEMINI_API_KEY=你的 Gemini API key
-GEMINI_MODELS=gemini-2.5-flash,gemini-3-flash,gemini-3.5-flash,gemini-3.1-flash-lite,gemini-2.5-flash-lite
-GEMINI_CARD_RESOLUTION_MODELS=gemini-3.1-flash-lite,gemini-2.5-flash-lite,gemini-2.5-flash
-GEMINI_MAX_OUTPUT_TOKENS=2600
-GEMINI_CARD_RESOLUTION_TOKENS=1200
-GEMINI_PARSER_MODELS=gemini-2.5-flash
-GEMINI_PARSER_TOKENS=4096
-GEMINI_TEMPERATURE=0.1
-ALLOWED_ORIGIN=https://coldiceh.github.io
-```
+- card text alone 不能 `confirmed`。
+- manual / heuristic rule 不能 `confirmed`。
+- pending_adjustment 不能 `confirmed`。
+- parserWarnings 非空时不能直接升级为 `confirmed`。
+- AI explanation 不能修改程序 verdict。
 
-如果设置了 `GEMINI_MODELS`，后端会按顺序尝试这些文字模型。前一个模型遇到免费额度耗尽、限速或输出格式异常时，会自动换下一个。图片、视频、语音、Embedding、Live API 和代理类模型不适合当前裁定问答链路。
+## Evidence 分类
 
-## GitHub Pages 部署
+- `directEvidence`：直接回答当前 `askedResult`，且卡名、问题类型、效果编号/场景没有明显冲突。
+- `similarEvidence`：同卡或同类问题相关，但不能直接回答当前问题。
+- `rejectedEvidence`：问题不同、场景冲突、卡片不同、效果编号不符、证据冲突或类型不匹配。
 
-1. 新建 GitHub 仓库，把本项目推到 `main` 分支。
-2. 在仓库 Settings -> Pages 中选择 GitHub Actions。
-3. 打开 Actions，手动运行一次 `Sync ruling data`。
-4. 再运行或等待 `Deploy GitHub Pages`。
+本轮质量门槛：
 
-如果本机没有 Git，但已经安装并登录 GitHub CLI，也可以运行：
+- `directEvidence` 必须覆盖 `askedResult`。
+- 只提到动作但没有回答当前问题，会降级为 `similarEvidence` 或 `rejectedEvidence`。
+- 多个 direct candidates 结论冲突时不能 confirmed。
 
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts/publish-github.ps1 -Repo coldiceh/ocg-ruling-assistant
-```
+已覆盖的回归例：
 
-更推荐安装 Git for Windows 后使用标准 Git 推送：
+- `ygoresources-qa-24339` -> `different_question`
+- `ygoresources-qa-24069` -> `different_question`
+- I:P case conflicting evidence -> `conflicting_direct_evidence`
 
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts/setup-git.ps1
-powershell -ExecutionPolicy Bypass -File scripts/publish-git.ps1
-```
+## 已完成核对表
 
-如果 GitHub CLI 登录失效，先重新登录并让 Git 使用它的凭据：
+- parser / formal query：已实现
+- card resolution：已实现
+- data health / sync-data / check-data：已实现
+- retrieval debug：已实现
+- directEvidence quality gate：已实现
+- multilingual verdict extractor：已实现
+- condition branches：已实现
+- gameState：已实现
+- eventTimeline：已实现
+- subQuestion dependencies：已实现
+- transitionRules：已实现
+- benchmark report：已实现
+- no_direct_evidence audit：基础审计已实现，后续仍需按诊断优化
+- on-demand sync / cache：已实现
+- final gate 防止 AI 覆盖 verdict：已实现
+- README：已更新
+
+## 未完成 / Roadmap
+
+下一步优先级：
+
+1. no_direct_evidence audit 后续优化：区分数据缺失、query missed、matcher 多语言类型识别、ranking issue。
+2. conditional answer / clarification question：当条件分支缺状态时，生成要追问的关键状态。
+3. manual-rulings.json curated ruling source：人工整理裁定源，但不能默认当 official confirmed。
+4. pending_adjustment / probable answer support：只允许 pending / unknown 或有限 inferred。
+5. answer revalidation after database update：数据更新后重新验证旧答案。
+6. larger real ruling benchmark：扩大真实问题集。
+7. data coverage expansion：扩大 Q&A / FAQ 覆盖，接近生产可用。
+8. user feedback -> regression case：用户反馈转成固定回归测试。
+
+当前明确未实现或只处于计划阶段：
+
+- conditional answer / clarification question
+- probable answer for pending_adjustment
+- manual-rulings.json curated ruling source
+- answer history / revalidation after database update
+- larger data coverage / production readiness
+
+## 最新裁定 / 调整中支持计划
+
+未来可以支持最新裁定，但必须区分来源等级：
+
+- `official_qa` / `card_faq` / `official_database`：在满足 direct evidence 和 verdict 条件时 may confirm。
+- `official_response`：取决于来源可信度、可引用性和时间戳。
+- `community_verified`：最高 `inferred`。
+- `manual_curated`：默认最高 `inferred`，除非另有可审计官方来源。
+- `pending_adjustment`：只能 `unknown` / `pending`，不能 confirmed。
+- `heuristic`：最高 `inferred` 或 `unknown`。
+
+不要把用户手动输入的裁定默认当作 official confirmed。
+
+## 后端模块
+
+- `backend/formalQuery.mjs`：FormalRulingQuery schema、normalize、validate、deterministic split。
+- `backend/openai.mjs`：AI parser，只输出 compact JSON。
+- `backend/engine.mjs`：主流程、检索、evidence trace、answer gate。
+- `backend/dataHealth.mjs`：数据健康检查。
+- `backend/dataIndex.mjs`：数据加载和索引。
+- `backend/verdictExtractor.mjs`：多语言 verdict 抽取。
+- `backend/conditionBranches.mjs`：条件分支抽取。
+- `backend/gameState.mjs`：静态状态建模。
+- `backend/eventTimeline.mjs`：事件时间线和 pending transition。
+- `backend/branchSelector.mjs`：条件分支选择。
+- `backend/subQuestionDependencies.mjs`：子问题依赖图。
+- `backend/transitionRules.mjs`：保守状态转移规则。
+
+## 部署
+
+静态前端可部署到 GitHub Pages；后端可部署到 Vercel、Render、Cloudflare Worker 或自己的服务器。
+
+GitHub CLI 登录后可使用：
 
 ```powershell
 D:\githubcli\gh.exe auth login -h github.com -s repo,workflow -w
 D:\githubcli\gh.exe auth setup-git
 ```
 
-## 资料维护
+标准 Git 推送：
 
-- 重点俗称和人工别名仍可写在 `data/tracked-cards.json`。
-- 适合长期共用的裁定，应整理成带来源的 JSON 条目后提交 PR。
-- 模型只能生成形式化查询，不能生成裁定结论；没有匹配当前子问题类型的 Q&A/FAQ 时，不能标记为已确认。
-
-## 路线图
-
-- 扩大 Q&A 同步范围，逐步接近全量。
-- 接入更多官方 Q&A 快照和变更检测。
-- 继续完善中文卡名、俗称、日文名、英文名的统一索引。
-- 加入“场面结构化输入”：双方场上、墓地、连锁、阶段、控制者。
-- 增加裁定变更提醒页，专门展示最近变化。
-- 持续扩充后端的形式化规则匹配；模型始终只做问题解析，不参与裁定结论。
-
-详见 [全卡裁定问答方案](docs/full-ruling-engine.md)。
-后端部署步骤见 [后端部署](docs/backend-deployment.md)。
+```powershell
+git status
+git log --oneline -5
+git push origin main
+```
 
 ## 免责声明
 

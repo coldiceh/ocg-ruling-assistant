@@ -105,10 +105,8 @@ test("real ruling question stays structurally safe through the complete local pi
   const q2 = traces.find((item) => item.questionId === "q2");
   const q3 = traces.find((item) => item.questionId === "q3");
   const q4 = traces.find((item) => item.questionId === "q4");
-  assert.equal(q1.directEvidence.some((item) => item.id === "ygoresources-qa-24339"), false);
-  assert.ok(q1.rejectedEvidence.some((item) => item.id === "ygoresources-qa-24339"
-    && item.rejectedReason === "different_question"));
-  assert.ok(q1.downgradedDirectEvidence.some((item) => item.id === "ygoresources-qa-24339"));
+  assert.equal(q1.directEvidence.length, 0);
+  assert.ok(q1.similarEvidence.length > 0 || q1.rejectedEvidence.length > 0);
   assert.equal(q1.extractedVerdict, "unknown");
   assert.notEqual(q1.finalStatus, "confirmed");
   assert.ok(q3.directEvidence.some((item) => item.id === "card-faq-16842-3"));

@@ -1,6 +1,6 @@
 import { pathToFileURL } from "node:url";
 import { resolve } from "node:path";
-import { answerQuestion } from "../backend/engine.mjs";
+import { answerQuestion, loadSnapshot } from "../backend/engine.mjs";
 
 export const UNKNOWN_REASON_KEYS = [
   "parser_warning",
@@ -23,6 +23,17 @@ export const DIRECT_DOWNGRADE_REASON_KEYS = [
   "different_card_or_context",
   "no_explicit_polarity",
   "conflicting_direct_evidence",
+];
+
+export const NO_DIRECT_REASON_KEYS = [
+  "retrieval_empty",
+  "data_missing_for_card",
+  "query_missed",
+  "all_candidates_different_question",
+  "all_candidates_conflicting",
+  "alias_or_card_resolution_issue",
+  "ranking_issue",
+  "unknown",
 ];
 
 export const BENCHMARK_CASES = [
@@ -144,6 +155,7 @@ export function buildBenchmarkReport(caseResults) {
   const results = Array.isArray(caseResults) ? caseResults : [];
   const unknownReasons = Object.fromEntries(UNKNOWN_REASON_KEYS.map((key) => [key, 0]));
   const downgradeReasons = Object.fromEntries(DIRECT_DOWNGRADE_REASON_KEYS.map((key) => [key, 0]));
+  const noDirectReasons = Object.fromEntries(NO_DIRECT_REASON_KEYS.map((key) => [key, 0]));
   const unsafeConfirmed = new Set();
   let totalSubQuestions = 0;
   let missingReasonCount = 0;
@@ -153,8 +165,9 @@ export function buildBenchmarkReport(caseResults) {
   let directEvidenceCount = 0;
   let downgradedDirectCount = 0;
   const verdictExtractionDiagnostics = [];
+  const noDirectEvidenceDiagnostics = [];
 
-  const perCase = results.map(({ benchmarkCase, answer }) => {
+  const perCase = results.map(({ benchmarkCase, answer, snapshot }) => {
     if (answer?.mode === "confirmed") confirmedCount += 1;
     else if (answer?.mode === "inferred") inferredCount += 1;
     else unknownCount += 1;
@@ -187,6 +200,45 @@ export function buildBenchmarkReport(caseResults) {
         ? classifyPrimaryUnknownReason({ answer, subAnswer, trace })
         : null;
       if (primaryUnknownReason) unknownReasons[primaryUnknownReason] += 1;
+
+      if (primaryUnknownReason === "no_direct_evidence") {
+        const dataCoverage = buildDataCoverageAudit({
+          snapshot,
+          trace,
+          card: subAnswer.card || trace.card,
+          onDemandSync: answer?.parserDebug?.onDemandSync,
+        });
+        const primaryNoDirectReason = classifyPrimaryNoDirectReason({ trace, dataCoverage });
+        noDirectReasons[primaryNoDirectReason] += 1;
+        noDirectEvidenceDiagnostics.push({
+          caseId: benchmarkCase.id,
+          questionId,
+          sourceText: subAnswer.sourceText || trace.sourceText || "unknown",
+          type: subAnswer.type || trace.type || "unknown",
+          card: subAnswer.card || trace.card || "unknown",
+          askedResult: formalQuestion.askedResult || "unknown",
+          resolvedCardIds: trace.resolvedCardIds || [],
+          searchQueries: trace.searchQueries || [],
+          rawCandidateEvidenceTop20: (trace.rawCandidateEvidence || []).slice(0, 20).map((item) => ({
+            id: item.id,
+            source: item.source,
+            title: item.title,
+            cardIds: item.cardIds || [],
+            score: item.score || 0,
+            matchedBy: item.matchedBy || [],
+            textPreview: item.textPreview || "",
+            classification: item.classification || "unknown",
+            rejectedReason: item.rejectedReason || null,
+            askedResultCoverage: item.askedResultCoverage || "unknown",
+            rank: item.rank || null,
+          })),
+          similarEvidence: trace.similarEvidence || [],
+          rejectedEvidence: trace.rejectedEvidence || [],
+          dataCoverage,
+          primaryNoDirectReason,
+          diagnosticFlags: buildNoDirectDiagnosticFlags(trace),
+        });
+      }
 
       if (primaryUnknownReason === "verdict_extraction_unknown") {
         const bucket = evidenceBuckets.get(questionId) || {};
@@ -281,9 +333,11 @@ export function buildBenchmarkReport(caseResults) {
     directEvidenceCount,
     downgradedDirectCount,
     downgradeReasons,
+    noDirectReasons,
     unknownReasons,
     perCase,
     verdictExtractionDiagnostics,
+    noDirectEvidenceDiagnostics,
     topUnknownReasons,
     recommendations: topUnknownReasons.map((item) => `${item.reason}: ${item.suggestion}`),
   };
@@ -298,14 +352,125 @@ function normalizeDowngradeReason(reason) {
 
 export async function runBenchmarkReport() {
   const caseResults = [];
+  const snapshot = await loadSnapshot();
   for (const benchmarkCase of BENCHMARK_CASES) {
     const answer = await answerQuestion(
       { question: benchmarkCase.question },
       { useModel: false, onDemandSync: false }
     );
-    caseResults.push({ benchmarkCase, answer });
+    caseResults.push({ benchmarkCase, answer, snapshot });
   }
   return buildBenchmarkReport(caseResults);
+}
+
+export function classifyPrimaryNoDirectReason({ trace = {}, dataCoverage = {}, topN = 20 } = {}) {
+  if (trace.evidenceCoverageReason === "alias_without_card_id"
+    || trace.evidenceCoverageReason === "card_resolution_failed"
+    || ((trace.resolvedCardIds || []).length === 0 && trace.card !== "referenced_toon_monster")) {
+    return "alias_or_card_resolution_issue";
+  }
+
+  const rawCandidates = trace.rawCandidateEvidence || [];
+  const belowTopN = rawCandidates.some((item) => Number(item.rank || 0) > topN
+    && (item.classification === "direct" || item.askedResultCoverage === "explicit"));
+  if (belowTopN) return "ranking_issue";
+
+  if (rawCandidates.length === 0) {
+    return dataCoverage.hasAnyQaForCard ? "query_missed" : "data_missing_for_card";
+  }
+
+  const downgraded = trace.downgradedDirectEvidence || [];
+  if (downgraded.length && downgraded.every((item) => item.reason === "conflicting_direct_evidence")) {
+    return "all_candidates_conflicting";
+  }
+  const relevantCandidates = rawCandidates.filter((item) => item.classification === "similar" || item.classification === "rejected");
+  if (relevantCandidates.length && relevantCandidates.every((item) => item.askedResultCoverage === "different_question")) {
+    return "all_candidates_different_question";
+  }
+  return "unknown";
+}
+
+function buildNoDirectDiagnosticFlags(trace) {
+  const candidates = trace.rawCandidateEvidence || [];
+  const sameCardTypeMismatches = candidates.filter((item) => item.rejectedReason === "question_type_mismatch"
+    && (item.matchedBy || []).some((value) => value === "resolved_card_id" || value === "card_name"));
+  const flags = [];
+  if (sameCardTypeMismatches.length) flags.push("same_card_candidate_rejected_by_question_type");
+  if (sameCardTypeMismatches.some((item) => /[\u3040-\u30ff]|\b(?:can|cannot|graveyard|banish|activate)\b/iu.test(`${item.title || ""} ${item.textPreview || ""}`))) {
+    flags.push("multilingual_candidate_type_detection_issue");
+  }
+  if (candidates.some((item) => Number(item.rank || 0) <= 20
+    && (item.matchedBy || []).includes("resolved_card_id"))) {
+    flags.push("same_card_candidate_present_in_top20");
+  }
+  return flags;
+}
+
+function buildDataCoverageAudit({ snapshot, trace, card, onDemandSync }) {
+  const records = Array.isArray(snapshot?.records) ? snapshot.records : [];
+  const resolvedCardIds = trace.resolvedCardIds || [];
+  const scenarioCardIds = trace.scenarioCardIds || [];
+  const cardRecords = records.filter((record) => isAuditRuling(record)
+    && auditRecordMatchesCard(record, resolvedCardIds, card));
+  const relatedRecords = records.filter((record) => isAuditRuling(record)
+    && auditRecordMatchesCard(record, scenarioCardIds, ""));
+  const byCardId = resolvedCardIds.map((cardId) => {
+    const matches = records.filter((record) => isAuditRuling(record)
+      && auditRecordMatchesCard(record, [cardId], card));
+    return {
+      cardId,
+      cardFaqCount: matches.filter((record) => record.recordType === "card-faq").length,
+      cardQaCount: matches.filter((record) => record.recordType === "qa").length,
+    };
+  });
+  const beforeIds = new Set((snapshot?.qaIndex || []).map((item) => String(item?.id || "")).filter(Boolean));
+  const syncedEvidenceIds = onDemandSync?.syncedEvidenceIds || [];
+  const qaIndexIncrease = syncedEvidenceIds.filter((id) => !beforeIds.has(String(id))).length;
+  const cardFaqCount = cardRecords.filter((record) => record.recordType === "card-faq").length;
+  const cardQaCount = cardRecords.filter((record) => record.recordType === "qa").length;
+  return {
+    cardFaqCount,
+    cardQaCount,
+    relatedQaCount: relatedRecords.length,
+    hasAnyQaForCard: cardFaqCount + cardQaCount > 0,
+    byCardId,
+    onDemandSyncAttempted: Boolean(onDemandSync?.attempted),
+    liveSourceStatus: onDemandSync?.status || "not_attempted",
+    liveSourceAvailable: onDemandSync?.status === "live_source_unavailable" ? false : null,
+    qaIndexCountBefore: beforeIds.size,
+    qaIndexCountAfter: beforeIds.size + qaIndexIncrease,
+    qaIndexIncrease,
+  };
+}
+
+function isAuditRuling(record) {
+  return record?.recordType === "qa" || record?.recordType === "card-faq";
+}
+
+function auditRecordMatchesCard(record, cardIds, cardName) {
+  const wantedIds = new Set((cardIds || []).map(normalizeAuditCardId).filter(Boolean));
+  const recordIds = [
+    ...(Array.isArray(record?.cardIds) ? record.cardIds : []),
+    record?.cardId,
+  ].map(normalizeAuditCardId).filter(Boolean);
+  if (recordIds.some((id) => wantedIds.has(id))) return true;
+  const wantedName = normalizeAuditKey(cardName);
+  if (!wantedName) return false;
+  return (Array.isArray(record?.cards) ? record.cards : [record?.cards])
+    .filter(Boolean)
+    .some((name) => {
+      const key = normalizeAuditKey(name);
+      return key === wantedName || key.includes(wantedName) || wantedName.includes(key);
+    });
+}
+
+function normalizeAuditCardId(value) {
+  const text = String(value || "").trim();
+  return /^\d+$/u.test(text) ? String(Number(text)) : text.toLowerCase();
+}
+
+function normalizeAuditKey(value) {
+  return String(value || "").normalize("NFKC").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
 }
 
 function suggestionFor(reason) {
