@@ -1132,8 +1132,10 @@ function updateModelStatus(text) {
 function renderSubAnswers(subAnswers) {
   if (!ui.subAnswersPanel) return;
   clearElement(ui.subAnswersPanel);
-  const items = Array.isArray(subAnswers) ? subAnswers.filter((item) => item?.question || item?.verdict || item?.reasoning) : [];
-  if (items.length <= 1) {
+  const items = Array.isArray(subAnswers)
+    ? subAnswers.filter((item) => item?.question || item?.verdict || item?.reasoning || item?.conditionalAnswer)
+    : [];
+  if (!items.length || (items.length <= 1 && !items[0]?.conditionalAnswer)) {
     ui.subAnswersPanel.hidden = true;
     return;
   }
@@ -1165,6 +1167,10 @@ function renderSubAnswers(subAnswers) {
       stateMessage.className = "sub-reasoning";
       stateMessage.textContent = item.stateMessage;
       block.appendChild(stateMessage);
+    }
+
+    if (item.conditionalAnswer) {
+      renderConditionalAnswer(block, item.conditionalAnswer);
     }
 
     if (Array.isArray(item.dependencies) && item.dependencies.length) {
@@ -1205,6 +1211,37 @@ function renderSubAnswers(subAnswers) {
 
     ui.subAnswersPanel.appendChild(block);
   });
+}
+
+function renderConditionalAnswer(parent, conditionalAnswer) {
+  const wrapper = document.createElement("div");
+  wrapper.className = "sub-reasoning";
+
+  const intro = document.createElement("p");
+  intro.textContent = "当前无法确定唯一结论。已找到相关 FAQ/Q&A，但需要确认适用哪个条件分支。";
+  wrapper.appendChild(intro);
+
+  if (Array.isArray(conditionalAnswer.branches) && conditionalAnswer.branches.length) {
+    const title = document.createElement("p");
+    title.textContent = "可能分支：";
+    wrapper.appendChild(title);
+
+    const list = document.createElement("ul");
+    conditionalAnswer.branches.forEach((branch) => {
+      const item = document.createElement("li");
+      item.textContent = `${branch.label || "如果满足该分支条件"}：${branch.explanation || branch.verdict || "unknown"}`;
+      list.appendChild(item);
+    });
+    wrapper.appendChild(list);
+  }
+
+  if (conditionalAnswer.clarificationQuestion) {
+    const clarify = document.createElement("p");
+    clarify.textContent = conditionalAnswer.clarificationQuestion;
+    wrapper.appendChild(clarify);
+  }
+
+  parent.appendChild(wrapper);
 }
 
 function renderList(container, items) {
