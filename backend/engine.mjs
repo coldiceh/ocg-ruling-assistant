@@ -10,6 +10,14 @@ import { extractConditionBranchesFromEvidence } from "./conditionBranches.mjs";
 import { buildEventTimelineFromFormalQuery, deriveStateAtTiming } from "./eventTimeline.mjs";
 import { buildGameStateFromFormalQuery } from "./gameState.mjs";
 import { normalizeFormalRulingQuery, validateFormalRulingQuery } from "./formalQuery.mjs";
+import {
+  buildProvisionalAnswerFromOfficialResponse,
+  isConfirmableOfficialResponse,
+  isProvisionalOfficialResponse,
+  isStructuredOfficialVerdict,
+  normalizeOfficialResponses,
+  officialResponseMatchesSubQuestion,
+} from "./officialResponses.mjs";
 import { parseFormalRulingQueryDetailed, resolveCardNamesWithModel } from "./openai.mjs";
 import { buildSubQuestionDependencyGraph } from "./subQuestionDependencies.mjs";
 import { applyTransitionRules } from "./transitionRules.mjs";
@@ -271,6 +279,7 @@ function buildSubQuestionEvidenceTrace(formalQuery, evidence, subAnswers = [], o
           rejectedReason: item.rejectedReason || "unknown",
         })),
       },
+      provisionalEvidence: [],
       evidenceCoverageReason: "retrieval_empty",
     };
     const rawById = new Map((baseTrace.rawCandidateEvidence || []).map((item) => [String(item.id), item]));
@@ -309,6 +318,8 @@ function buildSubQuestionEvidenceTrace(formalQuery, evidence, subAnswers = [], o
       extractorWarnings: answer.extractorWarnings || extracted.extractorWarnings || [],
       whyUnknown: answer.whyUnknown || extracted.whyUnknown || null,
       conditionalAnswer: answer.conditionalAnswer || null,
+      provisionalAnswer: answer.provisionalAnswer || null,
+      provisionalEvidence: bucket.provisionalEvidence || baseTrace.provisionalEvidence || [],
       dependencies: answer.dependencies || [],
       unresolvedDependencies: answer.unresolvedDependencies || [],
       transitionReasoning: answer.transitionReasoning || [],
@@ -432,6 +443,7 @@ export function retrieveEvidenceByFormalQuery(formalQuery, detectedCards, snapsh
   const cards = mergeCards(Array.isArray(detectedCards) ? detectedCards : []);
   const records = Array.isArray(snapshot?.records) ? snapshot.records : [];
   const qaRecords = records.filter(isRulingEvidence);
+  const provisionalOfficialResponses = records.filter(isProvisionalOfficialResponse);
   const bySubQuestion = query.subQuestions.map((subQuestion) => {
     const questionCards = cardsForSubQuestion(subQuestion, cards);
     const scenarioCards = cardsForScenario(query.scenario, cards);
@@ -444,6 +456,7 @@ export function retrieveEvidenceByFormalQuery(formalQuery, detectedCards, snapsh
     const similarRulingEvidence = [];
     const rejectedEvidence = [];
     const downgradedDirectEvidence = [];
+    const provisionalEvidence = [];
     const rawCandidateEvidence = [];
     const rawClassifications = { direct: [], similar: [], rejected: [] };
 
@@ -520,6 +533,19 @@ export function retrieveEvidenceByFormalQuery(formalQuery, detectedCards, snapsh
       }
     }
 
+    for (const record of provisionalOfficialResponses) {
+      if (!officialResponseMatchesSubQuestion(record, subQuestion)) continue;
+      provisionalEvidence.push({
+        ...record,
+        evidenceId: record.id,
+        subQuestionId: subQuestion.id,
+        matchKind: "provisional",
+        classificationReason: "provisional_official_response",
+        answeredAskedResult: true,
+        askedResultCoverage: "explicit",
+      });
+    }
+
     const conflictExtraction = rulingEvidence.length > 1
       ? extractVerdictFromEvidence(subQuestion, rulingEvidence)
       : null;
@@ -571,6 +597,14 @@ export function retrieveEvidenceByFormalQuery(formalQuery, detectedCards, snapsh
         downgradedDirectEvidence,
         (item) => `${item.id}:${item.reason}`
       ),
+      provisionalEvidence: provisionalEvidence.map((item) => ({
+        id: item.evidenceId || item.id,
+        sourceType: item.sourceType,
+        displayStatus: item.displayStatus,
+        sourceNote: item.sourceNote,
+        officialText: item.officialText,
+        watchOfficialDb: Boolean(item.watchOfficialDb?.enabled),
+      })),
       evidenceCoverageReason: determineEvidenceCoverageReason({
         subQuestion,
         resolvedCardIds,
@@ -587,6 +621,7 @@ export function retrieveEvidenceByFormalQuery(formalQuery, detectedCards, snapsh
       rulingEvidence: normalizedRuling,
       similarRulingEvidence: normalizedSimilar,
       rejectedEvidence: normalizedRejected,
+      provisionalEvidence: dedupeBy(provisionalEvidence, (item) => item.evidenceId || item.id),
       retrievalTrace,
     };
   });
@@ -603,6 +638,10 @@ export function retrieveEvidenceByFormalQuery(formalQuery, detectedCards, snapsh
       bySubQuestion.flatMap((item) => item.rejectedEvidence),
       (item) => `${item.subQuestionId}:${item.evidenceId}:${item.rejectedReason}`
     ),
+    provisionalEvidence: dedupeBy(
+      bySubQuestion.flatMap((item) => item.provisionalEvidence || []),
+      (item) => `${item.subQuestionId}:${item.evidenceId || item.id}`
+    ),
   };
 }
 
@@ -618,6 +657,7 @@ function buildEmptyRetrievalTrace(subQuestion) {
     rawCandidateEvidence: [],
     classifiedEvidence: { direct: [], similar: [], rejected: [] },
     downgradedDirectEvidence: [],
+    provisionalEvidence: [],
     evidenceCoverageReason: "retrieval_empty",
   };
 }
@@ -818,6 +858,9 @@ export function extractVerdictFromEvidence(subQuestion, evidenceList, context = 
     .filter((item) => !conditionalIds.has(String(item?.evidenceId || item?.id || "")))
     .map((item) => ({
       evidenceId: String(item?.evidenceId || item?.id || ""),
+      officialStructuredVerdict: isConfirmableOfficialResponse(item) && isStructuredOfficialVerdict(item.officialVerdict)
+        ? item.officialVerdict
+        : null,
       ...extractSingleEvidenceVerdict(subQuestion, item),
     }));
   const extracted = [
@@ -825,7 +868,11 @@ export function extractVerdictFromEvidence(subQuestion, evidenceList, context = 
       .filter((item) => item.status === "selected" && item.verdict !== "unknown")
       .map((item) => ({ id: item.evidenceId, verdict: item.verdict, reason: item.reason })),
     ...phraseEvidence
-      .map((item) => ({ id: item.evidenceId, verdict: item.verdict, reason: item.reason }))
+      .map((item) => ({
+        id: item.evidenceId,
+        verdict: item.officialStructuredVerdict || item.verdict,
+        reason: item.officialStructuredVerdict ? "official_structured_verdict" : item.reason,
+      }))
       .filter((item) => item.verdict !== "unknown"),
   ];
   const conditionBranches = conditionEvidence.flatMap((item) => item.extracted.branches.map((branch) => ({
@@ -913,7 +960,7 @@ export function extractVerdictFromEvidence(subQuestion, evidenceList, context = 
   const selectedBranch = branchSelections.find((item) => item.status === "selected" && item.verdict === merged) || null;
   return {
     verdict: merged,
-    reason: selectedBranch ? `condition_branch_selected:${merged}` : `explicit_evidence_answer:${merged}`,
+    reason: selectedBranch ? `condition_branch_selected:${formatVerdictReason(merged)}` : `explicit_evidence_answer:${formatVerdictReason(merged)}`,
     evidenceIds,
     conditionBranches,
     branchSelections,
@@ -971,6 +1018,7 @@ export function answerEachSubQuestion(
       similarRulingEvidence: rawBucket.similarRulingEvidence || rawBucket.similarEvidence || [],
       cardTextEvidence: rawBucket.cardTextEvidence || [],
       rejectedEvidence: rawBucket.rejectedEvidence || [],
+      provisionalEvidence: rawBucket.provisionalEvidence || [],
     };
     const parseFailure = options.parseFailure || null;
     if (parseFailure) {
@@ -1047,18 +1095,43 @@ export function answerEachSubQuestion(
         gameState: options.gameState,
         eventTimeline: options.eventTimeline,
       });
-      return finalAnswerGate(candidate, bucket, {
+      return attachProvisionalAnswerIfAllowed(finalAnswerGate(candidate, bucket, {
         parserWarnings: options.parserWarnings || [],
         validEvidenceIds: new Set(validEvidence.keys()),
-      });
+      }), bucket);
     }
     const reason = bucket.cardTextEvidence.length
       ? "card_text_only"
       : bucket.rejectedEvidence.length
         ? "rejected_evidence_only"
         : "no_evidence";
-    return buildProgramSubAnswer(subQuestion, "unknown", "unknown", [], reason, [], bucket);
+    return attachProvisionalAnswerIfAllowed(
+      buildProgramSubAnswer(subQuestion, "unknown", "unknown", [], reason, [], bucket),
+      bucket
+    );
   });
+}
+
+function attachProvisionalAnswerIfAllowed(answer, bucket = {}) {
+  if (answer?.status === "confirmed") return answer;
+  const provisional = (bucket.provisionalEvidence || [])
+    .map((item) => buildProvisionalAnswerFromOfficialResponse(item))
+    .find(Boolean);
+  if (!provisional) return answer;
+  const reason = answer?.reason && answer.reason !== "no_evidence"
+    ? `${answer.reason};provisional_official_response_available`
+    : "provisional_official_response_available";
+  return {
+    ...answer,
+    status: "unknown",
+    verdict: "unknown",
+    evidenceIds: [],
+    reason,
+    reasoning: reason,
+    source: "无 confirmed 直接 Q&A；存在未确认事务局回答截图",
+    provisionalAnswer: provisional,
+    warnings: [...new Set([...(answer.warnings || []), "provisional_official_response_not_confirmed"])],
+  };
 }
 
 function attachExtractionMetadata(answer, extracted, subQuestion, context = {}) {
@@ -1171,7 +1244,15 @@ function evidenceAnswerText(evidence) {
 }
 
 function mergeExtractedVerdicts(type, verdicts) {
-  const unique = [...new Set(verdicts.filter((verdict) => verdict && verdict !== "unknown"))];
+  const values = verdicts.filter((verdict) => verdict && verdict !== "unknown");
+  const structured = values.filter(isStructuredOfficialVerdict);
+  const scalarValues = values.filter((verdict) => !isStructuredOfficialVerdict(verdict));
+  if (structured.length) {
+    const structuredByKey = new Map(structured.map((verdict) => [JSON.stringify(verdict), verdict]));
+    if (structuredByKey.size === 1 && scalarValues.length === 0) return [...structuredByKey.values()][0];
+    return "unknown";
+  }
+  const unique = [...new Set(scalarValues)];
   if (unique.length <= 1) return unique[0] || "unknown";
 
   if (type === "activation_condition" || type === "timing") {
@@ -1196,6 +1277,10 @@ function mergeExtractedVerdicts(type, verdicts) {
     return "unknown";
   }
   return unique.length === 1 ? unique[0] : "unknown";
+}
+
+function formatVerdictReason(verdict) {
+  return isStructuredOfficialVerdict(verdict) ? "official_structured_verdict" : verdict;
 }
 
 function collectEvidenceRecords(evidence) {
@@ -1716,9 +1801,10 @@ export async function loadSnapshot(dataDir = defaultDataDir) {
   const cached = snapshotCache.get(cacheKey);
   if (cached && Date.now() - cached.loadedAt < 30_000) return cached.snapshot;
 
-  const [cardsPayload, rulingsPayload, metaPayload, ruleCorpusPayload, ruleTestsPayload, aliasIndexPayload, qaIndexPayload, dataHealth] = await Promise.all([
+  const [cardsPayload, rulingsPayload, officialResponsesPayload, metaPayload, ruleCorpusPayload, ruleTestsPayload, aliasIndexPayload, qaIndexPayload, dataHealth] = await Promise.all([
     readJson(join(dataDir, "cards.json"), { records: [] }),
     readJson(join(dataDir, "rulings.json"), { records: [] }),
+    readJson(join(dataDir, "official-responses.json"), { records: [] }),
     readJson(join(dataDir, "snapshot-meta.json"), { generatedAt: null, sources: [] }),
     readJson(join(dataDir, "ocg-rule-corpus.json"), { records: [] }),
     readJson(join(dataDir, "ocg-rule-tests.json"), { records: [] }),
@@ -1731,6 +1817,7 @@ export async function loadSnapshot(dataDir = defaultDataDir) {
     cards: normalizeCards(cardsPayload.records || cardsPayload.cards || []),
     records: normalizeRecords([
       ...(rulingsPayload.records || rulingsPayload.rulings || rulingsPayload.notes || []),
+      ...normalizeOfficialResponses(officialResponsesPayload.records || officialResponsesPayload.officialResponses || []),
       ...(ruleCorpusPayload.records || []),
       ...(ruleTestsPayload.records || []),
     ]),
@@ -1860,6 +1947,8 @@ function buildRetrievalDataSourceStats(snapshot, liveCards, liveEvidence, record
     card_text: records.filter((record) => record.recordType === "card-text").length,
     qa: records.filter((record) => record.recordType === "qa").length,
     faq: records.filter((record) => record.recordType === "card-faq").length,
+    official_response: records.filter((record) => record.recordType === "official-response").length,
+    official_response_screenshot: records.filter((record) => record.recordType === "official-response-screenshot").length,
     rule_doc: records.filter((record) => record.recordType === "rule-doc").length,
     rule_test: records.filter((record) => record.recordType === "rule-test").length,
     note: records.filter((record) => record.recordType === "note").length,
@@ -1869,7 +1958,7 @@ function buildRetrievalDataSourceStats(snapshot, liveCards, liveEvidence, record
     const source = record.sources?.[0]?.label || record.recordType || "unknown";
     bySource[source] = (bySource[source] || 0) + 1;
   }
-  const qaIndexCount = byRecordType.qa + byRecordType.faq;
+  const qaIndexCount = byRecordType.qa + byRecordType.faq + byRecordType.official_response;
   return {
     loadedCardCount: loadedCards.length,
     loadedQaCount: byRecordType.qa,
@@ -2368,7 +2457,7 @@ function collectCardTextSources(cards, fallbackSources) {
 
 export function mergeModelAnswer(modelAnswer, programAnswer) {
   const explanationText = cleanText(modelAnswer?.explanationText);
-  const attemptedOverride = ["status", "verdict", "evidenceIds", "verdictTitle", "steps", "subAnswers", "conditionalAnswer"]
+  const attemptedOverride = ["status", "verdict", "evidenceIds", "verdictTitle", "steps", "subAnswers", "conditionalAnswer", "provisionalAnswer"]
     .some((field) => modelAnswer?.[field] !== undefined);
   return {
     ...programAnswer,
@@ -2586,7 +2675,11 @@ function asksSpecificEffectActivation(value) {
 }
 
 function isRulingEvidence(record) {
-  return record?.recordType === "qa" || record?.recordType === "card-faq";
+  return record?.recordType === "qa" ||
+    record?.recordType === "card-faq" ||
+    record?.recordType === "official-database" ||
+    ["official_qa", "card_faq", "official_database"].includes(record?.sourceType) ||
+    isConfirmableOfficialResponse(record);
 }
 
 function countEvidenceMatchedCards(record, detectedCards) {
@@ -2709,6 +2802,18 @@ function normalizeRecords(records) {
       questions: record.questions || [],
       sources: record.sources || sourceFromRecord(record),
       updatedAt: record.updatedAt || record.lastModified || "",
+      sourceType: record.sourceType || "",
+      sourceUrl: record.sourceUrl || "",
+      sourceNote: record.sourceNote || "",
+      officialText: record.officialText || "",
+      evidenceText: record.evidenceText || "",
+      screenshotPath: record.screenshotPath || "",
+      officialVerdict: record.officialVerdict ?? null,
+      maxStatus: record.maxStatus || "",
+      displayStatus: record.displayStatus || "",
+      traceable: record.traceable === true,
+      responseId: record.responseId || "",
+      watchOfficialDb: record.watchOfficialDb || null,
     }))
     .filter((record) => record.conclusion);
 }

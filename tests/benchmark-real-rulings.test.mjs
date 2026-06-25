@@ -65,13 +65,13 @@ test("real ruling benchmark keeps every structured answer inside safety gates", 
       }
 
       for (const application of answer.parserDebug?.transitionRules?.ruleApplications || []) {
-        if (["heuristic", "manual_rule"].includes(application.ruleSource?.sourceType)
+        if (["heuristic", "official_database_card_page", "official_response_screenshot", "official_response_unverified", "pending_adjustment"].includes(application.ruleSource?.sourceType)
           && application.outputStatus === "confirmed") {
           unsafeConfirmed.add(`${benchmarkCase.id}:${application.appliedToQuestionId}:unsafe_rule_source`);
         }
       }
       for (const state of answer.parserDebug?.transitionRules?.derivedStates || []) {
-        if (["heuristic", "manual_rule"].includes(state.ruleSource?.sourceType) && state.status === "confirmed") {
+        if (["heuristic", "official_database_card_page", "official_response_screenshot", "official_response_unverified", "pending_adjustment"].includes(state.ruleSource?.sourceType) && state.status === "confirmed") {
           unsafeConfirmed.add(`${benchmarkCase.id}:${state.questionId}:unsafe_derived_state`);
         }
       }

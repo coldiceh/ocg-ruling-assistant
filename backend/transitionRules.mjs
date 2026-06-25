@@ -198,7 +198,12 @@ export function capTransitionRuleStatus(requestedStatus, source) {
   let sourceCap = normalized.maxStatus;
   if (!normalized.sourceIds.length && sourceCap === "confirmed") sourceCap = "inferred";
   else if (normalized.sourceType === "heuristic") sourceCap = sourceCap === "unknown" ? "unknown" : "inferred";
-  else if (normalized.sourceType === "manual_rule" && !normalized.verified) sourceCap = "inferred";
+  else if ([
+    "official_database_card_page",
+    "official_response_screenshot",
+    "official_response_unverified",
+    "pending_adjustment",
+  ].includes(normalized.sourceType)) sourceCap = "unknown";
   const requested = rank[requestedStatus] === undefined ? "unknown" : requestedStatus;
   return rank[requested] <= rank[sourceCap] ? requested : sourceCap;
 }
@@ -231,15 +236,24 @@ function normalizeRuleSource(source) {
   return {
     ruleId: String(source.ruleId || "unknown_rule"),
     description: String(source.description || source.ruleName || "未说明规则"),
-    sourceType: ["official_qa", "card_faq", "manual_rule", "heuristic"].includes(source.sourceType) ? source.sourceType : "heuristic",
+    sourceType: [
+      "official_qa",
+      "card_faq",
+      "official_database",
+      "official_database_card_page",
+      "official_response",
+      "official_response_screenshot",
+      "official_response_unverified",
+      "pending_adjustment",
+      "heuristic",
+    ].includes(source.sourceType) ? source.sourceType : "heuristic",
     sourceIds: [...new Set(Array.isArray(source.sourceIds) ? source.sourceIds.map(String).filter(Boolean) : [])],
-    maxStatus: ["confirmed", "inferred", "unknown"].includes(source.maxStatus) ? source.maxStatus : "unknown",
-    verified: source.verified === true,
+    maxStatus: ["confirmed", "inferred", "unknown", "unconfirmed"].includes(source.maxStatus) ? source.maxStatus : "unknown",
   };
 }
 
-function ruleSource(ruleId, description, sourceType, sourceIds, maxStatus, verified = false) {
-  return { ruleId, description, sourceType, sourceIds, maxStatus, verified };
+function ruleSource(ruleId, description, sourceType, sourceIds, maxStatus) {
+  return { ruleId, description, sourceType, sourceIds, maxStatus };
 }
 
 function isResolvedAnswer(answer) {

@@ -76,6 +76,7 @@ function retrieveTrace({ cards, records }) {
     "rawCandidateEvidence",
     "classifiedEvidence",
     "downgradedDirectEvidence",
+    "provisionalEvidence",
     "evidenceCoverageReason",
   ]);
   return trace;

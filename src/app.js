@@ -1152,7 +1152,7 @@ function renderSubAnswers(subAnswers) {
 
     const verdict = document.createElement("div");
     verdict.className = "sub-verdict";
-    verdict.textContent = item.verdict || "需要确认";
+    verdict.textContent = formatSubAnswerVerdict(item.verdict);
     block.appendChild(verdict);
 
     if (item.reasoning) {
@@ -1171,6 +1171,10 @@ function renderSubAnswers(subAnswers) {
 
     if (item.conditionalAnswer) {
       renderConditionalAnswer(block, item.conditionalAnswer);
+    }
+
+    if (item.provisionalAnswer) {
+      renderProvisionalAnswer(block, item.provisionalAnswer);
     }
 
     if (Array.isArray(item.dependencies) && item.dependencies.length) {
@@ -1213,6 +1217,12 @@ function renderSubAnswers(subAnswers) {
   });
 }
 
+function formatSubAnswerVerdict(verdict) {
+  if (!verdict) return "需要确认";
+  if (typeof verdict === "object") return JSON.stringify(verdict);
+  return String(verdict);
+}
+
 function renderConditionalAnswer(parent, conditionalAnswer) {
   const wrapper = document.createElement("div");
   wrapper.className = "sub-reasoning";
@@ -1242,6 +1252,38 @@ function renderConditionalAnswer(parent, conditionalAnswer) {
   }
 
   parent.appendChild(wrapper);
+}
+
+function renderProvisionalAnswer(parent, provisionalAnswer) {
+  const wrapper = document.createElement("div");
+  wrapper.className = "sub-reasoning";
+
+  const title = document.createElement("p");
+  title.textContent = "未确认处理方式（事务局回答截图，官方数据库未收录）：";
+  wrapper.appendChild(title);
+
+  const verdict = document.createElement("p");
+  verdict.textContent = formatProvisionalVerdict(provisionalAnswer.verdict, provisionalAnswer.explanation);
+  wrapper.appendChild(verdict);
+
+  const note = document.createElement("p");
+  note.textContent = "注意：该回答目前未在官方数据库中找到直接 Q&A。后续如果数据库更新，系统会优先改用官方数据库裁定。";
+  wrapper.appendChild(note);
+
+  parent.appendChild(wrapper);
+}
+
+function formatProvisionalVerdict(verdict, fallback) {
+  if (verdict && typeof verdict === "object") {
+    const activation = verdict.activation === "can_activate" ? "可以发动" : "";
+    const cost = verdict.cost === "can_pay_cost" ? "并支付 cost" : "";
+    const resolution = verdict.resolution === "does_not_perform_fusion_material_processing"
+      ? "但后续处理不进行"
+      : "";
+    const text = [activation + cost, resolution].filter(Boolean).join("，");
+    if (text) return `${text}。`;
+  }
+  return fallback || "存在事务局回答截图，但当前不作为 confirmed。";
 }
 
 function renderList(container, items) {

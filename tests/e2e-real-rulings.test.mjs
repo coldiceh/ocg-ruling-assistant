@@ -133,7 +133,7 @@ test("real ruling question stays structurally safe through the complete local pi
   assert.equal(q4.derivedState.zoneStatus, "pending_send_to_graveyard");
   assert.notEqual(q4.finalStatus, "confirmed");
   for (const state of answer.parserDebug.transitionRules.derivedStates) {
-    if (["heuristic", "manual_rule"].includes(state.ruleSource?.sourceType)) assert.notEqual(state.status, "confirmed");
+    if (["heuristic", "official_response_unverified", "pending_adjustment"].includes(state.ruleSource?.sourceType)) assert.notEqual(state.status, "confirmed");
   }
 
   const programAnswer = answer.subAnswers.find((item) => item.questionId === "q3");

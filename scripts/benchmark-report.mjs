@@ -147,7 +147,7 @@ export function classifyPrimaryUnknownReason({ answer = {}, subAnswer = {}, trac
     return "verdict_extraction_unknown";
   }
   const ruleSourceType = subAnswer.derivedState?.ruleSource?.sourceType || trace.derivedState?.ruleSource?.sourceType;
-  if (["heuristic", "manual_rule"].includes(ruleSourceType)) return "heuristic_limit";
+  if (["heuristic", "official_database_card_page", "official_response_screenshot", "official_response_unverified", "pending_adjustment"].includes(ruleSourceType)) return "heuristic_limit";
   return "unknown_other";
 }
 
@@ -301,12 +301,12 @@ export function buildBenchmarkReport(caseResults) {
     });
 
     for (const application of answer?.parserDebug?.transitionRules?.ruleApplications || []) {
-      if (["heuristic", "manual_rule"].includes(application.ruleSource?.sourceType) && application.outputStatus === "confirmed") {
+      if (["heuristic", "official_database_card_page", "official_response_screenshot", "official_response_unverified", "pending_adjustment"].includes(application.ruleSource?.sourceType) && application.outputStatus === "confirmed") {
         unsafeConfirmed.add(`${benchmarkCase.id}:${application.appliedToQuestionId}:unsafe_rule_source`);
       }
     }
     for (const state of answer?.parserDebug?.transitionRules?.derivedStates || []) {
-      if (["heuristic", "manual_rule"].includes(state.ruleSource?.sourceType) && state.status === "confirmed") {
+      if (["heuristic", "official_database_card_page", "official_response_screenshot", "official_response_unverified", "pending_adjustment"].includes(state.ruleSource?.sourceType) && state.status === "confirmed") {
         unsafeConfirmed.add(`${benchmarkCase.id}:${state.questionId}:unsafe_derived_state`);
       }
     }
@@ -505,7 +505,7 @@ function suggestionFor(reason) {
     parser_warning: "检查形式化解析警告并补强对应解析样例。",
     data_source_missing: "初始化或同步卡片与 Q&A 数据源。",
     no_direct_evidence: "补充当前问题类型的直接 Q&A，避免仅依赖相似裁定。",
-    heuristic_limit: "为状态转移补充 official Q&A、card FAQ 或已验证 manual rule 来源。",
+    heuristic_limit: "为状态转移补充 official Q&A、card FAQ、official database 或可追溯 official response 来源。",
     unknown_other: "检查该 case 的完整 trace，补充更具体的诊断标签。",
   };
   return suggestions[reason] || suggestions.unknown_other;
