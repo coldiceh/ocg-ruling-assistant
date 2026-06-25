@@ -370,6 +370,10 @@ export function classifyPrimaryNoDirectReason({ trace = {}, dataCoverage = {}, t
   }
 
   const rawCandidates = trace.rawCandidateEvidence || [];
+  const rawDirectCandidates = rawCandidates.filter((item) => item.classification === "direct");
+  if (rawDirectCandidates.length > 1 && (trace.directEvidence || []).length === 0) {
+    return "all_candidates_conflicting";
+  }
   const belowTopN = rawCandidates.some((item) => Number(item.rank || 0) > topN
     && (item.classification === "direct" || item.askedResultCoverage === "explicit"));
   if (belowTopN) return "ranking_issue";

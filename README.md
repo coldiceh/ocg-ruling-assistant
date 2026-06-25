@@ -36,7 +36,7 @@
 
 最近一次本地检查：
 
-- Node tests: 137/137 passing
+- Node tests: 151/151 passing
 - Legacy engine regressions: 9/9 passing
 - Data health: `ok`
 - Readiness level: `production_ready`
@@ -45,15 +45,15 @@ Benchmark：
 
 - total cases: 10
 - total subQuestions: 13
-- confirmedCount: 3
-- inferredCount: 1
-- unknownCount: 6
+- confirmedCount: 5
+- inferredCount: 0
+- unknownCount: 5
 - unsafeConfirmedCount: 0
 - missingReasonCount: 0
 - verdict_extraction_unknown: 0
-- no_direct_evidence: 4
+- no_direct_evidence: 3
 
-当前 benchmark 的结论是：系统安全门槛有效；大数据快照增加了覆盖，但多语言 matcher 和问题解析仍限制 `confirmed` 数量。
+当前 benchmark 的结论是：系统安全门槛有效；多语言 evidence question type classifier 修复了一部分 Q&A 类型误判，但没有放宽 `directEvidence` 门槛。
 
 ## 数据状态
 
@@ -84,6 +84,7 @@ Benchmark：
 - `scripts/debug-retrieval.mjs`：针对单个问题输出 parser、卡名解析、检索和 evidence trace。
 - `scripts/benchmark-report.mjs`：输出 benchmark 安全性和 unknown reason 报告。
 - `scripts/audit-no-direct.mjs`：审计 benchmark 中的 `no_direct_evidence` 原因。
+- `scripts/audit-evidence-types.mjs`：审计 no-direct case 中候选 Q&A 的多语言问题类型识别。
 
 运行时如果发现本地缺少卡片或该卡 Q&A / FAQ，会尝试 on-demand sync 并更新缓存；如果实时来源不可用，会在 trace 中显示 `live_source_unavailable`，并保守降级。
 
@@ -107,6 +108,7 @@ node scripts/debug-retrieval.mjs "玩家问题"
 ```bash
 node scripts/benchmark-report.mjs
 node scripts/audit-no-direct.mjs
+node scripts/audit-evidence-types.mjs
 ```
 
 运行测试：
@@ -171,6 +173,21 @@ Content-Type: application/json
 - `ygoresources-qa-24069` -> `different_question`
 - I:P case conflicting evidence -> `conflicting_direct_evidence`
 
+## Evidence question type classifier
+
+系统现在会在 matcher 层识别中 / 日 / 英 Q&A 的问题类型，用于判断候选资料是否可能回答当前 `askedResult`。当前识别的类型包括：
+
+- `activation_condition`
+- `activation_timing`
+- `damage_step_activation`
+- `temporary_banish`
+- `banish_applicability`
+- `effect_applicability`
+- `resolution_handling`
+- `activation_location`
+
+这不是放宽 `directEvidence`。它只让 matcher 更准确地区分“同卡同动作但问题不同”和“确实回答当前 askedResult”的 Q&A。进入 `directEvidence` 仍必须同时满足卡名 / 问题类型 / askedResult 覆盖 / verdict 或条件分支 / 场景无冲突等门槛。
+
 ## 已完成核对表
 
 - parser / formal query：已实现
@@ -178,6 +195,7 @@ Content-Type: application/json
 - data health / sync-data / check-data：已实现
 - retrieval debug：已实现
 - directEvidence quality gate：已实现
+- evidence question type classifier：已实现
 - multilingual verdict extractor：已实现
 - condition branches：已实现
 - gameState：已实现
@@ -185,7 +203,7 @@ Content-Type: application/json
 - subQuestion dependencies：已实现
 - transitionRules：已实现
 - benchmark report：已实现
-- no_direct_evidence audit：基础审计已实现，后续仍需按诊断优化
+- no_direct_evidence audit：已实现
 - on-demand sync / cache：已实现
 - final gate 防止 AI 覆盖 verdict：已实现
 - README：已更新
@@ -194,7 +212,7 @@ Content-Type: application/json
 
 下一步优先级：
 
-1. no_direct_evidence audit 后续优化：区分数据缺失、query missed、matcher 多语言类型识别、ranking issue。
+1. no_direct_evidence 后续优化：针对 `all_candidates_different_question` / `all_candidates_conflicting` 补充更精确数据源或人工 curated source。
 2. conditional answer / clarification question：当条件分支缺状态时，生成要追问的关键状态。
 3. manual-rulings.json curated ruling source：人工整理裁定源，但不能默认当 official confirmed。
 4. pending_adjustment / probable answer support：只允许 pending / unknown 或有限 inferred。
@@ -231,6 +249,7 @@ Content-Type: application/json
 - `backend/engine.mjs`：主流程、检索、evidence trace、answer gate。
 - `backend/dataHealth.mjs`：数据健康检查。
 - `backend/dataIndex.mjs`：数据加载和索引。
+- `backend/evidenceQuestionTypeClassifier.mjs`：中 / 日 / 英 Q&A 问题类型识别。
 - `backend/verdictExtractor.mjs`：多语言 verdict 抽取。
 - `backend/conditionBranches.mjs`：条件分支抽取。
 - `backend/gameState.mjs`：静态状态建模。
