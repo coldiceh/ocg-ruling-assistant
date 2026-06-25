@@ -2,6 +2,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { checkDataHealth } from "./dataHealth.mjs";
+import { buildConditionalAnswer } from "./conditionalAnswer.mjs";
 import { buildCardAliasIndex, buildQaIndex } from "./dataIndex.mjs";
 import { classifyEvidenceQuestionTypes } from "./evidenceQuestionTypeClassifier.mjs";
 import { selectBranchForSubQuestion } from "./branchSelector.mjs";
@@ -307,6 +308,7 @@ function buildSubQuestionEvidenceTrace(formalQuery, evidence, subAnswers = [], o
       extractorOutput: answer.extractorOutput || extracted.extractorOutput || [],
       extractorWarnings: answer.extractorWarnings || extracted.extractorWarnings || [],
       whyUnknown: answer.whyUnknown || extracted.whyUnknown || null,
+      conditionalAnswer: answer.conditionalAnswer || null,
       dependencies: answer.dependencies || [],
       unresolvedDependencies: answer.unresolvedDependencies || [],
       transitionReasoning: answer.transitionReasoning || [],
@@ -1009,7 +1011,11 @@ export function answerEachSubQuestion(
         extracted.reason,
         warnings,
         bucket
-      ), extracted, subQuestion);
+      ), extracted, subQuestion, {
+        evidence: direct,
+        gameState: options.gameState,
+        eventTimeline: options.eventTimeline,
+      });
       return finalAnswerGate(candidate, bucket, {
         parserWarnings: options.parserWarnings || [],
         validEvidenceIds: new Set(validEvidence.keys()),
@@ -1036,7 +1042,11 @@ export function answerEachSubQuestion(
           ...(extracted.warnings || []),
         ],
         bucket
-      ), extracted, subQuestion);
+      ), extracted, subQuestion, {
+        evidence: validSimilar,
+        gameState: options.gameState,
+        eventTimeline: options.eventTimeline,
+      });
       return finalAnswerGate(candidate, bucket, {
         parserWarnings: options.parserWarnings || [],
         validEvidenceIds: new Set(validEvidence.keys()),
@@ -1051,7 +1061,15 @@ export function answerEachSubQuestion(
   });
 }
 
-function attachExtractionMetadata(answer, extracted, subQuestion) {
+function attachExtractionMetadata(answer, extracted, subQuestion, context = {}) {
+  const conditionalAnswer = buildConditionalAnswer({
+    subQuestion,
+    evidence: context.evidence || [],
+    conditionBranches: extracted.conditionBranches || [],
+    branchSelectorResult: extracted.branchSelection || null,
+    gameState: context.gameState,
+    eventTimeline: context.eventTimeline,
+  });
   return {
     ...answer,
     extractedVerdict: extracted.verdict,
@@ -1065,6 +1083,7 @@ function attachExtractionMetadata(answer, extracted, subQuestion) {
     extractorWarnings: extracted.extractorWarnings || [],
     whyUnknown: extracted.whyUnknown || null,
     stateMessage: buildMissingStateMessage(subQuestion, extracted.branchSelection),
+    ...(conditionalAnswer ? { conditionalAnswer } : {}),
   };
 }
 
@@ -1236,6 +1255,7 @@ function mergeFormalAnswers(context) {
   if (counts.parse_failed) needsConfirmation.push("请补充缺失的卡名、效果编号或问题类型后重新解析。");
   if (parserWarnings.length) needsConfirmation.push("形式化解析包含警告，结论不会提升为 confirmed。");
   needsConfirmation.push(...subAnswers.map((answer) => answer.stateMessage).filter(Boolean));
+  needsConfirmation.push(...subAnswers.map((answer) => answer.conditionalAnswer?.clarificationQuestion).filter(Boolean));
   needsConfirmation.push(...subAnswers.map((answer) => answer.dependencyMessage).filter(Boolean));
   needsConfirmation.push(...notes);
 
@@ -2348,7 +2368,7 @@ function collectCardTextSources(cards, fallbackSources) {
 
 export function mergeModelAnswer(modelAnswer, programAnswer) {
   const explanationText = cleanText(modelAnswer?.explanationText);
-  const attemptedOverride = ["status", "verdict", "evidenceIds", "verdictTitle", "steps", "subAnswers"]
+  const attemptedOverride = ["status", "verdict", "evidenceIds", "verdictTitle", "steps", "subAnswers", "conditionalAnswer"]
     .some((field) => modelAnswer?.[field] !== undefined);
   return {
     ...programAnswer,

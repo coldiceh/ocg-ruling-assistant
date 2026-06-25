@@ -36,7 +36,7 @@
 
 最近一次本地检查：
 
-- Node tests: 151/151 passing
+- Node tests: 159/159 passing
 - Legacy engine regressions: 9/9 passing
 - Data health: `ok`
 - Readiness level: `production_ready`
@@ -50,10 +50,12 @@ Benchmark：
 - unknownCount: 5
 - unsafeConfirmedCount: 0
 - missingReasonCount: 0
+- conditionalAnswerCount: 1
+- clarificationQuestionCount: 1
 - verdict_extraction_unknown: 0
 - no_direct_evidence: 3
 
-当前 benchmark 的结论是：系统安全门槛有效；多语言 evidence question type classifier 修复了一部分 Q&A 类型误判，但没有放宽 `directEvidence` 门槛。
+当前 benchmark 的结论是：系统安全门槛有效；多语言 evidence question type classifier 修复了一部分 Q&A 类型误判，conditional answer 能解释缺状态的条件分支，但没有放宽 `directEvidence` 或 `confirmed` 门槛。
 
 ## 数据状态
 
@@ -188,6 +190,23 @@ Content-Type: application/json
 
 这不是放宽 `directEvidence`。它只让 matcher 更准确地区分“同卡同动作但问题不同”和“确实回答当前 askedResult”的 Q&A。进入 `directEvidence` 仍必须同时满足卡名 / 问题类型 / askedResult 覆盖 / verdict 或条件分支 / 场景无冲突等门槛。
 
+## Conditional answers
+
+当系统已经找到条件分支证据，但玩家问题缺少必要状态时，最终结构化结果仍保持 `unknown`，不会提升为 `confirmed`。系统会列出所有有证据支持的分支，并生成需要玩家补充的信息。
+
+示例：
+
+```text
+当前无法确定唯一结论。
+可能分支：
+- 如果仍在怪兽区域：在怪兽区域发动。
+- 如果已经送去墓地：在墓地发动。
+- 如果已经被除外：在除外状态发动。
+请补充：这个时点该卡是仍在怪兽区域、已经送去墓地，还是已经被除外？
+```
+
+`conditionalAnswer` 只是解释层字段，不能修改 `status` / `verdict` / `evidenceIds`。AI explanation 仍只能解释程序给出的结构化结果。
+
 ## 已完成核对表
 
 - parser / formal query：已实现
@@ -202,6 +221,7 @@ Content-Type: application/json
 - eventTimeline：已实现
 - subQuestion dependencies：已实现
 - transitionRules：已实现
+- conditional answer / clarification question：已实现（仅用于条件分支缺状态或多分支不唯一时的 unknown 解释）
 - benchmark report：已实现
 - no_direct_evidence audit：已实现
 - on-demand sync / cache：已实现
@@ -213,17 +233,15 @@ Content-Type: application/json
 下一步优先级：
 
 1. no_direct_evidence 后续优化：针对 `all_candidates_different_question` / `all_candidates_conflicting` 补充更精确数据源或人工 curated source。
-2. conditional answer / clarification question：当条件分支缺状态时，生成要追问的关键状态。
-3. manual-rulings.json curated ruling source：人工整理裁定源，但不能默认当 official confirmed。
-4. pending_adjustment / probable answer support：只允许 pending / unknown 或有限 inferred。
-5. answer revalidation after database update：数据更新后重新验证旧答案。
-6. larger real ruling benchmark：扩大真实问题集。
-7. data coverage expansion：扩大 Q&A / FAQ 覆盖，接近生产可用。
-8. user feedback -> regression case：用户反馈转成固定回归测试。
+2. manual-rulings.json curated ruling source：人工整理裁定源，但不能默认当 official confirmed。
+3. pending_adjustment / probable answer support：只允许 pending / unknown 或有限 inferred。
+4. answer revalidation after database update：数据更新后重新验证旧答案。
+5. larger real ruling benchmark：扩大真实问题集。
+6. data coverage expansion：扩大 Q&A / FAQ 覆盖，接近生产可用。
+7. user feedback -> regression case：用户反馈转成固定回归测试。
 
 当前明确未实现或只处于计划阶段：
 
-- conditional answer / clarification question
 - probable answer for pending_adjustment
 - manual-rulings.json curated ruling source
 - answer history / revalidation after database update

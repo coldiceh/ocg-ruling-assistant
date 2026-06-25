@@ -164,6 +164,8 @@ export function buildBenchmarkReport(caseResults) {
   let unknownCount = 0;
   let directEvidenceCount = 0;
   let downgradedDirectCount = 0;
+  let conditionalAnswerCount = 0;
+  let clarificationQuestionCount = 0;
   const verdictExtractionDiagnostics = [];
   const noDirectEvidenceDiagnostics = [];
 
@@ -180,6 +182,8 @@ export function buildBenchmarkReport(caseResults) {
       const questionId = String(subAnswer.questionId || subAnswer.id);
       const trace = traces.get(questionId) || {};
       const formalQuestion = formalQuestions.get(questionId) || {};
+      if (subAnswer.conditionalAnswer) conditionalAnswerCount += 1;
+      if (subAnswer.conditionalAnswer?.clarificationQuestion) clarificationQuestionCount += 1;
       const downgradedDirectEvidence = trace.downgradedDirectEvidence || [];
       directEvidenceCount += (trace.directEvidence || []).length;
       downgradedDirectCount += downgradedDirectEvidence.length;
@@ -291,6 +295,8 @@ export function buildBenchmarkReport(caseResults) {
         missingConditions: subAnswer.missingConditions || trace.branchSelector?.missingConditions || [],
         reason: subAnswer.reason || trace.reason || "",
         whyUnknown: trace.whyUnknown || subAnswer.whyUnknown || null,
+        hasConditionalAnswer: Boolean(subAnswer.conditionalAnswer),
+        clarificationQuestion: subAnswer.conditionalAnswer?.clarificationQuestion || null,
       };
     });
 
@@ -329,6 +335,8 @@ export function buildBenchmarkReport(caseResults) {
     unknownCount,
     unsafeConfirmedCount: unsafeConfirmed.size,
     missingReasonCount,
+    conditionalAnswerCount,
+    clarificationQuestionCount,
     directEvidenceCount,
     downgradedDirectCount,
     downgradeReasons,
