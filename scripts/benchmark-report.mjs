@@ -219,7 +219,7 @@ export function buildBenchmarkReport(caseResults) {
           askedResult: formalQuestion.askedResult || "unknown",
           resolvedCardIds: trace.resolvedCardIds || [],
           searchQueries: trace.searchQueries || [],
-          rawCandidateEvidenceTop20: (trace.rawCandidateEvidence || []).slice(0, 20).map((item) => ({
+          rawCandidateEvidenceTop50: (trace.rawCandidateEvidence || []).slice(0, 50).map((item) => ({
             id: item.id,
             source: item.source,
             title: item.title,
@@ -230,7 +230,6 @@ export function buildBenchmarkReport(caseResults) {
             classification: item.classification || "unknown",
             rejectedReason: item.rejectedReason || null,
             askedResultCoverage: item.askedResultCoverage || "unknown",
-            rank: item.rank || null,
           })),
           similarEvidence: trace.similarEvidence || [],
           rejectedEvidence: trace.rejectedEvidence || [],
@@ -363,7 +362,7 @@ export async function runBenchmarkReport() {
   return buildBenchmarkReport(caseResults);
 }
 
-export function classifyPrimaryNoDirectReason({ trace = {}, dataCoverage = {}, topN = 20 } = {}) {
+export function classifyPrimaryNoDirectReason({ trace = {}, dataCoverage = {}, topN = 50 } = {}) {
   if (trace.evidenceCoverageReason === "alias_without_card_id"
     || trace.evidenceCoverageReason === "card_resolution_failed"
     || ((trace.resolvedCardIds || []).length === 0 && trace.card !== "referenced_toon_monster")) {
@@ -383,8 +382,17 @@ export function classifyPrimaryNoDirectReason({ trace = {}, dataCoverage = {}, t
   if (downgraded.length && downgraded.every((item) => item.reason === "conflicting_direct_evidence")) {
     return "all_candidates_conflicting";
   }
-  const relevantCandidates = rawCandidates.filter((item) => item.classification === "similar" || item.classification === "rejected");
-  if (relevantCandidates.length && relevantCandidates.every((item) => item.askedResultCoverage === "different_question")) {
+  const classifiedCandidates = rawCandidates.filter((item) => item.classification === "similar" || item.classification === "rejected");
+  if (classifiedCandidates.length && classifiedCandidates.every((item) => item.askedResultCoverage === "different_question")) {
+    return "all_candidates_different_question";
+  }
+  const sameCardCandidates = rawCandidates.filter((item) => (item.matchedBy || [])
+    .some((value) => value === "resolved_card_id" || value === "card_name"));
+  if (!sameCardCandidates.length && dataCoverage.hasAnyQaForCard) return "ranking_issue";
+  if (sameCardCandidates.length && sameCardCandidates.every((item) => item.askedResultCoverage === "different_question")) {
+    return "all_candidates_different_question";
+  }
+  if (buildNoDirectDiagnosticFlags(trace).includes("same_card_candidate_rejected_by_question_type")) {
     return "all_candidates_different_question";
   }
   return "unknown";
@@ -392,7 +400,7 @@ export function classifyPrimaryNoDirectReason({ trace = {}, dataCoverage = {}, t
 
 function buildNoDirectDiagnosticFlags(trace) {
   const candidates = trace.rawCandidateEvidence || [];
-  const sameCardTypeMismatches = candidates.filter((item) => item.rejectedReason === "question_type_mismatch"
+  const sameCardTypeMismatches = candidates.filter((item) => ["question_type_mismatch", "card_and_question_type_mismatch"].includes(item.rejectedReason)
     && (item.matchedBy || []).some((value) => value === "resolved_card_id" || value === "card_name"));
   const flags = [];
   if (sameCardTypeMismatches.length) flags.push("same_card_candidate_rejected_by_question_type");
