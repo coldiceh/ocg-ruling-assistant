@@ -3,6 +3,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { checkDataHealth } from "./dataHealth.mjs";
 import { buildCardAliasIndex, buildQaIndex } from "./dataIndex.mjs";
+import { classifyEvidenceQuestionTypes } from "./evidenceQuestionTypeClassifier.mjs";
 import { selectBranchForSubQuestion } from "./branchSelector.mjs";
 import { extractConditionBranchesFromEvidence } from "./conditionBranches.mjs";
 import { buildEventTimelineFromFormalQuery, deriveStateAtTiming } from "./eventTimeline.mjs";
@@ -1318,10 +1319,12 @@ function formalEvidenceText(record) {
 }
 
 export function classifyQaForSubQuestion(subQuestion, qa) {
-  const matchedQuestionType = classifyQaQuestionType(qa);
-  const typeMatches = qaTypeMatchesSubQuestion(subQuestion?.type, matchedQuestionType);
-  const cardMatches = qaMatchesSubQuestionCard(subQuestion, qa);
   const fullText = formalEvidenceText(qa);
+  const evidenceTypeAudit = classifyEvidenceQuestionTypes(fullText);
+  const matchedQuestionType = classifyQaQuestionTypeForSubQuestion(subQuestion?.type, qa, evidenceTypeAudit);
+  const typeMatches = evidenceTypesMatchSubQuestion(subQuestion?.type, evidenceTypeAudit)
+    || qaTypeMatchesSubQuestion(subQuestion?.type, matchedQuestionType);
+  const cardMatches = qaMatchesSubQuestionCard(subQuestion, qa);
   const semanticCoverage = qaCoversAskedResult(subQuestion, matchedQuestionType, fullText);
   const askedResultAudit = auditQaAskedResultCoverage(subQuestion, qa, matchedQuestionType, semanticCoverage);
   const subEffectNumbers = extractEffectNumbers(`${subQuestion?.effectNo || ""} ${subQuestion?.sourceText || ""}`);
@@ -1383,10 +1386,21 @@ export function classifyQaForSubQuestion(subQuestion, qa) {
   return result("direct", "card_type_effect_semantics_and_scene_match");
 }
 
-function classifyQaQuestionType(qa) {
+function classifyQaQuestionType(qa, evidenceTypeAudit = null) {
   const promptText = normalizeRulingText(`${qa?.question || qa?.questionText || ""} ${qa?.title || ""} ${(qa?.keywords || []).join(" ")}`);
   const promptType = inferQaQuestionType(promptText);
-  return promptType !== "unknown" ? promptType : inferQaQuestionType(formalEvidenceText(qa));
+  if (promptType !== "unknown") return promptType;
+  const evidenceTypes = evidenceTypeAudit?.questionTypes || classifyEvidenceQuestionTypes(formalEvidenceText(qa)).questionTypes;
+  return normalizeEvidenceQuestionType(evidenceTypes[0]) || inferQaQuestionType(formalEvidenceText(qa));
+}
+
+function classifyQaQuestionTypeForSubQuestion(subQuestionType, qa, evidenceTypeAudit = null) {
+  const promptText = normalizeRulingText(`${qa?.question || qa?.questionText || ""} ${qa?.title || ""} ${(qa?.keywords || []).join(" ")}`);
+  const promptType = inferQaQuestionType(promptText);
+  if (qaTypeMatchesSubQuestion(subQuestionType, promptType)) return promptType;
+  const matchedAuditType = normalizeEvidenceQuestionTypeForSubQuestion(subQuestionType, evidenceTypeAudit);
+  if (matchedAuditType) return matchedAuditType;
+  return promptType !== "unknown" ? promptType : classifyQaQuestionType(qa, evidenceTypeAudit);
 }
 
 function inferQaQuestionType(value) {
@@ -1417,6 +1431,60 @@ function qaTypeMatchesSubQuestion(subQuestionType, qaType) {
   return subQuestionType === qaType;
 }
 
+function evidenceTypesMatchSubQuestion(subQuestionType, evidenceTypeAudit) {
+  if (!subQuestionType || subQuestionType === "unknown") return false;
+  const rawTypes = new Set(evidenceTypeAudit?.questionTypes || []);
+  const types = new Set((evidenceTypeAudit?.questionTypes || []).map(normalizeEvidenceQuestionType).filter(Boolean));
+  const actions = new Set(evidenceTypeAudit?.actions || []);
+  if (subQuestionType === "activation_condition") {
+    return ["activation_condition", "activation_timing", "damage_step_activation"].some((type) => types.has(type));
+  }
+  if (subQuestionType === "temporary_banish") {
+    return types.has("temporary_banish")
+      || types.has("banish_applicability")
+      || (rawTypes.has("effect_applicability") && actions.has("banish"));
+  }
+  if (subQuestionType === "resolution_handling") {
+    return types.has("resolution_handling") || types.has("effect_applicability");
+  }
+  if (subQuestionType === "timing") {
+    return types.has("activation_timing") || types.has("activation_condition");
+  }
+  return types.has(subQuestionType);
+}
+
+function normalizeEvidenceQuestionType(type) {
+  if (type === "activation_timing" || type === "damage_step_activation") return "activation_condition";
+  if (type === "banish_applicability") return "temporary_banish";
+  if (type === "effect_applicability") return "resolution_handling";
+  return type || "";
+}
+
+function normalizeEvidenceQuestionTypeForSubQuestion(subQuestionType, evidenceTypeAudit) {
+  if (!subQuestionType || subQuestionType === "unknown") return "";
+  const rawTypes = new Set(evidenceTypeAudit?.questionTypes || []);
+  const actions = new Set(evidenceTypeAudit?.actions || []);
+  const normalizedTypes = new Set([...rawTypes].map(normalizeEvidenceQuestionType).filter(Boolean));
+  if (rawTypes.has(subQuestionType) || normalizedTypes.has(subQuestionType)) return subQuestionType;
+  if (subQuestionType === "activation_condition"
+    && ["activation_condition", "activation_timing", "damage_step_activation"].some((type) => rawTypes.has(type) || normalizedTypes.has(type))) {
+    return "activation_condition";
+  }
+  if (subQuestionType === "temporary_banish"
+    && (rawTypes.has("temporary_banish") || rawTypes.has("banish_applicability") || (rawTypes.has("effect_applicability") && actions.has("banish")))) {
+    return "temporary_banish";
+  }
+  if (subQuestionType === "resolution_handling"
+    && (rawTypes.has("resolution_handling") || rawTypes.has("effect_applicability") || normalizedTypes.has("resolution_handling"))) {
+    return "resolution_handling";
+  }
+  if (subQuestionType === "timing"
+    && (rawTypes.has("activation_timing") || rawTypes.has("damage_step_activation") || normalizedTypes.has("activation_condition"))) {
+    return "activation_condition";
+  }
+  return "";
+}
+
 function qaMatchesSubQuestionCard(subQuestion, qa) {
   const card = String(subQuestion?.card || "").trim();
   if (!card || card === "unknown") return false;
@@ -1435,6 +1503,7 @@ function qaCoversAskedResult(subQuestion, matchedQuestionType, fullText) {
   const askedResult = String(subQuestion?.askedResult || "");
   if (!qaTypeMatchesSubQuestion(subQuestion?.type, matchedQuestionType)) return false;
   if (matchedQuestionType === "temporary_banish") {
+    if (requiresBattleSpecificBanishEvidence(subQuestion, fullText)) return false;
     return /(除外|banish)/iu.test(fullText) && /(处理|结算|对象|暂时|临时|结束阶段|返回|回到|until|target|return)/iu.test(fullText);
   }
   if (matchedQuestionType === "activation_location") {
@@ -1446,11 +1515,18 @@ function qaCoversAskedResult(subQuestion, matchedQuestionType, fullText) {
     return coversSend && (!needsBattle || /(战斗破坏|战破|destroyed by battle)/iu.test(fullText));
   }
   if (matchedQuestionType === "activation_condition") {
-    return /(能否发动|能不能发动|可以发动|不能发动|不可以发动|发动条件|诱发条件|发动时点|发动时机|诱发时点|条件.{0,18}发动|can.{0,12}activate|cannot.{0,12}activate)/iu.test(fullText);
+    return /(能否发动|能不能发动|可以发动|不能发动|不可以发动|发动条件|诱发条件|发动时点|发动时机|诱发时点|条件.{0,18}发动|発動でき|発動できる条件|条件.{0,12}満たされ|ダメージステップ.{0,12}発動でき|can.{0,12}activate|cannot.{0,12}activate)/iu.test(fullText);
   }
   if (matchedQuestionType === "return_to_deck") return /(回卡组|回到卡组|返回卡组|deck)/iu.test(fullText);
   if (matchedQuestionType === "location_change") return /(已经|所在|位置|区域|送墓|除外|场上|墓地)/iu.test(fullText);
   return matchedQuestionType === subQuestion?.type;
+}
+
+function requiresBattleSpecificBanishEvidence(subQuestion, fullText) {
+  const source = normalizeRulingText(`${subQuestion?.sourceText || ""} ${subQuestion?.scenarioRawContext || ""}`);
+  const asksBattleDestroyedMonster = /(战破|战斗破坏|傷害計算|伤害计算|battle|damage calculation)/iu.test(source);
+  if (!asksBattleDestroyedMonster) return false;
+  return !/(战破|战斗破坏|戦闘で破壊|傷害計算|伤害计算|damage calculation|destroyed by battle)/iu.test(fullText);
 }
 
 function auditQaAskedResultCoverage(subQuestion, qa, matchedQuestionType, semanticCoverage) {
@@ -1545,6 +1621,9 @@ function detectEvidenceAnswerFocus(value) {
   if (!text) return null;
   if (/(change|changed).{0,20}battle position|battle position.{0,20}(?:change|changed)|改变.{0,12}(?:表示形式|战斗位置)|表示形式.{0,12}变更/iu.test(text)) {
     return "battle_position_change";
+  }
+  if (/(?:ダメージステップ|damage step|伤害步骤|傷害步驟).{0,40}(?:発動でき|activate|发动)|(?:発動でき|activate|发动).{0,40}(?:ダメージステップ|damage step|伤害步骤|傷害步驟)/iu.test(text)) {
+    return "activation_condition";
   }
   if (/(?:在|从)(?:墓地|场上|怪兽区|除外状态).{0,16}(?:发动|發動)|(?:墓地|モンスターゾーン|除外状態)で.{0,16}発動|activat.{0,24}(?:graveyard|monster zone|field|banished)/iu.test(text)) {
     return "activation_location";
