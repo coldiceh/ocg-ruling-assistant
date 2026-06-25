@@ -23,7 +23,7 @@ export function buildQaIndex(rulings, cards) {
     }
   }
   return (Array.isArray(rulings) ? rulings : [])
-    .filter((record) => record.recordType === "qa" || record.recordType === "card-faq")
+    .filter((record) => ["qa", "card-faq", "official-database", "official-response"].includes(record.recordType))
     .map((record) => ({
       id: record.id,
       recordType: record.recordType,

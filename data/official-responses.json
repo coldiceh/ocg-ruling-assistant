@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "records": [
+    {
+      "id": "official-response-screenshot-albaz-quem-stigmata-001",
+      "title": "アルバスの落胤 cost に導きの聖女エクレシアを送った場合の処理",
+      "sourceType": "official_response_screenshot",
+      "sourceNote": "User-provided screenshot titled 遊戯王カードゲーム事務局からのご連絡. Not found as direct official DB Q&A at time of entry.",
+      "officialText": "「アルバスの落胤」の効果を発動できますが、処理は何も行われません。",
+      "cards": [
+        "アルバスの落胤",
+        "導きの聖女エクレシア",
+        "聖痕喰らいし竜",
+        "氷剣竜ミラジェイド"
+      ],
+      "questionTypes": [
+        "activation_condition",
+        "cost",
+        "fusion_material",
+        "resolution_handling"
+      ],
+      "scenario": "自分のEXデッキに氷剣竜ミラジェイドが存在し、手札に導きの聖女エクレシアとアルバスの落胤があり、相手フィールドに表側表示の聖痕喰らいし竜のみ存在する。アルバスの落胤を召喚した時、導きの聖女エクレシアをコストとして墓地へ送り、アルバスの落胤①効果を発動できるか。",
+      "verdict": {
+        "activation": "can_activate",
+        "cost": "can_pay_cost",
+        "resolution": "does_not_perform_fusion_material_processing"
+      },
+      "explanation": "事务局回答截图显示：可以发动「アルバスの落胤」的效果，但处理什么也不进行。由于该回答目前未在官方数据库中找到直接 Q&A，显示为未确认的事务局回答处理方式。",
+      "maxStatus": "unconfirmed",
+      "displayStatus": "provisional_official_response",
+      "updatedAt": "2026-06-25",
+      "tags": [
+        "official-response-screenshot",
+        "not-in-official-db",
+        "fusion-material",
+        "cost"
+      ],
+      "watchOfficialDb": {
+        "enabled": true,
+        "cardIds": [
+          22090,
+          16493
+        ],
+        "sourceUrls": [
+          "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=4&cid=22090&request_locale=ja"
+        ],
+        "queryTerms": [
+          "白の聖女エクレシア",
+          "導きの聖女エクレシア",
+          "アルバスの落胤",
+          "融合素材",
+          "コスト",
+          "処理は何も行われません",
+          "発動できます"
+        ],
+        "expectedAskedResult": [
+          "can_activate",
+          "can_pay_cost",
+          "does_not_perform_fusion_material_processing"
+        ],
+        "lastResult": "not_found"
+      }
+    }
+  ]
+}

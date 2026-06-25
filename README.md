@@ -36,7 +36,7 @@
 
 最近一次本地检查：
 
-- Node tests: 159/159 passing
+- Node tests: 172/172 passing
 - Legacy engine regressions: 9/9 passing
 - Data health: `ok`
 - Readiness level: `production_ready`
@@ -74,6 +74,7 @@ Benchmark：
 
 - `data/cards.json`
 - `data/rulings.json`
+- `data/official-responses.json`
 - `data/card-alias-index.json`
 - `data/qa-index.json`
 - `data/tracked-cards.json`
@@ -87,6 +88,7 @@ Benchmark：
 - `scripts/benchmark-report.mjs`：输出 benchmark 安全性和 unknown reason 报告。
 - `scripts/audit-no-direct.mjs`：审计 benchmark 中的 `no_direct_evidence` 原因。
 - `scripts/audit-evidence-types.mjs`：审计 no-direct case 中候选 Q&A 的多语言问题类型识别。
+- `scripts/revalidate-official-responses.mjs`：检查 provisional official response 是否已有官方 DB direct evidence。
 
 运行时如果发现本地缺少卡片或该卡 Q&A / FAQ，会尝试 on-demand sync 并更新缓存；如果实时来源不可用，会在 trace 中显示 `live_source_unavailable`，并保守降级。
 
@@ -111,6 +113,7 @@ node scripts/debug-retrieval.mjs "玩家问题"
 node scripts/benchmark-report.mjs
 node scripts/audit-no-direct.mjs
 node scripts/audit-evidence-types.mjs
+node scripts/revalidate-official-responses.mjs
 ```
 
 运行测试：
@@ -152,8 +155,9 @@ Content-Type: application/json
 安全规则：
 
 - card text alone 不能 `confirmed`。
-- manual / heuristic rule 不能 `confirmed`。
-- pending_adjustment 不能 `confirmed`。
+- `official_response_unverified` 不能 `confirmed`。
+- `pending_adjustment` 不能 `confirmed`。
+- 内部 heuristic 状态转移不能 `confirmed`。
 - parserWarnings 非空时不能直接升级为 `confirmed`。
 - AI explanation 不能修改程序 verdict。
 
@@ -207,6 +211,43 @@ Content-Type: application/json
 
 `conditionalAnswer` 只是解释层字段，不能修改 `status` / `verdict` / `evidenceIds`。AI explanation 仍只能解释程序给出的结构化结果。
 
+## Official responses
+
+事务局回答、官方客服回答、官方邮件或其他官方渠道确认可以作为 `official_response`，但必须可追溯。可追溯信息至少包括 `sourceUrl`、`sourceNote`、`officialText` / `evidenceText`、`collectedAt` / `updatedAt` 或 response id 之一。
+
+当前支持的来源等级：
+
+- `official_qa`：官方 Q&A / YGOResources Q&A；满足 direct evidence 和 verdict 条件时可 `confirmed`。
+- `card_faq`：卡片 FAQ；满足 direct evidence 和 verdict 条件时可 `confirmed`。
+- `official_database`：官方数据库公开裁定；满足 direct evidence 和 verdict 条件时可 `confirmed`。
+- `official_database_card_page`：官方数据库卡片页面；只能作为 cardReferenceEvidence，不能单独 `confirmed`。
+- `official_response`：可追溯事务局 / 官方渠道回答；必须继续通过 card、question type、askedResultCoverage、verdict extractor 和 final gate，才可 `confirmed`。
+- `official_response_screenshot`：事务局回答截图；当前阶段只生成 `provisionalAnswer`，显示“事务局回答截图，官方数据库未收录”，不能 `confirmed`。
+- `official_response_unverified`：只有玩家转述或无法追溯来源；当前阶段不能 `confirmed`。
+- `pending_adjustment`：调整中；保持 `unknown`，不能 `confirmed`。
+
+玩家整理、社区转述、无来源 probable answer 暂不作为数据源。即使内容看似正确，也不能进入 `directEvidence` 或影响 `confirmed`。
+
+`official_response_screenshot` 的显示规则：
+
+```text
+未确认处理方式（事务局回答截图，官方数据库未收录）：
+可以发动并支付 cost，但后续处理不进行。
+
+注意：
+该回答目前未在官方数据库中找到直接 Q&A。后续如果数据库更新，系统会优先改用官方数据库裁定。
+```
+
+结构上它会挂在子答案的 `provisionalAnswer` 字段中，`status` / `verdict` / `evidenceIds` 仍保持程序最终结果。截图回答不能进入 `directEvidence`，也不能被 AI explanation 提升为 `confirmed`。
+
+用于后续重评估的命令：
+
+```bash
+node scripts/revalidate-official-responses.mjs
+```
+
+该脚本只报告是否已经在官方 Q&A / FAQ / database 中找到覆盖 `expectedAskedResult` 的 direct evidence，不会自动覆盖原始截图记录。
+
 ## 已完成核对表
 
 - parser / formal query：已实现
@@ -222,6 +263,8 @@ Content-Type: application/json
 - subQuestion dependencies：已实现
 - transitionRules：已实现
 - conditional answer / clarification question：已实现（仅用于条件分支缺状态或多分支不唯一时的 unknown 解释）
+- official response source gate：已实现（可追溯 `official_response` 可进入 ruling evidence；`official_response_screenshot` 仅生成 provisionalAnswer）
+- official response revalidation skeleton：已实现（只报告 DB direct evidence 是否出现，不自动覆盖）
 - benchmark report：已实现
 - no_direct_evidence audit：已实现
 - on-demand sync / cache：已实现
@@ -232,10 +275,10 @@ Content-Type: application/json
 
 下一步优先级：
 
-1. no_direct_evidence 后续优化：针对 `all_candidates_different_question` / `all_candidates_conflicting` 补充更精确数据源或人工 curated source。
-2. manual-rulings.json curated ruling source：人工整理裁定源，但不能默认当 official confirmed。
-3. pending_adjustment / probable answer support：只允许 pending / unknown 或有限 inferred。
-4. answer revalidation after database update：数据更新后重新验证旧答案。
+1. no_direct_evidence 后续优化：针对 `all_candidates_different_question` / `all_candidates_conflicting` 补充更精确官方数据源。
+2. pending_adjustment support：只允许 `unknown`，并清楚提示调整中。
+3. official response ingestion：补充可追溯字段采集、去重和更新流程。
+4. answer revalidation after database update：将当前 report-only 脚本接入定时同步和历史答案复核。
 5. larger real ruling benchmark：扩大真实问题集。
 6. data coverage expansion：扩大 Q&A / FAQ 覆盖，接近生产可用。
 7. user feedback -> regression case：用户反馈转成固定回归测试。
@@ -243,7 +286,6 @@ Content-Type: application/json
 当前明确未实现或只处于计划阶段：
 
 - probable answer for pending_adjustment
-- manual-rulings.json curated ruling source
 - answer history / revalidation after database update
 - larger data coverage / production readiness
 
@@ -252,13 +294,12 @@ Content-Type: application/json
 未来可以支持最新裁定，但必须区分来源等级：
 
 - `official_qa` / `card_faq` / `official_database`：在满足 direct evidence 和 verdict 条件时 may confirm。
-- `official_response`：取决于来源可信度、可引用性和时间戳。
-- `community_verified`：最高 `inferred`。
-- `manual_curated`：默认最高 `inferred`，除非另有可审计官方来源。
-- `pending_adjustment`：只能 `unknown` / `pending`，不能 confirmed。
-- `heuristic`：最高 `inferred` 或 `unknown`。
+- `official_response`：必须可追溯，并通过 directEvidence 和 final gate 后才 may confirm。
+- `official_response_screenshot`：只能作为 provisional official response 展示；当前不能 confirmed。
+- `official_response_unverified`：只有转述或缺少可追溯信息时，不能 confirmed。
+- `pending_adjustment`：只能 `unknown`，不能 confirmed。
 
-不要把用户手动输入的裁定默认当作 official confirmed。
+不要把用户手动输入、玩家整理或社区转述的裁定默认当作 official confirmed。
 
 ## 后端模块
 
@@ -268,6 +309,7 @@ Content-Type: application/json
 - `backend/dataHealth.mjs`：数据健康检查。
 - `backend/dataIndex.mjs`：数据加载和索引。
 - `backend/evidenceQuestionTypeClassifier.mjs`：中 / 日 / 英 Q&A 问题类型识别。
+- `backend/officialResponses.mjs`：官方事务局回答 / 调整中记录的来源等级和可追溯校验。
 - `backend/verdictExtractor.mjs`：多语言 verdict 抽取。
 - `backend/conditionBranches.mjs`：条件分支抽取。
 - `backend/gameState.mjs`：静态状态建模。
