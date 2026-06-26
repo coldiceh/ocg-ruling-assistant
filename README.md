@@ -76,6 +76,7 @@ Benchmark：
 - `data/rulings.json`
 - `data/official-responses.json`
 - `data/answer-history.json`
+- `data/feedback-cases.json`
 - `data/card-alias-index.json`
 - `data/qa-index.json`
 - `data/tracked-cards.json`
@@ -90,6 +91,8 @@ Benchmark：
 - `scripts/audit-no-direct.mjs`：审计 benchmark 中的 `no_direct_evidence` 原因。
 - `scripts/audit-evidence-types.mjs`：审计 no-direct case 中候选 Q&A 的多语言问题类型识别。
 - `scripts/smoke-real-questions.mjs`：用真实问题跑完整 pipeline，输出 JSON 或 Markdown smoke report。
+- `scripts/list-feedback-cases.mjs`：统计并列出用户反馈 case。
+- `scripts/export-feedback-regressions.mjs`：导出用户反馈对应的 regression draft，不自动写入 benchmark。
 - `scripts/revalidate-official-responses.mjs`：检查 provisional official response 是否已有官方 DB direct evidence。
 - `scripts/revalidate-answers.mjs`：重评估 answer history watch queue 中的 unknown / provisional 问题。
 
@@ -118,6 +121,9 @@ node scripts/audit-no-direct.mjs
 node scripts/audit-evidence-types.mjs
 node scripts/smoke-real-questions.mjs
 node scripts/smoke-real-questions.mjs --markdown
+node scripts/list-feedback-cases.mjs
+node scripts/export-feedback-regressions.mjs
+node scripts/export-feedback-regressions.mjs --markdown
 node scripts/revalidate-official-responses.mjs
 node scripts/revalidate-answers.mjs
 ```
@@ -328,6 +334,46 @@ node scripts/revalidate-answers.mjs
 - official DB evidence 永远优先于 `provisionalAnswer`。
 - final gate 仍是确认结论的唯一出口。
 
+## Feedback to regression workflow
+
+用户反馈不会立即改变裁定答案，也不会绕过 final gate。反馈只会生成一个待人工确认的 regression draft，保存到 `data/feedback-cases.json`。
+
+前端普通模式会在回答下方显示反馈入口：
+
+```text
+回答错了
+资料不对
+需要补充来源
+```
+
+提交后提示：
+
+```text
+反馈已记录。它不会立即改变裁定结论；确认后会转成回归测试。
+```
+
+反馈记录只保存结构化信息：
+
+- 原始问题和可选 `formalQuery`
+- 当前程序生成的 `status` / `verdict` / `evidenceIds`
+- 用户反馈类型、说明和可选来源链接 / 原文
+- 自动生成的 regression draft
+
+安全约束：
+
+- 用户说“应该 confirmed”不会直接改变当前答案。
+- 用户提供 sourceUrl / sourceText 只会被记录；不会自动进入 `directEvidence`。
+- 只有人工确认来源并补成正式测试后，才会影响后续回归。
+- AI explanation 不能通过 feedback 覆盖程序 verdict。
+
+相关命令：
+
+```bash
+node scripts/list-feedback-cases.mjs
+node scripts/export-feedback-regressions.mjs
+node scripts/export-feedback-regressions.mjs --markdown
+```
+
 ## 已完成核对表
 
 - parser / formal query：已实现
@@ -346,6 +392,7 @@ node scripts/revalidate-answers.mjs
 - official response source gate：已实现（可追溯 `official_response` 可进入 ruling evidence；`official_response_screenshot` 仅生成 provisionalAnswer）
 - official response revalidation skeleton：已实现（只报告 DB direct evidence 是否出现，不自动覆盖）
 - answer history / revalidation queue：已实现（默认关闭，只记录结构化 unknown / provisional watch item）
+- user feedback -> regression draft：已实现（只生成草案，不修改答案和 benchmark）
 - benchmark report：已实现
 - no_direct_evidence audit：已实现
 - on-demand sync / cache：已实现
@@ -362,13 +409,14 @@ node scripts/revalidate-answers.mjs
 4. answer revalidation after database update：将当前 report-only 脚本接入定时同步、前端提醒和历史答案复核。
 5. larger real ruling benchmark：扩大真实问题集。
 6. data coverage expansion：扩大 Q&A / FAQ 覆盖，接近生产可用。
-7. user feedback -> regression case：用户反馈转成固定回归测试。
+7. feedback triage -> regression case：人工确认来源后，把 feedback draft 转成固定回归测试。
 
 当前明确未实现或只处于计划阶段：
 
 - probable answer for pending_adjustment
 - answer history UI reminder / automatic notification after database update
 - larger data coverage / production readiness
+- automatic conversion from feedback draft to benchmark test
 
 ## 最新裁定 / 调整中支持计划
 
@@ -392,6 +440,7 @@ node scripts/revalidate-answers.mjs
 - `backend/evidenceQuestionTypeClassifier.mjs`：中 / 日 / 英 Q&A 问题类型识别。
 - `backend/officialResponses.mjs`：官方事务局回答 / 调整中记录的来源等级和可追溯校验。
 - `backend/answerHistory.mjs`：unknown / provisional 回答历史和 watch queue 生成。
+- `backend/feedbackCases.mjs`：用户反馈 case 和 regression draft 生成。
 - `backend/verdictExtractor.mjs`：多语言 verdict 抽取。
 - `backend/conditionBranches.mjs`：条件分支抽取。
 - `backend/gameState.mjs`：静态状态建模。
