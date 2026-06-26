@@ -38,7 +38,7 @@
 
 最近一次本地检查：
 
-- Node tests: 218/218 passing
+- Node tests: 223/223 passing
 - Legacy engine regressions: 9/9 passing
 - Data health: `ok`
 - Readiness level: `production_ready`
@@ -90,6 +90,7 @@ Smoke real questions 当前额外统计：
 - `data/official-responses.json`
 - `data/answer-history.json`
 - `data/feedback-cases.json`
+- `data/acceptance-report.json`
 - `data/card-alias-index.json`
 - `data/qa-index.json`
 - `data/tracked-cards.json`
@@ -104,6 +105,7 @@ Smoke real questions 当前额外统计：
 - `scripts/audit-no-direct.mjs`：审计 benchmark 中的 `no_direct_evidence` 原因。
 - `scripts/audit-evidence-types.mjs`：审计 no-direct case 中候选 Q&A 的多语言问题类型识别。
 - `scripts/smoke-real-questions.mjs`：用真实问题跑完整 pipeline，输出 JSON 或 Markdown smoke report。
+- `scripts/manual-acceptance-check.mjs`：用真实问题生成适合人工验收的报告，并把失败项转成 feedback draft。
 - `scripts/list-feedback-cases.mjs`：统计并列出用户反馈 case。
 - `scripts/export-feedback-regressions.mjs`：导出用户反馈对应的 regression draft，不自动写入 benchmark。
 - `scripts/revalidate-official-responses.mjs`：检查 provisional official response 是否已有官方 DB direct evidence。
@@ -134,6 +136,7 @@ node scripts/audit-no-direct.mjs
 node scripts/audit-evidence-types.mjs
 node scripts/smoke-real-questions.mjs
 node scripts/smoke-real-questions.mjs --markdown
+node scripts/manual-acceptance-check.mjs
 node scripts/list-feedback-cases.mjs
 node scripts/export-feedback-regressions.mjs
 node scripts/export-feedback-regressions.mjs --markdown
@@ -152,6 +155,25 @@ npm test
 ```bash
 node tests/engine-regression.mjs
 ```
+
+## How to evaluate answers
+
+使用或验收回答时，应先区分系统给出的层级：
+
+1. **官方确认**：`officialAnswer.status = confirmed`。必须有 direct official evidence、非空 `evidenceIds`、明确 verdict，并通过 final gate。
+2. **未确认可能处理**：`likelyAnswer`。这是基于卡片文本、相似 Q&A、事件时间线或其他可追踪资料的 best-effort 参考，必须带风险提示和免责声明；不能当作官方裁定。
+3. **条件分支回答**：`conditionalAnswer`。系统已找到 FAQ / Q&A 的多个条件分支，但当前问题缺少状态，因此列出分支并追问；最终仍是 `unknown`。
+4. **事务局截图 provisional**：`provisionalAnswer`。可展示“事务局回答截图，官方数据库未收录”，但不能进入 `directEvidence`，也不能让结论变成 `confirmed`。
+5. **卡名需要确认**：当长卡名无法 exact match、只命中较短候选时，系统必须要求确认，不能静默错配。
+6. **资料不足但有原因**：如果没有 direct evidence，普通界面应显示用户可读原因、下一步需要补充的信息或可重评估方向，而不是内部 reason code。
+
+验收脚本：
+
+```bash
+node scripts/manual-acceptance-check.mjs
+```
+
+它会生成 `data/acceptance-report.json`，检查是否存在 unsafe confirmed、useless unknown、内部 reason 泄漏、可疑卡名错配，并把需要人工处理的 case 转成 feedback draft。该报告不会修改 benchmark，也不会自动改变裁定答案。
 
 ## Example outputs
 

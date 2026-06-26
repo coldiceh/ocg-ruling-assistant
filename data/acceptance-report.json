@@ -1,0 +1,721 @@
+{
+  "generatedAt": "2026-06-26T09:53:38.016Z",
+  "total": 11,
+  "passCount": 11,
+  "needsReviewCount": 0,
+  "unsafeConfirmedCount": 0,
+  "uselessUnknownCount": 0,
+  "internalReasonLeakCount": 0,
+  "wrongCardResolutionCount": 0,
+  "likelyAnswerCount": 6,
+  "conditionalAnswerCount": 1,
+  "provisionalAnswerCount": 3,
+  "clarificationCount": 3,
+  "smokeSummary": {
+    "officialConfirmedCount": 3,
+    "unsafeConfirmedCount": 0,
+    "uselessUnknownCount": 0,
+    "internalReasonLeakCount": 0,
+    "wrongCardResolutionCount": 0
+  },
+  "cases": [
+    {
+      "id": "confirmed-official-faq",
+      "input": "青眼暴君龙被战斗破坏并送去墓地后，它的③效果是在墓地发动还是在场上发动？",
+      "resolvedCards": [
+        "青眼暴君龙"
+      ],
+      "unresolvedCardNames": [],
+      "officialAnswer": {
+        "status": "confirmed",
+        "verdict": "activates_in_graveyard",
+        "evidenceIds": [
+          "card-faq-16842-3"
+        ],
+        "reason": "condition_branch_selected:activates_in_graveyard"
+      },
+      "likelyAnswer": null,
+      "conditionalAnswer": null,
+      "provisionalAnswer": null,
+      "clarification": null,
+      "userFacingSummary": "已确认：activates_in_graveyard",
+      "riskFlags": [],
+      "evidenceIds": [
+        "card-faq-16842-3"
+      ],
+      "internalReasonLeaked": false,
+      "wrongCardResolutionSuspected": false,
+      "acceptanceResult": "pass",
+      "reviewReasons": [],
+      "feedbackDrafts": []
+    },
+    {
+      "id": "unknown-no-direct-evidence",
+      "input": "伤害计算后已经确定会被战斗破坏的卡通怪兽，能用完美世界-卡通世界的③效果暂时除外到效果处理后吗？",
+      "resolvedCards": [
+        "完美世界-卡通世界"
+      ],
+      "unresolvedCardNames": [],
+      "officialAnswer": {
+        "status": "unknown",
+        "verdict": "unknown",
+        "evidenceIds": [
+          "ygoresources-qa-13055",
+          "ygoresources-qa-18123",
+          "card-faq-15241-3",
+          "card-faq-14121-0",
+          "card-faq-14850-3",
+          "card-faq-15363-0",
+          "ygoresources-qa-22185"
+        ],
+        "reason": "similar_evidence:direct_evidence_has_no_explicit_answer:multiple_unknown_reasons:evidence_mentions_action_but_not_asked_result,conditional_branch_not_selected"
+      },
+      "likelyAnswer": {
+        "status": "best_effort",
+        "verdict": "unknown",
+        "reasoning": "可以参考卡片文本本身的发动条件和处理描述；已找到相似 Q&A，但它不是当前问题的 direct evidence。针对“能用完美世界-卡通世界的③效果暂时除外到效果处理后吗？”，只能给出未确认的处理参考，仍需官方 Q&A 或事务局回答确认。",
+        "basis": [
+          "card_text",
+          "similar_qa",
+          "event_timeline"
+        ],
+        "riskFlags": [
+          "similar_evidence_only",
+          "different_question_evidence",
+          "no_direct_evidence"
+        ],
+        "disclaimer": "未确认裁定，不能替代官方 Q&A"
+      },
+      "conditionalAnswer": null,
+      "provisionalAnswer": null,
+      "clarification": null,
+      "userFacingSummary": "可能处理（未确认）：可以参考卡片文本本身的发动条件和处理描述；已找到相似 Q&A，但它不是当前问题的 direct evidence。针对“能用完美世界-卡通世界的③效果暂时除外到效果处理后吗？”，只能给出未确认的处理参考，仍需官方 Q&A 或事务局回答确认。 未确认裁定，不能替代官方 Q&A",
+      "riskFlags": [
+        "similar_evidence_only",
+        "different_question_evidence",
+        "no_direct_evidence"
+      ],
+      "evidenceIds": [
+        "ygoresources-qa-13055",
+        "ygoresources-qa-18123",
+        "card-faq-15241-3",
+        "card-faq-14121-0",
+        "card-faq-14850-3",
+        "card-faq-15363-0",
+        "ygoresources-qa-22185"
+      ],
+      "internalReasonLeaked": false,
+      "wrongCardResolutionSuspected": false,
+      "acceptanceResult": "pass",
+      "reviewReasons": [],
+      "feedbackDrafts": []
+    },
+    {
+      "id": "conditional-answer",
+      "input": "青眼暴君龙被战斗破坏的时候，这个效果是在墓地发动还是在场上发动？",
+      "resolvedCards": [
+        "青眼暴君龙"
+      ],
+      "unresolvedCardNames": [],
+      "officialAnswer": {
+        "status": "unknown",
+        "verdict": "unknown",
+        "evidenceIds": [
+          "card-faq-16842-3"
+        ],
+        "reason": "condition_branch_missing_state:已识别战斗破坏，但未确认该时点是否已经完成送墓、是否被除外、或是否仍在场上。"
+      },
+      "likelyAnswer": {
+        "status": "best_effort",
+        "verdict": "conditional",
+        "reasoning": "已找到条件分支证据，但当前场景不足以选择唯一分支。如果 このカードが戦闘で破壊されなかった場合にはモンスターゾーンで，则 在怪兽区发动；如果 戦闘で破壊され墓地へ送られた場合には墓地で，则 在墓地发动；如果 戦闘で破壊され表側で除外された場合には除外状態で，则 在除外状态发动。",
+        "basis": [
+          "condition_branch",
+          "event_timeline"
+        ],
+        "riskFlags": [
+          "condition_branch_requires_state"
+        ],
+        "disclaimer": "未确认裁定，不能替代官方 Q&A"
+      },
+      "conditionalAnswer": {
+        "kind": "conditional_answer",
+        "questionId": "q1",
+        "status": "unknown",
+        "reason": "已找到相关 FAQ/Q&A，但当前问题缺少必要状态，无法确定唯一结论。",
+        "branches": [
+          {
+            "label": "如果仍在怪兽区域",
+            "conditions": [
+              "not_destroyed_by_battle",
+              "remains_on_field",
+              "monster_zone"
+            ],
+            "verdict": "activates_on_field",
+            "explanation": "在怪兽区域发动。",
+            "evidenceIds": [
+              "card-faq-16842-3"
+            ]
+          },
+          {
+            "label": "如果已经送去墓地",
+            "conditions": [
+              "destroyed_by_battle",
+              "sent_to_graveyard",
+              "graveyard"
+            ],
+            "verdict": "activates_in_graveyard",
+            "explanation": "在墓地发动。",
+            "evidenceIds": [
+              "card-faq-16842-3"
+            ]
+          },
+          {
+            "label": "如果已经被除外",
+            "conditions": [
+              "destroyed_by_battle",
+              "banished",
+              "banished_zone"
+            ],
+            "verdict": "activates_while_banished",
+            "explanation": "在除外状态发动。",
+            "evidenceIds": [
+              "card-faq-16842-3"
+            ]
+          }
+        ],
+        "missingInfo": [
+          {
+            "field": "current_zone",
+            "questionToAsk": "请补充：这个时点青眼暴君龙是仍在怪兽区域、已经送去墓地，还是已经被除外？",
+            "options": [
+              "仍在怪兽区域",
+              "已经送去墓地",
+              "已经被除外"
+            ]
+          }
+        ],
+        "clarificationQuestion": "请补充：这个时点青眼暴君龙是仍在怪兽区域、已经送去墓地，还是已经被除外？"
+      },
+      "provisionalAnswer": null,
+      "clarification": {
+        "question": "请补充：这个时点青眼暴君龙是仍在怪兽区域、已经送去墓地，还是已经被除外？",
+        "options": [
+          "仍在怪兽区域",
+          "已经送去墓地",
+          "已经被除外"
+        ]
+      },
+      "userFacingSummary": "条件不足：如果仍在怪兽区域：在怪兽区域发动。；如果已经送去墓地：在墓地发动。；如果已经被除外：在除外状态发动。。请补充：这个时点青眼暴君龙是仍在怪兽区域、已经送去墓地，还是已经被除外？",
+      "riskFlags": [
+        "condition_branch_requires_state"
+      ],
+      "evidenceIds": [
+        "card-faq-16842-3"
+      ],
+      "internalReasonLeaked": false,
+      "wrongCardResolutionSuspected": false,
+      "acceptanceResult": "pass",
+      "reviewReasons": [],
+      "feedbackDrafts": []
+    },
+    {
+      "id": "provisional-official-response",
+      "input": "自分のEXデッキに氷剣竜ミラジェイドが存在し、手札に導きの聖女エクレシアとアルバスの落胤があり、相手フィールドに表側表示の聖痕喰らいし竜のみ存在します。アルバスの落胤を召喚した時、導きの聖女エクレシアをコストとして墓地へ送り、アルバスの落胤①の効果を発動できますか？",
+      "resolvedCards": [
+        "冰剑龙 镜翠幻种",
+        "阿尔白斯之落胤",
+        "吞喰圣痕之龙",
+        "剣竜"
+      ],
+      "unresolvedCardNames": [],
+      "officialAnswer": {
+        "status": "unknown",
+        "verdict": "unknown",
+        "evidenceIds": [],
+        "reason": "card_text_only;provisional_official_response_available"
+      },
+      "likelyAnswer": {
+        "status": "provisional",
+        "verdict": {
+          "activation": "can_activate",
+          "cost": "can_pay_cost",
+          "resolution": "does_not_perform_fusion_material_processing"
+        },
+        "reasoning": "根据事务局回答截图，最可能处理为：可以发动并支付 cost，但处理不进行。该回答目前未在官方数据库中找到直接 Q&A，因此不作为 confirmed。",
+        "basis": [
+          "official_response_screenshot"
+        ],
+        "riskFlags": [
+          "official_database_not_found"
+        ],
+        "disclaimer": "未确认裁定，不能替代官方 Q&A"
+      },
+      "conditionalAnswer": null,
+      "provisionalAnswer": {
+        "status": "provisional_official_response",
+        "sourceType": "official_response_screenshot",
+        "evidenceIds": [
+          "official-response-screenshot-albaz-quem-stigmata-001"
+        ],
+        "verdict": {
+          "activation": "can_activate",
+          "cost": "can_pay_cost",
+          "resolution": "does_not_perform_fusion_material_processing"
+        },
+        "explanation": "根据事务局回答截图，最可能处理为：可以发动并支付 cost，但处理不进行。该回答目前未在官方数据库中找到直接 Q&A，因此不作为 confirmed。",
+        "displayStatus": "provisional_official_response",
+        "sourceNote": "User-provided screenshot titled 遊戯王カードゲーム事務局からのご連絡. Not found as direct official DB Q&A at time of entry.",
+        "officialText": "「アルバスの落胤」の効果を発動できますが、処理は何も行われません。",
+        "watchOfficialDb": true,
+        "canRevalidate": true,
+        "revalidationReason": "official_database_direct_evidence_watch",
+        "watchOfficialDbConfig": {
+          "enabled": true,
+          "cardIds": [
+            "22090",
+            "16493"
+          ],
+          "sourceUrls": [
+            "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=4&cid=22090&request_locale=ja"
+          ],
+          "queryTerms": [
+            "白の聖女エクレシア",
+            "導きの聖女エクレシア",
+            "アルバスの落胤",
+            "融合素材",
+            "コスト",
+            "処理は何も行われません",
+            "発動できます"
+          ],
+          "expectedAskedResult": [
+            "can_activate",
+            "can_pay_cost",
+            "does_not_perform_fusion_material_processing"
+          ],
+          "lastCheckedAt": "",
+          "lastResult": "not_found"
+        }
+      },
+      "clarification": null,
+      "userFacingSummary": "未确认处理方式：可以发动并支付 cost，但后续处理不进行。",
+      "riskFlags": [
+        "official_database_not_found"
+      ],
+      "evidenceIds": [],
+      "internalReasonLeaked": false,
+      "wrongCardResolutionSuspected": false,
+      "acceptanceResult": "pass",
+      "reviewReasons": [],
+      "feedbackDrafts": []
+    },
+    {
+      "id": "answer-history-watch",
+      "input": "自分のEXデッキに氷剣竜ミラジェイドが存在し、手札に導きの聖女エクレシアとアルバスの落胤があり、相手フィールドに表側表示の聖痕喰らいし竜のみ存在します。アルバスの落胤を召喚した時、導きの聖女エクレシアをコストとして墓地へ送り、アルバスの落胤①の効果を発動できますか？",
+      "resolvedCards": [
+        "冰剑龙 镜翠幻种",
+        "阿尔白斯之落胤",
+        "吞喰圣痕之龙",
+        "剣竜"
+      ],
+      "unresolvedCardNames": [],
+      "officialAnswer": {
+        "status": "unknown",
+        "verdict": "unknown",
+        "evidenceIds": [],
+        "reason": "card_text_only;provisional_official_response_available"
+      },
+      "likelyAnswer": {
+        "status": "provisional",
+        "verdict": {
+          "activation": "can_activate",
+          "cost": "can_pay_cost",
+          "resolution": "does_not_perform_fusion_material_processing"
+        },
+        "reasoning": "根据事务局回答截图，最可能处理为：可以发动并支付 cost，但处理不进行。该回答目前未在官方数据库中找到直接 Q&A，因此不作为 confirmed。",
+        "basis": [
+          "official_response_screenshot"
+        ],
+        "riskFlags": [
+          "official_database_not_found"
+        ],
+        "disclaimer": "未确认裁定，不能替代官方 Q&A"
+      },
+      "conditionalAnswer": null,
+      "provisionalAnswer": {
+        "status": "provisional_official_response",
+        "sourceType": "official_response_screenshot",
+        "evidenceIds": [
+          "official-response-screenshot-albaz-quem-stigmata-001"
+        ],
+        "verdict": {
+          "activation": "can_activate",
+          "cost": "can_pay_cost",
+          "resolution": "does_not_perform_fusion_material_processing"
+        },
+        "explanation": "根据事务局回答截图，最可能处理为：可以发动并支付 cost，但处理不进行。该回答目前未在官方数据库中找到直接 Q&A，因此不作为 confirmed。",
+        "displayStatus": "provisional_official_response",
+        "sourceNote": "User-provided screenshot titled 遊戯王カードゲーム事務局からのご連絡. Not found as direct official DB Q&A at time of entry.",
+        "officialText": "「アルバスの落胤」の効果を発動できますが、処理は何も行われません。",
+        "watchOfficialDb": true,
+        "canRevalidate": true,
+        "revalidationReason": "official_database_direct_evidence_watch",
+        "watchOfficialDbConfig": {
+          "enabled": true,
+          "cardIds": [
+            "22090",
+            "16493"
+          ],
+          "sourceUrls": [
+            "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=4&cid=22090&request_locale=ja"
+          ],
+          "queryTerms": [
+            "白の聖女エクレシア",
+            "導きの聖女エクレシア",
+            "アルバスの落胤",
+            "融合素材",
+            "コスト",
+            "処理は何も行われません",
+            "発動できます"
+          ],
+          "expectedAskedResult": [
+            "can_activate",
+            "can_pay_cost",
+            "does_not_perform_fusion_material_processing"
+          ],
+          "lastCheckedAt": "",
+          "lastResult": "not_found"
+        }
+      },
+      "clarification": null,
+      "userFacingSummary": "未确认处理方式：可以发动并支付 cost，但后续处理不进行。",
+      "riskFlags": [
+        "official_database_not_found"
+      ],
+      "evidenceIds": [],
+      "internalReasonLeaked": false,
+      "wrongCardResolutionSuspected": false,
+      "acceptanceResult": "pass",
+      "reviewReasons": [],
+      "feedbackDrafts": []
+    },
+    {
+      "id": "conflicting-evidence",
+      "input": "对方主要阶段，能否发动I：P百变莱娜的效果，用它和另一只怪兽连接召唤S：P小夜骑士？",
+      "resolvedCards": [
+        "I：P百变莱娜",
+        "S：P小夜骑士"
+      ],
+      "unresolvedCardNames": [],
+      "officialAnswer": {
+        "status": "unknown",
+        "verdict": "unknown",
+        "evidenceIds": [
+          "ygoresources-qa-6078",
+          "ygoresources-qa-7266",
+          "ygoresources-qa-9673",
+          "ygoresources-qa-19474",
+          "ygoresources-qa-19483",
+          "ygoresources-qa-23987",
+          "ygoresources-qa-19808",
+          "ygoresources-qa-21516"
+        ],
+        "reason": "similar_evidence:direct_evidence_has_no_explicit_answer:evidence_mentions_action_but_not_asked_result"
+      },
+      "likelyAnswer": {
+        "status": "best_effort",
+        "verdict": "unknown",
+        "reasoning": "可以参考卡片文本本身的发动条件和处理描述；已找到相似 Q&A，但它不是当前问题的 direct evidence。针对“能否发动I：P百变莱娜的效果，用它和另一只怪兽连接召唤S：P小夜骑士？”，只能给出未确认的处理参考，仍需官方 Q&A 或事务局回答确认。",
+        "basis": [
+          "card_text",
+          "similar_qa"
+        ],
+        "riskFlags": [
+          "similar_evidence_only",
+          "different_question_evidence",
+          "no_direct_evidence"
+        ],
+        "disclaimer": "未确认裁定，不能替代官方 Q&A"
+      },
+      "conditionalAnswer": null,
+      "provisionalAnswer": null,
+      "clarification": null,
+      "userFacingSummary": "可能处理（未确认）：可以参考卡片文本本身的发动条件和处理描述；已找到相似 Q&A，但它不是当前问题的 direct evidence。针对“能否发动I：P百变莱娜的效果，用它和另一只怪兽连接召唤S：P小夜骑士？”，只能给出未确认的处理参考，仍需官方 Q&A 或事务局回答确认。 未确认裁定，不能替代官方 Q&A",
+      "riskFlags": [
+        "similar_evidence_only",
+        "different_question_evidence",
+        "no_direct_evidence"
+      ],
+      "evidenceIds": [
+        "ygoresources-qa-6078",
+        "ygoresources-qa-7266",
+        "ygoresources-qa-9673",
+        "ygoresources-qa-19474",
+        "ygoresources-qa-19483",
+        "ygoresources-qa-23987",
+        "ygoresources-qa-19808",
+        "ygoresources-qa-21516"
+      ],
+      "internalReasonLeaked": false,
+      "wrongCardResolutionSuspected": false,
+      "acceptanceResult": "pass",
+      "reviewReasons": [],
+      "feedbackDrafts": []
+    },
+    {
+      "id": "card-resolution-alias",
+      "input": "Perfect Toon World 能把已经确定会被战斗破坏的 Toon monster 暂时 banish 吗？",
+      "resolvedCards": [
+        "トゥーン・ワールド"
+      ],
+      "unresolvedCardNames": [],
+      "officialAnswer": {
+        "status": "unknown",
+        "verdict": "unknown",
+        "evidenceIds": [],
+        "reason": "card_text_only"
+      },
+      "likelyAnswer": {
+        "status": "not_available",
+        "verdict": "unknown",
+        "reasoning": "问题类型尚未识别，不能生成可靠的未确认处理。请先明确是在问发动条件、处理方式、区域变化还是时点。",
+        "basis": [],
+        "riskFlags": [
+          "question_type_unknown"
+        ],
+        "disclaimer": "未确认裁定，不能替代官方 Q&A"
+      },
+      "conditionalAnswer": null,
+      "provisionalAnswer": null,
+      "clarification": {
+        "question": "请确认你要问的是发动条件、效果处理、时点、对象还是区域变化？",
+        "options": [
+          "发动条件",
+          "效果处理",
+          "时点",
+          "区域变化"
+        ]
+      },
+      "userFacingSummary": "需要补充：请确认你要问的是发动条件、效果处理、时点、对象还是区域变化？",
+      "riskFlags": [
+        "question_type_unknown"
+      ],
+      "evidenceIds": [],
+      "internalReasonLeaked": false,
+      "wrongCardResolutionSuspected": false,
+      "acceptanceResult": "pass",
+      "reviewReasons": [],
+      "feedbackDrafts": []
+    },
+    {
+      "id": "damage-step-activation",
+      "input": "大日女之御巫的①效果能否在伤害步骤发动？",
+      "resolvedCards": [
+        "大日女之御巫"
+      ],
+      "unresolvedCardNames": [],
+      "officialAnswer": {
+        "status": "confirmed",
+        "verdict": "can",
+        "evidenceIds": [
+          "card-faq-18017-1"
+        ],
+        "reason": "explicit_evidence_answer:can"
+      },
+      "likelyAnswer": null,
+      "conditionalAnswer": null,
+      "provisionalAnswer": null,
+      "clarification": null,
+      "userFacingSummary": "已确认：can",
+      "riskFlags": [],
+      "evidenceIds": [
+        "card-faq-18017-1"
+      ],
+      "internalReasonLeaked": false,
+      "wrongCardResolutionSuspected": false,
+      "acceptanceResult": "pass",
+      "reviewReasons": [],
+      "feedbackDrafts": []
+    },
+    {
+      "id": "temporary-banish",
+      "input": "能用完美世界-卡通世界的效果除外该卡通怪兽吗？",
+      "resolvedCards": [
+        "完美世界-卡通世界"
+      ],
+      "unresolvedCardNames": [],
+      "officialAnswer": {
+        "status": "unknown",
+        "verdict": "unknown",
+        "evidenceIds": [
+          "card-faq-15313-0",
+          "card-faq-14861-2",
+          "card-faq-14813-2",
+          "card-faq-15241-3",
+          "card-faq-14107-1",
+          "card-faq-14107-2",
+          "card-faq-15333-2",
+          "card-faq-14879-0"
+        ],
+        "reason": "similar_evidence:explicit_evidence_answer:cannot"
+      },
+      "likelyAnswer": {
+        "status": "best_effort",
+        "verdict": "cannot",
+        "reasoning": "没有 direct Q&A；当前结论只来自相似 Q&A 或非直接证据，不能作为官方确认。",
+        "basis": [
+          "card_text",
+          "similar_qa",
+          "event_timeline"
+        ],
+        "riskFlags": [
+          "similar_evidence_only",
+          "different_question_evidence",
+          "no_direct_evidence"
+        ],
+        "disclaimer": "未确认裁定，不能替代官方 Q&A"
+      },
+      "conditionalAnswer": null,
+      "provisionalAnswer": null,
+      "clarification": null,
+      "userFacingSummary": "可能处理（未确认）：倾向：cannot。没有 direct Q&A；当前结论只来自相似 Q&A 或非直接证据，不能作为官方确认。 未确认裁定，不能替代官方 Q&A",
+      "riskFlags": [
+        "similar_evidence_only",
+        "different_question_evidence",
+        "no_direct_evidence"
+      ],
+      "evidenceIds": [
+        "card-faq-15313-0",
+        "card-faq-14861-2",
+        "card-faq-14813-2",
+        "card-faq-15241-3",
+        "card-faq-14107-1",
+        "card-faq-14107-2",
+        "card-faq-15333-2",
+        "card-faq-14879-0"
+      ],
+      "internalReasonLeaked": false,
+      "wrongCardResolutionSuspected": false,
+      "acceptanceResult": "pass",
+      "reviewReasons": [],
+      "feedbackDrafts": []
+    },
+    {
+      "id": "activation-location-branch",
+      "input": "青眼暴君龙被战斗破坏并被表侧除外后，它的③效果在哪里发动？",
+      "resolvedCards": [
+        "青眼暴君龙"
+      ],
+      "unresolvedCardNames": [],
+      "officialAnswer": {
+        "status": "confirmed",
+        "verdict": "activates_while_banished",
+        "evidenceIds": [
+          "card-faq-16842-3"
+        ],
+        "reason": "condition_branch_selected:activates_while_banished"
+      },
+      "likelyAnswer": null,
+      "conditionalAnswer": null,
+      "provisionalAnswer": null,
+      "clarification": null,
+      "userFacingSummary": "已确认：activates_while_banished",
+      "riskFlags": [],
+      "evidenceIds": [
+        "card-faq-16842-3"
+      ],
+      "internalReasonLeaked": false,
+      "wrongCardResolutionSuspected": false,
+      "acceptanceResult": "pass",
+      "reviewReasons": [],
+      "feedbackDrafts": []
+    },
+    {
+      "id": "long-card-name-confirmation",
+      "input": "卡通青眼究极龙可以发动它的效果吗？",
+      "resolvedCards": [],
+      "unresolvedCardNames": [
+        "卡通青眼究极龙"
+      ],
+      "officialAnswer": {
+        "status": "unknown",
+        "verdict": "unknown",
+        "evidenceIds": [],
+        "reason": "provisional_official_response_available"
+      },
+      "likelyAnswer": {
+        "status": "not_available",
+        "verdict": "unknown",
+        "reasoning": "卡名尚未确认：卡通青眼究极龙。系统只找到了较短候选：青眼究极龙，需要玩家确认。",
+        "basis": [],
+        "riskFlags": [
+          "card_name_unresolved"
+        ],
+        "disclaimer": "未确认裁定，不能替代官方 Q&A"
+      },
+      "conditionalAnswer": null,
+      "provisionalAnswer": {
+        "status": "provisional_official_response",
+        "sourceType": "official_response_screenshot",
+        "evidenceIds": [
+          "official-response-screenshot-albaz-quem-stigmata-001"
+        ],
+        "verdict": {
+          "activation": "can_activate",
+          "cost": "can_pay_cost",
+          "resolution": "does_not_perform_fusion_material_processing"
+        },
+        "explanation": "根据事务局回答截图，最可能处理为：可以发动并支付 cost，但处理不进行。该回答目前未在官方数据库中找到直接 Q&A，因此不作为 confirmed。",
+        "displayStatus": "provisional_official_response",
+        "sourceNote": "User-provided screenshot titled 遊戯王カードゲーム事務局からのご連絡. Not found as direct official DB Q&A at time of entry.",
+        "officialText": "「アルバスの落胤」の効果を発動できますが、処理は何も行われません。",
+        "watchOfficialDb": true,
+        "canRevalidate": true,
+        "revalidationReason": "official_database_direct_evidence_watch",
+        "watchOfficialDbConfig": {
+          "enabled": true,
+          "cardIds": [
+            "22090",
+            "16493"
+          ],
+          "sourceUrls": [
+            "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=4&cid=22090&request_locale=ja"
+          ],
+          "queryTerms": [
+            "白の聖女エクレシア",
+            "導きの聖女エクレシア",
+            "アルバスの落胤",
+            "融合素材",
+            "コスト",
+            "処理は何も行われません",
+            "発動できます"
+          ],
+          "expectedAskedResult": [
+            "can_activate",
+            "can_pay_cost",
+            "does_not_perform_fusion_material_processing"
+          ],
+          "lastCheckedAt": "",
+          "lastResult": "not_found"
+        }
+      },
+      "clarification": {
+        "question": "请确认你指的是哪张卡：卡通青眼究极龙？",
+        "options": [
+          "青眼究极龙"
+        ]
+      },
+      "userFacingSummary": "未确认处理方式：可以发动并支付 cost，但后续处理不进行。",
+      "riskFlags": [
+        "card_name_unresolved"
+      ],
+      "evidenceIds": [],
+      "internalReasonLeaked": false,
+      "wrongCardResolutionSuspected": false,
+      "acceptanceResult": "pass",
+      "reviewReasons": [],
+      "feedbackDrafts": []
+    }
+  ],
+  "feedbackDrafts": []
+}
