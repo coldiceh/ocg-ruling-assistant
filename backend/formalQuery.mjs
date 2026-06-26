@@ -15,6 +15,12 @@ export const CHAIN_STATES = ["before_activation", "during_chain", "after_chain_r
 export const SUB_QUESTION_TYPES = [
   "activation_condition",
   "activation_location",
+  "activation_procedure",
+  "copy_effect",
+  "effect_text_scope",
+  "direct_attack_permission",
+  "attack_target_restriction",
+  "reveal_same_card",
   "resolution_handling",
   "timing",
   "target",
@@ -260,7 +266,7 @@ function normalizeSubQuestion(item, index, cards) {
   const sourceText = cleanString(item.sourceText) || "unknown";
   const ruleType = inferSubQuestionType(sourceText);
   const modelType = SUB_QUESTION_TYPES.includes(item.type) ? item.type : "unknown";
-  const type = ruleType !== "unknown" ? ruleType : modelType;
+  const type = chooseSubQuestionType(modelType, ruleType);
   const inferredCard = inferSubQuestionCard(sourceText, cards);
   const modelCard = cleanString(item.card);
   const card = modelCard && modelCard !== "unknown" ? modelCard : inferredCard;
@@ -280,8 +286,20 @@ function normalizeSubQuestion(item, index, cards) {
   };
 }
 
+function chooseSubQuestionType(modelType, ruleType) {
+  if (modelType !== "unknown" && ["activation_procedure", "effect_text_scope"].includes(ruleType)) return modelType;
+  if (ruleType !== "unknown") return ruleType;
+  return modelType;
+}
+
 function inferSubQuestionType(value) {
   const text = cleanString(value);
+  if (/(复制|拷贝|變成.{0,20}效果相同|变成.{0,20}效果相同|事务回滚|事務回滾|Transaction Rollback)/iu.test(text)) return "copy_effect";
+  if (/(这张卡也能|這張卡也能|このカードは.*発動|也能.{0,20}来发动|也能.{0,20}发动|从墓地发动|墓地から発動|作为.*cost|作为.*代价|捨てて発動|コストとして.*発動)/iu.test(text)) return "activation_procedure";
+  if (/(效果外文本|外文本|发动手续|发动方式|发动条件|適用外|テキスト外|効果処理ではない)/iu.test(text)) return "effect_text_scope";
+  if (/(再次给对手观看|再次展示|再次给.*观看|同一张手卡|同一張手札|reveal.*same|再次公开)/iu.test(text)) return "reveal_same_card";
+  if (/(直接攻击|直接攻擊|direct attack|ダイレクトアタック)/iu.test(text)) return "direct_attack_permission";
+  if (/(攻击对象|攻擊對象|只能攻击|只能攻擊|attack target|must attack|攻撃対象)/iu.test(text)) return "attack_target_restriction";
   if (/(墓地发动|场上发动|在哪里发动|哪里发动|还是在.{0,12}发动|发动还是)/iu.test(text)) return "activation_location";
   if (/(已经送墓|是否已经|已经送去墓地|这个时候.{0,20}送墓)/iu.test(text)) return "location_change";
   if (/(效果除外|除外该|能用.{0,30}除外|可以.{0,20}除外)/iu.test(text)) return "temporary_banish";
@@ -304,6 +322,12 @@ function inferAskedResult(sourceText, type) {
   if (type === "activation_location") return "effect_activates_in_graveyard_or_field";
   if (type === "location_change" && /(已经送墓|是否已经|已经送去墓地)/u.test(text)) return "is_already_sent_to_graveyard_at_that_timing";
   if (type === "activation_condition") return "can_activate";
+  if (type === "copy_effect") return "can_copy_activation_procedure_or_effect_text_scope";
+  if (type === "activation_procedure") return "activation_procedure_applicability";
+  if (type === "effect_text_scope") return "whether_effect_text_scope_is_copied_or_applied";
+  if (type === "direct_attack_permission") return "can_direct_attack";
+  if (type === "attack_target_restriction") return "attack_target_restriction_applies";
+  if (type === "reveal_same_card") return "can_reveal_same_card_again";
   if (type === "return_to_deck") return "will_return_to_deck";
   if (type === "send_to_gy") return "will_be_sent_to_graveyard";
   if (type === "temporary_banish") return "can_temporarily_banish";

@@ -140,7 +140,10 @@ export function officialResponseMatchesSubQuestion(record, subQuestion) {
   const sourceText = normalizeMatchText(`${subQuestion.sourceText || ""} ${subQuestion.askedResult || ""}`);
   const card = normalizeMatchText(subQuestion.card || "");
   const cardMatches = !card || card === "unknown"
-    ? true
+    ? (record.cards || []).some((name) => {
+        const key = normalizeMatchText(name);
+        return key && sourceText.includes(key);
+      })
     : (record.cards || []).some((name) => {
         const key = normalizeMatchText(name);
         return key === card || key.includes(card) || card.includes(key);

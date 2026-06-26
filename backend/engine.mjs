@@ -238,7 +238,7 @@ export async function answerQuestion(payload, options = {}) {
   const subAnswers = attachTransitionReasoning(baseSubAnswers, dependencyGraph, transitionRules, {
     formalQuery,
     evidence,
-    options: { gameState, eventTimeline, cardResolutionConfirmations },
+    options: { gameState, eventTimeline, cardResolutionConfirmations, detectedCards },
   });
   const parserDebug = {
     rawQuestion: question,
@@ -1225,6 +1225,8 @@ function attachUserAnswerLayers(answer, { subQuestion, formalQuery, bucket, opti
         currentStatus: answer.status,
         provisionalAnswer: answer.provisionalAnswer || null,
         cardResolutionIssue,
+        resolvedCards: options?.detectedCards || [],
+        unresolvedCards: options?.cardResolutionConfirmations || [],
       });
   const clarification = buildSubAnswerClarification(subQuestion, answer, cardResolutionIssue);
   return {
@@ -1694,6 +1696,8 @@ function inferQaQuestionType(value) {
 function qaTypeMatchesSubQuestion(subQuestionType, qaType) {
   if (!subQuestionType || subQuestionType === "unknown" || qaType === "unknown") return false;
   if (subQuestionType === "timing") return qaType === "activation_condition";
+  if (subQuestionType === "activation_procedure") return ["activation_condition", "cost", "resolution_handling"].includes(qaType);
+  if (subQuestionType === "effect_text_scope" || subQuestionType === "copy_effect") return ["resolution_handling", "activation_condition"].includes(qaType);
   return subQuestionType === qaType;
 }
 
@@ -1704,6 +1708,12 @@ function evidenceTypesMatchSubQuestion(subQuestionType, evidenceTypeAudit) {
   const actions = new Set(evidenceTypeAudit?.actions || []);
   if (subQuestionType === "activation_condition") {
     return ["activation_condition", "activation_timing", "damage_step_activation"].some((type) => types.has(type));
+  }
+  if (subQuestionType === "activation_procedure") {
+    return ["activation_condition", "activation_timing", "cost", "resolution_handling", "effect_applicability"].some((type) => rawTypes.has(type) || types.has(type));
+  }
+  if (subQuestionType === "effect_text_scope" || subQuestionType === "copy_effect") {
+    return ["resolution_handling", "effect_applicability", "activation_condition"].some((type) => rawTypes.has(type) || types.has(type));
   }
   if (subQuestionType === "temporary_banish") {
     return types.has("temporary_banish")
@@ -1735,6 +1745,16 @@ function normalizeEvidenceQuestionTypeForSubQuestion(subQuestionType, evidenceTy
   if (subQuestionType === "activation_condition"
     && ["activation_condition", "activation_timing", "damage_step_activation"].some((type) => rawTypes.has(type) || normalizedTypes.has(type))) {
     return "activation_condition";
+  }
+  if (subQuestionType === "activation_procedure"
+    && ["activation_condition", "activation_timing", "cost", "resolution_handling", "effect_applicability"].some((type) => rawTypes.has(type) || normalizedTypes.has(type))) {
+    if (rawTypes.has("cost")) return "cost";
+    if (rawTypes.has("resolution_handling") || rawTypes.has("effect_applicability")) return "resolution_handling";
+    return "activation_condition";
+  }
+  if ((subQuestionType === "effect_text_scope" || subQuestionType === "copy_effect")
+    && ["resolution_handling", "effect_applicability", "activation_condition"].some((type) => rawTypes.has(type) || normalizedTypes.has(type))) {
+    return rawTypes.has("activation_condition") ? "activation_condition" : "resolution_handling";
   }
   if (subQuestionType === "temporary_banish"
     && (rawTypes.has("temporary_banish") || rawTypes.has("banish_applicability") || (rawTypes.has("effect_applicability") && actions.has("banish")))) {
@@ -1768,6 +1788,16 @@ function qaMatchesSubQuestionCard(subQuestion, qa) {
 function qaCoversAskedResult(subQuestion, matchedQuestionType, fullText) {
   const askedResult = String(subQuestion?.askedResult || "");
   if (!qaTypeMatchesSubQuestion(subQuestion?.type, matchedQuestionType)) return false;
+  if (subQuestion?.type === "activation_procedure") {
+    const asksComposite = /(cost|代价|コスト|处理|処理|融合素材|fusion)/iu.test(`${askedResult} ${subQuestion?.sourceText || ""}`);
+    const coversActivation = /(发动|發動|発動|activate)/iu.test(fullText);
+    const coversCost = /(cost|コスト|代价|支付|送去墓地|墓地へ送)/iu.test(fullText);
+    const coversResolution = /(处理|処理|resolution|融合素材|fusion material|何も行われません|不进行)/iu.test(fullText);
+    return asksComposite ? coversActivation && coversCost && coversResolution : coversActivation;
+  }
+  if (subQuestion?.type === "copy_effect" || subQuestion?.type === "effect_text_scope") {
+    return /(复制|拷贝|变成|效果相同|效果处理|发动手续|发动方式|copy|same effect|activation procedure)/iu.test(fullText);
+  }
   if (matchedQuestionType === "temporary_banish") {
     if (requiresBattleSpecificBanishEvidence(subQuestion, fullText)) return false;
     return /(除外|banish)/iu.test(fullText) && /(处理|结算|对象|暂时|临时|结束阶段|返回|回到|until|target|return)/iu.test(fullText);
@@ -1904,10 +1934,10 @@ function detectEvidenceAnswerFocus(value) {
 }
 
 function answerFocusMatchesSubQuestion(focus, type) {
-  if (focus === "activation_condition") return type === "activation_condition" || type === "timing";
+  if (focus === "activation_condition") return type === "activation_condition" || type === "activation_procedure" || type === "timing";
   if (focus === "activation_location") return type === "activation_location";
   if (focus === "temporary_banish") return type === "temporary_banish";
-  if (focus === "send_to_gy") return type === "send_to_gy" || type === "location_change";
+  if (focus === "send_to_gy") return type === "send_to_gy" || type === "location_change" || type === "activation_procedure";
   if (focus === "return_to_deck") return type === "return_to_deck" || type === "location_change";
   return false;
 }
@@ -2053,7 +2083,7 @@ export async function auditRetrieval(question, options = {}) {
   const subAnswers = attachTransitionReasoning(baseSubAnswers, dependencyGraph, transitionRules, {
     formalQuery: normalizedFormalQuery,
     evidence,
-    options: { gameState, eventTimeline, cardResolutionConfirmations },
+    options: { gameState, eventTimeline, cardResolutionConfirmations, detectedCards },
   });
   const liveResolutionAttempted = onDemandSync.attempted;
   const dataSourceStats = {
@@ -2999,8 +3029,9 @@ function inferRecordType(record) {
 export function buildCardNameConfirmationRequests(question, detectedCards = [], cards = []) {
   const catalog = Array.isArray(cards) ? cards : [];
   const detected = Array.isArray(detectedCards) ? detectedCards : [];
+  const extractedCandidates = collectQuestionCardCandidates(question).cards;
   const candidates = dedupeBy([
-    ...collectQuestionCardCandidates(question).cards,
+    ...extractedCandidates,
     ...collectContainedLongNameCandidates(question, detected),
   ], (item) => normalizeKey(item.input))
     .filter((item) => isStrictLongUnresolvedCardNameCandidate(item.input));
@@ -3008,7 +3039,8 @@ export function buildCardNameConfirmationRequests(question, detectedCards = [], 
 
   for (const candidate of candidates) {
     const candidateKey = normalizeKey(candidate.input);
-    if (!candidateKey || hasExactAlias(candidateKey, catalog)) continue;
+    if (!candidateKey) continue;
+    if (detected.some((card) => cardAliases(card).some((alias) => normalizeKey(alias) === candidateKey))) continue;
     const containedCards = detected
       .map((card) => {
         const matchedName = bestContainedAlias(candidateKey, card);
@@ -3021,11 +3053,28 @@ export function buildCardNameConfirmationRequests(question, detectedCards = [], 
         } : null;
       })
       .filter(Boolean);
+    if (hasExactAlias(candidateKey, catalog) && !containedCards.length) continue;
     if (!containedCards.length) continue;
     issues.push({
       unresolvedCardName: candidate.input,
       candidateCards: dedupeBy(containedCards, (item) => `${item.name}:${item.matchedName}`),
       reason: "longer_name_without_exact_alias",
+    });
+  }
+
+  const containedIssueKeys = new Set(issues.map((item) => normalizeKey(item.unresolvedCardName)));
+  for (const candidate of extractedCandidates) {
+    const candidateKey = normalizeKey(candidate.input);
+    if (!candidateKey || containedIssueKeys.has(candidateKey)) continue;
+    if (candidate.confidence !== "high" && candidate.source !== "quoted-name") continue;
+    if (!isStrictLongUnresolvedCardNameCandidate(candidate.input)) continue;
+    if (hasExactAlias(candidateKey, catalog)) continue;
+    if (detected.some((card) => cardAliases(card).some((alias) => normalizeKey(alias) === candidateKey))) continue;
+    const approximate = findApproximateCardCandidates(candidate.input, catalog);
+    issues.push({
+      unresolvedCardName: candidate.input,
+      candidateCards: approximate,
+      reason: approximate.length ? "quoted_name_without_exact_alias" : "quoted_name_not_found",
     });
   }
 
@@ -3040,7 +3089,8 @@ function collectContainedLongNameCandidates(question, detectedCards = []) {
     for (const alias of matchedAliases) {
       const index = text.indexOf(alias);
       if (index <= 0) continue;
-      const prefix = text.slice(Math.max(0, index - 8), index).match(/[\u3400-\u9fffA-Za-z0-9・･☆★－ー-]+$/u)?.[0] || "";
+      let prefix = text.slice(Math.max(0, index - 8), index).match(/[\u3400-\u9fffA-Za-z0-9・･☆★－ー-]+$/u)?.[0] || "";
+      prefix = prefix.replace(/^.*(?:的|の)/u, "");
       if (!prefix) continue;
       const input = `${prefix}${alias}`;
       if (normalizeKey(input).length >= normalizeKey(alias).length + 2) {
@@ -3083,6 +3133,59 @@ function bestContainedAlias(candidateKey, card) {
     .map((alias) => ({ alias, key: normalizeKey(alias) }))
     .filter((item) => item.key.length >= 3 && candidateKey.includes(item.key) && candidateKey.length >= item.key.length + 2)
     .sort((left, right) => right.key.length - left.key.length)[0]?.alias || "";
+}
+
+function findApproximateCardCandidates(input, cards = []) {
+  const inputKey = normalizeKey(input);
+  if (!inputKey) return [];
+  const scored = [];
+  for (const card of cards || []) {
+    const aliases = cardAliases(card).filter(Boolean);
+    let best = null;
+    for (const alias of aliases) {
+      const aliasKey = normalizeKey(alias);
+      if (!aliasKey || aliasKey === inputKey) continue;
+      const score = approximateNameScore(inputKey, aliasKey);
+      if (!best || score > best.score) best = { alias, score };
+    }
+    if (best && best.score >= 0.42) {
+      scored.push({
+        id: cleanText(card.id || card.passcode || card.cardId),
+        name: cleanText(card.name || card.cnName || card.jaName || card.enName),
+        matchedName: best.alias,
+        reason: "approximate alias, requires confirmation",
+        resolvedCardIds: collectResolvedCardIds([card]),
+        score: Number(best.score.toFixed(3)),
+      });
+    }
+  }
+  return scored
+    .sort((left, right) => right.score - left.score)
+    .slice(0, 5);
+}
+
+function approximateNameScore(left, right) {
+  if (!left || !right) return 0;
+  if (left.includes(right) || right.includes(left)) {
+    return Math.min(left.length, right.length) / Math.max(left.length, right.length);
+  }
+  const leftSet = new Set([...left]);
+  const rightSet = new Set([...right]);
+  const overlap = [...leftSet].filter((char) => rightSet.has(char)).length;
+  const charScore = (overlap * 2) / (leftSet.size + rightSet.size || 1);
+  const leftBigrams = ngrams(left);
+  const rightBigrams = new Set(ngrams(right));
+  const bigramOverlap = leftBigrams.filter((item) => rightBigrams.has(item)).length;
+  const bigramScore = (bigramOverlap * 2) / (leftBigrams.length + rightBigrams.size || 1);
+  return Math.max(charScore * 0.75 + bigramScore * 0.25, bigramScore);
+}
+
+function ngrams(value) {
+  const chars = [...String(value || "")];
+  if (chars.length <= 1) return chars;
+  const result = [];
+  for (let index = 0; index < chars.length - 1; index += 1) result.push(`${chars[index]}${chars[index + 1]}`);
+  return result;
 }
 
 function detectCards(question, cards) {
