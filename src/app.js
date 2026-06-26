@@ -1344,14 +1344,20 @@ function renderLikelyAnswer(parent, likelyAnswer) {
   wrapper.className = "sub-reasoning";
 
   const title = document.createElement("p");
-  title.textContent = "可能处理（未确认）：";
+  title.textContent = "未确认分析：";
   wrapper.appendChild(title);
 
-  const body = document.createElement("p");
+  const body = document.createElement("div");
   const verdict = likelyAnswer.verdict && likelyAnswer.verdict !== "unknown"
     ? `倾向：${formatSubAnswerVerdict(likelyAnswer.verdict)}。`
     : "";
-  body.textContent = `${verdict}${likelyAnswer.reasoning || "只能给出未确认处理参考。"} ${likelyAnswer.disclaimer || "未确认裁定，不能替代官方 Q&A"}`.trim();
+  const structured = [
+    likelyAnswer.issueSummary ? `问题核心：${likelyAnswer.issueSummary}` : "",
+    likelyAnswer.possibleHandling ? `未确认分析：${likelyAnswer.possibleHandling}` : "",
+    likelyAnswer.whyNotConfirmed ? `为什么不能确认：${likelyAnswer.whyNotConfirmed}` : "",
+    likelyAnswer.neededEvidence ? `需要确认：${likelyAnswer.neededEvidence}` : "",
+  ].filter(Boolean);
+  body.textContent = `${verdict}${structured.length ? structured.join(" ") : likelyAnswer.reasoning || "只能给出未确认处理参考。"} ${likelyAnswer.disclaimer || "未确认裁定，不能替代官方 Q&A"}`.trim();
   wrapper.appendChild(body);
 
   if (Array.isArray(likelyAnswer.riskFlags) && likelyAnswer.riskFlags.length) {

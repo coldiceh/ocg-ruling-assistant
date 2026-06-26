@@ -1,3 +1,5 @@
+import { analyzeRuleConcepts } from "./ruleConceptAnalyzer.mjs";
+
 const DISCLAIMER = "未确认裁定，不能替代官方 Q&A";
 
 export function buildLikelyAnswer({
@@ -14,8 +16,21 @@ export function buildLikelyAnswer({
   currentStatus = "unknown",
   provisionalAnswer = null,
   cardResolutionIssue = null,
+  ruleConceptAnalysis = null,
+  resolvedCards = [],
+  unresolvedCards = [],
 } = {}) {
-  if (cardResolutionIssue) {
+  const conceptAnalysis = ruleConceptAnalysis || analyzeRuleConcepts({
+    formalQuery,
+    resolvedCards,
+    unresolvedCards: dedupeUnresolvedCards(cardResolutionIssue ? [cardResolutionIssue, ...unresolvedCards] : unresolvedCards),
+    cardTexts,
+    similarEvidence,
+    rejectedEvidence,
+    eventTimeline,
+  });
+
+  if (cardResolutionIssue && !conceptAnalysis.concepts.length) {
     return {
       status: "not_available",
       verdict: "unknown",
@@ -26,7 +41,7 @@ export function buildLikelyAnswer({
     };
   }
 
-  if (!subQuestion.type || subQuestion.type === "unknown") {
+  if ((!subQuestion.type || subQuestion.type === "unknown") && !conceptAnalysis.concepts.length) {
     return {
       status: "not_available",
       verdict: "unknown",
@@ -57,6 +72,17 @@ export function buildLikelyAnswer({
       riskFlags: ["condition_branch_requires_state"],
       disclaimer: DISCLAIMER,
     };
+  }
+
+  if (conceptAnalysis.concepts.length) {
+    const conceptLikely = buildConceptLikelyAnswer(conceptAnalysis, {
+      cardTexts,
+      similarEvidence,
+      rejectedEvidence,
+      eventTimeline,
+      cardResolutionIssue,
+    });
+    if (conceptLikely) return conceptLikely;
   }
 
   const riskFlags = buildRiskFlags({ similarEvidence, rejectedEvidence, unresolvedDependencies });
@@ -90,6 +116,35 @@ export function buildLikelyAnswer({
     reasoning: "目前没有足够的卡片文本、相似 Q&A 或状态线索来生成未确认处理。",
     basis: [],
     riskFlags: ["insufficient_context"],
+    disclaimer: DISCLAIMER,
+  };
+}
+
+function buildConceptLikelyAnswer(conceptAnalysis, context = {}) {
+  const slots = conceptAnalysis.likelyReasoningSlots || {};
+  const basis = [];
+  if ((context.cardTexts || []).length) basis.push("card_text");
+  if ((context.similarEvidence || []).length) basis.push("similar_qa");
+  if (conceptAnalysis.concepts.includes("condition_branch")) basis.push("condition_branch");
+  if (context.eventTimeline?.events?.length) basis.push("event_timeline");
+  if (context.cardResolutionIssue) basis.push("card_text");
+  const reasoning = [
+    slots.issueSummary || conceptAnalysis.issueSummary,
+    slots.possibleHandling,
+    `为什么不能确认：${slots.whyNotConfirmed || "没有 direct evidence，不能 confirmed。"}`,
+    `需要确认：${slots.neededEvidence || "需要官方 Q&A / FAQ 明确覆盖当前场景。"}`,
+  ].filter(Boolean).join("\n");
+  return {
+    status: "best_effort",
+    verdict: "unknown",
+    reasoning,
+    issueSummary: slots.issueSummary || conceptAnalysis.issueSummary || "",
+    possibleHandling: slots.possibleHandling || "",
+    whyNotConfirmed: slots.whyNotConfirmed || "没有 direct evidence，不能 confirmed。",
+    neededEvidence: slots.neededEvidence || "需要官方 Q&A / FAQ 明确覆盖当前场景。",
+    concepts: conceptAnalysis.concepts || [],
+    basis: unique(basis.length ? basis : ["card_text"]),
+    riskFlags: unique([...(conceptAnalysis.riskFlags || []), "no_direct_evidence"]),
     disclaimer: DISCLAIMER,
   };
 }
@@ -146,4 +201,16 @@ function buildBestEffortReason({ subQuestion, cardTexts, similarEvidence, reject
 
 function unique(values) {
   return [...new Set((values || []).filter(Boolean))];
+}
+
+function dedupeUnresolvedCards(values = []) {
+  const seen = new Set();
+  const result = [];
+  for (const item of values || []) {
+    const key = String(item?.unresolvedCardName || item?.question || "").trim();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    result.push(item);
+  }
+  return result;
 }
