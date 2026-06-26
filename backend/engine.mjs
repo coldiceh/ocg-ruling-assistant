@@ -1,6 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { recordAnswerHistory } from "./answerHistory.mjs";
 import { checkDataHealth } from "./dataHealth.mjs";
 import { buildConditionalAnswer } from "./conditionalAnswer.mjs";
 import { buildCardAliasIndex, buildQaIndex } from "./dataIndex.mjs";
@@ -240,7 +241,7 @@ export async function answerQuestion(payload, options = {}) {
     evidenceTrace: buildSubQuestionEvidenceTrace(formalQuery, evidence, subAnswers, onDemandSync, { gameState, eventTimeline }),
     finalStatusBeforeExplanation: buildFinalStatusTrace(subAnswers),
   };
-  return mergeFormalAnswers({
+  const result = mergeFormalAnswers({
     formalQuery,
     validation,
     detectedCards,
@@ -253,6 +254,17 @@ export async function answerQuestion(payload, options = {}) {
     parserFailure: parserResult.parseFailed,
     parserDebug,
   });
+  if (options.recordAnswerHistory === true || env.RECORD_ANSWER_HISTORY === "true") {
+    try {
+      result.answerHistory = await recordAnswerHistory(result, {
+        dataDir: options.dataDir || defaultDataDir,
+      });
+    } catch (error) {
+      result.answerHistory = { recorded: false, reason: "write_failed" };
+      result.warnings = [...new Set([...(result.warnings || []), `answer_history_write_failed:${formatError(error)}`])];
+    }
+  }
+  return result;
 }
 
 function buildSubQuestionEvidenceTrace(formalQuery, evidence, subAnswers = [], onDemandSync = null, debugContext = {}) {
