@@ -1133,9 +1133,10 @@ function renderSubAnswers(subAnswers) {
   if (!ui.subAnswersPanel) return;
   clearElement(ui.subAnswersPanel);
   const items = Array.isArray(subAnswers)
-    ? subAnswers.filter((item) => item?.question || item?.verdict || item?.reasoning || item?.conditionalAnswer)
+    ? subAnswers.filter((item) => item?.question || item?.verdict || item?.reasoning || item?.reason || item?.conditionalAnswer || item?.provisionalAnswer)
     : [];
-  if (!items.length || (items.length <= 1 && !items[0]?.conditionalAnswer)) {
+  const shouldShowPanel = items.length > 1 || items.some(hasDetailedSubAnswerDisplay);
+  if (!items.length || !shouldShowPanel) {
     ui.subAnswersPanel.hidden = true;
     return;
   }
@@ -1150,6 +1151,11 @@ function renderSubAnswers(subAnswers) {
     question.textContent = `问题${index + 1}：${item.question || "未命名子问题"}`;
     block.appendChild(question);
 
+    const status = document.createElement("div");
+    status.className = "sub-status";
+    status.textContent = subAnswerStatusLabel(item);
+    block.appendChild(status);
+
     const verdict = document.createElement("div");
     verdict.className = "sub-verdict";
     verdict.textContent = formatSubAnswerVerdict(item.verdict);
@@ -1160,6 +1166,13 @@ function renderSubAnswers(subAnswers) {
       reasoning.className = "sub-reasoning";
       reasoning.textContent = item.reasoning;
       block.appendChild(reasoning);
+    }
+
+    if (!item.reasoning && item.reason) {
+      const reason = document.createElement("p");
+      reason.className = "sub-reasoning";
+      reason.textContent = item.reason;
+      block.appendChild(reason);
     }
 
     if (item.stateMessage) {
@@ -1208,6 +1221,13 @@ function renderSubAnswers(subAnswers) {
       block.appendChild(ruleSources);
     }
 
+    if (Array.isArray(item.evidenceIds) && item.evidenceIds.length) {
+      const evidenceIds = document.createElement("p");
+      evidenceIds.className = "sub-source";
+      evidenceIds.textContent = `依据 ID：${item.evidenceIds.join("、")}`;
+      block.appendChild(evidenceIds);
+    }
+
     const source = document.createElement("p");
     source.className = "sub-source";
     source.textContent = item.source ? `来源：${item.source}` : "来源：[推理，需确认]";
@@ -1215,6 +1235,30 @@ function renderSubAnswers(subAnswers) {
 
     ui.subAnswersPanel.appendChild(block);
   });
+}
+
+function hasDetailedSubAnswerDisplay(item) {
+  return Boolean(
+    item?.conditionalAnswer ||
+    item?.provisionalAnswer ||
+    item?.reasoning ||
+    item?.reason ||
+    item?.stateMessage ||
+    item?.dependencies?.length ||
+    item?.unresolvedDependencies?.length ||
+    item?.transitionReasoning?.length ||
+    item?.ruleSources?.length ||
+    item?.evidenceIds?.length
+  );
+}
+
+function subAnswerStatusLabel(item) {
+  if (item?.provisionalAnswer) return "未确认处理方式";
+  if (item?.conditionalAnswer) return "条件不足";
+  if (item?.status === "confirmed") return "已确认";
+  if (item?.status === "inferred") return "相似依据";
+  if (item?.status === "parse_failed") return "解析失败";
+  return "资料不足";
 }
 
 function formatSubAnswerVerdict(verdict) {

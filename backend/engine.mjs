@@ -2809,6 +2809,7 @@ function normalizeRecords(records) {
       cardId: record.cardId || "",
       cardIds: Array.isArray(record.cardIds) ? record.cardIds : [],
       keywords: record.keywords || [],
+      questionTypes: Array.isArray(record.questionTypes) ? record.questionTypes : [],
       conclusion: cleanText(record.conclusion || record.answer || record.text || ""),
       steps: record.steps || [],
       questions: record.questions || [],

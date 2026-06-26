@@ -36,24 +36,24 @@
 
 最近一次本地检查：
 
-- Node tests: 181/181 passing
+- Node tests: 198/198 passing
 - Legacy engine regressions: 9/9 passing
 - Data health: `ok`
 - Readiness level: `production_ready`
 
 Benchmark：
 
-- total cases: 10
-- total subQuestions: 13
-- confirmedCount: 5
+- total cases: 20
+- total subQuestions: 23
+- confirmedCount: 6
 - inferredCount: 0
-- unknownCount: 5
+- unknownCount: 14
 - unsafeConfirmedCount: 0
 - missingReasonCount: 0
-- conditionalAnswerCount: 1
-- clarificationQuestionCount: 1
+- conditionalAnswerCount: 2
+- clarificationQuestionCount: 2
 - verdict_extraction_unknown: 0
-- no_direct_evidence: 3
+- no_direct_evidence: 5
 
 当前 benchmark 的结论是：系统安全门槛有效；多语言 evidence question type classifier 修复了一部分 Q&A 类型误判，conditional answer 能解释缺状态的条件分支，但没有放宽 `directEvidence` 或 `confirmed` 门槛。
 
@@ -89,6 +89,7 @@ Benchmark：
 - `scripts/benchmark-report.mjs`：输出 benchmark 安全性和 unknown reason 报告。
 - `scripts/audit-no-direct.mjs`：审计 benchmark 中的 `no_direct_evidence` 原因。
 - `scripts/audit-evidence-types.mjs`：审计 no-direct case 中候选 Q&A 的多语言问题类型识别。
+- `scripts/smoke-real-questions.mjs`：用真实问题跑完整 pipeline，输出 JSON 或 Markdown smoke report。
 - `scripts/revalidate-official-responses.mjs`：检查 provisional official response 是否已有官方 DB direct evidence。
 - `scripts/revalidate-answers.mjs`：重评估 answer history watch queue 中的 unknown / provisional 问题。
 
@@ -115,6 +116,8 @@ node scripts/debug-retrieval.mjs "玩家问题"
 node scripts/benchmark-report.mjs
 node scripts/audit-no-direct.mjs
 node scripts/audit-evidence-types.mjs
+node scripts/smoke-real-questions.mjs
+node scripts/smoke-real-questions.mjs --markdown
 node scripts/revalidate-official-responses.mjs
 node scripts/revalidate-answers.mjs
 ```
@@ -130,6 +133,50 @@ npm test
 ```bash
 node tests/engine-regression.mjs
 ```
+
+## Example outputs
+
+### Confirmed official ruling
+
+```text
+输入：青眼暴君龙被战斗破坏并送去墓地后，它的③效果是在墓地发动还是在场上发动？
+
+状态：已确认
+结论：activates_in_graveyard
+依据：card-faq-16842-3
+原因：condition_branch_selected:activates_in_graveyard
+```
+
+这里的 `confirmed` 来自 card FAQ 的 direct evidence，并且 condition branch 已经被“送去墓地后”这个状态唯一选中。
+
+### Conditional answer
+
+```text
+输入：青眼暴君龙被战斗破坏的时候，这个效果是在墓地发动还是在场上发动？
+
+状态：条件不足 / unknown
+可能分支：
+- 如果仍在怪兽区域：在怪兽区域发动。
+- 如果已经送去墓地：在墓地发动。
+- 如果已经被除外：在除外状态发动。
+追问：这个时点青眼暴君龙是仍在怪兽区域、已经送去墓地，还是已经被除外？
+依据：card-faq-16842-3
+```
+
+这里已找到官方 FAQ，但当前问题缺少状态，所以不会提升为 `confirmed`。
+
+### Provisional official response
+
+```text
+输入：アルバスの落胤①効果を、導きの聖女エクレシアを cost として発動できるか？
+
+状态：未确认处理方式 / unknown
+显示：事务局回答截图，官方数据库未收录
+临时说明：可以发动并支付 cost，但后续处理不进行。
+revalidation：等待官方数据库收录 direct Q&A 后重新评估
+```
+
+这里的截图回答只进入 `provisionalAnswer`，不会进入 `directEvidence`，也不能让最终状态变成 `confirmed`。
 
 本地启动后端：
 
