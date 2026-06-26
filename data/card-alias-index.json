@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-06-25T20:31:41.647Z",
+  "generatedAt": "2026-06-26T20:19:44.374Z",
   "records": [
     {
       "alias": "“K9刑侦案件”",
@@ -990,10 +990,17 @@
       "language": "en"
     },
     {
+      "alias": "ASHLAN－U１０００型",
+      "normalizedAlias": "ashlan-u1000型",
+      "cardId": "21628",
+      "cardName": "ASHLAN－U１０００型",
+      "language": "zh"
+    },
+    {
       "alias": "ASHLAN U1000",
       "normalizedAlias": "ashlan u1000",
       "cardId": "21628",
-      "cardName": "ASHLAN U1000",
+      "cardName": "ASHLAN－U１０００型",
       "language": "en"
     },
     {
@@ -9327,10 +9334,17 @@
       "language": "en"
     },
     {
+      "alias": "A－GMX最終検証",
+      "normalizedAlias": "a-gmx最終検証",
+      "cardId": "22938",
+      "cardName": "A－GMX最終検証",
+      "language": "zh"
+    },
+    {
       "alias": "Anti-GMX Final Experiment",
       "normalizedAlias": "anti-gmx final experiment",
       "cardId": "22938",
-      "cardName": "Anti-GMX Final Experiment",
+      "cardName": "A－GMX最終検証",
       "language": "en"
     },
     {
@@ -13107,10 +13121,17 @@
       "language": "en"
     },
     {
+      "alias": "生ける屍の軍団",
+      "normalizedAlias": "生ける屍の軍団",
+      "cardId": "22345",
+      "cardName": "生ける屍の軍団",
+      "language": "ja"
+    },
+    {
       "alias": "Army of the Haunted",
       "normalizedAlias": "army of the haunted",
       "cardId": "22345",
-      "cardName": "Army of the Haunted",
+      "cardName": "生ける屍の軍団",
       "language": "en"
     },
     {
@@ -28836,10 +28857,17 @@
       "language": "en"
     },
     {
+      "alias": "暁光のブイオ",
+      "normalizedAlias": "暁光のブイオ",
+      "cardId": "21624",
+      "cardName": "暁光のブイオ",
+      "language": "ja"
+    },
+    {
       "alias": "Buio the Dawn's Light",
       "normalizedAlias": "buio the dawn's light",
       "cardId": "21624",
-      "cardName": "Buio the Dawn's Light",
+      "cardName": "暁光のブイオ",
       "language": "en"
     },
     {
@@ -30873,10 +30901,17 @@
       "language": "en"
     },
     {
+      "alias": "生ける屍の呼び声",
+      "normalizedAlias": "生ける屍の呼び声",
+      "cardId": "22350",
+      "cardName": "生ける屍の呼び声",
+      "language": "ja"
+    },
+    {
       "alias": "Call of the Forgotten",
       "normalizedAlias": "call of the forgotten",
       "cardId": "22350",
-      "cardName": "Call of the Forgotten",
+      "cardName": "生ける屍の呼び声",
       "language": "en"
     },
     {
@@ -33463,10 +33498,17 @@
       "language": "en"
     },
     {
+      "alias": "明滅騎士チャンバル",
+      "normalizedAlias": "明滅騎士チャンバル",
+      "cardId": "22065",
+      "cardName": "明滅騎士チャンバル",
+      "language": "ja"
+    },
+    {
       "alias": "Chanbar, the Flashy Sportsknight",
       "normalizedAlias": "chanbar, the flashy sportsknight",
       "cardId": "22065",
-      "cardName": "Chanbar, the Flashy Sportsknight",
+      "cardName": "明滅騎士チャンバル",
       "language": "en"
     },
     {
@@ -34611,10 +34653,17 @@
       "language": "en"
     },
     {
+      "alias": "チェツカー",
+      "normalizedAlias": "チェツカ-",
+      "cardId": "22928",
+      "cardName": "チェツカー",
+      "language": "ja"
+    },
+    {
       "alias": "Checkker",
       "normalizedAlias": "checkker",
       "cardId": "22928",
-      "cardName": "Checkker",
+      "cardName": "チェツカー",
       "language": "en"
     },
     {
@@ -34863,10 +34912,17 @@
       "language": "en"
     },
     {
+      "alias": "密林の狩猟者シュヴルイユ",
+      "normalizedAlias": "密林の狩猟者シュヴルイユ",
+      "cardId": "22067",
+      "cardName": "密林の狩猟者シュヴルイユ",
+      "language": "ja"
+    },
+    {
       "alias": "Chevreuil, Hunting Scout of the Deep Forest",
       "normalizedAlias": "chevreuil, hunting scout of the deep forest",
       "cardId": "22067",
-      "cardName": "Chevreuil, Hunting Scout of the Deep Forest",
+      "cardName": "密林の狩猟者シュヴルイユ",
       "language": "en"
     },
     {
@@ -43753,10 +43809,17 @@
       "language": "en"
     },
     {
+      "alias": "天魔伏聖剣",
+      "normalizedAlias": "天魔伏聖剣",
+      "cardId": "22064",
+      "cardName": "天魔伏聖剣",
+      "language": "zh"
+    },
+    {
       "alias": "Cursed Copycat Noble Arms",
       "normalizedAlias": "cursed copycat noble arms",
       "cardId": "22064",
-      "cardName": "Cursed Copycat Noble Arms",
+      "cardName": "天魔伏聖剣",
       "language": "en"
     },
     {
@@ -53742,10 +53805,17 @@
       "language": "en"
     },
     {
+      "alias": "朽ち果ての吐息",
+      "normalizedAlias": "朽ち果ての吐息",
+      "cardId": "22353",
+      "cardName": "朽ち果ての吐息",
+      "language": "ja"
+    },
+    {
       "alias": "Deadly Zombie Breath",
       "normalizedAlias": "deadly zombie breath",
       "cardId": "22353",
-      "cardName": "Deadly Zombie Breath",
+      "cardName": "朽ち果ての吐息",
       "language": "en"
     },
     {
@@ -59636,10 +59706,17 @@
       "language": "en"
     },
     {
+      "alias": "虚英雄ディスガイス",
+      "normalizedAlias": "虚英雄ディスガイス",
+      "cardId": "22063",
+      "cardName": "虚英雄ディスガイス",
+      "language": "ja"
+    },
+    {
       "alias": "Disguise, the Copycat Hero",
       "normalizedAlias": "disguise, the copycat hero",
       "cardId": "22063",
-      "cardName": "Disguise, the Copycat Hero",
+      "cardName": "虚英雄ディスガイス",
       "language": "en"
     },
     {
@@ -69240,10 +69317,17 @@
       "language": "en"
     },
     {
+      "alias": "霊魂プラズマ",
+      "normalizedAlias": "霊魂プラズマ",
+      "cardId": "22351",
+      "cardName": "霊魂プラズマ",
+      "language": "ja"
+    },
+    {
       "alias": "Ectoplasmic Fortification",
       "normalizedAlias": "ectoplasmic fortification",
       "cardId": "22351",
-      "cardName": "Ectoplasmic Fortification",
+      "cardName": "霊魂プラズマ",
       "language": "en"
     },
     {
@@ -76779,10 +76863,17 @@
       "language": "en"
     },
     {
+      "alias": "暁世竜ダニアン",
+      "normalizedAlias": "暁世竜ダニアン",
+      "cardId": "22935",
+      "cardName": "暁世竜ダニアン",
+      "language": "ja"
+    },
+    {
       "alias": "Evolved Daneen",
       "normalizedAlias": "evolved daneen",
       "cardId": "22935",
-      "cardName": "Evolved Daneen",
+      "cardName": "暁世竜ダニアン",
       "language": "en"
     },
     {
@@ -79670,10 +79761,17 @@
       "language": "en"
     },
     {
+      "alias": "密林の狩猟者フザン",
+      "normalizedAlias": "密林の狩猟者フザン",
+      "cardId": "22066",
+      "cardName": "密林の狩猟者フザン",
+      "language": "ja"
+    },
+    {
       "alias": "Faisan, Hunting Scout of the Deep Forest",
       "normalizedAlias": "faisan, hunting scout of the deep forest",
       "cardId": "22066",
-      "cardName": "Faisan, Hunting Scout of the Deep Forest",
+      "cardName": "密林の狩猟者フザン",
       "language": "en"
     },
     {
@@ -80300,10 +80398,17 @@
       "language": "en"
     },
     {
+      "alias": "蜃欺龍",
+      "normalizedAlias": "蜃欺龍",
+      "cardId": "22924",
+      "cardName": "蜃欺龍",
+      "language": "zh"
+    },
+    {
       "alias": "Fata Dragna",
       "normalizedAlias": "fata dragna",
       "cardId": "22924",
-      "cardName": "Fata Dragna",
+      "cardName": "蜃欺龍",
       "language": "en"
     },
     {
@@ -84381,10 +84486,17 @@
       "language": "en"
     },
     {
+      "alias": "魔術師の空華",
+      "normalizedAlias": "魔術師の空華",
+      "cardId": "22071",
+      "cardName": "魔術師の空華",
+      "language": "ja"
+    },
+    {
       "alias": "Fleeting Flower of the Magician",
       "normalizedAlias": "fleeting flower of the magician",
       "cardId": "22071",
-      "cardName": "Fleeting Flower of the Magician",
+      "cardName": "魔術師の空華",
       "language": "en"
     },
     {
@@ -85389,10 +85501,17 @@
       "language": "en"
     },
     {
+      "alias": "フラックス・オクセンフェルト",
+      "normalizedAlias": "フラックス・オクセンフェルト",
+      "cardId": "22333",
+      "cardName": "フラックス・オクセンフェルト",
+      "language": "ja"
+    },
+    {
       "alias": "Flux Ochsenfeld",
       "normalizedAlias": "flux ochsenfeld",
       "cardId": "22333",
-      "cardName": "Flux Ochsenfeld",
+      "cardName": "フラックス・オクセンフェルト",
       "language": "en"
     },
     {
@@ -88763,80 +88882,157 @@
       "language": "en"
     },
     {
+      "alias": "GMX－ALLOS",
+      "normalizedAlias": "gmx-allos",
+      "cardId": "22340",
+      "cardName": "GMX－ALLOS",
+      "language": "en"
+    },
+    {
       "alias": "GMX - ALLOS",
       "normalizedAlias": "gmx - allos",
       "cardId": "22340",
-      "cardName": "GMX - ALLOS",
+      "cardName": "GMX－ALLOS",
+      "language": "en"
+    },
+    {
+      "alias": "GMX－COMPREX",
+      "normalizedAlias": "gmx-comprex",
+      "cardId": "22934",
+      "cardName": "GMX－COMPREX",
       "language": "en"
     },
     {
       "alias": "GMX - COMPREX",
       "normalizedAlias": "gmx - comprex",
       "cardId": "22934",
-      "cardName": "GMX - COMPREX",
+      "cardName": "GMX－COMPREX",
+      "language": "en"
+    },
+    {
+      "alias": "GMX－VELOX",
+      "normalizedAlias": "gmx-velox",
+      "cardId": "22341",
+      "cardName": "GMX－VELOX",
       "language": "en"
     },
     {
       "alias": "GMX - VELOX",
       "normalizedAlias": "gmx - velox",
       "cardId": "22341",
-      "cardName": "GMX - VELOX",
+      "cardName": "GMX－VELOX",
       "language": "en"
+    },
+    {
+      "alias": "第５５次GMX試験報告",
+      "normalizedAlias": "第55次gmx試験報告",
+      "cardId": "22936",
+      "cardName": "第５５次GMX試験報告",
+      "language": "zh"
     },
     {
       "alias": "GMX 55th Experiment Report",
       "normalizedAlias": "gmx 55th experiment report",
       "cardId": "22936",
-      "cardName": "GMX 55th Experiment Report",
+      "cardName": "第５５次GMX試験報告",
       "language": "en"
+    },
+    {
+      "alias": "第５５次GMX応用試験",
+      "normalizedAlias": "第55次gmx応用試験",
+      "cardId": "22342",
+      "cardName": "第５５次GMX応用試験",
+      "language": "zh"
     },
     {
       "alias": "GMX Applied Experiment #55",
       "normalizedAlias": "gmx applied experiment #55",
       "cardId": "22342",
-      "cardName": "GMX Applied Experiment #55",
+      "cardName": "第５５次GMX応用試験",
       "language": "en"
+    },
+    {
+      "alias": "GMX准教授ノーマ",
+      "normalizedAlias": "gmx准教授ノ-マ",
+      "cardId": "22338",
+      "cardName": "GMX准教授ノーマ",
+      "language": "ja"
     },
     {
       "alias": "GMX Associate Noma",
       "normalizedAlias": "gmx associate noma",
       "cardId": "22338",
-      "cardName": "GMX Associate Noma",
+      "cardName": "GMX准教授ノーマ",
       "language": "en"
+    },
+    {
+      "alias": "GMX主任教授キンリッジ",
+      "normalizedAlias": "gmx主任教授キンリッジ",
+      "cardId": "22337",
+      "cardName": "GMX主任教授キンリッジ",
+      "language": "ja"
     },
     {
       "alias": "GMX Chairman Kimridge",
       "normalizedAlias": "gmx chairman kimridge",
       "cardId": "22337",
-      "cardName": "GMX Chairman Kimridge",
+      "cardName": "GMX主任教授キンリッジ",
       "language": "en"
+    },
+    {
+      "alias": "旧GMX第５研究所",
+      "normalizedAlias": "旧gmx第5研究所",
+      "cardId": "22937",
+      "cardName": "旧GMX第５研究所",
+      "language": "zh"
     },
     {
       "alias": "GMX Lab #5",
       "normalizedAlias": "gmx lab #5",
       "cardId": "22937",
-      "cardName": "GMX Lab #5",
+      "cardName": "旧GMX第５研究所",
       "language": "en"
+    },
+    {
+      "alias": "GMX同絆者セランディア",
+      "normalizedAlias": "gmx同絆者セランディア",
+      "cardId": "22932",
+      "cardName": "GMX同絆者セランディア",
+      "language": "ja"
     },
     {
       "alias": "GMX Partner Selandea",
       "normalizedAlias": "gmx partner selandea",
       "cardId": "22932",
-      "cardName": "GMX Partner Selandea",
+      "cardName": "GMX同絆者セランディア",
       "language": "en"
+    },
+    {
+      "alias": "GMX研究員セラン",
+      "normalizedAlias": "gmx研究員セラン",
+      "cardId": "22336",
+      "cardName": "GMX研究員セラン",
+      "language": "ja"
     },
     {
       "alias": "GMX Researcher Selande",
       "normalizedAlias": "gmx researcher selande",
       "cardId": "22336",
-      "cardName": "GMX Researcher Selande",
+      "cardName": "GMX研究員セラン",
       "language": "en"
+    },
+    {
+      "alias": "GMX鎮圧部隊アプト",
+      "normalizedAlias": "gmx鎮圧部隊アプト",
+      "cardId": "22933",
+      "cardName": "GMX鎮圧部隊アプト",
+      "language": "ja"
     },
     {
       "alias": "GMX Suppression Squad",
       "normalizedAlias": "gmx suppression squad",
       "cardId": "22933",
-      "cardName": "GMX Suppression Squad",
+      "cardName": "GMX鎮圧部隊アプト",
       "language": "en"
     },
     {
@@ -90975,10 +91171,17 @@
       "language": "en"
     },
     {
+      "alias": "ゲーミング・ゲーマーGG",
+      "normalizedAlias": "ゲ-ミング・ゲ-マ-gg",
+      "cardId": "22923",
+      "cardName": "ゲーミング・ゲーマーGG",
+      "language": "ja"
+    },
+    {
       "alias": "Gaming Gamer GG",
       "normalizedAlias": "gaming gamer gg",
       "cardId": "22923",
-      "cardName": "Gaming Gamer GG",
+      "cardName": "ゲーミング・ゲーマーGG",
       "language": "en"
     },
     {
@@ -94209,10 +94412,17 @@
       "language": "en"
     },
     {
+      "alias": "指環の精霊ジーニャ",
+      "normalizedAlias": "指環の精霊ジ-ニャ",
+      "cardId": "22927",
+      "cardName": "指環の精霊ジーニャ",
+      "language": "ja"
+    },
+    {
       "alias": "Genia of the Ring",
       "normalizedAlias": "genia of the ring",
       "cardId": "22927",
-      "cardName": "Genia of the Ring",
+      "cardName": "指環の精霊ジーニャ",
       "language": "en"
     },
     {
@@ -103071,10 +103281,17 @@
       "language": "en"
     },
     {
+      "alias": "冥界の魔象",
+      "normalizedAlias": "冥界の魔象",
+      "cardId": "22347",
+      "cardName": "冥界の魔象",
+      "language": "ja"
+    },
+    {
       "alias": "Great Mammoth of the Netherworld",
       "normalizedAlias": "great mammoth of the netherworld",
       "cardId": "22347",
-      "cardName": "Great Mammoth of the Netherworld",
+      "cardName": "冥界の魔象",
       "language": "en"
     },
     {
@@ -111401,10 +111618,17 @@
       "language": "en"
     },
     {
+      "alias": "ハンティングホーン",
+      "normalizedAlias": "ハンティングホ-ン",
+      "cardId": "22068",
+      "cardName": "ハンティングホーン",
+      "language": "ja"
+    },
+    {
       "alias": "Hunting Horn",
       "normalizedAlias": "hunting horn",
       "cardId": "22068",
-      "cardName": "Hunting Horn",
+      "cardName": "ハンティングホーン",
       "language": "en"
     },
     {
@@ -117554,10 +117778,17 @@
       "language": "en"
     },
     {
+      "alias": "翠鋁の機竜",
+      "normalizedAlias": "翠鋁の機竜",
+      "cardId": "22328",
+      "cardName": "翠鋁の機竜",
+      "language": "ja"
+    },
+    {
       "alias": "Jade Dragon Mech",
       "normalizedAlias": "jade dragon mech",
       "cardId": "22328",
-      "cardName": "Jade Dragon Mech",
+      "cardName": "翠鋁の機竜",
       "language": "en"
     },
     {
@@ -128362,10 +128593,17 @@
       "language": "en"
     },
     {
+      "alias": "闘者を導く光",
+      "normalizedAlias": "闘者を導く光",
+      "cardId": "21967",
+      "cardName": "闘者を導く光",
+      "language": "ja"
+    },
+    {
       "alias": "Light Leading the Valiant",
       "normalizedAlias": "light leading the valiant",
       "cardId": "21967",
-      "cardName": "Light Leading the Valiant",
+      "cardName": "闘者を導く光",
       "language": "en"
     },
     {
@@ -130742,10 +130980,17 @@
       "language": "en"
     },
     {
+      "alias": "宵闇のルーチェ",
+      "normalizedAlias": "宵闇のル-チェ",
+      "cardId": "21625",
+      "cardName": "宵闇のルーチェ",
+      "language": "ja"
+    },
+    {
       "alias": "Luce the Dusk's Dark",
       "normalizedAlias": "luce the dusk's dark",
       "cardId": "21625",
-      "cardName": "Luce the Dusk's Dark",
+      "cardName": "宵闇のルーチェ",
       "language": "en"
     },
     {
@@ -131610,10 +131855,17 @@
       "language": "en"
     },
     {
+      "alias": "リコリス・リリィパー",
+      "normalizedAlias": "リコリス・リリィパ-",
+      "cardId": "22069",
+      "cardName": "リコリス・リリィパー",
+      "language": "ja"
+    },
+    {
       "alias": "Lycoris Lilyreaper",
       "normalizedAlias": "lycoris lilyreaper",
       "cardId": "22069",
-      "cardName": "Lycoris Lilyreaper",
+      "cardName": "リコリス・リリィパー",
       "language": "en"
     },
     {
@@ -141648,10 +141900,17 @@
       "language": "en"
     },
     {
+      "alias": "機叡のメカチューナー",
+      "normalizedAlias": "機叡のメカチュ-ナ-",
+      "cardId": "22327",
+      "cardName": "機叡のメカチューナー",
+      "language": "ja"
+    },
+    {
       "alias": "Mechanical Mechanic",
       "normalizedAlias": "mechanical mechanic",
       "cardId": "22327",
-      "cardName": "Mechanical Mechanic",
+      "cardName": "機叡のメカチューナー",
       "language": "en"
     },
     {
@@ -143804,10 +144063,17 @@
       "language": "en"
     },
     {
+      "alias": "生命の汞 メルクリウム",
+      "normalizedAlias": "生命の汞 メルクリウム",
+      "cardId": "22330",
+      "cardName": "生命の汞 メルクリウム",
+      "language": "ja"
+    },
+    {
       "alias": "Mercurium the Living Quicksilver",
       "normalizedAlias": "mercurium the living quicksilver",
       "cardId": "22330",
-      "cardName": "Mercurium the Living Quicksilver",
+      "cardName": "生命の汞 メルクリウム",
       "language": "en"
     },
     {
@@ -147038,10 +147304,17 @@
       "language": "en"
     },
     {
+      "alias": "ミラクル・レイヴン－供物の儀式－",
+      "normalizedAlias": "ミラクル・レイヴン-供物の儀式-",
+      "cardId": "21627",
+      "cardName": "ミラクル・レイヴン－供物の儀式－",
+      "language": "ja"
+    },
+    {
       "alias": "Miracle Raven",
       "normalizedAlias": "miracle raven",
       "cardId": "21627",
-      "cardName": "Miracle Raven",
+      "cardName": "ミラクル・レイヴン－供物の儀式－",
       "language": "en"
     },
     {
@@ -147654,10 +147927,17 @@
       "language": "en"
     },
     {
+      "alias": "大狼のいたずら",
+      "normalizedAlias": "大狼のいたずら",
+      "cardId": "22329",
+      "cardName": "大狼のいたずら",
+      "language": "ja"
+    },
+    {
       "alias": "Mischief of the Wolves",
       "normalizedAlias": "mischief of the wolves",
       "cardId": "22329",
-      "cardName": "Mischief of the Wolves",
+      "cardName": "大狼のいたずら",
       "language": "en"
     },
     {
@@ -150629,10 +150909,17 @@
       "language": "en"
     },
     {
+      "alias": "天至る叛逆",
+      "normalizedAlias": "天至る叛逆",
+      "cardId": "21626",
+      "cardName": "天至る叛逆",
+      "language": "ja"
+    },
+    {
       "alias": "Mutiny in the Sky",
       "normalizedAlias": "mutiny in the sky",
       "cardId": "21626",
-      "cardName": "Mutiny in the Sky",
+      "cardName": "天至る叛逆",
       "language": "en"
     },
     {
@@ -161255,17 +161542,31 @@
       "language": "en"
     },
     {
+      "alias": "祭司 レヴァリー",
+      "normalizedAlias": "祭司 レヴァリ-",
+      "cardId": "22930",
+      "cardName": "祭司 レヴァリー",
+      "language": "ja"
+    },
+    {
       "alias": "Officiating Reverie",
       "normalizedAlias": "officiating reverie",
       "cardId": "22930",
-      "cardName": "Officiating Reverie",
+      "cardName": "祭司 レヴァリー",
       "language": "en"
+    },
+    {
+      "alias": "死宰 サムエル",
+      "normalizedAlias": "死宰 サムエル",
+      "cardId": "22931",
+      "cardName": "死宰 サムエル",
+      "language": "ja"
     },
     {
       "alias": "Officiator of Doom Samuel",
       "normalizedAlias": "officiator of doom samuel",
       "cardId": "22931",
-      "cardName": "Officiator of Doom Samuel",
+      "cardName": "死宰 サムエル",
       "language": "en"
     },
     {
@@ -174786,10 +175087,17 @@
       "language": "en"
     },
     {
+      "alias": "サイコ・オムニバスター",
+      "normalizedAlias": "サイコ・オムニバスタ-",
+      "cardId": "21632",
+      "cardName": "サイコ・オムニバスター",
+      "language": "ja"
+    },
+    {
       "alias": "Psychic Omnibuster",
       "normalizedAlias": "psychic omnibuster",
       "cardId": "21632",
-      "cardName": "Psychic Omnibuster",
+      "cardName": "サイコ・オムニバスター",
       "language": "en"
     },
     {
@@ -175129,10 +175437,17 @@
       "language": "en"
     },
     {
+      "alias": "ゴースト大王－パンプキング－",
+      "normalizedAlias": "ゴ-スト大王-パンプキング-",
+      "cardId": "22348",
+      "cardName": "ゴースト大王－パンプキング－",
+      "language": "ja"
+    },
+    {
       "alias": "Pumpking the Great Ghost King",
       "normalizedAlias": "pumpking the great ghost king",
       "cardId": "22348",
-      "cardName": "Pumpking the Great Ghost King",
+      "cardName": "ゴースト大王－パンプキング－",
       "language": "en"
     },
     {
@@ -175150,10 +175465,17 @@
       "language": "en"
     },
     {
+      "alias": "墓場のゴースト王－パンプキング－",
+      "normalizedAlias": "墓場のゴ-スト王-パンプキング-",
+      "cardId": "22344",
+      "cardName": "墓場のゴースト王－パンプキング－",
+      "language": "ja"
+    },
+    {
       "alias": "Pumpking the King of Grave Ghosts",
       "normalizedAlias": "pumpking the king of grave ghosts",
       "cardId": "22344",
-      "cardName": "Pumpking the King of Grave Ghosts",
+      "cardName": "墓場のゴースト王－パンプキング－",
       "language": "en"
     },
     {
@@ -176795,101 +177117,199 @@
       "language": "en"
     },
     {
+      "alias": "R.B.ファンク・ドック",
+      "normalizedAlias": "r.b.ファンク・ドック",
+      "cardId": "21638",
+      "cardName": "R.B.ファンク・ドック",
+      "language": "ja"
+    },
+    {
       "alias": "R.B. Funk Dock",
       "normalizedAlias": "r.b. funk dock",
       "cardId": "21638",
-      "cardName": "R.B. Funk Dock",
+      "cardName": "R.B.ファンク・ドック",
       "language": "en"
+    },
+    {
+      "alias": "R.B.GA１０カッター",
+      "normalizedAlias": "r.b.ga10カッタ-",
+      "cardId": "21634",
+      "cardName": "R.B.GA１０カッター",
+      "language": "ja"
     },
     {
       "alias": "R.B. Ga10 Cutter",
       "normalizedAlias": "r.b. ga10 cutter",
       "cardId": "21634",
-      "cardName": "R.B. Ga10 Cutter",
+      "cardName": "R.B.GA１０カッター",
       "language": "en"
+    },
+    {
+      "alias": "R.B.GA１０ドリラー",
+      "normalizedAlias": "r.b.ga10ドリラ-",
+      "cardId": "21633",
+      "cardName": "R.B.GA１０ドリラー",
+      "language": "ja"
     },
     {
       "alias": "R.B. Ga10 Driller",
       "normalizedAlias": "r.b. ga10 driller",
       "cardId": "21633",
-      "cardName": "R.B. Ga10 Driller",
+      "cardName": "R.B.GA１０ドリラー",
       "language": "en"
+    },
+    {
+      "alias": "R.B.GA１０パイルバンカー",
+      "normalizedAlias": "r.b.ga10パイルバンカ-",
+      "cardId": "22074",
+      "cardName": "R.B.GA１０パイルバンカー",
+      "language": "ja"
     },
     {
       "alias": "R.B. Ga10 Pile Bunker",
       "normalizedAlias": "r.b. ga10 pile bunker",
       "cardId": "22074",
-      "cardName": "R.B. Ga10 Pile Bunker",
+      "cardName": "R.B.GA１０パイルバンカー",
       "language": "en"
+    },
+    {
+      "alias": "R.B.ラムダブレード",
+      "normalizedAlias": "r.b.ラムダブレ-ド",
+      "cardId": "22073",
+      "cardName": "R.B.ラムダブレード",
+      "language": "ja"
     },
     {
       "alias": "R.B. Lambda Blade",
       "normalizedAlias": "r.b. lambda blade",
       "cardId": "22073",
-      "cardName": "R.B. Lambda Blade",
+      "cardName": "R.B.ラムダブレード",
       "language": "en"
+    },
+    {
+      "alias": "R.B.ラムダキャノン",
+      "normalizedAlias": "r.b.ラムダキャノン",
+      "cardId": "22072",
+      "cardName": "R.B.ラムダキャノン",
+      "language": "ja"
     },
     {
       "alias": "R.B. Lambda Cannon",
       "normalizedAlias": "r.b. lambda cannon",
       "cardId": "22072",
-      "cardName": "R.B. Lambda Cannon",
+      "cardName": "R.B.ラムダキャノン",
       "language": "en"
+    },
+    {
+      "alias": "R.B.ラスト・スタンド",
+      "normalizedAlias": "r.b.ラスト・スタンド",
+      "cardId": "22077",
+      "cardName": "R.B.ラスト・スタンド",
+      "language": "ja"
     },
     {
       "alias": "R.B. Last Stand",
       "normalizedAlias": "r.b. last stand",
       "cardId": "22077",
-      "cardName": "R.B. Last Stand",
+      "cardName": "R.B.ラスト・スタンド",
       "language": "en"
+    },
+    {
+      "alias": "R.B.ネクスト・フェーズ",
+      "normalizedAlias": "r.b.ネクスト・フェ-ズ",
+      "cardId": "22078",
+      "cardName": "R.B.ネクスト・フェーズ",
+      "language": "ja"
     },
     {
       "alias": "R.B. Next Phase",
       "normalizedAlias": "r.b. next phase",
       "cardId": "22078",
-      "cardName": "R.B. Next Phase",
+      "cardName": "R.B.ネクスト・フェーズ",
       "language": "en"
+    },
+    {
+      "alias": "R.B.オペレーション・テスト",
+      "normalizedAlias": "r.b.オペレ-ション・テスト",
+      "cardId": "22076",
+      "cardName": "R.B.オペレーション・テスト",
+      "language": "ja"
     },
     {
       "alias": "R.B. Operation Test",
       "normalizedAlias": "r.b. operation test",
       "cardId": "22076",
-      "cardName": "R.B. Operation Test",
+      "cardName": "R.B.オペレーション・テスト",
       "language": "en"
+    },
+    {
+      "alias": "R.B.シェパード・クルーク",
+      "normalizedAlias": "r.b.シェパ-ド・クル-ク",
+      "cardId": "22075",
+      "cardName": "R.B.シェパード・クルーク",
+      "language": "ja"
     },
     {
       "alias": "R.B. Shepherd's Crook",
       "normalizedAlias": "r.b. shepherd's crook",
       "cardId": "22075",
-      "cardName": "R.B. Shepherd's Crook",
+      "cardName": "R.B.シェパード・クルーク",
       "language": "en"
+    },
+    {
+      "alias": "R.B.ジャンプ・ナンバー",
+      "normalizedAlias": "r.b.ジャンプ・ナンバ-",
+      "cardId": "21639",
+      "cardName": "R.B.ジャンプ・ナンバー",
+      "language": "ja"
     },
     {
       "alias": "R.B. Stage Landing",
       "normalizedAlias": "r.b. stage landing",
       "cardId": "21639",
-      "cardName": "R.B. Stage Landing",
+      "cardName": "R.B.ジャンプ・ナンバー",
       "language": "en"
+    },
+    {
+      "alias": "R.B.ブルート・ブルース",
+      "normalizedAlias": "r.b.ブル-ト・ブル-ス",
+      "cardId": "21637",
+      "cardName": "R.B.ブルート・ブルース",
+      "language": "ja"
     },
     {
       "alias": "R.B. The Brute Blues",
       "normalizedAlias": "r.b. the brute blues",
       "cardId": "21637",
-      "cardName": "R.B. The Brute Blues",
+      "cardName": "R.B.ブルート・ブルース",
       "language": "en"
+    },
+    {
+      "alias": "R.B.バルカンブースター",
+      "normalizedAlias": "r.b.バルカンブ-スタ-",
+      "cardId": "21636",
+      "cardName": "R.B.バルカンブースター",
+      "language": "ja"
     },
     {
       "alias": "R.B. VALCan Booster",
       "normalizedAlias": "r.b. valcan booster",
       "cardId": "21636",
-      "cardName": "R.B. VALCan Booster",
+      "cardName": "R.B.バルカンブースター",
       "language": "en"
+    },
+    {
+      "alias": "R.B.バルカンロケット",
+      "normalizedAlias": "r.b.バルカンロケット",
+      "cardId": "21635",
+      "cardName": "R.B.バルカンロケット",
+      "language": "ja"
     },
     {
       "alias": "R.B. VALCan Rocket",
       "normalizedAlias": "r.b. valcan rocket",
       "cardId": "21635",
-      "cardName": "R.B. VALCan Rocket",
+      "cardName": "R.B.バルカンロケット",
       "language": "en"
     },
     {
@@ -178720,10 +179140,17 @@
       "language": "en"
     },
     {
+      "alias": "悪鵺死ノ雨",
+      "normalizedAlias": "悪鵺死ノ雨",
+      "cardId": "22332",
+      "cardName": "悪鵺死ノ雨",
+      "language": "ja"
+    },
+    {
       "alias": "Rain of Frogs",
       "normalizedAlias": "rain of frogs",
       "cardId": "22332",
-      "cardName": "Rain of Frogs",
+      "cardName": "悪鵺死ノ雨",
       "language": "en"
     },
     {
@@ -180197,10 +180624,17 @@
       "language": "en"
     },
     {
+      "alias": "供物の下ごしらえ",
+      "normalizedAlias": "供物の下ごしらえ",
+      "cardId": "21629",
+      "cardName": "供物の下ごしらえ",
+      "language": "ja"
+    },
+    {
       "alias": "Readying of Rites",
       "normalizedAlias": "readying of rites",
       "cardId": "21629",
-      "cardName": "Readying of Rites",
+      "cardName": "供物の下ごしらえ",
       "language": "en"
     },
     {
@@ -184327,10 +184761,17 @@
       "language": "en"
     },
     {
+      "alias": "新世竜ダニアン",
+      "normalizedAlias": "新世竜ダニアン",
+      "cardId": "22339",
+      "cardName": "新世竜ダニアン",
+      "language": "ja"
+    },
+    {
       "alias": "Returned Dino Daneen",
       "normalizedAlias": "returned dino daneen",
       "cardId": "22339",
-      "cardName": "Returned Dino Daneen",
+      "cardName": "新世竜ダニアン",
       "language": "en"
     },
     {
@@ -187771,10 +188212,17 @@
       "language": "en"
     },
     {
+      "alias": "ラスティン・マンモス",
+      "normalizedAlias": "ラスティン・マンモス",
+      "cardId": "22929",
+      "cardName": "ラスティン・マンモス",
+      "language": "ja"
+    },
+    {
       "alias": "Rustin Mammoth",
       "normalizedAlias": "rustin mammoth",
       "cardId": "22929",
-      "cardName": "Rustin Mammoth",
+      "cardName": "ラスティン・マンモス",
       "language": "en"
     },
     {
@@ -195268,10 +195716,17 @@
       "language": "en"
     },
     {
+      "alias": "暗翳の信仰者",
+      "normalizedAlias": "暗翳の信仰者",
+      "cardId": "22925",
+      "cardName": "暗翳の信仰者",
+      "language": "ja"
+    },
+    {
       "alias": "Shade the Obscure",
       "normalizedAlias": "shade the obscure",
       "cardId": "22925",
-      "cardName": "Shade the Obscure",
+      "cardName": "暗翳の信仰者",
       "language": "en"
     },
     {
@@ -196577,10 +197032,17 @@
       "language": "en"
     },
     {
+      "alias": "カップリング・デーモン",
+      "normalizedAlias": "カップリング・デ-モン",
+      "cardId": "22334",
+      "cardName": "カップリング・デーモン",
+      "language": "ja"
+    },
+    {
       "alias": "Shipping Archfiend",
       "normalizedAlias": "shipping archfiend",
       "cardId": "22334",
-      "cardName": "Shipping Archfiend",
+      "cardName": "カップリング・デーモン",
       "language": "en"
     },
     {
@@ -197802,10 +198264,17 @@
       "language": "en"
     },
     {
+      "alias": "シルクボムモース",
+      "normalizedAlias": "シルクボムモ-ス",
+      "cardId": "22070",
+      "cardName": "シルクボムモース",
+      "language": "ja"
+    },
+    {
       "alias": "Silk Bomb Moth",
       "normalizedAlias": "silk bomb moth",
       "cardId": "22070",
-      "cardName": "Silk Bomb Moth",
+      "cardName": "シルクボムモース",
       "language": "en"
     },
     {
@@ -206888,10 +207357,17 @@
       "language": "en"
     },
     {
+      "alias": "凍てつく眼光のメデューサ",
+      "normalizedAlias": "凍てつく眼光のメデュ-サ",
+      "cardId": "22346",
+      "cardName": "凍てつく眼光のメデューサ",
+      "language": "ja"
+    },
+    {
       "alias": "Stare of the Snake Hair",
       "normalizedAlias": "stare of the snake hair",
       "cardId": "22346",
-      "cardName": "Stare of the Snake Hair",
+      "cardName": "凍てつく眼光のメデューサ",
       "language": "en"
     },
     {
@@ -207637,10 +208113,17 @@
       "language": "en"
     },
     {
+      "alias": "鉄絃の犠打職人",
+      "normalizedAlias": "鉄絃の犠打職人",
+      "cardId": "21630",
+      "cardName": "鉄絃の犠打職人",
+      "language": "ja"
+    },
+    {
       "alias": "Steel-Stringed Sacrifice",
       "normalizedAlias": "steel-stringed sacrifice",
       "cardId": "21630",
-      "cardName": "Steel-Stringed Sacrifice",
+      "cardName": "鉄絃の犠打職人",
       "language": "en"
     },
     {
@@ -208407,10 +208890,17 @@
       "language": "en"
     },
     {
+      "alias": "嵐忌竜デストゥビム",
+      "normalizedAlias": "嵐忌竜デストゥビム",
+      "cardId": "22335",
+      "cardName": "嵐忌竜デストゥビム",
+      "language": "ja"
+    },
+    {
       "alias": "Storm-Bane Dragon Destorbim",
       "normalizedAlias": "storm-bane dragon destorbim",
       "cardId": "22335",
-      "cardName": "Storm-Bane Dragon Destorbim",
+      "cardName": "嵐忌竜デストゥビム",
       "language": "en"
     },
     {
@@ -219915,10 +220405,17 @@
       "language": "en"
     },
     {
+      "alias": "貴婦人の守護者",
+      "normalizedAlias": "貴婦人の守護者",
+      "cardId": "21968",
+      "cardName": "貴婦人の守護者",
+      "language": "ja"
+    },
+    {
       "alias": "The Lady's Protectors",
       "normalizedAlias": "the lady's protectors",
       "cardId": "21968",
-      "cardName": "The Lady's Protectors",
+      "cardName": "貴婦人の守護者",
       "language": "en"
     },
     {
@@ -221504,10 +222001,17 @@
       "language": "en"
     },
     {
+      "alias": "不死の大軍団",
+      "normalizedAlias": "不死の大軍団",
+      "cardId": "22349",
+      "cardName": "不死の大軍団",
+      "language": "ja"
+    },
+    {
       "alias": "The Undying Legion",
       "normalizedAlias": "the undying legion",
       "cardId": "22349",
-      "cardName": "The Undying Legion",
+      "cardName": "不死の大軍団",
       "language": "en"
     },
     {
@@ -233425,10 +233929,17 @@
       "language": "en"
     },
     {
+      "alias": "豪回遊鯨 VIPホエール",
+      "normalizedAlias": "豪回遊鯨 vipホエ-ル",
+      "cardId": "22926",
+      "cardName": "豪回遊鯨 VIPホエール",
+      "language": "ja"
+    },
+    {
       "alias": "VIP Whale",
       "normalizedAlias": "vip whale",
       "cardId": "22926",
-      "cardName": "VIP Whale",
+      "cardName": "豪回遊鯨 VIPホエール",
       "language": "en"
     },
     {
@@ -237114,10 +237625,17 @@
       "language": "en"
     },
     {
+      "alias": "還流の精ヴォドニカ",
+      "normalizedAlias": "還流の精ヴォドニカ",
+      "cardId": "22331",
+      "cardName": "還流の精ヴォドニカ",
+      "language": "ja"
+    },
+    {
       "alias": "Vodnika the Fountain Spirit",
       "normalizedAlias": "vodnika the fountain spirit",
       "cardId": "22331",
-      "cardName": "Vodnika the Fountain Spirit",
+      "cardName": "還流の精ヴォドニカ",
       "language": "en"
     },
     {
@@ -237800,10 +238318,17 @@
       "language": "en"
     },
     {
+      "alias": "時空の渦",
+      "normalizedAlias": "時空の渦",
+      "cardId": "22352",
+      "cardName": "時空の渦",
+      "language": "ja"
+    },
+    {
       "alias": "Vortex of Time",
       "normalizedAlias": "vortex of time",
       "cardId": "22352",
-      "cardName": "Vortex of Time",
+      "cardName": "時空の渦",
       "language": "en"
     },
     {
@@ -245836,10 +246361,17 @@
       "language": "en"
     },
     {
+      "alias": "エクシーズ・レイ",
+      "normalizedAlias": "エクシ-ズ・レイ",
+      "cardId": "21631",
+      "cardName": "エクシーズ・レイ",
+      "language": "ja"
+    },
+    {
       "alias": "Xyz Lay",
       "normalizedAlias": "xyz lay",
       "cardId": "21631",
-      "cardName": "Xyz Lay",
+      "cardName": "エクシーズ・レイ",
       "language": "en"
     },
     {
