@@ -1202,11 +1202,16 @@ function renderSubAnswers(subAnswers) {
     }
 
     if (item.likelyAnswer && item.likelyAnswer.status !== "not_available" && !item.provisionalAnswer) {
-      renderLikelyAnswer(block, item.likelyAnswer);
+      renderLikelyAnswer(block, item.likelyAnswer, item);
     }
 
     if (item.clarification?.question && !item.conditionalAnswer) {
       renderClarification(block, item.clarification);
+    } else if (shouldRenderFallbackClarification(item)) {
+      renderClarification(block, {
+        question: "需要确认：请补充正式卡名、效果编号、具体时点，或提供能直接覆盖该场景的官方 Q&A / FAQ。",
+        options: ["补充正式卡名", "补充效果编号", "补充具体时点", "提供官方 Q&A / FAQ"],
+      });
     }
 
     if (Array.isArray(item.dependencies) && item.dependencies.length) {
@@ -1339,7 +1344,7 @@ function renderProvisionalAnswer(parent, provisionalAnswer) {
   parent.appendChild(wrapper);
 }
 
-function renderLikelyAnswer(parent, likelyAnswer) {
+function renderLikelyAnswer(parent, likelyAnswer, context = {}) {
   const wrapper = document.createElement("div");
   wrapper.className = "sub-reasoning";
 
@@ -1357,7 +1362,14 @@ function renderLikelyAnswer(parent, likelyAnswer) {
     likelyAnswer.whyNotConfirmed ? `为什么不能确认：${likelyAnswer.whyNotConfirmed}` : "",
     likelyAnswer.neededEvidence ? `需要确认：${likelyAnswer.neededEvidence}` : "",
   ].filter(Boolean);
-  body.textContent = `${verdict}${structured.length ? structured.join(" ") : likelyAnswer.reasoning || "只能给出未确认处理参考。"} ${likelyAnswer.disclaimer || "未确认裁定，不能替代官方 Q&A"}`.trim();
+  const fallbackStructured = [
+    context.sourceText ? `问题核心：${context.sourceText}` : "",
+    "未确认分析：",
+    likelyAnswer.reasoning || "只能给出未确认处理参考。",
+    "为什么不能确认：目前没有能直接回答当前问题的官方 Q&A / FAQ。",
+    "需要确认：需要能覆盖该场景的官方 Q&A / FAQ / 事务局回答。",
+  ].filter(Boolean).join(" ");
+  body.textContent = `${verdict}${structured.length ? structured.join(" ") : fallbackStructured} ${likelyAnswer.disclaimer || "未确认裁定，不能替代官方 Q&A"}`.trim();
   wrapper.appendChild(body);
 
   if (Array.isArray(likelyAnswer.riskFlags) && likelyAnswer.riskFlags.length) {
@@ -1381,6 +1393,12 @@ function renderClarification(parent, clarification) {
     wrapper.appendChild(options);
   }
   parent.appendChild(wrapper);
+}
+
+function shouldRenderFallbackClarification(item) {
+  if (!item || item.status !== "unknown") return false;
+  if ((item.likelyAnswer && item.likelyAnswer.status !== "not_available") || item.conditionalAnswer || item.provisionalAnswer || item.clarification?.question) return false;
+  return true;
 }
 
 function formatOfficialAnswerLine(item) {
