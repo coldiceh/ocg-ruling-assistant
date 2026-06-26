@@ -1,5 +1,6 @@
 import { createServer } from "node:http";
 import { answerQuestion, getDataHealth } from "./engine.mjs";
+import { appendFeedbackCase } from "./feedbackCases.mjs";
 
 const port = Number(process.env.PORT || 8787);
 const allowedOrigin = process.env.ALLOWED_ORIGIN || "*";
@@ -30,6 +31,24 @@ const server = createServer(async (request, response) => {
       sendJson(response, 200, answer);
     } catch (error) {
       sendJson(response, 500, {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+    return;
+  }
+
+  if (request.method === "POST" && request.url === "/api/feedback") {
+    try {
+      const body = await readBody(request);
+      const feedbackCase = await appendFeedbackCase(JSON.parse(body || "{}"));
+      sendJson(response, 200, {
+        ok: true,
+        feedbackCase,
+        message: "反馈已记录。它不会立即改变裁定结论；确认后会转成回归测试。",
+      });
+    } catch (error) {
+      sendJson(response, 400, {
+        ok: false,
         error: error instanceof Error ? error.message : String(error),
       });
     }

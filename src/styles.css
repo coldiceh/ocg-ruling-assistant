@@ -513,6 +513,49 @@ li + li {
   font-size: 14px;
 }
 
+.feedback-panel {
+  margin-top: 16px;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
+.feedback-panel summary {
+  cursor: pointer;
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.feedback-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 10px 0;
+}
+
+.feedback-buttons button,
+.feedback-form button {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 7px 11px;
+  color: var(--ink);
+  background: #fff;
+}
+
+.feedback-form textarea {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 11px;
+  color: var(--ink);
+  background: #fbfcfd;
+  resize: vertical;
+}
+
+.feedback-message {
+  color: var(--muted);
+  font-size: 13px;
+}
+
 dialog {
   width: min(940px, calc(100% - 28px));
   padding: 0;

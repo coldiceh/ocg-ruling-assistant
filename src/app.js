@@ -192,6 +192,7 @@ const backendAnswerCacheTtlMs = 6 * 60 * 60 * 1000;
 const cardDetailsCache = new Map();
 let visibleCards = [];
 let selectedCardIndex = 0;
+let lastRenderedBackendAnswer = null;
 
 function normalizeText(value) {
   return String(value || "")
@@ -691,6 +692,7 @@ function renderPending() {
 }
 
 function renderBackendAnswer(answer) {
+  lastRenderedBackendAnswer = answer || null;
   if (answer?.status === "data_source_missing") {
     ui.resultGrid.hidden = false;
     renderCards([]);
@@ -705,6 +707,7 @@ function renderBackendAnswer(answer) {
     renderList(ui.stepsList, ["运行 node scripts/sync-data.mjs 后重新分析。"]);
     renderList(ui.questionsList, []);
     renderSources([]);
+    renderFeedbackPanel(null);
     return;
   }
   const confidence = answer?.confidence || { label: "不能确定", className: "is-risky" };
@@ -721,12 +724,15 @@ function renderBackendAnswer(answer) {
   renderList(ui.stepsList, answer?.steps || []);
   renderList(ui.questionsList, [...(answer?.needsConfirmation || []), ...(answer?.warnings || [])]);
   renderSources(answer?.sources || []);
+  renderFeedbackPanel(answer);
 }
 
 function resetAnalysis() {
+  lastRenderedBackendAnswer = null;
   ui.resultGrid.hidden = true;
   renderCards([]);
   renderParserDebug(null);
+  renderFeedbackPanel(null);
   updateModelStatus(appConfig.answerApiUrl ? appConfig.modelLabel || "后端自动选择" : "本地模板");
 }
 
@@ -1373,6 +1379,147 @@ function renderSources(sources) {
     }
     ui.sourcesList.appendChild(node);
   }
+}
+
+function renderFeedbackPanel(answer) {
+  if (!ui.verdictBlock) return;
+  const existing = ui.verdictBlock.querySelector(".feedback-panel");
+  if (existing) existing.remove();
+  if (!answer || answer.status === "data_source_missing") return;
+
+  const panel = document.createElement("details");
+  panel.className = "feedback-panel";
+  const summary = document.createElement("summary");
+  summary.textContent = "反馈这个回答";
+  panel.appendChild(summary);
+
+  const hint = document.createElement("p");
+  hint.textContent = "反馈不会立即改变裁定结论；确认来源后才会转成回归测试。";
+  panel.appendChild(hint);
+
+  const buttons = document.createElement("div");
+  buttons.className = "feedback-buttons";
+  const selectedType = { value: "other" };
+  const choices = [
+    ["wrong_verdict", "回答错了"],
+    ["missing_evidence", "资料不对"],
+    ["missing_evidence", "需要补充来源"],
+  ];
+  const form = document.createElement("div");
+  const textarea = document.createElement("textarea");
+  const message = document.createElement("p");
+  for (const [type, label] of choices) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = label;
+    button.addEventListener("click", () => {
+      selectedType.value = type;
+      form.hidden = false;
+      message.textContent = "";
+      textarea.focus();
+    });
+    buttons.appendChild(button);
+  }
+  panel.appendChild(buttons);
+
+  form.className = "feedback-form";
+  form.hidden = true;
+  textarea.rows = 4;
+  textarea.placeholder = "请说明哪里错了，或贴上来源链接 / 原文。";
+  form.appendChild(textarea);
+
+  const submit = document.createElement("button");
+  submit.type = "button";
+  submit.textContent = "提交反馈";
+  form.appendChild(submit);
+
+  message.className = "feedback-message";
+  form.appendChild(message);
+
+  submit.addEventListener("click", async () => {
+    const comment = textarea.value.trim();
+    if (!comment) {
+      message.textContent = "请先填写反馈内容。";
+      return;
+    }
+    submit.disabled = true;
+    try {
+      await submitFeedbackCase(answer, {
+        type: selectedType.value,
+        comment,
+        ...extractFeedbackSource(comment),
+      });
+      message.textContent = "反馈已记录。它不会立即改变裁定结论；确认后会转成回归测试。";
+      textarea.value = "";
+    } catch (error) {
+      message.textContent = `反馈保存失败：${error instanceof Error ? error.message : String(error)}`;
+    } finally {
+      submit.disabled = false;
+    }
+  });
+  panel.appendChild(form);
+  ui.verdictBlock.appendChild(panel);
+}
+
+async function submitFeedbackCase(answer, userFeedback) {
+  const payload = {
+    originalQuestion: answer?.formalQuery?.originalText || ui.questionInput.value.trim(),
+    formalQuery: answer?.formalQuery || null,
+    currentAnswer: buildFeedbackCurrentAnswer(answer || lastRenderedBackendAnswer || {}),
+    userFeedback,
+  };
+  const endpoint = feedbackApiUrl();
+  if (endpoint) {
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (response.ok) return response.json();
+  }
+  return saveFeedbackCaseLocally(payload);
+}
+
+function buildFeedbackCurrentAnswer(answer) {
+  const subAnswer = Array.isArray(answer.subAnswers) && answer.subAnswers.length === 1 ? answer.subAnswers[0] : null;
+  return {
+    finalStatus: answer.mode || answer.confidence?.status || subAnswer?.status || "unknown",
+    finalVerdict: subAnswer?.verdict ?? answer.verdict ?? "unknown",
+    reason: subAnswer?.reason || answer.needsConfirmation?.[0] || "",
+    evidenceIds: answer.evidenceIds || subAnswer?.evidenceIds || [],
+    ...(subAnswer?.conditionalAnswer ? { conditionalAnswer: subAnswer.conditionalAnswer } : {}),
+    ...(subAnswer?.provisionalAnswer ? { provisionalAnswer: subAnswer.provisionalAnswer } : {}),
+  };
+}
+
+function feedbackApiUrl() {
+  if (!appConfig.answerApiUrl) return "";
+  try {
+    const url = new URL(appConfig.answerApiUrl);
+    url.pathname = url.pathname.replace(/\/api\/answer\/?$/u, "/api/feedback");
+    return url.href;
+  } catch {
+    return appConfig.answerApiUrl.replace(/\/api\/answer\/?$/u, "/api/feedback");
+  }
+}
+
+function saveFeedbackCaseLocally(payload) {
+  const key = "ocg-ruling-feedback-cases:v1";
+  const stored = JSON.parse(localStorage.getItem(key) || "[]");
+  const item = {
+    ...payload,
+    id: `local-feedback-${Date.now()}`,
+    createdAt: new Date().toISOString(),
+    status: "new",
+  };
+  stored.push(item);
+  localStorage.setItem(key, JSON.stringify(stored));
+  return { ok: true, feedbackCase: item, localOnly: true };
+}
+
+function extractFeedbackSource(comment) {
+  const url = String(comment || "").match(/https?:\/\/\S+/iu)?.[0];
+  return url ? { supportingSourceUrl: url, supportingSourceText: comment } : { supportingSourceText: comment };
 }
 
 function appendText(parent, tagName, text) {
