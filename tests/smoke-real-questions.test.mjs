@@ -52,6 +52,10 @@ test("smoke report safety counters reject unsafe confirmed answers", () => {
   assert.equal(report.provisionalAnswerCount, 1);
   assert.equal(report.conditionalAnswerCount, 1);
   assert.equal(report.clarificationQuestionCount, 1);
+  assert.equal(report.officialConfirmedCount, 1);
+  assert.equal(report.clarificationCount, 1);
+  assert.equal(report.internalReasonLeakCount, 0);
+  assert.equal(report.wrongCardResolutionCount, 0);
   assert.equal(report.unsafeConfirmedCount, 0);
   assert.equal(report.missingReasonCount, 0);
 });
@@ -88,4 +92,46 @@ test("smoke report flags provisional or conditional status escalation", () => {
 
   assert.ok(report.unsafeConfirmed.includes("unsafe:q1:provisional_confirmed"));
   assert.ok(report.unsafeConfirmed.includes("conditional-raised:q1:conditional_raised_status"));
+});
+
+test("smoke report counts likely answers as useful unknowns without confirming them", () => {
+  const report = buildSmokeReport([{
+    id: "likely",
+    finalStatus: "unknown",
+    subAnswers: [{
+      questionId: "q1",
+      status: "unknown",
+      reason: "no_direct_evidence",
+      evidenceIds: [],
+      directEvidenceCount: 0,
+      extractedVerdict: "unknown",
+      likelyAnswer: { status: "best_effort", verdict: "unknown", reasoning: "未确认。", basis: ["card_text"] },
+      presentation: { reason: "找到的资料与本题相关，但没有直接回答当前问题。" },
+    }],
+    userFacingSummary: "可能处理（未确认）：未确认。",
+  }]);
+
+  assert.equal(report.confirmed, 0);
+  assert.equal(report.likelyAnswerCount, 1);
+  assert.equal(report.uselessUnknownCount, 0);
+  assert.equal(report.internalReasonLeakCount, 0);
+});
+
+test("smoke report detects internal reason leaks in user-facing summaries", () => {
+  const report = buildSmokeReport([{
+    id: "leak",
+    finalStatus: "unknown",
+    subAnswers: [{
+      questionId: "q1",
+      status: "unknown",
+      reason: "no_direct_evidence",
+      evidenceIds: [],
+      directEvidenceCount: 0,
+      extractedVerdict: "unknown",
+      presentation: { reason: "no_direct_evidence" },
+    }],
+    userFacingSummary: "资料不足：no_direct_evidence",
+  }]);
+
+  assert.equal(report.internalReasonLeakCount, 2);
 });

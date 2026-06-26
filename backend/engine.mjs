@@ -11,6 +11,7 @@ import { extractConditionBranchesFromEvidence } from "./conditionBranches.mjs";
 import { buildEventTimelineFromFormalQuery, deriveStateAtTiming } from "./eventTimeline.mjs";
 import { buildGameStateFromFormalQuery } from "./gameState.mjs";
 import { normalizeFormalRulingQuery, validateFormalRulingQuery } from "./formalQuery.mjs";
+import { buildLikelyAnswer } from "./likelyAnswer.mjs";
 import {
   buildProvisionalAnswerFromOfficialResponse,
   isConfirmableOfficialResponse,
@@ -181,6 +182,15 @@ export async function answerQuestion(payload, options = {}) {
     }
   }
 
+  const cardResolutionConfirmations = buildCardNameConfirmationRequests(question, detectedCards, snapshot.cards);
+  if (cardResolutionConfirmations.length) {
+    detectedCards = removeUnconfirmedShortCardMatches(detectedCards, cardResolutionConfirmations);
+    resolutionWarnings.push(...cardResolutionConfirmations.map((issue) => {
+      const candidates = issue.candidateCards.map((card) => card.name).filter(Boolean).join("、") || "无候选";
+      return `卡名需要确认：${issue.unresolvedCardName} 不是 exact match；较短候选 ${candidates} 不会自动当作同一张卡。`;
+    }));
+  }
+
   const onDemandSync = options.onDemandSync === false
     ? buildSkippedOnDemandSync()
     : await syncOnDemandData({
@@ -215,6 +225,7 @@ export async function answerQuestion(payload, options = {}) {
     parserWarnings: parserResult.parserWarnings,
     gameState,
     eventTimeline,
+    cardResolutionConfirmations,
   });
   const dependencyGraph = buildSubQuestionDependencyGraph(formalQuery, eventTimeline);
   const transitionRules = applyTransitionRules({
@@ -224,7 +235,11 @@ export async function answerQuestion(payload, options = {}) {
     dependencyGraph,
     subQuestionAnswers: baseSubAnswers,
   });
-  const subAnswers = attachTransitionReasoning(baseSubAnswers, dependencyGraph, transitionRules);
+  const subAnswers = attachTransitionReasoning(baseSubAnswers, dependencyGraph, transitionRules, {
+    formalQuery,
+    evidence,
+    options: { gameState, eventTimeline, cardResolutionConfirmations },
+  });
   const parserDebug = {
     rawQuestion: question,
     contextLines: parserResult.preprocessing.contextLines,
@@ -238,6 +253,7 @@ export async function answerQuestion(payload, options = {}) {
     timelineWarnings: eventTimeline.warnings,
     dependencyGraph,
     transitionRules,
+    cardResolutionConfirmations,
     evidenceTrace: buildSubQuestionEvidenceTrace(formalQuery, evidence, subAnswers, onDemandSync, { gameState, eventTimeline }),
     finalStatusBeforeExplanation: buildFinalStatusTrace(subAnswers),
   };
@@ -253,6 +269,7 @@ export async function answerQuestion(payload, options = {}) {
     parserWarnings: parserResult.parserWarnings,
     parserFailure: parserResult.parseFailed,
     parserDebug,
+    cardResolutionConfirmations,
   });
   if (options.recordAnswerHistory === true || env.RECORD_ANSWER_HISTORY === "true") {
     try {
@@ -331,6 +348,10 @@ function buildSubQuestionEvidenceTrace(formalQuery, evidence, subAnswers = [], o
       whyUnknown: answer.whyUnknown || extracted.whyUnknown || null,
       conditionalAnswer: answer.conditionalAnswer || null,
       provisionalAnswer: answer.provisionalAnswer || null,
+      officialAnswer: answer.officialAnswer || null,
+      likelyAnswer: answer.likelyAnswer || null,
+      clarification: answer.clarification || null,
+      cardResolutionIssue: answer.cardResolutionIssue || null,
       provisionalEvidence: bucket.provisionalEvidence || baseTrace.provisionalEvidence || [],
       dependencies: answer.dependencies || [],
       unresolvedDependencies: answer.unresolvedDependencies || [],
@@ -379,7 +400,7 @@ function buildFinalStatusTrace(subAnswers) {
   return { overallStatus, subQuestions };
 }
 
-function attachTransitionReasoning(subAnswers, dependencyGraph, transitionResult) {
+function attachTransitionReasoning(subAnswers, dependencyGraph, transitionResult, context = {}) {
   const unresolvedByQuestion = new Map();
   for (const item of transitionResult.unresolvedDependencies || []) {
     const list = unresolvedByQuestion.get(String(item.questionId)) || [];
@@ -428,8 +449,31 @@ function attachTransitionReasoning(subAnswers, dependencyGraph, transitionResult
         warnings: [...new Set([...(result.warnings || []), "pending_transition_not_completed"])],
       };
     }
+    if (context.formalQuery) {
+      const subQuestion = (context.formalQuery.subQuestions || []).find((item) => String(item.id) === questionId) || answer;
+      const bucket = findEvidenceBucketForSubQuestion(context.evidence, questionId);
+      return attachUserAnswerLayers(result, {
+        subQuestion,
+        formalQuery: context.formalQuery,
+        bucket,
+        options: context.options || {},
+      });
+    }
     return result;
   });
+}
+
+function findEvidenceBucketForSubQuestion(evidence, questionId) {
+  const buckets = Array.isArray(evidence) ? evidence : evidence?.bySubQuestion || [];
+  const rawBucket = buckets.find((item) => String(item.subQuestionId || item.questionId) === String(questionId)) || {};
+  return {
+    ...rawBucket,
+    rulingEvidence: rawBucket.rulingEvidence || rawBucket.directEvidence || [],
+    similarRulingEvidence: rawBucket.similarRulingEvidence || rawBucket.similarEvidence || [],
+    cardTextEvidence: rawBucket.cardTextEvidence || [],
+    rejectedEvidence: rawBucket.rejectedEvidence || [],
+    provisionalEvidence: rawBucket.provisionalEvidence || [],
+  };
 }
 
 function buildEmptyFormalEvidence(formalQuery) {
@@ -1034,7 +1078,10 @@ export function answerEachSubQuestion(
     };
     const parseFailure = options.parseFailure || null;
     if (parseFailure) {
-      return buildProgramSubAnswer(subQuestion, "parse_failed", "unknown", [], `formal_query_parse_failed:${parseFailure}`, [], bucket);
+      return attachUserAnswerLayers(
+        buildProgramSubAnswer(subQuestion, "parse_failed", "unknown", [], `formal_query_parse_failed:${parseFailure}`, [], bucket),
+        { subQuestion, formalQuery, bucket, options }
+      );
     }
 
     const invalidDirect = bucket.rulingEvidence.filter((item) => {
@@ -1043,7 +1090,7 @@ export function answerEachSubQuestion(
     });
     const direct = bucket.rulingEvidence.filter((item) => !invalidDirect.includes(item));
     if (invalidDirect.length) {
-      return buildProgramSubAnswer(
+      return attachUserAnswerLayers(buildProgramSubAnswer(
         subQuestion,
         "unknown",
         "unknown",
@@ -1051,7 +1098,7 @@ export function answerEachSubQuestion(
         "direct_evidence_id_or_type_invalid",
         ["invalid_direct_evidence"],
         bucket
-      );
+      ), { subQuestion, formalQuery, bucket, options });
     }
     if (direct.length) {
       const extracted = extractVerdictFromEvidence(subQuestion, direct, {
@@ -1076,10 +1123,11 @@ export function answerEachSubQuestion(
         gameState: options.gameState,
         eventTimeline: options.eventTimeline,
       });
-      return finalAnswerGate(candidate, bucket, {
+      const gated = finalAnswerGate(candidate, bucket, {
         parserWarnings: options.parserWarnings || [],
         validEvidenceIds: new Set(validEvidence.keys()),
       });
+      return attachUserAnswerLayers(gated, { subQuestion, formalQuery, bucket, options });
     }
     const validSimilar = bucket.similarRulingEvidence.filter((item) => {
       const source = validEvidence.get(String(item.evidenceId || ""));
@@ -1107,20 +1155,22 @@ export function answerEachSubQuestion(
         gameState: options.gameState,
         eventTimeline: options.eventTimeline,
       });
-      return attachProvisionalAnswerIfAllowed(finalAnswerGate(candidate, bucket, {
+      const gated = attachProvisionalAnswerIfAllowed(finalAnswerGate(candidate, bucket, {
         parserWarnings: options.parserWarnings || [],
         validEvidenceIds: new Set(validEvidence.keys()),
       }), bucket);
+      return attachUserAnswerLayers(gated, { subQuestion, formalQuery, bucket, options });
     }
     const reason = bucket.cardTextEvidence.length
       ? "card_text_only"
       : bucket.rejectedEvidence.length
         ? "rejected_evidence_only"
         : "no_evidence";
-    return attachProvisionalAnswerIfAllowed(
+    const baseAnswer = attachProvisionalAnswerIfAllowed(
       buildProgramSubAnswer(subQuestion, "unknown", "unknown", [], reason, [], bucket),
       bucket
     );
+    return attachUserAnswerLayers(baseAnswer, { subQuestion, formalQuery, bucket, options });
   });
 }
 
@@ -1144,6 +1194,101 @@ function attachProvisionalAnswerIfAllowed(answer, bucket = {}) {
     provisionalAnswer: provisional,
     warnings: [...new Set([...(answer.warnings || []), "provisional_official_response_not_confirmed"])],
   };
+}
+
+function attachUserAnswerLayers(answer, { subQuestion, formalQuery, bucket, options } = {}) {
+  const cardResolutionIssue = findCardResolutionIssueForSubQuestion(
+    subQuestion,
+    options?.cardResolutionConfirmations || []
+  );
+  const dependencies = answer?.dependencies || [];
+  const unresolvedDependencies = answer?.unresolvedDependencies || [];
+  const officialAnswer = {
+    status: answer.status === "confirmed" ? "confirmed" : answer.status === "parse_failed" ? "parse_failed" : "unknown",
+    verdict: answer.status === "confirmed" ? answer.verdict : "unknown",
+    evidenceIds: [...new Set(answer.evidenceIds || [])],
+    reason: answer.reason || "unknown",
+  };
+  const likelyAnswer = answer.status === "confirmed"
+    ? undefined
+    : buildLikelyAnswer({
+        subQuestion,
+        formalQuery,
+        cardTexts: bucket?.cardTextEvidence || [],
+        similarEvidence: bucket?.similarRulingEvidence || bucket?.similarEvidence || [],
+        rejectedEvidence: bucket?.rejectedEvidence || [],
+        conditionBranches: answer.conditionBranches || [],
+        eventTimeline: options?.eventTimeline || null,
+        dependencies,
+        unresolvedDependencies,
+        currentVerdict: answer.verdict,
+        currentStatus: answer.status,
+        provisionalAnswer: answer.provisionalAnswer || null,
+        cardResolutionIssue,
+      });
+  const clarification = buildSubAnswerClarification(subQuestion, answer, cardResolutionIssue);
+  return {
+    ...answer,
+    officialAnswer,
+    ...(likelyAnswer ? { likelyAnswer } : {}),
+    ...(clarification ? { clarification } : {}),
+    displayReason: buildPublicReason(answer, { cardResolutionIssue }),
+    cardResolutionIssue: cardResolutionIssue || null,
+  };
+}
+
+function findCardResolutionIssueForSubQuestion(subQuestion = {}, confirmations = []) {
+  const source = normalizeKey(`${subQuestion.card || ""} ${subQuestion.sourceText || ""}`);
+  if (!source) return null;
+  return confirmations.find((issue) => {
+    const unresolved = normalizeKey(issue.unresolvedCardName || "");
+    if (unresolved && source.includes(unresolved)) return true;
+    return (issue.candidateCards || []).some((card) => {
+      const name = normalizeKey(card.name || card.matchedName || "");
+      return name && source.includes(name) && unresolved && unresolved.includes(name);
+    });
+  }) || null;
+}
+
+function buildSubAnswerClarification(subQuestion = {}, answer = {}, cardResolutionIssue = null) {
+  if (cardResolutionIssue) {
+    const options = (cardResolutionIssue.candidateCards || []).map((card) => card.name).filter(Boolean);
+    return {
+      question: `请确认你指的是哪张卡：${cardResolutionIssue.unresolvedCardName}？`,
+      options,
+    };
+  }
+  if (answer.conditionalAnswer?.clarificationQuestion) {
+    return {
+      question: answer.conditionalAnswer.clarificationQuestion,
+      options: answer.conditionalAnswer.missingInfo?.flatMap((item) => item.options || []) || [],
+    };
+  }
+  if (!subQuestion.type || subQuestion.type === "unknown") {
+    return {
+      question: "请确认你要问的是发动条件、效果处理、时点、对象还是区域变化？",
+      options: ["发动条件", "效果处理", "时点", "区域变化"],
+    };
+  }
+  return null;
+}
+
+function buildPublicReason(answer = {}, { cardResolutionIssue = null } = {}) {
+  if (cardResolutionIssue) return "卡名没有 exact match，不能自动套用较短候选卡。";
+  if (answer.provisionalAnswer) return "官方数据库暂无直接裁定；存在事务局回答截图，需要后续复核。";
+  if (answer.conditionalAnswer) return "已找到相关 FAQ，但当前问题缺少必要状态，无法确定适用哪个分支。";
+  if ((answer.unresolvedDependencies || []).length) return "该问题依赖另一个子问题的结果，当前不能确认。";
+  const reason = String(answer.reason || answer.reasoning || "");
+  if (/conflicting_direct_evidence|conflicting_similar_evidence|冲突/u.test(reason)) return "候选资料结论冲突，不能确认。";
+  if (/condition_branch_missing_state|condition_branch_ambiguous/u.test(reason)) return "已找到条件分支证据，但当前场景不足以选择唯一分支。";
+  if (/no_direct_evidence|similar_evidence|evidence_mentions_action_but_not_asked_result|no_explicit_polarity/u.test(reason)) return "找到的资料与本题相关，但没有直接回答当前问题。";
+  if (/card_text_only/u.test(reason)) return "目前只有卡片文本，没有直接 Q&A。";
+  if (/rejected_evidence_only|matcher_rejected_all|different_question|question_type_mismatch/u.test(reason)) return "候选资料回答的是不同问题或场景不一致。";
+  if (/parse_failed|formal_query_parse_failed/u.test(reason)) return "形式化解析失败，需要补充卡名、效果编号或问题类型。";
+  if (/parser_warning/u.test(reason)) return "形式化解析存在不确定项，不能确认裁定。";
+  if (answer.status === "confirmed") return "已有 direct evidence 且 verdict 明确。";
+  if (answer.status === "inferred") return "只有相似证据，不能作为官方确认。";
+  return "暂时不能确认，需要官方 Q&A 或补充场景。";
 }
 
 function attachExtractionMetadata(answer, extracted, subQuestion, context = {}) {
@@ -1331,6 +1476,7 @@ function mergeFormalAnswers(context) {
     parserWarnings,
     parserFailure,
     parserDebug,
+    cardResolutionConfirmations = [],
   } = context;
   const statuses = subAnswers.map((item) => item.status);
   let mode = "unknown";
@@ -1353,7 +1499,9 @@ function mergeFormalAnswers(context) {
   if (parserWarnings.length) needsConfirmation.push("形式化解析包含警告，结论不会提升为 confirmed。");
   needsConfirmation.push(...subAnswers.map((answer) => answer.stateMessage).filter(Boolean));
   needsConfirmation.push(...subAnswers.map((answer) => answer.conditionalAnswer?.clarificationQuestion).filter(Boolean));
+  needsConfirmation.push(...subAnswers.map((answer) => answer.clarification?.question).filter(Boolean));
   needsConfirmation.push(...subAnswers.map((answer) => answer.dependencyMessage).filter(Boolean));
+  needsConfirmation.push(...cardResolutionConfirmations.map((issue) => `卡名需要确认：你输入的是“${issue.unresolvedCardName}”，但数据库没有直接匹配。`));
   needsConfirmation.push(...notes);
 
   return {
@@ -1368,6 +1516,7 @@ function mergeFormalAnswers(context) {
     parserWarnings,
     parserFailure,
     parserDebug,
+    cardResolutionConfirmations,
     subQuestions: formalQuery.subQuestions,
     subAnswers,
     evidence,
@@ -1883,12 +2032,15 @@ export async function auditRetrieval(question, options = {}) {
   const evidence = parserResult.parseFailed
     ? buildEmptyFormalEvidence(normalizedFormalQuery)
     : retrieveEvidenceByFormalQuery(normalizedFormalQuery, detectedCards, evidenceSnapshot);
+  const cardResolutionConfirmations = buildCardNameConfirmationRequests(rawQuestion, detectedCards, snapshot.cards);
+  if (cardResolutionConfirmations.length) detectedCards = removeUnconfirmedShortCardMatches(detectedCards, cardResolutionConfirmations);
+
   const baseSubAnswers = answerEachSubQuestion(
     normalizedFormalQuery,
     evidence,
     evidenceSnapshot,
     validateFormalRulingQuery(normalizedFormalQuery),
-    { parseFailure: parserResult.parseFailed, parserWarnings: parserResult.parserWarnings, gameState, eventTimeline }
+    { parseFailure: parserResult.parseFailed, parserWarnings: parserResult.parserWarnings, gameState, eventTimeline, cardResolutionConfirmations }
   );
   const dependencyGraph = buildSubQuestionDependencyGraph(normalizedFormalQuery, eventTimeline);
   const transitionRules = applyTransitionRules({
@@ -1898,7 +2050,11 @@ export async function auditRetrieval(question, options = {}) {
     dependencyGraph,
     subQuestionAnswers: baseSubAnswers,
   });
-  const subAnswers = attachTransitionReasoning(baseSubAnswers, dependencyGraph, transitionRules);
+  const subAnswers = attachTransitionReasoning(baseSubAnswers, dependencyGraph, transitionRules, {
+    formalQuery: normalizedFormalQuery,
+    evidence,
+    options: { gameState, eventTimeline, cardResolutionConfirmations },
+  });
   const liveResolutionAttempted = onDemandSync.attempted;
   const dataSourceStats = {
     ...buildRetrievalDataSourceStats(snapshot, liveCards, liveEvidence, records, liveResolutionAttempted),
@@ -2469,7 +2625,7 @@ function collectCardTextSources(cards, fallbackSources) {
 
 export function mergeModelAnswer(modelAnswer, programAnswer) {
   const explanationText = cleanText(modelAnswer?.explanationText);
-  const attemptedOverride = ["status", "verdict", "evidenceIds", "verdictTitle", "steps", "subAnswers", "conditionalAnswer", "provisionalAnswer"]
+  const attemptedOverride = ["status", "verdict", "evidenceIds", "verdictTitle", "steps", "subAnswers", "conditionalAnswer", "provisionalAnswer", "officialAnswer", "likelyAnswer", "clarification"]
     .some((field) => modelAnswer?.[field] !== undefined);
   return {
     ...programAnswer,
@@ -2838,6 +2994,95 @@ function inferRecordType(record) {
   if (String(record.id || "").startsWith("card-faq-") || /FAQ/i.test(record.title || "")) return "card-faq";
   if (String(record.id || "").includes("qa")) return "qa";
   return "note";
+}
+
+export function buildCardNameConfirmationRequests(question, detectedCards = [], cards = []) {
+  const catalog = Array.isArray(cards) ? cards : [];
+  const detected = Array.isArray(detectedCards) ? detectedCards : [];
+  const candidates = dedupeBy([
+    ...collectQuestionCardCandidates(question).cards,
+    ...collectContainedLongNameCandidates(question, detected),
+  ], (item) => normalizeKey(item.input))
+    .filter((item) => isStrictLongUnresolvedCardNameCandidate(item.input));
+  const issues = [];
+
+  for (const candidate of candidates) {
+    const candidateKey = normalizeKey(candidate.input);
+    if (!candidateKey || hasExactAlias(candidateKey, catalog)) continue;
+    const containedCards = detected
+      .map((card) => {
+        const matchedName = bestContainedAlias(candidateKey, card);
+        return matchedName ? {
+          id: cleanText(card.id || card.passcode || card.cardId),
+          name: cleanText(card.name || card.cnName || card.jaName || card.enName),
+          matchedName,
+          reason: "shorter contained alias, requires confirmation",
+          resolvedCardIds: collectResolvedCardIds([card]),
+        } : null;
+      })
+      .filter(Boolean);
+    if (!containedCards.length) continue;
+    issues.push({
+      unresolvedCardName: candidate.input,
+      candidateCards: dedupeBy(containedCards, (item) => `${item.name}:${item.matchedName}`),
+      reason: "longer_name_without_exact_alias",
+    });
+  }
+
+  return dedupeBy(issues, (item) => normalizeKey(item.unresolvedCardName));
+}
+
+function collectContainedLongNameCandidates(question, detectedCards = []) {
+  const text = normalizeText(question);
+  const candidates = [];
+  for (const card of detectedCards) {
+    const matchedAliases = [card.matched, ...cardAliases(card)].filter(Boolean).sort((left, right) => normalizeKey(right).length - normalizeKey(left).length);
+    for (const alias of matchedAliases) {
+      const index = text.indexOf(alias);
+      if (index <= 0) continue;
+      const prefix = text.slice(Math.max(0, index - 8), index).match(/[\u3400-\u9fffA-Za-z0-9・･☆★－ー-]+$/u)?.[0] || "";
+      if (!prefix) continue;
+      const input = `${prefix}${alias}`;
+      if (normalizeKey(input).length >= normalizeKey(alias).length + 2) {
+        candidates.push({ input, candidates: [input], confidence: "medium", source: "contained-short-alias" });
+      }
+    }
+  }
+  return candidates;
+}
+
+function removeUnconfirmedShortCardMatches(detectedCards = [], confirmations = []) {
+  if (!confirmations.length) return detectedCards;
+  return mergeCards(detectedCards).filter((card) => {
+    const cardIds = new Set(collectResolvedCardIds([card]).map(String));
+    return !confirmations.some((issue) => (issue.candidateCards || []).some((candidate) => {
+      const candidateIds = new Set((candidate.resolvedCardIds || []).map(String));
+      if ([...candidateIds].some((id) => cardIds.has(id))) return true;
+      const cardName = normalizeKey(card.name || card.cnName || card.jaName || card.enName || "");
+      return cardName && cardName === normalizeKey(candidate.name || "");
+    }));
+  });
+}
+
+function isStrictLongUnresolvedCardNameCandidate(value) {
+  const text = cleanCandidateName(value);
+  const key = normalizeKey(text);
+  if (key.length < 5 || key.length > 24) return false;
+  if (!/[\u3400-\u9fff]/u.test(text)) return false;
+  if (/\s/u.test(text)) return false;
+  if (/(如果|若|被|当|當|这个|這個|时候|時|发动|發動|效果|効果|能否|能用|可以|不能|用|把|将|將|对|對|除外|送墓|墓地|场上|場上|怪兽|怪獸|连接|連接|召唤|召喚|素材|处理|處理|攻击|攻擊|战斗|戰鬥|破坏|破壊|手札|自分|相手|存在|フィールド|デッキ|モンスター)/u.test(text)) return false;
+  return true;
+}
+
+function hasExactAlias(candidateKey, cards) {
+  return cards.some((card) => cardAliases(card).some((alias) => normalizeKey(alias) === candidateKey));
+}
+
+function bestContainedAlias(candidateKey, card) {
+  return cardAliases(card)
+    .map((alias) => ({ alias, key: normalizeKey(alias) }))
+    .filter((item) => item.key.length >= 3 && candidateKey.includes(item.key) && candidateKey.length >= item.key.length + 2)
+    .sort((left, right) => right.key.length - left.key.length)[0]?.alias || "";
 }
 
 function detectCards(question, cards) {

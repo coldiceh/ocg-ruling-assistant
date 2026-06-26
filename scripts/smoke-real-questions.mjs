@@ -85,6 +85,11 @@ export function buildSmokeCaseResult(smokeCase, answer) {
       extractedVerdict: trace.extractedVerdict || "unknown",
       conditionalAnswer: subAnswer.conditionalAnswer || null,
       provisionalAnswer: subAnswer.provisionalAnswer || null,
+      officialAnswer: subAnswer.officialAnswer || null,
+      likelyAnswer: subAnswer.likelyAnswer || null,
+      clarification: subAnswer.clarification || null,
+      displayReason: subAnswer.displayReason || "",
+      cardResolutionIssue: subAnswer.cardResolutionIssue || null,
       presentation: buildUserFacingSubAnswerSummary(subAnswer),
     };
   });
@@ -105,6 +110,7 @@ export function buildSmokeCaseResult(smokeCase, answer) {
     answerHistoryWatchable: shouldRecordAnswerHistory(answer),
     answerHistoryId: shouldRecordAnswerHistory(answer) ? historyItem?.id || null : null,
     canRevalidate: Boolean(provisionalAnswer?.canRevalidate || provisionalAnswer?.watchOfficialDb),
+    cardResolutionConfirmations: answer.cardResolutionConfirmations || [],
     subAnswers: subSummaries,
     userFacingSummary: buildUserFacingSummary(answer, subSummaries),
   };
@@ -113,10 +119,24 @@ export function buildSmokeCaseResult(smokeCase, answer) {
 export function buildSmokeReport(cases) {
   const unsafeConfirmed = [];
   const missingReason = [];
+  const internalReasonLeaks = [];
+  const wrongCardResolutions = [];
+  let officialConfirmedCount = 0;
+  let likelyAnswerCount = 0;
+  let clarificationCount = 0;
+  let uselessUnknownCount = 0;
   for (const smokeCase of cases) {
+    if (hasInternalReasonLeak(smokeCase.userFacingSummary)) internalReasonLeaks.push(`${smokeCase.id}:summary`);
+    if ((smokeCase.cardResolutionConfirmations || []).some((issue) => issue.autoResolved === true)) {
+      wrongCardResolutions.push(`${smokeCase.id}:auto_resolved_short_candidate`);
+    }
     for (const subAnswer of smokeCase.subAnswers || []) {
       const key = `${smokeCase.id}:${subAnswer.questionId}`;
+      if (hasInternalReasonLeak(subAnswer.presentation?.reason) || hasInternalReasonLeak(subAnswer.presentation?.statusLabel)) {
+        internalReasonLeaks.push(key);
+      }
       if (subAnswer.status === "confirmed") {
+        officialConfirmedCount += 1;
         if (!subAnswer.evidenceIds.length) unsafeConfirmed.push(`${key}:evidenceIds_missing`);
         if (!subAnswer.directEvidenceCount) unsafeConfirmed.push(`${key}:directEvidence_missing`);
         if (!subAnswer.extractedVerdict || subAnswer.extractedVerdict === "unknown") unsafeConfirmed.push(`${key}:verdict_unknown`);
@@ -128,6 +148,9 @@ export function buildSmokeReport(cases) {
       if (subAnswer.status === "unknown" && !String(subAnswer.reason || "").trim()) {
         missingReason.push(key);
       }
+      if (subAnswer.likelyAnswer && subAnswer.likelyAnswer.status !== "not_available") likelyAnswerCount += 1;
+      if (subAnswer.clarification?.question || subAnswer.conditionalAnswer?.clarificationQuestion) clarificationCount += 1;
+      if (subAnswer.status === "unknown" && !isUsefulUnknown(smokeCase, subAnswer)) uselessUnknownCount += 1;
     }
   }
   return {
@@ -138,8 +161,16 @@ export function buildSmokeReport(cases) {
     provisionalAnswerCount: cases.filter((item) => item.provisionalAnswer).length,
     conditionalAnswerCount: cases.filter((item) => item.conditionalAnswer).length,
     clarificationQuestionCount: cases.filter((item) => item.conditionalAnswer?.clarificationQuestion).length,
+    officialConfirmedCount,
+    likelyAnswerCount,
+    clarificationCount,
+    uselessUnknownCount,
+    wrongCardResolutionCount: wrongCardResolutions.length,
+    internalReasonLeakCount: internalReasonLeaks.length,
     unsafeConfirmedCount: unsafeConfirmed.length,
     missingReasonCount: missingReason.length,
+    internalReasonLeaks,
+    wrongCardResolutions,
     unsafeConfirmed,
     missingReason,
     cases,
@@ -157,6 +188,12 @@ export function formatSmokeMarkdown(report) {
     `- provisionalAnswerCount: ${report.provisionalAnswerCount}`,
     `- conditionalAnswerCount: ${report.conditionalAnswerCount}`,
     `- clarificationQuestionCount: ${report.clarificationQuestionCount}`,
+    `- officialConfirmedCount: ${report.officialConfirmedCount}`,
+    `- likelyAnswerCount: ${report.likelyAnswerCount}`,
+    `- clarificationCount: ${report.clarificationCount}`,
+    `- uselessUnknownCount: ${report.uselessUnknownCount}`,
+    `- wrongCardResolutionCount: ${report.wrongCardResolutionCount}`,
+    `- internalReasonLeakCount: ${report.internalReasonLeakCount}`,
     `- unsafeConfirmedCount: ${report.unsafeConfirmedCount}`,
     `- missingReasonCount: ${report.missingReasonCount}`,
     "",
@@ -208,8 +245,24 @@ function buildUserFacingSummary(answer, subSummaries) {
       .join("；");
     return `条件不足：${branches}。${first.presentation.clarificationQuestion || ""}`.trim();
   }
+  if (first.likelyAnswer && first.likelyAnswer.status !== "not_available") return `可能处理（未确认）：${first.presentation.likelyAnswerText}`;
+  if (first.clarification?.question) return `需要补充：${first.clarification.question}`;
   if (first.status === "confirmed") return `已确认：${first.presentation.verdictText}`;
-  return `${first.presentation.statusLabel}：${first.reason || "暂时不能确定。"}`;
+  return `${first.presentation.statusLabel}：${first.presentation.reason || "暂时不能确定。"}`;
+}
+
+function isUsefulUnknown(smokeCase, subAnswer) {
+  return Boolean(
+    (subAnswer.likelyAnswer && subAnswer.likelyAnswer.status !== "not_available") ||
+    subAnswer.conditionalAnswer ||
+    subAnswer.clarification?.question ||
+    subAnswer.provisionalAnswer ||
+    (smokeCase.cardResolutionConfirmations || []).length
+  );
+}
+
+function hasInternalReasonLeak(value) {
+  return /\b(?:no_direct_evidence|conflicting_direct_evidence|condition_branch_missing_state|similar_evidence|card_text_only|rejected_evidence_only|parser_warning|unresolved_dependency|evidence_mentions_action_but_not_asked_result|matcher_rejected_all)\b/u.test(String(value || ""));
 }
 
 const isMain = process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href;
