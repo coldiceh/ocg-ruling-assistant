@@ -47,6 +47,10 @@ test("real ruling benchmark keeps every structured answer inside safety gates", 
           if (!trace.extractedVerdict || trace.extractedVerdict === "unknown") unsafeConfirmed.add(`${key}:verdict_unknown`);
           if (parserWarnings.length) unsafeConfirmed.add(`${key}:parser_warning_present`);
           if ((subAnswer.unresolvedDependencies || []).length) unsafeConfirmed.add(`${key}:unresolved_dependency_present`);
+          if (subAnswer.provisionalAnswer) unsafeConfirmed.add(`${key}:provisional_answer_confirmed`);
+        }
+        if (subAnswer.conditionalAnswer && subAnswer.status !== "unknown") {
+          unsafeConfirmed.add(`${key}:conditional_answer_raised_status`);
         }
 
         if (subAnswer.status === "unknown" && !String(subAnswer.reason || "").trim()) {
