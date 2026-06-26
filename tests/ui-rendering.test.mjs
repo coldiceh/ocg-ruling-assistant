@@ -63,7 +63,23 @@ test("unknown answer displays a non-empty reason", () => {
     reason: "no_direct_evidence",
   });
   assert.equal(summary.statusLabel, "资料不足");
-  assert.equal(summary.reason, "no_direct_evidence");
+  assert.match(summary.reason, /没有直接回答当前问题/);
+  assert.doesNotMatch(summary.reason, /no_direct_evidence/u);
+});
+
+test("likelyAnswer displays as unconfirmed possible handling", () => {
+  const summary = buildUserFacingSubAnswerSummary({
+    status: "unknown",
+    verdict: "unknown",
+    likelyAnswer: {
+      status: "best_effort",
+      verdict: "unknown",
+      reasoning: "根据卡片文本只能给出未确认参考。",
+      disclaimer: "未确认裁定，不能替代官方 Q&A",
+    },
+  });
+  assert.equal(summary.statusLabel, "可能处理（未确认）");
+  assert.match(summary.likelyAnswerText, /未确认裁定/);
 });
 
 test("debug trace is backed by collapsed details in the page", async () => {

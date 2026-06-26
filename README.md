@@ -4,7 +4,7 @@
 
 当前阶段：**安全可追踪原型 / conservative ruling pipeline prototype**。
 
-现阶段优先目标不是提高 `confirmed` 数量，而是避免 `unsafe confirmed`：没有直接证据、没有明确 verdict、条件分支未选中、依赖未解决时，都不能给确定结论。
+现阶段优先目标不是盲目提高 `confirmed` 数量，而是避免 `unsafe confirmed`：没有直接证据、没有明确 verdict、条件分支未选中、依赖未解决时，都不能给确定结论。同时，系统会在未确认时输出可追踪的“可能处理 / 需要补充信息”，避免只给用户一句资料不足。
 
 ## 项目定位
 
@@ -22,6 +22,7 @@
 -> gameState / eventTimeline 推理
 -> subQuestion dependency / transitionRules
 -> final gate
+-> officialAnswer / likelyAnswer / clarification
 -> AI 只负责 explanationText
 ```
 
@@ -31,12 +32,13 @@
 - 卡片文本只能作为 `cardTextEvidence`，不能单独支撑 `confirmed`。
 - Q&A / FAQ 必须回答当前 `subQuestion.askedResult`，才可能进入 `directEvidence`。
 - 相关但不能直接回答的问题，只能进入 `similarEvidence` 或 `rejectedEvidence`。
+- `likelyAnswer` 只是未确认处理参考，不能改变 `finalStatus`，也不能进入 `confirmedCount`。
 
 ## 当前测试结果
 
 最近一次本地检查：
 
-- Node tests: 198/198 passing
+- Node tests: 218/218 passing
 - Legacy engine regressions: 9/9 passing
 - Data health: `ok`
 - Readiness level: `production_ready`
@@ -56,6 +58,17 @@ Benchmark：
 - no_direct_evidence: 5
 
 当前 benchmark 的结论是：系统安全门槛有效；多语言 evidence question type classifier 修复了一部分 Q&A 类型误判，conditional answer 能解释缺状态的条件分支，但没有放宽 `directEvidence` 或 `confirmed` 门槛。
+
+Smoke real questions 当前额外统计：
+
+- total: 10
+- officialConfirmedCount: 3
+- likelyAnswerCount: 6
+- clarificationCount: 2
+- uselessUnknownCount: 0
+- wrongCardResolutionCount: 0
+- internalReasonLeakCount: 0
+- unsafeConfirmedCount: 0
 
 ## 数据状态
 
@@ -150,7 +163,7 @@ node tests/engine-regression.mjs
 状态：已确认
 结论：activates_in_graveyard
 依据：card-faq-16842-3
-原因：condition_branch_selected:activates_in_graveyard
+说明：已有 direct FAQ，且“送去墓地后”唯一选中了墓地发动分支。
 ```
 
 这里的 `confirmed` 来自 card FAQ 的 direct evidence，并且 condition branch 已经被“送去墓地后”这个状态唯一选中。
@@ -184,6 +197,19 @@ revalidation：等待官方数据库收录 direct Q&A 后重新评估
 
 这里的截图回答只进入 `provisionalAnswer`，不会进入 `directEvidence`，也不能让最终状态变成 `confirmed`。
 
+### Useful provisional answer
+
+```text
+输入：伤害计算后已经确定会被战斗破坏的卡通怪兽，能用完美世界-卡通世界的③效果暂时除外到效果处理后吗？
+
+官方确认：暂无直接 Q&A。
+可能处理（未确认）：可以参考卡片文本和相似 Q&A，但当前资料没有直接回答“这个已确定战破的卡通怪兽能否被暂时除外”。
+不能确认的原因：找到的资料与本题相关，但没有直接回答当前问题。
+需要确认：是否存在覆盖该场景的官方 Q&A / FAQ / 事务局回答。
+```
+
+这里 `likelyAnswer` 可以帮助玩家理解下一步判断方向，但 `status` 仍是 `unknown`。
+
 本地启动后端：
 
 ```bash
@@ -216,6 +242,39 @@ Content-Type: application/json
 - 内部 heuristic 状态转移不能 `confirmed`。
 - parserWarnings 非空时不能直接升级为 `confirmed`。
 - AI explanation 不能修改程序 verdict。
+
+## 三层回答模型
+
+每个子问题现在同时输出：
+
+- `officialAnswer`：严格 final gate 后的官方确认层。只有 direct evidence、明确 verdict、有效 evidenceIds 同时满足时才可能 `confirmed`。
+- `likelyAnswer`：未确认处理参考。来源可以是卡片文本、相似 Q&A、条件分支、事件时间线或事务局截图，但必须显示风险和免责声明。
+- `clarification`：当卡名、问题类型或条件分支状态不明确时，要求玩家补充信息。
+
+重要约束：
+
+- `likelyAnswer` 不会提升 `finalStatus`。
+- `likelyAnswer` 不会进入 `confirmedCount`。
+- `officialAnswer` 优先于 `likelyAnswer`。
+- 普通 UI 显示用户可读原因；内部 reason code 只在 debug trace 中显示。
+
+## 卡名确认机制
+
+卡名解析优先 exact alias / longest alias。如果输入中出现更长的疑似卡名，但数据库只命中其中较短的卡名，系统不会自动当成同一张卡。
+
+示例：
+
+```text
+输入：卡通青眼究极龙
+数据库候选：青眼究极龙
+```
+
+普通 UI 会提示：
+
+```text
+卡名需要确认：
+你输入的是“卡通青眼究极龙”，但数据库没有直接匹配。系统找到了较短候选“青眼究极龙”，不能自动当作同一张卡。
+```
 
 ## Evidence 分类
 
@@ -388,6 +447,8 @@ node scripts/export-feedback-regressions.mjs --markdown
 - eventTimeline：已实现
 - subQuestion dependencies：已实现
 - transitionRules：已实现
+- likelyAnswer / 三层回答模型：已实现（未确认处理参考不影响 confirmed）
+- 卡名候选确认机制：已实现（长卡名不能静默退化为较短卡名）
 - conditional answer / clarification question：已实现（仅用于条件分支缺状态或多分支不唯一时的 unknown 解释）
 - official response source gate：已实现（可追溯 `official_response` 可进入 ruling evidence；`official_response_screenshot` 仅生成 provisionalAnswer）
 - official response revalidation skeleton：已实现（只报告 DB direct evidence 是否出现，不自动覆盖）
@@ -441,6 +502,7 @@ node scripts/export-feedback-regressions.mjs --markdown
 - `backend/officialResponses.mjs`：官方事务局回答 / 调整中记录的来源等级和可追溯校验。
 - `backend/answerHistory.mjs`：unknown / provisional 回答历史和 watch queue 生成。
 - `backend/feedbackCases.mjs`：用户反馈 case 和 regression draft 生成。
+- `backend/likelyAnswer.mjs`：未确认但可用的 likelyAnswer / best-effort reasoning。
 - `backend/verdictExtractor.mjs`：多语言 verdict 抽取。
 - `backend/conditionBranches.mjs`：条件分支抽取。
 - `backend/gameState.mjs`：静态状态建模。

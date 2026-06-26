@@ -175,6 +175,7 @@ test("public answer uses qualitative confidence without percentages", async () =
       "timelineWarnings",
       "dependencyGraph",
       "transitionRules",
+      "cardResolutionConfirmations",
       "evidenceTrace",
       "finalStatusBeforeExplanation",
     ]);

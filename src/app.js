@@ -1167,17 +1167,22 @@ function renderSubAnswers(subAnswers) {
     verdict.textContent = formatSubAnswerVerdict(item.verdict);
     block.appendChild(verdict);
 
+    const official = document.createElement("p");
+    official.className = "sub-reasoning";
+    official.textContent = formatOfficialAnswerLine(item);
+    block.appendChild(official);
+
     if (item.reasoning) {
       const reasoning = document.createElement("p");
       reasoning.className = "sub-reasoning";
-      reasoning.textContent = item.reasoning;
+      reasoning.textContent = publicReasonForSubAnswer(item);
       block.appendChild(reasoning);
     }
 
     if (!item.reasoning && item.reason) {
       const reason = document.createElement("p");
       reason.className = "sub-reasoning";
-      reason.textContent = item.reason;
+      reason.textContent = publicReasonForSubAnswer(item);
       block.appendChild(reason);
     }
 
@@ -1194,6 +1199,14 @@ function renderSubAnswers(subAnswers) {
 
     if (item.provisionalAnswer) {
       renderProvisionalAnswer(block, item.provisionalAnswer);
+    }
+
+    if (item.likelyAnswer && item.likelyAnswer.status !== "not_available" && !item.provisionalAnswer) {
+      renderLikelyAnswer(block, item.likelyAnswer);
+    }
+
+    if (item.clarification?.question && !item.conditionalAnswer) {
+      renderClarification(block, item.clarification);
     }
 
     if (Array.isArray(item.dependencies) && item.dependencies.length) {
@@ -1247,6 +1260,8 @@ function hasDetailedSubAnswerDisplay(item) {
   return Boolean(
     item?.conditionalAnswer ||
     item?.provisionalAnswer ||
+    item?.likelyAnswer ||
+    item?.clarification ||
     item?.reasoning ||
     item?.reason ||
     item?.stateMessage ||
@@ -1259,10 +1274,11 @@ function hasDetailedSubAnswerDisplay(item) {
 }
 
 function subAnswerStatusLabel(item) {
+  if (item?.officialAnswer?.status === "confirmed" || item?.status === "confirmed") return "已确认";
   if (item?.provisionalAnswer) return "未确认处理方式";
   if (item?.conditionalAnswer) return "条件不足";
-  if (item?.status === "confirmed") return "已确认";
-  if (item?.status === "inferred") return "相似依据";
+  if (item?.likelyAnswer && item.likelyAnswer.status !== "not_available") return "可能处理（未确认）";
+  if (item?.status === "inferred") return "可能处理（未确认）";
   if (item?.status === "parse_failed") return "解析失败";
   return "资料不足";
 }
@@ -1321,6 +1337,86 @@ function renderProvisionalAnswer(parent, provisionalAnswer) {
   wrapper.appendChild(note);
 
   parent.appendChild(wrapper);
+}
+
+function renderLikelyAnswer(parent, likelyAnswer) {
+  const wrapper = document.createElement("div");
+  wrapper.className = "sub-reasoning";
+
+  const title = document.createElement("p");
+  title.textContent = "可能处理（未确认）：";
+  wrapper.appendChild(title);
+
+  const body = document.createElement("p");
+  const verdict = likelyAnswer.verdict && likelyAnswer.verdict !== "unknown"
+    ? `倾向：${formatSubAnswerVerdict(likelyAnswer.verdict)}。`
+    : "";
+  body.textContent = `${verdict}${likelyAnswer.reasoning || "只能给出未确认处理参考。"} ${likelyAnswer.disclaimer || "未确认裁定，不能替代官方 Q&A"}`.trim();
+  wrapper.appendChild(body);
+
+  if (Array.isArray(likelyAnswer.riskFlags) && likelyAnswer.riskFlags.length) {
+    const risk = document.createElement("p");
+    risk.textContent = `风险提示：${likelyAnswer.riskFlags.map(formatRiskFlag).join("、")}`;
+    wrapper.appendChild(risk);
+  }
+
+  parent.appendChild(wrapper);
+}
+
+function renderClarification(parent, clarification) {
+  const wrapper = document.createElement("div");
+  wrapper.className = "sub-reasoning";
+  const question = document.createElement("p");
+  question.textContent = clarification.question;
+  wrapper.appendChild(question);
+  if (Array.isArray(clarification.options) && clarification.options.length) {
+    const options = document.createElement("p");
+    options.textContent = `可选项：${clarification.options.join("、")}`;
+    wrapper.appendChild(options);
+  }
+  parent.appendChild(wrapper);
+}
+
+function formatOfficialAnswerLine(item) {
+  const official = item?.officialAnswer || {};
+  if (official.status === "confirmed") {
+    return `官方确认：已确认。依据 ID：${(official.evidenceIds || item.evidenceIds || []).join("、") || "未列出"}`;
+  }
+  if (official.status === "parse_failed") return "官方确认：形式化解析失败，无法进入裁定判断。";
+  return "官方确认：暂无直接 Q&A / FAQ 可以确认该问题。";
+}
+
+function publicReasonForSubAnswer(item) {
+  if (item?.displayReason) return item.displayReason;
+  if (item?.cardResolutionIssue) return "卡名没有 exact match，不能自动套用较短候选卡。";
+  if (item?.provisionalAnswer) return "官方数据库暂无直接裁定；存在事务局回答截图，需要后续复核。";
+  if (item?.conditionalAnswer) return "已找到相关 FAQ，但当前问题缺少必要状态，无法确定适用哪个分支。";
+  if (item?.unresolvedDependencies?.length) return "该问题依赖另一个子问题的结果，当前不能确认。";
+  const reason = String(item?.reason || item?.reasoning || "");
+  if (/conflicting_direct_evidence|conflicting_similar_evidence|冲突/u.test(reason)) return "候选资料结论冲突，不能确认。";
+  if (/condition_branch_missing_state|condition_branch_ambiguous/u.test(reason)) return "已找到条件分支证据，但当前场景不足以选择唯一分支。";
+  if (/no_direct_evidence|similar_evidence|evidence_mentions_action_but_not_asked_result|no_explicit_polarity/u.test(reason)) return "找到的资料与本题相关，但没有直接回答当前问题。";
+  if (/card_text_only/u.test(reason)) return "目前只有卡片文本，没有直接 Q&A。";
+  if (/rejected_evidence_only|matcher_rejected_all|different_question|question_type_mismatch/u.test(reason)) return "候选资料回答的是不同问题或场景不一致。";
+  if (/parse_failed|formal_query_parse_failed/u.test(reason)) return "形式化解析失败，需要补充卡名、效果编号或问题类型。";
+  if (/parser_warning/u.test(reason)) return "形式化解析存在不确定项，不能确认裁定。";
+  return "暂时不能确认，需要官方 Q&A 或补充场景。";
+}
+
+function formatRiskFlag(flag) {
+  const labels = {
+    card_name_unresolved: "卡名未确认",
+    question_type_unknown: "问题类型未确认",
+    official_database_not_found: "官方数据库未收录",
+    condition_branch_requires_state: "缺少条件分支状态",
+    similar_evidence_only: "只有相似资料",
+    unresolved_dependency: "依赖子问题未解决",
+    conflicting_evidence: "候选资料冲突",
+    different_question_evidence: "候选资料回答不同问题",
+    no_direct_evidence: "没有 direct evidence",
+    insufficient_context: "上下文不足",
+  };
+  return labels[flag] || flag;
 }
 
 function formatProvisionalVerdict(verdict, fallback) {

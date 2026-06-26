@@ -1,8 +1,9 @@
 export function statusLabelForSubAnswer(item = {}) {
+  if (item.officialAnswer?.status === "confirmed" || item.status === "confirmed") return "已确认";
   if (item.provisionalAnswer) return "未确认处理方式";
   if (item.conditionalAnswer) return "条件不足";
-  if (item.status === "confirmed") return "已确认";
-  if (item.status === "inferred") return "相似依据";
+  if (item.likelyAnswer && item.likelyAnswer.status !== "not_available") return "可能处理（未确认）";
+  if (item.status === "inferred") return "可能处理（未确认）";
   if (item.status === "parse_failed") return "解析失败";
   return "资料不足";
 }
@@ -42,14 +43,46 @@ export function buildUserFacingSubAnswerSummary(item = {}) {
   const provisionalText = item.provisionalAnswer
     ? formatProvisionalVerdictText(item.provisionalAnswer.verdict, item.provisionalAnswer.explanation)
     : null;
+  const likelyAnswerText = item.likelyAnswer && item.likelyAnswer.status !== "not_available"
+    ? formatLikelyAnswerText(item.likelyAnswer)
+    : null;
   return {
     statusLabel,
     verdictText: formatDisplayVerdict(item.verdict),
-    reason: item.reason || item.reasoning || "",
+    officialStatusLabel: item.officialAnswer?.status === "confirmed" ? "官方确认：已确认" : "官方确认：暂无直接裁定",
+    reason: item.displayReason || publicReasonForSubAnswer(item),
     evidenceIds: item.evidenceIds || [],
     conditionalBranches,
-    clarificationQuestion: item.conditionalAnswer?.clarificationQuestion || null,
+    clarificationQuestion: item.clarification?.question || item.conditionalAnswer?.clarificationQuestion || null,
     provisionalText,
+    likelyAnswerText,
+    riskFlags: item.likelyAnswer?.riskFlags || [],
     debugTraceDefaultCollapsed: true,
   };
+}
+
+export function formatLikelyAnswerText(likelyAnswer = {}) {
+  const verdict = likelyAnswer.verdict && likelyAnswer.verdict !== "unknown"
+    ? `倾向：${formatDisplayVerdict(likelyAnswer.verdict)}。`
+    : "";
+  return `${verdict}${likelyAnswer.reasoning || "只能给出未确认处理参考。"} ${likelyAnswer.disclaimer || "未确认裁定，不能替代官方 Q&A"}`.trim();
+}
+
+export function publicReasonForSubAnswer(item = {}) {
+  if (item.displayReason) return item.displayReason;
+  if (item.cardResolutionIssue) return "卡名没有 exact match，不能自动套用较短候选卡。";
+  if (item.provisionalAnswer) return "官方数据库暂无直接裁定；存在事务局回答截图，需要后续复核。";
+  if (item.conditionalAnswer) return "已找到相关 FAQ，但当前问题缺少必要状态，无法确定适用哪个分支。";
+  if ((item.unresolvedDependencies || []).length) return "该问题依赖另一个子问题的结果，当前不能确认。";
+  const reason = String(item.reason || item.reasoning || "");
+  if (/conflicting_direct_evidence|conflicting_similar_evidence|冲突/u.test(reason)) return "候选资料结论冲突，不能确认。";
+  if (/condition_branch_missing_state|condition_branch_ambiguous/u.test(reason)) return "已找到条件分支证据，但当前场景不足以选择唯一分支。";
+  if (/no_direct_evidence|similar_evidence|evidence_mentions_action_but_not_asked_result|no_explicit_polarity/u.test(reason)) return "找到的资料与本题相关，但没有直接回答当前问题。";
+  if (/card_text_only/u.test(reason)) return "目前只有卡片文本，没有直接 Q&A。";
+  if (/rejected_evidence_only|matcher_rejected_all|different_question|question_type_mismatch/u.test(reason)) return "候选资料回答的是不同问题或场景不一致。";
+  if (/parse_failed|formal_query_parse_failed/u.test(reason)) return "形式化解析失败，需要补充卡名、效果编号或问题类型。";
+  if (/parser_warning/u.test(reason)) return "形式化解析存在不确定项，不能确认裁定。";
+  if (item.status === "confirmed") return "已有 direct evidence 且 verdict 明确。";
+  if (item.status === "inferred") return "只有相似证据，不能作为官方确认。";
+  return "暂时不能确认，需要官方 Q&A 或补充场景。";
 }
