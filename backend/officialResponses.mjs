@@ -117,6 +117,10 @@ export function buildProvisionalAnswerFromOfficialResponse(record) {
     sourceNote: record.sourceNote || "",
     officialText: record.officialText || "",
     watchOfficialDb: Boolean(record.watchOfficialDb?.enabled),
+    canRevalidate: Boolean(record.watchOfficialDb?.enabled),
+    revalidationReason: record.watchOfficialDb?.enabled
+      ? "official_database_direct_evidence_watch"
+      : "watch_official_db_not_configured",
     watchOfficialDbConfig: record.watchOfficialDb || null,
   };
 }

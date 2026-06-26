@@ -36,7 +36,7 @@
 
 最近一次本地检查：
 
-- Node tests: 172/172 passing
+- Node tests: 181/181 passing
 - Legacy engine regressions: 9/9 passing
 - Data health: `ok`
 - Readiness level: `production_ready`
@@ -75,6 +75,7 @@ Benchmark：
 - `data/cards.json`
 - `data/rulings.json`
 - `data/official-responses.json`
+- `data/answer-history.json`
 - `data/card-alias-index.json`
 - `data/qa-index.json`
 - `data/tracked-cards.json`
@@ -89,6 +90,7 @@ Benchmark：
 - `scripts/audit-no-direct.mjs`：审计 benchmark 中的 `no_direct_evidence` 原因。
 - `scripts/audit-evidence-types.mjs`：审计 no-direct case 中候选 Q&A 的多语言问题类型识别。
 - `scripts/revalidate-official-responses.mjs`：检查 provisional official response 是否已有官方 DB direct evidence。
+- `scripts/revalidate-answers.mjs`：重评估 answer history watch queue 中的 unknown / provisional 问题。
 
 运行时如果发现本地缺少卡片或该卡 Q&A / FAQ，会尝试 on-demand sync 并更新缓存；如果实时来源不可用，会在 trace 中显示 `live_source_unavailable`，并保守降级。
 
@@ -114,6 +116,7 @@ node scripts/benchmark-report.mjs
 node scripts/audit-no-direct.mjs
 node scripts/audit-evidence-types.mjs
 node scripts/revalidate-official-responses.mjs
+node scripts/revalidate-answers.mjs
 ```
 
 运行测试：
@@ -248,6 +251,36 @@ node scripts/revalidate-official-responses.mjs
 
 该脚本只报告是否已经在官方 Q&A / FAQ / database 中找到覆盖 `expectedAskedResult` 的 direct evidence，不会自动覆盖原始截图记录。
 
+## Answer history and revalidation
+
+默认不会记录回答历史。只有显式设置：
+
+```bash
+RECORD_ANSWER_HISTORY=true
+```
+
+系统才会把可重评估的结构化结果写入 `data/answer-history.json`。记录内容只包括 `originalText`、`formalQuery`、watch cards / terms、最终 `status` / `verdict`、unknown reasons、`provisionalAnswer` 和 evidence IDs；不记录 AI explanation，也不允许 AI explanation 参与后续重评估。
+
+进入 watch queue 的情况：
+
+- `confirmed` 默认不进入 watch queue。
+- `provisionalAnswer` 一定进入 watch queue。
+- `unknown` 且原因是 `no_direct_evidence`、`pending_adjustment`、`provisional_official_response` 或 `condition_branch_missing_state` 时，可以进入 watch queue。
+
+重评估命令：
+
+```bash
+node scripts/revalidate-answers.mjs
+```
+
+重评估会用保存的 `formalQuery` 重新跑 retrieval -> matcher -> verdict extractor -> final gate。找到官方 Q&A / FAQ / official database direct evidence 后，可以报告 `upgraded_to_confirmed`；否则报告 `unchanged`、`new_related_evidence` 或 `live_source_timeout`。脚本当前只报告结果，不会自动改旧答案。
+
+重要约束：
+
+- 截图、provisional、pending 或推测不会自动变成 `confirmed`。
+- official DB evidence 永远优先于 `provisionalAnswer`。
+- final gate 仍是确认结论的唯一出口。
+
 ## 已完成核对表
 
 - parser / formal query：已实现
@@ -265,6 +298,7 @@ node scripts/revalidate-official-responses.mjs
 - conditional answer / clarification question：已实现（仅用于条件分支缺状态或多分支不唯一时的 unknown 解释）
 - official response source gate：已实现（可追溯 `official_response` 可进入 ruling evidence；`official_response_screenshot` 仅生成 provisionalAnswer）
 - official response revalidation skeleton：已实现（只报告 DB direct evidence 是否出现，不自动覆盖）
+- answer history / revalidation queue：已实现（默认关闭，只记录结构化 unknown / provisional watch item）
 - benchmark report：已实现
 - no_direct_evidence audit：已实现
 - on-demand sync / cache：已实现
@@ -278,7 +312,7 @@ node scripts/revalidate-official-responses.mjs
 1. no_direct_evidence 后续优化：针对 `all_candidates_different_question` / `all_candidates_conflicting` 补充更精确官方数据源。
 2. pending_adjustment support：只允许 `unknown`，并清楚提示调整中。
 3. official response ingestion：补充可追溯字段采集、去重和更新流程。
-4. answer revalidation after database update：将当前 report-only 脚本接入定时同步和历史答案复核。
+4. answer revalidation after database update：将当前 report-only 脚本接入定时同步、前端提醒和历史答案复核。
 5. larger real ruling benchmark：扩大真实问题集。
 6. data coverage expansion：扩大 Q&A / FAQ 覆盖，接近生产可用。
 7. user feedback -> regression case：用户反馈转成固定回归测试。
@@ -286,7 +320,7 @@ node scripts/revalidate-official-responses.mjs
 当前明确未实现或只处于计划阶段：
 
 - probable answer for pending_adjustment
-- answer history / revalidation after database update
+- answer history UI reminder / automatic notification after database update
 - larger data coverage / production readiness
 
 ## 最新裁定 / 调整中支持计划
@@ -310,6 +344,7 @@ node scripts/revalidate-official-responses.mjs
 - `backend/dataIndex.mjs`：数据加载和索引。
 - `backend/evidenceQuestionTypeClassifier.mjs`：中 / 日 / 英 Q&A 问题类型识别。
 - `backend/officialResponses.mjs`：官方事务局回答 / 调整中记录的来源等级和可追溯校验。
+- `backend/answerHistory.mjs`：unknown / provisional 回答历史和 watch queue 生成。
 - `backend/verdictExtractor.mjs`：多语言 verdict 抽取。
 - `backend/conditionBranches.mjs`：条件分支抽取。
 - `backend/gameState.mjs`：静态状态建模。
