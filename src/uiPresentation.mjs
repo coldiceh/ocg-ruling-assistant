@@ -44,7 +44,7 @@ export function buildUserFacingSubAnswerSummary(item = {}) {
     ? formatProvisionalVerdictText(item.provisionalAnswer.verdict, item.provisionalAnswer.explanation)
     : null;
   const likelyAnswerText = item.likelyAnswer && item.likelyAnswer.status !== "not_available"
-    ? formatLikelyAnswerText(item.likelyAnswer)
+    ? formatLikelyAnswerText(item.likelyAnswer, item)
     : null;
   return {
     statusLabel,
@@ -53,7 +53,7 @@ export function buildUserFacingSubAnswerSummary(item = {}) {
     reason: item.displayReason || publicReasonForSubAnswer(item),
     evidenceIds: item.evidenceIds || [],
     conditionalBranches,
-    clarificationQuestion: item.clarification?.question || item.conditionalAnswer?.clarificationQuestion || null,
+    clarificationQuestion: item.clarification?.question || item.conditionalAnswer?.clarificationQuestion || fallbackClarificationForSubAnswer(item),
     provisionalText,
     likelyAnswerText,
     riskFlags: item.likelyAnswer?.riskFlags || [],
@@ -61,7 +61,7 @@ export function buildUserFacingSubAnswerSummary(item = {}) {
   };
 }
 
-export function formatLikelyAnswerText(likelyAnswer = {}) {
+export function formatLikelyAnswerText(likelyAnswer = {}, context = {}) {
   const verdict = likelyAnswer.verdict && likelyAnswer.verdict !== "unknown"
     ? `倾向：${formatDisplayVerdict(likelyAnswer.verdict)}。`
     : "";
@@ -71,7 +71,12 @@ export function formatLikelyAnswerText(likelyAnswer = {}) {
     likelyAnswer.whyNotConfirmed ? `为什么不能确认：${likelyAnswer.whyNotConfirmed}` : "",
     likelyAnswer.neededEvidence ? `需要确认：${likelyAnswer.neededEvidence}` : "",
   ].filter(Boolean);
-  const body = structured.length ? structured.join(" ") : likelyAnswer.reasoning || "只能给出未确认处理参考。";
+  const body = structured.length ? structured.join(" ") : [
+    context.sourceText ? `问题核心：${context.sourceText}` : "",
+    `未确认分析：${likelyAnswer.reasoning || "只能给出未确认处理参考。"}`,
+    "为什么不能确认：目前没有能直接回答当前问题的官方 Q&A / FAQ。",
+    "需要确认：需要能覆盖该场景的官方 Q&A / FAQ / 事务局回答。",
+  ].filter(Boolean).join(" ");
   return `${verdict}${body} ${likelyAnswer.disclaimer || "未确认裁定，不能替代官方 Q&A"}`.trim();
 }
 
@@ -92,4 +97,10 @@ export function publicReasonForSubAnswer(item = {}) {
   if (item.status === "confirmed") return "已有 direct evidence 且 verdict 明确。";
   if (item.status === "inferred") return "只有相似证据，不能作为官方确认。";
   return "暂时不能确认，需要官方 Q&A 或补充场景。";
+}
+
+function fallbackClarificationForSubAnswer(item = {}) {
+  if (!item || item.status !== "unknown") return null;
+  if ((item.likelyAnswer && item.likelyAnswer.status !== "not_available") || item.conditionalAnswer || item.provisionalAnswer || item.clarification?.question) return null;
+  return "需要确认：请补充正式卡名、效果编号、具体时点，或提供能直接覆盖该场景的官方 Q&A / FAQ。";
 }

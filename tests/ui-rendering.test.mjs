@@ -67,10 +67,20 @@ test("unknown answer displays a non-empty reason", () => {
   assert.doesNotMatch(summary.reason, /no_direct_evidence/u);
 });
 
+test("bare unknown answer shows a fallback clarification prompt", () => {
+  const summary = buildUserFacingSubAnswerSummary({
+    status: "unknown",
+    verdict: "unknown",
+  });
+  assert.match(summary.clarificationQuestion, /需要确认/);
+  assert.match(summary.clarificationQuestion, /官方 Q&A/);
+});
+
 test("likelyAnswer displays as unconfirmed possible handling", () => {
   const summary = buildUserFacingSubAnswerSummary({
     status: "unknown",
     verdict: "unknown",
+    sourceText: "能否处理这个场景？",
     likelyAnswer: {
       status: "best_effort",
       verdict: "unknown",
@@ -80,6 +90,36 @@ test("likelyAnswer displays as unconfirmed possible handling", () => {
   });
   assert.equal(summary.statusLabel, "可能处理（未确认）");
   assert.match(summary.likelyAnswerText, /未确认裁定/);
+  assert.match(summary.likelyAnswerText, /问题核心/);
+  assert.match(summary.likelyAnswerText, /为什么不能确认/);
+});
+
+test("unresolved card clarification is visible as a normal prompt", () => {
+  const summary = buildUserFacingSubAnswerSummary({
+    status: "unknown",
+    verdict: "unknown",
+    cardResolutionIssue: {
+      unresolvedCardName: "卡通青眼究极龙",
+      candidateCards: [{ name: "青眼究极龙" }],
+    },
+    clarification: {
+      question: "请确认你指的是哪张卡：卡通青眼究极龙？",
+      options: ["青眼究极龙"],
+    },
+  });
+  assert.match(summary.reason, /卡名没有 exact match/);
+  assert.match(summary.clarificationQuestion, /卡通青眼究极龙/);
+});
+
+test("confirmed answer exposes evidence ids in ordinary summary", () => {
+  const summary = buildUserFacingSubAnswerSummary({
+    status: "confirmed",
+    verdict: "can",
+    evidenceIds: ["qa-1"],
+    officialAnswer: { status: "confirmed", verdict: "can", evidenceIds: ["qa-1"] },
+  });
+  assert.equal(summary.statusLabel, "已确认");
+  assert.deepEqual(summary.evidenceIds, ["qa-1"]);
 });
 
 test("debug trace is backed by collapsed details in the page", async () => {

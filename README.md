@@ -38,7 +38,7 @@
 
 最近一次本地检查：
 
-- Node tests: 223/223 passing
+- Node tests: 239/239 passing
 - Legacy engine regressions: 9/9 passing
 - Data health: `ok`
 - Readiness level: `production_ready`
@@ -55,7 +55,7 @@ Benchmark：
 - conditionalAnswerCount: 2
 - clarificationQuestionCount: 2
 - verdict_extraction_unknown: 0
-- no_direct_evidence: 5
+- no_direct_evidence: 6
 
 当前 benchmark 的结论是：系统安全门槛有效；多语言 evidence question type classifier 修复了一部分 Q&A 类型误判，conditional answer 能解释缺状态的条件分支，但没有放宽 `directEvidence` 或 `confirmed` 门槛。
 
@@ -69,6 +69,20 @@ Smoke real questions 当前额外统计：
 - wrongCardResolutionCount: 0
 - internalReasonLeakCount: 0
 - unsafeConfirmedCount: 0
+
+UI acceptance 当前额外统计：
+
+- total: 20
+- passCount: 20
+- needsReviewCount: 0
+- visibleLikelyAnswerCount: 12
+- visibleClarificationCount: 8
+- visibleProvisionalAnswerCount: 1
+- visibleUnresolvedCardPromptCount: 7
+- uselessVisibleAnswerCount: 0
+- internalReasonLeakCount: 0
+- mistakenConfirmedCount: 0
+- wrongCardResolutionSuspectedCount: 0
 
 ## 数据状态
 
@@ -106,6 +120,7 @@ Smoke real questions 当前额外统计：
 - `scripts/audit-evidence-types.mjs`：审计 no-direct case 中候选 Q&A 的多语言问题类型识别。
 - `scripts/smoke-real-questions.mjs`：用真实问题跑完整 pipeline，输出 JSON 或 Markdown smoke report。
 - `scripts/manual-acceptance-check.mjs`：用真实问题生成适合人工验收的报告，并把失败项转成 feedback draft。
+- `scripts/ui-acceptance-real-questions.mjs`：用 20 个真实问题检查普通用户实际可见回答是否有用。
 - `scripts/list-feedback-cases.mjs`：统计并列出用户反馈 case。
 - `scripts/export-feedback-regressions.mjs`：导出用户反馈对应的 regression draft，不自动写入 benchmark。
 - `scripts/revalidate-official-responses.mjs`：检查 provisional official response 是否已有官方 DB direct evidence。
@@ -137,6 +152,7 @@ node scripts/audit-evidence-types.mjs
 node scripts/smoke-real-questions.mjs
 node scripts/smoke-real-questions.mjs --markdown
 node scripts/manual-acceptance-check.mjs
+node scripts/ui-acceptance-real-questions.mjs
 node scripts/list-feedback-cases.mjs
 node scripts/export-feedback-regressions.mjs
 node scripts/export-feedback-regressions.mjs --markdown
@@ -174,6 +190,24 @@ node scripts/manual-acceptance-check.mjs
 ```
 
 它会生成 `data/acceptance-report.json`，检查是否存在 unsafe confirmed、useless unknown、内部 reason 泄漏、可疑卡名错配，并把需要人工处理的 case 转成 feedback draft。该报告不会修改 benchmark，也不会自动改变裁定答案。
+
+## How to read an answer
+
+普通页面会把内部判断压缩成几类可见信息：
+
+1. **官方确认**：已经找到 direct official evidence，并显示依据 ID；这是可以作为标准裁定参考的层级。
+2. **未确认分析**：基于规则结构、卡片文本、相似资料或时间线给出可能处理；它必须显示“未确认”，不能当官方裁定。
+3. **条件分支**：已找到 FAQ / Q&A 的多个分支，但题目缺少状态；页面会列出各分支并追问需要补充的信息。
+4. **事务局截图**：显示为“事务局回答截图 / 官方 DB 未收录”，等待 revalidation；不会自动变成 `confirmed`。
+5. **卡名需要确认**：如果只命中较短候选，系统会要求确认，不会把短卡名冒充成长卡名。
+
+如果最终仍不能确认，普通页面也应说明“为什么不能确认”和“需要什么补充或官方裁定”，而不是显示内部 reason code。
+
+UI 试用验收脚本：
+
+```bash
+node scripts/ui-acceptance-real-questions.mjs
+```
 
 ## Example outputs
 
