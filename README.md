@@ -209,6 +209,20 @@ UI 试用验收脚本：
 node scripts/ui-acceptance-real-questions.mjs
 ```
 
+## Alpha playtest checklist
+
+- **官方直接裁定**：有 direct official evidence，可作为直接依据。
+- **规则推导结论**：按公开规则、卡片文本与数据库裁定结构推导，不等同于 direct Q&A。
+- **事务局回答参考**：官方数据库尚未收录时作为 provisional 参考，不能自动 confirmed。
+- **卡名需要确认**：系统不会用较短卡名冒充输入中的长卡名。
+- 遇到错误时使用反馈入口生成 regression draft；反馈不会立即改变当前答案。
+
+人工试用报告：
+
+```bash
+node scripts/manual-playtest-report.mjs
+```
+
 ## Example outputs
 
 ### Confirmed official ruling
