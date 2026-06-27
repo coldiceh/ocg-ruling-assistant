@@ -1,0 +1,66 @@
+[
+  {
+    "id": "playtest-ip-masquerena-link-summon",
+    "originalQuestion": "对方主要阶段，能否发动I：P百变莱娜的效果，用它和另一只怪兽连接召唤S：P小夜骑士？",
+    "category": "missing_rule_concept",
+    "visibleStatus": "资料不足",
+    "visibleSummary": "找到的资料与本题相关，但没有直接回答当前问题。",
+    "reviewReasons": [
+      "missing_rule_concept"
+    ],
+    "generatedRegressionDraft": {
+      "forbiddenStatuses": [],
+      "notes": "Playtest draft only. Confirm the source and failure mode before converting to a regression test."
+    },
+    "status": "new",
+    "createdAt": "2026-06-27T04:19:32.539Z"
+  },
+  {
+    "id": "playtest-macro-cosmos-power-tool-replacement",
+    "originalQuestion": "大宇宙适用中，动力工具龙被破坏的场合，能否把装备魔法送去墓地来代替破坏？",
+    "category": "missing_rule_concept",
+    "visibleStatus": "资料不足",
+    "visibleSummary": "目前只有卡片文本，没有直接 Q&A。",
+    "reviewReasons": [
+      "missing_rule_concept"
+    ],
+    "generatedRegressionDraft": {
+      "forbiddenStatuses": [],
+      "notes": "Playtest draft only. Confirm the source and failure mode before converting to a regression test."
+    },
+    "status": "new",
+    "createdAt": "2026-06-27T04:19:32.539Z"
+  },
+  {
+    "id": "playtest-ip-main-phase-link-summon",
+    "originalQuestion": "对方主要阶段，I：P百变莱娜能否发动①效果立即进行连接召唤？",
+    "category": "missing_rule_concept",
+    "visibleStatus": "资料不足",
+    "visibleSummary": "候选资料结论冲突，不能确认。",
+    "reviewReasons": [
+      "missing_rule_concept"
+    ],
+    "generatedRegressionDraft": {
+      "forbiddenStatuses": [],
+      "notes": "Playtest draft only. Confirm the source and failure mode before converting to a regression test."
+    },
+    "status": "new",
+    "createdAt": "2026-06-27T04:19:32.539Z"
+  },
+  {
+    "id": "playtest-sky-striker-kagari-link-summon",
+    "originalQuestion": "闪刀姬-燎里连接召唤成功时，能否发动①效果把墓地的闪刀魔法加入手卡？",
+    "category": "missing_rule_concept",
+    "visibleStatus": "资料不足",
+    "visibleSummary": "暂时不能确认，需要官方 Q&A 或补充场景。 需要确认：请补充正式卡名、效果编号、具体时点，或提供能直接覆盖该场景的官方 Q&A / FAQ。",
+    "reviewReasons": [
+      "missing_rule_concept"
+    ],
+    "generatedRegressionDraft": {
+      "forbiddenStatuses": [],
+      "notes": "Playtest draft only. Confirm the source and failure mode before converting to a regression test."
+    },
+    "status": "new",
+    "createdAt": "2026-06-27T04:19:32.539Z"
+  }
+]

@@ -3,6 +3,7 @@ export function statusLabelForSubAnswer(item = {}) {
   if (item.ruleDerivedAnswer?.status === "rule_derived") return "规则推导结论";
   if (item.provisionalAnswer) return "事务局回答参考";
   if (item.conditionalAnswer) return "条件不足";
+  if (item.cardResolutionIssue || item.clarification?.question?.includes("哪张卡")) return "卡名需要确认";
   if (item.likelyAnswer && item.likelyAnswer.status !== "not_available") return "可能处理（未确认）";
   if (item.status === "inferred") return "可能处理（未确认）";
   if (item.status === "parse_failed") return "解析失败";
@@ -44,7 +45,7 @@ export function buildUserFacingSubAnswerSummary(item = {}) {
   const provisionalText = item.provisionalAnswer
     ? formatProvisionalVerdictText(item.provisionalAnswer.verdict, item.provisionalAnswer.explanation)
     : null;
-  const likelyAnswerText = item.likelyAnswer && item.likelyAnswer.status !== "not_available"
+  const likelyAnswerText = item.likelyAnswer && item.likelyAnswer.status !== "not_available" && !item.cardResolutionIssue
     ? formatLikelyAnswerText(item.likelyAnswer, item)
     : null;
   const ruleDerivedAnswerText = item.ruleDerivedAnswer?.status === "rule_derived"

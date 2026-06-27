@@ -716,7 +716,12 @@ function renderBackendAnswer(answer) {
   updateModelStatus(modelStatusFromAnswer(answer));
   ui.verdictBlock.className = `result-block verdict-block ${confidence.className || ""}`.trim();
   ui.confidenceText.textContent = confidence.label || "不能确定";
-  ui.verdictTitle.textContent = answer?.verdictTitle || "后端没有返回结论";
+  const hasCardResolutionIssue = (answer?.subAnswers || []).some((item) => item.cardResolutionIssue || item.clarification?.question?.includes("哪张卡"));
+  ui.verdictTitle.textContent = answer?.mode === "confirmed"
+    ? "官方直接裁定"
+    : hasCardResolutionIssue
+      ? "卡名需要确认"
+      : answer?.verdictTitle || "后端没有返回结论";
   ui.rulingBasisText.textContent = answer?.rulingBasis || basisFromBackendMode(answer?.mode);
   ui.verdictBody.textContent = answer?.verdict || "暂时不能给确定裁定。";
   renderSubAnswers(answer?.subAnswers || []);
@@ -1170,21 +1175,21 @@ function renderSubAnswers(subAnswers) {
     const verdict = document.createElement("div");
     verdict.className = "sub-verdict";
     verdict.textContent = formatSubAnswerVerdict(item.verdict);
-    block.appendChild(verdict);
+    if (!item.ruleDerivedAnswer && !item.cardResolutionIssue) block.appendChild(verdict);
 
     const official = document.createElement("p");
     official.className = "sub-reasoning";
     official.textContent = formatOfficialAnswerLine(item);
     block.appendChild(official);
 
-    if (item.reasoning) {
+    if (item.reasoning && !item.ruleDerivedAnswer) {
       const reasoning = document.createElement("p");
       reasoning.className = "sub-reasoning";
       reasoning.textContent = publicReasonForSubAnswer(item);
       block.appendChild(reasoning);
     }
 
-    if (!item.reasoning && item.reason) {
+    if (!item.reasoning && item.reason && !item.ruleDerivedAnswer) {
       const reason = document.createElement("p");
       reason.className = "sub-reasoning";
       reason.textContent = publicReasonForSubAnswer(item);
@@ -1208,7 +1213,7 @@ function renderSubAnswers(subAnswers) {
 
     if (item.ruleDerivedAnswer && !item.provisionalAnswer) {
       renderRuleDerivedAnswer(block, item.ruleDerivedAnswer);
-    } else if (item.likelyAnswer && item.likelyAnswer.status !== "not_available" && !item.provisionalAnswer) {
+    } else if (item.likelyAnswer && item.likelyAnswer.status !== "not_available" && !item.provisionalAnswer && !item.cardResolutionIssue) {
       renderLikelyAnswer(block, item.likelyAnswer, item);
     }
 
@@ -1291,6 +1296,7 @@ function subAnswerStatusLabel(item) {
   if (item?.ruleDerivedAnswer?.status === "rule_derived") return "RULE-DERIVED · 规则推导结论";
   if (item?.provisionalAnswer) return "PROVISIONAL · 事务局回答参考";
   if (item?.conditionalAnswer) return "条件不足";
+  if (item?.cardResolutionIssue || item?.clarification?.question?.includes("哪张卡")) return "VERIFY-CARD · 卡名需要确认";
   if (item?.likelyAnswer && item.likelyAnswer.status !== "not_available") return "可能处理（未确认）";
   if (item?.status === "inferred") return "可能处理（未确认）";
   if (item?.status === "parse_failed") return "解析失败";
