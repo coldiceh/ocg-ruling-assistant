@@ -23,7 +23,7 @@ test("transaction rollback copy-effect question exposes the real issue instead o
   });
   const item = report.cases[0];
   const sub = item.subAnswers[0];
-  assert.equal(item.officialAnswer.status, "unknown");
+  assert.equal(item.officialAnswer.status, "not_found");
   assert.equal(sub.status, "unknown");
   assert.ok(item.resolvedCards.some((card) => card.name === "事务回滚"));
   assert.ok(item.unresolvedCardNames.includes("随心捏军费"));
@@ -57,7 +57,7 @@ test("illusion of chaos reveal question gives concept analysis or card-name clar
     cases: [PRODUCT_ACCEPTANCE_REAL_QUESTIONS.find((item) => item.id === "illusion-of-chaos-reveal-same-card-chain")],
   });
   const item = report.cases[0];
-  assert.equal(item.officialAnswer.status, "unknown");
+  assert.equal(item.officialAnswer.status, "not_found");
   assert.ok(item.unresolvedCardNames.includes("黑魔术的护符"));
   assert.ok(item.unresolvedCardNames.includes("混沌之幻想魔术师"));
   assert.equal(item.likelyAnswer.status, "best_effort");

@@ -7,13 +7,13 @@ import {
   statusLabelForSubAnswer,
 } from "../src/uiPresentation.mjs";
 
-test("confirmed answer displays 已确认", () => {
+test("confirmed answer displays 官方直接裁定", () => {
   const summary = buildUserFacingSubAnswerSummary({
     status: "confirmed",
     verdict: "can",
     evidenceIds: ["qa-1"],
   });
-  assert.equal(summary.statusLabel, "已确认");
+  assert.equal(summary.statusLabel, "官方直接裁定");
   assert.equal(summary.verdictText, "can");
 });
 
@@ -30,7 +30,7 @@ test("provisionalAnswer displays unconfirmed official-response screenshot wordin
       },
     },
   });
-  assert.equal(summary.statusLabel, "未确认处理方式");
+  assert.equal(summary.statusLabel, "事务局回答参考");
   assert.match(summary.provisionalText, /可以发动/);
   assert.notEqual(summary.statusLabel, "已确认");
 });
@@ -118,7 +118,7 @@ test("confirmed answer exposes evidence ids in ordinary summary", () => {
     evidenceIds: ["qa-1"],
     officialAnswer: { status: "confirmed", verdict: "can", evidenceIds: ["qa-1"] },
   });
-  assert.equal(summary.statusLabel, "已确认");
+  assert.equal(summary.statusLabel, "官方直接裁定");
   assert.deepEqual(summary.evidenceIds, ["qa-1"]);
 });
 

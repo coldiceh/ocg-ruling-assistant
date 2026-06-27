@@ -1139,7 +1139,7 @@ function renderSubAnswers(subAnswers) {
   if (!ui.subAnswersPanel) return;
   clearElement(ui.subAnswersPanel);
   const items = Array.isArray(subAnswers)
-    ? subAnswers.filter((item) => item?.question || item?.verdict || item?.reasoning || item?.reason || item?.conditionalAnswer || item?.provisionalAnswer)
+    ? subAnswers.filter((item) => item?.question || item?.verdict || item?.reasoning || item?.reason || item?.conditionalAnswer || item?.provisionalAnswer || item?.ruleDerivedAnswer)
     : [];
   const shouldShowPanel = items.length > 1 || items.some(hasDetailedSubAnswerDisplay);
   if (!items.length || !shouldShowPanel) {
@@ -1150,7 +1150,12 @@ function renderSubAnswers(subAnswers) {
   ui.subAnswersPanel.hidden = false;
   items.forEach((item, index) => {
     const block = document.createElement("div");
-    block.className = "sub-answer";
+    block.className = `sub-answer ${subAnswerVisualClass(item)}`.trim();
+
+    const answerNumber = document.createElement("span");
+    answerNumber.className = "sub-answer-number";
+    answerNumber.textContent = `Q-${String(index + 1).padStart(2, "0")}`;
+    block.appendChild(answerNumber);
 
     const question = document.createElement("div");
     question.className = "sub-q";
@@ -1201,7 +1206,9 @@ function renderSubAnswers(subAnswers) {
       renderProvisionalAnswer(block, item.provisionalAnswer);
     }
 
-    if (item.likelyAnswer && item.likelyAnswer.status !== "not_available" && !item.provisionalAnswer) {
+    if (item.ruleDerivedAnswer && !item.provisionalAnswer) {
+      renderRuleDerivedAnswer(block, item.ruleDerivedAnswer);
+    } else if (item.likelyAnswer && item.likelyAnswer.status !== "not_available" && !item.provisionalAnswer) {
       renderLikelyAnswer(block, item.likelyAnswer, item);
     }
 
@@ -1265,6 +1272,7 @@ function hasDetailedSubAnswerDisplay(item) {
   return Boolean(
     item?.conditionalAnswer ||
     item?.provisionalAnswer ||
+    item?.ruleDerivedAnswer ||
     item?.likelyAnswer ||
     item?.clarification ||
     item?.reasoning ||
@@ -1279,13 +1287,23 @@ function hasDetailedSubAnswerDisplay(item) {
 }
 
 function subAnswerStatusLabel(item) {
-  if (item?.officialAnswer?.status === "confirmed" || item?.status === "confirmed") return "已确认";
-  if (item?.provisionalAnswer) return "未确认处理方式";
+  if (item?.officialAnswer?.status === "confirmed" || item?.status === "confirmed") return "OFFICIAL · 官方直接裁定";
+  if (item?.ruleDerivedAnswer?.status === "rule_derived") return "RULE-DERIVED · 规则推导结论";
+  if (item?.provisionalAnswer) return "PROVISIONAL · 事务局回答参考";
   if (item?.conditionalAnswer) return "条件不足";
   if (item?.likelyAnswer && item.likelyAnswer.status !== "not_available") return "可能处理（未确认）";
   if (item?.status === "inferred") return "可能处理（未确认）";
   if (item?.status === "parse_failed") return "解析失败";
   return "资料不足";
+}
+
+function subAnswerVisualClass(item) {
+  if (item?.officialAnswer?.status === "confirmed" || item?.status === "confirmed") return "is-official";
+  if (item?.ruleDerivedAnswer?.status === "rule_derived") return "is-rule-derived";
+  if (item?.provisionalAnswer) return "is-provisional";
+  if (item?.conditionalAnswer) return "is-needs-state";
+  if (item?.clarification?.question || item?.cardResolutionIssue) return "is-verify-card";
+  return "is-unknown";
 }
 
 function formatSubAnswerVerdict(verdict) {
@@ -1330,7 +1348,7 @@ function renderProvisionalAnswer(parent, provisionalAnswer) {
   wrapper.className = "sub-reasoning";
 
   const title = document.createElement("p");
-  title.textContent = "未确认处理方式（事务局回答截图，官方数据库未收录）：";
+  title.textContent = "事务局回答参考（截图，官方数据库未收录）：";
   wrapper.appendChild(title);
 
   const verdict = document.createElement("p");
@@ -1340,6 +1358,46 @@ function renderProvisionalAnswer(parent, provisionalAnswer) {
   const note = document.createElement("p");
   note.textContent = "注意：该回答目前未在官方数据库中找到直接 Q&A。后续如果数据库更新，系统会优先改用官方数据库裁定。";
   wrapper.appendChild(note);
+
+  parent.appendChild(wrapper);
+}
+
+function renderRuleDerivedAnswer(parent, answer) {
+  const wrapper = document.createElement("section");
+  wrapper.className = "rule-derived-answer";
+
+  const title = document.createElement("h4");
+  title.textContent = answer.displayLabel || "规则推导结论";
+  wrapper.appendChild(title);
+
+  const shortAnswer = document.createElement("p");
+  shortAnswer.className = "rule-derived-short";
+  shortAnswer.textContent = answer.shortAnswer || formatSubAnswerVerdict(answer.verdict);
+  wrapper.appendChild(shortAnswer);
+
+  if (Array.isArray(answer.reasoningSteps) && answer.reasoningSteps.length) {
+    const list = document.createElement("ol");
+    list.className = "rule-derived-steps";
+    answer.reasoningSteps.forEach((reasoningStep) => {
+      const item = document.createElement("li");
+      const basis = reasoningStep.ruleBasis ? ` [${reasoningStep.ruleBasis}]` : "";
+      item.textContent = `${reasoningStep.explanation}${basis}`;
+      list.appendChild(item);
+    });
+    wrapper.appendChild(list);
+  }
+
+  if (Array.isArray(answer.assumptions) && answer.assumptions.length) {
+    const assumptions = document.createElement("p");
+    assumptions.className = "rule-derived-meta";
+    assumptions.textContent = `推导前提：${answer.assumptions.join("；")}`;
+    wrapper.appendChild(assumptions);
+  }
+
+  const notice = document.createElement("p");
+  notice.className = "rule-derived-notice";
+  notice.textContent = answer.notice || "未找到完全同场景的直接 Q&A。如存在相反裁定，应以官方数据库或事务局回答为准。";
+  wrapper.appendChild(notice);
 
   parent.appendChild(wrapper);
 }
@@ -1397,22 +1455,23 @@ function renderClarification(parent, clarification) {
 
 function shouldRenderFallbackClarification(item) {
   if (!item || item.status !== "unknown") return false;
-  if ((item.likelyAnswer && item.likelyAnswer.status !== "not_available") || item.conditionalAnswer || item.provisionalAnswer || item.clarification?.question) return false;
+  if (item.ruleDerivedAnswer || (item.likelyAnswer && item.likelyAnswer.status !== "not_available") || item.conditionalAnswer || item.provisionalAnswer || item.clarification?.question) return false;
   return true;
 }
 
 function formatOfficialAnswerLine(item) {
   const official = item?.officialAnswer || {};
   if (official.status === "confirmed") {
-    return `官方确认：已确认。依据 ID：${(official.evidenceIds || item.evidenceIds || []).join("、") || "未列出"}`;
+    return `官方直接裁定：已确认。依据 ID：${(official.evidenceIds || item.evidenceIds || []).join("、") || "未列出"}`;
   }
   if (official.status === "parse_failed") return "官方确认：形式化解析失败，无法进入裁定判断。";
-  return "官方确认：暂无直接 Q&A / FAQ 可以确认该问题。";
+  return "官方直接裁定：未检索到完全同场景的 Q&A / FAQ。";
 }
 
 function publicReasonForSubAnswer(item) {
   if (item?.displayReason) return item.displayReason;
   if (item?.cardResolutionIssue) return "卡名没有 exact match，不能自动套用较短候选卡。";
+  if (item?.ruleDerivedAnswer?.status === "rule_derived") return "以下处理由公开规则、卡片文本与官方裁定结构推导，不改变 official confirmed 状态。";
   if (item?.provisionalAnswer) return "官方数据库暂无直接裁定；存在事务局回答截图，需要后续复核。";
   if (item?.conditionalAnswer) return "已找到相关 FAQ，但当前问题缺少必要状态，无法确定适用哪个分支。";
   if (item?.unresolvedDependencies?.length) return "该问题依赖另一个子问题的结果，当前不能确认。";

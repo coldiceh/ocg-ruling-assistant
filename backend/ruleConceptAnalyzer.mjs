@@ -1,5 +1,25 @@
 const CONCEPT_DEFINITIONS = [
   {
+    concept: "damage_step_timing",
+    patterns: [/伤害步骤开始时/iu, /伤害计算前/iu, /伤害计算时/iu, /伤害计算后/iu, /伤害步骤结束时/iu, /damage step/iu],
+  },
+  {
+    concept: "battle_position_and_attack_target",
+    patterns: [/里侧守备/iu, /攻击表示.{0,20}守备表示/iu, /守备表示.{0,20}攻击/iu, /战斗.{0,10}(继续|终止)/iu],
+  },
+  {
+    concept: "effect_immunity_during_resolution",
+    patterns: [/不受.{0,12}效果影响/iu, /效果处理途中/iu, /同一效果处理/iu, /作为.{0,10}超量素材/iu],
+  },
+  {
+    concept: "atk_def_modification",
+    patterns: [/攻击力.{0,16}(变为|上升|下降|倍)/iu, /守备力.{0,16}(变为|上升|下降|倍)/iu, /交换.{0,10}攻击力/iu],
+  },
+  {
+    concept: "simultaneous_processing_order",
+    patterns: [/扣血和加攻.{0,10}同时/iu, /失去.{0,8}LP.{0,20}攻击力/iu, /同一效果处理.{0,16}顺序/iu],
+  },
+  {
     concept: "copy_effect",
     patterns: [/复制.{0,20}效果/iu, /拷贝.{0,20}效果/iu, /变成.{0,30}效果相同/iu, /變成.{0,30}效果相同/iu, /事务回滚|事務回滾|Transaction Rollback/iu],
   },

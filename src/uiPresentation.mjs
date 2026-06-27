@@ -1,6 +1,7 @@
 export function statusLabelForSubAnswer(item = {}) {
-  if (item.officialAnswer?.status === "confirmed" || item.status === "confirmed") return "已确认";
-  if (item.provisionalAnswer) return "未确认处理方式";
+  if (item.officialAnswer?.status === "confirmed" || item.status === "confirmed") return "官方直接裁定";
+  if (item.ruleDerivedAnswer?.status === "rule_derived") return "规则推导结论";
+  if (item.provisionalAnswer) return "事务局回答参考";
   if (item.conditionalAnswer) return "条件不足";
   if (item.likelyAnswer && item.likelyAnswer.status !== "not_available") return "可能处理（未确认）";
   if (item.status === "inferred") return "可能处理（未确认）";
@@ -46,19 +47,38 @@ export function buildUserFacingSubAnswerSummary(item = {}) {
   const likelyAnswerText = item.likelyAnswer && item.likelyAnswer.status !== "not_available"
     ? formatLikelyAnswerText(item.likelyAnswer, item)
     : null;
+  const ruleDerivedAnswerText = item.ruleDerivedAnswer?.status === "rule_derived"
+    ? formatRuleDerivedAnswerText(item.ruleDerivedAnswer)
+    : null;
   return {
     statusLabel,
     verdictText: formatDisplayVerdict(item.verdict),
-    officialStatusLabel: item.officialAnswer?.status === "confirmed" ? "官方确认：已确认" : "官方确认：暂无直接裁定",
+    officialStatusLabel: item.officialAnswer?.status === "confirmed" ? "官方直接裁定：已确认" : "官方直接裁定：未检索到完全同场景条目",
     reason: item.displayReason || publicReasonForSubAnswer(item),
     evidenceIds: item.evidenceIds || [],
     conditionalBranches,
     clarificationQuestion: item.clarification?.question || item.conditionalAnswer?.clarificationQuestion || fallbackClarificationForSubAnswer(item),
     provisionalText,
+    ruleDerivedAnswerText,
     likelyAnswerText,
-    riskFlags: item.likelyAnswer?.riskFlags || [],
+    riskFlags: item.ruleDerivedAnswer?.riskFlags || item.likelyAnswer?.riskFlags || [],
     debugTraceDefaultCollapsed: true,
   };
+}
+
+export function formatRuleDerivedAnswerText(answer = {}) {
+  const steps = (answer.reasoningSteps || [])
+    .map((item, index) => `${index + 1}. ${item.explanation}`)
+    .join(" ");
+  const assumptions = (answer.assumptions || []).length
+    ? `前提：${answer.assumptions.join("；")}。`
+    : "";
+  return [
+    answer.shortAnswer,
+    steps,
+    assumptions,
+    answer.notice || "未找到完全同场景的直接 Q&A。如存在相反裁定，应以官方数据库或事务局回答为准。",
+  ].filter(Boolean).join(" ").trim();
 }
 
 export function formatLikelyAnswerText(likelyAnswer = {}, context = {}) {
@@ -83,6 +103,7 @@ export function formatLikelyAnswerText(likelyAnswer = {}, context = {}) {
 export function publicReasonForSubAnswer(item = {}) {
   if (item.displayReason) return item.displayReason;
   if (item.cardResolutionIssue) return "卡名没有 exact match，不能自动套用较短候选卡。";
+  if (item.ruleDerivedAnswer?.status === "rule_derived") return "没有完全同场景的直接条目；以下结论由公开规则、卡片文本和官方裁定结构推导。";
   if (item.provisionalAnswer) return "官方数据库暂无直接裁定；存在事务局回答截图，需要后续复核。";
   if (item.conditionalAnswer) return "已找到相关 FAQ，但当前问题缺少必要状态，无法确定适用哪个分支。";
   if ((item.unresolvedDependencies || []).length) return "该问题依赖另一个子问题的结果，当前不能确认。";
@@ -101,6 +122,6 @@ export function publicReasonForSubAnswer(item = {}) {
 
 function fallbackClarificationForSubAnswer(item = {}) {
   if (!item || item.status !== "unknown") return null;
-  if ((item.likelyAnswer && item.likelyAnswer.status !== "not_available") || item.conditionalAnswer || item.provisionalAnswer || item.clarification?.question) return null;
+  if (item.ruleDerivedAnswer || (item.likelyAnswer && item.likelyAnswer.status !== "not_available") || item.conditionalAnswer || item.provisionalAnswer || item.clarification?.question) return null;
   return "需要确认：请补充正式卡名、效果编号、具体时点，或提供能直接覆盖该场景的官方 Q&A / FAQ。";
 }
