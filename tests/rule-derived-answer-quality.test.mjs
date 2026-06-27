@@ -117,7 +117,7 @@ test("UI presents rule-derived wording and terminal theme without internal codes
   ]);
   assert.match(html, /class="terminal-theme"/u);
   assert.match(html, /OCG RULING TERMINAL/u);
-  assert.match(html, /SOURCE TRACE/u);
+  assert.match(html, />依据</u);
   for (const variable of ["--bg-0", "--panel", "--accent-cyan", "--accent-violet", "--glow-cyan"]) {
     assert.match(css, new RegExp(variable));
   }

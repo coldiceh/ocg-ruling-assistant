@@ -751,12 +751,15 @@ function renderFastJudgeAnswer(answer) {
   const state = labels[answer.answerType] || labels.cannot_answer_safely;
   updateModelStatus(answer.pending ? "等待深度判断" : "FAST JUDGE");
   ui.verdictBlock.className = `result-block verdict-block ${state?.className || "is-risky"}`;
-  ui.confidenceText.textContent = state?.confidence || "无法安全判断";
-  ui.verdictTitle.textContent = answer.pending ? "正在深度判断" : "裁判结论";
+  ui.confidenceText.textContent = answer.statusChip || state?.confidence || "NEEDS-INFO";
+  ui.verdictTitle.textContent = answer.pending ? "正在深度判断" : "结论";
   ui.rulingBasisText.textContent = state?.basis || "验证未通过";
   ui.verdictBody.textContent = answer.shortAnswer || "当前无法安全判断。";
   renderSubAnswers([]);
-  renderList(ui.stepsList, (answer.judgeReasoning || []).map((item) => item.text).filter(Boolean));
+  renderList(ui.stepsList, [
+    ...(answer.judgeReasoning || []).map((item) => item.text).filter(Boolean),
+    ...(answer.warnings || []),
+  ]);
   const required = [
     ...(answer.requiredFacts || []),
     ...(answer.unresolvedCardPrompts || []).map((item) => {

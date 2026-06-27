@@ -70,3 +70,51 @@ test("missing pendulum section blocks model judgment", async () => {
   assert.equal(modelCalled, false);
   assert.ok(answer.requiredFacts.some((item) => item.includes("灵摆效果")));
 });
+
+test("Fast Judge reports rule-era checks", async () => {
+  const answer = await answerRulingQuestionFast({
+    question: "测试卡会造成贯穿战斗伤害吗？",
+    snapshot: { cards: [{ id: "1", name: "测试卡", aliases: ["测试卡"], cardType: "monster", effectText: "给予贯穿战斗伤害。" }], records: [] },
+    modelInvoker: async (input) => ({
+      answerType: "rule_judgment",
+      verdict: "damage_occurs",
+      shortAnswer: "测试卡攻击守备怪兽时会按文本造成贯穿战斗伤害。",
+      judgeReasoning: [{ text: "测试卡文本明确记载贯穿战斗伤害。", basis: ["card_text"], refs: [input.context.relevantCardSections[0].cardId] }],
+      confidence: "medium",
+    }),
+  });
+  assert.equal(answer.ruleEraChecked, true);
+  assert.equal(answer.staleRisk, "none");
+  assert.equal(answer.statusChip, "RULE-JUDGED");
+});
+
+test("user-provided full card text can support judgment but never OFFICIAL", async () => {
+  const answer = await answerRulingQuestionFast({
+    question: "新卡「测试新龙」的完整效果是：『①：这张卡攻击守备表示怪兽的场合，给予攻击力超过守备力数值的贯穿战斗伤害。』它会造成贯穿伤害吗？",
+    snapshot: { cards: [], records: [] },
+    modelInvoker: async (input) => ({
+      answerType: "rule_judgment",
+      verdict: "damage_occurs",
+      shortAnswer: "测试新龙按你提供的完整文本，会按攻击力超过守备力的数值造成贯穿战斗伤害，但该文本尚未由数据库校验。",
+      judgeReasoning: [{ text: "测试新龙的用户提供文本明确记载攻击力超过守备力时造成贯穿战斗伤害。", basis: ["card_text"], refs: [input.context.relevantCardSections[0].cardId] }],
+      confidence: "low",
+    }),
+  });
+  assert.equal(answer.answerType, "rule_judgment");
+  assert.notEqual(answer.statusChip, "OFFICIAL");
+  assert.equal(answer.staleRisk, "possible");
+  assert.equal(answer.unresolvedCardPrompts.length, 1);
+});
+
+test("stale official evidence cannot be the only direct official basis", async () => {
+  const answer = await answerRulingQuestionFast({
+    question: "测试怪兽召唤成功时，能否以优先权发动起动效果？",
+    snapshot: {
+      cards: [{ id: "7", name: "测试怪兽", aliases: ["测试怪兽"], cardType: "monster", effectText: "主要阶段可以发动这个起动效果。" }],
+      records: [{ id: "old-qa", recordType: "qa", title: "旧优先权问答", cards: ["测试怪兽"], cardIds: ["7"], text: "召唤成功时可以优先发动起动效果。", sourceType: "official_qa", format: "ocg", ruleEra: "pre_2011_ignition_priority", staleRisk: "none" }],
+    },
+  });
+  assert.notEqual(answer.answerType, "direct_official");
+  assert.equal(answer.statusChip, "OUTDATED-RISK");
+  assert.equal(answer.staleRisk, "high");
+});

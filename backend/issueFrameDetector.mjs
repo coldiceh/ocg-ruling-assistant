@@ -14,6 +14,19 @@ const frameDefinitions = [
   define("pendulum_effect_scope", /灵摆效果|灵摆区域|P效果|P区域|ペンデュラム効果|pendulum effect/iu, ["pendulumEffects"], ["灵摆效果全文与灵摆区域状态"]),
   define("same_chain_cost_or_procedure", /同一连锁|C\s*\d|再次.*(?:展示|支付|作为费用)|cost|コスト|发动手续|activation procedure/iu, ["conditionText", "monsterEffects", "spellTrapEffects"], ["同一连锁中已执行的手续或费用"]),
   define("once_per_turn_scope", /1回合1次|１ターンに１度|一回合一次|once per turn|再次发动|再次.*展示/iu, ["monsterEffects", "spellTrapEffects", "conditionText"], ["限制绑定卡名、效果还是单张卡"]),
+  define("priority", /优先权|優先権|ignition priority|player priority/iu, ["conditionText", "monsterEffects"], ["问题使用的是 OCG 现行优先权规则"]),
+  define("ignition_effect", /起动效果|起動効果|ignition effect/iu, ["monsterEffects", "conditionText"], ["效果是否属于起动效果及其可发动时点"]),
+  define("extra_deck_summon_zone", /额外卡组.*(?:额外怪兽区|连接端|区域)|EXデッキ.*(?:EXモンスターゾーン|リンク先)|extra deck.*(?:extra monster zone|linked zone)/iu, ["summonConditions", "monsterEffects"], ["召唤方式及可用怪兽区域"]),
+  define("fusion_summon", /融合召唤|融合召喚|Fusion Summon/iu, ["summonConditions", "monsterEffects", "spellTrapEffects"], ["融合召唤来源和放置区域"]),
+  define("synchro_summon", /同调召唤|同步召唤|S召唤|シンクロ召喚|Synchro Summon/iu, ["summonConditions", "monsterEffects"], ["同调召唤来源和放置区域"]),
+  define("xyz_summon", /超量召唤|X召唤|エクシーズ召喚|Xyz Summon/iu, ["summonConditions", "monsterEffects"], ["超量召唤来源和放置区域"]),
+  define("link_summon", /连接召唤|リンク召喚|Link Summon/iu, ["summonConditions", "monsterEffects"], ["连接召唤的可用区域"]),
+  define("pendulum_summon", /灵摆召唤|P召唤|ペンデュラム召喚|Pendulum Summon/iu, ["pendulumEffects", "summonConditions"], ["灵摆怪兽来自手卡还是额外卡组表侧"]),
+  define("trigger_effect", /诱发效果|誘発効果|Trigger Effect/iu, ["conditionText", "monsterEffects"], ["诱发条件满足时的所在区域"]),
+  define("location_change_before_activation", /发动前.*(?:离开|区域改变|送墓|除外)|还没发动.*(?:离开|区域改变)|発動する前.*場所|changes location before.*activate/iu, ["conditionText", "monsterEffects"], ["满足条件后到发动前是否改变区域"]),
+  define("saved_trigger", /暂存诱发|保存诱发|待发动.*诱发|saved trigger|pending trigger/iu, ["conditionText", "monsterEffects"], ["诱发效果进入连锁前的卡片位置"]),
+  define("trap_monster", /陷阱怪兽|陷阱卡当作怪兽|罠モンスター|Trap Monster/iu, ["spellTrapEffects", "continuousText"], ["该陷阱怪兽是否仍当作陷阱使用"]),
+  define("zone_occupancy", /占用.*(?:怪兽区|魔陷区|魔法与陷阱区)|区域占用|ゾーン.*使用|occup(?:y|ies).*zone/iu, ["spellTrapEffects", "continuousText"], ["该卡当前占用哪些区域"]),
 ];
 
 const forbiddenUnlessTriggered = [

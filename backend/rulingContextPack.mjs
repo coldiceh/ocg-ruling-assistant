@@ -1,4 +1,5 @@
-import { buildCardProfiles, selectRelevantCardSections } from "./cardProfile.mjs";
+import { buildCardProfile, buildCardProfiles, selectRelevantCardSections } from "./cardProfile.mjs";
+import { normalizeRulingSourceMetadata } from "./rulingVersioning.mjs";
 
 const issueKeywords = {
   activation_legality: ["发动", "発動", "activate"],
@@ -32,7 +33,7 @@ export function resolveCardsForFastJudge(question, cards = []) {
       continue;
     }
     const candidates = rankCardCandidates(name, cards).slice(0, 5);
-    if (!candidates.length && normalize(name).length <= 4) continue;
+    if (!candidates.length && normalize(name).length <= 3) continue;
     unresolvedCards.push({
       unresolvedCardName: name,
       candidateCards: candidates.slice(0, 3).map((item) => ({ name: displayName(item.card), cardId: String(item.card.id || ""), reason: item.reason, score: item.score })),
@@ -89,6 +90,11 @@ export function buildRulingContextPack({ question, resolvedCards = [], unresolve
     resolvedCards: resolvedCards.map(summarizeCard),
     unresolvedCards,
     cardProfiles: profiles,
+    userProvidedCardText: profiles.filter((profile) => profile.sourceMetadata?.sourceType === "user_provided_card_text").map((profile) => ({
+      cardId: profile.cardId,
+      cardName: profile.names.zh || profile.names.ja || profile.names.en,
+      metadata: profile.sourceMetadata,
+    })),
     relevantCardSections,
     issueFrames,
     officialQaCandidates,
@@ -98,6 +104,37 @@ export function buildRulingContextPack({ question, resolvedCards = [], unresolve
     counterEvidenceCandidates,
     limits: { cardSections: 10, officialQa: 8, faq: 8, ruleSnippets: 8, analogyRefs: 5 },
   };
+}
+
+export function buildTemporaryCardProfiles(question, unresolvedCards = [], now = new Date().toISOString()) {
+  const texts = extractFullEffectTexts(question);
+  if (!texts.length || !unresolvedCards.length) return [];
+  return texts.slice(0, unresolvedCards.length).map((text, index) => {
+    const unresolved = unresolvedCards[index] || unresolvedCards[0];
+    const name = unresolved.unresolvedCardName;
+    const asksPendulum = /灵摆效果|P效果|ペンデュラム効果|Pendulum Effect/iu.test(`${question}\n${text}`);
+    const profile = buildCardProfile({
+      id: `user-card-${stableKey(name)}`,
+      name,
+      cnName: name,
+      aliases: [name],
+      cardType: asksPendulum ? "Pendulum Monster" : "monster",
+      isPendulum: asksPendulum,
+      effectText: text,
+    });
+    profile.isTemporary = true;
+    profile.sourceMetadata = normalizeRulingSourceMetadata({
+      id: profile.cardId,
+      recordType: "user-provided-card-text",
+      sourceType: "user_provided_card_text",
+      lastCheckedAt: now,
+      locale: "zh",
+      format: "unknown",
+      ruleEra: "current",
+      staleRisk: "possible",
+    });
+    return profile;
+  });
 }
 
 function rankRecords(records, question, resolvedCards, frames) {
@@ -127,6 +164,7 @@ function rankRecords(records, question, resolvedCards, frames) {
         matchedBy: [idMatch && "card_id", nameMatch && "card_name", keywordHits.length && "issue_frame", tokenHits.length && "question_phrase"].filter(Boolean),
         text: trimText(text, 1800),
         sourceUrl: record.sourceUrl || record.sources?.[0]?.detail || "",
+        metadata: normalizeRulingSourceMetadata(record),
         record,
       };
     })
@@ -134,10 +172,19 @@ function rankRecords(records, question, resolvedCards, frames) {
     .sort((left, right) => right.score - left.score || left.id.localeCompare(right.id));
 }
 
+function extractFullEffectTexts(question) {
+  const result = [];
+  for (const match of String(question || "").matchAll(/[『“"]([^』”"]{12,1400})[』”"]/gu)) {
+    const text = clean(match[1]);
+    if (/[①②③④⑤⑥⑦⑧⑨⑩]|发动|效果|発動|効果|activate|effect/iu.test(text)) result.push(text);
+  }
+  return result;
+}
+
 function extractEmbeddedCardSections(question, limit) {
   if (limit <= 0) return [];
   const sections = [];
-  for (const match of String(question || "").matchAll(/[『“"]([^』”"]{40,900})[』”"]/gu)) {
+  for (const match of String(question || "").matchAll(/[『“"]([^』”"]{12,900})[』”"]/gu)) {
     sections.push({
       effectNo: "unknown",
       section: "otherText",
@@ -276,4 +323,13 @@ function dedupeUnresolved(items) {
 
 function escapeRegExp(value) {
   return String(value).replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+}
+
+function stableKey(value) {
+  let hash = 2166136261;
+  for (const char of String(value || "")) {
+    hash ^= char.codePointAt(0);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(16);
 }
