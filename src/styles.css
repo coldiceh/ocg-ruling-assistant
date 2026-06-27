@@ -224,6 +224,28 @@ select:focus {
   gap: 12px;
 }
 
+.judge-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.pipeline-debug-toggle {
+  width: fit-content;
+  margin-top: 10px;
+  color: var(--text-faint);
+  font-size: 12px;
+}
+
+.pipeline-debug-toggle summary {
+  cursor: pointer;
+}
+
+.pipeline-debug-toggle label {
+  display: block;
+  margin-top: 8px;
+}
+
 .model-strip {
   min-height: 38px;
   display: inline-flex;

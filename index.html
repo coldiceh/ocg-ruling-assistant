@@ -41,13 +41,21 @@
               <span>ANALYSIS CORE</span>
               <strong id="modelStatusText">待分析</strong>
             </div>
-            <button class="primary-button" id="analyzeButton" type="button">
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M8 5h8M6 12h12M9 19h6" />
-              </svg>
-              ANALYZE
-            </button>
+            <div class="judge-actions">
+              <button class="text-button" id="deepAnalyzeButton" type="button">深度解析</button>
+              <button class="primary-button" id="analyzeButton" type="button">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M8 5h8M6 12h12M9 19h6" />
+                </svg>
+                快速裁定
+              </button>
+            </div>
           </div>
+
+          <details class="pipeline-debug-toggle">
+            <summary>管线调试</summary>
+            <label><input id="legacyPipelineToggle" type="checkbox" /> 使用旧管线结果</label>
+          </details>
 
           <div class="result-grid" id="resultGrid" hidden>
             <section class="result-block card-panel" id="cardPanel" aria-labelledby="cardsTitle" hidden>

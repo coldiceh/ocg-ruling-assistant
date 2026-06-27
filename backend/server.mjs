@@ -1,5 +1,6 @@
 import { createServer } from "node:http";
 import { answerQuestion, getDataHealth } from "./engine.mjs";
+import { answerRulingQuestionFast } from "./fastJudgeEngine.mjs";
 import { appendFeedbackCase } from "./feedbackCases.mjs";
 
 const port = Number(process.env.PORT || 8787);
@@ -27,7 +28,15 @@ const server = createServer(async (request, response) => {
   if (request.method === "POST" && request.url === "/api/answer") {
     try {
       const body = await readBody(request);
-      const answer = await answerQuestion(JSON.parse(body || "{}"));
+      const payload = JSON.parse(body || "{}");
+      const useFastJudge = payload.useFastJudge !== false && process.env.USE_FAST_JUDGE_ENGINE !== "false";
+      const answer = useFastJudge
+        ? await answerRulingQuestionFast({
+            question: payload.question,
+            mode: payload.mode === "analysis" ? "analysis" : "duel",
+            maxLatencyMs: payload.mode === "analysis" ? 20000 : 6000,
+          })
+        : await answerQuestion(payload);
       sendJson(response, 200, answer);
     } catch (error) {
       sendJson(response, 500, {

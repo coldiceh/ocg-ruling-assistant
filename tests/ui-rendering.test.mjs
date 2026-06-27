@@ -128,3 +128,16 @@ test("debug trace is backed by collapsed details in the page", async () => {
   assert.match(html, /id="parserDebugPanel" hidden/u);
   assert.equal(statusLabelForSubAnswer({ status: "unknown" }), "资料不足");
 });
+
+test("ordinary UI renders Fast Judge as a short referee answer", async () => {
+  const [html, app] = await Promise.all([
+    readFile(new URL("../index.html", import.meta.url), "utf8"),
+    readFile(new URL("../src/app.js", import.meta.url), "utf8"),
+  ]);
+  assert.match(html, /快速裁定/u);
+  assert.match(html, /深度解析/u);
+  assert.match(html, /<details class="pipeline-debug-toggle">/u);
+  assert.match(app, /裁判结论/u);
+  assert.match(app, /FAST JUDGE/u);
+  assert.match(app, /answer\.judgeReasoning/u);
+});
