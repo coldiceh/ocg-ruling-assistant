@@ -6,16 +6,17 @@
     <title>游戏王OCG文本规则相关疑问助手</title>
     <link rel="stylesheet" href="src/styles.css" />
   </head>
-  <body>
+  <body class="terminal-theme">
     <div class="app-shell">
       <header class="topbar">
         <div>
-          <p class="eyebrow">OCG 文本规则</p>
-          <h1>游戏王OCG文本规则相关疑问助手</h1>
+          <p class="eyebrow">TEXT RULING ANALYSIS</p>
+          <h1>OCG RULING TERMINAL</h1>
         </div>
-        <div class="status-strip" aria-label="资料状态">
-          <span class="status-dot"></span>
-          <span id="sourceStatus">资料库</span>
+        <div class="status-cluster" aria-label="资料状态">
+          <div class="status-strip"><span class="status-dot"></span><span id="sourceStatus">DB ONLINE</span></div>
+          <span class="terminal-badge">Q&amp;A INDEX</span>
+          <span class="terminal-badge">PROVISIONAL WATCH</span>
         </div>
       </header>
 
@@ -23,8 +24,8 @@
         <section class="ask-panel" aria-labelledby="askTitle">
           <div class="panel-head">
             <div>
-              <h2 id="askTitle">规则疑问</h2>
-              <p>输入卡片文本、场面、连锁和想确认的点。</p>
+              <h2 id="askTitle">QUERY INPUT</h2>
+              <p>输入卡片、场面、连锁和需要判断的处理节点。</p>
             </div>
             <button class="icon-button ghost" id="clearButton" type="button" aria-label="清空" title="清空">
               <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -33,25 +34,25 @@
             </button>
           </div>
 
-          <textarea id="questionInput" spellcheck="false"></textarea>
+          <textarea id="questionInput" spellcheck="false" placeholder="&gt; DESCRIBE RULING SCENARIO..."></textarea>
 
           <div class="actions">
             <div class="model-strip" aria-live="polite">
-              <span>回答模型</span>
+              <span>ANALYSIS CORE</span>
               <strong id="modelStatusText">待分析</strong>
             </div>
             <button class="primary-button" id="analyzeButton" type="button">
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M8 5h8M6 12h12M9 19h6" />
               </svg>
-              分析
+              ANALYZE
             </button>
           </div>
 
           <div class="result-grid" id="resultGrid" hidden>
             <section class="result-block card-panel" id="cardPanel" aria-labelledby="cardsTitle" hidden>
               <div class="block-title">
-                <span id="cardsTitle">相关卡片</span>
+                <span id="cardsTitle">CARD DOSSIER</span>
                 <strong id="cardStatus"></strong>
               </div>
               <div class="card-tabs" id="cardTabs"></div>
@@ -71,7 +72,7 @@
 
             <section class="result-block verdict-block" aria-labelledby="verdictTitle">
               <div class="block-title">
-                <span>结论</span>
+                <span>RULING OUTPUT</span>
                 <strong id="confidenceText">未分析</strong>
               </div>
               <h3 id="verdictTitle"></h3>
@@ -82,27 +83,25 @@
 
             <section class="result-block" aria-labelledby="stepsTitle">
               <div class="block-title">
-                <span id="stepsTitle">处理步骤</span>
+                <span id="stepsTitle">PROCESS TRACE</span>
               </div>
               <ol id="stepsList"></ol>
             </section>
 
             <section class="result-block" aria-labelledby="questionsTitle">
               <div class="block-title">
-                <span id="questionsTitle">还需确认</span>
+                <span id="questionsTitle">REQUIRED INPUT</span>
               </div>
               <ul id="questionsList"></ul>
             </section>
 
-            <section class="result-block" aria-labelledby="sourcesTitle">
-              <div class="block-title">
-                <span id="sourcesTitle">依据</span>
-              </div>
+            <details class="result-block source-trace" aria-labelledby="sourcesTitle">
+              <summary class="block-title"><span id="sourcesTitle">SOURCE TRACE</span></summary>
               <div id="sourcesList"></div>
-            </section>
+            </details>
 
             <details class="result-block parser-debug" id="parserDebugPanel" hidden>
-              <summary>Formal Query Parser 调试</summary>
+              <summary>DEBUG TRACE</summary>
               <pre id="parserDebugOutput"></pre>
             </details>
           </div>

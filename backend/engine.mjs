@@ -12,6 +12,7 @@ import { buildEventTimelineFromFormalQuery, deriveStateAtTiming } from "./eventT
 import { buildGameStateFromFormalQuery } from "./gameState.mjs";
 import { normalizeFormalRulingQuery, validateFormalRulingQuery } from "./formalQuery.mjs";
 import { buildLikelyAnswer } from "./likelyAnswer.mjs";
+import { buildRuleDerivedAnswer } from "./ruleDerivedAnswer.mjs";
 import {
   buildProvisionalAnswerFromOfficialResponse,
   isConfirmableOfficialResponse,
@@ -49,6 +50,22 @@ const topics = [
 ];
 
 const localCardAliasHints = [
+  {
+    aliases: ["No.41 泥睡魔兽 酣睡貘", "No.41泥睡魔兽酣睡貘", "泥睡魔兽 酣睡貘"],
+    candidates: ["编号41 泥睡魔兽 貘熟梦", "No.41 泥睡魔獣バグースカ", "Number 41: Bagooska the Terribly Tired Tapir"],
+  },
+  {
+    aliases: ["霸王黑龙 异色眼叛逆龙-霸王", "霸王黑龙异色眼叛逆龙霸王", "异色眼叛逆龙-霸王"],
+    candidates: ["霸王黑龙 异色眼反叛龙－霸主", "覇王黒竜オッドアイズ・リベリオン・ドラゴン－オーバーロード", "Odd-Eyes Rebellion Dragon Overlord"],
+  },
+  {
+    aliases: ["究极猎鹰", "究極獵鷹", "Ultimate Falcon"],
+    candidates: ["急袭猛禽－究极猎鹰", "RR－アルティメット・ファルコン", "Raidraptor - Ultimate Falcon"],
+  },
+  {
+    aliases: ["旋风", "旋風"],
+    candidates: ["气旋", "サイクロン", "Mystical Space Typhoon"],
+  },
   {
     aliases: ["阿尔戈群星荣冠的阿德拉", "荣冠的阿德拉", "阿德拉", "阿尔戈父"],
     candidates: ["ARG☆S－栄冠のアドラ", "ARG☆S - Adra of the Laurel", "ARG☆S Adra", "アドラ", "Adra"],
@@ -1204,7 +1221,7 @@ function attachUserAnswerLayers(answer, { subQuestion, formalQuery, bucket, opti
   const dependencies = answer?.dependencies || [];
   const unresolvedDependencies = answer?.unresolvedDependencies || [];
   const officialAnswer = {
-    status: answer.status === "confirmed" ? "confirmed" : answer.status === "parse_failed" ? "parse_failed" : "unknown",
+    status: answer.status === "confirmed" ? "confirmed" : answer.status === "parse_failed" ? "parse_failed" : "not_found",
     verdict: answer.status === "confirmed" ? answer.verdict : "unknown",
     evidenceIds: [...new Set(answer.evidenceIds || [])],
     reason: answer.reason || "unknown",
@@ -1228,10 +1245,25 @@ function attachUserAnswerLayers(answer, { subQuestion, formalQuery, bucket, opti
         resolvedCards: options?.detectedCards || [],
         unresolvedCards: options?.cardResolutionConfirmations || [],
       });
+  const ruleDerivedAnswer = answer.status === "confirmed" || answer.provisionalAnswer || answer.conditionalAnswer
+    ? undefined
+    : buildRuleDerivedAnswer({
+        originalQuestion: formalQuery?.originalText || subQuestion?.sourceText || "",
+        formalQuery,
+        resolvedCards: options?.detectedCards || [],
+        unresolvedCards: options?.cardResolutionConfirmations || [],
+        cardTexts: bucket?.cardTextEvidence || [],
+        similarEvidence: bucket?.similarRulingEvidence || bucket?.similarEvidence || [],
+        rejectedEvidence: bucket?.rejectedEvidence || [],
+        eventTimeline: options?.eventTimeline || null,
+        conditionBranches: answer.conditionBranches || [],
+        dependencies,
+      });
   const clarification = buildSubAnswerClarification(subQuestion, answer, cardResolutionIssue);
   return {
     ...answer,
     officialAnswer,
+    ...(ruleDerivedAnswer ? { ruleDerivedAnswer } : {}),
     ...(likelyAnswer ? { likelyAnswer } : {}),
     ...(clarification ? { clarification } : {}),
     displayReason: buildPublicReason(answer, { cardResolutionIssue }),
@@ -1487,6 +1519,7 @@ function mergeFormalAnswers(context) {
   else if (statuses.length && statuses.every((status) => status === "parse_failed")) mode = "parse_failed";
 
   const counts = Object.fromEntries(["confirmed", "inferred", "unknown", "parse_failed"].map((status) => [status, statuses.filter((item) => item === status).length]));
+  const ruleDerivedCount = subAnswers.filter((item) => item.ruleDerivedAnswer?.status === "rule_derived").length;
   const labels = {
     confirmed: "有直接裁定依据",
     inferred: "只有相似裁定",
@@ -1509,10 +1542,16 @@ function mergeFormalAnswers(context) {
   return {
     schemaVersion: 2,
     mode,
-    verdictTitle: labels[mode],
-    verdict: `共拆分 ${subAnswers.length} 个子问题：${counts.confirmed} 个 confirmed，${counts.inferred} 个 inferred，${counts.unknown} 个 unknown，${counts.parse_failed} 个 parse_failed。`,
-    rulingBasis: mode === "confirmed" ? "直接 Q&A/FAQ" : mode === "inferred" ? "相似 Q&A/FAQ" : "没有可确认的直接问答",
-    confidence: { status: mode, label: labels[mode], className: mode === "confirmed" ? "is-confirmed" : "is-risky" },
+    verdictTitle: mode === "unknown" && ruleDerivedCount ? "规则推导结论" : labels[mode],
+    verdict: ruleDerivedCount
+      ? `官方直接裁定 ${counts.confirmed} 项；另有 ${ruleDerivedCount} 项规则推导结论。规则推导不计入 confirmed。`
+      : `共拆分 ${subAnswers.length} 个子问题：${counts.confirmed} 个 confirmed，${counts.inferred} 个 inferred，${counts.unknown} 个 unknown，${counts.parse_failed} 个 parse_failed。`,
+    rulingBasis: mode === "confirmed" ? "直接 Q&A/FAQ" : ruleDerivedCount ? "规则书原则 + 卡片文本 + 官方 FAQ 类例" : mode === "inferred" ? "相似 Q&A/FAQ" : "没有可确认的直接问答",
+    confidence: {
+      status: mode,
+      label: mode === "unknown" && ruleDerivedCount ? "RULE-DERIVED" : labels[mode],
+      className: mode === "confirmed" ? "is-confirmed" : ruleDerivedCount ? "is-rule-derived" : "is-risky",
+    },
     formalQuery,
     validation,
     parserWarnings,
@@ -1524,7 +1563,9 @@ function mergeFormalAnswers(context) {
     evidence,
     rejectedEvidence: evidence.rejectedEvidence,
     evidenceIds: subAnswers.flatMap((answer) => answer.evidenceIds),
-    steps: subAnswers.map((answer) => `${answer.id}：${answer.status} - ${answer.reasoning}`),
+    steps: subAnswers.flatMap((answer) => answer.ruleDerivedAnswer?.reasoningSteps?.length
+      ? answer.ruleDerivedAnswer.reasoningSteps.map((item) => `${answer.id}：${item.explanation}`)
+      : [`${answer.id}：${buildPublicReason(answer)}`]),
     needsConfirmation: [...new Set(needsConfirmation)],
     sources: collectSources(usedEvidence, snapshotMeta),
     cards: buildCardSummaries(detectedCards),
@@ -2655,7 +2696,7 @@ function collectCardTextSources(cards, fallbackSources) {
 
 export function mergeModelAnswer(modelAnswer, programAnswer) {
   const explanationText = cleanText(modelAnswer?.explanationText);
-  const attemptedOverride = ["status", "verdict", "evidenceIds", "verdictTitle", "steps", "subAnswers", "conditionalAnswer", "provisionalAnswer", "officialAnswer", "likelyAnswer", "clarification"]
+  const attemptedOverride = ["status", "verdict", "evidenceIds", "verdictTitle", "steps", "subAnswers", "conditionalAnswer", "provisionalAnswer", "officialAnswer", "likelyAnswer", "ruleDerivedAnswer", "clarification"]
     .some((field) => modelAnswer?.[field] !== undefined);
   return {
     ...programAnswer,
@@ -3201,7 +3242,40 @@ function detectCards(question, cards) {
   }
 
   matches.push(...matchLocalAliasHints(question, cards));
-  return mergeCards(...matches).sort((a, b) => normalizeKey(b.matched).length - normalizeKey(a.matched).length);
+  const merged = mergeCards(...matches).sort((a, b) => normalizeKey(b.matched).length - normalizeKey(a.matched).length);
+  return suppressContainedShortAliasMatches(question, merged);
+}
+
+function suppressContainedShortAliasMatches(question, matches) {
+  const text = normalizeKey(question);
+  return matches.filter((candidate) => {
+    const candidateKey = normalizeKey(candidate.matched || candidate.name || "");
+    if (!candidateKey) return true;
+    const containing = matches.filter((other) => {
+      if (other === candidate) return false;
+      const otherKey = normalizeKey(other.matched || other.name || "");
+      return otherKey.length > candidateKey.length && otherKey.includes(candidateKey);
+    });
+    if (!containing.length) return true;
+    const candidatePositions = findAllOccurrences(text, candidateKey);
+    if (!candidatePositions.length) return true;
+    return candidatePositions.some((position) => !containing.some((other) => {
+      const otherKey = normalizeKey(other.matched || other.name || "");
+      return findAllOccurrences(text, otherKey).some((start) => position >= start && position + candidateKey.length <= start + otherKey.length);
+    }));
+  });
+}
+
+function findAllOccurrences(text, needle) {
+  const positions = [];
+  let start = 0;
+  while (needle && start < text.length) {
+    const index = text.indexOf(needle, start);
+    if (index < 0) break;
+    positions.push(index);
+    start = index + 1;
+  }
+  return positions;
 }
 
 function extractUserProvidedCards(question) {

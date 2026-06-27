@@ -25,7 +25,7 @@ test("no direct evidence can produce a likelyAnswer while final status remains u
     }],
   }, { records: [] })[0];
   assert.equal(answer.status, "unknown");
-  assert.equal(answer.officialAnswer.status, "unknown");
+  assert.equal(answer.officialAnswer.status, "not_found");
   assert.equal(answer.likelyAnswer.status, "best_effort");
   assert.match(answer.likelyAnswer.disclaimer, /未确认裁定/);
 });
