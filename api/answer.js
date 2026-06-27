@@ -1,4 +1,5 @@
 import { answerQuestion } from "../backend/engine.mjs";
+import { answerRulingQuestionFast } from "../backend/fastJudgeEngine.mjs";
 
 const allowedOrigin = process.env.ALLOWED_ORIGIN || "*";
 
@@ -22,7 +23,14 @@ export default async function handler(request, response) {
 
   try {
     const payload = typeof request.body === "string" ? JSON.parse(request.body || "{}") : request.body || {};
-    const answer = await answerQuestion(payload);
+    const useFastJudge = payload.useFastJudge !== false && process.env.USE_FAST_JUDGE_ENGINE !== "false";
+    const answer = useFastJudge
+      ? await answerRulingQuestionFast({
+          question: payload.question,
+          mode: payload.mode === "analysis" ? "analysis" : "duel",
+          maxLatencyMs: payload.mode === "analysis" ? 20000 : 6000,
+        })
+      : await answerQuestion(payload);
     response.status(200).json(answer);
   } catch (error) {
     response.status(500).json({
@@ -46,6 +54,7 @@ function getModelInfo() {
       models,
       cardResolutionModels: splitList(process.env.GEMINI_CARD_RESOLUTION_MODELS || process.env.GEMINI_CARD_RESOLUTION_MODEL),
       enabled: Boolean(process.env.GEMINI_API_KEY && models.length),
+      fastJudgeEnabled: process.env.USE_FAST_JUDGE_ENGINE !== "false",
     };
   }
 
@@ -55,6 +64,7 @@ function getModelInfo() {
       provider: "openai",
       models,
       enabled: Boolean(process.env.OPENAI_API_KEY && models.length),
+      fastJudgeEnabled: process.env.USE_FAST_JUDGE_ENGINE !== "false",
     };
   }
 
@@ -62,6 +72,7 @@ function getModelInfo() {
     provider: provider || "none",
     models: [],
     enabled: false,
+    fastJudgeEnabled: process.env.USE_FAST_JUDGE_ENGINE !== "false",
   };
 }
 

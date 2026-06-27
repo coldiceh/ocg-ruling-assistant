@@ -152,6 +152,8 @@ const builtInNotes = [
 const ui = {
   questionInput: document.querySelector("#questionInput"),
   analyzeButton: document.querySelector("#analyzeButton"),
+  deepAnalyzeButton: document.querySelector("#deepAnalyzeButton"),
+  legacyPipelineToggle: document.querySelector("#legacyPipelineToggle"),
   clearButton: document.querySelector("#clearButton"),
   resultGrid: document.querySelector("#resultGrid"),
   confidenceText: document.querySelector("#confidenceText"),
@@ -604,7 +606,7 @@ function confidenceFor(match, generatedQuestions) {
   return { label: "需要Q&A确认", className: "is-risky" };
 }
 
-async function analyzeQuestion() {
+async function analyzeQuestion(mode = "duel") {
   const text = ui.questionInput.value.trim();
   const requestId = ++analysisRequestId;
   if (!text) {
@@ -615,7 +617,7 @@ async function analyzeQuestion() {
   if (appConfig.answerApiUrl) {
     renderPending();
     try {
-      const answer = await requestBackendAnswer(text);
+      const answer = await requestBackendAnswer(text, mode);
       if (requestId !== analysisRequestId) return;
       renderBackendAnswer(answer);
       return;
@@ -637,15 +639,16 @@ async function analyzeQuestion() {
   renderResult(text, bestMatch, confidence, generatedQuestions, detectedCards);
 }
 
-async function requestBackendAnswer(text) {
-  const cacheKey = buildBackendCacheKey(text);
+async function requestBackendAnswer(text, mode = "duel") {
+  const useFastJudge = !ui.legacyPipelineToggle?.checked;
+  const cacheKey = buildBackendCacheKey(text, mode, useFastJudge);
   const cached = readCachedBackendAnswer(cacheKey);
   if (cached) return cached;
 
   const response = await fetch(appConfig.answerApiUrl, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ question: text }),
+    body: JSON.stringify({ question: text, mode, useFastJudge }),
   });
   if (!response.ok) throw new Error(`后端返回 ${response.status}`);
   const answer = await response.json();
@@ -653,8 +656,8 @@ async function requestBackendAnswer(text) {
   return answer;
 }
 
-function buildBackendCacheKey(text) {
-  return `ocg-ruling-answer:v11:${appConfig.answerApiUrl}:${normalizeText(text).slice(0, 2000)}`;
+function buildBackendCacheKey(text, mode = "duel", useFastJudge = true) {
+  return `ocg-ruling-answer:v12:${mode}:${useFastJudge ? "fast" : "legacy"}:${appConfig.answerApiUrl}:${normalizeText(text).slice(0, 2000)}`;
 }
 
 function readCachedBackendAnswer(key) {
@@ -693,6 +696,10 @@ function renderPending() {
 
 function renderBackendAnswer(answer) {
   lastRenderedBackendAnswer = answer || null;
+  if (answer?.pipeline === "fast_judge" || answer?.answerType) {
+    renderFastJudgeAnswer(answer);
+    return;
+  }
   if (answer?.status === "data_source_missing") {
     ui.resultGrid.hidden = false;
     renderCards([]);
@@ -730,6 +737,47 @@ function renderBackendAnswer(answer) {
   renderList(ui.questionsList, [...(answer?.needsConfirmation || []), ...(answer?.warnings || [])]);
   renderSources(answer?.sources || []);
   renderFeedbackPanel(answer);
+}
+
+function renderFastJudgeAnswer(answer) {
+  ui.resultGrid.hidden = false;
+  renderCards(answer?.cards || []);
+  const labels = {
+    direct_official: { confidence: "官方依据", className: "is-confirmed", basis: "官方 Q&A / FAQ" },
+    rule_judgment: { confidence: "规则判断", className: "is-rule-derived", basis: "卡片文本与公开规则" },
+    needs_clarification: { confidence: "需要补充", className: "is-risky", basis: "当前信息不足" },
+    cannot_answer_safely: { confidence: "无法安全判断", className: "is-risky", basis: "验证未通过" },
+  };
+  const state = labels[answer.answerType] || labels.cannot_answer_safely;
+  updateModelStatus(answer.pending ? "等待深度判断" : "FAST JUDGE");
+  ui.verdictBlock.className = `result-block verdict-block ${state?.className || "is-risky"}`;
+  ui.confidenceText.textContent = state?.confidence || "无法安全判断";
+  ui.verdictTitle.textContent = answer.pending ? "正在深度判断" : "裁判结论";
+  ui.rulingBasisText.textContent = state?.basis || "验证未通过";
+  ui.verdictBody.textContent = answer.shortAnswer || "当前无法安全判断。";
+  renderSubAnswers([]);
+  renderList(ui.stepsList, (answer.judgeReasoning || []).map((item) => item.text).filter(Boolean));
+  const required = [
+    ...(answer.requiredFacts || []),
+    ...(answer.unresolvedCardPrompts || []).map((item) => {
+      const candidates = (item.candidateCards || []).map((card) => card.name).filter(Boolean).join("、");
+      return `请确认卡名“${item.unresolvedCardName}”${candidates ? `；候选：${candidates}` : ""}`;
+    }),
+  ];
+  renderList(ui.questionsList, required);
+  renderSources(fastJudgeSources(answer.sourceSummary));
+  renderParserDebug(answer.debug || null);
+  renderFeedbackPanel(answer);
+}
+
+function fastJudgeSources(summary = {}) {
+  const groups = [
+    ["卡片文本", summary.cardTextRefs],
+    ["官方 Q&A / FAQ", summary.officialQaRefs],
+    ["规则片段", summary.ruleRefs],
+    ["类比资料", summary.analogyRefs],
+  ];
+  return groups.flatMap(([label, refs]) => (refs || []).map((ref) => ({ label, detail: String(ref) })));
 }
 
 function resetAnalysis() {
@@ -1725,7 +1773,8 @@ async function init() {
   updateSourceStatus();
   resetAnalysis();
 
-  ui.analyzeButton.addEventListener("click", analyzeQuestion);
+  ui.analyzeButton.addEventListener("click", () => analyzeQuestion("duel"));
+  ui.deepAnalyzeButton?.addEventListener("click", () => analyzeQuestion("analysis"));
   ui.questionInput.addEventListener("input", scheduleAnalysis);
   ui.clearButton.addEventListener("click", () => {
     clearTimeout(analysisTimer);
