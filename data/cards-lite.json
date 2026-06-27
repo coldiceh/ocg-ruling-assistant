@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-06-25T20:31:41.647Z",
+  "generatedAt": "2026-06-26T20:19:44.374Z",
   "records": [
     {
       "id": "21385",
@@ -673,9 +673,11 @@
     },
     {
       "id": "21628",
-      "name": "ASHLAN U1000",
+      "name": "ASHLAN－U１０００型",
+      "jaName": "ASHLAN－U１０００型",
       "enName": "ASHLAN U1000",
       "aliases": [
+        "ASHLAN－U１０００型",
         "ASHLAN U1000"
       ],
       "released": true
@@ -6457,9 +6459,11 @@
     },
     {
       "id": "22938",
-      "name": "Anti-GMX Final Experiment",
+      "name": "A－GMX最終検証",
+      "jaName": "A－GMX最終検証",
       "enName": "Anti-GMX Final Experiment",
       "aliases": [
+        "A－GMX最終検証",
         "Anti-GMX Final Experiment"
       ],
       "released": true
@@ -9041,9 +9045,11 @@
     },
     {
       "id": "22345",
-      "name": "Army of the Haunted",
+      "name": "生ける屍の軍団",
+      "jaName": "生ける屍の軍団",
       "enName": "Army of the Haunted",
       "aliases": [
+        "生ける屍の軍団",
         "Army of the Haunted"
       ],
       "released": true
@@ -19746,9 +19752,11 @@
     },
     {
       "id": "21624",
-      "name": "Buio the Dawn's Light",
+      "name": "暁光のブイオ",
+      "jaName": "暁光のブイオ",
       "enName": "Buio the Dawn's Light",
       "aliases": [
+        "暁光のブイオ",
         "Buio the Dawn's Light"
       ],
       "released": true
@@ -21226,9 +21234,11 @@
     },
     {
       "id": "22350",
-      "name": "Call of the Forgotten",
+      "name": "生ける屍の呼び声",
+      "jaName": "生ける屍の呼び声",
       "enName": "Call of the Forgotten",
       "aliases": [
+        "生ける屍の呼び声",
         "Call of the Forgotten"
       ],
       "released": true
@@ -23065,9 +23075,11 @@
     },
     {
       "id": "22065",
-      "name": "Chanbar, the Flashy Sportsknight",
+      "name": "明滅騎士チャンバル",
+      "jaName": "明滅騎士チャンバル",
       "enName": "Chanbar, the Flashy Sportsknight",
       "aliases": [
+        "明滅騎士チャンバル",
         "Chanbar, the Flashy Sportsknight"
       ],
       "released": true
@@ -23848,9 +23860,11 @@
     },
     {
       "id": "22928",
-      "name": "Checkker",
+      "name": "チェツカー",
+      "jaName": "チェツカー",
       "enName": "Checkker",
       "aliases": [
+        "チェツカー",
         "Checkker"
       ],
       "released": true
@@ -24025,9 +24039,11 @@
     },
     {
       "id": "22067",
-      "name": "Chevreuil, Hunting Scout of the Deep Forest",
+      "name": "密林の狩猟者シュヴルイユ",
+      "jaName": "密林の狩猟者シュヴルイユ",
       "enName": "Chevreuil, Hunting Scout of the Deep Forest",
       "aliases": [
+        "密林の狩猟者シュヴルイユ",
         "Chevreuil, Hunting Scout of the Deep Forest"
       ],
       "released": true
@@ -30168,9 +30184,11 @@
     },
     {
       "id": "22064",
-      "name": "Cursed Copycat Noble Arms",
+      "name": "天魔伏聖剣",
+      "jaName": "天魔伏聖剣",
       "enName": "Cursed Copycat Noble Arms",
       "aliases": [
+        "天魔伏聖剣",
         "Cursed Copycat Noble Arms"
       ],
       "released": true
@@ -36936,9 +36954,11 @@
     },
     {
       "id": "22353",
-      "name": "Deadly Zombie Breath",
+      "name": "朽ち果ての吐息",
+      "jaName": "朽ち果ての吐息",
       "enName": "Deadly Zombie Breath",
       "aliases": [
+        "朽ち果ての吐息",
         "Deadly Zombie Breath"
       ],
       "released": true
@@ -40981,9 +41001,11 @@
     },
     {
       "id": "22063",
-      "name": "Disguise, the Copycat Hero",
+      "name": "虚英雄ディスガイス",
+      "jaName": "虚英雄ディスガイス",
       "enName": "Disguise, the Copycat Hero",
       "aliases": [
+        "虚英雄ディスガイス",
         "Disguise, the Copycat Hero"
       ],
       "released": true
@@ -47425,9 +47447,11 @@
     },
     {
       "id": "22351",
-      "name": "Ectoplasmic Fortification",
+      "name": "霊魂プラズマ",
+      "jaName": "霊魂プラズマ",
       "enName": "Ectoplasmic Fortification",
       "aliases": [
+        "霊魂プラズマ",
         "Ectoplasmic Fortification"
       ],
       "released": true
@@ -52500,9 +52524,11 @@
     },
     {
       "id": "22935",
-      "name": "Evolved Daneen",
+      "name": "暁世竜ダニアン",
+      "jaName": "暁世竜ダニアン",
       "enName": "Evolved Daneen",
       "aliases": [
+        "暁世竜ダニアン",
         "Evolved Daneen"
       ],
       "released": true
@@ -54404,9 +54430,11 @@
     },
     {
       "id": "22066",
-      "name": "Faisan, Hunting Scout of the Deep Forest",
+      "name": "密林の狩猟者フザン",
+      "jaName": "密林の狩猟者フザン",
       "enName": "Faisan, Hunting Scout of the Deep Forest",
       "aliases": [
+        "密林の狩猟者フザン",
         "Faisan, Hunting Scout of the Deep Forest"
       ],
       "released": true
@@ -54819,9 +54847,11 @@
     },
     {
       "id": "22924",
-      "name": "Fata Dragna",
+      "name": "蜃欺龍",
+      "jaName": "蜃欺龍",
       "enName": "Fata Dragna",
       "aliases": [
+        "蜃欺龍",
         "Fata Dragna"
       ],
       "released": true
@@ -57598,9 +57628,11 @@
     },
     {
       "id": "22071",
-      "name": "Fleeting Flower of the Magician",
+      "name": "魔術師の空華",
+      "jaName": "魔術師の空華",
       "enName": "Fleeting Flower of the Magician",
       "aliases": [
+        "魔術師の空華",
         "Fleeting Flower of the Magician"
       ],
       "released": true
@@ -58293,9 +58325,11 @@
     },
     {
       "id": "22333",
-      "name": "Flux Ochsenfeld",
+      "name": "フラックス・オクセンフェルト",
+      "jaName": "フラックス・オクセンフェルト",
       "enName": "Flux Ochsenfeld",
       "aliases": [
+        "フラックス・オクセンフェルト",
         "Flux Ochsenfeld"
       ],
       "released": true
@@ -60689,99 +60723,121 @@
     },
     {
       "id": "22340",
-      "name": "GMX - ALLOS",
+      "name": "GMX－ALLOS",
+      "jaName": "GMX－ALLOS",
       "enName": "GMX - ALLOS",
       "aliases": [
+        "GMX－ALLOS",
         "GMX - ALLOS"
       ],
       "released": true
     },
     {
       "id": "22934",
-      "name": "GMX - COMPREX",
+      "name": "GMX－COMPREX",
+      "jaName": "GMX－COMPREX",
       "enName": "GMX - COMPREX",
       "aliases": [
+        "GMX－COMPREX",
         "GMX - COMPREX"
       ],
       "released": true
     },
     {
       "id": "22341",
-      "name": "GMX - VELOX",
+      "name": "GMX－VELOX",
+      "jaName": "GMX－VELOX",
       "enName": "GMX - VELOX",
       "aliases": [
+        "GMX－VELOX",
         "GMX - VELOX"
       ],
       "released": true
     },
     {
       "id": "22936",
-      "name": "GMX 55th Experiment Report",
+      "name": "第５５次GMX試験報告",
+      "jaName": "第５５次GMX試験報告",
       "enName": "GMX 55th Experiment Report",
       "aliases": [
+        "第５５次GMX試験報告",
         "GMX 55th Experiment Report"
       ],
       "released": true
     },
     {
       "id": "22342",
-      "name": "GMX Applied Experiment #55",
+      "name": "第５５次GMX応用試験",
+      "jaName": "第５５次GMX応用試験",
       "enName": "GMX Applied Experiment #55",
       "aliases": [
+        "第５５次GMX応用試験",
         "GMX Applied Experiment #55"
       ],
       "released": true
     },
     {
       "id": "22338",
-      "name": "GMX Associate Noma",
+      "name": "GMX准教授ノーマ",
+      "jaName": "GMX准教授ノーマ",
       "enName": "GMX Associate Noma",
       "aliases": [
+        "GMX准教授ノーマ",
         "GMX Associate Noma"
       ],
       "released": true
     },
     {
       "id": "22337",
-      "name": "GMX Chairman Kimridge",
+      "name": "GMX主任教授キンリッジ",
+      "jaName": "GMX主任教授キンリッジ",
       "enName": "GMX Chairman Kimridge",
       "aliases": [
+        "GMX主任教授キンリッジ",
         "GMX Chairman Kimridge"
       ],
       "released": true
     },
     {
       "id": "22937",
-      "name": "GMX Lab #5",
+      "name": "旧GMX第５研究所",
+      "jaName": "旧GMX第５研究所",
       "enName": "GMX Lab #5",
       "aliases": [
+        "旧GMX第５研究所",
         "GMX Lab #5"
       ],
       "released": true
     },
     {
       "id": "22932",
-      "name": "GMX Partner Selandea",
+      "name": "GMX同絆者セランディア",
+      "jaName": "GMX同絆者セランディア",
       "enName": "GMX Partner Selandea",
       "aliases": [
+        "GMX同絆者セランディア",
         "GMX Partner Selandea"
       ],
       "released": true
     },
     {
       "id": "22336",
-      "name": "GMX Researcher Selande",
+      "name": "GMX研究員セラン",
+      "jaName": "GMX研究員セラン",
       "enName": "GMX Researcher Selande",
       "aliases": [
+        "GMX研究員セラン",
         "GMX Researcher Selande"
       ],
       "released": true
     },
     {
       "id": "22933",
-      "name": "GMX Suppression Squad",
+      "name": "GMX鎮圧部隊アプト",
+      "jaName": "GMX鎮圧部隊アプト",
       "enName": "GMX Suppression Squad",
       "aliases": [
+        "GMX鎮圧部隊アプト",
         "GMX Suppression Squad"
       ],
       "released": true
@@ -62183,9 +62239,11 @@
     },
     {
       "id": "22923",
-      "name": "Gaming Gamer GG",
+      "name": "ゲーミング・ゲーマーGG",
+      "jaName": "ゲーミング・ゲーマーGG",
       "enName": "Gaming Gamer GG",
       "aliases": [
+        "ゲーミング・ゲーマーGG",
         "Gaming Gamer GG"
       ],
       "released": true
@@ -64339,9 +64397,11 @@
     },
     {
       "id": "22927",
-      "name": "Genia of the Ring",
+      "name": "指環の精霊ジーニャ",
+      "jaName": "指環の精霊ジーニャ",
       "enName": "Genia of the Ring",
       "aliases": [
+        "指環の精霊ジーニャ",
         "Genia of the Ring"
       ],
       "released": true
@@ -70373,9 +70433,11 @@
     },
     {
       "id": "22347",
-      "name": "Great Mammoth of the Netherworld",
+      "name": "冥界の魔象",
+      "jaName": "冥界の魔象",
       "enName": "Great Mammoth of the Netherworld",
       "aliases": [
+        "冥界の魔象",
         "Great Mammoth of the Netherworld"
       ],
       "released": true
@@ -76115,9 +76177,11 @@
     },
     {
       "id": "22068",
-      "name": "Hunting Horn",
+      "name": "ハンティングホーン",
+      "jaName": "ハンティングホーン",
       "enName": "Hunting Horn",
       "aliases": [
+        "ハンティングホーン",
         "Hunting Horn"
       ],
       "released": true
@@ -80383,9 +80447,11 @@
     },
     {
       "id": "22328",
-      "name": "Jade Dragon Mech",
+      "name": "翠鋁の機竜",
+      "jaName": "翠鋁の機竜",
       "enName": "Jade Dragon Mech",
       "aliases": [
+        "翠鋁の機竜",
         "Jade Dragon Mech"
       ],
       "released": true
@@ -87881,10 +87947,11 @@
     },
     {
       "id": "21967",
-      "name": "Light Leading the Valiant",
-      "jaName": "Light Leading the Valiant",
+      "name": "闘者を導く光",
+      "jaName": "闘者を導く光",
       "enName": "Light Leading the Valiant",
       "aliases": [
+        "闘者を導く光",
         "Light Leading the Valiant"
       ],
       "released": true
@@ -89557,9 +89624,11 @@
     },
     {
       "id": "21625",
-      "name": "Luce the Dusk's Dark",
+      "name": "宵闇のルーチェ",
+      "jaName": "宵闇のルーチェ",
       "enName": "Luce the Dusk's Dark",
       "aliases": [
+        "宵闇のルーチェ",
         "Luce the Dusk's Dark"
       ],
       "released": true
@@ -90145,9 +90214,11 @@
     },
     {
       "id": "22069",
-      "name": "Lycoris Lilyreaper",
+      "name": "リコリス・リリィパー",
+      "jaName": "リコリス・リリィパー",
       "enName": "Lycoris Lilyreaper",
       "aliases": [
+        "リコリス・リリィパー",
         "Lycoris Lilyreaper"
       ],
       "released": true
@@ -96779,9 +96850,11 @@
     },
     {
       "id": "22327",
-      "name": "Mechanical Mechanic",
+      "name": "機叡のメカチューナー",
+      "jaName": "機叡のメカチューナー",
       "enName": "Mechanical Mechanic",
       "aliases": [
+        "機叡のメカチューナー",
         "Mechanical Mechanic"
       ],
       "released": true
@@ -98229,9 +98302,11 @@
     },
     {
       "id": "22330",
-      "name": "Mercurium the Living Quicksilver",
+      "name": "生命の汞 メルクリウム",
+      "jaName": "生命の汞 メルクリウム",
       "enName": "Mercurium the Living Quicksilver",
       "aliases": [
+        "生命の汞 メルクリウム",
         "Mercurium the Living Quicksilver"
       ],
       "released": true
@@ -100490,9 +100565,11 @@
     },
     {
       "id": "21627",
-      "name": "Miracle Raven",
+      "name": "ミラクル・レイヴン－供物の儀式－",
+      "jaName": "ミラクル・レイヴン－供物の儀式－",
       "enName": "Miracle Raven",
       "aliases": [
+        "ミラクル・レイヴン－供物の儀式－",
         "Miracle Raven"
       ],
       "released": true
@@ -100918,9 +100995,11 @@
     },
     {
       "id": "22329",
-      "name": "Mischief of the Wolves",
+      "name": "大狼のいたずら",
+      "jaName": "大狼のいたずら",
       "enName": "Mischief of the Wolves",
       "aliases": [
+        "大狼のいたずら",
         "Mischief of the Wolves"
       ],
       "released": true
@@ -103058,9 +103137,11 @@
     },
     {
       "id": "21626",
-      "name": "Mutiny in the Sky",
+      "name": "天至る叛逆",
+      "jaName": "天至る叛逆",
       "enName": "Mutiny in the Sky",
       "aliases": [
+        "天至る叛逆",
         "Mutiny in the Sky"
       ],
       "released": true
@@ -110270,18 +110351,22 @@
     },
     {
       "id": "22930",
-      "name": "Officiating Reverie",
+      "name": "祭司 レヴァリー",
+      "jaName": "祭司 レヴァリー",
       "enName": "Officiating Reverie",
       "aliases": [
+        "祭司 レヴァリー",
         "Officiating Reverie"
       ],
       "released": true
     },
     {
       "id": "22931",
-      "name": "Officiator of Doom Samuel",
+      "name": "死宰 サムエル",
+      "jaName": "死宰 サムエル",
       "enName": "Officiator of Doom Samuel",
       "aliases": [
+        "死宰 サムエル",
         "Officiator of Doom Samuel"
       ],
       "released": true
@@ -119750,9 +119835,11 @@
     },
     {
       "id": "21632",
-      "name": "Psychic Omnibuster",
+      "name": "サイコ・オムニバスター",
+      "jaName": "サイコ・オムニバスター",
       "enName": "Psychic Omnibuster",
       "aliases": [
+        "サイコ・オムニバスター",
         "Psychic Omnibuster"
       ],
       "released": true
@@ -120002,9 +120089,11 @@
     },
     {
       "id": "22348",
-      "name": "Pumpking the Great Ghost King",
+      "name": "ゴースト大王－パンプキング－",
+      "jaName": "ゴースト大王－パンプキング－",
       "enName": "Pumpking the Great Ghost King",
       "aliases": [
+        "ゴースト大王－パンプキング－",
         "Pumpking the Great Ghost King"
       ],
       "released": true
@@ -120022,9 +120111,11 @@
     },
     {
       "id": "22344",
-      "name": "Pumpking the King of Grave Ghosts",
+      "name": "墓場のゴースト王－パンプキング－",
+      "jaName": "墓場のゴースト王－パンプキング－",
       "enName": "Pumpking the King of Grave Ghosts",
       "aliases": [
+        "墓場のゴースト王－パンプキング－",
         "Pumpking the King of Grave Ghosts"
       ],
       "released": true
@@ -121173,126 +121264,154 @@
     },
     {
       "id": "21638",
-      "name": "R.B. Funk Dock",
+      "name": "R.B.ファンク・ドック",
+      "jaName": "R.B.ファンク・ドック",
       "enName": "R.B. Funk Dock",
       "aliases": [
+        "R.B.ファンク・ドック",
         "R.B. Funk Dock"
       ],
       "released": true
     },
     {
       "id": "21634",
-      "name": "R.B. Ga10 Cutter",
+      "name": "R.B.GA１０カッター",
+      "jaName": "R.B.GA１０カッター",
       "enName": "R.B. Ga10 Cutter",
       "aliases": [
+        "R.B.GA１０カッター",
         "R.B. Ga10 Cutter"
       ],
       "released": true
     },
     {
       "id": "21633",
-      "name": "R.B. Ga10 Driller",
+      "name": "R.B.GA１０ドリラー",
+      "jaName": "R.B.GA１０ドリラー",
       "enName": "R.B. Ga10 Driller",
       "aliases": [
+        "R.B.GA１０ドリラー",
         "R.B. Ga10 Driller"
       ],
       "released": true
     },
     {
       "id": "22074",
-      "name": "R.B. Ga10 Pile Bunker",
+      "name": "R.B.GA１０パイルバンカー",
+      "jaName": "R.B.GA１０パイルバンカー",
       "enName": "R.B. Ga10 Pile Bunker",
       "aliases": [
+        "R.B.GA１０パイルバンカー",
         "R.B. Ga10 Pile Bunker"
       ],
       "released": true
     },
     {
       "id": "22073",
-      "name": "R.B. Lambda Blade",
+      "name": "R.B.ラムダブレード",
+      "jaName": "R.B.ラムダブレード",
       "enName": "R.B. Lambda Blade",
       "aliases": [
+        "R.B.ラムダブレード",
         "R.B. Lambda Blade"
       ],
       "released": true
     },
     {
       "id": "22072",
-      "name": "R.B. Lambda Cannon",
+      "name": "R.B.ラムダキャノン",
+      "jaName": "R.B.ラムダキャノン",
       "enName": "R.B. Lambda Cannon",
       "aliases": [
+        "R.B.ラムダキャノン",
         "R.B. Lambda Cannon"
       ],
       "released": true
     },
     {
       "id": "22077",
-      "name": "R.B. Last Stand",
+      "name": "R.B.ラスト・スタンド",
+      "jaName": "R.B.ラスト・スタンド",
       "enName": "R.B. Last Stand",
       "aliases": [
+        "R.B.ラスト・スタンド",
         "R.B. Last Stand"
       ],
       "released": true
     },
     {
       "id": "22078",
-      "name": "R.B. Next Phase",
+      "name": "R.B.ネクスト・フェーズ",
+      "jaName": "R.B.ネクスト・フェーズ",
       "enName": "R.B. Next Phase",
       "aliases": [
+        "R.B.ネクスト・フェーズ",
         "R.B. Next Phase"
       ],
       "released": true
     },
     {
       "id": "22076",
-      "name": "R.B. Operation Test",
+      "name": "R.B.オペレーション・テスト",
+      "jaName": "R.B.オペレーション・テスト",
       "enName": "R.B. Operation Test",
       "aliases": [
+        "R.B.オペレーション・テスト",
         "R.B. Operation Test"
       ],
       "released": true
     },
     {
       "id": "22075",
-      "name": "R.B. Shepherd's Crook",
+      "name": "R.B.シェパード・クルーク",
+      "jaName": "R.B.シェパード・クルーク",
       "enName": "R.B. Shepherd's Crook",
       "aliases": [
+        "R.B.シェパード・クルーク",
         "R.B. Shepherd's Crook"
       ],
       "released": true
     },
     {
       "id": "21639",
-      "name": "R.B. Stage Landing",
+      "name": "R.B.ジャンプ・ナンバー",
+      "jaName": "R.B.ジャンプ・ナンバー",
       "enName": "R.B. Stage Landing",
       "aliases": [
+        "R.B.ジャンプ・ナンバー",
         "R.B. Stage Landing"
       ],
       "released": true
     },
     {
       "id": "21637",
-      "name": "R.B. The Brute Blues",
+      "name": "R.B.ブルート・ブルース",
+      "jaName": "R.B.ブルート・ブルース",
       "enName": "R.B. The Brute Blues",
       "aliases": [
+        "R.B.ブルート・ブルース",
         "R.B. The Brute Blues"
       ],
       "released": true
     },
     {
       "id": "21636",
-      "name": "R.B. VALCan Booster",
+      "name": "R.B.バルカンブースター",
+      "jaName": "R.B.バルカンブースター",
       "enName": "R.B. VALCan Booster",
       "aliases": [
+        "R.B.バルカンブースター",
         "R.B. VALCan Booster"
       ],
       "released": true
     },
     {
       "id": "21635",
-      "name": "R.B. VALCan Rocket",
+      "name": "R.B.バルカンロケット",
+      "jaName": "R.B.バルカンロケット",
       "enName": "R.B. VALCan Rocket",
       "aliases": [
+        "R.B.バルカンロケット",
         "R.B. VALCan Rocket"
       ],
       "released": true
@@ -122536,9 +122655,11 @@
     },
     {
       "id": "22332",
-      "name": "Rain of Frogs",
+      "name": "悪鵺死ノ雨",
+      "jaName": "悪鵺死ノ雨",
       "enName": "Rain of Frogs",
       "aliases": [
+        "悪鵺死ノ雨",
         "Rain of Frogs"
       ],
       "released": true
@@ -123546,9 +123667,11 @@
     },
     {
       "id": "21629",
-      "name": "Readying of Rites",
+      "name": "供物の下ごしらえ",
+      "jaName": "供物の下ごしらえ",
       "enName": "Readying of Rites",
       "aliases": [
+        "供物の下ごしらえ",
         "Readying of Rites"
       ],
       "released": true
@@ -126349,9 +126472,11 @@
     },
     {
       "id": "22339",
-      "name": "Returned Dino Daneen",
+      "name": "新世竜ダニアン",
+      "jaName": "新世竜ダニアン",
       "enName": "Returned Dino Daneen",
       "aliases": [
+        "新世竜ダニアン",
         "Returned Dino Daneen"
       ],
       "released": true
@@ -128734,9 +128859,11 @@
     },
     {
       "id": "22929",
-      "name": "Rustin Mammoth",
+      "name": "ラスティン・マンモス",
+      "jaName": "ラスティン・マンモス",
       "enName": "Rustin Mammoth",
       "aliases": [
+        "ラスティン・マンモス",
         "Rustin Mammoth"
       ],
       "released": true
@@ -133670,9 +133797,11 @@
     },
     {
       "id": "22925",
-      "name": "Shade the Obscure",
+      "name": "暗翳の信仰者",
+      "jaName": "暗翳の信仰者",
       "enName": "Shade the Obscure",
       "aliases": [
+        "暗翳の信仰者",
         "Shade the Obscure"
       ],
       "released": true
@@ -134611,9 +134740,11 @@
     },
     {
       "id": "22334",
-      "name": "Shipping Archfiend",
+      "name": "カップリング・デーモン",
+      "jaName": "カップリング・デーモン",
       "enName": "Shipping Archfiend",
       "aliases": [
+        "カップリング・デーモン",
         "Shipping Archfiend"
       ],
       "released": true
@@ -135462,9 +135593,11 @@
     },
     {
       "id": "22070",
-      "name": "Silk Bomb Moth",
+      "name": "シルクボムモース",
+      "jaName": "シルクボムモース",
       "enName": "Silk Bomb Moth",
       "aliases": [
+        "シルクボムモース",
         "Silk Bomb Moth"
       ],
       "released": true
@@ -141727,9 +141860,11 @@
     },
     {
       "id": "22346",
-      "name": "Stare of the Snake Hair",
+      "name": "凍てつく眼光のメデューサ",
+      "jaName": "凍てつく眼光のメデューサ",
       "enName": "Stare of the Snake Hair",
       "aliases": [
+        "凍てつく眼光のメデューサ",
         "Stare of the Snake Hair"
       ],
       "released": true
@@ -142243,9 +142378,11 @@
     },
     {
       "id": "21630",
-      "name": "Steel-Stringed Sacrifice",
+      "name": "鉄絃の犠打職人",
+      "jaName": "鉄絃の犠打職人",
       "enName": "Steel-Stringed Sacrifice",
       "aliases": [
+        "鉄絃の犠打職人",
         "Steel-Stringed Sacrifice"
       ],
       "released": true
@@ -142799,9 +142936,11 @@
     },
     {
       "id": "22335",
-      "name": "Storm-Bane Dragon Destorbim",
+      "name": "嵐忌竜デストゥビム",
+      "jaName": "嵐忌竜デストゥビム",
       "enName": "Storm-Bane Dragon Destorbim",
       "aliases": [
+        "嵐忌竜デストゥビム",
         "Storm-Bane Dragon Destorbim"
       ],
       "released": true
@@ -150673,10 +150812,11 @@
     },
     {
       "id": "21968",
-      "name": "The Lady's Protectors",
-      "jaName": "The Lady's Protectors",
+      "name": "貴婦人の守護者",
+      "jaName": "貴婦人の守護者",
       "enName": "The Lady's Protectors",
       "aliases": [
+        "貴婦人の守護者",
         "The Lady's Protectors"
       ],
       "released": true
@@ -151829,9 +151969,11 @@
     },
     {
       "id": "22349",
-      "name": "The Undying Legion",
+      "name": "不死の大軍団",
+      "jaName": "不死の大軍団",
       "enName": "The Undying Legion",
       "aliases": [
+        "不死の大軍団",
         "The Undying Legion"
       ],
       "released": true
@@ -160080,9 +160222,11 @@
     },
     {
       "id": "22926",
-      "name": "VIP Whale",
+      "name": "豪回遊鯨 VIPホエール",
+      "jaName": "豪回遊鯨 VIPホエール",
       "enName": "VIP Whale",
       "aliases": [
+        "豪回遊鯨 VIPホエール",
         "VIP Whale"
       ],
       "released": true
@@ -162544,9 +162688,11 @@
     },
     {
       "id": "22331",
-      "name": "Vodnika the Fountain Spirit",
+      "name": "還流の精ヴォドニカ",
+      "jaName": "還流の精ヴォドニカ",
       "enName": "Vodnika the Fountain Spirit",
       "aliases": [
+        "還流の精ヴォドニカ",
         "Vodnika the Fountain Spirit"
       ],
       "released": true
@@ -163034,9 +163180,11 @@
     },
     {
       "id": "22352",
-      "name": "Vortex of Time",
+      "name": "時空の渦",
+      "jaName": "時空の渦",
       "enName": "Vortex of Time",
       "aliases": [
+        "時空の渦",
         "Vortex of Time"
       ],
       "released": true
@@ -168587,9 +168735,11 @@
     },
     {
       "id": "21631",
-      "name": "Xyz Lay",
+      "name": "エクシーズ・レイ",
+      "jaName": "エクシーズ・レイ",
       "enName": "Xyz Lay",
       "aliases": [
+        "エクシーズ・レイ",
         "Xyz Lay"
       ],
       "released": true
