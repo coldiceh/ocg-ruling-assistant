@@ -98,7 +98,7 @@ function classifyMonsterText(text) {
   const otherText = [];
   for (const paragraph of paragraphs) {
     if (isSummonCondition(paragraph)) summonConditions.push(paragraph);
-    else if (extractEffectNo(paragraph) !== "unknown" || /发动|适用|不受|攻击|效果|発動|効果|activate|effect/iu.test(paragraph)) effects.push(paragraph);
+    else if (extractEffectNo(paragraph) !== "unknown" || /发动|适用|不受|攻击|效果|贯穿|貫通|战斗伤害|戦闘ダメージ|発動|効果|activate|effect|battle damage|piercing/iu.test(paragraph)) effects.push(paragraph);
     else otherText.push(paragraph);
   }
   return { effects, summonConditions, otherText };

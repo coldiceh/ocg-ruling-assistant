@@ -53,6 +53,15 @@ export function validateJudgeAnswer({ question = "", issueFrames = {}, contextPa
     const used = (modelAnswer.judgeReasoning || []).flatMap((item) => item.refs || []);
     if (!used.some((ref) => officialIds.has(String(ref)))) unsupportedClaims.push("direct_official_without_direct_official_ref");
   }
+  const staleness = contextPack.staleness || {};
+  const usedRefs = (modelAnswer.judgeReasoning || []).flatMap((item) => item.refs || []).map(String);
+  const staleIds = new Set((staleness.staleEvidenceIds || []).map(String));
+  if (usedRefs.some((ref) => staleIds.has(ref))) unsupportedClaims.push("stale_source_used_as_current_rule");
+  if (
+    ["direct_official", "rule_judgment"].includes(modelAnswer.answerType)
+    && staleness.matchedRuleChanges?.length
+    && !(staleness.currentEvidenceIds || []).length
+  ) unsupportedClaims.push("missing_current_rule_source");
 
   const currentNames = [
     ...(contextPack.resolvedCards || []).flatMap((card) => [card.name, card.names?.zh, card.names?.ja, card.names?.en]),
@@ -103,7 +112,7 @@ export function buildSafeClarification(question, issueFrames = {}, contextPack =
   return {
     answerType: "needs_clarification",
     verdict: "unknown",
-    shortAnswer: trim(`需要补充。${subject}这题涉及${issueLabel}，现有上下文不足以形成可靠裁判结论。`, 120),
+    shortAnswer: trim(`需要补充。${subject}这题涉及${issueLabel}，现有上下文不足以形成可靠规则结论。`, 120),
     judgeReasoning: refs.length ? [{ text: `已按${issueLabel}检查当前卡片文本，但关键状态或文本仍不完整。`, basis: ["card_text"], refs }] : [],
     requiredFacts: [...new Set(requiredFacts)].slice(0, 6),
     assumptions: [],

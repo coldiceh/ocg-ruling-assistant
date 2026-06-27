@@ -7,7 +7,8 @@ import { detectIssueFrames, issueFrameIds } from "./issueFrameDetector.mjs";
 import { runJudgeAnswerModel } from "./judgeAnswerModel.mjs";
 import { buildSafeClarification, validateJudgeAnswer } from "./judgeAnswerValidator.mjs";
 import { createLatencyBudget, isLatencyTimeout, runWithinLatencyBudget } from "./latencyBudget.mjs";
-import { buildRulingContextPack, resolveCardsForFastJudge } from "./rulingContextPack.mjs";
+import { buildRulingContextPack, buildTemporaryCardProfiles, resolveCardsForFastJudge } from "./rulingContextPack.mjs";
+import { checkStaleness } from "./stalenessGuard.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const fastSnapshotCache = new Map();
@@ -20,7 +21,9 @@ export async function answerRulingQuestionFast({ question, mode = "duel", maxLat
   try {
     const localSnapshot = snapshot || await runWithinLatencyBudget(() => loadFastJudgeSnapshot(dataDir), budget, "fast_context_load");
     const resolution = resolveCardsForFastJudge(input, localSnapshot.cards || []);
-    const cardProfiles = buildCardProfiles(resolution.resolvedCards);
+    const databaseProfiles = buildCardProfiles(resolution.resolvedCards);
+    const temporaryProfiles = buildTemporaryCardProfiles(input, resolution.unresolvedCards);
+    const cardProfiles = [...databaseProfiles, ...temporaryProfiles];
     const preliminaryFrames = detectIssueFrames({ question: input, cardProfiles });
     const contextPack = buildRulingContextPack({
       question: input,
@@ -37,8 +40,20 @@ export async function answerRulingQuestionFast({ question, mode = "duel", maxLat
       cardTexts: contextPack.relevantCardSections.map((item) => item.text),
     });
     contextPack.issueFrames = issueFrames;
+    const staleness = checkStaleness({
+      issueFrames,
+      evidence: [
+        contextPack.officialQaCandidates,
+        contextPack.faqCandidates,
+        contextPack.ruleSnippets,
+        contextPack.knownAnalogies,
+        contextPack.userProvidedCardText,
+      ],
+      targetFormat: "ocg",
+    });
+    contextPack.staleness = staleness;
 
-    const directOfficial = findDirectOfficialAnswer(input, contextPack, issueFrames);
+    const directOfficial = findDirectOfficialAnswer(input, contextPack, issueFrames, staleness);
     if (directOfficial) {
       const validation = validateJudgeAnswer({ question: input, issueFrames, contextPack, modelAnswer: directOfficial });
       if (validation.ok) return finalize(directOfficial, { mode, budget, issueFrames, contextPack, validation, debug });
@@ -49,8 +64,9 @@ export async function answerRulingQuestionFast({ question, mode = "duel", maxLat
       return finalize(answer, { mode, budget, issueFrames, contextPack, debug });
     }
 
-    if (resolution.unresolvedCards.length || hasRequiredTextGap(issueFrames, cardProfiles)) {
+    if (hasUnresolvedCardsWithoutText(resolution.unresolvedCards, temporaryProfiles) || hasRequiredTextGap(issueFrames, cardProfiles)) {
       const answer = buildSafeClarification(input, issueFrames, contextPack, {});
+      if (hasRequiredTextGap(issueFrames, cardProfiles)) answer.statusChip = "CARD-TEXT-MISSING";
       return finalize(answer, { mode, budget, issueFrames, contextPack, debug });
     }
 
@@ -80,13 +96,13 @@ export async function answerRulingQuestionFast({ question, mode = "duel", maxLat
     return finalize({
       answerType: "cannot_answer_safely",
       verdict: "unknown",
-      shortAnswer: "当前无法安全完成裁判判断，请确认卡名和场面后重试。",
+      shortAnswer: "当前无法安全完成规则判断，请确认卡名和场面后重试。",
       judgeReasoning: [],
       requiredFacts: ["相关卡的正式卡名与完整效果文本", "当前阶段、连锁与适用中的效果"],
       assumptions: [],
       possibleCounterCases: [],
       confidence: "low",
-      warnings: ["裁判引擎未生成可验证结论。"],
+      warnings: ["规则分析未生成可验证结论。"],
     }, { mode, budget, issueFrames: emptyFrames(), contextPack: emptyContext(input), debug, error });
   }
 }
@@ -101,8 +117,8 @@ export async function loadFastJudgeSnapshot(dataDir = join(root, "data")) {
   ]).then(([cards, qa, rules]) => ({
     cards: cards.records || cards.cards || [],
     records: [
-      ...(qa.records || []).map(normalizeIndexedEvidence),
-      ...(rules.records || []).map(normalizeRuleRecord),
+      ...(qa.records || []).map((record) => normalizeIndexedEvidence(record, qa.generatedAt)),
+      ...(rules.records || []).map((record) => normalizeRuleRecord(record, rules.generatedAt)),
     ],
   })).catch((error) => {
     fastSnapshotCache.delete(dataDir);
@@ -112,11 +128,13 @@ export async function loadFastJudgeSnapshot(dataDir = join(root, "data")) {
   return promise;
 }
 
-export function findDirectOfficialAnswer(question, contextPack, issueFrames) {
+export function findDirectOfficialAnswer(question, contextPack, issueFrames, staleness = contextPack.staleness || {}) {
   const primaryCard = contextPack.resolvedCards?.[0];
   if (!primaryCard || !issueFrames.primaryIssueFrames?.length) return null;
   const subQuestion = buildLegacySubQuestion(question, primaryCard.name, issueFrames.primaryIssueFrames);
-  const candidates = [...(contextPack.officialQaCandidates || []), ...(contextPack.faqCandidates || [])];
+  const staleIds = new Set(staleness.staleEvidenceIds || []);
+  const candidates = [...(contextPack.officialQaCandidates || []), ...(contextPack.faqCandidates || [])]
+    .filter((candidate) => !staleIds.has(String(candidate.id)));
   const direct = candidates.map((candidate) => {
     const classification = classifyQaForSubQuestion(subQuestion, normalizeIndexedEvidence(candidate.record || candidate));
     return { candidate, classification };
@@ -162,7 +180,7 @@ function finalize(answer, { mode, budget, issueFrames, contextPack, validation =
       ruleRefs: refs.filter((ref) => ruleIds.has(ref)),
       analogyRefs: refs.filter((ref) => analogyIds.has(ref)),
     },
-    warnings: answer.warnings || [],
+    warnings: [...new Set([...(answer.warnings || []), contextPack.staleness?.userFacingWarning].filter(Boolean))],
     confidence: answer.confidence || "low",
     possibleCounterCases: answer.possibleCounterCases || [],
     pending: Boolean(answer.pending),
@@ -170,6 +188,10 @@ function finalize(answer, { mode, budget, issueFrames, contextPack, validation =
     unresolvedCardPrompts: contextPack.unresolvedCards || [],
     pipeline: "fast_judge",
     latencyMs: budget.elapsedMs(),
+    ruleEraChecked: true,
+    staleRisk: contextPack.staleness?.staleRisk || "none",
+    ruleEraNote: contextPack.staleness?.userFacingWarning || "已检查当前规则版本。",
+    statusChip: answer.statusChip || statusChipFor(answer, contextPack.staleness),
   };
   if (debug || mode === "analysis") {
     result.debug = {
@@ -223,6 +245,11 @@ function hasRequiredTextGap(issueFrames, profiles) {
   return profiles.some((profile) => (profile.missingSections || []).some((section) => required.has(section)));
 }
 
+function hasUnresolvedCardsWithoutText(unresolvedCards, temporaryProfiles) {
+  const covered = new Set(temporaryProfiles.map((profile) => profile.names.zh || profile.names.ja || profile.names.en));
+  return unresolvedCards.some((item) => !covered.has(item.unresolvedCardName));
+}
+
 function buildNoIssueClarification(question, contextPack) {
   const card = contextPack.resolvedCards?.[0]?.name || contextPack.unresolvedCards?.[0]?.unresolvedCardName || "相关卡片";
   return {
@@ -249,18 +276,29 @@ function emptyContext(question) {
   return { question, resolvedCards: [], unresolvedCards: [], relevantCardSections: [], officialQaCandidates: [], faqCandidates: [], ruleSnippets: [], knownAnalogies: [], cardProfiles: [] };
 }
 
-function normalizeIndexedEvidence(record = {}) {
+function normalizeIndexedEvidence(record = {}, generatedAt = null) {
   return {
     ...record,
     recordType: record.recordType || (String(record.id || "").startsWith("card-faq-") ? "card-faq" : "qa"),
     question: record.question || "",
     conclusion: record.conclusion || record.text || "",
     sources: record.sources || [{ label: record.recordType === "qa" ? "YGOResources Q&A" : "YGOResources Card FAQ", detail: record.sourceUrl || "" }],
+    lastCheckedAt: record.lastCheckedAt || generatedAt || null,
+    sourceType: record.sourceType || (record.recordType === "qa" ? "official_qa" : "card_faq"),
+    format: record.format || "ocg",
+    ruleEra: record.ruleEra || "current",
   };
 }
 
-function normalizeRuleRecord(record = {}) {
-  return { ...record, conclusion: record.conclusion || record.text || "", sources: record.sources || [{ label: record.sourceName || "OCG Rule", detail: record.sourceUrl || "" }] };
+function normalizeRuleRecord(record = {}, generatedAt = null) {
+  return { ...record, conclusion: record.conclusion || record.text || "", sources: record.sources || [{ label: record.sourceName || "OCG Rule", detail: record.sourceUrl || "" }], lastCheckedAt: record.lastCheckedAt || generatedAt || null };
+}
+
+function statusChipFor(answer, staleness = {}) {
+  if (staleness.matchedRuleChanges?.length && !(staleness.currentEvidenceIds || []).length) return "OUTDATED-RISK";
+  if (answer.answerType === "direct_official") return "OFFICIAL";
+  if (answer.answerType === "rule_judgment") return "RULE-JUDGED";
+  return "NEEDS-INFO";
 }
 
 async function readJson(path, fallback) {

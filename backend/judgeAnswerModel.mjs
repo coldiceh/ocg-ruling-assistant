@@ -20,10 +20,11 @@ export function buildJudgeModelInput(contextPack, mode = "duel") {
   const rejected = (contextPack.issueFrames?.rejectedIssueFrames || []).map((item) => item.id);
   return {
     instructions: [
-      "你是 OCG 对局裁判助手，只能根据下面的上下文包作答。",
+      "你是 OCG 对局规则处理助手，只能根据下面的上下文包作答。",
       "输出单个 JSON 对象，不要 Markdown，不要引用未提供的案例。",
       "direct_official 仅在 officialQaCandidates/faqCandidates 明确直接回答当前场景时使用，否则只能 rule_judgment 或 needs_clarification。",
       "每条 judgeReasoning 必须有 basis 和有效 refs；最多 3 条。",
+      "带 staleRisk 或 supersededBy 的来源不能作为当前规则的强依据；涉及规则变更时必须引用当前有效来源。",
       "回答必须覆盖全部 primaryIssueFrames，并至少提到一张当前核心卡。",
       `禁止引入这些未触发争点：${rejected.join("、") || "无"}。`,
       mode === "duel" ? "shortAnswer 不超过 120 个中文字符。" : "shortAnswer 保持简洁，完整分析放 judgeReasoning。",
@@ -110,7 +111,7 @@ async function callGemini(input, budget, env) {
 }
 
 function compactContextPack(pack = {}) {
-  const compactEvidence = (items) => (items || []).map((item) => ({ id: item.id, source: item.source, title: item.title, cardIds: item.cardIds, text: item.text, matchedBy: item.matchedBy }));
+  const compactEvidence = (items) => (items || []).map((item) => ({ id: item.id, source: item.source, title: item.title, cardIds: item.cardIds, text: item.text, matchedBy: item.matchedBy, metadata: item.metadata }));
   return {
     question: pack.question,
     normalizedScenario: pack.normalizedScenario,
@@ -124,6 +125,12 @@ function compactContextPack(pack = {}) {
     ruleSnippets: compactEvidence(pack.ruleSnippets),
     knownAnalogies: compactEvidence(pack.knownAnalogies),
     counterEvidenceCandidates: compactEvidence(pack.counterEvidenceCandidates),
+    staleness: pack.staleness ? {
+      staleRisk: pack.staleness.staleRisk,
+      matchedRuleChanges: pack.staleness.matchedRuleChanges,
+      staleEvidenceIds: pack.staleness.staleEvidenceIds,
+      currentEvidenceIds: pack.staleness.currentEvidenceIds,
+    } : null,
   };
 }
 

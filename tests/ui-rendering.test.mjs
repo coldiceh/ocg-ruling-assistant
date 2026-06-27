@@ -134,10 +134,12 @@ test("ordinary UI renders Fast Judge as a short referee answer", async () => {
     readFile(new URL("../index.html", import.meta.url), "utf8"),
     readFile(new URL("../src/app.js", import.meta.url), "utf8"),
   ]);
-  assert.match(html, /快速裁定/u);
+  assert.match(html, /快速结论/u);
   assert.match(html, /深度解析/u);
   assert.match(html, /<details class="pipeline-debug-toggle">/u);
-  assert.match(app, /裁判结论/u);
+  assert.match(app, /"结论"/u);
+  assert.doesNotMatch(html, /裁判结论/u);
+  assert.doesNotMatch(app, /裁判结论/u);
   assert.match(app, /FAST JUDGE/u);
   assert.match(app, /answer\.judgeReasoning/u);
 });
