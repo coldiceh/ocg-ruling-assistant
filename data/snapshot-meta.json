@@ -1,9 +1,17 @@
 {
   "schemaVersion": 1,
   "status": "synced-with-warnings",
-  "generatedAt": "2026-06-26T20:19:44.374Z",
+  "generatedAt": "2026-06-27T19:37:20.349Z",
   "freshnessDays": 7,
+  "sourceFreshness": "stale",
+  "previousSourceRevision": null,
   "sourceRevision": null,
+  "lastSuccessfulSyncAt": "2026-06-26T20:19:44.374Z",
+  "lastFailedSyncAt": "2026-06-27T19:37:20.349Z",
+  "syncFailureCount": 1,
+  "newItems": 77,
+  "changedItems": 0,
+  "removedItems": 0,
   "sources": [
     {
       "id": "official-card-database",

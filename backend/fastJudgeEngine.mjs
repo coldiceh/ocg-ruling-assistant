@@ -9,6 +9,9 @@ import { buildSafeClarification, validateJudgeAnswer } from "./judgeAnswerValida
 import { createLatencyBudget, isLatencyTimeout, runWithinLatencyBudget } from "./latencyBudget.mjs";
 import { buildRulingContextPack, buildTemporaryCardProfiles, resolveCardsForFastJudge } from "./rulingContextPack.mjs";
 import { checkStaleness } from "./stalenessGuard.mjs";
+import { detectCurrentVerdictConflicts, filterCurrentEvidence } from "./currentEvidenceFilter.mjs";
+import { evaluateEvidenceFreshness } from "./evidenceFreshness.mjs";
+import { buildBlockerAnswer, evaluateRulingBlockers } from "./rulingBlockers.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const fastSnapshotCache = new Map();
@@ -20,6 +23,12 @@ export async function answerRulingQuestionFast({ question, mode = "duel", maxLat
 
   try {
     const localSnapshot = snapshot || await runWithinLatencyBudget(() => loadFastJudgeSnapshot(dataDir), budget, "fast_context_load");
+    const evidenceSelection = filterCurrentEvidence(localSnapshot.records || [], {
+      evidenceIndex: localSnapshot.evidenceIndex || [],
+      sourceFreshness: localSnapshot.snapshotMeta?.sourceFreshness || "unknown",
+      detectConflicts: false,
+    });
+    const activeSnapshot = { ...localSnapshot, records: evidenceSelection.currentEvidence };
     const resolution = resolveCardsForFastJudge(input, localSnapshot.cards || []);
     const databaseProfiles = buildCardProfiles(resolution.resolvedCards);
     const temporaryProfiles = buildTemporaryCardProfiles(input, resolution.unresolvedCards);
@@ -31,15 +40,28 @@ export async function answerRulingQuestionFast({ question, mode = "duel", maxLat
       unresolvedCards: resolution.unresolvedCards,
       cardProfiles,
       issueFrames: preliminaryFrames,
-      snapshot: localSnapshot,
+      snapshot: activeSnapshot,
     });
     contextPack.mode = mode;
+    contextPack.snapshotMeta = localSnapshot.snapshotMeta || {};
     const issueFrames = detectIssueFrames({
       question: input,
       cardProfiles,
       cardTexts: contextPack.relevantCardSections.map((item) => item.text),
     });
     contextPack.issueFrames = issueFrames;
+    const matchedEvidence = [contextPack.officialQaCandidates, contextPack.faqCandidates, contextPack.ruleSnippets, contextPack.knownAnalogies].flat();
+    const matchedConflicts = detectCurrentVerdictConflicts(matchedEvidence);
+    const evidenceFreshness = evaluateEvidenceFreshness({
+      snapshotMeta: localSnapshot.snapshotMeta || {},
+      evidenceList: [
+        ...matchedEvidence,
+        ...matchedConflicts.flatMap((item) => item.evidenceIds.map((id) => ({ id, status: "conflict" }))),
+      ],
+    });
+    evidenceSelection.conflicts = matchedConflicts;
+    contextPack.evidenceSelection = evidenceSelection;
+    contextPack.evidenceFreshness = evidenceFreshness;
     const staleness = checkStaleness({
       issueFrames,
       evidence: [
@@ -53,7 +75,13 @@ export async function answerRulingQuestionFast({ question, mode = "duel", maxLat
     });
     contextPack.staleness = staleness;
 
-    const directOfficial = findDirectOfficialAnswer(input, contextPack, issueFrames, staleness);
+    const blockerCards = collectBlockerCards(resolution, localSnapshot.cards || []);
+    const blockerResult = evaluateRulingBlockers({ question: input, cards: blockerCards });
+    if (blockerResult.hasBlocker) {
+      return finalize(buildBlockerAnswer(blockerResult), { mode, budget, issueFrames, contextPack, debug });
+    }
+
+    const directOfficial = findDirectOfficialAnswer(input, contextPack, issueFrames, staleness, evidenceFreshness);
     if (directOfficial) {
       const validation = validateJudgeAnswer({ question: input, issueFrames, contextPack, modelAnswer: directOfficial });
       if (validation.ok) return finalize(directOfficial, { mode, budget, issueFrames, contextPack, validation, debug });
@@ -114,8 +142,12 @@ export async function loadFastJudgeSnapshot(dataDir = join(root, "data")) {
     readJson(join(dataDir, "cards.json"), { records: [] }),
     readJson(join(dataDir, "qa-index.json"), { records: [] }),
     readJson(join(dataDir, "ocg-rule-corpus.json"), { records: [] }),
-  ]).then(([cards, qa, rules]) => ({
+    readJson(join(dataDir, "snapshot-meta.json"), {}),
+    readJson(join(dataDir, "evidence-index.json"), { records: [] }),
+  ]).then(([cards, qa, rules, snapshotMeta, evidenceIndex]) => ({
     cards: cards.records || cards.cards || [],
+    snapshotMeta,
+    evidenceIndex: evidenceIndex.records || [],
     records: [
       ...(qa.records || []).map((record) => normalizeIndexedEvidence(record, qa.generatedAt)),
       ...(rules.records || []).map((record) => normalizeRuleRecord(record, rules.generatedAt)),
@@ -128,7 +160,8 @@ export async function loadFastJudgeSnapshot(dataDir = join(root, "data")) {
   return promise;
 }
 
-export function findDirectOfficialAnswer(question, contextPack, issueFrames, staleness = contextPack.staleness || {}) {
+export function findDirectOfficialAnswer(question, contextPack, issueFrames, staleness = contextPack.staleness || {}, freshness = contextPack.evidenceFreshness || {}) {
+  if (freshness.freshness !== "fresh" || freshness.safetyPenalty > 0) return null;
   const primaryCard = contextPack.resolvedCards?.[0];
   if (!primaryCard || !issueFrames.primaryIssueFrames?.length) return null;
   const subQuestion = buildLegacySubQuestion(question, primaryCard.name, issueFrames.primaryIssueFrames);
@@ -180,7 +213,7 @@ function finalize(answer, { mode, budget, issueFrames, contextPack, validation =
       ruleRefs: refs.filter((ref) => ruleIds.has(ref)),
       analogyRefs: refs.filter((ref) => analogyIds.has(ref)),
     },
-    warnings: [...new Set([...(answer.warnings || []), contextPack.staleness?.userFacingWarning].filter(Boolean))],
+    warnings: [...new Set([...(answer.warnings || []), contextPack.staleness?.userFacingWarning, ...(contextPack.evidenceFreshness?.warnings || [])].filter(Boolean))],
     confidence: answer.confidence || "low",
     possibleCounterCases: answer.possibleCounterCases || [],
     pending: Boolean(answer.pending),
@@ -191,7 +224,16 @@ function finalize(answer, { mode, budget, issueFrames, contextPack, validation =
     ruleEraChecked: true,
     staleRisk: contextPack.staleness?.staleRisk || "none",
     ruleEraNote: contextPack.staleness?.userFacingWarning || "已检查当前规则版本。",
-    statusChip: answer.statusChip || statusChipFor(answer, contextPack.staleness),
+    statusChip: answer.statusChip || statusChipFor(answer, contextPack.staleness, contextPack.evidenceFreshness),
+    sourceFreshness: contextPack.evidenceFreshness?.freshness || "unknown",
+    sourceRevision: contextPack.snapshotMeta?.sourceRevision || contextPack.evidenceSelection?.currentEvidence?.[0]?.sourceRevision || "",
+    evidenceStatus: "current",
+    safetyPenalty: contextPack.evidenceFreshness?.safetyPenalty ?? 2,
+    blockers: answer.blockers || [],
+    primaryVerdict: answer.primaryVerdict || null,
+    hypotheticalBranch: answer.hypotheticalBranch || null,
+    resolutionSteps: answer.resolutionSteps || [],
+    finalJudgeSummary: answer.finalJudgeSummary || [],
   };
   if (debug || mode === "analysis") {
     result.debug = {
@@ -250,6 +292,12 @@ function hasUnresolvedCardsWithoutText(unresolvedCards, temporaryProfiles) {
   return unresolvedCards.some((item) => !covered.has(item.unresolvedCardName));
 }
 
+function collectBlockerCards(resolution, cards) {
+  const ids = new Set((resolution.unresolvedCards || []).flatMap((item) => item.candidateCards || []).map((item) => String(item.cardId || item.id || "")).filter(Boolean));
+  const candidates = cards.filter((card) => ids.has(String(card.id || card.cardId || "")));
+  return [...(resolution.resolvedCards || []), ...candidates];
+}
+
 function buildNoIssueClarification(question, contextPack) {
   const card = contextPack.resolvedCards?.[0]?.name || contextPack.unresolvedCards?.[0]?.unresolvedCardName || "相关卡片";
   return {
@@ -294,7 +342,8 @@ function normalizeRuleRecord(record = {}, generatedAt = null) {
   return { ...record, conclusion: record.conclusion || record.text || "", sources: record.sources || [{ label: record.sourceName || "OCG Rule", detail: record.sourceUrl || "" }], lastCheckedAt: record.lastCheckedAt || generatedAt || null };
 }
 
-function statusChipFor(answer, staleness = {}) {
+function statusChipFor(answer, staleness = {}, freshness = {}) {
+  if (freshness.freshness && freshness.freshness !== "fresh") return "OUTDATED-RISK";
   if (staleness.matchedRuleChanges?.length && !(staleness.currentEvidenceIds || []).length) return "OUTDATED-RISK";
   if (answer.answerType === "direct_official") return "OFFICIAL";
   if (answer.answerType === "rule_judgment") return "RULE-JUDGED";

@@ -200,7 +200,7 @@ function extractEmbeddedCardSections(question, limit) {
 
 function extractQuotedNames(text) {
   const result = [];
-  for (const match of String(text || "").matchAll(/[「『“"]([^」』”"\n]{2,80})[」』”"]/gu)) {
+  for (const match of String(text || "").matchAll(/[「『“"【]([^」』”"】\n]{2,80})[」』”】]/gu)) {
     const name = clean(match[1]);
     if (name.length <= 40 && !/[。；;：:].{12,}/u.test(name)) result.push(name);
   }
@@ -208,7 +208,7 @@ function extractQuotedNames(text) {
 }
 
 function maskQuotedNames(text) {
-  return String(text || "").replace(/[「『“"]([^」』”"\n]{2,80})[」』”"]/gu, (full, inner) => (clean(inner).length <= 40 ? " " : full));
+  return String(text || "").replace(/[「『“"【]([^」』”"】\n]{2,80})[」』”】]/gu, (full, inner) => (clean(inner).length <= 40 ? " " : full));
 }
 
 function findExactCard(name, cards) {

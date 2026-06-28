@@ -54,6 +54,7 @@ export function validateJudgeAnswer({ question = "", issueFrames = {}, contextPa
     if (!used.some((ref) => officialIds.has(String(ref)))) unsupportedClaims.push("direct_official_without_direct_official_ref");
   }
   const staleness = contextPack.staleness || {};
+  const evidenceFreshness = contextPack.evidenceFreshness || {};
   const usedRefs = (modelAnswer.judgeReasoning || []).flatMap((item) => item.refs || []).map(String);
   const staleIds = new Set((staleness.staleEvidenceIds || []).map(String));
   if (usedRefs.some((ref) => staleIds.has(ref))) unsupportedClaims.push("stale_source_used_as_current_rule");
@@ -62,6 +63,8 @@ export function validateJudgeAnswer({ question = "", issueFrames = {}, contextPa
     && staleness.matchedRuleChanges?.length
     && !(staleness.currentEvidenceIds || []).length
   ) unsupportedClaims.push("missing_current_rule_source");
+  if (modelAnswer.answerType === "direct_official" && evidenceFreshness.freshness !== "fresh") unsupportedClaims.push("official_answer_requires_fresh_source");
+  if (modelAnswer.answerType === "direct_official" && evidenceFreshness.safetyPenalty > 0) unsupportedClaims.push("official_answer_blocked_by_freshness_penalty");
 
   const currentNames = [
     ...(contextPack.resolvedCards || []).flatMap((card) => [card.name, card.names?.zh, card.names?.ja, card.names?.en]),

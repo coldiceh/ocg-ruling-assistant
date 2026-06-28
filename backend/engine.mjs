@@ -6,6 +6,8 @@ import { checkDataHealth } from "./dataHealth.mjs";
 import { buildConditionalAnswer } from "./conditionalAnswer.mjs";
 import { buildCardAliasIndex, buildQaIndex } from "./dataIndex.mjs";
 import { classifyEvidenceQuestionTypes } from "./evidenceQuestionTypeClassifier.mjs";
+import { filterCurrentEvidence } from "./currentEvidenceFilter.mjs";
+import { evaluateEvidenceFreshness } from "./evidenceFreshness.mjs";
 import { selectBranchForSubQuestion } from "./branchSelector.mjs";
 import { extractConditionBranchesFromEvidence } from "./conditionBranches.mjs";
 import { buildEventTimelineFromFormalQuery, deriveStateAtTiming } from "./eventTimeline.mjs";
@@ -2033,7 +2035,7 @@ export async function loadSnapshot(dataDir = defaultDataDir) {
   const cached = snapshotCache.get(cacheKey);
   if (cached && Date.now() - cached.loadedAt < 30_000) return cached.snapshot;
 
-  const [cardsPayload, rulingsPayload, officialResponsesPayload, metaPayload, ruleCorpusPayload, ruleTestsPayload, aliasIndexPayload, qaIndexPayload, dataHealth] = await Promise.all([
+  const [cardsPayload, rulingsPayload, officialResponsesPayload, metaPayload, ruleCorpusPayload, ruleTestsPayload, aliasIndexPayload, qaIndexPayload, evidenceIndexPayload, dataHealth] = await Promise.all([
     readJson(join(dataDir, "cards.json"), { records: [] }),
     readJson(join(dataDir, "rulings.json"), { records: [] }),
     readJson(join(dataDir, "official-responses.json"), { records: [] }),
@@ -2042,20 +2044,39 @@ export async function loadSnapshot(dataDir = defaultDataDir) {
     readJson(join(dataDir, "ocg-rule-tests.json"), { records: [] }),
     readJson(join(dataDir, "card-alias-index.json"), { records: [] }),
     readJson(join(dataDir, "qa-index.json"), { records: [] }),
+    readJson(join(dataDir, "evidence-index.json"), { records: [] }),
     checkDataHealth(dataDir),
   ]);
 
+  const rawRecords = [
+    ...(rulingsPayload.records || rulingsPayload.rulings || rulingsPayload.notes || []),
+    ...normalizeOfficialResponses(officialResponsesPayload.records || officialResponsesPayload.officialResponses || []),
+    ...(ruleCorpusPayload.records || []),
+    ...(ruleTestsPayload.records || []),
+  ];
+  const evidenceSelection = filterCurrentEvidence(rawRecords, {
+    evidenceIndex: evidenceIndexPayload.records || [],
+    sourceFreshness: metaPayload.sourceFreshness || "unknown",
+    detectConflicts: false,
+  });
+  const qaSelection = filterCurrentEvidence(qaIndexPayload.records || qaIndexPayload.entries || [], {
+    evidenceIndex: evidenceIndexPayload.records || [],
+    sourceFreshness: metaPayload.sourceFreshness || "unknown",
+    detectConflicts: false,
+  });
+  const evidenceFreshness = evaluateEvidenceFreshness({
+    snapshotMeta: metaPayload,
+    evidenceList: [...evidenceSelection.currentEvidence, ...qaSelection.currentEvidence],
+  });
+
   const snapshot = {
     cards: normalizeCards(cardsPayload.records || cardsPayload.cards || []),
-    records: normalizeRecords([
-      ...(rulingsPayload.records || rulingsPayload.rulings || rulingsPayload.notes || []),
-      ...normalizeOfficialResponses(officialResponsesPayload.records || officialResponsesPayload.officialResponses || []),
-      ...(ruleCorpusPayload.records || []),
-      ...(ruleTestsPayload.records || []),
-    ]),
+    records: normalizeRecords(evidenceSelection.currentEvidence),
     meta: metaPayload,
     cardAliasIndex: aliasIndexPayload.records || aliasIndexPayload.aliases || [],
-    qaIndex: qaIndexPayload.records || qaIndexPayload.entries || [],
+    qaIndex: qaSelection.currentEvidence,
+    evidenceSelection,
+    evidenceFreshness,
     dataHealth,
   };
 

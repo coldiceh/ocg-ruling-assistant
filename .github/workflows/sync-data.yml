@@ -29,11 +29,23 @@ jobs:
           MAX_QA_TOTAL: "3000"
         run: node scripts/sync-data.mjs
 
+      - name: Diff ruling snapshot
+        run: node scripts/diff-ruling-snapshot.mjs
+
+      - name: Build current evidence index
+        run: node scripts/build-evidence-index.mjs
+
       - name: Sync OCG rule corpus
         env:
           OCG_RULE_BASE_URL: "https://ocg-rule.readthedocs.io/zh-cn/latest/"
           OCG_RULE_MAX_PAGES: "240"
         run: node scripts/sync-ocg-rule.mjs
+
+      - name: Report ruling sync status
+        run: node scripts/report-ruling-sync-status.mjs
+
+      - name: Test updated snapshot
+        run: npm test
 
       - name: Commit snapshot changes
         run: |

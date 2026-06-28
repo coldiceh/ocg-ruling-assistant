@@ -38,6 +38,7 @@ test("direct official evidence wins before the model and remains official", asyn
     snapshot: {
       cards: [{ id: "15296", name: "三战之才", aliases: ["三战之才"], cardType: "spell", effectText: "对方在自己主要阶段发动过怪兽效果的场合才能发动。" }],
       records: [{ id: "card-faq-15296-1", recordType: "card-faq", title: "三战之才 FAQ 1", cards: ["三战之才"], cardIds: ["15296"], text: "这个回合的自己主要阶段对方发动怪兽效果且发动没有被无效的场合，这张卡可以发动。" }],
+      snapshotMeta: { sourceFreshness: "fresh", lastSuccessfulSyncAt: new Date().toISOString() },
     },
     modelInvoker: async () => { modelCalled = true; return null; },
   });
@@ -74,7 +75,7 @@ test("missing pendulum section blocks model judgment", async () => {
 test("Fast Judge reports rule-era checks", async () => {
   const answer = await answerRulingQuestionFast({
     question: "测试卡会造成贯穿战斗伤害吗？",
-    snapshot: { cards: [{ id: "1", name: "测试卡", aliases: ["测试卡"], cardType: "monster", effectText: "给予贯穿战斗伤害。" }], records: [] },
+    snapshot: { cards: [{ id: "1", name: "测试卡", aliases: ["测试卡"], cardType: "monster", effectText: "给予贯穿战斗伤害。" }], records: [], snapshotMeta: { sourceFreshness: "fresh", lastSuccessfulSyncAt: new Date().toISOString() } },
     modelInvoker: async (input) => ({
       answerType: "rule_judgment",
       verdict: "damage_occurs",
@@ -117,4 +118,39 @@ test("stale official evidence cannot be the only direct official basis", async (
   assert.notEqual(answer.answerType, "direct_official");
   assert.equal(answer.statusChip, "OUTDATED-RISK");
   assert.equal(answer.staleRisk, "high");
+});
+
+test("illegal target premise returns a primary ruling and a hypothetical chain branch", async () => {
+  const question = "在我方的结束阶段，我方场上有1只没有素材的【混沌No.88 机关傀儡-灾厄狮子】，对方基本分2500。对方c1发动【雷破】以灾厄狮子为对象，我方c2发动【隐居者的猛毒药】给与对方800伤害。请问在猛毒药的效果处理后会立刻胜利吗，c1的雷破还会处理吗？";
+  const answer = await answerRulingQuestionFast({
+    question,
+    snapshot: {
+      cards: [
+        { id: "11016", name: "混沌编号88 机关傀偶－灾厄之狮", aliases: ["混沌No.88 机关傀儡-灾厄狮子"], cardType: "monster", effectText: "在自己的结束阶段，对手的LP为２０００以下，且此卡没有超量素材的情况下，自己获得决斗胜利。双方不可将场上的此卡作为效果的对象。" },
+        { id: "5607", name: "隐居者的猛毒药", aliases: ["隐居者的猛毒药"], cardType: "spell", effectText: "给予对方800伤害。" },
+      ], records: [], snapshotMeta: { sourceFreshness: "fresh", lastSuccessfulSyncAt: new Date().toISOString() },
+    },
+    modelInvoker: async () => { throw new Error("blocker answer must not call the model"); },
+  });
+  assert.equal(answer.primaryVerdict, "original_chain_illegal");
+  assert.equal(answer.hypotheticalBranch.verdict, "immediate_special_win");
+  assert.match(answer.resolutionSteps[0].action, /2500.*1700/u);
+  assert.match(answer.resolutionSteps.at(-1).action, /C1不再处理/u);
+  assert.notEqual(answer.answerType, "direct_official");
+});
+
+test("an activated normal trap cannot satisfy the mandatory return handling", async () => {
+  const answer = await answerRulingQuestionFast({
+    question: "对方场上有『绚岚之达维』，我方以达维为对象发动『无限泡影』，这个时候场上没有其他魔陷，对方能不能发动『天雷之双风神』的效果？",
+    snapshot: {
+      cards: [
+        { id: "13631", name: "无限泡影", aliases: ["无限泡影"], cardType: "trap", effectText: "以对手场上的1只表侧表示怪兽为对象可以发动。" },
+        { id: "22130", name: "天雷之双风神 息那", aliases: ["天雷之双风神"], cardType: "monster", effectText: "对手发动魔法・陷阱效果时可以发动。将场上的魔法・陷阱卡全部放回手牌。" },
+      ], records: [], snapshotMeta: { sourceFreshness: "fresh", lastSuccessfulSyncAt: new Date().toISOString() },
+    },
+  });
+  assert.equal(answer.primaryVerdict, "cannot_activate");
+  assert.match(answer.shortAnswer, /不能发动/u);
+  assert.ok(answer.blockers.some((item) => item.id === "no_applicable_card_for_mandatory_return_effect"));
+  assert.notEqual(answer.answerType, "direct_official");
 });
