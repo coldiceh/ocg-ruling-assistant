@@ -26,19 +26,26 @@ async function main() {
   await mkdir(dataDir, { recursive: true });
   const tracked = await readJsonFile(join(dataDir, "tracked-cards.json"), { cards: [] });
   const previousMeta = await readJsonFile(join(dataDir, "snapshot-meta.json"), {});
+  const previousCards = await readJsonFile(join(dataDir, "cards.json"), { records: [] });
+  const previousRulings = await readJsonFile(join(dataDir, "rulings.json"), { records: [] });
 
   const trackedCards = tracked.cards || [];
   const languages = new Set([...defaultIndexLanguages, ...trackedCards.map((card) => card.language || "en")]);
   const nameIndexes = await loadNameIndexes(languages);
   const cardTargets = buildCardTargets(trackedCards, nameIndexes);
   const cardPayloads = await loadCards(cardTargets, nameIndexes);
-  const cards = cardPayloads.map(({ record }) => record);
-  const rulings = await loadRulings(cards, cardPayloads);
+  let cards = cardPayloads.map(({ record }) => record);
+  let rulings = await loadRulings(cards, cardPayloads);
+  if (warnings.length) {
+    cards = mergeById(previousCards.records || [], cards);
+    rulings = mergeById(previousRulings.records || [], rulings);
+  }
   const cardAliasIndex = buildCardAliasIndex(cards);
   const qaIndex = buildQaIndex(rulings, cards);
   const manifest = await loadManifest(previousMeta.sourceRevision);
 
   const generatedAt = new Date().toISOString();
+  const sourceFreshness = warnings.length ? "stale" : "fresh";
   await writeJson(join(dataDir, "cards.json"), {
     schemaVersion: 1,
     generatedAt,
@@ -77,7 +84,15 @@ async function main() {
     status: warnings.length ? "synced-with-warnings" : "synced",
     generatedAt,
     freshnessDays,
+    sourceFreshness,
+    previousSourceRevision: previousMeta.sourceRevision || null,
     sourceRevision: manifest.revision || previousMeta.sourceRevision || null,
+    lastSuccessfulSyncAt: warnings.length ? (previousMeta.lastSuccessfulSyncAt || previousMeta.generatedAt || null) : generatedAt,
+    lastFailedSyncAt: warnings.length ? generatedAt : (previousMeta.lastFailedSyncAt || null),
+    syncFailureCount: warnings.length ? Number(previousMeta.syncFailureCount || 0) + 1 : 0,
+    newItems: Number(previousMeta.newItems || 0),
+    changedItems: Number(previousMeta.changedItems || 0),
+    removedItems: Number(previousMeta.removedItems || 0),
     sources: [
       {
         id: "official-card-database",
@@ -540,6 +555,10 @@ function dedupeBy(items, getKey) {
   return [...map.values()];
 }
 
+function mergeById(previous, current) {
+  return dedupeBy([...(previous || []), ...(current || [])], (item) => String(item.id || item.name || ""));
+}
+
 async function mapLimit(items, limit, mapper) {
   const results = new Array(items.length);
   let nextIndex = 0;
@@ -583,7 +602,16 @@ function formatError(error) {
   return error instanceof Error ? error.message : String(error);
 }
 
-main().catch((error) => {
+main().catch(async (error) => {
   console.error(error);
+  const previous = await readJsonFile(join(dataDir, "snapshot-meta.json"), {});
+  const failedAt = new Date().toISOString();
+  await writeJson(join(dataDir, "snapshot-meta.json"), {
+    ...previous,
+    sourceFreshness: previous.lastSuccessfulSyncAt || previous.generatedAt ? "stale" : "unknown",
+    lastFailedSyncAt: failedAt,
+    syncFailureCount: Number(previous.syncFailureCount || 0) + 1,
+    warnings: [...new Set([...(previous.warnings || []), `Sync failed: ${formatError(error)}`])],
+  });
   process.exitCode = 1;
 });
