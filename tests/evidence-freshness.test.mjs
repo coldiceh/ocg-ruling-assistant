@@ -10,6 +10,19 @@ test("a successful sync within two days is fresh", () => {
   assert.equal(result.freshness, "fresh");
   assert.equal(result.safetyPenalty, 0);
 });
+test("alias and item-level data quality warnings do not stale a recent source", () => {
+  const result = evaluateEvidenceFreshness({
+    snapshotMeta: {
+      lastSuccessfulSyncAt: daysAgo(1),
+      sourceFreshness: "fresh",
+      aliasWarnings: ["Perfect Toon World alias was not resolved"],
+      dataQualityWarnings: ["one alias needs review"],
+    },
+    now,
+  });
+  assert.equal(result.freshness, "fresh");
+  assert.equal(result.safetyPenalty, 0);
+});
 test("two to seven days is stale with a warning", () => {
   const result = evaluateEvidenceFreshness({ snapshotMeta: { lastSuccessfulSyncAt: daysAgo(4) }, now });
   assert.equal(result.freshness, "stale");

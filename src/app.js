@@ -758,6 +758,9 @@ function renderFastJudgeAnswer(answer) {
   renderSubAnswers([]);
   renderList(ui.stepsList, [
     ...(answer.judgeReasoning || []).map((item) => item.text).filter(Boolean),
+    ...(answer.hypotheticalBranch?.assumption ? [`假设分支：${answer.hypotheticalBranch.assumption}`] : []),
+    ...(answer.resolutionSteps || []).map((item) => `处理顺序 ${item.chainLink || ""}：${item.action || ""}`),
+    ...(answer.finalJudgeSummary || []).map((item) => `裁定式总结：${item}`),
     ...(answer.warnings || []),
   ]);
   const required = [

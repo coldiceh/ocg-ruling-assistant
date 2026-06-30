@@ -1,16 +1,22 @@
 {
   "schemaVersion": 1,
-  "status": "synced-with-warnings",
-  "generatedAt": "2026-06-27T19:37:20.349Z",
+  "status": "synced",
+  "generatedAt": "2026-06-30T08:55:18.971Z",
   "freshnessDays": 7,
-  "sourceFreshness": "stale",
+  "sourceFreshness": "fresh",
   "previousSourceRevision": null,
   "sourceRevision": null,
-  "lastSuccessfulSyncAt": "2026-06-26T20:19:44.374Z",
-  "lastFailedSyncAt": "2026-06-27T19:37:20.349Z",
-  "syncFailureCount": 1,
-  "newItems": 77,
-  "changedItems": 0,
+  "lastSuccessfulSyncAt": "2026-06-30T08:55:18.971Z",
+  "lastFailedSyncAt": "2026-06-28T06:12:46.768Z",
+  "syncFailureCount": 0,
+  "aliasWarnings": [],
+  "parseFailedWarnings": [],
+  "dataQualityWarnings": [],
+  "aliasWarningCount": 0,
+  "parseFailedCount": 0,
+  "dataQualityWarningCount": 0,
+  "newItems": 2,
+  "changedItems": 1,
   "removedItems": 0,
   "sources": [
     {
@@ -26,8 +32,7 @@
       "role": "结构化卡片与 Q&A 数据来源，用于生成 GitHub Pages 可读取的静态快照。"
     }
   ],
-  "warnings": [
-    "Card not resolved: Perfect Toon World"
-  ],
+  "warnings": [],
+  "sourceSyncWarnings": [],
   "changedPaths": []
 }
