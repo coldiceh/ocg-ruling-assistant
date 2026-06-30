@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-06-29T20:19:51.038Z",
+  "generatedAt": "2026-06-30T20:29:42.105Z",
   "records": [
     {
       "id": "21385",
@@ -21461,6 +21461,17 @@
         "扭蛋魔壳",
         "カプシェル",
         "Capshell"
+      ],
+      "released": true
+    },
+    {
+      "id": "23409",
+      "name": "カプセル・モンスター・チェス",
+      "jaName": "カプセル・モンスター・チェス",
+      "enName": "Capsule Monster Chess",
+      "aliases": [
+        "カプセル・モンスター・チェス",
+        "Capsule Monster Chess"
       ],
       "released": true
     },
@@ -150950,6 +150961,17 @@
       "released": true
     },
     {
+      "id": "23428",
+      "name": "ゼータ次元の魔術王",
+      "jaName": "ゼータ次元の魔術王",
+      "enName": "The Magical King of Dimension Zeta",
+      "aliases": [
+        "ゼータ次元の魔術王",
+        "The Magical King of Dimension Zeta"
+      ],
+      "released": true
+    },
+    {
       "id": "21035",
       "name": "拥有刻印之人",
       "cnName": "拥有刻印之人",
@@ -171205,15 +171227,6 @@
         "青之眼少女",
         "青き眼の乙女",
         "Maiden with Eyes of Blue"
-      ],
-      "released": true
-    },
-    {
-      "id": "23409",
-      "name": "カプセル・モンスター・チェス",
-      "jaName": "カプセル・モンスター・チェス",
-      "aliases": [
-        "カプセル・モンスター・チェス"
       ],
       "released": true
     },
