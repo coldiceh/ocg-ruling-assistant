@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { auditCardResolutionNames } from "../backend/engine.mjs";
 
@@ -57,4 +58,11 @@ test("an unresolved name returns an explicit reason and approximate candidates",
 
   assert.ok(trace.failureReason || trace.resolvedCardIds.length > 0);
   assert.ok(Array.isArray(trace.approximateMatches));
+});
+
+test("Perfect Toon World keeps a stable alias for its current English database name", async () => {
+  const tracked = JSON.parse(await readFile(new URL("../data/tracked-cards.json", import.meta.url), "utf8"));
+  const card = tracked.cards.find((item) => item.lookupName === "Toon World the Perfect World");
+  assert.equal(card.lookupName, "Toon World the Perfect World");
+  assert.ok(card.aliases.includes("Perfect Toon World"));
 });

@@ -21,6 +21,9 @@ const freshnessDays = Number(process.env.FRESHNESS_DAYS || 7);
 const userAgent = "ocg-ruling-assistant/0.1 (+https://github.com/)";
 
 const warnings = [];
+const sourceSyncWarnings = [];
+const aliasWarnings = [];
+const parseFailedWarnings = [];
 
 async function main() {
   await mkdir(dataDir, { recursive: true });
@@ -36,7 +39,7 @@ async function main() {
   const cardPayloads = await loadCards(cardTargets, nameIndexes);
   let cards = cardPayloads.map(({ record }) => record);
   let rulings = await loadRulings(cards, cardPayloads);
-  if (warnings.length) {
+  if (sourceSyncWarnings.length || !syncAllReleasedCards) {
     cards = mergeById(previousCards.records || [], cards);
     rulings = mergeById(previousRulings.records || [], rulings);
   }
@@ -45,7 +48,8 @@ async function main() {
   const manifest = await loadManifest(previousMeta.sourceRevision);
 
   const generatedAt = new Date().toISOString();
-  const sourceFreshness = warnings.length ? "stale" : "fresh";
+  const sourceFreshness = sourceSyncWarnings.length ? "stale" : "fresh";
+  const dataQualityWarnings = [...aliasWarnings, ...parseFailedWarnings];
   await writeJson(join(dataDir, "cards.json"), {
     schemaVersion: 1,
     generatedAt,
@@ -87,9 +91,15 @@ async function main() {
     sourceFreshness,
     previousSourceRevision: previousMeta.sourceRevision || null,
     sourceRevision: manifest.revision || previousMeta.sourceRevision || null,
-    lastSuccessfulSyncAt: warnings.length ? (previousMeta.lastSuccessfulSyncAt || previousMeta.generatedAt || null) : generatedAt,
-    lastFailedSyncAt: warnings.length ? generatedAt : (previousMeta.lastFailedSyncAt || null),
-    syncFailureCount: warnings.length ? Number(previousMeta.syncFailureCount || 0) + 1 : 0,
+    lastSuccessfulSyncAt: sourceSyncWarnings.length ? (previousMeta.lastSuccessfulSyncAt || previousMeta.generatedAt || null) : generatedAt,
+    lastFailedSyncAt: sourceSyncWarnings.length ? generatedAt : (previousMeta.lastFailedSyncAt || null),
+    syncFailureCount: sourceSyncWarnings.length ? Number(previousMeta.syncFailureCount || 0) + 1 : 0,
+    aliasWarnings,
+    parseFailedWarnings,
+    dataQualityWarnings,
+    aliasWarningCount: aliasWarnings.length,
+    parseFailedCount: parseFailedWarnings.length,
+    dataQualityWarningCount: dataQualityWarnings.length,
     newItems: Number(previousMeta.newItems || 0),
     changedItems: Number(previousMeta.changedItems || 0),
     removedItems: Number(previousMeta.removedItems || 0),
@@ -108,6 +118,10 @@ async function main() {
       },
     ],
     warnings,
+    sourceSyncWarnings,
+    aliasWarnings,
+    parseFailedWarnings,
+    dataQualityWarnings,
     changedPaths: manifest.changedPaths,
   });
 
@@ -137,7 +151,7 @@ async function loadNameIndexes(languages) {
       const payload = await fetchJson(`/data/idx/card/name/${language}`);
       indexes.set(language, collectNameIndex(payload));
     } catch (error) {
-      warnings.push(`Name index ${language} failed: ${formatError(error)}`);
+      addSourceWarning(`Name index ${language} failed: ${formatError(error)}`);
       indexes.set(language, new Map());
     }
   }
@@ -159,7 +173,7 @@ function buildCardTargets(trackedCards, nameIndexes) {
   for (const item of trackedCards) {
     const id = item.id || resolveCardId(item, nameIndexes);
     if (!id) {
-      warnings.push(`Card not resolved: ${item.lookupName || item.name || JSON.stringify(item)}`);
+      addAliasWarning(`Card not resolved: ${item.lookupName || item.name || JSON.stringify(item)}`);
       continue;
     }
     mergeTarget(targets, { ...item, id: String(id) });
@@ -187,7 +201,7 @@ async function loadCards(cards, nameIndexes) {
   const results = await mapLimit(cards, fetchConcurrency, async (item) => {
     const id = item.id || resolveCardId(item, nameIndexes);
     if (!id) {
-      warnings.push(`Card not resolved: ${item.lookupName || item.name || JSON.stringify(item)}`);
+      addAliasWarning(`Card not resolved: ${item.lookupName || item.name || JSON.stringify(item)}`);
       return null;
     }
 
@@ -197,7 +211,7 @@ async function loadCards(cards, nameIndexes) {
       if (syncOnlyReleasedCards && !record.released) return null;
       return { record, payload, tracked: item };
     } catch (error) {
-      warnings.push(`Card ${item.lookupName || id} failed: ${formatError(error)}`);
+      addSourceWarning(`Card ${item.lookupName || id} failed: ${formatError(error)}`);
       return null;
     }
   });
@@ -221,7 +235,7 @@ async function loadRulings(cards, cardPayloads) {
     const payload = await fetchJson("/data/meta/recent/ja/qa");
     for (const id of collectQaIds(payload).slice(0, maxRecentQa)) qaIds.add(id);
   } catch (error) {
-    warnings.push(`Recent Q&A failed: ${formatError(error)}`);
+    addSourceWarning(`Recent Q&A failed: ${formatError(error)}`);
   }
 
   const qaLimit = Math.min(maxQaTotal, Math.max(maxRecentQa, cards.length * maxCardQaPerCard));
@@ -231,7 +245,7 @@ async function loadRulings(cards, cardPayloads) {
       const record = normalizeQa(payload, id, cards);
       if (record) records.push(record);
     } catch (error) {
-      warnings.push(`Q&A ${id} failed: ${formatError(error)}`);
+      addSourceWarning(`Q&A ${id} failed: ${formatError(error)}`);
     }
   }
 
@@ -248,7 +262,7 @@ async function loadManifest(previousRevision) {
       changedPaths: payload.changed || payload.paths || payload.data || [],
     };
   } catch (error) {
-    warnings.push(`Manifest check failed: ${formatError(error)}`);
+    addSourceWarning(`Manifest check failed: ${formatError(error)}`);
     return { revision: previousRevision, changedPaths: [] };
   }
 }
@@ -396,7 +410,7 @@ function normalizeQa(payload, id, cards) {
   const question = firstText(payload, ["question", "q", "title"]);
   const answer = firstText(payload, ["answer", "a", "content"]);
   if (!question || !answer) {
-    warnings.push(`Q&A ${id} skipped: question or answer not found`);
+    addParseWarning(`Q&A ${id} skipped: question or answer not found`);
     return null;
   }
 
@@ -546,7 +560,16 @@ async function readJsonFile(path, fallback) {
 
 async function writeJson(path, value) {
   await mkdir(dirname(path), { recursive: true });
-  await writeFile(path, `${JSON.stringify(value, null, 2)}\n`, "utf8");
+  const content = `${JSON.stringify(value, null, 2)}\n`;
+  for (let attempt = 1; attempt <= 5; attempt += 1) {
+    try {
+      await writeFile(path, content, "utf8");
+      return;
+    } catch (error) {
+      if (attempt === 5 || !["EPERM", "EBUSY", "UNKNOWN"].includes(error?.code)) throw error;
+      await new Promise((resolve) => setTimeout(resolve, attempt * 400));
+    }
+  }
 }
 
 function dedupeBy(items, getKey) {
@@ -558,6 +581,10 @@ function dedupeBy(items, getKey) {
 function mergeById(previous, current) {
   return dedupeBy([...(previous || []), ...(current || [])], (item) => String(item.id || item.name || ""));
 }
+
+function addSourceWarning(message) { sourceSyncWarnings.push(message); warnings.push(message); }
+function addAliasWarning(message) { aliasWarnings.push(message); warnings.push(message); }
+function addParseWarning(message) { parseFailedWarnings.push(message); warnings.push(message); }
 
 async function mapLimit(items, limit, mapper) {
   const results = new Array(items.length);

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-06-27T19:37:20.349Z",
+  "generatedAt": "2026-06-30T08:55:18.971Z",
   "records": [
     {
       "alias": "“K9刑侦案件”",
@@ -225704,17 +225704,45 @@
       "language": "en"
     },
     {
+      "alias": "完美世界-卡通世界",
+      "normalizedAlias": "完美世界-卡通世界",
+      "cardId": "23161",
+      "cardName": "完美世界-卡通世界",
+      "language": "zh"
+    },
+    {
       "alias": "完全なる世界 トゥーン・ワールド",
       "normalizedAlias": "完全なる世界 トゥ-ン・ワ-ルド",
       "cardId": "23161",
-      "cardName": "完全なる世界 トゥーン・ワールド",
+      "cardName": "完美世界-卡通世界",
       "language": "ja"
     },
     {
       "alias": "Toon World the Perfect World",
       "normalizedAlias": "toon world the perfect world",
       "cardId": "23161",
-      "cardName": "完全なる世界 トゥーン・ワールド",
+      "cardName": "完美世界-卡通世界",
+      "language": "en"
+    },
+    {
+      "alias": "完美世界 卡通世界",
+      "normalizedAlias": "完美世界 卡通世界",
+      "cardId": "23161",
+      "cardName": "完美世界-卡通世界",
+      "language": "zh"
+    },
+    {
+      "alias": "完美世界卡通世界",
+      "normalizedAlias": "完美世界卡通世界",
+      "cardId": "23161",
+      "cardName": "完美世界-卡通世界",
+      "language": "zh"
+    },
+    {
+      "alias": "Perfect Toon World",
+      "normalizedAlias": "perfect toon world",
+      "cardId": "23161",
+      "cardName": "完美世界-卡通世界",
       "language": "en"
     },
     {

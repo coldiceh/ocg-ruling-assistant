@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-06-27T19:37:20.349Z",
+  "generatedAt": "2026-06-30T08:55:18.971Z",
   "records": [
     {
       "id": "21385",
@@ -3554,7 +3554,7 @@
         "赫界龙"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/15994",
-      "updatedAt": "2026-06-27T19:36:29.925Z"
+      "updatedAt": "2026-06-30T08:52:09.694Z"
     },
     {
       "id": "18498",
@@ -23018,7 +23018,7 @@
         "混沌极龙"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12487",
-      "updatedAt": "2026-06-27T19:36:30.182Z"
+      "updatedAt": "2026-06-30T08:52:09.593Z"
     },
     {
       "id": "16809",
@@ -23167,7 +23167,7 @@
         "暴君龙"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/16842",
-      "updatedAt": "2026-06-27T19:36:30.177Z"
+      "updatedAt": "2026-06-30T08:52:10.720Z"
     },
     {
       "id": "4386",
@@ -24834,7 +24834,7 @@
         "Branded Fusion"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/17066",
-      "updatedAt": "2026-06-27T19:36:30.167Z"
+      "updatedAt": "2026-06-30T08:52:11.270Z"
     },
     {
       "id": "18201",
@@ -57634,7 +57634,7 @@
         "脆刃"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/14877",
-      "updatedAt": "2026-06-27T19:36:30.156Z"
+      "updatedAt": "2026-06-30T08:52:08.579Z"
     },
     {
       "id": "7323",
@@ -72698,7 +72698,7 @@
         "落胤"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/15245",
-      "updatedAt": "2026-06-27T19:36:30.216Z"
+      "updatedAt": "2026-06-30T08:52:08.587Z"
     },
     {
       "id": "18472",
@@ -102074,7 +102074,7 @@
         "IP加速"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/14676",
-      "updatedAt": "2026-06-27T19:36:30.238Z"
+      "updatedAt": "2026-06-30T08:52:08.832Z"
     },
     {
       "id": "14285",
@@ -132710,7 +132710,7 @@
         "御巫"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/18017",
-      "updatedAt": "2026-06-27T19:36:30.192Z"
+      "updatedAt": "2026-06-30T08:52:08.592Z"
     },
     {
       "id": "4717",
@@ -172269,7 +172269,7 @@
         "S:P小夜"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/19188",
-      "updatedAt": "2026-06-27T19:36:30.453Z"
+      "updatedAt": "2026-06-30T08:52:09.216Z"
     },
     {
       "id": "13717",
@@ -197028,7 +197028,7 @@
         "三战"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/15296",
-      "updatedAt": "2026-06-27T19:36:29.651Z"
+      "updatedAt": "2026-06-30T08:52:08.606Z"
     },
     {
       "id": "11099",
@@ -205969,18 +205969,23 @@
     },
     {
       "id": "23161",
-      "name": "完全なる世界 トゥーン・ワールド",
+      "name": "完美世界-卡通世界",
+      "cnName": "完美世界-卡通世界",
       "jaName": "完全なる世界 トゥーン・ワールド",
       "enName": "Toon World the Perfect World",
       "cardType": "spell",
       "effectText": "このカード名の②の効果は１ターンに３度まで使用できる。\n①：このカードはフィールドゾーンに存在する限り、カード名を「トゥーン・ワールド」として扱う。\n②：１ターンに１度、自分メインフェイズに発動できる。「トゥーン」カードまたはそのカード名が記されたカード１枚をデッキから手札に加える。\n③：他のカードが発動した効果が適用される際に、自分フィールドのトゥーンモンスター１体をその効果処理後まで除外できる（このターン、このカード名のこの効果で元々のカード名が同じモンスターを除外できない）。",
       "released": true,
       "aliases": [
+        "完美世界-卡通世界",
         "完全なる世界 トゥーン・ワールド",
-        "Toon World the Perfect World"
+        "Toon World the Perfect World",
+        "完美世界 卡通世界",
+        "完美世界卡通世界",
+        "Perfect Toon World"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23161",
-      "updatedAt": "2026-06-26T20:15:03.603Z"
+      "updatedAt": "2026-06-30T08:52:09.376Z"
     },
     {
       "id": "9296",

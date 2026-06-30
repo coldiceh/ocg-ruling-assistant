@@ -229,6 +229,7 @@ function finalize(answer, { mode, budget, issueFrames, contextPack, validation =
     sourceRevision: contextPack.snapshotMeta?.sourceRevision || contextPack.evidenceSelection?.currentEvidence?.[0]?.sourceRevision || "",
     evidenceStatus: "current",
     safetyPenalty: contextPack.evidenceFreshness?.safetyPenalty ?? 2,
+    dataQualityWarnings: contextPack.snapshotMeta?.dataQualityWarnings || [],
     blockers: answer.blockers || [],
     primaryVerdict: answer.primaryVerdict || null,
     hypotheticalBranch: answer.hypotheticalBranch || null,

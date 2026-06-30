@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-06-27T19:37:20.349Z",
+  "generatedAt": "2026-06-30T08:55:18.971Z",
   "records": [
     {
       "id": "21385",
@@ -154569,12 +154569,17 @@
     },
     {
       "id": "23161",
-      "name": "完全なる世界 トゥーン・ワールド",
+      "name": "完美世界-卡通世界",
+      "cnName": "完美世界-卡通世界",
       "jaName": "完全なる世界 トゥーン・ワールド",
       "enName": "Toon World the Perfect World",
       "aliases": [
+        "完美世界-卡通世界",
         "完全なる世界 トゥーン・ワールド",
-        "Toon World the Perfect World"
+        "Toon World the Perfect World",
+        "完美世界 卡通世界",
+        "完美世界卡通世界",
+        "Perfect Toon World"
       ],
       "released": true
     },
