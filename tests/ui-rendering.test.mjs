@@ -142,8 +142,12 @@ test("ordinary UI renders Fast Judge as a short referee answer", async () => {
   assert.doesNotMatch(app, /裁判结论/u);
   assert.match(app, /FAST JUDGE/u);
   assert.match(app, /answer\.judgeReasoning/u);
-  assert.match(app, /假设分支/u);
+  assert.match(app, /正常情况下/u);
+  assert.match(app, /假设情况下/u);
   assert.match(app, /处理顺序/u);
   assert.match(app, /裁定式总结/u);
+  assert.match(app, /伤害步骤分析/u);
+  assert.match(app, /诱发时点分析/u);
+  assert.doesNotMatch(app, /damage\.reasonCode|timing\.reasonCode/u);
   assert.doesNotMatch(app, /blocker\.id/u);
 });

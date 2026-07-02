@@ -14,10 +14,13 @@ test("target protection makes the original chain illegal and preserves a hypothe
   assert.equal(result.hypotheticalBranch.verdict, "immediate_special_win");
   assert.match(result.resolutionSteps[0].action, /2500.*1700/u);
   assert.match(result.resolutionSteps.at(-1).action, /C1不再处理/u);
+  assert.equal(result.resolutionSteps.at(-1).status, "not_processed");
+  assert.equal(result.resolutionSteps.at(-1).reason, "duel_already_ended");
+  assert.equal(result.afterResolutionCheckpoints[0].timing, "after_resolution_checkpoint");
   assert.match(buildBlockerAnswer(result).shortAnswer, /连锁不成立/u);
 });
 test("the immediate special win condition does not start a chain", () => {
-  const result = evaluateRulingBlockers({ question: "我方结束阶段，对方基本分2500，我方没有素材的灾厄狮子被取对象。C2给与对方800伤害。", cards: [disasterLeo, poison] });
+  const result = evaluateRulingBlockers({ question: "我方结束阶段，对方基本分2500，我方场上有1只没有素材的灾厄狮子。对方C1发动雷破取灾厄狮子为对象，我方C2给与对方800伤害。", cards: [disasterLeo, poison] });
   assert.ok(result.resolutionSteps.some((item) => /不开连锁.*立即胜利/u.test(item.action)));
 });
 test("an activated normal trap cannot be returned and leaves no applicable mandatory return", () => {
