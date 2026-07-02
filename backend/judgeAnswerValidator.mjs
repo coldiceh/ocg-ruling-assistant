@@ -14,6 +14,11 @@ const frameCoverage = {
   pendulum_effect_scope: /灵摆|P效果|pendulum/iu,
   same_chain_cost_or_procedure: /连锁|费用|手续|展示|cost|chain/iu,
   once_per_turn_scope: /1回合1次|再次|once per turn/iu,
+  summon_response_window: /召唤成功|响应窗口|summon response/iu,
+  open_game_state_priority: /开放游戏状态|回合玩家|open game state/iu,
+  copy_effect_activation_procedure: /复制|对象|发动时|copy|target/iu,
+  continuous_effect_during_resolution: /处理中|处理后|永续|during resolution/iu,
+  spell_trap_card_activation_vs_effect_activation: /卡的发动|效果发动|card activation|effect activation/iu,
 };
 
 const offTopicGroups = [
@@ -170,6 +175,11 @@ function humanIssueSummary(ids) {
     pendulum_effect_scope: "灵摆效果",
     same_chain_cost_or_procedure: "同一连锁中的费用或手续",
     once_per_turn_scope: "一回合一次限制",
+    summon_response_window: "召唤成功响应窗口",
+    open_game_state_priority: "开放游戏状态的行动顺序",
+    copy_effect_activation_procedure: "复制效果的发动手续",
+    continuous_effect_during_resolution: "效果处理中的永续效果适用",
+    spell_trap_card_activation_vs_effect_activation: "卡的发动与效果发动的区别",
   };
   const values = [...new Set(ids.map((id) => labels[id]).filter(Boolean))];
   const visible = values.slice(0, 5).join("、");

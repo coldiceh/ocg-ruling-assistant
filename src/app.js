@@ -743,7 +743,8 @@ function renderFastJudgeAnswer(answer) {
   ui.resultGrid.hidden = false;
   renderCards(answer?.cards || []);
   const labels = {
-    direct_official: { confidence: "官方依据", className: "is-confirmed", basis: "官方 Q&A / FAQ" },
+    direct_official: { confidence: "官方依据", className: "is-confirmed", basis: "官方 direct Q&A" },
+    official_case_based: { confidence: "官方相似案例", className: "is-rule-derived", basis: "官方相似案例 / 条件推导" },
     rule_judgment: { confidence: "规则判断", className: "is-rule-derived", basis: "卡片文本与公开规则" },
     needs_clarification: { confidence: "需要补充", className: "is-risky", basis: "当前信息不足" },
     cannot_answer_safely: { confidence: "无法安全判断", className: "is-risky", basis: "验证未通过" },
@@ -752,7 +753,14 @@ function renderFastJudgeAnswer(answer) {
   updateModelStatus(answer.pending ? "等待深度判断" : "FAST JUDGE");
   ui.verdictBlock.className = `result-block verdict-block ${state?.className || "is-risky"}`;
   ui.confidenceText.textContent = answer.statusChip || state?.confidence || "NEEDS-INFO";
-  ui.verdictTitle.textContent = answer.pending ? "正在深度判断" : "结论";
+  const routeTitles = {
+    official_qa_exact_match: "官方 Q&A 结论",
+    official_qa_near_case_match: "官方相似案例",
+    rule_engine_answer: "规则推导结论",
+    conditional_branch_answer: "条件分支",
+    needs_more_info: "需要补充信息",
+  };
+  ui.verdictTitle.textContent = answer.pending ? "正在深度判断" : routeTitles[answer.answerRoute] || "结论";
   ui.rulingBasisText.textContent = state?.basis || "验证未通过";
   ui.verdictBody.textContent = answer.shortAnswer || "当前无法安全判断。";
   renderSubAnswers([]);
@@ -760,6 +768,7 @@ function renderFastJudgeAnswer(answer) {
     ...(answer.normalRuling?.reason ? [`正常情况下：${answer.normalRuling.reason}`] : []),
     ...(answer.judgeReasoning || []).map((item) => item.text).filter(Boolean),
     ...(answer.hypotheticalBranch?.assumption ? [`假设情况下：${answer.hypotheticalBranch.assumption}`] : []),
+    ...(answer.conditionalBranches || []).map((item) => `如果${String(item.condition || "").replace(/^如果/u, "")}：${item.result || ""}`),
     ...fastJudgeRuleDomainLines(answer),
     ...(answer.resolutionSteps || []).map((item) => `处理顺序 ${item.chainLink || ""}：${item.action || ""}`),
     ...(answer.finalJudgeSummary || []).map((item) => `裁定式总结：${item}`),
