@@ -1,13 +1,15 @@
 {
-  "generatedAt": "2026-06-30T08:55:18.971Z",
-  "cardCount": 14237,
-  "rulingCount": 41838,
-  "cardAliasCount": 35714,
-  "qaIndexCount": 27601,
-  "syncAllReleasedCards": false,
+  "generatedAt": "2026-07-01T20:22:57.366Z",
+  "cardCount": 14238,
+  "rulingCount": 41903,
+  "cardAliasCount": 35713,
+  "qaIndexCount": 27665,
+  "syncAllReleasedCards": true,
   "syncOnlyReleasedCards": true,
   "maxCards": 0,
   "maxQaTotal": 3000,
-  "warnings": [],
+  "warnings": [
+    "Card not resolved: Perfect Toon World"
+  ],
   "changedPaths": []
 }

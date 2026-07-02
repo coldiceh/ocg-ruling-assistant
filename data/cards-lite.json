@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-06-30T08:55:18.971Z",
+  "generatedAt": "2026-07-01T20:22:57.366Z",
   "records": [
     {
       "id": "21385",
@@ -21461,6 +21461,17 @@
         "扭蛋魔壳",
         "カプシェル",
         "Capshell"
+      ],
+      "released": true
+    },
+    {
+      "id": "23409",
+      "name": "カプセル・モンスター・チェス",
+      "jaName": "カプセル・モンスター・チェス",
+      "enName": "Capsule Monster Chess",
+      "aliases": [
+        "カプセル・モンスター・チェス",
+        "Capsule Monster Chess"
       ],
       "released": true
     },
@@ -150950,6 +150961,17 @@
       "released": true
     },
     {
+      "id": "23428",
+      "name": "ゼータ次元の魔術王",
+      "jaName": "ゼータ次元の魔術王",
+      "enName": "The Magical King of Dimension Zeta",
+      "aliases": [
+        "ゼータ次元の魔術王",
+        "The Magical King of Dimension Zeta"
+      ],
+      "released": true
+    },
+    {
       "id": "21035",
       "name": "拥有刻印之人",
       "cnName": "拥有刻印之人",
@@ -154569,17 +154591,12 @@
     },
     {
       "id": "23161",
-      "name": "完美世界-卡通世界",
-      "cnName": "完美世界-卡通世界",
+      "name": "完全なる世界 トゥーン・ワールド",
       "jaName": "完全なる世界 トゥーン・ワールド",
       "enName": "Toon World the Perfect World",
       "aliases": [
-        "完美世界-卡通世界",
         "完全なる世界 トゥーン・ワールド",
-        "Toon World the Perfect World",
-        "完美世界 卡通世界",
-        "完美世界卡通世界",
-        "Perfect Toon World"
+        "Toon World the Perfect World"
       ],
       "released": true
     },
@@ -171210,15 +171227,6 @@
         "青之眼少女",
         "青き眼の乙女",
         "Maiden with Eyes of Blue"
-      ],
-      "released": true
-    },
-    {
-      "id": "23409",
-      "name": "カプセル・モンスター・チェス",
-      "jaName": "カプセル・モンスター・チェス",
-      "aliases": [
-        "カプセル・モンスター・チェス"
       ],
       "released": true
     },

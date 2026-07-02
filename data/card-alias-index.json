@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-06-30T08:55:18.971Z",
+  "generatedAt": "2026-07-01T20:22:57.366Z",
   "records": [
     {
       "alias": "“K9刑侦案件”",
@@ -31220,6 +31220,20 @@
       "normalizedAlias": "capshell",
       "cardId": "14709",
       "cardName": "扭蛋魔壳",
+      "language": "en"
+    },
+    {
+      "alias": "カプセル・モンスター・チェス",
+      "normalizedAlias": "カプセル・モンスタ-・チェス",
+      "cardId": "23409",
+      "cardName": "カプセル・モンスター・チェス",
+      "language": "ja"
+    },
+    {
+      "alias": "Capsule Monster Chess",
+      "normalizedAlias": "capsule monster chess",
+      "cardId": "23409",
+      "cardName": "カプセル・モンスター・チェス",
       "language": "en"
     },
     {
@@ -220594,6 +220608,20 @@
       "language": "en"
     },
     {
+      "alias": "ゼータ次元の魔術王",
+      "normalizedAlias": "ゼ-タ次元の魔術王",
+      "cardId": "23428",
+      "cardName": "ゼータ次元の魔術王",
+      "language": "ja"
+    },
+    {
+      "alias": "The Magical King of Dimension Zeta",
+      "normalizedAlias": "the magical king of dimension zeta",
+      "cardId": "23428",
+      "cardName": "ゼータ次元の魔術王",
+      "language": "en"
+    },
+    {
       "alias": "拥有刻印之人",
       "normalizedAlias": "拥有刻印之人",
       "cardId": "21035",
@@ -225704,45 +225732,17 @@
       "language": "en"
     },
     {
-      "alias": "完美世界-卡通世界",
-      "normalizedAlias": "完美世界-卡通世界",
-      "cardId": "23161",
-      "cardName": "完美世界-卡通世界",
-      "language": "zh"
-    },
-    {
       "alias": "完全なる世界 トゥーン・ワールド",
       "normalizedAlias": "完全なる世界 トゥ-ン・ワ-ルド",
       "cardId": "23161",
-      "cardName": "完美世界-卡通世界",
+      "cardName": "完全なる世界 トゥーン・ワールド",
       "language": "ja"
     },
     {
       "alias": "Toon World the Perfect World",
       "normalizedAlias": "toon world the perfect world",
       "cardId": "23161",
-      "cardName": "完美世界-卡通世界",
-      "language": "en"
-    },
-    {
-      "alias": "完美世界 卡通世界",
-      "normalizedAlias": "完美世界 卡通世界",
-      "cardId": "23161",
-      "cardName": "完美世界-卡通世界",
-      "language": "zh"
-    },
-    {
-      "alias": "完美世界卡通世界",
-      "normalizedAlias": "完美世界卡通世界",
-      "cardId": "23161",
-      "cardName": "完美世界-卡通世界",
-      "language": "zh"
-    },
-    {
-      "alias": "Perfect Toon World",
-      "normalizedAlias": "perfect toon world",
-      "cardId": "23161",
-      "cardName": "完美世界-卡通世界",
+      "cardName": "完全なる世界 トゥーン・ワールド",
       "language": "en"
     },
     {
@@ -249985,13 +249985,6 @@
       "cardId": "10588",
       "cardName": "青之眼少女",
       "language": "en"
-    },
-    {
-      "alias": "カプセル・モンスター・チェス",
-      "normalizedAlias": "カプセル・モンスタ-・チェス",
-      "cardId": "23409",
-      "cardName": "カプセル・モンスター・チェス",
-      "language": "ja"
     },
     {
       "alias": "7",
