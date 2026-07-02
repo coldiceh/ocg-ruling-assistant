@@ -12,6 +12,10 @@ import { checkStaleness } from "./stalenessGuard.mjs";
 import { detectCurrentVerdictConflicts, filterCurrentEvidence } from "./currentEvidenceFilter.mjs";
 import { evaluateEvidenceFreshness } from "./evidenceFreshness.mjs";
 import { buildBlockerAnswer, evaluateRulingBlockers } from "./rulingBlockers.mjs";
+import { buildDamageStepAnalysis, cardProfileRuleText } from "./damageStepRules.mjs";
+import { buildDamageStepBlockerAnswer, evaluateDamageStepBlocker } from "./damageStepBlockers.mjs";
+import { buildEventSequenceFromQuestion, buildTriggerTimingAnalysis, classifyTriggerWording, shouldAnalyzeTriggerTiming } from "./triggerTimingRules.mjs";
+import { buildTimingMissBlockerAnswer, evaluateTimingMissBlocker } from "./timingMissBlockers.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const fastSnapshotCache = new Map();
@@ -75,16 +79,52 @@ export async function answerRulingQuestionFast({ question, mode = "duel", maxLat
     });
     contextPack.staleness = staleness;
 
+    const directOfficial = findDirectOfficialAnswer(input, contextPack, issueFrames, staleness, evidenceFreshness);
+    const officialEvidenceIds = directOfficial?.judgeReasoning?.flatMap((item) => item.refs || []) || [];
+    const profileText = cardProfileRuleText(cardProfiles);
+    const damageStepAnalysis = buildDamageStepAnalysis({
+      question: input,
+      phase: contextPack.scenario?.phase || "",
+      effectText: profileText,
+      cardType: resolution.resolvedCards?.[0]?.cardType || "",
+      officialDirectEvidence: Boolean(directOfficial),
+      officialVerdict: directOfficial?.verdict || "unknown",
+      evidenceIds: officialEvidenceIds,
+    });
+    contextPack.damageStepAnalysis = damageStepAnalysis;
+    const triggerProfile = cardProfiles.find((profile) => classifyTriggerWording(cardProfileRuleText([profile])) !== "unknown") || null;
+    const triggerText = triggerProfile ? cardProfileRuleText([triggerProfile]) : "";
+    const eventSequence = buildEventSequenceFromQuestion(input);
+    const triggerTimingAnalysis = shouldAnalyzeTriggerTiming({ question: input, effectText: triggerText }) ? buildTriggerTimingAnalysis({
+      triggerCandidate: {
+        card: triggerProfile?.names?.zh || triggerProfile?.names?.ja || triggerProfile?.names?.en || "unknown",
+        effectText: triggerText,
+      },
+      eventSequence,
+      officialDirectEvidence: Boolean(directOfficial),
+      evidenceIds: officialEvidenceIds,
+    }) : null;
+    contextPack.eventSequence = eventSequence;
+    contextPack.triggerTimingAnalysis = triggerTimingAnalysis;
+
     const blockerCards = collectBlockerCards(resolution, localSnapshot.cards || []);
     const blockerResult = evaluateRulingBlockers({ question: input, cards: blockerCards });
     if (blockerResult.hasBlocker) {
       return finalize(buildBlockerAnswer(blockerResult), { mode, budget, issueFrames, contextPack, debug });
     }
 
-    const directOfficial = findDirectOfficialAnswer(input, contextPack, issueFrames, staleness, evidenceFreshness);
     if (directOfficial) {
       const validation = validateJudgeAnswer({ question: input, issueFrames, contextPack, modelAnswer: directOfficial });
       if (validation.ok) return finalize(directOfficial, { mode, budget, issueFrames, contextPack, validation, debug });
+    }
+
+    const damageStepBlocker = evaluateDamageStepBlocker(damageStepAnalysis);
+    if (damageStepBlocker.hasBlocker) {
+      return finalize(buildDamageStepBlockerAnswer(damageStepBlocker), { mode, budget, issueFrames, contextPack, debug });
+    }
+    const timingMissBlocker = evaluateTimingMissBlocker(triggerTimingAnalysis);
+    if (timingMissBlocker.hasBlocker) {
+      return finalize(buildTimingMissBlockerAnswer(timingMissBlocker), { mode, budget, issueFrames, contextPack, debug });
     }
 
     if (!issueFrames.primaryIssueFrames.length) {
@@ -231,10 +271,18 @@ function finalize(answer, { mode, budget, issueFrames, contextPack, validation =
     safetyPenalty: contextPack.evidenceFreshness?.safetyPenalty ?? 2,
     dataQualityWarnings: contextPack.snapshotMeta?.dataQualityWarnings || [],
     blockers: answer.blockers || [],
+    confirmationLevel: confirmationLevelFor(answer, contextPack),
+    normalRuling: answer.normalRuling || null,
     primaryVerdict: answer.primaryVerdict || null,
     hypotheticalBranch: answer.hypotheticalBranch || null,
     resolutionSteps: answer.resolutionSteps || [],
     finalJudgeSummary: answer.finalJudgeSummary || [],
+    afterResolutionCheckpoints: answer.afterResolutionCheckpoints || [],
+    finalGameState: answer.finalGameState || null,
+    terminalVerdict: answer.terminalVerdict || null,
+    damageStepAnalysis: contextPack.damageStepAnalysis || null,
+    triggerTimingAnalysis: contextPack.triggerTimingAnalysis || null,
+    eventSequence: contextPack.eventSequence || [],
   };
   if (debug || mode === "analysis") {
     result.debug = {
@@ -349,6 +397,14 @@ function statusChipFor(answer, staleness = {}, freshness = {}) {
   if (answer.answerType === "direct_official") return "OFFICIAL";
   if (answer.answerType === "rule_judgment") return "RULE-JUDGED";
   return "NEEDS-INFO";
+}
+
+function confirmationLevelFor(answer = {}, contextPack = {}) {
+  if (answer.answerType === "direct_official") return "confirmed";
+  if (answer.answerType === "rule_judgment") return "rule_derived";
+  if (contextPack.damageStepAnalysis?.confirmationLevel === "insufficient_info"
+    || contextPack.triggerTimingAnalysis?.confirmationLevel === "insufficient_info") return "insufficient_info";
+  return "conditional";
 }
 
 async function readJson(path, fallback) {

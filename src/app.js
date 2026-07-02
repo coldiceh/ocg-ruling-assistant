@@ -757,8 +757,10 @@ function renderFastJudgeAnswer(answer) {
   ui.verdictBody.textContent = answer.shortAnswer || "当前无法安全判断。";
   renderSubAnswers([]);
   renderList(ui.stepsList, [
+    ...(answer.normalRuling?.reason ? [`正常情况下：${answer.normalRuling.reason}`] : []),
     ...(answer.judgeReasoning || []).map((item) => item.text).filter(Boolean),
-    ...(answer.hypotheticalBranch?.assumption ? [`假设分支：${answer.hypotheticalBranch.assumption}`] : []),
+    ...(answer.hypotheticalBranch?.assumption ? [`假设情况下：${answer.hypotheticalBranch.assumption}`] : []),
+    ...fastJudgeRuleDomainLines(answer),
     ...(answer.resolutionSteps || []).map((item) => `处理顺序 ${item.chainLink || ""}：${item.action || ""}`),
     ...(answer.finalJudgeSummary || []).map((item) => `裁定式总结：${item}`),
     ...(answer.warnings || []),
@@ -774,6 +776,40 @@ function renderFastJudgeAnswer(answer) {
   renderSources(fastJudgeSources(answer.sourceSummary));
   renderParserDebug(answer.debug || null);
   renderFeedbackPanel(answer);
+}
+
+function fastJudgeRuleDomainLines(answer) {
+  const lines = [];
+  const damage = answer.damageStepAnalysis;
+  if (damage?.isDamageStep) {
+    const subphases = {
+      damage_step_start: "伤害步骤开始时",
+      before_damage_calculation: "伤害计算前",
+      during_damage_calculation: "伤害计算时",
+      after_damage_calculation: "伤害计算后",
+      damage_step_end: "伤害步骤结束时",
+      unknown_damage_step_timing: "伤害步骤内的具体时点尚未确认",
+    };
+    const permission = damage.allowedInDamageStep === true ? "该效果类别可继续进行发动合法性检查"
+      : damage.allowedInDamageStep === false ? "该效果类别没有伤害步骤发动许可"
+        : "尚不能确定该效果类别是否允许发动";
+    lines.push(`伤害步骤分析：${subphases[damage.subphase] || "具体时点待确认"}；${permission}。`);
+  }
+  const timing = answer.triggerTimingAnalysis;
+  if (timing) {
+    const labels = {
+      optional_when: "可选的“当……时”诱发",
+      optional_if: "可选的“如果……的场合”诱发",
+      mandatory_when: "强制的“当……时”诱发",
+      mandatory_if: "强制的“如果……的场合”诱发",
+      unknown: "诱发措辞尚未确认",
+    };
+    const result = timing.canActivate === false ? "诱发事件不是最后发生事件，不能发动"
+      : timing.canActivate === true ? "未被可选诱发的错过时点规则拦截"
+        : "仍需确认事件顺序或同时诱发排序";
+    lines.push(`诱发时点分析：${labels[timing.triggerType] || labels.unknown}；${result}。`);
+  }
+  return lines;
 }
 
 function fastJudgeSources(summary = {}) {

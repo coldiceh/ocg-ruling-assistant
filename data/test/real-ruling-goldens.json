@@ -240,6 +240,30 @@
       "requiredBlockers": [],
       "forbiddenBlockers": [],
       "notes": "诱发位置变化历史规则。"
+    },
+    {
+      "id": "damage-step-subphase-required",
+      "question": "伤害步骤中能发动这个效果吗？",
+      "expectedVerdictType": "needs_clarification",
+      "mustMention": ["伤害步骤", "具体子阶段"],
+      "mustNotMention": ["官方直接裁定", "一定可以发动"],
+      "expectedSafetyLevelMax": "NEEDS-INFO",
+      "expectedSafetyLevelMin": "NEEDS-INFO",
+      "requiredBlockers": [],
+      "forbiddenBlockers": [],
+      "notes": "缺少伤害步骤子阶段时必须保守追问。"
+    },
+    {
+      "id": "optional-when-missed-timing",
+      "question": "新卡「测试诱发龙」的完整效果是：『当这张卡送去墓地时，可以发动。』效果处理时先将测试诱发龙送去墓地，然后给与对方500伤害。送墓不是最后发生的事件，这个效果能发动吗？",
+      "expectedVerdictType": "rule_judgment",
+      "mustMention": ["错过时点", "不能发动"],
+      "mustNotMention": ["官方直接裁定", "可以发动"],
+      "expectedSafetyLevelMax": "RULE-JUDGED",
+      "expectedSafetyLevelMin": "RULE-JUDGED",
+      "requiredBlockers": [],
+      "forbiddenBlockers": [],
+      "notes": "可选 when 的诱发事件不是最后发生事件。"
     }
   ]
 }

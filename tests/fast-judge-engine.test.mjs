@@ -11,6 +11,7 @@ test("fast judge returns a short validated rule judgment", async () => {
     snapshot: { cards: [{ id: "1", name: "测试龙", aliases: ["测试龙"], cardType: "monster", effectText: "①：这张卡获得贯穿战斗伤害效果。" }], records: [] },
     modelInvoker: async () => ({
       answerType: "rule_judgment",
+      confirmationLevel: "confirmed",
       verdict: "damage_occurs",
       shortAnswer: "测试龙获得贯穿效果后，攻击守备怪兽会按攻击力超过守备力的数值造成战斗伤害。",
       judgeReasoning: [{ text: "测试龙的卡片文本明确涉及获得效果与贯穿战斗伤害。", basis: ["card_text"], refs: ["1"] }],
@@ -20,6 +21,7 @@ test("fast judge returns a short validated rule judgment", async () => {
   assert.equal(answer.answerType, "rule_judgment");
   assert.equal(answer.shortAnswer.length <= 120, true);
   assert.equal(answer.pipeline, "fast_judge");
+  assert.equal(answer.confirmationLevel, "rule_derived");
 });
 
 test("real failure case never emits off-topic chains", async () => {
@@ -133,9 +135,15 @@ test("illegal target premise returns a primary ruling and a hypothetical chain b
     modelInvoker: async () => { throw new Error("blocker answer must not call the model"); },
   });
   assert.equal(answer.primaryVerdict, "original_chain_illegal");
+  assert.equal(answer.normalRuling.verdict, "activation_illegal");
+  assert.equal(answer.normalRuling.confirmationLevel, "rule_derived");
   assert.equal(answer.hypotheticalBranch.verdict, "immediate_special_win");
+  assert.equal(answer.hypotheticalBranch.confirmationLevel, "conditional");
   assert.match(answer.resolutionSteps[0].action, /2500.*1700/u);
   assert.match(answer.resolutionSteps.at(-1).action, /C1不再处理/u);
+  assert.equal(answer.resolutionSteps.at(-1).status, "not_processed");
+  assert.equal(answer.resolutionSteps.at(-1).reason, "duel_already_ended");
+  assert.equal(answer.afterResolutionCheckpoints[0].terminalVerdict.type, "special_win");
   assert.notEqual(answer.answerType, "direct_official");
 });
 
