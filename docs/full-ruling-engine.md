@@ -62,6 +62,32 @@ flowchart LR
 
 模型只能负责解释证据包、补充自然语言表达和辅助卡名解析；它不能越过资料和规则模块直接决定“官方确认”。
 
+### 第一阶段 gate 与 trace
+
+当前后端把裁定控制流固定为：
+
+```text
+parse formal query
+-> Card Identity Gate
+-> build game state / activeRestrictions
+-> Activation Legality Gate（逐个 chain link）
+-> 仅合法连锁进入 resolution simulation
+-> evidence grade + program verdict
+-> 可选 explanationDraft
+```
+
+`backend/cardIdentityGate.mjs` 对数据库 exact match、alias 唯一性和低置信候选做确认；非唯一候选返回 `needs_card_confirmation`，不得静默选择。`backend/activationLegalityGate.mjs` 输出 `{ canActivate, blockers, assumptions }`，blocker 使用稳定的 `activation.*` code。`backend/activeRestrictions.mjs` 用结构化 `appliesTo` 做通用限制匹配。`backend/chainSafety.mjs` 在任何解算前验证所有已声称的 chain link；遇到非法发动即返回 `illegal_question`，且 `resolutionTrace` 为空。
+
+解算 trace 目前能表达 `target_lost`、`partial_resolution` 和 `source_unavailable`，但它仍是 scaffold：尚未覆盖所有 OCG 时点、对象重选、效果关联、离场后适用、伤害步骤及强制效果规则。未知事实必须降级为 `insufficient` 或要求确认，不能交给模型猜测。
+
+### 第二阶段 Effect Primitive Layer
+
+`backend/effectPrimitives.mjs` 定义通用操作和 connector；`backend/effectResolutionEngine.mjs` 按当前 game state 执行 primitive，并输出 `steps / failedParts / continuedParts / stateChanges / ruleTrace`。对象或来源离开预期区域只阻断声明了对应依赖的 primitive，独立部分继续；connector 依赖失败时跳过后续依赖部分。
+
+`backend/restrictionTemplates.mjs` 提供手工 restriction template registry，可按 `cardId + effectNo` 生成 `activeRestriction`。模板只负责生成结构化限制，不自动从任意卡片文本猜测限制。
+
+当前 primitive 层是可执行 scaffold，不是完整 OCG 模拟器。未建模的区域容量、苏生限制、公开/非公开信息、替代处理、对象关系重置、效果分类细节和复杂同时处理必须返回 `insufficient`。
+
 ## 后端可选实现
 
 - Cloudflare Worker：适合轻量 API，部署简单。

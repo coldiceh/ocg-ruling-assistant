@@ -1,4 +1,5 @@
 import { createResolutionGameState, resolveChainWithCheckpoints } from "./afterResolutionCheckpoint.mjs";
+import { validateActivation } from "./activationLegalityGate.mjs";
 import { extractSpecialWinConditions } from "./specialWinConditions.mjs";
 
 export const RULING_BLOCKER_IDS = Object.freeze([
@@ -16,7 +17,11 @@ export function evaluateRulingBlockers({ question = "", cards = [] } = {}) {
   const targetsProtectedCard = targetProtected && /为对象|取对象|対象/iu.test(text);
 
   if (targetsProtectedCard) {
-    const blockers = [blocker("target_protection_prevents_activation", "发动必须选择对象，但目标卡不能成为效果对象。", targetProtected)];
+    const gate = validateActivation({ sourceCard: extractChainSourceName(text, "C1") || "C1", requiresTarget: true, targetIsLegal: false });
+    const blockers = [
+      ...gate.blockers.map(toLegacyCompatibleBlocker),
+      blocker("target_protection_prevents_activation", "发动必须选择对象，但目标卡不能成为效果对象。", targetProtected),
+    ];
     const answer = {
       primaryVerdict: "original_chain_illegal",
       reason: `正常情况下，发动卡不能以${displayName(targetProtected)}为对象，因此原连锁不合法。`,
@@ -35,6 +40,9 @@ export function evaluateRulingBlockers({ question = "", cards = [] } = {}) {
       afterResolutionCheckpoints: [],
       finalGameState: null,
       terminalVerdict: null,
+      status: "illegal_question",
+      evidenceGrade: "illegal_question",
+      ruleTrace: [{ step: "validate_activation", chainLink: "C1", result: "blocked", blocker: "activation.no_legal_target" }],
     };
     if (specialWinner) {
       const scenario = buildHypotheticalChainScenario(text, specialWinner, targetProtected, profiles);
@@ -69,7 +77,15 @@ export function evaluateRulingBlockers({ question = "", cards = [] } = {}) {
   const activatedNormal = profiles.find((card) => isNormalSpellTrap(card) && mentionsCard(text, card) && /发动|発動|activate/iu.test(text));
   const noOtherBackrow = /没有其他魔陷|没有其它魔陷|不存在其他魔法.{0,3}陷阱|no other spell.*trap/iu.test(text);
   if (returner && activatedNormal && noOtherBackrow) {
+    const gate = validateActivation({
+      sourceCard: returner,
+      requiresLegalEffectApplication: true,
+      hasLegalEffectApplication: false,
+      attemptsToReturnCurrentlyResolvingCard: true,
+      returnTarget: activatedNormal,
+    });
     const blockers = [
+      ...gate.blockers.map(toLegacyCompatibleBlocker),
       blocker("chain_activated_normal_spell_trap_cannot_return_to_hand_or_deck", "发动后处于连锁中的通常魔法/陷阱不能返回手牌或卡组。", activatedNormal),
       blocker("no_applicable_card_for_mandatory_return_effect", "必须执行的返回处理没有可适用的魔法/陷阱。", returner),
     ];
@@ -82,6 +98,9 @@ export function evaluateRulingBlockers({ question = "", cards = [] } = {}) {
       resolutionSteps: [],
       finalJudgeSummary: [`正常情况：${displayName(returner)}不能发动。`, `理由：对应通常陷阱仍在连锁中，且没有其他可执行返回处理的魔法/陷阱。`],
       confirmationLevel: "rule_derived",
+      status: /C\d/iu.test(text) ? "illegal_question" : "cannot_activate",
+      evidenceGrade: /C\d/iu.test(text) ? "illegal_question" : "rule_derived",
+      ruleTrace: [{ step: "validate_activation", chainLink: "claimed_activation", result: "blocked", blocker: "activation.no_legal_effect_application" }],
       normalRuling: {
         verdict: "cannot_activate",
         reason: `正在发动中的${displayName(activatedNormal)}不能返回手牌，且没有其他可执行返回处理的魔法/陷阱。`,
@@ -97,8 +116,11 @@ export function buildBlockerAnswer(result) {
   if (!result?.hasBlocker) return null;
   return {
     answerType: "rule_judgment",
+    status: result.status || (result.primaryVerdict === "original_chain_illegal" ? "illegal_question" : "cannot_activate"),
     verdict: result.primaryVerdict,
+    evidenceGrade: result.evidenceGrade || (result.primaryVerdict === "original_chain_illegal" ? "illegal_question" : "rule_derived"),
     shortAnswer: result.finalJudgeSummary.join(" "),
+    userFacingAnswer: result.finalJudgeSummary.join(" "),
     judgeReasoning: result.blockers.slice(0, 3).map((item) => ({ text: item.reason, basis: ["card_text", "rule_blocker"], refs: item.evidenceIds })),
     requiredFacts: [],
     assumptions: result.hypotheticalBranch ? [result.hypotheticalBranch.assumption] : [],
@@ -114,6 +136,7 @@ export function buildBlockerAnswer(result) {
     afterResolutionCheckpoints: result.afterResolutionCheckpoints || [],
     finalGameState: result.finalGameState || null,
     terminalVerdict: result.terminalVerdict || null,
+    ruleTrace: result.ruleTrace || [],
   };
 }
 
@@ -158,6 +181,17 @@ function extractChainSourceName(text, chainId) {
 
 function blocker(id, reason, card) {
   return { id, reason, evidenceIds: card?.id ? [String(card.id)] : [], sourceType: "card_text", maxStatus: "rule_judgment" };
+}
+
+function toLegacyCompatibleBlocker(item) {
+  return {
+    ...item,
+    id: item.code,
+    reason: item.explanation,
+    evidenceIds: item.restriction?.sourceCardId ? [String(item.restriction.sourceCardId)] : [],
+    sourceType: "rule_blocker",
+    maxStatus: "rule_judgment",
+  };
 }
 
 function uniqueCards(cards) {

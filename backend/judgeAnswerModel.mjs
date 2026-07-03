@@ -8,12 +8,31 @@ const verdicts = new Set([
 const bases = new Set(["card_text", "official_qa", "faq_analogy", "rule_snippet"]);
 
 export async function runJudgeAnswerModel({ contextPack, mode = "duel", budget, env = globalThis.process?.env || {}, modelInvoker } = {}) {
-  const input = buildJudgeModelInput(contextPack, mode);
+  // modelInvoker is a deterministic test adapter kept for compatibility.
+  // Configured OpenAI/Gemini providers are explanation-only and never return
+  // a program verdict to the ruling pipeline.
+  const input = modelInvoker
+    ? buildJudgeModelInput(contextPack, mode)
+    : buildExplanationModelInput(contextPack, mode);
   const raw = modelInvoker
     ? await runWithinLatencyBudget(() => modelInvoker(input), budget, "judge_model")
     : await callConfiguredModel(input, budget, env);
   if (!raw) return null;
+  if (!modelInvoker) return normalizeExplanationDraft(typeof raw === "string" ? parseJson(raw) : raw, mode);
   return normalizeJudgeModelAnswer(typeof raw === "string" ? parseJson(raw) : raw, mode);
+}
+
+export function buildExplanationModelInput(contextPack, mode = "duel") {
+  return {
+    instructions: [
+      "你只负责把程序提供的证据与未知项组织成自然语言草稿，不负责裁定。",
+      "只输出 JSON：{\"explanationDraft\":\"...\"}。",
+      "禁止输出或暗示 verdict、status、evidenceGrade、blockers、ruleTrace；不得声称可以发动或不能发动。",
+      mode === "duel" ? "explanationDraft 不超过 120 个中文字符。" : "explanationDraft 保持简洁。",
+    ],
+    schema: { explanationDraft: "string" },
+    context: compactContextPack(contextPack),
+  };
 }
 
 export function buildJudgeModelInput(contextPack, mode = "duel") {
@@ -59,6 +78,45 @@ export function normalizeJudgeModelAnswer(value, mode = "duel") {
     possibleCounterCases: stringList(answer.possibleCounterCases, 6),
     confidence: ["high", "medium", "low"].includes(answer.confidence) ? answer.confidence : "low",
   };
+}
+
+export function normalizeExplanationDraft(value, mode = "duel") {
+  const draft = trim(String(value?.explanationDraft || ""), mode === "duel" ? 120 : 360);
+  const containsVerdict = /(?:可以|能够|能|不能|不可以)发动|(?:会|不会)(?:破坏|适用|处理)|can(?:not|'t)? activate|activation (?:is )?(?:legal|illegal|allowed)/iu.test(draft);
+  return {
+    explanationOnly: true,
+    explanationDraft: containsVerdict ? "" : draft,
+    rejectedDecisiveDraft: containsVerdict,
+  };
+}
+
+export function buildProgramAnswerModel(programResult = {}) {
+  const conclusion = String(programResult.userFacingAnswer || programResult.shortAnswer || programResult.verdict || "信息不足");
+  const evidenceGrade = String(programResult.evidenceGrade || "insufficient");
+  const keyActions = (programResult.blockers || []).map((item) => item.explanation || item.reason).filter(Boolean);
+  if (!keyActions.length) {
+    keyActions.push(...(programResult.ruleTrace || [])
+      .filter((item) => ["blocked", "skipped", "failed", "insufficient", "applied", "continued"].includes(item.result))
+      .slice(0, 5)
+      .map((item) => item.event || item.blocker || `${item.step}:${item.result}`));
+  }
+  const process = (programResult.resolutionSteps || programResult.steps || []).map((item) => {
+    if (typeof item === "string") return item;
+    return item.action || `${item.primitive || item.step || "处理"}：${item.status || item.result || "unknown"}`;
+  });
+  const notes = [...new Set([
+    ...(programResult.warnings || []),
+    ...(programResult.assumptions || []).map((item) => `假设：${item}`),
+  ])];
+  const model = { conclusion, evidenceGrade, keyActions, process, notes };
+  model.text = [
+    `结论：${conclusion}`,
+    `依据等级：${evidenceGrade}`,
+    `关键阻断 / 关键处理：${keyActions.length ? keyActions.join("；") : "无"}`,
+    `处理过程：${process.length ? process.join("；") : "未进入效果处理"}`,
+    `注意：${notes.length ? notes.join("；") : "无"}`,
+  ].join("\n");
+  return model;
 }
 
 async function callConfiguredModel(input, budget, env) {

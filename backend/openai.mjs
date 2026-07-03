@@ -176,9 +176,11 @@ function buildFormalParserInstructions() {
     "你是 OCG 问题字段填充器，不负责拆问，也不回答规则。",
     "只输出一行 compact JSON；禁止 Markdown、解释、reasoning、evidence、Q&A 和裁定结论。",
     "输入中的 questionLines 已由程序确定。subQuestions 必须与 questionLines 数量和顺序完全一致，并原样复制 id 与 sourceText。",
-    "只保留 originalText、scenario、cards、subQuestions 四个顶层字段。",
+    "必须保留 originalText、scenario、cards、subQuestions；只有题目明确提供时，才可增加 questionType、cardIdentities、chainLinks、targets、activeRestrictions、primitiveSequence、effectTemplateId。",
     "每个 subQuestion 只填写 id、type、card、askedResult、sourceText。无法确定的字段写 unknown，不能省略。",
     "不得输出可以、不可以、会、不会等答案。",
+    "你的输出只是 parsedFormalQuery；不得生成 verdict、evidenceGrade、blockers 或 ruleTrace。",
+    "primitiveSequence 只能描述题目或已注册模板明确给出的处理，不得猜测 primitive 是否成功。",
   ].join("\n");
 }
 
@@ -210,7 +212,7 @@ function compactFormalQueryPayload(payload) {
   const scenario = source.scenario && typeof source.scenario === "object" && !Array.isArray(source.scenario)
     ? source.scenario
     : {};
-  return {
+  const result = {
     originalText: source.originalText,
     scenario: {
       rawContext: scenario.rawContext,
@@ -244,6 +246,14 @@ function compactFormalQueryPayload(payload) {
       sourceText: subQuestion?.sourceText,
     })),
   };
+  if (source.questionType !== undefined) result.questionType = source.questionType;
+  if (source.effectTemplateId !== undefined) result.effectTemplateId = source.effectTemplateId;
+  if (Array.isArray(source.cardIdentities)) result.cardIdentities = source.cardIdentities;
+  if (Array.isArray(source.targets)) result.targets = source.targets;
+  if (Array.isArray(source.activeRestrictions)) result.activeRestrictions = source.activeRestrictions;
+  if (Array.isArray(source.primitiveSequence)) result.primitiveSequence = source.primitiveSequence;
+  if (Array.isArray(source.chainLinks)) result.chainLinks = source.chainLinks;
+  return result;
 }
 
 function buildFormalParserFailure(code, rawFormalQuery, normalizedFormalQuery, preprocessing, details = []) {
@@ -455,7 +465,8 @@ function buildCardResolutionInstructions() {
     "用户可能输入简体中文民间译名、俗称、日文片假名音译、英文缩写或错别字。",
     "请返回题目中出现的每张疑似卡，以及可能对应的官方英文名或日文名。",
     "不要回答裁定，不要解释规则，不要编造效果。",
-    "不确定时也可以给 low confidence 候选；后端只会采纳资料库中真实存在的卡。",
+    "长卡名不得静默退化为短卡名；相似候选必须全部保留，不能自行选一个。",
+    "不确定时返回 low confidence 和候选列表；程序会要求用户确认，模型输出本身不构成卡片身份。",
   ].join("\n");
 }
 

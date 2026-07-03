@@ -1,3 +1,5 @@
+import { EFFECT_PRIMITIVE_TYPES, RESOLUTION_CONNECTORS, createEffectPrimitive } from "./effectPrimitives.mjs";
+
 export const CARD_ROLES = ["question_card", "related_card", "cost_card", "target_card", "unknown"];
 export const CONTROLLERS = ["self", "opponent", "unknown"];
 export const CARD_ZONES = [
@@ -42,6 +44,24 @@ export const FormalRulingQuery = {
   required: ["originalText", "cards", "scenario", "subQuestions"],
   properties: {
     originalText: { type: "string" },
+    questionType: { type: "string" },
+    effectTemplateId: { type: "string" },
+    cardIdentities: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["rawText", "status"],
+        properties: {
+          rawText: { type: "string" },
+          cardId: { type: "string" },
+          canonicalName: { type: "string" },
+          confidence: { type: "string" },
+          status: { type: "string" },
+          candidates: { type: "array", items: { type: "object" } },
+        },
+      },
+    },
     cards: {
       type: "array",
       items: {
@@ -84,6 +104,30 @@ export const FormalRulingQuery = {
         },
       },
     },
+    targets: { type: "array", items: { type: "object" } },
+    activeRestrictions: { type: "array", items: { type: "object" } },
+    primitiveSequence: { type: "array", items: { type: "object" } },
+    chainLinks: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["id"],
+        properties: {
+          id: { type: "string" },
+          order: { type: "number" },
+          sourceCardId: { type: "string" },
+          sourceCardName: { type: "string" },
+          effectNo: { type: "string" },
+          sourceExpectedZone: { type: "string", enum: CARD_ZONES },
+          targets: { type: "array", items: { type: "object" } },
+          activeRestrictions: { type: "array", items: { type: "object" } },
+          primitiveSequence: { type: "array", items: { type: "object" } },
+          effectTemplateId: { type: "string" },
+          candidateEffect: { type: "object" },
+        },
+      },
+    },
     subQuestions: {
       type: "array",
       items: {
@@ -114,6 +158,15 @@ export function validateFormalRulingQuery(query) {
   if (!Array.isArray(query.subQuestions) || query.subQuestions.length === 0) {
     errors.push("subQuestions must contain at least one item");
   }
+  for (const forbidden of ["verdict", "evidenceGrade", "blockers", "ruleTrace"]) {
+    if (query[forbidden] !== undefined) errors.push(`${forbidden} is program-owned and cannot appear in parsedFormalQuery`);
+  }
+  validateOptionalArray(errors, "cardIdentities", query.cardIdentities);
+  validateOptionalArray(errors, "targets", query.targets);
+  validateOptionalArray(errors, "activeRestrictions", query.activeRestrictions);
+  validateOptionalArray(errors, "primitiveSequence", query.primitiveSequence);
+  validateOptionalArray(errors, "chainLinks", query.chainLinks);
+  validatePrimitiveSequence(errors, "primitiveSequence", query.primitiveSequence);
 
   const ids = new Set();
   for (const [index, card] of (Array.isArray(query.cards) ? query.cards : []).entries()) {
@@ -135,6 +188,19 @@ export function validateFormalRulingQuery(query) {
     if (query.scenario.events !== undefined && !Array.isArray(query.scenario.events)) {
       errors.push("scenario.events must be an array");
     }
+  }
+
+  for (const [index, link] of (Array.isArray(query.chainLinks) ? query.chainLinks : []).entries()) {
+    const path = `chainLinks[${index}]`;
+    if (!isPlainObject(link)) {
+      errors.push(`${path} must be an object`);
+      continue;
+    }
+    if (!cleanString(link.id)) errors.push(`${path}.id must be a non-empty string`);
+    if (link.sourceExpectedZone !== undefined) validateEnum(errors, `${path}.sourceExpectedZone`, link.sourceExpectedZone, CARD_ZONES);
+    validateOptionalArray(errors, `${path}.targets`, link.targets);
+    validateOptionalArray(errors, `${path}.activeRestrictions`, link.activeRestrictions);
+    validatePrimitiveSequence(errors, `${path}.primitiveSequence`, link.primitiveSequence);
   }
 
   for (const [index, subQuestion] of (Array.isArray(query.subQuestions) ? query.subQuestions : []).entries()) {
@@ -174,7 +240,15 @@ export function normalizeFormalRulingQuery(query) {
   const split = splitSubQuestions(seed);
   const subQuestions = split.map((item, index) => normalizeSubQuestion(item, index, cards));
   markQuestionCardRoles(cards, subQuestions);
-  return { originalText, cards, scenario, subQuestions };
+  const result = { originalText, cards, scenario, subQuestions };
+  if (cleanString(source.questionType)) result.questionType = cleanString(source.questionType);
+  if (cleanString(source.effectTemplateId)) result.effectTemplateId = cleanString(source.effectTemplateId);
+  if (Array.isArray(source.cardIdentities)) result.cardIdentities = normalizeCardIdentities(source.cardIdentities);
+  if (Array.isArray(source.targets)) result.targets = normalizeTargets(source.targets);
+  if (Array.isArray(source.activeRestrictions)) result.activeRestrictions = normalizeRestrictions(source.activeRestrictions);
+  if (Array.isArray(source.primitiveSequence)) result.primitiveSequence = normalizePrimitives(source.primitiveSequence);
+  if (Array.isArray(source.chainLinks)) result.chainLinks = normalizeChainLinks(source.chainLinks);
+  return result;
 }
 
 export function splitSubQuestions(query) {
@@ -284,6 +358,86 @@ function normalizeSubQuestion(item, index, cards) {
     askedResult,
     sourceText,
   };
+}
+
+function normalizeCardIdentities(items) {
+  return items.filter(isPlainObject).map((item) => ({
+    rawText: cleanString(item.rawText) || "unknown",
+    cardId: cleanString(item.cardId),
+    canonicalName: cleanString(item.canonicalName),
+    confidence: cleanString(item.confidence) || "low",
+    status: cleanString(item.status) || "uncertain",
+    candidates: (Array.isArray(item.candidates) ? item.candidates : []).filter(isPlainObject).map(clone),
+  }));
+}
+
+function normalizeTargets(items) {
+  return items.filter(isPlainObject).map((item, index) => ({
+    id: cleanString(item.id) || `target_${index + 1}`,
+    cardId: cleanString(item.cardId),
+    name: cleanString(item.name),
+    expectedZone: enumOrUnknown(item.expectedZone, CARD_ZONES),
+    validAtResolution: typeof item.validAtResolution === "boolean" ? item.validAtResolution : undefined,
+  }));
+}
+
+function normalizeRestrictions(items) {
+  return items.filter(isPlainObject).map((item) => ({
+    sourceCard: cleanString(item.sourceCard),
+    sourceCardId: cleanString(item.sourceCardId),
+    effectNo: cleanString(item.effectNo),
+    duration: clone(item.duration || "this_turn"),
+    restrictionType: cleanString(item.restrictionType),
+    appliesTo: isPlainObject(item.appliesTo) ? clone(item.appliesTo) : {},
+  }));
+}
+
+function normalizePrimitives(items) {
+  return items.filter(isPlainObject).flatMap((item, index) => {
+    const wrapper = item.primitive && isPlainObject(item.primitive) ? item : { primitive: item };
+    if (!EFFECT_PRIMITIVE_TYPES.includes(wrapper.primitive.type)) return [];
+    const primitive = createEffectPrimitive(wrapper.primitive.type, wrapper.primitive);
+    return [{
+      id: cleanString(wrapper.id || primitive.id) || `primitive_${index + 1}`,
+      connector: RESOLUTION_CONNECTORS.includes(wrapper.connector || primitive.connector)
+        ? wrapper.connector || primitive.connector
+        : index === 0 ? "INDEPENDENT" : "INDEPENDENT",
+      primitive,
+    }];
+  });
+}
+
+function normalizeChainLinks(items) {
+  return items.filter(isPlainObject).map((link, index) => ({
+    id: cleanString(link.id) || `C${index + 1}`,
+    order: Number.isFinite(Number(link.order)) ? Number(link.order) : index + 1,
+    sourceCardId: cleanString(link.sourceCardId),
+    sourceCardName: cleanString(link.sourceCardName),
+    effectNo: cleanString(link.effectNo) || "unknown",
+    sourceExpectedZone: enumOrUnknown(link.sourceExpectedZone, CARD_ZONES),
+    targets: normalizeTargets(Array.isArray(link.targets) ? link.targets : []),
+    activeRestrictions: normalizeRestrictions(Array.isArray(link.activeRestrictions) ? link.activeRestrictions : []),
+    primitiveSequence: normalizePrimitives(Array.isArray(link.primitiveSequence) ? link.primitiveSequence : []),
+    effectTemplateId: cleanString(link.effectTemplateId),
+    candidateEffect: isPlainObject(link.candidateEffect) ? clone(link.candidateEffect) : {},
+  }));
+}
+
+function validateOptionalArray(errors, path, value) {
+  if (value !== undefined && !Array.isArray(value)) errors.push(`${path} must be an array`);
+}
+
+function validatePrimitiveSequence(errors, path, value) {
+  for (const [index, item] of (Array.isArray(value) ? value : []).entries()) {
+    const primitive = item?.primitive && isPlainObject(item.primitive) ? item.primitive : item;
+    if (!isPlainObject(primitive) || !EFFECT_PRIMITIVE_TYPES.includes(primitive.type)) {
+      errors.push(`${path}[${index}].type must be a known effect primitive`);
+    }
+    const connector = item?.connector || primitive?.connector;
+    if (connector !== undefined && !RESOLUTION_CONNECTORS.includes(connector)) {
+      errors.push(`${path}[${index}].connector must be a known resolution connector`);
+    }
+  }
 }
 
 function chooseSubQuestionType(modelType, ruleType) {
@@ -434,6 +588,10 @@ function cleanString(value) {
 
 function isPlainObject(value) {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function clone(value) {
+  return JSON.parse(JSON.stringify(value));
 }
 
 function dedupe(values) {

@@ -93,6 +93,16 @@ test("G. AI explanation cannot override program status, verdict, or evidenceIds"
   assert.ok(merged.warnings.includes("model_status_or_verdict_ignored"));
 });
 
+test("AI explanation that contradicts a cannot-activate verdict is rejected", () => {
+  const merged = mergeModelAnswer(
+    { explanationDraft: "因此这张卡可以发动并继续处理连锁。" },
+    { status: "cannot_activate", verdict: "cannot_activate", blockers: [], ruleTrace: [], warnings: [] }
+  );
+  assert.equal(merged.verdict, "cannot_activate");
+  assert.equal(merged.explanationText, "");
+  assert.ok(merged.warnings.includes("model_explanation_conflict_rejected"));
+});
+
 test("conflicting direct evidence returns unknown with a conflict warning", () => {
   const positive = makeQa("qa-conflict-can", "可以发动。", "测试卡A的②效果能否发动？");
   const negative = makeQa("qa-conflict-cannot", "不可以发动。", "测试卡A的②效果能否发动？");

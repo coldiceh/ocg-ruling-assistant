@@ -29,6 +29,8 @@ export default async function handler(request, response) {
           question: payload.question,
           mode: payload.mode === "analysis" ? "analysis" : "duel",
           maxLatencyMs: payload.mode === "analysis" ? 20000 : 6000,
+          gameState: payload.gameState || {},
+          chainLinks: Array.isArray(payload.chainLinks) ? payload.chainLinks : [],
         })
       : await answerQuestion(payload);
     response.status(200).json(answer);

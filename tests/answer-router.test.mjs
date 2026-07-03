@@ -15,12 +15,14 @@ test("fast_judge_failure_does_not_imply_unable", async () => {
   assert.notEqual(answer.answerType, "cannot_answer_safely");
 });
 
-test("card_parse_failure_tries_raw_official_qa_search", async () => {
+test("exact official QA can answer before local card parsing", async () => {
   const question = "「不存在于卡表的别称」能发动吗？";
   const answer = await answerRulingQuestionFast({
     question,
     snapshot: { ...emptySnapshot, records: [{ id: "qa-raw", recordType: "qa", question, answer: "可以发动。", text: `${question} 可以发动。`, status: "current" }] },
   });
+  assert.equal(answer.status, "confirmed");
+  assert.equal(answer.evidenceGrade, "official_direct");
   assert.equal(answer.answerRoute, "official_qa_exact_match");
 });
 
