@@ -29,17 +29,22 @@
 重要约束：
 
 - AI 不能覆盖程序生成的 `status` / `verdict` / `evidenceIds`。
+- official Q&A exact / near-exact 未命中时，结构化连锁才进入 Card Identity Gate -> Activation Legality Gate -> Chain Resolution；任一 gate 阻断时不得进入后续解算。
+- 最终 verdict、`blockers`、`ruleTrace` 和 `evidenceGrade` 由程序生成；模型只允许提供 `parsedFormalQuery` 或不冲突的 `explanationDraft`。
 - 卡片文本只能作为 `cardTextEvidence`，不能单独支撑 `confirmed`。
 - Q&A / FAQ 必须回答当前 `subQuestion.askedResult`，才可能进入 `directEvidence`。
 - 相关但不能直接回答的问题，只能进入 `similarEvidence` 或 `rejectedEvidence`。
 - `likelyAnswer` 只是未确认处理参考，不能改变 `finalStatus`，也不能进入 `confirmedCount`。
 
+第一阶段统一输出等级为 `official_direct`、`official_derived`、`rule_derived`、`similar_only`、`insufficient`、`illegal_question`、`needs_card_confirmation`。卡名歧义会保留原始文本和候选列表；非法发动会返回结构化 blocker，并在 `ruleTrace` 的 `validate_activation` 步骤停止，不会继续模拟非法连锁。
+
 ## 当前测试结果
 
-最近一次本地检查：
+最近一次本地检查（2026-07-03）：
 
-- Node tests: 239/239 passing
-- Legacy engine regressions: 9/9 passing
+- `pnpm test`: Node tests 369/369 passing；Legacy engine regressions 9/9 passing
+- `pnpm test:benchmark`: 4/4 passing（24 个模板，15 个 ruling cases）
+- Benchmark dangerous failures: 0
 - Data health: `ok`
 - Readiness level: `production_ready`
 
@@ -163,14 +168,44 @@ node scripts/revalidate-answers.mjs
 运行测试：
 
 ```bash
-npm test
+pnpm install
+pnpm test
+pnpm test:benchmark
+pnpm report:benchmark
 ```
 
-如果当前 shell 没有 `npm`，可以用 Node 直接运行 `package.json` 里 `test` script 列出的测试文件；旧回归入口是：
+项目使用 `pnpm-workspace.yaml` 将 `storeDir` 固定为仓库内的 `.pnpm-store`，不依赖用户全局 pnpm store 的写权限；该目录已加入 `.gitignore`。pnpm 10 及更早版本仍可读取 `.npmrc` 中的兼容配置。CI 应使用 `package.json` 固定的 pnpm 版本。
+
+如果当前 shell 没有 `pnpm`，可以用 Node 直接运行 `package.json` 里 `test` script 列出的测试文件；旧回归入口是：
 
 ```bash
 node tests/engine-regression.mjs
 ```
+
+## Effect Primitive Layer
+
+合法通过 activation gate 的结构化连锁可以使用 `primitiveSequence` 执行。当前支持对象/来源检查、丢弃、回卡组、特殊召唤来源、作为永续陷阱放置、伤害、抽卡、破坏、除外和失败部分 no-op。`THEN`、`IF_YOU_DO`、`AND_IF_YOU_DO` 会依赖前一步成功；`ALSO`、`SIMULTANEOUS`、`INDEPENDENT` 保留独立处理。缺少卡片区域、手卡、卡组或基本分状态时返回 `insufficient`。
+
+用户可见答案固定由程序生成五段：结论、依据等级、关键阻断/处理、处理过程、注意。OpenAI/Gemini 仍只能提供可拒绝的 `explanationDraft`，不能修改 primitive 结果。
+
+## Effect Template vertical slice
+
+`data/effect-templates/cards` 按 `cardId + effectNo` 注册效果模板，`restrictions` 保存手工限制模板，`aliases` 保存模板别名。启动加载时会校验字段和 primitive；模板不得包含 `verdict`、`status`、答案正文或证据等级。
+
+结构化连锁在 Card Identity Gate 后加载模板，用模板补齐发动信息、对象、来源预期区域和 `primitiveSequence`。Activation Legality Gate 仍先于处理执行。找不到模板时先尝试输出可证明的 conditional branches；没有条件分支时才返回 `insufficient`，不会调用模型猜测结果。
+
+`pnpm test:benchmark` 校验全部模板和逐文件 benchmark fixture；`pnpm report:benchmark` 输出按类别、依据等级和危险失败类型汇总的 JSON。API 稳定字段包括 `status`、`verdict`、`evidenceGrade`、`cardIdentity`、`blockers`、`ruleTrace`、`resolutionSteps`、`warnings` 和程序生成的五段式 `answer`。
+
+## Official QA first answer router
+
+Fast Judge 的固定优先级为：官方 Q&A exact / near-exact → Effect Template Fast Judge → conditional branch answer → `insufficient`。exact 和 near-exact 命中后直接采用官方记录中的答案，不再加载效果模板或调用模型；near-exact 仍标记为条件性官方案例，不升级成 `official_direct`。
+
+```bash
+pnpm smoke:official-qa
+pnpm test:official-qa-100-schema
+```
+
+100-case benchmark 的 JSON Schema 位于 `tests/fixtures/official-qa-100/benchmark.schema.json`，固定要求恰好 100 案，并记录预期路由、模板/模型调用、trace、安全指标和来源追溯字段。
 
 ## How to evaluate answers
 

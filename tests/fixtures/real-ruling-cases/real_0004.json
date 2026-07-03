@@ -1,0 +1,11 @@
+{
+  "id": "real_0004",
+  "category": "source_moved",
+  "inputText": "「来源离场模板二」发动后来源被除外，伤害部分是否独立处理？",
+  "formalQuery": {
+    "cardIdentities": [{ "rawText": "来源离场模板二", "canonicalName": "来源离场模板二", "cardId": "900302", "status": "resolved", "confidence": "high" }],
+    "chainLinks": [{ "id": "C1", "sourceCardId": "900302", "effectNo": "2" }]
+  },
+  "gameState": { "phase": "main_phase", "lp": { "opponent": 2000 }, "cards": [{ "cardId": "900302", "zone": "banished" }] },
+  "expected": { "status": "partially_resolved", "evidenceGrade": "rule_derived", "mustHaveBlockers": [], "mustHaveTrace": ["apply_damage", "source_dependent_part_skipped", "primitive_resolution_finished"], "mustNotHaveTrace": [{ "event": "primitive_applied", "primitive": "special_summon_source" }], "mustNotContainInAnswer": ["来源仍在墓地"] }
+}

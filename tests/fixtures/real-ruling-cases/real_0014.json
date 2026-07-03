@@ -1,0 +1,11 @@
+{
+  "id": "real_0014",
+  "category": "special_win",
+  "inputText": "结束阶段处理「特殊胜利检查前伤害模板一」的伤害，并在处理后进行终局检查。",
+  "formalQuery": {
+    "cardIdentities": [{ "rawText": "特殊胜利检查前伤害模板一", "canonicalName": "特殊胜利检查前伤害模板一", "cardId": "900501", "status": "resolved", "confidence": "high" }],
+    "chainLinks": [{ "id": "C1", "sourceCardId": "900501", "effectNo": "1" }]
+  },
+  "gameState": { "phase": "end_phase", "lp": { "opponent": 2500 } },
+  "expected": { "status": "resolved", "evidenceGrade": "rule_derived", "programVerdict": "resolved", "mustHaveBlockers": [], "mustHaveTrace": ["template_loaded", "activation_validated", "apply_damage", "primitive_resolution_finished"], "mustNotHaveTrace": ["target_lost_at_resolution"], "mustNotContainInAnswer": ["不开连锁立即胜利"] }
+}

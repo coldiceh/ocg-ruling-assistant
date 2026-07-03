@@ -1,0 +1,11 @@
+{
+  "id": "real_0007",
+  "category": "illegal_activation",
+  "inputText": "场上只有发动中的通常陷阱时，能否发动「发动中通常陷阱返回模板一」？",
+  "formalQuery": {
+    "cardIdentities": [{ "rawText": "发动中通常陷阱返回模板一", "canonicalName": "发动中通常陷阱返回模板一", "cardId": "900401", "status": "resolved", "confidence": "high" }],
+    "chainLinks": [{ "id": "C2", "sourceCardId": "900401", "effectNo": "1" }]
+  },
+  "gameState": { "phase": "main_phase" },
+  "expected": { "status": "illegal_question", "evidenceGrade": "illegal_question", "programVerdict": "cannot_activate", "mustHaveBlockers": ["activation.no_legal_effect_application", "activation.currently_resolving_card_cannot_be_returned_if_rule_applies"], "mustHaveTrace": ["template_loaded", "activation.no_legal_effect_application"], "mustNotHaveTrace": ["primitive_resolution_started"], "mustNotContainInAnswer": ["可以发动"] }
+}

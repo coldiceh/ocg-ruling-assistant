@@ -27,6 +27,7 @@ import { parseFormalRulingQueryDetailed, resolveCardNamesWithModel } from "./ope
 import { buildSubQuestionDependencyGraph } from "./subQuestionDependencies.mjs";
 import { applyTransitionRules } from "./transitionRules.mjs";
 import { detectActionVerdict } from "./verdictExtractor.mjs";
+import { statusForProgramVerdict } from "./verdictPolicy.mjs";
 
 const projectRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 const defaultDataDir = join(projectRoot, "data");
@@ -1522,6 +1523,14 @@ function mergeFormalAnswers(context) {
 
   const counts = Object.fromEntries(["confirmed", "inferred", "unknown", "parse_failed"].map((status) => [status, statuses.filter((item) => item === status).length]));
   const ruleDerivedCount = subAnswers.filter((item) => item.ruleDerivedAnswer?.status === "rule_derived").length;
+  const uncertainCards = cardResolutionConfirmations.map((issue) => ({
+    rawText: issue.unresolvedCardName,
+    candidates: (issue.candidateCards || []).map((card) => ({
+      name: card.name || card.matchedName || "unknown",
+      cardId: String(card.id || card.cardId || ""),
+    })),
+    reason: "ambiguous_or_low_confidence",
+  }));
   const labels = {
     confirmed: "有直接裁定依据",
     inferred: "只有相似裁定",
@@ -1541,7 +1550,7 @@ function mergeFormalAnswers(context) {
   needsConfirmation.push(...cardResolutionConfirmations.map((issue) => `卡名需要确认：你输入的是“${issue.unresolvedCardName}”，但数据库没有直接匹配。`));
   needsConfirmation.push(...notes);
 
-  return {
+  const result = {
     schemaVersion: 2,
     mode,
     verdictTitle: mode === "unknown" && ruleDerivedCount ? "规则推导结论" : labels[mode],
@@ -1575,7 +1584,30 @@ function mergeFormalAnswers(context) {
     evidenceCount: usedEvidence.length,
     warnings,
     modelUsed: false,
+    status: uncertainCards.length ? "needs_card_confirmation" : mode,
+    evidenceGrade: uncertainCards.length
+      ? "needs_card_confirmation"
+      : mode === "confirmed"
+        ? "official_direct"
+        : ruleDerivedCount
+          ? "rule_derived"
+          : mode === "inferred"
+            ? "similar_only"
+            : "insufficient",
+    blockers: uncertainCards.map((item) => ({
+      code: "activation.card_identity_uncertain",
+      source: item.rawText,
+      explanation: "卡名未通过数据库 exact/alias 唯一匹配，不能给出 confirmed verdict。",
+    })),
+    ruleTrace: uncertainCards.length
+      ? [{ step: "resolve_card_identities", result: "blocked", blocker: "activation.card_identity_uncertain" }]
+      : [{ step: "resolve_card_identities", result: "allowed" }],
+    uncertainCards,
   };
+  result.userFacingAnswer = uncertainCards.length
+    ? `请先确认卡名：${uncertainCards.map((item) => item.rawText).join("、")}。`
+    : result.verdict;
+  return result;
 }
 
 function buildProgramSubAnswer(subQuestion, status, verdict, evidenceIds, reason, warnings, bucket) {
@@ -2716,8 +2748,10 @@ function collectCardTextSources(cards, fallbackSources) {
 }
 
 export function mergeModelAnswer(modelAnswer, programAnswer) {
-  const explanationText = cleanText(modelAnswer?.explanationText);
-  const attemptedOverride = ["status", "verdict", "evidenceIds", "verdictTitle", "steps", "subAnswers", "conditionalAnswer", "provisionalAnswer", "officialAnswer", "likelyAnswer", "ruleDerivedAnswer", "clarification"]
+  const draft = cleanText(modelAnswer?.explanationText || modelAnswer?.explanationDraft);
+  const conflictsWithProgram = explanationConflictsWithVerdict(draft, programAnswer);
+  const explanationText = conflictsWithProgram ? "" : draft;
+  const attemptedOverride = ["status", "verdict", "evidenceGrade", "blockers", "ruleTrace", "evidenceIds", "verdictTitle", "steps", "subAnswers", "conditionalAnswer", "provisionalAnswer", "officialAnswer", "likelyAnswer", "ruleDerivedAnswer", "clarification"]
     .some((field) => modelAnswer?.[field] !== undefined);
   return {
     ...programAnswer,
@@ -2725,11 +2759,24 @@ export function mergeModelAnswer(modelAnswer, programAnswer) {
     warnings: [...new Set([
       ...(programAnswer?.warnings || []),
       ...(attemptedOverride ? ["model_status_or_verdict_ignored"] : []),
+      ...(conflictsWithProgram ? ["model_explanation_conflict_rejected"] : []),
     ])],
     modelUsed: Boolean(explanationText),
     modelProvider: modelAnswer?.provider || null,
     modelName: modelAnswer?.model || null,
   };
+}
+
+function explanationConflictsWithVerdict(text, answer = {}) {
+  if (!text) return false;
+  const status = statusForProgramVerdict(answer);
+  const verdict = String(answer.verdict || answer.primaryVerdict || "");
+  const programRejectsActivation = status === "cannot_activate"
+    || status === "illegal_question"
+    || /cannot_activate|activation_illegal|original_chain_illegal/u.test(verdict);
+  if (programRejectsActivation && /(?:可以|能够|能)发动|activation (?:is )?(?:legal|allowed)|can activate/iu.test(text)) return true;
+  const programAllowsActivation = /^(?:can|yes|can_activate|activation_legal)$/u.test(verdict);
+  return programAllowsActivation && /不能发动|不可以发动|cannot activate|activation (?:is )?illegal/iu.test(text);
 }
 
 function retrieveEvidence(question, detectedCards, detectedTopics, snapshot, questionTypes = []) {

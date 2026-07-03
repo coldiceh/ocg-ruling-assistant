@@ -1,0 +1,12 @@
+{
+  "aliases": [
+    { "alias": "额外卡组效果限制模板一", "cardId": "900001", "effectNo": "1" },
+    { "alias": "对象丢失独立处理模板一", "cardId": "900101", "effectNo": "1" },
+    { "alias": "对象依赖后续模板一", "cardId": "900201", "effectNo": "1" },
+    { "alias": "来源离场模板一", "cardId": "900301", "effectNo": "1" },
+    { "alias": "发动中通常陷阱返回模板一", "cardId": "900401", "effectNo": "1" },
+    { "alias": "特殊胜利检查前伤害模板一", "cardId": "900501", "effectNo": "1" },
+    { "alias": "额外卡组融合怪兽效果模板", "cardId": "900601", "effectNo": "1" },
+    { "alias": "额外卡组同调怪兽效果模板", "cardId": "900602", "effectNo": "1" }
+  ]
+}

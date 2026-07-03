@@ -1,0 +1,13 @@
+{
+  "id": "real_0010",
+  "category": "special_win",
+  "inputText": "在我方结束阶段，我方场上有没有素材的【混沌No.88 机关傀儡-灾厄狮子】，对方基本分2500。对方C1发动【雷破】以灾厄狮子为对象，我方C2发动【隐居者的猛毒药】给予对方800伤害。",
+  "formalQuery": { "cardIdentities": [], "chainLinks": [] },
+  "snapshotCards": [
+    { "id": "11016", "name": "混沌编号88 机关傀偶－灾厄之狮", "aliases": ["混沌No.88 机关傀儡-灾厄狮子", "灾厄狮子"], "cardType": "monster", "effectText": "在自己的结束阶段，对手的LP为２０００以下，且此卡没有超量素材的情况下，自己获得决斗胜利。双方不可将场上的此卡作为效果的对象。" },
+    { "id": "5607", "name": "隐居者的猛毒药", "aliases": ["隐居者的猛毒药"], "cardType": "spell", "effectText": "给予对方800伤害。" },
+    { "id": "7777", "name": "雷破", "aliases": ["雷破"], "cardType": "trap", "effectText": "以场上1张卡为对象发动，那张卡破坏。" }
+  ],
+  "gameState": {},
+  "expected": { "status": "illegal_question", "evidenceGrade": "illegal_question", "programVerdict": "original_chain_illegal", "mustHaveBlockers": ["activation.no_legal_target"], "mustHaveTrace": ["activation.no_legal_target"], "mustNotHaveTrace": ["primitive_resolution_started"], "mustNotContainInAnswer": ["原连锁合法"] }
+}

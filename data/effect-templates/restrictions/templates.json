@@ -1,0 +1,8 @@
+{
+  "restrictions": [
+    { "id": "rt_extra_non_synchro", "cardId": "900001", "effectNo": "1", "createsRestriction": { "duration": "this_turn", "restrictionType": "cannot_activate", "appliesTo": { "effectType": "monster_effect", "monsterSummonedFrom": "extra_deck", "monsterTypeNot": "synchro" } } },
+    { "id": "rt_grave_monster", "cardId": "900002", "effectNo": "1", "createsRestriction": { "duration": "this_turn", "restrictionType": "cannot_activate", "appliesTo": { "effectType": "monster_effect", "activationLocation": "graveyard" } } },
+    { "id": "rt_hand_monster", "cardId": "900003", "effectNo": "1", "createsRestriction": { "duration": "this_turn", "restrictionType": "cannot_activate", "appliesTo": { "effectType": "monster_effect", "activationLocation": "hand" } } },
+    { "id": "rt_spell_effect", "cardId": "900004", "effectNo": "1", "createsRestriction": { "duration": "this_turn", "restrictionType": "cannot_activate", "appliesTo": { "effectType": "spell_effect" } } }
+  ]
+}

@@ -27,9 +27,24 @@ export function resolveCardsForFastJudge(question, cards = []) {
   const resolved = new Map();
 
   for (const name of quoted) {
-    const exact = findExactCard(name, cards);
-    if (exact) {
+    const exactMatches = findExactCards(name, cards);
+    if (exactMatches.length === 1) {
+      const exact = exactMatches[0];
       resolved.set(cardKey(exact), { ...exact, matched: name, resolution: "exact_quoted_name" });
+      continue;
+    }
+    if (exactMatches.length > 1) {
+      unresolvedCards.push({
+        unresolvedCardName: name,
+        reason: "ambiguous_or_low_confidence",
+        candidateCards: exactMatches.slice(0, 5).map((card) => ({
+          name: displayName(card),
+          cardId: String(card.id || card.cardId || ""),
+          reason: "alias_not_unique",
+          score: 1,
+        })),
+      });
+      for (const card of exactMatches) for (const alias of aliases(card)) blockedAliases.add(normalize(alias));
       continue;
     }
     const candidates = rankCardCandidates(name, cards).slice(0, 5);
@@ -211,9 +226,9 @@ function maskQuotedNames(text) {
   return String(text || "").replace(/[「『“"【]([^」』”"】\n]{2,80})[」』”】]/gu, (full, inner) => (clean(inner).length <= 40 ? " " : full));
 }
 
-function findExactCard(name, cards) {
+function findExactCards(name, cards) {
   const key = normalize(name);
-  return cards.find((card) => aliases(card).some((alias) => normalize(alias) === key)) || null;
+  return cards.filter((card) => aliases(card).some((alias) => normalize(alias) === key));
 }
 
 function rankCardCandidates(name, cards) {

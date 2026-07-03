@@ -1,0 +1,12 @@
+{
+  "id": "real_0012",
+  "category": "target_lost",
+  "inputText": "「对象丢失独立处理模板二」的对象离场后如何处理？",
+  "formalQuery": {
+    "cardIdentities": [{ "rawText": "对象丢失独立处理模板二", "canonicalName": "对象丢失独立处理模板二", "cardId": "900102", "status": "resolved", "confidence": "high" }],
+    "chainLinks": [{ "id": "C1", "sourceCardId": "900102", "effectNo": "2", "targets": [{ "id": "target", "cardId": "target-card", "expectedZone": "monster_zone", "validAtResolution": false }] }]
+  },
+  "gameState": { "phase": "main_phase", "lp": { "opponent": 1800 }, "cards": [{ "cardId": "target-card", "zone": "graveyard" }] },
+  "modelDraft": { "answerType": "rule_judgment", "verdict": "resolved", "shortAnswer": "全部处理成功。", "judgeReasoning": [], "confidence": "high" },
+  "expected": { "status": "partially_resolved", "evidenceGrade": "rule_derived", "programVerdict": "partially_resolved", "mustHaveBlockers": [], "mustHaveTrace": ["target_part_skipped", "primitive_resolution_finished"], "mustNotHaveTrace": [{ "event": "primitive_applied", "primitive": "banish_target" }], "mustNotContainInAnswer": ["全部处理成功"] }
+}

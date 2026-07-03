@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { buildCardProfiles } from "./cardProfile.mjs";
 import { classifyQaForSubQuestion } from "./engine.mjs";
 import { detectIssueFrames, issueFrameIds } from "./issueFrameDetector.mjs";
-import { runJudgeAnswerModel } from "./judgeAnswerModel.mjs";
+import { buildProgramAnswerModel, runJudgeAnswerModel } from "./judgeAnswerModel.mjs";
 import { buildSafeClarification, validateJudgeAnswer } from "./judgeAnswerValidator.mjs";
 import { createLatencyBudget, isLatencyTimeout, runWithinLatencyBudget } from "./latencyBudget.mjs";
 import { buildRulingContextPack, buildTemporaryCardProfiles, resolveCardsForFastJudge } from "./rulingContextPack.mjs";
@@ -12,6 +12,15 @@ import { checkStaleness } from "./stalenessGuard.mjs";
 import { detectCurrentVerdictConflicts, filterCurrentEvidence } from "./currentEvidenceFilter.mjs";
 import { evaluateEvidenceFreshness } from "./evidenceFreshness.mjs";
 import { buildBlockerAnswer, evaluateRulingBlockers } from "./rulingBlockers.mjs";
+import { buildCardIdentityGateAnswer, evaluateCardIdentityGate } from "./cardIdentityGate.mjs";
+import { applyProgramVerdictPolicy, evidenceGradeFor, statusForProgramVerdict } from "./verdictPolicy.mjs";
+import { runSafeChainPipeline } from "./chainSafety.mjs";
+import {
+  defaultEffectTemplateDir,
+  generateRestrictionsFromEffectTemplates,
+  hydrateChainLinksFromTemplates,
+  loadEffectTemplateRegistry,
+} from "./effectTemplateRegistry.mjs";
 import { buildDamageStepAnalysis, cardProfileRuleText } from "./damageStepRules.mjs";
 import { buildDamageStepBlockerAnswer, evaluateDamageStepBlocker } from "./damageStepBlockers.mjs";
 import { buildEventSequenceFromQuestion, buildTriggerTimingAnalysis, classifyTriggerWording, shouldAnalyzeTriggerTiming } from "./triggerTimingRules.mjs";
@@ -23,7 +32,7 @@ import { buildConditionalBranchAnswer } from "./conditionalAnswerBuilder.mjs";
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const fastSnapshotCache = new Map();
 
-export async function answerRulingQuestionFast({ question, mode = "duel", maxLatencyMs = 6000, env = globalThis.process?.env || {}, dataDir = join(root, "data"), snapshot, modelInvoker, debug = false } = {}) {
+export async function answerRulingQuestionFast({ question, mode = "duel", maxLatencyMs = 6000, env = globalThis.process?.env || {}, dataDir = join(root, "data"), snapshot, modelInvoker, gameState = {}, chainLinks = [], effectTemplateRegistry = null, effectTemplateDir = defaultEffectTemplateDir, debug = false } = {}) {
   const input = String(question || "").trim();
   const budget = createLatencyBudget({ mode, maxLatencyMs });
   if (!input) return finalize(buildEmptyAnswer(), { mode, budget, issueFrames: emptyFrames(), contextPack: emptyContext(input), debug });
@@ -68,6 +77,11 @@ export async function answerRulingQuestionFast({ question, mode = "duel", maxLat
     contextPack.mode = mode;
     contextPack.snapshotMeta = localSnapshot.snapshotMeta || {};
     contextPack.entityResolution = entityResolution;
+    const cardIdentityGate = evaluateCardIdentityGate({
+      resolvedCards: resolution.resolvedCards,
+      unresolvedCards: resolution.unresolvedCards,
+    });
+    contextPack.cardIdentityGate = cardIdentityGate;
     contextPack.officialQaSearch = officialQaSearch;
     const issueFrames = detectIssueFrames({
       question: input,
@@ -106,6 +120,9 @@ export async function answerRulingQuestionFast({ question, mode = "duel", maxLat
       staleEvidenceIds: staleness.staleEvidenceIds || [],
     });
     contextPack.answerRouter = { officialQaRoute: officialQaRoute.level, conflicts: officialQaRoute.conflicts || [] };
+    if (officialQaRoute.answer) {
+      return finalize(officialQaRoute.answer, { mode, budget, issueFrames, contextPack, debug });
+    }
     const legacyDirectOfficial = officialQaRoute.answer ? null : findDirectOfficialAnswer(input, contextPack, issueFrames, staleness, evidenceFreshness);
     const directOfficial = officialQaRoute.answer?.answerType === "direct_official" ? officialQaRoute.answer : legacyDirectOfficial;
     const officialEvidenceIds = directOfficial?.judgeReasoning?.flatMap((item) => item.refs || []) || [];
@@ -135,19 +152,71 @@ export async function answerRulingQuestionFast({ question, mode = "duel", maxLat
     contextPack.eventSequence = eventSequence;
     contextPack.triggerTimingAnalysis = triggerTimingAnalysis;
 
-    if (officialQaRoute.answer) {
-      return finalize(officialQaRoute.answer, { mode, budget, issueFrames, contextPack, debug });
+    if (chainLinks.length) {
+      if (!cardIdentityGate.passed) {
+        return finalize(buildCardIdentityGateAnswer(cardIdentityGate), { mode, budget, issueFrames, contextPack, debug });
+      }
+      const templateRegistry = effectTemplateRegistry || await loadEffectTemplateRegistry(effectTemplateDir);
+      const hydratedChainLinks = hydrateChainLinksFromTemplates(chainLinks, templateRegistry);
+      const generatedRestrictions = generateRestrictionsFromEffectTemplates(gameState.activeRestrictionTemplates || [], templateRegistry);
+      const structuredGameState = {
+        ...gameState,
+        activeRestrictions: [...(gameState.activeRestrictions || []), ...generatedRestrictions],
+      };
+      contextPack.effectTemplateRegistry = {
+        templateCount: templateRegistry.templateCount,
+        restrictionTemplateCount: templateRegistry.restrictionTemplateCount,
+        aliasCount: templateRegistry.aliasCount,
+        hydratedChainLinks: hydratedChainLinks.map((link) => ({
+          id: link.id,
+          templateStatus: link.templateStatus,
+          effectTemplateId: link.effectTemplateId || null,
+        })),
+      };
+      const chainSafety = runSafeChainPipeline({ chainLinks: hydratedChainLinks, gameState: structuredGameState });
+      contextPack.chainSafety = chainSafety;
+      if (!chainSafety.canResolve) {
+        if (chainSafety.status === "insufficient") {
+          const conditionalAnswer = buildConditionalBranchAnswer({
+            question: input,
+            contextPack,
+            officialMatches: officialQaSearch,
+            damageStepAnalysis,
+            triggerTimingAnalysis,
+            reason: "Effect Template Fast Judge 无法安全执行；已保留可证明的条件分支。",
+          });
+          const answer = routeAnswer({
+            conditionalAnswer,
+            noEvidenceAnswer: buildTemplateInsufficientAnswer(chainSafety),
+          });
+          return finalize(answer, { mode, budget, issueFrames, contextPack, debug });
+        } else {
+          return finalize(buildIllegalChainAnswer(chainSafety), { mode, budget, issueFrames, contextPack, debug });
+        }
+      }
+      if (chainSafety.resolutionResults?.length) {
+        return finalize(buildPrimitiveResolutionAnswer(chainSafety), { mode, budget, issueFrames, contextPack, debug });
+      }
+    }
+
+    // Template and legality routes run only when no exact or near-exact official QA answer was selected.
+    const blockerCards = collectBlockerCards(resolution, localSnapshot.cards || []);
+    const blockerResult = evaluateRulingBlockers({ question: input, cards: blockerCards });
+    if (blockerResult.hasBlocker) {
+      const answer = buildBlockerAnswer(blockerResult);
+      if (!cardIdentityGate.passed) {
+        answer.uncertainCards = cardIdentityGate.uncertainCards;
+        answer.warnings = [...new Set([...(answer.warnings || []), ...cardIdentityGate.warnings])];
+      }
+      return finalize(answer, { mode, budget, issueFrames, contextPack, debug });
+    }
+    if (!cardIdentityGate.passed && !temporaryProfiles.length) {
+      return finalize(buildCardIdentityGateAnswer(cardIdentityGate), { mode, budget, issueFrames, contextPack, debug });
     }
 
     if (legacyDirectOfficial) {
       const validation = validateJudgeAnswer({ question: input, issueFrames, contextPack, modelAnswer: legacyDirectOfficial });
       if (validation.ok) return finalize(legacyDirectOfficial, { mode, budget, issueFrames, contextPack, validation, debug });
-    }
-
-    const blockerCards = collectBlockerCards(resolution, localSnapshot.cards || []);
-    const blockerResult = evaluateRulingBlockers({ question: input, cards: blockerCards });
-    if (blockerResult.hasBlocker) {
-      return finalize(buildBlockerAnswer(blockerResult), { mode, budget, issueFrames, contextPack, debug });
     }
 
     const damageStepBlocker = evaluateDamageStepBlocker(damageStepAnalysis);
@@ -167,7 +236,7 @@ export async function answerRulingQuestionFast({ question, mode = "duel", maxLat
 
     if (!issueFrames.primaryIssueFrames.length) {
       const conditionalAnswer = buildConditionalBranchAnswer({ question: input, contextPack, officialMatches: officialQaSearch, damageStepAnalysis, triggerTimingAnalysis });
-      const answer = routeAnswer({ conditionalAnswer, noEvidenceAnswer: buildNoIssueClarification(input, contextPack) });
+      const answer = routeAnswer({ conditionalAnswer, noEvidenceAnswer: buildFinalInsufficientAnswer(input, buildNoIssueClarification(input, contextPack).requiredFacts) });
       return finalize(answer, { mode, budget, issueFrames, contextPack, debug });
     }
 
@@ -181,7 +250,14 @@ export async function answerRulingQuestionFast({ question, mode = "duel", maxLat
     const modelAnswer = await runJudgeAnswerModel({ contextPack, mode, budget, env, modelInvoker });
     if (!modelAnswer) {
       const conditionalAnswer = buildConditionalBranchAnswer({ question: input, contextPack, officialMatches: officialQaSearch, damageStepAnalysis, triggerTimingAnalysis, reason: "Fast Judge 未生成可验证的单一结论，已保留证据检索结果并转为条件回答。" });
-      const answer = routeAnswer({ conditionalAnswer, noEvidenceAnswer: buildSafeClarification(input, issueFrames, contextPack, {}) });
+      const answer = routeAnswer({ conditionalAnswer, noEvidenceAnswer: buildFinalInsufficientAnswer(input, buildSafeClarification(input, issueFrames, contextPack, {}).requiredFacts) });
+      return finalize(answer, { mode, budget, issueFrames, contextPack, debug });
+    }
+    if (modelAnswer.explanationOnly) {
+      const conditionalAnswer = buildConditionalBranchAnswer({ question: input, contextPack, officialMatches: officialQaSearch, damageStepAnalysis, triggerTimingAnalysis, reason: "规则引擎没有生成程序 verdict；模型草稿不能代替裁定，已降级为条件回答。" });
+      const answer = routeAnswer({ conditionalAnswer, noEvidenceAnswer: buildFinalInsufficientAnswer(input, buildSafeClarification(input, issueFrames, contextPack, {}).requiredFacts) });
+      answer.explanationDraft = modelAnswer.explanationDraft;
+      if (modelAnswer.rejectedDecisiveDraft) answer.warnings = [...new Set([...(answer.warnings || []), "model_decisive_draft_rejected"] )];
       return finalize(answer, { mode, budget, issueFrames, contextPack, debug });
     }
     const validation = validateJudgeAnswer({ question: input, issueFrames, contextPack, modelAnswer });
@@ -189,7 +265,7 @@ export async function answerRulingQuestionFast({ question, mode = "duel", maxLat
     const answer = routeAnswer({
       ruleEngineAnswer: validation.ok ? modelAnswer : null,
       conditionalAnswer,
-      noEvidenceAnswer: validation.fixedAnswer,
+      noEvidenceAnswer: buildFinalInsufficientAnswer(input, validation.fixedAnswer?.requiredFacts),
     });
     return finalize(answer, { mode, budget, issueFrames, contextPack, validation, debug });
   } catch (error) {
@@ -288,7 +364,9 @@ function finalize(answer, { mode, budget, issueFrames, contextPack, validation =
   const analogyIds = new Set((contextPack.knownAnalogies || []).map((item) => item.id));
   const result = {
     answerType: answer.answerType,
+    status: statusForProgramVerdict(answer),
     verdict: answer.verdict || "unknown",
+    evidenceGrade: evidenceGradeFor(answer, { hasSimilarEvidence: Boolean(contextPack.knownAnalogies?.length) }),
     shortAnswer: trim(answer.shortAnswer || "目前无法判断。", mode === "duel" && !["direct_official", "official_case_based"].includes(answer.answerType) ? 120 : 600),
     judgeReasoning: (answer.judgeReasoning || []).slice(0, 3),
     requiredFacts: answer.requiredFacts || [],
@@ -317,6 +395,15 @@ function finalize(answer, { mode, budget, issueFrames, contextPack, validation =
     safetyPenalty: contextPack.evidenceFreshness?.safetyPenalty ?? 2,
     dataQualityWarnings: contextPack.snapshotMeta?.dataQualityWarnings || [],
     blockers: answer.blockers || [],
+    ruleTrace: answer.ruleTrace || contextPack.chainSafety?.ruleTrace || [],
+    userFacingAnswer: answer.userFacingAnswer || answer.shortAnswer || "目前无法判断。",
+    uncertainCards: answer.uncertainCards || contextPack.cardIdentityGate?.uncertainCards || [],
+    cardIdentity: {
+      status: contextPack.cardIdentityGate?.status || "resolved",
+      resolvedCards: (contextPack.resolvedCards || []).map((card) => ({ cardId: card.cardId, name: card.name })),
+      uncertainCards: answer.uncertainCards || contextPack.cardIdentityGate?.uncertainCards || [],
+    },
+    explanationDraft: answer.explanationDraft || "",
     confirmationLevel: confirmationLevelFor(answer, contextPack),
     normalRuling: answer.normalRuling || null,
     primaryVerdict: answer.primaryVerdict || null,
@@ -334,6 +421,19 @@ function finalize(answer, { mode, budget, issueFrames, contextPack, validation =
     officialQaMatch: answer.officialQaMatch || null,
     entityResolution: contextPack.entityResolution || null,
     conditionalBranches: answer.conditionalBranches || [],
+    failedParts: answer.failedParts || [],
+    continuedParts: answer.continuedParts || [],
+    stateChanges: answer.stateChanges || [],
+  };
+  const policyResult = applyProgramVerdictPolicy(result, answer.explanationDraft || "");
+  Object.assign(result, policyResult);
+  result.answerModel = buildProgramAnswerModel(result);
+  result.answer = {
+    conclusion: result.answerModel.conclusion,
+    evidenceGrade: result.answerModel.evidenceGrade,
+    keyReasoning: result.answerModel.keyActions.join("；"),
+    process: result.answerModel.process.join("；"),
+    notes: result.answerModel.notes.join("；"),
   };
   if (debug || mode === "analysis") {
     result.debug = {
@@ -345,6 +445,81 @@ function finalize(answer, { mode, budget, issueFrames, contextPack, validation =
     };
   }
   return result;
+}
+
+function buildPrimitiveResolutionAnswer(chainSafety) {
+  const results = chainSafety.resolutionResults || [];
+  const steps = results.flatMap((item) => item.steps || []);
+  const failedParts = results.flatMap((item) => item.failedParts || []);
+  const continuedParts = results.flatMap((item) => item.continuedParts || []);
+  const stateChanges = results.flatMap((item) => item.stateChanges || []);
+  const status = chainSafety.status;
+  const labels = {
+    resolved: "合法连锁已按 primitive 全部处理。",
+    partially_resolved: "合法连锁仅部分处理；失败部分已跳过。",
+    failed: "合法发动后，没有 primitive 能成功处理。",
+    insufficient: "当前状态不足以可靠执行 primitive，已停止处理。",
+  };
+  return {
+    answerType: status === "insufficient" ? "needs_clarification" : "rule_judgment",
+    status,
+    verdict: status,
+    evidenceGrade: status === "insufficient" ? "insufficient" : "rule_derived",
+    shortAnswer: labels[status] || "primitive 处理完成。",
+    userFacingAnswer: labels[status] || "primitive 处理完成。",
+    judgeReasoning: [],
+    requiredFacts: status === "insufficient" ? ["补充 primitive 所需的对象、来源区域、手卡、卡组或基本分状态"] : [],
+    assumptions: chainSafety.assumptions || [],
+    possibleCounterCases: [],
+    confidence: status === "insufficient" ? "low" : "medium",
+    blockers: [],
+    ruleTrace: chainSafety.ruleTrace || [],
+    resolutionSteps: steps,
+    failedParts,
+    continuedParts,
+    stateChanges,
+    finalGameState: chainSafety.gameState || null,
+  };
+}
+
+function buildIllegalChainAnswer(chainSafety) {
+  const link = chainSafety.invalidChainLink || "该连锁点";
+  return {
+    answerType: "rule_judgment",
+    status: "illegal_question",
+    verdict: "cannot_activate",
+    evidenceGrade: "illegal_question",
+    shortAnswer: `${link}不能合法发动，题设连锁不成立；未进入后续效果处理。`,
+    userFacingAnswer: `${link}不能合法发动，后续连锁处理不成立。`,
+    judgeReasoning: (chainSafety.blockers || []).slice(0, 3).map((item) => ({ text: item.explanation, basis: ["rule_blocker"], refs: [] })),
+    requiredFacts: [],
+    assumptions: chainSafety.assumptions || [],
+    possibleCounterCases: [],
+    confidence: "medium",
+    blockers: chainSafety.blockers || [],
+    ruleTrace: chainSafety.ruleTrace || [],
+    resolutionSteps: [],
+  };
+}
+
+function buildTemplateInsufficientAnswer(chainSafety) {
+  return {
+    answerType: "needs_clarification",
+    status: "insufficient",
+    verdict: "insufficient",
+    evidenceGrade: "insufficient",
+    shortAnswer: "没有找到对应效果模板，且现有证据不能安全执行该效果。",
+    userFacingAnswer: "当前没有对应效果模板，无法安全模拟处理。",
+    judgeReasoning: [],
+    requiredFacts: (chainSafety.missingTemplates || []).map((item) => `补充 ${item.cardId || "unknown"} 的效果 ${item.effectNo || "unknown"} 模板`),
+    assumptions: [],
+    possibleCounterCases: [],
+    confidence: "low",
+    blockers: [],
+    ruleTrace: chainSafety.ruleTrace || [],
+    resolutionSteps: [],
+    warnings: ["effect_template_missing"],
+  };
 }
 
 function buildLegacySubQuestion(question, cardName, frames) {
@@ -409,6 +584,25 @@ function buildNoIssueClarification(question, contextPack) {
     assumptions: [],
     possibleCounterCases: [],
     confidence: "low",
+  };
+}
+
+function buildFinalInsufficientAnswer(question, requiredFacts = []) {
+  return {
+    answerType: "needs_clarification",
+    answerRoute: "insufficient",
+    answerSource: "official_qa_first_router",
+    status: "insufficient",
+    verdict: "insufficient",
+    evidenceGrade: "insufficient",
+    shortAnswer: "现有官方 Q&A、效果模板和条件信息均不足以安全形成结论。",
+    judgeReasoning: [],
+    requiredFacts: [...new Set([...(requiredFacts || []), "补充正式卡名、效果编号、当前区域、对象和连锁状态"])],
+    assumptions: [],
+    possibleCounterCases: [],
+    confidence: "low",
+    warnings: ["official_qa_template_and_conditional_routes_exhausted"],
+    originalQuestion: String(question || ""),
   };
 }
 

@@ -1,0 +1,11 @@
+{
+  "id": "real_0003",
+  "category": "source_moved",
+  "inputText": "「来源离场模板一」在墓地发动后被除外，独立丢弃和特殊召唤如何处理？",
+  "formalQuery": {
+    "cardIdentities": [{ "rawText": "来源离场模板一", "canonicalName": "来源离场模板一", "cardId": "900301", "status": "resolved", "confidence": "high" }],
+    "chainLinks": [{ "id": "C1", "sourceCardId": "900301", "effectNo": "1" }]
+  },
+  "gameState": { "phase": "main_phase", "cards": [{ "cardId": "900301", "name": "来源离场模板一", "zone": "banished" }], "hands": { "self": [{ "cardId": "hand-1" }] }, "graveyards": { "self": [] } },
+  "expected": { "status": "partially_resolved", "evidenceGrade": "rule_derived", "mustHaveBlockers": [], "mustHaveTrace": ["source_independent_part_continued", "source_unavailable_at_resolution", "source_dependent_part_skipped"], "mustNotHaveTrace": [{ "event": "primitive_applied", "primitive": "special_summon_source" }], "mustNotContainInAnswer": ["成功特殊召唤"] }
+}

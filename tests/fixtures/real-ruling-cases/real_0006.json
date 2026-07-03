@@ -1,0 +1,11 @@
+{
+  "id": "real_0006",
+  "category": "active_restriction",
+  "inputText": "同一限制适用时，「额外卡组同调怪兽效果模板」的效果按模板处理。",
+  "formalQuery": {
+    "cardIdentities": [{ "rawText": "额外卡组同调怪兽效果模板", "canonicalName": "额外卡组同调怪兽效果模板", "cardId": "900602", "status": "resolved", "confidence": "high" }],
+    "chainLinks": [{ "id": "C1", "sourceCardId": "900602", "effectNo": "1" }]
+  },
+  "gameState": { "phase": "main_phase", "activeRestrictionTemplates": [{ "cardId": "900001", "effectNo": "1" }], "decks": { "self": [{ "cardId": "deck-1" }] }, "hands": { "self": [] } },
+  "expected": { "status": "resolved", "evidenceGrade": "rule_derived", "programVerdict": "resolved", "mustHaveBlockers": [], "mustHaveTrace": ["template_loaded", "activation_validated", "draw_cards", "primitive_resolution_finished"], "mustNotHaveTrace": ["activation.forbidden_by_active_restriction"], "mustNotContainInAnswer": ["禁止同调怪兽"] }
+}

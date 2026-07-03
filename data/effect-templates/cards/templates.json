@@ -1,0 +1,213 @@
+{
+  "templates": [
+    {
+      "id": "et_restrict_01", "cardId": "900001", "name": "额外卡组效果限制模板一", "effectNo": "1",
+      "activation": { "effectType": "spell_effect", "activationLocation": "spell_trap_zone", "phase": ["main_phase"], "targets": [] },
+      "sourceExpectedZone": "spell_trap_zone",
+      "primitiveSequence": [{ "type": "no_op_failed_part", "requiresTargetStillValid": false, "requiresSourceAvailable": false, "dependsOnPreviousSuccess": false, "optional": true, "resultOnFailure": "skip_part", "connector": "INDEPENDENT" }],
+      "createsRestrictions": [{ "duration": "this_turn", "restrictionType": "cannot_activate", "appliesTo": { "effectType": "monster_effect", "monsterSummonedFrom": "extra_deck", "monsterTypeNot": "synchro" } }]
+    },
+    {
+      "id": "et_restrict_02", "cardId": "900002", "name": "墓地效果限制模板二", "effectNo": "1",
+      "activation": { "effectType": "monster_effect", "activationLocation": "monster_zone", "phase": ["main_phase"], "targets": [] },
+      "sourceExpectedZone": "monster_zone",
+      "primitiveSequence": [{ "type": "no_op_failed_part", "requiresTargetStillValid": false, "requiresSourceAvailable": false, "dependsOnPreviousSuccess": false, "optional": true, "resultOnFailure": "skip_part", "connector": "INDEPENDENT" }],
+      "createsRestrictions": [{ "duration": "this_turn", "restrictionType": "cannot_activate", "appliesTo": { "effectType": "monster_effect", "activationLocation": "graveyard" } }]
+    },
+    {
+      "id": "et_restrict_03", "cardId": "900003", "name": "手卡效果限制模板三", "effectNo": "1",
+      "activation": { "effectType": "monster_effect", "activationLocation": "monster_zone", "phase": ["main_phase"], "targets": [] },
+      "sourceExpectedZone": "monster_zone",
+      "primitiveSequence": [{ "type": "no_op_failed_part", "requiresTargetStillValid": false, "requiresSourceAvailable": false, "dependsOnPreviousSuccess": false, "optional": true, "resultOnFailure": "skip_part", "connector": "INDEPENDENT" }],
+      "createsRestrictions": [{ "duration": "this_turn", "restrictionType": "cannot_activate", "appliesTo": { "effectType": "monster_effect", "activationLocation": "hand" } }]
+    },
+    {
+      "id": "et_restrict_04", "cardId": "900004", "name": "魔法效果限制模板四", "effectNo": "1",
+      "activation": { "effectType": "monster_effect", "activationLocation": "monster_zone", "phase": ["main_phase"], "targets": [] },
+      "sourceExpectedZone": "monster_zone",
+      "primitiveSequence": [{ "type": "no_op_failed_part", "requiresTargetStillValid": false, "requiresSourceAvailable": false, "dependsOnPreviousSuccess": false, "optional": true, "resultOnFailure": "skip_part", "connector": "INDEPENDENT" }],
+      "createsRestrictions": [{ "duration": "this_turn", "restrictionType": "cannot_activate", "appliesTo": { "effectType": "spell_effect" } }]
+    },
+
+    {
+      "id": "et_target_ind_01", "cardId": "900101", "name": "对象丢失独立处理模板一", "effectNo": "1",
+      "activation": { "effectType": "trap_effect", "activationLocation": "spell_trap_zone", "phase": ["main_phase", "battle_phase"], "requiresTarget": true, "targets": [{ "id": "target", "expectedZone": "monster_zone" }] },
+      "sourceExpectedZone": "spell_trap_zone",
+      "primitiveSequence": [
+        { "type": "discard_from_hand", "player": "self", "amount": 1, "requiresTargetStillValid": false, "requiresSourceAvailable": false, "dependsOnPreviousSuccess": false, "optional": false, "resultOnFailure": "insufficient", "connector": "INDEPENDENT" },
+        { "type": "place_target_as_continuous_trap", "targetId": "target-card", "targetExpectedZone": "monster_zone", "requiresTargetStillValid": true, "requiresSourceAvailable": false, "dependsOnPreviousSuccess": false, "optional": false, "resultOnFailure": "skip_part", "connector": "ALSO" }
+      ],
+      "createsRestrictions": []
+    },
+    {
+      "id": "et_target_ind_02", "cardId": "900102", "name": "对象丢失独立处理模板二", "effectNo": "2",
+      "activation": { "effectType": "monster_effect", "activationLocation": "monster_zone", "phase": ["main_phase"], "requiresTarget": true, "targets": [{ "id": "target", "expectedZone": "monster_zone" }] },
+      "sourceExpectedZone": "monster_zone",
+      "primitiveSequence": [
+        { "type": "apply_damage", "player": "opponent", "amount": 500, "requiresTargetStillValid": false, "requiresSourceAvailable": false, "dependsOnPreviousSuccess": false, "optional": false, "resultOnFailure": "insufficient", "connector": "INDEPENDENT" },
+        { "type": "banish_target", "targetId": "target-card", "targetExpectedZone": "monster_zone", "requiresTargetStillValid": true, "requiresSourceAvailable": false, "dependsOnPreviousSuccess": false, "optional": false, "resultOnFailure": "skip_part", "connector": "ALSO" }
+      ],
+      "createsRestrictions": []
+    },
+    {
+      "id": "et_target_ind_03", "cardId": "900103", "name": "对象丢失独立处理模板三", "effectNo": "1",
+      "activation": { "effectType": "spell_effect", "activationLocation": "spell_trap_zone", "phase": ["main_phase"], "requiresTarget": true, "targets": [{ "id": "target", "expectedZone": "graveyard" }] },
+      "sourceExpectedZone": "spell_trap_zone",
+      "primitiveSequence": [
+        { "type": "draw_cards", "player": "self", "amount": 1, "requiresTargetStillValid": false, "requiresSourceAvailable": false, "dependsOnPreviousSuccess": false, "optional": false, "resultOnFailure": "insufficient", "connector": "INDEPENDENT" },
+        { "type": "return_card_to_deck", "targetId": "target-card", "targetExpectedZone": "graveyard", "requiresTargetStillValid": true, "requiresSourceAvailable": false, "dependsOnPreviousSuccess": false, "optional": false, "resultOnFailure": "skip_part", "connector": "ALSO" }
+      ],
+      "createsRestrictions": []
+    },
+    {
+      "id": "et_target_ind_04", "cardId": "900104", "name": "对象丢失独立处理模板四", "effectNo": "3",
+      "activation": { "effectType": "monster_effect", "activationLocation": "graveyard", "phase": ["main_phase"], "requiresTarget": true, "targets": [{ "id": "target", "expectedZone": "monster_zone" }] },
+      "sourceExpectedZone": "graveyard",
+      "primitiveSequence": [
+        { "type": "apply_damage", "player": "opponent", "amount": 300, "requiresTargetStillValid": false, "requiresSourceAvailable": false, "dependsOnPreviousSuccess": false, "optional": false, "resultOnFailure": "insufficient", "connector": "INDEPENDENT" },
+        { "type": "destroy_target", "targetId": "target-card", "targetExpectedZone": "monster_zone", "requiresTargetStillValid": true, "requiresSourceAvailable": false, "dependsOnPreviousSuccess": false, "optional": false, "resultOnFailure": "skip_part", "connector": "ALSO" }
+      ],
+      "createsRestrictions": []
+    },
+
+    {
+      "id": "et_target_then_01", "cardId": "900201", "name": "对象依赖后续模板一", "effectNo": "1",
+      "activation": { "effectType": "spell_effect", "activationLocation": "spell_trap_zone", "phase": ["main_phase"], "requiresTarget": true, "targets": [{ "id": "target", "expectedZone": "monster_zone" }] },
+      "sourceExpectedZone": "spell_trap_zone",
+      "primitiveSequence": [
+        { "type": "destroy_target", "targetId": "target-card", "targetExpectedZone": "monster_zone", "requiresTargetStillValid": true, "requiresSourceAvailable": false, "dependsOnPreviousSuccess": false, "optional": false, "resultOnFailure": "skip_part", "connector": "INDEPENDENT" },
+        { "type": "draw_cards", "player": "self", "amount": 1, "requiresTargetStillValid": false, "requiresSourceAvailable": false, "dependsOnPreviousSuccess": true, "optional": false, "resultOnFailure": "skip_part", "connector": "THEN" }
+      ],
+      "createsRestrictions": []
+    },
+    {
+      "id": "et_target_then_02", "cardId": "900202", "name": "对象依赖后续模板二", "effectNo": "1",
+      "activation": { "effectType": "trap_effect", "activationLocation": "spell_trap_zone", "phase": ["battle_phase"], "requiresTarget": true, "targets": [{ "id": "target", "expectedZone": "monster_zone" }] },
+      "sourceExpectedZone": "spell_trap_zone",
+      "primitiveSequence": [
+        { "type": "banish_target", "targetId": "target-card", "targetExpectedZone": "monster_zone", "requiresTargetStillValid": true, "requiresSourceAvailable": false, "dependsOnPreviousSuccess": false, "optional": false, "resultOnFailure": "skip_part", "connector": "INDEPENDENT" },
+        { "type": "apply_damage", "player": "opponent", "amount": 800, "requiresTargetStillValid": false, "requiresSourceAvailable": false, "dependsOnPreviousSuccess": true, "optional": false, "resultOnFailure": "skip_part", "connector": "IF_YOU_DO" }
+      ],
+      "createsRestrictions": []
+    },
+    {
+      "id": "et_target_then_03", "cardId": "900203", "name": "对象依赖后续模板三", "effectNo": "2",
+      "activation": { "effectType": "monster_effect", "activationLocation": "monster_zone", "phase": ["main_phase"], "requiresTarget": true, "targets": [{ "id": "target", "expectedZone": "graveyard" }] },
+      "sourceExpectedZone": "monster_zone",
+      "primitiveSequence": [
+        { "type": "return_card_to_deck", "targetId": "target-card", "targetExpectedZone": "graveyard", "requiresTargetStillValid": true, "requiresSourceAvailable": false, "dependsOnPreviousSuccess": false, "optional": false, "resultOnFailure": "skip_part", "connector": "INDEPENDENT" },
+        { "type": "draw_cards", "player": "self", "amount": 2, "requiresTargetStillValid": false, "requiresSourceAvailable": false, "dependsOnPreviousSuccess": true, "optional": false, "resultOnFailure": "skip_part", "connector": "AND_IF_YOU_DO" }
+      ],
+      "createsRestrictions": []
+    },
+    {
+      "id": "et_target_then_04", "cardId": "900204", "name": "对象依赖后续模板四", "effectNo": "1",
+      "activation": { "effectType": "spell_effect", "activationLocation": "graveyard", "phase": ["main_phase"], "requiresTarget": true, "targets": [{ "id": "target", "expectedZone": "monster_zone" }] },
+      "sourceExpectedZone": "graveyard",
+      "primitiveSequence": [
+        { "type": "place_target_as_continuous_trap", "targetId": "target-card", "targetExpectedZone": "monster_zone", "requiresTargetStillValid": true, "requiresSourceAvailable": false, "dependsOnPreviousSuccess": false, "optional": false, "resultOnFailure": "skip_part", "connector": "INDEPENDENT" },
+        { "type": "draw_cards", "player": "self", "amount": 1, "requiresTargetStillValid": false, "requiresSourceAvailable": false, "dependsOnPreviousSuccess": true, "optional": false, "resultOnFailure": "skip_part", "connector": "THEN" }
+      ],
+      "createsRestrictions": []
+    },
+
+    {
+      "id": "et_source_01", "cardId": "900301", "name": "来源离场模板一", "effectNo": "1",
+      "activation": { "effectType": "monster_effect", "activationLocation": "graveyard", "phase": ["main_phase"], "targets": [] },
+      "sourceExpectedZone": "graveyard",
+      "primitiveSequence": [
+        { "type": "discard_from_hand", "player": "self", "amount": 1, "requiresTargetStillValid": false, "requiresSourceAvailable": false, "dependsOnPreviousSuccess": false, "optional": false, "resultOnFailure": "insufficient", "connector": "INDEPENDENT" },
+        { "type": "special_summon_source", "sourceCardId": "900301", "sourceExpectedZone": "graveyard", "requiresTargetStillValid": false, "requiresSourceAvailable": true, "dependsOnPreviousSuccess": false, "optional": false, "resultOnFailure": "skip_part", "connector": "ALSO" }
+      ],
+      "createsRestrictions": []
+    },
+    {
+      "id": "et_source_02", "cardId": "900302", "name": "来源离场模板二", "effectNo": "2",
+      "activation": { "effectType": "monster_effect", "activationLocation": "graveyard", "phase": ["main_phase"], "targets": [] },
+      "sourceExpectedZone": "graveyard",
+      "primitiveSequence": [
+        { "type": "apply_damage", "player": "opponent", "amount": 400, "requiresTargetStillValid": false, "requiresSourceAvailable": false, "dependsOnPreviousSuccess": false, "optional": false, "resultOnFailure": "insufficient", "connector": "INDEPENDENT" },
+        { "type": "special_summon_source", "sourceCardId": "900302", "sourceExpectedZone": "graveyard", "requiresTargetStillValid": false, "requiresSourceAvailable": true, "dependsOnPreviousSuccess": false, "optional": false, "resultOnFailure": "skip_part", "connector": "ALSO" }
+      ],
+      "createsRestrictions": []
+    },
+    {
+      "id": "et_source_03", "cardId": "900303", "name": "来源离场模板三", "effectNo": "1",
+      "activation": { "effectType": "spell_effect", "activationLocation": "graveyard", "phase": ["main_phase"], "targets": [] },
+      "sourceExpectedZone": "graveyard",
+      "primitiveSequence": [
+        { "type": "draw_cards", "player": "self", "amount": 1, "requiresTargetStillValid": false, "requiresSourceAvailable": false, "dependsOnPreviousSuccess": false, "optional": false, "resultOnFailure": "insufficient", "connector": "INDEPENDENT" },
+        { "type": "special_summon_source", "sourceCardId": "900303", "sourceExpectedZone": "graveyard", "requiresTargetStillValid": false, "requiresSourceAvailable": true, "dependsOnPreviousSuccess": false, "optional": false, "resultOnFailure": "skip_part", "connector": "ALSO" }
+      ],
+      "createsRestrictions": []
+    },
+    {
+      "id": "et_source_04", "cardId": "900304", "name": "来源离场模板四", "effectNo": "3",
+      "activation": { "effectType": "trap_effect", "activationLocation": "graveyard", "phase": ["battle_phase"], "targets": [] },
+      "sourceExpectedZone": "graveyard",
+      "primitiveSequence": [
+        { "type": "apply_damage", "player": "opponent", "amount": 200, "requiresTargetStillValid": false, "requiresSourceAvailable": false, "dependsOnPreviousSuccess": false, "optional": false, "resultOnFailure": "insufficient", "connector": "INDEPENDENT" },
+        { "type": "special_summon_source", "sourceCardId": "900304", "sourceExpectedZone": "graveyard", "requiresTargetStillValid": false, "requiresSourceAvailable": true, "dependsOnPreviousSuccess": false, "optional": false, "resultOnFailure": "skip_part", "connector": "ALSO" }
+      ],
+      "createsRestrictions": []
+    },
+
+    {
+      "id": "et_return_01", "cardId": "900401", "name": "发动中通常陷阱返回模板一", "effectNo": "1",
+      "activation": { "effectType": "monster_effect", "activationLocation": "monster_zone", "phase": ["main_phase"], "targets": [], "requiresLegalEffectApplication": true, "hasLegalEffectApplication": false, "attemptsToReturnCurrentlyResolvingCard": true, "returnTarget": "发动中的通常陷阱" },
+      "sourceExpectedZone": "monster_zone",
+      "primitiveSequence": [{ "type": "return_card_to_deck", "targetId": "resolving-trap", "requiresTargetStillValid": true, "requiresSourceAvailable": false, "dependsOnPreviousSuccess": false, "optional": false, "resultOnFailure": "skip_part", "connector": "INDEPENDENT" }],
+      "createsRestrictions": []
+    },
+    {
+      "id": "et_return_02", "cardId": "900402", "name": "发动中通常陷阱返回模板二", "effectNo": "1",
+      "activation": { "effectType": "spell_effect", "activationLocation": "spell_trap_zone", "phase": ["main_phase"], "targets": [], "requiresLegalEffectApplication": true, "hasLegalEffectApplication": false, "attemptsToReturnCurrentlyResolvingCard": true, "returnTarget": "发动中的通常陷阱" },
+      "sourceExpectedZone": "spell_trap_zone",
+      "primitiveSequence": [{ "type": "return_card_to_deck", "targetId": "resolving-trap", "requiresTargetStillValid": true, "requiresSourceAvailable": false, "dependsOnPreviousSuccess": false, "optional": false, "resultOnFailure": "skip_part", "connector": "INDEPENDENT" }],
+      "createsRestrictions": []
+    },
+    {
+      "id": "et_return_03", "cardId": "900403", "name": "发动中通常陷阱返回模板三", "effectNo": "2",
+      "activation": { "effectType": "monster_effect", "activationLocation": "graveyard", "phase": ["main_phase"], "targets": [], "requiresLegalEffectApplication": true, "hasLegalEffectApplication": false, "attemptsToReturnCurrentlyResolvingCard": true, "returnTarget": "发动中的通常陷阱" },
+      "sourceExpectedZone": "graveyard",
+      "primitiveSequence": [{ "type": "return_card_to_deck", "targetId": "resolving-trap", "requiresTargetStillValid": true, "requiresSourceAvailable": false, "dependsOnPreviousSuccess": false, "optional": false, "resultOnFailure": "skip_part", "connector": "INDEPENDENT" }],
+      "createsRestrictions": []
+    },
+    {
+      "id": "et_return_04", "cardId": "900404", "name": "发动中通常陷阱返回模板四", "effectNo": "1",
+      "activation": { "effectType": "trap_effect", "activationLocation": "spell_trap_zone", "phase": ["battle_phase"], "targets": [], "requiresLegalEffectApplication": true, "hasLegalEffectApplication": false, "attemptsToReturnCurrentlyResolvingCard": true, "returnTarget": "发动中的通常陷阱" },
+      "sourceExpectedZone": "spell_trap_zone",
+      "primitiveSequence": [{ "type": "return_card_to_deck", "targetId": "resolving-trap", "requiresTargetStillValid": true, "requiresSourceAvailable": false, "dependsOnPreviousSuccess": false, "optional": false, "resultOnFailure": "skip_part", "connector": "INDEPENDENT" }],
+      "createsRestrictions": []
+    },
+
+    {
+      "id": "et_terminal_01", "cardId": "900501", "name": "特殊胜利检查前伤害模板一", "effectNo": "1",
+      "activation": { "effectType": "spell_effect", "activationLocation": "spell_trap_zone", "phase": ["end_phase"], "targets": [] },
+      "sourceExpectedZone": "spell_trap_zone",
+      "primitiveSequence": [{ "type": "apply_damage", "player": "opponent", "amount": 800, "requiresTargetStillValid": false, "requiresSourceAvailable": false, "dependsOnPreviousSuccess": false, "optional": false, "resultOnFailure": "insufficient", "connector": "INDEPENDENT" }],
+      "createsRestrictions": []
+    },
+    {
+      "id": "et_terminal_02", "cardId": "900502", "name": "特殊胜利检查前伤害模板二", "effectNo": "1",
+      "activation": { "effectType": "monster_effect", "activationLocation": "monster_zone", "phase": ["end_phase"], "targets": [] },
+      "sourceExpectedZone": "monster_zone",
+      "primitiveSequence": [{ "type": "apply_damage", "player": "opponent", "amount": 1000, "requiresTargetStillValid": false, "requiresSourceAvailable": false, "dependsOnPreviousSuccess": false, "optional": false, "resultOnFailure": "insufficient", "connector": "INDEPENDENT" }],
+      "createsRestrictions": []
+    },
+    {
+      "id": "et_extra_01", "cardId": "900601", "name": "额外卡组融合怪兽效果模板", "effectNo": "1",
+      "activation": { "effectType": "monster_effect", "activationLocation": "monster_zone", "phase": ["main_phase"], "targets": [], "monsterSummonedFrom": "extra_deck", "monsterType": "fusion" },
+      "sourceExpectedZone": "monster_zone",
+      "primitiveSequence": [{ "type": "draw_cards", "player": "self", "amount": 1, "requiresTargetStillValid": false, "requiresSourceAvailable": false, "dependsOnPreviousSuccess": false, "optional": false, "resultOnFailure": "insufficient", "connector": "INDEPENDENT" }],
+      "createsRestrictions": []
+    },
+    {
+      "id": "et_extra_02", "cardId": "900602", "name": "额外卡组同调怪兽效果模板", "effectNo": "1",
+      "activation": { "effectType": "monster_effect", "activationLocation": "monster_zone", "phase": ["main_phase"], "targets": [], "monsterSummonedFrom": "extra_deck", "monsterType": "synchro" },
+      "sourceExpectedZone": "monster_zone",
+      "primitiveSequence": [{ "type": "draw_cards", "player": "self", "amount": 1, "requiresTargetStillValid": false, "requiresSourceAvailable": false, "dependsOnPreviousSuccess": false, "optional": false, "resultOnFailure": "insufficient", "connector": "INDEPENDENT" }],
+      "createsRestrictions": []
+    }
+  ]
+}

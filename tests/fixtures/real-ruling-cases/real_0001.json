@@ -1,0 +1,12 @@
+{
+  "id": "real_0001",
+  "category": "target_lost",
+  "inputText": "「对象丢失独立处理模板一」发动后，对象离场，丢弃部分还处理吗？",
+  "formalQuery": {
+    "originalText": "对象离场后的处理",
+    "cardIdentities": [{ "rawText": "对象丢失独立处理模板一", "canonicalName": "对象丢失独立处理模板一", "cardId": "900101", "status": "resolved", "confidence": "high" }],
+    "chainLinks": [{ "id": "C1", "sourceCardId": "900101", "sourceCardName": "对象丢失独立处理模板一", "effectNo": "1", "targets": [{ "id": "target", "cardId": "target-card", "expectedZone": "monster_zone", "validAtResolution": false }] }]
+  },
+  "gameState": { "phase": "main_phase", "cards": [{ "cardId": "target-card", "name": "原对象", "zone": "graveyard" }], "hands": { "self": [{ "cardId": "hand-1" }] }, "graveyards": { "self": [] } },
+  "expected": { "status": "partially_resolved", "evidenceGrade": "rule_derived", "mustHaveBlockers": [], "mustHaveTrace": ["template_loaded", "activation_validated", "primitive_resolution_started", "target_lost_at_resolution", "non_target_part_continued", "primitive_resolution_finished"], "mustNotHaveTrace": [{ "step": "primitive_resolution_finished", "result": "resolved" }], "mustNotContainInAnswer": ["全部处理成功"] }
+}

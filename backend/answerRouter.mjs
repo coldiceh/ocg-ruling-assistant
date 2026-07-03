@@ -6,6 +6,7 @@ export const ANSWER_ROUTE_LEVELS = [
   "official_qa_near_case_match",
   "rule_engine_answer",
   "conditional_branch_answer",
+  "insufficient",
   "needs_more_info",
 ];
 
@@ -36,7 +37,8 @@ export function routeAnswer({ officialRoute, ruleEngineAnswer, conditionalAnswer
     ...conditionalAnswer,
     requiredFacts: [...new Set([...(conditionalAnswer.requiredFacts || []), ...(noEvidenceAnswer?.requiredFacts || [])])],
   }, "conditional_branch_answer");
-  return withRoute(noEvidenceAnswer || buildTrueNeedsMoreInfo(), "needs_more_info");
+  const fallback = noEvidenceAnswer || buildTrueNeedsMoreInfo();
+  return withRoute(fallback, fallback.status === "insufficient" || fallback.verdict === "insufficient" ? "insufficient" : "needs_more_info");
 }
 
 export function buildGenericRuleEngineAnswer({ question, issueFrames = {} } = {}) {

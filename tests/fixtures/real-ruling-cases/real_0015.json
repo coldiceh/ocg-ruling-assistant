@@ -1,0 +1,11 @@
+{
+  "id": "real_0015",
+  "category": "insufficient",
+  "inputText": "「对象丢失独立处理模板三」处理时没有提供卡组和手卡状态。",
+  "formalQuery": {
+    "cardIdentities": [{ "rawText": "对象丢失独立处理模板三", "canonicalName": "对象丢失独立处理模板三", "cardId": "900103", "status": "resolved", "confidence": "high" }],
+    "chainLinks": [{ "id": "C1", "sourceCardId": "900103", "effectNo": "1", "targets": [{ "id": "target", "cardId": "target-card", "expectedZone": "graveyard", "validAtResolution": true }] }]
+  },
+  "gameState": { "phase": "main_phase", "cards": [{ "cardId": "target-card", "zone": "graveyard" }] },
+  "expected": { "status": "insufficient", "evidenceGrade": "insufficient", "programVerdict": "insufficient", "mustHaveBlockers": [], "mustHaveTrace": ["primitive_insufficient", { "step": "primitive_resolution_finished", "result": "insufficient" }], "mustNotHaveTrace": [{ "event": "primitive_applied", "primitive": "return_card_to_deck" }], "mustNotContainInAnswer": ["已经完整处理"] }
+}

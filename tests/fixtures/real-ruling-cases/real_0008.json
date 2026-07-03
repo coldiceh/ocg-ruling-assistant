@@ -1,0 +1,11 @@
+{
+  "id": "real_0008",
+  "category": "insufficient",
+  "inputText": "「数据库尚无模板的测试卡」的①效果如何处理？",
+  "formalQuery": {
+    "cardIdentities": [{ "rawText": "数据库尚无模板的测试卡", "canonicalName": "数据库尚无模板的测试卡", "cardId": "999999", "status": "resolved", "confidence": "high" }],
+    "chainLinks": [{ "id": "C1", "sourceCardId": "999999", "effectNo": "1", "candidateEffect": { "effectType": "monster_effect", "activationLocation": "monster_zone" } }]
+  },
+  "gameState": { "phase": "main_phase" },
+  "expected": { "status": "insufficient", "evidenceGrade": "insufficient", "programVerdict": "insufficient", "mustHaveBlockers": [], "mustHaveTrace": [{ "step": "template_loaded", "result": "missing" }, { "step": "primitive_resolution_started", "result": "insufficient" }], "mustNotHaveTrace": [{ "step": "primitive_resolution_started", "result": "started" }], "mustNotContainInAnswer": ["可以处理", "不能处理"] }
+}

@@ -1,0 +1,11 @@
+{
+  "id": "real_0013",
+  "category": "active_restriction",
+  "inputText": "墓地效果限制适用后，「来源离场模板一」还能在墓地发动吗？",
+  "formalQuery": {
+    "cardIdentities": [{ "rawText": "来源离场模板一", "canonicalName": "来源离场模板一", "cardId": "900301", "status": "resolved", "confidence": "high" }],
+    "chainLinks": [{ "id": "C1", "sourceCardId": "900301", "effectNo": "1" }]
+  },
+  "gameState": { "phase": "main_phase", "activeRestrictionTemplates": [{ "cardId": "900002", "effectNo": "1" }], "cards": [{ "cardId": "900301", "zone": "graveyard" }] },
+  "expected": { "status": "illegal_question", "evidenceGrade": "illegal_question", "programVerdict": "cannot_activate", "mustHaveBlockers": ["activation.forbidden_by_active_restriction"], "mustHaveTrace": ["template_loaded", "activation.forbidden_by_active_restriction"], "mustNotHaveTrace": ["primitive_resolution_started"], "mustNotContainInAnswer": ["可以发动"] }
+}

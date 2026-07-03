@@ -1,0 +1,11 @@
+{
+  "id": "real_0005",
+  "category": "active_restriction",
+  "inputText": "限制适用后，「额外卡组融合怪兽效果模板」还能发动效果吗？",
+  "formalQuery": {
+    "cardIdentities": [{ "rawText": "额外卡组融合怪兽效果模板", "canonicalName": "额外卡组融合怪兽效果模板", "cardId": "900601", "status": "resolved", "confidence": "high" }],
+    "chainLinks": [{ "id": "C2", "sourceCardId": "900601", "effectNo": "1" }]
+  },
+  "gameState": { "phase": "main_phase", "activeRestrictionTemplates": [{ "cardId": "900001", "effectNo": "1", "sourceCard": "额外卡组效果限制模板一" }] },
+  "expected": { "status": "illegal_question", "evidenceGrade": "illegal_question", "programVerdict": "cannot_activate", "mustHaveBlockers": ["activation.forbidden_by_active_restriction"], "mustHaveTrace": ["template_loaded", "activation.forbidden_by_active_restriction"], "mustNotHaveTrace": ["primitive_resolution_started"], "mustNotContainInAnswer": ["可以发动"] }
+}

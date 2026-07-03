@@ -1,0 +1,11 @@
+{
+  "id": "real_0002",
+  "category": "target_lost",
+  "inputText": "「对象依赖后续模板一」的对象在处理前离场，还能抽卡吗？",
+  "formalQuery": {
+    "cardIdentities": [{ "rawText": "对象依赖后续模板一", "canonicalName": "对象依赖后续模板一", "cardId": "900201", "status": "resolved", "confidence": "high" }],
+    "chainLinks": [{ "id": "C1", "sourceCardId": "900201", "effectNo": "1", "targets": [{ "id": "target", "cardId": "target-card", "expectedZone": "monster_zone", "validAtResolution": false }] }]
+  },
+  "gameState": { "phase": "main_phase", "cards": [{ "cardId": "target-card", "zone": "graveyard" }], "decks": { "self": [{ "cardId": "deck-1" }] }, "hands": { "self": [] } },
+  "expected": { "status": "failed", "evidenceGrade": "rule_derived", "mustHaveBlockers": [], "mustHaveTrace": ["template_loaded", "target_part_skipped", "dependent_part_skipped", { "primitive": "draw_cards", "event": "dependent_part_skipped", "connector": "THEN" }, "primitive_resolution_finished"], "mustNotHaveTrace": [{ "primitive": "draw_cards", "event": "primitive_applied" }], "mustNotContainInAnswer": ["抽1张卡成功"] }
+}

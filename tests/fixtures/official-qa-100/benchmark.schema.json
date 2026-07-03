@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://coldiceh.github.io/ocg-ruling-assistant/schemas/official-qa-100-benchmark.schema.json",
+  "title": "Official QA First 100-case Benchmark",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "benchmarkId", "targetCaseCount", "cases"],
+  "properties": {
+    "schemaVersion": { "const": "1.0.0" },
+    "benchmarkId": { "type": "string", "minLength": 1 },
+    "targetCaseCount": { "const": 100 },
+    "cases": {
+      "type": "array",
+      "minItems": 100,
+      "maxItems": 100,
+      "items": { "$ref": "#/$defs/case" }
+    }
+  },
+  "$defs": {
+    "case": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "category", "inputText", "snapshot", "request", "expected", "provenance"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^official_qa_[0-9]{4}$" },
+        "category": { "enum": ["official_exact", "official_near_exact", "template_supported", "conditional_fallback", "insufficient", "safety_negative"] },
+        "inputText": { "type": "string", "minLength": 1 },
+        "snapshot": {
+          "type": "object",
+          "required": ["cards", "records", "snapshotMeta"],
+          "properties": {
+            "cards": { "type": "array" },
+            "records": { "type": "array" },
+            "snapshotMeta": { "type": "object" }
+          },
+          "additionalProperties": true
+        },
+        "request": {
+          "type": "object",
+          "required": ["gameState", "chainLinks"],
+          "properties": {
+            "gameState": { "type": "object" },
+            "chainLinks": { "type": "array" }
+          },
+          "additionalProperties": false
+        },
+        "expected": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["answerRoute", "status", "evidenceGrade", "mustCallTemplate", "mustCallModel", "mustHaveTrace", "mustNotHaveTrace", "dangerousFailures"],
+          "properties": {
+            "answerRoute": { "enum": ["official_qa_exact_match", "official_qa_near_case_match", "rule_engine_answer", "conditional_branch_answer", "insufficient"] },
+            "status": { "type": "string", "minLength": 1 },
+            "verdict": { "type": "string" },
+            "evidenceGrade": { "type": "string", "minLength": 1 },
+            "mustCallTemplate": { "type": "boolean" },
+            "mustCallModel": { "type": "boolean" },
+            "mustHaveTrace": { "type": "array" },
+            "mustNotHaveTrace": { "type": "array" },
+            "mustNotContainInAnswer": { "type": "array", "items": { "type": "string" } },
+            "dangerousFailures": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["unsafeConfirmed", "illegalChainEnteredResolution", "cardMisidentifiedWithoutWarning", "llmOverrideProgramVerdict"],
+              "properties": {
+                "unsafeConfirmed": { "const": false },
+                "illegalChainEnteredResolution": { "const": false },
+                "cardMisidentifiedWithoutWarning": { "const": false },
+                "llmOverrideProgramVerdict": { "const": false }
+              }
+            }
+          }
+        },
+        "provenance": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["sourceType", "sourceId", "verifiedAt"],
+          "properties": {
+            "sourceType": { "enum": ["official_qa", "official_database", "verified_regression"] },
+            "sourceId": { "type": "string", "minLength": 1 },
+            "sourceUrl": { "type": "string" },
+            "verifiedAt": { "type": "string", "format": "date-time" }
+          }
+        }
+      }
+    }
+  }
+}

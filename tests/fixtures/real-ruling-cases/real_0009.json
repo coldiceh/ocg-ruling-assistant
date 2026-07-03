@@ -1,0 +1,11 @@
+{
+  "id": "real_0009",
+  "category": "card_identity",
+  "inputText": "「相似卡俗称」的效果可以发动吗？",
+  "formalQuery": {
+    "cardIdentities": [{ "rawText": "相似卡俗称", "status": "uncertain", "confidence": "low", "candidates": [{ "name": "相似卡正式名甲", "cardId": "910001" }, { "name": "相似卡正式名乙", "cardId": "910002" }] }],
+    "chainLinks": []
+  },
+  "gameState": {},
+  "expected": { "status": "needs_card_confirmation", "evidenceGrade": "needs_card_confirmation", "programVerdict": "needs_card_confirmation", "mustHaveBlockers": ["activation.card_identity_uncertain"], "mustHaveTrace": ["resolve_card_identities"], "mustNotHaveTrace": ["primitive_resolution_started"], "mustNotContainInAnswer": ["可以发动", "不能发动"] }
+}
