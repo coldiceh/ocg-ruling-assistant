@@ -20,10 +20,45 @@
     "case": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "category", "inputText", "snapshot", "request", "expected", "provenance"],
+      "required": ["id", "category", "userQuery", "expectedRoute", "expectedAnswerShape", "expectedConfirmationLevel", "expectedSafety", "sourceType", "involvedCards", "expectedKeyPoints", "forbiddenOutputs", "failureTags"],
       "properties": {
         "id": { "type": "string", "pattern": "^official_qa_[0-9]{4}$" },
-        "category": { "enum": ["official_exact", "official_near_exact", "template_supported", "conditional_fallback", "insufficient", "safety_negative"] },
+        "category": { "enum": ["official_exact", "official_near_exact", "official_similar", "template_supported", "conditional_fallback", "insufficient"] },
+        "userQuery": { "type": "string", "minLength": 1 },
+        "expectedRoute": { "enum": ["official_qa_exact_match", "official_qa_near_case_match", "rule_engine_answer", "conditional_branch_answer", "insufficient"] },
+        "expectedAnswerShape": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "evidenceGrade", "requiredFields"],
+          "properties": {
+            "status": { "type": "string", "minLength": 1 },
+            "evidenceGrade": { "type": "string", "minLength": 1 },
+            "verdict": { "type": "string" },
+            "requiredFields": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "expectedConfirmationLevel": { "type": "string", "minLength": 1 },
+        "expectedSafety": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["unsafeConfirmed", "officialScopeMismatchUsedAsDirect", "wrongCardResolvedWithoutWarning", "llmOverrideProgramVerdict", "relatedEvidenceUsedAsOfficialDirect"],
+          "properties": {
+            "unsafeConfirmed": { "const": false },
+            "officialScopeMismatchUsedAsDirect": { "const": false },
+            "wrongCardResolvedWithoutWarning": { "const": false },
+            "llmOverrideProgramVerdict": { "const": false },
+            "relatedEvidenceUsedAsOfficialDirect": { "const": false }
+          }
+        },
+        "sourceType": { "enum": ["official_qa", "official_similar", "verified_regression", "template_fixture"] },
+        "sourceId": { "type": "string" },
+        "involvedCards": { "type": "array", "items": { "type": "string" } },
+        "expectedKeyPoints": { "type": "array", "items": { "type": "string" } },
+        "forbiddenOutputs": { "type": "array", "items": { "type": "string" } },
+        "failureTags": { "type": "array", "items": { "type": "string" } },
+        "fixtureRecord": { "type": "object" },
+        "fixtureCard": { "type": "object" },
+        "fixtureTemplate": { "type": "object" },
         "inputText": { "type": "string", "minLength": 1 },
         "snapshot": {
           "type": "object",

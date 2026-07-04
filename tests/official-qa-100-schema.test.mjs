@@ -9,25 +9,26 @@ test("official QA benchmark schema fixes the corpus at exactly 100 cases", async
   assert.equal(schema.properties.targetCaseCount.const, 100);
   assert.equal(schema.properties.cases.minItems, 100);
   assert.equal(schema.properties.cases.maxItems, 100);
-  assert.deepEqual(schema.$defs.case.required, ["id", "category", "inputText", "snapshot", "request", "expected", "provenance"]);
+  for (const field of ["id", "userQuery", "expectedRoute", "expectedAnswerShape", "expectedConfirmationLevel", "expectedSafety", "sourceType", "involvedCards", "expectedKeyPoints", "forbiddenOutputs", "failureTags"]) {
+    assert.ok(schema.$defs.case.required.includes(field), field);
+  }
 });
 
 test("official QA benchmark case schema records route order and safety expectations", async () => {
   const schema = JSON.parse(await readFile(schemaUrl, "utf8"));
-  const expected = schema.$defs.case.properties.expected;
-  assert.deepEqual(expected.properties.answerRoute.enum, [
+  const caseSchema = schema.$defs.case.properties;
+  assert.deepEqual(caseSchema.expectedRoute.enum, [
     "official_qa_exact_match",
     "official_qa_near_case_match",
     "rule_engine_answer",
     "conditional_branch_answer",
     "insufficient",
   ]);
-  assert.ok(expected.required.includes("mustCallTemplate"));
-  assert.ok(expected.required.includes("mustCallModel"));
-  assert.deepEqual(Object.keys(expected.properties.dangerousFailures.properties), [
+  assert.deepEqual(Object.keys(caseSchema.expectedSafety.properties), [
     "unsafeConfirmed",
-    "illegalChainEnteredResolution",
-    "cardMisidentifiedWithoutWarning",
+    "officialScopeMismatchUsedAsDirect",
+    "wrongCardResolvedWithoutWarning",
     "llmOverrideProgramVerdict",
+    "relatedEvidenceUsedAsOfficialDirect",
   ]);
 });
