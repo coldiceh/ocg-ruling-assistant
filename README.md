@@ -205,7 +205,9 @@ pnpm smoke:official-qa
 pnpm test:official-qa-100-schema
 ```
 
-100-case benchmark 的 JSON Schema 位于 `tests/fixtures/official-qa-100/benchmark.schema.json`，固定要求恰好 100 案，并记录预期路由、模板/模型调用、trace、安全指标和来源追溯字段。
+100-case benchmark 的 JSON Schema 位于 `tests/fixtures/official-qa-100/benchmark.schema.json`，fixture 位于同目录的 `benchmark.json`。当前固定包含 30 个 official exact / near-exact、20 个 official similar、20 个 template-supported、20 个 conditional fallback 和 10 个 true insufficient 案例。每案记录预期路由、答案结构、确认等级、安全约束、来源、相关卡片、关键点、禁止输出和失败标签。
+
+`pnpm report:benchmark` 输出 `routeCounts`、`correctByRoute`、`insufficientCount`、`conditionalCount`、official exact / near 与 template 正确率、五项危险失败统计及主要 insufficient 原因。任一 dangerous failure 或 case 断言失败都会令 benchmark 命令返回非零状态。
 
 ## How to evaluate answers
 
