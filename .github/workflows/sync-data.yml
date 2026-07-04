@@ -8,17 +8,30 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: sync-ruling-data
+  cancel-in-progress: false
+
 jobs:
   sync:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
-          node-version: "20"
+          node-version: "24"
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
 
       - name: Sync YGOResources snapshot
         env:
@@ -45,7 +58,7 @@ jobs:
         run: node scripts/report-ruling-sync-status.mjs
 
       - name: Test updated snapshot
-        run: npm test
+        run: pnpm test
 
       - name: Commit snapshot changes
         run: |
@@ -56,5 +69,5 @@ jobs:
             echo "No data changes."
           else
             git commit -m "chore(data): sync ruling snapshot"
-            git push
+            git push origin HEAD:main
           fi
