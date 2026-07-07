@@ -193,6 +193,27 @@ RAG 输出等级为 `official_confirmed`、`rule_analysis`、`low_confidence_ana
 
 前端提供 `RAG 分析模式` 开关。没有模型 API key 时，RAG client 会使用 mock/dry-run 结果，保证本地和测试环境不会因为缺少 DeepSeek / GLM 配置而崩溃。
 
+Vercel 必填环境变量：
+
+- `DEEPSEEK_API_KEY`
+- `DEEPSEEK_BASE_URL=https://api.deepseek.com`
+- `DEEPSEEK_MODEL=deepseek-v4-flash`
+
+可选环境变量：
+
+- `MODEL_PROVIDER=auto`，也可设为 `deepseek`、`gemini`、`mock`
+- `GEMINI_API_KEY`
+- `GEMINI_MODEL`
+- `GEMINI_TEMPERATURE`
+- `GEMINI_MAX_OUTPUT_TOKENS`
+- `API_DAILY_BUDGET_CNY=10`
+- `API_BUDGET_TIMEZONE=Asia/Tokyo`
+- `API_BUDGET_MODE=soft`
+- `UPSTASH_REDIS_REST_URL`
+- `UPSTASH_REDIS_REST_TOKEN`
+
+未配置 Upstash Redis 时，Vercel 上的每日预算限制只是 per-instance 软限制，不是全局硬上限。真正硬控成本可以先通过 DeepSeek 低余额充值实现。API key 只应配置在 Vercel 后端环境变量中，不应写入前端、README 或仓库。
+
 ## How to evaluate answers
 
 使用或验收回答时，应先区分系统给出的层级：

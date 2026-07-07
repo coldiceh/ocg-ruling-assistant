@@ -1,5 +1,6 @@
 import { answerQuestion } from "../backend/engine.mjs";
 import { answerRulingQuestionFast } from "../backend/fastJudgeEngine.mjs";
+import { resolveRagProvider } from "../backend/ragModelClient.mjs";
 import { answerRagRulingQuestion } from "../backend/ragRulingPipeline.mjs";
 
 const allowedOrigin = process.env.ALLOWED_ORIGIN || "*";
@@ -54,40 +55,37 @@ function setCors(response) {
 }
 
 function getModelInfo() {
-  const provider = String(process.env.MODEL_PROVIDER || "").toLowerCase() || inferProvider();
-  if (provider === "gemini") {
-    const models = splitList(process.env.GEMINI_MODELS || process.env.GEMINI_MODEL);
+  const ragProvider = resolveRagProvider(process.env);
+  const provider = ragProvider.provider;
+  if (provider === "deepseek") {
     return {
-      provider: "gemini",
-      models,
-      cardResolutionModels: splitList(process.env.GEMINI_CARD_RESOLUTION_MODELS || process.env.GEMINI_CARD_RESOLUTION_MODEL),
-      enabled: Boolean(process.env.GEMINI_API_KEY && models.length),
+      provider: "deepseek",
+      requestedProvider: ragProvider.requested,
+      models: [process.env.DEEPSEEK_MODEL || "deepseek-v4-flash"],
+      enabled: true,
       fastJudgeEnabled: process.env.USE_FAST_JUDGE_ENGINE !== "false",
     };
   }
 
-  if (provider === "openai") {
-    const models = splitList(process.env.OPENAI_MODEL);
+  if (provider === "gemini") {
+    const model = process.env.GEMINI_MODEL || "gemini-1.5-flash";
     return {
-      provider: "openai",
-      models,
-      enabled: Boolean(process.env.OPENAI_API_KEY && models.length),
+      provider: "gemini",
+      requestedProvider: ragProvider.requested,
+      models: [model],
+      cardResolutionModels: splitList(process.env.GEMINI_CARD_RESOLUTION_MODELS || process.env.GEMINI_CARD_RESOLUTION_MODEL),
+      enabled: true,
       fastJudgeEnabled: process.env.USE_FAST_JUDGE_ENGINE !== "false",
     };
   }
 
   return {
-    provider: provider || "none",
+    provider: "mock",
+    requestedProvider: ragProvider.requested,
     models: [],
     enabled: false,
     fastJudgeEnabled: process.env.USE_FAST_JUDGE_ENGINE !== "false",
   };
-}
-
-function inferProvider() {
-  if (process.env.GEMINI_API_KEY && (process.env.GEMINI_MODELS || process.env.GEMINI_MODEL)) return "gemini";
-  if (process.env.OPENAI_API_KEY && process.env.OPENAI_MODEL) return "openai";
-  return "none";
 }
 
 function splitList(value) {

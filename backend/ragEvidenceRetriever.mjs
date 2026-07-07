@@ -16,59 +16,68 @@ export async function retrieveRagEvidence({
   records,
   qaRecords,
   maxPerBucket = 5,
+  env = {},
 } = {}) {
+  const limits = readRetrievalLimits(env, maxPerBucket);
   const data = cards || records || qaRecords
     ? normalizeInjectedData({ cards, records, qaRecords })
     : await loadRagData(dataDir);
   const resolvedCards = cardResolution.resolvedCards || [];
   const retrievalWarnings = [];
   const allEvidenceRecords = [...data.records, ...data.qaRecords];
-  const recordById = new Map(allEvidenceRecords.map((record) => [record.id, record]));
 
   const cardTexts = resolvedCards
+    .slice(0, limits.maxCards)
     .map((card) => findCardRecord(card, data.cards))
     .filter(Boolean)
-    .map(cardTextEvidence)
-    .slice(0, maxPerBucket);
+    .map((card) => cardTextEvidence(card, limits.maxCardTextChars, retrievalWarnings));
 
   const officialMatches = searchOfficialQaEvidence({
     question: userQuery,
     records: data.qaRecords,
     resolvedCards,
-    limit: Math.max(20, maxPerBucket * 4),
+    limit: Math.max(20, limits.maxOfficialQa * 4),
   });
   const officialQaDirectCandidates = officialMatches.exact
-    .map((match) => evidenceFromOfficialMatch(match, "official_qa"))
-    .slice(0, maxPerBucket);
+    .map((match) => evidenceFromOfficialMatch(match, "official_qa", limits.maxEvidenceTextChars, retrievalWarnings))
+    .slice(0, limits.maxOfficialQa);
   const directIds = new Set(officialQaDirectCandidates.map((item) => item.id));
 
-  const officialQaRelated = [
+  const officialQaRelatedSource = [
     ...officialMatches.near,
     ...officialMatches.related,
     ...rankRecords({ userQuery, records: data.qaRecords.filter((record) => record.recordType === "qa"), resolvedCards }),
-  ]
-    .map((item) => item.record ? evidenceFromOfficialMatch(item, "related") : evidenceFromRecord(item, "related"))
+  ];
+  if (officialQaRelatedSource.length > limits.maxRelatedEvidence) retrievalWarnings.push(`official_related_limited:${officialQaRelatedSource.length}->${limits.maxRelatedEvidence}`);
+  const officialQaRelated = officialQaRelatedSource
+    .map((item) => item.record
+      ? evidenceFromOfficialMatch(item, "related", limits.maxEvidenceTextChars, retrievalWarnings)
+      : evidenceFromRecord(item, "related", limits.maxEvidenceTextChars, retrievalWarnings))
     .filter((item) => !directIds.has(item.id))
-    .slice(0, maxPerBucket);
+    .slice(0, limits.maxRelatedEvidence);
 
-  const faqRelated = rankRecords({
+  const faqRelatedSource = rankRecords({
     userQuery,
     records: allEvidenceRecords.filter((record) => record.recordType === "card-faq"),
     resolvedCards,
-  })
-    .map((record) => evidenceFromRecord(record, "faq"))
+  });
+  if (faqRelatedSource.length > limits.maxRelatedEvidence) retrievalWarnings.push(`faq_related_limited:${faqRelatedSource.length}->${limits.maxRelatedEvidence}`);
+  const faqRelated = faqRelatedSource
+    .map((record) => evidenceFromRecord(record, "faq", limits.maxEvidenceTextChars, retrievalWarnings))
     .filter((item) => !directIds.has(item.id))
-    .slice(0, maxPerBucket);
+    .slice(0, limits.maxRelatedEvidence);
 
-  const rawRelatedEvidence = rankRecords({
+  const rawRelatedSource = rankRecords({
     userQuery,
     records: allEvidenceRecords.filter((record) => !["card-faq", "card-text"].includes(record.recordType)),
     resolvedCards,
     allowNoCardMatch: true,
-  })
-    .map((record) => evidenceFromRecord(record, record.recordType === "qa" ? "related" : "related"))
+  });
+  if (rawRelatedSource.length > limits.maxRelatedEvidence) retrievalWarnings.push(`raw_related_limited:${rawRelatedSource.length}->${limits.maxRelatedEvidence}`);
+  const rawRelatedEvidence = rawRelatedSource
+    .map((record) => evidenceFromRecord(record, record.recordType === "qa" ? "related" : "related", limits.maxEvidenceTextChars, retrievalWarnings))
     .filter((item) => !directIds.has(item.id))
-    .slice(0, maxPerBucket);
+    .slice(0, limits.maxRelatedEvidence);
 
   if (!resolvedCards.length) retrievalWarnings.push("card_name_not_resolved_raw_query_fallback_used");
   if (!cardTexts.length && resolvedCards.length) retrievalWarnings.push("resolved_card_text_not_found");
@@ -185,23 +194,26 @@ function findCardRecord(card, cards) {
     || null;
 }
 
-function cardTextEvidence(card) {
+function cardTextEvidence(card, maxTextChars, warnings) {
+  const text = String(card.effectText || "");
+  const truncated = text.length > maxTextChars;
+  if (truncated) warnings.push(`card_text_truncated:${card.id || normalizeCardKey(card.name)}`);
   return {
     id: `card-text-${card.id || normalizeCardKey(card.name)}`,
     type: "card_text",
     title: `${card.name} 的卡片文本`,
     cardIds: [card.id || card.cardId].filter(Boolean).map(String),
     cards: [card.name].filter(Boolean),
-    text: card.effectText || "",
+    text: truncated ? `${text.slice(0, Math.max(0, maxTextChars - 1))}…` : text,
     sourceUrl: card.sourceUrl || "",
     isDirect: false,
   };
 }
 
-function evidenceFromOfficialMatch(match, type) {
+function evidenceFromOfficialMatch(match, type, maxTextChars, warnings) {
   const record = match.record || {};
   return {
-    ...evidenceFromRecord(record, type),
+    ...evidenceFromRecord(record, type, maxTextChars, warnings),
     score: match.score,
     matchLevel: match.matchLevel,
     matchedBy: match.matchedBy || [],
@@ -209,7 +221,10 @@ function evidenceFromOfficialMatch(match, type) {
   };
 }
 
-function evidenceFromRecord(record, type) {
+function evidenceFromRecord(record, type, maxTextChars = 1600, warnings = []) {
+  const text = String(record.text || record.answer || record.conclusion || "");
+  const truncated = text.length > maxTextChars;
+  if (truncated) warnings.push(`${type}_text_truncated:${record.id || record.evidenceId || record.stableId}`);
   return {
     id: String(record.id || record.evidenceId || record.stableId || ""),
     type,
@@ -217,7 +232,7 @@ function evidenceFromRecord(record, type) {
     title: record.title || record.question || String(record.id || "资料"),
     cardIds: record.cardIds || [],
     cards: record.cards || record.cardNames || [],
-    text: truncate(record.text || record.answer || record.conclusion || "", 1600),
+    text: truncated ? `${text.slice(0, Math.max(0, maxTextChars - 1))}…` : text,
     sourceUrl: record.sourceUrl || record.officialUrl || "",
     isDirect: false,
   };
@@ -290,6 +305,21 @@ function dedupeBy(items, getKey) {
 function truncate(value, maxLength) {
   const text = String(value || "");
   return text.length > maxLength ? `${text.slice(0, maxLength - 1)}…` : text;
+}
+
+function readRetrievalLimits(env, maxPerBucket) {
+  return {
+    maxCards: readPositiveNumber(env.RAG_MAX_CARDS, 6),
+    maxOfficialQa: readPositiveNumber(env.RAG_MAX_OFFICIAL_QA, maxPerBucket),
+    maxRelatedEvidence: readPositiveNumber(env.RAG_MAX_RELATED_EVIDENCE, Math.max(8, maxPerBucket)),
+    maxCardTextChars: readPositiveNumber(env.RAG_MAX_CARD_TEXT_CHARS, 2500),
+    maxEvidenceTextChars: readPositiveNumber(env.RAG_MAX_EVIDENCE_TEXT_CHARS, 1600),
+  };
+}
+
+function readPositiveNumber(value, fallback) {
+  const number = Number(value);
+  return Number.isFinite(number) && number > 0 ? Math.floor(number) : fallback;
 }
 
 async function readJson(path, fallback) {

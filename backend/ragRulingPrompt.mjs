@@ -5,25 +5,41 @@ export const RAG_ANSWER_LEVELS = Object.freeze([
   "rule_analysis",
   "low_confidence_analysis",
   "needs_more_info",
+  "budget_limited",
 ]);
 
 export function buildRagRulingPrompt({
   userQuery,
   cardResolution = {},
   evidence = {},
+  env = {},
 } = {}) {
+  return buildRagRulingPromptBundle({ userQuery, cardResolution, evidence, env }).prompt;
+}
+
+export function buildRagRulingPromptBundle({
+  userQuery,
+  cardResolution = {},
+  evidence = {},
+  env = {},
+} = {}) {
+  const warnings = [];
+  const promptLimits = {
+    maxCards: readNumber(env.RAG_MAX_CARDS, 6),
+    maxOfficialQa: readNumber(env.RAG_MAX_OFFICIAL_QA, 5),
+    maxRelatedEvidence: readNumber(env.RAG_MAX_RELATED_EVIDENCE, 8),
+    maxCardTextChars: readNumber(env.RAG_MAX_CARD_TEXT_CHARS, 2500),
+    maxPromptChars: readNumber(env.RAG_MAX_PROMPT_CHARS, 30000),
+  };
+  const evidencePayload = prepareEvidenceForPrompt(evidence, promptLimits, warnings);
   const payload = {
     userQuery: String(userQuery || ""),
-    resolvedCards: summarizeCards(cardResolution.resolvedCards || []),
+    resolvedCards: summarizeCards(cardResolution.resolvedCards || [], promptLimits.maxCards),
     unresolvedMentions: cardResolution.unresolvedMentions || [],
     ambiguousMentions: cardResolution.ambiguousMentions || [],
     evidence: {
-      cardTexts: evidence.cardTexts || [],
-      officialQaDirectCandidates: evidence.officialQaDirectCandidates || [],
-      officialQaRelated: evidence.officialQaRelated || [],
-      faqRelated: evidence.faqRelated || [],
-      rawRelatedEvidence: evidence.rawRelatedEvidence || [],
-      retrievalWarnings: evidence.retrievalWarnings || [],
+      ...evidencePayload,
+      retrievalWarnings: [...(evidence.retrievalWarnings || []), ...warnings],
     },
   };
 
@@ -38,11 +54,11 @@ export function buildRagRulingPrompt({
     confidenceSelfEstimate: "medium",
   };
 
-  return [
+  let prompt = [
     "你是游戏王 OCG 裁定分析助手。你要基于检索到的资料生成 RAG 裁定分析。",
     "优先根据官方 Q&A direct candidates 回答；只有 officialQaDirectCandidates 中的资料可以支持 official_confirmed。",
     "如果没有官方直接 Q&A，可以根据卡片文本、FAQ、官方相似案例和相关资料给裁定分析。",
-    "必须区分 answerLevel：official_confirmed、rule_analysis、low_confidence_analysis、needs_more_info。",
+    "必须区分 answerLevel：official_confirmed、rule_analysis、low_confidence_analysis、needs_more_info。budget_limited 只由后端预算守卫使用，模型不要主动输出。",
     "不得把 related evidence、FAQ 或 rawRelatedEvidence 伪装成 official direct。",
     "不得编造官方 Q&A、资料 id、卡片文本或规则出处。",
     "不确定时要把需要补充的信息写入 missingInfo，把风险写入 riskFlags。",
@@ -55,16 +71,63 @@ export function buildRagRulingPrompt({
     JSON.stringify(example, null, 2),
     "本次检索上下文如下：",
     JSON.stringify(payload, null, 2),
-    `可引用 evidence id 列表：${evidenceBucketsToList(evidence).map((item) => item.id).join(", ") || "(none)"}`,
+    `可引用 evidence id 列表：${evidenceBucketsToList(evidencePayload).map((item) => item.id).join(", ") || "(none)"}`,
   ].join("\n");
+  if (prompt.length > promptLimits.maxPromptChars) {
+    warnings.push("rag_prompt_truncated_to_max_chars");
+    const suffix = "\n\n[上下文因 RAG_MAX_PROMPT_CHARS 限制被截断。不要补造被截断的证据。]";
+    prompt = `${prompt.slice(0, Math.max(0, promptLimits.maxPromptChars - suffix.length))}${suffix}`;
+  }
+  return {
+    prompt,
+    warnings,
+    promptChars: prompt.length,
+    promptTruncated: warnings.some((warning) => warning.includes("truncated")),
+  };
 }
 
-function summarizeCards(cards) {
-  return (cards || []).map((card) => ({
+function summarizeCards(cards, limit) {
+  return (cards || []).slice(0, limit).map((card) => ({
     id: card.id || card.cardId || "",
     name: card.name || card.cnName || card.jaName || card.enName || "",
     aliases: card.aliases || [],
     cardType: card.cardType || "",
     effectText: card.effectText || "",
   }));
+}
+
+function prepareEvidenceForPrompt(evidence, limits, warnings) {
+  return {
+    officialQaDirectCandidates: limitEvidence(evidence.officialQaDirectCandidates, limits.maxOfficialQa, 1800, "official_direct", warnings),
+    officialQaRelated: limitEvidence(evidence.officialQaRelated, limits.maxRelatedEvidence, 1600, "official_related", warnings),
+    faqRelated: limitEvidence(evidence.faqRelated, limits.maxRelatedEvidence, 1600, "faq", warnings),
+    cardTexts: limitEvidence(evidence.cardTexts, limits.maxCards, limits.maxCardTextChars, "card_text", warnings),
+    rawRelatedEvidence: limitEvidence(evidence.rawRelatedEvidence, limits.maxRelatedEvidence, 1200, "raw_related", warnings),
+  };
+}
+
+function limitEvidence(items = [], limit, textLimit, label, warnings) {
+  const source = Array.isArray(items) ? items : [];
+  if (source.length > limit) warnings.push(`${label}_evidence_limited:${source.length}->${limit}`);
+  return source.slice(0, limit).map((item) => {
+    const text = String(item.text || "");
+    const truncated = text.length > textLimit;
+    if (truncated) warnings.push(`${label}_text_truncated:${item.id}`);
+    return {
+      id: item.id,
+      type: item.type,
+      title: item.title,
+      isDirect: Boolean(item.isDirect),
+      matchLevel: item.matchLevel || "",
+      cards: item.cards || [],
+      cardIds: item.cardIds || [],
+      text: truncated ? `${text.slice(0, Math.max(0, textLimit - 1))}…` : text,
+      sourceUrl: item.sourceUrl || "",
+    };
+  });
+}
+
+function readNumber(value, fallback) {
+  const number = Number(value);
+  return Number.isFinite(number) && number > 0 ? number : fallback;
 }
