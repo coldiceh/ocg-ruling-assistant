@@ -153,6 +153,7 @@ const ui = {
   questionInput: document.querySelector("#questionInput"),
   analyzeButton: document.querySelector("#analyzeButton"),
   deepAnalyzeButton: document.querySelector("#deepAnalyzeButton"),
+  ragModeToggle: document.querySelector("#ragModeToggle"),
   legacyPipelineToggle: document.querySelector("#legacyPipelineToggle"),
   clearButton: document.querySelector("#clearButton"),
   resultGrid: document.querySelector("#resultGrid"),
@@ -640,15 +641,17 @@ async function analyzeQuestion(mode = "duel") {
 }
 
 async function requestBackendAnswer(text, mode = "duel") {
+  const useRag = ui.ragModeToggle?.checked === true;
   const useFastJudge = !ui.legacyPipelineToggle?.checked;
-  const cacheKey = buildBackendCacheKey(text, mode, useFastJudge);
+  const backendMode = useRag ? "rag" : mode;
+  const cacheKey = buildBackendCacheKey(text, backendMode, useFastJudge);
   const cached = readCachedBackendAnswer(cacheKey);
   if (cached) return cached;
 
   const response = await fetch(appConfig.answerApiUrl, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ question: text, mode, useFastJudge }),
+    body: JSON.stringify({ question: text, mode: backendMode, useFastJudge }),
   });
   if (!response.ok) throw new Error(`后端返回 ${response.status}`);
   const answer = await response.json();
@@ -696,6 +699,10 @@ function renderPending() {
 
 function renderBackendAnswer(answer) {
   lastRenderedBackendAnswer = answer || null;
+  if (answer?.mode === "rag_baseline") {
+    renderRagAnswer(answer);
+    return;
+  }
   if (answer?.pipeline === "fast_judge" || answer?.answerType) {
     renderFastJudgeAnswer(answer);
     return;
@@ -737,6 +744,40 @@ function renderBackendAnswer(answer) {
   renderList(ui.questionsList, [...(answer?.needsConfirmation || []), ...(answer?.warnings || [])]);
   renderSources(answer?.sources || []);
   renderFeedbackPanel(answer);
+}
+
+function renderRagAnswer(answer) {
+  ui.resultGrid.hidden = false;
+  renderCards(answer?.resolvedCards || []);
+  const labels = {
+    official_confirmed: { confidence: "官方依据", className: "is-confirmed", title: "官方直接裁定", basis: "官方 direct Q&A" },
+    rule_analysis: { confidence: "RAG 分析", className: "is-rule-derived", title: "RAG 裁定分析", basis: "卡片文本 / FAQ / 相关资料" },
+    low_confidence_analysis: { confidence: "低置信", className: "is-risky", title: "低置信分析", basis: "资料不足或仅有弱相关资料" },
+    needs_more_info: { confidence: "需要补充", className: "is-risky", title: "需要补充信息", basis: "当前检索资料不足" },
+  };
+  const state = labels[answer.answerLevel] || labels.needs_more_info;
+  updateModelStatus(answer.debug?.dryRun ? "RAG MOCK" : answer.debug?.modelUsed || "RAG");
+  ui.verdictBlock.className = `result-block verdict-block ${state.className}`;
+  ui.confidenceText.textContent = state.confidence;
+  ui.verdictTitle.textContent = state.title;
+  ui.rulingBasisText.textContent = state.basis;
+  ui.verdictBody.textContent = answer.shortAnswer || "当前无法给出可靠分析。";
+  renderSubAnswers([]);
+  renderList(ui.stepsList, answer.reasoning || []);
+  renderList(ui.questionsList, [...(answer.missingInfo || []), ...(answer.riskFlags || [])]);
+  renderSources((answer.usedEvidence || []).map((item) => ({
+    label: ragEvidenceLabel(item.type),
+    detail: `${item.title || item.id}${item.id ? ` (${item.id})` : ""}`,
+  })));
+  renderParserDebug(answer.debug || null);
+  renderFeedbackPanel(answer);
+}
+
+function ragEvidenceLabel(type) {
+  if (type === "official_qa") return "官方 Q&A";
+  if (type === "card_text") return "卡片文本";
+  if (type === "faq") return "FAQ";
+  return "相关资料";
 }
 
 function renderFastJudgeAnswer(answer) {

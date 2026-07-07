@@ -185,6 +185,14 @@ pnpm smoke:official-qa
 
 官方 Q&A smoke 保留 exact / near case 的基本优先级和安全边界检查；旧 100-case benchmark fixture 与 schema 已移除。
 
+## RAG baseline mode
+
+新的最小可用 RAG 裁定助手通过 `/api/answer` 的 `mode=rag` 启用。流程是：从问题中抽取卡名，检索本地卡片文本、官方 Q&A、FAQ 和相关资料，构造 RAG prompt，再由模型或 mock client 生成 JSON 分析。
+
+RAG 输出等级为 `official_confirmed`、`rule_analysis`、`low_confidence_analysis`、`needs_more_info`。只有命中 `officialQaDirectCandidates` 并引用对应 evidence id 时，结果才允许保持 `official_confirmed`；相关资料和 FAQ 不会被升级成官方 direct。
+
+前端提供 `RAG 分析模式` 开关。没有模型 API key 时，RAG client 会使用 mock/dry-run 结果，保证本地和测试环境不会因为缺少 DeepSeek / GLM 配置而崩溃。
+
 ## How to evaluate answers
 
 使用或验收回答时，应先区分系统给出的层级：
