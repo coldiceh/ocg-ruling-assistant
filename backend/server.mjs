@@ -2,6 +2,7 @@ import { createServer } from "node:http";
 import { answerQuestion, getDataHealth } from "./engine.mjs";
 import { answerRulingQuestionFast } from "./fastJudgeEngine.mjs";
 import { appendFeedbackCase } from "./feedbackCases.mjs";
+import { answerRagRulingQuestion } from "./ragRulingPipeline.mjs";
 
 const port = Number(process.env.PORT || 8787);
 const allowedOrigin = process.env.ALLOWED_ORIGIN || "*";
@@ -29,6 +30,11 @@ const server = createServer(async (request, response) => {
     try {
       const body = await readBody(request);
       const payload = JSON.parse(body || "{}");
+      if (payload.mode === "rag") {
+        const answer = await answerRagRulingQuestion({ question: payload.question });
+        sendJson(response, 200, answer);
+        return;
+      }
       const useFastJudge = payload.useFastJudge !== false && process.env.USE_FAST_JUDGE_ENGINE !== "false";
       const answer = useFastJudge
         ? await answerRulingQuestionFast({

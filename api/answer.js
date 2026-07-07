@@ -1,5 +1,6 @@
 import { answerQuestion } from "../backend/engine.mjs";
 import { answerRulingQuestionFast } from "../backend/fastJudgeEngine.mjs";
+import { answerRagRulingQuestion } from "../backend/ragRulingPipeline.mjs";
 
 const allowedOrigin = process.env.ALLOWED_ORIGIN || "*";
 
@@ -23,6 +24,11 @@ export default async function handler(request, response) {
 
   try {
     const payload = typeof request.body === "string" ? JSON.parse(request.body || "{}") : request.body || {};
+    if (payload.mode === "rag") {
+      const answer = await answerRagRulingQuestion({ question: payload.question });
+      response.status(200).json(answer);
+      return;
+    }
     const useFastJudge = payload.useFastJudge !== false && process.env.USE_FAST_JUDGE_ENGINE !== "false";
     const answer = useFastJudge
       ? await answerRulingQuestionFast({
