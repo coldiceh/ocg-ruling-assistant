@@ -1,7 +1,7 @@
 import { extractRagCards } from "./ragCardExtractor.mjs";
 import { evidenceBucketsToList, loadRagData, retrieveRagEvidence } from "./ragEvidenceRetriever.mjs";
 import { callRagModel } from "./ragModelClient.mjs";
-import { buildRagRulingPrompt, RAG_ANSWER_LEVELS } from "./ragRulingPrompt.mjs";
+import { buildRagRulingPromptBundle, RAG_ANSWER_LEVELS } from "./ragRulingPrompt.mjs";
 
 export async function answerRagRulingQuestion({
   question,
@@ -12,13 +12,15 @@ export async function answerRagRulingQuestion({
   qaRecords,
   modelInvoker,
   dryRun,
+  fetchImpl,
+  now,
   env = globalThis.process?.env || {},
 } = {}) {
   const query = String(question || userQuery || "").trim();
   if (!query) return buildEmptyQuestionAnswer();
 
   const data = cards || records || qaRecords ? { cards: cards || [], records: records || [], qaRecords: qaRecords || [] } : await loadRagData(dataDir);
-  const cardResolution = extractRagCards(query, { cards: data.cards || [] });
+  const cardResolution = extractRagCards(query, { cards: data.cards || [], maxCards: readNumber(env.RAG_MAX_CARDS, 6) });
   const evidence = await retrieveRagEvidence({
     userQuery: query,
     cardResolution,
@@ -26,9 +28,19 @@ export async function answerRagRulingQuestion({
     cards: data.cards,
     records: data.records,
     qaRecords: data.qaRecords,
+    env,
   });
-  const prompt = buildRagRulingPrompt({ userQuery: query, cardResolution, evidence });
-  const modelResult = await callRagModel({ prompt, evidence, cardResolution, env, modelInvoker, dryRun });
+  const promptBundle = buildRagRulingPromptBundle({ userQuery: query, cardResolution, evidence, env });
+  const modelResult = await callRagModel({
+    prompt: promptBundle.prompt,
+    evidence,
+    cardResolution,
+    env,
+    modelInvoker,
+    dryRun,
+    fetchImpl,
+    now,
+  });
   const normalized = normalizeRagAnswer(modelResult.answer, { evidence, cardResolution, modelWarnings: modelResult.warnings || [] });
 
   return {
@@ -42,6 +54,7 @@ export async function answerRagRulingQuestion({
     riskFlags: normalized.riskFlags,
     confidenceSelfEstimate: normalized.confidenceSelfEstimate,
     debug: {
+      mode: "rag_baseline",
       retrievalCounts: {
         cardTexts: evidence.cardTexts.length,
         officialQaDirectCandidates: evidence.officialQaDirectCandidates.length,
@@ -51,12 +64,16 @@ export async function answerRagRulingQuestion({
       },
       unresolvedMentions: cardResolution.unresolvedMentions,
       ambiguousMentions: cardResolution.ambiguousMentions,
-      retrievalWarnings: evidence.retrievalWarnings,
+      retrievalWarnings: [...new Set([...(evidence.retrievalWarnings || []), ...(promptBundle.warnings || [])])],
+      providerUsed: modelResult.providerUsed || modelResult.provider,
       modelUsed: modelResult.modelUsed,
-      modelProvider: modelResult.provider,
       modelName: modelResult.modelName,
       dryRun: modelResult.dryRun,
-      prompt,
+      tokenUsage: modelResult.tokenUsage || {},
+      estimatedCostCny: modelResult.estimatedCostCny || 0,
+      budgetStatus: modelResult.budgetStatus || null,
+      promptChars: promptBundle.promptChars,
+      promptTruncated: promptBundle.promptTruncated,
     },
   };
 }
@@ -96,7 +113,7 @@ export function normalizeRagAnswer(answer = {}, { evidence = {}, cardResolution 
     });
     riskFlags.add("model_omitted_used_evidence");
   }
-  if (!availableEvidence.length) {
+  if (!availableEvidence.length && answerLevel !== "budget_limited") {
     answerLevel = "needs_more_info";
     riskFlags.add("no_retrieved_evidence");
   }
@@ -126,8 +143,12 @@ function buildEmptyQuestionAnswer() {
     confidenceSelfEstimate: "low",
     debug: {
       retrievalCounts: {},
+      providerUsed: "none",
       modelUsed: "none",
       dryRun: true,
+      tokenUsage: {},
+      estimatedCostCny: 0,
+      budgetStatus: null,
     },
   };
 }
@@ -144,4 +165,9 @@ function cleanStringArray(value) {
     .map((item) => String(item || "").trim())
     .filter(Boolean)
     .slice(0, 12);
+}
+
+function readNumber(value, fallback) {
+  const number = Number(value);
+  return Number.isFinite(number) && number > 0 ? number : fallback;
 }

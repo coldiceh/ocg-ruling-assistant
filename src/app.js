@@ -754,9 +754,12 @@ function renderRagAnswer(answer) {
     rule_analysis: { confidence: "RAG 分析", className: "is-rule-derived", title: "RAG 裁定分析", basis: "卡片文本 / FAQ / 相关资料" },
     low_confidence_analysis: { confidence: "低置信", className: "is-risky", title: "低置信分析", basis: "资料不足或仅有弱相关资料" },
     needs_more_info: { confidence: "需要补充", className: "is-risky", title: "需要补充信息", basis: "当前检索资料不足" },
+    budget_limited: { confidence: "预算限制", className: "is-risky", title: "今日预算已用完", basis: "API 预算守卫" },
   };
   const state = labels[answer.answerLevel] || labels.needs_more_info;
-  updateModelStatus(answer.debug?.dryRun ? "RAG MOCK" : answer.debug?.modelUsed || "RAG");
+  const providerLabel = modelProviderLabel(answer.debug?.providerUsed);
+  const modelLabel = answer.debug?.modelUsed || answer.debug?.modelName || "";
+  updateModelStatus(answer.debug?.dryRun ? "RAG MOCK" : [providerLabel, modelLabel].filter(Boolean).join(" · ") || "RAG");
   ui.verdictBlock.className = `result-block verdict-block ${state.className}`;
   ui.confidenceText.textContent = state.confidence;
   ui.verdictTitle.textContent = state.title;
@@ -764,7 +767,11 @@ function renderRagAnswer(answer) {
   ui.verdictBody.textContent = answer.shortAnswer || "当前无法给出可靠分析。";
   renderSubAnswers([]);
   renderList(ui.stepsList, answer.reasoning || []);
-  renderList(ui.questionsList, [...(answer.missingInfo || []), ...(answer.riskFlags || [])]);
+  renderList(ui.questionsList, [
+    ...(answer.missingInfo || []),
+    ...(answer.riskFlags || []),
+    ...ragBudgetLines(answer.debug?.budgetStatus),
+  ]);
   renderSources((answer.usedEvidence || []).map((item) => ({
     label: ragEvidenceLabel(item.type),
     detail: `${item.title || item.id}${item.id ? ` (${item.id})` : ""}`,
@@ -778,6 +785,18 @@ function ragEvidenceLabel(type) {
   if (type === "card_text") return "卡片文本";
   if (type === "faq") return "FAQ";
   return "相关资料";
+}
+
+function ragBudgetLines(status) {
+  if (!status) return [];
+  const lines = [];
+  if (typeof status.estimatedThisCallCny === "number") {
+    lines.push(`预算估算：本次 ${status.estimatedThisCallCny} 元，今日已用 ${status.spentTodayCny ?? 0}/${status.dailyBudgetCny ?? "?"} 元。`);
+  }
+  if (status.budgetStorage && status.budgetStorage !== "redis") {
+    lines.push("预算提示：未配置持久预算存储时，Vercel 上这是 per-instance 软限制。");
+  }
+  return lines;
 }
 
 function renderFastJudgeAnswer(answer) {
@@ -1263,9 +1282,12 @@ function modelStatusFromAnswer(answer) {
 
 function modelProviderLabel(provider) {
   const value = String(provider || "").toLowerCase();
+  if (value === "deepseek") return "DeepSeek";
   if (value === "gemini") return "Gemini";
   if (value === "openai") return "OpenAI";
   if (value === "ollama") return "Ollama";
+  if (value === "mock") return "RAG Mock";
+  if (value === "auto") return "自动";
   return "模型";
 }
 

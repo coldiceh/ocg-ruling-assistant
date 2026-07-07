@@ -2,6 +2,7 @@ import { createServer } from "node:http";
 import { answerQuestion, getDataHealth } from "./engine.mjs";
 import { answerRulingQuestionFast } from "./fastJudgeEngine.mjs";
 import { appendFeedbackCase } from "./feedbackCases.mjs";
+import { resolveRagProvider } from "./ragModelClient.mjs";
 import { answerRagRulingQuestion } from "./ragRulingPipeline.mjs";
 
 const port = Number(process.env.PORT || 8787);
@@ -23,6 +24,11 @@ const server = createServer(async (request, response) => {
 
   if (request.method === "GET" && request.url === "/health") {
     sendJson(response, startupDataHealth.usable ? 200 : 503, { ok: startupDataHealth.usable, data: startupDataHealth });
+    return;
+  }
+
+  if (request.method === "GET" && request.url === "/api/answer") {
+    sendJson(response, 200, getModelInfo());
     return;
   }
 
@@ -97,4 +103,41 @@ function readBody(request) {
     request.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
     request.on("error", reject);
   });
+}
+
+function getModelInfo() {
+  const ragProvider = resolveRagProvider(process.env);
+  if (ragProvider.provider === "deepseek") {
+    return {
+      provider: "deepseek",
+      requestedProvider: ragProvider.requested,
+      models: [process.env.DEEPSEEK_MODEL || "deepseek-v4-flash"],
+      enabled: true,
+      fastJudgeEnabled: process.env.USE_FAST_JUDGE_ENGINE !== "false",
+    };
+  }
+  if (ragProvider.provider === "gemini") {
+    return {
+      provider: "gemini",
+      requestedProvider: ragProvider.requested,
+      models: [process.env.GEMINI_MODEL || "gemini-1.5-flash"],
+      cardResolutionModels: splitList(process.env.GEMINI_CARD_RESOLUTION_MODELS || process.env.GEMINI_CARD_RESOLUTION_MODEL),
+      enabled: true,
+      fastJudgeEnabled: process.env.USE_FAST_JUDGE_ENGINE !== "false",
+    };
+  }
+  return {
+    provider: "mock",
+    requestedProvider: ragProvider.requested,
+    models: [],
+    enabled: false,
+    fastJudgeEnabled: process.env.USE_FAST_JUDGE_ENGINE !== "false",
+  };
+}
+
+function splitList(value) {
+  return String(value || "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
 }
