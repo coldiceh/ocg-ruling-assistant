@@ -40,29 +40,9 @@
 
 ## 当前测试结果
 
-最近一次本地检查（2026-07-03）：
+最近一次本地检查以 `pnpm test`、`pnpm smoke:official-qa` 和 `git diff --check` 为准。
 
-- `pnpm test`: Node tests 369/369 passing；Legacy engine regressions 9/9 passing
-- `pnpm test:benchmark`: 4/4 passing（24 个模板，15 个 ruling cases）
-- Benchmark dangerous failures: 0
-- Data health: `ok`
-- Readiness level: `production_ready`
-
-Benchmark：
-
-- total cases: 20
-- total subQuestions: 23
-- confirmedCount: 6
-- inferredCount: 0
-- unknownCount: 14
-- unsafeConfirmedCount: 0
-- missingReasonCount: 0
-- conditionalAnswerCount: 2
-- clarificationQuestionCount: 2
-- verdict_extraction_unknown: 0
-- no_direct_evidence: 6
-
-当前 benchmark 的结论是：系统安全门槛有效；多语言 evidence question type classifier 修复了一部分 Q&A 类型误判，conditional answer 能解释缺状态的条件分支，但没有放宽 `directEvidence` 或 `confirmed` 门槛。
+旧 `official-qa-100` benchmark 已停用；该 fixture 质量不足，不能再作为产品方向的必跑门槛。当前重点转向最小可用 RAG 裁定助手，同时保留官方 Q&A smoke、基础单元测试、数据同步和安全检查。
 
 Smoke real questions 当前额外统计：
 
@@ -148,7 +128,7 @@ node scripts/sync-data.mjs
 node scripts/debug-retrieval.mjs "玩家问题"
 ```
 
-运行 benchmark：
+运行资料审计和验收脚本：
 
 ```bash
 node scripts/benchmark-report.mjs
@@ -170,8 +150,7 @@ node scripts/revalidate-answers.mjs
 ```bash
 pnpm install
 pnpm test
-pnpm test:benchmark
-pnpm report:benchmark
+pnpm smoke:official-qa
 ```
 
 项目使用 `pnpm-workspace.yaml` 将 `storeDir` 固定为仓库内的 `.pnpm-store`，不依赖用户全局 pnpm store 的写权限；该目录已加入 `.gitignore`。pnpm 10 及更早版本仍可读取 `.npmrc` 中的兼容配置。CI 应使用 `package.json` 固定的 pnpm 版本。
@@ -194,7 +173,7 @@ node tests/engine-regression.mjs
 
 结构化连锁在 Card Identity Gate 后加载模板，用模板补齐发动信息、对象、来源预期区域和 `primitiveSequence`。Activation Legality Gate 仍先于处理执行。找不到模板时先尝试输出可证明的 conditional branches；没有条件分支时才返回 `insufficient`，不会调用模型猜测结果。
 
-`pnpm test:benchmark` 校验全部模板和逐文件 benchmark fixture；`pnpm report:benchmark` 输出按类别、依据等级和危险失败类型汇总的 JSON。API 稳定字段包括 `status`、`verdict`、`evidenceGrade`、`cardIdentity`、`blockers`、`ruleTrace`、`resolutionSteps`、`warnings` 和程序生成的五段式 `answer`。
+旧模板 benchmark 不再作为必跑门槛。相关模板模块保留给旧模式使用，但新产品方向优先建设 RAG baseline，再逐步加入 claim extraction 和 validator。
 
 ## Official QA first answer router
 
@@ -202,12 +181,9 @@ Fast Judge 的固定优先级为：官方 Q&A exact / near-exact → Effect Temp
 
 ```bash
 pnpm smoke:official-qa
-pnpm test:official-qa-100-schema
 ```
 
-100-case benchmark 的 JSON Schema 位于 `tests/fixtures/official-qa-100/benchmark.schema.json`，fixture 位于同目录的 `benchmark.json`。当前固定包含 30 个 official exact / near-exact、20 个 official similar、20 个 template-supported、20 个 conditional fallback 和 10 个 true insufficient 案例。每案记录预期路由、答案结构、确认等级、安全约束、来源、相关卡片、关键点、禁止输出和失败标签。
-
-`pnpm report:benchmark` 输出 `routeCounts`、`correctByRoute`、`insufficientCount`、`conditionalCount`、official exact / near 与 template 正确率、五项危险失败统计及主要 insufficient 原因。任一 dangerous failure 或 case 断言失败都会令 benchmark 命令返回非零状态。
+官方 Q&A smoke 保留 exact / near case 的基本优先级和安全边界检查；旧 100-case benchmark fixture 与 schema 已移除。
 
 ## How to evaluate answers
 
