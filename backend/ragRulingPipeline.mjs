@@ -29,11 +29,13 @@ export async function answerRagRulingQuestion({
     records: data.records,
     qaRecords: data.qaRecords,
     env,
+    fetchImpl,
   });
   const promptBundle = buildRagRulingPromptBundle({ userQuery: query, cardResolution, evidence, env });
   const displayCards = dedupeCards([
     ...(cardResolution.resolvedCards || []),
     ...(evidence.fuzzyResolvedCards || []),
+    ...(evidence.baigeResolvedCards || []),
     ...userProvidedCards(evidence.userProvidedCardTexts || []),
   ]);
   const modelResult = await callRagModel({
@@ -69,8 +71,11 @@ export async function answerRagRulingQuestion({
         rawRelatedEvidence: evidence.rawRelatedEvidence.length,
       },
       unresolvedMentions: cardResolution.unresolvedMentions,
-      ambiguousMentions: cardResolution.ambiguousMentions,
+      ambiguousMentions: [...(cardResolution.ambiguousMentions || []), ...(evidence.baigeAmbiguousMentions || [])],
       retrievalWarnings: [...new Set([...(evidence.retrievalWarnings || []), ...(promptBundle.warnings || [])])],
+      baigeSearchCount: evidence.debug?.baigeSearchCount || 0,
+      baigeCacheHitCount: evidence.debug?.baigeCacheHitCount || 0,
+      baigeWarnings: evidence.debug?.baigeWarnings || [],
       providerUsed: modelResult.providerUsed || modelResult.provider,
       modelUsed: modelResult.modelUsed,
       modelName: modelResult.modelName,
@@ -87,7 +92,12 @@ export async function answerRagRulingQuestion({
 export function normalizeRagAnswer(answer = {}, { evidence = {}, cardResolution = {}, modelWarnings = [] } = {}) {
   const availableEvidence = evidenceBucketsToList(evidence);
   const userTextEvidence = evidence.userProvidedCardTexts || [];
-  const availableCards = [...(cardResolution.resolvedCards || []), ...(evidence.fuzzyResolvedCards || []), ...userProvidedCards(userTextEvidence)];
+  const availableCards = [
+    ...(cardResolution.resolvedCards || []),
+    ...(evidence.fuzzyResolvedCards || []),
+    ...(evidence.baigeResolvedCards || []),
+    ...userProvidedCards(userTextEvidence),
+  ];
   const evidenceById = new Map(availableEvidence.map((item) => [String(item.id), item]));
   const directIds = new Set((evidence.officialQaDirectCandidates || []).map((item) => String(item.id)));
   const hasCardTextGrounding = Boolean((evidence.cardTexts || []).length || userTextEvidence.length);
@@ -186,6 +196,7 @@ function buildEmptyQuestionAnswer() {
 function outputEvidenceType(source, directIds) {
   if (directIds.has(String(source.id))) return "official_qa";
   if (source.type === "card_text") return "card_text";
+  if (source.type === "baige_card_text") return "baige_card_text";
   if (source.type === "user_provided_text") return "user_provided_text";
   if (source.type === "faq") return "faq";
   return "related";
