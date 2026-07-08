@@ -161,6 +161,7 @@ test("ui_hides_engine_details_by_default", async () => {
   assert.match(html, /AI裁定分析/u);
   assert.match(html, /id="themeToggle"/u);
   assert.doesNotMatch(html, /ANALYSIS CORE|DeepSeek|TOKEN|budget|provider debug/u);
+  assert.doesNotMatch(html, /后端模式|公开资料检索|卡片文本分析/u);
   assert.doesNotMatch(html, /terminal-theme|OCG RULING TERMINAL/u);
   assert.match(app, /debugUiEnabled/u);
   assert.match(app, /params\.get\("debug"\) === "1"/u);

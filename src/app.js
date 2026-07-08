@@ -370,15 +370,17 @@ function normalizeSourceMeta(payload) {
 
 function updateSourceStatus() {
   const freshness = getFreshness();
-  ui.statusDot.className = `status-dot ${freshness.className}`.trim();
-  if (appConfig.answerApiUrl && sourceMeta?.generatedAt) {
-    ui.sourceStatus.textContent = `后端模式 · ${formatDateTime(sourceMeta.generatedAt)}`;
-  } else if (appConfig.answerApiUrl) {
-    ui.sourceStatus.textContent = "后端模式";
-  } else if (sourceMeta?.generatedAt) {
-    ui.sourceStatus.textContent = `资料库已同步 · ${formatDateTime(sourceMeta.generatedAt)}`;
-  } else {
-    ui.sourceStatus.textContent = "资料库准备中";
+  if (ui.statusDot) ui.statusDot.className = `status-dot ${freshness.className}`.trim();
+  if (ui.sourceStatus) {
+    if (appConfig.answerApiUrl && sourceMeta?.generatedAt) {
+      ui.sourceStatus.textContent = `后端模式 · ${formatDateTime(sourceMeta.generatedAt)}`;
+    } else if (appConfig.answerApiUrl) {
+      ui.sourceStatus.textContent = "后端模式";
+    } else if (sourceMeta?.generatedAt) {
+      ui.sourceStatus.textContent = `资料库已同步 · ${formatDateTime(sourceMeta.generatedAt)}`;
+    } else {
+      ui.sourceStatus.textContent = "资料库准备中";
+    }
   }
   renderSyncInfo(freshness);
 }
