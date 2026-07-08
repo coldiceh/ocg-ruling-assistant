@@ -52,8 +52,10 @@ function fuzzyFindCards(cards, name, limit) {
   return cards
     .map((card) => {
       const aliases = [card.name, card.cnName, card.jaName, card.enName, ...(card.aliases || [])].filter(Boolean);
-      const score = Math.max(...aliases.map((alias) => scoreAlias(normalizeCardKey(alias), queryKey)));
-      return { ...card, matchedAlias: aliases[0] || card.name, confidence: score };
+      const best = aliases
+        .map((alias) => ({ alias, score: scoreAlias(normalizeCardKey(alias), queryKey) }))
+        .sort((left, right) => right.score - left.score || String(left.alias).localeCompare(String(right.alias), "zh-Hans-CN"))[0];
+      return { ...card, matchedAlias: best?.alias || aliases[0] || card.name, confidence: best?.score || 0 };
     })
     .filter((card) => card.confidence >= 0.42)
     .sort((left, right) => right.confidence - left.confidence || String(left.name).localeCompare(String(right.name)))
@@ -63,7 +65,8 @@ function fuzzyFindCards(cards, name, limit) {
 function scoreAlias(aliasKey, queryKey) {
   if (!aliasKey || !queryKey) return 0;
   if (aliasKey === queryKey) return 1;
-  if (aliasKey.includes(queryKey) || queryKey.includes(aliasKey)) return 0.9;
+  if (aliasKey.includes(queryKey)) return queryKey.length >= 4 ? 0.9 : 0.66;
+  if (queryKey.includes(aliasKey)) return aliasKey.length >= 5 ? 0.82 : 0.5;
   const grams = tokenOverlap(aliasKey, queryKey);
   const dice = diceCoefficient(aliasKey, queryKey);
   return Math.max(grams, dice);

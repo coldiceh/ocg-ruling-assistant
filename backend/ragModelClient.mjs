@@ -2,6 +2,7 @@ import { RAG_ANSWER_LEVELS } from "./ragRulingPrompt.mjs";
 
 const DEFAULT_DEEPSEEK_BASE_URL = "https://api.deepseek.com";
 const DEFAULT_DEEPSEEK_MODEL = "deepseek-v4-flash";
+const DEFAULT_DEEPSEEK_CARD_MODEL = "deepseek-v4-flash";
 const DEFAULT_DAILY_BUDGET_CNY = 10;
 const DEFAULT_BUDGET_TIMEZONE = "Asia/Tokyo";
 const memoryBudget = new Map();
@@ -135,6 +136,76 @@ export async function callRagModel({
   }
 }
 
+export async function callCardNameExtractionModel({
+  userQuery,
+  env = globalThis.process?.env || {},
+  modelInvoker,
+  fetchImpl = globalThis.fetch,
+} = {}) {
+  const providerResolution = resolveCardExtractionProvider(env);
+  const provider = providerResolution.provider;
+  const modelName = modelNameForCardExtractionProvider(provider, env);
+  const maxTokens = readNumber(env.RAG_CARD_MODEL_MAX_OUTPUT_TOKENS, 800);
+  const prompt = buildCardNameExtractionPrompt(userQuery);
+
+  if (modelInvoker) {
+    try {
+      const raw = await modelInvoker({ prompt, provider, modelName, maxTokens, task: "card_name_extraction" });
+      return {
+        candidates: normalizeCardNameCandidates(raw),
+        rawText: String(raw || ""),
+        providerUsed: provider,
+        modelUsed: modelName,
+        dryRun: false,
+        warnings: providerResolution.warnings,
+      };
+    } catch (error) {
+      return emptyCardNameExtractionResult(provider, modelName, false, [
+        ...providerResolution.warnings,
+        `card_name_model_failed:${safeErrorMessage(error)}`,
+      ]);
+    }
+  }
+
+  if (provider === "mock" || !hasProviderKey(provider, env) || typeof fetchImpl !== "function") {
+    return emptyCardNameExtractionResult("mock", "mock-card-extractor", true, providerResolution.warnings);
+  }
+
+  try {
+    const response = provider === "gemini"
+      ? await callGemini({
+          prompt,
+          env,
+          modelName,
+          maxTokens,
+          fetchImpl,
+          temperature: readNumber(env.RAG_CARD_MODEL_TEMPERATURE, 0),
+          maxTokensEnvName: "GEMINI_CARD_MODEL_MAX_OUTPUT_TOKENS",
+        })
+      : await callDeepSeek({
+          prompt,
+          env,
+          modelName,
+          maxTokens,
+          fetchImpl,
+          temperature: readNumber(env.RAG_CARD_MODEL_TEMPERATURE, 0),
+        });
+    return {
+      candidates: normalizeCardNameCandidates(response.rawText),
+      rawText: response.rawText,
+      providerUsed: provider,
+      modelUsed: modelName,
+      dryRun: false,
+      warnings: [...providerResolution.warnings, ...(response.warnings || [])],
+    };
+  } catch (error) {
+    return emptyCardNameExtractionResult(provider, modelName, false, [
+      ...providerResolution.warnings,
+      `card_name_model_failed:${safeErrorMessage(error)}`,
+    ]);
+  }
+}
+
 export function resolveRagProvider(env = {}) {
   const requested = String(env.RAG_MODEL_PROVIDER || env.MODEL_PROVIDER || "auto").trim().toLowerCase() || "auto";
   const warnings = [];
@@ -151,6 +222,28 @@ export function resolveRagProvider(env = {}) {
   if (env.DEEPSEEK_API_KEY) return { provider: "deepseek", requested, warnings };
   if (env.GEMINI_API_KEY) return { provider: "gemini", requested, warnings };
   warnings.push("no_model_api_key_using_mock");
+  return { provider: "mock", requested, warnings };
+}
+
+export function resolveCardExtractionProvider(env = {}) {
+  if (isDisabled(env.RAG_CARD_EXTRACTOR_ENABLED)) {
+    return { provider: "mock", requested: "disabled", warnings: ["card_name_model_disabled"] };
+  }
+  const requested = String(env.RAG_CARD_MODEL_PROVIDER || env.RAG_MODEL_PROVIDER || env.MODEL_PROVIDER || "auto").trim().toLowerCase() || "auto";
+  const warnings = [];
+  if (requested === "mock") return { provider: "mock", requested, warnings };
+  if (requested === "deepseek") {
+    if (!env.DEEPSEEK_API_KEY) warnings.push("deepseek_api_key_missing_card_name_model_disabled");
+    return { provider: env.DEEPSEEK_API_KEY ? "deepseek" : "mock", requested, warnings };
+  }
+  if (requested === "gemini") {
+    if (!env.GEMINI_API_KEY) warnings.push("gemini_api_key_missing_card_name_model_disabled");
+    return { provider: env.GEMINI_API_KEY ? "gemini" : "mock", requested, warnings };
+  }
+  if (requested !== "auto") warnings.push(`unsupported_card_name_model_provider:${requested}`);
+  if (env.DEEPSEEK_API_KEY) return { provider: "deepseek", requested, warnings };
+  if (env.GEMINI_API_KEY) return { provider: "gemini", requested, warnings };
+  warnings.push("no_model_api_key_card_name_model_disabled");
   return { provider: "mock", requested, warnings };
 }
 
@@ -189,7 +282,7 @@ export function parseRagModelJson(rawText) {
   }
 }
 
-async function callDeepSeek({ prompt, env, modelName, maxTokens, fetchImpl }) {
+async function callDeepSeek({ prompt, env, modelName, maxTokens, fetchImpl, temperature }) {
   const endpoint = deepSeekChatCompletionsUrl(env.DEEPSEEK_BASE_URL);
   const body = {
     model: modelName || DEFAULT_DEEPSEEK_MODEL,
@@ -197,7 +290,7 @@ async function callDeepSeek({ prompt, env, modelName, maxTokens, fetchImpl }) {
     stream: false,
     response_format: { type: "json_object" },
     max_tokens: maxTokens,
-    temperature: readNumber(env.RAG_MODEL_TEMPERATURE, 0.2),
+    temperature: temperature ?? readNumber(env.RAG_MODEL_TEMPERATURE, 0.2),
   };
   let response = await postJson(fetchImpl, endpoint, {
     authorization: `Bearer ${env.DEEPSEEK_API_KEY}`,
@@ -222,14 +315,14 @@ async function callDeepSeek({ prompt, env, modelName, maxTokens, fetchImpl }) {
   };
 }
 
-async function callGemini({ prompt, env, modelName, maxTokens, fetchImpl }) {
+async function callGemini({ prompt, env, modelName, maxTokens, fetchImpl, temperature, maxTokensEnvName = "GEMINI_MAX_OUTPUT_TOKENS" }) {
   const model = modelName || env.GEMINI_MODEL || "gemini-1.5-flash";
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(env.GEMINI_API_KEY)}`;
   const body = {
     contents: [{ role: "user", parts: [{ text: prompt }] }],
     generationConfig: {
-      temperature: readNumber(env.GEMINI_TEMPERATURE, readNumber(env.RAG_MODEL_TEMPERATURE, 0.2)),
-      maxOutputTokens: readNumber(env.GEMINI_MAX_OUTPUT_TOKENS, maxTokens),
+      temperature: temperature ?? readNumber(env.GEMINI_TEMPERATURE, readNumber(env.RAG_MODEL_TEMPERATURE, 0.2)),
+      maxOutputTokens: readNumber(env[maxTokensEnvName], maxTokens),
       responseMimeType: "application/json",
     },
   };
@@ -702,10 +795,88 @@ function normalizeUsage(provider, usage = {}) {
   };
 }
 
+function buildCardNameExtractionPrompt(userQuery) {
+  const example = {
+    cardNames: [
+      { name: "正式或可能的卡名", originalText: "玩家原文片段", confidence: "medium" },
+    ],
+  };
+  return [
+    "你只负责从玩家的游戏王 OCG 裁定问题中提取可能的卡名候选，不要回答裁定。",
+    "如果玩家卡名有错别字、漏字、俗称、缺少间隔点，可以给出你认为最可能的正式卡名候选，但不要编造没有依据的卡。",
+    "保留玩家原文片段 originalText；如果不能确信，只把 confidence 设为 low。",
+    "输出必须是单个 JSON 对象，不要 markdown，不要解释。",
+    "JSON 只包含 cardNames 数组；每项包含 name、originalText、confidence。",
+    "不要输出效果名、动作、场地区域、玩家称谓或规则术语。",
+    "示例结构如下，示例不是本题答案：",
+    JSON.stringify(example),
+    "玩家问题：",
+    String(userQuery || ""),
+  ].join("\n");
+}
+
+function normalizeCardNameCandidates(rawText) {
+  let parsed = null;
+  try {
+    parsed = rawText && typeof rawText === "object" ? rawText : parseRagModelJson(rawText);
+  } catch {
+    return [];
+  }
+  const source = Array.isArray(parsed?.cardNames) ? parsed.cardNames
+    : Array.isArray(parsed?.cards) ? parsed.cards
+      : Array.isArray(parsed?.names) ? parsed.names
+        : [];
+  const candidates = source
+    .map((item) => typeof item === "string"
+      ? { name: item, originalText: item, confidence: "medium" }
+      : {
+          name: item?.name || item?.cardName || item?.candidate || "",
+          originalText: item?.originalText || item?.surface || item?.mention || item?.input || item?.name || "",
+          confidence: item?.confidence || item?.confidenceSelfEstimate || "medium",
+        })
+    .map((item) => ({
+      name: nonEmpty(item.name).slice(0, 80),
+      originalText: nonEmpty(item.originalText).slice(0, 80),
+      confidence: ["low", "medium", "high"].includes(String(item.confidence || "").toLowerCase())
+        ? String(item.confidence).toLowerCase()
+        : "medium",
+      source: "model_card_name_extractor",
+    }))
+    .filter((item) => item.name.length >= 2 && /[A-Za-z\u3040-\u30ff\u3400-\u9fff0-9]/u.test(item.name))
+    .filter((item) => !/^(?:效果|发动|發動|适用|適用|对象|對象|场上|場上|墓地|除外|手卡|卡组|牌组|连锁|連鎖)$/u.test(item.name));
+  const seen = new Set();
+  const result = [];
+  for (const candidate of candidates) {
+    const key = candidate.name.normalize("NFKC").toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(candidate);
+    if (result.length >= 8) break;
+  }
+  return result;
+}
+
+function emptyCardNameExtractionResult(providerUsed, modelUsed, dryRun, warnings = []) {
+  return {
+    candidates: [],
+    rawText: "",
+    providerUsed,
+    modelUsed,
+    dryRun,
+    warnings,
+  };
+}
+
 function modelNameForProvider(provider, env) {
   if (provider === "deepseek") return String(env.DEEPSEEK_MODEL || DEFAULT_DEEPSEEK_MODEL);
   if (provider === "gemini") return String(env.GEMINI_MODEL || "gemini-1.5-flash");
   return "mock-rag";
+}
+
+function modelNameForCardExtractionProvider(provider, env) {
+  if (provider === "deepseek") return String(env.DEEPSEEK_CARD_MODEL || env.RAG_CARD_MODEL || DEFAULT_DEEPSEEK_CARD_MODEL);
+  if (provider === "gemini") return String(env.GEMINI_CARD_MODEL || env.GEMINI_CARD_RESOLUTION_MODEL || env.RAG_CARD_MODEL || "gemini-1.5-flash");
+  return "mock-card-extractor";
 }
 
 function hasProviderKey(provider, env) {
@@ -749,6 +920,10 @@ function readNumber(value, fallback) {
 
 function isEnabled(value) {
   return ["1", "true", "yes", "on"].includes(String(value || "").toLowerCase());
+}
+
+function isDisabled(value) {
+  return ["0", "false", "no", "off"].includes(String(value || "").toLowerCase());
 }
 
 function safeErrorMessage(error) {

@@ -347,12 +347,16 @@ function normalizeId(value) {
 
 function resolveUnresolvedMentionCards(unresolvedMentions, cardProvider, limits, warnings) {
   const result = [];
+  const minConfidence = readPositiveDecimal(limits.localFuzzyMinConfidence, 0.74);
   for (const mention of unresolvedMentions || []) {
     if (result.length >= limits.maxCards) break;
     const matches = cardProvider.searchCardByName(mention.input, 2);
     if (!matches.length) continue;
     const best = matches[0];
-    if (best.confidence < 0.48) continue;
+    if (best.confidence < minConfidence) {
+      warnings.push(`unresolved_mention_fuzzy_low_confidence:${mention.input}->${best.name}:${best.confidence}`);
+      continue;
+    }
     warnings.push(`unresolved_mention_fuzzy_match:${mention.input}->${best.name}`);
     result.push({
       ...best,
@@ -365,6 +369,7 @@ function resolveUnresolvedMentionCards(unresolvedMentions, cardProvider, limits,
 
 async function resolveUnresolvedMentionCardsWithBaige(unresolvedMentions, { fetchImpl, env, limits, warnings, debug }) {
   const result = [];
+  const minConfidence = readPositiveDecimal(env.RAG_BAIGE_MIN_CONFIDENCE, 0.72);
   for (const mention of unresolvedMentions || []) {
     if (result.length >= limits.maxCards) break;
     const searchResult = await searchBaige(mention.input, { fetchImpl, env, limits, debug });
@@ -375,7 +380,7 @@ async function resolveUnresolvedMentionCardsWithBaige(unresolvedMentions, { fetc
       continue;
     }
     const best = candidates[0];
-    const confident = candidates.length === 1 || Number(best.confidence || 0) >= 0.72;
+    const confident = Number(best.confidence || 0) >= minConfidence;
     if (!confident) {
       debug.ambiguousMentions.push({
         input: mention.input,
@@ -387,7 +392,6 @@ async function resolveUnresolvedMentionCardsWithBaige(unresolvedMentions, { fetc
         })),
       });
       warnings.push(`baige_ambiguous:${mention.input}`);
-      result.push(toRagCard(best, mention.input, Math.min(Number(best.confidence || 0), 0.68)));
       continue;
     }
     warnings.push(`baige_match:${mention.input}->${best.name}`);
@@ -525,12 +529,18 @@ function readRetrievalLimits(env, maxPerBucket) {
     maxRelatedEvidence: readPositiveNumber(env.RAG_MAX_RELATED_EVIDENCE, Math.max(8, maxPerBucket)),
     maxCardTextChars: readPositiveNumber(env.RAG_MAX_CARD_TEXT_CHARS, 2500),
     maxEvidenceTextChars: readPositiveNumber(env.RAG_MAX_EVIDENCE_TEXT_CHARS, 1600),
+    localFuzzyMinConfidence: readPositiveDecimal(env.RAG_LOCAL_FUZZY_MIN_CONFIDENCE, 0.74),
   };
 }
 
 function readPositiveNumber(value, fallback) {
   const number = Number(value);
   return Number.isFinite(number) && number > 0 ? Math.floor(number) : fallback;
+}
+
+function readPositiveDecimal(value, fallback) {
+  const number = Number(value);
+  return Number.isFinite(number) && number > 0 ? number : fallback;
 }
 
 async function readJson(path, fallback) {

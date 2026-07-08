@@ -121,6 +121,27 @@ test("baige_card_text_enters_rag_context", async () => {
   assert.equal(evidence.officialQaDirectCandidates.length, 0);
 });
 
+test("baige_low_confidence_single_result_is_not_resolved_card", async () => {
+  clearBaigeSearchCache();
+  const evidence = await retrieveRagEvidence({
+    userQuery: "「完全不像谜式密码大师的卡名」可以发动吗？",
+    cardResolution: {
+      resolvedCards: [],
+      unresolvedMentions: [{ input: "完全不像谜式密码大师的卡名", reason: "quoted_mention_not_found" }],
+      ambiguousMentions: [],
+      userProvidedCardTexts: [],
+    },
+    cards: [],
+    records: [],
+    qaRecords: [],
+    fetchImpl: async () => jsonResponse({ result: [packbitRawCard], next: 0 }),
+  });
+
+  assert.equal(evidence.baigeResolvedCards.length, 0);
+  assert.equal(evidence.cardTexts.length, 0);
+  assert.ok(evidence.baigeAmbiguousMentions.length >= 1);
+});
+
 test("baige_card_text_is_not_official_direct", async () => {
   clearBaigeSearchCache();
   const answer = await answerRagRulingQuestion({
