@@ -96,7 +96,7 @@ test("model adapter validates isolated rule-derived output and cannot overwrite 
   assert.equal(merged.ruleDerivedAnswer.status, "rule_derived");
 });
 
-test("UI presents rule-derived wording and terminal theme without internal codes", async () => {
+test("UI presents rule-derived wording and player assistant theme without internal codes", async () => {
   const answer = buildRuleDerivedAnswer({
     originalQuestion: "复制效果时是否复制额外发动方式和效果外文本？",
     formalQuery: { originalText: "复制效果时是否复制额外发动方式和效果外文本？", subQuestions: [] },
@@ -115,11 +115,12 @@ test("UI presents rule-derived wording and terminal theme without internal codes
     readFile(new URL("../index.html", import.meta.url), "utf8"),
     readFile(new URL("../src/styles.css", import.meta.url), "utf8"),
   ]);
-  assert.match(html, /class="terminal-theme"/u);
-  assert.match(html, /OCG RULING TERMINAL/u);
-  assert.match(html, />依据</u);
-  for (const variable of ["--bg-0", "--panel", "--accent-cyan", "--accent-violet", "--glow-cyan"]) {
-    assert.match(css, new RegExp(variable));
+  assert.match(html, /class="theme-day"/u);
+  assert.match(html, /OCG AI裁定分析/u);
+  assert.match(html, />资料来源</u);
+  assert.doesNotMatch(html, /OCG RULING TERMINAL|ANALYSIS CORE/u);
+  for (const token of ["assets/bg-day.png", "assets/bg-night.png", "--surface", "--accent", "theme-night"]) {
+    assert.match(css, new RegExp(token.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")));
   }
 });
 

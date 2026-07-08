@@ -180,6 +180,7 @@ const ui = {
   cardMeta: document.querySelector("#cardMeta"),
   cardEffect: document.querySelector("#cardEffect"),
   cardSourceLink: document.querySelector("#cardSourceLink"),
+  themeToggle: document.querySelector("#themeToggle"),
 };
 
 let appConfig = { answerApiUrl: "", modelLabel: "" };
@@ -195,6 +196,7 @@ let visibleCards = [];
 let selectedCardIndex = 0;
 let lastRenderedBackendAnswer = null;
 let debugUiEnabled = false;
+const themeStorageKey = "ocg-ruling-theme:v1";
 
 function normalizeText(value) {
   return String(value || "")
@@ -274,6 +276,7 @@ async function loadBackendModelInfo() {
 }
 
 function formatModelInfo(info) {
+  if (!debugUiEnabled) return "AI裁定分析";
   if (!info?.enabled) return "RAG · Mock";
   const provider = modelProviderLabel(info.provider);
   return `RAG · ${provider}`;
@@ -753,7 +756,9 @@ function renderRagAnswer(answer) {
   const state = labels[answer.answerLevel] || labels.needs_more_info;
   const providerLabel = modelProviderLabel(answer.debug?.providerUsed);
   const modelLabel = answer.debug?.modelUsed || answer.debug?.modelName || "";
-  updateModelStatus(answer.debug?.dryRun ? "RAG MOCK" : [providerLabel, modelLabel].filter(Boolean).join(" · ") || "RAG");
+  updateModelStatus(debugUiEnabled
+    ? (answer.debug?.dryRun ? "RAG MOCK" : [providerLabel, modelLabel].filter(Boolean).join(" · ") || "RAG")
+    : "AI裁定分析");
   ui.verdictBlock.className = `result-block verdict-block ${state.className}`;
   ui.confidenceText.textContent = state.confidence;
   ui.verdictTitle.textContent = state.title;
@@ -763,8 +768,8 @@ function renderRagAnswer(answer) {
   renderList(ui.stepsList, answer.reasoning || []);
   renderList(ui.questionsList, [
     ...(answer.missingInfo || []),
-    ...(answer.riskFlags || []),
-    ...ragBudgetLines(answer.debug?.budgetStatus),
+    ...publicRiskLines(answer.riskFlags || []),
+    ...(debugUiEnabled ? ragBudgetLines(answer.debug?.budgetStatus) : []),
   ]);
   renderSources((answer.usedEvidence || []).map((item) => ({
     label: ragEvidenceLabel(item.type),
@@ -777,9 +782,37 @@ function renderRagAnswer(answer) {
 function ragEvidenceLabel(type) {
   if (type === "official_qa") return "官方 Q&A";
   if (type === "card_text") return "卡片文本";
+  if (type === "baige_card_text") return "百鸽卡片文本";
   if (type === "user_provided_text") return "用户提供文本";
   if (type === "faq") return "FAQ";
   return "相关资料";
+}
+
+function publicRiskLines(flags) {
+  const hiddenExact = new Set([
+    "model_omitted_used_evidence",
+    "low_confidence_upgraded_to_rule_analysis_with_card_text",
+    "needs_more_info_upgraded_to_rule_analysis_with_card_text",
+    "needs_more_info_downgraded_to_low_confidence_with_evidence",
+    "card_name_not_resolved_raw_query_fallback_used",
+  ]);
+  const hiddenPrefixes = [
+    "persistent_budget_storage_missing",
+    "budget_",
+    "dropped_unknown_evidence:",
+    "card_text_truncated:",
+    "official_related_limited:",
+    "faq_related_limited:",
+    "raw_related_limited:",
+    "baige_missing_",
+    "baige_fetch_failed:",
+    "baige_http_",
+  ];
+  return [...new Set(flags || [])]
+    .filter((flag) => !hiddenExact.has(String(flag)))
+    .filter((flag) => !hiddenPrefixes.some((prefix) => String(flag).startsWith(prefix)))
+    .map(formatRiskFlag)
+    .filter(Boolean);
 }
 
 function ragBudgetLines(status) {
@@ -805,7 +838,7 @@ function renderFastJudgeAnswer(answer) {
     cannot_answer_safely: { confidence: "无法安全判断", className: "is-risky", basis: "验证未通过" },
   };
   const state = labels[answer.answerType] || labels.cannot_answer_safely;
-  updateModelStatus(answer.pending ? "Legacy · pending" : "Legacy");
+  updateModelStatus(debugUiEnabled ? (answer.pending ? "Legacy · pending" : "Legacy") : "AI裁定分析");
   ui.verdictBlock.className = `result-block verdict-block ${state?.className || "is-risky"}`;
   ui.confidenceText.textContent = answer.statusChip || state?.confidence || "NEEDS-INFO";
   const routeTitles = {
@@ -892,7 +925,7 @@ function resetAnalysis() {
   renderCards([]);
   renderParserDebug(null);
   renderFeedbackPanel(null);
-  updateModelStatus(appConfig.answerApiUrl ? appConfig.modelLabel || "后端自动选择" : "本地模板");
+  updateModelStatus(debugUiEnabled ? appConfig.modelLabel || "后端自动选择" : "准备就绪");
 }
 
 function renderParserDebug(debug) {
@@ -911,7 +944,7 @@ function renderResult(text, bestMatch, confidence, generatedQuestions, detectedC
   ui.resultGrid.hidden = false;
   renderCards(detectedCards);
   renderParserDebug(null);
-  updateModelStatus("本地模板");
+  updateModelStatus(debugUiEnabled ? "本地模板" : "AI裁定分析");
   ui.verdictBlock.className = `result-block verdict-block ${confidence.className}`.trim();
 
   if (!bestMatch) {
@@ -987,15 +1020,15 @@ function normalizeVisibleCards(cards) {
   const map = new Map();
   for (const card of cards || []) {
     const normalized = {
-      id: String(card.id || "").trim(),
-      passcode: String(card.passcode || "").trim(),
+      id: String(card.id || card.cardId || "").trim(),
+      passcode: String(card.passcode || card.cardId || card.id || "").trim(),
       name: String(card.name || card.cnName || card.jaName || card.enName || "").trim(),
       cnName: String(card.cnName || "").trim(),
-      jaName: String(card.jaName || "").trim(),
+      jaName: String(card.jaName || card.jpName || "").trim(),
       enName: String(card.enName || "").trim(),
       matched: String(card.matched || "").trim(),
-      cardType: String(card.cardType || "").trim(),
-      effectText: String(card.effectText || "").trim(),
+      cardType: String(card.cardType || card.type || "").trim(),
+      effectText: String(card.effectText || card.text || "").trim(),
       source: String(card.source || "").trim(),
       sourceLabel: String(card.sourceLabel || "").trim(),
       official: card.official === true,
@@ -1166,7 +1199,7 @@ function renderCardDetail(card, detail, status) {
   const sourceUrl = detail?.sourceUrl || card.sourceUrl || "";
   const sourceLabel = card.source === "user_provided_text"
     ? "用户提供文本"
-    : detail?.sourceLabel || card.sourceLabel || "在百鸽打开";
+    : detail?.sourceLabel || card.sourceLabel || (card.source === "baige" ? "百鸽" : "本地数据库");
 
   ui.cardName.textContent = name;
   ui.cardMeta.textContent = [detail?.meta || card.cardType, aliases.length ? aliases.join(" / ") : ""].filter(Boolean).join(" · ");
@@ -1183,7 +1216,7 @@ function renderCardDetail(card, detail, status) {
   }
   ui.cardStatus.textContent = card.source === "user_provided_text"
     ? "用户提供文本"
-    : status === "loading" ? "读取百鸽中" : `${visibleCards.length} 张`;
+    : status === "loading" ? "读取资料中" : `${visibleCards.length} 张`;
 
   const imageCandidates = detail?.imageCandidates?.length ? detail.imageCandidates : buildLocalImageCandidates(card);
   setCardImage(imageCandidates, name);
@@ -1296,6 +1329,7 @@ function cardDisplayName(card) {
 }
 
 function modelStatusFromAnswer(answer) {
+  if (!debugUiEnabled) return "AI裁定分析";
   if (answer?.modelUsed) {
     const provider = modelProviderLabel(answer.modelProvider);
     return answer.modelName ? `${provider} · ${answer.modelName}` : provider;
@@ -1681,8 +1715,19 @@ function publicReasonForSubAnswer(item) {
 function formatRiskFlag(flag) {
   const labels = {
     card_name_unresolved: "卡名未确认",
+    card_name_not_resolved: "没有完全确认全部卡名。",
     question_type_unknown: "问题类型未确认",
     official_database_not_found: "官方数据库未收录",
+    official_direct_qa_not_found: "没有命中官方直接 Q&A。",
+    no_official_direct_qa: "没有命中官方直接 Q&A，以下为未确认分析。",
+    no_retrieved_evidence: "当前没有检索到可用资料。",
+    user_provided_text_not_official: "使用了用户提供文本，不能视作官方资料。",
+    official_confirmed_requires_direct_evidence: "缺少官方直接依据，不能标记为官方确认。",
+    card_text_grounding_only: "主要依据卡片文本，仍需官方资料复核。",
+    card_text_only: "目前只有卡片文本，没有直接 Q&A。",
+    baige_ambiguous: "百鸽检索存在多个相近候选，需要复核卡名。",
+    baige_no_result: "百鸽没有找到对应卡片。",
+    model_json_parse_failed: "模型返回格式异常，已做保守处理。",
     condition_branch_requires_state: "缺少条件分支状态",
     similar_evidence_only: "只有相似资料",
     unresolved_dependency: "依赖子问题未解决",
@@ -1691,7 +1736,12 @@ function formatRiskFlag(flag) {
     no_direct_evidence: "没有 direct evidence",
     insufficient_context: "上下文不足",
   };
-  return labels[flag] || flag;
+  const text = labels[flag] || labels[String(flag).split(":")[0]];
+  if (text) return text;
+  return String(flag || "")
+    .replace(/_/gu, " ")
+    .replace(/\s+/gu, " ")
+    .trim();
 }
 
 function formatProvisionalVerdict(verdict, fallback) {
@@ -1905,10 +1955,11 @@ function clearElement(element) {
 }
 
 async function init() {
+  debugUiEnabled = isDebugUiEnabled();
+  applyTheme(readInitialTheme());
   await loadAppConfig();
   await loadBackendModelInfo();
   await loadSyncedData();
-  debugUiEnabled = isDebugUiEnabled();
   if (ui.pipelineDebugToggle) ui.pipelineDebugToggle.hidden = !debugUiEnabled;
   updateSourceStatus();
   resetAnalysis();
@@ -1920,6 +1971,15 @@ async function init() {
     ui.questionInput.value = "";
     analyzeQuestion();
     ui.questionInput.focus();
+  });
+  ui.themeToggle?.addEventListener("click", () => {
+    const nextTheme = document.body.classList.contains("theme-night") ? "day" : "night";
+    applyTheme(nextTheme);
+    try {
+      localStorage.setItem(themeStorageKey, nextTheme);
+    } catch {
+      // Theme persistence is optional.
+    }
   });
 }
 
@@ -1945,4 +2005,21 @@ function isDebugUiEnabled() {
   } catch {
     return false;
   }
+}
+
+function readInitialTheme() {
+  try {
+    const stored = localStorage.getItem(themeStorageKey);
+    if (stored === "day" || stored === "night") return stored;
+  } catch {
+    // Ignore unavailable storage.
+  }
+  return "day";
+}
+
+function applyTheme(theme) {
+  const normalized = theme === "night" ? "night" : "day";
+  document.body.classList.toggle("theme-night", normalized === "night");
+  document.body.classList.toggle("theme-day", normalized !== "night");
+  if (ui.themeToggle) ui.themeToggle.textContent = normalized === "night" ? "白天模式" : "黑夜模式";
 }
