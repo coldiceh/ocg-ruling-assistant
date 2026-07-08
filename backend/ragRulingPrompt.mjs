@@ -58,6 +58,8 @@ export function buildRagRulingPromptBundle({
     "你是游戏王 OCG 裁定分析助手。你要基于检索到的资料生成 RAG 裁定分析。",
     "优先根据官方 Q&A direct candidates 回答；只有 officialQaDirectCandidates 中的资料可以支持 official_confirmed。",
     "如果没有官方直接 Q&A，可以根据卡片文本、FAQ、官方相似案例和相关资料给裁定分析。",
+    "如果至少存在卡片文本、FAQ、官方相似案例或相关资料，不要只回答 needs_more_info；应输出 rule_analysis 或 low_confidence_analysis，并明确不是官方确认。",
+    "只有在完全没有可用卡片文本、相关资料，或问题缺少关键场景导致无法分析时，才输出 needs_more_info。",
     "必须区分 answerLevel：official_confirmed、rule_analysis、low_confidence_analysis、needs_more_info。budget_limited 只由后端预算守卫使用，模型不要主动输出。",
     "不得把 related evidence、FAQ 或 rawRelatedEvidence 伪装成 official direct。",
     "不得编造官方 Q&A、资料 id、卡片文本或规则出处。",

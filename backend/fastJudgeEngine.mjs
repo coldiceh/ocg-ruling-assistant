@@ -276,7 +276,7 @@ export async function answerRulingQuestionFast({ question, mode = "duel", maxLat
         verdict: "unknown",
         shortAnswer: `正在深度判断；已识别争点：${issueFrameIds(frames).join("、") || "待识别"}。暂不显示未经验证的结论。`,
         judgeReasoning: [],
-        requiredFacts: ["可点击“深度解析”继续等待完整判断。"],
+        requiredFacts: ["该 legacy 判断仍在等待完整结果。"],
         assumptions: [],
         possibleCounterCases: [],
         confidence: "low",

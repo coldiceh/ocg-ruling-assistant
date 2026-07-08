@@ -36,17 +36,18 @@ const server = createServer(async (request, response) => {
     try {
       const body = await readBody(request);
       const payload = JSON.parse(body || "{}");
-      if (payload.mode === "rag") {
+      const mode = String(payload.mode || "rag").toLowerCase();
+      if (!["legacy", "fastjudge"].includes(mode)) {
         const answer = await answerRagRulingQuestion({ question: payload.question });
         sendJson(response, 200, answer);
         return;
       }
-      const useFastJudge = payload.useFastJudge !== false && process.env.USE_FAST_JUDGE_ENGINE !== "false";
+      const useFastJudge = mode === "fastjudge";
       const answer = useFastJudge
         ? await answerRulingQuestionFast({
             question: payload.question,
-            mode: payload.mode === "analysis" ? "analysis" : "duel",
-            maxLatencyMs: payload.mode === "analysis" ? 20000 : 6000,
+            mode: "duel",
+            maxLatencyMs: 6000,
             gameState: payload.gameState || {},
             chainLinks: Array.isArray(payload.chainLinks) ? payload.chainLinks : [],
           })
@@ -113,7 +114,8 @@ function getModelInfo() {
       requestedProvider: ragProvider.requested,
       models: [process.env.DEEPSEEK_MODEL || "deepseek-v4-flash"],
       enabled: true,
-      fastJudgeEnabled: process.env.USE_FAST_JUDGE_ENGINE !== "false",
+      pipeline: "rag_baseline",
+      legacyModes: ["legacy", "fastjudge"],
     };
   }
   if (ragProvider.provider === "gemini") {
@@ -123,7 +125,8 @@ function getModelInfo() {
       models: [process.env.GEMINI_MODEL || "gemini-1.5-flash"],
       cardResolutionModels: splitList(process.env.GEMINI_CARD_RESOLUTION_MODELS || process.env.GEMINI_CARD_RESOLUTION_MODEL),
       enabled: true,
-      fastJudgeEnabled: process.env.USE_FAST_JUDGE_ENGINE !== "false",
+      pipeline: "rag_baseline",
+      legacyModes: ["legacy", "fastjudge"],
     };
   }
   return {
@@ -131,7 +134,8 @@ function getModelInfo() {
     requestedProvider: ragProvider.requested,
     models: [],
     enabled: false,
-    fastJudgeEnabled: process.env.USE_FAST_JUDGE_ENGINE !== "false",
+    pipeline: "rag_baseline",
+    legacyModes: ["legacy", "fastjudge"],
   };
 }
 

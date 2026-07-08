@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { extractRagCards } from "../backend/ragCardExtractor.mjs";
 import { buildRagRulingPromptBundle } from "../backend/ragRulingPrompt.mjs";
 import { callRagModel, estimateDeepSeekCostCny, resolveRagProvider } from "../backend/ragModelClient.mjs";
 import { answerRagRulingQuestion } from "../backend/ragRulingPipeline.mjs";
@@ -17,6 +18,29 @@ const cards = [
     sourceUrl: "https://example.test/card/100",
   },
 ];
+
+const secondCard = {
+  id: "200",
+  name: "未收录测试卡",
+  cnName: "未收录测试卡",
+  jaName: "未収録テストカード",
+  enName: "Unlisted Test Card",
+  cardType: "monster",
+  effectText: "①：对方怪兽攻击宣言时可以发动。那次攻击无效。",
+  aliases: ["未收录测试卡", "未収録テストカード", "Unlisted Test Card"],
+  sourceUrl: "https://example.test/card/200",
+};
+
+const dogmatikaCard = {
+  id: "18176",
+  name: "凶教导之天底 阿尔白・佐亚",
+  cnName: "凶教导之天底 阿尔白・佐亚",
+  jaName: "凶導の白き天底",
+  enName: "Dogmatika Alba Zoa",
+  cardType: "monster",
+  effectText: "仪式/效果文本。",
+  aliases: ["凶導の白き天底"],
+};
 
 const records = [
   {
@@ -72,6 +96,20 @@ test("rag_pipeline_returns_answer_with_mock_model", async () => {
   assert.equal(answer.debug.dryRun, false);
 });
 
+test("quoted_card_mentions_extract_all", () => {
+  const resolution = extractRagCards("「测试龙」攻击宣言时，能否连锁「未知卡名」？", { cards, maxCards: 6 });
+  const totalMentions = resolution.resolvedCards.length + resolution.unresolvedMentions.length + resolution.ambiguousMentions.length;
+  assert.equal(totalMentions >= 2, true);
+  assert.equal(resolution.resolvedCards[0].name, "测试龙");
+  assert.equal(resolution.unresolvedMentions[0].input, "未知卡名");
+});
+
+test("ocg_name_normalization_resolves_common_variants", () => {
+  const resolution = extractRagCards("「凶导的白天底」攻击宣言时触发「测试龙」效果。", { cards: [...cards, dogmatikaCard], maxCards: 6 });
+  assert.ok(resolution.resolvedCards.some((card) => card.name === "凶教导之天底 阿尔白・佐亚"));
+  assert.ok(resolution.resolvedCards.some((card) => card.name === "测试龙"));
+});
+
 test("rag_pipeline_does_not_require_effect_template", async () => {
   const answer = await answerRagRulingQuestion({
     question: "「测试龙」可以发动①效果吗？",
@@ -106,6 +144,42 @@ test("rag_pipeline_includes_card_text_when_card_resolved", async () => {
   assert.ok(answer.usedEvidence.some((item) => item.id === "card-text-100"));
   assert.equal(answer.debug.retrievalCounts.cardTexts > 0, true);
   assert.equal(typeof answer.debug.promptChars, "number");
+});
+
+test("rag_returns_low_confidence_when_no_direct_evidence", async () => {
+  const answer = await answerRagRulingQuestion({
+    question: "「测试龙」在没有官方直接裁定时怎么处理？",
+    cards,
+    records: [],
+    qaRecords: [],
+    modelInvoker: async () => JSON.stringify({
+      answerLevel: "needs_more_info",
+      shortAnswer: "当前资料不足，无法给出可靠裁定分析。",
+      reasoning: [],
+      usedCards: [],
+      usedEvidence: [],
+      missingInfo: [],
+      riskFlags: [],
+      confidenceSelfEstimate: "low",
+    }),
+  });
+  assert.equal(answer.answerLevel, "low_confidence_analysis");
+  assert.match(answer.shortAnswer, /低置信分析|未命中官方直接/u);
+  assert.ok(answer.riskFlags.includes("needs_more_info_downgraded_to_low_confidence_with_evidence"));
+});
+
+test("rag_preserves_card_dossier_data", async () => {
+  const answer = await answerRagRulingQuestion({
+    question: "「测试龙」和「未收录测试卡」如何互动？",
+    cards: [...cards, secondCard],
+    records: [],
+    qaRecords: [],
+    dryRun: true,
+    env: {},
+  });
+  assert.equal(answer.resolvedCards.length >= 2, true);
+  assert.ok(answer.resolvedCards.some((card) => card.name === "测试龙" && card.id === "100" && card.effectText));
+  assert.ok(answer.resolvedCards.some((card) => card.name === "未收录测试卡" && card.sourceUrl));
 });
 
 test("rag_pipeline_raw_query_fallback", async () => {
@@ -154,6 +228,16 @@ test("model_json_parse_failure_degrades_safely", async () => {
   });
   assert.ok(["low_confidence_analysis", "needs_more_info"].includes(answer.answerLevel));
   assert.ok(answer.riskFlags.some((item) => item.startsWith("model_json_parse_failed")));
+});
+
+test("model_natural_language_output_is_wrapped_as_low_confidence", async () => {
+  const result = await callRagModel({
+    prompt: "输出裁定分析",
+    env: {},
+    modelInvoker: async () => "没有官方直接资料，但根据卡片文本只能给出未确认分析：该效果是否成功结算取决于处理时攻击是否仍可被无效。",
+  });
+  assert.equal(result.answer.answerLevel, "low_confidence_analysis");
+  assert.ok(result.warnings.includes("model_natural_language_wrapped"));
 });
 
 test("no_api_key_uses_mock", async () => {

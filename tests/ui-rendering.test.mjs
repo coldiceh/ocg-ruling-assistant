@@ -122,36 +122,31 @@ test("confirmed answer exposes evidence ids in ordinary summary", () => {
   assert.deepEqual(summary.evidenceIds, ["qa-1"]);
 });
 
-test("debug trace is backed by collapsed details in the page", async () => {
+test("pipeline_debug_hidden_by_default", async () => {
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
   assert.match(html, /<details[^>]+parser-debug/u);
   assert.match(html, /id="parserDebugPanel" hidden/u);
+  assert.match(html, /id="pipelineDebugToggle" hidden/u);
   assert.equal(statusLabelForSubAnswer({ status: "unknown" }), "资料不足");
 });
 
-test("ordinary UI renders Fast Judge as a short referee answer", async () => {
+test("ui_has_single_query_button", async () => {
   const [html, app] = await Promise.all([
     readFile(new URL("../index.html", import.meta.url), "utf8"),
     readFile(new URL("../src/app.js", import.meta.url), "utf8"),
   ]);
-  assert.match(html, /快速结论/u);
-  assert.match(html, /深度解析/u);
-  assert.match(html, /<details class="pipeline-debug-toggle">/u);
-  assert.match(app, /"结论"/u);
+  assert.match(html, /查询/u);
+  assert.doesNotMatch(html, /快速结论/u);
+  assert.doesNotMatch(html, /深度解析/u);
+  assert.doesNotMatch(html, /RAG 分析模式/u);
+  assert.doesNotMatch(html, /使用旧管线结果/u);
+  assert.match(app, /mode: backendMode/u);
+  assert.match(app, /const backendMode = "rag"/u);
+  assert.match(app, /isDebugUiEnabled/u);
+  assert.doesNotMatch(app, /deepAnalyzeButton|ragModeToggle|legacyPipelineToggle/u);
   assert.doesNotMatch(html, /裁判结论/u);
   assert.doesNotMatch(app, /裁判结论/u);
-  assert.match(app, /FAST JUDGE/u);
-  assert.match(app, /answer\.judgeReasoning/u);
-  assert.match(app, /正常情况下/u);
-  assert.match(app, /假设情况下/u);
-  assert.match(app, /处理顺序/u);
-  assert.match(app, /裁定式总结/u);
-  assert.match(app, /伤害步骤分析/u);
-  assert.match(app, /诱发时点分析/u);
-  assert.match(app, /官方 Q&A 结论/u);
-  assert.match(app, /官方相似案例/u);
-  assert.match(app, /规则推导结论/u);
-  assert.match(app, /条件分支/u);
+  assert.doesNotMatch(app, /FAST JUDGE/u);
   assert.doesNotMatch(app, /damage\.reasonCode|timing\.reasonCode/u);
   assert.doesNotMatch(app, /blocker\.id/u);
 });

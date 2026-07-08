@@ -257,6 +257,20 @@ function parseModelResult(rawText, { provider, modelName, dryRun, warnings = [],
       budgetStatus,
     };
   } catch (error) {
+    const naturalLanguageAnswer = fallbackFromNaturalLanguage(rawText);
+    if (naturalLanguageAnswer) {
+      return {
+        answer: naturalLanguageAnswer,
+        rawText: String(rawText || ""),
+        provider,
+        providerUsed: provider,
+        modelName,
+        modelUsed: modelName || provider,
+        dryRun,
+        warnings: [...warnings, `model_json_parse_failed:${error instanceof Error ? error.message : String(error)}`, "model_natural_language_wrapped"],
+        budgetStatus,
+      };
+    }
     return {
       answer: safeFallbackAnswer("model_json_parse_failed"),
       rawText: String(rawText || ""),
@@ -269,6 +283,20 @@ function parseModelResult(rawText, { provider, modelName, dryRun, warnings = [],
       budgetStatus,
     };
   }
+}
+
+function fallbackFromNaturalLanguage(rawText) {
+  const text = String(rawText || "").trim();
+  if (text.length < 20) return null;
+  return normalizeModelAnswer({
+    answerLevel: "low_confidence_analysis",
+    shortAnswer: text.slice(0, 500),
+    reasoning: ["模型没有返回规范 JSON；已将自然语言内容作为低置信分析保留。"],
+    usedEvidence: [],
+    missingInfo: ["请复核引用资料，并优先寻找能直接覆盖该场景的官方 Q&A / FAQ。"],
+    riskFlags: ["model_output_not_json"],
+    confidenceSelfEstimate: "low",
+  });
 }
 
 function normalizeModelAnswer(answer = {}) {
