@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { extractRagCards } from "../backend/ragCardExtractor.mjs";
+import { extractQuotedMentions, extractRagCards, extractUserProvidedCardTextBlocks } from "../backend/ragCardExtractor.mjs";
 import { buildRagRulingPromptBundle } from "../backend/ragRulingPrompt.mjs";
 import { callRagModel, estimateDeepSeekCostCny, resolveRagProvider } from "../backend/ragModelClient.mjs";
 import { answerRagRulingQuestion } from "../backend/ragRulingPipeline.mjs";
@@ -104,10 +104,111 @@ test("quoted_card_mentions_extract_all", () => {
   assert.equal(resolution.unresolvedMentions[0].input, "未知卡名");
 });
 
+test("extracts_user_provided_card_text_block", () => {
+  const blocks = extractUserProvidedCardTextBlocks("【未发售测试龙】\n①：自己主要阶段可以发动。抽1张卡。\n②：这张卡被送去墓地的场合可以发动。");
+  assert.equal(blocks.length, 1);
+  assert.equal(blocks[0].name, "未发售测试龙");
+  assert.match(blocks[0].text, /①：自己主要阶段/u);
+  assert.match(blocks[0].text, /②：这张卡/u);
+  assert.equal(blocks[0].source, "user_provided_text");
+  assert.equal(blocks[0].official, false);
+  const bundle = buildRagRulingPromptBundle({
+    userQuery: "未发售测试龙如何处理？",
+    evidence: {
+      cardTexts: [],
+      userProvidedCardTexts: [{
+        id: "user-card-text-test",
+        type: "user_provided_text",
+        title: "未发售测试龙 的用户提供文本",
+        cards: ["未发售测试龙"],
+        text: blocks[0].text,
+        source: "user_provided_text",
+        official: false,
+        isDirect: false,
+      }],
+      officialQaDirectCandidates: [],
+      officialQaRelated: [],
+      faqRelated: [],
+      rawRelatedEvidence: [],
+      retrievalWarnings: [],
+    },
+  });
+  assert.match(bundle.prompt, /userProvidedCardTexts/u);
+  assert.match(bundle.prompt, /不是官方 direct evidence/u);
+});
+
+test("quoted_mentions_all_preserved", () => {
+  const mentions = extractQuotedMentions("【A卡】《B卡》「C卡」『D卡』[E卡]“F卡”\"G卡\"'H卡'");
+  assert.deepEqual(mentions, ["A卡", "B卡", "C卡", "D卡", "E卡", "F卡", "G卡", "H卡"]);
+});
+
 test("ocg_name_normalization_resolves_common_variants", () => {
   const resolution = extractRagCards("「凶导的白天底」攻击宣言时触发「测试龙」效果。", { cards: [...cards, dogmatikaCard], maxCards: 6 });
   assert.ok(resolution.resolvedCards.some((card) => card.name === "凶教导之天底 阿尔白・佐亚"));
   assert.ok(resolution.resolvedCards.some((card) => card.name === "测试龙"));
+});
+
+test("unresolved_new_card_with_text_can_be_analyzed", async () => {
+  const question = "【未发售测试龙】\n①：对方怪兽攻击宣言时可以发动。那次攻击无效。\n此时这张卡的效果能否处理？";
+  const answer = await answerRagRulingQuestion({
+    question,
+    cards: [],
+    records: [],
+    qaRecords: [],
+    modelInvoker: async () => JSON.stringify({
+      answerLevel: "rule_analysis",
+      shortAnswer: "可以基于用户提供文本给出未确认分析。",
+      reasoning: ["题目中提供了完整效果文本。"],
+      usedCards: ["未发售测试龙"],
+      usedEvidence: [],
+      missingInfo: [],
+      riskFlags: [],
+      confidenceSelfEstimate: "medium",
+    }),
+  });
+  assert.equal(answer.answerLevel, "rule_analysis");
+  assert.ok(answer.usedEvidence.some((item) => item.type === "user_provided_text"));
+  assert.ok(answer.riskFlags.includes("user_provided_text_not_official"));
+  assert.equal(answer.debug.retrievalCounts.userProvidedCardTexts, 1);
+  assert.equal(answer.debug.unresolvedMentions[0].input, "未发售测试龙");
+});
+
+test("user_provided_text_not_official_confirmed", async () => {
+  const answer = await answerRagRulingQuestion({
+    question: "《未发售仪式怪兽》\n效果：①：这张卡特殊召唤成功的场合可以发动。对方场上的卡全部破坏。",
+    cards: [],
+    records: [],
+    qaRecords: [],
+    modelInvoker: async () => JSON.stringify({
+      answerLevel: "official_confirmed",
+      shortAnswer: "模型错误地声称官方确认。",
+      reasoning: ["只有用户提供文本。"],
+      usedCards: ["未发售仪式怪兽"],
+      usedEvidence: [],
+      missingInfo: [],
+      riskFlags: [],
+      confidenceSelfEstimate: "high",
+    }),
+  });
+  assert.notEqual(answer.answerLevel, "official_confirmed");
+  assert.ok(answer.riskFlags.includes("official_confirmed_requires_direct_evidence"));
+  assert.ok(answer.riskFlags.includes("user_provided_text_not_official"));
+  assert.ok(answer.usedEvidence.some((item) => item.type === "user_provided_text"));
+});
+
+test("rag_does_not_require_database_match_when_user_text_present", async () => {
+  const answer = await answerRagRulingQuestion({
+    question: "未收录新卡：\n①：自己主要阶段可以发动。从卡组把1张卡加入手卡。\n这个效果能否在主要阶段2发动？",
+    cards: [],
+    records: [],
+    qaRecords: [],
+    dryRun: true,
+    env: {},
+  });
+  assert.notEqual(answer.answerLevel, "needs_more_info");
+  assert.ok(answer.resolvedCards.some((card) => card.name === "未收录新卡" && card.source === "user_provided_text"));
+  assert.ok(answer.usedEvidence.some((item) => item.type === "user_provided_text"));
+  assert.ok(!answer.riskFlags.includes("card_name_not_resolved"));
 });
 
 test("rag_pipeline_does_not_require_effect_template", async () => {
