@@ -187,3 +187,10 @@ test("card_dossier_nodes_and_theme_backgrounds_exist", async () => {
   assert.match(app, /baige_card_text/u);
   assert.match(app, /百鸽卡片文本/u);
 });
+
+test("pages_deploy_includes_background_assets", async () => {
+  const workflow = await readFile(new URL("../.github/workflows/deploy-pages.yml", import.meta.url), "utf8");
+  assert.match(workflow, /cp -R assets _site\/assets/u);
+  assert.match(workflow, /test -s _site\/assets\/bg-day\.png/u);
+  assert.match(workflow, /test -s _site\/assets\/bg-night\.png/u);
+});
