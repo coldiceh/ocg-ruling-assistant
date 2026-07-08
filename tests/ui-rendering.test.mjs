@@ -152,3 +152,33 @@ test("ui_has_single_query_button", async () => {
   assert.doesNotMatch(app, /damage\.reasonCode|timing\.reasonCode/u);
   assert.doesNotMatch(app, /blocker\.id/u);
 });
+
+test("ui_hides_engine_details_by_default", async () => {
+  const [html, app] = await Promise.all([
+    readFile(new URL("../index.html", import.meta.url), "utf8"),
+    readFile(new URL("../src/app.js", import.meta.url), "utf8"),
+  ]);
+  assert.match(html, /AI裁定分析/u);
+  assert.match(html, /id="themeToggle"/u);
+  assert.doesNotMatch(html, /ANALYSIS CORE|DeepSeek|TOKEN|budget|provider debug/u);
+  assert.doesNotMatch(html, /terminal-theme|OCG RULING TERMINAL/u);
+  assert.match(app, /debugUiEnabled/u);
+  assert.match(app, /params\.get\("debug"\) === "1"/u);
+  assert.match(app, /publicRiskLines/u);
+});
+
+test("card_dossier_nodes_and_theme_backgrounds_exist", async () => {
+  const [html, css, app] = await Promise.all([
+    readFile(new URL("../index.html", import.meta.url), "utf8"),
+    readFile(new URL("../src/styles.css", import.meta.url), "utf8"),
+    readFile(new URL("../src/app.js", import.meta.url), "utf8"),
+  ]);
+  assert.match(html, /id="cardPanel"/u);
+  assert.match(html, /id="cardImagePlaceholder"/u);
+  assert.match(html, /相关卡片/u);
+  assert.match(css, /assets\/bg-day\.png/u);
+  assert.match(css, /assets\/bg-night\.png/u);
+  assert.match(css, /theme-night/u);
+  assert.match(app, /baige_card_text/u);
+  assert.match(app, /百鸽卡片文本/u);
+});

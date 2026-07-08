@@ -3,20 +3,21 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>游戏王OCG文本规则相关疑问助手</title>
+    <title>OCG AI裁定分析助手</title>
     <link rel="stylesheet" href="src/styles.css" />
   </head>
-  <body class="terminal-theme">
+  <body class="theme-day">
     <div class="app-shell">
       <header class="topbar">
         <div>
-          <p class="eyebrow">TEXT RULING ANALYSIS</p>
-          <h1>OCG RULING TERMINAL</h1>
+          <p class="eyebrow">OCG RULING ASSISTANT</p>
+          <h1>OCG AI裁定分析</h1>
         </div>
         <div class="status-cluster" aria-label="资料状态">
-          <div class="status-strip"><span class="status-dot"></span><span id="sourceStatus">DB ONLINE</span></div>
-          <span class="terminal-badge">Q&amp;A INDEX</span>
-          <span class="terminal-badge">PROVISIONAL WATCH</span>
+          <div class="status-strip"><span class="status-dot"></span><span id="sourceStatus">资料库准备中</span></div>
+          <span class="status-badge">公开资料检索</span>
+          <span class="status-badge">卡片文本分析</span>
+          <button class="theme-toggle" id="themeToggle" type="button" aria-label="切换白天或黑夜主题">黑夜模式</button>
         </div>
       </header>
 
@@ -24,7 +25,7 @@
         <section class="ask-panel" aria-labelledby="askTitle">
           <div class="panel-head">
             <div>
-              <h2 id="askTitle">QUERY INPUT</h2>
+              <h2 id="askTitle">输入问题</h2>
               <p>输入卡片、场面、连锁和需要判断的处理节点。</p>
             </div>
             <button class="icon-button ghost" id="clearButton" type="button" aria-label="清空" title="清空">
@@ -38,8 +39,8 @@
 
           <div class="actions">
             <div class="model-strip" aria-live="polite">
-              <span>ANALYSIS CORE</span>
-              <strong id="modelStatusText">待分析</strong>
+              <span>AI裁定分析</span>
+              <strong id="modelStatusText">准备就绪</strong>
             </div>
             <div class="judge-actions">
               <button class="primary-button" id="analyzeButton" type="button">
@@ -57,9 +58,27 @@
           </details>
 
           <div class="result-grid" id="resultGrid" hidden>
+            <section class="result-block verdict-block" aria-labelledby="verdictTitle">
+              <div class="block-title">
+                <span>裁定结论</span>
+                <strong id="confidenceText">未分析</strong>
+              </div>
+              <h3 id="verdictTitle"></h3>
+              <p class="basis-text" id="rulingBasisText"></p>
+              <p id="verdictBody"></p>
+              <div class="sub-answers" id="subAnswersPanel" hidden></div>
+            </section>
+
+            <section class="result-block reason-block" aria-labelledby="stepsTitle">
+              <div class="block-title">
+                <span id="stepsTitle">理由</span>
+              </div>
+              <ol id="stepsList"></ol>
+            </section>
+
             <section class="result-block card-panel" id="cardPanel" aria-labelledby="cardsTitle" hidden>
               <div class="block-title">
-                <span id="cardsTitle">CARD DOSSIER</span>
+                <span id="cardsTitle">相关卡片</span>
                 <strong id="cardStatus"></strong>
               </div>
               <div class="card-tabs" id="cardTabs"></div>
@@ -77,35 +96,17 @@
               </div>
             </section>
 
-            <section class="result-block verdict-block" aria-labelledby="verdictTitle">
-              <div class="block-title">
-                <span>RULING OUTPUT</span>
-                <strong id="confidenceText">未分析</strong>
-              </div>
-              <h3 id="verdictTitle"></h3>
-              <p class="basis-text" id="rulingBasisText"></p>
-              <p id="verdictBody"></p>
-              <div class="sub-answers" id="subAnswersPanel" hidden></div>
+            <section class="result-block source-trace" aria-labelledby="sourcesTitle">
+              <div class="block-title"><span id="sourcesTitle">资料来源</span></div>
+              <div id="sourcesList"></div>
             </section>
 
-            <section class="result-block" aria-labelledby="stepsTitle">
+            <section class="result-block risk-block" aria-labelledby="questionsTitle">
               <div class="block-title">
-                <span id="stepsTitle">理由</span>
-              </div>
-              <ol id="stepsList"></ol>
-            </section>
-
-            <section class="result-block" aria-labelledby="questionsTitle">
-              <div class="block-title">
-                <span id="questionsTitle">需要补充</span>
+                <span id="questionsTitle">风险提示</span>
               </div>
               <ul id="questionsList"></ul>
             </section>
-
-            <details class="result-block source-trace" aria-labelledby="sourcesTitle">
-              <summary class="block-title"><span id="sourcesTitle">依据</span></summary>
-              <div id="sourcesList"></div>
-            </details>
 
             <details class="result-block parser-debug" id="parserDebugPanel" hidden>
               <summary>DEBUG TRACE</summary>
