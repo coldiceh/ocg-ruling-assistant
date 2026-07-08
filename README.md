@@ -1,166 +1,109 @@
-# 游戏王 OCG RAG 裁定分析助手
+# 游戏王 OCG 裁定分析助手
 
-这是一个面向中文 / OCG 环境的最小可用 RAG 裁定分析助手。当前目标不是完整规则引擎，也不是自动替代裁判，而是把玩家问题接到可追踪的资料检索和模型分析链路上。
+这是一个面向 OCG 游戏王玩家的裁定分析助手。项目通过检索卡片文本、卡片信息、公开规则资料和官方公开资料，构造可追踪的 RAG 上下文，再由大语言模型生成裁定分析。
 
-当前主路径：
+本项目的目标是帮助用户整理问题、查找依据、给出分析思路和风险提示，而不是替代官方裁定或现场裁判。
 
-```text
-用户裁定问题
--> 抽取卡名和书名号中的候选卡名
--> 检索本地卡片资料、百鸽卡片页、官方 Q&A / FAQ 和相关资料
--> 构造 RAG prompt
--> DeepSeek / Gemini / mock 生成裁定分析
--> UI 展示答案、卡图、卡文、资料依据和风险提示
-```
+## 项目简介
 
-## 当前阶段
+用户可以输入一个 OCG 裁定问题，例如卡片发动、连锁处理、效果适用、攻击宣言、处理时状态变化等场景。系统会尝试识别问题中的卡名和关键上下文，检索相关资料，并输出：
 
-当前为 **RAG baseline**：
+- 结论
+- 理由
+- 引用来源
+- 风险提示
+- 需要补充的信息
 
-- `official_confirmed`：只允许由 official direct Q&A / FAQ 支撑。
-- `rule_analysis`：没有 direct Q&A，但有卡片文本、FAQ、官方相似案例或相关资料，可以给未确认分析。
-- `low_confidence_analysis`：只有弱相关资料或卡片文本时的低置信分析。
-- `needs_more_info`：没有可用资料，或场景缺失到无法分析。
-- `budget_limited`：每日 API 预算守卫阻止调用。
+如果用户粘贴了未发售卡或数据库暂未收录卡片的完整效果文本，系统也可以基于用户提供的文本进行未确认分析。
 
-相关资料、FAQ 和卡片文本不能伪装成 official direct。没有 official direct 时，系统仍应给出未确认分析，而不是因为缺 effect template 直接拒答。
+## 工作原理
 
-## 保留和隔离
-
-保留在当前生产主路径：
-
-- `backend/ragCardExtractor.mjs`
-- `backend/cardDataProvider.mjs`
-- `backend/ragEvidenceRetriever.mjs`
-- `backend/ragRulingPrompt.mjs`
-- `backend/ragModelClient.mjs`
-- `backend/ragRulingPipeline.mjs`
-- `/api/answer` 默认 RAG baseline
-- `/api/card` 百鸽卡片资料查询
-- `/api/card-image` 卡图代理
-- Card Dossier / 卡图 / 卡片文本 UI
-
-保留给未来 validator，但不作为默认主裁判：
-
-- Fast Judge / rule-derived answer
-- effect templates / primitives
-- blocker、damage step、timing miss、chain safety
-- final gate、evidence scope / freshness guard
-
-这些模块后续可用于 claim extraction、validator、YGOPro / MyCard engine validator 或多模型 critic。本阶段不让它们拦截默认 RAG 回答。
-
-## API
-
-`POST /api/answer` 默认走 RAG baseline。显式 legacy 入口只用于内部调试：
-
-```json
-{
-  "question": "「宇宙耀变龙」的攻击无效效果在这个场景能否结算？"
-}
-```
-
-等价于：
-
-```json
-{
-  "question": "问题文本",
-  "mode": "rag"
-}
-```
-
-旧路径只在显式设置时启用：
-
-```json
-{ "question": "问题文本", "mode": "legacy" }
-{ "question": "问题文本", "mode": "fastjudge" }
-```
-
-## 模型 Provider
-
-支持：
-
-- `MODEL_PROVIDER=auto`
-- `MODEL_PROVIDER=deepseek`
-- `MODEL_PROVIDER=gemini`
-- `MODEL_PROVIDER=mock`
-
-默认 `auto`：
-
-1. 有 DeepSeek key 时使用 DeepSeek。
-2. 否则有 Gemini key 时使用 Gemini。
-3. 否则使用 mock / dry-run。
-
-Vercel 必填环境变量：
-
-- `DEEPSEEK_API_KEY`
-- `DEEPSEEK_BASE_URL=https://api.deepseek.com`
-- `DEEPSEEK_MODEL=deepseek-v4-flash`
-
-可选环境变量：
-
-- `MODEL_PROVIDER=auto`
-- `GEMINI_API_KEY`
-- `GEMINI_MODEL`
-- `GEMINI_TEMPERATURE`
-- `GEMINI_MAX_OUTPUT_TOKENS`
-- `API_DAILY_BUDGET_CNY=10`
-- `API_BUDGET_TIMEZONE=Asia/Tokyo`
-- `API_BUDGET_MODE=soft`
-- `UPSTASH_REDIS_REST_URL`
-- `UPSTASH_REDIS_REST_TOKEN`
-
-API key 只应配置在后端环境变量中，不应写入前端、README、日志或仓库。
-
-## 预算守卫
-
-默认每日预算：
+整体流程如下：
 
 ```text
-API_DAILY_BUDGET_CNY=10
-API_BUDGET_TIMEZONE=Asia/Tokyo
-API_BUDGET_MODE=soft
+用户输入问题
+↓
+卡名识别
+↓
+获取资料：
+- 卡片文本
+- 卡片信息
+- 官方资料
+- FAQ
+↓
+构造 RAG context
+↓
+LLM 生成裁定分析
+↓
+展示：
+- 结论
+- 理由
+- 来源
+- 风险
 ```
 
-未配置 Upstash Redis 时，Vercel 上预算限制是 per-instance 软限制，不是全局硬上限。配置 `UPSTASH_REDIS_REST_URL` 和 `UPSTASH_REDIS_REST_TOKEN` 后，预算计数会走共享 Redis。
+系统会区分不同证据来源的可信度。官方直接问答可以支持较高置信的结论；卡片文本、FAQ、相关资料和用户提供文本可以支持裁定分析，但不能被表述为官方确认。
 
-真正硬控成本仍建议结合 DeepSeek 低余额充值。
+## 数据来源
 
-## 卡片资料和卡图
+项目使用公开可访问资料构造检索上下文，包括：
 
-当前资料顺序：
+- 百鸽卡片资料
+- 公开卡片文本与卡片信息
+- 官方公开资料
+- 官方公开 Q&A / FAQ
+- 用户在问题中提供的卡片文本
 
-1. 本地 `data/cards.json` / `data/qa-index.json` / `data/evidence-index.json`
-2. `/api/card` 查询百鸽卡片资料
-3. `/api/card-image` 和候选 CDN URL 显示卡图
-4. raw query / fuzzy fallback
+项目不会把用户提供文本或第三方卡片资料标记为官方直接裁定。
 
-`backend/cardDataProvider.mjs` 预留轻量 provider interface：
+## 技术架构
 
-- `searchCardByName(name)`
-- `getCardProfile(cardId)`
-- `getCardText(cardId)`
-- `getCardImage(cardId)`
-- `getCardFaq(cardId)`
+### Frontend
 
-当前实现先包住本地 cache / Card Dossier 数据；百鸽实时查询保留在 API 和 UI 层，不在 RAG retriever 中硬编码不可控远程 URL。
+前端提供单页裁定查询界面，负责：
 
-## UI
+- 输入裁定问题
+- 展示模型结论
+- 展示理由、来源和风险
+- 展示 Card Dossier，包括卡名、卡图、卡片文本和资料来源
+- 展示需要补充的信息
 
-普通用户界面只有一个主按钮：`查询`。
+### Backend
 
-默认只走 RAG baseline。管线调试默认隐藏，只在 `?debug=1` 或本地开发地址显示。Card Dossier、卡图、卡片文本和依据展示保留。
+后端负责 RAG 分析链路：
 
-网页 debug 中确认真实模型调用：
+- 从问题中抽取卡名和用户提供的卡片文本
+- 检索卡片资料、FAQ 和官方公开资料
+- 归一化证据来源
+- 构造 RAG prompt
+- 调用模型 provider
+- 归一化模型输出，避免把非官方资料误标为官方确认
 
-- DeepSeek：`providerUsed = "deepseek"`，`dryRun = false`
-- Gemini：`providerUsed = "gemini"`，`dryRun = false`
-- mock：`providerUsed = "mock"`，`dryRun = true`
+### AI
 
-可同时查看 `modelUsed`、`tokenUsage`、`estimatedCostCny`、`budgetStatus`。
+模型用于生成裁定分析。当前支持的 provider 包括：
 
-## 测试
+- DeepSeek
+- Gemini
+- Mock / dry-run
 
-默认测试只覆盖当前 RAG baseline 和普通 UI：
+模型输出会被归一化为几个层级：
+
+- `official_confirmed`：存在官方直接资料时使用。
+- `rule_analysis`：没有官方直接资料，但有卡片文本、FAQ 或相关资料，可以给出分析。
+- `low_confidence_analysis`：资料较少或场景仍有关键不确定性，只能给出低置信分析。
+- `needs_more_info`：缺少足够资料或问题本身缺少关键条件。
+- `budget_limited`：模型调用被预算守卫阻止。
+
+## 本地运行
+
+安装依赖：
+
+```bash
+pnpm install
+```
+
+运行测试：
 
 ```bash
 pnpm test
@@ -168,29 +111,37 @@ pnpm smoke:official-qa
 git diff --check
 ```
 
-如果当前 shell 没有 pnpm，可用 bundled pnpm 或：
+常用环境变量：
 
-```bash
-npx pnpm@11.7.0 test
-npx pnpm@11.7.0 smoke:official-qa
+```text
+MODEL_PROVIDER=auto
+DEEPSEEK_API_KEY=
+DEEPSEEK_BASE_URL=https://api.deepseek.com
+DEEPSEEK_MODEL=deepseek-v4-flash
+GEMINI_API_KEY=
+GEMINI_MODEL=
+API_DAILY_BUDGET_CNY=10
 ```
 
-默认测试不包含旧规则引擎验收集。
+API key 应只配置在后端环境变量中，不应写入前端代码、日志或仓库。
 
-## Related Work
+## 未来计划
 
-Yugi-AI 展示了一个清晰的最小裁定助手架构：抽取卡名、获取卡片文本、把卡文注入裁定 prompt、调用主模型，并对少量高频问题使用已验证 canned response。本项目只参考这种产品形态和工程边界，不复制其代码或 prompt。
+后续可以继续增强：
 
-## Roadmap
+- 更强 validator
+- 多模型 critic
+- 模拟器验证
+- 更强规则分析
+- 更完整的卡片别名和多语言卡名识别
+- 更细的证据可信度分层
 
-下一步可以在 RAG baseline 稳定后加入：
+## Disclaimer
 
-1. claim extraction
-2. validator
-3. YGOPro / MyCard engine validator
-4. 多模型 critic
-5. 更严格的官方 direct / related evidence 验证层
+本项目不是 KONAMI 官方项目。
 
-## 免责声明
+本项目输出不代表官方裁定。AI 生成内容可能存在错误、遗漏或误判。
 
-本项目不是 Konami 官方产品。对局裁定如有争议，应以官方数据库、赛事主办方和裁判最终判断为准。
+正式比赛、店赛和官方活动中的裁定，请以官方规则、官方数据库、赛事主办方和现场裁判为准。
+
+本项目不声称替代裁判，也不声称任何结论 100% 正确。
