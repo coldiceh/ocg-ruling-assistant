@@ -28,10 +28,13 @@ jobs:
       - name: Build static site
         run: |
           mkdir -p _site/data
+          cp -R assets _site/assets
           cp -R src _site/src
           cp index.html config.json .nojekyll _site/
           cp data/cards-lite.json data/snapshot-meta.json _site/data/
           test -s _site/index.html
+          test -s _site/assets/bg-day.png
+          test -s _site/assets/bg-night.png
           test -s _site/src/app.js
           test -s _site/src/styles.css
           test -s _site/config.json
