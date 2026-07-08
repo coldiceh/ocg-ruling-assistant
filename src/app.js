@@ -276,7 +276,7 @@ async function loadBackendModelInfo() {
 }
 
 function formatModelInfo(info) {
-  if (!debugUiEnabled) return "AI裁定分析";
+  if (!debugUiEnabled) return "裁定分析";
   if (!info?.enabled) return "RAG · Mock";
   const provider = modelProviderLabel(info.provider);
   return `RAG · ${provider}`;
@@ -373,9 +373,9 @@ function updateSourceStatus() {
   if (ui.statusDot) ui.statusDot.className = `status-dot ${freshness.className}`.trim();
   if (ui.sourceStatus) {
     if (appConfig.answerApiUrl && sourceMeta?.generatedAt) {
-      ui.sourceStatus.textContent = `后端模式 · ${formatDateTime(sourceMeta.generatedAt)}`;
+      ui.sourceStatus.textContent = `资料服务 · ${formatDateTime(sourceMeta.generatedAt)}`;
     } else if (appConfig.answerApiUrl) {
-      ui.sourceStatus.textContent = "后端模式";
+      ui.sourceStatus.textContent = "资料服务";
     } else if (sourceMeta?.generatedAt) {
       ui.sourceStatus.textContent = `资料库已同步 · ${formatDateTime(sourceMeta.generatedAt)}`;
     } else {
@@ -750,7 +750,7 @@ function renderRagAnswer(answer) {
   renderCards(answer?.resolvedCards || []);
   const labels = {
     official_confirmed: { confidence: "官方依据", className: "is-confirmed", title: "官方直接裁定", basis: "官方 direct Q&A" },
-    rule_analysis: { confidence: "RAG 分析", className: "is-rule-derived", title: "RAG 裁定分析", basis: "卡片文本 / FAQ / 相关资料" },
+    rule_analysis: { confidence: "规则分析", className: "is-rule-derived", title: "裁定分析", basis: "卡片文本 / FAQ / 相关资料" },
     low_confidence_analysis: { confidence: "低置信", className: "is-risky", title: "低置信分析", basis: "资料不足或仅有弱相关资料" },
     needs_more_info: { confidence: "需要补充", className: "is-risky", title: "需要补充信息", basis: "当前检索资料不足" },
     budget_limited: { confidence: "预算限制", className: "is-risky", title: "今日预算已用完", basis: "API 预算守卫" },
@@ -760,7 +760,7 @@ function renderRagAnswer(answer) {
   const modelLabel = answer.debug?.modelUsed || answer.debug?.modelName || "";
   updateModelStatus(debugUiEnabled
     ? (answer.debug?.dryRun ? "RAG MOCK" : [providerLabel, modelLabel].filter(Boolean).join(" · ") || "RAG")
-    : "AI裁定分析");
+    : "分析完成");
   ui.verdictBlock.className = `result-block verdict-block ${state.className}`;
   ui.confidenceText.textContent = state.confidence;
   ui.verdictTitle.textContent = state.title;
@@ -840,7 +840,7 @@ function renderFastJudgeAnswer(answer) {
     cannot_answer_safely: { confidence: "无法安全判断", className: "is-risky", basis: "验证未通过" },
   };
   const state = labels[answer.answerType] || labels.cannot_answer_safely;
-  updateModelStatus(debugUiEnabled ? (answer.pending ? "Legacy · pending" : "Legacy") : "AI裁定分析");
+  updateModelStatus(debugUiEnabled ? (answer.pending ? "Legacy · pending" : "Legacy") : "分析完成");
   ui.verdictBlock.className = `result-block verdict-block ${state?.className || "is-risky"}`;
   ui.confidenceText.textContent = answer.statusChip || state?.confidence || "NEEDS-INFO";
   const routeTitles = {
@@ -946,7 +946,7 @@ function renderResult(text, bestMatch, confidence, generatedQuestions, detectedC
   ui.resultGrid.hidden = false;
   renderCards(detectedCards);
   renderParserDebug(null);
-  updateModelStatus(debugUiEnabled ? "本地模板" : "AI裁定分析");
+  updateModelStatus(debugUiEnabled ? "本地模板" : "分析完成");
   ui.verdictBlock.className = `result-block verdict-block ${confidence.className}`.trim();
 
   if (!bestMatch) {
@@ -1331,7 +1331,7 @@ function cardDisplayName(card) {
 }
 
 function modelStatusFromAnswer(answer) {
-  if (!debugUiEnabled) return "AI裁定分析";
+  if (!debugUiEnabled) return "分析完成";
   if (answer?.modelUsed) {
     const provider = modelProviderLabel(answer.modelProvider);
     return answer.modelName ? `${provider} · ${answer.modelName}` : provider;
