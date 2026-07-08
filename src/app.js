@@ -777,6 +777,7 @@ function renderRagAnswer(answer) {
 function ragEvidenceLabel(type) {
   if (type === "official_qa") return "官方 Q&A";
   if (type === "card_text") return "卡片文本";
+  if (type === "user_provided_text") return "用户提供文本";
   if (type === "faq") return "FAQ";
   return "相关资料";
 }
@@ -995,7 +996,12 @@ function normalizeVisibleCards(cards) {
       matched: String(card.matched || "").trim(),
       cardType: String(card.cardType || "").trim(),
       effectText: String(card.effectText || "").trim(),
+      source: String(card.source || "").trim(),
+      sourceLabel: String(card.sourceLabel || "").trim(),
+      official: card.official === true,
       sourceUrl: String(card.sourceUrl || "").trim(),
+      imageUrl: String(card.imageUrl || "").trim(),
+      imageCandidates: Array.isArray(card.imageCandidates) ? card.imageCandidates.map((url) => String(url || "").trim()).filter(Boolean) : [],
       ygoResourcesUrl: String(card.ygoResourcesUrl || "").trim(),
       liveId: String(card.liveId || "").trim(),
       aliases: Array.isArray(card.aliases) ? card.aliases.map((alias) => String(alias || "").trim()).filter(Boolean) : [],
@@ -1014,7 +1020,12 @@ function normalizeVisibleCards(cards) {
     existing.enName = existing.enName || normalized.enName;
     existing.name = preferVisibleDisplayName(existing, normalized);
     existing.passcode = existing.passcode || normalized.passcode;
+    existing.source = existing.source || normalized.source;
+    existing.sourceLabel = existing.sourceLabel || normalized.sourceLabel;
+    existing.official = existing.official || normalized.official;
     existing.sourceUrl = existing.sourceUrl || normalized.sourceUrl;
+    existing.imageUrl = existing.imageUrl || normalized.imageUrl;
+    existing.imageCandidates = [...new Set([...(existing.imageCandidates || []), ...(normalized.imageCandidates || [])])];
     existing.ygoResourcesUrl = existing.ygoResourcesUrl || normalized.ygoResourcesUrl;
     existing.liveId = existing.liveId || normalized.liveId;
     existing.aliases = [...new Set([...(existing.aliases || []), ...(normalized.aliases || [])])];
@@ -1106,6 +1117,10 @@ function selectCard(index) {
 async function loadCardDetail(card) {
   const key = card.passcode || card.id || card.name;
   if (cardDetailsCache.has(key)) return cardDetailsCache.get(key);
+  if (card.source === "user_provided_text") {
+    cardDetailsCache.set(key, null);
+    return null;
+  }
 
   const endpoint = getCardApiUrl();
   if (!endpoint) {
@@ -1149,15 +1164,28 @@ function renderCardDetail(card, detail, status) {
   const aliases = detail?.names?.filter((item) => item && item !== name).slice(0, 3) || [card.jaName, card.enName].filter(Boolean);
   const effect = cleanDisplayText(detail?.effectText || card.effectText || "暂未读取到效果文本。");
   const sourceUrl = detail?.sourceUrl || card.sourceUrl || "";
+  const sourceLabel = card.source === "user_provided_text"
+    ? "用户提供文本"
+    : detail?.sourceLabel || card.sourceLabel || "在百鸽打开";
 
   ui.cardName.textContent = name;
   ui.cardMeta.textContent = [detail?.meta || card.cardType, aliases.length ? aliases.join(" / ") : ""].filter(Boolean).join(" · ");
   ui.cardEffect.textContent = effect;
-  ui.cardSourceLink.href = sourceUrl || "#";
-  ui.cardSourceLink.hidden = !sourceUrl;
-  ui.cardStatus.textContent = status === "loading" ? "读取百鸽中" : `${visibleCards.length} 张`;
+  ui.cardSourceLink.textContent = sourceLabel;
+  if (sourceUrl) {
+    ui.cardSourceLink.href = sourceUrl;
+    ui.cardSourceLink.hidden = false;
+    ui.cardSourceLink.removeAttribute("aria-disabled");
+  } else {
+    ui.cardSourceLink.removeAttribute("href");
+    ui.cardSourceLink.hidden = sourceLabel !== "用户提供文本";
+    ui.cardSourceLink.setAttribute("aria-disabled", "true");
+  }
+  ui.cardStatus.textContent = card.source === "user_provided_text"
+    ? "用户提供文本"
+    : status === "loading" ? "读取百鸽中" : `${visibleCards.length} 张`;
 
-  const imageCandidates = detail?.imageCandidates || buildLocalImageCandidates(card);
+  const imageCandidates = detail?.imageCandidates?.length ? detail.imageCandidates : buildLocalImageCandidates(card);
   setCardImage(imageCandidates, name);
 }
 
@@ -1193,11 +1221,13 @@ function setCardImage(candidates, altText) {
 }
 
 function buildLocalImageCandidates(card) {
+  const providedImages = [card.imageUrl, ...(card.imageCandidates || [])].filter(Boolean);
   const id = (card.passcode || card.id || "").replace(/\D+/g, "");
-  if (!id) return [];
+  if (!id) return providedImages;
   const normalizedId = id.length <= 8 ? id.padStart(8, "0") : id;
   const compactId = normalizedId.replace(/^0+/, "") || normalizedId;
   return [
+    ...providedImages,
     getCardImageApiUrl(normalizedId),
     `https://cdn.233.momobako.com/ygopro/pics/${compactId}.jpg!half`,
     `https://cdn.233.momobako.com/ygopro/pics/${compactId}.jpg`,

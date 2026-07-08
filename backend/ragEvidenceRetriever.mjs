@@ -25,11 +25,16 @@ export async function retrieveRagEvidence({
     : await loadRagData(dataDir);
   const cardProvider = createLocalCardDataProvider(data);
   const resolvedCards = cardResolution.resolvedCards || [];
+  const providedTexts = normalizeUserProvidedCardTexts(cardResolution.userProvidedCardTexts || [], limits);
   const retrievalWarnings = [];
   const fuzzyCards = resolveUnresolvedMentionCards(cardResolution.unresolvedMentions || [], cardProvider, limits, retrievalWarnings);
   const retrievalCards = dedupeCards([...resolvedCards, ...fuzzyCards]).slice(0, limits.maxCards);
-  const mentionQueries = (cardResolution.unresolvedMentions || []).map((item) => item.input).filter(Boolean);
+  const mentionQueries = [
+    ...(cardResolution.unresolvedMentions || []).map((item) => item.input),
+    ...providedTexts.map((item) => item.name),
+  ].filter(Boolean);
   if (fuzzyCards.length) retrievalWarnings.push(`unresolved_mentions_fuzzy_matched:${fuzzyCards.map((card) => card.name).join(",")}`);
+  if (providedTexts.length) retrievalWarnings.push("user_provided_text_not_official");
   const allEvidenceRecords = [...data.records, ...data.qaRecords];
 
   const cardTexts = retrievalCards
@@ -92,6 +97,7 @@ export async function retrieveRagEvidence({
 
   return {
     cardTexts: dedupeEvidence(cardTexts),
+    userProvidedCardTexts: dedupeEvidence(providedTexts.map((item, index) => userProvidedTextEvidence(item, index, limits.maxCardTextChars, retrievalWarnings))),
     officialQaDirectCandidates: dedupeEvidence(officialQaDirectCandidates),
     officialQaRelated: dedupeEvidence(officialQaRelated),
     faqRelated: dedupeEvidence(faqRelated),
@@ -102,6 +108,7 @@ export async function retrieveRagEvidence({
       searchPaths: officialMatches.searchPaths || [],
       recordCount: allEvidenceRecords.length,
       cardCount: data.cards.length,
+      userProvidedCardTextCount: providedTexts.length,
     },
   };
 }
@@ -130,6 +137,7 @@ export async function loadRagData(dataDir = defaultDataDir) {
 export function evidenceBucketsToList(evidence = {}) {
   return [
     ...(evidence.cardTexts || []),
+    ...(evidence.userProvidedCardTexts || []),
     ...(evidence.officialQaDirectCandidates || []),
     ...(evidence.officialQaRelated || []),
     ...(evidence.faqRelated || []),
@@ -214,6 +222,25 @@ function cardTextEvidence(card, maxTextChars, warnings) {
     cards: [card.name].filter(Boolean),
     text: truncated ? `${text.slice(0, Math.max(0, maxTextChars - 1))}…` : text,
     sourceUrl: card.sourceUrl || "",
+    isDirect: false,
+  };
+}
+
+function userProvidedTextEvidence(item, index, maxTextChars, warnings) {
+  const text = String(item.text || "");
+  const key = normalizeCardKey(item.name) || `card-${index + 1}`;
+  const truncated = text.length > maxTextChars;
+  if (truncated) warnings.push(`user_provided_text_truncated:${key}`);
+  return {
+    id: `user-card-text-${key}`,
+    type: "user_provided_text",
+    title: `${item.name} 的用户提供文本`,
+    cardIds: [],
+    cards: [item.name].filter(Boolean),
+    text: truncated ? `${text.slice(0, Math.max(0, maxTextChars - 1))}…` : text,
+    sourceUrl: "",
+    source: "user_provided_text",
+    official: false,
     isDirect: false,
   };
 }
@@ -315,6 +342,18 @@ function resolveUnresolvedMentionCards(unresolvedMentions, cardProvider, limits,
     });
   }
   return result;
+}
+
+function normalizeUserProvidedCardTexts(items, limits) {
+  return dedupeBy((items || [])
+    .map((item) => ({
+      name: String(item?.name || "").trim(),
+      text: String(item?.text || "").trim(),
+      source: "user_provided_text",
+      official: false,
+    }))
+    .filter((item) => item.name && item.text)
+    .slice(0, limits.maxCards), (item) => normalizeCardKey(item.name));
 }
 
 function dedupeCards(cards) {

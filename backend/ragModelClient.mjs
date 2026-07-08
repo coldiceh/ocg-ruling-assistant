@@ -352,6 +352,19 @@ function buildMockAnswer({ evidence, cardResolution }) {
       confidenceSelfEstimate: related ? "medium" : "low",
     });
   }
+  const userProvidedText = evidence.userProvidedCardTexts?.[0];
+  if (userProvidedText) {
+    return normalizeModelAnswer({
+      answerLevel: "low_confidence_analysis",
+      shortAnswer: "目前主要只有用户提供的卡片文本，不能当作官方裁定。",
+      reasoning: ["已读取用户提供的卡片文本。", "该文本不是官方 direct Q&A，只能支持未确认分析。"],
+      usedCards: (userProvidedText.cards || []).filter(Boolean),
+      usedEvidence: [{ id: userProvidedText.id, type: "user_provided_text", title: userProvidedText.title }],
+      missingInfo: [],
+      riskFlags: ["user_provided_text_not_official"],
+      confidenceSelfEstimate: "low",
+    });
+  }
   return safeFallbackAnswer("no_retrieved_evidence");
 }
 

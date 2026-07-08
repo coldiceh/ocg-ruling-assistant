@@ -57,11 +57,15 @@ export function buildRagRulingPromptBundle({
   let prompt = [
     "你是游戏王 OCG 裁定分析助手。你要基于检索到的资料生成 RAG 裁定分析。",
     "优先根据官方 Q&A direct candidates 回答；只有 officialQaDirectCandidates 中的资料可以支持 official_confirmed。",
-    "如果没有官方直接 Q&A，可以根据卡片文本、FAQ、官方相似案例和相关资料给裁定分析。",
-    "如果至少存在卡片文本、FAQ、官方相似案例或相关资料，不要只回答 needs_more_info；应输出 rule_analysis 或 low_confidence_analysis，并明确不是官方确认。",
+    "资料来源必须区分：official_direct_qa、official_related_qa、card_text、user_provided_text、faq_related、raw_related。",
+    "user_provided_text 是用户在问题中粘贴的卡片文本，不是官方 direct evidence；可以基于这些文本分析，但不得称为官方确认。",
+    "如果没有官方直接 Q&A，可以根据卡片文本、用户提供文本、FAQ、官方相似案例和相关资料给裁定分析。",
+    "没有 official direct 时，answerLevel 只能是 rule_analysis、low_confidence_analysis 或 needs_more_info。",
+    "如果用户提供文本足够完整，不要仅因为本地数据库找不到该卡或缺少 official direct Q&A 就输出 needs_more_info。",
+    "如果至少存在卡片文本、用户提供文本、FAQ、官方相似案例或相关资料，不要只回答 needs_more_info；应输出 rule_analysis 或 low_confidence_analysis，并明确不是官方确认。",
     "只有在完全没有可用卡片文本、相关资料，或问题缺少关键场景导致无法分析时，才输出 needs_more_info。",
     "必须区分 answerLevel：official_confirmed、rule_analysis、low_confidence_analysis、needs_more_info。budget_limited 只由后端预算守卫使用，模型不要主动输出。",
-    "不得把 related evidence、FAQ 或 rawRelatedEvidence 伪装成 official direct。",
+    "不得把 user_provided_text、related evidence、FAQ 或 rawRelatedEvidence 伪装成 official direct。",
     "不得编造官方 Q&A、资料 id、卡片文本或规则出处。",
     "不确定时要把需要补充的信息写入 missingInfo，把风险写入 riskFlags。",
     "confidenceSelfEstimate 只是模型自评，不代表最终官方等级。",
@@ -104,6 +108,7 @@ function prepareEvidenceForPrompt(evidence, limits, warnings) {
     officialQaRelated: limitEvidence(evidence.officialQaRelated, limits.maxRelatedEvidence, 1600, "official_related", warnings),
     faqRelated: limitEvidence(evidence.faqRelated, limits.maxRelatedEvidence, 1600, "faq", warnings),
     cardTexts: limitEvidence(evidence.cardTexts, limits.maxCards, limits.maxCardTextChars, "card_text", warnings),
+    userProvidedCardTexts: limitEvidence(evidence.userProvidedCardTexts, limits.maxCards, limits.maxCardTextChars, "user_provided_text", warnings),
     rawRelatedEvidence: limitEvidence(evidence.rawRelatedEvidence, limits.maxRelatedEvidence, 1200, "raw_related", warnings),
   };
 }
@@ -125,6 +130,8 @@ function limitEvidence(items = [], limit, textLimit, label, warnings) {
       cardIds: item.cardIds || [],
       text: truncated ? `${text.slice(0, Math.max(0, textLimit - 1))}…` : text,
       sourceUrl: item.sourceUrl || "",
+      source: item.source || "",
+      official: item.official === true,
     };
   });
 }

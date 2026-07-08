@@ -31,7 +31,11 @@ export async function answerRagRulingQuestion({
     env,
   });
   const promptBundle = buildRagRulingPromptBundle({ userQuery: query, cardResolution, evidence, env });
-  const displayCards = dedupeCards([...(cardResolution.resolvedCards || []), ...(evidence.fuzzyResolvedCards || [])]);
+  const displayCards = dedupeCards([
+    ...(cardResolution.resolvedCards || []),
+    ...(evidence.fuzzyResolvedCards || []),
+    ...userProvidedCards(evidence.userProvidedCardTexts || []),
+  ]);
   const modelResult = await callRagModel({
     prompt: promptBundle.prompt,
     evidence,
@@ -58,6 +62,7 @@ export async function answerRagRulingQuestion({
       mode: "rag_baseline",
       retrievalCounts: {
         cardTexts: evidence.cardTexts.length,
+        userProvidedCardTexts: evidence.userProvidedCardTexts.length,
         officialQaDirectCandidates: evidence.officialQaDirectCandidates.length,
         officialQaRelated: evidence.officialQaRelated.length,
         faqRelated: evidence.faqRelated.length,
@@ -81,10 +86,12 @@ export async function answerRagRulingQuestion({
 
 export function normalizeRagAnswer(answer = {}, { evidence = {}, cardResolution = {}, modelWarnings = [] } = {}) {
   const availableEvidence = evidenceBucketsToList(evidence);
-  const availableCards = [...(cardResolution.resolvedCards || []), ...(evidence.fuzzyResolvedCards || [])];
+  const userTextEvidence = evidence.userProvidedCardTexts || [];
+  const availableCards = [...(cardResolution.resolvedCards || []), ...(evidence.fuzzyResolvedCards || []), ...userProvidedCards(userTextEvidence)];
   const evidenceById = new Map(availableEvidence.map((item) => [String(item.id), item]));
   const directIds = new Set((evidence.officialQaDirectCandidates || []).map((item) => String(item.id)));
   const riskFlags = new Set([...(answer.riskFlags || []), ...modelWarnings]);
+  if (userTextEvidence.length) riskFlags.add("user_provided_text_not_official");
   let answerLevel = RAG_ANSWER_LEVELS.includes(answer.answerLevel) ? answer.answerLevel : "low_confidence_analysis";
 
   const usedEvidence = (answer.usedEvidence || [])
@@ -171,6 +178,7 @@ function buildEmptyQuestionAnswer() {
 function outputEvidenceType(source, directIds) {
   if (directIds.has(String(source.id))) return "official_qa";
   if (source.type === "card_text") return "card_text";
+  if (source.type === "user_provided_text") return "user_provided_text";
   if (source.type === "faq") return "faq";
   return "related";
 }
@@ -195,4 +203,21 @@ function dedupeCards(cards) {
     map.set(key, card);
   }
   return [...map.values()];
+}
+
+function userProvidedCards(items) {
+  return (items || []).map((item) => ({
+    id: item.id || "",
+    cardId: "",
+    name: (item.cards || [])[0] || item.name || "",
+    cnName: (item.cards || [])[0] || item.name || "",
+    jaName: "",
+    enName: "",
+    cardType: "用户提供文本",
+    effectText: item.text || "",
+    source: "user_provided_text",
+    sourceLabel: "用户提供文本",
+    official: false,
+    aliases: (item.cards || []).filter(Boolean),
+  })).filter((card) => card.name && card.effectText);
 }

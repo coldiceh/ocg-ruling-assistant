@@ -143,6 +143,8 @@ test("ui_has_single_query_button", async () => {
   assert.match(app, /mode: backendMode/u);
   assert.match(app, /const backendMode = "rag"/u);
   assert.match(app, /isDebugUiEnabled/u);
+  assert.match(app, /user_provided_text/u);
+  assert.match(app, /用户提供文本/u);
   assert.doesNotMatch(app, /deepAnalyzeButton|ragModeToggle|legacyPipelineToggle/u);
   assert.doesNotMatch(html, /裁判结论/u);
   assert.doesNotMatch(app, /裁判结论/u);
