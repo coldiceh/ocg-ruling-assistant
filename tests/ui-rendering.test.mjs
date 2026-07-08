@@ -158,9 +158,11 @@ test("ui_hides_engine_details_by_default", async () => {
     readFile(new URL("../index.html", import.meta.url), "utf8"),
     readFile(new URL("../src/app.js", import.meta.url), "utf8"),
   ]);
-  assert.match(html, /AI裁定分析/u);
+  assert.match(html, /裁定流程/u);
   assert.match(html, /id="themeToggle"/u);
+  assert.match(html, /class="page-background"/u);
   assert.doesNotMatch(html, /ANALYSIS CORE|DeepSeek|TOKEN|budget|provider debug/u);
+  assert.doesNotMatch(html, /AI裁定分析|RAG 裁定分析|RAG 分析/u);
   assert.doesNotMatch(html, /后端模式|公开资料检索|卡片文本分析/u);
   assert.doesNotMatch(html, /terminal-theme|OCG RULING TERMINAL/u);
   assert.match(app, /debugUiEnabled/u);
@@ -177,9 +179,11 @@ test("card_dossier_nodes_and_theme_backgrounds_exist", async () => {
   assert.match(html, /id="cardPanel"/u);
   assert.match(html, /id="cardImagePlaceholder"/u);
   assert.match(html, /相关卡片/u);
+  assert.match(css, /\.page-background/u);
   assert.match(css, /assets\/bg-day\.png/u);
   assert.match(css, /assets\/bg-night\.png/u);
   assert.match(css, /theme-night/u);
+  assert.doesNotMatch(css, /body::before|body::after/u);
   assert.match(app, /baige_card_text/u);
   assert.match(app, /百鸽卡片文本/u);
 });
