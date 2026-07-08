@@ -65,7 +65,7 @@ body::after {
   position: fixed;
   inset: 0;
   pointer-events: none;
-  z-index: -2;
+  z-index: 0;
 }
 
 body::before {
@@ -75,7 +75,6 @@ body::before {
 }
 
 body::after {
-  z-index: -1;
   background:
     linear-gradient(180deg, var(--page-tint), var(--page-shade)),
     linear-gradient(90deg, rgba(255, 255, 255, 0.24), rgba(255, 255, 255, 0));
@@ -116,6 +115,8 @@ a {
 }
 
 .app-shell {
+  position: relative;
+  z-index: 1;
   min-height: 100vh;
   display: flex;
   flex-direction: column;

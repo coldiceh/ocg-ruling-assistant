@@ -116,7 +116,7 @@ test("UI presents rule-derived wording and player assistant theme without intern
     readFile(new URL("../src/styles.css", import.meta.url), "utf8"),
   ]);
   assert.match(html, /class="theme-day"/u);
-  assert.match(html, /OCG AI裁定分析/u);
+  assert.match(html, /游戏王OCG裁定助手/u);
   assert.match(html, />资料来源</u);
   assert.doesNotMatch(html, /OCG RULING TERMINAL|ANALYSIS CORE/u);
   for (const token of ["assets/bg-day.png", "assets/bg-night.png", "--surface", "--accent", "theme-night"]) {
