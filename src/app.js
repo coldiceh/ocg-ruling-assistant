@@ -152,9 +152,6 @@ const builtInNotes = [
 const ui = {
   questionInput: document.querySelector("#questionInput"),
   analyzeButton: document.querySelector("#analyzeButton"),
-  deepAnalyzeButton: document.querySelector("#deepAnalyzeButton"),
-  ragModeToggle: document.querySelector("#ragModeToggle"),
-  legacyPipelineToggle: document.querySelector("#legacyPipelineToggle"),
   clearButton: document.querySelector("#clearButton"),
   resultGrid: document.querySelector("#resultGrid"),
   confidenceText: document.querySelector("#confidenceText"),
@@ -165,6 +162,7 @@ const ui = {
   subAnswersPanel: document.querySelector("#subAnswersPanel"),
   parserDebugPanel: document.querySelector("#parserDebugPanel"),
   parserDebugOutput: document.querySelector("#parserDebugOutput"),
+  pipelineDebugToggle: document.querySelector("#pipelineDebugToggle"),
   modelStatusText: document.querySelector("#modelStatusText"),
   stepsList: document.querySelector("#stepsList"),
   questionsList: document.querySelector("#questionsList"),
@@ -196,6 +194,7 @@ const cardDetailsCache = new Map();
 let visibleCards = [];
 let selectedCardIndex = 0;
 let lastRenderedBackendAnswer = null;
+let debugUiEnabled = false;
 
 function normalizeText(value) {
   return String(value || "")
@@ -275,12 +274,9 @@ async function loadBackendModelInfo() {
 }
 
 function formatModelInfo(info) {
-  if (!info?.enabled) return "资料检索";
+  if (!info?.enabled) return "RAG · Mock";
   const provider = modelProviderLabel(info.provider);
-  const models = Array.isArray(info.models) ? info.models.filter(Boolean) : [];
-  if (!models.length) return provider;
-  if (models.length === 1) return `${provider} · ${models[0]}`;
-  return `${provider} · ${models[0]} 等 ${models.length} 个`;
+  return `RAG · ${provider}`;
 }
 
 async function readJson(url) {
@@ -607,7 +603,7 @@ function confidenceFor(match, generatedQuestions) {
   return { label: "需要Q&A确认", className: "is-risky" };
 }
 
-async function analyzeQuestion(mode = "duel") {
+async function analyzeQuestion() {
   const text = ui.questionInput.value.trim();
   const requestId = ++analysisRequestId;
   if (!text) {
@@ -618,7 +614,7 @@ async function analyzeQuestion(mode = "duel") {
   if (appConfig.answerApiUrl) {
     renderPending();
     try {
-      const answer = await requestBackendAnswer(text, mode);
+      const answer = await requestBackendAnswer(text);
       if (requestId !== analysisRequestId) return;
       renderBackendAnswer(answer);
       return;
@@ -640,18 +636,16 @@ async function analyzeQuestion(mode = "duel") {
   renderResult(text, bestMatch, confidence, generatedQuestions, detectedCards);
 }
 
-async function requestBackendAnswer(text, mode = "duel") {
-  const useRag = ui.ragModeToggle?.checked === true;
-  const useFastJudge = !ui.legacyPipelineToggle?.checked;
-  const backendMode = useRag ? "rag" : mode;
-  const cacheKey = buildBackendCacheKey(text, backendMode, useFastJudge);
+async function requestBackendAnswer(text) {
+  const backendMode = "rag";
+  const cacheKey = buildBackendCacheKey(text, backendMode);
   const cached = readCachedBackendAnswer(cacheKey);
   if (cached) return cached;
 
   const response = await fetch(appConfig.answerApiUrl, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ question: text, mode: backendMode, useFastJudge }),
+    body: JSON.stringify({ question: text, mode: backendMode }),
   });
   if (!response.ok) throw new Error(`后端返回 ${response.status}`);
   const answer = await response.json();
@@ -659,8 +653,8 @@ async function requestBackendAnswer(text, mode = "duel") {
   return answer;
 }
 
-function buildBackendCacheKey(text, mode = "duel", useFastJudge = true) {
-  return `ocg-ruling-answer:v12:${mode}:${useFastJudge ? "fast" : "legacy"}:${appConfig.answerApiUrl}:${normalizeText(text).slice(0, 2000)}`;
+function buildBackendCacheKey(text, mode = "rag") {
+  return `ocg-ruling-answer:v13:${mode}:${appConfig.answerApiUrl}:${normalizeText(text).slice(0, 2000)}`;
 }
 
 function readCachedBackendAnswer(key) {
@@ -810,7 +804,7 @@ function renderFastJudgeAnswer(answer) {
     cannot_answer_safely: { confidence: "无法安全判断", className: "is-risky", basis: "验证未通过" },
   };
   const state = labels[answer.answerType] || labels.cannot_answer_safely;
-  updateModelStatus(answer.pending ? "等待深度判断" : "FAST JUDGE");
+  updateModelStatus(answer.pending ? "Legacy · pending" : "Legacy");
   ui.verdictBlock.className = `result-block verdict-block ${state?.className || "is-risky"}`;
   ui.confidenceText.textContent = answer.statusChip || state?.confidence || "NEEDS-INFO";
   const routeTitles = {
@@ -902,7 +896,7 @@ function resetAnalysis() {
 
 function renderParserDebug(debug) {
   if (!ui.parserDebugPanel || !ui.parserDebugOutput) return;
-  if (!debug) {
+  if (!debugUiEnabled || !debug) {
     ui.parserDebugPanel.hidden = true;
     ui.parserDebugOutput.textContent = "";
     return;
@@ -1884,11 +1878,12 @@ async function init() {
   await loadAppConfig();
   await loadBackendModelInfo();
   await loadSyncedData();
+  debugUiEnabled = isDebugUiEnabled();
+  if (ui.pipelineDebugToggle) ui.pipelineDebugToggle.hidden = !debugUiEnabled;
   updateSourceStatus();
   resetAnalysis();
 
-  ui.analyzeButton.addEventListener("click", () => analyzeQuestion("duel"));
-  ui.deepAnalyzeButton?.addEventListener("click", () => analyzeQuestion("analysis"));
+  ui.analyzeButton.addEventListener("click", () => analyzeQuestion());
   ui.questionInput.addEventListener("input", scheduleAnalysis);
   ui.clearButton.addEventListener("click", () => {
     clearTimeout(analysisTimer);
@@ -1912,3 +1907,12 @@ function scheduleAnalysis() {
 }
 
 init();
+
+function isDebugUiEnabled() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    return params.get("debug") === "1";
+  } catch {
+    return false;
+  }
+}

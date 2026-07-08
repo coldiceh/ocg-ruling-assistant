@@ -31,6 +31,7 @@ export async function answerRagRulingQuestion({
     env,
   });
   const promptBundle = buildRagRulingPromptBundle({ userQuery: query, cardResolution, evidence, env });
+  const displayCards = dedupeCards([...(cardResolution.resolvedCards || []), ...(evidence.fuzzyResolvedCards || [])]);
   const modelResult = await callRagModel({
     prompt: promptBundle.prompt,
     evidence,
@@ -49,7 +50,7 @@ export async function answerRagRulingQuestion({
     shortAnswer: normalized.shortAnswer,
     reasoning: normalized.reasoning,
     usedEvidence: normalized.usedEvidence,
-    resolvedCards: cardResolution.resolvedCards,
+    resolvedCards: displayCards,
     missingInfo: normalized.missingInfo,
     riskFlags: normalized.riskFlags,
     confidenceSelfEstimate: normalized.confidenceSelfEstimate,
@@ -80,6 +81,7 @@ export async function answerRagRulingQuestion({
 
 export function normalizeRagAnswer(answer = {}, { evidence = {}, cardResolution = {}, modelWarnings = [] } = {}) {
   const availableEvidence = evidenceBucketsToList(evidence);
+  const availableCards = [...(cardResolution.resolvedCards || []), ...(evidence.fuzzyResolvedCards || [])];
   const evidenceById = new Map(availableEvidence.map((item) => [String(item.id), item]));
   const directIds = new Set((evidence.officialQaDirectCandidates || []).map((item) => String(item.id)));
   const riskFlags = new Set([...(answer.riskFlags || []), ...modelWarnings]);
@@ -104,6 +106,10 @@ export function normalizeRagAnswer(answer = {}, { evidence = {}, cardResolution 
     answerLevel = usedEvidence.length ? "rule_analysis" : "low_confidence_analysis";
     riskFlags.add("official_confirmed_requires_direct_evidence");
   }
+  if (answerLevel === "needs_more_info" && availableEvidence.length) {
+    answerLevel = "low_confidence_analysis";
+    riskFlags.add("needs_more_info_downgraded_to_low_confidence_with_evidence");
+  }
   if (!usedEvidence.length && availableEvidence.length) {
     const fallbackEvidence = availableEvidence[0];
     usedEvidence.push({
@@ -117,17 +123,26 @@ export function normalizeRagAnswer(answer = {}, { evidence = {}, cardResolution 
     answerLevel = "needs_more_info";
     riskFlags.add("no_retrieved_evidence");
   }
-  if (!(cardResolution.resolvedCards || []).length) riskFlags.add("card_name_not_resolved");
+  if (!availableCards.length) riskFlags.add("card_name_not_resolved");
+  const shortAnswer = readableShortAnswer(answer.shortAnswer, answerLevel);
 
   return {
     answerLevel,
-    shortAnswer: String(answer.shortAnswer || "当前资料不足，无法给出可靠裁定分析。").trim(),
+    shortAnswer,
     reasoning: cleanStringArray(answer.reasoning).length ? cleanStringArray(answer.reasoning) : ["基于当前检索资料生成 RAG baseline 分析。"],
     usedEvidence,
     missingInfo: cleanStringArray(answer.missingInfo),
     riskFlags: [...riskFlags].filter(Boolean),
     confidenceSelfEstimate: ["low", "medium", "high"].includes(answer.confidenceSelfEstimate) ? answer.confidenceSelfEstimate : "low",
   };
+}
+
+function readableShortAnswer(shortAnswer, answerLevel) {
+  const text = String(shortAnswer || "").trim();
+  if (text && !/^当前资料不足，无法给出可靠裁定分析。?$/u.test(text)) return text;
+  if (answerLevel === "low_confidence_analysis") return "未命中官方直接 Q&A；下面只能基于已检索到的卡片文本和相关资料给出低置信分析。";
+  if (answerLevel === "rule_analysis") return "未命中官方直接 Q&A；下面基于卡片文本、FAQ 和相关资料给出未确认分析。";
+  return text || "当前资料不足，无法给出可靠裁定分析。";
 }
 
 function buildEmptyQuestionAnswer() {
@@ -170,4 +185,14 @@ function cleanStringArray(value) {
 function readNumber(value, fallback) {
   const number = Number(value);
   return Number.isFinite(number) && number > 0 ? number : fallback;
+}
+
+function dedupeCards(cards) {
+  const map = new Map();
+  for (const card of cards || []) {
+    const key = String(card.id || card.cardId || card.name || card.input || "").trim();
+    if (!key || map.has(key)) continue;
+    map.set(key, card);
+  }
+  return [...map.values()];
 }

@@ -34,7 +34,7 @@
             </button>
           </div>
 
-          <textarea id="questionInput" spellcheck="false" placeholder="&gt; DESCRIBE RULING SCENARIO..."></textarea>
+          <textarea id="questionInput" spellcheck="false" placeholder="输入需要分析的 OCG 裁定问题..."></textarea>
 
           <div class="actions">
             <div class="model-strip" aria-live="polite">
@@ -42,20 +42,18 @@
               <strong id="modelStatusText">待分析</strong>
             </div>
             <div class="judge-actions">
-              <button class="text-button" id="deepAnalyzeButton" type="button">深度解析</button>
               <button class="primary-button" id="analyzeButton" type="button">
                 <svg viewBox="0 0 24 24" aria-hidden="true">
                   <path d="M8 5h8M6 12h12M9 19h6" />
                 </svg>
-                快速结论
+                查询
               </button>
             </div>
           </div>
 
-          <details class="pipeline-debug-toggle">
-            <summary>管线调试</summary>
-            <label><input id="ragModeToggle" type="checkbox" checked /> RAG 分析模式</label>
-            <label><input id="legacyPipelineToggle" type="checkbox" /> 使用旧管线结果</label>
+          <details class="pipeline-debug-toggle" id="pipelineDebugToggle" hidden>
+            <summary>调试</summary>
+            <p>当前默认使用 RAG baseline；legacy / fastjudge 仅保留为内部显式 API mode。</p>
           </details>
 
           <div class="result-grid" id="resultGrid" hidden>

@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { createLocalCardDataProvider } from "./cardDataProvider.mjs";
 import { normalizeCardKey } from "./ragCardExtractor.mjs";
 import { searchOfficialQaEvidence } from "./officialQaMatcher.mjs";
 
@@ -22,20 +23,24 @@ export async function retrieveRagEvidence({
   const data = cards || records || qaRecords
     ? normalizeInjectedData({ cards, records, qaRecords })
     : await loadRagData(dataDir);
+  const cardProvider = createLocalCardDataProvider(data);
   const resolvedCards = cardResolution.resolvedCards || [];
   const retrievalWarnings = [];
+  const fuzzyCards = resolveUnresolvedMentionCards(cardResolution.unresolvedMentions || [], cardProvider, limits, retrievalWarnings);
+  const retrievalCards = dedupeCards([...resolvedCards, ...fuzzyCards]).slice(0, limits.maxCards);
+  const mentionQueries = (cardResolution.unresolvedMentions || []).map((item) => item.input).filter(Boolean);
+  if (fuzzyCards.length) retrievalWarnings.push(`unresolved_mentions_fuzzy_matched:${fuzzyCards.map((card) => card.name).join(",")}`);
   const allEvidenceRecords = [...data.records, ...data.qaRecords];
 
-  const cardTexts = resolvedCards
-    .slice(0, limits.maxCards)
-    .map((card) => findCardRecord(card, data.cards))
+  const cardTexts = retrievalCards
+    .map((card) => findCardRecord(card, data.cards) || cardProvider.getCardProfile(card.id || card.cardId))
     .filter(Boolean)
     .map((card) => cardTextEvidence(card, limits.maxCardTextChars, retrievalWarnings));
 
   const officialMatches = searchOfficialQaEvidence({
     question: userQuery,
     records: data.qaRecords,
-    resolvedCards,
+    resolvedCards: retrievalCards,
     limit: Math.max(20, limits.maxOfficialQa * 4),
   });
   const officialQaDirectCandidates = officialMatches.exact
@@ -46,41 +51,43 @@ export async function retrieveRagEvidence({
   const officialQaRelatedSource = [
     ...officialMatches.near,
     ...officialMatches.related,
-    ...rankRecords({ userQuery, records: data.qaRecords.filter((record) => record.recordType === "qa"), resolvedCards }),
+    ...rankRecords({ userQuery, records: data.qaRecords.filter((record) => record.recordType === "qa"), resolvedCards: retrievalCards, mentionQueries }),
   ];
   if (officialQaRelatedSource.length > limits.maxRelatedEvidence) retrievalWarnings.push(`official_related_limited:${officialQaRelatedSource.length}->${limits.maxRelatedEvidence}`);
   const officialQaRelated = officialQaRelatedSource
+    .slice(0, limits.maxRelatedEvidence)
     .map((item) => item.record
       ? evidenceFromOfficialMatch(item, "related", limits.maxEvidenceTextChars, retrievalWarnings)
       : evidenceFromRecord(item, "related", limits.maxEvidenceTextChars, retrievalWarnings))
-    .filter((item) => !directIds.has(item.id))
-    .slice(0, limits.maxRelatedEvidence);
+    .filter((item) => !directIds.has(item.id));
 
   const faqRelatedSource = rankRecords({
     userQuery,
     records: allEvidenceRecords.filter((record) => record.recordType === "card-faq"),
-    resolvedCards,
+    resolvedCards: retrievalCards,
+    mentionQueries,
   });
   if (faqRelatedSource.length > limits.maxRelatedEvidence) retrievalWarnings.push(`faq_related_limited:${faqRelatedSource.length}->${limits.maxRelatedEvidence}`);
   const faqRelated = faqRelatedSource
+    .slice(0, limits.maxRelatedEvidence)
     .map((record) => evidenceFromRecord(record, "faq", limits.maxEvidenceTextChars, retrievalWarnings))
-    .filter((item) => !directIds.has(item.id))
-    .slice(0, limits.maxRelatedEvidence);
+    .filter((item) => !directIds.has(item.id));
 
   const rawRelatedSource = rankRecords({
     userQuery,
     records: allEvidenceRecords.filter((record) => !["card-faq", "card-text"].includes(record.recordType)),
-    resolvedCards,
+    resolvedCards: retrievalCards,
+    mentionQueries,
     allowNoCardMatch: true,
   });
   if (rawRelatedSource.length > limits.maxRelatedEvidence) retrievalWarnings.push(`raw_related_limited:${rawRelatedSource.length}->${limits.maxRelatedEvidence}`);
   const rawRelatedEvidence = rawRelatedSource
+    .slice(0, limits.maxRelatedEvidence)
     .map((record) => evidenceFromRecord(record, record.recordType === "qa" ? "related" : "related", limits.maxEvidenceTextChars, retrievalWarnings))
-    .filter((item) => !directIds.has(item.id))
-    .slice(0, limits.maxRelatedEvidence);
+    .filter((item) => !directIds.has(item.id));
 
   if (!resolvedCards.length) retrievalWarnings.push("card_name_not_resolved_raw_query_fallback_used");
-  if (!cardTexts.length && resolvedCards.length) retrievalWarnings.push("resolved_card_text_not_found");
+  if (!cardTexts.length && retrievalCards.length) retrievalWarnings.push("resolved_card_text_not_found");
   if (!officialQaDirectCandidates.length) retrievalWarnings.push("official_direct_qa_not_found");
 
   return {
@@ -89,6 +96,7 @@ export async function retrieveRagEvidence({
     officialQaRelated: dedupeEvidence(officialQaRelated),
     faqRelated: dedupeEvidence(faqRelated),
     rawRelatedEvidence: dedupeEvidence(rawRelatedEvidence),
+    fuzzyResolvedCards: fuzzyCards,
     retrievalWarnings,
     debug: {
       searchPaths: officialMatches.searchPaths || [],
@@ -238,25 +246,27 @@ function evidenceFromRecord(record, type, maxTextChars = 1600, warnings = []) {
   };
 }
 
-function rankRecords({ userQuery, records, resolvedCards, allowNoCardMatch = false }) {
-  const queryTerms = tokenize(userQuery);
+function rankRecords({ userQuery, records, resolvedCards, mentionQueries = [], allowNoCardMatch = false }) {
+  const queryTerms = tokenize([userQuery, ...mentionQueries].join(" "));
   const queryKey = normalizeCardKey(userQuery);
   const resolvedIds = new Set((resolvedCards || []).map((card) => normalizeId(card.id || card.cardId)).filter(Boolean));
   const resolvedNames = new Set((resolvedCards || []).flatMap((card) => [card.name, card.cnName, card.jaName, card.enName, ...(card.aliases || [])]).map(normalizeCardKey).filter(Boolean));
+  const unresolvedNames = new Set((mentionQueries || []).map(normalizeCardKey).filter(Boolean));
   return (records || [])
     .filter((record) => record.status !== "removed" && record.status !== "superseded")
-    .map((record) => ({ record, score: scoreRecord(record, { queryTerms, queryKey, resolvedIds, resolvedNames, allowNoCardMatch }) }))
+    .map((record) => ({ record, score: scoreRecord(record, { queryTerms, queryKey, resolvedIds, resolvedNames, unresolvedNames, allowNoCardMatch }) }))
     .filter((item) => item.score > 0)
     .sort((left, right) => right.score - left.score || String(left.record.id).localeCompare(String(right.record.id)))
     .map((item) => item.record);
 }
 
-function scoreRecord(record, { queryTerms, queryKey, resolvedIds, resolvedNames, allowNoCardMatch }) {
+function scoreRecord(record, { queryTerms, queryKey, resolvedIds, resolvedNames, unresolvedNames, allowNoCardMatch }) {
   const text = `${record.title || ""}\n${record.text || ""}`;
   const textKey = normalizeCardKey(text);
   const cardIdMatch = (record.cardIds || []).some((id) => resolvedIds.has(normalizeId(id)));
   const cardNameMatch = (record.cards || []).some((name) => resolvedNames.has(normalizeCardKey(name))) || [...resolvedNames].some((name) => name.length >= 3 && textKey.includes(name));
-  const cardScore = cardIdMatch ? 5 : cardNameMatch ? 4 : 0;
+  const unresolvedNameMatch = [...unresolvedNames].some((name) => name.length >= 3 && textKey.includes(name));
+  const cardScore = cardIdMatch ? 5 : cardNameMatch ? 4 : unresolvedNameMatch ? 2 : 0;
   if (!allowNoCardMatch && resolvedIds.size + resolvedNames.size > 0 && !cardScore) return 0;
   let score = cardScore;
   for (const term of queryTerms) {
@@ -287,6 +297,28 @@ function tokenize(value) {
 
 function normalizeId(value) {
   return String(value || "").replace(/\D+/gu, "").replace(/^0+(?=\d)/u, "");
+}
+
+function resolveUnresolvedMentionCards(unresolvedMentions, cardProvider, limits, warnings) {
+  const result = [];
+  for (const mention of unresolvedMentions || []) {
+    if (result.length >= limits.maxCards) break;
+    const matches = cardProvider.searchCardByName(mention.input, 2);
+    if (!matches.length) continue;
+    const best = matches[0];
+    if (best.confidence < 0.48) continue;
+    warnings.push(`unresolved_mention_fuzzy_match:${mention.input}->${best.name}`);
+    result.push({
+      ...best,
+      input: mention.input,
+      confidence: Math.min(best.confidence, 0.7),
+    });
+  }
+  return result;
+}
+
+function dedupeCards(cards) {
+  return dedupeBy((cards || []).filter(Boolean), (card) => normalizeId(card.id || card.cardId) || normalizeCardKey(card.name || card.cnName || card.jaName || card.enName || card.input));
 }
 
 function dedupeEvidence(items) {
