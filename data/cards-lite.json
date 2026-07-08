@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-02T07:45:59.197Z",
+  "generatedAt": "2026-07-08T20:00:28.826Z",
   "records": [
     {
       "id": "21385",
@@ -171232,6 +171232,24 @@
         "青之眼少女",
         "青き眼の乙女",
         "Maiden with Eyes of Blue"
+      ],
+      "released": true
+    },
+    {
+      "id": "23416",
+      "name": "ウィッチクラフト・シード",
+      "jaName": "ウィッチクラフト・シード",
+      "aliases": [
+        "ウィッチクラフト・シード"
+      ],
+      "released": true
+    },
+    {
+      "id": "22920",
+      "name": "道化の一座 ハット",
+      "jaName": "道化の一座 ハット",
+      "aliases": [
+        "道化の一座 ハット"
       ],
       "released": true
     },
