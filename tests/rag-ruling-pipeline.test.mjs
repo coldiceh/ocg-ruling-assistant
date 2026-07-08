@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { extractQuotedMentions, extractRagCards, extractUserProvidedCardTextBlocks } from "../backend/ragCardExtractor.mjs";
 import { buildRagRulingPromptBundle } from "../backend/ragRulingPrompt.mjs";
-import { callRagModel, estimateDeepSeekCostCny, resolveRagProvider } from "../backend/ragModelClient.mjs";
+import { callCardNameExtractionModel, callRagModel, estimateDeepSeekCostCny, resolveRagProvider } from "../backend/ragModelClient.mjs";
 import { answerRagRulingQuestion } from "../backend/ragRulingPipeline.mjs";
 
 const cards = [
@@ -266,8 +266,52 @@ test("rag_pipeline_includes_card_text_when_card_resolved", async () => {
   });
   assert.equal(answer.resolvedCards[0].name, "测试龙");
   assert.ok(answer.usedEvidence.some((item) => item.id === "card-text-100"));
+  assert.ok(answer.usedEvidence.some((item) => item.sourceUrl === "https://example.test/card/100"));
   assert.equal(answer.debug.retrievalCounts.cardTexts > 0, true);
   assert.equal(typeof answer.debug.promptChars, "number");
+});
+
+test("card_name_extractor_uses_dedicated_flash_model", async () => {
+  const calls = [];
+  const result = await callCardNameExtractionModel({
+    userQuery: "测式龙的①效果可以发动吗？",
+    env: {
+      MODEL_PROVIDER: "deepseek",
+      DEEPSEEK_API_KEY: "test-deepseek-key",
+      DEEPSEEK_MODEL: "deepseek-pro-test",
+      DEEPSEEK_CARD_MODEL: "deepseek-flash-test",
+      API_DAILY_BUDGET_CNY: "10",
+    },
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options, body: JSON.parse(options.body) });
+      return jsonResponse({
+        choices: [{ message: { content: JSON.stringify({ cardNames: [{ name: "测试龙", originalText: "测式龙", confidence: "high" }] }) } }],
+        usage: { prompt_tokens: 30, completion_tokens: 10 },
+      });
+    },
+  });
+  assert.equal(result.providerUsed, "deepseek");
+  assert.equal(result.modelUsed, "deepseek-flash-test");
+  assert.equal(calls[0].body.model, "deepseek-flash-test");
+  assert.equal(calls[0].body.max_tokens, 800);
+  assert.deepEqual(result.candidates.map((item) => item.name), ["测试龙"]);
+});
+
+test("rag_pipeline_uses_model_card_name_candidates_before_retrieval", async () => {
+  const answer = await answerRagRulingQuestion({
+    question: "测式龙的①效果可以发动吗？",
+    cards,
+    records,
+    qaRecords: [],
+    cardModelInvoker: async () => JSON.stringify({
+      cardNames: [{ name: "测试龙", originalText: "测式龙", confidence: "high" }],
+    }),
+    modelInvoker: async () => JSON.stringify(modelJson("根据测试龙文本可以分析。")),
+  });
+  assert.ok(answer.resolvedCards.some((card) => card.name === "测试龙"));
+  assert.ok(answer.debug.modelCardNameCandidates.some((item) => item.name === "测试龙"));
+  assert.equal(answer.debug.cardNameModelUsed, "mock-card-extractor");
+  assert.ok(answer.usedEvidence.some((item) => item.id === "card-text-100"));
 });
 
 test("card_text_without_official_qa_can_answer_rule_analysis", async () => {

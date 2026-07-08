@@ -775,7 +775,9 @@ function renderRagAnswer(answer) {
   ]);
   renderSources((answer.usedEvidence || []).map((item) => ({
     label: ragEvidenceLabel(item.type),
-    detail: `${item.title || item.id}${item.id ? ` (${item.id})` : ""}`,
+    detail: item.title || item.id || "",
+    id: item.id || "",
+    url: item.sourceUrl || item.url || "",
   })));
   renderParserDebug(answer.debug || null);
   renderFeedbackPanel(answer);
@@ -1790,18 +1792,21 @@ function renderSources(sources) {
 
   for (const source of sources) {
     const normalizedSource = typeof source === "string" ? { label: "资料来源", detail: source } : source;
-    const detail = normalizedSource.detail || normalizedSource.url || "";
+    const detail = normalizedSource.detail || normalizedSource.title || "";
+    const url = normalizedSource.url || normalizedSource.sourceUrl || (/^https?:\/\//i.test(detail) ? detail : "");
     const node = document.createElement("div");
     node.className = "source-item";
     appendText(node, "strong", normalizedSource.label || normalizedSource.name || "资料来源");
-    if (/^https?:\/\//i.test(detail)) {
+    const hasDetailLine = Boolean(detail && detail !== url);
+    if (hasDetailLine) appendText(node, "p", normalizedSource.id ? `${detail} (${normalizedSource.id})` : detail);
+    if (/^https?:\/\//i.test(url)) {
       const link = document.createElement("a");
-      link.href = detail;
+      link.href = url;
       link.target = "_blank";
       link.rel = "noreferrer";
-      link.textContent = detail;
+      link.textContent = url;
       node.appendChild(link);
-    } else {
+    } else if (!hasDetailLine) {
       appendText(node, "p", detail || "未提供链接");
     }
     ui.sourcesList.appendChild(node);
@@ -2020,7 +2025,7 @@ function readInitialTheme() {
   } catch {
     // Ignore unavailable storage.
   }
-  return "day";
+  return "night";
 }
 
 function applyTheme(theme) {

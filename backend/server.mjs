@@ -2,7 +2,7 @@ import { createServer } from "node:http";
 import { answerQuestion, getDataHealth } from "./engine.mjs";
 import { answerRulingQuestionFast } from "./fastJudgeEngine.mjs";
 import { appendFeedbackCase } from "./feedbackCases.mjs";
-import { resolveRagProvider } from "./ragModelClient.mjs";
+import { resolveCardExtractionProvider, resolveRagProvider } from "./ragModelClient.mjs";
 import { answerRagRulingQuestion } from "./ragRulingPipeline.mjs";
 
 const port = Number(process.env.PORT || 8787);
@@ -108,11 +108,14 @@ function readBody(request) {
 
 function getModelInfo() {
   const ragProvider = resolveRagProvider(process.env);
+  const cardProvider = resolveCardExtractionProvider(process.env);
   if (ragProvider.provider === "deepseek") {
     return {
       provider: "deepseek",
       requestedProvider: ragProvider.requested,
       models: [process.env.DEEPSEEK_MODEL || "deepseek-v4-flash"],
+      cardNameProvider: cardProvider.provider,
+      cardNameModels: [process.env.DEEPSEEK_CARD_MODEL || process.env.RAG_CARD_MODEL || "deepseek-v4-flash"],
       enabled: true,
       pipeline: "rag_baseline",
       legacyModes: ["legacy", "fastjudge"],
@@ -123,7 +126,8 @@ function getModelInfo() {
       provider: "gemini",
       requestedProvider: ragProvider.requested,
       models: [process.env.GEMINI_MODEL || "gemini-1.5-flash"],
-      cardResolutionModels: splitList(process.env.GEMINI_CARD_RESOLUTION_MODELS || process.env.GEMINI_CARD_RESOLUTION_MODEL),
+      cardNameProvider: cardProvider.provider,
+      cardNameModels: splitList(process.env.GEMINI_CARD_MODEL || process.env.GEMINI_CARD_RESOLUTION_MODELS || process.env.GEMINI_CARD_RESOLUTION_MODEL || "gemini-1.5-flash"),
       enabled: true,
       pipeline: "rag_baseline",
       legacyModes: ["legacy", "fastjudge"],

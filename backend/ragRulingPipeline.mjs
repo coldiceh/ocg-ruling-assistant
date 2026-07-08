@@ -1,6 +1,6 @@
 import { extractRagCards } from "./ragCardExtractor.mjs";
 import { evidenceBucketsToList, loadRagData, retrieveRagEvidence } from "./ragEvidenceRetriever.mjs";
-import { callRagModel } from "./ragModelClient.mjs";
+import { callCardNameExtractionModel, callRagModel } from "./ragModelClient.mjs";
 import { buildRagRulingPromptBundle, RAG_ANSWER_LEVELS } from "./ragRulingPrompt.mjs";
 
 export async function answerRagRulingQuestion({
@@ -11,6 +11,7 @@ export async function answerRagRulingQuestion({
   records,
   qaRecords,
   modelInvoker,
+  cardModelInvoker,
   dryRun,
   fetchImpl,
   now,
@@ -20,7 +21,17 @@ export async function answerRagRulingQuestion({
   if (!query) return buildEmptyQuestionAnswer();
 
   const data = cards || records || qaRecords ? { cards: cards || [], records: records || [], qaRecords: qaRecords || [] } : await loadRagData(dataDir);
-  const cardResolution = extractRagCards(query, { cards: data.cards || [], maxCards: readNumber(env.RAG_MAX_CARDS, 6) });
+  const cardNameModel = await callCardNameExtractionModel({
+    userQuery: query,
+    env,
+    modelInvoker: cardModelInvoker,
+    fetchImpl,
+  });
+  const cardResolution = extractRagCards(query, {
+    cards: data.cards || [],
+    maxCards: readNumber(env.RAG_MAX_CARDS, 6),
+    modelCardNameCandidates: cardNameModel.candidates || [],
+  });
   const evidence = await retrieveRagEvidence({
     userQuery: query,
     cardResolution,
@@ -72,6 +83,11 @@ export async function answerRagRulingQuestion({
       },
       unresolvedMentions: cardResolution.unresolvedMentions,
       ambiguousMentions: [...(cardResolution.ambiguousMentions || []), ...(evidence.baigeAmbiguousMentions || [])],
+      modelCardNameCandidates: cardResolution.modelCardNameCandidates || [],
+      cardNameModelUsed: cardNameModel.modelUsed,
+      cardNameProviderUsed: cardNameModel.providerUsed,
+      cardNameModelDryRun: cardNameModel.dryRun,
+      cardNameWarnings: cardNameModel.warnings || [],
       retrievalWarnings: [...new Set([...(evidence.retrievalWarnings || []), ...(promptBundle.warnings || [])])],
       baigeSearchCount: evidence.debug?.baigeSearchCount || 0,
       baigeCacheHitCount: evidence.debug?.baigeCacheHitCount || 0,
@@ -117,6 +133,7 @@ export function normalizeRagAnswer(answer = {}, { evidence = {}, cardResolution 
         id: source.id,
         type: outputEvidenceType(source, directIds),
         title: item.title || source.title,
+        sourceUrl: source.sourceUrl || "",
       };
     })
     .filter(Boolean);
@@ -127,6 +144,7 @@ export function normalizeRagAnswer(answer = {}, { evidence = {}, cardResolution 
       id: fallbackEvidence.id,
       type: outputEvidenceType(fallbackEvidence, directIds),
       title: fallbackEvidence.title,
+      sourceUrl: fallbackEvidence.sourceUrl || "",
     });
     riskFlags.add("model_omitted_used_evidence");
   }

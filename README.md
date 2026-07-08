@@ -117,11 +117,19 @@ git diff --check
 MODEL_PROVIDER=auto
 DEEPSEEK_API_KEY=
 DEEPSEEK_BASE_URL=https://api.deepseek.com
-DEEPSEEK_MODEL=deepseek-v4-flash
+DEEPSEEK_MODEL=deepseek-v4-pro
+DEEPSEEK_CARD_MODEL=deepseek-v4-flash
 GEMINI_API_KEY=
 GEMINI_MODEL=
+GEMINI_CARD_MODEL=
 API_DAILY_BUDGET_CNY=10
 ```
+
+推荐配置方式：
+
+- `DEEPSEEK_CARD_MODEL` / `GEMINI_CARD_MODEL`：用于从玩家自然语言里提取卡名候选，建议使用 flash / 轻量模型。
+- `DEEPSEEK_MODEL` / `GEMINI_MODEL`：用于最终 RAG 裁定分析，建议使用推理能力更强的模型。
+- `RAG_CARD_EXTRACTOR_ENABLED=false`：需要临时关闭 AI 卡名提取时使用。
 
 API key 应只配置在后端环境变量中，不应写入前端代码、日志或仓库。
 

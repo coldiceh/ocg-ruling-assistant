@@ -13,12 +13,15 @@ const EFFECT_LINE_PATTERN = /^(?:效果\s*[：:]|[①②③④⑤⑥⑦⑧⑨⑩
 const CARD_TEXT_BOUNDARY_PATTERN = /^(?:问题|问|Q|Ｑ|场景|请问|此时|那么|如果|假设)\s*[：:]/iu;
 const NON_CARD_HEADING_NAMES = new Set(["效果", "问题", "问", "q", "场景", "请问", "补充", "答案"]);
 
-export function extractRagCards(userQuery, { cards = [], maxCards = 6 } = {}) {
+export function extractRagCards(userQuery, { cards = [], maxCards = 6, modelCardNameCandidates = [] } = {}) {
   const query = String(userQuery || "");
   const normalizedQuery = normalizeCardKey(query);
   const aliasIndex = buildAliasIndex(cards);
   const userProvidedCardTexts = extractUserProvidedCardTextBlocks(query);
+  const modelMentions = normalizeModelCardNameCandidates(modelCardNameCandidates);
+  const modelMentionByNameKey = new Map(modelMentions.map((item) => [normalizeCardKey(item.name), item]));
   const exactMentions = [
+    ...modelMentions.map((item) => item.name),
     ...extractQuotedMentions(query),
     ...userProvidedCardTexts.map((item) => item.name),
   ];
@@ -30,8 +33,12 @@ export function extractRagCards(userQuery, { cards = [], maxCards = 6 } = {}) {
   const seenMentionKeys = new Set();
 
   for (const mention of exactMentions) {
-    seenMentionKeys.add(normalizeCardKey(mention));
-    const candidates = aliasIndex.get(normalizeCardKey(mention)) || [];
+    const mentionKey = normalizeCardKey(mention);
+    if (!mentionKey || seenMentionKeys.has(mentionKey)) continue;
+    seenMentionKeys.add(mentionKey);
+    const modelMention = modelMentionByNameKey.get(mentionKey);
+    if (modelMention?.originalText) seenMentionKeys.add(normalizeCardKey(modelMention.originalText));
+    const candidates = aliasIndex.get(mentionKey) || [];
     if (candidates.length === 1) {
       addResolved(resolved, seenCards, candidates[0], mention, 0.98);
     } else if (candidates.length > 1) {
@@ -78,6 +85,7 @@ export function extractRagCards(userQuery, { cards = [], maxCards = 6 } = {}) {
     unresolvedMentions: dedupeBy(unresolvedMentions, (item) => normalizeCardKey(item.input)),
     ambiguousMentions: dedupeBy(ambiguousMentions, (item) => normalizeCardKey(item.input)),
     userProvidedCardTexts,
+    modelCardNameCandidates: modelMentions,
   };
 }
 
@@ -343,6 +351,18 @@ function cardAliases(card = {}) {
 
 function cardIdentity(card = {}) {
   return String(card.id || card.cardId || normalizeCardKey(card.name || card.cnName || card.jaName || card.enName || ""));
+}
+
+function normalizeModelCardNameCandidates(items) {
+  return dedupeBy((Array.isArray(items) ? items : [])
+    .map((item) => ({
+      name: String(item?.name || item?.cardName || item || "").trim(),
+      originalText: String(item?.originalText || item?.surface || item?.mention || item?.name || item || "").trim(),
+      confidence: String(item?.confidence || "medium").toLowerCase(),
+      source: "model_card_name_extractor",
+    }))
+    .filter((item) => looksLikeCardMention(item.name))
+    .slice(0, 8), (item) => normalizeCardKey(item.name));
 }
 
 function dedupeBy(items, getKey) {
