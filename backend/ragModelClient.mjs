@@ -287,14 +287,14 @@ function parseModelResult(rawText, { provider, modelName, dryRun, warnings = [],
 
 function fallbackFromNaturalLanguage(rawText) {
   const text = String(rawText || "").trim();
-  if (text.length < 20) return null;
+  if (!text) return null;
   return normalizeModelAnswer({
     answerLevel: "low_confidence_analysis",
     shortAnswer: text.slice(0, 500),
     reasoning: ["模型没有返回规范 JSON；已将自然语言内容作为低置信分析保留。"],
     usedEvidence: [],
     missingInfo: ["请复核引用资料，并优先寻找能直接覆盖该场景的官方 Q&A / FAQ。"],
-    riskFlags: ["model_output_not_json"],
+    riskFlags: ["model_json_parse_failed", "model_output_not_json"],
     confidenceSelfEstimate: "low",
   });
 }
@@ -322,6 +322,8 @@ function buildMockAnswer({ evidence, cardResolution }) {
   const direct = evidence.officialQaDirectCandidates?.[0];
   const related = evidence.officialQaRelated?.[0] || evidence.faqRelated?.[0] || evidence.rawRelatedEvidence?.[0];
   const cardText = evidence.cardTexts?.[0];
+  const userProvidedText = evidence.userProvidedCardTexts?.[0];
+  const cardGrounding = cardText || userProvidedText;
   if (direct) {
     return normalizeModelAnswer({
       answerLevel: "official_confirmed",
@@ -334,35 +336,29 @@ function buildMockAnswer({ evidence, cardResolution }) {
       confidenceSelfEstimate: "high",
     });
   }
-  if (cardText || related) {
-    const used = [cardText, related].filter(Boolean).map((item) => ({ id: item.id, type: item.type, title: item.title }));
+  if (cardGrounding || related) {
+    const used = [cardGrounding, related].filter(Boolean).map((item) => ({ id: item.id, type: item.type, title: item.title }));
     return normalizeModelAnswer({
-      answerLevel: related ? "rule_analysis" : "low_confidence_analysis",
-      shortAnswer: related
+      answerLevel: cardGrounding ? "rule_analysis" : "low_confidence_analysis",
+      shortAnswer: cardGrounding
         ? "没有命中官方直接 Q&A；下面只能基于卡片文本和相关资料给出未确认分析。"
-        : "目前主要只有卡片文本，不能当作官方裁定。",
+        : "没有命中官方直接 Q&A；下面只能基于相关资料给出低置信分析。",
       reasoning: [
-        cardText ? "已读取相关卡片文本。" : "",
+        cardGrounding ? "已读取相关卡片文本。" : "",
         related ? "检索到相关资料，但它不是当前问题的官方 direct Q&A。" : "",
       ].filter(Boolean),
-      usedCards: (cardResolution.resolvedCards || []).map((card) => card.name).filter(Boolean),
+      usedCards: [
+        ...(cardResolution.resolvedCards || []).map((card) => card.name),
+        ...(userProvidedText?.cards || []),
+      ].filter(Boolean),
       usedEvidence: used,
       missingInfo: [],
-      riskFlags: [related ? "no_official_direct_qa" : "card_text_only"],
-      confidenceSelfEstimate: related ? "medium" : "low",
-    });
-  }
-  const userProvidedText = evidence.userProvidedCardTexts?.[0];
-  if (userProvidedText) {
-    return normalizeModelAnswer({
-      answerLevel: "low_confidence_analysis",
-      shortAnswer: "目前主要只有用户提供的卡片文本，不能当作官方裁定。",
-      reasoning: ["已读取用户提供的卡片文本。", "该文本不是官方 direct Q&A，只能支持未确认分析。"],
-      usedCards: (userProvidedText.cards || []).filter(Boolean),
-      usedEvidence: [{ id: userProvidedText.id, type: "user_provided_text", title: userProvidedText.title }],
-      missingInfo: [],
-      riskFlags: ["user_provided_text_not_official"],
-      confidenceSelfEstimate: "low",
+      riskFlags: [
+        "no_official_direct_qa",
+        cardGrounding ? "card_text_grounding_only" : "partial_evidence_only",
+        userProvidedText ? "user_provided_text_not_official" : "",
+      ].filter(Boolean),
+      confidenceSelfEstimate: cardGrounding && related ? "medium" : "low",
     });
   }
   return safeFallbackAnswer("no_retrieved_evidence");

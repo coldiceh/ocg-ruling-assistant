@@ -205,7 +205,7 @@ test("rag_does_not_require_database_match_when_user_text_present", async () => {
     dryRun: true,
     env: {},
   });
-  assert.notEqual(answer.answerLevel, "needs_more_info");
+  assert.equal(answer.answerLevel, "rule_analysis");
   assert.ok(answer.resolvedCards.some((card) => card.name === "未收录新卡" && card.source === "user_provided_text"));
   assert.ok(answer.usedEvidence.some((item) => item.type === "user_provided_text"));
   assert.ok(!answer.riskFlags.includes("card_name_not_resolved"));
@@ -229,7 +229,8 @@ test("rag_pipeline_does_not_require_effect_template", async () => {
     }),
   });
   assert.notEqual(answer.shortAnswer, "insufficient");
-  assert.notEqual(answer.answerLevel, "needs_more_info");
+  assert.equal(answer.answerLevel, "rule_analysis");
+  assert.ok(answer.riskFlags.includes("low_confidence_upgraded_to_rule_analysis_with_card_text"));
 });
 
 test("rag_pipeline_includes_card_text_when_card_resolved", async () => {
@@ -247,7 +248,7 @@ test("rag_pipeline_includes_card_text_when_card_resolved", async () => {
   assert.equal(typeof answer.debug.promptChars, "number");
 });
 
-test("rag_returns_low_confidence_when_no_direct_evidence", async () => {
+test("card_text_without_official_qa_can_answer_rule_analysis", async () => {
   const answer = await answerRagRulingQuestion({
     question: "「测试龙」在没有官方直接裁定时怎么处理？",
     cards,
@@ -264,9 +265,10 @@ test("rag_returns_low_confidence_when_no_direct_evidence", async () => {
       confidenceSelfEstimate: "low",
     }),
   });
-  assert.equal(answer.answerLevel, "low_confidence_analysis");
-  assert.match(answer.shortAnswer, /低置信分析|未命中官方直接/u);
-  assert.ok(answer.riskFlags.includes("needs_more_info_downgraded_to_low_confidence_with_evidence"));
+  assert.equal(answer.answerLevel, "rule_analysis");
+  assert.match(answer.shortAnswer, /未命中官方直接|未确认分析/u);
+  assert.ok(answer.riskFlags.includes("needs_more_info_upgraded_to_rule_analysis_with_card_text"));
+  assert.ok(answer.usedEvidence.some((item) => item.type === "card_text"));
 });
 
 test("rag_preserves_card_dossier_data", async () => {
@@ -295,6 +297,48 @@ test("rag_pipeline_raw_query_fallback", async () => {
   assert.equal(answer.resolvedCards.length, 0);
   assert.equal(answer.debug.retrievalCounts.rawRelatedEvidence > 0, true);
   assert.ok(answer.debug.retrievalWarnings.includes("card_name_not_resolved_raw_query_fallback_used"));
+});
+
+test("partial_related_evidence_only_stays_low_confidence", async () => {
+  const answer = await answerRagRulingQuestion({
+    question: "对象离场时连锁处理中怎么处理？",
+    cards: [],
+    records,
+    qaRecords: [],
+    modelInvoker: async () => JSON.stringify({
+      answerLevel: "needs_more_info",
+      shortAnswer: "当前资料不足，无法给出可靠裁定分析。",
+      reasoning: [],
+      usedCards: [],
+      usedEvidence: [],
+      missingInfo: [],
+      riskFlags: [],
+      confidenceSelfEstimate: "low",
+    }),
+  });
+  assert.equal(answer.answerLevel, "low_confidence_analysis");
+  assert.ok(answer.riskFlags.includes("needs_more_info_downgraded_to_low_confidence_with_evidence"));
+});
+
+test("no_evidence_still_needs_more_info", async () => {
+  const answer = await answerRagRulingQuestion({
+    question: "完全没有资料的问题如何处理？",
+    cards: [],
+    records: [],
+    qaRecords: [],
+    modelInvoker: async () => JSON.stringify({
+      answerLevel: "rule_analysis",
+      shortAnswer: "模型试图无资料分析。",
+      reasoning: ["没有资料。"],
+      usedCards: [],
+      usedEvidence: [],
+      missingInfo: [],
+      riskFlags: [],
+      confidenceSelfEstimate: "medium",
+    }),
+  });
+  assert.equal(answer.answerLevel, "needs_more_info");
+  assert.ok(answer.riskFlags.includes("no_retrieved_evidence"));
 });
 
 test("rag_pipeline_distinguishes_related_from_official", async () => {
@@ -327,7 +371,8 @@ test("model_json_parse_failure_degrades_safely", async () => {
     qaRecords,
     modelInvoker: async () => "not JSON",
   });
-  assert.ok(["low_confidence_analysis", "needs_more_info"].includes(answer.answerLevel));
+  assert.equal(answer.answerLevel, "rule_analysis");
+  assert.match(answer.shortAnswer, /not JSON/u);
   assert.ok(answer.riskFlags.some((item) => item.startsWith("model_json_parse_failed")));
 });
 
@@ -338,6 +383,7 @@ test("model_natural_language_output_is_wrapped_as_low_confidence", async () => {
     modelInvoker: async () => "没有官方直接资料，但根据卡片文本只能给出未确认分析：该效果是否成功结算取决于处理时攻击是否仍可被无效。",
   });
   assert.equal(result.answer.answerLevel, "low_confidence_analysis");
+  assert.ok(result.answer.riskFlags.includes("model_json_parse_failed"));
   assert.ok(result.warnings.includes("model_natural_language_wrapped"));
 });
 

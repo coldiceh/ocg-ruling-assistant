@@ -90,6 +90,8 @@ export function normalizeRagAnswer(answer = {}, { evidence = {}, cardResolution 
   const availableCards = [...(cardResolution.resolvedCards || []), ...(evidence.fuzzyResolvedCards || []), ...userProvidedCards(userTextEvidence)];
   const evidenceById = new Map(availableEvidence.map((item) => [String(item.id), item]));
   const directIds = new Set((evidence.officialQaDirectCandidates || []).map((item) => String(item.id)));
+  const hasCardTextGrounding = Boolean((evidence.cardTexts || []).length || userTextEvidence.length);
+  const hasAnyEvidence = availableEvidence.length > 0;
   const riskFlags = new Set([...(answer.riskFlags || []), ...modelWarnings]);
   if (userTextEvidence.length) riskFlags.add("user_provided_text_not_official");
   let answerLevel = RAG_ANSWER_LEVELS.includes(answer.answerLevel) ? answer.answerLevel : "low_confidence_analysis";
@@ -109,16 +111,8 @@ export function normalizeRagAnswer(answer = {}, { evidence = {}, cardResolution 
     })
     .filter(Boolean);
 
-  if (answerLevel === "official_confirmed" && !usedEvidence.some((item) => directIds.has(String(item.id)))) {
-    answerLevel = usedEvidence.length ? "rule_analysis" : "low_confidence_analysis";
-    riskFlags.add("official_confirmed_requires_direct_evidence");
-  }
-  if (answerLevel === "needs_more_info" && availableEvidence.length) {
-    answerLevel = "low_confidence_analysis";
-    riskFlags.add("needs_more_info_downgraded_to_low_confidence_with_evidence");
-  }
-  if (!usedEvidence.length && availableEvidence.length) {
-    const fallbackEvidence = availableEvidence[0];
+  if (!usedEvidence.length && hasAnyEvidence) {
+    const fallbackEvidence = selectFallbackEvidence(evidence, availableEvidence);
     usedEvidence.push({
       id: fallbackEvidence.id,
       type: outputEvidenceType(fallbackEvidence, directIds),
@@ -126,7 +120,21 @@ export function normalizeRagAnswer(answer = {}, { evidence = {}, cardResolution 
     });
     riskFlags.add("model_omitted_used_evidence");
   }
-  if (!availableEvidence.length && answerLevel !== "budget_limited") {
+  if (answerLevel === "official_confirmed" && !usedEvidence.some((item) => directIds.has(String(item.id)))) {
+    answerLevel = hasCardTextGrounding ? "rule_analysis" : "low_confidence_analysis";
+    riskFlags.add("official_confirmed_requires_direct_evidence");
+  }
+  if (answerLevel === "needs_more_info" && hasCardTextGrounding) {
+    answerLevel = "rule_analysis";
+    riskFlags.add("needs_more_info_upgraded_to_rule_analysis_with_card_text");
+  } else if (answerLevel === "needs_more_info" && hasAnyEvidence) {
+    answerLevel = "low_confidence_analysis";
+    riskFlags.add("needs_more_info_downgraded_to_low_confidence_with_evidence");
+  } else if (answerLevel === "low_confidence_analysis" && hasCardTextGrounding) {
+    answerLevel = "rule_analysis";
+    riskFlags.add("low_confidence_upgraded_to_rule_analysis_with_card_text");
+  }
+  if (!hasAnyEvidence && answerLevel !== "budget_limited") {
     answerLevel = "needs_more_info";
     riskFlags.add("no_retrieved_evidence");
   }
@@ -181,6 +189,16 @@ function outputEvidenceType(source, directIds) {
   if (source.type === "user_provided_text") return "user_provided_text";
   if (source.type === "faq") return "faq";
   return "related";
+}
+
+function selectFallbackEvidence(evidence, availableEvidence) {
+  return evidence.officialQaDirectCandidates?.[0]
+    || evidence.cardTexts?.[0]
+    || evidence.userProvidedCardTexts?.[0]
+    || evidence.faqRelated?.[0]
+    || evidence.officialQaRelated?.[0]
+    || evidence.rawRelatedEvidence?.[0]
+    || availableEvidence[0];
 }
 
 function cleanStringArray(value) {
