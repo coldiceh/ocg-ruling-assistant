@@ -19,7 +19,7 @@ export async function callRagModel({
   const providerResolution = resolveRagProvider(env);
   const provider = providerResolution.provider;
   const modelName = modelNameForProvider(provider, env);
-  const maxTokens = readNumber(env.RAG_MAX_OUTPUT_TOKENS, 1500);
+  const maxTokens = readNumber(env.RAG_MAX_OUTPUT_TOKENS, 2500);
   const forcedDryRun = dryRun === true || isEnabled(env.RAG_DRY_RUN);
   const willCallRemote = !modelInvoker && !forcedDryRun && provider !== "mock" && hasProviderKey(provider, env) && typeof fetchImpl === "function";
   const budget = await buildBudgetPreflight({
@@ -169,14 +169,23 @@ export function estimateDeepSeekCostCny(usage = {}, env = {}) {
 }
 
 export function parseRagModelJson(rawText) {
-  const text = String(rawText || "").trim();
+  const text = stripJsonCodeFence(String(rawText || "").trim());
   if (!text) throw new SyntaxError("empty model output");
   try {
     return JSON.parse(text);
   } catch {
     const match = text.match(/\{[\s\S]*\}/u);
-    if (!match) throw new SyntaxError("model output is not JSON");
-    return JSON.parse(match[0]);
+    if (match) {
+      try {
+        return JSON.parse(match[0]);
+      } catch {
+        const loose = parseLooseRagModelJson(match[0]);
+        if (loose) return loose;
+      }
+    }
+    const loose = parseLooseRagModelJson(text);
+    if (loose) return loose;
+    throw new SyntaxError("model output is not JSON");
   }
 }
 
@@ -245,6 +254,8 @@ async function postJson(fetchImpl, url, headers, body) {
 function parseModelResult(rawText, { provider, modelName, dryRun, warnings = [], budgetStatus = null }) {
   try {
     const parsed = rawText && typeof rawText === "object" ? rawText : parseRagModelJson(rawText);
+    const parseWarnings = parsed?.__modelJsonRepaired ? ["model_json_repaired"] : [];
+    if (parsed && typeof parsed === "object") delete parsed.__modelJsonRepaired;
     return {
       answer: normalizeModelAnswer(parsed),
       rawText: String(rawText || ""),
@@ -253,7 +264,7 @@ function parseModelResult(rawText, { provider, modelName, dryRun, warnings = [],
       modelName,
       modelUsed: modelName || provider,
       dryRun,
-      warnings,
+      warnings: [...warnings, ...parseWarnings],
       budgetStatus,
     };
   } catch (error) {
@@ -288,15 +299,139 @@ function parseModelResult(rawText, { provider, modelName, dryRun, warnings = [],
 function fallbackFromNaturalLanguage(rawText) {
   const text = String(rawText || "").trim();
   if (!text) return null;
+  const jsonLike = looksLikeBrokenJson(text);
   return normalizeModelAnswer({
     answerLevel: "low_confidence_analysis",
-    shortAnswer: text.slice(0, 500),
-    reasoning: ["模型没有返回规范 JSON；已将自然语言内容作为低置信分析保留。"],
+    shortAnswer: jsonLike
+      ? "模型返回了不完整的 JSON，无法完整解析；已转为低置信分析，请参考下方资料来源和风险提示。"
+      : text.slice(0, 500),
+    reasoning: [jsonLike
+      ? "模型输出格式异常，系统没有把原始 JSON 当作裁定结论展示。"
+      : "模型没有返回规范 JSON；已将自然语言内容作为低置信分析保留。"],
     usedEvidence: [],
     missingInfo: ["请复核引用资料，并优先寻找能直接覆盖该场景的官方 Q&A / FAQ。"],
     riskFlags: ["model_json_parse_failed", "model_output_not_json"],
     confidenceSelfEstimate: "low",
   });
+}
+
+function stripJsonCodeFence(text) {
+  return String(text || "")
+    .replace(/^```(?:json)?\s*/iu, "")
+    .replace(/\s*```$/u, "")
+    .trim();
+}
+
+function parseLooseRagModelJson(text) {
+  if (!looksLikeBrokenJson(text)) return null;
+  const answerLevel = readJsonStringField(text, "answerLevel");
+  const shortAnswer = readJsonStringField(text, "shortAnswer");
+  if (!answerLevel && !shortAnswer) return null;
+  const riskFlags = readJsonStringArrayField(text, "riskFlags");
+  if (!riskFlags.includes("model_json_repaired")) riskFlags.push("model_json_repaired");
+  return {
+    __modelJsonRepaired: true,
+    answerLevel: answerLevel || "low_confidence_analysis",
+    shortAnswer: shortAnswer || "模型返回了不完整 JSON；以下为保守恢复后的分析。",
+    reasoning: readJsonStringArrayField(text, "reasoning"),
+    usedCards: readJsonStringArrayField(text, "usedCards"),
+    usedEvidence: readLooseUsedEvidence(text),
+    missingInfo: readJsonStringArrayField(text, "missingInfo"),
+    riskFlags,
+    confidenceSelfEstimate: readJsonStringField(text, "confidenceSelfEstimate") || "low",
+  };
+}
+
+function looksLikeBrokenJson(text) {
+  return /^\s*[{[]/u.test(String(text || "")) || /"answerLevel"\s*:/u.test(String(text || ""));
+}
+
+function readJsonStringField(text, field) {
+  const pattern = new RegExp(`"${escapeRegExp(field)}"\\s*:\\s*"((?:\\\\.|[^"\\\\])*)"`, "u");
+  const match = String(text || "").match(pattern);
+  return match ? decodeJsonStringFragment(match[1]) : "";
+}
+
+function readJsonStringArrayField(text, field) {
+  const segment = readJsonArraySegment(text, field);
+  if (!segment) return [];
+  return [...segment.matchAll(/"((?:\\.|[^"\\])*)"/gu)]
+    .map((match) => decodeJsonStringFragment(match[1]))
+    .filter(Boolean)
+    .slice(0, 12);
+}
+
+function readLooseUsedEvidence(text) {
+  const segment = readJsonArraySegment(text, "usedEvidence");
+  if (!segment) return [];
+  return [...segment.matchAll(/\{[^{}]*"id"\s*:\s*"((?:\\.|[^"\\])*)"[^{}]*\}/gu)]
+    .map((match) => {
+      const objectText = match[0];
+      return {
+        id: decodeJsonStringFragment(match[1]),
+        type: readJsonStringField(objectText, "type"),
+        title: readJsonStringField(objectText, "title"),
+      };
+    })
+    .filter((item) => item.id)
+    .slice(0, 8);
+}
+
+function readJsonArraySegment(text, field) {
+  const source = String(text || "");
+  const pattern = new RegExp(`"${escapeRegExp(field)}"\\s*:\\s*\\[`, "u");
+  const match = pattern.exec(source);
+  if (!match) return "";
+  const start = match.index + match[0].lastIndexOf("[");
+  const end = findMatchingClose(source, start, "[", "]");
+  if (end >= 0) return source.slice(start, end + 1);
+  const nextField = source.slice(start + 1).search(/,\s*"[A-Za-z][A-Za-z0-9_]*"\s*:/u);
+  return nextField >= 0 ? source.slice(start, start + 1 + nextField) : source.slice(start);
+}
+
+function findMatchingClose(text, start, open, close) {
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let index = start; index < text.length; index += 1) {
+    const char = text[index];
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (char === "\\") {
+        escaped = true;
+      } else if (char === "\"") {
+        inString = false;
+      }
+      continue;
+    }
+    if (char === "\"") {
+      inString = true;
+    } else if (char === open) {
+      depth += 1;
+    } else if (char === close) {
+      depth -= 1;
+      if (depth === 0) return index;
+    }
+  }
+  return -1;
+}
+
+function decodeJsonStringFragment(value) {
+  try {
+    return JSON.parse(`"${String(value || "").replace(/\n/gu, "\\n")}"`);
+  } catch {
+    return String(value || "")
+      .replace(/\\"/gu, "\"")
+      .replace(/\\n/gu, "\n")
+      .replace(/\\r/gu, "\r")
+      .replace(/\\t/gu, "\t")
+      .trim();
+  }
+}
+
+function escapeRegExp(value) {
+  return String(value || "").replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 }
 
 function normalizeModelAnswer(answer = {}) {

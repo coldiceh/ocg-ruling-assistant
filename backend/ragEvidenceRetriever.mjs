@@ -360,7 +360,7 @@ function resolveUnresolvedMentionCards(unresolvedMentions, cardProvider, limits,
       confidence: Math.min(best.confidence, 0.7),
     });
   }
-  return result;
+  return dedupeCards(result);
 }
 
 async function resolveUnresolvedMentionCardsWithBaige(unresolvedMentions, { fetchImpl, env, limits, warnings, debug }) {

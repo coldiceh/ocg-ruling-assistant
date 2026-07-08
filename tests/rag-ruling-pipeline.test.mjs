@@ -142,6 +142,28 @@ test("quoted_mentions_all_preserved", () => {
   assert.deepEqual(mentions, ["A卡", "B卡", "C卡", "D卡", "E卡", "F卡", "G卡", "H卡"]);
 });
 
+test("unquoted_card_mentions_seed_retrieval_candidates", () => {
+  const resolution = extractRagCards("对方发动了手卡破械童子童的效果，要将场上的破械神露天阙序破坏，对方的破械童子罗安能特殊召唤吗？", { cards: [], maxCards: 8 });
+  assert.ok(resolution.unresolvedMentions.some((item) => item.input === "破械童子童"));
+  assert.ok(resolution.unresolvedMentions.some((item) => item.input === "破械神露天阙序"));
+  assert.ok(resolution.unresolvedMentions.some((item) => item.input === "破械童子罗安"));
+});
+
+test("traditional_unquoted_card_name_resolves_to_local_card", () => {
+  const resolution = extractRagCards("对方发动破械雙王神來迎的效果。", {
+    cards: [{
+      id: "300",
+      name: "破械双王神 来迎",
+      cnName: "破械双王神 来迎",
+      jaName: "破械雙王神ライゴウ",
+      aliases: ["破械双王神 来迎", "破械雙王神ライゴウ"],
+      effectText: "效果文本。",
+    }],
+    maxCards: 4,
+  });
+  assert.equal(resolution.resolvedCards[0].name, "破械双王神 来迎");
+});
+
 test("ocg_name_normalization_resolves_common_variants", () => {
   const resolution = extractRagCards("「凶导的白天底」攻击宣言时触发「测试龙」效果。", { cards: [...cards, dogmatikaCard], maxCards: 6 });
   assert.ok(resolution.resolvedCards.some((card) => card.name === "凶教导之天底 阿尔白・佐亚"));
@@ -385,6 +407,30 @@ test("model_natural_language_output_is_wrapped_as_low_confidence", async () => {
   assert.equal(result.answer.answerLevel, "low_confidence_analysis");
   assert.ok(result.answer.riskFlags.includes("model_json_parse_failed"));
   assert.ok(result.warnings.includes("model_natural_language_wrapped"));
+});
+
+test("model_truncated_json_output_is_repaired_without_raw_json_answer", async () => {
+  const result = await callRagModel({
+    prompt: "输出 JSON",
+    env: {},
+    modelInvoker: async () => "{\"answerLevel\":\"rule_analysis\",\"shortAnswer\":\"根据卡片文本可以继续分析，但不是官方确认。\",\"reasoning\":[\"已读取卡片文本。\",\"没有官方直接 Q&A。\"],\"usedCards\":[\"测试龙\"],\"usedEvidence\":[{\"id\":\"card-text-100\",\"type\":\"card_text\"",
+  });
+  assert.equal(result.answer.answerLevel, "rule_analysis");
+  assert.equal(result.answer.shortAnswer, "根据卡片文本可以继续分析，但不是官方确认。");
+  assert.doesNotMatch(result.answer.shortAnswer, /^\s*\{/u);
+  assert.ok(result.answer.reasoning.length >= 2);
+  assert.ok(result.answer.riskFlags.includes("model_json_repaired"));
+  assert.ok(result.warnings.includes("model_json_repaired"));
+});
+
+test("broken_json_without_short_answer_does_not_display_raw_json", async () => {
+  const result = await callRagModel({
+    prompt: "输出 JSON",
+    env: {},
+    modelInvoker: async () => "{\"answerLevel\":\"rule_analysis\",\"usedEvidence\":[",
+  });
+  assert.equal(result.answer.answerLevel, "rule_analysis");
+  assert.doesNotMatch(result.answer.shortAnswer, /^\s*\{/u);
 });
 
 test("no_api_key_uses_mock", async () => {

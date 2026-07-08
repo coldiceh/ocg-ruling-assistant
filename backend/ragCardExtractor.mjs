@@ -22,12 +22,15 @@ export function extractRagCards(userQuery, { cards = [], maxCards = 6 } = {}) {
     ...extractQuotedMentions(query),
     ...userProvidedCardTexts.map((item) => item.name),
   ];
+  const unquotedMentions = extractUnquotedCardMentionCandidates(query);
   const resolved = [];
   const unresolvedMentions = [];
   const ambiguousMentions = [];
   const seenCards = new Set();
+  const seenMentionKeys = new Set();
 
   for (const mention of exactMentions) {
+    seenMentionKeys.add(normalizeCardKey(mention));
     const candidates = aliasIndex.get(normalizeCardKey(mention)) || [];
     if (candidates.length === 1) {
       addResolved(resolved, seenCards, candidates[0], mention, 0.98);
@@ -35,6 +38,20 @@ export function extractRagCards(userQuery, { cards = [], maxCards = 6 } = {}) {
       ambiguousMentions.push(buildAmbiguousMention(mention, candidates));
     } else if (looksLikeCardMention(mention)) {
       unresolvedMentions.push({ input: mention, reason: "quoted_mention_not_found" });
+    }
+  }
+
+  for (const mention of unquotedMentions) {
+    const mentionKey = normalizeCardKey(mention);
+    if (!mentionKey || seenMentionKeys.has(mentionKey)) continue;
+    seenMentionKeys.add(mentionKey);
+    const candidates = aliasIndex.get(mentionKey) || [];
+    if (candidates.length === 1) {
+      addResolved(resolved, seenCards, candidates[0], mention, 0.92);
+    } else if (candidates.length > 1) {
+      ambiguousMentions.push(buildAmbiguousMention(mention, candidates));
+    } else if (looksLikeCardMention(mention)) {
+      unresolvedMentions.push({ input: mention, reason: "unquoted_candidate_not_found" });
     }
   }
 
@@ -87,6 +104,19 @@ export function normalizeCardKey(value) {
   return String(value || "")
     .normalize("NFKC")
     .toLowerCase()
+    .replace(/[雙]/gu, "双")
+    .replace(/[來]/gu, "来")
+    .replace(/[龍]/gu, "龙")
+    .replace(/[薔]/gu, "蔷")
+    .replace(/[蘇]/gu, "苏")
+    .replace(/[場]/gu, "场")
+    .replace(/[發]/gu, "发")
+    .replace(/[動]/gu, "动")
+    .replace(/[體]/gu, "体")
+    .replace(/[從]/gu, "从")
+    .replace(/[對]/gu, "对")
+    .replace(/[選]/gu, "选")
+    .replace(/[闕]/gu, "阙")
     .replace(/導/gu, "导")
     .replace(/白き/gu, "白")
     .replace(/[の之的]/gu, "")
@@ -94,6 +124,47 @@ export function normalizeCardKey(value) {
     .replace(/[：:・·･．.－—–_\-\s]/gu, "")
     .replace(/[，,。.!！?？;；、()（）\[\]{}]/gu, "")
     .trim();
+}
+
+export function extractUnquotedCardMentionCandidates(query) {
+  const text = String(query || "").normalize("NFKC");
+  const candidates = [];
+  const patterns = [
+    /(?:手卡|墓地|除外|场上|場上|自己场上|自己場上|对方场上|對方場上|我方场上|我方場上|对方的|對方的|我方的|自己的|发动了?|發動了?|适用|適用|选择|選擇|要将|要將|将|將|把|破坏|破壞|连锁|連鎖|c\d+\s*发动|c\d+\s*發動)\s*(?:的|上|中|存在的|表侧表示的|表側表示的|手卡的|场上的|場上的)?\s*([\p{L}\p{N}・·･．.\-－—–\s]{2,40}?)(?:的[①②③④⑤⑥⑦⑧⑨⑩]?(?:效果|效应|效應)|[①②③④⑤⑥⑦⑧⑨⑩]?效果|破坏|破壞|被破坏|被破壞|特殊召唤|特殊召喚|能|可以|吗|嗎|，|。|、|；|;|$)/giu,
+    /([\p{L}\p{N}・·･．.\-－—–\s]{2,40}?)(?:的[①②③④⑤⑥⑦⑧⑨⑩]?(?:效果|效应|效應)|[①②③④⑤⑥⑦⑧⑨⑩]效果)/giu,
+  ];
+  for (const pattern of patterns) {
+    pattern.lastIndex = 0;
+    for (const match of text.matchAll(pattern)) {
+      const candidate = cleanUnquotedMention(match[1]);
+      if (candidate && hasCardNameSignal(candidate)) candidates.push(candidate);
+    }
+  }
+  return dedupeBy(candidates, normalizeCardKey).slice(0, 12);
+}
+
+function cleanUnquotedMention(value) {
+  let text = String(value || "")
+    .replace(/\s+/gu, " ")
+    .replace(/^[,，。；;、：:\s]+|[,，。；;、：:\s]+$/gu, "")
+    .trim();
+  const leadingNoise = /^(?:了|双方|雙方|我方|对方|對方|自己|自分|只有|一只|一張|一张|怪兽|怪獸|的时候|時候|此时|此時|然后|然後|如果|假设|假設|此卡|这张卡|這張卡|这个|這個|那个|那個|手卡|墓地|除外|场上|場上|场上的|場上的|选择|選擇|适用|適用|发动|發動|要将|要將|将|將|把|想要|作为|作為|被破坏|被破壞|替代|代替|降低|提升|攻击力|攻擊力|守备力|守備力|可以|能否|是否|能|吗|嗎|的)+/u;
+  const trailingNoise = /(?:的)?(?:效果|效应|效應|破坏|破壞|被破坏|被破壞|特殊召唤|特殊召喚|能|可以|吗|嗎|的时候|時候|此时|此時|选择|選擇|适用|適用|发动|發動|降低.*|提升.*|作为.*|作為.*)$/u;
+  let previous = "";
+  while (text && text !== previous) {
+    previous = text;
+    text = text.replace(leadingNoise, "").replace(trailingNoise, "").trim();
+  }
+  return text.length >= 2 && text.length <= 30 ? text : "";
+}
+
+function hasCardNameSignal(value) {
+  const text = String(value || "").trim();
+  const key = normalizeCardKey(text);
+  if (key.length < 2 || key.length > 28) return false;
+  if (/^(?:效果|发动|特殊召唤|攻击力|守备力|怪兽|场上|手卡|墓地|破坏|选择|适用)$/u.test(key)) return false;
+  return /[\u3400-\u9fff]/u.test(text)
+    && /(龙|龍|神|王|魔|械|童子|蔷|薔|骑士|騎士|姬|兽|獸|花|园|園|多元|宇宙|电子|電子|融合|同步|超量|连接|連接|男爵|女|巫|陷阱|魔法|星|码|碼)/u.test(text);
 }
 
 function addResolved(resolved, seenCards, candidate, input, confidence) {
