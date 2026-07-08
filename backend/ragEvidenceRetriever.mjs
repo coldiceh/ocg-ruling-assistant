@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { searchCards } from "./baigeCardProvider.mjs";
 import { createLocalCardDataProvider } from "./cardDataProvider.mjs";
 import { normalizeCardKey } from "./ragCardExtractor.mjs";
 import { searchOfficialQaEvidence } from "./officialQaMatcher.mjs";
@@ -18,6 +19,7 @@ export async function retrieveRagEvidence({
   qaRecords,
   maxPerBucket = 5,
   env = {},
+  fetchImpl = globalThis.fetch,
 } = {}) {
   const limits = readRetrievalLimits(env, maxPerBucket);
   const data = cards || records || qaRecords
@@ -27,18 +29,27 @@ export async function retrieveRagEvidence({
   const resolvedCards = cardResolution.resolvedCards || [];
   const providedTexts = normalizeUserProvidedCardTexts(cardResolution.userProvidedCardTexts || [], limits);
   const retrievalWarnings = [];
+  const baigeDebug = { searchCount: 0, cacheHitCount: 0, warnings: [], ambiguousMentions: [] };
   const fuzzyCards = resolveUnresolvedMentionCards(cardResolution.unresolvedMentions || [], cardProvider, limits, retrievalWarnings);
-  const retrievalCards = dedupeCards([...resolvedCards, ...fuzzyCards]).slice(0, limits.maxCards);
+  const providedNameKeys = new Set(providedTexts.map((item) => normalizeCardKey(item.name)).filter(Boolean));
+  const unresolvedForBaige = (cardResolution.unresolvedMentions || [])
+    .filter((mention) => !providedNameKeys.has(normalizeCardKey(mention.input)));
+  const [enrichedLocalCards, baigeResolvedCards] = await Promise.all([
+    enrichCardsWithBaige(dedupeCards([...resolvedCards, ...fuzzyCards]), { fetchImpl, env, limits, warnings: retrievalWarnings, debug: baigeDebug }),
+    resolveUnresolvedMentionCardsWithBaige(unresolvedForBaige, { fetchImpl, env, limits, warnings: retrievalWarnings, debug: baigeDebug }),
+  ]);
+  const retrievalCards = dedupeCards([...enrichedLocalCards, ...baigeResolvedCards]).slice(0, limits.maxCards);
   const mentionQueries = [
     ...(cardResolution.unresolvedMentions || []).map((item) => item.input),
     ...providedTexts.map((item) => item.name),
   ].filter(Boolean);
   if (fuzzyCards.length) retrievalWarnings.push(`unresolved_mentions_fuzzy_matched:${fuzzyCards.map((card) => card.name).join(",")}`);
+  if (baigeResolvedCards.length) retrievalWarnings.push(`unresolved_mentions_baige_matched:${baigeResolvedCards.map((card) => card.name).join(",")}`);
   if (providedTexts.length) retrievalWarnings.push("user_provided_text_not_official");
   const allEvidenceRecords = [...data.records, ...data.qaRecords];
 
   const cardTexts = retrievalCards
-    .map((card) => findCardRecord(card, data.cards) || cardProvider.getCardProfile(card.id || card.cardId))
+    .map((card) => findCardRecord(card, data.cards) || cardProvider.getCardProfile(card.id || card.cardId) || card)
     .filter(Boolean)
     .map((card) => cardTextEvidence(card, limits.maxCardTextChars, retrievalWarnings));
 
@@ -103,12 +114,17 @@ export async function retrieveRagEvidence({
     faqRelated: dedupeEvidence(faqRelated),
     rawRelatedEvidence: dedupeEvidence(rawRelatedEvidence),
     fuzzyResolvedCards: fuzzyCards,
+    baigeResolvedCards,
+    baigeAmbiguousMentions: baigeDebug.ambiguousMentions,
     retrievalWarnings,
     debug: {
       searchPaths: officialMatches.searchPaths || [],
       recordCount: allEvidenceRecords.length,
       cardCount: data.cards.length,
       userProvidedCardTextCount: providedTexts.length,
+      baigeSearchCount: baigeDebug.searchCount,
+      baigeCacheHitCount: baigeDebug.cacheHitCount,
+      baigeWarnings: baigeDebug.warnings,
     },
   };
 }
@@ -211,17 +227,20 @@ function findCardRecord(card, cards) {
 }
 
 function cardTextEvidence(card, maxTextChars, warnings) {
-  const text = String(card.effectText || "");
+  const text = String(card.effectText || card.text || "");
   const truncated = text.length > maxTextChars;
   if (truncated) warnings.push(`card_text_truncated:${card.id || normalizeCardKey(card.name)}`);
+  const isBaige = card.source === "baige" || card.provider === "baige";
   return {
     id: `card-text-${card.id || normalizeCardKey(card.name)}`,
-    type: "card_text",
+    type: isBaige ? "baige_card_text" : "card_text",
     title: `${card.name} 的卡片文本`,
     cardIds: [card.id || card.cardId].filter(Boolean).map(String),
     cards: [card.name].filter(Boolean),
     text: truncated ? `${text.slice(0, Math.max(0, maxTextChars - 1))}…` : text,
     sourceUrl: card.sourceUrl || "",
+    source: isBaige ? "baige" : card.source || "",
+    official: false,
     isDirect: false,
   };
 }
@@ -342,6 +361,127 @@ function resolveUnresolvedMentionCards(unresolvedMentions, cardProvider, limits,
     });
   }
   return result;
+}
+
+async function resolveUnresolvedMentionCardsWithBaige(unresolvedMentions, { fetchImpl, env, limits, warnings, debug }) {
+  const result = [];
+  for (const mention of unresolvedMentions || []) {
+    if (result.length >= limits.maxCards) break;
+    const searchResult = await searchBaige(mention.input, { fetchImpl, env, limits, debug });
+    warnings.push(...searchResult.warnings);
+    const candidates = searchResult.results || [];
+    if (!candidates.length) {
+      warnings.push(`baige_no_result:${mention.input}`);
+      continue;
+    }
+    const best = candidates[0];
+    const confident = candidates.length === 1 || Number(best.confidence || 0) >= 0.72;
+    if (!confident) {
+      debug.ambiguousMentions.push({
+        input: mention.input,
+        candidateCards: candidates.slice(0, 3).map((card) => ({
+          id: card.id || card.cardId || "",
+          name: card.name || card.cnName || card.jpName || card.enName || "",
+          source: "baige",
+          confidence: card.confidence || 0,
+        })),
+      });
+      warnings.push(`baige_ambiguous:${mention.input}`);
+      result.push(toRagCard(best, mention.input, Math.min(Number(best.confidence || 0), 0.68)));
+      continue;
+    }
+    warnings.push(`baige_match:${mention.input}->${best.name}`);
+    result.push(toRagCard(best, mention.input, Number(best.confidence || 0)));
+  }
+  return dedupeCards(result);
+}
+
+async function enrichCardsWithBaige(cards, { fetchImpl, env, limits, warnings, debug }) {
+  const result = [];
+  for (const card of cards || []) {
+    if (result.length >= limits.maxCards) break;
+    if (hasUsableCardText(card) && (card.id || card.cardId) && card.sourceUrl) {
+      result.push(card);
+      continue;
+    }
+    const query = card.name || card.cnName || card.jaName || card.enName || card.input;
+    if (!query) {
+      result.push(card);
+      continue;
+    }
+    const searchResult = await searchBaige(query, { fetchImpl, env, limits, debug });
+    warnings.push(...searchResult.warnings);
+    const best = (searchResult.results || [])[0];
+    if (!best || Number(best.confidence || 0) < 0.72) {
+      result.push(card);
+      continue;
+    }
+    result.push(mergeCard(card, toRagCard(best, card.input || query, Number(best.confidence || 0))));
+  }
+  return result;
+}
+
+async function searchBaige(query, { fetchImpl, env, limits, debug }) {
+  const result = await searchCards(query, { fetchImpl, env, limit: Math.max(3, limits.maxCards) });
+  debug.searchCount += 1;
+  if (result.cacheHit) debug.cacheHitCount += 1;
+  debug.warnings.push(...(result.warnings || []));
+  return result;
+}
+
+function toRagCard(card, input, confidence) {
+  return {
+    input,
+    id: String(card.id || card.cardId || ""),
+    cardId: String(card.cardId || card.id || ""),
+    passcode: String(card.passcode || card.id || ""),
+    name: card.name || card.cnName || card.jpName || card.enName || String(input || ""),
+    cnName: card.cnName || "",
+    jaName: card.jaName || card.jpName || "",
+    jpName: card.jpName || card.jaName || "",
+    enName: card.enName || "",
+    cardType: card.cardType || card.type || "",
+    effectText: card.effectText || card.text || "",
+    text: card.text || card.effectText || "",
+    source: "baige",
+    sourceLabel: "百鸽",
+    sourceUrl: card.sourceUrl || "",
+    imageUrl: card.imageUrl || "",
+    imageCandidates: card.imageCandidates || [],
+    official: false,
+    aliases: card.aliases || [card.name, card.cnName, card.jpName, card.enName].filter(Boolean),
+    confidence,
+  };
+}
+
+function mergeCard(localCard, baigeCard) {
+  return {
+    ...baigeCard,
+    ...localCard,
+    id: localCard.id || baigeCard.id,
+    cardId: localCard.cardId || baigeCard.cardId,
+    passcode: localCard.passcode || baigeCard.passcode,
+    name: localCard.name || baigeCard.name,
+    cnName: localCard.cnName || baigeCard.cnName,
+    jaName: localCard.jaName || baigeCard.jaName,
+    jpName: localCard.jpName || baigeCard.jpName,
+    enName: localCard.enName || baigeCard.enName,
+    cardType: localCard.cardType || baigeCard.cardType,
+    effectText: localCard.effectText || baigeCard.effectText,
+    text: localCard.text || localCard.effectText || baigeCard.text,
+    source: localCard.source || baigeCard.source,
+    sourceLabel: localCard.sourceLabel || baigeCard.sourceLabel,
+    sourceUrl: localCard.sourceUrl || baigeCard.sourceUrl,
+    imageUrl: localCard.imageUrl || baigeCard.imageUrl,
+    imageCandidates: [...new Set([...(localCard.imageCandidates || []), ...(baigeCard.imageCandidates || [])])],
+    aliases: [...new Set([...(localCard.aliases || []), ...(baigeCard.aliases || [])])],
+    official: false,
+    confidence: Math.max(Number(localCard.confidence || 0), Number(baigeCard.confidence || 0)),
+  };
+}
+
+function hasUsableCardText(card) {
+  return Boolean(String(card.effectText || card.text || "").trim());
 }
 
 function normalizeUserProvidedCardTexts(items, limits) {
