@@ -148,6 +148,10 @@ test("ui_has_single_query_button", async () => {
   assert.match(app, /pendingStages/u);
   assert.match(app, /检索规则资料/u);
   assert.match(app, /startPendingStages/u);
+  assert.match(html, /id="flashModelButton"/u);
+  assert.match(html, /id="proModelButton"/u);
+  assert.match(app, /modelTier: selectedModelTier/u);
+  assert.match(app, /buildBackendCacheKey\(text, backendMode, selectedModelTier\)/u);
   assert.doesNotMatch(app, /deepAnalyzeButton|ragModeToggle|legacyPipelineToggle/u);
   assert.doesNotMatch(html, /裁判结论/u);
   assert.doesNotMatch(app, /裁判结论/u);
@@ -162,9 +166,11 @@ test("ui_hides_engine_details_by_default", async () => {
     readFile(new URL("../src/app.js", import.meta.url), "utf8"),
   ]);
   assert.match(html, /裁定流程/u);
+  assert.match(html, /今日额度/u);
+  assert.match(html, /id="budgetResetButton"/u);
   assert.match(html, /id="themeToggle"/u);
   assert.match(html, /class="page-background"/u);
-  assert.doesNotMatch(html, /ANALYSIS CORE|DeepSeek|TOKEN|budget|provider debug/u);
+  assert.doesNotMatch(html, /ANALYSIS CORE|DeepSeek|TOKEN|provider debug/u);
   assert.doesNotMatch(html, /AI裁定分析|RAG 裁定分析|RAG 分析/u);
   assert.doesNotMatch(html, /后端模式|公开资料检索|卡片文本分析/u);
   assert.doesNotMatch(html, /terminal-theme|OCG RULING TERMINAL/u);
@@ -187,6 +193,8 @@ test("card_dossier_nodes_and_theme_backgrounds_exist", async () => {
   assert.match(css, /assets\/bg-night\.png/u);
   assert.match(css, /theme-night/u);
   assert.match(css, /\.progress-step/u);
+  assert.match(css, /\.model-tier-toggle/u);
+  assert.match(css, /\.budget-panel/u);
   assert.doesNotMatch(css, /body::before|body::after/u);
   assert.match(app, /baige_card_text/u);
   assert.match(app, /百鸽卡片文本/u);

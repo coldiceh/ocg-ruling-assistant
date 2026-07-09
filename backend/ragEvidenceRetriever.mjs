@@ -115,6 +115,12 @@ export async function retrieveRagEvidence({
     .slice(0, limits.maxRelatedEvidence)
     .map((record) => evidenceFromRecord(record, record.recordType === "qa" ? "related" : "related", limits.maxEvidenceTextChars, retrievalWarnings))
     .filter((item) => !directIds.has(item.id));
+  const derivedRuleEvidence = buildDerivedRuleEvidence({
+    userQuery,
+    cards: retrievalCards,
+    maxTextChars: limits.maxEvidenceTextChars,
+    warnings: retrievalWarnings,
+  });
 
   if (!resolvedCards.length) retrievalWarnings.push("card_name_not_resolved_raw_query_fallback_used");
   if (!cardTexts.length && retrievalCards.length) retrievalWarnings.push("resolved_card_text_not_found");
@@ -126,7 +132,7 @@ export async function retrieveRagEvidence({
     officialQaDirectCandidates: dedupeEvidence(officialQaDirectCandidates),
     officialQaRelated: dedupeEvidence(officialQaRelated),
     faqRelated: dedupeEvidence(faqRelated),
-    rawRelatedEvidence: dedupeEvidence(rawRelatedEvidence),
+    rawRelatedEvidence: dedupeEvidence([...derivedRuleEvidence, ...rawRelatedEvidence]),
     fuzzyResolvedCards: fuzzyCards,
     baigeResolvedCards,
     baigeAmbiguousMentions: baigeDebug.ambiguousMentions,
@@ -309,6 +315,59 @@ function evidenceFromRecord(record, type, maxTextChars = 1600, warnings = []) {
   };
 }
 
+function buildDerivedRuleEvidence({ userQuery, cards = [], maxTextChars = 1600, warnings = [] } = {}) {
+  const queryText = String(userQuery || "");
+  const cardText = (cards || [])
+    .map((card) => [card.name, card.cnName, card.jaName, card.enName, card.cardType, card.type, card.effectText, card.text].filter(Boolean).join("\n"))
+    .join("\n");
+  const combined = `${queryText}\n${cardText}`;
+  const asksReturnSpellTrap = /(魔法.?陷阱|魔陷|魔法・罠|spell.?\/?.?trap|spell.?trap)/iu.test(combined)
+    && /(回(?:到|入)?手|返回手|放回手|弹回|彈回|手札に戻|手牌|hand|持ち主の手札に戻)/iu.test(combined);
+  const activationWindow = /(发动|發動|连锁|連鎖|处理中|处理时|正在处理|発動|チェーン|chain)/iu.test(queryText);
+  const noOtherSpellTrap = /(没有其他魔陷|没有其他魔法.?陷阱|没有其它魔陷|沒有其他魔陷|场上没有其他|場上沒有其他|只有.*魔陷|only.*spell)/iu.test(queryText);
+  const nonContinuousActivated = (cards || []).some((card) => isNonContinuousSpellTrapCard(card) && cardMentionedInQuestion(card, queryText))
+    || /(通常魔法|通常陷阱|速攻魔法|反击陷阱|反擊陷阱|非永续|非永續|normal spell|normal trap|quick-play spell|counter trap)/iu.test(queryText);
+
+  if (!asksReturnSpellTrap || !activationWindow || !nonContinuousActivated) return [];
+
+  const text = [
+    "通用规则资料：通常魔法、速攻魔法、通常陷阱、反击陷阱等非永续魔法/陷阱卡，在卡片发动并进入连锁处理的语境下，不应当作为可被“回到手卡/卡组”的场上魔法・陷阱卡来处理；处理完毕后通常送去墓地。",
+    "如果题目事实显示场上没有其他魔法・陷阱卡，那么要求将场上的魔法・陷阱卡返回手卡/卡组的处理，不能仅以那张正在发动或已经处理完毕的非永续魔法/陷阱卡作为可适用对象。",
+    noOtherSpellTrap ? "本题明确给出了“没有其他魔法・陷阱卡”的事实，应优先据此判断可适用处理是否存在。" : "若是否存在其他魔法・陷阱卡不明确，应把该事实列入 missingInfo。",
+  ].join("\n");
+  const truncated = text.length > maxTextChars;
+  if (truncated) warnings.push("derived_rule_text_truncated:non_continuous_spell_trap_return");
+  warnings.push("derived_rule_guard_used:non_continuous_spell_trap_return");
+  return [{
+    id: "rule-principle-non-continuous-spell-trap-return",
+    type: "rule_principle",
+    recordType: "derived_rule",
+    title: "非永续魔法/陷阱发动中与回到手卡处理",
+    cardIds: [],
+    cards: [],
+    text: truncated ? `${text.slice(0, Math.max(0, maxTextChars - 1))}…` : text,
+    sourceUrl: "",
+    source: "derived_rule_guard",
+    official: false,
+    isDirect: false,
+  }];
+}
+
+function isNonContinuousSpellTrapCard(card = {}) {
+  const type = `${card.cardType || ""} ${card.type || ""} ${card.race || ""}`.toLowerCase();
+  const isSpellTrap = /(魔法|陷阱|罠|spell|trap)/iu.test(type);
+  if (!isSpellTrap) return false;
+  return !/(永续|永續|持续|持續|continuous|场地|場地|field|装备|裝備|equip)/iu.test(type);
+}
+
+function cardMentionedInQuestion(card = {}, question = "") {
+  const queryKey = normalizeCardKey(question);
+  return [card.name, card.cnName, card.jaName, card.jpName, card.enName, ...(card.aliases || [])]
+    .map(normalizeCardKey)
+    .filter((key) => key.length >= 2)
+    .some((key) => queryKey.includes(key));
+}
+
 function rankRecords({ userQuery, records, resolvedCards, mentionQueries = [], ruleSearchQueries = [], allowNoCardMatch = false }) {
   const queryTerms = tokenize([userQuery, ...mentionQueries].join(" "));
   const ruleQueries = normalizeRuleSearchQueries(ruleSearchQueries, { maxRuleSearchQueries: 8 });
@@ -427,16 +486,15 @@ function resolveUnresolvedMentionCards(unresolvedMentions, cardProvider, limits,
 }
 
 async function resolveUnresolvedMentionCardsWithBaige(unresolvedMentions, { fetchImpl, env, limits, warnings, debug }) {
-  const result = [];
+  const mentions = (unresolvedMentions || []).slice(0, limits.maxCards);
   const minConfidence = readPositiveDecimal(env.RAG_BAIGE_MIN_CONFIDENCE, 0.72);
-  for (const mention of unresolvedMentions || []) {
-    if (result.length >= limits.maxCards) break;
+  const result = await Promise.all(mentions.map(async (mention) => {
     const searchResult = await searchBaige(mention.input, { fetchImpl, env, limits, debug });
     warnings.push(...searchResult.warnings);
     const candidates = searchResult.results || [];
     if (!candidates.length) {
       warnings.push(`baige_no_result:${mention.input}`);
-      continue;
+      return null;
     }
     const best = candidates[0];
     const confident = Number(best.confidence || 0) >= minConfidence;
@@ -451,37 +509,33 @@ async function resolveUnresolvedMentionCardsWithBaige(unresolvedMentions, { fetc
         })),
       });
       warnings.push(`baige_ambiguous:${mention.input}`);
-      continue;
+      return null;
     }
     warnings.push(`baige_match:${mention.input}->${best.name}`);
-    result.push(toRagCard(best, mention.input, Number(best.confidence || 0)));
-  }
-  return dedupeCards(result);
+    return toRagCard(best, mention.input, Number(best.confidence || 0));
+  }));
+  return dedupeCards(result.filter(Boolean)).slice(0, limits.maxCards);
 }
 
 async function enrichCardsWithBaige(cards, { fetchImpl, env, limits, warnings, debug }) {
-  const result = [];
-  for (const card of cards || []) {
-    if (result.length >= limits.maxCards) break;
+  const sourceCards = (cards || []).slice(0, limits.maxCards);
+  const result = await Promise.all(sourceCards.map(async (card) => {
     if (hasUsableCardText(card) && (card.id || card.cardId) && card.sourceUrl) {
-      result.push(card);
-      continue;
+      return card;
     }
     const query = card.name || card.cnName || card.jaName || card.enName || card.input;
     if (!query) {
-      result.push(card);
-      continue;
+      return card;
     }
     const searchResult = await searchBaige(query, { fetchImpl, env, limits, debug });
     warnings.push(...searchResult.warnings);
     const best = (searchResult.results || [])[0];
     if (!best || Number(best.confidence || 0) < 0.72) {
-      result.push(card);
-      continue;
+      return card;
     }
-    result.push(mergeCard(card, toRagCard(best, card.input || query, Number(best.confidence || 0))));
-  }
-  return result;
+    return mergeCard(card, toRagCard(best, card.input || query, Number(best.confidence || 0)));
+  }));
+  return result.filter(Boolean);
 }
 
 async function searchBaige(query, { fetchImpl, env, limits, debug }) {

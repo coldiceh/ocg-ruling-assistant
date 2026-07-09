@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>游戏王OCG裁定助手</title>
-    <link rel="stylesheet" href="src/styles.css" />
+    <link rel="stylesheet" href="src/styles.css?v=20260709-model-budget-1" />
   </head>
   <body class="theme-night">
     <div class="page-background" aria-hidden="true"></div>
@@ -36,6 +36,11 @@
           <textarea id="questionInput" spellcheck="false" placeholder="输入需要分析的 OCG 裁定问题..."></textarea>
 
           <div class="actions">
+            <div class="model-tier-toggle" role="group" aria-label="选择裁定模型">
+              <span>裁定模型</span>
+              <button id="flashModelButton" type="button" data-model-tier="flash">Flash</button>
+              <button id="proModelButton" type="button" data-model-tier="pro">Pro</button>
+            </div>
             <div class="model-strip" aria-live="polite">
               <span>裁定流程</span>
               <strong id="modelStatusText">准备就绪</strong>
@@ -111,10 +116,20 @@
               <pre id="parserDebugOutput"></pre>
             </details>
           </div>
+
+          <section class="budget-panel" id="budgetPanel" aria-labelledby="budgetTitle">
+            <div>
+              <p class="budget-label" id="budgetTitle">今日额度</p>
+              <strong id="budgetSpentText">读取中</strong>
+              <span id="budgetLimitText"></span>
+            </div>
+            <p id="budgetHint">统计后端今日累计模型用量。</p>
+            <button class="text-button" id="budgetResetButton" type="button">重置额度</button>
+          </section>
         </section>
       </main>
     </div>
 
-    <script src="src/app.js"></script>
+    <script src="src/app.js?v=20260709-model-budget-1"></script>
   </body>
 </html>

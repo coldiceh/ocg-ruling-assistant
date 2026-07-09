@@ -371,9 +371,9 @@ export function resolveRuleQueryExtractionProvider(env = {}) {
 }
 
 export function estimateDeepSeekCostCny(usage = {}, env = {}) {
-  const inputPrice = readNumber(env.DEEPSEEK_INPUT_CNY_PER_MTOK, 1);
-  const outputPrice = readNumber(env.DEEPSEEK_OUTPUT_CNY_PER_MTOK, 2);
-  const cacheHitPrice = readNumber(env.DEEPSEEK_CACHE_HIT_INPUT_CNY_PER_MTOK, 0.02);
+  const inputPrice = readTieredProviderNumber(env, "DEEPSEEK", "INPUT_CNY_PER_MTOK", 1);
+  const outputPrice = readTieredProviderNumber(env, "DEEPSEEK", "OUTPUT_CNY_PER_MTOK", 2);
+  const cacheHitPrice = readTieredProviderNumber(env, "DEEPSEEK", "CACHE_HIT_INPUT_CNY_PER_MTOK", 0.02);
   const promptTokens = Number(usage.prompt_tokens || 0);
   const completionTokens = Number(usage.completion_tokens || 0);
   const cacheHit = Number(usage.prompt_cache_hit_tokens || 0);
@@ -382,6 +382,46 @@ export function estimateDeepSeekCostCny(usage = {}, env = {}) {
     ? mtok(cacheHit) * cacheHitPrice + mtok(cacheMiss) * inputPrice
     : mtok(promptTokens) * inputPrice;
   return roundCost(inputCost + mtok(completionTokens) * outputPrice);
+}
+
+export async function getRagBudgetStatus({
+  env = globalThis.process?.env || {},
+  fetchImpl = globalThis.fetch,
+  now = new Date(),
+} = {}) {
+  const config = budgetConfig(env);
+  const dayKey = budgetDayKey(config.timezone, now);
+  const storage = budgetStorage(env);
+  const spent = await readBudgetSpent({ storage, dayKey, env, fetchImpl });
+  return {
+    dailyBudgetCny: config.dailyBudgetCny,
+    spentTodayCny: roundCost(spent),
+    estimatedThisCallCny: 0,
+    budgetMode: config.mode,
+    budgetStorage: storage,
+    limitEnforced: false,
+    dayKey,
+  };
+}
+
+export async function resetRagBudget({
+  env = globalThis.process?.env || {},
+  fetchImpl = globalThis.fetch,
+  now = new Date(),
+} = {}) {
+  const config = budgetConfig(env);
+  const dayKey = budgetDayKey(config.timezone, now);
+  const storage = budgetStorage(env);
+  await setBudgetSpent({ storage, dayKey, value: 0, env, fetchImpl });
+  return {
+    dailyBudgetCny: config.dailyBudgetCny,
+    spentTodayCny: 0,
+    estimatedThisCallCny: 0,
+    budgetMode: config.mode,
+    budgetStorage: storage,
+    limitEnforced: false,
+    dayKey,
+  };
 }
 
 export function parseRagModelJson(rawText) {
@@ -870,6 +910,16 @@ async function addBudgetSpent({ storage, dayKey, amount, env, fetchImpl }) {
   return next;
 }
 
+async function setBudgetSpent({ storage, dayKey, value, env, fetchImpl }) {
+  const next = Math.max(0, Number(value || 0));
+  if (storage === "redis" && typeof fetchImpl === "function") {
+    await redisCommand(env, fetchImpl, ["SET", dayKey, String(next), "EX", "172800"]);
+    return next;
+  }
+  memoryBudget.set(dayKey, next);
+  return next;
+}
+
 async function redisCommand(env, fetchImpl, command) {
   const response = await fetchImpl(env.UPSTASH_REDIS_REST_URL, {
     method: "POST",
@@ -890,14 +940,14 @@ function estimatePreflightCostCny(provider, prompt, maxTokens, env) {
     return estimateDeepSeekCostCny({ prompt_tokens: promptTokens, completion_tokens: maxTokens }, env);
   }
   if (provider === "gemini") {
-    return roundCost(readNumber(env.GEMINI_ESTIMATED_CNY_PER_CALL, 0.01));
+    return roundCost(readTieredProviderNumber(env, "GEMINI", "ESTIMATED_CNY_PER_CALL", 0.01));
   }
   return 0;
 }
 
 function estimateActualCostCny(provider, usage, env) {
   if (provider === "deepseek") return estimateDeepSeekCostCny(usage, env);
-  if (provider === "gemini") return roundCost(readNumber(env.GEMINI_ESTIMATED_CNY_PER_CALL, 0.01));
+  if (provider === "gemini") return roundCost(readTieredProviderNumber(env, "GEMINI", "ESTIMATED_CNY_PER_CALL", 0.01));
   return 0;
 }
 
@@ -1065,8 +1115,17 @@ function emptyRuleQueryExtractionResult(providerUsed, modelUsed, dryRun, warning
 }
 
 function modelNameForProvider(provider, env) {
-  if (provider === "deepseek") return String(env.DEEPSEEK_MODEL || DEFAULT_DEEPSEEK_MODEL);
-  if (provider === "gemini") return String(env.GEMINI_MODEL || "gemini-1.5-flash");
+  const tier = String(env.RAG_MODEL_TIER || "").trim().toLowerCase();
+  if (provider === "deepseek") {
+    if (tier === "flash") return String(env.DEEPSEEK_FLASH_MODEL || env.DEEPSEEK_CARD_MODEL || env.RAG_CARD_MODEL || DEFAULT_DEEPSEEK_CARD_MODEL);
+    if (tier === "pro") return String(env.DEEPSEEK_PRO_MODEL || env.DEEPSEEK_MODEL || DEFAULT_DEEPSEEK_MODEL);
+    return String(env.DEEPSEEK_MODEL || DEFAULT_DEEPSEEK_MODEL);
+  }
+  if (provider === "gemini") {
+    if (tier === "flash") return String(env.GEMINI_FLASH_MODEL || env.GEMINI_CARD_MODEL || "gemini-1.5-flash");
+    if (tier === "pro") return String(env.GEMINI_PRO_MODEL || env.GEMINI_MODEL || "gemini-1.5-flash");
+    return String(env.GEMINI_MODEL || "gemini-1.5-flash");
+  }
   return "mock-rag";
 }
 
@@ -1124,6 +1183,15 @@ function readNumber(value, fallback) {
 function readPositiveNumber(value, fallback) {
   const number = Number(value);
   return Number.isFinite(number) && number > 0 ? number : fallback;
+}
+
+function readTieredProviderNumber(env, providerPrefix, suffix, fallback) {
+  const tier = String(env.RAG_MODEL_TIER || "").trim().toUpperCase();
+  if (tier === "FLASH" || tier === "PRO") {
+    const tierValue = Number(env[`${providerPrefix}_${tier}_${suffix}`]);
+    if (Number.isFinite(tierValue)) return tierValue;
+  }
+  return readNumber(env[`${providerPrefix}_${suffix}`], fallback);
 }
 
 function withTimeout(promise, timeoutMs, message) {

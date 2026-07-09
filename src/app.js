@@ -181,9 +181,16 @@ const ui = {
   cardEffect: document.querySelector("#cardEffect"),
   cardSourceLink: document.querySelector("#cardSourceLink"),
   themeToggle: document.querySelector("#themeToggle"),
+  flashModelButton: document.querySelector("#flashModelButton"),
+  proModelButton: document.querySelector("#proModelButton"),
+  budgetPanel: document.querySelector("#budgetPanel"),
+  budgetSpentText: document.querySelector("#budgetSpentText"),
+  budgetLimitText: document.querySelector("#budgetLimitText"),
+  budgetHint: document.querySelector("#budgetHint"),
+  budgetResetButton: document.querySelector("#budgetResetButton"),
 };
 
-let appConfig = { answerApiUrl: "", modelLabel: "" };
+let appConfig = { answerApiUrl: "", modelLabel: "", budgetApiUrl: "" };
 let syncedCards = [];
 let syncedNotes = [];
 let sourceMeta = null;
@@ -197,6 +204,8 @@ let selectedCardIndex = 0;
 let lastRenderedBackendAnswer = null;
 let debugUiEnabled = false;
 const themeStorageKey = "ocg-ruling-theme:v1";
+const modelTierStorageKey = "ocg-ruling-model-tier:v1";
+let selectedModelTier = readInitialModelTier();
 const pendingStages = [
   { label: "理解问题", body: "正在读取问题中的卡片、场面、连锁和时点。" },
   { label: "提取卡名", body: "正在识别卡名候选，并准备查询卡片资料。" },
@@ -269,8 +278,10 @@ async function loadAppConfig() {
   if (!payload) return;
   appConfig = {
     answerApiUrl: String(payload.answerApiUrl || "").trim(),
+    budgetApiUrl: String(payload.budgetApiUrl || "").trim(),
     modelLabel: "",
   };
+  if (!appConfig.budgetApiUrl) appConfig.budgetApiUrl = getBudgetApiUrl();
 }
 
 async function loadBackendModelInfo() {
@@ -653,14 +664,14 @@ async function analyzeQuestion() {
 
 async function requestBackendAnswer(text) {
   const backendMode = "rag";
-  const cacheKey = buildBackendCacheKey(text, backendMode);
+  const cacheKey = buildBackendCacheKey(text, backendMode, selectedModelTier);
   const cached = readCachedBackendAnswer(cacheKey);
   if (cached) return cached;
 
   const response = await fetch(appConfig.answerApiUrl, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ question: text, mode: backendMode }),
+    body: JSON.stringify({ question: text, mode: backendMode, modelTier: selectedModelTier }),
   });
   if (!response.ok) throw new Error(`后端返回 ${response.status}`);
   const answer = await response.json();
@@ -668,8 +679,8 @@ async function requestBackendAnswer(text) {
   return answer;
 }
 
-function buildBackendCacheKey(text, mode = "rag") {
-  return `ocg-ruling-answer:v13:${mode}:${appConfig.answerApiUrl}:${normalizeText(text).slice(0, 2000)}`;
+function buildBackendCacheKey(text, mode = "rag", modelTier = "pro") {
+  return `ocg-ruling-answer:v15:${mode}:${modelTier}:${appConfig.answerApiUrl}:${normalizeText(text).slice(0, 2000)}`;
 }
 
 function readCachedBackendAnswer(key) {
@@ -759,6 +770,7 @@ function renderBackendAnswer(answer) {
 function renderRagAnswer(answer) {
   ui.resultGrid.hidden = false;
   renderCards(answer?.resolvedCards || []);
+  renderBudgetStatus(answer.debug?.budgetStatus || null);
   const labels = {
     official_confirmed: { confidence: "官方依据", className: "is-confirmed", title: "官方直接裁定", basis: "官方 direct Q&A" },
     rule_analysis: { confidence: "规则分析", className: "is-rule-derived", title: "裁定分析", basis: "卡片文本 / FAQ / 相关资料" },
@@ -799,6 +811,7 @@ function ragEvidenceLabel(type) {
   if (type === "card_text") return "卡片文本";
   if (type === "baige_card_text") return "百鸽卡片文本";
   if (type === "user_provided_text") return "用户提供文本";
+  if (type === "rule_principle") return "规则资料";
   if (type === "faq") return "FAQ";
   return "相关资料";
 }
@@ -840,6 +853,54 @@ function ragBudgetLines(status) {
     lines.push("预算提示：未配置持久预算存储时，Vercel 上这是 per-instance 软限制。");
   }
   return lines;
+}
+
+async function loadBudgetStatus() {
+  if (!appConfig.budgetApiUrl) {
+    renderBudgetStatus(null, "未配置后端预算接口。");
+    return;
+  }
+  try {
+    const response = await fetch(appConfig.budgetApiUrl, { cache: "no-store" });
+    if (!response.ok) throw new Error(`budget ${response.status}`);
+    renderBudgetStatus(await response.json());
+  } catch {
+    renderBudgetStatus(null, "暂时无法读取今日用量。");
+  }
+}
+
+async function resetBudgetStatus() {
+  if (!appConfig.budgetApiUrl || !ui.budgetResetButton) return;
+  ui.budgetResetButton.disabled = true;
+  if (ui.budgetHint) ui.budgetHint.textContent = "正在重置今日额度...";
+  try {
+    const response = await fetch(appConfig.budgetApiUrl, { method: "POST", cache: "no-store" });
+    if (!response.ok) throw new Error(`budget reset ${response.status}`);
+    renderBudgetStatus(await response.json(), "已重置今日累计用量。");
+  } catch {
+    renderBudgetStatus(null, "重置失败，请稍后再试。");
+  } finally {
+    ui.budgetResetButton.disabled = false;
+  }
+}
+
+function renderBudgetStatus(status, message = "") {
+  if (!ui.budgetPanel) return;
+  const spent = Number(status?.spentTodayCny);
+  const limit = Number(status?.dailyBudgetCny);
+  ui.budgetSpentText.textContent = Number.isFinite(spent) ? `${formatCny(spent)} 元` : "未读取";
+  ui.budgetLimitText.textContent = Number.isFinite(limit) && limit > 0 ? ` / ${formatCny(limit)} 元` : "";
+  const storage = status?.budgetStorage ? `存储：${status.budgetStorage}` : "";
+  const mode = status?.budgetMode ? `模式：${status.budgetMode}` : "";
+  ui.budgetHint.textContent = message || [storage, mode].filter(Boolean).join(" · ") || "统计后端今日累计模型用量。";
+}
+
+function formatCny(value) {
+  const number = Number(value || 0);
+  if (!Number.isFinite(number)) return "0";
+  if (number === 0) return "0";
+  if (number < 0.0001) return number.toExponential(2);
+  return number.toFixed(6).replace(/0+$/u, "").replace(/\.$/u, "");
 }
 
 function renderFastJudgeAnswer(answer) {
@@ -1209,6 +1270,18 @@ function getCardApiUrl() {
   }
 }
 
+function getBudgetApiUrl() {
+  if (!appConfig.answerApiUrl) return "";
+  try {
+    const url = new URL(appConfig.answerApiUrl);
+    url.pathname = url.pathname.replace(/\/api\/answer\/?$/, "/api/budget");
+    url.search = "";
+    return url.toString();
+  } catch {
+    return appConfig.answerApiUrl.replace(/\/api\/answer\/?$/, "/api/budget");
+  }
+}
+
 function renderCardDetail(card, detail, status) {
   const name = detail?.name || cardDisplayName(card);
   const aliases = detail?.names?.filter((item) => item && item !== name).slice(0, 3) || [card.jaName, card.enName].filter(Boolean);
@@ -1375,6 +1448,21 @@ function basisFromBackendMode(mode) {
 function updateModelStatus(text) {
   if (!ui.modelStatusText) return;
   ui.modelStatusText.textContent = text;
+}
+
+function setModelTier(tier) {
+  selectedModelTier = tier === "flash" ? "flash" : "pro";
+  for (const button of [ui.flashModelButton, ui.proModelButton].filter(Boolean)) {
+    const active = button.dataset.modelTier === selectedModelTier;
+    button.classList.toggle("is-active", active);
+    button.setAttribute("aria-pressed", active ? "true" : "false");
+  }
+  try {
+    localStorage.setItem(modelTierStorageKey, selectedModelTier);
+  } catch {
+    // Model preference persistence is optional.
+  }
+  updateModelStatus(debugUiEnabled ? `${appConfig.modelLabel || "裁定分析"} · ${selectedModelTier.toUpperCase()}` : "准备就绪");
 }
 
 function renderSubAnswers(subAnswers) {
@@ -2026,6 +2114,8 @@ async function init() {
   await loadBackendModelInfo();
   await loadSyncedData();
   if (ui.pipelineDebugToggle) ui.pipelineDebugToggle.hidden = !debugUiEnabled;
+  setModelTier(selectedModelTier);
+  await loadBudgetStatus();
   updateSourceStatus();
   resetAnalysis();
 
@@ -2046,6 +2136,9 @@ async function init() {
       // Theme persistence is optional.
     }
   });
+  ui.flashModelButton?.addEventListener("click", () => setModelTier("flash"));
+  ui.proModelButton?.addEventListener("click", () => setModelTier("pro"));
+  ui.budgetResetButton?.addEventListener("click", () => resetBudgetStatus());
 }
 
 function scheduleAnalysis() {
@@ -2080,6 +2173,16 @@ function readInitialTheme() {
     // Ignore unavailable storage.
   }
   return "night";
+}
+
+function readInitialModelTier() {
+  try {
+    const stored = localStorage.getItem(modelTierStorageKey);
+    if (stored === "flash" || stored === "pro") return stored;
+  } catch {
+    // Ignore unavailable storage.
+  }
+  return "pro";
 }
 
 function applyTheme(theme) {

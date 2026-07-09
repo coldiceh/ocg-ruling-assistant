@@ -2,7 +2,7 @@ import { createServer } from "node:http";
 import { answerQuestion, getDataHealth } from "./engine.mjs";
 import { answerRulingQuestionFast } from "./fastJudgeEngine.mjs";
 import { appendFeedbackCase } from "./feedbackCases.mjs";
-import { resolveCardExtractionProvider, resolveRagProvider } from "./ragModelClient.mjs";
+import { getRagBudgetStatus, resetRagBudget, resolveCardExtractionProvider, resolveRagProvider } from "./ragModelClient.mjs";
 import { answerRagRulingQuestion } from "./ragRulingPipeline.mjs";
 
 const port = Number(process.env.PORT || 8787);
@@ -28,7 +28,17 @@ const server = createServer(async (request, response) => {
   }
 
   if (request.method === "GET" && request.url === "/api/answer") {
-    sendJson(response, 200, getModelInfo());
+    sendJson(response, 200, await getModelInfo());
+    return;
+  }
+
+  if (request.method === "GET" && request.url === "/api/budget") {
+    sendJson(response, 200, await getRagBudgetStatus({ env: process.env }));
+    return;
+  }
+
+  if (request.method === "POST" && request.url === "/api/budget") {
+    sendJson(response, 200, await resetRagBudget({ env: process.env }));
     return;
   }
 
@@ -38,7 +48,10 @@ const server = createServer(async (request, response) => {
       const payload = JSON.parse(body || "{}");
       const mode = String(payload.mode || "rag").toLowerCase();
       if (!["legacy", "fastjudge"].includes(mode)) {
-        const answer = await answerRagRulingQuestion({ question: payload.question });
+        const answer = await answerRagRulingQuestion({
+          question: payload.question,
+          env: envForModelTier(process.env, payload.modelTier),
+        });
         sendJson(response, 200, answer);
         return;
       }
@@ -106,9 +119,10 @@ function readBody(request) {
   });
 }
 
-function getModelInfo() {
+async function getModelInfo() {
   const ragProvider = resolveRagProvider(process.env);
   const cardProvider = resolveCardExtractionProvider(process.env);
+  const budget = await getRagBudgetStatus({ env: process.env }).catch(() => null);
   if (ragProvider.provider === "deepseek") {
     return {
       provider: "deepseek",
@@ -116,6 +130,8 @@ function getModelInfo() {
       models: [process.env.DEEPSEEK_MODEL || "deepseek-v4-flash"],
       cardNameProvider: cardProvider.provider,
       cardNameModels: [process.env.DEEPSEEK_CARD_MODEL || process.env.RAG_CARD_MODEL || "deepseek-v4-flash"],
+      modelTiers: buildModelTiers("deepseek", process.env),
+      budget,
       enabled: true,
       pipeline: "rag_baseline",
       legacyModes: ["legacy", "fastjudge"],
@@ -128,6 +144,8 @@ function getModelInfo() {
       models: [process.env.GEMINI_MODEL || "gemini-1.5-flash"],
       cardNameProvider: cardProvider.provider,
       cardNameModels: splitList(process.env.GEMINI_CARD_MODEL || process.env.GEMINI_CARD_RESOLUTION_MODELS || process.env.GEMINI_CARD_RESOLUTION_MODEL || "gemini-1.5-flash"),
+      modelTiers: buildModelTiers("gemini", process.env),
+      budget,
       enabled: true,
       pipeline: "rag_baseline",
       legacyModes: ["legacy", "fastjudge"],
@@ -137,10 +155,38 @@ function getModelInfo() {
     provider: "mock",
     requestedProvider: ragProvider.requested,
     models: [],
+    modelTiers: [],
+    budget,
     enabled: false,
     pipeline: "rag_baseline",
     legacyModes: ["legacy", "fastjudge"],
   };
+}
+
+function envForModelTier(env, tier) {
+  const normalized = normalizeModelTier(tier);
+  return normalized ? { ...env, RAG_MODEL_TIER: normalized } : env;
+}
+
+function normalizeModelTier(value) {
+  const tier = String(value || "").trim().toLowerCase();
+  return tier === "flash" || tier === "pro" ? tier : "";
+}
+
+function buildModelTiers(provider, env) {
+  if (provider === "deepseek") {
+    return [
+      { id: "flash", label: "Flash", model: env.DEEPSEEK_FLASH_MODEL || env.DEEPSEEK_CARD_MODEL || env.RAG_CARD_MODEL || "deepseek-v4-flash" },
+      { id: "pro", label: "Pro", model: env.DEEPSEEK_PRO_MODEL || env.DEEPSEEK_MODEL || "deepseek-v4-flash" },
+    ];
+  }
+  if (provider === "gemini") {
+    return [
+      { id: "flash", label: "Flash", model: env.GEMINI_FLASH_MODEL || env.GEMINI_CARD_MODEL || "gemini-1.5-flash" },
+      { id: "pro", label: "Pro", model: env.GEMINI_PRO_MODEL || env.GEMINI_MODEL || "gemini-1.5-flash" },
+    ];
+  }
+  return [];
 }
 
 function splitList(value) {
