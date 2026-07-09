@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { extractQuotedMentions, extractRagCards, extractUserProvidedCardTextBlocks } from "../backend/ragCardExtractor.mjs";
 import { buildRagRulingPromptBundle } from "../backend/ragRulingPrompt.mjs";
-import { callCardNameExtractionModel, callRagModel, callRuleQueryExtractionModel, estimateDeepSeekCostCny, resolveRagProvider } from "../backend/ragModelClient.mjs";
+import { callCardNameExtractionModel, callRagModel, callRuleQueryExtractionModel, estimateDeepSeekCostCny, getRagBudgetStatus, resetRagBudget, resolveRagProvider } from "../backend/ragModelClient.mjs";
 import { answerRagRulingQuestion } from "../backend/ragRulingPipeline.mjs";
 
 const cards = [
@@ -370,6 +370,45 @@ test("rag_pipeline_uses_model_rule_queries_for_related_rules", async () => {
   assert.ok(answer.usedEvidence.some((item) => item.id === "rule-activated-trap-location"));
 });
 
+test("non_continuous_spell_trap_return_guard_corrects_wrong_model_answer", async () => {
+  const answer = await answerRagRulingQuestion({
+    question: "对方场上有「绚岚之达维」，我方以达维为对象发动「无限泡影」，这个时候场上没有其他魔陷，对方能不能发动「天雷之双风神」的效果？",
+    cards: [
+      {
+        id: "13631",
+        name: "无限泡影",
+        cnName: "无限泡影",
+        cardType: "通常陷阱",
+        effectText: "以对方场上1只表侧表示怪兽为对象才能发动。那只怪兽的效果直到回合结束时无效。",
+        aliases: ["无限泡影"],
+      },
+      {
+        id: "22130",
+        name: "天雷之双风神 息那",
+        cnName: "天雷之双风神 息那",
+        cardType: "怪兽",
+        effectText: "自己场上存在风属性怪兽，且对手发动魔法・陷阱・怪兽的效果时可以发动。从手牌将此卡特殊召唤。然后，根据该对手的效果的种类，适用以下效果。●魔法・陷阱：将场上的魔法・陷阱卡全部放回手牌。",
+        aliases: ["天雷之双风神"],
+      },
+    ],
+    records: [],
+    qaRecords: [],
+    modelInvoker: async () => JSON.stringify({
+      answerLevel: "rule_analysis",
+      shortAnswer: "可以发动并把无限泡影返回手卡。",
+      reasoning: ["模型错误地把正在发动的通常陷阱当作可返回的场上魔陷。"],
+      usedCards: ["无限泡影", "天雷之双风神 息那"],
+      usedEvidence: [{ id: "card-text-13631", type: "card_text", title: "无限泡影 的卡片文本" }],
+      missingInfo: [],
+      riskFlags: [],
+      confidenceSelfEstimate: "medium",
+    }),
+  });
+  assert.match(answer.shortAnswer, /不能发动/u);
+  assert.ok(answer.usedEvidence.some((item) => item.type === "rule_principle"));
+  assert.ok(answer.riskFlags.includes("derived_rule_guard_applied"));
+});
+
 test("card_text_without_official_qa_can_answer_rule_analysis", async () => {
   const answer = await answerRagRulingQuestion({
     question: "「测试龙」在没有官方直接裁定时怎么处理？",
@@ -577,6 +616,42 @@ test("deepseek_provider_builds_request", async () => {
   assert.equal(calls[0].body.stream, false);
 });
 
+test("deepseek_model_tier_selects_flash_or_pro_model", async () => {
+  const calls = [];
+  await callRagModel({
+    prompt: "输出 JSON",
+    env: {
+      MODEL_PROVIDER: "deepseek",
+      DEEPSEEK_API_KEY: "test-deepseek-key",
+      DEEPSEEK_FLASH_MODEL: "deepseek-flash-tier",
+      DEEPSEEK_PRO_MODEL: "deepseek-pro-tier",
+      RAG_MODEL_TIER: "flash",
+      API_DAILY_BUDGET_CNY: "10",
+    },
+    fetchImpl: async (url, options) => {
+      calls.push(JSON.parse(options.body));
+      return jsonResponse({ choices: [{ message: { content: JSON.stringify(modelJson("Flash OK")) } }], usage: {} });
+    },
+  });
+  await callRagModel({
+    prompt: "输出 JSON",
+    env: {
+      MODEL_PROVIDER: "deepseek",
+      DEEPSEEK_API_KEY: "test-deepseek-key",
+      DEEPSEEK_FLASH_MODEL: "deepseek-flash-tier",
+      DEEPSEEK_PRO_MODEL: "deepseek-pro-tier",
+      RAG_MODEL_TIER: "pro",
+      API_DAILY_BUDGET_CNY: "10",
+    },
+    fetchImpl: async (url, options) => {
+      calls.push(JSON.parse(options.body));
+      return jsonResponse({ choices: [{ message: { content: JSON.stringify(modelJson("Pro OK")) } }], usage: {} });
+    },
+  });
+  assert.equal(calls[0].model, "deepseek-flash-tier");
+  assert.equal(calls[1].model, "deepseek-pro-tier");
+});
+
 test("gemini_provider_builds_request", async () => {
   const calls = [];
   const result = await callRagModel({
@@ -646,6 +721,47 @@ test("usage_cost_estimation_deepseek", () => {
     DEEPSEEK_CACHE_HIT_INPUT_CNY_PER_MTOK: "0.02",
   });
   assert.equal(cost, 0.001804);
+});
+
+test("usage_cost_estimation_uses_model_tier_prices", () => {
+  const cost = estimateDeepSeekCostCny({
+    prompt_tokens: 1000,
+    completion_tokens: 500,
+  }, {
+    RAG_MODEL_TIER: "pro",
+    DEEPSEEK_INPUT_CNY_PER_MTOK: "1",
+    DEEPSEEK_OUTPUT_CNY_PER_MTOK: "2",
+    DEEPSEEK_PRO_INPUT_CNY_PER_MTOK: "8",
+    DEEPSEEK_PRO_OUTPUT_CNY_PER_MTOK: "16",
+  });
+  assert.equal(cost, 0.016);
+});
+
+test("budget_status_can_be_reset", async () => {
+  const env = { API_DAILY_BUDGET_CNY: "10", API_BUDGET_TIMEZONE: "UTC" };
+  await resetRagBudget({ env, now: new Date("2026-07-09T00:00:00Z") });
+  let status = await getRagBudgetStatus({ env, now: new Date("2026-07-09T00:00:00Z") });
+  assert.equal(status.spentTodayCny, 0);
+  await callRagModel({
+    prompt: "输出 JSON",
+    env: {
+      ...env,
+      MODEL_PROVIDER: "deepseek",
+      DEEPSEEK_API_KEY: "test-deepseek-key",
+      DEEPSEEK_MODEL: "deepseek-test",
+      DEEPSEEK_INPUT_CNY_PER_MTOK: "1",
+      DEEPSEEK_OUTPUT_CNY_PER_MTOK: "2",
+    },
+    now: new Date("2026-07-09T00:00:00Z"),
+    fetchImpl: async () => jsonResponse({
+      choices: [{ message: { content: JSON.stringify(modelJson("Budget OK")) } }],
+      usage: { prompt_tokens: 1000, completion_tokens: 500 },
+    }),
+  });
+  status = await getRagBudgetStatus({ env, now: new Date("2026-07-09T00:00:00Z") });
+  assert.equal(status.spentTodayCny > 0, true);
+  status = await resetRagBudget({ env, now: new Date("2026-07-09T00:00:00Z") });
+  assert.equal(status.spentTodayCny, 0);
 });
 
 test("rag_prompt_truncates_context", () => {

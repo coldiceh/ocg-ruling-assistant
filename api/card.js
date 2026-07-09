@@ -89,10 +89,15 @@ function attachImageProxy(request, card) {
 }
 
 function buildAtkDef(card) {
+  if (isSpellTrapCard(card)) return "";
   const parts = [];
   if (card.atk !== undefined && card.atk !== null && card.atk !== "") parts.push(`ATK ${card.atk}`);
   if (card.def !== undefined && card.def !== null && card.def !== "") parts.push(`DEF ${card.def}`);
   return parts.join(" / ");
+}
+
+function isSpellTrapCard(card = {}) {
+  return /(魔法|陷阱|罠|spell|trap)/iu.test(`${card.type || ""} ${card.cardType || ""} ${card.race || ""}`);
 }
 
 function buildImageProxyUrl(request, id) {

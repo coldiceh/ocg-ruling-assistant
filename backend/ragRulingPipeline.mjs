@@ -189,7 +189,7 @@ export function normalizeRagAnswer(answer = {}, { evidence = {}, cardResolution 
   if (!availableCards.length) riskFlags.add("card_name_not_resolved");
   const shortAnswer = readableShortAnswer(answer.shortAnswer, answerLevel);
 
-  return {
+  return applyDerivedRuleGuards({
     answerLevel,
     shortAnswer,
     reasoning: cleanStringArray(answer.reasoning).length ? cleanStringArray(answer.reasoning) : ["基于当前检索资料生成 RAG baseline 分析。"],
@@ -197,7 +197,7 @@ export function normalizeRagAnswer(answer = {}, { evidence = {}, cardResolution 
     missingInfo: cleanStringArray(answer.missingInfo),
     riskFlags: [...riskFlags].filter(Boolean),
     confidenceSelfEstimate: ["low", "medium", "high"].includes(answer.confidenceSelfEstimate) ? answer.confidenceSelfEstimate : "low",
-  };
+  }, { evidence, directIds });
 }
 
 function readableShortAnswer(shortAnswer, answerLevel) {
@@ -236,6 +236,7 @@ function outputEvidenceType(source, directIds) {
   if (source.type === "card_text") return "card_text";
   if (source.type === "baige_card_text") return "baige_card_text";
   if (source.type === "user_provided_text") return "user_provided_text";
+  if (source.type === "rule_principle") return "rule_principle";
   if (source.type === "faq") return "faq";
   return "related";
 }
@@ -255,6 +256,41 @@ function cleanStringArray(value) {
     .map((item) => String(item || "").trim())
     .filter(Boolean)
     .slice(0, 12);
+}
+
+function applyDerivedRuleGuards(result, { evidence = {}, directIds = new Set() } = {}) {
+  const guard = (evidence.rawRelatedEvidence || []).find((item) => item.id === "rule-principle-non-continuous-spell-trap-return");
+  if (!guard) return result;
+  const hasDirectEvidence = result.usedEvidence.some((item) => directIds.has(String(item.id)));
+  const hasGuardEvidence = result.usedEvidence.some((item) => item.id === guard.id);
+  const usedEvidence = hasGuardEvidence
+    ? result.usedEvidence
+    : [
+        ...result.usedEvidence,
+        { id: guard.id, type: "rule_principle", title: guard.title, sourceUrl: guard.sourceUrl || "" },
+      ];
+  if (hasDirectEvidence) {
+    return { ...result, usedEvidence };
+  }
+
+  const answerText = `${result.shortAnswer}\n${(result.reasoning || []).join("\n")}`;
+  const alreadyNegative = /(不能|不可以|无法|不能发动|不可发动|不能连锁|不能適用|不能适用|cannot|can't|can not|not be activated)/iu.test(answerText);
+  if (alreadyNegative) {
+    return { ...result, usedEvidence };
+  }
+
+  const shortAnswer = "不能发动。题目事实只有正在发动或处理中的非永续魔法/陷阱时，不能把那张卡作为场上的魔法・陷阱卡返回手卡；没有其他可处理的魔法・陷阱卡时，返回魔法・陷阱卡的效果不满足可适用处理。";
+  return {
+    ...result,
+    answerLevel: result.answerLevel === "official_confirmed" ? "rule_analysis" : result.answerLevel,
+    shortAnswer,
+    reasoning: [
+      "通用规则资料显示，非永续魔法/陷阱在发动和处理语境下不能作为可回到手卡的场上魔法・陷阱卡处理；题目又说明没有其他魔法・陷阱卡。",
+      ...result.reasoning,
+    ].slice(0, 12),
+    usedEvidence,
+    riskFlags: [...new Set([...(result.riskFlags || []), "derived_rule_guard_applied"])],
+  };
 }
 
 function readNumber(value, fallback) {

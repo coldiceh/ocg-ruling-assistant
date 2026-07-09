@@ -349,6 +349,40 @@ button:focus-visible {
   gap: 12px;
 }
 
+.model-tier-toggle {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: var(--glass-soft);
+}
+
+.model-tier-toggle span {
+  padding: 0 8px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.model-tier-toggle button {
+  min-height: 28px;
+  padding: 5px 10px;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  color: var(--muted);
+  background: transparent;
+  font-weight: 800;
+}
+
+.model-tier-toggle button.is-active {
+  border-color: var(--line-strong);
+  color: #061017;
+  background: var(--accent);
+}
+
 .judge-actions {
   display: flex;
   align-items: center;
@@ -389,6 +423,42 @@ button:focus-visible {
 
 .primary-button:hover {
   background: var(--accent-strong);
+}
+
+.budget-panel {
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px 16px;
+  align-items: center;
+  padding: 13px 14px;
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--accent-strong);
+  border-radius: 3px;
+  background: var(--glass-soft);
+}
+
+.budget-label {
+  margin-bottom: 3px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+#budgetSpentText {
+  color: var(--accent);
+  font-size: 20px;
+}
+
+#budgetLimitText,
+#budgetHint {
+  color: var(--muted);
+}
+
+#budgetHint {
+  grid-column: 1;
+  margin-bottom: 0;
+  font-size: 13px;
 }
 
 .theme-night .primary-button {
@@ -960,8 +1030,25 @@ dialog::backdrop {
     justify-content: space-between;
   }
 
+  .model-tier-toggle {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .model-tier-toggle span {
+    flex: 1;
+  }
+
   .primary-button {
     width: 100%;
+  }
+
+  .budget-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .budget-panel .text-button {
+    justify-self: start;
   }
 
   .card-preview {

@@ -1,6 +1,6 @@
 import { answerQuestion } from "../backend/engine.mjs";
 import { answerRulingQuestionFast } from "../backend/fastJudgeEngine.mjs";
-import { resolveCardExtractionProvider, resolveRagProvider } from "../backend/ragModelClient.mjs";
+import { getRagBudgetStatus, resolveCardExtractionProvider, resolveRagProvider } from "../backend/ragModelClient.mjs";
 import { answerRagRulingQuestion } from "../backend/ragRulingPipeline.mjs";
 
 const allowedOrigin = process.env.ALLOWED_ORIGIN || "*";
@@ -14,7 +14,7 @@ export default async function handler(request, response) {
   }
 
   if (request.method === "GET") {
-    response.status(200).json(getModelInfo());
+    response.status(200).json(await getModelInfo());
     return;
   }
 
@@ -27,7 +27,10 @@ export default async function handler(request, response) {
     const payload = typeof request.body === "string" ? JSON.parse(request.body || "{}") : request.body || {};
     const mode = String(payload.mode || "rag").toLowerCase();
     if (!["legacy", "fastjudge"].includes(mode)) {
-      const answer = await answerRagRulingQuestion({ question: payload.question });
+      const answer = await answerRagRulingQuestion({
+        question: payload.question,
+        env: envForModelTier(process.env, payload.modelTier),
+      });
       response.status(200).json(answer);
       return;
     }
@@ -55,9 +58,10 @@ function setCors(response) {
   response.setHeader("access-control-allow-headers", "content-type");
 }
 
-function getModelInfo() {
+async function getModelInfo() {
   const ragProvider = resolveRagProvider(process.env);
   const cardProvider = resolveCardExtractionProvider(process.env);
+  const budget = await getRagBudgetStatus({ env: process.env }).catch(() => null);
   const provider = ragProvider.provider;
   if (provider === "deepseek") {
     return {
@@ -66,6 +70,8 @@ function getModelInfo() {
       models: [process.env.DEEPSEEK_MODEL || "deepseek-v4-flash"],
       cardNameProvider: cardProvider.provider,
       cardNameModels: [process.env.DEEPSEEK_CARD_MODEL || process.env.RAG_CARD_MODEL || "deepseek-v4-flash"],
+      modelTiers: buildModelTiers("deepseek", process.env),
+      budget,
       enabled: true,
       pipeline: "rag_baseline",
       legacyModes: ["legacy", "fastjudge"],
@@ -80,6 +86,8 @@ function getModelInfo() {
       models: [model],
       cardNameProvider: cardProvider.provider,
       cardNameModels: splitList(process.env.GEMINI_CARD_MODEL || process.env.GEMINI_CARD_RESOLUTION_MODELS || process.env.GEMINI_CARD_RESOLUTION_MODEL || "gemini-1.5-flash"),
+      modelTiers: buildModelTiers("gemini", process.env),
+      budget,
       enabled: true,
       pipeline: "rag_baseline",
       legacyModes: ["legacy", "fastjudge"],
@@ -90,10 +98,38 @@ function getModelInfo() {
     provider: "mock",
     requestedProvider: ragProvider.requested,
     models: [],
+    modelTiers: [],
+    budget,
     enabled: false,
     pipeline: "rag_baseline",
     legacyModes: ["legacy", "fastjudge"],
   };
+}
+
+function envForModelTier(env, tier) {
+  const normalized = normalizeModelTier(tier);
+  return normalized ? { ...env, RAG_MODEL_TIER: normalized } : env;
+}
+
+function normalizeModelTier(value) {
+  const tier = String(value || "").trim().toLowerCase();
+  return tier === "flash" || tier === "pro" ? tier : "";
+}
+
+function buildModelTiers(provider, env) {
+  if (provider === "deepseek") {
+    return [
+      { id: "flash", label: "Flash", model: env.DEEPSEEK_FLASH_MODEL || env.DEEPSEEK_CARD_MODEL || env.RAG_CARD_MODEL || "deepseek-v4-flash" },
+      { id: "pro", label: "Pro", model: env.DEEPSEEK_PRO_MODEL || env.DEEPSEEK_MODEL || "deepseek-v4-flash" },
+    ];
+  }
+  if (provider === "gemini") {
+    return [
+      { id: "flash", label: "Flash", model: env.GEMINI_FLASH_MODEL || env.GEMINI_CARD_MODEL || "gemini-1.5-flash" },
+      { id: "pro", label: "Pro", model: env.GEMINI_PRO_MODEL || env.GEMINI_MODEL || "gemini-1.5-flash" },
+    ];
+  }
+  return [];
 }
 
 function splitList(value) {
