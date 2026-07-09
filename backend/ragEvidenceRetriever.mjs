@@ -17,6 +17,7 @@ export async function retrieveRagEvidence({
   cards,
   records,
   qaRecords,
+  ruleSearchQueries = [],
   maxPerBucket = 5,
   env = {},
   fetchImpl = globalThis.fetch,
@@ -28,6 +29,7 @@ export async function retrieveRagEvidence({
   const cardProvider = createLocalCardDataProvider(data);
   const resolvedCards = cardResolution.resolvedCards || [];
   const providedTexts = normalizeUserProvidedCardTexts(cardResolution.userProvidedCardTexts || [], limits);
+  const normalizedRuleQueries = normalizeRuleSearchQueries(ruleSearchQueries, limits);
   const retrievalWarnings = [];
   const baigeDebug = { searchCount: 0, cacheHitCount: 0, warnings: [], ambiguousMentions: [] };
   const fuzzyCards = resolveUnresolvedMentionCards(cardResolution.unresolvedMentions || [], cardProvider, limits, retrievalWarnings);
@@ -42,10 +44,12 @@ export async function retrieveRagEvidence({
   const mentionQueries = [
     ...(cardResolution.unresolvedMentions || []).map((item) => item.input),
     ...providedTexts.map((item) => item.name),
+    ...normalizedRuleQueries.map((item) => item.query),
   ].filter(Boolean);
   if (fuzzyCards.length) retrievalWarnings.push(`unresolved_mentions_fuzzy_matched:${fuzzyCards.map((card) => card.name).join(",")}`);
   if (baigeResolvedCards.length) retrievalWarnings.push(`unresolved_mentions_baige_matched:${baigeResolvedCards.map((card) => card.name).join(",")}`);
   if (providedTexts.length) retrievalWarnings.push("user_provided_text_not_official");
+  if (normalizedRuleQueries.length) retrievalWarnings.push(`rule_search_queries_used:${normalizedRuleQueries.length}`);
   const allEvidenceRecords = [...data.records, ...data.qaRecords];
 
   const cardTexts = retrievalCards
@@ -67,7 +71,14 @@ export async function retrieveRagEvidence({
   const officialQaRelatedSource = [
     ...officialMatches.near,
     ...officialMatches.related,
-    ...rankRecords({ userQuery, records: data.qaRecords.filter((record) => record.recordType === "qa"), resolvedCards: retrievalCards, mentionQueries }),
+    ...rankRecords({
+      userQuery,
+      records: data.qaRecords.filter((record) => record.recordType === "qa"),
+      resolvedCards: retrievalCards,
+      mentionQueries,
+      ruleSearchQueries: normalizedRuleQueries,
+      allowNoCardMatch: normalizedRuleQueries.length > 0,
+    }),
   ];
   if (officialQaRelatedSource.length > limits.maxRelatedEvidence) retrievalWarnings.push(`official_related_limited:${officialQaRelatedSource.length}->${limits.maxRelatedEvidence}`);
   const officialQaRelated = officialQaRelatedSource
@@ -82,6 +93,8 @@ export async function retrieveRagEvidence({
     records: allEvidenceRecords.filter((record) => record.recordType === "card-faq"),
     resolvedCards: retrievalCards,
     mentionQueries,
+    ruleSearchQueries: normalizedRuleQueries,
+    allowNoCardMatch: normalizedRuleQueries.length > 0,
   });
   if (faqRelatedSource.length > limits.maxRelatedEvidence) retrievalWarnings.push(`faq_related_limited:${faqRelatedSource.length}->${limits.maxRelatedEvidence}`);
   const faqRelated = faqRelatedSource
@@ -94,6 +107,7 @@ export async function retrieveRagEvidence({
     records: allEvidenceRecords.filter((record) => !["card-faq", "card-text"].includes(record.recordType)),
     resolvedCards: retrievalCards,
     mentionQueries,
+    ruleSearchQueries: normalizedRuleQueries,
     allowNoCardMatch: true,
   });
   if (rawRelatedSource.length > limits.maxRelatedEvidence) retrievalWarnings.push(`raw_related_limited:${rawRelatedSource.length}->${limits.maxRelatedEvidence}`);
@@ -116,12 +130,15 @@ export async function retrieveRagEvidence({
     fuzzyResolvedCards: fuzzyCards,
     baigeResolvedCards,
     baigeAmbiguousMentions: baigeDebug.ambiguousMentions,
+    ruleSearchQueries: normalizedRuleQueries,
     retrievalWarnings,
     debug: {
       searchPaths: officialMatches.searchPaths || [],
       recordCount: allEvidenceRecords.length,
       cardCount: data.cards.length,
       userProvidedCardTextCount: providedTexts.length,
+      ruleSearchQueryCount: normalizedRuleQueries.length,
+      ruleSearchQueries: normalizedRuleQueries,
       baigeSearchCount: baigeDebug.searchCount,
       baigeCacheHitCount: baigeDebug.cacheHitCount,
       baigeWarnings: baigeDebug.warnings,
@@ -292,21 +309,36 @@ function evidenceFromRecord(record, type, maxTextChars = 1600, warnings = []) {
   };
 }
 
-function rankRecords({ userQuery, records, resolvedCards, mentionQueries = [], allowNoCardMatch = false }) {
+function rankRecords({ userQuery, records, resolvedCards, mentionQueries = [], ruleSearchQueries = [], allowNoCardMatch = false }) {
   const queryTerms = tokenize([userQuery, ...mentionQueries].join(" "));
+  const ruleQueries = normalizeRuleSearchQueries(ruleSearchQueries, { maxRuleSearchQueries: 8 });
+  const ruleTerms = tokenize(ruleQueries.map((item) => item.query).join(" "));
+  const rulePhrases = ruleQueries.map((item) => normalizeCardKey(item.query)).filter(Boolean);
   const queryKey = normalizeCardKey(userQuery);
   const resolvedIds = new Set((resolvedCards || []).map((card) => normalizeId(card.id || card.cardId)).filter(Boolean));
   const resolvedNames = new Set((resolvedCards || []).flatMap((card) => [card.name, card.cnName, card.jaName, card.enName, ...(card.aliases || [])]).map(normalizeCardKey).filter(Boolean));
   const unresolvedNames = new Set((mentionQueries || []).map(normalizeCardKey).filter(Boolean));
   return (records || [])
     .filter((record) => record.status !== "removed" && record.status !== "superseded")
-    .map((record) => ({ record, score: scoreRecord(record, { queryTerms, queryKey, resolvedIds, resolvedNames, unresolvedNames, allowNoCardMatch }) }))
+    .map((record) => ({
+      record,
+      score: scoreRecord(record, {
+        queryTerms,
+        ruleTerms,
+        rulePhrases,
+        queryKey,
+        resolvedIds,
+        resolvedNames,
+        unresolvedNames,
+        allowNoCardMatch,
+      }),
+    }))
     .filter((item) => item.score > 0)
     .sort((left, right) => right.score - left.score || String(left.record.id).localeCompare(String(right.record.id)))
     .map((item) => item.record);
 }
 
-function scoreRecord(record, { queryTerms, queryKey, resolvedIds, resolvedNames, unresolvedNames, allowNoCardMatch }) {
+function scoreRecord(record, { queryTerms, ruleTerms, rulePhrases, queryKey, resolvedIds, resolvedNames, unresolvedNames, allowNoCardMatch }) {
   const text = `${record.title || ""}\n${record.text || ""}`;
   const textKey = normalizeCardKey(text);
   const cardIdMatch = (record.cardIds || []).some((id) => resolvedIds.has(normalizeId(id)));
@@ -318,10 +350,37 @@ function scoreRecord(record, { queryTerms, queryKey, resolvedIds, resolvedNames,
   for (const term of queryTerms) {
     if (textKey.includes(term)) score += 1;
   }
+  for (const term of ruleTerms || []) {
+    if (textKey.includes(term)) score += 2;
+  }
+  for (const phrase of rulePhrases || []) {
+    if (phrase.length >= 4 && textKey.includes(phrase.slice(0, Math.min(phrase.length, 80)))) score += 4;
+  }
   if (queryKey.length >= 8 && textKey.includes(queryKey.slice(0, Math.min(queryKey.length, 80)))) score += 5;
   if (record.recordType === "qa") score += 0.5;
   if (record.recordType === "card-faq") score += 0.4;
   return score;
+}
+
+function normalizeRuleSearchQueries(items, limits = {}) {
+  const max = readPositiveNumber(limits.maxRuleSearchQueries || limits.maxRelatedEvidence, 8);
+  const source = Array.isArray(items) ? items : [];
+  return dedupeBy(source
+    .map((item) => typeof item === "string"
+      ? { query: item, reason: "", confidence: "medium", source: "rule_search_query" }
+      : {
+          query: String(item?.query || item?.searchQuery || item?.keyword || item?.topic || "").trim(),
+          reason: String(item?.reason || "").trim(),
+          confidence: item?.confidence || "medium",
+          source: item?.source || "rule_search_query",
+        })
+    .map((item) => ({
+      ...item,
+      query: item.query.replace(/\s+/gu, " ").slice(0, 120),
+      reason: item.reason.replace(/\s+/gu, " ").slice(0, 120),
+    }))
+    .filter((item) => item.query && /[A-Za-z\u3040-\u30ff\u3400-\u9fff0-9]/u.test(item.query))
+    .slice(0, max), (item) => normalizeCardKey(item.query));
 }
 
 function tokenize(value) {

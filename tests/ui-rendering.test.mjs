@@ -145,6 +145,9 @@ test("ui_has_single_query_button", async () => {
   assert.match(app, /isDebugUiEnabled/u);
   assert.match(app, /user_provided_text/u);
   assert.match(app, /用户提供文本/u);
+  assert.match(app, /pendingStages/u);
+  assert.match(app, /检索规则资料/u);
+  assert.match(app, /startPendingStages/u);
   assert.doesNotMatch(app, /deepAnalyzeButton|ragModeToggle|legacyPipelineToggle/u);
   assert.doesNotMatch(html, /裁判结论/u);
   assert.doesNotMatch(app, /裁判结论/u);
@@ -183,6 +186,7 @@ test("card_dossier_nodes_and_theme_backgrounds_exist", async () => {
   assert.match(css, /assets\/bg-day\.png/u);
   assert.match(css, /assets\/bg-night\.png/u);
   assert.match(css, /theme-night/u);
+  assert.match(css, /\.progress-step/u);
   assert.doesNotMatch(css, /body::before|body::after/u);
   assert.match(app, /baige_card_text/u);
   assert.match(app, /百鸽卡片文本/u);

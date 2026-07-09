@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { extractQuotedMentions, extractRagCards, extractUserProvidedCardTextBlocks } from "../backend/ragCardExtractor.mjs";
 import { buildRagRulingPromptBundle } from "../backend/ragRulingPrompt.mjs";
-import { callCardNameExtractionModel, callRagModel, estimateDeepSeekCostCny, resolveRagProvider } from "../backend/ragModelClient.mjs";
+import { callCardNameExtractionModel, callRagModel, callRuleQueryExtractionModel, estimateDeepSeekCostCny, resolveRagProvider } from "../backend/ragModelClient.mjs";
 import { answerRagRulingQuestion } from "../backend/ragRulingPipeline.mjs";
 
 const cards = [
@@ -297,6 +297,31 @@ test("card_name_extractor_uses_dedicated_flash_model", async () => {
   assert.deepEqual(result.candidates.map((item) => item.name), ["测试龙"]);
 });
 
+test("rule_query_extractor_uses_lightweight_model", async () => {
+  const calls = [];
+  const result = await callRuleQueryExtractionModel({
+    userQuery: "场上只有正在处理的陷阱时，返回魔法陷阱的效果能否处理？",
+    env: {
+      MODEL_PROVIDER: "deepseek",
+      DEEPSEEK_API_KEY: "test-deepseek-key",
+      DEEPSEEK_MODEL: "deepseek-pro-test",
+      DEEPSEEK_CARD_MODEL: "deepseek-flash-test",
+      API_DAILY_BUDGET_CNY: "10",
+    },
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options, body: JSON.parse(options.body) });
+      return jsonResponse({
+        choices: [{ message: { content: JSON.stringify({ ruleQueries: [{ query: "正在处理的通常陷阱 回到手卡", reason: "检索处理后区域", confidence: "high" }] }) } }],
+        usage: { prompt_tokens: 25, completion_tokens: 8 },
+      });
+    },
+  });
+  assert.equal(result.providerUsed, "deepseek");
+  assert.equal(result.modelUsed, "deepseek-flash-test");
+  assert.equal(calls[0].body.model, "deepseek-flash-test");
+  assert.deepEqual(result.queries.map((item) => item.query), ["正在处理的通常陷阱 回到手卡"]);
+});
+
 test("rag_pipeline_uses_model_card_name_candidates_before_retrieval", async () => {
   const answer = await answerRagRulingQuestion({
     question: "测式龙的①效果可以发动吗？",
@@ -312,6 +337,37 @@ test("rag_pipeline_uses_model_card_name_candidates_before_retrieval", async () =
   assert.ok(answer.debug.modelCardNameCandidates.some((item) => item.name === "测试龙"));
   assert.equal(answer.debug.cardNameModelUsed, "mock-card-extractor");
   assert.ok(answer.usedEvidence.some((item) => item.id === "card-text-100"));
+});
+
+test("rag_pipeline_uses_model_rule_queries_for_related_rules", async () => {
+  const answer = await answerRagRulingQuestion({
+    question: "场上只有正在处理的陷阱时，返回魔法陷阱的效果能否处理？",
+    cards: [],
+    records: [{
+      id: "rule-activated-trap-location",
+      recordType: "related",
+      title: "处理中的陷阱和回到手卡",
+      text: "正在处理的通常陷阱和处理完毕后已经送去墓地的通常陷阱，不应当作为场上卡片进行回到手卡处理。",
+      sourceUrl: "https://example.test/rules/activated-trap-location",
+    }],
+    qaRecords: [],
+    ruleModelInvoker: async () => JSON.stringify({
+      ruleQueries: [{ query: "正在处理的通常陷阱 回到手卡", reason: "检索规则资料", confidence: "high" }],
+    }),
+    modelInvoker: async () => JSON.stringify({
+      answerLevel: "low_confidence_analysis",
+      shortAnswer: "根据相关规则资料，不能直接把该陷阱当作场上卡返回。",
+      reasoning: ["规则检索命中了处理中的陷阱位置资料。"],
+      usedCards: [],
+      usedEvidence: [{ id: "rule-activated-trap-location", type: "related", title: "处理中的陷阱和回到手卡" }],
+      missingInfo: [],
+      riskFlags: ["no_official_direct_qa"],
+      confidenceSelfEstimate: "medium",
+    }),
+  });
+  assert.ok(answer.debug.modelRuleSearchQueries.some((item) => item.query.includes("通常陷阱")));
+  assert.equal(answer.debug.retrievalCounts.rawRelatedEvidence > 0, true);
+  assert.ok(answer.usedEvidence.some((item) => item.id === "rule-activated-trap-location"));
 });
 
 test("card_text_without_official_qa_can_answer_rule_analysis", async () => {

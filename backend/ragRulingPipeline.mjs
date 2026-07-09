@@ -1,6 +1,6 @@
 import { extractRagCards } from "./ragCardExtractor.mjs";
 import { evidenceBucketsToList, loadRagData, retrieveRagEvidence } from "./ragEvidenceRetriever.mjs";
-import { callCardNameExtractionModel, callRagModel } from "./ragModelClient.mjs";
+import { callCardNameExtractionModel, callRagModel, callRuleQueryExtractionModel } from "./ragModelClient.mjs";
 import { buildRagRulingPromptBundle, RAG_ANSWER_LEVELS } from "./ragRulingPrompt.mjs";
 
 export async function answerRagRulingQuestion({
@@ -12,6 +12,7 @@ export async function answerRagRulingQuestion({
   qaRecords,
   modelInvoker,
   cardModelInvoker,
+  ruleModelInvoker,
   dryRun,
   fetchImpl,
   now,
@@ -20,13 +21,26 @@ export async function answerRagRulingQuestion({
   const query = String(question || userQuery || "").trim();
   if (!query) return buildEmptyQuestionAnswer();
 
-  const data = cards || records || qaRecords ? { cards: cards || [], records: records || [], qaRecords: qaRecords || [] } : await loadRagData(dataDir);
-  const cardNameModel = await callCardNameExtractionModel({
+  const dataPromise = Promise.resolve(cards || records || qaRecords
+    ? { cards: cards || [], records: records || [], qaRecords: qaRecords || [] }
+    : loadRagData(dataDir));
+  const cardNameModelPromise = callCardNameExtractionModel({
     userQuery: query,
     env,
     modelInvoker: cardModelInvoker,
     fetchImpl,
   });
+  const ruleQueryModelPromise = callRuleQueryExtractionModel({
+    userQuery: query,
+    env,
+    modelInvoker: ruleModelInvoker,
+    fetchImpl,
+  });
+  const [data, cardNameModel, ruleQueryModel] = await Promise.all([
+    dataPromise,
+    cardNameModelPromise,
+    ruleQueryModelPromise,
+  ]);
   const cardResolution = extractRagCards(query, {
     cards: data.cards || [],
     maxCards: readNumber(env.RAG_MAX_CARDS, 6),
@@ -39,6 +53,7 @@ export async function answerRagRulingQuestion({
     cards: data.cards,
     records: data.records,
     qaRecords: data.qaRecords,
+    ruleSearchQueries: ruleQueryModel.queries || [],
     env,
     fetchImpl,
   });
@@ -88,6 +103,11 @@ export async function answerRagRulingQuestion({
       cardNameProviderUsed: cardNameModel.providerUsed,
       cardNameModelDryRun: cardNameModel.dryRun,
       cardNameWarnings: cardNameModel.warnings || [],
+      modelRuleSearchQueries: ruleQueryModel.queries || [],
+      ruleQueryModelUsed: ruleQueryModel.modelUsed,
+      ruleQueryProviderUsed: ruleQueryModel.providerUsed,
+      ruleQueryModelDryRun: ruleQueryModel.dryRun,
+      ruleQueryWarnings: ruleQueryModel.warnings || [],
       retrievalWarnings: [...new Set([...(evidence.retrievalWarnings || []), ...(promptBundle.warnings || [])])],
       baigeSearchCount: evidence.debug?.baigeSearchCount || 0,
       baigeCacheHitCount: evidence.debug?.baigeCacheHitCount || 0,
