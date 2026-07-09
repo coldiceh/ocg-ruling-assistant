@@ -41,6 +41,19 @@ const packbitRawCard = {
   faqcount: 3,
 };
 
+const ecclesiaRawCard = {
+  cid: 22144,
+  id: 78397661,
+  cn_name: "黑龙之艾克莉西亚",
+  jp_name: "黒き竜のエクレシア",
+  en_name: "Ecclesia and the Dark Dragon",
+  text: {
+    types: "[怪兽|效果|同调] 魔法师/光\n[★8] 2500/2500",
+    desc: "调整＋调整以外的怪兽1只以上\n这个卡名的①②的效果1回合各能使用1次。",
+  },
+  data: { type: 8225, atk: 2500, def: 2500, level: 8, race: 2, attribute: 4 },
+};
+
 test("baige_search_mock_returns_enigmaster_packbit", async () => {
   clearBaigeSearchCache();
   const calls = [];
@@ -73,6 +86,16 @@ test("baige_short_name_can_match_long_card_name", async () => {
   assert.ok(result.results[0].confidence >= 0.72);
 });
 
+test("baige_common_translation_variant_can_match_card_name", async () => {
+  clearBaigeSearchCache();
+  const result = await searchCards("黑龙埃克利西亚", {
+    fetchImpl: async () => jsonResponse({ result: [ecclesiaRawCard], next: 0 }),
+  });
+
+  assert.equal(result.results[0].name, "黑龙之艾克莉西亚");
+  assert.ok(result.results[0].confidence >= 0.9);
+});
+
 test("baige_exact_full_cn_name_ranks_above_shorter_candidate", async () => {
   clearBaigeSearchCache();
   const shorter = {
@@ -94,6 +117,20 @@ test("baige_two_book_title_mentions_are_preserved", () => {
 
   assert.deepEqual(resolution.resolvedCards, []);
   assert.deepEqual(resolution.unresolvedMentions.map((item) => item.input), ["凶导的白天底", "宇宙耀变龙"]);
+});
+
+test("parenthesized_card_mentions_are_preserved", () => {
+  const resolution = extractRagCards("发动（炎王的孤岛）破坏（炎王神兽 麒麟），检索（圣炎王 大鹏不死鸟）。", { cards: [] });
+
+  assert.deepEqual(resolution.resolvedCards, []);
+  assert.deepEqual(resolution.unresolvedMentions.map((item) => item.input), ["炎王的孤岛", "炎王神兽 麒麟", "圣炎王 大鹏不死鸟"]);
+});
+
+test("unquoted_card_mention_stops_before_gameplay_suffix", () => {
+  const resolution = extractRagCards("墓地的黑龙埃克利西亚一张里侧魔陷发动2效果，C2那张魔陷发动了。", { cards: [] });
+
+  assert.ok(resolution.unresolvedMentions.some((item) => item.input === "黑龙埃克利西亚"));
+  assert.ok(!resolution.unresolvedMentions.some((item) => item.input.includes("一张里侧魔陷")));
 });
 
 test("baige_card_text_enters_rag_context", async () => {

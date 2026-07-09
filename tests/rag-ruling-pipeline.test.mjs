@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { extractQuotedMentions, extractRagCards, extractUserProvidedCardTextBlocks } from "../backend/ragCardExtractor.mjs";
+import { retrieveRagEvidence } from "../backend/ragEvidenceRetriever.mjs";
 import { buildRagRulingPromptBundle } from "../backend/ragRulingPrompt.mjs";
 import { callCardNameExtractionModel, callRagModel, callRuleQueryExtractionModel, estimateDeepSeekCostCny, getRagBudgetStatus, resetRagBudget, resolveRagProvider } from "../backend/ragModelClient.mjs";
 import { answerRagRulingQuestion } from "../backend/ragRulingPipeline.mjs";
@@ -370,7 +371,7 @@ test("rag_pipeline_uses_model_rule_queries_for_related_rules", async () => {
   assert.ok(answer.usedEvidence.some((item) => item.id === "rule-activated-trap-location"));
 });
 
-test("non_continuous_spell_trap_return_guard_corrects_wrong_model_answer", async () => {
+test("rag_pipeline_does_not_invent_rule_guard_evidence", async () => {
   const answer = await answerRagRulingQuestion({
     question: "对方场上有「绚岚之达维」，我方以达维为对象发动「无限泡影」，这个时候场上没有其他魔陷，对方能不能发动「天雷之双风神」的效果？",
     cards: [
@@ -404,9 +405,42 @@ test("non_continuous_spell_trap_return_guard_corrects_wrong_model_answer", async
       confidenceSelfEstimate: "medium",
     }),
   });
-  assert.match(answer.shortAnswer, /不能发动/u);
-  assert.ok(answer.usedEvidence.some((item) => item.type === "rule_principle"));
-  assert.ok(answer.riskFlags.includes("derived_rule_guard_applied"));
+  assert.equal(answer.shortAnswer, "可以发动并把无限泡影返回手卡。");
+  assert.ok(!answer.usedEvidence.some((item) => item.type === "rule_principle" || item.id === "rule-principle-non-continuous-spell-trap-return"));
+  assert.ok(!answer.riskFlags.includes("derived_rule_guard_applied"));
+});
+
+test("rulebook_context_snippet_enters_rag_context", async () => {
+  const longRuleText = [
+    "Contents\n\n Menu\n\n Skip to content\n\n 这里是很长的导航文本，不应该作为主要 evidence 进入 prompt。",
+    "战斗阶段流程",
+    "多次攻击的叠加",
+    "相同攻击次数的效果不会叠加，不同次数效果叠加后，可以作最大次数的攻击。",
+    "已经适用了『只再1次可以攻击』『只再1次可以继续攻击』『可以继续攻击』的效果的怪兽，已经是可以攻击2次的怪兽，不能再适用『可以作2次攻击』的效果。",
+  ].join("\n\n");
+  const evidence = await retrieveRagEvidence({
+    userQuery: "翻倍机会无效了一次攻击后，能不能再叠加成攻击三次？",
+    cards: [],
+    records: [{
+      id: "ocg-rule:c03/battle",
+      recordType: "rule-doc",
+      title: "战斗阶段流程",
+      text: longRuleText,
+      sourceUrl: "https://example.test/rule/battle",
+      status: "current",
+    }],
+    qaRecords: [],
+    ruleSearchQueries: [],
+  });
+
+  assert.ok(evidence.ruleSearchQueries.some((item) => item.query.includes("多次攻击的叠加")));
+  assert.equal(evidence.rawRelatedEvidence[0].type, "rulebook");
+  assert.match(evidence.rawRelatedEvidence[0].text, /相同攻击次数的效果不会叠加/u);
+  assert.doesNotMatch(evidence.rawRelatedEvidence[0].text, /Skip to content/u);
+
+  const bundle = buildRagRulingPromptBundle({ userQuery: "翻倍机会无效攻击后能攻击三次吗？", evidence });
+  assert.match(bundle.prompt, /rulebook/u);
+  assert.match(bundle.prompt, /相同攻击次数的效果不会叠加/u);
 });
 
 test("card_text_without_official_qa_can_answer_rule_analysis", async () => {
