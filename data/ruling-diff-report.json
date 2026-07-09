@@ -1,13 +1,13 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-02T07:47:05.817Z",
+  "generatedAt": "2026-07-08T20:00:31.258Z",
   "sourceRevision": "",
   "sourceFreshness": "fresh",
-  "newItems": 148,
+  "newItems": 40,
   "changedItems": 61,
-  "removedItems": 8,
-  "unchangedItems": 41788,
+  "removedItems": 95,
+  "unchangedItems": 41841,
   "conflictCount": 0,
-  "totalVersions": 42067,
-  "currentItems": 41997
+  "totalVersions": 42168,
+  "currentItems": 41942
 }
