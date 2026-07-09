@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
   "status": "synced",
-  "generatedAt": "2026-07-08T20:00:28.826Z",
+  "generatedAt": "2026-07-09T20:10:29.377Z",
   "freshnessDays": 7,
   "sourceFreshness": "fresh",
   "previousSourceRevision": null,
   "sourceRevision": null,
-  "lastSuccessfulSyncAt": "2026-07-08T20:00:28.826Z",
+  "lastSuccessfulSyncAt": "2026-07-09T20:10:29.377Z",
   "lastFailedSyncAt": null,
   "syncFailureCount": 0,
   "aliasWarnings": [],
@@ -15,9 +15,9 @@
   "aliasWarningCount": 0,
   "parseFailedCount": 0,
   "dataQualityWarningCount": 0,
-  "newItems": 40,
-  "changedItems": 61,
-  "removedItems": 95,
+  "newItems": 2,
+  "changedItems": 15,
+  "removedItems": 2,
   "sources": [
     {
       "id": "official-card-database",
