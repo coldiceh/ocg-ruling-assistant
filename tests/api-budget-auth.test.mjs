@@ -4,20 +4,27 @@ import handler from "../api/budget.js";
 
 test("budget_reset_requires_owner_token", async () => {
   const previousToken = process.env.API_BUDGET_RESET_TOKEN;
+  const previousPassword = process.env.API_BUDGET_RESET_PASSWORD;
   const previousBudget = process.env.API_DAILY_BUDGET_CNY;
   try {
     delete process.env.API_BUDGET_RESET_TOKEN;
+    delete process.env.API_BUDGET_RESET_PASSWORD;
     process.env.API_DAILY_BUDGET_CNY = "10";
 
     let response = createJsonResponse();
     await handler({ method: "GET", headers: {} }, response);
     assert.equal(response.statusCode, 200);
-    assert.equal(response.payload.resetEnabled, false);
+    assert.equal(response.payload.resetEnabled, true);
 
     response = createJsonResponse();
     await handler({ method: "POST", headers: {} }, response);
-    assert.equal(response.statusCode, 403);
-    assert.equal(response.payload.error, "budget_reset_token_not_configured");
+    assert.equal(response.statusCode, 401);
+    assert.equal(response.payload.error, "budget_reset_token_required");
+
+    response = createJsonResponse();
+    await handler({ method: "POST", headers: {}, body: { password: "allure" } }, response);
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.payload.spentTodayCny, 0);
 
     process.env.API_BUDGET_RESET_TOKEN = "owner-secret";
     response = createJsonResponse();
@@ -35,6 +42,8 @@ test("budget_reset_requires_owner_token", async () => {
   } finally {
     if (previousToken === undefined) delete process.env.API_BUDGET_RESET_TOKEN;
     else process.env.API_BUDGET_RESET_TOKEN = previousToken;
+    if (previousPassword === undefined) delete process.env.API_BUDGET_RESET_PASSWORD;
+    else process.env.API_BUDGET_RESET_PASSWORD = previousPassword;
     if (previousBudget === undefined) delete process.env.API_DAILY_BUDGET_CNY;
     else process.env.API_DAILY_BUDGET_CNY = previousBudget;
   }

@@ -29,7 +29,7 @@ export async function retrieveRagEvidence({
   const cardProvider = createLocalCardDataProvider(data);
   const resolvedCards = cardResolution.resolvedCards || [];
   const providedTexts = normalizeUserProvidedCardTexts(cardResolution.userProvidedCardTexts || [], limits);
-  const normalizedRuleQueries = normalizeRuleSearchQueries([
+  let normalizedRuleQueries = normalizeRuleSearchQueries([
     ...deriveRuleSearchQueries(userQuery),
     ...(ruleSearchQueries || []),
   ], limits);
@@ -44,21 +44,25 @@ export async function retrieveRagEvidence({
     resolveUnresolvedMentionCardsWithBaige(unresolvedForBaige, { fetchImpl, env, limits, warnings: retrievalWarnings, debug: baigeDebug }),
   ]);
   const retrievalCards = dedupeCards([...enrichedLocalCards, ...baigeResolvedCards]).slice(0, limits.maxCards);
-  const mentionQueries = [
-    ...(cardResolution.unresolvedMentions || []).map((item) => item.input),
-    ...providedTexts.map((item) => item.name),
-    ...normalizedRuleQueries.map((item) => item.query),
-  ].filter(Boolean);
   if (fuzzyCards.length) retrievalWarnings.push(`unresolved_mentions_fuzzy_matched:${fuzzyCards.map((card) => card.name).join(",")}`);
   if (baigeResolvedCards.length) retrievalWarnings.push(`unresolved_mentions_baige_matched:${baigeResolvedCards.map((card) => card.name).join(",")}`);
   if (providedTexts.length) retrievalWarnings.push("user_provided_text_not_official");
-  if (normalizedRuleQueries.length) retrievalWarnings.push(`rule_search_queries_used:${normalizedRuleQueries.length}`);
   const allEvidenceRecords = [...data.records, ...data.qaRecords];
 
   const cardTexts = retrievalCards
     .map((card) => findCardRecord(card, data.cards) || cardProvider.getCardProfile(card.id || card.cardId) || card)
     .filter(Boolean)
     .map((card) => cardTextEvidence(card, limits.maxCardTextChars, retrievalWarnings));
+  normalizedRuleQueries = normalizeRuleSearchQueries([
+    ...normalizedRuleQueries,
+    ...deriveRuleSearchQueriesFromCardTexts(userQuery, cardTexts),
+  ], limits);
+  if (normalizedRuleQueries.length) retrievalWarnings.push(`rule_search_queries_used:${normalizedRuleQueries.length}`);
+  const mentionQueries = [
+    ...(cardResolution.unresolvedMentions || []).map((item) => item.input),
+    ...providedTexts.map((item) => item.name),
+    ...normalizedRuleQueries.map((item) => item.query),
+  ].filter(Boolean);
 
   const officialMatches = searchOfficialQaEvidence({
     question: userQuery,
@@ -420,6 +424,44 @@ function deriveRuleSearchQueries(userQuery) {
       reason: "检索发动中的魔法陷阱与回手处理规则",
       confidence: "medium",
       source: "derived_rule_search_query",
+    });
+  }
+  return queries;
+}
+
+function deriveRuleSearchQueriesFromCardTexts(userQuery, cardTexts = []) {
+  const question = String(userQuery || "");
+  const text = `${question}\n${(cardTexts || []).map((item) => item.text || "").join("\n")}`;
+  const queries = [];
+  if (/(魔陷|魔法.?陷阱|魔法・陷阱|魔法・罠|魔法\/罠|spell.?trap|通常魔法|通常罠|通常陷阱)/iu.test(text)
+    && /(回.*手|返回|弹回|彈回|放回|戻|手札に戻|手卡)/iu.test(text)
+    && /(发动|發動|発動|连锁|連鎖|チェーン|chain|处理|處理|解決|resolve)/iu.test(text)) {
+    queries.push({
+      query: "发动中的通常魔法 通常陷阱 回到手卡 场上的魔法陷阱",
+      reason: "卡片文本涉及把场上的魔法陷阱返回手卡，需要检索发动中魔法陷阱能否被该处理适用",
+      confidence: "high",
+      source: "card_text_derived_rule_search_query",
+    });
+    queries.push({
+      query: "通常魔法 通常罠 発動中 手札に戻す 発動できない",
+      reason: "检索日文规则/FAQ 中通常魔法通常陷阱发动中与回手处理的表述",
+      confidence: "high",
+      source: "card_text_derived_rule_search_query",
+    });
+    queries.push({
+      query: "フィールドの魔法罠カード 手札に戻す 効果 発動できません",
+      reason: "检索没有可处理魔法陷阱时能否发动返回手卡效果",
+      confidence: "medium",
+      source: "card_text_derived_rule_search_query",
+    });
+  }
+  if (/(1回合1次|一回合一次|once per turn|１ターンに１度|このカード名|这个卡名)/iu.test(question)
+    || /(已经发动|已发动|再次满足|再次发动|もう一度|再び発動)/iu.test(question)) {
+    queries.push({
+      query: "没有一回合一次限制 同一诱发条件再次满足 可以再次发动",
+      reason: "检索效果次数限制与同一诱发条件再次满足的规则资料",
+      confidence: "medium",
+      source: "card_text_derived_rule_search_query",
     });
   }
   return queries;

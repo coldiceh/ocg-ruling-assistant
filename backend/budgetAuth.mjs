@@ -1,24 +1,26 @@
 import { timingSafeEqual } from "node:crypto";
 
 const RESET_TOKEN_ENV = "API_BUDGET_RESET_TOKEN";
+const RESET_PASSWORD_ENV = "API_BUDGET_RESET_PASSWORD";
+const DEFAULT_RESET_PASSWORD = "allure";
 
 export function budgetResetTokenConfigured(env = globalThis.process?.env || {}) {
-  return Boolean(readConfiguredToken(env));
+  return Boolean(readConfiguredSecret(env));
 }
 
-export function authorizeBudgetResetRequest(request, { env = globalThis.process?.env || {} } = {}) {
-  const configuredToken = readConfiguredToken(env);
-  if (!configuredToken) {
+export function authorizeBudgetResetRequest(request, { env = globalThis.process?.env || {}, body = null } = {}) {
+  const configuredSecret = readConfiguredSecret(env);
+  if (!configuredSecret) {
     return {
       ok: false,
       status: 403,
       error: "budget_reset_token_not_configured",
-      message: `Budget reset is disabled. Set ${RESET_TOKEN_ENV} to enable owner-only reset.`,
+      message: `Budget reset is disabled. Set ${RESET_PASSWORD_ENV} or ${RESET_TOKEN_ENV} to enable owner-only reset.`,
     };
   }
 
-  const providedToken = readRequestToken(request);
-  if (!providedToken) {
+  const providedSecret = readRequestSecret(request, body);
+  if (!providedSecret) {
     return {
       ok: false,
       status: 401,
@@ -27,7 +29,7 @@ export function authorizeBudgetResetRequest(request, { env = globalThis.process?
     };
   }
 
-  if (!safeEqual(providedToken, configuredToken)) {
+  if (!safeEqual(providedSecret, configuredSecret)) {
     return {
       ok: false,
       status: 403,
@@ -39,13 +41,25 @@ export function authorizeBudgetResetRequest(request, { env = globalThis.process?
   return { ok: true, status: 200 };
 }
 
-function readConfiguredToken(env) {
-  return String(env?.[RESET_TOKEN_ENV] || "").trim();
+function readConfiguredSecret(env) {
+  return String(env?.[RESET_PASSWORD_ENV] || env?.[RESET_TOKEN_ENV] || DEFAULT_RESET_PASSWORD).trim();
 }
 
-function readRequestToken(request) {
+function readRequestSecret(request, body) {
   const bearer = readHeader(request, "authorization").match(/^Bearer\s+(.+)$/iu)?.[1];
-  return String(bearer || readHeader(request, "x-budget-reset-token") || readHeader(request, "x-admin-token") || "").trim();
+  return String(
+    readBodySecret(body)
+    || bearer
+    || readHeader(request, "x-budget-reset-password")
+    || readHeader(request, "x-budget-reset-token")
+    || readHeader(request, "x-admin-token")
+    || "",
+  ).trim();
+}
+
+function readBodySecret(body) {
+  if (!body || typeof body !== "object") return "";
+  return String(body.password || body.resetPassword || body.token || body.adminToken || "").trim();
 }
 
 function readHeader(request, name) {
