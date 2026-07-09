@@ -21,7 +21,8 @@ export default async function handler(request, response) {
     }
 
     if (request.method === "POST") {
-      const auth = authorizeBudgetResetRequest(request, { env: process.env });
+      const body = await readRequestBody(request);
+      const auth = authorizeBudgetResetRequest(request, { env: process.env, body });
       if (!auth.ok) {
         response.status(auth.status).json({ ok: false, error: auth.error, message: auth.message });
         return;
@@ -41,5 +42,23 @@ export default async function handler(request, response) {
 function setCors(response) {
   response.setHeader("access-control-allow-origin", allowedOrigin);
   response.setHeader("access-control-allow-methods", "GET,POST,OPTIONS");
-  response.setHeader("access-control-allow-headers", "content-type,authorization,x-budget-reset-token,x-admin-token");
+  response.setHeader("access-control-allow-headers", "content-type,authorization,x-budget-reset-password,x-budget-reset-token,x-admin-token");
+}
+
+async function readRequestBody(request) {
+  if (request?.body && typeof request.body === "object" && !Buffer.isBuffer(request.body)) return request.body;
+  if (typeof request?.json === "function") {
+    try {
+      return await request.json();
+    } catch {
+      return {};
+    }
+  }
+  const raw = typeof request?.body === "string" || Buffer.isBuffer(request?.body) ? String(request.body || "") : "";
+  if (!raw) return {};
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return {};
+  }
 }

@@ -205,9 +205,7 @@ let lastRenderedBackendAnswer = null;
 let debugUiEnabled = false;
 const themeStorageKey = "ocg-ruling-theme:v1";
 const modelTierStorageKey = "ocg-ruling-model-tier:v1";
-const budgetResetTokenStorageKey = "ocg-ruling-budget-reset-token:v1";
 let selectedModelTier = readInitialModelTier();
-let budgetResetToken = readInitialBudgetResetToken();
 const pendingStages = [
   { label: "理解问题", body: "正在读取问题中的卡片、场面、连锁和时点。" },
   { label: "提取卡名", body: "正在识别卡名候选，并准备查询卡片资料。" },
@@ -876,18 +874,19 @@ async function loadBudgetStatus() {
 }
 
 async function resetBudgetStatus() {
-  if (!appConfig.budgetApiUrl || !ui.budgetResetButton || !budgetResetToken) return;
+  if (!appConfig.budgetApiUrl || !ui.budgetResetButton) return;
+  const password = window.prompt("请输入重置额度密码");
+  if (!password) return;
   ui.budgetResetButton.disabled = true;
   if (ui.budgetHint) ui.budgetHint.textContent = "正在重置今日额度...";
   try {
     const response = await fetch(appConfig.budgetApiUrl, {
       method: "POST",
       cache: "no-store",
-      headers: { "x-budget-reset-token": budgetResetToken },
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ password }),
     });
     if (response.status === 401 || response.status === 403) {
-      clearBudgetResetToken();
-      updateBudgetResetVisibility(false);
       throw new Error("owner authorization failed");
     }
     if (!response.ok) throw new Error(`budget reset ${response.status}`);
@@ -912,16 +911,7 @@ function renderBudgetStatus(status, message = "") {
 
 function updateBudgetResetVisibility(resetEnabled) {
   if (!ui.budgetResetButton) return;
-  ui.budgetResetButton.hidden = !(resetEnabled && budgetResetToken);
-}
-
-function clearBudgetResetToken() {
-  budgetResetToken = "";
-  try {
-    localStorage.removeItem(budgetResetTokenStorageKey);
-  } catch {
-    // Budget reset ownership is optional.
-  }
+  ui.budgetResetButton.hidden = !resetEnabled;
 }
 
 function formatCny(value) {
@@ -2212,20 +2202,6 @@ function readInitialModelTier() {
     // Ignore unavailable storage.
   }
   return "pro";
-}
-
-function readInitialBudgetResetToken() {
-  try {
-    const params = new URLSearchParams(window.location.search);
-    const token = String(params.get("budgetToken") || params.get("adminToken") || "").trim();
-    if (token) {
-      localStorage.setItem(budgetResetTokenStorageKey, token);
-      return token;
-    }
-    return String(localStorage.getItem(budgetResetTokenStorageKey) || "").trim();
-  } catch {
-    return "";
-  }
 }
 
 function applyTheme(theme) {

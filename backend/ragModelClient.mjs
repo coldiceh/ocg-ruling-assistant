@@ -887,7 +887,8 @@ function budgetConfig(env) {
 }
 
 function budgetStorage(env) {
-  return env.UPSTASH_REDIS_REST_URL && env.UPSTASH_REDIS_REST_TOKEN ? "redis" : "memory";
+  const redis = redisConfig(env);
+  return redis.url && redis.token ? "redis" : "memory";
 }
 
 async function readBudgetSpent({ storage, dayKey, env, fetchImpl }) {
@@ -921,10 +922,12 @@ async function setBudgetSpent({ storage, dayKey, value, env, fetchImpl }) {
 }
 
 async function redisCommand(env, fetchImpl, command) {
-  const response = await fetchImpl(env.UPSTASH_REDIS_REST_URL, {
+  const redis = redisConfig(env);
+  if (!redis.url || !redis.token) throw new Error("redis_not_configured");
+  const response = await fetchImpl(redis.url, {
     method: "POST",
     headers: {
-      authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}`,
+      authorization: `Bearer ${redis.token}`,
       "content-type": "application/json",
     },
     body: JSON.stringify(command),
@@ -932,6 +935,13 @@ async function redisCommand(env, fetchImpl, command) {
   if (!response.ok) throw new Error(`redis ${response.status}`);
   const payload = await response.json();
   return payload?.result;
+}
+
+function redisConfig(env = {}) {
+  return {
+    url: String(env.UPSTASH_REDIS_REST_URL || env.KV_REST_API_URL || env.REDIS_REST_API_URL || "").trim(),
+    token: String(env.UPSTASH_REDIS_REST_TOKEN || env.KV_REST_API_TOKEN || env.REDIS_REST_API_TOKEN || "").trim(),
+  };
 }
 
 function estimatePreflightCostCny(provider, prompt, maxTokens, env) {

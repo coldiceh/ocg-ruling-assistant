@@ -798,6 +798,52 @@ test("budget_status_can_be_reset", async () => {
   assert.equal(status.spentTodayCny, 0);
 });
 
+test("budget_status_uses_kv_rest_aliases_for_persistent_storage", async () => {
+  const env = {
+    API_DAILY_BUDGET_CNY: "10",
+    API_BUDGET_TIMEZONE: "UTC",
+    KV_REST_API_URL: "https://kv.example.test",
+    KV_REST_API_TOKEN: "kv-token",
+  };
+  const redis = createRedisFetch();
+  let status = await getRagBudgetStatus({ env, fetchImpl: redis.fetchImpl, now: new Date("2026-07-09T00:00:00Z") });
+  assert.equal(status.budgetStorage, "redis");
+  await resetRagBudget({ env, fetchImpl: redis.fetchImpl, now: new Date("2026-07-09T00:00:00Z") });
+  assert.deepEqual(redis.commands.at(-1), ["SET", "rag-api-budget:2026-07-09", "0", "EX", "172800"]);
+});
+
+test("card_text_derived_rule_queries_enter_rulebook_retrieval", async () => {
+  const windCard = {
+    id: "wind-test",
+    name: "测试风神",
+    cnName: "测试风神",
+    effectText: "①：对方把魔法·陷阱·怪兽的效果发动时可以发动。这张卡从手卡特殊召唤。那之后，场上的魔法·陷阱卡全部回到手卡。",
+    aliases: ["测试风神"],
+  };
+  const ruleRecord = {
+    id: "rule-spell-trap-return",
+    recordType: "rule-doc",
+    sourceId: "ocg-rule",
+    title: "发动中的通常魔法陷阱返回规则",
+    text: "通常魔法・通常罠カードの発動にチェーンして、フィールドの魔法・罠カードを手札に戻す効果を発動する場合、発動中の通常魔法・通常罠はその処理で手札に戻せません。ほかに処理できる魔法・罠カードが存在しない場合、発動できない場合があります。",
+  };
+  const evidence = await retrieveRagEvidence({
+    userQuery: "对方发动通常陷阱时，我方能连锁发动测试风神吗？",
+    cardResolution: {
+      resolvedCards: [windCard],
+      unresolvedMentions: [],
+      ambiguousMentions: [],
+      userProvidedCardTexts: [],
+    },
+    cards: [windCard],
+    records: [ruleRecord],
+    qaRecords: [],
+  });
+
+  assert.ok(evidence.ruleSearchQueries.some((item) => item.source === "card_text_derived_rule_search_query"));
+  assert.ok(evidence.rawRelatedEvidence.some((item) => item.id === "rule-spell-trap-return" && item.type === "rulebook"));
+});
+
 test("rag_prompt_truncates_context", () => {
   const bundle = buildRagRulingPromptBundle({
     userQuery: "测试问题",
@@ -851,6 +897,33 @@ function modelJson(shortAnswer) {
     missingInfo: [],
     riskFlags: [],
     confidenceSelfEstimate: "medium",
+  };
+}
+
+function createRedisFetch() {
+  const store = new Map();
+  const commands = [];
+  return {
+    commands,
+    fetchImpl: async (url, options = {}) => {
+      assert.equal(url, "https://kv.example.test");
+      assert.match(String(options.headers?.authorization || ""), /Bearer kv-token/u);
+      const command = JSON.parse(options.body || "[]");
+      commands.push(command);
+      const [op, key, value] = command;
+      if (op === "GET") return jsonResponse({ result: store.get(key) || null });
+      if (op === "SET") {
+        store.set(key, value);
+        return jsonResponse({ result: "OK" });
+      }
+      if (op === "INCRBYFLOAT") {
+        const next = Number(store.get(key) || 0) + Number(value || 0);
+        store.set(key, String(next));
+        return jsonResponse({ result: String(next) });
+      }
+      if (op === "EXPIRE") return jsonResponse({ result: 1 });
+      return jsonResponse({ result: null });
+    },
   };
 }
 

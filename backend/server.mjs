@@ -42,7 +42,8 @@ const server = createServer(async (request, response) => {
   }
 
   if (request.method === "POST" && request.url === "/api/budget") {
-    const auth = authorizeBudgetResetRequest(request, { env: process.env });
+    const body = await readJsonBody(request);
+    const auth = authorizeBudgetResetRequest(request, { env: process.env, body });
     if (!auth.ok) {
       sendJson(response, auth.status, { ok: false, error: auth.error, message: auth.message });
       return;
@@ -111,7 +112,7 @@ server.listen(port, () => {
 function setCors(response) {
   response.setHeader("access-control-allow-origin", allowedOrigin);
   response.setHeader("access-control-allow-methods", "GET,POST,OPTIONS");
-  response.setHeader("access-control-allow-headers", "content-type,authorization,x-budget-reset-token,x-admin-token");
+  response.setHeader("access-control-allow-headers", "content-type,authorization,x-budget-reset-password,x-budget-reset-token,x-admin-token");
 }
 
 function sendJson(response, status, payload) {
@@ -126,6 +127,14 @@ function readBody(request) {
     request.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
     request.on("error", reject);
   });
+}
+
+async function readJsonBody(request) {
+  try {
+    return JSON.parse(await readBody(request) || "{}");
+  } catch {
+    return {};
+  }
 }
 
 async function getModelInfo() {
