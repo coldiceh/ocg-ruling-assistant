@@ -21,36 +21,36 @@ export function extractRagCards(userQuery, { cards = [], maxCards = 6, modelCard
   const aliasIndex = buildAliasIndex(cards);
   const userProvidedCardTexts = extractUserProvidedCardTextBlocks(query);
   const modelMentions = normalizeModelCardNameCandidates(modelCardNameCandidates);
-  const modelMentionByNameKey = new Map(modelMentions.map((item) => [normalizeCardKey(item.name), item]));
-  const exactMentions = [
-    ...modelMentions.map((item) => item.name),
-    ...extractQuotedMentions(query),
-    ...userProvidedCardTexts.map((item) => item.name),
+  const exactMentionSeeds = [
+    ...buildModelMentionSeeds(modelMentions),
+    ...extractQuotedMentions(query).map((input) => ({ input, reason: "quoted_mention_not_found", source: "quoted_mention" })),
+    ...userProvidedCardTexts.map((item) => ({ input: item.name, reason: "user_provided_text_name_not_found", source: "user_provided_text" })),
   ];
-  const unquotedMentions = extractUnquotedCardMentionCandidates(query);
+  const unquotedMentionSeeds = extractUnquotedCardMentionCandidates(query)
+    .map((input) => ({ input, reason: "unquoted_candidate_not_found", source: "unquoted_heuristic" }));
   const resolved = [];
   const unresolvedMentions = [];
   const ambiguousMentions = [];
   const seenCards = new Set();
   const seenMentionKeys = new Set();
 
-  for (const mention of exactMentions) {
+  for (const seed of exactMentionSeeds) {
+    const mention = seed.input;
     const mentionKey = normalizeCardKey(mention);
     if (!mentionKey || seenMentionKeys.has(mentionKey)) continue;
     seenMentionKeys.add(mentionKey);
-    const modelMention = modelMentionByNameKey.get(mentionKey);
-    if (modelMention?.originalText) seenMentionKeys.add(normalizeCardKey(modelMention.originalText));
     const candidates = aliasIndex.get(mentionKey) || [];
     if (candidates.length === 1) {
-      addResolved(resolved, seenCards, candidates[0], mention, 0.98);
+      addResolved(resolved, seenCards, candidates[0], mention, confidenceForMentionSeed(seed, 0.98));
     } else if (candidates.length > 1) {
       ambiguousMentions.push(buildAmbiguousMention(mention, candidates));
     } else if (looksLikeCardMention(mention)) {
-      unresolvedMentions.push({ input: mention, reason: "quoted_mention_not_found" });
+      unresolvedMentions.push(buildUnresolvedMention(seed));
     }
   }
 
-  for (const mention of unquotedMentions) {
+  for (const seed of unquotedMentionSeeds) {
+    const mention = seed.input;
     const mentionKey = normalizeCardKey(mention);
     if (!mentionKey || seenMentionKeys.has(mentionKey)) continue;
     seenMentionKeys.add(mentionKey);
@@ -60,7 +60,7 @@ export function extractRagCards(userQuery, { cards = [], maxCards = 6, modelCard
     } else if (candidates.length > 1) {
       ambiguousMentions.push(buildAmbiguousMention(mention, candidates));
     } else if (looksLikeCardMention(mention)) {
-      unresolvedMentions.push({ input: mention, reason: "unquoted_candidate_not_found" });
+      unresolvedMentions.push(buildUnresolvedMention(seed));
     }
   }
 
@@ -84,7 +84,7 @@ export function extractRagCards(userQuery, { cards = [], maxCards = 6, modelCard
 
   return {
     resolvedCards: resolved.slice(0, maxCards),
-    unresolvedMentions: dedupeBy(unresolvedMentions, (item) => normalizeCardKey(item.input)),
+    unresolvedMentions: dedupeMentionObjects(unresolvedMentions),
     ambiguousMentions: dedupeBy(ambiguousMentions, (item) => normalizeCardKey(item.input)),
     userProvidedCardTexts,
     modelCardNameCandidates: modelMentions,
@@ -186,6 +186,50 @@ function hasCardNameSignal(value) {
   if (/^(?:效果|发动|特殊召唤|攻击力|守备力|怪兽|场上|手卡|墓地|破坏|选择|适用)$/u.test(key)) return false;
   return /[\u3400-\u9fff]/u.test(text)
     && /(龙|龍|神|王|魔|械|童子|蔷|薔|骑士|騎士|姬|兽|獸|花|园|園|多元|宇宙|电子|電子|融合|同步|超量|连接|連接|男爵|女|巫|陷阱|魔法|星|码|碼)/u.test(text);
+}
+
+function buildModelMentionSeeds(modelMentions) {
+  return modelMentions
+    .map((item) => {
+      const name = String(item.name || "").trim();
+      const originalText = String(item.originalText || "").trim();
+      const primary = choosePrimaryModelMention(name, originalText);
+      const searchTexts = dedupeBy([name, originalText].filter((value) => value && normalizeCardKey(value) !== normalizeCardKey(primary)), normalizeCardKey);
+      return {
+        input: primary,
+        reason: "model_candidate_not_found",
+        source: "model_card_name_extractor",
+        confidence: item.confidence || "medium",
+        searchTexts,
+      };
+    })
+    .filter((item) => looksLikeCardMention(item.input));
+}
+
+function choosePrimaryModelMention(name, originalText) {
+  if (!name) return originalText;
+  if (!originalText) return name;
+  const nameHasCjk = /[\u3040-\u30ff\u3400-\u9fff]/u.test(name);
+  const originalHasCjk = /[\u3040-\u30ff\u3400-\u9fff]/u.test(originalText);
+  if (originalHasCjk && !nameHasCjk) return originalText;
+  return name;
+}
+
+function buildUnresolvedMention(seed) {
+  return {
+    input: String(seed.input || "").trim(),
+    reason: seed.reason || "card_name_not_found",
+    source: seed.source || "card_name_candidate",
+    confidence: seed.confidence || undefined,
+    searchTexts: dedupeBy(seed.searchTexts || [], normalizeCardKey),
+  };
+}
+
+function confidenceForMentionSeed(seed, fallback) {
+  if (seed.source !== "model_card_name_extractor") return fallback;
+  if (seed.confidence === "high") return 0.95;
+  if (seed.confidence === "low") return 0.78;
+  return 0.88;
 }
 
 function addResolved(resolved, seenCards, candidate, input, confidence) {
@@ -377,7 +421,27 @@ function normalizeModelCardNameCandidates(items) {
       source: "model_card_name_extractor",
     }))
     .filter((item) => looksLikeCardMention(item.name))
-    .slice(0, 8), (item) => normalizeCardKey(item.name));
+    .slice(0, 12), (item) => normalizeCardKey(item.name));
+}
+
+function dedupeMentionObjects(items) {
+  const map = new Map();
+  for (const item of items) {
+    const key = normalizeCardKey(item.input);
+    if (!key) continue;
+    const existing = map.get(key);
+    if (!existing) {
+      map.set(key, {
+        ...item,
+        searchTexts: dedupeBy(item.searchTexts || [], normalizeCardKey),
+      });
+      continue;
+    }
+    existing.searchTexts = dedupeBy([...(existing.searchTexts || []), ...(item.searchTexts || [])], normalizeCardKey);
+    existing.source = existing.source || item.source;
+    existing.confidence = existing.confidence || item.confidence;
+  }
+  return [...map.values()];
 }
 
 function dedupeBy(items, getKey) {

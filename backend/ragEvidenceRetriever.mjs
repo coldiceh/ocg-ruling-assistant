@@ -523,19 +523,23 @@ function resolveUnresolvedMentionCards(unresolvedMentions, cardProvider, limits,
   const minConfidence = readPositiveDecimal(limits.localFuzzyMinConfidence, 0.74);
   for (const mention of unresolvedMentions || []) {
     if (result.length >= limits.maxCards) break;
-    const matches = cardProvider.searchCardByName(mention.input, 2);
-    if (!matches.length) continue;
-    const best = matches[0];
-    if (best.confidence < minConfidence) {
-      warnings.push(`unresolved_mention_fuzzy_low_confidence:${mention.input}->${best.name}:${best.confidence}`);
-      continue;
+    for (const query of mentionSearchQueries(mention)) {
+      const matches = cardProvider.searchCardByName(query, 2);
+      if (!matches.length) continue;
+      const best = matches[0];
+      if (best.confidence < minConfidence) {
+        warnings.push(`unresolved_mention_fuzzy_low_confidence:${query}->${best.name}:${best.confidence}`);
+        continue;
+      }
+      warnings.push(`unresolved_mention_fuzzy_match:${query}->${best.name}`);
+      result.push({
+        ...best,
+        input: mention.input,
+        matchedQuery: query,
+        confidence: Math.min(best.confidence, 0.7),
+      });
+      break;
     }
-    warnings.push(`unresolved_mention_fuzzy_match:${mention.input}->${best.name}`);
-    result.push({
-      ...best,
-      input: mention.input,
-      confidence: Math.min(best.confidence, 0.7),
-    });
   }
   return dedupeCards(result);
 }
@@ -544,32 +548,59 @@ async function resolveUnresolvedMentionCardsWithBaige(unresolvedMentions, { fetc
   const mentions = (unresolvedMentions || []).slice(0, limits.maxCards);
   const minConfidence = readPositiveDecimal(env.RAG_BAIGE_MIN_CONFIDENCE, 0.72);
   const result = await Promise.all(mentions.map(async (mention) => {
-    const searchResult = await searchBaige(mention.input, { fetchImpl, env, limits, debug });
-    warnings.push(...searchResult.warnings);
-    const candidates = searchResult.results || [];
-    if (!candidates.length) {
-      warnings.push(`baige_no_result:${mention.input}`);
-      return null;
+    let bestLowConfidence = null;
+    let bestLowConfidenceCandidates = [];
+    let bestLowConfidenceQuery = "";
+    for (const query of mentionSearchQueries(mention)) {
+      const searchResult = await searchBaige(query, { fetchImpl, env, limits, debug });
+      warnings.push(...searchResult.warnings);
+      const candidates = searchResult.results || [];
+      if (!candidates.length) {
+        warnings.push(`baige_no_result:${query}`);
+        continue;
+      }
+      const best = candidates[0];
+      const confidence = Number(best.confidence || 0);
+      if (confidence >= minConfidence) {
+        warnings.push(`baige_match:${query}->${best.name}`);
+        return {
+          ...toRagCard(best, mention.input, confidence),
+          matchedQuery: query,
+        };
+      }
+      if (!bestLowConfidence || confidence > Number(bestLowConfidence.confidence || 0)) {
+        bestLowConfidence = best;
+        bestLowConfidenceCandidates = candidates.slice(0, 3);
+        bestLowConfidenceQuery = query;
+      }
     }
-    const best = candidates[0];
-    const confident = Number(best.confidence || 0) >= minConfidence;
-    if (!confident) {
+    if (bestLowConfidence) {
       debug.ambiguousMentions.push({
         input: mention.input,
-        candidateCards: candidates.slice(0, 3).map((card) => ({
+        candidateCards: bestLowConfidenceCandidates.map((card) => ({
           id: card.id || card.cardId || "",
           name: card.name || card.cnName || card.jpName || card.enName || "",
           source: "baige",
           confidence: card.confidence || 0,
+          matchedQuery: bestLowConfidenceQuery,
         })),
       });
       warnings.push(`baige_ambiguous:${mention.input}`);
-      return null;
     }
-    warnings.push(`baige_match:${mention.input}->${best.name}`);
-    return toRagCard(best, mention.input, Number(best.confidence || 0));
+    return null;
   }));
   return dedupeCards(result.filter(Boolean)).slice(0, limits.maxCards);
+}
+
+function mentionSearchQueries(mention) {
+  const queries = [
+    mention?.input,
+    ...(Array.isArray(mention?.searchTexts) ? mention.searchTexts : []),
+    ...(Array.isArray(mention?.alternatives) ? mention.alternatives : []),
+  ]
+    .map((item) => String(item || "").trim())
+    .filter(Boolean);
+  return dedupeBy(queries, normalizeCardKey).slice(0, 3);
 }
 
 async function enrichCardsWithBaige(cards, { fetchImpl, env, limits, warnings, debug }) {
