@@ -197,6 +197,16 @@ let selectedCardIndex = 0;
 let lastRenderedBackendAnswer = null;
 let debugUiEnabled = false;
 const themeStorageKey = "ocg-ruling-theme:v1";
+const pendingStages = [
+  { label: "理解问题", body: "正在读取问题中的卡片、场面、连锁和时点。" },
+  { label: "提取卡名", body: "正在识别卡名候选，并准备查询卡片资料。" },
+  { label: "检索卡片文本", body: "正在匹配本地资料、百鸽卡片资料和用户提供文本。" },
+  { label: "检索规则资料", body: "正在查找相关 Q&A、FAQ 和规则资料。" },
+  { label: "生成裁定", body: "正在根据检索上下文生成未确认裁定分析。" },
+];
+const pendingStageDelays = [0, 700, 1600, 2900, 4800];
+let pendingStageTimers = [];
+let pendingStageIndex = 0;
 
 function normalizeText(value) {
   return String(value || "")
@@ -686,17 +696,18 @@ function renderPending() {
   updateModelStatus("分析中");
   ui.verdictBlock.className = "result-block verdict-block";
   ui.confidenceText.textContent = "分析中";
-  ui.verdictTitle.textContent = "正在检索资料";
+  ui.verdictTitle.textContent = "正在分析";
   ui.rulingBasisText.textContent = "";
-  ui.verdictBody.textContent = "后端正在匹配卡片、问答资料和处理条件。";
+  ui.verdictBody.textContent = pendingStages[0].body;
   renderSubAnswers([]);
   renderParserDebug(null);
-  renderList(ui.stepsList, ["等待后端返回。"]);
+  startPendingStages();
   renderList(ui.questionsList, []);
   renderSources([]);
 }
 
 function renderBackendAnswer(answer) {
+  clearPendingStages();
   lastRenderedBackendAnswer = answer || null;
   if (answer?.mode === "rag_baseline") {
     renderRagAnswer(answer);
@@ -924,6 +935,7 @@ function fastJudgeSources(summary = {}) {
 }
 
 function resetAnalysis() {
+  clearPendingStages();
   lastRenderedBackendAnswer = null;
   ui.resultGrid.hidden = true;
   renderCards([]);
@@ -945,6 +957,7 @@ function renderParserDebug(debug) {
 }
 
 function renderResult(text, bestMatch, confidence, generatedQuestions, detectedCards = []) {
+  clearPendingStages();
   ui.resultGrid.hidden = false;
   renderCards(detectedCards);
   renderParserDebug(null);
@@ -1767,6 +1780,7 @@ function formatProvisionalVerdict(verdict, fallback) {
 
 function renderList(container, items) {
   clearElement(container);
+  container.classList.remove("progress-steps");
   if (!items.length) {
     const li = document.createElement("li");
     li.textContent = "暂无";
@@ -1778,6 +1792,46 @@ function renderList(container, items) {
     li.textContent = item;
     container.appendChild(li);
   }
+}
+
+function startPendingStages() {
+  clearPendingStages(false);
+  pendingStageIndex = 0;
+  renderPendingStages(0);
+  pendingStageDelays.forEach((delay, index) => {
+    const timer = setTimeout(() => {
+      pendingStageIndex = index;
+      renderPendingStages(index);
+    }, delay);
+    pendingStageTimers.push(timer);
+  });
+}
+
+function clearPendingStages(clearClass = true) {
+  for (const timer of pendingStageTimers) clearTimeout(timer);
+  pendingStageTimers = [];
+  if (clearClass) ui.stepsList.classList.remove("progress-steps");
+}
+
+function renderPendingStages(activeIndex) {
+  clearElement(ui.stepsList);
+  ui.stepsList.classList.add("progress-steps");
+  pendingStages.forEach((stage, index) => {
+    const item = document.createElement("li");
+    item.className = index < activeIndex ? "progress-step is-done"
+      : index === activeIndex ? "progress-step is-current"
+        : "progress-step is-waiting";
+    const marker = document.createElement("span");
+    marker.className = "progress-step-marker";
+    marker.textContent = index < activeIndex ? "✓" : index === activeIndex ? "•" : "·";
+    const label = document.createElement("span");
+    label.textContent = stage.label;
+    item.append(marker, label);
+    ui.stepsList.appendChild(item);
+  });
+  const stage = pendingStages[Math.min(activeIndex, pendingStages.length - 1)];
+  ui.verdictTitle.textContent = stage.label === "生成裁定" ? "正在生成裁定" : `正在${stage.label}`;
+  ui.verdictBody.textContent = stage.body;
 }
 
 function renderSources(sources) {

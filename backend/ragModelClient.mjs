@@ -3,9 +3,12 @@ import { RAG_ANSWER_LEVELS } from "./ragRulingPrompt.mjs";
 const DEFAULT_DEEPSEEK_BASE_URL = "https://api.deepseek.com";
 const DEFAULT_DEEPSEEK_MODEL = "deepseek-v4-flash";
 const DEFAULT_DEEPSEEK_CARD_MODEL = "deepseek-v4-flash";
+const DEFAULT_LIGHTWEIGHT_EXTRACTION_TIMEOUT_MS = 4500;
 const DEFAULT_DAILY_BUDGET_CNY = 10;
 const DEFAULT_BUDGET_TIMEZONE = "Asia/Tokyo";
 const memoryBudget = new Map();
+const cardNameExtractionCache = new Map();
+const ruleQueryExtractionCache = new Map();
 
 export async function callRagModel({
   prompt,
@@ -171,26 +174,38 @@ export async function callCardNameExtractionModel({
     return emptyCardNameExtractionResult("mock", "mock-card-extractor", true, providerResolution.warnings);
   }
 
-  try {
-    const response = provider === "gemini"
-      ? await callGemini({
-          prompt,
-          env,
-          modelName,
-          maxTokens,
-          fetchImpl,
-          temperature: readNumber(env.RAG_CARD_MODEL_TEMPERATURE, 0),
-          maxTokensEnvName: "GEMINI_CARD_MODEL_MAX_OUTPUT_TOKENS",
-        })
-      : await callDeepSeek({
-          prompt,
-          env,
-          modelName,
-          maxTokens,
-          fetchImpl,
-          temperature: readNumber(env.RAG_CARD_MODEL_TEMPERATURE, 0),
-        });
+  const cacheKey = extractionCacheKey("card", provider, modelName, userQuery);
+  const cached = readCachedExtraction(cardNameExtractionCache, cacheKey, env);
+  if (cached) {
     return {
+      ...cached,
+      cacheHit: true,
+      warnings: [...new Set([...(cached.warnings || []), "card_name_model_cache_hit"])],
+    };
+  }
+
+  try {
+    const timeoutMs = readPositiveNumber(env.RAG_CARD_MODEL_TIMEOUT_MS, DEFAULT_LIGHTWEIGHT_EXTRACTION_TIMEOUT_MS);
+    const call = provider === "gemini"
+      ? callGemini({
+        prompt,
+        env,
+        modelName,
+        maxTokens,
+        fetchImpl,
+        temperature: readNumber(env.RAG_CARD_MODEL_TEMPERATURE, 0),
+        maxTokensEnvName: "GEMINI_CARD_MODEL_MAX_OUTPUT_TOKENS",
+      })
+      : callDeepSeek({
+        prompt,
+        env,
+        modelName,
+        maxTokens,
+        fetchImpl,
+        temperature: readNumber(env.RAG_CARD_MODEL_TEMPERATURE, 0),
+      });
+    const response = await withTimeout(call, timeoutMs, "card_name_model_timeout");
+    const result = {
       candidates: normalizeCardNameCandidates(response.rawText),
       rawText: response.rawText,
       providerUsed: provider,
@@ -198,10 +213,96 @@ export async function callCardNameExtractionModel({
       dryRun: false,
       warnings: [...providerResolution.warnings, ...(response.warnings || [])],
     };
+    writeCachedExtraction(cardNameExtractionCache, cacheKey, result, env);
+    return result;
   } catch (error) {
     return emptyCardNameExtractionResult(provider, modelName, false, [
       ...providerResolution.warnings,
       `card_name_model_failed:${safeErrorMessage(error)}`,
+    ]);
+  }
+}
+
+export async function callRuleQueryExtractionModel({
+  userQuery,
+  env = globalThis.process?.env || {},
+  modelInvoker,
+  fetchImpl = globalThis.fetch,
+} = {}) {
+  const providerResolution = resolveRuleQueryExtractionProvider(env);
+  const provider = providerResolution.provider;
+  const modelName = modelNameForRuleQueryExtractionProvider(provider, env);
+  const maxTokens = readNumber(env.RAG_RULE_MODEL_MAX_OUTPUT_TOKENS, 700);
+  const prompt = buildRuleQueryExtractionPrompt(userQuery);
+
+  if (modelInvoker) {
+    try {
+      const raw = await modelInvoker({ prompt, provider, modelName, maxTokens, task: "rule_query_extraction" });
+      return {
+        queries: normalizeRuleSearchQueries(raw),
+        rawText: String(raw || ""),
+        providerUsed: provider,
+        modelUsed: modelName,
+        dryRun: false,
+        warnings: providerResolution.warnings,
+      };
+    } catch (error) {
+      return emptyRuleQueryExtractionResult(provider, modelName, false, [
+        ...providerResolution.warnings,
+        `rule_query_model_failed:${safeErrorMessage(error)}`,
+      ]);
+    }
+  }
+
+  if (provider === "mock" || !hasProviderKey(provider, env) || typeof fetchImpl !== "function") {
+    return emptyRuleQueryExtractionResult("mock", "mock-rule-query-extractor", true, providerResolution.warnings);
+  }
+
+  const cacheKey = extractionCacheKey("rule", provider, modelName, userQuery);
+  const cached = readCachedExtraction(ruleQueryExtractionCache, cacheKey, env);
+  if (cached) {
+    return {
+      ...cached,
+      cacheHit: true,
+      warnings: [...new Set([...(cached.warnings || []), "rule_query_model_cache_hit"])],
+    };
+  }
+
+  try {
+    const timeoutMs = readPositiveNumber(env.RAG_RULE_MODEL_TIMEOUT_MS, readPositiveNumber(env.RAG_CARD_MODEL_TIMEOUT_MS, DEFAULT_LIGHTWEIGHT_EXTRACTION_TIMEOUT_MS));
+    const call = provider === "gemini"
+      ? callGemini({
+        prompt,
+        env,
+        modelName,
+        maxTokens,
+        fetchImpl,
+        temperature: readNumber(env.RAG_RULE_MODEL_TEMPERATURE, readNumber(env.RAG_CARD_MODEL_TEMPERATURE, 0)),
+        maxTokensEnvName: "GEMINI_RULE_MODEL_MAX_OUTPUT_TOKENS",
+      })
+      : callDeepSeek({
+        prompt,
+        env,
+        modelName,
+        maxTokens,
+        fetchImpl,
+        temperature: readNumber(env.RAG_RULE_MODEL_TEMPERATURE, readNumber(env.RAG_CARD_MODEL_TEMPERATURE, 0)),
+      });
+    const response = await withTimeout(call, timeoutMs, "rule_query_model_timeout");
+    const result = {
+      queries: normalizeRuleSearchQueries(response.rawText),
+      rawText: response.rawText,
+      providerUsed: provider,
+      modelUsed: modelName,
+      dryRun: false,
+      warnings: [...providerResolution.warnings, ...(response.warnings || [])],
+    };
+    writeCachedExtraction(ruleQueryExtractionCache, cacheKey, result, env);
+    return result;
+  } catch (error) {
+    return emptyRuleQueryExtractionResult(provider, modelName, false, [
+      ...providerResolution.warnings,
+      `rule_query_model_failed:${safeErrorMessage(error)}`,
     ]);
   }
 }
@@ -244,6 +345,28 @@ export function resolveCardExtractionProvider(env = {}) {
   if (env.DEEPSEEK_API_KEY) return { provider: "deepseek", requested, warnings };
   if (env.GEMINI_API_KEY) return { provider: "gemini", requested, warnings };
   warnings.push("no_model_api_key_card_name_model_disabled");
+  return { provider: "mock", requested, warnings };
+}
+
+export function resolveRuleQueryExtractionProvider(env = {}) {
+  if (isDisabled(env.RAG_RULE_QUERY_EXTRACTOR_ENABLED)) {
+    return { provider: "mock", requested: "disabled", warnings: ["rule_query_model_disabled"] };
+  }
+  const requested = String(env.RAG_RULE_MODEL_PROVIDER || env.RAG_CARD_MODEL_PROVIDER || env.RAG_MODEL_PROVIDER || env.MODEL_PROVIDER || "auto").trim().toLowerCase() || "auto";
+  const warnings = [];
+  if (requested === "mock") return { provider: "mock", requested, warnings };
+  if (requested === "deepseek") {
+    if (!env.DEEPSEEK_API_KEY) warnings.push("deepseek_api_key_missing_rule_query_model_disabled");
+    return { provider: env.DEEPSEEK_API_KEY ? "deepseek" : "mock", requested, warnings };
+  }
+  if (requested === "gemini") {
+    if (!env.GEMINI_API_KEY) warnings.push("gemini_api_key_missing_rule_query_model_disabled");
+    return { provider: env.GEMINI_API_KEY ? "gemini" : "mock", requested, warnings };
+  }
+  if (requested !== "auto") warnings.push(`unsupported_rule_query_model_provider:${requested}`);
+  if (env.DEEPSEEK_API_KEY) return { provider: "deepseek", requested, warnings };
+  if (env.GEMINI_API_KEY) return { provider: "gemini", requested, warnings };
+  warnings.push("no_model_api_key_rule_query_model_disabled");
   return { provider: "mock", requested, warnings };
 }
 
@@ -815,6 +938,27 @@ function buildCardNameExtractionPrompt(userQuery) {
   ].join("\n");
 }
 
+function buildRuleQueryExtractionPrompt(userQuery) {
+  const example = {
+    ruleQueries: [
+      { query: "伤害步骤结束时 送去墓地 发动位置", reason: "判断时点和卡片当前位置", confidence: "medium" },
+      { query: "连锁处理中 对象离场 效果处理", reason: "判断处理时对象状态", confidence: "medium" },
+    ],
+  };
+  return [
+    "你只负责从玩家的游戏王 OCG 裁定问题中提取用于检索规则资料、FAQ 或官方相似 Q&A 的查询词，不要回答裁定。",
+    "查询词应围绕规则机制、处理时点、连锁窗口、对象要求、当前位置、表侧/里侧、效果处理、伤害步骤等，不要只输出卡名。",
+    "如果问题涉及俗称或自然语言，请改写为可检索的规则词组；可以混合中文、日文或英文关键词。",
+    "输出 3 到 8 条高价值查询词即可；不知道就输出空数组。",
+    "输出必须是单个 JSON 对象，不要 markdown，不要解释。",
+    "JSON 只包含 ruleQueries 数组；每项包含 query、reason、confidence。",
+    "示例结构如下，示例不是本题答案：",
+    JSON.stringify(example),
+    "玩家问题：",
+    String(userQuery || ""),
+  ].join("\n");
+}
+
 function normalizeCardNameCandidates(rawText) {
   let parsed = null;
   try {
@@ -856,9 +1000,62 @@ function normalizeCardNameCandidates(rawText) {
   return result;
 }
 
+function normalizeRuleSearchQueries(rawText) {
+  let parsed = null;
+  try {
+    parsed = rawText && typeof rawText === "object" ? rawText : parseRagModelJson(rawText);
+  } catch {
+    return [];
+  }
+  const source = Array.isArray(parsed?.ruleQueries) ? parsed.ruleQueries
+    : Array.isArray(parsed?.queries) ? parsed.queries
+      : Array.isArray(parsed?.ruleSearchQueries) ? parsed.ruleSearchQueries
+        : Array.isArray(parsed?.keywords) ? parsed.keywords
+          : [];
+  const candidates = source
+    .map((item) => typeof item === "string"
+      ? { query: item, reason: "", confidence: "medium" }
+      : {
+          query: item?.query || item?.searchQuery || item?.keyword || item?.topic || "",
+          reason: item?.reason || item?.why || item?.purpose || "",
+          confidence: item?.confidence || item?.confidenceSelfEstimate || "medium",
+        })
+    .map((item) => ({
+      query: nonEmpty(item.query).replace(/\s+/gu, " ").slice(0, 120),
+      reason: nonEmpty(item.reason).replace(/\s+/gu, " ").slice(0, 120),
+      confidence: ["low", "medium", "high"].includes(String(item.confidence || "").toLowerCase())
+        ? String(item.confidence).toLowerCase()
+        : "medium",
+      source: "model_rule_query_extractor",
+    }))
+    .filter((item) => item.query.length >= 2 && /[A-Za-z\u3040-\u30ff\u3400-\u9fff0-9]/u.test(item.query))
+    .filter((item) => !/^[\s\p{P}]+$/u.test(item.query));
+  const seen = new Set();
+  const result = [];
+  for (const candidate of candidates) {
+    const key = candidate.query.normalize("NFKC").toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(candidate);
+    if (result.length >= 8) break;
+  }
+  return result;
+}
+
 function emptyCardNameExtractionResult(providerUsed, modelUsed, dryRun, warnings = []) {
   return {
     candidates: [],
+    rawText: "",
+    providerUsed,
+    modelUsed,
+    dryRun,
+    warnings,
+  };
+}
+
+function emptyRuleQueryExtractionResult(providerUsed, modelUsed, dryRun, warnings = []) {
+  return {
+    queries: [],
     rawText: "",
     providerUsed,
     modelUsed,
@@ -877,6 +1074,12 @@ function modelNameForCardExtractionProvider(provider, env) {
   if (provider === "deepseek") return String(env.DEEPSEEK_CARD_MODEL || env.RAG_CARD_MODEL || DEFAULT_DEEPSEEK_CARD_MODEL);
   if (provider === "gemini") return String(env.GEMINI_CARD_MODEL || env.GEMINI_CARD_RESOLUTION_MODEL || env.RAG_CARD_MODEL || "gemini-1.5-flash");
   return "mock-card-extractor";
+}
+
+function modelNameForRuleQueryExtractionProvider(provider, env) {
+  if (provider === "deepseek") return String(env.DEEPSEEK_RULE_MODEL || env.RAG_RULE_MODEL || env.DEEPSEEK_CARD_MODEL || env.RAG_CARD_MODEL || DEFAULT_DEEPSEEK_CARD_MODEL);
+  if (provider === "gemini") return String(env.GEMINI_RULE_MODEL || env.GEMINI_CARD_MODEL || env.GEMINI_CARD_RESOLUTION_MODEL || env.RAG_RULE_MODEL || env.RAG_CARD_MODEL || "gemini-1.5-flash");
+  return "mock-rule-query-extractor";
 }
 
 function hasProviderKey(provider, env) {
@@ -916,6 +1119,57 @@ function nonEmpty(value) {
 function readNumber(value, fallback) {
   const number = Number(value);
   return Number.isFinite(number) ? number : fallback;
+}
+
+function readPositiveNumber(value, fallback) {
+  const number = Number(value);
+  return Number.isFinite(number) && number > 0 ? number : fallback;
+}
+
+function withTimeout(promise, timeoutMs, message) {
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) return promise;
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(message)), timeoutMs);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
+}
+
+function extractionCacheKey(kind, provider, modelName, userQuery) {
+  return [
+    kind,
+    provider || "",
+    modelName || "",
+    String(userQuery || "").normalize("NFKC").trim().toLowerCase(),
+  ].join("\u0000");
+}
+
+function readCachedExtraction(cache, key, env) {
+  const ttlMs = readPositiveNumber(env.RAG_EXTRACTION_CACHE_TTL_MS, 6 * 60 * 60 * 1000);
+  const item = cache.get(key);
+  if (!item) return null;
+  if (Date.now() - item.savedAt > ttlMs) {
+    cache.delete(key);
+    return null;
+  }
+  return JSON.parse(JSON.stringify(item.value));
+}
+
+function writeCachedExtraction(cache, key, value, env) {
+  const maxEntries = readPositiveNumber(env.RAG_EXTRACTION_CACHE_MAX_ENTRIES, 200);
+  cache.set(key, { savedAt: Date.now(), value: JSON.parse(JSON.stringify(value)) });
+  while (cache.size > maxEntries) {
+    const oldestKey = cache.keys().next().value;
+    cache.delete(oldestKey);
+  }
 }
 
 function isEnabled(value) {

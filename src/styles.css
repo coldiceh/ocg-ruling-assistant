@@ -505,6 +505,47 @@ li + li {
   margin-top: 8px;
 }
 
+.progress-steps {
+  display: grid;
+  gap: 8px;
+  padding-left: 0;
+  list-style: none;
+}
+
+.progress-step {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 0;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.progress-step-marker {
+  display: inline-grid;
+  width: 18px;
+  height: 18px;
+  place-items: center;
+  border: 1px solid var(--line-strong);
+  border-radius: 50%;
+  color: var(--faint);
+  font-size: 13px;
+}
+
+.progress-step.is-done {
+  color: var(--good);
+}
+
+.progress-step.is-current {
+  color: var(--accent);
+}
+
+.progress-step.is-current .progress-step-marker {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  box-shadow: 0 0 0 4px rgba(80, 220, 255, 0.08);
+}
+
 .sub-answers {
   margin-top: 14px;
   display: grid;
