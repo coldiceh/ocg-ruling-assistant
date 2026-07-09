@@ -975,12 +975,16 @@ function buildCardNameExtractionPrompt(userQuery) {
     ],
   };
   return [
-    "你只负责从玩家的游戏王 OCG 裁定问题中提取可能的卡名候选，不要回答裁定。",
-    "如果玩家卡名有错别字、漏字、俗称、缺少间隔点，可以给出你认为最可能的正式卡名候选，但不要编造没有依据的卡。",
-    "保留玩家原文片段 originalText；如果不能确信，只把 confidence 设为 low。",
+    "你只负责从玩家的游戏王 OCG 裁定问题中提取所有可能的卡名候选，不要回答裁定。",
+    "把问题中出现的每一张卡都列出，包括没有括号的卡名、简称、俗称、错别字、漏字、缺少间隔点、系列内短称和后文简称。",
+    "中文问题优先把 name 写成可用于中文卡查/百鸽搜索的中文或日文卡名；除非玩家原文就是英文，不要只翻译成英文名。",
+    "如果玩家先写完整卡名、后文用简称指代同一张卡，name 尽量输出可检索的完整卡名，originalText 保留后文实际片段。",
+    "如果不能确信，也要输出为候选，只把 confidence 设为 low；后续检索会负责确认。",
+    "不要因为卡名不在【】《》「」中就跳过。不要因为不熟悉该卡就跳过。",
+    "保留玩家原文片段 originalText。",
     "输出必须是单个 JSON 对象，不要 markdown，不要解释。",
     "JSON 只包含 cardNames 数组；每项包含 name、originalText、confidence。",
-    "不要输出效果名、动作、场地区域、玩家称谓或规则术语。",
+    "不要输出效果名、动作、场地区域、玩家称谓、数值、处理结果或规则术语。",
     "示例结构如下，示例不是本题答案：",
     JSON.stringify(example),
     "玩家问题：",
@@ -1045,7 +1049,7 @@ function normalizeCardNameCandidates(rawText) {
     if (seen.has(key)) continue;
     seen.add(key);
     result.push(candidate);
-    if (result.length >= 8) break;
+    if (result.length >= 12) break;
   }
   return result;
 }

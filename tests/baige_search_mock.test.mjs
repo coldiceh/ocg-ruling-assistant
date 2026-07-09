@@ -54,6 +54,19 @@ const ecclesiaRawCard = {
   data: { type: 8225, atk: 2500, def: 2500, level: 8, race: 2, attribute: 4 },
 };
 
+const sacredGarunixRawCard = {
+  cid: 19000,
+  id: 66431519,
+  cn_name: "圣炎王 大鹏不死鸟",
+  jp_name: "聖炎王 ガルドニクス",
+  en_name: "Sacred Fire King Garunix",
+  text: {
+    types: "[怪兽|效果] 鸟兽/炎\n[★8] 2700/1700",
+    desc: "这个卡名的①②的效果1回合各能使用1次。\n①：自己的炎属性怪兽被破坏的场合才能发动。这张卡从手卡特殊召唤。",
+  },
+  data: { type: 33, atk: 2700, def: 1700, level: 8, race: 8192, attribute: 4 },
+};
+
 test("baige_search_mock_returns_enigmaster_packbit", async () => {
   clearBaigeSearchCache();
   const calls = [];
@@ -124,6 +137,48 @@ test("parenthesized_card_mentions_are_preserved", () => {
 
   assert.deepEqual(resolution.resolvedCards, []);
   assert.deepEqual(resolution.unresolvedMentions.map((item) => item.input), ["炎王的孤岛", "炎王神兽 麒麟", "圣炎王 大鹏不死鸟"]);
+});
+
+test("model_card_name_candidates_are_preserved_without_name_signal_filter", () => {
+  const resolution = extractRagCards("三一人攻击无效后可以用翻倍机会吗？", {
+    cards: [],
+    modelCardNameCandidates: [
+      { name: "幻影英雄三一人", originalText: "三一人", confidence: "medium" },
+      { name: "翻倍机会", originalText: "翻倍机会", confidence: "high" },
+    ],
+  });
+
+  assert.deepEqual(resolution.unresolvedMentions.map((item) => item.input), ["幻影英雄三一人", "翻倍机会"]);
+  assert.equal(resolution.unresolvedMentions[0].source, "model_card_name_extractor");
+});
+
+test("baige_search_uses_model_original_text_as_fallback_query", async () => {
+  clearBaigeSearchCache();
+  const question = "检索圣炎王 大鹏不死鸟的情况。";
+  const cardResolution = extractRagCards(question, {
+    cards: [],
+    modelCardNameCandidates: [
+      { name: "炎王神 大鹏不死鸟", originalText: "圣炎王 大鹏不死鸟", confidence: "medium" },
+    ],
+  });
+  const calls = [];
+  const evidence = await retrieveRagEvidence({
+    userQuery: question,
+    cardResolution,
+    cards: [],
+    records: [],
+    qaRecords: [],
+    fetchImpl: async (url) => {
+      calls.push(decodeURIComponent(String(url)).replace(/\+/gu, " "));
+      return calls[calls.length - 1].includes("圣炎王 大鹏不死鸟")
+        ? jsonResponse({ result: [sacredGarunixRawCard], next: 0 })
+        : jsonResponse({ result: [], next: 0 });
+    },
+  });
+
+  assert.ok(calls.some((url) => url.includes("炎王神 大鹏不死鸟")));
+  assert.ok(calls.some((url) => url.includes("圣炎王 大鹏不死鸟")));
+  assert.equal(evidence.baigeResolvedCards[0].name, "圣炎王 大鹏不死鸟");
 });
 
 test("unquoted_card_mention_stops_before_gameplay_suffix", () => {
