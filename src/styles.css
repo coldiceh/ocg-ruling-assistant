@@ -461,6 +461,32 @@ button:focus-visible {
   font-size: 13px;
 }
 
+.disclaimer-panel {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: rgba(6, 16, 23, 0.36);
+}
+
+.theme-day .disclaimer-panel {
+  background: rgba(255, 255, 255, 0.58);
+}
+
+.disclaimer-panel h2 {
+  margin-bottom: 5px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.disclaimer-panel p {
+  margin-bottom: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
 .theme-night .primary-button {
   color: #061017;
   background: var(--accent);

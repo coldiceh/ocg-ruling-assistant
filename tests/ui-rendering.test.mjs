@@ -167,7 +167,9 @@ test("ui_hides_engine_details_by_default", async () => {
   ]);
   assert.match(html, /裁定流程/u);
   assert.match(html, /今日额度/u);
-  assert.match(html, /id="budgetResetButton"/u);
+  assert.match(html, /id="budgetResetButton"[^>]+hidden/u);
+  assert.match(html, /免责声明/u);
+  assert.match(html, /不是 KONAMI 官方项目/u);
   assert.match(html, /id="themeToggle"/u);
   assert.match(html, /class="page-background"/u);
   assert.doesNotMatch(html, /ANALYSIS CORE|DeepSeek|TOKEN|provider debug/u);
@@ -176,6 +178,9 @@ test("ui_hides_engine_details_by_default", async () => {
   assert.doesNotMatch(html, /terminal-theme|OCG RULING TERMINAL/u);
   assert.match(app, /debugUiEnabled/u);
   assert.match(app, /params\.get\("debug"\) === "1"/u);
+  assert.match(app, /budgetToken/u);
+  assert.match(app, /x-budget-reset-token/u);
+  assert.match(app, /rulebook/u);
   assert.match(app, /publicRiskLines/u);
 });
 

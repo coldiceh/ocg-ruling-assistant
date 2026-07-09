@@ -1,4 +1,5 @@
 import { createServer } from "node:http";
+import { authorizeBudgetResetRequest, budgetResetTokenConfigured } from "./budgetAuth.mjs";
 import { answerQuestion, getDataHealth } from "./engine.mjs";
 import { answerRulingQuestionFast } from "./fastJudgeEngine.mjs";
 import { appendFeedbackCase } from "./feedbackCases.mjs";
@@ -33,11 +34,19 @@ const server = createServer(async (request, response) => {
   }
 
   if (request.method === "GET" && request.url === "/api/budget") {
-    sendJson(response, 200, await getRagBudgetStatus({ env: process.env }));
+    sendJson(response, 200, {
+      ...await getRagBudgetStatus({ env: process.env }),
+      resetEnabled: budgetResetTokenConfigured(process.env),
+    });
     return;
   }
 
   if (request.method === "POST" && request.url === "/api/budget") {
+    const auth = authorizeBudgetResetRequest(request, { env: process.env });
+    if (!auth.ok) {
+      sendJson(response, auth.status, { ok: false, error: auth.error, message: auth.message });
+      return;
+    }
     sendJson(response, 200, await resetRagBudget({ env: process.env }));
     return;
   }
@@ -102,7 +111,7 @@ server.listen(port, () => {
 function setCors(response) {
   response.setHeader("access-control-allow-origin", allowedOrigin);
   response.setHeader("access-control-allow-methods", "GET,POST,OPTIONS");
-  response.setHeader("access-control-allow-headers", "content-type");
+  response.setHeader("access-control-allow-headers", "content-type,authorization,x-budget-reset-token,x-admin-token");
 }
 
 function sendJson(response, status, payload) {

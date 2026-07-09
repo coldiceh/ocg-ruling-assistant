@@ -29,7 +29,10 @@ export async function retrieveRagEvidence({
   const cardProvider = createLocalCardDataProvider(data);
   const resolvedCards = cardResolution.resolvedCards || [];
   const providedTexts = normalizeUserProvidedCardTexts(cardResolution.userProvidedCardTexts || [], limits);
-  const normalizedRuleQueries = normalizeRuleSearchQueries(ruleSearchQueries, limits);
+  const normalizedRuleQueries = normalizeRuleSearchQueries([
+    ...deriveRuleSearchQueries(userQuery),
+    ...(ruleSearchQueries || []),
+  ], limits);
   const retrievalWarnings = [];
   const baigeDebug = { searchCount: 0, cacheHitCount: 0, warnings: [], ambiguousMentions: [] };
   const fuzzyCards = resolveUnresolvedMentionCards(cardResolution.unresolvedMentions || [], cardProvider, limits, retrievalWarnings);
@@ -113,14 +116,8 @@ export async function retrieveRagEvidence({
   if (rawRelatedSource.length > limits.maxRelatedEvidence) retrievalWarnings.push(`raw_related_limited:${rawRelatedSource.length}->${limits.maxRelatedEvidence}`);
   const rawRelatedEvidence = rawRelatedSource
     .slice(0, limits.maxRelatedEvidence)
-    .map((record) => evidenceFromRecord(record, record.recordType === "qa" ? "related" : "related", limits.maxEvidenceTextChars, retrievalWarnings))
+    .map((record) => evidenceFromRecord(record, evidenceTypeForRecord(record, "related"), limits.maxEvidenceTextChars, retrievalWarnings))
     .filter((item) => !directIds.has(item.id));
-  const derivedRuleEvidence = buildDerivedRuleEvidence({
-    userQuery,
-    cards: retrievalCards,
-    maxTextChars: limits.maxEvidenceTextChars,
-    warnings: retrievalWarnings,
-  });
 
   if (!resolvedCards.length) retrievalWarnings.push("card_name_not_resolved_raw_query_fallback_used");
   if (!cardTexts.length && retrievalCards.length) retrievalWarnings.push("resolved_card_text_not_found");
@@ -132,7 +129,7 @@ export async function retrieveRagEvidence({
     officialQaDirectCandidates: dedupeEvidence(officialQaDirectCandidates),
     officialQaRelated: dedupeEvidence(officialQaRelated),
     faqRelated: dedupeEvidence(faqRelated),
-    rawRelatedEvidence: dedupeEvidence([...derivedRuleEvidence, ...rawRelatedEvidence]),
+    rawRelatedEvidence: dedupeEvidence(rawRelatedEvidence),
     fuzzyResolvedCards: fuzzyCards,
     baigeResolvedCards,
     baigeAmbiguousMentions: baigeDebug.ambiguousMentions,
@@ -315,57 +312,12 @@ function evidenceFromRecord(record, type, maxTextChars = 1600, warnings = []) {
   };
 }
 
-function buildDerivedRuleEvidence({ userQuery, cards = [], maxTextChars = 1600, warnings = [] } = {}) {
-  const queryText = String(userQuery || "");
-  const cardText = (cards || [])
-    .map((card) => [card.name, card.cnName, card.jaName, card.enName, card.cardType, card.type, card.effectText, card.text].filter(Boolean).join("\n"))
-    .join("\n");
-  const combined = `${queryText}\n${cardText}`;
-  const asksReturnSpellTrap = /(魔法.?陷阱|魔陷|魔法・罠|spell.?\/?.?trap|spell.?trap)/iu.test(combined)
-    && /(回(?:到|入)?手|返回手|放回手|弹回|彈回|手札に戻|手牌|hand|持ち主の手札に戻)/iu.test(combined);
-  const activationWindow = /(发动|發動|连锁|連鎖|处理中|处理时|正在处理|発動|チェーン|chain)/iu.test(queryText);
-  const noOtherSpellTrap = /(没有其他魔陷|没有其他魔法.?陷阱|没有其它魔陷|沒有其他魔陷|场上没有其他|場上沒有其他|只有.*魔陷|only.*spell)/iu.test(queryText);
-  const nonContinuousActivated = (cards || []).some((card) => isNonContinuousSpellTrapCard(card) && cardMentionedInQuestion(card, queryText))
-    || /(通常魔法|通常陷阱|速攻魔法|反击陷阱|反擊陷阱|非永续|非永續|normal spell|normal trap|quick-play spell|counter trap)/iu.test(queryText);
-
-  if (!asksReturnSpellTrap || !activationWindow || !nonContinuousActivated) return [];
-
-  const text = [
-    "通用规则资料：通常魔法、速攻魔法、通常陷阱、反击陷阱等非永续魔法/陷阱卡，在卡片发动并进入连锁处理的语境下，不应当作为可被“回到手卡/卡组”的场上魔法・陷阱卡来处理；处理完毕后通常送去墓地。",
-    "如果题目事实显示场上没有其他魔法・陷阱卡，那么要求将场上的魔法・陷阱卡返回手卡/卡组的处理，不能仅以那张正在发动或已经处理完毕的非永续魔法/陷阱卡作为可适用对象。",
-    noOtherSpellTrap ? "本题明确给出了“没有其他魔法・陷阱卡”的事实，应优先据此判断可适用处理是否存在。" : "若是否存在其他魔法・陷阱卡不明确，应把该事实列入 missingInfo。",
-  ].join("\n");
-  const truncated = text.length > maxTextChars;
-  if (truncated) warnings.push("derived_rule_text_truncated:non_continuous_spell_trap_return");
-  warnings.push("derived_rule_guard_used:non_continuous_spell_trap_return");
-  return [{
-    id: "rule-principle-non-continuous-spell-trap-return",
-    type: "rule_principle",
-    recordType: "derived_rule",
-    title: "非永续魔法/陷阱发动中与回到手卡处理",
-    cardIds: [],
-    cards: [],
-    text: truncated ? `${text.slice(0, Math.max(0, maxTextChars - 1))}…` : text,
-    sourceUrl: "",
-    source: "derived_rule_guard",
-    official: false,
-    isDirect: false,
-  }];
-}
-
-function isNonContinuousSpellTrapCard(card = {}) {
-  const type = `${card.cardType || ""} ${card.type || ""} ${card.race || ""}`.toLowerCase();
-  const isSpellTrap = /(魔法|陷阱|罠|spell|trap)/iu.test(type);
-  if (!isSpellTrap) return false;
-  return !/(永续|永續|持续|持續|continuous|场地|場地|field|装备|裝備|equip)/iu.test(type);
-}
-
-function cardMentionedInQuestion(card = {}, question = "") {
-  const queryKey = normalizeCardKey(question);
-  return [card.name, card.cnName, card.jaName, card.jpName, card.enName, ...(card.aliases || [])]
-    .map(normalizeCardKey)
-    .filter((key) => key.length >= 2)
-    .some((key) => queryKey.includes(key));
+function evidenceTypeForRecord(record = {}, fallback = "related") {
+  const id = String(record.id || record.evidenceId || record.stableId || "");
+  if (record.recordType === "rule-doc" || record.recordType === "rule-test" || record.sourceId === "ocg-rule" || id.startsWith("ocg-rule:")) {
+    return "rulebook";
+  }
+  return fallback;
 }
 
 function rankRecords({ userQuery, records, resolvedCards, mentionQueries = [], ruleSearchQueries = [], allowNoCardMatch = false }) {
@@ -377,6 +329,7 @@ function rankRecords({ userQuery, records, resolvedCards, mentionQueries = [], r
   const resolvedIds = new Set((resolvedCards || []).map((card) => normalizeId(card.id || card.cardId)).filter(Boolean));
   const resolvedNames = new Set((resolvedCards || []).flatMap((card) => [card.name, card.cnName, card.jaName, card.enName, ...(card.aliases || [])]).map(normalizeCardKey).filter(Boolean));
   const unresolvedNames = new Set((mentionQueries || []).map(normalizeCardKey).filter(Boolean));
+  const contextTerms = buildContextTerms({ userQuery, mentionQueries, ruleQueries, resolvedCards });
   return (records || [])
     .filter((record) => record.status !== "removed" && record.status !== "superseded")
     .map((record) => ({
@@ -394,7 +347,7 @@ function rankRecords({ userQuery, records, resolvedCards, mentionQueries = [], r
     }))
     .filter((item) => item.score > 0)
     .sort((left, right) => right.score - left.score || String(left.record.id).localeCompare(String(right.record.id)))
-    .map((item) => item.record);
+    .map((item) => attachContextSnippet(item.record, contextTerms));
 }
 
 function scoreRecord(record, { queryTerms, ruleTerms, rulePhrases, queryKey, resolvedIds, resolvedNames, unresolvedNames, allowNoCardMatch }) {
@@ -440,6 +393,108 @@ function normalizeRuleSearchQueries(items, limits = {}) {
     }))
     .filter((item) => item.query && /[A-Za-z\u3040-\u30ff\u3400-\u9fff0-9]/u.test(item.query))
     .slice(0, max), (item) => normalizeCardKey(item.query));
+}
+
+function deriveRuleSearchQueries(userQuery) {
+  const text = String(userQuery || "");
+  const queries = [];
+  if (/(攻击|攻擊|攻撃|attack)/iu.test(text) && /(多次|两次|二次|2次|３次|3次|攻击次数|攻擊次數|翻倍机会|翻倍機會|只再|再.*攻击|可以.*攻击.*次)/iu.test(text)) {
+    queries.push({
+      query: "多次攻击的叠加 相同攻击次数 不会叠加 可以作最大次数的攻击",
+      reason: "检索攻击次数叠加规则",
+      confidence: "high",
+      source: "derived_rule_search_query",
+    });
+  }
+  if (/(发动|發動|连锁|連鎖|处理|處理|结算|解決|resolve)/iu.test(text) && /(离场|離場|不在|除外|送墓|回到卡组|回到卡組|对象|對象|仍然|还要|還要|尽可能|盡可能)/iu.test(text)) {
+    queries.push({
+      query: "效果处理时 来源离场 已发动效果 尽可能处理 对象不在场",
+      reason: "检索效果处理与来源/对象状态规则",
+      confidence: "medium",
+      source: "derived_rule_search_query",
+    });
+  }
+  if (/(魔陷|魔法.?陷阱|魔法・陷阱|魔法・罠|spell.?trap)/iu.test(text) && /(回.*手|返回|弹回|彈回|放回|戻)/iu.test(text) && /(发动|發動|连锁|連鎖|处理|處理|通常|速攻|陷阱|罠)/iu.test(text)) {
+    queries.push({
+      query: "发动中的通常魔法 通常陷阱 回到手卡 场上的魔法陷阱",
+      reason: "检索发动中的魔法陷阱与回手处理规则",
+      confidence: "medium",
+      source: "derived_rule_search_query",
+    });
+  }
+  return queries;
+}
+
+function buildContextTerms({ userQuery, mentionQueries = [], ruleQueries = [], resolvedCards = [] } = {}) {
+  return [...new Set([
+    ...String(userQuery || "").split(/[，,。.!！?？;；、\s]+/u),
+    ...mentionQueries,
+    ...ruleQueries.flatMap((item) => [item.query, item.reason]),
+    ...(resolvedCards || []).flatMap((card) => [card.name, card.cnName, card.jaName, card.enName, ...(card.aliases || [])]),
+  ]
+    .map((item) => String(item || "").trim())
+    .filter((item) => normalizeCardKey(item).length >= 2))]
+    .slice(0, 80);
+}
+
+function attachContextSnippet(record, terms = []) {
+  const text = String(record?.text || "");
+  const isRulebook = evidenceTypeForRecord(record, "") === "rulebook";
+  if (!isRulebook && text.length <= 2200) return record;
+  if (!isRulebook && !/^contents\s+menu/iu.test(text)) return record;
+  const snippet = selectContextSnippet(text, terms, 2200);
+  return snippet && snippet !== text ? { ...record, text: snippet, contextSnippet: true } : record;
+}
+
+function selectContextSnippet(text, terms = [], maxChars = 2200) {
+  const paragraphs = String(text || "")
+    .split(/\n{2,}/u)
+    .map((item) => item.trim())
+    .filter((item) => item && !isNavigationParagraph(item));
+  if (!paragraphs.length) return "";
+  const normalizedTerms = terms.map(normalizeCardKey).filter((item) => item.length >= 2);
+  let bestIndex = -1;
+  let bestScore = 0;
+  paragraphs.forEach((paragraph, index) => {
+    const key = normalizeCardKey(paragraph);
+    let score = 0;
+    for (const term of normalizedTerms) {
+      if (!term) continue;
+      if (key.includes(term)) score += Math.min(8, Math.max(1, term.length / 2));
+    }
+    if (/多次攻击的叠加|相同攻击次数|不会叠加|最大次数的攻击/u.test(paragraph)) score += 10;
+    if (score > bestScore) {
+      bestScore = score;
+      bestIndex = index;
+    }
+  });
+  if (bestIndex < 0 || bestScore <= 0) return joinParagraphsToLimit(paragraphs, maxChars);
+
+  const selected = [];
+  for (let index = Math.max(0, bestIndex - 1); index < paragraphs.length; index += 1) {
+    if (index > bestIndex + 10 && selected.join("\n\n").length > maxChars * 0.65) break;
+    selected.push(paragraphs[index]);
+    if (selected.join("\n\n").length >= maxChars) break;
+  }
+  const snippet = selected.join("\n\n");
+  return snippet.length > maxChars ? `${snippet.slice(0, maxChars - 1)}…` : snippet;
+}
+
+function isNavigationParagraph(value) {
+  const text = String(value || "").trim();
+  if (/^(?:contents|menu|skip to content|toggle .*|expand|light mode|dark mode|auto light.*|hide navigation.*|hide table.*|back to top|view this page|ocg rule)$/iu.test(text)) return true;
+  if (text.length < 120 && /(toggle|navigation sidebar|table of contents|规则修订|toggle navigation)/iu.test(text)) return true;
+  return false;
+}
+
+function joinParagraphsToLimit(paragraphs, maxChars) {
+  const selected = [];
+  for (const paragraph of paragraphs) {
+    selected.push(paragraph);
+    if (selected.join("\n\n").length >= maxChars) break;
+  }
+  const text = selected.join("\n\n");
+  return text.length > maxChars ? `${text.slice(0, maxChars - 1)}…` : text;
 }
 
 function tokenize(value) {

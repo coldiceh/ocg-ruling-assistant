@@ -4,6 +4,8 @@ const QUOTED_MENTION_PATTERNS = Object.freeze([
   /《([^》]{2,80})》/gu,
   /【([^】]{2,80})】/gu,
   /\[([^\]\r\n]{2,80})\]/gu,
+  /（([^）]{2,80})）/gu,
+  /\(([^)\r\n]{2,80})\)/gu,
   /“([^”]{2,80})”/gu,
   /"([^"\r\n]{2,80})"/gu,
   /'([^'\r\n]{2,80})'/gu,
@@ -127,6 +129,9 @@ export function normalizeCardKey(value) {
     .replace(/[闕]/gu, "阙")
     .replace(/導/gu, "导")
     .replace(/白き/gu, "白")
+    .replace(/埃克利西/gu, "艾克莉西")
+    .replace(/艾克利西/gu, "艾克莉西")
+    .replace(/埃克莉西/gu, "艾克莉西")
     .replace(/[の之的]/gu, "")
     .replace(/[「」『』《》【】“”"'`]/gu, "")
     .replace(/[：:・·･．.－—–_\-\s]/gu, "")
@@ -156,6 +161,7 @@ function cleanUnquotedMention(value) {
     .replace(/\s+/gu, " ")
     .replace(/^[,，。；;、：:\s]+|[,，。；;、：:\s]+$/gu, "")
     .trim();
+  text = trimGameplaySuffix(text);
   const leadingNoise = /^(?:了|双方|雙方|我方|对方|對方|自己|自分|只有|一只|一張|一张|怪兽|怪獸|的时候|時候|此时|此時|然后|然後|如果|假设|假設|此卡|这张卡|這張卡|这个|這個|那个|那個|手卡|墓地|除外|场上|場上|场上的|場上的|选择|選擇|适用|適用|发动|發動|要将|要將|将|將|把|想要|作为|作為|被破坏|被破壞|替代|代替|降低|提升|攻击力|攻擊力|守备力|守備力|可以|能否|是否|能|吗|嗎|的)+/u;
   const trailingNoise = /(?:的)?(?:效果|效应|效應|破坏|破壞|被破坏|被破壞|特殊召唤|特殊召喚|能|可以|吗|嗎|的时候|時候|此时|此時|选择|選擇|适用|適用|发动|發動|降低.*|提升.*|作为.*|作為.*)$/u;
   let previous = "";
@@ -164,6 +170,13 @@ function cleanUnquotedMention(value) {
     text = text.replace(leadingNoise, "").replace(trailingNoise, "").trim();
   }
   return text.length >= 2 && text.length <= 30 ? text : "";
+}
+
+function trimGameplaySuffix(value) {
+  const text = String(value || "").trim();
+  const suffixPattern = /(?:一[张張只]|[0-9０-９]+[张張只]|里侧|裏側|表侧|表側|盖放|覆蓋|魔陷|魔法陷阱|发动|發動|处理|處理|检索|檢索|破坏|破壞|送墓|除外|回到|返回|起跳)/u;
+  const match = text.match(suffixPattern);
+  return match && match.index && match.index >= 2 ? text.slice(0, match.index).trim() : text;
 }
 
 function hasCardNameSignal(value) {
@@ -272,6 +285,8 @@ function parseBracketHeading(text) {
     /^「([^」]{2,80})」\s*(.*)$/u,
     /^『([^』]{2,80})』\s*(.*)$/u,
     /^\[([^\]\r\n]{2,80})\]\s*(.*)$/u,
+    /^（([^）]{2,80})）\s*(.*)$/u,
+    /^\(([^)\r\n]{2,80})\)\s*(.*)$/u,
     /^“([^”]{2,80})”\s*(.*)$/u,
     /^"([^"\r\n]{2,80})"\s*(.*)$/u,
     /^'([^'\r\n]{2,80})'\s*(.*)$/u,

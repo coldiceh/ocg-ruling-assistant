@@ -1,3 +1,4 @@
+import { authorizeBudgetResetRequest, budgetResetTokenConfigured } from "../backend/budgetAuth.mjs";
 import { getRagBudgetStatus, resetRagBudget } from "../backend/ragModelClient.mjs";
 
 const allowedOrigin = process.env.ALLOWED_ORIGIN || "*";
@@ -12,11 +13,19 @@ export default async function handler(request, response) {
 
   try {
     if (request.method === "GET") {
-      response.status(200).json(await getRagBudgetStatus({ env: process.env }));
+      response.status(200).json({
+        ...await getRagBudgetStatus({ env: process.env }),
+        resetEnabled: budgetResetTokenConfigured(process.env),
+      });
       return;
     }
 
     if (request.method === "POST") {
+      const auth = authorizeBudgetResetRequest(request, { env: process.env });
+      if (!auth.ok) {
+        response.status(auth.status).json({ ok: false, error: auth.error, message: auth.message });
+        return;
+      }
       response.status(200).json(await resetRagBudget({ env: process.env }));
       return;
     }
@@ -32,5 +41,5 @@ export default async function handler(request, response) {
 function setCors(response) {
   response.setHeader("access-control-allow-origin", allowedOrigin);
   response.setHeader("access-control-allow-methods", "GET,POST,OPTIONS");
-  response.setHeader("access-control-allow-headers", "content-type");
+  response.setHeader("access-control-allow-headers", "content-type,authorization,x-budget-reset-token,x-admin-token");
 }

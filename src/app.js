@@ -205,7 +205,9 @@ let lastRenderedBackendAnswer = null;
 let debugUiEnabled = false;
 const themeStorageKey = "ocg-ruling-theme:v1";
 const modelTierStorageKey = "ocg-ruling-model-tier:v1";
+const budgetResetTokenStorageKey = "ocg-ruling-budget-reset-token:v1";
 let selectedModelTier = readInitialModelTier();
+let budgetResetToken = readInitialBudgetResetToken();
 const pendingStages = [
   { label: "理解问题", body: "正在读取问题中的卡片、场面、连锁和时点。" },
   { label: "提取卡名", body: "正在识别卡名候选，并准备查询卡片资料。" },
@@ -811,7 +813,7 @@ function ragEvidenceLabel(type) {
   if (type === "card_text") return "卡片文本";
   if (type === "baige_card_text") return "百鸽卡片文本";
   if (type === "user_provided_text") return "用户提供文本";
-  if (type === "rule_principle") return "规则资料";
+  if (type === "rulebook") return "规则书资料";
   if (type === "faq") return "FAQ";
   return "相关资料";
 }
@@ -858,27 +860,40 @@ function ragBudgetLines(status) {
 async function loadBudgetStatus() {
   if (!appConfig.budgetApiUrl) {
     renderBudgetStatus(null, "未配置后端预算接口。");
+    updateBudgetResetVisibility(false);
     return;
   }
   try {
     const response = await fetch(appConfig.budgetApiUrl, { cache: "no-store" });
     if (!response.ok) throw new Error(`budget ${response.status}`);
-    renderBudgetStatus(await response.json());
+    const status = await response.json();
+    renderBudgetStatus(status);
+    updateBudgetResetVisibility(Boolean(status?.resetEnabled));
   } catch {
     renderBudgetStatus(null, "暂时无法读取今日用量。");
+    updateBudgetResetVisibility(false);
   }
 }
 
 async function resetBudgetStatus() {
-  if (!appConfig.budgetApiUrl || !ui.budgetResetButton) return;
+  if (!appConfig.budgetApiUrl || !ui.budgetResetButton || !budgetResetToken) return;
   ui.budgetResetButton.disabled = true;
   if (ui.budgetHint) ui.budgetHint.textContent = "正在重置今日额度...";
   try {
-    const response = await fetch(appConfig.budgetApiUrl, { method: "POST", cache: "no-store" });
+    const response = await fetch(appConfig.budgetApiUrl, {
+      method: "POST",
+      cache: "no-store",
+      headers: { "x-budget-reset-token": budgetResetToken },
+    });
+    if (response.status === 401 || response.status === 403) {
+      clearBudgetResetToken();
+      updateBudgetResetVisibility(false);
+      throw new Error("owner authorization failed");
+    }
     if (!response.ok) throw new Error(`budget reset ${response.status}`);
     renderBudgetStatus(await response.json(), "已重置今日累计用量。");
   } catch {
-    renderBudgetStatus(null, "重置失败，请稍后再试。");
+    renderBudgetStatus(null, "重置失败：没有权限或后端暂时不可用。");
   } finally {
     ui.budgetResetButton.disabled = false;
   }
@@ -893,6 +908,20 @@ function renderBudgetStatus(status, message = "") {
   const storage = status?.budgetStorage ? `存储：${status.budgetStorage}` : "";
   const mode = status?.budgetMode ? `模式：${status.budgetMode}` : "";
   ui.budgetHint.textContent = message || [storage, mode].filter(Boolean).join(" · ") || "统计后端今日累计模型用量。";
+}
+
+function updateBudgetResetVisibility(resetEnabled) {
+  if (!ui.budgetResetButton) return;
+  ui.budgetResetButton.hidden = !(resetEnabled && budgetResetToken);
+}
+
+function clearBudgetResetToken() {
+  budgetResetToken = "";
+  try {
+    localStorage.removeItem(budgetResetTokenStorageKey);
+  } catch {
+    // Budget reset ownership is optional.
+  }
 }
 
 function formatCny(value) {
@@ -2183,6 +2212,20 @@ function readInitialModelTier() {
     // Ignore unavailable storage.
   }
   return "pro";
+}
+
+function readInitialBudgetResetToken() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const token = String(params.get("budgetToken") || params.get("adminToken") || "").trim();
+    if (token) {
+      localStorage.setItem(budgetResetTokenStorageKey, token);
+      return token;
+    }
+    return String(localStorage.getItem(budgetResetTokenStorageKey) || "").trim();
+  } catch {
+    return "";
+  }
 }
 
 function applyTheme(theme) {
