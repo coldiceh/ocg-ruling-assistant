@@ -65,9 +65,12 @@ export function buildRagRulingPromptBundle({
     "百鸽卡片资料和普通卡片文本可以作为卡片文本 grounding，但不是官方 direct Q&A。",
     "如果没有官方直接 Q&A，允许根据卡片文本、百鸽卡片资料、用户提供文本、FAQ、官方相似案例和 rulebook 规则书资料进行分析。",
     "ruleSearchQueries 是后端为检索规则资料生成的查询词，只能作为检索线索；最终理由必须基于 evidence 中真实存在的资料、卡片文本和题目事实。",
-    "operationChecks 是 Flash 规则书判读模型对题目每一步操作所做的检查；后端已经校验其中引用的 rulebook id 和逐字引文，未通过校验的 legal/illegal/conditional 会被降为 unknown。",
-    "operationChecks 中 status=illegal 且 citations 非空时，结论必须服从该检查，不得回答该操作可以发动或可以适用；status=unknown 不能作为肯定或否定依据。",
-    "rawRelatedEvidence 中 source=rulebook_model_grounding 的资料是校验后的逐操作检查，不是官方 direct Q&A；其规则书引文对应的原始段落也会作为独立 evidence 提供。",
+    "operationChecks 是 Flash 证据判读模型对题目每一步操作所做的检查；候选依据可以是规则书、官方 Q&A 或卡片 FAQ。后端已经校验其中引用的 evidence id 和逐字引文，未通过校验的 legal/illegal/conditional 会被降为 unknown。",
+    "对同一操作，operationChecks 中 citations 非空的 legal、illegal 或 conditional 结论必须作为强约束；不得在没有反证的情况下给出相反结论。status=unknown 不能作为肯定或否定依据。",
+    "如果校验后的证据直接点名题目中的多张卡并描述同一场景，必须完整遵守该案例的全部处理步骤；不得只采用其发动或取对象结论后，再凭记忆改写后续处理。",
+    "效果文本包含连续处理时，必须按文本和证据顺序说明每一步是否成功，并在前一步改变抗性、位置、素材或状态后重新判断下一步。",
+    "相关 Q&A / FAQ 可以作为规则适用案例，但必须比较卡片、效果、时点、位置、素材数量和处理顺序；不是当前原题时不得升级为 official_confirmed。",
+    "rawRelatedEvidence 中 source=rulebook_model_grounding 或 qa_rule_model_grounding 的资料是校验后的逐操作检查，不是官方 direct Q&A；其引文对应的原始证据也会作为独立 evidence 提供。",
     "涉及发动合法性、是否有可适用处理、次数限制、同一诱发条件再次满足时，要优先核对 rulebook、FAQ 和卡片文本；不要只凭常识猜测。",
     "只要有卡片文本 grounding，优先输出 rule_analysis；不要因为没有 template、没有 validator、没有官方 direct Q&A 就输出 needs_more_info。",
     "涉及“能否发动/能否适用/能否连锁”的问题时，必须先核对卡片文本中的发动条件、效果类别、对象要求、当前位置、表侧/里侧状态、当前连锁窗口和题目给出的场面事实。",
@@ -97,9 +100,8 @@ export function buildRagRulingPromptBundle({
     `可引用 evidence id 列表：${evidenceBucketsToList(evidencePayload).map((item) => item.id).join(", ") || "(none)"}`,
   ].join("\n");
   if (prompt.length > promptLimits.maxPromptChars) {
-    warnings.push("rag_prompt_truncated_to_max_chars");
-    const suffix = "\n\n[上下文因 RAG_MAX_PROMPT_CHARS 限制被截断。不要补造被截断的证据。]";
-    prompt = `${prompt.slice(0, Math.max(0, promptLimits.maxPromptChars - suffix.length))}${suffix}`;
+    warnings.push("rag_prompt_compacted_to_max_chars");
+    prompt = buildCompactRagPrompt({ payload, maxPromptChars: promptLimits.maxPromptChars });
   }
   return {
     prompt,
@@ -165,6 +167,83 @@ function limitEvidence(items = [], limit, textLimit, label, warnings) {
       official: item.official === true,
     };
   });
+}
+
+function buildCompactRagPrompt({ payload, maxPromptChars }) {
+  const maxChars = Math.max(600, Number(maxPromptChars) || 30000);
+  const textLimit = maxChars >= 12000 ? 900 : maxChars >= 4000 ? 360 : 100;
+  const totalEvidenceLimit = maxChars >= 12000 ? 14 : maxChars >= 4000 ? 7 : 3;
+  const evidence = {
+    officialQaDirectCandidates: [],
+    officialQaRelated: [],
+    faqRelated: [],
+    cardTexts: [],
+    userProvidedCardTexts: [],
+    rawRelatedEvidence: [],
+    retrievalWarnings: (payload.evidence?.retrievalWarnings || []).slice(0, 6),
+  };
+  const bucketOrder = [
+    "officialQaDirectCandidates",
+    "faqRelated",
+    "officialQaRelated",
+    "userProvidedCardTexts",
+    "cardTexts",
+    "rawRelatedEvidence",
+  ];
+  let evidenceCount = 0;
+  for (const bucket of bucketOrder) {
+    for (const item of payload.evidence?.[bucket] || []) {
+      if (evidenceCount >= totalEvidenceLimit) break;
+      evidence[bucket].push({
+        id: item.id,
+        type: item.type,
+        title: item.title,
+        isDirect: Boolean(item.isDirect),
+        text: String(item.text || "").slice(0, textLimit),
+        sourceUrl: item.sourceUrl || "",
+      });
+      evidenceCount += 1;
+    }
+  }
+  const compactPayload = {
+    userQuery: String(payload.userQuery || "").slice(0, maxChars >= 4000 ? 1000 : 260),
+    resolvedCards: (payload.resolvedCards || []).slice(0, 6).map((card) => ({ id: card.id, name: card.name })),
+    unresolvedMentions: (payload.unresolvedMentions || []).slice(0, 6),
+    operationChecks: (payload.operationChecks || []).slice(0, maxChars >= 4000 ? 8 : 2).map((check) => ({
+      operationId: check.operationId,
+      action: check.action,
+      status: check.status,
+      conclusion: String(check.conclusion || "").slice(0, textLimit),
+      citations: (check.citations || []).slice(0, 3).map((citation) => ({
+        id: citation.id,
+        quote: String(citation.quote || "").slice(0, textLimit),
+      })),
+    })),
+    evidence,
+  };
+  const render = (context) => [
+    "你是游戏王 OCG 裁定分析助手。只依据所给证据回答，不得编造规则或来源。",
+    "官方直接 Q&A 才能支持 official_confirmed；相关 Q&A、FAQ、规则书和卡文只能支持 rule_analysis 或 low_confidence_analysis。",
+    "有逐字引文的 operationChecks 是强约束；unknown 不能支持肯定或否定结论。",
+    "输出单个 JSON 对象，字段为 answerLevel、shortAnswer、reasoning、usedCards、usedEvidence、missingInfo、riskFlags、confidenceSelfEstimate。",
+    JSON.stringify(context),
+  ].join("\n");
+  let prompt = render(compactPayload);
+  if (prompt.length <= maxChars) return prompt;
+
+  const evidenceIds = bucketOrder.flatMap((bucket) => evidence[bucket].map((item) => ({ id: item.id, type: item.type, title: item.title })));
+  prompt = render({
+    userQuery: String(payload.userQuery || "").slice(0, 160),
+    resolvedCards: (payload.resolvedCards || []).slice(0, 4).map((card) => ({ id: card.id, name: card.name })),
+    operationChecks: (payload.operationChecks || []).slice(0, 2).map((check) => ({ status: check.status, conclusion: String(check.conclusion || "").slice(0, 100) })),
+    evidenceIds: evidenceIds.slice(0, 10),
+  });
+  if (prompt.length <= maxChars) return prompt;
+
+  return [
+    "仅依据上下文输出裁定 JSON；不得编造证据。",
+    JSON.stringify({ userQuery: String(payload.userQuery || "").slice(0, 80), evidenceIds: evidenceIds.slice(0, 5).map((item) => item.id) }),
+  ].join("\n").slice(0, maxChars);
 }
 
 function readNumber(value, fallback) {

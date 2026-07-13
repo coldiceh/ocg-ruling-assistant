@@ -14,18 +14,20 @@ test("budget_reset_requires_owner_token", async () => {
     let response = createJsonResponse();
     await handler({ method: "GET", headers: {} }, response);
     assert.equal(response.statusCode, 200);
-    assert.equal(response.payload.resetEnabled, true);
+    assert.equal(response.payload.resetEnabled, false);
 
     response = createJsonResponse();
     await handler({ method: "POST", headers: {} }, response);
-    assert.equal(response.statusCode, 401);
-    assert.equal(response.payload.error, "budget_reset_token_required");
+    assert.equal(response.statusCode, 403);
+    assert.equal(response.payload.error, "budget_reset_token_not_configured");
 
+    process.env.API_BUDGET_RESET_PASSWORD = "test-only-reset-secret";
     response = createJsonResponse();
-    await handler({ method: "POST", headers: {}, body: { password: "allure" } }, response);
+    await handler({ method: "POST", headers: {}, body: { password: "test-only-reset-secret" } }, response);
     assert.equal(response.statusCode, 200);
     assert.equal(response.payload.spentTodayCny, 0);
 
+    delete process.env.API_BUDGET_RESET_PASSWORD;
     process.env.API_BUDGET_RESET_TOKEN = "owner-secret";
     response = createJsonResponse();
     await handler({ method: "POST", headers: {} }, response);

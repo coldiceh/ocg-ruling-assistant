@@ -812,6 +812,7 @@ function ragEvidenceLabel(type) {
   if (type === "baige_card_text") return "百鸽卡片文本";
   if (type === "user_provided_text") return "用户提供文本";
   if (type === "rulebook") return "规则书资料";
+  if (type === "operation_check") return "逐步证据判读";
   if (type === "faq") return "FAQ";
   return "相关资料";
 }

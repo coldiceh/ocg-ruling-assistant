@@ -124,6 +124,8 @@ MODEL_PROVIDER=auto
 DEEPSEEK_API_KEY=
 DEEPSEEK_BASE_URL=https://api.deepseek.com
 DEEPSEEK_MODEL=deepseek-v4-pro
+DEEPSEEK_FLASH_MODEL=deepseek-v4-flash
+DEEPSEEK_PRO_MODEL=deepseek-v4-pro
 DEEPSEEK_CARD_MODEL=deepseek-v4-flash
 DEEPSEEK_RULE_MODEL=deepseek-v4-flash
 DEEPSEEK_RULEBOOK_MODEL=deepseek-v4-flash
@@ -132,17 +134,36 @@ GEMINI_MODEL=
 GEMINI_CARD_MODEL=
 GEMINI_RULE_MODEL=
 GEMINI_RULEBOOK_MODEL=
+RAG_FLASH_MAX_OUTPUT_TOKENS=2500
+RAG_PRO_MAX_OUTPUT_TOKENS=5000
 API_DAILY_BUDGET_CNY=10
+UPSTASH_REDIS_REST_URL=
+UPSTASH_REDIS_REST_TOKEN=
+API_BUDGET_RESET_PASSWORD=
 ```
 
 推荐配置方式：
 
 - `DEEPSEEK_CARD_MODEL` / `GEMINI_CARD_MODEL`：用于从玩家自然语言里提取卡名候选，建议使用 flash / 轻量模型。
 - `DEEPSEEK_RULE_MODEL` / `GEMINI_RULE_MODEL`：用于把问题改写为规则资料检索词，建议使用 flash / 轻量模型。
-- `DEEPSEEK_RULEBOOK_MODEL` / `GEMINI_RULEBOOK_MODEL`：用于从规则书候选段落中抽取操作步骤、选择原文并判断每一步是否合法，建议使用 flash / 轻量模型；未配置时回落到规则检索模型。
+- `DEEPSEEK_RULEBOOK_MODEL` / `GEMINI_RULEBOOK_MODEL`：用于从规则书、官方 Q&A 和卡片 FAQ 候选中抽取操作步骤、选择原文并判断每一步是否合法，建议使用 flash / 轻量模型；未配置时回落到规则检索模型。
 - `DEEPSEEK_MODEL` / `GEMINI_MODEL`：用于最终 RAG 裁定分析，建议使用推理能力更强的模型。
+- `DEEPSEEK_FLASH_MODEL` / `DEEPSEEK_PRO_MODEL`：分别对应网页上的 Flash 和 Pro 选择。
+- `RAG_FLASH_MAX_OUTPUT_TOKENS` / `RAG_PRO_MAX_OUTPUT_TOKENS`：分别控制最终答案输出额度。Pro 模型会消耗一部分额度进行推理，建议至少保留 `5000`。
 - `RAG_CARD_EXTRACTOR_ENABLED=false`：需要临时关闭 AI 卡名提取时使用。
 - `RAG_RULEBOOK_GROUNDING_ENABLED=false`：需要临时关闭规则书逐步判读时使用。
+
+### Vercel 预算持久化
+
+网页显示“未持久化”时，需要给部署 `/api/answer` 和 `/api/budget` 的 Vercel 后端项目连接 Redis。GitHub Pages 只托管前端，在 GitHub Pages 或浏览器本地配置这些变量不会生效。
+
+1. 在 Vercel 项目的 **Storage / Marketplace** 中创建或连接 Upstash Redis。
+2. 在 Vercel 项目的 **Settings → Environment Variables** 确认存在以下任意一组变量：
+   - `UPSTASH_REDIS_REST_URL` 与 `UPSTASH_REDIS_REST_TOKEN`
+   - `KV_REST_API_URL` 与 `KV_REST_API_TOKEN`
+3. 将变量至少应用到 `Production`；需要预览环境时同时勾选 `Preview`。
+4. 配置 `API_BUDGET_RESET_PASSWORD` 作为额度重置密码，不要把密码写入前端或提交到仓库。
+5. 重新部署后端。刷新网页后，“今日额度”应显示累计金额，不再显示“未持久化”。
 
 API key 应只配置在后端环境变量中，不应写入前端代码、日志或仓库。
 

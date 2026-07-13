@@ -25,7 +25,7 @@ export async function callRagModel({
   const providerResolution = resolveRagProvider(env);
   const provider = providerResolution.provider;
   const modelName = modelNameForProvider(provider, env);
-  const maxTokens = readNumber(env.RAG_MAX_OUTPUT_TOKENS, 2500);
+  const maxTokens = resolveRagMaxOutputTokens(env);
   const forcedDryRun = dryRun === true || isEnabled(env.RAG_DRY_RUN);
   const willCallRemote = !modelInvoker && !forcedDryRun && provider !== "mock" && hasProviderKey(provider, env) && typeof fetchImpl === "function";
   const budget = await buildBudgetPreflight({
@@ -313,23 +313,27 @@ export async function callRulebookGroundingModel({
   userQuery,
   cardTexts = [],
   ruleEvidence = [],
+  qaEvidence = [],
   env = globalThis.process?.env || {},
   modelInvoker,
   fetchImpl = globalThis.fetch,
   now = new Date(),
 } = {}) {
-  const candidates = (Array.isArray(ruleEvidence) ? ruleEvidence : [])
-    .filter((item) => item?.id && item?.text)
-    .slice(0, readPositiveNumber(env.RAG_MAX_RULEBOOK_CANDIDATES, 16));
+  const maxRulebookCandidates = readPositiveNumber(env.RAG_MAX_RULEBOOK_CANDIDATES, 16);
+  const maxQaCandidates = readPositiveNumber(env.RAG_MAX_QA_GROUNDING_CANDIDATES, 8);
+  const candidates = dedupeGroundingEvidence([
+    ...(Array.isArray(ruleEvidence) ? ruleEvidence : []).slice(0, maxRulebookCandidates),
+    ...(Array.isArray(qaEvidence) ? qaEvidence : []).slice(0, maxQaCandidates),
+  ]);
   if (!candidates.length) {
-    return emptyRulebookGroundingResult("none", "none", true, ["rulebook_candidates_missing"]);
+    return emptyRulebookGroundingResult("none", "none", true, ["grounding_evidence_candidates_missing"]);
   }
 
   const providerResolution = resolveRulebookGroundingProvider(env);
   const provider = providerResolution.provider;
   const modelName = modelNameForRulebookGroundingProvider(provider, env);
   const maxTokens = readNumber(env.RAG_RULEBOOK_MODEL_MAX_OUTPUT_TOKENS, 1800);
-  const prompt = buildRulebookGroundingPrompt({ userQuery, cardTexts, ruleEvidence: candidates });
+  const prompt = buildRulebookGroundingPrompt({ userQuery, cardTexts, evidenceCandidates: candidates });
 
   if (modelInvoker) {
     try {
@@ -623,11 +627,25 @@ async function callDeepSeek({ prompt, env, modelName, maxTokens, fetchImpl, temp
   }
   if (!response.ok) throw new Error(`deepseek ${response.status}`);
   const payload = await response.json();
+  const choice = payload?.choices?.[0] || {};
+  const message = choice.message || {};
+  const rawText = extractChatMessageText(message.content);
+  if (!rawText) warnings.push(`deepseek_empty_content:${choice.finish_reason || "unknown"}`);
+  if (choice.finish_reason === "length") warnings.push("deepseek_output_truncated_by_token_limit");
   return {
-    rawText: payload?.choices?.[0]?.message?.content || "",
+    rawText,
     usage: payload?.usage || {},
     warnings,
   };
+}
+
+function extractChatMessageText(content) {
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return "";
+  return content.map((part) => {
+    if (typeof part === "string") return part;
+    return typeof part?.text === "string" ? part.text : "";
+  }).filter(Boolean).join("\n");
 }
 
 async function callGemini({ prompt, env, modelName, maxTokens, fetchImpl, temperature, maxTokensEnvName = "GEMINI_MAX_OUTPUT_TOKENS" }) {
@@ -1208,7 +1226,7 @@ function buildRuleQueryExtractionPrompt(userQuery) {
   ].join("\n");
 }
 
-function buildRulebookGroundingPrompt({ userQuery, cardTexts = [], ruleEvidence = [] }) {
+function buildRulebookGroundingPrompt({ userQuery, cardTexts = [], evidenceCandidates = [] }) {
   const example = {
     operationChecks: [{
       operationId: "operation-1",
@@ -1218,7 +1236,7 @@ function buildRulebookGroundingPrompt({ userQuery, cardTexts = [], ruleEvidence 
       status: "conditional",
       conclusion: "只有满足规则书引文所述条件时才合法。",
       reasoning: ["把题目事实与引文条件逐项比较。"],
-      citations: [{ id: "rulebook-id#p1-3", quote: "必须从候选原文逐字复制的连续片段", application: "该引文如何约束当前操作。" }],
+      citations: [{ id: "evidence-id", quote: "必须从候选原文逐字复制的连续片段", application: "该引文如何约束当前操作。" }],
       missingFacts: [],
     }],
     overallConclusion: "基于逐步检查得到的结论。",
@@ -1232,21 +1250,27 @@ function buildRulebookGroundingPrompt({ userQuery, cardTexts = [], ruleEvidence 
       text: String(item.text || "").slice(0, 2800),
       source: item.source || item.type || "",
     })),
-    rulebookCandidates: (ruleEvidence || []).slice(0, 20).map((item) => ({
+    evidenceCandidates: (evidenceCandidates || []).slice(0, 24).map((item) => ({
       id: item.id,
+      type: item.type || item.recordType || "related",
       title: item.title,
       text: String(item.text || "").slice(0, 1800),
       sourceUrl: item.sourceUrl || "",
+      isDirect: item.isDirect === true,
     })),
   };
   return [
-    "你是游戏王 OCG 规则书判读器，不负责直接润色最终回答。",
+    "你是游戏王 OCG 证据判读器，不负责直接润色最终回答。",
     "先结合玩家问题与卡片文本，按实际发生顺序抽取每一步需要验证的操作，包括：发动条件、支付 cost、选择对象、连锁窗口、效果处理、位置变化、次数限制和后续处理。",
-    "然后只使用 rulebookCandidates 中提供的规则书原文，逐步判断该操作是 legal、illegal、conditional 还是 unknown。",
-    "不要依靠记忆补写规则，不要把卡片文本误当规则书，不要因为候选标题看起来相关就直接下结论。",
-    "每个 legal、illegal 或 conditional 判定都必须至少提供一个 citations 项；id 必须来自 rulebookCandidates，quote 必须逐字复制该候选中的一段连续原文。",
-    "如果候选规则书没有覆盖该操作，status 必须是 unknown，citations 留空，并在 missingFacts 说明缺什么；不得猜测。",
+    "然后只使用 evidenceCandidates 中提供的规则书、官方 Q&A 或卡片 FAQ 原文，逐步判断该操作是 legal、illegal、conditional 还是 unknown。",
+    "官方 Q&A / FAQ 可以作为规则适用案例，但必须逐项比较涉及的卡片、效果、时点、位置、素材数量和处理顺序；场景不同的相似案例不能直接套用。",
+    "isDirect=false 的 Q&A / FAQ 不是当前问题的官方直接裁定，只能支持规则分析；不得因此宣称 official_confirmed。",
+    "不要依靠记忆补写规则，不要把卡片文本误当规则证据，不要因为候选标题看起来相关就直接下结论。",
+    "每个 legal、illegal 或 conditional 判定都必须至少提供一个 citations 项；id 必须来自 evidenceCandidates，quote 必须逐字复制该候选中的一段连续原文。",
+    "如果候选证据没有覆盖该操作，status 必须是 unknown，citations 留空，并在 missingFacts 说明缺什么；不得猜测。",
     "必须区分‘能否发动’、‘能否成为对象/可适用卡’与‘已经发动后的效果如何处理’，不要用后续处理规则倒推出错误的发动合法性。",
+    "如果一条候选原文同时明确点名题目中的多张卡并描述同一操作，应把它视为比泛化规则更直接的场景证据，优先逐字引用并按其完整结论处理。",
+    "对于包含多个连续处理的效果，必须依次检查取对象、移除素材、位置移动及后续特殊召唤等全部步骤；overallConclusion 必须覆盖完整处理，不能只回答第一步。",
     "对题目中的每一个关键操作都要单独生成 operationChecks 项；不能只检查最后一步。",
     "输出必须是单个 JSON 对象，不要 markdown，不要 JSON 外文字。",
     "JSON 只包含 operationChecks 和 overallConclusion。",
@@ -1374,6 +1398,27 @@ function emptyRulebookGroundingResult(providerUsed, modelUsed, dryRun, warnings 
     estimatedCostCny: 0,
     budgetStatus: null,
   };
+}
+
+function resolveRagMaxOutputTokens(env = {}) {
+  const configured = Number(env.RAG_MAX_OUTPUT_TOKENS);
+  if (Number.isFinite(configured) && configured > 0) return Math.floor(configured);
+  const tier = String(env.RAG_MODEL_TIER || "").trim().toLowerCase();
+  if (tier === "pro") return readPositiveNumber(env.RAG_PRO_MAX_OUTPUT_TOKENS, 5000);
+  if (tier === "flash") return readPositiveNumber(env.RAG_FLASH_MAX_OUTPUT_TOKENS, 2500);
+  return 2500;
+}
+
+function dedupeGroundingEvidence(items = []) {
+  const result = [];
+  const seen = new Set();
+  for (const item of items) {
+    const id = String(item?.id || "").trim();
+    if (!id || !item?.text || seen.has(id)) continue;
+    seen.add(id);
+    result.push(item);
+  }
+  return result;
 }
 
 function modelNameForProvider(provider, env) {

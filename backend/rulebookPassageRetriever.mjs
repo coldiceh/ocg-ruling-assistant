@@ -9,6 +9,7 @@ export function retrieveRulebookPassages({
   maxPassageChars = DEFAULT_MAX_PASSAGE_CHARS,
 } = {}) {
   const terms = buildWeightedTerms({ userQuery, ruleSearchQueries });
+  const anchors = extractQuotedAnchors(userQuery);
   if (!terms.length) return [];
 
   const candidates = [];
@@ -18,7 +19,7 @@ export function retrieveRulebookPassages({
     if (!paragraphs.length) continue;
 
     for (let index = 0; index < paragraphs.length; index += 1) {
-      const score = scoreParagraph(paragraphs[index].text, record.title, terms);
+      const score = scoreParagraph(paragraphs[index].text, record.title, terms, anchors);
       if (score <= 0) continue;
       const passage = buildPassage(record, paragraphs, index, score, maxPassageChars);
       if (passage) candidates.push(passage);
@@ -27,10 +28,14 @@ export function retrieveRulebookPassages({
 
   const selected = [];
   const seen = new Set();
+  const seenContent = new Set();
   for (const candidate of candidates.sort(comparePassages)) {
     if (seen.has(candidate.id)) continue;
+    const contentKey = normalizeKey(candidate.text);
+    if (contentKey && seenContent.has(contentKey)) continue;
     if (selected.some((item) => overlaps(item, candidate))) continue;
     seen.add(candidate.id);
+    if (contentKey) seenContent.add(contentKey);
     selected.push(candidate);
     if (selected.length >= positiveInteger(maxPassages, DEFAULT_MAX_PASSAGES)) break;
   }
@@ -133,7 +138,7 @@ function addWeightedTerm(target, term, weight) {
   target.set(key, Math.max(target.get(key) || 0, weight));
 }
 
-function scoreParagraph(paragraph, title, terms) {
+function scoreParagraph(paragraph, title, terms, anchors = []) {
   const paragraphKey = normalizeKey(paragraph);
   const titleKey = normalizeKey(title);
   let score = 0;
@@ -147,8 +152,34 @@ function scoreParagraph(paragraph, title, terms) {
       score += term.weight * 0.25;
     }
   }
+  const matchedAnchors = anchors.filter((anchor) => paragraphKey.includes(anchor));
+  for (const anchor of matchedAnchors) {
+    score += 8 + Math.min(8, anchor.length / 2);
+  }
+  if (matchedAnchors.length >= 2) score += matchedAnchors.length * 6;
   if (!strongMatches && score < 1.5) return 0;
   return Math.round(score * 1000) / 1000;
+}
+
+function extractQuotedAnchors(value) {
+  const source = String(value || "");
+  const anchors = [];
+  const patterns = [
+    /「([^」]+)」/gu,
+    /『([^』]+)』/gu,
+    /《([^》]+)》/gu,
+    /【([^】]+)】/gu,
+    /\[([^\]]+)\]/gu,
+    /“([^”]+)”/gu,
+    /"([^"]+)"/gu,
+  ];
+  for (const pattern of patterns) {
+    for (const match of source.matchAll(pattern)) {
+      const key = normalizeKey(match[1]);
+      if (key.length >= 2 && key.length <= 100) anchors.push(key);
+    }
+  }
+  return [...new Set(anchors)];
 }
 
 function comparePassages(left, right) {
