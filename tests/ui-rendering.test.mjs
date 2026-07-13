@@ -180,6 +180,8 @@ test("ui_hides_engine_details_by_default", async () => {
   assert.match(app, /params\.get\("debug"\) === "1"/u);
   assert.match(app, /prompt\("请输入重置额度密码"\)/u);
   assert.match(app, /JSON\.stringify\(\{ password \}\)/u);
+  assert.match(app, /未持久化/u);
+  assert.match(app, /storageWarning/u);
   assert.match(app, /rulebook/u);
   assert.match(app, /publicRiskLines/u);
 });

@@ -34,9 +34,10 @@ const server = createServer(async (request, response) => {
   }
 
   if (request.method === "GET" && request.url === "/api/budget") {
+    const status = await getRagBudgetStatus({ env: process.env });
     sendJson(response, 200, {
-      ...await getRagBudgetStatus({ env: process.env }),
-      resetEnabled: budgetResetTokenConfigured(process.env),
+      ...status,
+      resetEnabled: budgetResetTokenConfigured(process.env) && status.budgetStorage !== "unconfigured",
     });
     return;
   }

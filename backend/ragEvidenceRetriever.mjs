@@ -5,6 +5,7 @@ import { searchCards } from "./baigeCardProvider.mjs";
 import { createLocalCardDataProvider } from "./cardDataProvider.mjs";
 import { normalizeCardKey } from "./ragCardExtractor.mjs";
 import { searchOfficialQaEvidence } from "./officialQaMatcher.mjs";
+import { isRulebookRecord, retrieveRulebookPassages } from "./rulebookPassageRetriever.mjs";
 
 const projectRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 const defaultDataDir = join(projectRoot, "data");
@@ -30,8 +31,8 @@ export async function retrieveRagEvidence({
   const resolvedCards = cardResolution.resolvedCards || [];
   const providedTexts = normalizeUserProvidedCardTexts(cardResolution.userProvidedCardTexts || [], limits);
   let normalizedRuleQueries = normalizeRuleSearchQueries([
-    ...deriveRuleSearchQueries(userQuery),
     ...(ruleSearchQueries || []),
+    ...deriveRuleSearchQueries(userQuery),
   ], limits);
   const retrievalWarnings = [];
   const baigeDebug = { searchCount: 0, cacheHitCount: 0, warnings: [], ambiguousMentions: [] };
@@ -53,6 +54,7 @@ export async function retrieveRagEvidence({
     .map((card) => findCardRecord(card, data.cards) || cardProvider.getCardProfile(card.id || card.cardId) || card)
     .filter(Boolean)
     .map((card) => cardTextEvidence(card, limits.maxCardTextChars, retrievalWarnings));
+  const userProvidedCardTextEvidence = dedupeEvidence(providedTexts.map((item, index) => userProvidedTextEvidence(item, index, limits.maxCardTextChars, retrievalWarnings)));
   normalizedRuleQueries = normalizeRuleSearchQueries([
     ...normalizedRuleQueries,
     ...deriveRuleSearchQueriesFromCardTexts(userQuery, cardTexts),
@@ -63,6 +65,14 @@ export async function retrieveRagEvidence({
     ...providedTexts.map((item) => item.name),
     ...normalizedRuleQueries.map((item) => item.query),
   ].filter(Boolean);
+  const rulebookCandidates = retrieveRulebookPassages({
+    records: allEvidenceRecords,
+    userQuery,
+    ruleSearchQueries: normalizedRuleQueries,
+    maxPassages: limits.maxRulebookCandidates,
+    maxPassageChars: limits.maxRulebookPassageChars,
+  });
+  if (rulebookCandidates.length) retrievalWarnings.push(`rulebook_passages_retrieved:${rulebookCandidates.length}`);
 
   const officialMatches = searchOfficialQaEvidence({
     question: userQuery,
@@ -111,7 +121,7 @@ export async function retrieveRagEvidence({
 
   const rawRelatedSource = rankRecords({
     userQuery,
-    records: allEvidenceRecords.filter((record) => !["card-faq", "card-text"].includes(record.recordType)),
+    records: allEvidenceRecords.filter((record) => !["card-faq", "card-text"].includes(record.recordType) && !isRulebookRecord(record)),
     resolvedCards: retrievalCards,
     mentionQueries,
     ruleSearchQueries: normalizedRuleQueries,
@@ -129,11 +139,12 @@ export async function retrieveRagEvidence({
 
   return {
     cardTexts: dedupeEvidence(cardTexts),
-    userProvidedCardTexts: dedupeEvidence(providedTexts.map((item, index) => userProvidedTextEvidence(item, index, limits.maxCardTextChars, retrievalWarnings))),
+    userProvidedCardTexts: userProvidedCardTextEvidence,
     officialQaDirectCandidates: dedupeEvidence(officialQaDirectCandidates),
     officialQaRelated: dedupeEvidence(officialQaRelated),
     faqRelated: dedupeEvidence(faqRelated),
-    rawRelatedEvidence: dedupeEvidence(rawRelatedEvidence),
+    rawRelatedEvidence: dedupeEvidence([...rulebookCandidates.slice(0, limits.maxRelatedEvidence), ...rawRelatedEvidence]),
+    rulebookCandidates,
     fuzzyResolvedCards: fuzzyCards,
     baigeResolvedCards,
     baigeAmbiguousMentions: baigeDebug.ambiguousMentions,
@@ -144,6 +155,7 @@ export async function retrieveRagEvidence({
       recordCount: allEvidenceRecords.length,
       cardCount: data.cards.length,
       userProvidedCardTextCount: providedTexts.length,
+      rulebookCandidateCount: rulebookCandidates.length,
       ruleSearchQueryCount: normalizedRuleQueries.length,
       ruleSearchQueries: normalizedRuleQueries,
       baigeSearchCount: baigeDebug.searchCount,
@@ -156,16 +168,18 @@ export async function retrieveRagEvidence({
 export async function loadRagData(dataDir = defaultDataDir) {
   const key = dataDir;
   if (dataCache.has(key)) return dataCache.get(key);
-  const [cardsPayload, rulingsPayload, qaPayload, evidencePayload] = await Promise.all([
+  const [cardsPayload, rulingsPayload, qaPayload, evidencePayload, rulebookPayload] = await Promise.all([
     readJson(join(dataDir, "cards.json"), { records: [] }),
     readJson(join(dataDir, "rulings.json"), { records: [] }),
     readJson(join(dataDir, "qa-index.json"), { records: [] }),
     readJson(join(dataDir, "evidence-index.json"), { records: [] }),
+    readJson(join(dataDir, "ocg-rule-corpus.json"), { records: [] }),
   ]);
   const data = normalizeInjectedData({
     cards: cardsPayload.records || cardsPayload.cards || [],
     records: [
       ...(rulingsPayload.records || []),
+      ...(rulebookPayload.records || []),
       ...(evidencePayload.records || []),
     ],
     qaRecords: qaPayload.records || [],
@@ -400,71 +414,57 @@ function normalizeRuleSearchQueries(items, limits = {}) {
 }
 
 function deriveRuleSearchQueries(userQuery) {
-  const text = String(userQuery || "");
-  const queries = [];
-  if (/(攻击|攻擊|攻撃|attack)/iu.test(text) && /(多次|两次|二次|2次|３次|3次|攻击次数|攻擊次數|翻倍机会|翻倍機會|只再|再.*攻击|可以.*攻击.*次)/iu.test(text)) {
-    queries.push({
-      query: "多次攻击的叠加 相同攻击次数 不会叠加 可以作最大次数的攻击",
-      reason: "检索攻击次数叠加规则",
-      confidence: "high",
-      source: "derived_rule_search_query",
-    });
-  }
-  if (/(发动|發動|连锁|連鎖|处理|處理|结算|解決|resolve)/iu.test(text) && /(离场|離場|不在|除外|送墓|回到卡组|回到卡組|对象|對象|仍然|还要|還要|尽可能|盡可能)/iu.test(text)) {
-    queries.push({
-      query: "效果处理时 来源离场 已发动效果 尽可能处理 对象不在场",
-      reason: "检索效果处理与来源/对象状态规则",
-      confidence: "medium",
-      source: "derived_rule_search_query",
-    });
-  }
-  if (/(魔陷|魔法.?陷阱|魔法・陷阱|魔法・罠|spell.?trap)/iu.test(text) && /(回.*手|返回|弹回|彈回|放回|戻)/iu.test(text) && /(发动|發動|连锁|連鎖|处理|處理|通常|速攻|陷阱|罠)/iu.test(text)) {
-    queries.push({
-      query: "发动中的通常魔法 通常陷阱 回到手卡 场上的魔法陷阱",
-      reason: "检索发动中的魔法陷阱与回手处理规则",
-      confidence: "medium",
-      source: "derived_rule_search_query",
-    });
-  }
-  return queries;
+  const query = buildGenericRuleQuery(userQuery);
+  return query ? [{
+    query,
+    reason: "从题目中的操作、时点、位置和连锁描述生成通用规则检索词。",
+    confidence: "medium",
+    source: "derived_rule_search_query",
+  }] : [];
 }
 
 function deriveRuleSearchQueriesFromCardTexts(userQuery, cardTexts = []) {
-  const question = String(userQuery || "");
-  const text = `${question}\n${(cardTexts || []).map((item) => item.text || "").join("\n")}`;
-  const queries = [];
-  if (/(魔陷|魔法.?陷阱|魔法・陷阱|魔法・罠|魔法\/罠|spell.?trap|通常魔法|通常罠|通常陷阱)/iu.test(text)
-    && /(回.*手|返回|弹回|彈回|放回|戻|手札に戻|手卡)/iu.test(text)
-    && /(发动|發動|発動|连锁|連鎖|チェーン|chain|处理|處理|解決|resolve)/iu.test(text)) {
-    queries.push({
-      query: "发动中的通常魔法 通常陷阱 回到手卡 场上的魔法陷阱",
-      reason: "卡片文本涉及把场上的魔法陷阱返回手卡，需要检索发动中魔法陷阱能否被该处理适用",
-      confidence: "high",
-      source: "card_text_derived_rule_search_query",
-    });
-    queries.push({
-      query: "通常魔法 通常罠 発動中 手札に戻す 発動できない",
-      reason: "检索日文规则/FAQ 中通常魔法通常陷阱发动中与回手处理的表述",
-      confidence: "high",
-      source: "card_text_derived_rule_search_query",
-    });
-    queries.push({
-      query: "フィールドの魔法罠カード 手札に戻す 効果 発動できません",
-      reason: "检索没有可处理魔法陷阱时能否发动返回手卡效果",
-      confidence: "medium",
-      source: "card_text_derived_rule_search_query",
-    });
-  }
-  if (/(1回合1次|一回合一次|once per turn|１ターンに１度|このカード名|这个卡名)/iu.test(question)
-    || /(已经发动|已发动|再次满足|再次发动|もう一度|再び発動)/iu.test(question)) {
-    queries.push({
-      query: "没有一回合一次限制 同一诱发条件再次满足 可以再次发动",
-      reason: "检索效果次数限制与同一诱发条件再次满足的规则资料",
-      confidence: "medium",
-      source: "card_text_derived_rule_search_query",
-    });
-  }
-  return queries;
+  const questionContext = buildGenericRuleQuery(userQuery).slice(0, 56);
+  const clauses = (cardTexts || [])
+    .flatMap((item) => String(item.text || "").split(/[。；;\n]+/u))
+    .map((item) => item.replace(/^[①②③④⑤⑥⑦⑧⑨\d]+[：:.、]?/u, "").trim())
+    .filter((item) => item.length >= 4 && containsOperationLanguage(item));
+  return dedupeBy(clauses.map((clause) => ({
+    query: expandRetrievalVocabulary(`${questionContext} ${clause}`).slice(0, 120),
+    reason: "把题目场景与卡片文本中的处理句组合，用于召回可能相关的规则书段落。",
+    confidence: "medium",
+    source: "card_text_derived_rule_search_query",
+  })).filter((item) => item.query), (item) => normalizeCardKey(item.query)).slice(0, 6);
+}
+
+function buildGenericRuleQuery(value) {
+  const withoutCardNames = String(value || "")
+    .normalize("NFKC")
+    .replace(/[「『《【\[].*?[」』》】\]]/gu, " ")
+    .replace(/\s+/gu, " ")
+    .trim();
+  if (normalizeCardKey(withoutCardNames).length < 4) return "";
+  return expandRetrievalVocabulary(withoutCardNames).slice(0, 120);
+}
+
+function containsOperationLanguage(value) {
+  return /(发动|發動|発動|处理|處理|适用|適用|选择|選擇|对象|對象|支付|cost|连锁|連鎖|チェーン|召唤|召喚|破坏|破壊|除外|送去|送墓|回到|返回|放回|戻|攻击|攻擊|攻撃|无效|無效|抽|加入手|特殊召唤|特殊召喚)/iu.test(String(value || ""));
+}
+
+function expandRetrievalVocabulary(value) {
+  const text = String(value || "").replace(/\s+/gu, " ").trim();
+  const additions = [];
+  if (/(发动|發動|発動)/u.test(text)) additions.push("发动 発動");
+  if (/(连锁|連鎖|チェーン|chain)/iu.test(text)) additions.push("连锁 チェーン chain");
+  if (/(处理|處理|适用|適用|解決|resolve)/iu.test(text)) additions.push("处理 適用 解決 resolve");
+  if (/(手卡|手牌|手札|hand)/iu.test(text)) additions.push("手卡 手牌 手札 hand");
+  if (/(回到|返回|放回|弹回|彈回|戻|return)/iu.test(text)) additions.push("回到 返回 戻 return");
+  if (/(墓地|送墓|graveyard)/iu.test(text)) additions.push("墓地 送去墓地 graveyard");
+  if (/(除外|banish)/iu.test(text)) additions.push("除外 banish");
+  if (/(破坏|破壊|destroy)/iu.test(text)) additions.push("破坏 破壊 destroy");
+  if (/(攻击|攻擊|攻撃|attack)/iu.test(text)) additions.push("攻击 攻撃 attack 战斗 バトル");
+  if (/(次数|回数|多次|两次|兩次|[一二三四五六七八九十\d]+次|twice)/iu.test(text)) additions.push("次数 回数 多次 twice");
+  return [...new Set([text, ...additions].filter(Boolean))].join(" ");
 }
 
 function buildContextTerms({ userQuery, mentionQueries = [], ruleQueries = [], resolvedCards = [] } = {}) {
@@ -504,7 +504,6 @@ function selectContextSnippet(text, terms = [], maxChars = 2200) {
       if (!term) continue;
       if (key.includes(term)) score += Math.min(8, Math.max(1, term.length / 2));
     }
-    if (/多次攻击的叠加|相同攻击次数|不会叠加|最大次数的攻击/u.test(paragraph)) score += 10;
     if (score > bestScore) {
       bestScore = score;
       bestIndex = index;
@@ -768,6 +767,9 @@ function readRetrievalLimits(env, maxPerBucket) {
     maxCards: readPositiveNumber(env.RAG_MAX_CARDS, 6),
     maxOfficialQa: readPositiveNumber(env.RAG_MAX_OFFICIAL_QA, maxPerBucket),
     maxRelatedEvidence: readPositiveNumber(env.RAG_MAX_RELATED_EVIDENCE, Math.max(8, maxPerBucket)),
+    maxRuleSearchQueries: readPositiveNumber(env.RAG_MAX_RULE_SEARCH_QUERIES, 12),
+    maxRulebookCandidates: readPositiveNumber(env.RAG_MAX_RULEBOOK_CANDIDATES, 16),
+    maxRulebookPassageChars: readPositiveNumber(env.RAG_MAX_RULEBOOK_PASSAGE_CHARS, 1400),
     maxCardTextChars: readPositiveNumber(env.RAG_MAX_CARD_TEXT_CHARS, 2500),
     maxEvidenceTextChars: readPositiveNumber(env.RAG_MAX_EVIDENCE_TEXT_CHARS, 1600),
     localFuzzyMinConfidence: readPositiveDecimal(env.RAG_LOCAL_FUZZY_MIN_CONFIDENCE, 0.74),

@@ -13,9 +13,10 @@ export default async function handler(request, response) {
 
   try {
     if (request.method === "GET") {
+      const status = await getRagBudgetStatus({ env: process.env });
       response.status(200).json({
-        ...await getRagBudgetStatus({ env: process.env }),
-        resetEnabled: budgetResetTokenConfigured(process.env),
+        ...status,
+        resetEnabled: budgetResetTokenConfigured(process.env) && status.budgetStorage !== "unconfigured",
       });
       return;
     }

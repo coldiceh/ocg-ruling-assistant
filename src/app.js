@@ -900,13 +900,20 @@ async function resetBudgetStatus() {
 
 function renderBudgetStatus(status, message = "") {
   if (!ui.budgetPanel) return;
+  const storageMissing = status?.budgetStorage === "unconfigured"
+    || (status?.budgetPersistent === false && status?.budgetStorage !== "memory");
   const spent = Number(status?.spentTodayCny);
   const limit = Number(status?.dailyBudgetCny);
-  ui.budgetSpentText.textContent = Number.isFinite(spent) ? `${formatCny(spent)} 元` : "未读取";
+  ui.budgetSpentText.textContent = storageMissing
+    ? "未持久化"
+    : Number.isFinite(spent) ? `${formatCny(spent)} 元` : "未读取";
   ui.budgetLimitText.textContent = Number.isFinite(limit) && limit > 0 ? ` / ${formatCny(limit)} 元` : "";
   const storage = status?.budgetStorage ? `存储：${status.budgetStorage}` : "";
   const mode = status?.budgetMode ? `模式：${status.budgetMode}` : "";
-  ui.budgetHint.textContent = message || [storage, mode].filter(Boolean).join(" · ") || "统计后端今日累计模型用量。";
+  ui.budgetHint.textContent = message
+    || status?.storageWarning
+    || [storage, mode].filter(Boolean).join(" · ")
+    || "统计后端今日累计模型用量。";
 }
 
 function updateBudgetResetVisibility(resetEnabled) {
