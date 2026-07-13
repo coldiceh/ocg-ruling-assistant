@@ -62,6 +62,11 @@ export async function answerRagRulingQuestion({
     userQuery: query,
     cardTexts: [...(retrievedEvidence.cardTexts || []), ...(retrievedEvidence.userProvidedCardTexts || [])],
     ruleEvidence: retrievedEvidence.rulebookCandidates || [],
+    qaEvidence: dedupeEvidenceRefs([
+      ...(retrievedEvidence.officialQaDirectCandidates || []),
+      ...(retrievedEvidence.faqRelated || []),
+      ...(retrievedEvidence.officialQaRelated || []),
+    ]),
     env,
     modelInvoker: rulebookModelInvoker,
     fetchImpl,
@@ -85,10 +90,10 @@ export async function answerRagRulingQuestion({
     fetchImpl,
     now,
   });
-  const normalized = applyOperationLegalityOverride(
-    normalizeRagAnswer(modelResult.answer, { evidence, cardResolution, modelWarnings: modelResult.warnings || [] }),
-    evidence,
-  );
+  const modelAnswer = normalizeRagAnswer(modelResult.answer, { evidence, cardResolution, modelWarnings: modelResult.warnings || [] });
+  const groundedFallback = applyGroundedOperationFallback(modelAnswer, evidence);
+  const evidenceConstrained = applyExactScenarioGrounding(groundedFallback, evidence, query);
+  const normalized = applyOperationLegalityOverride(evidenceConstrained, evidence);
 
   return {
     mode: "rag_baseline",
@@ -175,7 +180,7 @@ function applyOperationLegalityOverride(answer, evidence = {}) {
     .filter((item) => item.id)
     .map((item) => ({
       id: item.id,
-      type: "rulebook",
+      type: outputEvidenceType(item, new Set()),
       title: item.title,
       sourceUrl: item.sourceUrl || "",
     }));
@@ -214,6 +219,108 @@ function applyOperationLegalityOverride(answer, evidence = {}) {
   };
 }
 
+function applyExactScenarioGrounding(answer, evidence = {}, userQuery = "") {
+  const operation = evidence.operationLegality;
+  const checks = operation?.checks || [];
+  if (!operation?.hasGroundedChecks || !operation.shortAnswer || !checks.length) return answer;
+  if (checks.some((check) => check.status === "unknown" || !(check.citations || []).length)) return answer;
+
+  const anchors = extractScenarioAnchors(userQuery);
+  if (anchors.length < 2) return answer;
+  const requiredMatches = Math.min(2, anchors.length);
+  const exactEvidence = (operation.matchedRuleEvidence || []).filter((item) => {
+    const text = normalizeScenarioKey(item?.text);
+    return anchors.filter((anchor) => text.includes(anchor)).length >= requiredMatches;
+  });
+  if (!exactEvidence.length) return answer;
+
+  const usedEvidence = dedupeEvidenceRefs([
+    ...exactEvidence.map((item) => ({
+      id: item.id,
+      type: outputEvidenceType(item, new Set()),
+      title: item.title,
+      sourceUrl: item.sourceUrl || "",
+    })),
+    ...(operation.evidence || []).map((item) => ({
+      id: item.id,
+      type: outputEvidenceType(item, new Set()),
+      title: item.title,
+      sourceUrl: item.sourceUrl || "",
+    })),
+    ...(answer.usedEvidence || []),
+  ]);
+  const reasoning = cleanStringArray(operation.reasoning || []);
+  return {
+    ...answer,
+    answerLevel: answer.answerLevel === "official_confirmed" ? answer.answerLevel : "rule_analysis",
+    shortAnswer: operation.shortAnswer,
+    reasoning: reasoning.length ? reasoning : answer.reasoning,
+    usedEvidence,
+    missingInfo: [],
+    riskFlags: [...new Set([...(answer.riskFlags || []), "answer_constrained_by_exact_scenario_evidence"])],
+    confidenceSelfEstimate: answer.confidenceSelfEstimate === "low" ? "low" : "medium",
+  };
+}
+
+function applyGroundedOperationFallback(answer, evidence = {}) {
+  const operation = evidence.operationLegality;
+  const modelFailed = (answer.riskFlags || []).some((flag) => /(?:model_call_failed|model_json_parse_failed|deepseek_empty_content|model_output_not_json)/u.test(String(flag)));
+  if (!modelFailed || !operation?.hasGroundedChecks || !operation.shortAnswer) return answer;
+  const usedEvidence = dedupeEvidenceRefs([
+    ...(operation.evidence || []).map((item) => ({
+      id: item.id,
+      type: outputEvidenceType(item, new Set()),
+      title: item.title,
+      sourceUrl: item.sourceUrl || "",
+    })),
+    ...(operation.matchedRuleEvidence || []).map((item) => ({
+      id: item.id,
+      type: outputEvidenceType(item, new Set()),
+      title: item.title,
+      sourceUrl: item.sourceUrl || "",
+    })),
+    ...(answer.usedEvidence || []),
+  ]);
+  return {
+    ...answer,
+    answerLevel: "rule_analysis",
+    shortAnswer: operation.shortAnswer,
+    reasoning: cleanStringArray(operation.reasoning || []).length ? cleanStringArray(operation.reasoning) : answer.reasoning,
+    usedEvidence,
+    missingInfo: [],
+    riskFlags: [...new Set([...(answer.riskFlags || []), "final_model_failed_using_grounded_operation_analysis"])],
+    confidenceSelfEstimate: "medium",
+  };
+}
+
+function extractScenarioAnchors(value) {
+  const source = String(value || "");
+  const anchors = [];
+  const patterns = [
+    /「([^」]+)」/gu,
+    /『([^』]+)』/gu,
+    /《([^》]+)》/gu,
+    /【([^】]+)】/gu,
+    /\[([^\]]+)\]/gu,
+    /“([^”]+)”/gu,
+    /"([^"]+)"/gu,
+  ];
+  for (const pattern of patterns) {
+    for (const match of source.matchAll(pattern)) {
+      const key = normalizeScenarioKey(match[1]);
+      if (key.length >= 2 && key.length <= 100) anchors.push(key);
+    }
+  }
+  return [...new Set(anchors)];
+}
+
+function normalizeScenarioKey(value) {
+  return String(value || "")
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, "");
+}
+
 export function normalizeRagAnswer(answer = {}, { evidence = {}, cardResolution = {}, modelWarnings = [] } = {}) {
   const availableEvidence = evidenceBucketsToList(evidence);
   const userTextEvidence = evidence.userProvidedCardTexts || [];
@@ -246,6 +353,16 @@ export function normalizeRagAnswer(answer = {}, { evidence = {}, cardResolution 
       };
     })
     .filter(Boolean);
+
+  for (const grounded of evidence.operationLegality?.matchedRuleEvidence || []) {
+    if (!grounded?.id || usedEvidence.some((item) => String(item.id) === String(grounded.id))) continue;
+    usedEvidence.push({
+      id: grounded.id,
+      type: outputEvidenceType(grounded, directIds),
+      title: grounded.title || grounded.id,
+      sourceUrl: grounded.sourceUrl || "",
+    });
+  }
 
   if (!usedEvidence.length && hasAnyEvidence) {
     const fallbackEvidence = selectFallbackEvidence(evidence, availableEvidence);
@@ -326,17 +443,19 @@ function outputEvidenceType(source, directIds) {
   if (source.type === "baige_card_text") return "baige_card_text";
   if (source.type === "user_provided_text") return "user_provided_text";
   if (source.type === "rulebook") return "rulebook";
+  if (source.type === "operation_check") return "operation_check";
   if (source.type === "faq") return "faq";
   return "related";
 }
 
 function selectFallbackEvidence(evidence, availableEvidence) {
   return evidence.officialQaDirectCandidates?.[0]
-    || evidence.cardTexts?.[0]
-    || evidence.userProvidedCardTexts?.[0]
+    || evidence.operationLegality?.matchedRuleEvidence?.[0]
     || evidence.faqRelated?.[0]
     || evidence.officialQaRelated?.[0]
     || evidence.rawRelatedEvidence?.[0]
+    || evidence.cardTexts?.[0]
+    || evidence.userProvidedCardTexts?.[0]
     || availableEvidence[0];
 }
 

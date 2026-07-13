@@ -2,7 +2,6 @@ import { timingSafeEqual } from "node:crypto";
 
 const RESET_TOKEN_ENV = "API_BUDGET_RESET_TOKEN";
 const RESET_PASSWORD_ENV = "API_BUDGET_RESET_PASSWORD";
-const DEFAULT_RESET_PASSWORD = "allure";
 
 export function budgetResetTokenConfigured(env = globalThis.process?.env || {}) {
   return Boolean(readConfiguredSecret(env));
@@ -42,7 +41,7 @@ export function authorizeBudgetResetRequest(request, { env = globalThis.process?
 }
 
 function readConfiguredSecret(env) {
-  return String(env?.[RESET_PASSWORD_ENV] || env?.[RESET_TOKEN_ENV] || DEFAULT_RESET_PASSWORD).trim();
+  return String(env?.[RESET_PASSWORD_ENV] || env?.[RESET_TOKEN_ENV] || "").trim();
 }
 
 function readRequestSecret(request, body) {

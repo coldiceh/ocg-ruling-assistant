@@ -85,7 +85,7 @@ export async function retrieveRagEvidence({
     .slice(0, limits.maxOfficialQa);
   const directIds = new Set(officialQaDirectCandidates.map((item) => item.id));
 
-  const officialQaRelatedSource = [
+  const officialQaRelatedSource = dedupeBy([
     ...officialMatches.near,
     ...officialMatches.related,
     ...rankRecords({
@@ -96,7 +96,7 @@ export async function retrieveRagEvidence({
       ruleSearchQueries: normalizedRuleQueries,
       allowNoCardMatch: normalizedRuleQueries.length > 0,
     }),
-  ];
+  ], (item) => String(item?.record?.id || item?.id || ""));
   if (officialQaRelatedSource.length > limits.maxRelatedEvidence) retrievalWarnings.push(`official_related_limited:${officialQaRelatedSource.length}->${limits.maxRelatedEvidence}`);
   const officialQaRelated = officialQaRelatedSource
     .slice(0, limits.maxRelatedEvidence)
@@ -244,7 +244,7 @@ function normalizeRecord(record = {}) {
     text,
     cardIds,
     cards,
-    sourceUrl: record.sourceUrl || record.officialUrl || "",
+    sourceUrl: evidenceSourceUrl(record),
     status: record.status || "current",
   };
 }
@@ -328,6 +328,14 @@ function evidenceFromRecord(record, type, maxTextChars = 1600, warnings = []) {
     sourceUrl: record.sourceUrl || record.officialUrl || "",
     isDirect: false,
   };
+}
+
+function evidenceSourceUrl(record = {}) {
+  const cardId = (record.cardIds || []).map(normalizeId).find(Boolean);
+  if (record.recordType === "card-faq" && cardId) {
+    return `https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=4&cid=${encodeURIComponent(cardId)}&request_locale=ja`;
+  }
+  return record.sourceUrl || record.officialUrl || "";
 }
 
 function evidenceTypeForRecord(record = {}, fallback = "related") {

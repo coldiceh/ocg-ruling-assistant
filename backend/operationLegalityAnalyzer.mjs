@@ -5,11 +5,11 @@ export const OPERATION_LEGALITY_STATUSES = Object.freeze([
   "unknown",
 ]);
 
-export function validateOperationLegalityModelOutput(raw, ruleEvidence = []) {
+export function validateOperationLegalityModelOutput(raw, evidenceCandidates = []) {
   const parsed = parseModelObject(raw);
-  if (!parsed) return emptyOperationLegality(["rulebook_grounding_invalid_json"]);
+  if (!parsed) return emptyOperationLegality(["evidence_grounding_invalid_json"]);
 
-  const evidenceById = new Map((ruleEvidence || [])
+  const evidenceById = new Map((evidenceCandidates || [])
     .filter((item) => item?.id && item?.text)
     .map((item) => [String(item.id), item]));
   const warnings = [];
@@ -30,6 +30,7 @@ export function validateOperationLegalityModelOutput(raw, ruleEvidence = []) {
     checks,
     evidence,
     matchedRuleEvidence,
+    matchedEvidence: matchedRuleEvidence,
     hasChecks: checks.length > 0,
     hasGroundedChecks: groundedChecks.length > 0,
     hasBlockingCheck: blockingChecks.length > 0,
@@ -50,6 +51,7 @@ export function emptyOperationLegality(warnings = []) {
     checks: [],
     evidence: [],
     matchedRuleEvidence: [],
+    matchedEvidence: [],
     hasChecks: false,
     hasGroundedChecks: false,
     hasBlockingCheck: false,
@@ -105,15 +107,20 @@ function normalizeCitations(value, evidenceById, operationId, warnings) {
       id,
       quote: quote.slice(0, 500),
       application: cleanText(item?.application || item?.reason).slice(0, 500),
+      type: cleanText(evidence.type || evidence.recordType || "related"),
+      title: cleanText(evidence.title || id),
+      sourceUrl: cleanText(evidence.sourceUrl || ""),
     });
   }
   return result;
 }
 
 function operationCheckEvidence(check) {
+  const citationTypes = new Set(check.citations.map((citation) => citation.type).filter(Boolean));
+  const isRulebookOnly = citationTypes.size > 0 && [...citationTypes].every((type) => type === "rulebook");
   return {
     id: `operation-check-${check.operationId}`,
-    type: "rulebook",
+    type: isRulebookOnly ? "rulebook" : "operation_check",
     recordType: "operation-legality-check",
     title: `操作合法性检查：${check.action || check.operationId}`,
     cardIds: [],
@@ -124,10 +131,10 @@ function operationCheckEvidence(check) {
       `判定：${check.status}`,
       check.conclusion ? `结论：${check.conclusion}` : "",
       ...check.reasoning.map((reason) => `理由：${reason}`),
-      ...check.citations.map((citation) => `规则书引文 [${citation.id}]：${citation.quote}${citation.application ? `\n适用说明：${citation.application}` : ""}`),
+      ...check.citations.map((citation) => `证据引文 [${citation.id}]：${citation.quote}${citation.application ? `\n适用说明：${citation.application}` : ""}`),
     ].filter(Boolean).join("\n"),
     sourceUrl: "",
-    source: "rulebook_model_grounding",
+    source: isRulebookOnly ? "rulebook_model_grounding" : "qa_rule_model_grounding",
     official: false,
     isDirect: false,
     operationLegality: {

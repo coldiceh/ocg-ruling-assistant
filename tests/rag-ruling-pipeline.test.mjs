@@ -523,6 +523,162 @@ test("rulebook_grounding_accepts_verbatim_passage_citation", async () => {
   assert.equal(result.operationLegality.matchedRuleEvidence[0].id, passage.id);
 });
 
+test("qa_evidence_can_ground_operation_checks_without_rulebook", async () => {
+  const faq = {
+    id: "card-faq-10820-1",
+    type: "faq",
+    recordType: "card-faq",
+    title: "超量叠光延迟 FAQ 1",
+    text: "『那只怪兽的X素材全部取除』不是对怪兽适用的效果。即使是不受魔法效果影响的超量怪兽，其X素材也会全部取除。",
+    sourceUrl: "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=4&cid=10820&request_locale=ja",
+  };
+  let capturedPrompt = "";
+  const result = await callRulebookGroundingModel({
+    userQuery: "不受其他卡效果影响的怪兽能否成为超量叠光延迟的对象？",
+    ruleEvidence: [],
+    qaEvidence: [faq],
+    modelInvoker: async ({ prompt }) => {
+      capturedPrompt = prompt;
+      return JSON.stringify({
+        operationChecks: [{
+          operationId: "remove-xyz-materials",
+          action: "超量叠光延迟移除目标怪兽的全部X素材",
+          status: "legal",
+          conclusion: "可以正常移除X素材；该处理不属于对怪兽适用的效果。",
+          citations: [{
+            id: faq.id,
+            quote: "不是对怪兽适用的效果",
+            application: "怪兽的效果抗性不阻止移除其X素材。",
+          }],
+        }],
+        overallConclusion: "可以发动并正常移除素材，再按失去抗性后的状态继续处理。",
+      });
+    },
+  });
+
+  assert.match(capturedPrompt, /evidenceCandidates/u);
+  assert.match(capturedPrompt, /官方 Q&A 或卡片 FAQ/u);
+  assert.equal(result.operationLegality.hasGroundedChecks, true);
+  assert.equal(result.operationLegality.hasBlockingCheck, false);
+  assert.equal(result.operationLegality.matchedRuleEvidence[0].id, faq.id);
+  assert.equal(result.operationLegality.evidence[0].type, "operation_check");
+});
+
+test("pro_empty_output_falls_back_to_qa_grounded_operation_answer", async () => {
+  const scenarioCards = [
+    {
+      id: "10820",
+      name: "超量叠光延迟",
+      cnName: "超量叠光延迟",
+      cardType: "通常魔法",
+      effectText: "以持有X素材的对方场上1只X怪兽为对象才能发动。那只怪兽的X素材全部取除，那只怪兽回到额外卡组。",
+      aliases: ["超量叠光延迟", "エクシーズ・オーバーディレイ"],
+    },
+    {
+      id: "11296",
+      name: "No.86 英豪冠军 击灭枪王",
+      cnName: "No.86 英豪冠军 击灭枪王",
+      cardType: "怪兽",
+      effectText: "持有3个以上X素材的这张卡不受其他卡的效果影响。",
+      aliases: ["NO.86 英豪冠军 击灭枪王", "No.86 H－C ロンゴミアント"],
+    },
+  ];
+  const faqRecord = {
+    id: "card-faq-10820-1",
+    recordType: "card-faq",
+    title: "超量叠光延迟 FAQ 1",
+    cardIds: ["10820"],
+    cards: ["超量叠光延迟"],
+    text: "超量叠光延迟 FAQ 1 『那只怪兽的X素材全部取除』不是对怪兽适用的效果。即使是不受魔法效果影响的超量怪兽，其X素材也会全部取除。",
+  };
+  const answer = await answerRagRulingQuestion({
+    question: "持有三个X素材的「NO.86 英豪冠军 击灭枪王」能否成为「超量叠光延迟」的对象？",
+    cards: scenarioCards,
+    records: [],
+    qaRecords: [faqRecord],
+    env: { RAG_MODEL_TIER: "pro" },
+    rulebookModelInvoker: async () => JSON.stringify({
+      operationChecks: [{
+        operationId: "xyz-encore-target-and-resolve",
+        action: "以持有三个X素材的No.86为对象发动超量叠光延迟并移除素材",
+        status: "legal",
+        conclusion: "可以发动。先移除全部X素材，该处理不受怪兽效果抗性阻止；失去素材后再继续处理。",
+        citations: [{ id: faqRecord.id, quote: "不是对怪兽适用的效果" }],
+      }],
+      overallConclusion: "可以发动。先移除全部X素材，再按失去抗性后的状态继续处理。",
+    }),
+    modelInvoker: async () => "",
+  });
+
+  assert.match(answer.shortAnswer, /可以发动/u);
+  assert.doesNotMatch(answer.shortAnswer, /没有可用的模型 JSON/u);
+  assert.ok(answer.usedEvidence.some((item) => item.id === faqRecord.id && item.type === "faq"));
+  assert.ok(answer.usedEvidence.some((item) => /yugioh-card\.com/u.test(item.sourceUrl)));
+  assert.ok(answer.riskFlags.includes("final_model_failed_using_grounded_operation_analysis"));
+});
+
+test("exact_scenario_grounding_constrains_the_entire_effect_resolution", async () => {
+  const cards = [
+    {
+      id: "10820",
+      name: "超量叠光延迟",
+      cnName: "超量叠光延迟",
+      cardType: "通常魔法",
+      effectText: "以持有X素材的对方场上1只X怪兽为对象才能发动。那只怪兽的X素材全部取除，那只怪兽回到额外卡组。",
+      aliases: ["超量叠光延迟"],
+    },
+    {
+      id: "11296",
+      name: "No.86 英豪冠军 击灭枪王",
+      cnName: "No.86 英豪冠军 击灭枪王",
+      cardType: "怪兽",
+      effectText: "持有3个以上X素材的这张卡不受其他卡的效果影响。",
+      aliases: ["NO.86 英豪冠军 击灭枪王"],
+    },
+  ];
+  const exactRule = {
+    id: "ocg-rule:exact-xyz-encore",
+    recordType: "rule-doc",
+    title: "永续效果在处理途中不再适用",
+    text: "以持有5个X素材的「 No.86 英豪冠军 击灭枪王 」为对象发动「 超量叠光延迟 」，由于去除X素材的效果不影响X怪兽，「 No.86 英豪冠军 击灭枪王 」的X素材全部取除，这个时点其永续效果立即不适用，结果正常适用「 超量叠光延迟 」的后续效果。",
+    sourceUrl: "https://example.test/exact-xyz-encore",
+  };
+  const exactPassageId = `${exactRule.id}#p1-1`;
+  const answer = await answerRagRulingQuestion({
+    question: "拥有三个以上素材的【NO.86 英豪冠军 击灭枪王】是否可以被对方发动的【超量叠光延迟】取做效果对象？",
+    cards,
+    records: [exactRule],
+    qaRecords: [],
+    rulebookModelInvoker: async () => JSON.stringify({
+      operationChecks: [{
+        operationId: "target-and-resolve",
+        action: "以No.86为对象发动超量叠光延迟并完整处理",
+        status: "legal",
+        conclusion: "可以选择为对象；素材全部取除后抗性立即不再适用，后续效果正常处理。",
+        citations: [{
+          id: exactPassageId,
+          quote: "X素材全部取除，这个时点其永续效果立即不适用，结果正常适用「 超量叠光延迟 」的后续效果",
+        }],
+      }],
+      overallConclusion: "可以选择为对象。处理时取除全部X素材，枪王的抗性随即不再适用，因此枪王正常回到额外卡组。",
+    }),
+    modelInvoker: async () => JSON.stringify({
+      answerLevel: "rule_analysis",
+      shortAnswer: "可以选择为对象并取除素材，但枪王不受后续效果影响，会留在场上。",
+      reasoning: ["取除素材后不处理返回额外卡组。"],
+      usedCards: ["超量叠光延迟", "No.86 英豪冠军 击灭枪王"],
+      usedEvidence: [{ id: exactPassageId, type: "rulebook", title: exactRule.title }],
+      missingInfo: [],
+      riskFlags: [],
+      confidenceSelfEstimate: "medium",
+    }),
+  });
+
+  assert.match(answer.shortAnswer, /枪王正常回到额外卡组/u);
+  assert.doesNotMatch(answer.shortAnswer, /留在场上/u);
+  assert.ok(answer.riskFlags.includes("answer_constrained_by_exact_scenario_evidence"));
+});
+
 test("rulebook_context_snippet_enters_rag_context", async () => {
   const longRuleText = [
     "Contents\n\n Menu\n\n Skip to content\n\n 这里是很长的导航文本，不应该作为主要 evidence 进入 prompt。",
@@ -797,6 +953,8 @@ test("deepseek_model_tier_selects_flash_or_pro_model", async () => {
   });
   assert.equal(calls[0].model, "deepseek-flash-tier");
   assert.equal(calls[1].model, "deepseek-pro-tier");
+  assert.equal(calls[0].max_tokens, 2500);
+  assert.equal(calls[1].max_tokens, 5000);
 });
 
 test("gemini_provider_builds_request", async () => {
@@ -991,7 +1149,8 @@ test("rag_prompt_truncates_context", () => {
     },
   });
   assert.equal(bundle.prompt.length <= 1400, true);
-  assert.ok(bundle.warnings.some((warning) => warning.includes("truncated")));
+  assert.ok(bundle.warnings.some((warning) => warning.includes("compacted")));
+  assert.doesNotMatch(bundle.prompt, /上下文因 RAG_MAX_PROMPT_CHARS 限制被截断/u);
 });
 
 test("secrets_not_returned_in_debug", async () => {
