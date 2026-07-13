@@ -3,7 +3,7 @@ import test from "node:test";
 import { extractQuotedMentions, extractRagCards, extractUserProvidedCardTextBlocks } from "../backend/ragCardExtractor.mjs";
 import { retrieveRagEvidence } from "../backend/ragEvidenceRetriever.mjs";
 import { buildRagRulingPromptBundle } from "../backend/ragRulingPrompt.mjs";
-import { callCardNameExtractionModel, callRagModel, callRuleQueryExtractionModel, estimateDeepSeekCostCny, getRagBudgetStatus, resetRagBudget, resolveRagProvider } from "../backend/ragModelClient.mjs";
+import { callCardNameExtractionModel, callRagModel, callRulebookGroundingModel, callRuleQueryExtractionModel, estimateDeepSeekCostCny, getRagBudgetStatus, resetRagBudget, resolveRagProvider } from "../backend/ragModelClient.mjs";
 import { answerRagRulingQuestion } from "../backend/ragRulingPipeline.mjs";
 
 const cards = [
@@ -371,27 +371,39 @@ test("rag_pipeline_uses_model_rule_queries_for_related_rules", async () => {
   assert.ok(answer.usedEvidence.some((item) => item.id === "rule-activated-trap-location"));
 });
 
-test("rag_pipeline_does_not_invent_rule_guard_evidence", async () => {
+function thunderImpermanenceCards() {
+  return [
+    {
+      id: "13631",
+      name: "无限泡影",
+      cnName: "无限泡影",
+      cardType: "通常陷阱",
+      effectText: "以对方场上1只表侧表示怪兽为对象才能发动。那只怪兽的效果直到回合结束时无效。",
+      aliases: ["无限泡影"],
+    },
+    {
+      id: "22130",
+      name: "天雷之双风神 息那",
+      cnName: "天雷之双风神 息那",
+      cardType: "怪兽",
+      effectText: "自己场上存在风属性怪兽，且对手发动魔法・陷阱・怪兽的效果时可以发动。从手牌将此卡特殊召唤。然后，根据该对手的效果的种类，适用以下效果。●魔法・陷阱：将场上的魔法・陷阱卡全部放回手牌。",
+      aliases: ["天雷之双风神"],
+    },
+  ];
+}
+
+const activatedSpellTrapReturnRule = {
+  id: "rule-activated-normal-spell-trap-cannot-return",
+  recordType: "rule-doc",
+  title: "发动中的通常魔法陷阱不能返回手卡",
+  text: "通常魔法・通常罠カードの発動にチェーンして、フィールドの魔法・罠カードを手札に戻す効果を発動する場合、発動中の通常魔法・通常罠カードはその処理で手札に戻せません。ほかに処理できる魔法・罠カードが存在しない場合、その戻す処理を必要とする効果は発動できません。",
+  sourceUrl: "https://example.test/rule/activated-normal-spell-trap-return",
+};
+
+test("operation_legality_plans_rule_queries_without_rule_evidence_but_does_not_override", async () => {
   const answer = await answerRagRulingQuestion({
     question: "对方场上有「绚岚之达维」，我方以达维为对象发动「无限泡影」，这个时候场上没有其他魔陷，对方能不能发动「天雷之双风神」的效果？",
-    cards: [
-      {
-        id: "13631",
-        name: "无限泡影",
-        cnName: "无限泡影",
-        cardType: "通常陷阱",
-        effectText: "以对方场上1只表侧表示怪兽为对象才能发动。那只怪兽的效果直到回合结束时无效。",
-        aliases: ["无限泡影"],
-      },
-      {
-        id: "22130",
-        name: "天雷之双风神 息那",
-        cnName: "天雷之双风神 息那",
-        cardType: "怪兽",
-        effectText: "自己场上存在风属性怪兽，且对手发动魔法・陷阱・怪兽的效果时可以发动。从手牌将此卡特殊召唤。然后，根据该对手的效果的种类，适用以下效果。●魔法・陷阱：将场上的魔法・陷阱卡全部放回手牌。",
-        aliases: ["天雷之双风神"],
-      },
-    ],
+    cards: thunderImpermanenceCards(),
     records: [],
     qaRecords: [],
     modelInvoker: async () => JSON.stringify({
@@ -406,8 +418,109 @@ test("rag_pipeline_does_not_invent_rule_guard_evidence", async () => {
     }),
   });
   assert.equal(answer.shortAnswer, "可以发动并把无限泡影返回手卡。");
-  assert.ok(!answer.usedEvidence.some((item) => item.type === "rule_principle" || item.id === "rule-principle-non-continuous-spell-trap-return"));
-  assert.ok(!answer.riskFlags.includes("derived_rule_guard_applied"));
+  assert.equal(answer.debug.retrievalCounts.operationLegalityChecks, 0);
+  assert.ok(answer.debug.retrievalWarnings.some((item) => item.includes("rule_search_queries_used")));
+  assert.ok(!answer.riskFlags.includes("operation_legality_blocker_applied"));
+});
+
+test("rag_pipeline_applies_operation_legality_blocker_from_retrieved_rule_evidence", async () => {
+  const answer = await answerRagRulingQuestion({
+    question: "对方场上有「绚岚之达维」，我方以达维为对象发动「无限泡影」，这个时候场上没有其他魔陷，对方能不能发动「天雷之双风神」的效果？",
+    cards: thunderImpermanenceCards(),
+    records: [activatedSpellTrapReturnRule],
+    qaRecords: [],
+    rulebookModelInvoker: async () => JSON.stringify({
+      operationChecks: [{
+        operationId: "chain-wind-return",
+        step: 1,
+        action: "对方连锁发动天雷之双风神并试图把无限泡影返回手卡",
+        legalityQuestion: "正在发动中的通常陷阱能否作为返回手卡处理的可适用卡",
+        status: "illegal",
+        conclusion: "不能发动。无限泡影正在发动中，不能作为返回手卡处理的可适用卡；题目又没有其他魔法陷阱。",
+        reasoning: ["规则书明确排除了正在发动中的通常陷阱。"],
+        citations: [{
+          id: "rule-activated-normal-spell-trap-cannot-return#p1-1",
+          quote: "発動中の通常魔法・通常罠カードはその処理で手札に戻せません。",
+          application: "无限泡影是当前连锁中正在发动的通常陷阱。",
+        }],
+        missingFacts: [],
+      }],
+      overallConclusion: "不能发动。",
+    }),
+    modelInvoker: async () => JSON.stringify({
+      answerLevel: "rule_analysis",
+      shortAnswer: "可以发动并把无限泡影返回手卡。",
+      reasoning: ["模型错误地把正在发动的通常陷阱当作可返回的场上魔陷。"],
+      usedCards: ["无限泡影", "天雷之双风神 息那"],
+      usedEvidence: [{ id: "card-text-13631", type: "card_text", title: "无限泡影 的卡片文本" }],
+      missingInfo: [],
+      riskFlags: [],
+      confidenceSelfEstimate: "medium",
+    }),
+  });
+  assert.match(answer.shortAnswer, /不能发动/u);
+  assert.match(answer.shortAnswer, /无限泡影/u);
+  assert.equal(answer.answerLevel, "rule_analysis");
+  assert.equal(answer.debug.retrievalCounts.operationLegalityChecks, 1);
+  assert.ok(answer.usedEvidence.some((item) => item.type === "rulebook" && item.id.includes("operation-check")));
+  assert.ok(answer.usedEvidence.some((item) => item.id === "rule-activated-normal-spell-trap-cannot-return#p1-1"));
+  assert.ok(answer.riskFlags.includes("operation_legality_blocker_applied"));
+  assert.ok(answer.riskFlags.includes("model_answer_overridden_by_operation_legality"));
+});
+
+test("rulebook_grounding_rejects_unknown_ids_and_non_verbatim_quotes", async () => {
+  const passage = {
+    id: "ocg-rule:test#p4-6",
+    type: "rulebook",
+    title: "测试规则 · 段落 4-6",
+    text: "正在处理的卡不能返回手卡。",
+    sourceUrl: "https://example.test/rule",
+  };
+  const result = await callRulebookGroundingModel({
+    userQuery: "这张卡能返回手卡吗？",
+    ruleEvidence: [passage],
+    modelInvoker: async () => JSON.stringify({
+      operationChecks: [{
+        operationId: "operation-1",
+        action: "返回手卡",
+        status: "illegal",
+        conclusion: "不能返回。",
+        citations: [
+          { id: "invented-rule-id", quote: "正在处理的卡不能返回手卡。" },
+          { id: passage.id, quote: "模型自行改写、原文不存在的规则。" },
+        ],
+      }],
+    }),
+  });
+  assert.equal(result.operationLegality.hasBlockingCheck, false);
+  assert.equal(result.operationLegality.checks[0].status, "unknown");
+  assert.ok(result.warnings.some((item) => item.includes("unknown_evidence")));
+  assert.ok(result.warnings.some((item) => item.includes("quote_mismatch")));
+});
+
+test("rulebook_grounding_accepts_verbatim_passage_citation", async () => {
+  const passage = {
+    id: "ocg-rule:test#p4-6",
+    type: "rulebook",
+    title: "测试规则 · 段落 4-6",
+    text: "正在处理的卡不能返回手卡。",
+    sourceUrl: "https://example.test/rule",
+  };
+  const result = await callRulebookGroundingModel({
+    userQuery: "这张卡能返回手卡吗？",
+    ruleEvidence: [passage],
+    modelInvoker: async () => JSON.stringify({
+      operationChecks: [{
+        operationId: "operation-1",
+        action: "返回手卡",
+        status: "illegal",
+        conclusion: "不能返回。",
+        citations: [{ id: passage.id, quote: "正在处理的卡不能返回手卡。" }],
+      }],
+    }),
+  });
+  assert.equal(result.operationLegality.hasBlockingCheck, true);
+  assert.equal(result.operationLegality.matchedRuleEvidence[0].id, passage.id);
 });
 
 test("rulebook_context_snippet_enters_rag_context", async () => {
@@ -433,7 +546,7 @@ test("rulebook_context_snippet_enters_rag_context", async () => {
     ruleSearchQueries: [],
   });
 
-  assert.ok(evidence.ruleSearchQueries.some((item) => item.query.includes("多次攻击的叠加")));
+  assert.ok(evidence.ruleSearchQueries.some((item) => item.source === "derived_rule_search_query" && item.query.includes("翻倍机会")));
   assert.equal(evidence.rawRelatedEvidence[0].type, "rulebook");
   assert.match(evidence.rawRelatedEvidence[0].text, /相同攻击次数的效果不会叠加/u);
   assert.doesNotMatch(evidence.rawRelatedEvidence[0].text, /Skip to content/u);
@@ -812,6 +925,21 @@ test("budget_status_uses_kv_rest_aliases_for_persistent_storage", async () => {
   assert.deepEqual(redis.commands.at(-1), ["SET", "rag-api-budget:2026-07-09", "0", "EX", "172800"]);
 });
 
+test("budget_status_requires_persistent_storage_on_vercel", async () => {
+  const status = await getRagBudgetStatus({
+    env: {
+      VERCEL: "1",
+      API_DAILY_BUDGET_CNY: "10",
+      API_BUDGET_TIMEZONE: "UTC",
+    },
+    now: new Date("2026-07-09T00:00:00Z"),
+  });
+  assert.equal(status.budgetStorage, "unconfigured");
+  assert.equal(status.budgetPersistent, false);
+  assert.equal(status.spentTodayCny, null);
+  assert.match(status.storageWarning, /持久化预算存储/u);
+});
+
 test("card_text_derived_rule_queries_enter_rulebook_retrieval", async () => {
   const windCard = {
     id: "wind-test",
@@ -841,7 +969,8 @@ test("card_text_derived_rule_queries_enter_rulebook_retrieval", async () => {
   });
 
   assert.ok(evidence.ruleSearchQueries.some((item) => item.source === "card_text_derived_rule_search_query"));
-  assert.ok(evidence.rawRelatedEvidence.some((item) => item.id === "rule-spell-trap-return" && item.type === "rulebook"));
+  assert.ok(evidence.rawRelatedEvidence.some((item) => item.id.startsWith("rule-spell-trap-return#p") && item.type === "rulebook"));
+  assert.ok(evidence.rulebookCandidates.some((item) => /発動中の通常魔法/u.test(item.text)));
 });
 
 test("rag_prompt_truncates_context", () => {

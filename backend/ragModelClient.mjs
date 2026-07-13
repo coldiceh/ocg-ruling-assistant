@@ -1,3 +1,4 @@
+import { emptyOperationLegality, validateOperationLegalityModelOutput } from "./operationLegalityAnalyzer.mjs";
 import { RAG_ANSWER_LEVELS } from "./ragRulingPrompt.mjs";
 
 const DEFAULT_DEEPSEEK_BASE_URL = "https://api.deepseek.com";
@@ -9,6 +10,7 @@ const DEFAULT_BUDGET_TIMEZONE = "Asia/Tokyo";
 const memoryBudget = new Map();
 const cardNameExtractionCache = new Map();
 const ruleQueryExtractionCache = new Map();
+const rulebookGroundingCache = new Map();
 
 export async function callRagModel({
   prompt,
@@ -307,6 +309,144 @@ export async function callRuleQueryExtractionModel({
   }
 }
 
+export async function callRulebookGroundingModel({
+  userQuery,
+  cardTexts = [],
+  ruleEvidence = [],
+  env = globalThis.process?.env || {},
+  modelInvoker,
+  fetchImpl = globalThis.fetch,
+  now = new Date(),
+} = {}) {
+  const candidates = (Array.isArray(ruleEvidence) ? ruleEvidence : [])
+    .filter((item) => item?.id && item?.text)
+    .slice(0, readPositiveNumber(env.RAG_MAX_RULEBOOK_CANDIDATES, 16));
+  if (!candidates.length) {
+    return emptyRulebookGroundingResult("none", "none", true, ["rulebook_candidates_missing"]);
+  }
+
+  const providerResolution = resolveRulebookGroundingProvider(env);
+  const provider = providerResolution.provider;
+  const modelName = modelNameForRulebookGroundingProvider(provider, env);
+  const maxTokens = readNumber(env.RAG_RULEBOOK_MODEL_MAX_OUTPUT_TOKENS, 1800);
+  const prompt = buildRulebookGroundingPrompt({ userQuery, cardTexts, ruleEvidence: candidates });
+
+  if (modelInvoker) {
+    try {
+      const raw = await modelInvoker({ prompt, provider, modelName, maxTokens, task: "rulebook_grounding" });
+      const operationLegality = validateOperationLegalityModelOutput(raw, candidates);
+      return {
+        operationLegality,
+        rawText: String(raw || ""),
+        providerUsed: provider,
+        modelUsed: modelName,
+        dryRun: false,
+        warnings: [...providerResolution.warnings, ...(operationLegality.warnings || [])],
+        tokenUsage: {},
+        estimatedCostCny: 0,
+        budgetStatus: null,
+      };
+    } catch (error) {
+      return emptyRulebookGroundingResult(provider, modelName, false, [
+        ...providerResolution.warnings,
+        `rulebook_grounding_model_failed:${safeErrorMessage(error)}`,
+      ]);
+    }
+  }
+
+  if (provider === "mock" || !hasProviderKey(provider, env) || typeof fetchImpl !== "function" || isEnabled(env.RAG_DRY_RUN)) {
+    return emptyRulebookGroundingResult("mock", "mock-rulebook-grounding", true, providerResolution.warnings);
+  }
+
+  const cacheInput = `${userQuery}\n${candidates.map((item) => item.id).join("|")}\n${(cardTexts || []).map((item) => item.id || item.title || "").join("|")}`;
+  const cacheKey = extractionCacheKey("rulebook-grounding", provider, modelName, cacheInput);
+  const cached = readCachedExtraction(rulebookGroundingCache, cacheKey, env);
+  if (cached) {
+    return {
+      ...cached,
+      cacheHit: true,
+      estimatedCostCny: 0,
+      warnings: [...new Set([...(cached.warnings || []), "rulebook_grounding_model_cache_hit"])],
+    };
+  }
+
+  const budget = await buildBudgetPreflight({
+    provider,
+    prompt,
+    maxTokens,
+    env,
+    fetchImpl,
+    now,
+    trackSpend: true,
+  });
+  if (budget.blocked) {
+    return {
+      ...emptyRulebookGroundingResult(provider, modelName, true, [
+        ...providerResolution.warnings,
+        ...budget.warnings,
+        "api_daily_budget_exceeded_rulebook_grounding_skipped",
+      ]),
+      budgetStatus: budget.status,
+    };
+  }
+
+  try {
+    const timeoutMs = readPositiveNumber(env.RAG_RULEBOOK_MODEL_TIMEOUT_MS, 7000);
+    const call = provider === "gemini"
+      ? callGemini({
+        prompt,
+        env,
+        modelName,
+        maxTokens,
+        fetchImpl,
+        temperature: 0,
+        maxTokensEnvName: "GEMINI_RULEBOOK_MODEL_MAX_OUTPUT_TOKENS",
+      })
+      : callDeepSeek({ prompt, env, modelName, maxTokens, fetchImpl, temperature: 0 });
+    const response = await withTimeout(call, timeoutMs, "rulebook_grounding_model_timeout");
+    const tokenUsage = normalizeUsage(provider, response.usage);
+    const actualCost = estimateActualCostCny(provider, tokenUsage, env);
+    let budgetStatus = budget.status;
+    const spendWarnings = [];
+    try {
+      budgetStatus = await recordBudgetSpend({ preflight: budget, actualCostCny: actualCost, env, fetchImpl });
+    } catch (error) {
+      spendWarnings.push(`budget_spend_record_failed:${safeErrorMessage(error)}`);
+      budgetStatus = { ...budget.status, budgetStorage: "unavailable" };
+    }
+    const operationLegality = validateOperationLegalityModelOutput(response.rawText, candidates);
+    const result = {
+      operationLegality,
+      rawText: response.rawText,
+      providerUsed: provider,
+      modelUsed: modelName,
+      dryRun: false,
+      warnings: [
+        ...providerResolution.warnings,
+        ...budget.warnings,
+        ...spendWarnings,
+        ...(response.warnings || []),
+        ...(operationLegality.warnings || []),
+      ],
+      tokenUsage,
+      estimatedCostCny: actualCost,
+      budgetStatus,
+    };
+    writeCachedExtraction(rulebookGroundingCache, cacheKey, result, env);
+    return result;
+  } catch (error) {
+    const releasedBudgetStatus = await releaseBudgetReservation({ preflight: budget, env, fetchImpl }).catch(() => budget.status);
+    return {
+      ...emptyRulebookGroundingResult(provider, modelName, false, [
+        ...providerResolution.warnings,
+        ...budget.warnings,
+        `rulebook_grounding_model_failed:${safeErrorMessage(error)}`,
+      ]),
+      budgetStatus: releasedBudgetStatus,
+    };
+  }
+}
+
 export function resolveRagProvider(env = {}) {
   const requested = String(env.RAG_MODEL_PROVIDER || env.MODEL_PROVIDER || "auto").trim().toLowerCase() || "auto";
   const warnings = [];
@@ -370,6 +510,28 @@ export function resolveRuleQueryExtractionProvider(env = {}) {
   return { provider: "mock", requested, warnings };
 }
 
+export function resolveRulebookGroundingProvider(env = {}) {
+  if (isDisabled(env.RAG_RULEBOOK_GROUNDING_ENABLED)) {
+    return { provider: "mock", requested: "disabled", warnings: ["rulebook_grounding_model_disabled"] };
+  }
+  const requested = String(env.RAG_RULEBOOK_MODEL_PROVIDER || env.RAG_RULE_MODEL_PROVIDER || env.RAG_MODEL_PROVIDER || env.MODEL_PROVIDER || "auto").trim().toLowerCase() || "auto";
+  const warnings = [];
+  if (requested === "mock") return { provider: "mock", requested, warnings };
+  if (requested === "deepseek") {
+    if (!env.DEEPSEEK_API_KEY) warnings.push("deepseek_api_key_missing_rulebook_grounding_model_disabled");
+    return { provider: env.DEEPSEEK_API_KEY ? "deepseek" : "mock", requested, warnings };
+  }
+  if (requested === "gemini") {
+    if (!env.GEMINI_API_KEY) warnings.push("gemini_api_key_missing_rulebook_grounding_model_disabled");
+    return { provider: env.GEMINI_API_KEY ? "gemini" : "mock", requested, warnings };
+  }
+  if (requested !== "auto") warnings.push(`unsupported_rulebook_grounding_model_provider:${requested}`);
+  if (env.DEEPSEEK_API_KEY) return { provider: "deepseek", requested, warnings };
+  if (env.GEMINI_API_KEY) return { provider: "gemini", requested, warnings };
+  warnings.push("no_model_api_key_rulebook_grounding_model_disabled");
+  return { provider: "mock", requested, warnings };
+}
+
 export function estimateDeepSeekCostCny(usage = {}, env = {}) {
   const inputPrice = readTieredProviderNumber(env, "DEEPSEEK", "INPUT_CNY_PER_MTOK", 1);
   const outputPrice = readTieredProviderNumber(env, "DEEPSEEK", "OUTPUT_CNY_PER_MTOK", 2);
@@ -392,16 +554,11 @@ export async function getRagBudgetStatus({
   const config = budgetConfig(env);
   const dayKey = budgetDayKey(config.timezone, now);
   const storage = budgetStorage(env);
+  if (storage === "unconfigured") {
+    return budgetStatusPayload({ config, storage, dayKey, spent: null, estimated: 0, blocked: false });
+  }
   const spent = await readBudgetSpent({ storage, dayKey, env, fetchImpl });
-  return {
-    dailyBudgetCny: config.dailyBudgetCny,
-    spentTodayCny: roundCost(spent),
-    estimatedThisCallCny: 0,
-    budgetMode: config.mode,
-    budgetStorage: storage,
-    limitEnforced: false,
-    dayKey,
-  };
+  return budgetStatusPayload({ config, storage, dayKey, spent, estimated: 0, blocked: false });
 }
 
 export async function resetRagBudget({
@@ -412,16 +569,11 @@ export async function resetRagBudget({
   const config = budgetConfig(env);
   const dayKey = budgetDayKey(config.timezone, now);
   const storage = budgetStorage(env);
+  if (storage === "unconfigured") {
+    return budgetStatusPayload({ config, storage, dayKey, spent: null, estimated: 0, blocked: false });
+  }
   await setBudgetSpent({ storage, dayKey, value: 0, env, fetchImpl });
-  return {
-    dailyBudgetCny: config.dailyBudgetCny,
-    spentTodayCny: 0,
-    estimatedThisCallCny: 0,
-    budgetMode: config.mode,
-    budgetStorage: storage,
-    limitEnforced: false,
-    dayKey,
-  };
+  return budgetStatusPayload({ config, storage, dayKey, spent: 0, estimated: 0, blocked: false });
 }
 
 export function parseRagModelJson(rawText) {
@@ -771,10 +923,20 @@ async function buildBudgetPreflight({ provider, prompt, maxTokens, env, fetchImp
   const config = budgetConfig(env);
   const dayKey = budgetDayKey(config.timezone, now);
   let storage = budgetStorage(env);
-  const warnings = storage === "memory"
-    ? ["persistent_budget_storage_missing_vercel_limit_is_soft"]
-    : [];
+  const warnings = budgetStorageWarnings(storage);
   const estimated = estimatePreflightCostCny(provider, prompt, maxTokens, env);
+  if (storage === "unconfigured") {
+    const blocked = trackSpend && config.mode === "hard";
+    return {
+      config,
+      storage,
+      dayKey,
+      blocked,
+      reservedAmountCny: 0,
+      warnings,
+      status: budgetStatusPayload({ config, storage, dayKey, spent: null, estimated, blocked }),
+    };
+  }
   if (!trackSpend) {
     return {
       config,
@@ -783,14 +945,7 @@ async function buildBudgetPreflight({ provider, prompt, maxTokens, env, fetchImp
       blocked: false,
       reservedAmountCny: 0,
       warnings,
-      status: {
-        dailyBudgetCny: config.dailyBudgetCny,
-        spentTodayCny: 0,
-        estimatedThisCallCny: estimated,
-        budgetMode: config.mode,
-        budgetStorage: storage,
-        limitEnforced: false,
-      },
+      status: budgetStatusPayload({ config, storage, dayKey, spent: 0, estimated, blocked: false }),
     };
   }
   let spent = 0;
@@ -830,18 +985,18 @@ async function buildBudgetPreflight({ provider, prompt, maxTokens, env, fetchImp
     blocked,
     reservedAmountCny,
     warnings,
-    status: {
-      dailyBudgetCny: config.dailyBudgetCny,
-      spentTodayCny: roundCost(spent),
-      estimatedThisCallCny: estimated,
-      budgetMode: config.mode,
-      budgetStorage: storage,
-      limitEnforced: blocked,
-    },
+    status: budgetStatusPayload({ config, storage, dayKey, spent, estimated, blocked }),
   };
 }
 
 async function recordBudgetSpend({ preflight, actualCostCny, env, fetchImpl }) {
+  if (preflight.storage === "unconfigured") {
+    return {
+      ...preflight.status,
+      estimatedThisCallCny: actualCostCny,
+      limitEnforced: preflight.blocked,
+    };
+  }
   const delta = preflight.reservedAmountCny
     ? actualCostCny - preflight.reservedAmountCny
     : actualCostCny;
@@ -888,7 +1043,8 @@ function budgetConfig(env) {
 
 function budgetStorage(env) {
   const redis = redisConfig(env);
-  return redis.url && redis.token ? "redis" : "memory";
+  if (redis.url && redis.token) return "redis";
+  return requiresPersistentBudget(env) ? "unconfigured" : "memory";
 }
 
 async function readBudgetSpent({ storage, dayKey, env, fetchImpl }) {
@@ -942,6 +1098,35 @@ function redisConfig(env = {}) {
     url: String(env.UPSTASH_REDIS_REST_URL || env.KV_REST_API_URL || env.REDIS_REST_API_URL || "").trim(),
     token: String(env.UPSTASH_REDIS_REST_TOKEN || env.KV_REST_API_TOKEN || env.REDIS_REST_API_TOKEN || "").trim(),
   };
+}
+
+function requiresPersistentBudget(env = {}) {
+  return isEnabled(env.API_BUDGET_REQUIRE_PERSISTENT_STORAGE) || isEnabled(env.VERCEL);
+}
+
+function budgetStorageWarnings(storage) {
+  if (storage === "memory") return ["persistent_budget_storage_missing_vercel_limit_is_soft"];
+  if (storage === "unconfigured") return ["persistent_budget_storage_missing_backend_kv_required"];
+  return [];
+}
+
+function budgetStatusPayload({ config, storage, dayKey, spent, estimated, blocked }) {
+  const status = {
+    dailyBudgetCny: config.dailyBudgetCny,
+    spentTodayCny: spent === null ? null : roundCost(spent),
+    estimatedThisCallCny: estimated,
+    budgetMode: config.mode,
+    budgetStorage: storage,
+    budgetPersistent: storage === "redis",
+    limitEnforced: blocked,
+    dayKey,
+  };
+  if (storage === "unconfigured") {
+    status.storageWarning = "后端未启用持久化预算存储；请配置 KV_REST_API_URL/KV_REST_API_TOKEN 或 UPSTASH_REDIS_REST_URL/UPSTASH_REDIS_REST_TOKEN。";
+  } else if (storage === "memory") {
+    status.storageWarning = "当前使用进程内存统计；本地可用，serverless 部署刷新或冷启动后不会可靠保留。";
+  }
+  return status;
 }
 
 function estimatePreflightCostCny(provider, prompt, maxTokens, env) {
@@ -1020,6 +1205,55 @@ function buildRuleQueryExtractionPrompt(userQuery) {
     JSON.stringify(example),
     "玩家问题：",
     String(userQuery || ""),
+  ].join("\n");
+}
+
+function buildRulebookGroundingPrompt({ userQuery, cardTexts = [], ruleEvidence = [] }) {
+  const example = {
+    operationChecks: [{
+      operationId: "operation-1",
+      step: 1,
+      action: "玩家试图执行的操作",
+      legalityQuestion: "该操作在当前时点是否合法",
+      status: "conditional",
+      conclusion: "只有满足规则书引文所述条件时才合法。",
+      reasoning: ["把题目事实与引文条件逐项比较。"],
+      citations: [{ id: "rulebook-id#p1-3", quote: "必须从候选原文逐字复制的连续片段", application: "该引文如何约束当前操作。" }],
+      missingFacts: [],
+    }],
+    overallConclusion: "基于逐步检查得到的结论。",
+  };
+  const payload = {
+    userQuery: String(userQuery || ""),
+    cardTexts: (cardTexts || []).slice(0, 8).map((item) => ({
+      id: item.id,
+      title: item.title,
+      cards: item.cards || [],
+      text: String(item.text || "").slice(0, 2800),
+      source: item.source || item.type || "",
+    })),
+    rulebookCandidates: (ruleEvidence || []).slice(0, 20).map((item) => ({
+      id: item.id,
+      title: item.title,
+      text: String(item.text || "").slice(0, 1800),
+      sourceUrl: item.sourceUrl || "",
+    })),
+  };
+  return [
+    "你是游戏王 OCG 规则书判读器，不负责直接润色最终回答。",
+    "先结合玩家问题与卡片文本，按实际发生顺序抽取每一步需要验证的操作，包括：发动条件、支付 cost、选择对象、连锁窗口、效果处理、位置变化、次数限制和后续处理。",
+    "然后只使用 rulebookCandidates 中提供的规则书原文，逐步判断该操作是 legal、illegal、conditional 还是 unknown。",
+    "不要依靠记忆补写规则，不要把卡片文本误当规则书，不要因为候选标题看起来相关就直接下结论。",
+    "每个 legal、illegal 或 conditional 判定都必须至少提供一个 citations 项；id 必须来自 rulebookCandidates，quote 必须逐字复制该候选中的一段连续原文。",
+    "如果候选规则书没有覆盖该操作，status 必须是 unknown，citations 留空，并在 missingFacts 说明缺什么；不得猜测。",
+    "必须区分‘能否发动’、‘能否成为对象/可适用卡’与‘已经发动后的效果如何处理’，不要用后续处理规则倒推出错误的发动合法性。",
+    "对题目中的每一个关键操作都要单独生成 operationChecks 项；不能只检查最后一步。",
+    "输出必须是单个 JSON 对象，不要 markdown，不要 JSON 外文字。",
+    "JSON 只包含 operationChecks 和 overallConclusion。",
+    "示例结构如下，示例不是本题答案：",
+    JSON.stringify(example, null, 2),
+    "本次输入：",
+    JSON.stringify(payload, null, 2),
   ].join("\n");
 }
 
@@ -1128,6 +1362,20 @@ function emptyRuleQueryExtractionResult(providerUsed, modelUsed, dryRun, warning
   };
 }
 
+function emptyRulebookGroundingResult(providerUsed, modelUsed, dryRun, warnings = []) {
+  return {
+    operationLegality: emptyOperationLegality(warnings),
+    rawText: "",
+    providerUsed,
+    modelUsed,
+    dryRun,
+    warnings: [...new Set(warnings)],
+    tokenUsage: {},
+    estimatedCostCny: 0,
+    budgetStatus: null,
+  };
+}
+
 function modelNameForProvider(provider, env) {
   const tier = String(env.RAG_MODEL_TIER || "").trim().toLowerCase();
   if (provider === "deepseek") {
@@ -1153,6 +1401,12 @@ function modelNameForRuleQueryExtractionProvider(provider, env) {
   if (provider === "deepseek") return String(env.DEEPSEEK_RULE_MODEL || env.RAG_RULE_MODEL || env.DEEPSEEK_CARD_MODEL || env.RAG_CARD_MODEL || DEFAULT_DEEPSEEK_CARD_MODEL);
   if (provider === "gemini") return String(env.GEMINI_RULE_MODEL || env.GEMINI_CARD_MODEL || env.GEMINI_CARD_RESOLUTION_MODEL || env.RAG_RULE_MODEL || env.RAG_CARD_MODEL || "gemini-1.5-flash");
   return "mock-rule-query-extractor";
+}
+
+function modelNameForRulebookGroundingProvider(provider, env) {
+  if (provider === "deepseek") return String(env.DEEPSEEK_RULEBOOK_MODEL || env.DEEPSEEK_RULE_MODEL || env.DEEPSEEK_CARD_MODEL || env.RAG_RULE_MODEL || env.RAG_CARD_MODEL || DEFAULT_DEEPSEEK_CARD_MODEL);
+  if (provider === "gemini") return String(env.GEMINI_RULEBOOK_MODEL || env.GEMINI_RULE_MODEL || env.GEMINI_CARD_MODEL || env.RAG_RULE_MODEL || env.RAG_CARD_MODEL || "gemini-1.5-flash");
+  return "mock-rulebook-grounding";
 }
 
 function hasProviderKey(provider, env) {

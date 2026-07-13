@@ -38,6 +38,7 @@ export function buildRagRulingPromptBundle({
     unresolvedMentions: cardResolution.unresolvedMentions || [],
     ambiguousMentions: cardResolution.ambiguousMentions || [],
     ruleSearchQueries: evidence.ruleSearchQueries || [],
+    operationChecks: summarizeOperationChecks(evidence.operationLegality?.checks || []),
     evidence: {
       ...evidencePayload,
       retrievalWarnings: [...(evidence.retrievalWarnings || []), ...warnings],
@@ -64,6 +65,9 @@ export function buildRagRulingPromptBundle({
     "百鸽卡片资料和普通卡片文本可以作为卡片文本 grounding，但不是官方 direct Q&A。",
     "如果没有官方直接 Q&A，允许根据卡片文本、百鸽卡片资料、用户提供文本、FAQ、官方相似案例和 rulebook 规则书资料进行分析。",
     "ruleSearchQueries 是后端为检索规则资料生成的查询词，只能作为检索线索；最终理由必须基于 evidence 中真实存在的资料、卡片文本和题目事实。",
+    "operationChecks 是 Flash 规则书判读模型对题目每一步操作所做的检查；后端已经校验其中引用的 rulebook id 和逐字引文，未通过校验的 legal/illegal/conditional 会被降为 unknown。",
+    "operationChecks 中 status=illegal 且 citations 非空时，结论必须服从该检查，不得回答该操作可以发动或可以适用；status=unknown 不能作为肯定或否定依据。",
+    "rawRelatedEvidence 中 source=rulebook_model_grounding 的资料是校验后的逐操作检查，不是官方 direct Q&A；其规则书引文对应的原始段落也会作为独立 evidence 提供。",
     "涉及发动合法性、是否有可适用处理、次数限制、同一诱发条件再次满足时，要优先核对 rulebook、FAQ 和卡片文本；不要只凭常识猜测。",
     "只要有卡片文本 grounding，优先输出 rule_analysis；不要因为没有 template、没有 validator、没有官方 direct Q&A 就输出 needs_more_info。",
     "涉及“能否发动/能否适用/能否连锁”的问题时，必须先核对卡片文本中的发动条件、效果类别、对象要求、当前位置、表侧/里侧状态、当前连锁窗口和题目给出的场面事实。",
@@ -112,6 +116,20 @@ function summarizeCards(cards, limit) {
     aliases: card.aliases || [],
     cardType: card.cardType || "",
     effectText: card.effectText || "",
+  }));
+}
+
+function summarizeOperationChecks(checks) {
+  return (checks || []).slice(0, 20).map((check) => ({
+    operationId: check.operationId,
+    step: check.step,
+    action: check.action,
+    legalityQuestion: check.legalityQuestion,
+    status: check.status,
+    conclusion: check.conclusion,
+    reasoning: check.reasoning || [],
+    citations: check.citations || [],
+    missingFacts: check.missingFacts || [],
   }));
 }
 

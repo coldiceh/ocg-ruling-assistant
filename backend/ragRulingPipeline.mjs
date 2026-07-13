@@ -1,6 +1,6 @@
 import { extractRagCards } from "./ragCardExtractor.mjs";
 import { evidenceBucketsToList, loadRagData, retrieveRagEvidence } from "./ragEvidenceRetriever.mjs";
-import { callCardNameExtractionModel, callRagModel, callRuleQueryExtractionModel } from "./ragModelClient.mjs";
+import { callCardNameExtractionModel, callRagModel, callRulebookGroundingModel, callRuleQueryExtractionModel } from "./ragModelClient.mjs";
 import { buildRagRulingPromptBundle, RAG_ANSWER_LEVELS } from "./ragRulingPrompt.mjs";
 
 export async function answerRagRulingQuestion({
@@ -13,6 +13,7 @@ export async function answerRagRulingQuestion({
   modelInvoker,
   cardModelInvoker,
   ruleModelInvoker,
+  rulebookModelInvoker,
   dryRun,
   fetchImpl,
   now,
@@ -46,7 +47,7 @@ export async function answerRagRulingQuestion({
     maxCards: readNumber(env.RAG_MAX_CARDS, 6),
     modelCardNameCandidates: cardNameModel.candidates || [],
   });
-  const evidence = await retrieveRagEvidence({
+  const retrievedEvidence = await retrieveRagEvidence({
     userQuery: query,
     cardResolution,
     dataDir,
@@ -57,6 +58,16 @@ export async function answerRagRulingQuestion({
     env,
     fetchImpl,
   });
+  const rulebookGrounding = await callRulebookGroundingModel({
+    userQuery: query,
+    cardTexts: [...(retrievedEvidence.cardTexts || []), ...(retrievedEvidence.userProvidedCardTexts || [])],
+    ruleEvidence: retrievedEvidence.rulebookCandidates || [],
+    env,
+    modelInvoker: rulebookModelInvoker,
+    fetchImpl,
+    now,
+  });
+  const evidence = attachRulebookGrounding(retrievedEvidence, rulebookGrounding);
   const promptBundle = buildRagRulingPromptBundle({ userQuery: query, cardResolution, evidence, env });
   const displayCards = dedupeCards([
     ...(cardResolution.resolvedCards || []),
@@ -74,7 +85,10 @@ export async function answerRagRulingQuestion({
     fetchImpl,
     now,
   });
-  const normalized = normalizeRagAnswer(modelResult.answer, { evidence, cardResolution, modelWarnings: modelResult.warnings || [] });
+  const normalized = applyOperationLegalityOverride(
+    normalizeRagAnswer(modelResult.answer, { evidence, cardResolution, modelWarnings: modelResult.warnings || [] }),
+    evidence,
+  );
 
   return {
     mode: "rag_baseline",
@@ -95,6 +109,8 @@ export async function answerRagRulingQuestion({
         officialQaRelated: evidence.officialQaRelated.length,
         faqRelated: evidence.faqRelated.length,
         rawRelatedEvidence: evidence.rawRelatedEvidence.length,
+        rulebookCandidates: evidence.rulebookCandidates?.length || 0,
+        operationLegalityChecks: evidence.operationLegality?.checks?.length || 0,
       },
       unresolvedMentions: cardResolution.unresolvedMentions,
       ambiguousMentions: [...(cardResolution.ambiguousMentions || []), ...(evidence.baigeAmbiguousMentions || [])],
@@ -108,6 +124,12 @@ export async function answerRagRulingQuestion({
       ruleQueryProviderUsed: ruleQueryModel.providerUsed,
       ruleQueryModelDryRun: ruleQueryModel.dryRun,
       ruleQueryWarnings: ruleQueryModel.warnings || [],
+      rulebookGroundingModelUsed: rulebookGrounding.modelUsed,
+      rulebookGroundingProviderUsed: rulebookGrounding.providerUsed,
+      rulebookGroundingDryRun: rulebookGrounding.dryRun,
+      rulebookGroundingWarnings: rulebookGrounding.warnings || [],
+      rulebookGroundingTokenUsage: rulebookGrounding.tokenUsage || {},
+      rulebookGroundingCostCny: rulebookGrounding.estimatedCostCny || 0,
       retrievalWarnings: [...new Set([...(evidence.retrievalWarnings || []), ...(promptBundle.warnings || [])])],
       baigeSearchCount: evidence.debug?.baigeSearchCount || 0,
       baigeCacheHitCount: evidence.debug?.baigeCacheHitCount || 0,
@@ -117,11 +139,78 @@ export async function answerRagRulingQuestion({
       modelName: modelResult.modelName,
       dryRun: modelResult.dryRun,
       tokenUsage: modelResult.tokenUsage || {},
-      estimatedCostCny: modelResult.estimatedCostCny || 0,
+      estimatedCostCny: (modelResult.estimatedCostCny || 0) + (rulebookGrounding.estimatedCostCny || 0),
       budgetStatus: modelResult.budgetStatus || null,
       promptChars: promptBundle.promptChars,
       promptTruncated: promptBundle.promptTruncated,
     },
+  };
+}
+
+function attachRulebookGrounding(evidence, groundingResult = {}) {
+  const operationLegality = groundingResult.operationLegality;
+  if (!operationLegality) return evidence;
+  const rawRelatedEvidence = dedupeEvidenceRefs([
+    ...(operationLegality.evidence || []),
+    ...(operationLegality.matchedRuleEvidence || []),
+    ...(evidence.rawRelatedEvidence || []),
+  ]);
+  return {
+    ...evidence,
+    rawRelatedEvidence,
+    operationLegality,
+    retrievalWarnings: [...new Set([
+      ...(evidence.retrievalWarnings || []),
+      ...(groundingResult.warnings || []),
+      ...(operationLegality.hasGroundedChecks ? [`rulebook_grounded_operation_checks:${operationLegality.checks.length}`] : []),
+      ...(operationLegality.hasBlockingCheck ? ["operation_legality_blocker_applied"] : []),
+    ])],
+  };
+}
+
+function applyOperationLegalityOverride(answer, evidence = {}) {
+  const operation = evidence.operationLegality;
+  if (!operation?.hasBlockingCheck) return answer;
+  const operationEvidence = (operation.evidence || [])
+    .filter((item) => item.id)
+    .map((item) => ({
+      id: item.id,
+      type: "rulebook",
+      title: item.title,
+      sourceUrl: item.sourceUrl || "",
+    }));
+  const matchedRuleEvidence = (operation.matchedRuleEvidence || [])
+    .filter((item) => item.id)
+    .map((item) => ({
+      id: item.id,
+      type: outputEvidenceType(item, new Set()),
+      title: item.title,
+      sourceUrl: item.sourceUrl || "",
+    }));
+  const usedEvidence = dedupeEvidenceRefs([
+    ...operationEvidence,
+    ...matchedRuleEvidence,
+    ...(answer.usedEvidence || []),
+  ]);
+  const reasoning = cleanStringArray([
+    ...(operation.reasoning || []),
+  ]);
+  const modelContradicted = /可以|能发动|可发动|can activate|can be activated/iu.test(String(answer.shortAnswer || ""));
+  return {
+    ...answer,
+    answerLevel: "rule_analysis",
+    shortAnswer: operation.shortAnswer || answer.shortAnswer,
+    reasoning: reasoning.length ? reasoning : answer.reasoning,
+    usedEvidence,
+    missingInfo: [],
+    riskFlags: [
+      ...new Set([
+        ...(answer.riskFlags || []),
+        "operation_legality_blocker_applied",
+        ...(modelContradicted ? ["model_answer_overridden_by_operation_legality"] : []),
+      ]),
+    ],
+    confidenceSelfEstimate: answer.confidenceSelfEstimate === "high" ? "medium" : answer.confidenceSelfEstimate,
   };
 }
 
@@ -269,6 +358,16 @@ function dedupeCards(cards) {
     const key = String(card.id || card.cardId || card.name || card.input || "").trim();
     if (!key || map.has(key)) continue;
     map.set(key, card);
+  }
+  return [...map.values()];
+}
+
+function dedupeEvidenceRefs(items) {
+  const map = new Map();
+  for (const item of items || []) {
+    const key = String(item.id || "").trim();
+    if (!key || map.has(key)) continue;
+    map.set(key, item);
   }
   return [...map.values()];
 }

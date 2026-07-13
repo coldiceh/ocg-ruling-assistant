@@ -30,6 +30,9 @@
 - 卡片信息
 - 官方资料
 - FAQ
+- 公开规则书资料
+↓
+按段落检索规则书，并由轻量模型逐步绑定规则引文
 ↓
 构造 RAG context
 ↓
@@ -52,6 +55,7 @@ LLM 生成裁定分析
 - 公开卡片文本与卡片信息
 - 官方公开资料
 - 官方公开 Q&A / FAQ
+- OCG Rule 等公开规则学习资料
 - 用户在问题中提供的卡片文本
 
 项目不会把用户提供文本或第三方卡片资料标记为官方直接裁定。
@@ -74,6 +78,8 @@ LLM 生成裁定分析
 
 - 从问题中抽取卡名和用户提供的卡片文本
 - 检索卡片资料、FAQ 和官方公开资料
+- 将规则书整章切分为可引用段落，召回与题目操作相关的候选原文
+- 校验规则判读模型返回的段落 ID 和逐字引文；无有效引文的判断不会约束最终结论
 - 归一化证据来源
 - 构造 RAG prompt
 - 调用模型 provider
@@ -119,17 +125,24 @@ DEEPSEEK_API_KEY=
 DEEPSEEK_BASE_URL=https://api.deepseek.com
 DEEPSEEK_MODEL=deepseek-v4-pro
 DEEPSEEK_CARD_MODEL=deepseek-v4-flash
+DEEPSEEK_RULE_MODEL=deepseek-v4-flash
+DEEPSEEK_RULEBOOK_MODEL=deepseek-v4-flash
 GEMINI_API_KEY=
 GEMINI_MODEL=
 GEMINI_CARD_MODEL=
+GEMINI_RULE_MODEL=
+GEMINI_RULEBOOK_MODEL=
 API_DAILY_BUDGET_CNY=10
 ```
 
 推荐配置方式：
 
 - `DEEPSEEK_CARD_MODEL` / `GEMINI_CARD_MODEL`：用于从玩家自然语言里提取卡名候选，建议使用 flash / 轻量模型。
+- `DEEPSEEK_RULE_MODEL` / `GEMINI_RULE_MODEL`：用于把问题改写为规则资料检索词，建议使用 flash / 轻量模型。
+- `DEEPSEEK_RULEBOOK_MODEL` / `GEMINI_RULEBOOK_MODEL`：用于从规则书候选段落中抽取操作步骤、选择原文并判断每一步是否合法，建议使用 flash / 轻量模型；未配置时回落到规则检索模型。
 - `DEEPSEEK_MODEL` / `GEMINI_MODEL`：用于最终 RAG 裁定分析，建议使用推理能力更强的模型。
 - `RAG_CARD_EXTRACTOR_ENABLED=false`：需要临时关闭 AI 卡名提取时使用。
+- `RAG_RULEBOOK_GROUNDING_ENABLED=false`：需要临时关闭规则书逐步判读时使用。
 
 API key 应只配置在后端环境变量中，不应写入前端代码、日志或仓库。
 
