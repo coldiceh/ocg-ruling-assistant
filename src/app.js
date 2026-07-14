@@ -181,8 +181,6 @@ const ui = {
   cardEffect: document.querySelector("#cardEffect"),
   cardSourceLink: document.querySelector("#cardSourceLink"),
   themeToggle: document.querySelector("#themeToggle"),
-  flashModelButton: document.querySelector("#flashModelButton"),
-  proModelButton: document.querySelector("#proModelButton"),
   budgetPanel: document.querySelector("#budgetPanel"),
   budgetSpentText: document.querySelector("#budgetSpentText"),
   budgetLimitText: document.querySelector("#budgetLimitText"),
@@ -204,8 +202,7 @@ let selectedCardIndex = 0;
 let lastRenderedBackendAnswer = null;
 let debugUiEnabled = false;
 const themeStorageKey = "ocg-ruling-theme:v1";
-const modelTierStorageKey = "ocg-ruling-model-tier:v1";
-let selectedModelTier = readInitialModelTier();
+const selectedModelTier = "flash";
 const pendingStages = [
   { label: "理解问题", body: "正在读取问题中的卡片、场面、连锁和时点。" },
   { label: "提取卡名", body: "正在识别卡名候选，并准备查询卡片资料。" },
@@ -679,8 +676,8 @@ async function requestBackendAnswer(text) {
   return answer;
 }
 
-function buildBackendCacheKey(text, mode = "rag", modelTier = "pro") {
-  return `ocg-ruling-answer:v15:${mode}:${modelTier}:${appConfig.answerApiUrl}:${normalizeText(text).slice(0, 2000)}`;
+function buildBackendCacheKey(text, mode = "rag", modelTier = "flash") {
+  return `ocg-ruling-answer:v16:${mode}:${modelTier}:${appConfig.answerApiUrl}:${normalizeText(text).slice(0, 2000)}`;
 }
 
 function readCachedBackendAnswer(key) {
@@ -1477,21 +1474,6 @@ function updateModelStatus(text) {
   ui.modelStatusText.textContent = text;
 }
 
-function setModelTier(tier) {
-  selectedModelTier = tier === "flash" ? "flash" : "pro";
-  for (const button of [ui.flashModelButton, ui.proModelButton].filter(Boolean)) {
-    const active = button.dataset.modelTier === selectedModelTier;
-    button.classList.toggle("is-active", active);
-    button.setAttribute("aria-pressed", active ? "true" : "false");
-  }
-  try {
-    localStorage.setItem(modelTierStorageKey, selectedModelTier);
-  } catch {
-    // Model preference persistence is optional.
-  }
-  updateModelStatus(debugUiEnabled ? `${appConfig.modelLabel || "裁定分析"} · ${selectedModelTier.toUpperCase()}` : "准备就绪");
-}
-
 function renderSubAnswers(subAnswers) {
   if (!ui.subAnswersPanel) return;
   clearElement(ui.subAnswersPanel);
@@ -1861,6 +1843,8 @@ function formatRiskFlag(flag) {
     baige_no_result: "百鸽没有找到对应卡片。",
     model_json_parse_failed: "模型返回格式异常，已做保守处理。",
     model_json_repaired: "模型返回格式不完整，系统已做保守恢复。",
+    model_reasoning_missing: "模型没有返回可核对的理由，请结合资料来源复核结论。",
+    model_reasoning_recovered_from_short_answer: "模型未分离结论与理由，系统已保留可识别的解释。",
     model_output_not_json: "模型没有按预期格式返回。",
     no_card_text: "没有拿到全部关键卡片的效果文本。",
     ambiguous_card_name: "部分卡名存在歧义，需要复核。",
@@ -1988,139 +1972,44 @@ function renderFeedbackPanel(answer) {
   if (existing) existing.remove();
   if (!answer || answer.status === "data_source_missing") return;
 
-  const panel = document.createElement("details");
+  const panel = document.createElement("div");
   panel.className = "feedback-panel";
-  const summary = document.createElement("summary");
-  summary.textContent = "反馈这个回答";
-  panel.appendChild(summary);
-
-  const hint = document.createElement("p");
-  hint.textContent = "反馈不会立即改变裁定结论；确认来源后才会转成回归测试。";
-  panel.appendChild(hint);
-
-  const buttons = document.createElement("div");
-  buttons.className = "feedback-buttons";
-  const selectedType = { value: "other" };
-  const choices = [
-    ["wrong_verdict", "回答错了"],
-    ["missing_evidence", "资料不对"],
-    ["missing_evidence", "需要补充来源"],
-  ];
-  const form = document.createElement("div");
-  const textarea = document.createElement("textarea");
-  const message = document.createElement("p");
-  for (const [type, label] of choices) {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.textContent = label;
-    button.addEventListener("click", () => {
-      selectedType.value = type;
-      form.hidden = false;
-      message.textContent = "";
-      textarea.focus();
-    });
-    buttons.appendChild(button);
-  }
-  panel.appendChild(buttons);
-
-  form.className = "feedback-form";
-  form.hidden = true;
-  textarea.rows = 4;
-  textarea.placeholder = "请说明哪里错了，或贴上来源链接 / 原文。";
-  form.appendChild(textarea);
-
-  const submit = document.createElement("button");
-  submit.type = "button";
-  submit.textContent = "提交反馈";
-  form.appendChild(submit);
-
-  message.className = "feedback-message";
-  form.appendChild(message);
-
-  submit.addEventListener("click", async () => {
-    const comment = textarea.value.trim();
-    if (!comment) {
-      message.textContent = "请先填写反馈内容。";
-      return;
-    }
-    submit.disabled = true;
-    try {
-      await submitFeedbackCase(answer, {
-        type: selectedType.value,
-        comment,
-        ...extractFeedbackSource(comment),
-      });
-      message.textContent = "反馈已记录。它不会立即改变裁定结论；确认后会转成回归测试。";
-      textarea.value = "";
-    } catch (error) {
-      message.textContent = `反馈保存失败：${error instanceof Error ? error.message : String(error)}`;
-    } finally {
-      submit.disabled = false;
-    }
-  });
-  panel.appendChild(form);
+  const link = document.createElement("a");
+  link.className = "feedback-link";
+  link.href = buildFeedbackIssueUrl(answer);
+  link.target = "_blank";
+  link.rel = "noreferrer";
+  link.textContent = "在 GitHub 反馈这个回答";
+  panel.appendChild(link);
   ui.verdictBlock.appendChild(panel);
 }
 
-async function submitFeedbackCase(answer, userFeedback) {
-  const payload = {
-    originalQuestion: answer?.formalQuery?.originalText || ui.questionInput.value.trim(),
-    formalQuery: answer?.formalQuery || null,
-    currentAnswer: buildFeedbackCurrentAnswer(answer || lastRenderedBackendAnswer || {}),
-    userFeedback,
-  };
-  const endpoint = feedbackApiUrl();
-  if (endpoint) {
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    if (response.ok) return response.json();
-  }
-  return saveFeedbackCaseLocally(payload);
-}
-
-function buildFeedbackCurrentAnswer(answer) {
-  const subAnswer = Array.isArray(answer.subAnswers) && answer.subAnswers.length === 1 ? answer.subAnswers[0] : null;
-  return {
-    finalStatus: answer.mode || answer.confidence?.status || subAnswer?.status || "unknown",
-    finalVerdict: subAnswer?.verdict ?? answer.verdict ?? "unknown",
-    reason: subAnswer?.reason || answer.needsConfirmation?.[0] || "",
-    evidenceIds: answer.evidenceIds || subAnswer?.evidenceIds || [],
-    ...(subAnswer?.conditionalAnswer ? { conditionalAnswer: subAnswer.conditionalAnswer } : {}),
-    ...(subAnswer?.provisionalAnswer ? { provisionalAnswer: subAnswer.provisionalAnswer } : {}),
-  };
-}
-
-function feedbackApiUrl() {
-  if (!appConfig.answerApiUrl) return "";
-  try {
-    const url = new URL(appConfig.answerApiUrl);
-    url.pathname = url.pathname.replace(/\/api\/answer\/?$/u, "/api/feedback");
-    return url.href;
-  } catch {
-    return appConfig.answerApiUrl.replace(/\/api\/answer\/?$/u, "/api/feedback");
-  }
-}
-
-function saveFeedbackCaseLocally(payload) {
-  const key = "ocg-ruling-feedback-cases:v1";
-  const stored = JSON.parse(localStorage.getItem(key) || "[]");
-  const item = {
-    ...payload,
-    id: `local-feedback-${Date.now()}`,
-    createdAt: new Date().toISOString(),
-    status: "new",
-  };
-  stored.push(item);
-  localStorage.setItem(key, JSON.stringify(stored));
-  return { ok: true, feedbackCase: item, localOnly: true };
-}
-
-function extractFeedbackSource(comment) {
-  const url = String(comment || "").match(/https?:\/\/\S+/iu)?.[0];
-  return url ? { supportingSourceUrl: url, supportingSourceText: comment } : { supportingSourceText: comment };
+function buildFeedbackIssueUrl(answer) {
+  const question = answer?.formalQuery?.originalText || ui.questionInput.value.trim() || "未提供问题";
+  const currentAnswer = String(answer?.shortAnswer || answer?.verdict || "未返回结论").trim();
+  const reasoning = (Array.isArray(answer?.reasoning) ? answer.reasoning : [])
+    .map((item) => String(item || "").trim())
+    .filter(Boolean)
+    .slice(0, 8)
+    .map((item, index) => `${index + 1}. ${item}`);
+  const body = [
+    "## 原问题",
+    question,
+    "",
+    "## 当前回答",
+    currentAnswer,
+    ...(reasoning.length ? ["", "## 当前理由", ...reasoning] : []),
+    "",
+    "## 使用模型",
+    "DeepSeek V4 Flash",
+    "",
+    "## 反馈内容",
+    "请说明错误之处，并尽量附上官方 Q&A、规则书或其他可核对来源。",
+  ].join("\n");
+  const url = new URL("https://github.com/coldiceh/ocg-ruling-assistant/issues/new");
+  url.searchParams.set("title", `[回答反馈] ${question.slice(0, 60)}`);
+  url.searchParams.set("body", body);
+  return url.href;
 }
 
 function appendText(parent, tagName, text) {
@@ -2141,7 +2030,6 @@ async function init() {
   await loadBackendModelInfo();
   await loadSyncedData();
   if (ui.pipelineDebugToggle) ui.pipelineDebugToggle.hidden = !debugUiEnabled;
-  setModelTier(selectedModelTier);
   await loadBudgetStatus();
   updateSourceStatus();
   resetAnalysis();
@@ -2163,8 +2051,6 @@ async function init() {
       // Theme persistence is optional.
     }
   });
-  ui.flashModelButton?.addEventListener("click", () => setModelTier("flash"));
-  ui.proModelButton?.addEventListener("click", () => setModelTier("pro"));
   ui.budgetResetButton?.addEventListener("click", () => resetBudgetStatus());
 }
 
@@ -2200,16 +2086,6 @@ function readInitialTheme() {
     // Ignore unavailable storage.
   }
   return "night";
-}
-
-function readInitialModelTier() {
-  try {
-    const stored = localStorage.getItem(modelTierStorageKey);
-    if (stored === "flash" || stored === "pro") return stored;
-  } catch {
-    // Ignore unavailable storage.
-  }
-  return "pro";
 }
 
 function applyTheme(theme) {

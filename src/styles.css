@@ -349,38 +349,26 @@ button:focus-visible {
   gap: 12px;
 }
 
-.model-tier-toggle {
+.model-tier-label {
   min-height: 34px;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 4px;
+  gap: 10px;
+  padding: 6px 10px;
   border: 1px solid var(--line);
   border-radius: 3px;
   background: var(--glass-soft);
 }
 
-.model-tier-toggle span {
-  padding: 0 8px;
+.model-tier-label span {
   color: var(--muted);
   font-size: 13px;
   font-weight: 800;
 }
 
-.model-tier-toggle button {
-  min-height: 28px;
-  padding: 5px 10px;
-  border: 1px solid transparent;
-  border-radius: 2px;
-  color: var(--muted);
-  background: transparent;
-  font-weight: 800;
-}
-
-.model-tier-toggle button.is-active {
-  border-color: var(--line-strong);
-  color: #061017;
-  background: var(--accent);
+.model-tier-label strong {
+  color: var(--accent);
+  font-size: 13px;
 }
 
 .judge-actions {
@@ -884,41 +872,16 @@ li + li {
   padding-top: 12px;
 }
 
-.feedback-panel summary {
-  cursor: pointer;
+.feedback-link {
+  display: inline-flex;
+  align-items: center;
   color: var(--accent);
   font-weight: 800;
+  text-decoration: none;
 }
 
-.feedback-buttons {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin: 10px 0;
-}
-
-.feedback-buttons button,
-.feedback-form button {
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 7px 11px;
-  color: var(--ink);
-  background: var(--glass-soft);
-}
-
-.feedback-form textarea {
-  width: 100%;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 10px 11px;
-  color: var(--ink);
-  background: var(--glass-strong);
-  resize: vertical;
-}
-
-.feedback-message {
-  color: var(--muted);
-  font-size: 13px;
+.feedback-link:hover {
+  text-decoration: underline;
 }
 
 .parser-debug summary {
@@ -1056,12 +1019,12 @@ dialog::backdrop {
     justify-content: space-between;
   }
 
-  .model-tier-toggle {
+  .model-tier-label {
     width: 100%;
     justify-content: space-between;
   }
 
-  .model-tier-toggle span {
+  .model-tier-label span {
     flex: 1;
   }
 

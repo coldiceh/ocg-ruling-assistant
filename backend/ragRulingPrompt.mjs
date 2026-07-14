@@ -91,6 +91,8 @@ export function buildRagRulingPromptBundle({
     "confidenceSelfEstimate 只是模型自评，不代表最终官方等级。",
     "输出必须是单个 JSON 对象，不要 markdown，不要代码围栏，不要 JSON 外说明。",
     "JSON 字段必须包含 answerLevel、shortAnswer、reasoning、usedCards、usedEvidence、missingInfo、riskFlags、confidenceSelfEstimate。",
+    "shortAnswer 只写直接结论，不要把完整推理塞进 shortAnswer。",
+    "reasoning 必须是至少 2 条非空字符串组成的 JSON 数组；每条都要说明所依据的卡片文本、检索证据或规则，以及它如何适用于题目事实。",
     `允许的 answerLevel：${RAG_ANSWER_LEVELS.join(", ")}。`,
     "usedEvidence 只能引用下方 evidence 中真实存在的 id。",
     "示例结构如下，示例不是具体裁定：",
@@ -226,6 +228,7 @@ function buildCompactRagPrompt({ payload, maxPromptChars }) {
     "官方直接 Q&A 才能支持 official_confirmed；相关 Q&A、FAQ、规则书和卡文只能支持 rule_analysis 或 low_confidence_analysis。",
     "有逐字引文的 operationChecks 是强约束；unknown 不能支持肯定或否定结论。",
     "输出单个 JSON 对象，字段为 answerLevel、shortAnswer、reasoning、usedCards、usedEvidence、missingInfo、riskFlags、confidenceSelfEstimate。",
+    "shortAnswer 只写结论；reasoning 必须是至少 2 条非空字符串的数组，并逐条说明证据如何适用于题目。",
     JSON.stringify(context),
   ].join("\n");
   let prompt = render(compactPayload);

@@ -609,7 +609,7 @@ async function callDeepSeek({ prompt, env, modelName, maxTokens, fetchImpl, temp
     stream: false,
     response_format: { type: "json_object" },
     max_tokens: maxTokens,
-    temperature: temperature ?? readNumber(env.RAG_MODEL_TEMPERATURE, 0.2),
+    temperature: temperature ?? readNumber(env.RAG_MODEL_TEMPERATURE, 0),
   };
   let response = await postJson(fetchImpl, endpoint, {
     authorization: `Bearer ${env.DEEPSEEK_API_KEY}`,
@@ -654,7 +654,7 @@ async function callGemini({ prompt, env, modelName, maxTokens, fetchImpl, temper
   const body = {
     contents: [{ role: "user", parts: [{ text: prompt }] }],
     generationConfig: {
-      temperature: temperature ?? readNumber(env.GEMINI_TEMPERATURE, readNumber(env.RAG_MODEL_TEMPERATURE, 0.2)),
+      temperature: temperature ?? readNumber(env.GEMINI_TEMPERATURE, readNumber(env.RAG_MODEL_TEMPERATURE, 0)),
       maxOutputTokens: readNumber(env[maxTokensEnvName], maxTokens),
       responseMimeType: "application/json",
     },
@@ -759,7 +759,9 @@ function parseLooseRagModelJson(text) {
     __modelJsonRepaired: true,
     answerLevel: answerLevel || "low_confidence_analysis",
     shortAnswer: shortAnswer || "模型返回了不完整 JSON；以下为保守恢复后的分析。",
-    reasoning: readJsonStringArrayField(text, "reasoning"),
+    reasoning: readJsonStringArrayField(text, "reasoning").length
+      ? readJsonStringArrayField(text, "reasoning")
+      : readJsonStringField(text, "reasoning"),
     usedCards: readJsonStringArrayField(text, "usedCards"),
     usedEvidence: readLooseUsedEvidence(text),
     missingInfo: readJsonStringArrayField(text, "missingInfo"),
@@ -867,16 +869,82 @@ function normalizeModelAnswer(answer = {}) {
   const confidence = ["low", "medium", "high"].includes(answer.confidenceSelfEstimate)
     ? answer.confidenceSelfEstimate
     : answerLevel === "official_confirmed" ? "high" : "low";
+  const shortAnswer = nonEmpty(answer.shortAnswer || answer.short_answer || answer.verdict)
+    || "根据现有资料只能给出未确认分析。";
+  const reasoning = normalizeModelReasoning(answer);
+  const riskFlags = cleanStringArray(answer.riskFlags);
+
+  if (!reasoning.length) {
+    const recovered = deriveReasoningFromShortAnswer(shortAnswer);
+    if (recovered.length) {
+      reasoning.push(...recovered);
+      addUniqueString(riskFlags, "model_reasoning_recovered_from_short_answer");
+    } else {
+      reasoning.push("模型返回了结论，但没有提供可核对的理由；请结合下方资料来源复核。");
+      addUniqueString(riskFlags, "model_reasoning_missing");
+    }
+  }
+
   return {
     answerLevel,
-    shortAnswer: nonEmpty(answer.shortAnswer) || "根据现有资料只能给出未确认分析。",
-    reasoning: cleanStringArray(answer.reasoning),
+    shortAnswer,
+    reasoning,
     usedCards: cleanStringArray(answer.usedCards),
     usedEvidence: normalizeUsedEvidence(answer.usedEvidence),
     missingInfo: cleanStringArray(answer.missingInfo),
-    riskFlags: cleanStringArray(answer.riskFlags),
+    riskFlags,
     confidenceSelfEstimate: confidence,
   };
+}
+
+function normalizeModelReasoning(answer = {}) {
+  const candidates = [
+    answer.reasoning,
+    answer.reasons,
+    answer.explanation,
+    answer.explanations,
+    answer.analysis,
+    answer.reason,
+  ];
+  for (const candidate of candidates) {
+    const items = cleanReasoningItems(candidate);
+    if (items.length) return items;
+  }
+  return [];
+}
+
+function cleanReasoningItems(value) {
+  const source = Array.isArray(value) ? value : value === undefined || value === null ? [] : [value];
+  return source
+    .flatMap((item) => {
+      const text = typeof item === "string"
+        ? item
+        : nonEmpty(item?.reason || item?.explanation || item?.text || item?.content);
+      return String(text || "").split(/\r?\n+/u);
+    })
+    .map((item) => item.replace(/^\s*(?:[-*•]|\d+[.)、])\s*/u, "").trim())
+    .filter(Boolean)
+    .slice(0, 12);
+}
+
+function deriveReasoningFromShortAnswer(shortAnswer) {
+  const text = nonEmpty(shortAnswer);
+  if (!text) return [];
+  const sentences = text
+    .split(/(?<=[。！？!?；;])\s*|\r?\n+/u)
+    .map((item) => item.trim())
+    .filter(Boolean);
+  const candidates = sentences.length > 1
+    ? sentences.slice(1)
+    : [text.replace(/^(?:可以|能够|能|不可以|不能|无法|是|否)[，,:：\s]*/u, "")];
+  return candidates
+    .filter((item) => item.length >= 8)
+    .filter((item) => /因为|由于|根据|因此|所以|意味着|只能|无法|不满足|满足|要求|规定|处理时|结算时|连锁中|发动后|适用/u.test(item))
+    .slice(0, 6);
+}
+
+function addUniqueString(items, value) {
+  if (!items.includes(value)) items.push(value);
 }
 
 function buildMockAnswer({ evidence, cardResolution }) {
@@ -1403,10 +1471,7 @@ function emptyRulebookGroundingResult(providerUsed, modelUsed, dryRun, warnings 
 function resolveRagMaxOutputTokens(env = {}) {
   const configured = Number(env.RAG_MAX_OUTPUT_TOKENS);
   if (Number.isFinite(configured) && configured > 0) return Math.floor(configured);
-  const tier = String(env.RAG_MODEL_TIER || "").trim().toLowerCase();
-  if (tier === "pro") return readPositiveNumber(env.RAG_PRO_MAX_OUTPUT_TOKENS, 5000);
-  if (tier === "flash") return readPositiveNumber(env.RAG_FLASH_MAX_OUTPUT_TOKENS, 2500);
-  return 2500;
+  return readPositiveNumber(env.RAG_FLASH_MAX_OUTPUT_TOKENS, 2500);
 }
 
 function dedupeGroundingEvidence(items = []) {
@@ -1422,16 +1487,11 @@ function dedupeGroundingEvidence(items = []) {
 }
 
 function modelNameForProvider(provider, env) {
-  const tier = String(env.RAG_MODEL_TIER || "").trim().toLowerCase();
   if (provider === "deepseek") {
-    if (tier === "flash") return String(env.DEEPSEEK_FLASH_MODEL || env.DEEPSEEK_CARD_MODEL || env.RAG_CARD_MODEL || DEFAULT_DEEPSEEK_CARD_MODEL);
-    if (tier === "pro") return String(env.DEEPSEEK_PRO_MODEL || env.DEEPSEEK_MODEL || DEFAULT_DEEPSEEK_MODEL);
-    return String(env.DEEPSEEK_MODEL || DEFAULT_DEEPSEEK_MODEL);
+    return String(env.DEEPSEEK_FLASH_MODEL || env.DEEPSEEK_CARD_MODEL || env.RAG_CARD_MODEL || DEFAULT_DEEPSEEK_CARD_MODEL);
   }
   if (provider === "gemini") {
-    if (tier === "flash") return String(env.GEMINI_FLASH_MODEL || env.GEMINI_CARD_MODEL || "gemini-1.5-flash");
-    if (tier === "pro") return String(env.GEMINI_PRO_MODEL || env.GEMINI_MODEL || "gemini-1.5-flash");
-    return String(env.GEMINI_MODEL || "gemini-1.5-flash");
+    return String(env.GEMINI_FLASH_MODEL || env.GEMINI_CARD_MODEL || "gemini-1.5-flash");
   }
   return "mock-rag";
 }
@@ -1477,8 +1537,12 @@ function normalizeUsedEvidence(items) {
 }
 
 function cleanStringArray(value) {
-  return (Array.isArray(value) ? value : [])
-    .map((item) => String(item || "").trim())
+  const source = Array.isArray(value) ? value : value === undefined || value === null ? [] : [value];
+  return source
+    .map((item) => {
+      if (typeof item === "string" || typeof item === "number") return String(item).trim();
+      return nonEmpty(item?.text || item?.value || item?.name || item?.id);
+    })
     .filter(Boolean)
     .slice(0, 12);
 }
@@ -1499,11 +1563,8 @@ function readPositiveNumber(value, fallback) {
 }
 
 function readTieredProviderNumber(env, providerPrefix, suffix, fallback) {
-  const tier = String(env.RAG_MODEL_TIER || "").trim().toUpperCase();
-  if (tier === "FLASH" || tier === "PRO") {
-    const tierValue = Number(env[`${providerPrefix}_${tier}_${suffix}`]);
-    if (Number.isFinite(tierValue)) return tierValue;
-  }
+  const flashValue = Number(env[`${providerPrefix}_FLASH_${suffix}`]);
+  if (Number.isFinite(flashValue)) return flashValue;
   return readNumber(env[`${providerPrefix}_${suffix}`], fallback);
 }
 
