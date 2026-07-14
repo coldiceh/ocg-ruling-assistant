@@ -279,7 +279,7 @@ test("card_name_extractor_uses_dedicated_flash_model", async () => {
     env: {
       MODEL_PROVIDER: "deepseek",
       DEEPSEEK_API_KEY: "test-deepseek-key",
-      DEEPSEEK_MODEL: "deepseek-pro-test",
+      DEEPSEEK_FLASH_MODEL: "deepseek-v4-flash-test",
       DEEPSEEK_CARD_MODEL: "deepseek-flash-test",
       API_DAILY_BUDGET_CNY: "10",
     },
@@ -305,7 +305,7 @@ test("rule_query_extractor_uses_lightweight_model", async () => {
     env: {
       MODEL_PROVIDER: "deepseek",
       DEEPSEEK_API_KEY: "test-deepseek-key",
-      DEEPSEEK_MODEL: "deepseek-pro-test",
+      DEEPSEEK_FLASH_MODEL: "deepseek-v4-flash-test",
       DEEPSEEK_CARD_MODEL: "deepseek-flash-test",
       API_DAILY_BUDGET_CNY: "10",
     },
@@ -564,7 +564,7 @@ test("qa_evidence_can_ground_operation_checks_without_rulebook", async () => {
   assert.equal(result.operationLegality.evidence[0].type, "operation_check");
 });
 
-test("pro_empty_output_falls_back_to_qa_grounded_operation_answer", async () => {
+test("empty_model_output_falls_back_to_qa_grounded_operation_answer", async () => {
   const scenarioCards = [
     {
       id: "10820",
@@ -596,7 +596,7 @@ test("pro_empty_output_falls_back_to_qa_grounded_operation_answer", async () => 
     cards: scenarioCards,
     records: [],
     qaRecords: [faqRecord],
-    env: { RAG_MODEL_TIER: "pro" },
+    env: { RAG_MODEL_TIER: "flash" },
     rulebookModelInvoker: async () => JSON.stringify({
       operationChecks: [{
         operationId: "xyz-encore-target-and-resolve",
@@ -897,7 +897,7 @@ test("deepseek_provider_builds_request", async () => {
       MODEL_PROVIDER: "deepseek",
       DEEPSEEK_API_KEY: "test-deepseek-key",
       DEEPSEEK_BASE_URL: "https://api.deepseek.com",
-      DEEPSEEK_MODEL: "deepseek-test",
+      DEEPSEEK_FLASH_MODEL: "deepseek-test",
       RAG_MAX_OUTPUT_TOKENS: "321",
       API_DAILY_BUDGET_CNY: "10",
     },
@@ -919,7 +919,7 @@ test("deepseek_provider_builds_request", async () => {
   assert.equal(calls[0].body.stream, false);
 });
 
-test("deepseek_model_tier_selects_flash_or_pro_model", async () => {
+test("deepseek_final_generation_is_fixed_to_flash_model", async () => {
   const calls = [];
   await callRagModel({
     prompt: "输出 JSON",
@@ -927,8 +927,6 @@ test("deepseek_model_tier_selects_flash_or_pro_model", async () => {
       MODEL_PROVIDER: "deepseek",
       DEEPSEEK_API_KEY: "test-deepseek-key",
       DEEPSEEK_FLASH_MODEL: "deepseek-flash-tier",
-      DEEPSEEK_PRO_MODEL: "deepseek-pro-tier",
-      RAG_MODEL_TIER: "flash",
       API_DAILY_BUDGET_CNY: "10",
     },
     fetchImpl: async (url, options) => {
@@ -936,25 +934,57 @@ test("deepseek_model_tier_selects_flash_or_pro_model", async () => {
       return jsonResponse({ choices: [{ message: { content: JSON.stringify(modelJson("Flash OK")) } }], usage: {} });
     },
   });
-  await callRagModel({
-    prompt: "输出 JSON",
-    env: {
-      MODEL_PROVIDER: "deepseek",
-      DEEPSEEK_API_KEY: "test-deepseek-key",
-      DEEPSEEK_FLASH_MODEL: "deepseek-flash-tier",
-      DEEPSEEK_PRO_MODEL: "deepseek-pro-tier",
-      RAG_MODEL_TIER: "pro",
-      API_DAILY_BUDGET_CNY: "10",
-    },
-    fetchImpl: async (url, options) => {
-      calls.push(JSON.parse(options.body));
-      return jsonResponse({ choices: [{ message: { content: JSON.stringify(modelJson("Pro OK")) } }], usage: {} });
-    },
-  });
   assert.equal(calls[0].model, "deepseek-flash-tier");
-  assert.equal(calls[1].model, "deepseek-pro-tier");
   assert.equal(calls[0].max_tokens, 2500);
-  assert.equal(calls[1].max_tokens, 5000);
+  assert.equal(calls[0].temperature, 0);
+});
+
+test("model_reasoning_string_is_preserved", async () => {
+  const result = await callRagModel({
+    prompt: "输出 JSON",
+    env: { MODEL_PROVIDER: "mock" },
+    modelInvoker: async () => ({
+      answerLevel: "rule_analysis",
+      shortAnswer: "不能发动。",
+      reasoning: "卡片文本要求存在合法对象；当前场面没有合法对象。",
+      usedCards: [],
+      usedEvidence: [],
+      missingInfo: [],
+      riskFlags: [],
+      confidenceSelfEstimate: "medium",
+    }),
+  });
+  assert.deepEqual(result.answer.reasoning, ["卡片文本要求存在合法对象；当前场面没有合法对象。"]);
+  assert.doesNotMatch(result.answer.reasoning.join(" "), /RAG baseline/u);
+});
+
+test("reasoning_is_recovered_or_explicitly_marked_missing", async () => {
+  const recovered = await callRagModel({
+    prompt: "输出 JSON",
+    env: { MODEL_PROVIDER: "mock" },
+    modelInvoker: async () => ({
+      answerLevel: "rule_analysis",
+      shortAnswer: "不能。该效果只能直接连锁符合条件的发动。",
+      usedEvidence: [],
+      riskFlags: [],
+    }),
+  });
+  assert.match(recovered.answer.reasoning.join(" "), /只能直接连锁/u);
+  assert.ok(recovered.answer.riskFlags.includes("model_reasoning_recovered_from_short_answer"));
+
+  const missing = await callRagModel({
+    prompt: "输出 JSON",
+    env: { MODEL_PROVIDER: "mock" },
+    modelInvoker: async () => ({
+      answerLevel: "rule_analysis",
+      shortAnswer: "可以发动。",
+      usedEvidence: [],
+      riskFlags: [],
+    }),
+  });
+  assert.match(missing.answer.reasoning.join(" "), /没有提供可核对的理由/u);
+  assert.ok(missing.answer.riskFlags.includes("model_reasoning_missing"));
+  assert.doesNotMatch(missing.answer.reasoning.join(" "), /RAG baseline/u);
 });
 
 test("gemini_provider_builds_request", async () => {
@@ -964,7 +994,7 @@ test("gemini_provider_builds_request", async () => {
     env: {
       MODEL_PROVIDER: "gemini",
       GEMINI_API_KEY: "test-gemini-key",
-      GEMINI_MODEL: "gemini-test",
+      GEMINI_FLASH_MODEL: "gemini-test",
       GEMINI_MAX_OUTPUT_TOKENS: "456",
       API_DAILY_BUDGET_CNY: "10",
     },
@@ -1028,18 +1058,17 @@ test("usage_cost_estimation_deepseek", () => {
   assert.equal(cost, 0.001804);
 });
 
-test("usage_cost_estimation_uses_model_tier_prices", () => {
+test("usage_cost_estimation_uses_flash_prices", () => {
   const cost = estimateDeepSeekCostCny({
     prompt_tokens: 1000,
     completion_tokens: 500,
   }, {
-    RAG_MODEL_TIER: "pro",
     DEEPSEEK_INPUT_CNY_PER_MTOK: "1",
     DEEPSEEK_OUTPUT_CNY_PER_MTOK: "2",
-    DEEPSEEK_PRO_INPUT_CNY_PER_MTOK: "8",
-    DEEPSEEK_PRO_OUTPUT_CNY_PER_MTOK: "16",
+    DEEPSEEK_FLASH_INPUT_CNY_PER_MTOK: "3",
+    DEEPSEEK_FLASH_OUTPUT_CNY_PER_MTOK: "4",
   });
-  assert.equal(cost, 0.016);
+  assert.equal(cost, 0.005);
 });
 
 test("budget_status_can_be_reset", async () => {
@@ -1053,7 +1082,7 @@ test("budget_status_can_be_reset", async () => {
       ...env,
       MODEL_PROVIDER: "deepseek",
       DEEPSEEK_API_KEY: "test-deepseek-key",
-      DEEPSEEK_MODEL: "deepseek-test",
+      DEEPSEEK_FLASH_MODEL: "deepseek-test",
       DEEPSEEK_INPUT_CNY_PER_MTOK: "1",
       DEEPSEEK_OUTPUT_CNY_PER_MTOK: "2",
     },
@@ -1162,7 +1191,7 @@ test("secrets_not_returned_in_debug", async () => {
     env: {
       MODEL_PROVIDER: "deepseek",
       DEEPSEEK_API_KEY: "secret-key-that-must-not-leak",
-      DEEPSEEK_MODEL: "deepseek-test",
+      DEEPSEEK_FLASH_MODEL: "deepseek-test",
       API_DAILY_BUDGET_CNY: "10",
     },
     fetchImpl: async () => jsonResponse({

@@ -148,16 +148,37 @@ test("ui_has_single_query_button", async () => {
   assert.match(app, /pendingStages/u);
   assert.match(app, /检索规则资料/u);
   assert.match(app, /startPendingStages/u);
-  assert.match(html, /id="flashModelButton"/u);
-  assert.match(html, /id="proModelButton"/u);
+  assert.match(html, /DeepSeek V4 Flash/u);
+  assert.doesNotMatch(html, /id="flashModelButton"|id="proModelButton"|>Pro</u);
+  assert.match(app, /const selectedModelTier = "flash"/u);
   assert.match(app, /modelTier: selectedModelTier/u);
+  assert.match(app, /ocg-ruling-answer:v16/u);
   assert.match(app, /buildBackendCacheKey\(text, backendMode, selectedModelTier\)/u);
+  assert.doesNotMatch(app, /setModelTier|readInitialModelTier/u);
   assert.doesNotMatch(app, /deepAnalyzeButton|ragModeToggle|legacyPipelineToggle/u);
   assert.doesNotMatch(html, /裁判结论/u);
   assert.doesNotMatch(app, /裁判结论/u);
   assert.doesNotMatch(app, /FAST JUDGE/u);
   assert.doesNotMatch(app, /damage\.reasonCode|timing\.reasonCode/u);
   assert.doesNotMatch(app, /blocker\.id/u);
+});
+
+test("feedback_opens_a_prefilled_github_issue", async () => {
+  const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
+  assert.match(app, /https:\/\/github\.com\/coldiceh\/ocg-ruling-assistant\/issues\/new/u);
+  assert.match(app, /在 GitHub 反馈这个回答/u);
+  assert.match(app, /url\.searchParams\.set\("body", body\)/u);
+  assert.doesNotMatch(app, /feedbackApiUrl|submitFeedbackCase|saveFeedbackCaseLocally/u);
+});
+
+test("readme_keeps_only_requested_future_plans", async () => {
+  const readme = await readFile(new URL("../README.md", import.meta.url), "utf8");
+  assert.doesNotMatch(readme, /## 技术架构|## 本地运行/u);
+  const future = readme.match(/## 未来计划([\s\S]*?)## Disclaimer/u)?.[1] || "";
+  assert.match(future, /模拟器验证/u);
+  assert.match(future, /支持日文版本/u);
+  assert.match(future, /支持 TCG 版本/u);
+  assert.doesNotMatch(future, /validator|critic|更强规则分析/u);
 });
 
 test("ui_hides_engine_details_by_default", async () => {
@@ -172,7 +193,8 @@ test("ui_hides_engine_details_by_default", async () => {
   assert.match(html, /不是 KONAMI 官方项目/u);
   assert.match(html, /id="themeToggle"/u);
   assert.match(html, /class="page-background"/u);
-  assert.doesNotMatch(html, /ANALYSIS CORE|DeepSeek|TOKEN|provider debug/u);
+  assert.doesNotMatch(html, /ANALYSIS CORE|TOKEN|provider debug/u);
+  assert.match(html, /DeepSeek V4 Flash/u);
   assert.doesNotMatch(html, /AI裁定分析|RAG 裁定分析|RAG 分析/u);
   assert.doesNotMatch(html, /后端模式|公开资料检索|卡片文本分析/u);
   assert.doesNotMatch(html, /terminal-theme|OCG RULING TERMINAL/u);
@@ -200,7 +222,8 @@ test("card_dossier_nodes_and_theme_backgrounds_exist", async () => {
   assert.match(css, /assets\/bg-night\.png/u);
   assert.match(css, /theme-night/u);
   assert.match(css, /\.progress-step/u);
-  assert.match(css, /\.model-tier-toggle/u);
+  assert.match(css, /\.model-tier-label/u);
+  assert.doesNotMatch(css, /\.model-tier-toggle/u);
   assert.match(css, /\.budget-panel/u);
   assert.doesNotMatch(css, /body::before|body::after/u);
   assert.match(app, /baige_card_text/u);
