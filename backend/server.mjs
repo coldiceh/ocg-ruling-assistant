@@ -4,6 +4,7 @@ import { answerQuestion, getDataHealth } from "./engine.mjs";
 import { answerRulingQuestionFast } from "./fastJudgeEngine.mjs";
 import { appendFeedbackCase } from "./feedbackCases.mjs";
 import { getRagBudgetStatus, resetRagBudget, resolveCardExtractionProvider, resolveRagProvider } from "./ragModelClient.mjs";
+import { getOcgEngineHealth, requestOcgEngineSimulation } from "./ocgEngineClient.mjs";
 import { answerRagRulingQuestion } from "./ragRulingPipeline.mjs";
 
 const port = Number(process.env.PORT || 8787);
@@ -25,6 +26,12 @@ const server = createServer(async (request, response) => {
 
   if (request.method === "GET" && request.url === "/health") {
     sendJson(response, startupDataHealth.usable ? 200 : 503, { ok: startupDataHealth.usable, data: startupDataHealth });
+    return;
+  }
+
+  if (request.method === "GET" && request.url === "/api/engine") {
+    const health = await getOcgEngineHealth({ env: process.env });
+    sendJson(response, health.ok ? 200 : 503, health);
     return;
   }
 
@@ -53,6 +60,16 @@ const server = createServer(async (request, response) => {
     return;
   }
 
+  if (request.method === "POST" && request.url === "/api/engine") {
+    const payload = await readJsonBody(request);
+    const result = await requestOcgEngineSimulation({
+      engineScenario: payload.engineScenario ?? payload.scenario,
+      env: process.env,
+    });
+    sendJson(response, result.status === "completed" ? 200 : 503, result);
+    return;
+  }
+
   if (request.method === "POST" && request.url === "/api/answer") {
     try {
       const body = await readBody(request);
@@ -62,6 +79,7 @@ const server = createServer(async (request, response) => {
         const answer = await answerRagRulingQuestion({
           question: payload.question,
           env: envForModelTier(process.env, payload.modelTier),
+          engineScenario: payload.engineScenario,
         });
         sendJson(response, 200, answer);
         return;

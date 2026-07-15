@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { loadRagData, retrieveRagEvidence } from "../backend/ragEvidenceRetriever.mjs";
+import { callRulebookGroundingModel } from "../backend/ragModelClient.mjs";
 import { retrieveRulebookPassages } from "../backend/rulebookPassageRetriever.mjs";
 
 test("actual_rulebook_late_paragraph_is_retrieved_as_a_passage", async () => {
@@ -53,4 +54,104 @@ test("actual_xyz_encore_faq_is_retrieved_for_unaffected_rhongomyniad", async () 
   ));
   assert.ok(exactRuleIndex >= 0, "expected the exact No.86 and Xyz Encore rule example");
   assert.ok(exactRuleIndex < 3, `expected exact scenario evidence near the top, got rank ${exactRuleIndex + 1}`);
+});
+
+
+test("rulebook_passage_keeps_the_matched_paragraph_when_context_is_too_long", () => {
+  const marker = "命中规则：卡的发动被无效后，不再视为场上的卡。";
+  const passages = retrieveRulebookPassages({
+    records: [{
+      id: "ocg-rule:test-focus",
+      recordType: "rule-doc",
+      title: "测试规则",
+      text: [
+        "无关前文".repeat(160),
+        marker,
+        "无关后文".repeat(160),
+      ].join("\n\n"),
+      sourceUrl: "https://example.test/rule",
+    }],
+    userQuery: "卡的发动被无效后是否仍视为场上的卡？",
+    ruleSearchQueries: [{ query: "卡的发动 无效 场上的卡", confidence: "high" }],
+    maxPassages: 3,
+    maxPassageChars: 180,
+  });
+
+  assert.ok(passages.length > 0);
+  assert.match(passages[0].text, /命中规则：卡的发动被无效后，不再视为场上的卡/u);
+  assert.ok(passages[0].text.length <= 180);
+});
+
+test("inline_card_references_link_the_stardust_official_qa", async () => {
+  const data = await loadRagData();
+  const resolvedCards = ["4678", "16386", "7734"]
+    .map((id) => data.cards.find((card) => card.id === id))
+    .filter(Boolean);
+  const evidence = await retrieveRagEvidence({
+    userQuery: "我方C1发动「神鹰羽毛扫」，对手C2连锁「鲜花之女男爵」的无效并破坏效果，我方是否可以C3发动「星尘龙」？",
+    cardResolution: {
+      resolvedCards,
+      unresolvedMentions: [],
+      ambiguousMentions: [],
+      userProvidedCardTexts: [],
+    },
+    cards: data.cards,
+    records: data.records,
+    qaRecords: data.qaRecords,
+  });
+
+  const qa = evidence.officialQaRelated.find((item) => item.id === "ygoresources-qa-11290");
+  assert.ok(qa, "expected the official Stardust activation-negation analogy to be retrieved");
+  assert.ok(qa.cardIds.includes("7734"), "expected <<7734>> to be indexed as a referenced card");
+  assert.match(qa.text, /not treated as being on the field/iu);
+});
+
+test("grounding_candidate_budget_preserves_faq_rulebook_and_card_text", async () => {
+  const noisyRelated = Array.from({ length: 12 }, (_, index) => ({
+    id: `related-${index + 1}`,
+    type: "related",
+    recordType: "qa",
+    title: `相似问答 ${index + 1}`,
+    text: `只与卡名相关但没有覆盖关键处理的问答 ${index + 1}`,
+  }));
+  const faq = {
+    id: "card-faq-critical",
+    type: "faq",
+    recordType: "card-faq",
+    title: "关键卡片 FAQ",
+    text: "关键 FAQ 原文：这个处理仍然进行。",
+  };
+  const rule = {
+    id: "rulebook-critical",
+    type: "rulebook",
+    recordType: "rulebook",
+    title: "关键规则",
+    text: "关键规则原文：逐项处理效果。",
+  };
+  const cardText = {
+    id: "card-text-critical",
+    type: "card_text",
+    title: "关键卡片文本",
+    text: "关键卡文原文：然后，挑选一张手牌舍弃。",
+  };
+  let prompt = "";
+
+  await callRulebookGroundingModel({
+    userQuery: "这个效果如何处理？",
+    qaEvidence: [...noisyRelated, faq],
+    ruleEvidence: [rule],
+    cardTexts: [cardText],
+    env: { RAG_MAX_QA_GROUNDING_CANDIDATES: "4" },
+    modelInvoker: async (request) => {
+      prompt = request.prompt;
+      return JSON.stringify({ operationChecks: [], overallConclusion: "证据不足。" });
+    },
+  });
+
+  assert.match(prompt, /card-faq-critical/u);
+  assert.match(prompt, /rulebook-critical/u);
+  assert.match(prompt, /card-text-critical/u);
+  assert.match(prompt, /关键 FAQ 原文/u);
+  assert.match(prompt, /关键规则原文/u);
+  assert.match(prompt, /关键卡文原文/u);
 });
