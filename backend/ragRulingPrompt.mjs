@@ -27,9 +27,9 @@ export function buildRagRulingPromptBundle({
   const promptLimits = {
     maxCards: readNumber(env.RAG_MAX_CARDS, 6),
     maxOfficialQa: readNumber(env.RAG_MAX_OFFICIAL_QA, 5),
-    maxRelatedEvidence: readNumber(env.RAG_MAX_RELATED_EVIDENCE, 8),
+    maxRelatedEvidence: readNumber(env.RAG_MAX_RELATED_EVIDENCE, 10),
     maxCardTextChars: readNumber(env.RAG_MAX_CARD_TEXT_CHARS, 2500),
-    maxPromptChars: readNumber(env.RAG_MAX_PROMPT_CHARS, 30000),
+    maxPromptChars: readNumber(env.RAG_MAX_PROMPT_CHARS, 42000),
   };
   const evidencePayload = prepareEvidenceForPrompt(evidence, promptLimits, warnings);
   const payload = {
@@ -65,10 +65,16 @@ export function buildRagRulingPromptBundle({
     "百鸽卡片资料和普通卡片文本可以作为卡片文本 grounding，但不是官方 direct Q&A。",
     "如果没有官方直接 Q&A，允许根据卡片文本、百鸽卡片资料、用户提供文本、FAQ、官方相似案例和 rulebook 规则书资料进行分析。",
     "ruleSearchQueries 是后端为检索规则资料生成的查询词，只能作为检索线索；最终理由必须基于 evidence 中真实存在的资料、卡片文本和题目事实。",
+    "resolvedCards 是本地资料或百鸽已经匹配成功的卡片；其中已有 cardType、attribute 或效果文本时，不得再把该卡写成‘未识别’或‘属性未确定’。只有 unresolvedMentions 中仍存在的项目才算未解析。",
     "operationChecks 是 Flash 证据判读模型对题目每一步操作所做的检查；候选依据可以是规则书、官方 Q&A 或卡片 FAQ。后端已经校验其中引用的 evidence id 和逐字引文，未通过校验的 legal/illegal/conditional 会被降为 unknown。",
     "对同一操作，operationChecks 中 citations 非空的 legal、illegal 或 conditional 结论必须作为强约束；不得在没有反证的情况下给出相反结论。status=unknown 不能作为肯定或否定依据。",
     "如果校验后的证据直接点名题目中的多张卡并描述同一场景，必须完整遵守该案例的全部处理步骤；不得只采用其发动或取对象结论后，再凭记忆改写后续处理。",
     "效果文本包含连续处理时，必须按文本和证据顺序说明每一步是否成功，并在前一步改变抗性、位置、素材或状态后重新判断下一步。",
+    "不得因为效果发动源或对象在连锁处理中离开原位置，就未经证据把整条已经合法发动的效果判为不处理。必须分别核对：发动是否已经成立、每一项处理依赖什么对象或位置、某一项不能处理时其余项目是否继续，并引用覆盖该步骤的规则或 Q&A。",
+    "对象在处理时不再存在，只能直接影响确实依赖该对象的处理；不要据此自动删除不以该对象为处理对象的支付、丢弃、返回或其他项目。具体是否继续仍以检索证据和原效果连接词为准。",
+    "必须把‘能否取为对象’与‘效果是否影响该卡’作为两个独立判断；不受效果影响本身不等于不能成为对象，对象保护也不等于效果抗性。只引用真正约束该步骤的证据。",
+    "涉及把发动无效并破坏时，必须区分魔法・陷阱卡的卡的发动与已在场卡片的效果发动，并按检索证据判断被破坏的卡是否仍视为场上的卡。",
+    "较早步骤已经不合法时，结论应直接说明实际阻断原因，不要继续描述未发生的后续处理，也不要添加与当前场景无关的假设分支。",
     "相关 Q&A / FAQ 可以作为规则适用案例，但必须比较卡片、效果、时点、位置、素材数量和处理顺序；不是当前原题时不得升级为 official_confirmed。",
     "rawRelatedEvidence 中 source=rulebook_model_grounding 或 qa_rule_model_grounding 的资料是校验后的逐操作检查，不是官方 direct Q&A；其引文对应的原始证据也会作为独立 evidence 提供。",
     "涉及发动合法性、是否有可适用处理、次数限制、同一诱发条件再次满足时，要优先核对 rulebook、FAQ 和卡片文本；不要只凭常识猜测。",
@@ -118,8 +124,14 @@ function summarizeCards(cards, limit) {
     id: card.id || card.cardId || "",
     name: card.name || card.cnName || card.jaName || card.enName || "",
     aliases: card.aliases || [],
-    cardType: card.cardType || "",
-    effectText: card.effectText || "",
+    cardType: card.cardType || card.type || "",
+    attribute: card.attribute ?? "",
+    race: card.race ?? "",
+    atk: card.atk ?? null,
+    def: card.def ?? null,
+    level: card.level ?? card.rank ?? card.link ?? null,
+    source: card.source || "",
+    effectText: card.effectText || card.text || "",
   }));
 }
 
@@ -139,12 +151,12 @@ function summarizeOperationChecks(checks) {
 
 function prepareEvidenceForPrompt(evidence, limits, warnings) {
   return {
-    officialQaDirectCandidates: limitEvidence(evidence.officialQaDirectCandidates, limits.maxOfficialQa, 1800, "official_direct", warnings),
-    officialQaRelated: limitEvidence(evidence.officialQaRelated, limits.maxRelatedEvidence, 1600, "official_related", warnings),
-    faqRelated: limitEvidence(evidence.faqRelated, limits.maxRelatedEvidence, 1600, "faq", warnings),
+    officialQaDirectCandidates: limitEvidence(evidence.officialQaDirectCandidates, limits.maxOfficialQa, 2400, "official_direct", warnings),
+    officialQaRelated: limitEvidence(evidence.officialQaRelated, limits.maxRelatedEvidence, 2200, "official_related", warnings),
+    faqRelated: limitEvidence(evidence.faqRelated, limits.maxRelatedEvidence, 2000, "faq", warnings),
     cardTexts: limitEvidence(evidence.cardTexts, limits.maxCards, limits.maxCardTextChars, "card_text", warnings),
     userProvidedCardTexts: limitEvidence(evidence.userProvidedCardTexts, limits.maxCards, limits.maxCardTextChars, "user_provided_text", warnings),
-    rawRelatedEvidence: limitEvidence(evidence.rawRelatedEvidence, limits.maxRelatedEvidence, 1200, "raw_related", warnings),
+    rawRelatedEvidence: limitEvidence(evidence.rawRelatedEvidence, limits.maxRelatedEvidence, 1500, "raw_related", warnings),
   };
 }
 
@@ -163,6 +175,12 @@ function limitEvidence(items = [], limit, textLimit, label, warnings) {
       matchLevel: item.matchLevel || "",
       cards: item.cards || [],
       cardIds: item.cardIds || [],
+      cardType: item.cardType || "",
+      attribute: item.attribute ?? "",
+      race: item.race ?? "",
+      atk: item.atk ?? null,
+      def: item.def ?? null,
+      level: item.level ?? null,
       text: truncated ? `${text.slice(0, Math.max(0, textLimit - 1))}…` : text,
       sourceUrl: item.sourceUrl || "",
       source: item.source || "",
@@ -173,8 +191,8 @@ function limitEvidence(items = [], limit, textLimit, label, warnings) {
 
 function buildCompactRagPrompt({ payload, maxPromptChars }) {
   const maxChars = Math.max(600, Number(maxPromptChars) || 30000);
-  const textLimit = maxChars >= 12000 ? 900 : maxChars >= 4000 ? 360 : 100;
-  const totalEvidenceLimit = maxChars >= 12000 ? 14 : maxChars >= 4000 ? 7 : 3;
+  const textLimit = maxChars >= 30000 ? 1400 : maxChars >= 12000 ? 900 : maxChars >= 4000 ? 360 : 100;
+  const totalEvidenceLimit = maxChars >= 30000 ? 20 : maxChars >= 12000 ? 14 : maxChars >= 4000 ? 7 : 3;
   const evidence = {
     officialQaDirectCandidates: [],
     officialQaRelated: [],
@@ -186,16 +204,18 @@ function buildCompactRagPrompt({ payload, maxPromptChars }) {
   };
   const bucketOrder = [
     "officialQaDirectCandidates",
-    "faqRelated",
-    "officialQaRelated",
     "userProvidedCardTexts",
     "cardTexts",
     "rawRelatedEvidence",
+    "faqRelated",
+    "officialQaRelated",
   ];
   let evidenceCount = 0;
-  for (const bucket of bucketOrder) {
-    for (const item of payload.evidence?.[bucket] || []) {
-      if (evidenceCount >= totalEvidenceLimit) break;
+  for (let index = 0; evidenceCount < totalEvidenceLimit; index += 1) {
+    let added = false;
+    for (const bucket of bucketOrder) {
+      const item = (payload.evidence?.[bucket] || [])[index];
+      if (item && evidenceCount < totalEvidenceLimit) {
       evidence[bucket].push({
         id: item.id,
         type: item.type,
@@ -205,11 +225,21 @@ function buildCompactRagPrompt({ payload, maxPromptChars }) {
         sourceUrl: item.sourceUrl || "",
       });
       evidenceCount += 1;
+        added = true;
+      }
     }
+    if (!added) break;
   }
   const compactPayload = {
     userQuery: String(payload.userQuery || "").slice(0, maxChars >= 4000 ? 1000 : 260),
-    resolvedCards: (payload.resolvedCards || []).slice(0, 6).map((card) => ({ id: card.id, name: card.name })),
+    resolvedCards: (payload.resolvedCards || []).slice(0, 6).map((card) => ({
+      id: card.id,
+      name: card.name,
+      cardType: card.cardType,
+      attribute: card.attribute,
+      race: card.race,
+      source: card.source,
+    })),
     unresolvedMentions: (payload.unresolvedMentions || []).slice(0, 6),
     operationChecks: (payload.operationChecks || []).slice(0, maxChars >= 4000 ? 8 : 2).map((check) => ({
       operationId: check.operationId,
@@ -227,6 +257,8 @@ function buildCompactRagPrompt({ payload, maxPromptChars }) {
     "你是游戏王 OCG 裁定分析助手。只依据所给证据回答，不得编造规则或来源。",
     "官方直接 Q&A 才能支持 official_confirmed；相关 Q&A、FAQ、规则书和卡文只能支持 rule_analysis 或 low_confidence_analysis。",
     "有逐字引文的 operationChecks 是强约束；unknown 不能支持肯定或否定结论。",
+    "resolvedCards 是已匹配卡片，不得把其中已有的卡种或属性说成未确定。必须分别判断发动、取对象、效果适用和逐项处理；发动源或对象离开不等于整条效果自动不处理。",
+    "不受效果影响不等于不能成为对象；魔法陷阱卡的卡的发动被无效与场上表侧卡的效果发动被无效必须分开判断。",
     "输出单个 JSON 对象，字段为 answerLevel、shortAnswer、reasoning、usedCards、usedEvidence、missingInfo、riskFlags、confidenceSelfEstimate。",
     "shortAnswer 只写结论；reasoning 必须是至少 2 条非空字符串的数组，并逐条说明证据如何适用于题目。",
     JSON.stringify(context),
@@ -237,7 +269,7 @@ function buildCompactRagPrompt({ payload, maxPromptChars }) {
   const evidenceIds = bucketOrder.flatMap((bucket) => evidence[bucket].map((item) => ({ id: item.id, type: item.type, title: item.title })));
   prompt = render({
     userQuery: String(payload.userQuery || "").slice(0, 160),
-    resolvedCards: (payload.resolvedCards || []).slice(0, 4).map((card) => ({ id: card.id, name: card.name })),
+    resolvedCards: (payload.resolvedCards || []).slice(0, 4).map((card) => ({ id: card.id, name: card.name, cardType: card.cardType, attribute: card.attribute })),
     operationChecks: (payload.operationChecks || []).slice(0, 2).map((check) => ({ status: check.status, conclusion: String(check.conclusion || "").slice(0, 100) })),
     evidenceIds: evidenceIds.slice(0, 10),
   });

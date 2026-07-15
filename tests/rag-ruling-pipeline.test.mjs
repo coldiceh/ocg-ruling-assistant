@@ -558,6 +558,8 @@ test("qa_evidence_can_ground_operation_checks_without_rulebook", async () => {
 
   assert.match(capturedPrompt, /evidenceCandidates/u);
   assert.match(capturedPrompt, /官方 Q&A 或卡片 FAQ/u);
+  assert.match(capturedPrompt, /不受其他卡的效果影响.*不等于.*不能成为效果对象/u);
+  assert.match(capturedPrompt, /卡的发动.*已在场卡片的效果发动/u);
   assert.equal(result.operationLegality.hasGroundedChecks, true);
   assert.equal(result.operationLegality.hasBlockingCheck, false);
   assert.equal(result.operationLegality.matchedRuleEvidence[0].id, faq.id);
@@ -1182,6 +1184,32 @@ test("rag_prompt_truncates_context", () => {
   assert.doesNotMatch(bundle.prompt, /上下文因 RAG_MAX_PROMPT_CHARS 限制被截断/u);
 });
 
+test("compacted_prompt_keeps_each_critical_evidence_bucket", () => {
+  const longText = (marker) => `${marker} ${"证据内容".repeat(600)}`;
+  const bundle = buildRagRulingPromptBundle({
+    userQuery: "需要同时参考官方问答、卡文、规则书和FAQ的复杂问题",
+    cardResolution: { resolvedCards: cards },
+    evidence: {
+      officialQaDirectCandidates: [{ id: "direct-critical", type: "official_qa", title: "官方直答", text: longText("DIRECT_MARKER"), isDirect: true }],
+      userProvidedCardTexts: [{ id: "user-critical", type: "user_provided_text", title: "用户卡文", text: longText("USER_MARKER") }],
+      cardTexts: [{ id: "card-critical", type: "card_text", title: "卡片文本", text: longText("CARD_MARKER") }],
+      rawRelatedEvidence: [{ id: "rule-critical", type: "rulebook", title: "规则书", text: longText("RULE_MARKER") }],
+      faqRelated: [{ id: "faq-critical", type: "faq", title: "卡片FAQ", text: longText("FAQ_MARKER") }],
+      officialQaRelated: [{ id: "related-critical", type: "related", title: "相似问答", text: longText("RELATED_MARKER") }],
+      retrievalWarnings: [],
+    },
+    env: { RAG_MAX_PROMPT_CHARS: "8000" },
+  });
+
+  assert.ok(bundle.warnings.some((warning) => warning.includes("compacted")));
+  assert.match(bundle.prompt, /DIRECT_MARKER/u);
+  assert.match(bundle.prompt, /USER_MARKER/u);
+  assert.match(bundle.prompt, /CARD_MARKER/u);
+  assert.match(bundle.prompt, /RULE_MARKER/u);
+  assert.match(bundle.prompt, /FAQ_MARKER/u);
+  assert.match(bundle.prompt, /RELATED_MARKER/u);
+});
+
 test("secrets_not_returned_in_debug", async () => {
   const answer = await answerRagRulingQuestion({
     question: "「测试龙」可以发动①效果吗？",
@@ -1251,3 +1279,250 @@ function jsonResponse(payload, ok = true, status = 200) {
     json: async () => payload,
   };
 }
+
+
+test("stardust_chain_uses_inline_linked_official_qa_and_blocks_wrong_model_answer", async () => {
+  const scenarioCards = [
+    {
+      id: "4678",
+      name: "神鹰羽毛扫",
+      cnName: "神鹰羽毛扫",
+      cardType: "通常魔法",
+      effectText: "将对手场上的魔法・陷阱卡全部破坏。",
+      aliases: ["神鹰羽毛扫"],
+      sourceUrl: "https://example.test/card/4678",
+    },
+    {
+      id: "16386",
+      name: "鲜花之女男爵",
+      cnName: "鲜花之女男爵",
+      cardType: "怪兽",
+      effectText: "魔法・陷阱・怪兽的效果发动时可以发动。将该发动无效并破坏。",
+      aliases: ["鲜花之女男爵"],
+      sourceUrl: "https://example.test/card/16386",
+    },
+    {
+      id: "7734",
+      name: "星尘龙",
+      cnName: "星尘龙",
+      cardType: "怪兽",
+      effectText: "破坏场上的卡之效果发动时，解放此卡可以发动。将该发动无效并破坏。",
+      aliases: ["星尘龙"],
+      sourceUrl: "https://example.test/card/7734",
+    },
+  ];
+  const qaRecord = {
+    id: "ygoresources-qa-11290",
+    recordType: "qa",
+    title: "卡的发动被无效并破坏时能否连锁星尘龙",
+    cardIds: ["5494", "6053"],
+    cards: ["无关的旧索引值"],
+    text: "对魔法・陷阱卡的卡的发动连锁发动<<15105>>的无效并破坏效果时，能否再连锁发动<<7734>>？\n不能。魔法・陷阱卡的卡的发动被无效后，不再视为场上的卡。因此该破坏不视为破坏场上的卡。",
+    sourceUrl: "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=11290&request_locale=ja",
+  };
+  let groundingPrompt = "";
+  const answer = await answerRagRulingQuestion({
+    question: "我方C1发动「神鹰羽毛扫」，对手C2连锁「鲜花之女男爵」的无效并破坏效果，我方是否可以C3发动「星尘龙」？",
+    cards: scenarioCards,
+    records: [],
+    qaRecords: [qaRecord],
+    env: { RAG_MODEL_TIER: "flash" },
+    rulebookModelInvoker: async ({ prompt }) => {
+      groundingPrompt = prompt;
+      return JSON.stringify({
+        operationChecks: [{
+          operationId: "chain-stardust",
+          step: 3,
+          action: "以星尘龙连锁鲜花之女男爵的无效并破坏效果",
+          status: "illegal",
+          conclusion: "不能发动星尘龙；羽毛扫的卡的发动被无效后不再视为场上的卡，男爵的处理不属于破坏场上的卡。",
+          reasoning: ["星尘龙要求直接连锁会破坏场上卡片的效果，本场景不满足。"],
+          citations: [{
+            id: qaRecord.id,
+            quote: "魔法・陷阱卡的卡的发动被无效后，不再视为场上的卡。",
+          }],
+        }],
+        overallConclusion: "不能在C3发动星尘龙。",
+      });
+    },
+    modelInvoker: async () => JSON.stringify({
+      answerLevel: "rule_analysis",
+      shortAnswer: "可以在C3发动星尘龙。",
+      reasoning: ["鲜花之女男爵会破坏羽毛扫。", "星尘龙可以对应破坏效果。"],
+      usedCards: ["神鹰羽毛扫", "鲜花之女男爵", "星尘龙"],
+      usedEvidence: [],
+      missingInfo: [],
+      riskFlags: [],
+      confidenceSelfEstimate: "medium",
+    }),
+  });
+
+  assert.match(groundingPrompt, /ygoresources-qa-11290/u);
+  assert.match(answer.shortAnswer, /不能发动星尘龙/u);
+  assert.doesNotMatch(answer.shortAnswer, /可以在C3发动/u);
+  assert.ok(answer.reasoning.some((item) => /不再视为场上的卡/u.test(item)));
+  assert.ok(answer.usedEvidence.some((item) => item.id === qaRecord.id));
+  assert.ok(answer.riskFlags.includes("model_answer_overridden_by_operation_legality"));
+});
+
+test("fully_cited_multi_card_operation_analysis_constrains_partial_resolution", async () => {
+  const mediusText = "此卡存在于墓地的情况下可以发动。从自己手牌・场上（表侧表示）将1只怪兽放回牌组，将此卡特殊召唤。";
+  const bystialText = "以自己或对手墓地的1只光・暗属性怪兽为对象可以发动。将该怪兽除外，从手牌将此卡特殊召唤。";
+  const answer = await answerRagRulingQuestion({
+    question: "C1发动《无垢者 墨迪乌斯》的②效果，C2发动《渊兽 玛格纳姆特》将其除外。C1处理时还要将1只怪兽放回牌组吗？",
+    cards: [
+      {
+        id: "21419",
+        name: "无垢者 墨迪乌斯",
+        cnName: "无垢者 墨迪乌斯",
+        cardType: "怪兽",
+        effectText: mediusText,
+        aliases: ["无垢者 墨迪乌斯"],
+      },
+      {
+        id: "17762",
+        name: "渊兽 玛格纳姆特",
+        cnName: "渊兽 玛格纳姆特",
+        cardType: "怪兽",
+        effectText: bystialText,
+        aliases: ["渊兽 玛格纳姆特"],
+      },
+    ],
+    records: [],
+    qaRecords: [],
+    rulebookModelInvoker: async () => JSON.stringify({
+      operationChecks: [
+        {
+          operationId: "resolve-bystial",
+          step: 1,
+          action: "玛格纳姆特除外墓地的墨迪乌斯并特殊召唤",
+          status: "legal",
+          conclusion: "C2先将墨迪乌斯除外，并在除外成功后特殊召唤玛格纳姆特。",
+          reasoning: ["按C2卡片文本依次处理。"],
+          citations: [{
+            id: "card-text-17762",
+            quote: "将该怪兽除外，从手牌将此卡特殊召唤",
+            application: "C2使墨迪乌斯在C1处理前离开墓地。",
+          }],
+        },
+        {
+          operationId: "resolve-medius",
+          step: 2,
+          action: "处理已经发动的墨迪乌斯②效果",
+          status: "legal",
+          conclusion: "仍要从手牌或表侧场上将1只怪兽放回牌组；墨迪乌斯已不在墓地，之后不能将其特殊召唤。",
+          reasoning: ["回牌组处理写在特殊召唤之前，且不要求墨迪乌斯仍在墓地。"],
+          citations: [{
+            id: "card-text-21419",
+            quote: "从自己手牌・场上（表侧表示）将1只怪兽放回牌组，将此卡特殊召唤",
+            application: "先进行回牌组处理，再尝试特殊召唤此卡。",
+          }],
+        },
+      ],
+      overallConclusion: "仍要将1只怪兽放回牌组，但不能再特殊召唤已被除外的墨迪乌斯。",
+    }),
+    modelInvoker: async () => JSON.stringify({
+      answerLevel: "rule_analysis",
+      shortAnswer: "不需要。墨迪乌斯离开墓地后整个效果不处理。",
+      reasoning: ["效果处理时发动源不在原位置。"],
+      usedCards: ["无垢者 墨迪乌斯", "渊兽 玛格纳姆特"],
+      usedEvidence: [],
+      missingInfo: [],
+      riskFlags: [],
+      confidenceSelfEstimate: "medium",
+    }),
+  });
+
+  assert.match(answer.shortAnswer, /仍要将1只怪兽放回牌组/u);
+  assert.match(answer.shortAnswer, /不能再特殊召唤/u);
+  assert.ok(answer.reasoning.some((item) => /回牌组处理/u.test(item)));
+  assert.ok(answer.riskFlags.includes("answer_constrained_by_exact_scenario_evidence"));
+  assert.ok(answer.usedEvidence.some((item) => item.id === "card-text-21419"));
+  assert.ok(answer.usedEvidence.some((item) => item.id === "card-text-17762"));
+});
+
+
+test("target_protection_and_unaffected_status_are_checked_separately", async () => {
+  const scenarioCards = [
+    {
+      id: "17451",
+      name: "电光闪灵・精灵",
+      cnName: "电光闪灵・精灵",
+      cardType: "连接怪兽",
+      effectText: "对手不能将此卡链接端的怪兽作为效果对象。",
+      aliases: ["卫星闪灵 淘气精灵", "电光闪灵・精灵"],
+      sourceUrl: "https://example.test/card/17451",
+    },
+    {
+      id: "11296",
+      name: "No.86 英豪冠军 击灭枪王",
+      cnName: "No.86 英豪冠军 击灭枪王",
+      cardType: "超量怪兽",
+      effectText: "持有3个以上X素材的此卡不受其他卡的效果影响。",
+      aliases: ["NO.86 英豪冠军 击灭枪王"],
+      sourceUrl: "https://example.test/card/11296",
+    },
+    {
+      id: "10820",
+      name: "超量叠光延迟",
+      cnName: "超量叠光延迟",
+      cardType: "通常魔法",
+      effectText: "以持有X素材的对手场上1只X怪兽为对象可以发动。将其X素材全部取除。",
+      aliases: ["超量叠光延迟"],
+      sourceUrl: "https://example.test/card/10820",
+    },
+  ];
+  const elfFaq = {
+    id: "card-faq-17451-1",
+    recordType: "card-faq",
+    title: "电光闪灵・精灵 FAQ 1",
+    cardIds: ["17451"],
+    cards: ["电光闪灵・精灵"],
+    text: "相手プレイヤーに適用される効果です。（相手プレイヤーが、このカードのリンク先のモンスターを効果の対象に選択できなくなります。このカードのリンク先のモンスターに適用される効果ではありません。）",
+  };
+  const encoreFaq = {
+    id: "card-faq-10820-1",
+    recordType: "card-faq",
+    title: "超量叠光延迟 FAQ 1",
+    cardIds: ["10820"],
+    cards: ["超量叠光延迟"],
+    text: "『そのモンスターのX素材を全て取り除き』はモンスターに適用する効果ではありません。（魔法カードの効果を受けないエクシーズモンスターのエクシーズ素材も全て取り除かれます。）",
+  };
+  const answer = await answerRagRulingQuestion({
+    question: "在「卫星闪灵 淘气精灵」链接端，拥有三个以上素材的「NO.86 英豪冠军 击灭枪王」是否可以被对方发动的「超量叠光延迟」取做效果对象？",
+    cards: scenarioCards,
+    records: [],
+    qaRecords: [elfFaq, encoreFaq],
+    env: { RAG_MODEL_TIER: "flash" },
+    rulebookModelInvoker: async () => JSON.stringify({
+      operationChecks: [{
+        operationId: "choose-target",
+        step: 1,
+        action: "对方以链接端的枪王为对象发动超量叠光延迟",
+        status: "illegal",
+        conclusion: "不能发动；淘气精灵限制对手玩家把链接端怪兽选为效果对象。",
+        reasoning: ["阻断原因是对手玩家受到对象选择限制，不是枪王的不受效果影响。"],
+        citations: [{
+          id: elfFaq.id,
+          quote: "相手プレイヤーが、このカードのリンク先のモンスターを効果の対象に選択できなくなります",
+        }],
+      }],
+      overallConclusion: "不能以该枪王为对象发动超量叠光延迟。",
+    }),
+    modelInvoker: async () => JSON.stringify({
+      answerLevel: "rule_analysis",
+      shortAnswer: "不能发动，因为枪王不受魔法效果影响。",
+      reasoning: ["枪王不受效果，所以不能成为效果对象。", "超量叠光延迟无法适用。"],
+      usedCards: ["No.86 英豪冠军 击灭枪王", "超量叠光延迟"],
+      usedEvidence: [{ id: encoreFaq.id, type: "faq", title: encoreFaq.title }],
+      missingInfo: [],
+      riskFlags: [],
+      confidenceSelfEstimate: "medium",
+    }),
+  });
+
+  assert.match(answer.shortAnswer, /淘气精灵限制对手玩家/u);
+  assert.doesNotMatch(answer.shortAnswer, /枪王不受魔法效果影响/u);
+  assert.ok(answer.reasoning.some((item) => /不是枪王的不受效果影响/u.test(item)));
+  assert.ok(answer.usedEvidence.some((item) => item.id === elfFaq.id));
+});

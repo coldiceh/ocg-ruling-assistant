@@ -1,6 +1,17 @@
 const BAIGE_API_BASE = "https://ygocdb.com/api/v0/";
 const DEFAULT_CACHE_TTL_MS = 86_400_000;
 const searchCache = new Map();
+const ATTRIBUTE_NAMES = new Map([
+  [1, "地"], [2, "水"], [4, "炎"], [8, "风"], [16, "光"], [32, "暗"], [64, "神"],
+]);
+const RACE_NAMES = new Map([
+  [1, "战士族"], [2, "魔法师族"], [4, "天使族"], [8, "恶魔族"], [16, "不死族"],
+  [32, "机械族"], [64, "水族"], [128, "炎族"], [256, "岩石族"], [512, "鸟兽族"],
+  [1024, "植物族"], [2048, "昆虫族"], [4096, "雷族"], [8192, "龙族"], [16384, "兽族"],
+  [32768, "兽战士族"], [65536, "恐龙族"], [131072, "鱼族"], [262144, "海龙族"],
+  [524288, "爬虫类族"], [1048576, "念动力族"], [2097152, "幻神兽族"],
+  [4194304, "创造神族"], [8388608, "幻龙族"], [16777216, "电子界族"], [33554432, "幻想魔族"],
+]);
 
 export async function searchCards(query, options = {}) {
   return searchBaigeCards(query, options);
@@ -88,8 +99,8 @@ export function normalizeBaigeCard(card = {}, query = "", warnings = []) {
   const name = cnName || readFirst(card, ["name", "title"]) || jpName || enName || String(query || id || cid || "");
   const text = extractEffectText(card);
   const type = readFirst(card, ["type", "cardType"]) || card?.text?.types || card?.data?.type || "";
-  const attribute = readFirst(card, ["attribute"]) || card?.data?.attribute || "";
-  const race = readFirst(card, ["race"]) || card?.data?.race || "";
+  const attribute = normalizeAttribute(readFirst(card, ["attribute"]) || card?.data?.attribute || "", type);
+  const race = normalizeRace(readFirst(card, ["race"]) || card?.data?.race || "", type);
   const atk = readStat(card, "atk");
   const def = readStat(card, "def");
   const level = readStat(card, "level") || readStat(card, "rank") || readStat(card, "link");
@@ -291,6 +302,25 @@ function readStat(card, key) {
   if (card?.[key] !== undefined && card?.[key] !== null) return card[key];
   if (card?.data?.[key] !== undefined && card?.data?.[key] !== null) return card.data[key];
   return undefined;
+}
+
+function normalizeAttribute(value, typeText = "") {
+  const numeric = Number(value);
+  if (Number.isFinite(numeric) && ATTRIBUTE_NAMES.has(numeric)) return ATTRIBUTE_NAMES.get(numeric);
+  const text = String(value ?? "").trim().replace(/風/gu, "风");
+  if (text && !/^\d+$/u.test(text)) return text;
+  const match = String(typeText || "").replace(/風/gu, "风").match(/(?:\/|\s)(地|水|炎|风|光|暗|神)(?=$|[\s/\]])/u);
+  return match?.[1] || "";
+}
+
+function normalizeRace(value, typeText = "") {
+  const numeric = Number(value);
+  if (Number.isFinite(numeric) && RACE_NAMES.has(numeric)) return RACE_NAMES.get(numeric);
+  const text = String(value ?? "").trim();
+  if (text && !/^\d+$/u.test(text)) return text;
+  const match = String(typeText || "").match(/\]\s*([^/\n]+)\/(?:地|水|炎|风|風|光|暗|神)(?=$|[\s/\]])/u);
+  const parsed = String(match?.[1] || "").trim();
+  return parsed ? (parsed.endsWith("族") ? parsed : `${parsed}族`) : "";
 }
 
 function cleanText(value) {

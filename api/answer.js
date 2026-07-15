@@ -30,6 +30,7 @@ export default async function handler(request, response) {
       const answer = await answerRagRulingQuestion({
         question: payload.question,
         env: envForModelTier(process.env, payload.modelTier),
+        engineScenario: payload.engineScenario,
       });
       response.status(200).json(answer);
       return;

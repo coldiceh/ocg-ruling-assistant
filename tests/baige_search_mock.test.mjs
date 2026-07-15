@@ -67,6 +67,19 @@ const sacredGarunixRawCard = {
   data: { type: 33, atk: 2700, def: 1700, level: 8, race: 8192, attribute: 4 },
 };
 
+const dalviRawCard = {
+  cid: 22199,
+  id: 16384883,
+  cn_name: "绚岚之达维",
+  jp_name: "絢嵐たるエルダム",
+  en_name: "Radiant Typhoon Eldam",
+  text: {
+    types: "[怪兽|效果] 兽/风\n[★3] 1300/800",
+    desc: "自己墓地有『旋风』存在的场合或者对方场上没有魔法・陷阱卡存在的场合，这张卡可以从手卡特殊召唤。",
+  },
+  data: { type: 33, atk: 1300, def: 800, level: 3, race: 16384, attribute: 8 },
+};
+
 test("baige_search_mock_returns_enigmaster_packbit", async () => {
   clearBaigeSearchCache();
   const calls = [];
@@ -86,6 +99,8 @@ test("baige_search_mock_returns_enigmaster_packbit", async () => {
   assert.match(result.results[0].text, /自己的魔法与陷阱区域/u);
   assert.equal(result.results[0].official, false);
   assert.equal(result.results[0].source, "baige");
+  assert.equal(result.results[0].attribute, "水");
+  assert.equal(result.results[0].race, "电子界族");
   assert.ok(result.results[0].raw);
 });
 
@@ -258,6 +273,38 @@ test("baige_card_text_is_not_official_direct", async () => {
   assert.ok(answer.riskFlags.includes("official_confirmed_requires_direct_evidence"));
   assert.ok(answer.usedEvidence.some((item) => item.type === "baige_card_text"));
   assert.ok(!answer.usedEvidence.some((item) => item.type === "official_qa"));
+});
+
+test("baige_resolved_card_metadata_replaces_the_unresolved_prompt_mention", async () => {
+  clearBaigeSearchCache();
+  let finalPrompt = "";
+  const answer = await answerRagRulingQuestion({
+    question: "「绚岚之达维」是什么属性？",
+    cards: [],
+    records: [],
+    qaRecords: [],
+    fetchImpl: async () => jsonResponse({ result: [dalviRawCard], next: 0 }),
+    rulebookModelInvoker: async () => JSON.stringify({ operationChecks: [], overallConclusion: "卡片资料已找到。" }),
+    modelInvoker: async ({ prompt }) => {
+      finalPrompt = prompt;
+      return JSON.stringify({
+        answerLevel: "rule_analysis",
+        shortAnswer: "绚岚之达维是风属性怪兽。",
+        reasoning: ["百鸽卡片资料标明其为风属性。"],
+        usedCards: ["绚岚之达维"],
+        usedEvidence: [{ id: "card-text-16384883", type: "baige_card_text", title: "绚岚之达维 的卡片文本" }],
+        missingInfo: [],
+        riskFlags: [],
+        confidenceSelfEstimate: "medium",
+      });
+    },
+  });
+
+  assert.equal(answer.resolvedCards[0].name, "绚岚之达维");
+  assert.equal(answer.resolvedCards[0].attribute, "风");
+  assert.equal(answer.debug.unresolvedMentions.length, 0);
+  assert.match(finalPrompt, /"attribute": "风"/u);
+  assert.match(finalPrompt, /"unresolvedMentions": \[\]/u);
 });
 
 function jsonResponse(payload, ok = true, status = 200) {

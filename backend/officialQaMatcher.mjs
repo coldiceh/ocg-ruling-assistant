@@ -6,7 +6,7 @@ const QUESTION_TYPES = [
   ["timing_window", /时点|伤害步骤|伤害计算|错过时点|タイミング|ダメージステップ|timing|damage step/iu],
   ["continuous_effect_during_resolution", /效果处理中.*(?:永续|持续|自坏)|処理中.*永続|continuous effect.*resol/iu],
   ["resolution_result", /如何处理|怎么处理|处理后|效果处理|どう処理|resolution|resolve/iu],
-  ["can_activate", /能否发动|可以发动|不能发动|発動できますか|発動できません|can(?:not)? (?:be )?activate/iu],
+  ["can_activate", /(?:能否|是否(?:可以|能)?|可不可以|能不能|可以|不能).{0,12}(?:发动|连锁)|発動できますか|発動できません|can(?:not)?\b.{0,80}\bactivate/iu],
 ];
 
 const EFFECT_PHRASES = [
@@ -81,7 +81,12 @@ export function resolveEntitiesFromOfficialQaMatch({ resolution = {}, matches, c
   const top = matches?.exact?.[0] || matches?.near?.find((item) => item.score >= 0.78) || null;
   if (!top) return buildEntityResolution(resolved, unresolved, false);
 
-  const evidenceIds = new Set([top.record.cardId, ...(top.record.cardIds || []), ...(top.record.cards || [])].map(normalizeId).filter(Boolean));
+  const evidenceIds = new Set([
+    top.record.cardId,
+    ...(top.record.cardIds || []),
+    ...(top.record.cards || []),
+    ...extractInlineCardIds(recordText(top.record)),
+  ].map(normalizeId).filter(Boolean));
   const evidenceText = normalizeOfficialQaQuery(recordText(top.record));
   let resolvedByOfficialQaMatch = false;
   const remaining = [];
@@ -111,7 +116,12 @@ function scoreRecord({ record, normalizedQuery, queryType, queryPhrases, resolve
   const containment = containmentScore(normalizedQuery, normalizedRecordQuestion || normalizedRecordText);
   const similarity = diceSimilarity(normalizedQuery, normalizedRecordQuestion || normalizedRecordText.slice(0, normalizedQuery.length * 2));
   const phraseHits = queryPhrases.filter((phrase) => evidencePhrases.includes(phrase));
-  const recordIds = new Set([record.cardId, ...(record.cardIds || []), ...(record.cards || [])].map(normalizeId).filter(Boolean));
+  const recordIds = new Set([
+    record.cardId,
+    ...(record.cardIds || []),
+    ...(record.cards || []),
+    ...extractInlineCardIds(recordText(record)),
+  ].map(normalizeId).filter(Boolean));
   const cardIdMatch = [...resolvedIds].some((id) => recordIds.has(id));
   const cardNameMatch = [...resolvedNames].some((name) => name.length >= 3 && normalizedRecordText.includes(name));
   const cardMatch = cardIdMatch || cardNameMatch;
@@ -155,7 +165,14 @@ function recordQuestionText(record = {}) {
 }
 
 function recordText(record = {}) {
-  return [record.title, record.question, record.answer, record.conclusion, record.text, record.officialText].filter(Boolean).join("\n");
+  if (record.text) return String(record.text);
+  const answer = record.answer || record.conclusion || "";
+  return [record.question, answer, record.officialText, record.title].filter(Boolean).join("\n");
+}
+
+function extractInlineCardIds(value) {
+  return [...String(value || "").matchAll(/<<\s*(\d{1,10})\s*>>/gu)]
+    .map((match) => match[1]);
 }
 
 function containmentScore(left, right) {

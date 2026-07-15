@@ -1,4 +1,5 @@
-import { extractRagCards } from "./ragCardExtractor.mjs";
+import { requestOcgEngineSimulation } from "./ocgEngineClient.mjs";
+import { extractRagCards, normalizeCardKey } from "./ragCardExtractor.mjs";
 import { evidenceBucketsToList, loadRagData, retrieveRagEvidence } from "./ragEvidenceRetriever.mjs";
 import { callCardNameExtractionModel, callRagModel, callRulebookGroundingModel, callRuleQueryExtractionModel } from "./ragModelClient.mjs";
 import { buildRagRulingPromptBundle, RAG_ANSWER_LEVELS } from "./ragRulingPrompt.mjs";
@@ -18,9 +19,14 @@ export async function answerRagRulingQuestion({
   fetchImpl,
   now,
   env = globalThis.process?.env || {},
+  engineScenario,
+  engineFetchImpl,
 } = {}) {
   const query = String(question || userQuery || "").trim();
   if (!query) return buildEmptyQuestionAnswer();
+  const enginePromise = requestOcgEngineSimulation({
+    engineScenario, env, fetchImpl: engineFetchImpl || fetchImpl || globalThis.fetch,
+  });
 
   const dataPromise = Promise.resolve(cards || records || qaRecords
     ? { cards: cards || [], records: records || [], qaRecords: qaRecords || [] }
@@ -58,14 +64,15 @@ export async function answerRagRulingQuestion({
     env,
     fetchImpl,
   });
+  const effectiveCardResolution = reconcileCardResolution(cardResolution, retrievedEvidence);
   const rulebookGrounding = await callRulebookGroundingModel({
     userQuery: query,
     cardTexts: [...(retrievedEvidence.cardTexts || []), ...(retrievedEvidence.userProvidedCardTexts || [])],
     ruleEvidence: retrievedEvidence.rulebookCandidates || [],
     qaEvidence: dedupeEvidenceRefs([
       ...(retrievedEvidence.officialQaDirectCandidates || []),
-      ...(retrievedEvidence.faqRelated || []),
       ...(retrievedEvidence.officialQaRelated || []),
+      ...(retrievedEvidence.faqRelated || []),
     ]),
     env,
     modelInvoker: rulebookModelInvoker,
@@ -73,27 +80,29 @@ export async function answerRagRulingQuestion({
     now,
   });
   const evidence = attachRulebookGrounding(retrievedEvidence, rulebookGrounding);
-  const promptBundle = buildRagRulingPromptBundle({ userQuery: query, cardResolution, evidence, env });
+  const promptBundle = buildRagRulingPromptBundle({ userQuery: query, cardResolution: effectiveCardResolution, evidence, env });
   const displayCards = dedupeCards([
-    ...(cardResolution.resolvedCards || []),
-    ...(evidence.fuzzyResolvedCards || []),
-    ...(evidence.baigeResolvedCards || []),
+    ...(effectiveCardResolution.resolvedCards || []),
     ...userProvidedCards(evidence.userProvidedCardTexts || []),
   ]);
   const modelResult = await callRagModel({
     prompt: promptBundle.prompt,
     evidence,
-    cardResolution,
+    cardResolution: effectiveCardResolution,
     env,
     modelInvoker,
     dryRun,
     fetchImpl,
     now,
   });
-  const modelAnswer = normalizeRagAnswer(modelResult.answer, { evidence, cardResolution, modelWarnings: modelResult.warnings || [] });
+  const modelAnswer = normalizeRagAnswer(modelResult.answer, { evidence, cardResolution: effectiveCardResolution, modelWarnings: modelResult.warnings || [] });
   const groundedFallback = applyGroundedOperationFallback(modelAnswer, evidence);
   const evidenceConstrained = applyExactScenarioGrounding(groundedFallback, evidence, query);
   const normalized = applyOperationLegalityOverride(evidenceConstrained, evidence);
+  const engine = await enginePromise;
+  const engineRiskFlags = engine.status === "completed"
+    ? ["engine_simulation_not_official_evidence"]
+    : engine.requested ? ["engine_simulation_unavailable"] : [];
 
   return {
     mode: "rag_baseline",
@@ -103,10 +112,18 @@ export async function answerRagRulingQuestion({
     usedEvidence: normalized.usedEvidence,
     resolvedCards: displayCards,
     missingInfo: normalized.missingInfo,
-    riskFlags: normalized.riskFlags,
+    riskFlags: [...new Set([...normalized.riskFlags, ...engineRiskFlags])],
     confidenceSelfEstimate: normalized.confidenceSelfEstimate,
+    engine: {
+      requested: engine.requested,
+      status: engine.status,
+      ...(engine.error ? { error: engine.error } : {}),
+    },
+    engineSimulation: engine.simulation || null,
     debug: {
       mode: "rag_baseline",
+      engineStatus: engine.status,
+      engineTraceSha256: engine.simulation?.traceSha256 || null,
       retrievalCounts: {
         cardTexts: evidence.cardTexts.length,
         userProvidedCardTexts: evidence.userProvidedCardTexts.length,
@@ -117,9 +134,9 @@ export async function answerRagRulingQuestion({
         rulebookCandidates: evidence.rulebookCandidates?.length || 0,
         operationLegalityChecks: evidence.operationLegality?.checks?.length || 0,
       },
-      unresolvedMentions: cardResolution.unresolvedMentions,
-      ambiguousMentions: [...(cardResolution.ambiguousMentions || []), ...(evidence.baigeAmbiguousMentions || [])],
-      modelCardNameCandidates: cardResolution.modelCardNameCandidates || [],
+      unresolvedMentions: effectiveCardResolution.unresolvedMentions,
+      ambiguousMentions: [...(effectiveCardResolution.ambiguousMentions || []), ...(evidence.baigeAmbiguousMentions || [])],
+      modelCardNameCandidates: effectiveCardResolution.modelCardNameCandidates || [],
       cardNameModelUsed: cardNameModel.modelUsed,
       cardNameProviderUsed: cardNameModel.providerUsed,
       cardNameModelDryRun: cardNameModel.dryRun,
@@ -150,6 +167,39 @@ export async function answerRagRulingQuestion({
       promptTruncated: promptBundle.promptTruncated,
     },
   };
+}
+
+function reconcileCardResolution(cardResolution = {}, evidence = {}) {
+  const resolvedCards = dedupeCards([
+    ...(evidence.retrievedCards || []),
+    ...(evidence.baigeResolvedCards || []),
+    ...(evidence.fuzzyResolvedCards || []),
+    ...(cardResolution.resolvedCards || []),
+  ]);
+  const remainingUnresolved = Array.isArray(evidence.remainingUnresolvedMentions)
+    ? evidence.remainingUnresolvedMentions
+    : (cardResolution.unresolvedMentions || []).filter((mention) => !cardMatchesMention(mention, resolvedCards));
+  const ambiguousMentions = (cardResolution.ambiguousMentions || [])
+    .filter((mention) => !cardMatchesMention(mention, resolvedCards));
+  return {
+    ...cardResolution,
+    resolvedCards,
+    unresolvedMentions: remainingUnresolved,
+    ambiguousMentions,
+  };
+}
+
+function cardMatchesMention(mention, cards) {
+  const mentionKey = normalizeCardKey(mention?.input);
+  if (!mentionKey) return false;
+  return (cards || []).some((card) => {
+    const inputKey = normalizeCardKey(card.input || card.matchedQuery);
+    if (inputKey && inputKey === mentionKey) return true;
+    const names = [card.name, card.cnName, card.jaName, card.jpName, card.enName, ...(card.aliases || [])]
+      .map(normalizeCardKey)
+      .filter(Boolean);
+    return names.some((name) => name === mentionKey || (mentionKey.length >= 3 && (name.includes(mentionKey) || mentionKey.includes(name))));
+  });
 }
 
 function attachRulebookGrounding(evidence, groundingResult = {}) {
@@ -226,13 +276,22 @@ function applyExactScenarioGrounding(answer, evidence = {}, userQuery = "") {
   if (checks.some((check) => check.status === "unknown" || !(check.citations || []).length)) return answer;
 
   const anchors = extractScenarioAnchors(userQuery);
-  if (anchors.length < 2) return answer;
+  if (!anchors.length) return answer;
   const requiredMatches = Math.min(2, anchors.length);
   const exactEvidence = (operation.matchedRuleEvidence || []).filter((item) => {
-    const text = normalizeScenarioKey(item?.text);
-    return anchors.filter((anchor) => text.includes(anchor)).length >= requiredMatches;
+    const text = normalizeScenarioKey([
+      item?.title,
+      ...(item?.cards || []),
+      item?.text,
+    ].filter(Boolean).join(" "));
+    return anchors.some((anchor) => text.includes(anchor));
   });
-  if (!exactEvidence.length) return answer;
+  const coveredAnchors = anchors.filter((anchor) => exactEvidence.some((item) => normalizeScenarioKey([
+    item?.title,
+    ...(item?.cards || []),
+    item?.text,
+  ].filter(Boolean).join(" ")).includes(anchor)));
+  if (coveredAnchors.length < requiredMatches) return answer;
 
   const usedEvidence = dedupeEvidenceRefs([
     ...exactEvidence.map((item) => ({

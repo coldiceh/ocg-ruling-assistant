@@ -58,23 +58,33 @@ function splitRulebookParagraphs(value) {
 
 function buildPassage(record, paragraphs, hitIndex, score, maxPassageChars) {
   const limit = positiveInteger(maxPassageChars, DEFAULT_MAX_PASSAGE_CHARS);
-  let start = Math.max(0, hitIndex - 1);
-  let end = Math.min(paragraphs.length - 1, hitIndex + 1);
-  let text = joinRange(paragraphs, start, end);
+  const hit = paragraphs[hitIndex];
+  if (!hit?.text) return null;
 
-  while (text.length < limit * 0.72 && (start > 0 || end < paragraphs.length - 1)) {
-    const previous = start > 0 ? paragraphs[start - 1].text : "";
-    const next = end < paragraphs.length - 1 ? paragraphs[end + 1].text : "";
-    if (previous && (!next || previous.length <= next.length)) start -= 1;
-    else if (next) end += 1;
-    else break;
-    const expanded = joinRange(paragraphs, start, end);
-    if (expanded.length > limit * 1.25) break;
-    text = expanded;
+  let start = hitIndex;
+  let end = hitIndex;
+  let text = hit.text;
+  if (text.length <= limit) {
+    while (start > 0 || end < paragraphs.length - 1) {
+      if (end - start + 1 >= 5) break;
+      const choices = [];
+      if (start > 0) choices.push({ start: start - 1, end, side: "before" });
+      if (end < paragraphs.length - 1) choices.push({ start, end: end + 1, side: "after" });
+      choices.sort((left, right) => (
+        joinRange(paragraphs, left.start, left.end).length - joinRange(paragraphs, right.start, right.end).length
+        || (left.side === "before" ? -1 : 1)
+      ));
+
+      const next = choices.find((choice) => joinRange(paragraphs, choice.start, choice.end).length <= limit);
+      if (!next) break;
+      start = next.start;
+      end = next.end;
+      text = joinRange(paragraphs, start, end);
+    }
+  } else {
+    text = truncateFocusedParagraph(text, limit);
   }
 
-  if (!text) return null;
-  if (text.length > limit) text = `${text.slice(0, Math.max(0, limit - 1))}…`;
   const sourceId = String(record.id || record.evidenceId || record.stableId || "rulebook");
   const originalStart = paragraphs[start].originalIndex + 1;
   const originalEnd = paragraphs[end].originalIndex + 1;
@@ -95,6 +105,17 @@ function buildPassage(record, paragraphs, hitIndex, score, maxPassageChars) {
     official: false,
     isDirect: false,
   };
+}
+
+function truncateFocusedParagraph(value, limit) {
+  const text = String(value || "");
+  if (text.length <= limit) return text;
+  const marker = "\n…\n";
+  if (limit <= marker.length + 20) return text.slice(0, limit);
+  const available = limit - marker.length;
+  const headLength = Math.ceil(available * 0.55);
+  const tailLength = available - headLength;
+  return `${text.slice(0, headLength)}${marker}${text.slice(-tailLength)}`;
 }
 
 function buildWeightedTerms({ userQuery, ruleSearchQueries }) {

@@ -677,7 +677,7 @@ async function requestBackendAnswer(text) {
 }
 
 function buildBackendCacheKey(text, mode = "rag", modelTier = "flash") {
-  return `ocg-ruling-answer:v16:${mode}:${modelTier}:${appConfig.answerApiUrl}:${normalizeText(text).slice(0, 2000)}`;
+  return `ocg-ruling-answer:v17:${mode}:${modelTier}:${appConfig.answerApiUrl}:${normalizeText(text).slice(0, 2000)}`;
 }
 
 function readCachedBackendAnswer(key) {

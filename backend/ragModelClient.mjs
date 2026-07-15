@@ -319,12 +319,19 @@ export async function callRulebookGroundingModel({
   fetchImpl = globalThis.fetch,
   now = new Date(),
 } = {}) {
-  const maxRulebookCandidates = readPositiveNumber(env.RAG_MAX_RULEBOOK_CANDIDATES, 16);
-  const maxQaCandidates = readPositiveNumber(env.RAG_MAX_QA_GROUNDING_CANDIDATES, 8);
-  const candidates = dedupeGroundingEvidence([
-    ...(Array.isArray(ruleEvidence) ? ruleEvidence : []).slice(0, maxRulebookCandidates),
-    ...(Array.isArray(qaEvidence) ? qaEvidence : []).slice(0, maxQaCandidates),
-  ]);
+  const maxRulebookCandidates = readPositiveNumber(env.RAG_MAX_RULEBOOK_CANDIDATES, 18);
+  const maxQaCandidates = readPositiveNumber(env.RAG_MAX_QA_GROUNDING_CANDIDATES, 10);
+  const maxCardTextCandidates = readPositiveNumber(env.RAG_MAX_CARDS, 6);
+  const selectedQaEvidence = selectGroundingQaEvidence(qaEvidence, maxQaCandidates);
+  const selectedRuleEvidence = dedupeGroundingEvidence(ruleEvidence).slice(0, maxRulebookCandidates);
+  const selectedCardTexts = dedupeGroundingEvidence(cardTexts).slice(0, maxCardTextCandidates);
+  const candidates = interleaveGroundingEvidence([
+    selectedQaEvidence.filter(isDirectGroundingQa),
+    selectedCardTexts,
+    selectedRuleEvidence,
+    selectedQaEvidence.filter(isFaqGroundingEvidence),
+    selectedQaEvidence.filter((item) => !isDirectGroundingQa(item) && !isFaqGroundingEvidence(item)),
+  ], maxRulebookCandidates + maxQaCandidates + maxCardTextCandidates);
   if (!candidates.length) {
     return emptyRulebookGroundingResult("none", "none", true, ["grounding_evidence_candidates_missing"]);
   }
@@ -332,7 +339,7 @@ export async function callRulebookGroundingModel({
   const providerResolution = resolveRulebookGroundingProvider(env);
   const provider = providerResolution.provider;
   const modelName = modelNameForRulebookGroundingProvider(provider, env);
-  const maxTokens = readNumber(env.RAG_RULEBOOK_MODEL_MAX_OUTPUT_TOKENS, 1800);
+  const maxTokens = readNumber(env.RAG_RULEBOOK_MODEL_MAX_OUTPUT_TOKENS, 2400);
   const prompt = buildRulebookGroundingPrompt({ userQuery, cardTexts, evidenceCandidates: candidates });
 
   if (modelInvoker) {
@@ -1315,10 +1322,12 @@ function buildRulebookGroundingPrompt({ userQuery, cardTexts = [], evidenceCandi
       id: item.id,
       title: item.title,
       cards: item.cards || [],
-      text: String(item.text || "").slice(0, 2800),
       source: item.source || item.type || "",
+      cardType: item.cardType || "",
+      attribute: item.attribute ?? "",
+      race: item.race ?? "",
     })),
-    evidenceCandidates: (evidenceCandidates || []).slice(0, 24).map((item) => ({
+    evidenceCandidates: (evidenceCandidates || []).slice(0, 34).map((item) => ({
       id: item.id,
       type: item.type || item.recordType || "related",
       title: item.title,
@@ -1330,7 +1339,15 @@ function buildRulebookGroundingPrompt({ userQuery, cardTexts = [], evidenceCandi
   return [
     "你是游戏王 OCG 证据判读器，不负责直接润色最终回答。",
     "先结合玩家问题与卡片文本，按实际发生顺序抽取每一步需要验证的操作，包括：发动条件、支付 cost、选择对象、连锁窗口、效果处理、位置变化、次数限制和后续处理。",
-    "然后只使用 evidenceCandidates 中提供的规则书、官方 Q&A 或卡片 FAQ 原文，逐步判断该操作是 legal、illegal、conditional 还是 unknown。",
+    "每个关键步骤先列清题目事实，再选择真正覆盖该步骤的候选证据。卡片文本可以证明该卡写明的发动条件、cost、对象和处理；通用规则结论必须由规则书或适用场景一致的 Q&A / FAQ 支持。",
+    "每一步都要分别检查‘能否发动’‘能否选择为对象’‘效果是否适用’‘处理后状态’；这四类问题不能互相替代。",
+    "‘不受其他卡的效果影响’只约束效果是否适用，本身不等于‘不能成为效果对象’；‘不能成为对象’必须有独立的对象限制或玩家限制证据，反过来也一样。",
+    "同一场景同时存在对象保护与效果抗性时，要分别列出证据，并明确最终阻止操作的是哪一项；不得把抗性误写成不能取对象的理由。",
+    "涉及‘将发动无效并破坏’时，必须依据候选证据区分被无效的是魔法・陷阱卡的卡的发动，还是已在场卡片的效果发动，并据此判断是否属于破坏场上的卡。",
+    "不得仅因发动效果的卡或效果对象在连锁处理中离开原位置，就把整条已经合法发动的效果判为不处理。必须分别检查发动是否已成立、每项处理依赖的卡或位置、前一项不能处理时后一项是否继续，并为规则结论引用证据。",
+    "对象在处理时不再存在，不代表不依赖该对象的其他处理自动消失；但也不能反过来假定所有后续处理必然继续。要依据效果连接词、规则书和 Q&A 逐项判断。",
+    "如果较早步骤已被证据判为 illegal，后续处理应标记为未发生或不再需要判断；不得假设该操作已经成功后继续推演。",
+    "然后只使用 evidenceCandidates 中提供的卡片文本、规则书、官方 Q&A 或卡片 FAQ 原文，逐步判断该操作是 legal、illegal、conditional 还是 unknown。",
     "官方 Q&A / FAQ 可以作为规则适用案例，但必须逐项比较涉及的卡片、效果、时点、位置、素材数量和处理顺序；场景不同的相似案例不能直接套用。",
     "isDirect=false 的 Q&A / FAQ 不是当前问题的官方直接裁定，只能支持规则分析；不得因此宣称 official_confirmed。",
     "不要依靠记忆补写规则，不要把卡片文本误当规则证据，不要因为候选标题看起来相关就直接下结论。",
@@ -1484,6 +1501,52 @@ function dedupeGroundingEvidence(items = []) {
     result.push(item);
   }
   return result;
+}
+
+function selectGroundingQaEvidence(items = [], maxCandidates = 10) {
+  const available = dedupeGroundingEvidence(Array.isArray(items) ? items : []);
+  const limit = Math.max(0, Number(maxCandidates) || 0);
+  if (!limit) return [];
+
+  const direct = available.filter(isDirectGroundingQa);
+  const faq = available.filter((item) => !isDirectGroundingQa(item) && isFaqGroundingEvidence(item));
+  const related = available.filter((item) => !isDirectGroundingQa(item) && !isFaqGroundingEvidence(item));
+  const selectedDirect = direct.slice(0, limit);
+  return dedupeGroundingEvidence([
+    ...selectedDirect,
+    ...interleaveGroundingEvidence([faq, related], limit - selectedDirect.length),
+  ]).slice(0, limit);
+}
+
+function interleaveGroundingEvidence(buckets = [], maxItems = Number.POSITIVE_INFINITY) {
+  const normalizedBuckets = (Array.isArray(buckets) ? buckets : [])
+    .map((bucket) => dedupeGroundingEvidence(Array.isArray(bucket) ? bucket : []));
+  const limit = Number.isFinite(maxItems) ? Math.max(0, Number(maxItems) || 0) : Number.POSITIVE_INFINITY;
+  const result = [];
+  const seen = new Set();
+  let index = 0;
+
+  while (result.length < limit && normalizedBuckets.some((bucket) => index < bucket.length)) {
+    for (const bucket of normalizedBuckets) {
+      const item = bucket[index];
+      if (!item) continue;
+      const id = String(item.id || "").trim();
+      if (!id || seen.has(id)) continue;
+      seen.add(id);
+      result.push(item);
+      if (result.length >= limit) break;
+    }
+    index += 1;
+  }
+  return result;
+}
+
+function isDirectGroundingQa(item = {}) {
+  return item.isDirect === true || item.type === "official_qa";
+}
+
+function isFaqGroundingEvidence(item = {}) {
+  return item.type === "faq" || item.recordType === "card-faq" || String(item.id || "").startsWith("card-faq-");
 }
 
 function modelNameForProvider(provider, env) {
