@@ -70,6 +70,7 @@ export function buildRagRulingPromptBundle({
     "operationChecks 是 Flash 证据判读模型对题目每一步操作所做的检查；候选依据可以是规则书、官方 Q&A 或卡片 FAQ。后端已经校验其中引用的 evidence id 和逐字引文，未通过校验的 legal/illegal/conditional 会被降为 unknown。",
     "对同一操作，operationChecks 中 citations 非空的 illegal 结论是强约束。legal 或 conditional 只有在 constraintAudit.hasUnresolvedConstraints=false 时才能作为强约束；status=unknown 不能作为肯定或否定依据。",
     "constraintAudit 列出后端优先核对的限制性规则。hasUnresolvedConstraints=true 时，不得回答‘可以发动/可以进行’；必须继续依据列出的规则核对，无法完成时只能给保守的不确定结论。",
+    "hasUnresolvedConstraints=true 表示前置判读没有完成，不表示规则不适用。此时必须直接阅读 unresolvedConstraints.text，逐项比较规则条件与题目事实；若题目已明确满足阻断条件，应据此回答不能发动或不能进行，只有缺少必要事实时才保留不确定。",
     "一般 FAQ 只证明诱发条件或连锁窗口时，不能用它覆盖更具体的不能发动、不能选择、不能返回或无可适用卡规则。必须同时核对效果的所有必做处理。",
     "如果校验后的证据直接点名题目中的多张卡并描述同一场景，必须完整遵守该案例的全部处理步骤；不得只采用其发动或取对象结论后，再凭记忆改写后续处理。",
     "效果文本包含连续处理时，必须按文本和证据顺序说明每一步是否成功，并在前一步改变抗性、位置、素材或状态后重新判断下一步。",
@@ -158,10 +159,14 @@ function summarizeConstraintAudit(operationLegality = {}) {
     priorityConstraints: (operationLegality?.priorityConstraintEvidence || []).slice(0, 8).map((item) => ({
       id: item.id,
       title: item.title,
+      text: String(item.text || "").slice(0, 1800),
+      sourceUrl: item.sourceUrl || "",
     })),
     unresolvedConstraints: (operationLegality?.unresolvedConstraintEvidence || []).slice(0, 8).map((item) => ({
       id: item.id,
       title: item.title,
+      text: String(item.text || "").slice(0, 1800),
+      sourceUrl: item.sourceUrl || "",
     })),
     reviews: (operationLegality?.constraintReviews || []).slice(0, 8).map((review) => ({
       evidenceId: review.evidenceId,

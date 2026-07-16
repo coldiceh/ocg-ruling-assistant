@@ -9,7 +9,12 @@ export function validateOperationLegalityModelOutput(raw, evidenceCandidates = [
   requiredConstraintEvidence = [],
 } = {}) {
   const parsed = parseModelObject(raw);
-  if (!parsed) return emptyOperationLegality(["evidence_grounding_invalid_json"]);
+  if (!parsed) {
+    return emptyOperationLegality(
+      ["evidence_grounding_invalid_json"],
+      requiredConstraintEvidence,
+    );
+  }
 
   const evidenceById = new Map((evidenceCandidates || [])
     .filter((item) => item?.id && item?.text)
@@ -38,14 +43,13 @@ export function validateOperationLegalityModelOutput(raw, evidenceCandidates = [
   const resolvedConstraintIds = new Set(constraintReviews
     .filter(isResolvedConstraintReview)
     .map((review) => review.evidenceId));
-  const hasPositiveChecks = checks.some((check) => check.status === "legal" || check.status === "conditional");
   const hasBlockingChecksBeforeCoverage = checks.some((check) => check.status === "illegal" && check.citations.length > 0);
-  const unresolvedConstraintEvidence = hasPositiveChecks && !hasBlockingChecksBeforeCoverage
+  const unresolvedConstraintEvidence = !hasBlockingChecksBeforeCoverage
     ? requiredConstraints.filter((item) => !resolvedConstraintIds.has(String(item.id)))
     : [];
   if (unresolvedConstraintEvidence.length) {
     const missingLabel = unresolvedConstraintEvidence.map((item) => item.title || item.id).join("、").slice(0, 600);
-    warnings.push(`operation_positive_without_constraint_review:${unresolvedConstraintEvidence.map((item) => item.id).join(",")}`);
+    warnings.push(`operation_constraint_review_missing:${unresolvedConstraintEvidence.map((item) => item.id).join(",")}`);
     checks = checks.map((check) => {
       if (check.status !== "legal" && check.status !== "conditional") return check;
       return {
@@ -97,7 +101,11 @@ export function validateOperationLegalityModelOutput(raw, evidenceCandidates = [
   };
 }
 
-export function emptyOperationLegality(warnings = []) {
+export function emptyOperationLegality(warnings = [], requiredConstraintEvidence = []) {
+  const unresolvedConstraintEvidence = uniqueBy(
+    (requiredConstraintEvidence || []).filter((item) => item?.id && item?.text),
+    (item) => String(item.id),
+  );
   return {
     checks: [],
     evidence: [],
@@ -110,9 +118,9 @@ export function emptyOperationLegality(warnings = []) {
     shortAnswer: "",
     reasoning: [],
     constraintReviews: [],
-    priorityConstraintEvidence: [],
-    unresolvedConstraintEvidence: [],
-    hasUnresolvedConstraints: false,
+    priorityConstraintEvidence: unresolvedConstraintEvidence,
+    unresolvedConstraintEvidence,
+    hasUnresolvedConstraints: unresolvedConstraintEvidence.length > 0,
     warnings: [...new Set(warnings)],
     modelExtracted: false,
   };
@@ -159,13 +167,14 @@ function constraintReviewToCheck(review, index) {
 
 function isResolvedConstraintReview(review) {
   if (!review?.grounded) return false;
-  const explanation = cleanText(
-    review.citation?.application
-      || review.conclusion
-      || (review.reasoning || []).join(" "),
-  );
-  if (explanation.length < 8) return false;
-  if (review.relevance === "not_applicable") return true;
+  const application = cleanText(review.citation?.application);
+  const explanation = cleanText([
+    application,
+    review.conclusion,
+    ...(review.reasoning || []),
+  ].filter(Boolean).join(" "));
+  if (application.length < 8 || explanation.length < 12) return false;
+  if (review.relevance === "not_applicable") return review.consequence === "none";
   return review.relevance === "applies" && ["blocks", "none"].includes(review.consequence);
 }
 

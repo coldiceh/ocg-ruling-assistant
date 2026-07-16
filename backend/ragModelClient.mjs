@@ -397,16 +397,22 @@ export async function callRulebookGroundingModel({
       return emptyRulebookGroundingResult(provider, modelName, false, [
         ...providerResolution.warnings,
         `rulebook_grounding_model_failed:${safeErrorMessage(error)}`,
-      ]);
+      ], priorityConstraintEvidence);
     }
   }
 
   if (provider === "mock" || !hasProviderKey(provider, env) || typeof fetchImpl !== "function" || isEnabled(env.RAG_DRY_RUN)) {
-    return emptyRulebookGroundingResult("mock", "mock-rulebook-grounding", true, providerResolution.warnings);
+    return emptyRulebookGroundingResult(
+      "mock",
+      "mock-rulebook-grounding",
+      true,
+      providerResolution.warnings,
+      priorityConstraintEvidence,
+    );
   }
 
   const cacheInput = `${userQuery}\n${candidates.map((item) => item.id).join("|")}\n${(cardTexts || []).map((item) => item.id || item.title || "").join("|")}`;
-  const cacheKey = extractionCacheKey("rulebook-grounding-v2", provider, modelName, cacheInput);
+  const cacheKey = extractionCacheKey("rulebook-grounding-v3", provider, modelName, cacheInput);
   const cached = readCachedExtraction(rulebookGroundingCache, cacheKey, env);
   if (cached) {
     return {
@@ -432,7 +438,7 @@ export async function callRulebookGroundingModel({
         ...providerResolution.warnings,
         ...budget.warnings,
         "api_daily_budget_exceeded_rulebook_grounding_skipped",
-      ]),
+      ], priorityConstraintEvidence),
       budgetStatus: budget.status,
     };
   }
@@ -490,7 +496,7 @@ export async function callRulebookGroundingModel({
         ...providerResolution.warnings,
         ...budget.warnings,
         `rulebook_grounding_model_failed:${safeErrorMessage(error)}`,
-      ]),
+      ], priorityConstraintEvidence),
       budgetStatus: releasedBudgetStatus,
     };
   }
@@ -1374,6 +1380,8 @@ function buildRulebookGroundingPrompt({
     priorityConstraintCandidates: (priorityConstraintEvidence || []).slice(0, 8).map((item) => ({
       id: item.id,
       title: item.title,
+      text: String(item.text || "").slice(0, 2200),
+      sourceUrl: item.sourceUrl || "",
     })),
     cardTexts: (cardTexts || []).slice(0, 8).map((item) => ({
       id: item.id,
@@ -1383,6 +1391,7 @@ function buildRulebookGroundingPrompt({
       cardType: item.cardType || "",
       attribute: item.attribute ?? "",
       race: item.race ?? "",
+      text: String(item.text || "").slice(0, 2200),
     })),
     evidenceCandidates: (evidenceCandidates || []).slice(0, 34).map((item) => ({
       id: item.id,
@@ -1396,7 +1405,7 @@ function buildRulebookGroundingPrompt({
   return [
     "你是游戏王 OCG 证据判读器，不负责直接润色最终回答。",
     "先结合玩家问题与卡片文本，按实际发生顺序抽取每一步需要验证的操作，包括：发动条件、支付 cost、选择对象、连锁窗口、效果处理、位置变化、次数限制和后续处理。",
-    "priorityConstraintCandidates 是后端按题目操作与限制性措辞筛出的潜在阻断规则，不代表它们必然适用，但每一条都必须先审查，不能跳过。",
+    "priorityConstraintCandidates 是后端按题目操作与限制性措辞筛出的潜在阻断规则，已附规则原文。它们不代表必然适用，但每一条都必须先审查，不能跳过。",
     "对 priorityConstraintCandidates 中每个 id 都输出一个 constraintReviews 项：relevance 只能是 applies、not_applicable、uncertain；consequence 只能是 blocks、limits、none、uncertain。quote 必须逐字来自对应 evidenceCandidates，application 必须比较题目事实与规则条件。",
     "如果限制规则适用且会阻止操作，constraintReviews 写 applies + blocks，并在 operationChecks 中把相应步骤判为 illegal。若判定不适用，必须明确说明规则条件与题目事实的差异，不能只写结论。",
     "每个关键步骤先列清题目事实，再选择真正覆盖该步骤的候选证据。卡片文本可以证明该卡写明的发动条件、cost、对象和处理；通用规则结论必须由规则书或适用场景一致的 Q&A / FAQ 支持。",
@@ -1533,9 +1542,15 @@ function emptyRuleQueryExtractionResult(providerUsed, modelUsed, dryRun, warning
   };
 }
 
-function emptyRulebookGroundingResult(providerUsed, modelUsed, dryRun, warnings = []) {
+function emptyRulebookGroundingResult(
+  providerUsed,
+  modelUsed,
+  dryRun,
+  warnings = [],
+  requiredConstraintEvidence = [],
+) {
   return {
-    operationLegality: emptyOperationLegality(warnings),
+    operationLegality: emptyOperationLegality(warnings, requiredConstraintEvidence),
     rawText: "",
     providerUsed,
     modelUsed,
