@@ -522,6 +522,40 @@ test("generic_legal_grounding_cannot_skip_priority_constraint_evidence", async (
   assert.ok(answer.riskFlags.includes("unresolved_restrictive_evidence_blocked_positive_answer"));
 });
 
+test("empty_rulebook_grounding_keeps_restrictive_rules_visible_and_blocks_yes", async () => {
+  let finalPrompt = "";
+  const answer = await answerRagRulingQuestion({
+    question: "对方场上有「绚岚之达维」，我方以达维为对象发动「无限泡影」，这个时候场上没有其他魔陷，对方能不能发动「天雷之双风神」的效果？",
+    cards: thunderImpermanenceCards(),
+    records: [activatedSpellTrapReturnRule],
+    qaRecords: [],
+    rulebookModelInvoker: async () => JSON.stringify({
+      constraintReviews: [],
+      operationChecks: [],
+      overallConclusion: "证据待核对。",
+    }),
+    modelInvoker: async ({ prompt }) => {
+      finalPrompt = prompt;
+      return JSON.stringify({
+        answerLevel: "rule_analysis",
+        shortAnswer: "可以发动。",
+        reasoning: ["只检查了一般诱发条件。"],
+        usedCards: ["无限泡影", "天雷之双风神 息那"],
+        usedEvidence: [],
+        missingInfo: [],
+        riskFlags: [],
+        confidenceSelfEstimate: "medium",
+      });
+    },
+  });
+
+  assert.match(finalPrompt, /発動中の通常魔法・通常罠カードはその処理で手札に戻せません/u);
+  assert.match(finalPrompt, /"hasUnresolvedConstraints": true/u);
+  assert.doesNotMatch(answer.shortAnswer, /^可以发动/u);
+  assert.match(answer.shortAnswer, /不能确认/u);
+  assert.equal(answer.debug.retrievalCounts.unresolvedOperationConstraints, 1);
+  assert.ok(answer.riskFlags.includes("unresolved_restrictive_evidence_blocked_positive_answer"));
+});
 test("grounded_constraint_review_overrides_generic_trigger_faq", async () => {
   const genericFaq = {
     id: "card-faq-22130-generic-trigger-reviewed",

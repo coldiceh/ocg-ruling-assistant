@@ -1,6 +1,6 @@
 # OCG 引擎接入
 
-裁定助手已经可以选择性调用独立项目 [coldiceh/ocg-sim-core](https://github.com/coldiceh/ocg-sim-core)。本机默认使用相邻目录 `游戏王游戏引擎`；普通问题仍走原有 RAG，只有请求带 `engineScenario` 时才运行确定性模拟。
+规则助手已经可以选择性调用独立项目 [coldiceh/ocg-sim-core](https://github.com/coldiceh/ocg-sim-core)。本机默认使用相邻目录 `游戏王游戏引擎`；普通问题仍走原有 RAG，只有请求带 `engineScenario` 时才运行确定性模拟。
 
 模拟器核心、ocgcore host、资源快照和卡片脚本均在 `ocg-sim-core` 维护。本仓库只保留 HTTP 客户端、API 适配层和联调启动脚本，不复制模拟器实现。
 
@@ -84,7 +84,7 @@ npm run smoke:real -- ygopro
 
 ## Vercel / 云端
 
-Vercel Serverless 函数不能直接启动本机 Windows DLL/EXE。若不配置 `OCG_ENGINE_URL`，裁定助手照常提供 RAG，模拟明确显示 disabled。线上需要在受控主机单独部署 sidecar，并给 Vercel 配置 HTTPS `OCG_ENGINE_URL` 与同一 `OCG_ENGINE_TOKEN`。
+Vercel Serverless 函数不能直接启动本机 Windows DLL/EXE。若不配置 `OCG_ENGINE_URL`，规则助手照常提供 RAG，模拟明确显示 disabled。线上需要在受控主机单独部署 sidecar，并给 Vercel 配置 HTTPS `OCG_ENGINE_URL` 与同一 `OCG_ENGINE_TOKEN`。
 
 sidecar 默认只绑定 `127.0.0.1`。若改为远程绑定，必须使用 token、TLS、网络访问控制和请求超时，不应把无鉴权端口公开到互联网。
 

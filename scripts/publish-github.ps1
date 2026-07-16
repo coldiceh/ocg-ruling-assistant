@@ -85,7 +85,7 @@ function Ensure-Branch {
   }
 
   Write-Host "Branch $BranchName not found; initializing repository..."
-  $readme = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes("# OCG Ruling Assistant`n"))
+  $readme = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes("# OCG Rules Assistant`n"))
   Invoke-GhJson -Arguments @("-X", "PUT", "repos/$RepoName/contents/README.md") -Body @{
     message = "chore: initialize repository"
     content = $readme
