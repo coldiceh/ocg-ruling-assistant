@@ -98,7 +98,8 @@ export async function answerRagRulingQuestion({
   const modelAnswer = normalizeRagAnswer(modelResult.answer, { evidence, cardResolution: effectiveCardResolution, modelWarnings: modelResult.warnings || [] });
   const groundedFallback = applyGroundedOperationFallback(modelAnswer, evidence);
   const evidenceConstrained = applyExactScenarioGrounding(groundedFallback, evidence, query);
-  const normalized = applyOperationLegalityOverride(evidenceConstrained, evidence);
+  const operationConstrained = applyOperationLegalityOverride(evidenceConstrained, evidence);
+  const normalized = applyUnresolvedConstraintGuard(operationConstrained, evidence);
   const engine = await enginePromise;
   const engineRiskFlags = engine.status === "completed"
     ? ["engine_simulation_not_official_evidence"]
@@ -133,6 +134,7 @@ export async function answerRagRulingQuestion({
         rawRelatedEvidence: evidence.rawRelatedEvidence.length,
         rulebookCandidates: evidence.rulebookCandidates?.length || 0,
         operationLegalityChecks: evidence.operationLegality?.checks?.length || 0,
+        unresolvedOperationConstraints: evidence.operationLegality?.unresolvedConstraintEvidence?.length || 0,
       },
       unresolvedMentions: effectiveCardResolution.unresolvedMentions,
       ambiguousMentions: [...(effectiveCardResolution.ambiguousMentions || []), ...(evidence.baigeAmbiguousMentions || [])],
@@ -206,6 +208,7 @@ function attachRulebookGrounding(evidence, groundingResult = {}) {
   const operationLegality = groundingResult.operationLegality;
   if (!operationLegality) return evidence;
   const rawRelatedEvidence = dedupeEvidenceRefs([
+    ...(operationLegality.priorityConstraintEvidence || []),
     ...(operationLegality.evidence || []),
     ...(operationLegality.matchedRuleEvidence || []),
     ...(evidence.rawRelatedEvidence || []),
@@ -250,7 +253,7 @@ function applyOperationLegalityOverride(answer, evidence = {}) {
   const reasoning = cleanStringArray([
     ...(operation.reasoning || []),
   ]);
-  const modelContradicted = /可以|能发动|可发动|can activate|can be activated/iu.test(String(answer.shortAnswer || ""));
+  const modelContradicted = isAffirmativeOperationAnswer(answer.shortAnswer);
   return {
     ...answer,
     answerLevel: "rule_analysis",
@@ -267,6 +270,44 @@ function applyOperationLegalityOverride(answer, evidence = {}) {
     ],
     confidenceSelfEstimate: answer.confidenceSelfEstimate === "high" ? "medium" : answer.confidenceSelfEstimate,
   };
+}
+
+function applyUnresolvedConstraintGuard(answer, evidence = {}) {
+  const operation = evidence.operationLegality;
+  if (!operation?.hasUnresolvedConstraints || operation.hasBlockingCheck) return answer;
+  if (!isAffirmativeOperationAnswer(answer.shortAnswer)) return answer;
+
+  const unresolved = operation.unresolvedConstraintEvidence || [];
+  const unresolvedEvidence = unresolved.map((item) => ({
+    id: item.id,
+    type: outputEvidenceType(item, new Set()),
+    title: item.title,
+    sourceUrl: item.sourceUrl || "",
+  }));
+  const labels = unresolved.map((item) => item.title || item.id).filter(Boolean).slice(0, 4);
+  return {
+    ...answer,
+    answerLevel: "low_confidence_analysis",
+    shortAnswer: "当前不能确认该操作可以发动：检索到可能限制该操作的规则，但其适用性尚未完成核对。",
+    reasoning: cleanStringArray([
+      `尚未完成核对的限制性资料：${labels.join("、") || "相关规则资料"}。`,
+      "在这些限制规则被逐项判定为适用或不适用前，不能仅凭一般发动条件给出肯定结论。",
+      ...(answer.reasoning || []),
+    ]),
+    usedEvidence: dedupeEvidenceRefs([
+      ...unresolvedEvidence,
+      ...(answer.usedEvidence || []),
+    ]),
+    missingInfo: [...new Set([...(answer.missingInfo || []), "需要完成限制性规则与当前场景的适用性核对。"])],
+    riskFlags: [...new Set([...(answer.riskFlags || []), "unresolved_restrictive_evidence_blocked_positive_answer"])],
+    confidenceSelfEstimate: "low",
+  };
+}
+
+function isAffirmativeOperationAnswer(value) {
+  const text = String(value || "").normalize("NFKC");
+  if (/(?:不能|不可|不可以|无法|不得|不应|不成立|can\s*not|cannot|can't|not allowed|must not)/iu.test(text)) return false;
+  return /(?:可以|能够|能发动|可发动|可以发动|can activate|can be activated|is allowed)/iu.test(text);
 }
 
 function applyExactScenarioGrounding(answer, evidence = {}, userQuery = "") {

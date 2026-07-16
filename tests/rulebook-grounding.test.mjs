@@ -24,6 +24,44 @@ test("actual_rulebook_late_paragraph_is_retrieved_as_a_passage", async () => {
   assert.ok(relevant.sourceUrl);
 });
 
+test("actual_return_constraints_are_prioritized_for_operation_grounding", async () => {
+  const data = await loadRagData();
+  const resolvedCards = ["13631", "22130"]
+    .map((id) => data.cards.find((card) => card.id === id))
+    .filter(Boolean);
+  const question = "对方场上有「绚岚之达维」，我方以达维为对象发动「无限泡影」，这个时候场上没有其他魔陷，对方能不能发动「天雷之双风神」的效果？";
+  const evidence = await retrieveRagEvidence({
+    userQuery: question,
+    cardResolution: {
+      resolvedCards,
+      unresolvedMentions: [],
+      ambiguousMentions: [],
+      userProvidedCardTexts: [],
+    },
+    cards: data.cards,
+    records: data.records,
+    qaRecords: data.qaRecords,
+  });
+  let prompt = "";
+  const grounding = await callRulebookGroundingModel({
+    userQuery: question,
+    cardTexts: evidence.cardTexts,
+    ruleEvidence: evidence.rulebookCandidates,
+    qaEvidence: [...evidence.officialQaDirectCandidates, ...evidence.officialQaRelated, ...evidence.faqRelated],
+    modelInvoker: async (request) => {
+      prompt = request.prompt;
+      return JSON.stringify({ constraintReviews: [], operationChecks: [], overallConclusion: "证据待核对。" });
+    },
+  });
+
+  const priorityIds = grounding.operationLegality.priorityConstraintEvidence.map((item) => item.id);
+  assert.ok(priorityIds.some((id) => id.includes("卡片·效果的发动#p263-267")), "expected the activated Spell/Trap return restriction");
+  assert.ok(priorityIds.some((id) => id.includes("卡片·效果的发动#p285-289")), "expected the no-applicable-card activation restriction");
+  assert.ok(priorityIds.length <= 3);
+  assert.match(prompt, /priorityConstraintCandidates/u);
+  assert.match(prompt, /只说明诱发条件或可连锁时点的一般卡片 FAQ/u);
+});
+
 test("actual_xyz_encore_faq_is_retrieved_for_unaffected_rhongomyniad", async () => {
   const data = await loadRagData();
   const resolvedCards = ["10820", "11296"]

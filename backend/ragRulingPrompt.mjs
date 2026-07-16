@@ -39,6 +39,7 @@ export function buildRagRulingPromptBundle({
     ambiguousMentions: cardResolution.ambiguousMentions || [],
     ruleSearchQueries: evidence.ruleSearchQueries || [],
     operationChecks: summarizeOperationChecks(evidence.operationLegality?.checks || []),
+    constraintAudit: summarizeConstraintAudit(evidence.operationLegality),
     evidence: {
       ...evidencePayload,
       retrievalWarnings: [...(evidence.retrievalWarnings || []), ...warnings],
@@ -67,7 +68,9 @@ export function buildRagRulingPromptBundle({
     "ruleSearchQueries 是后端为检索规则资料生成的查询词，只能作为检索线索；最终理由必须基于 evidence 中真实存在的资料、卡片文本和题目事实。",
     "resolvedCards 是本地资料或百鸽已经匹配成功的卡片；其中已有 cardType、attribute 或效果文本时，不得再把该卡写成‘未识别’或‘属性未确定’。只有 unresolvedMentions 中仍存在的项目才算未解析。",
     "operationChecks 是 Flash 证据判读模型对题目每一步操作所做的检查；候选依据可以是规则书、官方 Q&A 或卡片 FAQ。后端已经校验其中引用的 evidence id 和逐字引文，未通过校验的 legal/illegal/conditional 会被降为 unknown。",
-    "对同一操作，operationChecks 中 citations 非空的 legal、illegal 或 conditional 结论必须作为强约束；不得在没有反证的情况下给出相反结论。status=unknown 不能作为肯定或否定依据。",
+    "对同一操作，operationChecks 中 citations 非空的 illegal 结论是强约束。legal 或 conditional 只有在 constraintAudit.hasUnresolvedConstraints=false 时才能作为强约束；status=unknown 不能作为肯定或否定依据。",
+    "constraintAudit 列出后端优先核对的限制性规则。hasUnresolvedConstraints=true 时，不得回答‘可以发动/可以进行’；必须继续依据列出的规则核对，无法完成时只能给保守的不确定结论。",
+    "一般 FAQ 只证明诱发条件或连锁窗口时，不能用它覆盖更具体的不能发动、不能选择、不能返回或无可适用卡规则。必须同时核对效果的所有必做处理。",
     "如果校验后的证据直接点名题目中的多张卡并描述同一场景，必须完整遵守该案例的全部处理步骤；不得只采用其发动或取对象结论后，再凭记忆改写后续处理。",
     "效果文本包含连续处理时，必须按文本和证据顺序说明每一步是否成功，并在前一步改变抗性、位置、素材或状态后重新判断下一步。",
     "不得因为效果发动源或对象在连锁处理中离开原位置，就未经证据把整条已经合法发动的效果判为不处理。必须分别核对：发动是否已经成立、每一项处理依赖什么对象或位置、某一项不能处理时其余项目是否继续，并引用覆盖该步骤的规则或 Q&A。",
@@ -147,6 +150,27 @@ function summarizeOperationChecks(checks) {
     citations: check.citations || [],
     missingFacts: check.missingFacts || [],
   }));
+}
+
+function summarizeConstraintAudit(operationLegality = {}) {
+  return {
+    hasUnresolvedConstraints: operationLegality?.hasUnresolvedConstraints === true,
+    priorityConstraints: (operationLegality?.priorityConstraintEvidence || []).slice(0, 8).map((item) => ({
+      id: item.id,
+      title: item.title,
+    })),
+    unresolvedConstraints: (operationLegality?.unresolvedConstraintEvidence || []).slice(0, 8).map((item) => ({
+      id: item.id,
+      title: item.title,
+    })),
+    reviews: (operationLegality?.constraintReviews || []).slice(0, 8).map((review) => ({
+      evidenceId: review.evidenceId,
+      relevance: review.relevance,
+      consequence: review.consequence,
+      conclusion: review.conclusion,
+      grounded: review.grounded === true,
+    })),
+  };
 }
 
 function prepareEvidenceForPrompt(evidence, limits, warnings) {
@@ -251,12 +275,14 @@ function buildCompactRagPrompt({ payload, maxPromptChars }) {
         quote: String(citation.quote || "").slice(0, textLimit),
       })),
     })),
+    constraintAudit: payload.constraintAudit,
     evidence,
   };
   const render = (context) => [
     "你是游戏王 OCG 裁定分析助手。只依据所给证据回答，不得编造规则或来源。",
     "官方直接 Q&A 才能支持 official_confirmed；相关 Q&A、FAQ、规则书和卡文只能支持 rule_analysis 或 low_confidence_analysis。",
-    "有逐字引文的 operationChecks 是强约束；unknown 不能支持肯定或否定结论。",
+    "有逐字引文的 illegal operationChecks 是强约束；legal 只有在 constraintAudit 没有未核对限制时才能支持肯定结论。unknown 不能支持肯定或否定结论。",
+    "constraintAudit.hasUnresolvedConstraints=true 时不得回答操作可以进行；一般发动条件不能覆盖更具体的限制规则。",
     "resolvedCards 是已匹配卡片，不得把其中已有的卡种或属性说成未确定。必须分别判断发动、取对象、效果适用和逐项处理；发动源或对象离开不等于整条效果自动不处理。",
     "不受效果影响不等于不能成为对象；魔法陷阱卡的卡的发动被无效与场上表侧卡的效果发动被无效必须分开判断。",
     "输出单个 JSON 对象，字段为 answerLevel、shortAnswer、reasoning、usedCards、usedEvidence、missingInfo、riskFlags、confidenceSelfEstimate。",
@@ -271,6 +297,7 @@ function buildCompactRagPrompt({ payload, maxPromptChars }) {
     userQuery: String(payload.userQuery || "").slice(0, 160),
     resolvedCards: (payload.resolvedCards || []).slice(0, 4).map((card) => ({ id: card.id, name: card.name, cardType: card.cardType, attribute: card.attribute })),
     operationChecks: (payload.operationChecks || []).slice(0, 2).map((check) => ({ status: check.status, conclusion: String(check.conclusion || "").slice(0, 100) })),
+    constraintAudit: payload.constraintAudit,
     evidenceIds: evidenceIds.slice(0, 10),
   });
   if (prompt.length <= maxChars) return prompt;
