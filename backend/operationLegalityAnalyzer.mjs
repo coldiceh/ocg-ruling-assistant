@@ -5,7 +5,9 @@ export const OPERATION_LEGALITY_STATUSES = Object.freeze([
   "unknown",
 ]);
 
-export function validateOperationLegalityModelOutput(raw, evidenceCandidates = []) {
+export function validateOperationLegalityModelOutput(raw, evidenceCandidates = [], {
+  requiredConstraintEvidence = [],
+} = {}) {
   const parsed = parseModelObject(raw);
   if (!parsed) return emptyOperationLegality(["evidence_grounding_invalid_json"]);
 
@@ -13,10 +15,52 @@ export function validateOperationLegalityModelOutput(raw, evidenceCandidates = [
     .filter((item) => item?.id && item?.text)
     .map((item) => [String(item.id), item]));
   const warnings = [];
+  const constraintReviews = normalizeConstraintReviews(
+    parsed.constraintReviews,
+    evidenceById,
+    warnings,
+  );
   const sourceChecks = Array.isArray(parsed.operationChecks) ? parsed.operationChecks
     : Array.isArray(parsed.operations) ? parsed.operations
       : [];
-  const checks = sourceChecks.slice(0, 20).map((item, index) => normalizeCheck(item, index, evidenceById, warnings));
+  let checks = sourceChecks.slice(0, 20).map((item, index) => normalizeCheck(item, index, evidenceById, warnings));
+  const reviewBlockingChecks = constraintReviews
+    .filter((review) => isResolvedConstraintReview(review) && review.relevance === "applies" && review.consequence === "blocks")
+    .map((review, index) => constraintReviewToCheck(review, checks.length + index));
+  checks = uniqueBy([...checks, ...reviewBlockingChecks], checkKey);
+
+  const requiredConstraints = uniqueBy(
+    (requiredConstraintEvidence || [])
+      .map((item) => evidenceById.get(String(item?.id || "")))
+      .filter(Boolean),
+    (item) => item.id,
+  );
+  const resolvedConstraintIds = new Set(constraintReviews
+    .filter(isResolvedConstraintReview)
+    .map((review) => review.evidenceId));
+  const hasPositiveChecks = checks.some((check) => check.status === "legal" || check.status === "conditional");
+  const hasBlockingChecksBeforeCoverage = checks.some((check) => check.status === "illegal" && check.citations.length > 0);
+  const unresolvedConstraintEvidence = hasPositiveChecks && !hasBlockingChecksBeforeCoverage
+    ? requiredConstraints.filter((item) => !resolvedConstraintIds.has(String(item.id)))
+    : [];
+  if (unresolvedConstraintEvidence.length) {
+    const missingLabel = unresolvedConstraintEvidence.map((item) => item.title || item.id).join("、").slice(0, 600);
+    warnings.push(`operation_positive_without_constraint_review:${unresolvedConstraintEvidence.map((item) => item.id).join(",")}`);
+    checks = checks.map((check) => {
+      if (check.status !== "legal" && check.status !== "conditional") return check;
+      return {
+        ...check,
+        status: "unknown",
+        conclusion: check.conclusion
+          ? `${check.conclusion}（该肯定结论未完成限制性规则核对，不能采用。）`
+          : "该肯定结论未完成限制性规则核对，不能采用。",
+        missingFacts: [...new Set([
+          ...(check.missingFacts || []),
+          `尚未核对限制性规则：${missingLabel}`,
+        ])],
+      };
+    });
+  }
   const groundedChecks = checks.filter((check) => check.citations.length > 0);
   const blockingChecks = groundedChecks.filter((check) => check.status === "illegal");
   const matchedRuleEvidence = uniqueBy(
@@ -39,8 +83,15 @@ export function validateOperationLegalityModelOutput(raw, evidenceCandidates = [
       explanation: check.conclusion,
       evidenceIds: check.citations.map((citation) => citation.id),
     })),
-    shortAnswer: firstBlocking?.conclusion || cleanText(parsed.overallConclusion),
+    shortAnswer: firstBlocking?.conclusion
+      || (unresolvedConstraintEvidence.length
+        ? "检索到尚未完成适用性核对的限制性规则，不能确认该操作可以发动或处理。"
+        : cleanText(parsed.overallConclusion)),
     reasoning: buildReasoning(checks),
+    constraintReviews,
+    priorityConstraintEvidence: requiredConstraints,
+    unresolvedConstraintEvidence,
+    hasUnresolvedConstraints: unresolvedConstraintEvidence.length > 0,
     warnings: [...new Set(warnings)],
     modelExtracted: true,
   };
@@ -58,9 +109,89 @@ export function emptyOperationLegality(warnings = []) {
     blockers: [],
     shortAnswer: "",
     reasoning: [],
+    constraintReviews: [],
+    priorityConstraintEvidence: [],
+    unresolvedConstraintEvidence: [],
+    hasUnresolvedConstraints: false,
     warnings: [...new Set(warnings)],
     modelExtracted: false,
   };
+}
+
+function normalizeConstraintReviews(value, evidenceById, warnings) {
+  const source = Array.isArray(value) ? value : [];
+  return source.slice(0, 12).map((item, index) => {
+    const evidenceId = cleanText(item?.evidenceId || item?.id);
+    const citations = normalizeCitations([{
+      id: evidenceId,
+      quote: item?.quote || item?.excerpt,
+      application: item?.application || item?.reason,
+    }], evidenceById, `constraint-review-${index + 1}`, warnings);
+    return {
+      evidenceId,
+      operationId: cleanText(item?.operationId || `constraint-operation-${index + 1}`).slice(0, 80),
+      action: cleanText(item?.action || item?.operation || "核对限制性规则").slice(0, 240),
+      relevance: normalizeConstraintRelevance(item?.relevance || item?.applicability || item?.applies),
+      consequence: normalizeConstraintConsequence(item?.consequence || item?.effect || item?.result),
+      conclusion: cleanText(item?.conclusion || item?.answer || item?.application).slice(0, 500),
+      reasoning: cleanStringArray(item?.reasoning || item?.reasons || item?.application, 6, 500),
+      citation: citations[0] || null,
+      grounded: citations.length > 0,
+    };
+  }).filter((review) => review.evidenceId);
+}
+
+function constraintReviewToCheck(review, index) {
+  return {
+    operationId: review.operationId || `constraint-operation-${index + 1}`,
+    step: index + 1,
+    action: review.action,
+    legalityQuestion: "该限制性规则是否阻止题目中的操作",
+    status: "illegal",
+    conclusion: review.conclusion || "检索到的限制性规则适用于当前场景，因此该操作不合法。",
+    reasoning: review.reasoning.length
+      ? review.reasoning
+      : [review.citation?.application || "限制性规则适用于题目给出的操作和场面事实。"].filter(Boolean),
+    citations: review.citation ? [review.citation] : [],
+    missingFacts: [],
+  };
+}
+
+function isResolvedConstraintReview(review) {
+  if (!review?.grounded) return false;
+  const explanation = cleanText(
+    review.citation?.application
+      || review.conclusion
+      || (review.reasoning || []).join(" "),
+  );
+  if (explanation.length < 8) return false;
+  if (review.relevance === "not_applicable") return true;
+  return review.relevance === "applies" && ["blocks", "none"].includes(review.consequence);
+}
+
+function checkKey(check) {
+  return [
+    check.operationId,
+    check.status,
+    ...(check.citations || []).map((citation) => citation.id),
+  ].join("\u0000");
+}
+
+function normalizeConstraintRelevance(value) {
+  if (value === true) return "applies";
+  if (value === false) return "not_applicable";
+  const normalized = String(value || "").trim().toLowerCase();
+  if (["applies", "applicable", "relevant", "yes"].includes(normalized)) return "applies";
+  if (["not_applicable", "not-applicable", "irrelevant", "no"].includes(normalized)) return "not_applicable";
+  return "uncertain";
+}
+
+function normalizeConstraintConsequence(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (["blocks", "block", "illegal", "prevents", "prohibits"].includes(normalized)) return "blocks";
+  if (["limits", "limit", "conditional", "restricts"].includes(normalized)) return "limits";
+  if (["none", "no_effect", "does_not_block", "not_blocking"].includes(normalized)) return "none";
+  return "uncertain";
 }
 
 function normalizeCheck(item, index, evidenceById, warnings) {

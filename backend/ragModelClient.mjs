@@ -7,6 +7,27 @@ const DEFAULT_DEEPSEEK_CARD_MODEL = "deepseek-v4-flash";
 const DEFAULT_LIGHTWEIGHT_EXTRACTION_TIMEOUT_MS = 4500;
 const DEFAULT_DAILY_BUDGET_CNY = 10;
 const DEFAULT_BUDGET_TIMEZONE = "Asia/Tokyo";
+const RESTRICTIVE_EVIDENCE_PATTERN = /(?:不能|不可|不得|无法|不可以|禁止|不满足|不存在|cannot|can't|must not|may not|not allowed|できません|発動できません)/iu;
+const GROUNDING_MECHANISM_PATTERNS = Object.freeze([
+  ["activation", /发动|發動|発動|activate/iu],
+  ["chain", /连锁|連鎖|チェーン|chain/iu],
+  ["target", /对象|對象|対象|target/iu],
+  ["applicability", /适用|適用|处理|處理|処理|resolve|applicable/iu],
+  ["return", /回到|返回|放回|弹回|彈回|戻|return/iu],
+  ["hand", /手卡|手牌|手札|hand/iu],
+  ["deck", /卡组|牌组|牌組|デッキ|deck/iu],
+  ["spell_trap", /魔法|陷阱|罠|spell|trap/iu],
+  ["field", /场上|場上|フィールド|field/iu],
+  ["destroy", /破坏|破壊|destroy/iu],
+  ["negate", /无效|無效|negate/iu],
+  ["banish", /除外|banish/iu],
+  ["graveyard", /墓地|graveyard|GY/iu],
+  ["summon", /召唤|召喚|summon/iu],
+  ["cost", /cost|代价|代價|支付/iu],
+  ["timing", /时点|時点|时机|タイミング|timing/iu],
+  ["attack", /攻击|攻擊|攻撃|attack/iu],
+  ["unaffected", /不受.{0,8}影响|不受.{0,8}影響|受けない|unaffected/iu],
+]);
 const memoryBudget = new Map();
 const cardNameExtractionCache = new Map();
 const ruleQueryExtractionCache = new Map();
@@ -322,10 +343,18 @@ export async function callRulebookGroundingModel({
   const maxRulebookCandidates = readPositiveNumber(env.RAG_MAX_RULEBOOK_CANDIDATES, 18);
   const maxQaCandidates = readPositiveNumber(env.RAG_MAX_QA_GROUNDING_CANDIDATES, 10);
   const maxCardTextCandidates = readPositiveNumber(env.RAG_MAX_CARDS, 6);
+  const maxPriorityConstraints = readPositiveNumber(env.RAG_MAX_PRIORITY_CONSTRAINTS, 3);
   const selectedQaEvidence = selectGroundingQaEvidence(qaEvidence, maxQaCandidates);
   const selectedRuleEvidence = dedupeGroundingEvidence(ruleEvidence).slice(0, maxRulebookCandidates);
   const selectedCardTexts = dedupeGroundingEvidence(cardTexts).slice(0, maxCardTextCandidates);
+  const priorityConstraintEvidence = selectPriorityConstraintEvidence({
+    items: selectedRuleEvidence,
+    userQuery,
+    cardTexts: selectedCardTexts,
+    limit: maxPriorityConstraints,
+  });
   const candidates = interleaveGroundingEvidence([
+    priorityConstraintEvidence,
     selectedQaEvidence.filter(isDirectGroundingQa),
     selectedCardTexts,
     selectedRuleEvidence,
@@ -340,12 +369,19 @@ export async function callRulebookGroundingModel({
   const provider = providerResolution.provider;
   const modelName = modelNameForRulebookGroundingProvider(provider, env);
   const maxTokens = readNumber(env.RAG_RULEBOOK_MODEL_MAX_OUTPUT_TOKENS, 2400);
-  const prompt = buildRulebookGroundingPrompt({ userQuery, cardTexts, evidenceCandidates: candidates });
+  const prompt = buildRulebookGroundingPrompt({
+    userQuery,
+    cardTexts,
+    evidenceCandidates: candidates,
+    priorityConstraintEvidence,
+  });
 
   if (modelInvoker) {
     try {
       const raw = await modelInvoker({ prompt, provider, modelName, maxTokens, task: "rulebook_grounding" });
-      const operationLegality = validateOperationLegalityModelOutput(raw, candidates);
+      const operationLegality = validateOperationLegalityModelOutput(raw, candidates, {
+        requiredConstraintEvidence: priorityConstraintEvidence,
+      });
       return {
         operationLegality,
         rawText: String(raw || ""),
@@ -370,7 +406,7 @@ export async function callRulebookGroundingModel({
   }
 
   const cacheInput = `${userQuery}\n${candidates.map((item) => item.id).join("|")}\n${(cardTexts || []).map((item) => item.id || item.title || "").join("|")}`;
-  const cacheKey = extractionCacheKey("rulebook-grounding", provider, modelName, cacheInput);
+  const cacheKey = extractionCacheKey("rulebook-grounding-v2", provider, modelName, cacheInput);
   const cached = readCachedExtraction(rulebookGroundingCache, cacheKey, env);
   if (cached) {
     return {
@@ -425,7 +461,9 @@ export async function callRulebookGroundingModel({
       spendWarnings.push(`budget_spend_record_failed:${safeErrorMessage(error)}`);
       budgetStatus = { ...budget.status, budgetStorage: "unavailable" };
     }
-    const operationLegality = validateOperationLegalityModelOutput(response.rawText, candidates);
+    const operationLegality = validateOperationLegalityModelOutput(response.rawText, candidates, {
+      requiredConstraintEvidence: priorityConstraintEvidence,
+    });
     const result = {
       operationLegality,
       rawText: response.rawText,
@@ -1301,8 +1339,23 @@ function buildRuleQueryExtractionPrompt(userQuery) {
   ].join("\n");
 }
 
-function buildRulebookGroundingPrompt({ userQuery, cardTexts = [], evidenceCandidates = [] }) {
+function buildRulebookGroundingPrompt({
+  userQuery,
+  cardTexts = [],
+  evidenceCandidates = [],
+  priorityConstraintEvidence = [],
+}) {
   const example = {
+    constraintReviews: [{
+      evidenceId: "restrictive-evidence-id",
+      operationId: "operation-1",
+      action: "玩家试图执行的操作",
+      relevance: "applies",
+      consequence: "blocks",
+      conclusion: "该限制规则适用于当前事实，因此操作不能进行。",
+      quote: "必须从候选原文逐字复制的连续片段",
+      application: "逐项说明题目事实为何满足这条限制规则。",
+    }],
     operationChecks: [{
       operationId: "operation-1",
       step: 1,
@@ -1318,6 +1371,10 @@ function buildRulebookGroundingPrompt({ userQuery, cardTexts = [], evidenceCandi
   };
   const payload = {
     userQuery: String(userQuery || ""),
+    priorityConstraintCandidates: (priorityConstraintEvidence || []).slice(0, 8).map((item) => ({
+      id: item.id,
+      title: item.title,
+    })),
     cardTexts: (cardTexts || []).slice(0, 8).map((item) => ({
       id: item.id,
       title: item.title,
@@ -1339,6 +1396,9 @@ function buildRulebookGroundingPrompt({ userQuery, cardTexts = [], evidenceCandi
   return [
     "你是游戏王 OCG 证据判读器，不负责直接润色最终回答。",
     "先结合玩家问题与卡片文本，按实际发生顺序抽取每一步需要验证的操作，包括：发动条件、支付 cost、选择对象、连锁窗口、效果处理、位置变化、次数限制和后续处理。",
+    "priorityConstraintCandidates 是后端按题目操作与限制性措辞筛出的潜在阻断规则，不代表它们必然适用，但每一条都必须先审查，不能跳过。",
+    "对 priorityConstraintCandidates 中每个 id 都输出一个 constraintReviews 项：relevance 只能是 applies、not_applicable、uncertain；consequence 只能是 blocks、limits、none、uncertain。quote 必须逐字来自对应 evidenceCandidates，application 必须比较题目事实与规则条件。",
+    "如果限制规则适用且会阻止操作，constraintReviews 写 applies + blocks，并在 operationChecks 中把相应步骤判为 illegal。若判定不适用，必须明确说明规则条件与题目事实的差异，不能只写结论。",
     "每个关键步骤先列清题目事实，再选择真正覆盖该步骤的候选证据。卡片文本可以证明该卡写明的发动条件、cost、对象和处理；通用规则结论必须由规则书或适用场景一致的 Q&A / FAQ 支持。",
     "每一步都要分别检查‘能否发动’‘能否选择为对象’‘效果是否适用’‘处理后状态’；这四类问题不能互相替代。",
     "‘不受其他卡的效果影响’只约束效果是否适用，本身不等于‘不能成为效果对象’；‘不能成为对象’必须有独立的对象限制或玩家限制证据，反过来也一样。",
@@ -1349,6 +1409,8 @@ function buildRulebookGroundingPrompt({ userQuery, cardTexts = [], evidenceCandi
     "如果较早步骤已被证据判为 illegal，后续处理应标记为未发生或不再需要判断；不得假设该操作已经成功后继续推演。",
     "然后只使用 evidenceCandidates 中提供的卡片文本、规则书、官方 Q&A 或卡片 FAQ 原文，逐步判断该操作是 legal、illegal、conditional 还是 unknown。",
     "官方 Q&A / FAQ 可以作为规则适用案例，但必须逐项比较涉及的卡片、效果、时点、位置、素材数量和处理顺序；场景不同的相似案例不能直接套用。",
+    "只说明诱发条件或可连锁时点的一般卡片 FAQ，不能单独证明整个发动合法。回答 legal 前还必须核对所有必做处理是否存在可适用对象或卡、是否受位置和连锁规则限制，以及 priorityConstraintCandidates 是否阻断。",
+    "更具体地约束当前处理的规则，不得被只说明一般发动窗口的 FAQ 覆盖；两者看似冲突时必须分别说明各自证明了什么。",
     "isDirect=false 的 Q&A / FAQ 不是当前问题的官方直接裁定，只能支持规则分析；不得因此宣称 official_confirmed。",
     "不要依靠记忆补写规则，不要把卡片文本误当规则证据，不要因为候选标题看起来相关就直接下结论。",
     "每个 legal、illegal 或 conditional 判定都必须至少提供一个 citations 项；id 必须来自 evidenceCandidates，quote 必须逐字复制该候选中的一段连续原文。",
@@ -1358,7 +1420,7 @@ function buildRulebookGroundingPrompt({ userQuery, cardTexts = [], evidenceCandi
     "对于包含多个连续处理的效果，必须依次检查取对象、移除素材、位置移动及后续特殊召唤等全部步骤；overallConclusion 必须覆盖完整处理，不能只回答第一步。",
     "对题目中的每一个关键操作都要单独生成 operationChecks 项；不能只检查最后一步。",
     "输出必须是单个 JSON 对象，不要 markdown，不要 JSON 外文字。",
-    "JSON 只包含 operationChecks 和 overallConclusion。",
+    "JSON 只包含 constraintReviews、operationChecks 和 overallConclusion。",
     "示例结构如下，示例不是本题答案：",
     JSON.stringify(example, null, 2),
     "本次输入：",
@@ -1501,6 +1563,41 @@ function dedupeGroundingEvidence(items = []) {
     result.push(item);
   }
   return result;
+}
+
+function selectPriorityConstraintEvidence({ items = [], userQuery = "", cardTexts = [], limit = 3 } = {}) {
+  const scenarioText = [
+    userQuery,
+    ...(cardTexts || []).map((item) => [item.title, item.cardType, item.text].filter(Boolean).join("\n")),
+  ].join("\n");
+  const scenarioConcepts = extractGroundingMechanisms(scenarioText);
+  if (scenarioConcepts.size < 2) return [];
+
+  return dedupeGroundingEvidence(items)
+    .filter((item) => RESTRICTIVE_EVIDENCE_PATTERN.test(String(item.text || "")))
+    .map((item, index) => {
+      const evidenceConcepts = extractGroundingMechanisms(`${item.title || ""}\n${item.text || ""}`);
+      const sharedConcepts = [...scenarioConcepts].filter((concept) => evidenceConcepts.has(concept));
+      const hasReturnChainPair = sharedConcepts.includes("return") && sharedConcepts.includes("chain");
+      const hasActivationApplicabilityPair = sharedConcepts.includes("activation") && sharedConcepts.includes("applicability");
+      const score = sharedConcepts.length * 20
+        + (hasReturnChainPair ? 18 : 0)
+        + (hasActivationApplicabilityPair ? 12 : 0)
+        + Math.min(20, Number(item.score) || 0)
+        - index * 0.01;
+      return { item, sharedConcepts, score };
+    })
+    .filter((entry) => entry.sharedConcepts.length >= 3)
+    .sort((left, right) => right.score - left.score)
+    .slice(0, Math.max(0, Number(limit) || 0))
+    .map((entry) => entry.item);
+}
+
+function extractGroundingMechanisms(value) {
+  const text = String(value || "");
+  return new Set(GROUNDING_MECHANISM_PATTERNS
+    .filter(([, pattern]) => pattern.test(text))
+    .map(([name]) => name));
 }
 
 function selectGroundingQaEvidence(items = [], maxCandidates = 10) {

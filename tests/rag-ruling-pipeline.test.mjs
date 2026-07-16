@@ -468,6 +468,117 @@ test("rag_pipeline_applies_operation_legality_blocker_from_retrieved_rule_eviden
   assert.ok(answer.riskFlags.includes("model_answer_overridden_by_operation_legality"));
 });
 
+test("generic_legal_grounding_cannot_skip_priority_constraint_evidence", async () => {
+  const genericFaq = {
+    id: "card-faq-22130-generic-trigger",
+    recordType: "card-faq",
+    title: "天雷之双风神 一般发动条件",
+    cardIds: ["22130"],
+    cards: ["天雷之双风神 息那"],
+    text: "对手发动魔法・陷阱・怪兽效果时，自己场上有风属性怪兽的场合，可以直接连锁发动。",
+  };
+  let groundingPrompt = "";
+  const answer = await answerRagRulingQuestion({
+    question: "对方场上有「绚岚之达维」，我方以达维为对象发动「无限泡影」，这个时候场上没有其他魔陷，对方能不能发动「天雷之双风神」的效果？",
+    cards: thunderImpermanenceCards(),
+    records: [activatedSpellTrapReturnRule],
+    qaRecords: [genericFaq],
+    rulebookModelInvoker: async ({ prompt }) => {
+      groundingPrompt = prompt;
+      return JSON.stringify({
+        constraintReviews: [],
+        operationChecks: [{
+          operationId: "chain-wind-return",
+          step: 1,
+          action: "对方连锁发动天雷之双风神",
+          status: "legal",
+          conclusion: "一般发动条件已经满足，所以可以发动。",
+          reasoning: ["只检查了风属性怪兽和对方发动魔陷。"],
+          citations: [{
+            id: genericFaq.id,
+            quote: "自己场上有风属性怪兽的场合，可以直接连锁发动。",
+          }],
+        }],
+        overallConclusion: "可以发动。",
+      });
+    },
+    modelInvoker: async () => JSON.stringify({
+      answerLevel: "rule_analysis",
+      shortAnswer: "可以发动。",
+      reasoning: ["场上有风属性怪兽。", "对方发动了通常陷阱。"],
+      usedCards: ["绚岚之达维", "无限泡影", "天雷之双风神 息那"],
+      usedEvidence: [{ id: genericFaq.id, type: "faq", title: genericFaq.title }],
+      missingInfo: [],
+      riskFlags: [],
+      confidenceSelfEstimate: "medium",
+    }),
+  });
+
+  assert.match(groundingPrompt, /priorityConstraintCandidates/u);
+  assert.match(groundingPrompt, /rule-activated-normal-spell-trap-cannot-return#p1-1/u);
+  assert.doesNotMatch(answer.shortAnswer, /^可以发动/u);
+  assert.match(answer.shortAnswer, /不能确认/u);
+  assert.equal(answer.debug.retrievalCounts.unresolvedOperationConstraints, 1);
+  assert.ok(answer.riskFlags.includes("unresolved_restrictive_evidence_blocked_positive_answer"));
+});
+
+test("grounded_constraint_review_overrides_generic_trigger_faq", async () => {
+  const genericFaq = {
+    id: "card-faq-22130-generic-trigger-reviewed",
+    recordType: "card-faq",
+    title: "天雷之双风神 一般发动条件",
+    cardIds: ["22130"],
+    cards: ["天雷之双风神 息那"],
+    text: "对手发动魔法・陷阱・怪兽效果时，自己场上有风属性怪兽的场合，可以直接连锁发动。",
+  };
+  const answer = await answerRagRulingQuestion({
+    question: "对方场上有「绚岚之达维」，我方以达维为对象发动「无限泡影」，这个时候场上没有其他魔陷，对方能不能发动「天雷之双风神」的效果？",
+    cards: thunderImpermanenceCards(),
+    records: [activatedSpellTrapReturnRule],
+    qaRecords: [genericFaq],
+    rulebookModelInvoker: async () => JSON.stringify({
+      constraintReviews: [{
+        evidenceId: "rule-activated-normal-spell-trap-cannot-return#p1-1",
+        operationId: "chain-wind-return",
+        action: "对方连锁发动天雷之双风神",
+        relevance: "applies",
+        consequence: "blocks",
+        conclusion: "不能发动。无限泡影正在发动中且场上没有其他可返回的魔法陷阱。",
+        quote: "ほかに処理できる魔法・罠カードが存在しない場合、その戻す処理を必要とする効果は発動できません。",
+        application: "题目明确场上没有其他魔陷，正在发动的无限泡影也不能返回。",
+      }],
+      operationChecks: [{
+        operationId: "generic-trigger",
+        step: 1,
+        action: "检查天雷之双风神的一般诱发条件",
+        status: "legal",
+        conclusion: "风属性怪兽和对方发动魔陷这两个一般条件满足。",
+        citations: [{
+          id: genericFaq.id,
+          quote: "自己场上有风属性怪兽的场合，可以直接连锁发动。",
+        }],
+      }],
+      overallConclusion: "一般诱发条件满足，但限制规则阻止本次发动。",
+    }),
+    modelInvoker: async () => JSON.stringify({
+      answerLevel: "rule_analysis",
+      shortAnswer: "可以发动。",
+      reasoning: ["一般诱发条件满足。", "可以直接连锁。"],
+      usedCards: ["绚岚之达维", "无限泡影", "天雷之双风神 息那"],
+      usedEvidence: [{ id: genericFaq.id, type: "faq", title: genericFaq.title }],
+      missingInfo: [],
+      riskFlags: [],
+      confidenceSelfEstimate: "medium",
+    }),
+  });
+
+  assert.match(answer.shortAnswer, /不能发动/u);
+  assert.match(answer.shortAnswer, /没有其他/u);
+  assert.equal(answer.debug.retrievalCounts.unresolvedOperationConstraints, 0);
+  assert.ok(answer.riskFlags.includes("operation_legality_blocker_applied"));
+  assert.ok(answer.riskFlags.includes("model_answer_overridden_by_operation_legality"));
+});
+
 test("rulebook_grounding_rejects_unknown_ids_and_non_verbatim_quotes", async () => {
   const passage = {
     id: "ocg-rule:test#p4-6",
