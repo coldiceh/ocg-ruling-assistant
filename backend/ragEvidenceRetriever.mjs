@@ -511,7 +511,7 @@ function deriveMechanismRuleQueries(value) {
     confidence: "high",
     source: "mechanism_rule_search_query",
   });
-  if (/(?:连锁|連鎖|チェーン|\bC\d+\b|chain)/iu.test(text) && /(除外|送去墓地|送墓|离场|離場|不在|回到手|返回手|回到卡组|返回卡组|位置)/u.test(text)) {
+  if (/(?:连锁|連鎖|チェーン|\bC\d+\b|chain)/iu.test(text) && /(除外|送去墓地|送墓|离场|離場|不在|回到手|返回手|回到卡组|返回卡组|回去|位置)/u.test(text)) {
     add("已经发动的效果 连锁处理中 发动效果的卡离开原位置 效果处理", "检索发动源在连锁处理中改变位置后的处理规则。");
     add("效果处理 部分不能处理 后续处理 尽可能处理", "检索一项处理不能完成时其余处理是否继续。");
   }
@@ -521,10 +521,14 @@ function deriveMechanismRuleQueries(value) {
   if (/(无效|無效|negate)/iu.test(text) && /(破坏|破壊|destroy)/iu.test(text)) {
     add("魔法陷阱 卡的发动无效 效果发动无效 场上的卡 破坏", "区分卡的发动与效果发动被无效后的场上状态。");
   }
+  if (/(?:舍弃|丢弃|捨て|送去墓地|送墓|支付|支払|cost|コスト)/iu.test(text) && /(?:发动|發動|発動)/u.test(text)) {
+    add("卡片效果发动 支付cost 顺序 支付后 状态立即变化", "检索发动时支付 cost 的顺序以及支付后卡片位置何时改变。");
+    add("支付cost后 效果处理前 永续效果 适用条件重新判断", "检索 cost 改变场面后，连锁处理前持续适用效果是否开始或停止适用。");
+  }
   if (/(不受.{0,8}效果影响|不受效果|unaffected)/iu.test(text) && /(对象|對象|対象|target)/iu.test(text)) {
     add("不受其他卡的效果影响 可以成为效果对象 对象选择 效果适用", "分别检索对象选择限制与效果抗性。");
   }
-  if (/(魔法|陷阱|罠)/u.test(text) && /(回到手|返回手|放回手|回到卡组|返回卡组|戻)/u.test(text)) {
+  if (/(魔法|陷阱|罠)/u.test(text) && /(回到手|返回手|放回手|回到卡组|返回卡组|回去|戻)/u.test(text)) {
     add("魔法陷阱卡 发动中 连锁途中 回到手卡 回到卡组", "检索发动中魔法陷阱的位置移动限制。");
   }
   if (/(然后|那之后|之后|之後|并且|並且|再|仍然|尽可能|不能处理)/u.test(text)) {
@@ -583,7 +587,7 @@ function buildGenericRuleQuery(value) {
 }
 
 function containsOperationLanguage(value) {
-  return /(发动|發動|発動|处理|處理|适用|適用|选择|選擇|对象|對象|支付|cost|连锁|連鎖|チェーン|召唤|召喚|破坏|破壊|除外|送去|送墓|回到|返回|放回|戻|攻击|攻擊|攻撃|无效|無效|抽|加入手|特殊召唤|特殊召喚)/iu.test(String(value || ""));
+  return /(发动|發動|発動|处理|處理|适用|適用|选择|選擇|对象|對象|支付|cost|连锁|連鎖|チェーン|召唤|召喚|破坏|破壊|除外|送去|送墓|回到|返回|回去|放回|戻|攻击|攻擊|攻撃|无效|無效|抽|加入手|特殊召唤|特殊召喚)/iu.test(String(value || ""));
 }
 
 function expandRetrievalVocabulary(value) {
@@ -593,7 +597,7 @@ function expandRetrievalVocabulary(value) {
   if (/(连锁|連鎖|チェーン|chain)/iu.test(text)) additions.push("连锁 チェーン chain");
   if (/(处理|處理|适用|適用|解決|resolve)/iu.test(text)) additions.push("处理 適用 解決 resolve");
   if (/(手卡|手牌|手札|hand)/iu.test(text)) additions.push("手卡 手牌 手札 hand");
-  if (/(回到|返回|放回|弹回|彈回|戻|return)/iu.test(text)) additions.push("回到 返回 戻 return");
+  if (/(回到|返回|回去|放回|弹回|彈回|戻|return)/iu.test(text)) additions.push("回到 返回 回去 戻 return");
   if (/(墓地|送墓|graveyard)/iu.test(text)) additions.push("墓地 送去墓地 graveyard");
   if (/(除外|banish)/iu.test(text)) additions.push("除外 banish");
   if (/(破坏|破壊|destroy)/iu.test(text)) additions.push("破坏 破壊 destroy");

@@ -44,20 +44,28 @@ export async function searchBaigeCards(query, {
   }
 
   let payload = null;
+  let matchedSearchQuery = normalizedQuery;
   try {
-    const url = new URL(BAIGE_API_BASE);
-    url.searchParams.set("search", normalizedQuery);
-    const response = await fetchImpl(url.toString(), {
-      headers: {
-        accept: "application/json",
-        "user-agent": "ocg-ruling-assistant/0.3",
-      },
-    });
-    if (!response?.ok) {
-      warnings.push(`baige_http_${response?.status || "error"}`);
-      return { provider: "baige", query: normalizedQuery, results: [], warnings, cacheHit: false };
+    for (const searchQuery of buildBaigeSearchQueries(normalizedQuery)) {
+      const url = new URL(BAIGE_API_BASE);
+      url.searchParams.set("search", searchQuery);
+      const response = await fetchImpl(url.toString(), {
+        headers: {
+          accept: "application/json",
+          "user-agent": "ocg-ruling-assistant/0.3",
+        },
+      });
+      if (!response?.ok) {
+        warnings.push(`baige_http_${response?.status || "error"}`);
+        return { provider: "baige", query: normalizedQuery, results: [], warnings, cacheHit: false };
+      }
+      payload = await response.json();
+      if (collectBaigeCards(payload).length) {
+        matchedSearchQuery = searchQuery;
+        if (searchQuery !== normalizedQuery) warnings.push(`baige_fallback_query_used:${searchQuery}`);
+        break;
+      }
     }
-    payload = await response.json();
   } catch (error) {
     warnings.push(`baige_fetch_failed:${safeErrorMessage(error)}`);
     return { provider: "baige", query: normalizedQuery, results: [], warnings, cacheHit: false };
@@ -80,6 +88,7 @@ export async function searchBaigeCards(query, {
   return {
     provider: "baige",
     query: normalizedQuery,
+    matchedSearchQuery,
     results,
     warnings,
     cacheHit: false,
@@ -380,11 +389,23 @@ function normalizeSearchKey(value) {
     .replace(/埃克利西/gu, "艾克莉西")
     .replace(/艾克利西/gu, "艾克莉西")
     .replace(/埃克莉西/gu, "艾克莉西")
+    .replace(/莉西娅/gu, "莉西亚")
     .replace(/[の之的]/gu, "")
     .replace(/[「」『』《》【】“”"'`]/gu, "")
     .replace(/[：:・·･．.－—–_\-\s]/gu, "")
     .replace(/[，,。.!！?？;；、()（）\[\]{}]/gu, "")
     .trim();
+}
+
+function buildBaigeSearchQueries(value) {
+  const original = String(value || "").trim();
+  const canonicalSpelling = original
+    .replace(/(?:埃|艾)克(?:利|莉)西(?:亚|娅)/gu, "艾克莉西娅");
+  const compact = canonicalSpelling.replace(/[「」『』《》【】“”"'`：:・·･．.－—–_\-\s，,。.!！?？;；、()（）\[\]{}]/gu, "");
+  const transliteration = compact.match(/艾克莉西娅/u)?.[0] || "";
+  const suffix = compact.length >= 6 ? compact.slice(-Math.min(6, compact.length - 1)) : "";
+  const prefix = compact.length >= 7 ? compact.slice(0, Math.min(6, compact.length - 1)) : "";
+  return [...new Set([original, canonicalSpelling, transliteration, suffix, prefix].filter(Boolean))].slice(0, 4);
 }
 
 function diceCoefficient(left, right) {

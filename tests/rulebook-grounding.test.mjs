@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { loadRagData, retrieveRagEvidence } from "../backend/ragEvidenceRetriever.mjs";
 import { callRulebookGroundingModel } from "../backend/ragModelClient.mjs";
+import { validateOperationLegalityModelOutput } from "../backend/operationLegalityAnalyzer.mjs";
 import { retrieveRulebookPassages } from "../backend/rulebookPassageRetriever.mjs";
 
 test("actual_rulebook_late_paragraph_is_retrieved_as_a_passage", async () => {
@@ -192,4 +193,77 @@ test("grounding_candidate_budget_preserves_faq_rulebook_and_card_text", async ()
   assert.match(prompt, /关键 FAQ 原文/u);
   assert.match(prompt, /关键规则原文/u);
   assert.match(prompt, /关键卡文原文/u);
+});
+test("localized_constraint_review_enums_produce_a_grounded_blocker", () => {
+  const rule = {
+    id: "rulebook-localized-constraint",
+    type: "rulebook",
+    title: "发动中的魔法陷阱返回限制",
+    text: "正在发动或连锁处理中的非永续魔法・陷阱卡不能从场上返回手牌。",
+  };
+  const result = validateOperationLegalityModelOutput({
+    constraintReviews: [{
+      evidenceId: rule.id,
+      operationId: "return-active-trap",
+      action: "将正在发动的陷阱返回手牌",
+      relevance: "适用",
+      consequence: "阻止",
+      application: "题目明确该陷阱正在当前连锁发动，因此满足这条返回限制。",
+    }],
+    operationChecks: [],
+    overallConclusion: "不能发动。",
+  }, [rule], { requiredConstraintEvidence: [rule] });
+
+  assert.equal(result.hasBlockingCheck, true);
+  assert.equal(result.hasUnresolvedConstraints, false);
+  assert.match(result.shortAnswer, /返回限制/u);
+  assert.ok(result.warnings.some((item) => item.includes("constraint_quote_recovered")));
+});
+
+test("focused_constraint_repair_resolves_a_missed_restrictive_rule", async () => {
+  const rule = {
+    id: "rulebook-focused-return-constraint",
+    type: "rulebook",
+    recordType: "rulebook",
+    title: "连锁处理中魔法陷阱的返回限制",
+    text: "正在发动或连锁处理中的非永续魔法・陷阱卡不能从场上返回手牌。场上没有其他可返回的魔法・陷阱卡时，要求返回卡片的效果不能发动。",
+    sourceUrl: "https://example.test/return-rule",
+  };
+  const tasks = [];
+  const result = await callRulebookGroundingModel({
+    userQuery: "对方连锁发动通常陷阱，场上没有其他魔法陷阱。我能否发动效果把那张正在连锁处理的陷阱返回手牌？",
+    ruleEvidence: [rule],
+    qaEvidence: [],
+    cardTexts: [],
+    modelInvoker: async ({ task }) => {
+      tasks.push(task);
+      if (task === "rulebook_grounding") {
+        return JSON.stringify({
+          constraintReviews: [],
+          operationChecks: [],
+          overallConclusion: "尚未核对。",
+        });
+      }
+      return JSON.stringify({
+        constraintReviews: [{
+          evidenceId: rule.id,
+          operationId: "return-active-trap",
+          action: "将正在发动的通常陷阱返回手牌",
+          relevance: "applies",
+          consequence: "blocks",
+          conclusion: "正在处理的通常陷阱不能作为必做返回处理的适用卡，因此该效果不能发动。",
+          quote: "正在发动或连锁处理中的非永续魔法・陷阱卡不能从场上返回手牌。",
+          application: "题目明确唯一候选是正在当前连锁处理中发动的通常陷阱，规则直接阻止返回。",
+        }],
+        operationChecks: [],
+        overallConclusion: "不能发动。",
+      });
+    },
+  });
+
+  assert.deepEqual(tasks, ["rulebook_grounding", "rulebook_constraint_repair"]);
+  assert.equal(result.operationLegality.hasBlockingCheck, true);
+  assert.equal(result.operationLegality.hasUnresolvedConstraints, false);
+  assert.ok(result.warnings.includes("rulebook_grounding_focused_repair_applied"));
+  assert.match(result.operationLegality.shortAnswer, /不能发动/u);
 });

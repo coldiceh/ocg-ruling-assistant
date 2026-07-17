@@ -413,6 +413,20 @@ button:focus-visible {
   background: var(--accent-strong);
 }
 
+.primary-button:disabled,
+.primary-button[aria-busy="true"] {
+  color: #d9e0e4;
+  background: #67727a;
+  box-shadow: none;
+  cursor: wait;
+  opacity: 0.82;
+  transform: none;
+}
+
+.primary-button:disabled:hover {
+  background: #67727a;
+}
+
 .budget-panel {
   margin-top: 14px;
   display: grid;
@@ -447,6 +461,61 @@ button:focus-visible {
   grid-column: 1;
   margin-bottom: 0;
   font-size: 13px;
+}
+
+.admin-query-panel {
+  margin-top: 12px;
+  padding: 13px 14px;
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--warning);
+  border-radius: 3px;
+  background: var(--glass-soft);
+}
+
+.admin-query-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.admin-query-head h2 {
+  margin: 0;
+  color: var(--text);
+  font-size: 15px;
+}
+
+#adminQueryStatus {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+#adminQueryList {
+  display: grid;
+  gap: 0;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+#adminQueryList li {
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+}
+
+#adminQueryList time {
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+#adminQueryList p {
+  margin: 4px 0 0;
+  color: var(--text);
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
 }
 
 .disclaimer-panel {

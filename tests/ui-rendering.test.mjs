@@ -152,7 +152,7 @@ test("ui_has_single_query_button", async () => {
   assert.doesNotMatch(html, /id="flashModelButton"|id="proModelButton"|>Pro</u);
   assert.match(app, /const selectedModelTier = "flash"/u);
   assert.match(app, /modelTier: selectedModelTier/u);
-  assert.match(app, /ocg-ruling-answer:v17/u);
+  assert.match(app, /ocg-ruling-answer:v18/u);
   assert.match(app, /buildBackendCacheKey\(text, backendMode, selectedModelTier\)/u);
   assert.doesNotMatch(app, /setModelTier|readInitialModelTier/u);
   assert.doesNotMatch(app, /deepAnalyzeButton|ragModeToggle|legacyPipelineToggle/u);
@@ -235,4 +235,38 @@ test("pages_deploy_includes_background_assets", async () => {
   assert.match(workflow, /cp -R assets _site\/assets/u);
   assert.match(workflow, /test -s _site\/assets\/bg-day\.png/u);
   assert.match(workflow, /test -s _site\/assets\/bg-night\.png/u);
+});
+test("query_button_has_visible_pending_state", async () => {
+  const [html, app, css] = await Promise.all([
+    readFile(new URL("../index.html", import.meta.url), "utf8"),
+    readFile(new URL("../src/app.js", import.meta.url), "utf8"),
+    readFile(new URL("../src/styles.css", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(html, /id="analyzeButtonText">查询</u);
+  assert.match(app, /setQueryPending\(true\)/u);
+  assert.match(app, /analyzeButton\.disabled = Boolean\(isPending\)/u);
+  assert.match(app, /setAttribute\("aria-busy"/u);
+  assert.match(app, /查询中…/u);
+  assert.match(css, /\.primary-button:disabled/u);
+  assert.match(css, /cursor: wait/u);
+});
+
+test("owner_query_log_is_hidden_and_server_authorized", async () => {
+  const [html, app, adminApi, adminAuth] = await Promise.all([
+    readFile(new URL("../index.html", import.meta.url), "utf8"),
+    readFile(new URL("../src/app.js", import.meta.url), "utf8"),
+    readFile(new URL("../api/admin-queries.js", import.meta.url), "utf8"),
+    readFile(new URL("../backend/adminAuth.mjs", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(html, /id="adminQueryPanel"[^>]+hidden/u);
+  assert.match(html, /最多保留 30 天的提问文本/u);
+  assert.match(html, /不记录 IP/u);
+  assert.match(app, /params\.get\("admin"\) === "1"/u);
+  assert.match(app, /\/api\/admin-queries/u);
+  assert.match(app, /prompt\("请输入管理员密码"\)/u);
+  assert.match(adminApi, /authorizeAdminRequest/u);
+  assert.match(adminAuth, /timingSafeEqual/u);
+  assert.doesNotMatch(adminAuth, /allure/u);
 });
