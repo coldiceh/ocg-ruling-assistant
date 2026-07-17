@@ -47,6 +47,12 @@ export function validateOperationLegalityModelOutput(raw, evidenceCandidates = [
   const resolvedConstraintIds = new Set(constraintReviews
     .filter(isResolvedConstraintReview)
     .map((review) => review.evidenceId));
+  const resolvedConstraintIdsFromChecks = new Set(checks.flatMap(resolvedConstraintCitationIds));
+  for (const evidenceId of resolvedConstraintIdsFromChecks) {
+    if (!requiredConstraints.some((item) => String(item.id) === evidenceId)) continue;
+    resolvedConstraintIds.add(evidenceId);
+    warnings.push(`operation_constraint_review_inferred_from_grounded_check:${evidenceId}`);
+  }
   const hasBlockingChecksBeforeCoverage = checks.some((check) => check.status === "illegal" && check.citations.length > 0);
   const unresolvedConstraintEvidence = !hasBlockingChecksBeforeCoverage
     ? requiredConstraints.filter((item) => !resolvedConstraintIds.has(String(item.id)))
@@ -197,6 +203,21 @@ function isResolvedConstraintReview(review) {
   if (application.length < 8 || explanation.length < 12) return false;
   if (review.relevance === "not_applicable") return review.consequence === "none";
   return review.relevance === "applies" && ["blocks", "none"].includes(review.consequence);
+}
+
+function resolvedConstraintCitationIds(check) {
+  if (check?.status !== "legal" || cleanText(check.conclusion).length < 8) return [];
+  const explicitlyNotApplicable = /(?:不(?:再)?适用|不满足|未满足|不再满足|条件(?:不同|不成立|未成立)|不受(?:该|这项|此)限制|not applicable|does not apply|condition.{0,20}not (?:met|satisfied))/iu;
+  return (check.citations || [])
+    .filter((citation) => {
+      const application = cleanText(citation.application);
+      if (!cleanText(citation.id) || application.length < 8) return false;
+      return explicitlyNotApplicable.test(cleanText([
+        check.conclusion,
+        application,
+      ].join(" ")));
+    })
+    .map((citation) => citation.id);
 }
 
 function checkKey(check) {

@@ -379,7 +379,7 @@ export async function callRulebookGroundingModel({
   });
   const repairMaxTokens = Math.min(
     maxTokens,
-    readPositiveNumber(env.RAG_RULEBOOK_REPAIR_MAX_OUTPUT_TOKENS, 900),
+    readPositiveNumber(env.RAG_RULEBOOK_REPAIR_MAX_OUTPUT_TOKENS, 1600),
   );
   const repairPrompt = priorityConstraintEvidence.length
     ? buildFocusedConstraintRepairPrompt({
@@ -405,11 +405,12 @@ export async function callRulebookGroundingModel({
             maxTokens: repairMaxTokens,
             task: "rulebook_constraint_repair",
           });
-          const repaired = validateOperationLegalityModelOutput(repairedRaw, candidates, {
+          const mergedRaw = mergeRulebookGroundingOutputs(raw, repairedRaw);
+          const repaired = validateOperationLegalityModelOutput(mergedRaw, candidates, {
             requiredConstraintEvidence: priorityConstraintEvidence,
           });
           if (isBetterOperationLegality(repaired, operationLegality)) {
-            raw = repairedRaw;
+            raw = mergedRaw;
             operationLegality = repaired;
             repairWarnings.push("rulebook_grounding_focused_repair_applied");
           } else {
@@ -448,7 +449,7 @@ export async function callRulebookGroundingModel({
   }
 
   const cacheInput = `${userQuery}\n${candidates.map((item) => item.id).join("|")}\n${(cardTexts || []).map((item) => item.id || item.title || "").join("|")}`;
-  const cacheKey = extractionCacheKey("rulebook-grounding-v5", provider, modelName, cacheInput);
+  const cacheKey = extractionCacheKey("rulebook-grounding-v6", provider, modelName, cacheInput);
   const cached = readCachedExtraction(rulebookGroundingCache, cacheKey, env);
   if (cached) {
     return {
@@ -480,7 +481,7 @@ export async function callRulebookGroundingModel({
   }
 
   try {
-    const timeoutMs = readPositiveNumber(env.RAG_RULEBOOK_MODEL_TIMEOUT_MS, 7000);
+    const timeoutMs = readPositiveNumber(env.RAG_RULEBOOK_MODEL_TIMEOUT_MS, 10000);
     const invokeGrounding = (modelPrompt, outputTokens) => provider === "gemini"
       ? callGemini({
         prompt: modelPrompt,
@@ -512,18 +513,19 @@ export async function callRulebookGroundingModel({
     const repairWarnings = [];
     if (shouldRepairRulebookGrounding(operationLegality, priorityConstraintEvidence, env)) {
       try {
-        const repairTimeoutMs = readPositiveNumber(env.RAG_RULEBOOK_REPAIR_TIMEOUT_MS, 5000);
+        const repairTimeoutMs = readPositiveNumber(env.RAG_RULEBOOK_REPAIR_TIMEOUT_MS, 10000);
         const repairResponse = await withTimeout(
           invokeGrounding(repairPrompt, repairMaxTokens),
           repairTimeoutMs,
           "rulebook_grounding_focused_repair_timeout",
         );
         responses.push(repairResponse);
-        const repaired = validateOperationLegalityModelOutput(repairResponse.rawText, candidates, {
+        const mergedRaw = mergeRulebookGroundingOutputs(rawText, repairResponse.rawText);
+        const repaired = validateOperationLegalityModelOutput(mergedRaw, candidates, {
           requiredConstraintEvidence: priorityConstraintEvidence,
         });
         if (isBetterOperationLegality(repaired, operationLegality)) {
-          rawText = repairResponse.rawText;
+          rawText = mergedRaw;
           operationLegality = repaired;
           repairWarnings.push("rulebook_grounding_focused_repair_applied");
         } else {
@@ -1545,13 +1547,65 @@ function buildFocusedConstraintRepairPrompt({
     "你正在修复一次未完成的游戏王 OCG 限制规则核对。只处理本次输入中的 priorityConstraintCandidates，不要讨论无关规则。",
     "对每个 priorityConstraintCandidates 的 id 必须输出一个 constraintReviews 项，不能遗漏。",
     "逐项比较玩家明确给出的场面事实、卡片文本和限制规则。只说明诱发条件或可连锁时点的一般卡片 FAQ，不能覆盖更具体的限制规则。",
-    "若规则适用并阻止某一步，写 relevance=applies、consequence=blocks，并为该步骤输出 status=illegal 的 operationChecks。",
+    "若规则适用并阻止某一步，写 relevance=applies、consequence=blocks；后端会据此生成阻断步骤。",
     "若规则条件与题目事实不一致，写 relevance=not_applicable、consequence=none，并明确差异。证据仍不足才允许 uncertain。",
-    "quote 必须从对应候选 text 逐字复制连续原文；application 必须说明题目事实如何满足或不满足规则条件。",
-    "输出单个 JSON 对象，只包含 constraintReviews、operationChecks、overallConclusion；枚举值必须使用英文。",
+    "每项 application 只写一个完整句子，说明题目事实如何满足或不满足规则条件；quote 从对应候选 text 复制最短的连续原文。",
+    "operationChecks 固定输出空数组，避免重复主分析；输出单个 JSON 对象，只包含 constraintReviews、operationChecks、overallConclusion，枚举值必须使用英文。",
     "本次聚焦输入：",
     JSON.stringify(payload, null, 2),
   ].join("\n");
+}
+
+function mergeRulebookGroundingOutputs(primaryRaw, repairRaw) {
+  let primary = {};
+  let repair = {};
+  try {
+    primary = parseRagModelJson(primaryRaw);
+  } catch {
+    primary = {};
+  }
+  try {
+    repair = parseRagModelJson(repairRaw);
+  } catch {
+    return String(primaryRaw || "");
+  }
+
+  const constraintReviews = mergeGroundingItems(
+    Array.isArray(primary.constraintReviews) ? primary.constraintReviews : [],
+    Array.isArray(repair.constraintReviews) ? repair.constraintReviews : [],
+    (item) => item?.evidenceId || item?.id,
+  );
+  const operationChecks = mergeGroundingItems(
+    Array.isArray(primary.operationChecks) ? primary.operationChecks : Array.isArray(primary.operations) ? primary.operations : [],
+    Array.isArray(repair.operationChecks) ? repair.operationChecks : Array.isArray(repair.operations) ? repair.operations : [],
+    (item) => item?.operationId || item?.id,
+  );
+  return JSON.stringify({
+    ...primary,
+    ...repair,
+    constraintReviews,
+    operationChecks,
+    overallConclusion: String(repair.overallConclusion || primary.overallConclusion || "").trim(),
+  });
+}
+
+function mergeGroundingItems(primary = [], repair = [], getKey) {
+  const result = [];
+  const indexByKey = new Map();
+  for (const item of [...primary, ...repair]) {
+    const key = String(getKey(item) || "").normalize("NFKC").trim();
+    if (!key) {
+      result.push(item);
+      continue;
+    }
+    if (indexByKey.has(key)) {
+      result[indexByKey.get(key)] = item;
+      continue;
+    }
+    indexByKey.set(key, result.length);
+    result.push(item);
+  }
+  return result;
 }
 
 function shouldRepairRulebookGrounding(operationLegality, priorityConstraintEvidence, env = {}) {

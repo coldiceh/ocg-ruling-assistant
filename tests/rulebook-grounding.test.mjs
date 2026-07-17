@@ -220,6 +220,64 @@ test("localized_constraint_review_enums_produce_a_grounded_blocker", () => {
   assert.ok(result.warnings.some((item) => item.includes("constraint_quote_recovered")));
 });
 
+test("grounded_operation_check_completes_its_priority_constraint_review", () => {
+  const rule = {
+    id: "rulebook-activation-restriction",
+    type: "rulebook",
+    title: "区域不同时限制不适用",
+    text: "只有那张卡仍在场上时，这项限制才适用；已经在墓地的卡不受这项限制。",
+  };
+  const result = validateOperationLegalityModelOutput({
+    constraintReviews: [],
+    operationChecks: [{
+      operationId: "check-updated-zone",
+      step: 1,
+      action: "按支付 cost 后的位置核对限制",
+      status: "legal",
+      conclusion: "该卡已经作为 cost 送去墓地，因此场上限制不适用。",
+      citations: [{
+        id: rule.id,
+        quote: "只有那张卡仍在场上时，这项限制才适用",
+        application: "题目中的卡已经作为 cost 送去墓地，不再满足规则要求的场上条件。",
+      }],
+    }],
+    overallConclusion: "可以继续处理。",
+  }, [rule], { requiredConstraintEvidence: [rule] });
+
+  assert.equal(result.hasGroundedChecks, true);
+  assert.equal(result.hasUnresolvedConstraints, false);
+  assert.ok(result.warnings.includes("operation_constraint_review_inferred_from_grounded_check:" + rule.id));
+});
+
+test("generic_legal_check_cannot_bypass_restrictive_rule_without_non_applicability_comparison", () => {
+  const rule = {
+    id: "rulebook-active-card-return-restriction",
+    type: "rulebook",
+    title: "发动中卡片的返回限制",
+    text: "正在发动的通常陷阱不能返回手牌；没有其他可返回卡片时，该返回效果不能发动。",
+  };
+  const result = validateOperationLegalityModelOutput({
+    constraintReviews: [],
+    operationChecks: [{
+      operationId: "check-general-trigger",
+      step: 1,
+      action: "检查一般连锁时点",
+      status: "legal",
+      conclusion: "对手发动陷阱，因此满足一般连锁时点。",
+      citations: [{
+        id: rule.id,
+        quote: "正在发动的通常陷阱不能返回手牌",
+        application: "虽然该陷阱不能返回手牌，但一般连锁时点仍然满足。",
+      }],
+    }],
+    overallConclusion: "可以发动。",
+  }, [rule], { requiredConstraintEvidence: [rule] });
+
+  assert.equal(result.hasGroundedChecks, true);
+  assert.equal(result.hasUnresolvedConstraints, true);
+  assert.ok(result.warnings.some((item) => item.startsWith("operation_constraint_review_missing:")));
+});
+
 test("focused_constraint_repair_resolves_a_missed_restrictive_rule", async () => {
   const rule = {
     id: "rulebook-focused-return-constraint",
@@ -229,18 +287,35 @@ test("focused_constraint_repair_resolves_a_missed_restrictive_rule", async () =>
     text: "正在发动或连锁处理中的非永续魔法・陷阱卡不能从场上返回手牌。场上没有其他可返回的魔法・陷阱卡时，要求返回卡片的效果不能发动。",
     sourceUrl: "https://example.test/return-rule",
   };
-  const tasks = [];
+  const triggerText = {
+    id: "card-text-returner",
+    type: "card_text",
+    title: "返回效果卡片文本",
+    text: "对手发动魔法・陷阱卡时可以发动。将场上的魔法・陷阱卡全部返回手牌。",
+  };
+  const calls = [];
   const result = await callRulebookGroundingModel({
     userQuery: "对方连锁发动通常陷阱，场上没有其他魔法陷阱。我能否发动效果把那张正在连锁处理的陷阱返回手牌？",
     ruleEvidence: [rule],
     qaEvidence: [],
-    cardTexts: [],
-    modelInvoker: async ({ task }) => {
-      tasks.push(task);
+    cardTexts: [triggerText],
+    modelInvoker: async ({ task, prompt, maxTokens }) => {
+      calls.push({ task, prompt, maxTokens });
       if (task === "rulebook_grounding") {
         return JSON.stringify({
           constraintReviews: [],
-          operationChecks: [],
+          operationChecks: [{
+            operationId: "check-trigger-window",
+            step: 1,
+            action: "检查一般发动时点",
+            status: "legal",
+            conclusion: "对手发动陷阱时满足一般发动时点。",
+            citations: [{
+              id: triggerText.id,
+              quote: "对手发动魔法・陷阱卡时可以发动。",
+              application: "题目明确对手正在发动通常陷阱，因此一般发动时点满足。",
+            }],
+          }],
           overallConclusion: "尚未核对。",
         });
       }
@@ -261,9 +336,13 @@ test("focused_constraint_repair_resolves_a_missed_restrictive_rule", async () =>
     },
   });
 
-  assert.deepEqual(tasks, ["rulebook_grounding", "rulebook_constraint_repair"]);
+  assert.deepEqual(calls.map((item) => item.task), ["rulebook_grounding", "rulebook_constraint_repair"]);
+  const repairCall = calls.find((item) => item.task === "rulebook_constraint_repair");
+  assert.ok(repairCall.maxTokens >= 1600);
+  assert.match(repairCall.prompt, /operationChecks 固定输出空数组/u);
   assert.equal(result.operationLegality.hasBlockingCheck, true);
   assert.equal(result.operationLegality.hasUnresolvedConstraints, false);
+  assert.ok(result.operationLegality.checks.some((item) => item.operationId === "check-trigger-window"));
   assert.ok(result.warnings.includes("rulebook_grounding_focused_repair_applied"));
   assert.match(result.operationLegality.shortAnswer, /不能发动/u);
 });

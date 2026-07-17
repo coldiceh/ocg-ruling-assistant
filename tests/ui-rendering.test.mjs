@@ -261,8 +261,7 @@ test("owner_query_log_is_hidden_and_server_authorized", async () => {
   ]);
 
   assert.match(html, /id="adminQueryPanel"[^>]+hidden/u);
-  assert.match(html, /最多保留 30 天的提问文本/u);
-  assert.match(html, /不记录 IP/u);
+  assert.doesNotMatch(html, /最多保留 30 天的提问文本|不记录 IP/u);
   assert.match(app, /params\.get\("admin"\) === "1"/u);
   assert.match(app, /\/api\/admin-queries/u);
   assert.match(app, /prompt\("请输入管理员密码"\)/u);
