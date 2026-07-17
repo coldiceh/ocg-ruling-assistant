@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-16T19:43:43.465Z",
+  "generatedAt": "2026-07-17T19:43:10.455Z",
   "records": [
     {
       "id": "21385",
@@ -1756,6 +1756,17 @@
       "released": true
     },
     {
+      "id": "23346",
+      "name": "魔救の調律者",
+      "jaName": "魔救の調律者",
+      "enName": "Adamancipator Conductor",
+      "aliases": [
+        "魔救の調律者",
+        "Adamancipator Conductor"
+      ],
+      "released": true
+    },
+    {
       "id": "15102",
       "name": "魔救奇石－龙石",
       "cnName": "魔救奇石－龙石",
@@ -1795,6 +1806,17 @@
       "released": true
     },
     {
+      "id": "23347",
+      "name": "魔救の奇石－ティアマイト",
+      "jaName": "魔救の奇石－ティアマイト",
+      "enName": "Adamancipator Crystal - Tiamite",
+      "aliases": [
+        "魔救の奇石－ティアマイト",
+        "Adamancipator Crystal - Tiamite"
+      ],
+      "released": true
+    },
+    {
       "id": "15295",
       "name": "魔救奇缘",
       "cnName": "魔救奇缘",
@@ -1817,6 +1839,28 @@
         "魔救拉普达石",
         "アダマシア・ラピュタイト",
         "Adamancipator Laputite"
+      ],
+      "released": true
+    },
+    {
+      "id": "23371",
+      "name": "魔救の輝跡",
+      "jaName": "魔救の輝跡",
+      "enName": "Adamancipator Luminous",
+      "aliases": [
+        "魔救の輝跡",
+        "Adamancipator Luminous"
+      ],
+      "released": true
+    },
+    {
+      "id": "23385",
+      "name": "魔救の合縁",
+      "jaName": "魔救の合縁",
+      "enName": "Adamancipator Mates",
+      "aliases": [
+        "魔救の合縁",
+        "Adamancipator Mates"
       ],
       "released": true
     },
@@ -1895,6 +1939,17 @@
         "魔救奇迹－猛禽石",
         "魔救の奇跡－ラプタイト",
         "Adamancipator Risen - Raptite"
+      ],
+      "released": true
+    },
+    {
+      "id": "23363",
+      "name": "魔救の奇跡－ティアマイト",
+      "jaName": "魔救の奇跡－ティアマイト",
+      "enName": "Adamancipator Risen - Tiamite",
+      "aliases": [
+        "魔救の奇跡－ティアマイト",
+        "Adamancipator Risen - Tiamite"
       ],
       "released": true
     },
@@ -2160,6 +2215,17 @@
         "高等仪式术",
         "高等儀式術",
         "Advanced Ritual Art"
+      ],
+      "released": true
+    },
+    {
+      "id": "23382",
+      "name": "顕現する伝説の都",
+      "jaName": "顕現する伝説の都",
+      "enName": "Advent of Atlantis",
+      "aliases": [
+        "顕現する伝説の都",
+        "Advent of Atlantis"
       ],
       "released": true
     },
@@ -2555,6 +2621,17 @@
         "阿卡西魔术师",
         "アカシック・マジシャン",
         "Akashic Magician"
+      ],
+      "released": true
+    },
+    {
+      "id": "23331",
+      "name": "金神の戦鬼 アカスナ",
+      "jaName": "金神の戦鬼 アカスナ",
+      "enName": "Akasuna the Battle Ashtra",
+      "aliases": [
+        "金神の戦鬼 アカスナ",
+        "Akasuna the Battle Ashtra"
       ],
       "released": true
     },
@@ -3091,6 +3168,17 @@
         "战华盟将－双龙",
         "戦華盟将－双龍",
         "Ancient Warriors Oath - Double Dragon Lords"
+      ],
+      "released": true
+    },
+    {
+      "id": "23324",
+      "name": "ワイバーンの竜騎士",
+      "jaName": "ワイバーンの竜騎士",
+      "enName": "Alligator's Dragon Knight",
+      "aliases": [
+        "ワイバーンの竜騎士",
+        "Alligator's Dragon Knight"
       ],
       "released": true
     },
@@ -9374,6 +9462,61 @@
       "released": true
     },
     {
+      "id": "23383",
+      "name": "無垢なる芸術－「黄昏の変幻」",
+      "jaName": "無垢なる芸術－「黄昏の変幻」",
+      "enName": "Ars Magna - \"Citrinitas\"",
+      "aliases": [
+        "無垢なる芸術－「黄昏の変幻」",
+        "Ars Magna - \"Citrinitas\""
+      ],
+      "released": true
+    },
+    {
+      "id": "23399",
+      "name": "無垢なる芸術－「幻創の賢者」",
+      "jaName": "無垢なる芸術－「幻創の賢者」",
+      "enName": "Ars Magna - \"Philosophirum\"",
+      "aliases": [
+        "無垢なる芸術－「幻創の賢者」",
+        "Ars Magna - \"Philosophirum\""
+      ],
+      "released": true
+    },
+    {
+      "id": "23340",
+      "name": "無限と有限のアルス＝マグナ",
+      "jaName": "無限と有限のアルス＝マグナ",
+      "enName": "Ars Magna of Infinity and Finity",
+      "aliases": [
+        "無限と有限のアルス＝マグナ",
+        "Ars Magna of Infinity and Finity"
+      ],
+      "released": true
+    },
+    {
+      "id": "23341",
+      "name": "浄化と腐敗のアルス＝マグナ",
+      "jaName": "浄化と腐敗のアルス＝マグナ",
+      "enName": "Ars Magna of Purification and Corruption",
+      "aliases": [
+        "浄化と腐敗のアルス＝マグナ",
+        "Ars Magna of Purification and Corruption"
+      ],
+      "released": true
+    },
+    {
+      "id": "23342",
+      "name": "結合と乖離のアルス＝マグナ",
+      "jaName": "結合と乖離のアルス＝マグナ",
+      "enName": "Ars Magna of Unification and Separation",
+      "aliases": [
+        "結合と乖離のアルス＝マグナ",
+        "Ars Magna of Unification and Separation"
+      ],
+      "released": true
+    },
+    {
       "id": "22180",
       "name": "武器库整理",
       "cnName": "武器库整理",
@@ -9995,6 +10138,72 @@
         "阿育王石柱",
         "アショカ・ピラー",
         "Ashoka Pillar"
+      ],
+      "released": true
+    },
+    {
+      "id": "23396",
+      "name": "依鬼の呪咆",
+      "jaName": "依鬼の呪咆",
+      "enName": "Ashtra Cursed Roar",
+      "aliases": [
+        "依鬼の呪咆",
+        "Ashtra Cursed Roar"
+      ],
+      "released": true
+    },
+    {
+      "id": "23397",
+      "name": "剣鬼の神域",
+      "jaName": "剣鬼の神域",
+      "enName": "Ashtra Divine Domain",
+      "aliases": [
+        "剣鬼の神域",
+        "Ashtra Divine Domain"
+      ],
+      "released": true
+    },
+    {
+      "id": "23395",
+      "name": "色鬼の蟲毒",
+      "jaName": "色鬼の蟲毒",
+      "enName": "Ashtra Insect Poison",
+      "aliases": [
+        "色鬼の蟲毒",
+        "Ashtra Insect Poison"
+      ],
+      "released": true
+    },
+    {
+      "id": "23361",
+      "name": "鬼神 朱沙之王",
+      "jaName": "鬼神 朱沙之王",
+      "enName": "Ashtraja Susanoo",
+      "aliases": [
+        "鬼神 朱沙之王",
+        "Ashtraja Susanoo"
+      ],
+      "released": true
+    },
+    {
+      "id": "23379",
+      "name": "艮神鬼門 三千世界",
+      "jaName": "艮神鬼門 三千世界",
+      "enName": "Ashtrashen - Gateway to the Worlds Beyond",
+      "aliases": [
+        "艮神鬼門 三千世界",
+        "Ashtrashen - Gateway to the Worlds Beyond"
+      ],
+      "released": true
+    },
+    {
+      "id": "23362",
+      "name": "鬼神 水子守命",
+      "jaName": "鬼神 水子守命",
+      "enName": "Ashtraya Mikumari-no-Mikoto",
+      "aliases": [
+        "鬼神 水子守命",
+        "Ashtraya Mikumari-no-Mikoto"
       ],
       "released": true
     },
@@ -10635,6 +10844,28 @@
         "海皇的长矛兵",
         "海皇の長槍兵",
         "Atlantean Pikeman"
+      ],
+      "released": true
+    },
+    {
+      "id": "23381",
+      "name": "呼応する伝説の都",
+      "jaName": "呼応する伝説の都",
+      "enName": "Atlantis Call",
+      "aliases": [
+        "呼応する伝説の都",
+        "Atlantis Call"
+      ],
+      "released": true
+    },
+    {
+      "id": "23380",
+      "name": "竜都アトランティス",
+      "jaName": "竜都アトランティス",
+      "enName": "Atlantis, City of the Sea Dragon",
+      "aliases": [
+        "竜都アトランティス",
+        "Atlantis, City of the Sea Dragon"
       ],
       "released": true
     },
@@ -11330,6 +11561,17 @@
         "巨型异虫",
         "ジャイアントワーム",
         "Aztekipede, the Worm Warrior"
+      ],
+      "released": true
+    },
+    {
+      "id": "23368",
+      "name": "蒼海竜神－ネオダイダロス・レイジ",
+      "jaName": "蒼海竜神－ネオダイダロス・レイジ",
+      "enName": "Azure Ocean Dragon Lord - Neo-Daedalus Rage",
+      "aliases": [
+        "蒼海竜神－ネオダイダロス・レイジ",
+        "Azure Ocean Dragon Lord - Neo-Daedalus Rage"
       ],
       "released": true
     },
@@ -12219,6 +12461,28 @@
         "巴利安之混沌抽牌",
         "バリアンズ・カオス・ドロー",
         "Barian's Chaos Draw"
+      ],
+      "released": true
+    },
+    {
+      "id": "23378",
+      "name": "バリアンズ・ホープ",
+      "jaName": "バリアンズ・ホープ",
+      "enName": "Barian's Hope",
+      "aliases": [
+        "バリアンズ・ホープ",
+        "Barian's Hope"
+      ],
+      "released": true
+    },
+    {
+      "id": "23394",
+      "name": "バリアンズ・シール",
+      "jaName": "バリアンズ・シール",
+      "enName": "Barian's Seal",
+      "aliases": [
+        "バリアンズ・シール",
+        "Barian's Seal"
       ],
       "released": true
     },
@@ -14763,6 +15027,17 @@
       "released": true
     },
     {
+      "id": "23402",
+      "name": "ビンゴカード",
+      "jaName": "ビンゴカード",
+      "enName": "Bingo Card",
+      "aliases": [
+        "ビンゴカード",
+        "Bingo Card"
+      ],
+      "released": true
+    },
+    {
       "id": "13844",
       "name": "宾果机器 冲！冲！",
       "cnName": "宾果机器 冲！冲！",
@@ -15423,6 +15698,17 @@
         "黑恶魔龙",
         "ブラック・デーモンズ・ドラゴン",
         "Black Skull Dragon"
+      ],
+      "released": true
+    },
+    {
+      "id": "23348",
+      "name": "結束の悪魔竜ブラック・デーモンズ・ドラゴン",
+      "jaName": "結束の悪魔竜ブラック・デーモンズ・ドラゴン",
+      "enName": "Black Skull Dragon the Archfiend Dragon of Unity",
+      "aliases": [
+        "結束の悪魔竜ブラック・デーモンズ・ドラゴン",
+        "Black Skull Dragon the Archfiend Dragon of Unity"
       ],
       "released": true
     },
@@ -16791,6 +17077,17 @@
       "aliases": [
         "雷盟－ブレイクアウェイ",
         "Blitzclique - Breakaway"
+      ],
+      "released": true
+    },
+    {
+      "id": "23388",
+      "name": "雷盟－オーバーボルテージ",
+      "jaName": "雷盟－オーバーボルテージ",
+      "enName": "Blitzclique - Overvoltage",
+      "aliases": [
+        "雷盟－オーバーボルテージ",
+        "Blitzclique - Overvoltage"
       ],
       "released": true
     },
@@ -20932,6 +21229,17 @@
       "released": true
     },
     {
+      "id": "23366",
+      "name": "CX 冀望皇龍カオス・バリアン・ドラゴン",
+      "jaName": "CX 冀望皇龍カオス・バリアン・ドラゴン",
+      "enName": "CXyz Chaos Barian Hope Dragon",
+      "aliases": [
+        "CX 冀望皇龍カオス・バリアン・ドラゴン",
+        "CXyz Chaos Barian Hope Dragon"
+      ],
+      "released": true
+    },
+    {
       "id": "10711",
       "name": "混沌超量 热血指导神 究极训练师",
       "cnName": "混沌超量 热血指导神 究极训练师",
@@ -21984,6 +22292,17 @@
       "aliases": [
         "ネイビィロイド",
         "Carrierroid"
+      ],
+      "released": true
+    },
+    {
+      "id": "23356",
+      "name": "カートゥーン・シェード",
+      "jaName": "カートゥーン・シェード",
+      "enName": "Cartoon Shade",
+      "aliases": [
+        "カートゥーン・シェード",
+        "Cartoon Shade"
       ],
       "released": true
     },
@@ -25791,6 +26110,17 @@
       "released": true
     },
     {
+      "id": "22920",
+      "name": "道化の一座 ハット",
+      "jaName": "道化の一座 ハット",
+      "enName": "Clown Crew Cappello",
+      "aliases": [
+        "道化の一座 ハット",
+        "Clown Crew Cappello"
+      ],
+      "released": true
+    },
+    {
       "id": "22991",
       "name": "道化の一座 ドリッシュ",
       "jaName": "道化の一座 ドリッシュ",
@@ -27491,6 +27821,17 @@
       "released": true
     },
     {
+      "id": "23351",
+      "name": "耀爛竜コラリアネクテス",
+      "jaName": "耀爛竜コラリアネクテス",
+      "enName": "Coralianektes the Shimmering Shining Dragon",
+      "aliases": [
+        "耀爛竜コラリアネクテス",
+        "Coralianektes the Shimmering Shining Dragon"
+      ],
+      "released": true
+    },
+    {
       "id": "8683",
       "name": "コア・ブラスト",
       "jaName": "コア・ブラスト",
@@ -27591,6 +27932,17 @@
         "巨骸龙 绯尔格兰特",
         "巨骸竜フェルグラント",
         "Skeletal Dragon Felgrand"
+      ],
+      "released": true
+    },
+    {
+      "id": "23401",
+      "name": "躯売りのカラス",
+      "jaName": "躯売りのカラス",
+      "enName": "Corpse-Seller Crow",
+      "aliases": [
+        "躯売りのカラス",
+        "Corpse-Seller Crow"
       ],
       "released": true
     },
@@ -30236,6 +30588,17 @@
       "aliases": [
         "呪炎王 バースト・カースド",
         "Cursed Fire King Doom Burst"
+      ],
+      "released": true
+    },
+    {
+      "id": "23400",
+      "name": "祟リ紙ノ報イ",
+      "jaName": "祟リ紙ノ報イ",
+      "enName": "Cursed Paper Retribution",
+      "aliases": [
+        "祟リ紙ノ報イ",
+        "Cursed Paper Retribution"
       ],
       "released": true
     },
@@ -33412,6 +33775,17 @@
       "released": true
     },
     {
+      "id": "23398",
+      "name": "海竜神の大渦",
+      "jaName": "海竜神の大渦",
+      "enName": "Daedalus Maelstrom",
+      "aliases": [
+        "海竜神の大渦",
+        "Daedalus Maelstrom"
+      ],
+      "released": true
+    },
+    {
       "id": "13448",
       "name": "GUYダンス",
       "jaName": "GUYダンス",
@@ -34301,6 +34675,17 @@
       "aliases": [
         "ダーク・シティ",
         "Dark City"
+      ],
+      "released": true
+    },
+    {
+      "id": "23384",
+      "name": "幽獄の時計都市－ダーク・シティ",
+      "jaName": "幽獄の時計都市－ダーク・シティ",
+      "enName": "Dark City at Midnight",
+      "aliases": [
+        "幽獄の時計都市－ダーク・シティ",
+        "Dark City at Midnight"
       ],
       "released": true
     },
@@ -35853,6 +36238,17 @@
         "暗骑士＠伊格尼斯者",
         "ダークナイト＠イグニスター",
         "Dark Templar @Ignister"
+      ],
+      "released": true
+    },
+    {
+      "id": "23374",
+      "name": "時の黒魔術師",
+      "jaName": "時の黒魔術師",
+      "enName": "Dark Time Wizard",
+      "aliases": [
+        "時の黒魔術師",
+        "Dark Time Wizard"
       ],
       "released": true
     },
@@ -38590,6 +38986,17 @@
       "released": true
     },
     {
+      "id": "23343",
+      "name": "D-HERO デスドグマガイ",
+      "jaName": "D-HERO デスドグマガイ",
+      "enName": "Destiny HERO - Destro-Dogma",
+      "aliases": [
+        "D-HERO デスドグマガイ",
+        "Destiny HERO - Destro-Dogma"
+      ],
+      "released": true
+    },
+    {
       "id": "6660",
       "name": "命运－英雄 钻石魔侠",
       "cnName": "命运－英雄 钻石魔侠",
@@ -38653,6 +39060,17 @@
       "released": true
     },
     {
+      "id": "23344",
+      "name": "D-HERO デビルロードガイ",
+      "jaName": "D-HERO デビルロードガイ",
+      "enName": "Destiny HERO - Doom Overlord",
+      "aliases": [
+        "D-HERO デビルロードガイ",
+        "Destiny HERO - Doom Overlord"
+      ],
+      "released": true
+    },
+    {
       "id": "6754",
       "name": "D-HERO ダブルガイ",
       "jaName": "D-HERO ダブルガイ",
@@ -38697,6 +39115,28 @@
         "命运－英雄 恐惧魔侠",
         "D-HERO ドレッドガイ",
         "Destiny HERO - Dreadmaster"
+      ],
+      "released": true
+    },
+    {
+      "id": "23359",
+      "name": "D-HERO ドレッドノートガイ",
+      "jaName": "D-HERO ドレッドノートガイ",
+      "enName": "Destiny HERO - Dreadnought Master",
+      "aliases": [
+        "D-HERO ドレッドノートガイ",
+        "Destiny HERO - Dreadnought Master"
+      ],
+      "released": true
+    },
+    {
+      "id": "23345",
+      "name": "D-HERO ドレッドノートサーヴァント",
+      "jaName": "D-HERO ドレッドノートサーヴァント",
+      "enName": "Destiny HERO - Dreadnought Servant",
+      "aliases": [
+        "D-HERO ドレッドノートサーヴァント",
+        "Destiny HERO - Dreadnought Servant"
       ],
       "released": true
     },
@@ -38828,6 +39268,17 @@
       "aliases": [
         "デステニー・シグナル",
         "Destiny Signal"
+      ],
+      "released": true
+    },
+    {
+      "id": "23373",
+      "name": "解層竜ストラティアエ",
+      "jaName": "解層竜ストラティアエ",
+      "enName": "Destratification Dino Stratiae",
+      "aliases": [
+        "解層竜ストラティアエ",
+        "Destratification Dino Stratiae"
       ],
       "released": true
     },
@@ -49251,6 +49702,17 @@
       "released": true
     },
     {
+      "id": "23350",
+      "name": "精霊世妃 ドリアード",
+      "jaName": "精霊世妃 ドリアード",
+      "enName": "Elemental Saga Doriado",
+      "aliases": [
+        "精霊世妃 ドリアード",
+        "Elemental Saga Doriado"
+      ],
+      "released": true
+    },
+    {
       "id": "13628",
       "name": "霊神統一",
       "jaName": "霊神統一",
@@ -54916,6 +55378,17 @@
       "released": true
     },
     {
+      "id": "23354",
+      "name": "グリズリーファザー",
+      "jaName": "グリズリーファザー",
+      "enName": "Father Grizzly",
+      "aliases": [
+        "グリズリーファザー",
+        "Father Grizzly"
+      ],
+      "released": true
+    },
+    {
       "id": "8497",
       "name": "悪魔への貢物",
       "jaName": "悪魔への貢物",
@@ -55518,6 +55991,17 @@
         "魔犀战士",
         "魔サイの戦士",
         "Fiendish Rhino Warrior"
+      ],
+      "released": true
+    },
+    {
+      "id": "23338",
+      "name": "アトランティスの妖渦",
+      "jaName": "アトランティスの妖渦",
+      "enName": "Fiendish Vortex of Atlantis",
+      "aliases": [
+        "アトランティスの妖渦",
+        "Fiendish Vortex of Atlantis"
       ],
       "released": true
     },
@@ -56948,6 +57432,17 @@
         "鱼博格－栽培者",
         "フィッシュボーグ－プランター",
         "Fishborg Planter"
+      ],
+      "released": true
+    },
+    {
+      "id": "23326",
+      "name": "大海の伝説－フィッシャーマン",
+      "jaName": "大海の伝説－フィッシャーマン",
+      "enName": "Fisherman of Legend",
+      "aliases": [
+        "大海の伝説－フィッシャーマン",
+        "Fisherman of Legend"
       ],
       "released": true
     },
@@ -58576,6 +59071,17 @@
         "愚蠢副葬",
         "おろかな副葬",
         "Foolish Burial Goods"
+      ],
+      "released": true
+    },
+    {
+      "id": "23392",
+      "name": "おろかな墓荒らし",
+      "jaName": "おろかな墓荒らし",
+      "enName": "Foolish Graverobber",
+      "aliases": [
+        "おろかな墓荒らし",
+        "Foolish Graverobber"
       ],
       "released": true
     },
@@ -62406,6 +62912,17 @@
       "released": true
     },
     {
+      "id": "23355",
+      "name": "ガーベージ・ゴーレム",
+      "jaName": "ガーベージ・ゴーレム",
+      "enName": "Garbage Golem",
+      "aliases": [
+        "ガーベージ・ゴーレム",
+        "Garbage Golem"
+      ],
+      "released": true
+    },
+    {
       "id": "10378",
       "name": "ガーベージ・ロード",
       "jaName": "ガーベージ・ロード",
@@ -63954,6 +64471,17 @@
         "冰结界的虎将 韦恩",
         "氷結界の虎将 ウェイン",
         "General Wayne of the Ice Barrier"
+      ],
+      "released": true
+    },
+    {
+      "id": "23336",
+      "name": "アトランティスの戦将",
+      "jaName": "アトランティスの戦将",
+      "enName": "General of Atlantis",
+      "aliases": [
+        "アトランティスの戦将",
+        "General of Atlantis"
       ],
       "released": true
     },
@@ -68731,6 +69259,17 @@
       "released": true
     },
     {
+      "id": "23329",
+      "name": "ゴルゴニック・アンブラル",
+      "jaName": "ゴルゴニック・アンブラル",
+      "enName": "Gorgonic Umbral Horror",
+      "aliases": [
+        "ゴルゴニック・アンブラル",
+        "Gorgonic Umbral Horror"
+      ],
+      "released": true
+    },
+    {
       "id": "6558",
       "name": "冥府之使者格斯",
       "cnName": "冥府之使者格斯",
@@ -69272,6 +69811,17 @@
         "牛头鬼",
         "牛頭鬼",
         "Gozuki"
+      ],
+      "released": true
+    },
+    {
+      "id": "23375",
+      "name": "天使と悪魔のサイコロ",
+      "jaName": "天使と悪魔のサイコロ",
+      "enName": "Graceful & Skull Dice",
+      "aliases": [
+        "天使と悪魔のサイコロ",
+        "Graceful & Skull Dice"
       ],
       "released": true
     },
@@ -73671,6 +74221,17 @@
       "released": true
     },
     {
+      "id": "23372",
+      "name": "海中戦型お手伝いロボ",
+      "jaName": "海中戦型お手伝いロボ",
+      "enName": "Helping Robo for Underwater Combat",
+      "aliases": [
+        "海中戦型お手伝いロボ",
+        "Helping Robo for Underwater Combat"
+      ],
+      "released": true
+    },
+    {
       "id": "5489",
       "name": "地獄詩人ヘルポエマー",
       "jaName": "地獄詩人ヘルポエマー",
@@ -75997,6 +76558,17 @@
         "黄金乡盗掘者",
         "黄金郷のワッケーロ",
         "Huaquero of the Golden Land"
+      ],
+      "released": true
+    },
+    {
+      "id": "23352",
+      "name": "死相の冥鑑ヒュブロ",
+      "jaName": "死相の冥鑑ヒュブロ",
+      "enName": "Hublot the Dark Directory of Death",
+      "aliases": [
+        "死相の冥鑑ヒュブロ",
+        "Hublot the Dark Directory of Death"
       ],
       "released": true
     },
@@ -79655,6 +80227,17 @@
       "released": true
     },
     {
+      "id": "23389",
+      "name": "召喚魔術－「杯」",
+      "jaName": "召喚魔術－「杯」",
+      "enName": "Invocation - \"Chalice\"",
+      "aliases": [
+        "召喚魔術－「杯」",
+        "Invocation - \"Chalice\""
+      ],
+      "released": true
+    },
+    {
       "id": "15026",
       "name": "召唤兽 奥格艾迪斯",
       "cnName": "召唤兽 奥格艾迪斯",
@@ -79675,6 +80258,17 @@
       "aliases": [
         "召喚獣ベイバロン",
         "Invoked Baybarron"
+      ],
+      "released": true
+    },
+    {
+      "id": "23360",
+      "name": "召喚獣ディー・アニマ",
+      "jaName": "召喚獣ディー・アニマ",
+      "enName": "Invoked Dee Anima",
+      "aliases": [
+        "召喚獣ディー・アニマ",
+        "Invoked Dee Anima"
       ],
       "released": true
     },
@@ -80797,6 +81391,17 @@
       "aliases": [
         "人造人間７号",
         "Jinzo #7"
+      ],
+      "released": true
+    },
+    {
+      "id": "23325",
+      "name": "人造人間－サイコ・エナジー・ショッカー",
+      "jaName": "人造人間－サイコ・エナジー・ショッカー",
+      "enName": "Jinzo - Energy Shocker",
+      "aliases": [
+        "人造人間－サイコ・エナジー・ショッカー",
+        "Jinzo - Energy Shocker"
       ],
       "released": true
     },
@@ -85358,6 +85963,17 @@
       "released": true
     },
     {
+      "id": "23332",
+      "name": "蠱神の色鬼 クズハ",
+      "jaName": "蠱神の色鬼 クズハ",
+      "enName": "Kuzuha the Bewitching Deity Ashtra",
+      "aliases": [
+        "蠱神の色鬼 クズハ",
+        "Kuzuha the Bewitching Deity Ashtra"
+      ],
+      "released": true
+    },
+    {
       "id": "12045",
       "name": "陰陽神 クズノハ",
       "jaName": "陰陽神 クズノハ",
@@ -87518,6 +88134,17 @@
       "released": true
     },
     {
+      "id": "23369",
+      "name": "真海竜騎－ダイダロス",
+      "jaName": "真海竜騎－ダイダロス",
+      "enName": "Levia-Dragoon - Daedalus",
+      "aliases": [
+        "真海竜騎－ダイダロス",
+        "Levia-Dragoon - Daedalus"
+      ],
+      "released": true
+    },
+    {
       "id": "9660",
       "name": "虚空海龙 利维埃尔",
       "cnName": "虚空海龙 利维埃尔",
@@ -87527,6 +88154,17 @@
         "虚空海龙 利维埃尔",
         "虚空海竜リヴァイエール",
         "Leviair the Sea Dragon"
+      ],
+      "released": true
+    },
+    {
+      "id": "23335",
+      "name": "アトランティスの竜神－ダイダロス",
+      "jaName": "アトランティスの竜神－ダイダロス",
+      "enName": "Leviathan of Atlantis - Daedalus",
+      "aliases": [
+        "アトランティスの竜神－ダイダロス",
+        "Leviathan of Atlantis - Daedalus"
       ],
       "released": true
     },
@@ -96932,6 +97570,17 @@
       "released": true
     },
     {
+      "id": "23370",
+      "name": "幻獄神メディクリウス",
+      "jaName": "幻獄神メディクリウス",
+      "enName": "Medicurius the Power Patron of Illusions",
+      "aliases": [
+        "幻獄神メディクリウス",
+        "Medicurius the Power Patron of Illusions"
+      ],
+      "released": true
+    },
+    {
       "id": "7705",
       "name": "中块魔像",
       "cnName": "中块魔像",
@@ -99661,6 +100310,17 @@
       "released": true
     },
     {
+      "id": "23334",
+      "name": "封神の剣鬼 ミクマリ",
+      "jaName": "封神の剣鬼 ミクマリ",
+      "enName": "Mikumari the Sealing Deity Ashtra",
+      "aliases": [
+        "封神の剣鬼 ミクマリ",
+        "Mikumari the Sealing Deity Ashtra"
+      ],
+      "released": true
+    },
+    {
       "id": "12393",
       "name": "温火鸡",
       "cnName": "温火鸡",
@@ -101073,6 +101733,17 @@
       "released": true
     },
     {
+      "id": "23353",
+      "name": "ミズティックコール",
+      "jaName": "ミズティックコール",
+      "enName": "Misstic Call",
+      "aliases": [
+        "ミズティックコール",
+        "Misstic Call"
+      ],
+      "released": true
+    },
+    {
       "id": "13091",
       "name": "金毛女士",
       "cnName": "金毛女士",
@@ -101894,6 +102565,17 @@
       "aliases": [
         "地獄の魔物使い",
         "Monster Tamer"
+      ],
+      "released": true
+    },
+    {
+      "id": "23337",
+      "name": "アトランティスの怪腕",
+      "jaName": "アトランティスの怪腕",
+      "enName": "Monstrous Arms of Atlantis",
+      "aliases": [
+        "アトランティスの怪腕",
+        "Monstrous Arms of Atlantis"
       ],
       "released": true
     },
@@ -103202,6 +103884,17 @@
         "我的朋友・皮尔莉",
         "ピュアリィ・マイフレンド",
         "My Friend Purrely"
+      ],
+      "released": true
+    },
+    {
+      "id": "23357",
+      "name": "一日万倍龍",
+      "jaName": "一日万倍龍",
+      "enName": "Myriaday Dragon",
+      "aliases": [
+        "一日万倍龍",
+        "Myriaday Dragon"
       ],
       "released": true
     },
@@ -107627,6 +108320,17 @@
       "released": true
     },
     {
+      "id": "23364",
+      "name": "No.104 仮面魔踏士シャイニングV",
+      "jaName": "No.104 仮面魔踏士シャイニングV",
+      "enName": "Number 104: Masquerade Vain",
+      "aliases": [
+        "No.104 仮面魔踏士シャイニングV",
+        "Number 104: Masquerade Vain"
+      ],
+      "released": true
+    },
+    {
       "id": "10532",
       "name": "编号105 燃烧拳斗士 流星之拳带",
       "cnName": "编号105 燃烧拳斗士 流星之拳带",
@@ -109090,6 +109794,17 @@
         "混沌编号104 假面魔蹈士 黑影",
         "CNo.104 仮面魔踏士アンブラル",
         "Number C104: Umbral Horror Masquerade"
+      ],
+      "released": true
+    },
+    {
+      "id": "23365",
+      "name": "CNo.104 仮面魔踏士アンブラル・ヴィクトリー",
+      "jaName": "CNo.104 仮面魔踏士アンブラル・ヴィクトリー",
+      "enName": "Number C104: Umbral Horror Masquerade Victory",
+      "aliases": [
+        "CNo.104 仮面魔踏士アンブラル・ヴィクトリー",
+        "Number C104: Umbral Horror Masquerade Victory"
       ],
       "released": true
     },
@@ -124627,6 +125342,17 @@
       "released": true
     },
     {
+      "id": "23358",
+      "name": "真紅眼の超越黒竜",
+      "jaName": "真紅眼の超越黒竜",
+      "enName": "Red-Eyes Black Dragon Exceed",
+      "aliases": [
+        "真紅眼の超越黒竜",
+        "Red-Eyes Black Dragon Exceed"
+      ],
+      "released": true
+    },
+    {
       "id": "11891",
       "name": "真紅眼の黒竜剣",
       "jaName": "真紅眼の黒竜剣",
@@ -126567,6 +127293,17 @@
         "复仇尸者・屠戮者",
         "リヴェンデット・スレイヤー",
         "Revendread Slayer"
+      ],
+      "released": true
+    },
+    {
+      "id": "23393",
+      "name": "大逆転BOX",
+      "jaName": "大逆転BOX",
+      "enName": "Reversal Box",
+      "aliases": [
+        "大逆転BOX",
+        "Reversal Box"
       ],
       "released": true
     },
@@ -133614,6 +134351,17 @@
       "released": true
     },
     {
+      "id": "23377",
+      "name": "七皇の冀望郷",
+      "jaName": "七皇の冀望郷",
+      "enName": "Seventh Barian's",
+      "aliases": [
+        "七皇の冀望郷",
+        "Seventh Barian's"
+      ],
+      "released": true
+    },
+    {
       "id": "18927",
       "name": "七皇觉醒",
       "cnName": "七皇觉醒",
@@ -134523,6 +135271,17 @@
       "released": true
     },
     {
+      "id": "23387",
+      "name": "三幻魔の天壊",
+      "jaName": "三幻魔の天壊",
+      "enName": "Shimmering Shatterer of the Sacred Beasts",
+      "aliases": [
+        "三幻魔の天壊",
+        "Shimmering Shatterer of the Sacred Beasts"
+      ],
+      "released": true
+    },
+    {
       "id": "5721",
       "name": "奇跡の方舟",
       "jaName": "奇跡の方舟",
@@ -134657,6 +135416,17 @@
         "闪耀的星之龙",
         "輝ける星の竜",
         "Shining Star Dragon"
+      ],
+      "released": true
+    },
+    {
+      "id": "23327",
+      "name": "シャイニング・アンブラル",
+      "jaName": "シャイニング・アンブラル",
+      "enName": "Shining Umbral Horror",
+      "aliases": [
+        "シャイニング・アンブラル",
+        "Shining Umbral Horror"
       ],
       "released": true
     },
@@ -137202,6 +137972,17 @@
       "released": true
     },
     {
+      "id": "23376",
+      "name": "眠れる羊 スケープ・ゴート",
+      "jaName": "眠れる羊 スケープ・ゴート",
+      "enName": "Sleepy Scapegoats",
+      "aliases": [
+        "眠れる羊 スケープ・ゴート",
+        "Sleepy Scapegoats"
+      ],
+      "released": true
+    },
+    {
       "id": "18822",
       "name": "神碑之鬣 斯雷普尼尔",
       "cnName": "神碑之鬣 斯雷普尼尔",
@@ -138903,6 +139684,17 @@
       "released": true
     },
     {
+      "id": "23390",
+      "name": "宇宙的ハリケーン",
+      "jaName": "宇宙的ハリケーン",
+      "enName": "Spatial Trunade",
+      "aliases": [
+        "宇宙的ハリケーン",
+        "Spatial Trunade"
+      ],
+      "released": true
+    },
+    {
       "id": "8702",
       "name": "スパウン・アリゲーター",
       "jaName": "スパウン・アリゲーター",
@@ -139546,6 +140338,17 @@
       "released": true
     },
     {
+      "id": "23391",
+      "name": "魔力到達",
+      "jaName": "魔力到達",
+      "enName": "Spell Power Attainment",
+      "aliases": [
+        "魔力到達",
+        "Spell Power Attainment"
+      ],
+      "released": true
+    },
+    {
       "id": "8136",
       "name": "魔力掌握",
       "cnName": "魔力掌握",
@@ -139642,6 +140445,17 @@
       "aliases": [
         "魔法効果の矢",
         "Spell Shattering Arrow"
+      ],
+      "released": true
+    },
+    {
+      "id": "23386",
+      "name": "魔法効果の剣",
+      "jaName": "魔法効果の剣",
+      "enName": "Spell Shattering Sword",
+      "aliases": [
+        "魔法効果の剣",
+        "Spell Shattering Sword"
       ],
       "released": true
     },
@@ -146176,6 +146990,17 @@
       "released": true
     },
     {
+      "id": "23367",
+      "name": "燦冠乗騎シックラヴィー",
+      "jaName": "燦冠乗騎シックラヴィー",
+      "enName": "Swickelavee the Brilliantly Crowned Heavy Cavalry",
+      "aliases": [
+        "燦冠乗騎シックラヴィー",
+        "Swickelavee the Brilliantly Crowned Heavy Cavalry"
+      ],
+      "released": true
+    },
+    {
       "id": "6704",
       "name": "疾風鳥人ジョー",
       "jaName": "疾風鳥人ジョー",
@@ -146229,6 +147054,17 @@
       "aliases": [
         "神速の具足",
         "Swiftstrike Armor"
+      ],
+      "released": true
+    },
+    {
+      "id": "23323",
+      "name": "疾風の豹戦士パンサーウォリアー",
+      "jaName": "疾風の豹戦士パンサーウォリアー",
+      "enName": "Swiftwind Panther Warrior",
+      "aliases": [
+        "疾風の豹戦士パンサーウォリアー",
+        "Swiftwind Panther Warrior"
       ],
       "released": true
     },
@@ -152378,6 +153214,17 @@
       "released": true
     },
     {
+      "id": "23349",
+      "name": "天下独歩の大義賊",
+      "jaName": "天下独歩の大義賊",
+      "enName": "The World's Greatest Gallant Thief",
+      "aliases": [
+        "天下独歩の大義賊",
+        "The World's Greatest Gallant Thief"
+      ],
+      "released": true
+    },
+    {
       "id": "6025",
       "name": "ナイトメアテーベ",
       "jaName": "ナイトメアテーベ",
@@ -152446,6 +153293,17 @@
         "开辟预幻视",
         "開闢なる予幻視",
         "Theorealize Liberation"
+      ],
+      "released": true
+    },
+    {
+      "id": "23339",
+      "name": "予幻使 メディウス",
+      "jaName": "予幻使 メディウス",
+      "enName": "Theorealize Medius",
+      "aliases": [
+        "予幻使 メディウス",
+        "Theorealize Medius"
       ],
       "released": true
     },
@@ -152763,6 +153621,17 @@
       "aliases": [
         "針千本",
         "Thousand Needles"
+      ],
+      "released": true
+    },
+    {
+      "id": "23330",
+      "name": "サウザンド・アンブラル",
+      "jaName": "サウザンド・アンブラル",
+      "enName": "Thousand Umbral Horror",
+      "aliases": [
+        "サウザンド・アンブラル",
+        "Thousand Umbral Horror"
       ],
       "released": true
     },
@@ -160214,6 +161083,17 @@
       "released": true
     },
     {
+      "id": "23328",
+      "name": "Vアンブラル",
+      "jaName": "Vアンブラル",
+      "enName": "V Umbral Horror",
+      "aliases": [
+        "Vアンブラル",
+        "V Umbral Horror"
+      ],
+      "released": true
+    },
+    {
       "id": "13302",
       "name": "V－LAN ヒドラ",
       "jaName": "V－LAN ヒドラ",
@@ -166744,6 +167624,17 @@
       "released": true
     },
     {
+      "id": "23416",
+      "name": "ウィッチクラフト・シード",
+      "jaName": "ウィッチクラフト・シード",
+      "enName": "Witchcrafter Seed",
+      "aliases": [
+        "ウィッチクラフト・シード",
+        "Witchcrafter Seed"
+      ],
+      "released": true
+    },
+    {
       "id": "23163",
       "name": "ウィッチクラフト・テラコッタン",
       "jaName": "ウィッチクラフト・テラコッタン",
@@ -169425,6 +170316,17 @@
       "released": true
     },
     {
+      "id": "23333",
+      "name": "疫神の依鬼 ヨア",
+      "jaName": "疫神の依鬼 ヨア",
+      "enName": "Yoa the Plague Deity Ashtra",
+      "aliases": [
+        "疫神の依鬼 ヨア",
+        "Yoa the Plague Deity Ashtra"
+      ],
+      "released": true
+    },
+    {
       "id": "14041",
       "name": "丽之魔妖－妖狐",
       "cnName": "丽之魔妖－妖狐",
@@ -171232,24 +172134,6 @@
         "青之眼少女",
         "青き眼の乙女",
         "Maiden with Eyes of Blue"
-      ],
-      "released": true
-    },
-    {
-      "id": "23416",
-      "name": "ウィッチクラフト・シード",
-      "jaName": "ウィッチクラフト・シード",
-      "aliases": [
-        "ウィッチクラフト・シード"
-      ],
-      "released": true
-    },
-    {
-      "id": "22920",
-      "name": "道化の一座 ハット",
-      "jaName": "道化の一座 ハット",
-      "aliases": [
-        "道化の一座 ハット"
       ],
       "released": true
     },
