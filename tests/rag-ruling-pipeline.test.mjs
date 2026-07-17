@@ -613,6 +613,55 @@ test("grounded_constraint_review_overrides_generic_trigger_faq", async () => {
   assert.ok(answer.riskFlags.includes("model_answer_overridden_by_operation_legality"));
 });
 
+test("focused_constraint_fallback_blocks_wrong_answer_after_primary_timeout", async () => {
+  const tasks = [];
+  const answer = await answerRagRulingQuestion({
+    question: "对方场上有「绚岚之达维」，我方以达维为对象发动「无限泡影」，这个时候场上没有其他魔陷，对方能不能发动「天雷之双风神」的效果？",
+    cards: thunderImpermanenceCards(),
+    records: [activatedSpellTrapReturnRule],
+    qaRecords: [],
+    rulebookModelInvoker: async ({ task }) => {
+      tasks.push(task);
+      if (task === "rulebook_grounding") {
+        throw new Error("rulebook_grounding_model_timeout");
+      }
+      return JSON.stringify({
+        constraintReviews: [{
+          evidenceId: "rule-activated-normal-spell-trap-cannot-return#p1-1",
+          operationId: "chain-wind-return-after-timeout",
+          action: "对方连锁发动天雷之双风神并尝试将无限泡影返回手牌",
+          relevance: "applies",
+          consequence: "blocks",
+          conclusion: "不能发动。无限泡影正在发动中且场上没有其他可返回的魔法陷阱。",
+          quote: "ほかに処理できる魔法・罠カードが存在しない場合、その戻す処理を必要とする効果は発動できません。",
+          application: "题目明确场上没有其他魔陷，正在发动的无限泡影不能返回手牌。",
+        }],
+        operationChecks: [],
+        overallConclusion: "不能发动。",
+      });
+    },
+    modelInvoker: async () => JSON.stringify({
+      answerLevel: "rule_analysis",
+      shortAnswer: "可以发动并把无限泡影返回手卡。",
+      reasoning: ["只检查了一般诱发条件。"],
+      usedCards: ["无限泡影", "天雷之双风神 息那"],
+      usedEvidence: [],
+      missingInfo: [],
+      riskFlags: [],
+      confidenceSelfEstimate: "medium",
+    }),
+  });
+
+  assert.deepEqual(tasks, ["rulebook_grounding", "rulebook_constraint_repair"]);
+  assert.match(answer.shortAnswer, /不能发动/u);
+  assert.doesNotMatch(answer.shortAnswer, /^可以发动/u);
+  assert.equal(answer.debug.retrievalCounts.unresolvedOperationConstraints, 0);
+  assert.ok(answer.debug.rulebookGroundingWarnings.includes("rulebook_grounding_focused_fallback_applied"));
+  assert.ok(answer.debug.rulebookGroundingWarnings.includes("rulebook_grounding_primary_failed:rulebook_grounding_model_timeout"));
+  assert.ok(answer.riskFlags.includes("operation_legality_blocker_applied"));
+  assert.ok(answer.riskFlags.includes("model_answer_overridden_by_operation_legality"));
+});
+
 test("rulebook_grounding_rejects_unknown_ids_and_non_verbatim_quotes", async () => {
   const passage = {
     id: "ocg-rule:test#p4-6",
