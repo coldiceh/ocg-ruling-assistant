@@ -168,6 +168,10 @@ const ui = {
   stepsList: document.querySelector("#stepsList"),
   questionsList: document.querySelector("#questionsList"),
   sourcesList: document.querySelector("#sourcesList"),
+  simulationPanel: document.querySelector("#simulationPanel"),
+  simulationStatus: document.querySelector("#simulationStatus"),
+  simulationSummary: document.querySelector("#simulationSummary"),
+  simulationDetails: document.querySelector("#simulationDetails"),
   sourceStatus: document.querySelector("#sourceStatus"),
   statusDot: document.querySelector(".status-dot"),
   syncInfo: document.querySelector("#syncInfo"),
@@ -711,6 +715,7 @@ function writeCachedBackendAnswer(key, answer) {
 function renderPending() {
   ui.resultGrid.hidden = false;
   renderCards([]);
+  renderEngineSimulation(null, null);
   updateModelStatus("分析中");
   ui.verdictBlock.className = "result-block verdict-block";
   ui.confidenceText.textContent = "分析中";
@@ -727,6 +732,7 @@ function renderPending() {
 function renderBackendAnswer(answer) {
   clearPendingStages();
   lastRenderedBackendAnswer = answer || null;
+  renderEngineSimulation(null, null);
   if (answer?.mode === "rag_baseline") {
     renderRagAnswer(answer);
     return;
@@ -778,6 +784,7 @@ function renderRagAnswer(answer) {
   ui.resultGrid.hidden = false;
   renderCards(answer?.resolvedCards || []);
   renderBudgetStatus(answer.debug?.budgetStatus || null);
+  renderEngineSimulation(answer?.engine || null, answer?.engineSimulation || null);
   const labels = {
     official_confirmed: { confidence: "官方依据", className: "is-confirmed", title: "官方直接裁定", basis: "官方 direct Q&A" },
     rule_analysis: { confidence: "规则分析", className: "is-rule-derived", title: "裁定分析", basis: "卡片文本 / FAQ / 相关资料" },
@@ -1043,6 +1050,7 @@ function resetAnalysis() {
   lastRenderedBackendAnswer = null;
   ui.resultGrid.hidden = true;
   renderCards([]);
+  renderEngineSimulation(null, null);
   renderParserDebug(null);
   renderFeedbackPanel(null);
   updateModelStatus(debugUiEnabled ? appConfig.modelLabel || "后端自动选择" : "准备就绪");
@@ -1064,6 +1072,7 @@ function renderResult(text, bestMatch, confidence, generatedQuestions, detectedC
   clearPendingStages();
   ui.resultGrid.hidden = false;
   renderCards(detectedCards);
+  renderEngineSimulation(null, null);
   renderParserDebug(null);
   updateModelStatus(debugUiEnabled ? "本地模板" : "分析完成");
   ui.verdictBlock.className = `result-block verdict-block ${confidence.className}`.trim();
@@ -2017,6 +2026,54 @@ function renderPendingStages(activeIndex) {
   const stage = pendingStages[Math.min(activeIndex, pendingStages.length - 1)];
   ui.verdictTitle.textContent = stage.label === "生成裁定" ? "正在生成裁定" : `正在${stage.label}`;
   ui.verdictBody.textContent = stage.body;
+}
+
+function renderEngineSimulation(engine, simulation) {
+  if (!ui.simulationPanel || !ui.simulationStatus || !ui.simulationSummary || !ui.simulationDetails) return;
+  if (!engine) {
+    ui.simulationPanel.hidden = true;
+    ui.simulationPanel.className = "result-block simulation-panel";
+    ui.simulationStatus.textContent = "";
+    ui.simulationSummary.textContent = "";
+    clearElement(ui.simulationDetails);
+    return;
+  }
+
+  const status = String(engine.status || "not_requested");
+  const details = [];
+  let className = "is-unavailable";
+  let statusLabel = "尚未执行";
+  let summary = "本题尚未生成可复现的对局场景，以上结论仅来自资料分析。";
+
+  if (status === "completed" && simulation) {
+    const stepCount = Array.isArray(simulation.steps) ? simulation.steps.length : 0;
+    const consumedResponses = Number(simulation.consumedResponses || 0);
+    const trace = String(simulation.traceSha256 || "");
+    const complete = simulation.status === "ended" && simulation.incomplete !== true;
+    className = complete ? "is-completed" : "is-incomplete";
+    statusLabel = complete ? "轨迹完成" : "轨迹待继续";
+    summary = complete
+      ? "模拟器已完成一条可复现轨迹。资料分析与模拟结果分别展示。"
+      : "模拟器已运行到需要下一次操作的位置，当前轨迹尚未结束。";
+    details.push(`执行节点：${stepCount}；已处理操作：${Number.isFinite(consumedResponses) ? consumedResponses : 0}。`);
+    if (trace) details.push(`轨迹编号：${trace.slice(0, 16)}。`);
+    details.push(simulation.policy?.warning || "模拟器结果不是官方裁定，卡片脚本也可能存在缺陷。");
+  } else if (status === "disabled") {
+    statusLabel = "未启用";
+    summary = "当前部署没有连接模拟器，以上结论仅来自资料分析。";
+  } else if (status === "unavailable") {
+    statusLabel = "暂不可用";
+    summary = "模拟器本次没有返回可验证轨迹，资料分析结果仍独立保留。";
+    if (debugUiEnabled && engine.error?.message) details.push(engine.error.message);
+  } else {
+    details.push("模拟器只执行结构化场景，不会把缺少阶段、区域或操作顺序的自然语言自动猜成对局。");
+  }
+
+  ui.simulationPanel.hidden = false;
+  ui.simulationPanel.className = `result-block simulation-panel ${className}`;
+  ui.simulationStatus.textContent = statusLabel;
+  ui.simulationSummary.textContent = summary;
+  renderList(ui.simulationDetails, details);
 }
 
 function renderSources(sources) {

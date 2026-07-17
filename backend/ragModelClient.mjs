@@ -389,54 +389,55 @@ export async function callRulebookGroundingModel({
     })
     : "";
 
+  const focusedReviewEnabled = Boolean(repairPrompt) && !isDisabled(env.RAG_RULEBOOK_FOCUSED_REPAIR_ENABLED);
   if (modelInvoker) {
-    try {
-      let raw = await modelInvoker({ prompt, provider, modelName, maxTokens, task: "rulebook_grounding" });
-      let operationLegality = validateOperationLegalityModelOutput(raw, candidates, {
-        requiredConstraintEvidence: priorityConstraintEvidence,
-      });
-      const repairWarnings = [];
-      if (shouldRepairRulebookGrounding(operationLegality, priorityConstraintEvidence, env)) {
-        try {
-          const repairedRaw = await modelInvoker({
-            prompt: repairPrompt,
-            provider,
-            modelName,
-            maxTokens: repairMaxTokens,
-            task: "rulebook_constraint_repair",
-          });
-          const mergedRaw = mergeRulebookGroundingOutputs(raw, repairedRaw);
-          const repaired = validateOperationLegalityModelOutput(mergedRaw, candidates, {
-            requiredConstraintEvidence: priorityConstraintEvidence,
-          });
-          if (isBetterOperationLegality(repaired, operationLegality)) {
-            raw = mergedRaw;
-            operationLegality = repaired;
-            repairWarnings.push("rulebook_grounding_focused_repair_applied");
-          } else {
-            repairWarnings.push("rulebook_grounding_focused_repair_no_improvement");
-          }
-        } catch (error) {
-          repairWarnings.push("rulebook_grounding_focused_repair_failed:" + safeErrorMessage(error));
-        }
-      }
-      return {
-        operationLegality,
-        rawText: String(raw || ""),
-        providerUsed: provider,
-        modelUsed: modelName,
-        dryRun: false,
-        warnings: [...providerResolution.warnings, ...repairWarnings, ...(operationLegality.warnings || [])],
-        tokenUsage: {},
-        estimatedCostCny: 0,
-        budgetStatus: null,
-      };
-    } catch (error) {
+    const primaryTask = Promise.resolve().then(() => modelInvoker({
+      prompt,
+      provider,
+      modelName,
+      maxTokens,
+      task: "rulebook_grounding",
+    }));
+    const focusedTask = focusedReviewEnabled
+      ? Promise.resolve().then(() => modelInvoker({
+        prompt: repairPrompt,
+        provider,
+        modelName,
+        maxTokens: repairMaxTokens,
+        task: "rulebook_constraint_repair",
+      }))
+      : null;
+    const [primaryOutcome, focusedOutcome] = await Promise.allSettled([
+      primaryTask,
+      ...(focusedTask ? [focusedTask] : []),
+    ]);
+    const combined = combineRulebookGroundingOutcomes({
+      primaryOutcome,
+      focusedOutcome: focusedTask ? focusedOutcome : null,
+      candidates,
+      priorityConstraintEvidence,
+    });
+    if (!combined.operationLegality) {
       return emptyRulebookGroundingResult(provider, modelName, false, [
         ...providerResolution.warnings,
-        "rulebook_grounding_model_failed:" + safeErrorMessage(error),
+        ...combined.warnings,
       ], priorityConstraintEvidence);
     }
+    return {
+      operationLegality: combined.operationLegality,
+      rawText: combined.rawText,
+      providerUsed: provider,
+      modelUsed: modelName,
+      dryRun: false,
+      warnings: [
+        ...providerResolution.warnings,
+        ...combined.warnings,
+        ...(combined.operationLegality.warnings || []),
+      ],
+      tokenUsage: {},
+      estimatedCostCny: 0,
+      budgetStatus: null,
+    };
   }
   if (provider === "mock" || !hasProviderKey(provider, env) || typeof fetchImpl !== "function" || isEnabled(env.RAG_DRY_RUN)) {
     return emptyRulebookGroundingResult(
@@ -449,7 +450,7 @@ export async function callRulebookGroundingModel({
   }
 
   const cacheInput = `${userQuery}\n${candidates.map((item) => item.id).join("|")}\n${(cardTexts || []).map((item) => item.id || item.title || "").join("|")}`;
-  const cacheKey = extractionCacheKey("rulebook-grounding-v6", provider, modelName, cacheInput);
+  const cacheKey = extractionCacheKey("rulebook-grounding-v7", provider, modelName, cacheInput);
   const cached = readCachedExtraction(rulebookGroundingCache, cacheKey, env);
   if (cached) {
     return {
@@ -500,41 +501,39 @@ export async function callRulebookGroundingModel({
         fetchImpl,
         temperature: 0,
       });
-    const response = await withTimeout(
+    const primaryTask = withTimeout(
       invokeGrounding(prompt, maxTokens),
       timeoutMs,
       "rulebook_grounding_model_timeout",
     );
-    const responses = [response];
-    let rawText = response.rawText;
-    let operationLegality = validateOperationLegalityModelOutput(rawText, candidates, {
-      requiredConstraintEvidence: priorityConstraintEvidence,
+    const repairTimeoutMs = readPositiveNumber(env.RAG_RULEBOOK_REPAIR_TIMEOUT_MS, 10000);
+    const focusedTask = focusedReviewEnabled
+      ? withTimeout(
+        invokeGrounding(repairPrompt, repairMaxTokens),
+        repairTimeoutMs,
+        "rulebook_grounding_focused_repair_timeout",
+      )
+      : null;
+    const [primaryOutcome, focusedOutcome] = await Promise.allSettled([
+      primaryTask,
+      ...(focusedTask ? [focusedTask] : []),
+    ]);
+    const combined = combineRulebookGroundingOutcomes({
+      primaryOutcome,
+      focusedOutcome: focusedTask ? focusedOutcome : null,
+      candidates,
+      priorityConstraintEvidence,
+      readRaw: (response) => response?.rawText,
     });
-    const repairWarnings = [];
-    if (shouldRepairRulebookGrounding(operationLegality, priorityConstraintEvidence, env)) {
-      try {
-        const repairTimeoutMs = readPositiveNumber(env.RAG_RULEBOOK_REPAIR_TIMEOUT_MS, 10000);
-        const repairResponse = await withTimeout(
-          invokeGrounding(repairPrompt, repairMaxTokens),
-          repairTimeoutMs,
-          "rulebook_grounding_focused_repair_timeout",
-        );
-        responses.push(repairResponse);
-        const mergedRaw = mergeRulebookGroundingOutputs(rawText, repairResponse.rawText);
-        const repaired = validateOperationLegalityModelOutput(mergedRaw, candidates, {
-          requiredConstraintEvidence: priorityConstraintEvidence,
-        });
-        if (isBetterOperationLegality(repaired, operationLegality)) {
-          rawText = mergedRaw;
-          operationLegality = repaired;
-          repairWarnings.push("rulebook_grounding_focused_repair_applied");
-        } else {
-          repairWarnings.push("rulebook_grounding_focused_repair_no_improvement");
-        }
-      } catch (error) {
-        repairWarnings.push("rulebook_grounding_focused_repair_failed:" + safeErrorMessage(error));
-      }
+    if (!combined.operationLegality) {
+      const message = combined.warnings.join(";") || "rulebook_grounding_model_failed";
+      throw new Error(message);
     }
+    const responses = [primaryOutcome, focusedOutcome]
+      .filter((outcome) => outcome?.status === "fulfilled")
+      .map((outcome) => outcome.value);
+    const rawText = combined.rawText;
+    const operationLegality = combined.operationLegality;
     const tokenUsage = sumTokenUsage(responses.map((item) => normalizeUsage(provider, item.usage)));
     const actualCost = estimateActualCostCny(provider, tokenUsage, env);
     let budgetStatus = budget.status;
@@ -555,7 +554,7 @@ export async function callRulebookGroundingModel({
         ...providerResolution.warnings,
         ...budget.warnings,
         ...spendWarnings,
-        ...repairWarnings,
+        ...combined.warnings,
         ...responses.flatMap((item) => item.warnings || []),
         ...(operationLegality.warnings || []),
       ],
@@ -1529,17 +1528,17 @@ function buildFocusedConstraintRepairPrompt({
 }) {
   const payload = {
     userQuery: String(userQuery || ""),
-    cardTexts: (cardTexts || []).slice(0, 6).map((item) => ({
+    cardTexts: (cardTexts || []).slice(0, 4).map((item) => ({
       id: item.id,
       title: item.title,
       cardType: item.cardType || "",
       attribute: item.attribute || "",
-      text: String(item.text || "").slice(0, 1800),
+      text: String(item.text || "").slice(0, 1400),
     })),
-    priorityConstraintCandidates: (priorityConstraintEvidence || []).slice(0, 6).map((item) => ({
+    priorityConstraintCandidates: (priorityConstraintEvidence || []).slice(0, 3).map((item) => ({
       id: item.id,
       title: item.title,
-      text: String(item.text || "").slice(0, 2200),
+      text: String(item.text || "").slice(0, 1600),
       sourceUrl: item.sourceUrl || "",
     })),
   };
@@ -1589,6 +1588,53 @@ function mergeRulebookGroundingOutputs(primaryRaw, repairRaw) {
   });
 }
 
+function combineRulebookGroundingOutcomes({
+  primaryOutcome,
+  focusedOutcome,
+  candidates = [],
+  priorityConstraintEvidence = [],
+  readRaw = (value) => value,
+} = {}) {
+  const warnings = [];
+  let rawText = "";
+  let operationLegality = null;
+
+  if (primaryOutcome?.status === "fulfilled") {
+    rawText = String(readRaw(primaryOutcome.value) || "");
+    operationLegality = validateOperationLegalityModelOutput(rawText, candidates, {
+      requiredConstraintEvidence: priorityConstraintEvidence,
+    });
+  } else if (primaryOutcome?.status === "rejected") {
+    warnings.push("rulebook_grounding_primary_failed:" + safeErrorMessage(primaryOutcome.reason));
+  }
+
+  if (focusedOutcome?.status === "fulfilled") {
+    const focusedRaw = String(readRaw(focusedOutcome.value) || "");
+    if (operationLegality) {
+      const mergedRaw = mergeRulebookGroundingOutputs(rawText, focusedRaw);
+      const repaired = validateOperationLegalityModelOutput(mergedRaw, candidates, {
+        requiredConstraintEvidence: priorityConstraintEvidence,
+      });
+      if (isBetterOperationLegality(repaired, operationLegality)) {
+        rawText = mergedRaw;
+        operationLegality = repaired;
+        warnings.push("rulebook_grounding_focused_repair_applied");
+      } else {
+        warnings.push("rulebook_grounding_focused_repair_no_improvement");
+      }
+    } else {
+      rawText = focusedRaw;
+      operationLegality = validateOperationLegalityModelOutput(rawText, candidates, {
+        requiredConstraintEvidence: priorityConstraintEvidence,
+      });
+      warnings.push("rulebook_grounding_focused_fallback_applied");
+    }
+  } else if (focusedOutcome?.status === "rejected") {
+    warnings.push("rulebook_grounding_focused_repair_failed:" + safeErrorMessage(focusedOutcome.reason));
+  }
+
+  return { rawText, operationLegality, warnings };
+}
 function mergeGroundingItems(primary = [], repair = [], getKey) {
   const result = [];
   const indexByKey = new Map();
@@ -1608,13 +1654,6 @@ function mergeGroundingItems(primary = [], repair = [], getKey) {
   return result;
 }
 
-function shouldRepairRulebookGrounding(operationLegality, priorityConstraintEvidence, env = {}) {
-  return !isDisabled(env.RAG_RULEBOOK_FOCUSED_REPAIR_ENABLED)
-    && Array.isArray(priorityConstraintEvidence)
-    && priorityConstraintEvidence.length > 0
-    && operationLegality?.hasUnresolvedConstraints === true
-    && operationLegality?.hasBlockingCheck !== true;
-}
 
 function isBetterOperationLegality(candidate, current) {
   return operationLegalityScore(candidate) > operationLegalityScore(current);

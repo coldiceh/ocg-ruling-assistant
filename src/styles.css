@@ -623,6 +623,33 @@ svg {
 .verdict-block.is-risky {
   border-left-color: var(--bad);
 }
+.simulation-panel {
+  border-left: 4px solid var(--line-strong);
+}
+
+.simulation-panel.is-completed {
+  border-left-color: var(--good);
+}
+
+.simulation-panel.is-incomplete {
+  border-left-color: var(--warn);
+}
+
+.simulation-panel.is-unavailable {
+  border-left-color: var(--faint);
+}
+
+#simulationSummary {
+  margin: 0;
+  line-height: 1.65;
+}
+
+#simulationDetails {
+  margin-top: 10px;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
 
 .block-title {
   margin-bottom: 10px;

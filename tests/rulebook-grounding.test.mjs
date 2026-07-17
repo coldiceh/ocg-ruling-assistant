@@ -346,3 +346,108 @@ test("focused_constraint_repair_resolves_a_missed_restrictive_rule", async () =>
   assert.ok(result.warnings.includes("rulebook_grounding_focused_repair_applied"));
   assert.match(result.operationLegality.shortAnswer, /不能发动/u);
 });
+test("focused_constraint_review_survives_primary_grounding_failure", async () => {
+  const rule = {
+    id: "rulebook-focused-timeout-fallback",
+    type: "rulebook",
+    recordType: "rulebook",
+    title: "发动中的魔法陷阱返回限制",
+    text: "正在发动或连锁处理中的非永续魔法・陷阱卡不能从场上返回手牌。场上没有其他可返回的魔法・陷阱卡时，要求返回卡片的效果不能发动。",
+    sourceUrl: "https://example.test/return-rule",
+  };
+  const calls = [];
+  const result = await callRulebookGroundingModel({
+    userQuery: "对方发动通常陷阱，场上没有其他魔法陷阱。我能否连锁发动把场上魔法陷阱全部返回手牌的效果？",
+    ruleEvidence: [rule],
+    cardTexts: [{
+      id: "card-text-return-effect",
+      type: "card_text",
+      title: "返回效果",
+      text: "对手发动魔法・陷阱卡时可以发动。将场上的魔法・陷阱卡全部返回手牌。",
+    }],
+    modelInvoker: async ({ task }) => {
+      calls.push(task);
+      if (task === "rulebook_grounding") {
+        throw new Error("rulebook_grounding_model_timeout");
+      }
+      return JSON.stringify({
+        constraintReviews: [{
+          evidenceId: rule.id,
+          operationId: "return-active-trap",
+          action: "将正在发动的通常陷阱返回手牌",
+          relevance: "applies",
+          consequence: "blocks",
+          conclusion: "唯一候选不能返回，因此该效果不能发动。",
+          quote: "正在发动或连锁处理中的非永续魔法・陷阱卡不能从场上返回手牌。",
+          application: "题目明确场上没有其他魔法陷阱，唯一候选是正在当前连锁发动的通常陷阱。",
+        }],
+        operationChecks: [],
+        overallConclusion: "不能发动。",
+      });
+    },
+  });
+
+  assert.deepEqual(calls, ["rulebook_grounding", "rulebook_constraint_repair"]);
+  assert.equal(result.operationLegality.hasBlockingCheck, true);
+  assert.equal(result.operationLegality.hasUnresolvedConstraints, false);
+  assert.ok(result.warnings.includes("rulebook_grounding_focused_fallback_applied"));
+  assert.ok(result.warnings.includes("rulebook_grounding_primary_failed:rulebook_grounding_model_timeout"));
+  assert.match(result.operationLegality.shortAnswer, /不能发动/u);
+});
+test("focused_constraint_review_survives_primary_provider_timeout", async () => {
+  const rule = {
+    id: "rulebook-provider-timeout-fallback",
+    type: "rulebook",
+    recordType: "rulebook",
+    title: "发动中的魔法陷阱返回限制",
+    text: "正在发动或连锁处理中的非永续魔法・陷阱卡不能从场上返回手牌。场上没有其他可返回的魔法・陷阱卡时，要求返回卡片的效果不能发动。",
+  };
+  const prompts = [];
+  const focusedOutput = JSON.stringify({
+    constraintReviews: [{
+      evidenceId: rule.id,
+      operationId: "return-active-trap",
+      action: "将正在发动的通常陷阱返回手牌",
+      relevance: "applies",
+      consequence: "blocks",
+      conclusion: "唯一候选不能返回，因此该效果不能发动。",
+      quote: "正在发动或连锁处理中的非永续魔法・陷阱卡不能从场上返回手牌。",
+      application: "题目明确唯一候选是正在当前连锁发动的通常陷阱。",
+    }],
+    operationChecks: [],
+    overallConclusion: "不能发动。",
+  });
+  const result = await callRulebookGroundingModel({
+    userQuery: "对方发动通常陷阱，场上没有其他魔法陷阱。我能否连锁发动把场上魔法陷阱全部返回手牌的效果？",
+    ruleEvidence: [rule],
+    cardTexts: [{
+      id: "card-text-provider-return-effect",
+      type: "card_text",
+      title: "返回效果",
+      text: "对手发动魔法・陷阱卡时可以发动。将场上的魔法・陷阱卡全部返回手牌。",
+    }],
+    env: {
+      RAG_MODEL_PROVIDER: "deepseek",
+      DEEPSEEK_API_KEY: "test-key",
+      RAG_RULEBOOK_MODEL_TIMEOUT_MS: "5",
+      RAG_RULEBOOK_REPAIR_TIMEOUT_MS: "100",
+      RAG_DAILY_BUDGET_CNY: "100",
+    },
+    fetchImpl: async (_url, options) => {
+      const request = JSON.parse(options.body);
+      const prompt = request.messages[0].content;
+      prompts.push(prompt);
+      if (!prompt.includes("本次聚焦输入")) return new Promise(() => {});
+      return new Response(JSON.stringify({
+        choices: [{ message: { content: focusedOutput }, finish_reason: "stop" }],
+        usage: { prompt_tokens: 10, completion_tokens: 10 },
+      }), { status: 200, headers: { "content-type": "application/json" } });
+    },
+  });
+
+  assert.equal(prompts.length, 2);
+  assert.equal(result.operationLegality.hasBlockingCheck, true);
+  assert.equal(result.operationLegality.hasUnresolvedConstraints, false);
+  assert.ok(result.warnings.includes("rulebook_grounding_focused_fallback_applied"));
+  assert.ok(result.warnings.includes("rulebook_grounding_primary_failed:rulebook_grounding_model_timeout"));
+});

@@ -269,3 +269,17 @@ test("owner_query_log_is_hidden_and_server_authorized", async () => {
   assert.match(adminAuth, /timingSafeEqual/u);
   assert.doesNotMatch(adminAuth, /allure/u);
 });
+
+test("rag_displays_simulator_output_as_a_separate_result", async () => {
+  const [html, app] = await Promise.all([
+    readFile(new URL("../index.html", import.meta.url), "utf8"),
+    readFile(new URL("../src/app.js", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(html, /id="simulationPanel"[^>]+hidden/u);
+  assert.match(html, /模拟器验证/u);
+  assert.match(app, /function renderEngineSimulation/u);
+  assert.match(app, /资料分析与模拟结果分别展示/u);
+  assert.match(app, /模拟器结果不是官方裁定/u);
+  assert.match(app, /answer\?\.engineSimulation/u);
+});
