@@ -1,10 +1,12 @@
 import { createServer } from "node:http";
+import { authorizeAdminRequest } from "./adminAuth.mjs";
 import { authorizeBudgetResetRequest, budgetResetTokenConfigured } from "./budgetAuth.mjs";
 import { answerQuestion, getDataHealth } from "./engine.mjs";
 import { answerRulingQuestionFast } from "./fastJudgeEngine.mjs";
 import { appendFeedbackCase } from "./feedbackCases.mjs";
 import { getRagBudgetStatus, resetRagBudget, resolveCardExtractionProvider, resolveRagProvider } from "./ragModelClient.mjs";
 import { getOcgEngineHealth, requestOcgEngineSimulation } from "./ocgEngineClient.mjs";
+import { appendQueryAudit, listQueryAudits } from "./queryAuditStore.mjs";
 import { answerRagRulingQuestion } from "./ragRulingPipeline.mjs";
 
 const port = Number(process.env.PORT || 8787);
@@ -60,6 +62,26 @@ const server = createServer(async (request, response) => {
     return;
   }
 
+  if (request.method === "POST" && request.url === "/api/admin-queries") {
+    const body = await readJsonBody(request);
+    const auth = authorizeAdminRequest(request, { env: process.env, body });
+    if (!auth.ok) {
+      sendJson(response, auth.status, { ok: false, error: auth.error, message: auth.message });
+      return;
+    }
+    try {
+      sendJson(response, 200, {
+        ok: true,
+        ...await listQueryAudits({ limit: body.limit, env: process.env }),
+      });
+    } catch (error) {
+      sendJson(response, 503, {
+        ok: false,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+    return;
+  }
   if (request.method === "POST" && request.url === "/api/engine") {
     const payload = await readJsonBody(request);
     const result = await requestOcgEngineSimulation({
@@ -71,16 +93,23 @@ const server = createServer(async (request, response) => {
   }
 
   if (request.method === "POST" && request.url === "/api/answer") {
+    let auditPromise = Promise.resolve();
     try {
       const body = await readBody(request);
       const payload = JSON.parse(body || "{}");
       const mode = String(payload.mode || "rag").toLowerCase();
+      auditPromise = appendQueryAudit({
+        question: payload.question,
+        mode,
+        env: process.env,
+      }).catch(() => null);
       if (!["legacy", "fastjudge"].includes(mode)) {
         const answer = await answerRagRulingQuestion({
           question: payload.question,
           env: envForModelTier(process.env, payload.modelTier),
           engineScenario: payload.engineScenario,
         });
+        await auditPromise;
         sendJson(response, 200, answer);
         return;
       }
@@ -94,8 +123,10 @@ const server = createServer(async (request, response) => {
             chainLinks: Array.isArray(payload.chainLinks) ? payload.chainLinks : [],
           })
         : await answerQuestion(payload);
+      await auditPromise;
       sendJson(response, 200, answer);
     } catch (error) {
+      await auditPromise;
       sendJson(response, 500, {
         error: error instanceof Error ? error.message : String(error),
       });

@@ -66,7 +66,10 @@ export function extractRagCards(userQuery, { cards = [], maxCards = 6, modelCard
 
   const aliasHits = [];
   for (const [aliasKey, candidates] of aliasIndex.entries()) {
-    if (aliasKey.length < 2 || !normalizedQuery.includes(aliasKey)) continue;
+    // Two-character aliases are too ambiguous for passive substring scanning
+    // (for example, the card "融合" inside the gameplay term "融合怪").
+    // Explicit model/quoted/unquoted candidates above can still resolve them.
+    if (aliasKey.length < 3 || !normalizedQuery.includes(aliasKey)) continue;
     const bestAlias = candidates[0]?.matchedAlias || "";
     aliasHits.push({ aliasKey, candidates, score: aliasKey.length + bestAlias.length / 100 });
   }
@@ -132,6 +135,7 @@ export function normalizeCardKey(value) {
     .replace(/埃克利西/gu, "艾克莉西")
     .replace(/艾克利西/gu, "艾克莉西")
     .replace(/埃克莉西/gu, "艾克莉西")
+    .replace(/莉西娅/gu, "莉西亚")
     .replace(/[の之的]/gu, "")
     .replace(/[「」『』《》【】“”"'`]/gu, "")
     .replace(/[：:・·･．.－—–_\-\s]/gu, "")
@@ -174,7 +178,7 @@ function cleanUnquotedMention(value) {
 
 function trimGameplaySuffix(value) {
   const text = String(value || "").trim();
-  const suffixPattern = /(?:一[张張只]|[0-9０-９]+[张張只]|里侧|裏側|表侧|表側|盖放|覆蓋|魔陷|魔法陷阱|发动|發動|处理|處理|检索|檢索|破坏|破壞|送墓|除外|回到|返回|起跳)/u;
+  const suffixPattern = /(?:一[张張只]|[0-9０-９]+[张張只]|里侧|裏側|表侧|表側|盖放|覆蓋|魔陷|魔法陷阱|发动|發動|处理|處理|检索|檢索|破坏|破壞|送墓|除外|回到|返回|回去|起跳)/u;
   const match = text.match(suffixPattern);
   return match && match.index && match.index >= 2 ? text.slice(0, match.index).trim() : text;
 }

@@ -16,9 +16,13 @@ export function validateOperationLegalityModelOutput(raw, evidenceCandidates = [
     );
   }
 
-  const evidenceById = new Map((evidenceCandidates || [])
-    .filter((item) => item?.id && item?.text)
-    .map((item) => [String(item.id), item]));
+  const evidenceById = new Map();
+  for (const item of evidenceCandidates || []) {
+    if (!item?.id || !item?.text) continue;
+    const originalId = String(item.id);
+    evidenceById.set(originalId, item);
+    evidenceById.set(cleanText(originalId), item);
+  }
   const warnings = [];
   const constraintReviews = normalizeConstraintReviews(
     parsed.constraintReviews,
@@ -130,13 +134,30 @@ function normalizeConstraintReviews(value, evidenceById, warnings) {
   const source = Array.isArray(value) ? value : [];
   return source.slice(0, 12).map((item, index) => {
     const evidenceId = cleanText(item?.evidenceId || item?.id);
-    const citations = normalizeCitations([{
+    const application = cleanText(item?.application || item?.reason);
+    let citations = normalizeCitations([{
       id: evidenceId,
       quote: item?.quote || item?.excerpt,
-      application: item?.application || item?.reason,
+      application,
     }], evidenceById, `constraint-review-${index + 1}`, warnings);
+    const evidence = evidenceById.get(evidenceId);
+    const canonicalEvidenceId = String(evidence?.id || evidenceId).trim();
+    if (!citations.length && evidence && application.length >= 8) {
+      const recoveredQuote = selectConstraintQuote(evidence.text, application);
+      if (recoveredQuote) {
+        warnings.push(`rulebook_grounding_constraint_quote_recovered:constraint-review-${index + 1}:${evidenceId}`);
+        citations = [{
+          id: canonicalEvidenceId,
+          quote: recoveredQuote,
+          application: application.slice(0, 500),
+          type: cleanText(evidence.type || evidence.recordType || "related"),
+          title: cleanText(evidence.title || canonicalEvidenceId),
+          sourceUrl: cleanText(evidence.sourceUrl || ""),
+        }];
+      }
+    }
     return {
-      evidenceId,
+      evidenceId: canonicalEvidenceId,
       operationId: cleanText(item?.operationId || `constraint-operation-${index + 1}`).slice(0, 80),
       action: cleanText(item?.action || item?.operation || "核对限制性规则").slice(0, 240),
       relevance: normalizeConstraintRelevance(item?.relevance || item?.applicability || item?.applies),
@@ -190,16 +211,16 @@ function normalizeConstraintRelevance(value) {
   if (value === true) return "applies";
   if (value === false) return "not_applicable";
   const normalized = String(value || "").trim().toLowerCase();
-  if (["applies", "applicable", "relevant", "yes"].includes(normalized)) return "applies";
-  if (["not_applicable", "not-applicable", "irrelevant", "no"].includes(normalized)) return "not_applicable";
+  if (["applies", "applicable", "relevant", "yes", "适用", "適用", "相关", "相關", "該当", "該当する"].includes(normalized)) return "applies";
+  if (["not_applicable", "not-applicable", "irrelevant", "no", "不适用", "不適用", "无关", "無關", "非該当", "該当しない"].includes(normalized)) return "not_applicable";
   return "uncertain";
 }
 
 function normalizeConstraintConsequence(value) {
   const normalized = String(value || "").trim().toLowerCase();
-  if (["blocks", "block", "illegal", "prevents", "prohibits"].includes(normalized)) return "blocks";
-  if (["limits", "limit", "conditional", "restricts"].includes(normalized)) return "limits";
-  if (["none", "no_effect", "does_not_block", "not_blocking"].includes(normalized)) return "none";
+  if (["blocks", "block", "illegal", "prevents", "prohibits", "阻止", "禁止", "不合法", "不能", "不可", "発動不可"].includes(normalized)) return "blocks";
+  if (["limits", "limit", "conditional", "restricts", "限制", "受限", "条件付き"].includes(normalized)) return "limits";
+  if (["none", "no_effect", "does_not_block", "not_blocking", "无", "無", "不阻止", "没有影响", "没有阻止", "影響なし"].includes(normalized)) return "none";
   return "uncertain";
 }
 
@@ -237,22 +258,44 @@ function normalizeCitations(value, evidenceById, operationId, warnings) {
       if (id) warnings.push(`rulebook_grounding_unknown_evidence:${operationId}:${id}`);
       continue;
     }
+    const canonicalId = String(evidence.id || id).trim();
     if (quote.length < 4 || !containsNormalizedQuote(evidence.text, quote)) {
       warnings.push(`rulebook_grounding_quote_mismatch:${operationId}:${id}`);
       continue;
     }
-    if (seen.has(id)) continue;
-    seen.add(id);
+    if (seen.has(canonicalId)) continue;
+    seen.add(canonicalId);
     result.push({
-      id,
+      id: canonicalId,
       quote: quote.slice(0, 500),
       application: cleanText(item?.application || item?.reason).slice(0, 500),
       type: cleanText(evidence.type || evidence.recordType || "related"),
-      title: cleanText(evidence.title || id),
+      title: cleanText(evidence.title || canonicalId),
       sourceUrl: cleanText(evidence.sourceUrl || ""),
     });
   }
   return result;
+}
+
+function selectConstraintQuote(value, application) {
+  const text = String(value || "").trim();
+  if (!text) return "";
+  const terms = cleanText(application)
+    .split(/[，,。.!！?？;；、：:\s]+/u)
+    .filter((item) => item.length >= 2)
+    .slice(0, 16);
+  const chunks = text
+    .split(/\n+|(?<=[。！？.!?])\s*/u)
+    .map((item) => item.trim())
+    .filter(Boolean);
+  const restrictive = /(?:不能|不可|不得|无法|不可以|禁止|cannot|can't|must not|may not|not allowed|できません|発動できません)/iu;
+  const ranked = chunks.map((chunk, index) => ({
+    chunk,
+    index,
+    score: (restrictive.test(chunk) ? 30 : 0)
+      + terms.reduce((score, term) => score + (chunk.includes(term) ? Math.min(term.length, 8) : 0), 0),
+  })).sort((left, right) => right.score - left.score || left.index - right.index);
+  return cleanText(ranked[0]?.chunk || text).slice(0, 500);
 }
 
 function operationCheckEvidence(check) {
@@ -294,9 +337,9 @@ function buildReasoning(checks) {
 
 function normalizeStatus(value) {
   const status = String(value || "unknown").trim().toLowerCase();
-  if (["legal", "allowed", "valid", "can"].includes(status)) return "legal";
-  if (["illegal", "blocked", "invalid", "cannot", "can_not"].includes(status)) return "illegal";
-  if (["conditional", "limited", "depends"].includes(status)) return "conditional";
+  if (["legal", "allowed", "valid", "can", "合法", "可以", "可行", "能发动", "発動可能"].includes(status)) return "legal";
+  if (["illegal", "blocked", "invalid", "cannot", "can_not", "不合法", "不能", "不可", "无法", "無法", "発動不可"].includes(status)) return "illegal";
+  if (["conditional", "limited", "depends", "有条件", "有條件", "视情况", "視情況", "条件付き"].includes(status)) return "conditional";
   return "unknown";
 }
 

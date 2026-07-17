@@ -152,6 +152,7 @@ const builtInNotes = [
 const ui = {
   questionInput: document.querySelector("#questionInput"),
   analyzeButton: document.querySelector("#analyzeButton"),
+  analyzeButtonText: document.querySelector("#analyzeButtonText"),
   clearButton: document.querySelector("#clearButton"),
   resultGrid: document.querySelector("#resultGrid"),
   confidenceText: document.querySelector("#confidenceText"),
@@ -186,9 +187,13 @@ const ui = {
   budgetLimitText: document.querySelector("#budgetLimitText"),
   budgetHint: document.querySelector("#budgetHint"),
   budgetResetButton: document.querySelector("#budgetResetButton"),
+  adminQueryPanel: document.querySelector("#adminQueryPanel"),
+  adminQueryLoadButton: document.querySelector("#adminQueryLoadButton"),
+  adminQueryStatus: document.querySelector("#adminQueryStatus"),
+  adminQueryList: document.querySelector("#adminQueryList"),
 };
 
-let appConfig = { answerApiUrl: "", modelLabel: "", budgetApiUrl: "" };
+let appConfig = { answerApiUrl: "", modelLabel: "", budgetApiUrl: "", adminQueriesApiUrl: "" };
 let syncedCards = [];
 let syncedNotes = [];
 let sourceMeta = null;
@@ -201,6 +206,7 @@ let visibleCards = [];
 let selectedCardIndex = 0;
 let lastRenderedBackendAnswer = null;
 let debugUiEnabled = false;
+let adminUiEnabled = false;
 const themeStorageKey = "ocg-ruling-theme:v1";
 const selectedModelTier = "flash";
 const pendingStages = [
@@ -271,14 +277,15 @@ async function loadSyncedData() {
 }
 
 async function loadAppConfig() {
-  const payload = await readOptionalJson("config.json");
-  if (!payload) return;
+  const payload = (await readOptionalJson("config.json")) || {};
   appConfig = {
     answerApiUrl: String(payload.answerApiUrl || "").trim(),
     budgetApiUrl: String(payload.budgetApiUrl || "").trim(),
+    adminQueriesApiUrl: String(payload.adminQueriesApiUrl || "").trim(),
     modelLabel: "",
   };
   if (!appConfig.budgetApiUrl) appConfig.budgetApiUrl = getBudgetApiUrl();
+  if (!appConfig.adminQueriesApiUrl) appConfig.adminQueriesApiUrl = getAdminQueriesApiUrl();
 }
 
 async function loadBackendModelInfo() {
@@ -635,6 +642,7 @@ async function analyzeQuestion() {
   }
 
   if (appConfig.answerApiUrl) {
+    setQueryPending(true);
     renderPending();
     try {
       const answer = await requestBackendAnswer(text);
@@ -644,6 +652,8 @@ async function analyzeQuestion() {
     } catch (error) {
       if (requestId !== analysisRequestId) return;
       console.warn("Backend answer failed, using static fallback.", error);
+    } finally {
+      if (requestId === analysisRequestId) setQueryPending(false);
     }
   }
 
@@ -677,7 +687,7 @@ async function requestBackendAnswer(text) {
 }
 
 function buildBackendCacheKey(text, mode = "rag", modelTier = "flash") {
-  return `ocg-ruling-answer:v17:${mode}:${modelTier}:${appConfig.answerApiUrl}:${normalizeText(text).slice(0, 2000)}`;
+  return `ocg-ruling-answer:v18:${mode}:${modelTier}:${appConfig.answerApiUrl}:${normalizeText(text).slice(0, 2000)}`;
 }
 
 function readCachedBackendAnswer(key) {
@@ -1019,7 +1029,16 @@ function fastJudgeSources(summary = {}) {
   return groups.flatMap(([label, refs]) => (refs || []).map((ref) => ({ label, detail: String(ref) })));
 }
 
+function setQueryPending(isPending) {
+  if (!ui.analyzeButton) return;
+  ui.analyzeButton.disabled = Boolean(isPending);
+  ui.analyzeButton.setAttribute("aria-busy", String(Boolean(isPending)));
+  if (ui.analyzeButtonText) {
+    ui.analyzeButtonText.textContent = isPending ? "查询中…" : "查询";
+  }
+}
 function resetAnalysis() {
+  setQueryPending(false);
   clearPendingStages();
   lastRenderedBackendAnswer = null;
   ui.resultGrid.hidden = true;
@@ -1282,6 +1301,62 @@ async function loadCardDetail(card) {
   }
 }
 
+async function loadAdminQueries() {
+  if (!adminUiEnabled || !appConfig.adminQueriesApiUrl || !ui.adminQueryLoadButton) return;
+  const password = window.prompt("请输入管理员密码");
+  if (!password) return;
+
+  ui.adminQueryLoadButton.disabled = true;
+  if (ui.adminQueryStatus) ui.adminQueryStatus.textContent = "正在读取问题记录...";
+  if (ui.adminQueryList) clearElement(ui.adminQueryList);
+
+  try {
+    const response = await fetch(appConfig.adminQueriesApiUrl, {
+      method: "POST",
+      cache: "no-store",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ password, limit: 50 }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (response.status === 401 || response.status === 403) {
+      throw new Error("管理员验证失败。");
+    }
+    if (!response.ok) throw new Error("问题记录接口返回 " + response.status);
+    renderAdminQueries(payload.entries || []);
+  } catch (error) {
+    if (ui.adminQueryStatus) {
+      ui.adminQueryStatus.textContent = error instanceof Error ? error.message : "暂时无法读取问题记录。";
+    }
+  } finally {
+    ui.adminQueryLoadButton.disabled = false;
+  }
+}
+
+function renderAdminQueries(entries) {
+  if (!ui.adminQueryList || !ui.adminQueryStatus) return;
+  clearElement(ui.adminQueryList);
+  const records = Array.isArray(entries) ? entries : [];
+  ui.adminQueryStatus.textContent = records.length
+    ? "最近 " + records.length + " 条问题。"
+    : "暂时没有已保存的问题。";
+
+  for (const entry of records) {
+    const item = document.createElement("li");
+    const time = document.createElement("time");
+    const date = new Date(entry?.createdAt || "");
+    time.dateTime = Number.isNaN(date.getTime()) ? "" : date.toISOString();
+    time.textContent = Number.isNaN(date.getTime())
+      ? String(entry?.createdAt || "")
+      : new Intl.DateTimeFormat("zh-CN", {
+          dateStyle: "medium",
+          timeStyle: "short",
+        }).format(date);
+    const question = document.createElement("p");
+    question.textContent = String(entry?.question || "");
+    item.append(time, question);
+    ui.adminQueryList.appendChild(item);
+  }
+}
 function getCardApiUrl() {
   if (!appConfig.answerApiUrl) return "";
   try {
@@ -1306,6 +1381,17 @@ function getBudgetApiUrl() {
   }
 }
 
+function getAdminQueriesApiUrl() {
+  if (!appConfig.answerApiUrl) return "";
+  try {
+    const url = new URL(appConfig.answerApiUrl);
+    url.pathname = url.pathname.replace(/\/api\/answer\/?$/, "/api/admin-queries");
+    url.search = "";
+    return url.toString();
+  } catch {
+    return appConfig.answerApiUrl.replace(/\/api\/answer\/?$/, "/api/admin-queries");
+  }
+}
 function renderCardDetail(card, detail, status) {
   const name = detail?.name || cardDisplayName(card);
   const aliases = detail?.names?.filter((item) => item && item !== name).slice(0, 3) || [card.jaName, card.enName].filter(Boolean);
@@ -2025,6 +2111,8 @@ function clearElement(element) {
 
 async function init() {
   debugUiEnabled = isDebugUiEnabled();
+  adminUiEnabled = isAdminUiEnabled();
+  if (ui.adminQueryPanel) ui.adminQueryPanel.hidden = !adminUiEnabled;
   applyTheme(readInitialTheme());
   await loadAppConfig();
   await loadBackendModelInfo();
@@ -2052,6 +2140,7 @@ async function init() {
     }
   });
   ui.budgetResetButton?.addEventListener("click", () => resetBudgetStatus());
+  ui.adminQueryLoadButton?.addEventListener("click", () => loadAdminQueries());
 }
 
 function scheduleAnalysis() {
@@ -2061,6 +2150,7 @@ function scheduleAnalysis() {
     return;
   }
   if (appConfig.answerApiUrl) {
+    analysisRequestId += 1;
     resetAnalysis();
     return;
   }
@@ -2078,6 +2168,14 @@ function isDebugUiEnabled() {
   }
 }
 
+function isAdminUiEnabled() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    return params.get("admin") === "1";
+  } catch {
+    return false;
+  }
+}
 function readInitialTheme() {
   try {
     const stored = localStorage.getItem(themeStorageKey);

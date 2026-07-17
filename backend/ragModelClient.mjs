@@ -13,7 +13,7 @@ const GROUNDING_MECHANISM_PATTERNS = Object.freeze([
   ["chain", /连锁|連鎖|チェーン|chain/iu],
   ["target", /对象|對象|対象|target/iu],
   ["applicability", /适用|適用|处理|處理|処理|resolve|applicable/iu],
-  ["return", /回到|返回|放回|弹回|彈回|戻|return/iu],
+  ["return", /回到|返回|回去|放回|弹回|彈回|戻|return/iu],
   ["hand", /手卡|手牌|手札|hand/iu],
   ["deck", /卡组|牌组|牌組|デッキ|deck/iu],
   ["spell_trap", /魔法|陷阱|罠|spell|trap/iu],
@@ -344,6 +344,7 @@ export async function callRulebookGroundingModel({
   const maxQaCandidates = readPositiveNumber(env.RAG_MAX_QA_GROUNDING_CANDIDATES, 10);
   const maxCardTextCandidates = readPositiveNumber(env.RAG_MAX_CARDS, 6);
   const maxPriorityConstraints = readPositiveNumber(env.RAG_MAX_PRIORITY_CONSTRAINTS, 3);
+  const maxFocusedCandidates = readPositiveNumber(env.RAG_MAX_FOCUSED_GROUNDING_CANDIDATES, 20);
   const selectedQaEvidence = selectGroundingQaEvidence(qaEvidence, maxQaCandidates);
   const selectedRuleEvidence = dedupeGroundingEvidence(ruleEvidence).slice(0, maxRulebookCandidates);
   const selectedCardTexts = dedupeGroundingEvidence(cardTexts).slice(0, maxCardTextCandidates);
@@ -353,14 +354,15 @@ export async function callRulebookGroundingModel({
     cardTexts: selectedCardTexts,
     limit: maxPriorityConstraints,
   });
-  const candidates = interleaveGroundingEvidence([
+  const candidates = selectGroundingCandidates({
     priorityConstraintEvidence,
-    selectedQaEvidence.filter(isDirectGroundingQa),
+    selectedQaEvidence,
     selectedCardTexts,
     selectedRuleEvidence,
-    selectedQaEvidence.filter(isFaqGroundingEvidence),
-    selectedQaEvidence.filter((item) => !isDirectGroundingQa(item) && !isFaqGroundingEvidence(item)),
-  ], maxRulebookCandidates + maxQaCandidates + maxCardTextCandidates);
+    maxCandidates: priorityConstraintEvidence.length
+      ? maxFocusedCandidates
+      : maxRulebookCandidates + maxQaCandidates + maxCardTextCandidates,
+  });
   if (!candidates.length) {
     return emptyRulebookGroundingResult("none", "none", true, ["grounding_evidence_candidates_missing"]);
   }
@@ -368,27 +370,62 @@ export async function callRulebookGroundingModel({
   const providerResolution = resolveRulebookGroundingProvider(env);
   const provider = providerResolution.provider;
   const modelName = modelNameForRulebookGroundingProvider(provider, env);
-  const maxTokens = readNumber(env.RAG_RULEBOOK_MODEL_MAX_OUTPUT_TOKENS, 2400);
+  const maxTokens = readNumber(env.RAG_RULEBOOK_MODEL_MAX_OUTPUT_TOKENS, 1800);
   const prompt = buildRulebookGroundingPrompt({
     userQuery,
-    cardTexts,
+    cardTexts: selectedCardTexts,
     evidenceCandidates: candidates,
     priorityConstraintEvidence,
   });
+  const repairMaxTokens = Math.min(
+    maxTokens,
+    readPositiveNumber(env.RAG_RULEBOOK_REPAIR_MAX_OUTPUT_TOKENS, 900),
+  );
+  const repairPrompt = priorityConstraintEvidence.length
+    ? buildFocusedConstraintRepairPrompt({
+      userQuery,
+      cardTexts: selectedCardTexts,
+      priorityConstraintEvidence,
+    })
+    : "";
 
   if (modelInvoker) {
     try {
-      const raw = await modelInvoker({ prompt, provider, modelName, maxTokens, task: "rulebook_grounding" });
-      const operationLegality = validateOperationLegalityModelOutput(raw, candidates, {
+      let raw = await modelInvoker({ prompt, provider, modelName, maxTokens, task: "rulebook_grounding" });
+      let operationLegality = validateOperationLegalityModelOutput(raw, candidates, {
         requiredConstraintEvidence: priorityConstraintEvidence,
       });
+      const repairWarnings = [];
+      if (shouldRepairRulebookGrounding(operationLegality, priorityConstraintEvidence, env)) {
+        try {
+          const repairedRaw = await modelInvoker({
+            prompt: repairPrompt,
+            provider,
+            modelName,
+            maxTokens: repairMaxTokens,
+            task: "rulebook_constraint_repair",
+          });
+          const repaired = validateOperationLegalityModelOutput(repairedRaw, candidates, {
+            requiredConstraintEvidence: priorityConstraintEvidence,
+          });
+          if (isBetterOperationLegality(repaired, operationLegality)) {
+            raw = repairedRaw;
+            operationLegality = repaired;
+            repairWarnings.push("rulebook_grounding_focused_repair_applied");
+          } else {
+            repairWarnings.push("rulebook_grounding_focused_repair_no_improvement");
+          }
+        } catch (error) {
+          repairWarnings.push("rulebook_grounding_focused_repair_failed:" + safeErrorMessage(error));
+        }
+      }
       return {
         operationLegality,
         rawText: String(raw || ""),
         providerUsed: provider,
         modelUsed: modelName,
         dryRun: false,
-        warnings: [...providerResolution.warnings, ...(operationLegality.warnings || [])],
+        warnings: [...providerResolution.warnings, ...repairWarnings, ...(operationLegality.warnings || [])],
         tokenUsage: {},
         estimatedCostCny: 0,
         budgetStatus: null,
@@ -396,11 +433,10 @@ export async function callRulebookGroundingModel({
     } catch (error) {
       return emptyRulebookGroundingResult(provider, modelName, false, [
         ...providerResolution.warnings,
-        `rulebook_grounding_model_failed:${safeErrorMessage(error)}`,
+        "rulebook_grounding_model_failed:" + safeErrorMessage(error),
       ], priorityConstraintEvidence);
     }
   }
-
   if (provider === "mock" || !hasProviderKey(provider, env) || typeof fetchImpl !== "function" || isEnabled(env.RAG_DRY_RUN)) {
     return emptyRulebookGroundingResult(
       "mock",
@@ -412,7 +448,7 @@ export async function callRulebookGroundingModel({
   }
 
   const cacheInput = `${userQuery}\n${candidates.map((item) => item.id).join("|")}\n${(cardTexts || []).map((item) => item.id || item.title || "").join("|")}`;
-  const cacheKey = extractionCacheKey("rulebook-grounding-v3", provider, modelName, cacheInput);
+  const cacheKey = extractionCacheKey("rulebook-grounding-v5", provider, modelName, cacheInput);
   const cached = readCachedExtraction(rulebookGroundingCache, cacheKey, env);
   if (cached) {
     return {
@@ -425,8 +461,8 @@ export async function callRulebookGroundingModel({
 
   const budget = await buildBudgetPreflight({
     provider,
-    prompt,
-    maxTokens,
+    prompt: repairPrompt ? prompt + "\n" + repairPrompt : prompt,
+    maxTokens: maxTokens + (repairPrompt ? repairMaxTokens : 0),
     env,
     fetchImpl,
     now,
@@ -445,34 +481,71 @@ export async function callRulebookGroundingModel({
 
   try {
     const timeoutMs = readPositiveNumber(env.RAG_RULEBOOK_MODEL_TIMEOUT_MS, 7000);
-    const call = provider === "gemini"
+    const invokeGrounding = (modelPrompt, outputTokens) => provider === "gemini"
       ? callGemini({
-        prompt,
+        prompt: modelPrompt,
         env,
         modelName,
-        maxTokens,
+        maxTokens: outputTokens,
         fetchImpl,
         temperature: 0,
         maxTokensEnvName: "GEMINI_RULEBOOK_MODEL_MAX_OUTPUT_TOKENS",
       })
-      : callDeepSeek({ prompt, env, modelName, maxTokens, fetchImpl, temperature: 0 });
-    const response = await withTimeout(call, timeoutMs, "rulebook_grounding_model_timeout");
-    const tokenUsage = normalizeUsage(provider, response.usage);
+      : callDeepSeek({
+        prompt: modelPrompt,
+        env,
+        modelName,
+        maxTokens: outputTokens,
+        fetchImpl,
+        temperature: 0,
+      });
+    const response = await withTimeout(
+      invokeGrounding(prompt, maxTokens),
+      timeoutMs,
+      "rulebook_grounding_model_timeout",
+    );
+    const responses = [response];
+    let rawText = response.rawText;
+    let operationLegality = validateOperationLegalityModelOutput(rawText, candidates, {
+      requiredConstraintEvidence: priorityConstraintEvidence,
+    });
+    const repairWarnings = [];
+    if (shouldRepairRulebookGrounding(operationLegality, priorityConstraintEvidence, env)) {
+      try {
+        const repairTimeoutMs = readPositiveNumber(env.RAG_RULEBOOK_REPAIR_TIMEOUT_MS, 5000);
+        const repairResponse = await withTimeout(
+          invokeGrounding(repairPrompt, repairMaxTokens),
+          repairTimeoutMs,
+          "rulebook_grounding_focused_repair_timeout",
+        );
+        responses.push(repairResponse);
+        const repaired = validateOperationLegalityModelOutput(repairResponse.rawText, candidates, {
+          requiredConstraintEvidence: priorityConstraintEvidence,
+        });
+        if (isBetterOperationLegality(repaired, operationLegality)) {
+          rawText = repairResponse.rawText;
+          operationLegality = repaired;
+          repairWarnings.push("rulebook_grounding_focused_repair_applied");
+        } else {
+          repairWarnings.push("rulebook_grounding_focused_repair_no_improvement");
+        }
+      } catch (error) {
+        repairWarnings.push("rulebook_grounding_focused_repair_failed:" + safeErrorMessage(error));
+      }
+    }
+    const tokenUsage = sumTokenUsage(responses.map((item) => normalizeUsage(provider, item.usage)));
     const actualCost = estimateActualCostCny(provider, tokenUsage, env);
     let budgetStatus = budget.status;
     const spendWarnings = [];
     try {
       budgetStatus = await recordBudgetSpend({ preflight: budget, actualCostCny: actualCost, env, fetchImpl });
     } catch (error) {
-      spendWarnings.push(`budget_spend_record_failed:${safeErrorMessage(error)}`);
+      spendWarnings.push("budget_spend_record_failed:" + safeErrorMessage(error));
       budgetStatus = { ...budget.status, budgetStorage: "unavailable" };
     }
-    const operationLegality = validateOperationLegalityModelOutput(response.rawText, candidates, {
-      requiredConstraintEvidence: priorityConstraintEvidence,
-    });
     const result = {
       operationLegality,
-      rawText: response.rawText,
+      rawText,
       providerUsed: provider,
       modelUsed: modelName,
       dryRun: false,
@@ -480,14 +553,19 @@ export async function callRulebookGroundingModel({
         ...providerResolution.warnings,
         ...budget.warnings,
         ...spendWarnings,
-        ...(response.warnings || []),
+        ...repairWarnings,
+        ...responses.flatMap((item) => item.warnings || []),
         ...(operationLegality.warnings || []),
       ],
       tokenUsage,
       estimatedCostCny: actualCost,
       budgetStatus,
     };
-    writeCachedExtraction(rulebookGroundingCache, cacheKey, result, env);
+    if (operationLegality.hasGroundedChecks && !operationLegality.hasUnresolvedConstraints) {
+      writeCachedExtraction(rulebookGroundingCache, cacheKey, result, env);
+    } else {
+      result.warnings = [...new Set([...result.warnings, "rulebook_grounding_unresolved_not_cached"])];
+    }
     return result;
   } catch (error) {
     const releasedBudgetStatus = await releaseBudgetReservation({ preflight: budget, env, fetchImpl }).catch(() => budget.status);
@@ -1375,6 +1453,7 @@ function buildRulebookGroundingPrompt({
     }],
     overallConclusion: "基于逐步检查得到的结论。",
   };
+  const priorityIds = new Set((priorityConstraintEvidence || []).map((item) => String(item?.id || "")));
   const payload = {
     userQuery: String(userQuery || ""),
     priorityConstraintCandidates: (priorityConstraintEvidence || []).slice(0, 8).map((item) => ({
@@ -1393,7 +1472,7 @@ function buildRulebookGroundingPrompt({
       race: item.race ?? "",
       text: String(item.text || "").slice(0, 2200),
     })),
-    evidenceCandidates: (evidenceCandidates || []).slice(0, 34).map((item) => ({
+    evidenceCandidates: (evidenceCandidates || []).filter((item) => !priorityIds.has(String(item?.id || ""))).slice(0, 24).map((item) => ({
       id: item.id,
       type: item.type || item.recordType || "related",
       title: item.title,
@@ -1405,11 +1484,15 @@ function buildRulebookGroundingPrompt({
   return [
     "你是游戏王 OCG 证据判读器，不负责直接润色最终回答。",
     "先结合玩家问题与卡片文本，按实际发生顺序抽取每一步需要验证的操作，包括：发动条件、支付 cost、选择对象、连锁窗口、效果处理、位置变化、次数限制和后续处理。",
+    "必须建立状态时间线：先判断能否发动，再立即支付 cost；cost 造成的送墓、除外、解放或其他位置变化在支付后立刻成立。进入连锁处理前，必须按支付后的场面重新判断永续效果、抗性及区域条件。不得把支付 cost 前的手牌状态沿用到效果处理时。",
+    "cost 支付后新开始适用的抗性可能改变效果处理，但不能在没有规则或卡文依据时倒推成原本的发动不合法；发动合法性与处理时能否实际完成必须分别给出结论。",
     "priorityConstraintCandidates 是后端按题目操作与限制性措辞筛出的潜在阻断规则，已附规则原文。它们不代表必然适用，但每一条都必须先审查，不能跳过。",
-    "对 priorityConstraintCandidates 中每个 id 都输出一个 constraintReviews 项：relevance 只能是 applies、not_applicable、uncertain；consequence 只能是 blocks、limits、none、uncertain。quote 必须逐字来自对应 evidenceCandidates，application 必须比较题目事实与规则条件。",
+    "对 priorityConstraintCandidates 中每个 id 都输出一个 constraintReviews 项：relevance 只能是 applies、not_applicable、uncertain；consequence 只能是 blocks、limits、none、uncertain。quote 必须逐字来自该 priorityConstraintCandidates 项的 text，application 必须比较题目事实与规则条件。",
     "如果限制规则适用且会阻止操作，constraintReviews 写 applies + blocks，并在 operationChecks 中把相应步骤判为 illegal。若判定不适用，必须明确说明规则条件与题目事实的差异，不能只写结论。",
+    "若题目明确没有其他可适用卡，而必做处理不能适用于当前正在发动或处理中的卡，应把是否存在可完成的必做处理作为发动合法性的一步；限制规则命中时直接判 illegal，不能只核对一般诱发窗口。",
     "每个关键步骤先列清题目事实，再选择真正覆盖该步骤的候选证据。卡片文本可以证明该卡写明的发动条件、cost、对象和处理；通用规则结论必须由规则书或适用场景一致的 Q&A / FAQ 支持。",
     "每一步都要分别检查‘能否发动’‘能否选择为对象’‘效果是否适用’‘处理后状态’；这四类问题不能互相替代。",
+    "区域条件必须逐字核对并严格区分手牌、场上、墓地、除外和额外牌组；在所检查步骤中某卡仍只在手牌时，不得把它视为在场上或墓地来满足持续条件、抗性或发动条件；若前一步 cost 已使其离开手牌，必须使用更新后的区域。",
     "‘不受其他卡的效果影响’只约束效果是否适用，本身不等于‘不能成为效果对象’；‘不能成为对象’必须有独立的对象限制或玩家限制证据，反过来也一样。",
     "同一场景同时存在对象保护与效果抗性时，要分别列出证据，并明确最终阻止操作的是哪一项；不得把抗性误写成不能取对象的理由。",
     "涉及‘将发动无效并破坏’时，必须依据候选证据区分被无效的是魔法・陷阱卡的卡的发动，还是已在场卡片的效果发动，并据此判断是否属于破坏场上的卡。",
@@ -1437,6 +1520,80 @@ function buildRulebookGroundingPrompt({
   ].join("\n");
 }
 
+function buildFocusedConstraintRepairPrompt({
+  userQuery,
+  cardTexts = [],
+  priorityConstraintEvidence = [],
+}) {
+  const payload = {
+    userQuery: String(userQuery || ""),
+    cardTexts: (cardTexts || []).slice(0, 6).map((item) => ({
+      id: item.id,
+      title: item.title,
+      cardType: item.cardType || "",
+      attribute: item.attribute || "",
+      text: String(item.text || "").slice(0, 1800),
+    })),
+    priorityConstraintCandidates: (priorityConstraintEvidence || []).slice(0, 6).map((item) => ({
+      id: item.id,
+      title: item.title,
+      text: String(item.text || "").slice(0, 2200),
+      sourceUrl: item.sourceUrl || "",
+    })),
+  };
+  return [
+    "你正在修复一次未完成的游戏王 OCG 限制规则核对。只处理本次输入中的 priorityConstraintCandidates，不要讨论无关规则。",
+    "对每个 priorityConstraintCandidates 的 id 必须输出一个 constraintReviews 项，不能遗漏。",
+    "逐项比较玩家明确给出的场面事实、卡片文本和限制规则。只说明诱发条件或可连锁时点的一般卡片 FAQ，不能覆盖更具体的限制规则。",
+    "若规则适用并阻止某一步，写 relevance=applies、consequence=blocks，并为该步骤输出 status=illegal 的 operationChecks。",
+    "若规则条件与题目事实不一致，写 relevance=not_applicable、consequence=none，并明确差异。证据仍不足才允许 uncertain。",
+    "quote 必须从对应候选 text 逐字复制连续原文；application 必须说明题目事实如何满足或不满足规则条件。",
+    "输出单个 JSON 对象，只包含 constraintReviews、operationChecks、overallConclusion；枚举值必须使用英文。",
+    "本次聚焦输入：",
+    JSON.stringify(payload, null, 2),
+  ].join("\n");
+}
+
+function shouldRepairRulebookGrounding(operationLegality, priorityConstraintEvidence, env = {}) {
+  return !isDisabled(env.RAG_RULEBOOK_FOCUSED_REPAIR_ENABLED)
+    && Array.isArray(priorityConstraintEvidence)
+    && priorityConstraintEvidence.length > 0
+    && operationLegality?.hasUnresolvedConstraints === true
+    && operationLegality?.hasBlockingCheck !== true;
+}
+
+function isBetterOperationLegality(candidate, current) {
+  return operationLegalityScore(candidate) > operationLegalityScore(current);
+}
+
+function operationLegalityScore(value = {}) {
+  const unresolved = Array.isArray(value.unresolvedConstraintEvidence)
+    ? value.unresolvedConstraintEvidence.length
+    : 0;
+  const groundedChecks = Array.isArray(value.checks)
+    ? value.checks.filter((item) => Array.isArray(item.citations) && item.citations.length > 0).length
+    : 0;
+  const resolvedReviews = Array.isArray(value.constraintReviews)
+    ? value.constraintReviews.filter((item) => item.grounded && item.relevance !== "uncertain" && item.consequence !== "uncertain").length
+    : 0;
+  return (value.hasBlockingCheck ? 10000 : 0)
+    + resolvedReviews * 200
+    + groundedChecks * 30
+    + (value.hasGroundedChecks ? 20 : 0)
+    - unresolved * 500;
+}
+
+function sumTokenUsage(items = []) {
+  const totals = {};
+  for (const item of items || []) {
+    for (const [key, value] of Object.entries(item || {})) {
+      const number = Number(value);
+      if (!Number.isFinite(number)) continue;
+      totals[key] = (totals[key] || 0) + number;
+    }
+  }
+  return totals;
+}
 function normalizeCardNameCandidates(rawText) {
   let parsed = null;
   try {
@@ -1651,6 +1808,29 @@ function interleaveGroundingEvidence(buckets = [], maxItems = Number.POSITIVE_IN
     index += 1;
   }
   return result;
+}
+
+function selectGroundingCandidates({
+  priorityConstraintEvidence = [],
+  selectedQaEvidence = [],
+  selectedCardTexts = [],
+  selectedRuleEvidence = [],
+  maxCandidates = Number.POSITIVE_INFINITY,
+} = {}) {
+  const priorities = dedupeGroundingEvidence(priorityConstraintEvidence);
+  const directQa = dedupeGroundingEvidence(selectedQaEvidence.filter(isDirectGroundingQa));
+  const cardTexts = dedupeGroundingEvidence(selectedCardTexts);
+  const mandatory = dedupeGroundingEvidence([...priorities, ...directQa, ...cardTexts]);
+  const mandatoryIds = new Set(mandatory.map((item) => String(item.id)));
+  const remainingLimit = Number.isFinite(maxCandidates)
+    ? Math.max(0, Number(maxCandidates) - mandatory.length)
+    : Number.POSITIVE_INFINITY;
+  const remainder = interleaveGroundingEvidence([
+    selectedQaEvidence.filter((item) => !isDirectGroundingQa(item) && isFaqGroundingEvidence(item)),
+    selectedRuleEvidence.filter((item) => !mandatoryIds.has(String(item.id))),
+    selectedQaEvidence.filter((item) => !isDirectGroundingQa(item) && !isFaqGroundingEvidence(item)),
+  ], remainingLimit);
+  return dedupeGroundingEvidence([...mandatory, ...remainder]).slice(0, maxCandidates);
 }
 
 function isDirectGroundingQa(item = {}) {

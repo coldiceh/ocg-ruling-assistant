@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { clearBaigeSearchCache, searchCards } from "../backend/baigeCardProvider.mjs";
 import { extractRagCards } from "../backend/ragCardExtractor.mjs";
-import { retrieveRagEvidence } from "../backend/ragEvidenceRetriever.mjs";
+import { loadRagData, retrieveRagEvidence } from "../backend/ragEvidenceRetriever.mjs";
 import { buildRagRulingPromptBundle } from "../backend/ragRulingPrompt.mjs";
 import { answerRagRulingQuestion } from "../backend/ragRulingPipeline.mjs";
 
@@ -314,3 +314,156 @@ function jsonResponse(payload, ok = true, status = 200) {
     json: async () => payload,
   };
 }
+test("baige_retries_a_common_ecclesia_spelling_variant", async () => {
+  clearBaigeSearchCache();
+  const calls = [];
+  const result = await searchCards("黑龙埃克利西亚", {
+    fetchImpl: async (url) => {
+      const decoded = decodeURIComponent(String(url)).replace(/\+/gu, " ");
+      calls.push(decoded);
+      return decoded.includes("艾克莉西娅")
+        ? jsonResponse({ result: [ecclesiaRawCard], next: 0 })
+        : jsonResponse({ result: [], next: 0 });
+    },
+  });
+
+  assert.ok(calls.length >= 2);
+  assert.ok(calls.some((url) => url.includes("艾克莉西娅")));
+  assert.equal(result.results[0].name, "黑龙之艾克莉西亚");
+  assert.match(result.warnings.join("\n"), /baige_fallback_query_used/u);
+});
+
+test("ordinary_fusion_monster_phrase_does_not_resolve_the_fusion_spell", async () => {
+  const data = await loadRagData();
+  const result = extractRagCards("墓地没有融合怪，对方发动一张可以发动的魔法卡。", {
+    cards: data.cards,
+  });
+
+  assert.ok(!result.resolvedCards.some((card) => card.name === "融合"));
+  assert.ok(!result.unresolvedMentions.some((item) => item.input === "融合"));
+});
+
+test("albaz_activation_rechecks_continuous_effects_after_paying_cost", async () => {
+  const data = await loadRagData();
+  const question = [
+    "我方额外卡组有【冰剑龙 幻冰龙】，手牌有【教导的圣女 艾克莉西亚】和【阿不思的落胤】各1张。",
+    "对方场上只有表侧表示的【吞食圣痕之龙】1只，双方墓地没有卡。",
+    "我召唤阿不思的落胤后，可以舍弃教导的圣女发动效果并融合召唤冰剑龙吗？",
+  ].join("");
+  let finalPrompt = "";
+
+  const answer = await answerRagRulingQuestion({
+    question,
+    cards: data.cards,
+    records: data.records,
+    qaRecords: data.qaRecords,
+    fetchImpl: async () => jsonResponse({ result: [], next: 0 }),
+    cardModelInvoker: async () => JSON.stringify({
+      cardNames: [
+        { name: "冰剑龙 镜翠幻种", originalText: "冰剑龙 幻冰龙", confidence: "high" },
+        { name: "教导之圣女 艾克利西亚", originalText: "教导的圣女 艾克莉西亚", confidence: "high" },
+        { name: "阿尔白斯之落胤", originalText: "阿不思的落胤", confidence: "high" },
+        { name: "吞喰圣痕之龙", originalText: "吞食圣痕之龙", confidence: "high" },
+      ],
+    }),
+    ruleModelInvoker: async () => JSON.stringify({ queries: [] }),
+    rulebookModelInvoker: async ({ prompt, task }) => {
+      const marker = task === "rulebook_constraint_repair" ? "本次聚焦输入：\n" : "本次输入：\n";
+      const payload = JSON.parse(prompt.slice(prompt.lastIndexOf(marker) + marker.length));
+      const priorities = payload.priorityConstraintCandidates || [];
+      const evidence = [...(payload.evidenceCandidates || []), ...(payload.cardTexts || [])];
+      const albaz = evidence.find((item) => String(item.id).includes("15245"));
+      const mirrorjade = evidence.find((item) => String(item.id).includes("17069"));
+      const devourer = evidence.find((item) => String(item.id).includes("22090"));
+      const citation = (item, application) => ({
+        id: item.id,
+        quote: String(item.text || "").slice(0, 140),
+        application,
+      });
+      return JSON.stringify({
+        constraintReviews: priorities.map((item, index) => ({
+          evidenceId: item.id,
+          operationId: "constraint-" + (index + 1),
+          action: "核对限制性规则",
+          relevance: "not_applicable",
+          consequence: "none",
+          conclusion: "该限制规则描述的操作或区域条件与题目当前步骤不同。",
+          quote: String(item.text || "").slice(0, 140),
+          application: "题目明确卡片所在区域和本次融合步骤；该候选的阻断条件没有在当前事实中成立。",
+        })),
+        operationChecks: [
+          {
+            operationId: "activate-albaz",
+            step: 1,
+            action: "召唤成功后舍弃1张手牌发动阿尔白斯之落胤",
+            legalityQuestion: "发动条件与cost是否满足",
+            status: "legal",
+            conclusion: "可以发动并舍弃手牌中的艾克利西亚。",
+            reasoning: ["落胤已召唤成功，手牌也有可舍弃的卡。"],
+            citations: [citation(albaz, "卡片文本写明召唤成功后舍弃1张手牌发动。")],
+            missingFacts: [],
+          },
+          {
+            operationId: "check-devourer-immunity",
+            step: 2,
+            action: "核对吞喰圣痕之龙的抗性是否适用",
+            legalityQuestion: "支付cost后艾克利西亚是否满足场上或墓地条件",
+            status: "legal",
+            conclusion: "支付cost后艾克利西亚进入墓地，吞喰圣痕之龙的抗性在处理前开始适用。",
+            reasoning: ["支付cost造成的位置变化立即成立，持续效果按支付后的场面重新判断。"],
+            citations: [citation(devourer, "抗性要求场上或墓地存在艾克利西亚；作为cost舍弃后，她已经在墓地。")],
+            missingFacts: [],
+          },
+          {
+            operationId: "fusion-summon-mirrorjade",
+            step: 3,
+            action: "处理阿尔白斯之落胤的融合召唤效果",
+            legalityQuestion: "支付cost后的场面能否完成融合召唤",
+            status: "conditional",
+            conclusion: "吞喰圣痕之龙此时不受阿尔白斯之落胤的效果影响，不能用于该效果的融合素材处理，因此不进行融合召唤。",
+            reasoning: ["卡种本来满足冰剑龙素材要求，但处理时新适用的抗性使阿尔白斯的效果不能使用该怪兽。"],
+            citations: [
+              citation(devourer, "艾克利西亚进入墓地后，此卡不受自身以外的效果影响。"),
+              citation(mirrorjade, "冰剑龙的素材要求虽包含融合怪兽，但仍需由阿尔白斯的效果进行素材处理。"),
+            ],
+            missingFacts: [],
+          },
+        ],
+        overallConclusion: "可以发动并舍弃手牌作为cost；处理时不进行融合召唤。",
+      });
+    },
+    modelInvoker: async ({ prompt }) => {
+      finalPrompt = prompt;
+      return JSON.stringify({
+        answerLevel: "rule_analysis",
+        shortAnswer: "可以发动。舍弃教导之圣女作为cost后，吞喰圣痕之龙的抗性开始适用，因此处理时不进行融合召唤。",
+        reasoning: [
+          "发动时可以舍弃手牌中的教导之圣女作为cost；支付后她立即进入墓地。",
+          "教导之圣女进入墓地后，吞喰圣痕之龙的②在阿尔白斯效果处理前开始适用，使其不受阿尔白斯效果影响，因此不进行融合召唤。",
+        ],
+        usedCards: ["阿尔白斯之落胤", "教导之圣女 艾克利西亚", "吞喰圣痕之龙", "冰剑龙 镜翠幻种"],
+        usedEvidence: [
+          { id: "card-text-15245", type: "card_text", title: "阿尔白斯之落胤 的卡片文本" },
+          { id: "card-text-22090", type: "card_text", title: "吞喰圣痕之龙 的卡片文本" },
+          { id: "card-text-17069", type: "card_text", title: "冰剑龙 镜翠幻种 的卡片文本" },
+        ],
+        missingInfo: [],
+        riskFlags: [],
+        confidenceSelfEstimate: "medium",
+      });
+    },
+  });
+
+  assert.match(answer.shortAnswer, /^可以发动/u);
+  assert.match(answer.shortAnswer, /不进行融合召唤/u);
+  assert.equal(answer.answerLevel, "rule_analysis");
+   assert.equal(answer.debug.promptTruncated, false);
+  assert.equal(answer.debug.retrievalCounts.unresolvedOperationConstraints, 0);
+  assert.ok(!answer.riskFlags.includes("unresolved_restrictive_evidence_blocked_positive_answer"));
+  assert.deepEqual(
+    new Set(answer.resolvedCards.map((card) => card.id)),
+    new Set(["15239", "15245", "17069", "22090"]),
+  );
+  assert.match(finalPrompt, /cost 将卡送墓后/u);
+  assert.match(finalPrompt, /按支付后的场面重新判断/u);
+});

@@ -1,6 +1,7 @@
 import { answerQuestion } from "../backend/engine.mjs";
 import { answerRulingQuestionFast } from "../backend/fastJudgeEngine.mjs";
 import { getRagBudgetStatus, resolveCardExtractionProvider, resolveRagProvider } from "../backend/ragModelClient.mjs";
+import { appendQueryAudit } from "../backend/queryAuditStore.mjs";
 import { answerRagRulingQuestion } from "../backend/ragRulingPipeline.mjs";
 
 const allowedOrigin = process.env.ALLOWED_ORIGIN || "*";
@@ -23,15 +24,22 @@ export default async function handler(request, response) {
     return;
   }
 
+  let auditPromise = Promise.resolve();
   try {
     const payload = typeof request.body === "string" ? JSON.parse(request.body || "{}") : request.body || {};
     const mode = String(payload.mode || "rag").toLowerCase();
+    auditPromise = appendQueryAudit({
+      question: payload.question,
+      mode,
+      env: process.env,
+    }).catch(() => null);
     if (!["legacy", "fastjudge"].includes(mode)) {
       const answer = await answerRagRulingQuestion({
         question: payload.question,
         env: envForModelTier(process.env, payload.modelTier),
         engineScenario: payload.engineScenario,
       });
+      await auditPromise;
       response.status(200).json(answer);
       return;
     }
@@ -45,8 +53,10 @@ export default async function handler(request, response) {
           chainLinks: Array.isArray(payload.chainLinks) ? payload.chainLinks : [],
         })
       : await answerQuestion(payload);
+    await auditPromise;
     response.status(200).json(answer);
   } catch (error) {
+    await auditPromise;
     response.status(500).json({
       error: error instanceof Error ? error.message : String(error),
     });

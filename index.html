@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>游戏王OCG规则助手</title>
-    <link rel="stylesheet" href="src/styles.css?v=20260710-operation-budget-1" />
+    <link rel="stylesheet" href="src/styles.css?v=20260716-query-admin-1" />
   </head>
   <body class="theme-night">
     <div class="page-background" aria-hidden="true"></div>
@@ -49,7 +49,7 @@
                 <svg viewBox="0 0 24 24" aria-hidden="true">
                   <path d="M8 5h8M6 12h12M9 19h6" />
                 </svg>
-                查询
+                <span id="analyzeButtonText">查询</span>
               </button>
             </div>
           </div>
@@ -126,17 +126,25 @@
             <button class="text-button" id="budgetResetButton" type="button" hidden>重置额度</button>
           </section>
 
+          <section class="admin-query-panel" id="adminQueryPanel" aria-labelledby="adminQueryTitle" hidden>
+            <div class="admin-query-head">
+              <h2 id="adminQueryTitle">问题记录</h2>
+              <button class="text-button" id="adminQueryLoadButton" type="button">读取</button>
+            </div>
+            <p id="adminQueryStatus">需要管理员验证。</p>
+            <ol id="adminQueryList"></ol>
+          </section>
           <section class="disclaimer-panel" aria-labelledby="disclaimerTitle">
             <h2 id="disclaimerTitle">免责声明</h2>
             <p>
               本项目不是 KONAMI 官方项目，分析结果不代表官方裁定。AI 生成内容和规则检索可能存在错误；
-              正式比赛请以官方规则、官方数据库和现场裁判判断为准。
+              正式比赛请以官方规则、官方数据库和现场裁判判断为准。为排查检索问题，后端可能最多保留 30 天的提问文本；不记录 IP，记录仅向管理员开放。
             </p>
           </section>
         </section>
       </main>
     </div>
 
-    <script src="src/app.js?v=20260710-operation-budget-1"></script>
+    <script src="src/app.js?v=20260716-query-admin-1"></script>
   </body>
 </html>
