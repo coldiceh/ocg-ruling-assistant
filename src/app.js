@@ -691,7 +691,7 @@ async function requestBackendAnswer(text) {
 }
 
 function buildBackendCacheKey(text, mode = "rag", modelTier = "flash") {
-  return `ocg-ruling-answer:v18:${mode}:${modelTier}:${appConfig.answerApiUrl}:${normalizeText(text).slice(0, 2000)}`;
+  return `ocg-ruling-answer:v19:${mode}:${modelTier}:${appConfig.answerApiUrl}:${normalizeText(text).slice(0, 2000)}`;
 }
 
 function readCachedBackendAnswer(key) {
@@ -2057,6 +2057,10 @@ function renderEngineSimulation(engine, simulation) {
       : "模拟器已运行到需要下一次操作的位置，当前轨迹尚未结束。";
     details.push(`执行节点：${stepCount}；已处理操作：${Number.isFinite(consumedResponses) ? consumedResponses : 0}。`);
     if (trace) details.push(`轨迹编号：${trace.slice(0, 16)}。`);
+    const zoneSummary = engineZoneSummary(simulation.zoneCounts);
+    const promptSummary = complete ? "" : enginePromptSummary(simulation);
+    if (zoneSummary) details.push(zoneSummary);
+    if (promptSummary) details.push(promptSummary);
     details.push(simulation.policy?.warning || "模拟器结果不是官方裁定，卡片脚本也可能存在缺陷。");
   } else if (status === "disabled") {
     statusLabel = "未启用";
@@ -2074,6 +2078,44 @@ function renderEngineSimulation(engine, simulation) {
   ui.simulationStatus.textContent = statusLabel;
   ui.simulationSummary.textContent = summary;
   renderList(ui.simulationDetails, details);
+}
+
+function engineZoneSummary(zoneCounts) {
+  const self = zoneCounts?.[0] || zoneCounts?.["0"];
+  const opponent = zoneCounts?.[1] || zoneCounts?.["1"];
+  if (!self || !opponent) return "";
+  const side = (label, zones) => `${label}手牌 ${Number(zones.hand || 0)}、怪兽区 ${Number(zones.monster_zone || 0)}、魔法陷阱区 ${Number(zones.spell_trap_zone || 0)}`;
+  return `引擎场面：${side("我方", self)}；${side("对方", opponent)}。`;
+}
+
+function enginePromptSummary(simulation) {
+  const messages = (simulation?.steps || []).flatMap((step) => step.messages || []);
+  const prompt = [...messages].reverse().find((message) => String(message?.messageName || "").startsWith("select_"));
+  if (!prompt) return "";
+  const labels = {
+    select_idle_command: "选择主要阶段操作",
+    select_effect_yes_no: "确认是否发动效果",
+    select_yes_no: "确认下一步操作",
+    select_option: "选择效果选项",
+    select_card: "选择卡片",
+    select_chain: "选择是否连锁",
+    select_place: "选择放置区域",
+    select_disabled_field: "选择区域",
+    select_position: "选择表示形式",
+    select_unselect_card: "调整所选卡片",
+  };
+  const semantic = prompt.semantic || {};
+  let count = null;
+  if (Array.isArray(semantic.cards)) count = semantic.cards.length;
+  else if (Array.isArray(semantic.options)) count = semantic.options.length;
+  else if (Array.isArray(semantic.selectable)) count = semantic.selectable.length;
+  else if (semantic.actions) {
+    count = Object.values(semantic.actions).reduce((total, value) => (
+      total + (Array.isArray(value) ? value.length : value === true ? 1 : 0)
+    ), 0);
+  }
+  const label = labels[prompt.messageName] || "继续选择操作";
+  return `当前等待：${label}${Number.isInteger(count) ? `（${count} 个可选项）` : ""}。`;
 }
 
 function renderSources(sources) {

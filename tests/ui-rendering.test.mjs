@@ -152,7 +152,7 @@ test("ui_has_single_query_button", async () => {
   assert.doesNotMatch(html, /id="flashModelButton"|id="proModelButton"|>Pro</u);
   assert.match(app, /const selectedModelTier = "flash"/u);
   assert.match(app, /modelTier: selectedModelTier/u);
-  assert.match(app, /ocg-ruling-answer:v18/u);
+  assert.match(app, /ocg-ruling-answer:v19/u);
   assert.match(app, /buildBackendCacheKey\(text, backendMode, selectedModelTier\)/u);
   assert.doesNotMatch(app, /setModelTier|readInitialModelTier/u);
   assert.doesNotMatch(app, /deepAnalyzeButton|ragModeToggle|legacyPipelineToggle/u);
@@ -281,5 +281,8 @@ test("rag_displays_simulator_output_as_a_separate_result", async () => {
   assert.match(app, /function renderEngineSimulation/u);
   assert.match(app, /资料分析与模拟结果分别展示/u);
   assert.match(app, /模拟器结果不是官方裁定/u);
+  assert.match(app, /function engineZoneSummary/u);
+  assert.match(app, /当前等待/u);
+  assert.match(app, /选择是否连锁/u);
   assert.match(app, /answer\?\.engineSimulation/u);
 });

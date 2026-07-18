@@ -53,6 +53,21 @@ pnpm dev:with-engine
 }
 ```
 
+响应可以直接按操作和卡号描述，运行器会根据当前 core prompt 解析实际索引：
+
+```json
+{
+  "responses": [
+    { "encoding": "idle_command", "action": "summon", "cardCode": 89631139 },
+    { "encoding": "yes_no", "value": true },
+    { "encoding": "card_selection", "cardCodes": [68468459] },
+    { "encoding": "chain", "action": "pass" }
+  ]
+}
+```
+
+`idle_command`、`chain`、`card_selection` 和 `card_toggle` 支持 `cardCode`；同一卡号有多个候选时可再指定 `controller`、`location`、`sequence` 或 `occurrence`。这比保存菜单索引稳定，资源更新改变候选顺序时不会误选。
+
 成功响应包含 `engine.status=completed`、`engineSimulation.sourceType=engine_simulation`、core 消息语义摘要、区域数量、字段查询、`traceSha256` 与完整 `resourceBinding`，并固定 `canConfirmOfficialRuling=false`。
 
 引擎未配置、超时或拒绝资源时，响应会明确给出 `disabled` 或 `unavailable`。原有 RAG 仍可回答，但会附带风险，不会伪造执行结果。

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { loadRagData, retrieveRagEvidence } from "../backend/ragEvidenceRetriever.mjs";
-import { callRulebookGroundingModel } from "../backend/ragModelClient.mjs";
+import { callRulebookGroundingModel, selectPriorityConstraintEvidence } from "../backend/ragModelClient.mjs";
 import { validateOperationLegalityModelOutput } from "../backend/operationLegalityAnalyzer.mjs";
 import { retrieveRulebookPassages } from "../backend/rulebookPassageRetriever.mjs";
 
@@ -61,6 +61,46 @@ test("actual_return_constraints_are_prioritized_for_operation_grounding", async 
   assert.ok(priorityIds.length <= 3);
   assert.match(prompt, /priorityConstraintCandidates/u);
   assert.match(prompt, /只说明诱发条件或可连锁时点的一般卡片 FAQ/u);
+});
+
+test("unrelated_restrictive_examples_are_not_promoted_to_mandatory_constraints", () => {
+  const priorities = selectPriorityConstraintEvidence({
+    userQuery: "我方召唤「阿尔白斯之落胤」，丢弃「教导的圣女 艾克莉西娅」作为cost，能否与对方的「吞食圣痕之龙」融合召唤「冰剑龙 幻冰龙」？",
+    cardTexts: [{
+      title: "阿尔白斯之落胤",
+      cardType: "怪兽",
+      text: "这张卡召唤成功的场合，丢弃1张手卡才能发动。用包含这张卡的自己・对方场上的怪兽作为融合素材。",
+    }],
+    items: [{
+      id: "rulebook-unrelated-trigger-location",
+      type: "rulebook",
+      title: "诱发效果的发动位置",
+      text: "卡片不在满足诱发条件的位置时不能发动。\n\n发动魔法・陷阱卡时，必须先确认连锁时点。",
+    }],
+  });
+
+  assert.deepEqual(priorities, []);
+});
+
+test("priority_constraint_keeps_only_the_matched_restrictive_paragraph", () => {
+  const [priority] = selectPriorityConstraintEvidence({
+    userQuery: "对方发动通常陷阱，场上没有其他魔法陷阱。我能否发动效果将场上的魔法陷阱全部返回手卡？",
+    cardTexts: [{
+      title: "返回效果",
+      cardType: "怪兽",
+      text: "对手发动魔法・陷阱卡时可以发动。将场上的魔法・陷阱卡全部返回手牌。",
+    }],
+    items: [{
+      id: "rulebook-active-card-return-restriction",
+      type: "rulebook",
+      title: "发动中的卡片",
+      text: "正在发动或连锁处理中的非永续魔法・陷阱卡不能从场上返回手牌。\n\n与本题无关的怪兽不能特殊召唤。",
+    }],
+  });
+
+  assert.equal(priority.priorityConstraintSignature, "active_spell_trap_return");
+  assert.match(priority.text, /不能从场上返回手牌/u);
+  assert.doesNotMatch(priority.text, /特殊召唤/u);
 });
 
 test("actual_xyz_encore_faq_is_retrieved_for_unaffected_rhongomyniad", async () => {

@@ -28,6 +28,10 @@ const GROUNDING_MECHANISM_PATTERNS = Object.freeze([
   ["attack", /攻击|攻擊|攻撃|attack/iu],
   ["unaffected", /不受.{0,8}影响|不受.{0,8}影響|受けない|unaffected/iu],
 ]);
+const PRIORITY_SCENARIO_ABSENCE_PATTERN = /(?:没有|不存在|并无|没有其他|除.{0,12}以外没有|只有.{0,24}(?:1|一)张|only|no other|none)/iu;
+const PRIORITY_ACTIVE_SPELL_TRAP_RETURN_PATTERN = /(?:发动|發動|発動|连锁|連鎖|チェーン|chain).{0,80}(?:魔法|陷阱|罠|spell|trap).{0,80}(?:回到|返回|放回|弹回|彈回|戻|return)|(?:魔法|陷阱|罠|spell|trap).{0,80}(?:连锁|連鎖|チェーン|chain).{0,80}(?:回到|返回|放回|弹回|彈回|戻|return)/iu;
+const PRIORITY_NO_APPLICABLE_CARD_PATTERN = /(?:除.{0,20}以外|没有|不存在|并无|无).{0,48}(?:能|可|可以|能够|適用|applicable).{0,24}(?:适用|適用|选择|選択|对象|対象|处理|處理|卡|card).{0,32}(?:不能|不可|不得|无法|不可以|発動できません|cannot).{0,12}(?:发动|發動|発動|activate)|(?:不能|不可|不得|无法|不可以|発動できません|cannot).{0,12}(?:发动|發動|発動|activate).{0,48}(?:适用|適用|对象|対象|卡|card)/iu;
+const PRIORITY_TARGET_RESTRICTION_PATTERN = /(?:不能|不可|不得|无法|不可以|cannot|can't|対象にできません).{0,28}(?:作为|成为|选为|選択|取为|取作|対象|target).{0,16}(?:对象|對象|対象|target)|(?:不能|不可|不得|无法|不可以|cannot|can't).{0,20}(?:取|选择|選択).{0,12}(?:对象|對象|対象|target)/iu;
 const memoryBudget = new Map();
 const cardNameExtractionCache = new Map();
 const ruleQueryExtractionCache = new Map();
@@ -450,7 +454,7 @@ export async function callRulebookGroundingModel({
   }
 
   const cacheInput = `${userQuery}\n${candidates.map((item) => item.id).join("|")}\n${(cardTexts || []).map((item) => item.id || item.title || "").join("|")}`;
-  const cacheKey = extractionCacheKey("rulebook-grounding-v7", provider, modelName, cacheInput);
+  const cacheKey = extractionCacheKey("rulebook-grounding-v8", provider, modelName, cacheInput);
   const cached = readCachedExtraction(rulebookGroundingCache, cacheKey, env);
   if (cached) {
     return {
@@ -1830,32 +1834,100 @@ function dedupeGroundingEvidence(items = []) {
   return result;
 }
 
-function selectPriorityConstraintEvidence({ items = [], userQuery = "", cardTexts = [], limit = 3 } = {}) {
-  const scenarioText = [
-    userQuery,
-    ...(cardTexts || []).map((item) => [item.title, item.cardType, item.text].filter(Boolean).join("\n")),
-  ].join("\n");
+export function selectPriorityConstraintEvidence({ items = [], userQuery = "", cardTexts = [], limit = 3 } = {}) {
+  const userText = String(userQuery || "");
+  const cardText = (cardTexts || [])
+    .map((item) => [item.title, item.cardType, item.text].filter(Boolean).join("\n"))
+    .join("\n");
+  const scenarioText = [userText, cardText].filter(Boolean).join("\n");
   const scenarioConcepts = extractGroundingMechanisms(scenarioText);
+  const userConcepts = extractGroundingMechanisms(userText);
   if (scenarioConcepts.size < 2) return [];
 
   return dedupeGroundingEvidence(items)
     .filter((item) => RESTRICTIVE_EVIDENCE_PATTERN.test(String(item.text || "")))
     .map((item, index) => {
-      const evidenceConcepts = extractGroundingMechanisms(`${item.title || ""}\n${item.text || ""}`);
-      const sharedConcepts = [...scenarioConcepts].filter((concept) => evidenceConcepts.has(concept));
-      const hasReturnChainPair = sharedConcepts.includes("return") && sharedConcepts.includes("chain");
-      const hasActivationApplicabilityPair = sharedConcepts.includes("activation") && sharedConcepts.includes("applicability");
-      const score = sharedConcepts.length * 20
-        + (hasReturnChainPair ? 18 : 0)
-        + (hasActivationApplicabilityPair ? 12 : 0)
-        + Math.min(20, Number(item.score) || 0)
-        - index * 0.01;
-      return { item, sharedConcepts, score };
+      const matches = splitRestrictiveEvidenceSegments(item.text)
+        .map((text) => classifyPriorityConstraintSegment({
+          text,
+          userText,
+          scenarioConcepts,
+          userConcepts,
+        }))
+        .filter(Boolean)
+        .sort((left, right) => right.score - left.score);
+      const best = matches[0];
+      if (!best) return null;
+      return {
+        item: {
+          ...item,
+          text: best.text,
+          priorityConstraintSignature: best.signature,
+        },
+        score: best.score + Math.min(20, Number(item.score) || 0) - index * 0.01,
+      };
     })
-    .filter((entry) => entry.sharedConcepts.length >= 3)
+    .filter(Boolean)
     .sort((left, right) => right.score - left.score)
     .slice(0, Math.max(0, Number(limit) || 0))
     .map((entry) => entry.item);
+}
+
+function splitRestrictiveEvidenceSegments(value) {
+  const text = String(value || "").replace(/\r\n?/gu, "\n").trim();
+  if (!text) return [];
+  const paragraphs = text.split(/\n\s*\n+/gu).map((item) => item.trim()).filter(Boolean);
+  return paragraphs.filter((item) => RESTRICTIVE_EVIDENCE_PATTERN.test(item));
+}
+
+function classifyPriorityConstraintSegment({
+  text,
+  userText,
+  scenarioConcepts,
+  userConcepts,
+}) {
+  const evidenceConcepts = extractGroundingMechanisms(text);
+  const sharedConcepts = [...scenarioConcepts].filter((concept) => evidenceConcepts.has(concept));
+  const scenarioHasReturnOperation = ["return", "spell_trap", "hand", "activation"]
+    .every((concept) => scenarioConcepts.has(concept));
+  const evidenceHasActiveReturnRule = PRIORITY_ACTIVE_SPELL_TRAP_RETURN_PATTERN.test(text)
+    && evidenceConcepts.has("return")
+    && evidenceConcepts.has("spell_trap")
+    && (evidenceConcepts.has("hand") || evidenceConcepts.has("deck"))
+    && (evidenceConcepts.has("chain") || evidenceConcepts.has("activation"));
+  if (scenarioHasReturnOperation && evidenceHasActiveReturnRule) {
+    return {
+      text,
+      signature: "active_spell_trap_return",
+      score: 180 + sharedConcepts.length * 10,
+    };
+  }
+
+  const scenarioHasConstrainedCardOperation = scenarioConcepts.has("spell_trap")
+    && scenarioConcepts.has("activation")
+    && ["return", "target", "destroy", "banish", "deck", "graveyard"]
+      .some((concept) => scenarioConcepts.has(concept));
+  if (scenarioHasConstrainedCardOperation
+      && PRIORITY_SCENARIO_ABSENCE_PATTERN.test(userText)
+      && PRIORITY_NO_APPLICABLE_CARD_PATTERN.test(text)) {
+    return {
+      text,
+      signature: "no_applicable_card_for_mandatory_operation",
+      score: 160 + sharedConcepts.length * 10,
+    };
+  }
+
+  if (userConcepts.has("target")
+      && evidenceConcepts.has("target")
+      && PRIORITY_TARGET_RESTRICTION_PATTERN.test(text)) {
+    return {
+      text,
+      signature: "targeting_restriction",
+      score: 140 + sharedConcepts.length * 10,
+    };
+  }
+
+  return null;
 }
 
 function extractGroundingMechanisms(value) {
