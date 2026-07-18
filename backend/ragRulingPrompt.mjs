@@ -56,6 +56,10 @@ export function buildRagRulingPromptBundle({
     riskFlags: ["no_official_direct_qa"],
     confidenceSelfEstimate: "medium",
   };
+  const recoveryPrompt = buildCompactRagPrompt({
+    payload,
+    maxPromptChars: readNumber(env.RAG_RECOVERY_PROMPT_CHARS, 12000),
+  });
 
   let prompt = [
     "你是游戏王 OCG 规则分析助手。你要基于检索到的资料生成 RAG 裁定分析。",
@@ -122,6 +126,7 @@ export function buildRagRulingPromptBundle({
   }
   return {
     prompt,
+    recoveryPrompt,
     warnings,
     promptChars: prompt.length,
     promptTruncated: warnings.some((warning) => warning.includes("truncated")),

@@ -39,6 +39,7 @@ const rulebookGroundingCache = new Map();
 
 export async function callRagModel({
   prompt,
+  recoveryPrompt,
   evidence = {},
   cardResolution = {},
   env = globalThis.process?.env || {},
@@ -113,10 +114,45 @@ export async function callRagModel({
   }
 
   try {
-    const response = provider === "gemini"
+    let response = provider === "gemini"
       ? await callGemini({ prompt, env, modelName, maxTokens, fetchImpl })
       : await callDeepSeek({ prompt, env, modelName, maxTokens, fetchImpl });
-    const tokenUsage = normalizeUsage(provider, response.usage);
+    const responses = [response];
+    if (provider === "deepseek" && shouldRetryCompactDeepSeek(response) && recoveryPrompt) {
+      const recoveryMaxTokens = readPositiveNumber(
+        env.RAG_RECOVERY_MAX_OUTPUT_TOKENS,
+        Math.max(maxTokens, 4000),
+      );
+      const recovery = await callDeepSeek({
+        prompt: recoveryPrompt,
+        env,
+        modelName,
+        maxTokens: recoveryMaxTokens,
+        fetchImpl,
+        temperature: 0,
+      });
+      responses.push(recovery);
+      response = recovery.rawText
+        ? {
+            ...recovery,
+            warnings: [
+              ...withoutRecoverableDeepSeekWarnings(responses[0].warnings || []),
+              "deepseek_compact_recovery_attempted",
+              "deepseek_compact_recovery_succeeded",
+              ...(recovery.warnings || []),
+            ],
+          }
+        : {
+            ...responses[0],
+            warnings: [
+              ...(responses[0].warnings || []),
+              "deepseek_compact_recovery_attempted",
+              "deepseek_compact_recovery_failed",
+              ...(recovery.warnings || []),
+            ],
+          };
+    }
+    const tokenUsage = sumTokenUsage(responses.map((item) => normalizeUsage(provider, item.usage)));
     const actualCost = estimateActualCostCny(provider, tokenUsage, env);
     const spendWarnings = [];
     let budgetStatus = budget.status;
@@ -771,6 +807,16 @@ async function callDeepSeek({ prompt, env, modelName, maxTokens, fetchImpl, temp
     usage: payload?.usage || {},
     warnings,
   };
+}
+
+function shouldRetryCompactDeepSeek(response = {}) {
+  if (!String(response.rawText || "").trim()) return true;
+  return (response.warnings || []).includes("deepseek_output_truncated_by_token_limit");
+}
+
+function withoutRecoverableDeepSeekWarnings(warnings = []) {
+  return warnings.filter((warning) => !String(warning).startsWith("deepseek_empty_content:")
+    && warning !== "deepseek_output_truncated_by_token_limit");
 }
 
 function extractChatMessageText(content) {

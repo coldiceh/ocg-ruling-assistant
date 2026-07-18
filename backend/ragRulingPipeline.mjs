@@ -1,4 +1,5 @@
 import { requestOcgEngineSimulation } from "./ocgEngineClient.mjs";
+import { autoEngineSimulationEnabled, buildBestEffortEngineScenario } from "./ocgScenarioPlanner.mjs";
 import { extractRagCards, normalizeCardKey } from "./ragCardExtractor.mjs";
 import { evidenceBucketsToList, loadRagData, retrieveRagEvidence } from "./ragEvidenceRetriever.mjs";
 import { callCardNameExtractionModel, callRagModel, callRulebookGroundingModel, callRuleQueryExtractionModel } from "./ragModelClient.mjs";
@@ -24,9 +25,6 @@ export async function answerRagRulingQuestion({
 } = {}) {
   const query = String(question || userQuery || "").trim();
   if (!query) return buildEmptyQuestionAnswer();
-  const enginePromise = requestOcgEngineSimulation({
-    engineScenario, env, fetchImpl: engineFetchImpl || fetchImpl || globalThis.fetch,
-  });
 
   const dataPromise = Promise.resolve(cards || records || qaRecords
     ? { cards: cards || [], records: records || [], qaRecords: qaRecords || [] }
@@ -65,6 +63,32 @@ export async function answerRagRulingQuestion({
     fetchImpl,
   });
   const effectiveCardResolution = reconcileCardResolution(cardResolution, retrievedEvidence);
+  const explicitEngineScenario = engineScenario !== undefined && engineScenario !== null;
+  const enginePlan = explicitEngineScenario
+    ? {
+        source: "explicit",
+        bestEffort: false,
+        warnings: [],
+        planSummary: null,
+        scenario: engineScenario,
+      }
+    : autoEngineSimulationEnabled(env)
+      ? buildBestEffortEngineScenario({
+          userQuery: query,
+          cards: effectiveCardResolution.resolvedCards || [],
+        })
+      : {
+          source: "disabled",
+          bestEffort: false,
+          warnings: ["automatic_engine_simulation_disabled"],
+          planSummary: null,
+          scenario: undefined,
+        };
+  const enginePromise = requestOcgEngineSimulation({
+    engineScenario: enginePlan.scenario,
+    env,
+    fetchImpl: engineFetchImpl || fetchImpl || globalThis.fetch,
+  });
   const rulebookGrounding = await callRulebookGroundingModel({
     userQuery: query,
     cardTexts: [...(retrievedEvidence.cardTexts || []), ...(retrievedEvidence.userProvidedCardTexts || [])],
@@ -87,6 +111,7 @@ export async function answerRagRulingQuestion({
   ]);
   const modelResult = await callRagModel({
     prompt: promptBundle.prompt,
+    recoveryPrompt: promptBundle.recoveryPrompt,
     evidence,
     cardResolution: effectiveCardResolution,
     env,
@@ -101,9 +126,12 @@ export async function answerRagRulingQuestion({
   const operationConstrained = applyOperationLegalityOverride(evidenceConstrained, evidence);
   const normalized = applyUnresolvedConstraintGuard(operationConstrained, evidence);
   const engine = await enginePromise;
-  const engineRiskFlags = engine.status === "completed"
-    ? ["engine_simulation_not_official_evidence"]
-    : engine.requested ? ["engine_simulation_unavailable"] : [];
+  const engineRiskFlags = [
+    ...(engine.status === "completed"
+      ? ["engine_simulation_not_official_evidence"]
+      : engine.requested ? ["engine_simulation_unavailable"] : []),
+    ...(enginePlan.bestEffort ? ["engine_scenario_best_effort"] : []),
+  ];
 
   return {
     mode: "rag_baseline",
@@ -118,6 +146,10 @@ export async function answerRagRulingQuestion({
     engine: {
       requested: engine.requested,
       status: engine.status,
+      scenarioSource: enginePlan.source,
+      bestEffort: enginePlan.bestEffort,
+      planningWarnings: enginePlan.warnings,
+      planSummary: enginePlan.planSummary,
       ...(engine.error ? { error: engine.error } : {}),
     },
     engineSimulation: engine.simulation || null,

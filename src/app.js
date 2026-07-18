@@ -218,9 +218,10 @@ const pendingStages = [
   { label: "提取卡名", body: "正在识别卡名候选，并准备查询卡片资料。" },
   { label: "检索卡片文本", body: "正在匹配本地资料、百鸽卡片资料和用户提供文本。" },
   { label: "检索规则资料", body: "正在查找相关 Q&A、FAQ 和规则资料。" },
+  { label: "编译模拟场景", body: "正在将已识别的卡片、区域和操作整理为尽力模拟场景。" },
   { label: "生成裁定", body: "正在根据检索上下文生成未确认裁定分析。" },
 ];
-const pendingStageDelays = [0, 700, 1600, 2900, 4800];
+const pendingStageDelays = [0, 700, 1600, 2900, 4500, 6200];
 let pendingStageTimers = [];
 let pendingStageIndex = 0;
 
@@ -691,7 +692,7 @@ async function requestBackendAnswer(text) {
 }
 
 function buildBackendCacheKey(text, mode = "rag", modelTier = "flash") {
-  return `ocg-ruling-answer:v19:${mode}:${modelTier}:${appConfig.answerApiUrl}:${normalizeText(text).slice(0, 2000)}`;
+  return `ocg-ruling-answer:v20:${mode}:${modelTier}:${appConfig.answerApiUrl}:${normalizeText(text).slice(0, 2000)}`;
 }
 
 function readCachedBackendAnswer(key) {
@@ -2050,12 +2051,24 @@ function renderEngineSimulation(engine, simulation) {
     const consumedResponses = Number(simulation.consumedResponses || 0);
     const trace = String(simulation.traceSha256 || "");
     const complete = simulation.status === "ended" && simulation.incomplete !== true;
+    const bestEffort = engine.bestEffort === true || simulation.bestEffort === true;
     className = complete ? "is-completed" : "is-incomplete";
-    statusLabel = complete ? "轨迹完成" : "轨迹待继续";
+    statusLabel = complete
+      ? (bestEffort ? "尽力轨迹完成" : "轨迹完成")
+      : (bestEffort ? "尽力轨迹待续" : "轨迹待继续");
     summary = complete
       ? "模拟器已完成一条可复现轨迹。资料分析与模拟结果分别展示。"
-      : "模拟器已运行到需要下一次操作的位置，当前轨迹尚未结束。";
-    details.push(`执行节点：${stepCount}；已处理操作：${Number.isFinite(consumedResponses) ? consumedResponses : 0}。`);
+      : bestEffort
+        ? "已按题目尽力编译并运行场景；轨迹停在需要下一次操作的位置。"
+        : "模拟器已运行到需要下一次操作的位置，当前轨迹尚未结束。";
+    const plannedResponses = Number(engine.planSummary?.responseCount || 0);
+    details.push(`执行节点：${stepCount}；已处理操作：${Number.isFinite(consumedResponses) ? consumedResponses : 0}${bestEffort ? ` / 计划 ${plannedResponses}` : ""}。`);
+    if (bestEffort && engine.planSummary) {
+      details.push(`自动场景包含 ${Number(engine.planSummary.cardCount || 0)} 张题目相关卡片。`);
+    }
+    if (simulation.responseFailure) {
+      details.push(`自动操作在第 ${Number(simulation.responseFailure.responseIndex || 0) + 1} 步停止，已执行轨迹仍保留。`);
+    }
     if (trace) details.push(`轨迹编号：${trace.slice(0, 16)}。`);
     const zoneSummary = engineZoneSummary(simulation.zoneCounts);
     const promptSummary = complete ? "" : enginePromptSummary(simulation);
@@ -2070,7 +2083,7 @@ function renderEngineSimulation(engine, simulation) {
     summary = "模拟器本次没有返回可验证轨迹，资料分析结果仍独立保留。";
     if (debugUiEnabled && engine.error?.message) details.push(engine.error.message);
   } else {
-    details.push("模拟器只执行结构化场景，不会把缺少阶段、区域或操作顺序的自然语言自动猜成对局。");
+    details.push("本题没有生成可执行场景，资料分析结果不受影响。");
   }
 
   ui.simulationPanel.hidden = false;
