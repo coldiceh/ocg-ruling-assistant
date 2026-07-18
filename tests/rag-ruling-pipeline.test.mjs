@@ -1085,6 +1085,42 @@ test("no_api_key_uses_mock", async () => {
   assert.ok(answer.shortAnswer);
 });
 
+test("deepseek_empty_truncated_output_retries_with_compact_prompt", async () => {
+  const calls = [];
+  const result = await callRagModel({
+    prompt: "原始长提示词",
+    recoveryPrompt: "紧凑恢复提示词",
+    env: {
+      MODEL_PROVIDER: "deepseek",
+      DEEPSEEK_API_KEY: "test-deepseek-key",
+      RAG_MAX_OUTPUT_TOKENS: "321",
+      API_DAILY_BUDGET_CNY: "10",
+    },
+    fetchImpl: async (_url, options) => {
+      calls.push(JSON.parse(options.body));
+      if (calls.length === 1) {
+        return jsonResponse({
+          choices: [{ message: { content: "" }, finish_reason: "length" }],
+          usage: { prompt_tokens: 100, completion_tokens: 321, total_tokens: 421 },
+        });
+      }
+      return jsonResponse({
+        choices: [{ message: { content: JSON.stringify(modelJson("恢复后的答案")) }, finish_reason: "stop" }],
+        usage: { prompt_tokens: 40, completion_tokens: 60, total_tokens: 100 },
+      });
+    },
+  });
+
+  assert.equal(calls.length, 2);
+  assert.equal(calls[1].messages[0].content, "紧凑恢复提示词");
+  assert.equal(calls[1].max_tokens, 4000);
+  assert.equal(result.answer.shortAnswer, "恢复后的答案");
+  assert.equal(result.tokenUsage.prompt_tokens, 140);
+  assert.equal(result.tokenUsage.completion_tokens, 381);
+  assert.ok(result.warnings.includes("deepseek_compact_recovery_succeeded"));
+  assert.equal(result.warnings.some((warning) => warning.startsWith("deepseek_empty_content:")), false);
+  assert.equal(result.warnings.includes("deepseek_output_truncated_by_token_limit"), false);
+});
 test("deepseek_provider_builds_request", async () => {
   const calls = [];
   const result = await callRagModel({

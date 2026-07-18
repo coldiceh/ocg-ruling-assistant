@@ -245,6 +245,7 @@ function addResolved(resolved, seenCards, candidate, input, confidence) {
     input: String(input || candidate.matchedAlias || card.name || ""),
     id: String(card.id || card.cardId || ""),
     cardId: String(card.id || card.cardId || ""),
+    passcode: String(card.passcode || card.password || ""),
     name: card.name || card.cnName || card.jaName || card.enName || String(input || ""),
     cnName: card.cnName || "",
     jaName: card.jaName || "",

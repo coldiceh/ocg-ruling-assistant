@@ -1,6 +1,6 @@
 # OCG 引擎接入
 
-规则助手已经可以选择性调用独立项目 [coldiceh/ocg-sim-core](https://github.com/coldiceh/ocg-sim-core)。本机默认使用相邻目录 `游戏王游戏引擎`；普通问题仍走原有 RAG，只有请求带 `engineScenario` 时才运行确定性模拟。
+规则助手可以调用独立项目 [coldiceh/ocg-sim-core](https://github.com/coldiceh/ocg-sim-core)。本机默认使用相邻目录 `游戏王游戏引擎`。配置 `OCG_ENGINE_URL` 后，普通问题会在卡片检索完成后自动生成一份尽力模拟场景并单独执行；请求显式传入 `engineScenario` 时仍以该场景为准。
 
 模拟器核心、ocgcore host、资源快照和卡片脚本均在 `ocg-sim-core` 维护。本仓库只保留 HTTP 客户端、API 适配层和联调启动脚本，不复制模拟器实现。
 
@@ -27,7 +27,7 @@ pnpm dev:with-engine
 
 - `GET /api/engine`：返回 sidecar 健康状态、能力和资源锁。
 - `POST /api/engine`：请求体为 `{ "scenario": { ... } }` 或场景本身，直接返回模拟结果。
-- `POST /api/answer`：照常传 `question`，可额外传 `engineScenario`。
+- `POST /api/answer`：照常传 `question`；未传 `engineScenario` 时自动尽力编译场景，显式传入时覆盖自动场景。
 
 示例：
 
@@ -52,6 +52,8 @@ pnpm dev:with-engine
   }
 }
 ```
+
+自动场景会标记 `bestEffort=true`。若某一步计划与真实 core prompt 不一致，引擎停止在该 prompt 并返回 `responseFailure` 和已执行的部分轨迹，不会把整次模拟丢弃。可用 `RAG_AUTO_ENGINE_SIMULATION=false` 关闭自动编译。
 
 响应可以直接按操作和卡号描述，运行器会根据当前 core prompt 解析实际索引：
 
@@ -105,5 +107,5 @@ sidecar 默认只绑定 `127.0.0.1`。若改为远程绑定，必须使用 token
 
 ## 能力边界
 
-当前接入已能运行真实 ocgcore 场景，但不会把任意自然语言自动补全为可靠对局。关键的玩家、阶段、区域、表示形式、连锁与历史缺失时，应先向用户澄清。复杂 `MSG_SELECT_*` 尚需逐类增加高层 response codec；上游单卡脚本也仍可能有 Bug。
+当前接入已能运行真实 ocgcore 场景，也会从自然语言中尽力提取玩家、区域、表示形式和操作顺序。自动场景不是可靠的完整对局还原；缺失事实会造成场景偏差，复杂 `MSG_SELECT_*` 也可能使轨迹提前停止，上游单卡脚本仍可能有 Bug。因此自动模拟只单独展示执行结果，不参与官方证据等级或最终裁定确认。
 

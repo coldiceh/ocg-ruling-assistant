@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { requestOcgEngineSimulation } from "../backend/ocgEngineClient.mjs";
+import { answerRagRulingQuestion } from "../backend/ragRulingPipeline.mjs";
 
 const binding = {
   lockId: "1".repeat(64),
@@ -51,4 +52,61 @@ test("engine is not contacted without an executable scenario", async () => {
   });
   assert.equal(result.status, "not_requested");
   assert.equal(called, false);
+});
+
+test("ordinary RAG question automatically submits a best-effort engine scenario", async () => {
+  let submittedScenario = null;
+  const result = await answerRagRulingQuestion({
+    question: "我方手牌有「模拟测试龙」，我召唤模拟测试龙后发动效果。",
+    cards: [{
+      id: "999",
+      passcode: "12345678",
+      name: "模拟测试龙",
+      aliases: ["模拟测试龙"],
+      cardType: "monster",
+      effectText: "这张卡召唤成功的场合可以发动。",
+      sourceUrl: "https://example.test/card/999",
+    }],
+    records: [],
+    qaRecords: [],
+    env: {
+      MODEL_PROVIDER: "mock",
+      OCG_ENGINE_URL: "http://127.0.0.1:8790",
+      RAG_RULEBOOK_GROUNDING_ENABLED: "false",
+    },
+    modelInvoker: async () => JSON.stringify({
+      answerLevel: "rule_analysis",
+      shortAnswer: "可以根据卡片文本分析。",
+      reasoning: ["已读取卡片文本。", "模拟结果单独展示。"],
+      usedCards: ["模拟测试龙"],
+      usedEvidence: [{ id: "card-text-999", type: "card_text" }],
+      missingInfo: [],
+      riskFlags: [],
+      confidenceSelfEstimate: "medium",
+    }),
+    engineFetchImpl: async (_url, options) => {
+      submittedScenario = JSON.parse(options.body).scenario;
+      return new Response(JSON.stringify({
+        ok: true,
+        simulation: {
+          sourceType: "engine_simulation",
+          canConfirmOfficialRuling: false,
+          resourceBinding: binding,
+          traceSha256: "8".repeat(64),
+          status: "awaiting_response",
+          incomplete: true,
+          bestEffort: true,
+          steps: [],
+          zoneCounts: {},
+        },
+      }), { status: 200 });
+    },
+  });
+
+  assert.equal(submittedScenario.bestEffort, true);
+  assert.ok(submittedScenario.setup.cards.some((card) => card.code === 12345678));
+  assert.equal(result.engine.status, "completed");
+  assert.equal(result.engine.bestEffort, true);
+  assert.equal(result.engine.scenarioSource, "auto_best_effort");
+  assert.equal(result.engineSimulation.canConfirmOfficialRuling, false);
 });

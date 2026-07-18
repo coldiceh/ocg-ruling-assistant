@@ -152,7 +152,7 @@ test("ui_has_single_query_button", async () => {
   assert.doesNotMatch(html, /id="flashModelButton"|id="proModelButton"|>Pro</u);
   assert.match(app, /const selectedModelTier = "flash"/u);
   assert.match(app, /modelTier: selectedModelTier/u);
-  assert.match(app, /ocg-ruling-answer:v19/u);
+  assert.match(app, /ocg-ruling-answer:v20/u);
   assert.match(app, /buildBackendCacheKey\(text, backendMode, selectedModelTier\)/u);
   assert.doesNotMatch(app, /setModelTier|readInitialModelTier/u);
   assert.doesNotMatch(app, /deepAnalyzeButton|ragModeToggle|legacyPipelineToggle/u);

@@ -791,7 +791,7 @@ function mentionSearchQueries(mention) {
 async function enrichCardsWithBaige(cards, { fetchImpl, env, limits, warnings, debug }) {
   const sourceCards = (cards || []).slice(0, limits.maxCards);
   const result = await Promise.all(sourceCards.map(async (card) => {
-    if (hasUsableCardText(card) && (card.id || card.cardId) && card.sourceUrl) {
+    if (hasUsableCardText(card) && (card.id || card.cardId) && card.sourceUrl && (!enginePasscodeRequired(env) || hasEnginePasscode(card))) {
       return card;
     }
     const query = card.name || card.cnName || card.jaName || card.enName || card.input;
@@ -909,6 +909,15 @@ function retrievedCardMatchesMention(mention, cards) {
 
 function hasUsableCardText(card) {
   return Boolean(String(card.effectText || card.text || "").trim());
+}
+
+function enginePasscodeRequired(env = {}) {
+  const enabled = !/^(?:0|false|off|disabled|no)$/iu.test(String(env.RAG_AUTO_ENGINE_SIMULATION ?? "true").trim());
+  return enabled && Boolean(String(env.OCG_ENGINE_URL || "").trim());
+}
+
+function hasEnginePasscode(card = {}) {
+  return /^\d{8}$/u.test(String(card.passcode || card.password || "").trim());
 }
 
 function normalizeUserProvidedCardTexts(items, limits) {
