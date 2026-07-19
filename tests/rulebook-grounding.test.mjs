@@ -5,7 +5,26 @@ import { loadRagData, retrieveRagEvidence } from "../backend/ragEvidenceRetrieve
 import { callRulebookGroundingModel, selectPriorityConstraintEvidence } from "../backend/ragModelClient.mjs";
 import { validateOperationLegalityModelOutput } from "../backend/operationLegalityAnalyzer.mjs";
 import { retrieveRulebookPassages } from "../backend/rulebookPassageRetriever.mjs";
+import { buildDocTargets } from "../scripts/sync-ocg-rule.mjs";
 
+test("rule_sync_keeps_all_content_pages_including_card_resistance", () => {
+  const docs = buildDocTargets({
+    docnames: ["index", "c03/卡片的抗性", "c03/装备", "search"],
+    titles: ["OCG Rule", "卡片的抗性", "装备", "Search"],
+  });
+
+  assert.deepEqual(docs.map((item) => item.docname), ["c03/卡片的抗性", "c03/装备"]);
+});
+
+test("rag_data_prefers_the_fresh_rulebook_corpus_over_embedded_snapshots", async () => {
+  const data = await loadRagData();
+  const ruleRecords = data.records.filter((record) => ["rule-doc", "rule-test"].includes(record.recordType) && record.id.startsWith("ocg-rule:"));
+  const uniqueSourceIds = new Set(ruleRecords.map((record) => record.stableId || record.id));
+
+  assert.equal(ruleRecords.length, 39);
+  assert.equal(uniqueSourceIds.size, ruleRecords.length);
+  assert.ok(ruleRecords.every((record) => !/@[a-f0-9]{8,}$/iu.test(record.id)));
+});
 test("actual_rulebook_late_paragraph_is_retrieved_as_a_passage", async () => {
   const payload = JSON.parse(await readFile(new URL("../data/ocg-rule-corpus.json", import.meta.url), "utf8"));
   const passages = retrieveRulebookPassages({
@@ -22,6 +41,25 @@ test("actual_rulebook_late_paragraph_is_retrieved_as_a_passage", async () => {
   assert.ok(relevant, "expected the rulebook passage about activated Spell/Trap Cards returning to hand");
   assert.match(relevant.id, /^ocg-rule:c02\/卡片·效果的发动#p/u);
   assert.equal(relevant.type, "rulebook");
+  assert.ok(relevant.sourceUrl);
+});
+
+test("actual_simultaneous_replacement_rule_is_retrieved_from_card_resistance", async () => {
+  const payload = JSON.parse(await readFile(new URL("../data/ocg-rule-corpus.json", import.meta.url), "utf8"));
+  const passages = retrieveRulebookPassages({
+    records: payload.records || [],
+    userQuery: "双方怪兽同时被破坏，双方都有代替破坏效果，如何决定顺序？",
+    ruleSearchQueries: [
+      { query: "同一时点 多个不入连锁效果 适用顺序 回合玩家 非回合玩家", confidence: "high" },
+      { query: "同时适用 多个代替破坏效果 回合玩家先适用 重新判断", confidence: "high" },
+    ],
+    maxPassages: 16,
+  });
+
+  const relevant = passages.find((item) => item.id.startsWith("ocg-rule:c03/卡片的抗性#")
+    && /同1时点双方都要适用代替破坏的效果时，回合玩家的先适用/u.test(item.text));
+  assert.ok(relevant, "expected the simultaneous replacement ordering rule from the card resistance page");
+  assert.match(relevant.text, /之后非回合玩家持有这类效果的卡已经不在场上存在的场合，不适用/u);
   assert.ok(relevant.sourceUrl);
 });
 
@@ -55,10 +93,10 @@ test("actual_return_constraints_are_prioritized_for_operation_grounding", async 
     },
   });
 
-  const priorityIds = grounding.operationLegality.priorityConstraintEvidence.map((item) => item.id);
-  assert.ok(priorityIds.some((id) => id.includes("卡片·效果的发动#p263-267")), "expected the activated Spell/Trap return restriction");
-  assert.ok(priorityIds.some((id) => id.includes("卡片·效果的发动#p285-289")), "expected the no-applicable-card activation restriction");
-  assert.ok(priorityIds.length <= 3);
+  const priorities = grounding.operationLegality.priorityConstraintEvidence;
+  assert.ok(priorities.some((item) => /这种魔法·陷阱卡在连锁途中不能从场上回到手卡·卡组/u.test(item.text)), "expected the activated Spell/Trap return restriction");
+  assert.ok(priorities.some((item) => /除自身以外没有能适用的卡时不能发动/u.test(item.text)), "expected the no-applicable-card activation restriction");
+  assert.ok(priorities.length <= 5);
   assert.match(prompt, /priorityConstraintCandidates/u);
   assert.match(prompt, /只说明诱发条件或可连锁时点的一般卡片 FAQ/u);
 });
@@ -314,10 +352,99 @@ test("generic_legal_check_cannot_bypass_restrictive_rule_without_non_applicabili
   }, [rule], { requiredConstraintEvidence: [rule] });
 
   assert.equal(result.hasGroundedChecks, true);
-  assert.equal(result.hasUnresolvedConstraints, true);
-  assert.ok(result.warnings.some((item) => item.startsWith("operation_constraint_review_missing:")));
+  assert.equal(result.hasBlockingCheck, true);
+  assert.equal(result.hasUnresolvedConstraints, false);
+  assert.match(result.shortAnswer, /不能发动/u);
+  assert.ok(result.warnings.includes("operation_blocker_derived_from_combined_constraint_evidence"));
 });
 
+test("focused_state_transition_review_separates_cost_from_effect_processing", async () => {
+  const activator = {
+    id: "card-text-activator",
+    type: "card_text",
+    title: "发动效果",
+    text: "这张卡召唤成功的场合，舍弃1张手牌可以发动。将双方场上的怪兽作为融合素材进行融合召唤。",
+  };
+  const immunity = {
+    id: "card-text-immunity",
+    type: "card_text",
+    title: "条件抗性",
+    text: "只要场上或墓地存在指定怪兽，这张卡不受自身以外的效果影响。",
+  };
+  const costRule = {
+    id: "rulebook-cost-state-transition",
+    type: "rulebook",
+    title: "支付 cost 后的状态",
+    text: "效果发动时先支付cost。支付完成造成的位置变化立即成立，再按当前场面处理连锁。",
+  };
+  const tasks = [];
+  const result = await callRulebookGroundingModel({
+    userQuery: "召唤成功后舍弃指定怪兽作为cost发动效果；该怪兽进入墓地后使对方怪兽获得效果抗性，之后如何处理？",
+    cardTexts: [activator, immunity],
+    ruleEvidence: [costRule],
+    modelInvoker: async ({ task }) => {
+      tasks.push(task);
+      if (task === "rulebook_grounding") {
+        return JSON.stringify({
+          constraintReviews: [],
+          operationChecks: [{
+            operationId: "activation-only",
+            step: 1,
+            action: "发动并支付cost",
+            status: "legal",
+            conclusion: "可以发动并支付cost。",
+            citations: [{
+              id: activator.id,
+              quote: "舍弃1张手牌可以发动。",
+              application: "题目有可舍弃的手牌。",
+            }],
+          }],
+          overallConclusion: "可以发动。",
+        });
+      }
+      assert.equal(task, "rulebook_state_transition_repair");
+      return JSON.stringify({
+        constraintReviews: [],
+        operationChecks: [
+          {
+            operationId: "activate-and-pay-cost",
+            step: 1,
+            action: "发动并舍弃手牌",
+            status: "legal",
+            conclusion: "可以发动，舍弃手牌作为cost。",
+            citations: [{ id: activator.id, quote: "舍弃1张手牌可以发动。", application: "发动时支付cost。" }],
+          },
+          {
+            operationId: "recalculate-after-cost",
+            step: 2,
+            action: "按cost支付后的场面重新适用抗性",
+            status: "legal",
+            conclusion: "手牌进入墓地后，条件抗性在效果处理前开始适用。",
+            citations: [
+              { id: costRule.id, quote: "支付完成造成的位置变化立即成立", application: "舍弃后区域立即更新。" },
+              { id: immunity.id, quote: "只要场上或墓地存在指定怪兽", application: "cost支付后已满足墓地条件。" },
+            ],
+          },
+          {
+            operationId: "resolve-with-immunity",
+            step: 3,
+            action: "处理融合效果",
+            status: "conditional",
+            conclusion: "可以发动，但抗性使该怪兽不受效果影响，因此不进行后续融合处理。",
+            citations: [{ id: immunity.id, quote: "这张卡不受自身以外的效果影响。", application: "处理时抗性已经适用。" }],
+          },
+        ],
+        overallConclusion: "可以发动并支付cost；处理时因新适用的抗性而不进行融合召唤。",
+      });
+    },
+  });
+
+  assert.deepEqual(tasks, ["rulebook_grounding", "rulebook_state_transition_repair"]);
+  assert.equal(result.operationLegality.checks.length, 4);
+  assert.match(result.operationLegality.shortAnswer, /^可以发动并支付cost/u);
+  assert.match(result.operationLegality.shortAnswer, /不进行融合召唤/u);
+  assert.ok(result.warnings.includes("rulebook_grounding_focused_repair_applied"));
+});
 test("focused_constraint_repair_resolves_a_missed_restrictive_rule", async () => {
   const rule = {
     id: "rulebook-focused-return-constraint",

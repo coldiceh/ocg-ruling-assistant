@@ -170,6 +170,11 @@ export async function retrieveRagEvidence({
   };
 }
 
+function rulebookSourceIdentity(record = {}) {
+  return String(record.stableId || record.sourceRecordId || record.id || record.evidenceId || "")
+    .replace(/@[a-f0-9]{8,}$/iu, "");
+}
+
 export async function loadRagData(dataDir = defaultDataDir) {
   const key = dataDir;
   if (dataCache.has(key)) return dataCache.get(key);
@@ -180,12 +185,18 @@ export async function loadRagData(dataDir = defaultDataDir) {
     readJson(join(dataDir, "evidence-index.json"), { records: [] }),
     readJson(join(dataDir, "ocg-rule-corpus.json"), { records: [] }),
   ]);
+  const bundledRulebookRecords = rulebookPayload.records || [];
+  const hasBundledRulebook = bundledRulebookRecords.length > 0;
+  const evidenceRecords = (evidencePayload.records || []).filter((record) => (
+    !hasBundledRulebook
+    || (record.sourceId !== "ocg-rule" && !rulebookSourceIdentity(record).startsWith("ocg-rule:"))
+  ));
   const data = normalizeInjectedData({
     cards: cardsPayload.records || cardsPayload.cards || [],
     records: [
       ...(rulingsPayload.records || []),
-      ...(rulebookPayload.records || []),
-      ...(evidencePayload.records || []),
+      ...bundledRulebookRecords,
+      ...evidenceRecords,
     ],
     qaRecords: qaPayload.records || [],
   });
@@ -525,11 +536,19 @@ function deriveMechanismRuleQueries(value) {
     add("卡片效果发动 支付cost 顺序 支付后 状态立即变化", "检索发动时支付 cost 的顺序以及支付后卡片位置何时改变。");
     add("支付cost后 效果处理前 永续效果 适用条件重新判断", "检索 cost 改变场面后，连锁处理前持续适用效果是否开始或停止适用。");
   }
+  if (/(?:代替破坏|破坏.{0,12}代替|破壊.{0,12}代わり|替代破坏)/u.test(text)
+      && /(?:同时|同一时点|双方|多个|复数|複数|各自|都要|一起)/u.test(text)) {
+    add("同一时点 多个不入连锁效果 适用顺序 回合玩家 非回合玩家", "检索多个不入连锁效果同时适用时的先后顺序。");
+    add("同时适用 多个代替破坏效果 回合玩家先适用 重新判断", "检索双方代替破坏效果竞争时是否依次适用并重新判断场面。");
+  }
   if (/(不受.{0,8}效果影响|不受效果|unaffected)/iu.test(text) && /(对象|對象|対象|target)/iu.test(text)) {
     add("不受其他卡的效果影响 可以成为效果对象 对象选择 效果适用", "分别检索对象选择限制与效果抗性。");
   }
   if (/(魔法|陷阱|罠)/u.test(text) && /(回到手|返回手|放回手|回到卡组|返回卡组|回去|戻)/u.test(text)) {
     add("魔法陷阱卡 发动中 连锁途中 回到手卡 回到卡组", "检索发动中魔法陷阱的位置移动限制。");
+    if (/(没有其他|不存在其他|并无其他|无其他|只有.{0,24}(?:1|一)张|除.{0,20}以外没有|no other|none)/iu.test(text)) {
+      add("发动后的非永续魔法陷阱 除自身以外没有能适用的卡时不能发动", "检索唯一候选受位置移动限制时，必做处理是否导致不能发动。");
+    }
   }
   if (/(然后|那之后|之后|之後|并且|並且|再|仍然|尽可能|不能处理)/u.test(text)) {
     add("效果文本 连续处理 前一项不能处理 后续处理 是否进行", "检索多段效果的处理顺序和依赖关系。");
@@ -963,12 +982,12 @@ function readRetrievalLimits(env, maxPerBucket) {
   return {
     maxCards: readPositiveNumber(env.RAG_MAX_CARDS, 6),
     maxOfficialQa: readPositiveNumber(env.RAG_MAX_OFFICIAL_QA, maxPerBucket),
-    maxRelatedEvidence: readPositiveNumber(env.RAG_MAX_RELATED_EVIDENCE, Math.max(10, maxPerBucket)),
-    maxRuleSearchQueries: readPositiveNumber(env.RAG_MAX_RULE_SEARCH_QUERIES, 12),
-    maxRulebookCandidates: readPositiveNumber(env.RAG_MAX_RULEBOOK_CANDIDATES, 18),
-    maxRulebookPassageChars: readPositiveNumber(env.RAG_MAX_RULEBOOK_PASSAGE_CHARS, 1600),
-    maxCardTextChars: readPositiveNumber(env.RAG_MAX_CARD_TEXT_CHARS, 2500),
-    maxEvidenceTextChars: readPositiveNumber(env.RAG_MAX_EVIDENCE_TEXT_CHARS, 2200),
+    maxRelatedEvidence: readPositiveNumber(env.RAG_MAX_RELATED_EVIDENCE, Math.max(14, maxPerBucket)),
+    maxRuleSearchQueries: readPositiveNumber(env.RAG_MAX_RULE_SEARCH_QUERIES, 16),
+    maxRulebookCandidates: readPositiveNumber(env.RAG_MAX_RULEBOOK_CANDIDATES, 24),
+    maxRulebookPassageChars: readPositiveNumber(env.RAG_MAX_RULEBOOK_PASSAGE_CHARS, 2200),
+    maxCardTextChars: readPositiveNumber(env.RAG_MAX_CARD_TEXT_CHARS, 3200),
+    maxEvidenceTextChars: readPositiveNumber(env.RAG_MAX_EVIDENCE_TEXT_CHARS, 2800),
     localFuzzyMinConfidence: readPositiveDecimal(env.RAG_LOCAL_FUZZY_MIN_CONFIDENCE, 0.74),
   };
 }

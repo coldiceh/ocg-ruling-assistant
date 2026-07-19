@@ -26,10 +26,11 @@ export function buildRagRulingPromptBundle({
   const warnings = [];
   const promptLimits = {
     maxCards: readNumber(env.RAG_MAX_CARDS, 6),
-    maxOfficialQa: readNumber(env.RAG_MAX_OFFICIAL_QA, 5),
-    maxRelatedEvidence: readNumber(env.RAG_MAX_RELATED_EVIDENCE, 10),
-    maxCardTextChars: readNumber(env.RAG_MAX_CARD_TEXT_CHARS, 2500),
-    maxPromptChars: readNumber(env.RAG_MAX_PROMPT_CHARS, 42000),
+    maxOfficialQa: readNumber(env.RAG_MAX_OFFICIAL_QA, 7),
+    maxRelatedEvidence: readNumber(env.RAG_MAX_RELATED_EVIDENCE, 14),
+    maxCardTextChars: readNumber(env.RAG_MAX_CARD_TEXT_CHARS, 3200),
+    maxEvidenceTextChars: readNumber(env.RAG_MAX_EVIDENCE_TEXT_CHARS, 2800),
+    maxPromptChars: readNumber(env.RAG_MAX_PROMPT_CHARS, 60000),
   };
   const evidencePayload = prepareEvidenceForPrompt(evidence, promptLimits, warnings);
   const payload = {
@@ -165,6 +166,7 @@ function summarizeOperationChecks(checks) {
 
 function summarizeConstraintAudit(operationLegality = {}) {
   return {
+    hasBlockingCheck: operationLegality?.hasBlockingCheck === true,
     hasUnresolvedConstraints: operationLegality?.hasUnresolvedConstraints === true,
     priorityConstraints: (operationLegality?.priorityConstraintEvidence || []).slice(0, 8).map((item) => ({
       id: item.id,
@@ -190,12 +192,12 @@ function summarizeConstraintAudit(operationLegality = {}) {
 
 function prepareEvidenceForPrompt(evidence, limits, warnings) {
   return {
-    officialQaDirectCandidates: limitEvidence(evidence.officialQaDirectCandidates, limits.maxOfficialQa, 2400, "official_direct", warnings),
-    officialQaRelated: limitEvidence(evidence.officialQaRelated, limits.maxRelatedEvidence, 2200, "official_related", warnings),
-    faqRelated: limitEvidence(evidence.faqRelated, limits.maxRelatedEvidence, 2000, "faq", warnings),
+    officialQaDirectCandidates: limitEvidence(evidence.officialQaDirectCandidates, limits.maxOfficialQa, limits.maxEvidenceTextChars, "official_direct", warnings),
+    officialQaRelated: limitEvidence(evidence.officialQaRelated, limits.maxRelatedEvidence, limits.maxEvidenceTextChars, "official_related", warnings),
+    faqRelated: limitEvidence(evidence.faqRelated, limits.maxRelatedEvidence, limits.maxEvidenceTextChars, "faq", warnings),
     cardTexts: limitEvidence(evidence.cardTexts, limits.maxCards, limits.maxCardTextChars, "card_text", warnings),
     userProvidedCardTexts: limitEvidence(evidence.userProvidedCardTexts, limits.maxCards, limits.maxCardTextChars, "user_provided_text", warnings),
-    rawRelatedEvidence: limitEvidence(evidence.rawRelatedEvidence, limits.maxRelatedEvidence, 1500, "raw_related", warnings),
+    rawRelatedEvidence: limitEvidence(evidence.rawRelatedEvidence, limits.maxRelatedEvidence, limits.maxEvidenceTextChars, "raw_related", warnings),
   };
 }
 

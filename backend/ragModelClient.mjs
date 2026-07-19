@@ -23,14 +23,14 @@ const GROUNDING_MECHANISM_PATTERNS = Object.freeze([
   ["banish", /除外|banish/iu],
   ["graveyard", /墓地|graveyard|GY/iu],
   ["summon", /召唤|召喚|summon/iu],
-  ["cost", /cost|代价|代價|支付/iu],
+  ["cost", /cost|代价|代價|支付|舍弃|丢弃|捨て/iu],
   ["timing", /时点|時点|时机|タイミング|timing/iu],
   ["attack", /攻击|攻擊|攻撃|attack/iu],
   ["unaffected", /不受.{0,8}影响|不受.{0,8}影響|受けない|unaffected/iu],
 ]);
-const PRIORITY_SCENARIO_ABSENCE_PATTERN = /(?:没有|不存在|并无|没有其他|除.{0,12}以外没有|只有.{0,24}(?:1|一)张|only|no other|none)/iu;
+const PRIORITY_SCENARIO_ABSENCE_PATTERN = /(?:没有其他|不存在其他|并无其他|无其他|除.{0,12}以外没有|只有.{0,24}(?:1|一)张|only.{0,24}(?:one|1)|no other|none(?:\s+(?:available|applicable))?)/iu;
 const PRIORITY_ACTIVE_SPELL_TRAP_RETURN_PATTERN = /(?:发动|發動|発動|连锁|連鎖|チェーン|chain).{0,80}(?:魔法|陷阱|罠|spell|trap).{0,80}(?:回到|返回|放回|弹回|彈回|戻|return)|(?:魔法|陷阱|罠|spell|trap).{0,80}(?:连锁|連鎖|チェーン|chain).{0,80}(?:回到|返回|放回|弹回|彈回|戻|return)/iu;
-const PRIORITY_NO_APPLICABLE_CARD_PATTERN = /(?:除.{0,20}以外|没有|不存在|并无|无).{0,48}(?:能|可|可以|能够|適用|applicable).{0,24}(?:适用|適用|选择|選択|对象|対象|处理|處理|卡|card).{0,32}(?:不能|不可|不得|无法|不可以|発動できません|cannot).{0,12}(?:发动|發動|発動|activate)|(?:不能|不可|不得|无法|不可以|発動できません|cannot).{0,12}(?:发动|發動|発動|activate).{0,48}(?:适用|適用|对象|対象|卡|card)/iu;
+const PRIORITY_NO_APPLICABLE_CARD_PATTERN = /(?:(?:除(?:了)?自身以外|除.{0,20}以外|没有其他|不存在其他|并无其他|无其他|no other|none|ほか|他).{0,180}(?:适用|適用|返回|回到|放回|选择|選択|对象|対象|处理|處理|処理|カード|card).{0,100}(?:(?:不能|不可|不得|无法|不可以|cannot).{0,16}(?:发动|發動|発動|activate)|発動できません|cannot activate))|(?:(?:(?:不能|不可|不得|无法|不可以|cannot).{0,16}(?:发动|發動|発動|activate)|発動できません|cannot activate).{0,100}(?:除自身以外|没有其他|不存在其他|no other|ほか.{0,24}ない))/iu;
 const PRIORITY_TARGET_RESTRICTION_PATTERN = /(?:不能|不可|不得|无法|不可以|cannot|can't|対象にできません).{0,28}(?:作为|成为|选为|選択|取为|取作|対象|target).{0,16}(?:对象|對象|対象|target)|(?:不能|不可|不得|无法|不可以|cannot|can't).{0,20}(?:取|选择|選択).{0,12}(?:对象|對象|対象|target)/iu;
 const memoryBudget = new Map();
 const cardNameExtractionCache = new Map();
@@ -380,11 +380,11 @@ export async function callRulebookGroundingModel({
   fetchImpl = globalThis.fetch,
   now = new Date(),
 } = {}) {
-  const maxRulebookCandidates = readPositiveNumber(env.RAG_MAX_RULEBOOK_CANDIDATES, 18);
-  const maxQaCandidates = readPositiveNumber(env.RAG_MAX_QA_GROUNDING_CANDIDATES, 10);
+  const maxRulebookCandidates = readPositiveNumber(env.RAG_MAX_RULEBOOK_CANDIDATES, 24);
+  const maxQaCandidates = readPositiveNumber(env.RAG_MAX_QA_GROUNDING_CANDIDATES, 12);
   const maxCardTextCandidates = readPositiveNumber(env.RAG_MAX_CARDS, 6);
-  const maxPriorityConstraints = readPositiveNumber(env.RAG_MAX_PRIORITY_CONSTRAINTS, 3);
-  const maxFocusedCandidates = readPositiveNumber(env.RAG_MAX_FOCUSED_GROUNDING_CANDIDATES, 20);
+  const maxPriorityConstraints = readPositiveNumber(env.RAG_MAX_PRIORITY_CONSTRAINTS, 5);
+  const maxFocusedCandidates = readPositiveNumber(env.RAG_MAX_FOCUSED_GROUNDING_CANDIDATES, 28);
   const selectedQaEvidence = selectGroundingQaEvidence(qaEvidence, maxQaCandidates);
   const selectedRuleEvidence = dedupeGroundingEvidence(ruleEvidence).slice(0, maxRulebookCandidates);
   const selectedCardTexts = dedupeGroundingEvidence(cardTexts).slice(0, maxCardTextCandidates);
@@ -410,7 +410,7 @@ export async function callRulebookGroundingModel({
   const providerResolution = resolveRulebookGroundingProvider(env);
   const provider = providerResolution.provider;
   const modelName = modelNameForRulebookGroundingProvider(provider, env);
-  const maxTokens = readNumber(env.RAG_RULEBOOK_MODEL_MAX_OUTPUT_TOKENS, 1800);
+  const maxTokens = readNumber(env.RAG_RULEBOOK_MODEL_MAX_OUTPUT_TOKENS, 2800);
   const prompt = buildRulebookGroundingPrompt({
     userQuery,
     cardTexts: selectedCardTexts,
@@ -419,15 +419,30 @@ export async function callRulebookGroundingModel({
   });
   const repairMaxTokens = Math.min(
     maxTokens,
-    readPositiveNumber(env.RAG_RULEBOOK_REPAIR_MAX_OUTPUT_TOKENS, 1600),
+    readPositiveNumber(env.RAG_RULEBOOK_REPAIR_MAX_OUTPUT_TOKENS, 2200),
   );
+  const focusedStateTransitionReview = !priorityConstraintEvidence.length
+    && shouldRunFocusedStateTransitionReview({
+      userQuery,
+      cardTexts: selectedCardTexts,
+      evidenceCandidates: candidates,
+    });
   const repairPrompt = priorityConstraintEvidence.length
     ? buildFocusedConstraintRepairPrompt({
       userQuery,
       cardTexts: selectedCardTexts,
       priorityConstraintEvidence,
     })
-    : "";
+    : focusedStateTransitionReview
+      ? buildFocusedStateTransitionRepairPrompt({
+        userQuery,
+        cardTexts: selectedCardTexts,
+        evidenceCandidates: candidates,
+      })
+      : "";
+  const focusedTaskName = priorityConstraintEvidence.length
+    ? "rulebook_constraint_repair"
+    : "rulebook_state_transition_repair";
 
   const focusedReviewEnabled = Boolean(repairPrompt) && !isDisabled(env.RAG_RULEBOOK_FOCUSED_REPAIR_ENABLED);
   if (modelInvoker) {
@@ -444,7 +459,7 @@ export async function callRulebookGroundingModel({
         provider,
         modelName,
         maxTokens: repairMaxTokens,
-        task: "rulebook_constraint_repair",
+        task: focusedTaskName,
       }))
       : null;
     const [primaryOutcome, focusedOutcome] = await Promise.allSettled([
@@ -490,7 +505,7 @@ export async function callRulebookGroundingModel({
   }
 
   const cacheInput = `${userQuery}\n${candidates.map((item) => item.id).join("|")}\n${(cardTexts || []).map((item) => item.id || item.title || "").join("|")}`;
-  const cacheKey = extractionCacheKey("rulebook-grounding-v8", provider, modelName, cacheInput);
+  const cacheKey = extractionCacheKey("rulebook-grounding-v9", provider, modelName, cacheInput);
   const cached = readCachedExtraction(rulebookGroundingCache, cacheKey, env);
   if (cached) {
     return {
@@ -1510,7 +1525,7 @@ function buildRulebookGroundingPrompt({
     priorityConstraintCandidates: (priorityConstraintEvidence || []).slice(0, 8).map((item) => ({
       id: item.id,
       title: item.title,
-      text: String(item.text || "").slice(0, 2200),
+      text: String(item.text || "").slice(0, 2800),
       sourceUrl: item.sourceUrl || "",
     })),
     cardTexts: (cardTexts || []).slice(0, 8).map((item) => ({
@@ -1521,13 +1536,13 @@ function buildRulebookGroundingPrompt({
       cardType: item.cardType || "",
       attribute: item.attribute ?? "",
       race: item.race ?? "",
-      text: String(item.text || "").slice(0, 2200),
+      text: String(item.text || "").slice(0, 3000),
     })),
-    evidenceCandidates: (evidenceCandidates || []).filter((item) => !priorityIds.has(String(item?.id || ""))).slice(0, 24).map((item) => ({
+    evidenceCandidates: (evidenceCandidates || []).filter((item) => !priorityIds.has(String(item?.id || ""))).slice(0, 32).map((item) => ({
       id: item.id,
       type: item.type || item.recordType || "related",
       title: item.title,
-      text: String(item.text || "").slice(0, 1800),
+      text: String(item.text || "").slice(0, 2200),
       sourceUrl: item.sourceUrl || "",
       isDirect: item.isDirect === true,
     })),
@@ -1547,6 +1562,7 @@ function buildRulebookGroundingPrompt({
     "‘不受其他卡的效果影响’只约束效果是否适用，本身不等于‘不能成为效果对象’；‘不能成为对象’必须有独立的对象限制或玩家限制证据，反过来也一样。",
     "同一场景同时存在对象保护与效果抗性时，要分别列出证据，并明确最终阻止操作的是哪一项；不得把抗性误写成不能取对象的理由。",
     "涉及‘将发动无效并破坏’时，必须依据候选证据区分被无效的是魔法・陷阱卡的卡的发动，还是已在场卡片的效果发动，并据此判断是否属于破坏场上的卡。",
+    "多个不入连锁效果或代替处理在同一时点适用时，必须检索其适用顺序；每适用一个效果后都要更新场面，再判断后续效果是否仍能适用，不能假定双方效果同时成功。",
     "不得仅因发动效果的卡或效果对象在连锁处理中离开原位置，就把整条已经合法发动的效果判为不处理。必须分别检查发动是否已成立、每项处理依赖的卡或位置、前一项不能处理时后一项是否继续，并为规则结论引用证据。",
     "对象在处理时不再存在，不代表不依赖该对象的其他处理自动消失；但也不能反过来假定所有后续处理必然继续。要依据效果连接词、规则书和 Q&A 逐项判断。",
     "如果较早步骤已被证据判为 illegal，后续处理应标记为未发生或不再需要判断；不得假设该操作已经成功后继续推演。",
@@ -1583,12 +1599,12 @@ function buildFocusedConstraintRepairPrompt({
       title: item.title,
       cardType: item.cardType || "",
       attribute: item.attribute || "",
-      text: String(item.text || "").slice(0, 1400),
+      text: String(item.text || "").slice(0, 1800),
     })),
-    priorityConstraintCandidates: (priorityConstraintEvidence || []).slice(0, 3).map((item) => ({
+    priorityConstraintCandidates: (priorityConstraintEvidence || []).slice(0, 5).map((item) => ({
       id: item.id,
       title: item.title,
-      text: String(item.text || "").slice(0, 1600),
+      text: String(item.text || "").slice(0, 2200),
       sourceUrl: item.sourceUrl || "",
     })),
   };
@@ -1605,6 +1621,57 @@ function buildFocusedConstraintRepairPrompt({
   ].join("\n");
 }
 
+function shouldRunFocusedStateTransitionReview({
+  userQuery,
+  cardTexts = [],
+} = {}) {
+  const scenarioText = [
+    String(userQuery || ""),
+    ...(cardTexts || []).map((item) => [item.title, item.cardType, item.text].filter(Boolean).join("\n")),
+  ].filter(Boolean).join("\n");
+  const hasActivation = /(?:发动|發動|発動|activate)/iu.test(scenarioText);
+  const hasCostMove = /(?:cost|代价|代價|支付|舍弃|丢弃|捨て|送去墓地|送墓|解放)/iu.test(scenarioText);
+  const hasConditionalContinuousEffect = /(?:只要|存在.{0,24}(?:场上|墓地|除外)|不受.{0,12}效果影响|受けない|unaffected)/iu.test(scenarioText);
+  const costStateTransition = hasActivation && hasCostMove && hasConditionalContinuousEffect;
+  const simultaneousReplacement = /(?:代替破坏|破坏.{0,12}代替|破壊.{0,12}代わり|替代破坏)/u.test(scenarioText)
+    && /(?:同时|同一时点|双方|多个|复数|複数|各自|都要|一起)/u.test(scenarioText);
+  return costStateTransition || simultaneousReplacement;
+}
+
+function buildFocusedStateTransitionRepairPrompt({
+  userQuery,
+  cardTexts = [],
+  evidenceCandidates = [],
+}) {
+  const payload = {
+    userQuery: String(userQuery || ""),
+    cardTexts: (cardTexts || []).slice(0, 8).map((item) => ({
+      id: item.id,
+      title: item.title,
+      cards: item.cards || [],
+      cardType: item.cardType || "",
+      attribute: item.attribute ?? "",
+      text: String(item.text || "").slice(0, 3000),
+    })),
+    evidenceCandidates: (evidenceCandidates || []).slice(0, 20).map((item) => ({
+      id: item.id,
+      type: item.type || item.recordType || "related",
+      title: item.title,
+      text: String(item.text || "").slice(0, 2200),
+      sourceUrl: item.sourceUrl || "",
+    })),
+  };
+  return [
+    "你正在聚焦复核一次游戏王 OCG 状态转换或多个不入连锁效果的适用顺序。不要泛泛重述卡文。",
+    "按真实时间线分别生成 operationChecks：发动条件；立即支付 cost 后的位置变化；按新场面重新适用永续效果和抗性；效果处理的每一步与最终状态。",
+    "支付 cost 后才开始适用的抗性可以阻止效果处理，但不能倒推成原本不能发动。必须分别回答‘能否发动并支付 cost’和‘处理时实际进行什么’。",
+    "若同一时点有多个代替破坏或其他不入连锁效果，先依据证据决定适用顺序；每适用一个后更新场面，再判断后一个是否仍能适用。",
+    "每个 legal、illegal 或 conditional 检查都必须引用本次输入中的证据 id，并逐字复制 quote。证据没有覆盖的步骤标记 unknown，不能凭记忆补规则。",
+    "constraintReviews 固定输出空数组。输出单个 JSON 对象，只包含 constraintReviews、operationChecks、overallConclusion。overallConclusion 必须同时覆盖发动合法性和处理结果。",
+    "本次状态转换输入：",
+    JSON.stringify(payload, null, 2),
+  ].join("\n");
+}
 function mergeRulebookGroundingOutputs(primaryRaw, repairRaw) {
   let primary = {};
   let repair = {};
@@ -1865,7 +1932,7 @@ function emptyRulebookGroundingResult(
 function resolveRagMaxOutputTokens(env = {}) {
   const configured = Number(env.RAG_MAX_OUTPUT_TOKENS);
   if (Number.isFinite(configured) && configured > 0) return Math.floor(configured);
-  return readPositiveNumber(env.RAG_FLASH_MAX_OUTPUT_TOKENS, 2500);
+  return readPositiveNumber(env.RAG_FLASH_MAX_OUTPUT_TOKENS, 3600);
 }
 
 function dedupeGroundingEvidence(items = []) {
@@ -1880,7 +1947,7 @@ function dedupeGroundingEvidence(items = []) {
   return result;
 }
 
-export function selectPriorityConstraintEvidence({ items = [], userQuery = "", cardTexts = [], limit = 3 } = {}) {
+export function selectPriorityConstraintEvidence({ items = [], userQuery = "", cardTexts = [], limit = 5 } = {}) {
   const userText = String(userQuery || "");
   const cardText = (cardTexts || [])
     .map((item) => [item.title, item.cardType, item.text].filter(Boolean).join("\n"))
@@ -1890,7 +1957,7 @@ export function selectPriorityConstraintEvidence({ items = [], userQuery = "", c
   const userConcepts = extractGroundingMechanisms(userText);
   if (scenarioConcepts.size < 2) return [];
 
-  return dedupeGroundingEvidence(items)
+  const ranked = dedupeGroundingEvidence(items)
     .filter((item) => RESTRICTIVE_EVIDENCE_PATTERN.test(String(item.text || "")))
     .map((item, index) => {
       const matches = splitRestrictiveEvidenceSegments(item.text)
@@ -1914,9 +1981,17 @@ export function selectPriorityConstraintEvidence({ items = [], userQuery = "", c
       };
     })
     .filter(Boolean)
-    .sort((left, right) => right.score - left.score)
-    .slice(0, Math.max(0, Number(limit) || 0))
-    .map((entry) => entry.item);
+    .sort((left, right) => right.score - left.score);
+  const selected = [];
+  const seenSignatures = new Set();
+  for (const entry of ranked) {
+    const signature = String(entry.item.priorityConstraintSignature || entry.item.id);
+    if (seenSignatures.has(signature)) continue;
+    seenSignatures.add(signature);
+    selected.push(entry.item);
+    if (selected.length >= Math.max(0, Number(limit) || 0)) break;
+  }
+  return selected;
 }
 
 function splitRestrictiveEvidenceSegments(value) {
@@ -1941,11 +2016,24 @@ function classifyPriorityConstraintSegment({
     && evidenceConcepts.has("spell_trap")
     && (evidenceConcepts.has("hand") || evidenceConcepts.has("deck"))
     && (evidenceConcepts.has("chain") || evidenceConcepts.has("activation"));
+  const scenarioHasNoAlternative = PRIORITY_SCENARIO_ABSENCE_PATTERN.test(userText);
+  const evidenceHasNoApplicableCardRule = PRIORITY_NO_APPLICABLE_CARD_PATTERN.test(text);
+  if (scenarioHasReturnOperation
+      && scenarioHasNoAlternative
+      && evidenceHasActiveReturnRule
+      && evidenceHasNoApplicableCardRule) {
+    return {
+      text,
+      signature: "mandatory_active_spell_trap_return_without_alternative",
+      score: 240 + sharedConcepts.length * 10,
+    };
+  }
   if (scenarioHasReturnOperation && evidenceHasActiveReturnRule) {
+    const genericRuleBonus = /这种魔法[・·]?陷阱卡.{0,40}连锁途中不能从场上回到手卡[・·]?卡组/u.test(text) ? 80 : 0;
     return {
       text,
       signature: "active_spell_trap_return",
-      score: 180 + sharedConcepts.length * 10,
+      score: 180 + genericRuleBonus + sharedConcepts.length * 10,
     };
   }
 
@@ -1954,8 +2042,8 @@ function classifyPriorityConstraintSegment({
     && ["return", "target", "destroy", "banish", "deck", "graveyard"]
       .some((concept) => scenarioConcepts.has(concept));
   if (scenarioHasConstrainedCardOperation
-      && PRIORITY_SCENARIO_ABSENCE_PATTERN.test(userText)
-      && PRIORITY_NO_APPLICABLE_CARD_PATTERN.test(text)) {
+      && scenarioHasNoAlternative
+      && evidenceHasNoApplicableCardRule) {
     return {
       text,
       signature: "no_applicable_card_for_mandatory_operation",

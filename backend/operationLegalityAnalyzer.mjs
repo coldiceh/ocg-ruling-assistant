@@ -8,13 +8,8 @@ export const OPERATION_LEGALITY_STATUSES = Object.freeze([
 export function validateOperationLegalityModelOutput(raw, evidenceCandidates = [], {
   requiredConstraintEvidence = [],
 } = {}) {
-  const parsed = parseModelObject(raw);
-  if (!parsed) {
-    return emptyOperationLegality(
-      ["evidence_grounding_invalid_json"],
-      requiredConstraintEvidence,
-    );
-  }
+  const parsedModel = parseModelObject(raw);
+  const parsed = parsedModel || {};
 
   const evidenceById = new Map();
   for (const item of evidenceCandidates || []) {
@@ -23,7 +18,7 @@ export function validateOperationLegalityModelOutput(raw, evidenceCandidates = [
     evidenceById.set(originalId, item);
     evidenceById.set(cleanText(originalId), item);
   }
-  const warnings = [];
+  const warnings = parsedModel ? [] : ["evidence_grounding_invalid_json"];
   const constraintReviews = normalizeConstraintReviews(
     parsed.constraintReviews,
     evidenceById,
@@ -44,6 +39,14 @@ export function validateOperationLegalityModelOutput(raw, evidenceCandidates = [
       .filter(Boolean),
     (item) => item.id,
   );
+  const evidenceDrivenBlockingChecks = deriveMandatoryOperationBlockingChecks(
+    requiredConstraints,
+    checks,
+  );
+  if (evidenceDrivenBlockingChecks.length) {
+    checks = uniqueBy([...checks, ...evidenceDrivenBlockingChecks], checkKey);
+    warnings.push("operation_blocker_derived_from_combined_constraint_evidence");
+  }
   const resolvedConstraintIds = new Set(constraintReviews
     .filter(isResolvedConstraintReview)
     .map((review) => review.evidenceId));
@@ -107,7 +110,7 @@ export function validateOperationLegalityModelOutput(raw, evidenceCandidates = [
     unresolvedConstraintEvidence,
     hasUnresolvedConstraints: unresolvedConstraintEvidence.length > 0,
     warnings: [...new Set(warnings)],
-    modelExtracted: true,
+    modelExtracted: Boolean(parsedModel),
   };
 }
 
@@ -192,6 +195,81 @@ function constraintReviewToCheck(review, index) {
   };
 }
 
+function deriveMandatoryOperationBlockingChecks(requiredConstraints, existingChecks = []) {
+  if ((existingChecks || []).some((check) => check.status === "illegal" && check.citations?.length)) return [];
+  const index = (existingChecks || []).length;
+  const constraints = (requiredConstraints || []).filter((item) => item?.id && item?.text);
+  const classified = constraints.map((item) => ({ item, signature: inferMandatoryOperationConstraintSignature(item) }));
+  const combined = classified.find((entry) => entry.signature === "mandatory_active_spell_trap_return_without_alternative")?.item;
+  const activeReturn = classified.find((entry) => entry.signature === "active_spell_trap_return")?.item;
+  const noApplicableCard = classified.find((entry) => entry.signature === "no_applicable_card_for_mandatory_operation")?.item;
+  if (!combined && !(activeReturn && noApplicableCard)) return [];
+
+  const sources = uniqueBy(combined ? [combined] : [activeReturn, noApplicableCard], (item) => String(item.id));
+  const citations = sources.map((item) => ({
+    id: String(item.id),
+    quote: selectMandatoryOperationQuote(item),
+    application: "题目明确没有其他可处理的魔法・陷阱卡；当前正在发动或连锁处理中的非永续魔法・陷阱卡又受该规则限制。",
+    type: cleanText(item.type || item.recordType || "related"),
+    title: cleanText(item.title || item.id),
+    sourceUrl: cleanText(item.sourceUrl || ""),
+  })).filter((item) => item.quote);
+  if (!citations.length) return [];
+
+  return [{
+    operationId: "mandatory-spell-trap-return-applicability",
+    step: index + 1,
+    action: "检查必做的魔法・陷阱卡返回处理是否存在可适用卡",
+    legalityQuestion: "一般发动时点满足后，必做处理在当前场面是否仍可成立",
+    status: "illegal",
+    conclusion: "不能发动：题目明确没有其他可处理的魔法・陷阱卡，而当前正在发动或连锁处理中的非永续魔法・陷阱卡不能作为返回手牌处理的可适用卡，因此必做的返回处理无法成立。",
+    reasoning: [
+      "满足对手发动魔法・陷阱卡这一时点，只能证明进入了发动时机，不能替代必做处理的可行性检查。",
+      "唯一候选受发动中卡片的位置移动限制，且题目排除了其他候选，所以该处理要求在发动时已经无法满足。",
+    ],
+    citations,
+    missingFacts: [],
+  }];
+}
+
+function inferMandatoryOperationConstraintSignature(item) {
+  const declared = cleanText(item?.priorityConstraintSignature);
+  if (declared) return declared;
+  const text = cleanText(item?.text);
+  const hasActiveCardContext = /正在发动|发动中|發動中|连锁途中|連鎖途中|発動にチェーン|発動中|チェーン中|during (?:the )?chain/iu.test(text)
+    && /魔法|陷阱|罠|spell|trap/iu.test(text);
+  const hasReturnRestriction = /(?:不能|不可|无法|不可以).{0,40}(?:回到|返回|放回|手卡|手牌|卡组|牌组)|手札.{0,12}戻せません|戻せない|戻せません|cannot.{0,20}return/iu.test(text);
+  const hasNoAlternative = /除(?:了)?自身以外|没有其他|不存在其他|并无其他|无其他|no other|ほか.{0,30}(?:ない|ありません|できない)|他(?:の)?(?:卡|カード|魔法|陷阱|罠).{0,30}(?:没有|不存在|ない|ありません)/iu.test(text);
+  const mentionsApplicableOperation = /适用|適用|返回|回到|放回|选择|対象|处理|處理|処理|カード|card/iu.test(text);
+  const blocksActivation = /(?:不能|不可|无法|不可以).{0,16}(?:发动|發動)|発動できません|cannot activate/iu.test(text);
+  const hasActiveReturnRestriction = hasActiveCardContext && hasReturnRestriction;
+  const hasNoApplicableCardRestriction = hasNoAlternative && mentionsApplicableOperation && blocksActivation;
+  if (hasActiveReturnRestriction && hasNoApplicableCardRestriction) {
+    return "mandatory_active_spell_trap_return_without_alternative";
+  }
+  if (hasActiveReturnRestriction) return "active_spell_trap_return";
+  if (hasNoApplicableCardRestriction) return "no_applicable_card_for_mandatory_operation";
+  return "";
+}
+
+function selectMandatoryOperationQuote(item) {
+  const text = String(item?.text || "").trim();
+  if (!text) return "";
+  const chunks = text
+    .split(/\n+|(?<=[。！？.!?])\s*/u)
+    .map((value) => value.trim())
+    .filter(Boolean);
+  const signature = item.priorityConstraintSignature;
+  const activationBlocked = /(?:不能|不可|无法|不可以|不得).{0,16}(?:发动|發動)|(?:発動できません|cannot activate)/iu;
+  const returnBlocked = /(?:不能|不可|无法|不可以|不得).{0,40}(?:回到|返回|放回|手牌|手卡)|(?:戻せません|cannot.{0,20}return)/iu;
+  const preferred = signature === "no_applicable_card_for_mandatory_operation"
+    ? chunks.find((value) => activationBlocked.test(value))
+    : signature === "active_spell_trap_return"
+      ? chunks.find((value) => returnBlocked.test(value))
+      : chunks.find((value) => activationBlocked.test(value))
+        || chunks.find((value) => returnBlocked.test(value));
+  return cleanText(preferred || chunks[0] || text).slice(0, 500);
+}
 function isResolvedConstraintReview(review) {
   if (!review?.grounded) return false;
   const application = cleanText(review.citation?.application);
