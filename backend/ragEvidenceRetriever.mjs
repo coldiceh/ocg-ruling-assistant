@@ -5,6 +5,7 @@ import { searchCards } from "./baigeCardProvider.mjs";
 import { createLocalCardDataProvider } from "./cardDataProvider.mjs";
 import { normalizeCardKey } from "./ragCardExtractor.mjs";
 import { searchOfficialQaEvidence } from "./officialQaMatcher.mjs";
+import { normalizeOfficialResponses } from "./officialResponses.mjs";
 import { isRulebookRecord, retrieveRulebookPassages } from "./rulebookPassageRetriever.mjs";
 
 const projectRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -108,6 +109,21 @@ export async function retrieveRagEvidence({
       : evidenceFromRecord(item, "related", limits.maxEvidenceTextChars, retrievalWarnings))
     .filter((item) => !directIds.has(item.id));
 
+  const provisionalOfficialResponseSource = rankRecords({
+    userQuery,
+    records: allEvidenceRecords.filter(isProvisionalOfficialResponseRecord),
+    resolvedCards: retrievalCards,
+    mentionQueries,
+    ruleSearchQueries: normalizedRuleQueries,
+    allowNoCardMatch: retrievalCards.length === 0,
+  });
+  const provisionalOfficialResponses = provisionalOfficialResponseSource
+    .slice(0, limits.maxOfficialQa)
+    .map((record) => evidenceFromRecord(record, "official_response_screenshot", limits.maxEvidenceTextChars, retrievalWarnings));
+  if (provisionalOfficialResponses.length) {
+    retrievalWarnings.push(`provisional_official_responses_retrieved:${provisionalOfficialResponses.length}`);
+  }
+
   const faqRelatedSource = rankRecords({
     userQuery,
     records: allEvidenceRecords.filter((record) => record.recordType === "card-faq"),
@@ -124,7 +140,7 @@ export async function retrieveRagEvidence({
 
   const rawRelatedSource = rankRecords({
     userQuery,
-    records: allEvidenceRecords.filter((record) => !["card-faq", "card-text"].includes(record.recordType) && !isRulebookRecord(record)),
+    records: allEvidenceRecords.filter((record) => !["card-faq", "card-text"].includes(record.recordType) && !isRulebookRecord(record) && !isProvisionalOfficialResponseRecord(record)),
     resolvedCards: retrievalCards,
     mentionQueries,
     ruleSearchQueries: normalizedRuleQueries,
@@ -145,6 +161,7 @@ export async function retrieveRagEvidence({
     userProvidedCardTexts: userProvidedCardTextEvidence,
     officialQaDirectCandidates: dedupeEvidence(officialQaDirectCandidates),
     officialQaRelated: dedupeEvidence(officialQaRelated),
+    provisionalOfficialResponses: dedupeEvidence(provisionalOfficialResponses),
     faqRelated: dedupeEvidence(faqRelated),
     rawRelatedEvidence: dedupeEvidence([...rulebookCandidates.slice(0, limits.maxRelatedEvidence), ...rawRelatedEvidence]),
     rulebookCandidates,
@@ -178,12 +195,13 @@ function rulebookSourceIdentity(record = {}) {
 export async function loadRagData(dataDir = defaultDataDir) {
   const key = dataDir;
   if (dataCache.has(key)) return dataCache.get(key);
-  const [cardsPayload, rulingsPayload, qaPayload, evidencePayload, rulebookPayload] = await Promise.all([
+  const [cardsPayload, rulingsPayload, qaPayload, evidencePayload, rulebookPayload, officialResponsesPayload] = await Promise.all([
     readJson(join(dataDir, "cards.json"), { records: [] }),
     readJson(join(dataDir, "rulings.json"), { records: [] }),
     readJson(join(dataDir, "qa-index.json"), { records: [] }),
     readJson(join(dataDir, "evidence-index.json"), { records: [] }),
     readJson(join(dataDir, "ocg-rule-corpus.json"), { records: [] }),
+    readJson(join(dataDir, "official-responses.json"), { records: [] }),
   ]);
   const bundledRulebookRecords = rulebookPayload.records || [];
   const hasBundledRulebook = bundledRulebookRecords.length > 0;
@@ -197,6 +215,7 @@ export async function loadRagData(dataDir = defaultDataDir) {
       ...(rulingsPayload.records || []),
       ...bundledRulebookRecords,
       ...evidenceRecords,
+      ...normalizeOfficialResponses(officialResponsesPayload),
     ],
     qaRecords: qaPayload.records || [],
   });
@@ -210,6 +229,7 @@ export function evidenceBucketsToList(evidence = {}) {
     ...(evidence.userProvidedCardTexts || []),
     ...(evidence.officialQaDirectCandidates || []),
     ...(evidence.officialQaRelated || []),
+    ...(evidence.provisionalOfficialResponses || []),
     ...(evidence.faqRelated || []),
     ...(evidence.rawRelatedEvidence || []),
   ];
@@ -349,6 +369,13 @@ function evidenceFromRecord(record, type, maxTextChars = 1600, warnings = []) {
     cards: record.cards || record.cardNames || [],
     text: truncated ? `${text.slice(0, Math.max(0, maxTextChars - 1))}…` : text,
     sourceUrl: record.sourceUrl || record.officialUrl || "",
+    sourceType: record.sourceType || "",
+    displayStatus: record.displayStatus || "",
+    maxStatus: record.maxStatus || "",
+    officialVerdict: record.officialVerdict ?? record.verdict ?? "unknown",
+    officialText: record.officialText || "",
+    explanation: record.explanation || "",
+    scenario: record.scenario || record.question || "",
     isDirect: false,
   };
 }
@@ -376,6 +403,11 @@ function isUsefulOfficialRelatedMatch(match = {}) {
     || match.matchLevel === "official_qa_exact"
     || (match.matchLevel === "official_qa_near" && Number(match.score || 0) >= 0.68)
     || Number(match.score || 0) >= 0.78;
+}
+
+function isProvisionalOfficialResponseRecord(record = {}) {
+  return record.sourceType === "official_response_screenshot"
+    || record.recordType === "official-response-screenshot";
 }
 
 function evidenceTypeForRecord(record = {}, fallback = "related") {

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { extractQuotedMentions, extractRagCards, extractUserProvidedCardTextBlocks } from "../backend/ragCardExtractor.mjs";
-import { retrieveRagEvidence } from "../backend/ragEvidenceRetriever.mjs";
+import { loadRagData, retrieveRagEvidence } from "../backend/ragEvidenceRetriever.mjs";
 import { buildRagRulingPromptBundle } from "../backend/ragRulingPrompt.mjs";
 import { callCardNameExtractionModel, callRagModel, callRulebookGroundingModel, callRuleQueryExtractionModel, estimateDeepSeekCostCny, getRagBudgetStatus, resetRagBudget, resolveRagProvider } from "../backend/ragModelClient.mjs";
 import { answerRagRulingQuestion } from "../backend/ragRulingPipeline.mjs";
@@ -95,6 +95,88 @@ test("rag_pipeline_returns_answer_with_mock_model", async () => {
   assert.equal(answer.answerLevel, "rule_analysis");
   assert.match(answer.shortAnswer, /未确认分析/u);
   assert.equal(answer.debug.dryRun, false);
+});
+
+test("provisional official response prevents Albaz fusion after Ecclesia cost enables immunity", async () => {
+  const scenarioCards = [
+    {
+      id: "15245",
+      name: "阿不思的落胤",
+      aliases: ["阿不思的落胤", "阿尔白斯之落胤", "アルバスの落胤"],
+      effectText: "舍弃1张手牌可以发动。使用自己或对方场上的怪兽作为融合素材进行融合召唤。",
+    },
+    {
+      id: "15239",
+      name: "教导之圣女 艾克利西亚",
+      aliases: ["教导之圣女 艾克利西亚", "教导的圣女 艾克莉西亚"],
+      effectText: "教导怪兽。",
+    },
+    {
+      id: "22090",
+      name: "吞喰圣痕之龙",
+      aliases: ["吞喰圣痕之龙", "吞食圣痕之龙", "聖痕喰らいし竜"],
+      effectText: "只要自己或对方的场上或墓地存在艾克利西亚怪兽，此卡不受此卡以外的效果影响。",
+    },
+    {
+      id: "17069",
+      name: "冰剑龙 幻冰龙",
+      aliases: ["冰剑龙 幻冰龙", "氷剣竜ミラジェイド"],
+      effectText: "阿不思的落胤＋融合・同步・超量・连接怪兽。",
+    },
+  ];
+  const response = {
+    id: "official-response-screenshot-albaz-ecclesia-stigmata",
+    recordType: "official-response-screenshot",
+    sourceType: "official_response_screenshot",
+    displayStatus: "provisional_official_response",
+    maxStatus: "unconfirmed",
+    title: "阿不思的落胤与吞食圣痕之龙的处理",
+    question: "把教导的圣女 艾克莉西亚作为 cost 送去墓地时，阿不思的落胤能否发动并融合召唤冰剑龙 幻冰龙？",
+    answer: "可以发动，但处理什么也不进行。",
+    text: "阿不思的落胤、教导的圣女 艾克莉西亚、吞食圣痕之龙、冰剑龙 幻冰龙。可以发动，但处理什么也不进行。",
+    cards: ["阿不思的落胤", "教导的圣女 艾克莉西亚", "吞食圣痕之龙", "冰剑龙 幻冰龙"],
+    officialText: "「阿不思的落胤」的效果可以发动，但处理什么也不进行。",
+    explanation: "cost 支付后抗性开始适用，不能把吞食圣痕之龙作为融合素材。",
+    officialVerdict: {
+      activation: "can_activate",
+      cost: "can_pay_cost",
+      resolution: "does_not_perform_fusion_material_processing",
+    },
+  };
+  const answer = await answerRagRulingQuestion({
+    question: "对方场上只有「吞食圣痕之龙」，双方墓地没有卡。我召唤「阿不思的落胤」时，可以将「教导的圣女 艾克莉西亚」作为Cost丢弃来发动效果，并融合召唤「冰剑龙 幻冰龙」吗？",
+    cards: scenarioCards,
+    records: [response],
+    qaRecords: [],
+    rulebookModelInvoker: async () => JSON.stringify({ operationChecks: [], constraintReviews: [] }),
+    modelInvoker: async () => JSON.stringify({
+      answerLevel: "rule_analysis",
+      shortAnswer: "可以发动并融合召唤冰剑龙 幻冰龙。",
+      reasoning: ["错误地沿用了 cost 支付前的场面。", "错误地认为素材仍受效果影响。"],
+      usedCards: scenarioCards.map((card) => card.name),
+      usedEvidence: [],
+      missingInfo: [],
+      riskFlags: [],
+      confidenceSelfEstimate: "medium",
+    }),
+  });
+
+  assert.equal(answer.answerLevel, "rule_analysis");
+  assert.match(answer.shortAnswer, /^可以发动/u);
+  assert.match(answer.shortAnswer, /不会进行任何效果处理/u);
+  assert.match(answer.shortAnswer, /不进行融合召唤「冰剑龙 幻冰龙」/u);
+  assert.equal(answer.debug.retrievalCounts.provisionalOfficialResponses, 1);
+  assert.ok(answer.riskFlags.includes("provisional_official_response"));
+  assert.equal(answer.usedEvidence[0].type, "official_response_screenshot");
+});
+
+test("bundled provisional official responses are loaded into the default RAG data", async () => {
+  const data = await loadRagData();
+  const response = data.records.find((record) => record.id === "official-response-screenshot-albaz-quem-stigmata-001");
+  assert.equal(response?.sourceType, "official_response_screenshot");
+  assert.equal(response?.displayStatus, "provisional_official_response");
+  assert.equal(response?.officialVerdict?.activation, "can_activate");
+  assert.equal(response?.officialVerdict?.resolution, "does_not_perform_fusion_material_processing");
 });
 
 test("quoted_card_mentions_extract_all", () => {
