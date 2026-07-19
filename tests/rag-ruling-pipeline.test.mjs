@@ -97,7 +97,7 @@ test("rag_pipeline_returns_answer_with_mock_model", async () => {
   assert.equal(answer.debug.dryRun, false);
 });
 
-test("provisional official response prevents Albaz fusion after Ecclesia cost enables immunity", async () => {
+test("activation-only Albaz question keeps activation legal but blocks resolution after Ecclesia cost", async () => {
   const scenarioCards = [
     {
       id: "15245",
@@ -144,7 +144,7 @@ test("provisional official response prevents Albaz fusion after Ecclesia cost en
     },
   };
   const answer = await answerRagRulingQuestion({
-    question: "对方场上只有「吞食圣痕之龙」，双方墓地没有卡。我召唤「阿不思的落胤」时，可以将「教导的圣女 艾克莉西亚」作为Cost丢弃来发动效果，并融合召唤「冰剑龙 幻冰龙」吗？",
+    question: "对方场上存在的卡只有表侧表示的「吞食圣痕之龙」1只，双方墓地没有卡。我方召唤「阿不思的落胤」时，可以将「教导的圣女 艾克莉西亚」作为Cost丢弃来发动「阿不思的落胤」的①效果吗？",
     cards: scenarioCards,
     records: [response],
     qaRecords: [],
@@ -164,7 +164,7 @@ test("provisional official response prevents Albaz fusion after Ecclesia cost en
   assert.equal(answer.answerLevel, "rule_analysis");
   assert.match(answer.shortAnswer, /^可以发动/u);
   assert.match(answer.shortAnswer, /不会进行任何效果处理/u);
-  assert.match(answer.shortAnswer, /不进行融合召唤「冰剑龙 幻冰龙」/u);
+  assert.match(answer.shortAnswer, /因此不进行融合召唤。$/u);
   assert.equal(answer.debug.retrievalCounts.provisionalOfficialResponses, 1);
   assert.ok(answer.riskFlags.includes("provisional_official_response"));
   assert.equal(answer.usedEvidence[0].type, "official_response_screenshot");
