@@ -285,4 +285,7 @@ test("rag_displays_simulator_output_as_a_separate_result", async () => {
   assert.match(app, /当前等待/u);
   assert.match(app, /选择是否连锁/u);
   assert.match(app, /answer\?\.engineSimulation/u);
+  assert.match(app, /info\?\.engineEnabled === true/u);
+  assert.match(app, /if \(!appConfig\.engineEnabled\) return pendingStages/u);
+  assert.match(app, /status !== "completed" \|\| !simulation/u);
 });

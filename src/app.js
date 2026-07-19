@@ -197,7 +197,7 @@ const ui = {
   adminQueryList: document.querySelector("#adminQueryList"),
 };
 
-let appConfig = { answerApiUrl: "", modelLabel: "", budgetApiUrl: "", adminQueriesApiUrl: "" };
+let appConfig = { answerApiUrl: "", modelLabel: "", budgetApiUrl: "", adminQueriesApiUrl: "", engineEnabled: false };
 let syncedCards = [];
 let syncedNotes = [];
 let sourceMeta = null;
@@ -218,9 +218,12 @@ const pendingStages = [
   { label: "提取卡名", body: "正在识别卡名候选，并准备查询卡片资料。" },
   { label: "检索卡片文本", body: "正在匹配本地资料、百鸽卡片资料和用户提供文本。" },
   { label: "检索规则资料", body: "正在查找相关 Q&A、FAQ 和规则资料。" },
-  { label: "编译模拟场景", body: "正在将已识别的卡片、区域和操作整理为尽力模拟场景。" },
   { label: "生成裁定", body: "正在根据检索上下文生成未确认裁定分析。" },
 ];
+const simulationPendingStage = {
+  label: "编译模拟场景",
+  body: "正在将已识别的卡片、区域和操作整理为尽力模拟场景。",
+};
 const pendingStageDelays = [0, 700, 1600, 2900, 4500, 6200];
 let pendingStageTimers = [];
 let pendingStageIndex = 0;
@@ -231,6 +234,15 @@ function normalizeText(value) {
     .replace(/[－ー]/g, "-")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function getPendingStages() {
+  if (!appConfig.engineEnabled) return pendingStages;
+  return [
+    ...pendingStages.slice(0, -1),
+    simulationPendingStage,
+    pendingStages[pendingStages.length - 1],
+  ];
 }
 
 function allNotes() {
@@ -288,6 +300,7 @@ async function loadAppConfig() {
     budgetApiUrl: String(payload.budgetApiUrl || "").trim(),
     adminQueriesApiUrl: String(payload.adminQueriesApiUrl || "").trim(),
     modelLabel: "",
+    engineEnabled: false,
   };
   if (!appConfig.budgetApiUrl) appConfig.budgetApiUrl = getBudgetApiUrl();
   if (!appConfig.adminQueriesApiUrl) appConfig.adminQueriesApiUrl = getAdminQueriesApiUrl();
@@ -300,8 +313,10 @@ async function loadBackendModelInfo() {
     if (!response.ok) throw new Error(`model info ${response.status}`);
     const info = await response.json();
     appConfig.modelLabel = formatModelInfo(info);
+    appConfig.engineEnabled = info?.engineEnabled === true;
   } catch {
     appConfig.modelLabel = "后端自动选择";
+    appConfig.engineEnabled = false;
   }
 }
 
@@ -722,7 +737,7 @@ function renderPending() {
   ui.confidenceText.textContent = "分析中";
   ui.verdictTitle.textContent = "正在分析";
   ui.rulingBasisText.textContent = "";
-  ui.verdictBody.textContent = pendingStages[0].body;
+  ui.verdictBody.textContent = getPendingStages()[0].body;
   renderSubAnswers([]);
   renderParserDebug(null);
   startPendingStages();
@@ -1991,12 +2006,13 @@ function renderList(container, items) {
 
 function startPendingStages() {
   clearPendingStages(false);
+  const stages = getPendingStages();
   pendingStageIndex = 0;
-  renderPendingStages(0);
-  pendingStageDelays.forEach((delay, index) => {
+  renderPendingStages(0, stages);
+  pendingStageDelays.slice(0, stages.length).forEach((delay, index) => {
     const timer = setTimeout(() => {
       pendingStageIndex = index;
-      renderPendingStages(index);
+      renderPendingStages(index, stages);
     }, delay);
     pendingStageTimers.push(timer);
   });
@@ -2008,10 +2024,10 @@ function clearPendingStages(clearClass = true) {
   if (clearClass) ui.stepsList.classList.remove("progress-steps");
 }
 
-function renderPendingStages(activeIndex) {
+function renderPendingStages(activeIndex, stages = getPendingStages()) {
   clearElement(ui.stepsList);
   ui.stepsList.classList.add("progress-steps");
-  pendingStages.forEach((stage, index) => {
+  stages.forEach((stage, index) => {
     const item = document.createElement("li");
     item.className = index < activeIndex ? "progress-step is-done"
       : index === activeIndex ? "progress-step is-current"
@@ -2024,14 +2040,15 @@ function renderPendingStages(activeIndex) {
     item.append(marker, label);
     ui.stepsList.appendChild(item);
   });
-  const stage = pendingStages[Math.min(activeIndex, pendingStages.length - 1)];
+  const stage = stages[Math.min(activeIndex, stages.length - 1)];
   ui.verdictTitle.textContent = stage.label === "生成裁定" ? "正在生成裁定" : `正在${stage.label}`;
   ui.verdictBody.textContent = stage.body;
 }
 
 function renderEngineSimulation(engine, simulation) {
   if (!ui.simulationPanel || !ui.simulationStatus || !ui.simulationSummary || !ui.simulationDetails) return;
-  if (!engine) {
+  const status = String(engine?.status || "not_requested");
+  if (!engine || (!debugUiEnabled && (status !== "completed" || !simulation))) {
     ui.simulationPanel.hidden = true;
     ui.simulationPanel.className = "result-block simulation-panel";
     ui.simulationStatus.textContent = "";
@@ -2040,7 +2057,6 @@ function renderEngineSimulation(engine, simulation) {
     return;
   }
 
-  const status = String(engine.status || "not_requested");
   const details = [];
   let className = "is-unavailable";
   let statusLabel = "尚未执行";

@@ -126,13 +126,6 @@ export async function answerRagRulingQuestion({
   const operationConstrained = applyOperationLegalityOverride(evidenceConstrained, evidence);
   const normalized = applyUnresolvedConstraintGuard(operationConstrained, evidence);
   const engine = await enginePromise;
-  const engineRiskFlags = [
-    ...(engine.status === "completed"
-      ? ["engine_simulation_not_official_evidence"]
-      : engine.requested ? ["engine_simulation_unavailable"] : []),
-    ...(enginePlan.bestEffort ? ["engine_scenario_best_effort"] : []),
-  ];
-
   return {
     mode: "rag_baseline",
     answerLevel: normalized.answerLevel,
@@ -141,7 +134,7 @@ export async function answerRagRulingQuestion({
     usedEvidence: normalized.usedEvidence,
     resolvedCards: displayCards,
     missingInfo: normalized.missingInfo,
-    riskFlags: [...new Set([...normalized.riskFlags, ...engineRiskFlags])],
+    riskFlags: normalized.riskFlags,
     confidenceSelfEstimate: normalized.confidenceSelfEstimate,
     engine: {
       requested: engine.requested,

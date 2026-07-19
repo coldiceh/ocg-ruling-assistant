@@ -6,7 +6,10 @@ const MONSTER_ZONE = 4;
 const SPELL_TRAP_ZONE = 8;
 
 export function autoEngineSimulationEnabled(env = {}) {
-  return !/^(?:0|false|off|disabled|no)$/iu.test(String(env.RAG_AUTO_ENGINE_SIMULATION ?? "true").trim());
+  const enabled = !/^(?:0|false|off|disabled|no)$/iu.test(
+    String(env.RAG_AUTO_ENGINE_SIMULATION ?? "true").trim(),
+  );
+  return enabled && Boolean(String(env.OCG_ENGINE_URL || "").trim());
 }
 
 export function buildBestEffortEngineScenario({ userQuery, cards = [] } = {}) {
