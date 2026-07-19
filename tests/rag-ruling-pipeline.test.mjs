@@ -468,7 +468,7 @@ test("rag_pipeline_applies_operation_legality_blocker_from_retrieved_rule_eviden
   assert.ok(answer.riskFlags.includes("model_answer_overridden_by_operation_legality"));
 });
 
-test("generic_legal_grounding_cannot_skip_priority_constraint_evidence", async () => {
+test("generic_legal_grounding_is_overridden_by_combined_mandatory_operation_evidence", async () => {
   const genericFaq = {
     id: "card-faq-22130-generic-trigger",
     recordType: "card-faq",
@@ -516,13 +516,13 @@ test("generic_legal_grounding_cannot_skip_priority_constraint_evidence", async (
 
   assert.match(groundingPrompt, /priorityConstraintCandidates/u);
   assert.match(groundingPrompt, /rule-activated-normal-spell-trap-cannot-return#p1-1/u);
-  assert.doesNotMatch(answer.shortAnswer, /^可以发动/u);
-  assert.match(answer.shortAnswer, /不能确认/u);
-  assert.equal(answer.debug.retrievalCounts.unresolvedOperationConstraints, 1);
-  assert.ok(answer.riskFlags.includes("unresolved_restrictive_evidence_blocked_positive_answer"));
+  assert.match(answer.shortAnswer, /不能发动/u);
+  assert.equal(answer.debug.retrievalCounts.unresolvedOperationConstraints, 0);
+  assert.ok(answer.riskFlags.includes("operation_legality_blocker_applied"));
+  assert.ok(answer.riskFlags.includes("model_answer_overridden_by_operation_legality"));
 });
 
-test("empty_rulebook_grounding_keeps_restrictive_rules_visible_and_blocks_yes", async () => {
+test("empty_rulebook_grounding_uses_combined_constraint_evidence_to_block_yes", async () => {
   let finalPrompt = "";
   const answer = await answerRagRulingQuestion({
     question: "对方场上有「绚岚之达维」，我方以达维为对象发动「无限泡影」，这个时候场上没有其他魔陷，对方能不能发动「天雷之双风神」的效果？",
@@ -550,11 +550,10 @@ test("empty_rulebook_grounding_keeps_restrictive_rules_visible_and_blocks_yes", 
   });
 
   assert.match(finalPrompt, /発動中の通常魔法・通常罠カードはその処理で手札に戻せません/u);
-  assert.match(finalPrompt, /"hasUnresolvedConstraints": true/u);
-  assert.doesNotMatch(answer.shortAnswer, /^可以发动/u);
-  assert.match(answer.shortAnswer, /不能确认/u);
-  assert.equal(answer.debug.retrievalCounts.unresolvedOperationConstraints, 1);
-  assert.ok(answer.riskFlags.includes("unresolved_restrictive_evidence_blocked_positive_answer"));
+  assert.match(finalPrompt, /"hasBlockingCheck": true/u);
+  assert.match(answer.shortAnswer, /不能发动/u);
+  assert.equal(answer.debug.retrievalCounts.unresolvedOperationConstraints, 0);
+  assert.ok(answer.riskFlags.includes("operation_legality_blocker_applied"));
 });
 test("grounded_constraint_review_overrides_generic_trigger_faq", async () => {
   const genericFaq = {
@@ -1167,7 +1166,7 @@ test("deepseek_final_generation_is_fixed_to_flash_model", async () => {
     },
   });
   assert.equal(calls[0].model, "deepseek-flash-tier");
-  assert.equal(calls[0].max_tokens, 2500);
+  assert.equal(calls[0].max_tokens, 3600);
   assert.equal(calls[0].temperature, 0);
 });
 

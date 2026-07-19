@@ -10,7 +10,7 @@ const fetchConcurrency = Number(process.env.OCG_RULE_FETCH_CONCURRENCY || 6);
 const userAgent = "ocg-ruling-assistant/0.2 (+https://github.com/coldiceh/ocg-ruling-assistant)";
 
 const testKeywordPattern = /(测试|检定|試験|试题|题目|练习|practice|exam|test|judge)/i;
-const usefulDocPattern = /(规则|发动|效果|连锁|无效|处理|伤害|战斗|对象|取对象|破坏|除外|一时|特殊召唤|表示形式|里侧|控制权|检定|测试|试题|题目|rule|chain|effect|damage|battle|target|destroy|banish|judge|test|exam)/i;
+const nonContentDocPattern = /(?:^|\/)(?:index|search|genindex|py-modindex)$/iu;
 
 async function main() {
   await mkdir(dataDir, { recursive: true });
@@ -59,7 +59,7 @@ async function loadSearchIndex() {
   return JSON.parse(match[1]);
 }
 
-function buildDocTargets(index) {
+export function buildDocTargets(index) {
   const docnames = Array.isArray(index.docnames) ? index.docnames : [];
   const titles = Array.isArray(index.titles) ? index.titles : [];
   return docnames
@@ -68,7 +68,7 @@ function buildDocTargets(index) {
       title: cleanText(titles[index] || docname),
       sourceUrl: new URL(`${docname}.html`, baseUrl).toString(),
     }))
-    .filter((doc) => usefulDocPattern.test(`${doc.docname} ${doc.title}`));
+    .filter((doc) => doc.docname && !nonContentDocPattern.test(doc.docname));
 }
 
 async function loadRulePage(doc) {
@@ -106,6 +106,8 @@ async function fetchText(url) {
 }
 
 function extractMainHtml(html) {
+  const articleMatch = html.match(/<article\b[^>]*>([\s\S]*?)<\/article>/i);
+  if (articleMatch) return articleMatch[1];
   const mainMatch = html.match(/<main\b[^>]*>([\s\S]*?)<\/main>/i);
   if (mainMatch) return mainMatch[1];
   const bodyMatch = html.match(/<body\b[^>]*>([\s\S]*?)<\/body>/i);
@@ -193,7 +195,9 @@ async function mapLimit(items, limit, mapper) {
   return results;
 }
 
-main().catch((error) => {
-  console.error(error);
-  process.exitCode = 1;
-});
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  main().catch((error) => {
+    console.error(error);
+    process.exitCode = 1;
+  });
+}
