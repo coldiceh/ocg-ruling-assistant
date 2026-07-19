@@ -64,9 +64,10 @@ export function buildRagRulingPromptBundle({
 
   let prompt = [
     "你是游戏王 OCG 规则分析助手。你要基于检索到的资料生成 RAG 裁定分析。",
-    "资料来源包括：官方 Q&A、FAQ、卡片文本、百鸽卡片资料、用户提供卡片文本，以及其他相关资料。",
+    "资料来源包括：官方 Q&A、未在官方数据库确认的事务局回答截图、FAQ、卡片文本、百鸽卡片资料、用户提供卡片文本，以及其他相关资料。",
     "优先根据官方 Q&A direct candidates 回答；只有 officialQaDirectCandidates 中的资料可以支持 official_confirmed。",
-    "资料来源必须区分：official_direct_qa、official_related_qa、faq_related、card_text、baige_card_text、user_provided_text、rulebook、raw_related。",
+    "资料来源必须区分：official_direct_qa、official_related_qa、official_response_screenshot、faq_related、card_text、baige_card_text、user_provided_text、rulebook、raw_related。",
+    "provisionalOfficialResponses 是可追溯到事务局回答截图、但尚未在官方数据库找到 direct Q&A 的案例。它可以约束同场景的规则分析，但只能输出 rule_analysis，必须保留 provisional_official_response 风险标记，不得升级为 official_confirmed。",
     "user_provided_text 是用户在问题中粘贴的卡片文本，不是官方 direct evidence；可以基于这些文本分析，但不得称为官方确认。",
     "百鸽卡片资料和普通卡片文本可以作为卡片文本 grounding，但不是官方 direct Q&A。",
     "如果没有官方直接 Q&A，允许根据卡片文本、百鸽卡片资料、用户提供文本、FAQ、官方相似案例和 rulebook 规则书资料进行分析。",
@@ -194,6 +195,7 @@ function prepareEvidenceForPrompt(evidence, limits, warnings) {
   return {
     officialQaDirectCandidates: limitEvidence(evidence.officialQaDirectCandidates, limits.maxOfficialQa, limits.maxEvidenceTextChars, "official_direct", warnings),
     officialQaRelated: limitEvidence(evidence.officialQaRelated, limits.maxRelatedEvidence, limits.maxEvidenceTextChars, "official_related", warnings),
+    provisionalOfficialResponses: limitEvidence(evidence.provisionalOfficialResponses, limits.maxOfficialQa, limits.maxEvidenceTextChars, "official_response_screenshot", warnings),
     faqRelated: limitEvidence(evidence.faqRelated, limits.maxRelatedEvidence, limits.maxEvidenceTextChars, "faq", warnings),
     cardTexts: limitEvidence(evidence.cardTexts, limits.maxCards, limits.maxCardTextChars, "card_text", warnings),
     userProvidedCardTexts: limitEvidence(evidence.userProvidedCardTexts, limits.maxCards, limits.maxCardTextChars, "user_provided_text", warnings),
@@ -226,6 +228,11 @@ function limitEvidence(items = [], limit, textLimit, label, warnings) {
       sourceUrl: item.sourceUrl || "",
       source: item.source || "",
       official: item.official === true,
+      sourceType: item.sourceType || "",
+      displayStatus: item.displayStatus || "",
+      officialVerdict: item.officialVerdict ?? "unknown",
+      officialText: item.officialText || "",
+      explanation: item.explanation || "",
     };
   });
 }

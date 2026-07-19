@@ -10,11 +10,16 @@
       "cards": [
         "アルバスの落胤",
         "阿尔白斯之落胤",
+        "阿不思的落胤",
         "導きの聖女エクレシア",
         "白之圣女 艾克利西亚",
+        "教导之圣女 艾克利西亚",
+        "教导的圣女 艾克莉西亚",
         "聖痕喰らいし竜",
         "吞喰圣痕之龙",
-        "氷剣竜ミラジェイド"
+        "吞食圣痕之龙",
+        "氷剣竜ミラジェイド",
+        "冰剑龙 幻冰龙"
       ],
       "questionTypes": [
         "activation_condition",
@@ -28,7 +33,7 @@
         "cost": "can_pay_cost",
         "resolution": "does_not_perform_fusion_material_processing"
       },
-      "explanation": "事务局回答截图显示：可以发动「アルバスの落胤」的效果，但处理什么也不进行。由于该回答目前未在官方数据库中找到直接 Q&A，显示为未确认的事务局回答处理方式。",
+      "explanation": "事务局回答截图显示：可以发动「アルバスの落胤」的效果，但处理什么也不进行。作为 cost 送去墓地的怪兽使「聖痕喰らいし竜」的抗性在效果处理前开始适用，不能继续把它作为融合素材，因此不会进行融合召唤。该回答目前未在官方数据库中找到直接 Q&A，显示为未确认的事务局回答处理方式。",
       "maxStatus": "unconfirmed",
       "displayStatus": "provisional_official_response",
       "updatedAt": "2026-06-25",
