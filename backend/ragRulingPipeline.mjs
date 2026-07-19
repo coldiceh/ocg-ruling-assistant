@@ -394,9 +394,8 @@ function applyProvisionalOfficialResponseGrounding(answer, evidence = {}, userQu
   if (answer.answerLevel === "official_confirmed" || evidence.operationLegality?.hasBlockingCheck) return answer;
   const anchors = extractScenarioAnchors(userQuery);
   const queryText = String(userQuery || "").normalize("NFKC");
-  const describesCostedFusion = /(?:cost|コスト|代价|代價|丢弃|丟棄|舍弃|捨棄|送.{0,8}墓)/iu.test(queryText)
-    && /融合/iu.test(queryText);
-  if (anchors.length < 3 || !describesCostedFusion) return answer;
+  const describesCostPayment = /(?:cost|コスト|代价|代價|丢弃|丟棄|舍弃|捨棄|送.{0,8}墓)/iu.test(queryText);
+  if (anchors.length < 3 || !describesCostPayment) return answer;
   const response = (evidence.provisionalOfficialResponses || []).find((item) => {
     const text = normalizeScenarioKey([
       item.title,
@@ -411,7 +410,10 @@ function applyProvisionalOfficialResponseGrounding(answer, evidence = {}, userQu
 
   const fusionTarget = extractScenarioAnchorLabels(userQuery)
     .find((label) => /冰剑龙|氷剣竜|mirrorjade/iu.test(label));
-  const shortAnswer = `可以发动，但是不会进行任何效果处理；因此不进行融合召唤${fusionTarget ? `「${fusionTarget}」` : "怪兽"}。`;
+  const fusionConclusion = fusionTarget
+    ? `不进行融合召唤「${fusionTarget}」`
+    : "不进行融合召唤";
+  const shortAnswer = `可以发动，但是不会进行任何效果处理；因此${fusionConclusion}。`;
   return {
     ...answer,
     answerLevel: "rule_analysis",
