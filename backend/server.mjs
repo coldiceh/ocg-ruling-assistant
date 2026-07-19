@@ -191,6 +191,9 @@ async function getModelInfo() {
   const ragProvider = resolveRagProvider(process.env);
   const cardProvider = resolveCardExtractionProvider(process.env);
   const budget = await getRagBudgetStatus({ env: process.env }).catch(() => null);
+  const engineEnabled = !/^(?:0|false|off|disabled|no)$/iu.test(
+    String(process.env.RAG_AUTO_ENGINE_SIMULATION ?? "true").trim(),
+  ) && Boolean(String(process.env.OCG_ENGINE_URL || "").trim());
   if (ragProvider.provider === "deepseek") {
     return {
       provider: "deepseek",
@@ -200,6 +203,7 @@ async function getModelInfo() {
       cardNameModels: [process.env.DEEPSEEK_CARD_MODEL || process.env.RAG_CARD_MODEL || "deepseek-v4-flash"],
       modelTiers: buildModelTiers("deepseek", process.env),
       budget,
+      engineEnabled,
       enabled: true,
       pipeline: "rag_baseline",
       legacyModes: ["legacy", "fastjudge"],
@@ -214,6 +218,7 @@ async function getModelInfo() {
       cardNameModels: splitList(process.env.GEMINI_CARD_MODEL || process.env.GEMINI_CARD_RESOLUTION_MODELS || process.env.GEMINI_CARD_RESOLUTION_MODEL || "gemini-1.5-flash"),
       modelTiers: buildModelTiers("gemini", process.env),
       budget,
+      engineEnabled,
       enabled: true,
       pipeline: "rag_baseline",
       legacyModes: ["legacy", "fastjudge"],
@@ -225,6 +230,7 @@ async function getModelInfo() {
     models: [],
     modelTiers: [],
     budget,
+    engineEnabled,
     enabled: false,
     pipeline: "rag_baseline",
     legacyModes: ["legacy", "fastjudge"],

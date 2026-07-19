@@ -110,3 +110,40 @@ test("ordinary RAG question automatically submits a best-effort engine scenario"
   assert.equal(result.engine.scenarioSource, "auto_best_effort");
   assert.equal(result.engineSimulation.canConfirmOfficialRuling, false);
 });
+
+test("ordinary RAG question skips simulation when no engine deployment is configured", async () => {
+  let engineCalled = false;
+  const result = await answerRagRulingQuestion({
+    question: "我方召唤「模拟测试龙」后发动效果。",
+    cards: [{
+      id: "999",
+      passcode: "12345678",
+      name: "模拟测试龙",
+      aliases: ["模拟测试龙"],
+      cardType: "monster",
+      effectText: "这张卡召唤成功的场合可以发动。",
+    }],
+    records: [],
+    qaRecords: [],
+    env: { MODEL_PROVIDER: "mock", RAG_RULEBOOK_GROUNDING_ENABLED: "false" },
+    modelInvoker: async () => JSON.stringify({
+      answerLevel: "rule_analysis",
+      shortAnswer: "可以根据卡片文本分析。",
+      reasoning: ["已读取卡片文本。"],
+      usedCards: ["模拟测试龙"],
+      usedEvidence: [{ id: "card-text-999", type: "card_text" }],
+      missingInfo: [],
+      riskFlags: [],
+      confidenceSelfEstimate: "medium",
+    }),
+    engineFetchImpl: async () => {
+      engineCalled = true;
+      throw new Error("engine should not be contacted");
+    },
+  });
+
+  assert.equal(engineCalled, false);
+  assert.equal(result.engine.status, "not_requested");
+  assert.equal(result.engineSimulation, null);
+  assert.equal(result.riskFlags.some((flag) => flag.startsWith("engine_")), false);
+});

@@ -20,6 +20,32 @@ test("api_answer_defaults_to_rag_baseline", async () => {
   }
 });
 
+test("api_answer_reports_engine_availability_from_backend_configuration", async () => {
+  const previousUrl = process.env.OCG_ENGINE_URL;
+  const previousAuto = process.env.RAG_AUTO_ENGINE_SIMULATION;
+  try {
+    delete process.env.OCG_ENGINE_URL;
+    delete process.env.RAG_AUTO_ENGINE_SIMULATION;
+    const disabled = createJsonResponse();
+    await handler({ method: "GET" }, disabled);
+    assert.equal(disabled.payload.engineEnabled, false);
+
+    process.env.OCG_ENGINE_URL = "https://engine.example.test";
+    const enabled = createJsonResponse();
+    await handler({ method: "GET" }, enabled);
+    assert.equal(enabled.payload.engineEnabled, true);
+
+    process.env.RAG_AUTO_ENGINE_SIMULATION = "false";
+    const optedOut = createJsonResponse();
+    await handler({ method: "GET" }, optedOut);
+    assert.equal(optedOut.payload.engineEnabled, false);
+  } finally {
+    if (previousUrl === undefined) delete process.env.OCG_ENGINE_URL;
+    else process.env.OCG_ENGINE_URL = previousUrl;
+    if (previousAuto === undefined) delete process.env.RAG_AUTO_ENGINE_SIMULATION;
+    else process.env.RAG_AUTO_ENGINE_SIMULATION = previousAuto;
+  }
+});
 function createJsonResponse() {
   return {
     statusCode: 0,

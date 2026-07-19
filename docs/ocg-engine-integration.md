@@ -72,7 +72,7 @@ pnpm dev:with-engine
 
 成功响应包含 `engine.status=completed`、`engineSimulation.sourceType=engine_simulation`、core 消息语义摘要、区域数量、字段查询、`traceSha256` 与完整 `resourceBinding`，并固定 `canConfirmOfficialRuling=false`。
 
-引擎未配置、超时或拒绝资源时，响应会明确给出 `disabled` 或 `unavailable`。原有 RAG 仍可回答，但会附带风险，不会伪造执行结果。
+引擎未配置时不会编译或请求自动场景。超时或拒绝资源时，原有 RAG 仍可回答且不会伪造执行结果；公开 UI 只在拿到成功轨迹后显示模拟器，`?debug=1` 才显示内部不可用状态。
 
 ## 证据边界
 
@@ -101,9 +101,79 @@ npm run smoke:real -- ygopro
 
 ## Vercel / 云端
 
-Vercel Serverless 函数不能直接启动本机 Windows DLL/EXE。若不配置 `OCG_ENGINE_URL`，规则助手照常提供 RAG，模拟明确显示 disabled。线上需要在受控主机单独部署 sidecar，并给 Vercel 配置 HTTPS `OCG_ENGINE_URL` 与同一 `OCG_ENGINE_TOKEN`。
+模拟器依赖 Windows 原生 `ocgcore`、CDB 和 Lua 资源，不能运行在 Vercel Serverless 函数里。线上结构必须是：
 
-sidecar 默认只绑定 `127.0.0.1`。若改为远程绑定，必须使用 token、TLS、网络访问控制和请求超时，不应把无鉴权端口公开到互联网。
+```text
+浏览器 -> Vercel /api/answer -> HTTPS + Bearer Token -> Windows 模拟器 sidecar
+```
+
+未配置 `OCG_ENGINE_URL` 时，后端不会编译或请求自动场景，公开页面也不会显示模拟器区域。
+
+### 1. 准备 Windows 引擎主机
+
+使用一台可持续在线的 Windows 主机或 Windows VPS。安装 Git、Node.js 20+、Visual Studio 2022 的“使用 C++ 的桌面开发”和 x64 工具集，并准备 YGOPro/YGOPro2 资源。随后执行：
+
+```powershell
+git clone https://github.com/coldiceh/ocg-sim-core.git "D:\Services\ocg-sim-core"
+cd "D:\Services\ocg-sim-core"
+npm run setup:local
+npm run smoke:real -- ygopro
+```
+
+生成一条独立的强随机令牌，并仅保存在引擎主机和 Vercel 环境变量中：
+
+```powershell
+$bytes = New-Object byte[] 32
+$rng = [Security.Cryptography.RandomNumberGenerator]::Create()
+$rng.GetBytes($bytes)
+$token = [Convert]::ToBase64String($bytes)
+$token
+```
+
+启动 sidecar：
+
+```powershell
+$env:OCG_ENGINE_BIND = "127.0.0.1"
+$env:OCG_ENGINE_PORT = "8790"
+$env:OCG_ENGINE_TOKEN = "<上一步生成的令牌>"
+cd "D:\Services\ocg-sim-core"
+npm run serve -- --profile ygopro
+```
+
+生产环境应使用 Windows 服务管理器或任务计划程序让该命令随系统启动，并使用固定服务账号保存环境变量。不要直接开放 `8790` 端口。
+
+### 2. 提供 HTTPS 地址
+
+推荐使用 [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/get-started/create-remote-tunnel/)：在 Cloudflare 控制台创建 Tunnel，按控制台给出的 Windows 命令安装 `cloudflared`，再添加一个 Published Application：
+
+- Hostname：例如 `engine.example.com`。
+- Service type：`HTTP`。
+- Service URL：`http://localhost:8790`。
+
+Tunnel 自身的 connector token 与 `OCG_ENGINE_TOKEN` 是两种不同凭据；Vercel 请求模拟器时使用后者。Cloudflare Tunnel 是出站连接，无需把引擎主机暴露为公网 IP。Windows 上的 `cloudflared` 需要按官方说明手动更新。
+
+从另一台机器验证公网入口：
+
+```powershell
+$url = "https://engine.example.com"
+$token = "<OCG_ENGINE_TOKEN>"
+Invoke-RestMethod -Uri "$url/health" -Headers @{ Authorization = "Bearer $token" }
+```
+
+### 3. 连接 Vercel
+
+在 Vercel 项目的 `Settings -> Environment Variables` 中为 Production（需要时也包括 Preview）添加：
+
+```text
+OCG_ENGINE_URL=https://engine.example.com
+OCG_ENGINE_TOKEN=<同一条强随机令牌>
+RAG_AUTO_ENGINE_SIMULATION=true
+OCG_ENGINE_TIMEOUT_MS=20000
+```
+
+将 `OCG_ENGINE_TOKEN` 标记为 Sensitive。Vercel 环境变量只会进入新部署，因此保存后必须重新部署。可通过 `https://<规则助手域名>/api/engine` 检查 Vercel 到 sidecar 的健康状态。
+
+若暂时不部署，不要设置 `OCG_ENGINE_URL`；也可以显式设置 `RAG_AUTO_ENGINE_SIMULATION=false`。
 
 ## 能力边界
 
