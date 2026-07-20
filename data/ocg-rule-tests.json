@@ -1,10 +1,24 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-19T19:38:07.720Z",
+  "generatedAt": "2026-07-20T14:39:11.696Z",
   "source": {
     "name": "OCG Rule tests",
     "url": "https://ocg-rule.readthedocs.io/zh-cn/latest/",
     "role": "裁判训练/往年测试资料，用于回归测试和规则理解检查。"
+  },
+  "sync": {
+    "status": "complete",
+    "targetCount": 40,
+    "recordCount": 39,
+    "failedCount": 1,
+    "successRatio": 0.975,
+    "previousRecordCount": 39,
+    "contentHash": "3c0cd541404deb26af498f3598c77065efd0481fd069d691195ea9b04d29e60a",
+    "previousContentHash": "3c0cd541404deb26af498f3598c77065efd0481fd069d691195ea9b04d29e60a",
+    "failedDocnames": [
+      "links"
+    ],
+    "testCount": 7
   },
   "records": [
     {

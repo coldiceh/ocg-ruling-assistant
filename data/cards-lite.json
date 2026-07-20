@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-19T19:38:01.967Z",
+  "generatedAt": "2026-07-20T14:39:09.032Z",
   "records": [
     {
       "id": "21385",
@@ -172134,6 +172134,15 @@
         "青之眼少女",
         "青き眼の乙女",
         "Maiden with Eyes of Blue"
+      ],
+      "released": true
+    },
+    {
+      "id": "23486",
+      "name": "邪悪なる魔王－ゾーク",
+      "jaName": "邪悪なる魔王－ゾーク",
+      "aliases": [
+        "邪悪なる魔王－ゾーク"
       ],
       "released": true
     },
