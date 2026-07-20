@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-19T19:38:01.967Z",
+  "generatedAt": "2026-07-20T14:39:09.032Z",
   "records": [
     {
       "alias": "“K9刑侦案件”",
@@ -251161,6 +251161,13 @@
       "cardId": "10588",
       "cardName": "青之眼少女",
       "language": "en"
+    },
+    {
+      "alias": "邪悪なる魔王－ゾーク",
+      "normalizedAlias": "邪悪なる魔王-ゾ-ク",
+      "cardId": "23486",
+      "cardName": "邪悪なる魔王－ゾーク",
+      "language": "ja"
     },
     {
       "alias": "7",
