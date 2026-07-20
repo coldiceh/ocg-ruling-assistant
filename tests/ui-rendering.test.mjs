@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { runInNewContext } from "node:vm";
 import {
   buildConditionalBranchLines,
   buildUserFacingSubAnswerSummary,
@@ -153,12 +152,8 @@ test("ui_has_single_query_button", async () => {
   assert.doesNotMatch(html, /id="flashModelButton"|id="proModelButton"|>Pro</u);
   assert.match(app, /const selectedModelTier = "flash"/u);
   assert.match(app, /modelTier: selectedModelTier/u);
-  assert.match(app, /ocg-ruling-answer:v21/u);
-  assert.doesNotMatch(app, /ocg-ruling-answer:v20/u);
-  assert.match(app, /buildBackendCacheKey\(text, backendMode, selectedModelTier\)/u);
-  assert.match(app, /ensureCompleteRagShortAnswer\(cached\)/u);
-  assert.match(app, /state\?\.status !== "resolved" \|\| state\.complete !== true/u);
-  assert.match(app, /if \(isActivationOnlyShortAnswer\(answer\?\.shortAnswer\)\) return null/u);
+  assert.match(app, /cache: "no-store"/u);
+  assert.doesNotMatch(app, /backendAnswerCacheTtlMs|buildBackendCacheKey|readCachedBackendAnswer|writeCachedBackendAnswer|ocg-ruling-answer:v/u);
   assert.doesNotMatch(app, /setModelTier|readInitialModelTier/u);
   assert.doesNotMatch(app, /deepAnalyzeButton|ragModeToggle|legacyPipelineToggle/u);
   assert.doesNotMatch(html, /裁判结论/u);
@@ -176,50 +171,17 @@ test("feedback_opens_a_prefilled_github_issue", async () => {
   assert.doesNotMatch(app, /feedbackApiUrl|submitFeedbackCase|saveFeedbackCaseLocally/u);
 });
 
-test("cached activation-only summaries are completed or rejected", async () => {
-  const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
-  const helperStart = app.indexOf("function ensureCompleteRagShortAnswer");
-  const helperEnd = app.indexOf("function buildBackendCacheKey", helperStart);
-  const cacheReaderStart = app.indexOf("function readCachedBackendAnswer", helperEnd);
-  const cacheReaderEnd = app.indexOf("function writeCachedBackendAnswer", cacheReaderStart);
-  assert.ok(helperStart >= 0 && helperEnd > helperStart && cacheReaderStart >= 0 && cacheReaderEnd > cacheReaderStart);
-
-  const helpers = runInNewContext(
-    app.slice(helperStart, helperEnd) + "; ({ ensureCompleteRagShortAnswer, isActivationOnlyShortAnswer });",
-  );
-  const completeSummary = "可以发动，但是不会进行任何效果处理；因此不进行融合召唤。";
-  const upgraded = helpers.ensureCompleteRagShortAnswer({
-    shortAnswer: "可以发动。",
-    debug: {
-      semanticStateTransition: {
-        status: "resolved",
-        complete: true,
-        shortAnswer: completeSummary,
-      },
-    },
-  });
-  assert.equal(upgraded.shortAnswer, completeSummary);
-  assert.equal(helpers.isActivationOnlyShortAnswer("该效果可以发动。"), true);
-  assert.equal(helpers.isActivationOnlyShortAnswer("可以发动①效果"), true);
-  assert.equal(helpers.isActivationOnlyShortAnswer(completeSummary), false);
-
-  const cachedPayload = JSON.stringify({
-    savedAt: Date.now(),
-    answer: {
-      shortAnswer: "该效果可以发动。",
-      reasoning: ["效果处理时不进行融合召唤。"],
-    },
-  });
-  const cachedAnswer = runInNewContext(
-    "const backendAnswerCacheTtlMs = 21600000;\n"
-      + app.slice(helperStart, helperEnd)
-      + app.slice(cacheReaderStart, cacheReaderEnd)
-      + "\nreadCachedBackendAnswer('test-key');",
-    {
-      localStorage: { getItem: () => cachedPayload },
-    },
-  );
-  assert.equal(cachedAnswer, null);
+test("backend answers bypass persistent browser cache and bust static assets", async () => {
+  const [app, html, configText] = await Promise.all([
+    readFile(new URL("../src/app.js", import.meta.url), "utf8"),
+    readFile(new URL("../index.html", import.meta.url), "utf8"),
+    readFile(new URL("../config.json", import.meta.url), "utf8"),
+  ]);
+  const config = JSON.parse(configText.replace(/^\uFEFF/u, ""));
+  assert.match(html, /src\/app\.js\?v=20260721-ruling-cache-1/u);
+  assert.match(config.answerApiUrl, /\?client=20260721-ruling-cache-1$/u);
+  assert.match(app, /cache: "no-store"/u);
+  assert.doesNotMatch(app, /backendAnswerCacheTtlMs|buildBackendCacheKey|readCachedBackendAnswer|writeCachedBackendAnswer|ocg-ruling-answer:v/u);
 });
 
 test("readme_keeps_only_requested_future_plans", async () => {
