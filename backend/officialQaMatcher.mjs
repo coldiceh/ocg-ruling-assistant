@@ -1,5 +1,7 @@
 import { hasNumberedCardIdentityConflict } from "./numberedCardIdentity.mjs";
 
+const officialQaRecordFeatureCache = new WeakMap();
+
 const QUESTION_TYPES = [
   ["who_can_activate", /(?:谁(?:可以|能)?.*发动|由谁发动)|誰が.*発動|who (?:can|may) activate|which player.*activate/iu],
   ["card_activation_vs_effect_activation", /卡的发动.*效果发动|效果发动.*卡的发动|カードの発動.*効果の発動|card activation.*effect activation/iu],
@@ -83,13 +85,9 @@ export function resolveEntitiesFromOfficialQaMatch({ resolution = {}, matches, c
   const top = matches?.exact?.[0] || matches?.near?.find((item) => item.score >= 0.78) || null;
   if (!top) return buildEntityResolution(resolved, unresolved, false);
 
-  const evidenceIds = new Set([
-    top.record.cardId,
-    ...(top.record.cardIds || []),
-    ...(top.record.cards || []),
-    ...extractInlineCardIds(recordText(top.record)),
-  ].map(normalizeId).filter(Boolean));
-  const evidenceText = normalizeOfficialQaQuery(recordText(top.record));
+  const topFeatures = officialQaRecordFeatures(top.record);
+  const evidenceIds = topFeatures.recordIds;
+  const evidenceText = topFeatures.normalizedRecordText;
   let resolvedByOfficialQaMatch = false;
   const remaining = [];
   for (const mention of unresolved) {
@@ -108,24 +106,21 @@ export function resolveEntitiesFromOfficialQaMatch({ resolution = {}, matches, c
 }
 
 function scoreRecord({ record, normalizedQuery, queryType, queryPhrases, resolvedIds, resolvedNames }) {
-  const questionText = recordQuestionText(record);
-  const normalizedRecordQuestion = normalizeOfficialQaQuery(questionText);
-  const normalizedRecordText = normalizeOfficialQaQuery(recordText(record));
-  const evidenceType = classifyOfficialQaQuestionType(questionText || recordText(record));
-  const evidencePhrases = extractOfficialQaEffectPhrases(recordText(record));
+  const {
+    questionText,
+    normalizedRecordQuestion,
+    normalizedRecordText,
+    evidenceType,
+    evidencePhrases,
+    recordIds,
+    recordIdentityText,
+  } = officialQaRecordFeatures(record);
   const typeCompatible = questionTypeCompatible(queryType, evidenceType);
   const exactNormalized = normalizedQuery.length >= 8 && normalizedRecordQuestion === normalizedQuery;
   const containment = containmentScore(normalizedQuery, normalizedRecordQuestion || normalizedRecordText);
   const similarity = diceSimilarity(normalizedQuery, normalizedRecordQuestion || normalizedRecordText.slice(0, normalizedQuery.length * 2));
   const phraseHits = queryPhrases.filter((phrase) => evidencePhrases.includes(phrase));
-  const recordIds = new Set([
-    record.cardId,
-    ...(record.cardIds || []),
-    ...(record.cards || []),
-    ...extractInlineCardIds(recordText(record)),
-  ].map(normalizeId).filter(Boolean));
   const cardIdMatch = [...resolvedIds].some((id) => recordIds.has(id));
-  const recordIdentityText = [record.title, record.text, ...(record.cards || [])].filter(Boolean).join(" ");
   const cardNameMatch = [...resolvedNames].some((name) => name.length >= 3 && !hasNumberedCardIdentityConflict(name, recordIdentityText) && normalizedRecordText.includes(name));
   const cardMatch = cardIdMatch || cardNameMatch;
   const rawExact = exactNormalized || (containment >= 0.9 && similarity >= 0.86);
@@ -171,6 +166,31 @@ function recordText(record = {}) {
   if (record.text) return String(record.text);
   const answer = record.answer || record.conclusion || "";
   return [record.question, answer, record.officialText, record.title].filter(Boolean).join("\n");
+}
+
+function officialQaRecordFeatures(record = {}) {
+  if (record && typeof record === "object") {
+    const cached = officialQaRecordFeatureCache.get(record);
+    if (cached) return cached;
+  }
+  const questionText = recordQuestionText(record);
+  const text = recordText(record);
+  const features = {
+    questionText,
+    normalizedRecordQuestion: normalizeOfficialQaQuery(questionText),
+    normalizedRecordText: normalizeOfficialQaQuery(text),
+    evidenceType: classifyOfficialQaQuestionType(questionText || text),
+    evidencePhrases: extractOfficialQaEffectPhrases(text),
+    recordIds: new Set([
+      record.cardId,
+      ...(record.cardIds || []),
+      ...(record.cards || []),
+      ...extractInlineCardIds(text),
+    ].map(normalizeId).filter(Boolean)),
+    recordIdentityText: [record.title, text, ...(record.cards || [])].filter(Boolean).join(" "),
+  };
+  if (record && typeof record === "object") officialQaRecordFeatureCache.set(record, features);
+  return features;
 }
 
 function extractInlineCardIds(value) {

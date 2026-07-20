@@ -1,14 +1,24 @@
-import { normalizeCardKey } from "./ragCardExtractor.mjs";
+import { hasSingleEditDistance, normalizeCardKey } from "./ragCardExtractor.mjs";
 import { hasNumberedCardIdentityConflict } from "./numberedCardIdentity.mjs";
 
-export function createLocalCardDataProvider({ cards = [], records = [], qaRecords = [] } = {}) {
-  const normalizedCards = (Array.isArray(cards) ? cards : []).map(normalizeProviderCard).filter((card) => card.name);
-  const cardById = new Map(normalizedCards.map((card) => [normalizeId(card.id || card.cardId), card]).filter(([id]) => id));
-  const allRecords = [...(Array.isArray(records) ? records : []), ...(Array.isArray(qaRecords) ? qaRecords : [])];
+const EMPTY_CARDS = Object.freeze([]);
+const EMPTY_RECORDS = Object.freeze([]);
+const cardCatalogCache = new WeakMap();
+const providerCache = new WeakMap();
 
-  return {
+export function createLocalCardDataProvider(options = {}) {
+  const cards = Array.isArray(options.cards) ? options.cards : EMPTY_CARDS;
+  const records = Array.isArray(options.records) ? options.records : EMPTY_RECORDS;
+  const qaRecords = Array.isArray(options.qaRecords) ? options.qaRecords : EMPTY_RECORDS;
+  const cached = getCachedProvider(cards, records, qaRecords);
+  if (cached) return cached;
+
+  const { cardById, searchEntries } = getCardCatalog(cards);
+  const allRecords = [...records, ...qaRecords];
+
+  const provider = {
     searchCardByName(name, limit = 5) {
-      return fuzzyFindCards(normalizedCards, name, limit);
+      return fuzzyFindCards(searchEntries, name, limit);
     },
     getCardProfile(cardId) {
       return cardById.get(normalizeId(cardId)) || null;
@@ -28,6 +38,8 @@ export function createLocalCardDataProvider({ cards = [], records = [], qaRecord
         .slice(0, limit);
     },
   };
+  setCachedProvider(cards, records, qaRecords, provider);
+  return provider;
 }
 
 export function buildCardImageCandidates(cardId) {
@@ -47,21 +59,40 @@ export function buildCardImageCandidates(cardId) {
   ];
 }
 
-function fuzzyFindCards(cards, name, limit) {
+function fuzzyFindCards(searchEntries, name, limit) {
   const queryKey = normalizeCardKey(name);
   if (!queryKey) return [];
-  return cards
-    .map((card) => {
-      const aliases = [card.name, card.cnName, card.jaName, card.enName, ...(card.aliases || [])].filter(Boolean);
-      const compatibleAliases = aliases.filter((alias) => !hasNumberedCardIdentityConflict(name, alias));
+  const scored = searchEntries
+    .map(({ card, aliases }) => {
+      const compatibleAliases = aliases.filter(({ alias }) => !hasNumberedCardIdentityConflict(name, alias));
       const best = compatibleAliases
-        .map((alias) => ({ alias, score: scoreAlias(normalizeCardKey(alias), queryKey) }))
+        .map(({ alias, key }) => ({ alias, key, score: scoreAlias(key, queryKey) }))
         .sort((left, right) => right.score - left.score || String(left.alias).localeCompare(String(right.alias), "zh-Hans-CN"))[0];
-      return { ...card, matchedAlias: best?.alias || compatibleAliases[0] || card.name, confidence: best?.score || 0 };
-    })
+      const singleEdit = compatibleAliases.find(({ key }) => hasSingleEditDistance(key, queryKey));
+      return {
+        ...card,
+        matchedAlias: best?.alias || compatibleAliases[0]?.alias || card.name,
+        confidence: best?.score || 0,
+        exactMatch: compatibleAliases.some(({ key }) => key === queryKey),
+        singleEditAlias: singleEdit?.alias || "",
+      };
+    });
+
+  if (!scored.some((card) => card.exactMatch)) {
+    const singleEditCards = scored.filter((card) => card.singleEditAlias);
+    if (singleEditCards.length === 1) {
+      singleEditCards[0].confidence = Math.max(singleEditCards[0].confidence, 0.94);
+      singleEditCards[0].matchedAlias = singleEditCards[0].singleEditAlias;
+    } else if (singleEditCards.length > 1) {
+      for (const card of scored) card.confidence = Math.min(card.confidence, 0.7);
+    }
+  }
+
+  return scored
     .filter((card) => card.confidence >= 0.42)
     .sort((left, right) => right.confidence - left.confidence || String(left.name).localeCompare(String(right.name)))
-    .slice(0, limit);
+    .slice(0, limit)
+    .map(({ exactMatch, singleEditAlias, ...card }) => card);
 }
 
 function scoreAlias(aliasKey, queryKey) {
@@ -123,6 +154,50 @@ function normalizeProviderCard(card = {}) {
     ].filter(Boolean),
     imageCandidates: buildCardImageCandidates(id),
   };
+}
+
+function getCardCatalog(cards) {
+  const cached = cardCatalogCache.get(cards);
+  if (cached) return cached;
+  const normalizedCards = cards.map(normalizeProviderCard).filter((card) => card.name);
+  const cardById = new Map(normalizedCards.map((card) => [normalizeId(card.id || card.cardId), card]).filter(([id]) => id));
+  const searchEntries = normalizedCards.map((card) => ({
+    card,
+    aliases: dedupeAliases([card.name, card.cnName, card.jaName, card.enName, ...(card.aliases || [])]),
+  }));
+  const catalog = { cardById, searchEntries };
+  cardCatalogCache.set(cards, catalog);
+  return catalog;
+}
+
+function dedupeAliases(aliases) {
+  const result = [];
+  const seen = new Set();
+  for (const alias of aliases.filter(Boolean)) {
+    const key = normalizeCardKey(alias);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    result.push({ alias, key });
+  }
+  return result;
+}
+
+function getCachedProvider(cards, records, qaRecords) {
+  return providerCache.get(cards)?.get(records)?.get(qaRecords) || null;
+}
+
+function setCachedProvider(cards, records, qaRecords, provider) {
+  let recordsCache = providerCache.get(cards);
+  if (!recordsCache) {
+    recordsCache = new WeakMap();
+    providerCache.set(cards, recordsCache);
+  }
+  let qaCache = recordsCache.get(records);
+  if (!qaCache) {
+    qaCache = new WeakMap();
+    recordsCache.set(records, qaCache);
+  }
+  qaCache.set(qaRecords, provider);
 }
 
 function normalizeId(value) {

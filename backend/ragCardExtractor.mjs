@@ -1,4 +1,9 @@
-import { canonicalizeNumberedCardPrefixes, extractNumberedCardMentionCandidates } from "./numberedCardIdentity.mjs";
+import { canonicalizeNumberedCardPrefixes, extractNumberedCardMentionCandidates, hasNumberedCardIdentityConflict } from "./numberedCardIdentity.mjs";
+
+const EMPTY_CARD_LIST = Object.freeze([]);
+const MIN_SINGLE_EDIT_CARD_KEY_LENGTH = 4;
+const aliasIndexCache = new WeakMap();
+const aliasKeysByLengthCache = new WeakMap();
 
 const QUOTED_MENTION_PATTERNS = Object.freeze([
   /「([^」]{2,80})」/gu,
@@ -43,10 +48,13 @@ export function extractRagCards(userQuery, { cards = [], maxCards = 6, modelCard
     if (!mentionKey || seenMentionKeys.has(mentionKey)) continue;
     seenMentionKeys.add(mentionKey);
     const candidates = aliasIndex.get(mentionKey) || [];
+    const singleEditCandidate = candidates.length ? null : findUniqueSingleEditCandidate(aliasIndex, mention);
     if (candidates.length === 1) {
       addResolved(resolved, seenCards, candidates[0], mention, confidenceForMentionSeed(seed, 0.98));
     } else if (candidates.length > 1) {
       ambiguousMentions.push(buildAmbiguousMention(mention, candidates));
+    } else if (singleEditCandidate) {
+      addResolved(resolved, seenCards, singleEditCandidate, mention, confidenceForSingleEditMention(seed));
     } else if (looksLikeCardMention(mention)) {
       unresolvedMentions.push(buildUnresolvedMention(seed));
     }
@@ -58,10 +66,13 @@ export function extractRagCards(userQuery, { cards = [], maxCards = 6, modelCard
     if (!mentionKey || seenMentionKeys.has(mentionKey)) continue;
     seenMentionKeys.add(mentionKey);
     const candidates = aliasIndex.get(mentionKey) || [];
+    const singleEditCandidate = candidates.length ? null : findUniqueSingleEditCandidate(aliasIndex, mention);
     if (candidates.length === 1) {
       addResolved(resolved, seenCards, candidates[0], mention, 0.92);
     } else if (candidates.length > 1) {
       ambiguousMentions.push(buildAmbiguousMention(mention, candidates));
+    } else if (singleEditCandidate) {
+      addResolved(resolved, seenCards, singleEditCandidate, mention, 0.9);
     } else if (looksLikeCardMention(mention)) {
       unresolvedMentions.push(buildUnresolvedMention(seed));
     }
@@ -98,8 +109,12 @@ export function extractRagCards(userQuery, { cards = [], maxCards = 6, modelCard
 }
 
 export function buildAliasIndex(cards = []) {
+  const sourceCards = Array.isArray(cards) ? cards : EMPTY_CARD_LIST;
+  const cached = aliasIndexCache.get(sourceCards);
+  if (cached) return cached;
+
   const index = new Map();
-  for (const card of Array.isArray(cards) ? cards : []) {
+  for (const card of sourceCards) {
     const aliases = cardAliases(card);
     for (const alias of aliases) {
       const key = normalizeCardKey(alias);
@@ -113,6 +128,14 @@ export function buildAliasIndex(cards = []) {
   for (const [key, candidates] of index.entries()) {
     index.set(key, dedupeBy(candidates, (candidate) => cardIdentity(candidate.card)));
   }
+  const keysByLength = new Map();
+  for (const key of index.keys()) {
+    const keys = keysByLength.get(key.length) || [];
+    keys.push(key);
+    keysByLength.set(key.length, keys);
+  }
+  aliasIndexCache.set(sourceCards, index);
+  aliasKeysByLengthCache.set(index, keysByLength);
   return index;
 }
 
@@ -133,6 +156,7 @@ export function normalizeCardKey(value) {
     .replace(/[對]/gu, "对")
     .replace(/[選]/gu, "选")
     .replace(/[闕]/gu, "阙")
+    .replace(/喰/gu, "食")
     .replace(/導/gu, "导")
     .replace(/白き/gu, "白")
     .replace(/埃克利西/gu, "艾克莉西")
@@ -237,6 +261,79 @@ function confidenceForMentionSeed(seed, fallback) {
   if (seed.confidence === "high") return 0.95;
   if (seed.confidence === "low") return 0.78;
   return 0.88;
+}
+
+function confidenceForSingleEditMention(seed) {
+  if (seed.source !== "model_card_name_extractor") return 0.94;
+  if (seed.confidence === "low") return 0.86;
+  return 0.92;
+}
+
+function findUniqueSingleEditCandidate(aliasIndex, mention) {
+  const mentionKey = normalizeCardKey(mention);
+  if (mentionKey.length < MIN_SINGLE_EDIT_CARD_KEY_LENGTH) return null;
+  const keysByLength = aliasKeysByLengthCache.get(aliasIndex) || buildAliasKeysByLength(aliasIndex);
+  const matchedCards = new Map();
+
+  for (const length of [mentionKey.length - 1, mentionKey.length, mentionKey.length + 1]) {
+    for (const aliasKey of keysByLength.get(length) || []) {
+      if (!hasSingleEditDistance(mentionKey, aliasKey)) continue;
+      for (const candidate of aliasIndex.get(aliasKey) || []) {
+        if (hasNumberedCardIdentityConflict(mention, candidate.matchedAlias)) continue;
+        const identity = cardIdentity(candidate.card);
+        if (!identity) continue;
+        const previous = matchedCards.get(identity);
+        if (!previous || normalizeCardKey(previous.matchedAlias).length < aliasKey.length) matchedCards.set(identity, candidate);
+      }
+      if (matchedCards.size > 1) return null;
+    }
+  }
+  return matchedCards.size === 1 ? matchedCards.values().next().value : null;
+}
+
+function buildAliasKeysByLength(aliasIndex) {
+  const keysByLength = new Map();
+  for (const key of aliasIndex.keys()) {
+    const keys = keysByLength.get(key.length) || [];
+    keys.push(key);
+    keysByLength.set(key.length, keys);
+  }
+  aliasKeysByLengthCache.set(aliasIndex, keysByLength);
+  return keysByLength;
+}
+
+export function hasSingleEditDistance(left, right) {
+  const leftKey = String(left || "");
+  const rightKey = String(right || "");
+  if (leftKey === rightKey || Math.abs(leftKey.length - rightKey.length) > 1) return false;
+  if (Math.min(leftKey.length, rightKey.length) < MIN_SINGLE_EDIT_CARD_KEY_LENGTH) return false;
+
+  if (leftKey.length === rightKey.length) {
+    let differences = 0;
+    for (let index = 0; index < leftKey.length; index += 1) {
+      if (leftKey[index] === rightKey[index]) continue;
+      differences += 1;
+      if (differences > 1) return false;
+    }
+    return differences === 1;
+  }
+
+  const shorter = leftKey.length < rightKey.length ? leftKey : rightKey;
+  const longer = leftKey.length < rightKey.length ? rightKey : leftKey;
+  let shortIndex = 0;
+  let longIndex = 0;
+  let edits = 0;
+  while (shortIndex < shorter.length && longIndex < longer.length) {
+    if (shorter[shortIndex] === longer[longIndex]) {
+      shortIndex += 1;
+      longIndex += 1;
+      continue;
+    }
+    edits += 1;
+    if (edits > 1) return false;
+    longIndex += 1;
+  }
+  return true;
 }
 
 function addResolved(resolved, seenCards, candidate, input, confidence) {

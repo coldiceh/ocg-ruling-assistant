@@ -2,10 +2,16 @@ import { requestOcgEngineSimulation } from "./ocgEngineClient.mjs";
 import { autoEngineSimulationEnabled, buildBestEffortEngineScenario } from "./ocgScenarioPlanner.mjs";
 import { extractRagCards, normalizeCardKey } from "./ragCardExtractor.mjs";
 import { evidenceBucketsToList, loadRagData, retrieveRagEvidence } from "./ragEvidenceRetriever.mjs";
-import { callCardNameExtractionModel, callRagModel, callRulebookGroundingModel, callRuleQueryExtractionModel } from "./ragModelClient.mjs";
+import {
+  callCardNameExtractionModel,
+  callRagModel,
+  callRulebookGroundingModel,
+  callRuleQueryExtractionModel,
+} from "./ragModelClient.mjs";
 import { buildRagRulingPromptBundle, RAG_ANSWER_LEVELS } from "./ragRulingPrompt.mjs";
 import { analyzeEffectStateTransition, attachUserQueryToCardTexts } from "./effectStateReasoner.mjs";
 import { hasNumberedCardIdentityConflict } from "./numberedCardIdentity.mjs";
+import { analyzeDeterministicOperationLegality } from "./operationLegalityAnalyzer.mjs";
 
 export async function answerRagRulingQuestion({
   question,
@@ -25,9 +31,12 @@ export async function answerRagRulingQuestion({
   engineScenario,
   engineFetchImpl,
 } = {}) {
+  const pipelineStartedAt = Date.now();
+  const timingsMs = {};
   const query = String(question || userQuery || "").trim();
   if (!query) return buildEmptyQuestionAnswer();
 
+  const extractionStartedAt = Date.now();
   const dataPromise = Promise.resolve(cards || records || qaRecords
     ? { cards: cards || [], records: records || [], qaRecords: qaRecords || [] }
     : loadRagData(dataDir));
@@ -48,11 +57,13 @@ export async function answerRagRulingQuestion({
     cardNameModelPromise,
     ruleQueryModelPromise,
   ]);
+  timingsMs.dataAndQueryExtraction = elapsedMs(extractionStartedAt);
   const cardResolution = extractRagCards(query, {
     cards: data.cards || [],
     maxCards: readNumber(env.RAG_MAX_CARDS, 6),
     modelCardNameCandidates: cardNameModel.candidates || [],
   });
+  const retrievalStartedAt = Date.now();
   const retrievedEvidence = await retrieveRagEvidence({
     userQuery: query,
     cardResolution,
@@ -64,6 +75,7 @@ export async function answerRagRulingQuestion({
     env,
     fetchImpl,
   });
+  timingsMs.retrieval = elapsedMs(retrievalStartedAt);
   const effectiveCardResolution = reconcileCardResolution(cardResolution, retrievedEvidence);
   const explicitEngineScenario = engineScenario !== undefined && engineScenario !== null;
   const enginePlan = explicitEngineScenario
@@ -91,59 +103,103 @@ export async function answerRagRulingQuestion({
     env,
     fetchImpl: engineFetchImpl || fetchImpl || globalThis.fetch,
   });
-  const rulebookGrounding = await callRulebookGroundingModel({
+  const reasoningCardTexts = attachUserQueryToCardTexts([
+    ...(retrievedEvidence.cardTexts || []),
+    ...(retrievedEvidence.userProvidedCardTexts || []),
+  ], query);
+  const corroboratingEvidence = dedupeEvidenceRefs([
+    ...(retrievedEvidence.officialQaDirectCandidates || []),
+    ...(retrievedEvidence.provisionalOfficialResponses || []),
+    ...(retrievedEvidence.officialQaRelated || []),
+  ]);
+  const localReasoningStartedAt = Date.now();
+  const localRulebookGrounding = buildLocalRulebookGrounding({
     userQuery: query,
-    cardTexts: [...(retrievedEvidence.cardTexts || []), ...(retrievedEvidence.userProvidedCardTexts || [])],
-    ruleEvidence: retrievedEvidence.rulebookCandidates || [],
-    qaEvidence: dedupeEvidenceRefs([
-      ...(retrievedEvidence.officialQaDirectCandidates || []),
-      ...(retrievedEvidence.officialQaRelated || []),
-      ...(retrievedEvidence.provisionalOfficialResponses || []),
-      ...(retrievedEvidence.faqRelated || []),
-    ]),
+    cardTexts: reasoningCardTexts,
+    evidence: retrievedEvidence,
     env,
-    modelInvoker: rulebookModelInvoker,
-    fetchImpl,
-    now,
   });
-  const groundedEvidence = attachRulebookGrounding(retrievedEvidence, rulebookGrounding);
-  const semanticStateTransition = analyzeEffectStateTransition({
+  const locallyGroundedEvidence = attachRulebookGrounding(retrievedEvidence, localRulebookGrounding);
+  const localSemanticStateTransition = analyzeEffectStateTransition({
     userQuery: query,
-    cardTexts: attachUserQueryToCardTexts([
-      ...(groundedEvidence.cardTexts || []),
-      ...(groundedEvidence.userProvidedCardTexts || []),
-    ], query),
-    corroboratingEvidence: dedupeEvidenceRefs([
-      ...(groundedEvidence.officialQaDirectCandidates || []),
-      ...(groundedEvidence.provisionalOfficialResponses || []),
-      ...(groundedEvidence.officialQaRelated || []),
-    ]),
-    operationLegality: groundedEvidence.operationLegality,
+    cardTexts: reasoningCardTexts,
+    corroboratingEvidence,
+    operationLegality: locallyGroundedEvidence.operationLegality,
+  });
+  const localDecisionComplete = !rulebookModelInvoker && hasCompleteDeterministicRuling({
+    semanticStateTransition: localSemanticStateTransition,
+    operationLegality: locallyGroundedEvidence.operationLegality,
+  });
+  timingsMs.localReasoning = elapsedMs(localReasoningStartedAt);
+
+  const rulebookStartedAt = Date.now();
+  const rulebookGrounding = localDecisionComplete
+    ? localRulebookGrounding
+    : await callRulebookGroundingModel({
+        userQuery: query,
+        cardTexts: reasoningCardTexts,
+        ruleEvidence: retrievedEvidence.rulebookCandidates || [],
+        qaEvidence: dedupeEvidenceRefs([
+          ...(retrievedEvidence.officialQaDirectCandidates || []),
+          ...(retrievedEvidence.officialQaRelated || []),
+          ...(retrievedEvidence.provisionalOfficialResponses || []),
+          ...(retrievedEvidence.faqRelated || []),
+        ]),
+        env,
+        modelInvoker: rulebookModelInvoker,
+        fetchImpl,
+        now,
+      });
+  timingsMs.rulebookGrounding = elapsedMs(rulebookStartedAt);
+  const groundedEvidence = attachRulebookGrounding(retrievedEvidence, rulebookGrounding);
+  const semanticStateTransition = localDecisionComplete
+    ? localSemanticStateTransition
+    : analyzeEffectStateTransition({
+        userQuery: query,
+        cardTexts: reasoningCardTexts,
+        corroboratingEvidence,
+        operationLegality: groundedEvidence.operationLegality,
   });
   const evidence = { ...groundedEvidence, semanticStateTransition };
-  const promptBundle = buildRagRulingPromptBundle({ userQuery: query, cardResolution: effectiveCardResolution, evidence, env });
+  const deterministicDecision = modelInvoker ? null : selectDeterministicDecision(evidence);
+  const promptBundle = deterministicDecision
+    ? {
+        prompt: "",
+        recoveryPrompt: "",
+        promptChars: 0,
+        promptTruncated: false,
+        warnings: ["final_model_skipped_deterministic_ruling"],
+      }
+    : buildRagRulingPromptBundle({ userQuery: query, cardResolution: effectiveCardResolution, evidence, env });
   const displayCards = dedupeCards([
     ...(effectiveCardResolution.resolvedCards || []),
     ...userProvidedCards(evidence.userProvidedCardTexts || []),
   ]);
-  const modelResult = await callRagModel({
-    prompt: promptBundle.prompt,
-    recoveryPrompt: promptBundle.recoveryPrompt,
-    evidence,
-    cardResolution: effectiveCardResolution,
-    env,
-    modelInvoker,
-    dryRun,
-    fetchImpl,
-    now,
-  });
+  const finalModelStartedAt = Date.now();
+  const modelResult = deterministicDecision
+    ? buildDeterministicModelResult(deterministicDecision)
+    : await callRagModel({
+        prompt: promptBundle.prompt,
+        recoveryPrompt: promptBundle.recoveryPrompt,
+        evidence,
+        cardResolution: effectiveCardResolution,
+        env,
+        modelInvoker,
+        dryRun,
+        fetchImpl,
+        now,
+      });
+  timingsMs.finalModel = elapsedMs(finalModelStartedAt);
   const modelAnswer = normalizeRagAnswer(modelResult.answer, { evidence, cardResolution: effectiveCardResolution, modelWarnings: modelResult.warnings || [] });
   const groundedFallback = applyGroundedOperationFallback(modelAnswer, evidence);
   const evidenceConstrained = applyExactScenarioGrounding(groundedFallback, evidence, query);
   const operationConstrained = applyOperationLegalityOverride(evidenceConstrained, evidence);
   const constraintGuarded = applyUnresolvedConstraintGuard(operationConstrained, evidence);
   const normalized = applySemanticStateConstraint(constraintGuarded, evidence);
+  const engineStartedAt = Date.now();
   const engine = await enginePromise;
+  timingsMs.engineAwait = elapsedMs(engineStartedAt);
+  timingsMs.total = elapsedMs(pipelineStartedAt);
   return {
     mode: "rag_baseline",
     answerLevel: normalized.answerLevel,
@@ -202,6 +258,7 @@ export async function answerRagRulingQuestion({
       baigeSearchCount: evidence.debug?.baigeSearchCount || 0,
       baigeCacheHitCount: evidence.debug?.baigeCacheHitCount || 0,
       baigeWarnings: evidence.debug?.baigeWarnings || [],
+      retrievalStageTimingsMs: evidence.debug?.timingsMs || {},
       providerUsed: modelResult.providerUsed || modelResult.provider,
       modelUsed: modelResult.modelUsed,
       modelName: modelResult.modelName,
@@ -212,8 +269,120 @@ export async function answerRagRulingQuestion({
       promptChars: promptBundle.promptChars,
       promptTruncated: promptBundle.promptTruncated,
       semanticStateTransition,
+      deterministicDecision: deterministicDecision?.kind || null,
+      timingsMs,
     },
   };
+}
+
+function buildLocalRulebookGrounding({
+  userQuery = "",
+  cardTexts = [],
+  evidence = {},
+  env = {},
+} = {}) {
+  const ruleEvidence = dedupeEvidenceRefs([
+    ...(evidence.rulebookCandidates || []),
+    ...(evidence.rawRelatedEvidence || []),
+    ...(evidence.officialQaDirectCandidates || []),
+    ...(evidence.officialQaRelated || []),
+    ...(evidence.provisionalOfficialResponses || []),
+    ...(evidence.faqRelated || []),
+  ]);
+  const operationLegality = analyzeDeterministicOperationLegality({
+    userQuery,
+    cardTexts,
+    ruleEvidence,
+  });
+  return {
+    operationLegality,
+    rawText: "",
+    providerUsed: "local",
+    modelUsed: "deterministic-rule-reasoner",
+    dryRun: true,
+    warnings: [...new Set([
+      "rulebook_grounding_model_skipped_local_precheck",
+      ...(operationLegality.warnings || []),
+    ])],
+    tokenUsage: {},
+    estimatedCostCny: 0,
+    budgetStatus: null,
+  };
+}
+
+function hasCompleteDeterministicRuling({
+  semanticStateTransition,
+  operationLegality,
+} = {}) {
+  if (operationLegality?.hasBlockingCheck && !operationLegality?.hasUnresolvedConstraints) return true;
+  if (semanticStateTransition?.status === "resolved" && semanticStateTransition?.complete === true) return true;
+  return operationLegality?.complete === true
+    && operationLegality?.hasGroundedChecks === true
+    && operationLegality?.hasUnresolvedConstraints !== true
+    && Boolean(operationLegality?.shortAnswer);
+}
+
+function selectDeterministicDecision(evidence = {}) {
+  const operationLegality = evidence.operationLegality;
+  if (operationLegality?.hasBlockingCheck && !operationLegality?.hasUnresolvedConstraints) {
+    return { kind: "operation_blocker", operationLegality };
+  }
+  const semanticStateTransition = evidence.semanticStateTransition;
+  if (semanticStateTransition?.status === "resolved" && semanticStateTransition?.complete === true) {
+    return { kind: "state_transition", semanticStateTransition };
+  }
+  if (operationLegality?.complete === true
+      && operationLegality?.hasGroundedChecks === true
+      && operationLegality?.hasUnresolvedConstraints !== true
+      && operationLegality?.shortAnswer) {
+    return { kind: "operation_sequence", operationLegality };
+  }
+  return null;
+}
+
+function buildDeterministicModelResult(decision) {
+  const state = decision?.semanticStateTransition;
+  const operation = decision?.operationLegality;
+  const usedEvidence = state
+    ? (state.evidenceIds || []).map((id) => ({ id, type: "related", title: String(id) }))
+    : (operation?.matchedRuleEvidence || []).map((item) => ({
+        id: item.id,
+        type: item.type || item.recordType || "rulebook",
+        title: item.title || item.id,
+      }));
+  const shortAnswer = state?.shortAnswer
+    || operation?.shortAnswer
+    || operation?.checks?.find((item) => item.status !== "unknown")?.conclusion
+    || "已根据当前状态与适用规则完成处理。";
+  return {
+    answer: {
+      answerLevel: "rule_analysis",
+      shortAnswer,
+      reasoning: state?.reasoning || operation?.reasoning || [],
+      usedCards: [],
+      usedEvidence,
+      missingInfo: [],
+      riskFlags: [
+        "deterministic_ruling_applied",
+        "final_model_skipped",
+      ],
+      confidenceSelfEstimate: "medium",
+    },
+    rawText: "",
+    provider: "local",
+    providerUsed: "local",
+    modelName: "deterministic-ruling-reasoner",
+    modelUsed: "deterministic-ruling-reasoner",
+    dryRun: true,
+    warnings: [],
+    tokenUsage: {},
+    estimatedCostCny: 0,
+    budgetStatus: null,
+  };
+}
+
+function elapsedMs(startedAt) {
+  return Math.max(0, Date.now() - Number(startedAt || Date.now()));
 }
 
 function reconcileCardResolution(cardResolution = {}, evidence = {}) {

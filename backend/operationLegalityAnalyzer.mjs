@@ -7,6 +7,49 @@ export const OPERATION_LEGALITY_STATUSES = Object.freeze([
   "unknown",
 ]);
 
+export function analyzeDeterministicOperationLegality({
+  userQuery = "",
+  cardTexts = [],
+  ruleEvidence = [],
+} = {}) {
+  const normalizedCardTexts = (cardTexts || [])
+    .filter((item) => item?.text)
+    .map((item, index) => ({
+      ...item,
+      id: String(item.id || item.evidenceId || "scenario-card-text-" + (index + 1)),
+      type: item.type || "card_text",
+      title: item.title || (item.cards || [])[0] || "卡片文本",
+    }));
+  const candidates = uniqueBy(
+    [...normalizedCardTexts, ...(ruleEvidence || [])].filter((item) => item?.id && item?.text),
+    (item) => String(item.id),
+  );
+  const scenario = compileRuleScenario({ userQuery, cardTexts: normalizedCardTexts });
+  const requiredConstraintEvidence = selectDeterministicRuleEvidence(ruleEvidence, scenario);
+  const result = validateOperationLegalityModelOutput({
+    constraintReviews: [],
+    operationChecks: [],
+    overallConclusion: "",
+  }, candidates, {
+    requiredConstraintEvidence,
+    userQuery,
+    cardTexts: normalizedCardTexts,
+  });
+  const deterministicChecks = result.checks.filter((item) => item.deterministic === true);
+  const completedChecks = deterministicChecks.filter((item) => item.deterministicComplete === true);
+  const preferred = result.checks.find((item) => item.operationId === "simultaneous-destruction-replacement-order" && item.deterministicComplete)
+    || result.checks.find((item) => item.operationId === "mandatory-spell-trap-return-applicability")
+    || completedChecks[0]
+    || deterministicChecks[0];
+  return {
+    ...result,
+    deterministic: deterministicChecks.length > 0,
+    complete: completedChecks.length > 0 && !result.hasUnresolvedConstraints,
+    shortAnswer: preferred?.conclusion || result.shortAnswer,
+    scenario,
+  };
+}
+
 export function validateOperationLegalityModelOutput(raw, evidenceCandidates = [], {
   requiredConstraintEvidence = [],
   userQuery = "",
@@ -46,6 +89,7 @@ export function validateOperationLegalityModelOutput(raw, evidenceCandidates = [
   const evidenceDrivenBlockingChecks = deriveMandatoryOperationBlockingChecks(
     requiredConstraints,
     checks,
+    { userQuery, cardTexts },
   );
   if (evidenceDrivenBlockingChecks.length) {
     checks = uniqueBy([...checks, ...evidenceDrivenBlockingChecks], checkKey);
@@ -136,27 +180,61 @@ function deriveDeterministicScenarioChecks(requiredConstraints, existingChecks, 
   if (!rule) return [];
   const quote = String(rule.text || "").match(/同\s*1?\s*时点.{0,24}双方.{0,30}(?:代替破坏|破坏.{0,12}代替).{0,60}回合玩家.{0,18}先适用.{0,100}非回合玩家.{0,60}(?:不在场上存在|已经不在场上).{0,30}不适用[。]?/su)?.[0];
   if (!quote) return [];
+
+  const complete = scenario.replacementSequenceComplete === true;
+  const citations = [{
+    id: String(rule.id),
+    quote,
+    application: "题目中的双方破坏代替在同一处理窗口竞争适用，因此先处理回合玩家一方并立即更新场面。",
+    type: cleanText(rule.type || rule.recordType || "rulebook"),
+    title: cleanText(rule.title || rule.id),
+    sourceUrl: cleanText(rule.sourceUrl || ""),
+  }];
+  if (complete) {
+    const destructive = scenario.replacementEffects.find((item) => item.replacementKind === "destroy_another");
+    const dependent = scenario.destructionDependentFollowUps[0];
+    citations.push(
+      scenarioCardCitation(
+        destructive,
+        /[^。；;\n]{0,120}(?:作为代替|作為代替|代わりに)[^。；;\n]{0,120}(?:破坏|破壊)[^。；;\n]*/u,
+        "回合玩家一方先把原定破坏改写为破坏另一张表侧卡。",
+      ),
+      scenarioCardCitation(
+        dependent,
+        /(?:破坏|破壊)[^。；;\n]{0,140}(?:特殊召唤|特殊召喚)/u,
+        "后续特殊召唤依赖原先选择的卡在该步骤被成功破坏。",
+      ),
+    );
+  }
+
   return [{
     operationId: "simultaneous-destruction-replacement-order",
     step: (existingChecks || []).length + 1,
     action: "按回合玩家顺序逐个适用代替破坏并更新场面",
     legalityQuestion: "双方代替破坏效果在同一时点适用时如何决定顺序",
-    status: "conditional",
-    conclusion: "先适用回合玩家的代替破坏并立即更新场面，再重新检查非回合玩家的效果载体；若该卡已不在场上，则非回合玩家的代替效果不适用。",
+    status: complete ? "legal" : "conditional",
+    conclusion: complete
+      ? scenario.dependentSpecialSummonNotPerformed
+        ? "回合玩家一方的代替破坏先适用，作为代替选中的非回合玩家怪兽被破坏；该卡离场后，其自身的降攻代替不再适用。原本选择的破坏对象没有被破坏，因此依赖该次破坏成功的后续特殊召唤不处理。"
+        : "回合玩家一方的代替破坏先适用，作为代替选中的非回合玩家怪兽被破坏；该卡离场后，其自身的代替破坏效果不再适用。"
+      : "先适用回合玩家的代替破坏并立即更新场面，再重新检查非回合玩家的效果载体；若该卡已不在场上，则非回合玩家的代替效果不适用。",
     reasoning: [
       "两个不入连锁的代替处理不是在同一个旧场面中并行结算。",
-      "第一个处理完成后，位置与破坏状态立即改变，第二个效果必须在新状态中重新检查。",
+      "先完成回合玩家一方的代替，并立即把被选作替代的卡移出场上。",
+      "随后按新场面检查非回合玩家一方；效果载体已经离场，所以不能再用降攻等方式代替这次破坏。",
+      ...(scenario.dependentSpecialSummonNotPerformed
+        ? ["原破坏对象因第一次代替而没有被成功破坏，故以该破坏成功为前提的后续特殊召唤不处理。"]
+        : []),
     ],
-    citations: [{
-      id: String(rule.id),
-      quote,
-      application: "题目包含双方效果载体、同一破坏事件和代替破坏卡文，因此适用该顺序规则。",
-      type: cleanText(rule.type || rule.recordType || "rulebook"),
-      title: cleanText(rule.title || rule.id),
-      sourceUrl: cleanText(rule.sourceUrl || ""),
-    }],
-    missingFacts: scenario.turnPlayerKnown ? ["第一个代替处理后，需按更新后的场面确认非回合玩家的效果载体是否仍存在。"] : ["需要确认当前回合玩家及第一个代替处理后的场面。"],
+    citations: citations.filter(Boolean),
+    missingFacts: complete
+      ? []
+      : scenario.turnPlayerKnown
+        ? ["第一个代替处理后，需按更新后的场面确认非回合玩家的效果载体是否仍存在。"]
+        : ["需要确认当前回合玩家及第一个代替处理后的场面。"],
     resolvesRequiredConstraint: true,
+    deterministic: true,
+    deterministicComplete: complete,
   }];
 }
 
@@ -245,8 +323,13 @@ function constraintReviewToCheck(review, index) {
   };
 }
 
-function deriveMandatoryOperationBlockingChecks(requiredConstraints, existingChecks = []) {
+function deriveMandatoryOperationBlockingChecks(requiredConstraints, existingChecks = [], { userQuery = "", cardTexts = [] } = {}) {
   if ((existingChecks || []).some((check) => check.status === "illegal" && check.citations?.length)) return [];
+  const hasScenarioInput = Boolean(cleanText(userQuery)) || (cardTexts || []).some((item) => cleanText(item?.text));
+  if (hasScenarioInput) {
+    const scenario = compileRuleScenario({ userQuery, cardTexts });
+    if (!(scenario.mandatoryFieldSpellTrapReturn && scenario.currentChainSpellTrap && scenario.noOtherSpellTraps)) return [];
+  }
   const index = (existingChecks || []).length;
   const constraints = (requiredConstraints || []).filter((item) => item?.id && item?.text);
   const classified = constraints.map((item) => ({ item, signature: inferMandatoryOperationConstraintSignature(item) }));
@@ -279,7 +362,36 @@ function deriveMandatoryOperationBlockingChecks(requiredConstraints, existingChe
     ],
     citations,
     missingFacts: [],
+    deterministic: true,
+    deterministicComplete: true,
   }];
+}
+
+function selectDeterministicRuleEvidence(ruleEvidence, scenario) {
+  return uniqueBy((ruleEvidence || []).filter((item) => {
+    if (!item?.id || !item?.text) return false;
+    const mandatorySignature = inferMandatoryOperationConstraintSignature(item);
+    if (scenario.mandatoryFieldSpellTrapReturn && scenario.currentChainSpellTrap && scenario.noOtherSpellTraps
+        && ["mandatory_active_spell_trap_return_without_alternative", "active_spell_trap_return", "no_applicable_card_for_mandatory_operation"].includes(mandatorySignature)) {
+      return true;
+    }
+    return scenario.simultaneousDestructionReplacement && inferSimultaneousReplacementSignature(item);
+  }), (item) => String(item.id));
+}
+
+function scenarioCardCitation(item, pattern, application) {
+  if (!item?.id || !item?.text) return null;
+  const match = String(item.text).match(pattern)?.[0];
+  const quote = cleanText(match || item.text).slice(0, 500);
+  if (quote.length < 4) return null;
+  return {
+    id: String(item.id),
+    quote,
+    application,
+    type: "card_text",
+    title: cleanText(item.title || item.id),
+    sourceUrl: "",
+  };
 }
 
 function inferMandatoryOperationConstraintSignature(item) {
