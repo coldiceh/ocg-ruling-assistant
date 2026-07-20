@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { extractQuotedMentions, extractRagCards, extractUserProvidedCardTextBlocks } from "../backend/ragCardExtractor.mjs";
+import { buildAliasIndex, extractQuotedMentions, extractRagCards, extractUserProvidedCardTextBlocks, normalizeCardKey } from "../backend/ragCardExtractor.mjs";
+import { createLocalCardDataProvider } from "../backend/cardDataProvider.mjs";
 import { loadRagData, retrieveRagEvidence } from "../backend/ragEvidenceRetriever.mjs";
 import { buildRagRulingPromptBundle } from "../backend/ragRulingPrompt.mjs";
 import { callCardNameExtractionModel, callRagModel, callRulebookGroundingModel, callRuleQueryExtractionModel, estimateDeepSeekCostCny, getRagBudgetStatus, resetRagBudget, resolveRagProvider } from "../backend/ragModelClient.mjs";
@@ -290,6 +291,57 @@ test("ocg_name_normalization_resolves_common_variants", () => {
   const resolution = extractRagCards("「凶导的白天底」攻击宣言时触发「测试龙」效果。", { cards: [...cards, dogmatikaCard], maxCards: 6 });
   assert.ok(resolution.resolvedCards.some((card) => card.name === "凶教导之天底 阿尔白・佐亚"));
   assert.ok(resolution.resolvedCards.some((card) => card.name === "测试龙"));
+});
+
+test("ocg_name_normalization_treats 喰 and 食 as the same character variant", () => {
+  const localCards = [{ id: "variant-1", name: "吞喰测试之龙", aliases: ["吞喰测试之龙"] }];
+  const resolution = extractRagCards("「吞食测试之龙」的效果可以发动吗？", { cards: localCards });
+
+  assert.equal(normalizeCardKey("吞喰测试之龙"), normalizeCardKey("吞食测试之龙"));
+  assert.equal(resolution.resolvedCards[0]?.id, "variant-1");
+  assert.deepEqual(resolution.unresolvedMentions, []);
+});
+
+test("a unique one-character card-name difference resolves with high confidence", () => {
+  const localCards = [{ id: "edit-1", name: "深渊测试魔龙", aliases: ["深渊测试魔龙"] }];
+  const resolution = extractRagCards("「深渊测试魔凤」的效果可以发动吗？", { cards: localCards });
+  const providerMatch = createLocalCardDataProvider({ cards: localCards }).searchCardByName("深渊测试魔凤", 2)[0];
+
+  assert.equal(resolution.resolvedCards[0]?.id, "edit-1");
+  assert.ok(resolution.resolvedCards[0]?.confidence >= 0.9);
+  assert.equal(providerMatch?.id, "edit-1");
+  assert.ok(providerMatch?.confidence >= 0.9);
+});
+
+test("multiple one-character card-name neighbours remain below automatic resolution confidence", () => {
+  const localCards = [
+    { id: "edit-a", name: "深渊测试魔龙", aliases: ["深渊测试魔龙"] },
+    { id: "edit-b", name: "深渊测试魔王", aliases: ["深渊测试魔王"] },
+  ];
+  const resolution = extractRagCards("「深渊测试魔神」的效果可以发动吗？", { cards: localCards });
+  const providerMatches = createLocalCardDataProvider({ cards: localCards }).searchCardByName("深渊测试魔神", 2);
+
+  assert.equal(resolution.resolvedCards.length, 0);
+  assert.equal(resolution.unresolvedMentions[0]?.input, "深渊测试魔神");
+  assert.equal(providerMatches.length, 2);
+  assert.ok(providerMatches.every((card) => card.confidence < 0.72));
+});
+
+test("card alias indexes and local providers are cached by source data objects", () => {
+  const localCards = [{ id: "cache-1", name: "缓存测试龙", aliases: ["缓存测试龙"] }];
+  const localRecords = [];
+  const localQaRecords = [];
+
+  assert.equal(buildAliasIndex(localCards), buildAliasIndex(localCards));
+  assert.notEqual(buildAliasIndex(localCards), buildAliasIndex([...localCards]));
+  assert.equal(
+    createLocalCardDataProvider({ cards: localCards, records: localRecords, qaRecords: localQaRecords }),
+    createLocalCardDataProvider({ cards: localCards, records: localRecords, qaRecords: localQaRecords }),
+  );
+  assert.notEqual(
+    createLocalCardDataProvider({ cards: localCards, records: localRecords, qaRecords: localQaRecords }),
+    createLocalCardDataProvider({ cards: [...localCards], records: localRecords, qaRecords: localQaRecords }),
+  );
 });
 
 test("unresolved_new_card_with_text_can_be_analyzed", async () => {

@@ -13,6 +13,14 @@ import { compileRuleScenario } from "./ruleScenarioCompiler.mjs";
 const projectRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 const defaultDataDir = join(projectRoot, "data");
 const dataCache = new Map();
+const emptyDataArray = Object.freeze([]);
+const normalizedCardArrayCache = new WeakMap();
+const normalizedRecordArrayCache = new WeakMap();
+const normalizedDataCache = new WeakMap();
+const evidenceRecordBucketsCache = new WeakMap();
+const evidenceListCache = new WeakMap();
+const retrievalRecordFeatureCache = new WeakMap();
+const recordIdentityIndexCache = new WeakMap();
 
 export async function retrieveRagEvidence({
   userQuery,
@@ -26,10 +34,15 @@ export async function retrieveRagEvidence({
   env = {},
   fetchImpl = globalThis.fetch,
 } = {}) {
+  const retrievalStartedAt = Date.now();
+  const timingsMs = {};
+  let stageStartedAt = Date.now();
   const limits = readRetrievalLimits(env, maxPerBucket);
   const data = cards || records || qaRecords
     ? normalizeInjectedData({ cards, records, qaRecords })
     : await loadRagData(dataDir);
+  timingsMs.data = Date.now() - stageStartedAt;
+  stageStartedAt = Date.now();
   const cardProvider = createLocalCardDataProvider(data);
   const resolvedCards = cardResolution.resolvedCards || [];
   const providedTexts = normalizeUserProvidedCardTexts(cardResolution.userProvidedCardTexts || [], limits);
@@ -48,11 +61,14 @@ export async function retrieveRagEvidence({
     resolveUnresolvedMentionCardsWithBaige(unresolvedForBaige, { fetchImpl, env, limits, warnings: retrievalWarnings, debug: baigeDebug }),
   ]);
   const retrievalCards = dedupeCards([...enrichedLocalCards, ...baigeResolvedCards]).slice(0, limits.maxCards);
+  timingsMs.cardResolution = Date.now() - stageStartedAt;
   const remainingUnresolvedMentions = unresolvedMentionsAfterRetrieval(cardResolution.unresolvedMentions || [], retrievalCards);
   if (fuzzyCards.length) retrievalWarnings.push(`unresolved_mentions_fuzzy_matched:${fuzzyCards.map((card) => card.name).join(",")}`);
   if (baigeResolvedCards.length) retrievalWarnings.push(`unresolved_mentions_baige_matched:${baigeResolvedCards.map((card) => card.name).join(",")}`);
   if (providedTexts.length) retrievalWarnings.push("user_provided_text_not_official");
-  const allEvidenceRecords = [...data.records, ...data.qaRecords];
+  const recordBuckets = evidenceRecordBuckets(data);
+  const allEvidenceRecords = recordBuckets.all;
+  const scopedRecordBuckets = scopeRecordBuckets(recordBuckets, retrievalCards);
 
   const cardTexts = retrievalCards
     .map((card) => findCardRecord(card, data.cards) || cardProvider.getCardProfile(card.id || card.cardId) || card)
@@ -70,6 +86,7 @@ export async function retrieveRagEvidence({
     ...providedTexts.map((item) => item.name),
     ...normalizedRuleQueries.map((item) => item.query),
   ].filter(Boolean);
+  stageStartedAt = Date.now();
   const rulebookCandidates = retrieveRulebookPassages({
     records: allEvidenceRecords,
     userQuery,
@@ -77,26 +94,30 @@ export async function retrieveRagEvidence({
     maxPassages: limits.maxRulebookCandidates,
     maxPassageChars: limits.maxRulebookPassageChars,
   });
+  timingsMs.rulebook = Date.now() - stageStartedAt;
   if (rulebookCandidates.length) retrievalWarnings.push(`rulebook_passages_retrieved:${rulebookCandidates.length}`);
 
+  stageStartedAt = Date.now();
   const officialMatches = searchOfficialQaEvidence({
     question: userQuery,
-    records: data.qaRecords,
+    records: scopedRecordBuckets.officialQa,
     resolvedCards: retrievalCards,
     limit: Math.max(20, limits.maxOfficialQa * 4),
   });
+  timingsMs.officialQa = Date.now() - stageStartedAt;
   const officialQaDirectCandidates = officialMatches.exact
     .filter((match) => isOfficialQaRecord(match.record))
     .map((match) => evidenceFromOfficialMatch(match, "official_qa", limits.maxEvidenceTextChars, retrievalWarnings))
     .slice(0, limits.maxOfficialQa);
   const directIds = new Set(officialQaDirectCandidates.map((item) => item.id));
 
+  stageStartedAt = Date.now();
   const officialQaRelatedSource = dedupeBy([
     ...officialMatches.near.filter((match) => isOfficialQaRecord(match.record) && isUsefulOfficialRelatedMatch(match)),
     ...officialMatches.related.filter((match) => isOfficialQaRecord(match.record) && isUsefulOfficialRelatedMatch(match)),
     ...rankRecords({
       userQuery,
-      records: data.qaRecords.filter((record) => record.recordType === "qa"),
+      records: scopedRecordBuckets.qa,
       resolvedCards: retrievalCards,
       mentionQueries,
       ruleSearchQueries: normalizedRuleQueries,
@@ -113,7 +134,7 @@ export async function retrieveRagEvidence({
 
   const provisionalOfficialResponseSource = rankRecords({
     userQuery,
-    records: allEvidenceRecords.filter(isProvisionalOfficialResponseRecord),
+    records: scopedRecordBuckets.provisionalOfficialResponses,
     resolvedCards: retrievalCards,
     mentionQueries,
     ruleSearchQueries: normalizedRuleQueries,
@@ -128,7 +149,7 @@ export async function retrieveRagEvidence({
 
   const faqRelatedSource = rankRecords({
     userQuery,
-    records: allEvidenceRecords.filter((record) => record.recordType === "card-faq"),
+    records: scopedRecordBuckets.faq,
     resolvedCards: retrievalCards,
     mentionQueries,
     ruleSearchQueries: normalizedRuleQueries,
@@ -142,7 +163,7 @@ export async function retrieveRagEvidence({
 
   const rawRelatedSource = rankRecords({
     userQuery,
-    records: allEvidenceRecords.filter((record) => !["card-faq", "card-text"].includes(record.recordType) && !isRulebookRecord(record) && !isProvisionalOfficialResponseRecord(record)),
+    records: scopedRecordBuckets.rawRelated,
     resolvedCards: retrievalCards,
     mentionQueries,
     ruleSearchQueries: normalizedRuleQueries,
@@ -153,6 +174,8 @@ export async function retrieveRagEvidence({
     .slice(0, limits.maxRelatedEvidence)
     .map((record) => evidenceFromRecord(record, evidenceTypeForRecord(record, "related"), limits.maxEvidenceTextChars, retrievalWarnings))
     .filter((item) => !directIds.has(item.id));
+  timingsMs.relatedEvidence = Date.now() - stageStartedAt;
+  timingsMs.total = Date.now() - retrievalStartedAt;
 
   if (!retrievalCards.length) retrievalWarnings.push("card_name_not_resolved_raw_query_fallback_used");
   if (!cardTexts.length && retrievalCards.length) retrievalWarnings.push("resolved_card_text_not_found");
@@ -180,6 +203,14 @@ export async function retrieveRagEvidence({
       cardCount: data.cards.length,
       userProvidedCardTextCount: providedTexts.length,
       rulebookCandidateCount: rulebookCandidates.length,
+      scopedRecordCounts: {
+        officialQa: scopedRecordBuckets.officialQa.length,
+        qa: scopedRecordBuckets.qa.length,
+        provisionalOfficialResponses: scopedRecordBuckets.provisionalOfficialResponses.length,
+        faq: scopedRecordBuckets.faq.length,
+        rawRelated: scopedRecordBuckets.rawRelated.length,
+      },
+      timingsMs,
       ruleSearchQueryCount: normalizedRuleQueries.length,
       ruleSearchQueries: normalizedRuleQueries,
       baigeSearchCount: baigeDebug.searchCount,
@@ -226,7 +257,11 @@ export async function loadRagData(dataDir = defaultDataDir) {
 }
 
 export function evidenceBucketsToList(evidence = {}) {
-  return [
+  if (evidence && typeof evidence === "object") {
+    const cached = evidenceListCache.get(evidence);
+    if (cached) return cached;
+  }
+  const records = [
     ...(evidence.cardTexts || []),
     ...(evidence.userProvidedCardTexts || []),
     ...(evidence.officialQaDirectCandidates || []),
@@ -235,13 +270,134 @@ export function evidenceBucketsToList(evidence = {}) {
     ...(evidence.faqRelated || []),
     ...(evidence.rawRelatedEvidence || []),
   ];
+  if (evidence && typeof evidence === "object") evidenceListCache.set(evidence, records);
+  return records;
 }
 
-function normalizeInjectedData({ cards = [], records = [], qaRecords = [] }) {
-  const normalizedCards = (Array.isArray(cards) ? cards : []).map(normalizeCard).filter((card) => card.name);
-  const normalizedRecords = (Array.isArray(records) ? records : []).map(normalizeRecord).filter((record) => record.id && record.text);
-  const normalizedQaRecords = (Array.isArray(qaRecords) ? qaRecords : []).map(normalizeRecord).filter((record) => record.id && record.text);
-  return { cards: normalizedCards, records: normalizedRecords, qaRecords: normalizedQaRecords };
+export function normalizeInjectedData({ cards = [], records = [], qaRecords = [] } = {}) {
+  const sourceCards = Array.isArray(cards) ? cards : emptyDataArray;
+  const sourceRecords = Array.isArray(records) ? records : emptyDataArray;
+  const sourceQaRecords = Array.isArray(qaRecords) ? qaRecords : emptyDataArray;
+  const cached = cachedNormalizedData(sourceCards, sourceRecords, sourceQaRecords);
+  if (cached) return cached;
+
+  const normalizedCards = normalizeDataArray(sourceCards, normalizedCardArrayCache, normalizeCard, (card) => card.name);
+  const normalizedRecords = normalizeDataArray(sourceRecords, normalizedRecordArrayCache, normalizeRecord, (record) => record.id && record.text);
+  const normalizedQaRecords = normalizeDataArray(sourceQaRecords, normalizedRecordArrayCache, normalizeRecord, (record) => record.id && record.text);
+  const canonical = cachedNormalizedData(normalizedCards, normalizedRecords, normalizedQaRecords);
+  if (canonical) {
+    cacheNormalizedData(sourceCards, sourceRecords, sourceQaRecords, canonical);
+    return canonical;
+  }
+
+  const data = { cards: normalizedCards, records: normalizedRecords, qaRecords: normalizedQaRecords };
+  cacheNormalizedData(sourceCards, sourceRecords, sourceQaRecords, data);
+  cacheNormalizedData(normalizedCards, normalizedRecords, normalizedQaRecords, data);
+  return data;
+}
+
+function normalizeDataArray(source, cache, normalizer, predicate) {
+  const cached = cache.get(source);
+  if (cached) return cached;
+  const normalized = source.map(normalizer).filter(predicate);
+  cache.set(source, normalized);
+  cache.set(normalized, normalized);
+  return normalized;
+}
+
+function cachedNormalizedData(cards, records, qaRecords) {
+  return normalizedDataCache.get(records)?.get(cards)?.get(qaRecords) || null;
+}
+
+function cacheNormalizedData(cards, records, qaRecords, data) {
+  let byCards = normalizedDataCache.get(records);
+  if (!byCards) {
+    byCards = new WeakMap();
+    normalizedDataCache.set(records, byCards);
+  }
+  let byQaRecords = byCards.get(cards);
+  if (!byQaRecords) {
+    byQaRecords = new WeakMap();
+    byCards.set(cards, byQaRecords);
+  }
+  byQaRecords.set(qaRecords, data);
+}
+
+function evidenceRecordBuckets(data) {
+  const cached = evidenceRecordBucketsCache.get(data);
+  if (cached) return cached;
+  const all = [...data.records, ...data.qaRecords];
+  const buckets = {
+    all,
+    officialQa: data.qaRecords.filter((record) => ["qa", "card-faq", "official-database"].includes(record.recordType)),
+    qa: data.qaRecords.filter((record) => record.recordType === "qa"),
+    provisionalOfficialResponses: all.filter(isProvisionalOfficialResponseRecord),
+    faq: all.filter((record) => record.recordType === "card-faq"),
+    rawRelated: all.filter((record) => !["card-faq", "card-text"].includes(record.recordType) && !isRulebookRecord(record) && !isProvisionalOfficialResponseRecord(record)),
+  };
+  evidenceRecordBucketsCache.set(data, buckets);
+  return buckets;
+}
+
+function scopeRecordBuckets(buckets, resolvedCards) {
+  return {
+    officialQa: recordsForResolvedCards(buckets.officialQa, resolvedCards),
+    qa: recordsForResolvedCards(buckets.qa, resolvedCards),
+    provisionalOfficialResponses: recordsForResolvedCards(buckets.provisionalOfficialResponses, resolvedCards),
+    faq: recordsForResolvedCards(buckets.faq, resolvedCards),
+    rawRelated: recordsForResolvedCards(buckets.rawRelated, resolvedCards),
+  };
+}
+
+function recordsForResolvedCards(records, resolvedCards) {
+  const identities = cardIdentityKeys(resolvedCards);
+  if (!identities.length || !(records || []).length) return records || [];
+  const index = recordIdentityIndex(records);
+  const matched = new Set();
+  for (const identity of identities) {
+    for (const record of index.get(identity) || []) matched.add(record);
+  }
+  return matched.size ? [...matched] : records;
+}
+
+function cardIdentityKeys(cards) {
+  const keys = [];
+  const seen = new Set();
+  for (const card of cards || []) {
+    const id = normalizeId(card.id || card.cardId);
+    if (id && !seen.has("id:" + id)) {
+      seen.add("id:" + id);
+      keys.push("id:" + id);
+    }
+    for (const name of [card.name, card.cnName, card.jaName, card.enName, ...(card.aliases || [])]) {
+      const key = normalizeCardKey(name);
+      if (!key || seen.has("name:" + key)) continue;
+      seen.add("name:" + key);
+      keys.push("name:" + key);
+    }
+  }
+  return keys;
+}
+
+function recordIdentityIndex(records) {
+  const cached = recordIdentityIndexCache.get(records);
+  if (cached) return cached;
+  const index = new Map();
+  for (const record of records || []) {
+    const keys = new Set([
+      ...(record.cardIds || []).map((id) => "id:" + normalizeId(id)).filter((key) => key !== "id:"),
+      ...(record.cards || []).map((name) => "name:" + normalizeCardKey(name)).filter((key) => key !== "name:"),
+    ]);
+    const directId = normalizeId(record.cardId);
+    if (directId) keys.add("id:" + directId);
+    for (const key of keys) {
+      const matches = index.get(key) || [];
+      matches.push(record);
+      index.set(key, matches);
+    }
+  }
+  recordIdentityIndexCache.set(records, index);
+  return index;
 }
 
 function normalizeCard(card = {}) {
@@ -453,9 +609,9 @@ function rankRecords({ userQuery, records, resolvedCards, mentionQueries = [], r
 
 function scoreRecord(record, { queryTerms, ruleTerms, rulePhrases, queryKey, resolvedIds, resolvedNames, unresolvedNames, allowNoCardMatch }) {
   const text = `${record.title || ""}\n${record.text || ""}`;
-  const textKey = normalizeCardKey(text);
-  const cardIdMatch = (record.cardIds || []).some((id) => resolvedIds.has(normalizeId(id)));
-  const cardNameMatch = (record.cards || []).some((name) => resolvedNames.has(normalizeCardKey(name))) || [...resolvedNames].some((name) => name.length >= 3 && !hasNumberedCardIdentityConflict(name, text) && textKey.includes(name));
+  const { textKey, normalizedCardIds, normalizedCardNames } = retrievalRecordFeatures(record, text);
+  const cardIdMatch = normalizedCardIds.some((id) => resolvedIds.has(id));
+  const cardNameMatch = normalizedCardNames.some((name) => resolvedNames.has(name)) || [...resolvedNames].some((name) => name.length >= 3 && !hasNumberedCardIdentityConflict(name, text) && textKey.includes(name));
   const unresolvedNameMatch = [...unresolvedNames].some((name) => name.length >= 3 && !hasNumberedCardIdentityConflict(name, text) && textKey.includes(name));
   const cardScore = cardIdMatch ? 5 : cardNameMatch ? 4 : unresolvedNameMatch ? 2 : 0;
   if (!allowNoCardMatch && resolvedIds.size + resolvedNames.size > 0 && !cardScore) return 0;
@@ -487,6 +643,21 @@ function scoreRecord(record, { queryTerms, ruleTerms, rulePhrases, queryKey, res
   if (record.recordType === "qa") score += 0.5;
   if (record.recordType === "card-faq") score += 0.4;
   return score;
+}
+
+function retrievalRecordFeatures(record = {}, preparedText) {
+  if (record && typeof record === "object") {
+    const cached = retrievalRecordFeatureCache.get(record);
+    if (cached) return cached;
+  }
+  const text = preparedText ?? [record.title || "", record.text || ""].join("\n");
+  const features = {
+    textKey: normalizeCardKey(text),
+    normalizedCardIds: (record.cardIds || []).map(normalizeId).filter(Boolean),
+    normalizedCardNames: (record.cards || []).map(normalizeCardKey).filter(Boolean),
+  };
+  if (record && typeof record === "object") retrievalRecordFeatureCache.set(record, features);
+  return features;
 }
 
 function normalizeRuleSearchQueries(items, limits = {}) {
@@ -867,7 +1038,7 @@ function mentionSearchQueries(mention) {
 async function enrichCardsWithBaige(cards, { fetchImpl, env, limits, warnings, debug }) {
   const sourceCards = (cards || []).slice(0, limits.maxCards);
   const result = await Promise.all(sourceCards.map(async (card) => {
-    if (hasUsableCardText(card) && (card.id || card.cardId) && card.sourceUrl && (!enginePasscodeRequired(env) || hasEnginePasscode(card))) {
+    if (hasUsableCardText(card) && (card.id || card.cardId) && (!enginePasscodeRequired(env) || hasEnginePasscode(card))) {
       return card;
     }
     const query = card.name || card.cnName || card.jaName || card.enName || card.input;

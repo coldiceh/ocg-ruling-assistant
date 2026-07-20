@@ -25,7 +25,7 @@
     "revalidate:answers": "node scripts/revalidate-answers.mjs",
     "check:legacy-validator": "node --check backend/effectPrimitives.mjs && node --check backend/effectResolutionEngine.mjs && node --check backend/effectTemplateRegistry.mjs && node --check backend/restrictionTemplates.mjs && node --check backend/chainSafety.mjs && node --check backend/cardTextSections.mjs && node --check backend/cardProfile.mjs && node --check backend/rulingBlockers.mjs && node --check backend/judgeAnswerValidator.mjs && node --check backend/fastJudgeEngine.mjs",
     "smoke:official-qa": "node --test tests/official-qa-smoke.test.mjs tests/official-qa-first-smoke.test.mjs tests/answer-router.test.mjs",
-    "test": "node --test tests/rag-ruling-pipeline.test.mjs tests/rulebook-grounding.test.mjs tests/baige_search_mock.test.mjs tests/sync-ocg-rule.test.mjs tests/source-freshness.test.mjs tests/api-answer-rag-default.test.mjs tests/api-budget-auth.test.mjs tests/query-audit.test.mjs tests/ocg-engine-client.test.mjs tests/ocg-scenario-planner.test.mjs tests/ui-rendering.test.mjs"
+    "test": "node --test tests/rag-ruling-pipeline.test.mjs tests/deterministic-ruling-fastpath.test.mjs tests/rag-retrieval-cache.test.mjs tests/rulebook-grounding.test.mjs tests/baige_search_mock.test.mjs tests/sync-ocg-rule.test.mjs tests/source-freshness.test.mjs tests/api-answer-rag-default.test.mjs tests/api-budget-auth.test.mjs tests/query-audit.test.mjs tests/ocg-engine-client.test.mjs tests/ocg-scenario-planner.test.mjs tests/ui-rendering.test.mjs"
   },
   "engines": {
     "node": ">=20"

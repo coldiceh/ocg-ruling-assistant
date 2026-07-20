@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { loadRagData, retrieveRagEvidence } from "../backend/ragEvidenceRetriever.mjs";
 import { callRulebookGroundingModel, selectPriorityConstraintEvidence } from "../backend/ragModelClient.mjs";
-import { validateOperationLegalityModelOutput } from "../backend/operationLegalityAnalyzer.mjs";
+import { analyzeDeterministicOperationLegality, validateOperationLegalityModelOutput } from "../backend/operationLegalityAnalyzer.mjs";
 import { retrieveRulebookPassages } from "../backend/rulebookPassageRetriever.mjs";
 import { buildDocTargets } from "../scripts/sync-ocg-rule.mjs";
 
@@ -420,6 +420,117 @@ test("replacement card text and player roles retrieve the turn-player-first rule
   assert.equal(check.status, "conditional");
   assert.match(check.conclusion, /先适用回合玩家.*重新检查非回合玩家/u);
   assert.equal(grounding.operationLegality.hasUnresolvedConstraints, false);
+});
+
+test("deterministic local analysis blocks mandatory return when the only candidate is the resolving trap", () => {
+  const activeCardRule = {
+    id: "neutral-rule-active-card",
+    type: "rulebook",
+    title: "发动中卡片的位置限制",
+    text: "正在发动或连锁处理中的非永续魔法・陷阱卡不能从场上返回手牌。",
+  };
+  const noCandidateRule = {
+    id: "neutral-rule-no-candidate",
+    type: "rulebook",
+    title: "必做处理的发动条件",
+    text: "除自身以外没有能适用的卡时不能发动。",
+  };
+  const result = analyzeDeterministicOperationLegality({
+    userQuery: "双方魔法陷阱区域只有刚刚发动的「测试通常陷阱」。我方能否使用「测试回手者」的效果？",
+    cardTexts: [{
+      id: "neutral-returner",
+      type: "card_text",
+      title: "测试回手者",
+      cardType: "monster",
+      text: "对手发动魔法・陷阱卡时可以发动。从手牌将此卡特殊召唤。然后，将场上的魔法・陷阱卡全部放回手牌。",
+    }, {
+      id: "neutral-trap",
+      type: "card_text",
+      title: "测试通常陷阱",
+      cardType: "trap",
+      text: "以场上1只怪兽为对象发动。那只怪兽的效果无效。",
+    }],
+    ruleEvidence: [activeCardRule, noCandidateRule],
+  });
+
+  assert.equal(result.deterministic, true);
+  assert.equal(result.complete, true);
+  assert.equal(result.hasBlockingCheck, true);
+  assert.match(result.shortAnswer, /不能发动/u);
+  assert.doesNotMatch(result.shortAnswer, /天雷|无限泡影/u);
+});
+
+test("deterministic local analysis completes turn-player-first replacement after the other carrier is destroyed", () => {
+  const rule = {
+    id: "neutral-rule-replacement-order",
+    type: "rulebook",
+    title: "同一时点双方的代替破坏",
+    text: "同1时点双方都要适用代替破坏的效果时，回合玩家的先适用，之后非回合玩家持有这类效果的卡已经不在场上存在的场合，不适用。",
+  };
+  const replacementText = "这张卡被战斗破坏的场合，可以作为代替把场上其他1只表侧表示怪兽破坏。";
+  const result = analyzeDeterministicOperationLegality({
+    userQuery: "我方回合，双方的「测试代破兽」在这次战斗中都要被破坏。我方先适用代替效果，作为自身破坏的代替将对方的「测试代破兽」破坏。对方还能适用其效果吗？",
+    cardTexts: [{
+      id: "neutral-replacement-carrier",
+      type: "card_text",
+      title: "测试代破兽",
+      cardType: "monster",
+      text: replacementText,
+    }],
+    ruleEvidence: [rule],
+  });
+
+  const check = result.checks.find((item) => item.operationId === "simultaneous-destruction-replacement-order");
+  assert.ok(check);
+  assert.equal(check.status, "legal");
+  assert.deepEqual(check.missingFacts, []);
+  assert.equal(result.deterministic, true);
+  assert.equal(result.complete, true);
+  assert.match(result.shortAnswer, /非回合玩家.*不再适用/u);
+  assert.doesNotMatch(result.shortAnswer, /破械/u);
+});
+
+test("deterministic local analysis applies the turn player's replacement first and stops dependent summon", () => {
+  const rule = {
+    id: "neutral-rule-replacement-order-follow-up",
+    type: "rulebook",
+    title: "同一时点双方的代替破坏",
+    text: "同1时点双方都要适用代替破坏的效果时，回合玩家的先适用，之后非回合玩家持有这类效果的卡已经不在场上存在的场合，不适用。",
+  };
+  const result = analyzeDeterministicOperationLegality({
+    userQuery: "对方从手牌发动「测试召唤者」的效果，以对方场上的「第一载体」为对象破坏。对方选择适用第一载体的代替效果，作为自身破坏的代替将我方的「第二载体」破坏。此时我方第二载体可以适用降低1000攻击力作为被破坏的代替吗？测试召唤者还会特殊召唤吗？",
+    cardTexts: [{
+      id: "neutral-destroy-summoner",
+      type: "card_text",
+      title: "测试召唤者",
+      cardType: "monster",
+      text: "自己主要阶段，以自己场上1只怪兽为对象可以从手牌发动。将那只怪兽破坏，那之后，从手牌将此卡特殊召唤。",
+    }, {
+      id: "neutral-first-carrier",
+      type: "card_text",
+      title: "第一载体",
+      cardType: "monster",
+      text: "场上的这张卡要被效果破坏的场合，可以作为代替把场上其他1张表侧表示卡破坏。",
+    }, {
+      id: "neutral-second-carrier",
+      type: "card_text",
+      title: "第二载体",
+      cardType: "monster",
+      text: "这张卡要被效果破坏的场合，可以作为代替使这张卡的攻击力下降1000。",
+    }],
+    ruleEvidence: [rule],
+  });
+
+  const check = result.checks.find((item) => item.operationId === "simultaneous-destruction-replacement-order");
+  assert.ok(check);
+  assert.equal(check.status, "legal");
+  assert.equal(result.deterministic, true);
+  assert.equal(result.complete, true);
+  assert.equal(result.hasBlockingCheck, false);
+  assert.match(result.shortAnswer, /降攻代替不再适用/u);
+  assert.match(result.shortAnswer, /原本选择的破坏对象没有被破坏/u);
+  assert.match(result.shortAnswer, /后续特殊召唤不处理/u);
+  assert.doesNotMatch(result.shortAnswer, /完美电子|破械/u);
 });
 
 test("focused_state_transition_review_separates_cost_from_effect_processing", async () => {
