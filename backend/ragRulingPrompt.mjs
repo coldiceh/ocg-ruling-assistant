@@ -114,7 +114,7 @@ export function buildRagRulingPromptBundle({
     "confidenceSelfEstimate 只是模型自评，不代表最终官方等级。",
     "输出必须是单个 JSON 对象，不要 markdown，不要代码围栏，不要 JSON 外说明。",
     "JSON 字段必须包含 answerLevel、shortAnswer、reasoning、usedCards、usedEvidence、missingInfo、riskFlags、confidenceSelfEstimate。",
-    "shortAnswer 只写直接结论，不要把完整推理塞进 shortAnswer。",
+    "shortAnswer 只写直接结论，不要把完整推理塞进 shortAnswer。若题目同时询问能否发动和后续如何处理，shortAnswer 必须同时写明发动结论与最终处理结果，不得只写“可以发动”。",
     "reasoning 必须是至少 2 条非空字符串组成的 JSON 数组；每条都要说明所依据的卡片文本、检索证据或规则，以及它如何适用于题目事实。",
     `允许的 answerLevel：${RAG_ANSWER_LEVELS.join(", ")}。`,
     "usedEvidence 只能引用下方 evidence 中真实存在的 id。",
@@ -336,7 +336,7 @@ function buildCompactRagPrompt({ payload, maxPromptChars }) {
     "不受效果影响不等于不能成为对象；魔法陷阱卡的卡的发动被无效与场上表侧卡的效果发动被无效必须分开判断。",
     "必须严格区分手牌、场上、墓地、除外和额外牌组；每一步题目明确的所在区域优先于模型记忆；仍在手牌的卡不能满足场上或墓地条件，但 cost 造成的位置变化必须从支付时起更新。",
     "输出单个 JSON 对象，字段为 answerLevel、shortAnswer、reasoning、usedCards、usedEvidence、missingInfo、riskFlags、confidenceSelfEstimate。",
-    "shortAnswer 只写结论；reasoning 必须是至少 2 条非空字符串的数组，并逐条说明证据如何适用于题目。",
+    "shortAnswer 只写结论；若题目同时询问能否发动和后续如何处理，必须同时写明发动结论与最终处理结果，不得只写“可以发动”；reasoning 必须是至少 2 条非空字符串的数组，并逐条说明证据如何适用于题目。",
     JSON.stringify(context),
   ].join("\n");
   let prompt = render(compactPayload);

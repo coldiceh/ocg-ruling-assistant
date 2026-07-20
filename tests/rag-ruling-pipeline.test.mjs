@@ -260,6 +260,24 @@ test("extracts_user_provided_card_text_block", () => {
   assert.match(bundle.prompt, /不是官方 direct evidence/u);
 });
 
+test("rag prompts require activation conclusions to include downstream resolution", () => {
+  const bundle = buildRagRulingPromptBundle({
+    userQuery: "这个效果可以发动吗，后续怎么处理？",
+    cardResolution: { resolvedCards: cards },
+    evidence: {
+      cardTexts: [{ id: "card-text-summary", type: "card_text", title: "测试卡文本", text: "舍弃1张手牌可以发动。那之后，进行处理。" }],
+      officialQaDirectCandidates: [],
+      officialQaRelated: [],
+      faqRelated: [],
+      rawRelatedEvidence: [],
+      retrievalWarnings: [],
+    },
+  });
+  assert.match(bundle.prompt, /必须同时写明发动结论与最终处理结果/u);
+  assert.match(bundle.prompt, /不得只写“可以发动”/u);
+  assert.match(bundle.recoveryPrompt, /必须同时写明发动结论与最终处理结果/u);
+});
+
 test("quoted_mentions_all_preserved", () => {
   const mentions = extractQuotedMentions("【A卡】《B卡》「C卡」『D卡』[E卡]“F卡”\"G卡\"'H卡'");
   assert.deepEqual(mentions, ["A卡", "B卡", "C卡", "D卡", "E卡", "F卡", "G卡", "H卡"]);

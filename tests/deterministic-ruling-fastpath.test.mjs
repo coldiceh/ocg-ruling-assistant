@@ -44,6 +44,22 @@ test("production fast path rechecks continuous immunity after paying discard cos
   assert.equal(answer.debug.timingsMs.finalModel, 0);
 });
 
+test("exact Albaz question with production data includes activation and downstream resolution", async () => {
+  const answer = await answerRagRulingQuestion({
+    question: "对方场上存在的卡只有表侧表示的「吞食圣痕之龙」1只，双方墓地没有卡。\n\n我方召唤「阿不思的落胤」时，可以将「教导的圣女 艾克莉西亚」作为Cost丢弃送去墓地，来发动「阿不思的落胤」的「①」效果吗，后续怎么处理",
+    env: localEnv,
+    dryRun: true,
+  });
+
+  assert.equal(answer.shortAnswer, "可以发动，但是不会进行任何效果处理；因此不进行融合召唤。");
+  assert.deepEqual(answer.debug.unresolvedMentions, []);
+  assert.equal(answer.debug.deterministicDecision, "state_transition");
+  assert.equal(answer.debug.semanticStateTransition.status, "resolved");
+  assert.equal(answer.debug.semanticStateTransition.complete, true);
+  assert.equal(answer.debug.modelUsed, "deterministic-ruling-reasoner");
+  assert.equal(answer.debug.timingsMs.finalModel, 0);
+});
+
 test("production fast path rejects mandatory return when only the activating trap exists", async () => {
   const answer = await answerRagRulingQuestion({
     question: "对方场上有「绚岚之达维」，我方以达维为对象发动「无限泡影」，这个时候场上没有其他魔陷，对方能不能发动「天雷之双风神」的效果？",
