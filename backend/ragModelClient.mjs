@@ -1,5 +1,6 @@
 import { emptyOperationLegality, validateOperationLegalityModelOutput } from "./operationLegalityAnalyzer.mjs";
 import { RAG_ANSWER_LEVELS } from "./ragRulingPrompt.mjs";
+import { compileRuleScenario } from "./ruleScenarioCompiler.mjs";
 
 const DEFAULT_DEEPSEEK_BASE_URL = "https://api.deepseek.com";
 const DEFAULT_DEEPSEEK_MODEL = "deepseek-v4-flash";
@@ -7,7 +8,7 @@ const DEFAULT_DEEPSEEK_CARD_MODEL = "deepseek-v4-flash";
 const DEFAULT_LIGHTWEIGHT_EXTRACTION_TIMEOUT_MS = 4500;
 const DEFAULT_DAILY_BUDGET_CNY = 10;
 const DEFAULT_BUDGET_TIMEZONE = "Asia/Tokyo";
-const RESTRICTIVE_EVIDENCE_PATTERN = /(?:不能|不可|不得|无法|不可以|禁止|不满足|不存在|cannot|can't|must not|may not|not allowed|できません|発動できません)/iu;
+const RESTRICTIVE_EVIDENCE_PATTERN = /(?:不能|不可|不得|无法|不可以|不适用|不在场上存在|禁止|不满足|不存在|cannot|can't|must not|may not|not allowed|できません|発動できません)/iu;
 const GROUNDING_MECHANISM_PATTERNS = Object.freeze([
   ["activation", /发动|發動|発動|activate/iu],
   ["chain", /连锁|連鎖|チェーン|chain/iu],
@@ -32,6 +33,7 @@ const PRIORITY_SCENARIO_ABSENCE_PATTERN = /(?:没有其他|不存在其他|并�
 const PRIORITY_ACTIVE_SPELL_TRAP_RETURN_PATTERN = /(?:发动|發動|発動|连锁|連鎖|チェーン|chain).{0,80}(?:魔法|陷阱|罠|spell|trap).{0,80}(?:回到|返回|放回|弹回|彈回|戻|return)|(?:魔法|陷阱|罠|spell|trap).{0,80}(?:连锁|連鎖|チェーン|chain).{0,80}(?:回到|返回|放回|弹回|彈回|戻|return)/iu;
 const PRIORITY_NO_APPLICABLE_CARD_PATTERN = /(?:(?:除(?:了)?自身以外|除.{0,20}以外|没有其他|不存在其他|并无其他|无其他|no other|none|ほか|他).{0,180}(?:适用|適用|返回|回到|放回|选择|選択|对象|対象|处理|處理|処理|カード|card).{0,100}(?:(?:不能|不可|不得|无法|不可以|cannot).{0,16}(?:发动|發動|発動|activate)|発動できません|cannot activate))|(?:(?:(?:不能|不可|不得|无法|不可以|cannot).{0,16}(?:发动|發動|発動|activate)|発動できません|cannot activate).{0,100}(?:除自身以外|没有其他|不存在其他|no other|ほか.{0,24}ない))/iu;
 const PRIORITY_TARGET_RESTRICTION_PATTERN = /(?:不能|不可|不得|无法|不可以|cannot|can't|対象にできません).{0,28}(?:作为|成为|选为|選択|取为|取作|対象|target).{0,16}(?:对象|對象|対象|target)|(?:不能|不可|不得|无法|不可以|cannot|can't).{0,20}(?:取|选择|選択).{0,12}(?:对象|對象|対象|target)/iu;
+const PRIORITY_SIMULTANEOUS_REPLACEMENT_PATTERN = /同\s*1?\s*时点.{0,24}双方.{0,30}(?:代替破坏|破坏.{0,12}代替).{0,60}回合玩家.{0,18}先适用.{0,100}非回合玩家.{0,60}(?:不在场上存在|已经不在场上).{0,30}不适用/su;
 const memoryBudget = new Map();
 const cardNameExtractionCache = new Map();
 const ruleQueryExtractionCache = new Map();
@@ -471,6 +473,8 @@ export async function callRulebookGroundingModel({
       focusedOutcome: focusedTask ? focusedOutcome : null,
       candidates,
       priorityConstraintEvidence,
+      userQuery,
+      cardTexts: selectedCardTexts,
     });
     if (!combined.operationLegality) {
       return emptyRulebookGroundingResult(provider, modelName, false, [
@@ -578,6 +582,8 @@ export async function callRulebookGroundingModel({
       focusedOutcome: focusedTask ? focusedOutcome : null,
       candidates,
       priorityConstraintEvidence,
+      userQuery,
+      cardTexts: selectedCardTexts,
       readRaw: (response) => response?.rawText,
     });
     if (!combined.operationLegality) {
@@ -1633,8 +1639,7 @@ function shouldRunFocusedStateTransitionReview({
   const hasCostMove = /(?:cost|代价|代價|支付|舍弃|丢弃|捨て|送去墓地|送墓|解放)/iu.test(scenarioText);
   const hasConditionalContinuousEffect = /(?:只要|存在.{0,24}(?:场上|墓地|除外)|不受.{0,12}效果影响|受けない|unaffected)/iu.test(scenarioText);
   const costStateTransition = hasActivation && hasCostMove && hasConditionalContinuousEffect;
-  const simultaneousReplacement = /(?:代替破坏|破坏.{0,12}代替|破壊.{0,12}代わり|替代破坏)/u.test(scenarioText)
-    && /(?:同时|同一时点|双方|多个|复数|複数|各自|都要|一起)/u.test(scenarioText);
+  const simultaneousReplacement = compileRuleScenario({ userQuery, cardTexts }).simultaneousDestructionReplacement;
   return costStateTransition || simultaneousReplacement;
 }
 
@@ -1710,6 +1715,8 @@ function combineRulebookGroundingOutcomes({
   focusedOutcome,
   candidates = [],
   priorityConstraintEvidence = [],
+  userQuery = "",
+  cardTexts = [],
   readRaw = (value) => value,
 } = {}) {
   const warnings = [];
@@ -1720,6 +1727,8 @@ function combineRulebookGroundingOutcomes({
     rawText = String(readRaw(primaryOutcome.value) || "");
     operationLegality = validateOperationLegalityModelOutput(rawText, candidates, {
       requiredConstraintEvidence: priorityConstraintEvidence,
+      userQuery,
+      cardTexts,
     });
   } else if (primaryOutcome?.status === "rejected") {
     warnings.push("rulebook_grounding_primary_failed:" + safeErrorMessage(primaryOutcome.reason));
@@ -1731,6 +1740,8 @@ function combineRulebookGroundingOutcomes({
       const mergedRaw = mergeRulebookGroundingOutputs(rawText, focusedRaw);
       const repaired = validateOperationLegalityModelOutput(mergedRaw, candidates, {
         requiredConstraintEvidence: priorityConstraintEvidence,
+        userQuery,
+        cardTexts,
       });
       if (isBetterOperationLegality(repaired, operationLegality)) {
         rawText = mergedRaw;
@@ -1743,6 +1754,8 @@ function combineRulebookGroundingOutcomes({
       rawText = focusedRaw;
       operationLegality = validateOperationLegalityModelOutput(rawText, candidates, {
         requiredConstraintEvidence: priorityConstraintEvidence,
+        userQuery,
+        cardTexts,
       });
       warnings.push("rulebook_grounding_focused_fallback_applied");
     }
@@ -1955,7 +1968,10 @@ export function selectPriorityConstraintEvidence({ items = [], userQuery = "", c
   const scenarioText = [userText, cardText].filter(Boolean).join("\n");
   const scenarioConcepts = extractGroundingMechanisms(scenarioText);
   const userConcepts = extractGroundingMechanisms(userText);
-  if (scenarioConcepts.size < 2) return [];
+  const ruleScenario = compileRuleScenario({ userQuery, cardTexts });
+  if (scenarioConcepts.size < 2
+      && !ruleScenario.simultaneousDestructionReplacement
+      && !(ruleScenario.mandatoryFieldSpellTrapReturn && ruleScenario.currentChainSpellTrap)) return [];
 
   const ranked = dedupeGroundingEvidence(items)
     .filter((item) => RESTRICTIVE_EVIDENCE_PATTERN.test(String(item.text || "")))
@@ -1966,6 +1982,7 @@ export function selectPriorityConstraintEvidence({ items = [], userQuery = "", c
           userText,
           scenarioConcepts,
           userConcepts,
+          ruleScenario,
         }))
         .filter(Boolean)
         .sort((left, right) => right.score - left.score);
@@ -2006,6 +2023,7 @@ function classifyPriorityConstraintSegment({
   userText,
   scenarioConcepts,
   userConcepts,
+  ruleScenario,
 }) {
   const evidenceConcepts = extractGroundingMechanisms(text);
   const sharedConcepts = [...scenarioConcepts].filter((concept) => evidenceConcepts.has(concept));
@@ -2018,8 +2036,15 @@ function classifyPriorityConstraintSegment({
     && (evidenceConcepts.has("chain") || evidenceConcepts.has("activation"));
   const scenarioHasNoAlternative = PRIORITY_SCENARIO_ABSENCE_PATTERN.test(userText);
   const evidenceHasNoApplicableCardRule = PRIORITY_NO_APPLICABLE_CARD_PATTERN.test(text);
+  if (ruleScenario?.simultaneousDestructionReplacement && PRIORITY_SIMULTANEOUS_REPLACEMENT_PATTERN.test(text)) {
+    return {
+      text,
+      signature: "simultaneous_destruction_replacement_turn_player_first",
+      score: 280 + sharedConcepts.length * 10,
+    };
+  }
   if (scenarioHasReturnOperation
-      && scenarioHasNoAlternative
+      && (scenarioHasNoAlternative || ruleScenario?.noOtherSpellTraps)
       && evidenceHasActiveReturnRule
       && evidenceHasNoApplicableCardRule) {
     return {
@@ -2042,7 +2067,7 @@ function classifyPriorityConstraintSegment({
     && ["return", "target", "destroy", "banish", "deck", "graveyard"]
       .some((concept) => scenarioConcepts.has(concept));
   if (scenarioHasConstrainedCardOperation
-      && scenarioHasNoAlternative
+      && (scenarioHasNoAlternative || ruleScenario?.noOtherSpellTraps)
       && evidenceHasNoApplicableCardRule) {
     return {
       text,

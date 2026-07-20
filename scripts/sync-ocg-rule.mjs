@@ -1,4 +1,5 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -14,14 +15,26 @@ const nonContentDocPattern = /(?:^|\/)(?:index|search|genindex|py-modindex)$/iu;
 
 async function main() {
   await mkdir(dataDir, { recursive: true });
+  const corpusPath = join(dataDir, "ocg-rule-corpus.json");
+  const testsPath = join(dataDir, "ocg-rule-tests.json");
+  const previousCorpus = await readJson(corpusPath, { records: [] });
   const index = await loadSearchIndex();
   const docs = buildDocTargets(index).slice(0, maxPages);
-  const pages = await mapLimit(docs, fetchConcurrency, loadRulePage);
-  const records = pages.filter(Boolean);
+  const pageResults = await mapLimit(docs, fetchConcurrency, loadRulePage);
+  const records = pageResults.map((item) => item.record).filter(Boolean);
+  const failures = pageResults.filter((item) => !item.record);
   const tests = records.filter((record) => testKeywordPattern.test(`${record.docname} ${record.title}`));
   const generatedAt = new Date().toISOString();
+  const sync = validateOcgRuleSnapshot({
+    targets: docs,
+    records,
+    failures,
+    previousRecords: previousCorpus.records || [],
+    env: process.env,
+  });
+  sync.testCount = tests.length;
 
-  await writeJson(join(dataDir, "ocg-rule-corpus.json"), {
+  const corpusPayload = {
     schemaVersion: 1,
     generatedAt,
     source: {
@@ -29,10 +42,11 @@ async function main() {
       url: baseUrl,
       role: "规则学习资料与裁判训练资料；回答时只能作为规则依据或测试集，不能伪装为官方数据库裁定。",
     },
+    sync,
     records,
-  });
+  };
 
-  await writeJson(join(dataDir, "ocg-rule-tests.json"), {
+  const testsPayload = {
     schemaVersion: 1,
     generatedAt,
     source: {
@@ -40,6 +54,7 @@ async function main() {
       url: baseUrl,
       role: "裁判训练/往年测试资料，用于回归测试和规则理解检查。",
     },
+    sync: { ...sync, testCount: tests.length },
     records: tests.map((record) => ({
       id: record.id,
       title: record.title,
@@ -47,9 +62,14 @@ async function main() {
       sourceUrl: record.sourceUrl,
       text: record.text,
     })),
-  });
+  };
 
-  console.log(`Synced ${records.length} OCG rule pages and ${tests.length} test pages.`);
+  await Promise.all([
+    writeJsonAtomic(corpusPath, corpusPayload),
+    writeJsonAtomic(testsPath, testsPayload),
+  ]);
+
+  console.log(`Synced ${records.length}/${docs.length} OCG rule pages and ${tests.length} test pages (${sync.contentHash.slice(0, 12)}).`);
 }
 
 async function loadSearchIndex() {
@@ -76,8 +96,8 @@ async function loadRulePage(doc) {
     const html = await fetchText(doc.sourceUrl);
     const title = extractTitle(html) || doc.title;
     const text = cleanText(stripHtml(extractMainHtml(html)));
-    if (text.length < 120) return null;
-    return {
+    if (text.length < 120) return { doc, error: "page_text_too_short" };
+    return { doc, record: {
       id: `ocg-rule:${doc.docname}`,
       recordType: testKeywordPattern.test(`${doc.docname} ${title}`) ? "rule-test" : "rule-doc",
       title,
@@ -87,10 +107,10 @@ async function loadRulePage(doc) {
       keywords: extractKeywords(`${doc.docname} ${title} ${text}`),
       text,
       updatedAt: new Date().toISOString(),
-    };
+    } };
   } catch (error) {
     console.warn(`Skip ${doc.sourceUrl}: ${formatError(error)}`);
-    return null;
+    return { doc, error: formatError(error) };
   }
 }
 
@@ -177,8 +197,78 @@ function formatError(error) {
   return error instanceof Error ? error.message : String(error);
 }
 
-async function writeJson(path, value) {
-  await writeFile(path, `${JSON.stringify(value, null, 2)}\n`, "utf8");
+async function writeJsonAtomic(path, value) {
+  const temporaryPath = `${path}.${process.pid}.tmp`;
+  await writeFile(temporaryPath, `${JSON.stringify(value, null, 2)}\n`, "utf8");
+  await rename(temporaryPath, path);
+}
+
+export function hashOcgRuleRecords(records = []) {
+  const stable = (records || []).map((record) => ({
+    id: String(record.id || ""),
+    recordType: String(record.recordType || ""),
+    title: String(record.title || ""),
+    docname: String(record.docname || ""),
+    sourceUrl: String(record.sourceUrl || ""),
+    keywords: [...(record.keywords || [])].map(String).sort(),
+    text: String(record.text || ""),
+  })).sort((left, right) => left.id.localeCompare(right.id));
+  return createHash("sha256").update(JSON.stringify(stable)).digest("hex");
+}
+
+export function validateOcgRuleSnapshot({
+  targets = [],
+  records = [],
+  failures = [],
+  previousRecords = [],
+  env = {},
+} = {}) {
+  const targetCount = targets.length || records.length + failures.length;
+  const recordCount = records.length;
+  const failedCount = failures.length || Math.max(0, targetCount - recordCount);
+  const successRatio = targetCount ? recordCount / targetCount : 0;
+  const minimumRecords = readThreshold(env.OCG_RULE_MIN_RECORDS, 10);
+  const minimumSuccessRatio = readRatio(env.OCG_RULE_MIN_SUCCESS_RATIO, 0.85);
+  const minimumPreviousRatio = readRatio(env.OCG_RULE_MIN_PREVIOUS_RATIO, 0.75);
+  const previousRecordCount = previousRecords.length;
+  const uniqueIds = new Set(records.map((record) => String(record.id || "")).filter(Boolean));
+  const errors = [];
+  if (!targetCount) errors.push("no_content_targets");
+  if (recordCount < minimumRecords) errors.push(`record_count_below_minimum:${recordCount}<${minimumRecords}`);
+  if (uniqueIds.size !== recordCount) errors.push(`duplicate_or_missing_record_ids:${uniqueIds.size}/${recordCount}`);
+  if (successRatio < minimumSuccessRatio) errors.push(`success_ratio_below_minimum:${successRatio.toFixed(3)}<${minimumSuccessRatio}`);
+  if (previousRecordCount >= minimumRecords && recordCount / previousRecordCount < minimumPreviousRatio) {
+    errors.push(`snapshot_shrank_abnormally:${recordCount}/${previousRecordCount}<${minimumPreviousRatio}`);
+  }
+  if (errors.length) {
+    const failedSample = failures.slice(0, 5).map((item) => item?.doc?.sourceUrl || item?.doc?.docname || item?.error).filter(Boolean);
+    throw new Error(`OCG Rule snapshot rejected: ${errors.join(", ")}${failedSample.length ? `; failed=${failedSample.join(" | ")}` : ""}`);
+  }
+  return {
+    status: "complete",
+    targetCount,
+    recordCount,
+    failedCount,
+    successRatio: Number(successRatio.toFixed(6)),
+    previousRecordCount,
+    contentHash: hashOcgRuleRecords(records),
+    previousContentHash: hashOcgRuleRecords(previousRecords),
+    failedDocnames: failures.slice(0, 12).map((item) => item?.doc?.docname).filter(Boolean),
+  };
+}
+
+function readThreshold(value, fallback) {
+  const number = Number(value);
+  return Number.isFinite(number) && number >= 0 ? Math.floor(number) : fallback;
+}
+
+function readRatio(value, fallback) {
+  const number = Number(value);
+  return Number.isFinite(number) && number >= 0 && number <= 1 ? number : fallback;
+}
+
+async function readJson(path, fallback) {
+  try { return JSON.parse(await readFile(path, "utf8")); } catch { return fallback; }
 }
 
 async function mapLimit(items, limit, mapper) {

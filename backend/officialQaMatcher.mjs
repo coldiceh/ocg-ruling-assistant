@@ -1,3 +1,5 @@
+import { hasNumberedCardIdentityConflict } from "./numberedCardIdentity.mjs";
+
 const QUESTION_TYPES = [
   ["who_can_activate", /(?:谁(?:可以|能)?.*发动|由谁发动)|誰が.*発動|who (?:can|may) activate|which player.*activate/iu],
   ["card_activation_vs_effect_activation", /卡的发动.*效果发动|效果发动.*卡的发动|カードの発動.*効果の発動|card activation.*effect activation/iu],
@@ -123,7 +125,8 @@ function scoreRecord({ record, normalizedQuery, queryType, queryPhrases, resolve
     ...extractInlineCardIds(recordText(record)),
   ].map(normalizeId).filter(Boolean));
   const cardIdMatch = [...resolvedIds].some((id) => recordIds.has(id));
-  const cardNameMatch = [...resolvedNames].some((name) => name.length >= 3 && normalizedRecordText.includes(name));
+  const recordIdentityText = [record.title, record.text, ...(record.cards || [])].filter(Boolean).join(" ");
+  const cardNameMatch = [...resolvedNames].some((name) => name.length >= 3 && !hasNumberedCardIdentityConflict(name, recordIdentityText) && normalizedRecordText.includes(name));
   const cardMatch = cardIdMatch || cardNameMatch;
   const rawExact = exactNormalized || (containment >= 0.9 && similarity >= 0.86);
   let score = Math.max(similarity, containment);

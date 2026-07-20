@@ -5,6 +5,7 @@ import { extractRagCards } from "../backend/ragCardExtractor.mjs";
 import { loadRagData, retrieveRagEvidence } from "../backend/ragEvidenceRetriever.mjs";
 import { buildRagRulingPromptBundle } from "../backend/ragRulingPrompt.mjs";
 import { answerRagRulingQuestion } from "../backend/ragRulingPipeline.mjs";
+import { canonicalizeNumberedCardPrefixes, hasNumberedCardIdentityConflict } from "../backend/numberedCardIdentity.mjs";
 
 const packbitDesc = [
   "调整＋调整以外的怪兽1只以上",
@@ -79,6 +80,12 @@ const dalviRawCard = {
   },
   data: { type: 33, atk: 1300, def: 800, level: 3, race: 16384, attribute: 8 },
 };
+
+const numberedRawCards = [
+  { cid: 10659, id: 49456901, cn_name: "混沌No.104 假面魔蹈士 黑影", text: { desc: "旧卡干扰项。" } },
+  { cid: 23364, id: 101306042, cn_name: "No.104 假面魔蹈士 闪光·杠然", text: { desc: "新卡文本。" } },
+  { cid: 10684, id: 55888045, cn_name: "混沌No.106 熔岩掌 巨手·红掌", text: { desc: "新卡文本。" } },
+];
 
 test("baige_search_mock_returns_enigmaster_packbit", async () => {
   clearBaigeSearchCache();
@@ -466,4 +473,46 @@ test("albaz_activation_rechecks_continuous_effects_after_paying_cost", async () 
   );
   assert.match(finalPrompt, /cost 将卡送墓后/u);
   assert.match(finalPrompt, /按支付后的场面重新判断/u);
+});
+
+test("numbered card identity keeps No and CNo families distinct", () => {
+  const question = "用场上的No.104 假面魔蹈士 闪光·杠然为素材超量召唤混沌No.106 熔岩掌 巨手·红掌，106发动除外对方卡组的效果。";
+  const resolution = extractRagCards(question, { cards: [] });
+  assert.deepEqual(resolution.unresolvedMentions.map((item) => item.input), [
+    "No.104 假面魔蹈士 闪光·杠然",
+    "混沌No.106 熔岩掌 巨手·红掌",
+  ]);
+  assert.equal(canonicalizeNumberedCardPrefixes("CNo.106 熔岩掌 巨手·红掌"), canonicalizeNumberedCardPrefixes("混沌No.106 熔岩掌 巨手·红掌"));
+  assert.equal(hasNumberedCardIdentityConflict("No.104 假面魔蹈士 闪光·杠然", "混沌No.104 假面魔蹈士 黑影"), true);
+});
+
+test("baige rejects conflicting numbered families and keeps new card ids", async () => {
+  for (const [query, expected] of [
+    ["No.104 假面魔蹈士 闪光·杠然", { id: "101306042", cid: 23364 }],
+    ["混沌No.106 熔岩掌 巨手·红掌", { id: "55888045", cid: 10684 }],
+  ]) {
+    clearBaigeSearchCache();
+    const result = await searchCards(query, {
+      fetchImpl: async () => jsonResponse({ result: numberedRawCards, next: 0 }),
+    });
+    assert.equal(result.results[0].id, expected.id);
+    assert.equal(result.results[0].cid, expected.cid);
+    assert.equal(result.results.some((card) => card.cid === 10659), false);
+  }
+});
+
+test("baige keeps trying full numbered-name variants after a conflicting payload", async () => {
+  clearBaigeSearchCache();
+  let calls = 0;
+  const result = await searchCards("混沌No.106 熔岩掌 巨手·红掌", {
+    fetchImpl: async () => {
+      calls += 1;
+      return calls === 1
+        ? jsonResponse({ result: [numberedRawCards[0]], next: 0 })
+        : jsonResponse({ result: [numberedRawCards[2]], next: 0 });
+    },
+  });
+  assert.ok(calls >= 2);
+  assert.equal(result.results[0].cid, 10684);
+  assert.match(result.warnings.join("\n"), /numbered_identity_conflict/u);
 });

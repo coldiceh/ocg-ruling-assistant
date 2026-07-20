@@ -1,4 +1,5 @@
 import { normalizeCardKey } from "./ragCardExtractor.mjs";
+import { hasNumberedCardIdentityConflict } from "./numberedCardIdentity.mjs";
 
 export function createLocalCardDataProvider({ cards = [], records = [], qaRecords = [] } = {}) {
   const normalizedCards = (Array.isArray(cards) ? cards : []).map(normalizeProviderCard).filter((card) => card.name);
@@ -52,10 +53,11 @@ function fuzzyFindCards(cards, name, limit) {
   return cards
     .map((card) => {
       const aliases = [card.name, card.cnName, card.jaName, card.enName, ...(card.aliases || [])].filter(Boolean);
-      const best = aliases
+      const compatibleAliases = aliases.filter((alias) => !hasNumberedCardIdentityConflict(name, alias));
+      const best = compatibleAliases
         .map((alias) => ({ alias, score: scoreAlias(normalizeCardKey(alias), queryKey) }))
         .sort((left, right) => right.score - left.score || String(left.alias).localeCompare(String(right.alias), "zh-Hans-CN"))[0];
-      return { ...card, matchedAlias: best?.alias || aliases[0] || card.name, confidence: best?.score || 0 };
+      return { ...card, matchedAlias: best?.alias || compatibleAliases[0] || card.name, confidence: best?.score || 0 };
     })
     .filter((card) => card.confidence >= 0.42)
     .sort((left, right) => right.confidence - left.confidence || String(left.name).localeCompare(String(right.name)))

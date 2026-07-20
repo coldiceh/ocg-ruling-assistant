@@ -358,6 +358,70 @@ test("generic_legal_check_cannot_bypass_restrictive_rule_without_non_applicabili
   assert.ok(result.warnings.includes("operation_blocker_derived_from_combined_constraint_evidence"));
 });
 
+test("card-text mechanics retrieve and enforce the Double Wind mandatory return restrictions", async () => {
+  const data = await loadRagData();
+  const question = "双方后场只有刚发动的「无限泡影」；对方场上有风属性怪兽，我方能否发动「天雷之双风神 息那」①效果？";
+  const resolvedCards = data.cards
+    .filter((card) => ["无限泡影", "天雷之双风神 息那"].includes(card.name))
+    .map((card) => ({ ...card, input: card.name, confidence: 1 }));
+  const evidence = await retrieveRagEvidence({
+    userQuery: question,
+    cardResolution: { resolvedCards, unresolvedMentions: [], ambiguousMentions: [], userProvidedCardTexts: [] },
+    cards: data.cards,
+    records: data.records,
+    qaRecords: data.qaRecords,
+  });
+  assert.ok(evidence.ruleSearchQueries.some((item) => /连锁途中.*回到手卡/u.test(item.query)));
+  assert.ok(evidence.ruleSearchQueries.some((item) => /除自身以外没有能适用/u.test(item.query)));
+  assert.ok(evidence.rulebookCandidates.some((item) => /这种魔法[・·]陷阱卡在连锁途中不能/u.test(item.text)));
+  assert.ok(evidence.rulebookCandidates.some((item) => /除自身以外没有能适用的卡时不能发动/u.test(item.text)));
+
+  const grounding = await callRulebookGroundingModel({
+    userQuery: question,
+    cardTexts: evidence.cardTexts,
+    ruleEvidence: evidence.rulebookCandidates,
+    qaEvidence: [],
+    modelInvoker: async () => JSON.stringify({ operationChecks: [], constraintReviews: [] }),
+  });
+  assert.equal(grounding.operationLegality.hasBlockingCheck, true);
+  assert.match(grounding.operationLegality.shortAnswer, /不能发动/u);
+});
+
+test("replacement card text and player roles retrieve the turn-player-first rule without answer keywords", async () => {
+  const data = await loadRagData();
+  const replacementCard = {
+    id: "synthetic-replacement-card",
+    name: "测试代破兽",
+    cnName: "测试代破兽",
+    aliases: ["测试代破兽"],
+    cardType: "monster",
+    effectText: "这张卡被战斗破坏的场合，可以作为代替把自己场上其他1只怪兽破坏。",
+  };
+  const question = "轮到我，我方「测试代破兽」攻击对方「测试代破兽」，两只在这次战斗都要被破坏；我方另有1只怪兽，两边各自的效果怎么处理？";
+  const evidence = await retrieveRagEvidence({
+    userQuery: question,
+    cardResolution: { resolvedCards: [{ ...replacementCard, input: replacementCard.name }], unresolvedMentions: [], ambiguousMentions: [], userProvidedCardTexts: [] },
+    cards: [...data.cards, replacementCard],
+    records: data.records,
+    qaRecords: data.qaRecords,
+  });
+  assert.ok(evidence.ruleSearchQueries.some((item) => /回合玩家.*先适用.*非回合玩家/u.test(item.query)));
+  assert.ok(evidence.rulebookCandidates.some((item) => /同1时点双方都要适用代替破坏/u.test(item.text)));
+
+  const grounding = await callRulebookGroundingModel({
+    userQuery: question,
+    cardTexts: evidence.cardTexts,
+    ruleEvidence: evidence.rulebookCandidates,
+    qaEvidence: [],
+    modelInvoker: async () => JSON.stringify({ operationChecks: [], constraintReviews: [] }),
+  });
+  const check = grounding.operationLegality.checks.find((item) => item.operationId === "simultaneous-destruction-replacement-order");
+  assert.ok(check);
+  assert.equal(check.status, "conditional");
+  assert.match(check.conclusion, /先适用回合玩家.*重新检查非回合玩家/u);
+  assert.equal(grounding.operationLegality.hasUnresolvedConstraints, false);
+});
+
 test("focused_state_transition_review_separates_cost_from_effect_processing", async () => {
   const activator = {
     id: "card-text-activator",

@@ -3,7 +3,7 @@ name: Sync ruling data
 on:
   workflow_dispatch:
   schedule:
-    - cron: "20 18 * * *"
+    - cron: "20 */6 * * *"
 
 permissions:
   contents: write
@@ -15,10 +15,12 @@ concurrency:
 jobs:
   sync:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v6
@@ -42,23 +44,34 @@ jobs:
           MAX_QA_TOTAL: "3000"
         run: node scripts/sync-data.mjs
 
-      - name: Diff ruling snapshot
-        run: node scripts/diff-ruling-snapshot.mjs
-
-      - name: Build current evidence index
-        run: node scripts/build-evidence-index.mjs
-
       - name: Sync OCG rule corpus
         env:
           OCG_RULE_BASE_URL: "https://ocg-rule.readthedocs.io/zh-cn/latest/"
           OCG_RULE_MAX_PAGES: "240"
         run: node scripts/sync-ocg-rule.mjs
 
-      - name: Report ruling sync status
-        run: node scripts/report-ruling-sync-status.mjs
+      - name: Validate synchronized data
+        run: pnpm check:data
+
+      - name: Diff ruling snapshot
+        run: pnpm diff:rulings
+
+      - name: Build current evidence index
+        run: pnpm build:evidence
+
+      - name: Verify source freshness and index ordering
+        run: pnpm check:freshness
+
+      - name: Check source and generated-file syntax
+        run: |
+          pnpm check
+          git diff --check
 
       - name: Test updated snapshot
         run: pnpm test
+
+      - name: Report ruling sync status
+        run: pnpm report:rulings
 
       - name: Commit snapshot changes
         run: |

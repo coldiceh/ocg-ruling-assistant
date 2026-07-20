@@ -41,6 +41,7 @@ export function buildRagRulingPromptBundle({
     ruleSearchQueries: evidence.ruleSearchQueries || [],
     operationChecks: summarizeOperationChecks(evidence.operationLegality?.checks || []),
     constraintAudit: summarizeConstraintAudit(evidence.operationLegality),
+    semanticStateTransition: summarizeSemanticStateTransition(evidence.semanticStateTransition),
     evidence: {
       ...evidencePayload,
       retrievalWarnings: [...(evidence.retrievalWarnings || []), ...warnings],
@@ -83,6 +84,7 @@ export function buildRagRulingPromptBundle({
     "必须建立状态时间线：先判断发动合法性，再立即支付 cost。cost 造成的送墓、除外、解放等位置变化在支付后立刻成立；进入效果处理前，按支付后的场面重新判断永续效果、抗性、素材和区域条件。不得把支付前仍在手牌的状态沿用到处理时。",
     "如果 cost 支付后新适用的持续效果使后续处理无法完成，要分别回答发动是否合法与处理时不能完成的步骤；不得把处理失败倒推成不能发动，也不得忽略新适用的抗性。",
     "区域条件必须逐字核对并严格区分手牌、场上、墓地、除外和额外牌组；在所检查步骤中某卡仍只在手牌时，不得把它视为在场上或墓地来满足持续条件、抗性或发动条件；若前一步 cost 已使其离开手牌，必须使用更新后的区域。",
+    "semanticStateTransition 是后端把卡文编译成 cost、操作、持续条件等中立语义后，对题目初始状态逐步执行得到的证明轨迹；它不是按卡名查答案。status=resolved 且 complete=true 时，必须按 trace 的状态顺序保留发动与处理的区别，不得跳回支付 cost 前的状态。",
     "不得因为效果发动源或对象在连锁处理中离开原位置，就未经证据把整条已经合法发动的效果判为不处理。必须分别核对：发动是否已经成立、每一项处理依赖什么对象或位置、某一项不能处理时其余项目是否继续，并引用覆盖该步骤的规则或 Q&A。",
     "对象在处理时不再存在，只能直接影响确实依赖该对象的处理；不要据此自动删除不以该对象为处理对象的支付、丢弃、返回或其他项目。具体是否继续仍以检索证据和原效果连接词为准。",
     "必须把‘能否取为对象’与‘效果是否影响该卡’作为两个独立判断；不受效果影响本身不等于不能成为对象，对象保护也不等于效果抗性。只引用真正约束该步骤的证据。",
@@ -188,6 +190,27 @@ function summarizeConstraintAudit(operationLegality = {}) {
       conclusion: review.conclusion,
       grounded: review.grounded === true,
     })),
+  };
+}
+
+function summarizeSemanticStateTransition(state = {}) {
+  if (!state || state.status !== "resolved") return { status: state?.status || "not_applicable", complete: false };
+  return {
+    status: state.status,
+    complete: state.complete === true,
+    activation: state.activation,
+    resolution: state.resolution,
+    trace: (state.trace || []).slice(0, 12).map((step) => ({
+      phase: step.phase,
+      state: step.state,
+      status: step.status,
+      operation: step.operation || null,
+      conclusion: step.conclusion,
+      evidenceIds: step.evidenceIds || [],
+      proof: step.proof || null,
+      stateSnapshot: step.stateSnapshot || null,
+    })),
+    evidenceIds: state.evidenceIds || [],
   };
 }
 

@@ -1,3 +1,5 @@
+import { canonicalizeNumberedCardPrefixes, extractNumberedCardIdentities, hasNumberedCardIdentityConflict } from "./numberedCardIdentity.mjs";
+
 const BAIGE_API_BASE = "https://ygocdb.com/api/v0/";
 const DEFAULT_CACHE_TTL_MS = 86_400_000;
 const searchCache = new Map();
@@ -60,11 +62,17 @@ export async function searchBaigeCards(query, {
         return { provider: "baige", query: normalizedQuery, results: [], warnings, cacheHit: false };
       }
       payload = await response.json();
-      if (collectBaigeCards(payload).length) {
+      const payloadCards = collectBaigeCards(payload);
+      const hasCompatibleCard = payloadCards.some((card) => !hasNumberedCardIdentityConflict(
+        normalizedQuery,
+        [readFirst(card, ["cn_name", "cnName", "sc_name", "zh_name", "nwbbs_n", "name", "title"]), readFirst(card, ["jp_name", "ja_name"]), readFirst(card, ["en_name"])].filter(Boolean).join(" "),
+      ));
+      if (payloadCards.length && hasCompatibleCard) {
         matchedSearchQuery = searchQuery;
         if (searchQuery !== normalizedQuery) warnings.push(`baige_fallback_query_used:${searchQuery}`);
         break;
       }
+      if (payloadCards.length) warnings.push(`baige_numbered_identity_conflict:${searchQuery}`);
     }
   } catch (error) {
     warnings.push(`baige_fetch_failed:${safeErrorMessage(error)}`);
@@ -75,6 +83,7 @@ export async function searchBaigeCards(query, {
   const results = rawCards
     .map((card) => normalizeBaigeCard(card, normalizedQuery, warnings))
     .filter((card) => card.name || card.text || card.id)
+    .filter((card) => !hasNumberedCardIdentityConflict(normalizedQuery, [card.name, card.cnName, card.jpName, card.enName, ...(card.aliases || [])].filter(Boolean).join(" ")))
     .map((card) => ({ ...card, confidence: scoreBaigeCard(card, normalizedQuery) }))
     .sort((left, right) => right.confidence - left.confidence || String(left.name).localeCompare(String(right.name), "zh-Hans-CN"))
     .slice(0, limit);
@@ -155,6 +164,9 @@ export function normalizeBaigeCard(card = {}, query = "", warnings = []) {
 }
 
 export function scoreBaigeCard(card = {}, query = "") {
+  if (/^\s*\d{1,4}\s*$/u.test(String(query || ""))) return 0;
+  const identityText = [card.cnName, card.name, card.jpName, card.jaName, card.enName, ...(card.aliases || [])].filter(Boolean).join(" ");
+  if (hasNumberedCardIdentityConflict(query, identityText)) return 0;
   const queryKey = normalizeSearchKey(query);
   if (!queryKey) return 0;
   const names = [card.cnName, card.name, card.jpName, card.jaName, card.enName, ...(card.aliases || [])].filter(Boolean);
@@ -369,7 +381,7 @@ function normalizeId(value) {
 }
 
 function normalizeSearchKey(value) {
-  return String(value || "")
+  return canonicalizeNumberedCardPrefixes(value)
     .normalize("NFKC")
     .toLowerCase()
     .replace(/[雙]/gu, "双")
@@ -401,6 +413,17 @@ function buildBaigeSearchQueries(value) {
   const original = String(value || "").trim();
   const canonicalSpelling = original
     .replace(/(?:埃|艾)克(?:利|莉)西(?:亚|娅)/gu, "艾克莉西娅");
+  const numberedIdentity = extractNumberedCardIdentities(canonicalSpelling)[0];
+  if (numberedIdentity) {
+    const tail = canonicalSpelling
+      .replace(/^(?:[「『《【“"']\s*)?(?:混沌\s*(?:No|编号|編號)|Chaos\s+Number|C\s*No|Number|No|编号|編號)\s*[.．]?\s*\d{1,4}\s*/iu, "")
+      .replace(/[」』》】”"']$/u, "")
+      .trim();
+    const prefixes = numberedIdentity.family === "cno"
+      ? [`CNo.${numberedIdentity.number}`, `混沌No.${numberedIdentity.number}`, `混沌编号${numberedIdentity.number}`]
+      : [`No.${numberedIdentity.number}`, `编号${numberedIdentity.number}`];
+    return [...new Set([original, canonicalSpelling, ...prefixes.map((prefix) => `${prefix}${tail ? ` ${tail}` : ""}`)].filter(Boolean))].slice(0, 6);
+  }
   const compact = canonicalSpelling.replace(/[「」『』《》【】“”"'`：:・·･．.－—–_\-\s，,。.!！?？;；、()（）\[\]{}]/gu, "");
   const transliteration = compact.match(/艾克莉西娅/u)?.[0] || "";
   const suffix = compact.length >= 6 ? compact.slice(-Math.min(6, compact.length - 1)) : "";
