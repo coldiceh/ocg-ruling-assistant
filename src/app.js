@@ -693,7 +693,7 @@ async function requestBackendAnswer(text) {
   const backendMode = "rag";
   const cacheKey = buildBackendCacheKey(text, backendMode, selectedModelTier);
   const cached = readCachedBackendAnswer(cacheKey);
-  if (cached) return cached;
+  if (cached) return ensureCompleteRagShortAnswer(cached);
 
   const response = await fetch(appConfig.answerApiUrl, {
     method: "POST",
@@ -701,20 +701,39 @@ async function requestBackendAnswer(text) {
     body: JSON.stringify({ question: text, mode: backendMode, modelTier: selectedModelTier }),
   });
   if (!response.ok) throw new Error(`后端返回 ${response.status}`);
-  const answer = await response.json();
+  const answer = ensureCompleteRagShortAnswer(await response.json());
   writeCachedBackendAnswer(cacheKey, answer);
   return answer;
 }
 
+function ensureCompleteRagShortAnswer(answer) {
+  if (!answer || typeof answer !== "object") return answer;
+  const shortAnswer = String(answer.shortAnswer || "").trim();
+  if (!isActivationOnlyShortAnswer(shortAnswer)) return answer;
+  const state = answer.debug?.semanticStateTransition;
+  const stateShortAnswer = String(state?.shortAnswer || "").trim();
+  if (state?.status !== "resolved" || state.complete !== true || !stateShortAnswer || stateShortAnswer === shortAnswer) {
+    return answer;
+  }
+  return { ...answer, shortAnswer: stateShortAnswer };
+}
+
+function isActivationOnlyShortAnswer(value) {
+  const text = String(value || "").trim().replace(/[。.!！]+$/u, "");
+  return /^(?:(?:该|該|此|这个|這個)效果)?(?:可以|可|能够)(?:发动|發動)(?:(?:该|該|此|这个|這個)?效果|[①-⑳]效果)?$/u.test(text);
+}
+
 function buildBackendCacheKey(text, mode = "rag", modelTier = "flash") {
-  return `ocg-ruling-answer:v20:${mode}:${modelTier}:${appConfig.answerApiUrl}:${normalizeText(text).slice(0, 2000)}`;
+  return `ocg-ruling-answer:v21:${mode}:${modelTier}:${appConfig.answerApiUrl}:${normalizeText(text).slice(0, 2000)}`;
 }
 
 function readCachedBackendAnswer(key) {
   try {
     const payload = JSON.parse(localStorage.getItem(key) || "null");
     if (!payload || Date.now() - Number(payload.savedAt || 0) > backendAnswerCacheTtlMs) return null;
-    return payload.answer || null;
+    const answer = ensureCompleteRagShortAnswer(payload.answer || null);
+    if (isActivationOnlyShortAnswer(answer?.shortAnswer)) return null;
+    return answer;
   } catch {
     return null;
   }
