@@ -1,3 +1,5 @@
+import { canonicalizeNumberedCardPrefixes, extractNumberedCardMentionCandidates } from "./numberedCardIdentity.mjs";
+
 const QUOTED_MENTION_PATTERNS = Object.freeze([
   /「([^」]{2,80})」/gu,
   /『([^』]{2,80})』/gu,
@@ -23,6 +25,7 @@ export function extractRagCards(userQuery, { cards = [], maxCards = 6, modelCard
   const modelMentions = normalizeModelCardNameCandidates(modelCardNameCandidates);
   const exactMentionSeeds = [
     ...buildModelMentionSeeds(modelMentions),
+    ...extractNumberedCardMentionCandidates(query).map((input) => ({ input, reason: "numbered_card_not_found", source: "numbered_card_identity" })),
     ...extractQuotedMentions(query).map((input) => ({ input, reason: "quoted_mention_not_found", source: "quoted_mention" })),
     ...userProvidedCardTexts.map((item) => ({ input: item.name, reason: "user_provided_text_name_not_found", source: "user_provided_text" })),
   ];
@@ -114,7 +117,7 @@ export function buildAliasIndex(cards = []) {
 }
 
 export function normalizeCardKey(value) {
-  return String(value || "")
+  return canonicalizeNumberedCardPrefixes(value)
     .normalize("NFKC")
     .toLowerCase()
     .replace(/[雙]/gu, "双")

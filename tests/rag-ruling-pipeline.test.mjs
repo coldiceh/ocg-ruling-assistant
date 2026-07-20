@@ -5,6 +5,7 @@ import { loadRagData, retrieveRagEvidence } from "../backend/ragEvidenceRetrieve
 import { buildRagRulingPromptBundle } from "../backend/ragRulingPrompt.mjs";
 import { callCardNameExtractionModel, callRagModel, callRulebookGroundingModel, callRuleQueryExtractionModel, estimateDeepSeekCostCny, getRagBudgetStatus, resetRagBudget, resolveRagProvider } from "../backend/ragModelClient.mjs";
 import { answerRagRulingQuestion } from "../backend/ragRulingPipeline.mjs";
+import { analyzeEffectStateTransition } from "../backend/effectStateReasoner.mjs";
 
 const cards = [
   {
@@ -167,7 +168,45 @@ test("activation-only Albaz question keeps activation legal but blocks resolutio
   assert.match(answer.shortAnswer, /因此不进行融合召唤。$/u);
   assert.equal(answer.debug.retrievalCounts.provisionalOfficialResponses, 1);
   assert.ok(answer.riskFlags.includes("provisional_official_response"));
+  assert.ok(answer.riskFlags.includes("semantic_state_transition_applied"));
+  assert.equal(answer.riskFlags.includes("answer_constrained_by_provisional_official_response"), false);
+  assert.deepEqual(
+    answer.debug.semanticStateTransition.trace.map((step) => step.phase),
+    ["activation_check", "pay_activation_cost", "stabilize_continuous_effects", "resolve_effect_operation"],
+  );
   assert.equal(answer.usedEvidence[0].type, "official_response_screenshot");
+});
+
+test("effect state reasoning is compiled from neutral card text rather than card names", () => {
+  const result = analyzeEffectStateTransition({
+    userQuery: "对方场上存在的卡只有表侧表示的「测试抗性龙」1只，双方墓地没有卡。我方召唤「测试融合者」时，可以将「测试圣女」作为Cost丢弃来发动「测试融合者」的效果吗？",
+    cardTexts: [
+      {
+        id: "card-text-neutral-source",
+        cards: ["测试融合者"],
+        text: "这张卡召唤・特殊召唤的情况下，舍弃1张手牌可以发动。将包含此卡在内的自己或对方场上的怪兽作为融合素材，将1只融合怪兽融合召唤。",
+      },
+      {
+        id: "card-text-neutral-protected",
+        cards: ["测试抗性龙"],
+        text: "只要自己或对方的场上或墓地存在“测试圣女”怪兽，此卡不受此卡以外的效果影响。",
+      },
+    ],
+  });
+
+  assert.equal(result.status, "resolved");
+  assert.equal(result.activation, "legal");
+  assert.equal(result.resolution, "not_performed");
+  assert.equal(result.activationEvidenceType, "effect_program");
+  assert.deepEqual(result.trace[0].proof.usableMaterials, ["测试融合者", "测试抗性龙"]);
+  assert.deepEqual(result.trace[3].proof.usableMaterials, ["测试融合者"]);
+  assert.deepEqual(
+    result.trace.map((step) => step.phase),
+    ["activation_check", "pay_activation_cost", "stabilize_continuous_effects", "resolve_effect_operation"],
+  );
+  assert.match(result.trace[2].conclusion, /测试圣女/u);
+  assert.match(result.trace[3].conclusion, /测试抗性龙/u);
+  assert.doesNotMatch(JSON.stringify(result), /阿不思|艾克利西亚|吞(?:食|喰)圣痕/u);
 });
 
 test("bundled provisional official responses are loaded into the default RAG data", async () => {

@@ -4,6 +4,8 @@ import { extractRagCards, normalizeCardKey } from "./ragCardExtractor.mjs";
 import { evidenceBucketsToList, loadRagData, retrieveRagEvidence } from "./ragEvidenceRetriever.mjs";
 import { callCardNameExtractionModel, callRagModel, callRulebookGroundingModel, callRuleQueryExtractionModel } from "./ragModelClient.mjs";
 import { buildRagRulingPromptBundle, RAG_ANSWER_LEVELS } from "./ragRulingPrompt.mjs";
+import { analyzeEffectStateTransition, attachUserQueryToCardTexts } from "./effectStateReasoner.mjs";
+import { hasNumberedCardIdentityConflict } from "./numberedCardIdentity.mjs";
 
 export async function answerRagRulingQuestion({
   question,
@@ -104,7 +106,21 @@ export async function answerRagRulingQuestion({
     fetchImpl,
     now,
   });
-  const evidence = attachRulebookGrounding(retrievedEvidence, rulebookGrounding);
+  const groundedEvidence = attachRulebookGrounding(retrievedEvidence, rulebookGrounding);
+  const semanticStateTransition = analyzeEffectStateTransition({
+    userQuery: query,
+    cardTexts: attachUserQueryToCardTexts([
+      ...(groundedEvidence.cardTexts || []),
+      ...(groundedEvidence.userProvidedCardTexts || []),
+    ], query),
+    corroboratingEvidence: dedupeEvidenceRefs([
+      ...(groundedEvidence.officialQaDirectCandidates || []),
+      ...(groundedEvidence.provisionalOfficialResponses || []),
+      ...(groundedEvidence.officialQaRelated || []),
+    ]),
+    operationLegality: groundedEvidence.operationLegality,
+  });
+  const evidence = { ...groundedEvidence, semanticStateTransition };
   const promptBundle = buildRagRulingPromptBundle({ userQuery: query, cardResolution: effectiveCardResolution, evidence, env });
   const displayCards = dedupeCards([
     ...(effectiveCardResolution.resolvedCards || []),
@@ -126,7 +142,7 @@ export async function answerRagRulingQuestion({
   const evidenceConstrained = applyExactScenarioGrounding(groundedFallback, evidence, query);
   const operationConstrained = applyOperationLegalityOverride(evidenceConstrained, evidence);
   const constraintGuarded = applyUnresolvedConstraintGuard(operationConstrained, evidence);
-  const normalized = applyProvisionalOfficialResponseGrounding(constraintGuarded, evidence, query);
+  const normalized = applySemanticStateConstraint(constraintGuarded, evidence);
   const engine = await enginePromise;
   return {
     mode: "rag_baseline",
@@ -195,6 +211,7 @@ export async function answerRagRulingQuestion({
       budgetStatus: modelResult.budgetStatus || null,
       promptChars: promptBundle.promptChars,
       promptTruncated: promptBundle.promptTruncated,
+      semanticStateTransition,
     },
   };
 }
@@ -223,6 +240,8 @@ function cardMatchesMention(mention, cards) {
   const mentionKey = normalizeCardKey(mention?.input);
   if (!mentionKey) return false;
   return (cards || []).some((card) => {
+    const identityText = [card.name, card.cnName, card.jaName, card.jpName, card.enName, ...(card.aliases || [])].filter(Boolean).join(" ");
+    if (hasNumberedCardIdentityConflict(mention?.input, identityText)) return false;
     const inputKey = normalizeCardKey(card.input || card.matchedQuery);
     if (inputKey && inputKey === mentionKey) return true;
     const names = [card.name, card.cnName, card.jaName, card.jpName, card.enName, ...(card.aliases || [])]
@@ -390,62 +409,38 @@ function applyExactScenarioGrounding(answer, evidence = {}, userQuery = "") {
   };
 }
 
-function applyProvisionalOfficialResponseGrounding(answer, evidence = {}, userQuery = "") {
+function applySemanticStateConstraint(answer, evidence = {}) {
+  const state = evidence.semanticStateTransition;
   if (answer.answerLevel === "official_confirmed" || evidence.operationLegality?.hasBlockingCheck) return answer;
-  const anchors = extractScenarioAnchors(userQuery);
-  const queryText = String(userQuery || "").normalize("NFKC");
-  const describesCostPayment = /(?:cost|コスト|代价|代價|丢弃|丟棄|舍弃|捨棄|送.{0,8}墓)/iu.test(queryText);
-  if (anchors.length < 3 || !describesCostPayment) return answer;
-  const response = (evidence.provisionalOfficialResponses || []).find((item) => {
-    const text = normalizeScenarioKey([
-      item.title,
-      ...(item.cards || []),
-      item.scenario,
-      item.text,
-    ].filter(Boolean).join(" "));
-    const covered = anchors.filter((anchor) => text.includes(anchor));
-    return covered.length >= 3;
-  });
-  if (!response || !isNoResolutionProvisionalVerdict(response.officialVerdict)) return answer;
-
-  const fusionTarget = extractScenarioAnchorLabels(userQuery)
-    .find((label) => /冰剑龙|氷剣竜|mirrorjade/iu.test(label));
-  const fusionConclusion = fusionTarget
-    ? `不进行融合召唤「${fusionTarget}」`
-    : "不进行融合召唤";
-  const shortAnswer = `可以发动，但是不会进行任何效果处理；因此${fusionConclusion}。`;
+  if (state?.status !== "resolved" || state.complete !== true) return answer;
+  const evidenceById = new Map(evidenceBucketsToList(evidence).map((item) => [String(item.id), item]));
+  const stateEvidence = (state.evidenceIds || [])
+    .map((id) => evidenceById.get(String(id)))
+    .filter(Boolean)
+    .map((item) => ({
+      id: item.id,
+      type: outputEvidenceType(item, new Set()),
+      title: item.title,
+      sourceUrl: item.sourceUrl || "",
+    }));
+  const provisional = state.activationEvidenceType === "official_response_screenshot";
   return {
     ...answer,
     answerLevel: "rule_analysis",
-    shortAnswer,
-    reasoning: cleanStringArray([
-      response.officialText || "事务局回答截图记载：效果可以发动，但处理什么也不进行。",
-      response.explanation || "支付 cost 后应按更新后的场面重新适用持续效果与抗性，因此不能沿用支付前的融合素材判断。",
-    ]),
+    shortAnswer: state.shortAnswer,
+    reasoning: cleanStringArray(state.reasoning),
     usedEvidence: dedupeEvidenceRefs([
-      {
-        id: response.id,
-        type: "official_response_screenshot",
-        title: response.title,
-        sourceUrl: response.sourceUrl || "",
-      },
+      ...stateEvidence,
       ...(answer.usedEvidence || []),
     ]),
     missingInfo: [],
     riskFlags: [...new Set([
       ...(answer.riskFlags || []),
-      "provisional_official_response",
-      "official_database_direct_qa_not_found",
-      "answer_constrained_by_provisional_official_response",
+      "semantic_state_transition_applied",
+      ...(provisional ? ["provisional_official_response", "official_database_direct_qa_not_found"] : []),
     ])],
     confidenceSelfEstimate: "medium",
   };
-}
-
-function isNoResolutionProvisionalVerdict(verdict) {
-  return verdict && typeof verdict === "object"
-    && verdict.activation === "can_activate"
-    && verdict.resolution === "does_not_perform_fusion_material_processing";
 }
 
 function applyGroundedOperationFallback(answer, evidence = {}) {
@@ -498,19 +493,6 @@ function extractScenarioAnchors(value) {
     }
   }
   return [...new Set(anchors)];
-}
-
-function extractScenarioAnchorLabels(value) {
-  const source = String(value || "");
-  const labels = [];
-  const patterns = [/「([^」]+)」/gu, /『([^』]+)』/gu, /《([^》]+)》/gu, /【([^】]+)】/gu, /“([^”]+)”/gu, /"([^"]+)"/gu];
-  for (const pattern of patterns) {
-    for (const match of source.matchAll(pattern)) {
-      const label = String(match[1] || "").trim();
-      if (label) labels.push(label);
-    }
-  }
-  return [...new Set(labels)];
 }
 
 function normalizeScenarioKey(value) {

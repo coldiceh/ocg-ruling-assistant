@@ -1,3 +1,5 @@
+import { compileRuleScenario } from "./ruleScenarioCompiler.mjs";
+
 export const OPERATION_LEGALITY_STATUSES = Object.freeze([
   "legal",
   "illegal",
@@ -7,6 +9,8 @@ export const OPERATION_LEGALITY_STATUSES = Object.freeze([
 
 export function validateOperationLegalityModelOutput(raw, evidenceCandidates = [], {
   requiredConstraintEvidence = [],
+  userQuery = "",
+  cardTexts = [],
 } = {}) {
   const parsedModel = parseModelObject(raw);
   const parsed = parsedModel || {};
@@ -47,10 +51,18 @@ export function validateOperationLegalityModelOutput(raw, evidenceCandidates = [
     checks = uniqueBy([...checks, ...evidenceDrivenBlockingChecks], checkKey);
     warnings.push("operation_blocker_derived_from_combined_constraint_evidence");
   }
+  const deterministicScenarioChecks = deriveDeterministicScenarioChecks(requiredConstraints, checks, { userQuery, cardTexts });
+  if (deterministicScenarioChecks.length) {
+    checks = uniqueBy([...checks, ...deterministicScenarioChecks], checkKey);
+    warnings.push("operation_check_derived_from_compiled_scenario");
+  }
   const resolvedConstraintIds = new Set(constraintReviews
     .filter(isResolvedConstraintReview)
     .map((review) => review.evidenceId));
   const resolvedConstraintIdsFromChecks = new Set(checks.flatMap(resolvedConstraintCitationIds));
+  for (const check of checks.filter((item) => item.resolvesRequiredConstraint === true)) {
+    for (const citation of check.citations || []) resolvedConstraintIdsFromChecks.add(String(citation.id));
+  }
   for (const evidenceId of resolvedConstraintIdsFromChecks) {
     if (!requiredConstraints.some((item) => String(item.id) === evidenceId)) continue;
     resolvedConstraintIds.add(evidenceId);
@@ -112,6 +124,44 @@ export function validateOperationLegalityModelOutput(raw, evidenceCandidates = [
     warnings: [...new Set(warnings)],
     modelExtracted: Boolean(parsedModel),
   };
+}
+
+function deriveDeterministicScenarioChecks(requiredConstraints, existingChecks, { userQuery, cardTexts }) {
+  const scenario = compileRuleScenario({ userQuery, cardTexts });
+  if (!scenario.simultaneousDestructionReplacement) return [];
+  const rule = (requiredConstraints || []).find((item) => (
+    item?.priorityConstraintSignature === "simultaneous_destruction_replacement_turn_player_first"
+    || inferSimultaneousReplacementSignature(item)
+  ));
+  if (!rule) return [];
+  const quote = String(rule.text || "").match(/同\s*1?\s*时点.{0,24}双方.{0,30}(?:代替破坏|破坏.{0,12}代替).{0,60}回合玩家.{0,18}先适用.{0,100}非回合玩家.{0,60}(?:不在场上存在|已经不在场上).{0,30}不适用[。]?/su)?.[0];
+  if (!quote) return [];
+  return [{
+    operationId: "simultaneous-destruction-replacement-order",
+    step: (existingChecks || []).length + 1,
+    action: "按回合玩家顺序逐个适用代替破坏并更新场面",
+    legalityQuestion: "双方代替破坏效果在同一时点适用时如何决定顺序",
+    status: "conditional",
+    conclusion: "先适用回合玩家的代替破坏并立即更新场面，再重新检查非回合玩家的效果载体；若该卡已不在场上，则非回合玩家的代替效果不适用。",
+    reasoning: [
+      "两个不入连锁的代替处理不是在同一个旧场面中并行结算。",
+      "第一个处理完成后，位置与破坏状态立即改变，第二个效果必须在新状态中重新检查。",
+    ],
+    citations: [{
+      id: String(rule.id),
+      quote,
+      application: "题目包含双方效果载体、同一破坏事件和代替破坏卡文，因此适用该顺序规则。",
+      type: cleanText(rule.type || rule.recordType || "rulebook"),
+      title: cleanText(rule.title || rule.id),
+      sourceUrl: cleanText(rule.sourceUrl || ""),
+    }],
+    missingFacts: scenario.turnPlayerKnown ? ["第一个代替处理后，需按更新后的场面确认非回合玩家的效果载体是否仍存在。"] : ["需要确认当前回合玩家及第一个代替处理后的场面。"],
+    resolvesRequiredConstraint: true,
+  }];
+}
+
+function inferSimultaneousReplacementSignature(item) {
+  return /同\s*1?\s*时点.{0,24}双方.{0,30}(?:代替破坏|破坏.{0,12}代替).{0,60}回合玩家.{0,18}先适用.{0,100}非回合玩家.{0,60}(?:不在场上存在|已经不在场上).{0,30}不适用/su.test(String(item?.text || ""));
 }
 
 export function emptyOperationLegality(warnings = [], requiredConstraintEvidence = []) {

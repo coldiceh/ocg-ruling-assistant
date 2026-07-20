@@ -7,6 +7,8 @@ import { normalizeCardKey } from "./ragCardExtractor.mjs";
 import { searchOfficialQaEvidence } from "./officialQaMatcher.mjs";
 import { normalizeOfficialResponses } from "./officialResponses.mjs";
 import { isRulebookRecord, retrieveRulebookPassages } from "./rulebookPassageRetriever.mjs";
+import { hasNumberedCardIdentityConflict } from "./numberedCardIdentity.mjs";
+import { compileRuleScenario } from "./ruleScenarioCompiler.mjs";
 
 const projectRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 const defaultDataDir = join(projectRoot, "data");
@@ -453,8 +455,8 @@ function scoreRecord(record, { queryTerms, ruleTerms, rulePhrases, queryKey, res
   const text = `${record.title || ""}\n${record.text || ""}`;
   const textKey = normalizeCardKey(text);
   const cardIdMatch = (record.cardIds || []).some((id) => resolvedIds.has(normalizeId(id)));
-  const cardNameMatch = (record.cards || []).some((name) => resolvedNames.has(normalizeCardKey(name))) || [...resolvedNames].some((name) => name.length >= 3 && textKey.includes(name));
-  const unresolvedNameMatch = [...unresolvedNames].some((name) => name.length >= 3 && textKey.includes(name));
+  const cardNameMatch = (record.cards || []).some((name) => resolvedNames.has(normalizeCardKey(name))) || [...resolvedNames].some((name) => name.length >= 3 && !hasNumberedCardIdentityConflict(name, text) && textKey.includes(name));
+  const unresolvedNameMatch = [...unresolvedNames].some((name) => name.length >= 3 && !hasNumberedCardIdentityConflict(name, text) && textKey.includes(name));
   const cardScore = cardIdMatch ? 5 : cardNameMatch ? 4 : unresolvedNameMatch ? 2 : 0;
   if (!allowNoCardMatch && resolvedIds.size + resolvedNames.size > 0 && !cardScore) return 0;
   let score = cardScore;
@@ -540,9 +542,32 @@ function deriveRuleSearchQueriesFromCardTexts(userQuery, cardTexts = []) {
   const interleaved = roundRobin(perCardQueries, 12);
   const combinedText = [userQuery, ...(cardTexts || []).map((item) => `${(item.cards || []).join(" ")} ${item.cardType || ""} ${item.text || ""}`)].join("\n");
   return dedupeBy([
+    ...deriveScenarioMechanismRuleQueries(userQuery, cardTexts),
     ...deriveMechanismRuleQueries(combinedText),
     ...interleaved,
   ], (item) => normalizeCardKey(item.query)).slice(0, 12);
+}
+
+function deriveScenarioMechanismRuleQueries(userQuery, cardTexts) {
+  const scenario = compileRuleScenario({ userQuery, cardTexts });
+  const queries = [];
+  const add = (query, reason) => queries.push({
+    query: expandRetrievalVocabulary(query).slice(0, 120),
+    reason,
+    confidence: "high",
+    source: "compiled_scenario_rule_search_query",
+  });
+  if (scenario.mandatoryFieldSpellTrapReturn && scenario.currentChainSpellTrap) {
+    add("魔法陷阱卡 发动中 连锁途中 回到手卡 回到卡组", "卡文包含必做的场上魔法・陷阱返回处理，题目中的当前连锁卡是魔法・陷阱。 ");
+    if (scenario.noOtherSpellTraps) {
+      add("发动后的非永续魔法陷阱 除自身以外没有能适用的卡时不能发动", "场景角色表明当前发动卡是唯一可能候选，检索必做处理无可适用卡时的发动限制。 ");
+    }
+  }
+  if (scenario.simultaneousDestructionReplacement) {
+    add("同一时点 双方 代替破坏 回合玩家 先适用 非回合玩家 不在场 不适用", "从双方效果载体、同一破坏事件及代替破坏卡文推导适用顺序规则。 ");
+    add("代替破坏 先适用 更新场面 重新检查 效果载体", "检索第一个代替处理改变场面后，第二个代替效果是否仍适用。 ");
+  }
+  return queries;
 }
 
 function deriveMechanismRuleQueries(value) {
@@ -874,6 +899,7 @@ function toRagCard(card, input, confidence) {
     id: String(card.id || card.cardId || ""),
     cardId: String(card.cardId || card.id || ""),
     passcode: String(card.passcode || card.id || ""),
+    cid: card.cid ?? null,
     name: card.name || card.cnName || card.jpName || card.enName || String(input || ""),
     cnName: card.cnName || "",
     jaName: card.jaName || card.jpName || "",
@@ -909,6 +935,7 @@ function mergeCard(localCard, baigeCard) {
     id: localCard.id || baigeCard.id,
     cardId: localCard.cardId || baigeCard.cardId,
     passcode: localCard.passcode || baigeCard.passcode,
+    cid: localCard.cid ?? baigeCard.cid ?? null,
     name: localCard.name || baigeCard.name,
     cnName: localCard.cnName || baigeCard.cnName,
     jaName: localCard.jaName || baigeCard.jaName,
@@ -949,6 +976,8 @@ function retrievedCardMatchesMention(mention, cards) {
   const mentionKey = normalizeCardKey(mention?.input);
   if (!mentionKey) return false;
   return (cards || []).some((card) => {
+    const identityText = [card.name, card.cnName, card.jaName, card.jpName, card.enName, ...(card.aliases || [])].filter(Boolean).join(" ");
+    if (hasNumberedCardIdentityConflict(mention?.input, identityText)) return false;
     const inputKey = normalizeCardKey(card.input || card.matchedQuery);
     if (inputKey && inputKey === mentionKey) return true;
     const names = [card.name, card.cnName, card.jaName, card.jpName, card.enName, ...(card.aliases || [])]
