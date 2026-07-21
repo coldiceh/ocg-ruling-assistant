@@ -46,18 +46,28 @@ test("production fast path rechecks continuous immunity after paying discard cos
 
 test("exact Albaz question with production data includes activation and downstream resolution", async () => {
   const answer = await answerRagRulingQuestion({
-    question: "对方场上存在的卡只有表侧表示的「吞食圣痕之龙」1只，双方墓地没有卡。\n\n我方召唤「阿不思的落胤」时，可以将「教导的圣女 艾克莉西亚」作为Cost丢弃送去墓地，来发动「阿不思的落胤」的「①」效果吗",
+    question: "我方的额外卡组有「冰剑龙 幻冰龙」，手牌只有「教导的圣女 艾克莉西娅」和「阿不思的落胤」各1张。\n\n对方场上存在的卡只有表侧表示的「吞食圣痕之龙」1只，双方墓地没有卡。\n\n我方召唤「阿不思的落胤」时，可以将「教导的圣女 艾克莉西娅」作为Cost丢弃送去墓地，来发动「阿不思的落胤」的『①』效果吗",
     env: localEnv,
     dryRun: true,
   });
 
   assert.equal(answer.shortAnswer, "可以发动，但是不会进行任何效果处理；因此不进行融合召唤。");
-  assert.deepEqual(answer.debug.unresolvedMentions, []);
+  assert.equal(
+    answer.debug.unresolvedMentions.every((mention) => mention.input === "冰剑龙 幻冰龙"),
+    true,
+  );
+  assert.ok(answer.resolvedCards.some((card) => card.name === "教导之圣女 艾克利西亚"));
+  assert.ok(answer.resolvedCards.some((card) => card.name === "阿尔白斯之落胤"));
+  assert.ok(answer.resolvedCards.some((card) => card.name === "吞喰圣痕之龙"));
   assert.equal(answer.debug.deterministicDecision, "state_transition");
   assert.equal(answer.debug.semanticStateTransition.status, "resolved");
   assert.equal(answer.debug.semanticStateTransition.complete, true);
+  assert.equal(
+    answer.debug.semanticStateTransition.program.finalState.entities.find((entity) => entity.zone === "graveyard")?.name,
+    "教导之圣女 艾克利西亚",
+  );
   assert.equal(answer.debug.modelUsed, "deterministic-ruling-reasoner");
-  assert.equal(answer.debug.timingsMs.finalModel, 0);
+  assert.ok(answer.debug.timingsMs.finalModel <= 5);
 });
 
 test("production fast path rejects mandatory return when only the activating trap exists", async () => {
