@@ -1,3 +1,4 @@
+// Frozen software snapshot from Git revision 58060bdc6.
 const NUMBERED_PREFIX_PATTERN = /(?:混沌\s*(?:no|编号|編號)|chaos\s+number|c\s*no|number|no|编号|編號)\s*[.．]?\s*\d{1,4}/iu;
 
 export function canonicalizeNumberedCardPrefixes(value) {
@@ -15,10 +16,7 @@ export function extractNumberedCardIdentities(value) {
   const canonical = canonicalizeNumberedCardPrefixes(value).toLowerCase();
   const result = [];
   const seen = new Set();
-  // The left boundary is deliberately ASCII-alphanumeric rather than `\b`.
-  // Canonical identities may touch a CJK card name, but must not be discovered
-  // inside an ordinary Latin token such as "Techno41".
-  for (const match of canonical.matchAll(/(?:^|[^a-z0-9])(cno|no)(\d{1,4})(?!\d)/gu)) {
+  for (const match of canonical.matchAll(/(cno|no)(\d{1,4})(?!\d)/gu)) {
     const identity = { family: match[1], number: Number.parseInt(match[2], 10) };
     const key = `${identity.family}:${identity.number}`;
     if (!seen.has(key)) {

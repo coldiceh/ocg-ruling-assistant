@@ -54,10 +54,6 @@ const topics = [
 
 const localCardAliasHints = [
   {
-    aliases: ["No.41 泥睡魔兽 酣睡貘", "No.41泥睡魔兽酣睡貘", "泥睡魔兽 酣睡貘"],
-    candidates: ["编号41 泥睡魔兽 貘熟梦", "No.41 泥睡魔獣バグースカ", "Number 41: Bagooska the Terribly Tired Tapir"],
-  },
-  {
     aliases: ["霸王黑龙 异色眼叛逆龙-霸王", "霸王黑龙异色眼叛逆龙霸王", "异色眼叛逆龙-霸王"],
     candidates: ["霸王黑龙 异色眼反叛龙－霸主", "覇王黒竜オッドアイズ・リベリオン・ドラゴン－オーバーロード", "Odd-Eyes Rebellion Dragon Overlord"],
   },

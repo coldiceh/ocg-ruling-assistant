@@ -1,5 +1,6 @@
-import { requestOcgEngineSimulation } from "./ocgEngineClient.mjs";
-import { autoEngineSimulationEnabled, buildBestEffortEngineScenario } from "./ocgScenarioPlanner.mjs";
+// Frozen software snapshot from Git revision 58060bdc6.
+import { requestOcgEngineSimulation } from "../../ocgEngineClient.mjs";
+import { autoEngineSimulationEnabled, buildBestEffortEngineScenario } from "../../ocgScenarioPlanner.mjs";
 import { extractRagCards, normalizeCardKey } from "./ragCardExtractor.mjs";
 import { evidenceBucketsToList, loadRagData, retrieveRagEvidence } from "./ragEvidenceRetriever.mjs";
 import {
@@ -7,11 +8,11 @@ import {
   callRagModel,
   callRulebookGroundingModel,
   callRuleQueryExtractionModel,
-} from "./ragModelClient.mjs";
-import { buildRagRulingPromptBundle, RAG_ANSWER_LEVELS } from "./ragRulingPrompt.mjs";
+} from "../../ragModelClient.mjs";
+import { buildRagRulingPromptBundle, RAG_ANSWER_LEVELS } from "../../ragRulingPrompt.mjs";
 import { analyzeEffectStateTransition, attachUserQueryToCardTexts } from "./effectStateReasoner.mjs";
 import { hasNumberedCardIdentityConflict } from "./numberedCardIdentity.mjs";
-import { analyzeDeterministicOperationLegality } from "./operationLegalityAnalyzer.mjs";
+import { analyzeDeterministicOperationLegality } from "../../operationLegalityAnalyzer.mjs";
 
 export async function answerRagRulingQuestion({
   question,
@@ -37,67 +38,32 @@ export async function answerRagRulingQuestion({
   if (!query) return buildEmptyQuestionAnswer();
 
   const extractionStartedAt = Date.now();
-  const dataStartedAt = Date.now();
-  const data = await Promise.resolve(cards || records || qaRecords
+  const dataPromise = Promise.resolve(cards || records || qaRecords
     ? { cards: cards || [], records: records || [], qaRecords: qaRecords || [] }
     : loadRagData(dataDir));
-  timingsMs.dataLoad = elapsedMs(dataStartedAt);
-
-  const preflightStartedAt = Date.now();
-  const maxCards = readNumber(env.RAG_MAX_CARDS, 6);
-  const localCardResolution = extractRagCards(query, {
-    cards: data.cards || [],
-    maxCards,
+  const cardNameModelPromise = callCardNameExtractionModel({
+    userQuery: query,
+    env,
+    modelInvoker: cardModelInvoker,
+    fetchImpl,
   });
-  const localPreflightTransition = !modelInvoker
-      && !rulebookModelInvoker
-      && hasCompleteCardResolution(localCardResolution)
-    ? analyzeEffectStateTransition({
-        userQuery: query,
-        resolvedCards: localCardResolution.resolvedCards,
-      })
-    : null;
-  const skipAuxiliaryExtractionModels = hasCompleteDeterministicRuling({
-    semanticStateTransition: localPreflightTransition,
-    cardResolution: localCardResolution,
+  const ruleQueryModelPromise = callRuleQueryExtractionModel({
+    userQuery: query,
+    env,
+    modelInvoker: ruleModelInvoker,
+    fetchImpl,
   });
-  timingsMs.deterministicPreflight = elapsedMs(preflightStartedAt);
-
-  let cardNameModel;
-  let ruleQueryModel;
-  let cardResolution;
-  const auxiliaryExtractionStartedAt = Date.now();
-  if (skipAuxiliaryExtractionModels) {
-    cardNameModel = skippedExtractionResult("card_name_model_skipped_deterministic_preflight", "candidates");
-    ruleQueryModel = skippedExtractionResult("rule_query_model_skipped_deterministic_preflight", "queries");
-    cardResolution = localCardResolution;
-  } else {
-    [cardNameModel, ruleQueryModel] = await Promise.all([
-      callCardNameExtractionModel({
-        userQuery: query,
-        env,
-        modelInvoker: cardModelInvoker,
-        fetchImpl,
-      }),
-      callRuleQueryExtractionModel({
-        userQuery: query,
-        env,
-        modelInvoker: ruleModelInvoker,
-        fetchImpl,
-      }),
-    ]);
-    cardResolution = (cardNameModel.candidates || []).length
-      ? extractRagCards(query, {
-          cards: data.cards || [],
-          maxCards,
-          modelCardNameCandidates: cardNameModel.candidates,
-        })
-      : localCardResolution;
-  }
-  timingsMs.auxiliaryExtractionModels = skipAuxiliaryExtractionModels
-    ? 0
-    : elapsedMs(auxiliaryExtractionStartedAt);
+  const [data, cardNameModel, ruleQueryModel] = await Promise.all([
+    dataPromise,
+    cardNameModelPromise,
+    ruleQueryModelPromise,
+  ]);
   timingsMs.dataAndQueryExtraction = elapsedMs(extractionStartedAt);
+  const cardResolution = extractRagCards(query, {
+    cards: data.cards || [],
+    maxCards: readNumber(env.RAG_MAX_CARDS, 6),
+    modelCardNameCandidates: cardNameModel.candidates || [],
+  });
   const retrievalStartedAt = Date.now();
   const retrievedEvidence = await retrieveRagEvidence({
     userQuery: query,
@@ -165,8 +131,6 @@ export async function answerRagRulingQuestion({
   const localDecisionComplete = !rulebookModelInvoker && hasCompleteDeterministicRuling({
     semanticStateTransition: localSemanticStateTransition,
     operationLegality: locallyGroundedEvidence.operationLegality,
-    cardResolution: effectiveCardResolution,
-    extraAmbiguousMentions: locallyGroundedEvidence.baigeAmbiguousMentions,
   });
   timingsMs.localReasoning = elapsedMs(localReasoningStartedAt);
 
@@ -200,9 +164,7 @@ export async function answerRagRulingQuestion({
         resolvedCards: effectiveCardResolution.resolvedCards,
   });
   const evidence = { ...groundedEvidence, semanticStateTransition };
-  const deterministicDecision = modelInvoker
-    ? null
-    : selectDeterministicDecision(evidence, effectiveCardResolution);
+  const deterministicDecision = modelInvoker ? null : selectDeterministicDecision(evidence);
   const promptBundle = deterministicDecision
     ? {
         prompt: "",
@@ -230,7 +192,7 @@ export async function answerRagRulingQuestion({
         fetchImpl,
         now,
       });
-  timingsMs.finalModel = deterministicDecision ? 0 : elapsedMs(finalModelStartedAt);
+  timingsMs.finalModel = elapsedMs(finalModelStartedAt);
   const modelAnswer = normalizeRagAnswer(modelResult.answer, { evidence, cardResolution: effectiveCardResolution, modelWarnings: modelResult.warnings || [] });
   const groundedFallback = applyGroundedOperationFallback(modelAnswer, evidence);
   const evidenceConstrained = applyExactScenarioGrounding(groundedFallback, evidence, query);
@@ -354,10 +316,7 @@ function buildLocalRulebookGrounding({
 function hasCompleteDeterministicRuling({
   semanticStateTransition,
   operationLegality,
-  cardResolution,
-  extraAmbiguousMentions,
 } = {}) {
-  if (!hasCompleteCardResolution(cardResolution, extraAmbiguousMentions)) return false;
   if (operationLegality?.hasBlockingCheck && !operationLegality?.hasUnresolvedConstraints) return true;
   if (semanticStateTransition?.status === "resolved" && semanticStateTransition?.complete === true) return true;
   return operationLegality?.complete === true
@@ -366,8 +325,7 @@ function hasCompleteDeterministicRuling({
     && Boolean(operationLegality?.shortAnswer);
 }
 
-function selectDeterministicDecision(evidence = {}, cardResolution = {}) {
-  if (!hasCompleteCardResolution(cardResolution, evidence.baigeAmbiguousMentions)) return null;
+function selectDeterministicDecision(evidence = {}) {
   const operationLegality = evidence.operationLegality;
   if (operationLegality?.hasBlockingCheck && !operationLegality?.hasUnresolvedConstraints) {
     return { kind: "operation_blocker", operationLegality };
@@ -383,13 +341,6 @@ function selectDeterministicDecision(evidence = {}, cardResolution = {}) {
     return { kind: "operation_sequence", operationLegality };
   }
   return null;
-}
-
-function hasCompleteCardResolution(cardResolution = {}, extraAmbiguousMentions = []) {
-  return !(cardResolution.unresolvedMentions || []).length
-    && !(cardResolution.ambiguousMentions || []).length
-    && !(cardResolution.omittedResolvedCards || []).length
-    && !(extraAmbiguousMentions || []).length;
 }
 
 function buildDeterministicModelResult(decision) {
@@ -435,17 +386,6 @@ function buildDeterministicModelResult(decision) {
 
 function elapsedMs(startedAt) {
   return Math.max(0, Date.now() - Number(startedAt || Date.now()));
-}
-
-function skippedExtractionResult(warning, collectionKey) {
-  return {
-    [collectionKey]: [],
-    rawText: "",
-    providerUsed: "local",
-    modelUsed: "none",
-    dryRun: true,
-    warnings: [warning],
-  };
 }
 
 function reconcileCardResolution(cardResolution = {}, evidence = {}) {

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildAliasIndex, extractQuotedMentions, extractRagCards, extractUserProvidedCardTextBlocks, normalizeCardKey } from "../backend/ragCardExtractor.mjs";
+import { buildAliasIndex, extractQuotedMentions, extractRagCards, extractUnquotedCardMentionCandidates, extractUserProvidedCardTextBlocks, normalizeCardKey } from "../backend/ragCardExtractor.mjs";
 import { createLocalCardDataProvider } from "../backend/cardDataProvider.mjs";
 import { loadRagData, retrieveRagEvidence } from "../backend/ragEvidenceRetriever.mjs";
 import { buildRagRulingPromptBundle } from "../backend/ragRulingPrompt.mjs";
@@ -117,13 +117,14 @@ test("activation-only Albaz question keeps activation legal but blocks resolutio
       id: "22090",
       name: "吞喰圣痕之龙",
       aliases: ["吞喰圣痕之龙", "吞食圣痕之龙", "聖痕喰らいし竜"],
+      cardType: "fusion",
       effectText: "只要自己或对方的场上或墓地存在艾克利西亚怪兽，此卡不受此卡以外的效果影响。",
     },
     {
       id: "17069",
       name: "冰剑龙 幻冰龙",
       aliases: ["冰剑龙 幻冰龙", "氷剣竜ミラジェイド"],
-      effectText: "阿不思的落胤＋融合・同步・超量・连接怪兽。",
+      effectText: "“阿不思的落胤”＋融合・同步・超量・连接怪兽。",
     },
   ];
   const response = {
@@ -146,7 +147,7 @@ test("activation-only Albaz question keeps activation legal but blocks resolutio
     },
   };
   const answer = await answerRagRulingQuestion({
-    question: "对方场上存在的卡只有表侧表示的「吞食圣痕之龙」1只，双方墓地没有卡。我方召唤「阿不思的落胤」时，可以将「教导的圣女 艾克莉西亚」作为Cost丢弃来发动「阿不思的落胤」的①效果吗？",
+    question: "我方额外卡组有「冰剑龙 幻冰龙」。对方场上存在的卡只有表侧表示的「吞食圣痕之龙」1只，双方墓地没有卡。我方召唤「阿不思的落胤」时，可以将「教导的圣女 艾克莉西亚」作为Cost丢弃来发动「阿不思的落胤」的①效果吗？",
     cards: scenarioCards,
     records: [response],
     qaRecords: [],
@@ -165,7 +166,7 @@ test("activation-only Albaz question keeps activation legal but blocks resolutio
 
   assert.equal(answer.answerLevel, "rule_analysis");
   assert.match(answer.shortAnswer, /^可以发动/u);
-  assert.match(answer.shortAnswer, /不会进行任何效果处理/u);
+  assert.match(answer.shortAnswer, /不会进行任何效果处理/u, JSON.stringify(answer.debug.semanticStateTransition));
   assert.match(answer.shortAnswer, /因此不进行融合召唤。$/u);
   assert.equal(answer.debug.retrievalCounts.provisionalOfficialResponses, 1);
   assert.ok(answer.riskFlags.includes("provisional_official_response"));
@@ -180,7 +181,7 @@ test("activation-only Albaz question keeps activation legal but blocks resolutio
 
 test("effect state reasoning is compiled from neutral card text rather than card names", () => {
   const result = analyzeEffectStateTransition({
-    userQuery: "对方场上存在的卡只有表侧表示的「测试抗性龙」1只，双方墓地没有卡。我方召唤「测试融合者」时，可以将「测试圣女」作为Cost丢弃来发动「测试融合者」的效果吗？",
+    userQuery: "我方额外卡组有「测试终端龙」。对方场上存在的卡只有表侧表示的「测试抗性龙」1只，双方墓地没有卡。我方召唤「测试融合者」时，可以将「测试圣女」作为Cost丢弃来发动「测试融合者」的效果吗？",
     cardTexts: [
       {
         id: "card-text-neutral-source",
@@ -190,29 +191,93 @@ test("effect state reasoning is compiled from neutral card text rather than card
       {
         id: "card-text-neutral-protected",
         cards: ["测试抗性龙"],
+        cardType: "fusion",
         text: "只要自己或对方的场上或墓地存在“测试圣女”怪兽，此卡不受此卡以外的效果影响。",
+      },
+      {
+        id: "card-text-neutral-saint",
+        cards: ["测试圣女"],
+        text: "测试圣女怪兽。",
+      },
+      {
+        id: "card-text-neutral-target",
+        cards: ["测试终端龙"],
+        text: "“测试融合者”＋融合・同步・超量・连接怪兽",
       },
     ],
   });
 
-  assert.equal(result.status, "resolved");
+  assert.equal(result.status, "resolved", JSON.stringify(result));
   assert.equal(result.activation, "legal");
   assert.equal(result.resolution, "not_performed");
   assert.equal(result.activationEvidenceType, "effect_program");
-  assert.deepEqual(result.trace[0].proof.usableMaterials, ["测试融合者", "测试抗性龙"]);
-  assert.deepEqual(result.trace[3].proof.usableMaterials, ["测试融合者"]);
+  assert.equal(result.trace[0].proof.usableMaterials.length, 2);
+  assert.equal(result.trace[3].proof.usableMaterials.length, 1);
   assert.deepEqual(
     result.trace.map((step) => step.phase),
     ["activation_check", "pay_activation_cost", "stabilize_continuous_effects", "resolve_effect_operation"],
   );
-  assert.match(result.trace[2].conclusion, /测试圣女/u);
+  assert.match(result.trace[1].conclusion, /测试圣女/u);
   assert.match(result.trace[3].conclusion, /测试抗性龙/u);
   assert.doesNotMatch(JSON.stringify(result), /阿不思|艾克利西亚|吞(?:食|喰)圣痕/u);
 });
 
+test("activation evidence is attached only when it references the simulated source", () => {
+  const input = {
+    userQuery: "我方额外卡组有「证据终端龙」。对方场上只有「证据抗性龙」。我方召唤「证据融合者」时，将「证据圣女」作为Cost丢弃发动效果。",
+    cardTexts: [{
+      id: "card-text-evidence-source",
+      cards: ["证据融合者"],
+      text: "这张卡召唤的场合，舍弃1张手牌可以发动。将包含此卡在内的自己或对方场上的怪兽作为融合素材进行融合召唤。",
+    }, {
+      id: "card-text-evidence-cost",
+      cards: ["证据圣女"],
+      text: "证据圣女怪兽。",
+    }, {
+      id: "card-text-evidence-protected",
+      cards: ["证据抗性龙"],
+      cardType: "fusion",
+      text: "只要自己或对方的场上或墓地存在“证据圣女”怪兽，此卡不受此卡以外的效果影响。",
+    }, {
+      id: "card-text-evidence-target",
+      cards: ["证据终端龙"],
+      text: "“证据融合者”＋融合怪兽",
+    }],
+  };
+  const unrelated = {
+    id: "unrelated-activation-evidence",
+    sourceType: "official_response_screenshot",
+    cards: ["完全无关卡"],
+    question: "完全无关卡可以发动吗？",
+    officialVerdict: { activation: "can_activate" },
+  };
+  const related = {
+    id: "related-activation-evidence",
+    sourceType: "official_response_screenshot",
+    cards: ["证据融合者"],
+    question: "证据融合者可以发动吗？",
+    officialVerdict: { activation: "can_activate" },
+  };
+  const withRelated = analyzeEffectStateTransition({
+    ...input,
+    corroboratingEvidence: [unrelated, related],
+  });
+  const unrelatedOnly = analyzeEffectStateTransition({
+    ...input,
+    corroboratingEvidence: [unrelated],
+  });
+
+  assert.equal(withRelated.status, "resolved", JSON.stringify(withRelated));
+  assert.equal(withRelated.activationEvidenceType, "official_response_screenshot");
+  assert.equal(withRelated.evidenceIds.includes("related-activation-evidence"), true);
+  assert.equal(withRelated.evidenceIds.includes("unrelated-activation-evidence"), false);
+  assert.equal(unrelatedOnly.activationEvidenceType, "effect_program");
+  assert.equal(unrelatedOnly.evidenceIds.includes("unrelated-activation-evidence"), false);
+});
+
 test("effect state reasoning preserves a resolved cost card identity across zone changes", () => {
   const result = analyzeEffectStateTransition({
-    userQuery: "对方场上存在的卡只有表侧表示的「测试抗性龙」1只，双方墓地没有卡。我方召唤「测试融合者」时，可以将「测试圣女别译」作为Cost丢弃来发动效果吗？",
+    userQuery: "我方额外卡组有「测试终端龙」。对方场上存在的卡只有表侧表示的「测试抗性龙」1只，双方墓地没有卡。我方召唤「测试融合者」时，可以将「测试圣女别译」作为Cost丢弃来发动效果吗？",
     cardTexts: [
       {
         id: "card-text-identity-source",
@@ -222,7 +287,13 @@ test("effect state reasoning preserves a resolved cost card identity across zone
       {
         id: "card-text-identity-protected",
         cards: ["测试抗性龙"],
+        cardType: "fusion",
         text: "只要自己或对方的场上或墓地存在“标准测试圣女”怪兽，此卡不受此卡以外的效果影响。",
+      },
+      {
+        id: "card-text-identity-target",
+        cards: ["测试终端龙"],
+        text: "“测试融合者”＋融合・同步・超量・连接怪兽",
       },
     ],
     resolvedCards: [{
@@ -233,7 +304,7 @@ test("effect state reasoning preserves a resolved cost card identity across zone
     }],
   });
 
-  assert.equal(result.status, "resolved");
+  assert.equal(result.status, "resolved", JSON.stringify(result));
   assert.equal(result.activation, "legal");
   assert.equal(result.resolution, "not_performed");
   assert.equal(result.program.finalState.entities.find((entity) => entity.zone === "graveyard")?.name, "标准测试圣女");
@@ -373,6 +444,298 @@ test("multiple one-character card-name neighbours remain below automatic resolut
   assert.equal(resolution.unresolvedMentions[0]?.input, "深渊测试魔神");
   assert.equal(providerMatches.length, 2);
   assert.ok(providerMatches.every((card) => card.confidence < 0.72));
+});
+
+test("extra-deck context resolves a legacy localized name only with unique material evidence", () => {
+  const localCards = [
+    {
+      id: "context-source",
+      name: "始源融合者",
+      aliases: ["始源融合者"],
+      effectText: "将包含此卡在内的场上怪兽作为融合素材进行融合召唤。",
+    },
+    {
+      id: "context-target",
+      name: "星铠龙 正式终焉",
+      aliases: ["星铠龙 正式终焉"],
+      effectText: "“始源融合者”＋融合怪兽",
+    },
+    {
+      id: "context-unrelated",
+      name: "星铠龙 无关守卫",
+      aliases: ["星铠龙 无关守卫"],
+      effectText: "这张卡召唤成功时可以发动。抽1张卡。",
+    },
+  ];
+  const positive = extractRagCards(
+    "我方额外卡组有「星铠龙 旧版幻影」，召唤「始源融合者」时发动其效果。",
+    { cards: localCards },
+  );
+  const noExtraDeckContext = extractRagCards(
+    "「星铠龙 旧版幻影」的效果可以发动吗？",
+    { cards: localCards },
+  );
+  const noResolvedMaterial = extractRagCards(
+    "我方额外卡组有「星铠龙 旧版幻影」。",
+    { cards: localCards },
+  );
+
+  assert.equal(positive.resolvedCards.some((card) => card.id === "context-target"), true);
+  assert.equal(positive.unresolvedMentions.some((item) => item.input === "星铠龙 旧版幻影"), false);
+  assert.equal(noExtraDeckContext.resolvedCards.some((card) => card.id === "context-target"), false);
+  assert.equal(noExtraDeckContext.unresolvedMentions.some((item) => item.input === "星铠龙 旧版幻影"), true);
+  assert.equal(noResolvedMaterial.resolvedCards.some((card) => card.id === "context-target"), false);
+  assert.equal(noResolvedMaterial.unresolvedMentions.some((item) => item.input === "星铠龙 旧版幻影"), true);
+});
+
+test("extra-deck contextual name resolution stays unresolved when material evidence is ambiguous", () => {
+  const localCards = [
+    {
+      id: "ambiguous-source",
+      name: "通用融合者",
+      aliases: ["通用融合者"],
+      effectText: "将包含此卡在内的场上怪兽作为融合素材进行融合召唤。",
+    },
+    {
+      id: "ambiguous-target-a",
+      name: "星铠龙 正式终焉",
+      aliases: ["星铠龙 正式终焉"],
+      effectText: "“通用融合者”＋融合怪兽",
+    },
+    {
+      id: "ambiguous-target-b",
+      name: "星铠龙 正式黎明",
+      aliases: ["星铠龙 正式黎明"],
+      effectText: "“通用融合者”＋同步怪兽",
+    },
+  ];
+  const resolution = extractRagCards(
+    "我方额外卡组有「星铠龙 旧版幻影」，召唤「通用融合者」时发动其效果。",
+    { cards: localCards },
+  );
+
+  assert.equal(resolution.resolvedCards.some((card) => /^ambiguous-target-/u.test(card.id)), false);
+  assert.equal(resolution.unresolvedMentions.some((item) => item.input === "星铠龙 旧版幻影"), true);
+});
+
+test("legacy state reasoning also keeps cost and operation inside the same effect block", () => {
+  const result = analyzeEffectStateTransition({
+    userQuery: "对方场上存在的卡只有表侧表示的「测试抗性龙」1只，双方墓地没有卡。我方召唤「分段融合者」时，可以将「测试圣女」作为Cost丢弃来发动效果吗？",
+    cardTexts: [
+      {
+        id: "card-text-split-source",
+        cards: ["分段融合者"],
+        text: [
+          "①：这张卡召唤的情况下，舍弃1张手牌可以发动。抽1张卡。",
+          "②：将包含此卡在内的自己或对方场上的怪兽作为融合素材，将1只融合怪兽融合召唤。",
+        ].join("\n"),
+      },
+      {
+        id: "card-text-split-protected",
+        cards: ["测试抗性龙"],
+        text: "只要自己或对方的场上或墓地存在“测试圣女”怪兽，此卡不受此卡以外的效果影响。",
+      },
+      {
+        id: "card-text-split-saint",
+        cards: ["测试圣女"],
+        text: "测试圣女怪兽。",
+      },
+    ],
+  });
+
+  assert.equal(result.status, "not_applicable", JSON.stringify(result));
+  assert.equal(result.complete, false);
+  assert.equal(result.reason, "declared_cost_not_part_of_selected_effect");
+});
+
+test("numbered identities require a token boundary and validate an explicit name suffix", () => {
+  const numberedCards = [
+    {
+      id: "no41",
+      name: "编号41 泥睡测试兽 原名",
+      jaName: "No.41 泥睡テスト獣",
+      aliases: ["编号41 泥睡测试兽 原名", "No.41 泥睡テスト獣"],
+    },
+    {
+      id: "cno41",
+      name: "混沌编号41 泥睡测试兽",
+      jaName: "CNo.41 泥睡テスト獣",
+      aliases: ["混沌编号41 泥睡测试兽", "CNo.41 泥睡テスト獣"],
+    },
+  ];
+
+  const bareNo = extractRagCards("对方场上的no.41防守表示存在。", { cards: numberedCards });
+  const bareCNo = extractRagCards("对方场上的CNo.41防守表示存在。", { cards: numberedCards });
+  const compatibleVariant = extractRagCards("「No.41 泥睡测试兽 别名」的效果可以发动吗？", { cards: numberedCards });
+  const wrongSuffix = extractRagCards("「No.41 青眼白龙」的效果可以发动吗？", { cards: numberedCards });
+  const misleadingSharedPrefix = extractRagCards("「No.41 泥睡测试兽 青眼白龙」的效果可以发动吗？", { cards: numberedCards });
+  const correctNameWithWrongTail = extractRagCards("「No.41 泥睡测试兽 原名 青眼白龙」的效果可以发动吗？", { cards: numberedCards });
+  const barePlusWrongDetail = extractRagCards("No.41在场，另有「No.41 青眼白龙」的效果。", { cards: numberedCards });
+  const embeddedLatinToken = extractRagCards("「Techno41」的效果可以发动吗？", { cards: numberedCards });
+  const unknownBareNumber = extractRagCards("对方场上的CNo.42防守表示存在。", { cards: numberedCards });
+
+  assert.deepEqual(bareNo.resolvedCards.map((card) => card.id), ["no41"]);
+  assert.deepEqual(bareCNo.resolvedCards.map((card) => card.id), ["cno41"]);
+  assert.deepEqual(compatibleVariant.resolvedCards.map((card) => card.id), ["no41"]);
+  assert.equal(wrongSuffix.resolvedCards.some((card) => card.id === "no41"), false);
+  assert.equal(wrongSuffix.unresolvedMentions.some((item) => item.input === "No.41 青眼白龙"), true);
+  assert.equal(misleadingSharedPrefix.resolvedCards.some((card) => card.id === "no41"), false);
+  assert.equal(misleadingSharedPrefix.unresolvedMentions.some((item) => item.input === "No.41 泥睡测试兽 青眼白龙"), true);
+  assert.equal(correctNameWithWrongTail.resolvedCards.some((card) => card.id === "no41"), false);
+  assert.equal(correctNameWithWrongTail.unresolvedMentions.some((item) => item.input === "No.41 泥睡测试兽 原名 青眼白龙"), true);
+  assert.equal(barePlusWrongDetail.resolvedCards.some((card) => card.id === "no41"), true);
+  assert.equal(barePlusWrongDetail.unresolvedMentions.some((item) => item.input === "No.41 青眼白龙"), true);
+  assert.equal(embeddedLatinToken.resolvedCards.some((card) => card.id === "no41"), false);
+  assert.equal(unknownBareNumber.unresolvedMentions.some((item) => item.input === "CNo.42"), true);
+});
+
+const contextualSeriesCards = [
+  {
+    id: "18730",
+    name: "对击斗魂 狂恋博士",
+    cnName: "对击斗魂 狂恋博士",
+    jaName: "VS Dr.マッドラヴ",
+    enName: "Vanquish Soul Dr. Mad Love",
+    cardType: "monster",
+    effectText: "在自己・对手回合中可以发动。将场上的1只守备力最低的怪兽放回手牌。",
+    aliases: ["对击斗魂 狂恋博士", "VS Dr.マッドラヴ", "Vanquish Soul Dr. Mad Love"],
+  },
+  {
+    id: "18732",
+    name: "对击斗魂 龙帝瓦里乌斯",
+    cnName: "对击斗魂 龙帝瓦里乌斯",
+    jaName: "VS 龍帝ヴァリウス",
+    enName: "Vanquish Soul Caesar Valius",
+    cardType: "monster",
+    effectText: "以自己场上的龙族以外的1只对击斗魂怪兽为对象可以发动。将该怪兽放回手牌，从手牌将此卡特殊召唤。",
+    aliases: ["对击斗魂 龙帝瓦里乌斯", "VS 龍帝ヴァリウス", "Vanquish Soul Caesar Valius"],
+  },
+  {
+    id: "18738",
+    name: "对击斗魂 龙帝之枪",
+    cnName: "对击斗魂 龙帝之枪",
+    jaName: "VS 龍帝ノ槍",
+    enName: "Vanquish Soul Calamity Caesar",
+    cardType: "trap",
+    effectText: "对手发动以自己场上的卡为对象的效果时可以发动。将该发动无效并破坏。",
+    aliases: ["对击斗魂 龙帝之枪", "VS 龍帝ノ槍", "Vanquish Soul Calamity Caesar"],
+  },
+  {
+    id: "20489",
+    name: "原石龙 帝皇龙",
+    cnName: "原石龙 帝皇龙",
+    jaName: "原石竜インペリアル・ドラゴン",
+    enName: "Primite Imperial Dragon",
+    cardType: "monster",
+    effectText: "向对手出示手牌的此卡可以发动。进行1只原石怪兽的召唤。",
+    aliases: ["原石龙 帝皇龙", "原石竜インペリアル・ドラゴン", "Primite Imperial Dragon"],
+  },
+  {
+    id: "other-series-doctor",
+    name: "异界斗魂 狂魔博士",
+    cnName: "异界斗魂 狂魔博士",
+    jaName: "US Dr.マッドラヴ",
+    cardType: "monster",
+    effectText: "从手牌特殊召唤。",
+    aliases: ["异界斗魂 狂魔博士", "US Dr.マッドラヴ"],
+  },
+];
+
+test("cross-locale series aliases keep one-edit correction inside the named series", () => {
+  const resolution = extractRagCards("「VS狂魔博士」的效果可以发动吗？", { cards: contextualSeriesCards });
+
+  assert.equal(resolution.resolvedCards[0]?.id, "18730");
+  assert.equal(resolution.resolvedCards.some((card) => card.id === "other-series-doctor"), false);
+  assert.deepEqual(resolution.unresolvedMentions, []);
+});
+
+test("chain number plus zone and action extracts and contextually resolves an unquoted short card name", () => {
+  const questions = [
+    "当对手场上的no.41防守表示存在时，我c1发动场上vs狂魔博士的效果，c2手牌龙帝进行替换，连锁处理结算时，c1的博士效果还会生效弹走场上防御力最高的卡吗？",
+    "当对手场上的【No.41 泥睡魔兽 睡梦貘】防守表示在场上存在。我方c1发动场上攻击表示的【VS狂魔博士】效果，C2从手牌发动【龙帝】替换效果，连锁逆算处理时，c1的博士效果还会生效弹走场上防御力最高的卡吗？",
+  ];
+
+  assert.ok(extractUnquotedCardMentionCandidates(questions[0]).includes("龙帝"));
+  for (const question of questions) {
+    const resolution = extractRagCards(question, { cards: contextualSeriesCards, maxCards: 8 });
+    const resolvedIds = new Set(resolution.resolvedCards.map((card) => card.id));
+    assert.equal(resolvedIds.has("18730"), true);
+    assert.equal(resolvedIds.has("18732"), true);
+    assert.equal(resolvedIds.has("18738"), false);
+    assert.equal(resolution.unresolvedMentions.some((item) => item.input === "龙帝"), false);
+    assert.equal(resolution.ambiguousMentions.some((item) => item.input === "龙帝"), false);
+  }
+});
+
+test("contextual short-name resolution never combines mechanics from separate effect blocks", () => {
+  const splitMechanicsCard = {
+    id: "split-mechanics",
+    name: "对击斗魂 龙帝伪装",
+    cnName: "对击斗魂 龙帝伪装",
+    jaName: "VS 龍帝フェイク",
+    cardType: "monster",
+    effectText: [
+      "①：从手牌将此卡特殊召唤。",
+      "②：将自己场上的1只怪兽放回手牌。",
+    ].join("\n"),
+    aliases: ["对击斗魂 龙帝伪装", "VS 龍帝フェイク"],
+  };
+  const resolution = extractRagCards(
+    "「VS狂魔博士」在场，C2手牌龙帝进行替换。",
+    { cards: [...contextualSeriesCards, splitMechanicsCard], maxCards: 8 },
+  );
+
+  assert.equal(resolution.resolvedCards.some((card) => card.id === "split-mechanics"), false);
+  assert.equal(resolution.resolvedCards.some((card) => card.id === "18732"), true);
+  const ambiguousIds = new Set(resolution.ambiguousMentions
+    .find((item) => item.input === "龙帝")?.candidateCards.map((card) => card.id) || []);
+  assert.equal(ambiguousIds.has("split-mechanics"), false);
+});
+
+test("an isolated short card name remains ambiguous instead of selecting the first matching card", () => {
+  const resolution = extractRagCards("「龙帝」是什么卡？", { cards: contextualSeriesCards });
+  const ambiguity = resolution.ambiguousMentions.find((item) => item.input === "龙帝");
+
+  assert.equal(resolution.resolvedCards.length, 0);
+  assert.deepEqual(ambiguity?.candidateCards.map((card) => card.id).sort(), ["18732", "18738"]);
+});
+
+test("short-name context uses the actual occurrence and excludes an enclosing full card name", () => {
+  const resolution = extractRagCards(
+    "对方场上的「对击斗魂 龙帝之枪」存在，我方C1发动「VS狂魔博士」的效果，C2手牌龙帝进行替换。",
+    { cards: contextualSeriesCards, maxCards: 8 },
+  );
+  const resolvedIds = new Set(resolution.resolvedCards.map((card) => card.id));
+
+  assert.equal(resolvedIds.has("18730"), true);
+  assert.equal(resolvedIds.has("18732"), true);
+  assert.equal(resolvedIds.has("18738"), true);
+  assert.equal(resolution.ambiguousMentions.some((item) => item.input === "龙帝"), false);
+});
+
+test("the same short surface with conflicting clause contexts stays ambiguous", () => {
+  const resolution = extractRagCards(
+    "「VS狂魔博士」在场。C1场上龙帝发动并无效效果，C2手牌龙帝进行替换。",
+    { cards: contextualSeriesCards, maxCards: 8 },
+  );
+  const ambiguity = resolution.ambiguousMentions.find((item) => item.input === "龙帝");
+
+  assert.equal(resolution.resolvedCards.some((card) => card.id === "18732"), false);
+  assert.equal(resolution.resolvedCards.some((card) => card.id === "18738"), false);
+  assert.deepEqual(ambiguity?.candidateCards.map((card) => card.id).sort(), ["18732", "18738"]);
+});
+
+test("resolved cards beyond maxCards remain visible as explicit card-limit mentions", () => {
+  const resolution = extractRagCards(
+    "C1发动「VS狂魔博士」的效果，C2手牌龙帝进行替换。",
+    { cards: contextualSeriesCards, maxCards: 1 },
+  );
+  const omitted = resolution.omittedResolvedCards.find((item) => item.input === "龙帝");
+
+  assert.deepEqual(resolution.resolvedCards.map((card) => card.id), ["18730"]);
+  assert.equal(resolution.unresolvedMentions.some((item) => item.reason === "resolved_card_limit_exceeded"), false);
+  assert.equal(omitted?.reason, "resolved_card_limit_exceeded");
+  assert.equal(omitted?.resolvedCardId, "18732");
 });
 
 test("card alias indexes and local providers are cached by source data objects", () => {

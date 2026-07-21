@@ -37,7 +37,6 @@ const frameDefinitions = [
 const forbiddenUnlessTriggered = [
   { id: "xyz_material_attach", pattern: /超量|Xyz|XYZ|素材|叠放|重叠/iu },
   { id: "defense_position_attack", pattern: /守备表示攻击|守備表示で攻撃|attack in defense position/iu },
-  { id: "no_41_chain", pattern: /No\.?\s*41|编号41|泥睡魔兽|バグースカ/iu },
 ];
 
 export function detectIssueFrames({ question = "", cardProfiles = [], cardTexts = [] } = {}) {

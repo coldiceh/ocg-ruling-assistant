@@ -2,8 +2,12 @@ export const EFFECT_PRIMITIVE_TYPES = Object.freeze([
   "target_valid_at_resolution",
   "source_available_at_resolution",
   "discard_from_hand",
+  "fusion_summon",
+  "return_target_to_hand",
+  "return_lowest_defense_monster_to_hand",
   "return_card_to_deck",
   "special_summon_source",
+  "set_position",
   "place_target_as_continuous_trap",
   "apply_damage",
   "draw_cards",
@@ -27,12 +31,21 @@ export const PRIMITIVE_FAILURE_RESULTS = Object.freeze([
   "insufficient",
 ]);
 
+export const EFFECT_ACTIVATION_STAGE_TYPES = Object.freeze([
+  "pay_activation_cost",
+  "apply_activation_action",
+]);
+
 const defaultsByType = Object.freeze({
   target_valid_at_resolution: flags(true, false, false, false, "skip_part"),
   source_available_at_resolution: flags(false, true, false, false, "skip_part"),
   discard_from_hand: flags(false, false, false, false, "insufficient"),
+  fusion_summon: flags(false, false, false, false, "insufficient"),
+  return_target_to_hand: flags(true, false, false, false, "skip_part"),
+  return_lowest_defense_monster_to_hand: flags(false, false, false, false, "insufficient"),
   return_card_to_deck: flags(true, false, false, false, "skip_part"),
   special_summon_source: flags(false, true, false, false, "skip_part"),
+  set_position: flags(true, false, false, false, "skip_part"),
   place_target_as_continuous_trap: flags(true, false, false, false, "skip_part"),
   apply_damage: flags(false, false, false, false, "insufficient"),
   draw_cards: flags(false, false, false, false, "insufficient"),
@@ -80,6 +93,23 @@ export function normalizePrimitiveSequence(sequence = []) {
   });
 }
 
+export function normalizeEffectActivationStages(link = {}) {
+  const costSequence = firstArray(
+    link.costSequence,
+    link.activationCostSequence,
+    link.activationCosts,
+  );
+  const actionSequence = firstArray(
+    link.activationSequence,
+    link.activationActionSequence,
+    link.activationActions,
+  );
+  return [
+    { stage: "pay_activation_cost", sequence: normalizePrimitiveSequence(costSequence) },
+    { stage: "apply_activation_action", sequence: normalizePrimitiveSequence(actionSequence) },
+  ].filter((item) => item.sequence.length);
+}
+
 export function connectorDependsOnPreviousSuccess(connector) {
   return ["THEN", "IF_YOU_DO", "AND_IF_YOU_DO"].includes(connector);
 }
@@ -90,6 +120,10 @@ function flags(requiresTargetStillValid, requiresSourceAvailable, dependsOnPrevi
 
 function booleanOr(value, fallback) {
   return typeof value === "boolean" ? value : fallback;
+}
+
+function firstArray(...values) {
+  return values.find(Array.isArray) || [];
 }
 
 function clone(value) {

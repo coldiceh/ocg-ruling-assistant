@@ -2,7 +2,10 @@ import { answerQuestion } from "../backend/engine.mjs";
 import { answerRulingQuestionFast } from "../backend/fastJudgeEngine.mjs";
 import { getRagBudgetStatus, resolveCardExtractionProvider, resolveRagProvider } from "../backend/ragModelClient.mjs";
 import { appendQueryAudit } from "../backend/queryAuditStore.mjs";
-import { answerRagRulingQuestion } from "../backend/ragRulingPipeline.mjs";
+import {
+  answerRagRulingQuestionForVersion,
+  getRulingVersionCapabilities,
+} from "../backend/rulingVersionRegistry.mjs";
 
 const allowedOrigin = process.env.ALLOWED_ORIGIN || "*";
 
@@ -34,7 +37,8 @@ export default async function handler(request, response) {
       env: process.env,
     }).catch(() => null);
     if (!["legacy", "fastjudge"].includes(mode)) {
-      const answer = await answerRagRulingQuestion({
+      const answer = await answerRagRulingQuestionForVersion({
+        rulingVersion: payload.rulingVersion,
         question: payload.question,
         env: envForModelTier(process.env, payload.modelTier),
         engineScenario: payload.engineScenario,
@@ -54,11 +58,17 @@ export default async function handler(request, response) {
         })
       : await answerQuestion(payload);
     await auditPromise;
-    response.status(200).json(answer);
+    response.status(200).json({
+      ...answer,
+      requestedRulingVersion: null,
+      effectiveRulingVersion: null,
+      rulingVersion: null,
+    });
   } catch (error) {
     await auditPromise;
-    response.status(500).json({
+    response.status(error?.statusCode === 400 ? 400 : 500).json({
       error: error instanceof Error ? error.message : String(error),
+      code: error?.code || "answer_failed",
     });
   }
 }
@@ -77,8 +87,10 @@ async function getModelInfo() {
     String(process.env.RAG_AUTO_ENGINE_SIMULATION ?? "true").trim(),
   ) && Boolean(String(process.env.OCG_ENGINE_URL || "").trim());
   const provider = ragProvider.provider;
+  const rulingVersionCapabilities = getRulingVersionCapabilities();
   if (provider === "deepseek") {
     return {
+      ...rulingVersionCapabilities,
       provider: "deepseek",
       requestedProvider: ragProvider.requested,
       models: [process.env.DEEPSEEK_MODEL || "deepseek-v4-flash"],
@@ -96,6 +108,7 @@ async function getModelInfo() {
   if (provider === "gemini") {
     const model = process.env.GEMINI_MODEL || "gemini-1.5-flash";
     return {
+      ...rulingVersionCapabilities,
       provider: "gemini",
       requestedProvider: ragProvider.requested,
       models: [model],
@@ -111,6 +124,7 @@ async function getModelInfo() {
   }
 
   return {
+    ...rulingVersionCapabilities,
     provider: "mock",
     requestedProvider: ragProvider.requested,
     models: [],

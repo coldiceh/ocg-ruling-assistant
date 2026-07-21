@@ -344,6 +344,7 @@ button:focus-visible {
 .actions {
   margin-top: 16px;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
@@ -377,6 +378,56 @@ button:focus-visible {
   gap: 10px;
 }
 
+.answer-version-selector {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: var(--glass-soft);
+}
+
+.answer-version-selector > span {
+  padding: 0 7px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.answer-version-button {
+  min-height: 28px;
+  padding: 4px 9px;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  color: var(--muted);
+  background: transparent;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.answer-version-button:hover {
+  color: var(--accent);
+  border-color: var(--line-strong);
+}
+
+.answer-version-button.is-active,
+.answer-version-button[aria-pressed="true"] {
+  color: #061017;
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.answer-version-button:disabled {
+  cursor: wait;
+  opacity: 0.62;
+}
+
+.answer-version-button[aria-disabled="true"][title] {
+  cursor: not-allowed;
+}
+
 .model-strip {
   padding: 8px 10px;
   min-width: 0;
@@ -391,6 +442,27 @@ button:focus-visible {
   color: var(--accent);
   font-size: 13px;
   overflow-wrap: anywhere;
+}
+
+.answer-version-note {
+  display: inline-flex;
+  margin: 0 0 10px;
+  padding: 3px 7px;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  color: var(--muted);
+  background: var(--glass-soft);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.answer-version-note[hidden] {
+  display: none;
+}
+
+.answer-version-note.is-error {
+  color: var(--bad);
+  border-color: var(--bad);
 }
 
 .primary-button {
@@ -1118,6 +1190,18 @@ dialog::backdrop {
   .model-tier-label {
     width: 100%;
     justify-content: space-between;
+  }
+
+  .answer-version-selector {
+    width: 100%;
+  }
+
+  .answer-version-selector > span {
+    flex: 1;
+  }
+
+  .judge-actions {
+    width: 100%;
   }
 
   .model-tier-label span {

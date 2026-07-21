@@ -152,6 +152,34 @@ test("ui_has_single_query_button", async () => {
   assert.doesNotMatch(html, /id="flashModelButton"|id="proModelButton"|>Pro</u);
   assert.match(app, /const selectedModelTier = "flash"/u);
   assert.match(app, /modelTier: selectedModelTier/u);
+  assert.match(html, /data-ruling-version="latest"[^>]+aria-pressed="true"[^>]*>最新版</u);
+  assert.match(html, /data-ruling-version="previous"[^>]+aria-pressed="false"[^>]+disabled[^>]*>上一版</u);
+  assert.match(app, /let selectedRulingVersion = "latest"/u);
+  assert.match(app, /rulingVersion: requestedRulingVersion/u);
+  assert.match(app, /selectRulingVersion\(button\.dataset\.rulingVersion\)/u);
+  assert.match(html, /id="answerVersionText" hidden/u);
+  assert.match(app, /effectiveRulingVersion \|\| answer\?\.rulingVersion/u);
+  assert.match(app, /本次回答：\$\{label\}/u);
+  assert.doesNotMatch(app, /请求版本：\$\{label\}/u);
+  assert.match(app, /ruling_version_unconfirmed/u);
+  assert.match(app, /ruling_version_mismatch/u);
+  assert.match(app, /ruling_version_response_invalid/u);
+  assert.match(app, /renderBackendVersionError\(error, requestedRulingVersion\)/u);
+  assert.match(app, /后端没有确认本次实际使用的回答版本/u);
+  assert.match(app, /不会降级到本地模板/u);
+  assert.match(app, /normalizeRulingVersionCapabilities\(info\?\.rulingVersions\)/u);
+  assert.match(app, /typeof item === "string" \? item : item\?\.id/u);
+  assert.match(app, /setAttribute\("aria-disabled", String\(disabled\)\)/u);
+  assert.match(app, /if \(!isRulingVersionSupported\(nextVersion\)\) return/u);
+  assert.doesNotMatch(app, /Backend answer failed, using static fallback/u);
+  assert.match(app, /const disabled = Boolean\(isPending\) \|\| !supported/u);
+  assert.match(app, /button\.disabled = disabled/u);
+  const versionSelectorStart = app.indexOf("function selectRulingVersion");
+  const scheduleAnalysisStart = app.indexOf("function scheduleAnalysis", versionSelectorStart);
+  assert.notEqual(versionSelectorStart, -1);
+  assert.notEqual(scheduleAnalysisStart, -1);
+  const versionSelectorBody = app.slice(versionSelectorStart, scheduleAnalysisStart);
+  assert.doesNotMatch(versionSelectorBody, /analyzeQuestion\(/u);
   assert.match(app, /cache: "no-store"/u);
   assert.doesNotMatch(app, /backendAnswerCacheTtlMs|buildBackendCacheKey|readCachedBackendAnswer|writeCachedBackendAnswer|ocg-ruling-answer:v/u);
   assert.doesNotMatch(app, /setModelTier|readInitialModelTier/u);
@@ -161,6 +189,52 @@ test("ui_has_single_query_button", async () => {
   assert.doesNotMatch(app, /FAST JUDGE/u);
   assert.doesNotMatch(app, /damage\.reasonCode|timing\.reasonCode/u);
   assert.doesNotMatch(app, /blocker\.id/u);
+});
+
+test("versioned backend answers require a matching server confirmation", async () => {
+  const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
+  const requestStart = app.indexOf("async function requestBackendAnswer");
+  const renderPendingStart = app.indexOf("function renderPending", requestStart);
+  assert.notEqual(requestStart, -1);
+  assert.notEqual(renderPendingStart, -1);
+  const versionClientSource = app.slice(requestStart, renderPendingStart);
+  const buildRequest = (fetchImpl) => new Function(
+    "fetch",
+    `const appConfig = { answerApiUrl: "https://example.test/api/answer" };
+     const selectedModelTier = "flash";
+     ${versionClientSource}
+     return requestBackendAnswer;`,
+  )(fetchImpl);
+
+  let requestBody = null;
+  const confirmedRequest = buildRequest(async (_url, options) => {
+    requestBody = JSON.parse(options.body);
+    return {
+      ok: true,
+      json: async () => ({ rulingVersion: "previous", shortAnswer: "已确认" }),
+    };
+  });
+  const confirmed = await confirmedRequest("问题", "previous");
+  assert.equal(requestBody.rulingVersion, "previous");
+  assert.equal(confirmed.effectiveRulingVersion, "previous");
+
+  const missingConfirmationRequest = buildRequest(async () => ({
+    ok: true,
+    json: async () => ({ shortAnswer: "旧后端未回显版本" }),
+  }));
+  await assert.rejects(
+    missingConfirmationRequest("问题", "previous"),
+    (error) => error?.code === "ruling_version_unconfirmed",
+  );
+
+  const mismatchedRequest = buildRequest(async () => ({
+    ok: true,
+    json: async () => ({ rulingVersion: "latest", shortAnswer: "错误版本" }),
+  }));
+  await assert.rejects(
+    mismatchedRequest("问题", "previous"),
+    (error) => error?.code === "ruling_version_mismatch",
+  );
 });
 
 test("feedback_opens_a_prefilled_github_issue", async () => {
@@ -178,8 +252,8 @@ test("backend answers bypass persistent browser cache and bust static assets", a
     readFile(new URL("../config.json", import.meta.url), "utf8"),
   ]);
   const config = JSON.parse(configText.replace(/^\uFEFF/u, ""));
-  assert.match(html, /src\/app\.js\?v=20260721-ruling-cache-1/u);
-  assert.match(config.answerApiUrl, /\?client=20260721-ruling-cache-1$/u);
+  assert.match(html, /src\/app\.js\?v=20260722-answer-version-1/u);
+  assert.match(config.answerApiUrl, /\?client=20260722-answer-version-1$/u);
   assert.match(app, /cache: "no-store"/u);
   assert.doesNotMatch(app, /backendAnswerCacheTtlMs|buildBackendCacheKey|readCachedBackendAnswer|writeCachedBackendAnswer|ocg-ruling-answer:v/u);
 });

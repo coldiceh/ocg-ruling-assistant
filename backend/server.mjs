@@ -7,7 +7,10 @@ import { appendFeedbackCase } from "./feedbackCases.mjs";
 import { getRagBudgetStatus, resetRagBudget, resolveCardExtractionProvider, resolveRagProvider } from "./ragModelClient.mjs";
 import { getOcgEngineHealth, requestOcgEngineSimulation } from "./ocgEngineClient.mjs";
 import { appendQueryAudit, listQueryAudits } from "./queryAuditStore.mjs";
-import { answerRagRulingQuestion } from "./ragRulingPipeline.mjs";
+import {
+  answerRagRulingQuestionForVersion,
+  getRulingVersionCapabilities,
+} from "./rulingVersionRegistry.mjs";
 
 const port = Number(process.env.PORT || 8787);
 const allowedOrigin = process.env.ALLOWED_ORIGIN || "*";
@@ -104,7 +107,8 @@ const server = createServer(async (request, response) => {
         env: process.env,
       }).catch(() => null);
       if (!["legacy", "fastjudge"].includes(mode)) {
-        const answer = await answerRagRulingQuestion({
+        const answer = await answerRagRulingQuestionForVersion({
+          rulingVersion: payload.rulingVersion,
           question: payload.question,
           env: envForModelTier(process.env, payload.modelTier),
           engineScenario: payload.engineScenario,
@@ -124,11 +128,17 @@ const server = createServer(async (request, response) => {
           })
         : await answerQuestion(payload);
       await auditPromise;
-      sendJson(response, 200, answer);
+      sendJson(response, 200, {
+        ...answer,
+        requestedRulingVersion: null,
+        effectiveRulingVersion: null,
+        rulingVersion: null,
+      });
     } catch (error) {
       await auditPromise;
-      sendJson(response, 500, {
+      sendJson(response, error?.statusCode === 400 ? 400 : 500, {
         error: error instanceof Error ? error.message : String(error),
+        code: error?.code || "answer_failed",
       });
     }
     return;
@@ -194,8 +204,10 @@ async function getModelInfo() {
   const engineEnabled = !/^(?:0|false|off|disabled|no)$/iu.test(
     String(process.env.RAG_AUTO_ENGINE_SIMULATION ?? "true").trim(),
   ) && Boolean(String(process.env.OCG_ENGINE_URL || "").trim());
+  const rulingVersionCapabilities = getRulingVersionCapabilities();
   if (ragProvider.provider === "deepseek") {
     return {
+      ...rulingVersionCapabilities,
       provider: "deepseek",
       requestedProvider: ragProvider.requested,
       models: [process.env.DEEPSEEK_MODEL || "deepseek-v4-flash"],
@@ -211,6 +223,7 @@ async function getModelInfo() {
   }
   if (ragProvider.provider === "gemini") {
     return {
+      ...rulingVersionCapabilities,
       provider: "gemini",
       requestedProvider: ragProvider.requested,
       models: [process.env.GEMINI_MODEL || "gemini-1.5-flash"],
@@ -225,6 +238,7 @@ async function getModelInfo() {
     };
   }
   return {
+    ...rulingVersionCapabilities,
     provider: "mock",
     requestedProvider: ragProvider.requested,
     models: [],

@@ -1,0 +1,1005 @@
+import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import { resolve } from "node:path";
+import test from "node:test";
+import { pathToFileURL } from "node:url";
+import {
+  analyzeDuelStateTransition,
+  compileResolvedCardPrograms,
+} from "../backend/duelStateReasoner.mjs";
+import { resolveEffectChain } from "../backend/effectResolutionEngine.mjs";
+import { createEffectPrimitive } from "../backend/effectPrimitives.mjs";
+import { extractRagCards } from "../backend/ragCardExtractor.mjs";
+import { loadRagData } from "../backend/ragEvidenceRetriever.mjs";
+import { answerRagRulingQuestion } from "../backend/ragRulingPipeline.mjs";
+
+function positionContinuousEffect(sourceCardId = "carrier") {
+  return {
+    id: "continuous-position-negation",
+    sourceCardId,
+    effectCategory: "monster",
+    activeWhen: { zone: "monster_zone", faceUp: true, position: "defense" },
+    constraints: [{
+      type: "set_position",
+      selector: { zone: "monster_zone", faceUp: true },
+      position: "defense",
+    }],
+    resolutionModifiers: [{
+      type: "negate_activated_effect",
+      effectCategory: "monster",
+      sourcePositionAtActivation: "defense",
+    }],
+  };
+}
+
+function returnLowestLink() {
+  return {
+    id: "C1",
+    order: 1,
+    sourceCardId: "source",
+    sourceCardName: "回转术士",
+    effectCategory: "monster",
+    sequence: [createEffectPrimitive("return_lowest_defense_monster_to_hand")],
+  };
+}
+
+test("generic chain engine keeps an activation snapshot after the source returns to hand", () => {
+  const gameState = {
+    cards: [
+      { cardId: "carrier", name: "沉睡结界兽", controller: "opponent", zone: "monster_zone", faceUp: true, position: "defense", defense: 2000 },
+      { cardId: "source", name: "回转术士", controller: "self", zone: "monster_zone", faceUp: true, position: "attack", defense: 500 },
+      { cardId: "swap", name: "换位龙", controller: "self", zone: "hand", faceUp: false, position: "none", defense: 2500 },
+    ],
+  };
+  const chainLinks = [
+    returnLowestLink(),
+    {
+      id: "C2",
+      order: 2,
+      sourceCardId: "swap",
+      sourceCardName: "换位龙",
+      effectCategory: "monster",
+      targets: [{ cardId: "source", name: "回转术士", expectedZone: "monster_zone", validAtResolution: true }],
+      sequence: [
+        createEffectPrimitive("return_target_to_hand", { targetId: "source", targetExpectedZone: "monster_zone" }),
+        { connector: "THEN", primitive: createEffectPrimitive("special_summon_source", { sourceCardId: "swap", sourceExpectedZone: "hand" }) },
+      ],
+    },
+  ];
+
+  const result = resolveEffectChain({
+    gameState,
+    chainLinks,
+    continuousEffects: [positionContinuousEffect()],
+  });
+
+  assert.equal(result.preparedChainLinks.find((link) => link.id === "C1").activationSnapshot.sourcePosition, "defense");
+  assert.equal(result.linkResults.find((link) => link.id === "C2").status, "resolved");
+  assert.equal(result.linkResults.find((link) => link.id === "C1").status, "negated");
+  assert.equal(result.finalGameState.cards.find((card) => card.cardId === "source").zone, "hand");
+  assert.equal(result.finalGameState.cards.find((card) => card.cardId === "swap").position, "defense");
+});
+
+test("generic chain engine rechecks the continuous carrier before each link resolves", () => {
+  const gameState = {
+    cards: [
+      { cardId: "carrier", name: "沉睡结界兽", controller: "opponent", zone: "monster_zone", faceUp: true, position: "defense", defense: 2000 },
+      { cardId: "source", name: "回转术士", controller: "self", zone: "monster_zone", faceUp: true, position: "attack", defense: 500 },
+      { cardId: "switcher", name: "转向术士", controller: "self", zone: "monster_zone", faceUp: true, position: "attack", defense: 1500 },
+    ],
+  };
+  const chainLinks = [
+    returnLowestLink(),
+    {
+      id: "C2",
+      order: 2,
+      sourceCardId: "switcher",
+      sourceCardName: "转向术士",
+      effectCategory: "spell",
+      targets: [{ cardId: "carrier", name: "沉睡结界兽", expectedZone: "monster_zone", validAtResolution: true }],
+      sequence: [createEffectPrimitive("set_position", { targetId: "carrier", targetExpectedZone: "monster_zone", position: "attack" })],
+    },
+  ];
+
+  const result = resolveEffectChain({
+    gameState,
+    chainLinks,
+    continuousEffects: [positionContinuousEffect()],
+  });
+
+  assert.equal(result.preparedChainLinks.find((link) => link.id === "C1").activationSnapshot.sourcePosition, "defense");
+  assert.equal(result.linkResults.find((link) => link.id === "C1").status, "resolved");
+  assert.equal(result.finalGameState.cards.find((card) => card.cardId === "carrier").position, "attack");
+});
+
+test("an unaffected source is not force-changed and its attack-position activation is not negated", () => {
+  const gameState = {
+    cards: [
+      { cardId: "carrier", name: "沉睡结界兽", controller: "opponent", zone: "monster_zone", faceUp: true, position: "defense", defense: 2000 },
+      { cardId: "source", name: "免疫术士", controller: "self", zone: "monster_zone", faceUp: true, position: "attack", defense: 500, unaffectedByMonsterEffects: true },
+    ],
+  };
+
+  const result = resolveEffectChain({
+    gameState,
+    chainLinks: [returnLowestLink()],
+    continuousEffects: [positionContinuousEffect()],
+  });
+
+  assert.equal(result.preparedChainLinks[0].activationSnapshot.sourcePosition, "attack");
+  assert.equal(result.linkResults[0].status, "resolved");
+});
+
+test("fictional cards with the same card-text semantics use the same compiled simulation", () => {
+  const resolvedCards = [
+    {
+      id: "fictional-carrier",
+      input: "沉睡结界兽",
+      name: "沉睡结界兽",
+      cardType: "monster",
+      effectText: "只要此卡以守备表示存在于怪兽区域，场上的表侧表示怪兽变为守备表示，守备表示怪兽发动的效果无效化。",
+    },
+    {
+      id: "fictional-source",
+      input: "回转术士",
+      name: "回转术士",
+      cardType: "monster",
+      effectText: "自己・对手回合可以发动。将场上的1只守备力最低的怪兽放回手牌。",
+    },
+    {
+      id: "fictional-swap",
+      input: "换位龙",
+      name: "换位龙",
+      cardType: "monster",
+      effectText: "以自己场上的1只怪兽为对象可以发动。将该怪兽放回手牌，从手牌将此卡特殊召唤。",
+    },
+  ];
+  const question = "对方场上的「沉睡结界兽」守备表示存在。我方C1发动场上攻击表示的「回转术士」效果，C2从手牌发动「换位龙」替换，连锁逆算时C1还会弹回守备力最高的怪兽吗？";
+
+  const result = analyzeDuelStateTransition({ userQuery: question, resolvedCards });
+
+  assert.equal(result.status, "resolved", JSON.stringify(result));
+  assert.equal(result.complete, true);
+  assert.equal(result.activation, "assumed_legal");
+  assert.equal(result.resolution, "negated");
+  assert.match(result.shortAnswer, /按题设已满足展示等发动手续，C1可以发动/u);
+  assert.match(result.shortAnswer, /C2/u);
+  assert.match(result.shortAnswer, /被无效/u);
+  assert.match(result.shortAnswer, /不进行这个连锁项的效果处理/u);
+  assert.doesNotMatch(result.shortAnswer, /不会把怪兽返回手牌/u);
+  assert.match(result.shortAnswer, /守备力最低/u);
+  const prepared = result.program.preparedChainLinks.find((link) => link.id === "C1");
+  assert.equal(result.program.identityModel, "definition_id_and_instance_id_separated");
+  assert.equal(prepared.activationPremise, "declared_legal");
+  assert.equal(prepared.sourceDefinitionId, "fictional-source");
+  assert.equal(prepared.sourceInstanceId, "fictional-source#1");
+  assert.notEqual(prepared.sourceDefinitionId, prepared.sourceInstanceId);
+  assert.equal(prepared.activationSnapshot.sourcePosition, "defense");
+});
+
+test("a declared single chain without a continuous effect is compiled without a hidden two-link gate", () => {
+  const resolvedCards = [
+    {
+      id: "training-target",
+      input: "训练兵",
+      name: "训练兵",
+      cardType: "monster",
+      effectText: "通常怪兽。",
+    },
+    {
+      id: "single-swap",
+      input: "换位龙",
+      name: "换位龙",
+      cardType: "monster",
+      effectText: "以自己场上的1只怪兽为对象可以发动。将该怪兽放回手牌，从手牌将此卡特殊召唤。",
+    },
+  ];
+  const question = "我方场上有「训练兵」。我方C1从手牌发动「换位龙」的替换效果。";
+
+  const result = analyzeDuelStateTransition({ userQuery: question, resolvedCards });
+
+  assert.equal(result.status, "resolved", JSON.stringify(result));
+  assert.equal(result.complete, true);
+  assert.equal(result.activation, "assumed_legal");
+  assert.equal(result.resolution, "resolved");
+  assert.match(result.shortAnswer, /按题设已满足展示等发动手续，C1可以发动/u);
+  assert.equal(result.program.preparedChainLinks.length, 1);
+  assert.equal(result.program.preparedChainLinks[0].activationPremise, "declared_legal");
+  assert.deepEqual(result.program.cardPrograms.map((program) => program.definitionId).sort(), ["single-swap", "training-target"]);
+});
+
+test("a non-fusion activation-legality question is not silently converted into a declared-legal premise", () => {
+  const resolvedCards = [
+    {
+      id: "training-target-legality",
+      input: "训练兵",
+      name: "训练兵",
+      cardType: "monster",
+      effectText: "通常怪兽。",
+    },
+    {
+      id: "single-swap-legality",
+      input: "换位龙",
+      name: "换位龙",
+      cardType: "monster",
+      effectText: "以自己场上的1只怪兽为对象可以发动。将该怪兽放回手牌，从手牌将此卡特殊召唤。",
+    },
+  ];
+  const result = analyzeDuelStateTransition({
+    userQuery: "我方场上有「训练兵」，C1从手牌的「换位龙」效果是否可以发动？",
+    resolvedCards,
+  });
+
+  assert.equal(result.status, "not_applicable", JSON.stringify(result));
+  assert.equal(result.complete, false);
+  assert.equal(result.reason, "activation_legality_not_compiled");
+});
+
+test("plain can-still-activate wording is treated as a legality question rather than a declared premise", () => {
+  const resolvedCards = [
+    {
+      id: "training-target-still",
+      input: "训练兵",
+      name: "训练兵",
+      cardType: "monster",
+      effectText: "通常怪兽。",
+    },
+    {
+      id: "single-swap-still",
+      input: "换位龙",
+      name: "换位龙",
+      cardType: "monster",
+      effectText: "以自己场上的1只怪兽为对象可以发动。将该怪兽放回手牌，从手牌将此卡特殊召唤。",
+    },
+  ];
+  for (const wording of ["「换位龙」的效果还能发动吗？", "「换位龙」的效果发动吗？"]) {
+    const result = analyzeDuelStateTransition({
+      userQuery: `我方场上有「训练兵」，C1从手牌${wording}`,
+      resolvedCards,
+    });
+    assert.equal(result.status, "not_applicable", JSON.stringify(result));
+    assert.equal(result.reason, "activation_legality_not_compiled");
+  }
+});
+
+test("a lowest-defense correction does not invent negation when the effect resolves", () => {
+  const resolvedCards = [
+    {
+      id: "lowest-source-resolves",
+      input: "回转术士",
+      name: "回转术士",
+      cardType: "monster",
+      defense: 800,
+      effectText: "自己・对手回合可以发动。将场上的1只守备力最低的怪兽放回手牌。",
+    },
+    {
+      id: "lowest-target-resolves",
+      input: "守备靶兽",
+      name: "守备靶兽",
+      cardType: "monster",
+      defense: 1200,
+      effectText: "通常怪兽。",
+    },
+  ];
+  const result = analyzeDuelStateTransition({
+    userQuery: "我方C1发动场上的「回转术士」效果。对方场上守备表示的「守备靶兽」存在，会弹走守备力最高的怪兽吗？",
+    resolvedCards,
+  });
+
+  assert.equal(result.status, "resolved", JSON.stringify(result));
+  assert.equal(result.resolution, "resolved");
+  assert.match(result.shortAnswer, /实际选择守备力最低/u);
+  assert.doesNotMatch(result.shortAnswer, /本题该处理被无效|不会选择任何怪兽/u);
+  assert.equal(result.program.stateInferences.some((item) => item.reason === "declared_legal_field_monster_activation"), true);
+});
+
+test("a position change is attributed to its own continuous source rather than the negator", () => {
+  const resolvedCards = [
+    {
+      id: "position-carrier",
+      input: "转守结界",
+      name: "转守结界",
+      cardType: "monster",
+      effectText: "场上的表侧表示怪兽变为守备表示。",
+    },
+    {
+      id: "negation-carrier",
+      input: "无效结界",
+      name: "无效结界",
+      cardType: "monster",
+      effectText: "只要此卡以守备表示存在于怪兽区域，守备表示怪兽发动的效果无效化。",
+    },
+    {
+      id: "attribution-source",
+      input: "回转术士",
+      name: "回转术士",
+      cardType: "monster",
+      effectText: "自己・对手回合可以发动。将场上的1只守备力最低的怪兽放回手牌。",
+    },
+  ];
+  const result = analyzeDuelStateTransition({
+    userQuery: "对方场上表侧表示的「转守结界」和表侧守备表示的「无效结界」存在。我方C1发动场上攻击表示的「回转术士」效果。",
+    resolvedCards,
+  });
+
+  assert.equal(result.status, "resolved", JSON.stringify(result));
+  assert.equal(result.resolution, "negated");
+  assert.match(result.shortAnswer, /「转守结界」的持续效果先将「回转术士」/u);
+  assert.match(result.shortAnswer, /满足「无效结界」持续效果的无效条件/u);
+});
+
+test("unsupported continuous-effect source categories fail closed instead of being placed in a monster zone", () => {
+  const resolvedCards = [
+    {
+      id: "continuous-spell-unsupported",
+      input: "转守永续魔法",
+      name: "转守永续魔法",
+      cardType: "永续魔法",
+      effectText: "场上的表侧表示怪兽变为守备表示。",
+    },
+    {
+      id: "spell-test-source",
+      input: "回转术士",
+      name: "回转术士",
+      cardType: "monster",
+      effectText: "自己・对手回合可以发动。将场上的1只守备力最低的怪兽放回手牌。",
+    },
+  ];
+  const result = analyzeDuelStateTransition({
+    userQuery: "对方场上表侧表示的「转守永续魔法」存在。我方C1发动场上攻击表示的「回转术士」效果。",
+    resolvedCards,
+  });
+
+  assert.equal(result.status, "not_applicable", JSON.stringify(result));
+  assert.equal(result.reason, "effect_source_category_not_supported");
+});
+
+test("missing cardType is inferred as monster only from an explicit source-monster effect structure", () => {
+  const [program] = compileResolvedCardPrograms([{
+    id: "missing-type-summon-trigger",
+    input: "语义融合者",
+    name: "语义融合者",
+    effectText: "这张卡召唤・特殊召唤的场合，舍弃1张手牌可以发动。将自己或对方场上的怪兽作为融合素材进行融合召唤。",
+  }]);
+
+  assert.equal(program.effectCategory, "monster");
+  assert.equal(program.effectCategoryBasis, "effect_text_source_summon_trigger");
+  assert.equal(program.activatedEffects[0].effectCategory, "monster");
+  assert.equal(program.activatedEffects[0].compileIncompleteReason, undefined);
+});
+
+test("missing cardType with an otherwise ambiguous operation stays unsupported", () => {
+  const [program] = compileResolvedCardPrograms([{
+    id: "missing-type-ambiguous-operation",
+    input: "无类型融合卡",
+    name: "无类型融合卡",
+    effectText: "舍弃1张手牌可以发动。将自己或对方场上的怪兽作为融合素材进行融合召唤。",
+  }]);
+
+  assert.equal(program.effectCategory, "unknown");
+  assert.equal(program.effectCategoryBasis, "missing_card_type_without_monster_structure");
+  assert.equal(program.activatedEffects[0].effectCategory, "unknown");
+  assert.equal(
+    program.activatedEffects[0].compileIncompleteReason,
+    "effect_source_category_not_supported",
+  );
+});
+
+test("another monster being summoned does not classify a missing-type continuous card as a monster", () => {
+  const [program] = compileResolvedCardPrograms([{
+    id: "missing-type-other-monster-trigger",
+    input: "无类型结界",
+    name: "无类型结界",
+    effectText: "怪兽召唤的场合，场上的表侧表示怪兽变为守备表示。",
+  }]);
+
+  assert.equal(program.effectCategory, "unknown");
+  assert.equal(program.effectCategoryBasis, "missing_card_type_without_monster_structure");
+  assert.equal(program.continuousEffects[0].effectCategory, "unknown");
+  assert.equal(
+    program.continuousEffects[0].compileIncompleteReason,
+    "effect_source_category_not_supported",
+  );
+});
+
+test("an unspecified field card is not fabricated as face-up to enable its continuous effect", () => {
+  const resolvedCards = [
+    {
+      id: "unknown-faceup-carrier",
+      input: "未知结界兽",
+      name: "未知结界兽",
+      cardType: "monster",
+      effectText: "只要此卡存在于怪兽区域，场上的表侧表示怪兽变为守备表示，守备表示怪兽发动的效果无效化。",
+    },
+    {
+      id: "known-source",
+      input: "回转术士",
+      name: "回转术士",
+      cardType: "monster",
+      effectText: "自己・对手回合可以发动。将场上的1只守备力最低的怪兽放回手牌。",
+    },
+  ];
+  const result = analyzeDuelStateTransition({
+    userQuery: "对方场上有「未知结界兽」。我方C1发动场上攻击表示的「回转术士」效果。",
+    resolvedCards,
+  });
+
+  assert.equal(result.status, "not_applicable", JSON.stringify(result));
+  assert.equal(result.complete, false);
+  assert.equal(result.reason, "compiled_chain_not_complete", JSON.stringify(result));
+  assert.equal(result.debug.simulation.incompleteReason, "continuous_effect_applicability_unknown");
+});
+
+test("the compiler does not fabricate one operation by joining separate numbered effects", () => {
+  const resolvedCards = [{
+    id: "split-effect-definition",
+    input: "分段术士",
+    name: "分段术士",
+    cardType: "monster",
+    effectText: [
+      "①：将场上的1只怪兽放回手牌。",
+      "②：场上的1只守备力最低的怪兽攻击力下降500。",
+    ].join("\n"),
+  }];
+  const result = analyzeDuelStateTransition({
+    userQuery: "我方C1发动场上的「分段术士」效果。",
+    resolvedCards,
+  });
+
+  assert.equal(result.status, "not_applicable", JSON.stringify(result));
+  assert.equal(result.complete, false);
+  assert.equal(result.reason, "declared_chain_link_not_compiled");
+});
+
+test("multiple same-definition instances reject an unbound chain source", () => {
+  const resolvedCards = [{
+    id: "ambiguous-source-definition",
+    input: "回转术士",
+    name: "回转术士",
+    cardType: "monster",
+    effectText: "自己・对手回合可以发动。将场上的1只守备力最低的怪兽放回手牌。",
+  }];
+  const question = "我方C1发动场上2只「回转术士」中的1只的效果，能弹回守备力最低的怪兽吗？";
+
+  const result = analyzeDuelStateTransition({ userQuery: question, resolvedCards });
+
+  assert.equal(result.status, "not_applicable", JSON.stringify(result));
+  assert.equal(result.complete, false);
+  assert.equal(result.reason, "ambiguous_chain_source_instance");
+  assert.deepEqual(result.debug.candidateInstanceIds, [
+    "ambiguous-source-definition#1",
+    "ambiguous-source-definition#2",
+  ]);
+});
+
+const originalUserQuestions = [
+  "当对手场上的no.41防守表示存在时，我c1发动场上vs狂魔博士的效果，c2手牌龙帝进行替换，连锁处理结算时，c1的博士效果还会生效弹走场上防御力最高的卡吗？",
+  "当对手场上的【No.41 泥睡魔兽 睡梦貘】防守表示在场上存在。我方c1发动场上攻击表示的【VS狂魔博士】效果，C2从手牌发动【龙帝】替换效果，连锁逆算处理时，c1的博士效果还会生效弹走场上防御力最高的卡吗？",
+];
+
+test("a bare numbered-card identity resolves only within the exact numbered family", () => {
+  const cards = [
+    { id: "no41", name: "编号41 测试兽", jaName: "No.41 テスト", aliases: ["编号41 测试兽", "No.41 テスト"] },
+    { id: "cno41", name: "混沌编号41 测试兽", jaName: "CNo.41 テスト", aliases: ["混沌编号41 测试兽", "CNo.41 テスト"] },
+  ];
+
+  const noResult = extractRagCards("对方场上的no.41防守表示存在。", { cards });
+  const cnoResult = extractRagCards("对方场上的CNo.41防守表示存在。", { cards });
+
+  assert.deepEqual(noResult.resolvedCards.map((card) => card.id), ["no41"]);
+  assert.deepEqual(cnoResult.resolvedCards.map((card) => card.id), ["cno41"]);
+});
+
+test("both original user phrasings resolve all cards and use the deterministic simulation end to end", async () => {
+  const data = await loadRagData();
+  for (const [questionIndex, question] of originalUserQuestions.entries()) {
+    const cardResolution = extractRagCards(question, { cards: data.cards, maxCards: 8 });
+    const resolvedIds = new Set(cardResolution.resolvedCards.map((card) => card.id));
+    assert.deepEqual(
+      new Set(["13163", "18730", "18732"]),
+      new Set([...resolvedIds].filter((id) => ["13163", "18730", "18732"].includes(id))),
+      JSON.stringify(cardResolution),
+    );
+    assert.equal(cardResolution.unresolvedMentions.length, 0, JSON.stringify(cardResolution.unresolvedMentions));
+
+    const direct = analyzeDuelStateTransition({
+      userQuery: question,
+      resolvedCards: cardResolution.resolvedCards,
+    });
+    assert.equal(direct.status, "resolved", JSON.stringify(direct));
+    assert.equal(direct.activation, "assumed_legal");
+    assert.equal(direct.activationBasis, "declared_legal");
+    assert.equal(direct.resolution, "negated");
+    assert.match(direct.shortAnswer, /按题设已满足展示等发动手续，C1可以发动/u);
+    assert.match(direct.shortAnswer, /C2/u);
+    assert.match(direct.shortAnswer, /被无效/u);
+    assert.match(direct.shortAnswer, /不进行这个连锁项的效果处理/u);
+    assert.doesNotMatch(direct.shortAnswer, /不会把怪兽返回手牌/u);
+    const initialDoctor = direct.program.initialState.cards.find((card) => card.definitionId === "18730");
+    assert.equal(initialDoctor.position, questionIndex === 0 ? "unknown" : "attack");
+    assert.equal(
+      direct.program.preparedChainLinks.find((link) => link.id === "C1").activationSnapshot.sourcePosition,
+      "defense",
+    );
+    assert.equal(
+      direct.program.preparedChainLinks.find((link) => link.id === "C2").activationSnapshot.sourceZone,
+      "hand",
+    );
+    assert.deepEqual(
+      direct.program.stateSnapshots.map((snapshot) => [snapshot.stage, snapshot.chainLink || ""]),
+      [
+        ["before_chain_activation", "C1"],
+        ["after_chain_activation", "C1"],
+        ["before_chain_activation", "C2"],
+        ["after_chain_activation", "C2"],
+        ["before_chain_resolution", ""],
+        ["after_chain_link", "C2"],
+        ["after_chain_link", "C1"],
+      ],
+    );
+    assert.equal(
+      direct.program.finalState.cards.find((card) => card.definitionId === "18730").zone,
+      "hand",
+    );
+    assert.equal(
+      direct.program.finalState.cards.find((card) => card.definitionId === "18732").position,
+      "defense",
+    );
+
+    const answer = await answerRagRulingQuestion({
+      question,
+      cards: data.cards,
+      records: data.records,
+      qaRecords: data.qaRecords,
+      dryRun: true,
+      env: {
+        RAG_PROVIDER: "mock",
+        MODEL_PROVIDER: "mock",
+        OCG_ENGINE_AUTO_SIMULATION: "false",
+      },
+      cardModelInvoker: async () => JSON.stringify({ cardNames: [] }),
+      ruleModelInvoker: async () => JSON.stringify({ queries: [] }),
+      fetchImpl: async () => new Response(JSON.stringify({ result: [], next: 0 }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    });
+    const answerIds = new Set(answer.resolvedCards.map((card) => card.id));
+    for (const id of ["13163", "18730", "18732"]) assert.equal(answerIds.has(id), true, id);
+    assert.match(answer.shortAnswer, /可以发动/u);
+    assert.match(answer.shortAnswer, /C2/u);
+    assert.match(answer.shortAnswer, /被无效/u);
+    assert.match(answer.shortAnswer, /不进行这个连锁项的效果处理/u);
+    assert.doesNotMatch(answer.shortAnswer, /不会把怪兽返回手牌/u);
+    assert.equal(answer.debug.semanticStateTransition.status, "resolved");
+    assert.equal(answer.debug.deterministicDecision, "state_transition");
+    assert.equal(answer.debug.modelUsed, "deterministic-ruling-reasoner");
+  }
+});
+
+function fictionalFusionCase(tag, { includeAlternativeMaterial = false, targetHasRecipe = true } = {}) {
+  const sourceName = "织合术士" + tag;
+  const costName = "墓启圣女" + tag;
+  const protectedName = "护界融合龙" + tag;
+  const targetName = "终式融合龙" + tag;
+  const alternativeName = "替代同步龙" + tag;
+  const ids = {
+    source: "source-" + tag,
+    cost: "cost-" + tag,
+    protected: "protected-" + tag,
+    target: "target-" + tag,
+    alternative: "alternative-" + tag,
+  };
+  const cards = [{
+    id: ids.source,
+    name: sourceName,
+    aliases: [sourceName],
+    cardType: "monster",
+    effectText: "这张卡召唤・特殊召唤的场合，舍弃1张手牌可以发动。将包含此卡在内的自己或对方场上的怪兽作为融合素材，将1只融合怪兽融合召唤。在此之际，不可将自己场上其他怪兽作为融合素材。",
+  }, {
+    id: ids.cost,
+    name: costName,
+    aliases: [costName],
+    cardType: "monster",
+    effectText: "通常怪兽。",
+  }, {
+    id: ids.protected,
+    name: protectedName,
+    aliases: [protectedName],
+    cardType: "fusion",
+    effectText: "只要自己或对方的场上或墓地存在“" + costName + "”怪兽，此卡不受此卡以外的效果影响。",
+  }, {
+    id: ids.target,
+    name: targetName,
+    aliases: [targetName],
+    cardType: "fusion",
+    effectText: targetHasRecipe
+      ? "“" + sourceName + "”＋融合・同步・超量・连接怪兽"
+      : "融合怪兽。",
+  }];
+  if (includeAlternativeMaterial) {
+    cards.push({
+      id: ids.alternative,
+      name: alternativeName,
+      aliases: [alternativeName],
+      cardType: "synchro",
+      effectText: "同步怪兽。",
+    });
+  }
+  const opponentField = includeAlternativeMaterial
+    ? "对方场上只有表侧表示的「" + protectedName + "」和「" + alternativeName + "」各1只。"
+    : "对方场上只有表侧表示的「" + protectedName + "」1只。";
+  return {
+    ids,
+    cards,
+    question: [
+      "我方额外卡组有「" + targetName + "」，手牌有「" + costName + "」和「" + sourceName + "」各1张。",
+      opponentField,
+      "双方墓地没有卡。我方召唤「" + sourceName + "」时，可以将「" + costName + "」作为Cost丢弃来发动「" + sourceName + "」的效果吗，后续怎么处理？",
+    ].join(""),
+  };
+}
+
+function fictionalFusionSignature(result, ids) {
+  const initial = result.program.initialState.cards;
+  const final = result.program.finalState.cards;
+  const zone = (cards, definitionId) => cards.find((card) => card.definitionId === definitionId)?.zone;
+  const modifiers = final
+    .find((card) => card.definitionId === ids.protected)
+    ?.derivedModifiers
+    ?.map((modifier) => modifier.type) || [];
+  return {
+    status: result.status,
+    complete: result.complete,
+    activation: result.activation,
+    resolution: result.resolution,
+    phases: result.trace.map((step) => step.phase),
+    initialZones: [
+      zone(initial, ids.source),
+      zone(initial, ids.cost),
+      zone(initial, ids.protected),
+      zone(initial, ids.target),
+    ],
+    finalZones: [
+      zone(final, ids.source),
+      zone(final, ids.cost),
+      zone(final, ids.protected),
+      zone(final, ids.target),
+    ],
+    protectedModifiers: modifiers,
+  };
+}
+
+test("renaming every fictional card preserves the compiled cost, stabilization, and fusion outcome", () => {
+  const first = fictionalFusionCase("甲");
+  const second = fictionalFusionCase("乙");
+  const firstResult = analyzeDuelStateTransition({ userQuery: first.question, resolvedCards: first.cards });
+  const secondResult = analyzeDuelStateTransition({ userQuery: second.question, resolvedCards: second.cards });
+  const firstSignature = fictionalFusionSignature(firstResult, first.ids);
+  const secondSignature = fictionalFusionSignature(secondResult, second.ids);
+
+  assert.deepEqual(secondSignature, firstSignature);
+  assert.deepEqual(firstSignature, {
+    status: "resolved",
+    complete: true,
+    activation: "legal",
+    resolution: "not_performed",
+    phases: ["activation_check", "pay_activation_cost", "stabilize_continuous_effects", "resolve_effect_operation"],
+    initialZones: ["monster_zone", "hand", "monster_zone", "extra_deck"],
+    finalZones: ["monster_zone", "graveyard", "monster_zone", "extra_deck"],
+    protectedModifiers: ["unaffected_by_other_effects"],
+  });
+  assert.doesNotMatch(JSON.stringify([firstResult, secondResult]), /阿不思|艾克利西亚|吞(?:食|喰)圣痕|冰剑龙/u);
+});
+
+test("swapping the activating player preserves relative cost and material semantics", () => {
+  const fixture = fictionalFusionCase("镜");
+  const name = (id) => fixture.cards.find((card) => card.id === id).name;
+  const question = [
+    "对方额外卡组有「" + name(fixture.ids.target) + "」，对方手牌有「"
+      + name(fixture.ids.cost) + "」和「" + name(fixture.ids.source) + "」各1张。",
+    "我方场上只有表侧表示的「" + name(fixture.ids.protected) + "」1只，双方墓地没有卡。",
+    "对方召唤「" + name(fixture.ids.source) + "」时，可以将「" + name(fixture.ids.cost)
+      + "」作为Cost丢弃来发动「" + name(fixture.ids.source) + "」的效果吗，后续怎么处理？",
+  ].join("");
+
+  const result = analyzeDuelStateTransition({ userQuery: question, resolvedCards: fixture.cards });
+  assert.equal(result.status, "resolved", JSON.stringify(result));
+  assert.equal(result.activation, "legal");
+  assert.equal(result.resolution, "not_performed");
+  const initial = result.program.initialState.cards;
+  const final = result.program.finalState.cards;
+  const card = (state, id) => state.find((item) => item.definitionId === id);
+  assert.equal(card(initial, fixture.ids.source).controller, "opponent");
+  assert.equal(card(initial, fixture.ids.cost).controller, "opponent");
+  assert.equal(card(final, fixture.ids.cost).zone, "graveyard");
+  assert.equal(card(final, fixture.ids.cost).controller, "opponent");
+  assert.equal(card(final, fixture.ids.protected).zone, "monster_zone");
+  assert.match(result.shortAnswer, /可以发动/u);
+  assert.match(result.shortAnswer, /不进行融合召唤/u);
+});
+
+test("a one-sided own-field material pool follows the effect controller after player swap", () => {
+  const cards = [{
+    id: "perspective-source",
+    name: "镜界织术师",
+    cardType: "monster",
+    effectText: "这张卡召唤的场合可以发动。将包含此卡在内的自己场上的怪兽作为融合素材，将1只融合怪兽融合召唤。",
+  }, {
+    id: "perspective-own-material",
+    name: "逆位同步兽",
+    cardType: "synchro",
+    effectText: "同步怪兽。",
+  }, {
+    id: "perspective-other-material",
+    name: "顺位同步兽",
+    cardType: "synchro",
+    effectText: "同步怪兽。",
+  }, {
+    id: "perspective-target",
+    name: "镜界终成体",
+    cardType: "fusion",
+    effectText: "「镜界织术师」＋同步怪兽",
+  }];
+  const question = [
+    "对方额外卡组有「镜界终成体」。",
+    "对方场上有表侧表示的「逆位同步兽」，我方场上有表侧表示的「顺位同步兽」。",
+    "对方召唤「镜界织术师」时发动其效果，可以融合召唤「镜界终成体」吗？",
+  ].join("");
+
+  const result = analyzeDuelStateTransition({ userQuery: question, resolvedCards: cards });
+  assert.equal(result.status, "resolved", JSON.stringify(result));
+  assert.equal(result.resolution, "performed");
+  const final = result.program.finalState.cards;
+  const zone = (id) => final.find((card) => card.definitionId === id)?.zone;
+  assert.equal(zone("perspective-source"), "graveyard");
+  assert.equal(zone("perspective-own-material"), "graveyard");
+  assert.equal(zone("perspective-other-material"), "monster_zone");
+  assert.equal(zone("perspective-target"), "monster_zone");
+});
+
+test("an unknown effect-controller perspective fails closed instead of choosing a player's hand", () => {
+  const fixture = fictionalFusionCase("雾");
+  const name = (id) => fixture.cards.find((card) => card.id === id).name;
+  const question = [
+    "额外卡组有「" + name(fixture.ids.target) + "」，手牌有「" + name(fixture.ids.cost) + "」。",
+    "场上只有表侧表示的「" + name(fixture.ids.protected) + "」，双方墓地没有卡。",
+    "召唤「" + name(fixture.ids.source) + "」时，将「" + name(fixture.ids.cost)
+      + "」作为Cost丢弃发动效果，后续怎么处理？",
+  ].join("");
+
+  const result = analyzeDuelStateTransition({ userQuery: question, resolvedCards: fixture.cards });
+  assert.equal(result.status, "not_applicable", JSON.stringify(result));
+  assert.equal(result.complete, false);
+  assert.equal(result.reason, "activation_cost_controller_unknown");
+});
+
+test("the compiled simulation still performs fusion when immunity leaves a second legal material", () => {
+  const fixture = fictionalFusionCase("丙", { includeAlternativeMaterial: true });
+  const result = analyzeDuelStateTransition({ userQuery: fixture.question, resolvedCards: fixture.cards });
+
+  assert.equal(result.status, "resolved", JSON.stringify(result));
+  assert.equal(result.complete, true);
+  assert.equal(result.activation, "legal");
+  assert.equal(result.resolution, "performed");
+  const finalCards = result.program.finalState.cards;
+  const zone = (definitionId) => finalCards.find((card) => card.definitionId === definitionId)?.zone;
+  assert.equal(zone(fixture.ids.protected), "monster_zone");
+  assert.equal(zone(fixture.ids.source), "graveyard");
+  assert.equal(zone(fixture.ids.alternative), "graveyard");
+  assert.equal(zone(fixture.ids.target), "monster_zone");
+  assert.match(result.shortAnswer, /进行融合召唤|融合召唤成功/u);
+  assert.doesNotMatch(result.shortAnswer, /不进行融合召唤/u);
+});
+
+test("an explicitly requested fusion target cannot be replaced by another summonable candidate", () => {
+  const cards = [{
+    id: "goal-source",
+    name: "起动术士",
+    cardType: "monster",
+    effectText: "这张卡召唤的场合，舍弃1张手牌可以发动。将包含此卡在内的自己或对方场上的怪兽作为融合素材进行融合召唤。",
+  }, {
+    id: "goal-cost",
+    name: "代价卡",
+    cardType: "monster",
+    effectText: "通常怪兽。",
+  }, {
+    id: "goal-fusion-material",
+    name: "融合素材龙",
+    cardType: "fusion",
+    effectText: "融合怪兽。",
+  }, {
+    id: "goal-legal-target",
+    name: "可行终龙",
+    cardType: "fusion",
+    effectText: "「起动术士」＋融合怪兽",
+  }, {
+    id: "goal-requested-target",
+    name: "指定终龙",
+    cardType: "fusion",
+    effectText: "「起动术士」＋同步怪兽",
+  }];
+  const question = [
+    "我方额外卡组有「可行终龙」和「指定终龙」，手牌有「代价卡」。",
+    "对方场上有表侧表示的「融合素材龙」。",
+    "我方召唤「起动术士」时，将「代价卡」作为Cost丢弃发动效果，可以融合召唤「指定终龙」吗？",
+  ].join("");
+  const result = analyzeDuelStateTransition({ userQuery: question, resolvedCards: cards });
+
+  assert.equal(result.status, "not_applicable", JSON.stringify(result));
+  const candidateIds = result.debug.compiled.chainLinks[0].sequence[0].primitive.candidateInstanceIds;
+  assert.deepEqual(candidateIds, ["goal-requested-target#1"]);
+});
+
+test("the compiler fails closed when the fusion target or material recipe is missing", () => {
+  const withoutTarget = fictionalFusionCase("丁");
+  withoutTarget.cards = withoutTarget.cards.filter((card) => card.id !== withoutTarget.ids.target);
+  const withoutRecipe = fictionalFusionCase("戊", { targetHasRecipe: false });
+
+  for (const fixture of [withoutTarget, withoutRecipe]) {
+    const result = analyzeDuelStateTransition({ userQuery: fixture.question, resolvedCards: fixture.cards });
+    assert.equal(result.status, "not_applicable", JSON.stringify(result));
+    assert.equal(result.complete, false);
+    assert.equal(result.reason, "fusion_candidate_or_material_recipe_unknown");
+    assert.equal(result.trace.length, 0);
+  }
+});
+
+test("the compiler does not invent an omitted card zone from its effect type", () => {
+  const fixture = fictionalFusionCase("区");
+  fixture.question = [
+    "「" + fixture.cards.find((card) => card.id === fixture.ids.protected).name + "」存在，但题目没有说明其所在区域。",
+    "我方额外卡组有「" + fixture.cards.find((card) => card.id === fixture.ids.target).name + "」。",
+    "我方手牌有「" + fixture.cards.find((card) => card.id === fixture.ids.cost).name + "」。",
+    "我方召唤「" + fixture.cards.find((card) => card.id === fixture.ids.source).name + "」时，将「"
+      + fixture.cards.find((card) => card.id === fixture.ids.cost).name + "」作为Cost丢弃发动效果。",
+  ].join("");
+  const result = analyzeDuelStateTransition({
+    userQuery: fixture.question,
+    resolvedCards: fixture.cards,
+  });
+
+  assert.equal(result.status, "not_applicable", JSON.stringify(result));
+  assert.equal(result.complete, false);
+  assert.equal(result.reason, "compiled_chain_not_complete");
+  assert.equal(result.debug.simulation.incompleteReason, "continuous_effect_applicability_unknown");
+});
+
+test("a summon trigger is bound to the activating instance rather than any summon in the question", () => {
+  const fixture = fictionalFusionCase("时");
+  const name = (id) => fixture.cards.find((card) => card.id === id).name;
+  fixture.question = [
+    "我方额外卡组有「" + name(fixture.ids.target) + "」，手牌有「" + name(fixture.ids.cost) + "」。",
+    "对方场上只有表侧表示的「" + name(fixture.ids.protected) + "」。",
+    "「" + name(fixture.ids.source) + "」已在我方场上。",
+    "之后我方召唤「旁观者」，打算将「" + name(fixture.ids.cost) + "」作为Cost发动「"
+      + name(fixture.ids.source) + "」的效果。",
+  ].join("");
+  const result = analyzeDuelStateTransition({
+    userQuery: fixture.question,
+    resolvedCards: fixture.cards,
+  });
+
+  assert.equal(result.status, "not_applicable", JSON.stringify(result));
+  assert.equal(result.complete, false);
+  assert.equal(result.reason, "compiled_chain_not_complete", JSON.stringify(result));
+  assert.equal(result.debug.simulation.incompleteReason, "summon_event_not_established");
+});
+
+test("printed material formulas classify summon kinds without mistaking Synchro, Link, or arithmetic text for Fusion", () => {
+  const programs = compileResolvedCardPrograms([
+    { id: "material-a", name: "素材甲", effectText: "通常怪兽。" },
+    {
+      id: "three-slot-fusion",
+      name: "三材合成体",
+      effectText: "“素材甲”＋“素材乙”＋效果怪兽",
+    },
+    {
+      id: "synchro-formula",
+      name: "无类型同步体",
+      effectText: "1只调整＋调整以外的怪兽1只以上",
+    },
+    {
+      id: "english-link-formula",
+      name: "Untyped Link Body",
+      effectText: "2+ Effect Monsters",
+    },
+    {
+      id: "ordinary-plus-text",
+      name: "算术术士",
+      effectText: "此卡的攻击力变成原本攻击力 + 500。",
+    },
+    {
+      id: "explicit-synchro",
+      name: "明确同步体",
+      cardType: "Synchro",
+      effectText: "“素材甲”＋融合怪兽",
+    },
+  ]);
+  const byId = (id) => programs.find((program) => program.definitionId === id);
+
+  assert.deepEqual(byId("three-slot-fusion").summonKinds, ["fusion"]);
+  assert.deepEqual(byId("synchro-formula").summonKinds, ["synchro"]);
+  assert.equal(byId("synchro-formula").summonKinds.includes("fusion"), false);
+  assert.deepEqual(byId("english-link-formula").summonKinds, []);
+  assert.equal(byId("english-link-formula").materialRecipeRaw, null);
+  assert.deepEqual(byId("ordinary-plus-text").summonKinds, []);
+  assert.equal(byId("ordinary-plus-text").materialRecipeRaw, null);
+  assert.deepEqual(byId("explicit-synchro").summonKinds, ["synchro"]);
+  assert.equal(byId("explicit-synchro").materialRecipe, undefined);
+});
+
+function runNo41ColdStart(question) {
+  const moduleUrl = pathToFileURL(resolve("backend/ragRulingPipeline.mjs")).href;
+  const encodedQuestion = Buffer.from(question, "utf8").toString("base64");
+  const script = [
+    "const { answerRagRulingQuestion } = await import(" + JSON.stringify(moduleUrl) + ");",
+    "const question = Buffer.from(" + JSON.stringify(encodedQuestion) + ", 'base64').toString('utf8');",
+    "const answer = await answerRagRulingQuestion({",
+    "  question, dryRun: true,",
+    "  env: { RAG_PROVIDER: 'mock', RAG_MODEL_PROVIDER: 'mock', MODEL_PROVIDER: 'mock', OCG_ENGINE_ENABLED: '0', OCG_ENGINE_AUTO_SIMULATION: 'false' },",
+    "  cardModelInvoker: async () => JSON.stringify({ cardNames: [] }),",
+    "  ruleModelInvoker: async () => JSON.stringify({ queries: [] }),",
+    "  fetchImpl: async () => new Response(JSON.stringify({ result: [], next: 0 }), { status: 200, headers: { 'content-type': 'application/json' } }),",
+    "});",
+    "const transition = answer.debug.semanticStateTransition;",
+    "const card = (state, id) => state.cards.find((item) => item.definitionId === id);",
+    "process.stdout.write(JSON.stringify({",
+    "  ids: answer.resolvedCards.map((item) => item.id),",
+    "  unresolved: answer.debug.unresolvedMentions,",
+    "  decision: answer.debug.deterministicDecision,",
+    "  modelUsed: answer.debug.modelUsed,",
+    "  shortAnswer: answer.shortAnswer,",
+    "  status: transition.status, complete: transition.complete, activation: transition.activation, resolution: transition.resolution,",
+    "  initialDoctor: card(transition.program.initialState, '18730'),",
+    "  prepared: transition.program.preparedChainLinks.map((link) => ({ id: link.id, sourceDefinitionId: link.sourceDefinitionId, snapshot: link.activationSnapshot })),",
+    "  snapshots: transition.program.stateSnapshots.map((item) => ({ stage: item.stage, chainLink: item.chainLink || '' })),",
+    "  finalDoctor: card(transition.program.finalState, '18730'),",
+    "  finalValius: card(transition.program.finalState, '18732'),",
+    "}));",
+  ].join("\n");
+  const child = spawnSync(process.execPath, ["--input-type=module", "--eval", script], {
+    cwd: resolve("."),
+    encoding: "utf8",
+    timeout: 120_000,
+    maxBuffer: 10 * 1024 * 1024,
+    env: { ...process.env },
+  });
+  assert.equal(child.status, 0, child.stderr || child.stdout);
+  return JSON.parse(child.stdout.trim().split(/\r?\n/u).at(-1));
+}
+
+test("the original No.41 wording resolves from a genuinely cold process with the complete timeline", () => {
+  const result = runNo41ColdStart(originalUserQuestions[0]);
+
+  for (const id of ["13163", "18730", "18732"]) assert.equal(result.ids.includes(id), true, id);
+  assert.deepEqual(result.unresolved, []);
+  assert.equal(result.decision, "state_transition");
+  assert.equal(result.modelUsed, "deterministic-ruling-reasoner");
+  assert.equal(result.status, "resolved");
+  assert.equal(result.complete, true);
+  assert.equal(result.activation, "assumed_legal");
+  assert.equal(result.resolution, "negated");
+  assert.equal(result.initialDoctor.position, "unknown");
+  assert.equal(result.prepared.find((link) => link.id === "C1").snapshot.sourcePosition, "defense");
+  assert.equal(result.prepared.find((link) => link.id === "C2").snapshot.sourceZone, "hand");
+  assert.deepEqual(result.snapshots, [
+    { stage: "before_chain_activation", chainLink: "C1" },
+    { stage: "after_chain_activation", chainLink: "C1" },
+    { stage: "before_chain_activation", chainLink: "C2" },
+    { stage: "after_chain_activation", chainLink: "C2" },
+    { stage: "before_chain_resolution", chainLink: "" },
+    { stage: "after_chain_link", chainLink: "C2" },
+    { stage: "after_chain_link", chainLink: "C1" },
+  ]);
+  assert.equal(result.finalDoctor.zone, "hand");
+  assert.equal(result.finalValius.zone, "monster_zone");
+  assert.equal(result.finalValius.position, "defense");
+  assert.match(result.shortAnswer, /进入发动窗口前/u);
+  assert.match(result.shortAnswer, /C1可以发动/u);
+  assert.match(result.shortAnswer, /C2/u);
+  assert.match(result.shortAnswer, /被无效/u);
+  assert.match(result.shortAnswer, /不进行这个连锁项的效果处理/u);
+  assert.doesNotMatch(result.shortAnswer, /不会把怪兽返回手牌/u);
+  assert.match(result.shortAnswer, /守备力最低/u);
+});
