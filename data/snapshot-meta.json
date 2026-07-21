@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
   "status": "synced",
-  "generatedAt": "2026-07-20T19:59:47.792Z",
+  "generatedAt": "2026-07-21T03:54:19.183Z",
   "freshnessDays": 7,
   "sourceFreshness": "fresh",
   "previousSourceRevision": null,
   "sourceRevision": null,
-  "lastSuccessfulSyncAt": "2026-07-20T19:59:47.792Z",
+  "lastSuccessfulSyncAt": "2026-07-21T03:54:19.183Z",
   "lastFailedSyncAt": null,
   "syncFailureCount": 0,
   "aliasWarnings": [],
@@ -15,7 +15,7 @@
   "aliasWarningCount": 0,
   "parseFailedCount": 0,
   "dataQualityWarningCount": 0,
-  "newItems": 0,
+  "newItems": 3,
   "changedItems": 0,
   "removedItems": 0,
   "sources": [
