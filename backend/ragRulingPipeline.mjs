@@ -125,6 +125,7 @@ export async function answerRagRulingQuestion({
     cardTexts: reasoningCardTexts,
     corroboratingEvidence,
     operationLegality: locallyGroundedEvidence.operationLegality,
+    resolvedCards: effectiveCardResolution.resolvedCards,
   });
   const localDecisionComplete = !rulebookModelInvoker && hasCompleteDeterministicRuling({
     semanticStateTransition: localSemanticStateTransition,
@@ -159,6 +160,7 @@ export async function answerRagRulingQuestion({
         cardTexts: reasoningCardTexts,
         corroboratingEvidence,
         operationLegality: groundedEvidence.operationLegality,
+        resolvedCards: effectiveCardResolution.resolvedCards,
   });
   const evidence = { ...groundedEvidence, semanticStateTransition };
   const deterministicDecision = modelInvoker ? null : selectDeterministicDecision(evidence);

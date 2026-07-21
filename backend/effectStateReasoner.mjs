@@ -3,12 +3,14 @@ export function analyzeEffectStateTransition({
   cardTexts = [],
   corroboratingEvidence = [],
   operationLegality = null,
+  resolvedCards = [],
 } = {}) {
   const query = String(userQuery || "");
   const cards = (cardTexts || []).map(compileCardProgram).filter(Boolean);
   const source = cards.find((card) => card.costs.length && card.operations.some((item) => item.type === "fusion_summon"));
   const protectedCard = cards.find((card) => card.continuousEffects.some((item) => item.modifier === "unaffected_by_other_effects"));
   const costCardName = extractCostCardName(query);
+  const costCardIdentity = resolveCardIdentity(costCardName, resolvedCards);
   const activationEvidence = findActivationEvidence(corroboratingEvidence, operationLegality);
 
   if (!source || !protectedCard || !costCardName) return unresolved("semantic_roles_incomplete");
@@ -18,10 +20,10 @@ export function analyzeEffectStateTransition({
   const cost = source.costs.find((item) => item.type === "move" && item.from === "hand" && item.to === "graveyard");
   const fusion = source.operations.find((item) => item.type === "fusion_summon");
   if (!cost || !fusion) return unresolved("effect_program_incomplete");
-  const initialState = stabilizeContinuousEffects(buildInitialState({ source, protectedCard, costCardName }), cards);
+  const initialState = stabilizeContinuousEffects(buildInitialState({ source, protectedCard, costCardIdentity }), cards);
   const activationPreview = executeEffectOperation(initialState, fusion, { source });
   const triggerSatisfied = source.triggers.some((item) => item.event === "summoned") && summonEventDescribed(query, source.names);
-  const costCanBePaid = initialState.entities.some((entity) => entity.zone === "hand" && fuzzyContains(entity.name, costCardName));
+  const costCanBePaid = initialState.entities.some((entity) => entity.zone === "hand" && entityMatchesName(entity, costCardName));
   const activationLegal = Boolean(activationEvidence) || (triggerSatisfied && costCanBePaid && activationPreview.status === "performable");
   if (!activationLegal) return unresolved("activation_legality_not_grounded");
 
@@ -112,12 +114,47 @@ export function analyzeEffectStateTransition({
   };
 }
 
-function buildInitialState({ source, protectedCard, costCardName }) {
+function resolveCardIdentity(mention, resolvedCards = []) {
+  const normalizedMention = normalizeName(mention);
+  const resolved = (resolvedCards || []).find((card) => (
+    [card?.input, card?.matchedQuery]
+      .filter(Boolean)
+      .some((value) => normalizeName(value) === normalizedMention)
+  ));
+  const names = unique([
+    mention,
+    resolved?.input,
+    resolved?.name,
+    resolved?.cnName,
+    resolved?.jaName,
+    resolved?.enName,
+    ...(resolved?.aliases || []),
+  ].filter(Boolean));
+  return {
+    name: String(resolved?.name || resolved?.cnName || mention || ""),
+    names: names.length ? names : [String(mention || "")].filter(Boolean),
+    cardId: String(resolved?.id || resolved?.cardId || ""),
+  };
+}
+
+function entityMatchesName(entity, fragment) {
+  return unique([entity?.name, ...(entity?.aliases || [])].filter(Boolean))
+    .some((name) => fuzzyContains(name, fragment) || fuzzyContains(fragment, name));
+}
+
+function buildInitialState({ source, protectedCard, costCardIdentity }) {
   return {
     entities: [
       { id: `entity:${source.id}`, name: source.name, aliases: source.names, controller: "self", zone: "own_field", modifiers: [] },
       { id: `entity:${protectedCard.id}`, name: protectedCard.name, aliases: protectedCard.names, controller: "opponent", zone: "opponent_field", modifiers: [] },
-      { id: `entity:cost:${normalizeName(costCardName)}`, name: costCardName, aliases: [costCardName], controller: "self", zone: "hand", modifiers: [] },
+      {
+        id: `entity:cost:${costCardIdentity.cardId || normalizeName(costCardIdentity.name)}`,
+        name: costCardIdentity.name,
+        aliases: costCardIdentity.names,
+        controller: "self",
+        zone: "hand",
+        modifiers: [],
+      },
     ],
     stabilizationIterations: 0,
   };
@@ -126,7 +163,7 @@ function buildInitialState({ source, protectedCard, costCardName }) {
 function applyStateOperation(state, operation) {
   if (operation.type !== "move") return { applied: false, state };
   const entities = state.entities.map((entity) => ({ ...entity, modifiers: [...(entity.modifiers || [])] }));
-  const entity = entities.find((item) => item.zone === operation.from && fuzzyContains(item.name, operation.card));
+  const entity = entities.find((item) => item.zone === operation.from && entityMatchesName(item, operation.card));
   if (!entity) return { applied: false, state };
   entity.zone = operation.to;
   return { applied: true, state: { ...state, entities } };
@@ -141,7 +178,7 @@ function stabilizeContinuousEffects(state, programs) {
   for (let iteration = 1; iteration <= 8; iteration += 1) {
     const nextModifiers = new Map(current.entities.map((entity) => [entity.id, []]));
     for (const program of programs) {
-      const carrier = current.entities.find((entity) => program.names.some((name) => fuzzyContains(entity.name, name)));
+      const carrier = current.entities.find((entity) => program.names.some((name) => entityMatchesName(entity, name)));
       if (!carrier) continue;
       for (const effect of program.continuousEffects) {
         if (!continuousConditionSatisfied(effect, current)) continue;
@@ -168,13 +205,13 @@ function continuousConditionSatisfied(effect, state) {
   if (effect.condition !== "archetype_card_exists") return false;
   return state.entities.some((entity) => (
     effect.zones.includes(genericZone(entity.zone))
-    && fuzzyContains(entity.name, effect.archetype)
+    && entityMatchesName(entity, effect.archetype)
   ));
 }
 
 function executeEffectOperation(state, operation, { source }) {
   if (operation.type !== "fusion_summon") return { status: "unsupported_operation", usableMaterials: [], excludedMaterials: [] };
-  const sourceEntity = state.entities.find((entity) => source.names.some((name) => fuzzyContains(entity.name, name)));
+  const sourceEntity = state.entities.find((entity) => source.names.some((name) => entityMatchesName(entity, name)));
   const fieldEntities = state.entities.filter((entity) => genericZone(entity.zone) === "field");
   const excludedMaterials = [];
   const usable = fieldEntities.filter((entity) => {

@@ -210,6 +210,36 @@ test("effect state reasoning is compiled from neutral card text rather than card
   assert.doesNotMatch(JSON.stringify(result), /阿不思|艾克利西亚|吞(?:食|喰)圣痕/u);
 });
 
+test("effect state reasoning preserves a resolved cost card identity across zone changes", () => {
+  const result = analyzeEffectStateTransition({
+    userQuery: "对方场上存在的卡只有表侧表示的「测试抗性龙」1只，双方墓地没有卡。我方召唤「测试融合者」时，可以将「测试圣女别译」作为Cost丢弃来发动效果吗？",
+    cardTexts: [
+      {
+        id: "card-text-identity-source",
+        cards: ["测试融合者"],
+        text: "这张卡召唤・特殊召唤的情况下，舍弃1张手牌可以发动。将包含此卡在内的自己或对方场上的怪兽作为融合素材，将1只融合怪兽融合召唤。",
+      },
+      {
+        id: "card-text-identity-protected",
+        cards: ["测试抗性龙"],
+        text: "只要自己或对方的场上或墓地存在“标准测试圣女”怪兽，此卡不受此卡以外的效果影响。",
+      },
+    ],
+    resolvedCards: [{
+      input: "测试圣女别译",
+      id: "resolved-test-saint",
+      name: "标准测试圣女",
+      aliases: ["标准测试圣女"],
+    }],
+  });
+
+  assert.equal(result.status, "resolved");
+  assert.equal(result.activation, "legal");
+  assert.equal(result.resolution, "not_performed");
+  assert.equal(result.program.finalState.entities.find((entity) => entity.zone === "graveyard")?.name, "标准测试圣女");
+  assert.doesNotMatch(JSON.stringify(result), /阿不思|艾克利西亚|吞(?:食|喰)圣痕/u);
+});
+
 test("bundled provisional official responses are loaded into the default RAG data", async () => {
   const data = await loadRagData();
   const response = data.records.find((record) => record.id === "official-response-screenshot-albaz-quem-stigmata-001");
