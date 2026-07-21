@@ -1,3 +1,4 @@
+// Frozen software snapshot from Git revision 58060bdc6.
 import { canonicalizeNumberedCardPrefixes, extractNumberedCardIdentities, hasNumberedCardIdentityConflict } from "./numberedCardIdentity.mjs";
 
 const BAIGE_API_BASE = "https://ygocdb.com/api/v0/";
@@ -174,12 +175,6 @@ export function scoreBaigeCard(card = {}, query = "") {
   for (const name of names) {
     const key = normalizeSearchKey(name);
     if (!key) continue;
-    const distance = boundedEditDistance(key, queryKey, 2);
-    if (distance === 1 && Math.min(key.length, queryKey.length) >= 5) {
-      score = Math.max(score, 0.9);
-    } else if (distance === 2 && Math.min(key.length, queryKey.length) >= 7) {
-      score = Math.max(score, 0.82);
-    }
     if (key === queryKey) score = Math.max(score, name === card.cnName || name === card.name ? 1 : 0.96);
     else if (key.includes(queryKey)) score = Math.max(score, queryKey.length >= 4 ? 0.9 : 0.72);
     else if (queryKey.includes(key)) score = Math.max(score, key.length >= 4 ? 0.82 : 0.62);
@@ -404,6 +399,10 @@ function normalizeSearchKey(value) {
     .replace(/[選]/gu, "选")
     .replace(/[闕]/gu, "阙")
     .replace(/導/gu, "导")
+    .replace(/埃克利西/gu, "艾克莉西")
+    .replace(/艾克利西/gu, "艾克莉西")
+    .replace(/埃克莉西/gu, "艾克莉西")
+    .replace(/莉西娅/gu, "莉西亚")
     .replace(/[の之的]/gu, "")
     .replace(/[「」『』《》【】“”"'`]/gu, "")
     .replace(/[：:・·･．.－—–_\-\s]/gu, "")
@@ -413,7 +412,8 @@ function normalizeSearchKey(value) {
 
 function buildBaigeSearchQueries(value) {
   const original = String(value || "").trim();
-  const canonicalSpelling = original;
+  const canonicalSpelling = original
+    .replace(/(?:埃|艾)克(?:利|莉)西(?:亚|娅)/gu, "艾克莉西娅");
   const numberedIdentity = extractNumberedCardIdentities(canonicalSpelling)[0];
   if (numberedIdentity) {
     const tail = canonicalSpelling
@@ -426,14 +426,10 @@ function buildBaigeSearchQueries(value) {
     return [...new Set([original, canonicalSpelling, ...prefixes.map((prefix) => `${prefix}${tail ? ` ${tail}` : ""}`)].filter(Boolean))].slice(0, 6);
   }
   const compact = canonicalSpelling.replace(/[「」『』《》【】“”"'`：:・·･．.－—–_\-\s，,。.!！?？;；、()（）\[\]{}]/gu, "");
-  const tokens = canonicalSpelling
-    .split(/\s+/u)
-    .map((token) => token.trim())
-    .filter((token) => token.length >= 2 && token !== original);
-  const longerPrefix = compact.length >= 7 ? compact.slice(0, 4) : "";
-  const shortPrefix = compact.length >= 6 ? compact.slice(0, 2) : "";
-  const suffix = compact.length >= 7 ? compact.slice(-4) : "";
-  return [...new Set([original, compact, ...tokens, longerPrefix, shortPrefix, suffix].filter(Boolean))].slice(0, 6);
+  const transliteration = compact.match(/艾克莉西娅/u)?.[0] || "";
+  const suffix = compact.length >= 6 ? compact.slice(-Math.min(6, compact.length - 1)) : "";
+  const prefix = compact.length >= 7 ? compact.slice(0, Math.min(6, compact.length - 1)) : "";
+  return [...new Set([original, canonicalSpelling, transliteration, suffix, prefix].filter(Boolean))].slice(0, 4);
 }
 
 function diceCoefficient(left, right) {
@@ -451,29 +447,6 @@ function diceCoefficient(left, right) {
     intersection += 1;
   }
   return (2 * intersection) / (leftBigrams.length + rightBigrams.length);
-}
-
-function boundedEditDistance(left, right, limit) {
-  if (Math.abs(left.length - right.length) > limit) return limit + 1;
-  let previous = Array.from({ length: right.length + 1 }, (_, index) => index);
-  for (let leftIndex = 1; leftIndex <= left.length; leftIndex += 1) {
-    const current = [leftIndex];
-    let rowMinimum = leftIndex;
-    for (let rightIndex = 1; rightIndex <= right.length; rightIndex += 1) {
-      const substitution = previous[rightIndex - 1]
-        + (left[leftIndex - 1] === right[rightIndex - 1] ? 0 : 1);
-      const value = Math.min(
-        previous[rightIndex] + 1,
-        current[rightIndex - 1] + 1,
-        substitution,
-      );
-      current.push(value);
-      rowMinimum = Math.min(rowMinimum, value);
-    }
-    if (rowMinimum > limit) return limit + 1;
-    previous = current;
-  }
-  return previous[right.length];
 }
 
 function bigrams(value) {

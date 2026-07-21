@@ -14,6 +14,9 @@ test("api_answer_defaults_to_rag_baseline", async () => {
     assert.equal(response.statusCode, 200);
     assert.equal(response.payload.mode, "rag_baseline");
     assert.equal(response.payload.debug.providerUsed, "mock");
+    assert.equal(response.payload.requestedRulingVersion, "latest");
+    assert.equal(response.payload.effectiveRulingVersion, "latest");
+    assert.equal(response.payload.rulingVersion, "latest");
   } finally {
     if (previousProvider === undefined) delete process.env.MODEL_PROVIDER;
     else process.env.MODEL_PROVIDER = previousProvider;
@@ -29,6 +32,11 @@ test("api_answer_reports_engine_availability_from_backend_configuration", async 
     const disabled = createJsonResponse();
     await handler({ method: "GET" }, disabled);
     assert.equal(disabled.payload.engineEnabled, false);
+    assert.equal(disabled.payload.defaultRulingVersion, "latest");
+    assert.deepEqual(disabled.payload.rulingVersions, [
+      { id: "latest", label: "最新版", revision: null },
+      { id: "previous", label: "上一版", revision: "58060bdc6" },
+    ]);
 
     process.env.OCG_ENGINE_URL = "https://engine.example.test";
     const enabled = createJsonResponse();
@@ -46,6 +54,46 @@ test("api_answer_reports_engine_availability_from_backend_configuration", async 
     else process.env.RAG_AUTO_ENGINE_SIMULATION = previousAuto;
   }
 });
+
+test("api_answer_dispatches_previous_and_rejects_invalid_ruling_versions", async () => {
+  const previousProvider = process.env.MODEL_PROVIDER;
+  process.env.MODEL_PROVIDER = "mock";
+  try {
+    const previous = createJsonResponse();
+    await handler({
+      method: "POST",
+      body: { question: "", rulingVersion: "previous" },
+    }, previous);
+    assert.equal(previous.statusCode, 200);
+    assert.equal(previous.payload.requestedRulingVersion, "previous");
+    assert.equal(previous.payload.effectiveRulingVersion, "previous");
+    assert.equal(previous.payload.rulingVersion, "previous");
+
+    const invalid = createJsonResponse();
+    await handler({
+      method: "POST",
+      body: { question: "问题", rulingVersion: "archived" },
+    }, invalid);
+    assert.equal(invalid.statusCode, 400);
+    assert.equal(invalid.payload.code, "invalid_ruling_version");
+  } finally {
+    if (previousProvider === undefined) delete process.env.MODEL_PROVIDER;
+    else process.env.MODEL_PROVIDER = previousProvider;
+  }
+});
+
+test("legacy answer modes explicitly report that ruling versions do not apply", async () => {
+  const response = createJsonResponse();
+  await handler({
+    method: "POST",
+    body: { question: "", mode: "legacy", rulingVersion: "previous" },
+  }, response);
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.payload.requestedRulingVersion, null);
+  assert.equal(response.payload.effectiveRulingVersion, null);
+  assert.equal(response.payload.rulingVersion, null);
+});
+
 function createJsonResponse() {
   return {
     statusCode: 0,

@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>游戏王OCG规则助手</title>
-    <link rel="stylesheet" href="src/styles.css?v=20260716-query-admin-1" />
+    <link rel="stylesheet" href="src/styles.css?v=20260722-answer-version-1" />
   </head>
   <body class="theme-night">
     <div class="page-background" aria-hidden="true"></div>
@@ -40,6 +40,11 @@
               <span>裁定模型</span>
               <strong>DeepSeek V4 Flash</strong>
             </div>
+            <div class="answer-version-selector" role="group" aria-label="回答版本">
+              <span>回答版本</span>
+              <button class="answer-version-button is-active" type="button" data-ruling-version="latest" aria-pressed="true">最新版</button>
+              <button class="answer-version-button" type="button" data-ruling-version="previous" aria-pressed="false" aria-disabled="true" disabled title="当前后端暂未提供上一版">上一版</button>
+            </div>
             <div class="model-strip" aria-live="polite">
               <span>裁定流程</span>
               <strong id="modelStatusText">准备就绪</strong>
@@ -67,6 +72,7 @@
               </div>
               <h3 id="verdictTitle"></h3>
               <p class="basis-text" id="rulingBasisText"></p>
+              <p class="answer-version-note" id="answerVersionText" hidden></p>
               <p id="verdictBody"></p>
               <div class="sub-answers" id="subAnswersPanel" hidden></div>
             </section>
@@ -154,6 +160,6 @@
       </main>
     </div>
 
-    <script src="src/app.js?v=20260721-ruling-cache-1"></script>
+    <script src="src/app.js?v=20260722-answer-version-1"></script>
   </body>
 </html>

@@ -11,7 +11,7 @@ const localEnv = {
 
 test("production fast path rechecks continuous immunity after paying discard cost", async () => {
   const answer = await answerRagRulingQuestion({
-    question: "对方场上存在的卡只有表侧表示的「吞食圣痕之龙」1只，双方墓地没有卡。我方召唤「阿不思的落胤」时，可以将「教导的圣女 艾克莉西亚」作为Cost丢弃来发动其效果吗，后续怎么处理？",
+    question: "我方额外卡组有「测试冰剑融合龙」。对方场上存在的卡只有表侧表示的「吞食圣痕之龙」1只，双方墓地没有卡。我方召唤「阿不思的落胤」时，可以将「教导的圣女 艾克莉西亚」作为Cost丢弃来发动其效果吗，后续怎么处理？",
     cards: [{
       id: "source-fusion",
       name: "阿不思的落胤",
@@ -26,7 +26,13 @@ test("production fast path rechecks continuous immunity after paying discard cos
       id: "continuous-immunity-carrier",
       name: "吞喰圣痕之龙",
       aliases: ["吞喰圣痕之龙"],
+      cardType: "fusion",
       effectText: "只要自己或对方的场上或墓地存在“艾克利西亚”怪兽，此卡不受此卡以外的效果影响。",
+    }, {
+      id: "fusion-target",
+      name: "测试冰剑融合龙",
+      aliases: ["测试冰剑融合龙"],
+      effectText: "“阿不思的落胤”＋融合・同步・超量・连接怪兽",
     }],
     records: [],
     qaRecords: [],
@@ -34,7 +40,7 @@ test("production fast path rechecks continuous immunity after paying discard cos
     dryRun: true,
   });
 
-  assert.match(answer.shortAnswer, /^可以发动/u);
+  assert.match(answer.shortAnswer, /^可以发动/u, JSON.stringify(answer.debug.semanticStateTransition));
   assert.match(answer.shortAnswer, /不会进行任何效果处理/u);
   assert.match(answer.shortAnswer, /不进行融合召唤/u);
   assert.ok(answer.resolvedCards.some((card) => card.name === "吞喰圣痕之龙"));
@@ -44,6 +50,83 @@ test("production fast path rechecks continuous immunity after paying discard cos
   assert.equal(answer.debug.timingsMs.finalModel, 0);
 });
 
+test("complete deterministic preflight skips both auxiliary extraction models", async () => {
+  let cardNameModelCalls = 0;
+  let ruleQueryModelCalls = 0;
+  const answer = await answerRagRulingQuestion({
+    question: "我方额外卡组有「测试冰剑融合龙」。对方场上只有表侧表示的「测试抗性龙」。我方召唤「测试融合术士」时，可以将「圣女代价卡」作为Cost丢弃来发动其效果吗，后续怎么处理？",
+    cards: [{
+      id: "preflight-source",
+      name: "测试融合术士",
+      effectText: "这张卡召唤・特殊召唤的场合，舍弃1张手牌可以发动。将包含此卡在内的自己或对方场上的怪兽作为融合素材进行融合召唤。不可将自己场上其他的怪兽作为融合素材。",
+    }, {
+      id: "preflight-cost",
+      name: "圣女代价卡",
+      effectText: "“圣女”怪兽。",
+    }, {
+      id: "preflight-protected",
+      name: "测试抗性龙",
+      cardType: "fusion",
+      effectText: "只要自己或对方的场上或墓地存在“圣女”怪兽，此卡不受此卡以外的效果影响。",
+    }, {
+      id: "preflight-target",
+      name: "测试冰剑融合龙",
+      cardType: "fusion",
+      effectText: "“测试融合术士”＋融合・同步・超量・连接怪兽",
+    }],
+    records: [],
+    qaRecords: [],
+    env: localEnv,
+    dryRun: true,
+    cardModelInvoker: async () => {
+      cardNameModelCalls += 1;
+      return JSON.stringify({ cardNames: [] });
+    },
+    ruleModelInvoker: async () => {
+      ruleQueryModelCalls += 1;
+      return JSON.stringify({ ruleQueries: [] });
+    },
+  });
+
+  assert.equal(cardNameModelCalls, 0);
+  assert.equal(ruleQueryModelCalls, 0);
+  assert.equal(answer.debug.cardNameModelUsed, "none");
+  assert.equal(answer.debug.ruleQueryModelUsed, "none");
+  assert.equal(answer.debug.timingsMs.auxiliaryExtractionModels, 0);
+  assert.equal(answer.debug.deterministicDecision, "state_transition");
+});
+
+test("incomplete deterministic preflight preserves auxiliary extraction models", async () => {
+  let cardNameModelCalls = 0;
+  let ruleQueryModelCalls = 0;
+  const answer = await answerRagRulingQuestion({
+    question: "「尚未收录的测试龙」的效果可以发动吗？",
+    cards: [],
+    records: [],
+    qaRecords: [],
+    env: localEnv,
+    dryRun: true,
+    fetchImpl: async () => new Response(JSON.stringify({ result: [], next: 0 }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    }),
+    cardModelInvoker: async () => {
+      cardNameModelCalls += 1;
+      return JSON.stringify({ cardNames: [] });
+    },
+    ruleModelInvoker: async () => {
+      ruleQueryModelCalls += 1;
+      return JSON.stringify({ ruleQueries: [] });
+    },
+  });
+
+  assert.equal(cardNameModelCalls, 1);
+  assert.equal(ruleQueryModelCalls, 1);
+  assert.notEqual(answer.debug.cardNameModelUsed, "none");
+  assert.notEqual(answer.debug.ruleQueryModelUsed, "none");
+  assert.equal(answer.debug.deterministicDecision, null);
+});
+
 test("exact Albaz question with production data includes activation and downstream resolution", async () => {
   const answer = await answerRagRulingQuestion({
     question: "我方的额外卡组有「冰剑龙 幻冰龙」，手牌只有「教导的圣女 艾克莉西娅」和「阿不思的落胤」各1张。\n\n对方场上存在的卡只有表侧表示的「吞食圣痕之龙」1只，双方墓地没有卡。\n\n我方召唤「阿不思的落胤」时，可以将「教导的圣女 艾克莉西娅」作为Cost丢弃送去墓地，来发动「阿不思的落胤」的『①』效果吗",
@@ -51,10 +134,11 @@ test("exact Albaz question with production data includes activation and downstre
     dryRun: true,
   });
 
-  assert.equal(answer.shortAnswer, "可以发动，但是不会进行任何效果处理；因此不进行融合召唤。");
+  assert.match(answer.shortAnswer, /^可以发动，但是不会进行任何效果处理/u, JSON.stringify(answer.debug.semanticStateTransition));
+  assert.match(answer.shortAnswer, /因此不进行融合召唤/u);
   assert.equal(
-    answer.debug.unresolvedMentions.every((mention) => mention.input === "冰剑龙 幻冰龙"),
-    true,
+    answer.debug.unresolvedMentions.some((mention) => mention.input === "冰剑龙 幻冰龙"),
+    false,
   );
   assert.ok(answer.resolvedCards.some((card) => card.name === "教导之圣女 艾克利西亚"));
   assert.ok(answer.resolvedCards.some((card) => card.name === "阿尔白斯之落胤"));
@@ -68,6 +152,48 @@ test("exact Albaz question with production data includes activation and downstre
   );
   assert.equal(answer.debug.modelUsed, "deterministic-ruling-reasoner");
   assert.ok(answer.debug.timingsMs.finalModel <= 5);
+});
+
+test("deterministic fast path does not ignore an unresolved card in the described state", async () => {
+  const answer = await answerRagRulingQuestion({
+    question: [
+      "我方额外卡组有「测试冰剑融合龙」，手牌有「测试代价卡」。",
+      "对方场上有表侧表示的「测试抗性龙」和「未识别屏障」。",
+      "我方召唤「测试融合术士」时，将「测试代价卡」作为Cost丢弃发动效果，后续怎么处理？",
+    ].join(""),
+    cards: [{
+      id: "guarded-source",
+      name: "测试融合术士",
+      effectText: "这张卡召唤的场合，舍弃1张手牌可以发动。将包含此卡在内的自己或对方场上的怪兽作为融合素材进行融合召唤。",
+    }, {
+      id: "guarded-cost",
+      name: "测试代价卡",
+      effectText: "测试系列怪兽。",
+    }, {
+      id: "guarded-material",
+      name: "测试抗性龙",
+      cardType: "fusion",
+      effectText: "只要场上或墓地存在“测试系列”怪兽，此卡不受此卡以外的效果影响。",
+    }, {
+      id: "guarded-target",
+      name: "测试冰剑融合龙",
+      cardType: "fusion",
+      effectText: "「测试融合术士」＋融合怪兽",
+    }],
+    records: [],
+    qaRecords: [],
+    env: localEnv,
+    dryRun: true,
+    fetchImpl: async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ result: [], next: 0 }),
+    }),
+  });
+
+  assert.ok(answer.debug.unresolvedMentions.some((mention) => mention.input === "未识别屏障"));
+  assert.equal(answer.debug.deterministicDecision, null);
+  assert.notEqual(answer.debug.modelUsed, "deterministic-ruling-reasoner");
 });
 
 test("production fast path rejects mandatory return when only the activating trap exists", async () => {

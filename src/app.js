@@ -153,12 +153,14 @@ const ui = {
   questionInput: document.querySelector("#questionInput"),
   analyzeButton: document.querySelector("#analyzeButton"),
   analyzeButtonText: document.querySelector("#analyzeButtonText"),
+  rulingVersionButtons: [...document.querySelectorAll("[data-ruling-version]")],
   clearButton: document.querySelector("#clearButton"),
   resultGrid: document.querySelector("#resultGrid"),
   confidenceText: document.querySelector("#confidenceText"),
   verdictBlock: document.querySelector(".verdict-block"),
   verdictTitle: document.querySelector("#verdictTitle"),
   rulingBasisText: document.querySelector("#rulingBasisText"),
+  answerVersionText: document.querySelector("#answerVersionText"),
   verdictBody: document.querySelector("#verdictBody"),
   subAnswersPanel: document.querySelector("#subAnswersPanel"),
   parserDebugPanel: document.querySelector("#parserDebugPanel"),
@@ -197,7 +199,14 @@ const ui = {
   adminQueryList: document.querySelector("#adminQueryList"),
 };
 
-let appConfig = { answerApiUrl: "", modelLabel: "", budgetApiUrl: "", adminQueriesApiUrl: "", engineEnabled: false };
+let appConfig = {
+  answerApiUrl: "",
+  modelLabel: "",
+  budgetApiUrl: "",
+  adminQueriesApiUrl: "",
+  engineEnabled: false,
+  rulingVersionIds: ["latest"],
+};
 let syncedCards = [];
 let syncedNotes = [];
 let sourceMeta = null;
@@ -212,6 +221,7 @@ let debugUiEnabled = false;
 let adminUiEnabled = false;
 const themeStorageKey = "ocg-ruling-theme:v1";
 const selectedModelTier = "flash";
+let selectedRulingVersion = "latest";
 const pendingStages = [
   { label: "理解问题", body: "正在读取问题中的卡片、场面、连锁和时点。" },
   { label: "提取卡名", body: "正在识别卡名候选，并准备查询卡片资料。" },
@@ -300,6 +310,7 @@ async function loadAppConfig() {
     adminQueriesApiUrl: String(payload.adminQueriesApiUrl || "").trim(),
     modelLabel: "",
     engineEnabled: false,
+    rulingVersionIds: ["latest"],
   };
   if (!appConfig.budgetApiUrl) appConfig.budgetApiUrl = getBudgetApiUrl();
   if (!appConfig.adminQueriesApiUrl) appConfig.adminQueriesApiUrl = getAdminQueriesApiUrl();
@@ -313,10 +324,23 @@ async function loadBackendModelInfo() {
     const info = await response.json();
     appConfig.modelLabel = formatModelInfo(info);
     appConfig.engineEnabled = info?.engineEnabled === true;
+    appConfig.rulingVersionIds = normalizeRulingVersionCapabilities(info?.rulingVersions);
+    syncRulingVersionButtons();
   } catch {
     appConfig.modelLabel = "后端自动选择";
     appConfig.engineEnabled = false;
+    appConfig.rulingVersionIds = ["latest"];
+    syncRulingVersionButtons();
   }
+}
+
+function normalizeRulingVersionCapabilities(versions) {
+  const ids = Array.isArray(versions)
+    ? versions
+      .map((item) => normalizeRulingVersion(typeof item === "string" ? item : item?.id))
+      .filter(Boolean)
+    : [];
+  return [...new Set(["latest", ...ids])];
 }
 
 function formatModelInfo(info) {
@@ -661,16 +685,19 @@ async function analyzeQuestion() {
   }
 
   if (appConfig.answerApiUrl) {
+    const requestedRulingVersion = selectedRulingVersion;
     setQueryPending(true);
     renderPending();
     try {
-      const answer = await requestBackendAnswer(text);
+      const answer = await requestBackendAnswer(text, requestedRulingVersion);
       if (requestId !== analysisRequestId) return;
       renderBackendAnswer(answer);
       return;
     } catch (error) {
       if (requestId !== analysisRequestId) return;
-      console.warn("Backend answer failed, using static fallback.", error);
+      console.error("Backend answer or ruling-version verification failed.", error);
+      renderBackendVersionError(error, requestedRulingVersion);
+      return;
     } finally {
       if (requestId === analysisRequestId) setQueryPending(false);
     }
@@ -688,20 +715,100 @@ async function analyzeQuestion() {
   renderResult(text, bestMatch, confidence, generatedQuestions, detectedCards);
 }
 
-async function requestBackendAnswer(text) {
+async function requestBackendAnswer(text, requestedRulingVersion) {
   const backendMode = "rag";
-  const response = await fetch(appConfig.answerApiUrl, {
-    method: "POST",
-    cache: "no-store",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ question: text, mode: backendMode, modelTier: selectedModelTier }),
-  });
-  if (!response.ok) throw new Error(`后端返回 ${response.status}`);
-  return response.json();
+  let response;
+  try {
+    response = await fetch(appConfig.answerApiUrl, {
+      method: "POST",
+      cache: "no-store",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        question: text,
+        mode: backendMode,
+        modelTier: selectedModelTier,
+        rulingVersion: requestedRulingVersion,
+      }),
+    });
+  } catch (error) {
+    throw createRulingVersionError({
+      code: "ruling_version_request_failed",
+      requestedVersion: requestedRulingVersion,
+      cause: error,
+    });
+  }
+  if (!response.ok) {
+    throw createRulingVersionError({
+      code: "ruling_version_request_failed",
+      requestedVersion: requestedRulingVersion,
+      status: response.status,
+    });
+  }
+  const answer = await response.json();
+  const rawEffectiveVersion = String(answer?.effectiveRulingVersion || "").trim();
+  const rawRulingVersion = String(answer?.rulingVersion || "").trim();
+  const reportedEffectiveVersion = normalizeRulingVersion(answer?.effectiveRulingVersion);
+  const reportedRulingVersion = normalizeRulingVersion(answer?.rulingVersion);
+  if (
+    (rawEffectiveVersion && !reportedEffectiveVersion)
+    || (rawRulingVersion && !reportedRulingVersion)
+  ) {
+    throw createRulingVersionError({
+      code: "ruling_version_response_invalid",
+      requestedVersion: requestedRulingVersion,
+    });
+  }
+  if (
+    reportedEffectiveVersion
+    && reportedRulingVersion
+    && reportedEffectiveVersion !== reportedRulingVersion
+  ) {
+    throw createRulingVersionError({
+      code: "ruling_version_response_conflict",
+      requestedVersion: requestedRulingVersion,
+      effectiveVersion: reportedEffectiveVersion,
+    });
+  }
+  const effectiveRulingVersion = reportedEffectiveVersion || reportedRulingVersion;
+  if (!effectiveRulingVersion) {
+    throw createRulingVersionError({
+      code: "ruling_version_unconfirmed",
+      requestedVersion: requestedRulingVersion,
+    });
+  }
+  if (effectiveRulingVersion !== requestedRulingVersion) {
+    throw createRulingVersionError({
+      code: "ruling_version_mismatch",
+      requestedVersion: requestedRulingVersion,
+      effectiveVersion: effectiveRulingVersion,
+    });
+  }
+  return { ...answer, requestedRulingVersion, effectiveRulingVersion };
+}
+
+function normalizeRulingVersion(value) {
+  const version = String(value || "").trim().toLowerCase();
+  return version === "latest" || version === "previous" ? version : "";
+}
+
+function createRulingVersionError({
+  code,
+  requestedVersion,
+  effectiveVersion = "",
+  status = 0,
+  cause,
+}) {
+  const error = new Error(code, cause ? { cause } : undefined);
+  error.code = code;
+  error.requestedVersion = requestedVersion;
+  error.effectiveVersion = effectiveVersion;
+  error.status = status;
+  return error;
 }
 
 function renderPending() {
   ui.resultGrid.hidden = false;
+  renderAnswerVersion(null);
   renderCards([]);
   renderEngineSimulation(null, null);
   updateModelStatus("分析中");
@@ -720,6 +827,7 @@ function renderPending() {
 function renderBackendAnswer(answer) {
   clearPendingStages();
   lastRenderedBackendAnswer = answer || null;
+  renderAnswerVersion(answer);
   renderEngineSimulation(null, null);
   if (answer?.mode === "rag_baseline") {
     renderRagAnswer(answer);
@@ -766,6 +874,54 @@ function renderBackendAnswer(answer) {
   renderList(ui.questionsList, [...(answer?.needsConfirmation || []), ...(answer?.warnings || [])]);
   renderSources(answer?.sources || []);
   renderFeedbackPanel(answer);
+}
+
+function renderAnswerVersion(answer) {
+  if (!ui.answerVersionText) return;
+  const effectiveVersion = normalizeRulingVersion(
+    answer?.effectiveRulingVersion || answer?.rulingVersion,
+  );
+  ui.answerVersionText.classList.remove("is-error");
+  if (!effectiveVersion) {
+    ui.answerVersionText.hidden = true;
+    ui.answerVersionText.textContent = "";
+    return;
+  }
+  const label = effectiveVersion === "previous" ? "上一版" : "最新版";
+  ui.answerVersionText.textContent = `本次回答：${label}`;
+  ui.answerVersionText.hidden = false;
+}
+
+function renderBackendVersionError(error, requestedRulingVersion) {
+  clearPendingStages();
+  lastRenderedBackendAnswer = null;
+  ui.resultGrid.hidden = false;
+  renderCards([]);
+  renderEngineSimulation(null, null);
+  renderParserDebug(null);
+  renderFeedbackPanel(null);
+  updateModelStatus("版本不可用");
+  ui.verdictBlock.className = "result-block verdict-block is-risky";
+  ui.confidenceText.textContent = "版本不可用";
+  ui.verdictTitle.textContent = "无法确认回答版本";
+  ui.rulingBasisText.textContent = "版本协议校验失败";
+  const requestedLabel = requestedRulingVersion === "previous" ? "上一版" : "最新版";
+  const effectiveVersion = normalizeRulingVersion(error?.effectiveVersion);
+  const effectiveLabel = effectiveVersion === "previous" ? "上一版" : "最新版";
+  ui.answerVersionText.classList.add("is-error");
+  ui.answerVersionText.hidden = false;
+  ui.answerVersionText.textContent = effectiveVersion
+    ? `版本不可用：请求${requestedLabel}，后端返回${effectiveLabel}`
+    : "版本未确认 / 不可用";
+  ui.verdictBody.textContent = effectiveVersion
+    ? "后端返回的实际版本与本次请求不一致，已拒绝展示该回答。"
+    : "后端没有确认本次实际使用的回答版本，已拒绝展示回答，也不会降级到本地模板。";
+  renderSubAnswers([]);
+  renderList(ui.stepsList, ["请稍后重试；若问题持续存在，需要先完成前端与后端的版本协议部署。"]);
+  renderList(ui.questionsList, [
+    error?.status ? `后端返回 HTTP ${error.status}。` : "未取得可验证的版本化回答。",
+  ]);
+  renderSources([]);
 }
 
 function renderRagAnswer(answer) {
@@ -1028,14 +1184,31 @@ function setQueryPending(isPending) {
   if (!ui.analyzeButton) return;
   ui.analyzeButton.disabled = Boolean(isPending);
   ui.analyzeButton.setAttribute("aria-busy", String(Boolean(isPending)));
+  syncRulingVersionButtons(Boolean(isPending));
   if (ui.analyzeButtonText) {
     ui.analyzeButtonText.textContent = isPending ? "查询中…" : "查询";
   }
+}
+
+function syncRulingVersionButtons(isPending = false) {
+  for (const button of ui.rulingVersionButtons || []) {
+    const version = normalizeRulingVersion(button.dataset.rulingVersion);
+    const supported = isRulingVersionSupported(version);
+    const disabled = Boolean(isPending) || !supported;
+    button.disabled = disabled;
+    button.setAttribute("aria-disabled", String(disabled));
+    button.title = supported ? "" : "当前后端暂未提供上一版";
+  }
+}
+
+function isRulingVersionSupported(version) {
+  return version === "latest" || appConfig.rulingVersionIds.includes(version);
 }
 function resetAnalysis() {
   setQueryPending(false);
   clearPendingStages();
   lastRenderedBackendAnswer = null;
+  renderAnswerVersion(null);
   ui.resultGrid.hidden = true;
   renderCards([]);
   renderEngineSimulation(null, null);
@@ -2178,6 +2351,10 @@ function buildFeedbackIssueUrl(answer) {
     .filter(Boolean)
     .slice(0, 8)
     .map((item, index) => `${index + 1}. ${item}`);
+  const rulingVersion = normalizeRulingVersion(
+    answer?.effectiveRulingVersion || answer?.rulingVersion,
+  );
+  const rulingVersionLabel = rulingVersion === "previous" ? "上一版" : "最新版";
   const body = [
     "## 原问题",
     question,
@@ -2188,6 +2365,9 @@ function buildFeedbackIssueUrl(answer) {
     "",
     "## 使用模型",
     "DeepSeek V4 Flash",
+    "",
+    "## 回答版本",
+    rulingVersion ? rulingVersionLabel : "版本未确认",
     "",
     "## 反馈内容",
     "请说明错误之处，并尽量附上官方 Q&A、规则书或其他可核对来源。",
@@ -2239,8 +2419,26 @@ async function init() {
       // Theme persistence is optional.
     }
   });
+  for (const button of ui.rulingVersionButtons || []) {
+    button.addEventListener("click", () => selectRulingVersion(button.dataset.rulingVersion));
+  }
   ui.budgetResetButton?.addEventListener("click", () => resetBudgetStatus());
   ui.adminQueryLoadButton?.addEventListener("click", () => loadAdminQueries());
+}
+
+function selectRulingVersion(version) {
+  const nextVersion = version === "previous" ? "previous" : "latest";
+  if (!isRulingVersionSupported(nextVersion)) return;
+  if (nextVersion === selectedRulingVersion) return;
+  selectedRulingVersion = nextVersion;
+  analysisRequestId += 1;
+  clearTimeout(analysisTimer);
+  for (const button of ui.rulingVersionButtons || []) {
+    const selected = button.dataset.rulingVersion === selectedRulingVersion;
+    button.classList.toggle("is-active", selected);
+    button.setAttribute("aria-pressed", String(selected));
+  }
+  resetAnalysis();
 }
 
 function scheduleAnalysis() {

@@ -9,6 +9,5 @@ test("real failure case detects only the relevant ruling issues", () => {
   const ids = issueFrameIds(result);
   for (const expected of ["copy_or_gain_effect", "piercing_battle_damage", "unaffected_by_effect", "continuous_effect_application"]) assert.ok(ids.includes(expected), expected);
   assert.ok(!ids.includes("xyz_material_attach"));
-  assert.ok(!ids.includes("no_41_chain"));
   assert.ok(!ids.includes("defense_position_attack"));
 });

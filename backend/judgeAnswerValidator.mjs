@@ -23,7 +23,6 @@ const frameCoverage = {
 
 const offTopicGroups = [
   { triggers: /超量|Xyz|XYZ|素材|叠放|重叠/iu, terms: [/素材叠放/iu, /超量素材/iu] },
-  { triggers: /No\.?\s*41|泥睡魔兽|バグースカ/iu, terms: [/No\.?\s*41/iu, /泥睡魔兽/iu] },
   { triggers: /青眼白龙|Blue-Eyes White Dragon/iu, terms: [/青眼白龙/iu] },
   { triggers: /守备表示攻击|超重武者|伤害计算前|翻开/iu, terms: [/守备表示攻击仍可继续/iu, /攻击怪兽转守后战斗停止/iu, /超重武者/iu] },
 ];

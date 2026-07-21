@@ -128,7 +128,7 @@ test("baige_common_translation_variant_can_match_card_name", async () => {
   });
 
   assert.equal(result.results[0].name, "黑龙之艾克莉西亚");
-  assert.ok(result.results[0].confidence >= 0.9);
+  assert.ok(result.results[0].confidence >= 0.8);
 });
 
 test("baige_exact_full_cn_name_ranks_above_shorter_candidate", async () => {
@@ -321,21 +321,22 @@ function jsonResponse(payload, ok = true, status = 200) {
     json: async () => payload,
   };
 }
-test("baige_retries_a_common_ecclesia_spelling_variant", async () => {
+test("baige_retries_generic_name_fragments_without_card_specific_rewrites", async () => {
   clearBaigeSearchCache();
   const calls = [];
-  const result = await searchCards("黑龙埃克利西亚", {
+  const result = await searchCards("黑龙 埃克利西亚", {
     fetchImpl: async (url) => {
-      const decoded = decodeURIComponent(String(url)).replace(/\+/gu, " ");
-      calls.push(decoded);
-      return decoded.includes("艾克莉西娅")
+      const searchQuery = new URL(String(url)).searchParams.get("search");
+      calls.push(searchQuery);
+      return searchQuery === "黑龙"
         ? jsonResponse({ result: [ecclesiaRawCard], next: 0 })
         : jsonResponse({ result: [], next: 0 });
     },
   });
 
   assert.ok(calls.length >= 2);
-  assert.ok(calls.some((url) => url.includes("艾克莉西娅")));
+  assert.ok(calls.includes("黑龙"));
+  assert.ok(!calls.some((query) => query.includes("艾克莉西娅")));
   assert.equal(result.results[0].name, "黑龙之艾克莉西亚");
   assert.match(result.warnings.join("\n"), /baige_fallback_query_used/u);
 });

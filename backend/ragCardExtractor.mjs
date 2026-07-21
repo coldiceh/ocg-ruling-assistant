@@ -1,9 +1,19 @@
-import { canonicalizeNumberedCardPrefixes, extractNumberedCardMentionCandidates, hasNumberedCardIdentityConflict } from "./numberedCardIdentity.mjs";
+import {
+  canonicalizeNumberedCardPrefixes,
+  extractNumberedCardIdentities,
+  extractNumberedCardMentionCandidates,
+  hasNumberedCardIdentityConflict,
+} from "./numberedCardIdentity.mjs";
+import { splitEffectTextBlocks } from "./cardEffectBlocks.mjs";
 
 const EMPTY_CARD_LIST = Object.freeze([]);
 const MIN_SINGLE_EDIT_CARD_KEY_LENGTH = 4;
+const MAX_CONTEXTUAL_SHORT_MENTION_LENGTH = 4;
 const aliasIndexCache = new WeakMap();
 const aliasKeysByLengthCache = new WeakMap();
+const cardAliasesCache = new WeakMap();
+const supplementalCardIndexesCache = new WeakMap();
+const cardSeriesKeysCache = new WeakMap();
 
 const QUOTED_MENTION_PATTERNS = Object.freeze([
   /「([^」]{2,80})」/gu,
@@ -24,7 +34,9 @@ const NON_CARD_HEADING_NAMES = new Set(["效果", "问题", "问", "q", "场景"
 
 export function extractRagCards(userQuery, { cards = [], maxCards = 6, modelCardNameCandidates = [] } = {}) {
   const query = String(userQuery || "");
+  const cardLimit = normalizeMaxCards(maxCards);
   const normalizedQuery = normalizeCardKey(query);
+  const queryNumberedIdentityKeys = new Set(extractNumberedCardIdentities(query).map(numberedIdentityKey));
   const aliasIndex = buildAliasIndex(cards);
   const userProvidedCardTexts = extractUserProvidedCardTextBlocks(query);
   const modelMentions = normalizeModelCardNameCandidates(modelCardNameCandidates);
@@ -42,20 +54,62 @@ export function extractRagCards(userQuery, { cards = [], maxCards = 6, modelCard
   const seenCards = new Set();
   const seenMentionKeys = new Set();
 
+  for (const identity of extractNumberedCardIdentities(query)) {
+    const input = `${identity.family === "cno" ? "CNo." : "No."}${identity.number}`;
+    const inputKey = normalizeCardKey(input);
+    const candidates = findCardsByNumberedIdentity(cards, identity);
+    const detailedSeeds = exactMentionSeeds.filter((seed) => (
+      seed.source !== "model_card_name_extractor"
+      && extractNumberedCardIdentities(seed.input).some((candidate) => sameNumberedIdentity(candidate, identity))
+      && numberedMentionRemainder(seed.input, identity)
+    ));
+    const bareIdentityPresent = queryHasBareNumberedOccurrence(query, detailedSeeds, identity);
+    const compatible = candidates.filter((candidate) => (
+      !detailedSeeds.length
+      || detailedSeeds.some((seed) => numberedMentionCompatibleWithCard(seed.input, identity, candidate.card))
+    ));
+
+    if (compatible.length === 1) {
+      const detailedSeed = detailedSeeds.find((seed) => numberedMentionCompatibleWithCard(seed.input, identity, compatible[0].card));
+      const resolvedInput = detailedSeed?.input || input;
+      addResolved(resolved, seenCards, compatible[0], resolvedInput, detailedSeed ? 0.97 : 0.99);
+      seenMentionKeys.add(inputKey);
+      if (detailedSeed) seenMentionKeys.add(normalizeCardKey(detailedSeed.input));
+    } else if (bareIdentityPresent && candidates.length === 1) {
+      addResolved(resolved, seenCards, candidates[0], input, 0.99);
+      seenMentionKeys.add(inputKey);
+    } else if (bareIdentityPresent && candidates.length > 1) {
+      ambiguousMentions.push(buildAmbiguousMention(input, candidates));
+      seenMentionKeys.add(inputKey);
+    } else if (detailedSeeds.length && compatible.length > 1) {
+      ambiguousMentions.push(buildAmbiguousMention(detailedSeeds[0].input, compatible));
+      seenMentionKeys.add(normalizeCardKey(detailedSeeds[0].input));
+    } else if (bareIdentityPresent && candidates.length === 0) {
+      unresolvedMentions.push({
+        input,
+        reason: "numbered_card_not_found",
+        source: "numbered_card_identity",
+      });
+      seenMentionKeys.add(inputKey);
+    }
+  }
+
   for (const seed of exactMentionSeeds) {
     const mention = seed.input;
     const mentionKey = normalizeCardKey(mention);
     if (!mentionKey || seenMentionKeys.has(mentionKey)) continue;
     seenMentionKeys.add(mentionKey);
     const candidates = aliasIndex.get(mentionKey) || [];
-    const singleEditCandidate = candidates.length ? null : findUniqueSingleEditCandidate(aliasIndex, mention);
+    const singleEditCandidate = candidates.length
+      ? null
+      : findUniqueSingleEditCandidate(aliasIndex, mention) || findUniqueNearEditCandidate(aliasIndex, mention);
     if (candidates.length === 1) {
       addResolved(resolved, seenCards, candidates[0], mention, confidenceForMentionSeed(seed, 0.98));
     } else if (candidates.length > 1) {
       ambiguousMentions.push(buildAmbiguousMention(mention, candidates));
     } else if (singleEditCandidate) {
       addResolved(resolved, seenCards, singleEditCandidate, mention, confidenceForSingleEditMention(seed));
-    } else if (looksLikeCardMention(mention)) {
+    } else if (looksLikeCardMention(mention) && !numberedMentionAlreadyResolved(mention, resolved)) {
       unresolvedMentions.push(buildUnresolvedMention(seed));
     }
   }
@@ -66,14 +120,16 @@ export function extractRagCards(userQuery, { cards = [], maxCards = 6, modelCard
     if (!mentionKey || seenMentionKeys.has(mentionKey)) continue;
     seenMentionKeys.add(mentionKey);
     const candidates = aliasIndex.get(mentionKey) || [];
-    const singleEditCandidate = candidates.length ? null : findUniqueSingleEditCandidate(aliasIndex, mention);
+    const singleEditCandidate = candidates.length
+      ? null
+      : findUniqueSingleEditCandidate(aliasIndex, mention) || findUniqueNearEditCandidate(aliasIndex, mention);
     if (candidates.length === 1) {
       addResolved(resolved, seenCards, candidates[0], mention, 0.92);
     } else if (candidates.length > 1) {
       ambiguousMentions.push(buildAmbiguousMention(mention, candidates));
     } else if (singleEditCandidate) {
       addResolved(resolved, seenCards, singleEditCandidate, mention, 0.9);
-    } else if (looksLikeCardMention(mention)) {
+    } else if (looksLikeCardMention(mention) && !numberedMentionAlreadyResolved(mention, resolved)) {
       unresolvedMentions.push(buildUnresolvedMention(seed));
     }
   }
@@ -84,25 +140,57 @@ export function extractRagCards(userQuery, { cards = [], maxCards = 6, modelCard
     // (for example, the card "融合" inside the gameplay term "融合怪").
     // Explicit model/quoted/unquoted candidates above can still resolve them.
     if (aliasKey.length < 3 || !normalizedQuery.includes(aliasKey)) continue;
+    const aliasNumberedIdentities = extractNumberedCardIdentities(aliasKey);
+    if (aliasNumberedIdentities.length && !aliasNumberedIdentities.some((identity) => queryNumberedIdentityKeys.has(numberedIdentityKey(identity)))) continue;
     const bestAlias = candidates[0]?.matchedAlias || "";
     aliasHits.push({ aliasKey, candidates, score: aliasKey.length + bestAlias.length / 100 });
   }
   aliasHits.sort((left, right) => right.score - left.score);
 
   for (const hit of aliasHits) {
-    if (resolved.length >= maxCards) break;
-    if (hit.candidates.length === 1) {
-      addResolved(resolved, seenCards, hit.candidates[0], hit.candidates[0].matchedAlias, confidenceForAlias(hit.aliasKey));
+    const eligibleCandidates = hit.candidates.filter((candidate) => (
+      numberedAliasCompatibleWithExplicitMentions(query, candidate, exactMentionSeeds)
+    ));
+    if (eligibleCandidates.length === 1) {
+      addResolved(resolved, seenCards, eligibleCandidates[0], eligibleCandidates[0].matchedAlias, confidenceForAlias(hit.aliasKey));
       continue;
     }
-    const unresolved = hit.candidates.filter((candidate) => !seenCards.has(cardIdentity(candidate.card)));
+    const unresolved = eligibleCandidates.filter((candidate) => !seenCards.has(cardIdentity(candidate.card)));
     if (unresolved.length > 1) ambiguousMentions.push(buildAmbiguousMention(hit.candidates[0].matchedAlias, unresolved));
   }
 
+  applyContextualExtraDeckMaterialResolution({
+    query,
+    cards: Array.isArray(cards) ? cards : EMPTY_CARD_LIST,
+    resolved,
+    seenCards,
+    unresolvedMentions,
+  });
+
+  applyContextualShortMentionResolution({
+    query,
+    cards: Array.isArray(cards) ? cards : EMPTY_CARD_LIST,
+    resolved,
+    seenCards,
+    unresolvedMentions,
+    ambiguousMentions,
+  });
+
+  const visibleResolved = resolved.slice(0, cardLimit);
+  const omittedResolved = resolved.slice(cardLimit);
+  const cardLimitMentions = omittedResolved.map((card) => ({
+    input: card.input || card.name,
+    reason: "resolved_card_limit_exceeded",
+    source: "card_limit",
+    resolvedCardId: card.id,
+    resolvedCardName: card.name,
+  }));
+
   return {
-    resolvedCards: resolved.slice(0, maxCards),
+    resolvedCards: visibleResolved,
     unresolvedMentions: dedupeMentionObjects(unresolvedMentions),
     ambiguousMentions: dedupeBy(ambiguousMentions, (item) => normalizeCardKey(item.input)),
+    omittedResolvedCards: cardLimitMentions,
     userProvidedCardTexts,
     modelCardNameCandidates: modelMentions,
   };
@@ -114,8 +202,12 @@ export function buildAliasIndex(cards = []) {
   if (cached) return cached;
 
   const index = new Map();
+  const numberedIdentityIndex = new Map();
+  const shortMentionIndex = new Map();
   for (const card of sourceCards) {
     const aliases = cardAliases(card);
+    const seenNumberedKeys = new Set();
+    const seenShortKeys = new Set();
     for (const alias of aliases) {
       const key = normalizeCardKey(alias);
       if (!key) continue;
@@ -123,10 +215,33 @@ export function buildAliasIndex(cards = []) {
       const existing = index.get(key) || [];
       existing.push(item);
       index.set(key, existing);
+
+      for (const identity of extractNumberedCardIdentities(alias)) {
+        const identityKey = numberedIdentityKey(identity);
+        if (seenNumberedKeys.has(identityKey)) continue;
+        seenNumberedKeys.add(identityKey);
+        const identityCandidates = numberedIdentityIndex.get(identityKey) || [];
+        identityCandidates.push(item);
+        numberedIdentityIndex.set(identityKey, identityCandidates);
+      }
+
+      for (const shortKey of shortMentionKeysForAlias(alias)) {
+        if (seenShortKeys.has(shortKey)) continue;
+        seenShortKeys.add(shortKey);
+        const shortCandidates = shortMentionIndex.get(shortKey) || [];
+        shortCandidates.push(item);
+        shortMentionIndex.set(shortKey, shortCandidates);
+      }
     }
   }
   for (const [key, candidates] of index.entries()) {
     index.set(key, dedupeBy(candidates, (candidate) => cardIdentity(candidate.card)));
+  }
+  for (const [key, candidates] of numberedIdentityIndex.entries()) {
+    numberedIdentityIndex.set(key, dedupeBy(candidates, (candidate) => cardIdentity(candidate.card)));
+  }
+  for (const [key, candidates] of shortMentionIndex.entries()) {
+    shortMentionIndex.set(key, dedupeBy(candidates, (candidate) => cardIdentity(candidate.card)));
   }
   const keysByLength = new Map();
   for (const key of index.keys()) {
@@ -136,7 +251,50 @@ export function buildAliasIndex(cards = []) {
   }
   aliasIndexCache.set(sourceCards, index);
   aliasKeysByLengthCache.set(index, keysByLength);
+  supplementalCardIndexesCache.set(sourceCards, { numberedIdentityIndex, shortMentionIndex });
   return index;
+}
+
+function applyContextualExtraDeckMaterialResolution({ query, cards, resolved, seenCards, unresolvedMentions }) {
+  const resolvedMentionKeys = new Set();
+  for (const mention of unresolvedMentions) {
+    const parsed = splitLocalizedSeriesAlias(mention.input);
+    const prefixKey = normalizeCardKey(parsed?.prefix);
+    if (!parsed || prefixKey.length < 3) continue;
+    const mentionIndex = String(query || "").indexOf(mention.input);
+    const before = mentionIndex >= 0 ? String(query || "").slice(Math.max(0, mentionIndex - 36), mentionIndex) : "";
+    if (!/(?:额外卡组|額外卡組|额外牌组|額外牌組|EX(?:tra)? Deck)/iu.test(before)) continue;
+    const candidates = [];
+    for (const card of cards) {
+      const matchingAlias = uniqueCardAliases(card).find((alias) => {
+        const candidate = splitLocalizedSeriesAlias(alias);
+        return candidate && normalizeCardKey(candidate.prefix) === prefixKey;
+      });
+      if (matchingAlias && materialFormulaReferencesResolvedCard(card.effectText, resolved, card)) {
+        candidates.push({ card, matchedAlias: matchingAlias });
+      }
+    }
+    const uniqueCandidates = dedupeBy(candidates, (candidate) => cardIdentity(candidate.card));
+    if (uniqueCandidates.length !== 1) continue;
+    addResolved(resolved, seenCards, uniqueCandidates[0], mention.input, 0.88);
+    resolvedMentionKeys.add(normalizeCardKey(mention.input));
+  }
+  if (!resolvedMentionKeys.size) return;
+  const retained = unresolvedMentions.filter((item) => !resolvedMentionKeys.has(normalizeCardKey(item.input)));
+  unresolvedMentions.splice(0, unresolvedMentions.length, ...retained);
+}
+
+function materialFormulaReferencesResolvedCard(effectText, resolvedCards, candidateCard) {
+  const firstLine = String(effectText || "").split(/\r?\n/u).map((line) => line.trim()).find(Boolean) || "";
+  if (!firstLine.includes("＋") && !/\s\+\s/u.test(firstLine)) return false;
+  const formulaKey = normalizeCardKey(firstLine);
+  return (resolvedCards || []).some((resolvedCard) => (
+    cardIdentity(resolvedCard) !== cardIdentity(candidateCard)
+    && uniqueCardAliases(resolvedCard).some((alias) => {
+      const aliasKey = normalizeCardKey(alias);
+      return aliasKey.length >= 4 && formulaKey.includes(aliasKey);
+    })
+  ));
 }
 
 export function normalizeCardKey(value) {
@@ -158,11 +316,6 @@ export function normalizeCardKey(value) {
     .replace(/[闕]/gu, "阙")
     .replace(/喰/gu, "食")
     .replace(/導/gu, "导")
-    .replace(/白き/gu, "白")
-    .replace(/埃克利西/gu, "艾克莉西")
-    .replace(/艾克利西/gu, "艾克莉西")
-    .replace(/埃克莉西/gu, "艾克莉西")
-    .replace(/莉西娅/gu, "莉西亚")
     .replace(/[の之的]/gu, "")
     .replace(/[「」『』《》【】“”"'`]/gu, "")
     .replace(/[：:・·･．.－—–_\-\s]/gu, "")
@@ -174,6 +327,7 @@ export function extractUnquotedCardMentionCandidates(query) {
   const text = String(query || "").normalize("NFKC");
   const candidates = [];
   const patterns = [
+    /(?:^|[，,。；;、\s])(?:c|cl|chain)\s*\d+\s*(?:再|先)?\s*(?:从|從|由)?\s*(?:我方|对方|對方|自己|自分)?\s*(?:手卡|手牌|墓地|除外区|除外區|除外|场上|場上|怪兽区|怪獸區|魔法陷阱区|魔法陷阱區)\s*(?:的)?\s*(?:发动|發動|使用|适用|適用)?\s*([\p{L}\p{N}・·･．.\-－—–\s]{2,30}?)(?=\s*(?:的\s*)?(?:(?:[①②③④⑤⑥⑦⑧⑨⑩]|[1-9])?\s*效果\s*)?(?:进行|進行|发动|發動|使用|适用|適用|替换|替換|交换|交換|特殊召唤|特殊召喚|回到|返回|放回|破坏|破壞|送去|送入|除外|作为|作為|处理|處理))/giu,
     /(?:手卡|墓地|除外|场上|場上|自己场上|自己場上|对方场上|對方場上|我方场上|我方場上|对方的|對方的|我方的|自己的|发动了?|發動了?|适用|適用|选择|選擇|要将|要將|将|將|把|破坏|破壞|连锁|連鎖|c\d+\s*发动|c\d+\s*發動)\s*(?:的|上|中|存在的|表侧表示的|表側表示的|手卡的|场上的|場上的)?\s*([\p{L}\p{N}・·･．.\-－—–\s]{2,40}?)(?:的[①②③④⑤⑥⑦⑧⑨⑩]?(?:效果|效应|效應)|[①②③④⑤⑥⑦⑧⑨⑩]?效果|破坏|破壞|被破坏|被破壞|特殊召唤|特殊召喚|能|可以|吗|嗎|，|。|、|；|;|$)/giu,
     /([\p{L}\p{N}・·･．.\-－—–\s]{2,40}?)(?:的[①②③④⑤⑥⑦⑧⑨⑩]?(?:效果|效应|效應)|[①②③④⑤⑥⑦⑧⑨⑩]效果)/giu,
   ];
@@ -273,22 +427,230 @@ function findUniqueSingleEditCandidate(aliasIndex, mention) {
   const mentionKey = normalizeCardKey(mention);
   if (mentionKey.length < MIN_SINGLE_EDIT_CARD_KEY_LENGTH) return null;
   const keysByLength = aliasKeysByLengthCache.get(aliasIndex) || buildAliasKeysByLength(aliasIndex);
+
+  const seriesToken = extractMixedScriptSeriesToken(mention);
+  if (seriesToken) {
+    const seriesMatches = collectSingleEditCandidates(aliasIndex, keysByLength, mention, mentionKey, (candidate) => (
+      extractMixedScriptSeriesToken(candidate.matchedAlias) === seriesToken
+    ));
+    if (seriesMatches.size) return seriesMatches.size === 1 ? seriesMatches.values().next().value : null;
+  }
+
+  const matchedCards = collectSingleEditCandidates(aliasIndex, keysByLength, mention, mentionKey);
+  return matchedCards.size === 1 ? matchedCards.values().next().value : null;
+}
+
+function findUniqueNearEditCandidate(aliasIndex, mention) {
+  const mentionKey = normalizeCardKey(mention);
+  const maximumDistance = mentionKey.length >= 8 ? 2 : 1;
+  if (mentionKey.length < MIN_SINGLE_EDIT_CARD_KEY_LENGTH) return null;
+  const keysByLength = aliasKeysByLengthCache.get(aliasIndex) || buildAliasKeysByLength(aliasIndex);
+  const matchedCards = new Map();
+  for (let length = mentionKey.length - maximumDistance; length <= mentionKey.length + maximumDistance; length += 1) {
+    for (const aliasKey of keysByLength.get(length) || []) {
+      if (boundedEditDistance(mentionKey, aliasKey, maximumDistance) > maximumDistance) continue;
+      for (const candidate of aliasIndex.get(aliasKey) || []) {
+        if (hasNumberedCardIdentityConflict(mention, candidate.matchedAlias)) continue;
+        const identity = cardIdentity(candidate.card);
+        if (identity) matchedCards.set(identity, candidate);
+        if (matchedCards.size > 1) return null;
+      }
+    }
+  }
+  return matchedCards.size === 1 ? matchedCards.values().next().value : null;
+}
+
+function boundedEditDistance(left, right, limit) {
+  const a = String(left || "");
+  const b = String(right || "");
+  if (Math.abs(a.length - b.length) > limit) return limit + 1;
+  let previous = Array.from({ length: b.length + 1 }, (_, index) => index);
+  for (let row = 1; row <= a.length; row += 1) {
+    const current = [row];
+    let rowMinimum = row;
+    for (let column = 1; column <= b.length; column += 1) {
+      const substitution = previous[column - 1] + (a[row - 1] === b[column - 1] ? 0 : 1);
+      const value = Math.min(previous[column] + 1, current[column - 1] + 1, substitution);
+      current.push(value);
+      rowMinimum = Math.min(rowMinimum, value);
+    }
+    if (rowMinimum > limit) return limit + 1;
+    previous = current;
+  }
+  return previous[b.length];
+}
+
+function collectSingleEditCandidates(aliasIndex, keysByLength, mention, mentionKey, candidateFilter = null) {
   const matchedCards = new Map();
 
   for (const length of [mentionKey.length - 1, mentionKey.length, mentionKey.length + 1]) {
     for (const aliasKey of keysByLength.get(length) || []) {
       if (!hasSingleEditDistance(mentionKey, aliasKey)) continue;
       for (const candidate of aliasIndex.get(aliasKey) || []) {
+        if (candidateFilter && !candidateFilter(candidate)) continue;
         if (hasNumberedCardIdentityConflict(mention, candidate.matchedAlias)) continue;
         const identity = cardIdentity(candidate.card);
         if (!identity) continue;
         const previous = matchedCards.get(identity);
         if (!previous || normalizeCardKey(previous.matchedAlias).length < aliasKey.length) matchedCards.set(identity, candidate);
       }
-      if (matchedCards.size > 1) return null;
     }
   }
-  return matchedCards.size === 1 ? matchedCards.values().next().value : null;
+  return matchedCards;
+}
+
+function findCardsByNumberedIdentity(cards, identity) {
+  return getSupplementalCardIndexes(cards).numberedIdentityIndex.get(numberedIdentityKey(identity)) || [];
+}
+
+function numberedMentionAlreadyResolved(mention, resolvedCards) {
+  const mentionIdentities = extractNumberedCardIdentities(mention);
+  if (!mentionIdentities.length) return false;
+  return (resolvedCards || []).some((card) => {
+    const identities = uniqueCardAliases(card).flatMap(extractNumberedCardIdentities);
+    return identities.some((identity) => mentionIdentities.some((mentionIdentity) => (
+      sameNumberedIdentity(identity, mentionIdentity)
+      && numberedMentionCompatibleWithCard(mention, mentionIdentity, card)
+    )));
+  });
+}
+
+function uniqueCardAliases(card = {}) {
+  return dedupeBy([
+    card.name,
+    card.cnName,
+    card.jaName,
+    card.enName,
+    ...(card.aliases || []),
+  ].filter(Boolean), normalizeCardKey);
+}
+
+function getSupplementalCardIndexes(cards) {
+  const sourceCards = Array.isArray(cards) ? cards : EMPTY_CARD_LIST;
+  let cached = supplementalCardIndexesCache.get(sourceCards);
+  if (cached) return cached;
+  buildAliasIndex(sourceCards);
+  cached = supplementalCardIndexesCache.get(sourceCards);
+  return cached || { numberedIdentityIndex: new Map(), shortMentionIndex: new Map() };
+}
+
+function numberedIdentityKey(identity) {
+  return `${identity?.family || ""}:${Number(identity?.number || 0)}`;
+}
+
+function sameNumberedIdentity(left, right) {
+  return left?.family === right?.family && Number(left?.number) === Number(right?.number);
+}
+
+function numberedMentionRemainder(value, identity) {
+  const canonical = canonicalizeNumberedCardPrefixes(value).normalize("NFKC").toLowerCase();
+  const family = identity?.family === "cno" ? "cno" : "no";
+  const number = Number(identity?.number || 0);
+  if (!number) return normalizeCardKey(canonical);
+  const pattern = new RegExp(`(^|[^a-z0-9])${family}${number}(?!\\d)`, "iu");
+  return normalizeCardKey(canonical.replace(pattern, "$1"));
+}
+
+function numberedMentionCompatibleWithCard(mention, identity, card) {
+  const remainder = numberedMentionRemainder(mention, identity);
+  if (!remainder) return true;
+
+  return uniqueCardAliases(card)
+    .filter((alias) => extractNumberedCardIdentities(alias).some((candidate) => sameNumberedIdentity(candidate, identity)))
+    .map((alias) => numberedMentionRemainder(alias, identity))
+    .filter(Boolean)
+    .some((candidateRemainder) => compatibleNumberedNameRemainders(remainder, candidateRemainder));
+}
+
+function compatibleNumberedNameRemainders(mention, candidate) {
+  if (mention === candidate) return true;
+  const shorterLength = Math.min(mention.length, candidate.length);
+  if (shorterLength >= 2 && candidate.includes(mention)) return true;
+  if (hasSingleEditDistance(mention, candidate)) return true;
+
+  let commonPrefixLength = 0;
+  while (commonPrefixLength < shorterLength && mention[commonPrefixLength] === candidate[commonPrefixLength]) {
+    commonPrefixLength += 1;
+  }
+  if (commonPrefixLength < 3 || commonPrefixLength / shorterLength < 0.5) return false;
+  const mentionSuffix = mention.slice(commonPrefixLength);
+  const candidateSuffix = candidate.slice(commonPrefixLength);
+  if (!mentionSuffix) return true;
+  if (!candidateSuffix) return false;
+  const sharedSuffixCharacters = multisetCharacterIntersectionSize(mentionSuffix, candidateSuffix);
+  return sharedSuffixCharacters >= Math.ceil(Math.min(mentionSuffix.length, candidateSuffix.length) / 2);
+}
+
+function multisetCharacterIntersectionSize(left, right) {
+  const counts = new Map();
+  for (const character of String(left || "")) counts.set(character, (counts.get(character) || 0) + 1);
+  let shared = 0;
+  for (const character of String(right || "")) {
+    const remaining = counts.get(character) || 0;
+    if (!remaining) continue;
+    counts.set(character, remaining - 1);
+    shared += 1;
+  }
+  return shared;
+}
+
+function queryHasBareNumberedOccurrence(query, detailedSeeds, identity) {
+  let residual = String(query || "");
+  for (const seed of detailedSeeds || []) {
+    const surface = String(seed?.input || "");
+    if (!surface) continue;
+    residual = residual.split(surface).join(" ");
+  }
+  return extractNumberedCardIdentities(residual).some((candidate) => sameNumberedIdentity(candidate, identity));
+}
+
+function numberedAliasCompatibleWithExplicitMentions(query, candidate, exactMentionSeeds) {
+  const identities = dedupeBy(
+    uniqueCardAliases(candidate?.card || candidate).flatMap(extractNumberedCardIdentities),
+    numberedIdentityKey,
+  );
+  return identities.every((identity) => {
+    const detailedSeeds = (exactMentionSeeds || []).filter((seed) => (
+      seed.source !== "model_card_name_extractor"
+      && extractNumberedCardIdentities(seed.input).some((item) => sameNumberedIdentity(item, identity))
+      && numberedMentionRemainder(seed.input, identity)
+    ));
+    if (!detailedSeeds.length) return true;
+    if (detailedSeeds.some((seed) => numberedMentionCompatibleWithCard(seed.input, identity, candidate.card || candidate))) return true;
+    return queryHasBareNumberedOccurrence(query, detailedSeeds, identity);
+  });
+}
+
+function shortMentionKeysForAlias(alias) {
+  const result = [];
+  const segments = String(alias || "")
+    .normalize("NFKC")
+    .split(/[\s・·･．.\-－—–]+/u)
+    .map(normalizeCardKey)
+    .filter(Boolean);
+  for (const segment of segments) {
+    if (!/[\u3400-\u9fff]/u.test(segment)) continue;
+    for (let length = 2; length <= Math.min(MAX_CONTEXTUAL_SHORT_MENTION_LENGTH, segment.length); length += 1) {
+      result.push(segment.slice(0, length));
+      result.push(segment.slice(-length));
+    }
+  }
+  return dedupeBy(result, (item) => item);
+}
+
+function normalizeMaxCards(maxCards) {
+  const parsed = Number.parseInt(maxCards, 10);
+  return Number.isFinite(parsed) ? Math.max(0, parsed) : 6;
+}
+
+function extractMixedScriptSeriesToken(value) {
+  const text = String(value || "")
+    .normalize("NFKC")
+    .trim()
+    .replace(/^[「『《【\[（(“"']+/u, "");
+  const match = text.match(/^([A-Za-z][A-Za-z0-9_-]{1,11})\s*(?=[\u3040-\u30ff\u3400-\u9fff])/u);
+  if (!match || /^(?:no|cno|sno)$/iu.test(match[1])) return "";
+  return normalizeCardKey(match[1]);
 }
 
 function buildAliasKeysByLength(aliasIndex) {
@@ -334,6 +696,299 @@ export function hasSingleEditDistance(left, right) {
     longIndex += 1;
   }
   return true;
+}
+
+function applyContextualShortMentionResolution({ query, cards, resolved, seenCards, unresolvedMentions, ambiguousMentions }) {
+  const pendingMentions = dedupeBy([
+    ...unresolvedMentions,
+    ...ambiguousMentions.map((item) => ({ input: item.input, source: "ambiguous_mention" })),
+  ], (item) => normalizeCardKey(item.input));
+  const resolvedMentionKeys = new Set();
+  const contextualAmbiguities = new Map();
+
+  let madeProgress = true;
+  while (madeProgress) {
+    madeProgress = false;
+    for (const mention of pendingMentions) {
+      const mentionKey = normalizeCardKey(mention.input);
+      if (!mentionKey || resolvedMentionKeys.has(mentionKey) || mentionKey.length > MAX_CONTEXTUAL_SHORT_MENTION_LENGTH) continue;
+      const candidates = findContextualShortMentionCandidates(cards, mention.input);
+      if (!candidates.length) continue;
+
+      const selected = chooseContextualShortMentionCandidate(query, mention.input, candidates, resolved);
+      if (selected) {
+        addResolved(resolved, seenCards, selected, mention.input, 0.9);
+        resolvedMentionKeys.add(mentionKey);
+        contextualAmbiguities.delete(mentionKey);
+        madeProgress = true;
+        continue;
+      }
+      if (candidates.length > 1) contextualAmbiguities.set(mentionKey, buildAmbiguousMention(mention.input, candidates));
+    }
+  }
+
+  const retainedUnresolved = unresolvedMentions.filter((item) => {
+    const key = normalizeCardKey(item.input);
+    return !resolvedMentionKeys.has(key) && !contextualAmbiguities.has(key);
+  });
+  unresolvedMentions.splice(0, unresolvedMentions.length, ...retainedUnresolved);
+
+  const retainedAmbiguous = ambiguousMentions.filter((item) => {
+    const key = normalizeCardKey(item.input);
+    return !resolvedMentionKeys.has(key) && !contextualAmbiguities.has(key);
+  });
+  ambiguousMentions.splice(0, ambiguousMentions.length, ...retainedAmbiguous, ...contextualAmbiguities.values());
+}
+
+function findContextualShortMentionCandidates(cards, mention) {
+  const mentionKey = normalizeCardKey(mention);
+  if (!mentionKey || mentionKey.length > MAX_CONTEXTUAL_SHORT_MENTION_LENGTH || !/[\u3400-\u9fff]/u.test(String(mention || ""))) return [];
+  return getSupplementalCardIndexes(cards).shortMentionIndex.get(mentionKey) || [];
+}
+
+function chooseContextualShortMentionCandidate(query, mention, candidates, resolvedCards) {
+  const resolvedSeriesKeys = new Set(resolvedCards.flatMap(cardSeriesKeys));
+  if (!resolvedSeriesKeys.size) return null;
+  const contexts = buildMentionContexts(query, mention, resolvedCards);
+  if (!contexts.length) return null;
+  const selections = contexts
+    .map((context) => selectContextualCandidateForOccurrence(candidates, context, resolvedSeriesKeys));
+  if (selections.some((selection) => !selection)) return null;
+
+  const selectedCardIds = new Set(selections.map((selection) => cardIdentity(selection.candidate.card)));
+  if (selectedCardIds.size !== 1) return null;
+  return selections.sort((left, right) => right.score - left.score)[0].candidate;
+}
+
+function selectContextualCandidateForOccurrence(candidates, context, resolvedSeriesKeys) {
+  const scored = candidates
+    .map((candidate) => scoreContextualShortMentionCandidate(candidate, context, resolvedSeriesKeys))
+    .sort((left, right) => right.score - left.score);
+  const best = scored[0];
+  const runnerUp = scored[1];
+  if (!best?.sharesSeries || best.strongSignals < 2 || best.score < 8) return null;
+  if (runnerUp && best.score - runnerUp.score < 3) return null;
+  return best;
+}
+
+function scoreContextualShortMentionCandidate(candidate, context, resolvedSeriesKeys) {
+  const card = candidate.card || {};
+  const effectText = String(card.effectText || "").normalize("NFKC");
+  const candidateSeriesKeys = cardSeriesKeys(card);
+  const sharesSeries = candidateSeriesKeys.some((key) => resolvedSeriesKeys.has(key));
+  let score = sharesSeries ? 5 : 0;
+  let strongSignals = sharesSeries ? 1 : 0;
+
+  const mentionedType = inferMentionedCardType(context.nearby);
+  if (mentionedType) {
+    if (String(card.cardType || "").toLowerCase() === mentionedType) {
+      score += 3;
+      strongSignals += 1;
+    } else {
+      score -= 4;
+    }
+  }
+
+  const semanticMatch = scoreEffectBlocksForMentionContext(effectText, context);
+  score += semanticMatch.score;
+  strongSignals += semanticMatch.strongSignals;
+  return { candidate, score, strongSignals, sharesSeries };
+}
+
+function scoreEffectBlocksForMentionContext(effectText, context) {
+  const blocks = splitEffectTextBlocks(effectText).map((block) => block.text).filter(Boolean);
+  const candidates = blocks.length ? blocks : [String(effectText || "")];
+  const mentionedZone = inferMentionedZone(context.before);
+  const actionRequested = mentionedActionRequested(context.after);
+  const scored = candidates.map((blockText) => ({
+    zoneMatches: !mentionedZone || effectSupportsZone(blockText, mentionedZone),
+    action: scoreMentionedAction(context.after, blockText),
+  }));
+
+  if (mentionedZone && actionRequested) {
+    const coherent = scored
+      .filter((item) => item.zoneMatches && item.action.strongSignals > 0)
+      .sort((left, right) => right.action.score - left.action.score)[0];
+    return coherent
+      ? { score: 3 + coherent.action.score, strongSignals: 2 }
+      : { score: -3, strongSignals: 0 };
+  }
+  if (mentionedZone) {
+    return scored.some((item) => item.zoneMatches)
+      ? { score: 3, strongSignals: 1 }
+      : { score: -1, strongSignals: 0 };
+  }
+  if (actionRequested) {
+    const best = scored.sort((left, right) => right.action.score - left.action.score)[0]?.action;
+    return best || { score: 0, strongSignals: 0 };
+  }
+  return { score: 0, strongSignals: 0 };
+}
+
+function mentionedActionRequested(value) {
+  return /(?:替换|替換|交换|交換|换下|換下|弹回|彈回|弹走|彈走|回手|返回手牌|放回手牌|特殊召唤|特殊召喚|特召|破坏|破壞|无效|無效|除外|抽卡|抽牌)/u
+    .test(String(value || ""));
+}
+
+function cardSeriesKeys(card) {
+  if (card && typeof card === "object") {
+    const cached = cardSeriesKeysCache.get(card);
+    if (cached) return cached;
+  }
+  const aliases = cardAliases(card);
+  const asciiSeries = aliases.map(splitAsciiSeriesAlias).filter(Boolean);
+  const localizedSeries = aliases.map(splitLocalizedSeriesAlias).filter(Boolean);
+  if (!asciiSeries.length && !localizedSeries.length) return [];
+  const result = dedupeBy([
+    ...asciiSeries.map((item) => item.prefix),
+    ...localizedSeries.map((item) => item.prefix),
+  ], normalizeCardKey).map(normalizeCardKey);
+  if (card && typeof card === "object") cardSeriesKeysCache.set(card, result);
+  return result;
+}
+
+function buildMentionContexts(query, mention, resolvedCards) {
+  const text = String(query || "").normalize("NFKC");
+  const needle = String(mention || "").normalize("NFKC");
+  if (!needle) return [];
+
+  const lowerText = text.toLowerCase();
+  const lowerNeedle = needle.toLowerCase();
+  const contexts = [];
+  let cursor = 0;
+  while (cursor <= lowerText.length - lowerNeedle.length) {
+    const index = lowerText.indexOf(lowerNeedle, cursor);
+    if (index < 0) break;
+    const end = index + needle.length;
+    cursor = Math.max(end, index + 1);
+    if (occurrenceInsideLongerMention(text, index, end, needle, resolvedCards)) continue;
+
+    const bounds = mentionClauseBounds(text, index, end);
+    const before = text.slice(Math.max(bounds.start, index - 48), index);
+    const after = text.slice(end, Math.min(bounds.end, end + 48));
+    contexts.push({ before, after, nearby: `${before}${needle}${after}`, index, end });
+  }
+  return contexts;
+}
+
+function occurrenceInsideLongerMention(text, index, end, needle, resolvedCards) {
+  const mentionKey = normalizeCardKey(needle);
+  const quotePairs = [
+    ["「", "」"], ["『", "』"], ["《", "》"], ["【", "】"], ["[", "]"], ["（", "）"], ["(", ")"], ["“", "”"],
+  ];
+  for (const [openToken, closeToken] of quotePairs) {
+    const open = text.lastIndexOf(openToken, index);
+    const close = text.indexOf(closeToken, end);
+    if (open < 0 || close < end) continue;
+    const between = text.slice(open + openToken.length, close);
+    const betweenKey = normalizeCardKey(between);
+    if (betweenKey !== mentionKey && betweenKey.includes(mentionKey)) return true;
+  }
+
+  const lowerText = text.toLowerCase();
+  for (const card of resolvedCards || []) {
+    for (const alias of uniqueCardAliases(card)) {
+      const normalizedAlias = String(alias || "").normalize("NFKC");
+      if (normalizedAlias.length <= needle.length) continue;
+      const lowerAlias = normalizedAlias.toLowerCase();
+      let aliasCursor = 0;
+      while (aliasCursor <= lowerText.length - lowerAlias.length) {
+        const aliasIndex = lowerText.indexOf(lowerAlias, aliasCursor);
+        if (aliasIndex < 0) break;
+        const aliasEnd = aliasIndex + normalizedAlias.length;
+        if (aliasIndex <= index && aliasEnd >= end) return true;
+        aliasCursor = Math.max(aliasEnd, aliasIndex + 1);
+      }
+    }
+  }
+  return false;
+}
+
+function mentionClauseBounds(text, mentionStart, mentionEnd) {
+  let start = 0;
+  for (let index = mentionStart - 1; index >= 0; index -= 1) {
+    if (!/[，,。；;、！？!?\r\n]/u.test(text[index])) continue;
+    start = index + 1;
+    break;
+  }
+
+  let end = text.length;
+  for (let index = mentionEnd; index < text.length; index += 1) {
+    if (!/[，,。；;、！？!?\r\n]/u.test(text[index])) continue;
+    end = index;
+    break;
+  }
+
+  const clause = text.slice(start, end);
+  const chainPattern = /(?:^|[^a-z0-9])((?:c|cl|chain)\s*\d+)/giu;
+  for (const match of clause.matchAll(chainPattern)) {
+    const markerOffset = (match.index || 0) + String(match[0] || "").indexOf(match[1]);
+    const markerIndex = start + markerOffset;
+    if (markerIndex <= mentionStart) start = Math.max(start, markerIndex);
+    else if (markerIndex >= mentionEnd) {
+      end = Math.min(end, markerIndex);
+      break;
+    }
+  }
+  return { start, end };
+}
+
+function inferMentionedCardType(text) {
+  const value = String(text || "");
+  if (/(?:陷阱卡?|魔陷)/u.test(value)) return "trap";
+  if (/魔法卡/u.test(value)) return "spell";
+  if (/怪兽卡|怪獸卡/u.test(value)) return "monster";
+  return "";
+}
+
+function inferMentionedZone(beforeMention) {
+  const tail = String(beforeMention || "").slice(-24);
+  const signals = [
+    { zone: "hand", pattern: /(?:手牌|手卡|手札)/gu },
+    { zone: "graveyard", pattern: /墓地/gu },
+    { zone: "banished", pattern: /(?:除外区|除外區|除外)/gu },
+    { zone: "field", pattern: /(?:场上|場上|怪兽区|怪獸區|魔法陷阱区|魔法陷阱區)/gu },
+  ];
+  let latest = { zone: "", index: -1 };
+  for (const signal of signals) {
+    for (const match of tail.matchAll(signal.pattern)) {
+      if ((match.index ?? -1) > latest.index) latest = { zone: signal.zone, index: match.index ?? -1 };
+    }
+  }
+  return latest.zone;
+}
+
+function effectSupportsZone(effectText, zone) {
+  const text = String(effectText || "");
+  if (zone === "hand") return /(?:手牌|手卡|手札).{0,24}(?:发动|發動|特殊召唤|特殊召喚)|(?:发动|發動|特殊召唤|特殊召喚).{0,24}(?:手牌|手卡|手札)/su.test(text);
+  if (zone === "graveyard") return /墓地.{0,24}(?:发动|發動|特殊召唤|特殊召喚|除外|加入手牌)/su.test(text);
+  if (zone === "banished") return /除外.{0,24}(?:发动|發動|特殊召唤|特殊召喚|返回|回到|放回)/su.test(text);
+  if (zone === "field") return /(?:场上|場上|怪兽区域|怪獸區域|魔法与陷阱区域|魔法與陷阱區域).{0,24}(?:发动|發動|可以|存在)/su.test(text);
+  return false;
+}
+
+function scoreMentionedAction(afterMention, effectText) {
+  const context = String(afterMention || "").slice(0, 36);
+  const effect = String(effectText || "");
+  const returnsToHand = /(?:放回|返回|回到).{0,8}(?:手牌|手卡|手札)|(?:手牌|手卡|手札).{0,8}(?:放回|返回|回到)/su.test(effect);
+  const specialSummons = /特殊召唤|特殊召喚/su.test(effect);
+
+  if (/(?:替换|替換|交换|交換|换下|換下)/u.test(context)) {
+    return returnsToHand && specialSummons ? { score: 4, strongSignals: 1 } : { score: 0, strongSignals: 0 };
+  }
+
+  const directActions = [
+    { query: /(?:弹回|彈回|弹走|彈走|回手|返回手牌|放回手牌)/u, effect: /(?:放回|返回|回到).{0,8}(?:手牌|手卡|手札)/su },
+    { query: /(?:特殊召唤|特殊召喚|特召)/u, effect: /特殊召唤|特殊召喚/su },
+    { query: /(?:破坏|破壞)/u, effect: /破坏|破壞/su },
+    { query: /(?:无效|無效)/u, effect: /无效|無效/su },
+    { query: /除外/u, effect: /除外/su },
+    { query: /(?:抽卡|抽牌|抽\s*\d+\s*张)/u, effect: /抽.{0,4}(?:张卡|張卡|牌)/su },
+  ];
+  for (const action of directActions) {
+    if (action.query.test(context) && action.effect.test(effect)) return { score: 3, strongSignals: 1 };
+  }
+  return { score: 0, strongSignals: 0 };
 }
 
 function addResolved(resolved, seenCards, candidate, input, confidence) {
@@ -504,13 +1159,55 @@ function looksLikeCardMention(value) {
 }
 
 function cardAliases(card = {}) {
-  return [
+  if (card && typeof card === "object") {
+    const cached = cardAliasesCache.get(card);
+    if (cached) return cached;
+  }
+
+  const baseAliases = [
     card.name,
     card.cnName,
     card.jaName,
     card.enName,
     ...(Array.isArray(card.aliases) ? card.aliases : []),
   ].filter(Boolean);
+  const aliases = dedupeBy([
+    ...baseAliases,
+    ...deriveCrossLocaleSeriesAliases(baseAliases),
+  ], normalizeCardKey);
+  if (card && typeof card === "object") cardAliasesCache.set(card, aliases);
+  return aliases;
+}
+
+function deriveCrossLocaleSeriesAliases(aliases) {
+  const asciiEntries = aliases.map(splitAsciiSeriesAlias).filter(Boolean);
+  const localizedEntries = aliases.map(splitLocalizedSeriesAlias).filter(Boolean);
+  const asciiPrefixes = dedupeBy(asciiEntries.map((item) => item.prefix), normalizeCardKey);
+  const localizedPrefixes = dedupeBy(localizedEntries.map((item) => item.prefix), normalizeCardKey);
+  if (asciiPrefixes.length !== 1 || localizedPrefixes.length !== 1) return [];
+  const localizedSuffixes = dedupeBy(localizedEntries.map((item) => item.suffix), normalizeCardKey);
+
+  const derived = [];
+  for (const suffix of localizedSuffixes) {
+    derived.push(`${asciiPrefixes[0]} ${suffix}`, `${asciiPrefixes[0]}${suffix}`);
+  }
+  return dedupeBy(derived, normalizeCardKey);
+}
+
+function splitAsciiSeriesAlias(value) {
+  const text = String(value || "").normalize("NFKC").trim();
+  const match = text.match(/^([A-Za-z][A-Za-z0-9]*(?:[-_][A-Za-z0-9]+)*)[\s・·･．.\-－—–]+(.{2,})$/u);
+  if (!match) return null;
+  const letters = match[1].replace(/[^A-Za-z]/gu, "");
+  if (letters.length < 2 || letters !== letters.toUpperCase() || /^(?:no|cno|sno)$/iu.test(match[1])) return null;
+  return { prefix: match[1], suffix: match[2].trim() };
+}
+
+function splitLocalizedSeriesAlias(value) {
+  const text = String(value || "").normalize("NFKC").trim();
+  const match = text.match(/^([\u3400-\u9fff]{2,12})[\s・·･．.\-－—–]+(.{2,})$/u);
+  if (!match || !/[\u3040-\u30ff\u3400-\u9fff]/u.test(match[2])) return null;
+  return { prefix: match[1], suffix: match[2].trim() };
 }
 
 function cardIdentity(card = {}) {
