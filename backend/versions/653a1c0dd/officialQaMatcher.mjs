@@ -1,3 +1,4 @@
+// Frozen software snapshot from Git revision 653a1c0dd.
 import { hasNumberedCardIdentityConflict } from "./numberedCardIdentity.mjs";
 
 const officialQaRecordFeatureCache = new WeakMap();
@@ -10,7 +11,7 @@ const QUESTION_TYPES = [
   ["timing_window", /时点|伤害步骤|伤害计算|错过时点|タイミング|ダメージステップ|timing|damage step/iu],
   ["continuous_effect_during_resolution", /效果处理中.*(?:永续|持续|自坏)|処理中.*永続|continuous effect.*resol/iu],
   ["resolution_result", /如何处理|怎么处理|处理后|效果处理|どう処理|resolution|resolve/iu],
-  ["can_activate", /(?:能否|是否(?:可以|能)?|可不可以|能不能|可以|不能).{0,12}(?:发动|连锁)|発動(?:する(?:事|こと)は)?(?:でき|出来)ますか|発動できません|can(?:not)?\b.{0,80}\bactivate/iu],
+  ["can_activate", /(?:能否|是否(?:可以|能)?|可不可以|能不能|可以|不能).{0,12}(?:发动|连锁)|発動できますか|発動できません|can(?:not)?\b.{0,80}\bactivate/iu],
 ];
 
 const EFFECT_PHRASES = [
@@ -56,12 +57,10 @@ export function searchOfficialQaEvidence({ question, records = [], resolvedCards
   const resolvedIds = new Set((resolvedCards || []).map((card) => normalizeId(card.id || card.cardId)).filter(Boolean));
   const resolvedNames = new Set((resolvedCards || []).flatMap(cardAliases).map(normalizeOfficialQaQuery).filter(Boolean));
 
-  const scored = (records || [])
+  const ranked = (records || [])
     .filter((record) => ["qa", "card-faq", "official-database"].includes(record.recordType))
     .map((record) => scoreRecord({ record, query, normalizedQuery, queryType, queryPhrases, resolvedIds, resolvedNames }))
-    .filter((item) => item.score >= 0.2);
-  promoteUniqueExactCardSet(scored, queryType, resolvedIds);
-  const ranked = scored
+    .filter((item) => item.score >= 0.2)
     .sort((left, right) => right.score - left.score || String(left.record.id).localeCompare(String(right.record.id)))
     .slice(0, Math.max(limit, 1));
 
@@ -122,26 +121,13 @@ function scoreRecord({ record, normalizedQuery, queryType, queryPhrases, resolve
   const containment = containmentScore(normalizedQuery, normalizedRecordQuestion || normalizedRecordText);
   const similarity = diceSimilarity(normalizedQuery, normalizedRecordQuestion || normalizedRecordText.slice(0, normalizedQuery.length * 2));
   const phraseHits = queryPhrases.filter((phrase) => evidencePhrases.includes(phrase));
-  const matchedCardIds = [...resolvedIds].filter((id) => recordIds.has(id));
-  const cardIdMatch = matchedCardIds.length > 0;
-  const cardIdCoverage = resolvedIds.size ? matchedCardIds.length / resolvedIds.size : 0;
-  const exactResolvedCardIdSet = resolvedIds.size >= 2
-    && recordIds.size === resolvedIds.size
-    && matchedCardIds.length === resolvedIds.size;
-  const supportingCardIds = new Set((record?.retrievalContext?.supportingCardIds || []).map(String));
-  const exactRetrievedCardSubset = supportingCardIds.size >= 2
-    && supportingCardIds.size === recordIds.size
-    && [...supportingCardIds].every((id) => recordIds.has(id) && resolvedIds.has(id));
-  const exactCardIdSet = exactResolvedCardIdSet || exactRetrievedCardSubset;
+  const cardIdMatch = [...resolvedIds].some((id) => recordIds.has(id));
   const cardNameMatch = [...resolvedNames].some((name) => name.length >= 3 && !hasNumberedCardIdentityConflict(name, recordIdentityText) && normalizedRecordText.includes(name));
   const cardMatch = cardIdMatch || cardNameMatch;
   const rawExact = exactNormalized || (containment >= 0.9 && similarity >= 0.86);
-  const lexicalScore = Math.max(similarity, containment);
-  let score = lexicalScore;
+  let score = Math.max(similarity, containment);
   if (typeCompatible && queryType !== "unknown") score += 0.16;
   if (cardMatch) score += 0.17;
-  if (resolvedIds.size >= 2 && cardIdCoverage === 1) score += 0.24;
-  if (exactCardIdSet) score += 0.12;
   score += Math.min(0.18, phraseHits.length * 0.06);
   score = Math.min(1, Number(score.toFixed(4)));
 
@@ -156,10 +142,6 @@ function scoreRecord({ record, normalizedQuery, queryType, queryPhrases, resolve
     questionType: evidenceType,
     typeCompatible,
     cardMatch,
-    matchedCardIds,
-    cardIdCoverage,
-    exactCardIdSet,
-    lexicalScore,
     matchedBy: [rawExact && "raw_or_normalized_query", cardIdMatch && "card_id", cardNameMatch && "card_name", typeCompatible && "question_type", phraseHits.length && "effect_phrase"].filter(Boolean),
     matchedPhrases: phraseHits,
     questionText,
@@ -185,21 +167,6 @@ function recordText(record = {}) {
   if (record.text) return String(record.text);
   const answer = record.answer || record.conclusion || "";
   return [record.question, answer, record.officialText, record.title].filter(Boolean).join("\n");
-}
-
-function promoteUniqueExactCardSet(items, queryType, resolvedIds) {
-  if (resolvedIds.size < 2 || queryType === "unknown") return;
-  const candidates = items.filter((item) => {
-    if (!item.exactCardIdSet || !item.typeCompatible || item.questionType !== queryType) return false;
-    const uniqueLiveIntersection = item.record?.retrievalContext?.uniqueExactCardIntersection === true
-      && Number(item.record?.retrievalContext?.candidatePoolSize) === 1;
-    return uniqueLiveIntersection || item.lexicalScore >= 0.45;
-  });
-  if (candidates.length !== 1) return;
-  const [candidate] = candidates;
-  candidate.matchLevel = "official_qa_exact";
-  candidate.score = Math.max(candidate.score, 0.92);
-  candidate.matchedBy = [...new Set([...candidate.matchedBy, "unique_exact_card_set"])];
 }
 
 function officialQaRecordFeatures(record = {}) {

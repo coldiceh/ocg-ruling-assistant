@@ -8,14 +8,22 @@ import {
   normalizeRequestedRulingVersion,
   resolveRulingVersionPipeline,
 } from "../backend/rulingVersionRegistry.mjs";
+import { loadRagData as loadPreviousRagData } from "../backend/versions/653a1c0dd/ragEvidenceRetriever.mjs";
 
 test("ruling version capabilities expose latest and the frozen previous revision", () => {
+  assert.equal(PREVIOUS_RULING_REVISION, "653a1c0dd");
   const capabilities = getRulingVersionCapabilities();
   assert.equal(capabilities.defaultRulingVersion, DEFAULT_RULING_VERSION);
   assert.deepEqual(capabilities.rulingVersions, [
     { id: "latest", label: "最新版", revision: null },
     { id: "previous", label: "上一版", revision: PREVIOUS_RULING_REVISION },
   ]);
+});
+
+test("frozen previous pipeline resolves its own dependency graph and shared data path", async () => {
+  const data = await loadPreviousRagData();
+  assert.ok(data.cards.length > 0);
+  assert.ok(data.records.length > 0);
 });
 
 test("missing rulingVersion defaults to latest and illegal values are rejected with 400", async () => {

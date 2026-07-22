@@ -1,4 +1,5 @@
-import { createDestinationReplacement, createEffectPrimitive } from "./effectPrimitives.mjs";
+// Frozen software snapshot from Git revision 653a1c0dd.
+import { createEffectPrimitive } from "./effectPrimitives.mjs";
 import { evaluateFusionOperation, resolveEffectChain } from "./effectResolutionEngine.mjs";
 import { splitEffectTextBlocks } from "./cardEffectBlocks.mjs";
 
@@ -14,8 +15,6 @@ const DISCARD_ONE_HAND_COST = /(?:舍弃|丢弃|捨てる?)\s*1张手牌.{0,12}(
 const FUSION_OPERATION = /作为融合素材.{0,30}融合召唤|融合素材.{0,30}融合召喚|Fusion Summon.{0,50}(?:materials?|using)/iu;
 const UNAFFECTED_BY_OTHER_EFFECTS = /不受此卡以外的效果影响|このカード以外の効果を受けない|unaffected by other card effects/iu;
 const SELF_IN_MONSTER_ZONE = /(?:此卡|这张卡|這張卡|このカード|this card).{0,24}(?:怪兽区域|怪獸區域|モンスターゾーン|Monster Zone)/iu;
-const PER_PLAYER_SAME_RACE_LIMIT = /(?:双方|雙方|お互い|each player).{0,36}(?:各|それぞれ|only).{0,18}(?:1|１|一)(?:只|隻|体|體|枚)?.{0,24}(?:同种族|同種族|同じ種族|same Type).{0,24}(?:表侧|表側|face-up)/iu;
-const OPPONENT_GRAVE_TO_BANISHED = /(?:被送(?:往|去|至).{0,8}(?:对手|對手|对方|對方)墓地的卡.{0,18}(?:不去墓地|不会去墓地|不进入墓地).{0,12}除外|相手の墓地へ送られるカード.{0,24}墓地へは行かず除外|cards?.{0,24}sent to your opponent(?:'s)? (?:GY|Graveyard).{0,24}banish)/iu;
 
 export function analyzeDuelStateTransition({
   userQuery = "",
@@ -32,16 +31,7 @@ export function analyzeDuelStateTransition({
     chainLinks: compiled.chainLinks,
     continuousEffects: compiled.continuousEffects,
   });
-  if (!simulation.complete) {
-    const illegalMandatorySummon = renderIllegalMandatorySummonActivation({
-      programs,
-      compiled,
-      simulation,
-      cardTexts,
-    });
-    if (illegalMandatorySummon) return illegalMandatorySummon;
-    return notApplicable("compiled_chain_not_complete", { compiled, simulation });
-  }
+  if (!simulation.complete) return notApplicable("compiled_chain_not_complete", { compiled, simulation });
 
   const firstLink = [...simulation.linkResults].sort((left, right) => left.order - right.order)[0];
   const firstPreparedLink = simulation.preparedChainLinks.find((link) => link.id === firstLink?.id);
@@ -395,10 +385,10 @@ export function compileResolvedCardPrograms(resolvedCards = [], cardTexts = []) 
         activatedEffects.push({
           id: `${definitionId}:${block.id}:fusion-summon`,
           effectBlockId: block.id,
-          activationZones: fusionActivationZones(effectCategory),
-          effectCategory,
+           activationZone: "monster_zone",
+           effectCategory,
           effectCategoryBasis: effectCategoryInference.basis,
-          ...(effectCategory === "unknown" ? { compileIncompleteReason: "effect_source_category_not_supported" } : {}),
+          ...monsterOnlyCompileIncomplete,
           actionTags: ["fusion_summon"],
           sharedRestrictionText,
           activationRequirementText: activationRequirement(blockText),
@@ -411,24 +401,6 @@ export function compileResolvedCardPrograms(resolvedCards = [], cardTexts = []) 
             excludeOtherOwnMonsters: /不可将自己场上其他的怪兽作为融合素材|自分フィールドの他のモンスターを融合素材にできない|cannot use other monsters you control/iu.test(blockText),
             materialPool,
           },
-        });
-      }
-
-      const mandatorySpecialSummonOutputs = parseMandatorySpecialSummonOutputs(blockText, card.race);
-      if (mandatorySpecialSummonOutputs.length >= 2) {
-        activatedEffects.push({
-          id: `${definitionId}:${block.id}:mandatory-special-summons`,
-          effectBlockId: block.id,
-          activationZone: SPECIAL_SUMMON_SOURCE_FROM_HAND.test(blockText) ? "hand" : "monster_zone",
-          effectCategory,
-          effectCategoryBasis: effectCategoryInference.basis,
-          ...monsterOnlyCompileIncomplete,
-          actionTags: ["special_summon", "mandatory_multi_player_summon"],
-          sharedRestrictionText,
-          activationRequirementText: activationRequirement(blockText),
-          mandatorySpecialSummonOutputs,
-          analysisScope: "activation_only",
-          sequence: [],
         });
       }
 
@@ -472,46 +444,6 @@ export function compileResolvedCardPrograms(resolvedCards = [], cardTexts = []) 
         });
       }
 
-      if (PER_PLAYER_SAME_RACE_LIMIT.test(blockText)) {
-        const activeZone = effectCategory === "monster" ? "monster_zone" : "spell_trap_zone";
-        continuousEffects.push({
-          id: `${definitionId}:${block.id}:per-player-race-limit`,
-          definitionCardId: definitionId,
-          sourceDefinitionId: definitionId,
-          sourceCardName: card.name || card.cnName || names[0] || "unknown",
-          effectCategory,
-          effectCategoryBasis: effectCategoryInference.basis,
-          activeWhen: { zone: activeZone, faceUp: true },
-          fieldRestrictions: [{
-            type: "max_face_up_monsters_per_race_per_player",
-            maxCount: 1,
-          }],
-        });
-      }
-
-      if (OPPONENT_GRAVE_TO_BANISHED.test(blockText)) {
-        continuousEffects.push({
-          id: [definitionId, block.id, "opponent-grave-destination-replacement"].join(":"),
-          definitionCardId: definitionId,
-          sourceDefinitionId: definitionId,
-          sourceCardName: card.name || card.cnName || names[0] || "unknown",
-          effectCategory,
-          effectCategoryBasis: effectCategoryInference.basis,
-          activeWhen: {
-            zone: SELF_IN_MONSTER_ZONE.test(blockText) || effectCategory === "monster"
-              ? "monster_zone"
-              : "spell_trap_zone",
-            faceUp: true,
-          },
-          destinationReplacements: [createDestinationReplacement({
-            id: "opponent-grave-to-banished",
-            intendedToZone: "graveyard",
-            replacementToZone: "banished",
-            destinationPlayerRelation: "opponent_of_source_controller",
-          })],
-        });
-      }
-
       if (UNAFFECTED_BY_OTHER_EFFECTS.test(blockText)) {
         const parsedCondition = parseContinuousExistsCondition(blockText);
         const conditionRequired = /只要|只要有|存在.{0,36}(?:不受|unaffected)|as long as|while/iu.test(blockText);
@@ -544,7 +476,6 @@ export function compileResolvedCardPrograms(resolvedCards = [], cardTexts = []) 
       names,
       input: String(card.input || ""),
       cardType: String(card.cardType || ""),
-      race: String(card.race || ""),
       effectCategory,
       effectCategoryBasis: effectCategoryInference.basis,
       summonKinds,
@@ -582,248 +513,6 @@ export function compileResolvedCardPrograms(resolvedCards = [], cardTexts = []) 
     }
   }
   return programs;
-}
-
-function parseMandatorySpecialSummonOutputs(text, sourceRace = "") {
-  const value = String(text || "");
-  if (!SPECIAL_SUMMON_SOURCE_FROM_HAND.test(value)) return [];
-  const outputs = [{
-    id: "special-summon-effect-source",
-    subject: "effect_source",
-    playerRelation: "same_as_source_controller",
-    race: String(sourceRace || ""),
-    mandatory: true,
-  }];
-  const connector = value.search(/然后|之後|之后|その後|then/iu);
-  if (connector < 0) return outputs;
-  const later = value.slice(connector);
-  const opponentSummon = /(?:特殊召唤|特殊召喚).{0,20}(?:至|到|给|給)?(?:对方|對方|对手|對手|相手).{0,12}(?:场上|場上|フィールド)|(?:对方|對方|对手|對手|相手).{0,18}(?:场上|場上|フィールド).{0,18}(?:特殊召唤|特殊召喚)|Special Summon.{0,80}(?:opponent'?s field|opponent's side)/iu.test(later);
-  if (!opponentSummon) return outputs;
-  const tokenName = later.match(/[“「『"]([^”」』"]{2,50})[”」』"]/u)?.[1] || "生成的怪兽";
-  outputs.push({
-    id: "special-summon-generated-monster",
-    subject: "generated_monster",
-    name: tokenName,
-    playerRelation: "opponent_of_source_controller",
-    race: extractRaceFromText(later),
-    mandatory: true,
-  });
-  return outputs;
-}
-
-function evaluateMandatorySpecialSummonRestrictions({ query, source, outputs, gameCards, continuousEffects }) {
-  const restrictions = [];
-  for (const effect of continuousEffects || []) {
-    if (!effect.fieldRestrictions?.length) continue;
-    const carrier = instanceById(gameCards, effect.sourceInstanceId || effect.sourceCardId);
-    if (!carrier) continue;
-    const activeWhen = effect.activeWhen || {};
-    if (activeWhen.zone && carrier.zone !== activeWhen.zone) continue;
-    if (typeof activeWhen.faceUp === "boolean" && carrier.faceUp !== activeWhen.faceUp) continue;
-    for (const restriction of effect.fieldRestrictions) restrictions.push({ effect, carrier, restriction });
-  }
-  if (!restrictions.length) return null;
-
-  const sourceController = normalizePlayer(source.controller);
-  if (!sourceController) {
-    return {
-      type: "mandatory_special_summon_restriction",
-      status: "unknown",
-      reason: "mandatory_special_summon_controller_unknown",
-    };
-  }
-  const resolvedOutputs = (outputs || []).map((output) => ({
-    ...output,
-    player: resolveOutputPlayer(output.playerRelation, sourceController),
-    raceKey: normalizeRaceKey(output.race),
-  }));
-  if (resolvedOutputs.some((output) => !output.player || !output.raceKey)) {
-    return {
-      type: "mandatory_special_summon_restriction",
-      status: "unknown",
-      reason: "mandatory_special_summon_output_identity_unknown",
-      outputs: resolvedOutputs,
-    };
-  }
-
-  const facts = [
-    ...extractFaceUpRaceFacts(query),
-    ...(gameCards || [])
-      .filter((card) => card.zone === "monster_zone" && card.faceUp === true && normalizeRaceKey(card.race))
-      .map((card) => ({
-        player: normalizePlayer(card.controller),
-        race: String(card.race || ""),
-        raceKey: normalizeRaceKey(card.race),
-        count: 1,
-        source: "named_field_card",
-      })),
-  ];
-  const conflicts = [];
-  for (const { effect, carrier, restriction } of restrictions) {
-    if (restriction.type !== "max_face_up_monsters_per_race_per_player") continue;
-    const maxCount = Number.isInteger(restriction.maxCount) ? restriction.maxCount : 1;
-    for (const fact of facts) {
-      const matchingOutputs = resolvedOutputs.filter((output) => output.raceKey === fact.raceKey);
-      if (!matchingOutputs.length || Number(fact.count || 1) < maxCount) continue;
-      const matchingPlayers = new Set(matchingOutputs.map((output) => output.player));
-      const definitelyConflicts = fact.player === "either"
-        ? matchingPlayers.has("self") && matchingPlayers.has("opponent")
-        : fact.player === "both"
-          ? matchingPlayers.size > 0
-          : matchingPlayers.has(fact.player);
-      if (!definitelyConflicts) continue;
-      conflicts.push({
-        restrictionEffectId: effect.id,
-        restrictionSourceInstanceId: carrier.instanceId,
-        restrictionSourceName: carrier.name,
-        player: fact.player,
-        race: fact.race,
-        raceKey: fact.raceKey,
-        existingCount: Number(fact.count || 1),
-        maxCount,
-        outputIds: matchingOutputs.map((output) => output.id),
-      });
-    }
-  }
-  if (!conflicts.length) {
-    return {
-      type: "mandatory_special_summon_restriction",
-      status: "legal",
-      satisfied: true,
-      reason: "mandatory_special_summon_outputs_do_not_conflict_with_known_limits",
-      outputs: resolvedOutputs,
-    };
-  }
-  return {
-    type: "mandatory_special_summon_restriction",
-    status: "illegal",
-    satisfied: false,
-    reason: "mandatory_special_summon_conflicts_with_active_per_player_race_limit",
-    evaluationPoint: "before_cost",
-    outputs: resolvedOutputs,
-    conflicts,
-  };
-}
-
-function extractFaceUpRaceFacts(query) {
-  const facts = [];
-  const text = String(query || "");
-  const playerPattern = /(?:自己|我方|自分)(?:或|或者|・|\/)(?:对方|對方|对手|對手|相手)|(?:对方|對方|对手|對手|相手)(?:或|或者|・|\/)(?:自己|我方|自分)|双方|雙方|お互い|自己|我方|自分|对方|對方|对手|對手|相手/gu;
-  for (const match of text.matchAll(playerPattern)) {
-    const segment = text.slice(match.index, Math.min(text.length, match.index + 120)).split(/[。；;\n]/u)[0];
-    if (!/(?:怪兽区域|怪獸區域|怪兽区|怪獸區|モンスターゾーン|场上|場上|フィールド)/iu.test(segment)) continue;
-    if (!/(?:表侧表示|表側表示|face-up)/iu.test(segment)) continue;
-    const race = extractRaceFromText(segment);
-    const raceKey = normalizeRaceKey(race);
-    if (!raceKey) continue;
-    facts.push({
-      player: playerScopeFromText(match[0]),
-      race,
-      raceKey,
-      count: 1,
-      source: "question_explicit_face_up_race_presence",
-      text: segment,
-    });
-  }
-  return facts;
-}
-
-function extractRaceFromText(value) {
-  const match = String(value || "").match(/(兽战士族|獸戰士族|獣戦士族|鸟兽族|鳥獸族|鳥獣族|海龙族|海龍族|海竜族|幻龙族|幻龍族|幻竜族|电子界族|電子界族|サイバース族|念动力族|念動力族|サイキック族|魔法师族|魔法師族|魔法使い族|爬虫类族|爬蟲類族|爬虫類族|幻神兽族|幻神獸族|幻神獣族|幻想魔族|创造神族|創造神族|岩石族|龙族|龍族|ドラゴン族|战士族|戰士族|戦士族|机械族|機械族|恶魔族|惡魔族|悪魔族|天使族|水族|不死族|アンデット族|植物族|昆虫族|昆蟲族|恐龙族|恐龍族|恐竜族|炎族|雷族|兽族|獸族|獣族|鱼族|魚族|Beast-Warrior|Winged Beast|Sea Serpent|Divine-Beast|Creator God|Spellcaster|Machine|Psychic|Cyberse|Reptile|Dinosaur|Illusion|Warrior|Dragon|Zombie|Thunder|Insect|Plant|Fiend|Fairy|Aqua|Pyro|Wyrm|Beast|Rock|Fish)/iu);
-  return match?.[1] || "";
-}
-
-function normalizeRaceKey(value) {
-  const normalized = String(value || "")
-    .normalize("NFKC")
-    .toLowerCase()
-    .replace(/\s+/gu, " ")
-    .replace(/族$/u, "")
-    .trim();
-  const aliases = {
-    岩石: "rock", 龙: "dragon", 龍: "dragon", 战士: "warrior", 戰士: "warrior",
-    魔法师: "spellcaster", 魔法師: "spellcaster", 机械: "machine", 機械: "machine",
-    恶魔: "fiend", 惡魔: "fiend", 天使: "fairy", 水: "aqua", 不死: "zombie",
-    念动力: "psychic", 念動力: "psychic", 电子界: "cyberse", 電子界: "cyberse",
-    爬虫类: "reptile", 爬蟲類: "reptile", 植物: "plant", 昆虫: "insect", 昆蟲: "insect",
-    恐龙: "dinosaur", 恐龍: "dinosaur", 炎: "pyro", 雷: "thunder", 幻龙: "wyrm", 幻龍: "wyrm",
-    兽战士: "beast-warrior", 獸戰士: "beast-warrior", 兽: "beast", 獸: "beast",
-    鸟兽: "winged beast", 鳥獸: "winged beast", 鳥獣: "winged beast",
-    海龙: "sea serpent", 海龍: "sea serpent", 海竜: "sea serpent", 幻竜: "wyrm",
-    鱼: "fish", 魚: "fish", 幻想魔: "illusion",
-    幻神兽: "divine-beast", 幻神獸: "divine-beast", 幻神獣: "divine-beast",
-    创造神: "creator god", 創造神: "creator god",
-  };
-  return aliases[normalized] || normalized;
-}
-
-function resolveOutputPlayer(relation, sourceController) {
-  if (relation === "same_as_source_controller") return sourceController;
-  if (relation === "opponent_of_source_controller") return sourceController === "self" ? "opponent" : "self";
-  return normalizePlayer(relation);
-}
-
-function normalizePlayer(value) {
-  if (value === "self" || value === "opponent") return value;
-  return "";
-}
-
-function playerScopeFromText(value) {
-  const text = String(value || "");
-  const hasSelf = /自己|我方|自分/u.test(text);
-  const hasOpponent = /对方|對方|对手|對手|相手/u.test(text);
-  if (/双方|雙方|お互い/u.test(text)) return "both";
-  if (hasSelf && hasOpponent) return "either";
-  if (hasSelf) return "self";
-  if (hasOpponent) return "opponent";
-  return "either";
-}
-
-function renderIllegalMandatorySummonActivation({ programs, compiled, simulation, cardTexts }) {
-  const activationResult = (simulation.activationResults || []).find((item) => (
-    item.status === "illegal"
-    && item.reason === "mandatory_special_summon_conflicts_with_active_per_player_race_limit"
-  ));
-  if (!activationResult) return null;
-  const link = (compiled.chainLinks || []).find((item) => item.id === activationResult.id);
-  const preflight = link?.activationPreconditions?.find((item) => item.type === "mandatory_special_summon_restriction");
-  if (!link || !preflight?.conflicts?.length) return null;
-  const source = programByDefinitionId(programs, link.sourceDefinitionId);
-  const conflict = preflight.conflicts[0];
-  const race = conflict.race || preflight.outputs?.[0]?.race || "相同种族";
-  const restrictionName = conflict.restrictionSourceName || "该持续限制";
-  const ownOutput = preflight.outputs.find((output) => output.player === "self");
-  const opponentOutput = preflight.outputs.find((output) => output.player === "opponent");
-  const summonDescription = [
-    ownOutput && `把作为${ownOutput.race || race}怪兽的自身特殊召唤到自己场上`,
-    opponentOutput && `把作为${opponentOutput.race || race}怪兽的「${opponentOutput.name || "生成的怪兽"}」特殊召唤到对方场上`,
-  ].filter(Boolean).join("，并且");
-  const sourceName = source?.name || link.sourceCardName || "该卡";
-  const shortAnswer = `不能发动。「${sourceName}」的效果必须${summonDescription}；「${restrictionName}」正在适用且发动时自己或对方的怪兽区域已有表侧${race}怪兽，因此至少一次必做特殊召唤违反同种族数量限制。不能先假定效果处理中的解放会清空场面，再反推发动合法。`;
-  const evidenceIds = unique(programs
-    .filter((program) => compiled.referencedDefinitionIds.includes(program.definitionId))
-    .map((program) => evidenceIdFor(program, cardTexts)));
-  return {
-    status: "resolved",
-    complete: true,
-    activation: "cannot_activate",
-    activationBasis: "derived_from_activation_preflight",
-    resolution: "not_started",
-    shortAnswer,
-    reasoning: [
-      `发动前先展开全部必做输出：${summonDescription}。`,
-      `再按目的玩家分别检查「${restrictionName}」的同种族表侧数量上限；已知场面与至少一个必做输出冲突。`,
-      "发动合法性使用发动时状态检查，效果尚未开始处理，所以不能把前段解放后的假想状态用于放宽发动条件。",
-    ],
-    trace: [
-      ...(compiled.stateInferences || []),
-      ...(simulation.trace || []),
-      { phase: "activation_preflight", status: "illegal", proof: preflight, conclusion: shortAnswer },
-    ],
-    evidenceIds,
-    activationEvidenceType: "effect_program",
-    program: serializeCompiledSimulation(programs, compiled, simulation),
-  };
 }
 
 function mergeDefinitionSources(resolvedCards, cardTexts) {
@@ -1122,27 +811,26 @@ function compileQuestionScenario({ query, programs }) {
   for (const { program, mention } of mentionedPrograms) {
     const explicitOrder = inferChainOrder(query, mention.index);
     const fusionEffectPresent = program.activatedEffects.some((effect) => effect.actionTags.includes("fusion_summon"));
-    const activationPreflightPresent = program.activatedEffects.some((effect) => effect.mandatorySpecialSummonOutputs?.length);
-    const implicitOrder = !explicitOrder && (fusionEffectPresent || activationPreflightPresent) && effectActivationAsked(query, mention) ? 1 : 0;
+    const implicitOrder = !explicitOrder && fusionEffectPresent && effectActivationAsked(query, mention) ? 1 : 0;
     const order = explicitOrder || implicitOrder;
     if (!order || !program.activatedEffects.length) continue;
     let effect = chooseActivatedEffect(query, mention, program.activatedEffects);
     if (!effect) continue;
     const contextualSourceCandidates = gameCards.filter((card) => (
       card.definitionId === program.definitionId
-      && effectAllowsActivationZone(effect, card.zone)
+      && (!effect.activationZone || card.zone === effect.activationZone)
     ));
     if (contextualSourceCandidates.length === 1) {
       effect = resolveEffectCategoryFromInstance(effect, contextualSourceCandidates[0]);
     }
     if (effect.compileIncompleteReason) return incomplete(effect.compileIncompleteReason);
-    if (!effect.fusionSpec && !effect.mandatorySpecialSummonOutputs?.length && activationLegalityExplicitlyAsked(query, mention)) {
+    if (!effect.fusionSpec && activationLegalityExplicitlyAsked(query, mention)) {
       return incomplete("activation_legality_not_compiled");
     }
     if (costMention && !effect.costSpec) return incomplete("declared_cost_not_part_of_selected_effect");
     const sourceCandidates = gameCards.filter((card) => (
       card.definitionId === program.definitionId
-      && effectAllowsActivationZone(effect, card.zone)
+      && (!effect.activationZone || card.zone === effect.activationZone)
     ));
     if (sourceCandidates.length !== 1) {
       return incomplete(
@@ -1196,16 +884,6 @@ function compileQuestionScenario({ query, programs }) {
     }));
     let activationCostSequence = [];
     const activationPreconditions = [];
-    if (effect.mandatorySpecialSummonOutputs?.length) {
-      const preflight = evaluateMandatorySpecialSummonRestrictions({
-        query,
-        source,
-        outputs: effect.mandatorySpecialSummonOutputs,
-        gameCards,
-        continuousEffects,
-      });
-      if (preflight) activationPreconditions.push(preflight);
-    }
     if (effect.fusionSpec) {
       const materialPool = instantiateRelativeMaterialPool(effect.fusionSpec.materialPool, source.controller);
       if (!materialPool.complete) return incomplete(materialPool.reason);
@@ -1324,8 +1002,8 @@ function compileQuestionScenario({ query, programs }) {
       sourceExpectedZone: source.zone,
       effectId: effect.id,
       effectCategory: effect.effectCategory,
-      activationPremise: effect.fusionSpec || effect.mandatorySpecialSummonOutputs?.length ? "derived" : "declared_legal",
-      activationPremiseText: effect.fusionSpec || effect.mandatorySpecialSummonOutputs?.length
+      activationPremise: effect.fusionSpec ? "derived" : "declared_legal",
+      activationPremiseText: effect.fusionSpec
         ? "由事件、费用与发动前操作可行性共同验证。"
         : "题设已声明该连锁项发动；展示、费用、对象等发动手续按题设视为已满足。",
       activationCostSequence,
@@ -1396,9 +1074,7 @@ function buildInitialCardState(query, program, mention, ordinal = 1, instanceCou
     || (explicitlyInExtraDeck ? "extra_deck" : inferZone(nearby.before, nearby.after, program));
   const controller = overrides.controller || inferController(nearby.before, nearby.after);
   const position = overrides.position || inferPosition(localWindow(query, mentionIndex, mention.surface.length, 16, 20));
-  const fieldCard = zone === "monster_zone" || zone === "spell_trap_zone";
-  const restrictionApplying = program.continuousEffects.some((effect) => effect.fieldRestrictions?.length)
-    && /(?:效果)?.{0,8}(?:正在)?(?:适用|適用|applying)/iu.test(nearby.full);
+  const fieldCard = zone === "monster_zone";
   const contextualEffectCategory = inferContextualEffectCategory({
     query,
     program,
@@ -1419,13 +1095,12 @@ function buildInitialCardState(query, program, mention, ordinal = 1, instanceCou
     owner: overrides.owner || controller || "unknown",
     zone,
     onField: fieldCard,
-    faceUp: overrides.faceUp ?? (restrictionApplying ? true : inferFaceUp(fieldCard, nearby.full, position)),
-    position: zone === "monster_zone" ? (position || "unknown") : "none",
+    faceUp: overrides.faceUp ?? inferFaceUp(fieldCard, nearby.full, position),
+    position: fieldCard ? (position || "unknown") : "none",
     effectCategory: contextualEffectCategory.category,
     effectCategoryBasis: contextualEffectCategory.basis,
     canChangeToDefense: !cannotChangeToDefense,
     unaffectedByMonsterEffects: unaffected,
-    ...(program.race ? { race: program.race } : {}),
     ...(Number.isFinite(program.defense) ? { defense: program.defense } : {}),
     ...(program.materialRecipe ? { materialRecipe: program.materialRecipe } : {}),
     ...(program.summonKinds?.length ? { summonKinds: [...program.summonKinds] } : {}),
@@ -1620,31 +1295,14 @@ function inferChainOrder(query, mentionIndex) {
   return matches.length ? Number(matches.at(-1)[1]) : 0;
 }
 
-function fusionActivationZones(effectCategory) {
-  if (effectCategory === "monster") return ["monster_zone"];
-  if (effectCategory === "spell") return ["hand", "spell_trap_zone"];
-  if (effectCategory === "trap") return ["spell_trap_zone"];
-  return [];
-}
-
-function effectAllowsActivationZone(effect, zone) {
-  const allowedZones = effect.activationZones || (effect.activationZone ? [effect.activationZone] : []);
-  return !allowedZones.length || allowedZones.includes(zone);
-}
-
 function inferZone(before, after, program) {
   const text = `${before}${after}`;
   if (/(?:召唤|召喚|特殊召唤|特殊召喚)\s*[「『【“"]?\s*$/u.test(before)) return "monster_zone";
-  const applyingRestriction = program.continuousEffects.find((effect) => effect.fieldRestrictions?.length);
-  if (applyingRestriction && /(?:效果)?.{0,10}(?:正在)?(?:适用|適用|applying)/iu.test(text)) {
-    return applyingRestriction.activeWhen?.zone || "unknown";
-  }
   const markers = [
     ["extra_deck", /额外卡组|額外卡組|EX卡组|EX牌组|エクストラデッキ/gu],
     ["hand", /手牌|手卡|手札/gu],
     ["graveyard", /墓地/gu],
     ["banished", /除外区|除外區|除外/gu],
-    ["spell_trap_zone", /魔法(?:与|與|＆|&)?陷阱(?:区域|區域|区|區)|魔法・陷阱区域|魔法＆罠ゾーン/gu],
     ["monster_zone", /场上|場上|怪兽区|怪獸區|怪兽区域|怪獸區域/gu],
   ];
   let latest = { zone: "", index: -1 };
@@ -1654,11 +1312,7 @@ function inferZone(before, after, program) {
     }
   }
   if (latest.zone) return latest.zone;
-  const activationZones = unique(program.activatedEffects.flatMap((effect) => (
-    effect.activationZones || (effect.activationZone ? [effect.activationZone] : [])
-  )));
-  if (activationZones.length === 1) return activationZones[0];
-  if (activationZones.includes("hand")) return "hand";
+  if (/手牌|手卡|手札/u.test(text) && program.activatedEffects.some((effect) => effect.activationZone === "hand")) return "hand";
   return "unknown";
 }
 
@@ -1777,7 +1431,6 @@ function serializeProgram(program) {
     name: program.name,
     names: program.names,
     cardType: program.cardType,
-    race: program.race,
     effectCategory: program.effectCategory,
     effectCategoryBasis: program.effectCategoryBasis,
     sharedRestrictionText: program.sharedRestrictionText,
@@ -1807,9 +1460,6 @@ function declaredActivationTrace(link) {
 }
 
 function serializeCompiledSimulation(programs, compiled, simulation) {
-  const activationLinks = simulation.preparedChainLinks?.length
-    ? simulation.preparedChainLinks
-    : compiled.chainLinks || [];
   return {
     type: "compiled_duel_state_simulation",
     identityModel: "definition_id_and_instance_id_separated",
@@ -1817,14 +1467,13 @@ function serializeCompiledSimulation(programs, compiled, simulation) {
       .filter((program) => compiled.referencedDefinitionIds.includes(program.definitionId))
       .map(serializeProgram),
     initialState: serializeDuelState(compiled.gameState),
-    activationPremises: activationLinks.map((link) => ({
+    activationPremises: simulation.preparedChainLinks.map((link) => ({
       chainLink: link.id,
       status: link.activationPremise,
       sourceInstanceId: link.sourceInstanceId,
       sourceDefinitionId: link.sourceDefinitionId,
     })),
     preparedChainLinks: simulation.preparedChainLinks,
-    compiledChainLinks: compiled.chainLinks,
     finalState: serializeDuelState(simulation.finalGameState),
     stateSnapshots: simulation.stateSnapshots,
     stateInferences: compiled.stateInferences || [],
@@ -1843,7 +1492,6 @@ function serializeDuelState(state = {}) {
       name: card.name,
       controller: card.controller,
       zone: card.zone,
-      race: card.race,
       modifiers: (card.derivedModifiers || []).map((modifier) => modifier.type),
     })),
   };

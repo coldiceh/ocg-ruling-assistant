@@ -1,3 +1,4 @@
+// Frozen software snapshot from Git revision 653a1c0dd.
 export const EFFECT_PRIMITIVE_TYPES = Object.freeze([
   "target_valid_at_resolution",
   "source_available_at_resolution",
@@ -35,8 +36,6 @@ export const EFFECT_ACTIVATION_STAGE_TYPES = Object.freeze([
   "pay_activation_cost",
   "apply_activation_action",
 ]);
-
-export const DESTINATION_REPLACEMENT_TYPES = Object.freeze(["replace_destination"]);
 
 const defaultsByType = Object.freeze({
   target_valid_at_resolution: flags(true, false, false, false, "skip_part"),
@@ -76,35 +75,6 @@ export function createEffectPrimitive(type, input = {}) {
     throw new TypeError(`unknown resolution connector: ${input.connector}`);
   }
   return primitive;
-}
-
-export function createDestinationReplacement(input = {}) {
-  const type = input.type || "replace_destination";
-  if (!DESTINATION_REPLACEMENT_TYPES.includes(type)) {
-    throw new TypeError(`unknown destination replacement: ${type}`);
-  }
-  const intendedToZone = input.intendedToZone || input.intendedZone;
-  const replacementToZone = input.replacementToZone || input.actualToZone || input.replacementZone;
-  if (!intendedToZone || !replacementToZone) {
-    throw new TypeError("destination replacement requires intendedToZone and replacementToZone");
-  }
-  const replacement = {
-    type,
-    intendedToZone: String(intendedToZone),
-    replacementToZone: String(replacementToZone),
-    destinationPlayerRelation: input.destinationPlayerRelation || "any",
-  };
-  for (const [key, value] of Object.entries(input)) {
-    if (value !== undefined && !Object.prototype.hasOwnProperty.call(replacement, key)) replacement[key] = clone(value);
-  }
-  return replacement;
-}
-
-export function normalizeDestinationReplacements(effect = {}) {
-  const replacements = Array.isArray(effect.destinationReplacements)
-    ? effect.destinationReplacements
-    : [];
-  return replacements.map((replacement) => createDestinationReplacement(replacement));
 }
 
 export function normalizePrimitiveSequence(sequence = []) {
