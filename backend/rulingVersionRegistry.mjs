@@ -1,7 +1,7 @@
 import { answerRagRulingQuestion as answerLatestRagRulingQuestion } from "./ragRulingPipeline.mjs";
 
 export const DEFAULT_RULING_VERSION = "latest";
-export const PREVIOUS_RULING_REVISION = "58060bdc6";
+export const PREVIOUS_RULING_REVISION = "653a1c0dd";
 
 export const RULING_VERSIONS = Object.freeze([
   Object.freeze({ id: "latest", label: "最新版", revision: null }),
@@ -77,6 +77,6 @@ export async function answerRagRulingQuestionForVersion({
 }
 
 function loadPreviousPipeline() {
-  previousPipelinePromise ||= import("./versions/58060bdc6/ragRulingPipeline.mjs");
+  previousPipelinePromise ||= import("./versions/653a1c0dd/ragRulingPipeline.mjs");
   return previousPipelinePromise;
 }

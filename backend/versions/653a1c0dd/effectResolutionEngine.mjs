@@ -1,6 +1,6 @@
+// Frozen software snapshot from Git revision 653a1c0dd.
 import {
   connectorDependsOnPreviousSuccess,
-  normalizeDestinationReplacements,
   normalizeEffectActivationStages,
   normalizePrimitiveSequence,
 } from "./effectPrimitives.mjs";
@@ -50,7 +50,7 @@ export function resolvePrimitiveSequence(sequence = [], gameState = {}, options 
       continue;
     }
 
-    const execution = executePrimitive(primitive, state, options);
+    const execution = executePrimitive(primitive, state);
     if (execution.status === "insufficient") {
       insufficient = true;
       previousSucceeded = false;
@@ -222,11 +222,7 @@ export function prepareEffectChain({ gameState = {}, chainLinks = [], continuous
       const stageResult = resolvePrimitiveSequence(
         stage.sequence,
         activationPrimitiveState(state, preparedLink),
-        {
-          afterStep: stabilizeAfterPrimitive(continuousEffects),
-          continuousEffects,
-          movementStage: stage.stage,
-        },
+        { afterStep: stabilizeAfterPrimitive(continuousEffects) },
       );
       stageResults.push({ stage: stage.stage, result: stageResult });
       trace.push({
@@ -397,11 +393,7 @@ export function resolveEffectChain({ gameState = {}, chainLinks = [], continuous
             targets: targetRefs,
           },
         },
-        {
-          afterStep: stabilizeAfterPrimitive(continuousEffects),
-          continuousEffects,
-          movementStage: "resolve_effect_operation",
-        },
+        { afterStep: stabilizeAfterPrimitive(continuousEffects) },
       );
       state = stripResolutionContext(primitiveResult.gameState || state);
       linkResults.push({
@@ -1263,7 +1255,7 @@ function emitIndependentContinuationTrace(item, target, source, ruleTrace) {
   }
 }
 
-function executePrimitive(primitive, gameState, options = {}) {
+function executePrimitive(primitive, gameState) {
   const state = clone(gameState);
   const amount = positiveInteger(primitive.amount ?? primitive.count ?? 1);
   const player = primitive.player || "self";
@@ -1279,11 +1271,6 @@ function executePrimitive(primitive, gameState, options = {}) {
     primitive.sourceCardName || primitive.source?.name || state.resolutionContext?.source?.name,
     primitive.sourceInstanceId || primitive.source?.instanceId || state.resolutionContext?.source?.instanceId,
   );
-  const movementContext = {
-    continuousEffects: Array.isArray(options.continuousEffects) ? options.continuousEffects : [],
-    stage: options.movementStage || "resolve_primitive",
-    primitiveType: primitive.type,
-  };
 
   switch (primitive.type) {
     case "target_valid_at_resolution":
@@ -1298,26 +1285,9 @@ function executePrimitive(primitive, gameState, options = {}) {
       if (!selection.complete || selection.cards.length < amount) {
         return insufficient(selection.reason || "specified_discard_cards_not_available");
       }
+      transitionCards(state, selection.cards, "graveyard", { owner: player, controller: player });
       const discarded = selection.cards;
-      const movement = resolveMoveBatch(state, discarded.map((card) => ({
-        card,
-        intendedToZone: "graveyard",
-        destinationPlayer: player,
-        extra: { owner: player, controller: player },
-        cause: "discard",
-      })), movementContext);
-      if (movement.status !== "applied") return insufficient(movement.reason);
-      const actualZones = uniqueStrings(movement.moves.map((move) => move.actualToZone));
-      return success(state, [{
-        type: "discard_from_hand",
-        player,
-        cardIds: discarded.map(cardId),
-        fromZone: "hand",
-        intendedToZone: "graveyard",
-        actualToZone: actualZones.length === 1 ? actualZones[0] : "mixed",
-        moves: movement.moves,
-        suppressedDestinationReplacementEffectIds: movement.suppressedDestinationReplacementEffectIds,
-      }]);
+      return success(state, [{ type: "discard_from_hand", player, cardIds: discarded.map(cardId) }]);
     }
     case "fusion_summon": {
       const evaluation = evaluateFusionOperation(state, primitive);
@@ -1335,43 +1305,26 @@ function executePrimitive(primitive, gameState, options = {}) {
         .map((item) => findCard(state, item.instanceId, "", item.instanceId))
         .filter(Boolean);
       if (materialCards.length !== evaluation.assignment.length) return insufficient("fusion_material_state_changed");
-      const summonController = source?.controller || "self";
-      const materialMovement = resolveMoveBatch(state, materialCards.map((material) => {
-        const destinationPlayer = knownPlayer(material.owner) || knownPlayer(material.controller) || "self";
-        return {
-          card: material,
-          intendedToZone: "graveyard",
-          destinationPlayer,
-          extra: { owner: destinationPlayer, controller: destinationPlayer },
-          cause: "fusion_material",
-        };
-      }), movementContext);
-      if (materialMovement.status !== "applied") return insufficient(materialMovement.reason);
+      for (const material of materialCards) {
+        transitionCards(state, [material], "graveyard", {
+          owner: knownPlayer(material.owner) || knownPlayer(material.controller) || "self",
+          controller: knownPlayer(material.owner) || knownPlayer(material.controller) || "self",
+        });
+      }
       const candidate = findCard(state, evaluation.candidateInstanceId, "", evaluation.candidateInstanceId);
       if (!candidate) return insufficient("fusion_candidate_state_changed");
-      const summonMovement = resolveMoveBatch(state, [{
-        card: candidate,
-        intendedToZone: "monster_zone",
-        destinationPlayer: summonController,
-        cause: "fusion_summon",
-        extra: {
-          controller: summonController,
-          summoned: true,
-          summonMethod: "fusion",
-          faceUp: true,
-          position: primitive.position || "attack",
-          positionChoices: [primitive.position || "attack"],
-        },
-      }], movementContext);
-      if (summonMovement.status !== "applied") return insufficient(summonMovement.reason);
-      const [summonMove] = summonMovement.moves;
+      transitionCards(state, [candidate], "monster_zone", {
+        controller: source?.controller || "self",
+        summoned: true,
+        summonMethod: "fusion",
+        faceUp: true,
+        position: primitive.position || "attack",
+        positionChoices: [primitive.position || "attack"],
+      });
       return success(state, [{
         type: "fusion_summon",
         cardId: cardInstanceId(candidate),
         materialInstanceIds: materialCards.map(cardInstanceId),
-        materialMoves: materialMovement.moves,
-        summonMove,
-        suppressedDestinationReplacementEffectIds: materialMovement.suppressedDestinationReplacementEffectIds,
       }], [{
         type: "fusion_summon",
         status: "performed",
@@ -1379,14 +1332,11 @@ function executePrimitive(primitive, gameState, options = {}) {
         assignment: evaluation.assignment,
         excludedMaterials: evaluation.excludedMaterials || [],
         usableMaterials: evaluation.usableMaterials || [],
-        materialMoves: materialMovement.moves,
-        summonMove,
-        suppressedDestinationReplacementEffectIds: materialMovement.suppressedDestinationReplacementEffectIds,
       }]);
     }
     case "return_target_to_hand":
       if (!target) return insufficient("target_state_unknown");
-      return moveCard(state, target, "hand", "return_target_to_hand", {}, movementContext);
+      return moveCard(state, target, "hand", "return_target_to_hand");
     case "return_lowest_defense_monster_to_hand": {
       const fieldMonsters = (state.cards || []).filter((card) => (
         normalize(card.zone) === "monster_zone"
@@ -1402,11 +1352,11 @@ function executePrimitive(primitive, gameState, options = {}) {
       const tied = candidates.filter((card) => Number(card.defense ?? card.def) === lowest);
       const selected = target && tied.some((card) => cardId(card) === cardId(target)) ? target : tied.length === 1 ? tied[0] : null;
       if (!selected) return insufficient("lowest_defense_tie_choice_unknown");
-      return moveCard(state, selected, "hand", "return_lowest_defense_monster_to_hand", {}, movementContext);
+      return moveCard(state, selected, "hand", "return_lowest_defense_monster_to_hand");
     }
     case "return_card_to_deck":
       if (!target) return insufficient("target_state_unknown");
-      return moveCard(state, target, "deck", "return_card_to_deck", {}, movementContext);
+      return moveCard(state, target, "deck", "return_card_to_deck");
     case "special_summon_source":
       if (!source) return insufficient("source_state_unknown");
       {
@@ -1424,7 +1374,7 @@ function executePrimitive(primitive, gameState, options = {}) {
         faceUp: true,
           position,
           positionChoices,
-      }, movementContext);
+      });
       }
     case "set_position":
       if (!target) return insufficient("target_state_unknown");
@@ -1439,7 +1389,7 @@ function executePrimitive(primitive, gameState, options = {}) {
       }
     case "place_target_as_continuous_trap":
       if (!target) return insufficient("target_state_unknown");
-      return moveCard(state, target, "spell_trap_zone", "place_target_as_continuous_trap", { cardTypeOverride: "continuous_trap" }, movementContext);
+      return moveCard(state, target, "spell_trap_zone", "place_target_as_continuous_trap", { cardTypeOverride: "continuous_trap" });
     case "apply_damage": {
       if (!Number.isFinite(state.lp?.[player]) || !Number.isFinite(amount)) return insufficient("life_points_or_damage_amount_unknown");
       const before = state.lp[player];
@@ -1458,10 +1408,10 @@ function executePrimitive(primitive, gameState, options = {}) {
     }
     case "destroy_target":
       if (!target) return insufficient("target_state_unknown");
-      return moveCard(state, target, "graveyard", "destroy_target", { destroyed: true }, movementContext);
+      return moveCard(state, target, "graveyard", "destroy_target", { destroyed: true });
     case "banish_target":
       if (!target) return insufficient("target_state_unknown");
-      return moveCard(state, target, "banished", "banish_target", { banished: true }, movementContext);
+      return moveCard(state, target, "banished", "banish_target", { banished: true });
     case "no_op_failed_part":
       return { status: "skipped", reason: primitive.reason || "declared_failed_part", gameState: state, stateChanges: [] };
     default:
@@ -1469,201 +1419,43 @@ function executePrimitive(primitive, gameState, options = {}) {
   }
 }
 
-function moveCard(state, card, toZone, type, extra = {}, movementContext = {}) {
+function moveCard(state, card, toZone, type, extra = {}) {
   const fromZone = card.zone || "unknown";
-  const destinationPlayer = knownPlayer(extra.owner) || knownPlayer(card.owner) || knownPlayer(card.controller) || "self";
-  const movement = resolveMoveBatch(state, [{
-    card,
-    intendedToZone: toZone,
-    destinationPlayer,
-    extra,
-    cause: type,
-  }], movementContext);
-  if (movement.status !== "applied") return insufficient(movement.reason);
-  const [move] = movement.moves;
+  transitionCards(state, [card], toZone, extra);
   return success(state, [{
     type,
     cardId: cardId(card),
     instanceId: cardInstanceId(card),
     definitionId: cardDefinitionId(card),
     fromZone,
-    toZone: move.actualToZone,
-    intendedToZone: move.intendedToZone,
-    actualToZone: move.actualToZone,
-    destinationPlayer: move.actualDestinationPlayer,
-    replacementEffectId: move.replacementEffectId,
-    replacementId: move.replacementId,
-    move,
+    toZone,
   }]);
-}
-
-export function resolveMoveBatch(state, inputs = [], context = {}) {
-  const plans = [];
-  for (const input of inputs || []) {
-    const card = input?.card;
-    const intendedToZone = normalize(input?.intendedToZone || input?.toZone);
-    if (!card || !intendedToZone || intendedToZone === "unknown") {
-      return { status: "insufficient", reason: "movement_card_or_destination_unknown" };
-    }
-    const intendedDestinationPlayer = knownPlayer(input.destinationPlayer)
-      || knownPlayer(input.extra?.owner)
-      || knownPlayer(card.owner)
-      || knownPlayer(card.controller)
-      || "self";
-    plans.push({
-      card,
-      instanceId: cardInstanceId(card),
-      definitionId: cardDefinitionId(card),
-      fromZone: normalize(card.zone || "unknown"),
-      intendedToZone,
-      intendedDestinationPlayer,
-      actualToZone: intendedToZone,
-      actualDestinationPlayer: intendedDestinationPlayer,
-      cause: String(input.cause || context.primitiveType || "move"),
-      stage: String(input.stage || context.stage || "resolve_primitive"),
-      extra: clone(input.extra || {}),
-      replacementMatches: [],
-    });
-  }
-
-  const activeReplacementEffects = [];
-  const suppressedDestinationReplacementEffectIds = [];
-  for (const effect of context.continuousEffects || []) {
-    let replacements;
-    try {
-      replacements = normalizeDestinationReplacements(effect);
-    } catch {
-      return { status: "insufficient", reason: "destination_replacement_definition_invalid" };
-    }
-    if (!replacements.length) continue;
-    const active = continuousEffectActive(effect, state);
-    if (active === null) return { status: "insufficient", reason: "destination_replacement_source_state_unknown" };
-    if (!active) continue;
-    const source = findCard(state, effect.sourceCardId, effect.sourceCardName, effect.sourceInstanceId);
-    if (!source) continue;
-    const sourceMove = plans.find((plan) => plan.instanceId === cardInstanceId(source));
-    if (sourceMove && moveLeavesContinuousScope(effect, sourceMove)) {
-      suppressedDestinationReplacementEffectIds.push(String(effect.id || cardInstanceId(source)));
-      continue;
-    }
-    activeReplacementEffects.push({ effect, source, replacements });
-  }
-
-  for (const plan of plans) {
-    for (const entry of activeReplacementEffects) {
-      for (const replacement of entry.replacements) {
-        const match = destinationReplacementMatches(plan, replacement, entry.source);
-        if (match === null) return { status: "insufficient", reason: "destination_replacement_scope_unknown" };
-        if (!match) continue;
-        plan.replacementMatches.push({
-          replacementToZone: normalize(replacement.replacementToZone),
-          effectId: String(entry.effect.id || ""),
-          replacementId: String(replacement.id || replacement.type || "replace_destination"),
-          sourceInstanceId: cardInstanceId(entry.source),
-        });
-      }
-    }
-    const replacementZones = uniqueStrings(plan.replacementMatches.map((item) => item.replacementToZone));
-    if (replacementZones.length > 1) {
-      return { status: "insufficient", reason: "conflicting_destination_replacements" };
-    }
-    if (replacementZones.length === 1) plan.actualToZone = replacementZones[0];
-  }
-
-  for (const plan of plans) {
-    applyCardTransition(state, plan.card, plan.actualToZone, plan.extra);
-  }
-  synchronizeKnownZoneViews(state);
-
-  return {
-    status: "applied",
-    gameState: state,
-    suppressedDestinationReplacementEffectIds: uniqueStrings(suppressedDestinationReplacementEffectIds),
-    moves: plans.map((plan) => {
-      const [primary] = plan.replacementMatches;
-      return {
-        instanceId: plan.instanceId,
-        definitionId: plan.definitionId,
-        fromZone: plan.fromZone,
-        intendedToZone: plan.intendedToZone,
-        actualToZone: plan.actualToZone,
-        intendedDestinationPlayer: plan.intendedDestinationPlayer,
-        actualDestinationPlayer: plan.actualDestinationPlayer,
-        cause: plan.cause,
-        stage: plan.stage,
-        ...(primary ? {
-          replacementEffectId: primary.effectId,
-          replacementId: primary.replacementId,
-          replacementSourceInstanceId: primary.sourceInstanceId,
-          replacementEffectIds: uniqueStrings(plan.replacementMatches.map((item) => item.effectId)),
-          replacementIds: uniqueStrings(plan.replacementMatches.map((item) => item.replacementId)),
-        } : {}),
-      };
-    }),
-  };
-}
-
-function moveLeavesContinuousScope(effect, plan) {
-  const activeWhen = effect.activeWhen || {};
-  if (activeWhen.zone && normalize(activeWhen.zone) !== plan.intendedToZone) return true;
-  if (typeof activeWhen.faceUp === "boolean" && activeWhen.faceUp && !isFieldZone(plan.intendedToZone)) return true;
-  if (activeWhen.position && plan.intendedToZone !== "monster_zone") return true;
-  return false;
-}
-
-function destinationReplacementMatches(plan, replacement, source) {
-  if (normalize(replacement.intendedToZone) !== plan.intendedToZone) return false;
-  if (replacement.fromZone && normalize(replacement.fromZone) !== plan.fromZone) return false;
-  if (replacement.fromZones?.length && !replacement.fromZones.map(normalize).includes(plan.fromZone)) return false;
-  if (replacement.cause && String(replacement.cause) !== plan.cause) return false;
-  if (replacement.causes?.length && !replacement.causes.map(String).includes(plan.cause)) return false;
-  if (replacement.selector) {
-    const selectorMatch = matchesCardSelectorTriState(plan.card, replacement.selector);
-    if (selectorMatch !== true) return selectorMatch;
-  }
-  const relation = replacement.destinationPlayerRelation || "any";
-  if (relation === "any") return true;
-  const sourceController = knownPlayer(source.controller);
-  if (!sourceController || !plan.intendedDestinationPlayer) return null;
-  if (relation === "same_as_source_controller") return plan.intendedDestinationPlayer === sourceController;
-  if (relation === "opponent_of_source_controller") return plan.intendedDestinationPlayer === opponentOf(sourceController);
-  return null;
-}
-
-function opponentOf(player) {
-  if (player === "self") return "opponent";
-  if (player === "opponent") return "self";
-  return "";
 }
 
 function transitionCards(state, cards, toZone, extra = {}) {
   for (const card of cards) {
-    applyCardTransition(state, card, toZone, extra);
+    card.zone = toZone;
+    if (isFieldZone(toZone)) {
+      card.onField = true;
+      card.faceUp = extra.faceUp ?? (toZone === "monster_zone" ? card.faceUp ?? true : true);
+      if (toZone !== "monster_zone") card.position = "none";
+    } else {
+      card.onField = false;
+      card.faceUp = false;
+      card.position = "none";
+    }
+    if (zoneCollectionFor(toZone)) {
+      const destinationPlayer = knownPlayer(extra.owner)
+        || knownPlayer(card.owner)
+        || knownPlayer(card.controller)
+        || "self";
+      card.owner = destinationPlayer;
+      card.controller = knownPlayer(extra.controller) || destinationPlayer;
+      ensureZoneView(state, toZone, destinationPlayer);
+    }
+    Object.assign(card, extra);
   }
   synchronizeKnownZoneViews(state);
-}
-
-function applyCardTransition(state, card, toZone, extra = {}) {
-  card.zone = toZone;
-  if (isFieldZone(toZone)) {
-    card.onField = true;
-    card.faceUp = extra.faceUp ?? (toZone === "monster_zone" ? card.faceUp ?? true : true);
-    if (toZone !== "monster_zone") card.position = "none";
-  } else {
-    card.onField = false;
-    card.faceUp = false;
-    card.position = "none";
-  }
-  if (zoneCollectionFor(toZone)) {
-    const destinationPlayer = knownPlayer(extra.owner)
-      || knownPlayer(card.owner)
-      || knownPlayer(card.controller)
-      || "self";
-    card.owner = destinationPlayer;
-    card.controller = knownPlayer(extra.controller) || destinationPlayer;
-    ensureZoneView(state, toZone, destinationPlayer);
-  }
-  Object.assign(card, extra);
 }
 
 function selectCardsByIds(cards, ids, max) {

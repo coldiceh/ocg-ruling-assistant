@@ -1,5 +1,6 @@
-import { requestOcgEngineSimulation } from "./ocgEngineClient.mjs";
-import { autoEngineSimulationEnabled, buildBestEffortEngineScenario } from "./ocgScenarioPlanner.mjs";
+// Frozen software snapshot from Git revision 653a1c0dd.
+import { requestOcgEngineSimulation } from "../../ocgEngineClient.mjs";
+import { autoEngineSimulationEnabled, buildBestEffortEngineScenario } from "../../ocgScenarioPlanner.mjs";
 import { extractRagCards, normalizeCardKey } from "./ragCardExtractor.mjs";
 import { evidenceBucketsToList, loadRagData, retrieveRagEvidence } from "./ragEvidenceRetriever.mjs";
 import {
@@ -7,11 +8,11 @@ import {
   callRagModel,
   callRulebookGroundingModel,
   callRuleQueryExtractionModel,
-} from "./ragModelClient.mjs";
+} from "../../ragModelClient.mjs";
 import { buildRagRulingPromptBundle, RAG_ANSWER_LEVELS } from "./ragRulingPrompt.mjs";
 import { analyzeEffectStateTransition, attachUserQueryToCardTexts } from "./effectStateReasoner.mjs";
 import { hasNumberedCardIdentityConflict } from "./numberedCardIdentity.mjs";
-import { analyzeDeterministicOperationLegality } from "./operationLegalityAnalyzer.mjs";
+import { analyzeDeterministicOperationLegality } from "../../operationLegalityAnalyzer.mjs";
 
 export async function answerRagRulingQuestion({
   question,
@@ -106,7 +107,6 @@ export async function answerRagRulingQuestion({
     cards: data.cards,
     records: data.records,
     qaRecords: data.qaRecords,
-    enableLiveOfficialQa: true,
     ruleSearchQueries: ruleQueryModel.queries || [],
     env,
     fetchImpl,

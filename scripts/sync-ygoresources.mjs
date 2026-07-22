@@ -1,5 +1,5 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildCardAliasIndex, buildQaIndex } from "../backend/dataIndex.mjs";
 
@@ -24,6 +24,8 @@ const warnings = [];
 const sourceSyncWarnings = [];
 const aliasWarnings = [];
 const parseFailedWarnings = [];
+let observedSourceRevision = null;
+let qaSyncSelectionStats = {};
 
 async function main() {
   await mkdir(dataDir, { recursive: true });
@@ -37,15 +39,15 @@ async function main() {
   const nameIndexes = await loadNameIndexes(languages);
   const cardTargets = buildCardTargets(trackedCards, nameIndexes);
   const cardPayloads = await loadCards(cardTargets, nameIndexes);
+  const manifest = await loadManifest(previousMeta.sourceRevision);
   let cards = cardPayloads.map(({ record }) => record);
-  let rulings = await loadRulings(cards, cardPayloads);
+  let rulings = await loadRulings(cards, cardPayloads, manifest.changedQaIds);
   if (sourceSyncWarnings.length || !syncAllReleasedCards) {
     cards = mergeById(previousCards.records || [], cards);
     rulings = mergeById(previousRulings.records || [], rulings);
   }
   const cardAliasIndex = buildCardAliasIndex(cards);
   const qaIndex = buildQaIndex(rulings, cards);
-  const manifest = await loadManifest(previousMeta.sourceRevision);
 
   const generatedAt = new Date().toISOString();
   const sourceFreshness = sourceSyncWarnings.length ? "stale" : "fresh";
@@ -90,7 +92,7 @@ async function main() {
     freshnessDays,
     sourceFreshness,
     previousSourceRevision: previousMeta.sourceRevision || null,
-    sourceRevision: manifest.revision || previousMeta.sourceRevision || null,
+    sourceRevision: observedSourceRevision || manifest.revision || previousMeta.sourceRevision || null,
     lastSuccessfulSyncAt: sourceSyncWarnings.length ? (previousMeta.lastSuccessfulSyncAt || previousMeta.generatedAt || null) : generatedAt,
     lastFailedSyncAt: sourceSyncWarnings.length ? generatedAt : (previousMeta.lastFailedSyncAt || null),
     syncFailureCount: sourceSyncWarnings.length ? Number(previousMeta.syncFailureCount || 0) + 1 : 0,
@@ -135,6 +137,7 @@ async function main() {
     syncOnlyReleasedCards,
     maxCards,
     maxQaTotal,
+    qaSyncSelection: qaSyncSelectionStats,
     warnings,
     changedPaths: manifest.changedPaths,
   });
@@ -219,27 +222,33 @@ async function loadCards(cards, nameIndexes) {
   return dedupeBy(results.filter(Boolean), (entry) => String(entry.record.id || entry.record.name));
 }
 
-async function loadRulings(cards, cardPayloads) {
+async function loadRulings(cards, cardPayloads, changedQaIds = []) {
   const records = [];
   records.push(...buildCardTextRecords(cardPayloads));
   records.push(...buildFaqRecords(cardPayloads));
-
-  const qaIds = new Set();
-  for (const entry of cardPayloads) {
-    for (const id of collectQaIds(entry.payload?.qaIndex || [])) {
-      qaIds.add(id);
-    }
-  }
-
+  let recentQaIds = [];
   try {
     const payload = await fetchJson("/data/meta/recent/ja/qa");
-    for (const id of collectQaIds(payload).slice(0, maxRecentQa)) qaIds.add(id);
+    recentQaIds = collectQaIds(payload).slice(0, maxRecentQa);
   } catch (error) {
     addSourceWarning(`Recent Q&A failed: ${formatError(error)}`);
   }
 
   const qaLimit = Math.min(maxQaTotal, Math.max(maxRecentQa, cards.length * maxCardQaPerCard));
-  for (const id of [...qaIds].slice(0, qaLimit)) {
+  const selection = selectQaIdsForSync({
+    changedQaIds,
+    recentQaIds,
+    cardQaIds: rankCardQaIds(cardPayloads, maxCardQaPerCard),
+    limit: qaLimit,
+  });
+  qaSyncSelectionStats = {
+    selectedCount: selection.selectedCount,
+    discoveredCount: selection.discoveredCount,
+    truncatedCount: selection.truncatedCount,
+    changedSelectedCount: selection.changedSelectedCount,
+    recentSelectedCount: selection.recentSelectedCount,
+  };
+  for (const id of selection.ids) {
     try {
       const payload = await fetchJson(`/data/qa/${id}`);
       const record = normalizeQa(payload, id, cards);
@@ -253,18 +262,77 @@ async function loadRulings(cards, cardPayloads) {
 }
 
 async function loadManifest(previousRevision) {
-  if (!previousRevision) return { revision: null, changedPaths: [] };
+  if (!previousRevision) return { revision: observedSourceRevision, changedPaths: [], changedQaIds: [] };
 
   try {
     const payload = await fetchJson(`/manifest/${previousRevision}`);
-    return {
-      revision: payload.revision || payload.latestRevision || payload.currentRevision || null,
-      changedPaths: payload.changed || payload.paths || payload.data || [],
-    };
+    return parseManifestPayload(payload, { revision: observedSourceRevision });
   } catch (error) {
     addSourceWarning(`Manifest check failed: ${formatError(error)}`);
-    return { revision: previousRevision, changedPaths: [] };
+    return { revision: previousRevision, changedPaths: [], changedQaIds: [] };
   }
+}
+
+export function parseManifestPayload(payload = {}, { revision = null } = {}) {
+  const changedPaths = [];
+  const directPaths = Array.isArray(payload.changed)
+    ? payload.changed
+    : Array.isArray(payload.paths)
+      ? payload.paths
+      : [];
+  changedPaths.push(...directPaths.map(String));
+  const data = payload.data && typeof payload.data === "object" && !Array.isArray(payload.data)
+    ? payload.data
+    : {};
+  for (const [kind, entries] of Object.entries(data)) {
+    if (Array.isArray(entries)) {
+      for (const id of entries) changedPaths.push(`/data/${kind}/${id}`);
+      continue;
+    }
+    for (const id of Object.keys(entries || {})) changedPaths.push(`/data/${kind}/${id}`);
+  }
+  const uniquePaths = [...new Set(changedPaths.filter(Boolean))];
+  return {
+    revision: normalizeRevision(revision || payload.revision || payload.latestRevision || payload.currentRevision),
+    changedPaths: uniquePaths,
+    changedQaIds: uniquePaths
+      .map((path) => String(path).match(/\/data\/qa\/(\d+)/u)?.[1])
+      .filter(Boolean),
+  };
+}
+
+export function rankCardQaIds(cardPayloads = [], perCardLimit = Infinity) {
+  const counts = new Map();
+  const firstSeen = new Map();
+  let cursor = 0;
+  for (const entry of cardPayloads || []) {
+    const ids = collectQaIds(entry?.payload?.qaIndex || []).slice(0, perCardLimit);
+    for (const id of ids) {
+      counts.set(id, (counts.get(id) || 0) + 1);
+      if (!firstSeen.has(id)) firstSeen.set(id, cursor++);
+    }
+  }
+  return [...counts.keys()].sort((left, right) => (
+    counts.get(right) - counts.get(left) || firstSeen.get(left) - firstSeen.get(right)
+  ));
+}
+
+export function selectQaIdsForSync({ changedQaIds = [], recentQaIds = [], cardQaIds = [], limit = Infinity } = {}) {
+  const changed = uniqueIds(changedQaIds);
+  const recent = uniqueIds(recentQaIds);
+  const card = uniqueIds(cardQaIds);
+  const discovered = uniqueIds([...changed, ...recent, ...card]);
+  const safeLimit = Number.isFinite(Number(limit)) && Number(limit) >= 0 ? Math.floor(Number(limit)) : discovered.length;
+  const ids = discovered.slice(0, safeLimit);
+  const selected = new Set(ids);
+  return {
+    ids,
+    selectedCount: ids.length,
+    discoveredCount: discovered.length,
+    truncatedCount: Math.max(0, discovered.length - ids.length),
+    changedSelectedCount: changed.filter((id) => selected.has(id)).length,
+    recentSelectedCount: recent.filter((id) => selected.has(id)).length,
+  };
 }
 
 function resolveCardId(item, indexes) {
@@ -547,7 +615,20 @@ async function fetchJson(path) {
     },
   });
   if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+  const revision = normalizeRevision(response.headers.get("x-cache-revision"));
+  if (revision && (!observedSourceRevision || Number(revision) > Number(observedSourceRevision))) {
+    observedSourceRevision = revision;
+  }
   return response.json();
+}
+
+function normalizeRevision(value) {
+  const text = String(value || "").trim();
+  return /^\d+$/u.test(text) ? text : null;
+}
+
+function uniqueIds(values) {
+  return [...new Set((values || []).map((value) => String(value || "")).filter((value) => /^\d+$/u.test(value)))];
 }
 
 async function readJsonFile(path, fallback) {
@@ -629,7 +710,7 @@ function formatError(error) {
   return error instanceof Error ? error.message : String(error);
 }
 
-main().catch(async (error) => {
+if (resolve(process.argv[1] || "") === fileURLToPath(import.meta.url)) main().catch(async (error) => {
   console.error(error);
   const previous = await readJsonFile(join(dataDir, "snapshot-meta.json"), {});
   const failedAt = new Date().toISOString();

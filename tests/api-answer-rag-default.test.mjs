@@ -35,7 +35,7 @@ test("api_answer_reports_engine_availability_from_backend_configuration", async 
     assert.equal(disabled.payload.defaultRulingVersion, "latest");
     assert.deepEqual(disabled.payload.rulingVersions, [
       { id: "latest", label: "最新版", revision: null },
-      { id: "previous", label: "上一版", revision: "58060bdc6" },
+      { id: "previous", label: "上一版", revision: "653a1c0dd" },
     ]);
 
     process.env.OCG_ENGINE_URL = "https://engine.example.test";

@@ -1,3 +1,4 @@
+// Frozen software snapshot from Git revision 653a1c0dd.
 import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -5,13 +6,12 @@ import { searchCards } from "./baigeCardProvider.mjs";
 import { createLocalCardDataProvider } from "./cardDataProvider.mjs";
 import { normalizeCardKey } from "./ragCardExtractor.mjs";
 import { searchOfficialQaEvidence } from "./officialQaMatcher.mjs";
-import { normalizeOfficialResponses } from "./officialResponses.mjs";
-import { isRulebookRecord, retrieveRulebookPassages } from "./rulebookPassageRetriever.mjs";
+import { normalizeOfficialResponses } from "../../officialResponses.mjs";
+import { isRulebookRecord, retrieveRulebookPassages } from "../../rulebookPassageRetriever.mjs";
 import { hasNumberedCardIdentityConflict } from "./numberedCardIdentity.mjs";
-import { compileRuleScenario } from "./ruleScenarioCompiler.mjs";
-import { retrieveLiveOfficialQa } from "./liveOfficialQaProvider.mjs";
+import { compileRuleScenario } from "../../ruleScenarioCompiler.mjs";
 
-const projectRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
+const projectRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 const defaultDataDir = join(projectRoot, "data");
 const dataCache = new Map();
 const emptyDataArray = Object.freeze([]);
@@ -31,14 +31,10 @@ export async function retrieveRagEvidence({
   records,
   qaRecords,
   ruleSearchQueries = [],
-  enableLiveOfficialQa = false,
   maxPerBucket = 5,
   env = {},
   fetchImpl = globalThis.fetch,
 } = {}) {
-  if (enableLiveOfficialQa && !isDisabled(env.RAG_LIVE_OFFICIAL_QA)) {
-    env = { ...env, RAG_LIVE_OFFICIAL_QA: "true" };
-  }
   const retrievalStartedAt = Date.now();
   const timingsMs = {};
   let stageStartedAt = Date.now();
@@ -65,7 +61,7 @@ export async function retrieveRagEvidence({
     enrichCardsWithBaige(dedupeCards([...resolvedCards, ...fuzzyCards]), { fetchImpl, env, limits, warnings: retrievalWarnings, debug: baigeDebug }),
     resolveUnresolvedMentionCardsWithBaige(unresolvedForBaige, { fetchImpl, env, limits, warnings: retrievalWarnings, debug: baigeDebug }),
   ]);
-  let retrievalCards = dedupeCards([...enrichedLocalCards, ...baigeResolvedCards]).slice(0, limits.maxCards);
+  const retrievalCards = dedupeCards([...enrichedLocalCards, ...baigeResolvedCards]).slice(0, limits.maxCards);
   timingsMs.cardResolution = Date.now() - stageStartedAt;
   const remainingUnresolvedMentions = unresolvedMentionsAfterRetrieval(cardResolution.unresolvedMentions || [], retrievalCards);
   if (fuzzyCards.length) retrievalWarnings.push(`unresolved_mentions_fuzzy_matched:${fuzzyCards.map((card) => card.name).join(",")}`);
@@ -103,37 +99,12 @@ export async function retrieveRagEvidence({
   if (rulebookCandidates.length) retrievalWarnings.push(`rulebook_passages_retrieved:${rulebookCandidates.length}`);
 
   stageStartedAt = Date.now();
-  const localOfficialMatches = searchOfficialQaEvidence({
+  const officialMatches = searchOfficialQaEvidence({
     question: userQuery,
     records: scopedRecordBuckets.officialQa,
     resolvedCards: retrievalCards,
     limit: Math.max(20, limits.maxOfficialQa * 4),
   });
-  let liveOfficialQa = { records: [], cardMetadata: [], warnings: [], debug: {} };
-  const liveQaEnabled = !isDisabled(env.RAG_LIVE_OFFICIAL_QA)
-    && (!cards && !records && !qaRecords || isEnabled(env.RAG_LIVE_OFFICIAL_QA));
-  if (!localOfficialMatches.exact.length && liveQaEnabled && retrievalCards.length >= 2) {
-    liveOfficialQa = await retrieveLiveOfficialQa({
-      resolvedCards: retrievalCards,
-      fetchImpl,
-      baseUrl: env.YGORESOURCES_BASE_URL || "https://db.ygoresources.com",
-      timeoutMs: readPositiveNumber(env.RAG_LIVE_QA_TIMEOUT_MS, 1800),
-      cacheTtlMs: readPositiveNumber(env.RAG_LIVE_QA_CACHE_TTL_MS, 10 * 60 * 1000),
-      maxCandidates: readPositiveNumber(env.RAG_LIVE_QA_MAX_CANDIDATES, 8),
-    });
-    retrievalWarnings.push(...(liveOfficialQa.warnings || []));
-    if (liveOfficialQa.records?.length) retrievalWarnings.push(`live_official_qa_retrieved:${liveOfficialQa.records.length}`);
-    const metadataById = new Map((liveOfficialQa.cardMetadata || []).map((item) => [String(item.id), item]));
-    retrievalCards = retrievalCards.map((card) => ({ ...card, ...(metadataById.get(String(card.id || card.cardId)) || {}) }));
-  }
-  const officialMatches = liveOfficialQa.records?.length
-    ? searchOfficialQaEvidence({
-      question: userQuery,
-      records: dedupeBy([...scopedRecordBuckets.officialQa, ...liveOfficialQa.records], stableRecordKey),
-      resolvedCards: retrievalCards,
-      limit: Math.max(20, limits.maxOfficialQa * 4),
-    })
-    : localOfficialMatches;
   timingsMs.officialQa = Date.now() - stageStartedAt;
   const officialQaDirectCandidates = officialMatches.exact
     .filter((match) => isOfficialQaRecord(match.record))
@@ -246,7 +217,6 @@ export async function retrieveRagEvidence({
       baigeSearchCount: baigeDebug.searchCount,
       baigeCacheHitCount: baigeDebug.cacheHitCount,
       baigeWarnings: baigeDebug.warnings,
-      liveOfficialQa: liveOfficialQa.debug || {},
     },
   };
 }
@@ -1263,14 +1233,6 @@ function readPositiveNumber(value, fallback) {
 function readPositiveDecimal(value, fallback) {
   const number = Number(value);
   return Number.isFinite(number) && number > 0 ? number : fallback;
-}
-
-function isEnabled(value) {
-  return /^(?:1|true|yes|on)$/iu.test(String(value || "").trim());
-}
-
-function isDisabled(value) {
-  return /^(?:0|false|no|off)$/iu.test(String(value || "").trim());
 }
 
 async function readJson(path, fallback) {
