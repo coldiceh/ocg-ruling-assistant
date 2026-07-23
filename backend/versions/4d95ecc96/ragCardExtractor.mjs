@@ -1,3 +1,4 @@
+// Frozen software snapshot from Git revision 4d95ecc96.
 import {
   canonicalizeNumberedCardPrefixes,
   extractNumberedCardIdentities,
@@ -14,8 +15,6 @@ const aliasKeysByLengthCache = new WeakMap();
 const cardAliasesCache = new WeakMap();
 const supplementalCardIndexesCache = new WeakMap();
 const cardSeriesKeysCache = new WeakMap();
-const DISTINCTIVE_CJK_FRAGMENT_MIN_LENGTH = 4;
-const DISTINCTIVE_FRAGMENT_MAX_LENGTH = 12;
 
 const QUOTED_MENTION_PATTERNS = Object.freeze([
   /「([^」]{2,80})」/gu,
@@ -50,14 +49,6 @@ export function extractRagCards(userQuery, { cards = [], maxCards = 6, modelCard
   ];
   const unquotedMentionSeeds = extractUnquotedCardMentionCandidates(query)
     .map((input) => ({ input, reason: "unquoted_candidate_not_found", source: "unquoted_heuristic" }));
-  const distinctiveMentionSeeds = extractContextualDistinctiveMentionCandidates(query)
-    .filter((input) => findUniqueDistinctiveFragmentCandidate(cards, input))
-    .map((input) => ({
-      input,
-      reason: "contextual_distinctive_fragment_not_found",
-      source: "contextual_distinctive_fragment",
-    }));
-  exactMentionSeeds.push(...distinctiveMentionSeeds);
   const resolved = [];
   const unresolvedMentions = [];
   const ambiguousMentions = [];
@@ -70,7 +61,6 @@ export function extractRagCards(userQuery, { cards = [], maxCards = 6, modelCard
     const candidates = findCardsByNumberedIdentity(cards, identity);
     const detailedSeeds = exactMentionSeeds.filter((seed) => (
       seed.source !== "model_card_name_extractor"
-      && seed.source !== "contextual_distinctive_fragment"
       && extractNumberedCardIdentities(seed.input).some((candidate) => sameNumberedIdentity(candidate, identity))
       && numberedMentionRemainder(seed.input, identity)
     ));
@@ -114,19 +104,14 @@ export function extractRagCards(userQuery, { cards = [], maxCards = 6, modelCard
     const singleEditCandidate = candidates.length
       ? null
       : findUniqueSingleEditCandidate(aliasIndex, mention) || findUniqueNearEditCandidate(aliasIndex, mention);
-    const distinctiveFragmentCandidate = candidates.length || singleEditCandidate
-      ? null
-      : findUniqueDistinctiveFragmentCandidate(cards, mention);
     if (candidates.length === 1) {
       addResolved(resolved, seenCards, candidates[0], mention, confidenceForMentionSeed(seed, 0.98));
     } else if (candidates.length > 1) {
       ambiguousMentions.push(buildAmbiguousMention(mention, candidates));
     } else if (singleEditCandidate) {
       addResolved(resolved, seenCards, singleEditCandidate, mention, confidenceForSingleEditMention(seed));
-    } else if (distinctiveFragmentCandidate) {
-      addResolved(resolved, seenCards, distinctiveFragmentCandidate, mention, 0.91);
     } else if (looksLikeCardMention(mention) && !numberedMentionAlreadyResolved(mention, resolved)) {
-      if (seed.source !== "contextual_distinctive_fragment") unresolvedMentions.push(buildUnresolvedMention(seed));
+      unresolvedMentions.push(buildUnresolvedMention(seed));
     }
   }
 
@@ -220,7 +205,6 @@ export function buildAliasIndex(cards = []) {
   const index = new Map();
   const numberedIdentityIndex = new Map();
   const shortMentionIndex = new Map();
-  const distinctiveFragmentIndex = new Map();
   for (const card of sourceCards) {
     const aliases = cardAliases(card);
     const seenNumberedKeys = new Set();
@@ -249,12 +233,6 @@ export function buildAliasIndex(cards = []) {
         shortCandidates.push(item);
         shortMentionIndex.set(shortKey, shortCandidates);
       }
-
-      for (const fragmentKey of distinctiveFragments(alias)) {
-        const fragmentCandidates = distinctiveFragmentIndex.get(fragmentKey) || [];
-        fragmentCandidates.push(item);
-        distinctiveFragmentIndex.set(fragmentKey, fragmentCandidates);
-      }
     }
   }
   for (const [key, candidates] of index.entries()) {
@@ -266,9 +244,6 @@ export function buildAliasIndex(cards = []) {
   for (const [key, candidates] of shortMentionIndex.entries()) {
     shortMentionIndex.set(key, dedupeBy(candidates, (candidate) => cardIdentity(candidate.card)));
   }
-  for (const [key, candidates] of distinctiveFragmentIndex.entries()) {
-    distinctiveFragmentIndex.set(key, dedupeBy(candidates, (candidate) => cardIdentity(candidate.card)));
-  }
   const keysByLength = new Map();
   for (const key of index.keys()) {
     const keys = keysByLength.get(key.length) || [];
@@ -277,7 +252,7 @@ export function buildAliasIndex(cards = []) {
   }
   aliasIndexCache.set(sourceCards, index);
   aliasKeysByLengthCache.set(index, keysByLength);
-  supplementalCardIndexesCache.set(sourceCards, { numberedIdentityIndex, shortMentionIndex, distinctiveFragmentIndex });
+  supplementalCardIndexesCache.set(sourceCards, { numberedIdentityIndex, shortMentionIndex });
   return index;
 }
 
@@ -364,31 +339,6 @@ export function extractUnquotedCardMentionCandidates(query) {
       if (candidate && hasCardNameSignal(candidate)) candidates.push(candidate);
     }
   }
-  return dedupeBy(candidates, normalizeCardKey).slice(0, 12);
-}
-
-function extractContextualDistinctiveMentionCandidates(query) {
-  const text = String(query || "").normalize("NFKC");
-  const candidates = [];
-
-  for (const match of text.matchAll(/(?<![A-Za-z0-9])([A-Za-z0-9]{3,12})(?![A-Za-z0-9])/gu)) {
-    const token = String(match[1] || "");
-    if (!/[A-Za-z]/u.test(token) || !/\d/u.test(token)) continue;
-    if (/^(?:(?:c|cl|chain|no|cno|sno)\d+)$/iu.test(token)) continue;
-    candidates.push(token);
-  }
-
-  const actionPatterns = [
-    /(?:发动|發動|使用|适用|適用)\s*([\p{L}\p{N}・·･．.\-－—–\s]{2,30}?)(?=\s*(?:(?:的)?[①②③④⑤⑥⑦⑧⑨⑩]?(?:效果|效应|效應))?\s*(?:吗|嗎|能否|是否|可否|，|。|；|;|$))/giu,
-    /(?:场上|場上|怪兽区域|怪獸區域)\s*(?:有|存在)?\s*(?:一[个個张張只隻])?\s*([\p{L}\p{N}・·･．.\-－—–\s]{2,30}?)(?=\s*(?:，|。|导致|導致|使得|令|的效果|效果))/giu,
-  ];
-  for (const pattern of actionPatterns) {
-    for (const match of text.matchAll(pattern)) {
-      const candidate = cleanUnquotedMention(match[1]);
-      if (candidate) candidates.push(candidate);
-    }
-  }
-
   return dedupeBy(candidates, normalizeCardKey).slice(0, 12);
 }
 
@@ -582,11 +532,7 @@ function getSupplementalCardIndexes(cards) {
   if (cached) return cached;
   buildAliasIndex(sourceCards);
   cached = supplementalCardIndexesCache.get(sourceCards);
-  return cached || {
-    numberedIdentityIndex: new Map(),
-    shortMentionIndex: new Map(),
-    distinctiveFragmentIndex: new Map(),
-  };
+  return cached || { numberedIdentityIndex: new Map(), shortMentionIndex: new Map() };
 }
 
 function numberedIdentityKey(identity) {
@@ -667,7 +613,6 @@ function numberedAliasCompatibleWithExplicitMentions(query, candidate, exactMent
   return identities.every((identity) => {
     const detailedSeeds = (exactMentionSeeds || []).filter((seed) => (
       seed.source !== "model_card_name_extractor"
-      && seed.source !== "contextual_distinctive_fragment"
       && extractNumberedCardIdentities(seed.input).some((item) => sameNumberedIdentity(item, identity))
       && numberedMentionRemainder(seed.input, identity)
     ));
@@ -692,57 +637,6 @@ function shortMentionKeysForAlias(alias) {
     }
   }
   return dedupeBy(result, (item) => item);
-}
-
-function distinctiveFragments(value) {
-  const text = String(value || "").normalize("NFKC");
-  const fragments = [];
-  const tokens = text
-    .split(/[^\p{L}\p{N}]+/u)
-    .map((item) => item.trim())
-    .filter(Boolean);
-
-  for (const token of tokens) {
-    const key = normalizeCardKey(token);
-    if (!key || key.length > DISTINCTIVE_FRAGMENT_MAX_LENGTH) continue;
-    if (
-      key.length >= 3
-      && /[a-z]/iu.test(key)
-      && /\d/u.test(key)
-      && !/^(?:(?:c|cl|chain|no|cno|sno)\d+)$/iu.test(key)
-    ) {
-      fragments.push(key);
-      continue;
-    }
-    if (
-      key.length >= DISTINCTIVE_CJK_FRAGMENT_MIN_LENGTH
-      && /[\u3400-\u9fff]/u.test(key)
-      && !/[a-z0-9]/iu.test(key)
-    ) {
-      fragments.push(key);
-    }
-  }
-  return dedupeBy(fragments, (item) => item);
-}
-
-function findUniqueDistinctiveFragmentCandidate(cards, mention) {
-  const fragments = distinctiveFragments(mention);
-  if (!fragments.length) return null;
-  const index = getSupplementalCardIndexes(cards).distinctiveFragmentIndex;
-  const uniquelyMatched = [];
-
-  for (const fragment of fragments) {
-    const candidates = index.get(fragment) || [];
-    if (candidates.length === 1) uniquelyMatched.push({ fragment, candidate: candidates[0] });
-  }
-  if (!uniquelyMatched.length) return null;
-
-  const mixedScriptMatches = uniquelyMatched.filter(({ fragment }) => (
-    /[a-z]/iu.test(fragment) && /\d/u.test(fragment)
-  ));
-  const preferred = mixedScriptMatches.length ? mixedScriptMatches : uniquelyMatched;
-  const identities = new Set(preferred.map(({ candidate }) => cardIdentity(candidate.card)));
-  return identities.size === 1 ? preferred[0].candidate : null;
 }
 
 function normalizeMaxCards(maxCards) {
