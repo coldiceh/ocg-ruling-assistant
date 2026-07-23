@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "fixtureName": "reported-user-regressions",
+  "coverageLevel": "reported_regression_set",
+  "isCompleteCorpus": true,
+  "cases": [
+    {
+      "id": "b2b-short-unquoted-names",
+      "question": "对方场上有一个b2b，导致我方场上的4+4变成了6+6。这个情况下假如我方额外只有8星同调而没有12星同调的话，可以发动异界共鸣吗",
+      "expectedCardIds": ["22551", "19046"],
+      "expectedQaIds": ["card-faq-19046-1"],
+      "expectedAnswer": "可以发动。"
+    },
+    {
+      "id": "b2b-full-names",
+      "question": "对方场上有一个《杀手级调整曲 B2B》，导致我方场上的2只四星怪兽变成了2只六星怪兽，这个情况下假如我方额外只有一只可以同调召唤的8星同调怪兽而没有12星同调怪兽的话，可以发动【异界共鸣-同调融合】吗",
+      "expectedCardIds": ["22551", "19046"],
+      "expectedQaIds": ["card-faq-19046-1"],
+      "expectedAnswer": "可以发动。"
+    },
+    {
+      "id": "rivalry-nibiru",
+      "question": "自己或对方的怪兽区域存在表侧表示的岩石族怪兽，并且「千查万别」的效果正在适用。对方在这个回合中已经成功召唤或特殊召唤了5只以上的怪兽。那么此时，自己可以发动手牌中的「原始生命态 尼比鲁」的怪兽效果吗？",
+      "expectedCardIds": ["13447", "14741"],
+      "expectedQaIds": ["22803"],
+      "expectedAnswer": "不能发动。"
+    },
+    {
+      "id": "dark-law-super-polymerization",
+      "question": "当对方场上存在「M·HERO 暗爪（M・HERO ダーク・ロウ）」时，自己可以发动「超融合」吗？如果可以发动，那么「M·HERO 暗爪」的送墓改除外效果会如何适用？",
+      "expectedCardIds": ["7445", "11313"],
+      "expectedQaIds": ["13330"],
+      "expectedAnswer": "可以发动。",
+      "expectedAnswerKeyPoints": [
+        "作为COST丢弃的手牌会被除外",
+        "M·HERO 暗爪自身作为融合素材离场后，其效果不再适用",
+        "融合素材正常送去墓地"
+      ]
+    }
+  ]
+}

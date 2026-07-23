@@ -37,7 +37,7 @@ test("query_audit_persists_only_question_metadata_with_retention", async () => {
   assert.equal(stored.createdAt, "2026-07-16T02:03:04.000Z");
   assert.equal(stored.mode, "rag");
   assert.ok(!("ip" in stored));
-  assert.equal(commands[1][3], "249");
+  assert.equal(commands[1][3], "99");
   assert.equal(commands[2][2], String(30 * 86400));
 });
 
@@ -81,6 +81,43 @@ test("query_audit_list_is_owner_protected_and_parses_entries", async () => {
 
   assert.deepEqual(commands[0], ["LRANGE", "rag-query-audit:v1", "0", "11"]);
   assert.deepEqual(result.entries, entries);
+});
+
+test("query audit retention and listing are capped at 100 questions", async () => {
+  const appendCommands = [];
+  await appendQueryAudit({
+    question: "测试保留上限",
+    env: {
+      ...redisEnv,
+      QUERY_AUDIT_MAX_ENTRIES: "500",
+    },
+    fetchImpl: async (_url, options) => {
+      appendCommands.push(JSON.parse(options.body));
+      return jsonResponse(1);
+    },
+  });
+  assert.deepEqual(appendCommands[1], ["LTRIM", "rag-query-audit:v1", "0", "99"]);
+
+  const listCommands = [];
+  await listQueryAudits({
+    limit: 500,
+    env: redisEnv,
+    fetchImpl: async (_url, options) => {
+      listCommands.push(JSON.parse(options.body));
+      return jsonResponse([]);
+    },
+  });
+  assert.deepEqual(listCommands[0], ["LRANGE", "rag-query-audit:v1", "0", "99"]);
+
+  const defaultListCommands = [];
+  await listQueryAudits({
+    env: redisEnv,
+    fetchImpl: async (_url, options) => {
+      defaultListCommands.push(JSON.parse(options.body));
+      return jsonResponse([]);
+    },
+  });
+  assert.deepEqual(defaultListCommands[0], ["LRANGE", "rag-query-audit:v1", "0", "99"]);
 });
 
 function jsonResponse(result) {

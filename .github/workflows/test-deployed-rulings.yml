@@ -1,0 +1,72 @@
+name: Test deployed ruling corpus
+
+on:
+  workflow_dispatch:
+    inputs:
+      endpoint:
+        description: Deployed answer API URL
+        required: false
+        default: https://ocg-ruling-assistant.vercel.app/api/answer
+      ruling_version:
+        description: Ruling version to test
+        required: false
+        default: latest
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deployed-ruling-corpus
+  cancel-in-progress: false
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+
+      - name: Run public official-X sample against deployed API
+        id: batch
+        shell: bash
+        run: |
+          set +e
+          status=0
+          node scripts/batch-ruling-corpus.mjs \
+            --runner online \
+            --input data/test/twitter-ruling-questions.json \
+            --output artifacts/twitter-ruling-online-report.json \
+            --endpoint "${{ inputs.endpoint }}" \
+            --ruling-version "${{ inputs.ruling_version }}" \
+            --delay-ms 250 \
+            --timeout-ms 180000 \
+            --no-resume || status=$?
+          node scripts/batch-ruling-corpus.mjs \
+            --runner online \
+            --input data/test/reported-user-regressions.json \
+            --output artifacts/reported-user-regressions-online-report.json \
+            --endpoint "${{ inputs.endpoint }}" \
+            --ruling-version "${{ inputs.ruling_version }}" \
+            --delay-ms 250 \
+            --timeout-ms 180000 \
+            --no-resume || status=$?
+          echo "exit_code=$status" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Upload detailed report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: deployed-ruling-reports
+          path: artifacts/*-online-report.json
+          if-no-files-found: error
+
+      - name: Enforce batch result
+        if: steps.batch.outputs.exit_code != '0'
+        run: exit "${{ steps.batch.outputs.exit_code }}"

@@ -1,0 +1,516 @@
+{
+  "schemaVersion": 1,
+  "fixtureName": "official-x-rulings-discovered-public-sample",
+  "coverageLevel": "discovered_public_sample",
+  "isCompleteCorpus": false,
+  "generatedAt": "2026-07-23T13:21:36+08:00",
+  "sourceAccount": {
+    "handle": "YuGiOh_OCG_INFO",
+    "numericId": "618646265",
+    "profileUrl": "https://x.com/YuGiOh_OCG_INFO",
+    "officialAccountDirectoryUrl": "https://www.konami.com/yugioh/"
+  },
+  "knownTweetDateRange": {
+    "from": "2023-03-12T13:00:02.155Z",
+    "to": "2026-07-13T13:00:01.375Z",
+    "basis": "Only rows with a recovered X status ID are used for this range. Rows without a recovered status ID remain undated."
+  },
+  "collection": {
+    "seriesSignature": {
+      "requiredTextFragments": [
+        "Ｑ＆Ａ",
+        "考えてみよう"
+      ],
+      "requiredExpandedUrlHost": "www.db.yugioh-card.com",
+      "requiredExpandedUrlPath": "/yugiohdb/faq_search.action",
+      "emojiAndDecorationAreNotStable": true
+    },
+    "recommendedFullArchiveQuery": "from:YuGiOh_OCG_INFO \"考えてみよう\" url:db.yugioh-card.com/yugiohdb/faq_search.action -is:retweet -is:reply",
+    "limitations": [
+      "This is a public-search discovery sample, not the complete official-account archive.",
+      "Public search indexes, Yahoo realtime search, twfan and similar mirrors are incomplete and may remove historical entries.",
+      "A complete historical collection requires the X API v2 full-archive search endpoint and pagination with a valid X_BEARER_TOKEN.",
+      "A missing tweetId, xUrl or officialFaqId is deliberately null and must not be guessed."
+    ]
+  },
+  "cases": [
+    {
+      "id": "official-x-sample-chimeratech-fortress-fusion-material",
+      "question": "融合召喚の素材にできないモンスターを墓地へ送って「キメラテック・フォートレス・ドラゴン」を特殊召喚できますか？",
+      "sourceUrl": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?fid=22839&ope=5&request_locale=ja",
+      "tweetId": null,
+      "createdAt": null,
+      "xUrl": null,
+      "officialFaqId": "22839",
+      "officialFaqUrl": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?fid=22839&ope=5&request_locale=ja",
+      "officialCardQaIndexUrl": null,
+      "expectedCardNames": [
+        "キメラテック・フォートレス・ドラゴン"
+      ],
+      "expectedAnswerKeyPoints": [
+        "墓地へ送って特殊召喚できる",
+        "この特殊召喚は融合召喚ではない"
+      ],
+      "provenanceStatus": "official_x_post_confirmed_via_public_search_index"
+    },
+    {
+      "id": "official-x-sample-whiteface-sphere-mode",
+      "question": "「道化の一座 ホワイトフェイス」の②の効果を発動した場合、「ラーの翼神竜－球体形」をアドバンス召喚できますか？",
+      "sourceUrl": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?fid=16178&ope=5&request_locale=ja",
+      "tweetId": null,
+      "createdAt": null,
+      "xUrl": null,
+      "officialFaqId": "16178",
+      "officialFaqUrl": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?fid=16178&ope=5&request_locale=ja",
+      "officialCardQaIndexUrl": null,
+      "expectedCardNames": [
+        "道化の一座 ホワイトフェイス",
+        "ラーの翼神竜－球体形"
+      ],
+      "expectedAnswerKeyPoints": [
+        "アドバンス召喚できる",
+        "召喚する側のフィールドのモンスター3体をリリースする"
+      ],
+      "provenanceStatus": "official_x_post_confirmed_via_public_search_index"
+    },
+    {
+      "id": "official-x-sample-numbers-eveill-lion-hope-ray",
+      "question": "「ナンバーズ・エヴァイユ」の効果処理時に、「獣装合体 ライオ・ホープレイ」を見せることはできますか？",
+      "sourceUrl": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?fid=23500&ope=5&request_locale=ja",
+      "tweetId": null,
+      "createdAt": null,
+      "xUrl": null,
+      "officialFaqId": "23500",
+      "officialFaqUrl": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?fid=23500&ope=5&request_locale=ja",
+      "officialCardQaIndexUrl": null,
+      "expectedCardNames": [
+        "ナンバーズ・エヴァイユ",
+        "獣装合体 ライオ・ホープレイ"
+      ],
+      "expectedAnswerKeyPoints": [
+        "見せることができる",
+        "ルール上CNo.39 希望皇ホープレイとして扱いNo.の数値は39"
+      ],
+      "provenanceStatus": "official_x_post_confirmed_via_public_search_index"
+    },
+    {
+      "id": "official-x-sample-altmegia-declare-nerved",
+      "question": "「獄神影獣－ネルヴェド」と宣言して「神芸学都アルトメギア」②の効果を発動できますか？",
+      "sourceUrl": "https://x.com/YuGiOh_OCG_INFO/status/2076652870695632997",
+      "tweetId": "2076652870695632997",
+      "createdAt": "2026-07-13T13:00:01.375Z",
+      "xUrl": "https://x.com/YuGiOh_OCG_INFO/status/2076652870695632997",
+      "officialFaqId": "24276",
+      "officialFaqUrl": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?fid=24276&ope=5&request_locale=ja",
+      "officialCardQaIndexUrl": null,
+      "expectedCardNames": [
+        "獄神影獣－ネルヴェド",
+        "神芸学都アルトメギア"
+      ],
+      "expectedAnswerKeyPoints": [
+        "宣言して発動できる",
+        "そのターンは同じカード名を再び宣言できない"
+      ],
+      "provenanceStatus": "official_x_status_recovered"
+    },
+    {
+      "id": "official-x-sample-kouran-mikami-draw-crosea",
+      "question": "「絢嵐たる見神」の効果でドローした「絢嵐たるクローゼア」の①の効果は発動できますか？",
+      "sourceUrl": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?fid=24312&ope=5&request_locale=ja",
+      "tweetId": null,
+      "createdAt": null,
+      "xUrl": null,
+      "officialFaqId": "24312",
+      "officialFaqUrl": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?fid=24312&ope=5&request_locale=ja",
+      "officialCardQaIndexUrl": null,
+      "expectedCardNames": [
+        "絢嵐たる見神",
+        "絢嵐たるクローゼア"
+      ],
+      "expectedAnswerKeyPoints": [
+        "一連のチェーン処理後に発動できる"
+      ],
+      "provenanceStatus": "official_x_post_confirmed_via_public_search_index"
+    },
+    {
+      "id": "official-x-sample-macro-cno104",
+      "question": "「マクロコスモス」適用中に「CNo.104 仮面魔踏士アンブラル」の『●』の効果を発動する事はできますか？",
+      "sourceUrl": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?fid=12794&ope=5&request_locale=ja",
+      "tweetId": null,
+      "createdAt": null,
+      "xUrl": null,
+      "officialFaqId": "12794",
+      "officialFaqUrl": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?fid=12794&ope=5&request_locale=ja",
+      "officialCardQaIndexUrl": null,
+      "expectedCardNames": [
+        "マクロコスモス",
+        "CNo.104 仮面魔踏士アンブラル"
+      ],
+      "expectedAnswerKeyPoints": [
+        "発動できる",
+        "ランダムな手札は墓地へ送られず除外される",
+        "相手のLPを半分にする処理は適用できない"
+      ],
+      "provenanceStatus": "official_x_post_confirmed_via_public_search_index"
+    },
+    {
+      "id": "official-x-sample-call-haunted-inspector-boarder",
+      "question": "相手のモンスター効果の発動にチェーンして、自分が「リビングデッドの呼び声」を発動し、「インスペクト・ボーダー」を特殊召喚した場合、相手モンスターの効果はどうなりますか？",
+      "sourceUrl": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?fid=10618&ope=5&request_locale=ja",
+      "tweetId": null,
+      "createdAt": null,
+      "xUrl": null,
+      "officialFaqId": "10618",
+      "officialFaqUrl": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?fid=10618&ope=5&request_locale=ja",
+      "officialCardQaIndexUrl": null,
+      "expectedCardNames": [
+        "リビングデッドの呼び声",
+        "インスペクト・ボーダー"
+      ],
+      "expectedAnswerKeyPoints": [
+        "既に発動された相手モンスターの効果は通常通り処理される"
+      ],
+      "provenanceStatus": "official_x_post_confirmed_via_public_search_index"
+    },
+    {
+      "id": "official-x-sample-crackdown-forbidden-lance",
+      "question": "「大捕り物」の発動にチェーンして、「禁じられた聖槍」が発動した場合、処理はどうなりますか？",
+      "sourceUrl": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?fid=19174&ope=5&request_locale=ja",
+      "tweetId": null,
+      "createdAt": null,
+      "xUrl": null,
+      "officialFaqId": "19174",
+      "officialFaqUrl": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?fid=19174&ope=5&request_locale=ja",
+      "officialCardQaIndexUrl": null,
+      "expectedCardNames": [
+        "大捕り物",
+        "禁じられた聖槍"
+      ],
+      "expectedAnswerKeyPoints": [],
+      "provenanceStatus": "official_x_post_confirmed_via_public_search_index"
+    },
+    {
+      "id": "official-x-sample-fairy-prince-sky-striker-raye",
+      "question": "「妖精の王子様」として扱われている「閃刀姫」リンクモンスターが相手の効果でフィールドから離れた場合、または戦闘で破壊された場合、「閃刀姫－レイ」の②の効果は発動できますか？",
+      "sourceUrl": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?fid=24289&ope=5&request_locale=ja",
+      "tweetId": null,
+      "createdAt": null,
+      "xUrl": null,
+      "officialFaqId": "24289",
+      "officialFaqUrl": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?fid=24289&ope=5&request_locale=ja",
+      "officialCardQaIndexUrl": null,
+      "expectedCardNames": [
+        "妖精の王子様",
+        "閃刀姫－レイ"
+      ],
+      "expectedAnswerKeyPoints": [],
+      "provenanceStatus": "official_x_post_confirmed_via_public_search_index"
+    },
+    {
+      "id": "official-x-sample-atlantis-trade-in",
+      "question": "「伝説の都 アトランティス」の効果によってレベルが下がり、レベル8となっている手札のモンスターを捨てて、「トレード・イン」を発動できますか？",
+      "sourceUrl": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?fid=7036&ope=5&request_locale=ja",
+      "tweetId": null,
+      "createdAt": null,
+      "xUrl": null,
+      "officialFaqId": "7036",
+      "officialFaqUrl": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?fid=7036&ope=5&request_locale=ja",
+      "officialCardQaIndexUrl": null,
+      "expectedCardNames": [
+        "伝説の都 アトランティス",
+        "トレード・イン"
+      ],
+      "expectedAnswerKeyPoints": [
+        "手札でレベル8として扱われているためコストとして捨てられる"
+      ],
+      "provenanceStatus": "official_x_post_confirmed_via_public_search_index"
+    },
+    {
+      "id": "official-x-sample-verre-planet-pathfinder",
+      "question": "相手の「ウィッチクラフトマスター・ヴェール」のモンスター効果によって効果が無効になっている「惑星探査車」のモンスター効果を発動した場合、処理はどうなりますか？",
+      "sourceUrl": "https://x.com/YuGiOh_OCG_INFO/status/2054547215646064887",
+      "tweetId": "2054547215646064887",
+      "createdAt": "2026-05-13T13:00:02.508Z",
+      "xUrl": "https://x.com/YuGiOh_OCG_INFO/status/2054547215646064887",
+      "officialFaqId": null,
+      "officialFaqUrl": null,
+      "officialAnswerLinkFromPost": "https://t.co/Y07pg2Kb8Z",
+      "officialCardQaIndexUrl": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?cid=10232&ope=4&request_locale=ja",
+      "expectedCardNames": [
+        "ウィッチクラフトマスター・ヴェール",
+        "惑星探査車"
+      ],
+      "expectedAnswerKeyPoints": [],
+      "provenanceStatus": "official_x_status_recovered_shortlink_unresolved"
+    },
+    {
+      "id": "official-x-sample-armory-call-magic-cylinder",
+      "question": "「検問」の発動にチェーンして「魔法の筒」を発動できますか？",
+      "sourceUrl": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?fid=18823&ope=5&request_locale=ja",
+      "tweetId": null,
+      "createdAt": null,
+      "xUrl": null,
+      "officialFaqId": "18823",
+      "officialFaqUrl": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?fid=18823&ope=5&request_locale=ja",
+      "officialCardQaIndexUrl": null,
+      "expectedCardNames": [
+        "検問",
+        "魔法の筒"
+      ],
+      "expectedAnswerKeyPoints": [
+        "チェーンして発動できる",
+        "攻撃が既に無効なので検問の手札から捨てる処理は適用されない"
+      ],
+      "provenanceStatus": "official_x_post_confirmed_via_public_search_index"
+    },
+    {
+      "id": "official-x-sample-clock-tower-eternal-dread",
+      "question": "お互いのフィールドゾーンに「幽獄の時計塔」が存在している場合、「エターナル・ドレッド」の処理はどうなりますか？",
+      "sourceUrl": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?fid=120&ope=5&request_locale=ja",
+      "tweetId": null,
+      "createdAt": null,
+      "xUrl": null,
+      "officialFaqId": "120",
+      "officialFaqUrl": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?fid=120&ope=5&request_locale=ja",
+      "officialCardQaIndexUrl": null,
+      "expectedCardNames": [
+        "幽獄の時計塔",
+        "エターナル・ドレッド"
+      ],
+      "expectedAnswerKeyPoints": [
+        "お互いの幽獄の時計塔に時計カウンターを2つずつ置く"
+      ],
+      "provenanceStatus": "official_x_post_confirmed_via_public_search_index"
+    },
+    {
+      "id": "official-x-sample-alternative-blue-eyes-rage",
+      "question": "「青眼の亜白龍」を特殊召喚するターン、「青き眼の激臨」を発動できますか？",
+      "sourceUrl": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?fid=56&ope=5&request_locale=ja",
+      "tweetId": null,
+      "createdAt": null,
+      "xUrl": null,
+      "officialFaqId": "56",
+      "officialFaqUrl": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?fid=56&ope=5&request_locale=ja",
+      "officialCardQaIndexUrl": null,
+      "expectedCardNames": [
+        "青眼の亜白龍",
+        "青き眼の激臨"
+      ],
+      "expectedAnswerKeyPoints": [],
+      "provenanceStatus": "official_x_post_confirmed_via_public_search_index"
+    },
+    {
+      "id": "official-x-sample-burst-stream-first-turn",
+      "question": "「滅びの爆裂疾風弾」を先攻1ターン目に発動する事はできますか？",
+      "sourceUrl": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?fid=12814&ope=5&request_locale=ja",
+      "tweetId": null,
+      "createdAt": null,
+      "xUrl": null,
+      "officialFaqId": "12814",
+      "officialFaqUrl": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?fid=12814&ope=5&request_locale=ja",
+      "officialCardQaIndexUrl": null,
+      "expectedCardNames": [
+        "滅びの爆裂疾風弾",
+        "青眼の白龍"
+      ],
+      "expectedAnswerKeyPoints": [],
+      "provenanceStatus": "official_x_post_confirmed_via_public_search_index"
+    },
+    {
+      "id": "official-x-sample-cyberse-witch-missing-search-card",
+      "question": "リンク先にモンスターが特殊召喚された際に発動した「サイバース・ウィッチ」のモンスター効果の処理時に、自分のデッキに手札に加えられるカードのいずれかが存在しなくなっている場合、処理はどうなりますか？",
+      "sourceUrl": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?fid=10799&ope=5&request_locale=ja",
+      "tweetId": null,
+      "createdAt": null,
+      "xUrl": null,
+      "officialFaqId": "10799",
+      "officialFaqUrl": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?fid=10799&ope=5&request_locale=ja",
+      "officialCardQaIndexUrl": null,
+      "expectedCardNames": [
+        "サイバース・ウィッチ",
+        "サイバネット・リチューアル"
+      ],
+      "expectedAnswerKeyPoints": [],
+      "provenanceStatus": "official_x_post_confirmed_via_public_search_index"
+    },
+    {
+      "id": "official-x-sample-spirit-dragon-dark-magic-curtain",
+      "question": "「青眼の精霊龍」の効果適用中に「黒魔導のカーテン」を発動できますか？",
+      "sourceUrl": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?fid=24313&ope=5&request_locale=ja",
+      "tweetId": null,
+      "createdAt": null,
+      "xUrl": null,
+      "officialFaqId": "24313",
+      "officialFaqUrl": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?fid=24313&ope=5&request_locale=ja",
+      "officialCardQaIndexUrl": null,
+      "expectedCardNames": [
+        "青眼の精霊龍",
+        "黒魔導のカーテン"
+      ],
+      "expectedAnswerKeyPoints": [
+        "発動できる",
+        "特殊召喚するプレイヤーが別々なのでお互いに1体ずつ特殊召喚できる"
+      ],
+      "provenanceStatus": "official_x_post_confirmed_via_public_search_index"
+    },
+    {
+      "id": "official-x-sample-temporarily-banished-control",
+      "question": "コントロールを得たモンスターが一時的に除外された場合、どうなりますか？",
+      "sourceUrl": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?fid=17476&ope=5&request_locale=ja",
+      "tweetId": null,
+      "createdAt": null,
+      "xUrl": null,
+      "officialFaqId": "17476",
+      "officialFaqUrl": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?fid=17476&ope=5&request_locale=ja",
+      "officialCardQaIndexUrl": null,
+      "expectedCardNames": [],
+      "expectedAnswerKeyPoints": [],
+      "provenanceStatus": "official_x_post_confirmed_via_public_search_index"
+    },
+    {
+      "id": "official-x-sample-diamond-dude-pot-desires",
+      "question": "「D-HERO ダイヤモンドガイ」のモンスター効果で確認したデッキの一番上のカードが、「強欲で貪欲な壺」だった場合、デッキが11枚以下でも、その効果を発動できますか？",
+      "sourceUrl": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?fid=18702&ope=5&request_locale=ja",
+      "tweetId": null,
+      "createdAt": null,
+      "xUrl": null,
+      "officialFaqId": "18702",
+      "officialFaqUrl": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?fid=18702&ope=5&request_locale=ja",
+      "officialCardQaIndexUrl": null,
+      "expectedCardNames": [
+        "D-HERO ダイヤモンドガイ",
+        "強欲で貪欲な壺"
+      ],
+      "expectedAnswerKeyPoints": [
+        "デッキが2枚以上なら発動できる",
+        "デッキの上から10枚を除外するコストは必要ない"
+      ],
+      "provenanceStatus": "official_x_post_confirmed_via_public_search_index"
+    },
+    {
+      "id": "official-x-sample-atlantis-overdone-burial",
+      "question": "「伝説の都 アトランティス」の適用中に、「やりすぎた埋葬」を発動し、水属性モンスターを捨てる場合、対象のモンスターはどのように選びますか？",
+      "sourceUrl": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?fid=21254&ope=5&request_locale=ja",
+      "tweetId": null,
+      "createdAt": null,
+      "xUrl": null,
+      "officialFaqId": "21254",
+      "officialFaqUrl": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?fid=21254&ope=5&request_locale=ja",
+      "officialCardQaIndexUrl": null,
+      "expectedCardNames": [
+        "伝説の都 アトランティス",
+        "やりすぎた埋葬"
+      ],
+      "expectedAnswerKeyPoints": [
+        "捨てたモンスターの元々のレベルより低いモンスターを選ぶ"
+      ],
+      "provenanceStatus": "official_x_post_confirmed_via_public_search_index"
+    },
+    {
+      "id": "official-x-sample-codarus-two-seas",
+      "question": "「コダロス」のコストとして、「伝説の都 アトランティス」と「忘却の海底神殿」の両方を墓地へ送らなければなりませんか？",
+      "sourceUrl": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?fid=9475&ope=5&request_locale=ja",
+      "tweetId": null,
+      "createdAt": null,
+      "xUrl": null,
+      "officialFaqId": "9475",
+      "officialFaqUrl": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?fid=9475&ope=5&request_locale=ja",
+      "officialCardQaIndexUrl": null,
+      "expectedCardNames": [
+        "コダロス",
+        "伝説の都 アトランティス",
+        "忘却の海底神殿"
+      ],
+      "expectedAnswerKeyPoints": [],
+      "provenanceStatus": "official_x_post_confirmed_via_public_search_index"
+    },
+    {
+      "id": "official-x-sample-promethean-princess-elfenotes",
+      "question": "「賜炎の咎姫」を墓地へ送って「エルフェンノーツ～廻郷のパラレリズム～」の②の効果を発動できますか？",
+      "sourceUrl": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?fid=24255&ope=5&request_locale=ja",
+      "tweetId": null,
+      "createdAt": null,
+      "xUrl": null,
+      "officialFaqId": "24255",
+      "officialFaqUrl": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?fid=24255&ope=5&request_locale=ja",
+      "officialCardQaIndexUrl": null,
+      "expectedCardNames": [
+        "賜炎の咎姫",
+        "エルフェンノーツ～廻郷のパラレリズム～"
+      ],
+      "expectedAnswerKeyPoints": [],
+      "provenanceStatus": "official_x_post_confirmed_via_public_search_index"
+    },
+    {
+      "id": "official-x-sample-siegfried-face-down-destroyed",
+      "question": "裏側守備表示の「DDD呪血王サイフリート」が戦闘や効果で破壊された場合、効果は発動しますか？",
+      "sourceUrl": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?cid=12233&ope=4&request_locale=ja",
+      "tweetId": null,
+      "createdAt": null,
+      "xUrl": null,
+      "officialFaqId": null,
+      "officialFaqUrl": null,
+      "officialCardQaIndexUrl": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?cid=12233&ope=4&request_locale=ja",
+      "expectedCardNames": [
+        "DDD呪血王サイフリート"
+      ],
+      "expectedAnswerKeyPoints": [],
+      "provenanceStatus": "official_x_post_confirmed_via_public_search_index_official_card_qa_index_only"
+    },
+    {
+      "id": "official-x-2023-cubic-causality-deck-return",
+      "question": "表側表示の「方界」と名のついたモンスターがデッキに戻った場合、墓地の「方界合神」の効果を発動できますか？",
+      "sourceUrl": "https://x.com/YuGiOh_OCG_INFO/status/1634902065800413187",
+      "tweetId": "1634902065800413187",
+      "createdAt": "2023-03-12T13:00:02.155Z",
+      "xUrl": "https://x.com/YuGiOh_OCG_INFO/status/1634902065800413187",
+      "officialFaqId": "12403",
+      "officialFaqUrl": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?fid=12403&ope=5&request_locale=ja",
+      "officialCardQaIndexUrl": null,
+      "expectedCardNames": [
+        "方界合神"
+      ],
+      "expectedAnswerKeyPoints": [],
+      "provenanceStatus": "official_x_status_recovered"
+    },
+    {
+      "id": "official-x-2023-union-carrier-dragon-buster",
+      "question": "「ユニオン・キャリアー」のモンスター効果によって装備カード扱いとなった「破壊剣－ドラゴンバスターブレード」の効果は適用されますか？",
+      "sourceUrl": "https://x.com/YuGiOh_OCG_INFO/status/1670416068505108481",
+      "tweetId": "1670416068505108481",
+      "createdAt": "2023-06-18T13:00:00.218Z",
+      "xUrl": "https://x.com/YuGiOh_OCG_INFO/status/1670416068505108481",
+      "officialFaqId": "22916",
+      "officialFaqUrl": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?fid=22916&ope=5&request_locale=ja",
+      "officialCardQaIndexUrl": null,
+      "expectedCardNames": [
+        "ユニオン・キャリアー",
+        "破壊剣－ドラゴンバスターブレード"
+      ],
+      "expectedAnswerKeyPoints": [
+        "他のカードの効果で装備された場合にも効果は適用される"
+      ],
+      "provenanceStatus": "official_x_status_recovered"
+    },
+    {
+      "id": "official-x-2024-ash-blossom-negate-return",
+      "question": "手札の「灰流うらら」の効果の発動にチェーンして『その発動を無効にし、そのカードを持ち主のデッキに戻す』効果を発動した場合、処理はどうなりますか？",
+      "sourceUrl": "https://x.com/YuGiOh_OCG_INFO/status/1820082263180325336",
+      "tweetId": "1820082263180325336",
+      "createdAt": "2024-08-04T13:00:01.692Z",
+      "xUrl": "https://x.com/YuGiOh_OCG_INFO/status/1820082263180325336",
+      "officialFaqId": "12336",
+      "officialFaqUrl": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?fid=12336&ope=5&request_locale=ja",
+      "officialCardQaIndexUrl": null,
+      "expectedCardNames": [
+        "灰流うらら"
+      ],
+      "expectedAnswerKeyPoints": [
+        "発動は無効になる",
+        "手札に存在しない灰流うららはデッキに戻らない",
+        "その後の処理も適用されない"
+      ],
+      "provenanceStatus": "official_x_status_recovered"
+    }
+  ]
+}

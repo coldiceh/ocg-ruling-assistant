@@ -1485,7 +1485,7 @@ async function loadAdminQueries() {
       method: "POST",
       cache: "no-store",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ password, limit: 50 }),
+      body: JSON.stringify({ password, limit: 100 }),
     });
     const payload = await response.json().catch(() => ({}));
     if (response.status === 401 || response.status === 403) {

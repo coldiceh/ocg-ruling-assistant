@@ -352,6 +352,7 @@ test("owner_query_log_is_hidden_and_server_authorized", async () => {
   assert.match(app, /params\.get\("admin"\) === "1"/u);
   assert.match(app, /\/api\/admin-queries/u);
   assert.match(app, /prompt\("请输入管理员密码"\)/u);
+  assert.match(app, /JSON\.stringify\(\{ password, limit: 100 \}\)/u);
   assert.match(adminApi, /authorizeAdminRequest/u);
   assert.match(adminAuth, /timingSafeEqual/u);
   assert.doesNotMatch(adminAuth, /allure/u);

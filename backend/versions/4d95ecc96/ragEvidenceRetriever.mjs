@@ -1,3 +1,4 @@
+// Frozen software snapshot from Git revision 4d95ecc96.
 import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -5,13 +6,13 @@ import { searchCards } from "./baigeCardProvider.mjs";
 import { createLocalCardDataProvider } from "./cardDataProvider.mjs";
 import { normalizeCardKey } from "./ragCardExtractor.mjs";
 import { searchOfficialQaEvidence } from "./officialQaMatcher.mjs";
-import { normalizeOfficialResponses } from "./officialResponses.mjs";
-import { isRulebookRecord, retrieveRulebookPassages } from "./rulebookPassageRetriever.mjs";
+import { normalizeOfficialResponses } from "../../officialResponses.mjs";
+import { isRulebookRecord, retrieveRulebookPassages } from "../../rulebookPassageRetriever.mjs";
 import { hasNumberedCardIdentityConflict } from "./numberedCardIdentity.mjs";
-import { compileRuleScenario } from "./ruleScenarioCompiler.mjs";
+import { compileRuleScenario } from "../../ruleScenarioCompiler.mjs";
 import { retrieveLiveOfficialQa } from "./liveOfficialQaProvider.mjs";
 
-const projectRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
+const projectRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 const defaultDataDir = join(projectRoot, "data");
 const dataCache = new Map();
 const emptyDataArray = Object.freeze([]);
@@ -57,13 +58,9 @@ export async function retrieveRagEvidence({
   ], limits);
   const retrievalWarnings = [];
   const baigeDebug = { searchCount: 0, cacheHitCount: 0, warnings: [], ambiguousMentions: [] };
-  const unresolvedMentions = cardResolution.unresolvedMentions || [];
-  const parentheticalAliasKeys = collectParentheticalAliasMentionKeys(unresolvedMentions, resolvedCards);
-  const unresolvedResolutionCandidates = unresolvedMentions
-    .filter((mention) => !parentheticalAliasKeys.has(normalizeCardKey(mention?.input)));
-  const fuzzyCards = resolveUnresolvedMentionCards(unresolvedResolutionCandidates, cardProvider, limits, retrievalWarnings);
+  const fuzzyCards = resolveUnresolvedMentionCards(cardResolution.unresolvedMentions || [], cardProvider, limits, retrievalWarnings);
   const providedNameKeys = new Set(providedTexts.map((item) => normalizeCardKey(item.name)).filter(Boolean));
-  const unresolvedForBaige = unresolvedResolutionCandidates
+  const unresolvedForBaige = (cardResolution.unresolvedMentions || [])
     .filter((mention) => !providedNameKeys.has(normalizeCardKey(mention.input)));
   const [enrichedLocalCards, baigeResolvedCards] = await Promise.all([
     enrichCardsWithBaige(dedupeCards([...resolvedCards, ...fuzzyCards]), { fetchImpl, env, limits, warnings: retrievalWarnings, debug: baigeDebug }),
@@ -71,8 +68,7 @@ export async function retrieveRagEvidence({
   ]);
   let retrievalCards = dedupeCards([...enrichedLocalCards, ...baigeResolvedCards]).slice(0, limits.maxCards);
   timingsMs.cardResolution = Date.now() - stageStartedAt;
-  const remainingUnresolvedMentions = unresolvedMentionsAfterRetrieval(unresolvedResolutionCandidates, retrievalCards);
-  if (parentheticalAliasKeys.size) retrievalWarnings.push(`parenthetical_alias_mentions_collapsed:${parentheticalAliasKeys.size}`);
+  const remainingUnresolvedMentions = unresolvedMentionsAfterRetrieval(cardResolution.unresolvedMentions || [], retrievalCards);
   if (fuzzyCards.length) retrievalWarnings.push(`unresolved_mentions_fuzzy_matched:${fuzzyCards.map((card) => card.name).join(",")}`);
   if (baigeResolvedCards.length) retrievalWarnings.push(`unresolved_mentions_baige_matched:${baigeResolvedCards.map((card) => card.name).join(",")}`);
   if (providedTexts.length) retrievalWarnings.push("user_provided_text_not_official");
@@ -984,29 +980,6 @@ function normalizeId(value) {
 function extractInlineCardIds(value) {
   return [...String(value || "").matchAll(/<<\s*(\d{1,10})\s*>>/gu)]
     .map((match) => match[1]);
-}
-
-function collectParentheticalAliasMentionKeys(unresolvedMentions, resolvedCards) {
-  const reliableIdentityKeys = new Set();
-  for (const card of resolvedCards || []) {
-    const confidence = card?.confidence === undefined ? 1 : Number(card.confidence);
-    if (!Number.isFinite(confidence) || confidence < 0.9) continue;
-    for (const value of [card.input, card.name, card.cnName, card.jaName, card.jpName, card.enName, ...(card.aliases || [])]) {
-      const key = normalizeCardKey(value);
-      if (key) reliableIdentityKeys.add(key);
-    }
-  }
-  const coveredKeys = new Set();
-  for (const mention of unresolvedMentions || []) {
-    const input = String(mention?.input || "").trim();
-    const match = input.match(/^(.+?)[（(]([^（）()]+)[）)]$/u);
-    if (!match) continue;
-    const innerKey = normalizeCardKey(match[2]);
-    if (!innerKey || !reliableIdentityKeys.has(innerKey)) continue;
-    coveredKeys.add(normalizeCardKey(input));
-    coveredKeys.add(normalizeCardKey(match[1]));
-  }
-  return coveredKeys;
 }
 
 function resolveUnresolvedMentionCards(unresolvedMentions, cardProvider, limits, warnings) {

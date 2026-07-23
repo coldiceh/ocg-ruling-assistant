@@ -1,7 +1,9 @@
 import { createHash } from "node:crypto";
 
 const DEFAULT_KEY = "rag-query-audit:v1";
-const DEFAULT_MAX_ENTRIES = 250;
+const DEFAULT_MAX_ENTRIES = 100;
+const MAX_ENTRIES = 100;
+const DEFAULT_LIST_LIMIT = 100;
 const DEFAULT_RETENTION_DAYS = 30;
 const DEFAULT_TIMEOUT_MS = 1800;
 
@@ -44,7 +46,7 @@ export async function appendQueryAudit({
     mode: String(mode || "rag").slice(0, 32),
   };
   const key = String(env.QUERY_AUDIT_REDIS_KEY || DEFAULT_KEY).trim() || DEFAULT_KEY;
-  const maxEntries = boundedInteger(env.QUERY_AUDIT_MAX_ENTRIES, DEFAULT_MAX_ENTRIES, 10, 1000);
+  const maxEntries = boundedInteger(env.QUERY_AUDIT_MAX_ENTRIES, DEFAULT_MAX_ENTRIES, 10, MAX_ENTRIES);
   const retentionSeconds = boundedInteger(
     env.QUERY_AUDIT_RETENTION_DAYS,
     DEFAULT_RETENTION_DAYS,
@@ -61,7 +63,7 @@ export async function appendQueryAudit({
 }
 
 export async function listQueryAudits({
-  limit = 50,
+  limit = DEFAULT_LIST_LIMIT,
   env = globalThis.process?.env || {},
   fetchImpl = globalThis.fetch,
 } = {}) {
@@ -73,7 +75,7 @@ export async function listQueryAudits({
   }
 
   const key = String(env.QUERY_AUDIT_REDIS_KEY || DEFAULT_KEY).trim() || DEFAULT_KEY;
-  const safeLimit = boundedInteger(limit, 50, 1, 100);
+  const safeLimit = boundedInteger(limit, DEFAULT_LIST_LIMIT, 1, MAX_ENTRIES);
   const values = await redisCommand(env, fetchImpl, ["LRANGE", key, "0", String(safeLimit - 1)]);
   const entries = (Array.isArray(values) ? values : [])
     .map(parseEntry)

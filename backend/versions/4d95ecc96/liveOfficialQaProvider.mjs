@@ -1,0 +1,280 @@
+// Frozen software snapshot from Git revision 4d95ecc96.
+const DEFAULT_BASE_URL = "https://db.ygoresources.com";
+const DEFAULT_TIMEOUT_MS = 1800;
+const DEFAULT_CACHE_TTL_MS = 10 * 60 * 1000;
+const NON_RACE_PROPERTIES = new Set([
+  "effect",
+  "normal",
+  "flip",
+  "union",
+  "fusion",
+  "pendulum",
+  "xyz",
+  "synchro",
+  "tuner",
+  "link",
+  "spirit",
+  "ritual",
+  "gemini",
+  "toon",
+  "special summon monster",
+]);
+
+const cacheByFetchImpl = new WeakMap();
+
+export async function retrieveLiveOfficialQa({
+  resolvedCards = [],
+  fetchImpl = globalThis.fetch,
+  baseUrl = DEFAULT_BASE_URL,
+  timeoutMs = DEFAULT_TIMEOUT_MS,
+  cacheTtlMs = DEFAULT_CACHE_TTL_MS,
+  maxCandidates = 8,
+} = {}) {
+  const cards = dedupeCardsById(resolvedCards).slice(0, 6);
+  if (cards.length < 2 || typeof fetchImpl !== "function") {
+    return emptyResult("live_qa_requires_two_resolved_cards");
+  }
+
+  const warnings = [];
+  const [cardPayloadResults, propertyMetadataResult] = await Promise.all([
+    Promise.all(cards.map(async (card) => {
+      try {
+        const payload = await fetchJsonCached(fetchImpl, `${baseUrl}/data/card/${encodeURIComponent(card.id)}`, {
+          timeoutMs,
+          cacheTtlMs,
+        });
+        return { card, payload };
+      } catch (error) {
+        warnings.push(`live_card_qa_index_failed:${card.id}:${errorCode(error)}`);
+        return null;
+      }
+    })),
+    fetchJsonCached(fetchImpl, `${baseUrl}/data/meta/mprop`, { timeoutMs, cacheTtlMs })
+      .catch((error) => {
+        warnings.push(`live_monster_property_metadata_failed:${errorCode(error)}`);
+        return [];
+      }),
+  ]);
+  const cardPayloads = cardPayloadResults.filter(Boolean);
+  if (cardPayloads.length < 2) {
+    return { ...emptyResult("live_card_qa_index_incomplete"), warnings };
+  }
+  const allCardIndexesAvailable = cardPayloads.length === cards.length;
+  if (!allCardIndexesAvailable) warnings.push("live_card_qa_index_partial");
+
+  const propertyMetadata = propertyMetadataResult;
+  const cardMetadata = cardPayloads.map(({ card, payload }) => normalizeCardMetadata(card, payload, propertyMetadata));
+  const qaSelection = selectRelevantQaIds(cardPayloads.map(({ card, payload }) => ({
+    cardId: card.id,
+    qaIds: collectQaIds(payload?.qaIndex),
+  })), maxCandidates);
+  qaSelection.uniqueExactCardIntersection = allCardIndexesAvailable && qaSelection.uniqueExactCardIntersection;
+  qaSelection.uniqueExactQaId = qaSelection.uniqueExactCardIntersection
+    ? qaSelection.uniqueExactQaId : null;
+  if (!qaSelection.ids.length) {
+    return {
+      records: [],
+      cardMetadata,
+      warnings: [...warnings, "live_shared_qa_not_found"],
+      debug: qaSelection,
+    };
+  }
+
+  const cardNameById = new Map(cards.map((card) => [String(card.id), displayCardName(card)]));
+  const records = (await Promise.all(qaSelection.ids.map(async (qaId) => {
+    try {
+      const payload = await fetchJsonCached(fetchImpl, `${baseUrl}/data/qa/${encodeURIComponent(qaId)}`, {
+        timeoutMs,
+        cacheTtlMs,
+      });
+      return normalizeQaRecord(qaId, payload, cardNameById, qaSelection);
+    } catch (error) {
+      warnings.push(`live_qa_fetch_failed:${qaId}:${errorCode(error)}`);
+      return null;
+    }
+  }))).filter(Boolean);
+
+  return {
+    records,
+    cardMetadata,
+    warnings,
+    debug: {
+      ...qaSelection,
+      fetchedQaCount: records.length,
+      cardCount: cards.length,
+      availableCardIndexCount: cardPayloads.length,
+    },
+  };
+}
+
+export function selectRelevantQaIds(cardQaEntries = [], maxCandidates = 8) {
+  const entries = (cardQaEntries || [])
+    .map((entry) => ({
+      cardId: String(entry.cardId || ""),
+      qaIds: uniqueNumericIds(entry.qaIds),
+    }))
+    .filter((entry) => entry.cardId && entry.qaIds.length);
+  if (entries.length < 2) return { ids: [], strategy: "insufficient_card_qa_indexes", candidatePoolSize: 0 };
+
+  const counts = new Map();
+  const supportingCardIds = new Map();
+  const firstSeen = new Map();
+  let cursor = 0;
+  for (const entry of entries) {
+    for (const qaId of entry.qaIds) {
+      counts.set(qaId, (counts.get(qaId) || 0) + 1);
+      if (!supportingCardIds.has(qaId)) supportingCardIds.set(qaId, []);
+      supportingCardIds.get(qaId).push(entry.cardId);
+      if (!firstSeen.has(qaId)) firstSeen.set(qaId, cursor++);
+    }
+  }
+  const allCardMatches = [...counts.entries()]
+    .filter(([, count]) => count === entries.length)
+    .sort((left, right) => firstSeen.get(left[0]) - firstSeen.get(right[0]));
+  const sharedMatches = (allCardMatches.length ? allCardMatches : [...counts.entries()]
+    .filter(([, count]) => count >= 2)
+    .sort((left, right) => right[1] - left[1] || firstSeen.get(left[0]) - firstSeen.get(right[0])));
+  const safeLimit = positiveInteger(maxCandidates, 8);
+  const selectedMatches = sharedMatches.slice(0, safeLimit);
+  return {
+    ids: selectedMatches.map(([id]) => id),
+    strategy: allCardMatches.length ? "all_resolved_card_intersection" : "highest_shared_card_coverage",
+    candidatePoolSize: sharedMatches.length,
+    uniqueExactCardIntersection: allCardMatches.length === 1,
+    uniqueExactQaId: allCardMatches.length === 1 ? String(allCardMatches[0][0]) : null,
+    resolvedCardIds: entries.map((entry) => entry.cardId),
+    supportingCardIdsByQaId: Object.fromEntries(selectedMatches.map(([id]) => [
+      String(id),
+      [...(supportingCardIds.get(id) || [])],
+    ])),
+  };
+}
+
+function normalizeCardMetadata(card, payload, propertyMetadata) {
+  const localized = preferredCardLocale(payload?.cardData);
+  const propertyIds = uniqueNumericIds(localized?.properties);
+  const propertyLabels = propertyIds
+    .map((id) => propertyMetadata?.[Number(id)]?.en || "")
+    .filter(Boolean);
+  const race = propertyLabels.find((label) => !NON_RACE_PROPERTIES.has(String(label).toLowerCase())) || "";
+  return {
+    id: String(card.id),
+    ...(race ? { race } : {}),
+    ...(propertyIds.length ? { monsterPropertyIds: propertyIds } : {}),
+    ...(propertyLabels.length ? { monsterProperties: propertyLabels } : {}),
+    ...(Number.isFinite(Number(localized?.atk)) ? { attack: Number(localized.atk) } : {}),
+    ...(Number.isFinite(Number(localized?.def)) ? { defense: Number(localized.def) } : {}),
+    ...(localized?.attribute ? { attribute: localized.attribute } : {}),
+  };
+}
+
+function normalizeQaRecord(qaId, payload, cardNameById, selection) {
+  const localized = payload?.qaData?.ja || payload?.qaData?.en || firstObjectValue(payload?.qaData);
+  if (!localized) return null;
+  const cardIds = uniqueNumericIds(payload?.cards);
+  const replaceCards = (value) => String(value || "").replace(/<<\s*(\d{1,10})\s*>>/gu, (_match, id) => (
+    cardNameById.has(String(id)) ? `「${cardNameById.get(String(id))}」` : `卡片#${id}`
+  ));
+  const question = replaceCards(localized.question || localized.title);
+  const answer = replaceCards(localized.answer);
+  const title = replaceCards(localized.title || localized.question || `Official Q&A ${qaId}`);
+  if (!question || !answer) return null;
+  const supportingCardIds = selection.supportingCardIdsByQaId?.[String(qaId)] || [];
+  return {
+    id: `ygoresources-qa-${qaId}`,
+    stableId: `ygoresources-qa-${qaId}`,
+    sourceId: String(qaId),
+    sourceRecordId: String(qaId),
+    recordType: "qa",
+    status: "confirmed",
+    title,
+    question,
+    answer,
+    conclusion: answer,
+    text: `${question}\n${answer}`,
+    cards: cardIds.map((id) => cardNameById.get(String(id)) || `卡片#${id}`),
+    cardIds,
+    source: "Konami Official Card Database via YGOResources",
+    sourceUrl: `https://www.db.yugioh-card.com/yugiohdb/faq_search.action?fid=${encodeURIComponent(qaId)}&ope=5&request_locale=ja`,
+    mirrorUrl: `${DEFAULT_BASE_URL}/data/qa/${encodeURIComponent(qaId)}`,
+    retrievalContext: {
+      strategy: selection.strategy,
+      candidatePoolSize: selection.candidatePoolSize,
+      uniqueExactCardIntersection: selection.uniqueExactCardIntersection
+        && String(selection.uniqueExactQaId || "") === String(qaId),
+      resolvedCardIds: selection.resolvedCardIds,
+      supportingCardIds,
+    },
+  };
+}
+
+function preferredCardLocale(cardData = {}) {
+  return cardData.en || cardData.cn || cardData.ja || firstObjectValue(cardData) || {};
+}
+
+function firstObjectValue(value) {
+  return Object.values(value || {}).find((item) => item && typeof item === "object") || null;
+}
+
+function collectQaIds(value) {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    if (item && typeof item === "object") return [item.id || item.qaId || item.qid];
+    return [item];
+  });
+}
+
+async function fetchJsonCached(fetchImpl, url, { timeoutMs, cacheTtlMs }) {
+  let cache = cacheByFetchImpl.get(fetchImpl);
+  if (!cache) {
+    cache = new Map();
+    cacheByFetchImpl.set(fetchImpl, cache);
+  }
+  const cached = cache.get(url);
+  if (cached && cached.expiresAt > Date.now()) return cached.value;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), positiveInteger(timeoutMs, DEFAULT_TIMEOUT_MS));
+  try {
+    const response = await fetchImpl(url, {
+      headers: { accept: "application/json" },
+      signal: controller.signal,
+    });
+    if (!response?.ok) throw new Error(`http_${response?.status || "unknown"}`);
+    const value = await response.json();
+    cache.set(url, { value, expiresAt: Date.now() + positiveInteger(cacheTtlMs, DEFAULT_CACHE_TTL_MS) });
+    return value;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function dedupeCardsById(cards) {
+  const seen = new Set();
+  return (cards || []).flatMap((card) => {
+    const id = String(card.id || card.cardId || "").replace(/\D+/gu, "");
+    if (!id || seen.has(id)) return [];
+    seen.add(id);
+    return [{ ...card, id }];
+  });
+}
+
+function uniqueNumericIds(values) {
+  return [...new Set((values || []).map((value) => String(value || "").replace(/\D+/gu, "")).filter(Boolean))];
+}
+
+function displayCardName(card = {}) {
+  return String(card.cnName || card.name || card.jaName || card.enName || `卡片#${card.id}`);
+}
+
+function positiveInteger(value, fallback) {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function errorCode(error) {
+  return String(error?.name || error?.code || error?.message || "unknown").replace(/\s+/gu, "_").slice(0, 80);
+}
+
+function emptyResult(reason) {
+  return { records: [], cardMetadata: [], warnings: [reason], debug: { strategy: reason, ids: [] } };
+}
