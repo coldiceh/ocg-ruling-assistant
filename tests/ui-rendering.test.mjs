@@ -226,6 +226,10 @@ test("versioned backend answers require a matching server confirmation", async (
     missingConfirmationRequest("问题", "previous"),
     (error) => error?.code === "ruling_version_unconfirmed",
   );
+  const compatibleLatest = await missingConfirmationRequest("问题", "latest");
+  assert.equal(compatibleLatest.effectiveRulingVersion, "latest");
+  assert.equal(compatibleLatest.rulingVersionCompatibility, "legacy_unversioned_latest");
+  assert.equal(compatibleLatest.shortAnswer, "旧后端未回显版本");
 
   const mismatchedRequest = buildRequest(async () => ({
     ok: true,
