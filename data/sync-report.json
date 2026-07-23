@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-22T14:26:13.159Z",
+  "generatedAt": "2026-07-23T03:48:19.319Z",
   "cardCount": 14321,
   "rulingCount": 42233,
   "cardAliasCount": 35882,
@@ -8,6 +8,20 @@
   "syncOnlyReleasedCards": true,
   "maxCards": 0,
   "maxQaTotal": 3000,
+  "qaSyncSelection": {
+    "selectedCount": 3000,
+    "discoveredCount": 11576,
+    "truncatedCount": 8576,
+    "changedSelectedCount": 1,
+    "recentSelectedCount": 120
+  },
   "warnings": [],
-  "changedPaths": []
+  "changedPaths": [
+    "/data/card/15741",
+    "/data/idx/card",
+    "/data/idx/qa",
+    "/data/meta/index",
+    "/data/meta/recent",
+    "/data/qa/24328"
+  ]
 }
