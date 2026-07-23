@@ -769,12 +769,18 @@ async function requestBackendAnswer(text, requestedRulingVersion) {
       effectiveVersion: reportedEffectiveVersion,
     });
   }
-  const effectiveRulingVersion = reportedEffectiveVersion || reportedRulingVersion;
+  let effectiveRulingVersion = reportedEffectiveVersion || reportedRulingVersion;
+  let rulingVersionCompatibility = "";
   if (!effectiveRulingVersion) {
-    throw createRulingVersionError({
-      code: "ruling_version_unconfirmed",
-      requestedVersion: requestedRulingVersion,
-    });
+    if (requestedRulingVersion === "latest") {
+      effectiveRulingVersion = "latest";
+      rulingVersionCompatibility = "legacy_unversioned_latest";
+    } else {
+      throw createRulingVersionError({
+        code: "ruling_version_unconfirmed",
+        requestedVersion: requestedRulingVersion,
+      });
+    }
   }
   if (effectiveRulingVersion !== requestedRulingVersion) {
     throw createRulingVersionError({
@@ -783,7 +789,12 @@ async function requestBackendAnswer(text, requestedRulingVersion) {
       effectiveVersion: effectiveRulingVersion,
     });
   }
-  return { ...answer, requestedRulingVersion, effectiveRulingVersion };
+  return {
+    ...answer,
+    requestedRulingVersion,
+    effectiveRulingVersion,
+    rulingVersionCompatibility,
+  };
 }
 
 function normalizeRulingVersion(value) {
