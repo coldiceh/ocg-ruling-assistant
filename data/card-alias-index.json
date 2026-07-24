@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-23T15:56:25.506Z",
+  "generatedAt": "2026-07-24T03:50:07.043Z",
   "records": [
     {
       "alias": "“K9刑侦案件”",
@@ -251142,6 +251142,20 @@
       "language": "en"
     },
     {
+      "alias": "D－バースト",
+      "normalizedAlias": "d-バ-スト",
+      "cardId": "23150",
+      "cardName": "D－バースト",
+      "language": "ja"
+    },
+    {
+      "alias": "E・HERO クレイガードマン",
+      "normalizedAlias": "e・hero クレイガ-ドマン",
+      "cardId": "23147",
+      "cardName": "E・HERO クレイガードマン",
+      "language": "ja"
+    },
+    {
       "alias": "青之眼少女",
       "normalizedAlias": "青之眼少女",
       "cardId": "10588",
@@ -251163,10 +251177,38 @@
       "language": "en"
     },
     {
+      "alias": "光幻獣 カンデラード",
+      "normalizedAlias": "光幻獣 カンデラ-ド",
+      "cardId": "23144",
+      "cardName": "光幻獣 カンデラード",
+      "language": "ja"
+    },
+    {
       "alias": "邪悪なる魔王－ゾーク",
       "normalizedAlias": "邪悪なる魔王-ゾ-ク",
       "cardId": "23486",
       "cardName": "邪悪なる魔王－ゾーク",
+      "language": "ja"
+    },
+    {
+      "alias": "速攻召喚",
+      "normalizedAlias": "速攻召喚",
+      "cardId": "23149",
+      "cardName": "速攻召喚",
+      "language": "zh"
+    },
+    {
+      "alias": "不死のデスロード",
+      "normalizedAlias": "不死のデスロ-ド",
+      "cardId": "23146",
+      "cardName": "不死のデスロード",
+      "language": "ja"
+    },
+    {
+      "alias": "アルカナフォースⅩⅡ－THE HANGED MAN",
+      "normalizedAlias": "アルカナフォ-スxii-the hanged man",
+      "cardId": "23143",
+      "cardName": "アルカナフォースⅩⅡ－THE HANGED MAN",
       "language": "ja"
     },
     {
@@ -251175,6 +251217,34 @@
       "cardId": "6053",
       "cardName": "7",
       "language": "unknown"
+    },
+    {
+      "alias": "ダークティラノ",
+      "normalizedAlias": "ダ-クティラノ",
+      "cardId": "23142",
+      "cardName": "ダークティラノ",
+      "language": "ja"
+    },
+    {
+      "alias": "ドールハンマー",
+      "normalizedAlias": "ド-ルハンマ-",
+      "cardId": "23148",
+      "cardName": "ドールハンマー",
+      "language": "ja"
+    },
+    {
+      "alias": "プラズマ戦士エイトム",
+      "normalizedAlias": "プラズマ戦士エイトム",
+      "cardId": "23145",
+      "cardName": "プラズマ戦士エイトム",
+      "language": "ja"
+    },
+    {
+      "alias": "白騎士団のロード",
+      "normalizedAlias": "白騎士団のロ-ド",
+      "cardId": "6829",
+      "cardName": "白騎士団のロード",
+      "language": "ja"
     }
   ]
 }
