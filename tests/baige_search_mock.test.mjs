@@ -81,6 +81,20 @@ const dalviRawCard = {
   data: { type: 33, atk: 1300, def: 800, level: 3, race: 16384, attribute: 8 },
 };
 
+const mindScanRawCard = {
+  cid: 25000,
+  id: 34298391,
+  cn_name: "看透心灵之眼",
+  sc_name: "心灵透视眼",
+  jp_name: "心を見通す眼",
+  en_name: "Mind Scan",
+  text: {
+    types: "[魔法|永续]",
+    desc: "自己场上或墓地存在指定系列卡期间，对方必须持续公开全部手牌。",
+  },
+  data: { type: 131074 },
+};
+
 const numberedRawCards = [
   { cid: 10659, id: 49456901, cn_name: "混沌No.104 假面魔蹈士 黑影", text: { desc: "旧卡干扰项。" } },
   { cid: 23364, id: 101306042, cn_name: "No.104 假面魔蹈士 闪光·杠然", text: { desc: "新卡文本。" } },
@@ -280,6 +294,56 @@ test("baige_card_text_is_not_official_direct", async () => {
   assert.ok(answer.riskFlags.includes("official_confirmed_requires_direct_evidence"));
   assert.ok(answer.usedEvidence.some((item) => item.type === "baige_card_text"));
   assert.ok(!answer.usedEvidence.some((item) => item.type === "official_qa"));
+});
+
+test("a newly indexed continuous effect feeds generic hand-visibility legality reasoning", async () => {
+  clearBaigeSearchCache();
+  const answer = await answerRagRulingQuestion({
+    question: "我方看透心灵之眼适用中，我方有手牌，我方能发动红莲的指名者吗？",
+    cards: [{
+      id: "8515",
+      name: "红莲指名者",
+      aliases: ["红莲指名者", "紅蓮の指名者"],
+      effectText: "支付2000基本分，将手牌全部出示给对手可以发动。确认对方的手牌，从其中选1张除外。",
+    }, {
+      id: "34298391",
+      name: "心灵透视眼",
+      cnName: "心灵透视眼",
+      jaName: "心を見通す眼",
+      enName: "Mind Scan",
+      aliases: ["心灵透视眼", "心を見通す眼", "Mind Scan"],
+      effectText: "自己场上或墓地存在指定系列卡期间，对方必须持续公开全部手牌。",
+    }],
+    records: [{
+      id: "card-faq-8515-1",
+      recordType: "card-faq",
+      type: "faq",
+      title: "红莲指名者 FAQ",
+      cardIds: ["8515"],
+      cards: ["红莲指名者"],
+      conclusion: "自己的手牌有1张以上已经因其他卡的效果公开时，不能发动。",
+    }],
+    qaRecords: [],
+    fetchImpl: async (url) => (
+      String(url).includes("ygocdb.com/api/")
+        ? jsonResponse({ result: [mindScanRawCard], next: 0 })
+        : jsonResponse({ result: [], next: 0 })
+    ),
+    env: {
+      MODEL_PROVIDER: "mock",
+      RAG_MODEL_PROVIDER: "mock",
+      RAG_DRY_RUN: "1",
+      RAG_LIVE_OFFICIAL_QA: "0",
+      OCG_ENGINE_ENABLED: "0",
+    },
+    dryRun: true,
+  });
+
+  assert.match(answer.shortAnswer, /^不能发动/u);
+  assert.ok(answer.resolvedCards.some((card) => card.name === "看透心灵之眼"));
+  assert.equal(answer.debug.unresolvedMentions.length, 0);
+  assert.equal(answer.debug.deterministicDecision, "operation_blocker");
+  assert.equal(answer.debug.modelUsed, "deterministic-ruling-reasoner");
 });
 
 test("baige_resolved_card_metadata_replaces_the_unresolved_prompt_mention", async () => {

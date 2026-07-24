@@ -26,6 +26,24 @@ test("normalized punctuation and full-width variants still match official origin
   assert.equal(matches.exact[0].id, "qa-1");
 });
 
+test("a card-name-agnostic question skeleton cannot directly match a different card", () => {
+  const record = qa({
+    question: "「测试甲卡」的效果可以发动吗？",
+    answer: "可以发动。",
+    cardIds: ["101"],
+    cards: ["测试甲卡"],
+  });
+  const matches = searchOfficialQaEvidence({
+    question: "「测试乙卡」的效果可以发动吗？",
+    records: [record],
+    resolvedCards: [{ id: "202", name: "测试乙卡" }],
+  });
+
+  assert.equal(matches.exact.length, 0);
+  assert.ok(matches.all[0]?.matchedBy.includes("card_name_agnostic_skeleton"));
+  assert.equal(matches.all[0]?.identityCompatibleForExact, false);
+});
+
 test("mixed Japanese card name and Chinese question can use a near official case", () => {
   const record = qa({ question: "「S：Pリトルナイト」のコントロールが移った場合、誰が効果を発動できますか？", answer: "その時点で自分がコントロールしているので、自分が発動できます。", cards: ["S：Pリトルナイト"] });
   const matches = searchOfficialQaEvidence({ question: "S：Pリトルナイト的控制权在连锁处理后转移，谁可以发动效果？", records: [record], resolvedCards: [{ id: "1", name: "S：Pリトルナイト" }] });

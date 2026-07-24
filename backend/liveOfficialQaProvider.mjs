@@ -23,6 +23,7 @@ const cacheByFetchImpl = new WeakMap();
 
 export async function retrieveLiveOfficialQa({
   resolvedCards = [],
+  candidateQaIds = [],
   fetchImpl = globalThis.fetch,
   baseUrl = DEFAULT_BASE_URL,
   timeoutMs = DEFAULT_TIMEOUT_MS,
@@ -30,15 +31,16 @@ export async function retrieveLiveOfficialQa({
   maxCandidates = 8,
 } = {}) {
   const cards = dedupeCardsById(resolvedCards).slice(0, 6);
-  if (cards.length < 2 || typeof fetchImpl !== "function") {
-    return emptyResult("live_qa_requires_two_resolved_cards");
+  const preferredCandidateQaIds = uniqueNumericIds(candidateQaIds);
+  if ((!cards.length && !preferredCandidateQaIds.length) || typeof fetchImpl !== "function") {
+    return emptyResult("live_qa_requires_resolved_cards_or_local_candidates");
   }
 
   const warnings = [];
   const [cardPayloadResults, propertyMetadataResult] = await Promise.all([
     Promise.all(cards.map(async (card) => {
       try {
-        const payload = await fetchJsonCached(fetchImpl, `${baseUrl}/data/card/${encodeURIComponent(card.id)}`, {
+        const payload = await fetchJsonResilient(fetchImpl, `${baseUrl}/data/card/${encodeURIComponent(card.id)}`, {
           timeoutMs,
           cacheTtlMs,
         });
@@ -48,14 +50,16 @@ export async function retrieveLiveOfficialQa({
         return null;
       }
     })),
-    fetchJsonCached(fetchImpl, `${baseUrl}/data/meta/mprop`, { timeoutMs, cacheTtlMs })
-      .catch((error) => {
-        warnings.push(`live_monster_property_metadata_failed:${errorCode(error)}`);
-        return [];
-      }),
+    cards.length
+      ? fetchJsonResilient(fetchImpl, `${baseUrl}/data/meta/mprop`, { timeoutMs, cacheTtlMs })
+        .catch((error) => {
+          warnings.push(`live_monster_property_metadata_failed:${errorCode(error)}`);
+          return [];
+        })
+      : Promise.resolve([]),
   ]);
   const cardPayloads = cardPayloadResults.filter(Boolean);
-  if (cardPayloads.length < 2) {
+  if (cards.length && !cardPayloads.length && !preferredCandidateQaIds.length) {
     return { ...emptyResult("live_card_qa_index_incomplete"), warnings };
   }
   const allCardIndexesAvailable = cardPayloads.length === cards.length;
@@ -63,11 +67,17 @@ export async function retrieveLiveOfficialQa({
 
   const propertyMetadata = propertyMetadataResult;
   const cardMetadata = cardPayloads.map(({ card, payload }) => normalizeCardMetadata(card, payload, propertyMetadata));
-  const qaSelection = selectRelevantQaIds(cardPayloads.map(({ card, payload }) => ({
+  const indexedSelection = selectRelevantQaIds(cardPayloads.map(({ card, payload }) => ({
     cardId: card.id,
     qaIds: collectQaIds(payload?.qaIndex),
   })), maxCandidates);
-  qaSelection.uniqueExactCardIntersection = allCardIndexesAvailable && qaSelection.uniqueExactCardIntersection;
+  indexedSelection.uniqueExactCardIntersection = allCardIndexesAvailable && indexedSelection.uniqueExactCardIntersection;
+  const qaSelection = {
+    ...indexedSelection,
+    ids: uniqueNumericIds([...indexedSelection.ids, ...preferredCandidateQaIds])
+      .slice(0, positiveInteger(maxCandidates, 8)),
+    candidateQaIds: preferredCandidateQaIds,
+  };
   qaSelection.uniqueExactQaId = qaSelection.uniqueExactCardIntersection
     ? qaSelection.uniqueExactQaId : null;
   if (!qaSelection.ids.length) {
@@ -82,7 +92,7 @@ export async function retrieveLiveOfficialQa({
   const cardNameById = new Map(cards.map((card) => [String(card.id), displayCardName(card)]));
   const records = (await Promise.all(qaSelection.ids.map(async (qaId) => {
     try {
-      const payload = await fetchJsonCached(fetchImpl, `${baseUrl}/data/qa/${encodeURIComponent(qaId)}`, {
+      const payload = await fetchJsonResilient(fetchImpl, `${baseUrl}/data/qa/${encodeURIComponent(qaId)}`, {
         timeoutMs,
         cacheTtlMs,
       });
@@ -107,13 +117,37 @@ export async function retrieveLiveOfficialQa({
 }
 
 export function selectRelevantQaIds(cardQaEntries = [], maxCandidates = 8) {
+  const safeLimit = positiveInteger(maxCandidates, 8);
   const entries = (cardQaEntries || [])
     .map((entry) => ({
       cardId: String(entry.cardId || ""),
       qaIds: uniqueNumericIds(entry.qaIds),
     }))
     .filter((entry) => entry.cardId && entry.qaIds.length);
-  if (entries.length < 2) return { ids: [], strategy: "insufficient_card_qa_indexes", candidatePoolSize: 0 };
+  if (!entries.length) return { ids: [], strategy: "no_card_qa_indexes", candidatePoolSize: 0 };
+  if (entries.length === 1) {
+    const ids = entries[0].qaIds;
+    if (ids.length > safeLimit) {
+      return {
+        ids: [],
+        strategy: "single_card_qa_index_too_large",
+        candidatePoolSize: ids.length,
+        uniqueExactCardIntersection: false,
+        uniqueExactQaId: null,
+        resolvedCardIds: [entries[0].cardId],
+        supportingCardIdsByQaId: {},
+      };
+    }
+    return {
+      ids,
+      strategy: "bounded_single_card_qa_index",
+      candidatePoolSize: ids.length,
+      uniqueExactCardIntersection: ids.length === 1,
+      uniqueExactQaId: ids.length === 1 ? String(ids[0]) : null,
+      resolvedCardIds: [entries[0].cardId],
+      supportingCardIdsByQaId: Object.fromEntries(ids.map((id) => [String(id), [entries[0].cardId]])),
+    };
+  }
 
   const counts = new Map();
   const supportingCardIds = new Map();
@@ -133,7 +167,6 @@ export function selectRelevantQaIds(cardQaEntries = [], maxCandidates = 8) {
   const sharedMatches = (allCardMatches.length ? allCardMatches : [...counts.entries()]
     .filter(([, count]) => count >= 2)
     .sort((left, right) => right[1] - left[1] || firstSeen.get(left[0]) - firstSeen.get(right[0])));
-  const safeLimit = positiveInteger(maxCandidates, 8);
   const selectedMatches = sharedMatches.slice(0, safeLimit);
   return {
     ids: selectedMatches.map(([id]) => id),
@@ -172,9 +205,10 @@ function normalizeQaRecord(qaId, payload, cardNameById, selection) {
   if (!localized) return null;
   const cardIds = uniqueNumericIds(payload?.cards);
   const replaceCards = (value) => String(value || "").replace(/<<\s*(\d{1,10})\s*>>/gu, (_match, id) => (
-    cardNameById.has(String(id)) ? `「${cardNameById.get(String(id))}」` : `卡片#${id}`
+    cardNameById.has(String(id)) ? cardNameById.get(String(id)) : `卡片#${id}`
   ));
-  const question = replaceCards(localized.question || localized.title);
+  const question = replaceCards(localized.title || localized.question);
+  const detailedQuestion = replaceCards(localized.question || localized.title);
   const answer = replaceCards(localized.answer);
   const title = replaceCards(localized.title || localized.question || `Official Q&A ${qaId}`);
   if (!question || !answer) return null;
@@ -190,7 +224,7 @@ function normalizeQaRecord(qaId, payload, cardNameById, selection) {
     question,
     answer,
     conclusion: answer,
-    text: `${question}\n${answer}`,
+    text: [question, detailedQuestion !== question ? detailedQuestion : "", answer].filter(Boolean).join("\n"),
     cards: cardIds.map((id) => cardNameById.get(String(id)) || `卡片#${id}`),
     cardIds,
     source: "Konami Official Card Database via YGOResources",
@@ -244,6 +278,14 @@ async function fetchJsonCached(fetchImpl, url, { timeoutMs, cacheTtlMs }) {
     return value;
   } finally {
     clearTimeout(timer);
+  }
+}
+
+async function fetchJsonResilient(fetchImpl, url, options) {
+  try {
+    return await fetchJsonCached(fetchImpl, url, options);
+  } catch {
+    return fetchJsonCached(fetchImpl, url, options);
   }
 }
 

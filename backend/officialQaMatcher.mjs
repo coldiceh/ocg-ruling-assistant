@@ -9,8 +9,9 @@ const QUESTION_TYPES = [
   ["target_legality", /能否.*(?:取|选择).*对象|不能成为.*对象|対象に.*(?:できます|できません)|can(?:not)? target|legal target/iu],
   ["timing_window", /时点|伤害步骤|伤害计算|错过时点|タイミング|ダメージステップ|timing|damage step/iu],
   ["continuous_effect_during_resolution", /效果处理中.*(?:永续|持续|自坏)|処理中.*永続|continuous effect.*resol/iu],
-  ["resolution_result", /如何处理|怎么处理|处理后|效果处理|どう処理|resolution|resolve/iu],
+  ["resolution_result", /如何处理|怎么处理|处理后|效果处理|どう処理|どうなりますか|処理はどうな|what happens|resolution|resolve/iu],
   ["can_activate", /(?:能否|是否(?:可以|能)?|可不可以|能不能|可以|不能).{0,12}(?:发动|连锁)|発動(?:する(?:事|こと)は)?(?:でき|出来)ますか|発動できません|can(?:not)?\b.{0,80}\bactivate/iu],
+  ["action_legality", /(?:できますか|できませんか|可能ですか)|(?:能否|是否(?:可以|能)?|可不可以|能不能).{0,30}(?:召唤|送去|作为|进行|处理)|\bcan (?:i|you|a player|that|this)\b|\bis it possible\b/iu],
 ];
 
 const EFFECT_PHRASES = [
@@ -25,6 +26,27 @@ const EFFECT_PHRASES = [
   ["damage_step", /伤害步骤|ダメージステップ|damage step/iu],
   ["miss_timing", /错过时点|タイミングを逃|miss.*timing/iu],
   ["summon_response", /召唤成功时点|召喚成功時|summon response/iu],
+];
+
+const SEMANTIC_CONCEPTS = [
+  ["activation", /発動|发动|activate|activation/iu],
+  ["resolution", /処理|处理|解決|resolve|resolution|what happens|どうな/iu],
+  ["chain", /チェーン|连锁|chain/iu],
+  ["effect", /効果|效果|effect/iu],
+  ["monster_effect", /モンスター.{0,12}効果|怪兽.{0,12}效果|monster effect/iu],
+  ["special_summon", /特殊召喚|特殊召唤|special summon/iu],
+  ["fusion_summon", /融合召喚|融合召唤|fusion summon/iu],
+  ["fusion_material", /融合(?:召喚|召唤)?.{0,8}素材|fusion material|material for a fusion summon/iu],
+  ["material_prohibited", /素材にできない|不能.{0,12}(?:作为|用作).{0,8}素材|cannot be used as material/iu],
+  ["send_graveyard", /墓地.{0,16}送|送.{0,16}墓地|send.{0,30}graveyard|sent.{0,30}graveyard/iu],
+  ["tribute_summon", /アドバンス召喚|上级召唤|tribute summon/iu],
+  ["control_change", /コントロール|控制权|gain.{0,16}control|control of/iu],
+  ["temporary_banish", /一時的.{0,16}除外|暂时.{0,16}除外|temporar.{0,24}banish|banish.{0,40}return.{0,20}(?:field|zone)/iu],
+  ["negate_activation", /発動.{0,24}無効|发动.{0,24}无效|negate.{0,24}activation/iu],
+  ["return_deck", /デッキ.{0,24}戻|卡组.{0,24}(?:回到|返回)|shuffle.{0,30}deck|return.{0,30}deck/iu],
+  ["discard", /捨て|丢弃|discard/iu],
+  ["first_turn", /先攻.{0,12}(?:1|１)ターン|先攻第一回合|first turn.{0,20}(?:going first|of the duel)?/iu],
+  ["simultaneous_summon", /同時.{0,16}特殊召喚|同时.{0,16}特殊召唤|simultaneous.{0,20}special summon/iu],
 ];
 
 export function normalizeOfficialQaQuery(value) {
@@ -48,22 +70,38 @@ export function extractOfficialQaEffectPhrases(value) {
   return EFFECT_PHRASES.filter(([, pattern]) => pattern.test(text)).map(([id]) => id);
 }
 
+export function extractOfficialQaSemanticConcepts(value) {
+  const text = String(value || "");
+  return SEMANTIC_CONCEPTS.filter(([, pattern]) => pattern.test(text)).map(([id]) => id);
+}
+
 export function searchOfficialQaEvidence({ question, records = [], resolvedCards = [], limit = 20 } = {}) {
   const query = String(question || "").trim();
   const normalizedQuery = normalizeOfficialQaQuery(query);
+  const normalizedQuerySkeleton = normalizeOfficialQaSkeleton(query);
   const queryType = classifyOfficialQaQuestionType(query);
   const queryPhrases = extractOfficialQaEffectPhrases(query);
+  const queryConcepts = extractOfficialQaSemanticConcepts(query);
   const resolvedIds = new Set((resolvedCards || []).map((card) => normalizeId(card.id || card.cardId)).filter(Boolean));
   const resolvedNames = new Set((resolvedCards || []).flatMap(cardAliases).map(normalizeOfficialQaQuery).filter(Boolean));
 
   const scored = (records || [])
     .filter((record) => ["qa", "card-faq", "official-database"].includes(record.recordType))
-    .map((record) => scoreRecord({ record, query, normalizedQuery, queryType, queryPhrases, resolvedIds, resolvedNames }))
+    .map((record) => scoreRecord({
+      record,
+      normalizedQuery,
+      normalizedQuerySkeleton,
+      queryType,
+      queryPhrases,
+      queryConcepts,
+      resolvedIds,
+      resolvedNames,
+    }))
     .filter((item) => item.score >= 0.2);
   promoteUniqueExactCardSet(scored, queryType, resolvedIds);
-  const ranked = scored
-    .sort((left, right) => right.score - left.score || String(left.record.id).localeCompare(String(right.record.id)))
-    .slice(0, Math.max(limit, 1));
+  scored.sort((left, right) => right.score - left.score || String(left.record.id).localeCompare(String(right.record.id)));
+  promoteUniqueSemanticMatch(scored, resolvedIds);
+  const ranked = scored.slice(0, Math.max(limit, 1));
 
   const exact = ranked.filter((item) => item.matchLevel === "official_qa_exact");
   const near = ranked.filter((item) => item.matchLevel === "official_qa_near");
@@ -73,6 +111,7 @@ export function searchOfficialQaEvidence({ question, records = [], resolvedCards
     normalizedQuery,
     questionType: queryType,
     effectPhrases: queryPhrases,
+    semanticConcepts: queryConcepts,
     exact,
     near,
     related,
@@ -107,21 +146,39 @@ export function resolveEntitiesFromOfficialQaMatch({ resolution = {}, matches, c
   return buildEntityResolution(resolved, remaining, resolvedByOfficialQaMatch);
 }
 
-function scoreRecord({ record, normalizedQuery, queryType, queryPhrases, resolvedIds, resolvedNames }) {
+function scoreRecord({
+  record,
+  normalizedQuery,
+  normalizedQuerySkeleton,
+  queryType,
+  queryPhrases,
+  queryConcepts,
+  resolvedIds,
+  resolvedNames,
+}) {
   const {
     questionText,
     normalizedRecordQuestion,
+    normalizedRecordQuestionSkeleton,
     normalizedRecordText,
     evidenceType,
     evidencePhrases,
+    evidenceConcepts,
     recordIds,
     recordIdentityText,
   } = officialQaRecordFeatures(record);
   const typeCompatible = questionTypeCompatible(queryType, evidenceType);
   const exactNormalized = normalizedQuery.length >= 8 && normalizedRecordQuestion === normalizedQuery;
+  const exactSkeleton = normalizedQuerySkeleton.length >= 8
+    && normalizedRecordQuestionSkeleton === normalizedQuerySkeleton;
   const containment = containmentScore(normalizedQuery, normalizedRecordQuestion || normalizedRecordText);
   const similarity = diceSimilarity(normalizedQuery, normalizedRecordQuestion || normalizedRecordText.slice(0, normalizedQuery.length * 2));
+  const skeletonContainment = containmentScore(normalizedQuerySkeleton, normalizedRecordQuestionSkeleton);
+  const skeletonSimilarity = diceSimilarity(normalizedQuerySkeleton, normalizedRecordQuestionSkeleton);
   const phraseHits = queryPhrases.filter((phrase) => evidencePhrases.includes(phrase));
+  const semanticHits = queryConcepts.filter((concept) => evidenceConcepts.includes(concept));
+  const semanticScore = setDiceSimilarity(queryConcepts, evidenceConcepts);
+  const semanticQueryCoverage = queryConcepts.length ? semanticHits.length / queryConcepts.length : 0;
   const matchedCardIds = [...resolvedIds].filter((id) => recordIds.has(id));
   const cardIdMatch = matchedCardIds.length > 0;
   const cardIdCoverage = resolvedIds.size ? matchedCardIds.length / resolvedIds.size : 0;
@@ -135,9 +192,19 @@ function scoreRecord({ record, normalizedQuery, queryType, queryPhrases, resolve
   const exactCardIdSet = exactResolvedCardIdSet || exactRetrievedCardSubset;
   const cardNameMatch = [...resolvedNames].some((name) => name.length >= 3 && !hasNumberedCardIdentityConflict(name, recordIdentityText) && normalizedRecordText.includes(name));
   const cardMatch = cardIdMatch || cardNameMatch;
-  const rawExact = exactNormalized || (containment >= 0.9 && similarity >= 0.86);
-  const lexicalScore = Math.max(similarity, containment);
-  let score = lexicalScore;
+  const identityCompatibleForExact = !resolvedIds.size
+    || (recordIds.size ? cardIdCoverage === 1 : cardNameMatch);
+  // Replacing quoted names with a generic "card" token is useful for ranking
+  // differently translated versions of the same question, but it cannot prove
+  // that the cards are the same. Only the original wording may establish a raw
+  // exact match, and any structured card identity present on both sides must
+  // agree completely.
+  const rawExact = identityCompatibleForExact && (
+    exactNormalized
+    || (containment >= 0.9 && similarity >= 0.86)
+  );
+  const lexicalScore = Math.max(similarity, containment, skeletonSimilarity, skeletonContainment);
+  let score = Math.max(lexicalScore, semanticScore * 0.72);
   if (typeCompatible && queryType !== "unknown") score += 0.16;
   if (cardMatch) score += 0.17;
   if (resolvedIds.size >= 2 && cardIdCoverage === 1) score += 0.24;
@@ -159,8 +226,19 @@ function scoreRecord({ record, normalizedQuery, queryType, queryPhrases, resolve
     matchedCardIds,
     cardIdCoverage,
     exactCardIdSet,
+    identityCompatibleForExact,
     lexicalScore,
-    matchedBy: [rawExact && "raw_or_normalized_query", cardIdMatch && "card_id", cardNameMatch && "card_name", typeCompatible && "question_type", phraseHits.length && "effect_phrase"].filter(Boolean),
+    semanticScore,
+    semanticQueryCoverage,
+    semanticHits,
+    matchedBy: [
+      rawExact && "raw_or_normalized_query",
+      exactSkeleton && "card_name_agnostic_skeleton",
+      cardIdMatch && "card_id",
+      cardNameMatch && "card_name",
+      typeCompatible && "question_type",
+      phraseHits.length && "effect_phrase",
+    ].filter(Boolean),
     matchedPhrases: phraseHits,
     questionText,
   };
@@ -170,7 +248,9 @@ function questionTypeCompatible(queryType, evidenceType) {
   if (queryType === "unknown" || evidenceType === "unknown") return queryType === evidenceType;
   if (queryType === evidenceType) return true;
   const activation = new Set(["can_activate", "timing_window"]);
-  return activation.has(queryType) && activation.has(evidenceType);
+  if (activation.has(queryType) && activation.has(evidenceType)) return true;
+  const legality = new Set(["action_legality", "can_activate", "target_legality", "timing_window"]);
+  return legality.has(queryType) && legality.has(evidenceType);
 }
 
 function recordQuestionText(record = {}) {
@@ -202,6 +282,20 @@ function promoteUniqueExactCardSet(items, queryType, resolvedIds) {
   candidate.matchedBy = [...new Set([...candidate.matchedBy, "unique_exact_card_set"])];
 }
 
+function promoteUniqueSemanticMatch(items, resolvedIds) {
+  const [top, second] = items;
+  if (!top || !top.typeCompatible || top.matchLevel === "official_qa_exact") return;
+  const enoughConcepts = top.semanticHits.length >= 3
+    && top.semanticQueryCoverage >= 0.8
+    && top.semanticScore >= 0.72;
+  if (!enoughConcepts || top.score < 0.78) return;
+  if (resolvedIds.size && !top.identityCompatibleForExact) return;
+  const margin = top.score - Number(second?.score || 0);
+  if (second && margin < 0.08) return;
+  top.matchLevel = "official_qa_exact";
+  top.matchedBy = [...new Set([...top.matchedBy, "unique_semantic_signature"])];
+}
+
 function officialQaRecordFeatures(record = {}) {
   if (record && typeof record === "object") {
     const cached = officialQaRecordFeatureCache.get(record);
@@ -212,9 +306,11 @@ function officialQaRecordFeatures(record = {}) {
   const features = {
     questionText,
     normalizedRecordQuestion: normalizeOfficialQaQuery(questionText),
+    normalizedRecordQuestionSkeleton: normalizeOfficialQaSkeleton(questionText),
     normalizedRecordText: normalizeOfficialQaQuery(text),
     evidenceType: classifyOfficialQaQuestionType(questionText || text),
     evidencePhrases: extractOfficialQaEffectPhrases(text),
+    evidenceConcepts: extractOfficialQaSemanticConcepts(questionText || text),
     recordIds: new Set([
       record.cardId,
       ...(record.cardIds || []),
@@ -225,6 +321,14 @@ function officialQaRecordFeatures(record = {}) {
   };
   if (record && typeof record === "object") officialQaRecordFeatureCache.set(record, features);
   return features;
+}
+
+function normalizeOfficialQaSkeleton(value) {
+  return normalizeOfficialQaQuery(
+    String(value || "")
+      .replace(/「[^」\r\n]{1,100}」/gu, " card ")
+      .replace(/<<\s*\d{1,10}\s*>>/gu, " card "),
+  );
 }
 
 function extractInlineCardIds(value) {
@@ -246,6 +350,14 @@ function diceSimilarity(left, right) {
   const b = bigrams(right);
   const overlap = [...a].filter((item) => b.has(item)).length;
   return (2 * overlap) / Math.max(1, a.size + b.size);
+}
+
+function setDiceSimilarity(left, right) {
+  const a = new Set(left || []);
+  const b = new Set(right || []);
+  if (!a.size || !b.size) return 0;
+  const overlap = [...a].filter((item) => b.has(item)).length;
+  return (2 * overlap) / (a.size + b.size);
 }
 
 function bigrams(value) {

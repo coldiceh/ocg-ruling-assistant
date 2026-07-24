@@ -1,5 +1,6 @@
 import { access, readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
+import { findRulingDataQualityIssues } from "./rulingDataQuality.mjs";
 
 export const REQUIRED_DATA_FILES = [
   "cards.json",
@@ -61,6 +62,7 @@ export function buildDataHealth({
   });
   const qaCount = rulingRecords.filter((record) => record?.recordType === "qa").length;
   const faqCount = rulingRecords.filter((record) => record?.recordType === "card-faq").length;
+  const rulingDataQualityIssues = findRulingDataQualityIssues(rulingRecords);
   const stats = {
     cardsCount: cardRecords.length,
     cardAliasCount: aliasRecords.length,
@@ -69,6 +71,8 @@ export function buildDataHealth({
     qaIndexCount: qaIndexRecords.length,
     aliasWithoutCardIdCount: aliasWithoutCardId.length,
     aliasWithoutCardId: aliasWithoutCardId.slice(0, 20),
+    rulingDataQualityIssueCount: rulingDataQualityIssues.length,
+    rulingDataQualityIssues: rulingDataQualityIssues.slice(0, 20),
     dataFiles,
     missingFiles,
     expectedDataPaths: paths,
@@ -92,6 +96,7 @@ export function determineReadinessLevel(stats) {
 
 export function determineDataHealthStatus(stats) {
   if (stats.cardsCount === 0 && stats.qaCount === 0) return "data_source_missing";
+  if (stats.rulingDataQualityIssueCount > 0) return "data_quality_invalid";
   if (stats.cardsCount === 0) return "missing_cards";
   if (stats.qaCount === 0) return "missing_qa";
   if (stats.cardAliasCount === 0) return "missing_cards";
@@ -107,5 +112,6 @@ export function isDataHealthUsable(stats) {
     stats.qaCount > 0 &&
     stats.qaIndexCount > 0 &&
     stats.aliasWithoutCardIdCount === 0 &&
+    Number(stats.rulingDataQualityIssueCount || 0) === 0 &&
     (stats.missingFiles || []).length === 0;
 }

@@ -154,6 +154,39 @@ test("exact Albaz question with production data includes activation and downstre
   assert.ok(answer.debug.timingsMs.finalModel <= 5);
 });
 
+test("exact public-hand reveal question is blocked before the final model", async () => {
+  const answer = await answerRagRulingQuestion({
+    question: "我方看透心灵之眼适用中，我方有手牌，我方能发动红莲的指名者吗？",
+    cards: [{
+      id: "neutral-opponent-hand-reveal",
+      name: "看透心灵之眼",
+      effectText: "自己场上或墓地存在指定系列卡期间，对方必须持续公开全部手牌。",
+    }, {
+      id: "neutral-hand-show-procedure",
+      name: "红莲的指名者",
+      effectText: "支付2000基本分，将手牌全部出示给对手可以发动。确认对方的手牌，从其中选1张除外。",
+    }],
+    records: [{
+      id: "neutral-public-hand-procedure-rule",
+      recordType: "faq",
+      type: "faq",
+      title: "已经公开的手牌与展示手续",
+      cardIds: ["neutral-hand-show-procedure"],
+      cards: ["红莲的指名者"],
+      text: "自己的手牌已因其他卡的效果持续公开时，不能发动需要把自己的手牌给对方观看的效果。",
+    }],
+    qaRecords: [],
+    env: localEnv,
+    dryRun: true,
+  });
+
+  assert.match(answer.shortAnswer, /^不能发动/u);
+  assert.match(answer.shortAnswer, /手牌已经.*持续公开/u);
+  assert.equal(answer.debug.deterministicDecision, "operation_blocker");
+  assert.equal(answer.debug.modelUsed, "deterministic-ruling-reasoner");
+  assert.equal(answer.debug.timingsMs.finalModel, 0);
+});
+
 test("deterministic fast path does not ignore an unresolved card in the described state", async () => {
   const answer = await answerRagRulingQuestion({
     question: [

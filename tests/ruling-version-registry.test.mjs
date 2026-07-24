@@ -8,10 +8,10 @@ import {
   normalizeRequestedRulingVersion,
   resolveRulingVersionPipeline,
 } from "../backend/rulingVersionRegistry.mjs";
-import { loadRagData as loadPreviousRagData } from "../backend/versions/4d95ecc96/ragEvidenceRetriever.mjs";
+import { loadRagData as loadPreviousRagData } from "../backend/versions/4de792b8a/ragEvidenceRetriever.mjs";
 
 test("ruling version capabilities expose latest and the frozen previous revision", () => {
-  assert.equal(PREVIOUS_RULING_REVISION, "4d95ecc96");
+  assert.equal(PREVIOUS_RULING_REVISION, "4de792b8a");
   const capabilities = getRulingVersionCapabilities();
   assert.equal(capabilities.defaultRulingVersion, DEFAULT_RULING_VERSION);
   assert.deepEqual(capabilities.rulingVersions, [

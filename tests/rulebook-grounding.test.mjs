@@ -460,6 +460,131 @@ test("deterministic local analysis blocks mandatory return when the only candida
   assert.doesNotMatch(result.shortAnswer, /天雷|无限泡影/u);
 });
 
+test("deterministic local analysis blocks a reveal procedure while the actor's hand is already public", () => {
+  const result = analyzeDeterministicOperationLegality({
+    userQuery: "我方「测试公开领域」的效果适用中，我方有手牌。我方能发动「测试展示陷阱」吗？",
+    cardTexts: [{
+      id: "neutral-public-hand",
+      type: "card_text",
+      title: "测试公开领域",
+      cardType: "spell",
+      text: "双方玩家根据自身场上的怪兽对自身适用以下效果。光：自己的手牌全部持续公开。",
+    }, {
+      id: "neutral-reveal-trap",
+      type: "card_text",
+      title: "测试展示陷阱",
+      cardType: "trap",
+      text: "把自己的全部手牌给对方观看，支付1000基本分可以发动。选对方手牌1张除外。",
+    }],
+    ruleEvidence: [{
+      id: "neutral-rule-public-hand",
+      type: "faq",
+      title: "持续公开与展示手续",
+      text: "自己的手牌已经因其他卡的效果持续公开的情况下，不能发动需要把自己的手牌给对方观看的效果。",
+    }],
+  });
+
+  const check = result.checks.find((item) => item.operationId === "public-hand-reveal-activation-procedure");
+  assert.ok(check);
+  assert.equal(check.status, "illegal");
+  assert.equal(result.deterministic, true);
+  assert.equal(result.complete, true);
+  assert.equal(result.hasBlockingCheck, true);
+  assert.match(result.shortAnswer, /^不能发动/u);
+  assert.doesNotMatch(result.shortAnswer, /红莲|看透/u);
+});
+
+test("public opponent hand does not block the actor from revealing their own hand", () => {
+  const result = analyzeDeterministicOperationLegality({
+    userQuery: "我方控制「测试透视镜」且效果适用中，我方有手牌。我方能发动「测试展示陷阱」吗？",
+    cardTexts: [{
+      id: "neutral-opponent-hand",
+      type: "card_text",
+      title: "测试透视镜",
+      cardType: "trap",
+      text: "只要这张卡存在于魔法与陷阱区域，对方必须持续公开手牌。",
+    }, {
+      id: "neutral-reveal-trap",
+      type: "card_text",
+      title: "测试展示陷阱",
+      cardType: "trap",
+      text: "把自己的全部手牌给对方观看，支付1000基本分可以发动。选对方手牌1张除外。",
+    }],
+    ruleEvidence: [{
+      id: "neutral-rule-public-hand",
+      type: "faq",
+      title: "持续公开与展示手续",
+      text: "自己的手牌已经因其他卡的效果持续公开的情况下，不能发动需要把自己的手牌给对方观看的效果。",
+    }],
+  });
+
+  assert.equal(result.hasBlockingCheck, false);
+  assert.equal(
+    result.checks.some((item) => item.operationId === "public-hand-reveal-activation-procedure"),
+    false,
+  );
+});
+
+test("a public self hand does not block the opponent's separate reveal activation", () => {
+  const result = analyzeDeterministicOperationLegality({
+    userQuery: "我方「测试公开领域」的效果适用中。对方能发动「测试展示陷阱」吗？",
+    cardTexts: [{
+      id: "neutral-public-hand",
+      type: "card_text",
+      title: "测试公开领域",
+      text: "只要这张卡存在，自己的手牌全部持续公开。",
+    }, {
+      id: "neutral-reveal-trap",
+      type: "card_text",
+      title: "测试展示陷阱",
+      text: "把自己的全部手牌给对方观看可以发动。选对方手牌1张除外。",
+    }],
+    ruleEvidence: [{
+      id: "neutral-rule-public-hand",
+      type: "faq",
+      title: "测试展示陷阱 FAQ",
+      cardIds: ["neutral-reveal-trap"],
+      text: "自己的手牌已经因其他卡的效果持续公开时，不能发动。",
+    }],
+  });
+
+  assert.equal(result.scenario.revealActivationOperations[0]?.actor, "opponent");
+  assert.equal(result.scenario.selfHandContinuouslyPublic, true);
+  assert.equal(result.scenario.opponentHandContinuouslyPublic, false);
+  assert.equal(result.hasBlockingCheck, false);
+});
+
+test("a reveal FAQ explicitly belonging to another card cannot create a deterministic blocker", () => {
+  const result = analyzeDeterministicOperationLegality({
+    userQuery: "我方「测试公开领域」的效果适用中。我方能发动「测试展示陷阱」吗？",
+    cardTexts: [{
+      id: "neutral-public-hand",
+      type: "card_text",
+      title: "测试公开领域",
+      text: "只要这张卡存在，自己的手牌全部持续公开。",
+    }, {
+      id: "neutral-reveal-trap",
+      type: "card_text",
+      title: "测试展示陷阱",
+      text: "把自己的全部手牌给对方观看可以发动。选对方手牌1张除外。",
+    }],
+    ruleEvidence: [{
+      id: "unrelated-card-faq",
+      type: "faq",
+      title: "其他卡 FAQ",
+      cardIds: ["different-card"],
+      text: "自己的手牌已经因其他卡的效果持续公开时，不能发动。",
+    }],
+  });
+
+  assert.equal(result.scenario.publicHandRevealProcedureBlocked, true);
+  assert.equal(result.hasBlockingCheck, false);
+  assert.equal(
+    result.checks.some((item) => item.operationId === "public-hand-reveal-activation-procedure"),
+    false,
+  );
+});
+
 test("deterministic local analysis completes turn-player-first replacement after the other carrier is destroyed", () => {
   const rule = {
     id: "neutral-rule-replacement-order",

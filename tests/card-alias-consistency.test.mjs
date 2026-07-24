@@ -62,3 +62,66 @@ test("a shared short fragment is not resolved when it identifies multiple cards"
 
   assert.deepEqual(resolution.resolvedCards, []);
 });
+
+test("quoted card roles exclude dynamic names, archetype labels, and quoted effect clauses", async () => {
+  const data = await loadRagData();
+  const cases = [
+    {
+      question: "「妖精の王子様」として扱われている「閃刀姫」リンクモンスターが相手の効果でフィールドから離れた場合、または戦闘で破壊された場合、「閃刀姫－レイ」の②の効果は発動できますか？",
+      expectedId: "13670",
+      excludedMentions: ["妖精の王子様", "閃刀姫"],
+    },
+    {
+      question: "表側表示の「方界」と名のついたモンスターがデッキに戻った場合、墓地の「方界合神」の効果を発動できますか？",
+      expectedId: "12528",
+      excludedMentions: ["方界"],
+    },
+    {
+      question: "手札の「灰流うらら」の効果の発動にチェーンして『その発動を無効にし、そのカードを持ち主のデッキに戻す』効果を発動した場合、処理はどうなりますか？",
+      expectedId: "12950",
+      excludedMentions: ["その発動を無効にし、そのカードを持ち主のデッキに戻す"],
+    },
+  ];
+
+  for (const item of cases) {
+    const resolution = extractRagCards(item.question, { cards: data.cards, maxCards: 8 });
+    assert.ok(resolution.resolvedCards.some((card) => String(card.id) === item.expectedId));
+    const unresolvedInputs = resolution.unresolvedMentions.map((mention) => mention.input);
+    const ambiguousInputs = resolution.ambiguousMentions.map((mention) => mention.input);
+    for (const excludedMention of item.excludedMentions) {
+      assert.ok(!unresolvedInputs.includes(excludedMention));
+      assert.ok(!ambiguousInputs.includes(excludedMention));
+    }
+  }
+});
+
+test("exact card dependencies named by a resolved card's own text are expanded one hop", async () => {
+  const data = await loadRagData();
+  const cases = [
+    {
+      question: "「滅びの爆裂疾風弾」を先攻1ターン目に発動する事はできますか？",
+      expectedIds: new Set(["5979", "4007"]),
+    },
+    {
+      question: "リンク先にモンスターが特殊召喚された際に発動した「サイバース・ウィッチ」のモンスター効果の処理時に、自分のデッキに手札に加えられるカードのいずれかが存在しなくなっている場合、処理はどうなりますか？",
+      expectedIds: new Set(["13751", "13767"]),
+    },
+  ];
+
+  for (const item of cases) {
+    const resolution = extractRagCards(item.question, { cards: data.cards, maxCards: 8 });
+    assert.deepEqual(new Set(resolution.resolvedCards.map((card) => String(card.id))), item.expectedIds);
+    assert.deepEqual(resolution.unresolvedMentions, []);
+    assert.deepEqual(resolution.ambiguousMentions, []);
+  }
+});
+
+test("unquoted active-effect carrier syntax extracts arbitrary names but rejects ordinary game phrases", () => {
+  const reported = extractRagCards("我方看透心灵之眼适用中，对方发动怪兽效果。", { cards: [] });
+  const fictional = extractRagCards("对方寂静回声的效果生效中，但场上没有其他卡。", { cards: [] });
+  const ordinary = extractRagCards("我方效果适用中，场上怪兽的攻击力不变。", { cards: [] });
+
+  assert.ok(reported.unresolvedMentions.some((mention) => mention.input === "看透心灵之眼"));
+  assert.ok(fictional.unresolvedMentions.some((mention) => mention.input === "寂静回声"));
+  assert.ok(!ordinary.unresolvedMentions.some((mention) => ["效果", "怪兽效果", "场上怪兽"].includes(mention.input)));
+});
