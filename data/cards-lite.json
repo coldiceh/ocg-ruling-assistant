@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-23T15:56:25.506Z",
+  "generatedAt": "2026-07-24T03:50:07.043Z",
   "records": [
     {
       "id": "21385",
@@ -172125,6 +172125,24 @@
       "released": true
     },
     {
+      "id": "23150",
+      "name": "D－バースト",
+      "jaName": "D－バースト",
+      "aliases": [
+        "D－バースト"
+      ],
+      "released": true
+    },
+    {
+      "id": "23147",
+      "name": "E・HERO クレイガードマン",
+      "jaName": "E・HERO クレイガードマン",
+      "aliases": [
+        "E・HERO クレイガードマン"
+      ],
+      "released": true
+    },
+    {
       "id": "10588",
       "name": "青之眼少女",
       "cnName": "青之眼少女",
@@ -172138,11 +172156,47 @@
       "released": true
     },
     {
+      "id": "23144",
+      "name": "光幻獣 カンデラード",
+      "jaName": "光幻獣 カンデラード",
+      "aliases": [
+        "光幻獣 カンデラード"
+      ],
+      "released": true
+    },
+    {
       "id": "23486",
       "name": "邪悪なる魔王－ゾーク",
       "jaName": "邪悪なる魔王－ゾーク",
       "aliases": [
         "邪悪なる魔王－ゾーク"
+      ],
+      "released": true
+    },
+    {
+      "id": "23149",
+      "name": "速攻召喚",
+      "jaName": "速攻召喚",
+      "aliases": [
+        "速攻召喚"
+      ],
+      "released": true
+    },
+    {
+      "id": "23146",
+      "name": "不死のデスロード",
+      "jaName": "不死のデスロード",
+      "aliases": [
+        "不死のデスロード"
+      ],
+      "released": true
+    },
+    {
+      "id": "23143",
+      "name": "アルカナフォースⅩⅡ－THE HANGED MAN",
+      "jaName": "アルカナフォースⅩⅡ－THE HANGED MAN",
+      "aliases": [
+        "アルカナフォースⅩⅡ－THE HANGED MAN"
       ],
       "released": true
     },
@@ -172153,6 +172207,42 @@
       "enName": "7",
       "aliases": [
         "7"
+      ],
+      "released": true
+    },
+    {
+      "id": "23142",
+      "name": "ダークティラノ",
+      "jaName": "ダークティラノ",
+      "aliases": [
+        "ダークティラノ"
+      ],
+      "released": true
+    },
+    {
+      "id": "23148",
+      "name": "ドールハンマー",
+      "jaName": "ドールハンマー",
+      "aliases": [
+        "ドールハンマー"
+      ],
+      "released": true
+    },
+    {
+      "id": "23145",
+      "name": "プラズマ戦士エイトム",
+      "jaName": "プラズマ戦士エイトム",
+      "aliases": [
+        "プラズマ戦士エイトム"
+      ],
+      "released": true
+    },
+    {
+      "id": "6829",
+      "name": "白騎士団のロード",
+      "jaName": "白騎士団のロード",
+      "aliases": [
+        "白騎士団のロード"
       ],
       "released": true
     }
