@@ -37,7 +37,8 @@ const NON_CARD_HEADING_NAMES = new Set(["效果", "问题", "问", "q", "场景"
 export function extractRagCards(userQuery, { cards = [], maxCards = 6, modelCardNameCandidates = [] } = {}) {
   const query = String(userQuery || "");
   const cardLimit = normalizeMaxCards(maxCards);
-  const normalizedQuery = normalizeCardKey(query);
+  const cardNameScanQuery = maskNonCardQuotedExpressions(query);
+  const normalizedQuery = normalizeCardKey(cardNameScanQuery);
   const queryNumberedIdentityKeys = new Set(extractNumberedCardIdentities(query).map(numberedIdentityKey));
   const aliasIndex = buildAliasIndex(cards);
   const userProvidedCardTexts = extractUserProvidedCardTextBlocks(query);
@@ -48,9 +49,9 @@ export function extractRagCards(userQuery, { cards = [], maxCards = 6, modelCard
     ...extractQuotedMentions(query).map((input) => ({ input, reason: "quoted_mention_not_found", source: "quoted_mention" })),
     ...userProvidedCardTexts.map((item) => ({ input: item.name, reason: "user_provided_text_name_not_found", source: "user_provided_text" })),
   ];
-  const unquotedMentionSeeds = extractUnquotedCardMentionCandidates(query)
+  const unquotedMentionSeeds = extractUnquotedCardMentionCandidates(cardNameScanQuery)
     .map((input) => ({ input, reason: "unquoted_candidate_not_found", source: "unquoted_heuristic" }));
-  const distinctiveMentionSeeds = extractContextualDistinctiveMentionCandidates(query)
+  const distinctiveMentionSeeds = extractContextualDistinctiveMentionCandidates(cardNameScanQuery)
     .filter((input) => findUniqueDistinctiveFragmentCandidate(cards, input))
     .map((input) => ({
       input,
@@ -190,6 +191,14 @@ export function extractRagCards(userQuery, { cards = [], maxCards = 6, modelCard
     seenCards,
     unresolvedMentions,
     ambiguousMentions,
+  });
+
+  applyReferencedCardTextResolution({
+    query,
+    aliasIndex,
+    resolved,
+    seenCards,
+    maxCards: cardLimit,
   });
 
   const visibleResolved = resolved.slice(0, cardLimit);
@@ -352,6 +361,12 @@ export function normalizeCardKey(value) {
 export function extractUnquotedCardMentionCandidates(query) {
   const text = String(query || "").normalize("NFKC");
   const candidates = [];
+  const activeEffectCarrierPattern = /(?:^|[，,。；;、\s])(?:我方|对方|對方|自己|自分)\s*(?:场上|場上)?\s*(?:的)?\s*([\p{L}\p{N}・·･．.\-－—–\s]{2,30}?)(?:的\s*(?:[①②③④⑤⑥⑦⑧⑨⑩1-9]\s*)?(?:效果|效应|效應))?\s*(?:正在|正|仍然|仍|依然|还在|還在)?\s*(?:适用|適用|生效)(?:中|着|著)?(?=\s*(?:[，,。；;、]|而|并|並|但|时|時|的情况下|的情況下|$))/giu;
+  for (const match of text.matchAll(activeEffectCarrierPattern)) {
+    const candidate = cleanUnquotedMention(match[1]);
+    if (candidate && hasContextualEffectCarrierSignal(candidate)) candidates.push(candidate);
+  }
+
   const patterns = [
     /(?:^|[，,。；;、\s])(?:c|cl|chain)\s*\d+\s*(?:再|先)?\s*(?:从|從|由)?\s*(?:我方|对方|對方|自己|自分)?\s*(?:手卡|手牌|墓地|除外区|除外區|除外|场上|場上|怪兽区|怪獸區|魔法陷阱区|魔法陷阱區)\s*(?:的)?\s*(?:发动|發動|使用|适用|適用)?\s*([\p{L}\p{N}・·･．.\-－—–\s]{2,30}?)(?=\s*(?:的\s*)?(?:(?:[①②③④⑤⑥⑦⑧⑨⑩]|[1-9])?\s*效果\s*)?(?:进行|進行|发动|發動|使用|适用|適用|替换|替換|交换|交換|特殊召唤|特殊召喚|回到|返回|放回|破坏|破壞|送去|送入|除外|作为|作為|处理|處理))/giu,
     /(?:手卡|墓地|除外|场上|場上|自己场上|自己場上|对方场上|對方場上|我方场上|我方場上|对方的|對方的|我方的|自己的|发动了?|發動了?|适用|適用|选择|選擇|要将|要將|将|將|把|破坏|破壞|连锁|連鎖|c\d+\s*发动|c\d+\s*發動)\s*(?:的|上|中|存在的|表侧表示的|表側表示的|手卡的|场上的|場上的)?\s*([\p{L}\p{N}・·･．.\-－—–\s]{2,40}?)(?:的[①②③④⑤⑥⑦⑧⑨⑩]?(?:效果|效应|效應)|[①②③④⑤⑥⑦⑧⑨⑩]?效果|破坏|破壞|被破坏|被破壞|特殊召唤|特殊召喚|能|可以|吗|嗎|，|。|、|；|;|$)/giu,
@@ -421,7 +436,18 @@ function hasCardNameSignal(value) {
   if (key.length < 2 || key.length > 28) return false;
   if (/^(?:效果|发动|特殊召唤|攻击力|守备力|怪兽|场上|手卡|墓地|破坏|选择|适用)$/u.test(key)) return false;
   return /[\u3400-\u9fff]/u.test(text)
-    && /(龙|龍|神|王|魔|械|童子|蔷|薔|骑士|騎士|姬|兽|獸|花|园|園|多元|宇宙|电子|電子|融合|同步|超量|连接|連接|男爵|女|巫|陷阱|魔法|星|码|碼)/u.test(text);
+     && /(龙|龍|神|王|魔|械|童子|蔷|薔|骑士|騎士|姬|兽|獸|花|园|園|多元|宇宙|电子|電子|融合|同步|超量|连接|連接|男爵|女|巫|陷阱|魔法|星|码|碼)/u.test(text);
+}
+
+function hasContextualEffectCarrierSignal(value) {
+  const text = String(value || "").trim();
+  const key = normalizeCardKey(text);
+  if (key.length < 2 || key.length > 28 || !/[\p{L}\p{N}]/u.test(text)) return false;
+  if (/^(?:效果|效应|效應|卡片效果|怪兽效果|怪獸效果|魔法效果|陷阱效果|永续效果|永續效果|规则效果|規則效果|这个效果|這個效果|该效果|該效果|此效果|卡片|怪兽|怪獸|魔法|陷阱|永续|永續|规则|規則|限制|状态|狀態|攻击力|攻擊力|守备力|守備力)$/u.test(text)) return false;
+  if (/^(?:(?:我方|对方|對方|自己|自分|双方|雙方|场上|場上|墓地|手卡|手牌|怪兽区|怪獸區|魔法陷阱区|魔法陷阱區|卡|怪兽|怪獸|效果|适用|適用|生效)的?)+$/u.test(text)) return false;
+  if (/(?:召唤|召喚|特殊召唤|特殊召喚|攻击|攻擊|破坏|破壞|除外|送去墓地|加入手牌|抽卡|抽牌)(?:的)?(?:卡|怪兽|怪獸|效果)?$/u.test(text)) return false;
+  if (/(?:攻击力|攻擊力|守备力|守備力|等级|等級|阶级|階級|数值|數值).*(?:上升|下降|改变|改變|效果)?$/u.test(text)) return false;
+  return true;
 }
 
 function buildModelMentionSeeds(modelMentions) {
@@ -633,6 +659,11 @@ function compatibleNumberedNameRemainders(mention, candidate) {
   if (!mentionSuffix) return true;
   if (!candidateSuffix) return false;
   const sharedSuffixCharacters = multisetCharacterIntersectionSize(mentionSuffix, candidateSuffix);
+  const compactLocalizedVariant = commonPrefixLength >= 4
+    && Math.max(mentionSuffix.length, candidateSuffix.length) <= 4
+    && Math.abs(mentionSuffix.length - candidateSuffix.length) <= 1
+    && sharedSuffixCharacters >= 1;
+  if (compactLocalizedVariant) return true;
   return sharedSuffixCharacters >= Math.ceil(Math.min(mentionSuffix.length, candidateSuffix.length) / 2);
 }
 
@@ -1115,23 +1146,108 @@ function addResolved(resolved, seenCards, candidate, input, confidence) {
     cardType: card.cardType || "",
     effectText: card.effectText || "",
     sourceUrl: card.sourceUrl || "",
-    aliases: cardAliases(card),
+    aliases: resolvedCardAliases(card, input),
     confidence,
   });
 }
 
+function resolvedCardAliases(card, input) {
+  const aliases = cardAliases(card);
+  const mention = String(input || "").trim();
+  const identities = extractNumberedCardIdentities(mention);
+  if (!mention || identities.length !== 1) return aliases;
+  const identity = identities[0];
+  if (numberedMentionRemainder(mention, identity).length < 2) return aliases;
+  const cardHasIdentity = aliases.some((alias) => (
+    extractNumberedCardIdentities(alias).some((candidate) => sameNumberedIdentity(candidate, identity))
+  ));
+  return cardHasIdentity ? dedupeBy([...aliases, mention], normalizeCardKey) : aliases;
+}
+
+function applyReferencedCardTextResolution({ query, aliasIndex, resolved, seenCards, maxCards }) {
+  if (!/(?:发动|發動|発動|处理|處理|処理|结算|結算|適用|适用|resolve|activate)/iu.test(String(query || ""))) return;
+
+  // A question often names only the card whose effect is being judged, while the
+  // governing dependency is an exact card name inside that card's own text.
+  // Resolve one hop only, and only globally unique exact aliases; this expands
+  // explicit card-text dependencies without turning archetype names into cards.
+  const sourceCards = resolved.slice();
+  for (const sourceCard of sourceCards) {
+    const blocks = splitEffectTextBlocks(sourceCard.effectText);
+    const effectBlocks = blocks.some((block) => block.kind === "effect")
+      ? blocks.filter((block) => block.kind === "effect")
+      : blocks;
+    for (const block of effectBlocks) {
+      for (const mention of extractQuotedMentions(block.text)) {
+        const candidates = aliasIndex.get(normalizeCardKey(mention)) || [];
+        if (candidates.length !== 1) continue;
+        addResolved(resolved, seenCards, candidates[0], mention, 0.86);
+        if (resolved.length >= maxCards) return;
+      }
+    }
+  }
+}
+
 export function extractQuotedMentions(query) {
+  return dedupeBy(
+    collectQuotedMentionEntries(query).filter((item) => item.role === "card"),
+    (item) => normalizeCardKey(item.mention),
+  ).map((item) => item.mention);
+}
+
+function collectQuotedMentionEntries(query) {
   const result = [];
   const text = String(query || "");
   for (const pattern of QUOTED_MENTION_PATTERNS) {
     pattern.lastIndex = 0;
     for (const match of text.matchAll(pattern)) {
       const mention = String(match[1] || "").trim();
-      if (looksLikeCardMention(mention)) result.push({ mention, index: match.index ?? text.indexOf(match[0]) });
+      if (!looksLikeCardMention(mention)) continue;
+      const index = match.index ?? text.indexOf(match[0]);
+      const end = index + String(match[0] || "").length;
+      result.push({
+        mention,
+        index,
+        end,
+        role: classifyQuotedMentionRole(text, mention, end),
+      });
     }
   }
   result.sort((left, right) => left.index - right.index);
-  return dedupeBy(result, (item) => normalizeCardKey(item.mention)).map((item) => item.mention);
+  return result;
+}
+
+function classifyQuotedMentionRole(text, mention, end) {
+  const suffix = String(text || "").slice(end, end + 48).normalize("NFKC");
+
+  if (/^\s*(?:として扱|として使用|としてカード名を扱|视为|視為|被视为|被視為)/iu.test(suffix)) {
+    return "dynamic_card_name";
+  }
+
+  if (/^\s*(?:と名のついた|という名の|名のついた|カード名に.{0,12}(?:含む|含まれる|記された)|(?:融合|儀式|シンクロ|エクシーズ|リンク|ペンデュラム|通常|効果|チューナー|同调|同步|融合|仪式|儀式|连接|連接|超量)?\s*(?:モンスター|カード))/iu.test(suffix)) {
+    return "card_series";
+  }
+
+  if (looksLikeQuotedEffectClause(mention)) return "effect_clause";
+  return "card";
+}
+
+function looksLikeQuotedEffectClause(mention) {
+  const text = String(mention || "").normalize("NFKC").trim();
+  if (text.length < 8) return false;
+  const hasReferencedObject = /(?:(?:その|この|あの|対象の|選んだ|選択した|该|該|此|这|這|那)(?:カード|怪獣|モンスター|発動|効果)|(?:その|この|该|該|此|这|這|那)(?:発動|效果|効果))/u.test(text);
+  const hasEffectOperation = /(?:無効|无效|無效|戻す|返回|放回|破壊|破坏|除外|墓地へ送|送去墓地|手札に加|加入手牌|特殊召喚|特殊召唤)/u.test(text);
+  return hasReferencedObject && hasEffectOperation;
+}
+
+function maskNonCardQuotedExpressions(query) {
+  const text = String(query || "");
+  const chars = text.split("");
+  for (const entry of collectQuotedMentionEntries(text)) {
+    if (entry.role === "card") continue;
+    for (let index = entry.index; index < entry.end; index += 1) chars[index] = " ";
+  }
+  return chars.join("");
 }
 
 export function extractUserProvidedCardTextBlocks(query) {

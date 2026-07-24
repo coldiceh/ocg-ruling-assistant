@@ -14,6 +14,8 @@ import { buildEventTimelineFromFormalQuery, deriveStateAtTiming } from "./eventT
 import { buildGameStateFromFormalQuery } from "./gameState.mjs";
 import { normalizeFormalRulingQuery, validateFormalRulingQuery } from "./formalQuery.mjs";
 import { buildLikelyAnswer } from "./likelyAnswer.mjs";
+import { extractNumberedCardIdentities } from "./numberedCardIdentity.mjs";
+import { extractRagCards } from "./ragCardExtractor.mjs";
 import { buildRuleDerivedAnswer } from "./ruleDerivedAnswer.mjs";
 import {
   buildProvisionalAnswerFromOfficialResponse,
@@ -3303,6 +3305,21 @@ function detectCards(question, cards) {
       .sort((a, b) => normalizeKey(b).length - normalizeKey(a).length);
     const matched = aliases.find((alias) => text.includes(normalizeKey(alias)));
     if (matched) matches.push({ ...card, matched });
+  }
+
+  const numberedIdentities = extractNumberedCardIdentities(question);
+  if (numberedIdentities.length) {
+    const numberedMatches = extractRagCards(question, {
+      cards,
+      maxCards: Math.max(6, numberedIdentities.length),
+    }).resolvedCards
+      .filter((card) => extractNumberedCardIdentities(card.input).length)
+      .map((card) => ({
+        ...card,
+        matched: card.input || card.name,
+        resolvedBy: "numbered-card-identity",
+      }));
+    matches.push(...numberedMatches);
   }
 
   matches.push(...matchLocalAliasHints(question, cards));

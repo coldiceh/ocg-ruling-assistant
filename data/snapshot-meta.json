@@ -1,19 +1,21 @@
 {
   "schemaVersion": 1,
   "status": "synced",
-  "generatedAt": "2026-07-23T08:50:08.617Z",
+  "generatedAt": "2026-07-23T15:56:25.506Z",
   "freshnessDays": 7,
   "sourceFreshness": "fresh",
-  "previousSourceRevision": "32090",
-  "sourceRevision": "32092",
-  "lastSuccessfulSyncAt": "2026-07-23T08:50:08.617Z",
-  "lastFailedSyncAt": null,
+  "previousSourceRevision": "32100",
+  "sourceRevision": "32100",
+  "lastSuccessfulSyncAt": "2026-07-23T15:56:25.506Z",
+  "lastFailedSyncAt": "2026-07-23T15:33:09.091Z",
   "syncFailureCount": 0,
   "aliasWarnings": [],
   "parseFailedWarnings": [],
+  "contentQualityWarnings": [],
   "dataQualityWarnings": [],
   "aliasWarningCount": 0,
   "parseFailedCount": 0,
+  "contentQualityWarningCount": 0,
   "dataQualityWarningCount": 0,
   "newItems": 0,
   "changedItems": 0,
@@ -34,9 +36,5 @@
   ],
   "warnings": [],
   "sourceSyncWarnings": [],
-  "changedPaths": [
-    "/data/meta/index",
-    "/data/meta/recent",
-    "/data/qa/12510"
-  ]
+  "changedPaths": []
 }

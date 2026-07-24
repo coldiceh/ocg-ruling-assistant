@@ -138,6 +138,29 @@ test("a local mock dry run cannot be reported as a real passing answer", () => {
   assert.equal(evaluation.execution.dryRun, true);
 });
 
+test("a deterministic local ruling is evaluated as a real answer even when no model was called", () => {
+  const evaluation = evaluateRulingAnswer({
+    question: "可以发动吗？",
+    expectedAnswer: "不能发动。",
+  }, {
+    shortAnswer: "不能发动。",
+    resolvedCards: [],
+    usedEvidence: [],
+    debug: {
+      dryRun: true,
+      providerUsed: "local",
+      modelUsed: "deterministic-ruling-reasoner",
+      retrievalCounts: {},
+      unresolvedMentions: [],
+      ambiguousMentions: [],
+    },
+  });
+
+  assert.equal(evaluation.overall, "pass");
+  assert.equal(evaluation.execution.rawDryRun, true);
+  assert.equal(evaluation.execution.dryRun, false);
+});
+
 test("twitter fixture card names and officialFaqId are accepted with normalized aliases", () => {
   const evaluation = evaluateRulingAnswer({
     question: "この場合は発動できますか？",

@@ -172,14 +172,15 @@ export function validateOperationLegalityModelOutput(raw, evidenceCandidates = [
 
 function deriveDeterministicScenarioChecks(requiredConstraints, existingChecks, { userQuery, cardTexts }) {
   const scenario = compileRuleScenario({ userQuery, cardTexts });
-  if (!scenario.simultaneousDestructionReplacement) return [];
+  const checks = derivePublicHandRevealProcedureChecks(requiredConstraints, existingChecks, scenario);
+  if (!scenario.simultaneousDestructionReplacement) return checks;
   const rule = (requiredConstraints || []).find((item) => (
     item?.priorityConstraintSignature === "simultaneous_destruction_replacement_turn_player_first"
     || inferSimultaneousReplacementSignature(item)
   ));
-  if (!rule) return [];
+  if (!rule) return checks;
   const quote = String(rule.text || "").match(/同\s*1?\s*时点.{0,24}双方.{0,30}(?:代替破坏|破坏.{0,12}代替).{0,60}回合玩家.{0,18}先适用.{0,100}非回合玩家.{0,60}(?:不在场上存在|已经不在场上).{0,30}不适用[。]?/su)?.[0];
-  if (!quote) return [];
+  if (!quote) return checks;
 
   const complete = scenario.replacementSequenceComplete === true;
   const citations = [{
@@ -207,9 +208,9 @@ function deriveDeterministicScenarioChecks(requiredConstraints, existingChecks, 
     );
   }
 
-  return [{
+  return [...checks, {
     operationId: "simultaneous-destruction-replacement-order",
-    step: (existingChecks || []).length + 1,
+    step: (existingChecks || []).length + checks.length + 1,
     action: "按回合玩家顺序逐个适用代替破坏并更新场面",
     legalityQuestion: "双方代替破坏效果在同一时点适用时如何决定顺序",
     status: complete ? "legal" : "conditional",
@@ -235,6 +236,59 @@ function deriveDeterministicScenarioChecks(requiredConstraints, existingChecks, 
     resolvesRequiredConstraint: true,
     deterministic: true,
     deterministicComplete: complete,
+  }];
+}
+
+function derivePublicHandRevealProcedureChecks(requiredConstraints, existingChecks, scenario) {
+  if (!scenario.publicHandRevealProcedureBlocked) return [];
+  const supportedOperation = (scenario.blockedRevealActivationOperations || [])
+    .map((operation) => {
+      const ruleMatch = (requiredConstraints || [])
+        .map((rule) => matchPublicHandRevealRule(rule, operation.card))
+        .find(Boolean);
+      return ruleMatch ? { operation, ...ruleMatch } : null;
+    })
+    .find(Boolean);
+  if (!supportedOperation) return [];
+  const { operation, rule, quote } = supportedOperation;
+  const publicSourceId = operation.publicSourceId;
+  const publicCard = scenario.continuousHandRevealCards.find((item) => item.id === publicSourceId);
+  const activationCard = operation.card;
+  const actorLabel = operation.actor === "opponent" ? "对方" : "我方";
+  const citations = [{
+    id: String(rule.id),
+    quote,
+    application: `题目中${actorLabel}的手牌已经持续公开，而该玩家待发动效果要求展示自己的手牌；该发动手续此时无法执行。`,
+    type: cleanText(rule.type || rule.recordType || "faq"),
+    title: cleanText(rule.title || rule.id),
+    sourceUrl: cleanText(rule.sourceUrl || ""),
+  }, scenarioCardCitation(
+    publicCard,
+    /(?:(?:手牌|手卡|手札).{0,80}(?:公开|公開|展示)|(?:公开|公開|展示).{0,80}(?:手牌|手卡|手札))/su,
+    "结合题目给出的适用关系，该持续效果使当前玩家自己的手牌保持公开。",
+  ), scenarioCardCitation(
+    activationCard,
+    /(?:(?:手牌|手卡|手札).{0,100}(?:给对方观看|給對方觀看|给对手观看|给对手看|向对方展示|向对手展示|展示给对方|展示给对手|出示给对方|出示给对手|相手に見せ)|(?:给对方观看|給對方觀看|给对手观看|给对手看|向对方展示|向对手展示|相手に見せ).{0,100}(?:手牌|手卡|手札))/su,
+    "待发动效果把展示自己的手牌规定为发动手续。",
+  )].filter(Boolean);
+
+  return [{
+    operationId: "public-hand-reveal-activation-procedure",
+    step: (existingChecks || []).length + 1,
+    action: `检查${actorLabel}把自己的手牌给另一方观看这一发动手续能否执行`,
+    legalityQuestion: `${actorLabel}自己的手牌已经持续公开时，能否再次执行展示手牌的发动手续`,
+    status: "illegal",
+    conclusion: `不能发动：${actorLabel}自己的手牌已经因其他效果持续公开，无法再执行展示自己手牌这一发动手续。`,
+    reasoning: [
+      `先读取当前信息状态：${actorLabel}自己的手牌已经对另一方持续公开。`,
+      `再读取待发动效果的手续：${actorLabel}发动时必须展示自己的手牌。`,
+      "发动手续必须在入连锁前实际执行；已经公开的手牌不能再次完成该展示动作，因此发动不合法。",
+    ],
+    citations,
+    missingFacts: [],
+    resolvesRequiredConstraint: true,
+    deterministic: true,
+    deterministicComplete: true,
   }];
 }
 
@@ -375,8 +429,86 @@ function selectDeterministicRuleEvidence(ruleEvidence, scenario) {
         && ["mandatory_active_spell_trap_return_without_alternative", "active_spell_trap_return", "no_applicable_card_for_mandatory_operation"].includes(mandatorySignature)) {
       return true;
     }
+    if (scenario.publicHandRevealProcedureBlocked && (scenario.blockedRevealActivationOperations || [])
+      .some((operation) => matchPublicHandRevealRule(item, operation.card))) {
+      return true;
+    }
     return scenario.simultaneousDestructionReplacement && inferSimultaneousReplacementSignature(item);
   }), (item) => String(item.id));
+}
+
+function inferPublicHandRevealConstraintSignature(item) {
+  return Boolean(selectPublicHandRevealQuote(item));
+}
+
+function selectPublicHandRevealQuote(item) {
+  const text = String(item?.text || "").trim();
+  if (!text) return "";
+  const chunks = text
+    .split(/\n+|(?<=[。！？.!?])\s*/u)
+    .map((value) => value.trim())
+    .filter(Boolean);
+  const preferred = chunks.find((value) => {
+    const handIsPublic = /(?:(?:手牌|手卡|手札|hand).{0,80}(?:已经|已|持续|因其他.{0,12}效果)?(?:公开|公開されている|公開中|public|revealed)|(?:公开|公開中|public|revealed).{0,80}(?:手牌|手卡|手札|hand))/isu.test(value);
+    const activationBlocked = /(?:不能|不可|无法|不可以).{0,20}(?:发动|發動)|発動できません|発動することはできません|cannot activate/iu.test(value);
+    return handIsPublic && activationBlocked;
+  });
+  return preferred ? cleanText(preferred).slice(0, 500) : "";
+}
+
+function matchPublicHandRevealRule(item, activationCard) {
+  if (!item?.id || !activationCard?.id || !inferPublicHandRevealConstraintSignature(item)) return null;
+  const quote = selectPublicHandRevealQuote(item);
+  if (!quote || !publicHandRevealRuleBelongsToCard(item, activationCard, quote)) return null;
+  return { rule: item, quote };
+}
+
+function publicHandRevealRuleBelongsToCard(item, activationCard, quote) {
+  const cardIds = new Set((activationCard.identityIds || [activationCard.id]).map(cleanText).filter(Boolean));
+  const evidenceIds = uniqueBy([
+    item.cardId,
+    ...(Array.isArray(item.cardIds) ? item.cardIds : []),
+  ].map(cleanText).filter(Boolean), (value) => value);
+  const inlineIds = uniqueBy(
+    [...[
+      item.question,
+      item.title,
+      item.text,
+      quote,
+    ].filter(Boolean).join("\n").matchAll(/<<\s*(\d{1,10})\s*>>/gu)].map((match) => cleanText(match[1])),
+    (value) => value,
+  );
+  if (inlineIds.length) return inlineIds.some((id) => cardIds.has(id));
+  if (item.recordType === "card-faq" && evidenceIds.length) {
+    return evidenceIds.some((id) => cardIds.has(id));
+  }
+
+  const cardNames = (activationCard.names || [activationCard.title])
+    .map(normalizeCardIdentity)
+    .filter((value) => value.length >= 2);
+  const declaredEvidenceNames = (Array.isArray(item.cards) ? item.cards : [])
+    .map(normalizeCardIdentity)
+    .filter(Boolean);
+  if (declaredEvidenceNames.length) {
+    return declaredEvidenceNames.some((declared) => (
+      cardNames.some((name) => declared === name || declared.includes(name) || name.includes(declared))
+    ));
+  }
+
+  const normalizedTitle = normalizeCardIdentity(item.title);
+  if (normalizedTitle && cardNames.some((name) => normalizedTitle.includes(name))) return true;
+
+  // A genuinely generic rule may have no card identity metadata. In that case
+  // it must be self-contained: the same passage must state both the already
+  // public hand and the failed reveal-to-opponent activation procedure.
+  return /(?:手牌|手卡|手札|hand).{0,120}(?:给对方观看|給對方觀看|给对手观看|给对手看|向对方展示|向对手展示|展示给对方|展示给对手|出示给对方|出示给对手|相手に見せ|show.{0,20}(?:opponent|other player))/isu.test(quote);
+}
+
+function normalizeCardIdentity(value) {
+  return cleanText(value)
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, "");
 }
 
 function scenarioCardCitation(item, pattern, application) {

@@ -81,7 +81,10 @@ export async function retrieveRagEvidence({
   const scopedRecordBuckets = scopeRecordBuckets(recordBuckets, retrievalCards);
 
   const cardTexts = retrievalCards
-    .map((card) => findCardRecord(card, data.cards) || cardProvider.getCardProfile(card.id || card.cardId) || card)
+    .map((card) => mergeCanonicalCardEvidenceProfile(
+      card,
+      findCardRecord(card, data.cards) || cardProvider.getCardProfile(card.id || card.cardId),
+    ))
     .filter(Boolean)
     .map((card) => cardTextEvidence(card, limits.maxCardTextChars, retrievalWarnings));
   const userProvidedCardTextEvidence = dedupeEvidence(providedTexts.map((item, index) => userProvidedTextEvidence(item, index, limits.maxCardTextChars, retrievalWarnings)));
@@ -114,12 +117,21 @@ export async function retrieveRagEvidence({
     resolvedCards: retrievalCards,
     limit: Math.max(20, limits.maxOfficialQa * 4),
   });
+  const localCandidateQaIds = localOfficialMatches.all
+    .map((match) => officialQaNumericId(match.record))
+    .filter(Boolean)
+    .slice(0, readPositiveNumber(env.RAG_LIVE_QA_MAX_CANDIDATES, 8));
   let liveOfficialQa = { records: [], cardMetadata: [], warnings: [], debug: {} };
   const liveQaEnabled = !isDisabled(env.RAG_LIVE_OFFICIAL_QA)
     && (!cards && !records && !qaRecords || isEnabled(env.RAG_LIVE_OFFICIAL_QA));
-  if (!localOfficialMatches.exact.length && liveQaEnabled && retrievalCards.length >= 2) {
+  if (
+    !localOfficialMatches.exact.length
+    && liveQaEnabled
+    && (retrievalCards.length >= 1 || localCandidateQaIds.length)
+  ) {
     liveOfficialQa = await retrieveLiveOfficialQa({
       resolvedCards: retrievalCards,
+      candidateQaIds: localCandidateQaIds,
       fetchImpl,
       baseUrl: env.YGORESOURCES_BASE_URL || "https://db.ygoresources.com",
       timeoutMs: readPositiveNumber(env.RAG_LIVE_QA_TIMEOUT_MS, 1800),
@@ -134,7 +146,10 @@ export async function retrieveRagEvidence({
   const officialMatches = liveOfficialQa.records?.length
     ? searchOfficialQaEvidence({
       question: userQuery,
-      records: dedupeBy([...scopedRecordBuckets.officialQa, ...liveOfficialQa.records], stableRecordKey),
+      // Prefer the freshly hydrated locale over a stale/local record with the
+      // same stable id. Otherwise the Japanese live question is silently
+      // discarded in favour of an older English-only snapshot.
+      records: dedupeBy([...liveOfficialQa.records, ...scopedRecordBuckets.officialQa], stableRecordKey),
       resolvedCards: retrievalCards,
       limit: Math.max(20, limits.maxOfficialQa * 4),
     })
@@ -423,6 +438,13 @@ function recordIdentityIndex(records) {
     const keys = new Set([
       ...(record.cardIds || []).map((id) => "id:" + normalizeId(id)).filter((key) => key !== "id:"),
       ...(record.cards || []).map((name) => "name:" + normalizeCardKey(name)).filter((key) => key !== "name:"),
+      ...extractInlineCardIds([
+        record.question,
+        record.title,
+        record.text,
+        record.answer,
+        record.conclusion,
+      ].filter(Boolean).join("\n")).map((id) => "id:" + normalizeId(id)),
     ]);
     const directId = normalizeId(record.cardId);
     if (directId) keys.add("id:" + directId);
@@ -500,12 +522,21 @@ function cardTextEvidence(card, maxTextChars, warnings) {
   const truncated = text.length > maxTextChars;
   if (truncated) warnings.push(`card_text_truncated:${card.id || normalizeCardKey(card.name)}`);
   const isBaige = card.source === "baige" || card.provider === "baige";
+  const identityNames = cardIdentityNames(card);
   return {
     id: `card-text-${card.id || normalizeCardKey(card.name)}`,
     type: isBaige ? "baige_card_text" : "card_text",
     title: `${card.name} 的卡片文本`,
     cardIds: [card.id || card.cardId].filter(Boolean).map(String),
-    cards: [card.name].filter(Boolean),
+    cards: identityNames,
+    identityKeys: identityNames.map(normalizeCardKey).filter(Boolean),
+    input: card.input || "",
+    matchedQuery: card.matchedQuery || "",
+    name: card.name || "",
+    cnName: card.cnName || "",
+    jaName: card.jaName || card.jpName || "",
+    enName: card.enName || "",
+    aliases: card.aliases || [],
     text: truncated ? `${text.slice(0, Math.max(0, maxTextChars - 1))}…` : text,
     sourceUrl: card.sourceUrl || "",
     source: isBaige ? "baige" : card.source || "",
@@ -518,6 +549,42 @@ function cardTextEvidence(card, maxTextChars, warnings) {
     official: false,
     isDirect: false,
   };
+}
+
+function mergeCanonicalCardEvidenceProfile(resolvedCard = {}, canonicalCard = null) {
+  if (!canonicalCard) return resolvedCard;
+  return {
+    ...resolvedCard,
+    ...canonicalCard,
+    input: resolvedCard.input || canonicalCard.input || "",
+    matchedQuery: resolvedCard.matchedQuery || canonicalCard.matchedQuery || "",
+    aliases: cardIdentityNames(resolvedCard, canonicalCard),
+    confidence: resolvedCard.confidence ?? canonicalCard.confidence,
+  };
+}
+
+function cardIdentityNames(...cards) {
+  const seen = new Set();
+  const result = [];
+  for (const card of cards.filter(Boolean)) {
+    for (const value of [
+      card.input,
+      card.matchedQuery,
+      card.name,
+      card.cnName,
+      card.jaName,
+      card.jpName,
+      card.enName,
+      ...(card.aliases || []),
+    ]) {
+      const text = String(value || "").trim();
+      const key = normalizeCardKey(text);
+      if (!text || !key || seen.has(key)) continue;
+      seen.add(key);
+      result.push(text);
+    }
+  }
+  return result;
 }
 
 function userProvidedTextEvidence(item, index, maxTextChars, warnings) {
@@ -590,6 +657,12 @@ function evidenceSourceUrl(record = {}) {
 
 function isOfficialQaRecord(record = {}) {
   return ["qa", "official-database"].includes(record.recordType);
+}
+
+function officialQaNumericId(record = {}) {
+  const direct = String(record.sourceRecordId || record.sourceId || "").match(/^\d+$/u)?.[0];
+  if (direct) return direct;
+  return String(record.stableId || record.id || "").match(/(?:ygoresources-qa-|official-qa-)(\d+)$/u)?.[1] || "";
 }
 
 function isUsefulOfficialRelatedMatch(match = {}) {

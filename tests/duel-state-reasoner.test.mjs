@@ -490,6 +490,40 @@ test("a bare numbered-card identity resolves only within the exact numbered fami
   assert.deepEqual(cnoResult.resolvedCards.map((card) => card.id), ["cno41"]);
 });
 
+test("a unique numbered identity merges a legacy localized subtitle and propagates it as an alias", () => {
+  const legacyName = "No.41 泥睡魔兽 酣睡貘";
+  const cards = [{
+    id: "13163",
+    name: "编号41 泥睡魔兽 貘熟梦",
+    jaName: "No.41 泥睡魔獣バグースカ",
+    enName: "Number 41: Bagooska the Terribly Tired Tapir",
+    aliases: [
+      "编号41 泥睡魔兽 貘熟梦",
+      "No.41 泥睡魔獣バグースカ",
+      "Number 41: Bagooska the Terribly Tired Tapir",
+    ],
+  }];
+
+  const result = extractRagCards(`对方场上的「${legacyName}」以守备表示存在。`, { cards });
+
+  assert.deepEqual(result.resolvedCards.map((card) => card.id), ["13163"]);
+  assert.equal(result.resolvedCards[0].input, legacyName);
+  assert.ok(result.resolvedCards[0].aliases.includes(legacyName));
+  assert.deepEqual(result.unresolvedMentions, []);
+});
+
+test("a numbered subtitle cannot choose arbitrarily when one identity maps to multiple cards", () => {
+  const cards = [
+    { id: "no41-a", name: "编号41 甲龙", aliases: ["No.41 甲龙"] },
+    { id: "no41-b", name: "编号41 乙龙", aliases: ["No.41 乙龙"] },
+  ];
+
+  const result = extractRagCards("对方场上的「No.41 旧译兽」以守备表示存在。", { cards });
+
+  assert.deepEqual(result.resolvedCards, []);
+  assert.ok(result.unresolvedMentions.length || result.ambiguousMentions.length);
+});
+
 test("both original user phrasings resolve all cards and use the deterministic simulation end to end", async () => {
   const data = await loadRagData();
   for (const [questionIndex, question] of originalUserQuestions.entries()) {

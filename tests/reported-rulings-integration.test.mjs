@@ -166,6 +166,92 @@ test("the production pipeline enables the live official QA fallback by default",
   assert.ok(answer.usedEvidence.some((item) => item.id === "ygoresources-qa-22803"));
 });
 
+test("the eight original official-X wordings retrieve their expected official QA generically", async () => {
+  const data = await loadRagData();
+  const corpus = JSON.parse(
+    await (await import("node:fs/promises")).readFile(
+      new URL("../data/test/twitter-ruling-questions.json", import.meta.url),
+      "utf8",
+    ),
+  );
+  const resolvedIdsByQa = {
+    "22839": ["7403"],
+    "16178": ["22524", "11927", "5000", "4030"],
+    "12794": ["6682", "10659"],
+    "10618": ["4989", "13405"],
+    "12814": ["5979"],
+    "24313": ["12324", "22692", "6057"],
+    "17476": [],
+    "12336": ["12950"],
+  };
+  const primaryIdsByQa = {
+    "22839": ["7403"],
+    "16178": ["22524", "11927"],
+    "12794": ["6682", "10659"],
+    "10618": ["4989", "13405"],
+    "12814": ["5979"],
+    "24313": ["12324", "22692"],
+    "17476": [],
+    "12336": ["12950"],
+  };
+  const cases = corpus.cases.filter((item) => Object.hasOwn(resolvedIdsByQa, item.officialFaqId));
+  assert.equal(cases.length, 8);
+
+  for (const item of cases) {
+    const qaId = String(item.officialFaqId);
+    const resolvedCards = resolvedIdsByQa[qaId]
+      .map((id) => data.cards.find((card) => String(card.id) === id))
+      .filter(Boolean);
+    const fetchImpl = async (url) => {
+      const href = String(url);
+      if (href.endsWith("/data/meta/mprop")) return Response.json([]);
+      const cardMatch = href.match(/\/data\/card\/(\d+)$/u);
+      if (cardMatch) {
+        const cardId = cardMatch[1];
+        const isPrimary = primaryIdsByQa[qaId].includes(cardId);
+        const qaIndex = isPrimary ? [Number(qaId)] : [];
+        if (qaId === "12336" && isPrimary) {
+          qaIndex.push(90001, 90002, 90003, 90004, 90005, 90006, 90007, 90008);
+        }
+        return Response.json({
+          cardData: { en: { id: Number(cardId), cardType: "monster", properties: [] } },
+          qaIndex,
+        });
+      }
+      if (href.endsWith("/data/qa/" + qaId)) {
+        return Response.json({
+          cards: primaryIdsByQa[qaId].map(Number),
+          qaData: {
+            ja: {
+              title: item.question,
+              question: `${item.question}\n詳細な前提を確認します。`,
+              answer: "この質問に対応する公式回答です。",
+            },
+          },
+        });
+      }
+      return Response.json({ error: "not in fixture" }, { status: 404 });
+    };
+    const evidence = await retrieveRagEvidence({
+      userQuery: item.question,
+      cardResolution: { resolvedCards, unresolvedMentions: [] },
+      cards: data.cards,
+      records: data.records,
+      qaRecords: data.qaRecords,
+      enableLiveOfficialQa: true,
+      fetchImpl,
+    });
+    assert.ok(
+      evidence.officialQaDirectCandidates.some((candidate) => candidate.id === `ygoresources-qa-${qaId}`),
+      `${qaId}: ${JSON.stringify({
+        direct: evidence.officialQaDirectCandidates.map((candidate) => candidate.id),
+        live: evidence.debug.liveOfficialQa,
+        warnings: evidence.retrievalWarnings,
+      })}`,
+    );
+  }
+});
+
 test("a resolved parenthetical alias group suppresses duplicate fallback card searches", async () => {
   const card = {
     id: "alias-card-100",

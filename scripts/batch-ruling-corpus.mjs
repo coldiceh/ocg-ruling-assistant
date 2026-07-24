@@ -70,10 +70,18 @@ export async function runRulingCorpusBatch(options = {}) {
 }
 
 export function evaluateRulingAnswer(corpusCase = {}, answer = {}) {
+  const provider = answer.debug?.providerUsed || "";
+  const model = answer.debug?.modelUsed || "";
+  const rawDryRun = answer.debug?.dryRun === true;
+  const mockExecution = /(?:^|[-_])mock(?:$|[-_])/iu.test(`${provider}-${model}`);
   const execution = {
-    dryRun: answer.debug?.dryRun === true,
-    provider: answer.debug?.providerUsed || "",
-    model: answer.debug?.modelUsed || "",
+    // Deterministic local reasoning deliberately has debug.dryRun=true because
+    // no external model was called. It is still a real computed ruling, not a
+    // mock answer. Only mock-backed generations are excluded from pass counts.
+    dryRun: rawDryRun && mockExecution,
+    rawDryRun,
+    provider,
+    model,
   };
   const expectedCardIds = stringList(corpusCase.expectedCardIds || corpusCase.cardIds);
   const expectedCardNames = stringList(corpusCase.expectedCardNames);
@@ -141,7 +149,7 @@ export function evaluateRulingAnswer(corpusCase = {}, answer = {}) {
   const needsReview = execution.dryRun
     || correctness.status === "needs_review"
     || cardResolution.status === "unresolved"
-    || officialQa.status === "not_found";
+    || officialQa.status === "not_found" && correctness.status !== "pass";
   return {
     overall: execution.dryRun ? "dry_run" : (hardFailure ? "fail" : (needsReview ? "needs_review" : "pass")),
     execution,

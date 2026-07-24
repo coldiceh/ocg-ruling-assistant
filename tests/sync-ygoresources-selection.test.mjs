@@ -20,6 +20,14 @@ test("manifest parser reads real nested paths and response-header revision", () 
   assert.ok(parsed.changedPaths.includes("/data/card/23486"));
 });
 
+test("manifest parser treats a null no-change response as an empty manifest", () => {
+  const parsed = parseManifestPayload(null, { revision: "32082" });
+
+  assert.equal(parsed.revision, "32082");
+  assert.deepEqual(parsed.changedPaths, []);
+  assert.deepEqual(parsed.changedQaIds, []);
+});
+
 test("changed and recent QA IDs cannot be displaced by the all-card cap", () => {
   const selected = selectQaIdsForSync({
     changedQaIds: [22803],

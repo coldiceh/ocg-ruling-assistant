@@ -2,6 +2,10 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildCardAliasIndex, buildQaIndex } from "../backend/dataIndex.mjs";
+import {
+  formatRulingDataQualityIssue,
+  quarantineRulingData,
+} from "../backend/rulingDataQuality.mjs";
 
 const rootDir = join(dirname(fileURLToPath(import.meta.url)), "..");
 const dataDir = join(rootDir, "data");
@@ -11,6 +15,7 @@ const maxCardQaPerCard = Number(process.env.MAX_CARD_QA_PER_CARD || 80);
 const maxQaTotal = Number(process.env.MAX_QA_TOTAL || 3000);
 const maxCards = Number(process.env.MAX_CARDS || 0);
 const fetchConcurrency = Number(process.env.FETCH_CONCURRENCY || 8);
+const fetchRetryCount = Math.max(1, Number(process.env.FETCH_RETRY_COUNT || 3));
 const syncAllReleasedCards = process.env.SYNC_ALL_RELEASED_CARDS !== "false";
 const syncOnlyReleasedCards = process.env.SYNC_ONLY_RELEASED_CARDS !== "false";
 const defaultIndexLanguages = (process.env.CARD_INDEX_LANGUAGES || "en,ja")
@@ -24,6 +29,7 @@ const warnings = [];
 const sourceSyncWarnings = [];
 const aliasWarnings = [];
 const parseFailedWarnings = [];
+const contentQualityWarnings = [];
 let observedSourceRevision = null;
 let qaSyncSelectionStats = {};
 
@@ -46,12 +52,27 @@ async function main() {
     cards = mergeById(previousCards.records || [], cards);
     rulings = mergeById(previousRulings.records || [], rulings);
   }
+  const rulingQuarantine = quarantineRulingData(rulings, previousRulings.records || []);
+  for (const issue of rulingQuarantine.issues) {
+    addContentQualityWarning(formatRulingDataQualityIssue(issue));
+  }
+  if (rulingQuarantine.retainedPreviousIds.length) {
+    addContentQualityWarning(
+      `Retained ${rulingQuarantine.retainedPreviousIds.length} previous healthy ruling record(s) in place of invalid synchronized content`,
+    );
+  }
+  if (rulingQuarantine.droppedIds.length) {
+    addContentQualityWarning(
+      `Quarantined ${rulingQuarantine.droppedIds.length} ruling record(s) because no previous healthy value was available`,
+    );
+  }
+  rulings = rulingQuarantine.records;
   const cardAliasIndex = buildCardAliasIndex(cards);
   const qaIndex = buildQaIndex(rulings, cards);
 
   const generatedAt = new Date().toISOString();
   const sourceFreshness = sourceSyncWarnings.length ? "stale" : "fresh";
-  const dataQualityWarnings = [...aliasWarnings, ...parseFailedWarnings];
+  const dataQualityWarnings = [...aliasWarnings, ...parseFailedWarnings, ...contentQualityWarnings];
   await writeJson(join(dataDir, "cards.json"), {
     schemaVersion: 1,
     generatedAt,
@@ -98,9 +119,11 @@ async function main() {
     syncFailureCount: sourceSyncWarnings.length ? Number(previousMeta.syncFailureCount || 0) + 1 : 0,
     aliasWarnings,
     parseFailedWarnings,
+    contentQualityWarnings,
     dataQualityWarnings,
     aliasWarningCount: aliasWarnings.length,
     parseFailedCount: parseFailedWarnings.length,
+    contentQualityWarningCount: contentQualityWarnings.length,
     dataQualityWarningCount: dataQualityWarnings.length,
     newItems: Number(previousMeta.newItems || 0),
     changedItems: Number(previousMeta.changedItems || 0),
@@ -139,6 +162,7 @@ async function main() {
     maxQaTotal,
     qaSyncSelection: qaSyncSelectionStats,
     warnings,
+    dataQualityWarnings,
     changedPaths: manifest.changedPaths,
   });
 
@@ -274,15 +298,18 @@ async function loadManifest(previousRevision) {
 }
 
 export function parseManifestPayload(payload = {}, { revision = null } = {}) {
+  const safePayload = payload && typeof payload === "object" && !Array.isArray(payload)
+    ? payload
+    : {};
   const changedPaths = [];
-  const directPaths = Array.isArray(payload.changed)
-    ? payload.changed
-    : Array.isArray(payload.paths)
-      ? payload.paths
+  const directPaths = Array.isArray(safePayload.changed)
+    ? safePayload.changed
+    : Array.isArray(safePayload.paths)
+      ? safePayload.paths
       : [];
   changedPaths.push(...directPaths.map(String));
-  const data = payload.data && typeof payload.data === "object" && !Array.isArray(payload.data)
-    ? payload.data
+  const data = safePayload.data && typeof safePayload.data === "object" && !Array.isArray(safePayload.data)
+    ? safePayload.data
     : {};
   for (const [kind, entries] of Object.entries(data)) {
     if (Array.isArray(entries)) {
@@ -293,7 +320,7 @@ export function parseManifestPayload(payload = {}, { revision = null } = {}) {
   }
   const uniquePaths = [...new Set(changedPaths.filter(Boolean))];
   return {
-    revision: normalizeRevision(revision || payload.revision || payload.latestRevision || payload.currentRevision),
+    revision: normalizeRevision(revision || safePayload.revision || safePayload.latestRevision || safePayload.currentRevision),
     changedPaths: uniquePaths,
     changedQaIds: uniquePaths
       .map((path) => String(path).match(/\/data\/qa\/(\d+)/u)?.[1])
@@ -475,8 +502,19 @@ function buildFaqRecords(cardPayloads) {
 }
 
 function normalizeQa(payload, id, cards) {
-  const question = firstText(payload, ["question", "q", "title"]);
-  const answer = firstText(payload, ["answer", "a", "content"]);
+  const localized = payload?.qaData?.ja
+    || payload?.qaData?.cn
+    || payload?.qaData?.["zh-CN"]
+    || payload?.qaData?.en
+    || {};
+  const question = localized.question
+    || localized.q
+    || localized.title
+    || firstText(payload, ["question", "q", "title"]);
+  const answer = localized.answer
+    || localized.a
+    || localized.content
+    || firstText(payload, ["answer", "a", "content"]);
   if (!question || !answer) {
     addParseWarning(`Q&A ${id} skipped: question or answer not found`);
     return null;
@@ -484,6 +522,7 @@ function normalizeQa(payload, id, cards) {
 
   const text = `${question}\n${answer}`;
   const involvedCards = detectCards(text, cards);
+  const sourceCardIds = uniqueIds(Array.isArray(payload?.cards) ? payload.cards : []);
   const title = truncate(question.replace(/\s+/g, " "), 90);
   return {
     id: `ygoresources-qa-${id}`,
@@ -492,7 +531,7 @@ function normalizeQa(payload, id, cards) {
     question,
     status: "confirmed",
     cards: involvedCards.map((card) => card.name),
-    cardIds: involvedCards.map((card) => card.id).filter(Boolean),
+    cardIds: uniqueIds([...sourceCardIds, ...involvedCards.map((card) => card.id)]),
     keywords: extractKeywords(text),
     conclusion: answer,
     steps: ["按同步 Q&A 的问答结论处理。", "若对局条件与问答不同，先回到官方数据库核对完整原文。"],
@@ -608,18 +647,35 @@ function extractKeywords(text) {
 
 async function fetchJson(path) {
   const url = path.startsWith("http") ? path : `${baseUrl}${path}`;
-  const response = await fetch(url, {
-    headers: {
-      "accept": "application/json",
-      "user-agent": userAgent,
-    },
-  });
-  if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
-  const revision = normalizeRevision(response.headers.get("x-cache-revision"));
-  if (revision && (!observedSourceRevision || Number(revision) > Number(observedSourceRevision))) {
-    observedSourceRevision = revision;
+  let lastError = null;
+  for (let attempt = 1; attempt <= fetchRetryCount; attempt += 1) {
+    try {
+      const response = await fetch(url, {
+        headers: {
+          "accept": "application/json",
+          "user-agent": userAgent,
+        },
+      });
+      if (!response.ok) {
+        const error = new Error(`${response.status} ${response.statusText}`);
+        error.status = response.status;
+        throw error;
+      }
+      const revision = normalizeRevision(response.headers.get("x-cache-revision"));
+      if (revision && (!observedSourceRevision || Number(revision) > Number(observedSourceRevision))) {
+        observedSourceRevision = revision;
+      }
+      return await response.json();
+    } catch (error) {
+      lastError = error;
+      const retryable = !Number.isFinite(Number(error?.status))
+        || Number(error.status) === 429
+        || Number(error.status) >= 500;
+      if (!retryable || attempt === fetchRetryCount) throw error;
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, 200 * attempt));
+    }
   }
-  return response.json();
+  throw lastError || new Error(`Failed to fetch ${url}`);
 }
 
 function normalizeRevision(value) {
@@ -666,6 +722,7 @@ function mergeById(previous, current) {
 function addSourceWarning(message) { sourceSyncWarnings.push(message); warnings.push(message); }
 function addAliasWarning(message) { aliasWarnings.push(message); warnings.push(message); }
 function addParseWarning(message) { parseFailedWarnings.push(message); warnings.push(message); }
+function addContentQualityWarning(message) { contentQualityWarnings.push(message); warnings.push(message); }
 
 async function mapLimit(items, limit, mapper) {
   const results = new Array(items.length);
@@ -714,12 +771,20 @@ if (resolve(process.argv[1] || "") === fileURLToPath(import.meta.url)) main().ca
   console.error(error);
   const previous = await readJsonFile(join(dataDir, "snapshot-meta.json"), {});
   const failedAt = new Date().toISOString();
+  const dataQualityWarnings = [...new Set([
+    ...(previous.dataQualityWarnings || []),
+    ...contentQualityWarnings,
+  ])];
   await writeJson(join(dataDir, "snapshot-meta.json"), {
     ...previous,
     sourceFreshness: previous.lastSuccessfulSyncAt || previous.generatedAt ? "stale" : "unknown",
     lastFailedSyncAt: failedAt,
     syncFailureCount: Number(previous.syncFailureCount || 0) + 1,
     warnings: [...new Set([...(previous.warnings || []), `Sync failed: ${formatError(error)}`])],
+    contentQualityWarnings: [...new Set([...(previous.contentQualityWarnings || []), ...contentQualityWarnings])],
+    contentQualityWarningCount: new Set([...(previous.contentQualityWarnings || []), ...contentQualityWarnings]).size,
+    dataQualityWarnings,
+    dataQualityWarningCount: dataQualityWarnings.length,
   });
   process.exitCode = 1;
 });

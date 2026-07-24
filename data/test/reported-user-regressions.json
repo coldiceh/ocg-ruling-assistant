@@ -36,6 +36,13 @@
         "M·HERO 暗爪自身作为融合素材离场后，其效果不再适用",
         "融合素材正常送去墓地"
       ]
+    },
+    {
+      "id": "already-public-hand-cannot-be-shown-again",
+      "question": "我方看透心灵之眼适用中，我方有手牌，我方能发动红莲的指名者吗？",
+      "expectedCardNames": ["看透心灵之眼", "红莲的指名者"],
+      "expectedQaIds": ["ygoresources-qa-20844"],
+      "expectedAnswer": "不能发动。"
     }
   ]
 }
