@@ -20,6 +20,20 @@ test("unique short aliases and translated partial names resolve to the same card
   assert.deepEqual(fullResolution.unresolvedMentions, []);
 });
 
+test("passive alias scanning does not extract short card names from inside longer quoted names", async () => {
+  const data = await loadRagData();
+  const resolution = extractRagCards(
+    "「道化の一座 ホワイトフェイス」の②の効果を発動した場合、「ラーの翼神竜－球体形」をアドバンス召喚できますか？",
+    { cards: data.cards, maxCards: 8 },
+  );
+  const queryIds = resolution.resolvedCards
+    .filter((card) => card.resolutionSource !== "card_text_reference")
+    .map((card) => String(card.id));
+
+  assert.deepEqual(new Set(queryIds), new Set(["22524", "11927"]));
+  assert.ok(!resolution.resolvedCards.some((card) => String(card.id) === "4030"));
+});
+
 test("equivalent short and full questions retrieve the same governing FAQ without a network fallback", async () => {
   const data = await loadRagData();
   const results = [];

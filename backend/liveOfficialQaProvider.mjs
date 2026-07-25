@@ -224,6 +224,7 @@ function normalizeQaRecord(qaId, payload, cardNameById, selection) {
   const localized = payload?.qaData?.ja || payload?.qaData?.en || firstObjectValue(payload?.qaData);
   if (!localized) return null;
   const cardIds = uniqueNumericIds(payload?.cards);
+  const rawQuestion = localized.question || localized.title;
   const replaceCards = (value) => String(value || "").replace(/<<\s*(\d{1,10})\s*>>/gu, (_match, id) => (
     cardNameById.has(String(id)) ? cardNameById.get(String(id)) : `卡片#${id}`
   ));
@@ -247,6 +248,7 @@ function normalizeQaRecord(qaId, payload, cardNameById, selection) {
     text: [question, detailedQuestion !== question ? detailedQuestion : "", answer].filter(Boolean).join("\n"),
     cards: cardIds.map((id) => cardNameById.get(String(id)) || `卡片#${id}`),
     cardIds,
+    questionCardIds: extractInlineCardIds(rawQuestion),
     source: "Konami Official Card Database via YGOResources",
     sourceUrl: `https://www.db.yugioh-card.com/yugiohdb/faq_search.action?fid=${encodeURIComponent(qaId)}&ope=5&request_locale=ja`,
     mirrorUrl: `${DEFAULT_BASE_URL}/data/qa/${encodeURIComponent(qaId)}`,
@@ -299,6 +301,10 @@ async function fetchJsonCached(fetchImpl, url, { timeoutMs, cacheTtlMs }) {
   } finally {
     clearTimeout(timer);
   }
+}
+
+function extractInlineCardIds(value) {
+  return uniqueNumericIds([...String(value || "").matchAll(/<<\s*(\d{1,10})\s*>>/gu)].map((match) => match[1]));
 }
 
 async function fetchJsonResilient(fetchImpl, url, options) {
