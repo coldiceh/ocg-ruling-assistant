@@ -188,6 +188,27 @@ test("model_card_name_candidates_are_preserved_without_name_signal_filter", () =
   assert.equal(resolution.unresolvedMentions[0].source, "model_card_name_extractor");
 });
 
+test("model card-name extraction cannot add a card that has no surface in the user question", async () => {
+  const data = await loadRagData();
+  const resolution = extractRagCards(
+    "相手のモンスター効果にチェーンして「リビングデッドの呼び声」で「インスペクト・ボーダー」を特殊召喚した場合、どうなりますか？",
+    {
+      cards: data.cards,
+      modelCardNameCandidates: [
+        { name: "威光魔人", originalText: "威光魔人", confidence: "high" },
+        { name: "リビングデッドの呼び声", originalText: "リビングデッドの呼び声", confidence: "high" },
+        { name: "インスペクト・ボーダー", originalText: "インスペクト・ボーダー", confidence: "high" },
+      ],
+    },
+  );
+
+  assert.ok(!resolution.resolvedCards.some((card) => String(card.id) === "11063"));
+  assert.deepEqual(
+    new Set(resolution.resolvedCards.filter((card) => card.resolutionSource === "query").map((card) => String(card.id))),
+    new Set(["4989", "13405"]),
+  );
+});
+
 test("baige_search_uses_model_original_text_as_fallback_query", async () => {
   clearBaigeSearchCache();
   const question = "检索圣炎王 大鹏不死鸟的情况。";

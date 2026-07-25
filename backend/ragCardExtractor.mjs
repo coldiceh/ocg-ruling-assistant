@@ -52,6 +52,10 @@ export function extractRagCards(userQuery, { cards = [], maxCards = 6, modelCard
     .filter((mention) => (
       !nonCardQuotedMentionKeys.has(normalizeCardKey(mention.name))
       && !nonCardQuotedMentionKeys.has(normalizeCardKey(mention.originalText))
+      && [mention.originalText, mention.name].some((surface) => {
+        const key = normalizeCardKey(surface);
+        return key.length >= 2 && normalizedQuery.includes(key);
+      })
     ));
   const exactMentionSeeds = [
     ...buildModelMentionSeeds(modelMentions),
