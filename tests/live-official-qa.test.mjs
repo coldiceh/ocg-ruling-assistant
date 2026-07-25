@@ -6,6 +6,7 @@ import {
   selectRelevantQaIds,
 } from "../backend/liveOfficialQaProvider.mjs";
 import { searchOfficialQaEvidence } from "../backend/officialQaMatcher.mjs";
+import { retrieveRagEvidence } from "../backend/ragEvidenceRetriever.mjs";
 
 function jsonResponse(value) {
   return new Response(JSON.stringify(value), {
@@ -169,6 +170,74 @@ test("an unrelated single QA is not promoted only because its card set is exact"
   });
 
   assert.equal(matches.exact.length, 0);
+});
+
+test("a unique broad official QA can govern two listed example cards", () => {
+  const matches = searchOfficialQaEvidence({
+    question: "卡片100的持续效果适用中，可以发动卡片200吗？",
+    records: [{
+      id: "qa-broad-examples",
+      recordType: "qa",
+      cardIds: [100, 200, 300, 400],
+      question: "Can the effect be activated while the continuous effect is applying?",
+      answer: "Cards <<100>>, <<200>>, <<300>>, and <<400>> follow this ruling.",
+    }],
+    resolvedCards: [{ id: "100", name: "卡片100" }, { id: "200", name: "卡片200" }],
+  });
+
+  assert.equal(matches.exact[0]?.record.id, "qa-broad-examples");
+  assert.ok(matches.exact[0]?.matchedBy.includes("unique_semantic_signature"));
+});
+
+test("two broad QAs listing the same cards remain ambiguous", () => {
+  const records = ["a", "b"].map((suffix) => ({
+    id: `qa-broad-${suffix}`,
+    recordType: "qa",
+    cardIds: [100, 200, 300],
+    question: "Can the effect be activated while the continuous effect is applying?",
+    answer: "Answer",
+  }));
+  const matches = searchOfficialQaEvidence({
+    question: "卡片100的持续效果适用中，可以发动卡片200吗？",
+    records,
+    resolvedCards: [{ id: "100", name: "卡片100" }, { id: "200", name: "卡片200" }],
+  });
+
+  assert.equal(matches.exact.length, 0);
+});
+
+test("card-text dependency expansion does not pollute the queried card identity set", async () => {
+  const cards = [
+    { id: "100", name: "卡片100", effectText: "效果100" },
+    { id: "200", name: "卡片200", effectText: "效果200" },
+    { id: "300", name: "卡文依赖300", effectText: "效果300" },
+  ];
+  const evidence = await retrieveRagEvidence({
+    userQuery: "卡片100存在时，可以发动卡片200吗？",
+    cardResolution: {
+      resolvedCards: [
+        { ...cards[0], resolutionSource: "query" },
+        { ...cards[1], resolutionSource: "query" },
+        { ...cards[2], resolutionSource: "card_text_reference" },
+      ],
+      unresolvedMentions: [],
+      ambiguousMentions: [],
+      userProvidedCardTexts: [],
+    },
+    cards,
+    records: [],
+    qaRecords: [{
+      id: "qa-query-pair",
+      recordType: "qa",
+      cardIds: ["100", "200"],
+      question: "卡片100存在时，可以发动卡片200吗？",
+      answer: "可以发动。",
+    }],
+    env: { RAG_LIVE_OFFICIAL_QA: "false" },
+  });
+
+  assert.equal(evidence.officialQaDirectCandidates[0]?.id, "qa-query-pair");
+  assert.ok(evidence.retrievalWarnings.includes("qa_identity_excludes_card_text_references:1"));
 });
 
 test("QA selection prioritizes full intersection and remains bounded", () => {

@@ -70,6 +70,11 @@ export async function retrieveRagEvidence({
     resolveUnresolvedMentionCardsWithBaige(unresolvedForBaige, { fetchImpl, env, limits, warnings: retrievalWarnings, debug: baigeDebug }),
   ]);
   let retrievalCards = dedupeCards([...enrichedLocalCards, ...baigeResolvedCards]).slice(0, limits.maxCards);
+  const qaIdentityCards = retrievalCards.filter((card) => card.resolutionSource !== "card_text_reference");
+  if (qaIdentityCards.length !== retrievalCards.length) {
+    retrievalWarnings.push(`qa_identity_excludes_card_text_references:${retrievalCards.length - qaIdentityCards.length}`);
+  }
+  const effectiveQaIdentityCards = qaIdentityCards.length ? qaIdentityCards : retrievalCards;
   timingsMs.cardResolution = Date.now() - stageStartedAt;
   const remainingUnresolvedMentions = unresolvedMentionsAfterRetrieval(unresolvedResolutionCandidates, retrievalCards);
   if (parentheticalAliasKeys.size) retrievalWarnings.push(`parenthetical_alias_mentions_collapsed:${parentheticalAliasKeys.size}`);
@@ -114,7 +119,7 @@ export async function retrieveRagEvidence({
   const localOfficialMatches = searchOfficialQaEvidence({
     question: userQuery,
     records: scopedRecordBuckets.officialQa,
-    resolvedCards: retrievalCards,
+    resolvedCards: effectiveQaIdentityCards,
     limit: Math.max(20, limits.maxOfficialQa * 4),
   });
   const localCandidateQaIds = localOfficialMatches.all
@@ -130,7 +135,7 @@ export async function retrieveRagEvidence({
     && (retrievalCards.length >= 1 || localCandidateQaIds.length)
   ) {
     liveOfficialQa = await retrieveLiveOfficialQa({
-      resolvedCards: retrievalCards,
+      resolvedCards: effectiveQaIdentityCards,
       candidateQaIds: localCandidateQaIds,
       fetchImpl,
       baseUrl: env.YGORESOURCES_BASE_URL || "https://db.ygoresources.com",
@@ -150,7 +155,7 @@ export async function retrieveRagEvidence({
       // same stable id. Otherwise the Japanese live question is silently
       // discarded in favour of an older English-only snapshot.
       records: dedupeBy([...liveOfficialQa.records, ...scopedRecordBuckets.officialQa], stableRecordKey),
-      resolvedCards: retrievalCards,
+      resolvedCards: effectiveQaIdentityCards,
       limit: Math.max(20, limits.maxOfficialQa * 4),
     })
     : localOfficialMatches;

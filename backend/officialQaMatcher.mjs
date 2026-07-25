@@ -100,7 +100,7 @@ export function searchOfficialQaEvidence({ question, records = [], resolvedCards
     .filter((item) => item.score >= 0.2);
   promoteUniqueExactCardSet(scored, queryType, resolvedIds);
   scored.sort((left, right) => right.score - left.score || String(left.record.id).localeCompare(String(right.record.id)));
-  promoteUniqueSemanticMatch(scored, resolvedIds);
+  promoteUniqueSemanticMatch(scored, resolvedIds, queryType);
   const ranked = scored.slice(0, Math.max(limit, 1));
 
   const exact = ranked.filter((item) => item.matchLevel === "official_qa_exact");
@@ -282,13 +282,19 @@ function promoteUniqueExactCardSet(items, queryType, resolvedIds) {
   candidate.matchedBy = [...new Set([...candidate.matchedBy, "unique_exact_card_set"])];
 }
 
-function promoteUniqueSemanticMatch(items, resolvedIds) {
+function promoteUniqueSemanticMatch(items, resolvedIds, queryType) {
   const [top, second] = items;
   if (!top || !top.typeCompatible || top.matchLevel === "official_qa_exact") return;
-  const enoughConcepts = top.semanticHits.length >= 3
+  const generalSemanticSignature = top.semanticHits.length >= 3
     && top.semanticQueryCoverage >= 0.8
     && top.semanticScore >= 0.72;
-  if (!enoughConcepts || top.score < 0.78) return;
+  const uniqueResolvedCardOperation = resolvedIds.size >= 2
+    && top.cardIdCoverage === 1
+    && top.questionType === queryType
+    && top.semanticHits.length >= 1
+    && top.semanticQueryCoverage >= 0.9
+    && top.semanticScore >= 0.5;
+  if ((!generalSemanticSignature && !uniqueResolvedCardOperation) || top.score < 0.78) return;
   if (resolvedIds.size && !top.identityCompatibleForExact) return;
   const margin = top.score - Number(second?.score || 0);
   if (second && margin < 0.08) return;

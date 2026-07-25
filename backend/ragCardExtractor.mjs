@@ -42,7 +42,17 @@ export function extractRagCards(userQuery, { cards = [], maxCards = 6, modelCard
   const queryNumberedIdentityKeys = new Set(extractNumberedCardIdentities(query).map(numberedIdentityKey));
   const aliasIndex = buildAliasIndex(cards);
   const userProvidedCardTexts = extractUserProvidedCardTextBlocks(query);
-  const modelMentions = normalizeModelCardNameCandidates(modelCardNameCandidates);
+  const nonCardQuotedMentionKeys = new Set(
+    collectQuotedMentionEntries(query)
+      .filter((item) => item.role !== "card")
+      .map((item) => normalizeCardKey(item.mention))
+      .filter(Boolean),
+  );
+  const modelMentions = normalizeModelCardNameCandidates(modelCardNameCandidates)
+    .filter((mention) => (
+      !nonCardQuotedMentionKeys.has(normalizeCardKey(mention.name))
+      && !nonCardQuotedMentionKeys.has(normalizeCardKey(mention.originalText))
+    ));
   const exactMentionSeeds = [
     ...buildModelMentionSeeds(modelMentions),
     ...extractNumberedCardMentionCandidates(query).map((input) => ({ input, reason: "numbered_card_not_found", source: "numbered_card_identity" })),
@@ -1129,7 +1139,7 @@ function scoreMentionedAction(afterMention, effectText) {
   return { score: 0, strongSignals: 0 };
 }
 
-function addResolved(resolved, seenCards, candidate, input, confidence) {
+function addResolved(resolved, seenCards, candidate, input, confidence, resolutionSource = "query") {
   const card = candidate.card || candidate;
   const key = cardIdentity(card);
   if (!key || seenCards.has(key)) return;
@@ -1166,6 +1176,7 @@ function addResolved(resolved, seenCards, candidate, input, confidence) {
     sourceUrl: card.sourceUrl || "",
     aliases: resolvedCardAliases(card, input),
     confidence,
+    resolutionSource,
   });
 }
 
@@ -1205,7 +1216,7 @@ function applyReferencedCardTextResolution({ query, aliasIndex, resolved, seenCa
       for (const mention of extractQuotedMentions(block.text)) {
         const candidates = aliasIndex.get(normalizeCardKey(mention)) || [];
         if (candidates.length !== 1) continue;
-        addResolved(resolved, seenCards, candidates[0], mention, 0.86);
+        addResolved(resolved, seenCards, candidates[0], mention, 0.86, "card_text_reference");
         if (resolved.length >= maxCards) return;
       }
     }

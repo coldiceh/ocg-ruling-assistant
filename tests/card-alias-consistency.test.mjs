@@ -127,11 +127,13 @@ test("quoted card roles exclude dynamic names, archetype labels, and quoted effe
       question: "「妖精の王子様」として扱われている「閃刀姫」リンクモンスターが相手の効果でフィールドから離れた場合、または戦闘で破壊された場合、「閃刀姫－レイ」の②の効果は発動できますか？",
       expectedId: "13670",
       excludedMentions: ["妖精の王子様", "閃刀姫"],
+      modelCandidates: ["妖精の王子様", "閃刀姫", "閃刀姫－レイ"],
     },
     {
       question: "表側表示の「方界」と名のついたモンスターがデッキに戻った場合、墓地の「方界合神」の効果を発動できますか？",
       expectedId: "12528",
       excludedMentions: ["方界"],
+      modelCandidates: ["方界", "方界合神"],
     },
     {
       question: "手札の「灰流うらら」の効果の発動にチェーンして『その発動を無効にし、そのカードを持ち主のデッキに戻す』効果を発動した場合、処理はどうなりますか？",
@@ -141,7 +143,11 @@ test("quoted card roles exclude dynamic names, archetype labels, and quoted effe
   ];
 
   for (const item of cases) {
-    const resolution = extractRagCards(item.question, { cards: data.cards, maxCards: 8 });
+    const resolution = extractRagCards(item.question, {
+      cards: data.cards,
+      maxCards: 8,
+      modelCardNameCandidates: item.modelCandidates || [],
+    });
     assert.ok(resolution.resolvedCards.some((card) => String(card.id) === item.expectedId));
     const unresolvedInputs = resolution.unresolvedMentions.map((mention) => mention.input);
     const ambiguousInputs = resolution.ambiguousMentions.map((mention) => mention.input);
@@ -168,6 +174,11 @@ test("exact card dependencies named by a resolved card's own text are expanded o
   for (const item of cases) {
     const resolution = extractRagCards(item.question, { cards: data.cards, maxCards: 8 });
     assert.deepEqual(new Set(resolution.resolvedCards.map((card) => String(card.id))), item.expectedIds);
+    const referencedCards = resolution.resolvedCards.filter((card) => (
+      !item.question.normalize("NFKC").includes(String(card.input || "").normalize("NFKC"))
+    ));
+    assert.ok(referencedCards.length >= 1);
+    assert.ok(referencedCards.every((card) => card.resolutionSource === "card_text_reference"));
     assert.deepEqual(resolution.unresolvedMentions, []);
     assert.deepEqual(resolution.ambiguousMentions, []);
   }
