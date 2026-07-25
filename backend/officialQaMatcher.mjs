@@ -9,9 +9,9 @@ const QUESTION_TYPES = [
   ["target_legality", /能否.*(?:取|选择).*对象|不能成为.*对象|対象に.*(?:できます|できません)|can(?:not)? target|legal target/iu],
   ["timing_window", /时点|伤害步骤|伤害计算|错过时点|タイミング|ダメージステップ|timing|damage step/iu],
   ["continuous_effect_during_resolution", /效果处理中.*(?:永续|持续|自坏)|処理中.*永続|continuous effect.*resol/iu],
-  ["resolution_result", /如何处理|怎么处理|处理后|效果处理|どう処理|どうなりますか|処理はどうな|what happens|resolution|resolve/iu],
-  ["can_activate", /(?:能否|是否(?:可以|能)?|可不可以|能不能|可以|不能).{0,12}(?:发动|连锁)|発動(?:する(?:事|こと)は)?(?:でき|出来)ますか|発動できません|can(?:not)?\b.{0,80}\bactivate/iu],
+  ["can_activate", /(?:能否|是否(?:可以|能)?|可不可以|能不能|可以|不能|能).{0,12}(?:发动|连锁)|発動(?:する(?:事|こと)は)?(?:でき|出来)ますか|発動できません|can(?:not)?\b.{0,80}\bactivate/iu],
   ["action_legality", /(?:できますか|できませんか|可能ですか)|(?:能否|是否(?:可以|能)?|可不可以|能不能).{0,30}(?:召唤|送去|作为|进行|处理)|\bcan (?:i|you|a player|that|this)\b|\bis it possible\b/iu],
+  ["resolution_result", /如何处理|怎么处理|处理后|效果处理|どう処理|どうなりますか|処理はどうな|what happens|resolution|resolve/iu],
 ];
 
 const EFFECT_PHRASES = [
@@ -99,6 +99,7 @@ export function searchOfficialQaEvidence({ question, records = [], resolvedCards
     }))
     .filter((item) => item.score >= 0.2);
   promoteUniqueExactCardSet(scored, queryType, resolvedIds);
+  promoteUniqueQuestionCardMatch(scored, resolvedIds, queryType);
   scored.sort((left, right) => right.score - left.score || String(left.record.id).localeCompare(String(right.record.id)));
   promoteUniqueSemanticMatch(scored, resolvedIds, queryType);
   const ranked = scored.slice(0, Math.max(limit, 1));
@@ -165,6 +166,7 @@ function scoreRecord({
     evidencePhrases,
     evidenceConcepts,
     recordIds,
+    recordQuestionIds,
     recordIdentityText,
   } = officialQaRecordFeatures(record);
   const typeCompatible = questionTypeCompatible(queryType, evidenceType);
@@ -180,15 +182,18 @@ function scoreRecord({
   const semanticScore = setDiceSimilarity(queryConcepts, evidenceConcepts);
   const semanticQueryCoverage = queryConcepts.length ? semanticHits.length / queryConcepts.length : 0;
   const matchedCardIds = [...resolvedIds].filter((id) => recordIds.has(id));
+  const matchedQuestionCardIds = [...resolvedIds].filter((id) => recordQuestionIds.has(id));
   const cardIdMatch = matchedCardIds.length > 0;
   const cardIdCoverage = resolvedIds.size ? matchedCardIds.length / resolvedIds.size : 0;
+  const questionCardIdCoverage = resolvedIds.size ? matchedQuestionCardIds.length / resolvedIds.size : 0;
   const exactResolvedCardIdSet = resolvedIds.size >= 2
     && recordIds.size === resolvedIds.size
     && matchedCardIds.length === resolvedIds.size;
   const supportingCardIds = new Set((record?.retrievalContext?.supportingCardIds || []).map(String));
   const exactRetrievedCardSubset = supportingCardIds.size >= 2
-    && supportingCardIds.size === recordIds.size
-    && [...supportingCardIds].every((id) => recordIds.has(id) && resolvedIds.has(id));
+    && supportingCardIds.size === resolvedIds.size
+    && [...supportingCardIds].every((id) => recordIds.has(id) && resolvedIds.has(id))
+    && [...resolvedIds].every((id) => supportingCardIds.has(id));
   const exactCardIdSet = exactResolvedCardIdSet || exactRetrievedCardSubset;
   const cardNameMatch = [...resolvedNames].some((name) => name.length >= 3 && !hasNumberedCardIdentityConflict(name, recordIdentityText) && normalizedRecordText.includes(name));
   const cardMatch = cardIdMatch || cardNameMatch;
@@ -201,6 +206,7 @@ function scoreRecord({
   // agree completely.
   const rawExact = identityCompatibleForExact && (
     exactNormalized
+    || (exactSkeleton && resolvedIds.size > 0 && cardIdCoverage === 1)
     || (containment >= 0.9 && similarity >= 0.86)
   );
   const lexicalScore = Math.max(similarity, containment, skeletonSimilarity, skeletonContainment);
@@ -208,6 +214,7 @@ function scoreRecord({
   if (typeCompatible && queryType !== "unknown") score += 0.16;
   if (cardMatch) score += 0.17;
   if (resolvedIds.size >= 2 && cardIdCoverage === 1) score += 0.24;
+  if (resolvedIds.size >= 2 && questionCardIdCoverage === 1) score += 0.08;
   if (exactCardIdSet) score += 0.12;
   score += Math.min(0.18, phraseHits.length * 0.06);
   score = Math.min(1, Number(score.toFixed(4)));
@@ -224,7 +231,9 @@ function scoreRecord({
     typeCompatible,
     cardMatch,
     matchedCardIds,
+    matchedQuestionCardIds,
     cardIdCoverage,
+    questionCardIdCoverage,
     exactCardIdSet,
     identityCompatibleForExact,
     lexicalScore,
@@ -282,6 +291,23 @@ function promoteUniqueExactCardSet(items, queryType, resolvedIds) {
   candidate.matchedBy = [...new Set([...candidate.matchedBy, "unique_exact_card_set"])];
 }
 
+function promoteUniqueQuestionCardMatch(items, resolvedIds, queryType) {
+  if (resolvedIds.size < 2 || queryType === "unknown") return;
+  const candidates = items.filter((item) => (
+    item.typeCompatible
+    && item.questionType === queryType
+    && item.questionCardIdCoverage === 1
+    && item.semanticHits.length >= 1
+    && item.semanticQueryCoverage >= 0.5
+    && item.semanticScore >= 0.4
+  ));
+  if (candidates.length !== 1) return;
+  const [candidate] = candidates;
+  candidate.matchLevel = "official_qa_exact";
+  candidate.score = Math.max(candidate.score, 0.94);
+  candidate.matchedBy = [...new Set([...candidate.matchedBy, "unique_question_card_set"])];
+}
+
 function promoteUniqueSemanticMatch(items, resolvedIds, queryType) {
   const [top, second] = items;
   if (!top || !top.typeCompatible || top.matchLevel === "official_qa_exact") return;
@@ -320,8 +346,12 @@ function officialQaRecordFeatures(record = {}) {
     recordIds: new Set([
       record.cardId,
       ...(record.cardIds || []),
-      ...(record.cards || []),
+      ...(record.cards || []).filter((value) => /^\d+$/u.test(String(value || "").trim())),
       ...extractInlineCardIds(text),
+    ].map(normalizeId).filter(Boolean)),
+    recordQuestionIds: new Set([
+      ...(record.questionCardIds || []),
+      ...extractInlineCardIds(questionText),
     ].map(normalizeId).filter(Boolean)),
     recordIdentityText: [record.title, text, ...(record.cards || [])].filter(Boolean).join(" "),
   };

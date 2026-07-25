@@ -22,6 +22,7 @@ const evidenceRecordBucketsCache = new WeakMap();
 const evidenceListCache = new WeakMap();
 const retrievalRecordFeatureCache = new WeakMap();
 const recordIdentityIndexCache = new WeakMap();
+const canonicalCardIdentityIndexCache = new WeakMap();
 
 export async function retrieveRagEvidence({
   userQuery,
@@ -74,7 +75,11 @@ export async function retrieveRagEvidence({
   if (qaIdentityCards.length !== retrievalCards.length) {
     retrievalWarnings.push(`qa_identity_excludes_card_text_references:${retrievalCards.length - qaIdentityCards.length}`);
   }
-  const effectiveQaIdentityCards = qaIdentityCards.length ? qaIdentityCards : retrievalCards;
+  const effectiveQaIdentityCards = canonicalizeQaIdentityCards(
+    qaIdentityCards.length ? qaIdentityCards : retrievalCards,
+    data.cards,
+    retrievalWarnings,
+  );
   timingsMs.cardResolution = Date.now() - stageStartedAt;
   const remainingUnresolvedMentions = unresolvedMentionsAfterRetrieval(unresolvedResolutionCandidates, retrievalCards);
   if (parentheticalAliasKeys.size) retrievalWarnings.push(`parenthetical_alias_mentions_collapsed:${parentheticalAliasKeys.size}`);
@@ -83,7 +88,10 @@ export async function retrieveRagEvidence({
   if (providedTexts.length) retrievalWarnings.push("user_provided_text_not_official");
   const recordBuckets = evidenceRecordBuckets(data);
   const allEvidenceRecords = recordBuckets.all;
-  const scopedRecordBuckets = scopeRecordBuckets(recordBuckets, retrievalCards);
+  const scopedRecordBuckets = scopeRecordBuckets(
+    recordBuckets,
+    dedupeCards([...effectiveQaIdentityCards, ...retrievalCards]),
+  );
 
   const cardTexts = retrievalCards
     .map((card) => mergeCanonicalCardEvidenceProfile(
@@ -435,6 +443,77 @@ function cardIdentityKeys(cards) {
   return keys;
 }
 
+function canonicalizeQaIdentityCards(cards, canonicalCards, warnings) {
+  const index = canonicalCardIdentityIndex(canonicalCards);
+  return (cards || []).map((card) => {
+    const currentId = normalizeId(card.id || card.cardId);
+    const direct = currentId ? index.byId.get(currentId) : null;
+    if (direct) return mergeQaIdentityCard(card, direct);
+
+    const candidates = new Set();
+    for (const name of [card.name, card.cnName, card.jaName, card.enName, ...(card.aliases || [])]) {
+      const key = normalizeCardKey(name);
+      if (!key) continue;
+      for (const candidate of index.byAlias.get(key) || []) candidates.add(candidate);
+    }
+    if (candidates.size !== 1) {
+      if (candidates.size > 1) {
+        warnings.push(`qa_identity_canonicalization_ambiguous:${card.name || card.input || currentId}`);
+      }
+      return card;
+    }
+    const canonical = [...candidates][0];
+    const canonicalId = normalizeId(canonical.id || canonical.cardId);
+    if (!canonicalId || canonicalId === currentId) return mergeQaIdentityCard(card, canonical);
+    warnings.push(`qa_identity_canonicalized:${currentId || "name"}->${canonicalId}`);
+    return {
+      ...mergeQaIdentityCard(card, canonical),
+      qaIdentityOriginalId: String(card.id || card.cardId || ""),
+      id: canonicalId,
+      cardId: canonicalId,
+    };
+  });
+}
+
+function canonicalCardIdentityIndex(cards) {
+  const cached = canonicalCardIdentityIndexCache.get(cards);
+  if (cached) return cached;
+  const byId = new Map();
+  const byAlias = new Map();
+  for (const card of cards || []) {
+    const id = normalizeId(card.id || card.cardId);
+    if (id) byId.set(id, card);
+    for (const name of [card.name, card.cnName, card.jaName, card.enName, ...(card.aliases || [])]) {
+      const key = normalizeCardKey(name);
+      if (!key) continue;
+      const matches = byAlias.get(key) || [];
+      matches.push(card);
+      byAlias.set(key, matches);
+    }
+  }
+  const index = { byId, byAlias };
+  canonicalCardIdentityIndexCache.set(cards, index);
+  return index;
+}
+
+function mergeQaIdentityCard(card, canonical) {
+  return {
+    ...card,
+    aliases: [...new Set([
+      ...(card.aliases || []),
+      card.name,
+      card.cnName,
+      card.jaName,
+      card.enName,
+      ...(canonical.aliases || []),
+      canonical.name,
+      canonical.cnName,
+      canonical.jaName,
+      canonical.enName,
+    ].filter(Boolean))],
+  };
+}
+
 function recordIdentityIndex(records) {
   const cached = recordIdentityIndexCache.get(records);
   if (cached) return cached;
@@ -491,6 +570,7 @@ function normalizeRecord(record = {}) {
     ...(record.cardIds || []),
     ...extractInlineCardIds(text),
   ].map((item) => String(item || "")).filter(Boolean))];
+  const questionCardIds = extractInlineCardIds([record.question, record.title].filter(Boolean).join("\n"));
   const cards = [record.cardName, ...(record.cards || []), ...(record.cardNames || [])].filter(Boolean);
   return {
     ...record,
@@ -501,6 +581,7 @@ function normalizeRecord(record = {}) {
     answer: record.answer || record.conclusion || "",
     text,
     cardIds,
+    questionCardIds,
     cards,
     sourceUrl: evidenceSourceUrl({ ...record, cardIds }),
     status: record.status || "current",

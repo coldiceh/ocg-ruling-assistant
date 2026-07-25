@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { routeAnswer, selectOfficialQaRoute } from "../backend/answerRouter.mjs";
 import { extractOfficialQaAnswer } from "../backend/officialQaAnswerExtractor.mjs";
-import { searchOfficialQaEvidence, resolveEntitiesFromOfficialQaMatch } from "../backend/officialQaMatcher.mjs";
+import {
+  classifyOfficialQaQuestionType,
+  searchOfficialQaEvidence,
+  resolveEntitiesFromOfficialQaMatch,
+} from "../backend/officialQaMatcher.mjs";
 import { answerRulingQuestionFast } from "../backend/fastJudgeEngine.mjs";
 
 const fresh = { freshness: "fresh", safetyPenalty: 0 };
@@ -118,4 +122,53 @@ test("related official evidence produces a conditional route rather than unable"
   });
   assert.equal(answer.answerRoute, "conditional_branch_answer");
   assert.notEqual(answer.answerType, "cannot_answer_safely");
+});
+
+test("plain Chinese '能发动' wording is classified as an activation question", () => {
+  assert.equal(classifyOfficialQaQuestionType("我方能发动这张卡吗？"), "can_activate");
+});
+
+test("a card-name translation difference remains exact when the structured identity and question skeleton agree", () => {
+  const matches = searchOfficialQaEvidence({
+    question: "「译名乙」在先攻第1回合可以发动吗？",
+    records: [qa({
+      question: "「正式名甲」在先攻第1回合可以发动吗？",
+      answer: "可以发动。",
+      cardIds: ["100"],
+      cards: ["正式名甲"],
+    })],
+    resolvedCards: [{ id: "100", name: "译名乙" }],
+  });
+
+  assert.equal(matches.exact[0]?.record.id, "qa-1");
+  assert.ok(matches.exact[0]?.matchedBy.includes("card_name_agnostic_skeleton"));
+});
+
+test("the unique QA whose question contains every queried card wins over answer-only example mentions", () => {
+  const records = [
+    {
+      id: "qa-target",
+      recordType: "qa",
+      cardIds: ["100", "200", "300"],
+      questionCardIds: ["100", "200"],
+      question: "卡片100适用中，能发动卡片200吗？",
+      answer: "可以。",
+    },
+    {
+      id: "qa-answer-only",
+      recordType: "qa",
+      cardIds: ["100", "200", "300"],
+      questionCardIds: ["100", "300"],
+      question: "卡片100适用中，能发动卡片300吗？",
+      answer: "卡片200也属于其他示例。",
+    },
+  ];
+  const matches = searchOfficialQaEvidence({
+    question: "卡片100适用中，我方能发动卡片200吗？",
+    records,
+    resolvedCards: [{ id: "100", name: "卡片100" }, { id: "200", name: "卡片200" }],
+  });
+
+  assert.equal(matches.exact[0]?.record.id, "qa-target");
+  assert.ok(matches.exact[0]?.matchedBy.includes("unique_question_card_set"));
 });

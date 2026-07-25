@@ -170,6 +170,7 @@ export function extractRagCards(userQuery, { cards = [], maxCards = 6, modelCard
     const aliasNumberedIdentities = extractNumberedCardIdentities(aliasKey);
     if (aliasNumberedIdentities.length && !aliasNumberedIdentities.some((identity) => queryNumberedIdentityKeys.has(numberedIdentityKey(identity)))) continue;
     const bestAlias = candidates[0]?.matchedAlias || "";
+    if (!bestAlias || !buildMentionContexts(cardNameScanQuery, bestAlias, resolved).length) continue;
     aliasHits.push({ aliasKey, candidates, score: aliasKey.length + bestAlias.length / 100 });
   }
   aliasHits.sort((left, right) => right.score - left.score);

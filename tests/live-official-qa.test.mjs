@@ -240,6 +240,45 @@ test("card-text dependency expansion does not pollute the queried card identity 
   assert.ok(evidence.retrievalWarnings.includes("qa_identity_excludes_card_text_references:1"));
 });
 
+test("a unique exact alias canonicalizes an external passcode only for QA identity matching", async () => {
+  const externalCard = {
+    id: "87654321",
+    cardId: "87654321",
+    name: "公开手牌效果",
+    aliases: ["公开手牌效果"],
+    resolutionSource: "query",
+  };
+  const evidence = await retrieveRagEvidence({
+    userQuery: "公开手牌效果适用中，我方能发动展示手续卡吗？",
+    cardResolution: {
+      resolvedCards: [
+        externalCard,
+        { id: "200", name: "展示手续卡", aliases: ["展示手续卡"], resolutionSource: "query" },
+      ],
+      unresolvedMentions: [],
+      ambiguousMentions: [],
+      userProvidedCardTexts: [],
+    },
+    cards: [
+      { id: "12345", name: "公开手牌效果", aliases: ["公开手牌效果"], effectText: "双方手牌公开。" },
+      { id: "200", name: "展示手续卡", aliases: ["展示手续卡"], effectText: "给对方观看手牌并发动。" },
+    ],
+    records: [],
+    qaRecords: [{
+      id: "qa-broad-reveal-procedure",
+      recordType: "qa",
+      cardIds: ["12345", "200", "300"],
+      question: "手牌已经公开时，能发动需要展示手牌作为手续的效果吗？",
+      answer: "不能发动。公开手牌效果与展示手续卡均适用此规则。",
+    }],
+    env: { RAG_LIVE_OFFICIAL_QA: "false" },
+  });
+
+  assert.equal(externalCard.id, "87654321");
+  assert.equal(evidence.officialQaDirectCandidates[0]?.id, "qa-broad-reveal-procedure");
+  assert.ok(evidence.retrievalWarnings.includes("qa_identity_canonicalized:87654321->12345"));
+});
+
 test("QA selection prioritizes full intersection and remains bounded", () => {
   const selected = selectRelevantQaIds([
     { cardId: "1", qaIds: [90, 91, 92, 93] },
