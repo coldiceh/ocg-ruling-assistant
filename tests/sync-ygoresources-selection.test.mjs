@@ -2,10 +2,14 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  mergeRulingsCumulatively,
+  normalizeCard,
+  normalizeQa,
   parseManifestPayload,
   rankCardQaIds,
   selectQaIdsForSync,
 } from "../scripts/sync-ygoresources.mjs";
+import { quarantineRulingData } from "../backend/rulingDataQuality.mjs";
 
 test("manifest parser reads real nested paths and response-header revision", () => {
   const parsed = parseManifestPayload({
@@ -51,4 +55,128 @@ test("card QA ranking prioritizes interactions referenced by multiple cards", ()
   ]);
 
   assert.deepEqual(ranked.slice(0, 2), ["22803", "13330"]);
+});
+
+test("QA normalization falls back from translation placeholders to the Japanese original per field", () => {
+  const record = normalizeQa({
+    cards: [12345],
+    qaData: {
+      en: {
+        question: "Can this effect be activated?",
+        answer: "Yes. (Translation mismatch error: the source text changed.)",
+      },
+      ja: {
+        question: "この効果を発動できますか？",
+        answer: "この効果は発動でき、通常通り処理します。",
+      },
+    },
+  }, "99999", []);
+
+  assert.equal(record.question, "この効果を発動できますか?");
+  assert.equal(record.conclusion, "この効果は発動でき、通常通り処理します。");
+  assert.equal(record.questionLocale, "ja");
+  assert.equal(record.answerLocale, "ja");
+  assert.deepEqual(record.cardIds, ["12345"]);
+});
+
+test("QA normalization retains a clean non-Japanese locale when no Japanese text exists", () => {
+  const record = normalizeQa({
+    qaData: {
+      en: {
+        question: "Can this effect be activated?",
+        answer: "It can be activated.",
+      },
+    },
+  }, "99998", []);
+
+  assert.equal(record.question, "Can this effect be activated?");
+  assert.equal(record.conclusion, "It can be activated.");
+  assert.equal(record.questionLocale, "en");
+  assert.equal(record.answerLocale, "en");
+});
+
+test("card normalization persists structured monster metadata without a card-specific branch", () => {
+  const propertyMetadata = [
+    null,
+    ...Array.from({ length: 22 }, () => null),
+    { en: "Link" },
+    ...Array.from({ length: 6 }, () => null),
+    { en: "Cyberse" },
+  ];
+  const record = normalizeCard({
+    cardData: {
+      ja: {
+        name: "架空连接怪兽",
+        cardType: "monster",
+        effectText: "效果怪兽2只以上",
+        atk: 2300,
+        def: "",
+        attribute: "dark",
+        linkRating: 3,
+        linkArrows: "813",
+        properties: [30, 23, 4],
+      },
+    },
+  }, { aliases: ["Fictional Link Monster"] }, "90001", propertyMetadata);
+  const levelRecord = normalizeCard({
+    cardData: {
+      en: {
+        name: "Fictional Level Monster",
+        cardType: "monster",
+        atk: 3000,
+        def: 600,
+        level: 11,
+      },
+    },
+  }, {}, "90002", propertyMetadata);
+  const rankRecord = normalizeCard({
+    cardData: {
+      en: {
+        name: "Fictional Rank Monster",
+        cardType: "monster",
+        rank: 8,
+      },
+    },
+  }, {}, "90003", propertyMetadata);
+
+  assert.equal(record.type, "monster");
+  assert.equal(record.cardType, "monster");
+  assert.equal(record.race, "Cyberse");
+  assert.equal(record.attribute, "dark");
+  assert.equal(record.attack, 2300);
+  assert.equal(record.atk, 2300);
+  assert.equal("defense" in record, false);
+  assert.equal(record.link, 3);
+  assert.equal(record.linkRating, 3);
+  assert.equal(record.linkArrows, "813");
+  assert.deepEqual(record.monsterPropertyIds, ["30", "23", "4"]);
+  assert.deepEqual(record.monsterProperties, ["Cyberse", "Link"]);
+  assert.equal(levelRecord.level, 11);
+  assert.equal(levelRecord.attack, 3000);
+  assert.equal(levelRecord.defense, 600);
+  assert.equal(rankRecord.rank, 8);
+});
+
+test("cumulative ruling merge keeps healthy old QA and lets new records override the same ID", () => {
+  const previous = [
+    { id: "ygoresources-qa-old", recordType: "qa", conclusion: "旧但仍有效的裁定" },
+    { id: "ygoresources-qa-updated", recordType: "qa", conclusion: "旧答案" },
+  ];
+  const current = [
+    { id: "ygoresources-qa-updated", recordType: "qa", conclusion: "新答案" },
+  ];
+
+  const merged = mergeRulingsCumulatively(previous, current);
+  assert.equal(merged.find((item) => item.id === "ygoresources-qa-old")?.conclusion, "旧但仍有效的裁定");
+  assert.equal(merged.find((item) => item.id === "ygoresources-qa-updated")?.conclusion, "新答案");
+
+  const invalidCurrent = mergeRulingsCumulatively(previous, [
+    {
+      id: "ygoresources-qa-updated",
+      recordType: "qa",
+      conclusion: "Translation mismatch error: source changed",
+    },
+  ]);
+  const quarantined = quarantineRulingData(invalidCurrent, previous);
+  assert.equal(quarantined.records.find((item) => item.id === "ygoresources-qa-updated")?.conclusion, "旧答案");
 });

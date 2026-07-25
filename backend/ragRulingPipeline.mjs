@@ -219,7 +219,7 @@ export async function answerRagRulingQuestion({
   ]);
   const finalModelStartedAt = Date.now();
   const modelResult = deterministicDecision
-    ? buildDeterministicModelResult(deterministicDecision)
+    ? buildDeterministicModelResult(deterministicDecision, evidence)
     : await callRagModel({
         prompt: promptBundle.prompt,
         recoveryPrompt: promptBundle.recoveryPrompt,
@@ -393,16 +393,31 @@ function hasCompleteCardResolution(cardResolution = {}, extraAmbiguousMentions =
     && !(extraAmbiguousMentions || []).length;
 }
 
-function buildDeterministicModelResult(decision) {
+function buildDeterministicModelResult(decision, evidence = {}) {
   const state = decision?.semanticStateTransition;
   const operation = decision?.operationLegality;
-  const usedEvidence = state
+  const directQaEvidence = (evidence.officialQaDirectCandidates || []).map((item) => ({
+    id: item.id,
+    type: "official_qa",
+    title: item.title || item.id,
+    sourceUrl: item.sourceUrl || "",
+  }));
+  const activationSourceFaqEvidence = state
+    ? selectActivationSourceFaqEvidence(state, evidence.faqRelated)
+    : [];
+  const decisionEvidence = state
     ? (state.evidenceIds || []).map((id) => ({ id, type: "related", title: String(id) }))
     : (operation?.matchedRuleEvidence || []).map((item) => ({
         id: item.id,
         type: item.type || item.recordType || "rulebook",
         title: item.title || item.id,
+        sourceUrl: item.sourceUrl || "",
       }));
+  const usedEvidence = dedupeEvidenceRefs([
+    ...directQaEvidence,
+    ...activationSourceFaqEvidence,
+    ...decisionEvidence,
+  ]);
   const shortAnswer = state?.shortAnswer
     || operation?.shortAnswer
     || operation?.checks?.find((item) => item.status !== "unknown")?.conclusion
@@ -432,6 +447,47 @@ function buildDeterministicModelResult(decision) {
     estimatedCostCny: 0,
     budgetStatus: null,
   };
+}
+
+function selectActivationSourceFaqEvidence(state = {}, faqRelated = [], maxItems = 3) {
+  const sourceIds = collectActivationSourceDefinitionIds(state);
+  if (!sourceIds.size) return [];
+  return (faqRelated || [])
+    .filter((item) => (item.cardIds || []).some((id) => sourceIds.has(normalizeEvidenceCardId(id))))
+    .slice(0, maxItems)
+    .map((item) => ({
+      id: item.id,
+      type: item.type || item.recordType || "faq",
+      title: item.title || item.id,
+      sourceUrl: item.sourceUrl || "",
+    }));
+}
+
+function collectActivationSourceDefinitionIds(state = {}) {
+  const ids = new Set();
+  const addIds = (values) => {
+    for (const value of Array.isArray(values) ? values : [values]) {
+      const normalized = normalizeEvidenceCardId(value);
+      if (normalized) ids.add(normalized);
+    }
+  };
+  addIds(state.supportingCardIds);
+  addIds(state.sourceDefinitionId);
+  const program = state.program || {};
+  addIds(program.supportingCardIds);
+  const preparedLinks = [
+    ...(state.preparedChainLinks || []),
+    ...(program.preparedChainLinks || []),
+  ];
+  const links = preparedLinks.length
+    ? preparedLinks
+    : [...(state.compiledChainLinks || []), ...(program.compiledChainLinks || [])];
+  for (const link of links) addIds(link?.sourceDefinitionId || link?.sourceCardId);
+  return ids;
+}
+
+function normalizeEvidenceCardId(value) {
+  return String(value ?? "").trim();
 }
 
 function elapsedMs(startedAt) {

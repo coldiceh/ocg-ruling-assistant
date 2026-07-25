@@ -3,6 +3,7 @@ import test from "node:test";
 
 import { extractRagCards } from "../backend/ragCardExtractor.mjs";
 import { loadRagData, retrieveRagEvidence } from "../backend/ragEvidenceRetriever.mjs";
+import { analyzeEffectStateTransition, attachUserQueryToCardTexts } from "../backend/effectStateReasoner.mjs";
 
 const shortQuestion = "对方场上有一个b2b，导致我方场上的4+4变成了6+6。这个情况下假如我方额外只有8星同调而没有12星同调的话，可以发动异界共鸣吗";
 const fullQuestion = "对方场上有一个《杀手级调整曲 B2B》，导致我方场上的2只四星怪兽变成了2只六星怪兽，这个情况下假如我方额外只有一只可以同调召唤的8星同调怪兽而没有12星同调怪兽的话，可以发动【异界共鸣-同调融合】吗";
@@ -53,6 +54,33 @@ test("equivalent short and full questions retrieve the same governing FAQ withou
   }
 });
 
+test("both original B2B phrasings run through the same post-cost state simulation", async () => {
+  const data = await loadRagData();
+  for (const question of [shortQuestion, fullQuestion]) {
+    const cardResolution = extractRagCards(question, { cards: data.cards, maxCards: 8 });
+    const evidence = await retrieveRagEvidence({
+      userQuery: question,
+      cardResolution,
+      cards: data.cards,
+      records: data.records,
+      qaRecords: data.qaRecords,
+      env: { RAG_LIVE_OFFICIAL_QA: "false" },
+    });
+    const transition = analyzeEffectStateTransition({
+      userQuery: question,
+      resolvedCards: cardResolution.resolvedCards,
+      cardTexts: attachUserQueryToCardTexts(evidence.cardTexts, question),
+    });
+
+    assert.equal(transition.status, "resolved", JSON.stringify(transition.debug));
+    assert.equal(transition.complete, true);
+    assert.equal(transition.sourceDefinitionId, "19046");
+    assert.match(transition.shortAnswer, /^可以发动/u);
+    assert.match(transition.shortAnswer, /4\+4（合计8）/u);
+    assert.match(transition.shortAnswer, /没有12星同步怪兽不影响/u);
+  }
+});
+
 test("a shared short fragment is not resolved when it identifies multiple cards", () => {
   const cards = [
     { id: "a", name: "测试卡 A1B", aliases: ["Alpha A1B"] },
@@ -61,6 +89,35 @@ test("a shared short fragment is not resolved when it identifies multiple cards"
   const resolution = extractRagCards("对方场上有一个A1B，这个效果如何处理？", { cards });
 
   assert.deepEqual(resolution.resolvedCards, []);
+});
+
+test("resolved cards preserve normalized structured fields for downstream state reasoning", () => {
+  const cards = [{
+    id: "fictional-1",
+    name: "架空语义龙",
+    aliases: ["Fictional Semantic Dragon"],
+    type: "monster",
+    cardType: "monster",
+    race: "Dragon",
+    attribute: "light",
+    attack: 2500,
+    defense: 2000,
+    level: 8,
+    propertyIds: ["21", "4"],
+    properties: ["Dragon", "Effect"],
+    monsterPropertyIds: ["21", "4"],
+    monsterProperties: ["Dragon", "Effect"],
+  }];
+  const resolution = extractRagCards("发动「架空语义龙」的效果。", { cards });
+  const [resolved] = resolution.resolvedCards;
+
+  assert.equal(resolved.type, "monster");
+  assert.equal(resolved.race, "Dragon");
+  assert.equal(resolved.attribute, "light");
+  assert.equal(resolved.attack, 2500);
+  assert.equal(resolved.defense, 2000);
+  assert.equal(resolved.level, 8);
+  assert.deepEqual(resolved.monsterProperties, ["Dragon", "Effect"]);
 });
 
 test("quoted card roles exclude dynamic names, archetype labels, and quoted effect clauses", async () => {

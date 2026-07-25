@@ -63,13 +63,18 @@ export function normalizeDestinationReplacementOutput(transition = {}) {
     : "";
   if (!costConclusion && !materialConclusion) return transition;
 
+  const activationConclusion = transition.activation === "legal"
+    ? transition.activationAssumption === "valid_fusion_material_configuration"
+      ? "在能够支付 cost 且存在合法融合召唤组合的通常前提下，可以发动。"
+      : "可以发动。"
+    : "";
   const trace = (transition.trace || []).map((step) => {
     if (step === costStep && costConclusion) return { ...step, conclusion: costConclusion };
     if (step === resolutionStep && materialConclusion) return { ...step, conclusion: materialConclusion };
     return step;
   });
   const shortAnswer = [
-    transition.activation === "legal" ? "可以发动。" : "",
+    activationConclusion,
     costConclusion,
     materialConclusion,
   ].filter(Boolean).join("");

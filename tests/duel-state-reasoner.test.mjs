@@ -402,6 +402,127 @@ test("another monster being summoned does not classify a missing-type continuous
   );
 });
 
+test("program compilation consumes normalized card-text IR before legacy semantic patterns", () => {
+  const programs = compileResolvedCardPrograms([{
+    id: "ir-fusion-source",
+    name: "测试合成术士",
+    cardType: "monster",
+    effectText: "①：把手牌中的1张卡丢弃可以发动。从额外卡组融合召唤1只怪兽。",
+  }, {
+    id: "ir-destination-carrier",
+    name: "测试去向结界",
+    cardType: "monster",
+    effectText: "①：只要此卡存在于怪兽区域，对方的卡送去墓地的场合，不去墓地而除外。",
+  }, {
+    id: "legacy-fusion-source",
+    name: "测试旧式合成",
+    cardType: "spell",
+    effectText: "将场上的怪兽作为融合素材进行融合召唤。",
+  }]);
+  const byId = (id) => programs.find((program) => program.definitionId === id);
+
+  const fusion = byId("ir-fusion-source").activatedEffects
+    .find((effect) => effect.actionTags.includes("fusion_summon"));
+  assert.equal(fusion.semanticSources.fusionSummon, "card_text_ir");
+  assert.equal(fusion.semanticSources.discardCost, "card_text_ir");
+  assert.deepEqual(fusion.costSpec, {
+    type: "discard_from_hand",
+    amount: 1,
+    player: "self",
+  });
+
+  const replacement = byId("ir-destination-carrier").continuousEffects
+    .find((effect) => effect.destinationReplacements?.length);
+  assert.equal(replacement.semanticSource, "card_text_ir");
+  assert.equal(replacement.destinationReplacements[0].intendedToZone, "graveyard");
+  assert.equal(replacement.destinationReplacements[0].replacementToZone, "banished");
+  assert.equal(
+    replacement.destinationReplacements[0].destinationPlayerRelation,
+    "opponent_of_source_controller",
+  );
+
+  const legacyFusion = byId("legacy-fusion-source").activatedEffects
+    .find((effect) => effect.actionTags.includes("fusion_summon"));
+  assert.equal(legacyFusion.semanticSources.fusionSummon, "legacy_pattern");
+});
+
+test("program compilation consumes normalized mandatory outputs and grouped field limits", () => {
+  const programs = compileResolvedCardPrograms([
+    {
+      id: "generic-rock-output",
+      name: "测试双重降临",
+      cardType: "monster",
+      race: "岩石族",
+      effectText: "①：在主要阶段可以发动。从手牌将此卡特殊召唤。然后，将1只“测试衍生物”（岩石族）特殊召唤至对手场上。",
+    },
+    {
+      id: "generic-race-limit",
+      name: "测试种族限制",
+      cardType: "trap",
+      effectText: "①：只要此卡存在于魔法与陷阱区域，双方场上各只可有1只同种族怪兽以表侧表示存在。",
+    },
+  ]);
+  const summonEffect = programs.find((program) => program.definitionId === "generic-rock-output")
+    .activatedEffects.find((effect) => effect.mandatorySpecialSummonOutputs?.length);
+  const restrictionEffect = programs.find((program) => program.definitionId === "generic-race-limit")
+    .continuousEffects.find((effect) => effect.fieldRestrictions?.length);
+
+  assert.equal(summonEffect.semanticSource, "card_text_ir");
+  assert.deepEqual(
+    summonEffect.mandatorySpecialSummonOutputs.map((output) => [
+      output.subject,
+      output.playerRelation,
+      output.race,
+    ]),
+    [
+      ["effect_source", "same_as_source_controller", "岩石族"],
+      ["generated_monster", "opponent_of_source_controller", "岩石族"],
+    ],
+  );
+  assert.equal(restrictionEffect.semanticSource, "card_text_ir");
+  assert.deepEqual(restrictionEffect.fieldRestrictions[0], {
+    type: "max_face_up_monsters_per_race_per_player",
+    maxCount: 1,
+  });
+});
+
+test("generic symbolic simulation resolves a fusion cost and simultaneous material movement", () => {
+  const result = analyzeDuelStateTransition({
+    userQuery: "当对方场上存在「墓地改道兽」时，自己仍然可以发动「融合术式」吗？如果发动时丢弃手牌，并将对方的「墓地改道兽」和自己场上的怪兽作为融合素材，卡片分别去哪里？",
+    resolvedCards: [
+      {
+        id: "generic-fusion-spell",
+        name: "融合术式",
+        cardType: "spell",
+        effectText: "①：舍弃1张手牌可以发动。以自己・对手场上的怪兽作为融合素材，将1只融合怪兽融合召唤。",
+      },
+      {
+        id: "generic-replacement-monster",
+        name: "墓地改道兽",
+        cardType: "monster",
+        effectText: "①：只要此卡存在于怪兽区域，对方的卡送去墓地的场合，不去墓地而除外。",
+      },
+    ],
+  });
+
+  assert.equal(result.status, "resolved", JSON.stringify(result));
+  assert.equal(result.complete, true);
+  assert.equal(result.activation, "legal");
+  assert.equal(result.activationAssumption, "valid_fusion_material_configuration");
+  assert.equal(result.symbolicMaterialBranch, "replacement_carrier_used_as_material");
+  const costMove = result.trace
+    .find((step) => step.phase === "pay_activation_cost").proof[0].moves[0];
+  assert.equal(costMove.intendedToZone, "graveyard");
+  assert.equal(costMove.actualToZone, "banished");
+  const fusionProof = result.trace
+    .find((step) => step.phase === "resolve_effect_operation").proof;
+  assert.deepEqual(fusionProof.materialMoves.map((move) => move.actualToZone), [
+    "graveyard",
+    "graveyard",
+  ]);
+  assert.equal(fusionProof.suppressedDestinationReplacementEffectIds.length, 1);
+});
+
 test("an unspecified field card is not fabricated as face-up to enable its continuous effect", () => {
   const resolvedCards = [
     {
@@ -1036,4 +1157,47 @@ test("the original No.41 wording resolves from a genuinely cold process with the
   assert.match(result.shortAnswer, /不进行这个连锁项的效果处理/u);
   assert.doesNotMatch(result.shortAnswer, /不会把怪兽返回手牌/u);
   assert.match(result.shortAnswer, /守备力最低/u);
+});
+
+test("generic state simulation recomputes field-modified levels after materials are paid as cost", () => {
+  const modifierId = "fictional-level-modifier";
+  const sourceId = "fictional-post-cost-source";
+  const result = analyzeDuelStateTransition({
+    userQuery: "对方场上有一个「架空等级载体」，导致我方场上的3+3变成了5+5。假如我方额外只有6星同调而没有10星同调，可以发动「架空双召术」吗？",
+    resolvedCards: [{
+      id: modifierId,
+      name: "架空等级载体",
+      cardType: "synchro monster",
+      effectText: "协调＋同步怪兽1只以上\n①：对手场上的怪兽的等级上升2。",
+    }, {
+      id: sourceId,
+      name: "架空双召术",
+      cardType: "spell",
+      effectText: "①：将自己场上表侧表示的协调和协调以外的怪兽各1只送至墓地可以发动。从额外牌组将以下怪兽各1只特殊召唤。\n●能够以墓地的该2只怪兽作为素材同步召唤的同步怪兽\n●能够以墓地的该2只怪兽作为素材融合召唤的融合怪兽",
+    }],
+  });
+
+  assert.equal(result.status, "resolved", JSON.stringify(result.debug));
+  assert.equal(result.complete, true);
+  assert.equal(result.activation, "legal");
+  assert.equal(result.sourceDefinitionId, sourceId);
+  assert.match(result.shortAnswer, /3\+3（合计6）/u);
+  assert.match(result.shortAnswer, /没有10星同步怪兽不影响/u);
+  const prepared = result.program.preparedChainLinks[0];
+  assert.equal(prepared.sourceDefinitionId, sourceId);
+  assert.equal(prepared.activationCostReceipt.cardInstanceIds.length, 2);
+  const beforeActivation = result.program.stateSnapshots
+    .find((snapshot) => snapshot.stage === "before_chain_activation");
+  assert.deepEqual(
+    beforeActivation.gameState.cards
+      .filter((card) => card.roles?.length)
+      .map((card) => card.currentValues.level),
+    [5, 5],
+  );
+  assert.deepEqual(
+    result.program.finalState.cards
+      .filter((card) => card.roles?.length)
+      .map((card) => [card.zone, card.currentValues.level]),
+    [["graveyard", 3], ["graveyard", 3]],
+  );
 });

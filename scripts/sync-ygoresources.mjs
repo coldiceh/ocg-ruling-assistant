@@ -2,9 +2,12 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildCardAliasIndex, buildQaIndex } from "../backend/dataIndex.mjs";
+import { normalizeCardMetadata } from "../backend/liveOfficialQaProvider.mjs";
 import {
+  detectTranslationPlaceholder,
   formatRulingDataQualityIssue,
   quarantineRulingData,
+  selectUsableLocalizedRulingText,
 } from "../backend/rulingDataQuality.mjs";
 
 const rootDir = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -44,14 +47,15 @@ async function main() {
   const languages = new Set([...defaultIndexLanguages, ...trackedCards.map((card) => card.language || "en")]);
   const nameIndexes = await loadNameIndexes(languages);
   const cardTargets = buildCardTargets(trackedCards, nameIndexes);
-  const cardPayloads = await loadCards(cardTargets, nameIndexes);
+  const monsterPropertyMetadata = await loadMonsterPropertyMetadata();
+  const cardPayloads = await loadCards(cardTargets, nameIndexes, monsterPropertyMetadata);
   const manifest = await loadManifest(previousMeta.sourceRevision);
   let cards = cardPayloads.map(({ record }) => record);
   let rulings = await loadRulings(cards, cardPayloads, manifest.changedQaIds);
   if (sourceSyncWarnings.length || !syncAllReleasedCards) {
-    cards = mergeById(previousCards.records || [], cards);
-    rulings = mergeById(previousRulings.records || [], rulings);
+    cards = mergeCardRecords(previousCards.records || [], cards);
   }
+  rulings = mergeRulingsCumulatively(previousRulings.records || [], rulings);
   const rulingQuarantine = quarantineRulingData(rulings, previousRulings.records || []);
   for (const issue of rulingQuarantine.issues) {
     addContentQualityWarning(formatRulingDataQualityIssue(issue));
@@ -89,6 +93,23 @@ async function main() {
       enName: card.enName,
       aliases: card.aliases,
       released: card.released,
+      type: card.type,
+      cardType: card.cardType,
+      race: card.race,
+      attribute: card.attribute,
+      attack: card.attack,
+      defense: card.defense,
+      atk: card.atk,
+      def: card.def,
+      level: card.level,
+      rank: card.rank,
+      link: card.link,
+      linkRating: card.linkRating,
+      linkArrows: card.linkArrows,
+      propertyIds: card.propertyIds,
+      properties: card.properties,
+      monsterPropertyIds: card.monsterPropertyIds,
+      monsterProperties: card.monsterProperties,
     })),
   });
   await writeJson(join(dataDir, "rulings.json"), {
@@ -224,7 +245,17 @@ function mergeTarget(targets, item) {
   existing.aliases = [...new Set([...(existing.aliases || []), ...(item.aliases || [])])];
 }
 
-async function loadCards(cards, nameIndexes) {
+async function loadMonsterPropertyMetadata() {
+  try {
+    const payload = await fetchJson("/data/meta/mprop");
+    return Array.isArray(payload) ? payload : [];
+  } catch (error) {
+    addSourceWarning(`Monster property metadata failed: ${formatError(error)}`);
+    return [];
+  }
+}
+
+async function loadCards(cards, nameIndexes, monsterPropertyMetadata = []) {
   const results = await mapLimit(cards, fetchConcurrency, async (item) => {
     const id = item.id || resolveCardId(item, nameIndexes);
     if (!id) {
@@ -234,7 +265,7 @@ async function loadCards(cards, nameIndexes) {
 
     try {
       const payload = await fetchJson(`/data/card/${id}`);
-      const record = normalizeCard(payload, item, id);
+      const record = normalizeCard(payload, item, id, monsterPropertyMetadata);
       if (syncOnlyReleasedCards && !record.released) return null;
       return { record, payload, tracked: item };
     } catch (error) {
@@ -403,21 +434,23 @@ function collectNameIndex(payload) {
   return index;
 }
 
-function normalizeCard(payload, tracked, id) {
+export function normalizeCard(payload, tracked = {}, id, monsterPropertyMetadata = []) {
   const cardData = payload?.cardData || {};
   const cnName = cardData.cn?.name || tracked.aliases?.find((alias) => /[\u4e00-\u9fa5]/.test(alias));
   const jaName = cardData.ja?.name;
   const enName = cardData.en?.name || tracked.lookupName;
   const primaryName = cnName || jaName || enName || tracked.name || String(id);
   const aliases = [...new Set([primaryName, cnName, jaName, enName, tracked.lookupName, ...(tracked.aliases || [])].filter(Boolean))];
+  const structuredMetadata = normalizeCardMetadata({ id }, payload, monsterPropertyMetadata);
 
   return {
+    ...structuredMetadata,
     id: String(id),
     name: primaryName,
     cnName,
     jaName,
     enName,
-    cardType: cardData.cn?.cardType || cardData.ja?.cardType || cardData.en?.cardType || "",
+    cardType: cardData.cn?.cardType || cardData.ja?.cardType || cardData.en?.cardType || structuredMetadata.cardType || "",
     effectText: cardData.cn?.effectText || cardData.ja?.effectText || cardData.en?.effectText || "",
     released: isReleased(cardData),
     aliases,
@@ -470,8 +503,10 @@ function buildFaqRecords(cardPayloads) {
     for (const [effectNo, blocks] of Object.entries(entries)) {
       const lines = [];
       for (const block of blocks || []) {
-        const text = block.cn || block.ja || block.en;
-        if (text) lines.push(text);
+        const selected = selectUsableLocalizedRulingText(block, [], {
+          localeOrder: ["cn", "zh-CN", "ja", "en"],
+        });
+        if (selected) lines.push(selected.text);
       }
       if (!lines.length) continue;
 
@@ -501,20 +536,19 @@ function buildFaqRecords(cardPayloads) {
   return records;
 }
 
-function normalizeQa(payload, id, cards) {
-  const localized = payload?.qaData?.ja
-    || payload?.qaData?.cn
-    || payload?.qaData?.["zh-CN"]
-    || payload?.qaData?.en
-    || {};
-  const question = localized.question
-    || localized.q
-    || localized.title
-    || firstText(payload, ["question", "q", "title"]);
-  const answer = localized.answer
-    || localized.a
-    || localized.content
-    || firstText(payload, ["answer", "a", "content"]);
+export function normalizeQa(payload, id, cards) {
+  const questionSelection = selectUsableLocalizedRulingText(
+    payload?.qaData,
+    ["question", "q", "title"],
+  );
+  const answerSelection = selectUsableLocalizedRulingText(
+    payload?.qaData,
+    ["answer", "a", "content"],
+  );
+  const fallbackQuestion = firstText(payload, ["question", "q", "title"]);
+  const fallbackAnswer = firstText(payload, ["answer", "a", "content"]);
+  const question = questionSelection?.text || fallbackQuestion;
+  const answer = answerSelection?.text || fallbackAnswer;
   if (!question || !answer) {
     addParseWarning(`Q&A ${id} skipped: question or answer not found`);
     return null;
@@ -545,6 +579,8 @@ function normalizeQa(payload, id, cards) {
     sourceId: String(id),
     sourceName: "YGOResources DB",
     sourceUrl: `${baseUrl}/data/qa/${id}`,
+    questionLocale: questionSelection?.locale || "unknown",
+    answerLocale: answerSelection?.locale || "unknown",
     updatedAt: new Date().toISOString(),
   };
 }
@@ -621,7 +657,9 @@ function firstText(payload, targetKeys) {
   }
 
   visit(payload);
-  return candidates.sort((a, b) => b.length - a.length)[0] || "";
+  return candidates
+    .filter((candidate) => !detectTranslationPlaceholder(candidate))
+    .sort((a, b) => b.length - a.length)[0] || "";
 }
 
 function detectCards(text, cards) {
@@ -717,6 +755,21 @@ function dedupeBy(items, getKey) {
 
 function mergeById(previous, current) {
   return dedupeBy([...(previous || []), ...(current || [])], (item) => String(item.id || item.name || ""));
+}
+
+function mergeCardRecords(previous, current) {
+  const records = new Map(
+    (previous || []).map((card) => [String(card.id || card.name || ""), card]),
+  );
+  for (const card of current || []) {
+    const key = String(card.id || card.name || "");
+    records.set(key, { ...(records.get(key) || {}), ...card });
+  }
+  return [...records.values()];
+}
+
+export function mergeRulingsCumulatively(previous, current) {
+  return mergeById(previous, current);
 }
 
 function addSourceWarning(message) { sourceSyncWarnings.push(message); warnings.push(message); }

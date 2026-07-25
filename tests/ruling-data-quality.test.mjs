@@ -6,6 +6,7 @@ import {
   findRulingDataQualityIssues,
   formatRulingDataQualityIssue,
   quarantineRulingData,
+  selectUsableLocalizedRulingText,
 } from "../backend/rulingDataQuality.mjs";
 import { buildDataHealth } from "../backend/dataHealth.mjs";
 
@@ -17,6 +18,30 @@ test("translation placeholder detection covers mismatch and obvious failure vari
   assert.equal(detectTranslationPlaceholder("[Translation unavailable]")?.code, "translation_failure_placeholder");
   assert.equal(detectTranslationPlaceholder("翻译失败")?.code, "translation_failure_placeholder");
   assert.equal(detectTranslationPlaceholder("这个效果正常处理。"), null);
+});
+
+test("localized ruling selection skips broken translations and keeps the usable Japanese original", () => {
+  const selected = selectUsableLocalizedRulingText({
+    en: {
+      answer: "A useful prefix. (Translation mismatch error: source changed.)",
+    },
+    cn: {
+      answer: "Untranslated text related to a card name.",
+    },
+    ja: {
+      answer: "この効果は通常通り適用されます。",
+    },
+  }, ["answer", "content"]);
+
+  assert.deepEqual(selected, {
+    text: "この効果は通常通り適用されます。",
+    locale: "ja",
+    field: "answer",
+  });
+  assert.equal(selectUsableLocalizedRulingText({
+    en: { answer: "Translation unavailable" },
+    ja: { answer: "翻訳エラー" },
+  }, ["answer"]), null);
 });
 
 test("ruling quality scan identifies placeholders in QA and card FAQ bodies without using source IDs", () => {

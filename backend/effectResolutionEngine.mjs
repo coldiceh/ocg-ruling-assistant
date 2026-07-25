@@ -167,7 +167,7 @@ export function prepareEffectChain({ gameState = {}, chainLinks = [], continuous
       });
     }
 
-    const activationCheck = inspectActivationLegality(link, state);
+    const activationCheck = inspectActivationLegality(link, state, continuousEffects);
     if (activationCheck.status !== "legal") {
       activationResults.push({
         id: link.id,
@@ -236,6 +236,12 @@ export function prepareEffectChain({ gameState = {}, chainLinks = [], continuous
         primitiveSteps: stageResult.steps,
       });
       if (stageResult.gameState) state = stripResolutionContext(stageResult.gameState);
+      if (stage.stage === "pay_activation_cost" && stageResult.resolutionStatus === "resolved") {
+        preparedLink.activationCostReceipt = buildActivationCostReceipt(
+          [{ stage: stage.stage, result: stageResult }],
+          state,
+        );
+      }
       if (stageResult.resolutionStatus !== "resolved") {
         activationFailed = {
           status: stageResult.resolutionStatus === "insufficient" ? "insufficient" : "illegal",
@@ -264,6 +270,7 @@ export function prepareEffectChain({ gameState = {}, chainLinks = [], continuous
       });
     }
 
+    preparedLink.activationCostReceipt ||= { cardInstanceIds: [], moves: [], paymentSnapshots: [] };
     const afterActivation = stabilizeContinuousEffects(state, continuousEffects);
     state = afterActivation.gameState;
     trace.push(...afterActivation.trace.map((item) => ({ ...item, afterChainActivation: link.id })));
@@ -395,6 +402,7 @@ export function resolveEffectChain({ gameState = {}, chainLinks = [], continuous
               availableAtResolution: Boolean(source),
             },
             targets: targetRefs,
+            activationCostReceipt: clone(link.activationCostReceipt || {}),
           },
         },
         {
@@ -622,9 +630,14 @@ function continuousEffectRecipientSelectionUnknown(effect, state) {
     ...(effect.grantedModifiers || [])
       .filter((grant) => grant.recipient !== "source")
       .map((grant) => grant.selector || {}),
+    ...(effect.valueModifiers || []).map((modifier) => modifier.selector || {}),
   ];
-  return selectors.some((selector) => (
+  if (selectors.some((selector) => (
     (state.cards || []).some((card) => matchesCardSelectorTriState(card, selector) === null)
+  ))) return true;
+  const source = findCard(state, effect.sourceCardId, effect.sourceCardName, effect.sourceInstanceId);
+  return (effect.valueModifiers || []).some((modifier) => (
+    (state.cards || []).some((card) => valueModifierRecipientMatch(card, source, modifier) === null)
   ));
 }
 
@@ -730,6 +743,22 @@ function deriveContinuousModifiers(state, continuousEffects) {
         });
       }
     }
+    for (const modifier of effect.valueModifiers || []) {
+      for (const recipient of state.cards || []) {
+        if (matchesCardSelectorTriState(recipient, modifier.selector || {}) !== true) continue;
+        if (valueModifierRecipientMatch(recipient, source, modifier) !== true) continue;
+        if (!cardCanReceiveEffect(recipient, effect)) continue;
+        nextByCard.get(cardInstanceId(recipient))?.push({
+          type: "numeric_value_modifier",
+          property: modifier.property,
+          operation: modifier.operation,
+          amount: Number(modifier.amount),
+          continuousEffectId: effect.id,
+          sourceInstanceId: cardInstanceId(source),
+          sourceDefinitionId: cardDefinitionId(source),
+        });
+      }
+    }
   }
 
   let changed = false;
@@ -748,8 +777,77 @@ function deriveContinuousModifiers(state, continuousEffects) {
       });
     }
     card.derivedModifiers = next;
+    const projectedValues = projectCurrentValues(card, next);
+    const beforeValues = JSON.stringify(card.currentValues || {});
+    const afterValues = JSON.stringify(projectedValues);
+    if (beforeValues !== afterValues) {
+      changed = true;
+      trace.push({
+        phase: "stabilize_continuous_effects",
+        operation: "recompute_current_values",
+        cardId: cardInstanceId(card),
+        before: card.currentValues || {},
+        after: projectedValues,
+      });
+      card.currentValues = projectedValues;
+    }
+    applyProjectedValueMirrors(card, projectedValues);
   }
   return { changed, trace };
+}
+
+function valueModifierRecipientMatch(card, source, modifier = {}) {
+  const relation = modifier.affectedRelation || modifier.recipientRelation || "any";
+  if (relation === "any" || relation === "both") return true;
+  const sourceController = knownPlayer(source?.controller);
+  const recipientController = knownPlayer(card?.controller);
+  if (!sourceController || !recipientController) return null;
+  if (relation === "same_as_source_controller") return recipientController === sourceController;
+  if (relation === "opponent_of_source_controller") return recipientController === opponentOf(sourceController);
+  return null;
+}
+
+function projectCurrentValues(card, modifiers = []) {
+  const base = {
+    ...(card.baseValues || {}),
+  };
+  for (const property of ["level", "rank", "link", "attack", "defense"]) {
+    if (base[property] === undefined && Number.isFinite(Number(card[property]))) {
+      base[property] = Number(card[property]);
+    }
+  }
+  const projected = { ...base };
+  for (const modifier of modifiers || []) {
+    if (modifier.type !== "numeric_value_modifier") continue;
+    const property = String(modifier.property || "");
+    if (!property || !Number.isFinite(Number(projected[property]))) continue;
+    if (modifier.operation === "add" && Number.isFinite(Number(modifier.amount))) {
+      projected[property] = Number(projected[property]) + Number(modifier.amount);
+    }
+  }
+  return projected;
+}
+
+function initializeCardValueProjection(card = {}) {
+  const base = { ...(card.baseValues || {}) };
+  for (const property of ["level", "rank", "link", "attack", "defense"]) {
+    if (base[property] === undefined && Number.isFinite(Number(card[property]))) {
+      base[property] = Number(card[property]);
+    }
+  }
+  card.baseValues = base;
+  if (!card.currentValues || typeof card.currentValues !== "object") {
+    card.currentValues = { ...base };
+  }
+  applyProjectedValueMirrors(card, card.currentValues);
+}
+
+function applyProjectedValueMirrors(card, currentValues = {}) {
+  for (const property of ["level", "rank", "link", "attack", "defense"]) {
+    if (Number.isFinite(Number(currentValues[property]))) {
+      card[property] = Number(currentValues[property]);
+    }
+  }
 }
 
 function cardCanReceiveEffect(card, effect = {}) {
@@ -773,10 +871,13 @@ function modifierSignature(modifiers = []) {
     continuousEffectId: modifier.continuousEffectId,
     sourceInstanceId: modifier.sourceInstanceId,
     exceptEffectSource: modifier.exceptEffectSource,
+    property: modifier.property,
+    operation: modifier.operation,
+    amount: modifier.amount,
   })).sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right))));
 }
 
-function inspectActivationLegality(link, state) {
+function inspectActivationLegality(link, state, continuousEffects = []) {
   if (link.activationLegal === false) {
     return { status: "illegal", reason: link.activationBlockReason || "activation_explicitly_illegal", source: null };
   }
@@ -846,6 +947,21 @@ function inspectActivationLegality(link, state) {
       }
       continue;
     }
+    if (precondition.type === "operation_performable_after_cost") {
+      const evaluation = evaluateOperationAfterActivationCost({
+        state,
+        link,
+        operation: precondition.primitive || precondition.operation,
+        continuousEffects,
+      });
+      if (evaluation.status === "unknown") {
+        return { status: "insufficient", reason: evaluation.reason || "post_cost_operation_unknown", source, evaluation };
+      }
+      if (evaluation.status !== "performable") {
+        return { status: "illegal", reason: evaluation.reason || "post_cost_operation_not_performable", source, evaluation };
+      }
+      continue;
+    }
     if (!precondition.selector) continue;
     const count = (state.cards || []).filter((card) => matchesCardSelector(card, precondition.selector)).length;
     const minimum = Number.isInteger(precondition.minCount) ? precondition.minCount : 1;
@@ -857,6 +973,63 @@ function inspectActivationLegality(link, state) {
   }
 
   return { status: "legal", reason: "activation_preconditions_satisfied", source };
+}
+
+function evaluateOperationAfterActivationCost({
+  state,
+  link,
+  operation,
+  continuousEffects = [],
+} = {}) {
+  const costStage = normalizeEffectActivationStages(link)
+    .find((stage) => stage.stage === "pay_activation_cost");
+  if (!costStage?.sequence?.length) {
+    return { status: "unknown", reason: "activation_cost_sequence_missing" };
+  }
+  const projected = resolvePrimitiveSequence(
+    costStage.sequence,
+    activationPrimitiveState(state, link),
+    {
+      afterStep: stabilizeAfterPrimitive(continuousEffects),
+      continuousEffects,
+      movementStage: "activation_preflight_cost_projection",
+    },
+  );
+  if (projected.resolutionStatus !== "resolved") {
+    return { status: "unknown", reason: "activation_cost_projection_incomplete" };
+  }
+  const receipt = buildActivationCostReceipt(
+    [{ stage: "pay_activation_cost", result: projected }],
+    projected.gameState,
+  );
+  return evaluateStateReferencedSummon(
+    {
+      ...(projected.gameState || state),
+      resolutionContext: { activationCostReceipt: receipt },
+    },
+    operation,
+  );
+}
+
+function buildActivationCostReceipt(stageResults = [], state = {}) {
+  const costResults = (stageResults || [])
+    .filter((stage) => stage.stage === "pay_activation_cost")
+    .map((stage) => stage.result)
+    .filter(Boolean);
+  const stateChanges = costResults
+    .flatMap((result) => result.stateChanges || [])
+    .filter((change) => change.receiptId || change.type === "send_field_monsters_to_graveyard");
+  const cardInstanceIds = uniqueStrings(stateChanges.flatMap((change) => [
+    ...(change.cardInstanceIds || []),
+    ...(change.cardIds || []),
+    ...(change.moves || []).map((move) => move.cardInstanceId || move.instanceId || move.cardId),
+  ]));
+  return {
+    receiptIds: uniqueStrings(stateChanges.map((change) => change.receiptId)),
+    cardInstanceIds,
+    moves: stateChanges.flatMap((change) => change.moves || []).map(clone),
+    paymentSnapshots: stateChanges.flatMap((change) => change.paymentSnapshots || []).map(clone),
+  };
 }
 
 export function evaluateFusionOperation(gameState = {}, primitive = {}) {
@@ -1172,6 +1345,7 @@ function continuousStateSignature(state) {
     positionChoices: Array.isArray(card.positionChoices) ? [...card.positionChoices].sort() : [],
     unaffectedByMonsterEffects: Boolean(card.unaffectedByMonsterEffects),
     derivedModifiers: modifierSignature(card.derivedModifiers),
+    currentValues: card.currentValues || {},
   })).sort((left, right) => left.instanceId.localeCompare(right.instanceId));
   return JSON.stringify(cards);
 }
@@ -1263,6 +1437,81 @@ function emitIndependentContinuationTrace(item, target, source, ruleTrace) {
   }
 }
 
+function evaluateStateReferencedSummon(state, primitive = {}) {
+  const receipt = state?.resolutionContext?.activationCostReceipt || {};
+  if (primitive.receiptRef
+      && receipt.receiptIds?.length
+      && !receipt.receiptIds.map(String).includes(String(primitive.receiptRef))) {
+    return { status: "unknown", reason: "activation_cost_receipt_mismatch" };
+  }
+  const cardInstanceIds = uniqueStrings([
+    ...(primitive.materialInstanceIds || []),
+    ...(receipt.cardInstanceIds || []),
+  ]);
+  if (!cardInstanceIds.length) {
+    return { status: "unknown", reason: "activation_cost_cards_unknown" };
+  }
+  const cards = cardInstanceIds.map((instanceId) => findCard(state, instanceId, "", instanceId));
+  if (cards.some((card) => !card)) {
+    return { status: "not_performable", reason: "activation_cost_card_no_longer_exists" };
+  }
+  const requiredZone = normalize(primitive.requiredZone || "graveyard");
+  if (cards.some((card) => normalize(card.zone) !== requiredZone)) {
+    return { status: "not_performable", reason: "activation_cost_card_left_required_zone" };
+  }
+  const materialSnapshots = cards.map((card) => ({
+    instanceId: cardInstanceId(card),
+    zone: card.zone,
+    roles: clone(card.roles || []),
+    baseValues: clone(card.baseValues || {}),
+    currentValues: clone(card.currentValues || {}),
+  }));
+  const summonKinds = uniqueStrings(primitive.summonKinds || []);
+  const kindResults = [];
+  let synchroLevel = null;
+  if (summonKinds.includes("synchro")) {
+    const levels = cards.map((card) => Number(card.currentValues?.level ?? card.level));
+    if (levels.some((level) => !Number.isFinite(level))) {
+      return { status: "unknown", reason: "activation_cost_card_current_level_unknown", materialSnapshots };
+    }
+    synchroLevel = levels.reduce((sum, level) => sum + level, 0);
+    const availableLevels = uniqueNumbers(primitive.availableSynchroLevels || []);
+    if (!availableLevels.length) {
+      return { status: "unknown", reason: "synchro_candidate_levels_unknown", materialSnapshots, synchroLevel };
+    }
+    kindResults.push({
+      kind: "synchro",
+      status: availableLevels.includes(synchroLevel) ? "available" : "unavailable",
+      requiredLevel: synchroLevel,
+      availableLevels,
+    });
+  }
+  const availableKinds = new Set((primitive.availableSummonKinds || []).map(normalize));
+  const assumedKinds = new Set((primitive.assumedAvailableSummonKinds || []).map(normalize));
+  for (const kind of summonKinds.filter((item) => item !== "synchro")) {
+    if (availableKinds.has(normalize(kind))) {
+      kindResults.push({ kind, status: "available" });
+    } else if (assumedKinds.has(normalize(kind))) {
+      kindResults.push({ kind, status: "assumed_available" });
+    } else {
+      kindResults.push({ kind, status: "unknown" });
+    }
+  }
+  if (kindResults.some((result) => result.status === "unknown")) {
+    return { status: "unknown", reason: "required_summon_candidate_unknown", materialSnapshots, synchroLevel, kindResults };
+  }
+  if (kindResults.some((result) => result.status === "unavailable")) {
+    return { status: "not_performable", reason: "required_summon_candidate_unavailable", materialSnapshots, synchroLevel, kindResults };
+  }
+  return {
+    status: "performable",
+    reason: "activation_cost_cards_current_state_supports_all_outputs",
+    materialSnapshots,
+    synchroLevel,
+    kindResults,
+  };
+}
+
 function executePrimitive(primitive, gameState, options = {}) {
   const state = clone(gameState);
   const amount = positiveInteger(primitive.amount ?? primitive.count ?? 1);
@@ -1317,6 +1566,81 @@ function executePrimitive(primitive, gameState, options = {}) {
         actualToZone: actualZones.length === 1 ? actualZones[0] : "mixed",
         moves: movement.moves,
         suppressedDestinationReplacementEffectIds: movement.suppressedDestinationReplacementEffectIds,
+      }]);
+    }
+    case "send_field_monsters_to_graveyard": {
+      const field = (state.cards || []).filter((card) => (
+        normalize(card.zone) === "monster_zone"
+        && knownPlayer(card.controller) === knownPlayer(player)
+      ));
+      const requestedIds = primitive.cardInstanceIds?.length
+        ? primitive.cardInstanceIds
+        : primitive.cardIds || [];
+      const selection = requestedIds.length
+        ? selectCardsByIds(field, requestedIds, amount)
+        : field.length === amount
+          ? { complete: true, cards: [...field] }
+          : { complete: false, cards: [], reason: "field_material_selection_ambiguous" };
+      if (!selection.complete || selection.cards.length !== amount) {
+        return insufficient(selection.reason || "field_materials_not_available");
+      }
+      if (primitive.faceUp === true && selection.cards.some((card) => card.faceUp !== true)) {
+        return insufficient("required_face_up_field_material_unknown_or_unavailable");
+      }
+      const requiredRoles = uniqueStrings(primitive.requiredRoles || []);
+      for (const role of requiredRoles) {
+        const count = selection.cards.filter((card) => (
+          (card.roles || []).map(normalize).includes(normalize(role))
+        )).length;
+        if (count !== 1) return insufficient("field_material_roles_unknown_or_invalid");
+      }
+      const paymentSnapshots = selection.cards.map((card) => ({
+        instanceId: cardInstanceId(card),
+        zone: card.zone,
+        roles: clone(card.roles || []),
+        baseValues: clone(card.baseValues || {}),
+        currentValues: clone(card.currentValues || {}),
+      }));
+      const movement = resolveMoveBatch(state, selection.cards.map((card) => ({
+        card,
+        intendedToZone: "graveyard",
+        destinationPlayer: knownPlayer(card.owner) || knownPlayer(card.controller) || player,
+        extra: {
+          owner: knownPlayer(card.owner) || knownPlayer(card.controller) || player,
+          controller: knownPlayer(card.owner) || knownPlayer(card.controller) || player,
+        },
+        cause: "activation_cost_send_to_graveyard",
+      })), {
+        ...movementContext,
+        requireActualDestinationMatchesIntended: true,
+      });
+      if (movement.status !== "applied") return insufficient(movement.reason);
+      return success(state, [{
+        type: "send_field_monsters_to_graveyard",
+        receiptId: primitive.receiptId || "activation_cost_cards",
+        player,
+        cardInstanceIds: selection.cards.map(cardInstanceId),
+        fromZone: "monster_zone",
+        intendedToZone: "graveyard",
+        actualToZone: "graveyard",
+        paymentSnapshots,
+        moves: movement.moves,
+      }]);
+    }
+    case "summon_using_activation_cost_cards": {
+      const evaluation = evaluateStateReferencedSummon(state, primitive);
+      if (evaluation.status === "unknown") return insufficient(evaluation.reason);
+      if (evaluation.status === "not_performable") {
+        return success(state, [], [{
+          type: "summon_using_activation_cost_cards",
+          status: "not_performed",
+          ...evaluation,
+        }], false);
+      }
+      return success(state, [], [{
+        type: "summon_using_activation_cost_cards",
+        status: "performable",
+        ...evaluation,
       }]);
     }
     case "fusion_summon": {
@@ -1569,6 +1893,10 @@ export function resolveMoveBatch(state, inputs = [], context = {}) {
     }
     if (replacementZones.length === 1) plan.actualToZone = replacementZones[0];
   }
+  if (context.requireActualDestinationMatchesIntended
+      && plans.some((plan) => plan.actualToZone !== plan.intendedToZone)) {
+    return { status: "insufficient", reason: "required_cost_destination_replaced" };
+  }
 
   for (const plan of plans) {
     applyCardTransition(state, plan.card, plan.actualToZone, plan.extra);
@@ -1699,6 +2027,7 @@ const ZONE_COLLECTIONS = Object.freeze([
 function canonicalizeZoneState(gameState) {
   const state = clone(gameState);
   if (!Array.isArray(state.cards)) state.cards = [];
+  for (const card of state.cards) initializeCardValueProjection(card);
   const cardsByInstance = new Map();
   for (const card of state.cards) {
     const instanceId = cardInstanceId(card);
@@ -1880,6 +2209,12 @@ function positiveInteger(value) {
 
 function uniqueStrings(values) {
   return [...new Set((values || []).map(String).filter(Boolean))];
+}
+
+function uniqueNumbers(values) {
+  return [...new Set((values || [])
+    .map(Number)
+    .filter((value) => Number.isFinite(value)))];
 }
 
 function cardId(card) {
