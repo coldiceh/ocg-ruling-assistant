@@ -40,6 +40,38 @@ export function detectTranslationPlaceholder(value) {
   return null;
 }
 
+export function selectUsableLocalizedRulingText(localizations = {}, fields = [], {
+  localeOrder = ["ja", "cn", "zh-CN", "en"],
+} = {}) {
+  if (!localizations || typeof localizations !== "object") return null;
+  const requestedFields = [...new Set(
+    (Array.isArray(fields) ? fields : [fields])
+      .map((field) => String(field || "").trim())
+      .filter(Boolean),
+  )];
+  const orderedLocales = [...new Set([
+    ...localeOrder.map((locale) => String(locale || "").trim()).filter(Boolean),
+    ...Object.keys(localizations),
+  ])];
+
+  for (const locale of orderedLocales) {
+    const localized = localizations[locale];
+    const candidates = typeof localized === "string"
+      ? [{ field: "", value: localized }]
+      : requestedFields.map((field) => ({ field, value: localized?.[field] }));
+    for (const candidate of candidates) {
+      const text = normalizeText(candidate.value);
+      if (!text || detectTranslationPlaceholder(text)) continue;
+      return {
+        text,
+        locale,
+        field: candidate.field,
+      };
+    }
+  }
+  return null;
+}
+
 export function findRulingDataQualityIssues(records = []) {
   const issues = [];
   const sourceRecords = Array.isArray(records) ? records : [];

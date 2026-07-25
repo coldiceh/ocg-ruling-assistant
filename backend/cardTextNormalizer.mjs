@@ -1,6 +1,6 @@
 import { splitCardTextSections, tagEffectText } from "./cardTextSections.mjs";
 
-export const CARD_TEXT_IR_VERSION = "1.0";
+export const CARD_TEXT_IR_VERSION = "1.2";
 
 const ACTIVATION_MARKER = /(?:可以发动|才能发动|可发动|発動できる|発動する|you can activate|can be activated)/iu;
 const CONTINUOUS_MARKER = /(?:只要|期间|持续|繼續|一直|限り|公開し続け|し続ける|must keep|while .*face-up|as long as)/iu;
@@ -9,6 +9,8 @@ const PUBLIC_WORD = /(?:公开|公開|展示|出示|给对方观看|給對方觀
 const OPPONENT_WORD = /(?:对方|對方|对手|相手|opponent)/iu;
 const CONTROLLER_WORD = /(?:自己|自身|自分|your|controller)/iu;
 const BOTH_PLAYERS_WORD = /(?:双方|双方玩家|彼此|お互い|両方のプレイヤー|both players)/iu;
+const PER_PLAYER_SAME_RACE_LIMIT = /(?:双方|雙方|お互い|each player).{0,48}(?:各|それぞれ|only|可有).{0,20}(?:1|１|一)(?:只|隻|体|體|枚)?.{0,28}(?:同种族|同種族|同じ種族|same Type).{0,28}(?:表侧|表側|face-up)/iu;
+const ACTIVATION_LIMIT_ONLY = /(?:此卡名|这张卡名|このカード名|cards? with this name).{0,48}(?:[1１]回合|[1１]ターン|per turn).{0,36}(?:发动|發動|発動|activate).{0,16}(?:[1１](?:张|張)|[1１]枚|一次|1 time|once)/iu;
 
 export function normalizeCardText(card = {}) {
   const identity = normalizeCardIdentity(card);
@@ -74,7 +76,7 @@ export function findNormalizedSemantics(normalizedCard, predicate) {
 function normalizeEffectEntry(entry, { cardId, index }) {
   const rawText = cleanText(entry.text);
   const effectNo = normalizeEffectNo(entry.effectNo || extractEffectNo(rawText));
-  const activationMatch = ACTIVATION_MARKER.exec(rawText);
+  const activationMatch = findActivationMatch(rawText);
   const activationIndex = activationMatch?.index ?? -1;
   const activationPrefix = activationIndex >= 0 ? rawText.slice(0, activationIndex) : "";
   const resolutionText = activationIndex >= 0
@@ -118,7 +120,9 @@ function primaryEffectEntries(sections = {}) {
 function classifyEffectNature(section, text, activationIndex) {
   if (section === "summonConditions") return "summon_condition";
   if (activationIndex >= 0) return "activated";
-  if (CONTINUOUS_MARKER.test(text) || /(?:不会|不能|不受|効果を受けない|instead|代わりに|作为代替)/iu.test(text)) {
+  if (parseContinuousSemantics(text).length
+      || CONTINUOUS_MARKER.test(text)
+      || /(?:不会|不能|不受|効果を受けない|instead|代わりに|作为代替)/iu.test(text)) {
     return "continuous";
   }
   return "static";
@@ -171,11 +175,35 @@ function parseActivationCosts(prefix) {
       text: lp[0],
     });
   }
-  if (/(?:舍弃|丢弃|捨て|discard).{0,24}(?:手牌|手卡|手札|card)/iu.test(text)
-    || /(?:手牌|手卡|手札).{0,24}(?:舍弃|丢弃|捨て|discard)/iu.test(text)) {
+  const discard = text.match(/(?:舍弃|丢弃|捨て|discard)\s*([０-９\d一二三两兩]*)\s*(?:张|張|枚)?\s*(?:手牌|手卡|手札|card)/iu)
+    || text.match(/(?:手牌|手卡|手札)\s*(?:中的|中の)?\s*([０-９\d一二三两兩]*)\s*(?:张|張|枚)?[^。；;]{0,20}(?:舍弃|丢弃|捨て|discard)/iu);
+  if (discard) {
     costs.push({
       type: "discard_from_hand",
       actor: "controller",
+      amount: parseCount(discard[1], 1),
+      timing: "activation",
+      text,
+    });
+  }
+  const fieldMaterialSend = (
+    /(?:自己|自分|your)[^。；;]{0,32}(?:场上|場上|フィールド|field)/iu.test(text)
+    && /(?:协调|協調|调整|調整|チューナー|tuner)/iu.test(text)
+    && /(?:协调以外|協調以外|调整以外|調整以外|チューナー以外|non[- ]?tuner)/iu.test(text)
+    && (
+      /(?:送去|送往|送至|送入|送る|send)[^。；;]{0,16}(?:墓地|graveyard)/iu.test(text)
+      || /(?:墓地|graveyard)[^。；;]{0,12}(?:へ)?(?:送って|送る|send)/iu.test(text)
+    )
+  );
+  if (fieldMaterialSend) {
+    costs.push({
+      type: "send_field_monsters_to_graveyard",
+      actor: "controller",
+      amount: 2,
+      fromZone: "monster_zone",
+      toZone: "graveyard",
+      faceUp: /(?:表侧|表側|face-up)/iu.test(text),
+      requiredRoles: ["tuner", "non_tuner"],
       timing: "activation",
       text,
     });
@@ -183,7 +211,8 @@ function parseActivationCosts(prefix) {
   if (/(?:解放|リリース|tribute)/iu.test(text)) {
     costs.push({ type: "tribute", actor: "controller", timing: "activation", text });
   }
-  if (/(?:除外|banish)/iu.test(text)) {
+  if (/(?:从|從|将|將|把|このカードを|banish)\s*[^。；;]{0,60}(?:除外|banish)[^。；;]{0,24}(?:作为|作為)?(?:cost|代价|代價|コスト|可以发动|才能发动|発動できる|to activate)/iu.test(text)
+      || /(?:除外|banish)[^。；;]{0,12}(?:作为|作為|as)\s*(?:cost|代价|代價|コスト)/iu.test(text)) {
     costs.push({ type: "banish_as_cost", actor: "controller", timing: "activation", text });
   }
   return costs;
@@ -227,6 +256,41 @@ function parseContinuousSemantics(text) {
     semantics.push({
       type: "effect_immunity",
       affected: "source",
+      duration: "continuous",
+      text: value,
+    });
+  }
+  if (PER_PLAYER_SAME_RACE_LIMIT.test(value)) {
+    semantics.push({
+      type: "field_count_limit",
+      affected: "both",
+      scope: "per_player",
+      zone: "monster_zone",
+      faceUp: true,
+      groupBy: "race",
+      maxCount: 1,
+      duration: "continuous",
+      text: value,
+    });
+  }
+  const levelIncrease = value.match(
+    /(?:场上|場上|フィールド|field)[^。；;]{0,48}(?:(?:等级|等級|レベル|level)\s*([０-９\d]+)[^。；;]{0,24})?(?:怪兽|怪獸|モンスター|monsters?)[^。；;]{0,36}(?:等级|等級|レベル|level)(?:上升|上昇|提高|增加|アップ|gain(?:s)?)\s*([０-９\d]+)(?:星|级|級|つ)?/iu,
+  );
+  if (levelIncrease) {
+    semantics.push({
+      type: "numeric_value_modifier",
+      property: "level",
+      operation: "add",
+      amount: parseNumber(levelIncrease[2]),
+      affected: classifyAffectedPlayer(value),
+      selector: {
+        zone: "monster_zone",
+        faceUp: /(?:表侧|表側|face-up)/iu.test(value) ? true : null,
+        ...(parseNumber(levelIncrease[1]) !== null
+          ? { printedValue: parseNumber(levelIncrease[1]) }
+          : {}),
+      },
+      expiresWhenLeavingSelectorZone: true,
       duration: "continuous",
       text: value,
     });
@@ -277,9 +341,27 @@ function splitImplicitResolutionClauses(text, firstConnector) {
 
 function classifyResolutionOperation(text) {
   const value = cleanText(text);
+  const usesActivationCostCards = /(?:(?:这个|此|该|この|the)\s*(?:效果|効果|effect)[^。；;]{0,24})?(?:送去|送往|送至|送入|送られた|sent)[^。；;]{0,20}(?:墓地|graveyard)[^。；;]{0,40}(?:怪兽|怪獸|モンスター|monsters?)[^。；;]{0,32}(?:作为|作為|为|為|として|as)\s*(?:素材|material)/iu.test(value)
+    || /(?:因|由|通过|通過|この|this)[^。；;]{0,24}(?:效果|効果|effect)[^。；;]{0,24}(?:送去|送往|送至|送入|送られた|sent)[^。；;]{0,20}(?:墓地|graveyard)[^。；;]{0,32}(?:素材|material)/iu.test(value)
+    || /(?:墓地|graveyard)(?:中|的|に存在する|にいる)?\s*(?:该|該|那|その|those)?\s*[２2二两兩]\s*(?:只|隻|体|體)?\s*(?:怪兽|怪獸|モンスター|monsters?)[^。；;]{0,32}(?:作为|作為|为|為|として|as)\s*(?:素材|material)/iu.test(value);
+  const referencedSummonKinds = unique([
+    /(?:同步|同调|シンクロ|synchro)/iu.test(value) ? "synchro" : "",
+    /(?:融合|fusion)/iu.test(value) ? "fusion" : "",
+  ]);
+  if (usesActivationCostCards && referencedSummonKinds.length) {
+    return {
+      type: "summon_using_activation_cost_cards",
+      text: value,
+      materialReference: "activation_cost_cards",
+      materialStateAt: "resolution_current_state",
+      summonKinds: referencedSummonKinds,
+      fromZone: "extra_deck",
+    };
+  }
   const rules = [
     ["fusion_summon", /(?:融合召唤|融合召喚|fusion summon)/iu],
     ["special_summon", /(?:特殊召唤|特殊召喚|special summon)/iu],
+    ["tribute", /(?:解放|リリース|tribute)/iu],
     ["destroy", /(?:破坏|破壊|destroy)/iu],
     ["banish", /(?:除外|banish)/iu],
     ["send_to_graveyard", /(?:送去墓地|送往墓地|送至墓地|墓地へ送|send .*graveyard)/iu],
@@ -291,7 +373,31 @@ function classifyResolutionOperation(text) {
     ["reveal", PUBLIC_WORD],
   ];
   const type = firstMatch(value, rules) || "unparsed_operation";
-  return { type, text: value };
+  if (type !== "special_summon") return { type, text: value };
+
+  const sourceCard = /(?:此卡|这张卡|這張卡|このカード|this card)/iu.test(value);
+  const generatedMonster = /(?:衍生物|代币|代幣|トークン|token)/iu.test(value);
+  const alternativeOperation = /(?:加入|加到|add).{0,16}(?:手牌|手卡|手札|hand).{0,8}(?:或|或者|または|or).{0,8}(?:特殊召唤|特殊召喚|special summon)/iu.test(value);
+  const quotedName = value.match(/[“「『"]([^”」』"]{2,50})[”」』"]/u)?.[1] || "";
+  return {
+    type,
+    text: value,
+    mandatory: !alternativeOperation && !/(?:可以|可选择|任意|できる|may|you can)/iu.test(value),
+    ...(alternativeOperation ? { choice: "one_of_multiple_operations" } : {}),
+    subject: sourceCard ? "effect_source" : generatedMonster ? "generated_monster" : "selected_card",
+    amount: parseCount(value.match(/([０-９\d一二三两兩]+)\s*(?:只|隻|体|體|枚)/u)?.[1], 1),
+    fromZone: firstMatch(value, [
+      ["extra_deck", /(?:从|從)\s*(?:额外卡组|額外卡組|额外牌组|額外牌組)|(?:エクストラデッキから)|(?:from\s+(?:the\s+|your\s+)?extra deck)/iu],
+      ["hand", /(?:从|從)\s*(?:手牌|手卡)|(?:手札から)|(?:from\s+(?:the\s+|your\s+)?hand)/iu],
+      ["graveyard", /(?:从|從)\s*(?:墓地)|(?:墓地から)|(?:from\s+(?:the\s+|your\s+)?(?:GY|graveyard))/iu],
+      ["deck", /(?:从|從)\s*(?:牌组|牌組|卡组|卡組)|(?<!エクストラ)(?:デッキから)|(?:from\s+(?:the\s+|your\s+)?deck)/iu],
+    ]) || "unknown",
+    destinationPlayerRelation: /(?:至|到|给|給)?(?:对方|對方|对手|對手|相手).{0,16}(?:场上|場上|フィールド)|opponent'?s (?:field|side)/iu.test(value)
+      ? "opponent_of_source_controller"
+      : "same_as_source_controller",
+    ...(quotedName ? { name: quotedName } : {}),
+    ...(extractRaceLabel(value) ? { race: extractRaceLabel(value) } : {}),
+  };
 }
 
 function classifyAffectedPlayer(text) {
@@ -305,6 +411,29 @@ function normalizeConnector(value) {
   if (/若如此|and if you do/iu.test(value)) return "AND_IF_YOU_DO";
   if (/并且|同时|also/iu.test(value)) return "ALSO";
   return "THEN";
+}
+
+function findActivationMatch(text) {
+  const value = String(text || "");
+  const matcher = new RegExp(
+    ACTIVATION_MARKER.source,
+    ACTIVATION_MARKER.flags.includes("g") ? ACTIVATION_MARKER.flags : `${ACTIVATION_MARKER.flags}g`,
+  );
+  for (const match of value.matchAll(matcher)) {
+    const index = Number(match.index || 0);
+    const clauseStart = Math.max(
+      value.lastIndexOf("。", index - 1),
+      value.lastIndexOf("；", index - 1),
+      value.lastIndexOf(";", index - 1),
+      value.lastIndexOf("，", index - 1),
+      value.lastIndexOf(",", index - 1),
+      value.lastIndexOf("\n", index - 1),
+    ) + 1;
+    const local = value.slice(clauseStart, index + match[0].length + 24);
+    if (ACTIVATION_LIMIT_ONLY.test(local)) continue;
+    return match;
+  }
+  return null;
 }
 
 function extractEffectNo(text) {
@@ -322,6 +451,27 @@ function parseNumber(value) {
   const normalized = String(value || "").normalize("NFKC").replace(/[,，]/gu, "");
   const parsed = Number.parseInt(normalized, 10);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function parseCount(value, fallback = null) {
+  const normalized = String(value || "").normalize("NFKC").trim();
+  if (!normalized) return fallback;
+  const chinese = new Map([
+    ["一", 1],
+    ["二", 2],
+    ["两", 2],
+    ["兩", 2],
+    ["三", 3],
+  ]);
+  if (chinese.has(normalized)) return chinese.get(normalized);
+  const parsed = Number.parseInt(normalized, 10);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function extractRaceLabel(text) {
+  return String(text || "").match(
+    /(岩石族|龙族|龍族|ドラゴン族|Dragon|魔法师族|魔法使い族|Spellcaster|战士族|戰士族|戦士族|Warrior|恶魔族|惡魔族|悪魔族|Fiend|机械族|機械族|Machine|不死族|アンデット族|Zombie|兽族|獸族|獣族|Beast|鸟兽族|鳥獸族|鳥獣族|Winged Beast|水族|Aqua|炎族|Pyro|雷族|Thunder|植物族|Plant|昆虫族|Insect|爬虫类族|爬蟲類族|爬虫類族|Reptile|鱼族|魚族|Fish|海龙族|海龍族|海竜族|Sea Serpent|念动力族|念動力族|サイキック族|Psychic|幻龙族|幻龍族|幻竜族|Wyrm|电子界族|電子界族|サイバース族|Cyberse|幻想魔族|Illusion|天使族|Fairy|恐龙族|恐龍族|恐竜族|Dinosaur)/iu,
+  )?.[1] || "";
 }
 
 function firstMatch(text, rules) {

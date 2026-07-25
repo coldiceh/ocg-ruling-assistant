@@ -13,28 +13,40 @@ test("production fast path rechecks continuous immunity after paying discard cos
   const answer = await answerRagRulingQuestion({
     question: "我方额外卡组有「测试冰剑融合龙」。对方场上存在的卡只有表侧表示的「吞食圣痕之龙」1只，双方墓地没有卡。我方召唤「阿不思的落胤」时，可以将「教导的圣女 艾克莉西亚」作为Cost丢弃来发动其效果吗，后续怎么处理？",
     cards: [{
-      id: "source-fusion",
+      id: "100001",
       name: "阿不思的落胤",
       aliases: ["阿不思的落胤"],
       effectText: "这张卡召唤・特殊召唤的场合，舍弃1张手牌可以发动。将包含此卡在内的自己或对方场上的怪兽作为融合素材进行融合召唤。不可将自己场上其他的怪兽作为融合素材。",
     }, {
-      id: "discarded-archetype-card",
+      id: "100002",
       name: "教导的圣女 艾克莉西亚",
       aliases: ["教导的圣女 艾克莉西亚"],
       effectText: "“艾克利西亚”怪兽。",
     }, {
-      id: "continuous-immunity-carrier",
+      id: "100003",
       name: "吞喰圣痕之龙",
       aliases: ["吞喰圣痕之龙"],
       cardType: "fusion",
       effectText: "只要自己或对方的场上或墓地存在“艾克利西亚”怪兽，此卡不受此卡以外的效果影响。",
     }, {
-      id: "fusion-target",
+      id: "100004",
       name: "测试冰剑融合龙",
       aliases: ["测试冰剑融合龙"],
       effectText: "“阿不思的落胤”＋融合・同步・超量・连接怪兽",
     }],
-    records: [],
+    records: [{
+      id: "faq-for-activated-source",
+      recordType: "card-faq",
+      title: "发动源卡的处理 FAQ",
+      cardIds: ["100001"],
+      text: "这条 FAQ 只直接关联发动效果的测试融合怪兽。",
+    }, {
+      id: "faq-for-other-field-card",
+      recordType: "card-faq",
+      title: "另一张场上卡的 FAQ",
+      cardIds: ["100003"],
+      text: "这条 FAQ 只直接关联场上的测试抗性怪兽。",
+    }],
     qaRecords: [],
     env: localEnv,
     dryRun: true,
@@ -48,6 +60,8 @@ test("production fast path rechecks continuous immunity after paying discard cos
   assert.equal(answer.debug.deterministicDecision, "state_transition");
   assert.equal(answer.debug.modelUsed, "deterministic-ruling-reasoner");
   assert.equal(answer.debug.timingsMs.finalModel, 0);
+  assert.ok(answer.usedEvidence.some((item) => item.id === "faq-for-activated-source"));
+  assert.equal(answer.usedEvidence.some((item) => item.id === "faq-for-other-field-card"), false);
 });
 
 test("complete deterministic preflight skips both auxiliary extraction models", async () => {

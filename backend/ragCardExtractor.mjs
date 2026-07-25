@@ -1134,6 +1134,11 @@ function addResolved(resolved, seenCards, candidate, input, confidence) {
   const key = cardIdentity(card);
   if (!key || seenCards.has(key)) return;
   seenCards.add(key);
+  const attack = normalizedCardNumber(card.attack ?? card.atk);
+  const defense = normalizedCardNumber(card.defense ?? card.def);
+  const level = normalizedCardNumber(card.level);
+  const rank = normalizedCardNumber(card.rank);
+  const link = normalizedCardNumber(card.link ?? card.linkRating);
   resolved.push({
     input: String(input || candidate.matchedAlias || card.name || ""),
     id: String(card.id || card.cardId || ""),
@@ -1143,12 +1148,31 @@ function addResolved(resolved, seenCards, candidate, input, confidence) {
     cnName: card.cnName || "",
     jaName: card.jaName || "",
     enName: card.enName || "",
-    cardType: card.cardType || "",
+    type: card.type || card.cardType || "",
+    cardType: card.cardType || card.type || "",
+    race: card.race || "",
+    attribute: card.attribute || "",
+    ...(attack !== null ? { attack, atk: attack } : {}),
+    ...(defense !== null ? { defense, def: defense } : {}),
+    ...(level !== null ? { level } : {}),
+    ...(rank !== null ? { rank } : {}),
+    ...(link !== null ? { link, linkRating: link } : {}),
+    ...(card.linkArrows ? { linkArrows: String(card.linkArrows) } : {}),
+    ...(Array.isArray(card.propertyIds) ? { propertyIds: [...card.propertyIds] } : {}),
+    ...(Array.isArray(card.properties) ? { properties: [...card.properties] } : {}),
+    ...(Array.isArray(card.monsterPropertyIds) ? { monsterPropertyIds: [...card.monsterPropertyIds] } : {}),
+    ...(Array.isArray(card.monsterProperties) ? { monsterProperties: [...card.monsterProperties] } : {}),
     effectText: card.effectText || "",
     sourceUrl: card.sourceUrl || "",
     aliases: resolvedCardAliases(card, input),
     confidence,
   });
+}
+
+function normalizedCardNumber(value) {
+  if (value === null || value === undefined || String(value).trim() === "") return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 function resolvedCardAliases(card, input) {

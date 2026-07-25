@@ -182,22 +182,42 @@ export function selectRelevantQaIds(cardQaEntries = [], maxCandidates = 8) {
   };
 }
 
-function normalizeCardMetadata(card, payload, propertyMetadata) {
+export function normalizeCardMetadata(card, payload, propertyMetadata) {
   const localized = preferredCardLocale(payload?.cardData);
   const propertyIds = uniqueNumericIds(localized?.properties);
   const propertyLabels = propertyIds
     .map((id) => propertyMetadata?.[Number(id)]?.en || "")
     .filter(Boolean);
   const race = propertyLabels.find((label) => !NON_RACE_PROPERTIES.has(String(label).toLowerCase())) || "";
+  const type = String(localized?.cardType || "").trim();
+  const attack = optionalNumber(localized?.atk);
+  const defense = optionalNumber(localized?.def);
+  const level = optionalNumber(localized?.level);
+  const rank = optionalNumber(localized?.rank);
+  const link = optionalNumber(localized?.linkRating);
+  const linkArrows = String(localized?.linkArrows || "").trim();
   return {
     id: String(card.id),
+    ...(type ? { type, cardType: type } : {}),
     ...(race ? { race } : {}),
     ...(propertyIds.length ? { monsterPropertyIds: propertyIds } : {}),
     ...(propertyLabels.length ? { monsterProperties: propertyLabels } : {}),
-    ...(Number.isFinite(Number(localized?.atk)) ? { attack: Number(localized.atk) } : {}),
-    ...(Number.isFinite(Number(localized?.def)) ? { defense: Number(localized.def) } : {}),
+    ...(propertyIds.length ? { propertyIds } : {}),
+    ...(propertyLabels.length ? { properties: propertyLabels } : {}),
+    ...(attack !== null ? { attack, atk: attack } : {}),
+    ...(defense !== null ? { defense, def: defense } : {}),
+    ...(level !== null ? { level } : {}),
+    ...(rank !== null ? { rank } : {}),
+    ...(link !== null ? { link, linkRating: link } : {}),
+    ...(linkArrows ? { linkArrows } : {}),
     ...(localized?.attribute ? { attribute: localized.attribute } : {}),
   };
+}
+
+function optionalNumber(value) {
+  if (value === null || value === undefined || String(value).trim() === "") return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 function normalizeQaRecord(qaId, payload, cardNameById, selection) {

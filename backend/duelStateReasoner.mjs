@@ -1,6 +1,7 @@
 import { createDestinationReplacement, createEffectPrimitive } from "./effectPrimitives.mjs";
 import { evaluateFusionOperation, resolveEffectChain } from "./effectResolutionEngine.mjs";
 import { splitEffectTextBlocks } from "./cardEffectBlocks.mjs";
+import { normalizeCardText } from "./cardTextNormalizer.mjs";
 
 const RETURN_TO_HAND = /(?:放回|返回|回到).{0,12}(?:手牌|手卡|手札)|(?:手牌|手卡|手札).{0,12}(?:放回|返回|回到)|return.{0,20}(?:to )?(?:the )?hand/isu;
 const LOWEST_DEFENSE = /(?:守备力|守備力|防御力|防禦力).{0,8}(?:最低|最小|一番低)|lowest\s+DEF/iu;
@@ -25,7 +26,16 @@ export function analyzeDuelStateTransition({
   const query = String(userQuery || "");
   const programs = compileResolvedCardPrograms(resolvedCards, cardTexts);
   const compiled = compileQuestionScenario({ query, programs });
-  if (!compiled.complete) return notApplicable(compiled.reason, compiled);
+  if (!compiled.complete) {
+    const symbolicTransition = analyzeSymbolicFusionReplacementTransition({
+      query,
+      programs,
+      cardTexts,
+      compileFailure: compiled,
+    });
+    if (symbolicTransition) return symbolicTransition;
+    return notApplicable(compiled.reason, compiled);
+  }
 
   const simulation = resolveEffectChain({
     gameState: compiled.gameState,
@@ -50,6 +60,21 @@ export function analyzeDuelStateTransition({
   const activationBasis = firstPreparedLink.activationPremise === "declared_legal"
     ? "declared_legal"
     : "derived_from_simulation";
+  const postCostStateOutcome = firstLink.primitiveResult?.outcomes
+    ?.find((item) => item.type === "summon_using_activation_cost_cards");
+  if (postCostStateOutcome) {
+    return renderPostCostStateReferenceTransition({
+      programs,
+      compiled,
+      simulation,
+      firstLink,
+      firstPreparedLink,
+      activationResult,
+      activationBasis,
+      cardTexts,
+      outcome: postCostStateOutcome,
+    });
+  }
   const fusionOutcome = firstLink.primitiveResult?.outcomes?.find((item) => item.type === "fusion_summon");
   if (fusionOutcome) {
     return renderFusionTransition({
@@ -330,6 +355,11 @@ export function compileResolvedCardPrograms(resolvedCards = [], cardTexts = []) 
       ? {}
       : { compileIncompleteReason: "effect_source_category_not_supported" };
     const effectBlocks = splitEffectTextBlocks(text);
+    const cardTextIr = normalizeCardText({
+      ...card,
+      id: definitionId,
+      effectText: text,
+    });
     const sharedRestrictionText = effectBlocks
       .filter((block) => block.kind === "preamble")
       .map((block) => block.text)
@@ -338,6 +368,7 @@ export function compileResolvedCardPrograms(resolvedCards = [], cardTexts = []) 
     for (const block of effectBlocks) {
       const blockText = block.text;
       if (block.kind === "preamble") continue;
+      const normalizedSemantics = normalizedSemanticsForBlock(cardTextIr, blockText);
       if (LOWEST_DEFENSE.test(blockText) && RETURN_TO_HAND.test(blockText)) {
         activatedEffects.push({
           id: `${definitionId}:${block.id}:return-lowest-defense`,
@@ -388,9 +419,22 @@ export function compileResolvedCardPrograms(resolvedCards = [], cardTexts = []) 
         });
       }
 
-      if (FUSION_OPERATION.test(blockText)) {
+      const normalizedFusionOperation = normalizedSemantics.resolutionOperations
+        .find((operation) => operation.type === "fusion_summon");
+      const fusionSemanticSource = normalizedFusionOperation
+        ? "card_text_ir"
+        : FUSION_OPERATION.test(blockText)
+          ? "legacy_pattern"
+          : "";
+      if (fusionSemanticSource) {
         const hasSummonTrigger = SUMMON_TRIGGER.test(blockText);
-        const hasDiscardCost = DISCARD_ONE_HAND_COST.test(blockText);
+        const normalizedDiscardCost = normalizedSemantics.activationCosts
+          .find((cost) => cost.type === "discard_from_hand");
+        const discardSemanticSource = normalizedDiscardCost
+          ? "card_text_ir"
+          : DISCARD_ONE_HAND_COST.test(blockText)
+            ? "legacy_pattern"
+            : "";
         const materialPool = parseFusionMaterialPool(blockText);
         activatedEffects.push({
           id: `${definitionId}:${block.id}:fusion-summon`,
@@ -400,11 +444,19 @@ export function compileResolvedCardPrograms(resolvedCards = [], cardTexts = []) 
           effectCategoryBasis: effectCategoryInference.basis,
           ...(effectCategory === "unknown" ? { compileIncompleteReason: "effect_source_category_not_supported" } : {}),
           actionTags: ["fusion_summon"],
+          semanticSources: {
+            fusionSummon: fusionSemanticSource,
+            ...(discardSemanticSource ? { discardCost: discardSemanticSource } : {}),
+          },
           sharedRestrictionText,
           activationRequirementText: activationRequirement(blockText),
           ...(!materialPool ? { compileIncompleteReason: "fusion_material_pool_not_compiled" } : {}),
           trigger: hasSummonTrigger ? { type: "source_event", event: "summoned" } : null,
-          costSpec: hasDiscardCost ? { type: "discard_from_hand", amount: 1, player: "self" } : null,
+          costSpec: discardSemanticSource ? {
+            type: "discard_from_hand",
+            amount: Number(normalizedDiscardCost?.amount) || 1,
+            player: "self",
+          } : null,
           fusionSpec: {
             interaction: "effect_affecting",
             sourceMustBeMaterial: /包含此卡在内|このカードを含む|including this card/iu.test(blockText),
@@ -414,7 +466,41 @@ export function compileResolvedCardPrograms(resolvedCards = [], cardTexts = []) 
         });
       }
 
-      const mandatorySpecialSummonOutputs = parseMandatorySpecialSummonOutputs(blockText, card.race);
+      const normalizedFieldMaterialCost = normalizedSemantics.activationCosts
+        .find((cost) => cost.type === "send_field_monsters_to_graveyard");
+      const normalizedCostCardStateOperation = normalizedSemantics.resolutionOperations
+        .find((operation) => operation.type === "summon_using_activation_cost_cards");
+      if (normalizedFieldMaterialCost && normalizedCostCardStateOperation) {
+        activatedEffects.push({
+          id: `${definitionId}:${block.id}:post-cost-state-reference`,
+          effectBlockId: block.id,
+          activationZones: fusionActivationZones(effectCategory),
+          effectCategory,
+          effectCategoryBasis: effectCategoryInference.basis,
+          ...(effectCategory === "unknown" ? { compileIncompleteReason: "effect_source_category_not_supported" } : {}),
+          actionTags: ["send_field_materials_to_graveyard", "state_referenced_extra_deck_summon"],
+          semanticSource: "card_text_ir",
+          sharedRestrictionText,
+          activationRequirementText: activationRequirement(blockText),
+          costSpec: {
+            ...normalizedFieldMaterialCost,
+            player: "self",
+          },
+          materialReferenceSpec: {
+            ...normalizedCostCardStateOperation,
+          },
+          analysisScope: "post_cost_value_reference",
+          sequence: [],
+        });
+      }
+
+      const normalizedMandatorySpecialSummonOutputs = mandatorySpecialSummonOutputsFromNormalized(
+        normalizedSemantics.resolutionOperations,
+        card.race,
+      );
+      const mandatorySpecialSummonOutputs = normalizedMandatorySpecialSummonOutputs.length >= 2
+        ? normalizedMandatorySpecialSummonOutputs
+        : parseMandatorySpecialSummonOutputs(blockText, card.race);
       if (mandatorySpecialSummonOutputs.length >= 2) {
         activatedEffects.push({
           id: `${definitionId}:${block.id}:mandatory-special-summons`,
@@ -424,6 +510,9 @@ export function compileResolvedCardPrograms(resolvedCards = [], cardTexts = []) 
           effectCategoryBasis: effectCategoryInference.basis,
           ...monsterOnlyCompileIncomplete,
           actionTags: ["special_summon", "mandatory_multi_player_summon"],
+          semanticSource: normalizedMandatorySpecialSummonOutputs.length >= 2
+            ? "card_text_ir"
+            : "legacy_pattern",
           sharedRestrictionText,
           activationRequirementText: activationRequirement(blockText),
           mandatorySpecialSummonOutputs,
@@ -472,7 +561,46 @@ export function compileResolvedCardPrograms(resolvedCards = [], cardTexts = []) 
         });
       }
 
-      if (PER_PLAYER_SAME_RACE_LIMIT.test(blockText)) {
+      for (const numericModifier of normalizedSemantics.continuous.filter((semantic) => (
+        semantic.type === "numeric_value_modifier"
+      ))) {
+        continuousEffects.push({
+          id: `${definitionId}:${block.id}:numeric-${numericModifier.property}`,
+          definitionCardId: definitionId,
+          sourceDefinitionId: definitionId,
+          sourceCardName: card.name || card.cnName || names[0] || "unknown",
+          effectCategory,
+          effectCategoryBasis: effectCategoryInference.basis,
+          semanticSource: "card_text_ir",
+          activeWhen: {
+            zone: effectCategory === "monster" ? "monster_zone" : "spell_trap_zone",
+            faceUp: true,
+          },
+          valueModifiers: [{
+            property: numericModifier.property,
+            operation: numericModifier.operation,
+            amount: numericModifier.amount,
+            affectedRelation: destinationPlayerRelationFromNormalized(numericModifier.affected),
+            selector: {
+              ...(numericModifier.selector || {}),
+              cardKind: "monster",
+            },
+            expiresWhenLeavingSelectorZone: numericModifier.expiresWhenLeavingSelectorZone !== false,
+          }],
+        });
+      }
+
+      const normalizedRaceLimit = normalizedSemantics.continuous.find((semantic) => (
+        semantic.type === "field_count_limit"
+        && semantic.scope === "per_player"
+        && semantic.groupBy === "race"
+      ));
+      const raceLimitSemanticSource = normalizedRaceLimit
+        ? "card_text_ir"
+        : PER_PLAYER_SAME_RACE_LIMIT.test(blockText)
+          ? "legacy_pattern"
+          : "";
+      if (raceLimitSemanticSource) {
         const activeZone = effectCategory === "monster" ? "monster_zone" : "spell_trap_zone";
         continuousEffects.push({
           id: `${definitionId}:${block.id}:per-player-race-limit`,
@@ -481,15 +609,27 @@ export function compileResolvedCardPrograms(resolvedCards = [], cardTexts = []) 
           sourceCardName: card.name || card.cnName || names[0] || "unknown",
           effectCategory,
           effectCategoryBasis: effectCategoryInference.basis,
+          semanticSource: raceLimitSemanticSource,
           activeWhen: { zone: activeZone, faceUp: true },
           fieldRestrictions: [{
             type: "max_face_up_monsters_per_race_per_player",
-            maxCount: 1,
+            maxCount: Number(normalizedRaceLimit?.maxCount) || 1,
           }],
         });
       }
 
-      if (OPPONENT_GRAVE_TO_BANISHED.test(blockText)) {
+      const normalizedDestinationReplacement = normalizedSemantics.continuous
+        .find((semantic) => (
+          semantic.type === "destination_replacement"
+          && semantic.intendedZone === "graveyard"
+          && semantic.replacementZone === "banished"
+        ));
+      const destinationReplacementSemanticSource = normalizedDestinationReplacement
+        ? "card_text_ir"
+        : OPPONENT_GRAVE_TO_BANISHED.test(blockText)
+          ? "legacy_pattern"
+          : "";
+      if (destinationReplacementSemanticSource) {
         continuousEffects.push({
           id: [definitionId, block.id, "opponent-grave-destination-replacement"].join(":"),
           definitionCardId: definitionId,
@@ -503,11 +643,14 @@ export function compileResolvedCardPrograms(resolvedCards = [], cardTexts = []) 
               : "spell_trap_zone",
             faceUp: true,
           },
+          semanticSource: destinationReplacementSemanticSource,
           destinationReplacements: [createDestinationReplacement({
             id: "opponent-grave-to-banished",
-            intendedToZone: "graveyard",
-            replacementToZone: "banished",
-            destinationPlayerRelation: "opponent_of_source_controller",
+            intendedToZone: normalizedDestinationReplacement?.intendedZone || "graveyard",
+            replacementToZone: normalizedDestinationReplacement?.replacementZone || "banished",
+            destinationPlayerRelation: destinationPlayerRelationFromNormalized(
+              normalizedDestinationReplacement?.affected || "opponent",
+            ),
           })],
         });
       }
@@ -582,6 +725,407 @@ export function compileResolvedCardPrograms(resolvedCards = [], cardTexts = []) 
     }
   }
   return programs;
+}
+
+function normalizedSemanticsForBlock(cardTextIr, blockText) {
+  const blockKey = normalizeSemanticText(blockText);
+  const effects = cardTextIr?.effects || [];
+  const effect = effects.find((candidate) => {
+    const effectKey = normalizeSemanticText(candidate.rawText);
+    return effectKey && blockKey && (
+      effectKey === blockKey
+      || effectKey.includes(blockKey)
+      || blockKey.includes(effectKey)
+    );
+  });
+  return {
+    activationCosts: effect?.activation?.costs || [],
+    resolutionOperations: (effect?.resolution || []).map((step) => step.operation).filter(Boolean),
+    continuous: effect?.continuous || [],
+  };
+}
+
+function analyzeSymbolicFusionReplacementTransition({
+  query,
+  programs,
+  cardTexts,
+  compileFailure,
+}) {
+  const mentionedPrograms = (programs || [])
+    .map((program) => ({ program, mention: locateCardMention(query, program) }))
+    .filter((item) => item.mention.index >= 0);
+  const fusionCandidates = mentionedPrograms.flatMap(({ program, mention }) => (
+    program.activatedEffects
+      .filter((effect) => (
+        effect.fusionSpec
+        && effect.costSpec?.type === "discard_from_hand"
+        && effectActivationAsked(query, mention)
+      ))
+      .map((effect) => ({ program, mention, effect }))
+  ));
+  const replacementCandidates = mentionedPrograms.flatMap(({ program, mention }) => (
+    program.continuousEffects.flatMap((effect) => (
+      (effect.destinationReplacements || [])
+        .filter((replacement) => (
+          replacement.intendedToZone === "graveyard"
+          && replacement.replacementToZone === "banished"
+        ))
+        .map((replacement) => ({ program, mention, effect, replacement }))
+    ))
+  ));
+  if (fusionCandidates.length !== 1 || replacementCandidates.length !== 1) return null;
+
+  const fusion = fusionCandidates[0];
+  const carrier = replacementCandidates[0];
+  if (!activationLegalityExplicitlyAsked(query, fusion.mention)) return null;
+  const fusionMentionState = buildInitialCardState(query, fusion.program, fusion.mention);
+  const carrierMentionState = buildInitialCardState(query, carrier.program, carrier.mention);
+  const effectController = fusionMentionState.controller;
+  const carrierController = carrierMentionState.controller;
+  if (!["self", "opponent"].includes(effectController)
+      || !["self", "opponent"].includes(carrierController)
+      || effectController === carrierController) {
+    return null;
+  }
+  if (carrier.replacement.destinationPlayerRelation !== "opponent_of_source_controller") return null;
+
+  const costPlayer = resolveRelativePlayer(fusion.effect.costSpec.player, effectController);
+  if (!costPlayer || costPlayer === carrierController) return null;
+  const materialPool = instantiateRelativeMaterialPool(fusion.effect.fusionSpec.materialPool, effectController);
+  if (!materialPool.complete
+      || !materialPool.value.controllers.includes(effectController)
+      || !materialPool.value.controllers.includes(carrierController)) {
+    return null;
+  }
+
+  const fusionSourceId = `${fusion.program.definitionId}#symbolic-activation`;
+  const carrierId = `${carrier.program.definitionId}#symbolic-carrier`;
+  const costId = "symbolic-discard-cost#1";
+  const otherMaterialId = "symbolic-other-material#1";
+  const fusionResultId = "symbolic-fusion-result#1";
+  const otherMaterialDefinitionId = "symbolic-other-material";
+  const cards = [
+    {
+      instanceId: fusionSourceId,
+      cardId: fusionSourceId,
+      definitionId: fusion.program.definitionId,
+      name: fusion.program.name,
+      owner: effectController,
+      controller: effectController,
+      zone: "spell_trap_zone",
+      faceUp: true,
+      position: "none",
+      effectCategory: fusion.program.effectCategory,
+    },
+    {
+      instanceId: carrierId,
+      cardId: carrierId,
+      definitionId: carrier.program.definitionId,
+      name: carrier.program.name,
+      owner: carrierController,
+      controller: carrierController,
+      zone: carrier.effect.activeWhen?.zone || "monster_zone",
+      faceUp: true,
+      position: "attack",
+      effectCategory: carrier.program.effectCategory,
+    },
+    {
+      instanceId: costId,
+      cardId: costId,
+      definitionId: "symbolic-discard-cost",
+      name: "作为 cost 丢弃的手牌",
+      owner: costPlayer,
+      controller: costPlayer,
+      zone: "hand",
+      faceUp: false,
+      position: "none",
+    },
+    {
+      instanceId: otherMaterialId,
+      cardId: otherMaterialId,
+      definitionId: otherMaterialDefinitionId,
+      name: "另一只合法融合素材",
+      owner: effectController,
+      controller: effectController,
+      zone: "monster_zone",
+      faceUp: true,
+      position: "attack",
+    },
+    {
+      instanceId: fusionResultId,
+      cardId: fusionResultId,
+      definitionId: "symbolic-fusion-result",
+      name: "可融合召唤的融合怪兽",
+      owner: effectController,
+      controller: effectController,
+      zone: "extra_deck",
+      faceUp: false,
+      position: "none",
+      summonKinds: ["fusion"],
+      materialRecipe: {
+        slots: [
+          { id: "replacement-carrier", predicate: { definitionIds: [carrier.program.definitionId] } },
+          { id: "other-material", predicate: { definitionIds: [otherMaterialDefinitionId] } },
+        ],
+      },
+    },
+  ];
+  const fusionPrimitive = createEffectPrimitive("fusion_summon", {
+    ...fusion.effect.fusionSpec,
+    materialPool: materialPool.value,
+    sourceCardId: fusionSourceId,
+    sourceInstanceId: fusionSourceId,
+    sourceDefinitionId: fusion.program.definitionId,
+    sourceCardName: fusion.program.name,
+    candidateInstanceIds: [fusionResultId],
+  });
+  const continuousEffect = {
+    ...carrier.effect,
+    id: `${carrier.effect.id}@${carrierId}`,
+    sourceCardId: carrierId,
+    sourceInstanceId: carrierId,
+    sourceDefinitionId: carrier.program.definitionId,
+  };
+  const gameState = {
+    cards,
+    hands: {
+      [costPlayer]: [cards.find((card) => card.instanceId === costId)],
+      [oppositePlayer(costPlayer)]: [],
+    },
+    graveyards: { self: [], opponent: [] },
+    banished: { self: [], opponent: [] },
+  };
+  const chainLinks = [{
+    id: "C1",
+    order: 1,
+    sourceInstanceId: fusionSourceId,
+    sourceDefinitionId: fusion.program.definitionId,
+    sourceExpectedZone: "spell_trap_zone",
+    sourceCardName: fusion.program.name,
+    effectId: fusion.effect.id,
+    activationPremise: "derived",
+    activationCostSequence: [createEffectPrimitive("discard_from_hand", {
+      player: costPlayer,
+      amount: Number(fusion.effect.costSpec.amount) || 1,
+      cardIds: [costId],
+    })],
+    activationPreconditions: [{
+      type: "operation_performable",
+      evaluationPoint: "before_cost",
+      primitive: fusionPrimitive,
+      reason: "fusion_operation_not_performable_before_cost",
+    }],
+    sequence: [{
+      id: "fusion-summon",
+      connector: "INDEPENDENT",
+      primitive: fusionPrimitive,
+    }],
+  }];
+  const compiled = {
+    complete: true,
+    gameState,
+    chainLinks,
+    continuousEffects: [continuousEffect],
+    stateInferences: [{
+      phase: "compile_symbolic_assumption",
+      reason: "interaction_question_omits_specific_fusion_recipe",
+      conclusion: "仅为判断去向替代的适用时点，建立满足通常发动条件的匿名融合素材组合；不把匿名素材当成题目中的实际卡名。",
+    }],
+    referencedDefinitionIds: [fusion.program.definitionId, carrier.program.definitionId],
+    referencedInstanceIds: cards.map((card) => card.instanceId),
+  };
+  const simulation = resolveEffectChain({
+    gameState,
+    chainLinks,
+    continuousEffects: [continuousEffect],
+  });
+  if (!simulation.complete) return null;
+  const firstLink = simulation.linkResults.find((item) => item.id === "C1");
+  const firstPreparedLink = simulation.preparedChainLinks.find((item) => item.id === "C1");
+  const activationResult = simulation.activationResults.find((item) => item.id === "C1");
+  const fusionOutcome = firstLink?.primitiveResult?.outcomes?.find((item) => item.type === "fusion_summon");
+  if (!firstLink || !firstPreparedLink || fusionOutcome?.status !== "performed") return null;
+
+  const rendered = renderFusionTransition({
+    query,
+    programs,
+    compiled,
+    simulation,
+    firstLink,
+    firstPreparedLink,
+    activationResult,
+    activationBasis: "derived_from_symbolic_simulation",
+    cardTexts,
+    fusionOutcome,
+  });
+  if (rendered?.status !== "resolved" || rendered.complete !== true) return null;
+  return {
+    ...rendered,
+    activationAssumption: "valid_fusion_material_configuration",
+    symbolicMaterialBranch: "replacement_carrier_used_as_material",
+    compileFallbackReason: compileFailure?.reason || "",
+  };
+}
+
+function renderPostCostStateReferenceTransition({
+  programs,
+  compiled,
+  simulation,
+  firstLink,
+  firstPreparedLink,
+  activationResult,
+  activationBasis,
+  cardTexts,
+  outcome,
+}) {
+  const source = programByDefinitionId(programs, firstPreparedLink.sourceDefinitionId);
+  const facts = firstPreparedLink.postCostStateFacts || {};
+  const currentLevels = (outcome.materialSnapshots || [])
+    .map((snapshot) => Number(snapshot.currentValues?.level))
+    .filter(Number.isFinite);
+  if (currentLevels.length !== 2 || !Number.isFinite(Number(outcome.synchroLevel))) {
+    return notApplicable("post_cost_material_snapshot_incomplete", { compiled, simulation, outcome });
+  }
+  const beforeLabel = (facts.modifiedLevels || []).join("+");
+  const afterLabel = currentLevels.join("+");
+  const unavailable = (facts.unavailableSynchroLevels || []).join("、");
+  const modifierName = facts.modifierSourceName || "场上的持续等级修正";
+  const sourceName = source?.name || firstPreparedLink.sourceCardName || "发动的卡";
+  const fusionConditional = (firstPreparedLink.sequence || [])
+    .some((step) => step.primitive?.summonKinds?.includes("fusion"));
+  const processing = fusionConditional
+    ? "效果处理时，若额外牌组同时存在可由这2只怪兽作为素材融合召唤的融合怪兽，则把符合条件的同步怪兽与融合怪兽同时各特殊召唤1只；若不能把两者都特殊召唤，则1只也不特殊召唤。"
+    : "效果处理时，按这些作为 cost 的卡在当时所在区域中的当前状态判断可特殊召唤的怪兽。";
+  const shortAnswer = `可以发动。发动时将表侧表示的协调与非协调各1只作为 cost 从场上送去墓地；它们离场后不再受到「${modifierName}」的场上等级修正，处理时按墓地中的当前等级${afterLabel}（合计${outcome.synchroLevel}）判断。因此，${outcome.synchroLevel}星同步怪兽是正确候选${unavailable ? `，没有${unavailable}星同步怪兽不影响这次发动` : ""}。${processing}`;
+  const trace = [
+    {
+      phase: "activation_check",
+      chainLink: firstPreparedLink.id,
+      status: activationResult?.status || "activated",
+      conclusion: `发动前先确认两只表侧素材能作为 cost 送去墓地，并按支付后的状态验证后续处理，因此「${sourceName}」可以发动。`,
+    },
+    {
+      phase: "pay_activation_cost",
+      chainLink: firstPreparedLink.id,
+      cardInstanceIds: firstPreparedLink.activationCostReceipt?.cardInstanceIds || [],
+      conclusion: `作为 cost 的协调与非协调从怪兽区域送去墓地。`,
+    },
+    {
+      phase: "stabilize_continuous_effects",
+      chainLink: firstPreparedLink.id,
+      before: facts.modifiedLevels || [],
+      after: currentLevels,
+      conclusion: `这些卡离开场上后，「${modifierName}」只在场上适用的等级修正消失，等级由${beforeLabel || "修正后数值"}重算为${afterLabel}。`,
+    },
+    {
+      phase: "resolve_chain_link",
+      chainLink: firstPreparedLink.id,
+      materialStateAt: "resolution_current_state",
+      synchroLevel: outcome.synchroLevel,
+      conclusion: `处理时读取作为 cost 的卡此刻在墓地中的状态，以${afterLabel}合计${outcome.synchroLevel}判断同步候选；${processing}`,
+    },
+  ];
+  const evidenceIds = unique([
+    evidenceIdFor(source, cardTexts),
+    ...(facts.modifierSourceDefinitionId
+      ? [evidenceIdFor(programByDefinitionId(programs, facts.modifierSourceDefinitionId), cardTexts)]
+      : []),
+  ].filter(Boolean));
+  return {
+    status: "resolved",
+    complete: true,
+    activation: "legal",
+    activationBasis,
+    resolution: "conditional_all_or_none",
+    shortAnswer,
+    reasoning: trace.map((item) => item.conclusion),
+    trace,
+    evidenceIds,
+    sourceDefinitionId: firstPreparedLink.sourceDefinitionId,
+    activationEvidenceType: "effect_program",
+    activationAssumption: fusionConditional ? "unmentioned_fusion_candidate_meets_normal_requirements" : "",
+    program: serializeCompiledSimulation(programs, compiled, simulation),
+  };
+}
+
+function inferPostCostMaterialFacts(query) {
+  const text = String(query || "").normalize("NFKC");
+  let baseLevels = [];
+  let modifiedLevels = [];
+  const arithmetic = text.match(
+    /(\d+)\s*\+\s*(\d+)[^。；;]{0,24}?(?:变成|變成|变为|變為|成为|成為)了?\s*(\d+)\s*\+\s*(\d+)/u,
+  );
+  if (arithmetic) {
+    baseLevels = [Number(arithmetic[1]), Number(arithmetic[2])];
+    modifiedLevels = [Number(arithmetic[3]), Number(arithmetic[4])];
+  } else {
+    const repeated = text.match(
+      /(?:[2二两兩]\s*只)?\s*([一二三四五六七八九十\d]+)\s*星[^。；;]{0,24}?(?:变成|變成|变为|變為|成为|成為)了?\s*(?:[2二两兩]\s*只)?\s*([一二三四五六七八九十\d]+)\s*星/u,
+    );
+    if (repeated) {
+      const before = parseSimpleNumber(repeated[1]);
+      const after = parseSimpleNumber(repeated[2]);
+      if (Number.isFinite(before) && Number.isFinite(after)) {
+        baseLevels = [before, before];
+        modifiedLevels = [after, after];
+      }
+    }
+  }
+  if (baseLevels.length !== 2 || modifiedLevels.length !== 2) {
+    return { complete: false, reason: "post_cost_material_level_transition_not_understood" };
+  }
+  const deltas = modifiedLevels.map((level, index) => level - baseLevels[index]);
+  if (!Number.isFinite(deltas[0]) || deltas[0] !== deltas[1]) {
+    return { complete: false, reason: "post_cost_material_level_delta_inconsistent" };
+  }
+  const availableSynchroLevels = [];
+  const unavailableSynchroLevels = [];
+  const levelMentions = [...text.matchAll(/(\d+)\s*星[^，,。；;]{0,10}?(?:同调|同調|同步|シンクロ)/gu)];
+  for (const mention of levelMentions) {
+    const level = Number(mention[1]);
+    const before = text.slice(Math.max(0, Number(mention.index || 0) - 40), Number(mention.index || 0));
+    if (/(?:没有|沒有|并无|並無|不存在|无|無)\s*$/u.test(before)) {
+      unavailableSynchroLevels.push(level);
+    } else if (/(?:只有|仅有|僅有|存在|有|可用)\s*[^，,。；;]{0,28}$/u.test(before)) {
+      availableSynchroLevels.push(level);
+    }
+  }
+  if (!availableSynchroLevels.length) {
+    return { complete: false, reason: "available_synchro_candidate_level_not_understood" };
+  }
+  return {
+    complete: true,
+    baseLevels,
+    modifiedLevels,
+    levelDelta: deltas[0],
+    availableSynchroLevels: [...new Set(availableSynchroLevels)],
+    unavailableSynchroLevels: [...new Set(unavailableSynchroLevels)],
+  };
+}
+
+function parseSimpleNumber(value) {
+  const normalized = String(value || "").normalize("NFKC");
+  if (/^\d+$/u.test(normalized)) return Number(normalized);
+  const digits = new Map([
+    ["一", 1], ["二", 2], ["三", 3], ["四", 4], ["五", 5],
+    ["六", 6], ["七", 7], ["八", 8], ["九", 9], ["十", 10],
+  ]);
+  if (digits.has(normalized)) return digits.get(normalized);
+  if (/^十[一二三四五六七八九]$/u.test(normalized)) return 10 + digits.get(normalized[1]);
+  return NaN;
+}
+
+function destinationPlayerRelationFromNormalized(affected) {
+  if (affected === "opponent") return "opponent_of_source_controller";
+  if (affected === "controller") return "same_as_source_controller";
+  return "any";
+}
+
+function normalizeSemanticText(value) {
+  return String(value || "")
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, "");
 }
 
 function parseMandatorySpecialSummonOutputs(text, sourceRace = "") {
@@ -976,6 +1520,32 @@ function resolveRelativePlayer(relativePlayer, sourceController) {
   return "";
 }
 
+function mandatorySpecialSummonOutputsFromNormalized(operations = [], sourceRace = "") {
+  return operations
+    .filter((operation) => operation?.type === "special_summon" && operation.mandatory !== false)
+    .map((operation, index) => ({
+      id: operation.subject === "effect_source"
+        ? "special-summon-effect-source"
+        : operation.subject === "generated_monster"
+          ? "special-summon-generated-monster"
+          : `special-summon-output-${index + 1}`,
+      subject: operation.subject || "selected_card",
+      ...(operation.name ? { name: operation.name } : {}),
+      playerRelation: operation.destinationPlayerRelation || "same_as_source_controller",
+      race: operation.subject === "effect_source"
+        ? String(sourceRace || operation.race || "")
+        : String(operation.race || ""),
+      mandatory: true,
+      semanticSource: "card_text_ir",
+    }));
+}
+
+function oppositePlayer(player) {
+  if (player === "self") return "opponent";
+  if (player === "opponent") return "self";
+  return "unknown";
+}
+
 function parseMaterialRecipe(text) {
   const segments = printedMaterialFormulaSegments(text);
   if (segments.length !== 2 || classifyPrintedMaterialFormula(segments) !== "fusion") return null;
@@ -1123,7 +1693,12 @@ function compileQuestionScenario({ query, programs }) {
     const explicitOrder = inferChainOrder(query, mention.index);
     const fusionEffectPresent = program.activatedEffects.some((effect) => effect.actionTags.includes("fusion_summon"));
     const activationPreflightPresent = program.activatedEffects.some((effect) => effect.mandatorySpecialSummonOutputs?.length);
-    const implicitOrder = !explicitOrder && (fusionEffectPresent || activationPreflightPresent) && effectActivationAsked(query, mention) ? 1 : 0;
+    const postCostStateReferencePresent = program.activatedEffects.some((effect) => effect.materialReferenceSpec);
+    const implicitOrder = !explicitOrder
+      && (fusionEffectPresent || activationPreflightPresent || postCostStateReferencePresent)
+      && effectActivationAsked(query, mention)
+      ? 1
+      : 0;
     const order = explicitOrder || implicitOrder;
     if (!order || !program.activatedEffects.length) continue;
     let effect = chooseActivatedEffect(query, mention, program.activatedEffects);
@@ -1136,7 +1711,10 @@ function compileQuestionScenario({ query, programs }) {
       effect = resolveEffectCategoryFromInstance(effect, contextualSourceCandidates[0]);
     }
     if (effect.compileIncompleteReason) return incomplete(effect.compileIncompleteReason);
-    if (!effect.fusionSpec && !effect.mandatorySpecialSummonOutputs?.length && activationLegalityExplicitlyAsked(query, mention)) {
+    if (!effect.fusionSpec
+        && !effect.mandatorySpecialSummonOutputs?.length
+        && !effect.materialReferenceSpec
+        && activationLegalityExplicitlyAsked(query, mention)) {
       return incomplete("activation_legality_not_compiled");
     }
     if (costMention && !effect.costSpec) return incomplete("declared_cost_not_part_of_selected_effect");
@@ -1314,6 +1892,85 @@ function compileQuestionScenario({ query, programs }) {
         }];
       }
     }
+    if (effect.materialReferenceSpec) {
+      const facts = inferPostCostMaterialFacts(query);
+      if (!facts.complete) return incomplete(facts.reason);
+      const matchingNumericEffects = continuousEffects.filter((continuousEffect) => (
+        (continuousEffect.valueModifiers || []).some((modifier) => (
+          modifier.property === "level"
+          && modifier.operation === "add"
+          && Number(modifier.amount) === facts.levelDelta
+        ))
+      ));
+      if (matchingNumericEffects.length !== 1) {
+        return incomplete(
+          matchingNumericEffects.length
+            ? "post_cost_level_modifier_ambiguous"
+            : "post_cost_level_modifier_not_compiled",
+        );
+      }
+      const modifierEffect = matchingNumericEffects[0];
+      const materialInstanceIds = facts.baseLevels.map((level, index) => {
+        const instanceId = `symbolic-cost-material#${index + 1}`;
+        gameCards.push({
+          cardId: instanceId,
+          instanceId,
+          definitionId: `symbolic-cost-material-${index + 1}`,
+          name: index === 0 ? "作为 cost 的协调" : "作为 cost 的非协调",
+          controller: source.controller,
+          owner: source.controller,
+          zone: "monster_zone",
+          onField: true,
+          faceUp: true,
+          position: "attack",
+          cardKind: "monster",
+          roles: [index === 0 ? "tuner" : "non_tuner"],
+          baseValues: { level },
+          currentValues: { level },
+        });
+        return instanceId;
+      });
+      const receiptId = `${source.instanceId}:${effect.id}:cost-materials`;
+      const resolutionPrimitive = createEffectPrimitive("summon_using_activation_cost_cards", {
+        receiptRef: receiptId,
+        materialStateAt: effect.materialReferenceSpec.materialStateAt,
+        requiredZone: "graveyard",
+        summonKinds: effect.materialReferenceSpec.summonKinds,
+        availableSynchroLevels: facts.availableSynchroLevels,
+        unavailableSynchroLevels: facts.unavailableSynchroLevels,
+        assumedAvailableSummonKinds: (effect.materialReferenceSpec.summonKinds || [])
+          .filter((kind) => kind !== "synchro"),
+        allOrNone: true,
+      });
+      activationCostSequence = [{
+        id: "send-field-materials-to-graveyard",
+        connector: "INDEPENDENT",
+        primitive: createEffectPrimitive("send_field_monsters_to_graveyard", {
+          player: source.controller,
+          amount: materialInstanceIds.length,
+          cardInstanceIds: materialInstanceIds,
+          requiredRoles: effect.costSpec.requiredRoles,
+          faceUp: effect.costSpec.faceUp,
+          receiptId,
+        }),
+      }];
+      sequence = [{
+        id: "summon-using-activation-cost-cards",
+        connector: "INDEPENDENT",
+        primitive: resolutionPrimitive,
+      }];
+      activationPreconditions.push({
+        type: "operation_performable_after_cost",
+        evaluationPoint: "after_projected_cost",
+        primitive: resolutionPrimitive,
+        reason: "post_cost_material_state_does_not_support_required_outputs",
+      });
+      effect.postCostStateFacts = {
+        ...facts,
+        modifierSourceDefinitionId: modifierEffect.sourceDefinitionId,
+        modifierSourceName: modifierEffect.sourceCardName,
+      };
+    }
     chainLinks.push({
       id: `C${order}`,
       order,
@@ -1324,10 +1981,13 @@ function compileQuestionScenario({ query, programs }) {
       sourceExpectedZone: source.zone,
       effectId: effect.id,
       effectCategory: effect.effectCategory,
-      activationPremise: effect.fusionSpec || effect.mandatorySpecialSummonOutputs?.length ? "derived" : "declared_legal",
-      activationPremiseText: effect.fusionSpec || effect.mandatorySpecialSummonOutputs?.length
+      activationPremise: effect.fusionSpec || effect.mandatorySpecialSummonOutputs?.length || effect.materialReferenceSpec
+        ? "derived"
+        : "declared_legal",
+      activationPremiseText: effect.fusionSpec || effect.mandatorySpecialSummonOutputs?.length || effect.materialReferenceSpec
         ? "由事件、费用与发动前操作可行性共同验证。"
         : "题设已声明该连锁项发动；展示、费用、对象等发动手续按题设视为已满足。",
+      ...(effect.postCostStateFacts ? { postCostStateFacts: effect.postCostStateFacts } : {}),
       activationCostSequence,
       activationPreconditions,
       sequence,
@@ -1397,8 +2057,12 @@ function buildInitialCardState(query, program, mention, ordinal = 1, instanceCou
   const controller = overrides.controller || inferController(nearby.before, nearby.after);
   const position = overrides.position || inferPosition(localWindow(query, mentionIndex, mention.surface.length, 16, 20));
   const fieldCard = zone === "monster_zone" || zone === "spell_trap_zone";
-  const restrictionApplying = program.continuousEffects.some((effect) => effect.fieldRestrictions?.length)
-    && /(?:效果)?.{0,8}(?:正在)?(?:适用|適用|applying)/iu.test(nearby.full);
+  const restrictionApplying = program.continuousEffects.some((effect) => (
+    effect.fieldRestrictions?.length || effect.valueModifiers?.length
+  )) && (
+    /(?:效果)?.{0,8}(?:正在)?(?:适用|適用|applying)/iu.test(nearby.full)
+    || /(?:导致|導致|使得|使)[^。；;]{0,36}(?:变成|變成|变为|變為|上升|下降|增加|减少)/iu.test(nearby.full)
+  );
   const contextualEffectCategory = inferContextualEffectCategory({
     query,
     program,
@@ -1452,6 +2116,7 @@ function effectActivationAsked(query, mention) {
 function activationLegalityExplicitlyAsked(query, mention) {
   const context = localWindow(query, mention.index, mention.surface.length, 72, 88).full;
   return /(?:能否|能不能|能不能够|是否(?:可以|能够|能)?|可否|可不可以|可以不可以|还(?:能|可以)|仍(?:能|可以)).{0,18}(?:发动|發動|発動|activate)/iu.test(context)
+    || /(?:可以|能够|能)\s*(?:再|继续|繼續)?\s*(?:发动|發動|発動|activate).{0,48}(?:吗|嗎|嘛|么|麼|[?？])/iu.test(context)
     || /(?:发动|發動|発動|activate).{0,18}(?:可以吗|可以嗎|能吗|能嗎|是否合法|是否可以)/iu.test(context)
     || /(?:发动|發動|発動|activate)(?:这个|這個|该|該|其)?(?:效果)?\s*(?:吗|嗎|嘛|么|麼|[?？])/iu.test(context);
 }
@@ -1648,8 +2313,26 @@ function inferZone(before, after, program) {
     ["monster_zone", /场上|場上|怪兽区|怪獸區|怪兽区域|怪獸區域/gu],
   ];
   let latest = { zone: "", index: -1 };
+  // Positional words in a completed clause describe that clause's card, not
+  // the next card mention. This prevents “opponent controls A, can I activate
+  // B?” from incorrectly placing B in A's Monster Zone.
+  const beforeText = String(before || "");
+  const currentClause = beforeText.slice(
+    Math.max(
+      beforeText.lastIndexOf("，"),
+      beforeText.lastIndexOf(","),
+      beforeText.lastIndexOf("。"),
+      beforeText.lastIndexOf("；"),
+      beforeText.lastIndexOf(";"),
+      beforeText.lastIndexOf("？"),
+      beforeText.lastIndexOf("?"),
+      beforeText.lastIndexOf("！"),
+      beforeText.lastIndexOf("!"),
+      beforeText.lastIndexOf("\n"),
+    ) + 1,
+  );
   for (const [zone, pattern] of markers) {
-    for (const match of before.matchAll(pattern)) {
+    for (const match of currentClause.matchAll(pattern)) {
       if ((match.index ?? -1) > latest.index) latest = { zone, index: match.index ?? -1 };
     }
   }
