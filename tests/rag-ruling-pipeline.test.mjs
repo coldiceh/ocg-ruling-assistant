@@ -2003,7 +2003,10 @@ test("compacted_prompt_keeps_each_critical_evidence_bucket", () => {
     userQuery: "需要同时参考官方问答、卡文、规则书和FAQ的复杂问题",
     cardResolution: { resolvedCards: cards },
     evidence: {
-      officialQaDirectCandidates: [{ id: "direct-critical", type: "official_qa", title: "官方直答", text: longText("DIRECT_MARKER"), isDirect: true }],
+      officialQaDirectCandidates: [
+        { id: "direct-critical", type: "official_qa", title: "官方直答", text: longText("DIRECT_MARKER"), isDirect: true },
+        { id: "direct-critical-2", type: "official_qa", title: "第二条官方直答", text: longText("DIRECT_MARKER_2"), isDirect: true },
+      ],
       userProvidedCardTexts: [{ id: "user-critical", type: "user_provided_text", title: "用户卡文", text: longText("USER_MARKER") }],
       cardTexts: [{ id: "card-critical", type: "card_text", title: "卡片文本", text: longText("CARD_MARKER") }],
       rawRelatedEvidence: [{ id: "rule-critical", type: "rulebook", title: "规则书", text: longText("RULE_MARKER") }],
@@ -2021,6 +2024,170 @@ test("compacted_prompt_keeps_each_critical_evidence_bucket", () => {
   assert.match(bundle.prompt, /RULE_MARKER/u);
   assert.match(bundle.prompt, /FAQ_MARKER/u);
   assert.match(bundle.prompt, /RELATED_MARKER/u);
+});
+
+test("unique exact official QA uses a focused complete-answer route", async () => {
+  const directCards = [
+    {
+      id: "91001",
+      name: "规则神兽",
+      aliases: ["规则神兽"],
+      cardType: "怪兽",
+      effectText: "此卡在规则上也视为“规则学”卡。无关卡文的特殊召唤限制。",
+    },
+    {
+      id: "91002",
+      name: "规则学都",
+      aliases: ["规则学都"],
+      cardType: "魔法",
+      effectText: "宣言1只“规则学”怪兽的卡名才能发动。",
+    },
+  ];
+  const directQa = {
+    id: "ygoresources-qa-focused-route",
+    recordType: "qa",
+    question: "可以宣言「规则神兽」发动「规则学都」②效果吗？",
+    answer: "可以宣言并发动，因为「规则神兽」在规则上也视为“规则学”卡。（本回合不能再次宣言「规则神兽」。）",
+    cardIds: ["91001", "91002"],
+    questionCardIds: ["91001", "91002"],
+    sourceUrl: "https://example.test/qa/focused-route",
+  };
+  let finalPrompt = "";
+  let rulebookModelCalled = false;
+  const answer = await answerRagRulingQuestion({
+    question: directQa.question,
+    cards: directCards,
+    records: [],
+    qaRecords: [directQa],
+    rulebookModelInvoker: async () => {
+      rulebookModelCalled = true;
+      throw new Error("exact official QA must skip broad rulebook grounding");
+    },
+    modelInvoker: async ({ prompt }) => {
+      finalPrompt = prompt;
+      return JSON.stringify({
+        answerLevel: "official_confirmed",
+        shortAnswer: "可以发动。",
+        reasoning: ["官方问答确认可以发动。"],
+        usedCards: ["规则神兽", "规则学都"],
+        usedEvidence: [{ id: "card-text-91002", type: "card_text", title: "规则学都 的卡片文本" }],
+        missingInfo: [],
+        riskFlags: [],
+        confidenceSelfEstimate: "high",
+      });
+    },
+  });
+
+  assert.equal(rulebookModelCalled, false);
+  assert.match(finalPrompt, /本回合不能再次宣言/u);
+  assert.doesNotMatch(finalPrompt, /无关卡文的特殊召唤限制/u);
+  assert.equal(answer.answerLevel, "official_confirmed");
+  assert.ok(answer.usedEvidence.some((item) => item.id === directQa.id && item.type === "official_qa"));
+  assert.match(answer.shortAnswer, /本回合不能再次宣言/u);
+  assert.ok(answer.reasoning.some((item) => /本回合不能再次宣言/u.test(item)));
+  assert.ok(answer.riskFlags.includes("official_direct_evidence_enforced"));
+  assert.ok(answer.debug.retrievalWarnings.includes("official_direct_focused_prompt"));
+
+  const contradicted = await answerRagRulingQuestion({
+    question: directQa.question,
+    cards: directCards,
+    records: [],
+    qaRecords: [directQa],
+    modelInvoker: async () => JSON.stringify({
+      answerLevel: "official_confirmed",
+      shortAnswer: "不能发动。",
+      reasoning: ["错误地把官方结论写反。"],
+      usedCards: ["规则神兽", "规则学都"],
+      usedEvidence: [{ id: directQa.id, type: "official_qa", title: "官方问答" }],
+      missingInfo: [],
+      riskFlags: [],
+      confidenceSelfEstimate: "high",
+    }),
+  });
+  assert.match(contradicted.shortAnswer, /官方 Q&A 完整回答原文/u);
+  assert.match(contradicted.shortAnswer, /可以宣言并发动/u);
+  assert.ok(contradicted.riskFlags.includes("official_direct_source_fallback_after_incomplete_summary"));
+});
+
+test("focused official QA prompt preserves the full-source tail without invalid JSON slicing", () => {
+  const sourceText = `问题？回答开头。${"中间内容".repeat(800)}（TAIL_MARKER：本回合不能再次宣言同名卡。）`;
+  const bundle = buildRagRulingPromptBundle({
+    userQuery: "可以发动这个效果吗？",
+    cardResolution: {
+      resolvedCards: [{ id: "92001", name: "长文本测试卡", aliases: ["长文本测试卡"] }],
+      unresolvedMentions: [],
+      ambiguousMentions: [],
+    },
+    evidence: {
+      officialQaDirectCandidates: [{
+        id: "ygoresources-qa-long-tail",
+        type: "official_qa",
+        title: "长官方回答",
+        fullText: sourceText,
+        text: `${sourceText.slice(0, 100)}…`,
+        sourceUrl: "https://example.test/qa/long-tail",
+        isDirect: true,
+        matchLevel: "official_qa_exact",
+        matchedQuestionCardIds: ["92001"],
+        questionCardIdCoverage: 1,
+        questionCardIdCount: 1,
+        authoritativeSceneMatch: true,
+        authoritativeSceneMatchReason: "raw_or_normalized_query",
+      }],
+      officialQaRelated: [],
+      faqRelated: [],
+      cardTexts: [],
+      userProvidedCardTexts: [],
+      rawRelatedEvidence: [],
+      retrievalWarnings: [],
+    },
+    env: { RAG_MAX_PROMPT_CHARS: "1800" },
+  });
+
+  assert.equal(bundle.prompt.length <= 1800, true);
+  assert.equal(bundle.promptTruncated, true);
+  assert.match(bundle.prompt, /TAIL_MARKER/u);
+  assert.doesNotThrow(() => JSON.parse(bundle.prompt.split("\n").at(-1)));
+});
+
+test("non-exact or ambiguous official candidates do not enter the authoritative fast route", () => {
+  const baseEvidence = {
+    officialQaDirectCandidates: [{
+      id: "qa-not-exact",
+      type: "official_qa",
+      title: "相似问答",
+      fullText: "问题？可以发动。",
+      text: "问题？可以发动。",
+      isDirect: true,
+      matchLevel: "official_qa_near",
+    }],
+    officialQaRelated: [],
+    faqRelated: [],
+    cardTexts: [],
+    userProvidedCardTexts: [],
+    rawRelatedEvidence: [],
+    retrievalWarnings: [],
+  };
+  const nearBundle = buildRagRulingPromptBundle({
+    userQuery: "问题",
+    cardResolution: { resolvedCards: [], unresolvedMentions: [], ambiguousMentions: [] },
+    evidence: baseEvidence,
+  });
+  assert.equal(nearBundle.warnings.includes("official_direct_focused_prompt"), false);
+
+  const ambiguousBundle = buildRagRulingPromptBundle({
+    userQuery: "问题",
+    cardResolution: { resolvedCards: [], unresolvedMentions: [], ambiguousMentions: [{ input: "问题卡" }] },
+    evidence: {
+      ...baseEvidence,
+      officialQaDirectCandidates: [{
+        ...baseEvidence.officialQaDirectCandidates[0],
+        id: "qa-exact-but-ambiguous",
+        matchLevel: "official_qa_exact",
+      }],
+    },
+  });
+  assert.equal(ambiguousBundle.warnings.includes("official_direct_focused_prompt"), false);
 });
 
 test("secrets_not_returned_in_debug", async () => {

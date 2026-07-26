@@ -128,7 +128,7 @@ test("plain Chinese '能发动' wording is classified as an activation question"
   assert.equal(classifyOfficialQaQuestionType("我方能发动这张卡吗？"), "can_activate");
 });
 
-test("a card-name translation difference remains exact when the structured identity and question skeleton agree", () => {
+test("a card-name translation difference remains near until role identity is proven", () => {
   const matches = searchOfficialQaEvidence({
     question: "「译名乙」在先攻第1回合可以发动吗？",
     records: [qa({
@@ -140,8 +140,9 @@ test("a card-name translation difference remains exact when the structured ident
     resolvedCards: [{ id: "100", name: "译名乙" }],
   });
 
-  assert.equal(matches.exact[0]?.record.id, "qa-1");
-  assert.ok(matches.exact[0]?.matchedBy.includes("card_name_agnostic_skeleton"));
+  assert.equal(matches.exact.length, 0);
+  assert.equal(matches.all[0]?.record.id, "qa-1");
+  assert.ok(matches.all[0]?.matchedBy.includes("card_name_agnostic_skeleton"));
 });
 
 test("the unique QA whose question contains every queried card wins over answer-only example mentions", () => {
@@ -169,6 +170,78 @@ test("the unique QA whose question contains every queried card wins over answer-
     resolvedCards: [{ id: "100", name: "卡片100" }, { id: "200", name: "卡片200" }],
   });
 
-  assert.equal(matches.exact[0]?.record.id, "qa-target");
-  assert.ok(matches.exact[0]?.matchedBy.includes("unique_question_card_set"));
+  assert.equal(matches.exact.length, 0);
+  assert.equal(matches.all[0]?.record.id, "qa-target");
+});
+
+test("a unique cross-language card-name declaration scene remains near until its role graph is proven", () => {
+  const matches = searchOfficialQaEvidence({
+    question: "「测试怪兽」と宣言して「测试学都」②の効果を発動できますか？",
+    records: [{
+      id: "qa-cross-language-scene",
+      recordType: "qa",
+      cardIds: ["100", "200"],
+      questionCardIds: ["100", "200"],
+      question: "When activating <<200>>'s effect, can I declare the card name of <<100>>?",
+      answer: "Yes. You cannot declare that same card name again this turn.",
+    }],
+    resolvedCards: [{ id: "100", name: "测试怪兽" }, { id: "200", name: "测试学都" }],
+  });
+
+  assert.equal(matches.exact.length, 0);
+  assert.equal(matches.all[0]?.authoritativeSceneMatch, false);
+  assert.deepEqual(matches.all[0]?.distinctiveSemanticHits, ["declare_card_name"]);
+});
+
+test("an exact card set with a different operation is not authoritative", () => {
+  const matches = searchOfficialQaEvidence({
+    question: "「测试怪兽」と宣言して「测试学都」②の効果を発動できますか？",
+    records: [{
+      id: "qa-different-operation",
+      recordType: "qa",
+      cardIds: ["100", "200"],
+      questionCardIds: ["100", "200"],
+      question: "Can <<100>> be Special Summoned while the effect of <<200>> is applying?",
+      answer: "Yes.",
+    }],
+    resolvedCards: [{ id: "100", name: "测试怪兽" }, { id: "200", name: "测试学都" }],
+  });
+
+  assert.equal(matches.all[0]?.authoritativeSceneMatch, false);
+});
+
+test("conflicting effect numbers prevent an authoritative scene match", () => {
+  const matches = searchOfficialQaEvidence({
+    question: "可以宣言「测试怪兽」发动「测试学都」②效果吗？",
+    records: [{
+      id: "qa-wrong-effect-number",
+      recordType: "qa",
+      cardIds: ["100", "200"],
+      questionCardIds: ["100", "200"],
+      question: "可以宣言「测试怪兽」发动「测试学都」①效果吗？",
+      answer: "可以。",
+    }],
+    resolvedCards: [{ id: "100", name: "测试怪兽" }, { id: "200", name: "测试学都" }],
+  });
+
+  assert.equal(matches.all[0]?.effectNumberCompatible, false);
+  assert.equal(matches.all[0]?.authoritativeSceneMatch, false);
+});
+
+test("two same-card same-operation scenes remain non-authoritative", () => {
+  const records = ["a", "b"].map((suffix) => ({
+    id: `qa-declare-${suffix}`,
+    recordType: "qa",
+    cardIds: ["100", "200"],
+    questionCardIds: ["100", "200"],
+    question: `When activating <<200>>'s effect, can I declare the card name of <<100>>? ${suffix}`,
+    answer: "Yes.",
+  }));
+  const matches = searchOfficialQaEvidence({
+    question: "「测试怪兽」と宣言して「测试学都」②の効果を発動できますか？",
+    records,
+    resolvedCards: [{ id: "100", name: "测试怪兽" }, { id: "200", name: "测试学都" }],
+  });
+
+  assert.ok(matches.all.every((item) => item.authoritativeSceneMatch === false));
 });

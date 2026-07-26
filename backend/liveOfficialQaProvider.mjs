@@ -90,7 +90,7 @@ export async function retrieveLiveOfficialQa({
   }
 
   const cardNameById = new Map(cards.map((card) => [String(card.id), displayCardName(card)]));
-  const records = (await Promise.all(qaSelection.ids.map(async (qaId) => {
+  const fetchedRecords = (await Promise.all(qaSelection.ids.map(async (qaId) => {
     try {
       const payload = await fetchJsonResilient(fetchImpl, `${baseUrl}/data/qa/${encodeURIComponent(qaId)}`, {
         timeoutMs,
@@ -102,6 +102,20 @@ export async function retrieveLiveOfficialQa({
       return null;
     }
   }))).filter(Boolean);
+  const fetchedRecordIds = new Set(fetchedRecords.map((record) => String(record.sourceId || "")));
+  const candidatePoolComplete = allCardIndexesAvailable
+    && indexedSelection.candidatePoolSize <= positiveInteger(maxCandidates, 8)
+    && indexedSelection.ids.every((id) => fetchedRecordIds.has(String(id)));
+  const records = fetchedRecords.map((record) => ({
+    ...record,
+    retrievalContext: {
+      ...(record.retrievalContext || {}),
+      candidatePoolComplete,
+      fetchedCandidateCount: fetchedRecords.length,
+      selectedCandidateCount: qaSelection.ids.length,
+      allCardIndexesAvailable,
+    },
+  }));
 
   return {
     records,
@@ -224,7 +238,8 @@ function normalizeQaRecord(qaId, payload, cardNameById, selection) {
   const localized = payload?.qaData?.ja || payload?.qaData?.en || firstObjectValue(payload?.qaData);
   if (!localized) return null;
   const cardIds = uniqueNumericIds(payload?.cards);
-  const rawQuestion = localized.question || localized.title;
+  const rawQuestion = localized.title || localized.question;
+  const rawDetailedQuestion = localized.question || localized.title;
   const replaceCards = (value) => String(value || "").replace(/<<\s*(\d{1,10})\s*>>/gu, (_match, id) => (
     cardNameById.has(String(id)) ? cardNameById.get(String(id)) : `卡片#${id}`
   ));
@@ -243,12 +258,14 @@ function normalizeQaRecord(qaId, payload, cardNameById, selection) {
     status: "confirmed",
     title,
     question,
+    rawQuestion,
+    rawDetailedQuestion,
     answer,
     conclusion: answer,
     text: [question, detailedQuestion !== question ? detailedQuestion : "", answer].filter(Boolean).join("\n"),
     cards: cardIds.map((id) => cardNameById.get(String(id)) || `卡片#${id}`),
     cardIds,
-    questionCardIds: extractInlineCardIds(rawQuestion),
+    questionCardIds: extractQuestionIdentityCardIds(rawQuestion, rawDetailedQuestion),
     source: "Konami Official Card Database via YGOResources",
     sourceUrl: `https://www.db.yugioh-card.com/yugiohdb/faq_search.action?fid=${encodeURIComponent(qaId)}&ope=5&request_locale=ja`,
     mirrorUrl: `${DEFAULT_BASE_URL}/data/qa/${encodeURIComponent(qaId)}`,
@@ -305,6 +322,16 @@ async function fetchJsonCached(fetchImpl, url, { timeoutMs, cacheTtlMs }) {
 
 function extractInlineCardIds(value) {
   return uniqueNumericIds([...String(value || "").matchAll(/<<\s*(\d{1,10})\s*>>/gu)].map((match) => match[1]));
+}
+
+function extractQuestionIdentityCardIds(rawTitle, rawDetailedQuestion) {
+  const scenarioText = String(rawDetailedQuestion || "")
+    .replace(/『[\s\S]*?』/gu, " ")
+    .replace(/“[\s\S]*?”/gu, " ");
+  return uniqueNumericIds([
+    ...extractInlineCardIds(rawTitle),
+    ...extractInlineCardIds(scenarioText),
+  ]);
 }
 
 async function fetchJsonResilient(fetchImpl, url, options) {
