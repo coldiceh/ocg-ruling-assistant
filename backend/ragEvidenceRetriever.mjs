@@ -570,7 +570,10 @@ function normalizeRecord(record = {}) {
     ...(record.cardIds || []),
     ...extractInlineCardIds(text),
   ].map((item) => String(item || "")).filter(Boolean))];
-  const questionCardIds = extractInlineCardIds([record.question, record.title].filter(Boolean).join("\n"));
+  const questionCardIds = [...new Set([
+    ...(record.questionCardIds || []),
+    ...extractInlineCardIds([record.question, record.title].filter(Boolean).join("\n")),
+  ].map((item) => String(item || "")).filter(Boolean))];
   const cards = [record.cardName, ...(record.cards || []), ...(record.cardNames || [])].filter(Boolean);
   return {
     ...record,
@@ -699,6 +702,15 @@ function evidenceFromOfficialMatch(match, type, maxTextChars, warnings) {
     score: match.score,
     matchLevel: match.matchLevel,
     matchedBy: match.matchedBy || [],
+    matchedQuestionCardIds: match.matchedQuestionCardIds || [],
+    questionCardIdCoverage: Number(match.questionCardIdCoverage || 0),
+    questionCardIdCount: Number(match.questionCardIdCount || 0),
+    authoritativeSceneMatch: match.authoritativeSceneMatch === true,
+    authoritativeSceneMatchReason: match.authoritativeSceneMatchReason || "",
+    candidatePoolComplete: match.candidatePoolComplete === true,
+    distinctiveSemanticHits: match.distinctiveSemanticHits || [],
+    effectNumberCompatible: match.effectNumberCompatible !== false,
+    sceneQualifiersCompatible: match.sceneQualifiersCompatible !== false,
     isDirect: match.matchLevel === "official_qa_exact",
   };
 }
@@ -713,7 +725,14 @@ function evidenceFromRecord(record, type, maxTextChars = 1600, warnings = []) {
     recordType: record.recordType || "",
     title: record.title || record.question || String(record.id || "资料"),
     cardIds: record.cardIds || [],
+    questionCardIds: record.questionCardIds || [],
     cards: record.cards || record.cardNames || [],
+    question: record.question || "",
+    rawQuestion: record.rawQuestion || "",
+    rawDetailedQuestion: record.rawDetailedQuestion || "",
+    answer: record.answer || record.conclusion || "",
+    retrievalContext: record.retrievalContext || {},
+    fullText: text,
     text: truncated ? `${text.slice(0, Math.max(0, maxTextChars - 1))}…` : text,
     sourceUrl: record.sourceUrl || record.officialUrl || "",
     sourceType: record.sourceType || "",

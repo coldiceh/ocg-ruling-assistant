@@ -6,6 +6,7 @@ const QUESTION_TYPES = [
   ["who_can_activate", /(?:谁(?:可以|能)?.*发动|由谁发动)|誰が.*発動|who (?:can|may) activate|which player.*activate/iu],
   ["card_activation_vs_effect_activation", /卡的发动.*效果发动|效果发动.*卡的发动|カードの発動.*効果の発動|card activation.*effect activation/iu],
   ["copy_effect_procedure", /复制.*效果|复制.*发动手续|同じ効果.*発動|copy.*effect|copied effect/iu],
+  ["declaration_legality", /(?:能否|是否(?:可以|能)?|可不可以|能不能|可以|能).{0,40}(?:宣言|声明)|(?:宣言|声明).{0,50}(?:できますか|できる|可以|能|発動)|(?:can|may).{0,50}\bdeclare\b|\bdeclare\b.{0,50}(?:can|may)/iu],
   ["target_legality", /能否.*(?:取|选择).*对象|不能成为.*对象|対象に.*(?:できます|できません)|can(?:not)? target|legal target/iu],
   ["timing_window", /时点|伤害步骤|伤害计算|错过时点|タイミング|ダメージステップ|timing|damage step/iu],
   ["continuous_effect_during_resolution", /效果处理中.*(?:永续|持续|自坏)|処理中.*永続|continuous effect.*resol/iu],
@@ -47,7 +48,44 @@ const SEMANTIC_CONCEPTS = [
   ["discard", /捨て|丢弃|discard/iu],
   ["first_turn", /先攻.{0,12}(?:1|１)ターン|先攻第一回合|first turn.{0,20}(?:going first|of the duel)?/iu],
   ["simultaneous_summon", /同時.{0,16}特殊召喚|同时.{0,16}特殊召唤|simultaneous.{0,20}special summon/iu],
+  ["declare_card_name", /宣言|声明|\bdeclare\b/iu],
+  ["draw", /ドロー|抽卡|抽牌|\bdraw\b/iu],
+  ["banish", /除外|banish/iu],
+  ["destroy", /破壊|破坏|destroy/iu],
+  ["battle", /戦闘|战斗|battle/iu],
+  ["attack", /攻撃|攻击|attack/iu],
+  ["reveal_show", /見せ|展示|给对方观看|公開|公开|reveal|show.{0,20}(?:hand|card)/iu],
+  ["change_position", /表示形式|表示形態|表示状态|战斗表示形式|battle position|change.{0,20}position/iu],
+  ["unaffected", /受けない|不受.{0,16}效果|unaffected/iu],
+  ["replacement", /代わり|代替|instead/iu],
+  ["race_identity", /(?:族|種族|race|type)\b/iu],
+  ["monster_zone", /モンスターゾーン|怪兽区域|怪獸區域|monster zone/iu],
+  ["field_presence", /フィールド|场上|場上|\bfield\b/iu],
+  ["continuous_applying", /適用中|适用中|適用され|正在适用|while.{0,30}(?:appl|in effect)|is applying/iu],
 ];
+
+const GENERIC_SEMANTIC_CONCEPTS = new Set([
+  "activation",
+  "resolution",
+  "chain",
+  "effect",
+  "monster_effect",
+]);
+
+const SCENE_QUALIFIER_CONCEPTS = new Set([
+  "damage_step",
+  "first_turn",
+  "temporary_banish",
+  "simultaneous_summon",
+]);
+
+const SCENE_QUALIFIER_PHRASES = new Set([
+  "after_chain_resolution",
+  "during_resolution",
+  "damage_step",
+  "miss_timing",
+  "summon_response",
+]);
 
 export function normalizeOfficialQaQuery(value) {
   return String(value || "")
@@ -89,6 +127,7 @@ export function searchOfficialQaEvidence({ question, records = [], resolvedCards
     .filter((record) => ["qa", "card-faq", "official-database"].includes(record.recordType))
     .map((record) => scoreRecord({
       record,
+      query,
       normalizedQuery,
       normalizedQuerySkeleton,
       queryType,
@@ -98,9 +137,12 @@ export function searchOfficialQaEvidence({ question, records = [], resolvedCards
       resolvedNames,
     }))
     .filter((item) => item.score >= 0.2);
+  markAuthoritativeSceneMatches(scored);
   promoteUniqueExactCardSet(scored, queryType, resolvedIds);
   promoteUniqueQuestionCardMatch(scored, resolvedIds, queryType);
-  scored.sort((left, right) => right.score - left.score || String(left.record.id).localeCompare(String(right.record.id)));
+  scored.sort((left, right) => right.score - left.score
+    || right.questionCardIdCoverage - left.questionCardIdCoverage
+    || String(left.record.id).localeCompare(String(right.record.id)));
   promoteUniqueSemanticMatch(scored, resolvedIds, queryType);
   const ranked = scored.slice(0, Math.max(limit, 1));
 
@@ -149,6 +191,7 @@ export function resolveEntitiesFromOfficialQaMatch({ resolution = {}, matches, c
 
 function scoreRecord({
   record,
+  query,
   normalizedQuery,
   normalizedQuerySkeleton,
   queryType,
@@ -181,11 +224,27 @@ function scoreRecord({
   const semanticHits = queryConcepts.filter((concept) => evidenceConcepts.includes(concept));
   const semanticScore = setDiceSimilarity(queryConcepts, evidenceConcepts);
   const semanticQueryCoverage = queryConcepts.length ? semanticHits.length / queryConcepts.length : 0;
+  const distinctiveQueryConcepts = queryConcepts.filter((concept) => !GENERIC_SEMANTIC_CONCEPTS.has(concept));
+  const distinctiveSemanticHits = distinctiveQueryConcepts.filter((concept) => evidenceConcepts.includes(concept));
+  const distinctiveSemanticQueryCoverage = distinctiveQueryConcepts.length
+    ? distinctiveSemanticHits.length / distinctiveQueryConcepts.length
+    : 0;
+  const queryEffectNumbers = extractEffectNumbers(query);
+  const evidenceEffectNumbers = extractEffectNumbers(questionText);
+  const effectNumberCompatible = !queryEffectNumbers.length
+    || !evidenceEffectNumbers.length
+    || queryEffectNumbers.some((number) => evidenceEffectNumbers.includes(number));
+  const querySceneQualifiers = extractSceneQualifiers(queryConcepts, queryPhrases);
+  const evidenceSceneQualifiers = extractSceneQualifiers(evidenceConcepts, evidencePhrases);
+  const sceneQualifiersCompatible = sameStringSet(querySceneQualifiers, evidenceSceneQualifiers);
   const matchedCardIds = [...resolvedIds].filter((id) => recordIds.has(id));
   const matchedQuestionCardIds = [...resolvedIds].filter((id) => recordQuestionIds.has(id));
   const cardIdMatch = matchedCardIds.length > 0;
   const cardIdCoverage = resolvedIds.size ? matchedCardIds.length / resolvedIds.size : 0;
   const questionCardIdCoverage = resolvedIds.size ? matchedQuestionCardIds.length / resolvedIds.size : 0;
+  const exactQuestionCardIdSet = resolvedIds.size > 0
+    && recordQuestionIds.size === resolvedIds.size
+    && matchedQuestionCardIds.length === resolvedIds.size;
   const exactResolvedCardIdSet = resolvedIds.size >= 2
     && recordIds.size === resolvedIds.size
     && matchedCardIds.length === resolvedIds.size;
@@ -204,17 +263,21 @@ function scoreRecord({
   // that the cards are the same. Only the original wording may establish a raw
   // exact match, and any structured card identity present on both sides must
   // agree completely.
-  const rawExact = identityCompatibleForExact && (
-    exactNormalized
-    || (exactSkeleton && resolvedIds.size > 0 && cardIdCoverage === 1)
-    || (containment >= 0.9 && similarity >= 0.86)
-  );
+  const rawExact = identityCompatibleForExact && exactNormalized;
+  const rawSceneMatch = rawExact && typeCompatible;
+  const structuredSceneMatch = exactQuestionCardIdSet
+    && queryType !== "unknown"
+    && evidenceType === queryType
+    && distinctiveQueryConcepts.length > 0
+    && distinctiveSemanticHits.length > 0
+    && effectNumberCompatible
+    && sceneQualifiersCompatible;
   const lexicalScore = Math.max(similarity, containment, skeletonSimilarity, skeletonContainment);
   let score = Math.max(lexicalScore, semanticScore * 0.72);
   if (typeCompatible && queryType !== "unknown") score += 0.16;
   if (cardMatch) score += 0.17;
   if (resolvedIds.size >= 2 && cardIdCoverage === 1) score += 0.24;
-  if (resolvedIds.size >= 2 && questionCardIdCoverage === 1) score += 0.08;
+  if (resolvedIds.size >= 2 && questionCardIdCoverage === 1) score += 0.2;
   if (exactCardIdSet) score += 0.12;
   score += Math.min(0.18, phraseHits.length * 0.06);
   score = Math.min(1, Number(score.toFixed(4)));
@@ -234,12 +297,28 @@ function scoreRecord({
     matchedQuestionCardIds,
     cardIdCoverage,
     questionCardIdCoverage,
+    questionCardIdCount: recordQuestionIds.size,
+    exactQuestionCardIdSet,
     exactCardIdSet,
     identityCompatibleForExact,
     lexicalScore,
     semanticScore,
     semanticQueryCoverage,
     semanticHits,
+    distinctiveQueryConcepts,
+    distinctiveSemanticHits,
+    distinctiveSemanticQueryCoverage,
+    queryEffectNumbers,
+    evidenceEffectNumbers,
+    effectNumberCompatible,
+    querySceneQualifiers,
+    evidenceSceneQualifiers,
+    sceneQualifiersCompatible,
+    rawSceneMatch,
+    structuredSceneMatch,
+    authoritativeSceneMatch: false,
+    authoritativeSceneMatchReason: "",
+    candidatePoolComplete: record?.retrievalContext?.candidatePoolComplete === true,
     matchedBy: [
       rawExact && "raw_or_normalized_query",
       exactSkeleton && "card_name_agnostic_skeleton",
@@ -251,6 +330,50 @@ function scoreRecord({
     matchedPhrases: phraseHits,
     questionText,
   };
+}
+
+function markAuthoritativeSceneMatches(items) {
+  const structuredMatches = items.filter((item) => item.structuredSceneMatch && item.candidatePoolComplete);
+  for (const item of items) {
+    if (item.rawSceneMatch) {
+      item.authoritativeSceneMatch = true;
+      item.authoritativeSceneMatchReason = "raw_or_normalized_query";
+      continue;
+    }
+    if (item.structuredSceneMatch && item.candidatePoolComplete && structuredMatches.length === 1) {
+      item.authoritativeSceneMatch = true;
+      item.authoritativeSceneMatchReason = "unique_structured_scene";
+    }
+  }
+}
+
+function extractEffectNumbers(value) {
+  const text = String(value || "").normalize("NFKC");
+  const numbers = [
+    ...[...text.matchAll(/[①②③④⑤⑥⑦⑧⑨⑩]/gu)].map((match) => String("①②③④⑤⑥⑦⑧⑨⑩".indexOf(match[0]) + 1)),
+    ...[...text.matchAll(/(?:第\s*)?([1-9]|10)\s*(?:个|個|つ目)?(?:的|の)?\s*(?:効果|效果|effect)/giu)].map((match) => String(Number(match[1]))),
+    ...[...text.matchAll(/\b(?:the\s+)?(first|second|third|fourth|fifth)\s+effect\b/giu)].map((match) => ({
+      first: "1",
+      second: "2",
+      third: "3",
+      fourth: "4",
+      fifth: "5",
+    })[match[1].toLowerCase()]),
+  ].filter(Boolean);
+  return [...new Set(numbers)];
+}
+
+function extractSceneQualifiers(concepts, phrases) {
+  return [...new Set([
+    ...(concepts || []).filter((concept) => SCENE_QUALIFIER_CONCEPTS.has(concept)),
+    ...(phrases || []).filter((phrase) => SCENE_QUALIFIER_PHRASES.has(phrase)),
+  ])].sort();
+}
+
+function sameStringSet(left, right) {
+  if ((left || []).length !== (right || []).length) return false;
+  const rightSet = new Set(right || []);
+  return (left || []).every((item) => rightSet.has(item));
 }
 
 function questionTypeCompatible(queryType, evidenceType) {
@@ -286,6 +409,7 @@ function promoteUniqueExactCardSet(items, queryType, resolvedIds) {
   });
   if (candidates.length !== 1) return;
   const [candidate] = candidates;
+  if (!candidate.authoritativeSceneMatch) return;
   candidate.matchLevel = "official_qa_exact";
   candidate.score = Math.max(candidate.score, 0.92);
   candidate.matchedBy = [...new Set([...candidate.matchedBy, "unique_exact_card_set"])];
@@ -303,6 +427,7 @@ function promoteUniqueQuestionCardMatch(items, resolvedIds, queryType) {
   ));
   if (candidates.length !== 1) return;
   const [candidate] = candidates;
+  if (!candidate.authoritativeSceneMatch) return;
   candidate.matchLevel = "official_qa_exact";
   candidate.score = Math.max(candidate.score, 0.94);
   candidate.matchedBy = [...new Set([...candidate.matchedBy, "unique_question_card_set"])];
@@ -322,6 +447,7 @@ function promoteUniqueSemanticMatch(items, resolvedIds, queryType) {
     && top.semanticScore >= 0.5;
   if ((!generalSemanticSignature && !uniqueResolvedCardOperation) || top.score < 0.78) return;
   if (resolvedIds.size && !top.identityCompatibleForExact) return;
+  if (!top.authoritativeSceneMatch) return;
   const margin = top.score - Number(second?.score || 0);
   if (second && margin < 0.08) return;
   top.matchLevel = "official_qa_exact";
@@ -342,7 +468,9 @@ function officialQaRecordFeatures(record = {}) {
     normalizedRecordText: normalizeOfficialQaQuery(text),
     evidenceType: classifyOfficialQaQuestionType(questionText || text),
     evidencePhrases: extractOfficialQaEffectPhrases(text),
-    evidenceConcepts: extractOfficialQaSemanticConcepts(questionText || text),
+    evidenceConcepts: extractOfficialQaSemanticConcepts(
+      [questionText, record.rawDetailedQuestion].filter(Boolean).join("\n") || text,
+    ),
     recordIds: new Set([
       record.cardId,
       ...(record.cardIds || []),
@@ -351,6 +479,7 @@ function officialQaRecordFeatures(record = {}) {
     ].map(normalizeId).filter(Boolean)),
     recordQuestionIds: new Set([
       ...(record.questionCardIds || []),
+      ...extractInlineCardIds(record.rawQuestion),
       ...extractInlineCardIds(questionText),
     ].map(normalizeId).filter(Boolean)),
     recordIdentityText: [record.title, text, ...(record.cards || [])].filter(Boolean).join(" "),

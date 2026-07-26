@@ -47,6 +47,35 @@ export function buildRagRulingPromptBundle({
       retrievalWarnings: [...(evidence.retrievalWarnings || []), ...warnings],
     },
   };
+  const rawDirectCandidates = evidence.officialQaDirectCandidates || [];
+  const authoritativeDirect = selectAuthoritativeOfficialDirectCandidate({
+    candidates: rawDirectCandidates,
+    cardResolution,
+    baigeAmbiguousMentions: evidence.baigeAmbiguousMentions,
+  });
+  if (authoritativeDirect) {
+    warnings.push("official_direct_focused_prompt");
+    const promptResult = buildOfficialDirectPrompt({
+      userQuery: payload.userQuery,
+      resolvedCards: payload.resolvedCards,
+      directQa: authoritativeDirect,
+      maxPromptChars: promptLimits.maxPromptChars,
+    });
+    const recoveryResult = buildOfficialDirectPrompt({
+      userQuery: payload.userQuery,
+      resolvedCards: payload.resolvedCards,
+      directQa: authoritativeDirect,
+      maxPromptChars: readNumber(env.RAG_RECOVERY_PROMPT_CHARS, 12000),
+    });
+    if (promptResult.truncated) warnings.push("official_direct_prompt_truncated");
+    return {
+      prompt: promptResult.prompt,
+      recoveryPrompt: recoveryResult.prompt,
+      warnings,
+      promptChars: promptResult.prompt.length,
+      promptTruncated: promptResult.truncated,
+    };
+  }
 
   const example = {
     answerLevel: "rule_analysis",
@@ -139,6 +168,125 @@ export function buildRagRulingPromptBundle({
     promptChars: prompt.length,
     promptTruncated: warnings.some((warning) => warning.includes("truncated")),
   };
+}
+
+export function selectAuthoritativeOfficialDirectCandidate({
+  candidates = [],
+  cardResolution = {},
+  baigeAmbiguousMentions = [],
+} = {}) {
+  if (candidates.length !== 1) return null;
+  const [candidate] = candidates;
+  const completeIdentity = !(cardResolution.unresolvedMentions || []).length
+    && !(cardResolution.ambiguousMentions || []).length
+    && !(cardResolution.omittedResolvedCards || []).length
+    && !(baigeAmbiguousMentions || []).length;
+  const exactQuestionCardSet = candidate?.questionCardIdCoverage === 1
+    && candidate?.questionCardIdCount > 0
+    && candidate?.questionCardIdCount === (candidate?.matchedQuestionCardIds || []).length;
+  const sceneProvenanceComplete = candidate?.authoritativeSceneMatchReason === "raw_or_normalized_query"
+    || (candidate?.authoritativeSceneMatchReason === "unique_structured_scene"
+      && candidate?.candidatePoolComplete === true);
+  return candidate?.isDirect === true
+    && candidate?.matchLevel === "official_qa_exact"
+    && candidate?.type === "official_qa"
+    && candidate?.authoritativeSceneMatch === true
+    && sceneProvenanceComplete
+    && exactQuestionCardSet
+    && completeIdentity
+    && Boolean(candidate?.id)
+    && Boolean(candidate?.fullText || candidate?.text || candidate?.answer || candidate?.officialText)
+    ? candidate
+    : null;
+}
+
+function buildOfficialDirectPrompt({
+  userQuery,
+  resolvedCards = [],
+  directQa = {},
+  maxPromptChars,
+} = {}) {
+  const maxChars = Math.max(600, Number(maxPromptChars) || 12000);
+  const instructions = [
+    "你是游戏王 OCG 官方 Q&A 转述助手。检索器已经确认下方唯一 officialQaDirectCandidate 与用户问题精确对应。",
+    "以该官方 Q&A 为最高且唯一的裁定依据，用中文完整回答；不要再用卡片文本、相似 FAQ 或常见场面改写官方结论。",
+    "必须保留官方回答中的每个实质条件、例外、后续处理、次数或同回合限制；不能只写第一句结论。",
+    "不要添加官方回答没有说明的处理。resolvedCards 只用于把 <<数字ID>> 等占位符还原为卡名。",
+    `usedEvidence 必须包含 id=${String(directQa.id || "")}，type 必须为 official_qa。`,
+    "answerLevel 必须为 official_confirmed；shortAnswer 直接给出完整结论，reasoning 至少两条并说明官方回答如何适用于本题。",
+    "输出单个 JSON 对象，字段为 answerLevel、shortAnswer、reasoning、usedCards、usedEvidence、missingInfo、riskFlags、confidenceSelfEstimate；不要输出 JSON 以外内容。",
+  ];
+  const cardIdentities = (resolvedCards || []).map((card) => ({
+    id: card.id,
+    name: card.name,
+    aliases: card.aliases || [],
+  }));
+  const render = ({ instructionLines, query, cards, text }) => [
+    ...instructionLines,
+    JSON.stringify({
+      userQuery: query,
+      resolvedCards: cards,
+      officialQaDirectCandidate: {
+        id: directQa.id,
+        type: "official_qa",
+        title: directQa.title || "",
+        text,
+        sourceUrl: directQa.sourceUrl || "",
+      },
+    }),
+  ].join("\n");
+  const sourceText = String(directQa.fullText || directQa.text || directQa.officialText || "");
+  const fullPrompt = render({
+    instructionLines: instructions,
+    query: String(userQuery || ""),
+    cards: cardIdentities,
+    text: sourceText,
+  });
+  if (fullPrompt.length <= maxChars) return { prompt: fullPrompt, truncated: false };
+
+  const compactInstructions = [
+    "唯一精确官方Q&A如下。用中文完整转述全部条件、括号、例外、后续处理和限制，不得增删结论。",
+    `输出规定字段的单个JSON；answerLevel=official_confirmed，usedEvidence必须含official_qa:${String(directQa.id || "")}。`,
+  ];
+  const compactCards = cardIdentities.slice(0, 6).map((card) => ({ id: card.id, name: card.name }));
+  const compactQuery = String(userQuery || "").slice(0, 300);
+  const fixedPrompt = render({
+    instructionLines: compactInstructions,
+    query: compactQuery,
+    cards: compactCards,
+    text: "",
+  });
+  const textBudget = Math.max(80, maxChars - fixedPrompt.length - 8);
+  let prompt = render({
+    instructionLines: compactInstructions,
+    query: compactQuery,
+    cards: compactCards,
+    text: preserveTextEnds(sourceText, textBudget),
+  });
+  if (prompt.length > maxChars) {
+    const minimalInstructions = ["完整转述唯一官方Q&A，保留全部限制；输出JSON并引用给定official_qa id。"];
+    const minimalFixed = render({
+      instructionLines: minimalInstructions,
+      query: String(userQuery || "").slice(0, 80),
+      cards: [],
+      text: "",
+    });
+    prompt = render({
+      instructionLines: minimalInstructions,
+      query: String(userQuery || "").slice(0, 80),
+      cards: [],
+      text: preserveTextEnds(sourceText, Math.max(40, maxChars - minimalFixed.length - 8)),
+    });
+  }
+  return { prompt, truncated: true };
+}
+
+function preserveTextEnds(text, limit) {
+  const source = String(text || "");
+  if (source.length <= limit) return source;
+  const headLength = Math.max(1, Math.ceil((limit - 1) * 0.6));
+  const tailLength = Math.max(1, limit - headLength - 1);
+  return `${source.slice(0, headLength)}…${source.slice(-tailLength)}`;
 }
 
 function summarizeCards(cards, limit) {

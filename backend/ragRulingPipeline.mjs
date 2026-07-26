@@ -8,10 +8,15 @@ import {
   callRulebookGroundingModel,
   callRuleQueryExtractionModel,
 } from "./ragModelClient.mjs";
-import { buildRagRulingPromptBundle, RAG_ANSWER_LEVELS } from "./ragRulingPrompt.mjs";
+import {
+  buildRagRulingPromptBundle,
+  RAG_ANSWER_LEVELS,
+  selectAuthoritativeOfficialDirectCandidate,
+} from "./ragRulingPrompt.mjs";
 import { analyzeEffectStateTransition, attachUserQueryToCardTexts } from "./effectStateReasoner.mjs";
 import { hasNumberedCardIdentityConflict } from "./numberedCardIdentity.mjs";
 import { analyzeDeterministicOperationLegality } from "./operationLegalityAnalyzer.mjs";
+import { extractOfficialQaAnswer } from "./officialQaAnswerExtractor.mjs";
 
 export async function answerRagRulingQuestion({
   question,
@@ -113,6 +118,7 @@ export async function answerRagRulingQuestion({
   });
   timingsMs.retrieval = elapsedMs(retrievalStartedAt);
   const effectiveCardResolution = reconcileCardResolution(cardResolution, retrievedEvidence);
+  const authoritativeOfficialDirect = hasAuthoritativeOfficialDirect(retrievedEvidence, effectiveCardResolution);
   const explicitEngineScenario = engineScenario !== undefined && engineScenario !== null;
   const enginePlan = explicitEngineScenario
     ? {
@@ -172,7 +178,7 @@ export async function answerRagRulingQuestion({
   timingsMs.localReasoning = elapsedMs(localReasoningStartedAt);
 
   const rulebookStartedAt = Date.now();
-  const rulebookGrounding = localDecisionComplete
+  const rulebookGrounding = localDecisionComplete || authoritativeOfficialDirect
     ? localRulebookGrounding
     : await callRulebookGroundingModel({
         userQuery: query,
@@ -233,11 +239,22 @@ export async function answerRagRulingQuestion({
       });
   timingsMs.finalModel = deterministicDecision ? 0 : elapsedMs(finalModelStartedAt);
   const modelAnswer = normalizeRagAnswer(modelResult.answer, { evidence, cardResolution: effectiveCardResolution, modelWarnings: modelResult.warnings || [] });
-  const groundedFallback = applyGroundedOperationFallback(modelAnswer, evidence);
-  const evidenceConstrained = applyExactScenarioGrounding(groundedFallback, evidence, query);
-  const operationConstrained = applyOperationLegalityOverride(evidenceConstrained, evidence);
-  const constraintGuarded = applyUnresolvedConstraintGuard(operationConstrained, evidence);
-  const normalized = applySemanticStateConstraint(constraintGuarded, evidence);
+  const normalized = authoritativeOfficialDirect
+    ? applyOfficialDirectAnswerContract(modelAnswer, evidence, effectiveCardResolution)
+    : applySemanticStateConstraint(
+        applyUnresolvedConstraintGuard(
+          applyOperationLegalityOverride(
+            applyExactScenarioGrounding(
+              applyGroundedOperationFallback(modelAnswer, evidence),
+              evidence,
+              query,
+            ),
+            evidence,
+          ),
+          evidence,
+        ),
+        evidence,
+      );
   const engineStartedAt = Date.now();
   const engine = await enginePromise;
   timingsMs.engineAwait = elapsedMs(engineStartedAt);
@@ -447,6 +464,99 @@ function buildDeterministicModelResult(decision, evidence = {}) {
     estimatedCostCny: 0,
     budgetStatus: null,
   };
+}
+
+function hasAuthoritativeOfficialDirect(evidence = {}, cardResolution = {}) {
+  return Boolean(selectAuthoritativeOfficialDirectCandidate({
+    candidates: evidence.officialQaDirectCandidates || [],
+    cardResolution,
+    baigeAmbiguousMentions: evidence.baigeAmbiguousMentions,
+  }));
+}
+
+function applyOfficialDirectAnswerContract(answer, evidence = {}, cardResolution = {}) {
+  const direct = evidence.officialQaDirectCandidates?.[0];
+  if (!direct) return answer;
+  const extracted = extractOfficialQaAnswer({
+    ...direct,
+    text: direct.fullText || direct.text,
+  });
+  const officialAnswerText = replaceOfficialCardPlaceholders(
+    String(extracted.answerText || direct.answer || direct.officialText || "").trim(),
+    cardResolution.resolvedCards || [],
+  );
+  const alreadyUsedDirect = (answer.usedEvidence || []).some((item) => String(item.id) === String(direct.id));
+  const modelFailed = (answer.riskFlags || []).some((flag) => /(?:model_call_failed|model_json_parse_failed|deepseek_empty_content|model_output_not_json)/u.test(String(flag)));
+  const modelCannotSafelySummarize = modelFailed
+    || answer.answerLevel === "budget_limited"
+    || answer.answerLevel === "needs_more_info"
+    || !alreadyUsedDirect
+    || primaryPolarityConflict(officialAnswerText, answer.shortAnswer)
+    || officialConstraintLost(officialAnswerText, `${answer.shortAnswer || ""}\n${(answer.reasoning || []).join("\n")}`);
+  const translatedSummary = modelCannotSafelySummarize ? "" : String(answer.shortAnswer || "").trim();
+  const officialSourceLine = officialAnswerText ? `官方 Q&A 完整回答原文：${officialAnswerText}` : "";
+  const shortAnswer = [translatedSummary, officialSourceLine].filter(Boolean).join("\n") || answer.shortAnswer;
+  const officialAnswerReason = officialAnswerText
+    ? `官方 Q&A 完整回答原文：${officialAnswerText}`
+    : "";
+  return {
+    ...answer,
+    answerLevel: "official_confirmed",
+    shortAnswer,
+    reasoning: cleanStringArray([
+      officialAnswerReason,
+      ...(answer.reasoning || []),
+    ]),
+    usedEvidence: dedupeEvidenceRefs([
+      {
+        id: direct.id,
+        type: "official_qa",
+        title: direct.title || direct.id,
+        sourceUrl: direct.sourceUrl || "",
+      },
+      ...(answer.usedEvidence || []),
+    ]),
+    riskFlags: [...new Set([
+      ...(answer.riskFlags || []),
+      ...(!alreadyUsedDirect ? ["official_direct_evidence_enforced"] : []),
+      ...(modelFailed ? ["official_direct_source_fallback_after_model_failure"] : []),
+      ...(modelCannotSafelySummarize && !modelFailed ? ["official_direct_source_fallback_after_incomplete_summary"] : []),
+    ])],
+    confidenceSelfEstimate: "high",
+  };
+}
+
+function replaceOfficialCardPlaceholders(text, cards = []) {
+  const namesById = new Map();
+  for (const card of cards || []) {
+    const id = String(card.id || card.cardId || "").trim();
+    const name = String(card.name || card.cnName || card.jaName || card.enName || "").trim();
+    if (id && name && !namesById.has(id)) namesById.set(id, name);
+  }
+  return String(text || "").replace(/<<(\d+)>>/gu, (placeholder, id) => (
+    namesById.has(id) ? `「${namesById.get(id)}」` : placeholder
+  ));
+}
+
+function primaryPolarityConflict(officialText, modelText) {
+  const official = primaryAnswerPolarity(officialText);
+  const model = primaryAnswerPolarity(modelText);
+  return official !== "unknown" && model !== "unknown" && official !== model;
+}
+
+function primaryAnswerPolarity(value) {
+  const text = String(value || "").trim();
+  if (/^(?:no\b|いいえ|不能|不可以|无法|不可|不得|できません|発動できません)/iu.test(text)) return "negative";
+  if (/^(?:yes\b|はい|可以|能够|能(?:够)?发动|できます|発動できます)/iu.test(text)) return "positive";
+  return "unknown";
+}
+
+function officialConstraintLost(officialText, modelText) {
+  const official = String(officialText || "");
+  const model = String(modelText || "");
+  const sourceHasConstraint = /(?:cannot|can't|not be able|only|unless|except|however|if\b|when\b|できません|できない|ただし|場合|のみ|以外|不能|不可|不得|仅|只|如果|之后|本回合)/iu.test(official);
+  if (!sourceHasConstraint) return false;
+  return !/(?:不能|不可|不得|仅|只|如果|场合|条件|之后|本回合|除外|例外|cannot|can't|not be able|only|unless|except|however|if\b|when\b|できません|できない|ただし|場合|のみ|以外)/iu.test(model);
 }
 
 function selectActivationSourceFaqEvidence(state = {}, faqRelated = [], maxItems = 3) {

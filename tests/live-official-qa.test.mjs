@@ -54,7 +54,7 @@ test("shared card-QA intersection retrieves the unique official interaction and 
   const fixture = liveFetchFixture({
     cardIds: [13447, 14741],
     qaId: 22803,
-    question: `「<<13447>>」の適用中、手札の「<<14741>>」のモンスター効果を発動する事はできますか？`,
+    question: `「<<13447>>」の適用中、自分または相手のモンスターゾーンに岩石族モンスターが存在する場合、手札の「<<14741>>」のモンスター効果を発動する事はできますか？`,
     answer: "新たな岩石族モンスターを特殊召喚する効果となるため、発動できません。",
   });
   const cards = [
@@ -67,6 +67,7 @@ test("shared card-QA intersection retrieves the unique official interaction and 
   assert.equal(result.debug.strategy, "all_resolved_card_intersection");
   assert.equal(result.records[0].sourceId, "22803");
   assert.equal(result.records[0].retrievalContext.uniqueExactCardIntersection, true);
+  assert.equal(result.records[0].retrievalContext.candidatePoolComplete, true);
   assert.equal(result.cardMetadata.find((item) => item.id === "14741").race, "Rock");
   assert.equal(fixture.calls.filter((url) => url.includes("/data/qa/")).length, 1);
 
@@ -185,8 +186,8 @@ test("a unique broad official QA can govern two listed example cards", () => {
     resolvedCards: [{ id: "100", name: "卡片100" }, { id: "200", name: "卡片200" }],
   });
 
-  assert.equal(matches.exact[0]?.record.id, "qa-broad-examples");
-  assert.ok(matches.exact[0]?.matchedBy.includes("unique_semantic_signature"));
+  assert.equal(matches.exact.length, 0);
+  assert.equal(matches.all[0]?.record.id, "qa-broad-examples");
 });
 
 test("two broad QAs listing the same cards remain ambiguous", () => {
@@ -275,7 +276,8 @@ test("a unique exact alias canonicalizes an external passcode only for QA identi
   });
 
   assert.equal(externalCard.id, "87654321");
-  assert.equal(evidence.officialQaDirectCandidates[0]?.id, "qa-broad-reveal-procedure");
+  assert.equal(evidence.officialQaDirectCandidates.length, 0);
+  assert.ok(evidence.officialQaRelated.some((item) => item.id === "qa-broad-reveal-procedure"));
   assert.ok(evidence.retrievalWarnings.includes("qa_identity_canonicalized:87654321->12345"));
 });
 
