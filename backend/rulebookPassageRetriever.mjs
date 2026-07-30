@@ -99,7 +99,11 @@ function buildPassage(record, paragraphs, hitIndex, score, maxPassageChars) {
     sourceRecordId: sourceId,
     paragraphStart: originalStart,
     paragraphEnd: originalEnd,
-    score,
+    // Keep a bounded score on the evidence object so a long rulebook page
+    // cannot dominate a direct scene QA merely by repeating generic terms.
+    // `rankingScore` retains the internal ordering signal.
+    score: normalizeRulebookRelevance(score),
+    rankingScore: score,
     cardIds: [],
     cards: [],
     official: false,
@@ -204,9 +208,15 @@ function extractQuotedAnchors(value) {
 }
 
 function comparePassages(left, right) {
-  return right.score - left.score
+  return (right.rankingScore ?? right.score) - (left.rankingScore ?? left.score)
     || String(left.sourceRecordId).localeCompare(String(right.sourceRecordId))
     || left.paragraphStart - right.paragraphStart;
+}
+
+function normalizeRulebookRelevance(score) {
+  const number = Number(score);
+  if (!Number.isFinite(number) || number <= 0) return 0;
+  return Number((1 - Math.exp(-number / 18)).toFixed(4));
 }
 
 function overlaps(left, right) {

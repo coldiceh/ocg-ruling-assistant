@@ -1,4 +1,13 @@
 import { compileRuleScenario } from "./ruleScenarioCompiler.mjs";
+import {
+  analyzePrintedTextReferenceScenario,
+  isPrintedTextReferenceRule,
+  selectPrintedTextReferenceRuleQuote,
+} from "./printedTextReferences.mjs";
+import {
+  isPublicThenPrivateTriggerRule,
+  selectPublicThenPrivateTriggerQuotes,
+} from "./simultaneousTriggerChain.mjs";
 
 export const OPERATION_LEGALITY_STATUSES = Object.freeze([
   "legal",
@@ -11,6 +20,8 @@ export function analyzeDeterministicOperationLegality({
   userQuery = "",
   cardTexts = [],
   ruleEvidence = [],
+  movementEvents = [],
+  branchWitness = null,
 } = {}) {
   const normalizedCardTexts = (cardTexts || [])
     .filter((item) => item?.text)
@@ -24,8 +35,21 @@ export function analyzeDeterministicOperationLegality({
     [...normalizedCardTexts, ...(ruleEvidence || [])].filter((item) => item?.id && item?.text),
     (item) => String(item.id),
   );
-  const scenario = compileRuleScenario({ userQuery, cardTexts: normalizedCardTexts });
-  const requiredConstraintEvidence = selectDeterministicRuleEvidence(ruleEvidence, scenario);
+  const scenario = compileRuleScenario({
+    userQuery,
+    cardTexts: normalizedCardTexts,
+    movementEvents,
+    branchWitness,
+  });
+  const printedTextReference = analyzePrintedTextReferenceScenario({
+    userQuery,
+    cardTexts: normalizedCardTexts,
+  });
+  const requiredConstraintEvidence = selectDeterministicRuleEvidence(
+    ruleEvidence,
+    scenario,
+    printedTextReference,
+  );
   const result = validateOperationLegalityModelOutput({
     constraintReviews: [],
     operationChecks: [],
@@ -34,6 +58,7 @@ export function analyzeDeterministicOperationLegality({
     requiredConstraintEvidence,
     userQuery,
     cardTexts: normalizedCardTexts,
+    compiledScenario: scenario,
   });
   const deterministicChecks = result.checks.filter((item) => item.deterministic === true);
   const completedChecks = deterministicChecks.filter((item) => item.deterministicComplete === true);
@@ -54,6 +79,7 @@ export function validateOperationLegalityModelOutput(raw, evidenceCandidates = [
   requiredConstraintEvidence = [],
   userQuery = "",
   cardTexts = [],
+  compiledScenario = null,
 } = {}) {
   const parsedModel = parseModelObject(raw);
   const parsed = parsedModel || {};
@@ -95,7 +121,11 @@ export function validateOperationLegalityModelOutput(raw, evidenceCandidates = [
     checks = uniqueBy([...checks, ...evidenceDrivenBlockingChecks], checkKey);
     warnings.push("operation_blocker_derived_from_combined_constraint_evidence");
   }
-  const deterministicScenarioChecks = deriveDeterministicScenarioChecks(requiredConstraints, checks, { userQuery, cardTexts });
+  const deterministicScenarioChecks = deriveDeterministicScenarioChecks(requiredConstraints, checks, {
+    userQuery,
+    cardTexts,
+    compiledScenario,
+  });
   if (deterministicScenarioChecks.length) {
     checks = uniqueBy([...checks, ...deterministicScenarioChecks], checkKey);
     warnings.push("operation_check_derived_from_compiled_scenario");
@@ -170,9 +200,18 @@ export function validateOperationLegalityModelOutput(raw, evidenceCandidates = [
   };
 }
 
-function deriveDeterministicScenarioChecks(requiredConstraints, existingChecks, { userQuery, cardTexts }) {
-  const scenario = compileRuleScenario({ userQuery, cardTexts });
-  const checks = derivePublicHandRevealProcedureChecks(requiredConstraints, existingChecks, scenario);
+function deriveDeterministicScenarioChecks(
+  requiredConstraints,
+  existingChecks,
+  { userQuery, cardTexts, compiledScenario = null },
+) {
+  const scenario = compiledScenario || compileRuleScenario({ userQuery, cardTexts });
+  const printedTextReference = analyzePrintedTextReferenceScenario({ userQuery, cardTexts });
+  const checks = [
+    ...derivePublicHandRevealProcedureChecks(requiredConstraints, existingChecks, scenario),
+    ...derivePrintedTextReferenceChecks(requiredConstraints, existingChecks, printedTextReference),
+    ...deriveSimultaneousTriggerChainChecks(requiredConstraints, existingChecks, scenario),
+  ];
   if (!scenario.simultaneousDestructionReplacement) return checks;
   const rule = (requiredConstraints || []).find((item) => (
     item?.priorityConstraintSignature === "simultaneous_destruction_replacement_turn_player_first"
@@ -236,6 +275,113 @@ function deriveDeterministicScenarioChecks(requiredConstraints, existingChecks, 
     resolvesRequiredConstraint: true,
     deterministic: true,
     deterministicComplete: complete,
+  }];
+}
+
+function deriveSimultaneousTriggerChainChecks(requiredConstraints, existingChecks, scenario) {
+  const analysis = scenario?.simultaneousTriggerChain;
+  if (!analysis?.recognized) return [];
+  const ruleQuotes = selectPublicThenPrivateTriggerQuotes(
+    (requiredConstraints || []).filter((item) => isPublicThenPrivateTriggerRule(item?.text)),
+  );
+  const hasPrivateOrderRule = ruleQuotes.some(({ quote }) => /从手卡发动的诱发效果.{0,40}顺序是\s*7/u.test(quote));
+  const hasResponseRule = ruleQuotes.some(({ quote }) => /优先权发生转移.{0,100}把优先权转移给对方/u.test(quote));
+  if (!hasPrivateOrderRule || !hasResponseRule) return [];
+
+  const publicTrigger = analysis.specialSummonTriggerCards?.[0];
+  const privateTrigger = analysis.privateBanishTriggerCards?.[0];
+  const replacementSource = analysis.sourceReplacementCards?.[0];
+  const citations = [
+    ...ruleQuotes.map(({ item, quote }) => ({
+      id: String(item.id),
+      quote,
+      application: /顺序是\s*7/u.test(quote)
+        ? "题目中的手牌诱发效果位于非公开手牌，不能与公开区域的选发诱发效果一起预先自排连锁。"
+        : "公开区域的诱发效果进入连锁后，响应权先转移给对方；必须逐次确认对方是否连锁。",
+      type: cleanText(item.type || item.recordType || "rulebook"),
+      title: cleanText(item.title || item.id),
+      sourceUrl: cleanText(item.sourceUrl || ""),
+    })),
+    scenarioCardCitation(
+      publicTrigger,
+      /(?:此卡|这张卡|這張卡|このカード|this card).{0,30}(?:特殊召唤|特殊召喚|special summoned).{0,24}(?:场合|場合|情况(?:下)?|情形(?:下)?|if|when).{0,24}(?:可以发动|可发动|発動できる|can be activated)/iu,
+      "该效果是在特殊召唤成功后从公开的怪兽区域发动的选发诱发效果。",
+    ),
+    scenarioCardCitation(
+      privateTrigger,
+      /(?=[^。；;\n]{0,200}(?:(?:卡片|卡|カード)(?:的|の)?(?:效果|効果)|card effect))(?=[^。；;\n]{0,200}(?:怪兽|怪獸|モンスター|monster))(?=[^。；;\n]{0,200}(?:除外|banish))[^。；;\n]{0,200}(?:场合|場合|情况(?:下)?|情形(?:下)?|if|when)[^。；;\n]{0,40}(?:可以发动|可发动|発動できる|can be activated)/iu,
+      "该效果是在怪兽因卡的效果以表侧除外后，从非公开手牌发动的诱发效果。",
+    ),
+    scenarioCardCitation(
+      replacementSource,
+      /(?:(?:表侧|表側|face-up).{0,20})?(?:此卡|这张卡|這張卡|このカード|this card).{0,32}(?:离开场上|離開場上|フィールドから離れ|leaves the field).{0,32}(?:除外|banish)/iu,
+      "原本用于特殊召唤手续的离场动作被这张卡自身的效果改写为表侧除外，因此属于因卡的效果被除外。",
+    ),
+  ].filter(Boolean);
+  const chainExample = analysis.exampleAfterOpponentPass?.chainLinks || [];
+  const complete = analysis.complete === true && chainExample.length >= 2;
+  const conclusion = complete
+    ? `该特殊召唤成功后，两项诱发效果都可以进入同一时点的发动窗口，但不能直接一起自排连锁。先宣言公开区域的「${publicTrigger?.title || "特殊召唤成功时的效果"}」作为连锁1，随后必须让对方确认是否连锁；若对方不发动效果，自己才可把非公开手牌中的「${privateTrigger?.title || "因效果被除外时的效果"}」作为连锁2发动。`
+    : "该特殊召唤成功后，应先处理公开区域的选发诱发效果，再把响应权交给对方；对方不连锁时，自己才取得从非公开手牌发动诱发效果的机会。是否满足“因卡的效果以表侧除外”仍须由实际移动来源确认。";
+
+  return [{
+    operationId: "simultaneous-public-then-private-trigger-chain",
+    step: (existingChecks || []).length + 1,
+    action: "按 OCG 的公开区域与非公开手牌诱发顺序组成连锁，并逐次转移响应权",
+    legalityQuestion: "同一时点满足条件的公开区域选发诱发和非公开手牌诱发，能否直接自排连锁以及谁先获得响应机会",
+    status: complete ? "legal" : "conditional",
+    conclusion,
+    reasoning: [
+      "场上表侧怪兽的特殊召唤成功时诱发属于公开情报的选发诱发，先按公开区域诱发顺序决定是否发动。",
+      "非公开手牌中的诱发效果处于顺序7，不会与同一玩家的公开区域选发诱发预先一起排列。",
+      "公开区域的效果发动后，最后发动效果的玩家先把优先权转移给对方；对方放弃连锁后，响应权才回到自己。",
+      ...(analysis.effectBanishConfirmed
+        ? ["离场动作虽然属于特殊召唤手续的一部分，但最终除外由卡片效果的去向替代造成，故满足“因卡的效果以表侧除外”。"]
+        : []),
+    ],
+    citations,
+    missingFacts: complete ? [] : ["确认被除外事件的最终原因是否包含正在适用的卡片效果。"],
+    resolvesRequiredConstraint: true,
+    deterministic: true,
+    // This check deliberately constrains the chain-building part only. The
+    // caller still has to decide whether the preceding Special Summon method
+    // itself is legal, so it must not replace the complete final answer.
+    deterministicComplete: false,
+  }];
+}
+
+function derivePrintedTextReferenceChecks(requiredConstraints, existingChecks, printedTextReference) {
+  if (!printedTextReference.activationBlocked) return [];
+  const rule = (requiredConstraints || []).find((item) => isPrintedTextReferenceRule(item?.text));
+  const quote = selectPrintedTextReferenceRuleQuote(rule?.text);
+  if (!rule || !quote) return [];
+  const receiverNames = printedTextReference.copyReceivers.map((item) => item.title).filter(Boolean);
+  const receiverLabel = receiverNames.join("、") || "复制卡名与效果的怪兽";
+  const requiredName = printedTextReference.requiredName;
+  return [{
+    operationId: "printed-text-name-reference-activation-condition",
+    step: (existingChecks || []).length + 1,
+    action: `检查${receiverLabel}自身印刷文本是否记述「${requiredName}」卡名`,
+    legalityQuestion: "临时获得其他怪兽的卡名与效果，是否会改写自身卡面效果文本中的卡名记述",
+    status: "illegal",
+    conclusion: `不能发动：${receiverLabel}自身的效果文本栏没有记述「${requiredName}」卡名；临时获得其他卡的卡名与效果不会改写其印刷文本，因此不属于“有「${requiredName}」卡名记述的怪兽”。`,
+    reasoning: [
+      "“有某卡名记述”检查的是该卡自身效果文本栏中印刷存在的卡名，而不是当前获得或适用中的效果内容。",
+      `${receiverLabel}原本卡文中的卡名引用不包含「${requiredName}」。`,
+      "复制或获得另一只怪兽的卡名与效果只改变当前适用的卡名・效果，不会把来源卡的文字写入这张卡自身的效果文本栏。",
+    ],
+    citations: [{
+      id: String(rule.id),
+      quote,
+      application: `题目要求以${receiverLabel}满足“有「${requiredName}」卡名记述的怪兽”这一发动条件，故应检查该怪兽自身的效果文本栏。`,
+      type: cleanText(rule.type || rule.recordType || "rulebook"),
+      title: cleanText(rule.title || rule.id),
+      sourceUrl: cleanText(rule.sourceUrl || ""),
+    }],
+    missingFacts: [],
+    resolvesRequiredConstraint: true,
+    deterministic: true,
+    deterministicComplete: true,
   }];
 }
 
@@ -421,7 +567,7 @@ function deriveMandatoryOperationBlockingChecks(requiredConstraints, existingChe
   }];
 }
 
-function selectDeterministicRuleEvidence(ruleEvidence, scenario) {
+function selectDeterministicRuleEvidence(ruleEvidence, scenario, printedTextReference = {}) {
   return uniqueBy((ruleEvidence || []).filter((item) => {
     if (!item?.id || !item?.text) return false;
     const mandatorySignature = inferMandatoryOperationConstraintSignature(item);
@@ -433,6 +579,8 @@ function selectDeterministicRuleEvidence(ruleEvidence, scenario) {
       .some((operation) => matchPublicHandRevealRule(item, operation.card))) {
       return true;
     }
+    if (scenario.simultaneousPublicPrivateTriggers && isPublicThenPrivateTriggerRule(item.text)) return true;
+    if (printedTextReference.activationBlocked && isPrintedTextReferenceRule(item.text)) return true;
     return scenario.simultaneousDestructionReplacement && inferSimultaneousReplacementSignature(item);
   }), (item) => String(item.id));
 }

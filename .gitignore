@@ -4,6 +4,12 @@ node_modules/
 .pnpm-store/
 .env
 .env.*
+!.env.example
+.tmp-*/
+artifacts/deployed-*/
+artifacts/*-report.json
+artifacts/*-probe.json
+artifacts/*-local.json
 *.log
 *.zip
 preview.png

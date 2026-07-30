@@ -1,4 +1,5 @@
 import { findNormalizedSemantics, normalizeCardText } from "./cardTextNormalizer.mjs";
+import { analyzeSimultaneousTriggerScenario } from "./simultaneousTriggerChain.mjs";
 
 const MANDATORY_FIELD_SPELL_TRAP_RETURN = /将(?:双方)?场上的魔法[・·]?陷阱卡(?:全部)?(?:放回|返回|回到)(?:持有者的)?(?:手牌|手卡|卡组|牌组)/u;
 const DESTRUCTION_THREAT = "(?:被(?:战斗|戰鬥|戦闘)[・·]?(?:效果|効果)?破坏|被(?:效果|効果)破坏|要被(?:战斗|戰鬥|戦闘)?[・·]?(?:效果|効果)?破坏|(?:戦闘[・·]?効果|戦闘|効果)で破壊される場合|破壊される場合)";
@@ -16,7 +17,12 @@ const STATE_CHANGE_REPLACEMENT = new RegExp(
 const DESTROY_THEN_SPECIAL_SUMMON = /(?:破坏|破壊)[^。；;\n]{0,140}(?:特殊召唤|特殊召喚)/u;
 const ACTIVATION_WORD = "(?:发动|發動|発動|activate)";
 
-export function compileRuleScenario({ userQuery = "", cardTexts = [] } = {}) {
+export function compileRuleScenario({
+  userQuery = "",
+  cardTexts = [],
+  movementEvents = [],
+  branchWitness = null,
+} = {}) {
   const query = String(userQuery || "");
   const cards = (cardTexts || []).map((item, index) => {
     const id = String(item.id || item.evidenceId || "scenario-card-text-" + (index + 1));
@@ -139,6 +145,13 @@ export function compileRuleScenario({ userQuery = "", cardTexts = [] } = {}) {
   const replacementSequenceComplete = simultaneousDestructionReplacement
     && turnPlayerKnown
     && firstReplacementRemovesNonTurnCarrier;
+  const simultaneousTriggerChain = analyzeSimultaneousTriggerScenario({
+    userQuery: query,
+    cardTexts,
+    movementEvents,
+    turnPlayer: turnPlayerSide || "self",
+    branchWitness,
+  });
 
   return {
     mandatoryFieldSpellTrapReturn,
@@ -168,6 +181,8 @@ export function compileRuleScenario({ userQuery = "", cardTexts = [] } = {}) {
     originalDestructionReplaced: replacementSequenceComplete,
     nonTurnReplacementCarrierDestroyed: replacementSequenceComplete,
     dependentSpecialSummonNotPerformed: replacementSequenceComplete && destructionDependentFollowUps.length > 0,
+    simultaneousTriggerChain,
+    simultaneousPublicPrivateTriggers: simultaneousTriggerChain.recognized === true,
   };
 }
 

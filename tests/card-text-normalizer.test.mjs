@@ -186,3 +186,35 @@ test("does not confuse a graveyard or banished target and an either-or operation
   assert.equal(operation.mandatory, false);
   assert.equal(operation.choice, "one_of_multiple_operations");
 });
+
+test("splits inline numbered effects after a preamble without splitting effect-number references", () => {
+  const normalized = normalizeCardText({
+    id: "fictional-inline-effects",
+    name: "架空内联效果怪兽",
+    cardType: "monster",
+    effectText: [
+      "此卡不可通常召唤。此卡名的①②效果1回合仅可各使用1次。",
+      "①：此卡存在于手牌，且有怪兽因卡的效果被除外的情况下可以发动。将此卡特殊召唤。",
+      "②：此卡特殊召唤成功的情况下可以发动。从牌组将1张卡加入手牌。",
+      "③：表侧表示的此卡离开场上的情况下，将其除外。",
+    ].join(""),
+  });
+
+  assert.deepEqual(
+    normalized.effects.map((effect) => effect.effectNo),
+    ["unknown", "1", "2", "3"],
+  );
+  assert.equal(normalized.effects.find((effect) => effect.effectNo === "1").nature, "activated");
+  assert.equal(normalized.effects.find((effect) => effect.effectNo === "2").nature, "activated");
+  const leaveField = normalized.effects.find((effect) => effect.effectNo === "3");
+  assert.equal(leaveField.nature, "continuous");
+  assert.equal(
+    leaveField.continuous.some((semantic) => (
+      semantic.type === "destination_replacement"
+      && semantic.whenLeavingField === true
+      && semantic.replacementZone === "banished"
+    )),
+    true,
+  );
+  assert.equal(normalized.missingSections.includes("monsterEffects"), false);
+});

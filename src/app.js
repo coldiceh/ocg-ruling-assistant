@@ -193,17 +193,56 @@ const ui = {
   budgetLimitText: document.querySelector("#budgetLimitText"),
   budgetHint: document.querySelector("#budgetHint"),
   budgetResetButton: document.querySelector("#budgetResetButton"),
-  adminQueryPanel: document.querySelector("#adminQueryPanel"),
-  adminQueryLoadButton: document.querySelector("#adminQueryLoadButton"),
-  adminQueryStatus: document.querySelector("#adminQueryStatus"),
-  adminQueryList: document.querySelector("#adminQueryList"),
+  adminLabPanel: document.querySelector("#adminLabPanel"),
+  adminLabWorkspace: document.querySelector("#adminLabWorkspace"),
+  adminLoginForm: document.querySelector("#adminLoginForm"),
+  adminPasswordInput: document.querySelector("#adminPasswordInput"),
+  adminLoginButton: document.querySelector("#adminLoginButton"),
+  adminLoginStatus: document.querySelector("#adminLoginStatus"),
+  adminSessionBadge: document.querySelector("#adminSessionBadge"),
+  adminLogoutButton: document.querySelector("#adminLogoutButton"),
+  adminQuestionInput: document.querySelector("#adminQuestionInput"),
+  adminCopyPublicQuestionButton: document.querySelector("#adminCopyPublicQuestionButton"),
+  adminProviderSelect: document.querySelector("#adminProviderSelect"),
+  adminModelSelect: document.querySelector("#adminModelSelect"),
+  adminEffortSelect: document.querySelector("#adminEffortSelect"),
+  adminModeSelect: document.querySelector("#adminModeSelect"),
+  adminPromptVersionSelect: document.querySelector("#adminPromptVersionSelect"),
+  adminStartButton: document.querySelector("#adminStartButton"),
+  adminCancelButton: document.querySelector("#adminCancelButton"),
+  adminRunStatus: document.querySelector("#adminRunStatus"),
+  adminRunIdentity: document.querySelector("#adminRunIdentity"),
+  adminElapsedText: document.querySelector("#adminElapsedText"),
+  adminStageList: document.querySelector("#adminStageList"),
+  adminResultSummary: document.querySelector("#adminResultSummary"),
+  adminMetrics: document.querySelector("#adminMetrics"),
+  adminEvidenceDetails: document.querySelector("#adminEvidenceDetails"),
+  adminEvidenceSummary: document.querySelector("#adminEvidenceSummary"),
+  adminEvidenceJson: document.querySelector("#adminEvidenceJson"),
+  adminResultJson: document.querySelector("#adminResultJson"),
+  adminExportJsonButton: document.querySelector("#adminExportJsonButton"),
+  adminExportCsvButton: document.querySelector("#adminExportCsvButton"),
+  adminRatingForm: document.querySelector("#adminRatingForm"),
+  adminRatingSelect: document.querySelector("#adminRatingSelect"),
+  adminRatingNotes: document.querySelector("#adminRatingNotes"),
+  adminRatingButton: document.querySelector("#adminRatingButton"),
+  adminRatingStatus: document.querySelector("#adminRatingStatus"),
+  adminHistoryRefreshButton: document.querySelector("#adminHistoryRefreshButton"),
+  adminHistoryStatus: document.querySelector("#adminHistoryStatus"),
+  adminHistoryList: document.querySelector("#adminHistoryList"),
+  adminQuestionHistoryRefreshButton: document.querySelector("#adminQuestionHistoryRefreshButton"),
+  adminQuestionHistoryStatus: document.querySelector("#adminQuestionHistoryStatus"),
+  adminQuestionHistoryList: document.querySelector("#adminQuestionHistoryList"),
+  adminEvaluationRefreshButton: document.querySelector("#adminEvaluationRefreshButton"),
+  adminEvaluationStatus: document.querySelector("#adminEvaluationStatus"),
+  adminEvaluationSelect: document.querySelector("#adminEvaluationSelect"),
+  adminEvaluationLoadButton: document.querySelector("#adminEvaluationLoadButton"),
 };
 
 let appConfig = {
   answerApiUrl: "",
   modelLabel: "",
   budgetApiUrl: "",
-  adminQueriesApiUrl: "",
   engineEnabled: false,
   rulingVersionIds: ["latest"],
 };
@@ -219,6 +258,23 @@ let selectedCardIndex = 0;
 let lastRenderedBackendAnswer = null;
 let debugUiEnabled = false;
 let adminUiEnabled = false;
+let adminSession = {
+  authenticated: false,
+  csrfToken: "",
+  expiresAt: "",
+};
+let adminCapabilityState = null;
+let adminCurrentRun = null;
+let adminCurrentRunId = "";
+let adminAfterSequence = 0;
+let adminFollowGeneration = 0;
+let adminStreamAbortController = null;
+let adminClientStartedAt = 0;
+let adminElapsedTimer = 0;
+let adminEvaluationCases = [];
+const adminExecuteAttemptedRunIds = new Set();
+const adminStageStates = new Map();
+const adminCurrentRunStorageKey = "ocg-admin-current-run:v1";
 const themeStorageKey = "ocg-ruling-theme:v1";
 const selectedModelTier = "flash";
 let selectedRulingVersion = "latest";
@@ -307,13 +363,11 @@ async function loadAppConfig() {
   appConfig = {
     answerApiUrl: String(payload.answerApiUrl || "").trim(),
     budgetApiUrl: String(payload.budgetApiUrl || "").trim(),
-    adminQueriesApiUrl: String(payload.adminQueriesApiUrl || "").trim(),
     modelLabel: "",
     engineEnabled: false,
     rulingVersionIds: ["latest"],
   };
   if (!appConfig.budgetApiUrl) appConfig.budgetApiUrl = getBudgetApiUrl();
-  if (!appConfig.adminQueriesApiUrl) appConfig.adminQueriesApiUrl = getAdminQueriesApiUrl();
 }
 
 async function loadBackendModelInfo() {
@@ -1482,62 +1536,1778 @@ async function loadCardDetail(card) {
   }
 }
 
-async function loadAdminQueries() {
-  if (!adminUiEnabled || !appConfig.adminQueriesApiUrl || !ui.adminQueryLoadButton) return;
-  const password = window.prompt("请输入管理员密码");
-  if (!password) return;
+const ADMIN_STAGES = [
+  { id: "understand", label: "理解问题" },
+  { id: "extract_card_names", label: "提取卡名" },
+  { id: "retrieve_card_texts", label: "检索卡片文本" },
+  { id: "retrieve_rulings_evidence", label: "检索裁定与证据" },
+  { id: "generate_ruling", label: "生成最终裁定" },
+];
 
-  ui.adminQueryLoadButton.disabled = true;
-  if (ui.adminQueryStatus) ui.adminQueryStatus.textContent = "正在读取问题记录...";
-  if (ui.adminQueryList) clearElement(ui.adminQueryList);
+const ADMIN_TERMINAL_STATUSES = new Set([
+  "completed",
+  "succeeded",
+  "failed",
+  "cancelled",
+  "canceled",
+]);
+
+async function initializeAdminLab() {
+  if (!adminUiEnabled || !ui.adminLabPanel) return;
+  resetAdminStageStates();
+  renderAdminStageStates();
+  setAdminAuthenticated(false);
+  setAdminLoginStatus("正在确认登录状态…");
+  try {
+    const payload = await requestAdminAuth("session");
+    setAdminAuthenticated(payload.authenticated === true, payload);
+    if (payload.authenticated === true) await loadAdminLabBootstrap();
+  } catch (error) {
+    setAdminAuthenticated(false);
+    setAdminLoginStatus(adminErrorMessage(error, "尚未登录，请输入管理员密码。"));
+  }
+}
+
+async function handleAdminLogin(event) {
+  event.preventDefault();
+  const password = String(ui.adminPasswordInput?.value || "");
+  if (!password) {
+    setAdminLoginStatus("请输入管理员密码。", "error");
+    return;
+  }
+  ui.adminLoginButton.disabled = true;
+  setAdminLoginStatus("正在登录…");
+  try {
+    const payload = await requestAdminAuth("login", { password });
+    if (ui.adminPasswordInput) ui.adminPasswordInput.value = "";
+    setAdminAuthenticated(payload.authenticated === true, payload);
+    await loadAdminLabBootstrap();
+  } catch (error) {
+    setAdminAuthenticated(false);
+    setAdminLoginStatus(adminErrorMessage(error, "登录失败。"), "error");
+  } finally {
+    ui.adminLoginButton.disabled = false;
+  }
+}
+
+async function handleAdminLogout() {
+  ui.adminLogoutButton.disabled = true;
+  try {
+    await requestAdminAuth("logout");
+  } catch (error) {
+    setAdminLoginStatus(adminErrorMessage(error, "退出登录失败。"), "error");
+    ui.adminLogoutButton.disabled = false;
+    return;
+  }
+  stopFollowingAdminRun();
+  clearStoredAdminRunId();
+  adminCurrentRun = null;
+  adminCurrentRunId = "";
+  setAdminAuthenticated(false);
+  setAdminLoginStatus("已安全退出。");
+}
+
+async function requestAdminAuth(action, body = {}) {
+  const isSessionRead = action === "session";
+  const headers = { accept: "application/json" };
+  if (!isSessionRead) {
+    headers["content-type"] = "application/json";
+    if (action === "logout" && adminSession.csrfToken) {
+      headers["x-csrf-token"] = adminSession.csrfToken;
+    }
+  }
+  const response = await fetch(getAdminEndpointUrl("/api/admin-auth"), {
+    method: isSessionRead ? "GET" : "POST",
+    cache: "no-store",
+    credentials: "include",
+    headers,
+    ...(isSessionRead ? {} : { body: JSON.stringify({ action, ...body }) }),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || payload.ok === false) {
+    throw createAdminRequestError(response.status, payload);
+  }
+  return payload;
+}
+
+function setAdminAuthenticated(authenticated, payload = {}) {
+  adminSession = {
+    authenticated: authenticated === true,
+    csrfToken: authenticated === true ? String(payload.csrfToken || adminSession.csrfToken || "") : "",
+    expiresAt: authenticated === true ? String(payload.expiresAt || "") : "",
+  };
+  if (ui.adminLabWorkspace) ui.adminLabWorkspace.hidden = !adminSession.authenticated;
+  if (ui.adminLoginForm) ui.adminLoginForm.hidden = adminSession.authenticated;
+  if (ui.adminLogoutButton) {
+    ui.adminLogoutButton.hidden = !adminSession.authenticated;
+    ui.adminLogoutButton.disabled = false;
+  }
+  if (ui.adminSessionBadge) {
+    ui.adminSessionBadge.textContent = adminSession.authenticated ? "已登录" : "未登录";
+    ui.adminSessionBadge.classList.toggle("is-authenticated", adminSession.authenticated);
+  }
+  if (adminSession.authenticated) {
+    const expires = formatAdminDate(adminSession.expiresAt);
+    setAdminLoginStatus(expires ? `登录有效期至 ${expires}` : "管理员登录有效。");
+  } else {
+    adminCapabilityState = null;
+    setAdminControlsEnabled(false);
+  }
+}
+
+function setAdminLoginStatus(message, tone = "") {
+  if (!ui.adminLoginStatus) return;
+  ui.adminLoginStatus.textContent = String(message || "");
+  ui.adminLoginStatus.classList.toggle("is-error", tone === "error");
+  ui.adminLoginStatus.classList.toggle("is-good", tone === "good");
+}
+
+async function loadAdminLabBootstrap() {
+  setAdminLoginStatus("管理员登录有效。", "good");
+  await loadAdminCapabilities();
+  await Promise.allSettled([
+    adminFeatureEnabled("history") ? loadAdminHistory() : showAdminFeatureUnavailable("history"),
+    loadAdminQuestionHistory(),
+    adminFeatureEnabled("evaluation") ? loadAdminEvaluationCases() : showAdminFeatureUnavailable("evaluation"),
+  ]);
+  await restoreStoredAdminRun();
+}
+
+async function loadAdminCapabilities() {
+  setAdminControlsEnabled(false);
+  setAdminRunStatus("正在读取可用模型与配置…");
+  try {
+    const data = await requestAdminLab({
+      method: "GET",
+      action: "capabilities",
+    });
+    adminCapabilityState = normalizeAdminCapabilities(data);
+    renderAdminCapabilities(adminCapabilityState);
+    const hasModels = adminCapabilityState.models.length > 0;
+    setAdminControlsEnabled(hasModels);
+    setAdminRunStatus(hasModels ? "配置已就绪，可以开始实验。" : "后端没有返回可用模型。", hasModels ? "good" : "error");
+  } catch (error) {
+    adminCapabilityState = null;
+    setAdminControlsEnabled(false);
+    setAdminRunStatus(adminErrorMessage(error, "暂时无法读取可用模型。"), "error");
+  }
+}
+
+function normalizeAdminCapabilities(data) {
+  const source = data?.capabilities || data || {};
+  const providerSource = Array.isArray(source.providers)
+    ? source.providers
+    : source.providers?.providers;
+  const rawProviders = normalizeAdminOptionList(providerSource);
+  const rawModels = [];
+  const providerModelById = new Map();
+  for (const provider of rawProviders) {
+    if (!provider || typeof provider === "string" || !Array.isArray(provider.models)) continue;
+    for (const model of provider.models) {
+      const id = String(typeof model === "string" ? model : model?.modelId || model?.id || "");
+      if (id) providerModelById.set(id, typeof model === "string" ? { id } : model);
+    }
+  }
+
+  if (Array.isArray(source.models)) {
+    rawModels.push(...source.models);
+  } else if (source.models && typeof source.models === "object") {
+    for (const [modelId, descriptor] of Object.entries(source.models)) {
+      if (Array.isArray(descriptor)) {
+        for (const model of descriptor) {
+          rawModels.push(typeof model === "string"
+            ? { id: model, provider: modelId }
+            : { ...model, provider: model.provider || model.providerId || modelId });
+        }
+      } else if (descriptor && typeof descriptor === "object") {
+        rawModels.push({
+          id: modelId,
+          ...descriptor,
+          ...(providerModelById.get(modelId) || {}),
+        });
+      }
+    }
+  }
+
+  for (const provider of rawProviders) {
+    if (!provider || typeof provider === "string" || !Array.isArray(provider.models)) continue;
+    const providerId = provider.providerId || provider.id || provider.value || provider.name;
+    for (const model of provider.models) {
+      const descriptor = typeof model === "string" ? source.models?.[model] : model;
+      rawModels.push(typeof descriptor === "string" || !descriptor
+        ? { id: model, provider: providerId }
+        : {
+            ...descriptor,
+            id: descriptor.id || descriptor.modelId || model,
+            provider: descriptor.provider || descriptor.providerId || providerId,
+          });
+    }
+  }
+
+  const normalizedModels = uniqueAdminOptions(rawModels
+    .map((item) => normalizeAdminModelOption(item, source))
+    .filter((item) => item.available !== false));
+  const hasStageCapabilities = normalizedModels.some((item) => Array.isArray(item.allowedStages));
+  const models = hasStageCapabilities
+    ? normalizedModels.filter((item) => item.allowedStages.includes("final_ruling"))
+    : normalizedModels;
+  const inferredProviders = models.map((model) => ({ id: model.provider, label: adminProviderLabel(model.provider) }));
+  const providers = uniqueAdminOptions([
+    ...rawProviders.map(normalizeAdminBasicOption),
+    ...inferredProviders,
+  ]).filter((item) => item.id && models.some((model) => model.provider === item.id));
+
+  return {
+    providers,
+    models,
+    efforts: uniqueAdminOptions(normalizeAdminOptionList(
+      source.reasoningEfforts || source.efforts || source.reasoning_efforts,
+    ).map(normalizeAdminBasicOption)),
+    modes: uniqueAdminOptions(normalizeAdminOptionList(source.modes).map(normalizeAdminBasicOption)),
+    promptVersions: uniqueAdminOptions(normalizeAdminOptionList(
+      source.promptVersions || source.prompt_versions || source.prompts,
+    ).map(normalizeAdminBasicOption)),
+    features: source.features && typeof source.features === "object" ? source.features : {},
+  };
+}
+
+function normalizeAdminOptionList(value) {
+  if (Array.isArray(value)) return value;
+  if (value && typeof value === "object") {
+    return Object.entries(value).map(([id, item]) => {
+      if (item && typeof item === "object" && !Array.isArray(item)) return { id, ...item };
+      return { id, label: String(item || id) };
+    });
+  }
+  return [];
+}
+
+function normalizeAdminBasicOption(item) {
+  if (typeof item === "string") return { id: item, label: item };
+  return {
+    ...item,
+    id: String(
+      item?.id
+      || item?.value
+      || item?.providerId
+      || item?.modelId
+      || item?.name
+      || item?.model
+      || "",
+    ),
+    label: String(
+      item?.label
+      || item?.displayName
+      || item?.providerId
+      || item?.modelId
+      || item?.id
+      || item?.value
+      || item?.name
+      || "",
+    ),
+  };
+}
+
+function normalizeAdminModelOption(item, source) {
+  const normalized = normalizeAdminBasicOption(item);
+  const provider = String(item?.provider || item?.providerId || (
+    normalized.id.startsWith("gpt-") ? "openai" : source.defaultProvider || ""
+  ));
+  return {
+    ...normalized,
+    provider,
+    efforts: normalizeAdminOptionList(
+      item?.supportedReasoningEfforts
+      || item?.reasoningEfforts
+      || item?.efforts
+      || source.reasoningEfforts
+      || source.efforts,
+    ).map(normalizeAdminBasicOption),
+    modes: normalizeAdminOptionList(
+      item?.supportedReasoningModes || item?.modes || source.modes,
+    ).map(normalizeAdminBasicOption),
+    promptVersions: normalizeAdminOptionList(
+      item?.promptVersions || item?.prompts || source.promptVersions || source.prompts,
+    ).map(normalizeAdminBasicOption),
+  };
+}
+
+function uniqueAdminOptions(options) {
+  const seen = new Set();
+  return options.filter((option) => {
+    const id = String(option?.id || "");
+    if (!id || seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
+}
+
+function renderAdminCapabilities(capabilities) {
+  populateAdminSelect(ui.adminProviderSelect, capabilities.providers, "没有可用服务");
+  const preferredProvider = capabilities.providers.some((item) => item.id === "openai") ? "openai" : capabilities.providers[0]?.id;
+  if (preferredProvider) ui.adminProviderSelect.value = preferredProvider;
+  syncAdminModelControls();
+  applyAdminFeatureAvailability();
+}
+
+function adminFeatureEnabled(name) {
+  if (!adminCapabilityState) return false;
+  const aliases = {
+    history: ["history", "list", "runHistory"],
+    evaluation: ["evaluation", "evaluations", "evaluationCorpus"],
+    export: ["export", "exports"],
+    rating: ["rating", "ratings", "humanRating"],
+    cancel: ["cancelRun", "cancel", "cancellation"],
+    events: ["eventReplay", "events", "streaming", "sse"],
+    create: ["createRun", "create"],
+    execute: ["executeRun", "execute"],
+  };
+  const features = adminCapabilityState.features || {};
+  for (const key of aliases[name] || [name]) {
+    if (features[key] === false) return false;
+    if (features[key] === true) return true;
+    if (features[key] && typeof features[key] === "object" && "enabled" in features[key]) {
+      return features[key].enabled === true;
+    }
+  }
+  return true;
+}
+
+function applyAdminFeatureAvailability() {
+  const controls = [
+    [ui.adminHistoryRefreshButton, "history"],
+    [ui.adminEvaluationRefreshButton, "evaluation"],
+    [ui.adminEvaluationLoadButton, "evaluation"],
+    [ui.adminExportJsonButton, "export"],
+    [ui.adminExportCsvButton, "export"],
+    [ui.adminRatingButton, "rating"],
+  ];
+  for (const [control, feature] of controls) {
+    if (!control) continue;
+    const available = adminFeatureEnabled(feature);
+    control.dataset.capabilityUnavailable = String(!available);
+    control.title = available ? "" : "当前后端尚未提供这项能力";
+    if (!available) control.disabled = true;
+  }
+  showAdminFeatureUnavailable("history");
+  showAdminFeatureUnavailable("evaluation");
+}
+
+function showAdminFeatureUnavailable(feature) {
+  if (adminFeatureEnabled(feature)) return;
+  if (feature === "history" && ui.adminHistoryStatus) {
+    ui.adminHistoryStatus.textContent = "当前后端尚未提供实验历史。";
+  }
+  if (feature === "evaluation" && ui.adminEvaluationStatus) {
+    ui.adminEvaluationStatus.textContent = "当前后端尚未提供评估题集。";
+  }
+}
+
+function syncAdminModelControls() {
+  if (!adminCapabilityState) return;
+  const provider = String(ui.adminProviderSelect?.value || "");
+  const models = adminCapabilityState.models.filter((model) => !model.provider || model.provider === provider);
+  const previousModel = String(ui.adminModelSelect?.value || "");
+  populateAdminSelect(ui.adminModelSelect, models, "没有可用模型");
+  if (models.some((item) => item.id === previousModel)) {
+    ui.adminModelSelect.value = previousModel;
+  } else {
+    const preferred = models.find((item) => item.id === "gpt-5.6-terra") || models[0];
+    if (preferred) ui.adminModelSelect.value = preferred.id;
+  }
+  syncAdminModelSpecificControls();
+}
+
+function syncAdminModelSpecificControls() {
+  if (!adminCapabilityState) return;
+  const model = adminCapabilityState.models.find((item) => item.id === ui.adminModelSelect?.value);
+  const efforts = model?.efforts?.length ? model.efforts : adminCapabilityState.efforts;
+  const modes = model?.modes?.length ? model.modes : adminCapabilityState.modes;
+  const prompts = model?.promptVersions?.length ? model.promptVersions : adminCapabilityState.promptVersions;
+  populateAdminSelect(ui.adminEffortSelect, efforts, "默认");
+  populateAdminSelect(ui.adminModeSelect, modes, "标准");
+  populateAdminSelect(ui.adminPromptVersionSelect, prompts, "后端默认");
+  selectPreferredAdminOption(ui.adminEffortSelect, ["medium", "low", "none"]);
+  selectPreferredAdminOption(ui.adminModeSelect, ["standard", "pro"]);
+  selectPreferredAdminOption(ui.adminPromptVersionSelect, ["openai-ruling-v1"]);
+}
+
+function populateAdminSelect(select, options, emptyLabel) {
+  if (!select) return;
+  clearElement(select);
+  if (!options.length) {
+    const option = document.createElement("option");
+    option.value = "";
+    option.textContent = emptyLabel;
+    select.appendChild(option);
+    return;
+  }
+  for (const item of options) {
+    const option = document.createElement("option");
+    option.value = item.id;
+    option.textContent = item.label || item.id;
+    select.appendChild(option);
+  }
+}
+
+function selectPreferredAdminOption(select, preferred) {
+  if (!select) return;
+  const values = [...select.options].map((option) => option.value);
+  const selected = preferred.find((item) => values.includes(item));
+  if (selected) select.value = selected;
+}
+
+function setAdminControlsEnabled(enabled) {
+  for (const control of [
+    ui.adminProviderSelect,
+    ui.adminModelSelect,
+    ui.adminEffortSelect,
+    ui.adminModeSelect,
+    ui.adminPromptVersionSelect,
+  ]) {
+    if (control) control.disabled = !enabled;
+  }
+  if (ui.adminStartButton) {
+    ui.adminStartButton.disabled = !enabled
+      || !adminSession.authenticated
+      || !adminFeatureEnabled("create")
+      || !adminFeatureEnabled("execute");
+  }
+}
+
+async function startAdminExperiment() {
+  if (
+    !adminSession.authenticated
+    || !adminCapabilityState
+    || !adminFeatureEnabled("create")
+    || !adminFeatureEnabled("execute")
+  ) return;
+  const question = String(ui.adminQuestionInput?.value || "").trim();
+  if (!question) {
+    setAdminRunStatus("请先输入完整的裁定问题。", "error");
+    ui.adminQuestionInput?.focus();
+    return;
+  }
+
+  stopFollowingAdminRun();
+  adminCurrentRun = null;
+  adminCurrentRunId = "";
+  adminAfterSequence = 0;
+  adminClientStartedAt = Date.now();
+  resetAdminStageStates();
+  renderAdminStageStates();
+  renderAdminRun(null);
+  startAdminElapsedTimer();
+  setAdminRunningState(true);
+  setAdminRunStatus("正在建立实验记录…");
+
+  const configuration = {
+    provider: String(ui.adminProviderSelect?.value || ""),
+    model: String(ui.adminModelSelect?.value || ""),
+    effort: String(ui.adminEffortSelect?.value || ""),
+    reasoningEffort: String(ui.adminEffortSelect?.value || ""),
+    mode: String(ui.adminModeSelect?.value || ""),
+    reasoningMode: String(ui.adminModeSelect?.value || ""),
+    promptVersion: String(ui.adminPromptVersionSelect?.value || ""),
+  };
 
   try {
-    const response = await fetch(appConfig.adminQueriesApiUrl, {
+    const created = await requestAdminLab({
       method: "POST",
-      cache: "no-store",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ password, limit: 100 }),
+      action: "create",
+      body: {
+        question,
+        ...configuration,
+        configuration,
+      },
     });
-    const payload = await response.json().catch(() => ({}));
-    if (response.status === 401 || response.status === 403) {
-      throw new Error("管理员验证失败。");
-    }
-    if (!response.ok) throw new Error("问题记录接口返回 " + response.status);
-    renderAdminQueries(payload.entries || []);
+    adminCurrentRun = extractAdminRun(created);
+    adminCurrentRunId = extractAdminRunId(created);
+    if (!adminCurrentRunId) throw new Error("后端没有返回运行编号。");
+    storeAdminRunId(adminCurrentRunId);
+    renderAdminRun(adminCurrentRun);
+    void followAdminRun(adminCurrentRunId);
+    triggerAdminRunExecution(adminCurrentRunId);
   } catch (error) {
-    if (ui.adminQueryStatus) {
-      ui.adminQueryStatus.textContent = error instanceof Error ? error.message : "暂时无法读取问题记录。";
+    setAdminRunStatus(adminErrorMessage(error, "实验启动失败。"), "error");
+    if (!adminCurrentRunId) {
+      stopAdminElapsedTimer();
+      setAdminRunningState(false);
     }
+  }
+}
+
+function shouldTriggerAdminRunExecution(run, nowMs = Date.now()) {
+  const status = String(run?.status || "").trim().toUpperCase();
+  if (!["QUEUED", "RUNNING"].includes(status) || run?.result) return false;
+
+  const execution = run?.execution;
+  const submission = execution?.providerSubmission;
+  if (submission && typeof submission === "object") {
+    const state = String(submission.state || "NONE").trim().toUpperCase();
+    if (state !== "NONE") return false;
+    if (
+      submission.requestId
+      || submission.attemptId
+      || submission.intentAt
+      || submission.outcomeUnknownAt
+    ) return false;
+  }
+
+  const lease = execution?.lease;
+  if (lease === null || lease === undefined) return true;
+  if (!lease || typeof lease !== "object") return false;
+  const expiresAt = Date.parse(String(lease.expiresAt || ""));
+  const now = Number(nowMs);
+  return Number.isFinite(expiresAt) && Number.isFinite(now) && expiresAt <= now;
+}
+
+function isAdminRunQueued(run) {
+  return String(run?.status || "").trim().toUpperCase() === "QUEUED";
+}
+
+function triggerAdminRunExecution(runId) {
+  const id = normalizeStoredAdminRunId(runId);
+  if (
+    !id
+    || adminExecuteAttemptedRunIds.has(id)
+    || !shouldTriggerAdminRunExecution(adminCurrentRun)
+  ) return;
+  adminExecuteAttemptedRunIds.add(id);
+  void requestAdminLab({
+    method: "POST",
+    action: "execute",
+    body: { runId: id },
+  }).then((executed) => {
+    if (id !== adminCurrentRunId) return;
+    mergeAdminRun(extractAdminRun(executed));
+    renderAdminRun(adminCurrentRun);
+    if (isAdminRunTerminal(adminCurrentRun)) finishAdminRunDisplay();
+  }).catch(async (error) => {
+    if (id !== adminCurrentRunId) return;
+    await refreshAdminRun(id).catch(() => {});
+    // A second page may have started the same queued run first. Once the
+    // persisted state has advanced, the failed duplicate execute is harmless.
+    if (isAdminRunQueued(adminCurrentRun)) {
+      setAdminRunStatus(adminErrorMessage(error, "运行尚未启动，请刷新后重试。"), "error");
+    }
+  }).finally(() => {
+    adminExecuteAttemptedRunIds.delete(id);
+  });
+}
+
+async function cancelAdminExperiment() {
+  if (!adminFeatureEnabled("cancel") || !adminCurrentRunId || isAdminRunTerminal(adminCurrentRun)) return;
+  ui.adminCancelButton.disabled = true;
+  setAdminRunStatus("正在请求取消；已经产生的记录会保留…");
+  try {
+    const cancelled = await requestAdminLab({
+      method: "POST",
+      action: "cancel",
+      body: { runId: adminCurrentRunId },
+    });
+    mergeAdminRun(extractAdminRun(cancelled));
+    renderAdminRun(adminCurrentRun);
+    await refreshAdminRun(adminCurrentRunId);
+  } catch (error) {
+    setAdminRunStatus(adminErrorMessage(error, "取消失败，运行可能仍在继续。"), "error");
+    ui.adminCancelButton.disabled = false;
+  }
+}
+
+async function followAdminRun(runId) {
+  const generation = ++adminFollowGeneration;
+  while (
+    generation === adminFollowGeneration
+    && runId === adminCurrentRunId
+    && !isAdminRunTerminal(adminCurrentRun)
+  ) {
+    if (!adminFeatureEnabled("events")) {
+      await refreshAdminRun(runId).catch(() => {});
+      if (!isAdminRunTerminal(adminCurrentRun)) await adminDelay(1200);
+      continue;
+    }
+    try {
+      await streamAdminEventsOnce(runId, generation);
+    } catch (error) {
+      if (generation !== adminFollowGeneration || error?.name === "AbortError") return;
+      setAdminRunStatus("进度连接暂时中断，正在从上次事件继续…");
+    }
+    if (generation !== adminFollowGeneration || isAdminRunTerminal(adminCurrentRun)) break;
+    await refreshAdminRun(runId).catch(() => {});
+    if (isAdminRunTerminal(adminCurrentRun)) break;
+    await adminDelay(1200);
+  }
+  if (generation === adminFollowGeneration && isAdminRunTerminal(adminCurrentRun)) {
+    finishAdminRunDisplay();
+  }
+}
+
+async function streamAdminEventsOnce(runId, generation) {
+  const url = new URL(getAdminEndpointUrl("/api/admin-model-lab"));
+  url.searchParams.set("action", "events");
+  url.searchParams.set("runId", runId);
+  url.searchParams.set("afterSequence", String(adminAfterSequence));
+  const controller = new AbortController();
+  adminStreamAbortController = controller;
+  const response = await fetch(url, {
+    method: "GET",
+    cache: "no-store",
+    credentials: "include",
+    headers: {
+      accept: "text/event-stream",
+      "last-event-id": String(adminAfterSequence),
+    },
+    signal: controller.signal,
+  });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({}));
+    if (response.status === 401) setAdminAuthenticated(false);
+    throw createAdminRequestError(response.status, payload);
+  }
+  if (!response.body?.getReader) {
+    const payload = await response.json().catch(() => ({}));
+    for (const event of payload?.data?.events || payload?.events || []) applyAdminRunEvent(event);
+    return;
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  while (generation === adminFollowGeneration) {
+    const { done, value } = await reader.read();
+    buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
+    const blocks = buffer.split(/\r?\n\r?\n/u);
+    buffer = blocks.pop() || "";
+    for (const block of blocks) {
+      const event = parseAdminSseBlock(block);
+      if (event) applyAdminRunEvent(event);
+    }
+    if (done || isAdminRunTerminal(adminCurrentRun)) break;
+  }
+  if (buffer.trim()) {
+    const event = parseAdminSseBlock(buffer);
+    if (event) applyAdminRunEvent(event);
+  }
+}
+
+function parseAdminSseBlock(block) {
+  let id = "";
+  let type = "message";
+  const dataLines = [];
+  for (const line of String(block || "").split(/\r?\n/u)) {
+    if (!line || line.startsWith(":")) continue;
+    if (line.startsWith("id:")) id = line.slice(3).trim();
+    else if (line.startsWith("event:")) type = line.slice(6).trim();
+    else if (line.startsWith("data:")) dataLines.push(line.slice(5).trimStart());
+  }
+  if (!dataLines.length) return null;
+  const rawData = dataLines.join("\n");
+  let data;
+  try {
+    data = JSON.parse(rawData);
+  } catch {
+    data = { message: rawData };
+  }
+  return {
+    ...data,
+    type: data?.type || type,
+    sequence: Number(data?.sequence || id || 0),
+  };
+}
+
+function applyAdminRunEvent(event) {
+  const sequence = Number(event?.sequence || event?.seq || 0);
+  if (Number.isFinite(sequence) && sequence > adminAfterSequence) adminAfterSequence = sequence;
+  const eventRun = extractAdminRun(event?.run || event?.data?.run || event?.payload?.run);
+  if (eventRun) mergeAdminRun(eventRun);
+  updateAdminStageFromEvent(event);
+
+  const terminalStatus = String(
+    event?.status
+    || event?.data?.status
+    || event?.payload?.status
+    || (event?.terminal ? event?.type : ""),
+  ).toLowerCase();
+  if (ADMIN_TERMINAL_STATUSES.has(terminalStatus)) {
+    mergeAdminRun({ status: terminalStatus });
+  }
+  renderAdminRun(adminCurrentRun);
+  if (isAdminRunTerminal(adminCurrentRun)) finishAdminRunDisplay();
+}
+
+function updateAdminStageFromEvent(event) {
+  const type = String(event?.type || event?.event || "").toLowerCase();
+  const payload = event?.data || event?.payload || event;
+  const stages = payload?.stageTiming?.stages || payload?.stages;
+  if (Array.isArray(stages)) {
+    for (const stage of stages) updateAdminStageState(stage);
+    renderAdminStageStates();
+  }
+  const id = normalizeAdminStageId(
+    payload?.stageId || payload?.stage || payload?.name || event?.stageId || event?.stage,
+  );
+  if (!id) return;
+  const previous = adminStageStates.get(id) || {};
+  let status = String(payload?.stageStatus || payload?.status || "").toLowerCase();
+  if (!status) {
+    if (/complete|finish|success/u.test(type)) status = "completed";
+    else if (/fail|error/u.test(type)) status = "failed";
+    else if (/cancel/u.test(type)) status = "cancelled";
+    else status = "running";
+  }
+  adminStageStates.set(id, {
+    ...previous,
+    ...payload,
+    id,
+    status,
+    durationMs: readAdminDuration(payload) ?? previous.durationMs,
+  });
+  renderAdminStageStates();
+}
+
+async function refreshAdminRun(runId) {
+  const data = await requestAdminLab({
+    method: "GET",
+    action: "run",
+    query: { runId },
+  });
+  mergeAdminRun(extractAdminRun(data));
+  renderAdminRun(adminCurrentRun);
+  if (isAdminRunTerminal(adminCurrentRun)) {
+    finishAdminRunDisplay();
+  } else {
+    triggerAdminRunExecution(runId);
+  }
+}
+
+function mergeAdminRun(run) {
+  if (!run || typeof run !== "object") return;
+  const previousRunId = extractAdminRunId(adminCurrentRun);
+  const incomingRunId = extractAdminRunId(run);
+  const previousRun = (
+    previousRunId
+    && incomingRunId
+    && previousRunId !== incomingRunId
+  ) ? null : adminCurrentRun;
+  const mergedRun = {
+    ...(previousRun || {}),
+    ...run,
+  };
+  const mergedMetrics = {
+      ...(previousRun?.metrics || {}),
+      ...(run.metrics || {}),
+  };
+  const mergedUsage = {
+      ...(previousRun?.usage || {}),
+      ...(run.usage || {}),
+  };
+  if (Object.keys(mergedMetrics).length) mergedRun.metrics = mergedMetrics;
+  else delete mergedRun.metrics;
+  if (Object.keys(mergedUsage).length) mergedRun.usage = mergedUsage;
+  else delete mergedRun.usage;
+  adminCurrentRun = mergedRun;
+  adminCurrentRunId = extractAdminRunId(adminCurrentRun) || adminCurrentRunId;
+  storeAdminRunId(adminCurrentRunId);
+  updateAdminStagesFromRun(adminCurrentRun);
+}
+
+function extractAdminRun(data) {
+  if (!data || typeof data !== "object") return null;
+  return data.run || data.record || data.item || data;
+}
+
+function extractAdminRunId(data) {
+  const run = extractAdminRun(data);
+  return String(run?.runId || run?.id || data?.runId || "");
+}
+
+function updateAdminStagesFromRun(run) {
+  const stages = run?.stageTiming?.stages
+    || run?.stages
+    || run?.stageTimings
+    || run?.timings?.stages
+    || run?.metrics?.stages;
+  if (Array.isArray(stages)) {
+    for (const stage of stages) updateAdminStageState(stage);
+  } else if (stages && typeof stages === "object") {
+    for (const [id, stage] of Object.entries(stages)) {
+      updateAdminStageState({ id, ...(stage && typeof stage === "object" ? stage : {}) });
+    }
+  }
+}
+
+function updateAdminStageState(stage) {
+  const id = normalizeAdminStageId(stage?.id || stage?.stageId || stage?.stage || stage?.name);
+  if (!id) return;
+  const previous = adminStageStates.get(id) || {};
+  adminStageStates.set(id, {
+    ...previous,
+    ...stage,
+    id,
+    status: String(stage?.status || previous.status || "pending").toLowerCase(),
+    durationMs: readAdminDuration(stage) ?? previous.durationMs,
+  });
+}
+
+function normalizeAdminStageId(value) {
+  const normalized = String(value || "").trim().toLowerCase().replace(/[.\s-]+/gu, "_");
+  const aliases = {
+    understand_question: "understand",
+    understanding: "understand",
+    extract_names: "extract_card_names",
+    card_names: "extract_card_names",
+    retrieve_cards: "retrieve_card_texts",
+    card_texts: "retrieve_card_texts",
+    retrieve_evidence: "retrieve_rulings_evidence",
+    rulings: "retrieve_rulings_evidence",
+    generate: "generate_ruling",
+    final_ruling: "generate_ruling",
+  };
+  const id = aliases[normalized] || normalized;
+  return ADMIN_STAGES.some((stage) => stage.id === id) ? id : "";
+}
+
+function resetAdminStageStates() {
+  adminStageStates.clear();
+  for (const stage of ADMIN_STAGES) adminStageStates.set(stage.id, { ...stage, status: "pending" });
+}
+
+function renderAdminStageStates() {
+  if (!ui.adminStageList) return;
+  for (const item of ui.adminStageList.querySelectorAll("[data-admin-stage]")) {
+    const id = item.dataset.adminStage;
+    const state = adminStageStates.get(id) || { status: "pending" };
+    const status = normalizeAdminStageStatus(state.status);
+    item.className = `is-${status}`;
+    const small = item.querySelector("small");
+    if (small) small.textContent = adminStageStatusText(state);
+  }
+}
+
+function normalizeAdminStageStatus(status) {
+  const value = String(status || "").toLowerCase();
+  if (/complete|success|succeed|done/u.test(value)) return "completed";
+  if (/running|active|start|progress/u.test(value)) return "running";
+  if (/fail|error/u.test(value)) return "failed";
+  if (/cancel/u.test(value)) return "cancelled";
+  return "pending";
+}
+
+function adminStageStatusText(state) {
+  const status = normalizeAdminStageStatus(state?.status);
+  const duration = readAdminDuration(state);
+  const parts = [{
+    pending: "等待开始",
+    running: "处理中",
+    completed: "已完成",
+    failed: "失败",
+    cancelled: "已取消",
+  }[status]];
+  if (Number.isFinite(duration)) {
+    const serverLabel = String(state?.speedLabel || state?.speed_label || "").toUpperCase();
+    parts.push(
+      formatAdminDuration(duration),
+      ["FAST", "NORMAL", "SLOW"].includes(serverLabel) ? serverLabel : adminDurationCategory(duration),
+    );
+  }
+  return parts.filter(Boolean).join(" · ");
+}
+
+function readAdminDuration(value) {
+  const candidates = [
+    value?.durationMs,
+    value?.elapsedMs,
+    value?.wallClockMs,
+    value?.timing?.durationMs,
+  ];
+  for (const candidate of candidates) {
+    const number = Number(candidate);
+    if (Number.isFinite(number) && number >= 0) return number;
+  }
+  const startedAt = Date.parse(String(value?.startedAt || ""));
+  const completedAt = Date.parse(String(value?.completedAt || value?.finishedAt || value?.endedAt || ""));
+  return Number.isFinite(startedAt) && Number.isFinite(completedAt)
+    ? Math.max(0, completedAt - startedAt)
+    : null;
+}
+
+function adminDurationCategory(durationMs) {
+  if (!Number.isFinite(Number(durationMs))) return "";
+  if (Number(durationMs) <= 10_000) return "FAST";
+  if (Number(durationMs) <= 30_000) return "NORMAL";
+  return "SLOW";
+}
+
+function renderAdminRun(run) {
+  updateAdminStagesFromRun(run);
+  renderAdminStageStates();
+  const runId = extractAdminRunId(run) || adminCurrentRunId;
+  const status = String(run?.status || "").toLowerCase();
+  if (ui.adminRunIdentity) {
+    ui.adminRunIdentity.textContent = runId
+      ? `运行 ${runId} · ${adminRunStatusLabel(status)}`
+      : "尚未开始运行。";
+  }
+  if (runId) setAdminRunStatus(adminRunStatusMessage(status));
+  renderAdminStructuredResult(run);
+  renderAdminMetrics(run);
+  renderAdminEvidence(run);
+  if (ui.adminResultJson) ui.adminResultJson.textContent = run ? safeAdminJson(run) : "";
+  const terminal = isAdminRunTerminal(run);
+  if (ui.adminExportJsonButton) ui.adminExportJsonButton.disabled = !runId || !adminFeatureEnabled("export");
+  if (ui.adminExportCsvButton) ui.adminExportCsvButton.disabled = !runId || !adminFeatureEnabled("export");
+  if (ui.adminRatingButton) ui.adminRatingButton.disabled = !runId || !terminal || !adminFeatureEnabled("rating");
+  setAdminRunningState(Boolean(runId) && !terminal);
+}
+
+function renderAdminStructuredResult(run) {
+  if (!ui.adminResultSummary) return;
+  clearElement(ui.adminResultSummary);
+  const result = run?.result?.finalRuling
+    || run?.result?.ruling
+    || run?.result?.output
+    || run?.result
+    || run?.output
+    || run?.response;
+  if (!result || typeof result !== "object") {
+    appendText(ui.adminResultSummary, "p", run ? "最终裁定尚未生成。" : "运行完成后会在这里显示结构化裁定。");
+    return;
+  }
+
+  const conciseAnswer = String(result.conciseAnswer || "").trim();
+  const verdicts = firstAdminArray(result.verdicts);
+  const claims = firstAdminArray(result.claims);
+  const timeline = firstAdminArray(result.timeline);
+  const unresolved = firstAdminArray(result.unresolved);
+  const isCurrentRulingSchema = Boolean(
+    conciseAnswer
+    || verdicts.length
+    || claims.length
+    || timeline.length
+    || unresolved.length,
+  );
+
+  if (isCurrentRulingSchema) {
+    if (conciseAnswer) appendText(ui.adminResultSummary, "h4", conciseAnswer);
+
+    if (verdicts.length) {
+      appendText(ui.adminResultSummary, "strong", "逐题结论");
+      const verdictList = document.createElement("ul");
+      for (const verdict of verdicts) {
+        const item = document.createElement("li");
+        const questionId = String(verdict?.questionId || "").trim();
+        const value = adminRulingVerdictLabel(verdict?.value);
+        appendText(item, "strong", [questionId, value].filter(Boolean).join(" · ") || "结论");
+        const conclusion = String(verdict?.conclusion || "").trim();
+        if (conclusion && conclusion !== conciseAnswer) appendText(item, "p", conclusion);
+        appendAdminStringList(item, verdict?.conditions, "适用条件");
+        verdictList.appendChild(item);
+      }
+      ui.adminResultSummary.appendChild(verdictList);
+    }
+
+    if (claims.length) {
+      appendText(ui.adminResultSummary, "strong", "判断依据");
+      const claimList = document.createElement("ul");
+      for (const claim of claims) {
+        const proposition = String(claim?.proposition || "").trim();
+        if (!proposition) continue;
+        const item = document.createElement("li");
+        const status = adminRulingVerdictLabel(claim?.status);
+        const scope = String(claim?.questionId || "").trim();
+        appendText(item, "span", [
+          proposition,
+          scope ? `题目 ${scope}` : "",
+          status,
+          claim?.decisive === true ? "关键判断" : "",
+        ].filter(Boolean).join(" · "));
+        claimList.appendChild(item);
+      }
+      if (claimList.childNodes.length) ui.adminResultSummary.appendChild(claimList);
+    }
+
+    if (timeline.length) {
+      appendText(ui.adminResultSummary, "strong", "处理顺序");
+      const timelineList = document.createElement("ol");
+      const orderedTimeline = [...timeline].sort(
+        (left, right) => Number(left?.order || 0) - Number(right?.order || 0),
+      );
+      for (const step of orderedTimeline) {
+        const action = String(step?.action || "").trim();
+        const stepResult = String(step?.result || "").trim();
+        if (!action && !stepResult) continue;
+        appendText(timelineList, "li", [action, stepResult].filter(Boolean).join(" → "));
+      }
+      if (timelineList.childNodes.length) ui.adminResultSummary.appendChild(timelineList);
+    }
+
+    if (unresolved.length) {
+      appendText(ui.adminResultSummary, "strong", "仍需确认");
+      const unresolvedList = document.createElement("ul");
+      for (const item of unresolved) {
+        const explanation = String(item?.explanation || "").trim();
+        if (!explanation) continue;
+        const questionId = String(item?.questionId || "").trim();
+        const code = String(item?.code || "").trim();
+        appendText(unresolvedList, "li", [
+          explanation,
+          questionId ? `题目 ${questionId}` : "",
+          code,
+          item?.decisive === true ? "会影响最终结论" : "",
+        ].filter(Boolean).join(" · "));
+      }
+      if (unresolvedList.childNodes.length) ui.adminResultSummary.appendChild(unresolvedList);
+    }
+
+    appendAdminStringList(
+      ui.adminResultSummary,
+      result?.confidence?.reasons,
+      result?.confidence?.level
+        ? `置信度：${String(result.confidence.level)}`
+        : "置信度说明",
+    );
+  }
+
+  if (isCurrentRulingSchema && ui.adminResultSummary.childNodes.length) return;
+
+  // Compatibility fallback for older or externally supplied result shapes.
+  const verdict = firstAdminValue(
+    result.verdict,
+    result.conclusion,
+    result.shortAnswer,
+    result.short_answer,
+    result.answer,
+    result.finalAnswer,
+  );
+  if (verdict) appendText(ui.adminResultSummary, "h4", String(verdict));
+
+  const explanation = firstAdminValue(result.explanation, result.summary, result.ruling);
+  if (typeof explanation === "string" && explanation !== verdict) {
+    appendText(ui.adminResultSummary, "p", explanation);
+  }
+
+  const reasons = firstAdminArray(result.reasons, result.reasoning, result.steps);
+  if (reasons.length) {
+    appendText(ui.adminResultSummary, "strong", "理由");
+    const list = document.createElement("ol");
+    for (const reason of reasons) appendText(list, "li", adminDisplayValue(reason));
+    ui.adminResultSummary.appendChild(list);
+  }
+
+  const risks = firstAdminArray(result.uncertainties, result.risks, result.warnings);
+  if (risks.length) {
+    appendText(ui.adminResultSummary, "strong", "风险与未确定项");
+    const list = document.createElement("ul");
+    for (const risk of risks) appendText(list, "li", adminDisplayValue(risk));
+    ui.adminResultSummary.appendChild(list);
+  }
+
+  if (!ui.adminResultSummary.childNodes.length) {
+    appendText(ui.adminResultSummary, "p", "已收到结构化结果，请展开下方查看完整内容。");
+  }
+}
+
+function appendAdminStringList(parent, values, label) {
+  const items = Array.isArray(values)
+    ? values.map((value) => String(value || "").trim()).filter(Boolean)
+    : [];
+  if (!items.length) return;
+  appendText(parent, "strong", label);
+  const list = document.createElement("ul");
+  for (const item of items) appendText(list, "li", item);
+  parent.appendChild(list);
+}
+
+function adminRulingVerdictLabel(value) {
+  const normalized = String(value || "").trim().toUpperCase();
+  return {
+    TRUE: "可以／成立",
+    FALSE: "不可以／不成立",
+    CONDITIONAL: "视条件而定",
+    UNKNOWN: "尚不能确定",
+  }[normalized] || normalized;
+}
+
+function renderAdminMetrics(run) {
+  if (!ui.adminMetrics) return;
+  clearElement(ui.adminMetrics);
+  const firstNonEmptyObject = (...values) => values.find((value) => (
+    value
+    && typeof value === "object"
+    && !Array.isArray(value)
+    && Object.keys(value).length > 0
+  )) || {};
+  const metrics = firstNonEmptyObject(run?.metrics, run?.result?.metrics);
+  const meteringTotals = run?.result?.metering?.totals || {};
+  const usage = firstNonEmptyObject(
+    run?.usage,
+    metrics?.usage,
+    meteringTotals?.usage,
+    run?.result?.usage,
+  );
+  const aggregateCost = firstNonEmptyObject(metrics?.cost, meteringTotals?.cost);
+  const finalStageCost = run?.result?.cost || {};
+  const latency = run?.result?.latency || metrics?.latency || {};
+  const usdCostIncomplete = (
+    aggregateCost.completeInUsd === false
+    && aggregateCost.totalCostUsd == null
+    && aggregateCost.knownCostUsd != null
+  );
+  const cnyCostIncomplete = (
+    aggregateCost.completeInCny === false
+    && aggregateCost.totalCostCny == null
+    && aggregateCost.knownCostCny != null
+  );
+  const formatMissingCostStages = (values) => {
+    if (!Array.isArray(values) || !values.length) return "";
+    const labels = {
+      evidencePreparation: "证据准备（DeepSeek）",
+      finalRuling: "最终裁定（OpenAI）",
+    };
+    return values
+      .map((value) => labels[String(value || "")] || String(value || ""))
+      .filter(Boolean)
+      .join("、");
+  };
+  const configuration = run?.configuration
+    || run?.executionProfile
+    || run?.config
+    || run?.options
+    || {};
+  const finalConfiguration = configuration.finalRuling || configuration;
+  const fields = [
+    ["状态", adminRunStatusLabel(run?.status)],
+    ["服务提供方", run?.provider || finalConfiguration.provider],
+    ["模型", run?.model || finalConfiguration.model || finalConfiguration.requestedModel],
+    ["推理强度", finalConfiguration.reasoningEffort || finalConfiguration.effort || run?.reasoningEffort],
+    ["运行模式", finalConfiguration.reasoningMode || finalConfiguration.mode || run?.reasoningMode || run?.mode],
+    ["提示词版本", configuration.prompt?.version || configuration.promptVersion || run?.promptVersion],
+    ["输入 Token", usage.inputTokens ?? usage.input_tokens ?? metrics.inputTokens],
+    ["缓存输入 Token", usage.cachedInputTokens ?? usage.cached_input_tokens ?? metrics.cachedInputTokens],
+    ["输出 Token", usage.outputTokens ?? usage.output_tokens ?? metrics.outputTokens],
+    ["推理 Token", usage.reasoningTokens ?? usage.reasoning_tokens ?? metrics.reasoningTokens],
+    ["总 Token", usage.totalTokens ?? usage.total_tokens ?? metrics.totalTokens],
+    [usdCostIncomplete ? "估算成本（仅已知部分）" : "估算成本", formatAdminCost(
+      metrics.estimatedCostUsd
+      ?? metrics.costUsd
+      ?? aggregateCost.totalCostUsd
+      ?? aggregateCost.knownCostUsd
+      ?? (typeof finalStageCost === "number" ? finalStageCost : undefined)
+      ?? finalStageCost.estimatedUsd
+      ?? finalStageCost.usd
+      ?? run?.estimatedCostUsd,
+    )],
+    ["美元成本缺失阶段", usdCostIncomplete
+      ? formatMissingCostStages(aggregateCost.missingUsdStages)
+      : ""],
+    [cnyCostIncomplete ? "人民币估算（仅已知部分）" : "人民币估算", formatAdminCnyCost(
+      metrics.estimatedCostCny
+      ?? metrics.costCny
+      ?? aggregateCost.totalCostCny
+      ?? aggregateCost.knownCostCny
+      ?? (typeof finalStageCost === "object" ? finalStageCost.totalCostCny : undefined)
+      ?? finalStageCost.estimatedCny
+      ?? finalStageCost.cny
+      ?? run?.estimatedCostCny,
+    )],
+    ["人民币成本缺失阶段", cnyCostIncomplete
+      ? formatMissingCostStages(aggregateCost.missingCnyStages)
+      : ""],
+    ["服务端总耗时", formatAdminMetricDuration(
+      latency.totalWallClockMs
+      ?? metrics.wallClockMs
+      ?? metrics.totalDurationMs
+      ?? (typeof latency === "number" ? latency : undefined)
+      ?? latency.wallClockMs
+      ?? latency.totalMs
+      ?? run?.wallClockMs
+      ?? run?.durationMs,
+      metrics.speedLabel || latency.speedLabel,
+    )],
+  ];
+  for (const [label, value] of fields) {
+    if (value === undefined || value === null || value === "") continue;
+    const term = document.createElement("div");
+    appendText(term, "dt", label);
+    appendText(term, "dd", String(value));
+    ui.adminMetrics.appendChild(term);
+  }
+}
+
+function renderAdminEvidence(run) {
+  const evidence = run?.evidenceSnapshot
+    || run?.evidence_snapshot
+    || run?.snapshot
+    || run?.result?.evidenceSnapshot
+    || run?.result?.evidence_snapshot;
+  if (ui.adminEvidenceJson) ui.adminEvidenceJson.textContent = evidence ? safeAdminJson(evidence) : "";
+  if (!ui.adminEvidenceSummary) return;
+  clearElement(ui.adminEvidenceSummary);
+  if (!evidence) {
+    appendText(ui.adminEvidenceSummary, "p", "尚未取得冻结证据快照。");
+    return;
+  }
+  const cards = evidence.cards || evidence.cardTexts || evidence.card_texts;
+  const rulings = evidence.rulings || evidence.faqs || evidence.evidence;
+  const queries = evidence.queries || evidence.retrievalQueries || evidence.retrieval_queries;
+  const summary = [
+    Array.isArray(cards) ? `${cards.length} 张卡片` : "",
+    Array.isArray(rulings) ? `${rulings.length} 条裁定/证据` : "",
+    Array.isArray(queries) ? `${queries.length} 个检索词` : "",
+  ].filter(Boolean);
+  appendText(ui.adminEvidenceSummary, "p", summary.length ? summary.join(" · ") : "证据快照已冻结。");
+}
+
+function finishAdminRunDisplay() {
+  stopAdminElapsedTimer();
+  setAdminRunningState(false);
+  renderAdminRun(adminCurrentRun);
+  void loadAdminHistory();
+}
+
+function setAdminRunningState(isRunning) {
+  if (ui.adminStartButton) {
+    ui.adminStartButton.disabled = isRunning
+      || !adminSession.authenticated
+      || !adminCapabilityState?.models?.length
+      || !adminFeatureEnabled("create")
+      || !adminFeatureEnabled("execute");
+    ui.adminStartButton.textContent = isRunning ? "运行中…" : "开始实验";
+  }
+  if (ui.adminCancelButton) {
+    ui.adminCancelButton.disabled = !isRunning || !adminCurrentRunId || !adminFeatureEnabled("cancel");
+  }
+}
+
+function startAdminElapsedTimer() {
+  stopAdminElapsedTimer();
+  updateAdminElapsedText();
+  adminElapsedTimer = window.setInterval(updateAdminElapsedText, 250);
+}
+
+function stopAdminElapsedTimer() {
+  if (adminElapsedTimer) window.clearInterval(adminElapsedTimer);
+  adminElapsedTimer = 0;
+  updateAdminElapsedText();
+}
+
+function updateAdminElapsedText() {
+  if (!ui.adminElapsedText) return;
+  const serverDuration = readAdminDuration(adminCurrentRun?.metrics || adminCurrentRun);
+  if (isAdminRunTerminal(adminCurrentRun) && Number.isFinite(serverDuration)) {
+    ui.adminElapsedText.textContent = `${formatAdminDuration(serverDuration)} · ${adminDurationCategory(serverDuration)}（服务端）`;
+    return;
+  }
+  if (adminClientStartedAt && !isAdminRunTerminal(adminCurrentRun)) {
+    ui.adminElapsedText.textContent = `${formatAdminDuration(Date.now() - adminClientStartedAt)}（浏览器计时）`;
+    return;
+  }
+  ui.adminElapsedText.textContent = "—";
+}
+
+function stopFollowingAdminRun() {
+  adminFollowGeneration += 1;
+  adminStreamAbortController?.abort();
+  adminStreamAbortController = null;
+  stopAdminElapsedTimer();
+}
+
+async function loadAdminHistory() {
+  if (!adminFeatureEnabled("history") || !adminSession.authenticated || !ui.adminHistoryList) {
+    showAdminFeatureUnavailable("history");
+    return;
+  }
+  ui.adminHistoryRefreshButton.disabled = true;
+  ui.adminHistoryStatus.textContent = "正在读取最近的实验…";
+  try {
+    const data = await requestAdminLab({
+      method: "GET",
+      action: "list",
+      query: { limit: 100 },
+    });
+    const records = firstAdminArray(data?.runs, data?.items, data?.entries, Array.isArray(data) ? data : null);
+    renderAdminHistory(records);
+  } catch (error) {
+    ui.adminHistoryStatus.textContent = adminErrorMessage(error, "暂时无法读取实验历史。");
   } finally {
-    ui.adminQueryLoadButton.disabled = false;
+    ui.adminHistoryRefreshButton.disabled = false;
   }
 }
 
-function renderAdminQueries(entries) {
-  if (!ui.adminQueryList || !ui.adminQueryStatus) return;
-  clearElement(ui.adminQueryList);
-  const records = Array.isArray(entries) ? entries : [];
-  ui.adminQueryStatus.textContent = records.length
-    ? "最近 " + records.length + " 条问题。"
-    : "暂时没有已保存的问题。";
-
-  for (const entry of records) {
+function renderAdminHistory(records) {
+  clearElement(ui.adminHistoryList);
+  ui.adminHistoryStatus.textContent = records.length ? `最近 ${records.length} 次实验。` : "暂时没有实验记录。";
+  for (const record of records) {
+    const runId = extractAdminRunId(record);
+    if (!runId) continue;
     const item = document.createElement("li");
-    const time = document.createElement("time");
-    const date = new Date(entry?.createdAt || "");
-    time.dateTime = Number.isNaN(date.getTime()) ? "" : date.toISOString();
-    time.textContent = Number.isNaN(date.getTime())
-      ? String(entry?.createdAt || "")
-      : new Intl.DateTimeFormat("zh-CN", {
-          dateStyle: "medium",
-          timeStyle: "short",
-        }).format(date);
-    const question = document.createElement("p");
-    question.textContent = String(entry?.question || "");
-    item.append(time, question);
-    ui.adminQueryList.appendChild(item);
+    const button = document.createElement("button");
+    button.type = "button";
+    const question = String(record?.question || record?.input?.question || "未命名问题");
+    appendText(button, "strong", question);
+    appendText(button, "small", [
+      formatAdminDate(record?.createdAt || record?.startedAt),
+      adminRunStatusLabel(record?.status),
+      String(record?.model || record?.configuration?.model || ""),
+    ].filter(Boolean).join(" · "));
+    button.addEventListener("click", () => loadAdminRunFromHistory(runId));
+    item.appendChild(button);
+    ui.adminHistoryList.appendChild(item);
   }
 }
+
+async function loadAdminRunFromHistory(runId) {
+  stopFollowingAdminRun();
+  adminCurrentRunId = normalizeStoredAdminRunId(runId);
+  if (!adminCurrentRunId) return false;
+  storeAdminRunId(adminCurrentRunId);
+  adminAfterSequence = 0;
+  resetAdminStageStates();
+  setAdminRunStatus("正在读取实验记录…");
+  try {
+    await refreshAdminRun(adminCurrentRunId);
+    if (!isAdminRunTerminal(adminCurrentRun)) {
+      adminClientStartedAt = Date.now();
+      startAdminElapsedTimer();
+      void followAdminRun(adminCurrentRunId);
+      triggerAdminRunExecution(adminCurrentRunId);
+    }
+    return true;
+  } catch (error) {
+    if (error?.code === "admin_run_not_found") clearStoredAdminRunId();
+    setAdminRunStatus(adminErrorMessage(error, "无法读取这次实验。"), "error");
+    return false;
+  }
+}
+
+async function restoreStoredAdminRun() {
+  const runId = readStoredAdminRunId();
+  if (!runId || !adminSession.authenticated) return;
+  setAdminRunStatus("正在恢复刷新前的实验…");
+  await loadAdminRunFromHistory(runId);
+}
+
+function storeAdminRunId(runId) {
+  const id = normalizeStoredAdminRunId(runId);
+  if (!id) return;
+  try {
+    sessionStorage.setItem(adminCurrentRunStorageKey, id);
+  } catch {
+    // Run recovery remains available from persistent experiment history.
+  }
+}
+
+function readStoredAdminRunId() {
+  try {
+    return normalizeStoredAdminRunId(sessionStorage.getItem(adminCurrentRunStorageKey));
+  } catch {
+    return "";
+  }
+}
+
+function clearStoredAdminRunId() {
+  try {
+    sessionStorage.removeItem(adminCurrentRunStorageKey);
+  } catch {
+    // Session storage is an optional convenience, never an authentication layer.
+  }
+}
+
+function normalizeStoredAdminRunId(value) {
+  const text = String(value || "").trim();
+  return text && text.length <= 200 && !/[\u0000-\u001f{}\s]/u.test(text) ? text : "";
+}
+
+async function loadAdminQuestionHistory() {
+  if (!adminSession.authenticated || !ui.adminQuestionHistoryList) return;
+  ui.adminQuestionHistoryRefreshButton.disabled = true;
+  ui.adminQuestionHistoryStatus.textContent = "正在读取后台最近保存的提问…";
+  try {
+    const payload = await requestAdminQuestionHistory();
+    const entries = firstAdminArray(
+      payload?.entries,
+      payload?.records,
+      payload?.items,
+      Array.isArray(payload) ? payload : null,
+    );
+    renderAdminQuestionHistory(entries.slice(0, 100));
+  } catch (error) {
+    ui.adminQuestionHistoryStatus.textContent = adminErrorMessage(
+      error,
+      "暂时无法读取后台历史提问。",
+    );
+  } finally {
+    ui.adminQuestionHistoryRefreshButton.disabled = false;
+  }
+}
+
+async function requestAdminQuestionHistory() {
+  const url = new URL(getAdminEndpointUrl("/api/admin-queries"));
+  url.searchParams.set("limit", "100");
+  const response = await fetch(url, {
+    method: "GET",
+    cache: "no-store",
+    credentials: "include",
+    headers: { accept: "application/json" },
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (response.status === 401) {
+    stopFollowingAdminRun();
+    setAdminAuthenticated(false);
+    setAdminLoginStatus("登录已过期，请重新登录。", "error");
+  }
+  if (!response.ok || payload.ok === false) throw createAdminRequestError(response.status, payload);
+  return payload.data ?? payload;
+}
+
+function renderAdminQuestionHistory(entries) {
+  clearElement(ui.adminQuestionHistoryList);
+  ui.adminQuestionHistoryStatus.textContent = entries.length
+    ? `后台最近保存的 ${entries.length} 条提问（最多 100 条）。`
+    : "后台暂时没有已保存的提问。";
+  for (const entry of entries) {
+    const question = String(entry?.question || "").trim();
+    if (!question) continue;
+    const item = document.createElement("li");
+    const button = document.createElement("button");
+    button.type = "button";
+    button.title = "载入到新实验";
+    appendText(button, "strong", question);
+    appendText(button, "small", [
+      formatAdminDate(entry?.createdAt),
+      entry?.mode ? `来源：${String(entry.mode)}` : "",
+      "点击载入",
+    ].filter(Boolean).join(" · "));
+    button.addEventListener("click", () => {
+      ui.adminQuestionInput.value = question;
+      ui.adminQuestionInput.focus();
+      ui.adminQuestionHistoryStatus.textContent = "已载入这条历史提问，可直接开始新实验。";
+    });
+    item.appendChild(button);
+    ui.adminQuestionHistoryList.appendChild(item);
+  }
+}
+
+async function loadAdminEvaluationCases() {
+  if (!adminFeatureEnabled("evaluation") || !adminSession.authenticated || !ui.adminEvaluationSelect) {
+    showAdminFeatureUnavailable("evaluation");
+    return;
+  }
+  ui.adminEvaluationRefreshButton.disabled = true;
+  ui.adminEvaluationStatus.textContent = "正在读取评估题集…";
+  try {
+    const data = await requestAdminLab({
+      method: "GET",
+      action: "evaluation",
+    });
+    adminEvaluationCases = firstAdminArray(data?.cases, data?.items, data?.entries, Array.isArray(data) ? data : null);
+    renderAdminEvaluationCases();
+  } catch (error) {
+    adminEvaluationCases = [];
+    renderAdminEvaluationCases();
+    ui.adminEvaluationStatus.textContent = adminErrorMessage(error, "暂时无法读取评估题集。");
+  } finally {
+    ui.adminEvaluationRefreshButton.disabled = false;
+  }
+}
+
+function renderAdminEvaluationCases() {
+  clearElement(ui.adminEvaluationSelect);
+  for (let index = 0; index < adminEvaluationCases.length; index += 1) {
+    const item = adminEvaluationCases[index];
+    const option = document.createElement("option");
+    option.value = String(index);
+    option.textContent = String(item?.title || item?.name || item?.id || `评估题 ${index + 1}`);
+    ui.adminEvaluationSelect.appendChild(option);
+  }
+  ui.adminEvaluationLoadButton.disabled = !adminEvaluationCases.length;
+  ui.adminEvaluationStatus.textContent = adminEvaluationCases.length
+    ? `已读取 ${adminEvaluationCases.length} 道固定评估题。`
+    : "当前没有可用评估题。";
+}
+
+function loadSelectedAdminEvaluation() {
+  const index = Number(ui.adminEvaluationSelect?.value || 0);
+  const item = adminEvaluationCases[index];
+  const question = String(item?.question || item?.input?.question || item?.prompt || "");
+  if (!item || !question) {
+    ui.adminEvaluationStatus.textContent = "这条评估记录没有问题文本。";
+    return;
+  }
+  ui.adminQuestionInput.value = question;
+  ui.adminQuestionInput.focus();
+  ui.adminEvaluationStatus.textContent = "已载入问题，可调整配置后开始实验。";
+}
+
+async function submitAdminRating(event) {
+  event.preventDefault();
+  if (!adminFeatureEnabled("rating") || !adminCurrentRunId || !isAdminRunTerminal(adminCurrentRun)) return;
+  ui.adminRatingButton.disabled = true;
+  ui.adminRatingStatus.textContent = "正在保存评分…";
+  try {
+    await requestAdminLab({
+      method: "POST",
+      action: "rating",
+      body: {
+        runId: adminCurrentRunId,
+        rating: String(ui.adminRatingSelect?.value || ""),
+        notes: String(ui.adminRatingNotes?.value || "").trim(),
+      },
+    });
+    ui.adminRatingStatus.textContent = "评分已保存。";
+    await loadAdminHistory();
+  } catch (error) {
+    ui.adminRatingStatus.textContent = adminErrorMessage(error, "评分保存失败。");
+  } finally {
+    ui.adminRatingButton.disabled = false;
+  }
+}
+
+async function exportAdminRun(format) {
+  if (!adminFeatureEnabled("export") || !adminCurrentRunId) return;
+  const button = format === "csv" ? ui.adminExportCsvButton : ui.adminExportJsonButton;
+  button.disabled = true;
+  setAdminRunStatus(`正在准备 ${format.toUpperCase()} 文件…`);
+  try {
+    const data = await requestAdminLab({
+      method: "GET",
+      action: "export",
+      query: { runId: adminCurrentRunId, format },
+    });
+    const serverContent = typeof data?.content === "string" ? data.content : null;
+    const fileName = String(
+      data?.fileName || `ocg-model-lab-${adminCurrentRunId}.${format}`,
+    );
+    const content = serverContent
+      ?? (format === "csv" ? adminObjectToCsv(data) : safeAdminJson(data));
+    const contentType = String(
+      data?.contentType
+        || (format === "csv" ? "text/csv;charset=utf-8" : "application/json;charset=utf-8"),
+    );
+    downloadAdminFile(fileName, content, contentType);
+    setAdminRunStatus("导出文件已生成。", "good");
+  } catch (error) {
+    setAdminRunStatus(adminErrorMessage(error, "导出失败。"), "error");
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function requestAdminLab({
+  method = "GET",
+  action,
+  query = {},
+  body = {},
+}) {
+  const url = new URL(getAdminEndpointUrl("/api/admin-model-lab"));
+  if (method === "GET") {
+    url.searchParams.set("action", action);
+    for (const [key, value] of Object.entries(query)) {
+      if (value !== undefined && value !== null && value !== "") url.searchParams.set(key, String(value));
+    }
+  }
+  const headers = { accept: "application/json" };
+  if (method !== "GET") {
+    headers["content-type"] = "application/json";
+    headers["x-csrf-token"] = adminSession.csrfToken;
+  }
+  const response = await fetch(url, {
+    method,
+    cache: "no-store",
+    credentials: "include",
+    headers,
+    ...(method === "GET" ? {} : { body: JSON.stringify({ action, ...body }) }),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (response.status === 401) {
+    stopFollowingAdminRun();
+    setAdminAuthenticated(false);
+    setAdminLoginStatus("登录已过期，请重新登录。", "error");
+  }
+  if (!response.ok || payload.ok === false) throw createAdminRequestError(response.status, payload);
+  return payload.data ?? payload;
+}
+
+function getAdminEndpointUrl(pathname) {
+  const path = String(pathname || "");
+  if (appConfig.answerApiUrl) {
+    try {
+      const url = new URL(appConfig.answerApiUrl, window.location.href);
+      url.pathname = path;
+      url.search = "";
+      url.hash = "";
+      return url.toString();
+    } catch {
+      // Fall through to the current origin.
+    }
+  }
+  return new URL(path, window.location.origin).toString();
+}
+
+function createAdminRequestError(status, payload) {
+  const error = new Error(String(payload?.message || payload?.error || `管理接口返回 ${status}`));
+  error.status = status;
+  error.code = String(payload?.error || "");
+  return error;
+}
+
+function adminErrorMessage(error, fallback) {
+  const messages = {
+    admin_login_invalid: "管理员密码不正确。",
+    admin_login_rate_limited: "登录尝试过多，请稍后再试。",
+    admin_session_required: "请先登录管理员实验室。",
+    admin_session_invalid: "登录已失效，请重新登录。",
+    admin_session_expired: "登录已过期，请重新登录。",
+    admin_csrf_invalid: "安全令牌已失效，请重新登录。",
+    capability_unavailable: "后端尚未提供这项实验能力。",
+    query_audit_storage_unavailable: "后台历史提问存储尚未配置。",
+  };
+  return messages[error?.code] || String(error?.message || fallback || "请求失败。");
+}
+
+function setAdminRunStatus(message, tone = "") {
+  if (!ui.adminRunStatus) return;
+  ui.adminRunStatus.textContent = String(message || "");
+  ui.adminRunStatus.classList.toggle("is-error", tone === "error");
+  ui.adminRunStatus.classList.toggle("is-good", tone === "good");
+}
+
+function adminRunStatusMessage(status) {
+  const normalized = String(status || "").toLowerCase();
+  if (isAdminRunTerminal({ status: normalized })) return `运行${adminRunStatusLabel(normalized)}。`;
+  if (normalized) return `运行${adminRunStatusLabel(normalized)}；关闭页面后后端仍可继续。`;
+  return "实验记录已建立。";
+}
+
+function adminRunStatusLabel(status) {
+  const labels = {
+    queued: "排队中",
+    pending: "等待中",
+    created: "已建立",
+    running: "进行中",
+    in_progress: "进行中",
+    completing: "收尾中",
+    completed: "已完成",
+    succeeded: "已完成",
+    failed: "失败",
+    cancelled: "已取消",
+    canceled: "已取消",
+  };
+  const key = String(status || "").toLowerCase();
+  return labels[key] || (key ? key : "未知");
+}
+
+function isAdminRunTerminal(run) {
+  return ADMIN_TERMINAL_STATUSES.has(String(run?.status || "").toLowerCase());
+}
+
+function formatAdminDuration(durationMs) {
+  const milliseconds = Number(durationMs);
+  if (!Number.isFinite(milliseconds)) return "";
+  if (milliseconds < 1000) return `${Math.round(milliseconds)} ms`;
+  return `${(milliseconds / 1000).toFixed(milliseconds < 10_000 ? 1 : 0)} 秒`;
+}
+
+function formatAdminMetricDuration(durationMs, serverLabel = "") {
+  const number = Number(durationMs);
+  const normalizedLabel = String(serverLabel || "").toUpperCase();
+  const label = ["FAST", "NORMAL", "SLOW"].includes(normalizedLabel)
+    ? normalizedLabel
+    : adminDurationCategory(number);
+  return Number.isFinite(number)
+    ? `${formatAdminDuration(number)} · ${label}`
+    : "";
+}
+
+function formatAdminCost(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? `$${number.toFixed(6)}` : "";
+}
+
+function formatAdminCnyCost(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? `¥${formatCny(number)}` : "";
+}
+
+function formatAdminDate(value) {
+  const date = new Date(String(value || ""));
+  if (Number.isNaN(date.getTime())) return "";
+  return new Intl.DateTimeFormat("zh-CN", {
+    dateStyle: "short",
+    timeStyle: "medium",
+  }).format(date);
+}
+
+function safeAdminJson(value) {
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value || "");
+  }
+}
+
+function adminDisplayValue(value) {
+  if (typeof value === "string") return value;
+  return String(value?.text || value?.reason || value?.message || safeAdminJson(value));
+}
+
+function firstAdminValue(...values) {
+  return values.find((value) => value !== undefined && value !== null && value !== "");
+}
+
+function firstAdminArray(...values) {
+  return values.find(Array.isArray) || [];
+}
+
+function adminProviderLabel(value) {
+  const labels = { openai: "OpenAI", deepseek: "DeepSeek" };
+  return labels[String(value || "").toLowerCase()] || String(value || "");
+}
+
+function adminObjectToCsv(value) {
+  const rows = [["字段", "值"]];
+  flattenAdminCsv(value, "", rows);
+  return "\ufeff" + rows.map((row) => row.map(adminCsvCell).join(",")).join("\r\n");
+}
+
+function flattenAdminCsv(value, path, rows) {
+  if (value === null || value === undefined || typeof value !== "object") {
+    rows.push([path || "value", value ?? ""]);
+    return;
+  }
+  if (Array.isArray(value)) {
+    if (!value.length) rows.push([path, "[]"]);
+    value.forEach((item, index) => flattenAdminCsv(item, `${path}[${index}]`, rows));
+    return;
+  }
+  const entries = Object.entries(value);
+  if (!entries.length) rows.push([path, "{}"]);
+  for (const [key, item] of entries) {
+    flattenAdminCsv(item, path ? `${path}.${key}` : key, rows);
+  }
+}
+
+function adminCsvCell(value) {
+  return `"${String(value ?? "").replace(/"/gu, "\"\"")}"`;
+}
+
+function downloadAdminFile(fileName, content, type) {
+  const blob = new Blob([content], { type });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = fileName;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+function adminDelay(milliseconds) {
+  return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
+}
+
 function getCardApiUrl() {
   if (!appConfig.answerApiUrl) return "";
   try {
@@ -1562,17 +3332,6 @@ function getBudgetApiUrl() {
   }
 }
 
-function getAdminQueriesApiUrl() {
-  if (!appConfig.answerApiUrl) return "";
-  try {
-    const url = new URL(appConfig.answerApiUrl);
-    url.pathname = url.pathname.replace(/\/api\/answer\/?$/, "/api/admin-queries");
-    url.search = "";
-    return url.toString();
-  } catch {
-    return appConfig.answerApiUrl.replace(/\/api\/answer\/?$/, "/api/admin-queries");
-  }
-}
 function renderCardDetail(card, detail, status) {
   const name = detail?.name || cardDisplayName(card);
   const aliases = detail?.names?.filter((item) => item && item !== name).slice(0, 3) || [card.jaName, card.enName].filter(Boolean);
@@ -2403,7 +4162,7 @@ function clearElement(element) {
 async function init() {
   debugUiEnabled = isDebugUiEnabled();
   adminUiEnabled = isAdminUiEnabled();
-  if (ui.adminQueryPanel) ui.adminQueryPanel.hidden = !adminUiEnabled;
+  if (ui.adminLabPanel) ui.adminLabPanel.hidden = !adminUiEnabled;
   applyTheme(readInitialTheme());
   await loadAppConfig();
   await loadBackendModelInfo();
@@ -2412,6 +4171,7 @@ async function init() {
   await loadBudgetStatus();
   updateSourceStatus();
   resetAnalysis();
+  if (adminUiEnabled) await initializeAdminLab();
 
   ui.analyzeButton.addEventListener("click", () => analyzeQuestion());
   ui.questionInput.addEventListener("input", scheduleAnalysis);
@@ -2434,7 +4194,23 @@ async function init() {
     button.addEventListener("click", () => selectRulingVersion(button.dataset.rulingVersion));
   }
   ui.budgetResetButton?.addEventListener("click", () => resetBudgetStatus());
-  ui.adminQueryLoadButton?.addEventListener("click", () => loadAdminQueries());
+  ui.adminLoginForm?.addEventListener("submit", handleAdminLogin);
+  ui.adminLogoutButton?.addEventListener("click", handleAdminLogout);
+  ui.adminCopyPublicQuestionButton?.addEventListener("click", () => {
+    ui.adminQuestionInput.value = ui.questionInput.value;
+    ui.adminQuestionInput.focus();
+  });
+  ui.adminProviderSelect?.addEventListener("change", syncAdminModelControls);
+  ui.adminModelSelect?.addEventListener("change", syncAdminModelSpecificControls);
+  ui.adminStartButton?.addEventListener("click", startAdminExperiment);
+  ui.adminCancelButton?.addEventListener("click", cancelAdminExperiment);
+  ui.adminHistoryRefreshButton?.addEventListener("click", loadAdminHistory);
+  ui.adminQuestionHistoryRefreshButton?.addEventListener("click", loadAdminQuestionHistory);
+  ui.adminEvaluationRefreshButton?.addEventListener("click", loadAdminEvaluationCases);
+  ui.adminEvaluationLoadButton?.addEventListener("click", loadSelectedAdminEvaluation);
+  ui.adminRatingForm?.addEventListener("submit", submitAdminRating);
+  ui.adminExportJsonButton?.addEventListener("click", () => exportAdminRun("json"));
+  ui.adminExportCsvButton?.addEventListener("click", () => exportAdminRun("csv"));
 }
 
 function selectRulingVersion(version) {

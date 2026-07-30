@@ -1,6 +1,7 @@
 import { splitCardTextSections, tagEffectText } from "./cardTextSections.mjs";
+import { extractPrintedNameReferences } from "./printedTextReferences.mjs";
 
-export const CARD_TEXT_IR_VERSION = "1.2";
+export const CARD_TEXT_IR_VERSION = "1.3";
 
 const ACTIVATION_MARKER = /(?:可以发动|才能发动|可发动|発動できる|発動する|you can activate|can be activated)/iu;
 const CONTINUOUS_MARKER = /(?:只要|期间|持续|繼續|一直|限り|公開し続け|し続ける|must keep|while .*face-up|as long as)/iu;
@@ -10,7 +11,11 @@ const OPPONENT_WORD = /(?:对方|對方|对手|相手|opponent)/iu;
 const CONTROLLER_WORD = /(?:自己|自身|自分|your|controller)/iu;
 const BOTH_PLAYERS_WORD = /(?:双方|双方玩家|彼此|お互い|両方のプレイヤー|both players)/iu;
 const PER_PLAYER_SAME_RACE_LIMIT = /(?:双方|雙方|お互い|each player).{0,48}(?:各|それぞれ|only|可有).{0,20}(?:1|１|一)(?:只|隻|体|體|枚)?.{0,28}(?:同种族|同種族|同じ種族|same Type).{0,28}(?:表侧|表側|face-up)/iu;
+const PER_PLAYER_ONE_RACE_LIMIT = /(?:双方|雙方|お互い|each player).{0,48}(?:仅可有|只可有|只能有|only control).{0,20}(?:1|１|一)(?:种|種|type).{0,16}(?:种族|種族|Type)/iu;
+const PER_PLAYER_ONE_ATTRIBUTE_LIMIT = /(?:双方|雙方|お互い|each player).{0,48}(?:仅可有|只可有|只能有|only control).{0,20}(?:1|１|一)(?:种|種|type).{0,16}(?:属性|Attribute)/iu;
+const SUMMON_BOUND_DURATION = /(?:以|用)(?:此|这个|這個|该|該)效果特殊召唤的怪兽|この効果で特殊召喚したモンスター|monster(?:s)? Special Summoned by this effect/iu;
 const ACTIVATION_LIMIT_ONLY = /(?:此卡名|这张卡名|このカード名|cards? with this name).{0,48}(?:[1１]回合|[1１]ターン|per turn).{0,36}(?:发动|發動|発動|activate).{0,16}(?:[1１](?:张|張)|[1１]枚|一次|1 time|once)/iu;
+const SELF_FACE_UP_LEAVE_FIELD_BANISH = /(?:(?:表侧|表側)表示(?:的|の)?(?:此卡|这张卡|這張卡|このカード).{0,24}(?:离开|離開|離れる).{0,16}(?:场上|場上|フィールド).{0,32}(?:将其|將其|该卡|該卡|此卡|このカード)?[^。；;]{0,12}(?:除外|banish)|(?:if\s+)?this face-up card.{0,24}leave the field.{0,24}banish it)/iu;
 
 export function normalizeCardText(card = {}) {
   const identity = normalizeCardIdentity(card);
@@ -30,6 +35,11 @@ export function normalizeCardText(card = {}) {
     identity,
     cardType: String(card.cardType || card.type || "unknown").toLowerCase(),
     isPendulum: parsed.isPendulum,
+    // This is derived only from the card's database/printed text. Runtime name
+    // or effect copying must never mutate it.
+    printedNameReferences: extractPrintedNameReferences(
+      card.effectText || card.text || card.description || "",
+    ),
     effects,
     missingSections: [...parsed.missingSections],
   };
@@ -118,8 +128,8 @@ function primaryEffectEntries(sections = {}) {
 }
 
 function classifyEffectNature(section, text, activationIndex) {
-  if (section === "summonConditions") return "summon_condition";
   if (activationIndex >= 0) return "activated";
+  if (section === "summonConditions") return "summon_condition";
   if (parseContinuousSemantics(text).length
       || CONTINUOUS_MARKER.test(text)
       || /(?:不会|不能|不受|効果を受けない|instead|代わりに|作为代替)/iu.test(text)) {
@@ -252,6 +262,22 @@ function parseContinuousSemantics(text) {
       text: value,
     });
   }
+  if (SELF_FACE_UP_LEAVE_FIELD_BANISH.test(value)) {
+    semantics.push({
+      type: "destination_replacement",
+      event: "leave_field",
+      whenLeavingField: true,
+      affected: "source",
+      affectedCardRelation: "source",
+      fromZones: ["monster_zone", "spell_trap_zone", "field_zone", "pendulum_zone"],
+      requiresFaceUp: true,
+      replacementZone: "banished",
+      appliesWhenSourceLeaves: true,
+      effectCauseKind: "card_effect",
+      duration: "self_leave_field",
+      text: value,
+    });
+  }
   if (/(?:不受.{0,24}效果影响|効果を受けない|unaffected by)/iu.test(value)) {
     semantics.push({
       type: "effect_immunity",
@@ -268,6 +294,34 @@ function parseContinuousSemantics(text) {
       zone: "monster_zone",
       faceUp: true,
       groupBy: "race",
+      maxCount: 1,
+      duration: "continuous",
+      text: value,
+    });
+  }
+  if (PER_PLAYER_ONE_RACE_LIMIT.test(value)) {
+    semantics.push({
+      type: "field_count_limit",
+      affected: "both",
+      scope: "per_player",
+      zone: "monster_zone",
+      faceUp: true,
+      groupBy: "race",
+      distinctGroups: true,
+      maxCount: 1,
+      duration: "continuous",
+      text: value,
+    });
+  }
+  if (PER_PLAYER_ONE_ATTRIBUTE_LIMIT.test(value)) {
+    semantics.push({
+      type: "field_count_limit",
+      affected: "both",
+      scope: "per_player",
+      zone: "monster_zone",
+      faceUp: true,
+      groupBy: "attribute",
+      distinctGroups: true,
       maxCount: 1,
       duration: "continuous",
       text: value,
@@ -328,10 +382,21 @@ function splitResolutionClauses(text) {
 }
 
 function splitImplicitResolutionClauses(text, firstConnector) {
-  const fragments = cleanText(text)
+  const rawFragments = cleanText(text)
     .split(/[，,；;。]+/u)
     .map(cleanText)
     .filter(Boolean);
+  const fragments = [];
+  for (const fragment of rawFragments) {
+    const previous = fragments.at(-1);
+    if (previous
+        && SUMMON_BOUND_DURATION.test(previous)
+        && /(?:仅可|只可|只能|不可|不能|しか|only|cannot).{0,48}(?:特殊召唤|特殊召喚|Special Summon)/iu.test(fragment)) {
+      fragments[fragments.length - 1] = `${previous}，${fragment}`;
+    } else {
+      fragments.push(fragment);
+    }
+  }
   if (fragments.length < 2) return fragments.map((fragment) => ({ connector: firstConnector, text: fragment }));
   return fragments.map((fragment, index) => ({
     connector: index === 0 ? firstConnector : "THEN",
@@ -341,6 +406,29 @@ function splitImplicitResolutionClauses(text, firstConnector) {
 
 function classifyResolutionOperation(text) {
   const value = cleanText(text);
+  if (SUMMON_BOUND_DURATION.test(value)) {
+    const allowedArchetype = value.match(
+      /(?:仅可|只可|只能|しか)[^。；;]{0,36}[“「『"]([^”」』"]+)[”」』"][^。；;]{0,16}(?:怪兽|怪獸|モンスター)/iu,
+    )?.[1] || "";
+    return {
+      type: "create_lingering_restriction",
+      binding: "monsters_special_summoned_by_this_effect",
+      activeWhile: {
+        zone: "monster_zone",
+        controller: "effect_controller",
+        faceUp: /(?:表侧|表側|face-up)/iu.test(value),
+      },
+      expiration: {
+        mode: "irreversible_on_first_condition_failure",
+        reactivates: false,
+      },
+      restriction: {
+        type: "extra_deck_special_summon_lock",
+        ...(allowedArchetype ? { allowedArchetype } : {}),
+      },
+      text: value,
+    };
+  }
   const usesActivationCostCards = /(?:(?:这个|此|该|この|the)\s*(?:效果|効果|effect)[^。；;]{0,24})?(?:送去|送往|送至|送入|送られた|sent)[^。；;]{0,20}(?:墓地|graveyard)[^。；;]{0,40}(?:怪兽|怪獸|モンスター|monsters?)[^。；;]{0,32}(?:作为|作為|为|為|として|as)\s*(?:素材|material)/iu.test(value)
     || /(?:因|由|通过|通過|この|this)[^。；;]{0,24}(?:效果|効果|effect)[^。；;]{0,24}(?:送去|送往|送至|送入|送られた|sent)[^。；;]{0,20}(?:墓地|graveyard)[^。；;]{0,32}(?:素材|material)/iu.test(value)
     || /(?:墓地|graveyard)(?:中|的|に存在する|にいる)?\s*(?:该|該|那|その|those)?\s*[２2二两兩]\s*(?:只|隻|体|體)?\s*(?:怪兽|怪獸|モンスター|monsters?)[^。；;]{0,32}(?:作为|作為|为|為|として|as)\s*(?:素材|material)/iu.test(value);
@@ -373,19 +461,32 @@ function classifyResolutionOperation(text) {
     ["reveal", PUBLIC_WORD],
   ];
   const type = firstMatch(value, rules) || "unparsed_operation";
-  if (type !== "special_summon") return { type, text: value };
+  if (type !== "special_summon") {
+    return {
+      type,
+      text: value,
+      ...(["destroy", "banish", "return_to_hand", "return_to_deck"].includes(type)
+        ? { optional: /(?:可以|可|任意|できる|may|you can)/iu.test(value) }
+        : {}),
+    };
+  }
 
   const sourceCard = /(?:此卡|这张卡|這張卡|このカード|this card)/iu.test(value);
   const generatedMonster = /(?:衍生物|代币|代幣|トークン|token)/iu.test(value);
   const alternativeOperation = /(?:加入|加到|add).{0,16}(?:手牌|手卡|手札|hand).{0,8}(?:或|或者|または|or).{0,8}(?:特殊召唤|特殊召喚|special summon)/iu.test(value);
-  const quotedName = value.match(/[“「『"]([^”」』"]{2,50})[”」』"]/u)?.[1] || "";
+  const quotedNames = unique([...value.matchAll(/[“「『"]([^”」』"]{2,50})[”」』"]/gu)]
+    .map((match) => match[1]));
+  const quotedName = quotedNames[0] || "";
   return {
     type,
     text: value,
     mandatory: !alternativeOperation && !/(?:可以|可选择|任意|できる|may|you can)/iu.test(value),
     ...(alternativeOperation ? { choice: "one_of_multiple_operations" } : {}),
     subject: sourceCard ? "effect_source" : generatedMonster ? "generated_monster" : "selected_card",
-    amount: parseCount(value.match(/([０-９\d一二三两兩]+)\s*(?:只|隻|体|體|枚)/u)?.[1], 1),
+    amount: Math.max(
+      quotedNames.length,
+      parseCount(value.match(/([０-９\d一二三两兩]+)\s*(?:只|隻|体|體|枚)/u)?.[1], 1),
+    ),
     fromZone: firstMatch(value, [
       ["extra_deck", /(?:从|從)\s*(?:额外卡组|額外卡組|额外牌组|額外牌組)|(?:エクストラデッキから)|(?:from\s+(?:the\s+|your\s+)?extra deck)/iu],
       ["hand", /(?:从|從)\s*(?:手牌|手卡)|(?:手札から)|(?:from\s+(?:the\s+|your\s+)?hand)/iu],
@@ -396,6 +497,7 @@ function classifyResolutionOperation(text) {
       ? "opponent_of_source_controller"
       : "same_as_source_controller",
     ...(quotedName ? { name: quotedName } : {}),
+    ...(quotedNames.length ? { names: quotedNames } : {}),
     ...(extractRaceLabel(value) ? { race: extractRaceLabel(value) } : {}),
   };
 }

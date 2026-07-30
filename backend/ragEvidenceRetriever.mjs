@@ -4,12 +4,18 @@ import { fileURLToPath } from "node:url";
 import { searchCards } from "./baigeCardProvider.mjs";
 import { createLocalCardDataProvider } from "./cardDataProvider.mjs";
 import { normalizeCardKey } from "./ragCardExtractor.mjs";
-import { searchOfficialQaEvidence } from "./officialQaMatcher.mjs";
+import {
+  classifyOfficialQaQuestionType,
+  extractOfficialQaEffectPhrases,
+  extractOfficialQaSemanticConcepts,
+  searchOfficialQaEvidence,
+} from "./officialQaMatcher.mjs";
 import { normalizeOfficialResponses } from "./officialResponses.mjs";
 import { isRulebookRecord, retrieveRulebookPassages } from "./rulebookPassageRetriever.mjs";
 import { hasNumberedCardIdentityConflict } from "./numberedCardIdentity.mjs";
 import { compileRuleScenario } from "./ruleScenarioCompiler.mjs";
 import { retrieveLiveOfficialQa } from "./liveOfficialQaProvider.mjs";
+import { analyzePrintedTextReferenceScenario } from "./printedTextReferences.mjs";
 
 const projectRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 const defaultDataDir = join(projectRoot, "data");
@@ -52,10 +58,11 @@ export async function retrieveRagEvidence({
   const cardProvider = createLocalCardDataProvider(data);
   const resolvedCards = cardResolution.resolvedCards || [];
   const providedTexts = normalizeUserProvidedCardTexts(cardResolution.userProvidedCardTexts || [], limits);
-  let normalizedRuleQueries = normalizeRuleSearchQueries([
-    ...(ruleSearchQueries || []),
-    ...deriveRuleSearchQueries(userQuery),
-  ], limits);
+  const supplementalRuleQueries = normalizeRuleSearchQueries(ruleSearchQueries, limits);
+  let deterministicRuleQueries = normalizeRuleSearchQueries(
+    deriveRuleSearchQueries(userQuery),
+    limits,
+  );
   const retrievalWarnings = [];
   const baigeDebug = { searchCount: 0, cacheHitCount: 0, warnings: [], ambiguousMentions: [] };
   const unresolvedMentions = cardResolution.unresolvedMentions || [];
@@ -70,7 +77,8 @@ export async function retrieveRagEvidence({
     enrichCardsWithBaige(dedupeCards([...resolvedCards, ...fuzzyCards]), { fetchImpl, env, limits, warnings: retrievalWarnings, debug: baigeDebug }),
     resolveUnresolvedMentionCardsWithBaige(unresolvedForBaige, { fetchImpl, env, limits, warnings: retrievalWarnings, debug: baigeDebug }),
   ]);
-  let retrievalCards = dedupeCards([...enrichedLocalCards, ...baigeResolvedCards]).slice(0, limits.maxCards);
+  const verifiedLocalCards = suppressModelExpansionConflicts(enrichedLocalCards, baigeResolvedCards, retrievalWarnings);
+  let retrievalCards = dedupeCards([...verifiedLocalCards, ...baigeResolvedCards]).slice(0, limits.maxCards);
   const qaIdentityCards = retrievalCards.filter((card) => card.resolutionSource !== "card_text_reference");
   if (qaIdentityCards.length !== retrievalCards.length) {
     retrievalWarnings.push(`qa_identity_excludes_card_text_references:${retrievalCards.length - qaIdentityCards.length}`);
@@ -101,25 +109,48 @@ export async function retrieveRagEvidence({
     .filter(Boolean)
     .map((card) => cardTextEvidence(card, limits.maxCardTextChars, retrievalWarnings));
   const userProvidedCardTextEvidence = dedupeEvidence(providedTexts.map((item, index) => userProvidedTextEvidence(item, index, limits.maxCardTextChars, retrievalWarnings)));
-  normalizedRuleQueries = mergeRuleSearchQueries(
-    normalizedRuleQueries,
+  deterministicRuleQueries = mergeRuleSearchQueries(
+    deterministicRuleQueries,
     deriveRuleSearchQueriesFromCardTexts(userQuery, cardTexts),
     limits,
+  );
+  const normalizedRuleQueries = appendSupplementalRuleSearchQueries(
+    deterministicRuleQueries,
+    supplementalRuleQueries,
+    limits,
+  );
+  const deterministicRuleQueryKeys = new Set(
+    deterministicRuleQueries.map((item) => normalizeCardKey(item.query)).filter(Boolean),
+  );
+  const effectiveSupplementalRuleQueries = normalizedRuleQueries.filter(
+    (item) => !deterministicRuleQueryKeys.has(normalizeCardKey(item.query)),
   );
   if (normalizedRuleQueries.length) retrievalWarnings.push(`rule_search_queries_used:${normalizedRuleQueries.length}`);
   const mentionQueries = [
     ...remainingUnresolvedMentions.map((item) => item.input),
     ...providedTexts.map((item) => item.name),
-    ...normalizedRuleQueries.map((item) => item.query),
   ].filter(Boolean);
   stageStartedAt = Date.now();
-  const rulebookCandidates = retrieveRulebookPassages({
+  const deterministicRulebookCandidates = retrieveRulebookPassages({
     records: allEvidenceRecords,
     userQuery,
-    ruleSearchQueries: normalizedRuleQueries,
+    ruleSearchQueries: deterministicRuleQueries,
     maxPassages: limits.maxRulebookCandidates,
     maxPassageChars: limits.maxRulebookPassageChars,
   });
+  const supplementalRulebookCandidates = effectiveSupplementalRuleQueries.length
+    ? retrieveRulebookPassages({
+      records: allEvidenceRecords,
+      userQuery,
+      ruleSearchQueries: effectiveSupplementalRuleQueries,
+      maxPassages: limits.maxRulebookCandidates,
+      maxPassageChars: limits.maxRulebookPassageChars,
+    })
+    : [];
+  const rulebookCandidates = dedupeBy(
+    [...deterministicRulebookCandidates, ...supplementalRulebookCandidates],
+    stableRecordKey,
+  ).slice(0, limits.maxRulebookCandidates);
   timingsMs.rulebook = Date.now() - stageStartedAt;
   if (rulebookCandidates.length) retrievalWarnings.push(`rulebook_passages_retrieved:${rulebookCandidates.length}`);
 
@@ -176,14 +207,17 @@ export async function retrieveRagEvidence({
 
   stageStartedAt = Date.now();
   const officialQaRelatedSource = dedupeBy([
-    ...officialMatches.near.filter((match) => isOfficialQaRecord(match.record) && isUsefulOfficialRelatedMatch(match)),
-    ...officialMatches.related.filter((match) => isOfficialQaRecord(match.record) && isUsefulOfficialRelatedMatch(match)),
-    ...rankRecords({
+    // `all` is globally ranked. Concatenating the near bucket before the
+    // related bucket used to bury a source with the exact multi-card scene
+    // merely because its wording had a different question type/language.
+    ...officialMatches.all.filter((match) => isOfficialQaRecord(match.record) && isUsefulOfficialRelatedMatch(match)),
+    ...rankRecordsWithSupplementalQueries({
       userQuery,
       records: scopedRecordBuckets.qa,
       resolvedCards: retrievalCards,
       mentionQueries,
-      ruleSearchQueries: normalizedRuleQueries,
+      deterministicRuleQueries,
+      supplementalRuleQueries: effectiveSupplementalRuleQueries,
       allowNoCardMatch: retrievalCards.length === 0 && normalizedRuleQueries.length > 0,
     }),
   ], (item) => stableRecordKey(item?.record || item));
@@ -195,12 +229,13 @@ export async function retrieveRagEvidence({
       : evidenceFromRecord(item, "related", limits.maxEvidenceTextChars, retrievalWarnings))
     .filter((item) => !directIds.has(item.id));
 
-  const provisionalOfficialResponseSource = rankRecords({
+  const provisionalOfficialResponseSource = rankRecordsWithSupplementalQueries({
     userQuery,
     records: scopedRecordBuckets.provisionalOfficialResponses,
     resolvedCards: retrievalCards,
     mentionQueries,
-    ruleSearchQueries: normalizedRuleQueries,
+    deterministicRuleQueries,
+    supplementalRuleQueries: effectiveSupplementalRuleQueries,
     allowNoCardMatch: retrievalCards.length === 0,
   });
   const provisionalOfficialResponses = provisionalOfficialResponseSource
@@ -210,12 +245,13 @@ export async function retrieveRagEvidence({
     retrievalWarnings.push(`provisional_official_responses_retrieved:${provisionalOfficialResponses.length}`);
   }
 
-  const faqRelatedSource = rankRecords({
+  const faqRelatedSource = rankRecordsWithSupplementalQueries({
     userQuery,
     records: scopedRecordBuckets.faq,
     resolvedCards: retrievalCards,
     mentionQueries,
-    ruleSearchQueries: normalizedRuleQueries,
+    deterministicRuleQueries,
+    supplementalRuleQueries: effectiveSupplementalRuleQueries,
     allowNoCardMatch: retrievalCards.length === 0 && normalizedRuleQueries.length > 0,
   });
   if (faqRelatedSource.length > limits.maxRelatedEvidence) retrievalWarnings.push(`faq_related_limited:${faqRelatedSource.length}->${limits.maxRelatedEvidence}`);
@@ -224,12 +260,13 @@ export async function retrieveRagEvidence({
     .map((record) => evidenceFromRecord(record, "faq", limits.maxEvidenceTextChars, retrievalWarnings))
     .filter((item) => !directIds.has(item.id));
 
-  const rawRelatedSource = rankRecords({
+  const rawRelatedSource = rankRecordsWithSupplementalQueries({
     userQuery,
     records: scopedRecordBuckets.rawRelated,
     resolvedCards: retrievalCards,
     mentionQueries,
-    ruleSearchQueries: normalizedRuleQueries,
+    deterministicRuleQueries,
+    supplementalRuleQueries: effectiveSupplementalRuleQueries,
     allowNoCardMatch: retrievalCards.length === 0,
   });
   if (rawRelatedSource.length > limits.maxRelatedEvidence) retrievalWarnings.push(`raw_related_limited:${rawRelatedSource.length}->${limits.maxRelatedEvidence}`);
@@ -276,6 +313,8 @@ export async function retrieveRagEvidence({
       timingsMs,
       ruleSearchQueryCount: normalizedRuleQueries.length,
       ruleSearchQueries: normalizedRuleQueries,
+      deterministicRuleSearchQueryCount: deterministicRuleQueries.length,
+      supplementalRuleSearchQueryCount: effectiveSupplementalRuleQueries.length,
       baigeSearchCount: baigeDebug.searchCount,
       baigeCacheHitCount: baigeDebug.cacheHitCount,
       baigeWarnings: baigeDebug.warnings,
@@ -697,9 +736,16 @@ function userProvidedTextEvidence(item, index, maxTextChars, warnings) {
 
 function evidenceFromOfficialMatch(match, type, maxTextChars, warnings) {
   const record = match.record || {};
+  const retrievalScore = normalizeEvidenceRelevanceScore(
+    match.retrievalScore
+      ?? record.retrievalScore
+      ?? match.score
+      ?? record.score,
+  );
   return {
     ...evidenceFromRecord(record, type, maxTextChars, warnings),
     score: match.score,
+    retrievalScore,
     matchLevel: match.matchLevel,
     matchedBy: match.matchedBy || [],
     matchedQuestionCardIds: match.matchedQuestionCardIds || [],
@@ -718,6 +764,7 @@ function evidenceFromOfficialMatch(match, type, maxTextChars, warnings) {
 function evidenceFromRecord(record, type, maxTextChars = 1600, warnings = []) {
   const text = String(record.text || record.answer || record.conclusion || "");
   const truncated = text.length > maxTextChars;
+  const retrievalScore = normalizeEvidenceRelevanceScore(record.retrievalScore ?? record.score);
   if (truncated) warnings.push(`${type}_text_truncated:${record.id || record.evidenceId || record.stableId}`);
   return {
     id: String(record.id || record.evidenceId || record.stableId || ""),
@@ -742,6 +789,10 @@ function evidenceFromRecord(record, type, maxTextChars = 1600, warnings = []) {
     officialText: record.officialText || "",
     explanation: record.explanation || "",
     scenario: record.scenario || record.question || "",
+    score: retrievalScore,
+    retrievalScore,
+    retrievalSignals: record.retrievalSignals || null,
+    official: isAuthoritativeQaOrFaqRecord(record),
     isDirect: false,
   };
 }
@@ -762,6 +813,11 @@ function evidenceSourceUrl(record = {}) {
 
 function isOfficialQaRecord(record = {}) {
   return ["qa", "official-database"].includes(record.recordType);
+}
+
+function isAuthoritativeQaOrFaqRecord(record = {}) {
+  return ["qa", "card-faq", "official-database"].includes(record.recordType)
+    || /^S0_/u.test(String(record.sourceTier || ""));
 }
 
 function officialQaNumericId(record = {}) {
@@ -799,12 +855,15 @@ function rankRecords({ userQuery, records, resolvedCards, mentionQueries = [], r
   const resolvedIds = new Set((resolvedCards || []).map((card) => normalizeId(card.id || card.cardId)).filter(Boolean));
   const resolvedNames = new Set((resolvedCards || []).flatMap((card) => [card.name, card.cnName, card.jaName, card.enName, ...(card.aliases || [])]).map(normalizeCardKey).filter(Boolean));
   const unresolvedNames = new Set((mentionQueries || []).map(normalizeCardKey).filter(Boolean));
+  const queryEffectNumbers = extractEffectNumbers(userQuery);
+  const queryQuestionType = classifyOfficialQaQuestionType(userQuery);
+  const queryEffectPhrases = extractOfficialQaEffectPhrases(userQuery);
+  const querySemanticConcepts = extractOfficialQaSemanticConcepts(userQuery);
   const contextTerms = buildContextTerms({ userQuery, mentionQueries, ruleQueries, resolvedCards });
   const ranked = (records || [])
     .filter((record) => record.status !== "removed" && record.status !== "superseded")
-    .map((record) => ({
-      record,
-      score: scoreRecord(record, {
+    .map((record) => {
+      const scored = scoreRecord(record, {
         queryTerms,
         ruleTerms,
         rulePhrases,
@@ -813,22 +872,92 @@ function rankRecords({ userQuery, records, resolvedCards, mentionQueries = [], r
         resolvedNames,
         unresolvedNames,
         allowNoCardMatch,
-      }),
-    }))
-    .filter((item) => item.score > 0)
-    .sort((left, right) => right.score - left.score || String(left.record.id).localeCompare(String(right.record.id)))
-    .map((item) => attachContextSnippet(item.record, contextTerms));
+        queryEffectNumbers,
+        queryQuestionType,
+        queryEffectPhrases,
+        querySemanticConcepts,
+      });
+      return { record, ...scored };
+    })
+    .filter((item) => item.rawScore > 0)
+    .sort(compareRankedRecords)
+    .map((item) => {
+      const contextual = attachContextSnippet(item.record, contextTerms);
+      return {
+        ...contextual,
+        retrievalScore: item.relevanceScore,
+        retrievalSignals: item.signals,
+      };
+    });
   return dedupeBy(ranked, stableRecordKey);
 }
 
-function scoreRecord(record, { queryTerms, ruleTerms, rulePhrases, queryKey, resolvedIds, resolvedNames, unresolvedNames, allowNoCardMatch }) {
+function rankRecordsWithSupplementalQueries({
+  userQuery,
+  records,
+  resolvedCards,
+  mentionQueries = [],
+  deterministicRuleQueries = [],
+  supplementalRuleQueries = [],
+  allowNoCardMatch = false,
+}) {
+  const deterministic = rankRecords({
+    userQuery,
+    records,
+    resolvedCards,
+    mentionQueries,
+    ruleSearchQueries: deterministicRuleQueries,
+    allowNoCardMatch,
+  });
+  if (!supplementalRuleQueries.length) return deterministic;
+  const supplemental = rankRecords({
+    userQuery,
+    records,
+    resolvedCards,
+    mentionQueries,
+    ruleSearchQueries: supplementalRuleQueries,
+    allowNoCardMatch,
+  });
+  return dedupeBy([...deterministic, ...supplemental], stableRecordKey);
+}
+
+function scoreRecord(record, {
+  queryTerms,
+  ruleTerms,
+  rulePhrases,
+  queryKey,
+  resolvedIds,
+  resolvedNames,
+  unresolvedNames,
+  allowNoCardMatch,
+  queryEffectNumbers,
+  queryQuestionType,
+  queryEffectPhrases,
+  querySemanticConcepts,
+}) {
   const text = `${record.title || ""}\n${record.text || ""}`;
   const { textKey, normalizedCardIds, normalizedCardNames } = retrievalRecordFeatures(record, text);
-  const cardIdMatch = normalizedCardIds.some((id) => resolvedIds.has(id));
+  const questionText = record.question || record.title || "";
+  const questionCardIds = new Set([
+    ...(record.questionCardIds || []),
+    ...extractInlineCardIds(questionText),
+  ].map(normalizeId).filter(Boolean));
+  const matchedRecordCardIds = normalizedCardIds.filter((id) => resolvedIds.has(id));
+  const matchedQuestionCardIds = [...resolvedIds].filter((id) => questionCardIds.has(id));
+  const matchedCardIds = [...new Set([
+    ...matchedRecordCardIds,
+    ...matchedQuestionCardIds,
+  ])];
+  const cardIdMatch = matchedCardIds.length > 0;
+  const questionCardIdCoverage = resolvedIds.size
+    ? matchedQuestionCardIds.length / resolvedIds.size
+    : 0;
   const cardNameMatch = normalizedCardNames.some((name) => resolvedNames.has(name)) || [...resolvedNames].some((name) => name.length >= 3 && !hasNumberedCardIdentityConflict(name, text) && textKey.includes(name));
   const unresolvedNameMatch = [...unresolvedNames].some((name) => name.length >= 3 && !hasNumberedCardIdentityConflict(name, text) && textKey.includes(name));
   const cardScore = cardIdMatch ? 5 : cardNameMatch ? 4 : unresolvedNameMatch ? 2 : 0;
-  if (!allowNoCardMatch && resolvedIds.size + resolvedNames.size > 0 && !cardScore) return 0;
+  if (!allowNoCardMatch && resolvedIds.size + resolvedNames.size > 0 && !cardScore) {
+    return emptyRecordScore();
+  }
   let score = cardScore;
   const lexicalHits = new Set();
   for (const term of queryTerms) {
@@ -852,11 +981,91 @@ function scoreRecord(record, { queryTerms, ruleTerms, rulePhrases, queryKey, res
   }
   const fullQueryMatched = queryKey.length >= 8 && textKey.includes(queryKey.slice(0, Math.min(queryKey.length, 80)));
   if (fullQueryMatched) score += 5;
-  if (!cardScore && !phraseMatched && !fullQueryMatched && lexicalHits.size < 3) return 0;
-  if (score <= 0) return 0;
+  if (!cardScore && !phraseMatched && !fullQueryMatched && lexicalHits.size < 3) {
+    return emptyRecordScore();
+  }
+  const evidenceEffectNumbers = extractEffectNumbers(questionText || text);
+  const effectNumberCompatible = !queryEffectNumbers.length
+    || !evidenceEffectNumbers.length
+    || queryEffectNumbers.some((number) => evidenceEffectNumbers.includes(number));
+  const evidenceQuestionType = classifyOfficialQaQuestionType(questionText || text);
+  const typeCompatible = questionTypeCompatibleForRanking(queryQuestionType, evidenceQuestionType);
+  const evidenceEffectPhrases = extractOfficialQaEffectPhrases(questionText || text);
+  const matchedEffectPhrases = queryEffectPhrases.filter((phrase) => evidenceEffectPhrases.includes(phrase));
+  const evidenceSemanticConcepts = extractOfficialQaSemanticConcepts(questionText || text);
+  const matchedSemanticConcepts = querySemanticConcepts.filter((concept) => evidenceSemanticConcepts.includes(concept));
+  const semanticQueryCoverage = querySemanticConcepts.length
+    ? matchedSemanticConcepts.length / querySemanticConcepts.length
+    : 0;
+  score += questionCardIdCoverage * 5;
+  score += matchedQuestionCardIds.length * 1.5;
+  if (effectNumberCompatible && queryEffectNumbers.length && evidenceEffectNumbers.length) score += 2;
+  if (typeCompatible && queryQuestionType !== "unknown") score += 1.5;
+  score += matchedEffectPhrases.length;
+  score += semanticQueryCoverage * 3;
+  if (score <= 0) return emptyRecordScore();
   if (record.recordType === "qa") score += 0.5;
   if (record.recordType === "card-faq") score += 0.4;
-  return score;
+  return {
+    rawScore: score,
+    relevanceScore: normalizeEvidenceRelevanceScore(1 - Math.exp(-score / 10)),
+    signals: {
+      matchedCardIdCount: matchedCardIds.length,
+      matchedQuestionCardIdCount: matchedQuestionCardIds.length,
+      questionCardIdCoverage: Number(questionCardIdCoverage.toFixed(4)),
+      effectNumberCompatible,
+      typeCompatible,
+      matchedEffectPhrases,
+      matchedSemanticConcepts,
+      semanticQueryCoverage: Number(semanticQueryCoverage.toFixed(4)),
+      lexicalHitCount: lexicalHits.size,
+      fullQueryMatched,
+      rulePhraseMatched: phraseMatched,
+    },
+  };
+}
+
+function emptyRecordScore() {
+  return {
+    rawScore: 0,
+    relevanceScore: 0,
+    signals: {},
+  };
+}
+
+function compareRankedRecords(left, right) {
+  return right.signals.questionCardIdCoverage - left.signals.questionCardIdCoverage
+    || right.signals.matchedQuestionCardIdCount - left.signals.matchedQuestionCardIdCount
+    || Number(right.signals.effectNumberCompatible) - Number(left.signals.effectNumberCompatible)
+    || Number(right.signals.typeCompatible) - Number(left.signals.typeCompatible)
+    || right.relevanceScore - left.relevanceScore
+    || right.rawScore - left.rawScore
+    || String(left.record.id).localeCompare(String(right.record.id));
+}
+
+function questionTypeCompatibleForRanking(queryType, evidenceType) {
+  if (queryType === "unknown" || evidenceType === "unknown") return queryType === evidenceType;
+  if (queryType === evidenceType) return true;
+  const activation = new Set(["can_activate", "timing_window"]);
+  if (activation.has(queryType) && activation.has(evidenceType)) return true;
+  const legality = new Set(["action_legality", "can_activate", "target_legality", "timing_window"]);
+  return legality.has(queryType) && legality.has(evidenceType);
+}
+
+function extractEffectNumbers(value) {
+  const text = String(value || "").normalize("NFKC");
+  return [...new Set([
+    ...[...text.matchAll(/[①②③④⑤⑥⑦⑧⑨⑩]/gu)]
+      .map((match) => String("①②③④⑤⑥⑦⑧⑨⑩".indexOf(match[0]) + 1)),
+    ...[...text.matchAll(/(?:第\s*)?([1-9]|10)\s*(?:个|個|つ目)?(?:的|の)?\s*(?:効果|效果|effect)/giu)]
+      .map((match) => String(Number(match[1]))),
+  ].filter(Boolean))];
+}
+
+function normalizeEvidenceRelevanceScore(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return null;
+  return Math.max(0, Math.min(1, Number(number.toFixed(4))));
 }
 
 function retrievalRecordFeatures(record = {}, preparedText) {
@@ -952,6 +1161,10 @@ function deriveScenarioMechanismRuleQueries(userQuery, cardTexts) {
     add("同一时点 双方 代替破坏 回合玩家 先适用 非回合玩家 不在场 不适用", "从双方效果载体、同一破坏事件及代替破坏卡文推导适用顺序规则。 ");
     add("代替破坏 先适用 更新场面 重新检查 效果载体", "检索第一个代替处理改变场面后，第二个代替效果是否仍适用。 ");
   }
+  if (scenario.simultaneousPublicPrivateTriggers) {
+    add("同一时点发动多个诱发类效果 回合玩家 公开情报 选发 手卡诱发 顺序7 优先权转移 对方", "场景中同时存在公开区域的选发诱发效果与非公开手牌的诱发效果，检索 OCG 组链优先顺序。 ");
+    add("公开区域诱发先组成连锁 对方确认是否连锁 手卡诱发之后连锁发动", "检索公开区域诱发进入连锁后，响应权逐次转移及手牌诱发的发动窗口。 ");
+  }
   return queries;
 }
 
@@ -995,6 +1208,17 @@ function deriveMechanismRuleQueries(value) {
   if (/(然后|那之后|之后|之後|并且|並且|再|仍然|尽可能|不能处理)/u.test(text)) {
     add("效果文本 连续处理 前一项不能处理 后续处理 是否进行", "检索多段效果的处理顺序和依赖关系。");
   }
+  const printedReferenceScenario = analyzePrintedTextReferenceScenario({
+    userQuery: text,
+    cardTexts: [],
+  });
+  if (printedReferenceScenario.requiredName
+      || /(?:有.{0,30}卡名(?:记载|记述)|卡名(?:记载|记述).{0,30}怪兽)/u.test(text)) {
+    add("有「○○」卡名记述 效果文本栏中记述作为卡名存在 字段不满足条件", "检索“有某卡名记述”的定义及其对卡面效果文本栏的要求。");
+    if (/(?:获得|得到|复制|拷贝|コピー|copy|gain).{0,100}(?:卡名|效果|効果|effect)/isu.test(text)) {
+      add("复制 获得 卡名 效果 不改变自身效果文本栏 卡名记述", "区分当前获得的卡名・效果与卡片自身印刷文本中的卡名记述。");
+    }
+  }
   return dedupeBy(queries, (item) => normalizeCardKey(item.query));
 }
 
@@ -1034,6 +1258,26 @@ function mergeRuleSearchQueries(baseQueries, cardQueries, limits) {
     ...card.slice(0, cardQuota),
     ...base.slice(baseQuota),
     ...card.slice(cardQuota),
+  ], { maxRuleSearchQueries: max });
+}
+
+function appendSupplementalRuleSearchQueries(deterministicQueries, supplementalQueries, limits) {
+  const max = readPositiveNumber(limits.maxRuleSearchQueries, 12);
+  const deterministic = normalizeRuleSearchQueries(
+    deterministicQueries,
+    { maxRuleSearchQueries: max },
+  );
+  const supplemental = normalizeRuleSearchQueries(
+    supplementalQueries,
+    { maxRuleSearchQueries: max },
+  );
+  // Caller/model-generated queries are retained after the local reproducible
+  // query plan. Retrieval ranks these two groups independently and appends the
+  // supplemental results, so model output can broaden but never reorder the
+  // deterministic evidence prefix.
+  return normalizeRuleSearchQueries([
+    ...deterministic,
+    ...supplemental,
   ], { maxRuleSearchQueries: max });
 }
 
@@ -1275,10 +1519,13 @@ function mentionSearchQueries(mention) {
 async function enrichCardsWithBaige(cards, { fetchImpl, env, limits, warnings, debug }) {
   const sourceCards = (cards || []).slice(0, limits.maxCards);
   const result = await Promise.all(sourceCards.map(async (card) => {
-    if (hasUsableCardText(card) && (card.id || card.cardId) && (!enginePasscodeRequired(env) || hasEnginePasscode(card))) {
+    const needsNumberedIdentityEnrichment = card.numberedIdentityNameMismatch === true;
+    if (!needsNumberedIdentityEnrichment && hasUsableCardText(card) && (card.id || card.cardId) && (!enginePasscodeRequired(env) || hasEnginePasscode(card))) {
       return card;
     }
-    const query = card.name || card.cnName || card.jaName || card.enName || card.input;
+    const query = needsNumberedIdentityEnrichment
+      ? card.numberedIdentityInput || card.input || card.name
+      : card.name || card.cnName || card.jaName || card.enName || card.input;
     if (!query) {
       return card;
     }
@@ -1288,9 +1535,33 @@ async function enrichCardsWithBaige(cards, { fetchImpl, env, limits, warnings, d
     if (!best || Number(best.confidence || 0) < 0.72) {
       return card;
     }
+    if (needsNumberedIdentityEnrichment) {
+      warnings.push(`numbered_identity_baige_enriched:${query}->${best.name}`);
+    }
     return mergeCard(card, toRagCard(best, card.input || query, Number(best.confidence || 0)));
   }));
   return result.filter(Boolean);
+}
+
+function suppressModelExpansionConflicts(localCards, baigeCards, warnings) {
+  const surfaceVerified = (baigeCards || []).filter((card) => (
+    Number(card.confidence || 0) >= 0.72
+    && normalizeCardKey(card.matchedQuery) === normalizeCardKey(card.input)
+  ));
+  if (!surfaceVerified.length) return localCards || [];
+  return (localCards || []).filter((localCard) => {
+    const conflict = surfaceVerified.find((verifiedCard) => (
+      normalizeCardKey(verifiedCard.input) === normalizeCardKey(localCard.input)
+      && normalizeId(verifiedCard.id || verifiedCard.cardId) !== normalizeId(localCard.id || localCard.cardId)
+      && (
+        normalizeCardKey(localCard.matchedQuery) !== normalizeCardKey(localCard.input)
+        || Number(verifiedCard.confidence || 0) >= Number(localCard.confidence || 0) + 0.02
+      )
+    ));
+    if (!conflict) return true;
+    warnings.push(`model_expansion_conflict_suppressed:${localCard.input}:${localCard.name}->${conflict.name}`);
+    return false;
+  });
 }
 
 async function searchBaige(query, { fetchImpl, env, limits, debug }) {
@@ -1377,7 +1648,11 @@ function hasValue(value) {
 }
 
 function unresolvedMentionsAfterRetrieval(mentions, cards) {
-  return (mentions || []).filter((mention) => !retrievedCardMatchesMention(mention, cards));
+  return (mentions || [])
+    .filter((mention) => !retrievedCardMatchesMention(mention, cards))
+    .map((mention) => Object.fromEntries(
+      Object.entries(mention || {}).filter(([, value]) => value !== undefined),
+    ));
 }
 
 function retrievedCardMatchesMention(mention, cards) {

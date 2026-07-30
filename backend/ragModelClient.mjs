@@ -204,6 +204,45 @@ export async function callRagModel({
   }
 }
 
+/**
+ * Runs one server-side DeepSeek JSON task without applying the public answer
+ * budget. The admin model lab uses this only for evidence preparation; final
+ * ruling authorization is enforced by its provider adapter.
+ */
+export async function callDeepSeekJsonTask({
+  prompt,
+  modelName,
+  maxTokens = null,
+  env = globalThis.process?.env || {},
+  fetchImpl = globalThis.fetch,
+  temperature = 0,
+} = {}) {
+  const normalizedPrompt = String(prompt || "").trim();
+  if (!normalizedPrompt) throw new TypeError("DeepSeek JSON task prompt must not be empty");
+  if (!String(env.DEEPSEEK_API_KEY || "").trim()) {
+    const error = new Error("DeepSeek is not configured");
+    error.code = "deepseek_not_configured";
+    throw error;
+  }
+  if (typeof fetchImpl !== "function") throw new TypeError("DeepSeek JSON task requires fetch");
+
+  const response = await callDeepSeek({
+    prompt: normalizedPrompt,
+    env,
+    modelName: String(modelName || env.DEEPSEEK_MODEL || DEFAULT_DEEPSEEK_MODEL).trim(),
+    maxTokens: optionalPositiveInteger(maxTokens),
+    fetchImpl,
+    temperature: readNumber(temperature, 0),
+  });
+  const parsed = parseStrictJsonObject(response.rawText);
+  return {
+    ...parsed,
+    rawText: response.rawText,
+    usage: normalizeUsage("deepseek", response.usage),
+    warnings: [...(response.warnings || [])],
+  };
+}
+
 export async function callCardNameExtractionModel({
   userQuery,
   env = globalThis.process?.env || {},
@@ -661,6 +700,39 @@ export function resolveRagProvider(env = {}) {
   return { provider: "mock", requested, warnings };
 }
 
+/**
+ * Builds the only environment that public answer entry points may pass into
+ * model-aware code.
+ *
+ * OpenAI is reserved for the authenticated admin model lab. Public legacy and
+ * fast-judge code predate that boundary and also read MODEL_PROVIDER, so merely
+ * ignoring provider fields from the HTTP body is insufficient: adding the
+ * server-side admin OpenAI key could otherwise enable anonymous paid calls.
+ *
+ * The explicit mock mode is retained for offline tests. Every other public
+ * configuration is pinned to DeepSeek and falls back to the existing mock
+ * behavior when no DeepSeek key is configured.
+ */
+export function createPublicAnswerModelEnv(env = {}) {
+  const source = env && typeof env === "object" ? env : {};
+  const result = { ...source };
+  for (const key of Object.keys(result)) {
+    if (/^(?:OPENAI_|ADMIN_OPENAI_)/iu.test(key)) delete result[key];
+  }
+
+  const mockRequested = [
+    source.RAG_MODEL_PROVIDER,
+    source.MODEL_PROVIDER,
+  ].some((value) => String(value || "").trim().toLowerCase() === "mock");
+  const provider = mockRequested ? "mock" : "deepseek";
+  result.MODEL_PROVIDER = provider;
+  result.RAG_MODEL_PROVIDER = provider;
+  result.RAG_CARD_MODEL_PROVIDER = provider;
+  result.RAG_RULE_MODEL_PROVIDER = provider;
+  result.RAG_RULEBOOK_MODEL_PROVIDER = provider;
+  return result;
+}
+
 export function resolveCardExtractionProvider(env = {}) {
   if (isDisabled(env.RAG_CARD_EXTRACTOR_ENABLED)) {
     return { provider: "mock", requested: "disabled", warnings: ["card_name_model_disabled"] };
@@ -799,9 +871,9 @@ async function callDeepSeek({ prompt, env, modelName, maxTokens, fetchImpl, temp
     messages: [{ role: "user", content: prompt }],
     stream: false,
     response_format: { type: "json_object" },
-    max_tokens: maxTokens,
     temperature: temperature ?? readNumber(env.RAG_MODEL_TEMPERATURE, 0),
   };
+  if (Number.isInteger(maxTokens) && maxTokens > 0) body.max_tokens = maxTokens;
   let response = await postJson(fetchImpl, endpoint, {
     authorization: `Bearer ${env.DEEPSEEK_API_KEY}`,
     "content-type": "application/json",
@@ -947,6 +1019,25 @@ function stripJsonCodeFence(text) {
     .replace(/^```(?:json)?\s*/iu, "")
     .replace(/\s*```$/u, "")
     .trim();
+}
+
+function optionalPositiveInteger(value) {
+  if (value === null || value === undefined || String(value).trim() === "") return undefined;
+  const number = Number(value);
+  if (!Number.isInteger(number) || number <= 0) {
+    throw new TypeError("maxTokens must be a positive integer when provided");
+  }
+  return number;
+}
+
+function parseStrictJsonObject(rawText) {
+  const normalized = stripJsonCodeFence(String(rawText || "").trim());
+  if (!normalized) throw new SyntaxError("DeepSeek JSON task returned empty content");
+  const parsed = JSON.parse(normalized);
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new TypeError("DeepSeek JSON task must return a JSON object");
+  }
+  return parsed;
 }
 
 function parseLooseRagModelJson(text) {
@@ -1569,6 +1660,7 @@ function buildRulebookGroundingPrompt({
     "同一场景同时存在对象保护与效果抗性时，要分别列出证据，并明确最终阻止操作的是哪一项；不得把抗性误写成不能取对象的理由。",
     "涉及‘将发动无效并破坏’时，必须依据候选证据区分被无效的是魔法・陷阱卡的卡的发动，还是已在场卡片的效果发动，并据此判断是否属于破坏场上的卡。",
     "多个不入连锁效果或代替处理在同一时点适用时，必须检索其适用顺序；每适用一个效果后都要更新场面，再判断后续效果是否仍能适用，不能假定双方效果同时成功。",
+    "当发动条件要求“有「X」卡名记述”的卡时，只检查候选卡自身卡面／数据库 effect text 栏中的印刷文字。临时获得、复制或适用另一张卡的卡名与效果，不会改写该卡自身的印刷文本引用，不能因此满足该条件。",
     "不得仅因发动效果的卡或效果对象在连锁处理中离开原位置，就把整条已经合法发动的效果判为不处理。必须分别检查发动是否已成立、每项处理依赖的卡或位置、前一项不能处理时后一项是否继续，并为规则结论引用证据。",
     "对象在处理时不再存在，不代表不依赖该对象的其他处理自动消失；但也不能反过来假定所有后续处理必然继续。要依据效果连接词、规则书和 Q&A 逐项判断。",
     "如果较早步骤已被证据判为 illegal，后续处理应标记为未发生或不再需要判断；不得假设该操作已经成功后继续推演。",

@@ -11,6 +11,7 @@ export function analyzeEffectStateTransition({
     userQuery: String(userQuery || ""),
     resolvedCards,
     cardTexts,
+    corroboratingEvidence,
   });
   const normalizedTransition = normalizeDestinationReplacementOutput(transition);
   if (normalizedTransition.status !== "resolved" || normalizedTransition.complete !== true) return normalizedTransition;

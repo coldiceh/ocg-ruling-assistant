@@ -1,4 +1,8 @@
-const numberedEffectPattern = /(?:^|\n)\s*([①②③④⑤⑥⑦⑧⑨⑩]|\(?\d{1,2}\)?[.:：])\s*/gu;
+// Official and localized card texts often place a numbered effect immediately
+// after a full stop instead of on a new line. Circled numerals must include the
+// following colon so references such as “①②效果” are not mistaken for effect
+// boundaries.
+const numberedEffectPattern = /(?:^|\n|(?<=[。；;]))\s*(?:[①②③④⑤⑥⑦⑧⑨⑩]\s*[：:]|\(?\d{1,2}\)?[.:：])\s*/gu;
 
 export function splitCardTextSections(card = {}) {
   const cardType = String(card.cardType || card.type || "unknown").toLowerCase();

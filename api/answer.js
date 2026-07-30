@@ -1,6 +1,11 @@
 import { answerQuestion } from "../backend/engine.mjs";
 import { answerRulingQuestionFast } from "../backend/fastJudgeEngine.mjs";
-import { getRagBudgetStatus, resolveCardExtractionProvider, resolveRagProvider } from "../backend/ragModelClient.mjs";
+import {
+  createPublicAnswerModelEnv,
+  getRagBudgetStatus,
+  resolveCardExtractionProvider,
+  resolveRagProvider,
+} from "../backend/ragModelClient.mjs";
 import { appendQueryAudit } from "../backend/queryAuditStore.mjs";
 import {
   answerRagRulingQuestionForVersion,
@@ -31,16 +36,17 @@ export default async function handler(request, response) {
   try {
     const payload = typeof request.body === "string" ? JSON.parse(request.body || "{}") : request.body || {};
     const mode = String(payload.mode || "rag").toLowerCase();
+    const publicEnv = createPublicAnswerModelEnv(process.env);
     auditPromise = appendQueryAudit({
       question: payload.question,
       mode,
-      env: process.env,
+      env: publicEnv,
     }).catch(() => null);
     if (!["legacy", "fastjudge"].includes(mode)) {
       const answer = await answerRagRulingQuestionForVersion({
         rulingVersion: payload.rulingVersion,
         question: payload.question,
-        env: envForModelTier(process.env, payload.modelTier),
+        env: envForModelTier(publicEnv, payload.modelTier),
         engineScenario: payload.engineScenario,
       });
       await auditPromise;
@@ -53,10 +59,11 @@ export default async function handler(request, response) {
           question: payload.question,
           mode: "duel",
           maxLatencyMs: 6000,
+          env: publicEnv,
           gameState: payload.gameState || {},
           chainLinks: Array.isArray(payload.chainLinks) ? payload.chainLinks : [],
         })
-      : await answerQuestion(payload);
+      : await answerQuestion(payload, { env: publicEnv });
     await auditPromise;
     response.status(200).json({
       ...answer,
@@ -80,12 +87,13 @@ function setCors(response) {
 }
 
 async function getModelInfo() {
-  const ragProvider = resolveRagProvider(process.env);
-  const cardProvider = resolveCardExtractionProvider(process.env);
-  const budget = await getRagBudgetStatus({ env: process.env }).catch(() => null);
+  const publicEnv = createPublicAnswerModelEnv(process.env);
+  const ragProvider = resolveRagProvider(publicEnv);
+  const cardProvider = resolveCardExtractionProvider(publicEnv);
+  const budget = await getRagBudgetStatus({ env: publicEnv }).catch(() => null);
   const engineEnabled = !/^(?:0|false|off|disabled|no)$/iu.test(
-    String(process.env.RAG_AUTO_ENGINE_SIMULATION ?? "true").trim(),
-  ) && Boolean(String(process.env.OCG_ENGINE_URL || "").trim());
+    String(publicEnv.RAG_AUTO_ENGINE_SIMULATION ?? "true").trim(),
+  ) && Boolean(String(publicEnv.OCG_ENGINE_URL || "").trim());
   const provider = ragProvider.provider;
   const rulingVersionCapabilities = getRulingVersionCapabilities();
   if (provider === "deepseek") {
@@ -93,10 +101,10 @@ async function getModelInfo() {
       ...rulingVersionCapabilities,
       provider: "deepseek",
       requestedProvider: ragProvider.requested,
-      models: [process.env.DEEPSEEK_MODEL || "deepseek-v4-flash"],
+      models: [publicEnv.DEEPSEEK_MODEL || "deepseek-v4-flash"],
       cardNameProvider: cardProvider.provider,
-      cardNameModels: [process.env.DEEPSEEK_CARD_MODEL || process.env.RAG_CARD_MODEL || "deepseek-v4-flash"],
-      modelTiers: buildModelTiers("deepseek", process.env),
+      cardNameModels: [publicEnv.DEEPSEEK_CARD_MODEL || publicEnv.RAG_CARD_MODEL || "deepseek-v4-flash"],
+      modelTiers: buildModelTiers("deepseek", publicEnv),
       budget,
       engineEnabled,
       enabled: true,
@@ -106,15 +114,15 @@ async function getModelInfo() {
   }
 
   if (provider === "gemini") {
-    const model = process.env.GEMINI_MODEL || "gemini-1.5-flash";
+    const model = publicEnv.GEMINI_MODEL || "gemini-1.5-flash";
     return {
       ...rulingVersionCapabilities,
       provider: "gemini",
       requestedProvider: ragProvider.requested,
       models: [model],
       cardNameProvider: cardProvider.provider,
-      cardNameModels: splitList(process.env.GEMINI_CARD_MODEL || process.env.GEMINI_CARD_RESOLUTION_MODELS || process.env.GEMINI_CARD_RESOLUTION_MODEL || "gemini-1.5-flash"),
-      modelTiers: buildModelTiers("gemini", process.env),
+      cardNameModels: splitList(publicEnv.GEMINI_CARD_MODEL || publicEnv.GEMINI_CARD_RESOLUTION_MODELS || publicEnv.GEMINI_CARD_RESOLUTION_MODEL || "gemini-1.5-flash"),
+      modelTiers: buildModelTiers("gemini", publicEnv),
       budget,
       engineEnabled,
       enabled: true,
