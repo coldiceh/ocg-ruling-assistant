@@ -1,0 +1,553 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import {
+  createAdminModelLabDevelopmentService,
+  createAdminModelLabProductionService,
+  createDeepSeekEvidencePreparationInvoke,
+} from "../backend/adminModelLabProduction.mjs";
+import { createMemoryAdminLabRecordStore } from "../backend/adminLabRecordStore.mjs";
+import {
+  createAdminRunStore,
+  createMemoryAdminRunStorage,
+} from "../backend/adminRunStore.mjs";
+import { callDeepSeekJsonTask } from "../backend/ragModelClient.mjs";
+
+const ENABLED_ENV = Object.freeze({
+  ADMIN_MODEL_LAB_ENABLED: "true",
+  ADMIN_OPENAI_ENABLED: "true",
+});
+
+test("production model lab is disabled by default and never falls back to memory", () => {
+  assert.throws(
+    () => createAdminModelLabProductionService({
+      env: {},
+      fetchImpl: async () => {
+        throw new Error("network must not run");
+      },
+      baseService: fakeBaseService(),
+      recordStore: createMemoryAdminLabRecordStore(),
+    }),
+    (error) => error.code === "admin_model_lab_production_unavailable"
+      && /ADMIN_MODEL_LAB_ENABLED/u.test(error.message),
+  );
+});
+
+test("production composition registers runs and exposes persistent record capabilities", async () => {
+  const recordStore = persistentRecordStore();
+  const service = createAdminModelLabProductionService({
+    env: ENABLED_ENV,
+    fetchImpl: async () => {
+      throw new Error("network must not run");
+    },
+    baseService: fakeBaseService(),
+    recordStore,
+    evaluationLoader: async () => ({
+      schemaVersion: "1",
+      fixtureName: "fixture",
+      purpose: "test",
+      cases: [],
+    }),
+  });
+
+  const capabilities = await service.capabilities();
+  assert.equal(capabilities.features.history, true);
+  assert.equal(capabilities.features.rating, true);
+  assert.equal(capabilities.features.export, true);
+  assert.equal(capabilities.features.evaluation, true);
+  assert.equal(capabilities.persistence.recordStore, "persistent");
+  assert.equal(capabilities.persistence.runStore, "persistent");
+
+  const run = await service.createRun({ body: { question: "测试问题" } });
+  assert.equal(run.runId, "run-production-1");
+  const history = await service.listRuns({ limit: 10 });
+  assert.equal(history.records.length, 1);
+  assert.equal(history.records[0].question, "测试问题");
+
+  await service.saveRating({
+    runId: run.runId,
+    rating: "needs_review",
+    notes: "等待真实模型测试",
+  });
+  const exported = await service.exportRuns({ runId: run.runId, format: "json" });
+  assert.equal(exported.format, "json");
+  assert.match(exported.content, /needs_review/u);
+  const exportRecord = JSON.parse(exported.content).records[0];
+  assert.equal(exportRecord.status, "SUCCEEDED");
+  assert.equal(exportRecord.evidenceSnapshotId, "evidence-production-1");
+  assert.equal(exportRecord.result.finalRuling.conciseAnswer, "测试裁定。");
+  assert.equal(exportRecord.metering.totals.usage.totalTokens, 180);
+
+  const fullExport = await service.exportRuns({ format: "json" });
+  assert.equal(JSON.parse(fullExport.content).records[0].result.validation.ok, true);
+});
+
+test("export and rating repair a confirmed history record deleted after cache confirmation", async () => {
+  const recordStore = deletablePersistentRecordStore();
+  const service = createAdminModelLabProductionService({
+    env: ENABLED_ENV,
+    fetchImpl: async () => {
+      throw new Error("network must not run");
+    },
+    baseService: fakeBaseService(),
+    recordStore,
+  });
+  const run = await service.createRun({ body: { question: "测试问题" } });
+  assert.equal(recordStore.registrationCalls(), 1);
+
+  recordStore.deleteRecord(run.runId);
+  const exported = await service.exportRuns({ runId: run.runId, format: "json" });
+  assert.equal(JSON.parse(exported.content).records[0].runId, run.runId);
+  assert.equal(recordStore.registrationCalls(), 2);
+
+  recordStore.deleteRecord(run.runId);
+  const rating = await service.saveRating({
+    runId: run.runId,
+    rating: "correct",
+    notes: "删除后重新登记",
+  });
+  assert.equal(rating.rating, "correct");
+  assert.equal(recordStore.registrationCalls(), 3);
+});
+
+test("production creation returns the durable run and repairs history after a lost register response", async () => {
+  const innerRecordStore = createMemoryAdminLabRecordStore();
+  let registrationCalls = 0;
+  const recordStore = Object.freeze({
+    ...innerRecordStore,
+    kind: "test-persistent-flaky",
+    persistent: true,
+    async registerRun(input) {
+      registrationCalls += 1;
+      const registered = await innerRecordStore.registerRun(input);
+      if (registrationCalls === 1) {
+        const error = new Error("simulated timeout containing server-secret");
+        error.code = "admin_lab_record_redis_timeout";
+        throw error;
+      }
+      return registered;
+    },
+  });
+  const baseService = fakeBaseService();
+  const originalCreateRun = baseService.createRun.bind(baseService);
+  let createCalls = 0;
+  baseService.createRun = async (...args) => {
+    createCalls += 1;
+    return originalCreateRun(...args);
+  };
+  const service = createAdminModelLabProductionService({
+    env: ENABLED_ENV,
+    fetchImpl: async () => {
+      throw new Error("network must not run");
+    },
+    baseService,
+    recordStore,
+    evaluationLoader: async () => ({
+      schemaVersion: "1",
+      fixtureName: "fixture",
+      purpose: "test",
+      cases: [],
+    }),
+  });
+
+  const created = await service.createRun({ body: { question: "测试问题" } });
+  assert.equal(created.runId, "run-production-1");
+  assert.equal(created.historyRegistration.status, "pending");
+  assert.equal(created.historyRegistration.retryable, true);
+  assert.equal(
+    created.historyRegistration.errorCode,
+    "admin_lab_record_redis_timeout",
+  );
+  assert.equal(JSON.stringify(created).includes("server-secret"), false);
+  assert.equal(createCalls, 1);
+  assert.equal(registrationCalls, 1);
+
+  const repaired = await service.getRun({
+    runId: created.runId,
+    reconcile: false,
+  });
+  assert.equal(Object.hasOwn(repaired, "historyRegistration"), false);
+  assert.equal(createCalls, 1);
+  assert.equal(registrationCalls, 2);
+  const history = await service.listRuns({ limit: 10 });
+  assert.equal(history.records.length, 1);
+  assert.equal(history.records[0].runId, created.runId);
+});
+
+test("production composition accepts the real base service when its run store is persistent", async () => {
+  const persistentRunStorage = Object.freeze({
+    ...createMemoryAdminRunStorage(),
+    kind: "test-persistent-run-storage",
+    persistent: true,
+  });
+  const service = createAdminModelLabProductionService({
+    env: ENABLED_ENV,
+    fetchImpl: async () => {
+      throw new Error("network must not run");
+    },
+    recordStore: persistentRecordStore(),
+    runStore: createAdminRunStore({ storage: persistentRunStorage }),
+    deepSeekProvider: {},
+    openAIProvider: {},
+    evaluationLoader: async () => ({
+      schemaVersion: "1",
+      fixtureName: "fixture",
+      purpose: "test",
+      cases: [],
+    }),
+  });
+
+  const capabilities = await service.capabilities();
+  assert.equal(capabilities.persistence.runStore, "persistent");
+  assert.equal(capabilities.persistence.runStoreKind, "test-persistent-run-storage");
+});
+
+test("production composition rejects every ephemeral storage injection and memory env mode", () => {
+  const ephemeralRecordStore = createMemoryAdminLabRecordStore();
+  assert.throws(
+    () => createAdminModelLabProductionService({
+      env: ENABLED_ENV,
+      fetchImpl: async () => null,
+      baseService: fakeBaseService(),
+      recordStore: ephemeralRecordStore,
+    }),
+    (error) => error?.code === "admin_model_lab_production_unavailable"
+      && /record store must be persistent/u.test(error.message),
+  );
+
+  const durableRecordStore = persistentRecordStore();
+  assert.throws(
+    () => createAdminModelLabProductionService({
+      env: { ...ENABLED_ENV, ADMIN_RUN_STORAGE: "memory" },
+      fetchImpl: async () => null,
+      recordStore: durableRecordStore,
+    }),
+    (error) => error?.code === "admin_run_memory_forbidden",
+  );
+  assert.throws(
+    () => createAdminModelLabProductionService({
+      env: { ...ENABLED_ENV, ADMIN_LAB_RECORD_STORAGE: "memory" },
+      fetchImpl: async () => null,
+    }),
+    (error) => error?.code === "admin_lab_record_memory_forbidden",
+  );
+  assert.throws(
+    () => createAdminModelLabProductionService({
+      env: ENABLED_ENV,
+      fetchImpl: async () => null,
+      recordStore: durableRecordStore,
+      runStorage: createMemoryAdminRunStorage(),
+    }),
+    (error) => error?.code === "admin_model_lab_production_unavailable"
+      && /run storage must be persistent/u.test(error.message),
+  );
+  assert.throws(
+    () => createAdminModelLabProductionService({
+      env: ENABLED_ENV,
+      fetchImpl: async () => null,
+      recordStore: durableRecordStore,
+      runStore: createAdminRunStore({ storage: createMemoryAdminRunStorage() }),
+    }),
+    (error) => error?.code === "admin_model_lab_production_unavailable"
+      && /run store must be persistent/u.test(error.message),
+  );
+  assert.throws(
+    () => createAdminModelLabProductionService({
+      env: ENABLED_ENV,
+      fetchImpl: async () => null,
+      recordStore: durableRecordStore,
+      baseService: fakeBaseService({ persistent: false }),
+    }),
+    (error) => error?.code === "admin_model_lab_production_unavailable"
+      && /base service run store must be persistent/u.test(error.message),
+  );
+});
+
+test("explicit local development composition works without Redis but is forbidden in production", async () => {
+  const service = createAdminModelLabDevelopmentService({
+    env: {
+      ...ENABLED_ENV,
+      NODE_ENV: "development",
+    },
+    fetchImpl: async () => {
+      throw new Error("network must not run");
+    },
+    deepSeekProvider: {},
+    openAIProvider: {},
+    evaluationLoader: async () => ({
+      schemaVersion: "1",
+      fixtureName: "fixture",
+      purpose: "test",
+      cases: [],
+    }),
+  });
+
+  const capabilities = await service.capabilities();
+  assert.equal(capabilities.persistence.runStore, "ephemeral");
+  assert.equal(capabilities.persistence.recordStore, "ephemeral");
+  const run = await service.createRun({ body: { question: "本地开发问题" } });
+  assert.equal(run.status, "QUEUED");
+  assert.equal((await service.listRuns({ limit: 10 })).records.length, 1);
+
+  assert.throws(
+    () => createAdminModelLabDevelopmentService({
+      env: {
+        ...ENABLED_ENV,
+        NODE_ENV: "production",
+      },
+      fetchImpl: async () => null,
+      deepSeekProvider: {},
+      openAIProvider: {},
+    }),
+    (error) => error?.code === "admin_model_lab_production_unavailable"
+      && /local-only/u.test(error.message),
+  );
+});
+
+test("DeepSeek bridge accepts evidence preparation only and keeps server-owned transport", async () => {
+  const calls = [];
+  const serverEnv = {
+    DEEPSEEK_API_KEY: "server-only",
+  };
+  const serverFetch = async () => {
+    throw new Error("injected JSON task should own this test");
+  };
+  const invoke = createDeepSeekEvidencePreparationInvoke({
+    env: serverEnv,
+    fetchImpl: serverFetch,
+    callDeepSeekJsonTaskImpl: async (request) => {
+      calls.push(request);
+      return { cardNameCandidates: [{ name: "测试卡" }] };
+    },
+  });
+
+  const result = await invoke({
+    provider: "deepseek",
+    purpose: "evidence_preparation",
+    canMakeFinalRuling: false,
+    canDecideEscalation: false,
+    prompt: "只整理证据",
+    modelName: "deepseek-v4-flash",
+  });
+  assert.equal(result.cardNameCandidates[0].name, "测试卡");
+  assert.equal(calls[0].env, serverEnv);
+  assert.equal(calls[0].fetchImpl, serverFetch);
+
+  await assert.rejects(
+    invoke({
+      provider: "deepseek",
+      purpose: "final_ruling",
+      canMakeFinalRuling: true,
+      canDecideEscalation: true,
+      prompt: "越权请求",
+    }),
+    (error) => error.code === "deepseek_evidence_preparation_boundary_violation",
+  );
+});
+
+test("DeepSeek JSON task returns strict structured hints and metered usage", async () => {
+  const calls = [];
+  const result = await callDeepSeekJsonTask({
+    prompt: "提取卡名和规则检索词",
+    modelName: "deepseek-v4-flash",
+    maxTokens: 900,
+    env: {
+      DEEPSEEK_API_KEY: "server-secret",
+      DEEPSEEK_BASE_URL: "https://deepseek.example/v1",
+    },
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options });
+      return jsonResponse({
+        choices: [{
+          finish_reason: "stop",
+          message: {
+            content: JSON.stringify({
+              cardNameCandidates: [{ name: "测试卡", originalText: "测试卡" }],
+              ruleSearchQueries: [{ query: "发动条件" }],
+              unresolvedNotes: [],
+              conflicts: [],
+            }),
+          },
+        }],
+        usage: {
+          prompt_tokens: 120,
+          completion_tokens: 40,
+          prompt_cache_hit_tokens: 20,
+          prompt_cache_miss_tokens: 100,
+        },
+      });
+    },
+  });
+
+  assert.equal(result.cardNameCandidates[0].name, "测试卡");
+  assert.equal(result.usage.prompt_tokens, 120);
+  assert.equal(result.usage.completion_tokens, 40);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, "https://deepseek.example/v1/chat/completions");
+  assert.equal(calls[0].options.headers.authorization, "Bearer server-secret");
+  const body = JSON.parse(calls[0].options.body);
+  assert.equal(body.response_format.type, "json_object");
+  assert.equal(body.max_tokens, 900);
+
+  await callDeepSeekJsonTask({
+    prompt: "不设置应用层输出上限",
+    env: {
+      DEEPSEEK_API_KEY: "server-secret",
+      DEEPSEEK_BASE_URL: "https://deepseek.example/v1",
+    },
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options });
+      return jsonResponse({
+        choices: [{
+          finish_reason: "stop",
+          message: { content: JSON.stringify({ ruleSearchQueries: [] }) },
+        }],
+        usage: {},
+      });
+    },
+  });
+  assert.equal(Object.hasOwn(JSON.parse(calls[1].options.body), "max_tokens"), false);
+
+  await assert.rejects(
+    callDeepSeekJsonTask({
+      prompt: "x",
+      env: {},
+      fetchImpl: async () => {
+        throw new Error("must not call");
+      },
+    }),
+    (error) => error.code === "deepseek_not_configured",
+  );
+});
+
+function fakeBaseService({ persistent = true } = {}) {
+  const run = {
+    runId: "run-production-1",
+    createdAt: "2026-07-28T00:00:00.000Z",
+    status: "SUCCEEDED",
+    startedAt: "2026-07-28T00:00:01.000Z",
+    endedAt: "2026-07-28T00:00:03.000Z",
+    evidenceSnapshot: {
+      question: "测试问题",
+      snapshotId: "evidence-production-1",
+    },
+    executionProfile: {
+      finalRuling: {
+        provider: "openai",
+        model: "gpt-5.6-terra",
+      },
+    },
+    result: {
+      schemaVersion: 1,
+      evidenceSnapshotId: "evidence-production-1",
+      finalRuling: {
+        conciseAnswer: "测试裁定。",
+      },
+      validation: {
+        ok: true,
+        errors: [],
+      },
+      metering: {
+        totals: {
+          usage: {
+            totalTokens: 180,
+          },
+          cost: {
+            totalCostUsd: 0.01,
+          },
+        },
+      },
+    },
+  };
+  return {
+    persistence: {
+      runStore: persistent,
+      runStoreKind: persistent ? "redis-rest" : "memory",
+      runTtlSeconds: null,
+    },
+    async capabilities() {
+      return {
+        features: {
+          history: false,
+          rating: false,
+          export: false,
+          evaluation: false,
+        },
+        unavailableReasons: {
+          history: "missing",
+          rating: "missing",
+          export: "missing",
+          evaluation: "missing",
+        },
+      };
+    },
+    async createRun() {
+      return structuredClone(run);
+    },
+    async executeRun() {
+      return { run: structuredClone(run), providerRequest: null };
+    },
+    async getRun() {
+      return structuredClone(run);
+    },
+    async pollRun() {
+      return structuredClone(run);
+    },
+    async cancelRun() {
+      return structuredClone(run);
+    },
+    async replayEvents() {
+      return { events: [], nextAfterSequence: 0, status: run.status, terminal: false };
+    },
+  };
+}
+
+function persistentRecordStore() {
+  return Object.freeze({
+    ...createMemoryAdminLabRecordStore(),
+    kind: "test-persistent",
+    persistent: true,
+  });
+}
+
+function deletablePersistentRecordStore() {
+  const inner = createMemoryAdminLabRecordStore();
+  const deletedRunIds = new Set();
+  let registerCalls = 0;
+  return Object.freeze({
+    ...inner,
+    kind: "test-persistent-deletable",
+    persistent: true,
+    async registerRun(input) {
+      registerCalls += 1;
+      const record = await inner.registerRun(input);
+      deletedRunIds.delete(record.runId);
+      return record;
+    },
+    async getRun(runId) {
+      if (deletedRunIds.has(String(runId))) return null;
+      return inner.getRun(runId);
+    },
+    async saveHumanRating(input) {
+      if (deletedRunIds.has(String(input?.runId))) {
+        const error = new Error(`admin lab record not found: ${String(input?.runId || "")}`);
+        error.code = "admin_lab_record_not_found";
+        throw error;
+      }
+      return inner.saveHumanRating(input);
+    },
+    deleteRecord(runId) {
+      deletedRunIds.add(String(runId));
+    },
+    registrationCalls() {
+      return registerCalls;
+    },
+  });
+}
+
+function jsonResponse(payload, status = 200) {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    json: async () => payload,
+  };
+}

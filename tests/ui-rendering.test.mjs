@@ -343,23 +343,414 @@ test("query_button_has_visible_pending_state", async () => {
   assert.match(css, /cursor: wait/u);
 });
 
-test("owner_query_log_is_hidden_and_server_authorized", async () => {
-  const [html, app, adminApi, adminAuth] = await Promise.all([
+test("admin_model_lab_is_hidden_and_requires_a_real_session", async () => {
+  const [html, app, adminAuthApi, adminSession] = await Promise.all([
     readFile(new URL("../index.html", import.meta.url), "utf8"),
     readFile(new URL("../src/app.js", import.meta.url), "utf8"),
-    readFile(new URL("../api/admin-queries.js", import.meta.url), "utf8"),
-    readFile(new URL("../backend/adminAuth.mjs", import.meta.url), "utf8"),
+    readFile(new URL("../api/admin-auth.js", import.meta.url), "utf8"),
+    readFile(new URL("../backend/adminSession.mjs", import.meta.url), "utf8"),
   ]);
 
-  assert.match(html, /id="adminQueryPanel"[^>]+hidden/u);
-  assert.doesNotMatch(html, /最多保留 30 天的提问文本|不记录 IP/u);
+  assert.match(html, /id="adminLabPanel"[^>]+hidden/u);
+  assert.match(html, /admin=1<\/code> 只负责显示本区域，并不代表已经登录/u);
+  assert.match(html, /id="adminPasswordInput" type="password"/u);
+  assert.match(html, /data-admin-stage="understand"/u);
+  assert.match(html, /data-admin-stage="generate_ruling"/u);
+  assert.match(html, /FAST \/ NORMAL \/ SLOW 只是耗时标签，不会触发自动取消/u);
   assert.match(app, /params\.get\("admin"\) === "1"/u);
-  assert.match(app, /\/api\/admin-queries/u);
-  assert.match(app, /prompt\("请输入管理员密码"\)/u);
-  assert.match(app, /JSON\.stringify\(\{ password, limit: 100 \}\)/u);
-  assert.match(adminApi, /authorizeAdminRequest/u);
-  assert.match(adminAuth, /timingSafeEqual/u);
-  assert.doesNotMatch(adminAuth, /allure/u);
+  assert.match(app, /\/api\/admin-auth/u);
+  assert.match(app, /\/api\/admin-model-lab/u);
+  assert.match(app, /credentials: "include"/u);
+  assert.match(app, /headers\["x-csrf-token"\] = adminSession\.csrfToken/u);
+  assert.match(app, /afterSequence/u);
+  assert.match(app, /"last-event-id": String\(adminAfterSequence\)/u);
+  assert.match(app, /adminDurationCategory/u);
+  assert.match(app, /run\?\.stageTiming\?\.stages/u);
+  assert.match(app, /adminFeatureEnabled\("history"\)/u);
+  assert.match(html, /id="adminHistoryTitle">实验历史/u);
+  assert.match(html, /id="adminQuestionHistoryTitle">后台历史提问/u);
+  assert.match(html, /最多 100 条；不等同于上方的模型实验历史/u);
+  assert.match(app, /getAdminEndpointUrl\("\/api\/admin-queries"\)/u);
+  assert.match(app, /url\.searchParams\.set\("limit", "100"\)/u);
+  assert.match(app, /sessionStorage\.setItem\(adminCurrentRunStorageKey, id\)/u);
+  assert.match(app, /sessionStorage\.getItem\(adminCurrentRunStorageKey\)/u);
+  assert.match(app, /await restoreStoredAdminRun\(\)/u);
+  assert.match(app, /triggerAdminRunExecution\(adminCurrentRunId\)/u);
+  assert.match(app, /adminExecuteAttemptedRunIds\.has\(id\)/u);
+  assert.match(app, /!shouldTriggerAdminRunExecution\(adminCurrentRun\)/u);
+  assert.match(app, /latency\.totalWallClockMs/u);
+  assert.match(app, /latency\.totalWallClockMs[\s\S]{0,120}\?\? metrics\.wallClockMs/u);
+  assert.match(app, /\["推理 Token", usage\.reasoningTokens/u);
+  assert.match(app, /cnyCostIncomplete \? "人民币估算（仅已知部分）" : "人民币估算"/u);
+  assert.match(app, /adminObjectToCsv/u);
+  assert.match(app, /query: \{ runId: adminCurrentRunId, format \}/u);
+  assert.match(app, /typeof data\?\.content === "string"/u);
+  assert.match(app, /data\?\.fileName/u);
+  assert.match(app, /data\?\.contentType/u);
+  assert.match(html, /option value="partially_correct">部分正确/u);
+  assert.match(app, /rating: String\(ui\.adminRatingSelect\?\.value \|\| ""\)/u);
+  assert.doesNotMatch(app, /prompt\("请输入管理员密码"\)/u);
+  assert.doesNotMatch(app, /body:\s*\{[^}]*password[^}]*\}[\s\S]{0,240}\/api\/admin-queries/u);
+  assert.doesNotMatch(html, /OPENAI_API_KEY|DEEPSEEK_API_KEY/u);
+  assert.match(adminAuthApi, /createAdminSessionManager/u);
+  assert.match(adminAuthApi, /defaultHandler \|\|=/u);
+  assert.match(adminSession, /timingSafeEqual/u);
+  assert.match(adminSession, /HttpOnly/u);
+  assert.match(adminSession, /SameSite=None/u);
+});
+
+test("admin model lab renders the current structured ruling schema", async () => {
+  const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
+  const source = sourceBetween(
+    app,
+    "function renderAdminStructuredResult",
+    "function renderAdminMetrics",
+  );
+  const document = createTestDocument();
+  const summary = document.createElement("section");
+  const render = new Function(
+    "ui",
+    "document",
+    "clearElement",
+    "appendText",
+    "firstAdminArray",
+    "firstAdminValue",
+    "adminDisplayValue",
+    `${source}; return renderAdminStructuredResult;`,
+  )(
+    { adminResultSummary: summary },
+    document,
+    clearTestElement,
+    appendTestText,
+    (...values) => values.find(Array.isArray) || [],
+    (...values) => values.find((value) => value !== undefined && value !== null && value !== ""),
+    (value) => String(value?.text || value?.reason || value?.message || value || ""),
+  );
+
+  render({
+    result: {
+      finalRuling: {
+        schemaVersion: "1.0",
+        conciseAnswer: "可以发动，但处理时不会进行特殊召唤。",
+        verdicts: [{
+          questionId: "q1",
+          value: "TRUE",
+          conclusion: "发动合法。",
+          conditions: ["手牌中存在可支付的卡"],
+        }],
+        claims: [{
+          questionId: "q1",
+          claimId: "c1",
+          proposition: "发动条件在发动时满足。",
+          status: "TRUE",
+          decisive: true,
+          evidenceIds: ["faq-1"],
+          inferenceType: "DIRECT_OFFICIAL",
+        }],
+        timeline: [{
+          order: 1,
+          action: "支付代价",
+          result: "手牌送去墓地",
+          evidenceIds: ["faq-1"],
+        }],
+        unresolved: [{
+          questionId: "q1",
+          code: "FOLLOW_UP",
+          decisive: false,
+          explanation: "后续对象仍需确认。",
+        }],
+        confidence: {
+          level: "HIGH",
+          reasons: ["存在直接官方资料"],
+        },
+      },
+    },
+  });
+
+  const text = testNodeText(summary);
+  assert.match(text, /可以发动，但处理时不会进行特殊召唤/u);
+  assert.match(text, /q1 · 可以／成立/u);
+  assert.match(text, /手牌中存在可支付的卡/u);
+  assert.match(text, /发动条件在发动时满足/u);
+  assert.match(text, /支付代价 → 手牌送去墓地/u);
+  assert.match(text, /后续对象仍需确认/u);
+  assert.doesNotMatch(text, /已收到结构化结果/u);
+});
+
+test("admin model lab displays aggregate two-stage cost before final-stage cost", async () => {
+  const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
+  const source = sourceBetween(
+    app,
+    "function renderAdminMetrics",
+    "function renderAdminEvidence",
+  );
+  const document = createTestDocument();
+  const metricsNode = document.createElement("dl");
+  const render = new Function(
+    "ui",
+    "document",
+    "clearElement",
+    "appendText",
+    "adminRunStatusLabel",
+    "formatAdminCost",
+    "formatAdminCnyCost",
+    "formatAdminMetricDuration",
+    `${source}; return renderAdminMetrics;`,
+  )(
+    { adminMetrics: metricsNode },
+    document,
+    clearTestElement,
+    appendTestText,
+    (value) => String(value || ""),
+    (value) => Number.isFinite(Number(value)) ? `$${Number(value).toFixed(6)}` : "",
+    (value) => Number.isFinite(Number(value)) ? `¥${Number(value).toFixed(4)}` : "",
+    (value) => String(value ?? ""),
+  );
+
+  render({
+    status: "SUCCEEDED",
+    metrics: {},
+    usage: {},
+    result: {
+      cost: {
+        totalCostUsd: 99,
+        totalCostCny: 999,
+      },
+      metrics: {
+        usage: {
+          inputTokens: 12,
+          outputTokens: 3,
+          totalTokens: 15,
+        },
+        cost: {
+          totalCostUsd: 3,
+          totalCostCny: 21,
+          knownCostUsd: 3,
+          knownCostCny: 21,
+        },
+      },
+      metering: {
+        totals: {
+          cost: {
+            totalCostUsd: 3,
+            totalCostCny: 21,
+          },
+        },
+      },
+    },
+  });
+
+  const text = testNodeText(metricsNode);
+  assert.match(text, /输入 Token\n12/u);
+  assert.match(text, /总 Token\n15/u);
+  assert.match(text, /\$3\.000000/u);
+  assert.match(text, /¥21\.0000/u);
+  assert.doesNotMatch(text, /\$99\.000000|¥999\.0000/u);
+});
+
+test("admin model lab labels incomplete aggregate costs as known portions", async () => {
+  const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
+  const source = sourceBetween(
+    app,
+    "function renderAdminMetrics",
+    "function renderAdminEvidence",
+  );
+  const document = createTestDocument();
+  const metricsNode = document.createElement("dl");
+  const render = new Function(
+    "ui",
+    "document",
+    "clearElement",
+    "appendText",
+    "adminRunStatusLabel",
+    "formatAdminCost",
+    "formatAdminCnyCost",
+    "formatAdminMetricDuration",
+    `${source}; return renderAdminMetrics;`,
+  )(
+    { adminMetrics: metricsNode },
+    document,
+    clearTestElement,
+    appendTestText,
+    (value) => String(value || ""),
+    (value) => Number.isFinite(Number(value)) ? `$${Number(value).toFixed(6)}` : "",
+    (value) => Number.isFinite(Number(value)) ? `¥${Number(value).toFixed(4)}` : "",
+    (value) => String(value ?? ""),
+  );
+
+  render({
+    status: "SUCCEEDED",
+    metrics: {},
+    usage: {},
+    result: {
+      metrics: {
+        cost: {
+          totalCostUsd: null,
+          knownCostUsd: 1.25,
+          totalCostCny: null,
+          knownCostCny: 8.75,
+          completeInUsd: false,
+          completeInCny: false,
+          missingUsdStages: ["evidencePreparation"],
+          missingCnyStages: ["finalRuling"],
+        },
+      },
+    },
+  });
+
+  const text = testNodeText(metricsNode);
+  assert.match(text, /估算成本（仅已知部分）\n\$1\.250000/u);
+  assert.match(text, /美元成本缺失阶段\n证据准备（DeepSeek）/u);
+  assert.match(text, /人民币估算（仅已知部分）\n¥8\.7500/u);
+  assert.match(text, /人民币成本缺失阶段\n最终裁定（OpenAI）/u);
+});
+
+test("admin run merge replaces state across run ids and does not create empty metric shadows", async () => {
+  const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
+  const source = sourceBetween(
+    app,
+    "function mergeAdminRun",
+    "function extractAdminRun",
+  );
+  const merge = new Function(
+    "previous",
+    "incoming",
+    `
+      let adminCurrentRun = previous;
+      let adminCurrentRunId = previous?.runId || "";
+      const extractAdminRunId = (value) => String(value?.runId || value?.id || "");
+      const storeAdminRunId = () => {};
+      const updateAdminStagesFromRun = () => {};
+      ${source}
+      mergeAdminRun(incoming);
+      return adminCurrentRun;
+    `,
+  );
+
+  const merged = merge({
+    runId: "run-a",
+    oldOnly: true,
+    metrics: { inputTokens: 999 },
+    usage: { totalTokens: 999 },
+  }, {
+    runId: "run-b",
+    status: "SUCCEEDED",
+    result: {
+      metrics: {
+        usage: { totalTokens: 15 },
+      },
+    },
+  });
+
+  assert.equal(merged.runId, "run-b");
+  assert.equal(merged.oldOnly, undefined);
+  assert.equal(merged.metrics, undefined);
+  assert.equal(merged.usage, undefined);
+  assert.equal(merged.result.metrics.usage.totalTokens, 15);
+});
+
+test("admin run recovery retries only a safely unclaimed execution", async () => {
+  const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
+  const predicateSource = sourceBetween(
+    app,
+    "function shouldTriggerAdminRunExecution",
+    "function isAdminRunQueued",
+  );
+  const shouldTrigger = new Function(
+    `${predicateSource}; return shouldTriggerAdminRunExecution;`,
+  )();
+  const now = Date.parse("2026-07-30T12:00:00.000Z");
+  const baseRun = {
+    status: "RUNNING",
+    result: null,
+    execution: {
+      lease: null,
+      providerSubmission: {
+        state: "NONE",
+        requestId: null,
+        attemptId: null,
+        intentAt: null,
+        outcomeUnknownAt: null,
+      },
+    },
+  };
+
+  assert.equal(shouldTrigger({ ...baseRun, status: "QUEUED" }, now), true);
+  assert.equal(shouldTrigger(baseRun, now), true);
+  assert.equal(shouldTrigger({
+    ...baseRun,
+    execution: {
+      ...baseRun.execution,
+      lease: { expiresAt: "2026-07-30T11:59:59.000Z" },
+    },
+  }, now), true);
+  assert.equal(shouldTrigger({
+    ...baseRun,
+    execution: {
+      ...baseRun.execution,
+      lease: { expiresAt: "2026-07-30T12:00:01.000Z" },
+    },
+  }, now), false);
+  assert.equal(shouldTrigger({
+    ...baseRun,
+    execution: {
+      ...baseRun.execution,
+      lease: { expiresAt: "invalid" },
+    },
+  }, now), false);
+
+  for (const state of ["SUBMITTING", "SUBMITTED", "REJECTED", "OUTCOME_UNKNOWN", "UNRECOGNIZED"]) {
+    assert.equal(shouldTrigger({
+      ...baseRun,
+      execution: {
+        lease: null,
+        providerSubmission: {
+          ...baseRun.execution.providerSubmission,
+          state,
+        },
+      },
+    }, now), false, `${state} must never be resubmitted by the browser`);
+  }
+  assert.equal(shouldTrigger({
+    ...baseRun,
+    execution: {
+      lease: null,
+      providerSubmission: {
+        ...baseRun.execution.providerSubmission,
+        requestId: "resp_existing",
+      },
+    },
+  }, now), false);
+  assert.equal(shouldTrigger({ ...baseRun, status: "CANCEL_REQUESTED" }, now), false);
+  assert.equal(shouldTrigger({ ...baseRun, result: { finalRuling: {} } }, now), false);
+
+  const triggerSource = sourceBetween(
+    app,
+    "function triggerAdminRunExecution",
+    "async function cancelAdminExperiment",
+  );
+  assert.match(triggerSource, /shouldTriggerAdminRunExecution\(adminCurrentRun\)/u);
+  assert.match(triggerSource, /\.finally\(\(\) => \{[\s\S]*adminExecuteAttemptedRunIds\.delete\(id\)/u);
+  const refreshSource = sourceBetween(
+    app,
+    "async function refreshAdminRun",
+    "function mergeAdminRun",
+  );
+  assert.match(refreshSource, /triggerAdminRunExecution\(runId\)/u);
+});
+
+test("local admin routes lazily share one session manager and omit legacy token auth", async () => {
+  const server = await readFile(new URL("../backend/server.mjs", import.meta.url), "utf8");
+
+  assert.match(server, /localAdminHandlersPromise \|\|= createLocalAdminHandlers\(\)/u);
+  assert.match(server, /manager: createAdminSessionManager/u);
+  assert.match(server, /allowMemoryStore: allowLocalMemoryStore/u);
+  assert.match(server, /ADMIN_SESSION_STORAGE:[\s\S]*allowLocalMemoryStore \? "memory" : "redis"/u);
+  assert.match(server, /createAdminAuthHandler\(shared\)/u);
+  assert.match(server, /createProductionAdminModelLabHandler\(\{[\s\S]*?\.\.\.shared,/u);
+  assert.match(server, /createAdminQueriesHandler\(shared\)/u);
+  assert.doesNotMatch(server, /authorizeAdminRequest/u);
+  assert.doesNotMatch(server, /x-admin-token/u);
 });
 
 test("rag_displays_simulator_output_as_a_separate_result", async () => {
@@ -381,3 +772,53 @@ test("rag_displays_simulator_output_as_a_separate_result", async () => {
   assert.match(app, /if \(!appConfig\.engineEnabled\) return pendingStages/u);
   assert.match(app, /status !== "completed" \|\| !simulation/u);
 });
+
+function sourceBetween(source, startMarker, endMarker) {
+  const start = source.indexOf(startMarker);
+  const end = source.indexOf(endMarker, start + startMarker.length);
+  assert.notEqual(start, -1, `missing source marker: ${startMarker}`);
+  assert.notEqual(end, -1, `missing source marker: ${endMarker}`);
+  return source.slice(start, end);
+}
+
+function createTestDocument() {
+  return {
+    createElement(tagName) {
+      return {
+        tagName,
+        textContent: "",
+        childNodes: [],
+        appendChild(child) {
+          this.childNodes.push(child);
+          return child;
+        },
+      };
+    },
+  };
+}
+
+function clearTestElement(element) {
+  element.textContent = "";
+  element.childNodes.length = 0;
+}
+
+function appendTestText(parent, tagName, text) {
+  const node = {
+    tagName,
+    textContent: String(text ?? ""),
+    childNodes: [],
+    appendChild(child) {
+      this.childNodes.push(child);
+      return child;
+    },
+  };
+  parent.appendChild(node);
+  return node;
+}
+
+function testNodeText(node) {
+  return [
+    String(node?.textContent || ""),
+    ...(node?.childNodes || []).map(testNodeText),
+  ].filter(Boolean).join("\n");
+}

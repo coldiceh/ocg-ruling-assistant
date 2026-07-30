@@ -9,6 +9,9 @@ export const EFFECT_PRIMITIVE_TYPES = Object.freeze([
   "return_lowest_defense_monster_to_hand",
   "return_card_to_deck",
   "special_summon_source",
+  "special_summon_cards",
+  "change_control",
+  "create_lingering_effect",
   "set_position",
   "place_target_as_continuous_trap",
   "apply_damage",
@@ -51,6 +54,9 @@ const defaultsByType = Object.freeze({
   return_lowest_defense_monster_to_hand: flags(false, false, false, false, "insufficient"),
   return_card_to_deck: flags(true, false, false, false, "skip_part"),
   special_summon_source: flags(false, true, false, false, "skip_part"),
+  special_summon_cards: flags(false, false, false, false, "insufficient"),
+  change_control: flags(true, false, false, false, "skip_part"),
+  create_lingering_effect: flags(false, false, true, false, "insufficient"),
   set_position: flags(true, false, false, false, "skip_part"),
   place_target_as_continuous_trap: flags(true, false, false, false, "skip_part"),
   apply_damage: flags(false, false, false, false, "insufficient"),
@@ -89,14 +95,28 @@ export function createDestinationReplacement(input = {}) {
   }
   const intendedToZone = input.intendedToZone || input.intendedZone;
   const replacementToZone = input.replacementToZone || input.actualToZone || input.replacementZone;
-  if (!intendedToZone || !replacementToZone) {
-    throw new TypeError("destination replacement requires intendedToZone and replacementToZone");
+  const whenLeavingField = Boolean(
+    input.whenLeavingField
+    || input.event === "leave_field"
+    || input.trigger === "leave_field",
+  );
+  if ((!intendedToZone && !whenLeavingField) || !replacementToZone) {
+    throw new TypeError(
+      "destination replacement requires replacementToZone and either intendedToZone or whenLeavingField",
+    );
   }
+  const affectedCardRelation = input.affectedCardRelation || input.cardRelation || "any";
   const replacement = {
     type,
-    intendedToZone: String(intendedToZone),
+    ...(intendedToZone ? { intendedToZone: String(intendedToZone) } : {}),
     replacementToZone: String(replacementToZone),
     destinationPlayerRelation: input.destinationPlayerRelation || "any",
+    affectedCardRelation,
+    whenLeavingField,
+    appliesWhenSourceLeaves: typeof input.appliesWhenSourceLeaves === "boolean"
+      ? input.appliesWhenSourceLeaves
+      : whenLeavingField && affectedCardRelation === "source",
+    effectCauseKind: input.effectCauseKind || "card_effect",
   };
   for (const [key, value] of Object.entries(input)) {
     if (value !== undefined && !Object.prototype.hasOwnProperty.call(replacement, key)) replacement[key] = clone(value);

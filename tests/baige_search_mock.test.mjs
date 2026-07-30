@@ -95,6 +95,24 @@ const mindScanRawCard = {
   data: { type: 131074 },
 };
 
+const redLotusRawCard = {
+  cid: 8515,
+  id: 43262273,
+  cn_name: "红莲之指名者",
+  sc_name: "红莲指名者",
+  md_name: "红莲的指名者",
+  nwbbs_n: "红莲之指名者",
+  cnocg_n: "红莲的指名者",
+  jp_name: "紅蓮の指名者",
+  en_name: "Appointer of the Red Lotus",
+  text: {
+    types: "[陷阱]",
+    desc: "①：支付2000基本分，把手卡全部给对方观看才能发动。把对方手卡确认，从那之中选1张直到下次的对方结束阶段除外。",
+  },
+  data: { type: 4 },
+  weight: 50,
+};
+
 const numberedRawCards = [
   { cid: 10659, id: 49456901, cn_name: "混沌No.104 假面魔蹈士 黑影", text: { desc: "旧卡干扰项。" } },
   { cid: 23364, id: 101306042, cn_name: "No.104 假面魔蹈士 闪光·杠然", text: { desc: "新卡文本。" } },
@@ -175,7 +193,7 @@ test("parenthesized_card_mentions_are_preserved", () => {
   assert.deepEqual(resolution.unresolvedMentions.map((item) => item.input), ["炎王的孤岛", "炎王神兽 麒麟", "圣炎王 大鹏不死鸟"]);
 });
 
-test("model_card_name_candidates_are_preserved_without_name_signal_filter", () => {
+test("model_card_name_candidates_keep_the_user_surface_as_identity_and_the_expansion_as_search_text", () => {
   const resolution = extractRagCards("三一人攻击无效后可以用翻倍机会吗？", {
     cards: [],
     modelCardNameCandidates: [
@@ -184,8 +202,9 @@ test("model_card_name_candidates_are_preserved_without_name_signal_filter", () =
     ],
   });
 
-  assert.deepEqual(resolution.unresolvedMentions.map((item) => item.input), ["幻影英雄三一人", "翻倍机会"]);
+  assert.deepEqual(resolution.unresolvedMentions.map((item) => item.input), ["三一人", "翻倍机会"]);
   assert.equal(resolution.unresolvedMentions[0].source, "model_card_name_extractor");
+  assert.deepEqual(resolution.unresolvedMentions[0].searchTexts, ["幻影英雄三一人"]);
 });
 
 test("model card-name extraction cannot add a card that has no surface in the user question", async () => {
@@ -209,7 +228,7 @@ test("model card-name extraction cannot add a card that has no surface in the us
   );
 });
 
-test("baige_search_uses_model_original_text_as_fallback_query", async () => {
+test("baige_search_uses_the_user_surface_before_a_model_expansion", async () => {
   clearBaigeSearchCache();
   const question = "检索圣炎王 大鹏不死鸟的情况。";
   const cardResolution = extractRagCards(question, {
@@ -233,9 +252,70 @@ test("baige_search_uses_model_original_text_as_fallback_query", async () => {
     },
   });
 
-  assert.ok(calls.some((url) => url.includes("炎王神 大鹏不死鸟")));
   assert.ok(calls.some((url) => url.includes("圣炎王 大鹏不死鸟")));
+  assert.ok(!calls.some((url) => url.includes("炎王神 大鹏不死鸟")));
   assert.equal(evidence.baigeResolvedCards[0].name, "圣炎王 大鹏不死鸟");
+});
+
+test("baige_unique_ordered_subsequence_accepts_a_two_character_nickname", async () => {
+  clearBaigeSearchCache();
+  const result = await searchCards("红指", {
+    fetchImpl: async () => jsonResponse({ result: [redLotusRawCard], next: 1 }),
+  });
+
+  assert.equal(result.results[0].name, "红莲之指名者");
+  assert.ok(result.results[0].confidence >= 0.72);
+  assert.equal(result.results[0].confidenceSource, "baige_unique_ordered_subsequence");
+  assert.equal(result.results[0].providerResultCount, 1);
+});
+
+test("unquoted_colloquial_activation_subject_resolves_by_surface_before_a_wrong_model_guess", async () => {
+  clearBaigeSearchCache();
+  const question = "看透心灵之眼的①效果适用的情况下，红指还能发出来吗";
+  const redReboot = {
+    id: "23002292",
+    name: "红色重启",
+    aliases: ["红色重启", "レッド・リブート", "Red Reboot"],
+    effectText: "从手卡发动的场合，支付一半基本分。",
+  };
+  const mindScan = {
+    id: "34298391",
+    name: "看透心灵之眼",
+    aliases: ["看透心灵之眼", "心灵透视眼", "心を見通す眼"],
+    effectText: "对方必须持续公开全部手牌。",
+  };
+  const cardResolution = extractRagCards(question, {
+    cards: [mindScan, redReboot],
+    modelCardNameCandidates: [
+      { name: "看透心灵之眼", originalText: "看透心灵之眼", confidence: "high" },
+      { name: "红色重启", originalText: "红指", confidence: "high" },
+    ],
+  });
+
+  assert.ok(cardResolution.resolvedCards.some((card) => card.name === "看透心灵之眼"));
+  assert.ok(!cardResolution.resolvedCards.some((card) => card.name === "红色重启"));
+  assert.ok(cardResolution.unresolvedMentions.some((item) => item.input === "红指"));
+
+  const calls = [];
+  const evidence = await retrieveRagEvidence({
+    userQuery: question,
+    cardResolution,
+    cards: [mindScan, redReboot],
+    records: [],
+    qaRecords: [],
+    fetchImpl: async (url) => {
+      const decoded = decodeURIComponent(String(url)).replace(/\+/gu, " ");
+      calls.push(decoded);
+      return decoded.includes("红指")
+        ? jsonResponse({ result: [redLotusRawCard], next: 1 })
+        : jsonResponse({ result: [], next: 0 });
+    },
+  });
+
+  assert.equal(evidence.baigeResolvedCards[0].name, "红莲之指名者");
+  assert.ok(!evidence.retrievedCards.some((card) => card.name === "红色重启"));
+  assert.ok(calls.some((url) => url.includes("红指")));
+  assert.ok(!calls.some((url) => url.includes("红色重启")));
 });
 
 test("unquoted_card_mention_stops_before_gameplay_suffix", () => {
@@ -570,6 +650,41 @@ test("numbered card identity keeps No and CNo families distinct", () => {
   ]);
   assert.equal(canonicalizeNumberedCardPrefixes("CNo.106 熔岩掌 巨手·红掌"), canonicalizeNumberedCardPrefixes("混沌No.106 熔岩掌 巨手·红掌"));
   assert.equal(hasNumberedCardIdentityConflict("No.104 假面魔蹈士 闪光·杠然", "混沌No.104 假面魔蹈士 黑影"), true);
+});
+
+test("numbered identity anchors localized variants without collapsing a different same-number form", async () => {
+  const data = await loadRagData();
+  const question = "场上的No.104 假面魔踏士 闪光·杖然发动效果。混沌No.106 熔岩掌 巨手·红掌也发动效果。";
+  const resolution = extractRagCards(question, { cards: data.cards });
+
+  assert.ok(resolution.resolvedCards.some((card) => (
+    card.id === "10684"
+    && card.resolutionSource === "numbered_identity_unique_localized_variant"
+    && card.numberedIdentityNameMismatch === true
+  )));
+  assert.ok(!resolution.resolvedCards.some((card) => card.id === "10658" || card.id === "23364"));
+  assert.ok(resolution.unresolvedMentions.some((item) => item.input.includes("No.104")));
+
+  clearBaigeSearchCache();
+  const calls = [];
+  const evidence = await retrieveRagEvidence({
+    userQuery: question,
+    cardResolution: resolution,
+    cards: data.cards,
+    records: [],
+    qaRecords: [],
+    fetchImpl: async (url) => {
+      const decoded = decodeURIComponent(String(url)).replace(/\+/gu, " ");
+      calls.push(decoded);
+      if (/No\.104 闪光 杖然/iu.test(decoded)) return jsonResponse({ result: [numberedRawCards[1]], next: 1 });
+      if (/106/u.test(decoded)) return jsonResponse({ result: [numberedRawCards[2]], next: 1 });
+      return jsonResponse({ result: [], next: 0 });
+    },
+  });
+
+  assert.ok(calls.some((url) => /No\.104 闪光 杖然/iu.test(url)));
+  assert.ok(evidence.baigeResolvedCards.some((card) => card.id === "101306042"));
+  assert.ok(!evidence.retrievedCards.some((card) => card.id === "10658"));
 });
 
 test("baige rejects conflicting numbered families and keeps new card ids", async () => {

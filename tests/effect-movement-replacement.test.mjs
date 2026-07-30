@@ -5,7 +5,14 @@ import {
   createDestinationReplacement,
   createEffectPrimitive,
 } from "../backend/effectPrimitives.mjs";
-import { resolveEffectChain } from "../backend/effectResolutionEngine.mjs";
+import {
+  movementWasCausedByCardEffect,
+  resolveEffectChain,
+  resolveMoveBatch,
+  wasBanishedByCardEffect,
+} from "../backend/effectResolutionEngine.mjs";
+import { findNormalizedSemantics, normalizeCardText } from "../backend/cardTextNormalizer.mjs";
+import { compileResolvedCardPrograms } from "../backend/duelStateReasoner.mjs";
 
 const replacementEffectId = "rift-keeper-grave-replacement";
 
@@ -172,4 +179,138 @@ test("a material can be redirected while the carrier stays active without preven
   assert.deepEqual([emberMove.intendedToZone, emberMove.actualToZone], ["graveyard", "banished"]);
   assert.equal(emberMove.replacementEffectId, replacementEffectId);
   assert.equal(foreignMove.actualToZone, "graveyard");
+});
+
+test("normalizes and compiles a face-up self leave-field banish replacement without a card-name special case", () => {
+  const effectText = "③：表侧表示的此卡离开场上的情况下，将其除外。";
+  const normalized = normalizeCardText({
+    id: "generic-self-replacement",
+    name: "通用测试怪兽",
+    cardType: "monster",
+    effectText,
+  });
+  const matches = findNormalizedSemantics(normalized, "destination_replacement");
+  const selfReplacement = matches.find(({ semantic }) => semantic.whenLeavingField);
+
+  assert.ok(selfReplacement);
+  assert.equal(selfReplacement.semantic.affectedCardRelation, "source");
+  assert.equal(selfReplacement.semantic.replacementZone, "banished");
+  assert.equal(selfReplacement.semantic.effectCauseKind, "card_effect");
+
+  const [program] = compileResolvedCardPrograms([{
+    id: "generic-self-replacement",
+    name: "通用测试怪兽",
+    cardType: "monster",
+    effectText,
+  }]);
+  const compiledEffect = program.continuousEffects.find((effect) => (
+    effect.destinationReplacements?.some((replacement) => replacement.whenLeavingField)
+  ));
+  const [compiledReplacement] = compiledEffect.destinationReplacements;
+
+  assert.ok(compiledEffect);
+  assert.deepEqual(compiledEffect.activeWhen, { zone: "monster_zone", faceUp: true });
+  assert.equal(compiledReplacement.affectedCardRelation, "source");
+  assert.equal(compiledReplacement.appliesWhenSourceLeaves, true);
+  assert.equal(compiledReplacement.replacementToZone, "banished");
+});
+
+test("self leave-field replacement preserves summon-procedure cause and adds card-effect provenance", () => {
+  const source = card(
+    "self-replacer#1",
+    "self-replacer",
+    "self",
+    "monster_zone",
+  );
+  const other = card(
+    "ordinary-material#1",
+    "ordinary-material",
+    "self",
+    "monster_zone",
+  );
+  const effectId = "self-replacer:leave-field";
+  const continuousEffect = {
+    id: effectId,
+    sourceInstanceId: source.instanceId,
+    sourceDefinitionId: source.definitionId,
+    activeWhen: { zone: "monster_zone", faceUp: true },
+    destinationReplacements: [createDestinationReplacement({
+      id: "self-leave-field-to-banished",
+      whenLeavingField: true,
+      replacementToZone: "banished",
+      affectedCardRelation: "source",
+      appliesWhenSourceLeaves: true,
+      effectCauseKind: "card_effect",
+    })],
+  };
+  const state = {
+    cards: [source, other],
+    graveyards: { self: [], opponent: [] },
+    banished: { self: [], opponent: [] },
+  };
+  const result = resolveMoveBatch(state, [source, other].map((material) => ({
+    card: material,
+    intendedToZone: "banished",
+    destinationPlayer: "self",
+    originalCause: "special_summon_procedure_banish",
+    originalCauseKind: "summon_procedure",
+  })), {
+    stage: "special_summon_procedure",
+    continuousEffects: [continuousEffect],
+  });
+  const selfMove = result.moves.find((move) => move.instanceId === source.instanceId);
+  const ordinaryMove = result.moves.find((move) => move.instanceId === other.instanceId);
+
+  assert.equal(result.status, "applied");
+  assert.equal(selfMove.originalCause, "special_summon_procedure_banish");
+  assert.equal(selfMove.originalCauseKind, "summon_procedure");
+  assert.equal(selfMove.intendedToZone, "banished");
+  assert.equal(selfMove.finalDestination, "banished");
+  assert.equal(selfMove.destinationReplacementApplied, true);
+  assert.equal(selfMove.destinationChangedByReplacement, false);
+  assert.equal(selfMove.replacementEffectId, effectId);
+  assert.equal(selfMove.replacementApplications[0].appliedEffect, true);
+  assert.equal(selfMove.finalDestinationCauseKind, "card_effect");
+  assert.equal(selfMove.banishedByCardEffect, true);
+  assert.equal(movementWasCausedByCardEffect(selfMove), true);
+  assert.equal(wasBanishedByCardEffect(selfMove), true);
+  assert.equal(result.suppressedDestinationReplacementEffectIds.includes(effectId), false);
+
+  assert.equal(ordinaryMove.originalCauseKind, "summon_procedure");
+  assert.equal(ordinaryMove.destinationReplacementApplied, false);
+  assert.equal(ordinaryMove.finalDestinationCauseKind, "summon_procedure");
+  assert.equal(ordinaryMove.banishedByCardEffect, false);
+  assert.equal(wasBanishedByCardEffect(ordinaryMove), false);
+});
+
+test("self leave-field replacement changes a non-banished destination and remains effect-caused", () => {
+  const source = card("self-replacer#2", "self-replacer", "self", "monster_zone");
+  const result = resolveMoveBatch({
+    cards: [source],
+    graveyards: { self: [], opponent: [] },
+    banished: { self: [], opponent: [] },
+  }, [{
+    card: source,
+    intendedToZone: "graveyard",
+    destinationPlayer: "self",
+    originalCause: "tribute_for_summon",
+    originalCauseKind: "summon_procedure",
+  }], {
+    stage: "special_summon_procedure",
+    continuousEffects: [{
+      id: "self-replacer:leave-field",
+      sourceInstanceId: source.instanceId,
+      activeWhen: { zone: "monster_zone", faceUp: true },
+      destinationReplacements: [createDestinationReplacement({
+        whenLeavingField: true,
+        replacementToZone: "banished",
+        affectedCardRelation: "source",
+      })],
+    }],
+  });
+  const [move] = result.moves;
+
+  assert.deepEqual([move.intendedToZone, move.finalDestination], ["graveyard", "banished"]);
+  assert.equal(move.destinationChangedByReplacement, true);
+  assert.equal(wasBanishedByCardEffect(move), true);
 });

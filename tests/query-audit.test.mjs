@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import adminQueriesHandler from "../api/admin-queries.js";
-import { authorizeAdminRequest } from "../backend/adminAuth.mjs";
+import { createAdminQueriesHandler } from "../api/admin-queries.js";
+import {
+  createAdminSessionManager,
+  createMemoryAdminSessionStore,
+} from "../backend/adminSession.mjs";
 import {
   appendQueryAudit,
   listQueryAudits,
@@ -41,26 +44,8 @@ test("query_audit_persists_only_question_metadata_with_retention", async () => {
   assert.equal(commands[2][2], String(30 * 86400));
 });
 
-test("query_audit_list_is_owner_protected_and_parses_entries", async () => {
+test("query_audit_list_parses_entries", async () => {
   assert.equal(queryAuditStorageStatus({}).persistent, false);
-
-  const missing = authorizeAdminRequest({ headers: {} }, {
-    env: { API_ADMIN_PASSWORD: "owner-secret" },
-    body: {},
-  });
-  assert.equal(missing.status, 401);
-
-  const wrong = authorizeAdminRequest({ headers: {} }, {
-    env: { API_ADMIN_PASSWORD: "owner-secret" },
-    body: { password: "wrong" },
-  });
-  assert.equal(wrong.status, 403);
-
-  const allowed = authorizeAdminRequest({ headers: {} }, {
-    env: { API_ADMIN_PASSWORD: "owner-secret" },
-    body: { password: "owner-secret" },
-  });
-  assert.equal(allowed.ok, true);
 
   const entries = [{
     id: "entry-1",
@@ -127,44 +112,66 @@ function jsonResponse(result) {
     json: async () => ({ result }),
   };
 }
-test("admin_queries_endpoint_rejects_public_access_and_accepts_owner_password", async () => {
-  const previous = {
-    password: process.env.API_ADMIN_PASSWORD,
-    url: process.env.UPSTASH_REDIS_REST_URL,
-    token: process.env.UPSTASH_REDIS_REST_TOKEN,
-    fetch: globalThis.fetch,
+test("admin_queries_endpoint_uses_cookie_session_and_never_body_password", async () => {
+  const origin = "https://admin.example.test";
+  const env = {
+    ...redisEnv,
+    ADMIN_ALLOWED_ORIGIN: origin,
+    ADMIN_SESSION_PASSWORD: "owner-secret",
   };
-  try {
-    process.env.API_ADMIN_PASSWORD = "owner-secret";
-    process.env.UPSTASH_REDIS_REST_URL = redisEnv.UPSTASH_REDIS_REST_URL;
-    process.env.UPSTASH_REDIS_REST_TOKEN = redisEnv.UPSTASH_REDIS_REST_TOKEN;
-
-    let response = createJsonResponse();
-    await adminQueriesHandler({ method: "POST", headers: {}, body: {} }, response);
-    assert.equal(response.statusCode, 401);
-
-    globalThis.fetch = async () => jsonResponse([
-      JSON.stringify({
+  const manager = createAdminSessionManager({
+    env,
+    store: createMemoryAdminSessionStore(),
+  });
+  const handler = createAdminQueriesHandler({
+    env,
+    manager,
+    listQueries: async ({ limit }) => ({
+      entries: [{
         id: "entry-2",
         createdAt: "2026-07-16T03:04:05.000Z",
         question: "仅管理员可见",
         mode: "rag",
-      }),
-    ]);
-    response = createJsonResponse();
-    await adminQueriesHandler({
-      method: "POST",
-      headers: {},
-      body: { password: "owner-secret", limit: 5 },
-    }, response);
-    assert.equal(response.statusCode, 200);
-    assert.equal(response.payload.entries[0].question, "仅管理员可见");
-  } finally {
-    restoreEnv("API_ADMIN_PASSWORD", previous.password);
-    restoreEnv("UPSTASH_REDIS_REST_URL", previous.url);
-    restoreEnv("UPSTASH_REDIS_REST_TOKEN", previous.token);
-    globalThis.fetch = previous.fetch;
-  }
+      }],
+      count: 1,
+      receivedLimit: limit,
+    }),
+  });
+
+  let response = createJsonResponse();
+  await handler({
+    method: "POST",
+    url: "/api/admin-queries",
+    headers: { origin },
+    body: { password: "owner-secret", limit: 5 },
+  }, response);
+  assert.equal(response.statusCode, 401);
+  assert.equal(response.payload.error, "admin_session_required");
+
+  const login = await manager.login({
+    request: {
+      headers: {
+        origin,
+        "x-forwarded-for": "203.0.113.12",
+      },
+    },
+    body: { password: "owner-secret" },
+  });
+  assert.equal(login.ok, true);
+  const cookie = String(login.setCookie).split(";", 1)[0];
+
+  response = createJsonResponse();
+  await handler({
+    method: "GET",
+    url: "/api/admin-queries?limit=5&admin=1",
+    headers: { origin, cookie },
+  }, response);
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.payload.entries[0].question, "仅管理员可见");
+  assert.equal(response.payload.receivedLimit, "5");
+  assert.equal(response.headers["access-control-allow-origin"], origin);
+  assert.equal(response.headers["access-control-allow-credentials"], "true");
+  assert.notEqual(response.headers["access-control-allow-origin"], "*");
 });
 
 function createJsonResponse() {
@@ -187,9 +194,4 @@ function createJsonResponse() {
       return this;
     },
   };
-}
-
-function restoreEnv(name, value) {
-  if (value === undefined) delete process.env[name];
-  else process.env[name] = value;
 }

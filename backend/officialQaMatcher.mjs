@@ -140,9 +140,7 @@ export function searchOfficialQaEvidence({ question, records = [], resolvedCards
   markAuthoritativeSceneMatches(scored);
   promoteUniqueExactCardSet(scored, queryType, resolvedIds);
   promoteUniqueQuestionCardMatch(scored, resolvedIds, queryType);
-  scored.sort((left, right) => right.score - left.score
-    || right.questionCardIdCoverage - left.questionCardIdCoverage
-    || String(left.record.id).localeCompare(String(right.record.id)));
+  scored.sort(compareOfficialQaMatches);
   promoteUniqueSemanticMatch(scored, resolvedIds, queryType);
   const ranked = scored.slice(0, Math.max(limit, 1));
 
@@ -330,6 +328,32 @@ function scoreRecord({
     matchedPhrases: phraseHits,
     questionText,
   };
+}
+
+/**
+ * Rank scene evidence by the identities and operations stated in the question
+ * portion of the source before considering broad lexical similarity.
+ *
+ * This intentionally does not alter matchLevel. A source can therefore be the
+ * best supporting QA without being promoted to DIRECT_OFFICIAL. In particular,
+ * a long FAQ that merely lists a card in an example cannot outrank a question
+ * that names several of the same cards and the same effect number/scene.
+ */
+function compareOfficialQaMatches(left, right) {
+  return Number(right.matchLevel === "official_qa_exact")
+      - Number(left.matchLevel === "official_qa_exact")
+    || Number(right.authoritativeSceneMatch) - Number(left.authoritativeSceneMatch)
+    || right.questionCardIdCoverage - left.questionCardIdCoverage
+    || right.matchedQuestionCardIds.length - left.matchedQuestionCardIds.length
+    || Number(right.exactCardIdSet) - Number(left.exactCardIdSet)
+    || Number(right.effectNumberCompatible) - Number(left.effectNumberCompatible)
+    || Number(right.sceneQualifiersCompatible) - Number(left.sceneQualifiersCompatible)
+    || right.distinctiveSemanticQueryCoverage - left.distinctiveSemanticQueryCoverage
+    || right.semanticQueryCoverage - left.semanticQueryCoverage
+    || Number(right.typeCompatible) - Number(left.typeCompatible)
+    || right.score - left.score
+    || right.lexicalScore - left.lexicalScore
+    || String(left.record.id).localeCompare(String(right.record.id));
 }
 
 function markAuthoritativeSceneMatches(items) {

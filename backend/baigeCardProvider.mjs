@@ -80,11 +80,27 @@ export async function searchBaigeCards(query, {
   }
 
   const rawCards = collectBaigeCards(payload);
-  const results = rawCards
+  const normalizedCards = rawCards
     .map((card) => normalizeBaigeCard(card, normalizedQuery, warnings))
     .filter((card) => card.name || card.text || card.id)
-    .filter((card) => !hasNumberedCardIdentityConflict(normalizedQuery, [card.name, card.cnName, card.jpName, card.enName, ...(card.aliases || [])].filter(Boolean).join(" ")))
-    .map((card) => ({ ...card, confidence: scoreBaigeCard(card, normalizedQuery) }))
+    .filter((card) => !hasNumberedCardIdentityConflict(normalizedQuery, [card.name, card.cnName, card.jpName, card.enName, ...(card.aliases || [])].filter(Boolean).join(" ")));
+  const providerSignals = buildProviderSearchSignals(normalizedCards, normalizedQuery, matchedSearchQuery);
+  const results = normalizedCards
+    .map((card, index) => {
+      const lexicalConfidence = scoreBaigeCard(card, normalizedQuery);
+      const providerSignal = providerSignals[index] || {};
+      const confidence = Math.max(lexicalConfidence, Number(providerSignal.confidence || 0));
+      return {
+        ...card,
+        confidence: Math.round(confidence * 1000) / 1000,
+        confidenceSource: lexicalConfidence >= Number(providerSignal.confidence || 0)
+          ? "name_similarity"
+          : providerSignal.source || "provider_search",
+        providerResultCount: normalizedCards.length,
+        providerRank: index + 1,
+        providerMatchScore: providerSignal.matchScore || 0,
+      };
+    })
     .sort((left, right) => right.confidence - left.confidence || String(left.name).localeCompare(String(right.name), "zh-Hans-CN"))
     .slice(0, limit);
 
@@ -111,7 +127,7 @@ export function clearBaigeSearchCache() {
 export function normalizeBaigeCard(card = {}, query = "", warnings = []) {
   const id = normalizeId(readFirst(card, ["id", "card_id", "cardId", "password", "passcode"]) || card?.data?.id || "");
   const cid = readFirst(card, ["cid", "card_cid", "ygocdb_id"]);
-  const cnName = readFirst(card, ["cn_name", "cnName", "sc_name", "zh_name", "nwbbs_n", "cnocg_n", "name", "title"]);
+  const cnName = readFirst(card, ["cn_name", "cnName", "sc_name", "zh_name", "nwbbs_n", "cnocg_n", "md_name", "name", "title"]);
   const jpName = readFirst(card, ["jp_name", "ja_name", "jpName", "jaName", "jp_ruby"]);
   const enName = readFirst(card, ["en_name", "enName", "english_name"]);
   const name = cnName || readFirst(card, ["name", "title"]) || jpName || enName || String(query || id || cid || "");
@@ -151,7 +167,7 @@ export function normalizeBaigeCard(card = {}, query = "", warnings = []) {
     atk: atk === undefined ? null : atk,
     def: def === undefined ? null : def,
     level: level === undefined ? null : level,
-    aliases: [name, cnName, jpName, enName, readFirst(card, ["sc_name", "zh_name", "nwbbs_n", "cnocg_n"])]
+    aliases: [name, cnName, jpName, enName, readFirst(card, ["sc_name", "zh_name", "nwbbs_n", "cnocg_n"]), readFirst(card, ["md_name"])]
       .map((item) => String(item || "").trim())
       .filter(Boolean)
       .filter((item, index, array) => array.indexOf(item) === index),
@@ -188,6 +204,63 @@ export function scoreBaigeCard(card = {}, query = "") {
   const textKey = normalizeSearchKey(card.text || card.effectText || "");
   if (textKey.includes(queryKey)) score = Math.max(score, 0.38);
   return Math.round(score * 1000) / 1000;
+}
+
+function buildProviderSearchSignals(cards, query, matchedSearchQuery) {
+  const queryKey = normalizeSearchKey(query);
+  const exactSearchUsed = normalizeSearchKey(matchedSearchQuery) === queryKey;
+  if (!exactSearchUsed || queryKey.length < 2 || !cards.length) return cards.map(() => ({}));
+
+  const scored = cards.map((card, index) => ({
+    index,
+    matchScore: bestOrderedSubsequenceScore(card, queryKey),
+  }));
+  const ranked = [...scored].sort((left, right) => right.matchScore - left.matchScore || left.index - right.index);
+  const best = ranked[0];
+  const runnerUp = ranked[1];
+  const unique = cards.length === 1;
+  const highGap = best?.matchScore >= 0.72
+    && (!runnerUp || best.matchScore - runnerUp.matchScore >= 0.16);
+
+  return cards.map((card, index) => {
+    const item = scored[index];
+    if (!item?.matchScore || index !== best?.index || (!unique && !highGap)) return {};
+    return {
+      confidence: unique ? Math.max(0.84, item.matchScore) : Math.max(0.8, item.matchScore),
+      source: unique ? "baige_unique_ordered_subsequence" : "baige_high_gap_ordered_subsequence",
+      matchScore: item.matchScore,
+    };
+  });
+}
+
+function bestOrderedSubsequenceScore(card, queryKey) {
+  const names = [card.cnName, card.name, card.jpName, card.jaName, card.enName, ...(card.aliases || [])]
+    .map(normalizeSearchKey)
+    .filter(Boolean);
+  let best = 0;
+  for (const nameKey of names) {
+    const score = orderedSubsequenceScore(queryKey, nameKey);
+    if (score > best) best = score;
+  }
+  return Math.round(best * 1000) / 1000;
+}
+
+function orderedSubsequenceScore(queryKey, nameKey) {
+  if (queryKey.length < 2 || queryKey.length > nameKey.length) return 0;
+  let queryIndex = 0;
+  let firstIndex = -1;
+  let lastIndex = -1;
+  for (let nameIndex = 0; nameIndex < nameKey.length && queryIndex < queryKey.length; nameIndex += 1) {
+    if (nameKey[nameIndex] !== queryKey[queryIndex]) continue;
+    if (firstIndex < 0) firstIndex = nameIndex;
+    lastIndex = nameIndex;
+    queryIndex += 1;
+  }
+  if (queryIndex !== queryKey.length) return 0;
+  const span = lastIndex - firstIndex + 1;
+  const density = queryKey.length / span;
+  const coverage = queryKey.length / nameKey.length;
+  return Math.min(0.94, 0.72 + density * 0.14 + coverage * 0.08);
 }
 
 function collectBaigeCards(payload) {
@@ -423,7 +496,19 @@ function buildBaigeSearchQueries(value) {
     const prefixes = numberedIdentity.family === "cno"
       ? [`CNo.${numberedIdentity.number}`, `混沌No.${numberedIdentity.number}`, `混沌编号${numberedIdentity.number}`]
       : [`No.${numberedIdentity.number}`, `编号${numberedIdentity.number}`];
-    return [...new Set([original, canonicalSpelling, ...prefixes.map((prefix) => `${prefix}${tail ? ` ${tail}` : ""}`)].filter(Boolean))].slice(0, 6);
+    const tailTokens = tail
+      .split(/[\s・·･．.－—–_\-]+/u)
+      .map((token) => token.trim())
+      .filter((token) => normalizeSearchKey(token).length >= 2);
+    const discriminatingTail = tailTokens.slice(-2).join(" ");
+    return [...new Set([
+      original,
+      canonicalSpelling,
+      ...prefixes.map((prefix) => `${prefix}${tail ? ` ${tail}` : ""}`),
+      ...(discriminatingTail ? prefixes.map((prefix) => `${prefix} ${discriminatingTail}`) : []),
+      discriminatingTail,
+      ...prefixes,
+    ].filter(Boolean))].slice(0, 10);
   }
   const compact = canonicalSpelling.replace(/[「」『』《》【】“”"'`：:・·･．.－—–_\-\s，,。.!！?？;；、()（）\[\]{}]/gu, "");
   const tokens = canonicalSpelling

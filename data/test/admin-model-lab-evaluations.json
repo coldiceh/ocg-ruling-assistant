@@ -1,0 +1,141 @@
+{
+  "schemaVersion": 1,
+  "fixtureName": "admin-model-lab-evaluations",
+  "purpose": "Frozen evaluation cases for comparing evidence preparation and final-ruling model configurations.",
+  "cases": [
+    {
+      "id": "procedure-banishing-creates-two-trigger-opportunities",
+      "mechanisms": [
+        "special-summon-procedure",
+        "event-attribution",
+        "simultaneous-optional-triggers",
+        "chain-building"
+      ],
+      "question": "自己场上表侧表示存在「混沌黑魔术师」，手牌中有「深渊的相剑龙」。本回合自己已经发动过魔法卡的效果。是否可以将「混沌黑魔术师」除外，从额外卡组特殊召唤「毁灭的黑魔术师」？如果可以特殊召唤，之后可以发动哪些效果，连锁如何组成？",
+      "expectedCardIds": [
+        "5880",
+        "21610",
+        "18150"
+      ],
+      "expectedEvidenceIds": [
+        "ygoresources-qa-24229"
+      ],
+      "expectedVerdict": "可以依照记述的特殊召唤手续进行特殊召唤。",
+      "expectedAnswerKeyPoints": [
+        "除外混沌黑魔术师后特殊召唤毁灭的黑魔术师",
+        "毁灭的黑魔术师②与深渊的相剑龙①都满足发动条件",
+        "先宣言发动场上的毁灭的黑魔术师②",
+        "确认对方是否连锁后，才可将手牌的深渊的相剑龙①连锁发动"
+      ],
+      "mustNotInclude": [
+        "深渊的相剑龙不能发动",
+        "除外是效果处理所以不能触发"
+      ]
+    },
+    {
+      "id": "silver-hound-control-change-ends-lingering-restriction",
+      "mechanisms": [
+        "effect-instance-lifecycle",
+        "control-change",
+        "lingering-restriction"
+      ],
+      "question": "「月光银狗」的①效果适用后，以该效果特殊召唤的怪兽控制权转移给对方，之后又回到自己场上的场合，『自己不是「月光」怪兽不能从额外卡组特殊召唤』如何适用？",
+      "expectedCardIds": [
+        "21417"
+      ],
+      "expectedEvidenceIds": [
+        "card-faq-21417-1"
+      ],
+      "expectedVerdict": "控制权转移、该怪兽不再以表侧表示存在于自己场上的时点，限制立即结束；之后控制权归还也不会恢复。",
+      "expectedAnswerKeyPoints": [
+        "控制权转移时立即不再适用",
+        "控制权归还后不会恢复适用",
+        "只要以此效果特殊召唤的怪兽在自己场上存在属于持续条件"
+      ],
+      "mustNotInclude": [
+        "控制权归还后恢复适用"
+      ]
+    },
+    {
+      "id": "zero-rivalry-sequential-resolution",
+      "mechanisms": [
+        "activation-legality",
+        "sequential-resolution",
+        "continuous-restriction-recalculation"
+      ],
+      "question": "对方场上存在「千查万别」且其效果适用时，我方是否可以发动「闪刀姬＝零萝」的②效果？处理时可以选择破坏「千查万别」的场合，如何处理？",
+      "expectedCardIds": [
+        "21460",
+        "13447"
+      ],
+      "expectedEvidenceIds": [
+        "ygoresources-qa-24189"
+      ],
+      "expectedVerdict": "满足两只怪兽均可特殊召唤等发动条件时可以发动。",
+      "expectedAnswerKeyPoints": [
+        "先特殊召唤闪刀姬－零与闪刀姬－萝杰",
+        "特殊召唤与之后破坏不同时处理",
+        "之后可以选择破坏场上一张卡",
+        "如果破坏千查万别，其限制立即不再适用",
+        "如果千查万别仍适用，再按其效果处理场上同种族怪兽"
+      ],
+      "mustNotInclude": [
+        "发动时必须先把一只怪兽送去墓地",
+        "因为千查万别存在所以一律不能发动"
+      ]
+    },
+    {
+      "id": "copied-effect-is-not-printed-name-reference",
+      "mechanisms": [
+        "printed-text-reference",
+        "copied-name-and-effect",
+        "activation-condition"
+      ],
+      "question": "自己场上有「霸王眷龙 凶饿猛毒」与「光之黄金柜」。该「霸王眷龙 凶饿猛毒」复制了「破坏龙 钢多拉G」的原本卡名和效果。此时它是否成为效果文本框内记载有「光之黄金柜」卡名的怪兽，并可据此发动要求该记载的卡？",
+      "expectedCardIds": [
+        "13077",
+        "19842",
+        "19892"
+      ],
+      "expectedEvidenceIds": [
+        "card-faq-19842-3"
+      ],
+      "expectedVerdict": "不能仅凭复制获得的效果满足『效果文本框内记载有该卡名』的条件。",
+      "expectedAnswerKeyPoints": [
+        "是否有卡名记述按卡面原本效果文本框判断",
+        "复制得到的卡名和效果不会改写卡面印刷文本",
+        "霸王眷龙 凶饿猛毒自身原本效果文本没有记载光之黄金柜"
+      ],
+      "mustNotInclude": [
+        "复制效果后视为卡面记载有光之黄金柜"
+      ]
+    },
+    {
+      "id": "negated-effect-consumes-use-but-not-unresolved-restriction",
+      "mechanisms": [
+        "activation-negated-effect",
+        "once-per-turn-use",
+        "resolution-dependent-restriction"
+      ],
+      "question": "「破械式鬼シュマ」召唤后发动①效果，对方连锁发动「灰流丽」将其效果无效。这个回合还能再次发动「破械式鬼シュマ」①吗？『这个回合自己只能特殊召唤恶魔族怪兽』还会适用吗？",
+      "expectedCardIds": [
+        "23171",
+        "12950"
+      ],
+      "expectedEvidenceIds": [
+        "card-faq-23171-1"
+      ],
+      "expectedVerdict": "①的每回合使用次数已经消耗，不能再次发动；但效果被无效，处理中的特殊召唤、破坏与恶魔族特殊召唤限制均不适用。",
+      "expectedAnswerKeyPoints": [
+        "同名卡①这个回合不能再次发动",
+        "效果被无效所以不进行特殊召唤",
+        "不进行之后的破坏",
+        "恶魔族特殊召唤限制不适用"
+      ],
+      "mustNotInclude": [
+        "仍然只能特殊召唤恶魔族怪兽",
+        "可以再次发动①"
+      ]
+    }
+  ]
+}

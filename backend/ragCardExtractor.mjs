@@ -104,6 +104,27 @@ export function extractRagCards(userQuery, { cards = [], maxCards = 6, modelCard
     } else if (bareIdentityPresent && candidates.length === 1) {
       addResolved(resolved, seenCards, candidates[0], input, 0.99);
       seenMentionKeys.add(inputKey);
+    } else if (
+      detailedSeeds.length
+      && candidates.length === 1
+      && detailedSeeds.some((seed) => plausibleNumberedLocalizedVariant(seed.input, identity, candidates[0].card))
+    ) {
+      const detailedSeed = detailedSeeds.find((seed) => plausibleNumberedLocalizedVariant(seed.input, identity, candidates[0].card));
+      const resolvedCard = addResolved(
+        resolved,
+        seenCards,
+        candidates[0],
+        detailedSeed.input,
+        0.9,
+        "numbered_identity_unique_localized_variant",
+      );
+      if (resolvedCard) {
+        resolvedCard.numberedIdentityNameMismatch = true;
+        resolvedCard.numberedIdentityInput = detailedSeed.input;
+        resolvedCard.numberedIdentityCanonicalName = resolvedCard.name;
+      }
+      seenMentionKeys.add(inputKey);
+      seenMentionKeys.add(normalizeCardKey(detailedSeed.input));
     } else if (bareIdentityPresent && candidates.length > 1) {
       ambiguousMentions.push(buildAmbiguousMention(input, candidates));
       seenMentionKeys.add(inputKey);
@@ -376,10 +397,22 @@ export function normalizeCardKey(value) {
 export function extractUnquotedCardMentionCandidates(query) {
   const text = String(query || "").normalize("NFKC");
   const candidates = [];
+  const numberedEffectCarrierPattern = /(?:^|[，,。；;、！？!?\s])([\p{L}\p{N}・·･．.\-－—–\s]{2,30}?)(?=\s*(?:的\s*)?[①②③④⑤⑥⑦⑧⑨⑩1-9]\s*(?:效果|效应|效應))/giu;
+  for (const match of text.matchAll(numberedEffectCarrierPattern)) {
+    const candidate = cleanUnquotedMention(match[1]);
+    if (candidate && hasContextualEffectCarrierSignal(candidate)) candidates.push(candidate);
+  }
+
   const activeEffectCarrierPattern = /(?:^|[，,。；;、\s])(?:我方|对方|對方|自己|自分)\s*(?:场上|場上)?\s*(?:的)?\s*([\p{L}\p{N}・·･．.\-－—–\s]{2,30}?)(?:的\s*(?:[①②③④⑤⑥⑦⑧⑨⑩1-9]\s*)?(?:效果|效应|效應))?\s*(?:正在|正|仍然|仍|依然|还在|還在)?\s*(?:适用|適用|生效)(?:中|着|著)?(?=\s*(?:[，,。；;、]|而|并|並|但|时|時|的情况下|的情況下|$))/giu;
   for (const match of text.matchAll(activeEffectCarrierPattern)) {
     const candidate = cleanUnquotedMention(match[1]);
     if (candidate && hasContextualEffectCarrierSignal(candidate)) candidates.push(candidate);
+  }
+
+  const colloquialActivationSubjectPattern = /(?:^|[，,。；;、！？!?\s])([\p{L}\p{N}・·･．.\-－—–\s]{2,30}?)(?=\s*(?:还|還)?\s*(?:能|可以|可否|能否|是否)?\s*(?:发出来|發出來|发动|發動|起跳)(?:\s*(?:吗|嗎|么|嘛))?(?:[，,。；;！？!?]|$))/giu;
+  for (const match of text.matchAll(colloquialActivationSubjectPattern)) {
+    const candidate = cleanUnquotedMention(match[1]);
+    if (candidate && hasColloquialActivationSubjectSignal(candidate)) candidates.push(candidate);
   }
 
   const patterns = [
@@ -450,8 +483,14 @@ function hasCardNameSignal(value) {
   const key = normalizeCardKey(text);
   if (key.length < 2 || key.length > 28) return false;
   if (/^(?:效果|发动|特殊召唤|攻击力|守备力|怪兽|场上|手卡|墓地|破坏|选择|适用)$/u.test(key)) return false;
+  if (looksLikeGenericCardDescription(text)) return false;
   return /[\u3400-\u9fff]/u.test(text)
      && /(龙|龍|神|王|魔|械|童子|蔷|薔|骑士|騎士|姬|兽|獸|花|园|園|多元|宇宙|电子|電子|融合|同步|超量|连接|連接|男爵|女|巫|陷阱|魔法|星|码|碼)/u.test(text);
+}
+
+function looksLikeGenericCardDescription(value) {
+  const text = String(value || "").normalize("NFKC").replace(/\s+/gu, "");
+  return /^(?:(?:已(?:经)?|曾(?:经)?|又|还|還|再)?(?:发动|發動|使用)?过|一[张張只隻枚])?(?:(?:通常|速攻|永续|永續|装备|裝備|场地|場地|反击|反擊|仪式|儀式|融合|同步|同调|同調|超量|连接|連接|灵摆|靈擺|效果|通常)?(?:怪兽|怪獸|魔法|陷阱)(?:卡|牌)?|魔法陷阱卡?|魔陷|卡片)$/u.test(text);
 }
 
 function hasContextualEffectCarrierSignal(value) {
@@ -462,6 +501,15 @@ function hasContextualEffectCarrierSignal(value) {
   if (/^(?:(?:我方|对方|對方|自己|自分|双方|雙方|场上|場上|墓地|手卡|手牌|怪兽区|怪獸區|魔法陷阱区|魔法陷阱區|卡|怪兽|怪獸|效果|适用|適用|生效)的?)+$/u.test(text)) return false;
   if (/(?:召唤|召喚|特殊召唤|特殊召喚|攻击|攻擊|破坏|破壞|除外|送去墓地|加入手牌|抽卡|抽牌)(?:的)?(?:卡|怪兽|怪獸|效果)?$/u.test(text)) return false;
   if (/(?:攻击力|攻擊力|守备力|守備力|等级|等級|阶级|階級|数值|數值).*(?:上升|下降|改变|改變|效果)?$/u.test(text)) return false;
+  return true;
+}
+
+function hasColloquialActivationSubjectSignal(value) {
+  const text = String(value || "").trim();
+  if (!hasContextualEffectCarrierSignal(text)) return false;
+  if (/^(?:还|還)?(?:能|可以|可否|能否|是否)$/u.test(text)) return false;
+  if (/^(?:通常召唤|通常召喚|特殊召唤|特殊召喚|融合召唤|融合召喚|同步召唤|同步召喚|超量召唤|超量召喚|连接召唤|連接召喚|灵摆召唤|靈擺召喚|效果处理|效果處理|连锁|連鎖|攻击宣言|攻擊宣言)$/u.test(text)) return false;
+  if (/(?:发出来|發出來|发动|發動|起跳)$/u.test(text)) return false;
   return true;
 }
 
@@ -486,10 +534,10 @@ function buildModelMentionSeeds(modelMentions) {
 function choosePrimaryModelMention(name, originalText) {
   if (!name) return originalText;
   if (!originalText) return name;
-  const nameHasCjk = /[\u3040-\u30ff\u3400-\u9fff]/u.test(name);
-  const originalHasCjk = /[\u3040-\u30ff\u3400-\u9fff]/u.test(originalText);
-  if (originalHasCjk && !nameHasCjk) return originalText;
-  return name;
+  // The model only proposes search expansions; it does not establish identity.
+  // Keep the user's actual surface as the primary mention so a guessed expansion
+  // cannot silently resolve a different locally indexed card.
+  return originalText;
 }
 
 function buildUnresolvedMention(seed) {
@@ -680,6 +728,18 @@ function compatibleNumberedNameRemainders(mention, candidate) {
     && sharedSuffixCharacters >= 1;
   if (compactLocalizedVariant) return true;
   return sharedSuffixCharacters >= Math.ceil(Math.min(mentionSuffix.length, candidateSuffix.length) / 2);
+}
+
+function plausibleNumberedLocalizedVariant(mention, identity, card) {
+  const inputRemainder = numberedMentionRemainder(mention, identity);
+  if (inputRemainder.length < 4) return false;
+  return uniqueCardAliases(card)
+    .filter((alias) => extractNumberedCardIdentities(alias).some((candidate) => sameNumberedIdentity(candidate, identity)))
+    .map((alias) => numberedMentionRemainder(alias, identity))
+    .filter((candidate) => candidate.length >= 4 && Math.abs(candidate.length - inputRemainder.length) <= 1)
+    .some((candidate) => (
+      multisetCharacterIntersectionSize(inputRemainder, candidate) / Math.min(inputRemainder.length, candidate.length) >= 0.65
+    ));
 }
 
 function multisetCharacterIntersectionSize(left, right) {
@@ -1147,14 +1207,14 @@ function scoreMentionedAction(afterMention, effectText) {
 function addResolved(resolved, seenCards, candidate, input, confidence, resolutionSource = "query") {
   const card = candidate.card || candidate;
   const key = cardIdentity(card);
-  if (!key || seenCards.has(key)) return;
+  if (!key || seenCards.has(key)) return null;
   seenCards.add(key);
   const attack = normalizedCardNumber(card.attack ?? card.atk);
   const defense = normalizedCardNumber(card.defense ?? card.def);
   const level = normalizedCardNumber(card.level);
   const rank = normalizedCardNumber(card.rank);
   const link = normalizedCardNumber(card.link ?? card.linkRating);
-  resolved.push({
+  const resolvedCard = {
     input: String(input || candidate.matchedAlias || card.name || ""),
     id: String(card.id || card.cardId || ""),
     cardId: String(card.id || card.cardId || ""),
@@ -1182,7 +1242,9 @@ function addResolved(resolved, seenCards, candidate, input, confidence, resoluti
     aliases: resolvedCardAliases(card, input),
     confidence,
     resolutionSource,
-  });
+  };
+  resolved.push(resolvedCard);
+  return resolvedCard;
 }
 
 function normalizedCardNumber(value) {
@@ -1254,6 +1316,17 @@ function collectQuotedMentionEntries(query) {
     }
   }
   result.sort((left, right) => left.index - right.index);
+  const effectClauseContainers = result.filter((item) => item.role === "effect_clause");
+  for (const item of result) {
+    if (item.role !== "card") continue;
+    if (effectClauseContainers.some((container) => (
+      container !== item
+      && container.index < item.index
+      && container.end > item.end
+    ))) {
+      item.role = "nested_effect_expression";
+    }
+  }
   return result;
 }
 
@@ -1276,8 +1349,19 @@ function looksLikeQuotedEffectClause(mention) {
   const text = String(mention || "").normalize("NFKC").trim();
   if (text.length < 8) return false;
   const hasReferencedObject = /(?:(?:その|この|あの|対象の|選んだ|選択した|该|該|此|这|這|那)(?:カード|怪獣|モンスター|発動|効果)|(?:その|この|该|該|此|这|這|那)(?:発動|效果|効果))/u.test(text);
-  const hasEffectOperation = /(?:無効|无效|無效|戻す|返回|放回|破壊|破坏|除外|墓地へ送|送去墓地|手札に加|加入手牌|特殊召喚|特殊召唤)/u.test(text);
-  return hasReferencedObject && hasEffectOperation;
+  const hasEffectOperation = /(?:発動|发动|發動|適用|适用|無効|无效|戻す|返回|放回|破壊|破坏|除外|墓地へ送|送去墓地|手札に加|加入手牌|召喚|召唤|特殊召喚|特殊召唤)/u.test(text);
+  if (!hasEffectOperation) return false;
+
+  const hasRuleSubject = /(?:自分|自己|我方|对方|對方|双方|雙方|プレイヤー|玩家|このカード|そのカード|此卡|这张卡|這張卡|该卡|該卡|这个效果|這個效果|その効果)/u.test(text);
+  const hasRestrictionGrammar = /(?:しか.{0,24}(?:できない|行えない)|できない|できる|なければならない|してはならない|不能|不可以|不可|不得|只能|仅能|僅能|必须|必須|可以|能否|不会|不會|不受)/u.test(text);
+  const hasTurnFrame = /(?:この|その|自分の|相手の)?ターン|(?:这个|這個|本|此|那个|那個|自己|对方|對方)回合/u.test(text);
+  const hasCompletedActionGrammar = /(?:已(?:经)?|曾(?:经)?|已经|已經).{0,20}(?:发动|發動|使用).{0,6}过/u.test(text);
+  const hasEffectInstructionGrammar = /(?:从|從|自).{0,20}(?:卡组|卡組|牌组|牌組|手牌|手卡|墓地|除外).{0,28}(?:召喚|召唤|特殊召喚|特殊召唤|加入手牌|墓地へ送|送去墓地|除外|返回|放回)/u.test(text);
+  return (hasReferencedObject && hasEffectOperation)
+    || (hasRuleSubject && hasRestrictionGrammar)
+    || (hasTurnFrame && (hasRestrictionGrammar || hasCompletedActionGrammar))
+    || hasCompletedActionGrammar
+    || hasEffectInstructionGrammar;
 }
 
 function maskNonCardQuotedExpressions(query) {

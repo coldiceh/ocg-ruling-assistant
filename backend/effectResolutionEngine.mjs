@@ -4,6 +4,39 @@ import {
   normalizeEffectActivationStages,
   normalizePrimitiveSequence,
 } from "./effectPrimitives.mjs";
+import {
+  advanceEffectInstanceLifecycles,
+  createBoundLingeringEffectInstance,
+} from "./effectInstanceLifecycle.mjs";
+
+export function movementWasCausedByCardEffect(move = {}) {
+  const provenance = [
+    move.finalDestinationCauseKind,
+    move.eventSource,
+    move.originalCauseKind,
+    move.causeKind,
+  ].map(normalize).filter(Boolean);
+  if (provenance.includes("card_effect")) return true;
+  if ((move.replacementApplications || []).some((application) => (
+    application?.appliedEffect === true
+    || normalize(application?.effectCauseKind) === "card_effect"
+    || normalize(application?.eventSource) === "card_effect"
+  ))) return true;
+  return Boolean(
+    move.destinationReplacementApplied
+    && (move.replacementEffectId || (move.replacementEffectIds || []).length),
+  );
+}
+
+export function wasBanishedByCardEffect(move = {}) {
+  const finalDestination = normalize(
+    move.finalDestination
+    || move.finalToZone
+    || move.actualToZone
+    || move.toZone,
+  );
+  return finalDestination === "banished" && movementWasCausedByCardEffect(move);
+}
 
 export function resolvePrimitiveSequence(sequence = [], gameState = {}, options = {}) {
   let state = canonicalizeZoneState(gameState);
@@ -411,7 +444,13 @@ export function resolveEffectChain({ gameState = {}, chainLinks = [], continuous
           movementStage: "resolve_effect_operation",
         },
       );
-      state = stripResolutionContext(primitiveResult.gameState || state);
+      const checkpoint = runAfterEffectResolutionCheckpoint({
+        gameState: primitiveResult.gameState || state,
+        continuousEffects,
+        chainLink: link.id,
+      });
+      primitiveResult.afterResolutionCheckpoint = checkpoint;
+      state = stripResolutionContext(checkpoint.gameState || primitiveResult.gameState || state);
       linkResults.push({
         id: link.id,
         order: chainOrder(link),
@@ -421,6 +460,7 @@ export function resolveEffectChain({ gameState = {}, chainLinks = [], continuous
         reason: primitiveResult.resolutionStatus,
         activationSnapshot: clone(link.activationSnapshot),
         primitiveResult,
+        afterResolutionCheckpoint: checkpoint,
       });
       trace.push({
         phase: "resolve_chain_link",
@@ -431,6 +471,11 @@ export function resolveEffectChain({ gameState = {}, chainLinks = [], continuous
         activationSnapshot: clone(link.activationSnapshot),
         primitiveSteps: primitiveResult.steps,
       });
+      trace.push(...checkpoint.trace.map((item) => ({ ...item, chainLink: link.id })));
+      if (!checkpoint.complete) {
+        incompleteReason = checkpoint.reason || "after_effect_resolution_checkpoint_incomplete";
+        break;
+      }
     }
 
     const stabilized = stabilizeContinuousEffects(state, continuousEffects);
@@ -1254,15 +1299,265 @@ function stripResolutionContext(state) {
   return next;
 }
 
+/**
+ * Checks field-shape restrictions after every operation in the current effect
+ * has finished. This is intentionally separate from continuous-effect
+ * stabilization between operations: if a later operation destroys the
+ * restriction carrier, no cleanup is required.
+ */
+export function runAfterEffectResolutionCheckpoint({
+  gameState = {},
+  continuousEffects = [],
+  chainLink = "",
+} = {}) {
+  let state = canonicalizeZoneState(gameState);
+  const lifecycle = advanceEffectInstanceLifecycles(state, {
+    timing: "after_effect_resolution_checkpoint",
+    cause: chainLink || "effect_resolution_completed",
+  });
+  state = lifecycle.gameState;
+  const trace = [...lifecycle.trace];
+  const adjustments = [];
+  if (!lifecycle.complete) {
+    return {
+      complete: false,
+      reason: lifecycle.reason,
+      gameState: state,
+      trace,
+      adjustments,
+    };
+  }
+
+  for (const effect of continuousEffects || []) {
+    if (!(effect.fieldRestrictions || []).length) continue;
+    const active = continuousEffectActive(effect, state);
+    if (active === null) {
+      return {
+        complete: false,
+        reason: "field_restriction_applicability_unknown_at_checkpoint",
+        gameState: state,
+        trace,
+        adjustments,
+      };
+    }
+    if (!active) {
+      trace.push({
+        phase: "after_effect_resolution_checkpoint",
+        event: "field_restriction_inactive",
+        continuousEffectId: effect.id,
+        result: "no_adjustment",
+      });
+      continue;
+    }
+
+    for (const restriction of effect.fieldRestrictions) {
+      const evaluated = evaluateFieldRestrictionAtCheckpoint(state, restriction);
+      if (!evaluated.complete) {
+        return {
+          complete: false,
+          reason: evaluated.reason,
+          gameState: state,
+          trace,
+          adjustments,
+        };
+      }
+      for (const adjustment of evaluated.adjustments) {
+        const applied = applyFieldRestrictionChoice(state, effect, adjustment);
+        state = applied.gameState;
+        adjustments.push(applied.adjustment);
+        trace.push(applied.trace);
+      }
+      if (!evaluated.adjustments.length) {
+        trace.push({
+          phase: "after_effect_resolution_checkpoint",
+          event: "field_restriction_satisfied",
+          continuousEffectId: effect.id,
+          restrictionType: restriction.type,
+          result: "no_adjustment",
+        });
+      }
+    }
+  }
+  synchronizeKnownZoneViews(state);
+  return {
+    complete: true,
+    reason: "after_effect_resolution_checkpoint_complete",
+    gameState: state,
+    trace,
+    adjustments,
+  };
+}
+
+function evaluateFieldRestrictionAtCheckpoint(state, restriction) {
+  const monsters = (state.cards || []).filter((card) => (
+    normalize(card.zone) === "monster_zone" && card.faceUp === true
+  ));
+  if (monsters.some((card) => !knownPlayer(card.controller))) {
+    return { complete: false, reason: "field_restriction_controller_unknown", adjustments: [] };
+  }
+  const maxCount = Number.isInteger(Number(restriction.maxCount))
+    ? Number(restriction.maxCount)
+    : 1;
+  const property = restriction.type === "max_face_up_monsters_per_race_per_player"
+    ? "race"
+    : restriction.type === "max_distinct_races_per_player"
+      ? "race"
+      : restriction.type === "max_distinct_attributes_per_player"
+        ? "attribute"
+        : "";
+  if (!property) return { complete: true, adjustments: [] };
+  if (monsters.some((card) => !normalize(card[property]) || normalize(card[property]) === "unknown")) {
+    return {
+      complete: false,
+      reason: `field_restriction_${property}_unknown`,
+      adjustments: [],
+    };
+  }
+
+  const adjustments = [];
+  if (restriction.type === "max_face_up_monsters_per_race_per_player") {
+    for (const group of grouped(monsters, (card) => `${card.controller}:${normalize(card.race)}`)) {
+      if (group.cards.length <= maxCount) continue;
+      adjustments.push({
+        type: "send_until_group_count",
+        player: group.cards[0].controller,
+        groupBy: "race",
+        groupValue: group.cards[0].race,
+        maxCount,
+        candidateInstanceIds: group.cards.map(cardInstanceId),
+        sendCount: group.cards.length - maxCount,
+      });
+    }
+    return { complete: true, adjustments };
+  }
+
+  for (const playerGroup of grouped(monsters, (card) => card.controller)) {
+    const valueGroups = grouped(playerGroup.cards, (card) => normalize(card[property]));
+    if (valueGroups.length <= maxCount) continue;
+    adjustments.push({
+      type: "send_until_distinct_group_count",
+      player: playerGroup.key,
+      groupBy: property,
+      maxCount,
+      groups: valueGroups.map((group) => ({
+        value: group.cards[0][property],
+        candidateInstanceIds: group.cards.map(cardInstanceId),
+      })),
+      sendCount: valueGroups
+        .sort((left, right) => right.cards.length - left.cards.length)
+        .slice(maxCount)
+        .reduce((total, group) => total + group.cards.length, 0),
+    });
+  }
+  return { complete: true, adjustments };
+}
+
+function applyFieldRestrictionChoice(state, effect, adjustment) {
+  const next = clone(state);
+  const choiceTable = next.resolutionChoices?.fieldRestrictionKeepInstanceIds || {};
+  const configured = uniqueStrings(
+    choiceTable[effect.id]
+    || choiceTable[effect.sourceInstanceId || effect.sourceCardId]
+    || next.resolutionChoices?.keepInstanceIds
+    || [],
+  );
+  const candidates = adjustment.candidateInstanceIds
+    || adjustment.groups.flatMap((group) => group.candidateInstanceIds);
+  let sent = [];
+  if (adjustment.type === "send_until_group_count") {
+    const kept = configured.filter((id) => candidates.includes(id));
+    if (kept.length === adjustment.maxCount) sent = candidates.filter((id) => !kept.includes(id));
+  } else {
+    const keptGroups = adjustment.groups.filter((group) => (
+      group.candidateInstanceIds.some((id) => configured.includes(id))
+    ));
+    if (keptGroups.length === adjustment.maxCount) {
+      const kept = new Set(keptGroups.flatMap((group) => group.candidateInstanceIds));
+      sent = candidates.filter((id) => !kept.has(id));
+    }
+  }
+
+  if (!sent.length) {
+    if (!Array.isArray(next.pendingMandatoryAdjustments)) next.pendingMandatoryAdjustments = [];
+    const pending = {
+      ...clone(adjustment),
+      sourceEffectId: effect.id,
+      status: "choice_required",
+      timing: "after_effect_resolution_checkpoint",
+    };
+    next.pendingMandatoryAdjustments.push(pending);
+    return {
+      gameState: next,
+      adjustment: pending,
+      trace: {
+        phase: "after_effect_resolution_checkpoint",
+        event: "field_restriction_adjustment_required",
+        continuousEffectId: effect.id,
+        result: "choice_required",
+        sendCount: adjustment.sendCount,
+        candidateInstanceIds: candidates,
+      },
+    };
+  }
+
+  for (const id of sent) {
+    const card = next.cards.find((candidate) => cardInstanceId(candidate) === id);
+    if (!card) continue;
+    const owner = knownPlayer(card.owner) || knownPlayer(card.controller) || "self";
+    applyCardTransition(next, card, "graveyard", { owner, controller: owner });
+  }
+  const applied = {
+    ...clone(adjustment),
+    sourceEffectId: effect.id,
+    status: "applied",
+    sentInstanceIds: sent,
+    timing: "after_effect_resolution_checkpoint",
+  };
+  return {
+    gameState: next,
+    adjustment: applied,
+    trace: {
+      phase: "after_effect_resolution_checkpoint",
+      event: "field_restriction_adjustment_applied",
+      continuousEffectId: effect.id,
+      result: "applied",
+      sentInstanceIds: sent,
+    },
+  };
+}
+
+function grouped(cards, keyFn) {
+  const groups = new Map();
+  for (const card of cards || []) {
+    const key = String(keyFn(card));
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(card);
+  }
+  return [...groups.entries()].map(([key, entries]) => ({ key, cards: entries }));
+}
+
 function stabilizeAfterPrimitive(continuousEffects) {
-  return ({ gameState }) => {
-    const stabilized = stabilizeContinuousEffects(gameState, continuousEffects);
+  return ({ gameState, item }) => {
+    const lifecycle = advanceEffectInstanceLifecycles(gameState, {
+      timing: `after_${item?.id || "primitive"}`,
+      cause: item?.primitive?.type || "primitive_state_change",
+    });
+    if (!lifecycle.complete) {
+      return {
+        gameState: lifecycle.gameState,
+        complete: false,
+        fixedPointReached: false,
+        reason: lifecycle.reason,
+        trace: lifecycle.trace,
+      };
+    }
+    const stabilized = stabilizeContinuousEffects(lifecycle.gameState, continuousEffects);
     return {
       gameState: stabilized.gameState,
       complete: stabilized.fixedPointReached,
       fixedPointReached: stabilized.fixedPointReached,
       reason: stabilized.reason,
-      trace: stabilized.trace,
+      trace: [...lifecycle.trace, ...stabilized.trace],
     };
   };
 }
@@ -1750,6 +2045,79 @@ function executePrimitive(primitive, gameState, options = {}) {
           positionChoices,
       }, movementContext);
       }
+    case "special_summon_cards": {
+      const requestedIds = uniqueStrings(primitive.cardInstanceIds || primitive.cardIds || []);
+      if (!requestedIds.length) return insufficient("special_summon_card_instances_unknown");
+      const cards = [];
+      for (const requested of requestedIds) {
+        const candidates = findCardCandidates(state, requested, "", requested);
+        if (candidates.length !== 1) return insufficient("special_summon_card_instance_ambiguous_or_missing");
+        cards.push(candidates[0]);
+      }
+      const controller = knownPlayer(primitive.controller || primitive.player) || "self";
+      const movement = resolveMoveBatch(state, cards.map((card) => ({
+        card,
+        intendedToZone: primitive.destinationZone || "monster_zone",
+        destinationPlayer: controller,
+        cause: "special_summon_cards",
+        extra: {
+          controller,
+          summoned: true,
+          faceUp: primitive.faceUp !== false,
+          position: primitive.position || "attack",
+          positionChoices: [primitive.position || "attack"],
+        },
+      })), movementContext);
+      if (movement.status !== "applied") return insufficient(movement.reason);
+      if (!state.resolutionContext) state.resolutionContext = {};
+      state.resolutionContext.lastSpecialSummonedInstanceIds = cards.map(cardInstanceId);
+      return success(state, [{
+        type: "special_summon_cards",
+        controller,
+        cardInstanceIds: cards.map(cardInstanceId),
+        moves: movement.moves,
+      }]);
+    }
+    case "change_control": {
+      if (!target) return insufficient("target_state_unknown");
+      const nextController = knownPlayer(primitive.newController || primitive.controller);
+      if (!nextController) return insufficient("new_controller_unknown");
+      const before = target.controller;
+      target.controller = nextController;
+      return success(state, [{
+        type: "change_control",
+        cardId: cardInstanceId(target),
+        before,
+        after: nextController,
+      }]);
+    }
+    case "create_lingering_effect": {
+      const boundInstanceIds = uniqueStrings(
+        primitive.boundInstanceIds
+        || (primitive.bindToPreviousSpecialSummon
+          ? state.resolutionContext?.lastSpecialSummonedInstanceIds
+          : []),
+      );
+      if (!boundInstanceIds.length) return insufficient("lingering_effect_binding_unknown");
+      if (!Array.isArray(state.effectInstances)) state.effectInstances = [];
+      const instance = createBoundLingeringEffectInstance({
+        id: primitive.effectInstanceId || `${primitive.sourceEffectId || "effect"}:lingering:${state.effectInstances.length + 1}`,
+        sourceEffectId: primitive.sourceEffectId || "",
+        boundInstanceIds,
+        controller: primitive.requiredController || primitive.controller || "self",
+        zone: primitive.requiredZone || "monster_zone",
+        faceUp: primitive.requiredFaceUp !== false,
+        match: primitive.match || "any",
+        restriction: primitive.restriction || {},
+      });
+      state.effectInstances.push(instance);
+      return success(state, [{
+        type: "create_lingering_effect",
+        effectInstanceId: instance.id,
+        boundInstanceIds,
+        status: "active",
+      }]);
+    }
     case "set_position":
       if (!target) return insufficient("target_state_unknown");
       if (primitive.position === "defense" && target.canChangeToDefense === false) {
@@ -1814,7 +2182,15 @@ function moveCard(state, card, toZone, type, extra = {}, movementContext = {}) {
     toZone: move.actualToZone,
     intendedToZone: move.intendedToZone,
     actualToZone: move.actualToZone,
+    finalDestination: move.finalDestination,
     destinationPlayer: move.actualDestinationPlayer,
+    originalCause: move.originalCause,
+    originalCauseKind: move.originalCauseKind,
+    finalDestinationCauseKind: move.finalDestinationCauseKind,
+    destinationReplacementApplied: move.destinationReplacementApplied,
+    destinationChangedByReplacement: move.destinationChangedByReplacement,
+    replacementApplications: move.replacementApplications,
+    banishedByCardEffect: move.banishedByCardEffect,
     replacementEffectId: move.replacementEffectId,
     replacementId: move.replacementId,
     move,
@@ -1834,6 +2210,13 @@ export function resolveMoveBatch(state, inputs = [], context = {}) {
       || knownPlayer(card.owner)
       || knownPlayer(card.controller)
       || "self";
+    const originalCause = String(
+      input.originalCause
+      || input.cause
+      || context.primitiveType
+      || "move",
+    );
+    const originalCauseKind = inferMovementCauseKind(input, context);
     plans.push({
       card,
       instanceId: cardInstanceId(card),
@@ -1843,7 +2226,10 @@ export function resolveMoveBatch(state, inputs = [], context = {}) {
       intendedDestinationPlayer,
       actualToZone: intendedToZone,
       actualDestinationPlayer: intendedDestinationPlayer,
-      cause: String(input.cause || context.primitiveType || "move"),
+      cause: originalCause,
+      causeKind: originalCauseKind,
+      originalCause,
+      originalCauseKind,
       stage: String(input.stage || context.stage || "resolve_primitive"),
       extra: clone(input.extra || {}),
       replacementMatches: [],
@@ -1866,11 +2252,17 @@ export function resolveMoveBatch(state, inputs = [], context = {}) {
     const source = findCard(state, effect.sourceCardId, effect.sourceCardName, effect.sourceInstanceId);
     if (!source) continue;
     const sourceMove = plans.find((plan) => plan.instanceId === cardInstanceId(source));
+    let activeReplacements = replacements;
     if (sourceMove && moveLeavesContinuousScope(effect, sourceMove)) {
-      suppressedDestinationReplacementEffectIds.push(String(effect.id || cardInstanceId(source)));
-      continue;
+      activeReplacements = replacements.filter((replacement) => (
+        replacementAppliesAsSourceLeaves(replacement, sourceMove, source)
+      ));
+      if (activeReplacements.length !== replacements.length) {
+        suppressedDestinationReplacementEffectIds.push(String(effect.id || cardInstanceId(source)));
+      }
+      if (!activeReplacements.length) continue;
     }
-    activeReplacementEffects.push({ effect, source, replacements });
+    activeReplacementEffects.push({ effect, source, replacements: activeReplacements });
   }
 
   for (const plan of plans) {
@@ -1884,6 +2276,13 @@ export function resolveMoveBatch(state, inputs = [], context = {}) {
           effectId: String(entry.effect.id || ""),
           replacementId: String(replacement.id || replacement.type || "replace_destination"),
           sourceInstanceId: cardInstanceId(entry.source),
+          effectCauseKind: String(
+            replacement.effectCauseKind
+            || entry.effect.effectCauseKind
+            || "card_effect",
+          ),
+          appliedEffect: true,
+          eventSource: "card_effect",
         });
       }
     }
@@ -1909,15 +2308,40 @@ export function resolveMoveBatch(state, inputs = [], context = {}) {
     suppressedDestinationReplacementEffectIds: uniqueStrings(suppressedDestinationReplacementEffectIds),
     moves: plans.map((plan) => {
       const [primary] = plan.replacementMatches;
-      return {
+      const replacementApplications = plan.replacementMatches.map((application) => ({
+        ...application,
+        applied: true,
+        appliedEffect: application.appliedEffect !== false,
+        eventSource: application.eventSource || "card_effect",
+        intendedToZone: plan.intendedToZone,
+        finalDestination: plan.actualToZone,
+        changedDestination: plan.actualToZone !== plan.intendedToZone,
+      }));
+      const finalDestinationCauseKind = replacementApplications.some((application) => (
+        normalize(application.effectCauseKind) === "card_effect"
+        || application.appliedEffect === true
+        || normalize(application.eventSource) === "card_effect"
+      ))
+        ? "card_effect"
+        : plan.originalCauseKind;
+      const move = {
         instanceId: plan.instanceId,
         definitionId: plan.definitionId,
         fromZone: plan.fromZone,
         intendedToZone: plan.intendedToZone,
         actualToZone: plan.actualToZone,
+        finalDestination: plan.actualToZone,
         intendedDestinationPlayer: plan.intendedDestinationPlayer,
         actualDestinationPlayer: plan.actualDestinationPlayer,
         cause: plan.cause,
+        causeKind: plan.causeKind,
+        originalCause: plan.originalCause,
+        originalCauseKind: plan.originalCauseKind,
+        finalDestinationCauseKind,
+        eventSource: finalDestinationCauseKind,
+        destinationReplacementApplied: replacementApplications.length > 0,
+        destinationChangedByReplacement: plan.actualToZone !== plan.intendedToZone,
+        replacementApplications,
         stage: plan.stage,
         ...(primary ? {
           replacementEffectId: primary.effectId,
@@ -1926,6 +2350,10 @@ export function resolveMoveBatch(state, inputs = [], context = {}) {
           replacementEffectIds: uniqueStrings(plan.replacementMatches.map((item) => item.effectId)),
           replacementIds: uniqueStrings(plan.replacementMatches.map((item) => item.replacementId)),
         } : {}),
+      };
+      return {
+        ...move,
+        banishedByCardEffect: wasBanishedByCardEffect(move),
       };
     }),
   };
@@ -1939,12 +2367,25 @@ function moveLeavesContinuousScope(effect, plan) {
   return false;
 }
 
+function replacementAppliesAsSourceLeaves(replacement, plan, source) {
+  if (replacement.appliesWhenSourceLeaves !== true) return false;
+  if ((replacement.affectedCardRelation || replacement.cardRelation) !== "source") return false;
+  return plan.instanceId === cardInstanceId(source);
+}
+
 function destinationReplacementMatches(plan, replacement, source) {
-  if (normalize(replacement.intendedToZone) !== plan.intendedToZone) return false;
+  if (replacement.whenLeavingField) {
+    if (!isFieldZone(plan.fromZone) || isFieldZone(plan.intendedToZone)) return false;
+  } else if (normalize(replacement.intendedToZone) !== plan.intendedToZone) {
+    return false;
+  }
   if (replacement.fromZone && normalize(replacement.fromZone) !== plan.fromZone) return false;
   if (replacement.fromZones?.length && !replacement.fromZones.map(normalize).includes(plan.fromZone)) return false;
   if (replacement.cause && String(replacement.cause) !== plan.cause) return false;
   if (replacement.causes?.length && !replacement.causes.map(String).includes(plan.cause)) return false;
+  const affectedCardRelation = replacement.affectedCardRelation || replacement.cardRelation || "any";
+  if (affectedCardRelation === "source" && plan.instanceId !== cardInstanceId(source)) return false;
+  if (!["any", "source"].includes(affectedCardRelation)) return null;
   if (replacement.selector) {
     const selectorMatch = matchesCardSelectorTriState(plan.card, replacement.selector);
     if (selectorMatch !== true) return selectorMatch;
@@ -1956,6 +2397,23 @@ function destinationReplacementMatches(plan, replacement, source) {
   if (relation === "same_as_source_controller") return plan.intendedDestinationPlayer === sourceController;
   if (relation === "opponent_of_source_controller") return plan.intendedDestinationPlayer === opponentOf(sourceController);
   return null;
+}
+
+function inferMovementCauseKind(input = {}, context = {}) {
+  const explicit = normalize(
+    input.originalCauseKind
+    || input.causeKind
+    || context.originalCauseKind
+    || context.causeKind,
+  );
+  if (explicit) return explicit;
+  const stage = normalize(input.stage || context.stage);
+  if (stage.includes("summon_procedure")) return "summon_procedure";
+  if (stage === "pay_activation_cost" || stage === "activation_preflight_cost_projection") {
+    return "activation_cost";
+  }
+  if (stage === "resolve_effect_operation" || context.primitiveType) return "card_effect";
+  return "unknown";
 }
 
 function opponentOf(player) {

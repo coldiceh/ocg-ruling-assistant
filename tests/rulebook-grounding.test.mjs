@@ -63,6 +63,118 @@ test("actual_simultaneous_replacement_rule_is_retrieved_from_card_resistance", a
   assert.ok(relevant.sourceUrl);
 });
 
+test("deterministic rule queries keep the first eight ranking slots ahead of model supplements", async () => {
+  const evidence = await retrieveRagEvidence({
+    userQuery: [
+      "连锁处理中对象离场并除外，效果无效并破坏。",
+      "发动时丢弃手牌支付cost，双方同一时点适用代替破坏。",
+      "不受其他卡效果影响的对象是魔法陷阱，场上没有其他卡且要回到手卡。",
+      "然后复制获得有「测试卡」卡名记述的怪兽效果，后续如何处理？",
+    ].join(""),
+    cardResolution: {
+      resolvedCards: [],
+      unresolvedMentions: [],
+      ambiguousMentions: [],
+      userProvidedCardTexts: [],
+    },
+    cards: [],
+    records: [],
+    qaRecords: [],
+    ruleSearchQueries: Array.from({ length: 16 }, (_, index) => ({
+      query: `模型补充噪声查询 ${index + 1}`,
+      reason: "deepseek_preparation",
+    })),
+    env: {
+      RAG_MAX_RULE_SEARCH_QUERIES: "16",
+    },
+  });
+
+  assert.equal(evidence.ruleSearchQueries.length, 16);
+  assert.ok(
+    evidence.ruleSearchQueries.slice(0, 8).every((item) => item.source !== "rule_search_query"),
+    "the first eight ranking queries must all come from deterministic local derivation",
+  );
+  assert.ok(
+    evidence.ruleSearchQueries.slice(0, 8).every((item) => item.reason !== "deepseek_preparation"),
+    "model supplements must not displace the deterministic ranking window",
+  );
+});
+
+test("model rule queries are retained only as an append-only retrieval supplement", async () => {
+  const evidence = await retrieveRagEvidence({
+    userQuery: "这个效果可以发动吗？",
+    cardResolution: {
+      resolvedCards: [],
+      unresolvedMentions: [],
+      ambiguousMentions: [],
+      userProvidedCardTexts: [],
+    },
+    cards: [],
+    records: [],
+    qaRecords: [],
+    ruleSearchQueries: [
+      { query: "模型补充查询 甲", reason: "deepseek_preparation" },
+      { query: "模型补充查询 乙", reason: "deepseek_preparation" },
+    ],
+    env: {
+      RAG_MAX_RULE_SEARCH_QUERIES: "16",
+    },
+  });
+
+  const firstSupplementIndex = evidence.ruleSearchQueries.findIndex(
+    (item) => item.reason === "deepseek_preparation",
+  );
+  assert.ok(firstSupplementIndex > 0, "the deterministic query must precede model supplements");
+  assert.deepEqual(
+    evidence.ruleSearchQueries.slice(firstSupplementIndex).map((item) => item.query),
+    ["模型补充查询 甲", "模型补充查询 乙"],
+  );
+  assert.ok(
+    evidence.ruleSearchQueries.slice(0, firstSupplementIndex)
+      .every((item) => item.reason !== "deepseek_preparation"),
+  );
+});
+
+test("model supplemental queries cannot reorder the deterministic evidence prefix", async () => {
+  const request = {
+    userQuery: "发动时丢弃手牌，之后特殊召唤如何处理？",
+    cardResolution: {
+      resolvedCards: [],
+      unresolvedMentions: [],
+      ambiguousMentions: [],
+      userProvidedCardTexts: [],
+    },
+    cards: [],
+    records: [{
+      id: "deterministic-evidence",
+      recordType: "related",
+      title: "发动与处理",
+      text: "发动时丢弃手牌，之后特殊召唤如何处理？应依次确认发动手续、支付代价与效果处理。",
+    }, {
+      id: "supplement-only-evidence",
+      recordType: "related",
+      title: "补充查询专用资料",
+      text: "恶意噪声精确短语 恶意噪声精确短语 恶意噪声精确短语",
+    }],
+    qaRecords: [],
+    env: {
+      RAG_MAX_RELATED_EVIDENCE: "1",
+      RAG_MAX_RULE_SEARCH_QUERIES: "16",
+    },
+  };
+  const deterministic = await retrieveRagEvidence(request);
+  const supplemented = await retrieveRagEvidence({
+    ...request,
+    ruleSearchQueries: [{
+      query: "恶意噪声精确短语",
+      reason: "deepseek_preparation",
+    }],
+  });
+
+  assert.equal(deterministic.rawRelatedEvidence[0].id, "deterministic-evidence");
+  assert.equal(supplemented.rawRelatedEvidence[0].id, "deterministic-evidence");
+});
+
 test("actual_return_constraints_are_prioritized_for_operation_grounding", async () => {
   const data = await loadRagData();
   const resolvedCards = ["13631", "22130"]
@@ -220,7 +332,10 @@ test("inline_card_references_link_the_stardust_official_qa", async () => {
   const qa = evidence.officialQaRelated.find((item) => item.id === "ygoresources-qa-11290");
   assert.ok(qa, "expected the official Stardust activation-negation analogy to be retrieved");
   assert.ok(qa.cardIds.includes("7734"), "expected <<7734>> to be indexed as a referenced card");
-  assert.match(qa.text, /not treated as being on the field/iu);
+  assert.match(
+    qa.text,
+    /(?:not treated as being on the field|フィールドで破壊された扱いにはなりません|不视为在场上破坏)/iu,
+  );
 });
 
 test("grounding_candidate_budget_preserves_faq_rulebook_and_card_text", async () => {

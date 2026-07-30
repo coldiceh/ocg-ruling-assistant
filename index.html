@@ -141,13 +141,176 @@
             <button class="text-button" id="budgetResetButton" type="button" hidden>重置额度</button>
           </section>
 
-          <section class="admin-query-panel" id="adminQueryPanel" aria-labelledby="adminQueryTitle" hidden>
-            <div class="admin-query-head">
-              <h2 id="adminQueryTitle">问题记录</h2>
-              <button class="text-button" id="adminQueryLoadButton" type="button">读取</button>
+          <section class="admin-lab" id="adminLabPanel" aria-labelledby="adminLabTitle" hidden>
+            <div class="admin-lab-head">
+              <div>
+                <p class="eyebrow">管理员专用 · 模型实验</p>
+                <h2 id="adminLabTitle">裁定模型实验室</h2>
+                <p>
+                  地址中的 <code>admin=1</code> 只负责显示本区域，并不代表已经登录。
+                  实验不会改变普通查询使用的模型。
+                </p>
+              </div>
+              <div class="admin-session-actions">
+                <span class="admin-session-badge" id="adminSessionBadge">未登录</span>
+                <button class="text-button" id="adminLogoutButton" type="button" hidden>退出</button>
+              </div>
             </div>
-            <p id="adminQueryStatus">需要管理员验证。</p>
-            <ol id="adminQueryList"></ol>
+
+            <form class="admin-login" id="adminLoginForm">
+              <label for="adminPasswordInput">管理员密码</label>
+              <div class="admin-login-row">
+                <input id="adminPasswordInput" type="password" autocomplete="current-password" required />
+                <button class="primary-button" id="adminLoginButton" type="submit">登录实验室</button>
+              </div>
+              <p class="admin-status" id="adminLoginStatus" role="status">正在确认登录状态…</p>
+            </form>
+
+            <div id="adminLabWorkspace" hidden>
+              <section class="admin-lab-section" aria-labelledby="adminExperimentTitle">
+                <div class="admin-section-head">
+                  <div>
+                    <h3 id="adminExperimentTitle">新建实验</h3>
+                    <p>资料准备和最终裁定会分阶段记录；这里不会保存或显示任何 API 密钥。</p>
+                  </div>
+                  <button class="text-button" id="adminCopyPublicQuestionButton" type="button">复制上方问题</button>
+                </div>
+
+                <label class="admin-field admin-question-field" for="adminQuestionInput">
+                  <span>裁定问题</span>
+                  <textarea id="adminQuestionInput" spellcheck="false" placeholder="输入需要实验的完整裁定问题…"></textarea>
+                </label>
+
+                <div class="admin-controls">
+                  <label class="admin-field" for="adminProviderSelect">
+                    <span>最终裁定服务</span>
+                    <select id="adminProviderSelect" disabled></select>
+                  </label>
+                  <label class="admin-field" for="adminModelSelect">
+                    <span>最终裁定模型</span>
+                    <select id="adminModelSelect" disabled></select>
+                  </label>
+                  <label class="admin-field" for="adminEffortSelect">
+                    <span>推理强度</span>
+                    <select id="adminEffortSelect" disabled></select>
+                  </label>
+                  <label class="admin-field" for="adminModeSelect">
+                    <span>运行模式</span>
+                    <select id="adminModeSelect" disabled></select>
+                  </label>
+                  <label class="admin-field" for="adminPromptVersionSelect">
+                    <span>提示词版本</span>
+                    <select id="adminPromptVersionSelect" disabled></select>
+                  </label>
+                </div>
+
+                <div class="admin-run-actions">
+                  <button class="primary-button" id="adminStartButton" type="button" disabled>开始实验</button>
+                  <button class="danger-outline-button" id="adminCancelButton" type="button" disabled>取消运行</button>
+                  <span class="admin-status" id="adminRunStatus" role="status">登录后读取可用配置。</span>
+                </div>
+              </section>
+
+              <section class="admin-lab-section" id="adminProgressSection" aria-labelledby="adminProgressTitle">
+                <div class="admin-section-head">
+                  <div>
+                    <h3 id="adminProgressTitle">真实处理进度</h3>
+                    <p id="adminRunIdentity">尚未开始运行。</p>
+                  </div>
+                  <strong id="adminElapsedText">—</strong>
+                </div>
+                <ol class="admin-stage-list" id="adminStageList">
+                  <li data-admin-stage="understand"><span>1</span><div><strong>理解问题</strong><small>等待开始</small></div></li>
+                  <li data-admin-stage="extract_card_names"><span>2</span><div><strong>提取卡名</strong><small>等待开始</small></div></li>
+                  <li data-admin-stage="retrieve_card_texts"><span>3</span><div><strong>检索卡片文本</strong><small>等待开始</small></div></li>
+                  <li data-admin-stage="retrieve_rulings_evidence"><span>4</span><div><strong>检索裁定与证据</strong><small>等待开始</small></div></li>
+                  <li data-admin-stage="generate_ruling"><span>5</span><div><strong>生成最终裁定</strong><small>等待开始</small></div></li>
+                </ol>
+                <p class="admin-timing-note">FAST / NORMAL / SLOW 只是耗时标签，不会触发自动取消。</p>
+              </section>
+
+              <section class="admin-lab-section" id="adminResultSection" aria-labelledby="adminResultTitle">
+                <div class="admin-section-head">
+                  <div>
+                    <h3 id="adminResultTitle">实验结果</h3>
+                    <p>最终结果、用量和延迟以服务端记录为准。</p>
+                  </div>
+                  <div class="admin-export-actions">
+                    <button class="text-button" id="adminExportJsonButton" type="button" disabled>导出 JSON</button>
+                    <button class="text-button" id="adminExportCsvButton" type="button" disabled>导出 CSV</button>
+                  </div>
+                </div>
+                <div class="admin-result-summary" id="adminResultSummary">
+                  <p>运行完成后会在这里显示结构化裁定。</p>
+                </div>
+                <dl class="admin-metrics" id="adminMetrics"></dl>
+                <details class="admin-json-details" id="adminEvidenceDetails">
+                  <summary>Evidence Snapshot（冻结证据）</summary>
+                  <div id="adminEvidenceSummary"></div>
+                  <pre id="adminEvidenceJson"></pre>
+                </details>
+                <details class="admin-json-details">
+                  <summary>完整结构化结果</summary>
+                  <pre id="adminResultJson"></pre>
+                </details>
+
+                <form class="admin-rating" id="adminRatingForm">
+                  <h4>人工评分</h4>
+                  <label for="adminRatingSelect">正确程度</label>
+                  <select id="adminRatingSelect">
+                    <option value="correct">正确且完整</option>
+                    <option value="partially_correct">部分正确</option>
+                    <option value="incorrect">错误</option>
+                    <option value="needs_review">需要进一步复核</option>
+                  </select>
+                  <label for="adminRatingNotes">备注</label>
+                  <textarea id="adminRatingNotes" placeholder="记录错误点、遗漏资料或更正依据…"></textarea>
+                  <button class="text-button" id="adminRatingButton" type="submit" disabled>保存评分</button>
+                  <span class="admin-status" id="adminRatingStatus" role="status"></span>
+                </form>
+              </section>
+
+              <div class="admin-lab-columns">
+                <section class="admin-lab-section" aria-labelledby="adminHistoryTitle">
+                  <div class="admin-section-head">
+                    <div>
+                      <h3 id="adminHistoryTitle">实验历史</h3>
+                      <p id="adminHistoryStatus">这里保存模型实验运行，与普通提问记录分开。</p>
+                    </div>
+                    <button class="text-button" id="adminHistoryRefreshButton" type="button">刷新</button>
+                  </div>
+                  <ol class="admin-history-list" id="adminHistoryList"></ol>
+                </section>
+
+                <section class="admin-lab-section" aria-labelledby="adminEvaluationTitle">
+                  <div class="admin-section-head">
+                    <div>
+                      <h3 id="adminEvaluationTitle">评估题集</h3>
+                      <p id="adminEvaluationStatus">可将固定错题载入新实验。</p>
+                    </div>
+                    <button class="text-button" id="adminEvaluationRefreshButton" type="button">读取</button>
+                  </div>
+                  <label class="admin-field" for="adminEvaluationSelect">
+                    <span>选择题目</span>
+                    <select id="adminEvaluationSelect"></select>
+                  </label>
+                  <button class="text-button" id="adminEvaluationLoadButton" type="button" disabled>载入到问题框</button>
+                </section>
+              </div>
+
+              <section class="admin-lab-section" aria-labelledby="adminQuestionHistoryTitle">
+                <div class="admin-section-head">
+                  <div>
+                    <h3 id="adminQuestionHistoryTitle">后台历史提问</h3>
+                    <p id="adminQuestionHistoryStatus">
+                      这里显示普通问答后台最近保存的提问，最多 100 条；不等同于上方的模型实验历史。
+                    </p>
+                  </div>
+                  <button class="text-button" id="adminQuestionHistoryRefreshButton" type="button">刷新</button>
+                </div>
+                <ol class="admin-history-list" id="adminQuestionHistoryList"></ol>
+              </section>
+            </div>
           </section>
           <section class="disclaimer-panel" aria-labelledby="disclaimerTitle">
             <h2 id="disclaimerTitle">免责声明</h2>

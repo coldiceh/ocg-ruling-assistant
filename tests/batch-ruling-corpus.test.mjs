@@ -3,6 +3,8 @@ import test from "node:test";
 import {
   buildBatchSummary,
   evaluateRulingAnswer,
+  renderBatchMarkdownSummary,
+  shouldFailBatchProcess,
 } from "../scripts/batch-ruling-corpus.mjs";
 
 test("batch evaluator reports card, direct QA, and simple verdict hits separately", () => {
@@ -115,6 +117,35 @@ test("batch summary exposes retrieval failures without conflating them with requ
   assert.equal(summary.runs.online.officialQaNotFound, 1);
   assert.equal(summary.runs.local.pass, 1);
   assert.equal(summary.onlineLocalDiverged, 1);
+});
+
+test("transport failure policy keeps review and retrieval regressions neutral but rejects request failures", () => {
+  const reviewOnly = {
+    summary: {
+      runs: {
+        online: {
+          completed: 3,
+          requestFailed: 0,
+          fail: 2,
+          needsReview: 1,
+        },
+      },
+    },
+  };
+  assert.equal(shouldFailBatchProcess(reviewOnly, "strict"), true);
+  assert.equal(shouldFailBatchProcess(reviewOnly, "transport"), false);
+
+  const requestFailure = structuredClone(reviewOnly);
+  requestFailure.summary.runs.online.requestFailed = 1;
+  assert.equal(shouldFailBatchProcess(requestFailure, "transport"), true);
+  assert.throws(
+    () => shouldFailBatchProcess(reviewOnly, "unknown"),
+    /unsupported failure policy/u,
+  );
+  assert.match(renderBatchMarkdownSummary({
+    inputPath: "data/test/example.json",
+    summary: reviewOnly.summary,
+  }), /Soft fail and needs review are report findings/u);
 });
 
 test("a local mock dry run cannot be reported as a real passing answer", () => {

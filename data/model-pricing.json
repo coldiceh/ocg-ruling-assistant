@@ -1,0 +1,66 @@
+{
+  "schemaVersion": 1,
+  "pricingVersion": "openai-gpt-5.6-standard-2026-07-09",
+  "effectiveDate": "2026-07-09",
+  "checkedAt": "2026-07-27",
+  "currency": "USD",
+  "unit": "per_1m_tokens",
+  "processingTier": "standard",
+  "sources": [
+    "https://openai.com/index/gpt-5-6/",
+    "https://developers.openai.com/api/docs/models/gpt-5.6-sol",
+    "https://developers.openai.com/api/docs/models/gpt-5.6-terra",
+    "https://developers.openai.com/api/docs/models/gpt-5.6-luna"
+  ],
+  "notes": {
+    "reasoningTokens": "Reasoning tokens are included in output_tokens and are not billed a second time.",
+    "cacheWrites": "GPT-5.6 cache writes are billed at 1.25x the uncached input rate.",
+    "longContext": "Requests with more than 272000 input tokens are billed at 2x input and 1.5x output for the full request.",
+    "estimateOnly": "Calculated costs are estimates, not invoices."
+  },
+  "aliases": {
+    "gpt-5.6": "gpt-5.6-sol"
+  },
+  "models": {
+    "gpt-5.6-sol": {
+      "inputUsdPerMillion": 5,
+      "cachedInputUsdPerMillion": 0.5,
+      "cacheWriteUsdPerMillion": 6.25,
+      "outputUsdPerMillion": 30,
+      "longContext": {
+        "thresholdInputTokensExclusive": 272000,
+        "inputMultiplier": 2,
+        "outputMultiplier": 1.5
+      }
+    },
+    "gpt-5.6-terra": {
+      "inputUsdPerMillion": 2.5,
+      "cachedInputUsdPerMillion": 0.25,
+      "cacheWriteUsdPerMillion": 3.125,
+      "outputUsdPerMillion": 15,
+      "longContext": {
+        "thresholdInputTokensExclusive": 272000,
+        "inputMultiplier": 2,
+        "outputMultiplier": 1.5
+      }
+    },
+    "gpt-5.6-luna": {
+      "inputUsdPerMillion": 1,
+      "cachedInputUsdPerMillion": 0.1,
+      "cacheWriteUsdPerMillion": 1.25,
+      "outputUsdPerMillion": 6,
+      "longContext": {
+        "thresholdInputTokensExclusive": 272000,
+        "inputMultiplier": 2,
+        "outputMultiplier": 1.5
+      }
+    }
+  },
+  "fx": {
+    "baseCurrency": "USD",
+    "quoteCurrency": "CNY",
+    "defaultRate": null,
+    "defaultVersion": null,
+    "configurable": true
+  }
+}

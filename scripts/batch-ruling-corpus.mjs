@@ -1,5 +1,5 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
+import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
+import { basename, dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -196,6 +196,32 @@ export function buildBatchSummary(cases = []) {
     onlineLocalComparable: cases.filter((item) => item.comparison?.status !== "not_available").length,
     onlineLocalDiverged: cases.filter((item) => item.comparison?.status === "diverged").length,
   };
+}
+
+export function shouldFailBatchProcess(report = {}, failurePolicy = "strict") {
+  const policy = String(failurePolicy || "strict").trim().toLowerCase();
+  const runs = Object.values(report?.summary?.runs || {});
+  if (policy === "transport") {
+    return runs.some((item) => Number(item?.requestFailed || 0) > 0);
+  }
+  if (policy !== "strict") {
+    throw new Error(`unsupported failure policy: ${failurePolicy}`);
+  }
+  return runs.some((item) => Number(item?.requestFailed || 0) > 0 || Number(item?.fail || 0) > 0);
+}
+
+export function renderBatchMarkdownSummary(report = {}) {
+  const lines = [
+    `### Deployed ruling corpus: ${basename(String(report.inputPath || "unknown corpus"))}`,
+    "",
+    "| Runner | Completed | Request failed | Pass | Soft fail | Needs review | Card miss | Official QA miss |",
+    "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+  ];
+  for (const [runner, stats] of Object.entries(report?.summary?.runs || {})) {
+    lines.push(`| ${runner} | ${Number(stats?.completed || 0)} | ${Number(stats?.requestFailed || 0)} | ${Number(stats?.pass || 0)} | ${Number(stats?.fail || 0)} | ${Number(stats?.needsReview || 0)} | ${Number(stats?.cardMiss || 0)} | ${Number(stats?.officialQaMiss || 0)} |`);
+  }
+  lines.push("", "Soft fail and needs review are report findings; only request/runtime failures fail the deployed smoke workflow.", "");
+  return lines.join("\n");
 }
 
 function evaluateCorrectness(corpusCase, answerText, officialQa) {
@@ -566,6 +592,7 @@ function parseCli(argv) {
     else if (arg === "--timeout-ms") options.timeoutMs = value, index += 1;
     else if (arg === "--ruling-version") options.rulingVersion = value, index += 1;
     else if (arg === "--model-tier") options.modelTier = value, index += 1;
+    else if (arg === "--failure-policy") options.failurePolicy = value, index += 1;
     else if (arg === "--no-resume") options.resume = false;
     else if (arg === "--help") options.help = true;
     else throw new Error(`unknown argument: ${arg}`);
@@ -587,6 +614,7 @@ function printUsage() {
     "  --timeout-ms <n>        Per-request timeout",
     "  --ruling-version <id>   latest, previous, or a registered revision",
     "  --model-tier <tier>     flash or pro",
+    "  --failure-policy <mode>  strict (default) or transport (only request/runtime failures)",
     "  --no-resume             Ignore an existing output report",
   ].join("\n"));
 }
@@ -600,7 +628,10 @@ if (isMain) {
     } else {
       const report = await runRulingCorpusBatch(options);
       console.log(JSON.stringify(report.summary, null, 2));
-      if (Object.values(report.summary.runs || {}).some((item) => item.requestFailed || item.fail)) {
+      if (process.env.GITHUB_STEP_SUMMARY) {
+        await appendFile(process.env.GITHUB_STEP_SUMMARY, renderBatchMarkdownSummary(report), "utf8");
+      }
+      if (shouldFailBatchProcess(report, options.failurePolicy || "strict")) {
         process.exitCode = 1;
       }
     }

@@ -118,6 +118,7 @@ test("activation-only Albaz question keeps activation legal but blocks resolutio
       name: "吞喰圣痕之龙",
       aliases: ["吞喰圣痕之龙", "吞食圣痕之龙", "聖痕喰らいし竜"],
       cardType: "fusion",
+      summonKinds: ["fusion"],
       effectText: "只要自己或对方的场上或墓地存在艾克利西亚怪兽，此卡不受此卡以外的效果影响。",
     },
     {
@@ -382,6 +383,41 @@ test("rag prompts require activation conclusions to include downstream resolutio
 test("quoted_mentions_all_preserved", () => {
   const mentions = extractQuotedMentions("【A卡】《B卡》「C卡」『D卡』[E卡]“F卡”\"G卡\"'H卡'");
   assert.deepEqual(mentions, ["A卡", "B卡", "C卡", "D卡", "E卡", "F卡", "G卡", "H卡"]);
+});
+
+test("quoted effect and restriction clauses are not treated as card names", () => {
+  const query = [
+    "『本回合自己已经发动过魔法卡的效果』",
+    "『自己不是「星群」怪兽不能从额外卡组特殊召唤』",
+    "『这个回合自己只能特殊召唤恶魔族怪兽』",
+  ].join("；");
+  const localCards = [
+    { id: "series-a", name: "星群先锋", aliases: ["星群先锋", "星群"] },
+    { id: "series-b", name: "星群后卫", aliases: ["星群后卫", "星群"] },
+  ];
+  const resolution = extractRagCards(query, {
+    cards: localCards,
+    modelCardNameCandidates: [{ name: "星群", originalText: "星群", confidence: "high" }],
+  });
+
+  assert.deepEqual(extractQuotedMentions(query), []);
+  assert.deepEqual(resolution.resolvedCards, []);
+  assert.deepEqual(resolution.unresolvedMentions, []);
+  assert.deepEqual(resolution.ambiguousMentions, []);
+  assert.deepEqual(resolution.modelCardNameCandidates, []);
+});
+
+test("past-action grammar does not leave a generic card category as an unquoted name", () => {
+  const query = "本回合自己已经发动过魔法卡的效果。";
+  const resolution = extractRagCards(query, { cards: [] });
+
+  assert.deepEqual(extractUnquotedCardMentionCandidates(query), []);
+  assert.deepEqual(resolution.unresolvedMentions, []);
+});
+
+test("long card names, abbreviations, and localized parentheses remain quoted mentions", () => {
+  const mentions = extractQuotedMentions("《不能停止的机械巨龙》、（跨语种测试长卡名）、(AB龙)");
+  assert.deepEqual(mentions, ["不能停止的机械巨龙", "跨语种测试长卡名", "AB龙"]);
 });
 
 test("unquoted_card_mentions_seed_retrieval_candidates", () => {
