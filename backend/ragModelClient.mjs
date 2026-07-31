@@ -123,7 +123,7 @@ export async function callRagModel({
     if (provider === "deepseek" && shouldRetryCompactDeepSeek(response) && recoveryPrompt) {
       const recoveryMaxTokens = readPositiveNumber(
         env.RAG_RECOVERY_MAX_OUTPUT_TOKENS,
-        Math.max(maxTokens, 4000),
+        Math.max(maxTokens * 2, 8000),
       );
       const recovery = await callDeepSeek({
         prompt: recoveryPrompt,
@@ -134,7 +134,8 @@ export async function callRagModel({
         temperature: 0,
       });
       responses.push(recovery);
-      response = recovery.rawText
+      const recoveryAssessment = assessDeepSeekRecovery(recovery);
+      response = recoveryAssessment.ok
         ? {
             ...recovery,
             warnings: [
@@ -150,6 +151,7 @@ export async function callRagModel({
               ...(responses[0].warnings || []),
               "deepseek_compact_recovery_attempted",
               "deepseek_compact_recovery_failed",
+              recoveryAssessment.warning,
               ...(recovery.warnings || []),
             ],
           };
@@ -184,6 +186,7 @@ export async function callRagModel({
       tokenUsage,
       estimatedCostCny: actualCost,
       budgetStatus,
+      generationAttempts: responses.map((item, index) => summarizeGenerationAttempt(item, index)),
     };
   } catch (error) {
     const warning = `model_call_failed:${error instanceof Error ? error.message : String(error)}`;
@@ -893,10 +896,16 @@ async function callDeepSeek({ prompt, env, modelName, maxTokens, fetchImpl, temp
   const choice = payload?.choices?.[0] || {};
   const message = choice.message || {};
   const rawText = extractChatMessageText(message.content);
-  if (!rawText) warnings.push(`deepseek_empty_content:${choice.finish_reason || "unknown"}`);
-  if (choice.finish_reason === "length") warnings.push("deepseek_output_truncated_by_token_limit");
+  const finishReason = String(choice.finish_reason || "");
+  const reasoningContent = extractChatMessageText(message.reasoning_content);
+  if (!rawText) warnings.push(`deepseek_empty_content:${finishReason || "unknown"}`);
+  if (finishReason === "length") warnings.push("deepseek_output_truncated_by_token_limit");
   return {
     rawText,
+    finishReason,
+    contentChars: rawText.length,
+    reasoningContentPresent: Boolean(reasoningContent),
+    reasoningContentChars: reasoningContent.length,
     usage: payload?.usage || {},
     warnings,
   };
@@ -910,6 +919,52 @@ function shouldRetryCompactDeepSeek(response = {}) {
 function withoutRecoverableDeepSeekWarnings(warnings = []) {
   return warnings.filter((warning) => !String(warning).startsWith("deepseek_empty_content:")
     && warning !== "deepseek_output_truncated_by_token_limit");
+}
+
+function assessDeepSeekRecovery(response = {}) {
+  const rawText = String(response.rawText || "").trim();
+  if (!rawText) {
+    return { ok: false, warning: "deepseek_compact_recovery_empty" };
+  }
+  if (response.finishReason === "length"
+      || (response.warnings || []).includes("deepseek_output_truncated_by_token_limit")) {
+    return { ok: false, warning: "deepseek_compact_recovery_truncated" };
+  }
+  let parsed;
+  try {
+    parsed = parseStrictJsonObject(rawText);
+  } catch {
+    return { ok: false, warning: "deepseek_compact_recovery_invalid_json" };
+  }
+  if (!hasBasicRagAnswerSchema(parsed)) {
+    return { ok: false, warning: "deepseek_compact_recovery_invalid_schema" };
+  }
+  return { ok: true, warning: "" };
+}
+
+function hasBasicRagAnswerSchema(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  if (!RAG_ANSWER_LEVELS.includes(value.answerLevel)) return false;
+  if (!String(value.shortAnswer || "").trim()) return false;
+  if (!Array.isArray(value.reasoning)
+      || !value.reasoning.some((item) => typeof item === "string" && item.trim())) return false;
+  if (!Array.isArray(value.usedCards)
+      || !Array.isArray(value.usedEvidence)
+      || !Array.isArray(value.missingInfo)
+      || !Array.isArray(value.riskFlags)) return false;
+  if (!["low", "medium", "high"].includes(value.confidenceSelfEstimate)) return false;
+  return value.usedEvidence.every((item) => item && typeof item === "object" && !Array.isArray(item));
+}
+
+function summarizeGenerationAttempt(response = {}, index = 0) {
+  return {
+    attempt: index === 0 ? "primary" : "compact_recovery",
+    finishReason: String(response.finishReason || ""),
+    contentChars: Number(response.contentChars ?? String(response.rawText || "").length),
+    reasoningContentPresent: response.reasoningContentPresent === true,
+    reasoningContentChars: Number(response.reasoningContentChars || 0),
+    usage: response.usage && typeof response.usage === "object" ? { ...response.usage } : {},
+  };
 }
 
 function extractChatMessageText(content) {

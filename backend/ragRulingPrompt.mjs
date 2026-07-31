@@ -167,7 +167,7 @@ export function buildRagRulingPromptBundle({
     recoveryPrompt,
     warnings,
     promptChars: prompt.length,
-    promptTruncated: warnings.some((warning) => warning.includes("truncated")),
+    promptTruncated: warnings.some((warning) => warning.includes("truncated") || warning.includes("compacted")),
   };
 }
 
@@ -464,6 +464,10 @@ function buildCompactRagPrompt({ payload, maxPromptChars }) {
       attribute: card.attribute,
       race: card.race,
       source: card.source,
+      effectText: truncatePromptText(
+        card.effectText,
+        maxChars >= 12000 ? 1200 : maxChars >= 4000 ? 600 : 180,
+      ),
     })),
     unresolvedMentions: (payload.unresolvedMentions || []).slice(0, 6),
     operationChecks: (payload.operationChecks || []).slice(0, maxChars >= 4000 ? 8 : 2).map((check) => ({
@@ -477,23 +481,21 @@ function buildCompactRagPrompt({ payload, maxPromptChars }) {
       })),
     })),
     constraintAudit: payload.constraintAudit,
+    semanticStateTransition: compactSemanticStateTransition(payload.semanticStateTransition, {
+      textLimit,
+      traceLimit: maxChars >= 12000 ? 8 : maxChars >= 4000 ? 5 : 2,
+    }),
     evidence,
   };
   const render = (context) => [
     "你是游戏王 OCG 规则分析助手。只依据所给证据回答，不得编造规则或来源。",
     "官方直接 Q&A 才能支持 official_confirmed；相关 Q&A、FAQ、规则书和卡文只能支持 rule_analysis 或 low_confidence_analysis。",
-    "有逐字引文的 illegal operationChecks 是强约束；legal 只有在 constraintAudit 没有未核对限制时才能支持肯定结论。unknown 不能支持肯定或否定结论。",
-    "constraintAudit.hasUnresolvedConstraints=true 时不得回答操作可以进行；一般发动条件不能覆盖更具体的限制规则。",
-    "resolvedCards 是已匹配卡片，不得把其中已有的卡种或属性说成未确定。必须分别判断发动、取对象、效果适用和逐项处理；发动源或对象离开不等于整条效果自动不处理。",
-    "先判断发动，再立即支付 cost，并以支付后的场面判断效果处理；cost 将卡送墓后，依赖场上或墓地条件的永续效果可能在处理前开始适用。此时应分别写明发动是否合法及后续处理能否完成。",
-    "持续目的地替代必须逐次按时间点判断：支付 cost 时载体仍在场，原定送墓的 cost 就按替代目的地移动；不得用载体稍后离场倒推 cost。融合素材在同一步同时移动时按一个原子批次判断；若替代载体自身也在该批离开适用区域，替代对整批素材均不适用，不能逐张移动。",
-    "结论必须同时交代能否发动、cost 实际去向、同批素材实际去向和最终处理结果。",
-    "卡名仍未解析但题目已明确通用操作时，应依据直接覆盖该操作的规则书或 FAQ 回答该部分，不得仅因卡名未匹配而拒答。多对象效果中盖放通常陷阱或速攻魔法在同一连锁发动时，必须按该卡 FAQ 或连接关系判断其余处理，不得猜测。",
-    "不受效果影响不等于不能成为对象；魔法陷阱卡的卡的发动被无效与场上表侧卡的效果发动被无效必须分开判断。",
-    "必须严格区分手牌、场上、墓地、除外和额外牌组；每一步题目明确的所在区域优先于模型记忆；仍在手牌的卡不能满足场上或墓地条件，但 cost 造成的位置变化必须从支付时起更新。",
-    "同一时点的公开区域选发诱发先组成连锁并把响应权交给对方；非公开手牌诱发属于之后的响应顺序，不能与公开区域诱发直接自排。对方不连锁或响应权再次回到自己时，才可从非公开手牌继续连锁发动。",
+    "优先服从有引文的 operationChecks、constraintAudit 与 semanticStateTransition；unknown 或未核对限制不能支持肯定结论。",
+    "按时间线分别判断发动、cost、状态更新和逐项处理；严格区分区域、对象资格与效果抗性，同一步同时移动按原子批次处理。",
+    "resolvedCards 是已匹配卡片，effectText 是其效果依据；不得把已有字段说成未确定。semanticStateTransition 若 status=resolved 且 complete=true，必须保留其状态顺序。",
     "输出单个 JSON 对象，字段为 answerLevel、shortAnswer、reasoning、usedCards、usedEvidence、missingInfo、riskFlags、confidenceSelfEstimate。",
-    "shortAnswer 只写结论；若题目同时询问能否发动和后续如何处理，必须同时写明发动结论与最终处理结果，不得只写“可以发动”；reasoning 必须是至少 2 条非空字符串的数组，并逐条说明证据如何适用于题目。",
+    "shortAnswer 不超过300字；若题目同时询问能否发动和后续如何处理，必须同时写明发动结论与最终处理结果，不得只写“可以发动”。",
+    "reasoning 为2至5条字符串，每条不超过240字；usedCards、usedEvidence 各不超过8项；missingInfo、riskFlags 各不超过6项。不要输出 JSON 以外内容。",
     JSON.stringify(context),
   ].join("\n");
   let prompt = render(compactPayload);
@@ -502,17 +504,80 @@ function buildCompactRagPrompt({ payload, maxPromptChars }) {
   const evidenceIds = bucketOrder.flatMap((bucket) => evidence[bucket].map((item) => ({ id: item.id, type: item.type, title: item.title })));
   prompt = render({
     userQuery: String(payload.userQuery || "").slice(0, 160),
-    resolvedCards: (payload.resolvedCards || []).slice(0, 4).map((card) => ({ id: card.id, name: card.name, cardType: card.cardType, attribute: card.attribute })),
+    resolvedCards: (payload.resolvedCards || []).slice(0, 4).map((card) => ({
+      id: card.id,
+      name: card.name,
+      cardType: card.cardType,
+      attribute: card.attribute,
+      effectText: truncatePromptText(card.effectText, 240),
+    })),
     operationChecks: (payload.operationChecks || []).slice(0, 2).map((check) => ({ status: check.status, conclusion: String(check.conclusion || "").slice(0, 100) })),
     constraintAudit: payload.constraintAudit,
+    semanticStateTransition: compactSemanticStateTransition(payload.semanticStateTransition, {
+      textLimit: 160,
+      traceLimit: 3,
+    }),
     evidenceIds: evidenceIds.slice(0, 10),
   });
   if (prompt.length <= maxChars) return prompt;
 
-  return [
+  const minimalPrompt = [
     "仅依据上下文输出裁定 JSON；不得编造证据。",
-    JSON.stringify({ userQuery: String(payload.userQuery || "").slice(0, 80), evidenceIds: evidenceIds.slice(0, 5).map((item) => item.id) }),
-  ].join("\n").slice(0, maxChars);
+    JSON.stringify({
+      userQuery: String(payload.userQuery || "").slice(0, 80),
+      resolvedCards: (payload.resolvedCards || []).slice(0, 2).map((card) => ({
+        id: card.id,
+        name: card.name,
+        effectText: truncatePromptText(card.effectText, 80),
+      })),
+      semanticStateTransition: compactSemanticStateTransition(payload.semanticStateTransition, {
+        textLimit: 80,
+        traceLimit: 1,
+      }),
+      evidenceIds: evidenceIds.slice(0, 3).map((item) => item.id),
+    }),
+  ].join("\n");
+  return minimalPrompt.length <= maxChars
+    ? minimalPrompt
+    : minimalPrompt.slice(0, maxChars);
+}
+
+function compactSemanticStateTransition(state = {}, { textLimit = 360, traceLimit = 5 } = {}) {
+  if (!state || typeof state !== "object") return { status: "not_applicable", complete: false };
+  return {
+    status: state.status || "not_applicable",
+    complete: state.complete === true,
+    activation: compactPromptValue(state.activation, textLimit),
+    resolution: compactPromptValue(state.resolution, textLimit),
+    trace: (Array.isArray(state.trace) ? state.trace : []).slice(0, traceLimit).map((step) => ({
+      phase: step?.phase,
+      state: step?.state,
+      status: step?.status,
+      operation: compactPromptValue(step?.operation, Math.max(80, Math.floor(textLimit / 2))),
+      conclusion: truncatePromptText(step?.conclusion, textLimit),
+      evidenceIds: (step?.evidenceIds || []).slice(0, 6),
+      proof: compactPromptValue(step?.proof, textLimit),
+    })),
+    destinationReplacementTimeline: compactPromptValue(
+      state.destinationReplacementTimeline,
+      Math.max(textLimit, textLimit * 2),
+    ),
+    evidenceIds: (state.evidenceIds || []).slice(0, 10),
+  };
+}
+
+function compactPromptValue(value, maxChars) {
+  if (value === undefined || value === null) return null;
+  if (typeof value === "string") return truncatePromptText(value, maxChars);
+  if (typeof value !== "object") return value;
+  const serialized = JSON.stringify(value);
+  return serialized.length <= maxChars ? value : truncatePromptText(serialized, maxChars);
+}
+
+function truncatePromptText(value, maxChars) {
+  const text = String(value || "");
+  const limit = Math.max(1, Number(maxChars) || 1);
+  return text.length <= limit ? text : `${text.slice(0, Math.max(0, limit - 1))}…`;
 }
 
 function readNumber(value, fallback) {

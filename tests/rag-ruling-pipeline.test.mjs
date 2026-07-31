@@ -1719,7 +1719,7 @@ test("deepseek_empty_truncated_output_retries_with_compact_prompt", async () => 
       calls.push(JSON.parse(options.body));
       if (calls.length === 1) {
         return jsonResponse({
-          choices: [{ message: { content: "" }, finish_reason: "length" }],
+          choices: [{ message: { content: "", reasoning_content: "内部推理已耗尽首轮输出额度" }, finish_reason: "length" }],
           usage: { prompt_tokens: 100, completion_tokens: 321, total_tokens: 421 },
         });
       }
@@ -1732,13 +1732,84 @@ test("deepseek_empty_truncated_output_retries_with_compact_prompt", async () => 
 
   assert.equal(calls.length, 2);
   assert.equal(calls[1].messages[0].content, "紧凑恢复提示词");
-  assert.equal(calls[1].max_tokens, 4000);
+  assert.equal(calls[1].max_tokens, 8000);
   assert.equal(result.answer.shortAnswer, "恢复后的答案");
   assert.equal(result.tokenUsage.prompt_tokens, 140);
   assert.equal(result.tokenUsage.completion_tokens, 381);
   assert.ok(result.warnings.includes("deepseek_compact_recovery_succeeded"));
   assert.equal(result.warnings.some((warning) => warning.startsWith("deepseek_empty_content:")), false);
   assert.equal(result.warnings.includes("deepseek_output_truncated_by_token_limit"), false);
+  assert.deepEqual(result.generationAttempts.map((item) => item.finishReason), ["length", "stop"]);
+  assert.equal(result.generationAttempts[0].reasoningContentPresent, true);
+  assert.equal(result.generationAttempts[0].reasoningContentChars > 0, true);
+  assert.equal("reasoningContent" in result.generationAttempts[0], false);
+});
+
+test("deepseek_primary_and_compact_recovery_both_empty_fail_safely", async () => {
+  const calls = [];
+  const result = await callRagModel({
+    prompt: "原始长提示词",
+    recoveryPrompt: "紧凑恢复提示词",
+    env: {
+      MODEL_PROVIDER: "deepseek",
+      DEEPSEEK_API_KEY: "test-deepseek-key",
+      RAG_MAX_OUTPUT_TOKENS: "500",
+      API_DAILY_BUDGET_CNY: "10",
+    },
+    fetchImpl: async (_url, options) => {
+      calls.push(JSON.parse(options.body));
+      return jsonResponse({
+        choices: [{ message: { content: "", reasoning_content: "只产生了内部推理" }, finish_reason: "length" }],
+        usage: { prompt_tokens: 30, completion_tokens: calls.length === 1 ? 500 : 8000, total_tokens: calls.length === 1 ? 530 : 8030 },
+      });
+    },
+  });
+
+  assert.equal(calls.length, 2);
+  assert.equal(calls[1].max_tokens, 8000);
+  assert.ok(result.warnings.includes("deepseek_compact_recovery_attempted"));
+  assert.ok(result.warnings.includes("deepseek_compact_recovery_failed"));
+  assert.ok(result.warnings.includes("deepseek_compact_recovery_empty"));
+  assert.equal(result.warnings.includes("deepseek_compact_recovery_succeeded"), false);
+  assert.ok(result.answer.riskFlags.includes("model_json_parse_failed"));
+  assert.deepEqual(result.generationAttempts.map((item) => item.finishReason), ["length", "length"]);
+  assert.equal(result.generationAttempts.every((item) => item.reasoningContentPresent), true);
+});
+
+test("deepseek_compact_recovery_rejects_incomplete_json_even_when_nonempty", async () => {
+  const calls = [];
+  const result = await callRagModel({
+    prompt: "原始长提示词",
+    recoveryPrompt: "紧凑恢复提示词",
+    env: {
+      MODEL_PROVIDER: "deepseek",
+      DEEPSEEK_API_KEY: "test-deepseek-key",
+      RAG_MAX_OUTPUT_TOKENS: "500",
+      API_DAILY_BUDGET_CNY: "10",
+    },
+    fetchImpl: async (_url, options) => {
+      calls.push(JSON.parse(options.body));
+      if (calls.length === 1) {
+        return jsonResponse({
+          choices: [{ message: { content: "" }, finish_reason: "length" }],
+          usage: { prompt_tokens: 30, completion_tokens: 500, total_tokens: 530 },
+        });
+      }
+      return jsonResponse({
+        choices: [{
+          message: { content: "{\"answerLevel\":\"rule_analysis\",\"shortAnswer\":\"这段残缺结果不得采用\",\"reasoning\":[" },
+          finish_reason: "stop",
+        }],
+        usage: { prompt_tokens: 20, completion_tokens: 40, total_tokens: 60 },
+      });
+    },
+  });
+
+  assert.equal(calls.length, 2);
+  assert.ok(result.warnings.includes("deepseek_compact_recovery_failed"));
+  assert.ok(result.warnings.includes("deepseek_compact_recovery_invalid_json"));
+  assert.equal(result.warnings.includes("deepseek_compact_recovery_succeeded"), false);
+  assert.doesNotMatch(result.answer.shortAnswer, /这段残缺结果不得采用/u);
 });
 test("deepseek_provider_builds_request", async () => {
   const calls = [];
@@ -2030,7 +2101,49 @@ test("rag_prompt_truncates_context", () => {
   });
   assert.equal(bundle.prompt.length <= 1400, true);
   assert.ok(bundle.warnings.some((warning) => warning.includes("compacted")));
+  assert.equal(bundle.promptTruncated, true);
   assert.doesNotMatch(bundle.prompt, /上下文因 RAG_MAX_PROMPT_CHARS 限制被截断/u);
+});
+
+test("compact recovery prompt retains card effect text and semantic state transition", () => {
+  const bundle = buildRagRulingPromptBundle({
+    userQuery: "这个效果可以发动吗，后续如何处理？",
+    cardResolution: {
+      resolvedCards: [{
+        id: "recovery-card",
+        name: "恢复测试龙",
+        cardType: "monster",
+        effectText: "EFFECT_TEXT_RECOVERY_MARKER：舍弃1张手牌发动，处理时再检查场面。",
+      }],
+    },
+    evidence: {
+      cardTexts: [],
+      officialQaDirectCandidates: [],
+      officialQaRelated: [],
+      faqRelated: [],
+      rawRelatedEvidence: [],
+      retrievalWarnings: [],
+      semanticStateTransition: {
+        status: "resolved",
+        complete: true,
+        activation: { legal: true, conclusion: "发动合法" },
+        resolution: { legal: false, conclusion: "处理时后续步骤失败" },
+        trace: [{
+          phase: "resolution",
+          status: "blocked",
+          conclusion: "SEMANTIC_STATE_RECOVERY_MARKER：支付代价后重新计算持续效果。",
+          evidenceIds: ["rule-state-transition"],
+        }],
+        evidenceIds: ["rule-state-transition"],
+      },
+    },
+    env: { RAG_RECOVERY_PROMPT_CHARS: "12000" },
+  });
+
+  assert.match(bundle.recoveryPrompt, /EFFECT_TEXT_RECOVERY_MARKER/u);
+  assert.match(bundle.recoveryPrompt, /SEMANTIC_STATE_RECOVERY_MARKER/u);
+  assert.match(bundle.recoveryPrompt, /shortAnswer 不超过300字/u);
+  assert.match(bundle.recoveryPrompt, /reasoning 为2至5条/u);
 });
 
 test("compacted_prompt_keeps_each_critical_evidence_bucket", () => {
