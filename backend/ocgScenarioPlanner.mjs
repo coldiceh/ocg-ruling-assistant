@@ -6,8 +6,8 @@ const MONSTER_ZONE = 4;
 const SPELL_TRAP_ZONE = 8;
 
 export function autoEngineSimulationEnabled(env = {}) {
-  const enabled = !/^(?:0|false|off|disabled|no)$/iu.test(
-    String(env.RAG_AUTO_ENGINE_SIMULATION ?? "true").trim(),
+  const enabled = /^(?:1|true|on|enabled|yes)$/iu.test(
+    String(env.RAG_AUTO_ENGINE_SIMULATION ?? "false").trim(),
   );
   return enabled && Boolean(String(env.OCG_ENGINE_URL || "").trim());
 }

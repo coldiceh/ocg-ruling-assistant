@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { normalizeCardText } from "../backend/cardTextNormalizer.mjs";
-import { analyzeDeterministicOperationLegality } from "../backend/operationLegalityAnalyzer.mjs";
+import {
+  analyzeDeterministicOperationLegality,
+  OPERATION_PREMISE_SCHEMA_VERSION,
+} from "../backend/operationLegalityAnalyzer.mjs";
 import { analyzePrintedTextReferenceScenario } from "../backend/printedTextReferences.mjs";
 import { retrieveRulebookPassages } from "../backend/rulebookPassageRetriever.mjs";
 
@@ -76,15 +79,86 @@ test("generic rule query retrieves the printed-text definition passage", () => {
   assert.match(passage.text, /效果文本栏中记述作为卡名存在/u);
 });
 
-test("deterministic legality blocks activation when only copied text mentions the required name", () => {
+test("printed-text pattern remains an unknown candidate without typed premises", () => {
   const result = analyzeDeterministicOperationLegality({
     userQuery: question,
     cardTexts: [copyMonster, copiedSource, activationCard],
     ruleEvidence: [rule],
   });
-  assert.equal(result.hasBlockingCheck, true);
-  assert.equal(result.complete, true);
-  assert.match(result.shortAnswer, /^不能发动/u);
-  assert.match(result.shortAnswer, /不会改写其印刷文本/u);
+  const check = result.checks.find((item) => item.operationId === "printed-text-name-reference-activation-condition");
+  assert.equal(check?.status, "unknown");
+  assert.equal(check?.deterministicComplete, false);
+  assert.equal(result.hasBlockingCheck, false);
+  assert.equal(result.complete, false);
+  assert.match(result.shortAnswer, /不能确认/u);
   assert.equal(result.matchedRuleEvidence[0].id, rule.id);
+});
+
+test("printed-text candidate completes only with attested evidence-bound premises", () => {
+  const result = analyzeDeterministicOperationLegality({
+    userQuery: question,
+    cardTexts: [copyMonster, copiedSource, activationCard],
+    ruleEvidence: [rule],
+    typedPremises: {
+      schemaVersion: OPERATION_PREMISE_SCHEMA_VERSION,
+      attested: true,
+      facts: [{
+        predicate: "activation.requires_printed_name_reference",
+        value: true,
+        citations: [{ id: activationCard.id, quote: "记载有该卡名的怪兽" }],
+      }, {
+        predicate: "candidate.original_printed_text_contains_required_name",
+        value: false,
+        citations: [{ id: copyMonster.id, quote: "获得与该怪兽原本卡名・效果相同的卡名・效果" }],
+      }, {
+        predicate: "candidate.only_has_copied_name_or_effect",
+        value: true,
+        citations: [{ id: copyMonster.id, quote: "获得与该怪兽原本卡名・效果相同的卡名・效果" }],
+      }, {
+        predicate: "copy.modifies_receiver_printed_text",
+        value: false,
+        citations: [{ id: rule.id, quote: "效果文本栏中记述作为卡名存在" }],
+      }],
+    },
+  });
+  const check = result.checks.find((item) => item.operationId === "printed-text-name-reference-activation-condition");
+  assert.equal(check?.status, "illegal");
+  assert.equal(check?.deterministicComplete, true);
+  assert.equal(result.complete, true);
+  assert.equal(result.hasBlockingCheck, true);
+  assert.match(result.shortAnswer, /^不能发动/u);
+});
+
+test("attested premise labels without matching source quotes cannot complete", () => {
+  const result = analyzeDeterministicOperationLegality({
+    userQuery: question,
+    cardTexts: [copyMonster, copiedSource, activationCard],
+    ruleEvidence: [rule],
+    typedPremises: {
+      schemaVersion: OPERATION_PREMISE_SCHEMA_VERSION,
+      attested: true,
+      facts: [{
+        predicate: "activation.requires_printed_name_reference",
+        value: true,
+        citations: [{ id: activationCard.id, quote: "这段文字并不存在于证据中" }],
+      }, {
+        predicate: "candidate.original_printed_text_contains_required_name",
+        value: false,
+        citations: [{ id: "missing-evidence-id", quote: "不存在的证据" }],
+      }, {
+        predicate: "candidate.only_has_copied_name_or_effect",
+        value: true,
+        citations: [{ id: copyMonster.id, quote: "获得与该怪兽原本卡名・效果相同的卡名・效果" }],
+      }, {
+        predicate: "copy.modifies_receiver_printed_text",
+        value: false,
+        citations: [{ id: rule.id, quote: "效果文本栏中记述作为卡名存在" }],
+      }],
+    },
+  });
+  const check = result.checks.find((item) => item.operationId === "printed-text-name-reference-activation-condition");
+  assert.equal(check?.status, "unknown");
+  assert.equal(check?.deterministicComplete, false);
+  assert.equal(result.complete, false);
+  assert.ok(result.warnings.some((item) => /operation_premise_unbound/u.test(item)));
 });

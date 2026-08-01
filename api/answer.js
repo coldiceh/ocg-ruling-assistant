@@ -1,5 +1,3 @@
-import { answerQuestion } from "../backend/engine.mjs";
-import { answerRulingQuestionFast } from "../backend/fastJudgeEngine.mjs";
 import {
   createPublicAnswerModelEnv,
   getRagBudgetStatus,
@@ -42,35 +40,20 @@ export default async function handler(request, response) {
       mode,
       env: publicEnv,
     }).catch(() => null);
-    if (!["legacy", "fastjudge"].includes(mode)) {
-      const answer = await answerRagRulingQuestionForVersion({
-        rulingVersion: payload.rulingVersion,
-        question: payload.question,
-        env: envForModelTier(publicEnv, payload.modelTier),
-        engineScenario: payload.engineScenario,
-      });
-      await auditPromise;
-      response.status(200).json(answer);
-      return;
+    if (mode !== "rag") {
+      const error = new Error("Only the evidence-grounded RAG answer mode is public");
+      error.statusCode = 400;
+      error.code = "unsupported_answer_mode";
+      throw error;
     }
-    const useFastJudge = mode === "fastjudge";
-    const answer = useFastJudge
-      ? await answerRulingQuestionFast({
-          question: payload.question,
-          mode: "duel",
-          maxLatencyMs: 6000,
-          env: publicEnv,
-          gameState: payload.gameState || {},
-          chainLinks: Array.isArray(payload.chainLinks) ? payload.chainLinks : [],
-        })
-      : await answerQuestion(payload, { env: publicEnv });
-    await auditPromise;
-    response.status(200).json({
-      ...answer,
-      requestedRulingVersion: null,
-      effectiveRulingVersion: null,
-      rulingVersion: null,
+    const answer = await answerRagRulingQuestionForVersion({
+      rulingVersion: payload.rulingVersion,
+      question: payload.question,
+      env: envForModelTier(publicEnv, payload.modelTier),
+      engineScenario: payload.engineScenario,
     });
+    await auditPromise;
+    response.status(200).json(answer);
   } catch (error) {
     await auditPromise;
     response.status(error?.statusCode === 400 ? 400 : 500).json({
@@ -109,7 +92,7 @@ async function getModelInfo() {
       engineEnabled,
       enabled: true,
       pipeline: "rag_baseline",
-      legacyModes: ["legacy", "fastjudge"],
+      legacyModes: [],
     };
   }
 
@@ -127,7 +110,7 @@ async function getModelInfo() {
       engineEnabled,
       enabled: true,
       pipeline: "rag_baseline",
-      legacyModes: ["legacy", "fastjudge"],
+      legacyModes: [],
     };
   }
 
@@ -141,7 +124,7 @@ async function getModelInfo() {
     engineEnabled,
     enabled: false,
     pipeline: "rag_baseline",
-    legacyModes: ["legacy", "fastjudge"],
+    legacyModes: [],
   };
 }
 

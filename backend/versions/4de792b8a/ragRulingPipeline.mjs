@@ -12,7 +12,7 @@ import {
 import { buildRagRulingPromptBundle, RAG_ANSWER_LEVELS } from "./ragRulingPrompt.mjs";
 import { analyzeEffectStateTransition, attachUserQueryToCardTexts } from "./effectStateReasoner.mjs";
 import { hasNumberedCardIdentityConflict } from "./numberedCardIdentity.mjs";
-import { analyzeDeterministicOperationLegality } from "../../operationLegalityAnalyzer.mjs";
+import { analyzeDeterministicOperationLegality } from "./operationLegalityAnalyzer.mjs";
 
 export async function answerRagRulingQuestion({
   question,

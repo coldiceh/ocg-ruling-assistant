@@ -68,7 +68,7 @@ test("equivalent short and full questions retrieve the same governing FAQ withou
   }
 });
 
-test("both original B2B phrasings run through the same post-cost state simulation", async () => {
+test("both original B2B phrasings produce the same non-authoritative legacy simulation", async () => {
   const data = await loadRagData();
   for (const question of [shortQuestion, fullQuestion]) {
     const cardResolution = extractRagCards(question, { cards: data.cards, maxCards: 8 });
@@ -86,10 +86,14 @@ test("both original B2B phrasings run through the same post-cost state simulatio
       cardTexts: attachUserQueryToCardTexts(evidence.cardTexts, question),
     });
 
-    assert.equal(transition.status, "resolved", JSON.stringify(transition.debug));
-    assert.equal(transition.complete, true);
+    assert.equal(transition.status, "unknown", JSON.stringify(transition.debug));
+    assert.equal(transition.complete, false);
+    assert.equal(transition.authoritative, false);
+    assert.equal(transition.originalStatus, "resolved");
+    assert.equal(transition.authorityReason, "untrusted_semantic_inputs");
+    assert.ok(transition.authorityReasons.length > 0);
     assert.equal(transition.sourceDefinitionId, "19046");
-    assert.match(transition.shortAnswer, /^可以发动/u);
+    assert.match(transition.shortAnswer, /^条件式推演（不能作为完整裁定）/u);
     assert.match(transition.shortAnswer, /4\+4（合计8）/u);
     assert.match(transition.shortAnswer, /没有12星同步怪兽不影响/u);
   }

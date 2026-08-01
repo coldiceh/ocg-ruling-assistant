@@ -107,7 +107,7 @@ test("generic output separates replaced activation cost from the simultaneous ma
   );
 });
 
-test("full and recovery prompts require staged destination replacement reasoning", () => {
+test("full and recovery prompts require the same generic state-execution procedure", () => {
   const bundle = buildRagRulingPromptBundle({
     userQuery: "这个效果能否发动，代价与同批素材分别去哪里？",
     cardResolution: { resolvedCards: [] },
@@ -115,9 +115,10 @@ test("full and recovery prompts require staged destination replacement reasoning
   });
 
   for (const prompt of [bundle.prompt, bundle.recoveryPrompt]) {
-    assert.match(prompt, /原子批次/u);
-    assert.match(prompt, /载体此时仍|支付 cost 时载体仍/u);
-    assert.match(prompt, /cost.*实际去向/u);
-    assert.match(prompt, /最终(?:是否完成融合召唤|处理结果)/u);
+    assert.match(prompt, /通用(?:状态)?执行顺序/u);
+    assert.match(prompt, /手续或cost|执行手续、cost/u);
+    assert.match(prompt, /持续效果重算|重算持续效果/u);
+    assert.match(prompt, /诱发检查点|收集诱发候选/u);
+    assert.match(prompt, /移动归因|实际移动及归因/u);
   }
 });

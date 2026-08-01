@@ -73,15 +73,31 @@ export function evaluateRulingAnswer(corpusCase = {}, answer = {}) {
   const provider = answer.debug?.providerUsed || "";
   const model = answer.debug?.modelUsed || "";
   const rawDryRun = answer.debug?.dryRun === true;
+  const explicitNonDryRun = answer.debug?.dryRun === false;
   const mockExecution = /(?:^|[-_])mock(?:$|[-_])/iu.test(`${provider}-${model}`);
+  const nonLiveModel = /(?:^|[-_])(?:mock|local|none|deterministic)(?:$|[-_])/iu.test(`${provider}-${model}`);
+  const forbiddenModels = stringList(corpusCase.forbiddenModelUsed).map((item) => item.toLowerCase());
+  const policyViolations = [];
+  if (corpusCase.requireNonDryRun === true && !explicitNonDryRun) policyViolations.push("explicit_non_dry_run_required");
+  if (corpusCase.requireLiveModel === true && nonLiveModel) policyViolations.push("non_live_model_forbidden");
+  if (corpusCase.requireModelUsed === true && !String(provider).trim()) policyViolations.push("provider_used_marker_required");
+  if (corpusCase.requireModelUsed === true && !String(model).trim()) policyViolations.push("model_used_marker_required");
+  if (model && forbiddenModels.includes(String(model).toLowerCase())) policyViolations.push(`forbidden_model_used:${model}`);
   const execution = {
     // Deterministic local reasoning deliberately has debug.dryRun=true because
     // no external model was called. It is still a real computed ruling, not a
     // mock answer. Only mock-backed generations are excluded from pass counts.
     dryRun: rawDryRun && mockExecution,
     rawDryRun,
+    explicitNonDryRun,
     provider,
     model,
+    requireNonDryRun: corpusCase.requireNonDryRun === true,
+    requireModelUsed: corpusCase.requireModelUsed === true,
+    requireLiveModel: corpusCase.requireLiveModel === true,
+    forbiddenModels,
+    policyViolations,
+    policyStatus: policyViolations.length ? "fail" : "pass",
   };
   const expectedCardIds = stringList(corpusCase.expectedCardIds || corpusCase.cardIds);
   const expectedCardNames = stringList(corpusCase.expectedCardNames);
@@ -145,7 +161,8 @@ export function evaluateRulingAnswer(corpusCase = {}, answer = {}) {
   const correctness = evaluateCorrectness(corpusCase, answerText, officialQa);
   const hardFailure = cardResolution.status === "miss"
     || officialQa.status === "miss"
-    || correctness.status === "fail";
+    || correctness.status === "fail"
+    || execution.policyStatus === "fail";
   const needsReview = execution.dryRun
     || correctness.status === "needs_review"
     || cardResolution.status === "unresolved"

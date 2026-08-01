@@ -1,6 +1,38 @@
 # OCG 引擎接入
 
-规则助手可以调用独立项目 [coldiceh/ocg-sim-core](https://github.com/coldiceh/ocg-sim-core)。本机默认使用相邻目录 `游戏王游戏引擎`。配置 `OCG_ENGINE_URL` 后，普通问题会在卡片检索完成后自动生成一份尽力模拟场景并单独执行；请求显式传入 `engineScenario` 时仍以该场景为准。
+## 两条严格分离的路径
+
+当前规则助手同时保留两条接口，但权威边界不同：
+
+1. 旧 `/simulate` 是 YGOPro/native 兼容模拟，只用于轨迹、差分和调试，固定 `canConfirmOfficialRuling=false`。
+2. 正式规则内核只允许通过 `GET /formal/v1/capabilities` 与 `POST /formal/v1/analyze-scenario` 接入；绝不回退 `/simulate` 冒充形式证明。
+
+形式路径按以下顺序执行：题面和已解析卡片 → 只含 sourceSpan/状态事实/意图/查询的 `ScenarioDraft` → UTF-16、实体、效果定义和 Schema 绑定 → capability/version handshake → 形式分析 → 证明证书与独立 verifier → `formal_engine_proof` 证据 → 最终模型与答案门禁。sourceSpan 编码固定为 `UTF16_CODE_UNIT_HALF_OPEN`。
+
+启用影子模式：
+
+```text
+RAG_FORMAL_ENGINE_MODE=formal-shadow
+```
+
+影子模式仍保持公开问答可用。离线、超时、缺 capability、版本不匹配、Schema 错误、执行/搜索不完整、存在 unresolved semantics、证书无效或没有独立 verifier 时，逐查询结果保持 `UNKNOWN`；`UNKNOWN` 绝不转换成 `FALSE`。只有真实卡 fixture 与不含真实卡名的匿名同构 fixture 都通过后，校验成功的 TRUE/FALSE 才可约束最终答案。
+
+`ScenarioDraft` 不能包含 `banishedByCardEffect`、`summonLegal`、`triggerActivates`、`finalChainNumber` 等内核派生结论。高层 `TRY_SUMMON_PROCEDURE` 只是意图；底层 operation 必须由引擎根据已绑定 EffectDefinition 编译。
+
+### 当前精确阻塞项（2026-08-01）
+
+只读审计相邻引擎后确认：声明式模块和部分谓词已经存在，但 HTTP service 目前仍只暴露 `/health` 与 `/simulate`。因此规则助手侧客户端、Schema、planner、shadow 管线和 mock contract 已可用，真实正式请求仍会安全返回 `ENGINE_FORMAL_API_UNAVAILABLE`/`CAPABILITY_UNAVAILABLE`。引擎侧还需要：
+
+- 实现上述两个 formal HTTP 端点；
+- 发布与 capability 清单一致的版本号；
+- 提供可独立调用的公共 proof verifier；
+- 为所需 EffectDefinition 提供稳定的 card/effect binding；
+- 证明搜索、执行和响应分支完整，而不是仅执行调用方预先给出的 operation；
+- 完整覆盖移动 provenance、手续离场后的最终目的地、TriggerWindow 与公开区/手牌诱发顺序。
+
+本仓库不会复制这些规则语义，也不会为某道测试题伪造 TRUE。
+
+规则助手可以调用独立项目 [coldiceh/ocg-sim-core](https://github.com/coldiceh/ocg-sim-core)。本机默认使用相邻目录 `游戏王游戏引擎`。旧模拟默认不自动运行；显式设置 `RAG_AUTO_ENGINE_SIMULATION=true` 后，普通问题才会在卡片检索完成后生成一份尽力模拟场景并单独执行。请求显式传入 `engineScenario` 时仍以该场景为准。
 
 模拟器核心、ocgcore host、资源快照和卡片脚本均在 `ocg-sim-core` 维护。本仓库只保留 HTTP 客户端、API 适配层和联调启动脚本，不复制模拟器实现。
 
@@ -53,7 +85,7 @@ pnpm dev:with-engine
 }
 ```
 
-自动场景会标记 `bestEffort=true`。若某一步计划与真实 core prompt 不一致，引擎停止在该 prompt 并返回 `responseFailure` 和已执行的部分轨迹，不会把整次模拟丢弃。可用 `RAG_AUTO_ENGINE_SIMULATION=false` 关闭自动编译。
+自动场景会标记 `bestEffort=true`。若某一步计划与真实 core prompt 不一致，引擎停止在该 prompt 并返回 `responseFailure` 和已执行的部分轨迹，不会把整次模拟丢弃。自动编译默认关闭，只能用 `RAG_AUTO_ENGINE_SIMULATION=true` 显式开启。
 
 响应可以直接按操作和卡号描述，运行器会根据当前 core prompt 解析实际索引：
 
@@ -167,13 +199,14 @@ Invoke-RestMethod -Uri "$url/health" -Headers @{ Authorization = "Bearer $token"
 ```text
 OCG_ENGINE_URL=https://engine.example.com
 OCG_ENGINE_TOKEN=<同一条强随机令牌>
-RAG_AUTO_ENGINE_SIMULATION=true
+RAG_AUTO_ENGINE_SIMULATION=false
 OCG_ENGINE_TIMEOUT_MS=20000
 ```
 
 将 `OCG_ENGINE_TOKEN` 标记为 Sensitive。Vercel 环境变量只会进入新部署，因此保存后必须重新部署。可通过 `https://<规则助手域名>/api/engine` 检查 Vercel 到 sidecar 的健康状态。
 
-若暂时不部署，不要设置 `OCG_ENGINE_URL`；也可以显式设置 `RAG_AUTO_ENGINE_SIMULATION=false`。
+旧 `/simulate` 默认关闭。只有需要兼容轨迹或差分调试时才显式设置
+`RAG_AUTO_ENGINE_SIMULATION=true`；它仍然不参与最终裁定。
 
 ## 能力边界
 

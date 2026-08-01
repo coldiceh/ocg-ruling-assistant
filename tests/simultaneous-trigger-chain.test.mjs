@@ -327,7 +327,7 @@ test("current three-card wording produces the official public-C1 then hand-C2 se
   const conditionalCheck = withoutExecutionEvidence.checks.find((item) => (
     item.operationId === "simultaneous-public-then-private-trigger-chain"
   ));
-  assert.equal(conditionalCheck?.status, "conditional", JSON.stringify(withoutExecutionEvidence));
+  assert.equal(conditionalCheck?.status, "unknown", JSON.stringify(withoutExecutionEvidence));
   assert.match(conditionalCheck.conclusion, /实际移动来源确认/u);
 
   const result = analyzeDeterministicOperationLegality({

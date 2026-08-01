@@ -1,13 +1,13 @@
-import { compileRuleScenario } from "./ruleScenarioCompiler.mjs";
+import { compileRuleScenario } from "../../ruleScenarioCompiler.mjs";
 import {
   analyzePrintedTextReferenceScenario,
   isPrintedTextReferenceRule,
   selectPrintedTextReferenceRuleQuote,
-} from "./printedTextReferences.mjs";
+} from "../../printedTextReferences.mjs";
 import {
   isPublicThenPrivateTriggerRule,
   selectPublicThenPrivateTriggerQuotes,
-} from "./simultaneousTriggerChain.mjs";
+} from "../../simultaneousTriggerChain.mjs";
 
 export const OPERATION_LEGALITY_STATUSES = Object.freeze([
   "legal",
@@ -16,45 +16,12 @@ export const OPERATION_LEGALITY_STATUSES = Object.freeze([
   "unknown",
 ]);
 
-export const OPERATION_PREMISE_SCHEMA_VERSION = "operation-legality-premises/v1";
-
-const TYPED_PREMISE_REQUIREMENTS = Object.freeze({
-  simultaneousReplacement: Object.freeze([
-    ["destruction.simultaneous_for_both_players", true],
-    ["turn_player.identified", true],
-    ["replacement.first_application_by_turn_player", true],
-    ["replacement.first_application_removes_non_turn_carrier", true],
-    ["replacement.non_turn_carrier_present_after_first_application", false],
-  ]),
-  simultaneousReplacementFollowUp: Object.freeze([
-    ["replacement.original_target_destroyed", false],
-    ["follow_up.requires_original_target_destroyed", true],
-  ]),
-  printedTextReference: Object.freeze([
-    ["activation.requires_printed_name_reference", true],
-    ["candidate.original_printed_text_contains_required_name", false],
-    ["candidate.only_has_copied_name_or_effect", true],
-    ["copy.modifies_receiver_printed_text", false],
-  ]),
-  publicHandReveal: Object.freeze([
-    ["hand.actor_is_already_public", true],
-    ["activation.procedure_requires_reveal_own_hand", true],
-    ["reveal.already_public_can_satisfy_procedure", false],
-  ]),
-  mandatoryReturn: Object.freeze([
-    ["operation.mandatory_field_spell_trap_return", true],
-    ["operation.only_candidate_is_active_chain_card", true],
-    ["operation.active_chain_card_can_be_returned", false],
-  ]),
-});
-
 export function analyzeDeterministicOperationLegality({
   userQuery = "",
   cardTexts = [],
   ruleEvidence = [],
   movementEvents = [],
   branchWitness = null,
-  typedPremises = null,
 } = {}) {
   const normalizedCardTexts = (cardTexts || [])
     .filter((item) => item?.text)
@@ -64,16 +31,8 @@ export function analyzeDeterministicOperationLegality({
       type: item.type || "card_text",
       title: item.title || (item.cards || [])[0] || "卡片文本",
     }));
-  const scenarioInputEvidence = cleanText(userQuery)
-    ? [{
-      id: "scenario-input:user-query",
-      type: "scenario_input",
-      title: "题目给出的场面与操作",
-      text: String(userQuery),
-    }]
-    : [];
   const candidates = uniqueBy(
-    [...normalizedCardTexts, ...(ruleEvidence || []), ...scenarioInputEvidence].filter((item) => item?.id && item?.text),
+    [...normalizedCardTexts, ...(ruleEvidence || [])].filter((item) => item?.id && item?.text),
     (item) => String(item.id),
   );
   const scenario = compileRuleScenario({
@@ -100,12 +59,13 @@ export function analyzeDeterministicOperationLegality({
     userQuery,
     cardTexts: normalizedCardTexts,
     compiledScenario: scenario,
-    typedPremises,
   });
   const deterministicChecks = result.checks.filter((item) => item.deterministic === true);
   const completedChecks = deterministicChecks.filter((item) => item.deterministicComplete === true);
-  const preferred = completedChecks.find((item) => item.status === "illegal")
-    || completedChecks[0];
+  const preferred = result.checks.find((item) => item.operationId === "simultaneous-destruction-replacement-order" && item.deterministicComplete)
+    || result.checks.find((item) => item.operationId === "mandatory-spell-trap-return-applicability")
+    || completedChecks[0]
+    || deterministicChecks[0];
   return {
     ...result,
     deterministic: deterministicChecks.length > 0,
@@ -120,7 +80,6 @@ export function validateOperationLegalityModelOutput(raw, evidenceCandidates = [
   userQuery = "",
   cardTexts = [],
   compiledScenario = null,
-  typedPremises = null,
 } = {}) {
   const parsedModel = parseModelObject(raw);
   const parsed = parsedModel || {};
@@ -133,7 +92,6 @@ export function validateOperationLegalityModelOutput(raw, evidenceCandidates = [
     evidenceById.set(cleanText(originalId), item);
   }
   const warnings = parsedModel ? [] : ["evidence_grounding_invalid_json"];
-  const premiseContext = normalizeTypedPremiseContext(typedPremises, evidenceById, warnings);
   const constraintReviews = normalizeConstraintReviews(
     parsed.constraintReviews,
     evidenceById,
@@ -157,17 +115,16 @@ export function validateOperationLegalityModelOutput(raw, evidenceCandidates = [
   const evidenceDrivenBlockingChecks = deriveMandatoryOperationBlockingChecks(
     requiredConstraints,
     checks,
-    { userQuery, cardTexts, premiseContext },
+    { userQuery, cardTexts },
   );
   if (evidenceDrivenBlockingChecks.length) {
     checks = uniqueBy([...checks, ...evidenceDrivenBlockingChecks], checkKey);
-    warnings.push("operation_candidate_derived_from_combined_constraint_evidence");
+    warnings.push("operation_blocker_derived_from_combined_constraint_evidence");
   }
   const deterministicScenarioChecks = deriveDeterministicScenarioChecks(requiredConstraints, checks, {
     userQuery,
     cardTexts,
     compiledScenario,
-    premiseContext,
   });
   if (deterministicScenarioChecks.length) {
     checks = uniqueBy([...checks, ...deterministicScenarioChecks], checkKey);
@@ -177,10 +134,7 @@ export function validateOperationLegalityModelOutput(raw, evidenceCandidates = [
     .filter(isResolvedConstraintReview)
     .map((review) => review.evidenceId));
   const resolvedConstraintIdsFromChecks = new Set(checks.flatMap(resolvedConstraintCitationIds));
-  for (const check of checks.filter((item) => (
-    item.resolvesRequiredConstraint === true
-      && (item.deterministicComplete === true || item.constraintScopeComplete === true)
-  ))) {
+  for (const check of checks.filter((item) => item.resolvesRequiredConstraint === true)) {
     for (const citation of check.citations || []) resolvedConstraintIdsFromChecks.add(String(citation.id));
   }
   for (const evidenceId of resolvedConstraintIdsFromChecks) {
@@ -249,13 +203,13 @@ export function validateOperationLegalityModelOutput(raw, evidenceCandidates = [
 function deriveDeterministicScenarioChecks(
   requiredConstraints,
   existingChecks,
-  { userQuery, cardTexts, compiledScenario = null, premiseContext = null },
+  { userQuery, cardTexts, compiledScenario = null },
 ) {
   const scenario = compiledScenario || compileRuleScenario({ userQuery, cardTexts });
   const printedTextReference = analyzePrintedTextReferenceScenario({ userQuery, cardTexts });
   const checks = [
-    ...derivePublicHandRevealProcedureChecks(requiredConstraints, existingChecks, scenario, premiseContext),
-    ...derivePrintedTextReferenceChecks(requiredConstraints, existingChecks, printedTextReference, premiseContext),
+    ...derivePublicHandRevealProcedureChecks(requiredConstraints, existingChecks, scenario),
+    ...derivePrintedTextReferenceChecks(requiredConstraints, existingChecks, printedTextReference),
     ...deriveSimultaneousTriggerChainChecks(requiredConstraints, existingChecks, scenario),
   ];
   if (!scenario.simultaneousDestructionReplacement) return checks;
@@ -267,16 +221,7 @@ function deriveDeterministicScenarioChecks(
   const quote = String(rule.text || "").match(/同\s*1?\s*时点.{0,24}双方.{0,30}(?:代替破坏|破坏.{0,12}代替).{0,60}回合玩家.{0,18}先适用.{0,100}非回合玩家.{0,60}(?:不在场上存在|已经不在场上).{0,30}不适用[。]?/su)?.[0];
   if (!quote) return checks;
 
-  const premiseGate = evaluateTypedPremiseRequirements(
-    premiseContext,
-    [
-      ...TYPED_PREMISE_REQUIREMENTS.simultaneousReplacement,
-      ...(scenario.destructionDependentFollowUps.length > 0
-        ? TYPED_PREMISE_REQUIREMENTS.simultaneousReplacementFollowUp
-        : []),
-    ],
-  );
-  const complete = scenario.replacementSequenceComplete === true && premiseGate.complete;
+  const complete = scenario.replacementSequenceComplete === true;
   const citations = [{
     id: String(rule.id),
     quote,
@@ -307,36 +252,27 @@ function deriveDeterministicScenarioChecks(
     step: (existingChecks || []).length + checks.length + 1,
     action: "按回合玩家顺序逐个适用代替破坏并更新场面",
     legalityQuestion: "双方代替破坏效果在同一时点适用时如何决定顺序",
-    status: complete ? "legal" : "unknown",
+    status: complete ? "legal" : "conditional",
     conclusion: complete
       ? scenario.dependentSpecialSummonNotPerformed
         ? "回合玩家一方的代替破坏先适用，作为代替选中的非回合玩家怪兽被破坏；该卡离场后，其自身的降攻代替不再适用。原本选择的破坏对象没有被破坏，因此依赖该次破坏成功的后续特殊召唤不处理。"
         : "回合玩家一方的代替破坏先适用，作为代替选中的非回合玩家怪兽被破坏；该卡离场后，其自身的代替破坏效果不再适用。"
       : "先适用回合玩家的代替破坏并立即更新场面，再重新检查非回合玩家的效果载体；若该卡已不在场上，则非回合玩家的代替效果不适用。",
-    reasoning: complete
-      ? [
-        "两个不入连锁的代替处理不是在同一个旧场面中并行结算。",
-        "先完成回合玩家一方的代替，并立即把被选作替代的卡移出场上。",
-        "随后按新场面检查非回合玩家一方；效果载体已经离场，所以不能再用降攻等方式代替这次破坏。",
-        ...(scenario.dependentSpecialSummonNotPerformed
-          ? ["原破坏对象因第一次代替而没有被成功破坏，故以该破坏成功为前提的后续特殊召唤不处理。"]
-          : []),
-      ]
-      : [
-        "题面与卡文只用于发现可能相关的同时代替规则，不足以证明实际处理顺序和处理后的场面。",
-        "必须取得逐步状态事实及其来源后，才能判断第二个代替和依赖后续是否仍会处理。",
-      ],
-    citations: uniqueCitations([...citations.filter(Boolean), ...premiseGate.citations]),
+    reasoning: [
+      "两个不入连锁的代替处理不是在同一个旧场面中并行结算。",
+      "先完成回合玩家一方的代替，并立即把被选作替代的卡移出场上。",
+      "随后按新场面检查非回合玩家一方；效果载体已经离场，所以不能再用降攻等方式代替这次破坏。",
+      ...(scenario.dependentSpecialSummonNotPerformed
+        ? ["原破坏对象因第一次代替而没有被成功破坏，故以该破坏成功为前提的后续特殊召唤不处理。"]
+        : []),
+    ],
+    citations: citations.filter(Boolean),
     missingFacts: complete
       ? []
-      : [...new Set([
-        ...(scenario.turnPlayerKnown
-          ? ["第一个代替处理后，需按更新后的场面确认非回合玩家的效果载体是否仍存在。"]
-          : ["需要确认当前回合玩家及第一个代替处理后的场面。"]),
-        ...premiseGate.missingFacts,
-      ])],
-    candidateStatus: "legal",
-    resolvesRequiredConstraint: complete,
+      : scenario.turnPlayerKnown
+        ? ["第一个代替处理后，需按更新后的场面确认非回合玩家的效果载体是否仍存在。"]
+        : ["需要确认当前回合玩家及第一个代替处理后的场面。"],
+    resolvesRequiredConstraint: true,
     deterministic: true,
     deterministicComplete: complete,
   }];
@@ -406,7 +342,6 @@ function deriveSimultaneousTriggerChainChecks(requiredConstraints, existingCheck
     citations,
     missingFacts: complete ? [] : ["确认被除外事件的最终原因是否包含正在适用的卡片效果。"],
     resolvesRequiredConstraint: true,
-    constraintScopeComplete: complete,
     deterministic: true,
     // This check deliberately constrains the chain-building part only. The
     // caller still has to decide whether the preceding Special Summon method
@@ -415,7 +350,7 @@ function deriveSimultaneousTriggerChainChecks(requiredConstraints, existingCheck
   }];
 }
 
-function derivePrintedTextReferenceChecks(requiredConstraints, existingChecks, printedTextReference, premiseContext) {
+function derivePrintedTextReferenceChecks(requiredConstraints, existingChecks, printedTextReference) {
   if (!printedTextReference.activationBlocked) return [];
   const rule = (requiredConstraints || []).find((item) => isPrintedTextReferenceRule(item?.text));
   const quote = selectPrintedTextReferenceRuleQuote(rule?.text);
@@ -423,47 +358,34 @@ function derivePrintedTextReferenceChecks(requiredConstraints, existingChecks, p
   const receiverNames = printedTextReference.copyReceivers.map((item) => item.title).filter(Boolean);
   const receiverLabel = receiverNames.join("、") || "复制卡名与效果的怪兽";
   const requiredName = printedTextReference.requiredName;
-  const premiseGate = evaluateTypedPremiseRequirements(
-    premiseContext,
-    TYPED_PREMISE_REQUIREMENTS.printedTextReference,
-  );
-  const complete = premiseGate.complete;
   return [{
     operationId: "printed-text-name-reference-activation-condition",
     step: (existingChecks || []).length + 1,
     action: `检查${receiverLabel}自身印刷文本是否记述「${requiredName}」卡名`,
     legalityQuestion: "临时获得其他怪兽的卡名与效果，是否会改写自身卡面效果文本中的卡名记述",
-    status: complete ? "illegal" : "unknown",
-    conclusion: complete
-      ? `不能发动：${receiverLabel}自身的效果文本栏没有记述「${requiredName}」卡名；临时获得其他卡的卡名与效果不会改写其印刷文本，因此不属于“有「${requiredName}」卡名记述的怪兽”。`
-      : "检索到了“卡名记述应按原始印刷文本判断”的候选规则，但尚缺少完整且证据绑定的类型化前提，不能仅凭题面模板直接判定能否发动。",
-    reasoning: complete
-      ? [
-        "“有某卡名记述”检查的是该卡自身效果文本栏中印刷存在的卡名，而不是当前获得或适用中的效果内容。",
-        `${receiverLabel}原本卡文中的卡名引用不包含「${requiredName}」。`,
-        "复制或获得另一只怪兽的卡名与效果只改变当前适用的卡名・效果，不会把来源卡的文字写入这张卡自身的效果文本栏。",
-      ]
-      : [
-        "题面解析只发现了复制效果与卡名记述条件的候选关系。",
-        "仍须用带来源的类型化事实确认被检查卡的原始印刷文本及复制关系，不能从名称相似或题面措辞补造结论。",
-      ],
-    citations: uniqueCitations([{
+    status: "illegal",
+    conclusion: `不能发动：${receiverLabel}自身的效果文本栏没有记述「${requiredName}」卡名；临时获得其他卡的卡名与效果不会改写其印刷文本，因此不属于“有「${requiredName}」卡名记述的怪兽”。`,
+    reasoning: [
+      "“有某卡名记述”检查的是该卡自身效果文本栏中印刷存在的卡名，而不是当前获得或适用中的效果内容。",
+      `${receiverLabel}原本卡文中的卡名引用不包含「${requiredName}」。`,
+      "复制或获得另一只怪兽的卡名与效果只改变当前适用的卡名・效果，不会把来源卡的文字写入这张卡自身的效果文本栏。",
+    ],
+    citations: [{
       id: String(rule.id),
       quote,
       application: `题目要求以${receiverLabel}满足“有「${requiredName}」卡名记述的怪兽”这一发动条件，故应检查该怪兽自身的效果文本栏。`,
       type: cleanText(rule.type || rule.recordType || "rulebook"),
       title: cleanText(rule.title || rule.id),
       sourceUrl: cleanText(rule.sourceUrl || ""),
-    }, ...premiseGate.citations]),
-    missingFacts: complete ? [] : premiseGate.missingFacts,
-    candidateStatus: "illegal",
-    resolvesRequiredConstraint: complete,
+    }],
+    missingFacts: [],
+    resolvesRequiredConstraint: true,
     deterministic: true,
-    deterministicComplete: complete,
+    deterministicComplete: true,
   }];
 }
 
-function derivePublicHandRevealProcedureChecks(requiredConstraints, existingChecks, scenario, premiseContext) {
+function derivePublicHandRevealProcedureChecks(requiredConstraints, existingChecks, scenario) {
   if (!scenario.publicHandRevealProcedureBlocked) return [];
   const supportedOperation = (scenario.blockedRevealActivationOperations || [])
     .map((operation) => {
@@ -479,11 +401,6 @@ function derivePublicHandRevealProcedureChecks(requiredConstraints, existingChec
   const publicCard = scenario.continuousHandRevealCards.find((item) => item.id === publicSourceId);
   const activationCard = operation.card;
   const actorLabel = operation.actor === "opponent" ? "对方" : "我方";
-  const premiseGate = evaluateTypedPremiseRequirements(
-    premiseContext,
-    TYPED_PREMISE_REQUIREMENTS.publicHandReveal,
-  );
-  const complete = premiseGate.complete;
   const citations = [{
     id: String(rule.id),
     quote,
@@ -506,26 +423,18 @@ function derivePublicHandRevealProcedureChecks(requiredConstraints, existingChec
     step: (existingChecks || []).length + 1,
     action: `检查${actorLabel}把自己的手牌给另一方观看这一发动手续能否执行`,
     legalityQuestion: `${actorLabel}自己的手牌已经持续公开时，能否再次执行展示手牌的发动手续`,
-    status: complete ? "illegal" : "unknown",
-    conclusion: complete
-      ? `不能发动：${actorLabel}自己的手牌已经因其他效果持续公开，无法再执行展示自己手牌这一发动手续。`
-      : "检索到了“手牌已公开时不能再次完成展示手续”的候选规则，但尚缺少完整且证据绑定的类型化前提，不能仅凭题面模板直接判定能否发动。",
-    reasoning: complete
-      ? [
-        `先读取当前信息状态：${actorLabel}自己的手牌已经对另一方持续公开。`,
-        `再读取待发动效果的手续：${actorLabel}发动时必须展示自己的手牌。`,
-        "发动手续必须在入连锁前实际执行；已经公开的手牌不能再次完成该展示动作，因此发动不合法。",
-      ]
-      : [
-        "题面解析只发现了持续公开手牌与展示手牌手续的候选关系。",
-        "仍须用带来源的类型化事实确认受影响玩家、当前公开状态和发动手续，不能仅靠词语共现作出裁定。",
-      ],
-    citations: uniqueCitations([...citations, ...premiseGate.citations]),
-    missingFacts: complete ? [] : premiseGate.missingFacts,
-    candidateStatus: "illegal",
-    resolvesRequiredConstraint: complete,
+    status: "illegal",
+    conclusion: `不能发动：${actorLabel}自己的手牌已经因其他效果持续公开，无法再执行展示自己手牌这一发动手续。`,
+    reasoning: [
+      `先读取当前信息状态：${actorLabel}自己的手牌已经对另一方持续公开。`,
+      `再读取待发动效果的手续：${actorLabel}发动时必须展示自己的手牌。`,
+      "发动手续必须在入连锁前实际执行；已经公开的手牌不能再次完成该展示动作，因此发动不合法。",
+    ],
+    citations,
+    missingFacts: [],
+    resolvesRequiredConstraint: true,
     deterministic: true,
-    deterministicComplete: complete,
+    deterministicComplete: true,
   }];
 }
 
@@ -556,87 +465,6 @@ export function emptyOperationLegality(warnings = [], requiredConstraintEvidence
     warnings: [...new Set(warnings)],
     modelExtracted: false,
   };
-}
-
-function normalizeTypedPremiseContext(value, evidenceById, warnings) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return { valid: false, facts: new Map(), reason: "not_provided" };
-  }
-  if (cleanText(value.schemaVersion) !== OPERATION_PREMISE_SCHEMA_VERSION) {
-    warnings.push("operation_premises_invalid_schema");
-    return { valid: false, facts: new Map(), reason: "invalid_schema" };
-  }
-  if (value.attested !== true) {
-    warnings.push("operation_premises_not_attested");
-    return { valid: false, facts: new Map(), reason: "not_attested" };
-  }
-
-  const facts = new Map();
-  const conflictedPredicates = new Set();
-  for (const [index, item] of (Array.isArray(value.facts) ? value.facts : []).slice(0, 80).entries()) {
-    const predicate = cleanText(item?.predicate).slice(0, 160);
-    if (!predicate || typeof item?.value !== "boolean") {
-      warnings.push(`operation_premise_invalid_fact:${index + 1}`);
-      continue;
-    }
-    if (conflictedPredicates.has(predicate)) continue;
-    const citations = normalizeCitations(
-      item.citations || item.evidence,
-      evidenceById,
-      `typed-premise-${predicate}`,
-      warnings,
-    );
-    if (!citations.length) {
-      warnings.push(`operation_premise_unbound:${predicate}`);
-      continue;
-    }
-    const existing = facts.get(predicate);
-    if (existing && existing.value !== item.value) {
-      warnings.push(`operation_premise_conflict:${predicate}`);
-      facts.delete(predicate);
-      conflictedPredicates.add(predicate);
-      continue;
-    }
-    facts.set(predicate, {
-      predicate,
-      value: item.value,
-      citations: uniqueCitations([...(existing?.citations || []), ...citations]),
-    });
-  }
-  return {
-    valid: facts.size > 0,
-    facts,
-    reason: facts.size > 0 ? "verified" : "no_bound_facts",
-  };
-}
-
-function evaluateTypedPremiseRequirements(context, requirements) {
-  const missingFacts = [];
-  const citations = [];
-  for (const [predicate, expected] of requirements || []) {
-    const fact = context?.valid ? context.facts.get(predicate) : null;
-    if (!fact) {
-      missingFacts.push(`缺少已校验且绑定证据的类型化前提：${predicate}=${String(expected)}`);
-      continue;
-    }
-    if (fact.value !== expected) {
-      missingFacts.push(`类型化前提与候选规则要求不一致：${predicate} 应为 ${String(expected)}`);
-      continue;
-    }
-    citations.push(...fact.citations);
-  }
-  return {
-    complete: Boolean(context?.valid) && missingFacts.length === 0,
-    citations: uniqueCitations(citations),
-    missingFacts,
-  };
-}
-
-function uniqueCitations(values) {
-  return uniqueBy((values || []).filter(Boolean), (item) => [
-    cleanText(item.id),
-    cleanText(item.quote),
-  ].join("\u0000"));
 }
 
 function normalizeConstraintReviews(value, evidenceById, warnings) {
@@ -695,11 +523,7 @@ function constraintReviewToCheck(review, index) {
   };
 }
 
-function deriveMandatoryOperationBlockingChecks(requiredConstraints, existingChecks = [], {
-  userQuery = "",
-  cardTexts = [],
-  premiseContext = null,
-} = {}) {
+function deriveMandatoryOperationBlockingChecks(requiredConstraints, existingChecks = [], { userQuery = "", cardTexts = [] } = {}) {
   if ((existingChecks || []).some((check) => check.status === "illegal" && check.citations?.length)) return [];
   const hasScenarioInput = Boolean(cleanText(userQuery)) || (cardTexts || []).some((item) => cleanText(item?.text));
   if (hasScenarioInput) {
@@ -724,36 +548,22 @@ function deriveMandatoryOperationBlockingChecks(requiredConstraints, existingChe
     sourceUrl: cleanText(item.sourceUrl || ""),
   })).filter((item) => item.quote);
   if (!citations.length) return [];
-  const premiseGate = evaluateTypedPremiseRequirements(
-    premiseContext,
-    TYPED_PREMISE_REQUIREMENTS.mandatoryReturn,
-  );
-  const complete = premiseGate.complete;
 
   return [{
     operationId: "mandatory-spell-trap-return-applicability",
     step: index + 1,
     action: "检查必做的魔法・陷阱卡返回处理是否存在可适用卡",
     legalityQuestion: "一般发动时点满足后，必做处理在当前场面是否仍可成立",
-    status: complete ? "illegal" : "unknown",
-    conclusion: complete
-      ? "不能发动：题目明确没有其他可处理的魔法・陷阱卡，而当前正在发动或连锁处理中的非永续魔法・陷阱卡不能作为返回手牌处理的可适用卡，因此必做的返回处理无法成立。"
-      : "检索到了发动中卡片的位置限制和必做处理可行性规则，但尚缺少完整且证据绑定的类型化前提，不能仅凭题面模板直接判定不能发动。",
-    reasoning: complete
-      ? [
-        "满足对手发动魔法・陷阱卡这一时点，只能证明进入了发动时机，不能替代必做处理的可行性检查。",
-        "唯一候选受发动中卡片的位置移动限制，且题目排除了其他候选，所以该处理要求在发动时已经无法满足。",
-      ]
-      : [
-        "题面解析只发现了必做返回处理、当前连锁卡和候选数量之间的可能关系。",
-        "仍须用带来源的类型化事实确认处理是否必做、可适用卡集合以及当前连锁卡的位置限制。",
-      ],
-    citations: uniqueCitations([...citations, ...premiseGate.citations]),
-    missingFacts: complete ? [] : premiseGate.missingFacts,
-    candidateStatus: "illegal",
-    resolvesRequiredConstraint: complete,
+    status: "illegal",
+    conclusion: "不能发动：题目明确没有其他可处理的魔法・陷阱卡，而当前正在发动或连锁处理中的非永续魔法・陷阱卡不能作为返回手牌处理的可适用卡，因此必做的返回处理无法成立。",
+    reasoning: [
+      "满足对手发动魔法・陷阱卡这一时点，只能证明进入了发动时机，不能替代必做处理的可行性检查。",
+      "唯一候选受发动中卡片的位置移动限制，且题目排除了其他候选，所以该处理要求在发动时已经无法满足。",
+    ],
+    citations,
+    missingFacts: [],
     deterministic: true,
-    deterministicComplete: complete,
+    deterministicComplete: true,
   }];
 }
 
@@ -852,8 +662,7 @@ function normalizeCardIdentity(value) {
 function scenarioCardCitation(item, pattern, application) {
   if (!item?.id || !item?.text) return null;
   const match = String(item.text).match(pattern)?.[0];
-  if (!match) return null;
-  const quote = cleanText(match).slice(0, 500);
+  const quote = cleanText(match || item.text).slice(0, 500);
   if (quote.length < 4) return null;
   return {
     id: String(item.id),

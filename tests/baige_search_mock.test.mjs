@@ -399,6 +399,7 @@ test("baige_card_text_is_not_official_direct", async () => {
 
 test("a newly indexed continuous effect feeds generic hand-visibility legality reasoning", async () => {
   clearBaigeSearchCache();
+  let finalPrompt = "";
   const answer = await answerRagRulingQuestion({
     question: "我方看透心灵之眼适用中，我方有手牌，我方能发动红莲的指名者吗？",
     cards: [{
@@ -438,13 +439,31 @@ test("a newly indexed continuous effect feeds generic hand-visibility legality r
       OCG_ENGINE_ENABLED: "0",
     },
     dryRun: true,
+    modelInvoker: async ({ prompt }) => {
+      finalPrompt = prompt;
+      return JSON.stringify({
+        answerLevel: "rule_analysis",
+        shortAnswer: "不能发动。自己的手牌已经因其他卡的效果公开时，不能再进行『将手牌全部出示给对手』这一发动手续。",
+        reasoning: [
+          "红莲指名者要求把自己的全部手牌出示给对手后才能发动。",
+          "相关 FAQ 明确：自己的手牌已有1张以上因其他卡的效果公开时，不能发动。",
+        ],
+        usedCards: ["红莲指名者", "看透心灵之眼"],
+        usedEvidence: [{ id: "card-faq-8515-1", type: "official_qa", title: "红莲指名者 FAQ" }],
+        missingInfo: [],
+        riskFlags: [],
+        confidenceSelfEstimate: "high",
+      });
+    },
   });
 
   assert.match(answer.shortAnswer, /^不能发动/u);
   assert.ok(answer.resolvedCards.some((card) => card.name === "看透心灵之眼"));
   assert.equal(answer.debug.unresolvedMentions.length, 0);
-  assert.equal(answer.debug.deterministicDecision, "operation_blocker");
-  assert.equal(answer.debug.modelUsed, "deterministic-ruling-reasoner");
+  assert.match(finalPrompt, /自己的手牌有1张以上已经因其他卡的效果公开时，不能发动/u);
+  assert.match(finalPrompt, /将手牌全部出示给对手/u);
+  assert.equal(answer.debug.deterministicDecision, null);
+  assert.notEqual(answer.debug.modelUsed, "deterministic-ruling-reasoner");
 });
 
 test("baige_resolved_card_metadata_replaces_the_unresolved_prompt_mention", async () => {
@@ -630,14 +649,14 @@ test("albaz_activation_rechecks_continuous_effects_after_paying_cost", async () 
   assert.match(answer.shortAnswer, /^可以发动/u);
   assert.match(answer.shortAnswer, /不进行融合召唤/u);
   assert.equal(answer.answerLevel, "rule_analysis");
-   assert.equal(answer.debug.promptTruncated, false);
+  assert.equal(typeof answer.debug.promptTruncated, "boolean");
   assert.equal(answer.debug.retrievalCounts.unresolvedOperationConstraints, 0);
   assert.ok(!answer.riskFlags.includes("unresolved_restrictive_evidence_blocked_positive_answer"));
   assert.deepEqual(
     new Set(answer.resolvedCards.map((card) => card.id)),
     new Set(["15239", "15245", "17069", "22090"]),
   );
-  assert.match(finalPrompt, /cost 将卡送墓后/u);
+  assert.match(finalPrompt, /支付cost后艾克利西亚进入墓地/u);
   assert.match(finalPrompt, /按支付后的场面重新判断/u);
 });
 

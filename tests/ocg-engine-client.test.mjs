@@ -72,6 +72,7 @@ test("ordinary RAG question automatically submits a best-effort engine scenario"
     env: {
       MODEL_PROVIDER: "mock",
       OCG_ENGINE_URL: "http://127.0.0.1:8790",
+      RAG_AUTO_ENGINE_SIMULATION: "true",
       RAG_RULEBOOK_GROUNDING_ENABLED: "false",
     },
     modelInvoker: async () => JSON.stringify({

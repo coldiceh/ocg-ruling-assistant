@@ -26,7 +26,12 @@ const SELF_IN_MONSTER_ZONE = /(?:此卡|这张卡|這張卡|このカード|this
 const PER_PLAYER_SAME_RACE_LIMIT = /(?:双方|雙方|お互い|each player).{0,36}(?:各|それぞれ|only).{0,18}(?:1|１|一)(?:只|隻|体|體|枚)?.{0,24}(?:同种族|同種族|同じ種族|same Type).{0,24}(?:表侧|表側|face-up)/iu;
 const OPPONENT_GRAVE_TO_BANISHED = /(?:被送(?:往|去|至).{0,8}(?:对手|對手|对方|對方)墓地的卡.{0,18}(?:不去墓地|不会去墓地|不进入墓地).{0,12}除外|相手の墓地へ送られるカード.{0,24}墓地へは行かず除外|cards?.{0,24}sent to your opponent(?:'s)? (?:GY|Graveyard).{0,24}banish)/iu;
 
-export function analyzeDuelStateTransition({
+export function analyzeDuelStateTransition(input = {}) {
+  const result = analyzeDuelStateTransitionInternal(input);
+  return enforceReasonerAuthorityBoundary(result);
+}
+
+function analyzeDuelStateTransitionInternal({
   userQuery = "",
   resolvedCards = [],
   cardTexts = [],
@@ -473,6 +478,9 @@ export function compileResolvedCardPrograms(resolvedCards = [], cardTexts = []) 
           sharedRestrictionText,
           activationRequirementText: activationRequirement(blockText),
           ...(!materialPool ? { compileIncompleteReason: "fusion_material_pool_not_compiled" } : {}),
+          ...(fusionSemanticSource === "legacy_pattern" || discardSemanticSource === "legacy_pattern"
+            ? { compileIncompleteReason: "legacy_pattern_semantics_not_authoritative" }
+            : {}),
           trigger: hasSummonTrigger ? { type: "source_event", event: "summoned" } : null,
           costSpec: discardSemanticSource ? {
             type: "discard_from_hand",
@@ -535,6 +543,9 @@ export function compileResolvedCardPrograms(resolvedCards = [], cardTexts = []) 
           semanticSource: normalizedMandatorySpecialSummonOutputs.length >= 2
             ? "card_text_ir"
             : "legacy_pattern",
+          ...(normalizedMandatorySpecialSummonOutputs.length >= 2
+            ? {}
+            : { compileIncompleteReason: "legacy_pattern_semantics_not_authoritative" }),
           sharedRestrictionText,
           activationRequirementText: activationRequirement(blockText),
           mandatorySpecialSummonOutputs,
@@ -632,6 +643,9 @@ export function compileResolvedCardPrograms(resolvedCards = [], cardTexts = []) 
           effectCategory,
           effectCategoryBasis: effectCategoryInference.basis,
           semanticSource: raceLimitSemanticSource,
+          ...(raceLimitSemanticSource === "legacy_pattern"
+            ? { compileIncompleteReason: "legacy_pattern_semantics_not_authoritative" }
+            : {}),
           activeWhen: { zone: activeZone, faceUp: true },
           fieldRestrictions: [{
             type: "max_face_up_monsters_per_race_per_player",
@@ -666,6 +680,9 @@ export function compileResolvedCardPrograms(resolvedCards = [], cardTexts = []) 
             faceUp: true,
           },
           semanticSource: destinationReplacementSemanticSource,
+          ...(destinationReplacementSemanticSource === "legacy_pattern"
+            ? { compileIncompleteReason: "legacy_pattern_semantics_not_authoritative" }
+            : {}),
           destinationReplacements: [createDestinationReplacement({
             id: "opponent-grave-to-banished",
             intendedToZone: normalizedDestinationReplacement?.intendedZone || "graveyard",
@@ -2905,6 +2922,80 @@ function zoneLabel(value) {
   if (value === "monster_zone") return "怪兽区域";
   if (value === "hand") return "手牌";
   return value || "未知区域";
+}
+
+function enforceReasonerAuthorityBoundary(result) {
+  if (!result || result.complete !== true) return result;
+  const authorityReasons = collectUntrustedAuthorityReasons(result);
+  if (!authorityReasons.length) return result;
+  const originalShortAnswer = String(result.shortAnswer || "").trim();
+  return {
+    ...result,
+    status: "unknown",
+    complete: false,
+    authoritative: false,
+    conditional: true,
+    authorityReason: "untrusted_semantic_inputs",
+    authorityReasons,
+    originalStatus: result.status,
+    originalComplete: true,
+    shortAnswer: originalShortAnswer
+      ? `条件式推演（不能作为完整裁定）：${originalShortAnswer}`
+      : "当前只能给出条件式推演，不能据此形成完整裁定。",
+  };
+}
+
+function collectUntrustedAuthorityReasons(value) {
+  const reasons = new Set();
+  const seen = new Set();
+  const identifierKeys = new Set([
+    "cardId",
+    "instanceId",
+    "definitionId",
+    "sourceCardId",
+    "sourceInstanceId",
+    "sourceDefinitionId",
+    "candidateInstanceId",
+    "candidateInstanceIds",
+    "cardInstanceIds",
+    "boundInstanceIds",
+  ]);
+
+  const visit = (current, key = "") => {
+    if (current === null || current === undefined) return;
+    if (typeof current === "string") {
+      if (current === "legacy_pattern") reasons.add("legacy_pattern_semantics");
+      if (key === "effectCategoryBasis" && current.startsWith("question_")) {
+        reasons.add("question_inferred_effect_category");
+      }
+      if (identifierKeys.has(key) && /(?:^|[#:_-])symbolic(?:[-:#]|$)/iu.test(current)) {
+        reasons.add("synthetic_entity_or_material");
+      }
+      if ((key === "activationBasis" || key === "activationEvidenceType")
+          && /symbolic|assumption/iu.test(current)) {
+        reasons.add("synthetic_or_assumed_activation_basis");
+      }
+      return;
+    }
+    if (typeof current !== "object" || seen.has(current)) return;
+    seen.add(current);
+    if (Array.isArray(current)) {
+      current.forEach((item) => visit(item, key));
+      return;
+    }
+    for (const [childKey, childValue] of Object.entries(current)) {
+      visit(childValue, childKey);
+    }
+  };
+
+  visit(value);
+  if (String(value.activationAssumption || "").trim()) {
+    reasons.add("explicit_activation_assumption");
+  }
+  if ((value.trace || []).some((entry) => entry?.phase === "compile_symbolic_assumption")) {
+    reasons.add("synthetic_entity_or_material");
+  }
+  return [...reasons];
 }
 
 function incomplete(reason, extra = {}) {

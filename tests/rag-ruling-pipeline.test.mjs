@@ -99,7 +99,7 @@ test("rag_pipeline_returns_answer_with_mock_model", async () => {
   assert.equal(answer.debug.dryRun, false);
 });
 
-test("activation-only Albaz question keeps activation legal but blocks resolution after Ecclesia cost", async () => {
+test("final reasoner receives the Albaz evidence without a local answer override", async () => {
   const scenarioCards = [
     {
       id: "15245",
@@ -155,10 +155,10 @@ test("activation-only Albaz question keeps activation legal but blocks resolutio
     rulebookModelInvoker: async () => JSON.stringify({ operationChecks: [], constraintReviews: [] }),
     modelInvoker: async () => JSON.stringify({
       answerLevel: "rule_analysis",
-      shortAnswer: "可以发动并融合召唤冰剑龙 幻冰龙。",
-      reasoning: ["错误地沿用了 cost 支付前的场面。", "错误地认为素材仍受效果影响。"],
+      shortAnswer: "可以发动，但是支付 cost 后吞喰圣痕之龙开始不受这次效果影响，因此处理时不进行融合召唤。",
+      reasoning: ["发动前存在合法素材组合。", "支付 cost 后重新检查持续抗性，处理时已没有可用的完整素材组合。"],
       usedCards: scenarioCards.map((card) => card.name),
-      usedEvidence: [],
+      usedEvidence: [{ id: response.id, type: "official_response_screenshot", title: response.title }],
       missingInfo: [],
       riskFlags: [],
       confidenceSelfEstimate: "medium",
@@ -167,16 +167,13 @@ test("activation-only Albaz question keeps activation legal but blocks resolutio
 
   assert.equal(answer.answerLevel, "rule_analysis");
   assert.match(answer.shortAnswer, /^可以发动/u);
-  assert.match(answer.shortAnswer, /不会进行任何效果处理/u, JSON.stringify(answer.debug.semanticStateTransition));
-  assert.match(answer.shortAnswer, /因此不进行融合召唤。$/u);
+  assert.match(answer.shortAnswer, /支付 cost 后/u);
+  assert.match(answer.shortAnswer, /不进行融合召唤。$/u);
   assert.equal(answer.debug.retrievalCounts.provisionalOfficialResponses, 1);
-  assert.ok(answer.riskFlags.includes("provisional_official_response"));
-  assert.ok(answer.riskFlags.includes("semantic_state_transition_applied"));
+  assert.ok(!answer.riskFlags.includes("provisional_official_response"));
+  assert.ok(!answer.riskFlags.includes("semantic_state_transition_applied"));
   assert.equal(answer.riskFlags.includes("answer_constrained_by_provisional_official_response"), false);
-  assert.deepEqual(
-    answer.debug.semanticStateTransition.trace.map((step) => step.phase),
-    ["activation_check", "pay_activation_cost", "stabilize_continuous_effects", "resolve_effect_operation"],
-  );
+  assert.equal(answer.debug.semanticStateTransition, null);
   assert.equal(answer.usedEvidence[0].type, "official_response_screenshot");
 });
 
@@ -581,7 +578,7 @@ test("legacy state reasoning also keeps cost and operation inside the same effec
 
   assert.equal(result.status, "not_applicable", JSON.stringify(result));
   assert.equal(result.complete, false);
-  assert.equal(result.reason, "declared_cost_not_part_of_selected_effect");
+  assert.equal(result.reason, "legacy_pattern_semantics_not_authoritative");
 });
 
 test("numbered identities require a token boundary and validate an explicit name suffix", () => {
@@ -1043,7 +1040,7 @@ test("operation_legality_plans_rule_queries_without_rule_evidence_but_does_not_o
   assert.ok(!answer.riskFlags.includes("operation_legality_blocker_applied"));
 });
 
-test("rag_pipeline_applies_operation_legality_blocker_from_retrieved_rule_evidence", async () => {
+test("final reasoner uses retrieved restrictive evidence without a local blocker override", async () => {
   const answer = await answerRagRulingQuestion({
     question: "对方场上有「绚岚之达维」，我方以达维为对象发动「无限泡影」，这个时候场上没有其他魔陷，对方能不能发动「天雷之双风神」的效果？",
     cards: thunderImpermanenceCards(),
@@ -1069,10 +1066,10 @@ test("rag_pipeline_applies_operation_legality_blocker_from_retrieved_rule_eviden
     }),
     modelInvoker: async () => JSON.stringify({
       answerLevel: "rule_analysis",
-      shortAnswer: "可以发动并把无限泡影返回手卡。",
-      reasoning: ["模型错误地把正在发动的通常陷阱当作可返回的场上魔陷。"],
+      shortAnswer: "不能发动。无限泡影正在发动中，不能作为返回手卡处理的可适用卡，且题面没有其他魔法・陷阱卡。",
+      reasoning: ["一般诱发条件满足，但必做的返回处理没有可适用卡。"],
       usedCards: ["无限泡影", "天雷之双风神 息那"],
-      usedEvidence: [{ id: "card-text-13631", type: "card_text", title: "无限泡影 的卡片文本" }],
+      usedEvidence: [{ id: "rule-activated-normal-spell-trap-cannot-return#p1-1", type: "rulebook", title: "发动中的通常魔陷不能返回手卡" }],
       missingInfo: [],
       riskFlags: [],
       confidenceSelfEstimate: "medium",
@@ -1082,13 +1079,12 @@ test("rag_pipeline_applies_operation_legality_blocker_from_retrieved_rule_eviden
   assert.match(answer.shortAnswer, /无限泡影/u);
   assert.equal(answer.answerLevel, "rule_analysis");
   assert.equal(answer.debug.retrievalCounts.operationLegalityChecks, 1);
-  assert.ok(answer.usedEvidence.some((item) => item.type === "rulebook" && item.id.includes("operation-check")));
   assert.ok(answer.usedEvidence.some((item) => item.id === "rule-activated-normal-spell-trap-cannot-return#p1-1"));
-  assert.ok(answer.riskFlags.includes("operation_legality_blocker_applied"));
-  assert.ok(answer.riskFlags.includes("model_answer_overridden_by_operation_legality"));
+  assert.ok(!answer.riskFlags.includes("operation_legality_blocker_applied"));
+  assert.ok(!answer.riskFlags.includes("model_answer_overridden_by_operation_legality"));
 });
 
-test("generic_legal_grounding_is_overridden_by_combined_mandatory_operation_evidence", async () => {
+test("final reasoner can reject a generic trigger answer after reading restrictive evidence", async () => {
   const genericFaq = {
     id: "card-faq-22130-generic-trigger",
     recordType: "card-faq",
@@ -1124,10 +1120,10 @@ test("generic_legal_grounding_is_overridden_by_combined_mandatory_operation_evid
     },
     modelInvoker: async () => JSON.stringify({
       answerLevel: "rule_analysis",
-      shortAnswer: "可以发动。",
-      reasoning: ["场上有风属性怪兽。", "对方发动了通常陷阱。"],
+      shortAnswer: "不能发动。虽然一般诱发条件满足，但场上没有能完成必做返回处理的魔法・陷阱卡。",
+      reasoning: ["正在发动的通常陷阱不能由这个处理返回手卡。"],
       usedCards: ["绚岚之达维", "无限泡影", "天雷之双风神 息那"],
-      usedEvidence: [{ id: genericFaq.id, type: "faq", title: genericFaq.title }],
+      usedEvidence: [{ id: "rule-activated-normal-spell-trap-cannot-return#p1-1", type: "rulebook", title: "发动中的通常魔陷不能返回手卡" }],
       missingInfo: [],
       riskFlags: [],
       confidenceSelfEstimate: "medium",
@@ -1137,12 +1133,11 @@ test("generic_legal_grounding_is_overridden_by_combined_mandatory_operation_evid
   assert.match(groundingPrompt, /priorityConstraintCandidates/u);
   assert.match(groundingPrompt, /rule-activated-normal-spell-trap-cannot-return#p1-1/u);
   assert.match(answer.shortAnswer, /不能发动/u);
-  assert.equal(answer.debug.retrievalCounts.unresolvedOperationConstraints, 0);
-  assert.ok(answer.riskFlags.includes("operation_legality_blocker_applied"));
-  assert.ok(answer.riskFlags.includes("model_answer_overridden_by_operation_legality"));
+  assert.ok(!answer.riskFlags.includes("operation_legality_blocker_applied"));
+  assert.ok(!answer.riskFlags.includes("model_answer_overridden_by_operation_legality"));
 });
 
-test("empty_rulebook_grounding_uses_combined_constraint_evidence_to_block_yes", async () => {
+test("raw restrictive evidence remains visible when the preparation model is empty", async () => {
   let finalPrompt = "";
   const answer = await answerRagRulingQuestion({
     question: "对方场上有「绚岚之达维」，我方以达维为对象发动「无限泡影」，这个时候场上没有其他魔陷，对方能不能发动「天雷之双风神」的效果？",
@@ -1158,10 +1153,10 @@ test("empty_rulebook_grounding_uses_combined_constraint_evidence_to_block_yes", 
       finalPrompt = prompt;
       return JSON.stringify({
         answerLevel: "rule_analysis",
-        shortAnswer: "可以发动。",
-        reasoning: ["只检查了一般诱发条件。"],
+        shortAnswer: "不能发动。场上没有能完成必做返回处理的魔法・陷阱卡。",
+        reasoning: ["最终模型直接核对了规则原文，而不是采用空的准备模型结论。"],
         usedCards: ["无限泡影", "天雷之双风神 息那"],
-        usedEvidence: [],
+        usedEvidence: [{ id: "rule-activated-normal-spell-trap-cannot-return#p1-1", type: "rulebook", title: "发动中的通常魔陷不能返回手卡" }],
         missingInfo: [],
         riskFlags: [],
         confidenceSelfEstimate: "medium",
@@ -1170,12 +1165,12 @@ test("empty_rulebook_grounding_uses_combined_constraint_evidence_to_block_yes", 
   });
 
   assert.match(finalPrompt, /発動中の通常魔法・通常罠カードはその処理で手札に戻せません/u);
-  assert.match(finalPrompt, /"hasBlockingCheck": true/u);
+  assert.match(finalPrompt, /"hasBlockingCheck": false/u);
+  assert.match(finalPrompt, /"hasUnresolvedConstraints": true/u);
   assert.match(answer.shortAnswer, /不能发动/u);
-  assert.equal(answer.debug.retrievalCounts.unresolvedOperationConstraints, 0);
-  assert.ok(answer.riskFlags.includes("operation_legality_blocker_applied"));
+  assert.ok(!answer.riskFlags.includes("operation_legality_blocker_applied"));
 });
-test("grounded_constraint_review_overrides_generic_trigger_faq", async () => {
+test("final reasoner reconciles a grounded restriction with a generic trigger FAQ", async () => {
   const genericFaq = {
     id: "card-faq-22130-generic-trigger-reviewed",
     recordType: "card-faq",
@@ -1215,10 +1210,10 @@ test("grounded_constraint_review_overrides_generic_trigger_faq", async () => {
     }),
     modelInvoker: async () => JSON.stringify({
       answerLevel: "rule_analysis",
-      shortAnswer: "可以发动。",
-      reasoning: ["一般诱发条件满足。", "可以直接连锁。"],
+      shortAnswer: "不能发动。一般诱发条件虽满足，但题面没有其他可返回的魔法・陷阱卡。",
+      reasoning: ["正在发动中的无限泡影不能返回手卡，所以必做处理无法完成。"],
       usedCards: ["绚岚之达维", "无限泡影", "天雷之双风神 息那"],
-      usedEvidence: [{ id: genericFaq.id, type: "faq", title: genericFaq.title }],
+      usedEvidence: [{ id: "rule-activated-normal-spell-trap-cannot-return#p1-1", type: "rulebook", title: "发动中的通常魔陷不能返回手卡" }],
       missingInfo: [],
       riskFlags: [],
       confidenceSelfEstimate: "medium",
@@ -1227,12 +1222,11 @@ test("grounded_constraint_review_overrides_generic_trigger_faq", async () => {
 
   assert.match(answer.shortAnswer, /不能发动/u);
   assert.match(answer.shortAnswer, /没有其他/u);
-  assert.equal(answer.debug.retrievalCounts.unresolvedOperationConstraints, 0);
-  assert.ok(answer.riskFlags.includes("operation_legality_blocker_applied"));
-  assert.ok(answer.riskFlags.includes("model_answer_overridden_by_operation_legality"));
+  assert.ok(!answer.riskFlags.includes("operation_legality_blocker_applied"));
+  assert.ok(!answer.riskFlags.includes("model_answer_overridden_by_operation_legality"));
 });
 
-test("focused_constraint_fallback_blocks_wrong_answer_after_primary_timeout", async () => {
+test("focused preparation fallback still leaves the final verdict to the final reasoner", async () => {
   const tasks = [];
   const answer = await answerRagRulingQuestion({
     question: "对方场上有「绚岚之达维」，我方以达维为对象发动「无限泡影」，这个时候场上没有其他魔陷，对方能不能发动「天雷之双风神」的效果？",
@@ -1261,10 +1255,10 @@ test("focused_constraint_fallback_blocks_wrong_answer_after_primary_timeout", as
     },
     modelInvoker: async () => JSON.stringify({
       answerLevel: "rule_analysis",
-      shortAnswer: "可以发动并把无限泡影返回手卡。",
-      reasoning: ["只检查了一般诱发条件。"],
+      shortAnswer: "不能发动。无限泡影正在发动中且没有其他可返回的魔法・陷阱卡。",
+      reasoning: ["最终模型使用了 focused preparation 提供的逐字规则证据。"],
       usedCards: ["无限泡影", "天雷之双风神 息那"],
-      usedEvidence: [],
+      usedEvidence: [{ id: "rule-activated-normal-spell-trap-cannot-return#p1-1", type: "rulebook", title: "发动中的通常魔陷不能返回手卡" }],
       missingInfo: [],
       riskFlags: [],
       confidenceSelfEstimate: "medium",
@@ -1274,11 +1268,10 @@ test("focused_constraint_fallback_blocks_wrong_answer_after_primary_timeout", as
   assert.deepEqual(tasks, ["rulebook_grounding", "rulebook_constraint_repair"]);
   assert.match(answer.shortAnswer, /不能发动/u);
   assert.doesNotMatch(answer.shortAnswer, /^可以发动/u);
-  assert.equal(answer.debug.retrievalCounts.unresolvedOperationConstraints, 0);
   assert.ok(answer.debug.rulebookGroundingWarnings.includes("rulebook_grounding_focused_fallback_applied"));
   assert.ok(answer.debug.rulebookGroundingWarnings.includes("rulebook_grounding_primary_failed:rulebook_grounding_model_timeout"));
-  assert.ok(answer.riskFlags.includes("operation_legality_blocker_applied"));
-  assert.ok(answer.riskFlags.includes("model_answer_overridden_by_operation_legality"));
+  assert.ok(!answer.riskFlags.includes("operation_legality_blocker_applied"));
+  assert.ok(!answer.riskFlags.includes("model_answer_overridden_by_operation_legality"));
 });
 
 test("rulebook_grounding_rejects_unknown_ids_and_non_verbatim_quotes", async () => {
@@ -1379,7 +1372,7 @@ test("qa_evidence_can_ground_operation_checks_without_rulebook", async () => {
   assert.equal(result.operationLegality.evidence[0].type, "operation_check");
 });
 
-test("empty_model_output_falls_back_to_qa_grounded_operation_answer", async () => {
+test("empty final-model output degrades safely instead of using a prepared answer", async () => {
   const scenarioCards = [
     {
       id: "10820",
@@ -1425,14 +1418,12 @@ test("empty_model_output_falls_back_to_qa_grounded_operation_answer", async () =
     modelInvoker: async () => "",
   });
 
-  assert.match(answer.shortAnswer, /可以发动/u);
-  assert.doesNotMatch(answer.shortAnswer, /没有可用的模型 JSON/u);
-  assert.ok(answer.usedEvidence.some((item) => item.id === faqRecord.id && item.type === "faq"));
-  assert.ok(answer.usedEvidence.some((item) => /yugioh-card\.com/u.test(item.sourceUrl)));
-  assert.ok(answer.riskFlags.includes("final_model_failed_using_grounded_operation_analysis"));
+  assert.doesNotMatch(answer.shortAnswer, /可以发动/u);
+  assert.match(answer.shortAnswer, /未确认分析|没有可用的模型 JSON/u);
+  assert.ok(!answer.riskFlags.includes("final_model_failed_using_grounded_operation_analysis"));
 });
 
-test("exact_scenario_grounding_constrains_the_entire_effect_resolution", async () => {
+test("final reasoner uses exact scenario evidence for the entire effect resolution", async () => {
   const cards = [
     {
       id: "10820",
@@ -1479,8 +1470,8 @@ test("exact_scenario_grounding_constrains_the_entire_effect_resolution", async (
     }),
     modelInvoker: async () => JSON.stringify({
       answerLevel: "rule_analysis",
-      shortAnswer: "可以选择为对象并取除素材，但枪王不受后续效果影响，会留在场上。",
-      reasoning: ["取除素材后不处理返回额外卡组。"],
+      shortAnswer: "可以选择为对象。处理时先取除全部X素材，抗性立即不再适用，因此枪王正常回到额外卡组。",
+      reasoning: ["素材取除不是对怪兽适用的处理。", "失去素材后永续抗性不再适用，继续处理返回额外卡组。"],
       usedCards: ["超量叠光延迟", "No.86 英豪冠军 击灭枪王"],
       usedEvidence: [{ id: exactPassageId, type: "rulebook", title: exactRule.title }],
       missingInfo: [],
@@ -1491,7 +1482,7 @@ test("exact_scenario_grounding_constrains_the_entire_effect_resolution", async (
 
   assert.match(answer.shortAnswer, /枪王正常回到额外卡组/u);
   assert.doesNotMatch(answer.shortAnswer, /留在场上/u);
-  assert.ok(answer.riskFlags.includes("answer_constrained_by_exact_scenario_evidence"));
+  assert.ok(!answer.riskFlags.includes("answer_constrained_by_exact_scenario_evidence"));
 });
 
 test("rulebook_context_snippet_enters_rag_context", async () => {
@@ -2208,6 +2199,11 @@ test("unique exact official QA uses a focused complete-answer route", async () =
     cards: directCards,
     records: [],
     qaRecords: [directQa],
+    env: {
+      RAG_FORMAL_ENGINE_MODE: "formal-shadow",
+      RAG_AUTO_ENGINE_SIMULATION: "false",
+      OCG_ENGINE_URL: "http://formal.test",
+    },
     rulebookModelInvoker: async () => {
       rulebookModelCalled = true;
       throw new Error("exact official QA must skip broad rulebook grounding");
@@ -2234,6 +2230,7 @@ test("unique exact official QA uses a focused complete-answer route", async () =
   assert.ok(answer.usedEvidence.some((item) => item.id === directQa.id && item.type === "official_qa"));
   assert.match(answer.shortAnswer, /本回合不能再次宣言/u);
   assert.ok(answer.reasoning.some((item) => /本回合不能再次宣言/u.test(item)));
+  assert.ok(answer.reasoning.some((item) => /形式规则内核本次未签发确定性证明/u.test(item)));
   assert.ok(answer.riskFlags.includes("official_direct_evidence_enforced"));
   assert.ok(answer.debug.retrievalWarnings.includes("official_direct_focused_prompt"));
 
@@ -2410,7 +2407,7 @@ function jsonResponse(payload, ok = true, status = 200) {
 }
 
 
-test("stardust_chain_uses_inline_linked_official_qa_and_blocks_wrong_model_answer", async () => {
+test("final reasoner uses inline-linked official QA for the Stardust chain", async () => {
   const scenarioCards = [
     {
       id: "4678",
@@ -2476,10 +2473,10 @@ test("stardust_chain_uses_inline_linked_official_qa_and_blocks_wrong_model_answe
     },
     modelInvoker: async () => JSON.stringify({
       answerLevel: "rule_analysis",
-      shortAnswer: "可以在C3发动星尘龙。",
-      reasoning: ["鲜花之女男爵会破坏羽毛扫。", "星尘龙可以对应破坏效果。"],
+      shortAnswer: "不能在C3发动星尘龙。羽毛扫的卡的发动被无效后不再视为场上的卡，因此男爵的处理不属于破坏场上的卡。",
+      reasoning: ["星尘龙要求直接连锁会破坏场上卡片的效果。", "官方Q&A明确该场景不满足。"],
       usedCards: ["神鹰羽毛扫", "鲜花之女男爵", "星尘龙"],
-      usedEvidence: [],
+      usedEvidence: [{ id: qaRecord.id, type: "faq", title: qaRecord.title }],
       missingInfo: [],
       riskFlags: [],
       confidenceSelfEstimate: "medium",
@@ -2487,14 +2484,14 @@ test("stardust_chain_uses_inline_linked_official_qa_and_blocks_wrong_model_answe
   });
 
   assert.match(groundingPrompt, /ygoresources-qa-11290/u);
-  assert.match(answer.shortAnswer, /不能发动星尘龙/u);
+  assert.match(answer.shortAnswer, /不能(?:在C3)?发动星尘龙/u);
   assert.doesNotMatch(answer.shortAnswer, /可以在C3发动/u);
-  assert.ok(answer.reasoning.some((item) => /不再视为场上的卡/u.test(item)));
+  assert.match(answer.shortAnswer, /不再视为场上的卡/u);
   assert.ok(answer.usedEvidence.some((item) => item.id === qaRecord.id));
-  assert.ok(answer.riskFlags.includes("model_answer_overridden_by_operation_legality"));
+  assert.ok(!answer.riskFlags.includes("model_answer_overridden_by_operation_legality"));
 });
 
-test("fully_cited_multi_card_operation_analysis_constrains_partial_resolution", async () => {
+test("final reasoner follows cited multi-card operation order", async () => {
   const mediusText = "此卡存在于墓地的情况下可以发动。从自己手牌・场上（表侧表示）将1只怪兽放回牌组，将此卡特殊召唤。";
   const bystialText = "以自己或对手墓地的1只光・暗属性怪兽为对象可以发动。将该怪兽除外，从手牌将此卡特殊召唤。";
   const answer = await answerRagRulingQuestion({
@@ -2552,10 +2549,13 @@ test("fully_cited_multi_card_operation_analysis_constrains_partial_resolution", 
     }),
     modelInvoker: async () => JSON.stringify({
       answerLevel: "rule_analysis",
-      shortAnswer: "不需要。墨迪乌斯离开墓地后整个效果不处理。",
-      reasoning: ["效果处理时发动源不在原位置。"],
+      shortAnswer: "仍要将1只怪兽放回牌组，但墨迪乌斯已经被除外，之后不能再特殊召唤它。",
+      reasoning: ["先处理卡文写在前面的回牌组。", "发动源离开原位置不会自动取消不依赖其位置的前段处理。"],
       usedCards: ["无垢者 墨迪乌斯", "渊兽 玛格纳姆特"],
-      usedEvidence: [],
+      usedEvidence: [
+        { id: "card-text-21419", type: "card_text", title: "无垢者 墨迪乌斯 的卡片文本" },
+        { id: "card-text-17762", type: "card_text", title: "渊兽 玛格纳姆特 的卡片文本" },
+      ],
       missingInfo: [],
       riskFlags: [],
       confidenceSelfEstimate: "medium",
@@ -2564,14 +2564,14 @@ test("fully_cited_multi_card_operation_analysis_constrains_partial_resolution", 
 
   assert.match(answer.shortAnswer, /仍要将1只怪兽放回牌组/u);
   assert.match(answer.shortAnswer, /不能再特殊召唤/u);
-  assert.ok(answer.reasoning.some((item) => /回牌组处理/u.test(item)));
-  assert.ok(answer.riskFlags.includes("answer_constrained_by_exact_scenario_evidence"));
+  assert.ok(answer.reasoning.some((item) => /回牌组/u.test(item)));
+  assert.ok(!answer.riskFlags.includes("answer_constrained_by_exact_scenario_evidence"));
   assert.ok(answer.usedEvidence.some((item) => item.id === "card-text-21419"));
   assert.ok(answer.usedEvidence.some((item) => item.id === "card-text-17762"));
 });
 
 
-test("target_protection_and_unaffected_status_are_checked_separately", async () => {
+test("final reasoner keeps target protection separate from unaffected status", async () => {
   const scenarioCards = [
     {
       id: "17451",
@@ -2640,10 +2640,10 @@ test("target_protection_and_unaffected_status_are_checked_separately", async () 
     }),
     modelInvoker: async () => JSON.stringify({
       answerLevel: "rule_analysis",
-      shortAnswer: "不能发动，因为枪王不受魔法效果影响。",
-      reasoning: ["枪王不受效果，所以不能成为效果对象。", "超量叠光延迟无法适用。"],
+      shortAnswer: "不能发动，因为淘气精灵限制对手玩家把其链接端怪兽选为效果对象；不是因为枪王不受魔法效果影响。",
+      reasoning: ["对象选择限制适用于对手玩家。", "不受效果影响与不能成为对象是两个不同检查。"],
       usedCards: ["No.86 英豪冠军 击灭枪王", "超量叠光延迟"],
-      usedEvidence: [{ id: encoreFaq.id, type: "faq", title: encoreFaq.title }],
+      usedEvidence: [{ id: elfFaq.id, type: "faq", title: elfFaq.title }],
       missingInfo: [],
       riskFlags: [],
       confidenceSelfEstimate: "medium",
@@ -2651,7 +2651,7 @@ test("target_protection_and_unaffected_status_are_checked_separately", async () 
   });
 
   assert.match(answer.shortAnswer, /淘气精灵限制对手玩家/u);
-  assert.doesNotMatch(answer.shortAnswer, /枪王不受魔法效果影响/u);
-  assert.ok(answer.reasoning.some((item) => /不是枪王的不受效果影响/u.test(item)));
+  assert.match(answer.shortAnswer, /不是因为枪王不受魔法效果影响/u);
+  assert.match(answer.shortAnswer, /不是因为枪王不受魔法效果影响/u);
   assert.ok(answer.usedEvidence.some((item) => item.id === elfFaq.id));
 });

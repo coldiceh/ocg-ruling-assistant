@@ -773,6 +773,50 @@ test("rag_displays_simulator_output_as_a_separate_result", async () => {
   assert.match(app, /status !== "completed" \|\| !simulation/u);
 });
 
+test("rag UI presents every formal query without turning UNKNOWN into a negative", async () => {
+  const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
+  const helperSource = sourceBetween(
+    app,
+    "function publicFormalQueryLines",
+    "function publicRiskLines",
+  );
+  const publicFormalQueryLines = new Function(
+    `${helperSource}; return publicFormalQueryLines;`,
+  )();
+
+  const lines = publicFormalQueryLines([
+    { queryId: "q1", claimText: "第一问", verdict: "TRUE", trusted: true },
+    { queryId: "q2", claimText: "第二问", verdict: "FALSE", trusted: true },
+    {
+      queryId: "q3",
+      claimText: "第三问",
+      verdict: "UNKNOWN",
+      trusted: false,
+      unknownReasons: [{ code: "MISSING_STATE_FACT" }],
+    },
+    {
+      queryId: "q4",
+      claimText: "第四问",
+      verdict: "TRUE",
+      trusted: false,
+      conditional: true,
+      assumptions: [{ assumptionId: "a1", type: "OPPONENT_PASSES_PRIORITY" }],
+    },
+  ]);
+
+  assert.equal(lines.length, 4);
+  assert.match(lines[0], /TRUE（证明已验证）/u);
+  assert.match(lines[1], /FALSE（证明已验证）/u);
+  assert.match(lines[2], /UNKNOWN（尚未得出结论，不等于“不能”）/u);
+  assert.match(lines[2], /原因码：MISSING_STATE_FACT/u);
+  assert.doesNotMatch(lines[2], /不能发动|不能特殊召唤/u);
+  assert.match(lines[3], /UNKNOWN/u);
+  assert.match(lines[3], /条件分析所用假设：OPPONENT_PASSES_PRIORITY/u);
+  assert.match(app, /\.\.\.publicFormalQueryLines\(answer\.formalQueryResults \|\| \[\]\)/u);
+  assert.match(app, /type === "formal_engine_proof"\) return "形式规则验证"/u);
+  assert.match(app, /formal_engine_unknown: "形式规则内核本次未签发确定性证明；这不等于“不能”。"/u);
+});
+
 function sourceBetween(source, startMarker, endMarker) {
   const start = source.indexOf(startMarker);
   const end = source.indexOf(endMarker, start + startMarker.length);

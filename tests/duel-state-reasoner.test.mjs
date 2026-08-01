@@ -444,6 +444,10 @@ test("program compilation consumes normalized card-text IR before legacy semanti
   const legacyFusion = byId("legacy-fusion-source").activatedEffects
     .find((effect) => effect.actionTags.includes("fusion_summon"));
   assert.equal(legacyFusion.semanticSources.fusionSummon, "legacy_pattern");
+  assert.equal(
+    legacyFusion.compileIncompleteReason,
+    "legacy_pattern_semantics_not_authoritative",
+  );
 });
 
 test("program compilation consumes normalized mandatory outputs and grouped field limits", () => {
@@ -486,7 +490,7 @@ test("program compilation consumes normalized mandatory outputs and grouped fiel
   });
 });
 
-test("generic symbolic simulation resolves a fusion cost and simultaneous material movement", () => {
+test("generic symbolic fusion preserves its trace but is conditional rather than complete", () => {
   const result = analyzeDuelStateTransition({
     userQuery: "当对方场上存在「墓地改道兽」时，自己仍然可以发动「融合术式」吗？如果发动时丢弃手牌，并将对方的「墓地改道兽」和自己场上的怪兽作为融合素材，卡片分别去哪里？",
     resolvedCards: [
@@ -505,8 +509,11 @@ test("generic symbolic simulation resolves a fusion cost and simultaneous materi
     ],
   });
 
-  assert.equal(result.status, "resolved", JSON.stringify(result));
-  assert.equal(result.complete, true);
+  assert.equal(result.status, "unknown", JSON.stringify(result));
+  assert.equal(result.complete, false);
+  assert.equal(result.authoritative, false);
+  assert.equal(result.conditional, true);
+  assert.ok(result.authorityReasons.includes("synthetic_entity_or_material"));
   assert.equal(result.activation, "legal");
   assert.equal(result.activationAssumption, "valid_fusion_material_configuration");
   assert.equal(result.symbolicMaterialBranch, "replacement_carrier_used_as_material");
@@ -645,7 +652,7 @@ test("a numbered subtitle cannot choose arbitrarily when one identity maps to mu
   assert.ok(result.unresolvedMentions.length || result.ambiguousMentions.length);
 });
 
-test("both original user phrasings resolve all cards and use the deterministic simulation end to end", async () => {
+test("both original user phrasings resolve all cards while the final model owns the verdict", async () => {
   const data = await loadRagData();
   for (const [questionIndex, question] of originalUserQuestions.entries()) {
     const cardResolution = extractRagCards(question, { cards: data.cards, maxCards: 8 });
@@ -701,6 +708,7 @@ test("both original user phrasings resolve all cards and use the deterministic s
       "defense",
     );
 
+    let finalPrompt = "";
     const answer = await answerRagRulingQuestion({
       question,
       cards: data.cards,
@@ -714,6 +722,22 @@ test("both original user phrasings resolve all cards and use the deterministic s
       },
       cardModelInvoker: async () => JSON.stringify({ cardNames: [] }),
       ruleModelInvoker: async () => JSON.stringify({ queries: [] }),
+      modelInvoker: async ({ prompt }) => {
+        finalPrompt = prompt;
+        return JSON.stringify({
+          answerLevel: "rule_analysis",
+          shortAnswer: "按题设已经完成展示等发动手续，C1可以发动。C2处理后，C1发动源在守备表示，因此C1效果被无效，不进行这个连锁项的效果处理。",
+          reasoning: [
+            "题面已经把C1记载为发动完成，不能在处理阶段倒推为未发动。",
+            "连锁逆算时先处理C2，再依据更新后的场面处理C1；此时持续无效效果适用。",
+          ],
+          usedCards: ["No.41 泥睡魔兽 酣睡貘", "VS 狂爱博士", "龙帝 瓦利乌斯"],
+          usedEvidence: [],
+          missingInfo: [],
+          riskFlags: [],
+          confidenceSelfEstimate: "high",
+        });
+      },
       fetchImpl: async () => new Response(JSON.stringify({ result: [], next: 0 }), {
         status: 200,
         headers: { "content-type": "application/json" },
@@ -726,9 +750,11 @@ test("both original user phrasings resolve all cards and use the deterministic s
     assert.match(answer.shortAnswer, /被无效/u);
     assert.match(answer.shortAnswer, /不进行这个连锁项的效果处理/u);
     assert.doesNotMatch(answer.shortAnswer, /不会把怪兽返回手牌/u);
-    assert.equal(answer.debug.semanticStateTransition.status, "resolved");
-    assert.equal(answer.debug.deterministicDecision, "state_transition");
-    assert.equal(answer.debug.modelUsed, "deterministic-ruling-reasoner");
+    assert.match(finalPrompt, /no\.41/iu);
+    assert.match(finalPrompt, /vs狂魔博士|对击斗魂 狂恋博士/iu);
+    assert.equal(answer.debug.semanticStateTransition, null);
+    assert.equal(answer.debug.deterministicDecision, null);
+    assert.notEqual(answer.debug.modelUsed, "deterministic-ruling-reasoner");
   }
 });
 
@@ -1095,22 +1121,17 @@ function runNo41ColdStart(question) {
     "  env: { RAG_PROVIDER: 'mock', RAG_MODEL_PROVIDER: 'mock', MODEL_PROVIDER: 'mock', OCG_ENGINE_ENABLED: '0', OCG_ENGINE_AUTO_SIMULATION: 'false' },",
     "  cardModelInvoker: async () => JSON.stringify({ cardNames: [] }),",
     "  ruleModelInvoker: async () => JSON.stringify({ queries: [] }),",
+    "  modelInvoker: async () => JSON.stringify({ answerLevel: 'rule_analysis', shortAnswer: '按题设已经完成展示等发动手续，C1可以发动。C2处理后，C1效果被无效，不进行这个连锁项的效果处理。', reasoning: ['先处理C2，再按更新后的场面处理C1。'], usedCards: [], usedEvidence: [], missingInfo: [], riskFlags: [], confidenceSelfEstimate: 'high' }),",
     "  fetchImpl: async () => new Response(JSON.stringify({ result: [], next: 0 }), { status: 200, headers: { 'content-type': 'application/json' } }),",
     "});",
     "const transition = answer.debug.semanticStateTransition;",
-    "const card = (state, id) => state.cards.find((item) => item.definitionId === id);",
     "process.stdout.write(JSON.stringify({",
     "  ids: answer.resolvedCards.map((item) => item.id),",
     "  unresolved: answer.debug.unresolvedMentions,",
     "  decision: answer.debug.deterministicDecision,",
     "  modelUsed: answer.debug.modelUsed,",
     "  shortAnswer: answer.shortAnswer,",
-    "  status: transition.status, complete: transition.complete, activation: transition.activation, resolution: transition.resolution,",
-    "  initialDoctor: card(transition.program.initialState, '18730'),",
-    "  prepared: transition.program.preparedChainLinks.map((link) => ({ id: link.id, sourceDefinitionId: link.sourceDefinitionId, snapshot: link.activationSnapshot })),",
-    "  snapshots: transition.program.stateSnapshots.map((item) => ({ stage: item.stage, chainLink: item.chainLink || '' })),",
-    "  finalDoctor: card(transition.program.finalState, '18730'),",
-    "  finalValius: card(transition.program.finalState, '18732'),",
+    "  transition,",
     "}));",
   ].join("\n");
   const child = spawnSync(process.execPath, ["--input-type=module", "--eval", script], {
@@ -1124,42 +1145,22 @@ function runNo41ColdStart(question) {
   return JSON.parse(child.stdout.trim().split(/\r?\n/u).at(-1));
 }
 
-test("the original No.41 wording resolves from a genuinely cold process with the complete timeline", () => {
+test("the original No.41 wording resolves cards in a cold process and delegates the verdict", () => {
   const result = runNo41ColdStart(originalUserQuestions[0]);
 
   for (const id of ["13163", "18730", "18732"]) assert.equal(result.ids.includes(id), true, id);
   assert.deepEqual(result.unresolved, []);
-  assert.equal(result.decision, "state_transition");
-  assert.equal(result.modelUsed, "deterministic-ruling-reasoner");
-  assert.equal(result.status, "resolved");
-  assert.equal(result.complete, true);
-  assert.equal(result.activation, "assumed_legal");
-  assert.equal(result.resolution, "negated");
-  assert.equal(result.initialDoctor.position, "unknown");
-  assert.equal(result.prepared.find((link) => link.id === "C1").snapshot.sourcePosition, "defense");
-  assert.equal(result.prepared.find((link) => link.id === "C2").snapshot.sourceZone, "hand");
-  assert.deepEqual(result.snapshots, [
-    { stage: "before_chain_activation", chainLink: "C1" },
-    { stage: "after_chain_activation", chainLink: "C1" },
-    { stage: "before_chain_activation", chainLink: "C2" },
-    { stage: "after_chain_activation", chainLink: "C2" },
-    { stage: "before_chain_resolution", chainLink: "" },
-    { stage: "after_chain_link", chainLink: "C2" },
-    { stage: "after_chain_link", chainLink: "C1" },
-  ]);
-  assert.equal(result.finalDoctor.zone, "hand");
-  assert.equal(result.finalValius.zone, "monster_zone");
-  assert.equal(result.finalValius.position, "defense");
-  assert.match(result.shortAnswer, /进入发动窗口前/u);
+  assert.equal(result.decision, null);
+  assert.notEqual(result.modelUsed, "deterministic-ruling-reasoner");
+  assert.equal(result.transition, null);
   assert.match(result.shortAnswer, /C1可以发动/u);
   assert.match(result.shortAnswer, /C2/u);
   assert.match(result.shortAnswer, /被无效/u);
   assert.match(result.shortAnswer, /不进行这个连锁项的效果处理/u);
   assert.doesNotMatch(result.shortAnswer, /不会把怪兽返回手牌/u);
-  assert.match(result.shortAnswer, /守备力最低/u);
 });
 
-test("generic state simulation recomputes field-modified levels after materials are paid as cost", () => {
+test("generic post-cost simulation keeps its arithmetic trace but is conditional with synthetic materials", () => {
   const modifierId = "fictional-level-modifier";
   const sourceId = "fictional-post-cost-source";
   const result = analyzeDuelStateTransition({
@@ -1177,8 +1178,11 @@ test("generic state simulation recomputes field-modified levels after materials 
     }],
   });
 
-  assert.equal(result.status, "resolved", JSON.stringify(result.debug));
-  assert.equal(result.complete, true);
+  assert.equal(result.status, "unknown", JSON.stringify(result.debug));
+  assert.equal(result.complete, false);
+  assert.equal(result.authoritative, false);
+  assert.equal(result.conditional, true);
+  assert.ok(result.authorityReasons.includes("synthetic_entity_or_material"));
   assert.equal(result.activation, "legal");
   assert.equal(result.sourceDefinitionId, sourceId);
   assert.match(result.shortAnswer, /3\+3（合计6）/u);

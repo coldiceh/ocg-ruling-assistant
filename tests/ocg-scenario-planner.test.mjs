@@ -80,9 +80,13 @@ test("best_effort_engine_scenario_distinguishes_effect_source_target_and_opponen
   ));
 });
 
-test("automatic_engine_simulation_can_be_disabled", () => {
+test("automatic_engine_simulation_is_opt_in", () => {
   assert.equal(autoEngineSimulationEnabled({}), false);
-  assert.equal(autoEngineSimulationEnabled({ OCG_ENGINE_URL: "http://127.0.0.1:8790" }), true);
+  assert.equal(autoEngineSimulationEnabled({ OCG_ENGINE_URL: "http://127.0.0.1:8790" }), false);
+  assert.equal(autoEngineSimulationEnabled({
+    OCG_ENGINE_URL: "http://127.0.0.1:8790",
+    RAG_AUTO_ENGINE_SIMULATION: "true",
+  }), true);
   assert.equal(autoEngineSimulationEnabled({
     OCG_ENGINE_URL: "http://127.0.0.1:8790",
     RAG_AUTO_ENGINE_SIMULATION: "false",

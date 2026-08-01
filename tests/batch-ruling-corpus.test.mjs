@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
+import { loadRagData } from "../backend/ragEvidenceRetriever.mjs";
+import { answerRagRulingQuestion } from "../backend/ragRulingPipeline.mjs";
 import {
   buildBatchSummary,
   evaluateRulingAnswer,
@@ -192,6 +195,91 @@ test("a deterministic local ruling is evaluated as a real answer even when no mo
   assert.equal(evaluation.execution.dryRun, false);
 });
 
+test("corpus execution gates reject dry runs and forbidden deterministic answerers", () => {
+  const corpusCase = {
+    question: "可以发动吗？",
+    expectedAnswer: "可以发动。",
+    requireNonDryRun: true,
+    requireModelUsed: true,
+    requireLiveModel: true,
+    forbiddenModelUsed: ["deterministic-ruling-reasoner"],
+  };
+  const dryRun = evaluateRulingAnswer(corpusCase, {
+    shortAnswer: "可以发动。",
+    debug: {
+      dryRun: true,
+      providerUsed: "local",
+      modelUsed: "deterministic-ruling-reasoner",
+      retrievalCounts: {},
+      unresolvedMentions: [],
+      ambiguousMentions: [],
+    },
+  });
+  assert.equal(dryRun.overall, "fail");
+  assert.deepEqual(dryRun.execution.policyViolations, [
+    "explicit_non_dry_run_required",
+    "non_live_model_forbidden",
+    "forbidden_model_used:deterministic-ruling-reasoner",
+  ]);
+
+  const missingModelMarker = evaluateRulingAnswer(corpusCase, {
+    shortAnswer: "可以发动。",
+    debug: {
+      dryRun: false,
+      providerUsed: "openai",
+      modelUsed: "",
+      retrievalCounts: {},
+      unresolvedMentions: [],
+      ambiguousMentions: [],
+    },
+  });
+  assert.equal(missingModelMarker.overall, "fail");
+  assert.deepEqual(missingModelMarker.execution.policyViolations, ["model_used_marker_required"]);
+
+  const missingExecutionMarkers = evaluateRulingAnswer(corpusCase, {
+    shortAnswer: "可以发动。",
+    debug: {
+      retrievalCounts: {},
+      unresolvedMentions: [],
+      ambiguousMentions: [],
+    },
+  });
+  assert.equal(missingExecutionMarkers.overall, "fail");
+  assert.deepEqual(missingExecutionMarkers.execution.policyViolations, [
+    "explicit_non_dry_run_required",
+    "provider_used_marker_required",
+    "model_used_marker_required",
+  ]);
+
+  const mockAnswer = evaluateRulingAnswer(corpusCase, {
+    shortAnswer: "可以发动。",
+    debug: {
+      dryRun: false,
+      providerUsed: "mock",
+      modelUsed: "mock-ruling-model",
+      retrievalCounts: {},
+      unresolvedMentions: [],
+      ambiguousMentions: [],
+    },
+  });
+  assert.equal(mockAnswer.overall, "fail");
+  assert.deepEqual(mockAnswer.execution.policyViolations, ["non_live_model_forbidden"]);
+
+  const finalModel = evaluateRulingAnswer(corpusCase, {
+    shortAnswer: "可以发动。",
+    debug: {
+      dryRun: false,
+      providerUsed: "openai",
+      modelUsed: "gpt-5.6",
+      retrievalCounts: {},
+      unresolvedMentions: [],
+      ambiguousMentions: [],
+    },
+  });
+  assert.equal(finalModel.execution.policyStatus, "pass");
+  assert.equal(finalModel.overall, "pass");
+});
+
 test("twitter fixture card names and officialFaqId are accepted with normalized aliases", () => {
   const evaluation = evaluateRulingAnswer({
     question: "この場合は発動できますか？",
@@ -257,3 +345,165 @@ test("negative activation and application phrases are not double-counted as posi
   assert.deepEqual(evaluation.correctness.expectedVerdicts, ["cannot_activate", "does_not_apply"]);
   assert.deepEqual(evaluation.correctness.actualVerdicts, ["cannot_activate", "does_not_apply"]);
 });
+
+const fiveCaseCorpus = JSON.parse(readFileSync(
+  new URL("../data/test/five-state-transition-regressions.json", import.meta.url),
+  "utf8",
+));
+
+const finalReasonerEvidenceSpecs = {
+  "albaz-cost-enables-opponent-immunity": {
+    cardNames: [
+      ["阿尔白斯之落胤", "阿不思的落胤"],
+      ["教导之圣女 艾克利西亚", "教导的圣女 艾克莉西亚"],
+      ["吞喰圣痕之龙", "吞食圣痕之龙"],
+      ["冰剑龙 镜翠幻种", "冰剑龙 幻冰龙"],
+    ],
+    evidenceIds: ["card-faq-15245-0", "card-faq-15245-1", "card-faq-22090-2"],
+    promptSnippets: [
+      "舍弃1张手牌可以发动",
+      "只要自己或对手的、场上或墓地存在“艾克利西亚”怪兽",
+      "“阿尔白斯之落胤”＋融合・同步・超量・连接怪兽",
+      "Discarding 1 card from your hand is the cost",
+      "モンスターゾーンで適用する永続効果",
+    ],
+  },
+  "evenly-from-hand-is-field-card-activation": {
+    cardNames: [
+      ["颉颃胜负", "颉颃胜负"],
+      ["天下独歩の大義賊", "天下独步的大义贼"],
+    ],
+    evidenceIds: ["card-faq-13293-0.5", "card-faq-23349-1"],
+    ruleSearchQueries: ["从手牌发动陷阱卡属于场上的卡的发动"],
+    ruleEvidence: [{
+      id: "ocg-rule:c02/卡片·效果的发动#evenly-gallant-thief",
+      recordType: "rule-doc",
+      sourceId: "ocg-rule",
+      title: "从手牌进行魔法・陷阱卡的发动",
+      text: "对方从手卡把「颉颃胜负」以『自己场上没有卡存在的场合，这张卡的发动从手卡也能用』的方法发动的场合，不能连锁发动「天下独步的大义贼」的①效果。对方从手卡把魔法・陷阱卡放置在场上并发动的状况，不属于『对方把手卡・墓地・除外状态的卡的效果发动时』。",
+    }],
+    promptSnippets: [
+      "手札から魔法＆罠ゾーンに表側表示で置いて発動",
+      "相手が手札・墓地・除外状態のカードの効果を発動した時",
+      "不能连锁发动「天下独步的大义贼」的①效果",
+    ],
+  },
+  "lotus-changes-yubel-effect-destruction-source": {
+    cardNames: [
+      ["尤贝尔之精灵", "于贝尔精灵"],
+      ["纳祭魔鬼莲", "献祭魔界莲"],
+      ["尤贝尔", "于贝尔"],
+    ],
+    evidenceIds: ["card-faq-19458-2", "card-faq-7409-3", "card-faq-7409-4"],
+    promptSnippets: [
+      "该效果变为“将场上的１只“尤贝尔”怪兽破坏”",
+      "モンスターに適用する効果ではありません",
+      "此卡因此③效果以外的方式被破坏时可以发动",
+    ],
+  },
+  "zero-resolves-before-tcboo-cleanup": {
+    cardNames: [
+      ["千察万别", "千查万别"],
+      ["闪刀姬＝零萝", "闪刀姬＝零露"],
+      ["闪刀姬－零", "闪刀姬－零"],
+      ["闪刀姬－萝杰", "闪刀姬－萝杰"],
+    ],
+    evidenceIds: ["card-faq-21460-2", "card-faq-13447-1"],
+    ruleSearchQueries: ["效果处理途中出现只能有一种族限制冲突时何时送墓"],
+    ruleEvidence: [{
+      id: "ocg-rule:c03/只能有○○存在#after-resolution-cleanup",
+      recordType: "rule-doc",
+      sourceId: "ocg-rule",
+      title: "只能有○○存在的效果处理途中检查",
+      text: "效果处理途中出现了不符合条件的怪兽的场合，在这个效果处理完毕时，再把不符合条件的怪兽送去墓地。多只怪兽同时特殊召唤而出现同种族怪兽两只以上的场合，在效果处理完毕时选一部分或全部送去墓地，直到只剩一只。",
+    }],
+    promptSnippets: [
+      "“闪刀姬－零”“闪刀姬－萝杰”各1只特殊召唤。然后，可将场上的1张卡破坏",
+      "特殊召喚する処理と破壊する処理を両方行う場合、それらは同時に行われません",
+      "效果处理途中出现了不符合条件的怪兽的场合",
+    ],
+  },
+  "silver-hound-control-condition-does-not-restart": {
+    cardNames: [["月光银狗", "月光银狗"]],
+    evidenceIds: ["card-faq-21417-1"],
+    promptSnippets: [
+      "只要以此效果特殊召唤的怪兽以表侧表示存在于自己场上",
+      "この効果で特殊召喚したモンスターが自分のモンスターゾーンに表側表示で存在する限り",
+    ],
+  },
+};
+
+test("five reported state-transition cases reach the final model with complete card and rule evidence", async () => {
+  assert.equal(fiveCaseCorpus.cases.length, 5);
+  const data = await loadRagData();
+  const cardsById = new Map(data.cards.map((card) => [String(card.id || card.cardId), card]));
+  const qaById = new Map(data.qaRecords.map((record) => [String(record.id), record]));
+
+  for (const corpusCase of fiveCaseCorpus.cases) {
+    const spec = finalReasonerEvidenceSpecs[corpusCase.id];
+    assert.ok(spec, `missing evidence spec for ${corpusCase.id}`);
+    const cards = corpusCase.expectedCardIds.map((id) => cardsById.get(String(id)));
+    assert.ok(cards.every(Boolean), `missing local card snapshot for ${corpusCase.id}`);
+    const relatedFaqs = spec.evidenceIds.map((id) => qaById.get(id));
+    assert.ok(relatedFaqs.every(Boolean), `missing local FAQ snapshot for ${corpusCase.id}`);
+    const records = [
+      ...relatedFaqs.map((record) => ({
+        ...record,
+        originalRecordType: record.recordType,
+        recordType: "related",
+        sourceType: "faq_related",
+      })),
+      ...(spec.ruleEvidence || []),
+    ];
+    let finalModelCalls = 0;
+    const marker = `FINAL_MODEL_GENERATED:${corpusCase.id}`;
+    const answer = await answerRagRulingQuestion({
+      question: corpusCase.question,
+      cards,
+      records,
+      qaRecords: [],
+      env: {
+        MODEL_PROVIDER: "mock",
+        RAG_LIVE_OFFICIAL_QA: "false",
+        RAG_AUTO_ENGINE_SIMULATION: "false",
+        RAG_FORMAL_ENGINE_MODE: "off",
+      },
+      cardModelInvoker: async () => JSON.stringify({
+        cardNames: spec.cardNames.map(([name, originalText]) => ({ name, originalText, confidence: "high" })),
+      }),
+      ruleModelInvoker: async () => JSON.stringify({
+        ruleQueries: (spec.ruleSearchQueries || []).map((query) => ({ query, confidence: "high" })),
+      }),
+      rulebookModelInvoker: async () => JSON.stringify({
+        operationChecks: [],
+        constraintReviews: [],
+        overallConclusion: "最终裁定由最终模型根据原始证据生成。",
+      }),
+      modelInvoker: async ({ prompt }) => {
+        finalModelCalls += 1;
+        for (const id of spec.evidenceIds) assert.match(prompt, new RegExp(escapeRegExp(id), "u"));
+        for (const snippet of spec.promptSnippets) assert.ok(prompt.includes(snippet), `${corpusCase.id} prompt missing: ${snippet}`);
+        return JSON.stringify({
+          answerLevel: "rule_analysis",
+          shortAnswer: `【${marker}】${corpusCase.expectedAnswer || corpusCase.expectedAnswerKeyPoints.join("；")} `,
+          reasoning: corpusCase.expectedAnswerKeyPoints || [],
+          usedCards: cards.map((card) => card.name),
+          usedEvidence: spec.evidenceIds.map((id) => ({ id, type: "faq", title: id })),
+          missingInfo: [],
+          riskFlags: ["no_official_direct_qa"],
+          confidenceSelfEstimate: "medium",
+        });
+      },
+    });
+
+    assert.equal(finalModelCalls, 1, `${corpusCase.id} did not use exactly one final model generation`);
+    assert.match(answer.shortAnswer, new RegExp(escapeRegExp(marker), "u"));
+    const resolvedIds = new Set(answer.resolvedCards.map((card) => String(card.id)));
+    assert.ok(corpusCase.expectedCardIds.every((id) => resolvedIds.has(String(id))));
+    assert.equal(answer.debug.deterministicDecision, null);
+  }
+});
+
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+}

@@ -1,0 +1,47 @@
+{
+  "artifactType": "acceptance_expectation",
+  "notAnEngineExecution": true,
+  "scenarioFixture": "real-three-card.json",
+  "expectedFormalVerdicts": [
+    { "queryId": "q1-summon-procedure", "verdict": "TRUE" },
+    { "queryId": "q2-hand-trigger", "verdict": "TRUE" }
+  ],
+  "expectedTraceSemantics": [
+    "召唤手续存在合法执行分支",
+    "SUMMON_PROCEDURE 发起「混沌の黒魔術師」离场并记录手续请求去向",
+    "「混沌の黒魔術師」自身③效果决定最终表侧除外",
+    "怪兽因卡片效果表侧除外的 provenance 谓词为 TRUE",
+    "「滅びの黒魔術師」特殊召唤成功",
+    "收集同一检查点的诱发候选且保留未指定响应分支",
+    "场上公开区域选发诱发先进入连锁，然后优先权交给对方",
+    "对方 pass 后，手牌中的「深淵の相剣龍」①可以作为后续连锁发动"
+  ],
+  "expectedChineseAnswer": {
+    "shortAnswer": "可以将「混沌の黒魔術師」除外来特殊召唤「滅びの黒魔術師」，之后也可以发动手牌中「深淵の相剣龍」的①效果。",
+    "requiredPoints": [
+      "特殊召唤手续本身不是效果",
+      "「混沌の黒魔術師」最终因自身③效果表侧除外",
+      "因此满足「深淵の相剣龍」①的诱发条件",
+      "若发动「滅びの黒魔術師」②，先宣言该公开区域选发诱发；对方不响应后，手牌诱发才能在其后加入连锁",
+      "若没有要先发动的公开区域诱发，手牌诱发可以成为连锁1"
+    ]
+  },
+  "officialSources": [
+    "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?fid=24229&keyword=-1&ope=5&request_locale=ja",
+    "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?fid=13107&keyword=&ope=5&request_locale=ja&tag=-1",
+    "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?cid=18150&ope=4&request_locale=ja",
+    "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?fid=24174&keyword=-1&ope=5&request_locale=ja",
+    "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?fid=24006&keyword=&ope=5&request_locale=ja&tag=-1"
+  ],
+  "acceptanceConditions": [
+    "只有真实 formal endpoint 返回完整结果并通过公共 proof verifier 后，预期 verdict 才能视为实跑通过",
+    "本文件不能作为 formal_engine_proof，也不能替代引擎 witness、trace 或证书",
+    "若定义快照把「深淵の相剣龍」属性写成 DARK 而不是 FIRE，必须报告数据冲突并保持 UNKNOWN"
+  ],
+  "engineSemanticRequirementsNotProvedByThisFixture": [
+    "普通怪兽作为手续输入时，不得生成卡片效果去向归因",
+    "Token 离场时，不得生成表侧除外怪兽事实",
+    "对方尚未 pass 时，不得把手牌诱发固定为当前可以直接加入连锁",
+    "改变 initiatingOperation 不得删除同一事件的其他 attribution"
+  ]
+}

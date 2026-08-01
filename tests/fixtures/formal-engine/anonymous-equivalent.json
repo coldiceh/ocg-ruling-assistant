@@ -1,0 +1,61 @@
+{
+  "question": "自己场上表侧表示存在「怪兽甲」，手牌中有「怪兽丙」，本回合自己已经发动过魔法卡的效果。是否可以将「怪兽甲」除外，从额外卡组特殊召唤「怪兽乙」？如果可以特殊召唤，之后是否可以发动手牌中「怪兽丙」的①效果？",
+  "resolvedCards": [
+    {
+      "cardId": "card-a",
+      "formalDefinitionId": "definition:card-a",
+      "formalDefinitionSnapshotId": "fixture:anonymous-definitions:v1",
+      "formalDefinitionContentSha256": "1111111111111111111111111111111111111111111111111111111111111111",
+      "formalEffects": [
+        { "effectId": "effect-3", "definitionEffectId": "effect:a:3", "definitionEffectSha256": "7777777777777777777777777777777777777777777777777777777777777777" }
+      ]
+    },
+    {
+      "cardId": "card-b",
+      "formalDefinitionId": "definition:card-b",
+      "formalDefinitionSnapshotId": "fixture:anonymous-definitions:v1",
+      "formalDefinitionContentSha256": "2222222222222222222222222222222222222222222222222222222222222222",
+      "formalEffects": [
+        { "effectId": "summon-procedure", "definitionEffectId": "effect:b:summon-procedure", "definitionEffectSha256": "4444444444444444444444444444444444444444444444444444444444444444" },
+        { "effectId": "effect-2", "definitionEffectId": "effect:b:2", "definitionEffectSha256": "5555555555555555555555555555555555555555555555555555555555555555" }
+      ]
+    },
+    {
+      "cardId": "card-c",
+      "formalDefinitionId": "definition:card-c",
+      "formalDefinitionSnapshotId": "fixture:anonymous-definitions:v1",
+      "formalDefinitionContentSha256": "3333333333333333333333333333333333333333333333333333333333333333",
+      "formalEffects": [
+        { "effectId": "effect-1", "definitionEffectId": "effect:c:1", "definitionEffectSha256": "6666666666666666666666666666666666666666666666666666666666666666" }
+      ]
+    }
+  ],
+  "draft": {
+    "contractVersion": "ocg-formal-scenario-draft/v1",
+    "sourceSpanEncoding": "UTF16_CODE_UNIT_HALF_OPEN",
+    "scenarioId": "fixture:anonymous-equivalent",
+    "mode": "STRICT",
+    "turn": { "activePlayer": "SELF", "phase": "MAIN1" },
+    "cardInstances": [
+      { "instanceId": "card-a@0", "objectEpoch": 0, "cardId": "card-a", "effectIds": ["effect-3"], "owner": "SELF", "controller": "SELF", "zone": "MONSTER_ZONE", "position": "FACE_UP_ATTACK", "mention": "「怪兽甲」" },
+      { "instanceId": "card-b@0", "objectEpoch": 0, "cardId": "card-b", "effectIds": ["summon-procedure", "effect-2"], "owner": "SELF", "controller": "SELF", "zone": "EXTRA_DECK", "position": null, "mention": "「怪兽乙」" },
+      { "instanceId": "card-c@0", "objectEpoch": 0, "cardId": "card-c", "effectIds": ["effect-1"], "owner": "SELF", "controller": "SELF", "zone": "HAND", "position": null, "mention": "「怪兽丙」" }
+    ],
+    "stateFacts": [
+      { "factId": "spell-effect-used-this-turn", "type": "SPELL_EFFECT_ACTIVATED_THIS_TURN", "provenance": "USER_OBSERVED", "player": "SELF", "value": true, "mention": "本回合自己已经发动过魔法卡的效果" }
+    ],
+    "eventHistory": [
+      { "eventId": "spell-effect-activation-event", "type": "SPELL_EFFECT_ACTIVATED", "provenance": "USER_OBSERVED", "player": "SELF", "mention": "已经发动过魔法卡的效果" }
+    ],
+    "intents": [
+      { "intentId": "summon-card-b", "type": "TRY_SUMMON_PROCEDURE", "actorInstanceId": "card-b@0", "procedureId": "summon-procedure", "procedureInputInstanceIds": ["card-a@0"], "mention": "是否可以将「怪兽甲」除外，从额外卡组特殊召唤「怪兽乙」" }
+    ],
+    "queries": [
+      { "queryId": "q1-summon-procedure", "predicate": "PROCEDURE_AVAILABLE", "intentId": "summon-card-b", "mention": "是否可以将「怪兽甲」除外，从额外卡组特殊召唤「怪兽乙」" },
+      { "queryId": "q2-hand-trigger", "predicate": "TRIGGER_CAN_ACTIVATE", "subjectInstanceId": "card-c@0", "effectId": "effect-1", "dependsOn": ["q1-summon-procedure"], "mention": "之后是否可以发动手牌中「怪兽丙」的①效果" }
+    ],
+    "assumptions": [],
+    "requiredCapabilities": [],
+    "branchPolicy": { "preserveUnspecifiedResponses": true }
+  }
+}

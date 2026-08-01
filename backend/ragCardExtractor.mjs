@@ -1239,6 +1239,17 @@ function addResolved(resolved, seenCards, candidate, input, confidence, resoluti
     ...(Array.isArray(card.monsterProperties) ? { monsterProperties: [...card.monsterProperties] } : {}),
     effectText: card.effectText || "",
     sourceUrl: card.sourceUrl || "",
+    ...(card.formalDefinitionId ? { formalDefinitionId: String(card.formalDefinitionId) } : {}),
+    ...(card.formalDefinitionSnapshotId
+      ? { formalDefinitionSnapshotId: String(card.formalDefinitionSnapshotId) }
+      : {}),
+    ...(card.formalDefinitionContentSha256
+      ? { formalDefinitionContentSha256: String(card.formalDefinitionContentSha256) }
+      : {}),
+    ...(card.formalSnapshotId ? { formalSnapshotId: String(card.formalSnapshotId) } : {}),
+    ...(card.formalContentSha256 ? { formalContentSha256: String(card.formalContentSha256) } : {}),
+    ...(Array.isArray(card.formalEffects) ? { formalEffects: structuredClone(card.formalEffects) } : {}),
+    ...(card.formal && typeof card.formal === "object" ? { formal: structuredClone(card.formal) } : {}),
     aliases: resolvedCardAliases(card, input),
     confidence,
     resolutionSource,

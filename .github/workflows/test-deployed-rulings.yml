@@ -58,6 +58,16 @@ jobs:
             --timeout-ms 180000 \
             --failure-policy transport \
             --no-resume || status=$?
+          node scripts/batch-ruling-corpus.mjs \
+            --runner online \
+            --input data/test/five-state-transition-regressions.json \
+            --output artifacts/five-state-transition-regressions-online-report.json \
+            --endpoint "${{ inputs.endpoint }}" \
+            --ruling-version "${{ inputs.ruling_version }}" \
+            --delay-ms 250 \
+            --timeout-ms 180000 \
+            --failure-policy transport \
+            --no-resume || status=$?
           echo "exit_code=$status" >> "$GITHUB_OUTPUT"
           exit 0
 

@@ -371,6 +371,7 @@ export function evidenceBucketsToList(evidence = {}) {
     ...(evidence.officialQaRelated || []),
     ...(evidence.provisionalOfficialResponses || []),
     ...(evidence.faqRelated || []),
+    ...(evidence.formalEngineProofs || []),
     ...(evidence.rawRelatedEvidence || []),
   ];
   if (evidence && typeof evidence === "object") evidenceListCache.set(evidence, records);

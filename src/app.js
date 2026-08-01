@@ -1,63 +1,9 @@
 "use strict";
 
-const baseCardIndex = [
-  {
-    name: "闪刀姬-零衣",
-    aliases: ["闪刀姬-零衣", "零衣", "零一", "Raye", "閃刀姫－レイ"],
-    note: "俗称可能写成零一，建议核对正式卡名。",
-  },
-  {
-    name: "闪刀姬-露世",
-    aliases: ["闪刀姬-露世", "露世", "Roze", "閃刀姫－ロゼ"],
-  },
-  {
-    name: "闪刀姬-燎里",
-    aliases: ["闪刀姬-燎里", "燎里", "火刀", "Kagari", "閃刀姫－カガリ"],
-  },
-  {
-    name: "闪刀姬-飒天",
-    id: "08491308",
-    passcode: "08491308",
-    aliases: ["闪刀姬-飒天", "闪刀姬飒天", "飒天", "风刀", "Hayate", "閃刀姫－ハヤテ", "閃刀姫-ハヤテ"],
-  },
-  {
-    name: "闪刀姬-阿泽莉娅",
-    aliases: ["闪刀姬-阿泽莉娅", "阿泽莉娅", "亚式", "亚泽莉娅", "Azalea"],
-    note: "此俗称可能对应不同译名，最好用正式中文名或日文名确认。",
-  },
-  {
-    name: "三战之才",
-    aliases: ["三战之才", "三战", "Triple Tactics Talent"],
-  },
-  {
-    name: "青眼混沌极龙",
-    aliases: ["青眼混沌极龙", "混沌极龙", "Chaos MAX", "Blue-Eyes Chaos MAX Dragon"],
-  },
-  {
-    name: "脆刃之剑",
-    aliases: ["脆刃之剑", "脆刃", "Double-Edged Sword"],
-  },
-  {
-    name: "大日女之御巫",
-    aliases: ["大日女之御巫", "大日女", "御巫", "Ohime"],
-  },
-  {
-    name: "破械 Link-4",
-    aliases: ["破械新link4", "破械新 Link4", "破械link4", "破械 Link4", "新link4", "新 Link4"],
-    note: "这是描述，不是正式卡名。需要确认具体是哪张破械连接怪兽。",
-    vague: true,
-  },
-  {
-    name: "阿不思的落胤",
-    aliases: ["阿不思", "阿不思的落胤", "阿尔白斯之落胤", "落胤", "Fallen of Albaz"],
-  },
-  {
-    name: "完美世界 卡通世界",
-    id: "07293697",
-    passcode: "07293697",
-    aliases: ["完美世界 卡通世界", "完美世界卡通世界", "完美世界-卡通世界", "Perfect Toon World", "パーフェクト・トゥーン・ワールド"],
-  },
-];
+// Card identities and aliases must come from the synchronized, versioned data set.
+// Keeping an empty offline index prevents the browser fallback from silently
+// treating a handful of historical examples as authoritative card knowledge.
+const baseCardIndex = [];
 
 const topicIndex = [
   { id: "activation", label: "能否发动", keywords: ["能否发动", "可以发动", "发动②", "发动2", "发动效果", "诱发"] },
@@ -68,86 +14,9 @@ const topicIndex = [
   { id: "spelltrap", label: "魔法陷阱状态", keywords: ["表侧发动中", "魔法陷阱", "永续", "场地", "装备"] },
 ];
 
-const builtInNotes = [
-  {
-    id: "template-chain-trigger-control",
-    title: "连锁处理后检查诱发与发动条件",
-    status: "needs-source",
-    cards: ["闪刀姬-零衣", "闪刀姬-燎里", "闪刀姬-阿泽莉娅", "三战之才"],
-    keywords: ["连锁", "控制权", "墓地", "能否发动", "诱发", "连接召唤"],
-    conclusion:
-      "当前资料库资料不足，不能给确定裁定。应在 C2 与 C1 全部处理完后，核对墓地效果的触发事件、发动位置、控制者要求和每回合次数。",
-    steps: [
-      "按逆顺处理连锁：先处理 C2，再处理 C1。",
-      "记录连接召唤成功时的怪兽、召唤成功后的控制者，以及随后控制权变更的时点。",
-      "连锁全部处理完后，只检查此时满足条件且可以发动的效果。",
-      "比对墓地效果②的完整文本：触发事件、发动位置、是否要求自己场上或自己怪兽、是否错过时点。",
-    ],
-    questions: [
-      "“亚式”具体是哪张卡的哪个译名？",
-      "墓地效果②的完整文本是什么？这个回合是否已经使用过？",
-      "连接召唤成功后是否还有其他效果进入同一触发窗口？",
-    ],
-    sources: [
-      {
-        label: "本地规则模板",
-        detail: "用于拆解连锁和诱发窗口，需补官方数据库或事务局出处。",
-      },
-    ],
-  },
-  {
-    id: "template-mikanko-chaos-max",
-    title: "多重战斗伤害适用项需要逐项结算",
-    status: "needs-source",
-    cards: ["青眼混沌极龙", "脆刃之剑", "大日女之御巫"],
-    keywords: ["攻击", "守备表示", "战斗伤害", "伤害计算", "双方受到", "御巫"],
-    conclusion:
-      "这是高风险伤害计算题。没有录入官方条目前，不应只凭口算给最终数值；需要先确认守备力、装备状态、伤害转移与双方承受伤害的适用顺序。",
-    steps: [
-      "确认被攻击怪兽的当前守备力，以及装备卡是否仍然适用。",
-      "判断攻击守备表示怪兽时是否产生穿防战斗伤害，以及是否有倍化处理。",
-      "确认“自己将受到的战斗伤害由对方受到”和“双方受到战斗伤害”是否同时适用。",
-      "若没有官方同类裁定，应记录为待确认，并避免把推定结论写成确定裁定。",
-    ],
-    questions: [
-      "大日女之御巫的守备力是多少？题目中 2000 是攻击力提升后的数值，还是误写为守备力？",
-      "双方是否还有其他伤害变更、伤害归零、不能战破等效果适用？",
-      "是否已有官方数据库 Q&A 或店内记录可引用？",
-    ],
-    sources: [
-      {
-        label: "本地规则模板",
-        detail: "用于标记伤害计算风险，需补官方数据库 Q&A。",
-      },
-    ],
-  },
-  {
-    id: "template-replacement-face-up-spelltrap",
-    title: "代替破坏必须确认卡片状态和代破文本",
-    status: "needs-source",
-    cards: ["破械 Link-4"],
-    keywords: ["代破", "表侧发动中", "魔法陷阱", "发动中的卡", "破坏"],
-    conclusion:
-      "仅凭“破械新 Link4”和“表侧发动中”无法下结论。需要确认代破效果的完整文本，以及那张魔法/陷阱是正在连锁上的卡，还是已经表侧存在的永续、场地、装备等卡。",
-    steps: [
-      "先确认破械连接怪兽的正式卡名和代替破坏效果原文。",
-      "再确认被问到的魔法/陷阱当前是否仍在场上，是否会被某个效果破坏。",
-      "若是正在连锁处理的通常魔法/陷阱，需额外确认该卡在处理时是否仍能作为代替破坏对象或适用范围。",
-      "按代破文本判断：是否要求“场上的卡”“表侧表示卡”“自己场上的卡”或指定卡种。",
-    ],
-    questions: [
-      "破械新 Link4 的正式卡名是什么？",
-      "被代掉的是通常魔法/陷阱、速攻魔法，还是永续/场地/装备/表侧陷阱？",
-      "这张魔法/陷阱是被什么效果破坏？是在同一连锁中还是已经表侧存在？",
-    ],
-    sources: [
-      {
-        label: "本地规则模板",
-        detail: "用于拆分“发动中的卡”和“场上表侧卡”的歧义。",
-      },
-    ],
-  },
-];
+// Offline notes are deliberately empty. Rule guidance must be retrieved from
+// the versioned evidence corpus instead of historical question templates.
+const builtInNotes = [];
 
 const ui = {
   questionInput: document.querySelector("#questionInput"),
@@ -1015,6 +884,7 @@ function renderRagAnswer(answer) {
   renderSubAnswers([]);
   renderList(ui.stepsList, answer.reasoning || []);
   renderList(ui.questionsList, [
+    ...publicFormalQueryLines(answer.formalQueryResults || []),
     ...(answer.missingInfo || []),
     ...publicRiskLines(answer.riskFlags || []),
     ...(debugUiEnabled ? ragBudgetLines(answer.debug?.budgetStatus) : []),
@@ -1036,8 +906,45 @@ function ragEvidenceLabel(type) {
   if (type === "user_provided_text") return "用户提供文本";
   if (type === "rulebook") return "规则书资料";
   if (type === "operation_check") return "逐步证据判读";
+  if (type === "formal_engine_proof") return "形式规则验证";
   if (type === "faq") return "FAQ";
   return "相关资料";
+}
+
+function publicFormalQueryLines(results) {
+  if (!Array.isArray(results)) return [];
+  return results.map((item, index) => {
+    const queryId = String(item?.queryId || `问题 ${index + 1}`);
+    const claim = String(item?.claimText || item?.predicate || "").trim();
+    const prefix = `形式验证 ${queryId}`;
+    const suffix = claim ? `：${claim}` : "";
+    const verdict = String(item?.verdict || "UNKNOWN").toUpperCase();
+
+    if ((verdict === "TRUE" || verdict === "FALSE") && item?.trusted === true) {
+      return `${prefix}：${verdict}（证明已验证）${suffix}`;
+    }
+
+    const reasons = (Array.isArray(item?.unknownReasons) ? item.unknownReasons : [])
+      .map((reason) => String(reason?.code || reason || "").trim())
+      .filter(Boolean);
+    const assumptions = (Array.isArray(item?.assumptions) ? item.assumptions : [])
+      .map((assumption, assumptionIndex) => {
+        if (typeof assumption === "string") return assumption.trim();
+        return String(
+          assumption?.type
+          || assumption?.assumptionId
+          || assumption?.assumesFactId
+          || `假设 ${assumptionIndex + 1}`,
+        ).trim();
+      })
+      .filter(Boolean);
+    const parts = ["UNKNOWN（尚未得出结论，不等于“不能”）"];
+    if (item?.conditional === true || assumptions.length) {
+      parts.push(`条件分析所用假设：${assumptions.join("、") || "未提供假设说明"}`);
+    }
+    if (reasons.length) parts.push(`原因码：${[...new Set(reasons)].join("、")}`);
+    return `${prefix}：${parts.join("；")}${suffix}`;
+  });
 }
 
 function publicRiskLines(flags) {
@@ -3881,6 +3788,9 @@ function formatRiskFlag(flag) {
     different_question_evidence: "候选资料回答不同问题",
     no_direct_evidence: "没有 direct evidence",
     insufficient_context: "上下文不足",
+    formal_engine_unknown: "形式规则内核本次未签发确定性证明；这不等于“不能”。",
+    formal_engine_conditional: "形式规则内核只得到依赖显式假设的条件分析。",
+    formal_engine_unverified: "形式规则内核结果尚未通过证明校验，不能作为权威结论。",
   };
   const text = labels[flag] || labels[String(flag).split(":")[0]];
   if (text) return text;

@@ -127,7 +127,7 @@ test("public model environment strips every OpenAI setting and pins all model st
   assert.equal(mockEnv.OPENAI_API_KEY, undefined);
 });
 
-test("public legacy and fastjudge modes cannot spend the admin OpenAI key", async () => {
+test("public legacy and fastjudge modes are rejected before any admin OpenAI call", async () => {
   const envKeys = [
     "MODEL_PROVIDER",
     "RAG_MODEL_PROVIDER",
@@ -173,7 +173,8 @@ test("public legacy and fastjudge modes cannot spend the admin OpenAI key", asyn
           mode,
         },
       }, response);
-      assert.equal(response.statusCode, 200, mode);
+      assert.equal(response.statusCode, 400, mode);
+      assert.equal(response.payload?.code, "unsupported_answer_mode", mode);
     }
     assert.equal(openAiCalls, 0);
   } finally {
@@ -188,9 +189,9 @@ test("public legacy and fastjudge modes cannot spend the admin OpenAI key", asyn
 test("local Node public entry point applies the same public model boundary", async () => {
   const source = await readFile(new URL("../backend/server.mjs", import.meta.url), "utf8");
   assert.match(source, /createPublicAnswerModelEnv\(process\.env\)/u);
-  assert.match(source, /answerQuestion\(payload,\s*\{\s*env:\s*publicEnv\s*\}\)/u);
-  assert.match(source, /answerRulingQuestionFast\(\{[\s\S]*?env:\s*publicEnv/u);
+  assert.match(source, /if \(mode !== "rag"\)[\s\S]*?unsupported_answer_mode/u);
   assert.match(source, /answerRagRulingQuestionForVersion\(\{[\s\S]*?env:\s*envForModelTier\(publicEnv,/u);
+  assert.doesNotMatch(source, /answerQuestion\(payload|answerRulingQuestionFast/u);
 });
 
 function createJsonResponse() {
