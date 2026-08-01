@@ -1,4 +1,6 @@
 import { getOcgEngineHealth, requestOcgEngineSimulation } from "../backend/ocgEngineClient.mjs";
+import { getFormalEngineCapabilities } from "../backend/formalEngineClient.mjs";
+import { formalShadowEnabled } from "../backend/formalEngineShadow.mjs";
 
 const allowedOrigin = process.env.ALLOWED_ORIGIN || "*";
 
@@ -12,7 +14,10 @@ export default async function handler(request, response) {
   }
   if (request.method === "GET") {
     const health = await getOcgEngineHealth({ env: process.env });
-    response.status(health.ok ? 200 : 503).json(health);
+    const formal = formalShadowEnabled(process.env)
+      ? await getFormalEngineCapabilities({ env: process.env })
+      : { status: "disabled", capabilities: null, error: null };
+    response.status(health.ok ? 200 : 503).json({ ...health, formal });
     return;
   }
   if (request.method !== "POST") {

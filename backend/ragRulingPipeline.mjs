@@ -1,5 +1,6 @@
 import { requestOcgEngineSimulation } from "./ocgEngineClient.mjs";
 import { autoEngineSimulationEnabled, buildBestEffortEngineScenario } from "./ocgScenarioPlanner.mjs";
+import { applyFormalAnswerGate, runFormalEngineShadow } from "./formalEngineShadow.mjs";
 import { extractRagCards, normalizeCardKey } from "./ragCardExtractor.mjs";
 import { evidenceBucketsToList, loadRagData, retrieveRagEvidence } from "./ragEvidenceRetriever.mjs";
 import {
@@ -13,9 +14,7 @@ import {
   RAG_ANSWER_LEVELS,
   selectAuthoritativeOfficialDirectCandidate,
 } from "./ragRulingPrompt.mjs";
-import { analyzeEffectStateTransition, attachUserQueryToCardTexts } from "./effectStateReasoner.mjs";
 import { hasNumberedCardIdentityConflict } from "./numberedCardIdentity.mjs";
-import { analyzeDeterministicOperationLegality } from "./operationLegalityAnalyzer.mjs";
 import { extractOfficialQaAnswer } from "./officialQaAnswerExtractor.mjs";
 
 export async function answerRagRulingQuestion({
@@ -35,6 +34,11 @@ export async function answerRagRulingQuestion({
   env = globalThis.process?.env || {},
   engineScenario,
   engineFetchImpl,
+  formalScenarioDraft,
+  formalScenarioDraftInvoker,
+  formalProofVerifier,
+  formalExpectedVersions,
+  formalFetchImpl,
 } = {}) {
   const pipelineStartedAt = Date.now();
   const timingsMs = {};
@@ -54,54 +58,31 @@ export async function answerRagRulingQuestion({
     cards: data.cards || [],
     maxCards,
   });
-  const localPreflightTransition = !modelInvoker
-      && !rulebookModelInvoker
-      && hasCompleteCardResolution(localCardResolution)
-    ? analyzeEffectStateTransition({
-        userQuery: query,
-        resolvedCards: localCardResolution.resolvedCards,
-      })
-    : null;
-  const skipAuxiliaryExtractionModels = hasCompleteDeterministicRuling({
-    semanticStateTransition: localPreflightTransition,
-    cardResolution: localCardResolution,
-  });
   timingsMs.deterministicPreflight = elapsedMs(preflightStartedAt);
 
-  let cardNameModel;
-  let ruleQueryModel;
-  let cardResolution;
   const auxiliaryExtractionStartedAt = Date.now();
-  if (skipAuxiliaryExtractionModels) {
-    cardNameModel = skippedExtractionResult("card_name_model_skipped_deterministic_preflight", "candidates");
-    ruleQueryModel = skippedExtractionResult("rule_query_model_skipped_deterministic_preflight", "queries");
-    cardResolution = localCardResolution;
-  } else {
-    [cardNameModel, ruleQueryModel] = await Promise.all([
-      callCardNameExtractionModel({
-        userQuery: query,
-        env,
-        modelInvoker: cardModelInvoker,
-        fetchImpl,
-      }),
-      callRuleQueryExtractionModel({
-        userQuery: query,
-        env,
-        modelInvoker: ruleModelInvoker,
-        fetchImpl,
-      }),
-    ]);
-    cardResolution = (cardNameModel.candidates || []).length
-      ? extractRagCards(query, {
-          cards: data.cards || [],
-          maxCards,
-          modelCardNameCandidates: cardNameModel.candidates,
-        })
-      : localCardResolution;
-  }
-  timingsMs.auxiliaryExtractionModels = skipAuxiliaryExtractionModels
-    ? 0
-    : elapsedMs(auxiliaryExtractionStartedAt);
+  const [cardNameModel, ruleQueryModel] = await Promise.all([
+    callCardNameExtractionModel({
+      userQuery: query,
+      env,
+      modelInvoker: cardModelInvoker,
+      fetchImpl,
+    }),
+    callRuleQueryExtractionModel({
+      userQuery: query,
+      env,
+      modelInvoker: ruleModelInvoker,
+      fetchImpl,
+    }),
+  ]);
+  const cardResolution = (cardNameModel.candidates || []).length
+    ? extractRagCards(query, {
+        cards: data.cards || [],
+        maxCards,
+        modelCardNameCandidates: cardNameModel.candidates,
+      })
+    : localCardResolution;
+  timingsMs.auxiliaryExtractionModels = elapsedMs(auxiliaryExtractionStartedAt);
   timingsMs.dataAndQueryExtraction = elapsedMs(extractionStartedAt);
   const retrievalStartedAt = Date.now();
   const retrievedEvidence = await retrieveRagEvidence({
@@ -145,6 +126,16 @@ export async function answerRagRulingQuestion({
     env,
     fetchImpl: engineFetchImpl || fetchImpl || globalThis.fetch,
   });
+  const formalShadowPromise = runFormalEngineShadow({
+    userQuery: query,
+    resolvedCards: effectiveCardResolution.resolvedCards || [],
+    scenarioDraft: formalScenarioDraft,
+    scenarioDraftInvoker: formalScenarioDraftInvoker,
+    env,
+    fetchImpl: formalFetchImpl || engineFetchImpl || fetchImpl || globalThis.fetch,
+    proofVerifier: formalProofVerifier,
+    expectedVersions: formalExpectedVersions,
+  });
   const reasoningCardTexts = attachUserQueryToCardTexts([
     ...(retrievedEvidence.cardTexts || []),
     ...(retrievedEvidence.userProvidedCardTexts || []),
@@ -162,23 +153,11 @@ export async function answerRagRulingQuestion({
     env,
   });
   const locallyGroundedEvidence = attachRulebookGrounding(retrievedEvidence, localRulebookGrounding);
-  const localSemanticStateTransition = analyzeEffectStateTransition({
-    userQuery: query,
-    cardTexts: reasoningCardTexts,
-    corroboratingEvidence,
-    operationLegality: locallyGroundedEvidence.operationLegality,
-    resolvedCards: effectiveCardResolution.resolvedCards,
-  });
-  const localDecisionComplete = !rulebookModelInvoker && hasCompleteDeterministicRuling({
-    semanticStateTransition: localSemanticStateTransition,
-    operationLegality: locallyGroundedEvidence.operationLegality,
-    cardResolution: effectiveCardResolution,
-    extraAmbiguousMentions: locallyGroundedEvidence.baigeAmbiguousMentions,
-  });
+  const localDecisionComplete = false;
   timingsMs.localReasoning = elapsedMs(localReasoningStartedAt);
 
   const rulebookStartedAt = Date.now();
-  const rulebookGrounding = localDecisionComplete || authoritativeOfficialDirect
+  const rulebookGrounding = authoritativeOfficialDirect
     ? localRulebookGrounding
     : await callRulebookGroundingModel({
         userQuery: query,
@@ -197,64 +176,54 @@ export async function answerRagRulingQuestion({
       });
   timingsMs.rulebookGrounding = elapsedMs(rulebookStartedAt);
   const groundedEvidence = attachRulebookGrounding(retrievedEvidence, rulebookGrounding);
-  const semanticStateTransition = localDecisionComplete
-    ? localSemanticStateTransition
-    : analyzeEffectStateTransition({
-        userQuery: query,
-        cardTexts: reasoningCardTexts,
-        corroboratingEvidence,
-        operationLegality: groundedEvidence.operationLegality,
-        resolvedCards: effectiveCardResolution.resolvedCards,
+  // Pattern-derived state programs are retained only in frozen/diagnostic
+  // versions. The latest answer path accepts executable claims exclusively
+  // from the verified formal engine.
+  const semanticStateTransition = null;
+  const formalStartedAt = Date.now();
+  const formalShadow = await formalShadowPromise;
+  timingsMs.formalEngineAwait = elapsedMs(formalStartedAt);
+  const evidence = {
+    ...groundedEvidence,
+    semanticStateTransition,
+    formalEngineProofs: formalShadow.evidence || [],
+    formalEngineStatus: summarizeFormalShadow(formalShadow),
+  };
+  const deterministicDecision = null;
+  const promptBundle = buildRagRulingPromptBundle({
+    userQuery: query,
+    cardResolution: effectiveCardResolution,
+    evidence,
+    env,
   });
-  const evidence = { ...groundedEvidence, semanticStateTransition };
-  const deterministicDecision = modelInvoker
-    ? null
-    : selectDeterministicDecision(evidence, effectiveCardResolution);
-  const promptBundle = deterministicDecision
-    ? {
-        prompt: "",
-        recoveryPrompt: "",
-        promptChars: 0,
-        promptTruncated: false,
-        warnings: ["final_model_skipped_deterministic_ruling"],
-      }
-    : buildRagRulingPromptBundle({ userQuery: query, cardResolution: effectiveCardResolution, evidence, env });
   const displayCards = dedupeCards([
     ...(effectiveCardResolution.resolvedCards || []),
     ...userProvidedCards(evidence.userProvidedCardTexts || []),
   ]);
   const finalModelStartedAt = Date.now();
-  const modelResult = deterministicDecision
-    ? buildDeterministicModelResult(deterministicDecision, evidence)
-    : await callRagModel({
-        prompt: promptBundle.prompt,
-        recoveryPrompt: promptBundle.recoveryPrompt,
-        evidence,
-        cardResolution: effectiveCardResolution,
-        env,
-        modelInvoker,
-        dryRun,
-        fetchImpl,
-        now,
-      });
-  timingsMs.finalModel = deterministicDecision ? 0 : elapsedMs(finalModelStartedAt);
+  const modelResult = await callRagModel({
+    prompt: promptBundle.prompt,
+    recoveryPrompt: promptBundle.recoveryPrompt,
+    evidence,
+    cardResolution: effectiveCardResolution,
+    env,
+    modelInvoker,
+    dryRun,
+    fetchImpl,
+    now,
+  });
+  timingsMs.finalModel = elapsedMs(finalModelStartedAt);
   const modelAnswer = normalizeRagAnswer(modelResult.answer, { evidence, cardResolution: effectiveCardResolution, modelWarnings: modelResult.warnings || [] });
-  const normalized = authoritativeOfficialDirect
+  const normalizedWithoutFormalGate = authoritativeOfficialDirect
     ? applyOfficialDirectAnswerContract(modelAnswer, evidence, effectiveCardResolution)
-    : applySemanticStateConstraint(
-        applyUnresolvedConstraintGuard(
-          applyOperationLegalityOverride(
-            applyExactScenarioGrounding(
-              applyGroundedOperationFallback(modelAnswer, evidence),
-              evidence,
-              query,
-            ),
-            evidence,
-          ),
-          evidence,
-        ),
-        evidence,
-      );
+    : modelAnswer;
+  const normalized = attachFormalShadowRisk(
+    applyFormalAnswerGate(normalizedWithoutFormalGate, evidence.formalEngineProofs, {
+      preserveAuthoritativeAnswer: authoritativeOfficialDirect,
+    }),
+    formalShadow,
+    { preserveAuthoritativeAnswer: authoritativeOfficialDirect },
+  );
   const engineStartedAt = Date.now();
   const engine = await enginePromise;
   timingsMs.engineAwait = elapsedMs(engineStartedAt);
@@ -269,6 +238,16 @@ export async function answerRagRulingQuestion({
     missingInfo: normalized.missingInfo,
     riskFlags: normalized.riskFlags,
     confidenceSelfEstimate: normalized.confidenceSelfEstimate,
+    formalQueryResults: normalized.formalQueryResults || evidence.formalEngineProofs.map((item) => ({
+      queryId: item.queryId,
+      predicate: item.predicate,
+      claimText: item.claimText,
+      verdict: item.verdict,
+      trusted: item.trusted === true,
+      unknownReasons: item.unknownReasons || [],
+      versions: item.versions || {},
+      proof: item.proof || null,
+    })),
     engine: {
       requested: engine.requested,
       status: engine.status,
@@ -279,6 +258,7 @@ export async function answerRagRulingQuestion({
       ...(engine.error ? { error: engine.error } : {}),
     },
     engineSimulation: engine.simulation || null,
+    formalEngine: summarizeFormalShadow(formalShadow),
     debug: {
       mode: "rag_baseline",
       engineStatus: engine.status,
@@ -335,131 +315,18 @@ export async function answerRagRulingQuestion({
 }
 
 function buildLocalRulebookGrounding({
-  userQuery = "",
-  cardTexts = [],
-  evidence = {},
-  env = {},
+  userQuery: _userQuery = "",
+  cardTexts: _cardTexts = [],
+  evidence: _evidence = {},
+  env: _env = {},
 } = {}) {
-  const ruleEvidence = dedupeEvidenceRefs([
-    ...(evidence.rulebookCandidates || []),
-    ...(evidence.rawRelatedEvidence || []),
-    ...(evidence.officialQaDirectCandidates || []),
-    ...(evidence.officialQaRelated || []),
-    ...(evidence.provisionalOfficialResponses || []),
-    ...(evidence.faqRelated || []),
-  ]);
-  const operationLegality = analyzeDeterministicOperationLegality({
-    userQuery,
-    cardTexts,
-    ruleEvidence,
-  });
   return {
-    operationLegality,
+    operationLegality: null,
     rawText: "",
-    providerUsed: "local",
-    modelUsed: "deterministic-rule-reasoner",
+    providerUsed: "none",
+    modelUsed: "none",
     dryRun: true,
-    warnings: [...new Set([
-      "rulebook_grounding_model_skipped_local_precheck",
-      ...(operationLegality.warnings || []),
-    ])],
-    tokenUsage: {},
-    estimatedCostCny: 0,
-    budgetStatus: null,
-  };
-}
-
-function hasCompleteDeterministicRuling({
-  semanticStateTransition,
-  operationLegality,
-  cardResolution,
-  extraAmbiguousMentions,
-} = {}) {
-  if (!hasCompleteCardResolution(cardResolution, extraAmbiguousMentions)) return false;
-  if (operationLegality?.hasBlockingCheck && !operationLegality?.hasUnresolvedConstraints) return true;
-  if (semanticStateTransition?.status === "resolved" && semanticStateTransition?.complete === true) return true;
-  return operationLegality?.complete === true
-    && operationLegality?.hasGroundedChecks === true
-    && operationLegality?.hasUnresolvedConstraints !== true
-    && Boolean(operationLegality?.shortAnswer);
-}
-
-function selectDeterministicDecision(evidence = {}, cardResolution = {}) {
-  if (!hasCompleteCardResolution(cardResolution, evidence.baigeAmbiguousMentions)) return null;
-  const operationLegality = evidence.operationLegality;
-  if (operationLegality?.hasBlockingCheck && !operationLegality?.hasUnresolvedConstraints) {
-    return { kind: "operation_blocker", operationLegality };
-  }
-  const semanticStateTransition = evidence.semanticStateTransition;
-  if (semanticStateTransition?.status === "resolved" && semanticStateTransition?.complete === true) {
-    return { kind: "state_transition", semanticStateTransition };
-  }
-  if (operationLegality?.complete === true
-      && operationLegality?.hasGroundedChecks === true
-      && operationLegality?.hasUnresolvedConstraints !== true
-      && operationLegality?.shortAnswer) {
-    return { kind: "operation_sequence", operationLegality };
-  }
-  return null;
-}
-
-function hasCompleteCardResolution(cardResolution = {}, extraAmbiguousMentions = []) {
-  return !(cardResolution.unresolvedMentions || []).length
-    && !(cardResolution.ambiguousMentions || []).length
-    && !(cardResolution.omittedResolvedCards || []).length
-    && !(extraAmbiguousMentions || []).length;
-}
-
-function buildDeterministicModelResult(decision, evidence = {}) {
-  const state = decision?.semanticStateTransition;
-  const operation = decision?.operationLegality;
-  const directQaEvidence = (evidence.officialQaDirectCandidates || []).map((item) => ({
-    id: item.id,
-    type: "official_qa",
-    title: item.title || item.id,
-    sourceUrl: item.sourceUrl || "",
-  }));
-  const activationSourceFaqEvidence = state
-    ? selectActivationSourceFaqEvidence(state, evidence.faqRelated)
-    : [];
-  const decisionEvidence = state
-    ? (state.evidenceIds || []).map((id) => ({ id, type: "related", title: String(id) }))
-    : (operation?.matchedRuleEvidence || []).map((item) => ({
-        id: item.id,
-        type: item.type || item.recordType || "rulebook",
-        title: item.title || item.id,
-        sourceUrl: item.sourceUrl || "",
-      }));
-  const usedEvidence = dedupeEvidenceRefs([
-    ...directQaEvidence,
-    ...activationSourceFaqEvidence,
-    ...decisionEvidence,
-  ]);
-  const shortAnswer = state?.shortAnswer
-    || operation?.shortAnswer
-    || operation?.checks?.find((item) => item.status !== "unknown")?.conclusion
-    || "已根据当前状态与适用规则完成处理。";
-  return {
-    answer: {
-      answerLevel: "rule_analysis",
-      shortAnswer,
-      reasoning: state?.reasoning || operation?.reasoning || [],
-      usedCards: [],
-      usedEvidence,
-      missingInfo: [],
-      riskFlags: [
-        "deterministic_ruling_applied",
-        "final_model_skipped",
-      ],
-      confidenceSelfEstimate: "medium",
-    },
-    rawText: "",
-    provider: "local",
-    providerUsed: "local",
-    modelName: "deterministic-ruling-reasoner",
-    modelUsed: "deterministic-ruling-reasoner",
-    dryRun: true,
-    warnings: [],
+    warnings: ["rulebook_grounding_skipped_for_authoritative_official_direct"],
     tokenUsage: {},
     estimatedCostCny: 0,
     budgetStatus: null,
@@ -559,60 +426,8 @@ function officialConstraintLost(officialText, modelText) {
   return !/(?:不能|不可|不得|仅|只|如果|场合|条件|之后|本回合|除外|例外|cannot|can't|not be able|only|unless|except|however|if\b|when\b|できません|できない|ただし|場合|のみ|以外)/iu.test(model);
 }
 
-function selectActivationSourceFaqEvidence(state = {}, faqRelated = [], maxItems = 3) {
-  const sourceIds = collectActivationSourceDefinitionIds(state);
-  if (!sourceIds.size) return [];
-  return (faqRelated || [])
-    .filter((item) => (item.cardIds || []).some((id) => sourceIds.has(normalizeEvidenceCardId(id))))
-    .slice(0, maxItems)
-    .map((item) => ({
-      id: item.id,
-      type: item.type || item.recordType || "faq",
-      title: item.title || item.id,
-      sourceUrl: item.sourceUrl || "",
-    }));
-}
-
-function collectActivationSourceDefinitionIds(state = {}) {
-  const ids = new Set();
-  const addIds = (values) => {
-    for (const value of Array.isArray(values) ? values : [values]) {
-      const normalized = normalizeEvidenceCardId(value);
-      if (normalized) ids.add(normalized);
-    }
-  };
-  addIds(state.supportingCardIds);
-  addIds(state.sourceDefinitionId);
-  const program = state.program || {};
-  addIds(program.supportingCardIds);
-  const preparedLinks = [
-    ...(state.preparedChainLinks || []),
-    ...(program.preparedChainLinks || []),
-  ];
-  const links = preparedLinks.length
-    ? preparedLinks
-    : [...(state.compiledChainLinks || []), ...(program.compiledChainLinks || [])];
-  for (const link of links) addIds(link?.sourceDefinitionId || link?.sourceCardId);
-  return ids;
-}
-
-function normalizeEvidenceCardId(value) {
-  return String(value ?? "").trim();
-}
-
 function elapsedMs(startedAt) {
   return Math.max(0, Date.now() - Number(startedAt || Date.now()));
-}
-
-function skippedExtractionResult(warning, collectionKey) {
-  return {
-    [collectionKey]: [],
-    rawText: "",
-    providerUsed: "local",
-    modelUsed: "none",
-    dryRun: true,
-    warnings: [warning],
-  };
 }
 
 function reconcileCardResolution(cardResolution = {}, evidence = {}) {
@@ -670,235 +485,6 @@ function attachRulebookGrounding(evidence, groundingResult = {}) {
       ...(operationLegality.hasBlockingCheck ? ["operation_legality_blocker_applied"] : []),
     ])],
   };
-}
-
-function applyOperationLegalityOverride(answer, evidence = {}) {
-  const operation = evidence.operationLegality;
-  if (!operation?.hasBlockingCheck) return answer;
-  const operationEvidence = (operation.evidence || [])
-    .filter((item) => item.id)
-    .map((item) => ({
-      id: item.id,
-      type: outputEvidenceType(item, new Set()),
-      title: item.title,
-      sourceUrl: item.sourceUrl || "",
-    }));
-  const matchedRuleEvidence = (operation.matchedRuleEvidence || [])
-    .filter((item) => item.id)
-    .map((item) => ({
-      id: item.id,
-      type: outputEvidenceType(item, new Set()),
-      title: item.title,
-      sourceUrl: item.sourceUrl || "",
-    }));
-  const usedEvidence = dedupeEvidenceRefs([
-    ...operationEvidence,
-    ...matchedRuleEvidence,
-    ...(answer.usedEvidence || []),
-  ]);
-  const reasoning = cleanStringArray([
-    ...(operation.reasoning || []),
-  ]);
-  const modelContradicted = isAffirmativeOperationAnswer(answer.shortAnswer);
-  return {
-    ...answer,
-    answerLevel: "rule_analysis",
-    shortAnswer: operation.shortAnswer || answer.shortAnswer,
-    reasoning: reasoning.length ? reasoning : answer.reasoning,
-    usedEvidence,
-    missingInfo: [],
-    riskFlags: [
-      ...new Set([
-        ...(answer.riskFlags || []),
-        "operation_legality_blocker_applied",
-        ...(modelContradicted ? ["model_answer_overridden_by_operation_legality"] : []),
-      ]),
-    ],
-    confidenceSelfEstimate: answer.confidenceSelfEstimate === "high" ? "medium" : answer.confidenceSelfEstimate,
-  };
-}
-
-function applyUnresolvedConstraintGuard(answer, evidence = {}) {
-  const operation = evidence.operationLegality;
-  if (!operation?.hasUnresolvedConstraints || operation.hasBlockingCheck) return answer;
-  if (!isAffirmativeOperationAnswer(answer.shortAnswer)) return answer;
-
-  const unresolved = operation.unresolvedConstraintEvidence || [];
-  const unresolvedEvidence = unresolved.map((item) => ({
-    id: item.id,
-    type: outputEvidenceType(item, new Set()),
-    title: item.title,
-    sourceUrl: item.sourceUrl || "",
-  }));
-  const labels = unresolved.map((item) => item.title || item.id).filter(Boolean).slice(0, 4);
-  return {
-    ...answer,
-    answerLevel: "low_confidence_analysis",
-    shortAnswer: "当前不能确认该操作可以发动：检索到可能限制该操作的规则，但其适用性尚未完成核对。",
-    reasoning: cleanStringArray([
-      `尚未完成核对的限制性资料：${labels.join("、") || "相关规则资料"}。`,
-      "在这些限制规则被逐项判定为适用或不适用前，不能仅凭一般发动条件给出肯定结论。",
-      ...(answer.reasoning || []),
-    ]),
-    usedEvidence: dedupeEvidenceRefs([
-      ...unresolvedEvidence,
-      ...(answer.usedEvidence || []),
-    ]),
-    missingInfo: [...new Set([...(answer.missingInfo || []), "需要完成限制性规则与当前场景的适用性核对。"])],
-    riskFlags: [...new Set([...(answer.riskFlags || []), "unresolved_restrictive_evidence_blocked_positive_answer"])],
-    confidenceSelfEstimate: "low",
-  };
-}
-
-function isAffirmativeOperationAnswer(value) {
-  const text = String(value || "").normalize("NFKC");
-  if (/(?:不能|不可|不可以|无法|不得|不应|不成立|can\s*not|cannot|can't|not allowed|must not)/iu.test(text)) return false;
-  return /(?:可以|能够|能发动|可发动|可以发动|can activate|can be activated|is allowed)/iu.test(text);
-}
-
-function applyExactScenarioGrounding(answer, evidence = {}, userQuery = "") {
-  const operation = evidence.operationLegality;
-  const checks = operation?.checks || [];
-  if (!operation?.hasGroundedChecks || !operation.shortAnswer || !checks.length) return answer;
-  if (checks.some((check) => check.status === "unknown" || !(check.citations || []).length)) return answer;
-
-  const anchors = extractScenarioAnchors(userQuery);
-  if (!anchors.length) return answer;
-  const requiredMatches = Math.min(2, anchors.length);
-  const exactEvidence = (operation.matchedRuleEvidence || []).filter((item) => {
-    const text = normalizeScenarioKey([
-      item?.title,
-      ...(item?.cards || []),
-      item?.text,
-    ].filter(Boolean).join(" "));
-    return anchors.some((anchor) => text.includes(anchor));
-  });
-  const coveredAnchors = anchors.filter((anchor) => exactEvidence.some((item) => normalizeScenarioKey([
-    item?.title,
-    ...(item?.cards || []),
-    item?.text,
-  ].filter(Boolean).join(" ")).includes(anchor)));
-  if (coveredAnchors.length < requiredMatches) return answer;
-
-  const usedEvidence = dedupeEvidenceRefs([
-    ...exactEvidence.map((item) => ({
-      id: item.id,
-      type: outputEvidenceType(item, new Set()),
-      title: item.title,
-      sourceUrl: item.sourceUrl || "",
-    })),
-    ...(operation.evidence || []).map((item) => ({
-      id: item.id,
-      type: outputEvidenceType(item, new Set()),
-      title: item.title,
-      sourceUrl: item.sourceUrl || "",
-    })),
-    ...(answer.usedEvidence || []),
-  ]);
-  const reasoning = cleanStringArray(operation.reasoning || []);
-  return {
-    ...answer,
-    answerLevel: answer.answerLevel === "official_confirmed" ? answer.answerLevel : "rule_analysis",
-    shortAnswer: operation.shortAnswer,
-    reasoning: reasoning.length ? reasoning : answer.reasoning,
-    usedEvidence,
-    missingInfo: [],
-    riskFlags: [...new Set([...(answer.riskFlags || []), "answer_constrained_by_exact_scenario_evidence"])],
-    confidenceSelfEstimate: answer.confidenceSelfEstimate === "low" ? "low" : "medium",
-  };
-}
-
-function applySemanticStateConstraint(answer, evidence = {}) {
-  const state = evidence.semanticStateTransition;
-  if (answer.answerLevel === "official_confirmed" || evidence.operationLegality?.hasBlockingCheck) return answer;
-  if (state?.status !== "resolved" || state.complete !== true) return answer;
-  const evidenceById = new Map(evidenceBucketsToList(evidence).map((item) => [String(item.id), item]));
-  const stateEvidence = (state.evidenceIds || [])
-    .map((id) => evidenceById.get(String(id)))
-    .filter(Boolean)
-    .map((item) => ({
-      id: item.id,
-      type: outputEvidenceType(item, new Set()),
-      title: item.title,
-      sourceUrl: item.sourceUrl || "",
-    }));
-  const provisional = state.activationEvidenceType === "official_response_screenshot";
-  return {
-    ...answer,
-    answerLevel: "rule_analysis",
-    shortAnswer: state.shortAnswer,
-    reasoning: cleanStringArray(state.reasoning),
-    usedEvidence: dedupeEvidenceRefs([
-      ...stateEvidence,
-      ...(answer.usedEvidence || []),
-    ]),
-    missingInfo: [],
-    riskFlags: [...new Set([
-      ...(answer.riskFlags || []),
-      "semantic_state_transition_applied",
-      ...(provisional ? ["provisional_official_response", "official_database_direct_qa_not_found"] : []),
-    ])],
-    confidenceSelfEstimate: "medium",
-  };
-}
-
-function applyGroundedOperationFallback(answer, evidence = {}) {
-  const operation = evidence.operationLegality;
-  const modelFailed = (answer.riskFlags || []).some((flag) => /(?:model_call_failed|model_json_parse_failed|deepseek_empty_content|model_output_not_json)/u.test(String(flag)));
-  if (!modelFailed || !operation?.hasGroundedChecks || !operation.shortAnswer) return answer;
-  const usedEvidence = dedupeEvidenceRefs([
-    ...(operation.evidence || []).map((item) => ({
-      id: item.id,
-      type: outputEvidenceType(item, new Set()),
-      title: item.title,
-      sourceUrl: item.sourceUrl || "",
-    })),
-    ...(operation.matchedRuleEvidence || []).map((item) => ({
-      id: item.id,
-      type: outputEvidenceType(item, new Set()),
-      title: item.title,
-      sourceUrl: item.sourceUrl || "",
-    })),
-    ...(answer.usedEvidence || []),
-  ]);
-  return {
-    ...answer,
-    answerLevel: "rule_analysis",
-    shortAnswer: operation.shortAnswer,
-    reasoning: cleanStringArray(operation.reasoning || []).length ? cleanStringArray(operation.reasoning) : answer.reasoning,
-    usedEvidence,
-    missingInfo: [],
-    riskFlags: [...new Set([...(answer.riskFlags || []), "final_model_failed_using_grounded_operation_analysis"])],
-    confidenceSelfEstimate: "medium",
-  };
-}
-
-function extractScenarioAnchors(value) {
-  const source = String(value || "");
-  const anchors = [];
-  const patterns = [
-    /「([^」]+)」/gu,
-    /『([^』]+)』/gu,
-    /《([^》]+)》/gu,
-    /【([^】]+)】/gu,
-    /\[([^\]]+)\]/gu,
-    /“([^”]+)”/gu,
-    /"([^"]+)"/gu,
-  ];
-  for (const pattern of patterns) {
-    for (const match of source.matchAll(pattern)) {
-      const key = normalizeScenarioKey(match[1]);
-      if (key.length >= 2 && key.length <= 100) anchors.push(key);
-    }
-  }
-  return [...new Set(anchors)];
-}
-
-function normalizeScenarioKey(value) {
-  return String(value || "")
-    .normalize("NFKC")
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}]+/gu, "");
 }
 
 export function normalizeRagAnswer(answer = {}, { evidence = {}, cardResolution = {}, modelWarnings = [] } = {}) {
@@ -1025,12 +611,14 @@ function outputEvidenceType(source, directIds) {
   if (source.type === "rulebook") return "rulebook";
   if (source.type === "official_response_screenshot") return "official_response_screenshot";
   if (source.type === "operation_check") return "operation_check";
+  if (source.type === "formal_engine_proof") return "formal_engine_proof";
   if (source.type === "faq") return "faq";
   return "related";
 }
 
 function selectFallbackEvidence(evidence, availableEvidence) {
   return evidence.officialQaDirectCandidates?.[0]
+    || evidence.formalEngineProofs?.find((item) => item.trusted)
     || evidence.operationLegality?.matchedRuleEvidence?.[0]
     || evidence.faqRelated?.[0]
     || evidence.officialQaRelated?.[0]
@@ -1038,6 +626,67 @@ function selectFallbackEvidence(evidence, availableEvidence) {
     || evidence.cardTexts?.[0]
     || evidence.userProvidedCardTexts?.[0]
     || availableEvidence[0];
+}
+
+function attachFormalShadowRisk(answer, formalShadow, { preserveAuthoritativeAnswer = false } = {}) {
+  if (!formalShadow?.enabled || formalShadow.status !== "unknown") return answer;
+  const errorCode = formalShadow.error?.code || formalShadow.analysis?.error?.code
+    || formalShadow.analysis?.formalResult?.queryResults?.[0]?.unknownReasons?.[0]?.code
+    || "FORMAL_UNKNOWN";
+  const riskAttached = {
+    ...answer,
+    riskFlags: [...new Set([...(answer?.riskFlags || []), `formal_engine_unknown:${errorCode}`])],
+  };
+  const diagnostic = preserveAuthoritativeAnswer
+    ? `形式规则内核本次未签发确定性证明（${errorCode}）；该诊断不覆盖已经命中的官方直接依据。`
+    : `形式规则内核本次未签发确定性证明（${errorCode}）；这不等于“不能”，当前答案仅依据其他资料。`;
+  const existingReasoning = cleanStringArray(answer?.reasoning || []);
+  const reasoning = existingReasoning.some((item) => /形式规则内核.*未签发确定性证明/u.test(item))
+    ? existingReasoning
+    : cleanStringArray([...existingReasoning, diagnostic]);
+  return {
+    ...riskAttached,
+    reasoning,
+  };
+}
+
+function summarizeFormalShadow(formalShadow) {
+  if (!formalShadow) return { mode: "off", enabled: false, status: "disabled" };
+  const result = formalShadow.analysis?.formalResult;
+  const capabilities = formalShadow.analysis?.capabilities;
+  return {
+    mode: formalShadow.mode,
+    enabled: formalShadow.enabled === true,
+    stage: formalShadow.stage,
+    requested: formalShadow.requested === true,
+    status: formalShadow.status,
+    planningStatus: formalShadow.plan?.kind || null,
+    scenarioId: formalShadow.plan?.scenario?.scenarioId || result?.scenarioId || null,
+    queryResults: (result?.queryResults || []).map((item) => ({
+      queryId: item.queryId,
+      verdict: item.verdict,
+      unknownReasons: (item.unknownReasons || []).map((reason) => ({
+        code: String(reason?.code || reason || "FORMAL_UNKNOWN"),
+      })),
+      certificateVerified: item.certificateVerification?.valid === true,
+    })),
+    versions: result ? {
+      engineVersion: result.engineVersion,
+      IRVersion: result.IRVersion,
+      rulesetVersion: result.rulesetVersion,
+      schemaVersion: result.schemaVersion,
+      proofVerifierVersion: result.proofVerifierVersion,
+    } : capabilities?.versions || null,
+    error: publicFormalError(formalShadow.error || formalShadow.analysis?.error, formalShadow.stage),
+  };
+}
+
+function publicFormalError(error, fallbackStage) {
+  if (!error || typeof error !== "object") return null;
+  return {
+    code: String(error.code || "FORMAL_UNKNOWN"),
+    stage: String(error.stage || fallbackStage || "unknown"),
+  };
 }
 
 function cleanStringArray(value) {
@@ -1050,6 +699,13 @@ function cleanStringArray(value) {
 function readNumber(value, fallback) {
   const number = Number(value);
   return Number.isFinite(number) && number > 0 ? number : fallback;
+}
+
+function attachUserQueryToCardTexts(cardTexts = [], userQuery = "") {
+  return (cardTexts || []).map((item) => ({
+    ...item,
+    _userQuery: String(userQuery || ""),
+  }));
 }
 
 function dedupeCards(cards) {

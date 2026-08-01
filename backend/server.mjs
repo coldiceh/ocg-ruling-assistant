@@ -1,7 +1,6 @@
 import { createServer } from "node:http";
 import { authorizeBudgetResetRequest, budgetResetTokenConfigured } from "./budgetAuth.mjs";
-import { answerQuestion, getDataHealth } from "./engine.mjs";
-import { answerRulingQuestionFast } from "./fastJudgeEngine.mjs";
+import { getDataHealth } from "./engine.mjs";
 import { appendFeedbackCase } from "./feedbackCases.mjs";
 import {
   createPublicAnswerModelEnv,
@@ -11,6 +10,8 @@ import {
   resolveRagProvider,
 } from "./ragModelClient.mjs";
 import { getOcgEngineHealth, requestOcgEngineSimulation } from "./ocgEngineClient.mjs";
+import { getFormalEngineCapabilities } from "./formalEngineClient.mjs";
+import { formalShadowEnabled } from "./formalEngineShadow.mjs";
 import { appendQueryAudit } from "./queryAuditStore.mjs";
 import {
   answerRagRulingQuestionForVersion,
@@ -58,7 +59,10 @@ const server = createServer(async (request, response) => {
 
   if (request.method === "GET" && request.url === "/api/engine") {
     const health = await getOcgEngineHealth({ env: process.env });
-    sendJson(response, health.ok ? 200 : 503, health);
+    const formal = formalShadowEnabled(process.env)
+      ? await getFormalEngineCapabilities({ env: process.env })
+      : { status: "disabled", capabilities: null, error: null };
+    sendJson(response, health.ok ? 200 : 503, { ...health, formal });
     return;
   }
 
@@ -109,35 +113,20 @@ const server = createServer(async (request, response) => {
         mode,
         env: publicEnv,
       }).catch(() => null);
-      if (!["legacy", "fastjudge"].includes(mode)) {
-        const answer = await answerRagRulingQuestionForVersion({
-          rulingVersion: payload.rulingVersion,
-          question: payload.question,
-          env: envForModelTier(publicEnv, payload.modelTier),
-          engineScenario: payload.engineScenario,
-        });
-        await auditPromise;
-        sendJson(response, 200, answer);
-        return;
+      if (mode !== "rag") {
+        const error = new Error("Only the evidence-grounded RAG answer mode is public");
+        error.statusCode = 400;
+        error.code = "unsupported_answer_mode";
+        throw error;
       }
-      const useFastJudge = mode === "fastjudge";
-      const answer = useFastJudge
-        ? await answerRulingQuestionFast({
-            question: payload.question,
-            mode: "duel",
-            maxLatencyMs: 6000,
-            env: publicEnv,
-            gameState: payload.gameState || {},
-            chainLinks: Array.isArray(payload.chainLinks) ? payload.chainLinks : [],
-          })
-        : await answerQuestion(payload, { env: publicEnv });
-      await auditPromise;
-      sendJson(response, 200, {
-        ...answer,
-        requestedRulingVersion: null,
-        effectiveRulingVersion: null,
-        rulingVersion: null,
+      const answer = await answerRagRulingQuestionForVersion({
+        rulingVersion: payload.rulingVersion,
+        question: payload.question,
+        env: envForModelTier(publicEnv, payload.modelTier),
+        engineScenario: payload.engineScenario,
       });
+      await auditPromise;
+      sendJson(response, 200, answer);
     } catch (error) {
       await auditPromise;
       sendJson(response, error?.statusCode === 400 ? 400 : 500, {
@@ -327,7 +316,7 @@ async function getModelInfo() {
       engineEnabled,
       enabled: true,
       pipeline: "rag_baseline",
-      legacyModes: ["legacy", "fastjudge"],
+      legacyModes: [],
     };
   }
   if (ragProvider.provider === "gemini") {
@@ -343,7 +332,7 @@ async function getModelInfo() {
       engineEnabled,
       enabled: true,
       pipeline: "rag_baseline",
-      legacyModes: ["legacy", "fastjudge"],
+      legacyModes: [],
     };
   }
   return {
@@ -356,7 +345,7 @@ async function getModelInfo() {
     engineEnabled,
     enabled: false,
     pipeline: "rag_baseline",
-    legacyModes: ["legacy", "fastjudge"],
+    legacyModes: [],
   };
 }
 

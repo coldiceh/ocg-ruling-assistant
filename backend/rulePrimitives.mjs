@@ -245,23 +245,19 @@ function deriveAtkDefModification(input) {
   if (!/攻击力|守备力|ATK|DEF/iu.test(input.text)) return null;
   const setCards = relatedCardNames(input, /(?:攻击力|攻撃力).{0,18}(?:变为|は).{0,10}(?:倍|两倍|半分|一半)/iu);
   const continuousCards = relatedCardNames(input, /装备怪兽的攻击力变为|装備モンスターの攻撃力/iu);
-  const statedValues = extractStatedValuePair(input.originalQuestion);
-  const statedFinal = statedValues.final;
   const steps = [
-    step("continuous_modifier_reapply", `持续效果会在游戏状态变化时重新适用；生命值关系改变后，装备效果先按新的条件更新当前攻击力${statedValues.intermediate ? `为题述中间值 ${statedValues.intermediate}` : ""}。`, continuousCards, input),
-    step("set_attack_value", `随后处理的发动型“攻击力变为／倍化”效果以当时的攻击力为基准设定新的处理结果${statedFinal && statedValues.intermediate ? `，即由 ${statedValues.intermediate} 变为 ${statedFinal}` : ""}。`, setCards, input),
+    step("continuous_modifier_reapply", "持续效果会在游戏状态变化时重新适用；生命值关系改变后，先按新条件重算当前攻击力。", continuousCards, input),
+    step("set_attack_value", "随后处理的发动型“攻击力变为／倍化”效果以当时经可验证规则重算后的攻击力为基准。", setCards, input),
     step("atk_value_lock", "该设定处理完成后，先前持续修正的移除不会自动把已经设定的数值倒回处理前的中间值，除非文本或规则要求重新计算。", unique([...setCards, ...continuousCards]), input),
   ];
   if (/失去.{0,8}LP|扣血/iu.test(input.text)) {
     steps.unshift(step("lp_change_before_atk_setting", "同一效果先执行失去 LP 的部分；该状态变化会立即影响依赖双方 LP 高低的持续效果，然后才执行后续攻击力设定。", setCards, input));
   }
   return {
-    concepts: unique(["atk_def_modification", "continuous_modifier_reapply", "set_attack_value", "atk_value_lock", ...(steps.some((item) => item.step === "lp_change_before_atk_setting") ? ["lp_change_before_atk_setting"] : []), ...(statedFinal ? [`final_atk_${statedFinal}`] : [])]),
+    concepts: unique(["atk_def_modification", "continuous_modifier_reapply", "set_attack_value", "atk_value_lock", ...(steps.some((item) => item.step === "lp_change_before_atk_setting") ? ["lp_change_before_atk_setting"] : [])]),
     steps,
-    verdictHint: statedFinal ? `final_atk_${statedFinal}` : "set_attack_value_remains_after_prior_modifier_removed",
-    shortAnswer: statedFinal
-      ? `按处理顺序，最终攻击力应为 ${statedFinal}；之后移除先前的持续修正不会把已设定数值改回中间值。`
-      : "先更新持续修正，再执行发动型数值设定；之后移除先前修正通常不改写已设定结果。",
+    verdictHint: "set_attack_value_remains_after_prior_modifier_removed",
+    shortAnswer: "先更新持续修正，再执行发动型数值设定；之后移除先前修正通常不改写已设定结果。具体数值必须由卡片文本与已验证的状态计算，不从用户在问题中声称的答案反推。",
   };
 }
 
@@ -335,12 +331,6 @@ function primitiveRuleBasis(stepId) {
   if (/damage|battle|position|attack_target/u.test(stepId)) return "rulebook";
   if (/copy|activation_procedure|effect_text_scope|reveal/u.test(stepId)) return "card_text";
   return "rulebook + card_text + official_faq_analogy";
-}
-
-function extractStatedValuePair(text) {
-  const source = String(text || "").normalize("NFKC");
-  const match = source.match(/(?:为什么|为何|应为|还是)[^。？！?]{0,20}?(\d{3,6})\s*(?:而不是|不是|而非)\s*(\d{3,6})/u);
-  return { final: match?.[1] || "", intermediate: match?.[2] || "" };
 }
 
 function extractPositionMentions(text, position) {

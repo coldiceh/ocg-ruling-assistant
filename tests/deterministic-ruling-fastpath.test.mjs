@@ -9,7 +9,7 @@ const localEnv = {
   OCG_ENGINE_ENABLED: "0",
 };
 
-test("production fast path rechecks continuous immunity after paying discard cost", async () => {
+test("legacy state-transition hint cannot issue a production verdict", async () => {
   const answer = await answerRagRulingQuestion({
     question: "我方额外卡组有「测试冰剑融合龙」。对方场上存在的卡只有表侧表示的「吞食圣痕之龙」1只，双方墓地没有卡。我方召唤「阿不思的落胤」时，可以将「教导的圣女 艾克莉西亚」作为Cost丢弃来发动其效果吗，后续怎么处理？",
     cards: [{
@@ -52,19 +52,16 @@ test("production fast path rechecks continuous immunity after paying discard cos
     dryRun: true,
   });
 
-  assert.match(answer.shortAnswer, /^可以发动/u, JSON.stringify(answer.debug.semanticStateTransition));
-  assert.match(answer.shortAnswer, /不会进行任何效果处理/u);
-  assert.match(answer.shortAnswer, /不进行融合召唤/u);
+  assert.match(answer.shortAnswer, /未确认分析/u);
   assert.ok(answer.resolvedCards.some((card) => card.name === "吞喰圣痕之龙"));
   assert.deepEqual(answer.debug.unresolvedMentions, []);
-  assert.equal(answer.debug.deterministicDecision, "state_transition");
-  assert.equal(answer.debug.modelUsed, "deterministic-ruling-reasoner");
-  assert.equal(answer.debug.timingsMs.finalModel, 0);
+  assert.equal(answer.debug.deterministicDecision, null);
+  assert.notEqual(answer.debug.modelUsed, "deterministic-ruling-reasoner");
   assert.ok(answer.usedEvidence.some((item) => item.id === "faq-for-activated-source"));
   assert.equal(answer.usedEvidence.some((item) => item.id === "faq-for-other-field-card"), false);
 });
 
-test("complete deterministic preflight skips both auxiliary extraction models", async () => {
+test("legacy preflight cannot skip either auxiliary extraction model", async () => {
   let cardNameModelCalls = 0;
   let ruleQueryModelCalls = 0;
   const answer = await answerRagRulingQuestion({
@@ -102,12 +99,11 @@ test("complete deterministic preflight skips both auxiliary extraction models", 
     },
   });
 
-  assert.equal(cardNameModelCalls, 0);
-  assert.equal(ruleQueryModelCalls, 0);
-  assert.equal(answer.debug.cardNameModelUsed, "none");
-  assert.equal(answer.debug.ruleQueryModelUsed, "none");
-  assert.equal(answer.debug.timingsMs.auxiliaryExtractionModels, 0);
-  assert.equal(answer.debug.deterministicDecision, "state_transition");
+  assert.equal(cardNameModelCalls, 1);
+  assert.equal(ruleQueryModelCalls, 1);
+  assert.notEqual(answer.debug.cardNameModelUsed, "none");
+  assert.notEqual(answer.debug.ruleQueryModelUsed, "none");
+  assert.equal(answer.debug.deterministicDecision, null);
 });
 
 test("incomplete deterministic preflight preserves auxiliary extraction models", async () => {
@@ -141,15 +137,14 @@ test("incomplete deterministic preflight preserves auxiliary extraction models",
   assert.equal(answer.debug.deterministicDecision, null);
 });
 
-test("exact Albaz question with production data includes activation and downstream resolution", async () => {
+test("a historical production question is not answered by a local card-name shortcut", async () => {
   const answer = await answerRagRulingQuestion({
     question: "我方的额外卡组有「冰剑龙 幻冰龙」，手牌只有「教导的圣女 艾克莉西娅」和「阿不思的落胤」各1张。\n\n对方场上存在的卡只有表侧表示的「吞食圣痕之龙」1只，双方墓地没有卡。\n\n我方召唤「阿不思的落胤」时，可以将「教导的圣女 艾克莉西娅」作为Cost丢弃送去墓地，来发动「阿不思的落胤」的『①』效果吗",
     env: localEnv,
     dryRun: true,
   });
 
-  assert.match(answer.shortAnswer, /^可以发动，但是不会进行任何效果处理/u, JSON.stringify(answer.debug.semanticStateTransition));
-  assert.match(answer.shortAnswer, /因此不进行融合召唤/u);
+  assert.match(answer.shortAnswer, /未确认分析/u);
   assert.equal(
     answer.debug.unresolvedMentions.some((mention) => mention.input === "冰剑龙 幻冰龙"),
     false,
@@ -157,18 +152,11 @@ test("exact Albaz question with production data includes activation and downstre
   assert.ok(answer.resolvedCards.some((card) => card.name === "教导之圣女 艾克利西亚"));
   assert.ok(answer.resolvedCards.some((card) => card.name === "阿尔白斯之落胤"));
   assert.ok(answer.resolvedCards.some((card) => card.name === "吞喰圣痕之龙"));
-  assert.equal(answer.debug.deterministicDecision, "state_transition");
-  assert.equal(answer.debug.semanticStateTransition.status, "resolved");
-  assert.equal(answer.debug.semanticStateTransition.complete, true);
-  assert.equal(
-    answer.debug.semanticStateTransition.program.finalState.entities.find((entity) => entity.zone === "graveyard")?.name,
-    "教导之圣女 艾克利西亚",
-  );
-  assert.equal(answer.debug.modelUsed, "deterministic-ruling-reasoner");
-  assert.ok(answer.debug.timingsMs.finalModel <= 5);
+  assert.equal(answer.debug.deterministicDecision, null);
+  assert.notEqual(answer.debug.modelUsed, "deterministic-ruling-reasoner");
 });
 
-test("exact public-hand reveal question is blocked before the final model", async () => {
+test("a public-hand wording plus an untyped note cannot block before the final model", async () => {
   const answer = await answerRagRulingQuestion({
     question: "我方看透心灵之眼适用中，我方有手牌，我方能发动红莲的指名者吗？",
     cards: [{
@@ -194,11 +182,9 @@ test("exact public-hand reveal question is blocked before the final model", asyn
     dryRun: true,
   });
 
-  assert.match(answer.shortAnswer, /^不能发动/u);
-  assert.match(answer.shortAnswer, /手牌已经.*持续公开/u);
-  assert.equal(answer.debug.deterministicDecision, "operation_blocker");
-  assert.equal(answer.debug.modelUsed, "deterministic-ruling-reasoner");
-  assert.equal(answer.debug.timingsMs.finalModel, 0);
+  assert.match(answer.shortAnswer, /未确认分析/u);
+  assert.equal(answer.debug.deterministicDecision, null);
+  assert.notEqual(answer.debug.modelUsed, "deterministic-ruling-reasoner");
 });
 
 test("deterministic fast path does not ignore an unresolved card in the described state", async () => {
@@ -243,7 +229,7 @@ test("deterministic fast path does not ignore an unresolved card in the describe
   assert.notEqual(answer.debug.modelUsed, "deterministic-ruling-reasoner");
 });
 
-test("production fast path rejects mandatory return when only the activating trap exists", async () => {
+test("an untyped mandatory-return template cannot issue a production rejection", async () => {
   const answer = await answerRagRulingQuestion({
     question: "对方场上有「绚岚之达维」，我方以达维为对象发动「无限泡影」，这个时候场上没有其他魔陷，对方能不能发动「天雷之双风神」的效果？",
     cards: [{
@@ -278,15 +264,14 @@ test("production fast path rejects mandatory return when only the activating tra
     dryRun: true,
   });
 
-  assert.match(answer.shortAnswer, /^不能发动/u);
+  assert.match(answer.shortAnswer, /未确认分析/u);
   assert.ok(answer.resolvedCards.some((card) => card.name === "绚岚之达象"));
   assert.deepEqual(answer.debug.unresolvedMentions, []);
-  assert.equal(answer.debug.deterministicDecision, "operation_blocker");
-  assert.equal(answer.debug.modelUsed, "deterministic-ruling-reasoner");
-  assert.equal(answer.debug.timingsMs.finalModel, 0);
+  assert.equal(answer.debug.deterministicDecision, null);
+  assert.notEqual(answer.debug.modelUsed, "deterministic-ruling-reasoner");
 });
 
-test("production fast path orders both players' destruction replacements before dependent summon", async () => {
+test("an untyped destruction-replacement template cannot issue a production sequence", async () => {
   const answer = await answerRagRulingQuestion({
     question: "双方场上都只有一只怪兽的时候，对方发动了手卡「破械冥官·笔」的效果，要将场上的「破械焰魔天·阎摩」破坏，此时对方选择适用「破械焰魔天·阎摩」的效果想要破坏我方场上的「完美电子多元驱动蛇·神龙」，我方场上的「完美电子多元驱动蛇·神龙」可以作为被破坏的替代降低1000攻击力吗？如果适用降低1000攻击力，对方的「破械冥官·笔」还能特殊召唤吗？",
     cards: [{
@@ -318,11 +303,7 @@ test("production fast path orders both players' destruction replacements before 
     dryRun: true,
   });
 
-  assert.match(answer.shortAnswer, /降攻代替不再适用/u);
-  assert.match(answer.shortAnswer, /原本选择的破坏对象没有被破坏/u);
-  assert.match(answer.shortAnswer, /后续特殊召唤不处理/u);
-  assert.doesNotMatch(answer.shortAnswer, /两次代替依次适用/u);
-  assert.equal(answer.debug.deterministicDecision, "operation_sequence");
-  assert.equal(answer.debug.modelUsed, "deterministic-ruling-reasoner");
-  assert.equal(answer.debug.timingsMs.finalModel, 0);
+  assert.match(answer.shortAnswer, /未确认分析/u);
+  assert.equal(answer.debug.deterministicDecision, null);
+  assert.notEqual(answer.debug.modelUsed, "deterministic-ruling-reasoner");
 });

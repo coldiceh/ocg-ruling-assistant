@@ -3,7 +3,11 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { loadRagData, retrieveRagEvidence } from "../backend/ragEvidenceRetriever.mjs";
 import { callRulebookGroundingModel, selectPriorityConstraintEvidence } from "../backend/ragModelClient.mjs";
-import { analyzeDeterministicOperationLegality, validateOperationLegalityModelOutput } from "../backend/operationLegalityAnalyzer.mjs";
+import {
+  analyzeDeterministicOperationLegality,
+  OPERATION_PREMISE_SCHEMA_VERSION,
+  validateOperationLegalityModelOutput,
+} from "../backend/operationLegalityAnalyzer.mjs";
 import { retrieveRulebookPassages } from "../backend/rulebookPassageRetriever.mjs";
 import { buildDocTargets } from "../scripts/sync-ocg-rule.mjs";
 
@@ -442,7 +446,7 @@ test("grounded_operation_check_completes_its_priority_constraint_review", () => 
   assert.ok(result.warnings.includes("operation_constraint_review_inferred_from_grounded_check:" + rule.id));
 });
 
-test("generic_legal_check_cannot_bypass_restrictive_rule_without_non_applicability_comparison", () => {
+test("generic legal check cannot turn a restrictive candidate into a fixed blocker", () => {
   const rule = {
     id: "rulebook-active-card-return-restriction",
     type: "rulebook",
@@ -467,13 +471,13 @@ test("generic_legal_check_cannot_bypass_restrictive_rule_without_non_applicabili
   }, [rule], { requiredConstraintEvidence: [rule] });
 
   assert.equal(result.hasGroundedChecks, true);
-  assert.equal(result.hasBlockingCheck, true);
-  assert.equal(result.hasUnresolvedConstraints, false);
-  assert.match(result.shortAnswer, /不能发动/u);
-  assert.ok(result.warnings.includes("operation_blocker_derived_from_combined_constraint_evidence"));
+  assert.equal(result.hasBlockingCheck, false);
+  assert.equal(result.hasUnresolvedConstraints, true);
+  assert.match(result.shortAnswer, /不能确认/u);
+  assert.ok(result.warnings.includes("operation_candidate_derived_from_combined_constraint_evidence"));
 });
 
-test("card-text mechanics retrieve and enforce the Double Wind mandatory return restrictions", async () => {
+test("card-text mechanics retrieve mandatory-return constraints without fixing the answer", async () => {
   const data = await loadRagData();
   const question = "双方后场只有刚发动的「无限泡影」；对方场上有风属性怪兽，我方能否发动「天雷之双风神 息那」①效果？";
   const resolvedCards = data.cards
@@ -498,8 +502,9 @@ test("card-text mechanics retrieve and enforce the Double Wind mandatory return 
     qaEvidence: [],
     modelInvoker: async () => JSON.stringify({ operationChecks: [], constraintReviews: [] }),
   });
-  assert.equal(grounding.operationLegality.hasBlockingCheck, true);
-  assert.match(grounding.operationLegality.shortAnswer, /不能发动/u);
+  assert.equal(grounding.operationLegality.hasBlockingCheck, false);
+  assert.equal(grounding.operationLegality.hasUnresolvedConstraints, true);
+  assert.match(grounding.operationLegality.shortAnswer, /不能确认/u);
 });
 
 test("replacement card text and player roles retrieve the turn-player-first rule without answer keywords", async () => {
@@ -532,12 +537,12 @@ test("replacement card text and player roles retrieve the turn-player-first rule
   });
   const check = grounding.operationLegality.checks.find((item) => item.operationId === "simultaneous-destruction-replacement-order");
   assert.ok(check);
-  assert.equal(check.status, "conditional");
+  assert.equal(check.status, "unknown");
   assert.match(check.conclusion, /先适用回合玩家.*重新检查非回合玩家/u);
-  assert.equal(grounding.operationLegality.hasUnresolvedConstraints, false);
+  assert.equal(grounding.operationLegality.hasUnresolvedConstraints, true);
 });
 
-test("deterministic local analysis blocks mandatory return when the only candidate is the resolving trap", () => {
+test("mandatory-return template remains an unknown candidate without typed premises", () => {
   const activeCardRule = {
     id: "neutral-rule-active-card",
     type: "rulebook",
@@ -569,13 +574,72 @@ test("deterministic local analysis blocks mandatory return when the only candida
   });
 
   assert.equal(result.deterministic, true);
-  assert.equal(result.complete, true);
-  assert.equal(result.hasBlockingCheck, true);
-  assert.match(result.shortAnswer, /不能发动/u);
+  assert.equal(result.complete, false);
+  assert.equal(result.hasBlockingCheck, false);
+  assert.equal(result.hasUnresolvedConstraints, true);
+  assert.match(result.shortAnswer, /不能确认/u);
   assert.doesNotMatch(result.shortAnswer, /天雷|无限泡影/u);
 });
 
-test("deterministic local analysis blocks a reveal procedure while the actor's hand is already public", () => {
+test("mandatory-return candidate completes only with attested evidence-bound premises", () => {
+  const userQuery = "双方魔法陷阱区域只有刚刚发动的「测试通常陷阱」。我方能否使用「测试回手者」的效果？";
+  const returner = {
+    id: "neutral-returner-attested",
+    type: "card_text",
+    title: "测试回手者",
+    cardType: "monster",
+    text: "对手发动魔法・陷阱卡时可以发动。从手牌将此卡特殊召唤。然后，将场上的魔法・陷阱卡全部放回手牌。",
+  };
+  const activeCardRule = {
+    id: "neutral-rule-active-card-attested",
+    type: "rulebook",
+    title: "发动中卡片的位置限制",
+    text: "正在发动或连锁处理中的非永续魔法・陷阱卡不能从场上返回手牌。",
+  };
+  const noCandidateRule = {
+    id: "neutral-rule-no-candidate-attested",
+    type: "rulebook",
+    title: "必做处理的发动条件",
+    text: "除自身以外没有能适用的卡时不能发动。",
+  };
+  const result = analyzeDeterministicOperationLegality({
+    userQuery,
+    cardTexts: [returner, {
+      id: "neutral-trap-attested",
+      type: "card_text",
+      title: "测试通常陷阱",
+      cardType: "trap",
+      text: "以场上1只怪兽为对象发动。那只怪兽的效果无效。",
+    }],
+    ruleEvidence: [activeCardRule, noCandidateRule],
+    typedPremises: {
+      schemaVersion: OPERATION_PREMISE_SCHEMA_VERSION,
+      attested: true,
+      facts: [{
+        predicate: "operation.mandatory_field_spell_trap_return",
+        value: true,
+        citations: [{ id: returner.id, quote: "将场上的魔法・陷阱卡全部放回手牌" }],
+      }, {
+        predicate: "operation.only_candidate_is_active_chain_card",
+        value: true,
+        citations: [{ id: "scenario-input:user-query", quote: "双方魔法陷阱区域只有刚刚发动的「测试通常陷阱」" }],
+      }, {
+        predicate: "operation.active_chain_card_can_be_returned",
+        value: false,
+        citations: [{ id: activeCardRule.id, quote: "非永续魔法・陷阱卡不能从场上返回手牌" }],
+      }],
+    },
+  });
+
+  const check = result.checks.find((item) => item.operationId === "mandatory-spell-trap-return-applicability");
+  assert.equal(check?.status, "illegal");
+  assert.equal(check?.deterministicComplete, true);
+  assert.equal(result.complete, true);
+  assert.equal(result.hasBlockingCheck, true);
+  assert.match(result.shortAnswer, /^不能发动/u);
+});
+
+test("public-hand reveal template remains an unknown candidate without typed premises", () => {
   const result = analyzeDeterministicOperationLegality({
     userQuery: "我方「测试公开领域」的效果适用中，我方有手牌。我方能发动「测试展示陷阱」吗？",
     cardTexts: [{
@@ -601,12 +665,64 @@ test("deterministic local analysis blocks a reveal procedure while the actor's h
 
   const check = result.checks.find((item) => item.operationId === "public-hand-reveal-activation-procedure");
   assert.ok(check);
-  assert.equal(check.status, "illegal");
+  assert.equal(check.status, "unknown");
   assert.equal(result.deterministic, true);
+  assert.equal(result.complete, false);
+  assert.equal(result.hasBlockingCheck, false);
+  assert.match(result.shortAnswer, /不能确认/u);
+  assert.doesNotMatch(result.shortAnswer, /红莲|看透/u);
+});
+
+test("public-hand reveal candidate completes only with attested evidence-bound premises", () => {
+  const publicCard = {
+    id: "neutral-public-hand-attested",
+    type: "card_text",
+    title: "测试公开领域",
+    cardType: "spell",
+    text: "双方玩家根据自身场上的怪兽对自身适用以下效果。光：自己的手牌全部持续公开。",
+  };
+  const activationCard = {
+    id: "neutral-reveal-trap-attested",
+    type: "card_text",
+    title: "测试展示陷阱",
+    cardType: "trap",
+    text: "把自己的全部手牌给对方观看，支付1000基本分可以发动。选对方手牌1张除外。",
+  };
+  const rule = {
+    id: "neutral-rule-public-hand-attested",
+    type: "faq",
+    title: "持续公开与展示手续",
+    text: "自己的手牌已经因其他卡的效果持续公开的情况下，不能发动需要把自己的手牌给对方观看的效果。",
+  };
+  const result = analyzeDeterministicOperationLegality({
+    userQuery: "我方「测试公开领域」的效果适用中，我方有手牌。我方能发动「测试展示陷阱」吗？",
+    cardTexts: [publicCard, activationCard],
+    ruleEvidence: [rule],
+    typedPremises: {
+      schemaVersion: OPERATION_PREMISE_SCHEMA_VERSION,
+      attested: true,
+      facts: [{
+        predicate: "hand.actor_is_already_public",
+        value: true,
+        citations: [{ id: publicCard.id, quote: "自己的手牌全部持续公开" }],
+      }, {
+        predicate: "activation.procedure_requires_reveal_own_hand",
+        value: true,
+        citations: [{ id: activationCard.id, quote: "把自己的全部手牌给对方观看" }],
+      }, {
+        predicate: "reveal.already_public_can_satisfy_procedure",
+        value: false,
+        citations: [{ id: rule.id, quote: "不能发动需要把自己的手牌给对方观看的效果" }],
+      }],
+    },
+  });
+
+  const check = result.checks.find((item) => item.operationId === "public-hand-reveal-activation-procedure");
+  assert.equal(check?.status, "illegal");
+  assert.equal(check?.deterministicComplete, true);
   assert.equal(result.complete, true);
   assert.equal(result.hasBlockingCheck, true);
   assert.match(result.shortAnswer, /^不能发动/u);
-  assert.doesNotMatch(result.shortAnswer, /红莲|看透/u);
 });
 
 test("public opponent hand does not block the actor from revealing their own hand", () => {
@@ -700,7 +816,7 @@ test("a reveal FAQ explicitly belonging to another card cannot create a determin
   );
 });
 
-test("deterministic local analysis completes turn-player-first replacement after the other carrier is destroyed", () => {
+test("turn-player replacement wording remains an unknown candidate without typed premises", () => {
   const rule = {
     id: "neutral-rule-replacement-order",
     type: "rulebook",
@@ -722,15 +838,15 @@ test("deterministic local analysis completes turn-player-first replacement after
 
   const check = result.checks.find((item) => item.operationId === "simultaneous-destruction-replacement-order");
   assert.ok(check);
-  assert.equal(check.status, "legal");
-  assert.deepEqual(check.missingFacts, []);
+  assert.equal(check.status, "unknown");
+  assert.ok(check.missingFacts.some((item) => /类型化前提/u.test(item)));
   assert.equal(result.deterministic, true);
-  assert.equal(result.complete, true);
-  assert.match(result.shortAnswer, /非回合玩家.*不再适用/u);
+  assert.equal(result.complete, false);
+  assert.match(result.shortAnswer, /不能确认/u);
   assert.doesNotMatch(result.shortAnswer, /破械/u);
 });
 
-test("deterministic local analysis applies the turn player's replacement first and stops dependent summon", () => {
+test("replacement follow-up wording cannot manufacture a complete sequence answer", () => {
   const rule = {
     id: "neutral-rule-replacement-order-follow-up",
     type: "rulebook",
@@ -763,13 +879,11 @@ test("deterministic local analysis applies the turn player's replacement first a
 
   const check = result.checks.find((item) => item.operationId === "simultaneous-destruction-replacement-order");
   assert.ok(check);
-  assert.equal(check.status, "legal");
+  assert.equal(check.status, "unknown");
   assert.equal(result.deterministic, true);
-  assert.equal(result.complete, true);
+  assert.equal(result.complete, false);
   assert.equal(result.hasBlockingCheck, false);
-  assert.match(result.shortAnswer, /降攻代替不再适用/u);
-  assert.match(result.shortAnswer, /原本选择的破坏对象没有被破坏/u);
-  assert.match(result.shortAnswer, /后续特殊召唤不处理/u);
+  assert.match(result.shortAnswer, /不能确认/u);
   assert.doesNotMatch(result.shortAnswer, /完美电子|破械/u);
 });
 

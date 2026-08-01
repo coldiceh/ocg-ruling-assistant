@@ -82,16 +82,14 @@ test("api_answer_dispatches_previous_and_rejects_invalid_ruling_versions", async
   }
 });
 
-test("legacy answer modes explicitly report that ruling versions do not apply", async () => {
+test("legacy answer modes are no longer exposed by the public API", async () => {
   const response = createJsonResponse();
   await handler({
     method: "POST",
     body: { question: "", mode: "legacy", rulingVersion: "previous" },
   }, response);
-  assert.equal(response.statusCode, 200);
-  assert.equal(response.payload.requestedRulingVersion, null);
-  assert.equal(response.payload.effectiveRulingVersion, null);
-  assert.equal(response.payload.rulingVersion, null);
+  assert.equal(response.statusCode, 400);
+  assert.equal(response.payload.code, "unsupported_answer_mode");
 });
 
 function createJsonResponse() {

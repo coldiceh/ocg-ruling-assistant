@@ -1,13 +1,7 @@
+import { requestOcgEngineJson, toOcgEngineFailure } from "./ocgEngineHttpClient.mjs";
+
 const SHA256 = /^[a-f0-9]{64}$/u;
 const RESOURCE_FIELDS = ["lockId", "snapshotId", "manifestSha256", "coreSha256", "dbSetSha256", "scriptSetSha256", "patchSetSha256"];
-
-function cleanBaseUrl(value) {
-  const text = String(value || "").trim().replace(/\/+$/u, "");
-  if (!text) return "";
-  const url = new URL(text);
-  if (!["http:", "https:"].includes(url.protocol)) throw new TypeError("OCG_ENGINE_URL must use http or https");
-  return url.toString().replace(/\/+$/u, "");
-}
 
 function validateSimulation(value) {
   if (!value || typeof value !== "object") throw new Error("engine returned no simulation");
@@ -22,22 +16,6 @@ function validateSimulation(value) {
   return value;
 }
 
-function safeFailure(error) {
-  return {
-    code: typeof error?.code === "string" ? error.code : "OCG_ENGINE_UNAVAILABLE",
-    message: error instanceof Error ? error.message : String(error),
-  };
-}
-
-async function parseResponse(response) {
-  const text = await response.text();
-  try {
-    return text ? JSON.parse(text) : {};
-  } catch {
-    throw new Error("engine returned invalid JSON");
-  }
-}
-
 export async function requestOcgEngineSimulation({
   engineScenario,
   env = globalThis.process?.env || {},
@@ -45,43 +23,30 @@ export async function requestOcgEngineSimulation({
   timeoutMs,
 } = {}) {
   if (engineScenario === undefined || engineScenario === null) return { requested: false, status: "not_requested" };
-  let baseUrl;
+  const fetchUnavailableError = new Error("fetch is unavailable");
+  fetchUnavailableError.code = "OCG_ENGINE_FETCH_UNAVAILABLE";
+  const transport = await requestOcgEngineJson({
+    path: "/simulate",
+    method: "POST",
+    body: { scenario: engineScenario },
+    env,
+    fetchImpl,
+    timeoutMs,
+    defaultTimeoutMs: 20_000,
+    fetchUnavailableError,
+  });
+  if (transport.status !== "response") {
+    return { requested: true, status: transport.status, error: transport.error };
+  }
   try {
-    baseUrl = cleanBaseUrl(env.OCG_ENGINE_URL);
-  } catch (error) {
-    return { requested: true, status: "unavailable", error: safeFailure(error) };
-  }
-  if (!baseUrl) {
-    return { requested: true, status: "disabled", error: { code: "OCG_ENGINE_NOT_CONFIGURED", message: "OCG_ENGINE_URL is not configured" } };
-  }
-  if (typeof fetchImpl !== "function") {
-    return { requested: true, status: "unavailable", error: { code: "OCG_ENGINE_FETCH_UNAVAILABLE", message: "fetch is unavailable" } };
-  }
-
-  const controller = new AbortController();
-  const timeout = Number(timeoutMs || env.OCG_ENGINE_TIMEOUT_MS || 20_000);
-  const timer = setTimeout(() => controller.abort(), Number.isFinite(timeout) ? timeout : 20_000);
-  timer.unref?.();
-  try {
-    const headers = { "content-type": "application/json" };
-    if (env.OCG_ENGINE_TOKEN) headers.authorization = "Bearer " + env.OCG_ENGINE_TOKEN;
-    const response = await fetchImpl(baseUrl + "/simulate", {
-      method: "POST",
-      headers,
-      body: JSON.stringify({ scenario: engineScenario }),
-      signal: controller.signal,
-    });
-    const payload = await parseResponse(response);
-    if (!response.ok || payload.ok !== true) {
-      const error = new Error(payload?.error?.message || "engine request failed with HTTP " + response.status);
-      error.code = payload?.error?.code || "OCG_ENGINE_HTTP_ERROR";
+    if (!transport.ok) {
+      const error = new Error(transport.payload?.error?.message || "engine request failed with HTTP " + transport.httpStatus);
+      error.code = transport.payload?.error?.code || "OCG_ENGINE_HTTP_ERROR";
       throw error;
     }
-    return { requested: true, status: "completed", simulation: validateSimulation(payload.simulation) };
+    return { requested: true, status: "completed", simulation: validateSimulation(transport.payload.simulation) };
   } catch (error) {
-    return { requested: true, status: "unavailable", error: safeFailure(error) };
-  } finally {
-    clearTimeout(timer);
+    return { requested: true, status: "unavailable", error: toOcgEngineFailure(error) };
   }
 }
 
@@ -90,27 +55,18 @@ export async function getOcgEngineHealth({
   fetchImpl = globalThis.fetch,
   timeoutMs = 3_000,
 } = {}) {
-  let baseUrl;
-  try {
-    baseUrl = cleanBaseUrl(env.OCG_ENGINE_URL);
-  } catch (error) {
-    return { ok: false, status: "unavailable", error: safeFailure(error) };
+  const transport = await requestOcgEngineJson({
+    path: "/health",
+    env,
+    fetchImpl,
+    timeoutMs,
+    defaultTimeoutMs: 3_000,
+  });
+  if (transport.status === "disabled") return { ok: false, status: "disabled" };
+  if (transport.status !== "response") {
+    return { ok: false, status: "unavailable", error: transport.error };
   }
-  if (!baseUrl) return { ok: false, status: "disabled" };
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  timer.unref?.();
-  try {
-    const headers = {};
-    if (env.OCG_ENGINE_TOKEN) headers.authorization = "Bearer " + env.OCG_ENGINE_TOKEN;
-    const response = await fetchImpl(baseUrl + "/health", { headers, signal: controller.signal });
-    const payload = await parseResponse(response);
-    return response.ok && payload.ok === true
-      ? { ...payload, status: "ready" }
-      : { ok: false, status: "unavailable", error: payload.error || { code: "OCG_ENGINE_HEALTH_FAILED" } };
-  } catch (error) {
-    return { ok: false, status: "unavailable", error: safeFailure(error) };
-  } finally {
-    clearTimeout(timer);
-  }
+  return transport.ok
+    ? { ...transport.payload, status: "ready" }
+    : { ok: false, status: "unavailable", error: transport.payload.error || { code: "OCG_ENGINE_HEALTH_FAILED" } };
 }
