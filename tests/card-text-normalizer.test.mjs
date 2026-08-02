@@ -198,6 +198,7 @@ test("normalizes a field-material cost and resolution-time reference to those co
   assert.equal(cost.faceUp, true);
   assert.deepEqual(cost.requiredRoles, ["tuner", "non_tuner"]);
   assert.equal(extraDeckSummon.fromZone, "extra_deck");
+  assert.deepEqual(extraDeckSummon.fromZones, ["extra_deck"]);
   assert.equal(operation.materialReference, "activation_cost_cards");
   assert.equal(operation.materialStateAt, "resolution_current_state");
   assert.deepEqual(operation.summonKinds, ["synchro", "fusion"]);
