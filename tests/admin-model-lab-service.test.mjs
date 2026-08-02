@@ -269,6 +269,51 @@ test("evidence preparation is fixed to DeepSeek V4 Flash and client transport fi
   );
 });
 
+test("complete deterministic card resolution skips the paid preparation model", async () => {
+  const fixture = makeFixture();
+  fixture.cardResolution = {
+    ...fixture.cardResolution,
+    unresolvedMentions: [],
+    ambiguousMentions: [],
+  };
+  const service = makeService(fixture);
+  const created = await service.createRun({ body: { question: "「匿名卡A」如何处理？" } });
+  const execution = await service.executeRun({ runId: created.runId });
+
+  assert.equal(fixture.deepSeekPrepareCalls, 0);
+  assert.equal(execution.run.evidenceSnapshot.evidence.preparation.skipped, true);
+  assert.equal(
+    execution.run.evidenceSnapshot.evidence.preparation.skipReason,
+    "deterministic_card_resolution_complete",
+  );
+  assert.deepEqual(
+    execution.run.evidenceSnapshot.evidence.preparation.extractedHints.ruleSearchQueries,
+    [],
+  );
+
+  fixture.providerResponse = completedResponse(makeStructuredRuling());
+  const completed = await service.getRun({ runId: created.runId });
+  assert.equal(completed.status, ADMIN_RUN_STATUSES.SUCCEEDED);
+  assert.equal(completed.result.metering.stages.evidencePreparation.usageStatus, "skipped");
+  assert.equal(completed.result.metering.stages.evidencePreparation.usage.totalTokens, 0);
+  assert.equal(completed.result.metering.stages.evidencePreparation.cost.totalCostCny, 0);
+});
+
+test("zero deterministic card matches still invokes preparation even without quote marks", async () => {
+  const fixture = makeFixture();
+  fixture.cardResolution = {
+    ...fixture.cardResolution,
+    resolvedCards: [],
+    unresolvedMentions: [],
+    ambiguousMentions: [],
+  };
+  const service = makeService(fixture);
+  const created = await service.createRun({ body: { question: "简称卡发动后如何处理？" } });
+  await service.executeRun({ runId: created.runId });
+
+  assert.equal(fixture.deepSeekPrepareCalls, 1);
+});
+
 test("getRun reconciles a completed background response, validates it, and persists metrics", async () => {
   const fixture = makeFixture();
   const service = makeService(fixture);
@@ -1074,16 +1119,21 @@ function makeService(fixture, envOverrides = {}, {
     extractCards: (_question, options) => {
       fixture.advance(5);
       assert.equal(options.maxCards, fixture.data.cards.length);
-      assert.deepEqual(
-        options.modelCardNameCandidates.map((item) => item.name),
-        ["匿名卡A", "匿名卡B"],
+      const candidateNames = options.modelCardNameCandidates.map((item) => item.name);
+      assert.equal(
+        candidateNames.length === 0
+          || JSON.stringify(candidateNames) === JSON.stringify(["匿名卡A", "匿名卡B"]),
+        true,
       );
+      fixture.extractCardsCalls.push(candidateNames);
       return fixture.cardResolution;
     },
     retrieveEvidence: async (request) => {
       fixture.retrieveRequests.push(request);
       fixture.advance(25);
-      assert.equal(request.ruleSearchQueries[0].query, "匿名规则");
+      if (request.ruleSearchQueries.length > 0) {
+        assert.equal(request.ruleSearchQueries[0].query, "匿名规则");
+      }
       return fixture.retrieval;
     },
     promptLoader: async () => "匿名系统提示：只依据证据输出严格 JSON。",
@@ -1099,6 +1149,7 @@ function makeFixture() {
     deepSeekPrepareCalls: 0,
     deepSeekFinalCalls: 0,
     loadDataCalls: 0,
+    extractCardsCalls: [],
     retrieveRequests: [],
     openAICreateCalls: [],
     openAICreateGate: null,

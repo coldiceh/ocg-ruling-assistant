@@ -13,17 +13,17 @@ export const ADMIN_EVIDENCE_CATEGORIES = Object.freeze({
 });
 
 export const DEFAULT_ADMIN_DECISION_PACKET_LIMITS = Object.freeze({
-  maxPacketBytes: 120 * 1024,
-  maxItems: 48,
-  maxTotalBodyChars: 60_000,
-  maxTotalBodyBytes: 72 * 1024,
-  maxBodyCharsPerItem: 8_000,
-  maxBodyBytesPerItem: 12 * 1024,
+  maxPacketBytes: 80 * 1024,
+  maxItems: 32,
+  maxTotalBodyChars: 36_000,
+  maxTotalBodyBytes: 48 * 1024,
+  maxBodyCharsPerItem: 5_000,
+  maxBodyBytesPerItem: 8 * 1024,
   maxEquivalentEvidenceIdsPerItem: 16,
   maxEvidenceIdBytes: 160,
-  maxOmissionCatalogItems: 32,
+  maxOmissionCatalogItems: 16,
   maxOmissionEvidenceIdsPerItem: 8,
-  maxConflictCatalogItems: 16,
+  maxConflictCatalogItems: 8,
   maxConflictItemBytes: 4 * 1024,
   maxConflictReferencesPerItem: 8,
 });
@@ -1188,6 +1188,7 @@ function aggregateDecisionCandidates(archive) {
       current: occurrence.current,
       relevanceScore: occurrence.relevanceScore,
       bestCollectionRank: occurrence.index,
+      bestSourceCollectionPriority: sourceCollectionPriority(occurrence.collection),
       sourceCollections: [],
     };
     if (!candidate.evidenceIds.includes(occurrence.evidenceId)) {
@@ -1216,6 +1217,10 @@ function aggregateDecisionCandidates(archive) {
       candidate.bestCollectionRank,
       occurrence.index,
     );
+    candidate.bestSourceCollectionPriority = Math.min(
+      candidate.bestSourceCollectionPriority,
+      sourceCollectionPriority(occurrence.collection),
+    );
     bySubstance.set(occurrence.substanceHash, candidate);
   }
   return layerDecisionCandidates([...bySubstance.values()]
@@ -1240,18 +1245,50 @@ function layerDecisionCandidates(candidates) {
     || left.localeCompare(right, "en")
   ));
   for (const category of categories) {
-    byCategory.get(category).sort(compareDecisionCandidatesWithinCategory);
+    const categoryCandidates = byCategory.get(category);
+    categoryCandidates.sort(compareDecisionCandidatesWithinCategory);
+    if (category === ADMIN_EVIDENCE_CATEGORIES.RELATED_QA) {
+      byCategory.set(category, weightedRelatedCandidateOrder(categoryCandidates));
+    }
   }
   const layered = [];
-  const maximumCategorySize = Math.max(
-    0,
-    ...categories.map((category) => byCategory.get(category).length),
-  );
-  for (let layer = 0; layer < maximumCategorySize; layer += 1) {
+  const offsets = new Map(categories.map((category) => [category, 0]));
+  const takeNext = (category) => {
+    const source = byCategory.get(category) || [];
+    const offset = offsets.get(category) || 0;
+    if (offset >= source.length) return false;
+    layered.push(source[offset]);
+    offsets.set(category, offset + 1);
+    return true;
+  };
+
+  // Interleave grounding and supporting evidence so a question with many
+  // resolved cards cannot consume every bounded packet slot. Direct rulings
+  // and card text remain the most frequent categories, while related rulings
+  // and mechanism rules are guaranteed opportunities before another cycle.
+  const weightedSchedule = [
+    ADMIN_EVIDENCE_CATEGORIES.DIRECT_OFFICIAL_QA,
+    ADMIN_EVIDENCE_CATEGORIES.PARSED_CARD_TEXT,
+    ADMIN_EVIDENCE_CATEGORIES.PARSED_CARD_TEXT,
+    ADMIN_EVIDENCE_CATEGORIES.RELATED_QA,
+    ADMIN_EVIDENCE_CATEGORIES.DIRECT_OFFICIAL_QA,
+    ADMIN_EVIDENCE_CATEGORIES.PARSED_CARD_TEXT,
+    ADMIN_EVIDENCE_CATEGORIES.PARSED_CARD_TEXT,
+    ADMIN_EVIDENCE_CATEGORIES.RELATED_QA,
+    ADMIN_EVIDENCE_CATEGORIES.MECHANISM_RULE,
+    ADMIN_EVIDENCE_CATEGORIES.RELATED_QA,
+    ADMIN_EVIDENCE_CATEGORIES.CONTEXT,
+    ADMIN_EVIDENCE_CATEGORIES.OTHER,
+  ];
+  while (categories.some((category) => (
+    (offsets.get(category) || 0) < (byCategory.get(category)?.length || 0)
+  ))) {
+    let progressed = false;
+    for (const category of weightedSchedule) progressed = takeNext(category) || progressed;
     for (const category of categories) {
-      const candidate = byCategory.get(category)[layer];
-      if (candidate) layered.push(candidate);
+      if (!weightedSchedule.includes(category)) progressed = takeNext(category) || progressed;
     }
+    if (!progressed) break;
   }
   return layered;
 }
@@ -1260,11 +1297,83 @@ function compareDecisionCandidatesWithinCategory(left, right) {
   return Number(right.direct) - Number(left.direct)
     || Number(right.authority === "official") - Number(left.authority === "official")
     || Number(right.current) - Number(left.current)
+    || left.bestSourceCollectionPriority - right.bestSourceCollectionPriority
     || left.bestCollectionRank - right.bestCollectionRank
     || numberOrNegativeInfinity(right.relevanceScore)
       - numberOrNegativeInfinity(left.relevanceScore)
     || left.evidenceIds[0].localeCompare(right.evidenceIds[0], "en")
     || left.substanceHash.localeCompare(right.substanceHash, "en");
+}
+
+function sourceCollectionPriority(collection) {
+  const value = String(collection || "");
+  if (/officialQaDirectCandidates|provisionalOfficialResponses/iu.test(value)) return 0;
+  if (/cardTextCandidates|cardTexts|faqRelated|officialQaRelated/iu.test(value)) return 1;
+  if (/rulebookCandidates/iu.test(value)) return 2;
+  if (/rawRelatedEvidence/iu.test(value)) return 4;
+  return 3;
+}
+
+function weightedRelatedCandidateOrder(candidates) {
+  const groups = new Map([
+    ["direct_or_response", []],
+    ["faq", []],
+    ["official_related", []],
+    ["raw_or_other", []],
+  ]);
+  for (const candidate of candidates) groups.get(relatedCandidateGroup(candidate)).push(candidate);
+  groups.get("faq").sort(compareRelatedFaqCandidates);
+  const ordered = [];
+  const offsets = new Map([...groups.keys()].map((key) => [key, 0]));
+  const take = (key) => {
+    const source = groups.get(key);
+    const offset = offsets.get(key) || 0;
+    if (offset >= source.length) return false;
+    ordered.push(source[offset]);
+    offsets.set(key, offset + 1);
+    return true;
+  };
+  while (take("direct_or_response")) {
+    // direct/traceable response candidates are always first
+  }
+  const schedule = [
+    "faq",
+    "faq",
+    "official_related",
+    "faq",
+    "faq",
+    "official_related",
+    "raw_or_other",
+  ];
+  while ([...groups.keys()].some((key) => (
+    (offsets.get(key) || 0) < groups.get(key).length
+  ))) {
+    let progressed = false;
+    for (const key of schedule) progressed = take(key) || progressed;
+    if (!progressed) break;
+  }
+  return ordered;
+}
+
+function compareRelatedFaqCandidates(left, right) {
+  return Number(right.direct) - Number(left.direct)
+    || Number(right.authority === "official") - Number(left.authority === "official")
+    || Number(right.current) - Number(left.current)
+    || numberOrNegativeInfinity(right.relevanceScore)
+      - numberOrNegativeInfinity(left.relevanceScore)
+    || left.bestCollectionRank - right.bestCollectionRank
+    || left.evidenceIds[0].localeCompare(right.evidenceIds[0], "en")
+    || left.substanceHash.localeCompare(right.substanceHash, "en");
+}
+
+function relatedCandidateGroup(candidate) {
+  const collections = candidate.sourceCollections || [];
+  if (candidate.direct || collections.some(
+    (value) => /officialQaDirectCandidates|provisionalOfficialResponses/iu.test(value),
+  )) return "direct_or_response";
+  if (collections.some((value) => /faqRelated/iu.test(value))) return "faq";
+  if (collections.some((value) => /officialQaRelated/iu.test(value))) return "official_related";
+  return "raw_or_other";
 }
 
 function categoryPriority(category) {
@@ -1281,6 +1390,11 @@ function omittedEntry(candidate, reason) {
     authority: candidate.authority,
     direct: candidate.direct,
     current: candidate.current,
+    relevanceScore: Number.isFinite(candidate.relevanceScore)
+      ? candidate.relevanceScore
+      : null,
+    bestCollectionRank: candidate.bestCollectionRank,
+    sourceCollections: candidate.sourceCollections,
     priorityRank: categoryPriority(candidate.category),
     reason,
     bodyCharCount: candidate.bodyText.length,
@@ -1306,6 +1420,11 @@ function modelEvidenceItem(candidate, bounded, limits) {
     authority: candidate.authority,
     direct: candidate.direct,
     current: candidate.current,
+    relevanceScore: Number.isFinite(candidate.relevanceScore)
+      ? candidate.relevanceScore
+      : null,
+    bestCollectionRank: candidate.bestCollectionRank,
+    sourceCollections: candidate.sourceCollections,
     substanceHash: candidate.substanceHash,
     bodyHash: candidate.bodyHash,
     body: bounded.text,
@@ -1429,21 +1548,22 @@ function createModelPacketSnapshot({
     archiveId: archive.archiveId,
     archiveContentSha256: archive.contentSha256,
     policy: {
-      selectionPolicy: "deterministic_category_layered_selection",
+      selectionPolicy: "deterministic_grounding_and_weighted_evidence_selection",
       priorityOrder: [
         ADMIN_EVIDENCE_CATEGORIES.DIRECT_OFFICIAL_QA,
         ADMIN_EVIDENCE_CATEGORIES.PARSED_CARD_TEXT,
-        ADMIN_EVIDENCE_CATEGORIES.MECHANISM_RULE,
         ADMIN_EVIDENCE_CATEGORIES.RELATED_QA,
+        ADMIN_EVIDENCE_CATEGORIES.MECHANISM_RULE,
         ADMIN_EVIDENCE_CATEGORIES.CONTEXT,
         ADMIN_EVIDENCE_CATEGORIES.OTHER,
       ],
       categoryMinimumGuarantee:
-        "one_candidate_per_available_category_before_second_candidates",
+        "weighted_grounding_and_support_coverage_without_category_starvation",
       withinCategoryPriority: [
         "direct",
         "official",
         "current",
+        "sourceCollectionPriority",
         "bestCollectionRank",
         "relevanceScore",
         "evidenceId",

@@ -44,6 +44,8 @@
 - 证据项的 `direct` 是机器边界而不是建议：只有 `direct: true`、`authority: "official"`、正文未截断且资料仍有效的证据，才允许使用 `DIRECT_OFFICIAL` / `DIRECTLY_ENTAILS`。`authority: "official"` 但 `direct: false` 仍不属于直接命中。
 - `category: "parsed_card_text"` 的资料只能支撑 `CARD_TEXT` 类型 Claim，关系使用 `DEFINES_TERM` 或 `SUPPORTS_STEP`，绝不能标成 `DIRECT_OFFICIAL` / `DIRECTLY_ENTAILS`。
 - `category: "related_qa"` 且 `direct: false` 的资料可用于 `OFFICIAL_RULE_DERIVATION` 或 `ANALOGY`，关系使用 `ANALOGOUS_RULING`、`SUPPORTS_STEP` 或 `PARTIAL_SUPPORT`，绝不能自行升级为直接官方结论。
+- 机制资料和相似 Q&A 可能在同一段正文中同时记载其他卡的例子。例子中某张卡专属的限制、COST、对象、效果编号或处理语句，只属于那张卡；除非目标卡自己的 `parsed_card_text` 也明确记载同一条款，否则不得把它迁移到目标卡，也不得把“是否适用该条款”新增为 `unresolved`。
+- 在输出任何带引号的卡片专属效果语句前，先核对该语句确实属于同名目标卡的 `parsed_card_text`。机制资料只定义通用规则和类比步骤，不能补写目标卡卡文。
 - 没有直接 FAQ 时，使用 `CARD_TEXT`、`OFFICIAL_RULE_DERIVATION`、`ANALOGY` 或 `MODEL_SYNTHESIS` 的真实类别，不得伪装成直接官方结论。
 - `official_direct_qa_not_found` 仅表示保守的精确匹配器没有把候选标成 direct，不表示可见的 `related_qa` 与当前问题无关。必须阅读其正文；若正文可支持推导，使用 `OFFICIAL_RULE_DERIVATION` 和适当的支持关系，不得因此拒答。
 - `IRRELEVANT` 资料不能支持决定性 Claim。
