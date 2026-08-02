@@ -68,37 +68,62 @@ export async function answerRagRulingQuestion({
     cards: data.cards || [],
     maxCards,
   });
+  const localPreflightTransition = !modelInvoker
+      && !cardModelInvoker
+      && !ruleModelInvoker
+      && !rulebookModelInvoker
+      && hasCompleteCardResolution(localCardResolution)
+    ? analyzeEffectStateTransition({
+        userQuery: query,
+        resolvedCards: localCardResolution.resolvedCards || [],
+      })
+    : null;
+  const skipAuxiliaryExtractionModels = hasTrustedSemanticStateTransition({
+    semanticStateTransition: localPreflightTransition,
+    cardResolution: localCardResolution,
+  });
   timingsMs.deterministicPreflight = elapsedMs(preflightStartedAt);
 
   const auxiliaryExtractionStartedAt = Date.now();
-  const [cardNameModel, ruleQueryModel] = await Promise.all([
-    callCardNameExtractionModel({
-      userQuery: query,
-      env,
-      modelInvoker: cardModelInvoker,
-      fetchImpl,
-      dryRun,
-      now,
-      signal,
-    }),
-    callRuleQueryExtractionModel({
-      userQuery: query,
-      env,
-      modelInvoker: ruleModelInvoker,
-      fetchImpl,
-      dryRun,
-      now,
-      signal,
-    }),
-  ]);
-  const cardResolution = (cardNameModel.candidates || []).length
-    ? extractRagCards(query, {
-        cards: data.cards || [],
-        maxCards,
-        modelCardNameCandidates: cardNameModel.candidates,
-      })
-    : localCardResolution;
-  timingsMs.auxiliaryExtractionModels = elapsedMs(auxiliaryExtractionStartedAt);
+  let cardNameModel;
+  let ruleQueryModel;
+  let cardResolution;
+  if (skipAuxiliaryExtractionModels) {
+    cardNameModel = skippedExtractionResult("card_name_model_skipped_trusted_semantic_preflight", "candidates");
+    ruleQueryModel = skippedExtractionResult("rule_query_model_skipped_trusted_semantic_preflight", "queries");
+    cardResolution = localCardResolution;
+  } else {
+    [cardNameModel, ruleQueryModel] = await Promise.all([
+      callCardNameExtractionModel({
+        userQuery: query,
+        env,
+        modelInvoker: cardModelInvoker,
+        fetchImpl,
+        dryRun,
+        now,
+        signal,
+      }),
+      callRuleQueryExtractionModel({
+        userQuery: query,
+        env,
+        modelInvoker: ruleModelInvoker,
+        fetchImpl,
+        dryRun,
+        now,
+        signal,
+      }),
+    ]);
+    cardResolution = (cardNameModel.candidates || []).length
+      ? extractRagCards(query, {
+          cards: data.cards || [],
+          maxCards,
+          modelCardNameCandidates: cardNameModel.candidates,
+        })
+      : localCardResolution;
+  }
+  timingsMs.auxiliaryExtractionModels = skipAuxiliaryExtractionModels
+    ? 0
+    : elapsedMs(auxiliaryExtractionStartedAt);
   timingsMs.dataAndQueryExtraction = elapsedMs(extractionStartedAt);
   const retrievalStartedAt = Date.now();
   const retrievedEvidence = await retrieveRagEvidence({
@@ -579,6 +604,20 @@ function summarizeSemanticStateDiagnostic(transition) {
     authoritative: transition.authoritative !== false,
     reason: transition.reason || transition.authorityReason || null,
     authorityReasons: cleanStringArray(transition.authorityReasons || []),
+  };
+}
+
+function skippedExtractionResult(warning, collectionKey) {
+  return {
+    [collectionKey]: [],
+    rawText: "",
+    providerUsed: "local",
+    modelUsed: "none",
+    dryRun: true,
+    warnings: [warning],
+    tokenUsage: {},
+    estimatedCostCny: 0,
+    budgetStatus: null,
   };
 }
 

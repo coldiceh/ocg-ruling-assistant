@@ -1,8 +1,10 @@
 import { createDestinationReplacement, createEffectPrimitive } from "./effectPrimitives.mjs";
 import {
   evaluateFusionOperation,
+  resolvePrimitiveSequence,
   resolveEffectChain,
 } from "./effectResolutionEngine.mjs";
+import { advanceEffectInstanceLifecycles } from "./effectInstanceLifecycle.mjs";
 import { splitEffectTextBlocks } from "./cardEffectBlocks.mjs";
 import { normalizeCardText } from "./cardTextNormalizer.mjs";
 
@@ -35,6 +37,13 @@ function analyzeDuelStateTransitionInternal({
   const programs = compileResolvedCardPrograms(resolvedCards, cardTexts);
   const compiled = compileQuestionScenario({ query, programs });
   if (!compiled.complete) {
+    const boundLifecycleTransition = compileEffectInstanceLifecycleTransition({
+      query,
+      programs,
+      cardTexts,
+      compileFailure: compiled,
+    });
+    if (boundLifecycleTransition) return boundLifecycleTransition;
     const symbolicTransition = analyzeSymbolicFusionReplacementTransition({
       query,
       programs,
@@ -810,6 +819,152 @@ function normalizedEffectsForProgram(program) {
     cardType: program.cardType,
     effectText: program.effectText,
   }).effects || [];
+}
+
+const APPLIED_EFFECT_PREMISE = /(?:(?:效果|効果|effect)[^。？！?]{0,20}(?:已经|已經|已|すでに|既に|already)[^。？！?]{0,12}(?:适用|適用|resolved|applied))|(?:(?:效果|効果|effect)[^。？！?]{0,16}(?:适用|適用)(?:后|後|した後))|(?:after[^.?!]{0,20}(?:effect)[^.?!]{0,16}(?:resolved|applied))/iu;
+const EFFECT_SUMMONED_MONSTER_REFERENCE = /(?:(?:这个|這個|该|該|此|その|this)\s*(?:效果|効果|effect)[^。？！?]{0,28}(?:特殊召唤|特殊召喚|special summoned?)[^。？！?]{0,16}(?:怪兽|怪獸|モンスター|monster))|(?:(?:怪兽|怪獸|モンスター|monster)[^。？！?]{0,16}(?:由|被|によって|by)[^。？！?]{0,16}(?:这个|這個|该|該|此|その|this)\s*(?:效果|効果|effect))|(?:monster[^.?!]{0,20}special summoned[^.?!]{0,16}by\s+this\s+effect)/iu;
+const BOUND_MONSTER_CONTROL_CHANGE = /(?:(?:这个|這個|该|該|此|その|this)\s*(?:效果|効果|effect)[^。？！?]{0,28}(?:特殊召唤|特殊召喚|special summoned?)[^。？！?]{0,20}(?:怪兽|怪獸|モンスター|monster)[^。？！?]{0,28}(?:控制权|控制權|コントロール|control)[^。？！?]{0,16}(?:变更|變更|改变|改變|转移|轉移|変更|change))|(?:(?:控制权|控制權|コントロール|control)[^。？！?]{0,16}(?:变更|變更|改变|改變|转移|轉移|変更|change)[^。？！?]{0,28}(?:这个|這個|该|該|此|その|this)\s*(?:效果|効果|effect)[^。？！?]{0,28}(?:特殊召唤|特殊召喚|special summoned?)[^。？！?]{0,16}(?:怪兽|怪獸|モンスター|monster))/iu;
+const CONTROL_RETURNS_LATER = /(?:之后|之後|此后|此後|后来|後來|随后|隨後|後で|その後|then|later)[^。？！?]{0,36}(?:(?:控制权|控制權|コントロール|control)[^。？！?]{0,16}(?:归还|歸還|归回|歸回|归后|戻|return)|(?:又|再)?\s*(?:回到|返回|戻|returns?\s+to)[^。？！?]{0,16}(?:自己|自分|your)[^。？！?]{0,10}(?:场上|場上|フィールド|field))/iu;
+
+function compileEffectInstanceLifecycleTransition({
+  query,
+  programs,
+  cardTexts,
+  compileFailure,
+}) {
+  if (!APPLIED_EFFECT_PREMISE.test(query)) return null;
+  if (!EFFECT_SUMMONED_MONSTER_REFERENCE.test(query)) return null;
+  if (!BOUND_MONSTER_CONTROL_CHANGE.test(query)) return null;
+
+  const candidates = (programs || [])
+    .filter((program) => locateCardMention(query, program).index >= 0)
+    .flatMap((program) => normalizedEffectsForProgram(program)
+      .flatMap((effect) => (effect.resolution || [])
+        .map((step) => step.operation)
+        .filter((operation) => isAuthoritativeBoundRestrictionOperation(operation))
+        .map((operation) => ({ program, effect, operation }))));
+  if (candidates.length !== 1) return null;
+
+  const [{ program, effect, operation }] = candidates;
+  const includesReturn = CONTROL_RETURNS_LATER.test(query);
+  const boundInstanceId = "compiled-effect-output-1";
+  const effectInstanceId = `${program.definitionId}:effect-instance:${effect.effectNumber || effect.index || 1}`;
+  const initialState = {
+    cards: [{
+      instanceId: boundInstanceId,
+      definitionId: "effect-output-monster",
+      name: "该效果特殊召唤的怪兽",
+      cardType: "monster",
+      controller: "self",
+      zone: "monster_zone",
+      faceUp: true,
+      onField: true,
+    }],
+    effectInstances: [],
+  };
+  const sequence = [
+    {
+      connector: "INDEPENDENT",
+      primitive: createEffectPrimitive("create_lingering_effect", {
+        sourceEffectId: `${program.definitionId}:effect:${effect.effectNumber || effect.index || 1}`,
+        effectInstanceId,
+        boundInstanceIds: [boundInstanceId],
+        requiredController: "self",
+        requiredZone: "monster_zone",
+        requiredFaceUp: true,
+        restriction: operation.restriction,
+      }),
+    },
+    {
+      connector: "INDEPENDENT",
+      primitive: createEffectPrimitive("change_control", {
+        targetInstanceId: boundInstanceId,
+        newController: "opponent",
+      }),
+    },
+    ...(includesReturn ? [{
+      connector: "INDEPENDENT",
+      primitive: createEffectPrimitive("change_control", {
+        targetInstanceId: boundInstanceId,
+        newController: "self",
+      }),
+    }] : []),
+  ];
+  const snapshots = [];
+  const simulation = resolvePrimitiveSequence(sequence, initialState, {
+    afterStep: ({ gameState, item }) => {
+      const lifecycle = advanceEffectInstanceLifecycles(gameState, {
+        timing: `after_${item.primitive.type}`,
+        cause: item.primitive.type === "change_control" ? "control_changed" : "effect_instance_created",
+      });
+      snapshots.push({
+        event: item.primitive.type,
+        controller: lifecycle.gameState.cards?.[0]?.controller || "unknown",
+        effectStatus: lifecycle.gameState.effectInstances?.[0]?.status || "unknown",
+        lifecycleTrace: lifecycle.trace,
+      });
+      return lifecycle;
+    },
+  });
+  if (simulation.resolutionStatus !== "resolved") return null;
+
+  const controlChangeSnapshots = snapshots.filter((snapshot) => snapshot.event === "change_control");
+  if (controlChangeSnapshots[0]?.effectStatus !== "expired") return null;
+  if (includesReturn && controlChangeSnapshots[1]?.effectStatus !== "expired") return null;
+  const lifecycleTrace = simulation.ruleTrace.filter((entry) => entry.phase === "effect_instance_lifecycle");
+  const evidenceIds = unique(
+    program.evidenceIds?.length
+      ? program.evidenceIds
+      : [evidenceIdFor(program, cardTexts)],
+  );
+  return {
+    status: "resolved",
+    complete: true,
+    authoritative: true,
+    conditional: false,
+    activation: "already_resolved",
+    resolution: "bound_lingering_restriction_lifecycle_resolved",
+    reason: "bound_condition_failed_irreversibly",
+    shortAnswer: includesReturn
+      ? "该效果特殊召唤的怪兽控制权变更后，绑定于该怪兽的限制立即不再适用；之后控制权归还，也不会恢复适用。"
+      : "该效果特殊召唤的怪兽控制权变更后，绑定于该怪兽的限制立即不再适用。",
+    reasoning: [
+      "题面明确该效果已经适用，因此按卡片文本建立一个绑定于该效果特殊召唤怪兽的效果实例。",
+      "控制权变更后，绑定怪兽不再满足“在效果处理者自己场上表侧存在”的持续条件；该效果实例在首次条件失败时永久失效。",
+      ...(includesReturn
+        ? ["控制权归还只会再次满足位置条件，不会新建效果实例；已经失效的同一实例不会重新生效。"]
+        : []),
+    ],
+    trace: [
+      {
+        phase: "compile_effect_instance",
+        sourceDefinitionId: program.definitionId,
+        effectInstanceId,
+        boundInstanceIds: [boundInstanceId],
+        premise: "effect_already_applied_and_bound_monster_face_up_on_effect_controller_field",
+      },
+      ...lifecycleTrace,
+    ],
+    evidenceIds,
+    program: {
+      type: "compiled_effect_instance_lifecycle",
+      sourceDefinitionId: program.definitionId,
+      sourceOperation: operation,
+      events: sequence.slice(1).map((item) => item.primitive),
+    },
+    debug: { compileFailure, simulation, snapshots },
+  };
+}
+
+function isAuthoritativeBoundRestrictionOperation(operation) {
+  return operation?.type === "create_lingering_restriction"
+    && operation.binding === "monsters_special_summoned_by_this_effect"
+    && operation.activeWhile?.zone === "monster_zone"
+    && operation.activeWhile?.controller === "effect_controller"
+    && operation.activeWhile?.faceUp === true
+    && operation.expiration?.mode === "irreversible_on_first_condition_failure"
+    && operation.expiration?.reactivates === false
+    && operation.restriction?.type === "extra_deck_special_summon_lock";
 }
 
 function identifyUncompiledMechanism({ query, programs }) {

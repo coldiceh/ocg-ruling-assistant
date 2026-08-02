@@ -55,6 +55,86 @@ test("a summon-bound restriction expires on control change and does not reactiva
   assert.ok(returned.trace.some((entry) => entry.result === "remains_expired"));
 });
 
+test("a newly resolved effect creates a distinct active instance without reviving the expired one", () => {
+  const state = {
+    cards: [
+      { instanceId: "first-output#1", controller: "self", zone: "monster_zone", faceUp: true },
+      { instanceId: "second-output#1", controller: "self", zone: "monster_zone", faceUp: true },
+    ],
+    effectInstances: [createBoundLingeringEffectInstance({
+      id: "first-effect#1",
+      boundInstanceIds: ["first-output#1"],
+      controller: "self",
+      restriction: { type: "extra_deck_special_summon_lock", allowedArchetype: "棱镜" },
+    })],
+  };
+  state.cards[0].controller = "opponent";
+  const expired = advanceEffectInstanceLifecycles(state, {
+    timing: "after_first_control_change",
+    cause: "control_changed",
+  });
+  expired.gameState.effectInstances.push(createBoundLingeringEffectInstance({
+    id: "second-effect#1",
+    boundInstanceIds: ["second-output#1"],
+    controller: "self",
+    restriction: { type: "extra_deck_special_summon_lock", allowedArchetype: "棱镜" },
+  }));
+  const nextApplication = advanceEffectInstanceLifecycles(expired.gameState, {
+    timing: "after_second_effect_resolution",
+    cause: "new_effect_instance_created",
+  });
+
+  assert.deepEqual(
+    nextApplication.gameState.effectInstances.map((effect) => [effect.id, effect.status]),
+    [["first-effect#1", "expired"], ["second-effect#1", "active"]],
+  );
+});
+
+test("leaving the field or becoming face-down expires the bound instance irreversibly", () => {
+  for (const transition of [
+    { label: "leave-field", mutate: (card) => { card.zone = "graveyard"; card.faceUp = false; } },
+    { label: "face-down", mutate: (card) => { card.faceUp = false; } },
+  ]) {
+    const state = {
+      cards: [{ instanceId: "bound#1", controller: "self", zone: "monster_zone", faceUp: true }],
+      effectInstances: [createBoundLingeringEffectInstance({
+        id: `effect-${transition.label}`,
+        boundInstanceIds: ["bound#1"],
+        controller: "self",
+      })],
+    };
+    transition.mutate(state.cards[0]);
+    const expired = advanceEffectInstanceLifecycles(state, {
+      timing: `after_${transition.label}`,
+      cause: transition.label,
+    });
+    assert.equal(expired.gameState.effectInstances[0].status, "expired");
+
+    expired.gameState.cards[0].zone = "monster_zone";
+    expired.gameState.cards[0].faceUp = true;
+    const restoredCondition = advanceEffectInstanceLifecycles(expired.gameState, {
+      timing: "after_condition_restored",
+      cause: "condition_restored",
+    });
+    assert.equal(restoredCondition.gameState.effectInstances[0].status, "expired");
+    assert.ok(restoredCondition.trace.some((entry) => entry.result === "remains_expired"));
+  }
+});
+
+test("an unknown bound card state fails closed", () => {
+  const result = advanceEffectInstanceLifecycles({
+    cards: [{ instanceId: "bound#1", controller: "self", zone: "unknown" }],
+    effectInstances: [createBoundLingeringEffectInstance({
+      id: "unknown-state-effect",
+      boundInstanceIds: ["bound#1"],
+      controller: "self",
+    })],
+  });
+
+  assert.equal(result.complete, false);
+  assert.equal(result.reason, "bound_effect_lifecycle_state_unknown");
+});
+
 function fieldLimitEffect() {
   return {
     id: "generic-race-limit@limit#1",

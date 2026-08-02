@@ -129,6 +129,39 @@ test("normalizes mandatory summon outputs and per-player grouped field limits", 
   }]);
 });
 
+test("special-summon normalization excludes an 'other than' card name without inflating the count", () => {
+  const normalized = normalizeCardText({
+    id: "fictional-archetype-summon",
+    name: "折光航标",
+    cardType: "monster",
+    effectText: "①：可以发动。从牌组将“折光航标”以外的1只“棱镜”怪兽特殊召唤。",
+  });
+  const summon = normalized.effects[0].resolution
+    .map((step) => step.operation)
+    .find((operation) => operation.type === "special_summon");
+
+  assert.equal(summon.amount, 1);
+  assert.equal(summon.name, "棱镜");
+  assert.deepEqual(summon.names, ["棱镜"]);
+  assert.deepEqual(summon.excludedNames, ["折光航标"]);
+});
+
+test("special-summon normalization keeps a true each-named-card output count", () => {
+  const normalized = normalizeCardText({
+    id: "fictional-enumerated-summon",
+    name: "折光双召术",
+    cardType: "spell",
+    effectText: "①：可以发动。从牌组将“棱镜甲”“棱镜乙”各1只特殊召唤。",
+  });
+  const summon = normalized.effects[0].resolution
+    .map((step) => step.operation)
+    .find((operation) => operation.type === "special_summon");
+
+  assert.equal(summon.amount, 2);
+  assert.deepEqual(summon.names, ["棱镜甲", "棱镜乙"]);
+  assert.equal(Object.hasOwn(summon, "excludedNames"), false);
+});
+
 test("normalizes field-only numeric modifiers without relying on a real card identity", () => {
   const normalized = normalizeCardText({
     id: "fictional-level-carrier",
