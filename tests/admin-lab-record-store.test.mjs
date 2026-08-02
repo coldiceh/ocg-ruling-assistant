@@ -357,6 +357,22 @@ test("JSON and CSV exports whitelist fields and neutralize spreadsheet formulas"
       model: "gpt-5.6-luna",
       apiKey: "secret-key",
     },
+    evidenceSnapshotId: "evidence_export_1",
+    evidenceSnapshotSha256: "a".repeat(64),
+    decisionPacketId: "decision_packet_export_1",
+    decisionPacketSha256: "b".repeat(64),
+    forkProvenance: {
+      schemaVersion: 1,
+      sourceRunId: "source-run-1",
+      rootSourceRunId: "root-run-1",
+      sourceEvidenceSnapshotId: "evidence_export_1",
+      sourceEvidenceSnapshotSha256: "a".repeat(64),
+      sourceDecisionPacketId: "decision_packet_export_1",
+      sourceDecisionPacketSha256: "b".repeat(64),
+      requestFingerprint: "c".repeat(64),
+      idempotencyKeySha256: "d".repeat(64),
+      password: "must-not-survive",
+    },
   });
   await store.saveHumanRating({
     runId: "export-run",
@@ -405,13 +421,22 @@ test("JSON and CSV exports whitelist fields and neutralize spreadsheet formulas"
   assert.equal(json.includes("secret-key"), false);
   assert.equal(json.includes("nested-secret"), false);
   assert.equal(json.includes("must-not-survive"), false);
-  assert.equal(parsed.schemaVersion, 2);
+  assert.equal(parsed.schemaVersion, 3);
   assert.equal(parsed.records[0].humanRating.rating, "incorrect");
   assert.equal(parsed.records[0].status, "SUCCEEDED");
   assert.equal(parsed.records[0].evidenceSnapshotId, "evidence_export_1");
+  assert.equal(parsed.records[0].evidenceSnapshotSha256, "a".repeat(64));
+  assert.equal(parsed.records[0].decisionPacketId, "decision_packet_export_1");
+  assert.equal(parsed.records[0].decisionPacketSha256, "b".repeat(64));
+  assert.equal(parsed.records[0].forkProvenance.sourceRunId, "source-run-1");
+  assert.equal(parsed.records[0].forkProvenance.sourceDecisionPacketSha256, "b".repeat(64));
+  assert.equal(Object.hasOwn(parsed.records[0].forkProvenance, "password"), false);
   assert.equal(parsed.records[0].result.finalRuling.conciseAnswer, "可以发动。");
   assert.equal(parsed.records[0].metering.totals.usage.totalTokens, 321);
   assert.match(csv, /evidence_export_1/u);
+  assert.match(csv, /source-run-1/u);
+  assert.match(csv, new RegExp("a{64}", "u"));
+  assert.match(csv, new RegExp("b{64}", "u"));
   assert.match(csv, /totalTokens/u);
   assert.match(csv, /"'=HYPERLINK/u);
   assert.match(csv, /"'\+SUM\(1,1\)"/u);

@@ -61,6 +61,7 @@ test("all POST actions require CSRF and dispatch only through the injected servi
   const calls = [];
   const service = {
     createRun: async (input) => calls.push(["createRun", input]) && { runId: "run-1" },
+    forkRun: async (input) => calls.push(["forkRun", input]) && { runId: "fork-1" },
     executeRun: async (input) => calls.push(["executeRun", input]) && { accepted: true },
     cancelRun: async (input) => calls.push(["cancelRun", input]) && { requested: true },
     saveRating: async (input) => calls.push(["saveRating", input]) && { stored: true },
@@ -79,6 +80,12 @@ test("all POST actions require CSRF and dispatch only through the injected servi
 
   for (const body of [
     { action: "create", question: "test" },
+    {
+      action: "fork",
+      forkFromRunId: "run-1",
+      idempotencyKey: "fork-api-key-0001",
+      provider: "glm",
+    },
     { action: "execute", runId: "run-1", prompt: "p" },
     { action: "cancel", runId: "run-1", reason: "manual" },
     { action: "rating", runId: "run-1", rating: 4, notes: "ok" },
@@ -99,15 +106,48 @@ test("all POST actions require CSRF and dispatch only through the injected servi
 
   assert.deepEqual(calls.map(([name]) => name), [
     "createRun",
+    "forkRun",
     "executeRun",
     "cancelRun",
     "saveRating",
   ]);
   assert.deepEqual(calls[0][1].body, { question: "test" });
-  assert.equal(calls[1][1].runId, "run-1");
+  assert.equal(calls[1][1].forkFromRunId, "run-1");
+  assert.equal(calls[1][1].body.idempotencyKey, "fork-api-key-0001");
+  assert.equal(calls[1][1].body.provider, "glm");
+  assert.equal(Object.hasOwn(calls[1][1].body, "action"), false);
   assert.equal(calls[2][1].runId, "run-1");
-  assert.equal(calls[3][1].rating, 4);
-  assert.equal(calls[3][1].notes, "ok");
+  assert.equal(calls[3][1].runId, "run-1");
+  assert.equal(calls[4][1].rating, 4);
+  assert.equal(calls[4][1].notes, "ok");
+});
+
+test("fork is POST-only and requires source run and idempotency key before dispatch", async () => {
+  let calls = 0;
+  const { handler, cookie, csrfToken } = await createHarness({
+    login: true,
+    service: { forkRun: async () => { calls += 1; } },
+  });
+  for (const body of [
+    { action: "fork", idempotencyKey: "fork-api-key-0002" },
+    { action: "fork", forkFromRunId: "run-1" },
+  ]) {
+    const response = createResponse();
+    await handler(request({
+      method: "POST",
+      headers: { cookie, "x-csrf-token": csrfToken },
+      body,
+    }), response);
+    assert.equal(response.statusCode, 400);
+  }
+  const getResponse = createResponse();
+  await handler(request({
+    method: "GET",
+    url: "/api/admin-model-lab?action=fork",
+    headers: { cookie },
+  }), getResponse);
+  assert.equal(getResponse.statusCode, 400);
+  assert.equal(calls, 0);
 });
 
 test("authenticated POST bodies are rejected before dispatch when the byte limit is exceeded", async () => {

@@ -1002,6 +1002,187 @@ test("an ambiguous provider submission is failed closed and never resubmitted", 
   assert.equal(fixture.openAICreateCalls.length, 1, "ambiguous create must never be retried");
 });
 
+test("fork reuses the exact frozen evidence packet, skips preparation, and meters only the new final ruling", async () => {
+  const fixture = makeFixture();
+  const domesticCalls = [];
+  const service = makeService(fixture, {}, {
+    finalRulingProviders: {
+      deepseek: {
+        providerId: "deepseek",
+        async create(request) {
+          domesticCalls.push(request);
+          return {
+            id: "deepseek-fork-final-1",
+            status: "completed",
+            model: "deepseek-v4-flash",
+            output_text: JSON.stringify(makeStructuredRuling()),
+            usage: { prompt_tokens: 900, completion_tokens: 600, total_tokens: 1500 },
+          };
+        },
+      },
+    },
+  });
+  fixture.providerResponse = completedResponse(makeStructuredRuling());
+  const created = await service.createRun({ body: { question: "匿名问题" } });
+  await service.executeRun({ runId: created.runId });
+  const source = await service.getRun({ runId: created.runId });
+  assert.equal(source.status, ADMIN_RUN_STATUSES.SUCCEEDED);
+  const sourceRequest = fixture.openAICreateCalls[0];
+  const baseline = {
+    deepSeekPrepareCalls: fixture.deepSeekPrepareCalls,
+    loadDataCalls: fixture.loadDataCalls,
+    extractCardsCalls: fixture.extractCardsCalls.length,
+    retrieveRequests: fixture.retrieveRequests.length,
+  };
+
+  const fork = await service.forkRun({
+    forkFromRunId: source.runId,
+    body: {
+      idempotencyKey: "fork-idempotency-0001",
+      provider: "deepseek",
+      model: "deepseek-v4-flash",
+      reasoningEffort: "none",
+      reasoningMode: "standard",
+    },
+  });
+
+  assert.equal(fork.status, ADMIN_RUN_STATUSES.QUEUED);
+  assert.equal(Boolean(fork.preparationFinalizedAt), true);
+  assert.equal(fork.stageTiming, null);
+  assert.equal(fork.execution.providerSubmission.state, "NONE");
+  assert.deepEqual(fork.evidenceSnapshot, source.evidenceSnapshot);
+  assert.deepEqual(
+    fork.evidenceSnapshot.evidence.evidenceDecisionPacket,
+    source.evidenceSnapshot.evidence.evidenceDecisionPacket,
+  );
+  assert.deepEqual(fork.executionProfile.preparation, source.executionProfile.preparation);
+  assert.deepEqual(fork.executionProfile.prompt, source.executionProfile.prompt);
+  assert.deepEqual(fork.executionProfile.providedFacts, source.executionProfile.providedFacts);
+  assert.deepEqual(fork.limits, source.limits);
+  assert.equal(fork.evidenceSnapshot.metadata.finalRulingProvider, "openai");
+  assert.equal(fork.executionProfile.finalRuling.provider, "deepseek");
+  assert.equal(domesticCalls.length, 0, "fork creation must not submit a paid request");
+
+  const execution = await service.executeRun({ runId: fork.runId });
+  const completed = execution.run;
+  assert.equal(completed.status, ADMIN_RUN_STATUSES.SUCCEEDED);
+  assert.equal(fixture.deepSeekPrepareCalls, baseline.deepSeekPrepareCalls);
+  assert.equal(fixture.loadDataCalls, baseline.loadDataCalls);
+  assert.equal(fixture.extractCardsCalls.length, baseline.extractCardsCalls);
+  assert.equal(fixture.retrieveRequests.length, baseline.retrieveRequests);
+  assert.equal(domesticCalls.length, 1);
+  assert.equal(sourceRequest.input, domesticCalls[0].input);
+  assert.equal(sourceRequest.instructions, domesticCalls[0].instructions);
+  assert.notEqual(sourceRequest.metadata.runId, domesticCalls[0].metadata.runId);
+  assert.deepEqual(
+    completed.stageTiming.stages.map((stage) => stage.status),
+    ["SKIPPED", "SKIPPED", "SKIPPED", "SKIPPED", "COMPLETED"],
+  );
+  for (const stage of completed.stageTiming.stages.slice(0, 4)) {
+    assert.equal(stage.skipReason, "reused_frozen_evidence_snapshot");
+  }
+  const preparation = completed.result.metering.stages.evidencePreparation;
+  assert.equal(preparation.usageStatus, "reused");
+  assert.equal(preparation.usage.totalTokens, 0);
+  assert.equal(preparation.rawUsage, null);
+  assert.equal(preparation.sourceUsage.totalTokens, 30);
+  assert.equal(preparation.sourceRawUsage.total_tokens, 30);
+  assert.equal(preparation.reusedFromRunId, source.runId);
+  assert.equal(preparation.reusedEvidenceSnapshotId, source.evidenceSnapshot.snapshotId);
+  assert.equal(preparation.cost.totalCostCny, 0);
+  assert.equal(preparation.cost.totalCostUsd, 0);
+  assert.equal(completed.result.metering.totals.usage.totalTokens, 1500);
+  assert.equal(completed.result.latency.preparationReused, true);
+  assert.equal(completed.result.latency.preparationMs, 0);
+});
+
+test("fork creation is idempotent and rejects key reuse or client evidence overrides", async () => {
+  const fixture = makeFixture();
+  const service = makeService(fixture);
+  fixture.providerResponse = completedResponse(makeStructuredRuling());
+  const created = await service.createRun({ body: { question: "匿名问题" } });
+  await service.executeRun({ runId: created.runId });
+  const source = await service.getRun({ runId: created.runId });
+  const input = {
+    forkFromRunId: source.runId,
+    body: { idempotencyKey: "fork-idempotency-0002" },
+  };
+  const [first, second] = await Promise.all([
+    service.forkRun(input),
+    service.forkRun(input),
+  ]);
+  assert.equal(first.runId, second.runId);
+  assert.deepEqual(first, second);
+  assert.equal((await service.forkRun(input)).runId, first.runId);
+  const replay = await service.replayEvents({ runId: first.runId });
+  assert.equal(replay.events.filter((event) => event.type === "RUN_CREATED").length, 1);
+  assert.equal(fixture.openAICreateCalls.length, 1, "fork creation must not submit another final request");
+
+  await assert.rejects(
+    service.forkRun({
+      forkFromRunId: source.runId,
+      body: {
+        idempotencyKey: "fork-idempotency-0002",
+        reasoningEffort: "high",
+      },
+    }),
+    (error) => error?.code === "admin_fork_idempotency_conflict" && error.status === 409,
+  );
+  for (const field of [
+    "question",
+    "providedFacts",
+    "instructions",
+    "promptVersion",
+    "preparationModel",
+    "configuration",
+    "evidenceSnapshot",
+    "dataVersions",
+  ]) {
+    await assert.rejects(
+      service.forkRun({
+        forkFromRunId: source.runId,
+        body: {
+          idempotencyKey: "fork-forbidden-override-0001",
+          [field]: "forbidden",
+        },
+      }),
+      (error) => error?.code === "admin_fork_override_forbidden" && error.status === 400,
+    );
+  }
+});
+
+test("fork permits a failed source only after evidence is frozen and billing is unambiguous", async () => {
+  const fixture = makeFixture();
+  const service = makeService(fixture);
+  await assert.rejects(
+    service.forkRun({
+      forkFromRunId: "missing-source-run",
+      body: { idempotencyKey: "fork-source-missing-0001" },
+    }),
+    (error) => error?.code === "admin_run_not_found" && error.status === 404,
+  );
+  const queued = await service.createRun({ body: { question: "匿名问题" } });
+  await assert.rejects(
+    service.forkRun({
+      forkFromRunId: queued.runId,
+      body: { idempotencyKey: "fork-source-state-0001" },
+    }),
+    (error) => error?.code === "admin_fork_source_not_terminal" && error.status === 409,
+  );
+
+  fixture.providerResponse = completedResponse("{}");
+  await service.executeRun({ runId: queued.runId });
+  const failed = await service.getRun({ runId: queued.runId });
+  assert.equal(failed.status, ADMIN_RUN_STATUSES.FAILED);
+  assert.equal(failed.execution.providerSubmission.state, "SUBMITTED");
+  const fork = await service.forkRun({
+    forkFromRunId: failed.runId,
+    body: { idempotencyKey: "fork-source-state-0002" },
+  });
+  assert.equal(fork.status, ADMIN_RUN_STATUSES.QUEUED);
+  assert.equal(fork.metadata.fork.sourceRunId, failed.runId);
+});
+
 function codedError(message, code) {
   return Object.assign(new Error(message), { code });
 }
