@@ -1,5 +1,8 @@
 # OCG 引擎接入
 
+Windows 上进行临时公网联调时，可直接按
+[Quick Tunnel 中文步骤](./ocg-engine-quick-tunnel.md) 操作。
+
 ## 两条严格分离的路径
 
 当前规则助手同时保留两条接口，但权威边界不同：

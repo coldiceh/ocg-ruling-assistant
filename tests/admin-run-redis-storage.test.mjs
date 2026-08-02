@@ -225,6 +225,116 @@ test("Redis create recovers when the transaction commits but its response is los
   );
 });
 
+test("Redis commit recovers when snapshot staging succeeds but its response is lost", async () => {
+  const mock = createMockRedisRest();
+  let loseSnapshotResponse = false;
+  const fetchImpl = async (url, options) => {
+    const command = JSON.parse(options.body);
+    const response = await mock.fetchImpl(url, options);
+    if (
+      loseSnapshotResponse
+      && command[0] === "EVAL"
+      && command[1].includes("admin-run-snapshot-prepare-v1")
+    ) {
+      loseSnapshotResponse = false;
+      throw new Error("simulated connection loss after snapshot staging");
+    }
+    return response;
+  };
+  const storage = createRedisAdminRunStorage({ env: REDIS_ENV, fetchImpl });
+  const store = createAdminRunStore({
+    storage,
+    runIdFactory: () => "lost-snapshot-stage-response-run",
+    now: increasingClock("2026-07-28T01:50:00.000Z"),
+  });
+  const created = await store.createRun({
+    evidenceSnapshot: createAdminEvidenceSnapshot({ question: "initial snapshot" }),
+  });
+  const current = await storage.getRun(created.runId);
+  const replacementSnapshot = createAdminEvidenceSnapshot({ question: "replacement snapshot" });
+  loseSnapshotResponse = true;
+
+  await storage.commitRun({
+    runId: created.runId,
+    expectedRevision: 1,
+    run: {
+      ...current,
+      evidenceSnapshot: replacementSnapshot,
+      revision: 2,
+      lastSequence: 2,
+      updatedAt: "2026-07-28T01:50:01.000Z",
+    },
+    event: {
+      runId: created.runId,
+      sequence: 2,
+      type: "SNAPSHOT_REPLACED",
+      timestamp: "2026-07-28T01:50:01.000Z",
+      status: current.status,
+      payload: {},
+    },
+  });
+
+  assert.equal((await storage.getRun(created.runId)).revision, 2);
+  assert.deepEqual(
+    (await storage.readEvents({ runId: created.runId })).map((item) => item.sequence),
+    [1, 2],
+  );
+});
+
+test("Redis commit retries when the first snapshot staging request never arrives", async () => {
+  const mock = createMockRedisRest();
+  let loseBeforeSnapshotStage = false;
+  const fetchImpl = async (url, options) => {
+    const command = JSON.parse(options.body);
+    if (
+      loseBeforeSnapshotStage
+      && command[0] === "EVAL"
+      && command[1].includes("admin-run-snapshot-prepare-v1")
+    ) {
+      loseBeforeSnapshotStage = false;
+      throw new Error("simulated connection loss before snapshot staging");
+    }
+    return mock.fetchImpl(url, options);
+  };
+  const storage = createRedisAdminRunStorage({ env: REDIS_ENV, fetchImpl });
+  const store = createAdminRunStore({
+    storage,
+    runIdFactory: () => "lost-before-snapshot-stage-run",
+    now: increasingClock("2026-07-28T01:55:00.000Z"),
+  });
+  const created = await store.createRun({
+    evidenceSnapshot: createAdminEvidenceSnapshot({ question: "initial snapshot" }),
+  });
+  const current = await storage.getRun(created.runId);
+  loseBeforeSnapshotStage = true;
+
+  await storage.commitRun({
+    runId: created.runId,
+    expectedRevision: 1,
+    run: {
+      ...current,
+      evidenceSnapshot: createAdminEvidenceSnapshot({ question: "new snapshot" }),
+      revision: 2,
+      lastSequence: 2,
+      updatedAt: "2026-07-28T01:55:01.000Z",
+    },
+    event: {
+      runId: created.runId,
+      sequence: 2,
+      type: "SNAPSHOT_REPLACED",
+      timestamp: "2026-07-28T01:55:01.000Z",
+      status: current.status,
+      payload: {},
+    },
+  });
+
+  assert.equal((await storage.getRun(created.runId)).revision, 2);
+  assert.deepEqual(
+    (await storage.readEvents({ runId: created.runId })).map((item) => item.sequence),
+    [1, 2],
+  );
+});
+
 test("Redis commit performs revision CAS and atomically appends one event", async () => {
   const mock = createMockRedisRest();
   const storage = createRedisAdminRunStorage({ env: REDIS_ENV, fetchImpl: mock.fetchImpl });
@@ -262,14 +372,132 @@ test("Redis commit performs revision CAS and atomically appends one event", asyn
     storage.commitRun({
       runId: created.runId,
       expectedRevision: 1,
-      run: next,
-      event,
+      run: {
+        ...next,
+        updatedAt: "2026-07-28T02:00:02.000Z",
+      },
+      event: {
+        ...event,
+        timestamp: "2026-07-28T02:00:02.000Z",
+        payload: { competing: true },
+      },
     }),
     (error) => error?.code === "admin_run_revision_conflict",
   );
+  await storage.commitRun({
+    runId: created.runId,
+    expectedRevision: 1,
+    run: next,
+    event,
+  });
   assert.deepEqual(
     (await storage.readEvents({ runId: created.runId })).map((item) => item.sequence),
     [1, 2],
+  );
+});
+
+test("Redis commit retries safely when the transaction commits but its response is lost", async () => {
+  const mock = createMockRedisRest();
+  let loseCommitResponse = true;
+  const fetchImpl = async (url, options) => {
+    const command = JSON.parse(options.body);
+    const response = await mock.fetchImpl(url, options);
+    if (
+      loseCommitResponse
+      && command[0] === "EVAL"
+      && command[1].includes("admin-run-commit-v1")
+    ) {
+      loseCommitResponse = false;
+      throw new Error("simulated connection loss after commit");
+    }
+    return response;
+  };
+  const storage = createRedisAdminRunStorage({ env: REDIS_ENV, fetchImpl });
+  const store = createAdminRunStore({
+    storage,
+    runIdFactory: () => "lost-commit-response-run",
+    now: increasingClock("2026-07-28T02:10:00.000Z"),
+  });
+  const created = await store.createRun({
+    evidenceSnapshot: createAdminEvidenceSnapshot({ question: "recover committed write" }),
+  });
+
+  const updated = await store.appendEvent(created.runId, { payload: { recovered: true } });
+  assert.equal(updated.revision, 2);
+  assert.deepEqual(
+    (await storage.readEvents({ runId: created.runId })).map((item) => item.sequence),
+    [1, 2],
+  );
+  assert.equal(
+    mock.commands.filter((command) => (
+      command[0] === "EVAL" && command[1].includes("admin-run-commit-v1")
+    )).length,
+    2,
+  );
+});
+
+test("Redis commit retries safely when the first request never reaches Redis", async () => {
+  const mock = createMockRedisRest();
+  let loseBeforeCommit = true;
+  const fetchImpl = async (url, options) => {
+    const command = JSON.parse(options.body);
+    if (
+      loseBeforeCommit
+      && command[0] === "EVAL"
+      && command[1].includes("admin-run-commit-v1")
+    ) {
+      loseBeforeCommit = false;
+      throw new Error("simulated connection loss before commit");
+    }
+    return mock.fetchImpl(url, options);
+  };
+  const storage = createRedisAdminRunStorage({ env: REDIS_ENV, fetchImpl });
+  const store = createAdminRunStore({
+    storage,
+    runIdFactory: () => "lost-before-commit-run",
+    now: increasingClock("2026-07-28T02:15:00.000Z"),
+  });
+  const created = await store.createRun({
+    evidenceSnapshot: createAdminEvidenceSnapshot({ question: "retry uncommitted write" }),
+  });
+
+  const updated = await store.appendEvent(created.runId, { payload: { retried: true } });
+  assert.equal(updated.revision, 2);
+  assert.deepEqual(
+    (await storage.readEvents({ runId: created.runId })).map((item) => item.sequence),
+    [1, 2],
+  );
+});
+
+test("Redis commit retry is bounded during a persistent transport outage", async () => {
+  const mock = createMockRedisRest();
+  let failedCommitAttempts = 0;
+  const fetchImpl = async (url, options) => {
+    const command = JSON.parse(options.body);
+    if (command[0] === "EVAL" && command[1].includes("admin-run-commit-v1")) {
+      failedCommitAttempts += 1;
+      throw new Error("simulated persistent connection loss");
+    }
+    return mock.fetchImpl(url, options);
+  };
+  const storage = createRedisAdminRunStorage({ env: REDIS_ENV, fetchImpl });
+  const store = createAdminRunStore({
+    storage,
+    runIdFactory: () => "persistent-commit-outage-run",
+    now: increasingClock("2026-07-28T02:20:00.000Z"),
+  });
+  const created = await store.createRun({
+    evidenceSnapshot: createAdminEvidenceSnapshot({ question: "bounded retries" }),
+  });
+
+  await assert.rejects(
+    store.appendEvent(created.runId, { payload: { unreachable: true } }),
+    (error) => error?.code === "admin_run_redis_request_failed",
+  );
+  assert.equal(failedCommitAttempts, 3);
+  assert.deepEqual(
+    (await storage.readEvents({ runId: created.runId })).map((item) => item.sequence),
+    [1],
   );
 });
 
@@ -504,13 +732,22 @@ function createMockRedisRest() {
             const expectedRevision = Number(command[6]);
             const next = JSON.parse(command[7]);
             const event = JSON.parse(command[8]);
-            if (current.revision !== expectedRevision) {
-              result = `CONFLICT:${current.revision}`;
-            } else if (
+            if (
               current.runId !== next.runId
               || current.runId !== event.runId
               || next.revision !== expectedRevision + 1
-              || next.lastSequence !== current.lastSequence + 1
+              || next.lastSequence !== event.sequence
+            ) {
+              result = "INVALID";
+            } else if (current.revision !== expectedRevision) {
+              const existingEvent = (lists.get(eventKey) || [])[event.sequence - 1];
+              result = current.revision >= expectedRevision + 1
+                && current.lastSequence >= event.sequence
+                && existingEvent === command[8]
+                ? "ALREADY_COMMITTED"
+                : `CONFLICT:${current.revision}`;
+            } else if (
+              next.lastSequence !== current.lastSequence + 1
               || event.sequence !== current.lastSequence + 1
             ) {
               result = "INVALID";

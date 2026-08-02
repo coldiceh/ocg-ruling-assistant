@@ -2,8 +2,9 @@ import { createMemoryAdminRunStorage } from "./adminRunStore.mjs";
 import { parseAdminEvidenceSnapshot } from "./adminEvidenceSnapshot.mjs";
 
 const DEFAULT_KEY_PREFIX = "admin-runs:v1";
-const DEFAULT_TIMEOUT_MS = 1_800;
+const DEFAULT_TIMEOUT_MS = 5_000;
 const MAX_TIMEOUT_MS = 30_000;
+const AMBIGUOUS_WRITE_ATTEMPTS = 3;
 const MAX_TTL_SECONDS = 2_147_483_647;
 const MAX_SNAPSHOT_CACHE_ENTRIES = 4;
 const SNAPSHOT_CANDIDATE_TTL_SECONDS = 300;
@@ -93,17 +94,32 @@ if not currentOk or not nextOk or not eventOk then
 end
 
 local expectedRevision = tonumber(ARGV[1])
-if tonumber(current["revision"]) ~= expectedRevision then
-  return "CONFLICT:" .. tostring(current["revision"])
-end
-
 local nextRevision = expectedRevision + 1
-local nextSequence = tonumber(current["lastSequence"]) + 1
+local eventSequence = tonumber(event["sequence"])
 if tostring(current["runId"]) ~= tostring(nextRun["runId"])
   or tostring(current["runId"]) ~= tostring(event["runId"])
   or tonumber(nextRun["revision"]) ~= nextRevision
-  or tonumber(nextRun["lastSequence"]) ~= nextSequence
-  or tonumber(event["sequence"]) ~= nextSequence then
+  or tonumber(nextRun["lastSequence"]) ~= eventSequence then
+  return "INVALID"
+end
+
+-- A Redis REST response can be lost after this transaction commits. Replaying
+-- the exact same CAS must then be a read-only success, even if later events
+-- have already advanced the run. Exact event bytes at the original sequence
+-- distinguish our mutation from a different writer that won the same CAS.
+if tonumber(current["revision"]) ~= expectedRevision then
+  local existingEventRaw = redis.call("LINDEX", KEYS[2], eventSequence - 1)
+  if tonumber(current["revision"]) >= nextRevision
+    and tonumber(current["lastSequence"]) >= eventSequence
+    and existingEventRaw == ARGV[3] then
+    return "ALREADY_COMMITTED"
+  end
+  return "CONFLICT:" .. tostring(current["revision"])
+end
+
+local nextSequence = tonumber(current["lastSequence"]) + 1
+if tonumber(nextRun["lastSequence"]) ~= nextSequence
+  or eventSequence ~= nextSequence then
   return "INVALID"
 end
 
@@ -259,7 +275,7 @@ export function createRedisAdminRunStorage(options = {}) {
     const detached = detachEvidenceSnapshot(run);
     const keys = redisKeys(keyPrefix, id, detached.snapshot.snapshotId);
     const snapshot = await prepareEvidenceSnapshot(keys.snapshot, detached.snapshot);
-    const result = await redisCommand(config, fetchImpl, timeoutMs, [
+    const command = [
       "EVAL",
       COMMIT_RUN_SCRIPT,
       "3",
@@ -270,15 +286,27 @@ export function createRedisAdminRunStorage(options = {}) {
       serializeJson(detached.run),
       serializeJson(event),
       ttlSeconds === null ? "" : String(ttlSeconds),
-    ]);
-    if (result === "COMMITTED") {
-      cacheEvidenceSnapshot(keys.snapshot, snapshot);
-      return;
+    ];
+    for (let attempt = 0; attempt < AMBIGUOUS_WRITE_ATTEMPTS; attempt += 1) {
+      let result;
+      try {
+        result = await redisCommand(config, fetchImpl, timeoutMs, command);
+      } catch (error) {
+        if (
+          !isAmbiguousRedisWriteError(error)
+          || attempt === AMBIGUOUS_WRITE_ATTEMPTS - 1
+        ) throw error;
+        continue;
+      }
+      if (result === "COMMITTED" || result === "ALREADY_COMMITTED") {
+        cacheEvidenceSnapshot(keys.snapshot, snapshot);
+        return;
+      }
+      if (result === "NOT_FOUND") throw runNotFound(id);
+      if (String(result || "").startsWith("CONFLICT:")) throw revisionConflict();
+      if (result === "MISSING_SNAPSHOT") throw storageCorrupt("commit transaction lost evidence snapshot");
+      throw unexpectedScriptResult("commit", result);
     }
-    if (result === "NOT_FOUND") throw runNotFound(id);
-    if (String(result || "").startsWith("CONFLICT:")) throw revisionConflict();
-    if (result === "MISSING_SNAPSHOT") throw storageCorrupt("commit transaction lost evidence snapshot");
-    throw unexpectedScriptResult("commit", result);
   }
 
   async function prepareEvidenceSnapshot(snapshotKey, snapshot) {
@@ -287,26 +315,31 @@ export function createRedisAdminRunStorage(options = {}) {
       snapshot?.snapshotId,
     );
     const serializedSnapshot = serializeJson(canonicalSnapshot);
-    const result = await redisCommand(
-      config,
-      fetchImpl,
-      timeoutMs,
-      [
-        "EVAL",
-        PREPARE_SNAPSHOT_SCRIPT,
-        "1",
-        snapshotKey,
-        serializedSnapshot,
-        String(SNAPSHOT_CANDIDATE_TTL_SECONDS),
-      ],
-    );
-    if (result === "STAGED" || result === "UNCHANGED") {
-      return canonicalSnapshot;
+    const command = [
+      "EVAL",
+      PREPARE_SNAPSHOT_SCRIPT,
+      "1",
+      snapshotKey,
+      serializedSnapshot,
+      String(SNAPSHOT_CANDIDATE_TTL_SECONDS),
+    ];
+    for (let attempt = 0; attempt < AMBIGUOUS_WRITE_ATTEMPTS; attempt += 1) {
+      let result;
+      try {
+        result = await redisCommand(config, fetchImpl, timeoutMs, command);
+      } catch (error) {
+        if (
+          !isAmbiguousRedisWriteError(error)
+          || attempt === AMBIGUOUS_WRITE_ATTEMPTS - 1
+        ) throw error;
+        continue;
+      }
+      if (result === "STAGED" || result === "UNCHANGED") return canonicalSnapshot;
+      if (result === "CONFLICT") {
+        throw storageCorrupt("stored evidence snapshot conflicts with canonical snapshot identity");
+      }
+      throw storageCorrupt(`unexpected evidence snapshot prepare result: ${String(result)}`);
     }
-    if (result === "CONFLICT") {
-      throw storageCorrupt("stored evidence snapshot conflicts with canonical snapshot identity");
-    }
-    throw storageCorrupt(`unexpected evidence snapshot prepare result: ${String(result)}`);
   }
 
   async function verifyCreatedRun(keys, {

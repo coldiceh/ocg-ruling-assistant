@@ -57,6 +57,7 @@ const TERMINAL_RUN_STATUSES = new Set([
   ADMIN_RUN_STATUSES.SUCCEEDED,
   ADMIN_RUN_STATUSES.FAILED,
 ]);
+const PROVIDER_ACCEPTANCE_PERSIST_ATTEMPTS = 3;
 
 export const ADMIN_MODEL_LAB_SERVICE_EVENT_TYPES = Object.freeze({
   MODEL_REQUEST_CREATED: "MODEL_REQUEST_CREATED",
@@ -511,7 +512,8 @@ export function createAdminModelLabService({
       }
 
       try {
-        await runStore.recordProviderSubmissionAccepted(id, {
+        await persistProviderSubmissionAccepted({
+          runId: id,
           executionToken,
           attemptId: submission.submissionIntent.attemptId,
           providerId: profile.provider,
@@ -521,8 +523,12 @@ export function createAdminModelLabService({
         const current = await requireRun(id);
         const persistedSubmission = current.execution?.providerSubmission;
         if (
-          persistedSubmission?.state === ADMIN_PROVIDER_SUBMISSION_STATES.SUBMITTED
-          && persistedSubmission.requestId
+          isMatchingAcceptedProviderSubmission(persistedSubmission, {
+            attemptId: submission.submissionIntent.attemptId,
+            providerId: profile.provider,
+            requestId: request.requestId,
+            executionEpoch: current.execution?.epoch,
+          })
         ) {
           request = {
             ...request,
@@ -1339,8 +1345,8 @@ export function createAdminModelLabService({
     const terminalError = outcomeKnown
       ? error
       : serviceError(
-        "OpenAI submission outcome is unknown; automatic resubmission is disabled to avoid duplicate charges",
-        "openai_submission_outcome_unknown",
+        "Provider submission outcome is unknown; automatic resubmission is disabled to avoid duplicate charges",
+        "provider_submission_outcome_unknown",
       );
     await failRunWithStage(runId, terminalError, executionToken);
     return requireRun(runId);
@@ -1517,6 +1523,64 @@ export function createAdminModelLabService({
     const run = await runStore.getRun(id);
     if (!run) throw serviceError(`admin run not found: ${id}`, "admin_run_not_found");
     return run;
+  }
+
+  /**
+   * Retries only the durable local acknowledgement after the provider has
+   * already returned. The provider create call deliberately lives outside
+   * this helper and can therefore never be repeated by these retries.
+   *
+   * recordProviderSubmissionAccepted is idempotent for the exact
+   * attempt/provider/request tuple, covering both ambiguous timeout outcomes:
+   * the first Redis commit may have happened, or it may not have happened.
+   */
+  async function persistProviderSubmissionAccepted({
+    runId,
+    executionToken,
+    attemptId,
+    providerId,
+    requestId,
+  }) {
+    let lastError = null;
+    for (let attempt = 0; attempt < PROVIDER_ACCEPTANCE_PERSIST_ATTEMPTS; attempt += 1) {
+      try {
+        return await runStore.recordProviderSubmissionAccepted(runId, {
+          executionToken,
+          attemptId,
+          providerId,
+          requestId,
+        });
+      } catch (error) {
+        lastError = error;
+        if (!isProviderAcceptancePersistenceRetryable(error)) break;
+      }
+    }
+
+    // A final read handles the case where every HTTP response timed out but a
+    // Redis transaction nevertheless committed. Exact tuple matching is
+    // required; a different accepted request must never be treated as ours.
+    try {
+      const observed = await requireRun(runId);
+      if (isMatchingAcceptedProviderSubmission(
+        observed.execution?.providerSubmission,
+        {
+          attemptId,
+          providerId,
+          requestId,
+          executionEpoch: observed.execution?.epoch,
+        },
+      )) {
+        return observed;
+      }
+    } catch {
+      // Preserve the acknowledgement error as the primary failure. If Redis is
+      // still unavailable, the durable SUBMITTING intent remains the safety
+      // fence that prevents another provider create.
+    }
+    throw lastError || serviceError(
+      "Provider request was accepted but its acknowledgement was not persisted",
+      "provider_submission_record_failed",
+    );
   }
 
   function restoreTracker(run, { targetElapsedMs = 0 } = {}) {
@@ -2378,14 +2442,34 @@ function providerSubmissionTerminalError(submission) {
   const persisted = submission?.error || {};
   if (state === ADMIN_PROVIDER_SUBMISSION_STATES.OUTCOME_UNKNOWN) {
     return serviceError(
-      "OpenAI submission outcome is unknown; automatic resubmission is disabled to avoid duplicate charges",
-      "openai_submission_outcome_unknown",
+      "Provider submission outcome is unknown; automatic resubmission is disabled to avoid duplicate charges",
+      "provider_submission_outcome_unknown",
     );
   }
   return serviceError(
-    String(persisted.message || "OpenAI explicitly rejected the background request"),
-    String(persisted.code || "openai_submission_rejected"),
+    String(persisted.message || "Provider explicitly rejected the request"),
+    String(persisted.code || "provider_submission_rejected"),
   );
+}
+
+function isMatchingAcceptedProviderSubmission(submission, {
+  attemptId,
+  providerId,
+  requestId,
+  executionEpoch,
+} = {}) {
+  return submission?.state === ADMIN_PROVIDER_SUBMISSION_STATES.SUBMITTED
+    && submission.attemptId === attemptId
+    && submission.providerId === providerId
+    && submission.requestId === requestId
+    && submission.attemptEpoch === executionEpoch;
+}
+
+function isProviderAcceptancePersistenceRetryable(error) {
+  const code = String(error?.code || "");
+  return code === "admin_run_redis_timeout"
+    || code === "admin_run_redis_request_failed"
+    || code === "admin_run_redis_http_error";
 }
 
 function serviceError(message, code) {

@@ -745,7 +745,7 @@ test("poll safely reconciles an expired SUBMITTING owner to outcome_unknown with
   fixture.advance(120_001);
   const reconciled = await service.pollRun({ runId: created.runId });
   assert.equal(reconciled.status, ADMIN_RUN_STATUSES.FAILED);
-  assert.equal(reconciled.error.code, "openai_submission_outcome_unknown");
+  assert.equal(reconciled.error.code, "provider_submission_outcome_unknown");
   assert.equal(reconciled.execution.providerSubmission.state, "OUTCOME_UNKNOWN");
   assert.equal(fixture.openAICreateCalls.length, 1);
 
@@ -775,7 +775,7 @@ test("expired CANCEL_REQUESTED plus SUBMITTING settles unknown instead of cancel
   fixture.advance(120_001);
   const reconciled = await service.pollRun({ runId: created.runId });
   assert.equal(reconciled.status, ADMIN_RUN_STATUSES.FAILED);
-  assert.equal(reconciled.error.code, "openai_submission_outcome_unknown");
+  assert.equal(reconciled.error.code, "provider_submission_outcome_unknown");
   assert.equal(reconciled.execution.providerSubmission.state, "OUTCOME_UNKNOWN");
   assert.equal(fixture.openAICreateCalls.length, 1);
 
@@ -807,7 +807,7 @@ test("two service instances sharing persistent CAS issue only one provider creat
   assert.equal(persisted.execution.providerSubmission.requestId, "resp_admin_1");
 });
 
-test("accept-before-record storage failure becomes outcome_unknown without a second create", async () => {
+test("a pre-commit acknowledgement timeout retries only the local write", async () => {
   const fixture = makeFixture();
   const baseStorage = createMemoryAdminRunStorage();
   let failAcceptedCommit = true;
@@ -819,7 +819,10 @@ test("accept-before-record storage failure becomes outcome_unknown without a sec
         && argument?.event?.type === "PROVIDER_SUBMISSION_ACCEPTED"
       ) {
         failAcceptedCommit = false;
-        throw new Error("simulated persistence loss after upstream acceptance");
+        throw codedError(
+          "simulated persistence loss after upstream acceptance",
+          "admin_run_redis_request_failed",
+        );
       }
       return baseStorage.commitRun(argument);
     },
@@ -828,9 +831,78 @@ test("accept-before-record storage failure becomes outcome_unknown without a sec
   const created = await service.createRun({ body: { question: "匿名落库歧义问题" } });
 
   const first = await service.executeRun({ runId: created.runId });
+  assert.equal(first.run.status, ADMIN_RUN_STATUSES.RUNNING);
+  assert.equal(first.providerRequest.requestId, "resp_admin_1");
+  assert.equal(first.run.execution.providerSubmission.state, "SUBMITTED");
+  assert.equal(fixture.openAICreateCalls.length, 1);
+
+  const second = await service.executeRun({ runId: created.runId });
+  assert.equal(second.providerRequest.requestId, "resp_admin_1");
+  assert.equal(fixture.openAICreateCalls.length, 1);
+});
+
+test("a post-commit acknowledgement timeout is recovered idempotently", async () => {
+  const fixture = makeFixture();
+  const baseStorage = createMemoryAdminRunStorage();
+  let loseFirstAcceptedResponse = true;
+  const storage = {
+    ...baseStorage,
+    async commitRun(argument) {
+      if (
+        loseFirstAcceptedResponse
+        && argument?.event?.type === "PROVIDER_SUBMISSION_ACCEPTED"
+      ) {
+        loseFirstAcceptedResponse = false;
+        await baseStorage.commitRun(argument);
+        throw codedError(
+          "simulated timeout after the Redis transaction committed",
+          "admin_run_redis_timeout",
+        );
+      }
+      return baseStorage.commitRun(argument);
+    },
+  };
+  const service = makeService(fixture, {}, { storage });
+  const created = await service.createRun({ body: { question: "匿名提交已落库但响应丢失" } });
+
+  const first = await service.executeRun({ runId: created.runId });
+  assert.equal(first.run.status, ADMIN_RUN_STATUSES.RUNNING);
+  assert.equal(first.providerRequest.requestId, "resp_admin_1");
+  assert.equal(first.run.execution.providerSubmission.state, "SUBMITTED");
+  assert.equal(fixture.openAICreateCalls.length, 1);
+  const events = await service.replayEvents({ runId: created.runId });
+  assert.equal(
+    events.events.filter((event) => event.type === "PROVIDER_SUBMISSION_ACCEPTED").length,
+    1,
+    "idempotent acknowledgement must not duplicate the accepted event",
+  );
+});
+
+test("persistent acknowledgement failure is bounded and never repeats provider create", async () => {
+  const fixture = makeFixture();
+  const baseStorage = createMemoryAdminRunStorage();
+  let acceptedCommitAttempts = 0;
+  const storage = {
+    ...baseStorage,
+    async commitRun(argument) {
+      if (argument?.event?.type === "PROVIDER_SUBMISSION_ACCEPTED") {
+        acceptedCommitAttempts += 1;
+        throw codedError(
+          "simulated persistent acknowledgement outage",
+          "admin_run_redis_request_failed",
+        );
+      }
+      return baseStorage.commitRun(argument);
+    },
+  };
+  const service = makeService(fixture, {}, { storage });
+  const created = await service.createRun({ body: { question: "匿名持续落库失败问题" } });
+
+  const first = await service.executeRun({ runId: created.runId });
   assert.equal(first.run.status, ADMIN_RUN_STATUSES.FAILED);
   assert.equal(first.run.error.code, "openai_submission_record_outcome_unknown");
   assert.equal(first.run.execution.providerSubmission.state, "OUTCOME_UNKNOWN");
+  assert.equal(acceptedCommitAttempts, 3, "local acknowledgement retries must be bounded");
   assert.equal(fixture.openAICreateCalls.length, 1);
 
   const second = await service.executeRun({ runId: created.runId });
@@ -849,7 +921,7 @@ test("an ambiguous provider submission is failed closed and never resubmitted", 
   assert.equal(interrupted.run.preparationFinalizedAt !== null, true);
   assert.equal(interrupted.providerRequest, null);
   assert.equal(interrupted.run.status, ADMIN_RUN_STATUSES.FAILED);
-  assert.equal(interrupted.run.error.code, "openai_submission_outcome_unknown");
+  assert.equal(interrupted.run.error.code, "provider_submission_outcome_unknown");
   assert.equal(
     interrupted.run.execution.providerSubmission.state,
     "OUTCOME_UNKNOWN",
@@ -861,6 +933,10 @@ test("an ambiguous provider submission is failed closed and never resubmitted", 
   assert.equal(fixture.deepSeekPrepareCalls, 1, "frozen evidence must not be rebuilt");
   assert.equal(fixture.openAICreateCalls.length, 1, "ambiguous create must never be retried");
 });
+
+function codedError(message, code) {
+  return Object.assign(new Error(message), { code });
+}
 
 function makeService(fixture, envOverrides = {}, {
   storage = createMemoryAdminRunStorage(),

@@ -147,6 +147,9 @@ test("ui_has_single_query_button", async () => {
   assert.match(app, /用户提供文本/u);
   assert.match(app, /pendingStages/u);
   assert.match(app, /检索规则资料/u);
+  assert.match(app, /pendingStageTickTimer/u);
+  assert.match(app, /formatPendingStageDuration/u);
+  assert.match(app, /progress-step-time/u);
   assert.match(app, /startPendingStages/u);
   assert.match(html, /DeepSeek V4 Flash/u);
   assert.doesNotMatch(html, /id="flashModelButton"|id="proModelButton"|>Pro</u);
