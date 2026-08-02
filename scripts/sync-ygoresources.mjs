@@ -30,6 +30,7 @@ const userAgent = "ocg-ruling-assistant/0.1 (+https://github.com/)";
 
 const warnings = [];
 const sourceSyncWarnings = [];
+const sourceRetirementWarnings = [];
 const aliasWarnings = [];
 const parseFailedWarnings = [];
 const contentQualityWarnings = [];
@@ -51,11 +52,14 @@ async function main() {
   const cardPayloads = await loadCards(cardTargets, nameIndexes, monsterPropertyMetadata);
   const manifest = await loadManifest(previousMeta.sourceRevision);
   let cards = cardPayloads.map(({ record }) => record);
-  let rulings = await loadRulings(cards, cardPayloads, manifest.changedQaIds);
+  const rulingSync = await loadRulings(cards, cardPayloads, manifest.changedQaIds);
+  let rulings = rulingSync.records;
   if (sourceSyncWarnings.length || !syncAllReleasedCards) {
     cards = mergeCardRecords(previousCards.records || [], cards);
   }
-  rulings = mergeRulingsCumulatively(previousRulings.records || [], rulings);
+  rulings = mergeRulingsCumulatively(previousRulings.records || [], rulings, {
+    removedQaIds: rulingSync.removedQaIds,
+  });
   const rulingQuarantine = quarantineRulingData(rulings, previousRulings.records || []);
   for (const issue of rulingQuarantine.issues) {
     addContentQualityWarning(formatRulingDataQualityIssue(issue));
@@ -165,6 +169,8 @@ async function main() {
     ],
     warnings,
     sourceSyncWarnings,
+    sourceRetirementWarnings,
+    sourceRetirementWarningCount: sourceRetirementWarnings.length,
     aliasWarnings,
     parseFailedWarnings,
     dataQualityWarnings,
@@ -183,6 +189,7 @@ async function main() {
     maxQaTotal,
     qaSyncSelection: qaSyncSelectionStats,
     warnings,
+    sourceRetirementWarnings,
     dataQualityWarnings,
     changedPaths: manifest.changedPaths,
   });
@@ -279,6 +286,7 @@ async function loadCards(cards, nameIndexes, monsterPropertyMetadata = []) {
 
 async function loadRulings(cards, cardPayloads, changedQaIds = []) {
   const records = [];
+  const removedQaIds = [];
   records.push(...buildCardTextRecords(cardPayloads));
   records.push(...buildFaqRecords(cardPayloads));
   let recentQaIds = [];
@@ -309,11 +317,29 @@ async function loadRulings(cards, cardPayloads, changedQaIds = []) {
       const record = normalizeQa(payload, id, cards);
       if (record) records.push(record);
     } catch (error) {
-      addSourceWarning(`Q&A ${id} failed: ${formatError(error)}`);
+      const failure = classifyRemoteItemFetchFailure(error);
+      if (failure.kind === "removed") {
+        removedQaIds.push(String(id));
+        addSourceRetirementWarning(`Q&A ${id} was removed upstream (${failure.status})`);
+      } else {
+        addSourceWarning(`Q&A ${id} failed: ${formatError(error)}`);
+      }
     }
   }
 
-  return records;
+  return { records, removedQaIds };
+}
+
+export function classifyRemoteItemFetchFailure(error = {}) {
+  const status = Number(error?.status);
+  if (status === 404 || status === 410) {
+    return { kind: "removed", fatal: false, status };
+  }
+  return {
+    kind: "source_failure",
+    fatal: true,
+    status: Number.isFinite(status) ? status : null,
+  };
 }
 
 async function loadManifest(previousRevision) {
@@ -768,11 +794,20 @@ function mergeCardRecords(previous, current) {
   return [...records.values()];
 }
 
-export function mergeRulingsCumulatively(previous, current) {
-  return mergeById(previous, current);
+export function mergeRulingsCumulatively(previous, current, { removedQaIds = [] } = {}) {
+  const removed = new Set((removedQaIds || []).map((id) => String(id || "")).filter(Boolean));
+  const retainedPrevious = (previous || []).filter((record) => {
+    if (!removed.size || String(record?.recordType || "") !== "qa") return true;
+    const sourceId = String(record?.sourceId || "").trim()
+      || String(record?.id || "").match(/^ygoresources-qa-(\d+)$/u)?.[1]
+      || "";
+    return !removed.has(sourceId);
+  });
+  return mergeById(retainedPrevious, current);
 }
 
 function addSourceWarning(message) { sourceSyncWarnings.push(message); warnings.push(message); }
+function addSourceRetirementWarning(message) { sourceRetirementWarnings.push(message); warnings.push(message); }
 function addAliasWarning(message) { aliasWarnings.push(message); warnings.push(message); }
 function addParseWarning(message) { parseFailedWarnings.push(message); warnings.push(message); }
 function addContentQualityWarning(message) { contentQualityWarnings.push(message); warnings.push(message); }

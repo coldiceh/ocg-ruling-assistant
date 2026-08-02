@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  classifyRemoteItemFetchFailure,
   mergeRulingsCumulatively,
   normalizeCard,
   normalizeQa,
@@ -179,4 +180,45 @@ test("cumulative ruling merge keeps healthy old QA and lets new records override
   ]);
   const quarantined = quarantineRulingData(invalidCurrent, previous);
   assert.equal(quarantined.records.find((item) => item.id === "ygoresources-qa-updated")?.conclusion, "旧答案");
+});
+
+test("withdrawn remote QA is non-fatal and removed from the cumulative snapshot", () => {
+  assert.deepEqual(classifyRemoteItemFetchFailure({ status: 404 }), {
+    kind: "removed",
+    fatal: false,
+    status: 404,
+  });
+  assert.deepEqual(classifyRemoteItemFetchFailure({ status: 410 }), {
+    kind: "removed",
+    fatal: false,
+    status: 410,
+  });
+  assert.equal(classifyRemoteItemFetchFailure({ status: 503 }).fatal, true);
+  assert.equal(classifyRemoteItemFetchFailure(new Error("network unavailable")).fatal, true);
+
+  const previous = [
+    {
+      id: "ygoresources-qa-retired",
+      sourceId: "70001",
+      sourceName: "YGOResources DB",
+      recordType: "qa",
+      conclusion: "已被上游撤回",
+    },
+    {
+      id: "ygoresources-qa-70002",
+      recordType: "qa",
+      conclusion: "仍然存在",
+    },
+    {
+      id: "card-faq-70001-1",
+      sourceId: "70001",
+      recordType: "card-faq",
+      conclusion: "卡片 FAQ 不属于独立 QA 条目",
+    },
+  ];
+
+  const merged = mergeRulingsCumulatively(previous, [], { removedQaIds: ["70001"] });
+  assert.equal(merged.some((record) => record.id === "ygoresources-qa-retired"), false);
+  assert.equal(merged.some((record) => record.id === "ygoresources-qa-70002"), true);
+  assert.equal(merged.some((record) => record.id === "card-faq-70001-1"), true);
 });
