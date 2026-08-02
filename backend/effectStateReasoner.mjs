@@ -1,6 +1,7 @@
 import { analyzeDuelStateTransition } from "./duelStateReasoner.mjs";
 import { analyzeActivationEventStateTransition } from "./activationEventStateReasoner.mjs";
 import { analyzeOrderedResolutionCheckpoint } from "./orderedResolutionCheckpointReasoner.mjs";
+import { analyzePrintedCardNameReferenceTransition } from "./printedCardNameReferenceReasoner.mjs";
 
 export function analyzeEffectStateTransition({
   userQuery = "",
@@ -9,6 +10,12 @@ export function analyzeEffectStateTransition({
   operationLegality = null,
   resolvedCards = [],
 } = {}) {
+  const printedCardNameReferenceTransition = analyzePrintedCardNameReferenceTransition({
+    userQuery: String(userQuery || ""),
+    resolvedCards,
+    cardTexts,
+  });
+  if (printedCardNameReferenceTransition) return printedCardNameReferenceTransition;
   const activationEventTransition = analyzeActivationEventStateTransition({
     userQuery: String(userQuery || ""),
     resolvedCards,
