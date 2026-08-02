@@ -214,7 +214,84 @@ export function parseAndValidateModelRulingResult(rawText, options = {}) {
   } catch {
     return validationFailure(["model output is not valid JSON"]);
   }
-  return validateModelRulingResult(parsed, options);
+  const strictValidation = validateModelRulingResult(parsed, options);
+  if (strictValidation.ok || options.normalizeEvidenceProvenance !== true) {
+    return strictValidation;
+  }
+
+  const provenance = normalizeModelRulingEvidenceProvenance(parsed, options);
+  if (provenance.corrections.length === 0) return strictValidation;
+  const normalizedValidation = validateModelRulingResult(provenance.normalized, options);
+  if (!normalizedValidation.ok) return normalizedValidation;
+  return {
+    ...normalizedValidation,
+    provenanceCorrections: provenance.corrections,
+  };
+}
+
+/**
+ * Deterministically downgrades only evidence provenance labels which claim a
+ * stronger status than the frozen packet permits. It never changes verdicts,
+ * propositions, timelines, citations, or answer text. Missing/fabricated
+ * evidence remains untouched so the normal validator still fails closed.
+ */
+export function normalizeModelRulingEvidenceProvenance(result, {
+  evidenceSnapshot,
+  modelVisibleEvidencePacket,
+} = {}) {
+  const normalized = cloneJson(result);
+  const corrections = [];
+  if (!isPlainObject(normalized)) return { normalized, corrections };
+
+  const evidenceIndex = modelVisibleEvidencePacket !== undefined
+    ? buildModelVisibleEvidenceIndex(modelVisibleEvidencePacket)
+    : buildEvidenceIndex(evidenceSnapshot);
+  const usageByEvidence = new Map(
+    (Array.isArray(normalized.evidenceUsage) ? normalized.evidenceUsage : [])
+      .filter((usage) => isPlainObject(usage) && isNonEmptyString(usage.evidenceId))
+      .map((usage) => [String(usage.evidenceId), usage]),
+  );
+
+  for (const usage of usageByEvidence.values()) {
+    if (usage.relation !== "DIRECTLY_ENTAILS") continue;
+    const evidence = evidenceIndex.get(String(usage.evidenceId));
+    if (!evidence || isEligibleDirectOfficialEvidence(evidence)) continue;
+    const nextRelation = conservativeEvidenceRelation(evidence);
+    corrections.push({
+      kind: "evidence_relation_downgrade",
+      evidenceId: String(usage.evidenceId),
+      from: usage.relation,
+      to: nextRelation,
+      reason: evidenceProvenanceReason(evidence),
+    });
+    usage.relation = nextRelation;
+  }
+
+  for (const claim of Array.isArray(normalized.claims) ? normalized.claims : []) {
+    if (!isPlainObject(claim) || claim.inferenceType !== "DIRECT_OFFICIAL") continue;
+    const citedEvidenceIds = Array.isArray(claim.evidenceIds) ? claim.evidenceIds : [];
+    const citedEvidence = citedEvidenceIds
+      .map((evidenceId) => evidenceIndex.get(String(evidenceId)))
+      .filter(Boolean);
+    const allDirect = citedEvidence.length > 0
+      && citedEvidence.length === citedEvidenceIds.length
+      && citedEvidence.every(isEligibleDirectOfficialEvidence)
+      && citedEvidenceIds.every((evidenceId) => (
+        usageByEvidence.get(String(evidenceId))?.relation === "DIRECTLY_ENTAILS"
+      ));
+    if (allDirect || citedEvidence.length === 0) continue;
+    const nextInferenceType = conservativeInferenceType(citedEvidence);
+    corrections.push({
+      kind: "claim_inference_downgrade",
+      claimId: String(claim.claimId || ""),
+      from: claim.inferenceType,
+      to: nextInferenceType,
+      reason: "cited evidence is not eligible for a direct-official claim",
+    });
+    claim.inferenceType = nextInferenceType;
+  }
+
+  return { normalized, corrections };
 }
 
 function validateSchemaShape(result, errors) {
@@ -870,6 +947,48 @@ function isDirectOfficialEvidence(evidence) {
     && evidence?.superseded !== true
     && evidence?.direct !== false
     && evidence?.isDirect !== false;
+}
+
+function isEligibleDirectOfficialEvidence(evidence) {
+  return evidence?.bodyExcerpted !== true && isDirectOfficialEvidence(evidence);
+}
+
+function conservativeEvidenceRelation(evidence) {
+  const category = normalizeMachineToken(
+    evidence?.category || evidence?.sourceType || evidence?.recordType || evidence?.type,
+  );
+  if (/(?:parsed_)?card_text|resolved_card/u.test(category)) return "SUPPORTS_STEP";
+  if (evidence?.authority === "official" || /qa|faq|ruling|official/u.test(category)) {
+    return "ANALOGOUS_RULING";
+  }
+  return "PARTIAL_SUPPORT";
+}
+
+function conservativeInferenceType(evidenceItems) {
+  const categories = evidenceItems.map((evidence) => normalizeMachineToken(
+    evidence?.category || evidence?.sourceType || evidence?.recordType || evidence?.type,
+  ));
+  if (categories.length > 0
+    && categories.every((category) => /(?:parsed_)?card_text|resolved_card/u.test(category))) {
+    return "CARD_TEXT";
+  }
+  if (evidenceItems.some((evidence, index) => (
+    evidence?.authority === "official" || /qa|faq|ruling|official/u.test(categories[index])
+  ))) {
+    return "OFFICIAL_RULE_DERIVATION";
+  }
+  return "MODEL_SYNTHESIS";
+}
+
+function evidenceProvenanceReason(evidence) {
+  if (evidence?.bodyExcerpted === true) return "evidence body is excerpted";
+  if (evidence?.direct === false || evidence?.isDirect === false) {
+    return "evidence packet marks the item as non-direct";
+  }
+  if (evidence?.current === false || evidence?.stale === true || evidence?.superseded === true) {
+    return "evidence is not current";
+  }
+  return "evidence category is not direct official material";
 }
 
 function detectOperationKinds(text) {

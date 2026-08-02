@@ -41,6 +41,9 @@
 - 每个 `TRUE`、`FALSE` 或 `CONDITIONAL` verdict 都必须至少有一个同 `questionId` 的决定性 Claim；不得用空的 `claims`、`evidenceUsage` 和 `timeline` 直接给出确定结论。
 - `claims[].questionId` 与 `unresolved[].questionId` 必须填写，并与它实际支持或阻塞的 verdict 对应。多子问题中，一个问题的 UNKNOWN 不得污染其他已有充分证据的问题。
 - `DIRECT_OFFICIAL` 只能用于直接回答当前问题的有效官方 Q&A、卡片 FAQ、官方数据库裁定或可追溯官方答复，并且关系必须是 `DIRECTLY_ENTAILS`。
+- 证据项的 `direct` 是机器边界而不是建议：只有 `direct: true`、`authority: "official"`、正文未截断且资料仍有效的证据，才允许使用 `DIRECT_OFFICIAL` / `DIRECTLY_ENTAILS`。`authority: "official"` 但 `direct: false` 仍不属于直接命中。
+- `category: "parsed_card_text"` 的资料只能支撑 `CARD_TEXT` 类型 Claim，关系使用 `DEFINES_TERM` 或 `SUPPORTS_STEP`，绝不能标成 `DIRECT_OFFICIAL` / `DIRECTLY_ENTAILS`。
+- `category: "related_qa"` 且 `direct: false` 的资料可用于 `OFFICIAL_RULE_DERIVATION` 或 `ANALOGY`，关系使用 `ANALOGOUS_RULING`、`SUPPORTS_STEP` 或 `PARTIAL_SUPPORT`，绝不能自行升级为直接官方结论。
 - 没有直接 FAQ 时，使用 `CARD_TEXT`、`OFFICIAL_RULE_DERIVATION`、`ANALOGY` 或 `MODEL_SYNTHESIS` 的真实类别，不得伪装成直接官方结论。
 - `official_direct_qa_not_found` 仅表示保守的精确匹配器没有把候选标成 direct，不表示可见的 `related_qa` 与当前问题无关。必须阅读其正文；若正文可支持推导，使用 `OFFICIAL_RULE_DERIVATION` 和适当的支持关系，不得因此拒答。
 - `IRRELEVANT` 资料不能支持决定性 Claim。
