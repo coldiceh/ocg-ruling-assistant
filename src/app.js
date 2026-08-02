@@ -151,6 +151,9 @@ const simulationPendingStage = {
 const pendingStageDelays = [0, 700, 1600, 2900, 4500, 6200];
 let pendingStageTimers = [];
 let pendingStageIndex = 0;
+let pendingStageTickTimer = 0;
+let pendingStageEnteredAt = [];
+let pendingStageDurationsMs = [];
 
 function normalizeText(value) {
   return String(value || "")
@@ -3742,19 +3745,41 @@ function startPendingStages() {
   clearPendingStages(false);
   const stages = getPendingStages();
   pendingStageIndex = 0;
+  pendingStageEnteredAt = stages.map(() => null);
+  pendingStageDurationsMs = stages.map(() => null);
+  pendingStageEnteredAt[0] = Date.now();
   renderPendingStages(0, stages);
   pendingStageDelays.slice(0, stages.length).forEach((delay, index) => {
+    if (index === 0) return;
     const timer = setTimeout(() => {
+      const now = Date.now();
+      const previousIndex = pendingStageIndex;
+      if (
+        previousIndex < index
+        && pendingStageEnteredAt[previousIndex] !== null
+        && pendingStageDurationsMs[previousIndex] === null
+      ) {
+        pendingStageDurationsMs[previousIndex] = Math.max(
+          0,
+          now - pendingStageEnteredAt[previousIndex],
+        );
+      }
       pendingStageIndex = index;
+      if (pendingStageEnteredAt[index] === null) pendingStageEnteredAt[index] = now;
       renderPendingStages(index, stages);
     }, delay);
     pendingStageTimers.push(timer);
   });
+  pendingStageTickTimer = window.setInterval(() => {
+    renderPendingStages(pendingStageIndex, stages);
+  }, 250);
 }
 
 function clearPendingStages(clearClass = true) {
   for (const timer of pendingStageTimers) clearTimeout(timer);
   pendingStageTimers = [];
+  if (pendingStageTickTimer) window.clearInterval(pendingStageTickTimer);
+  pendingStageTickTimer = 0;
   if (clearClass) ui.stepsList.classList.remove("progress-steps");
 }
 
@@ -3771,12 +3796,27 @@ function renderPendingStages(activeIndex, stages = getPendingStages()) {
     marker.textContent = index < activeIndex ? "✓" : index === activeIndex ? "•" : "·";
     const label = document.createElement("span");
     label.textContent = stage.label;
-    item.append(marker, label);
+    const time = document.createElement("span");
+    time.className = "progress-step-time";
+    const durationMs = index < activeIndex
+      ? pendingStageDurationsMs[index]
+      : index === activeIndex && pendingStageEnteredAt[index] !== null
+        ? Math.max(0, Date.now() - pendingStageEnteredAt[index])
+        : null;
+    time.textContent = durationMs === null
+      ? ""
+      : `${formatPendingStageDuration(durationMs)}${index === activeIndex ? "" : " ✓"}`;
+    item.append(marker, label, time);
     ui.stepsList.appendChild(item);
   });
   const stage = stages[Math.min(activeIndex, stages.length - 1)];
   ui.verdictTitle.textContent = stage.label === "生成裁定" ? "正在生成裁定" : `正在${stage.label}`;
   ui.verdictBody.textContent = stage.body;
+}
+
+function formatPendingStageDuration(milliseconds) {
+  const seconds = Math.max(0, Number(milliseconds) || 0) / 1000;
+  return `${seconds < 10 ? seconds.toFixed(1) : Math.round(seconds)} 秒`;
 }
 
 function renderEngineSimulation(engine, simulation) {

@@ -456,6 +456,21 @@ export function createAdminRunStore({
         timestamp,
         "record provider submission accepted",
       );
+      const existingSubmission = execution.providerSubmission;
+      if (
+        existingSubmission?.state === ADMIN_PROVIDER_SUBMISSION_STATES.SUBMITTED
+        && existingSubmission.attemptId === attempt
+        && existingSubmission.providerId === provider
+        && existingSubmission.requestId === request
+        && existingSubmission.attemptEpoch === execution.epoch
+      ) {
+        // A Redis REST timeout is ambiguous: the atomic commit may have
+        // succeeded even though its HTTP response never reached this worker.
+        // Repeating the exact same local acknowledgement must therefore be a
+        // read-only success. This makes it safe for the service to retry the
+        // persistence step without ever repeating the billable provider call.
+        return { noChange: true };
+      }
       requireProviderSubmissionAttempt(execution, { attemptId: attempt, providerId: provider });
       const providerSubmission = {
         ...execution.providerSubmission,

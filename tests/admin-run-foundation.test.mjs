@@ -497,6 +497,29 @@ test("provider SUBMITTING intent is an atomic one-winner gate before create", as
     ADMIN_PROVIDER_SUBMISSION_STATES.SUBMITTED,
   );
   assert.equal(accepted.execution.providerSubmission.requestId, "resp_anonymous");
+  const acceptedAgain = await storeA.recordProviderSubmissionAccepted("provider-submit-race-run", {
+    executionToken: lease.executionToken,
+    attemptId: winner.submissionIntent.attemptId,
+    providerId: "openai",
+    requestId: "resp_anonymous",
+  });
+  assert.equal(acceptedAgain.revision, accepted.revision);
+  assert.equal(acceptedAgain.lastSequence, accepted.lastSequence);
+  assert.equal(
+    (await storeA.replayEvents("provider-submit-race-run", { afterSequence: 0 }))
+      .events.filter((event) => event.type === "PROVIDER_SUBMISSION_ACCEPTED").length,
+    1,
+    "an exact acknowledgement retry must not append a duplicate event",
+  );
+  await assert.rejects(
+    storeA.recordProviderSubmissionAccepted("provider-submit-race-run", {
+      executionToken: lease.executionToken,
+      attemptId: winner.submissionIntent.attemptId,
+      providerId: "openai",
+      requestId: "resp_different",
+    }),
+    (error) => error?.code === "admin_run_provider_submission_already_accepted",
+  );
   await assert.rejects(
     storeA.beginProviderSubmission("provider-submit-race-run", {
       executionToken: lease.executionToken,

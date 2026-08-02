@@ -1599,6 +1599,16 @@ dialog::backdrop {
   }
 }
 
+.progress-step-time {
+  min-width: 58px;
+  margin-left: auto;
+  color: currentColor;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
 @media (max-width: 680px) {
   h1 {
     font-size: 25px;
