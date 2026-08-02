@@ -174,6 +174,22 @@ test("Redis history persists index and ratings with no default trim or TTL", asy
     note: "遗漏一个处理步骤",
     updatedAt: "2026-07-28T03:05:00.000Z",
   });
+  const repairProvenance = {
+    schemaVersion: 1,
+    attempted: true,
+    outcome: "succeeded",
+    validationErrors: ["claim reference missing"],
+    initialAttempt: { requestId: "redis-primary-request" },
+    submission: { state: "SUBMITTED", requestId: "redis-repair-request" },
+  };
+  await storeA.saveRunRepairProvenance({
+    runId: "redis-new",
+    repairProvenance,
+  });
+  await storeA.saveRunRepairProvenance({
+    runId: "redis-new",
+    repairProvenance,
+  });
 
   const storeB = createRedisAdminLabRecordStore({
     env: REDIS_ENV,
@@ -182,11 +198,13 @@ test("Redis history persists index and ratings with no default trim or TTL", asy
   const first = await storeB.listRuns({ limit: 1 });
   assert.equal(first.records[0].runId, "redis-new");
   assert.equal(first.records[0].humanRating.rating, "partially_correct");
+  assert.equal(first.records[0].repairProvenance.submission.requestId, "redis-repair-request");
   assert.ok(first.nextCursor);
   const second = await storeB.listRuns({ cursor: first.nextCursor, limit: 1 });
   assert.equal(second.records[0].runId, "redis-old");
   assert.equal(second.nextCursor, null);
   assert.equal((await storeB.getRun("redis-old")).questionSummary, "旧问题");
+  assert.equal((await storeB.getRun("redis-new")).repairProvenance.outcome, "succeeded");
 
   assert.equal(redis.commands.some((command) => command[0] === "LTRIM"), false);
   assert.equal(redis.commands.some((command) => command[0] === "EXPIRE"), false);
@@ -387,6 +405,14 @@ test("JSON and CSV exports whitelist fields and neutralize spreadsheet formulas"
     startedAt: "2026-07-28T04:00:01.000Z",
     endedAt: "2026-07-28T04:00:03.000Z",
     evidenceSnapshotId: "evidence_export_1",
+    repairProvenance: {
+      schemaVersion: 1,
+      attempted: true,
+      outcome: "succeeded",
+      validationErrors: ["missing evidenceId"],
+      initialAttempt: { requestId: "primary-request", usage: { totalTokens: 111 } },
+      submission: { requestId: "repair-request", state: "SUBMITTED" },
+    },
     result: {
       schemaVersion: 1,
       evidenceSnapshotId: "evidence_export_1",
@@ -401,6 +427,14 @@ test("JSON and CSV exports whitelist fields and neutralize spreadsheet formulas"
           usage: { totalTokens: 321 },
           cost: { totalCostUsd: 0.0123 },
         },
+      },
+      repair: {
+        attempted: true,
+        outcome: "succeeded",
+        attempts: [
+          { requestId: "primary-request" },
+          { requestId: "repair-request" },
+        ],
       },
       callerAddedSecret: "must-not-survive",
     },
@@ -421,7 +455,7 @@ test("JSON and CSV exports whitelist fields and neutralize spreadsheet formulas"
   assert.equal(json.includes("secret-key"), false);
   assert.equal(json.includes("nested-secret"), false);
   assert.equal(json.includes("must-not-survive"), false);
-  assert.equal(parsed.schemaVersion, 3);
+  assert.equal(parsed.schemaVersion, 4);
   assert.equal(parsed.records[0].humanRating.rating, "incorrect");
   assert.equal(parsed.records[0].status, "SUCCEEDED");
   assert.equal(parsed.records[0].evidenceSnapshotId, "evidence_export_1");
@@ -433,11 +467,15 @@ test("JSON and CSV exports whitelist fields and neutralize spreadsheet formulas"
   assert.equal(Object.hasOwn(parsed.records[0].forkProvenance, "password"), false);
   assert.equal(parsed.records[0].result.finalRuling.conciseAnswer, "可以发动。");
   assert.equal(parsed.records[0].metering.totals.usage.totalTokens, 321);
+  assert.equal(parsed.records[0].repairProvenance.outcome, "succeeded");
+  assert.equal(parsed.records[0].result.repair.attempts.length, 2);
   assert.match(csv, /evidence_export_1/u);
   assert.match(csv, /source-run-1/u);
   assert.match(csv, new RegExp("a{64}", "u"));
   assert.match(csv, new RegExp("b{64}", "u"));
   assert.match(csv, /totalTokens/u);
+  assert.match(csv, /primary-request/u);
+  assert.match(csv, /repair-request/u);
   assert.match(csv, /"'=HYPERLINK/u);
   assert.match(csv, /"'\+SUM\(1,1\)"/u);
 });
@@ -486,6 +524,19 @@ function createMockRedisRest() {
           result = "INVALID";
         } else {
           strings.set(ratingKey, command[5]);
+          result = "SAVED";
+        }
+      } else if (script.includes("admin-lab-record-save-repair-audit-v1")) {
+        const recordKey = command[3];
+        const repairKey = command[4];
+        if (!strings.has(recordKey)) {
+          result = "NOT_FOUND";
+        } else if (strings.has(repairKey) && strings.get(repairKey) !== command[5]) {
+          result = "CONFLICT";
+        } else if (strings.has(repairKey)) {
+          result = "UNCHANGED";
+        } else {
+          strings.set(repairKey, command[5]);
           result = "SAVED";
         }
       } else {

@@ -240,12 +240,14 @@ function createAdminModelLabComposedService({
   async function createRun(argument = {}) {
     const run = await resolvedBaseService.createRun(argument);
     const registration = await ensureRunHistoryRegistration(run);
+    await persistTerminalRepairAudit(run);
     return attachHistoryRegistration(run, registration);
   }
 
   async function forkRun(argument = {}) {
     const run = await resolvedBaseService.forkRun(argument);
     const registration = await ensureRunHistoryRegistration(run);
+    await persistTerminalRepairAudit(run);
     return attachHistoryRegistration(run, registration);
   }
 
@@ -258,18 +260,21 @@ function createAdminModelLabComposedService({
   async function getRun(argument = {}) {
     const run = await resolvedBaseService.getRun(argument);
     const registration = await ensureRunHistoryRegistration(run);
+    await persistTerminalRepairAudit(run);
     return attachHistoryRegistration(run, registration);
   }
 
   async function pollRun(argument = {}) {
     const run = await resolvedBaseService.pollRun(argument);
     const registration = await ensureRunHistoryRegistration(run);
+    await persistTerminalRepairAudit(run);
     return attachHistoryRegistration(run, registration);
   }
 
   async function cancelRun(argument = {}) {
     const run = await resolvedBaseService.cancelRun(argument);
     const registration = await ensureRunHistoryRegistration(run);
+    await persistTerminalRepairAudit(run);
     return attachHistoryRegistration(run, registration);
   }
 
@@ -294,6 +299,7 @@ function createAdminModelLabComposedService({
   async function reconcileRunBearingResult(value) {
     if (value?.run && typeof value.run === "object") {
       const registration = await ensureRunHistoryRegistration(value.run);
+      await persistTerminalRepairAudit(value.run);
       if (registration.status === "registered") return value;
       return {
         ...cloneJson(value),
@@ -302,6 +308,7 @@ function createAdminModelLabComposedService({
     }
     if (value?.runId) {
       const registration = await ensureRunHistoryRegistration(value);
+      await persistTerminalRepairAudit(value);
       return attachHistoryRegistration(value, registration);
     }
     return value;
@@ -336,6 +343,29 @@ function createAdminModelLabComposedService({
       });
     }
     return pending;
+  }
+
+  async function persistTerminalRepairAudit(run) {
+    if (!run?.execution?.repair) return null;
+    if (!["SUCCEEDED", "FAILED", "CANCELLED"].includes(String(run.status || ""))) return null;
+    const repairProvenance = {
+      ...run.execution.repair,
+      submission: run.execution.repairSubmission || null,
+      outcome: repairOutcome(run),
+    };
+    try {
+      return await resolvedRecordStore.saveRunRepairProvenance({
+        runId: run.runId,
+        repairProvenance,
+      });
+    } catch (error) {
+      if (error?.code !== "admin_lab_record_not_found") throw error;
+      await repairHistoryRegistrationByRunId(run.runId, { force: true });
+      return resolvedRecordStore.saveRunRepairProvenance({
+        runId: run.runId,
+        repairProvenance,
+      });
+    }
   }
 
   function historyRegistrationIsCached(runId) {
@@ -487,6 +517,13 @@ function createAdminModelLabComposedService({
       endedAt: run?.endedAt || null,
       model: finalRuling.model || finalRuling.requestedModel || "",
       configuration: cloneJson(record.modelConfig || {}),
+      repairProvenance: run?.execution?.repair
+        ? cloneJson({
+            ...run.execution.repair,
+            submission: run.execution.repairSubmission || null,
+            outcome: repairOutcome(run),
+          })
+        : (record.repairProvenance ? cloneJson(record.repairProvenance) : null),
     };
   }
 
@@ -545,6 +582,15 @@ function createAdminModelLabComposedService({
       forkProvenance: run?.metadata?.fork
         ? cloneJson(run.metadata.fork)
         : (record.forkProvenance ? cloneJson(record.forkProvenance) : null),
+      repairProvenance: run?.execution?.repair
+        ? cloneJson({
+            ...run.execution.repair,
+            submission: run.execution.repairSubmission || null,
+            outcome: repairOutcome(run),
+          })
+        : (result?.repair
+            ? cloneJson(result.repair)
+            : (record.repairProvenance ? cloneJson(record.repairProvenance) : null)),
       result: result ? cloneJson(result) : null,
       metering: result?.metering ? cloneJson(result.metering) : null,
     };
@@ -672,6 +718,7 @@ function assertRecordStore(store) {
     "listRuns",
     "saveHumanRating",
     "getHumanRating",
+    "saveRunRepairProvenance",
   ]) {
     if (typeof store?.[method] !== "function") {
       throw new TypeError(`admin model lab record store is missing ${method}()`);
@@ -778,7 +825,25 @@ function historyRegistrationInput(run) {
     decisionPacketId: decisionPacket?.decisionPacketId,
     decisionPacketSha256: decisionPacket?.packetContentSha256,
     forkProvenance: run?.metadata?.fork,
+    repairProvenance: run?.execution?.repair
+      ? {
+          ...run.execution.repair,
+          submission: run.execution.repairSubmission || null,
+          outcome: repairOutcome(run),
+        }
+      : undefined,
   };
+}
+
+function repairOutcome(run) {
+  if (!run?.execution?.repair) return null;
+  if (run.status === "SUCCEEDED") return "succeeded";
+  if (run.status === "FAILED") return "failed";
+  if (run.status === "CANCELLED") return "cancelled";
+  const state = String(run.execution?.repairSubmission?.state || "").toUpperCase();
+  if (state === "OUTCOME_UNKNOWN") return "submission_outcome_unknown";
+  if (state === "REJECTED") return "submission_rejected";
+  return "in_progress";
 }
 
 function historyRegistrationFailure(error) {

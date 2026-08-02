@@ -75,6 +75,7 @@ test("production composition registers runs and exposes persistent record capabi
   assert.equal(history.records[0].question, "测试问题");
   assert.equal(history.records[0].configuration.finalRuling.model, "gpt-5.6-terra");
   assert.equal(history.records[0].forkProvenance.sourceRunId, "source-production-1");
+  assert.equal(history.records[0].repairProvenance.outcome, "succeeded");
 
   await service.saveRating({
     runId: run.runId,
@@ -94,6 +95,7 @@ test("production composition registers runs and exposes persistent record capabi
   assert.equal(exportRecord.modelConfig.finalRuling.model, "gpt-5.6-terra");
   assert.equal(exportRecord.result.finalRuling.conciseAnswer, "测试裁定。");
   assert.equal(exportRecord.metering.totals.usage.totalTokens, 180);
+  assert.equal(exportRecord.repairProvenance.submission.requestId, "repair-production-1");
 
   const fullExport = await service.exportRuns({ format: "json" });
   assert.equal(JSON.parse(fullExport.content).records[0].result.validation.ok, true);
@@ -576,6 +578,26 @@ function fakeBaseService({ persistent = true } = {}) {
         model: "gpt-5.6-terra",
       },
     },
+    execution: {
+      repair: {
+        schemaVersion: 1,
+        attempted: true,
+        requestedAt: "2026-07-28T00:00:02.000Z",
+        validationErrors: ["missing evidenceId"],
+        initialAttempt: { requestId: "primary-production-1" },
+        invariants: {
+          evidenceSnapshotId: "evidence-production-1",
+          evidenceSnapshotSha256: "a".repeat(64),
+          decisionPacketId: "decision_packet_production_1",
+          decisionPacketSha256: "b".repeat(64),
+          promptSha256: "c".repeat(64),
+        },
+      },
+      repairSubmission: {
+        state: "SUBMITTED",
+        requestId: "repair-production-1",
+      },
+    },
     result: {
       schemaVersion: 1,
       evidenceSnapshotId: "evidence-production-1",
@@ -585,6 +607,15 @@ function fakeBaseService({ persistent = true } = {}) {
       validation: {
         ok: true,
         errors: [],
+      },
+      repair: {
+        schemaVersion: 1,
+        attempted: true,
+        outcome: "succeeded",
+        attempts: [
+          { requestId: "primary-production-1" },
+          { requestId: "repair-production-1" },
+        ],
       },
       metering: {
         totals: {
