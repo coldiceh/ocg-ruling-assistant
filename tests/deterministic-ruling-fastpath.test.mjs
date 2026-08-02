@@ -9,7 +9,8 @@ const localEnv = {
   OCG_ENGINE_ENABLED: "0",
 };
 
-test("legacy state-transition hint cannot issue a production verdict", async () => {
+test("trusted semantic execution answers the real post-cost immunity scenario without calling the final model", async () => {
+  const remoteModelCalls = [];
   const answer = await answerRagRulingQuestion({
     question: "我方额外卡组有「测试冰剑融合龙」。对方场上存在的卡只有表侧表示的「吞食圣痕之龙」1只，双方墓地没有卡。我方召唤「阿不思的落胤」时，可以将「教导的圣女 艾克莉西亚」作为Cost丢弃来发动其效果吗，后续怎么处理？",
     cards: [{
@@ -48,20 +49,43 @@ test("legacy state-transition hint cannot issue a production verdict", async () 
       text: "这条 FAQ 只直接关联场上的测试抗性怪兽。",
     }],
     qaRecords: [],
-    env: localEnv,
-    dryRun: true,
+    env: {
+      ...localEnv,
+      MODEL_PROVIDER: "deepseek",
+      RAG_MODEL_PROVIDER: "deepseek",
+      RAG_PROVIDER: "deepseek",
+      RAG_DRY_RUN: "0",
+      DEEPSEEK_API_KEY: "test-key",
+    },
+    dryRun: false,
+    cardModelInvoker: async () => JSON.stringify({ cardNames: [] }),
+    ruleModelInvoker: async () => JSON.stringify({ ruleQueries: [] }),
+    fetchImpl: async (url) => {
+      if (/api\.deepseek\.com/iu.test(String(url))) remoteModelCalls.push(String(url));
+      return new Response(JSON.stringify({ result: [], next: 0 }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    },
   });
 
-  assert.match(answer.shortAnswer, /未确认分析/u);
+  assert.match(answer.shortAnswer, /^可以发动/u);
+  assert.match(answer.shortAnswer, /cost.*进入墓地/u);
+  assert.match(answer.shortAnswer, /开始不受这次效果影响/u);
+  assert.match(answer.shortAnswer, /不进行融合召唤/u);
   assert.ok(answer.resolvedCards.some((card) => card.name === "吞喰圣痕之龙"));
   assert.deepEqual(answer.debug.unresolvedMentions, []);
-  assert.equal(answer.debug.deterministicDecision, null);
-  assert.notEqual(answer.debug.modelUsed, "deterministic-ruling-reasoner");
-  assert.ok(answer.usedEvidence.some((item) => item.id === "faq-for-activated-source"));
+  assert.equal(answer.debug.deterministicDecision, "state_transition");
+  assert.equal(answer.debug.modelUsed, "trusted-semantic-state-executor");
+  assert.equal(answer.debug.timingsMs.finalModel, 0);
+  assert.deepEqual(remoteModelCalls, []);
+  assert.ok(answer.riskFlags.includes("trusted_local_semantic_execution"));
+  assert.ok(answer.riskFlags.includes("final_model_skipped"));
+  assert.ok(answer.usedEvidence.some((item) => item.type === "card_text"));
   assert.equal(answer.usedEvidence.some((item) => item.id === "faq-for-other-field-card"), false);
 });
 
-test("legacy preflight cannot skip either auxiliary extraction model in an injected mock run", async () => {
+test("renaming every card preserves the trusted semantic fast-path result", async () => {
   let cardNameModelCalls = 0;
   let ruleQueryModelCalls = 0;
   const answer = await answerRagRulingQuestion({
@@ -103,7 +127,13 @@ test("legacy preflight cannot skip either auxiliary extraction model in an injec
   assert.equal(ruleQueryModelCalls, 1);
   assert.notEqual(answer.debug.cardNameModelUsed, "none");
   assert.notEqual(answer.debug.ruleQueryModelUsed, "none");
-  assert.equal(answer.debug.deterministicDecision, null);
+  assert.equal(answer.debug.deterministicDecision, "state_transition");
+  assert.equal(answer.debug.modelUsed, "trusted-semantic-state-executor");
+  assert.equal(answer.debug.semanticStateTransition.activation, "legal");
+  assert.equal(answer.debug.semanticStateTransition.resolution, "not_performed");
+  assert.match(answer.shortAnswer, /^可以发动/u);
+  assert.match(answer.shortAnswer, /不进行融合召唤/u);
+  assert.doesNotMatch(JSON.stringify(answer), /阿不思|艾克利西亚|吞(?:食|喰)圣痕|冰剑龙/u);
 });
 
 test("incomplete deterministic preflight preserves auxiliary extraction models in an injected mock run", async () => {
@@ -137,14 +167,15 @@ test("incomplete deterministic preflight preserves auxiliary extraction models i
   assert.equal(answer.debug.deterministicDecision, null);
 });
 
-test("a historical production question is not answered by a local card-name shortcut", async () => {
+test("the historical production wording uses the generic trusted semantic executor", async () => {
   const answer = await answerRagRulingQuestion({
     question: "我方的额外卡组有「冰剑龙 幻冰龙」，手牌只有「教导的圣女 艾克莉西娅」和「阿不思的落胤」各1张。\n\n对方场上存在的卡只有表侧表示的「吞食圣痕之龙」1只，双方墓地没有卡。\n\n我方召唤「阿不思的落胤」时，可以将「教导的圣女 艾克莉西娅」作为Cost丢弃送去墓地，来发动「阿不思的落胤」的『①』效果吗",
     env: localEnv,
     dryRun: true,
   });
 
-  assert.match(answer.shortAnswer, /未确认分析/u);
+  assert.match(answer.shortAnswer, /^可以发动/u);
+  assert.match(answer.shortAnswer, /不进行融合召唤/u);
   assert.equal(
     answer.debug.unresolvedMentions.some((mention) => mention.input === "冰剑龙 幻冰龙"),
     false,
@@ -152,8 +183,36 @@ test("a historical production question is not answered by a local card-name shor
   assert.ok(answer.resolvedCards.some((card) => card.name === "教导之圣女 艾克利西亚"));
   assert.ok(answer.resolvedCards.some((card) => card.name === "阿尔白斯之落胤"));
   assert.ok(answer.resolvedCards.some((card) => card.name === "吞喰圣痕之龙"));
+  assert.equal(answer.debug.deterministicDecision, "state_transition");
+  assert.equal(answer.debug.modelUsed, "trusted-semantic-state-executor");
+  assert.equal(answer.debug.timingsMs.finalModel, 0);
+});
+
+test("authority-boundary downgrade remains diagnostic and cannot skip the final model", async () => {
+  const answer = await answerRagRulingQuestion({
+    question: "对方场上存在「匿名去向载体」。自己可以发动「匿名融合操作」吗？发动时丢弃手牌，并将双方场上的怪兽作为素材。",
+    cards: [{
+      id: "anonymous-fusion-operation",
+      name: "匿名融合操作",
+      cardType: "spell",
+      effectText: "①：舍弃1张手牌可以发动。以自己・对手场上的怪兽作为融合素材，将1只融合怪兽融合召唤。",
+    }, {
+      id: "anonymous-destination-carrier",
+      name: "匿名去向载体",
+      cardType: "monster",
+      effectText: "①：只要此卡存在于怪兽区域，对方的卡送去墓地的场合，不去墓地而除外。",
+    }],
+    records: [],
+    qaRecords: [],
+    env: localEnv,
+    dryRun: true,
+  });
+
   assert.equal(answer.debug.deterministicDecision, null);
-  assert.notEqual(answer.debug.modelUsed, "deterministic-ruling-reasoner");
+  assert.notEqual(answer.debug.modelUsed, "trusted-semantic-state-executor");
+  assert.equal(answer.debug.semanticStateTransition, null);
+  assert.equal(answer.debug.semanticStateTransitionDiagnostic.complete, false);
+  assert.ok(answer.debug.semanticStateTransitionDiagnostic.authorityReasons.includes("synthetic_entity_or_material"));
 });
 
 test("a public-hand wording plus an untyped note cannot block before the final model", async () => {
