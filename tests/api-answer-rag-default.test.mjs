@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import handler from "../api/answer.js";
+import { PREVIOUS_RULING_WARNING } from "../backend/rulingVersionRegistry.mjs";
 
 test("api_answer_defaults_to_rag_baseline", async () => {
   const previousProvider = process.env.MODEL_PROVIDER;
@@ -34,8 +35,14 @@ test("api_answer_reports_engine_availability_from_backend_configuration", async 
     assert.equal(disabled.payload.engineEnabled, false);
     assert.equal(disabled.payload.defaultRulingVersion, "latest");
     assert.deepEqual(disabled.payload.rulingVersions, [
-      { id: "latest", label: "最新版", revision: null },
-      { id: "previous", label: "上一版", revision: "4de792b8a" },
+      { id: "latest", label: "最新版", revision: null, legacyCompatibility: false },
+      {
+        id: "previous",
+        label: "上一版（兼容）",
+        revision: "4de792b8a",
+        legacyCompatibility: true,
+        warning: PREVIOUS_RULING_WARNING,
+      },
     ]);
 
     process.env.OCG_ENGINE_URL = "https://engine.example.test";
@@ -68,6 +75,8 @@ test("api_answer_dispatches_previous_and_rejects_invalid_ruling_versions", async
     assert.equal(previous.payload.requestedRulingVersion, "previous");
     assert.equal(previous.payload.effectiveRulingVersion, "previous");
     assert.equal(previous.payload.rulingVersion, "previous");
+    assert.equal(previous.payload.legacyCompatibility, true);
+    assert.deepEqual(previous.payload.versionWarnings, [PREVIOUS_RULING_WARNING]);
 
     const invalid = createJsonResponse();
     await handler({

@@ -1,4 +1,5 @@
 const QUESTION_MARKERS = /(?:是否|会不会|还会|能否|能用|可以|吗[？?]?|还是)/u;
+const REFERENCED_MONSTER_ENTITY = "referenced_monster";
 
 export function buildEventTimelineFromFormalQuery(formalQuery, gameState = {}) {
   const query = formalQuery && typeof formalQuery === "object" ? formalQuery : {};
@@ -238,17 +239,63 @@ function collectSegments(query) {
 }
 
 function collectEntities(query, gameState, segments) {
-  const values = [...(gameState.entities || [])];
+  const values = (gameState.entities || []).map((item) => ({
+    ...item,
+    aliases: Array.isArray(item?.aliases) ? [...item.aliases] : item?.aliases,
+  }));
   for (const card of [...(query.cards || []), ...(query.resolvedCards || [])]) {
     if (!card?.name || card.name === "unknown") continue;
     if (!values.some((item) => sameCard(item.name, card.name))) {
       values.push({ name: card.name, cardId: String(card.cardId || card.liveId || card.id || "unknown") });
     }
   }
-  if (segments.some(({ text }) => /(?:该)?卡通怪兽/u.test(text)) && !values.some((item) => item.name === "referenced_toon_monster")) {
-    values.push({ name: "referenced_toon_monster", cardId: "unknown", aliases: ["卡通怪兽", "该卡通怪兽"] });
+  const referencedMonsterAliases = collectReferencedMonsterAliases(segments);
+  const requestedReference = [...(query.subQuestions || []), ...(query.cards || [])]
+    .some((item) => item?.card === REFERENCED_MONSTER_ENTITY || item?.name === REFERENCED_MONSTER_ENTITY);
+  if (referencedMonsterAliases.length || requestedReference) {
+    const existing = values.find((item) => item.name === REFERENCED_MONSTER_ENTITY);
+    if (existing) {
+      existing.aliases = [...new Set([...(existing.aliases || []), ...referencedMonsterAliases])];
+    } else {
+      values.push({
+        name: REFERENCED_MONSTER_ENTITY,
+        cardId: "unknown",
+        aliases: referencedMonsterAliases,
+      });
+    }
   }
   return values;
+}
+
+function collectReferencedMonsterAliases(segments) {
+  const aliases = new Set();
+  for (const { text: rawText } of segments) {
+    const text = String(rawText || "");
+    const matches = [
+      ...text.matchAll(/(?:该|这|那|上述|前述)(?:只)?[\p{L}\p{N}·・=－—-]{0,12}怪兽/gu),
+      ...text.matchAll(/(?:战破|战斗破坏)的([\p{L}\p{N}·・=－—-]{0,12}怪兽)/gu),
+      ...text.matchAll(/(?:^|[，。；！？：:\n])\s*([\p{L}\p{N}·・=－—-]{0,12}怪兽)(?=.{0,18}(?:还会|会不会|是否|能否|可以|可否|能用|送墓|除外|发动|处理|被战破|被战斗破坏))/gu),
+      ...text.matchAll(/(?:その|この|あの)[^、。！？\s]{0,12}モンスター/gu),
+      ...text.matchAll(/\b(?:that|this|the referenced)(?:\s+[\p{L}\p{N}-]+){0,4}\s+monster\b/giu),
+    ];
+    for (const match of matches) {
+      const surface = String(match[1] || match[0] || "").trim();
+      if (!surface) continue;
+      aliases.add(surface);
+      const withoutDemonstrative = surface
+        .replace(/^(?:该|这|那|上述|前述)(?:只)?/u, "")
+        .replace(/^(?:その|この|あの)/u, "")
+        .trim();
+      if (withoutDemonstrative) aliases.add(withoutDemonstrative);
+    }
+  }
+  if (aliases.size) {
+    aliases.add("怪兽");
+    aliases.add("该怪兽");
+    aliases.add("这只怪兽");
+    aliases.add("那只怪兽");
+  }
+  return [...aliases];
 }
 
 function baseEvent(type, entity, sourceText, timing, status) {
@@ -268,8 +315,8 @@ function baseEvent(type, entity, sourceText, timing, status) {
 function hasPositiveBattleDestruction(text, entity) {
   if (hasNegativeBattleDestruction(text, entity)) return false;
   const subject = entityPattern(entity);
-  if (entity.name === "referenced_toon_monster") {
-    return /(?:被[^，。；\n]{0,24}战破的(?:该)?卡通怪兽|(?:该)?卡通怪兽.{0,18}(?:被战破|被战斗破坏))/u.test(text);
+  if (entity.name === REFERENCED_MONSTER_ENTITY) {
+    return new RegExp(`(?:被[^，。；\\n]{0,24}(?:战破|战斗破坏)的${subject}|${subject}.{0,18}(?:被战破|被战斗破坏))`, "iu").test(text);
   }
   return new RegExp(`${subject}.{0,30}(?:被战破|被战斗破坏|战斗中被破坏)`, "iu").test(text);
 }
@@ -303,9 +350,7 @@ function hasCompletedBanish(text, entity) {
 
 function hasQuestionedBanish(text, entity) {
   if (!QUESTION_MARKERS.test(text) || !/(除外该|除外(?:这|那|该)?只|暂时除外|能用.{0,30}除外)/u.test(text)) return false;
-  if (/除外(?:该)?卡通怪兽/u.test(text)) return entity.name === "referenced_toon_monster";
-  if (entity.name === "referenced_toon_monster") return false;
-  return mentionsEntity(text, entity) && /除外/u.test(text);
+  return isBanishTarget(text, entity);
 }
 
 function hasExplicitOnField(text, entity) {
@@ -315,12 +360,23 @@ function hasExplicitOnField(text, entity) {
 }
 
 function inferBanishTarget(text, entities) {
-  if (/除外(?:该)?卡通怪兽/u.test(text)) return entities.find((item) => item.name === "referenced_toon_monster") || null;
+  const explicitTarget = entities
+    .filter((item) => isBanishTarget(text, item))
+    .sort((left, right) => mentionLength(text, right) - mentionLength(text, left))[0];
+  if (explicitTarget) return explicitTarget;
   return findMentionedEntity(text, entities);
 }
 
+function isBanishTarget(text, entity) {
+  const subject = entityPattern(entity);
+  return new RegExp(
+    `(?:除外|banish(?:es|ed|ing)?).{0,18}${subject}|(?:将|把)${subject}.{0,18}除外|${subject}.{0,6}(?:を|は).{0,18}除外`,
+    "iu",
+  ).test(text);
+}
+
 function inferBattleActor(text, target, entities) {
-  const match = text.match(/被([^，。；\n]{1,24})战破的(?:该)?卡通怪兽/u);
+  const match = text.match(new RegExp(`被([^，。；\\n]{1,24})(?:战破|战斗破坏)的${entityPattern(target)}`, "iu"));
   if (!match) return "unknown";
   const actor = findMentionedEntity(match[1], entities);
   return actor && !sameCard(actor.name, target.name) ? actor.name : match[1].trim();
@@ -344,7 +400,6 @@ function findMentionedEntity(text, entities) {
 }
 
 function mentionLength(text, entity) {
-  if (entity.name === "referenced_toon_monster") return /该卡通怪兽/u.test(text) ? 6 : 5;
   return Math.max(0, ...displayNames(entity).filter((name) => normalize(text).includes(normalize(name))).map((name) => normalize(name).length));
 }
 
@@ -353,12 +408,10 @@ function findEntity(card, entities) {
 }
 
 function mentionsEntity(text, entity) {
-  if (entity.name === "referenced_toon_monster") return /(?:该)?卡通怪兽/u.test(text);
   return displayNames(entity).some((name) => normalize(text).includes(normalize(name)));
 }
 
 function entityPattern(entity) {
-  if (entity.name === "referenced_toon_monster") return "(?:该)?卡通怪兽";
   return `(?:${displayNames(entity).map(escapeRegExp).join("|")})`;
 }
 

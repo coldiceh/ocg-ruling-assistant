@@ -16,7 +16,6 @@ import { normalizeFormalRulingQuery, validateFormalRulingQuery } from "./formalQ
 import { buildLikelyAnswer } from "./likelyAnswer.mjs";
 import { extractNumberedCardIdentities } from "./numberedCardIdentity.mjs";
 import { extractRagCards } from "./ragCardExtractor.mjs";
-import { buildRuleDerivedAnswer } from "./ruleDerivedAnswer.mjs";
 import {
   buildProvisionalAnswerFromOfficialResponse,
   isConfirmableOfficialResponse,
@@ -712,8 +711,11 @@ function buildFormalEvidenceSearchQueries(subQuestion, questionCards = [], scena
     resolution_handling: ["效果处理", "结算时"],
   };
   const primaryName = String(subQuestion?.card || "").trim();
-  const searchCardName = primaryName === "referenced_toon_monster" ? "卡通怪兽" : primaryName;
-  const sourcePrimaryName = extractSearchCardName(subQuestion?.sourceText) || primaryName;
+  const referencedEntityName = extractReferencedEntityDescriptor(subQuestion?.sourceText);
+  const searchCardName = isReferencedEntityPlaceholder(primaryName)
+    ? referencedEntityName
+    : primaryName;
+  const sourcePrimaryName = extractSearchCardName(subQuestion?.sourceText) || searchCardName;
   const compactPrimaryName = searchCardName.replace(/[-－]/gu, " ").replace(/\s+/gu, " ").trim();
   const scenarioNames = scenarioCards.map((card) => card.name).filter((name) => name && normalizeKey(name) !== normalizeKey(searchCardName));
   const aliases = questionCards.flatMap(cardAliases);
@@ -730,12 +732,11 @@ function buildFormalEvidenceSearchQueries(subQuestion, questionCards = [], scena
     if (aliasKeyword) combinedQueries.push(`${alias} ${aliasKeyword}`);
   }
   if (subQuestion?.type === "temporary_banish") {
-    if (sourcePrimaryName && sourcePrimaryName !== "unknown") combinedQueries.push(`${sourcePrimaryName} 除外 卡通怪兽`);
-    if (compactPrimaryName && compactPrimaryName !== "unknown") combinedQueries.push(`${compactPrimaryName} 效果处理 除外`);
-    const toonNames = normalizeKey(`${primaryName} ${aliases.join(" ")}`);
-    if (/(卡通世界|toonworld|トゥーンワールド)/iu.test(toonNames)) {
-      combinedQueries.push("Toon World banish toon monster", "トゥーン ワールド 除外 トゥーン");
+    if (sourcePrimaryName && sourcePrimaryName !== "unknown" && referencedEntityName
+      && normalizeKey(sourcePrimaryName) !== normalizeKey(referencedEntityName)) {
+      combinedQueries.push(`${sourcePrimaryName} 除外 ${referencedEntityName}`);
     }
+    if (compactPrimaryName && compactPrimaryName !== "unknown") combinedQueries.push(`${compactPrimaryName} 效果处理 除外`);
   }
   for (const scenarioName of scenarioNames.slice(0, 4)) {
     combinedQueries.push(`${scenarioName} ${searchCardName} ${typeKeywords[0] || ""}`.trim());
@@ -770,6 +771,23 @@ function extractSearchCardName(sourceText) {
   const text = String(sourceText || "").trim();
   const match = text.match(/(?:能用|使用)\s*([^，。？！?]{2,40}?)\s*(?:的|之)\s*效果/iu);
   return match ? match[1].trim() : "";
+}
+
+function isReferencedEntityPlaceholder(value) {
+  return /^referenced(?:_[a-z0-9]+)*_(?:monster|card|entity)$/iu.test(String(value || "").trim());
+}
+
+function extractReferencedEntityDescriptor(sourceText) {
+  const text = String(sourceText || "").normalize("NFKC").trim();
+  const candidates = [
+    text.match(/(?:该|這|这|那|此|这个|這個|那个|那個|上述|前述)\s*([^\s，。；;：:！？?]{1,40}?(?:怪兽|怪獸|卡片|卡))/u)?.[1],
+    text.match(/(?:この|その|あの)\s*([^\s、。；;：:！？?]{1,50}?(?:モンスター|カード))/u)?.[1],
+    text.match(/\b(?:this|that|the|referenced)\s+([a-z0-9][a-z0-9 '\-]{0,48}?(?:monster|card))\b/iu)?.[1],
+  ].map((item) => String(item || "").trim()).filter(Boolean);
+  const descriptor = candidates[0] || "";
+  const key = normalizeKey(descriptor);
+  if (!key || /^(?:怪兽|怪獸|卡|卡片|モンスター|カード|monster|card)$/iu.test(key)) return "";
+  return descriptor;
 }
 
 function describeRawCandidateEvidence(
@@ -1187,25 +1205,10 @@ function attachUserAnswerLayers(answer, { subQuestion, formalQuery, bucket, opti
         resolvedCards: options?.detectedCards || [],
         unresolvedCards: options?.cardResolutionConfirmations || [],
       });
-  const ruleDerivedAnswer = answer.status === "confirmed" || answer.provisionalAnswer || answer.conditionalAnswer
-    ? undefined
-    : buildRuleDerivedAnswer({
-        originalQuestion: formalQuery?.originalText || subQuestion?.sourceText || "",
-        formalQuery,
-        resolvedCards: options?.detectedCards || [],
-        unresolvedCards: options?.cardResolutionConfirmations || [],
-        cardTexts: bucket?.cardTextEvidence || [],
-        similarEvidence: bucket?.similarRulingEvidence || bucket?.similarEvidence || [],
-        rejectedEvidence: bucket?.rejectedEvidence || [],
-        eventTimeline: options?.eventTimeline || null,
-        conditionBranches: answer.conditionBranches || [],
-        dependencies,
-      });
   const clarification = buildSubAnswerClarification(subQuestion, answer, cardResolutionIssue);
   return {
     ...answer,
     officialAnswer,
-    ...(ruleDerivedAnswer ? { ruleDerivedAnswer } : {}),
     ...(likelyAnswer ? { likelyAnswer } : {}),
     ...(clarification ? { clarification } : {}),
     displayReason: buildPublicReason(answer, { cardResolutionIssue }),
@@ -1461,7 +1464,6 @@ function mergeFormalAnswers(context) {
   else if (statuses.length && statuses.every((status) => status === "parse_failed")) mode = "parse_failed";
 
   const counts = Object.fromEntries(["confirmed", "inferred", "unknown", "parse_failed"].map((status) => [status, statuses.filter((item) => item === status).length]));
-  const ruleDerivedCount = subAnswers.filter((item) => item.ruleDerivedAnswer?.status === "rule_derived").length;
   const uncertainCards = cardResolutionConfirmations.map((issue) => ({
     rawText: issue.unresolvedCardName,
     candidates: (issue.candidateCards || []).map((card) => ({
@@ -1492,15 +1494,13 @@ function mergeFormalAnswers(context) {
   const result = {
     schemaVersion: 2,
     mode,
-    verdictTitle: mode === "unknown" && ruleDerivedCount ? "规则推导结论" : labels[mode],
-    verdict: ruleDerivedCount
-      ? `官方直接裁定 ${counts.confirmed} 项；另有 ${ruleDerivedCount} 项规则推导结论。规则推导不计入 confirmed。`
-      : `共拆分 ${subAnswers.length} 个子问题：${counts.confirmed} 个 confirmed，${counts.inferred} 个 inferred，${counts.unknown} 个 unknown，${counts.parse_failed} 个 parse_failed。`,
-    rulingBasis: mode === "confirmed" ? "直接 Q&A/FAQ" : ruleDerivedCount ? "规则书原则 + 卡片文本 + 官方 FAQ 类例" : mode === "inferred" ? "相似 Q&A/FAQ" : "没有可确认的直接问答",
+    verdictTitle: labels[mode],
+    verdict: `共拆分 ${subAnswers.length} 个子问题：${counts.confirmed} 个 confirmed，${counts.inferred} 个 inferred，${counts.unknown} 个 unknown，${counts.parse_failed} 个 parse_failed。`,
+    rulingBasis: mode === "confirmed" ? "直接 Q&A/FAQ" : mode === "inferred" ? "相似 Q&A/FAQ" : "没有可确认的直接问答",
     confidence: {
       status: mode,
-      label: mode === "unknown" && ruleDerivedCount ? "RULE-DERIVED" : labels[mode],
-      className: mode === "confirmed" ? "is-confirmed" : ruleDerivedCount ? "is-rule-derived" : "is-risky",
+      label: labels[mode],
+      className: mode === "confirmed" ? "is-confirmed" : "is-risky",
     },
     formalQuery,
     validation,
@@ -1513,9 +1513,7 @@ function mergeFormalAnswers(context) {
     evidence,
     rejectedEvidence: evidence.rejectedEvidence,
     evidenceIds: subAnswers.flatMap((answer) => answer.evidenceIds),
-    steps: subAnswers.flatMap((answer) => answer.ruleDerivedAnswer?.reasoningSteps?.length
-      ? answer.ruleDerivedAnswer.reasoningSteps.map((item) => `${answer.id}：${item.explanation}`)
-      : [`${answer.id}：${buildPublicReason(answer)}`]),
+    steps: subAnswers.map((answer) => `${answer.id}：${buildPublicReason(answer)}`),
     needsConfirmation: [...new Set(needsConfirmation)],
     sources: collectSources(usedEvidence, snapshotMeta),
     cards: buildCardSummaries(detectedCards),
@@ -1528,11 +1526,9 @@ function mergeFormalAnswers(context) {
       ? "needs_card_confirmation"
       : mode === "confirmed"
         ? "official_direct"
-        : ruleDerivedCount
-          ? "rule_derived"
-          : mode === "inferred"
-            ? "similar_only"
-            : "insufficient",
+        : mode === "inferred"
+          ? "similar_only"
+          : "insufficient",
     blockers: uncertainCards.map((item) => ({
       code: "activation.card_identity_uncertain",
       source: item.rawText,
@@ -1789,7 +1785,9 @@ function qaMatchesSubQuestionCard(subQuestion, qa) {
   const card = String(subQuestion?.card || "").trim();
   if (!card || card === "unknown") return false;
   const qaText = formalEvidenceText(qa);
-  if (card === "referenced_toon_monster") return /(卡通怪兽|トゥーンモンスター|toon monster)/iu.test(qaText);
+  // A descriptive reference is not a canonical card identity.  It may improve
+  // retrieval queries, but must not promote evidence to a card-name match.
+  if (isReferencedEntityPlaceholder(card)) return false;
 
   const wanted = normalizeKey(card);
   const listedCards = Array.isArray(qa?.cards) ? qa.cards.map(normalizeKey).filter(Boolean) : [];
@@ -2320,20 +2318,17 @@ function buildEvidenceAnswer(context) {
 
   const usableRulings = evidence.filter((item) => isRulingEvidence(item) && !item.intentMismatch);
   const mismatchedRuling = evidence.find((item) => isRulingEvidence(item) && item.intentMismatch);
-  const preemptiveRuleInference = inferPreemptiveRuleAnswer(context, sources, snapshotMeta, evidence.length);
-  if (preemptiveRuleInference) return preemptiveRuleInference;
-
   const exactRuling = usableRulings.find((item) => item.matchKind === "direct");
   if (exactRuling) {
-    const title = summarizeRulingConclusion(exactRuling.conclusion, "direct", `${context.question} ${exactRuling.question || exactRuling.title || ""}`);
+    const title = summarizeRulingConclusion(exactRuling.conclusion, "direct");
     return {
       schemaVersion: 1,
       mode: "confirmed",
       verdictTitle: title,
-      verdict: buildReadableRulingBody(exactRuling.conclusion, title, "direct", context),
+      verdict: buildReadableRulingBody(exactRuling.conclusion, "direct"),
       rulingBasis: "找到直接问答资料",
       confidence: buildEvidenceConfidence(context, evidence, "confirmed"),
-      steps: buildRulingSteps(context, exactRuling, title),
+      steps: buildRulingSteps(exactRuling),
       needsConfirmation: buildDirectNeedsConfirmation(context),
       sources,
       snapshotAt: snapshotMeta?.generatedAt || null,
@@ -2342,23 +2337,20 @@ function buildEvidenceAnswer(context) {
     };
   }
 
-  const ruleInference = inferStructuredRuleAnswer(context, sources, snapshotMeta, evidence.length);
-  if (ruleInference) return ruleInference;
-
   const analogousRuling = usableRulings.find((item) => isStrongAnalogousEvidence(item, context));
   if (analogousRuling) {
-    const title = summarizeRulingConclusion(analogousRuling.conclusion, "analogous", `${context.question} ${analogousRuling.question || analogousRuling.title || ""}`);
+    const title = summarizeRulingConclusion(analogousRuling.conclusion, "analogous");
     return {
       schemaVersion: 1,
       mode: "inferred",
       verdictTitle: title,
-      verdict: `没有命中完全同场面的问答。可作为类推依据的资料结论是：${buildReadableRulingBody(analogousRuling.conclusion, title, "analogous", context)}`,
+      verdict: `没有命中完全同场面的问答。可作为类推依据的资料结论是：${buildReadableRulingBody(analogousRuling.conclusion, "analogous")}`,
       rulingBasis: "找到相似问答资料",
       confidence: buildEvidenceConfidence(context, evidence, "inferred"),
       steps: [
         "先确认题目与相似问答的共通结构：触发事件、适用时点、效果处理期间、对象或适用范围。",
         "再核对差异点是否会改变裁定；差异未排除前不能标记为已确认裁定。",
-        ...buildRulingSteps(context, analogousRuling, title).slice(0, 3),
+        ...buildRulingSteps(analogousRuling).slice(0, 3),
       ],
       needsConfirmation: buildNeedsConfirmation(context, false, analogousRuling),
       sources,
@@ -2440,155 +2432,12 @@ function buildMismatchedEvidenceAnswer(context, mismatchedRuling, sources, snaps
   };
 }
 
-function inferPreemptiveRuleAnswer(context, sources, snapshotMeta, evidenceCount) {
-  void context;
-  void sources;
-  void snapshotMeta;
-  void evidenceCount;
-  // Historical card-specific preemptive answers were removed. A preemptive
-  // answer now requires a typed rule execution result supplied elsewhere.
-  return null;
-}
-
-function inferStructuredRuleAnswer(context, sources, snapshotMeta, evidenceCount) {
-  const providedCardInference = inferProvidedCardRuleAnswer(context, sources, snapshotMeta, evidenceCount);
-  if (providedCardInference) return providedCardInference;
-
-  const intent = detectQuestionIntent(context.question);
-  if (intent !== "handling") return null;
-
-  const protector = context.detectedCards.find((card) => hasTemporaryBanishText(card.effectText || ""));
-  const resolver = context.detectedCards.find((card) => card !== protector && hasDeckReturnText(`${card.effectText || ""} ${card.name || ""} ${card.matched || ""}`));
-  const otherEffect = resolver || context.detectedCards.find((card) => card !== protector);
-  if (!protector || !otherEffect) return null;
-
-  const title = resolver
-    ? "可以适用临时除外效果，怪兽不回卡组"
-    : hasPendingDestructionText(context.question)
-      ? "可以适用临时除外效果，怪兽不按原预定破坏处理"
-      : "可以适用临时除外效果";
-  const ruleRuling = { steps: [] };
-  return {
-    schemaVersion: 1,
-    mode: "inferred",
-    verdictTitle: title,
-    verdict: buildReadableRulingBody("", title, "analogous", context),
-    rulingBasis: "效果文本 + 规则推理",
-    confidence: buildEvidenceConfidence(context, context.evidence || [], "inferred"),
-    steps: buildRulingSteps(context, ruleRuling, title),
-    needsConfirmation: [
-      "这是按已识别卡片效果文本和处理时点作出的规则推理，不是数据库原题；仍建议核对官方 Q&A。",
-      ...buildNeedsConfirmation(context, false).filter((item) => !/当前没有命中直接/.test(item)).slice(0, 3),
-    ],
-    sources: collectCardTextSources(context.detectedCards, sources),
-    snapshotAt: snapshotMeta?.generatedAt || null,
-    evidenceCount,
-    warnings: [],
-    modelUsed: false,
-  };
-}
-
-function inferProvidedCardRuleAnswer(context, sources, snapshotMeta, evidenceCount) {
-  const providedCards = context.detectedCards.filter((card) => card.provisional || card.resolvedBy === "user-provided-card-text");
-  if (!providedCards.length) return null;
-
-  const text = normalizeRulingText(context.question);
-  const card = providedCards.find((item) => hasActivationAndEffectNoNegateText(item.effectText || ""));
-  if (!card) return null;
-
-  const cardText = normalizeRulingText(card.effectText || "");
-  const hasFiveFaceUpCondition = /(表侧表示卡\s*5\s*张以上|表側表示カードが\s*5\s*枚以上|face-up cards?.{0,12}5 or more)/iu.test(`${text} ${cardText}`);
-  const asksCountChange = /(处理时|处理过程中|后续|结算时|適用|解決|resolve).{0,24}(不足\s*5|少于\s*5|不满\s*5|不够\s*5|4\s*张|减少|变少|变成\s*4|less than 5|fewer than 5)/iu.test(text) ||
-    /(不足\s*5|少于\s*5|不满\s*5|不够\s*5|4\s*张|减少|变少|变成\s*4|less than 5|fewer than 5).{0,24}(还|仍|继续|会不会|是否).{0,24}(无效|無効|negate)/iu.test(text);
-  const asksRewrite = /(改写|改成|改为|改變|改变为|变成.*效果|rewrite|change.*effect|effect.*becomes|黑玛丽|暗黑界龙神王|救祓|エクソシスター|グラファ)/iu.test(text);
-  const hasDestroyActivationCondition = /(要让场上的卡破坏的怪兽的效果|场上的卡破坏的怪兽效果|フィールドのカードを破壊するモンスター効果|monster effect.{0,24}destroy.{0,24}card.{0,24}field)/iu.test(`${text} ${cardText}`);
-  const asksActivationNegateDestroy = /(发动(?:被)?无效.{0,12}破坏|无效.{0,12}发动.{0,12}破坏|発動を無効.{0,12}破壊|negate.{0,24}activation.{0,24}destroy|鲜花女男爵|鲜花|バロネス|Baronne|神之宣告|神の宣告)/iu.test(text);
-
-  if (hasFiveFaceUpCondition && asksCountChange) {
-    return buildProvidedCardInferenceAnswer(context, sources, snapshotMeta, evidenceCount, {
-      title: "发动时满足5张即可，后续减少不影响已适用保护",
-      verdict:
-        `按当前文本预览分析：如果发动${formatRulingCardName(card)}时对方场上有5张以上表侧表示卡，这次发动取得“发动和效果不会被无效化”的保护。之后效果处理中对方表侧表示卡减少到不足5张，也不会倒回去取消这次已经适用的保护。`,
-      steps: [
-        "先检查发动这一刻是否满足“对方场上有表侧表示卡5张以上存在”。",
-        "满足时，“这张卡的发动和效果不会被无效化”适用于这次发动及这次效果处理。",
-        "后续处理时场上数量变化，不会重新判断并失去这次已经取得的发动/效果不被无效化保护。",
-      ],
-    });
-  }
-
-  if (asksRewrite) {
-    return buildProvidedCardInferenceAnswer(context, sources, snapshotMeta, evidenceCount, {
-      title: "不被无效化不等于不能被改写效果",
-      verdict:
-        `按当前文本预览分析：${formatRulingCardName(card)}写的是“发动和效果不会被无效化”。这只阻止发动或效果被无效，不等于免疫“把效果改成其他处理”的效果。若对方的效果文本是改写/变更效果而不是无效化，仍可能适用。`,
-      steps: [
-        "先把“无效化”和“改写/变更效果”分开判断。",
-        "该文本只保护发动和效果不被无效化，没有写“不会被改写”“不会受其他效果影响”。",
-        "因此改写效果类资料需要按该改写效果自身的适用条件另行判断。",
-      ],
-    });
-  }
-
-  if (hasDestroyActivationCondition && asksActivationNegateDestroy) {
-    return buildProvidedCardInferenceAnswer(context, sources, snapshotMeta, evidenceCount, {
-      title: "无效发动并破坏不满足破坏场上卡的条件",
-      verdict:
-        `按当前文本预览分析：若对方发动的是“把魔法/陷阱卡的发动无效并破坏”的怪兽效果，被无效发动的那张魔法/陷阱通常不视为从场上被破坏。因此它不满足${formatRulingCardName(card)}中“要让场上的卡破坏的怪兽效果由对方发动时”这一发动条件。`,
-      steps: [
-        "先确认对方怪兽效果要破坏的对象是否是“场上的卡”。",
-        "魔法/陷阱的发动被无效并破坏时，那张卡不按“在场上被破坏”处理。",
-        "所以只有该怪兽效果还会破坏其他真正处于场上的卡时，才需要再判断是否满足这条发动条件。",
-      ],
-    });
-  }
-
-  return null;
-}
-
-function buildProvidedCardInferenceAnswer(context, sources, snapshotMeta, evidenceCount, inference) {
-  return {
-    schemaVersion: 1,
-    mode: "inferred",
-    verdictTitle: inference.title,
-    verdict: inference.verdict,
-    rulingBasis: "未发售卡文本 + 规则推理",
-    confidence: buildEvidenceConfidence(context, context.evidence || [], "inferred"),
-    steps: inference.steps,
-    needsConfirmation: [
-      "这是根据用户提供的新卡文本做的预览分析，不是已确认裁定。",
-      "发售后若官方数据库、FAQ 或事务局回答与这里不同，应以发售后的官方资料为准。",
-      ...buildNeedsConfirmation(context, false).filter((item) => !/可能尚未发售|当前没有命中直接/.test(item)).slice(0, 3),
-    ],
-    sources: collectCardTextSources(context.detectedCards, sources),
-    snapshotAt: snapshotMeta?.generatedAt || null,
-    evidenceCount,
-    warnings: [],
-    modelUsed: false,
-  };
-}
-
-function hasActivationAndEffectNoNegateText(value) {
-  const text = normalizeRulingText(value);
-  return /(发动和效果不会被无效化|發動和效果不會被無效化|発動と効果は無効化されない|activation and effect cannot be negated)/iu.test(text);
-}
-
 function isStrongAnalogousEvidence(item, context) {
   if (!item || item.matchKind !== "analogous") return false;
   const intent = detectQuestionIntent(context.question);
   if (intent === "handling" && (item.matchedCardCount || 0) < Math.min(2, context.detectedCards.length)) return false;
   if (intent === "handling" && scoreHandlingOverlap(context.question, `${item.question || ""} ${item.conclusion || ""} ${(item.keywords || []).join(" ")}`) < 2) return false;
   return (item.matchScore || 0) >= 45;
-}
-
-function collectCardTextSources(cards, fallbackSources) {
-  const cardSources = cards
-    .filter((card) => card.provisional || card.sourceUrl || card.ygoResourcesUrl)
-    .map((card) => ({
-      label: `${card.name || card.cnName || card.jaName || "卡片"} 的效果文本`,
-      detail: card.provisional ? "用户输入文本" : card.sourceUrl || card.ygoResourcesUrl,
-    }));
-  return cardSources.length ? dedupeBy(cardSources, (source) => `${source.label}:${source.detail}`) : fallbackSources;
 }
 
 export function mergeModelAnswer(modelAnswer, programAnswer) {
@@ -3451,7 +3300,6 @@ function isLikelyCardNameCandidate(value, source = "") {
   if (!/[\p{L}\p{N}]/u.test(text)) return false;
   if (/[①②③④⑤⑥⑦⑧⑨]/u.test(text)) return false;
   if (/[：:]/u.test(text)) return false;
-  if (/^(闪刀姬|閃刀姫|闪刀|閃刀|卡通|トゥーン)$/iu.test(text)) return false;
   if (/(発動|发动|効果|效果|デッキ|墓地|除外|相手|自分|フィールド|モンスター|できますか|できる|できない|このカード)/iu.test(text)) return false;
   return true;
 }
@@ -4217,9 +4065,10 @@ function cardAliases(card) {
 
 function mergeCards(...groups) {
   const flat = groups.flat().filter(Boolean);
+  const ambiguousAliasKeys = collectAmbiguousCardAliasKeys(flat);
   const map = new Map();
   for (const card of flat) {
-    const key = findMergeCardKey(map, card) || canonicalCardKey(card);
+    const key = findMergeCardKey(map, card, ambiguousAliasKeys) || canonicalCardKey(card);
     const existing = map.get(key);
     if (!existing) {
       map.set(key, { ...card });
@@ -4269,13 +4118,13 @@ function preferChineseText(left, right) {
   return current;
 }
 
-function findMergeCardKey(map, card) {
+function findMergeCardKey(map, card, ambiguousAliasKeys = new Set()) {
   const key = canonicalCardKey(card);
   if (map.has(key)) return key;
 
-  const keys = cardIdentityKeys(card);
+  const keys = cardIdentityKeys(card, ambiguousAliasKeys);
   for (const [existingKey, existing] of map.entries()) {
-    const existingKeys = cardIdentityKeys(existing);
+    const existingKeys = cardIdentityKeys(existing, ambiguousAliasKeys);
     if ([...keys].some((item) => existingKeys.has(item))) return existingKey;
   }
   return "";
@@ -4290,7 +4139,7 @@ function canonicalCardKey(card) {
   return `name:${normalizeKey(card.name || card.cnName || card.jaName || card.enName || "")}`;
 }
 
-function cardIdentityKeys(card) {
+function cardIdentityKeys(card, ambiguousAliasKeys = new Set()) {
   const keys = new Set();
   const numeric = normalizeId(card.passcode || card.id || card.cardId || "");
   if (numeric) keys.add(`id:${numeric}`);
@@ -4300,13 +4149,29 @@ function cardIdentityKeys(card) {
 
   for (const alias of cardAliases(card)) {
     const key = normalizeKey(alias);
-    if (key.length >= 3 && !isGenericCardAliasKey(key)) keys.add(`alias:${key}`);
+    if (key.length >= 3 && !ambiguousAliasKeys.has(key)) keys.add(`alias:${key}`);
   }
   return keys;
 }
 
-function isGenericCardAliasKey(key) {
-  return /^(卡通世界|toonworld|トゥーンワールド|闪刀姬|閃刀姫|闪刀|閃刀|时空)$/.test(key);
+function collectAmbiguousCardAliasKeys(cards = []) {
+  const identitiesByAlias = new Map();
+  for (const card of cards) {
+    const identity = canonicalCardKey(card);
+    if (!identity || identity === "name:") continue;
+    for (const alias of cardAliases(card)) {
+      const key = normalizeKey(alias);
+      if (key.length < 3) continue;
+      const identities = identitiesByAlias.get(key) || new Set();
+      identities.add(identity);
+      identitiesByAlias.set(key, identities);
+    }
+  }
+  return new Set(
+    [...identitiesByAlias.entries()]
+      .filter(([, identities]) => identities.size > 1)
+      .map(([key]) => key),
+  );
 }
 
 function buildCardSummaries(cards) {
@@ -4428,14 +4293,15 @@ function detectMissingSceneFacts(context) {
   if (/场地|フィールド魔法|Field Spell/i.test(question) && !cards.some((card) => /场地魔法|场地卡|场地区域|フィールド魔法|Field Spell/i.test(`${card.name || ""} ${card.cnName || ""} ${card.jaName || ""} ${card.enName || ""} ${card.cardType || ""} ${card.effectText || ""}`))) {
     items.push("题目提到场地卡，但当前没有识别到具体是哪张场地卡；需要补卡名或效果文本。");
   }
-  if (/卡通怪|トゥーンモンスター|Toon monster/i.test(question) && !cards.some((card) => /卡通|トゥーン|Toon/i.test(`${card.name || ""} ${card.cnName || ""} ${card.jaName || ""} ${card.enName || ""} ${card.effectText || ""}`))) {
-    items.push("题目提到卡通怪兽，但当前没有识别到那只怪兽或其适用中的相关效果。");
+  const referencedEntity = extractReferencedEntityDescriptor(question);
+  if (referencedEntity && !cards.some((card) => normalizeKey(`${card.name || ""} ${card.cnName || ""} ${card.jaName || ""} ${card.enName || ""} ${card.effectText || ""}`).includes(normalizeKey(referencedEntity)))) {
+    items.push(`题目提到“${referencedEntity}”，但当前没有识别到该实体或能约束它的完整效果文本。`);
   }
   return items;
 }
 
-function summarizeRulingConclusion(value, matchKind, contextText = "") {
-  const text = normalizeRulingText(`${contextText} ${value}`);
+function summarizeRulingConclusion(value, matchKind) {
+  const text = normalizeRulingText(value);
   const negative = /(できません|不能|不可以|不可|cannot|can't)/i.test(text);
   const positive = /(できます|できる|可以|能|may|can\b)/i.test(text);
   const notDestroyed = /(破壊されません|不会被破坏|不被破坏|不会破坏)/i.test(text);
@@ -4443,22 +4309,11 @@ function summarizeRulingConclusion(value, matchKind, contextText = "") {
   const banish = /(除外|banish)/i.test(text);
   const activate = /(発動|发动|activate)/i.test(text);
   const apply = /(適用|适用|apply)/i.test(text);
-  const deckReturn = hasDeckReturnText(text);
-  const temporaryBanish = hasTemporaryBanishText(text);
-
   if (negative) {
     if (activate) return "不能发动";
     if (apply) return "不能适用该效果";
     if (banish) return "不能除外";
     return "不能按该处理进行";
-  }
-
-  if ((positive || banish || apply || temporaryBanish) && deckReturn && temporaryBanish) {
-    return "可以适用临时除外效果，怪兽不回卡组";
-  }
-
-  if ((positive || banish || apply || temporaryBanish) && hasPendingDestructionText(text) && temporaryBanish) {
-    return "可以适用临时除外效果，怪兽不按原预定破坏处理";
   }
 
   if (notDestroyed) {
@@ -4478,117 +4333,20 @@ function summarizeRulingConclusion(value, matchKind, contextText = "") {
   return matchKind === "analogous" ? "可参考相似裁定，需复核差异" : "按问答结论处理";
 }
 
-function buildReadableRulingBody(value, title, matchKind, context = null) {
-  const text = normalizeRulingText(value);
-  const contextText = normalizeRulingText(`${context?.question || ""} ${text}`);
-  if (title === "可以适用临时除外效果，怪兽不回卡组") {
-    const names = inferInteractionCardNames(context);
-    return `可以适用${names.protector}的临时除外效果，把被处理的怪兽除外到该效果处理后。因此${names.resolver}处理时，那只怪兽已经不在原本要处理的位置，不能被洗回卡组；处理后再回到场上。`;
-  }
-  if (title === "可以适用临时除外效果，怪兽不按原预定破坏处理") {
-    const names = inferInteractionCardNames(context);
-    return `可以适用${names.protector}的临时除外效果。适用后那只怪兽会暂时离开场上，直到${names.resolver}处理后再回到场上；由于原本预定被破坏的时点它已经不在原位置，不能按原预定破坏处理。`;
-  }
-  if (title === "可以适用临时除外效果") {
-    const names = inferInteractionCardNames(context);
-    return `可以适用${names.protector}的临时除外效果，把满足条件的怪兽除外到${names.resolver}处理后，再让其回到场上。`;
-  }
-  if (title === "可以除外，怪兽不被破坏") {
-    return "可以适用相关除外效果，把战斗破坏预定的卡通怪兽除外；因此该怪兽不会被这次战斗破坏。";
-  }
-  if (title === "可以除外") return "可以适用相关效果，将满足条件的卡除外。";
-  if (title === "不能除外") return "不能适用相关效果将其除外。";
-  if (title === "可以发动") return "满足问答所示条件时，可以发动该效果。";
-  if (title === "不能发动") return "该场面不满足问答所示条件，不能发动该效果。";
-  if (title === "可以适用该效果") return "可以按问答结论适用该效果。";
-  if (title === "不能适用该效果") return "不能按该方式适用该效果。";
+function buildReadableRulingBody(value, matchKind) {
+  const original = cleanText(value).trim();
+  if (original && !hasBrokenCardMarkup(original)) return original;
 
-  if (text && !hasBrokenCardMarkup(text)) {
-    if (hasDeckReturnText(contextText) && hasTemporaryBanishText(contextText)) {
-      const names = inferInteractionCardNames(context);
-      return `可以适用${names.protector}的临时除外效果；被除外的怪兽不会被${names.resolver}洗回卡组。`;
-    }
-    return text;
-  }
+  const repaired = normalizeRulingText(original);
+  if (repaired) return repaired;
   return matchKind === "analogous"
     ? "相似问答的原文含有卡名标记或未本地化文本，需要结合出处核对后类推。"
-    : "命中的问答原文含有卡名标记或未本地化文本；已按结论关键词提炼，完整原文请打开下方出处核对。";
+    : "命中的问答没有可直接显示的结论文本；请打开下方出处核对原文。";
 }
 
-function buildRulingSteps(context, ruling, title) {
-  if (title === "可以适用临时除外效果，怪兽不回卡组") {
-    const names = inferInteractionCardNames(context);
-    return [
-      `${names.resolver}的效果开始适用时，会处理“把被无效或被处理的那张卡洗回卡组”。`,
-      `在这个“其他卡发动的效果适用之际”，可以适用${names.protector}的临时除外效果，把那只怪兽除外到该效果处理后。`,
-      `除外后，那只怪兽已经不在${names.resolver}要处理的原位置，不能被该效果洗回卡组。`,
-      `${names.resolver}处理完后，再按${names.protector}的临时除外效果让被除外的怪兽回到场上。`,
-    ];
-  }
-
-  if (title === "可以适用临时除外效果，怪兽不按原预定破坏处理") {
-    const names = inferInteractionCardNames(context);
-    return [
-      `${names.resolver}的效果正在适用，进入“其他卡发动的效果适用之际”。`,
-      `此时可以适用${names.protector}的临时除外效果，把那只怪兽除外到该效果处理后。`,
-      "除外期间那只怪兽不在原本会被战斗或效果破坏的位置，因此不能按原预定破坏处理。",
-      `${names.resolver}处理完后，再按${names.protector}的临时除外效果让被除外的怪兽回到场上。`,
-    ];
-  }
-
-  if (title === "可以适用临时除外效果") {
-    const names = inferInteractionCardNames(context);
-    return [
-      `${names.resolver}的效果正在适用，检查是否满足“其他卡发动的效果适用之际”。`,
-      `满足时，可以适用${names.protector}的临时除外效果，把对应怪兽除外到该效果处理后。`,
-      `${names.resolver}继续处理；处理完后，被除外的怪兽按临时除外效果回到场上。`,
-    ];
-  }
-
-  if (title === "可以除外，怪兽不被破坏") {
-    const names = inferInteractionCardNames(context);
-    return [
-      "先确认有其他卡发动的效果正在适用，且该处理会影响自己场上的卡通怪兽。",
-      `在该效果适用之际，可以适用${names.protector}的临时除外效果，把那只怪兽除外到该效果处理后。`,
-      "除外期间该怪兽不在会被处理的位置，因此不会被该效果破坏。",
-      `该效果处理完后，再按${names.protector}的临时除外效果让其回到相应位置。`,
-    ];
-  }
-
+function buildRulingSteps(ruling) {
   if (ruling.steps?.length) return ruling.steps;
   return ["按命中的问答资料处理。", "若场面条件不同，继续核对原文和相关 Q&A。"];
-}
-
-function hasDeckReturnText(value) {
-  return /(回卡组|回到卡组|返回卡组|洗回卡组|放回卡组|回入卡组|戻.*デッキ|デッキ.*戻|デッキに加え|shuffle(?:d)?\s+(?:it|that card|them|those cards)?\s*(?:into|to)\s+the\s+deck|return(?:ed)?\s+(?:it|that card|them|those cards)?\s*(?:into|to)\s+the\s+deck)/i.test(
-    normalizeRulingText(value)
-  );
-}
-
-function hasTemporaryBanishText(value) {
-  const text = normalizeRulingText(value);
-  return /(除外.*(处理后|處理後|戻|戻す|戻る|return)|(?:处理后|處理後|処理後).*(除外|回到|返回|特殊召唤|戻)|temporar(?:y|ily).*banish|banish.*until.*(?:resolv|after))/i.test(text);
-}
-
-function hasPendingDestructionText(value) {
-  return /(战斗.*破坏|破坏.*决定|破坏.*确定|破壊されることが決定|戦闘で破壊|破壊予定|would be destroyed|determined to be destroyed)/i.test(normalizeRulingText(value));
-}
-
-function inferInteractionCardNames(context) {
-  const cards = context?.detectedCards || [];
-  const protector = cards.find((card) => hasTemporaryBanishText(card.effectText || ""));
-  const resolver =
-    cards.find((card) => card !== protector && hasDeckReturnText(`${card.effectText || ""} ${card.name || ""} ${card.matched || ""}`)) ||
-    cards.find((card) => card !== protector);
-  return {
-    protector: formatRulingCardName(protector) || "该临时除外效果",
-    resolver: formatRulingCardName(resolver) || "原本正在处理的效果",
-  };
-}
-
-function formatRulingCardName(card) {
-  const name = cleanText(card?.cnName || card?.name || card?.matched || card?.jaName || card?.enName || "");
-  return name ? `「${name}」` : "";
 }
 
 function normalizeRulingText(value) {

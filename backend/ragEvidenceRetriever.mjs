@@ -83,7 +83,7 @@ export async function retrieveRagEvidence({
   if (qaIdentityCards.length !== retrievalCards.length) {
     retrievalWarnings.push(`qa_identity_excludes_card_text_references:${retrievalCards.length - qaIdentityCards.length}`);
   }
-  const effectiveQaIdentityCards = canonicalizeQaIdentityCards(
+  let effectiveQaIdentityCards = canonicalizeQaIdentityCards(
     qaIdentityCards.length ? qaIdentityCards : retrievalCards,
     data.cards,
     retrievalWarnings,
@@ -186,6 +186,14 @@ export async function retrieveRagEvidence({
     if (liveOfficialQa.records?.length) retrievalWarnings.push(`live_official_qa_retrieved:${liveOfficialQa.records.length}`);
     const metadataById = new Map((liveOfficialQa.cardMetadata || []).map((item) => [String(item.id), item]));
     retrievalCards = retrievalCards.map((card) => ({ ...card, ...(metadataById.get(String(card.id || card.cardId)) || {}) }));
+    const hydratedQaIdentityCards = retrievalCards.filter(
+      (card) => card.resolutionSource !== "card_text_reference",
+    );
+    effectiveQaIdentityCards = canonicalizeQaIdentityCards(
+      hydratedQaIdentityCards.length ? hydratedQaIdentityCards : retrievalCards,
+      data.cards,
+      retrievalWarnings,
+    );
   }
   const officialMatches = liveOfficialQa.records?.length
     ? searchOfficialQaEvidence({
@@ -290,7 +298,9 @@ export async function retrieveRagEvidence({
     faqRelated: dedupeEvidence(faqRelated),
     rawRelatedEvidence: dedupeEvidence([...rulebookCandidates.slice(0, limits.maxRelatedEvidence), ...rawRelatedEvidence]),
     rulebookCandidates,
-    retrievedCards: retrievalCards,
+    // Keep the canonical local card id on the answer path even when the card
+    // was first found through a Baige passcode or another external id.
+    retrievedCards: effectiveQaIdentityCards,
     remainingUnresolvedMentions,
     fuzzyResolvedCards: fuzzyCards,
     baigeResolvedCards,

@@ -176,6 +176,15 @@ test("quoted card roles exclude dynamic names, archetype labels, and quoted effe
   }
 });
 
+test("quoted metalinguistic terms are not treated as unresolved card names", () => {
+  const resolution = extractRagCards(
+    "本题的“可以”按至少存在1个合法分支理解。是否可以发动「测试卡甲」？",
+    { cards: [] },
+  );
+  assert.ok(!resolution.unresolvedMentions.some((mention) => mention.input === "可以"));
+  assert.ok(resolution.unresolvedMentions.some((mention) => mention.input === "测试卡甲"));
+});
+
 test("exact card dependencies named by a resolved card's own text are expanded one hop", async () => {
   const data = await loadRagData();
   const cases = [

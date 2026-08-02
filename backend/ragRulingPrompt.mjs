@@ -42,6 +42,7 @@ export function buildRagRulingPromptBundle({
     operationChecks: summarizeOperationChecks(evidence.operationLegality?.checks || []),
     constraintAudit: summarizeConstraintAudit(evidence.operationLegality),
     semanticStateTransition: summarizeSemanticStateTransition(evidence.semanticStateTransition),
+    cardSemanticFacts: summarizeCardSemanticFacts(evidence.cardSemanticFacts),
     formalEngineStatus: evidence.formalEngineStatus || { mode: "off", status: "disabled" },
     evidence: {
       ...evidencePayload,
@@ -109,6 +110,7 @@ export function buildRagRulingPromptBundle({
     "constraintAudit 列出后端优先核对的限制性规则。hasUnresolvedConstraints=true 时，不得回答‘可以发动/可以进行’；必须继续依据列出的规则核对，无法完成时只能给保守的不确定结论。",
     "hasUnresolvedConstraints=true 表示前置判读没有完成，不表示规则不适用。此时必须直接阅读 unresolvedConstraints.text，逐项比较规则条件与题目事实；若题目已明确满足阻断条件，应据此回答不能发动或不能进行，只有缺少必要事实时才保留不确定。",
     "operationChecks、constraintAudit 和 semanticStateTransition 只属于证据整理或旧诊断信息，不是裁定证明；不得仅凭它们翻转官方资料、补造事实或签发最终结论。最终推理必须重新核对其逐字引文、卡文与题面事实。",
+    "cardSemanticFacts 是卡文范式化器从已解析卡文抽取的候选操作，不是裁定证明；必须对照原始卡文复核。若候选为 create_lingering_restriction 且 expiration.mode=irreversible_on_first_condition_failure、reactivates=false，它表示已处理效果创建的限制实例在 activeWhile 首次不成立时永久终止，之后条件再次成立也不会自行恢复，只有重新适用原效果才能创建新实例。",
     "formalEngineProofs 来自版本协商、能力检查、完整执行检查和独立证明校验后的声明式规则内核。trusted=true 且 verdict=TRUE/FALSE 的逐查询结论是强约束，模型只能解释，不能翻转；verdict=UNKNOWN 只表示未获证明，绝不等于 FALSE，也不能单独支持‘不能’。",
     "分析任何操作时使用同一套通用执行顺序：从卡文和题面建立带来源的初始状态；分别检查手续或发动前提；执行手续、cost 与每个效果步骤并记录实际移动及归因；每次状态变化后重算持续效果；在检查点收集诱发候选并保留对方响应分支。禁止根据卡名、FAQ 编号、题面暗示答案或历史错题模板补造缺失事实。",
     "较早步骤已经不合法时，结论应直接说明实际阻断原因，不要继续描述未发生的后续处理，也不要添加与当前场景无关的假设分支。",
@@ -485,6 +487,7 @@ function buildCompactRagPrompt({ payload, maxPromptChars }) {
       textLimit,
       traceLimit: maxChars >= 12000 ? 8 : maxChars >= 4000 ? 5 : 2,
     }),
+    cardSemanticFacts: (payload.cardSemanticFacts || []).slice(0, maxChars >= 12000 ? 12 : 5),
     formalEngineStatus: payload.formalEngineStatus,
     evidence,
   };
@@ -492,6 +495,7 @@ function buildCompactRagPrompt({ payload, maxPromptChars }) {
     "你是游戏王 OCG 规则分析助手。只依据所给证据回答，不得编造规则或来源。",
     "官方直接 Q&A 才能支持 official_confirmed；相关 Q&A、FAQ、规则书和卡文只能支持 rule_analysis 或 low_confidence_analysis。",
     "operationChecks、constraintAudit 与 semanticStateTransition 是便宜模型/旧诊断整理出的待核对假设；只能帮助定位证据，不能替代最终推理。unknown 或未核对限制不能支持肯定或否定结论。",
+    "cardSemanticFacts 是卡文范式化候选而非证明。create_lingering_restriction 的 irreversible_on_first_condition_failure/ reactivates=false 表示期限条件首次失效后该效果实例永久结束，条件后来恢复不会自动重启。必须对照原卡文复核。",
     "按通用状态执行顺序判断手续或发动前提、手续或cost、每步状态更新、持续效果重算、逐项处理与诱发检查点；严格区分区域、移动归因、对象资格与效果抗性，同一步同时移动按原子批次处理。禁止按卡名或历史题模板补造事实。",
     "formalEngineProofs 中 trusted=true 的 TRUE/FALSE 是逐查询强约束；UNKNOWN 不是 FALSE，不能据此回答不能。",
     "resolvedCards 是已匹配卡片，effectText 是其效果依据；不得把已有字段说成未确定。任何非 formal 的状态轨迹都必须由最终模型依据原始文本重新验证。",
@@ -519,6 +523,7 @@ function buildCompactRagPrompt({ payload, maxPromptChars }) {
       textLimit: 160,
       traceLimit: 3,
     }),
+    cardSemanticFacts: (payload.cardSemanticFacts || []).slice(0, 3),
     formalEngineStatus: payload.formalEngineStatus,
     evidenceIds: evidenceIds.slice(0, 10),
   });
@@ -537,6 +542,7 @@ function buildCompactRagPrompt({ payload, maxPromptChars }) {
         textLimit: 80,
         traceLimit: 1,
       }),
+      cardSemanticFacts: (payload.cardSemanticFacts || []).slice(0, 1),
       formalEngineStatus: payload.formalEngineStatus,
       evidenceIds: evidenceIds.slice(0, 3).map((item) => item.id),
     }),
@@ -544,6 +550,23 @@ function buildCompactRagPrompt({ payload, maxPromptChars }) {
   return minimalPrompt.length <= maxChars
     ? minimalPrompt
     : minimalPrompt.slice(0, maxChars);
+}
+
+function summarizeCardSemanticFacts(facts = {}) {
+  return (Array.isArray(facts) ? facts : [])
+    .filter((fact) => fact && typeof fact === "object" && fact.operation)
+    .slice(0, 24)
+    .map((fact) => ({
+      cardId: fact.cardId,
+      cardName: fact.cardName,
+      effectIndex: fact.effectIndex,
+      stepIndex: fact.stepIndex,
+      connector: fact.connector,
+      operation: fact.operation,
+      sourceText: String(fact.sourceText || "").slice(0, 1200),
+      sourceEvidenceIds: fact.sourceEvidenceIds || [],
+      authority: "normalizer_candidate_only",
+    }));
 }
 
 function compactSemanticStateTransition(state = {}, { textLimit = 360, traceLimit = 5 } = {}) {

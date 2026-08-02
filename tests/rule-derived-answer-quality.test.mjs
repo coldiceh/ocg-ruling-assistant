@@ -2,46 +2,41 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { answerEachSubQuestion, mergeModelAnswer } from "../backend/engine.mjs";
-import { buildRuleDerivedAnswer, validateRuleDerivedAnswer } from "../backend/ruleDerivedAnswer.mjs";
+import { buildRuleAnalysisHints, buildRuleDerivedAnswer, validateRuleDerivedAnswer } from "../backend/ruleDerivedAnswer.mjs";
 import { generateRuleDerivedAnswer } from "../backend/ruleDerivedModel.mjs";
 import { RULE_DERIVED_GOLDEN_CASES, runProductAnswerQuality } from "../scripts/product-answer-quality.mjs";
 import { buildUserFacingSubAnswerSummary } from "../src/uiPresentation.mjs";
 
-test("three golden cases produce substantive rule-derived answers", async () => {
+test("phrase-matched golden cases do not manufacture rule-derived verdicts", async () => {
   const report = await runProductAnswerQuality();
   assert.equal(report.total, 3);
-  assert.equal(report.ruleDerivedAnswerCount, 3);
-  assert.equal(report.usefulRuleDerivedCount, 3);
+  assert.equal(report.ruleDerivedAnswerCount, 0);
+  assert.equal(report.usefulRuleDerivedCount, 0);
   assert.equal(report.uselessRuleDerivedCount, 0);
-  assert.equal(report.wrongCardResolutionCount, 0);
   assert.equal(report.internalReasonLeakCount, 0);
   assert.equal(report.unsafeConfirmedCount, 0);
-  for (const item of report.cases) {
-    assert.equal(item.missingConcepts.length, 0, `${item.id}: ${item.missingConcepts.join(", ")}`);
-    assert.ok(item.ruleDerivedAnswer.reasoningSteps.length >= 2);
-    assert.notEqual(item.ruleDerivedAnswer.verdict, "unknown");
-    assert.doesNotMatch(item.summary, /^(?:资料不足|需要官方 Q&A|可以参考卡片文本)$/u);
-  }
 });
 
-test("counter evidence lowers confidence and raises a risk flag", () => {
-  const answer = buildRuleDerivedAnswer({
+test("rule primitives remain analysis-only and expose no verdict fields", () => {
+  const analysis = buildRuleAnalysisHints({
     originalQuestion: "同一张手卡在连锁中能否再次给对手观看来发动？",
     formalQuery: { originalText: "同一张手卡在连锁中能否再次给对手观看来发动？", subQuestions: [] },
     rejectedEvidence: [{ rejectedReason: "conflicting_direct_evidence" }],
   });
-  assert.equal(answer.status, "rule_derived");
-  assert.equal(answer.confidence, "low");
-  assert.equal(answer.counterEvidenceFound, true);
-  assert.ok(answer.riskFlags.includes("counter_evidence_found"));
+  assert.equal(analysis.status, "analysis_only");
+  assert.ok(analysis.reasoningChecks.length >= 2);
+  assert.equal(Object.hasOwn(analysis, "verdict"), false);
+  assert.equal(Object.hasOwn(analysis, "shortAnswer"), false);
+  assert.equal(Object.hasOwn(analysis, "confidence"), false);
+  assert.equal(buildRuleDerivedAnswer({ originalQuestion: "可以发动吗？" }), null);
 });
 
-test("unresolved card names block a rule conclusion", () => {
-  const answer = buildRuleDerivedAnswer({
+test("unresolved card names also block analysis hints", () => {
+  const analysis = buildRuleAnalysisHints({
     originalQuestion: "卡通青眼究极龙能否直接攻击？",
     unresolvedCards: [{ unresolvedCardName: "卡通青眼究极龙", candidateCards: [{ name: "青眼究极龙" }] }],
   });
-  assert.equal(answer, null);
+  assert.equal(analysis, null);
 });
 
 test("official direct evidence remains authoritative and rule-derived output does not confirm", () => {
@@ -73,43 +68,35 @@ test("official direct evidence remains authoritative and rule-derived output doe
   assert.equal(answer.ruleDerivedAnswer, undefined);
 });
 
-test("model adapter validates isolated rule-derived output and cannot overwrite official fields", async () => {
-  const fixture = buildRuleDerivedAnswer({
-    originalQuestion: "复制效果时是否复制额外发动方式和效果外文本？",
-    formalQuery: { originalText: "复制效果时是否复制额外发动方式和效果外文本？", subQuestions: [] },
-  });
-  assert.equal(validateRuleDerivedAnswer(fixture).valid, true);
+test("model adapter cannot mint an unverified rule-derived verdict or overwrite official fields", async () => {
+  let modelCalled = false;
   const generated = await generateRuleDerivedAnswer({
     originalQuestion: "复制效果时是否复制额外发动方式和效果外文本？",
     officialAnswer: { status: "not_found", verdict: "unknown", evidenceIds: [] },
-  }, { model: async () => ({ ...fixture, status: "confirmed", shortAnswer: "官方确认可以。" }) });
-  assert.equal(generated.answer.status, "rule_derived");
-  assert.equal(generated.provider, "deterministic");
-  assert.ok(generated.warnings.includes("model_rule_derived_invalid"));
+  }, { model: async () => { modelCalled = true; return { status: "confirmed", shortAnswer: "官方确认可以。" }; } });
+  assert.equal(modelCalled, false);
+  assert.equal(generated.answer, null);
+  assert.equal(generated.provider, "disabled");
+  assert.ok(generated.warnings.includes("unverified_rule_derived_verdict_disabled"));
+  assert.equal(validateRuleDerivedAnswer({ status: "rule_derived", shortAnswer: "可以。" }).valid, false);
 
   const merged = mergeModelAnswer({
     explanationText: "模型解释",
     ruleDerivedAnswer: { status: "confirmed", verdict: "can" },
     status: "confirmed",
-  }, { status: "unknown", verdict: "unknown", evidenceIds: [], ruleDerivedAnswer: fixture });
+  }, { status: "unknown", verdict: "unknown", evidenceIds: [] });
   assert.equal(merged.status, "unknown");
-  assert.equal(merged.ruleDerivedAnswer.status, "rule_derived");
+  assert.equal(merged.ruleDerivedAnswer, undefined);
 });
 
-test("UI presents rule-derived wording and player assistant theme without internal codes", async () => {
-  const answer = buildRuleDerivedAnswer({
-    originalQuestion: "复制效果时是否复制额外发动方式和效果外文本？",
-    formalQuery: { originalText: "复制效果时是否复制额外发动方式和效果外文本？", subQuestions: [] },
-  });
+test("analysis-only hints are not presented as a ruling conclusion", async () => {
   const summary = buildUserFacingSubAnswerSummary({
     status: "unknown",
     officialAnswer: { status: "not_found", verdict: "unknown", evidenceIds: [] },
-    ruleDerivedAnswer: answer,
     reason: "no_direct_evidence",
   });
-  assert.equal(summary.statusLabel, "规则推导结论");
-  assert.match(summary.ruleDerivedAnswerText, /效果处理|发动手续/u);
-  assert.doesNotMatch(summary.ruleDerivedAnswerText, /no_direct_evidence/u);
+  assert.equal(summary.statusLabel, "资料不足");
+  assert.equal(summary.ruleDerivedAnswerText, null);
 
   const [html, css] = await Promise.all([
     readFile(new URL("../index.html", import.meta.url), "utf8"),

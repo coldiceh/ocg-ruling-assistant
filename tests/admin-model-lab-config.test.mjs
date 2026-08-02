@@ -89,6 +89,27 @@ test("DeepSeek capabilities explicitly prohibit final judgment and escalation de
   assert.equal(selection.capability.canMakeFinalRuling, false);
   assert.equal(selection.capability.canDecideEscalation, false);
   assert.deepEqual(selection.capability.allowedStages, ["evidence_preparation"]);
+  assert.deepEqual(selection.capability.supportedReasoningEfforts, ["none", "high", "max"]);
+  assert.deepEqual(selection.capability.supportedReasoningModes, ["standard", "pro"]);
+  const thinkingSelection = resolveAdminModelSelection({
+    provider: "deepseek",
+    model: "deepseek-v4-pro",
+    reasoningEffort: "max",
+    reasoningMode: "pro",
+    stage: ADMIN_MODEL_LAB_STAGES.EVIDENCE_PREPARATION,
+  });
+  assert.equal(thinkingSelection.reasoningEffort, "max");
+  assert.equal(thinkingSelection.reasoningMode, "pro");
+  assert.throws(
+    () => resolveAdminModelSelection({
+      provider: "deepseek",
+      model: "deepseek-v4-flash",
+      reasoningEffort: "high",
+      reasoningMode: "standard",
+      stage: ADMIN_MODEL_LAB_STAGES.EVIDENCE_PREPARATION,
+    }),
+    (error) => error.code === "reasoning_effort_requires_thinking",
+  );
 });
 
 test("availability is computed server-side without exposing secrets", () => {
@@ -99,6 +120,89 @@ test("availability is computed server-side without exposing secrets", () => {
       DEEPSEEK_API_KEY: "secret",
     },
   });
-  assert.equal(capabilities.providers.every((provider) => provider.models.every((model) => model.available)), true);
+  assert.equal(capabilities.providers.find((provider) => provider.providerId === "openai").available, true);
+  assert.equal(capabilities.providers.find((provider) => provider.providerId === "deepseek").available, true);
+  assert.equal(capabilities.providers.find((provider) => provider.providerId === "glm").available, false);
+  assert.equal(capabilities.providers.find((provider) => provider.providerId === "kimi").available, false);
   assert.equal(JSON.stringify(capabilities).includes("secret"), false);
+});
+
+test("GLM and Kimi are allowlisted only for evidence preparation with model-specific thinking", () => {
+  const glm = resolveAdminModelSelection({
+    provider: "glm",
+    model: "glm-5.2",
+    reasoningEffort: "high",
+    reasoningMode: "pro",
+    stage: ADMIN_MODEL_LAB_STAGES.EVIDENCE_PREPARATION,
+  });
+  assert.equal(glm.capability.canMakeFinalRuling, false);
+  assert.equal(glm.capability.canDecideEscalation, false);
+
+  const kimiK2 = resolveAdminModelSelection({
+    provider: "kimi",
+    model: "kimi-k2.6",
+    reasoningEffort: "none",
+    reasoningMode: "standard",
+    stage: ADMIN_MODEL_LAB_STAGES.EVIDENCE_PREPARATION,
+  });
+  assert.equal(kimiK2.capability.thinkingControl, "optional");
+
+  const kimiK3 = resolveAdminModelSelection({
+    provider: "kimi",
+    model: "kimi-k3",
+    reasoningEffort: "max",
+    reasoningMode: "pro",
+    stage: ADMIN_MODEL_LAB_STAGES.EVIDENCE_PREPARATION,
+  });
+  assert.equal(kimiK3.capability.thinkingControl, "always_on");
+  assert.deepEqual(kimiK3.capability.supportedReasoningEfforts, ["low", "high", "max"]);
+  assert.equal(kimiK3.capability.defaultReasoningEffort, "max");
+  assert.deepEqual(
+    resolveAdminModelSelection({
+      provider: "kimi",
+      model: "kimi-k3",
+      stage: ADMIN_MODEL_LAB_STAGES.EVIDENCE_PREPARATION,
+    }),
+    kimiK3,
+  );
+  const defaultGlm = resolveAdminModelSelection({
+    provider: "glm",
+    model: "glm-5.2",
+    stage: ADMIN_MODEL_LAB_STAGES.EVIDENCE_PREPARATION,
+  });
+  assert.equal(defaultGlm.reasoningEffort, "max");
+  assert.equal(defaultGlm.reasoningMode, "pro");
+  assert.throws(
+    () => resolveAdminModelSelection({
+      provider: "kimi",
+      model: "kimi-k3",
+      reasoningEffort: "max",
+      reasoningMode: "standard",
+      stage: ADMIN_MODEL_LAB_STAGES.EVIDENCE_PREPARATION,
+    }),
+    (error) => error.code === "reasoning_mode_not_supported",
+  );
+  assert.throws(
+    () => resolveAdminModelSelection({
+      provider: "glm",
+      model: "glm-5.2",
+      reasoningEffort: "none",
+      reasoningMode: "standard",
+      stage: ADMIN_MODEL_LAB_STAGES.FINAL_RULING,
+    }),
+    (error) => error.code === "model_stage_not_allowed",
+  );
+});
+
+test("GLM and Kimi availability uses server keys and never returns them", () => {
+  const capabilities = getAdminModelProviderCapabilities({
+    env: {
+      GLM_API_KEY: "glm-secret",
+      KIMI_API_KEY: "kimi-secret",
+    },
+  });
+  assert.equal(capabilities.providers.find((provider) => provider.providerId === "glm").available, true);
+  assert.equal(capabilities.providers.find((provider) => provider.providerId === "kimi").available, true);
+  assert.equal(JSON.stringify(capabilities).includes("glm-secret"), false);
+  assert.equal(JSON.stringify(capabilities).includes("kimi-secret"), false);
 });

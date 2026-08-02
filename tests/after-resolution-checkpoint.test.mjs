@@ -24,17 +24,15 @@ function resolveHypothetical() {
   });
 }
 
-test("target_illegal_blocker: protected target makes C1 activation illegal", () => {
+test("raw card text is not sufficient proof that C1 activation was illegal", () => {
   const result = evaluateRulingBlockers({ question, cards: [disasterLeo, poison] });
-  assert.equal(result.normalRuling.verdict, "activation_illegal");
-  assert.ok(result.blockers.some((item) => item.id === "target_protection_prevents_activation"));
+  assert.equal(result.hasBlocker, false);
+  assert.equal(result.normalRuling, undefined);
 });
 
-test("illegal_premise_with_hypothetical_branch: both ruling layers remain explicit", () => {
+test("illegal premise does not invent a hypothetical branch from prose", () => {
   const answer = buildBlockerAnswer(evaluateRulingBlockers({ question, cards: [disasterLeo, poison] }));
-  assert.equal(answer.normalRuling.confirmationLevel, "rule_derived");
-  assert.equal(answer.hypotheticalBranch.confirmationLevel, "conditional");
-  assert.match(answer.hypotheticalBranch.assumption, /对象保护被无效/u);
+  assert.equal(answer, null);
 });
 
 test("chain_reverse_resolution_with_damage: C2 resolves first and updates LP 2500 to 1700", () => {
@@ -65,7 +63,8 @@ test("terminal_stops_remaining_chain_links: C1 is not processed after the duel e
   assert.equal(result.finalGameState.duelEnded, true);
 });
 
-test("no_unsafe_confirmed: rule-derived blocker answer never becomes official confirmed", async () => {
+test("no_unsafe_confirmed: Fast Judge does not turn raw blocker-like prose into a verdict", async () => {
+  let modelCalled = false;
   const answer = await answerRulingQuestionFast({
     question,
     snapshot: {
@@ -73,12 +72,11 @@ test("no_unsafe_confirmed: rule-derived blocker answer never becomes official co
       records: [],
       snapshotMeta: { sourceFreshness: "fresh", lastSuccessfulSyncAt: new Date().toISOString() },
     },
-    modelInvoker: async () => { throw new Error("blocker path must not call the model"); },
+    modelInvoker: async () => { modelCalled = true; return null; },
   });
-  assert.equal(answer.answerType, "rule_judgment");
-  assert.equal(answer.confirmationLevel, "rule_derived");
+  assert.equal(modelCalled, true);
+  assert.notEqual(answer.answerType, "rule_judgment");
+  assert.equal(answer.verdict === "unknown" || answer.verdict === "insufficient_for_single_verdict", true);
   assert.notEqual(answer.statusChip, "OFFICIAL");
-  assert.equal(answer.normalRuling.confirmationLevel, "rule_derived");
-  assert.equal(answer.hypotheticalBranch.confirmationLevel, "conditional");
   assert.equal(answer.sourceSummary.officialQaRefs.length, 0);
 });

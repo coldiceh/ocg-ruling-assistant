@@ -4,13 +4,20 @@ import { buildDamageStepBlockerAnswer, evaluateDamageStepBlocker } from "../back
 import { buildDamageStepAnalysis } from "../backend/damageStepRules.mjs";
 import { answerRulingQuestionFast } from "../backend/fastJudgeEngine.mjs";
 
-test("restricted damage-step category produces a conservative rule blocker", () => {
+test("regex-classified damage-step category is only a non-authoritative hint", () => {
   const analysis = buildDamageStepAnalysis({ question: "伤害步骤中能发动吗？", effectText: "快速效果：可以发动。" });
   const result = evaluateDamageStepBlocker(analysis);
   const answer = buildDamageStepBlockerAnswer(result);
   assert.equal(result.hasBlocker, true);
-  assert.equal(answer.verdict, "activation_illegal_or_unsupported_in_damage_step");
-  assert.equal(answer.confirmationLevel, "rule_derived");
+  assert.equal(answer.verdict, "insufficient_info");
+  assert.equal(answer.confirmationLevel, "insufficient_info");
+});
+
+test("a caller self-reporting structured proof cannot produce a damage-step verdict", () => {
+  const analysis = { ...buildDamageStepAnalysis({ question: "伤害步骤中能发动吗？", effectText: "快速效果：可以发动。" }), structuredProof: true };
+  const answer = buildDamageStepBlockerAnswer(evaluateDamageStepBlocker(analysis));
+  assert.equal(answer.verdict, "insufficient_info");
+  assert.equal(answer.confirmationLevel, "insufficient_info");
 });
 
 test("allowed damage-step category continues to later Fast Judge checks", () => {
@@ -18,7 +25,7 @@ test("allowed damage-step category continues to later Fast Judge checks", () => 
   assert.equal(evaluateDamageStepBlocker(analysis).hasBlocker, false);
 });
 
-test("Fast Judge applies the damage-step blocker before invoking the model", async () => {
+test("Fast Judge exposes raw damage-step classification only as insufficient information", async () => {
   let modelCalled = false;
   const answer = await answerRulingQuestionFast({
     question: "伤害步骤中，测试快速龙能发动这个快速效果吗？",
@@ -30,8 +37,9 @@ test("Fast Judge applies the damage-step blocker before invoking the model", asy
     modelInvoker: async () => { modelCalled = true; return { answerType: "direct_official", verdict: "can_activate" }; },
   });
   assert.equal(modelCalled, false);
-  assert.equal(answer.verdict, "activation_illegal_or_unsupported_in_damage_step");
-  assert.equal(answer.confirmationLevel, "rule_derived");
+  assert.equal(answer.verdict, "insufficient_info");
+  assert.notEqual(answer.confirmationLevel, "rule_derived");
+  assert.notEqual(answer.confirmationLevel, "official_confirmed");
   assert.equal(answer.damageStepAnalysis.allowedInDamageStep, false);
   assert.notEqual(answer.statusChip, "OFFICIAL");
 });

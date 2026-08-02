@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   DEFAULT_RULING_VERSION,
+  PREVIOUS_RULING_WARNING,
   PREVIOUS_RULING_REVISION,
   answerRagRulingQuestionForVersion,
   getRulingVersionCapabilities,
@@ -15,8 +16,14 @@ test("ruling version capabilities expose latest and the frozen previous revision
   const capabilities = getRulingVersionCapabilities();
   assert.equal(capabilities.defaultRulingVersion, DEFAULT_RULING_VERSION);
   assert.deepEqual(capabilities.rulingVersions, [
-    { id: "latest", label: "最新版", revision: null },
-    { id: "previous", label: "上一版", revision: PREVIOUS_RULING_REVISION },
+    { id: "latest", label: "最新版", revision: null, legacyCompatibility: false },
+    {
+      id: "previous",
+      label: "上一版（兼容）",
+      revision: PREVIOUS_RULING_REVISION,
+      legacyCompatibility: true,
+      warning: PREVIOUS_RULING_WARNING,
+    },
   ]);
 });
 
@@ -43,7 +50,11 @@ test("previous pipeline is dynamically loaded once and never aliases latest", as
   const previousA = await resolveRulingVersionPipeline("previous");
   const previousB = await resolveRulingVersionPipeline("previous");
   assert.equal(latest.effectiveRulingVersion, "latest");
+  assert.equal(latest.legacyCompatibility, false);
+  assert.deepEqual(latest.versionWarnings, []);
   assert.equal(previousA.effectiveRulingVersion, "previous");
+  assert.equal(previousA.legacyCompatibility, true);
+  assert.deepEqual(previousA.versionWarnings, [PREVIOUS_RULING_WARNING]);
   assert.equal(previousA.answerRagRulingQuestion, previousB.answerRagRulingQuestion);
   assert.notEqual(previousA.answerRagRulingQuestion, latest.answerRagRulingQuestion);
 });
@@ -56,6 +67,8 @@ test("versioned answer dispatch echoes the requested and effective version", asy
   assert.equal(latest.requestedRulingVersion, "latest");
   assert.equal(latest.effectiveRulingVersion, "latest");
   assert.equal(latest.rulingVersion, "latest");
+  assert.equal(latest.legacyCompatibility, false);
+  assert.deepEqual(latest.versionWarnings, []);
 
   const previous = await answerRagRulingQuestionForVersion({
     question: "",
@@ -64,4 +77,6 @@ test("versioned answer dispatch echoes the requested and effective version", asy
   assert.equal(previous.requestedRulingVersion, "previous");
   assert.equal(previous.effectiveRulingVersion, "previous");
   assert.equal(previous.rulingVersion, "previous");
+  assert.equal(previous.legacyCompatibility, true);
+  assert.deepEqual(previous.versionWarnings, [PREVIOUS_RULING_WARNING]);
 });

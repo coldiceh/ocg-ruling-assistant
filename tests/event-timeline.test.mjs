@@ -35,8 +35,8 @@ test("D. battle destruction followed by banishment derives banished state", () =
 });
 
 test("E. damage-step-end activation keeps the destroyed monster in a pending transition", () => {
-  const { gameState, timeline } = build("卡通怪兽被战破，在伤害步骤结束阶段发动效果的时候", "referenced_toon_monster", ["卡通怪兽"]);
-  const derived = deriveStateAtTiming(gameState, timeline, "referenced_toon_monster");
+  const { gameState, timeline } = build("卡通怪兽被战破，在伤害步骤结束阶段发动效果的时候", "referenced_monster", ["卡通怪兽"]);
+  const derived = deriveStateAtTiming(gameState, timeline, "referenced_monster");
   assert.ok(timeline.events.some((item) => item.type === "battle_destroyed"));
   assert.ok(timeline.events.some((item) => item.type === "damage_step_end"));
   assert.ok(timeline.events.some((item) => item.type === "effect_activation"));
@@ -49,16 +49,32 @@ test("F. a banish question creates a questioned event, not a completed transitio
   const query = formalQuery(
     "能用完美世界-卡通世界的效果除外该卡通怪兽吗？",
     "完美世界-卡通世界",
-    ["完美世界-卡通世界", "referenced_toon_monster"]
+    ["完美世界-卡通世界", "referenced_monster"]
   );
   query.cards[1].aliases = ["卡通怪兽", "该卡通怪兽"];
   const gameState = buildGameStateFromFormalQuery(query);
   const timeline = buildEventTimelineFromFormalQuery(query, gameState);
-  const event = timeline.events.find((item) => item.type === "temporarily_banished" && item.card === "referenced_toon_monster");
+  const event = timeline.events.find((item) => item.type === "temporarily_banished" && item.card === "referenced_monster");
   assert.ok(event);
   assert.equal(event.status, "questioned");
   assert.equal(timeline.events.some((item) => item.type === "temporarily_banished" && item.status === "completed"), false);
   assert.equal(deriveStateAtTiming(gameState, timeline, "完美世界-卡通世界").zoneStatus, "unknown");
+});
+
+test("G. non-Toon descriptors use the same referenced-monster timeline semantics", () => {
+  const query = formalQuery(
+    "龙族怪兽被战破时，能用完美世界-卡通世界的效果除外该龙族怪兽吗？",
+    "完美世界-卡通世界",
+    ["完美世界-卡通世界", "referenced_monster"]
+  );
+  const gameState = buildGameStateFromFormalQuery(query);
+  const timeline = buildEventTimelineFromFormalQuery(query, gameState);
+
+  assert.ok(timeline.events.some((item) => item.type === "battle_destroyed" && item.card === "referenced_monster"));
+  assert.ok(timeline.events.some((item) => item.type === "temporarily_banished"
+    && item.card === "referenced_monster"
+    && item.status === "questioned"));
+  assert.equal(deriveStateAtTiming(gameState, timeline, "referenced_monster").zoneStatus, "pending_send_to_graveyard");
 });
 
 for (const phrase of [

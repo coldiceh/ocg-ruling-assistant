@@ -218,3 +218,48 @@ test("splits inline numbered effects after a preamble without splitting effect-n
   );
   assert.equal(normalized.missingSections.includes("monsterEffects"), false);
 });
+
+test("summon-bound lifecycle parsing requires an actual extra-deck summon restriction", () => {
+  for (const effectText of [
+    "①：可以发动。将1只怪兽特殊召唤。只要这个效果特殊召唤的怪兽以表侧表示存在于自己场上，自己从额外牌组仅可特殊召唤‘示例’怪兽。",
+    "①：可以发动。将1只怪兽特殊召唤。只要这个效果特殊召唤的怪兽以表侧表示存在于自己场上，自己不是‘示例’怪兽不能从额外牌组特殊召唤。",
+    "①：発動できる。モンスター1体を特殊召喚する。この効果で特殊召喚したモンスターが表側表示で自分フィールドに存在する限り、自分は「例」モンスターしかEXデッキから特殊召喚できない。",
+    "①：発動できる。このカードを特殊召喚する。この効果で特殊召喚したこのカードが表側表示で自分フィールドに存在する限り、自分は「例」モンスターしかEXデッキから特殊召喚できない。",
+    "You can activate this effect; Special Summon 1 monster. As long as a monster Special Summoned by this effect is face-up on your field, you can only Special Summon ‘Example’ monsters from your Extra Deck.",
+  ]) {
+    const positive = normalizeCardText({
+      id: "fictional-bound-lock",
+      name: "架空期限限制",
+      cardType: "monster",
+      effectText,
+    });
+    assert.equal(
+      positive.effects.flatMap((effect) => effect.resolution)
+        .some((step) => step.operation.type === "create_lingering_restriction"),
+      true,
+      effectText,
+    );
+  }
+
+  for (const effectText of [
+    "①：这个效果特殊召唤的怪兽的效果无效化。",
+    "①：以此效果特殊召唤的怪兽作为融合素材。",
+    "①：只要这个效果特殊召唤的怪兽以表侧表示存在于自己场上，那只怪兽的效果无效化。",
+    "①：只要这个效果特殊召唤的怪兽以表侧表示存在于自己场上，自己场上的怪兽不能被从额外牌组特殊召唤的怪兽战斗破坏。",
+    "①：只要这个效果特殊召唤的怪兽以表侧表示存在于自己场上，自己不能让从额外牌组特殊召唤的怪兽攻击。",
+    "①：只要这个效果特殊召唤的怪兽以表侧表示存在于自己场上，自己不能把从额外牌组特殊召唤的怪兽作为融合素材。",
+  ]) {
+    const normalized = normalizeCardText({
+      id: "fictional-non-lock",
+      name: "架空非限制",
+      cardType: "monster",
+      effectText,
+    });
+    assert.equal(
+      normalized.effects.flatMap((effect) => effect.resolution)
+        .some((step) => step.operation.type === "create_lingering_restriction"),
+      false,
+      effectText,
+    );
+  }
+});

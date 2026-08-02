@@ -1,3 +1,5 @@
+const REFERENCED_MONSTER_ENTITY = "referenced_monster";
+
 export function buildSubQuestionDependencyGraph(formalQuery, eventTimeline = {}) {
   const questions = Array.isArray(formalQuery?.subQuestions) ? formalQuery.subQuestions : [];
   const nodes = questions.map((item) => ({
@@ -61,8 +63,9 @@ export function buildSubQuestionDependencyGraph(formalQuery, eventTimeline = {})
   for (const [index, question] of questions.entries()) {
     const text = String(question.sourceText || "");
     const prior = questions.slice(0, index);
-    if (/该怪兽/u.test(text) && !canResolveMonsterReference(question, prior)) {
-      warnings.push(`${question.id}:unresolved_reference:该怪兽`);
+    const monsterReference = referencedMonsterSurface(text);
+    if (monsterReference && isAnaphoricMonsterReference(monsterReference) && !canResolveMonsterReference(question, prior)) {
+      warnings.push(`${question.id}:unresolved_reference:${monsterReference}`);
     }
     if (/这个时候/u.test(text) && !canResolveTimingReference(question, prior, eventTimeline)) {
       warnings.push(`${question.id}:unresolved_reference:这个时候`);
@@ -87,7 +90,7 @@ function isSendToGraveyardQuestion(question) {
 
 function referencedEntity(question) {
   const text = String(question?.sourceText || "");
-  if (/(?:该)?卡通怪兽/u.test(text) || question?.card === "referenced_toon_monster") return "referenced_toon_monster";
+  if (question?.card === REFERENCED_MONSTER_ENTITY || referencedMonsterSurface(text)) return REFERENCED_MONSTER_ENTITY;
   const card = normalize(question?.card);
   return card && card !== "unknown" ? card : "unknown";
 }
@@ -104,14 +107,28 @@ function sameScenarioReference(left, right, eventTimeline) {
   if (sameEntity) return true;
   const leftText = String(left?.sourceText || "");
   const rightText = String(right?.sourceText || "");
-  const hasAnaphora = /(?:这个时候|该怪兽|这个效果)/u.test(`${leftText} ${rightText}`);
+  const combinedText = `${leftText} ${rightText}`;
+  const hasAnaphora = /(?:这个时候|这个效果)/u.test(combinedText)
+    || isAnaphoricMonsterReference(referencedMonsterSurface(combinedText));
   const hasUnknownEntity = leftEntity === "unknown" || rightEntity === "unknown";
   return hasUnknownEntity && hasAnaphora && eventTimeline?.timing?.currentWindow && eventTimeline.timing.currentWindow !== "unknown";
 }
 
 function canResolveMonsterReference(question, prior) {
-  if (referencedEntity(question) !== "unknown") return true;
+  const entity = referencedEntity(question);
+  if (entity !== "unknown" && entity !== REFERENCED_MONSTER_ENTITY) return true;
+  if (entity === REFERENCED_MONSTER_ENTITY && !isAnaphoricMonsterReference(referencedMonsterSurface(question?.sourceText))) return true;
   return prior.some((item) => referencedEntity(item) !== "unknown");
+}
+
+function referencedMonsterSurface(value) {
+  const text = String(value || "");
+  const match = text.match(/(?:该|这|那|上述|前述)(?:只)?(?:[\p{L}\p{N}·・=－—-]{0,12})?怪兽|(?:^|[，。；！？：:\s])((?:[\p{L}\p{N}·・=－—-]{0,12})怪兽)(?=.{0,18}(?:还会|会不会|是否|能否|可以|可否|能用|送墓|除外|发动|处理))|(?:その|この|あの)(?:[^、。！？\s]{0,12})?モンスター|(?:that|this|the\s+referenced)(?:\s+[\p{L}\p{N}-]+){0,4}\s+monster/iu);
+  return String(match?.[1] || match?.[0] || "").trim();
+}
+
+function isAnaphoricMonsterReference(value) {
+  return /^(?:(?:该|这|那|上述|前述)(?:只)?|(?:その|この|あの)|(?:that|this|the\s+referenced)\b)/iu.test(String(value || "").trim());
 }
 
 function canResolveTimingReference(question, prior, eventTimeline) {

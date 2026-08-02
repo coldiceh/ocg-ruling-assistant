@@ -13,7 +13,7 @@ test("no direct evidence can produce a likelyAnswer while final status remains u
   const formalQuery = formal({
     type: "temporary_banish",
     card: "完美世界-卡通世界",
-    askedResult: "can_banish_that_toon_monster",
+    askedResult: "can_banish_referenced_monster",
   });
   const answer = answerEachSubQuestion(formalQuery, {
     bySubQuestion: [{

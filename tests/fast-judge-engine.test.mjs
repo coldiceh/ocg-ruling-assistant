@@ -35,11 +35,12 @@ test("real failure case never emits off-topic chains", async () => {
 
 test("direct official evidence wins before the model and remains official", async () => {
   let modelCalled = false;
+  const question = "对方在我的主要阶段发动过怪兽效果后，我能否发动三战之才？";
   const answer = await answerRulingQuestionFast({
-    question: "对方在我的主要阶段发动过怪兽效果后，我能否发动三战之才？",
+    question,
     snapshot: {
       cards: [{ id: "15296", name: "三战之才", aliases: ["三战之才"], cardType: "spell", effectText: "对方在自己主要阶段发动过怪兽效果的场合才能发动。" }],
-      records: [{ id: "card-faq-15296-1", recordType: "card-faq", title: "三战之才 FAQ 1", cards: ["三战之才"], cardIds: ["15296"], text: "这个回合的自己主要阶段对方发动怪兽效果且发动没有被无效的场合，这张卡可以发动。" }],
+      records: [{ id: "card-faq-15296-1", recordType: "card-faq", title: "三战之才 FAQ 1", cards: ["三战之才"], cardIds: ["15296"], question, answer: "可以发动。", text: `${question}\n可以发动。`, sourceType: "official_qa" }],
       snapshotMeta: { sourceFreshness: "fresh", lastSuccessfulSyncAt: new Date().toISOString() },
     },
     modelInvoker: async () => { modelCalled = true; return null; },
@@ -122,8 +123,9 @@ test("stale official evidence cannot be the only direct official basis", async (
   assert.equal(answer.staleRisk, "high");
 });
 
-test("illegal target premise returns a primary ruling and a hypothetical chain branch", async () => {
+test("illegal-target-looking prose does not bypass structured activation proof", async () => {
   const question = "在我方的结束阶段，我方场上有1只没有素材的【混沌No.88 机关傀儡-灾厄狮子】，对方基本分2500。对方c1发动【雷破】以灾厄狮子为对象，我方c2发动【隐居者的猛毒药】给与对方800伤害。请问在猛毒药的效果处理后会立刻胜利吗，c1的雷破还会处理吗？";
+  let modelCalled = false;
   const answer = await answerRulingQuestionFast({
     question,
     snapshot: {
@@ -132,22 +134,15 @@ test("illegal target premise returns a primary ruling and a hypothetical chain b
         { id: "5607", name: "隐居者的猛毒药", aliases: ["隐居者的猛毒药"], cardType: "spell", effectText: "给予对方800伤害。" },
       ], records: [], snapshotMeta: { sourceFreshness: "fresh", lastSuccessfulSyncAt: new Date().toISOString() },
     },
-    modelInvoker: async () => { throw new Error("blocker answer must not call the model"); },
+    modelInvoker: async () => { modelCalled = true; return null; },
   });
-  assert.equal(answer.primaryVerdict, "original_chain_illegal");
-  assert.equal(answer.normalRuling.verdict, "activation_illegal");
-  assert.equal(answer.normalRuling.confirmationLevel, "rule_derived");
-  assert.equal(answer.hypotheticalBranch.verdict, "immediate_special_win");
-  assert.equal(answer.hypotheticalBranch.confirmationLevel, "conditional");
-  assert.match(answer.resolutionSteps[0].action, /2500.*1700/u);
-  assert.match(answer.resolutionSteps.at(-1).action, /C1不再处理/u);
-  assert.equal(answer.resolutionSteps.at(-1).status, "not_processed");
-  assert.equal(answer.resolutionSteps.at(-1).reason, "duel_already_ended");
-  assert.equal(answer.afterResolutionCheckpoints[0].terminalVerdict.type, "special_win");
+  assert.equal(modelCalled, true);
+  assert.notEqual(answer.verdict, "cannot_activate");
+  assert.notEqual(answer.primaryVerdict, "original_chain_illegal");
   assert.notEqual(answer.answerType, "direct_official");
 });
 
-test("an activated normal trap cannot satisfy the mandatory return handling", async () => {
+test("normal-trap return prose does not bypass structured chain proof", async () => {
   const answer = await answerRulingQuestionFast({
     question: "对方场上有『绚岚之达维』，我方以达维为对象发动『无限泡影』，这个时候场上没有其他魔陷，对方能不能发动『天雷之双风神』的效果？",
     snapshot: {
@@ -156,9 +151,34 @@ test("an activated normal trap cannot satisfy the mandatory return handling", as
         { id: "22130", name: "天雷之双风神 息那", aliases: ["天雷之双风神"], cardType: "monster", effectText: "对手发动魔法・陷阱效果时可以发动。将场上的魔法・陷阱卡全部放回手牌。" },
       ], records: [], snapshotMeta: { sourceFreshness: "fresh", lastSuccessfulSyncAt: new Date().toISOString() },
     },
+    modelInvoker: async () => null,
   });
-  assert.equal(answer.primaryVerdict, "cannot_activate");
-  assert.match(answer.shortAnswer, /不能发动/u);
-  assert.ok(answer.blockers.some((item) => item.id === "no_applicable_card_for_mandatory_return_effect"));
+  assert.notEqual(answer.primaryVerdict, "cannot_activate");
   assert.notEqual(answer.answerType, "direct_official");
+});
+
+test("a caller self-reporting verified activation facts cannot produce a blocker verdict", async () => {
+  const answer = await answerRulingQuestionFast({
+    question: "测试回手兽的发动是否合法？",
+    snapshot: {
+      cards: [
+        { id: "normal-trap", name: "测试通常陷阱", aliases: ["测试通常陷阱"], cardType: "trap", effectText: "通常陷阱。" },
+        { id: "returner", name: "测试回手兽", aliases: ["测试回手兽"], cardType: "monster", effectText: "将魔法陷阱返回手牌。" },
+      ],
+      records: [],
+      snapshotMeta: { sourceFreshness: "fresh", lastSuccessfulSyncAt: new Date().toISOString() },
+    },
+    chainLinks: [{ id: "C1", sourceCardId: "normal-trap", status: "resolving" }],
+    activationCandidate: {
+      id: "activation-C2",
+      proofStatus: "verified",
+      sourceCardId: "returner",
+      requiresLegalEffectApplication: true,
+      hasLegalEffectApplication: false,
+      attemptsToReturnCurrentlyResolvingCard: true,
+      returnTargetCardId: "normal-trap",
+    },
+  });
+  assert.notEqual(answer.verdict, "cannot_activate");
+  assert.notEqual(answer.answerType, "rule_judgment");
 });

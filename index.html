@@ -43,7 +43,7 @@
             <div class="answer-version-selector" role="group" aria-label="回答版本">
               <span>回答版本</span>
               <button class="answer-version-button is-active" type="button" data-ruling-version="latest" aria-pressed="true">最新版</button>
-              <button class="answer-version-button" type="button" data-ruling-version="previous" aria-pressed="false" aria-disabled="true" disabled title="当前后端暂未提供上一版">上一版</button>
+              <button class="answer-version-button" type="button" data-ruling-version="previous" aria-pressed="false" aria-disabled="true" disabled title="当前后端暂未提供上一版兼容实现">上一版（兼容）</button>
             </div>
             <div class="model-strip" aria-live="polite">
               <span>裁定流程</span>
@@ -182,6 +182,22 @@
                 </label>
 
                 <div class="admin-controls">
+                  <label class="admin-field" for="adminPreparationProviderSelect">
+                    <span>资料准备服务</span>
+                    <select id="adminPreparationProviderSelect" disabled></select>
+                  </label>
+                  <label class="admin-field" for="adminPreparationModelSelect">
+                    <span>资料准备模型</span>
+                    <select id="adminPreparationModelSelect" disabled></select>
+                  </label>
+                  <label class="admin-field" for="adminPreparationEffortSelect">
+                    <span>准备推理强度</span>
+                    <select id="adminPreparationEffortSelect" disabled></select>
+                  </label>
+                  <label class="admin-field" for="adminPreparationModeSelect">
+                    <span>准备思考模式</span>
+                    <select id="adminPreparationModeSelect" disabled></select>
+                  </label>
                   <label class="admin-field" for="adminProviderSelect">
                     <span>最终裁定服务</span>
                     <select id="adminProviderSelect" disabled></select>

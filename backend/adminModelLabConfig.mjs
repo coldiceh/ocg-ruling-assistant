@@ -31,6 +31,15 @@ const DEEPSEEK_MODEL_IDS = Object.freeze([
   "deepseek-v4-pro",
 ]);
 
+const GLM_MODEL_IDS = Object.freeze([
+  "glm-5.2",
+]);
+
+const KIMI_MODEL_IDS = Object.freeze([
+  "kimi-k2.6",
+  "kimi-k3",
+]);
+
 const OPENAI_MODEL_DETAILS = Object.freeze({
   "gpt-5.6-sol": {
     displayName: "GPT-5.6 Sol",
@@ -61,6 +70,36 @@ const CAPABILITY_TABLE = {
   ])),
   "deepseek-v4-flash": deepSeekCapability("deepseek-v4-flash", "DeepSeek V4 Flash"),
   "deepseek-v4-pro": deepSeekCapability("deepseek-v4-pro", "DeepSeek V4 Pro"),
+  "glm-5.2": preparationCapability({
+    providerId: "glm",
+    modelId: "glm-5.2",
+    displayName: "GLM-5.2",
+    supportedReasoningEfforts: ["none", "minimal", "low", "medium", "high", "xhigh", "max"],
+    supportedReasoningModes: ["standard", "pro"],
+    defaultReasoningEffort: "max",
+    defaultReasoningMode: "pro",
+    thinkingControl: "optional",
+  }),
+  "kimi-k2.6": preparationCapability({
+    providerId: "kimi",
+    modelId: "kimi-k2.6",
+    displayName: "Kimi K2.6",
+    supportedReasoningEfforts: ["none"],
+    supportedReasoningModes: ["standard", "pro"],
+    defaultReasoningEffort: "none",
+    defaultReasoningMode: "standard",
+    thinkingControl: "optional",
+  }),
+  "kimi-k3": preparationCapability({
+    providerId: "kimi",
+    modelId: "kimi-k3",
+    displayName: "Kimi K3",
+    supportedReasoningEfforts: ["low", "high", "max"],
+    supportedReasoningModes: ["pro"],
+    defaultReasoningEffort: "max",
+    defaultReasoningMode: "pro",
+    thinkingControl: "always_on",
+  }),
 };
 
 export const ADMIN_MODEL_CAPABILITY_TABLE = deepFreeze(CAPABILITY_TABLE);
@@ -129,12 +168,14 @@ export function getAdminModelCapability(modelId) {
 
 export function resolveAdminModelSelection({
   model,
-  reasoningEffort = "low",
-  reasoningMode = "standard",
+  reasoningEffort,
+  reasoningMode,
   stage = ADMIN_MODEL_LAB_STAGES.FINAL_RULING,
   provider,
 } = {}) {
   const capability = getAdminModelCapability(model);
+  const selectedReasoningEffort = reasoningEffort ?? capability.defaultReasoningEffort;
+  const selectedReasoningMode = reasoningMode ?? capability.defaultReasoningMode;
   const requestedProvider = provider === undefined || provider === null
     ? capability.providerId
     : String(provider).trim().toLowerCase();
@@ -151,16 +192,27 @@ export function resolveAdminModelSelection({
       { code: "model_stage_not_allowed", field: "stage", value: stage },
     );
   }
-  if (!capability.supportedReasoningEfforts.includes(reasoningEffort)) {
+  if (!capability.supportedReasoningEfforts.includes(selectedReasoningEffort)) {
     throw new UnsupportedModelSelectionError(
-      `Unsupported reasoning effort for ${capability.modelId}: ${reasoningEffort}`,
-      { code: "reasoning_effort_not_supported", field: "reasoningEffort", value: reasoningEffort },
+      `Unsupported reasoning effort for ${capability.modelId}: ${selectedReasoningEffort}`,
+      { code: "reasoning_effort_not_supported", field: "reasoningEffort", value: selectedReasoningEffort },
     );
   }
-  if (!capability.supportedReasoningModes.includes(reasoningMode)) {
+  if (!capability.supportedReasoningModes.includes(selectedReasoningMode)) {
     throw new UnsupportedModelSelectionError(
-      `Unsupported reasoning mode for ${capability.modelId}: ${reasoningMode}`,
-      { code: "reasoning_mode_not_supported", field: "reasoningMode", value: reasoningMode },
+      `Unsupported reasoning mode for ${capability.modelId}: ${selectedReasoningMode}`,
+      { code: "reasoning_mode_not_supported", field: "reasoningMode", value: selectedReasoningMode },
+    );
+  }
+  if (
+    capability.allowedStages.includes(ADMIN_MODEL_LAB_STAGES.EVIDENCE_PREPARATION)
+    && capability.thinkingControl === "optional"
+    && selectedReasoningMode === "standard"
+    && selectedReasoningEffort !== "none"
+  ) {
+    throw new UnsupportedModelSelectionError(
+      `Reasoning effort ${selectedReasoningEffort} requires thinking mode for ${capability.modelId}`,
+      { code: "reasoning_effort_requires_thinking", field: "reasoningEffort", value: selectedReasoningEffort },
     );
   }
 
@@ -168,8 +220,8 @@ export function resolveAdminModelSelection({
     requestedModel: capability.modelId,
     model: capability.canonicalModelId,
     provider: capability.providerId,
-    reasoningEffort,
-    reasoningMode,
+    reasoningEffort: selectedReasoningEffort,
+    reasoningMode: selectedReasoningMode,
     stage,
     capability,
   });
@@ -180,9 +232,17 @@ export function getAdminModelProviderCapabilities({
 } = {}) {
   const openAiAvailable = readBoolean(env.ADMIN_OPENAI_ENABLED, false) && Boolean(env.OPENAI_API_KEY);
   const deepSeekAvailable = Boolean(env.DEEPSEEK_API_KEY);
+  const glmAvailable = Boolean(env.GLM_API_KEY);
+  const kimiAvailable = Boolean(env.KIMI_API_KEY);
+  const availability = {
+    openai: openAiAvailable,
+    deepseek: deepSeekAvailable,
+    glm: glmAvailable,
+    kimi: kimiAvailable,
+  };
   const models = Object.values(ADMIN_MODEL_CAPABILITY_TABLE).map((entry) => ({
     ...entry,
-    available: entry.providerId === "openai" ? openAiAvailable : deepSeekAvailable,
+    available: availability[entry.providerId] === true,
   }));
 
   return deepFreeze({
@@ -192,12 +252,26 @@ export function getAdminModelProviderCapabilities({
       {
         providerId: "openai",
         role: ADMIN_MODEL_LAB_STAGES.FINAL_RULING,
+        available: openAiAvailable,
         models: models.filter((entry) => entry.providerId === "openai"),
       },
       {
         providerId: "deepseek",
         role: ADMIN_MODEL_LAB_STAGES.EVIDENCE_PREPARATION,
+        available: deepSeekAvailable,
         models: models.filter((entry) => entry.providerId === "deepseek"),
+      },
+      {
+        providerId: "glm",
+        role: ADMIN_MODEL_LAB_STAGES.EVIDENCE_PREPARATION,
+        available: glmAvailable,
+        models: models.filter((entry) => entry.providerId === "glm"),
+      },
+      {
+        providerId: "kimi",
+        role: ADMIN_MODEL_LAB_STAGES.EVIDENCE_PREPARATION,
+        available: kimiAvailable,
+        models: models.filter((entry) => entry.providerId === "kimi"),
       },
     ],
   });
@@ -222,6 +296,8 @@ function openAiCapability(modelId, canonicalModelId, details) {
     allowedStages: [ADMIN_MODEL_LAB_STAGES.FINAL_RULING],
     supportedReasoningEfforts: [...OPENAI_REASONING_EFFORTS],
     supportedReasoningModes: [...OPENAI_REASONING_MODES],
+    defaultReasoningEffort: "low",
+    defaultReasoningMode: "standard",
     supportsStructuredOutputs: true,
     structuredOutputMode: "json_schema",
     supportsBackground: true,
@@ -238,15 +314,40 @@ function openAiCapability(modelId, canonicalModelId, details) {
 }
 
 function deepSeekCapability(modelId, displayName) {
-  return {
+  return preparationCapability({
     providerId: "deepseek",
+    modelId,
+    displayName,
+    supportedReasoningEfforts: ["none", "high", "max"],
+    supportedReasoningModes: ["standard", "pro"],
+    defaultReasoningEffort: "none",
+    defaultReasoningMode: "standard",
+    thinkingControl: "optional",
+  });
+}
+
+function preparationCapability({
+  providerId,
+  modelId,
+  displayName,
+  supportedReasoningEfforts,
+  supportedReasoningModes,
+  defaultReasoningEffort,
+  defaultReasoningMode,
+  thinkingControl,
+}) {
+  return {
+    providerId,
     modelId,
     canonicalModelId: modelId,
     displayName,
     alias: false,
     allowedStages: [ADMIN_MODEL_LAB_STAGES.EVIDENCE_PREPARATION],
-    supportedReasoningEfforts: ["none"],
-    supportedReasoningModes: ["standard"],
+    supportedReasoningEfforts: [...supportedReasoningEfforts],
+    supportedReasoningModes: [...supportedReasoningModes],
+    defaultReasoningEffort,
+    defaultReasoningMode,
+    thinkingControl,
     supportsStructuredOutputs: false,
     structuredOutputMode: "json_object",
     supportsBackground: false,
@@ -275,3 +376,5 @@ function deepFreeze(value) {
 
 export const ADMIN_OPENAI_MODEL_IDS = OPENAI_MODEL_IDS;
 export const ADMIN_DEEPSEEK_MODEL_IDS = DEEPSEEK_MODEL_IDS;
+export const ADMIN_GLM_MODEL_IDS = GLM_MODEL_IDS;
+export const ADMIN_KIMI_MODEL_IDS = KIMI_MODEL_IDS;

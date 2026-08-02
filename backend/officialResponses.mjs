@@ -43,7 +43,7 @@ export function normalizeOfficialResponse(record) {
   const traceable = sourceType === "official_response" && hasTraceableOfficialResponseSource(record);
   const provisional = sourceType === "official_response_screenshot";
   const maxStatus = normalizeOfficialResponseMaxStatus(record.maxStatus, sourceType, traceable);
-  const displayStatus = normalizeOfficialResponseDisplayStatus(record.displayStatus, sourceType, traceable);
+  const displayStatus = normalizeOfficialResponseDisplayStatus(record.displayStatus, sourceType, traceable, maxStatus);
   const officialVerdict = sourceType === "pending_adjustment" ? "unknown" : (record.verdict ?? "unknown");
   const officialText = cleanText(record.officialText || record.evidenceText || "");
   const explanation = cleanText(record.explanation || "");
@@ -106,13 +106,21 @@ export function isProvisionalOfficialResponse(record) {
 
 export function buildProvisionalAnswerFromOfficialResponse(record) {
   if (!isProvisionalOfficialResponse(record)) return null;
+  const traceableExplanation = cleanText(
+    record.explanation
+    || record.officialText
+    || record.evidenceText
+    || "",
+  );
+  const hasRecordedVerdict = record.officialVerdict
+    && record.officialVerdict !== "unknown";
   return {
     status: record.displayStatus || "provisional_official_response",
     sourceType: record.sourceType,
     evidenceIds: [record.id].filter(Boolean),
-    verdict: record.officialVerdict ?? "unknown",
-    explanation: record.explanation ||
-      "根据事务局回答截图，最可能处理为：可以发动并支付 cost，但处理不进行。该回答目前未在官方数据库中找到直接 Q&A，因此不作为 confirmed。",
+    verdict: hasRecordedVerdict ? record.officialVerdict : "unknown",
+    explanation: traceableExplanation
+      || "该截图记录没有提供可核对的具体处理文本，因此不能据此判定发动是否合法或效果如何处理。",
     displayStatus: record.displayStatus || "provisional_official_response",
     sourceNote: record.sourceNote || "",
     officialText: record.officialText || "",
@@ -171,15 +179,13 @@ export function officialResponseMatchesSubQuestion(record, subQuestion) {
 }
 
 export function hasTraceableOfficialResponseSource(record) {
-  return Boolean(
-    record?.sourceUrl ||
-    record?.sourceNote ||
-    record?.officialText ||
-    record?.evidenceText ||
-    record?.collectedAt ||
-    record?.updatedAt ||
-    record?.responseId
-  );
+  // The asserted response text cannot prove its own provenance.  A confirmed
+  // record needs both an external/curated locator and a collection timestamp;
+  // otherwise it remains an unverified reference even if the text looks
+  // official.
+  const hasLocator = Boolean(record?.sourceUrl || record?.sourceNote || record?.responseId);
+  const hasCollectionTime = Boolean(record?.collectedAt || record?.updatedAt);
+  return hasLocator && hasCollectionTime;
 }
 
 export function isStructuredOfficialVerdict(value) {
@@ -195,16 +201,21 @@ function normalizeOfficialResponseMaxStatus(value, sourceType, traceable) {
   const requested = String(value || "").trim();
   if (sourceType === "official_response_screenshot") return "unconfirmed";
   if (sourceType === "pending_adjustment" || sourceType === "official_response_unverified") return "unknown";
-  if (sourceType === "official_response" && traceable && requested !== "unknown" && requested !== "unconfirmed") return "confirmed";
+  if (sourceType === "official_response" && traceable && requested === "confirmed") return "confirmed";
   return "unknown";
 }
 
-function normalizeOfficialResponseDisplayStatus(value, sourceType, traceable) {
+function normalizeOfficialResponseDisplayStatus(value, sourceType, traceable, maxStatus) {
   const requested = String(value || "").trim();
+  if (sourceType === "official_response") {
+    if (!traceable || maxStatus !== "confirmed") return "unknown";
+    return requested === "official_database_confirmed"
+      ? "official_database_confirmed"
+      : "official_response_confirmed";
+  }
   if (OFFICIAL_RESPONSE_DISPLAY_STATUSES.has(requested)) return requested;
   if (sourceType === "official_response_screenshot") return "provisional_official_response";
   if (sourceType === "pending_adjustment") return "pending_adjustment";
-  if (sourceType === "official_response" && traceable) return "official_response_confirmed";
   return "unknown";
 }
 

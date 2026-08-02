@@ -153,7 +153,7 @@ test("ui_has_single_query_button", async () => {
   assert.match(app, /const selectedModelTier = "flash"/u);
   assert.match(app, /modelTier: selectedModelTier/u);
   assert.match(html, /data-ruling-version="latest"[^>]+aria-pressed="true"[^>]*>最新版</u);
-  assert.match(html, /data-ruling-version="previous"[^>]+aria-pressed="false"[^>]+disabled[^>]*>上一版</u);
+  assert.match(html, /data-ruling-version="previous"[^>]+aria-pressed="false"[^>]+disabled[^>]*>上一版（兼容）</u);
   assert.match(app, /let selectedRulingVersion = "latest"/u);
   assert.match(app, /rulingVersion: requestedRulingVersion/u);
   assert.match(app, /selectRulingVersion\(button\.dataset\.rulingVersion\)/u);
@@ -189,6 +189,28 @@ test("ui_has_single_query_button", async () => {
   assert.doesNotMatch(app, /FAST JUDGE/u);
   assert.doesNotMatch(app, /damage\.reasonCode|timing\.reasonCode/u);
   assert.doesNotMatch(app, /blocker\.id/u);
+});
+
+test("missing answer API fails closed instead of answering from local ruling notes", async () => {
+  const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
+  const analyzeSource = sourceBetween(
+    app,
+    "async function analyzeQuestion",
+    "async function requestBackendAnswer",
+  );
+  const unavailableRenderer = sourceBetween(
+    app,
+    "function renderBackendUnavailable",
+    "function renderCards",
+  );
+
+  assert.match(analyzeSource, /renderBackendUnavailable\(getDetectedCards\(text\)\);/u);
+  assert.match(unavailableRenderer, /裁定服务不可用/u);
+  assert.match(unavailableRenderer, /无法生成或验证这道题的裁定/u);
+  assert.match(unavailableRenderer, /本地卡片资料仅供查看，不会被当作裁定答案/u);
+  assert.doesNotMatch(app, /normalizeRulingRecords|scoreNote|findMatches|filterRelevantMatches|confidenceFor/u);
+  assert.doesNotMatch(app, /readJson\("data\/rulings\.json"\)|note\.conclusion/u);
+  assert.doesNotMatch(app, /status:\s*record\.status\s*\|\|\s*"confirmed"/u);
 });
 
 test("versioned backend answers require a matching server confirmation", async () => {
@@ -600,7 +622,7 @@ test("admin model lab labels incomplete aggregate costs as known portions", asyn
 
   const text = testNodeText(metricsNode);
   assert.match(text, /估算成本（仅已知部分）\n\$1\.250000/u);
-  assert.match(text, /美元成本缺失阶段\n证据准备（DeepSeek）/u);
+  assert.match(text, /美元成本缺失阶段\n证据准备模型/u);
   assert.match(text, /人民币估算（仅已知部分）\n¥8\.7500/u);
   assert.match(text, /人民币成本缺失阶段\n最终裁定（OpenAI）/u);
 });

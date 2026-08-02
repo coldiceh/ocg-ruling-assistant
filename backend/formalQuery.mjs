@@ -471,7 +471,7 @@ function inferSubQuestionType(value) {
 
 function inferAskedResult(sourceText, type) {
   const text = cleanString(sourceText);
-  if (type === "temporary_banish" && /(该卡通怪兽|卡通怪兽)/u.test(text)) return "can_banish_that_toon_monster";
+  if (type === "temporary_banish" && hasReferencedMonsterPhrase(text)) return "can_banish_referenced_monster";
   if (type === "send_to_gy" && /(战破|战斗破坏)/u.test(text)) return "will_still_be_sent_to_graveyard_by_battle";
   if (type === "activation_location") return "effect_activates_in_graveyard_or_field";
   if (type === "location_change" && /(已经送墓|是否已经|已经送去墓地)/u.test(text)) return "is_already_sent_to_graveyard_at_that_timing";
@@ -493,8 +493,13 @@ function inferAskedResult(sourceText, type) {
 function inferSubQuestionCard(sourceText, cards) {
   const matched = findQuestionCard(sourceText, cards);
   if (matched && matched !== "unknown") return matched;
-  if (/(该卡通怪兽|那只卡通怪兽|卡通怪兽)/u.test(sourceText)) return "referenced_toon_monster";
+  if (hasReferencedMonsterPhrase(sourceText)) return "referenced_monster";
   return "unknown";
+}
+
+function hasReferencedMonsterPhrase(value) {
+  const text = cleanString(value);
+  return /(?:(?:该|这|那|上述|前述)(?:只)?(?:[\p{L}\p{N}·・=－—-]{0,12})?怪兽|(?:^|[，。；！？：:\s])(?:[\p{L}\p{N}·・=－—-]{0,12})怪兽(?=.{0,18}(?:还会|会不会|是否|能否|可以|可否|能用|送墓|除外|发动|处理))|(?:その|この|あの)(?:[^、。！？\s]{0,12})?モンスター|(?:that|this|the\s+referenced)(?:\s+[\p{L}\p{N}-]+){0,4}\s+monster)/iu.test(text);
 }
 
 function findProvidedSubQuestion(provided, sourceText, index, expectedCount) {

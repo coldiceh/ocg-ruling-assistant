@@ -145,6 +145,70 @@ test("executeRun always starts OpenAI final ruling with the complete frozen snap
   );
 });
 
+test("preparation model selects a registry provider while OpenAI remains the final judge", async () => {
+  const fixture = makeFixture();
+  const preparationCalls = [];
+  const service = makeService(fixture, { GLM_API_KEY: "server-only-glm-key" }, {
+    preparationProviders: {
+      glm: {
+        providerId: "glm",
+        async prepareEvidence(request) {
+          preparationCalls.push(request);
+          return {
+            provider: "glm",
+            model: request.model,
+            canMakeFinalRuling: false,
+            canDecideEscalation: false,
+            result: {
+              cardNameCandidates: [
+                { name: "匿名卡A", originalText: "匿名卡A" },
+                { name: "匿名卡B", originalText: "匿名卡B" },
+              ],
+              ruleSearchQueries: [{ query: "匿名规则", reason: "mechanism" }],
+              unresolvedNotes: [],
+              conflicts: [],
+            },
+          };
+        },
+      },
+    },
+  });
+  const created = await service.createRun({
+    body: {
+      question: "匿名问题",
+      preparationModel: "glm-5.2",
+      preparationReasoningMode: "pro",
+      preparationReasoningEffort: "high",
+      provider: "glm",
+      baseUrl: "https://attacker.invalid/v1",
+      apiKey: "frontend-secret",
+    },
+  });
+  assert.equal(created.executionProfile.preparation.provider, "glm");
+  assert.equal(created.executionProfile.preparation.reasoningMode, "pro");
+  assert.equal(created.executionProfile.finalRuling.provider, "openai");
+  assert.equal(JSON.stringify(created).includes("frontend-secret"), false);
+  assert.equal(JSON.stringify(created).includes("attacker.invalid"), false);
+
+  const execution = await service.executeRun({ runId: created.runId });
+  assert.equal(preparationCalls.length, 1);
+  assert.equal(preparationCalls[0].model, "glm-5.2");
+  assert.equal(preparationCalls[0].reasoningEffort, "high");
+  assert.equal(execution.run.evidenceSnapshot.evidence.preparation.provider, "glm");
+  assert.equal(fixture.openAICreateCalls.length, 1);
+
+  await assert.rejects(
+    service.createRun({
+      body: {
+        question: "provider mismatch",
+        preparationProvider: "kimi",
+        preparationModel: "glm-5.2",
+      },
+    }),
+    (error) => error.code === "provider_model_mismatch",
+  );
+});
+
 test("getRun reconciles a completed background response, validates it, and persists metrics", async () => {
   const fixture = makeFixture();
   const service = makeService(fixture);
@@ -561,6 +625,50 @@ test("preparation and provider polling renew leases during long awaits", async (
   assert.equal(typeof fixture.retrieveSignals[0]?.addEventListener, "function");
 });
 
+test("cancelling evidence preparation aborts the active preparation request", async () => {
+  const fixture = makeFixture();
+  let preparationSignal = null;
+  const service = makeService(fixture, { GLM_API_KEY: "server-only-glm-key" }, {
+    preparationProviders: {
+      glm: {
+        providerId: "glm",
+        async prepareEvidence({ signal }) {
+          preparationSignal = signal;
+          return new Promise((resolve, reject) => {
+            const abort = () => reject(signal.reason || new Error("aborted"));
+            if (signal.aborted) abort();
+            else signal.addEventListener("abort", abort, { once: true });
+          });
+        },
+      },
+    },
+  });
+  const created = await service.createRun({
+    body: {
+      question: "匿名资料准备取消问题",
+      preparationModel: "glm-5.2",
+      preparationReasoningMode: "standard",
+      preparationReasoningEffort: "none",
+    },
+  });
+
+  const executionPromise = service.executeRun({ runId: created.runId });
+  await waitUntil(() => preparationSignal !== null);
+  const cancelled = await service.cancelRun({
+    runId: created.runId,
+    body: { reason: "取消资料准备", requestedBy: "tester" },
+  });
+  const execution = await executionPromise;
+
+  assert.equal(preparationSignal.aborted, true);
+  assert.ok([
+    ADMIN_RUN_STATUSES.CANCEL_REQUESTED,
+    ADMIN_RUN_STATUSES.CANCELLED,
+  ].includes(cancelled.status));
+  assert.equal(execution.run.status, ADMIN_RUN_STATUSES.CANCELLED);
+  assert.equal(fixture.openAICreateCalls.length, 0);
+});
+
 test("poll safely reconciles an expired SUBMITTING owner to outcome_unknown without resubmission", async () => {
   const fixture = makeFixture();
   const createGate = deferred();
@@ -698,6 +806,7 @@ test("an ambiguous provider submission is failed closed and never resubmitted", 
 
 function makeService(fixture, envOverrides = {}, {
   storage = createMemoryAdminRunStorage(),
+  preparationProviders = {},
 } = {}) {
   const runStore = createAdminRunStore({
     storage,
@@ -744,6 +853,7 @@ function makeService(fixture, envOverrides = {}, {
         throw new Error("must never be called");
       },
     },
+    preparationProviders,
     openAIProvider: {
       async create(request) {
         fixture.openAICreateCalls.push(request);

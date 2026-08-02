@@ -17,6 +17,7 @@ export async function getFormalEngineCapabilities({
   fetchImpl = globalThis.fetch,
   timeoutMs,
   expectedVersions,
+  signal,
 } = {}) {
   const transport = await requestOcgEngineJson({
     path: CAPABILITIES_PATH,
@@ -26,6 +27,7 @@ export async function getFormalEngineCapabilities({
     timeoutMs,
     defaultTimeoutMs: 5_000,
     fetchUnavailableError: "ENGINE_FORMAL_API_UNAVAILABLE",
+    signal,
   });
   if (transport.status !== "response") {
     return {
@@ -53,11 +55,14 @@ export async function getFormalEngineCapabilities({
 
 export async function requestFormalScenarioAnalysis({
   formalScenario,
+  negotiatedCapabilities,
   env = globalThis.process?.env || {},
   fetchImpl = globalThis.fetch,
   timeoutMs,
   expectedVersions,
   proofVerifier,
+  proofVerifierTimeoutMs,
+  signal,
 } = {}) {
   if (formalScenario === undefined || formalScenario === null) {
     return { requested: false, status: "not_requested", formalResult: null, capabilities: null };
@@ -69,7 +74,9 @@ export async function requestFormalScenarioAnalysis({
     return unknownResponse(formalScenario, normalizedError(error), null);
   }
 
-  const negotiation = await getFormalEngineCapabilities({ env, fetchImpl, timeoutMs, expectedVersions });
+  const negotiation = negotiatedCapabilities
+    ? validateNegotiatedCapabilities(negotiatedCapabilities, { env, expectedVersions })
+    : await getFormalEngineCapabilities({ env, fetchImpl, timeoutMs, expectedVersions, signal });
   if (negotiation.status !== "ready") return unknownResponse(scenario, negotiation.error, null);
   try {
     assertRequiredCapabilities(negotiation.capabilities, scenario.requiredCapabilities);
@@ -93,6 +100,7 @@ export async function requestFormalScenarioAnalysis({
     timeoutMs,
     defaultTimeoutMs: 20_000,
     fetchUnavailableError: "ENGINE_FORMAL_API_UNAVAILABLE",
+    signal,
   });
   if (transport.status !== "response") {
     return unknownResponse(scenario, unavailableError(transport.error, "formal analysis endpoint is unavailable"), negotiation.capabilities);
@@ -101,10 +109,12 @@ export async function requestFormalScenarioAnalysis({
     return unknownResponse(scenario, endpointError(transport, "formal analysis endpoint rejected the request"), negotiation.capabilities);
   }
   try {
-    const formalResult = validateFormalResult(transport.payload.result, {
+    const formalResult = await validateFormalResult(structuredClone(transport.payload.result), {
       scenario,
       capabilities: negotiation.capabilities,
       proofVerifier,
+      proofVerifierSignal: signal,
+      proofVerifierTimeoutMs: resolveProofVerifierTimeoutMs(proofVerifierTimeoutMs, env),
     });
     return {
       requested: true,
@@ -115,6 +125,25 @@ export async function requestFormalScenarioAnalysis({
     };
   } catch (error) {
     return unknownResponse(scenario, normalizedError(error), negotiation.capabilities);
+  }
+}
+
+function resolveProofVerifierTimeoutMs(value, env) {
+  const requested = Number(value ?? env.OCG_FORMAL_PROOF_VERIFIER_TIMEOUT_MS ?? 5_000);
+  return Number.isInteger(requested) && requested > 0 ? requested : 5_000;
+}
+
+function validateNegotiatedCapabilities(capabilities, { env, expectedVersions }) {
+  try {
+    return {
+      status: "ready",
+      capabilities: validateFormalCapabilities(capabilities, {
+        expectedVersions: expectedVersions || expectedVersionsFromEnv(env),
+      }),
+      error: null,
+    };
+  } catch (error) {
+    return { status: "unknown", capabilities: null, error: normalizedError(error) };
   }
 }
 

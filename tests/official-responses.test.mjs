@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { answerEachSubQuestion, mergeModelAnswer, retrieveEvidenceByFormalQuery } from "../backend/engine.mjs";
-import { normalizeOfficialResponses } from "../backend/officialResponses.mjs";
+import {
+  buildProvisionalAnswerFromOfficialResponse,
+  isConfirmableOfficialResponse,
+  normalizeOfficialResponses,
+} from "../backend/officialResponses.mjs";
 import { revalidateOfficialResponses } from "../scripts/revalidate-official-responses.mjs";
 
 const cards = [
@@ -50,6 +54,34 @@ test("traceable official_response can confirm only through direct evidence and e
   assert.equal(answer.verdict.activation, "can_activate");
   assert.equal(answer.verdict.cost, "can_pay_cost");
   assert.equal(answer.verdict.resolution, "does_not_perform_fusion_material_processing");
+});
+
+test("official response text cannot prove its own provenance", () => {
+  const records = normalizeOfficialResponses([{
+    ...traceableOfficialResponse(),
+    id: "self-attested-official-text",
+    sourceUrl: "",
+    sourceNote: "",
+    responseId: "",
+    updatedAt: "",
+    collectedAt: "",
+  }]);
+  assert.equal(records[0].traceable, false);
+  assert.equal(records[0].maxStatus, "unknown");
+  assert.equal(records[0].displayStatus, "unknown");
+  assert.equal(isConfirmableOfficialResponse(records[0]), false);
+});
+
+test("traceable provenance without an explicit confirmed review stays unknown", () => {
+  const records = normalizeOfficialResponses([{
+    ...traceableOfficialResponse(),
+    id: "unreviewed-traceable-response",
+    maxStatus: "",
+  }]);
+  assert.equal(records[0].traceable, true);
+  assert.equal(records[0].maxStatus, "unknown");
+  assert.equal(records[0].displayStatus, "unknown");
+  assert.equal(isConfirmableOfficialResponse(records[0]), false);
 });
 
 test("official_response_unverified cannot confirm", () => {
@@ -151,6 +183,19 @@ test("official_response_screenshot hit generates provisionalAnswer but cannot co
   assert.equal(answer.provisionalAnswer.verdict.cost, "can_pay_cost");
   assert.equal(answer.provisionalAnswer.verdict.resolution, "does_not_perform_fusion_material_processing");
   assert.equal(answer.provisionalAnswer.watchOfficialDb, true);
+});
+
+test("a screenshot record with no ruling text never receives a fabricated default answer", () => {
+  const [record] = normalizeOfficialResponses([{
+    id: "screenshot-without-ruling-text",
+    sourceType: "official_response_screenshot",
+    title: "匿名截图记录",
+    screenshotPath: "/fixtures/anonymous.png",
+  }]);
+  const provisional = buildProvisionalAnswerFromOfficialResponse(record);
+  assert.equal(provisional.verdict, "unknown");
+  assert.match(provisional.explanation, /不能据此判定/u);
+  assert.doesNotMatch(provisional.explanation, /可以发动|支付\s*cost|处理不进行/iu);
 });
 
 test("official_qa direct evidence takes priority over provisional screenshot", () => {

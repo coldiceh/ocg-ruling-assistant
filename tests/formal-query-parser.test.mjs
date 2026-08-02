@@ -44,10 +44,10 @@ test("golden case keeps context separate and produces four complete subQuestions
 
   assert.ok(["temporary_banish", "resolution_handling"].includes(query.subQuestions[0].type));
   assert.equal(query.subQuestions[0].card, "完美世界 卡通世界");
-  assert.equal(query.subQuestions[0].askedResult, "can_banish_that_toon_monster");
+  assert.equal(query.subQuestions[0].askedResult, "can_banish_referenced_monster");
 
   assert.ok(["send_to_gy", "location_change"].includes(query.subQuestions[1].type));
-  assert.equal(query.subQuestions[1].card, "referenced_toon_monster");
+  assert.equal(query.subQuestions[1].card, "referenced_monster");
   assert.equal(query.subQuestions[1].askedResult, "will_still_be_sent_to_graveyard_by_battle");
 
   assert.ok(["activation_location", "timing"].includes(query.subQuestions[2].type));
@@ -62,6 +62,18 @@ test("golden case keeps context separate and produces four complete subQuestions
   const evidence = retrieveEvidenceByFormalQuery(query, cardCandidates, { records: [] });
   const answers = answerEachSubQuestion(query, evidence, { records: [] }, validateFormalRulingQuery(query));
   assert.ok(answers.every((answer) => answer.status !== "parse_failed"));
+});
+
+test("anonymous monster references are mechanism-neutral rather than Toon-specific", async () => {
+  const question = `被青眼暴君龙战破的龙族怪兽在伤害步骤结束阶段：
+能用完美世界-卡通世界的效果除外该龙族怪兽吗？
+该龙族怪兽还会被战破送墓吗？`;
+  const query = await parseFormalRulingQuery(question, cardCandidates, {});
+
+  assert.equal(query.subQuestions.length, 2);
+  assert.equal(query.subQuestions[0].askedResult, "can_banish_referenced_monster");
+  assert.equal(query.subQuestions[1].card, "referenced_monster");
+  assert.equal(query.subQuestions[1].askedResult, "will_still_be_sent_to_graveyard_by_battle");
 });
 
 test("normalization uses unknown defaults instead of omitting required subQuestion fields", async () => {

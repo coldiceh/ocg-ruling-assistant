@@ -1,6 +1,8 @@
 import { requestOcgEngineSimulation } from "./ocgEngineClient.mjs";
 import { autoEngineSimulationEnabled, buildBestEffortEngineScenario } from "./ocgScenarioPlanner.mjs";
 import { applyFormalAnswerGate, runFormalEngineShadow } from "./formalEngineShadow.mjs";
+import { createDefaultFormalScenarioDraftInvoker } from "./formalScenarioDraftModel.mjs";
+import { normalizeCardText } from "./cardTextNormalizer.mjs";
 import { extractRagCards, normalizeCardKey } from "./ragCardExtractor.mjs";
 import { evidenceBucketsToList, loadRagData, retrieveRagEvidence } from "./ragEvidenceRetriever.mjs";
 import {
@@ -36,9 +38,16 @@ export async function answerRagRulingQuestion({
   engineFetchImpl,
   formalScenarioDraft,
   formalScenarioDraftInvoker,
+  formalScenarioDraftVerifier,
+  formalExpectedScenarioDraftVerifierId,
+  formalExpectedScenarioDraftVerifierVersion,
   formalProofVerifier,
   formalExpectedVersions,
   formalFetchImpl,
+  formalScenarioDraftTimeoutMs,
+  thinkingMode,
+  reasoningEffort,
+  signal,
 } = {}) {
   const pipelineStartedAt = Date.now();
   const timingsMs = {};
@@ -67,12 +76,18 @@ export async function answerRagRulingQuestion({
       env,
       modelInvoker: cardModelInvoker,
       fetchImpl,
+      dryRun,
+      now,
+      signal,
     }),
     callRuleQueryExtractionModel({
       userQuery: query,
       env,
       modelInvoker: ruleModelInvoker,
       fetchImpl,
+      dryRun,
+      now,
+      signal,
     }),
   ]);
   const cardResolution = (cardNameModel.candidates || []).length
@@ -126,15 +141,29 @@ export async function answerRagRulingQuestion({
     env,
     fetchImpl: engineFetchImpl || fetchImpl || globalThis.fetch,
   });
+  const effectiveFormalScenarioDraftInvoker = formalScenarioDraft || formalScenarioDraftInvoker
+    ? formalScenarioDraftInvoker
+    : createDefaultFormalScenarioDraftInvoker({
+        env,
+        fetchImpl: fetchImpl || globalThis.fetch,
+        signal,
+      });
   const formalShadowPromise = runFormalEngineShadow({
     userQuery: query,
     resolvedCards: effectiveCardResolution.resolvedCards || [],
+    cardResolution: effectiveCardResolution,
     scenarioDraft: formalScenarioDraft,
-    scenarioDraftInvoker: formalScenarioDraftInvoker,
+    scenarioDraftInvoker: effectiveFormalScenarioDraftInvoker,
+    scenarioDraftVerifier: formalScenarioDraftVerifier,
+    expectedScenarioDraftVerifierId: formalExpectedScenarioDraftVerifierId,
+    expectedScenarioDraftVerifierVersion: formalExpectedScenarioDraftVerifierVersion,
     env,
     fetchImpl: formalFetchImpl || engineFetchImpl || fetchImpl || globalThis.fetch,
     proofVerifier: formalProofVerifier,
     expectedVersions: formalExpectedVersions,
+    scenarioDraftTimeoutMs: formalScenarioDraftTimeoutMs,
+    dryRun,
+    signal,
   });
   const reasoningCardTexts = attachUserQueryToCardTexts([
     ...(retrievedEvidence.cardTexts || []),
@@ -172,6 +201,8 @@ export async function answerRagRulingQuestion({
         env,
         modelInvoker: rulebookModelInvoker,
         fetchImpl,
+        dryRun,
+        signal,
         now,
       });
   timingsMs.rulebookGrounding = elapsedMs(rulebookStartedAt);
@@ -186,6 +217,11 @@ export async function answerRagRulingQuestion({
   const evidence = {
     ...groundedEvidence,
     semanticStateTransition,
+    cardSemanticFacts: buildCardSemanticFacts([
+      ...(effectiveCardResolution.resolvedCards || []),
+      ...semanticCardsFromEvidence(groundedEvidence.cardTexts || []),
+      ...semanticCardsFromEvidence(groundedEvidence.userProvidedCardTexts || []),
+    ]),
     formalEngineProofs: formalShadow.evidence || [],
     formalEngineStatus: summarizeFormalShadow(formalShadow),
   };
@@ -211,6 +247,9 @@ export async function answerRagRulingQuestion({
     dryRun,
     fetchImpl,
     now,
+    thinkingMode,
+    reasoningEffort,
+    signal,
   });
   timingsMs.finalModel = elapsedMs(finalModelStartedAt);
   const modelAnswer = normalizeRagAnswer(modelResult.answer, { evidence, cardResolution: effectiveCardResolution, modelWarnings: modelResult.warnings || [] });
@@ -281,11 +320,13 @@ export async function answerRagRulingQuestion({
       cardNameModelUsed: cardNameModel.modelUsed,
       cardNameProviderUsed: cardNameModel.providerUsed,
       cardNameModelDryRun: cardNameModel.dryRun,
+      cardNameModelCostCny: cardNameModel.estimatedCostCny || 0,
       cardNameWarnings: cardNameModel.warnings || [],
       modelRuleSearchQueries: ruleQueryModel.queries || [],
       ruleQueryModelUsed: ruleQueryModel.modelUsed,
       ruleQueryProviderUsed: ruleQueryModel.providerUsed,
       ruleQueryModelDryRun: ruleQueryModel.dryRun,
+      ruleQueryModelCostCny: ruleQueryModel.estimatedCostCny || 0,
       ruleQueryWarnings: ruleQueryModel.warnings || [],
       rulebookGroundingModelUsed: rulebookGrounding.modelUsed,
       rulebookGroundingProviderUsed: rulebookGrounding.providerUsed,
@@ -303,8 +344,14 @@ export async function answerRagRulingQuestion({
       modelName: modelResult.modelName,
       dryRun: modelResult.dryRun,
       tokenUsage: modelResult.tokenUsage || {},
-      estimatedCostCny: (modelResult.estimatedCostCny || 0) + (rulebookGrounding.estimatedCostCny || 0),
+      estimatedCostCny:
+        (cardNameModel.estimatedCostCny || 0)
+        + (ruleQueryModel.estimatedCostCny || 0)
+        + (rulebookGrounding.estimatedCostCny || 0)
+        + (modelResult.estimatedCostCny || 0),
       budgetStatus: modelResult.budgetStatus || null,
+      generationConfig: modelResult.generationConfig || null,
+      generationAttempts: modelResult.generationAttempts || [],
       promptChars: promptBundle.promptChars,
       promptTruncated: promptBundle.promptTruncated,
       semanticStateTransition,
@@ -433,8 +480,6 @@ function elapsedMs(startedAt) {
 function reconcileCardResolution(cardResolution = {}, evidence = {}) {
   const resolvedCards = dedupeCards([
     ...(evidence.retrievedCards || []),
-    ...(evidence.baigeResolvedCards || []),
-    ...(evidence.fuzzyResolvedCards || []),
     ...(cardResolution.resolvedCards || []),
   ]);
   const remainingUnresolved = Array.isArray(evidence.remainingUnresolvedMentions)
@@ -544,16 +589,12 @@ export function normalizeRagAnswer(answer = {}, { evidence = {}, cardResolution 
     answerLevel = hasCardTextGrounding ? "rule_analysis" : "low_confidence_analysis";
     riskFlags.add("official_confirmed_requires_direct_evidence");
   }
-  if (answerLevel === "needs_more_info" && hasCardTextGrounding) {
-    answerLevel = "rule_analysis";
-    riskFlags.add("needs_more_info_upgraded_to_rule_analysis_with_card_text");
-  } else if (answerLevel === "needs_more_info" && hasAnyEvidence) {
-    answerLevel = "low_confidence_analysis";
-    riskFlags.add("needs_more_info_downgraded_to_low_confidence_with_evidence");
-  } else if (answerLevel === "low_confidence_analysis" && hasCardTextGrounding) {
-    answerLevel = "rule_analysis";
-    riskFlags.add("low_confidence_upgraded_to_rule_analysis_with_card_text");
-  }
+  // Evidence availability cannot silently strengthen the model's own
+  // uncertainty assessment.  Card text or a related record may be useful
+  // context, but it is not itself a proof that the missing semantic step has
+  // been covered.  Keep NEEDS_MORE_INFO and LOW_CONFIDENCE exactly as issued;
+  // only an exact official binding or a verified formal claim may raise the
+  // authority of the answer elsewhere in the pipeline.
   if (!hasAnyEvidence && answerLevel !== "budget_limited") {
     answerLevel = "needs_more_info";
     riskFlags.add("no_retrieved_evidence");
@@ -677,6 +718,14 @@ function summarizeFormalShadow(formalShadow) {
       schemaVersion: result.schemaVersion,
       proofVerifierVersion: result.proofVerifierVersion,
     } : capabilities?.versions || null,
+    draftVerification: formalShadow.draftVerification ? {
+      valid: formalShadow.draftVerification.valid === true,
+      code: formalShadow.draftVerification.code || null,
+      verifierId: formalShadow.draftVerification.verifierId || null,
+      verifierVersion: formalShadow.draftVerification.verifierVersion || null,
+      expectedVerifierId: formalShadow.draftVerification.expectedVerifierId || null,
+      expectedVerifierVersion: formalShadow.draftVerification.expectedVerifierVersion || null,
+    } : null,
     error: publicFormalError(formalShadow.error || formalShadow.analysis?.error, formalShadow.stage),
   };
 }
@@ -706,6 +755,77 @@ function attachUserQueryToCardTexts(cardTexts = [], userQuery = "") {
     ...item,
     _userQuery: String(userQuery || ""),
   }));
+}
+
+export function buildCardSemanticFacts(cards = []) {
+  const factsByKey = new Map();
+  for (const card of cards || []) {
+    const effectText = String(card?.effectText || card?.text || "").trim();
+    if (!effectText) continue;
+    let normalized;
+    try {
+      normalized = normalizeCardText({
+        id: card.id || card.cardId || card.name,
+        name: card.name || card.cnName || card.jaName || card.enName || "",
+        cardType: card.cardType || card.type || "",
+        effectText,
+      });
+    } catch {
+      continue;
+    }
+    for (const [effectIndex, effect] of (normalized.effects || []).entries()) {
+      for (const [stepIndex, step] of (effect.resolution || []).entries()) {
+        const operation = step?.operation;
+        if (!operation || operation.type === "unknown") continue;
+        const fact = {
+          cardId: String(card.cardId || card.id || ""),
+          cardName: String(card.name || card.cnName || card.title || ""),
+          effectIndex,
+          stepIndex,
+          connector: step.connector || "INDEPENDENT",
+          operation,
+          sourceText: String(operation.text || effect.rawText || effectText).slice(0, 1200),
+          sourceEvidenceIds: uniqueStrings(card.sourceEvidenceIds || []),
+          authority: "normalizer_candidate_only",
+        };
+        const key = JSON.stringify([
+          normalizeCardKey(fact.cardName) || fact.cardId,
+          normalizeCardKey(fact.sourceText),
+          fact.operation,
+        ]);
+        const existing = factsByKey.get(key);
+        if (existing) {
+          existing.sourceEvidenceIds = uniqueStrings([
+            ...existing.sourceEvidenceIds,
+            ...fact.sourceEvidenceIds,
+          ]);
+        } else {
+          factsByKey.set(key, fact);
+        }
+      }
+    }
+  }
+  return [...factsByKey.values()].slice(0, 24);
+}
+
+function semanticCardsFromEvidence(items = []) {
+  return (items || []).map((item) => {
+    const evidenceId = String(item?.id || "").trim();
+    const directCardId = String(item?.cardId || item?.cardIds?.[0] || "").trim();
+    const cardId = directCardId || evidenceId.match(/^card-text-(.+)$/u)?.[1] || "";
+    return {
+      id: cardId,
+      cardId,
+      name: item?.name || item?.cards?.[0] || item?.title || "",
+      cardType: item?.cardType || item?.type || "",
+      effectText: item?.text || item?.effectText || "",
+      sourceEvidenceIds: evidenceId ? [evidenceId] : [],
+    };
+  }).filter((card) => String(card.effectText || "").trim());
+}
+
+function uniqueStrings(values = []) {
+  return [...new Set((values || []).map((value) => String(value || "").trim()).filter(Boolean))];
 }
 
 function dedupeCards(cards) {

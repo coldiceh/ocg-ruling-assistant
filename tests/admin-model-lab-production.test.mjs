@@ -10,7 +10,11 @@ import {
   createAdminRunStore,
   createMemoryAdminRunStorage,
 } from "../backend/adminRunStore.mjs";
-import { callDeepSeekJsonTask } from "../backend/ragModelClient.mjs";
+import {
+  callDeepSeekJsonTask,
+  getRagBudgetStatus,
+  resetRagBudget,
+} from "../backend/ragModelClient.mjs";
 
 const ENABLED_ENV = Object.freeze({
   ADMIN_MODEL_LAB_ENABLED: "true",
@@ -303,6 +307,28 @@ test("explicit local development composition works without Redis but is forbidde
   );
 });
 
+test("composition instantiates optional GLM and Kimi preparation providers from server env only", async () => {
+  const service = createAdminModelLabDevelopmentService({
+    env: {
+      ...ENABLED_ENV,
+      NODE_ENV: "development",
+      GLM_API_KEY: "server-glm-secret",
+      KIMI_API_KEY: "server-kimi-secret",
+    },
+    fetchImpl: async () => {
+      throw new Error("network must not run while reading capabilities");
+    },
+    deepSeekProvider: {},
+    openAIProvider: {},
+  });
+  const capabilities = await service.capabilities();
+  assert.deepEqual([...capabilities.architecture.preparationProviders].sort(), ["glm", "kimi"]);
+  assert.equal(capabilities.providers.providers.find((item) => item.providerId === "glm").available, true);
+  assert.equal(capabilities.providers.providers.find((item) => item.providerId === "kimi").available, true);
+  assert.equal(JSON.stringify(capabilities).includes("server-glm-secret"), false);
+  assert.equal(JSON.stringify(capabilities).includes("server-kimi-secret"), false);
+});
+
 test("DeepSeek bridge accepts evidence preparation only and keeps server-owned transport", async () => {
   const calls = [];
   const serverEnv = {
@@ -319,6 +345,7 @@ test("DeepSeek bridge accepts evidence preparation only and keeps server-owned t
       return { cardNameCandidates: [{ name: "测试卡" }] };
     },
   });
+  const controller = new AbortController();
 
   const result = await invoke({
     provider: "deepseek",
@@ -327,10 +354,16 @@ test("DeepSeek bridge accepts evidence preparation only and keeps server-owned t
     canDecideEscalation: false,
     prompt: "只整理证据",
     modelName: "deepseek-v4-flash",
+    thinkingMode: "enabled",
+    reasoningEffort: "max",
+    signal: controller.signal,
   });
   assert.equal(result.cardNameCandidates[0].name, "测试卡");
   assert.equal(calls[0].env, serverEnv);
   assert.equal(calls[0].fetchImpl, serverFetch);
+  assert.equal(calls[0].signal, controller.signal);
+  assert.equal(calls[0].thinkingMode, "enabled");
+  assert.equal(calls[0].reasoningEffort, "max");
 
   await assert.rejects(
     invoke({
@@ -417,6 +450,62 @@ test("DeepSeek JSON task returns strict structured hints and metered usage", asy
     }),
     (error) => error.code === "deepseek_not_configured",
   );
+});
+
+test("DeepSeek response-format fallback keeps the caller AbortSignal", async () => {
+  const controller = new AbortController();
+  const calls = [];
+  const result = await callDeepSeekJsonTask({
+    prompt: "只返回 JSON",
+    signal: controller.signal,
+    env: {
+      DEEPSEEK_API_KEY: "server-secret",
+      DEEPSEEK_BASE_URL: "https://deepseek.example/v1",
+    },
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options });
+      if (calls.length === 1) return jsonResponse({ error: { message: "response_format unsupported" } }, 400);
+      return jsonResponse({
+        choices: [{ finish_reason: "stop", message: { content: JSON.stringify({ ok: true }) } }],
+        usage: {},
+      });
+    },
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(calls.length, 2);
+  assert.equal(calls[0].options.signal, controller.signal);
+  assert.equal(calls[1].options.signal, controller.signal);
+  assert.equal(Object.hasOwn(JSON.parse(calls[1].options.body), "response_format"), false);
+});
+
+test("DeepSeek JSON task records paid usage before rejecting invalid JSON", async () => {
+  const now = new Date("2026-07-31T00:00:00.000Z");
+  const env = {
+    DEEPSEEK_API_KEY: "server-secret",
+    DEEPSEEK_BASE_URL: "https://deepseek.example/v1",
+    API_DAILY_BUDGET_CNY: "10",
+    API_BUDGET_TIMEZONE: "UTC",
+    DEEPSEEK_INPUT_CNY_PER_MTOK: "1",
+    DEEPSEEK_OUTPUT_CNY_PER_MTOK: "2",
+  };
+  await resetRagBudget({ env, now });
+
+  await assert.rejects(
+    callDeepSeekJsonTask({
+      prompt: "返回严格 JSON",
+      env,
+      now,
+      trackPublicBudget: true,
+      fetchImpl: async () => jsonResponse({
+        choices: [{ finish_reason: "stop", message: { content: "not-json" } }],
+        usage: { prompt_tokens: 1_000, completion_tokens: 500 },
+      }),
+    }),
+  );
+
+  const status = await getRagBudgetStatus({ env, now });
+  assert.equal(status.spentTodayCny, 0.002);
 });
 
 function fakeBaseService({ persistent = true } = {}) {

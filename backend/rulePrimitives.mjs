@@ -180,8 +180,6 @@ function deriveDamageStepTiming(input) {
   return {
     concepts: unique(["damage_step_timing", "damage_step_start", "before_damage_calculation", ...(steps.some((item) => item.step === "face_down_flipped_before_damage_calculation") ? ["face_down_flipped_before_damage_calculation"] : [])]),
     steps,
-    verdictHint: related.length ? "伤害步骤开始时的效果先于里侧怪兽翻开处理" : "按具体伤害步骤窗口判断",
-    shortAnswer: related.length ? "伤害步骤开始时的效果先处理；里侧怪兽到伤害计算前才翻开。" : "先区分伤害步骤的具体窗口，再判断效果与战斗处理。",
   };
 }
 
@@ -219,10 +217,6 @@ function deriveBattlePosition(input) {
   return {
     concepts: unique(["battle_position_and_attack_target", "battle_position_change", "attack_target_restriction", ...(defenseAttackers.length ? ["defense_position_attack"] : [])]),
     steps,
-    verdictHint: defenseAttackers.length ? "普通攻击者转守后停止战斗；可守备表示攻击者继续战斗" : "攻击者转为守备表示后通常停止该次战斗",
-    shortAnswer: defenseAttackers.length
-      ? "普通攻击怪兽转为守备表示后停止战斗；明确允许守备表示攻击的怪兽仍可继续。"
-      : "攻击怪兽若在伤害计算前失去可攻击状态，该次战斗通常停止。",
   };
 }
 
@@ -234,10 +228,8 @@ function deriveEffectImmunity(input) {
     steps: [
       step("same_effect_resolution", "特殊召唤与后续素材叠放若写在同一效果处理中，应作为同一次正在进行的效果处理连续判断。", [], input),
       step("effect_already_processing", "怪兽特殊召唤后开始适用的不受影响状态，不会把已经进入处理流程的同一效果追溯为未处理。", immuneCards, input),
-      step("material_attach_during_resolution", "因此，在没有相反特例裁定的前提下，后续将指定卡叠放为超量素材的处理应继续进行。", immuneCards, input),
+      step("material_attach_during_resolution", "核对后续素材处理是否仍属于同一效果、是否存在不适用或不能处理的规则；不能只凭题面关键词直接签发结论。", immuneCards, input),
     ],
-    verdictHint: "material_attaches_during_same_resolution",
-    shortAnswer: "按同一效果处理的连续性推导，素材叠放应正常进行；新适用的抗性不倒过来中断已在处理的效果。",
   };
 }
 
@@ -256,8 +248,6 @@ function deriveAtkDefModification(input) {
   return {
     concepts: unique(["atk_def_modification", "continuous_modifier_reapply", "set_attack_value", "atk_value_lock", ...(steps.some((item) => item.step === "lp_change_before_atk_setting") ? ["lp_change_before_atk_setting"] : [])]),
     steps,
-    verdictHint: "set_attack_value_remains_after_prior_modifier_removed",
-    shortAnswer: "先更新持续修正，再执行发动型数值设定；之后移除先前修正通常不改写已设定结果。具体数值必须由卡片文本与已验证的状态计算，不从用户在问题中声称的答案反推。",
   };
 }
 
@@ -269,8 +259,6 @@ function deriveSimultaneousProcessing(input) {
       step("simultaneous_processing_order", "多个部分属于同一效果处理，不代表处理中间不存在先后；每完成一个处理动作，相关持续效果会按新的游戏状态重新适用。", [], input),
       step("state_update_within_resolution", "因此应按卡片文本顺序记录 LP、区域、表示形式或数值变化，再把更新后的状态交给后续处理。", [], input),
     ],
-    verdictHint: "same_effect_has_ordered_state_updates",
-    shortAnswer: "同一效果中的处理可以在结算完成时视为一体，但内部仍按文本顺序更新游戏状态。",
   };
 }
 
@@ -282,8 +270,6 @@ function deriveCopyEffectScope(input) {
       step("activation_procedure", "“这张卡也能……来发动”、发动条件、支付 cost 与发动位置属于发动手续或额外发动方式，应与效果处理内容分开判断。", [], input),
       step("effect_text_scope", "只有复制效果的原文或官方类例明确把这些手续纳入复制范围时，才能一并适用。", [], input),
     ],
-    verdictHint: "copied_effect_does_not_automatically_include_activation_procedure",
-    shortAnswer: "按文本结构推导，复制效果处理内容不当然复制额外发动方式或效果外文本。",
   };
 }
 
@@ -291,12 +277,10 @@ function deriveRevealSameCard(input) {
   return {
     concepts: ["reveal_same_card_procedure", "reveal_same_card", "once_per_turn_scope", "chain_timing"],
     steps: [
-      step("reveal_is_activation_procedure", "展示手卡若是发动手续，应在每次发动时分别检查该卡此时是否仍在手卡、是否仍可被展示。", [], input),
-      step("same_physical_card_reuse", "先前已经展示不等于该卡持续处于公开或被消耗；若它仍在手卡，是否可再次展示取决于文本是否限制同名卡、同一张卡或每回合次数。", [], input),
-      step("same_chain_timing", "同一连锁中还要确认 C1 展示后是否有处理改变该卡状态，以及 C3 的卡是否具备当回合发动资格。", [], input),
+      step("reveal_is_activation_procedure", "展示手卡若是发动手续，应在每次发动时分别检查该卡此时是否仍在手卡、是否处于能够重新执行“给对方观看”这一手续的非公开状态。", [], input),
+      step("same_physical_card_reuse", "区分短暂展示已经结束、卡片仍持续公开、以及整副手牌被公开三种状态；不能仅凭该实体仍在手牌就判定手续可执行。", [], input),
+      step("same_chain_timing", "同一连锁中还要确认先前展示后的公开状态、后续效果造成的状态变化，以及下一次发动本身的文本与次数限制。", [], input),
     ],
-    verdictHint: "same_card_may_be_revealed_again_if_still_in_hand_and_not_restricted",
-    shortAnswer: "先前展示本身通常不消耗该卡；若仍在手卡且没有次数或同卡限制，规则结构上可再次作为展示手续，但需核对两张卡原文。",
   };
 }
 

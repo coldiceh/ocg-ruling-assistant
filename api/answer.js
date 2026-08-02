@@ -31,6 +31,7 @@ export default async function handler(request, response) {
   }
 
   let auditPromise = Promise.resolve();
+  const requestAbort = createRequestAbortContext(request, response);
   try {
     const payload = typeof request.body === "string" ? JSON.parse(request.body || "{}") : request.body || {};
     const mode = String(payload.mode || "rag").toLowerCase();
@@ -51,15 +52,21 @@ export default async function handler(request, response) {
       question: payload.question,
       env: envForModelTier(publicEnv, payload.modelTier),
       engineScenario: payload.engineScenario,
+      thinkingMode: payload.thinkingMode,
+      reasoningEffort: payload.reasoningEffort,
+      signal: requestAbort.signal,
     });
     await auditPromise;
     response.status(200).json(answer);
   } catch (error) {
     await auditPromise;
+    if (requestAbort.signal.aborted) return;
     response.status(error?.statusCode === 400 ? 400 : 500).json({
       error: error instanceof Error ? error.message : String(error),
       code: error?.code || "answer_failed",
     });
+  } finally {
+    requestAbort.cleanup();
   }
 }
 
@@ -142,7 +149,7 @@ function buildModelTiers(provider, env) {
   if (provider === "deepseek") {
     return [
       { id: "flash", label: "Flash", model: env.DEEPSEEK_FLASH_MODEL || env.DEEPSEEK_CARD_MODEL || env.RAG_CARD_MODEL || "deepseek-v4-flash" },
-      { id: "pro", label: "Pro", model: env.DEEPSEEK_PRO_MODEL || env.DEEPSEEK_MODEL || "deepseek-v4-flash" },
+      { id: "pro", label: "Pro", model: env.DEEPSEEK_PRO_MODEL || env.DEEPSEEK_MODEL || "deepseek-v4-pro" },
     ];
   }
   if (provider === "gemini") {
@@ -159,4 +166,24 @@ function splitList(value) {
     .split(",")
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+function createRequestAbortContext(request, response) {
+  if (request?.signal && typeof request.signal.aborted === "boolean") {
+    return { signal: request.signal, cleanup() {} };
+  }
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  const close = () => {
+    if (!response?.writableEnded && !response?.finished) abort();
+  };
+  request?.once?.("aborted", abort);
+  response?.once?.("close", close);
+  return {
+    signal: controller.signal,
+    cleanup() {
+      request?.off?.("aborted", abort);
+      response?.off?.("close", close);
+    },
+  };
 }
