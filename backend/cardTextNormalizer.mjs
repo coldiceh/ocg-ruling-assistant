@@ -474,19 +474,26 @@ function classifyResolutionOperation(text) {
   const sourceCard = /(?:此卡|这张卡|這張卡|このカード|this card)/iu.test(value);
   const generatedMonster = /(?:衍生物|代币|代幣|トークン|token)/iu.test(value);
   const alternativeOperation = /(?:加入|加到|add).{0,16}(?:手牌|手卡|手札|hand).{0,8}(?:或|或者|または|or).{0,8}(?:特殊召唤|特殊召喚|special summon)/iu.test(value);
-  const quotedNames = unique([...value.matchAll(/[“「『"]([^”」』"]{2,50})[”」』"]/gu)]
+  const quotedNameMatches = [...value.matchAll(/[“「『"]([^”」』"]{2,50})[”」』"]/gu)];
+  const excludedNames = unique(quotedNameMatches
+    .filter((match) => quotedReferenceIsExcluded(value, match))
+    .map((match) => match[1]));
+  const quotedNames = unique(quotedNameMatches
+    .filter((match) => !quotedReferenceIsExcluded(value, match))
     .map((match) => match[1]));
   const quotedName = quotedNames[0] || "";
+  const explicitAmountMatch = value.match(/([０-９\d一二三两兩]+)\s*(?:只|隻|体|體|枚)/u);
+  const explicitAmount = explicitAmountMatch ? parseCount(explicitAmountMatch[1], 1) : null;
+  const distributesPerNamedCard = /(?:各|それぞれ|each)\s*[０-９\d一二三两兩]+\s*(?:只|隻|体|體|枚)?/iu.test(value);
   return {
     type,
     text: value,
     mandatory: !alternativeOperation && !/(?:可以|可选择|任意|できる|may|you can)/iu.test(value),
     ...(alternativeOperation ? { choice: "one_of_multiple_operations" } : {}),
     subject: sourceCard ? "effect_source" : generatedMonster ? "generated_monster" : "selected_card",
-    amount: Math.max(
-      quotedNames.length,
-      parseCount(value.match(/([０-９\d一二三两兩]+)\s*(?:只|隻|体|體|枚)/u)?.[1], 1),
-    ),
+    amount: distributesPerNamedCard && quotedNames.length > 1
+      ? quotedNames.length * (explicitAmount ?? 1)
+      : explicitAmount ?? Math.max(quotedNames.length, 1),
     fromZone: firstMatch(value, [
       ["extra_deck", /(?:从|從)\s*(?:额外卡组|額外卡組|额外牌组|額外牌組)|(?:エクストラデッキから)|(?:from\s+(?:the\s+|your\s+)?extra deck)/iu],
       ["hand", /(?:从|從)\s*(?:手牌|手卡)|(?:手札から)|(?:from\s+(?:the\s+|your\s+)?hand)/iu],
@@ -498,8 +505,18 @@ function classifyResolutionOperation(text) {
       : "same_as_source_controller",
     ...(quotedName ? { name: quotedName } : {}),
     ...(quotedNames.length ? { names: quotedNames } : {}),
+    ...(excludedNames.length ? { excludedNames } : {}),
     ...(extractRaceLabel(value) ? { race: extractRaceLabel(value) } : {}),
   };
+}
+
+function quotedReferenceIsExcluded(value, match) {
+  const start = Number(match.index) || 0;
+  const end = start + String(match[0] || "").length;
+  const before = value.slice(Math.max(0, start - 24), start);
+  const after = value.slice(end, end + 16);
+  return /^\s*(?:以外|を除く)/iu.test(after)
+    || /(?:除外|排除|except|other\s+than)\s*$/iu.test(before);
 }
 
 function isSummonBoundExtraDeckRestriction(value) {

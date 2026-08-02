@@ -186,6 +186,36 @@ test("the historical production wording uses the generic trusted semantic execut
   assert.equal(answer.debug.deterministicDecision, "state_transition");
   assert.equal(answer.debug.modelUsed, "trusted-semantic-state-executor");
   assert.equal(answer.debug.timingsMs.finalModel, 0);
+  assert.equal(answer.debug.cardNameModelUsed, "none");
+  assert.equal(answer.debug.ruleQueryModelUsed, "none");
+  assert.equal(answer.debug.timingsMs.auxiliaryExtractionModels, 0);
+  assert.ok(answer.debug.cardNameWarnings.includes("card_name_model_skipped_trusted_semantic_preflight"));
+  assert.ok(answer.debug.ruleQueryWarnings.includes("rule_query_model_skipped_trusted_semantic_preflight"));
+});
+
+test("a summon-bound restriction expires permanently through the public trusted fast path", async () => {
+  const answer = await answerRagRulingQuestion({
+    question: "「测试银犬」的①效果适用后，以该效果特殊召唤的怪兽控制权转移给对方，之后又回到自己场上的场合，『自己不是「测试月影」怪兽不能从额外卡组特殊召唤』如何适用？",
+    cards: [{
+      id: "generic-silver-hound",
+      name: "测试银犬",
+      cardType: "monster",
+      effectText: "①：此卡因效果被送至墓地的情况下可以发动。从牌组将“测试银犬”以外的1只“测试月影”怪兽特殊召唤。只要以此效果特殊召唤的怪兽以表侧表示存在于自己场上，自己从额外牌组仅可特殊召唤“测试月影”怪兽。",
+    }],
+    records: [],
+    qaRecords: [],
+    env: localEnv,
+    dryRun: true,
+  });
+
+  assert.match(answer.shortAnswer, /控制权变更后.*立即不再适用/u);
+  assert.match(answer.shortAnswer, /控制权归还.*不会恢复适用/u);
+  assert.equal(answer.debug.deterministicDecision, "state_transition");
+  assert.equal(answer.debug.modelUsed, "trusted-semantic-state-executor");
+  assert.equal(answer.debug.timingsMs.finalModel, 0);
+  assert.equal(answer.debug.timingsMs.auxiliaryExtractionModels, 0);
+  assert.ok(answer.riskFlags.includes("trusted_local_semantic_execution"));
+  assert.doesNotMatch(JSON.stringify(answer), /月光银狗/u);
 });
 
 test("authority-boundary downgrade remains diagnostic and cannot skip the final model", async () => {
