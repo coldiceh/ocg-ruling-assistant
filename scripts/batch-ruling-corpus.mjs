@@ -2,6 +2,8 @@ import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { basename, dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
+import { assessSemanticTransitionAuthority } from "../backend/semanticAuthorityGate.mjs";
+
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const defaultInput = resolve(root, "data", "test", "twitter-ruling-questions.json");
 const defaultOutput = resolve(root, "artifacts", "twitter-ruling-batch-report.json");
@@ -77,10 +79,31 @@ export function evaluateRulingAnswer(corpusCase = {}, answer = {}) {
   const explicitNonDryRun = answer.debug?.dryRun === false;
   const mockExecution = /(?:^|[-_])mock(?:$|[-_])/iu.test(`${provider}-${model}`);
   const nonLiveModel = /(?:^|[-_])(?:mock|local|none|deterministic)(?:$|[-_])/iu.test(`${provider}-${model}`);
+  const replayedSemanticAuthority = assessSemanticTransitionAuthority({
+    semanticStateTransition: answer.debug?.semanticStateTransition,
+    cardResolution: {
+      resolvedCards: Array.isArray(answer.resolvedCards) ? answer.resolvedCards : [],
+      unresolvedMentions: Array.isArray(answer.debug?.unresolvedMentions) ? answer.debug.unresolvedMentions : [],
+      ambiguousMentions: Array.isArray(answer.debug?.ambiguousMentions) ? answer.debug.ambiguousMentions : [],
+      omittedResolvedCards: Array.isArray(answer.debug?.omittedResolvedCards) ? answer.debug.omittedResolvedCards : [],
+    },
+  });
+  const trustedSemanticExecution = corpusCase.allowTrustedSemanticExecutor === true
+    && provider === "local"
+    && model === "trusted-semantic-state-executor"
+    && answer.debug?.deterministicDecision === "state_transition"
+    && Array.isArray(answer.riskFlags)
+    && answer.riskFlags.includes("trusted_local_semantic_execution")
+    && answer.riskFlags.includes("final_model_skipped")
+    && replayedSemanticAuthority.trusted === true;
   const forbiddenModels = stringList(corpusCase.forbiddenModelUsed).map((item) => item.toLowerCase());
   const policyViolations = [];
-  if (corpusCase.requireNonDryRun === true && !explicitNonDryRun) policyViolations.push("explicit_non_dry_run_required");
-  if (corpusCase.requireLiveModel === true && nonLiveModel) policyViolations.push("non_live_model_forbidden");
+  if (corpusCase.requireNonDryRun === true && !explicitNonDryRun && !trustedSemanticExecution) {
+    policyViolations.push("explicit_non_dry_run_required");
+  }
+  if (corpusCase.requireLiveModel === true && nonLiveModel && !trustedSemanticExecution) {
+    policyViolations.push("non_live_model_forbidden");
+  }
   if (corpusCase.requireModelUsed === true && !String(provider).trim()) policyViolations.push("provider_used_marker_required");
   if (corpusCase.requireModelUsed === true && !String(model).trim()) policyViolations.push("model_used_marker_required");
   if (model && forbiddenModels.includes(String(model).toLowerCase())) policyViolations.push(`forbidden_model_used:${model}`);
@@ -96,6 +119,9 @@ export function evaluateRulingAnswer(corpusCase = {}, answer = {}) {
     requireNonDryRun: corpusCase.requireNonDryRun === true,
     requireModelUsed: corpusCase.requireModelUsed === true,
     requireLiveModel: corpusCase.requireLiveModel === true,
+    allowTrustedSemanticExecutor: corpusCase.allowTrustedSemanticExecutor === true,
+    trustedSemanticExecution,
+    trustedSemanticAuthorityReasons: replayedSemanticAuthority.reasons || [],
     forbiddenModels,
     policyViolations,
     policyStatus: policyViolations.length ? "fail" : "pass",

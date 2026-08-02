@@ -1062,7 +1062,12 @@ function normalizedEffectsForProgram(program) {
 
 const APPLIED_EFFECT_PREMISE = /(?:(?:效果|効果|effect)[^。？！?]{0,20}(?:已经|已經|已|すでに|既に|already)[^。？！?]{0,12}(?:适用|適用|resolved|applied))|(?:(?:效果|効果|effect)[^。？！?]{0,16}(?:适用|適用)(?:后|後|した後))|(?:after[^.?!]{0,20}(?:effect)[^.?!]{0,16}(?:resolved|applied))/iu;
 const NUMBERED_EFFECT_OUTPUT_MONSTER = /(?:[①②③④⑤⑥⑦⑧⑨⑩](?:的)?(?:效果|効果|effect)?|(?:这个|這個|该|該|此|その|this)\s*(?:效果|効果|effect))[^。？！?]{0,28}(?:特殊召唤|特殊召喚|special summoned?)[^。？！?]{0,16}(?:出(?:的)?|的|された|した|by)?\s*(?:怪兽|怪獸|モンスター|monster)/iu;
-const EFFECT_OUTPUT_WITH_COMPLETED_EVENT = /(?:[①②③④⑤⑥⑦⑧⑨⑩](?:的)?(?:效果|効果|effect)?|(?:这个|這個|该|該|此|その|this)\s*(?:效果|効果|effect))[^。？！?]{0,28}(?:特殊召唤|特殊召喚|special summoned?)[^。？！?]{0,16}(?:出(?:的)?|された|した|by)\s*(?:怪兽|怪獸|モンスター|monster)[^。？！?]{0,28}(?:已经|已經|已|先|随后|隨後|后来|後來|被|控制权|控制權|control)/iu;
+// A numbered effect followed by an already-existing output monster and a later
+// event is itself an explicit completed-state premise.  A bare deictic phrase
+// such as "以该效果特殊召唤的怪兽" is not: without an earlier applied-effect
+// premise it can also describe a hypothetical output, so that form must fail
+// closed instead of silently inventing a resolved effect instance.
+const EFFECT_OUTPUT_WITH_COMPLETED_EVENT = /[①②③④⑤⑥⑦⑧⑨⑩](?:的)?(?:效果|効果|effect)?[^。？！?]{0,28}(?:特殊召唤|特殊召喚|special summoned?)[^。？！?]{0,16}(?:出(?:的)?|的|された|した|by)\s*(?:怪兽|怪獸|モンスター|monster)[^。？！?]{0,28}(?:已经|已經|已|先|随后|隨後|后来|後來|被|控制权|控制權|control)/iu;
 const EFFECT_SUMMONED_MONSTER_REFERENCE = new RegExp([
   NUMBERED_EFFECT_OUTPUT_MONSTER.source,
   "(?:(?:怪兽|怪獸|モンスター|monster)[^。？！?]{0,16}(?:由|被|によって|by)[^。？！?]{0,16}(?:这个|這個|该|該|此|その|this)\\s*(?:效果|効果|effect))",

@@ -576,6 +576,29 @@ test("the real summon-bound wording executes through the generic lifecycle compi
   assert.match(result.shortAnswer, /不会恢复适用/u);
 });
 
+test("an already-created numbered-effect output is enough to compile its exact control lifecycle question", () => {
+  const result = analyzeDuelStateTransition({
+    userQuery: "「月光银狗」①效果特殊召唤的怪兽控制权变更到对方场上的场合，『自己不是「月光」怪兽不能从额外卡组特殊召唤』还适用吗？之后那只怪兽的控制权归还时，这个限制会恢复适用吗？",
+    resolvedCards: [{
+      id: "21417",
+      name: "月光银狗",
+      cardType: "monster",
+      effectText: "此卡名的①②效果1回合仅可各使用1次。\n①：此卡因效果被送至墓地的情况下可以发动。从牌组将“月光银狗”以外的1只“月光”怪兽特殊召唤。只要以此效果特殊召唤的怪兽以表侧表示存在于自己场上，自己从额外牌组仅可特殊召唤“月光”怪兽。\n②：魔法・陷阱卡的效果在场上发动时，从自己墓地将此卡和1只“月光”融合怪兽除外可以发动。将该发动无效。",
+    }],
+  });
+
+  assert.equal(result.status, "resolved", JSON.stringify(result));
+  assert.equal(result.complete, true);
+  assert.equal(result.authoritative, true);
+  assert.equal(result.reason, "bound_condition_failed_irreversibly");
+  assert.deepEqual(
+    result.debug.snapshots.map((snapshot) => [snapshot.controller, snapshot.effectStatus]),
+    [["self", "active"], ["opponent", "expired"], ["self", "expired"]],
+  );
+  assert.match(result.shortAnswer, /立即不再适用/u);
+  assert.match(result.shortAnswer, /不会恢复适用/u);
+});
+
 test("a return to the original field does not require the noun 'control' to be repeated", () => {
   const result = analyzeDuelStateTransition({
     userQuery: "「折光航标」的①效果已经适用。以该效果特殊召唤的怪兽控制权转移给对方，之后又回到自己场上的场合，限制会恢复吗？",

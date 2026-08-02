@@ -640,6 +640,29 @@ test("multiple one-character card-name neighbours remain below automatic resolut
   assert.ok(providerMatches.every((card) => card.confidence < 0.72));
 });
 
+test("a unique short localized spelling resolves, while an ungrounded short two-edit name fails closed", () => {
+  const localCards = [
+    { id: "localized-short", name: "尤贝尔", aliases: ["尤贝尔"], sourceUrl: "https://db.ygoresources.com/data/card/localized-short" },
+    { id: "localized-two-edit", name: "纳祭魔鬼莲", aliases: ["纳祭魔鬼莲"], sourceUrl: "https://db.ygoresources.com/data/card/localized-two-edit" },
+  ];
+  const resolution = extractRagCards("「于贝尔」与「献祭魔界莲」的效果如何处理？", { cards: localCards });
+
+  assert.deepEqual(new Set(resolution.resolvedCards.map((card) => card.id)), new Set(["localized-short"]));
+  assert.ok(resolution.resolvedCards.every((card) => card.confidence >= 0.9));
+  assert.deepEqual(resolution.unresolvedMentions.map((item) => item.input), ["献祭魔界莲"]);
+});
+
+test("multiple two-edit neighbours remain unresolved instead of guessing", () => {
+  const localCards = [
+    { id: "near-two-a", name: "纳祭魔鬼莲", aliases: ["纳祭魔鬼莲"] },
+    { id: "near-two-b", name: "奉祭魔界花", aliases: ["奉祭魔界花"] },
+  ];
+  const resolution = extractRagCards("「献祭魔界莲」的效果如何处理？", { cards: localCards });
+
+  assert.equal(resolution.resolvedCards.length, 0);
+  assert.equal(resolution.unresolvedMentions[0]?.input, "献祭魔界莲");
+});
+
 test("extra-deck context resolves a legacy localized name only with unique material evidence", () => {
   const localCards = [
     {

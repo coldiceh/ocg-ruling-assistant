@@ -20,6 +20,26 @@ test("unique short aliases and translated partial names resolve to the same card
   assert.deepEqual(fullResolution.unresolvedMentions, []);
 });
 
+test("unique alternate localized spellings resolve the reported Yubel interaction without a model", async () => {
+  const data = await loadRagData();
+  const resolution = extractRagCards(
+    "我方场上有「于贝尔精灵」和「献祭魔界莲」，对方场上有「于贝尔」。",
+    { cards: data.cards, maxCards: 8 },
+  );
+
+  assert.deepEqual(
+    new Set(resolution.resolvedCards.map((card) => String(card.id))),
+    new Set(["19456", "19458", "7409"]),
+    JSON.stringify({
+      resolvedCards: resolution.resolvedCards.map((card) => ({ id: card.id, input: card.input, name: card.name, confidence: card.confidence })),
+      unresolvedMentions: resolution.unresolvedMentions,
+      ambiguousMentions: resolution.ambiguousMentions,
+    }),
+  );
+  assert.deepEqual(resolution.unresolvedMentions, []);
+  assert.deepEqual(resolution.ambiguousMentions, []);
+});
+
 test("passive alias scanning does not extract short card names from inside longer quoted names", async () => {
   const data = await loadRagData();
   const resolution = extractRagCards(
