@@ -23,7 +23,11 @@ const ui = {
   parserDebugOutput: document.querySelector("#parserDebugOutput"),
   pipelineDebugToggle: document.querySelector("#pipelineDebugToggle"),
   modelStatusText: document.querySelector("#modelStatusText"),
+  stepsTitle: document.querySelector("#stepsTitle"),
   stepsList: document.querySelector("#stepsList"),
+  pipelineTimingPanel: document.querySelector("#pipelineTimingPanel"),
+  pipelineStageList: document.querySelector("#pipelineStageList"),
+  pipelineElapsedText: document.querySelector("#pipelineElapsedText"),
   questionsList: document.querySelector("#questionsList"),
   sourcesList: document.querySelector("#sourcesList"),
   simulationPanel: document.querySelector("#simulationPanel"),
@@ -138,13 +142,14 @@ const themeStorageKey = "ocg-ruling-theme:v1";
 const selectedModelTier = "flash";
 let selectedRulingVersion = "latest";
 const pendingStages = [
-  { label: "理解问题", body: "正在读取问题中的卡片、场面、连锁和时点。" },
-  { label: "提取卡名", body: "正在识别卡名候选，并准备查询卡片资料。" },
-  { label: "检索卡片文本", body: "正在匹配本地资料、百鸽卡片资料和用户提供文本。" },
-  { label: "检索规则资料", body: "正在查找相关 Q&A、FAQ 和规则资料。" },
-  { label: "生成裁定", body: "正在根据检索上下文生成未确认裁定分析。" },
+  { id: "understand", label: "理解问题", body: "正在读取问题中的卡片、场面、连锁和时点。" },
+  { id: "extract_card_names", label: "提取卡名", body: "正在识别卡名候选，并准备查询卡片资料。" },
+  { id: "retrieve_card_texts", label: "检索卡片文本", body: "正在匹配本地资料、百鸽卡片资料和用户提供文本。" },
+  { id: "retrieve_rulings", label: "检索规则资料", body: "正在查找相关 Q&A、FAQ 和规则资料。" },
+  { id: "generate_ruling", label: "生成裁定", body: "正在根据检索上下文生成未确认裁定分析。" },
 ];
 const simulationPendingStage = {
+  id: "simulate",
   label: "编译模拟场景",
   body: "正在将已识别的卡片、区域和操作整理为尽力模拟场景。",
 };
@@ -154,6 +159,9 @@ let pendingStageIndex = 0;
 let pendingStageTickTimer = 0;
 let pendingStageEnteredAt = [];
 let pendingStageDurationsMs = [];
+let pendingPipelineStartedAt = null;
+let pendingPipelineTotalMs = null;
+let pendingPipelineStatus = "idle";
 
 function normalizeText(value) {
   return String(value || "")
@@ -578,6 +586,8 @@ function renderPending() {
   ui.verdictTitle.textContent = "正在分析";
   ui.rulingBasisText.textContent = "";
   ui.verdictBody.textContent = getPendingStages()[0].body;
+  ui.stepsTitle.textContent = "裁定流程";
+  ui.stepsList.hidden = true;
   renderSubAnswers([]);
   renderParserDebug(null);
   startPendingStages();
@@ -586,7 +596,9 @@ function renderPending() {
 }
 
 function renderBackendAnswer(answer) {
-  clearPendingStages();
+  completePendingStages(answer);
+  ui.stepsTitle.textContent = "理由";
+  ui.stepsList.hidden = false;
   lastRenderedBackendAnswer = answer || null;
   renderAnswerVersion(answer);
   renderEngineSimulation(null, null);
@@ -654,7 +666,7 @@ function renderAnswerVersion(answer) {
 }
 
 function renderBackendVersionError(error, requestedRulingVersion) {
-  clearPendingStages();
+  failPendingStages();
   lastRenderedBackendAnswer = null;
   ui.resultGrid.hidden = false;
   renderCards([]);
@@ -678,6 +690,8 @@ function renderBackendVersionError(error, requestedRulingVersion) {
     ? "后端返回的实际版本与本次请求不一致，已拒绝展示该回答。"
     : "后端没有确认本次实际使用的回答版本，已拒绝展示回答，也不会降级到本地模板。";
   renderSubAnswers([]);
+  ui.stepsTitle.textContent = "理由";
+  ui.stepsList.hidden = false;
   renderList(ui.stepsList, ["请稍后重试；若问题持续存在，需要先完成前端与后端的版本协议部署。"]);
   renderList(ui.questionsList, [
     error?.status ? `后端返回 HTTP ${error.status}。` : "未取得可验证的版本化回答。",
@@ -709,6 +723,8 @@ function renderRagAnswer(answer) {
   ui.rulingBasisText.textContent = state.basis;
   ui.verdictBody.textContent = answer.shortAnswer || "当前无法给出可靠分析。";
   renderSubAnswers([]);
+  ui.stepsTitle.textContent = "理由";
+  ui.stepsList.hidden = false;
   renderList(ui.stepsList, answer.reasoning || []);
   renderList(ui.questionsList, [
     ...publicFormalQueryLines(answer.formalQueryResults || []),
@@ -1045,6 +1061,8 @@ function renderBackendUnavailable(detectedCards = []) {
   ui.verdictBody.textContent =
     "当前页面没有可用的后端裁定服务，无法生成或验证这道题的裁定。已识别的本地卡片资料仅供查看，不会被当作裁定答案。";
   renderSubAnswers([]);
+  ui.stepsTitle.textContent = "理由";
+  ui.stepsList.hidden = false;
   renderList(ui.stepsList, ["请在后端裁定服务恢复或完成配置后重试。"]);
   renderList(ui.questionsList, []);
   renderSources([]);
@@ -3747,12 +3765,16 @@ function startPendingStages() {
   pendingStageIndex = 0;
   pendingStageEnteredAt = stages.map(() => null);
   pendingStageDurationsMs = stages.map(() => null);
-  pendingStageEnteredAt[0] = Date.now();
+  pendingPipelineStartedAt = readMonotonicNow();
+  pendingPipelineTotalMs = null;
+  pendingPipelineStatus = "running";
+  pendingStageEnteredAt[0] = pendingPipelineStartedAt;
+  if (ui.pipelineTimingPanel) ui.pipelineTimingPanel.hidden = false;
   renderPendingStages(0, stages);
   pendingStageDelays.slice(0, stages.length).forEach((delay, index) => {
     if (index === 0) return;
     const timer = setTimeout(() => {
-      const now = Date.now();
+      const now = readMonotonicNow();
       const previousIndex = pendingStageIndex;
       if (
         previousIndex < index
@@ -3780,20 +3802,34 @@ function clearPendingStages(clearClass = true) {
   pendingStageTimers = [];
   if (pendingStageTickTimer) window.clearInterval(pendingStageTickTimer);
   pendingStageTickTimer = 0;
-  if (clearClass) ui.stepsList.classList.remove("progress-steps");
+  if (clearClass) {
+    pendingPipelineStartedAt = null;
+    pendingPipelineTotalMs = null;
+    pendingPipelineStatus = "idle";
+    pendingStageEnteredAt = [];
+    pendingStageDurationsMs = [];
+    if (ui.pipelineTimingPanel) ui.pipelineTimingPanel.hidden = true;
+    if (ui.pipelineStageList) clearElement(ui.pipelineStageList);
+    if (ui.pipelineElapsedText) ui.pipelineElapsedText.textContent = "";
+  }
 }
 
 function renderPendingStages(activeIndex, stages = getPendingStages()) {
-  clearElement(ui.stepsList);
-  ui.stepsList.classList.add("progress-steps");
+  if (!ui.pipelineStageList) return;
+  clearElement(ui.pipelineStageList);
   stages.forEach((stage, index) => {
     const item = document.createElement("li");
-    item.className = index < activeIndex ? "progress-step is-done"
-      : index === activeIndex ? "progress-step is-current"
+    item.className = pendingPipelineStatus === "failed" && index === activeIndex
+      ? "progress-step is-failed"
+      : index < activeIndex ? "progress-step is-done"
+      : index === activeIndex && pendingPipelineStatus === "running" ? "progress-step is-current"
         : "progress-step is-waiting";
     const marker = document.createElement("span");
     marker.className = "progress-step-marker";
-    marker.textContent = index < activeIndex ? "✓" : index === activeIndex ? "•" : "·";
+    marker.textContent = pendingPipelineStatus === "failed" && index === activeIndex
+      ? "!"
+      : index < activeIndex ? "✓"
+      : index === activeIndex && pendingPipelineStatus === "running" ? "•" : "·";
     const label = document.createElement("span");
     label.textContent = stage.label;
     const time = document.createElement("span");
@@ -3801,17 +3837,127 @@ function renderPendingStages(activeIndex, stages = getPendingStages()) {
     const durationMs = index < activeIndex
       ? pendingStageDurationsMs[index]
       : index === activeIndex && pendingStageEnteredAt[index] !== null
-        ? Math.max(0, Date.now() - pendingStageEnteredAt[index])
+        ? Math.max(0, readMonotonicNow() - pendingStageEnteredAt[index])
         : null;
     time.textContent = durationMs === null
       ? ""
-      : `${formatPendingStageDuration(durationMs)}${index === activeIndex ? "" : " ✓"}`;
+      : formatPendingStageDuration(durationMs);
     item.append(marker, label, time);
-    ui.stepsList.appendChild(item);
+    ui.pipelineStageList.appendChild(item);
   });
+  renderPendingPipelineTotal();
+  if (pendingPipelineStatus !== "running") return;
   const stage = stages[Math.min(activeIndex, stages.length - 1)];
   ui.verdictTitle.textContent = stage.label === "生成裁定" ? "正在生成裁定" : `正在${stage.label}`;
   ui.verdictBody.textContent = stage.body;
+}
+
+function completePendingStages(answer) {
+  const stages = getPendingStages();
+  const completedAt = readMonotonicNow();
+  const clientTotalMs = pendingPipelineStartedAt === null
+    ? null
+    : Math.max(0, completedAt - pendingPipelineStartedAt);
+  const backend = extractBackendPipelineTimings(answer, stages);
+  clearPendingStages(false);
+  pendingPipelineStatus = "completed";
+  pendingPipelineTotalMs = backend.totalMs ?? clientTotalMs ?? 0;
+  pendingStageDurationsMs = stages.map((stage, index) => (
+    backend.stageDurationsMs[stage.id]
+    ?? pendingStageDurationsMs[index]
+    ?? (pendingStageEnteredAt[index] === null ? 0 : Math.max(0, completedAt - pendingStageEnteredAt[index]))
+  ));
+  pendingStageEnteredAt = stages.map(() => null);
+  pendingStageIndex = stages.length;
+  if (ui.pipelineTimingPanel) ui.pipelineTimingPanel.hidden = false;
+  if (ui.pipelineElapsedText) {
+    ui.pipelineElapsedText.title = backend.usesServerTiming
+      ? "总计采用后端实测墙钟耗时；部分阶段可能并行。"
+      : "后端未返回总耗时，当前采用浏览器单调计时。";
+  }
+  renderPendingStages(stages.length, stages);
+}
+
+function failPendingStages() {
+  const stages = getPendingStages();
+  const now = readMonotonicNow();
+  clearPendingStages(false);
+  if (pendingPipelineStartedAt === null) {
+    clearPendingStages();
+    return;
+  }
+  const activeStartedAt = pendingStageEnteredAt[pendingStageIndex];
+  if (activeStartedAt !== null && pendingStageDurationsMs[pendingStageIndex] === null) {
+    pendingStageDurationsMs[pendingStageIndex] = Math.max(0, now - activeStartedAt);
+  }
+  pendingPipelineTotalMs = Math.max(0, now - pendingPipelineStartedAt);
+  pendingPipelineStatus = "failed";
+  if (ui.pipelineTimingPanel) ui.pipelineTimingPanel.hidden = false;
+  if (ui.pipelineElapsedText) ui.pipelineElapsedText.title = "请求失败前的浏览器单调计时。";
+  renderPendingStages(pendingStageIndex, stages);
+}
+
+function renderPendingPipelineTotal() {
+  if (!ui.pipelineElapsedText) return;
+  const runningMs = pendingPipelineStartedAt === null
+    ? null
+    : Math.max(0, readMonotonicNow() - pendingPipelineStartedAt);
+  const durationMs = pendingPipelineTotalMs ?? runningMs;
+  ui.pipelineElapsedText.textContent = durationMs === null
+    ? ""
+    : `总计 ${formatPendingStageDuration(durationMs)}`;
+}
+
+function extractBackendPipelineTimings(answer, stages = getPendingStages()) {
+  const pipeline = answer?.debug?.timingsMs || answer?.timingsMs || {};
+  const retrieval = answer?.debug?.retrievalStageTimingsMs
+    || answer?.retrievalStageTimingsMs
+    || {};
+  const stageDurationsMs = {
+    understand: sumFiniteDurations(pipeline.dataLoad, pipeline.deterministicPreflight),
+    extract_card_names: readFiniteDuration(pipeline.auxiliaryExtractionModels),
+    retrieve_card_texts: readFiniteDuration(retrieval.cardResolution),
+    retrieve_rulings: sumFiniteDurations(
+      retrieval.data,
+      retrieval.rulebook,
+      retrieval.officialQa,
+      retrieval.relatedEvidence,
+    ),
+    simulate: sumFiniteDurations(pipeline.formalEngineAwait, pipeline.engineAwait),
+    generate_ruling: sumFiniteDurations(
+      pipeline.localReasoning,
+      pipeline.rulebookGrounding,
+      pipeline.finalModel,
+    ),
+  };
+  const knownStageIds = new Set(stages.map((stage) => stage.id));
+  for (const key of Object.keys(stageDurationsMs)) {
+    if (!knownStageIds.has(key) || stageDurationsMs[key] === null) delete stageDurationsMs[key];
+  }
+  const totalMs = readFiniteDuration(pipeline.total);
+  return {
+    stageDurationsMs,
+    totalMs,
+    usesServerTiming: totalMs !== null || Object.keys(stageDurationsMs).length > 0,
+  };
+}
+
+function readFiniteDuration(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const duration = Number(value);
+  return Number.isFinite(duration) && duration >= 0 ? duration : null;
+}
+
+function sumFiniteDurations(...values) {
+  const durations = values.map(readFiniteDuration).filter((value) => value !== null);
+  return durations.length ? durations.reduce((sum, value) => sum + value, 0) : null;
+}
+
+function readMonotonicNow() {
+  if (globalThis.performance && typeof globalThis.performance.now === "function") {
+    return globalThis.performance.now();
+  }
+  return Date.now();
 }
 
 function formatPendingStageDuration(milliseconds) {
