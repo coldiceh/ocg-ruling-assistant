@@ -35,7 +35,10 @@
       "expectedCardIds": ["13293", "23349"],
       "expectedQaIds": ["card-faq-13293-0.5", "card-faq-23349-1"],
       "expectedAnswer": "不能连锁发动。",
-      "mustInclude": ["不能连锁发动", "魔法与陷阱区域"],
+      "mustIncludeAny": [
+        ["不能连锁发动", "不能连锁「颉颃胜负」"],
+        ["魔法与陷阱区域", "从手牌将魔法·陷阱卡放置到场上"]
+      ],
       "expectedAnswerKeyPoints": [
         "从手牌发动魔法或陷阱卡时先放到魔法与陷阱区域",
         "这不属于手牌中的卡的效果发动"

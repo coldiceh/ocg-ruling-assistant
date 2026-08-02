@@ -5,7 +5,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
-import { attachSemanticTransitionContract } from "../backend/semanticAuthorityGate.mjs";
+import {
+  assessSemanticTransitionAuthority,
+  attachSemanticTransitionContract,
+} from "../backend/semanticAuthorityGate.mjs";
 import { loadRagData } from "../backend/ragEvidenceRetriever.mjs";
 import { answerRagRulingQuestion } from "../backend/ragRulingPipeline.mjs";
 import {
@@ -62,6 +65,28 @@ test("batch evaluator fails independently on missing cards, missing QA, and a co
   assert.deepEqual(evaluation.cardResolution.missingCardIds, ["200"]);
   assert.equal(evaluation.officialQa.status, "miss");
   assert.equal(evaluation.correctness.reason, "verdict_contradiction");
+});
+
+test("explicit correctness expectations can express equivalent wording groups without weakening every group", () => {
+  const corpusCase = {
+    question: "可以连锁发动吗？",
+    mustIncludeAny: [
+      ["不能连锁发动", "不能连锁这张卡"],
+      ["魔法与陷阱区域", "从手牌将魔法·陷阱卡放置到场上"],
+    ],
+  };
+  const equivalent = evaluateRulingAnswer(corpusCase, {
+    shortAnswer: "不能连锁这张卡；发动时会从手牌将魔法·陷阱卡放置到场上。",
+    debug: { retrievalCounts: {}, unresolvedMentions: [], ambiguousMentions: [] },
+  });
+  assert.equal(equivalent.correctness.status, "pass");
+
+  const incomplete = evaluateRulingAnswer(corpusCase, {
+    shortAnswer: "不能连锁这张卡。",
+    debug: { retrievalCounts: {}, unresolvedMentions: [], ambiguousMentions: [] },
+  });
+  assert.equal(incomplete.correctness.status, "fail");
+  assert.deepEqual(incomplete.correctness.missingRequiredAlternatives, [corpusCase.mustIncludeAny[1]]);
 });
 
 test("an expected QA miss is diagnostic unless the corpus explicitly requires that citation", () => {
@@ -437,7 +462,7 @@ test("a corpus may explicitly accept an auditable trusted semantic execution ins
     resolutionSource: "query",
     sourceUrl: "https://db.ygoresources.com/data/card/semantic-test-1",
   };
-  const semanticStateTransition = attachSemanticTransitionContract({
+  const attachedTransition = attachSemanticTransitionContract({
     status: "resolved",
     complete: true,
     authoritative: true,
@@ -452,6 +477,16 @@ test("a corpus may explicitly accept an auditable trusted semantic execution ins
     userQuery: question,
     cardResolution: { resolvedCards: [resolvedCard], unresolvedMentions: [], ambiguousMentions: [] },
   });
+  const initialAuthority = assessSemanticTransitionAuthority({
+    semanticStateTransition: attachedTransition,
+    cardResolution: { resolvedCards: [resolvedCard], unresolvedMentions: [], ambiguousMentions: [] },
+  });
+  assert.equal(initialAuthority.trusted, true, JSON.stringify(initialAuthority.reasons));
+  const semanticStateTransition = {
+    ...attachedTransition,
+    queryCoverage: initialAuthority.queryCoverage,
+    identityBindingProof: initialAuthority.identityBinding,
+  };
   const corpusCase = {
     question,
     expectedAnswer: "可以发动。",
@@ -464,7 +499,16 @@ test("a corpus may explicitly accept an auditable trusted semantic execution ins
   const answer = {
     shortAnswer: "可以发动，但处理时不进行融合召唤。",
     reasoning: ["状态执行器按顺序检查了发动前与支付后的状态。"],
-    resolvedCards: [resolvedCard],
+    resolvedCards: [
+      resolvedCard,
+      {
+        id: "user-card-text-semantic-test-1",
+        name: "测试转换器",
+        input: "测试转换器",
+        confidence: 0.76,
+        resolutionSource: "user_card_text",
+      },
+    ],
     riskFlags: ["trusted_local_semantic_execution", "final_model_skipped"],
     debug: {
       dryRun: true,

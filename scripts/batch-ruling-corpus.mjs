@@ -79,10 +79,18 @@ export function evaluateRulingAnswer(corpusCase = {}, answer = {}) {
   const explicitNonDryRun = answer.debug?.dryRun === false;
   const mockExecution = /(?:^|[-_])mock(?:$|[-_])/iu.test(`${provider}-${model}`);
   const nonLiveModel = /(?:^|[-_])(?:mock|local|none|deterministic)(?:$|[-_])/iu.test(`${provider}-${model}`);
+  const semanticTransition = answer.debug?.semanticStateTransition;
+  const participatingDefinitionIds = new Set(stringList(
+    semanticTransition?.identityBindingProof?.participatingDefinitionIds,
+  ));
+  const returnedResolvedCards = Array.isArray(answer.resolvedCards) ? answer.resolvedCards : [];
+  const replayResolvedCards = participatingDefinitionIds.size
+    ? returnedResolvedCards.filter((card) => participatingDefinitionIds.has(String(card?.id || card?.cardId || card?.definitionId || "")))
+    : returnedResolvedCards;
   const replayedSemanticAuthority = assessSemanticTransitionAuthority({
-    semanticStateTransition: answer.debug?.semanticStateTransition,
+    semanticStateTransition: semanticTransition,
     cardResolution: {
-      resolvedCards: Array.isArray(answer.resolvedCards) ? answer.resolvedCards : [],
+      resolvedCards: replayResolvedCards,
       unresolvedMentions: Array.isArray(answer.debug?.unresolvedMentions) ? answer.debug.unresolvedMentions : [],
       ambiguousMentions: Array.isArray(answer.debug?.ambiguousMentions) ? answer.debug.ambiguousMentions : [],
       omittedResolvedCards: Array.isArray(answer.debug?.omittedResolvedCards) ? answer.debug.omittedResolvedCards : [],
@@ -273,25 +281,31 @@ export function renderBatchMarkdownSummary(report = {}) {
 
 function evaluateCorrectness(corpusCase, answerText, officialQa) {
   const mustInclude = stringList(corpusCase.mustInclude);
+  const mustIncludeAny = stringGroups(corpusCase.mustIncludeAny);
   const softKeyPoints = stringList(corpusCase.expectedAnswerKeyPoints);
   const mustNotInclude = stringList(corpusCase.mustNotInclude);
   const normalizedAnswerText = normalizeTextMatch(answerText);
   const missingRequired = mustInclude.filter((term) => !normalizedAnswerText.includes(normalizeTextMatch(term)));
+  const missingRequiredAlternatives = mustIncludeAny.filter((alternatives) => (
+    !alternatives.some((term) => normalizedAnswerText.includes(normalizeTextMatch(term)))
+  ));
   const missingSoftKeyPoints = softKeyPoints.filter((term) => !normalizedAnswerText.includes(normalizeTextMatch(term)));
   const forbiddenPresent = mustNotInclude.filter((term) => normalizedAnswerText.includes(normalizeTextMatch(term)));
-  if (missingRequired.length || forbiddenPresent.length) {
+  if (missingRequired.length || missingRequiredAlternatives.length || forbiddenPresent.length) {
     return {
       status: "fail",
       reason: "explicit_expectation_failed",
       missingRequired,
+      missingRequiredAlternatives,
       forbiddenPresent,
     };
   }
-  if (mustInclude.length || mustNotInclude.length) {
+  if (mustInclude.length || mustIncludeAny.length || mustNotInclude.length) {
     return {
       status: "pass",
       reason: "explicit_expectations_satisfied",
       missingRequired,
+      missingRequiredAlternatives,
       forbiddenPresent,
     };
   }
@@ -623,6 +637,13 @@ function normalizeRunners(values) {
 function stringList(value) {
   const values = Array.isArray(value) ? value : (value === undefined || value === null ? [] : [value]);
   return [...new Set(values.map((item) => String(item || "").trim()).filter(Boolean))];
+}
+
+function stringGroups(value) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((group) => stringList(Array.isArray(group) ? group : [group]))
+    .filter((group) => group.length > 0);
 }
 
 function equalStringSets(left, right) {
