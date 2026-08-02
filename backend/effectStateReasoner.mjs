@@ -1,4 +1,5 @@
 import { analyzeDuelStateTransition } from "./duelStateReasoner.mjs";
+import { analyzeActivationEventStateTransition } from "./activationEventStateReasoner.mjs";
 import { analyzeOrderedResolutionCheckpoint } from "./orderedResolutionCheckpointReasoner.mjs";
 
 export function analyzeEffectStateTransition({
@@ -8,6 +9,12 @@ export function analyzeEffectStateTransition({
   operationLegality = null,
   resolvedCards = [],
 } = {}) {
+  const activationEventTransition = analyzeActivationEventStateTransition({
+    userQuery: String(userQuery || ""),
+    resolvedCards,
+    cardTexts,
+  });
+  if (activationEventTransition) return activationEventTransition;
   const orderedResolutionCheckpoint = analyzeOrderedResolutionCheckpoint({
     userQuery: String(userQuery || ""),
     resolvedCards,
