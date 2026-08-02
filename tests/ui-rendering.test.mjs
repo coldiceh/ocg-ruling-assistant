@@ -451,6 +451,7 @@ test("admin model lab renders the current structured ruling schema", async () =>
 
   render({
     result: {
+      experimental: true,
       finalRuling: {
         schemaVersion: "1.0",
         conciseAnswer: "可以发动，但处理时不会进行特殊召唤。",
@@ -491,6 +492,7 @@ test("admin model lab renders the current structured ruling schema", async () =>
 
   const text = testNodeText(summary);
   assert.match(text, /可以发动，但处理时不会进行特殊召唤/u);
+  assert.match(text, /实验结果.*不代表官方裁定/u);
   assert.match(text, /q1 · 可以／成立/u);
   assert.match(text, /手牌中存在可支付的卡/u);
   assert.match(text, /发动条件在发动时满足/u);
@@ -624,7 +626,7 @@ test("admin model lab labels incomplete aggregate costs as known portions", asyn
   assert.match(text, /估算成本（仅已知部分）\n\$1\.250000/u);
   assert.match(text, /美元成本缺失阶段\n证据准备模型/u);
   assert.match(text, /人民币估算（仅已知部分）\n¥8\.7500/u);
-  assert.match(text, /人民币成本缺失阶段\n最终裁定（OpenAI）/u);
+  assert.match(text, /人民币成本缺失阶段\n最终裁定模型/u);
 });
 
 test("admin run merge replaces state across run ids and does not create empty metric shadows", async () => {

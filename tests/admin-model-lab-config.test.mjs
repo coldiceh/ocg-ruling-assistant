@@ -78,7 +78,7 @@ test("arbitrary models and unsupported provider/model/stage combinations are rej
   );
 });
 
-test("DeepSeek capabilities explicitly prohibit final judgment and escalation decisions", () => {
+test("DeepSeek Flash prepares evidence and domestic models expose only experimental final judgment", () => {
   const selection = resolveAdminModelSelection({
     provider: "deepseek",
     model: "deepseek-v4-flash",
@@ -88,7 +88,11 @@ test("DeepSeek capabilities explicitly prohibit final judgment and escalation de
   });
   assert.equal(selection.capability.canMakeFinalRuling, false);
   assert.equal(selection.capability.canDecideEscalation, false);
-  assert.deepEqual(selection.capability.allowedStages, ["evidence_preparation"]);
+  assert.deepEqual(selection.capability.allowedStages, [
+    "evidence_preparation",
+    "experimental_final_ruling",
+  ]);
+  assert.equal(selection.capability.canMakeExperimentalRuling, true);
   assert.deepEqual(selection.capability.supportedReasoningEfforts, ["none", "high", "max"]);
   assert.deepEqual(selection.capability.supportedReasoningModes, ["standard", "pro"]);
   const thinkingSelection = resolveAdminModelSelection({
@@ -96,7 +100,7 @@ test("DeepSeek capabilities explicitly prohibit final judgment and escalation de
     model: "deepseek-v4-pro",
     reasoningEffort: "max",
     reasoningMode: "pro",
-    stage: ADMIN_MODEL_LAB_STAGES.EVIDENCE_PREPARATION,
+    stage: ADMIN_MODEL_LAB_STAGES.EXPERIMENTAL_FINAL_RULING,
   });
   assert.equal(thinkingSelection.reasoningEffort, "max");
   assert.equal(thinkingSelection.reasoningMode, "pro");
@@ -127,13 +131,13 @@ test("availability is computed server-side without exposing secrets", () => {
   assert.equal(JSON.stringify(capabilities).includes("secret"), false);
 });
 
-test("GLM and Kimi are allowlisted only for evidence preparation with model-specific thinking", () => {
+test("GLM and Kimi are allowlisted only for experimental final rulings with model-specific thinking", () => {
   const glm = resolveAdminModelSelection({
     provider: "glm",
     model: "glm-5.2",
     reasoningEffort: "high",
     reasoningMode: "pro",
-    stage: ADMIN_MODEL_LAB_STAGES.EVIDENCE_PREPARATION,
+    stage: ADMIN_MODEL_LAB_STAGES.EXPERIMENTAL_FINAL_RULING,
   });
   assert.equal(glm.capability.canMakeFinalRuling, false);
   assert.equal(glm.capability.canDecideEscalation, false);
@@ -143,7 +147,7 @@ test("GLM and Kimi are allowlisted only for evidence preparation with model-spec
     model: "kimi-k2.6",
     reasoningEffort: "none",
     reasoningMode: "standard",
-    stage: ADMIN_MODEL_LAB_STAGES.EVIDENCE_PREPARATION,
+    stage: ADMIN_MODEL_LAB_STAGES.EXPERIMENTAL_FINAL_RULING,
   });
   assert.equal(kimiK2.capability.thinkingControl, "optional");
 
@@ -152,7 +156,7 @@ test("GLM and Kimi are allowlisted only for evidence preparation with model-spec
     model: "kimi-k3",
     reasoningEffort: "max",
     reasoningMode: "pro",
-    stage: ADMIN_MODEL_LAB_STAGES.EVIDENCE_PREPARATION,
+    stage: ADMIN_MODEL_LAB_STAGES.EXPERIMENTAL_FINAL_RULING,
   });
   assert.equal(kimiK3.capability.thinkingControl, "always_on");
   assert.deepEqual(kimiK3.capability.supportedReasoningEfforts, ["low", "high", "max"]);
@@ -161,14 +165,14 @@ test("GLM and Kimi are allowlisted only for evidence preparation with model-spec
     resolveAdminModelSelection({
       provider: "kimi",
       model: "kimi-k3",
-      stage: ADMIN_MODEL_LAB_STAGES.EVIDENCE_PREPARATION,
+      stage: ADMIN_MODEL_LAB_STAGES.EXPERIMENTAL_FINAL_RULING,
     }),
     kimiK3,
   );
   const defaultGlm = resolveAdminModelSelection({
     provider: "glm",
     model: "glm-5.2",
-    stage: ADMIN_MODEL_LAB_STAGES.EVIDENCE_PREPARATION,
+    stage: ADMIN_MODEL_LAB_STAGES.EXPERIMENTAL_FINAL_RULING,
   });
   assert.equal(defaultGlm.reasoningEffort, "max");
   assert.equal(defaultGlm.reasoningMode, "pro");
@@ -178,7 +182,7 @@ test("GLM and Kimi are allowlisted only for evidence preparation with model-spec
       model: "kimi-k3",
       reasoningEffort: "max",
       reasoningMode: "standard",
-      stage: ADMIN_MODEL_LAB_STAGES.EVIDENCE_PREPARATION,
+      stage: ADMIN_MODEL_LAB_STAGES.EXPERIMENTAL_FINAL_RULING,
     }),
     (error) => error.code === "reasoning_mode_not_supported",
   );

@@ -842,6 +842,16 @@ button:focus-visible {
   white-space: pre-wrap;
 }
 
+.admin-result-summary .admin-experimental-notice {
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 183, 77, 0.65);
+  border-radius: 6px;
+  color: #ffd089;
+  background: rgba(125, 73, 0, 0.24);
+  font-weight: 700;
+}
+
 .admin-result-summary ol,
 .admin-result-summary ul {
   margin-bottom: 12px;

@@ -1036,7 +1036,7 @@ export function createPublicAnswerModelEnv(env = {}) {
   const source = env && typeof env === "object" ? env : {};
   const result = { ...source };
   for (const key of Object.keys(result)) {
-    if (/^(?:OPENAI_|ADMIN_OPENAI_)/iu.test(key)) delete result[key];
+    if (/^(?:OPENAI_|ADMIN_|GLM_|KIMI_)/iu.test(key)) delete result[key];
   }
 
   const mockRequested = [

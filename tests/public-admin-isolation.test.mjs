@@ -98,7 +98,7 @@ test("public answer payload cannot select an admin-only provider or depend on Op
   }
 });
 
-test("public model environment strips every OpenAI setting and pins all model stages", () => {
+test("public model environment strips every admin-only model setting and pins all model stages", () => {
   const publicEnv = createPublicAnswerModelEnv({
     MODEL_PROVIDER: "openai",
     RAG_MODEL_PROVIDER: "gemini",
@@ -107,6 +107,11 @@ test("public model environment strips every OpenAI setting and pins all model st
     OPENAI_BASE_URL: "https://openai.example.test",
     ADMIN_OPENAI_ENABLED: "true",
     ADMIN_OPENAI_BASE_URL: "https://admin-openai.example.test",
+    ADMIN_MODEL_LAB_ENABLED: "true",
+    GLM_API_KEY: "admin-glm-key",
+    GLM_BASE_URL: "https://glm.example.test",
+    KIMI_API_KEY: "admin-kimi-key",
+    KIMI_BASE_URL: "https://kimi.example.test",
     DEEPSEEK_API_KEY: "public-deepseek-key",
   });
 
@@ -115,7 +120,7 @@ test("public model environment strips every OpenAI setting and pins all model st
   assert.equal(publicEnv.RAG_CARD_MODEL_PROVIDER, "deepseek");
   assert.equal(publicEnv.RAG_RULE_MODEL_PROVIDER, "deepseek");
   assert.equal(publicEnv.RAG_RULEBOOK_MODEL_PROVIDER, "deepseek");
-  assert.equal(Object.keys(publicEnv).some((key) => /^(?:OPENAI_|ADMIN_OPENAI_)/iu.test(key)), false);
+  assert.equal(Object.keys(publicEnv).some((key) => /^(?:OPENAI_|ADMIN_|GLM_|KIMI_)/iu.test(key)), false);
   assert.equal(publicEnv.DEEPSEEK_API_KEY, "public-deepseek-key");
 
   const mockEnv = createPublicAnswerModelEnv({

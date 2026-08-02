@@ -7,7 +7,7 @@ import {
   loadAdminLabEvaluationCorpus,
 } from "../backend/adminLabEvaluation.mjs";
 
-test("loads the frozen five-case corpus locally without a model or network", async () => {
+test("loads the frozen eight-case corpus locally without a model or network", async () => {
   let readCount = 0;
   const corpus = await loadAdminLabEvaluationCorpus({
     readFileImpl: async (url, encoding) => {
@@ -19,7 +19,7 @@ test("loads the frozen five-case corpus locally without a model or network", asy
     },
   });
   assert.equal(readCount, 1);
-  assert.equal(corpus.cases.length, 5);
+  assert.equal(corpus.cases.length, 8);
   assert.equal(Object.isFrozen(corpus), true);
 });
 
@@ -118,8 +118,8 @@ test("suite reports missing results and never labels automation as human truth",
     },
   });
 
-  assert.equal(report.totalCount, 5);
+  assert.equal(report.totalCount, 8);
   assert.equal(report.passedCount, 1);
   assert.equal(report.humanTruth, false);
-  assert.equal(report.cases.filter((item) => item.missingResult).length, 4);
+  assert.equal(report.cases.filter((item) => item.missingResult).length, 7);
 });

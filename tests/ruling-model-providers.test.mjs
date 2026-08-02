@@ -205,7 +205,7 @@ test("completed OpenAI output is extracted and validated without loose JSON repa
   assert.equal(validation.ok, true, validation.errors?.join("\n"));
 });
 
-test("DeepSeek adapter can prepare evidence but can never issue the final ruling", async () => {
+test("existing DeepSeek adapter remains evidence-only while Flash is the fixed preparation model", async () => {
   const invocations = [];
   const controller = new AbortController();
   const provider = new ExistingDeepSeekProvider({
@@ -225,21 +225,50 @@ test("DeepSeek adapter can prepare evidence but can never issue the final ruling
   assert.equal(invocations[0].purpose, "evidence_preparation");
   assert.equal(invocations[0].canMakeFinalRuling, false);
   assert.equal(invocations[0].signal, controller.signal);
-  await provider.prepareEvidence({
-    model: "deepseek-v4-pro",
-    reasoningEffort: "max",
-    reasoningMode: "pro",
-    input: { evidence: ["faq-1"] },
-  });
-  assert.equal(invocations[1].thinkingMode, "enabled");
-  assert.equal(invocations[1].reasoningEffort, "max");
   await assert.rejects(
     provider.runRuling({ input: "question" }),
     (error) => error.code === "deepseek_final_ruling_forbidden",
   );
 });
 
-test("GLM compatible adapter emits preparation-only JSON with filtered thinking controls", async () => {
+test("DeepSeek V4 experimental finals send both the thinking toggle and effort", async () => {
+  const calls = [];
+  const provider = new CompatibleEvidencePreparationProvider({
+    providerId: "deepseek",
+    apiKey: "deepseek-server-secret",
+    fetchImpl: mockFetch(calls, {
+      id: "deepseek-final-1",
+      model: "deepseek-v4-pro",
+      choices: [{ message: { content: JSON.stringify(makeStructuredResult()) } }],
+      usage: { prompt_tokens: 10, completion_tokens: 5 },
+    }),
+  });
+  await provider.create({
+    model: "deepseek-v4-pro",
+    reasoningEffort: "max",
+    reasoningMode: "pro",
+    input: "匿名问题与冻结证据",
+    instructions: "只输出 JSON。",
+    metadata: { runId: "run-deepseek", promptVersion: "openai-ruling-v1" },
+  });
+
+  const body = JSON.parse(calls[0].options.body);
+  assert.deepEqual(body.thinking, { type: "enabled" });
+  assert.equal(body.reasoning_effort, "max");
+  assert.equal((await provider.create({
+    model: "deepseek-v4-flash",
+    reasoningEffort: "none",
+    reasoningMode: "standard",
+    input: "匿名问题与冻结证据",
+    instructions: "只输出 JSON。",
+    metadata: { runId: "run-deepseek-standard", promptVersion: "openai-ruling-v1" },
+  })).request_id_source, "upstream");
+  const standardBody = JSON.parse(calls[1].options.body);
+  assert.deepEqual(standardBody.thinking, { type: "disabled" });
+  assert.equal(Object.hasOwn(standardBody, "reasoning_effort"), false);
+});
+
+test("GLM compatible adapter emits an experimental final JSON result with filtered thinking controls", async () => {
   const calls = [];
   const controller = new AbortController();
   const provider = new CompatibleEvidencePreparationProvider({
@@ -247,32 +276,31 @@ test("GLM compatible adapter emits preparation-only JSON with filtered thinking 
     apiKey: "glm-server-secret",
     baseUrl: "https://glm.example/v4",
     fetchImpl: mockFetch(calls, {
-      choices: [{ message: { content: JSON.stringify({ ruleSearchQueries: [{ query: "规则" }] }) } }],
+      id: "glm-final-1",
+      model: "glm-5.2",
+      choices: [{ message: { content: JSON.stringify(makeStructuredResult()) } }],
       usage: { prompt_tokens: 10, completion_tokens: 5 },
     }),
   });
-  const prepared = await provider.prepareEvidence({
+  const response = await provider.create({
     model: "glm-5.2",
     reasoningEffort: "high",
     reasoningMode: "pro",
-    input: { question: "匿名问题" },
+    input: "匿名问题与冻结证据",
+    instructions: "只输出 JSON。",
+    metadata: { runId: "run-1", promptVersion: "openai-ruling-v1" },
     maxOutputTokens: 700,
     signal: controller.signal,
   });
-  assert.equal(prepared.canMakeFinalRuling, false);
-  assert.equal(prepared.canDecideEscalation, false);
-  assert.equal(prepared.result.ruleSearchQueries[0].query, "规则");
+  assert.equal(response.status, "completed");
+  assert.equal(response.experimental, true);
   const body = JSON.parse(calls[0].options.body);
   assert.deepEqual(body.thinking, { type: "enabled" });
   assert.equal(body.reasoning_effort, "high");
   assert.equal(body.max_tokens, 700);
   assert.equal(calls[0].options.headers.authorization, "Bearer glm-server-secret");
   assert.equal(calls[0].options.signal, controller.signal);
-  assert.equal(JSON.stringify(prepared).includes("glm-server-secret"), false);
-  await assert.rejects(
-    provider.runRuling(),
-    (error) => error.code === "glm_final_ruling_forbidden",
-  );
+  assert.equal(JSON.stringify(response).includes("glm-server-secret"), false);
 });
 
 test("Kimi K2.6 supports optional thinking while K3 uses its always-on reasoning effort", async () => {
@@ -285,18 +313,22 @@ test("Kimi K2.6 supports optional thinking while K3 uses its always-on reasoning
       usage: {},
     }),
   });
-  await provider.prepareEvidence({
+  await provider.create({
     model: "kimi-k2.6",
     reasoningEffort: "none",
     reasoningMode: "standard",
-    input: "prepare",
+    input: "final",
+    instructions: "JSON only",
+    metadata: { runId: "run-k2", promptVersion: "openai-ruling-v1" },
     maxOutputTokens: 800,
   });
-  await provider.prepareEvidence({
+  await provider.create({
     model: "kimi-k3",
     reasoningEffort: "max",
     reasoningMode: "pro",
-    input: "prepare",
+    input: "final",
+    instructions: "JSON only",
+    metadata: { runId: "run-k3", promptVersion: "openai-ruling-v1" },
   });
   const k2Body = JSON.parse(calls[0].options.body);
   const k3Body = JSON.parse(calls[1].options.body);
@@ -306,11 +338,13 @@ test("Kimi K2.6 supports optional thinking while K3 uses its always-on reasoning
   assert.equal(k3Body.reasoning_effort, "max");
   assert.match(calls[0].url, /^https:\/\/api\.moonshot\.ai\/v1\//u);
   await assert.rejects(
-    provider.prepareEvidence({
+    provider.create({
       model: "kimi-k3",
       reasoningEffort: "max",
       reasoningMode: "standard",
-      input: "prepare",
+      input: "final",
+      instructions: "JSON only",
+      metadata: { runId: "run-invalid", promptVersion: "openai-ruling-v1" },
     }),
     (error) => error.code === "reasoning_mode_not_supported",
   );

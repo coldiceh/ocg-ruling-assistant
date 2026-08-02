@@ -191,7 +191,12 @@ test("production composition accepts the real base service when its run store is
     recordStore: persistentRecordStore(),
     runStore: createAdminRunStore({ storage: persistentRunStorage }),
     deepSeekProvider: {},
-    openAIProvider: {},
+    openAIProvider: {
+      providerId: "openai",
+      async create() {
+        throw new Error("final provider must not run during createRun");
+      },
+    },
     evaluationLoader: async () => ({
       schemaVersion: "1",
       fixtureName: "fixture",
@@ -276,7 +281,12 @@ test("explicit local development composition works without Redis but is forbidde
       throw new Error("network must not run");
     },
     deepSeekProvider: {},
-    openAIProvider: {},
+    openAIProvider: {
+      providerId: "openai",
+      async create() {
+        throw new Error("final provider must not run during createRun");
+      },
+    },
     evaluationLoader: async () => ({
       schemaVersion: "1",
       fixtureName: "fixture",
@@ -307,24 +317,31 @@ test("explicit local development composition works without Redis but is forbidde
   );
 });
 
-test("composition instantiates optional GLM and Kimi preparation providers from server env only", async () => {
+test("composition keeps DeepSeek Flash as preparation and exposes GLM/Kimi only as experimental finals", async () => {
   const service = createAdminModelLabDevelopmentService({
     env: {
-      ...ENABLED_ENV,
+      ADMIN_MODEL_LAB_ENABLED: "true",
       NODE_ENV: "development",
+      DEEPSEEK_API_KEY: "server-deepseek-secret",
       GLM_API_KEY: "server-glm-secret",
       KIMI_API_KEY: "server-kimi-secret",
     },
     fetchImpl: async () => {
       throw new Error("network must not run while reading capabilities");
     },
-    deepSeekProvider: {},
-    openAIProvider: {},
+    deepSeekProvider: { async prepareEvidence() {} },
   });
   const capabilities = await service.capabilities();
-  assert.deepEqual([...capabilities.architecture.preparationProviders].sort(), ["glm", "kimi"]);
+  assert.deepEqual(capabilities.architecture.preparationProviders, ["deepseek"]);
+  assert.deepEqual([...capabilities.architecture.finalRulingProviders].sort(), ["deepseek", "glm", "kimi"]);
+  assert.equal(capabilities.architecture.finalRulingProvider, "deepseek");
   assert.equal(capabilities.providers.providers.find((item) => item.providerId === "glm").available, true);
   assert.equal(capabilities.providers.providers.find((item) => item.providerId === "kimi").available, true);
+  assert.equal(capabilities.providers.providers.find((item) => item.providerId === "openai").available, false);
+  const queued = await service.createRun({ body: { question: "仅国产模型的实验问题" } });
+  assert.equal(queued.executionProfile.preparation.provider, "deepseek");
+  assert.equal(queued.executionProfile.finalRuling.provider, "deepseek");
+  assert.equal(queued.executionProfile.finalRuling.model, "deepseek-v4-flash");
   assert.equal(JSON.stringify(capabilities).includes("server-glm-secret"), false);
   assert.equal(JSON.stringify(capabilities).includes("server-kimi-secret"), false);
 });

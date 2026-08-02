@@ -29,7 +29,7 @@ ChatGPT 订阅和 OpenAI API 是两套独立计费系统。Apple Gift Card/Apple
 - 支持 JSON Output 和 Tool Calls，但 JSON 模式不是严格 JSON Schema，且官方提醒可能偶发空 content，必须由服务端校验和有限重试。
 - 官方 FAQ 列出 PayPal、银行卡、支付宝和微信支付：https://api-docs.deepseek.com/faq
 
-管理实验中，Flash/Pro 都只能做卡名候选、检索词、证据逐字摘取、冲突列表和 ScenarioDraft；不能作出最终裁定，也不能决定是否升级。每次最终裁定仍固定交给 OpenAI GPT-5.6。
+管理实验中固定由 `deepseek-v4-flash` 准备卡名候选和检索词。Flash/Pro 也可以作为隔离后台的实验最终模型，但服务端会强制标记为非权威、仅管理员可见，结果不会进入公开回答；资料准备输出仍不能替最终模型下结论或决定升级。
 
 ### Kimi
 
@@ -54,17 +54,18 @@ K3/K2.7 Code 对严格 JSON Schema 的支持更适合高风险结构化任务；
 - 官方结构化输出目前仍需业务侧 JSON Schema 校验：https://docs.bigmodel.cn/cn/guide/capabilities/struct-output
 - 个人充值协议列明支付宝、微信；企业认证账号还可按官方流程使用对公打款：https://docs.bigmodel.cn/cn/terms/recharge-agreement 、https://docs.bigmodel.cn/cn/faq/authentication-issues
 
-当前管理实验仅将官方明确的 `glm-5.2` 加入资料准备白名单。它不能作出最终裁定；是否适合资料整理仍要用同一 Evidence Snapshot 做盲测。
+当前管理实验将官方明确的 `glm-5.2` 加入实验最终模型白名单。它读取与其他模型相同的冻结 Evidence Snapshot，输出仍必须通过同一严格 Schema 与引用校验。
 
 ## 管理实验配置
 
 所有密钥只设置在后端部署环境，不要填进网页、请求体或 Git 仓库：
 
-- 必需：`ADMIN_MODEL_LAB_ENABLED=true`、`ADMIN_OPENAI_ENABLED=true`、`OPENAI_API_KEY`、`DEEPSEEK_API_KEY`。
+- 必需：`ADMIN_MODEL_LAB_ENABLED=true`、`DEEPSEEK_API_KEY`。
+- OpenAI 可选：只有实际使用 GPT-5.6 时才设置 `ADMIN_OPENAI_ENABLED=true` 和 `OPENAI_API_KEY`；完全没有 OpenAI Key 时不影响国产模型实验。
 - 可选智谱：设置 `GLM_API_KEY`；默认使用中国站 `https://open.bigmodel.cn/api/paas/v4`，必要时只能由服务器用 `ADMIN_GLM_BASE_URL` 覆盖。
 - 可选 Kimi：设置 `KIMI_API_KEY`；默认使用官方当前端点 `https://api.moonshot.ai/v1`，必要时只能由服务器用 `ADMIN_KIMI_BASE_URL` 覆盖。
 
-网页只能从后端返回的白名单中选择资料准备模型：`deepseek-v4-flash`、`deepseek-v4-pro`、`glm-5.2`、`kimi-k2.6`、`kimi-k3`。DeepSeek Flash/Pro 可分别测试关闭思考，或开启思考并选择 `high|max`；GLM-5.2 与 Kimi K2.6 可按能力切换思考；Kimi K3 固定开启思考，并只发送官方支持的顶层 `reasoning_effort=low|high|max`。任意 Base URL、API key、未列模型或 provider/model 不匹配都会被后端忽略或拒绝。公开 `/api/answer` 仍固定使用原有 DeepSeek 流程，不受管理实验选择影响。
+网页的资料准备模型固定为 `deepseek-v4-flash`。实验最终模型可选择 `deepseek-v4-flash`、`deepseek-v4-pro`、`glm-5.2`、`kimi-k2.6`、`kimi-k3`。DeepSeek Flash/Pro 可分别测试关闭思考，或开启思考并选择 `high|max`；GLM-5.2 与 Kimi K2.6 可按能力切换思考；Kimi K3 固定开启思考，并只发送官方支持的顶层 `reasoning_effort=low|high|max`。任意 Base URL、API key、未列模型或 provider/model 不匹配都会被后端忽略或拒绝。公开 `/api/answer` 仍固定使用原有 DeepSeek 流程，不受管理实验选择影响。
 
 ## 推荐运行策略
 

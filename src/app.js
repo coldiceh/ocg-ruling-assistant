@@ -1469,7 +1469,10 @@ function normalizeAdminCapabilities(data) {
     .filter((item) => item.available !== false));
   const hasStageCapabilities = normalizedModels.some((item) => Array.isArray(item.allowedStages));
   const models = hasStageCapabilities
-    ? normalizedModels.filter((item) => item.allowedStages.includes("final_ruling"))
+    ? normalizedModels.filter((item) => (
+        item.allowedStages.includes("final_ruling")
+        || item.allowedStages.includes("experimental_final_ruling")
+      ))
     : normalizedModels;
   const preparationModels = hasStageCapabilities
     ? normalizedModels.filter((item) => item.allowedStages.includes("evidence_preparation"))
@@ -1707,9 +1710,25 @@ function syncAdminModelSpecificControls() {
   populateAdminSelect(ui.adminEffortSelect, efforts, "默认");
   populateAdminSelect(ui.adminModeSelect, modes, "标准");
   populateAdminSelect(ui.adminPromptVersionSelect, prompts, "后端默认");
-  selectPreferredAdminOption(ui.adminEffortSelect, ["medium", "low", "none"]);
-  selectPreferredAdminOption(ui.adminModeSelect, ["standard", "pro"]);
+  selectPreferredAdminOption(ui.adminModeSelect, [
+    model?.defaultReasoningMode,
+    "standard",
+    "pro",
+  ].filter(Boolean));
+  syncAdminFinalReasoningCompatibility();
   selectPreferredAdminOption(ui.adminPromptVersionSelect, ["openai-ruling-v1"]);
+}
+
+function syncAdminFinalReasoningCompatibility() {
+  if (!adminCapabilityState) return;
+  const model = adminCapabilityState.models.find((item) => item.id === ui.adminModelSelect?.value);
+  const mode = String(ui.adminModeSelect?.value || "");
+  const preferredEfforts = mode === "standard" && model?.provider !== "openai"
+    ? ["none"]
+    : mode === "pro" && model?.provider === "deepseek"
+      ? ["high", "max", "none"]
+      : [model?.defaultReasoningEffort, "medium", "high", "max", "low", "none"].filter(Boolean);
+  selectPreferredAdminOption(ui.adminEffortSelect, preferredEfforts);
 }
 
 function populateAdminSelect(select, options, emptyLabel) {
@@ -2263,6 +2282,15 @@ function renderAdminStructuredResult(run) {
     return;
   }
 
+  if (run?.result?.experimental === true) {
+    const notice = appendText(
+      ui.adminResultSummary,
+      "p",
+      "实验结果：由国产模型在隔离管理实验中生成，不代表官方裁定，也不会进入普通用户回答。",
+    );
+    notice.className = "admin-experimental-notice";
+  }
+
   const conciseAnswer = String(result.conciseAnswer || "").trim();
   const verdicts = firstAdminArray(result.verdicts);
   const claims = firstAdminArray(result.claims);
@@ -2451,7 +2479,7 @@ function renderAdminMetrics(run) {
     if (!Array.isArray(values) || !values.length) return "";
     const labels = {
       evidencePreparation: "证据准备模型",
-      finalRuling: "最终裁定（OpenAI）",
+      finalRuling: "最终裁定模型",
     };
     return values
       .map((value) => labels[String(value || "")] || String(value || ""))
@@ -3993,6 +4021,7 @@ async function init() {
   });
   ui.adminProviderSelect?.addEventListener("change", syncAdminModelControls);
   ui.adminModelSelect?.addEventListener("change", syncAdminModelSpecificControls);
+  ui.adminModeSelect?.addEventListener("change", syncAdminFinalReasoningCompatibility);
   ui.adminPreparationProviderSelect?.addEventListener("change", syncAdminPreparationModelControls);
   ui.adminPreparationModelSelect?.addEventListener("change", syncAdminPreparationModelSpecificControls);
   ui.adminStartButton?.addEventListener("click", startAdminExperiment);

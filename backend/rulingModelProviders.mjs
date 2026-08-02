@@ -10,6 +10,7 @@ import {
 } from "./modelRulingSchema.mjs";
 
 const DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1";
+const DEFAULT_DEEPSEEK_BASE_URL = "https://api.deepseek.com";
 const DEFAULT_GLM_BASE_URL = "https://open.bigmodel.cn/api/paas/v4";
 const DEFAULT_KIMI_BASE_URL = "https://api.moonshot.ai/v1";
 const MODEL_RULING_FORMAT_NAME = "model_ruling_result";
@@ -122,8 +123,10 @@ export class ExistingDeepSeekProvider {
 }
 
 /**
- * Server-owned OpenAI-compatible Chat Completions adapter used only to prepare
- * evidence-search hints. It intentionally has no final-ruling method.
+ * Server-owned OpenAI-compatible Chat Completions adapter. The same transport
+ * can prepare evidence-search hints or, when selected explicitly in the
+ * isolated admin lab, produce an experimental final ruling from the complete
+ * frozen evidence packet. Public answers never use this final-ruling method.
  */
 export class CompatibleEvidencePreparationProvider {
   constructor({
@@ -134,8 +137,8 @@ export class CompatibleEvidencePreparationProvider {
     env = globalThis.process?.env || {},
   } = {}) {
     const normalizedProvider = String(providerId || "").trim().toLowerCase();
-    if (!new Set(["glm", "kimi"]).has(normalizedProvider)) {
-      throw new TypeError("Compatible evidence provider must be glm or kimi");
+    if (!new Set(["deepseek", "glm", "kimi"]).has(normalizedProvider)) {
+      throw new TypeError("Compatible model provider must be deepseek, glm or kimi");
     }
     if (typeof fetchImpl !== "function") {
       throw new TypeError(`${normalizedProvider} evidence provider requires fetch`);
@@ -146,14 +149,20 @@ export class CompatibleEvidencePreparationProvider {
     this.providerId = normalizedProvider;
     this.apiKey = apiKey.trim();
     this.fetchImpl = fetchImpl;
-    this.baseUrl = normalizeBaseUrl(baseUrl || (
-      normalizedProvider === "glm" ? DEFAULT_GLM_BASE_URL : DEFAULT_KIMI_BASE_URL
-    ), { requireHttps: true });
+    this.baseUrl = normalizeBaseUrl(baseUrl || ({
+      deepseek: DEFAULT_DEEPSEEK_BASE_URL,
+      glm: DEFAULT_GLM_BASE_URL,
+      kimi: DEFAULT_KIMI_BASE_URL,
+    })[normalizedProvider], { requireHttps: true });
     this.env = env;
   }
 
   async getCapabilities() {
-    const keyName = this.providerId === "glm" ? "GLM_API_KEY" : "KIMI_API_KEY";
+    const keyName = ({
+      deepseek: "DEEPSEEK_API_KEY",
+      glm: "GLM_API_KEY",
+      kimi: "KIMI_API_KEY",
+    })[this.providerId];
     return getAdminModelProviderCapabilities({
       env: {
         ...this.env,
@@ -217,10 +226,89 @@ export class CompatibleEvidencePreparationProvider {
     };
   }
 
-  async runRuling() {
-    throw new RulingModelProviderError(
-      `${this.providerId} is restricted to evidence preparation; every final ruling must use OpenAI GPT-5.6`,
-      { code: `${this.providerId}_final_ruling_forbidden`, provider: this.providerId },
+  async create({
+    model,
+    reasoningEffort,
+    reasoningMode,
+    instructions,
+    input,
+    maxOutputTokens,
+    metadata = {},
+    signal,
+  } = {}) {
+    const capability = ADMIN_MODEL_CAPABILITY_TABLE[String(model || "").trim()];
+    const selection = resolveAdminModelSelection({
+      provider: this.providerId,
+      model,
+      reasoningEffort: reasoningEffort || capability?.defaultReasoningEffort,
+      reasoningMode: reasoningMode || capability?.defaultReasoningMode,
+      stage: ADMIN_MODEL_LAB_STAGES.EXPERIMENTAL_FINAL_RULING,
+    });
+    const finalInput = normalizeDeepSeekInput(input);
+    if (!finalInput) throw new TypeError(`${this.providerId} final-ruling input must not be empty`);
+    sanitizeMetadata(metadata, { requireTraceFields: true });
+    const maxTokens = optionalPositiveInteger(maxOutputTokens, "maxOutputTokens") ?? 16_000;
+    const schemaInstruction = [
+      String(instructions || "").trim(),
+      "这是隔离后台中的实验性最终裁定运行，不代表正式裁定或普通用户答案。",
+      "只输出一个符合下列 JSON Schema 的 JSON 对象，不要输出 Markdown、代码围栏或额外说明：",
+      JSON.stringify(MODEL_RULING_RESULT_JSON_SCHEMA),
+    ].filter(Boolean).join("\n\n");
+    const body = {
+      model: selection.model,
+      messages: [
+        { role: "system", content: schemaInstruction },
+        { role: "user", content: finalInput },
+      ],
+      response_format: { type: "json_object" },
+      ...compatibleThinkingParameters(selection),
+    };
+    if (maxTokens !== undefined) {
+      body[this.providerId === "kimi" ? "max_completion_tokens" : "max_tokens"] = maxTokens;
+    }
+    const startedAt = new Date();
+    const payload = await this.requestJson("/chat/completions", {
+      method: "POST",
+      body,
+      signal,
+    });
+    const text = extractChatCompletionText(payload);
+    if (!text) {
+      throw new RulingModelProviderError(`${this.providerId} returned an empty final ruling`, {
+        code: `${this.providerId}_empty_final_ruling`,
+        provider: this.providerId,
+        outcomeKnown: true,
+      });
+    }
+    const upstreamRequestId = String(payload?.id || "").trim();
+    return {
+      id: upstreamRequestId || `${this.providerId}-synthetic-${Date.now()}`,
+      request_id_source: upstreamRequestId ? "upstream" : "synthetic",
+      status: "completed",
+      model: String(payload?.model || selection.model),
+      output_text: text,
+      usage: cloneJson(payload?.usage || null),
+      created_at: payload?.created ?? startedAt.toISOString(),
+      completed_at: new Date().toISOString(),
+      provider: this.providerId,
+      experimental: true,
+    };
+  }
+
+  async runRuling(request = {}) {
+    return this.create(request);
+  }
+
+  validateCompletedResponse(response, validationOptions = {}) {
+    if (!response || response.status !== "completed") {
+      return {
+        ok: false,
+        errors: [`response is not completed: ${response?.status || "missing"}`],
+      };
+    }
+    return parseAndValidateModelRulingResult(
+      String(response.output_text || ""),
+      validationOptions,
     );
   }
 
@@ -237,7 +325,7 @@ export class CompatibleEvidencePreparationProvider {
         ...(signal === undefined ? {} : { signal }),
       });
     } catch (cause) {
-      throw new RulingModelProviderError(`${this.providerId} evidence request failed`, {
+      throw new RulingModelProviderError(`${this.providerId} model request failed`, {
         code: `${this.providerId}_network_error`,
         provider: this.providerId,
         outcomeKnown: false,
@@ -488,6 +576,15 @@ function compatibleThinkingParameters(selection) {
   }
   if (selection.model === "kimi-k3") {
     return { reasoning_effort: selection.reasoningEffort };
+  }
+  if (selection.provider === "deepseek") {
+    const enabled = selection.reasoningMode === "pro";
+    return {
+      thinking: { type: enabled ? "enabled" : "disabled" },
+      ...(enabled && selection.reasoningEffort !== "none"
+        ? { reasoning_effort: selection.reasoningEffort }
+        : {}),
+    };
   }
   return {
     thinking: { type: selection.reasoningMode === "pro" ? "enabled" : "disabled" },

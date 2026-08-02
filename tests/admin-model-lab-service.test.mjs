@@ -145,29 +145,21 @@ test("executeRun always starts OpenAI final ruling with the complete frozen snap
   );
 });
 
-test("preparation model selects a registry provider while OpenAI remains the final judge", async () => {
+test("a domestic experimental final ruling completes synchronously and is labelled non-authoritative", async () => {
   const fixture = makeFixture();
-  const preparationCalls = [];
-  const service = makeService(fixture, { GLM_API_KEY: "server-only-glm-key" }, {
-    preparationProviders: {
-      glm: {
-        providerId: "glm",
-        async prepareEvidence(request) {
-          preparationCalls.push(request);
+  const domesticCalls = [];
+  const service = makeService(fixture, {}, {
+    finalRulingProviders: {
+      deepseek: {
+        providerId: "deepseek",
+        async create(request) {
+          domesticCalls.push(request);
           return {
-            provider: "glm",
-            model: request.model,
-            canMakeFinalRuling: false,
-            canDecideEscalation: false,
-            result: {
-              cardNameCandidates: [
-                { name: "匿名卡A", originalText: "匿名卡A" },
-                { name: "匿名卡B", originalText: "匿名卡B" },
-              ],
-              ruleSearchQueries: [{ query: "匿名规则", reason: "mechanism" }],
-              unresolvedNotes: [],
-              conflicts: [],
-            },
+            id: "deepseek-final-1",
+            status: "completed",
+            model: "deepseek-v4-flash",
+            output_text: JSON.stringify(makeStructuredRuling()),
+            usage: { prompt_tokens: 900, completion_tokens: 600, total_tokens: 1500 },
           };
         },
       },
@@ -176,36 +168,104 @@ test("preparation model selects a registry provider while OpenAI remains the fin
   const created = await service.createRun({
     body: {
       question: "匿名问题",
-      preparationModel: "glm-5.2",
-      preparationReasoningMode: "pro",
-      preparationReasoningEffort: "high",
-      provider: "glm",
+      provider: "deepseek",
+      model: "deepseek-v4-flash",
+      reasoningEffort: "none",
+      reasoningMode: "standard",
+    },
+  });
+  const execution = await service.executeRun({ runId: created.runId });
+
+  assert.equal(execution.run.status, ADMIN_RUN_STATUSES.SUCCEEDED);
+  assert.equal(execution.run.result.experimental, true);
+  assert.equal(execution.run.result.authority.classification, "experimental_non_authoritative");
+  assert.equal(execution.run.result.authority.publicAnswerEligible, false);
+  assert.equal(execution.run.result.provider.providerId, "deepseek");
+  assert.equal(execution.run.result.finalRuling.conciseAnswer, "可以发动，并完成处理。");
+  assert.equal(domesticCalls.length, 1);
+  assert.match(domesticCalls[0].input, /evidence-direct/u);
+  assert.equal(fixture.openAICreateCalls.length, 0);
+});
+
+test("polling cannot fail a domestic synchronous result while its executor still owns the lease", async () => {
+  const fixture = makeFixture();
+  const acceptedGate = deferred();
+  fixture.afterProviderAccepted = acceptedGate.promise;
+  const service = makeService(fixture, {}, {
+    finalRulingProviders: {
+      deepseek: {
+        providerId: "deepseek",
+        async create() {
+          return {
+            id: "deepseek-final-race",
+            status: "completed",
+            model: "deepseek-v4-flash",
+            output_text: JSON.stringify(makeStructuredRuling()),
+            usage: { prompt_tokens: 900, completion_tokens: 600, total_tokens: 1500 },
+          };
+        },
+      },
+    },
+  });
+  const created = await service.createRun({
+    body: {
+      question: "匿名并发轮询问题",
+      provider: "deepseek",
+      model: "deepseek-v4-flash",
+      reasoningEffort: "none",
+      reasoningMode: "standard",
+    },
+  });
+  const executionPromise = service.executeRun({ runId: created.runId });
+  await waitUntil(async () => {
+    const run = await fixture.runStore.getRun(created.runId);
+    return run.execution?.providerSubmission?.state === "SUBMITTED";
+  });
+
+  const duringExecution = await service.pollRun({ runId: created.runId });
+  assert.equal(duringExecution.status, ADMIN_RUN_STATUSES.RUNNING);
+  assert.equal(duringExecution.error, null);
+
+  acceptedGate.resolve();
+  const execution = await executionPromise;
+  assert.equal(execution.run.status, ADMIN_RUN_STATUSES.SUCCEEDED);
+});
+
+test("evidence preparation is fixed to DeepSeek V4 Flash and client transport fields are ignored", async () => {
+  const fixture = makeFixture();
+  const service = makeService(fixture);
+  const created = await service.createRun({
+    body: {
+      question: "匿名问题",
+      preparationModel: "deepseek-v4-flash",
+      preparationReasoningMode: "standard",
+      preparationReasoningEffort: "none",
+      provider: "openai",
+      model: "gpt-5.6-terra",
       baseUrl: "https://attacker.invalid/v1",
       apiKey: "frontend-secret",
     },
   });
-  assert.equal(created.executionProfile.preparation.provider, "glm");
-  assert.equal(created.executionProfile.preparation.reasoningMode, "pro");
+  assert.equal(created.executionProfile.preparation.provider, "deepseek");
+  assert.equal(created.executionProfile.preparation.model, "deepseek-v4-flash");
   assert.equal(created.executionProfile.finalRuling.provider, "openai");
   assert.equal(JSON.stringify(created).includes("frontend-secret"), false);
   assert.equal(JSON.stringify(created).includes("attacker.invalid"), false);
 
   const execution = await service.executeRun({ runId: created.runId });
-  assert.equal(preparationCalls.length, 1);
-  assert.equal(preparationCalls[0].model, "glm-5.2");
-  assert.equal(preparationCalls[0].reasoningEffort, "high");
-  assert.equal(execution.run.evidenceSnapshot.evidence.preparation.provider, "glm");
+  assert.equal(fixture.deepSeekPrepareCalls, 1);
+  assert.equal(execution.run.evidenceSnapshot.evidence.preparation.provider, "deepseek");
   assert.equal(fixture.openAICreateCalls.length, 1);
 
   await assert.rejects(
     service.createRun({
       body: {
         question: "provider mismatch",
-        preparationProvider: "kimi",
+        preparationProvider: "glm",
         preparationModel: "glm-5.2",
       },
     }),
-    (error) => error.code === "provider_model_mismatch",
+    (error) => error.code === "model_stage_not_allowed",
   );
 });
 
@@ -628,25 +688,23 @@ test("preparation and provider polling renew leases during long awaits", async (
 test("cancelling evidence preparation aborts the active preparation request", async () => {
   const fixture = makeFixture();
   let preparationSignal = null;
-  const service = makeService(fixture, { GLM_API_KEY: "server-only-glm-key" }, {
-    preparationProviders: {
-      glm: {
-        providerId: "glm",
-        async prepareEvidence({ signal }) {
-          preparationSignal = signal;
-          return new Promise((resolve, reject) => {
-            const abort = () => reject(signal.reason || new Error("aborted"));
-            if (signal.aborted) abort();
-            else signal.addEventListener("abort", abort, { once: true });
-          });
-        },
+  const service = makeService(fixture, {}, {
+    deepSeekProvider: {
+      providerId: "deepseek",
+      async prepareEvidence({ signal }) {
+        preparationSignal = signal;
+        return new Promise((resolve, reject) => {
+          const abort = () => reject(signal.reason || new Error("aborted"));
+          if (signal.aborted) abort();
+          else signal.addEventListener("abort", abort, { once: true });
+        });
       },
     },
   });
   const created = await service.createRun({
     body: {
       question: "匿名资料准备取消问题",
-      preparationModel: "glm-5.2",
+      preparationModel: "deepseek-v4-flash",
       preparationReasoningMode: "standard",
       preparationReasoningEffort: "none",
     },
@@ -807,13 +865,26 @@ test("an ambiguous provider submission is failed closed and never resubmitted", 
 function makeService(fixture, envOverrides = {}, {
   storage = createMemoryAdminRunStorage(),
   preparationProviders = {},
+  deepSeekProvider = null,
+  finalRulingProviders = {},
 } = {}) {
-  const runStore = createAdminRunStore({
+  const baseRunStore = createAdminRunStore({
     storage,
     runIdFactory: () => "admin-service-run-1",
     executionTokenFactory: () => "admin-service-test-execution-token",
     now: () => fixture.wallNow(),
   });
+  let runStore = baseRunStore;
+  if (fixture.afterProviderAccepted) {
+    runStore = {
+      ...baseRunStore,
+      async recordProviderSubmissionAccepted(...args) {
+        const accepted = await baseRunStore.recordProviderSubmissionAccepted(...args);
+        await fixture.afterProviderAccepted;
+        return accepted;
+      },
+    };
+  }
   fixture.runStore = runStore;
   return createAdminModelLabService({
     runStore,
@@ -824,7 +895,7 @@ function makeService(fixture, envOverrides = {}, {
       DEEPSEEK_API_KEY: "server-only-test-key",
       ...envOverrides,
     },
-    deepSeekProvider: {
+    deepSeekProvider: deepSeekProvider || {
       async prepareEvidence() {
         fixture.deepSeekPrepareCalls += 1;
         if (fixture.deepSeekPrepareGate) await fixture.deepSeekPrepareGate;
@@ -854,6 +925,7 @@ function makeService(fixture, envOverrides = {}, {
       },
     },
     preparationProviders,
+    finalRulingProviders,
     openAIProvider: {
       async create(request) {
         fixture.openAICreateCalls.push(request);
@@ -1059,7 +1131,7 @@ function delay(ms) {
 
 async function waitUntil(predicate, attempts = 100) {
   for (let index = 0; index < attempts; index += 1) {
-    if (predicate()) return;
+    if (await predicate()) return;
     await delay(0);
   }
   throw new Error("timed out waiting for asynchronous test state");

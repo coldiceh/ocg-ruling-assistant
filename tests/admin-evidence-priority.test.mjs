@@ -56,6 +56,9 @@ test("high-value local evidence is ranked ahead of weak same-card matches withou
       retrievalWarnings: evidence.retrievalWarnings || [],
     });
     const packet = buildAdminEvidenceDecisionPacket({ archive });
+    const expectedEvidenceMaxRank = Number.isInteger(evaluationCase.expectedEvidenceMaxRank)
+      ? evaluationCase.expectedEvidenceMaxRank
+      : 5;
 
     for (const expectedId of evaluationCase.expectedEvidenceIds || []) {
       const bucket = expectedId.startsWith("card-faq-") ? faqCandidates : officialCandidates;
@@ -82,8 +85,8 @@ test("high-value local evidence is ranked ahead of weak same-card matches withou
         `${evaluationCase.id}: ${expectedId} must survive into a high-value QA/FAQ bucket`,
       );
       assert.ok(
-        highValueRank < 5,
-        `${evaluationCase.id}: ${expectedId} must rank before weak same-card candidates (rank ${highValueRank})`,
+        highValueRank < expectedEvidenceMaxRank,
+        `${evaluationCase.id}: ${expectedId} must rank within the declared high-value candidate window ${expectedEvidenceMaxRank} (rank ${highValueRank})`,
       );
       assert.notEqual(allRank, -1, `${evaluationCase.id}: ${expectedId} must survive flattened evidence`);
       assert.ok(
