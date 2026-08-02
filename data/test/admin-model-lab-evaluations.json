@@ -21,6 +21,48 @@
         "ygoresources-qa-24229"
       ],
       "expectedVerdict": "可以依照记述的特殊召唤手续进行特殊召唤。",
+      "expectedAssertions": {
+        "verdicts": [
+          { "questionId": "q1", "value": "TRUE" }
+        ],
+        "claims": [
+          {
+            "assertionId": "procedure-summon-is-legal",
+            "questionId": "q1",
+            "status": "TRUE",
+            "proposition": {
+              "allOf": [
+                ["混沌黑魔术师", "混沌之黑魔术师"],
+                ["除外"],
+                ["毁灭的黑魔术师", "毁灭之黑魔术师"],
+                ["特殊召唤"]
+              ]
+            }
+          },
+          {
+            "assertionId": "abyss-trigger-can-activate",
+            "questionId": "q1",
+            "status": "TRUE",
+            "proposition": {
+              "allOf": [
+                ["深渊的相剑龙", "深渊之相剑龙"],
+                ["①", "1效果"],
+                ["发动"]
+              ],
+              "noneOf": ["不能发动"]
+            }
+          }
+        ],
+        "timelineOrder": [
+          {
+            "assertionId": "field-trigger-before-hand-trigger",
+            "steps": [
+              { "action": { "allOf": [["毁灭的黑魔术师", "毁灭之黑魔术师"], ["②", "2效果"], ["发动", "宣言"]] } },
+              { "action": { "allOf": [["深渊的相剑龙", "深渊之相剑龙"], ["①", "1效果"], ["连锁", "发动"]] } }
+            ]
+          }
+        ]
+      },
       "expectedAnswerKeyPoints": [
         "除外混沌黑魔术师后特殊召唤毁灭的黑魔术师",
         "毁灭的黑魔术师②与深渊的相剑龙①都满足发动条件",
@@ -53,8 +95,40 @@
         "card-faq-15245-1",
         "card-faq-22090-2"
       ],
-      "expectedEvidenceMaxRank": 16,
+      "expectedEvidenceMaxRank": 32,
       "expectedVerdict": "可以发动；作为COST丢弃后场上状态改变，处理时不能使用不受该效果影响的怪兽作为融合素材，因此不进行融合召唤。",
+      "expectedAssertions": {
+        "verdicts": [
+          { "questionId": "q1", "value": "TRUE" }
+        ],
+        "claims": [
+          {
+            "assertionId": "activation-remains-legal",
+            "questionId": "q1",
+            "status": "TRUE",
+            "proposition": {
+              "allOf": [["可以发动", "发动合法"], ["阿不思"]]
+            }
+          },
+          {
+            "assertionId": "fusion-does-not-resolve",
+            "questionId": "q1",
+            "proposition": {
+              "allOf": [["吞食圣痕之龙"], ["不受", "影响"], ["融合素材"], ["不能", "不可"]]
+            }
+          }
+        ],
+        "timelineOrder": [
+          {
+            "assertionId": "cost-state-change-before-resolution",
+            "steps": [
+              { "action": { "allOf": [["COST", "代价"], ["艾克莉西亚", "艾克莉西娅"], ["丢弃", "送去墓地"]] } },
+              { "result": { "allOf": [["吞食圣痕之龙"], ["不受", "影响"], ["适用", "生效"]] } },
+              { "result": { "allOf": [["不进行融合召唤", "融合召唤不进行", "不会融合召唤"]] } }
+            ]
+          }
+        ]
+      },
       "expectedAnswerKeyPoints": [
         "可以发动",
         "作为COST丢弃艾克莉西亚后，吞食圣痕之龙的不受其他效果影响立即适用",
@@ -83,6 +157,30 @@
         "card-faq-23349-1"
       ],
       "expectedVerdict": "不能连锁发动「天下独步的大义贼」的①效果。",
+      "expectedAssertions": {
+        "verdicts": [
+          { "questionId": "q1", "value": "FALSE" }
+        ],
+        "claims": [
+          {
+            "assertionId": "response-condition-not-met",
+            "questionId": "q1",
+            "status": "TRUE",
+            "proposition": {
+              "allOf": [["天下独步"], ["①", "1效果"], ["不能", "不可"], ["连锁", "发动"]],
+              "noneOf": ["可以直接连锁"]
+            }
+          },
+          {
+            "assertionId": "trap-is-activated-on-field",
+            "questionId": "q1",
+            "proposition": {
+              "allOf": [["颉颃胜负"], ["手牌", "手卡"], ["魔法与陷阱区域", "魔法·陷阱区域", "场上"], ["发动"]]
+            }
+          }
+        ],
+        "timelineOrder": []
+      },
       "expectedAnswerKeyPoints": [
         "不能连锁发动",
         "从手牌发动魔法或陷阱卡时先放到魔法与陷阱区域",
@@ -111,6 +209,29 @@
         "card-faq-19458-2"
       ],
       "expectedVerdict": "不算被自身③效果破坏，可以发动④效果。",
+      "expectedAssertions": {
+        "verdicts": [],
+        "claims": [
+          {
+            "assertionId": "destruction-is-not-attributed-to-yubel",
+            "questionId": "q1",
+            "status": "TRUE",
+            "proposition": {
+              "allOf": [["尤贝尔"], ["自身③", "自身的③", "自己的③"], ["破坏"], ["不算", "不是", "并非"]]
+            }
+          },
+          {
+            "assertionId": "fourth-effect-can-activate",
+            "questionId": "q1",
+            "status": "TRUE",
+            "proposition": {
+              "allOf": [["④", "4效果"], ["可以发动", "能够发动"]],
+              "noneOf": ["不能发动④"]
+            }
+          }
+        ],
+        "timelineOrder": []
+      },
       "expectedAnswerKeyPoints": [
         "原本的③效果被改写",
         "破坏来自纳祭魔鬼莲改写后的效果",
@@ -137,6 +258,27 @@
         "card-faq-21417-1"
       ],
       "expectedVerdict": "控制权转移、该怪兽不再以表侧表示存在于自己场上的时点，限制立即结束；之后控制权归还也不会恢复。",
+      "expectedAssertions": {
+        "verdicts": [],
+        "claims": [
+          {
+            "assertionId": "restriction-ends-on-control-change",
+            "questionId": "q1",
+            "proposition": {
+              "allOf": [["控制权"], ["转移", "变更"], ["限制"], ["立即结束", "立即不再适用", "失效"]]
+            }
+          },
+          {
+            "assertionId": "restriction-does-not-return",
+            "questionId": "q1",
+            "proposition": {
+              "allOf": [["控制权"], ["归还", "回到"], ["不会恢复", "不再恢复", "不会重新适用"]],
+              "noneOf": ["归还后恢复适用"]
+            }
+          }
+        ],
+        "timelineOrder": []
+      },
       "expectedAnswerKeyPoints": [
         "控制权转移时立即不再适用",
         "控制权归还后不会恢复适用",
@@ -164,6 +306,36 @@
         "ygoresources-qa-24189"
       ],
       "expectedVerdict": "可以发动；先特殊召唤两只怪兽，再处理破坏，处理后才根据「千查万别」是否仍适用决定是否需要送1只怪兽去墓地。",
+      "expectedAssertions": {
+        "verdicts": [
+          { "questionId": "q1", "value": "TRUE" }
+        ],
+        "claims": [
+          {
+            "assertionId": "destroy-rivalry-keeps-both",
+            "questionId": "q1",
+            "proposition": {
+              "allOf": [["破坏千查万别", "千查万别被破坏"], ["两只"], ["保留", "留在场上"]]
+            }
+          },
+          {
+            "assertionId": "destroy-other-sends-one-after-resolution",
+            "questionId": "q1",
+            "proposition": {
+              "allOf": [["破坏其他卡"], ["处理", "效果处理"], ["之后", "完毕后", "结束后"], ["1只", "一只"], ["墓地"]]
+            }
+          }
+        ],
+        "timelineOrder": [
+          {
+            "assertionId": "summon-before-destruction",
+            "steps": [
+              { "action": { "allOf": [["零衣", "零"], ["露世", "萝杰"], ["特殊召唤"]] } },
+              { "action": { "allOf": [["破坏"], ["场上", "卡"]] } }
+            ]
+          }
+        ]
+      },
       "expectedAnswerKeyPoints": [
         "先特殊召唤闪刀姬－零与闪刀姬－萝杰",
         "特殊召唤与之后破坏不同时处理",
@@ -193,6 +365,22 @@
         "card-faq-19842-3"
       ],
       "expectedVerdict": "不能仅凭复制获得的效果满足『效果文本框内记载有该卡名』的条件。",
+      "expectedAssertions": {
+        "verdicts": [
+          { "questionId": "q1", "value": "FALSE" }
+        ],
+        "claims": [
+          {
+            "assertionId": "printed-text-is-not-rewritten",
+            "questionId": "q1",
+            "status": "TRUE",
+            "proposition": {
+              "allOf": [["卡面", "印刷", "原本效果文本"], ["复制"], ["不会", "不能", "不视为"], ["记载"]]
+            }
+          }
+        ],
+        "timelineOrder": []
+      },
       "expectedAnswerKeyPoints": [
         "是否有卡名记述按卡面原本效果文本框判断",
         "复制得到的卡名和效果不会改写卡面印刷文本",
@@ -218,6 +406,27 @@
         "card-faq-23171-1"
       ],
       "expectedVerdict": "①的每回合使用次数已经消耗，不能再次发动；但效果被无效，处理中的特殊召唤、破坏与恶魔族特殊召唤限制均不适用。",
+      "expectedAssertions": {
+        "verdicts": [],
+        "claims": [
+          {
+            "assertionId": "once-per-turn-use-is-consumed",
+            "questionId": "q1",
+            "status": "TRUE",
+            "proposition": {
+              "allOf": [["①", "1效果"], ["再次发动"], ["不能", "不可"], ["使用次数", "1回合1次", "次数"]]
+            }
+          },
+          {
+            "assertionId": "unresolved-restriction-does-not-apply",
+            "questionId": "q1",
+            "proposition": {
+              "allOf": [["恶魔族"], ["特殊召唤限制", "只能特殊召唤"], ["不适用", "不会适用"]]
+            }
+          }
+        ],
+        "timelineOrder": []
+      },
       "expectedAnswerKeyPoints": [
         "同名卡①这个回合不能再次发动",
         "效果被无效所以不进行特殊召唤",

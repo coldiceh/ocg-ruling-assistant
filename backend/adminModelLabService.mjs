@@ -885,12 +885,23 @@ export function createAdminModelLabService({
     const startedAt = readWall(wallNow).toISOString();
     let preparationOutput;
     let data;
+    let initialCardResolution;
     let cardResolution;
     let cardTextCandidates;
     let retrieval;
 
-    preparationOutput = await runTrackedStage(run.runId, tracker, "understand", async (signal) => (
-      runCheapPreparation({
+    preparationOutput = await runTrackedStage(run.runId, tracker, "understand", async (signal) => {
+      data = await loadData(dataDir);
+      const allCards = Array.isArray(data?.cards) ? data.cards : [];
+      initialCardResolution = extractCards(question, {
+        cards: allCards,
+        maxCards: Math.max(1, allCards.length),
+        modelCardNameCandidates: [],
+      });
+      if (!needsPreparationModelHints(initialCardResolution)) {
+        return skippedPreparationOutput("deterministic_card_resolution_complete");
+      }
+      return runCheapPreparation({
         question,
         questions,
         preparationProvider,
@@ -898,18 +909,17 @@ export function createAdminModelLabService({
         preparationReasoningEffort,
         preparationReasoningMode,
         signal,
-      })
-    ), executionToken);
+      });
+    }, executionToken);
 
-    data = await runTrackedStage(run.runId, tracker, "extract_card_names", async () => {
-      const loaded = await loadData(dataDir);
-      const allCards = Array.isArray(loaded?.cards) ? loaded.cards : [];
-      cardResolution = extractCards(question, {
+    cardResolution = await runTrackedStage(run.runId, tracker, "extract_card_names", async () => {
+      if (preparationOutput.skipped === true) return initialCardResolution;
+      const allCards = Array.isArray(data?.cards) ? data.cards : [];
+      return extractCards(question, {
         cards: allCards,
         maxCards: Math.max(1, allCards.length),
         modelCardNameCandidates: preparationOutput.hints.cardNameCandidates,
       });
-      return loaded;
     }, executionToken);
 
     cardTextCandidates = await runTrackedStage(run.runId, tracker, "retrieve_card_texts", async () => (
@@ -978,6 +988,8 @@ export function createAdminModelLabService({
           reasoningMode: preparationReasoningMode,
           canMakeFinalRuling: false,
           canDecideEscalation: false,
+          skipped: preparationOutput.skipped === true,
+          skipReason: preparationOutput.skipReason || null,
           rawResult: preparationOutput.rawResult,
           extractedHints: preparationOutput.hints,
           warnings: preparationOutput.warnings,
@@ -2014,11 +2026,20 @@ function buildAdminModelLabMetering({
 }) {
   const pricingProfile = run.executionProfile?.pricing || {};
   const preparationProfile = run.executionProfile?.preparation || {};
+  const preparationSkipped = run.evidenceSnapshot?.evidence?.preparation?.skipped === true;
   const preparationRawUsage = run.evidenceSnapshot?.evidence?.preparation?.usage ?? null;
-  const preparationUsage = normalizeReportedModelUsage(preparationRawUsage);
+  const preparationUsage = preparationSkipped
+    ? normalizeOpenAIResponsesUsage(preparationRawUsage || {})
+    : normalizeReportedModelUsage(preparationRawUsage);
   const finalRawUsage = finalResponse?.usage ?? null;
   const measuredFinalUsage = normalizeReportedModelUsage(finalRawUsage);
-  const preparationCost = preparationProfile.provider === "deepseek"
+  const preparationCost = preparationSkipped
+    ? skippedPreparationCost({
+        provider: preparationProfile.provider,
+        model: preparationProfile.model,
+        usage: preparationUsage,
+      })
+    : preparationProfile.provider === "deepseek"
     ? estimateDeepSeekModelCost({
         model: preparationProfile.model,
         usage: preparationUsage,
@@ -2036,7 +2057,7 @@ function buildAdminModelLabMetering({
       stageId: ADMIN_MODEL_LAB_STAGES.EVIDENCE_PREPARATION,
       provider: preparationProfile.provider || null,
       model: preparationProfile.model || null,
-      usageStatus: preparationUsage ? "reported" : "unavailable",
+      usageStatus: preparationSkipped ? "skipped" : (preparationUsage ? "reported" : "unavailable"),
       usage: preparationUsage,
       rawUsage: jsonSafe(preparationRawUsage),
       cost: preparationCost,
@@ -2061,6 +2082,24 @@ function buildAdminModelLabMetering({
       cost: aggregateStageCosts(stages),
     },
     legacyFinalStageUsage: finalUsage,
+  };
+}
+
+function skippedPreparationCost({ provider, model, usage }) {
+  return {
+    provider: nullableString(provider),
+    model: nullableString(model),
+    requestedModel: nullableString(model),
+    usage,
+    pricingStatus: "not_applicable",
+    unavailabilityReason: null,
+    inputCostCny: 0,
+    cachedInputCostCny: 0,
+    cacheWriteInputCny: 0,
+    outputCostCny: 0,
+    totalCostCny: 0,
+    totalCostUsd: 0,
+    estimateOnly: true,
   };
 }
 
@@ -2177,6 +2216,37 @@ function extractPreparationUsage(prepared) {
     || prepared?.result?.usage
     || prepared?.result?.response?.usage
     || null;
+}
+
+function needsPreparationModelHints(cardResolution) {
+  if ((cardResolution?.unresolvedMentions?.length || 0) > 0) return true;
+  if ((cardResolution?.ambiguousMentions?.length || 0) > 0) return true;
+  if ((cardResolution?.resolvedCards || []).some((card) => (
+    Number.isFinite(Number(card?.confidence)) && Number(card.confidence) < 0.7
+  ))) return true;
+  const resolvedCount = cardResolution?.resolvedCards?.length || 0;
+  return resolvedCount === 0;
+}
+
+function skippedPreparationOutput(skipReason) {
+  return {
+    skipped: true,
+    skipReason,
+    rawResult: null,
+    usage: {
+      prompt_tokens: 0,
+      completion_tokens: 0,
+      total_tokens: 0,
+      reasoning_tokens: 0,
+      prompt_cache_hit_tokens: 0,
+      prompt_cache_miss_tokens: 0,
+    },
+    hints: {
+      cardNameCandidates: [],
+      ruleSearchQueries: [],
+    },
+    warnings: [`preparation_model_skipped:${skipReason}`],
+  };
 }
 
 function evidenceAnswerFingerprint(item) {

@@ -7,6 +7,7 @@ import {
   createAdminRunStore,
   createMemoryAdminRunStorage,
 } from "../backend/adminRunStore.mjs";
+import { evaluateAdminLabResult } from "../backend/adminLabEvaluation.mjs";
 
 const evaluationCorpus = JSON.parse(await readFile(
   new URL("../data/test/admin-model-lab-evaluations.json", import.meta.url),
@@ -122,6 +123,16 @@ test("local Evidence Snapshot covers every expected card without network or mode
         (item) => item.evidenceIds || [item.evidenceId],
       ),
     );
+    const packetEvidenceRanks = new Map();
+    for (const [index, item] of (
+      decisionPacket?.modelPacket?.evidenceItems || []
+    ).entries()) {
+      for (const evidenceId of item.evidenceIds || [item.evidenceId]) {
+        if (!packetEvidenceRanks.has(evidenceId)) {
+          packetEvidenceRanks.set(evidenceId, index + 1);
+        }
+      }
+    }
     for (const expectedEvidenceId of evaluationCase.expectedEvidenceIds || []) {
       assert.equal(
         packetEvidenceIds.has(expectedEvidenceId),
@@ -133,7 +144,33 @@ test("local Evidence Snapshot covers every expected card without network or mode
         new RegExp(escapeRegExp(expectedEvidenceId), "u"),
         `${evaluationCase.id}: final-model input must contain ${expectedEvidenceId}`,
       );
+      if (Number.isInteger(evaluationCase.expectedEvidenceMaxRank)) {
+        assert.ok(
+          packetEvidenceRanks.get(expectedEvidenceId) <= evaluationCase.expectedEvidenceMaxRank,
+          `${evaluationCase.id}: ${expectedEvidenceId} rank ${packetEvidenceRanks.get(expectedEvidenceId)} must be within the first ${evaluationCase.expectedEvidenceMaxRank} visible items`,
+        );
+      }
     }
+    const packetOnlyAssessment = evaluateAdminLabResult({
+      testCase: evaluationCase,
+      structuredResult: {
+        conciseAnswer: "packet coverage probe",
+        verdicts: [],
+        claims: [],
+        timeline: [],
+      },
+      evidenceSnapshot: snapshot,
+    });
+    assert.equal(
+      packetOnlyAssessment.summary.cardEvidenceCoverage,
+      1,
+      `${evaluationCase.id}: every expected card text must be visible to the final model`,
+    );
+    assert.equal(
+      packetOnlyAssessment.summary.evidenceCoverage,
+      1,
+      `${evaluationCase.id}: every decisive evidence id must be visible within its declared packet rank: ${JSON.stringify(packetOnlyAssessment.checks.evidenceCoverage)}`,
+    );
     const finalModelInputBytes = Buffer.byteLength(openAIRequests.at(-1)?.input || "");
     assert.ok(
       finalModelInputBytes < 150_000,
@@ -152,6 +189,12 @@ test("local Evidence Snapshot covers every expected card without network or mode
       decisionPacketEvidenceCount:
         decisionPacket?.statistics?.includedSubstanceCount || 0,
       decisionPacketBytes: decisionPacket?.statistics?.modelPacketBytes || 0,
+      expectedEvidenceRanks: Object.fromEntries(
+        (evaluationCase.expectedEvidenceIds || []).map((evidenceId) => [
+          evidenceId,
+          packetEvidenceRanks.get(evidenceId) || null,
+        ]),
+      ),
       finalModelInputBytes,
       bucketCounts,
       conflictTypes,

@@ -355,13 +355,13 @@ test("decision packet uses deterministic generic priority and keeps a complete o
     [
       ADMIN_EVIDENCE_CATEGORIES.DIRECT_OFFICIAL_QA,
       ADMIN_EVIDENCE_CATEGORIES.PARSED_CARD_TEXT,
-      ADMIN_EVIDENCE_CATEGORIES.MECHANISM_RULE,
       ADMIN_EVIDENCE_CATEGORIES.RELATED_QA,
+      ADMIN_EVIDENCE_CATEGORIES.MECHANISM_RULE,
     ],
   );
   assert.deepEqual(
     packet.modelPacket.evidenceItems.map((item) => item.evidenceId),
-    ["qa-direct", "card-text-1", "rule-1", "qa-related"],
+    ["qa-direct", "card-text-1", "qa-related", "rule-1"],
   );
   assert.equal(packet.omittedManifest.length, 1);
   assert.equal(packet.omittedManifest[0].evidenceIds[0], "other-1");
@@ -392,7 +392,7 @@ test("decision packet uses deterministic generic priority and keeps a complete o
   assert.equal(packet.modelPacket.completeness.evidenceSufficiency, "NOT_ASSESSED");
 });
 
-test("decision packet gives each available category a first-layer slot before more rules", () => {
+test("decision packet weights related rulings while preserving authoritative mechanism rules", () => {
   const archive = createAdminEvidenceArchive({
     evidenceBuckets: {
       rulebookCandidates: [
@@ -447,7 +447,7 @@ test("decision packet gives each available category a first-layer slot before mo
 
   assert.deepEqual(
     first.modelPacket.evidenceItems.map((item) => item.evidenceId),
-    ["rule-official-current", "qa-related-kept", "rule-high-score"],
+    ["qa-related-kept", "rule-official-current", "rule-high-score"],
   );
   assert.deepEqual(
     first.modelPacket.policy.withinCategoryPriority,
@@ -455,6 +455,7 @@ test("decision packet gives each available category a first-layer slot before mo
       "direct",
       "official",
       "current",
+      "sourceCollectionPriority",
       "bestCollectionRank",
       "relevanceScore",
       "evidenceId",
@@ -472,6 +473,39 @@ test("decision packet gives each available category a first-layer slot before mo
   assert.equal(first.omittedManifest[0].bodyHash.length, 64);
   assert.equal(first.modelPacket.omissionSummary.manifestSha256.length, 64);
   assert.equal(first.modelPacket.completeness.evidenceSufficiency, "NOT_ASSESSED");
+});
+
+test("many resolved card texts cannot starve related rulings and mechanism evidence", () => {
+  const archive = createAdminEvidenceArchive({
+    cardTextCandidates: {
+      resolved: Array.from({ length: 33 }, (_, index) => ({
+        id: `card-text-${index + 1}`,
+        name: `匿名卡${index + 1}`,
+        text: `匿名卡${index + 1}的卡片文本。`,
+      })),
+    },
+    evidenceBuckets: {
+      faqRelated: [{
+        id: "qa-related-required",
+        title: "相关官方问答",
+        answer: "这是与处理步骤直接相关的官方问答。",
+        official: true,
+      }],
+      rulebookCandidates: [{
+        id: "rule-required",
+        title: "必要机制规则",
+        text: "这是完成处理顺序判断所需的机制规则。",
+        official: true,
+      }],
+    },
+  });
+
+  const packet = buildAdminEvidenceDecisionPacket({ archive });
+  const categories = packet.modelPacket.evidenceItems.map((item) => item.category);
+  assert.equal(packet.modelPacket.evidenceItems.length, 32);
+  assert.ok(categories.includes(ADMIN_EVIDENCE_CATEGORIES.PARSED_CARD_TEXT));
+  assert.ok(categories.includes(ADMIN_EVIDENCE_CATEGORIES.RELATED_QA));
+  assert.ok(categories.includes(ADMIN_EVIDENCE_CATEGORIES.MECHANISM_RULE));
 });
 
 test("decision packet omission catalog is informative and independently bounded", () => {
