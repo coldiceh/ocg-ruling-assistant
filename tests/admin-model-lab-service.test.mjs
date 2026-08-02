@@ -384,6 +384,29 @@ test("invalid final JSON fails closed instead of accepting or repairing it", asy
   );
 });
 
+test("final validation records a provenance-only downgrade without changing the ruling", async () => {
+  const fixture = makeFixture();
+  const service = makeService(fixture);
+  const created = await service.createRun({ body: { question: "匿名问题" } });
+  const execution = await service.executeRun({ runId: created.runId });
+  const cardTextEvidence = execution.run.evidenceSnapshot.evidence.evidenceDecisionPacket
+    .modelPacket.evidenceItems.find((item) => item.category === "parsed_card_text");
+  assert.ok(cardTextEvidence?.evidenceId);
+
+  const overclaimed = makeStructuredRuling();
+  overclaimed.claims[0].evidenceIds = [cardTextEvidence.evidenceId];
+  overclaimed.timeline[0].evidenceIds = [cardTextEvidence.evidenceId];
+  overclaimed.evidenceUsage[0].evidenceId = cardTextEvidence.evidenceId;
+  fixture.providerResponse = completedResponse(overclaimed);
+
+  const completed = await service.getRun({ runId: created.runId });
+  assert.equal(completed.status, ADMIN_RUN_STATUSES.SUCCEEDED);
+  assert.equal(completed.result.finalRuling.verdicts[0].value, "TRUE");
+  assert.equal(completed.result.finalRuling.claims[0].inferenceType, "CARD_TEXT");
+  assert.equal(completed.result.finalRuling.evidenceUsage[0].relation, "SUPPORTS_STEP");
+  assert.equal(completed.result.validation.provenanceCorrections.length, 2);
+});
+
 test("final validation rejects an audit-only evidence ID omitted from the model packet", async () => {
   const fixture = makeFixture();
   fixture.retrieval.rawRelatedEvidence = Array.from({ length: 80 }, (_, index) => ({

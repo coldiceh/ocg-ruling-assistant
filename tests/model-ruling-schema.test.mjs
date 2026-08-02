@@ -112,6 +112,70 @@ test("fabricated evidence and fabricated DIRECT_OFFICIAL claims fail closed", ()
   assert.ok(validation.errors.some((error) => error.includes("non-direct evidence")));
 });
 
+test("provider provenance overclaims can be deterministically downgraded without changing the ruling", () => {
+  const overclaimed = makeResult();
+  const cardTextPacket = {
+    evidenceItems: [{
+      evidenceId: "faq-1",
+      category: "parsed_card_text",
+      authority: "other",
+      direct: false,
+      current: true,
+      bodyExcerpted: false,
+      body: "舍弃1张手牌可以发动。",
+    }],
+  };
+
+  const strict = parseAndValidateModelRulingResult(JSON.stringify(overclaimed), {
+    evidenceSnapshot: makeSnapshot(),
+    modelVisibleEvidencePacket: cardTextPacket,
+    expectedQuestionIds: ["q1"],
+  });
+  assert.equal(strict.ok, false);
+
+  const normalized = parseAndValidateModelRulingResult(JSON.stringify(overclaimed), {
+    evidenceSnapshot: makeSnapshot(),
+    modelVisibleEvidencePacket: cardTextPacket,
+    expectedQuestionIds: ["q1"],
+    normalizeEvidenceProvenance: true,
+  });
+  assert.equal(normalized.ok, true, normalized.errors?.join("\n"));
+  assert.equal(normalized.normalized.verdicts[0].value, overclaimed.verdicts[0].value);
+  assert.equal(normalized.normalized.conciseAnswer, overclaimed.conciseAnswer);
+  assert.equal(normalized.normalized.claims[0].inferenceType, "CARD_TEXT");
+  assert.equal(normalized.normalized.evidenceUsage[0].relation, "SUPPORTS_STEP");
+  assert.equal(normalized.provenanceCorrections.length, 2);
+});
+
+test("provenance normalization never repairs fabricated evidence references", () => {
+  const fabricated = makeResult();
+  fabricated.claims[0].evidenceIds = ["fabricated-evidence"];
+  fabricated.timeline[0].evidenceIds = ["fabricated-evidence"];
+  fabricated.evidenceUsage[0].evidenceId = "fabricated-evidence";
+
+  const validation = parseAndValidateModelRulingResult(JSON.stringify(fabricated), {
+    evidenceSnapshot: makeSnapshot(),
+    modelVisibleEvidencePacket: makeVisiblePacket(),
+    expectedQuestionIds: ["q1"],
+    normalizeEvidenceProvenance: true,
+  });
+  assert.equal(validation.ok, false);
+  assert.ok(validation.errors.some((error) => error.includes("not present in model-visible Evidence Packet")));
+});
+
+test("provenance normalization preserves schema failures instead of throwing", () => {
+  const malformed = makeResult();
+  delete malformed.claims[0].evidenceIds;
+  const validation = parseAndValidateModelRulingResult(JSON.stringify(malformed), {
+    evidenceSnapshot: makeSnapshot(),
+    modelVisibleEvidencePacket: makeVisiblePacket(),
+    expectedQuestionIds: ["q1"],
+    normalizeEvidenceProvenance: true,
+  });
+  assert.equal(validation.ok, false);
+  assert.ok(validation.errors.some((error) => error.includes("claims[0]")));
+});
+
 test("final-model citations are limited to evidence bodies visible in the bounded packet", () => {
   const hiddenEvidenceId = "faq-hidden-in-audit-only";
   const snapshot = makeSnapshot();

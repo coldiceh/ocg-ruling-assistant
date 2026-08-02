@@ -1181,12 +1181,14 @@ export function createAdminModelLabService({
         modelVisibleEvidencePacket: finalRulingModelEvidencePacket(run.evidenceSnapshot),
         expectedQuestionIds: questionIds,
         providedFacts,
+        normalizeEvidenceProvenance: true,
       })
       : parseAndValidateModelRulingResult(extractOpenAIResponseOutputText(response), {
         evidenceSnapshot: run.evidenceSnapshot,
         modelVisibleEvidencePacket: finalRulingModelEvidencePacket(run.evidenceSnapshot),
         expectedQuestionIds: questionIds,
         providedFacts,
+        normalizeEvidenceProvenance: true,
       });
     if (!validation?.ok) {
       await runStore.appendEvent(run.runId, {
@@ -1273,6 +1275,7 @@ export function createAdminModelLabService({
       validation: {
         ok: true,
         errors: [],
+        provenanceCorrections: jsonSafe(validation.provenanceCorrections || []),
       },
       provider: {
         providerId: profile.provider,
