@@ -35,6 +35,12 @@ function analyzeDuelStateTransitionInternal({
 } = {}) {
   const query = String(userQuery || "");
   const programs = compileResolvedCardPrograms(resolvedCards, cardTexts);
+  const usageRestrictionTransition = analyzeUsageRestrictionNegationTransition({
+    query,
+    programs,
+    cardTexts,
+  });
+  if (usageRestrictionTransition) return usageRestrictionTransition;
   const compiled = compileQuestionScenario({ query, programs });
   if (!compiled.complete) {
     const boundLifecycleTransition = compileEffectInstanceLifecycleTransition({
@@ -759,6 +765,7 @@ export function compileResolvedCardPrograms(resolvedCards = [], cardTexts = []) 
       summonKinds,
       defense: Number.isFinite(Number(card.defense ?? card.def)) ? Number(card.defense ?? card.def) : undefined,
       effectText: text,
+      cardTextIr,
       effectBlocks,
       sharedRestrictionText,
       materialRecipeRaw: summonKinds.includes("fusion") ? parseMaterialRecipe(text) : null,
@@ -791,6 +798,224 @@ export function compileResolvedCardPrograms(resolvedCards = [], cardTexts = []) 
     }
   }
   return programs;
+}
+
+function analyzeUsageRestrictionNegationTransition({ query, programs, cardTexts }) {
+  const asksRepeatedActivation = /(?:还|仍|再|继续|繼續).{0,12}(?:发动|發動|発動|activate)/iu.test(query);
+  const asksRestriction = /(?:限制|只(?:能|可).{0,20}特殊召唤|しか特殊召喚|Special Summon.{0,24}only).{0,32}(?:适用|適用|生效|有效|apply)|(?:适用|適用|生效|有效|apply).{0,32}(?:限制|特殊召唤|特殊召喚)/iu.test(query);
+  if (!asksRepeatedActivation || !asksRestriction) return null;
+
+  const mentioned = programs
+    .map((program) => ({ program, mention: locateCardMention(query, program) }))
+    .filter((item) => item.mention.index >= 0);
+  const sourceCandidates = mentioned.flatMap(({ program, mention }) => (
+    (program.cardTextIr?.effects || [])
+      .filter((effect) => (
+        effect.nature === "activated"
+        && (effect.usagePolicies || []).length
+        && (effect.resolution || []).some((step) => step.operation?.type === "create_turn_restriction")
+      ))
+      .map((effect) => ({ program, mention, effect }))
+  ));
+  if (!sourceCandidates.length) return null;
+  if (sourceCandidates.length !== 1) {
+    return notApplicable("usage_restriction_source_effect_ambiguous", { sourceCandidates });
+  }
+  const [sourceCandidate] = sourceCandidates;
+  const referencedEffectNo = effectNumberNearMention(query, sourceCandidate.mention);
+  if (referencedEffectNo && referencedEffectNo !== sourceCandidate.effect.effectNo) {
+    return notApplicable("usage_restriction_effect_number_mismatch", { sourceCandidate, referencedEffectNo });
+  }
+
+  const supportedOperations = new Set([
+    "special_summon",
+    "destroy",
+    "create_turn_restriction",
+  ]);
+  const operations = (sourceCandidate.effect.resolution || []).map((step) => step.operation).filter(Boolean);
+  if (!operations.length || operations.some((operation) => !supportedOperations.has(operation.type))) {
+    return notApplicable("usage_restriction_resolution_ir_incomplete", { sourceCandidate, operations });
+  }
+
+  const negatorCandidates = mentioned
+    .filter(({ program }) => program.definitionId !== sourceCandidate.program.definitionId)
+    .flatMap(({ program, mention }) => {
+      const negations = (program.cardTextIr?.effects || [])
+        .map((effect) => ({ effect, kind: inferChainNegationKind(effect.rawText) }))
+        .filter((item) => item.kind);
+      return negations.map((item) => ({ program, mention, ...item }));
+    });
+  if (negatorCandidates.length !== 1) {
+    return notApplicable(
+      negatorCandidates.length ? "chain_negation_effect_ambiguous" : "chain_negation_kind_not_compiled",
+      { negatorCandidates },
+    );
+  }
+  const [negator] = negatorCandidates;
+  if (!chainResponseDeclared(query, sourceCandidate.mention, negator.mention)) {
+    return notApplicable("chain_response_relation_not_explicit", { sourceCandidate, negator });
+  }
+
+  const sourceInstance = {
+    instanceId: `${sourceCandidate.program.definitionId}#1`,
+    cardId: sourceCandidate.program.definitionId,
+    definitionId: sourceCandidate.program.definitionId,
+    name: sourceCandidate.program.name,
+    controller: "self",
+    owner: "self",
+    zone: "monster_zone",
+    onField: true,
+    faceUp: true,
+    position: "attack",
+    cardKind: "monster",
+  };
+  const negatorInstance = {
+    instanceId: `${negator.program.definitionId}#1`,
+    cardId: negator.program.definitionId,
+    definitionId: negator.program.definitionId,
+    name: negator.program.name,
+    controller: "opponent",
+    owner: "opponent",
+    zone: "hand",
+    onField: false,
+    faceUp: false,
+    position: "none",
+    cardKind: "monster",
+  };
+  const restrictionOperations = operations.filter((operation) => operation.type === "create_turn_restriction");
+  const sourceSequence = restrictionOperations.map((operation, index) => ({
+    id: `turn-restriction-${index + 1}`,
+    connector: "INDEPENDENT",
+    primitive: createEffectPrimitive("create_turn_restriction", {
+      ...operation,
+      sourceEffectId: sourceCandidate.effect.id,
+    }),
+  }));
+  const negatorDiscard = (negator.effect.activation?.costs || [])
+    .find((cost) => cost.type === "discard_from_hand");
+  const sourceLink = {
+    id: "C1",
+    order: 1,
+    sourceCardId: sourceInstance.instanceId,
+    sourceInstanceId: sourceInstance.instanceId,
+    sourceDefinitionId: sourceInstance.definitionId,
+    sourceCardName: sourceInstance.name,
+    sourceExpectedZone: "monster_zone",
+    effectId: sourceCandidate.effect.id,
+    usagePolicies: sourceCandidate.effect.usagePolicies,
+    activationPremise: "declared_legal",
+    sequence: sourceSequence,
+    ...(negator.kind === "activation"
+      ? { activationNegated: true, negatedBy: negatorInstance.instanceId }
+      : { effectNegated: true, negatedBy: negatorInstance.instanceId }),
+  };
+  const negatorLink = {
+    id: "C2",
+    order: 2,
+    sourceCardId: negatorInstance.instanceId,
+    sourceInstanceId: negatorInstance.instanceId,
+    sourceDefinitionId: negatorInstance.definitionId,
+    sourceCardName: negatorInstance.name,
+    sourceExpectedZone: "hand",
+    effectId: negator.effect.id,
+    activationPremise: "declared_legal",
+    activationCostSequence: negatorDiscard ? [{
+      id: "discard-negator",
+      connector: "INDEPENDENT",
+      primitive: createEffectPrimitive("discard_from_hand", {
+        player: "opponent",
+        amount: Number(negatorDiscard.amount) || 1,
+        cardIds: [negatorInstance.instanceId],
+        cardInstanceIds: [negatorInstance.instanceId],
+      }),
+    }] : [],
+    sequence: [],
+  };
+  const simulation = resolveEffectChain({
+    gameState: { cards: [sourceInstance, negatorInstance] },
+    chainLinks: [sourceLink, negatorLink],
+  });
+  if (!simulation.complete) {
+    return notApplicable("usage_restriction_chain_simulation_incomplete", { simulation });
+  }
+  const sourceResult = simulation.linkResults.find((item) => item.id === "C1");
+  const usagePolicy = sourceCandidate.effect.usagePolicies[0];
+  const usageConsumed = (simulation.finalGameState.effectUsageLedger || []).some((entry) => (
+    entry.scopeKey === usagePolicy.scopeKey
+  ));
+  const restrictionCreated = (simulation.finalGameState.turnRestrictions || []).some((item) => (
+    item.sourceEffectId === sourceCandidate.effect.id
+  ));
+  const repeatConclusion = usageConsumed
+    ? `本回合不能再次发动「${sourceCandidate.program.name}」的${circledEffectNo(sourceCandidate.effect.effectNo)}效果：卡名一回合一次的“${usagePolicy.verb === "use" ? "使用" : "发动"}”次数已经计入。`
+    : `由于此次发动本身被无效，卡文限制的是“发动”次数，本回合仍可再次发动「${sourceCandidate.program.name}」的${circledEffectNo(sourceCandidate.effect.effectNo)}效果。`;
+  const resolutionConclusion = restrictionCreated
+    ? `该效果完成处理，因此处理末尾建立的特殊召唤限制适用。`
+    : `该连锁项${sourceResult?.status === "activation_negated" ? "的发动被无效" : "的效果被无效"}，特殊召唤、破坏以及处理末尾才建立的特殊召唤限制都不进行、也不适用。`;
+  const evidenceIds = unique([
+    ...(sourceCandidate.program.evidenceIds || []),
+    evidenceIdFor(sourceCandidate.program, cardTexts),
+    ...(negator.program.evidenceIds || []),
+    evidenceIdFor(negator.program, cardTexts),
+  ].filter(Boolean));
+  return {
+    status: "resolved",
+    complete: true,
+    authoritative: true,
+    activation: "assumed_legal",
+    activationBasis: "declared_legal",
+    resolution: sourceResult?.status || "unknown",
+    shortAnswer: `${repeatConclusion}${resolutionConclusion}`,
+    reasoning: [
+      `卡文范式化结果把${circledEffectNo(sourceCandidate.effect.effectNo)}的次数限制记录为 ${usagePolicy.verb}/${usagePolicy.consumeAt}；这是发动阶段的账本，不会因之后仅把效果无效而回滚。`,
+      `${negator.program.name}的文本把C1的${negator.kind === "activation" ? "发动" : "效果"}无效。效果处理未执行时，create_turn_restriction 原语不会写入回合限制状态。`,
+      repeatConclusion,
+      resolutionConclusion,
+    ],
+    trace: simulation.trace,
+    evidenceIds,
+    activationEvidenceType: "declared_legal_premise",
+    program: {
+      semanticSource: "card_text_ir",
+      sourceEffect: sourceCandidate.effect,
+      negationKind: negator.kind,
+      simulation,
+    },
+  };
+}
+
+function inferChainNegationKind(text) {
+  const value = String(text || "");
+  if (/(?:那个|該|该|其|その|that)?(?:效果|効果|effect)?(?:的|の)?(?:发动|發動|発動|activation)(?:变为|為|为|を)?(?:无效|無効|negat)/iu.test(value)) {
+    return "activation";
+  }
+  if (/(?:将|把)?(?:那个|該|该|其|その|that)(?:效果|効果|effect)?(?:变为|為|为|を)?(?:无效|無効)|negate that effect/iu.test(value)) {
+    return "effect";
+  }
+  return "";
+}
+
+function chainResponseDeclared(query, sourceMention, negatorMention) {
+  if (!sourceMention || !negatorMention || sourceMention.index < 0 || negatorMention.index < 0) return false;
+  if (inferChainOrder(query, sourceMention.index) === 1 && inferChainOrder(query, negatorMention.index) === 2) return true;
+  const between = query.slice(
+    Math.min(sourceMention.index + sourceMention.surface.length, negatorMention.index),
+    Math.max(sourceMention.index, negatorMention.index),
+  );
+  return negatorMention.index > sourceMention.index && /(?:连锁|連鎖|チェーン|chain)/iu.test(between);
+}
+
+function effectNumberNearMention(query, mention) {
+  const context = localWindow(query, mention.index, mention.surface.length, 12, 72).full;
+  const marker = context.match(/[①②③④⑤⑥⑦⑧⑨⑩]/u)?.[0] || "";
+  return marker ? String("①②③④⑤⑥⑦⑧⑨⑩".indexOf(marker) + 1) : "";
+}
+
+function circledEffectNo(value) {
+  const number = Number(value);
+  return Number.isInteger(number) && number >= 1 && number <= 10
+    ? "①②③④⑤⑥⑦⑧⑨⑩"[number - 1]
+    : String(value || "");
 }
 
 function normalizedSemanticsForBlock(cardTextIr, blockText) {

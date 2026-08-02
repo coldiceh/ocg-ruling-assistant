@@ -1,7 +1,7 @@
 import { splitCardTextSections, tagEffectText } from "./cardTextSections.mjs";
 import { extractPrintedNameReferences } from "./printedTextReferences.mjs";
 
-export const CARD_TEXT_IR_VERSION = "1.3";
+export const CARD_TEXT_IR_VERSION = "1.4";
 
 const ACTIVATION_MARKER = /(?:可以发动|才能发动|可发动|発動できる|発動する|you can activate|can be activated)/iu;
 const CONTINUOUS_MARKER = /(?:只要|期间|持续|繼續|一直|限り|公開し続け|し続ける|must keep|while .*face-up|as long as)/iu;
@@ -19,14 +19,19 @@ const SELF_FACE_UP_LEAVE_FIELD_BANISH = /(?:(?:表侧|表側)表示(?:的|の)?(
 
 export function normalizeCardText(card = {}) {
   const identity = normalizeCardIdentity(card);
+  const fullText = card.effectText || card.text || card.description || "";
   const parsed = splitCardTextSections({
     ...card,
     effectText: card.effectText || card.text || card.description || "",
   });
   const sourceEffects = primaryEffectEntries(parsed.sections);
+  const usagePolicies = parseUsagePolicies(fullText, identity.cardId || identity.canonicalName);
   const effects = sourceEffects.map((entry, index) => normalizeEffectEntry(entry, {
     cardId: identity.cardId,
     index,
+  })).map((effect) => ({
+    ...effect,
+    usagePolicies: usagePolicies.filter((policy) => policy.effectNo === effect.effectNo),
   }));
 
   return {
@@ -38,8 +43,9 @@ export function normalizeCardText(card = {}) {
     // This is derived only from the card's database/printed text. Runtime name
     // or effect copying must never mutate it.
     printedNameReferences: extractPrintedNameReferences(
-      card.effectText || card.text || card.description || "",
+      fullText,
     ),
+    usagePolicies,
     effects,
     missingSections: [...parsed.missingSections],
   };
@@ -389,7 +395,9 @@ function splitImplicitResolutionClauses(text, firstConnector) {
   const fragments = [];
   for (const fragment of rawFragments) {
     const previous = fragments.at(-1);
-    if (previous
+    if (previous && /^(?:这个回合|此回合|這個回合|このターン|for (?:the rest of )?this turn)$/iu.test(previous)) {
+      fragments[fragments.length - 1] = `${previous}，${fragment}`;
+    } else if (previous
         && SUMMON_BOUND_DURATION.test(previous)
         && /(?:仅可|只可|只能|不可|不能|しか|only|cannot).{0,48}(?:特殊召唤|特殊召喚|Special Summon)/iu.test(fragment)) {
       fragments[fragments.length - 1] = `${previous}，${fragment}`;
@@ -406,6 +414,8 @@ function splitImplicitResolutionClauses(text, firstConnector) {
 
 function classifyResolutionOperation(text) {
   const value = cleanText(text);
+  const turnRestriction = parseTurnSpecialSummonRestriction(value);
+  if (turnRestriction) return turnRestriction;
   if (isSummonBoundExtraDeckRestriction(value)) {
     const allowedArchetype = value.match(
       /(?:仅可|只可|只能|しか)[^。；;]{0,36}[“「『"]([^”」』"]+)[”」』"][^。；;]{0,16}(?:怪兽|怪獸|モンスター)/iu,
@@ -507,6 +517,65 @@ function classifyResolutionOperation(text) {
     ...(quotedNames.length ? { names: quotedNames } : {}),
     ...(excludedNames.length ? { excludedNames } : {}),
     ...(extractRaceLabel(value) ? { race: extractRaceLabel(value) } : {}),
+  };
+}
+
+function parseUsagePolicies(text, cardKey) {
+  const policies = [];
+  const clauses = cleanText(text).split(/[。；;\n]+/u).map(cleanText).filter(Boolean);
+  for (const clause of clauses) {
+    if (!/(?:此卡名|这个卡名|这张卡名|このカード名|cards? with this name)/iu.test(clause)) continue;
+    if (!/(?:[１1]回合|[１1]ターン|per turn)/iu.test(clause)) continue;
+    if (!/(?:[１1]次|[１1]度|once)/iu.test(clause)) continue;
+    const effectNos = unique([...clause.matchAll(/[①②③④⑤⑥⑦⑧⑨⑩]/gu)]
+      .map((match) => normalizeEffectNo(match[0])));
+    if (!effectNos.length) continue;
+    const verb = /(?:使用|use)/iu.test(clause)
+      ? "use"
+      : /(?:发动|發動|発動|activate)/iu.test(clause)
+        ? "activate"
+        : "";
+    if (!verb) continue;
+    for (const effectNo of effectNos) {
+      policies.push({
+        id: `${cardKey || "unresolved"}:effect:${effectNo}:once-per-turn-${verb}`,
+        scope: "card_name_effect",
+        scopeKey: `${cardKey || "unresolved"}:effect:${effectNo}`,
+        effectNo,
+        period: "turn",
+        limit: 1,
+        verb,
+        consumeAt: verb === "use" ? "accepted_activation" : "activation_established",
+        rawText: clause,
+      });
+    }
+  }
+  return policies;
+}
+
+function parseTurnSpecialSummonRestriction(value) {
+  if (!/(?:这个回合|此回合|這個回合|このターン|for (?:the rest of )?this turn)/iu.test(value)) return null;
+  if (!/(?:特殊召唤|特殊召喚|Special Summon)/iu.test(value)) return null;
+  if (!/(?:自己|我方|自分|you)/iu.test(value)) return null;
+
+  const allowedRace = value.match(
+    /(?:自己|我方).{0,20}?(?:不是\s*)?([\p{Script=Han}]{1,10}族)(?:怪兽|怪獸)?[^。；;]{0,24}(?:仅可|僅可|只可|只能|才可|才可以|不能|不得)?[^。；;]{0,16}(?:特殊召唤|特殊召喚)/iu,
+  )?.[1]
+    || value.match(/自分(?:は|が)?[^。；;]{0,16}?([\p{Script=Han}\p{Script=Katakana}]{1,12}族)モンスターしか特殊召喚できない/iu)?.[1]
+    || value.match(/(?:you|the controller) can only Special Summon ([A-Za-z -]+?)(?:-Type)? monsters?/iu)?.[1]?.trim()
+    || "";
+  const onlyPattern = /(?:しか特殊召喚できない|仅可|僅可|只可|只能|才可|才可以|不能特殊召唤|不能特殊召喚|can only Special Summon)/iu.test(value);
+  if (!allowedRace || !onlyPattern) return null;
+  return {
+    type: "create_turn_restriction",
+    affectedPlayer: "effect_controller",
+    duration: "turn",
+    expiresAt: "end_of_turn",
+    restriction: {
+      type: "special_summon_filter",
+      allowed: { race: allowedRace },
+    },
+    text: value,
   };
 }
 
