@@ -79,6 +79,7 @@ export function findNormalizedSemantics(normalizedCard, predicate) {
       ...(effect.activation?.targets || []),
       ...(effect.continuous || []),
       ...(effect.resolution || []).map((step) => step.operation),
+      ...(effect.summonCondition?.procedures || []),
     ]) {
       if (!semantic) continue;
       if (typeof predicate === "function" ? predicate(semantic, effect) : semantic.type === predicate) {
@@ -116,7 +117,53 @@ function normalizeEffectEntry(entry, { cardId, index }) {
     },
     continuous: nature === "continuous" ? parseContinuousSemantics(rawText) : [],
     resolution: nature === "activated" ? parseResolutionSteps(resolutionText) : [],
+    summonCondition: nature === "summon_condition"
+      ? { procedures: parseSummonConditionProcedures(rawText) }
+      : null,
   };
+}
+
+function parseSummonConditionProcedures(text) {
+  const value = cleanText(text);
+  const specialSummonFromExtra = /(?:从|從|自)(?:额外卡组|額外卡組|额外牌组|額外牌組)[^。；;]{0,24}(?:特殊召唤|特殊召喚)|(?:EXデッキ|エクストラデッキ)から[^。；;]{0,24}特殊召喚|(?:特殊召唤|特殊召喚)[^。；;]{0,24}(?:从|從|自)(?:额外卡组|額外卡組|额外牌组|額外牌組)|Special Summon(?:ed)?\s*(?:this card\s*)?\(?from (?:your )?Extra Deck\)?/iu.test(value);
+  const banishesOwnFieldMonster = /(?:将|將|把|除外する)[^。；;]{0,48}(?:自己|自分)[^。；;]{0,28}(?:场上|場上|フィールド)[^。；;]{0,80}(?:怪兽|怪獸|モンスター)[^。；;]{0,20}(?:除外)|(?:自己|自分)[^。；;]{0,24}(?:场上|場上|フィールド)[^。；;]{0,72}(?:怪兽|怪獸|モンスター)[^。；;]{0,24}(?:除外)|banish(?:ing)?[^.;]{0,120}monsters?[^.;]{0,48}you control(?:[^.;]{0,32}from your field)?/iu.test(value);
+  if (!specialSummonFromExtra || !banishesOwnFieldMonster) return [];
+  const minimumLevel = parseMinimumLevel(value);
+  const race = extractRaceLabel(value);
+  const attribute = value.match(/(暗属性|闇属性|DARK|光属性|光属性|LIGHT|炎属性|炎属性|FIRE|水属性|水属性|WATER|风属性|風属性|WIND|地属性|地属性|EARTH)/iu)?.[1] || "";
+  const spellEffectThisTurn = /(?:发动|發動|発動|activat)[^。；;]{0,24}(?:魔法卡|魔法カード|Spell Card)[^。；;]{0,16}(?:效果|効果|effect)|(?:魔法卡|魔法カード|Spell Card)[^。；;]{0,24}(?:效果|効果|effect)[^。；;]{0,20}(?:发动|發動|発動|activat)/iu.test(value)
+    && /(?:回合|ターン|turn)/iu.test(value);
+  return [{
+    type: "special_summon_procedure",
+    usesChain: false,
+    destinationZone: "monster_zone",
+    sourceZone: "extra_deck",
+    perTurnLimit: /(?:1回合1次|１ターンに１度|once per turn)/iu.test(value) ? 1 : null,
+    historyConditions: spellEffectThisTurn
+      ? [{ type: "spell_card_effect_activated_this_turn", player: "controller" }]
+      : [],
+    requiredMovements: [{
+      operation: "banish",
+      causeKind: "summon_procedure",
+      controller: "self",
+      fromZone: "monster_zone",
+      amount: parseCount(value.match(/([０-９\d一二三两兩]+)\s*(?:只|隻|体|體|枚)?[^。；;]{0,48}(?:等级|等級|レベル|Level|怪兽|怪獸|モンスター|monster)/iu)?.[1], 1),
+      selector: {
+        ...(minimumLevel !== null ? { minimumLevel } : {}),
+        ...(race ? { race } : {}),
+        ...(attribute ? { attribute } : {}),
+      },
+    }],
+    text: value,
+  }];
+}
+
+function parseMinimumLevel(text) {
+  const value = String(text || "").normalize("NFKC");
+  const match = value.match(
+    /(?:(?:等级|等級|级别|級別|レベル|Level)\s*(?:为|為|是|of)?\s*([0-9]+)|([0-9]+)\s*(?:星|级|級|レベル|Level))\s*(?:以上|或以上|及以上|或者更高|或更高|及更高|or\s+higher)/iu,
+  );
+  return parseNumber(match?.[1] || match?.[2]);
 }
 
 function primaryEffectEntries(sections = {}) {

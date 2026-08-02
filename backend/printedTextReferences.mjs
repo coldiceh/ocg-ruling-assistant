@@ -1,4 +1,5 @@
 const QUOTED_NAME = /[「『“"]([^「」『』“”"]{1,80})[」』”"]/gu;
+const PRINTED_TEXT_COMPLEMENT = /(?:效果文本框|效果文本栏|效果文本|卡面|印刷文本|印刷文字|テキスト欄|カードテキスト|printed\s+(?:effect\s+)?text)[^，,。；;!?？]{0,32}?(?:记载|记述|記載|記述|mention)(?:有|了)?([^，,。；;!?？]{0,120})/iu;
 const PRINTED_REFERENCE_REQUIREMENT_PATTERNS = Object.freeze([
   /有\s*[「『“"]([^「」『』“”"]{1,80})[」』”"]\s*(?:这个|该)?卡名(?:的)?(?:记载|记述|記載|記述)/iu,
   /(?:记载|记述|記載|記述)(?:有|了)?\s*[「『“"]([^「」『』“”"]{1,80})[」』”"]\s*(?:这个|该)?卡名/iu,
@@ -19,6 +20,12 @@ export function extractPrintedNameReferences(effectText = "") {
 
 export function extractPrintedReferenceRequirement(value = "") {
   const text = String(value || "");
+  const printedComplement = text.match(PRINTED_TEXT_COMPLEMENT)?.[1] || "";
+  if (printedComplement) {
+    const complements = extractPrintedNameReferences(printedComplement);
+    if (complements.length === 1) return complements[0];
+    if (complements.length > 1) return "";
+  }
   for (const pattern of PRINTED_REFERENCE_REQUIREMENT_PATTERNS) {
     const match = text.match(pattern);
     const requiredName = cleanName(match?.[1]);

@@ -44,6 +44,26 @@ test("complete data reports ok", () => {
   assert.equal(health.usable, true);
 });
 
+test("a production-sized card snapshot cannot silently omit all monster race metadata", () => {
+  const cards = Array.from({ length: 5_000 }, (_, index) => ({
+    id: `card-${index + 1}`,
+    name: `测试怪兽${index + 1}`,
+    cardType: "monster",
+  }));
+  const health = buildDataHealth({
+    cards,
+    rulings: [qa, faq],
+    aliases: [{ ...alias, cardId: cards[0].id }],
+    qaIndex: [qaIndexEntry],
+  });
+
+  assert.equal(health.monsterCardsCount, 5_000);
+  assert.equal(health.monsterRaceMetadataCount, 0);
+  assert.equal(health.monsterRaceMetadataCoverage, 0);
+  assert.equal(health.status, "monster_metadata_incomplete");
+  assert.equal(health.usable, false);
+});
+
 test("missing data short-circuits before parser and final answer", async () => {
   const dataDir = await mkdtemp(join(tmpdir(), "data-health-tests-"));
   let fetchCalled = false;

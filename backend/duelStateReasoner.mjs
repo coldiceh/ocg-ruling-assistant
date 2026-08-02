@@ -7,6 +7,7 @@ import {
 import { advanceEffectInstanceLifecycles } from "./effectInstanceLifecycle.mjs";
 import { splitEffectTextBlocks } from "./cardEffectBlocks.mjs";
 import { normalizeCardText } from "./cardTextNormalizer.mjs";
+import { resolveUniqueEntityFragment } from "./scenarioEntityResolver.mjs";
 
 const RETURN_TO_HAND = /(?:放回|返回|回到).{0,12}(?:手牌|手卡|手札)|(?:手牌|手卡|手札).{0,12}(?:放回|返回|回到)|return.{0,20}(?:to )?(?:the )?hand/isu;
 const LOWEST_DEFENSE = /(?:守备力|守備力|防御力|防禦力).{0,8}(?:最低|最小|一番低)|lowest\s+DEF/iu;
@@ -162,6 +163,7 @@ function analyzeDuelStateTransitionInternal({
     return {
       status: "resolved",
       complete: true,
+      authoritative: true,
       activation: "assumed_legal",
       activationBasis,
       resolution: firstLink.status,
@@ -198,6 +200,7 @@ function analyzeDuelStateTransitionInternal({
   return {
     status: "resolved",
     complete: true,
+    authoritative: true,
     activation: "assumed_legal",
     activationBasis,
     resolution: "negated",
@@ -222,6 +225,7 @@ function renderFusionTransition({
   fusionOutcome,
 }) {
   const source = programByDefinitionId(programs, firstPreparedLink.sourceDefinitionId);
+  const sourceEffect = source?.activatedEffects.find((item) => item.id === firstPreparedLink.effectId);
   const fusionPrimitive = firstPreparedLink.sequence
     .map((item) => item.primitive || item)
     .find((primitive) => primitive.type === "fusion_summon");
@@ -314,6 +318,7 @@ function renderFusionTransition({
     return {
       status: "resolved",
       complete: true,
+      authoritative: true,
       activation: "legal",
       activationBasis,
       resolution: "performed",
@@ -322,7 +327,10 @@ function renderFusionTransition({
       trace,
       evidenceIds,
       activationEvidenceType: "effect_program",
-      program: serializeCompiledSimulation(programs, compiled, simulation),
+      program: {
+        ...serializeCompiledSimulation(programs, compiled, simulation),
+        sourceEffect,
+      },
     };
   }
 
@@ -347,6 +355,7 @@ function renderFusionTransition({
   return {
     status: "resolved",
     complete: true,
+    authoritative: true,
     activation: "legal",
     activationBasis,
     resolution: "not_performed",
@@ -355,7 +364,10 @@ function renderFusionTransition({
     trace,
     evidenceIds,
     activationEvidenceType: "effect_program",
-    program: serializeCompiledSimulation(programs, compiled, simulation),
+    program: {
+      ...serializeCompiledSimulation(programs, compiled, simulation),
+      sourceEffect,
+    },
   };
 }
 
@@ -466,6 +478,7 @@ export function compileResolvedCardPrograms(resolvedCards = [], cardTexts = []) 
         activatedEffects.push({
           id: `${definitionId}:${block.id}:fusion-summon`,
           effectBlockId: block.id,
+          effectNumber: normalizedSemantics.effectNumber,
           activationZones: fusionActivationZones(effectCategory),
           effectCategory,
           effectCategoryBasis: effectCategoryInference.basis,
@@ -802,7 +815,7 @@ export function compileResolvedCardPrograms(resolvedCards = [], cardTexts = []) 
 
 function analyzeUsageRestrictionNegationTransition({ query, programs, cardTexts }) {
   const asksRepeatedActivation = /(?:还|仍|再|继续|繼續).{0,12}(?:发动|發動|発動|activate)/iu.test(query);
-  const asksRestriction = /(?:限制|只(?:能|可).{0,20}特殊召唤|しか特殊召喚|Special Summon.{0,24}only).{0,32}(?:适用|適用|生效|有效|apply)|(?:适用|適用|生效|有效|apply).{0,32}(?:限制|特殊召唤|特殊召喚)/iu.test(query);
+  const asksRestriction = /(?:限制|只(?:能|可).{0,20}特殊召唤|しか特殊召喚|Special Summon.{0,24}only).{0,32}(?:适用|適用|生效|有效|约束|約束|拘束|apply)|(?:适用|適用|生效|有效|约束|約束|拘束|apply).{0,32}(?:限制|特殊召唤|特殊召喚)/iu.test(query);
   if (!asksRepeatedActivation || !asksRestriction) return null;
 
   const mentioned = programs
@@ -1030,6 +1043,7 @@ function normalizedSemanticsForBlock(cardTextIr, blockText) {
     );
   });
   return {
+    effectNumber: effect?.effectNo || effect?.effectNumber || "",
     activationCosts: effect?.activation?.costs || [],
     resolutionOperations: (effect?.resolution || []).map((step) => step.operation).filter(Boolean),
     continuous: effect?.continuous || [],
@@ -1047,9 +1061,15 @@ function normalizedEffectsForProgram(program) {
 }
 
 const APPLIED_EFFECT_PREMISE = /(?:(?:效果|効果|effect)[^。？！?]{0,20}(?:已经|已經|已|すでに|既に|already)[^。？！?]{0,12}(?:适用|適用|resolved|applied))|(?:(?:效果|効果|effect)[^。？！?]{0,16}(?:适用|適用)(?:后|後|した後))|(?:after[^.?!]{0,20}(?:effect)[^.?!]{0,16}(?:resolved|applied))/iu;
-const EFFECT_SUMMONED_MONSTER_REFERENCE = /(?:(?:这个|這個|该|該|此|その|this)\s*(?:效果|効果|effect)[^。？！?]{0,28}(?:特殊召唤|特殊召喚|special summoned?)[^。？！?]{0,16}(?:怪兽|怪獸|モンスター|monster))|(?:(?:怪兽|怪獸|モンスター|monster)[^。？！?]{0,16}(?:由|被|によって|by)[^。？！?]{0,16}(?:这个|這個|该|該|此|その|this)\s*(?:效果|効果|effect))|(?:monster[^.?!]{0,20}special summoned[^.?!]{0,16}by\s+this\s+effect)/iu;
-const BOUND_MONSTER_CONTROL_CHANGE = /(?:(?:这个|這個|该|該|此|その|this)\s*(?:效果|効果|effect)[^。？！?]{0,28}(?:特殊召唤|特殊召喚|special summoned?)[^。？！?]{0,20}(?:怪兽|怪獸|モンスター|monster)[^。？！?]{0,28}(?:控制权|控制權|コントロール|control)[^。？！?]{0,16}(?:变更|變更|改变|改變|转移|轉移|変更|change))|(?:(?:控制权|控制權|コントロール|control)[^。？！?]{0,16}(?:变更|變更|改变|改變|转移|轉移|変更|change)[^。？！?]{0,28}(?:这个|這個|该|該|此|その|this)\s*(?:效果|効果|effect)[^。？！?]{0,28}(?:特殊召唤|特殊召喚|special summoned?)[^。？！?]{0,16}(?:怪兽|怪獸|モンスター|monster))/iu;
-const CONTROL_RETURNS_LATER = /(?:之后|之後|此后|此後|后来|後來|随后|隨後|後で|その後|then|later)[^。？！?]{0,36}(?:(?:控制权|控制權|コントロール|control)[^。？！?]{0,16}(?:归还|歸還|归回|歸回|归后|戻|return)|(?:又|再)?\s*(?:回到|返回|戻|returns?\s+to)[^。？！?]{0,16}(?:自己|自分|your)[^。？！?]{0,10}(?:场上|場上|フィールド|field))/iu;
+const NUMBERED_EFFECT_OUTPUT_MONSTER = /(?:[①②③④⑤⑥⑦⑧⑨⑩](?:的)?(?:效果|効果|effect)?|(?:这个|這個|该|該|此|その|this)\s*(?:效果|効果|effect))[^。？！?]{0,28}(?:特殊召唤|特殊召喚|special summoned?)[^。？！?]{0,16}(?:出(?:的)?|的|された|した|by)?\s*(?:怪兽|怪獸|モンスター|monster)/iu;
+const EFFECT_OUTPUT_WITH_COMPLETED_EVENT = /(?:[①②③④⑤⑥⑦⑧⑨⑩](?:的)?(?:效果|効果|effect)?|(?:这个|這個|该|該|此|その|this)\s*(?:效果|効果|effect))[^。？！?]{0,28}(?:特殊召唤|特殊召喚|special summoned?)[^。？！?]{0,16}(?:出(?:的)?|された|した|by)\s*(?:怪兽|怪獸|モンスター|monster)[^。？！?]{0,28}(?:已经|已經|已|先|随后|隨後|后来|後來|被|控制权|控制權|control)/iu;
+const EFFECT_SUMMONED_MONSTER_REFERENCE = new RegExp([
+  NUMBERED_EFFECT_OUTPUT_MONSTER.source,
+  "(?:(?:怪兽|怪獸|モンスター|monster)[^。？！?]{0,16}(?:由|被|によって|by)[^。？！?]{0,16}(?:这个|這個|该|該|此|その|this)\\s*(?:效果|効果|effect))",
+  "(?:monster[^.?!]{0,20}special summoned[^.?!]{0,16}by\\s+this\\s+effect)",
+].join("|"), "iu");
+const BOUND_MONSTER_CONTROL_CHANGE = /(?:(?:怪兽|怪獸|モンスター|monster)[^。？！?]{0,32}(?:(?:被|由)?[^。？！?]{0,12}(?:取得|获得|獲得|gain(?:ed)?|take(?:n)?)\s*(?:其)?\s*(?:控制权|控制權|コントロール|control)|(?:控制权|控制權|コントロール|control)[^。？！?]{0,16}(?:变更|變更|改变|改變|转移|轉移|変更|change)))|(?:(?:控制权|控制權|コントロール|control)[^。？！?]{0,16}(?:变更|變更|改变|改變|转移|轉移|取得|获得|獲得|変更|change)[^。？！?]{0,28}(?:怪兽|怪獸|モンスター|monster))/iu;
+const CONTROL_RETURNS_LATER = /(?:之后|之後|此后|此後|后来|後來|随后|隨後|後で|その後|then|later)[^。？！?]{0,36}(?:(?:控制权|控制權|コントロール|control)[^。？！?]{0,16}(?:归还|歸還|归回|歸回|归后|戻|return)|(?:又|再)?\s*(?:回到|返回|戻|returns?\s+to)[^。？！?]{0,16}(?:自己|我方|自分|your)[^。？！?]{0,10}(?:场上|場上|フィールド|field))/iu;
 
 function compileEffectInstanceLifecycleTransition({
   query,
@@ -1057,7 +1077,7 @@ function compileEffectInstanceLifecycleTransition({
   cardTexts,
   compileFailure,
 }) {
-  if (!APPLIED_EFFECT_PREMISE.test(query)) return null;
+  if (!APPLIED_EFFECT_PREMISE.test(query) && !EFFECT_OUTPUT_WITH_COMPLETED_EVENT.test(query)) return null;
   if (!EFFECT_SUMMONED_MONSTER_REFERENCE.test(query)) return null;
   if (!BOUND_MONSTER_CONTROL_CHANGE.test(query)) return null;
 
@@ -1174,6 +1194,7 @@ function compileEffectInstanceLifecycleTransition({
     program: {
       type: "compiled_effect_instance_lifecycle",
       sourceDefinitionId: program.definitionId,
+      sourceEffect: effect,
       sourceOperation: operation,
       events: sequence.slice(1).map((item) => item.primitive),
     },
@@ -1528,6 +1549,7 @@ function renderPostCostStateReferenceTransition({
   return {
     status: "resolved",
     complete: true,
+    authoritative: true,
     activation: "legal",
     activationBasis,
     resolution: "conditional_all_or_none",
@@ -1844,6 +1866,7 @@ function renderIllegalMandatorySummonActivation({ programs, compiled, simulation
   return {
     status: "resolved",
     complete: true,
+    authoritative: true,
     activation: "cannot_activate",
     activationBasis: "derived_from_activation_preflight",
     resolution: "not_started",
@@ -2148,7 +2171,7 @@ function compileQuestionScenario({ query, programs }) {
   const mentionedPrograms = programs
     .map((program) => ({ program, mention: locateCardMention(query, program) }))
     .filter((item) => item.mention.index >= 0);
-  const costMention = extractCostCardMention(query);
+  const costMention = extractCostCardMention(query, programs);
   const costPrograms = costMention
     ? programs.filter((program) => program.names.some((name) => fuzzyContains(name, costMention) || fuzzyContains(costMention, name)))
     : [];
@@ -2474,6 +2497,7 @@ function compileQuestionScenario({ query, programs }) {
       sourceCardName: source.name,
       sourceExpectedZone: source.zone,
       effectId: effect.id,
+      effectNumber: effect.effectNumber,
       effectCategory: effect.effectCategory,
       activationPremise: effect.fusionSpec || effect.mandatorySpecialSummonOutputs?.length || effect.materialReferenceSpec
         ? "derived"
@@ -2548,7 +2572,11 @@ function buildInitialCardState(query, program, mention, ordinal = 1, instanceCou
     && programHasExplicitExtraDeckMention(query, program);
   const zone = overrides.zone
     || (explicitlyInExtraDeck ? "extra_deck" : inferZone(nearby.before, nearby.after, program));
-  const controller = overrides.controller || inferController(nearby.before, nearby.after);
+  const locallyDeclaredController = inferLocalController(nearby.before, nearby.after);
+  const controller = overrides.controller
+    || locallyDeclaredController
+    || inferPreviouslyDeclaredEntityController(query, program, mention)
+    || inferController(nearby.before, nearby.after);
   const position = overrides.position || inferPosition(localWindow(query, mentionIndex, mention.surface.length, 16, 20));
   const fieldCard = zone === "monster_zone" || zone === "spell_trap_zone";
   const restrictionApplying = program.continuousEffects.some((effect) => (
@@ -2590,7 +2618,7 @@ function buildInitialCardState(query, program, mention, ordinal = 1, instanceCou
   };
 }
 
-function extractCostCardMention(query) {
+function extractCostCardMention(query, programs = []) {
   const patterns = [
     /(?:将|將|把)\s*[「『【“]([^」』】”]+)[」』】”]\s*(?:作为|作為)\s*(?:cost|コスト|代价|代價)/iu,
     /(?:舍弃|丢弃|捨てる?)\s*[「『【“]([^」』】”]+)[」』】”]/iu,
@@ -2598,6 +2626,25 @@ function extractCostCardMention(query) {
   for (const pattern of patterns) {
     const match = String(query || "").match(pattern);
     if (match?.[1]) return match[1].trim();
+  }
+  const unquotedPatterns = [
+    /(?:舍弃|丢弃|捨てる?)\s*(?:手牌中(?:的)?|手卡中(?:的)?|手札の)?\s*([^，。；;、！？?]{1,24}?)(?=\s*(?:作为|作為|当作|當作|支付).{0,12}(?:cost|コスト|代价|代價))/iu,
+    /(?:舍弃|丢弃|捨てる?)\s*(?:手牌中(?:的)?|手卡中(?:的)?|手札の)?\s*([^，。；;、！？?]{1,24}?)(?=\s*(?:来|以此|并|並)?\s*(?:发动|發動|発動))/iu,
+  ];
+  for (const pattern of unquotedPatterns) {
+    const match = String(query || "").match(pattern);
+    if (!match?.[1]) continue;
+    const fragment = match[1].trim().replace(/^[\p{Pi}\p{Pf}'"]+|[\p{Pi}\p{Pf}'"]+$/gu, "");
+    const capturedOffset = match[0].indexOf(match[1]);
+    const binding = resolveUniqueEntityFragment(fragment, programs, {
+      query,
+      referenceIndex: (match.index ?? 0) + Math.max(0, capturedOffset),
+    });
+    if (binding.status === "bound") {
+      const program = programs.find((item) => String(item.definitionId) === binding.entityIds[0]);
+      return program?.name || fragment;
+    }
+    return fragment;
   }
   return "";
 }
@@ -2840,14 +2887,8 @@ function inferZone(before, after, program) {
 }
 
 function inferController(before, after) {
-  const beforeLocal = before.match(/(?:我方|自己|我|对方|對方|对手|對手)[^，,。；;]{0,32}$/u)?.[0] || "";
-  const beforeLocalTokens = [...beforeLocal.matchAll(/我方|自己|我|对方|對方|对手|對手/gu)];
-  const beforeLocalController = controllerFromToken(beforeLocalTokens.at(-1)?.[0]);
-  if (beforeLocalController) return beforeLocalController;
-
-  const afterLocal = after.match(/^[」』】”"]?\s*(?:已|正|仍)?\s*(?:在|于|於|位于|位於)?\s*(我方|自己|我|对方|對方|对手|對手)(?:的)?(?:场上|場上|怪兽区|怪獸區|手牌|手卡|手札|墓地|额外卡组|額外卡組)/u);
-  const afterLocalController = controllerFromToken(afterLocal?.[1]);
-  if (afterLocalController) return afterLocalController;
+  const local = inferLocalController(before, after);
+  if (local) return local;
 
   const beforeSelf = Math.max(before.lastIndexOf("我方"), before.lastIndexOf("自己"), before.lastIndexOf("我"));
   const beforeOpponent = Math.max(before.lastIndexOf("对方"), before.lastIndexOf("對方"), before.lastIndexOf("对手"), before.lastIndexOf("對手"));
@@ -2859,6 +2900,52 @@ function inferController(before, after) {
   if (afterSelf < 0) return "opponent";
   if (afterOpponent < 0) return "self";
   return afterSelf < afterOpponent ? "self" : "opponent";
+}
+
+function inferLocalController(before, after) {
+  const beforeLocal = before.match(/(?:我方|自己|我|对方|對方|对手|對手)[^，,。；;]{0,32}$/u)?.[0] || "";
+  const beforeLocalTokens = [...beforeLocal.matchAll(/我方|自己|我|对方|對方|对手|對手/gu)];
+  const beforeLocalController = controllerFromToken(beforeLocalTokens.at(-1)?.[0]);
+  if (beforeLocalController) return beforeLocalController;
+
+  const afterLocal = after.match(/^[」』】”"]?\s*(?:已|正|仍)?\s*(?:在|于|於|位于|位於)?\s*(我方|自己|我|对方|對方|对手|對手)(?:的)?(?:场上|場上|怪兽区|怪獸區|手牌|手卡|手札|墓地|额外卡组|額外卡組)/u);
+  const afterLocalController = controllerFromToken(afterLocal?.[1]);
+  if (afterLocalController) return afterLocalController;
+
+  const afterClause = String(after || "").split(/[，,。；;！？!?\n]/u, 1)[0];
+  const afterSelf = firstNonNegative(afterClause.indexOf("我方"), afterClause.indexOf("自己"), afterClause.indexOf("我"));
+  const afterOpponent = firstNonNegative(afterClause.indexOf("对方"), afterClause.indexOf("對方"), afterClause.indexOf("对手"), afterClause.indexOf("對手"));
+  if (afterSelf < 0 && afterOpponent < 0) return "";
+  if (afterSelf < 0) return "opponent";
+  if (afterOpponent < 0) return "self";
+  return afterSelf < afterOpponent ? "self" : "opponent";
+}
+
+function inferPreviouslyDeclaredEntityController(query, program, currentMention) {
+  if (!currentMention || currentMention.index <= 0) return "";
+  const text = String(query || "").normalize("NFKC");
+  const lower = text.toLowerCase();
+  const occurrences = [];
+  for (const surface of unique([program?.input, ...(program?.names || [])])
+    .filter((value) => String(value || "").length >= 2)
+    .sort((left, right) => String(right).length - String(left).length)) {
+    const candidate = String(surface).normalize("NFKC");
+    const needle = candidate.toLowerCase();
+    let cursor = 0;
+    while (cursor < currentMention.index) {
+      const index = lower.indexOf(needle, cursor);
+      if (index < 0 || index >= currentMention.index) break;
+      occurrences.push({ index, surface: candidate });
+      cursor = Math.max(index + candidate.length, index + 1);
+    }
+  }
+  occurrences.sort((left, right) => right.index - left.index || right.surface.length - left.surface.length);
+  for (const occurrence of occurrences) {
+    const nearby = localWindow(text, occurrence.index, occurrence.surface.length, 48, 32);
+    const controller = inferLocalController(nearby.before, nearby.after);
+    if (controller) return controller;
+  }
+  return "";
 }
 
 function controllerFromToken(token) {

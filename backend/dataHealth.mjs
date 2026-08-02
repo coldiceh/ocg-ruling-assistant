@@ -55,6 +55,10 @@ export function buildDataHealth({
   const rulingRecords = Array.isArray(rulings) ? rulings : [];
   const aliasRecords = Array.isArray(aliases) ? aliases : [];
   const qaIndexRecords = Array.isArray(qaIndex) ? qaIndex : [];
+  const monsterRecords = cardRecords.filter((card) => (
+    /(?:monster|怪兽|怪獸|モンスター)/iu.test(String(card?.cardType || card?.type || ""))
+  ));
+  const monsterRaceRecords = monsterRecords.filter((card) => String(card?.race || "").trim());
   const cardIds = new Set(cardRecords.map((card) => String(card?.id || card?.cardId || "").trim()).filter(Boolean));
   const aliasWithoutCardId = aliasRecords.filter((entry) => {
     const cardId = String(entry?.cardId || entry?.id || "").trim();
@@ -65,6 +69,9 @@ export function buildDataHealth({
   const rulingDataQualityIssues = findRulingDataQualityIssues(rulingRecords);
   const stats = {
     cardsCount: cardRecords.length,
+    monsterCardsCount: monsterRecords.length,
+    monsterRaceMetadataCount: monsterRaceRecords.length,
+    monsterRaceMetadataCoverage: ratio(monsterRaceRecords.length, monsterRecords.length),
     cardAliasCount: aliasRecords.length,
     qaCount,
     faqCount,
@@ -98,6 +105,11 @@ export function determineDataHealthStatus(stats) {
   if (stats.cardsCount === 0 && stats.qaCount === 0) return "data_source_missing";
   if (stats.rulingDataQualityIssueCount > 0) return "data_quality_invalid";
   if (stats.cardsCount === 0) return "missing_cards";
+  if (stats.cardsCount >= 5_000
+      && stats.monsterCardsCount > 0
+      && Number(stats.monsterRaceMetadataCoverage || 0) < 0.95) {
+    return "monster_metadata_incomplete";
+  }
   if (stats.qaCount === 0) return "missing_qa";
   if (stats.cardAliasCount === 0) return "missing_cards";
   if (stats.aliasWithoutCardIdCount > 0) return "alias_without_card_id";
@@ -113,5 +125,13 @@ export function isDataHealthUsable(stats) {
     stats.qaIndexCount > 0 &&
     stats.aliasWithoutCardIdCount === 0 &&
     Number(stats.rulingDataQualityIssueCount || 0) === 0 &&
+    !(stats.cardsCount >= 5_000
+      && stats.monsterCardsCount > 0
+      && Number(stats.monsterRaceMetadataCoverage || 0) < 0.95) &&
     (stats.missingFiles || []).length === 0;
+}
+
+function ratio(numerator, denominator) {
+  if (!denominator) return 1;
+  return numerator / denominator;
 }
