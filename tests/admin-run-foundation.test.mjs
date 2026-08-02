@@ -343,6 +343,60 @@ test("preparation finalization atomically replaces the initial request snapshot 
   );
 });
 
+test("run store atomically creates a preparation-finalized fork run", async () => {
+  const store = createAdminRunStore({
+    storage: createMemoryAdminRunStorage(),
+    runIdFactory: () => "unused-generated-run-id",
+    now: () => new Date("2027-01-02T00:00:00.000Z"),
+  });
+  const snapshot = createAdminEvidenceSnapshot({
+    question: "anonymous frozen question",
+    evidence: { preparationStatus: "finalized" },
+  });
+  const executionProfile = {
+    status: "evidence_frozen",
+    evidenceSnapshotId: snapshot.snapshotId,
+  };
+  const created = await store.createRun({
+    runId: "prepared-fork-run",
+    evidenceSnapshot: snapshot,
+    executionProfile,
+    preparationFinalized: true,
+  });
+
+  assert.equal(created.runId, "prepared-fork-run");
+  assert.equal(created.status, ADMIN_RUN_STATUSES.QUEUED);
+  assert.equal(created.preparationFinalizedAt, created.createdAt);
+  assert.equal(created.stageTiming, null);
+  assert.equal(
+    created.execution.providerSubmission.state,
+    ADMIN_PROVIDER_SUBMISSION_STATES.NONE,
+  );
+  assert.deepEqual(created.evidenceSnapshot, snapshot);
+  assert.deepEqual(created.executionProfile, executionProfile);
+  const replay = await store.replayEvents(created.runId);
+  assert.equal(replay.events.length, 1);
+  assert.equal(replay.events[0].type, "RUN_CREATED");
+  assert.equal(replay.events[0].payload.preparationFinalized, true);
+
+  for (const [runId, profile] of [
+    ["missing-profile", null],
+    ["planned-profile", { status: "planned", evidenceSnapshotId: snapshot.snapshotId }],
+    ["mismatched-profile", { status: "evidence_frozen", evidenceSnapshotId: "wrong" }],
+  ]) {
+    await assert.rejects(
+      store.createRun({
+        runId,
+        evidenceSnapshot: snapshot,
+        executionProfile: profile,
+        preparationFinalized: true,
+      }),
+      TypeError,
+    );
+    assert.equal(await store.getRun(runId), null);
+  }
+});
+
 test("persistent execution leases fence stale workers across store instances", async () => {
   const storage = createMemoryAdminRunStorage();
   let wallMs = Date.parse("2026-07-29T00:00:00.000Z");

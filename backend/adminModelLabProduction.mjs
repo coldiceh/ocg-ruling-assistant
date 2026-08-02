@@ -213,8 +213,13 @@ function createAdminModelLabComposedService({
     for (const feature of HISTORY_FEATURES) delete unavailableReasons[feature];
     return {
       ...cloneJson(base || {}),
+      architecture: {
+        ...(base?.architecture || {}),
+        sharedEvidenceSnapshotFork: true,
+      },
       features: {
         ...(base?.features || {}),
+        forkRun: true,
         history: true,
         rating: true,
         export: true,
@@ -234,6 +239,12 @@ function createAdminModelLabComposedService({
 
   async function createRun(argument = {}) {
     const run = await resolvedBaseService.createRun(argument);
+    const registration = await ensureRunHistoryRegistration(run);
+    return attachHistoryRegistration(run, registration);
+  }
+
+  async function forkRun(argument = {}) {
+    const run = await resolvedBaseService.forkRun(argument);
     const registration = await ensureRunHistoryRegistration(run);
     return attachHistoryRegistration(run, registration);
   }
@@ -516,7 +527,24 @@ function createAdminModelLabComposedService({
       evidenceSnapshotId:
         result?.evidenceSnapshotId
         || run?.evidenceSnapshot?.snapshotId
+        || record.evidenceSnapshotId
         || null,
+      evidenceSnapshotSha256:
+        run?.evidenceSnapshot?.contentSha256
+        || record.evidenceSnapshotSha256
+        || null,
+      decisionPacketId:
+        run?.evidenceSnapshot?.evidence?.evidenceDecisionPacket?.decisionPacketId
+        || record.decisionPacketId
+        || null,
+      decisionPacketSha256:
+        run?.evidenceSnapshot?.evidence?.evidenceDecisionPacket?.packetContentSha256
+        || record.decisionPacketSha256
+        || null,
+      runMetadata: run?.metadata ? cloneJson(run.metadata) : null,
+      forkProvenance: run?.metadata?.fork
+        ? cloneJson(run.metadata.fork)
+        : (record.forkProvenance ? cloneJson(record.forkProvenance) : null),
       result: result ? cloneJson(result) : null,
       metering: result?.metering ? cloneJson(result.metering) : null,
     };
@@ -564,6 +592,7 @@ function createAdminModelLabComposedService({
   return Object.freeze({
     capabilities,
     createRun,
+    forkRun,
     executeRun,
     getRun,
     pollRun,
@@ -623,6 +652,7 @@ function assertBaseService(service) {
   for (const method of [
     "capabilities",
     "createRun",
+    "forkRun",
     "executeRun",
     "getRun",
     "pollRun",
@@ -737,11 +767,17 @@ function safeFilePart(value) {
 }
 
 function historyRegistrationInput(run) {
+  const decisionPacket = run?.evidenceSnapshot?.evidence?.evidenceDecisionPacket;
   return {
     runId: run?.runId,
     createdAt: run?.createdAt,
     questionSummary: run?.evidenceSnapshot?.question,
     executionProfile: run?.executionProfile,
+    evidenceSnapshotId: run?.evidenceSnapshot?.snapshotId,
+    evidenceSnapshotSha256: run?.evidenceSnapshot?.contentSha256,
+    decisionPacketId: decisionPacket?.decisionPacketId,
+    decisionPacketSha256: decisionPacket?.packetContentSha256,
+    forkProvenance: run?.metadata?.fork,
   };
 }
 

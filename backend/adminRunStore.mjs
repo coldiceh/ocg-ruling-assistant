@@ -90,13 +90,30 @@ export function createAdminRunStore({
   }
 
   async function createRun({
+    runId: requestedRunId = null,
     evidenceSnapshot,
     metadata = {},
     limits,
     executionProfile = null,
+    preparationFinalized = false,
   } = {}) {
     assertAdminEvidenceSnapshot(evidenceSnapshot);
-    const runId = requiredString(runIdFactory(), "runId");
+    const runId = requestedRunId === null || requestedRunId === undefined
+      ? requiredString(runIdFactory(), "runId")
+      : requiredString(requestedRunId, "runId");
+    const prepared = preparationFinalized === true;
+    const frozenProfile = executionProfile === null ? null : canonicalJson(executionProfile);
+    if (prepared) {
+      if (!frozenProfile || typeof frozenProfile !== "object" || Array.isArray(frozenProfile)) {
+        throw new TypeError("executionProfile is required for a preparation-finalized run");
+      }
+      if (frozenProfile.status !== "evidence_frozen") {
+        throw new TypeError("preparation-finalized run requires an evidence_frozen executionProfile");
+      }
+      if (String(frozenProfile.evidenceSnapshotId || "") !== String(evidenceSnapshot.snapshotId || "")) {
+        throw new TypeError("executionProfile evidenceSnapshotId does not match evidenceSnapshot");
+      }
+    }
     const timestamp = await readTimestamp(clock);
     const event = {
       runId,
@@ -106,6 +123,7 @@ export function createAdminRunStore({
       status: ADMIN_RUN_STATUSES.QUEUED,
       payload: {
         evidenceSnapshotId: evidenceSnapshot.snapshotId,
+        ...(prepared ? { preparationFinalized: true } : {}),
       },
     };
     const run = {
@@ -120,8 +138,8 @@ export function createAdminRunStore({
       endedAt: null,
       evidenceSnapshot: cloneJson(evidenceSnapshot),
       metadata: canonicalJson(metadata),
-      executionProfile: executionProfile === null ? null : canonicalJson(executionProfile),
-      preparationFinalizedAt: null,
+      executionProfile: frozenProfile,
+      preparationFinalizedAt: prepared ? timestamp : null,
       limits: normalizeAdminRunLimits(limits),
       stageTiming: null,
       cancellation: null,

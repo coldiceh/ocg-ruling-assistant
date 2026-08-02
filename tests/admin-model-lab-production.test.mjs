@@ -58,14 +58,23 @@ test("production composition registers runs and exposes persistent record capabi
   assert.equal(capabilities.features.rating, true);
   assert.equal(capabilities.features.export, true);
   assert.equal(capabilities.features.evaluation, true);
+  assert.equal(capabilities.features.forkRun, true);
+  assert.equal(capabilities.architecture.sharedEvidenceSnapshotFork, true);
   assert.equal(capabilities.persistence.recordStore, "persistent");
   assert.equal(capabilities.persistence.runStore, "persistent");
 
   const run = await service.createRun({ body: { question: "测试问题" } });
   assert.equal(run.runId, "run-production-1");
+  const fork = await service.forkRun({
+    forkFromRunId: run.runId,
+    body: { idempotencyKey: "production-fork-key-0001" },
+  });
+  assert.equal(fork.runId, run.runId);
   const history = await service.listRuns({ limit: 10 });
   assert.equal(history.records.length, 1);
   assert.equal(history.records[0].question, "测试问题");
+  assert.equal(history.records[0].configuration.finalRuling.model, "gpt-5.6-terra");
+  assert.equal(history.records[0].forkProvenance.sourceRunId, "source-production-1");
 
   await service.saveRating({
     runId: run.runId,
@@ -78,6 +87,11 @@ test("production composition registers runs and exposes persistent record capabi
   const exportRecord = JSON.parse(exported.content).records[0];
   assert.equal(exportRecord.status, "SUCCEEDED");
   assert.equal(exportRecord.evidenceSnapshotId, "evidence-production-1");
+  assert.equal(exportRecord.evidenceSnapshotSha256, "a".repeat(64));
+  assert.equal(exportRecord.decisionPacketId, "decision_packet_production_1");
+  assert.equal(exportRecord.decisionPacketSha256, "b".repeat(64));
+  assert.equal(exportRecord.forkProvenance.sourceRunId, "source-production-1");
+  assert.equal(exportRecord.modelConfig.finalRuling.model, "gpt-5.6-terra");
   assert.equal(exportRecord.result.finalRuling.conciseAnswer, "测试裁定。");
   assert.equal(exportRecord.metering.totals.usage.totalTokens, 180);
 
@@ -535,6 +549,26 @@ function fakeBaseService({ persistent = true } = {}) {
     evidenceSnapshot: {
       question: "测试问题",
       snapshotId: "evidence-production-1",
+      contentSha256: "a".repeat(64),
+      evidence: {
+        evidenceDecisionPacket: {
+          decisionPacketId: "decision_packet_production_1",
+          packetContentSha256: "b".repeat(64),
+        },
+      },
+    },
+    metadata: {
+      fork: {
+        schemaVersion: 1,
+        sourceRunId: "source-production-1",
+        rootSourceRunId: "source-production-1",
+        sourceEvidenceSnapshotId: "evidence-production-1",
+        sourceEvidenceSnapshotSha256: "a".repeat(64),
+        sourceDecisionPacketId: "decision_packet_production_1",
+        sourceDecisionPacketSha256: "b".repeat(64),
+        requestFingerprint: "c".repeat(64),
+        idempotencyKeySha256: "d".repeat(64),
+      },
     },
     executionProfile: {
       finalRuling: {
@@ -587,6 +621,9 @@ function fakeBaseService({ persistent = true } = {}) {
       };
     },
     async createRun() {
+      return structuredClone(run);
+    },
+    async forkRun() {
       return structuredClone(run);
     },
     async executeRun() {

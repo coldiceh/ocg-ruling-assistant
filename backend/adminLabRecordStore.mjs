@@ -1,5 +1,5 @@
 const RECORD_SCHEMA_VERSION = 1;
-const EXPORT_SCHEMA_VERSION = 2;
+const EXPORT_SCHEMA_VERSION = 3;
 const DEFAULT_KEY_PREFIX = "admin-lab-records:v1";
 const DEFAULT_PAGE_LIMIT = 25;
 const MAX_PAGE_LIMIT = 100;
@@ -414,6 +414,15 @@ export function exportAdminLabRecordsCsv(records) {
     "startedAt",
     "endedAt",
     "evidenceSnapshotId",
+    "evidenceSnapshotSha256",
+    "decisionPacketId",
+    "decisionPacketSha256",
+    "forkSourceRunId",
+    "forkRootSourceRunId",
+    "sourceEvidenceSnapshotId",
+    "sourceEvidenceSnapshotSha256",
+    "sourceDecisionPacketId",
+    "sourceDecisionPacketSha256",
     "resultJson",
     "meteringJson",
     "humanRating",
@@ -424,6 +433,7 @@ export function exportAdminLabRecordsCsv(records) {
     const preparation = record.modelConfig.preparation || {};
     const finalRuling = record.modelConfig.finalRuling || {};
     const prompt = record.modelConfig.prompt || {};
+    const fork = record.forkProvenance || {};
     return [
       record.runId,
       record.createdAt,
@@ -439,6 +449,15 @@ export function exportAdminLabRecordsCsv(records) {
       record.startedAt || "",
       record.endedAt || "",
       record.evidenceSnapshotId || "",
+      record.evidenceSnapshotSha256 || "",
+      record.decisionPacketId || "",
+      record.decisionPacketSha256 || "",
+      fork.sourceRunId || "",
+      fork.rootSourceRunId || "",
+      fork.sourceEvidenceSnapshotId || "",
+      fork.sourceEvidenceSnapshotSha256 || "",
+      fork.sourceDecisionPacketId || "",
+      fork.sourceDecisionPacketSha256 || "",
       record.result ? JSON.stringify(record.result) : "",
       record.metering ? JSON.stringify(record.metering) : "",
       record.humanRating?.rating || "",
@@ -457,7 +476,7 @@ function normalizeRunRecord(input, { now }) {
   const questionSource = input.questionSummary ?? input.question;
   const questionSummary = summarizeQuestion(questionSource);
   if (!questionSummary) throw new TypeError("question is required");
-  return {
+  return compactObject({
     schemaVersion: RECORD_SCHEMA_VERSION,
     runId,
     createdAt,
@@ -465,7 +484,12 @@ function normalizeRunRecord(input, { now }) {
     modelConfig: normalizeModelConfig(
       input.modelConfig ?? input.executionProfile ?? {},
     ),
-  };
+    evidenceSnapshotId: optionalText(input.evidenceSnapshotId, 240),
+    evidenceSnapshotSha256: normalizeSha256(input.evidenceSnapshotSha256),
+    decisionPacketId: optionalText(input.decisionPacketId, 240),
+    decisionPacketSha256: normalizeSha256(input.decisionPacketSha256),
+    forkProvenance: normalizeForkProvenance(input.forkProvenance),
+  });
 }
 
 function normalizeHumanRating(input, { now }) {
@@ -543,6 +567,21 @@ function normalizeModelConfig(value) {
   });
 }
 
+function normalizeForkProvenance(value) {
+  if (!isPlainObject(value)) return undefined;
+  return compactObject({
+    schemaVersion: optionalNonNegativeNumber(value.schemaVersion),
+    sourceRunId: optionalText(value.sourceRunId, 240),
+    rootSourceRunId: optionalText(value.rootSourceRunId, 240),
+    sourceEvidenceSnapshotId: optionalText(value.sourceEvidenceSnapshotId, 240),
+    sourceEvidenceSnapshotSha256: normalizeSha256(value.sourceEvidenceSnapshotSha256),
+    sourceDecisionPacketId: optionalText(value.sourceDecisionPacketId, 240),
+    sourceDecisionPacketSha256: normalizeSha256(value.sourceDecisionPacketSha256),
+    requestFingerprint: normalizeSha256(value.requestFingerprint),
+    idempotencyKeySha256: normalizeSha256(value.idempotencyKeySha256),
+  });
+}
+
 function normalizeExportRecords(records) {
   if (!Array.isArray(records)) throw new TypeError("records must be an array");
   return records.map((input) => {
@@ -551,6 +590,11 @@ function normalizeExportRecords(records) {
       createdAt: input?.createdAt,
       questionSummary: input?.questionSummary,
       modelConfig: input?.modelConfig,
+      evidenceSnapshotId: input?.evidenceSnapshotId,
+      evidenceSnapshotSha256: input?.evidenceSnapshotSha256,
+      decisionPacketId: input?.decisionPacketId,
+      decisionPacketSha256: input?.decisionPacketSha256,
+      forkProvenance: input?.forkProvenance,
     }, { now: () => new Date(0) });
     const rating = input?.humanRating === null || input?.humanRating === undefined
       ? null

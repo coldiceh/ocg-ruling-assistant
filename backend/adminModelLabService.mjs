@@ -7,10 +7,14 @@ import {
   resolveAdminModelSelection,
 } from "./adminModelLabConfig.mjs";
 import {
+  assertAdminEvidenceArchive,
   buildAdminEvidenceDecisionPacket,
   createAdminEvidenceArchive,
 } from "./adminEvidenceArchive.mjs";
-import { createAdminEvidenceSnapshot } from "./adminEvidenceSnapshot.mjs";
+import {
+  assertAdminEvidenceSnapshot,
+  createAdminEvidenceSnapshot,
+} from "./adminEvidenceSnapshot.mjs";
 import {
   ADMIN_RUN_STAGE_CATALOG,
   ADMIN_STAGE_STATUSES,
@@ -58,6 +62,17 @@ const TERMINAL_RUN_STATUSES = new Set([
   ADMIN_RUN_STATUSES.FAILED,
 ]);
 const PROVIDER_ACCEPTANCE_PERSIST_ATTEMPTS = 3;
+const ADMIN_FORK_ALLOWED_BODY_FIELDS = new Set([
+  "forkFromRunId",
+  "idempotencyKey",
+  "label",
+  "provider",
+  "model",
+  "reasoningEffort",
+  "reasoningMode",
+  "maxOutputTokens",
+]);
+const ADMIN_FORK_IDEMPOTENCY_KEY_PATTERN = /^[A-Za-z0-9._:-]{16,128}$/u;
 
 export const ADMIN_MODEL_LAB_SERVICE_EVENT_TYPES = Object.freeze({
   MODEL_REQUEST_CREATED: "MODEL_REQUEST_CREATED",
@@ -142,6 +157,7 @@ export function createAdminModelLabService({
           : finalRulingProviderRegistry.listProviderIds()[0] || null,
         finalRulingProviders: finalRulingProviderRegistry.listProviderIds(),
         finalRulingRequiredForEveryRun: true,
+        sharedEvidenceSnapshotFork: true,
         experimentalFinalRulingAvailable: finalRulingProviderRegistry.listProviderIds()
           .some((providerId) => providerId !== "openai"),
         simulatorUsed: false,
@@ -159,6 +175,7 @@ export function createAdminModelLabService({
       }],
       features: {
         createRun: true,
+        forkRun: true,
         executeRun: true,
         reconcileRunOnRead: true,
         cancelRun: true,
@@ -180,17 +197,19 @@ export function createAdminModelLabService({
     });
   }
 
-  async function createRun(argument = {}) {
-    const body = unwrapBody(argument);
-    const questions = normalizeQuestions(body);
-    const question = normalizeQuestionText(body, questions);
-    const promptVersion = nonEmptyString(body.promptVersion, DEFAULT_PROMPT_VERSION);
+  function resolveFinalRulingProfile(body = {}, fallbackProfile = null) {
+    const fallback = fallbackProfile && typeof fallbackProfile === "object"
+      ? fallbackProfile
+      : {};
     const requestedFinalModel = String(
-      body.model || defaultFinalModel({ config, finalRulingProviderRegistry }),
+      body.model
+      || fallback.requestedModel
+      || fallback.model
+      || defaultFinalModel({ config, finalRulingProviderRegistry }),
     ).trim();
     const finalCapability = getRulingModelCapabilityTable()[requestedFinalModel];
     const finalProvider = String(
-      body.provider || finalCapability?.providerId || "",
+      body.provider || fallback.provider || finalCapability?.providerId || "",
     ).trim().toLowerCase();
     const finalStage = finalCapability?.allowedStages?.includes(
       ADMIN_MODEL_LAB_STAGES.FINAL_RULING,
@@ -201,10 +220,12 @@ export function createAdminModelLabService({
       provider: finalProvider,
       model: requestedFinalModel,
       reasoningEffort: body.reasoningEffort
+        || fallback.reasoningEffort
         || (finalProvider === "openai"
           ? config.defaultReasoningEffort
           : finalCapability?.defaultReasoningEffort),
       reasoningMode: body.reasoningMode
+        || fallback.reasoningMode
         || (finalProvider === "openai"
           ? config.defaultReasoningMode
           : finalCapability?.defaultReasoningMode),
@@ -216,6 +237,32 @@ export function createAdminModelLabService({
         "final_ruling_provider_unavailable",
       );
     }
+    const maxOutputTokens = Object.hasOwn(body, "maxOutputTokens")
+      ? optionalPositiveInteger(body.maxOutputTokens)
+      : optionalPositiveInteger(fallback.maxOutputTokens);
+    return {
+      selection: finalSelection,
+      profile: {
+        provider: finalSelection.provider,
+        requestedModel: finalSelection.requestedModel,
+        model: finalSelection.model,
+        reasoningEffort: finalSelection.reasoningEffort,
+        reasoningMode: finalSelection.reasoningMode,
+        maxOutputTokens,
+        experimental: finalSelection.stage === ADMIN_MODEL_LAB_STAGES.EXPERIMENTAL_FINAL_RULING,
+        authority: finalSelection.stage === ADMIN_MODEL_LAB_STAGES.EXPERIMENTAL_FINAL_RULING
+          ? "experimental_non_authoritative"
+          : "model_assisted_ruling",
+      },
+    };
+  }
+
+  async function createRun(argument = {}) {
+    const body = unwrapBody(argument);
+    const questions = normalizeQuestions(body);
+    const question = normalizeQuestionText(body, questions);
+    const promptVersion = nonEmptyString(body.promptVersion, DEFAULT_PROMPT_VERSION);
+    const { selection: finalSelection, profile: finalRulingProfile } = resolveFinalRulingProfile(body);
     const preparationModel = String(body.preparationModel || "deepseek-v4-flash").trim();
     const preparationCapability = getRulingModelCapabilityTable()[preparationModel];
     const preparationProvider = String(
@@ -244,18 +291,7 @@ export function createAdminModelLabService({
         canMakeFinalRuling: false,
         canDecideEscalation: false,
       },
-      finalRuling: {
-        provider: finalSelection.provider,
-        requestedModel: finalSelection.requestedModel,
-        model: finalSelection.model,
-        reasoningEffort: finalSelection.reasoningEffort,
-        reasoningMode: finalSelection.reasoningMode,
-        maxOutputTokens: optionalPositiveInteger(body.maxOutputTokens),
-        experimental: finalSelection.stage === ADMIN_MODEL_LAB_STAGES.EXPERIMENTAL_FINAL_RULING,
-        authority: finalSelection.stage === ADMIN_MODEL_LAB_STAGES.EXPERIMENTAL_FINAL_RULING
-          ? "experimental_non_authoritative"
-          : "model_assisted_ruling",
-      },
+      finalRuling: finalRulingProfile,
       prompt: {
         version: promptVersion,
         sha256: sha256(instructions),
@@ -309,6 +345,107 @@ export function createAdminModelLabService({
       // means disabled and is never coerced to zero.
       limits: config.limitsEnabled ? translateConfiguredLimits(config.limits) : undefined,
     });
+  }
+
+  async function forkRun({ forkFromRunId, body = {} } = {}) {
+    const forkBody = body && typeof body === "object" && !Array.isArray(body) ? body : {};
+    assertForkBodyFields(forkBody);
+    const bodySourceRunId = nullableString(forkBody.forkFromRunId);
+    const sourceRunId = nullableString(forkFromRunId) || bodySourceRunId;
+    if (!sourceRunId) {
+      throw requestError("forkFromRunId is required", "admin_model_lab_forkFromRunId_required");
+    }
+    if (bodySourceRunId && nullableString(forkFromRunId) && bodySourceRunId !== nullableString(forkFromRunId)) {
+      throw requestError(
+        "forkFromRunId does not match the request body",
+        "admin_fork_source_mismatch",
+      );
+    }
+    const idempotencyKey = nullableString(forkBody.idempotencyKey);
+    if (!idempotencyKey) {
+      throw requestError("idempotencyKey is required", "admin_model_lab_idempotencyKey_required");
+    }
+    if (!ADMIN_FORK_IDEMPOTENCY_KEY_PATTERN.test(idempotencyKey)) {
+      throw requestError(
+        "idempotencyKey must contain 16-128 safe ASCII characters",
+        "admin_fork_idempotency_key_invalid",
+      );
+    }
+    const forkRunId = `fork_${sha256(`fork-v1\0${idempotencyKey}`).slice(0, 40)}`;
+    const existingFork = await runStore.getRun(forkRunId);
+    if (existingFork) {
+      const { profile: retriedFinalProfile } = resolveFinalRulingProfile(
+        forkBody,
+        existingFork.executionProfile?.finalRuling,
+      );
+      if (
+        existingFork.metadata?.fork?.sourceRunId === sourceRunId
+        && JSON.stringify(existingFork.executionProfile?.finalRuling) === JSON.stringify(retriedFinalProfile)
+      ) {
+        return existingFork;
+      }
+      throw serviceError(
+        "idempotencyKey was already used for a different frozen-evidence fork",
+        "admin_fork_idempotency_conflict",
+      );
+    }
+
+    const sourceRun = await requireRun(sourceRunId);
+    const forkEvidence = assertForkSourceRun(sourceRun);
+    const { profile: finalRulingProfile } = resolveFinalRulingProfile(
+      forkBody,
+      sourceRun.executionProfile.finalRuling,
+    );
+    const executionProfile = {
+      ...jsonSafe(sourceRun.executionProfile),
+      finalRuling: finalRulingProfile,
+    };
+    const requestFingerprint = sha256(JSON.stringify({
+      schemaVersion: 1,
+      sourceRunId,
+      evidenceSnapshotId: sourceRun.evidenceSnapshot.snapshotId,
+      evidenceSnapshotSha256: sourceRun.evidenceSnapshot.contentSha256,
+      decisionPacketId: forkEvidence.decisionPacket.decisionPacketId,
+      decisionPacketSha256: forkEvidence.decisionPacket.packetContentSha256,
+      promptSha256: sourceRun.executionProfile.prompt?.sha256 || null,
+      finalRuling: finalRulingProfile,
+    }));
+    const forkMetadata = {
+      label: nullableString(forkBody.label),
+      source: "admin_model_lab_snapshot_fork",
+      initialRequestSnapshotId:
+        sourceRun.metadata?.initialRequestSnapshotId || sourceRun.evidenceSnapshot.snapshotId,
+      fork: {
+        schemaVersion: 1,
+        sourceRunId,
+        rootSourceRunId: sourceRun.metadata?.fork?.rootSourceRunId || sourceRunId,
+        sourceEvidenceSnapshotId: sourceRun.evidenceSnapshot.snapshotId,
+        sourceEvidenceSnapshotSha256: sourceRun.evidenceSnapshot.contentSha256,
+        sourceDecisionPacketId: forkEvidence.decisionPacket.decisionPacketId,
+        sourceDecisionPacketSha256: forkEvidence.decisionPacket.packetContentSha256,
+        requestFingerprint,
+        idempotencyKeySha256: sha256(idempotencyKey),
+      },
+    };
+
+    try {
+      return await runStore.createRun({
+        runId: forkRunId,
+        evidenceSnapshot: sourceRun.evidenceSnapshot,
+        metadata: forkMetadata,
+        executionProfile,
+        limits: sourceRun.limits,
+        preparationFinalized: true,
+      });
+    } catch (error) {
+      if (error?.code !== "admin_run_exists") throw error;
+      const existing = await runStore.getRun(forkRunId);
+      if (existing?.metadata?.fork?.requestFingerprint === requestFingerprint) return existing;
+      throw serviceError(
+        "idempotencyKey was already used for a different frozen-evidence fork",
+        "admin_fork_idempotency_conflict",
+      );
+    }
   }
 
   async function executeRun({ runId, body = {} } = {}) {
@@ -442,10 +579,22 @@ export function createAdminModelLabService({
           executionProfile: finalizedProfile,
           executionToken,
         });
-      } else {
+      } else if (run.stageTiming) {
         tracker = restoreTracker(run, {
           targetElapsedMs: currentElapsedMs(run),
         }).tracker;
+      } else {
+        tracker = stageTrackerFactory({
+          runId: id,
+          monotonicNow,
+          wallNow,
+        });
+        for (const stageId of PREPARATION_STAGE_IDS) {
+          tracker.skipStage(stageId, { reason: "reused_frozen_evidence_snapshot" });
+        }
+        run = await runStore.updateStageProgress(id, tracker.snapshot(), {
+          executionToken,
+        });
       }
 
       const finalStage = tracker.snapshot().stages.find((stage) => stage.id === FINAL_STAGE_ID);
@@ -1648,6 +1797,7 @@ export function createAdminModelLabService({
     }),
     capabilities,
     createRun,
+    forkRun,
     executeRun,
     getRun,
     pollRun,
@@ -1996,6 +2146,7 @@ function normalizeProviderTimestamp(value) {
 
 function buildLatencyMetrics(run, stageTiming, response) {
   const generation = stageTiming.stages.find((stage) => stage.id === FINAL_STAGE_ID);
+  const preparationReused = Boolean(run.metadata?.fork?.sourceRunId);
   const providerCreatedAt = normalizeProviderTimestamp(response.created_at);
   const providerCompletedAt = normalizeProviderTimestamp(response.completed_at);
   const providerLatencyMs = providerCreatedAt && providerCompletedAt
@@ -2003,15 +2154,18 @@ function buildLatencyMetrics(run, stageTiming, response) {
     : null;
   return {
     totalWallClockMs: stageTiming.totalElapsedMs,
-    preparationMs: generation?.startOffsetMs ?? null,
+    preparationMs: preparationReused ? 0 : (generation?.startOffsetMs ?? null),
+    preparationReused,
     finalRulingMs: generation?.durationMs ?? null,
     providerLatencyMs,
     providerCreatedAt,
     providerCompletedAt,
     stages: stageTiming.stages.map((stage) => ({
       id: stage.id,
+      status: stage.status,
       durationMs: stage.durationMs,
       speedLabel: stage.speedLabel,
+      skipReason: stage.skipReason || null,
     })),
     runStartedAt: run.startedAt,
     runEndedObservationAt: stageTiming.endedAt,
@@ -2026,14 +2180,19 @@ function buildAdminModelLabMetering({
 }) {
   const pricingProfile = run.executionProfile?.pricing || {};
   const preparationProfile = run.executionProfile?.preparation || {};
+  const preparationReused = Boolean(run.metadata?.fork?.sourceRunId);
   const preparationSkipped = run.evidenceSnapshot?.evidence?.preparation?.skipped === true;
-  const preparationRawUsage = run.evidenceSnapshot?.evidence?.preparation?.usage ?? null;
-  const preparationUsage = preparationSkipped
-    ? normalizeOpenAIResponsesUsage(preparationRawUsage || {})
-    : normalizeReportedModelUsage(preparationRawUsage);
+  const sourcePreparationRawUsage = run.evidenceSnapshot?.evidence?.preparation?.usage ?? null;
+  const sourcePreparationUsage = preparationSkipped
+    ? normalizeOpenAIResponsesUsage(sourcePreparationRawUsage || {})
+    : normalizeReportedModelUsage(sourcePreparationRawUsage);
+  const preparationRawUsage = preparationReused ? null : sourcePreparationRawUsage;
+  const preparationUsage = preparationReused
+    ? normalizeOpenAIResponsesUsage({})
+    : sourcePreparationUsage;
   const finalRawUsage = finalResponse?.usage ?? null;
   const measuredFinalUsage = normalizeReportedModelUsage(finalRawUsage);
-  const preparationCost = preparationSkipped
+  const preparationCost = preparationReused || preparationSkipped
     ? skippedPreparationCost({
         provider: preparationProfile.provider,
         model: preparationProfile.model,
@@ -2057,9 +2216,17 @@ function buildAdminModelLabMetering({
       stageId: ADMIN_MODEL_LAB_STAGES.EVIDENCE_PREPARATION,
       provider: preparationProfile.provider || null,
       model: preparationProfile.model || null,
-      usageStatus: preparationSkipped ? "skipped" : (preparationUsage ? "reported" : "unavailable"),
+      usageStatus: preparationReused
+        ? "reused"
+        : (preparationSkipped ? "skipped" : (preparationUsage ? "reported" : "unavailable")),
       usage: preparationUsage,
       rawUsage: jsonSafe(preparationRawUsage),
+      sourceUsage: preparationReused ? sourcePreparationUsage : null,
+      sourceRawUsage: preparationReused ? jsonSafe(sourcePreparationRawUsage) : null,
+      reusedFromRunId: preparationReused ? run.metadata.fork.sourceRunId : null,
+      reusedEvidenceSnapshotId: preparationReused
+        ? run.metadata.fork.sourceEvidenceSnapshotId
+        : null,
       cost: preparationCost,
     },
     finalRuling: {
@@ -2317,6 +2484,109 @@ function resolveServerDataVersions(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : {};
 }
 
+function assertForkBodyFields(body) {
+  const rejected = Object.keys(body).filter((key) => !ADMIN_FORK_ALLOWED_BODY_FIELDS.has(key));
+  if (rejected.length) {
+    throw requestError(
+      `Frozen-evidence fork does not allow overriding: ${rejected.sort().join(", ")}`,
+      "admin_fork_override_forbidden",
+    );
+  }
+}
+
+function assertForkSourceRun(sourceRun) {
+  if (![ADMIN_RUN_STATUSES.SUCCEEDED, ADMIN_RUN_STATUSES.FAILED].includes(sourceRun?.status)) {
+    throw serviceError(
+      "Frozen-evidence fork requires a completed source run",
+      "admin_fork_source_not_terminal",
+    );
+  }
+  if (!sourceRun.preparationFinalizedAt) {
+    throw serviceError(
+      "Source run has no finalized evidence preparation",
+      "admin_fork_source_not_frozen",
+    );
+  }
+  if (sourceRun.executionProfile?.status !== "evidence_frozen") {
+    throw serviceError(
+      "Source run execution profile is not evidence_frozen",
+      "admin_fork_source_profile_invalid",
+    );
+  }
+  const promptInstructions = sourceRun.executionProfile?.prompt?.instructions;
+  if (
+    typeof promptInstructions !== "string"
+    || !promptInstructions.trim()
+    || sourceRun.executionProfile.prompt.sha256 !== sha256(promptInstructions)
+  ) {
+    throw serviceError(
+      "Source run prompt profile is invalid",
+      "admin_fork_source_profile_invalid",
+    );
+  }
+  const submissionState = sourceRun.execution?.providerSubmission?.state
+    || ADMIN_PROVIDER_SUBMISSION_STATES.NONE;
+  if ([
+    ADMIN_PROVIDER_SUBMISSION_STATES.SUBMITTING,
+    ADMIN_PROVIDER_SUBMISSION_STATES.OUTCOME_UNKNOWN,
+  ].includes(submissionState)) {
+    throw serviceError(
+      "Source run has an ambiguous provider submission outcome",
+      "admin_fork_source_billing_ambiguous",
+    );
+  }
+  try {
+    assertAdminEvidenceSnapshot(sourceRun.evidenceSnapshot);
+  } catch (error) {
+    const invalid = serviceError(
+      "Source run evidence snapshot is invalid",
+      "admin_fork_source_snapshot_invalid",
+    );
+    invalid.cause = error;
+    throw invalid;
+  }
+  if (
+    String(sourceRun.executionProfile.evidenceSnapshotId || "")
+    !== String(sourceRun.evidenceSnapshot.snapshotId || "")
+  ) {
+    throw serviceError(
+      "Source run profile does not reference its frozen evidence snapshot",
+      "admin_fork_source_snapshot_mismatch",
+    );
+  }
+  const archive = sourceRun.evidenceSnapshot?.evidence?.evidenceArchive;
+  try {
+    assertAdminEvidenceArchive(archive);
+  } catch (error) {
+    const invalid = serviceError(
+      "Source run evidence archive is invalid",
+      "admin_fork_source_archive_invalid",
+    );
+    invalid.cause = error;
+    throw invalid;
+  }
+  const decisionPacket = sourceRun.evidenceSnapshot?.evidence?.evidenceDecisionPacket;
+  const expectedPacketHash = decisionPacket?.modelPacket
+    ? sha256(JSON.stringify(decisionPacket.modelPacket))
+    : "";
+  if (
+    !decisionPacket
+    || typeof decisionPacket !== "object"
+    || !decisionPacket.modelPacket
+    || typeof decisionPacket.modelPacket !== "object"
+    || decisionPacket.decisionPacketId !== `decision_packet_${expectedPacketHash.slice(0, 24)}`
+    || decisionPacket.packetContentSha256 !== expectedPacketHash
+    || decisionPacket.modelPacket.archiveId !== archive.archiveId
+    || decisionPacket.modelPacket.archiveContentSha256 !== archive.contentSha256
+  ) {
+    throw serviceError(
+      "Source run evidence decision packet is invalid",
+      "admin_fork_source_decision_packet_invalid",
+    );
+  }
+  return { archive, decisionPacket };
+}
+
 function unwrapBody(argument) {
   if (argument?.body && typeof argument.body === "object" && !Array.isArray(argument.body)) {
     return argument.body;
@@ -2551,5 +2821,11 @@ function serviceError(message, code) {
   error.expose = true;
   error.status = code === "admin_run_not_found" ? 404 : 409;
   error.publicMessage = message;
+  return error;
+}
+
+function requestError(message, code) {
+  const error = serviceError(message, code);
+  error.status = 400;
   return error;
 }

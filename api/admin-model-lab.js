@@ -14,6 +14,7 @@ const GET_ACTIONS = new Set([
 
 const POST_ACTIONS = new Set([
   "create",
+  "fork",
   "execute",
   "cancel",
   "rating",
@@ -189,6 +190,15 @@ async function dispatchJsonAction({ service, context }) {
   }
   if (action === "create") {
     return callService(service, "createRun", {
+      body: withoutAction(body),
+      request,
+      authorization,
+    });
+  }
+  if (action === "fork") {
+    requiredParameter(body.idempotencyKey, "idempotencyKey");
+    return callService(service, "forkRun", {
+      forkFromRunId: requiredParameter(body.forkFromRunId, "forkFromRunId"),
       body: withoutAction(body),
       request,
       authorization,
@@ -493,6 +503,7 @@ function unavailableProductionService(configurationError) {
   const methods = [
     "capabilities",
     "createRun",
+    "forkRun",
     "executeRun",
     "getRun",
     "cancelRun",
