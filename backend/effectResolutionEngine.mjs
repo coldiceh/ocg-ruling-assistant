@@ -1916,6 +1916,51 @@ function executePrimitive(primitive, gameState, options = {}) {
         suppressedDestinationReplacementEffectIds: movement.suppressedDestinationReplacementEffectIds,
       }]);
     }
+    case "tribute_cards": {
+      const field = (state.cards || []).filter((card) => (
+        normalize(card.zone) === normalize(primitive.fromZone || "monster_zone")
+        && knownPlayer(card.controller) === knownPlayer(player)
+      ));
+      const requestedIds = primitive.cardInstanceIds?.length
+        ? primitive.cardInstanceIds
+        : primitive.cardIds || [];
+      const selection = requestedIds.length
+        ? selectCardsByIds(field, requestedIds, amount)
+        : field.length === amount
+          ? { complete: true, cards: [...field] }
+          : { complete: false, cards: [], reason: "tribute_selection_ambiguous" };
+      if (!selection.complete || selection.cards.length !== amount) {
+        return insufficient(selection.reason || "tribute_cards_not_available");
+      }
+      const paymentSnapshots = selection.cards.map((card) => ({
+        instanceId: cardInstanceId(card),
+        zone: card.zone,
+        controller: card.controller,
+        faceUp: card.faceUp,
+      }));
+      const movement = resolveMoveBatch(state, selection.cards.map((card) => ({
+        card,
+        intendedToZone: "graveyard",
+        destinationPlayer: knownPlayer(card.owner) || knownPlayer(card.controller) || player,
+        extra: {
+          owner: knownPlayer(card.owner) || knownPlayer(card.controller) || player,
+          controller: knownPlayer(card.owner) || knownPlayer(card.controller) || player,
+          tributed: true,
+        },
+        cause: "tribute_as_activation_cost",
+      })), movementContext);
+      if (movement.status !== "applied") return insufficient(movement.reason);
+      return success(state, [{
+        type: "tribute_cards",
+        player,
+        cardInstanceIds: selection.cards.map(cardInstanceId),
+        fromZone: primitive.fromZone || "monster_zone",
+        intendedToZone: "graveyard",
+        actualToZones: uniqueStrings(movement.moves.map((move) => move.actualToZone)),
+        paymentSnapshots,
+        moves: movement.moves,
+      }]);
+    }
     case "send_field_monsters_to_graveyard": {
       const field = (state.cards || []).filter((card) => (
         normalize(card.zone) === "monster_zone"

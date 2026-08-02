@@ -225,7 +225,16 @@ function parseActivationCosts(prefix) {
     });
   }
   if (/(?:解放|リリース|tribute)/iu.test(text)) {
-    costs.push({ type: "tribute", actor: "controller", timing: "activation", text });
+    costs.push({
+      type: "tribute",
+      actor: "controller",
+      subject: /(?:解放|リリース|tribute)\s*(?:此卡|这张卡|這張卡|このカード|this card)|(?:此卡|这张卡|這張卡|このカード|this card)\s*(?:を)?\s*(?:解放|リリース|tribute)/iu.test(text)
+        ? "effect_source"
+        : "selected_card",
+      amount: parseCount(text.match(/([０-９\d一二三两兩]+)\s*(?:只|隻|体|體|枚)?[^。；;]{0,12}(?:解放|リリース|tribute)/iu)?.[1], 1),
+      timing: "activation",
+      text,
+    });
   }
   if (/(?:从|從|将|將|把|このカードを|banish)\s*[^。；;]{0,60}(?:除外|banish)[^。；;]{0,24}(?:作为|作為)?(?:cost|代价|代價|コスト|可以发动|才能发动|発動できる|to activate)/iu.test(text)
       || /(?:除外|banish)[^。；;]{0,12}(?:作为|作為|as)\s*(?:cost|代价|代價|コスト)/iu.test(text)) {
@@ -478,6 +487,18 @@ function classifyResolutionOperation(text) {
       ...(["destroy", "banish", "return_to_hand", "return_to_deck"].includes(type)
         ? { optional: /(?:可以|可|任意|できる|may|you can)/iu.test(value) }
         : {}),
+      ...(type === "destroy" && /(?:场上|場上|フィールド|field)/iu.test(value)
+        ? {
+            selector: {
+              zone: "field",
+              amount: parseCount(value.match(/([０-９\d一二三两兩]+)\s*(?:张|張|枚)/u)?.[1], 1),
+              controller: /(?:对方|對方|相手|opponent)/iu.test(value)
+                && !/(?:自己|自分|双方|お互い|either)/iu.test(value)
+                ? "opponent"
+                : "either",
+            },
+          }
+        : {}),
     };
   }
 
@@ -495,21 +516,20 @@ function classifyResolutionOperation(text) {
   const explicitAmountMatch = value.match(/([０-９\d一二三两兩]+)\s*(?:只|隻|体|體|枚)/u);
   const explicitAmount = explicitAmountMatch ? parseCount(explicitAmountMatch[1], 1) : null;
   const distributesPerNamedCard = /(?:各|それぞれ|each)\s*[０-９\d一二三两兩]+\s*(?:只|隻|体|體|枚)?/iu.test(value);
+  const fromZones = operationSourceZones(value);
+  const amount = distributesPerNamedCard && quotedNames.length > 1
+    ? quotedNames.length * (explicitAmount ?? 1)
+    : explicitAmount ?? Math.max(quotedNames.length, 1);
   return {
     type,
     text: value,
     mandatory: !alternativeOperation && !/(?:可以|可选择|任意|できる|may|you can)/iu.test(value),
     ...(alternativeOperation ? { choice: "one_of_multiple_operations" } : {}),
     subject: sourceCard ? "effect_source" : generatedMonster ? "generated_monster" : "selected_card",
-    amount: distributesPerNamedCard && quotedNames.length > 1
-      ? quotedNames.length * (explicitAmount ?? 1)
-      : explicitAmount ?? Math.max(quotedNames.length, 1),
-    fromZone: firstMatch(value, [
-      ["extra_deck", /(?:从|從)\s*(?:额外卡组|額外卡組|额外牌组|額外牌組)|(?:エクストラデッキから)|(?:from\s+(?:the\s+|your\s+)?extra deck)/iu],
-      ["hand", /(?:从|從)\s*(?:手牌|手卡)|(?:手札から)|(?:from\s+(?:the\s+|your\s+)?hand)/iu],
-      ["graveyard", /(?:从|從)\s*(?:墓地)|(?:墓地から)|(?:from\s+(?:the\s+|your\s+)?(?:GY|graveyard))/iu],
-      ["deck", /(?:从|從)\s*(?:牌组|牌組|卡组|卡組)|(?<!エクストラ)(?:デッキから)|(?:from\s+(?:the\s+|your\s+)?deck)/iu],
-    ]) || "unknown",
+    amount,
+    simultaneous: amount > 1 && (distributesPerNamedCard || /(?:同时|同時|simultaneously|at the same time)/iu.test(value)),
+    fromZone: fromZones[0] || "unknown",
+    ...(fromZones.length ? { fromZones } : {}),
     destinationPlayerRelation: /(?:至|到|给|給)?(?:对方|對方|对手|對手|相手).{0,16}(?:场上|場上|フィールド)|opponent'?s (?:field|side)/iu.test(value)
       ? "opponent_of_source_controller"
       : "same_as_source_controller",
@@ -518,6 +538,26 @@ function classifyResolutionOperation(text) {
     ...(excludedNames.length ? { excludedNames } : {}),
     ...(extractRaceLabel(value) ? { race: extractRaceLabel(value) } : {}),
   };
+}
+
+function operationSourceZones(value) {
+  const zones = [];
+  const text = String(value || "");
+  const sourceSegment = text.match(
+    /(?:从|從|自)(?:自己|我方|对方|對方|自分|相手|your|the opponent'?s)?(?:的)?\s*((?:额外卡组|額外卡組|额外牌组|額外牌組|牌组|牌組|卡组|卡組|手牌|手卡|墓地)(?:[・·、或和与與/]?(?:额外卡组|額外卡組|额外牌组|額外牌組|牌组|牌組|卡组|卡組|手牌|手卡|墓地))*)/iu,
+  )?.[1]
+    || text.match(/((?:(?:自分|相手)の)?(?:エクストラデッキ|デッキ|手札|墓地)(?:[・、または]+(?:エクストラデッキ|デッキ|手札|墓地))*)から/iu)?.[1]
+    || text.match(/from\s+(?:(?:your|the|their|opponent'?s)\s+)?((?:extra deck|deck|hand|graveyard|GY)(?:\s*(?:or|and|\/)\s*(?:extra deck|deck|hand|graveyard|GY))*)/iu)?.[1]
+    || "";
+  if (/(?:额外卡组|額外卡組|额外牌组|額外牌組|エクストラデッキ|extra deck)/iu.test(sourceSegment)) zones.push("extra_deck");
+  if (/(?:手牌|手卡|手札|hand)/iu.test(sourceSegment)) zones.push("hand");
+  const ordinaryDeckSegment = sourceSegment.replace(
+    /(?:额外卡组|額外卡組|额外牌组|額外牌組|エクストラデッキ|extra deck)/giu,
+    "",
+  );
+  if (/(?:牌组|牌組|卡组|卡組|デッキ|deck)/iu.test(ordinaryDeckSegment)) zones.push("deck");
+  if (/(?:墓地|graveyard|\bGY\b)/iu.test(sourceSegment)) zones.push("graveyard");
+  return unique(zones);
 }
 
 function parseUsagePolicies(text, cardKey) {
