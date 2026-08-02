@@ -158,7 +158,13 @@ export function extractRagCards(userQuery, { cards = [], maxCards = 6, modelCard
     } else if (candidates.length > 1) {
       ambiguousMentions.push(buildAmbiguousMention(mention, candidates));
     } else if (singleEditCandidate) {
-      addResolved(resolved, seenCards, singleEditCandidate, mention, confidenceForSingleEditMention(seed));
+      addResolved(
+        resolved,
+        seenCards,
+        singleEditCandidate,
+        mention,
+        confidenceForNearEditMention(seed, singleEditCandidate.nearEditDistance),
+      );
     } else if (distinctiveFragmentCandidate) {
       addResolved(resolved, seenCards, distinctiveFragmentCandidate, mention, 0.91);
     } else if (looksLikeCardMention(mention) && !numberedMentionAlreadyResolved(mention, resolved)) {
@@ -180,7 +186,13 @@ export function extractRagCards(userQuery, { cards = [], maxCards = 6, modelCard
     } else if (candidates.length > 1) {
       ambiguousMentions.push(buildAmbiguousMention(mention, candidates));
     } else if (singleEditCandidate) {
-      addResolved(resolved, seenCards, singleEditCandidate, mention, 0.9);
+      addResolved(
+        resolved,
+        seenCards,
+        singleEditCandidate,
+        mention,
+        confidenceForNearEditMention(seed, singleEditCandidate.nearEditDistance),
+      );
     } else if (looksLikeCardMention(mention) && !numberedMentionAlreadyResolved(mention, resolved)) {
       unresolvedMentions.push(buildUnresolvedMention(seed));
     }
@@ -223,6 +235,14 @@ export function extractRagCards(userQuery, { cards = [], maxCards = 6, modelCard
   applyContextualShortMentionResolution({
     query,
     cards: Array.isArray(cards) ? cards : EMPTY_CARD_LIST,
+    resolved,
+    seenCards,
+    unresolvedMentions,
+    ambiguousMentions,
+  });
+
+  applyContextualNearEditResolution({
+    aliasIndex,
     resolved,
     seenCards,
     unresolvedMentions,
@@ -569,6 +589,14 @@ function confidenceForSingleEditMention(seed) {
   return 0.92;
 }
 
+function confidenceForNearEditMention(seed, distance) {
+  if (!Number.isFinite(Number(distance)) || Number(distance) <= 1) {
+    return confidenceForSingleEditMention(seed);
+  }
+  if (seed.source === "model_card_name_extractor" && seed.confidence === "low") return 0.82;
+  return 0.9;
+}
+
 function findUniqueSingleEditCandidate(aliasIndex, mention) {
   const mentionKey = normalizeCardKey(mention);
   if (mentionKey.length < MIN_SINGLE_EDIT_CARD_KEY_LENGTH) return null;
@@ -587,23 +615,31 @@ function findUniqueSingleEditCandidate(aliasIndex, mention) {
 }
 
 function findUniqueNearEditCandidate(aliasIndex, mention) {
+  const matchedCards = collectNearEditCandidates(aliasIndex, mention);
+  return matchedCards.size === 1 ? matchedCards.values().next().value : null;
+}
+
+function collectNearEditCandidates(aliasIndex, mention, { allowContextualTwoEdit = false } = {}) {
   const mentionKey = normalizeCardKey(mention);
-  const maximumDistance = mentionKey.length >= 8 ? 2 : 1;
-  if (mentionKey.length < MIN_SINGLE_EDIT_CARD_KEY_LENGTH) return null;
+  const maximumDistance = mentionKey.length >= 8 || (allowContextualTwoEdit && mentionKey.length >= 5) ? 2 : 1;
+  if (mentionKey.length < 3) return new Map();
   const keysByLength = aliasKeysByLengthCache.get(aliasIndex) || buildAliasKeysByLength(aliasIndex);
   const matchedCards = new Map();
   for (let length = mentionKey.length - maximumDistance; length <= mentionKey.length + maximumDistance; length += 1) {
     for (const aliasKey of keysByLength.get(length) || []) {
-      if (boundedEditDistance(mentionKey, aliasKey, maximumDistance) > maximumDistance) continue;
+      const distance = boundedEditDistance(mentionKey, aliasKey, maximumDistance);
+      if (distance > maximumDistance) continue;
       for (const candidate of aliasIndex.get(aliasKey) || []) {
         if (hasNumberedCardIdentityConflict(mention, candidate.matchedAlias)) continue;
         const identity = cardIdentity(candidate.card);
-        if (identity) matchedCards.set(identity, candidate);
-        if (matchedCards.size > 1) return null;
+        const previous = matchedCards.get(identity);
+        if (identity && (!previous || distance < previous.nearEditDistance)) {
+          matchedCards.set(identity, { ...candidate, nearEditDistance: distance });
+        }
       }
     }
   }
-  return matchedCards.size === 1 ? matchedCards.values().next().value : null;
+  return matchedCards;
 }
 
 function boundedEditDistance(left, right, limit) {
@@ -957,6 +993,41 @@ function applyContextualShortMentionResolution({ query, cards, resolved, seenCar
     return !resolvedMentionKeys.has(key) && !contextualAmbiguities.has(key);
   });
   ambiguousMentions.splice(0, ambiguousMentions.length, ...retainedAmbiguous, ...contextualAmbiguities.values());
+}
+
+function applyContextualNearEditResolution({
+  aliasIndex,
+  resolved,
+  seenCards,
+  unresolvedMentions,
+  ambiguousMentions,
+}) {
+  if (!resolved.length || !unresolvedMentions.length) return;
+  const resolvedMentionKeys = new Set();
+  for (const mention of unresolvedMentions) {
+    const candidates = [...collectNearEditCandidates(aliasIndex, mention.input, { allowContextualTwoEdit: true }).values()];
+    if (!candidates.length) continue;
+    const linked = candidates.filter((candidate) => cardTextLinksToResolvedIdentity(candidate.card, resolved));
+    const identities = new Set(linked.map((candidate) => cardIdentity(candidate.card)).filter(Boolean));
+    if (identities.size !== 1) continue;
+    const selected = linked.find((candidate) => cardIdentity(candidate.card) === identities.values().next().value);
+    addResolved(resolved, seenCards, selected, mention.input, confidenceForNearEditMention(mention, selected.nearEditDistance));
+    resolvedMentionKeys.add(normalizeCardKey(mention.input));
+  }
+  if (!resolvedMentionKeys.size) return;
+  const retainedUnresolved = unresolvedMentions.filter((item) => !resolvedMentionKeys.has(normalizeCardKey(item.input)));
+  unresolvedMentions.splice(0, unresolvedMentions.length, ...retainedUnresolved);
+  const retainedAmbiguous = ambiguousMentions.filter((item) => !resolvedMentionKeys.has(normalizeCardKey(item.input)));
+  ambiguousMentions.splice(0, ambiguousMentions.length, ...retainedAmbiguous);
+}
+
+function cardTextLinksToResolvedIdentity(candidateCard, resolvedCards) {
+  const candidateText = normalizeCardKey(candidateCard?.effectText || "");
+  if (!candidateText) return false;
+  return resolvedCards.some((resolvedCard) => uniqueCardAliases(resolvedCard).some((alias) => {
+    const aliasKey = normalizeCardKey(alias);
+    return aliasKey.length >= 3 && candidateText.includes(aliasKey);
+  }));
 }
 
 function findContextualShortMentionCandidates(cards, mention) {
