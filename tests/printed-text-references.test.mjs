@@ -52,7 +52,7 @@ test("card text IR keeps immutable printed name references", () => {
     effectText: copiedSource.text,
   });
   assert.deepEqual(normalized.printedNameReferences, ["目标场地"]);
-  assert.equal(normalized.version, "1.3");
+  assert.equal(normalized.version, "1.4");
 });
 
 test("copied effects do not become the receiver's printed name references", () => {

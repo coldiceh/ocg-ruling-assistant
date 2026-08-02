@@ -304,6 +304,7 @@ export function prepareEffectChain({ gameState = {}, chainLinks = [], continuous
     }
 
     preparedLink.activationCostReceipt ||= { cardInstanceIds: [], moves: [], paymentSnapshots: [] };
+    state = recordAcceptedEffectUsage(state, preparedLink);
     const afterActivation = stabilizeContinuousEffects(state, continuousEffects);
     state = afterActivation.gameState;
     trace.push(...afterActivation.trace.map((item) => ({ ...item, afterChainActivation: link.id })));
@@ -325,8 +326,8 @@ export function prepareEffectChain({ gameState = {}, chainLinks = [], continuous
     activationResults.push({
       id: link.id,
       order: chainOrder(link),
-      status: "activated",
-      reason: "activation_complete",
+      status: preparedLink.activationNegated === true ? "activation_negated" : "activated",
+      reason: preparedLink.activationNegated === true ? "activation_was_negated" : "activation_complete",
       activationSnapshot: clone(preparedLink.activationSnapshot),
       stageResults,
     });
@@ -375,6 +376,47 @@ export function resolveEffectChain({ gameState = {}, chainLinks = [], continuous
     if (!beforeResolution.fixedPointReached) {
       incompleteReason = beforeResolution.reason || "continuous_effects_not_converged";
       break;
+    }
+
+    if (link.activationNegated === true) {
+      linkResults.push({
+        id: link.id,
+        order: chainOrder(link),
+        sourceCardId: link.sourceCardId,
+        sourceCardName: link.sourceCardName,
+        status: "activation_negated",
+        reason: "chain_activation_negation",
+        activationSnapshot: clone(link.activationSnapshot),
+        negatedBy: link.negatedBy || "",
+        primitiveResult: null,
+      });
+      trace.push({
+        phase: "resolve_chain_link",
+        chainLink: link.id,
+        status: "activation_negated",
+        negatedBy: link.negatedBy || "",
+      });
+      continue;
+    }
+    if (link.effectNegated === true) {
+      linkResults.push({
+        id: link.id,
+        order: chainOrder(link),
+        sourceCardId: link.sourceCardId,
+        sourceCardName: link.sourceCardName,
+        status: "negated",
+        reason: "chain_effect_negation",
+        activationSnapshot: clone(link.activationSnapshot),
+        negatedBy: link.negatedBy || "",
+        primitiveResult: null,
+      });
+      trace.push({
+        phase: "resolve_chain_link",
+        chainLink: link.id,
+        status: "negated",
+        negatedBy: link.negatedBy || "",
+      });
+      continue;
     }
 
     const negation = findResolutionNegation(link, state, continuousEffects);
@@ -927,6 +969,16 @@ function inspectActivationLegality(link, state, continuousEffects = []) {
     return { status: "illegal", reason: link.activationBlockReason || "activation_explicitly_illegal", source: null };
   }
 
+  for (const policy of normalizeUsagePolicies(link)) {
+    const used = (state.effectUsageLedger || []).filter((entry) => (
+      String(entry.scopeKey || "") === String(policy.scopeKey || "")
+      && String(entry.period || "turn") === String(policy.period || "turn")
+    )).length;
+    if (used >= Number(policy.limit || 1)) {
+      return { status: "illegal", reason: "effect_usage_limit_reached", source: null, usagePolicy: policy };
+    }
+  }
+
   const hasSourceReference = Boolean(link.sourceInstanceId || link.sourceCardId || link.sourceDefinitionId || link.sourceCardName);
   const sourceRequired = link.requiresSourceAtActivation === true
     || (link.requiresSourceAtActivation !== false && hasSourceReference);
@@ -1031,6 +1083,7 @@ function evaluateOperationAfterActivationCost({
   if (!costStage?.sequence?.length) {
     return { status: "unknown", reason: "activation_cost_sequence_missing" };
   }
+
   const projected = resolvePrimitiveSequence(
     costStage.sequence,
     activationPrimitiveState(state, link),
@@ -2118,6 +2171,30 @@ function executePrimitive(primitive, gameState, options = {}) {
         status: "active",
       }]);
     }
+    case "create_turn_restriction": {
+      if (!primitive.restriction?.type) return insufficient("turn_restriction_semantics_unknown");
+      if (!Array.isArray(state.turnRestrictions)) state.turnRestrictions = [];
+      const instance = {
+        id: primitive.restrictionInstanceId
+          || `${primitive.sourceEffectId || "effect"}:turn-restriction:${state.turnRestrictions.length + 1}`,
+        sourceEffectId: primitive.sourceEffectId || "",
+        controller: primitive.affectedPlayer === "effect_controller"
+          ? knownPlayer(source?.controller) || knownPlayer(primitive.controller) || "self"
+          : knownPlayer(primitive.player) || knownPlayer(primitive.controller) || "self",
+        status: "active",
+        createdAt: "effect_resolution",
+        expiresAt: primitive.expiresAt || "end_of_turn",
+        duration: primitive.duration || "turn",
+        restriction: clone(primitive.restriction),
+      };
+      state.turnRestrictions.push(instance);
+      return success(state, [{
+        type: "create_turn_restriction",
+        restrictionInstanceId: instance.id,
+        status: "active",
+        restriction: clone(instance.restriction),
+      }]);
+    }
     case "set_position":
       if (!target) return insufficient("target_state_unknown");
       if (primitive.position === "defense" && target.canChangeToDefense === false) {
@@ -2485,6 +2562,8 @@ const ZONE_COLLECTIONS = Object.freeze([
 function canonicalizeZoneState(gameState) {
   const state = clone(gameState);
   if (!Array.isArray(state.cards)) state.cards = [];
+  if (!Array.isArray(state.effectUsageLedger)) state.effectUsageLedger = [];
+  if (!Array.isArray(state.turnRestrictions)) state.turnRestrictions = [];
   for (const card of state.cards) initializeCardValueProjection(card);
   const cardsByInstance = new Map();
   for (const card of state.cards) {
@@ -2667,6 +2746,33 @@ function positiveInteger(value) {
 
 function uniqueStrings(values) {
   return [...new Set((values || []).map(String).filter(Boolean))];
+}
+
+function normalizeUsagePolicies(link = {}) {
+  const policies = Array.isArray(link.usagePolicies)
+    ? link.usagePolicies
+    : link.usagePolicy
+      ? [link.usagePolicy]
+      : [];
+  return policies.filter((policy) => policy?.scopeKey && Number(policy.limit || 1) > 0);
+}
+
+function recordAcceptedEffectUsage(gameState, link) {
+  const state = clone(gameState);
+  if (!Array.isArray(state.effectUsageLedger)) state.effectUsageLedger = [];
+  for (const policy of normalizeUsagePolicies(link)) {
+    if (policy.consumeAt === "activation_established" && link.activationNegated === true) continue;
+    state.effectUsageLedger.push({
+      id: `${policy.scopeKey}:usage:${state.effectUsageLedger.length + 1}`,
+      policyId: policy.id || "",
+      scopeKey: policy.scopeKey,
+      period: policy.period || "turn",
+      verb: policy.verb || "use",
+      chainLinkId: link.id || "",
+      consumedAt: link.activationNegated === true ? "accepted_activation" : "activation_established",
+    });
+  }
+  return state;
 }
 
 function uniqueNumbers(values) {
