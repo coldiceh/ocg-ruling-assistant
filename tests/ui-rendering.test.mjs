@@ -334,6 +334,9 @@ test("feedback_opens_a_prefilled_github_issue", async () => {
   assert.match(app, /https:\/\/github\.com\/coldiceh\/ocg-ruling-assistant\/issues\/new/u);
   assert.match(app, /在 GitHub 反馈这个回答/u);
   assert.match(app, /url\.searchParams\.set\("body", body\)/u);
+  assert.match(app, /function feedbackModelLabel/u);
+  assert.match(app, /通用规则执行器（未调用最终大模型）/u);
+  assert.doesNotMatch(app, /"## 使用模型",\s*"DeepSeek V4 Flash"/u);
   assert.doesNotMatch(app, /feedbackApiUrl|submitFeedbackCase|saveFeedbackCaseLocally/u);
 });
 
@@ -344,7 +347,7 @@ test("backend answers bypass persistent browser cache and bust static assets", a
     readFile(new URL("../config.json", import.meta.url), "utf8"),
   ]);
   const config = JSON.parse(configText.replace(/^\uFEFF/u, ""));
-  assert.match(html, /src\/app\.js\?v=20260803-pipeline-timing-1/u);
+  assert.match(html, /src\/app\.js\?v=20260803-executor-label-1/u);
   assert.match(html, /src\/styles\.css\?v=20260803-pipeline-timing-1/u);
   assert.match(config.answerApiUrl, /\?client=20260722-answer-version-1$/u);
   assert.match(app, /cache: "no-store"/u);
@@ -386,6 +389,9 @@ test("ui_hides_engine_details_by_default", async () => {
   assert.match(app, /storageWarning/u);
   assert.match(app, /rulebook/u);
   assert.match(app, /publicRiskLines/u);
+  assert.match(app, /"trusted_local_semantic_execution"/u);
+  assert.match(app, /"semantic_state_transition_applied"/u);
+  assert.match(app, /"final_model_skipped"/u);
 });
 
 test("card_dossier_nodes_and_theme_backgrounds_exist", async () => {

@@ -797,6 +797,9 @@ function publicRiskLines(flags) {
     "needs_more_info_upgraded_to_rule_analysis_with_card_text",
     "needs_more_info_downgraded_to_low_confidence_with_evidence",
     "card_name_not_resolved_raw_query_fallback_used",
+    "trusted_local_semantic_execution",
+    "semantic_state_transition_applied",
+    "final_model_skipped",
   ]);
   const hiddenPrefixes = [
     "persistent_budget_storage_missing",
@@ -4130,6 +4133,7 @@ function buildFeedbackIssueUrl(answer) {
     answer?.effectiveRulingVersion || answer?.rulingVersion,
   );
   const rulingVersionLabel = rulingVersion === "previous" ? "上一版（兼容）" : "最新版";
+  const modelLabel = feedbackModelLabel(answer);
   const body = [
     "## 原问题",
     question,
@@ -4139,7 +4143,7 @@ function buildFeedbackIssueUrl(answer) {
     ...(reasoning.length ? ["", "## 当前理由", ...reasoning] : []),
     "",
     "## 使用模型",
-    "DeepSeek V4 Flash",
+    modelLabel,
     "",
     "## 回答版本",
     rulingVersion ? rulingVersionLabel : "版本未确认",
@@ -4151,6 +4155,13 @@ function buildFeedbackIssueUrl(answer) {
   url.searchParams.set("title", `[回答反馈] ${question.slice(0, 60)}`);
   url.searchParams.set("body", body);
   return url.href;
+}
+
+function feedbackModelLabel(answer) {
+  const model = String(answer?.debug?.modelUsed || answer?.debug?.modelName || "").trim();
+  if (model === "trusted-semantic-state-executor") return "通用规则执行器（未调用最终大模型）";
+  const provider = modelProviderLabel(answer?.debug?.providerUsed);
+  return [provider, model].filter(Boolean).join(" · ") || appConfig.modelLabel || "后端自动选择";
 }
 
 function appendText(parent, tagName, text) {
