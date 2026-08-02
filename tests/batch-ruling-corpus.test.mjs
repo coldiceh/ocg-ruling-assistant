@@ -628,7 +628,10 @@ test("five reported state-transition cases reach the final model with complete c
         for (const snippet of spec.promptSnippets) assert.ok(prompt.includes(snippet), `${corpusCase.id} prompt missing: ${snippet}`);
         return JSON.stringify({
           answerLevel: "rule_analysis",
-          shortAnswer: `【${marker}】${corpusCase.expectedAnswer || corpusCase.expectedAnswerKeyPoints.join("；")} `,
+          shortAnswer: `【${marker}】${[
+            corpusCase.expectedAnswer,
+            ...(corpusCase.expectedAnswerKeyPoints || []),
+          ].filter(Boolean).join("；")} `,
           reasoning: corpusCase.expectedAnswerKeyPoints || [],
           usedCards: cards.map((card) => card.name),
           usedEvidence: spec.evidenceIds.map((id) => ({ id, type: "faq", title: id })),

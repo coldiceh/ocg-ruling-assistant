@@ -594,6 +594,22 @@ test("a return to the original field does not require the noun 'control' to be r
   );
 });
 
+test("a completed numbered-effect output is an applied-state premise after complete renaming", () => {
+  const result = analyzeDuelStateTransition({
+    userQuery: "「雾海测距仪」①特殊召唤出的怪兽先被对方取得控制权，后来又回到我方场上。与该怪兽在我方场上存在相绑定的额外卡组特殊召唤限制会恢复吗？",
+    resolvedCards: [{
+      id: "bound-result-state-premise",
+      name: "雾海测距仪",
+      cardType: "monster",
+      effectText: "①：可以发动。从卡组特殊召唤1只怪兽。只要以此效果特殊召唤的怪兽以表侧表示存在于自己场上，自己从额外牌组只能特殊召唤「潮汐」怪兽。",
+    }],
+  });
+  assert.equal(result.status, "resolved", JSON.stringify(result));
+  assert.equal(result.complete, true);
+  assert.match(result.shortAnswer, /立即不再适用/u);
+  assert.match(result.shortAnswer, /不会恢复适用/u);
+});
+
 test("bound-restriction lifecycle compiler fails closed without an already-applied premise", () => {
   const result = analyzeDuelStateTransition({
     userQuery: "「折光航标」以该效果特殊召唤的怪兽控制权变更后，限制还适用吗？之后控制权归还会恢复吗？",

@@ -10,6 +10,7 @@ import {
   parseActivationResponsePredicate,
   parseFromHandCardActivationPermission,
 } from "../backend/activationEventStateReasoner.mjs";
+import { answerRagRulingQuestion } from "../backend/ragRulingPipeline.mjs";
 
 function fixture(prefix = "测试", { includeFieldEmpty = true } = {}) {
   const names = {
@@ -80,6 +81,24 @@ test("the high-level activation-event compiler is invariant under complete card 
   assert.doesNotMatch(JSON.stringify(first), /颉颃|天下独步|拮抗勝負/u);
 });
 
+test("an explicitly numbered effect may ask whether it can chain without repeating the word activate", () => {
+  const input = fixture("省略发动词");
+  input.userQuery = `战斗阶段结束时，我方场上没有任何卡，于是从手牌发动「${input.names.trap}」。对方场上有通常召唤的「${input.names.responder}」。虽然陷阱原先在手牌，这次卡的发动在规则上发生于哪个区域；「${input.names.responder}」①能否直接连锁？`;
+  const result = analyzeActivationEventStateTransition(input);
+  assert.equal(result.status, "resolved", JSON.stringify(result));
+  assert.equal(result.activation, "illegal");
+  assert.match(result.shortAnswer, /不能连锁发动/u);
+  assert.equal(result.program.activationEvent.activationZone, "SPELL_TRAP_ZONE");
+});
+
+test("an unnumbered bare chain question fails closed when the responding effect is not identified", () => {
+  const input = fixture("缺少效果身份");
+  input.userQuery = `战斗阶段结束时，我方场上没有任何卡，于是从手牌发动「${input.names.trap}」。对方场上有通常召唤的「${input.names.responder}」；该卡能否直接连锁？`;
+  const result = analyzeActivationEventStateTransition(input);
+  assert.equal(result.status, "unknown", JSON.stringify(result));
+  assert.equal(result.reason, "activation_response_question_not_explicit");
+});
+
 test("the reported wording executes the same generic card-activation procedure", () => {
   const result = analyzeActivationEventStateTransition({
     userQuery: "对方场上通常召唤的「天下独步的大义贼（天下独歩の大義賊）」存在。自己场上没有卡，在战斗阶段结束时从手牌发动「颉颃胜负」。对方可以直接连锁发动「天下独步的大义贼（天下独歩の大義賊）」的①效果吗？",
@@ -138,3 +157,23 @@ test("missing the field-empty fact fails closed instead of assuming hand activat
   assert.equal(result.reason, "activating_player_field_empty_state_unknown");
 });
 
+test("the production data path answers the historical wording without a final-model call", async () => {
+  const answer = await answerRagRulingQuestion({
+    question: "对方场上通常召唤的「天下独步的大义贼（天下独歩の大義賊）」存在。自己场上没有卡，在战斗阶段结束时从手牌发动「颉颃胜负」。对方可以直接连锁发动「天下独步的大义贼（天下独歩の大義賊）」的①效果吗？",
+    env: {
+      MODEL_PROVIDER: "mock",
+      RAG_MODEL_PROVIDER: "mock",
+      RAG_DRY_RUN: "1",
+      OCG_ENGINE_ENABLED: "0",
+    },
+    dryRun: true,
+  });
+
+  assert.match(answer.shortAnswer, /^不能连锁发动/u);
+  assert.match(answer.shortAnswer, /魔法与陷阱区域/u);
+  assert.equal(answer.debug.deterministicDecision, "state_transition");
+  assert.equal(answer.debug.modelUsed, "trusted-semantic-state-executor");
+  assert.equal(answer.debug.timingsMs.finalModel, 0);
+  assert.equal(answer.debug.timingsMs.auxiliaryExtractionModels, 0);
+  assert.deepEqual(answer.debug.unresolvedMentions, []);
+});

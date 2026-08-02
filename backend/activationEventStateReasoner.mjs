@@ -160,6 +160,7 @@ export function analyzeActivationEventStateTransition({
       type: "compiled_activation_event_response",
       semanticSource: "card_text_ir_and_rule_procedure",
       sourcePermission: source.permission,
+      responseEffect: responder.effect,
       responsePredicate: responder.predicate,
       activationEvent: procedure.activationEvent,
       responseDecision: response,
@@ -319,7 +320,7 @@ function normalSummonedExplicit(query, names) {
 
 function asksResponseLegality(query, names) {
   const context = contextAroundMention(query, names, 110);
-  return /(?:可以|能否|能不能|是否(?:可以|能够|能)?|可否|can).{0,30}(?:连锁|連鎖|チェーン|chain).{0,30}(?:发动|發動|発動|activate)|(?:连锁|連鎖|チェーン|chain).{0,30}(?:发动|發動|発動|activate).{0,20}(?:吗|嗎|是否|can|[?？])/iu.test(context);
+  return /(?:可以|能否|能不能|是否(?:可以|能够|能)?|可否|can).{0,30}(?:连锁|連鎖|チェーン|chain).{0,30}(?:发动|發動|発動|activate)|(?:连锁|連鎖|チェーン|chain).{0,30}(?:发动|發動|発動|activate).{0,20}(?:吗|嗎|是否|can|[?？])|[①②③④⑤⑥⑦⑧⑨⑩]\s*(?:效果)?\s*(?:可以|能否|能不能|是否(?:可以|能够|能)?|可否|can).{0,16}(?:直接)?(?:连锁|連鎖|チェーン|chain)/iu.test(context);
 }
 
 function controllerNearMention(query, names) {

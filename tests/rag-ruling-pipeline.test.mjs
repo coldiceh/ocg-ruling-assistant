@@ -493,6 +493,10 @@ test("temporal follow-up phrases are not treated as unquoted card names", () => 
     [],
   );
   assert.deepEqual(
+    extractUnquotedCardMentionCandidates("这只怪兽被破坏后，它的④能否发动？"),
+    [],
+  );
+  assert.deepEqual(
     extractUnquotedCardMentionCandidates("将1只怪兽特殊召唤。"),
     [],
   );
@@ -502,6 +506,10 @@ test("temporal follow-up phrases are not treated as unquoted card names", () => 
   );
   assert.deepEqual(
     extractUnquotedCardMentionCandidates("将3张魔法卡送去墓地。"),
+    [],
+  );
+  assert.deepEqual(
+    extractUnquotedCardMentionCandidates("成功后双方各有哪些诱发效果可以发动，连锁顺序是什么？"),
     [],
   );
 });
@@ -576,6 +584,35 @@ test("ocg_name_normalization_treats 喰 and 食 as the same character variant", 
   assert.equal(normalizeCardKey("吞喰测试之龙"), normalizeCardKey("吞食测试之龙"));
   assert.equal(resolution.resolvedCards[0]?.id, "variant-1");
   assert.deepEqual(resolution.unresolvedMentions, []);
+});
+
+test("ocg_name_normalization binds Japanese glyph variants to a unique localized identity", () => {
+  const localCards = [{
+    id: "glyph-variant-1",
+    name: "架空独歩の義賊",
+    aliases: ["架空独歩の義賊"],
+  }];
+  const resolution = extractRagCards("「架空独步的义贼」①能否发动？", { cards: localCards });
+
+  assert.equal(normalizeCardKey("架空独歩の義賊"), normalizeCardKey("架空独步的义贼"));
+  assert.equal(resolution.resolvedCards[0]?.id, "glyph-variant-1");
+  assert.deepEqual(resolution.unresolvedMentions, []);
+});
+
+test("glyph normalization collisions remain ambiguous instead of selecting a card", () => {
+  const localCards = [{
+    id: "glyph-collision-a",
+    name: "架空独歩の義賊",
+    aliases: ["架空独歩の義賊"],
+  }, {
+    id: "glyph-collision-b",
+    name: "架空独步的义贼",
+    aliases: ["架空独步的义贼"],
+  }];
+  const resolution = extractRagCards("「架空独步的义贼」①能否发动？", { cards: localCards });
+
+  assert.equal(resolution.resolvedCards.length, 0);
+  assert.equal(resolution.ambiguousMentions[0]?.candidateCards.length, 2);
 });
 
 test("a unique one-character card-name difference resolves with high confidence", () => {

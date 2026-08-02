@@ -340,33 +340,42 @@ function rulebookSourceIdentity(record = {}) {
 
 export async function loadRagData(dataDir = defaultDataDir) {
   const key = dataDir;
-  if (dataCache.has(key)) return dataCache.get(key);
-  const [cardsPayload, rulingsPayload, qaPayload, evidencePayload, rulebookPayload, officialResponsesPayload] = await Promise.all([
-    readJson(join(dataDir, "cards.json"), { records: [] }),
-    readJson(join(dataDir, "rulings.json"), { records: [] }),
-    readJson(join(dataDir, "qa-index.json"), { records: [] }),
-    readJson(join(dataDir, "evidence-index.json"), { records: [] }),
-    readJson(join(dataDir, "ocg-rule-corpus.json"), { records: [] }),
-    readJson(join(dataDir, "official-responses.json"), { records: [] }),
-  ]);
-  const bundledRulebookRecords = rulebookPayload.records || [];
-  const hasBundledRulebook = bundledRulebookRecords.length > 0;
-  const evidenceRecords = (evidencePayload.records || []).filter((record) => (
-    !hasBundledRulebook
-    || (record.sourceId !== "ocg-rule" && !rulebookSourceIdentity(record).startsWith("ocg-rule:"))
-  ));
-  const data = normalizeInjectedData({
-    cards: cardsPayload.records || cardsPayload.cards || [],
-    records: [
-      ...(rulingsPayload.records || []),
-      ...bundledRulebookRecords,
-      ...evidenceRecords,
-      ...normalizeOfficialResponses(officialResponsesPayload),
-    ],
-    qaRecords: qaPayload.records || [],
-  });
-  dataCache.set(key, data);
-  return data;
+  if (dataCache.has(key)) return await dataCache.get(key);
+  const pending = (async () => {
+    const [cardsPayload, rulingsPayload, qaPayload, evidencePayload, rulebookPayload, officialResponsesPayload] = await Promise.all([
+      readJson(join(dataDir, "cards.json"), { records: [] }),
+      readJson(join(dataDir, "rulings.json"), { records: [] }),
+      readJson(join(dataDir, "qa-index.json"), { records: [] }),
+      readJson(join(dataDir, "evidence-index.json"), { records: [] }),
+      readJson(join(dataDir, "ocg-rule-corpus.json"), { records: [] }),
+      readJson(join(dataDir, "official-responses.json"), { records: [] }),
+    ]);
+    const bundledRulebookRecords = rulebookPayload.records || [];
+    const hasBundledRulebook = bundledRulebookRecords.length > 0;
+    const evidenceRecords = (evidencePayload.records || []).filter((record) => (
+      !hasBundledRulebook
+      || (record.sourceId !== "ocg-rule" && !rulebookSourceIdentity(record).startsWith("ocg-rule:"))
+    ));
+    return normalizeInjectedData({
+      cards: cardsPayload.records || cardsPayload.cards || [],
+      records: [
+        ...(rulingsPayload.records || []),
+        ...bundledRulebookRecords,
+        ...evidenceRecords,
+        ...normalizeOfficialResponses(officialResponsesPayload),
+      ],
+      qaRecords: qaPayload.records || [],
+    });
+  })();
+  dataCache.set(key, pending);
+  try {
+    const data = await pending;
+    dataCache.set(key, data);
+    return data;
+  } catch (error) {
+    if (dataCache.get(key) === pending) dataCache.delete(key);
+    throw error;
+  }
 }
 
 export function evidenceBucketsToList(evidence = {}) {

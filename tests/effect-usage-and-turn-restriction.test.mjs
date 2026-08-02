@@ -188,6 +188,20 @@ test("state reasoner reaches the same result after every card name is fictionali
   assert.match(result.shortAnswer, /不适用/u);
 });
 
+test("restriction applicability accepts the synonymous predicate 'still constrains' after renaming", () => {
+  const renamedSource = { ...realSourceCard, id: "constraint-alpha", name: "星潮领航员" };
+  const renamedNegator = { ...effectNegatorCard, id: "constraint-beta", name: "暮光拦截者" };
+  const result = analyzeDuelStateTransition({
+    userQuery: "「星潮领航员」①的发动被连锁的「暮光拦截者」无效。请判断本回合能否再发动一次①；原处理会不会做；‘本回合只能特殊召唤恶魔族’是否还约束我方？",
+    resolvedCards: [renamedSource, renamedNegator],
+    cardTexts: [renamedSource, renamedNegator],
+  });
+  assert.equal(result.status, "resolved", JSON.stringify(result));
+  assert.equal(result.complete, true);
+  assert.match(result.shortAnswer, /不能再次发动/u);
+  assert.match(result.shortAnswer, /限制.*不适用/u);
+});
+
 test("state reasoner fails closed when the responding effect does not establish what was negated", () => {
   const unknownResponder = {
     ...effectNegatorCard,

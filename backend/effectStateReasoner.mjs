@@ -1,7 +1,10 @@
 import { analyzeDuelStateTransition } from "./duelStateReasoner.mjs";
 import { analyzeActivationEventStateTransition } from "./activationEventStateReasoner.mjs";
 import { analyzeOrderedResolutionCheckpoint } from "./orderedResolutionCheckpointReasoner.mjs";
+import { analyzeEffectRewriteAttribution } from "./effectRewriteAttribution.mjs";
 import { analyzePrintedCardNameReferenceTransition } from "./printedCardNameReferenceReasoner.mjs";
+import { analyzeSummonProcedureTriggerTransition } from "./summonProcedureTriggerReasoner.mjs";
+import { attachSemanticTransitionContract } from "./semanticAuthorityGate.mjs";
 
 export function analyzeEffectStateTransition({
   userQuery = "",
@@ -10,24 +13,44 @@ export function analyzeEffectStateTransition({
   operationLegality = null,
   resolvedCards = [],
 } = {}) {
+  const finalize = (transition) => attachSemanticTransitionContract(transition, {
+    userQuery,
+    cardResolution: { resolvedCards },
+  });
+  const candidates = [];
+  const collect = (transition) => {
+    if (transition) candidates.push(finalize(transition));
+  };
+  const summonProcedureTriggerTransition = analyzeSummonProcedureTriggerTransition({
+    userQuery: String(userQuery || ""),
+    resolvedCards,
+    cardTexts,
+  });
+  collect(summonProcedureTriggerTransition);
   const printedCardNameReferenceTransition = analyzePrintedCardNameReferenceTransition({
     userQuery: String(userQuery || ""),
     resolvedCards,
     cardTexts,
   });
-  if (printedCardNameReferenceTransition) return printedCardNameReferenceTransition;
+  collect(printedCardNameReferenceTransition);
   const activationEventTransition = analyzeActivationEventStateTransition({
     userQuery: String(userQuery || ""),
     resolvedCards,
     cardTexts,
   });
-  if (activationEventTransition) return activationEventTransition;
+  collect(activationEventTransition);
   const orderedResolutionCheckpoint = analyzeOrderedResolutionCheckpoint({
     userQuery: String(userQuery || ""),
     resolvedCards,
     cardTexts,
   });
-  if (orderedResolutionCheckpoint) return orderedResolutionCheckpoint;
+  collect(orderedResolutionCheckpoint);
+  const rewriteAttribution = analyzeEffectRewriteAttribution({
+    userQuery: String(userQuery || ""),
+    resolvedCards,
+    cardTexts,
+  });
+  collect(rewriteAttribution);
   const transition = analyzeDuelStateTransition({
     userQuery: String(userQuery || ""),
     resolvedCards,
@@ -35,15 +58,45 @@ export function analyzeEffectStateTransition({
     corroboratingEvidence,
   });
   const normalizedTransition = normalizeDestinationReplacementOutput(transition);
-  if (normalizedTransition.status !== "resolved" || normalizedTransition.complete !== true) return normalizedTransition;
+  if (normalizedTransition.status === "resolved" && normalizedTransition.complete === true) {
+    const activationEvidence = findActivationEvidence(corroboratingEvidence, operationLegality, normalizedTransition);
+    collect(activationEvidence ? {
+      ...normalizedTransition,
+      activationEvidenceType: activationEvidence.sourceType,
+      evidenceIds: unique([activationEvidence.id, ...(normalizedTransition.evidenceIds || [])]),
+    } : normalizedTransition);
+  } else {
+    collect(normalizedTransition);
+  }
+  return selectBestSemanticCandidate(candidates);
+}
 
-  const activationEvidence = findActivationEvidence(corroboratingEvidence, operationLegality, normalizedTransition);
-  if (!activationEvidence) return normalizedTransition;
-  return {
-    ...normalizedTransition,
-    activationEvidenceType: activationEvidence.sourceType,
-    evidenceIds: unique([activationEvidence.id, ...(normalizedTransition.evidenceIds || [])]),
-  };
+// Reasoners are independent capability providers.  An early recognizer may
+// legitimately return an incomplete diagnostic, so it must not prevent a
+// later executor from proving the whole question.  Prefer complete claim
+// coverage, then an explicit authoritative execution; partial candidates are
+// retained only as diagnostics and will still fail the separate authority
+// gate in the RAG pipeline.
+function selectBestSemanticCandidate(candidates = []) {
+  return [...candidates]
+    .filter(Boolean)
+    .sort((left, right) => semanticCandidateScore(right) - semanticCandidateScore(left))[0]
+    || null;
+}
+
+function semanticCandidateScore(candidate = {}) {
+  const coverage = candidate.queryCoverage || {};
+  const claims = Array.isArray(coverage.claims) ? coverage.claims : [];
+  const covered = claims.filter((claim) => claim?.covered === true).length;
+  const uncovered = Array.isArray(coverage.uncoveredClaimIds) ? coverage.uncoveredClaimIds.length : claims.length;
+  const ambiguous = Array.isArray(coverage.ambiguousClaimIds) ? coverage.ambiguousClaimIds.length : 0;
+  const executable = candidate.status === "resolved" && candidate.complete === true;
+  return (executable && coverage.complete === true ? 10_000 : 0)
+    + (executable ? 1_000 : 0)
+    + (executable && candidate.authoritative === true ? 200 : 0)
+    + (covered * 20)
+    - (uncovered * 10)
+    - (ambiguous * 20);
 }
 
 // Render from generic movement records emitted by the state engine. Card names

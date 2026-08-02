@@ -19,6 +19,8 @@ import {
 import { hasNumberedCardIdentityConflict } from "./numberedCardIdentity.mjs";
 import { extractOfficialQaAnswer } from "./officialQaAnswerExtractor.mjs";
 import { analyzeEffectStateTransition } from "./effectStateReasoner.mjs";
+import { assessSemanticTransitionAuthority } from "./semanticAuthorityGate.mjs";
+import { runValidatedPublicRagFinal } from "./publicRagAnswerValidator.mjs";
 
 export async function answerRagRulingQuestion({
   question,
@@ -216,12 +218,17 @@ export async function answerRagRulingQuestion({
     resolvedCards: effectiveCardResolution.resolvedCards || [],
   });
   timingsMs.semanticStateExecution = elapsedMs(semanticStateStartedAt);
-  const trustedSemanticStateTransition = hasTrustedSemanticStateTransition({
+  const semanticAuthorityAssessment = assessSemanticTransitionAuthority({
     semanticStateTransition: localSemanticStateTransition,
     cardResolution: effectiveCardResolution,
     extraAmbiguousMentions: retrievedEvidence.baigeAmbiguousMentions,
-  })
-    ? localSemanticStateTransition
+  });
+  const trustedSemanticStateTransition = semanticAuthorityAssessment.trusted
+    ? {
+        ...localSemanticStateTransition,
+        queryCoverage: semanticAuthorityAssessment.queryCoverage,
+        identityBindingProof: semanticAuthorityAssessment.identityBinding,
+      }
     : null;
   // An exact official answer remains the highest-priority contract. The local
   // executor is used as a production fast path only after the generic
@@ -294,19 +301,25 @@ export async function answerRagRulingQuestion({
   const finalModelStartedAt = Date.now();
   const modelResult = deterministicDecision
     ? buildTrustedSemanticModelResult(deterministicDecision)
-    : await callRagModel({
-        prompt: promptBundle.prompt,
-        recoveryPrompt: promptBundle.recoveryPrompt,
+    : await runValidatedPublicRagFinal({
+        originalPrompt: promptBundle.prompt,
+        userQuery: query,
         evidence,
-        cardResolution: effectiveCardResolution,
-        env,
-        modelInvoker,
-        dryRun,
-        fetchImpl,
-        now,
-        thinkingMode,
-        reasoningEffort,
-        signal,
+        authoritativeOfficialDirect,
+        invoke: ({ prompt, attemptKind }) => callRagModel({
+          prompt,
+          recoveryPrompt: attemptKind === "primary" ? promptBundle.recoveryPrompt : "",
+          evidence,
+          cardResolution: effectiveCardResolution,
+          env,
+          modelInvoker,
+          dryRun,
+          fetchImpl,
+          now,
+          thinkingMode,
+          reasoningEffort,
+          signal,
+        }),
       });
   timingsMs.finalModel = deterministicDecision ? 0 : elapsedMs(finalModelStartedAt);
   const modelAnswer = normalizeRagAnswer(modelResult.answer, { evidence, cardResolution: effectiveCardResolution, modelWarnings: modelResult.warnings || [] });
@@ -411,12 +424,13 @@ export async function answerRagRulingQuestion({
       budgetStatus: modelResult.budgetStatus || null,
       generationConfig: modelResult.generationConfig || null,
       generationAttempts: modelResult.generationAttempts || [],
+      publicFinalValidation: modelResult.publicFinalValidation || null,
       promptChars: promptBundle.promptChars,
       promptTruncated: promptBundle.promptTruncated,
       semanticStateTransition,
       semanticStateTransitionDiagnostic: semanticStateTransition
         ? null
-        : summarizeSemanticStateDiagnostic(localSemanticStateTransition),
+        : summarizeSemanticStateDiagnostic(localSemanticStateTransition, semanticAuthorityAssessment),
       deterministicDecision: deterministicDecision?.kind || null,
       timingsMs,
     },
@@ -540,11 +554,11 @@ function hasTrustedSemanticStateTransition({
   cardResolution = {},
   extraAmbiguousMentions = [],
 } = {}) {
-  if (!hasCompleteCardResolution(cardResolution, extraAmbiguousMentions)) return false;
-  return semanticStateTransition?.status === "resolved"
-    && semanticStateTransition?.complete === true
-    && semanticStateTransition?.authoritative !== false
-    && !(semanticStateTransition.authorityReasons || []).length;
+  return assessSemanticTransitionAuthority({
+    semanticStateTransition,
+    cardResolution,
+    extraAmbiguousMentions,
+  }).trusted;
 }
 
 function hasCompleteCardResolution(cardResolution = {}, extraAmbiguousMentions = []) {
@@ -596,14 +610,17 @@ function hasTrustedFormalVerdict(formalEvidence = []) {
   ));
 }
 
-function summarizeSemanticStateDiagnostic(transition) {
+function summarizeSemanticStateDiagnostic(transition, authorityAssessment = null) {
   if (!transition || typeof transition !== "object") return null;
   return {
     status: transition.status || null,
     complete: transition.complete === true,
-    authoritative: transition.authoritative !== false,
+    authoritative: transition.authoritative === true,
     reason: transition.reason || transition.authorityReason || null,
     authorityReasons: cleanStringArray(transition.authorityReasons || []),
+    authorityGateReasons: cleanStringArray(authorityAssessment?.reasons || []),
+    queryCoverage: authorityAssessment?.queryCoverage || transition.queryCoverage || null,
+    identityBinding: authorityAssessment?.identityBinding || null,
   };
 }
 

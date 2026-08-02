@@ -6,6 +6,7 @@ import {
   analyzePrintedCardNameReferenceTransition,
   compileImmutablePrintedCardDefinitions,
 } from "../backend/printedCardNameReferenceReasoner.mjs";
+import { extractPrintedReferenceRequirement } from "../backend/printedTextReferences.mjs";
 import { answerRagRulingQuestion } from "../backend/ragRulingPipeline.mjs";
 
 const realCards = [{
@@ -90,6 +91,23 @@ test("renaming every card preserves the copied printed-reference verdict", () =>
   assert.equal(result.condition, "not_satisfied");
   assert.match(result.shortAnswer, /^不能仅凭复制/u);
   assert.doesNotMatch(JSON.stringify(result), /霸王|钢多拉|黄金柜/u);
+});
+
+test("completed runtime acquisition does not require an irrelevant field-location premise", () => {
+  const result = analyzePrintedCardNameReferenceTransition({
+    userQuery: "「匿名复制体」复制「匿名来源体」的原本卡名和效果后，能否因此认定自己的卡面效果文本框记载了「匿名场地」，从而满足要求‘有该卡名记述’的条件？",
+    resolvedCards: renamedCards(),
+  });
+  assert.equal(result.status, "resolved", JSON.stringify(result));
+  assert.equal(result.condition, "not_satisfied");
+  assert.match(result.shortAnswer, /^不能仅凭复制/u);
+});
+
+test("multiple names in the printed-text complement do not resolve an anaphoric target", () => {
+  const required = extractPrintedReferenceRequirement(
+    "复制效果后，能否认定自己的卡面效果文本框记载了「匿名场地甲」或「匿名场地乙」，从而满足有该卡名记述的条件？",
+  );
+  assert.equal(required, "");
 });
 
 test("a missing required card identity fails closed", () => {

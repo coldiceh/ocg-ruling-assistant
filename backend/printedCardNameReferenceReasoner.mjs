@@ -3,7 +3,6 @@ import { extractPrintedReferenceRequirement } from "./printedTextReferences.mjs"
 const QUOTED_TOKEN = /[「『“"]([^「」『』“”"]{1,100})[」』”"]/gu;
 const COPY_NAME_AND_EFFECT = /(?:复制(?:了)?|获得(?:了)?|得到(?:了)?|适用(?:了)?|コピー(?:した|している|し)?|copy(?:ied|ing)?|gain(?:ed|ing)?).{0,80}(?:原本|original|元々|originally)?.{0,24}(?:卡名|カード名|name).{0,80}(?:效果|効果|effect)|(?:复制(?:了)?|获得(?:了)?|得到(?:了)?|コピー(?:した|している|し)?|copy(?:ied|ing)?|gain(?:ed|ing)?).{0,80}(?:效果|効果|effect).{0,40}(?:卡名|カード名|name)/isu;
 const PRINTED_REFERENCE_QUESTION = /(?:效果文本框|效果文本栏|效果文本|卡面|印刷文本|印刷文字|テキスト欄|カードテキスト|printed\s+(?:effect\s+)?text).{0,60}(?:记载|记述|記載|記述|mention)|(?:记载|记述|記載|記述|mention).{0,60}(?:卡名|カード名|card\s+name)/isu;
-const FIELD_PRESENCE = /(?:自己|我方|己方|自分|your).{0,20}(?:场上|場上|field).{0,24}(?:有|存在|表侧|表側|face-up)|(?:自己|我方|己方|自分|your).{0,12}(?:场上|場上|field).{0,80}[「『“"]/isu;
 const ARCHETYPE_CONTEXT = /^(?:系列|主题|字段|怪兽|怪獸|モンスター|monster(?:s)?|卡(?:片)?(?!名)|カード(?!名)|cards?(?!\s+name))/iu;
 
 /**
@@ -201,8 +200,6 @@ function bindScenarioRoles(query, compiled) {
   if (receiverBinding.definitionId && receiverBinding.definitionId === sourceBinding.definitionId) {
     authorityReasons.push("runtime_copy_roles_not_distinct");
   }
-  if (!FIELD_PRESENCE.test(query)) authorityReasons.push("receiver_field_state_not_explicit");
-
   return deepFreeze({
     receiverSurface: copyPair?.receiverSurface || "",
     sourceSurface: copyPair?.sourceSurface || "",
