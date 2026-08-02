@@ -31,7 +31,7 @@ ADMIN_MODEL_LAB_ENABLED=false
 ADMIN_OPENAI_ENABLED=false
 ```
 
-仓库根目录 `.env.example` 使用的就是这组默认值。完成精确 Origin、管理员密码、持久 Redis 和服务端模型凭据配置后，管理员才可在部署环境中把两个开关都改为 `true`。
+仓库根目录 `.env.example` 使用的就是这组默认值。完成精确 Origin、管理员密码、持久 Redis 和服务端模型凭据配置后，管理员可打开 `ADMIN_MODEL_LAB_ENABLED`；`ADMIN_OPENAI_ENABLED` 只在确实配置并选择 OpenAI 模型时打开。
 
 显式启用时由管理员在 Vercel 服务端环境配置，禁止写入仓库或前端：
 
@@ -39,11 +39,16 @@ ADMIN_OPENAI_ENABLED=false
 ADMIN_SESSION_PASSWORD=<高强度管理员密码>
 ADMIN_ALLOWED_ORIGINS=https://coldiceh.github.io
 ADMIN_MODEL_LAB_ENABLED=true
-ADMIN_OPENAI_ENABLED=true
-OPENAI_API_KEY=<服务端 OpenAI Project Key>
 DEEPSEEK_API_KEY=<服务端 DeepSeek Key>
 UPSTASH_REDIS_REST_URL=<已有 Redis REST URL>
 UPSTASH_REDIS_REST_TOKEN=<已有 Redis REST Token>
+```
+
+若要使用 GPT-5.6，再额外设置：
+
+```text
+ADMIN_OPENAI_ENABLED=true
+OPENAI_API_KEY=<服务端 OpenAI Project Key>
 ```
 
 如果以后把管理页面迁移到自有域名，应把 `ADMIN_ALLOWED_ORIGINS` 改为真实管理页面 Origin。不得使用 `*`。

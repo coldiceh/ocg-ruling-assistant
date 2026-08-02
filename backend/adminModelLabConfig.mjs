@@ -4,6 +4,7 @@ export const FINAL_RULING_PROVIDER = "openai";
 export const ADMIN_MODEL_LAB_STAGES = Object.freeze({
   EVIDENCE_PREPARATION: "evidence_preparation",
   FINAL_RULING: "final_ruling",
+  EXPERIMENTAL_FINAL_RULING: "experimental_final_ruling",
 });
 
 export const OPENAI_REASONING_EFFORTS = Object.freeze([
@@ -68,9 +69,28 @@ const CAPABILITY_TABLE = {
     modelId,
     openAiCapability(modelId, modelId, OPENAI_MODEL_DETAILS[modelId]),
   ])),
-  "deepseek-v4-flash": deepSeekCapability("deepseek-v4-flash", "DeepSeek V4 Flash"),
-  "deepseek-v4-pro": deepSeekCapability("deepseek-v4-pro", "DeepSeek V4 Pro"),
-  "glm-5.2": preparationCapability({
+  "deepseek-v4-flash": domesticFinalCapability({
+    providerId: "deepseek",
+    modelId: "deepseek-v4-flash",
+    displayName: "DeepSeek V4 Flash",
+    supportedReasoningEfforts: ["none", "high", "max"],
+    supportedReasoningModes: ["standard", "pro"],
+    defaultReasoningEffort: "none",
+    defaultReasoningMode: "standard",
+    thinkingControl: "optional",
+    allowEvidencePreparation: true,
+  }),
+  "deepseek-v4-pro": domesticFinalCapability({
+    providerId: "deepseek",
+    modelId: "deepseek-v4-pro",
+    displayName: "DeepSeek V4 Pro",
+    supportedReasoningEfforts: ["none", "high", "max"],
+    supportedReasoningModes: ["standard", "pro"],
+    defaultReasoningEffort: "max",
+    defaultReasoningMode: "pro",
+    thinkingControl: "optional",
+  }),
+  "glm-5.2": domesticFinalCapability({
     providerId: "glm",
     modelId: "glm-5.2",
     displayName: "GLM-5.2",
@@ -80,7 +100,7 @@ const CAPABILITY_TABLE = {
     defaultReasoningMode: "pro",
     thinkingControl: "optional",
   }),
-  "kimi-k2.6": preparationCapability({
+  "kimi-k2.6": domesticFinalCapability({
     providerId: "kimi",
     modelId: "kimi-k2.6",
     displayName: "Kimi K2.6",
@@ -90,7 +110,7 @@ const CAPABILITY_TABLE = {
     defaultReasoningMode: "standard",
     thinkingControl: "optional",
   }),
-  "kimi-k3": preparationCapability({
+  "kimi-k3": domesticFinalCapability({
     providerId: "kimi",
     modelId: "kimi-k3",
     displayName: "Kimi K3",
@@ -205,7 +225,7 @@ export function resolveAdminModelSelection({
     );
   }
   if (
-    capability.allowedStages.includes(ADMIN_MODEL_LAB_STAGES.EVIDENCE_PREPARATION)
+    capability.providerId !== "openai"
     && capability.thinkingControl === "optional"
     && selectedReasoningMode === "standard"
     && selectedReasoningEffort !== "none"
@@ -257,19 +277,19 @@ export function getAdminModelProviderCapabilities({
       },
       {
         providerId: "deepseek",
-        role: ADMIN_MODEL_LAB_STAGES.EVIDENCE_PREPARATION,
+        role: "experimental_final_ruling",
         available: deepSeekAvailable,
         models: models.filter((entry) => entry.providerId === "deepseek"),
       },
       {
         providerId: "glm",
-        role: ADMIN_MODEL_LAB_STAGES.EVIDENCE_PREPARATION,
+        role: "experimental_final_ruling",
         available: glmAvailable,
         models: models.filter((entry) => entry.providerId === "glm"),
       },
       {
         providerId: "kimi",
-        role: ADMIN_MODEL_LAB_STAGES.EVIDENCE_PREPARATION,
+        role: "experimental_final_ruling",
         available: kimiAvailable,
         models: models.filter((entry) => entry.providerId === "kimi"),
       },
@@ -313,19 +333,6 @@ function openAiCapability(modelId, canonicalModelId, details) {
   };
 }
 
-function deepSeekCapability(modelId, displayName) {
-  return preparationCapability({
-    providerId: "deepseek",
-    modelId,
-    displayName,
-    supportedReasoningEfforts: ["none", "high", "max"],
-    supportedReasoningModes: ["standard", "pro"],
-    defaultReasoningEffort: "none",
-    defaultReasoningMode: "standard",
-    thinkingControl: "optional",
-  });
-}
-
 function preparationCapability({
   providerId,
   modelId,
@@ -360,6 +367,39 @@ function preparationCapability({
     maxOutputTokens: null,
     canMakeFinalRuling: false,
     canDecideEscalation: false,
+  };
+}
+
+function domesticFinalCapability({
+  providerId,
+  modelId,
+  displayName,
+  supportedReasoningEfforts,
+  supportedReasoningModes,
+  defaultReasoningEffort,
+  defaultReasoningMode,
+  thinkingControl,
+  allowEvidencePreparation = false,
+}) {
+  return {
+    ...preparationCapability({
+      providerId,
+      modelId,
+      displayName,
+      supportedReasoningEfforts,
+      supportedReasoningModes,
+      defaultReasoningEffort,
+      defaultReasoningMode,
+      thinkingControl,
+    }),
+    allowedStages: [
+      ...(allowEvidencePreparation ? [ADMIN_MODEL_LAB_STAGES.EVIDENCE_PREPARATION] : []),
+      ADMIN_MODEL_LAB_STAGES.EXPERIMENTAL_FINAL_RULING,
+    ],
+    canMakeFinalRuling: false,
+    canMakeAuthoritativeFinalRuling: false,
+    canMakeExperimentalRuling: true,
+    experimentalFinalRuling: true,
   };
 }
 

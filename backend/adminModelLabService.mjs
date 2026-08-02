@@ -71,11 +71,13 @@ export const ADMIN_MODEL_LAB_SERVICE_EVENT_TYPES = Object.freeze({
  *
  * The service intentionally has no simulator dependency. Deterministic RAG and
  * an optional low-cost preparation provider build a lossless Evidence Snapshot;
- * every final ruling is then submitted to an allowlisted OpenAI GPT-5.6 model.
+ * every final ruling is then submitted either to an allowlisted OpenAI model
+ * or to an explicitly labelled, non-authoritative domestic-model experiment.
  */
 export function createAdminModelLabService({
   runStore,
   openAIProvider = null,
+  finalRulingProviders = {},
   deepSeekProvider = null,
   preparationProviders = {},
   env = globalThis.process?.env || {},
@@ -103,6 +105,16 @@ export function createAdminModelLabService({
         : {}),
     },
   });
+  const finalRulingProviderRegistry = createFinalRulingProviderRegistry({
+    providers: {
+      ...(finalRulingProviders && typeof finalRulingProviders === "object"
+        ? finalRulingProviders
+        : {}),
+      ...(openAIProvider && typeof openAIProvider.create === "function"
+        ? { openai: openAIProvider }
+        : {}),
+    },
+  });
   const liveOfficialQaEnabled = serverLiveOfficialQaEnabled(env);
   const serverPricingProfile = {
     usdToCnyRate: optionalPositiveNumber(env.ADMIN_MODEL_LAB_USD_TO_CNY_RATE),
@@ -111,6 +123,7 @@ export function createAdminModelLabService({
   };
   const activeExecutionRunIds = new Set();
   const activePreparationAbortControllers = new Map();
+  const activeFinalAbortControllers = new Map();
   const serviceInstanceId = randomUUID();
   const executionHeartbeatMs = readExecutionHeartbeatMs(env);
 
@@ -123,8 +136,13 @@ export function createAdminModelLabService({
         preparationProviders: preparationProviderRegistry.listProviderIds(),
         preparationCanMakeFinalRuling: false,
         preparationCanDecideEscalation: false,
-        finalRulingProvider: "openai",
+        finalRulingProvider: finalRulingProviderRegistry.has("openai")
+          ? "openai"
+          : finalRulingProviderRegistry.listProviderIds()[0] || null,
+        finalRulingProviders: finalRulingProviderRegistry.listProviderIds(),
         finalRulingRequiredForEveryRun: true,
+        experimentalFinalRulingAvailable: finalRulingProviderRegistry.listProviderIds()
+          .some((providerId) => providerId !== "openai"),
         simulatorUsed: false,
       },
       providers: getAdminModelProviderCapabilities({ env }),
@@ -135,7 +153,7 @@ export function createAdminModelLabService({
       },
       promptVersions: [{
         id: DEFAULT_PROMPT_VERSION,
-        label: "OpenAI Ruling v1",
+        label: "Final Ruling v1",
         default: true,
       }],
       features: {
@@ -166,13 +184,37 @@ export function createAdminModelLabService({
     const questions = normalizeQuestions(body);
     const question = normalizeQuestionText(body, questions);
     const promptVersion = nonEmptyString(body.promptVersion, DEFAULT_PROMPT_VERSION);
+    const requestedFinalModel = String(
+      body.model || defaultFinalModel({ config, finalRulingProviderRegistry }),
+    ).trim();
+    const finalCapability = getRulingModelCapabilityTable()[requestedFinalModel];
+    const finalProvider = String(
+      body.provider || finalCapability?.providerId || "",
+    ).trim().toLowerCase();
+    const finalStage = finalCapability?.allowedStages?.includes(
+      ADMIN_MODEL_LAB_STAGES.FINAL_RULING,
+    )
+      ? ADMIN_MODEL_LAB_STAGES.FINAL_RULING
+      : ADMIN_MODEL_LAB_STAGES.EXPERIMENTAL_FINAL_RULING;
     const finalSelection = resolveAdminModelSelection({
-      provider: "openai",
-      model: body.model || config.defaultFinalModel,
-      reasoningEffort: body.reasoningEffort || config.defaultReasoningEffort,
-      reasoningMode: body.reasoningMode || config.defaultReasoningMode,
-      stage: ADMIN_MODEL_LAB_STAGES.FINAL_RULING,
+      provider: finalProvider,
+      model: requestedFinalModel,
+      reasoningEffort: body.reasoningEffort
+        || (finalProvider === "openai"
+          ? config.defaultReasoningEffort
+          : finalCapability?.defaultReasoningEffort),
+      reasoningMode: body.reasoningMode
+        || (finalProvider === "openai"
+          ? config.defaultReasoningMode
+          : finalCapability?.defaultReasoningMode),
+      stage: finalStage,
     });
+    if (!finalRulingProviderRegistry.has(finalSelection.provider)) {
+      throw serviceError(
+        `${finalSelection.provider} final-ruling provider is not configured`,
+        "final_ruling_provider_unavailable",
+      );
+    }
     const preparationModel = String(body.preparationModel || "deepseek-v4-flash").trim();
     const preparationCapability = getRulingModelCapabilityTable()[preparationModel];
     const preparationProvider = String(
@@ -208,6 +250,10 @@ export function createAdminModelLabService({
         reasoningEffort: finalSelection.reasoningEffort,
         reasoningMode: finalSelection.reasoningMode,
         maxOutputTokens: optionalPositiveInteger(body.maxOutputTokens),
+        experimental: finalSelection.stage === ADMIN_MODEL_LAB_STAGES.EXPERIMENTAL_FINAL_RULING,
+        authority: finalSelection.stage === ADMIN_MODEL_LAB_STAGES.EXPERIMENTAL_FINAL_RULING
+          ? "experimental_non_authoritative"
+          : "model_assisted_ruling",
       },
       prompt: {
         version: promptVersion,
@@ -242,8 +288,10 @@ export function createAdminModelLabService({
         promptVersion,
         promptSha256: sha256(instructions),
         preparationProvider: preparationSelection.provider,
-        finalRulingProvider: "openai",
+        finalRulingProvider: finalSelection.provider,
         finalRulingRequired: true,
+        experimentalFinalRuling: finalSelection.stage
+          === ADMIN_MODEL_LAB_STAGES.EXPERIMENTAL_FINAL_RULING,
         simulatorUsed: false,
       },
       createdAt: readWall(wallNow),
@@ -266,8 +314,13 @@ export function createAdminModelLabService({
     const id = requiredString(runId, "runId");
     let run = await requireRun(id);
     if (TERMINAL_RUN_STATUSES.has(run.status)) return immutableJson({ run, providerRequest: null });
-    if (!openAIProvider || typeof openAIProvider.create !== "function") {
-      throw serviceError("OpenAI final-ruling provider is not configured", "final_ruling_provider_unavailable");
+    const selectedFinalProviderId = String(run.executionProfile?.finalRuling?.provider || "").trim();
+    const selectedFinalProvider = finalRulingProviderRegistry.get(selectedFinalProviderId);
+    if (!selectedFinalProvider || typeof selectedFinalProvider.create !== "function") {
+      throw serviceError(
+        `${selectedFinalProviderId || "selected"} final-ruling provider is not configured`,
+        "final_ruling_provider_unavailable",
+      );
     }
     if (run.status === ADMIN_RUN_STATUSES.CANCEL_REQUESTED) {
       const context = await readProviderContext(id);
@@ -367,8 +420,9 @@ export function createAdminModelLabService({
             promptVersion: run.executionProfile?.prompt?.version || DEFAULT_PROMPT_VERSION,
             promptSha256: run.executionProfile?.prompt?.sha256 || null,
             preparationProvider: run.executionProfile.preparation.provider,
-            finalRulingProvider: "openai",
+            finalRulingProvider: run.executionProfile.finalRuling.provider,
             finalRulingRequired: true,
+            experimentalFinalRuling: run.executionProfile.finalRuling.experimental === true,
             simulatorUsed: false,
             initialRequestSnapshotId: run.evidenceSnapshot.snapshotId,
             preparationStartedAt: preparation.startedAt,
@@ -421,7 +475,7 @@ export function createAdminModelLabService({
       await runStore.renewExecutionLease(id, { executionToken });
       const submission = await runStore.beginProviderSubmission(id, {
         executionToken,
-        providerId: "openai",
+        providerId: profile.provider,
         requestFingerprint: sha256(JSON.stringify({
           model: providerCreateRequest.model,
           reasoningEffort: providerCreateRequest.reasoningEffort,
@@ -431,16 +485,21 @@ export function createAdminModelLabService({
         })),
       });
       let request;
+      let providerResponse;
       try {
-        const response = await withExecutionLeaseHeartbeat({
+        providerResponse = await withExecutionLeaseHeartbeat({
           runId: id,
           executionToken,
-          operation: (signal) => openAIProvider.create({
+          abortControllerRegistry: activeFinalAbortControllers,
+          timeoutMs: profile.provider === "openai"
+            ? null
+            : readSynchronousFinalTimeoutMs(env),
+          operation: (signal) => selectedFinalProvider.create({
             ...providerCreateRequest,
             signal,
           }),
         });
-        request = normalizeProviderRequest(response, profile.model);
+        request = normalizeProviderRequest(providerResponse, profile.model, profile.provider);
       } catch (error) {
         const failed = await settleProviderCreateFailure({
           runId: id,
@@ -455,7 +514,7 @@ export function createAdminModelLabService({
         await runStore.recordProviderSubmissionAccepted(id, {
           executionToken,
           attemptId: submission.submissionIntent.attemptId,
-          providerId: "openai",
+          providerId: profile.provider,
           requestId: request.requestId,
         });
       } catch (persistenceError) {
@@ -471,15 +530,15 @@ export function createAdminModelLabService({
           };
         } else {
           const ambiguous = serviceError(
-            "OpenAI accepted the request, but its request id could not be durably recorded",
-            "openai_submission_record_outcome_unknown",
+            `${profile.provider} accepted the request, but its request id could not be durably recorded`,
+            `${profile.provider}_submission_record_outcome_unknown`,
           );
           ambiguous.cause = persistenceError;
           try {
             await runStore.markProviderSubmissionOutcomeUnknown(id, {
               executionToken,
               attemptId: submission.submissionIntent.attemptId,
-              providerId: "openai",
+              providerId: profile.provider,
               error: ambiguous,
             });
           } catch {
@@ -503,6 +562,17 @@ export function createAdminModelLabService({
       } catch {
         // The accepted request id is already durable in the run record. This
         // compatibility event is useful for old readers but is not authoritative.
+      }
+      if (normalizeProviderStatus(providerResponse?.status) === "completed") {
+        run = await completeRunFromProviderResponse(
+          await requireRun(id),
+          providerResponse,
+          request,
+          executionToken,
+          selectedFinalProvider,
+        );
+        await releaseLeaseIfOwned(id, executionToken);
+        return immutableJson({ run, providerRequest: request });
       }
       run = await requireRun(id);
       if (run.status === ADMIN_RUN_STATUSES.CANCEL_REQUESTED) {
@@ -608,10 +678,10 @@ export function createAdminModelLabService({
       }
       return run;
     }
-    if (!openAIProvider || typeof openAIProvider.retrieve !== "function") {
-      throw serviceError("OpenAI background retrieval is not configured", "final_ruling_provider_unavailable");
-    }
-
+    const providerId = String(
+      context.request?.providerId || run.executionProfile?.finalRuling?.provider || "",
+    ).trim();
+    const finalProvider = finalRulingProviderRegistry.get(providerId);
     let claim;
     try {
       claim = await runStore.acquireExecutionLease(id, {
@@ -622,13 +692,26 @@ export function createAdminModelLabService({
       throw error;
     }
     const executionToken = claim.executionToken;
+    if (!finalProvider || typeof finalProvider.retrieve !== "function") {
+      const error = serviceError(
+        `${providerId || "selected"} provider returned without a durably completed synchronous result`,
+        "synchronous_final_ruling_completion_lost",
+      );
+      try {
+        await failRunWithStage(id, error, executionToken);
+      } catch (failure) {
+        if (failure?.code !== "admin_run_execution_fenced") throw failure;
+      }
+      return requireRun(id);
+    }
+
     try {
       let response;
       try {
         response = await withExecutionLeaseHeartbeat({
           runId: id,
           executionToken,
-          operation: (signal) => openAIProvider.retrieve(
+          operation: (signal) => finalProvider.retrieve(
             context.request.requestId,
             { signal },
           ),
@@ -678,16 +761,16 @@ export function createAdminModelLabService({
       }
       if (OPENAI_FAILURE_STATUSES.has(providerStatus)) {
         const error = serviceError(
-          response?.error?.message || `OpenAI response ended with ${providerStatus}`,
-          response?.error?.code || `openai_response_${providerStatus}`,
+          response?.error?.message || `${providerId} response ended with ${providerStatus}`,
+          response?.error?.code || `${providerId}_response_${providerStatus}`,
         );
         await failRunWithStage(id, error, executionToken);
         return requireRun(id);
       }
       if (providerStatus !== "completed") {
         const error = serviceError(
-          `unsupported OpenAI response status: ${providerStatus || "(missing)"}`,
-          "openai_response_status_unknown",
+          `unsupported ${providerId} response status: ${providerStatus || "(missing)"}`,
+          `${providerId || "provider"}_response_status_unknown`,
         );
         await failRunWithStage(id, error, executionToken);
         return requireRun(id);
@@ -697,6 +780,7 @@ export function createAdminModelLabService({
         response,
         context.request,
         executionToken,
+        finalProvider,
       );
     } finally {
       await releaseLeaseIfOwned(id, executionToken);
@@ -717,6 +801,13 @@ export function createAdminModelLabService({
         "admin_run_cancelled_during_preparation",
       ));
     }
+    const activeFinal = activeFinalAbortControllers.get(id);
+    if (activeFinal && !activeFinal.signal.aborted) {
+      activeFinal.abort(serviceError(
+        "operator cancelled final ruling generation",
+        "admin_run_cancelled_during_final_ruling",
+      ));
+    }
     if (
       run.execution?.providerSubmission?.state
         === ADMIN_PROVIDER_SUBMISSION_STATES.SUBMITTING
@@ -725,7 +816,11 @@ export function createAdminModelLabService({
     }
     const context = await readProviderContext(id);
     if (!context.request?.requestId) return markRunCancelled(id, { reason });
-    if (!openAIProvider || typeof openAIProvider.cancel !== "function") return run;
+    const providerId = String(
+      context.request?.providerId || run.executionProfile?.finalRuling?.provider || "",
+    ).trim();
+    const finalProvider = finalRulingProviderRegistry.get(providerId);
+    if (!finalProvider || typeof finalProvider.cancel !== "function") return run;
     let claim;
     try {
       claim = await runStore.acquireExecutionLease(id, {
@@ -740,7 +835,7 @@ export function createAdminModelLabService({
       const response = await withExecutionLeaseHeartbeat({
         runId: id,
         executionToken,
-        operation: (signal) => openAIProvider.cancel(
+        operation: (signal) => finalProvider.cancel(
           context.request.requestId,
           { signal },
         ),
@@ -946,6 +1041,7 @@ export function createAdminModelLabService({
     executionToken,
     operation,
     abortControllerRegistry = null,
+    timeoutMs = null,
   }) {
     if (typeof operation !== "function") {
       throw new TypeError("lease heartbeat operation must be a function");
@@ -956,6 +1052,7 @@ export function createAdminModelLabService({
     let timer = null;
     let heartbeatInFlight = null;
     let heartbeatError = null;
+    let timeout = null;
 
     const schedule = () => {
       if (stopped || heartbeatError) return;
@@ -975,6 +1072,17 @@ export function createAdminModelLabService({
     };
 
     schedule();
+    if (Number.isFinite(timeoutMs) && timeoutMs > 0) {
+      timeout = setTimeout(() => {
+        if (!controller.signal.aborted) {
+          controller.abort(serviceError(
+            `final ruling provider exceeded ${timeoutMs}ms`,
+            "final_ruling_provider_timeout",
+          ));
+        }
+      }, timeoutMs);
+      timeout.unref?.();
+    }
     let value;
     let operationError = null;
     try {
@@ -984,6 +1092,7 @@ export function createAdminModelLabService({
     } finally {
       stopped = true;
       if (timer) clearTimeout(timer);
+      if (timeout) clearTimeout(timeout);
       if (abortControllerRegistry?.get(runId) === controller) {
         abortControllerRegistry.delete(runId);
       }
@@ -1053,11 +1162,15 @@ export function createAdminModelLabService({
     response,
     request,
     executionToken = null,
+    finalProvider = null,
   ) {
     const questionIds = run.executionProfile?.questionIds || [];
     const providedFacts = run.executionProfile?.providedFacts || [];
-    const validation = typeof openAIProvider.validateCompletedResponse === "function"
-      ? openAIProvider.validateCompletedResponse(response, {
+    const selectedProvider = finalProvider || finalRulingProviderRegistry.get(
+      run.executionProfile?.finalRuling?.provider,
+    );
+    const validation = typeof selectedProvider?.validateCompletedResponse === "function"
+      ? selectedProvider.validateCompletedResponse(response, {
         evidenceSnapshot: run.evidenceSnapshot,
         modelVisibleEvidencePacket: finalRulingModelEvidencePacket(run.evidenceSnapshot),
         expectedQuestionIds: questionIds,
@@ -1085,14 +1198,30 @@ export function createAdminModelLabService({
 
     const profile = run.executionProfile?.finalRuling || {};
     const pricingProfile = run.executionProfile?.pricing || {};
-    const usage = normalizeOpenAIResponsesUsage(response.usage || {});
-    const cost = estimateOpenAIModelCost({
-      model: response.model || profile.model,
-      usage: response.usage || {},
-      reasoningMode: profile.reasoningMode || "standard",
-      usdToCnyRate: pricingProfile.usdToCnyRate,
-      exchangeRateVersion: pricingProfile.exchangeRateVersion,
-    });
+    const usage = profile.provider === "openai"
+      ? normalizeOpenAIResponsesUsage(response.usage || {})
+      : normalizeReportedModelUsage(response.usage || {});
+    const cost = profile.provider === "openai"
+      ? estimateOpenAIModelCost({
+          model: response.model || profile.model,
+          usage: response.usage || {},
+          reasoningMode: profile.reasoningMode || "standard",
+          usdToCnyRate: pricingProfile.usdToCnyRate,
+          exchangeRateVersion: pricingProfile.exchangeRateVersion,
+        })
+      : profile.provider === "deepseek"
+        ? estimateDeepSeekModelCost({
+            model: response.model || profile.model,
+            usage: response.usage || {},
+            pricingProfile: pricingProfile.deepSeek,
+            usdToCnyRate: pricingProfile.usdToCnyRate,
+            exchangeRateVersion: pricingProfile.exchangeRateVersion,
+          })
+        : unavailablePreparationProviderCost({
+            provider: profile.provider,
+            model: response.model || profile.model,
+            usage,
+          });
     const metering = buildAdminModelLabMetering({
       run,
       finalResponse: response,
@@ -1121,18 +1250,32 @@ export function createAdminModelLabService({
       schemaVersion: 1,
       evidenceSnapshotId: run.evidenceSnapshot.snapshotId,
       finalRuling: validation.normalized,
+      experimental: profile.experimental === true,
+      authority: profile.experimental === true
+        ? {
+            classification: "experimental_non_authoritative",
+            official: false,
+            adminOnly: true,
+            publicAnswerEligible: false,
+          }
+        : {
+            classification: "model_assisted_ruling",
+            official: false,
+            adminOnly: true,
+            publicAnswerEligible: false,
+          },
       validation: {
         ok: true,
         errors: [],
       },
       provider: {
-        providerId: "openai",
+        providerId: profile.provider,
         requestId: request.requestId,
         model: response.model || profile.model,
         status: "completed",
       },
-      // Backward-compatible aliases: these continue to mean the OpenAI final
-      // stage. The complete two-stage view lives in metering/metrics below.
+      // Backward-compatible aliases continue to mean the selected final stage.
+      // The complete two-stage view lives in metering/metrics below.
       usage,
       cost,
       metering,
@@ -1258,12 +1401,14 @@ export function createAdminModelLabService({
     requestId,
     executionToken,
   }) {
-    if (!openAIProvider || typeof openAIProvider.cancel !== "function") return run;
+    const providerId = String(run.executionProfile?.finalRuling?.provider || "").trim();
+    const finalProvider = finalRulingProviderRegistry.get(providerId);
+    if (!finalProvider || typeof finalProvider.cancel !== "function") return run;
     try {
       const response = await withExecutionLeaseHeartbeat({
         runId: run.runId,
         executionToken,
-        operation: (signal) => openAIProvider.cancel(requestId, { signal }),
+        operation: (signal) => finalProvider.cancel(requestId, { signal }),
       });
       if (normalizeProviderStatus(response?.status) === "cancelled") {
         return markRunCancelled(run.runId, {
@@ -1740,13 +1885,16 @@ function finiteCardNumber(value) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function normalizeProviderRequest(response, fallbackModel) {
+function normalizeProviderRequest(response, fallbackModel, providerId = "openai") {
   const requestId = String(response?.id || "").trim();
   if (!requestId) {
-    throw serviceError("OpenAI background response did not include an id", "openai_response_id_missing");
+    throw serviceError(
+      `${providerId} response did not include an id`,
+      `${providerId || "provider"}_response_id_missing`,
+    );
   }
   return {
-    providerId: "openai",
+    providerId,
     requestId,
     status: normalizeProviderStatus(response?.status),
     model: String(response?.model || fallbackModel || ""),
@@ -1827,8 +1975,10 @@ function buildAdminModelLabMetering({
       cost: preparationCost,
     },
     finalRuling: {
-      stageId: ADMIN_MODEL_LAB_STAGES.FINAL_RULING,
-      provider: "openai",
+      stageId: run.executionProfile?.finalRuling?.experimental === true
+        ? ADMIN_MODEL_LAB_STAGES.EXPERIMENTAL_FINAL_RULING
+        : ADMIN_MODEL_LAB_STAGES.FINAL_RULING,
+      provider: run.executionProfile?.finalRuling?.provider || null,
       model: finalResponse?.model || run.executionProfile?.finalRuling?.model || null,
       usageStatus: measuredFinalUsage ? "reported" : "unavailable",
       usage: measuredFinalUsage,
@@ -2037,6 +2187,40 @@ function unwrapBody(argument) {
   return argument && typeof argument === "object" && !Array.isArray(argument) ? argument : {};
 }
 
+function createFinalRulingProviderRegistry({ providers = {} } = {}) {
+  const registry = new Map();
+  for (const [declaredId, provider] of Object.entries(providers || {})) {
+    if (!provider) continue;
+    const providerId = String(provider.providerId || declaredId || "").trim().toLowerCase();
+    if (!providerId || String(declaredId || providerId).trim().toLowerCase() !== providerId) {
+      throw new TypeError(`Final-ruling provider registry key mismatch: ${declaredId}`);
+    }
+    if (typeof provider.create !== "function") {
+      throw new TypeError(`${providerId} final-ruling provider requires create()`);
+    }
+    registry.set(providerId, provider);
+  }
+  return Object.freeze({
+    get(providerId) {
+      return registry.get(String(providerId || "").trim().toLowerCase()) || null;
+    },
+    has(providerId) {
+      return registry.has(String(providerId || "").trim().toLowerCase());
+    },
+    listProviderIds() {
+      return Object.freeze([...registry.keys()]);
+    },
+  });
+}
+
+function defaultFinalModel({ config, finalRulingProviderRegistry }) {
+  if (finalRulingProviderRegistry.has("openai")) return config.defaultFinalModel;
+  if (finalRulingProviderRegistry.has("deepseek")) return "deepseek-v4-flash";
+  if (finalRulingProviderRegistry.has("glm")) return "glm-5.2";
+  if (finalRulingProviderRegistry.has("kimi")) return "kimi-k2.6";
+  return config.defaultFinalModel;
+}
+
 function assertRunStore(runStore) {
   for (const method of [
     "createRun",
@@ -2078,6 +2262,16 @@ function readExecutionHeartbeatMs(env) {
   const number = Number(value);
   if (!Number.isInteger(number) || number < 1) {
     throw new TypeError("ADMIN_MODEL_LAB_EXECUTION_HEARTBEAT_MS must be a positive integer");
+  }
+  return number;
+}
+
+function readSynchronousFinalTimeoutMs(env) {
+  const value = env.ADMIN_MODEL_LAB_SYNC_FINAL_TIMEOUT_MS;
+  if (value === undefined || value === null || value === "") return 240_000;
+  const number = Number(value);
+  if (!Number.isInteger(number) || number < 1) {
+    throw new TypeError("ADMIN_MODEL_LAB_SYNC_FINAL_TIMEOUT_MS must be a positive integer");
   }
   return number;
 }

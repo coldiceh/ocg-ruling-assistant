@@ -103,9 +103,6 @@ function createAdminModelLabComposedService({
   if (!readEnabled(env.ADMIN_MODEL_LAB_ENABLED)) {
     throw productionUnavailable("ADMIN_MODEL_LAB_ENABLED is not enabled");
   }
-  if (!readEnabled(env.ADMIN_OPENAI_ENABLED)) {
-    throw productionUnavailable("ADMIN_OPENAI_ENABLED is not enabled");
-  }
 
   const resolvedRecordStore = recordStore || createConfiguredAdminLabRecordStore({
     env,
@@ -144,6 +141,15 @@ function createAdminModelLabComposedService({
         callDeepSeekJsonTaskImpl,
       }),
     });
+    const resolvedDeepSeekFinalProvider = hasServerSecret(env.DEEPSEEK_API_KEY)
+      ? new CompatibleEvidencePreparationProvider({
+          providerId: "deepseek",
+          apiKey: env.DEEPSEEK_API_KEY,
+          baseUrl: serverDeepSeekBaseUrl(env),
+          fetchImpl,
+          env,
+        })
+      : null;
     const resolvedGlmProvider = glmProvider || (
       hasServerSecret(env.GLM_API_KEY)
         ? new CompatibleEvidencePreparationProvider({
@@ -166,12 +172,16 @@ function createAdminModelLabComposedService({
           })
         : null
     );
-    const resolvedOpenAIProvider = openAIProvider || new OpenAIResponsesProvider({
-      apiKey: requiredServerSecret(env.OPENAI_API_KEY, "OPENAI_API_KEY"),
-      baseUrl: serverOpenAIBaseUrl(env),
-      fetchImpl,
-      env,
-    });
+    const resolvedOpenAIProvider = openAIProvider || (
+      readEnabled(env.ADMIN_OPENAI_ENABLED) && hasServerSecret(env.OPENAI_API_KEY)
+        ? new OpenAIResponsesProvider({
+            apiKey: env.OPENAI_API_KEY,
+            baseUrl: serverOpenAIBaseUrl(env),
+            fetchImpl,
+            env,
+          })
+        : null
+    );
     resolvedBaseService = createAdminModelLabService({
       runStore: resolvedRunStore,
       deepSeekProvider: resolvedDeepSeekProvider,
@@ -179,10 +189,13 @@ function createAdminModelLabComposedService({
         ...(preparationProviders && typeof preparationProviders === "object"
           ? preparationProviders
           : {}),
-        ...(resolvedGlmProvider ? { glm: resolvedGlmProvider } : {}),
-        ...(resolvedKimiProvider ? { kimi: resolvedKimiProvider } : {}),
       },
       openAIProvider: resolvedOpenAIProvider,
+      finalRulingProviders: {
+        ...(resolvedDeepSeekFinalProvider ? { deepseek: resolvedDeepSeekFinalProvider } : {}),
+        ...(typeof resolvedGlmProvider?.create === "function" ? { glm: resolvedGlmProvider } : {}),
+        ...(typeof resolvedKimiProvider?.create === "function" ? { kimi: resolvedKimiProvider } : {}),
+      },
       env,
     });
   }
@@ -678,6 +691,14 @@ function serverOpenAIBaseUrl(env) {
     env.ADMIN_OPENAI_BASE_URL
     || env.OPENAI_BASE_URL
     || "https://api.openai.com/v1",
+  ).trim();
+}
+
+function serverDeepSeekBaseUrl(env) {
+  return String(
+    env.ADMIN_DEEPSEEK_BASE_URL
+    || env.DEEPSEEK_BASE_URL
+    || "https://api.deepseek.com",
   ).trim();
 }
 
