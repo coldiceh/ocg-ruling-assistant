@@ -28,6 +28,7 @@ import {
   normalizeReportedModelUsage,
 } from "./modelPricing.mjs";
 import {
+  createEvidencePreparationProviderRegistry,
   extractOpenAIResponseOutputText,
   getRulingModelCapabilityTable,
 } from "./rulingModelProviders.mjs";
@@ -76,6 +77,7 @@ export function createAdminModelLabService({
   runStore,
   openAIProvider = null,
   deepSeekProvider = null,
+  preparationProviders = {},
   env = globalThis.process?.env || {},
   loadData = loadRagData,
   extractCards = extractRagCards,
@@ -91,6 +93,16 @@ export function createAdminModelLabService({
 } = {}) {
   assertRunStore(runStore);
   const config = readAdminModelLabConfig(env);
+  const preparationProviderRegistry = createEvidencePreparationProviderRegistry({
+    providers: {
+      ...(preparationProviders && typeof preparationProviders === "object"
+        ? preparationProviders
+        : {}),
+      ...(deepSeekProvider && typeof deepSeekProvider.prepareEvidence === "function"
+        ? { deepseek: deepSeekProvider }
+        : {}),
+    },
+  });
   const liveOfficialQaEnabled = serverLiveOfficialQaEnabled(env);
   const serverPricingProfile = {
     usdToCnyRate: optionalPositiveNumber(env.ADMIN_MODEL_LAB_USD_TO_CNY_RATE),
@@ -98,13 +110,17 @@ export function createAdminModelLabService({
     deepSeek: readServerDeepSeekPricingProfile(env),
   };
   const activeExecutionRunIds = new Set();
+  const activePreparationAbortControllers = new Map();
   const serviceInstanceId = randomUUID();
   const executionHeartbeatMs = readExecutionHeartbeatMs(env);
 
   async function capabilities() {
     return immutableJson({
       architecture: {
-        preparationProvider: "deepseek",
+        preparationProvider: preparationProviderRegistry.has("deepseek")
+          ? "deepseek"
+          : preparationProviderRegistry.listProviderIds()[0] || null,
+        preparationProviders: preparationProviderRegistry.listProviderIds(),
         preparationCanMakeFinalRuling: false,
         preparationCanDecideEscalation: false,
         finalRulingProvider: "openai",
@@ -158,19 +174,30 @@ export function createAdminModelLabService({
       stage: ADMIN_MODEL_LAB_STAGES.FINAL_RULING,
     });
     const preparationModel = String(body.preparationModel || "deepseek-v4-flash").trim();
-    resolveAdminModelSelection({
-      provider: "deepseek",
+    const preparationCapability = getRulingModelCapabilityTable()[preparationModel];
+    const preparationProvider = String(
+      body.preparationProvider || preparationCapability?.providerId || "",
+    ).trim().toLowerCase();
+    const preparationSelection = resolveAdminModelSelection({
+      provider: preparationProvider,
       model: preparationModel,
-      reasoningEffort: "none",
-      reasoningMode: "standard",
+      reasoningEffort: body.preparationReasoningEffort
+        || preparationCapability?.defaultReasoningEffort
+        || "none",
+      reasoningMode: body.preparationReasoningMode
+        || preparationCapability?.defaultReasoningMode
+        || "standard",
       stage: ADMIN_MODEL_LAB_STAGES.EVIDENCE_PREPARATION,
     });
     const instructions = await resolveInstructions(body, promptLoader);
     const executionProfile = {
       status: "planned",
       preparation: {
-        provider: "deepseek",
-        model: preparationModel,
+        provider: preparationSelection.provider,
+        requestedModel: preparationSelection.requestedModel,
+        model: preparationSelection.model,
+        reasoningEffort: preparationSelection.reasoningEffort,
+        reasoningMode: preparationSelection.reasoningMode,
         canMakeFinalRuling: false,
         canDecideEscalation: false,
       },
@@ -199,6 +226,9 @@ export function createAdminModelLabService({
         providedFacts: executionProfile.providedFacts,
         request: {
           preparationModel,
+          preparationProvider: preparationSelection.provider,
+          preparationReasoningEffort: preparationSelection.reasoningEffort,
+          preparationReasoningMode: preparationSelection.reasoningMode,
           finalModel: finalSelection.model,
           reasoningEffort: finalSelection.reasoningEffort,
           reasoningMode: finalSelection.reasoningMode,
@@ -211,7 +241,7 @@ export function createAdminModelLabService({
         initialRequest: true,
         promptVersion,
         promptSha256: sha256(instructions),
-        preparationProvider: "deepseek",
+        preparationProvider: preparationSelection.provider,
         finalRulingProvider: "openai",
         finalRulingRequired: true,
         simulatorUsed: false,
@@ -336,7 +366,7 @@ export function createAdminModelLabService({
           metadata: {
             promptVersion: run.executionProfile?.prompt?.version || DEFAULT_PROMPT_VERSION,
             promptSha256: run.executionProfile?.prompt?.sha256 || null,
-            preparationProvider: "deepseek",
+            preparationProvider: run.executionProfile.preparation.provider,
             finalRulingProvider: "openai",
             finalRulingRequired: true,
             simulatorUsed: false,
@@ -486,7 +516,14 @@ export function createAdminModelLabService({
       return immutableJson({ run, providerRequest: request });
     } catch (error) {
       if (error?.code === "admin_run_cancelled_during_preparation") {
-        return immutableJson({ run: await requireRun(id), providerRequest: null });
+        const current = await requireRun(id);
+        const cancelled = TERMINAL_RUN_STATUSES.has(current.status)
+          ? current
+          : await markRunCancelled(id, {
+              reason: current.cancellation?.reason || "operator cancelled",
+              executionToken,
+            });
+        return immutableJson({ run: cancelled, providerRequest: null });
       }
       const current = await requireRun(id);
       if (TERMINAL_RUN_STATUSES.has(current.status)) {
@@ -524,6 +561,7 @@ export function createAdminModelLabService({
       if (current.status === ADMIN_RUN_STATUSES.CANCEL_REQUESTED) {
         const cancelled = await markRunCancelled(id, {
           reason: current.cancellation?.reason || "operator cancelled",
+          executionToken,
         });
         return immutableJson({ run: cancelled, providerRequest: null });
       }
@@ -672,6 +710,13 @@ export function createAdminModelLabService({
     const reason = String(body.reason || "operator requested cancellation");
     const requestedBy = String(body.requestedBy || "admin");
     run = await runStore.requestCancellation(id, { reason, requestedBy });
+    const activePreparation = activePreparationAbortControllers.get(id);
+    if (activePreparation && !activePreparation.signal.aborted) {
+      activePreparation.abort(serviceError(
+        "operator cancelled evidence preparation",
+        "admin_run_cancelled_during_preparation",
+      ));
+    }
     if (
       run.execution?.providerSubmission?.state
         === ADMIN_PROVIDER_SUBMISSION_STATES.SUBMITTING
@@ -733,6 +778,9 @@ export function createAdminModelLabService({
     const question = run.evidenceSnapshot.question;
     const questions = run.evidenceSnapshot.evidence.questions;
     const preparationModel = run.executionProfile.preparation.model;
+    const preparationProvider = run.executionProfile.preparation.provider;
+    const preparationReasoningEffort = run.executionProfile.preparation.reasoningEffort;
+    const preparationReasoningMode = run.executionProfile.preparation.reasoningMode;
     const startedAt = readWall(wallNow).toISOString();
     let preparationOutput;
     let data;
@@ -740,11 +788,15 @@ export function createAdminModelLabService({
     let cardTextCandidates;
     let retrieval;
 
-    preparationOutput = await runTrackedStage(run.runId, tracker, "understand", async () => (
+    preparationOutput = await runTrackedStage(run.runId, tracker, "understand", async (signal) => (
       runCheapPreparation({
         question,
         questions,
+        preparationProvider,
         preparationModel,
+        preparationReasoningEffort,
+        preparationReasoningMode,
+        signal,
       })
     ), executionToken);
 
@@ -819,8 +871,10 @@ export function createAdminModelLabService({
         questions,
         providedFacts: run.executionProfile.providedFacts,
         preparation: {
-          provider: "deepseek",
+          provider: preparationProvider,
           model: preparationModel,
+          reasoningEffort: preparationReasoningEffort,
+          reasoningMode: preparationReasoningMode,
           canMakeFinalRuling: false,
           canDecideEscalation: false,
           rawResult: preparationOutput.rawResult,
@@ -847,25 +901,33 @@ export function createAdminModelLabService({
   async function runCheapPreparation({
     question,
     questions,
+    preparationProvider,
     preparationModel,
+    preparationReasoningEffort,
+    preparationReasoningMode,
     suppliedHints,
+    signal,
   }) {
     const warnings = [];
     let rawResult = null;
     let usage = null;
-    if (deepSeekProvider && typeof deepSeekProvider.prepareEvidence === "function") {
-      const prepared = await deepSeekProvider.prepareEvidence({
+    const provider = preparationProviderRegistry.get(preparationProvider);
+    if (provider && typeof provider.prepareEvidence === "function") {
+      const prepared = await provider.prepareEvidence({
         model: preparationModel,
+        reasoningEffort: preparationReasoningEffort,
+        reasoningMode: preparationReasoningMode,
         input: buildPreparationInput({ question, questions }),
         metadata: {
           role: "evidence_preparation_only",
           finalRulingForbidden: "true",
         },
+        signal,
       });
       rawResult = jsonSafe(prepared);
       usage = jsonSafe(extractPreparationUsage(prepared));
     } else {
-      warnings.push("deepseek_preparation_provider_unavailable");
+      warnings.push(`${preparationProvider}_preparation_provider_unavailable`);
     }
     const hints = mergePreparationHints(
       normalizePreparationHints(rawResult),
@@ -883,11 +945,13 @@ export function createAdminModelLabService({
     runId,
     executionToken,
     operation,
+    abortControllerRegistry = null,
   }) {
     if (typeof operation !== "function") {
       throw new TypeError("lease heartbeat operation must be a function");
     }
     const controller = new AbortController();
+    if (abortControllerRegistry) abortControllerRegistry.set(runId, controller);
     let stopped = false;
     let timer = null;
     let heartbeatInFlight = null;
@@ -920,6 +984,9 @@ export function createAdminModelLabService({
     } finally {
       stopped = true;
       if (timer) clearTimeout(timer);
+      if (abortControllerRegistry?.get(runId) === controller) {
+        abortControllerRegistry.delete(runId);
+      }
       const pendingHeartbeat = heartbeatInFlight;
       if (pendingHeartbeat) await pendingHeartbeat;
     }
@@ -956,6 +1023,7 @@ export function createAdminModelLabService({
       runId,
       executionToken,
       operation,
+      abortControllerRegistry: activePreparationAbortControllers,
     });
     tracker.finishStage(stageId);
     await runStore.updateStageProgress(runId, tracker.snapshot(), {
@@ -1599,7 +1667,7 @@ export function buildFinalRulingInput(snapshot) {
   const input = [
     "以下是从完整、冻结且通过内容哈希校验的 Evidence Snapshot 生成的有界决策资料包。",
     "完整候选与完整冲突均保存在审计归档中；此处只包含确定性分层规则选出的卡文、FAQ 与机制资料，以及有界冲突目录、完整计数/哈希、遗漏和截断摘要。",
-    "DeepSeek 只提供候选卡名与补充检索词，不是裁定；确定性查询始终优先，但其补充词仍可能扩展候选集合，所以必须独立核对每条可见证据。",
+    "资料准备模型只提供候选卡名与补充检索词，不是裁定；确定性查询始终优先，但模型补充词仍可能扩展候选集合，所以必须独立核对每条可见证据。",
     "只能引用 evidenceDecisionPacket.evidenceItems 中实际展示正文的 evidenceId/evidenceIds；omissionSummary.catalog 仅用于提示未展示的候选，不能作为可引用证据。",
     "不得调用网络搜索，不得引用快照外资料。",
     JSON.stringify(boundedInput),
@@ -1735,17 +1803,23 @@ function buildAdminModelLabMetering({
   const preparationUsage = normalizeReportedModelUsage(preparationRawUsage);
   const finalRawUsage = finalResponse?.usage ?? null;
   const measuredFinalUsage = normalizeReportedModelUsage(finalRawUsage);
-  const preparationCost = estimateDeepSeekModelCost({
-    model: preparationProfile.model,
-    usage: preparationUsage,
-    pricingProfile: pricingProfile.deepSeek,
-    usdToCnyRate: pricingProfile.usdToCnyRate,
-    exchangeRateVersion: pricingProfile.exchangeRateVersion,
-  });
+  const preparationCost = preparationProfile.provider === "deepseek"
+    ? estimateDeepSeekModelCost({
+        model: preparationProfile.model,
+        usage: preparationUsage,
+        pricingProfile: pricingProfile.deepSeek,
+        usdToCnyRate: pricingProfile.usdToCnyRate,
+        exchangeRateVersion: pricingProfile.exchangeRateVersion,
+      })
+    : unavailablePreparationProviderCost({
+        provider: preparationProfile.provider,
+        model: preparationProfile.model,
+        usage: preparationUsage,
+      });
   const stages = {
     evidencePreparation: {
       stageId: ADMIN_MODEL_LAB_STAGES.EVIDENCE_PREPARATION,
-      provider: "deepseek",
+      provider: preparationProfile.provider || null,
       model: preparationProfile.model || null,
       usageStatus: preparationUsage ? "reported" : "unavailable",
       usage: preparationUsage,
@@ -1770,6 +1844,24 @@ function buildAdminModelLabMetering({
       cost: aggregateStageCosts(stages),
     },
     legacyFinalStageUsage: finalUsage,
+  };
+}
+
+function unavailablePreparationProviderCost({ provider, model, usage }) {
+  return {
+    provider: nullableString(provider),
+    model: nullableString(model),
+    requestedModel: nullableString(model),
+    usage,
+    pricingStatus: "unavailable",
+    unavailabilityReason: "versioned_server_pricing_unavailable",
+    inputCostCny: null,
+    cachedInputCostCny: null,
+    cacheWriteInputCny: null,
+    outputCostCny: null,
+    totalCostCny: null,
+    totalCostUsd: null,
+    estimateOnly: true,
   };
 }
 

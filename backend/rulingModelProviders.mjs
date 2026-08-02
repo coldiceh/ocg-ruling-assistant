@@ -10,7 +10,10 @@ import {
 } from "./modelRulingSchema.mjs";
 
 const DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1";
+const DEFAULT_GLM_BASE_URL = "https://open.bigmodel.cn/api/paas/v4";
+const DEFAULT_KIMI_BASE_URL = "https://api.moonshot.ai/v1";
 const MODEL_RULING_FORMAT_NAME = "model_ruling_result";
+const EVIDENCE_PREPARATION_PROVIDER_IDS = new Set(["deepseek", "glm", "kimi"]);
 
 export class RulingModelProviderError extends Error {
   constructor(message, {
@@ -52,14 +55,17 @@ export class ExistingDeepSeekProvider {
   async prepareEvidence({
     input,
     model = "deepseek-v4-flash",
+    reasoningEffort,
+    reasoningMode,
     metadata = {},
     maxOutputTokens,
+    signal,
   } = {}) {
     const selection = resolveAdminModelSelection({
       provider: "deepseek",
       model,
-      reasoningEffort: "none",
-      reasoningMode: "standard",
+      reasoningEffort,
+      reasoningMode,
       stage: ADMIN_MODEL_LAB_STAGES.EVIDENCE_PREPARATION,
     });
     const prompt = normalizeDeepSeekInput(input);
@@ -70,10 +76,13 @@ export class ExistingDeepSeekProvider {
       provider: "deepseek",
       modelName: selection.model,
       maxTokens: optionalPositiveInteger(maxOutputTokens, "maxOutputTokens"),
+      thinkingMode: selection.reasoningMode === "pro" ? "enabled" : "disabled",
+      reasoningEffort: selection.reasoningMode === "pro" ? selection.reasoningEffort : undefined,
       metadata: sanitizeMetadata(metadata, { requireTraceFields: false }),
       purpose: ADMIN_MODEL_LAB_STAGES.EVIDENCE_PREPARATION,
       canMakeFinalRuling: false,
       canDecideEscalation: false,
+      signal,
     });
 
     return {
@@ -110,6 +119,177 @@ export class ExistingDeepSeekProvider {
       provider: "deepseek",
     });
   }
+}
+
+/**
+ * Server-owned OpenAI-compatible Chat Completions adapter used only to prepare
+ * evidence-search hints. It intentionally has no final-ruling method.
+ */
+export class CompatibleEvidencePreparationProvider {
+  constructor({
+    providerId,
+    apiKey,
+    fetchImpl = globalThis.fetch,
+    baseUrl,
+    env = globalThis.process?.env || {},
+  } = {}) {
+    const normalizedProvider = String(providerId || "").trim().toLowerCase();
+    if (!new Set(["glm", "kimi"]).has(normalizedProvider)) {
+      throw new TypeError("Compatible evidence provider must be glm or kimi");
+    }
+    if (typeof fetchImpl !== "function") {
+      throw new TypeError(`${normalizedProvider} evidence provider requires fetch`);
+    }
+    if (typeof apiKey !== "string" || apiKey.trim() === "") {
+      throw new TypeError(`${normalizedProvider} evidence provider requires a server-side API key`);
+    }
+    this.providerId = normalizedProvider;
+    this.apiKey = apiKey.trim();
+    this.fetchImpl = fetchImpl;
+    this.baseUrl = normalizeBaseUrl(baseUrl || (
+      normalizedProvider === "glm" ? DEFAULT_GLM_BASE_URL : DEFAULT_KIMI_BASE_URL
+    ), { requireHttps: true });
+    this.env = env;
+  }
+
+  async getCapabilities() {
+    const keyName = this.providerId === "glm" ? "GLM_API_KEY" : "KIMI_API_KEY";
+    return getAdminModelProviderCapabilities({
+      env: {
+        ...this.env,
+        [keyName]: "__configured_server_side__",
+      },
+    }).providers.find((provider) => provider.providerId === this.providerId);
+  }
+
+  async prepareEvidence({
+    input,
+    model,
+    reasoningEffort,
+    reasoningMode,
+    metadata = {},
+    maxOutputTokens,
+    signal,
+  } = {}) {
+    const capability = ADMIN_MODEL_CAPABILITY_TABLE[String(model || "").trim()];
+    const selection = resolveAdminModelSelection({
+      provider: this.providerId,
+      model,
+      reasoningEffort: reasoningEffort || capability?.defaultReasoningEffort,
+      reasoningMode: reasoningMode || capability?.defaultReasoningMode,
+      stage: ADMIN_MODEL_LAB_STAGES.EVIDENCE_PREPARATION,
+    });
+    const prompt = normalizeDeepSeekInput(input);
+    if (!prompt) throw new TypeError(`${this.providerId} preparation input must not be empty`);
+    sanitizeMetadata(metadata, { requireTraceFields: false });
+    const maxTokens = optionalPositiveInteger(maxOutputTokens, "maxOutputTokens");
+    const body = {
+      model: selection.model,
+      messages: [
+        {
+          role: "system",
+          content: "Return only one JSON object. Prepare search evidence; do not make a final ruling or an escalation decision.",
+        },
+        { role: "user", content: prompt },
+      ],
+      response_format: { type: "json_object" },
+      ...compatibleThinkingParameters(selection),
+    };
+    if (maxTokens !== undefined) {
+      body[this.providerId === "kimi" ? "max_completion_tokens" : "max_tokens"] = maxTokens;
+    }
+
+    const payload = await this.requestJson("/chat/completions", {
+      method: "POST",
+      body,
+      signal,
+    });
+    const text = extractChatCompletionText(payload);
+    const result = parseStrictJsonObject(text, this.providerId);
+    return {
+      provider: this.providerId,
+      model: selection.model,
+      stage: ADMIN_MODEL_LAB_STAGES.EVIDENCE_PREPARATION,
+      canMakeFinalRuling: false,
+      canDecideEscalation: false,
+      result,
+      usage: cloneJson(payload?.usage || null),
+    };
+  }
+
+  async runRuling() {
+    throw new RulingModelProviderError(
+      `${this.providerId} is restricted to evidence preparation; every final ruling must use OpenAI GPT-5.6`,
+      { code: `${this.providerId}_final_ruling_forbidden`, provider: this.providerId },
+    );
+  }
+
+  async requestJson(path, { method, body, signal } = {}) {
+    let response;
+    try {
+      response = await this.fetchImpl(`${this.baseUrl}${path}`, {
+        method,
+        headers: {
+          authorization: `Bearer ${this.apiKey}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(body),
+        ...(signal === undefined ? {} : { signal }),
+      });
+    } catch (cause) {
+      throw new RulingModelProviderError(`${this.providerId} evidence request failed`, {
+        code: `${this.providerId}_network_error`,
+        provider: this.providerId,
+        outcomeKnown: false,
+        cause,
+      });
+    }
+    const payload = await readResponsePayload(response);
+    if (!response.ok) {
+      throw new RulingModelProviderError(
+        payload?.error?.message || `${this.providerId} Chat Completions API returned HTTP ${response.status}`,
+        {
+          code: payload?.error?.code || `${this.providerId}_http_error`,
+          provider: this.providerId,
+          status: response.status,
+          outcomeKnown: isProvableHttpRejection(response.status),
+        },
+      );
+    }
+    return payload;
+  }
+}
+
+export function createEvidencePreparationProviderRegistry({ providers = [] } = {}) {
+  const entries = providers instanceof Map
+    ? [...providers.entries()]
+    : Object.entries(providers || {});
+  const registry = new Map();
+  for (const [declaredId, provider] of entries) {
+    if (!provider) continue;
+    const providerId = String(provider.providerId || declaredId || "").trim().toLowerCase();
+    if (!EVIDENCE_PREPARATION_PROVIDER_IDS.has(providerId)) {
+      throw new TypeError(`Unsupported evidence preparation provider: ${providerId || "(empty)"}`);
+    }
+    if (String(declaredId || providerId).trim().toLowerCase() !== providerId) {
+      throw new TypeError(`Evidence preparation provider registry key mismatch: ${declaredId}`);
+    }
+    if (typeof provider.prepareEvidence !== "function") {
+      throw new TypeError(`${providerId} evidence preparation provider requires prepareEvidence()`);
+    }
+    registry.set(providerId, provider);
+  }
+  return Object.freeze({
+    get(providerId) {
+      return registry.get(String(providerId || "").trim().toLowerCase()) || null;
+    },
+    has(providerId) {
+      return registry.has(String(providerId || "").trim().toLowerCase());
+    },
+    listProviderIds() {
+      return Object.freeze([...registry.keys()]);
+    },
+  });
 }
 
 export class OpenAIResponsesProvider {
@@ -296,6 +476,55 @@ export function getRulingModelCapabilityTable() {
   return ADMIN_MODEL_CAPABILITY_TABLE;
 }
 
+function compatibleThinkingParameters(selection) {
+  if (selection.provider === "glm") {
+    const enabled = selection.reasoningMode === "pro";
+    return {
+      thinking: { type: enabled ? "enabled" : "disabled" },
+      ...(enabled && selection.reasoningEffort !== "none"
+        ? { reasoning_effort: selection.reasoningEffort }
+        : {}),
+    };
+  }
+  if (selection.model === "kimi-k3") {
+    return { reasoning_effort: selection.reasoningEffort };
+  }
+  return {
+    thinking: { type: selection.reasoningMode === "pro" ? "enabled" : "disabled" },
+  };
+}
+
+function extractChatCompletionText(payload) {
+  const content = payload?.choices?.[0]?.message?.content;
+  if (typeof content === "string") return content.trim();
+  if (Array.isArray(content)) {
+    return content.map((part) => String(part?.text || part?.content || "")).join("").trim();
+  }
+  return "";
+}
+
+function parseStrictJsonObject(text, providerId) {
+  let parsed;
+  try {
+    parsed = JSON.parse(String(text || ""));
+  } catch (cause) {
+    throw new RulingModelProviderError(`${providerId} preparation response was not valid JSON`, {
+      code: `${providerId}_invalid_json`,
+      provider: providerId,
+      outcomeKnown: true,
+      cause,
+    });
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new RulingModelProviderError(`${providerId} preparation response must be a JSON object`, {
+      code: `${providerId}_invalid_json_shape`,
+      provider: providerId,
+      outcomeKnown: true,
+    });
+  }
+  return parsed;
+}
+
 function normalizeDeepSeekInput(input) {
   if (typeof input === "string") return input.trim();
   if (input === undefined || input === null) return "";
@@ -352,9 +581,23 @@ function validateResponseId(responseId) {
   return id;
 }
 
-function normalizeBaseUrl(baseUrl) {
+function normalizeBaseUrl(baseUrl, { requireHttps = false } = {}) {
   const value = String(baseUrl || DEFAULT_OPENAI_BASE_URL).trim().replace(/\/+$/u, "");
-  if (!/^https?:\/\//iu.test(value)) throw new TypeError("baseUrl must be an HTTP(S) URL");
+  let parsed;
+  try {
+    parsed = new URL(value);
+  } catch {
+    throw new TypeError("baseUrl must be an HTTP(S) URL");
+  }
+  if (!new Set(["http:", "https:"]).has(parsed.protocol)) {
+    throw new TypeError("baseUrl must be an HTTP(S) URL");
+  }
+  if (parsed.username || parsed.password) {
+    throw new TypeError("baseUrl must not contain userinfo");
+  }
+  if (requireHttps && parsed.protocol !== "https:") {
+    throw new TypeError("evidence preparation baseUrl must use HTTPS");
+  }
   return value;
 }
 

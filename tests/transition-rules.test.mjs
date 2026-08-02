@@ -83,7 +83,7 @@ function run(formalQuery, subQuestionAnswers, transitionRuleSources = []) {
 function dependencyQuery() {
   return makeQuery([
     q("q1", "temporary_banish", "完美世界-卡通世界", "能用完美世界-卡通世界的效果除外该卡通怪兽吗？"),
-    q("q2", "send_to_gy", "referenced_toon_monster", "该卡通怪兽还会不会送墓？"),
+    q("q2", "send_to_gy", "referenced_monster", "该卡通怪兽还会不会送墓？"),
   ]);
 }
 

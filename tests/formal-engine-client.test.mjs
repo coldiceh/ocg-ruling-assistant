@@ -257,6 +257,91 @@ test("top-level artifact binding failures are global while q2 verifier failure s
   assert.equal(localResponse.formalResult.queryResults[1].unknownReasons[0].code, "FORMAL_CERTIFICATE_INVALID");
 });
 
+test("async proof verifiers are awaited and rejected promises downgrade only their query", async () => {
+  const acceptedMock = endpointMock();
+  const verifiedQueries = [];
+  const accepted = await requestFormalScenarioAnalysis({
+    formalScenario: scenario,
+    env: { OCG_ENGINE_URL: "http://127.0.0.1:8790" },
+    fetchImpl: acceptedMock.fetchImpl,
+    proofVerifier: async (input) => {
+      await Promise.resolve();
+      verifiedQueries.push(input.queryResult.queryId);
+      return mockPublicProofVerifier(input);
+    },
+  });
+  assert.equal(accepted.status, "completed");
+  assert.deepEqual(accepted.formalResult.queryResults.map((item) => item.verdict), ["TRUE", "FALSE"]);
+  assert.deepEqual(verifiedQueries.sort(), ["q1-summon-procedure", "q2-hand-trigger"]);
+
+  const rejectedMock = endpointMock();
+  const rejected = await requestFormalScenarioAnalysis({
+    formalScenario: scenario,
+    env: { OCG_ENGINE_URL: "http://127.0.0.1:8790" },
+    fetchImpl: rejectedMock.fetchImpl,
+    proofVerifier: async (input) => {
+      await Promise.resolve();
+      if (input.queryResult.queryId === "q2-hand-trigger") throw new Error("asynchronous verifier rejection");
+      return mockPublicProofVerifier(input);
+    },
+  });
+  assert.equal(rejected.status, "completed");
+  assert.deepEqual(rejected.formalResult.queryResults.map((item) => item.verdict), ["TRUE", "UNKNOWN"]);
+  assert.equal(rejected.formalResult.queryResults[1].unknownReasons[0].code, "FORMAL_CERTIFICATE_INVALID");
+});
+
+test("a non-resolving proof verifier times out and downgrades every affected query to typed UNKNOWN", async () => {
+  const mock = endpointMock();
+  const verifierSignals = [];
+  const response = await requestFormalScenarioAnalysis({
+    formalScenario: scenario,
+    env: { OCG_ENGINE_URL: "http://127.0.0.1:8790" },
+    fetchImpl: mock.fetchImpl,
+    proofVerifierTimeoutMs: 15,
+    proofVerifier: (_input, options) => {
+      verifierSignals.push(options.signal);
+      return new Promise(() => {});
+    },
+  });
+  assert.equal(response.status, "completed");
+  assert.deepEqual(response.formalResult.queryResults.map((item) => item.verdict), ["UNKNOWN", "UNKNOWN"]);
+  assert.equal(response.formalResult.queryResults.every((item) => (
+    item.unknownReasons[0].code === "FORMAL_PROOF_VERIFIER_TIMEOUT"
+  )), true);
+  assert.equal(verifierSignals.length, 2);
+  assert.equal(verifierSignals.every((signal) => signal.aborted), true);
+});
+
+test("caller cancellation aborts asynchronous proof verification and returns typed UNKNOWN", async () => {
+  const mock = endpointMock();
+  const controller = new AbortController();
+  let markVerifierStarted;
+  const verifierStarted = new Promise((resolve) => { markVerifierStarted = resolve; });
+  const verifierSignals = [];
+  const pending = requestFormalScenarioAnalysis({
+    formalScenario: scenario,
+    env: { OCG_ENGINE_URL: "http://127.0.0.1:8790" },
+    fetchImpl: mock.fetchImpl,
+    signal: controller.signal,
+    proofVerifierTimeoutMs: 1_000,
+    proofVerifier: (_input, options) => {
+      verifierSignals.push(options.signal);
+      markVerifierStarted();
+      return new Promise(() => {});
+    },
+  });
+  await verifierStarted;
+  controller.abort("test-request-cancelled");
+  const response = await pending;
+  assert.equal(response.status, "completed");
+  assert.deepEqual(response.formalResult.queryResults.map((item) => item.verdict), ["UNKNOWN", "UNKNOWN"]);
+  assert.equal(response.formalResult.queryResults.every((item) => (
+    item.unknownReasons[0].code === "FORMAL_PROOF_VERIFIER_ABORTED"
+  )), true);
+  assert.equal(verifierSignals.length, 2);
+  assert.equal(verifierSignals.every((signal) => signal.aborted), true);
+});
+
 test("offline and timeout failures stay UNKNOWN", async () => {
   const offline = await requestFormalScenarioAnalysis({
     formalScenario: scenario,

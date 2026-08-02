@@ -17,8 +17,6 @@ function primitiveProjection(question) {
   }).map(({ primitive, result }) => ({
     id: primitive.id,
     concepts: result.concepts,
-    verdictHint: result.verdictHint,
-    shortAnswer: result.shortAnswer,
     steps: result.steps,
   }));
 }
@@ -31,6 +29,7 @@ test("a claimed numeric answer in the question is not copied into rule-derived o
   const serialized = JSON.stringify(first);
   assert.doesNotMatch(serialized, /9876|1234|5555|2222/u);
   assert.doesNotMatch(serialized, /final_atk_/u);
+  assert.doesNotMatch(serialized, /verdictHint|shortAnswer/u);
 });
 
 test("legacy pattern semantics are retained only as diagnostics and cannot compile authoritatively", () => {

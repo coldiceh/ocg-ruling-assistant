@@ -71,7 +71,7 @@ test("official extractor preserves explicit answer instead of replacing it with 
   assert.equal(extracted.answerText, "不可以发动。");
 });
 
-test("Fast Judge failure cannot override an official direct answer", async () => {
+test("Fast Judge requires canonical identity binding before an official direct answer", async () => {
   let modelCalled = false;
   const question = "这张测试卡能发动吗？";
   const answer = await answerRulingQuestionFast({
@@ -83,9 +83,8 @@ test("Fast Judge failure cannot override an official direct answer", async () =>
     },
     modelInvoker: async () => { modelCalled = true; return null; },
   });
-  assert.equal(answer.answerRoute, "official_qa_exact_match");
-  assert.equal(answer.confirmationLevel, "official_confirmed");
-  assert.equal(modelCalled, false);
+  assert.notEqual(answer.answerType, "direct_official");
+  assert.equal(modelCalled, true);
 });
 
 test("scope mismatch stays related and cannot become direct", () => {

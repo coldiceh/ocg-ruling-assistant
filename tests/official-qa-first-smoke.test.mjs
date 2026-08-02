@@ -8,7 +8,7 @@ function qa({ id = "qa-first-1", question, answer }) {
   return { id, recordType: "qa", question, answer, text: `${question}\n${answer}`, evidenceStatus: "current", sourceType: "official_qa" };
 }
 
-test("exact official QA bypasses template and activation processing", async () => {
+test("exact wording without a canonical card identity cannot bypass processing", async () => {
   let modelCalled = false;
   const question = "只有发动中的通常陷阱时，这个效果能发动吗？";
   const answer = await answerRulingQuestionFast({
@@ -17,13 +17,12 @@ test("exact official QA bypasses template and activation processing", async () =
     chainLinks: [{ id: "C1", sourceCardId: "900401", effectNo: "1" }],
     modelInvoker: async () => { modelCalled = true; return null; },
   });
-  assert.equal(answer.answerRoute, "official_qa_exact_match");
-  assert.match(answer.shortAnswer, /可以发动/u);
+  assert.notEqual(answer.answerType, "direct_official");
   assert.equal(modelCalled, false);
-  assert.equal(answer.ruleTrace.some((item) => item.step === "template_loaded"), false);
+  assert.equal(answer.ruleTrace.some((item) => item.step === "template_loaded"), true);
 });
 
-test("near-exact official QA bypasses a missing template", async () => {
+test("near-exact official QA remains conditional and does not bypass a missing template", async () => {
   const name = "S：Pリトルナイト";
   const recordQuestion = `「${name}」のコントロールが移った場合、誰が効果を発動できますか？`;
   const answer = await answerRulingQuestionFast({
@@ -31,9 +30,9 @@ test("near-exact official QA bypasses a missing template", async () => {
     snapshot: { cards: [{ id: "999002", name, aliases: [name], effectText: "控制权发生变化。" }], records: [qa({ question: recordQuestion, answer: "その時点のコントローラーが発動できます。" })], snapshotMeta: freshMeta },
     chainLinks: [{ id: "C1", sourceCardId: "999002", effectNo: "1" }],
   });
-  assert.equal(answer.answerRoute, "official_qa_near_case_match");
-  assert.equal(answer.confirmationLevel, "conditional_official_case");
-  assert.equal(answer.ruleTrace.some((item) => item.step === "template_loaded"), false);
+  assert.equal(answer.answerRoute, "conditional_branch_answer");
+  assert.equal(answer.confirmationLevel, "conditional");
+  assert.equal(answer.ruleTrace.some((item) => item.step === "template_loaded"), true);
 });
 
 test("template Fast Judge runs when no official QA matches", async () => {

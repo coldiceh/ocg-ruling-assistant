@@ -1,5 +1,7 @@
 {
-  "question": "自己场上表侧表示存在「混沌の黒魔術師」，手牌中有「深淵の相剣龍」，本回合自己已经发动过魔法卡的效果。是否可以将「混沌の黒魔術師」除外，从额外卡组特殊召唤「滅びの黒魔術師」？如果可以特殊召唤，之后是否可以发动手牌中「深淵の相剣龍」的①效果？",
+  "acceptanceScope": "fully-specified-protocol-contract",
+  "originalQuestion": "自己场上表侧表示存在「混沌の黒魔術師」，手牌中有「深淵の相剣龍」，本回合自己已经发动过魔法卡的效果。是否可以将「混沌の黒魔術師」除外，从额外卡组特殊召唤「滅びの黒魔術師」？如果可以特殊召唤，之后是否可以发动手牌中「深淵の相剣龍」的①效果？",
+  "question": "当前为自己回合的主要阶段1开放行动时点，自己可以进行特殊召唤，自己怪兽区域至少有1个可用区域。自己是下述3张卡的原持有者，相关效果本回合尚未使用；除下述卡外，双方所有区域没有其他卡，也没有其他正在适用的效果。自己场上表侧攻击表示存在「混沌の黒魔術師」，手牌中有「深淵の相剣龍」，额外卡组中有「滅びの黒魔術師」。本回合自己已经发动过魔法卡的效果，且该发动未被无效。对方后续响应未指定，必须保留全部响应分支；本题所称可以按至少存在1个合法分支理解。是否可以将「混沌の黒魔術師」除外，从额外卡组特殊召唤「滅びの黒魔術師」？如果可以特殊召唤，之后是否可以发动手牌中「深淵の相剣龍」的①效果？",
   "resolvedCards": [
     {
       "cardId": "real-card-chaos-magician",
@@ -73,12 +75,21 @@
     ],
     "stateFacts": [
       {
+        "factId": "self-monster-zone-capacity",
+        "type": "ZONE_CAPACITY",
+        "provenance": "USER_OBSERVED",
+        "player": "SELF",
+        "zone": "MONSTER_ZONE",
+        "value": 1,
+        "mention": "自己怪兽区域至少有1个可用区域"
+      },
+      {
         "factId": "spell-effect-used-this-turn",
         "type": "SPELL_EFFECT_ACTIVATED_THIS_TURN",
         "provenance": "USER_OBSERVED",
         "player": "SELF",
         "value": true,
-        "mention": "本回合自己已经发动过魔法卡的效果"
+        "mention": "本回合自己已经发动过魔法卡的效果，且该发动未被无效"
       }
     ],
     "eventHistory": [
@@ -87,7 +98,7 @@
         "type": "SPELL_EFFECT_ACTIVATED",
         "provenance": "USER_OBSERVED",
         "player": "SELF",
-        "mention": "已经发动过魔法卡的效果"
+        "mention": "已经发动过魔法卡的效果，且该发动未被无效"
       }
     ],
     "intents": [
@@ -117,6 +128,7 @@
       }
     ],
     "assumptions": [],
+    "missingStateFacts": [],
     "requiredCapabilities": [],
     "branchPolicy": { "preserveUnspecifiedResponses": true }
   }

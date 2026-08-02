@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  CompatibleEvidencePreparationProvider,
   ExistingDeepSeekProvider,
   OpenAIResponsesProvider,
+  createEvidencePreparationProviderRegistry,
   extractOpenAIResponseOutputText,
 } from "../backend/rulingModelProviders.mjs";
 import { MODEL_RULING_COUNTER_CHECK_TYPES } from "../backend/modelRulingSchema.mjs";
@@ -205,6 +207,7 @@ test("completed OpenAI output is extracted and validated without loose JSON repa
 
 test("DeepSeek adapter can prepare evidence but can never issue the final ruling", async () => {
   const invocations = [];
+  const controller = new AbortController();
   const provider = new ExistingDeepSeekProvider({
     invoke: async (request) => {
       invocations.push(request);
@@ -215,14 +218,142 @@ test("DeepSeek adapter can prepare evidence but can never issue the final ruling
     model: "deepseek-v4-flash",
     input: { evidence: ["faq-1"] },
     metadata: { runId: "run-1" },
+    signal: controller.signal,
   });
   assert.equal(prepared.canMakeFinalRuling, false);
   assert.equal(prepared.canDecideEscalation, false);
   assert.equal(invocations[0].purpose, "evidence_preparation");
   assert.equal(invocations[0].canMakeFinalRuling, false);
+  assert.equal(invocations[0].signal, controller.signal);
+  await provider.prepareEvidence({
+    model: "deepseek-v4-pro",
+    reasoningEffort: "max",
+    reasoningMode: "pro",
+    input: { evidence: ["faq-1"] },
+  });
+  assert.equal(invocations[1].thinkingMode, "enabled");
+  assert.equal(invocations[1].reasoningEffort, "max");
   await assert.rejects(
     provider.runRuling({ input: "question" }),
     (error) => error.code === "deepseek_final_ruling_forbidden",
+  );
+});
+
+test("GLM compatible adapter emits preparation-only JSON with filtered thinking controls", async () => {
+  const calls = [];
+  const controller = new AbortController();
+  const provider = new CompatibleEvidencePreparationProvider({
+    providerId: "glm",
+    apiKey: "glm-server-secret",
+    baseUrl: "https://glm.example/v4",
+    fetchImpl: mockFetch(calls, {
+      choices: [{ message: { content: JSON.stringify({ ruleSearchQueries: [{ query: "规则" }] }) } }],
+      usage: { prompt_tokens: 10, completion_tokens: 5 },
+    }),
+  });
+  const prepared = await provider.prepareEvidence({
+    model: "glm-5.2",
+    reasoningEffort: "high",
+    reasoningMode: "pro",
+    input: { question: "匿名问题" },
+    maxOutputTokens: 700,
+    signal: controller.signal,
+  });
+  assert.equal(prepared.canMakeFinalRuling, false);
+  assert.equal(prepared.canDecideEscalation, false);
+  assert.equal(prepared.result.ruleSearchQueries[0].query, "规则");
+  const body = JSON.parse(calls[0].options.body);
+  assert.deepEqual(body.thinking, { type: "enabled" });
+  assert.equal(body.reasoning_effort, "high");
+  assert.equal(body.max_tokens, 700);
+  assert.equal(calls[0].options.headers.authorization, "Bearer glm-server-secret");
+  assert.equal(calls[0].options.signal, controller.signal);
+  assert.equal(JSON.stringify(prepared).includes("glm-server-secret"), false);
+  await assert.rejects(
+    provider.runRuling(),
+    (error) => error.code === "glm_final_ruling_forbidden",
+  );
+});
+
+test("Kimi K2.6 supports optional thinking while K3 uses its always-on reasoning effort", async () => {
+  const calls = [];
+  const provider = new CompatibleEvidencePreparationProvider({
+    providerId: "kimi",
+    apiKey: "kimi-server-secret",
+    fetchImpl: mockFetch(calls, {
+      choices: [{ message: { content: "{}" } }],
+      usage: {},
+    }),
+  });
+  await provider.prepareEvidence({
+    model: "kimi-k2.6",
+    reasoningEffort: "none",
+    reasoningMode: "standard",
+    input: "prepare",
+    maxOutputTokens: 800,
+  });
+  await provider.prepareEvidence({
+    model: "kimi-k3",
+    reasoningEffort: "max",
+    reasoningMode: "pro",
+    input: "prepare",
+  });
+  const k2Body = JSON.parse(calls[0].options.body);
+  const k3Body = JSON.parse(calls[1].options.body);
+  assert.deepEqual(k2Body.thinking, { type: "disabled" });
+  assert.equal(k2Body.max_completion_tokens, 800);
+  assert.equal(Object.hasOwn(k3Body, "thinking"), false);
+  assert.equal(k3Body.reasoning_effort, "max");
+  assert.match(calls[0].url, /^https:\/\/api\.moonshot\.ai\/v1\//u);
+  await assert.rejects(
+    provider.prepareEvidence({
+      model: "kimi-k3",
+      reasoningEffort: "max",
+      reasoningMode: "standard",
+      input: "prepare",
+    }),
+    (error) => error.code === "reasoning_mode_not_supported",
+  );
+});
+
+test("preparation registry rejects final or arbitrary providers and dispatches only known adapters", () => {
+  const glm = { providerId: "glm", async prepareEvidence() {} };
+  const registry = createEvidencePreparationProviderRegistry({ providers: { glm } });
+  assert.equal(registry.get("glm"), glm);
+  assert.deepEqual(registry.listProviderIds(), ["glm"]);
+  assert.throws(
+    () => createEvidencePreparationProviderRegistry({
+      providers: { openai: { providerId: "openai", async prepareEvidence() {} } },
+    }),
+    /Unsupported evidence preparation provider/u,
+  );
+  assert.throws(
+    () => createEvidencePreparationProviderRegistry({
+      providers: { glm: { providerId: "kimi", async prepareEvidence() {} } },
+    }),
+    /key mismatch/u,
+  );
+});
+
+test("compatible preparation providers require credential-safe HTTPS base URLs", () => {
+  const options = {
+    providerId: "glm",
+    apiKey: "server-secret",
+    fetchImpl: async () => jsonResponse({}),
+  };
+  assert.throws(
+    () => new CompatibleEvidencePreparationProvider({
+      ...options,
+      baseUrl: "http://glm.example/v4",
+    }),
+    /must use HTTPS/u,
+  );
+  assert.throws(
+    () => new CompatibleEvidencePreparationProvider({
+      ...options,
+      baseUrl: "https://user:password@glm.example/v4",
+    }),
+    /must not contain userinfo/u,
   );
 });
 

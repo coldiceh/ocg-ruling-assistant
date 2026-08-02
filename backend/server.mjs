@@ -103,6 +103,7 @@ const server = createServer(async (request, response) => {
 
   if (request.method === "POST" && request.url === "/api/answer") {
     let auditPromise = Promise.resolve();
+    const requestAbort = createRequestAbortContext(request, response);
     try {
       const body = await readBody(request);
       const payload = JSON.parse(body || "{}");
@@ -124,15 +125,21 @@ const server = createServer(async (request, response) => {
         question: payload.question,
         env: envForModelTier(publicEnv, payload.modelTier),
         engineScenario: payload.engineScenario,
+        thinkingMode: payload.thinkingMode,
+        reasoningEffort: payload.reasoningEffort,
+        signal: requestAbort.signal,
       });
       await auditPromise;
       sendJson(response, 200, answer);
     } catch (error) {
       await auditPromise;
+      if (requestAbort.signal.aborted) return;
       sendJson(response, error?.statusCode === 400 ? 400 : 500, {
         error: error instanceof Error ? error.message : String(error),
         code: error?.code || "answer_failed",
       });
+    } finally {
+      requestAbort.cleanup();
     }
     return;
   }
@@ -171,6 +178,26 @@ function setCors(response) {
 function sendJson(response, status, payload) {
   response.writeHead(status, { "content-type": "application/json; charset=utf-8" });
   response.end(JSON.stringify(payload, null, 2));
+}
+
+function createRequestAbortContext(request, response) {
+  if (request?.signal && typeof request.signal.aborted === "boolean") {
+    return { signal: request.signal, cleanup() {} };
+  }
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  const close = () => {
+    if (!response?.writableEnded && !response?.finished) abort();
+  };
+  request?.once?.("aborted", abort);
+  response?.once?.("close", close);
+  return {
+    signal: controller.signal,
+    cleanup() {
+      request?.off?.("aborted", abort);
+      response?.off?.("close", close);
+    },
+  };
 }
 
 async function readJsonBody(request) {
@@ -363,7 +390,7 @@ function buildModelTiers(provider, env) {
   if (provider === "deepseek") {
     return [
       { id: "flash", label: "Flash", model: env.DEEPSEEK_FLASH_MODEL || env.DEEPSEEK_CARD_MODEL || env.RAG_CARD_MODEL || "deepseek-v4-flash" },
-      { id: "pro", label: "Pro", model: env.DEEPSEEK_PRO_MODEL || env.DEEPSEEK_MODEL || "deepseek-v4-flash" },
+      { id: "pro", label: "Pro", model: env.DEEPSEEK_PRO_MODEL || env.DEEPSEEK_MODEL || "deepseek-v4-pro" },
     ];
   }
   if (provider === "gemini") {

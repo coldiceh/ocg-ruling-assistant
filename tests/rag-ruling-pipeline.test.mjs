@@ -5,7 +5,7 @@ import { createLocalCardDataProvider } from "../backend/cardDataProvider.mjs";
 import { loadRagData, retrieveRagEvidence } from "../backend/ragEvidenceRetriever.mjs";
 import { buildRagRulingPromptBundle } from "../backend/ragRulingPrompt.mjs";
 import { callCardNameExtractionModel, callRagModel, callRulebookGroundingModel, callRuleQueryExtractionModel, estimateDeepSeekCostCny, getRagBudgetStatus, resetRagBudget, resolveRagProvider } from "../backend/ragModelClient.mjs";
-import { answerRagRulingQuestion } from "../backend/ragRulingPipeline.mjs";
+import { answerRagRulingQuestion, buildCardSemanticFacts } from "../backend/ragRulingPipeline.mjs";
 import { analyzeEffectStateTransition } from "../backend/effectStateReasoner.mjs";
 
 const cards = [
@@ -75,6 +75,103 @@ const qaRecords = [
     cardIds: ["100"],
   },
 ];
+
+test("normalized lingering restriction facts reach both final prompts without card-name branches", () => {
+  const genericCard = {
+    id: "generic-duration-card",
+    name: "匿名期限效果卡",
+    cardType: "monster",
+    effectText: "①：可以发动。将1只怪兽特殊召唤。只要这个效果特殊召唤的怪兽以表侧表示存在于自己场上，自己从额外牌组仅可特殊召唤“测试”怪兽。",
+  };
+  const facts = buildCardSemanticFacts([genericCard]);
+  const lingering = facts.find((fact) => fact.operation?.type === "create_lingering_restriction");
+  assert.ok(lingering);
+  assert.equal(lingering.operation.expiration.mode, "irreversible_on_first_condition_failure");
+  assert.equal(lingering.operation.expiration.reactivates, false);
+
+  const dedupedFacts = buildCardSemanticFacts([
+    genericCard,
+    {
+      name: genericCard.name,
+      cardType: genericCard.cardType,
+      effectText: genericCard.effectText,
+      sourceEvidenceIds: ["user-card-text-anonymous-lifecycle"],
+    },
+  ]);
+  const dedupedLingering = dedupedFacts.filter(
+    (fact) => fact.operation?.type === "create_lingering_restriction",
+  );
+  assert.equal(dedupedLingering.length, 1);
+  assert.deepEqual(
+    dedupedLingering[0].sourceEvidenceIds,
+    ["user-card-text-anonymous-lifecycle"],
+  );
+
+  const userOnlyFact = buildCardSemanticFacts([{
+    name: genericCard.name,
+    cardType: genericCard.cardType,
+    effectText: genericCard.effectText,
+    sourceEvidenceIds: ["user-card-text-only"],
+  }]).find((fact) => fact.operation?.type === "create_lingering_restriction");
+  assert.ok(userOnlyFact);
+  assert.equal(userOnlyFact.cardId, "");
+  assert.deepEqual(userOnlyFact.sourceEvidenceIds, ["user-card-text-only"]);
+
+  const bundle = buildRagRulingPromptBundle({
+    userQuery: "控制权改变后，已经适用的期限效果是否会自动恢复？",
+    cardResolution: { resolvedCards: [genericCard], unresolvedMentions: [], ambiguousMentions: [] },
+    evidence: {
+      cardTexts: [{ id: "card-text-generic-duration-card", type: "card_text", title: "匿名卡文", text: genericCard.effectText }],
+      officialQaDirectCandidates: [],
+      officialQaRelated: [],
+      faqRelated: [],
+      rawRelatedEvidence: [],
+      retrievalWarnings: [],
+      cardSemanticFacts: facts,
+    },
+    env: { RAG_RECOVERY_PROMPT_CHARS: "12000" },
+  });
+  assert.match(bundle.prompt, /irreversible_on_first_condition_failure/u);
+  assert.match(bundle.prompt, /reactivates/u);
+  assert.match(bundle.recoveryPrompt, /irreversible_on_first_condition_failure/u);
+  assert.match(bundle.recoveryPrompt, /条件后来恢复不会自动重启/u);
+});
+
+test("user-provided card text reaches the final model as generic lifecycle facts", async () => {
+  let finalPrompt = "";
+  await answerRagRulingQuestion({
+    question: [
+      "【匿名期限效果卡】",
+      "①：可以发动。将1只怪兽特殊召唤。只要这个效果特殊召唤的怪兽以表侧表示存在于自己场上，自己从额外牌组仅可特殊召唤‘示例’怪兽。",
+      "那只怪兽的控制权改变后，限制以后会自动恢复吗？",
+    ].join("\n"),
+    cards: [],
+    records: [],
+    qaRecords: [],
+    env: { RAG_MODEL_PROVIDER: "mock", RAG_AUTO_ENGINE_SIMULATION: "false" },
+    fetchImpl: async () => {
+      throw new Error("anonymous user text must not trigger a remote card-name lookup");
+    },
+    modelInvoker: async ({ prompt }) => {
+      finalPrompt = prompt;
+      return JSON.stringify({
+        answerLevel: "rule_analysis",
+        shortAnswer: "仅用于验证通用语义事实进入最终提示。",
+        reasoning: ["依据用户提供的匿名卡文分析。"],
+        usedCards: ["匿名期限效果卡"],
+        usedEvidence: [],
+        missingInfo: [],
+        riskFlags: [],
+        confidenceSelfEstimate: "medium",
+      });
+    },
+  });
+  assert.match(finalPrompt, /create_lingering_restriction/u);
+  assert.match(finalPrompt, /irreversible_on_first_condition_failure/u);
+  assert.match(finalPrompt, /"reactivates": false/u);
+  assert.match(finalPrompt, /user-card-text-/u);
+  assert.doesNotMatch(finalPrompt, /"cardId": "user-card-text-/u);
+});
 
 test("rag_pipeline_returns_answer_with_mock_model", async () => {
   const answer = await answerRagRulingQuestion({
@@ -380,6 +477,33 @@ test("rag prompts require activation conclusions to include downstream resolutio
 test("quoted_mentions_all_preserved", () => {
   const mentions = extractQuotedMentions("【A卡】《B卡》「C卡」『D卡』[E卡]“F卡”\"G卡\"'H卡'");
   assert.deepEqual(mentions, ["A卡", "B卡", "C卡", "D卡", "E卡", "F卡", "G卡", "H卡"]);
+});
+
+test("temporal follow-up phrases are not treated as unquoted card names", () => {
+  assert.deepEqual(
+    extractUnquotedCardMentionCandidates("原效果被改写。之后能否发动④效果？"),
+    [],
+  );
+  assert.deepEqual(
+    extractUnquotedCardMentionCandidates("控制权改变，随后是否还可以发动效果？"),
+    [],
+  );
+  assert.deepEqual(
+    extractUnquotedCardMentionCandidates("原效果处理。那之后能否发动④效果？"),
+    [],
+  );
+  assert.deepEqual(
+    extractUnquotedCardMentionCandidates("将1只怪兽特殊召唤。"),
+    [],
+  );
+  assert.deepEqual(
+    extractUnquotedCardMentionCandidates("将2只怪兽特殊召唤。"),
+    [],
+  );
+  assert.deepEqual(
+    extractUnquotedCardMentionCandidates("将3张魔法卡送去墓地。"),
+    [],
+  );
 });
 
 test("quoted effect and restriction clauses are not treated as card names", () => {
@@ -851,7 +975,7 @@ test("rag_does_not_require_database_match_when_user_text_present", async () => {
   assert.ok(!answer.riskFlags.includes("card_name_not_resolved"));
 });
 
-test("rag_pipeline_does_not_require_effect_template", async () => {
+test("rag pipeline preserves low confidence when no effect template proves the answer", async () => {
   const answer = await answerRagRulingQuestion({
     question: "「测试龙」可以发动①效果吗？",
     cards,
@@ -869,8 +993,8 @@ test("rag_pipeline_does_not_require_effect_template", async () => {
     }),
   });
   assert.notEqual(answer.shortAnswer, "insufficient");
-  assert.equal(answer.answerLevel, "rule_analysis");
-  assert.ok(answer.riskFlags.includes("low_confidence_upgraded_to_rule_analysis_with_card_text"));
+  assert.equal(answer.answerLevel, "low_confidence_analysis");
+  assert.ok(!answer.riskFlags.includes("low_confidence_upgraded_to_rule_analysis_with_card_text"));
 });
 
 test("rag_pipeline_includes_card_text_when_card_resolved", async () => {
@@ -1419,7 +1543,7 @@ test("empty final-model output degrades safely instead of using a prepared answe
   });
 
   assert.doesNotMatch(answer.shortAnswer, /可以发动/u);
-  assert.match(answer.shortAnswer, /未确认分析|没有可用的模型 JSON/u);
+  assert.match(answer.shortAnswer, /资料不足|没有可用的模型 JSON/u);
   assert.ok(!answer.riskFlags.includes("final_model_failed_using_grounded_operation_analysis"));
 });
 
@@ -1518,7 +1642,7 @@ test("rulebook_context_snippet_enters_rag_context", async () => {
   assert.match(bundle.prompt, /相同攻击次数的效果不会叠加/u);
 });
 
-test("card_text_without_official_qa_can_answer_rule_analysis", async () => {
+test("card text cannot override a model's explicit needs-more-info result", async () => {
   const answer = await answerRagRulingQuestion({
     question: "「测试龙」在没有官方直接裁定时怎么处理？",
     cards,
@@ -1535,9 +1659,9 @@ test("card_text_without_official_qa_can_answer_rule_analysis", async () => {
       confidenceSelfEstimate: "low",
     }),
   });
-  assert.equal(answer.answerLevel, "rule_analysis");
-  assert.match(answer.shortAnswer, /未命中官方直接|未确认分析/u);
-  assert.ok(answer.riskFlags.includes("needs_more_info_upgraded_to_rule_analysis_with_card_text"));
+  assert.equal(answer.answerLevel, "needs_more_info");
+  assert.match(answer.shortAnswer, /资料不足/u);
+  assert.ok(!answer.riskFlags.includes("needs_more_info_upgraded_to_rule_analysis_with_card_text"));
   assert.ok(answer.usedEvidence.some((item) => item.type === "card_text"));
 });
 
@@ -1569,7 +1693,7 @@ test("rag_pipeline_raw_query_fallback", async () => {
   assert.ok(answer.debug.retrievalWarnings.includes("card_name_not_resolved_raw_query_fallback_used"));
 });
 
-test("partial_related_evidence_only_stays_low_confidence", async () => {
+test("partial related evidence cannot override a model's explicit needs-more-info result", async () => {
   const answer = await answerRagRulingQuestion({
     question: "对象离场时连锁处理中怎么处理？",
     cards: [],
@@ -1586,8 +1710,8 @@ test("partial_related_evidence_only_stays_low_confidence", async () => {
       confidenceSelfEstimate: "low",
     }),
   });
-  assert.equal(answer.answerLevel, "low_confidence_analysis");
-  assert.ok(answer.riskFlags.includes("needs_more_info_downgraded_to_low_confidence_with_evidence"));
+  assert.equal(answer.answerLevel, "needs_more_info");
+  assert.ok(!answer.riskFlags.includes("needs_more_info_downgraded_to_low_confidence_with_evidence"));
 });
 
 test("no_evidence_still_needs_more_info", async () => {
@@ -1641,7 +1765,7 @@ test("model_json_parse_failure_degrades_safely", async () => {
     qaRecords,
     modelInvoker: async () => "not JSON",
   });
-  assert.equal(answer.answerLevel, "rule_analysis");
+  assert.equal(answer.answerLevel, "low_confidence_analysis");
   assert.match(answer.shortAnswer, /not JSON/u);
   assert.ok(answer.riskFlags.some((item) => item.startsWith("model_json_parse_failed")));
 });
@@ -1736,6 +1860,88 @@ test("deepseek_empty_truncated_output_retries_with_compact_prompt", async () => 
   assert.equal("reasoningContent" in result.generationAttempts[0], false);
 });
 
+test("deepseek_compact_recovery_accepts_minimal_normalizable_json", async () => {
+  const calls = [];
+  const result = await callRagModel({
+    prompt: "原始长提示词",
+    recoveryPrompt: "紧凑恢复提示词",
+    env: {
+      MODEL_PROVIDER: "deepseek",
+      DEEPSEEK_API_KEY: "test-deepseek-key",
+      RAG_MAX_OUTPUT_TOKENS: "500",
+      API_DAILY_BUDGET_CNY: "10",
+    },
+    fetchImpl: async (_url, options) => {
+      calls.push(JSON.parse(options.body));
+      if (calls.length === 1) {
+        return jsonResponse({
+          choices: [{ message: { content: "" }, finish_reason: "length" }],
+          usage: { prompt_tokens: 30, completion_tokens: 500, total_tokens: 530 },
+        });
+      }
+      return jsonResponse({
+        choices: [{
+          message: {
+            content: JSON.stringify({
+              answerLevel: "rule_analysis",
+              shortAnswer: "恢复后的最小答案",
+              reasoning: "紧凑恢复仍保留了结论依据。",
+            }),
+          },
+          finish_reason: "stop",
+        }],
+        usage: { prompt_tokens: 20, completion_tokens: 40, total_tokens: 60 },
+      });
+    },
+  });
+
+  assert.equal(calls.length, 2);
+  assert.equal(result.answer.shortAnswer, "恢复后的最小答案");
+  assert.deepEqual(result.answer.reasoning, ["紧凑恢复仍保留了结论依据。"]);
+  assert.deepEqual(result.answer.usedEvidence, []);
+  assert.ok(result.warnings.includes("deepseek_compact_recovery_succeeded"));
+});
+
+test("an aborted compact recovery still records the completed primary response", async () => {
+  const now = new Date("2026-08-01T03:00:00.000Z");
+  const controller = new AbortController();
+  const env = {
+    MODEL_PROVIDER: "deepseek",
+    DEEPSEEK_API_KEY: "test-deepseek-key",
+    API_DAILY_BUDGET_CNY: "10",
+    API_BUDGET_TIMEZONE: "UTC",
+    DEEPSEEK_INPUT_CNY_PER_MTOK: "1",
+    DEEPSEEK_OUTPUT_CNY_PER_MTOK: "2",
+  };
+  await resetRagBudget({ env, now });
+  let callCount = 0;
+  const result = await callRagModel({
+    prompt: "primary paid response",
+    recoveryPrompt: "aborted recovery",
+    env,
+    now,
+    signal: controller.signal,
+    fetchImpl: async (_url, options) => {
+      callCount += 1;
+      assert.equal(options.signal, controller.signal);
+      if (callCount === 1) {
+        controller.abort(new DOMException("client disconnected", "AbortError"));
+        return jsonResponse({
+          choices: [{ message: { content: "" }, finish_reason: "length" }],
+          usage: { prompt_tokens: 1_000, completion_tokens: 500 },
+        });
+      }
+      throw controller.signal.reason;
+    },
+  });
+  const status = await getRagBudgetStatus({ env, now });
+
+  assert.equal(callCount, 2);
+  assert.ok(result.warnings.some((warning) => warning.startsWith("deepseek_compact_recovery_call_failed:")));
+  assert.equal(result.estimatedCostCny, 0.002);
+  assert.equal(status.spentTodayCny, 0.002);
+});
+
 test("deepseek_primary_and_compact_recovery_both_empty_fail_safely", async () => {
   const calls = [];
   const result = await callRagModel({
@@ -1810,6 +2016,7 @@ test("deepseek_provider_builds_request", async () => {
       MODEL_PROVIDER: "deepseek",
       DEEPSEEK_API_KEY: "test-deepseek-key",
       DEEPSEEK_BASE_URL: "https://api.deepseek.com",
+      RAG_MODEL_TIER: "flash",
       DEEPSEEK_FLASH_MODEL: "deepseek-test",
       RAG_MAX_OUTPUT_TOKENS: "321",
       API_DAILY_BUDGET_CNY: "10",
@@ -1830,15 +2037,19 @@ test("deepseek_provider_builds_request", async () => {
   assert.deepEqual(calls[0].body.response_format, { type: "json_object" });
   assert.equal(calls[0].body.max_tokens, 321);
   assert.equal(calls[0].body.stream, false);
+  assert.deepEqual(calls[0].body.thinking, { type: "enabled" });
+  assert.equal(calls[0].body.reasoning_effort, "high");
+  assert.equal(Object.hasOwn(calls[0].body, "temperature"), false);
 });
 
-test("deepseek_final_generation_is_fixed_to_flash_model", async () => {
+test("deepseek_final_generation_uses_configured_primary_model", async () => {
   const calls = [];
   await callRagModel({
     prompt: "输出 JSON",
     env: {
       MODEL_PROVIDER: "deepseek",
       DEEPSEEK_API_KEY: "test-deepseek-key",
+      DEEPSEEK_MODEL: "deepseek-pro-tier",
       DEEPSEEK_FLASH_MODEL: "deepseek-flash-tier",
       API_DAILY_BUDGET_CNY: "10",
     },
@@ -1847,9 +2058,136 @@ test("deepseek_final_generation_is_fixed_to_flash_model", async () => {
       return jsonResponse({ choices: [{ message: { content: JSON.stringify(modelJson("Flash OK")) } }], usage: {} });
     },
   });
+  assert.equal(calls[0].model, "deepseek-pro-tier");
+  assert.equal(calls[0].max_tokens, 32000);
+  assert.deepEqual(calls[0].thinking, { type: "enabled" });
+  assert.equal(calls[0].reasoning_effort, "high");
+  assert.equal(Object.hasOwn(calls[0], "temperature"), false);
+});
+
+test("deepseek_explicit_flash_tier_uses_flash_model_and_budget", async () => {
+  const calls = [];
+  await callRagModel({
+    prompt: "输出 JSON",
+    env: {
+      MODEL_PROVIDER: "deepseek",
+      RAG_MODEL_TIER: "flash",
+      DEEPSEEK_API_KEY: "test-deepseek-key",
+      DEEPSEEK_MODEL: "deepseek-pro-tier",
+      DEEPSEEK_FLASH_MODEL: "deepseek-flash-tier",
+      API_DAILY_BUDGET_CNY: "10",
+    },
+    fetchImpl: async (_url, options) => {
+      calls.push(JSON.parse(options.body));
+      return jsonResponse({ choices: [{ message: { content: JSON.stringify(modelJson("Flash OK")) } }], usage: {} });
+    },
+  });
   assert.equal(calls[0].model, "deepseek-flash-tier");
-  assert.equal(calls[0].max_tokens, 3600);
+  assert.equal(calls[0].max_tokens, 32000);
+  assert.deepEqual(calls[0].thinking, { type: "enabled" });
+});
+
+test("deepseek flash tier never falls through to a configured Pro model", async () => {
+  let invokedModel = "";
+  await callRagModel({
+    prompt: "输出 JSON",
+    env: {
+      MODEL_PROVIDER: "deepseek",
+      RAG_MODEL_TIER: "flash",
+      DEEPSEEK_API_KEY: "test-deepseek-key",
+      DEEPSEEK_MODEL: "deepseek-v4-pro",
+    },
+    modelInvoker: async ({ modelName }) => {
+      invokedModel = modelName;
+      return modelJson("Flash selection is isolated");
+    },
+  });
+  assert.equal(invokedModel, "deepseek-v4-flash");
+});
+
+test("deepseek_flash_non-thinking_mode uses a smaller answer budget and no reasoning effort", async () => {
+  const calls = [];
+  const result = await callRagModel({
+    prompt: "输出 JSON",
+    thinkingMode: "disabled",
+    reasoningEffort: "max",
+    env: {
+      MODEL_PROVIDER: "deepseek",
+      RAG_MODEL_TIER: "flash",
+      DEEPSEEK_API_KEY: "test-deepseek-key",
+      DEEPSEEK_FLASH_MODEL: "deepseek-v4-flash",
+      API_DAILY_BUDGET_CNY: "10",
+    },
+    fetchImpl: async (_url, options) => {
+      calls.push(JSON.parse(options.body));
+      return jsonResponse({
+        id: "request-1",
+        model: "deepseek-v4-flash",
+        system_fingerprint: "fp-test",
+        choices: [{ message: { content: JSON.stringify(modelJson("Flash no-think OK")) }, finish_reason: "stop" }],
+        usage: {
+          prompt_tokens: 20,
+          completion_tokens: 30,
+          total_tokens: 50,
+          completion_tokens_details: { reasoning_tokens: 0 },
+        },
+      });
+    },
+  });
+  assert.deepEqual(calls[0].thinking, { type: "disabled" });
+  assert.equal(calls[0].max_tokens, 8000);
   assert.equal(calls[0].temperature, 0);
+  assert.equal(Object.hasOwn(calls[0], "reasoning_effort"), false);
+  assert.equal(result.generationConfig.thinkingMode, "disabled");
+  assert.equal(result.generationAttempts[0].requestModel, "deepseek-v4-flash");
+  assert.equal(result.generationAttempts[0].responseModel, "deepseek-v4-flash");
+  assert.equal(result.generationAttempts[0].systemFingerprint, "fp-test");
+  assert.equal(result.generationAttempts[0].usage.reasoning_tokens, 0);
+});
+
+test("deepseek thinking mode accepts max effort and records reasoning usage without exposing content", async () => {
+  const result = await callRagModel({
+    prompt: "输出 JSON",
+    thinkingMode: "enabled",
+    reasoningEffort: "max",
+    env: {
+      MODEL_PROVIDER: "deepseek",
+      RAG_MODEL_TIER: "pro",
+      DEEPSEEK_API_KEY: "test-deepseek-key",
+      DEEPSEEK_PRO_MODEL: "deepseek-v4-pro",
+      API_DAILY_BUDGET_CNY: "10",
+    },
+    fetchImpl: async (_url, options) => {
+      const body = JSON.parse(options.body);
+      assert.deepEqual(body.thinking, { type: "enabled" });
+      assert.equal(body.reasoning_effort, "max");
+      assert.equal(body.max_tokens, 32000);
+      assert.equal(Object.hasOwn(body, "temperature"), false);
+      return jsonResponse({
+        id: "request-2",
+        model: "deepseek-v4-pro",
+        choices: [{
+          message: {
+            reasoning_content: "private reasoning that must not enter debug",
+            content: JSON.stringify(modelJson("Pro think OK")),
+          },
+          finish_reason: "stop",
+        }],
+        usage: {
+          prompt_tokens: 40,
+          completion_tokens: 80,
+          total_tokens: 120,
+          completion_tokens_details: { reasoning_tokens: 50 },
+        },
+      });
+    },
+  });
+  assert.equal(result.generationConfig.thinkingMode, "enabled");
+  assert.equal(result.generationConfig.reasoningEffort, "max");
+  assert.equal(result.generationAttempts[0].reasoningContentPresent, true);
+  assert.equal(result.generationAttempts[0].reasoningContentChars > 0, true);
+  assert.equal(result.generationAttempts[0].usage.reasoning_tokens, 50);
+  assert.equal("reasoningContent" in result.generationAttempts[0], false);
 });
 
 test("model_reasoning_string_is_preserved", async () => {
@@ -1957,6 +2295,221 @@ test("budget_soft_limit_blocks_call_when_exceeded", async () => {
   assert.equal(result.budgetStatus.budgetStorage, "memory");
 });
 
+test("public card-name and rule-query helpers cannot bypass the shared daily budget", async () => {
+  const now = new Date("2026-08-01T00:00:00.000Z");
+  const env = {
+    MODEL_PROVIDER: "deepseek",
+    RAG_CARD_MODEL_PROVIDER: "deepseek",
+    RAG_RULE_MODEL_PROVIDER: "deepseek",
+    DEEPSEEK_API_KEY: "test-deepseek-key",
+    API_DAILY_BUDGET_CNY: "0.000001",
+    API_BUDGET_TIMEZONE: "UTC",
+  };
+  await resetRagBudget({ env, now });
+  let fetchCount = 0;
+  const fetchImpl = async () => {
+    fetchCount += 1;
+    return jsonResponse({});
+  };
+
+  const cardResult = await callCardNameExtractionModel({
+    userQuery: "预算拦截卡名辅助模型-20260801",
+    env,
+    fetchImpl,
+    now,
+  });
+  const ruleResult = await callRuleQueryExtractionModel({
+    userQuery: "预算拦截规则词辅助模型-20260801",
+    env,
+    fetchImpl,
+    now,
+  });
+
+  assert.equal(fetchCount, 0);
+  assert.equal(cardResult.budgetStatus.limitEnforced, true);
+  assert.equal(ruleResult.budgetStatus.limitEnforced, true);
+  assert.ok(cardResult.warnings.includes("api_daily_budget_exceeded_card_name_model_skipped"));
+  assert.ok(ruleResult.warnings.includes("api_daily_budget_exceeded_rule_query_model_skipped"));
+});
+
+test("public extraction helpers record their paid usage in the shared budget", async () => {
+  const now = new Date("2026-08-01T01:00:00.000Z");
+  const env = {
+    MODEL_PROVIDER: "deepseek",
+    RAG_CARD_MODEL_PROVIDER: "deepseek",
+    RAG_RULE_MODEL_PROVIDER: "deepseek",
+    DEEPSEEK_API_KEY: "test-deepseek-key",
+    API_DAILY_BUDGET_CNY: "10",
+    API_BUDGET_TIMEZONE: "UTC",
+    DEEPSEEK_INPUT_CNY_PER_MTOK: "1",
+    DEEPSEEK_OUTPUT_CNY_PER_MTOK: "2",
+  };
+  await resetRagBudget({ env, now });
+  let callCount = 0;
+  const fetchImpl = async () => {
+    callCount += 1;
+    const content = callCount === 1
+      ? JSON.stringify({ cardNames: [{ name: "测试龙", originalText: "测试龙" }] })
+      : JSON.stringify({ ruleQueries: [{ query: "发动条件" }] });
+    return jsonResponse({
+      choices: [{ finish_reason: "stop", message: { content } }],
+      usage: { prompt_tokens: 1_000, completion_tokens: 500 },
+    });
+  };
+
+  const cardResult = await callCardNameExtractionModel({
+    userQuery: "辅助模型计费卡名-20260801",
+    env,
+    fetchImpl,
+    now,
+  });
+  const ruleResult = await callRuleQueryExtractionModel({
+    userQuery: "辅助模型计费规则-20260801",
+    env,
+    fetchImpl,
+    now,
+  });
+  const status = await getRagBudgetStatus({ env, now });
+
+  assert.equal(callCount, 2);
+  assert.equal(cardResult.estimatedCostCny, 0.002);
+  assert.equal(ruleResult.estimatedCostCny, 0.002);
+  assert.equal(status.spentTodayCny, 0.004);
+});
+
+test("pipeline cost summary includes both auxiliary extractors on the caller's budget day", async () => {
+  const now = new Date("2032-03-04T05:06:07.000Z");
+  const env = {
+    MODEL_PROVIDER: "deepseek",
+    RAG_MODEL_PROVIDER: "deepseek",
+    RAG_CARD_MODEL_PROVIDER: "deepseek",
+    RAG_RULE_MODEL_PROVIDER: "deepseek",
+    RAG_RULEBOOK_MODEL_PROVIDER: "mock",
+    RAG_LIVE_OFFICIAL_QA_ENABLED: "false",
+    DEEPSEEK_API_KEY: "test-deepseek-key",
+    API_DAILY_BUDGET_CNY: "10",
+    API_BUDGET_TIMEZONE: "UTC",
+    DEEPSEEK_INPUT_CNY_PER_MTOK: "1",
+    DEEPSEEK_OUTPUT_CNY_PER_MTOK: "2",
+  };
+  await resetRagBudget({ env, now });
+
+  const result = await answerRagRulingQuestion({
+    question: "「测试龙」的效果可以发动吗？",
+    cards,
+    records: [],
+    qaRecords: [],
+    env,
+    now,
+    cardModelInvoker: async () => ({
+      cardNames: [],
+      usage: { prompt_tokens: 1_000, completion_tokens: 500 },
+    }),
+    ruleModelInvoker: async () => ({
+      ruleQueries: [],
+      usage: { prompt_tokens: 1_000, completion_tokens: 500 },
+    }),
+    modelInvoker: async () => JSON.stringify(modelJson("需要结合完整局面判断。")),
+  });
+  const status = await getRagBudgetStatus({ env, now });
+
+  assert.equal(result.debug.cardNameModelCostCny, 0.002);
+  assert.equal(result.debug.ruleQueryModelCostCny, 0.002);
+  assert.equal(result.debug.estimatedCostCny, 0.004);
+  assert.equal(status.spentTodayCny, 0.004);
+});
+
+test("rulebook response parsing failure retains the cost of the completed remote call", async () => {
+  const now = new Date("2026-08-01T02:00:00.000Z");
+  const env = {
+    MODEL_PROVIDER: "deepseek",
+    RAG_RULEBOOK_MODEL_PROVIDER: "deepseek",
+    DEEPSEEK_API_KEY: "test-deepseek-key",
+    API_DAILY_BUDGET_CNY: "10",
+    API_BUDGET_TIMEZONE: "UTC",
+    DEEPSEEK_INPUT_CNY_PER_MTOK: "1",
+    DEEPSEEK_OUTPUT_CNY_PER_MTOK: "2",
+    RAG_RULEBOOK_FOCUSED_REPAIR_ENABLED: "false",
+  };
+  await resetRagBudget({ env, now });
+  const result = await callRulebookGroundingModel({
+    userQuery: "远端返回后解析失败的预算回归-20260801",
+    ruleEvidence: [{
+      id: "budget-rulebook-invalid-json-20260801",
+      title: "通用规则资料",
+      text: "效果发动后，按照连锁顺序处理。",
+    }],
+    env,
+    now,
+    fetchImpl: async () => jsonResponse({
+      choices: [{ finish_reason: "stop", message: { content: "not-json" } }],
+      usage: { prompt_tokens: 1_000, completion_tokens: 500 },
+    }),
+  });
+  const status = await getRagBudgetStatus({ env, now });
+
+  assert.ok(result.warnings.includes("evidence_grounding_invalid_json"));
+  assert.equal(result.estimatedCostCny, 0.002);
+  assert.equal(status.spentTodayCny, 0.002);
+});
+
+test("forced dry-run skips injected model invokers and live invokers receive the caller signal", async () => {
+  let dryRunCalls = 0;
+  const dryRunResult = await callRagModel({
+    prompt: "dry-run must not invoke",
+    dryRun: true,
+    env: { MODEL_PROVIDER: "mock" },
+    modelInvoker: async () => {
+      dryRunCalls += 1;
+      return JSON.stringify(modelJson("不应调用"));
+    },
+  });
+  assert.equal(dryRunCalls, 0);
+  assert.equal(dryRunResult.dryRun, true);
+
+  const controller = new AbortController();
+  let receivedSignal = null;
+  await callRagModel({
+    prompt: "signal passthrough",
+    env: { MODEL_PROVIDER: "mock" },
+    signal: controller.signal,
+    modelInvoker: async (request) => {
+      receivedSignal = request.signal;
+      return JSON.stringify(modelJson("收到信号"));
+    },
+  });
+  assert.equal(receivedSignal, controller.signal);
+});
+
+test("auxiliary model dry-runs skip injected invokers and forward signals when enabled", async () => {
+  const ruleEvidence = [{ id: "aux-signal-rule", title: "规则资料", text: "效果按照连锁顺序处理。" }];
+  let dryRunCalls = 0;
+  const neverInvoke = async () => {
+    dryRunCalls += 1;
+    return "{}";
+  };
+  await Promise.all([
+    callCardNameExtractionModel({ userQuery: "辅助卡名 dry-run", dryRun: true, modelInvoker: neverInvoke, env: { MODEL_PROVIDER: "mock" } }),
+    callRuleQueryExtractionModel({ userQuery: "辅助规则 dry-run", dryRun: true, modelInvoker: neverInvoke, env: { MODEL_PROVIDER: "mock" } }),
+    callRulebookGroundingModel({ userQuery: "辅助规则书 dry-run", ruleEvidence, dryRun: true, modelInvoker: neverInvoke, env: { MODEL_PROVIDER: "mock" } }),
+  ]);
+  assert.equal(dryRunCalls, 0);
+
+  const controller = new AbortController();
+  const receivedSignals = [];
+  const captureSignal = async (request) => {
+    receivedSignals.push(request.signal);
+    if (request.task === "card_name_extraction") return JSON.stringify({ cardNames: [] });
+    if (request.task === "rule_query_extraction") return JSON.stringify({ ruleQueries: [] });
+    return JSON.stringify({ operationChecks: [], constraintReviews: [] });
+  };
+  await callCardNameExtractionModel({ userQuery: "辅助卡名 signal", signal: controller.signal, modelInvoker: captureSignal, env: { MODEL_PROVIDER: "mock" } });
+  await callRuleQueryExtractionModel({ userQuery: "辅助规则 signal", signal: controller.signal, modelInvoker: captureSignal, env: { MODEL_PROVIDER: "mock" } });
+  await callRulebookGroundingModel({ userQuery: "辅助规则书 signal", ruleEvidence, signal: controller.signal, modelInvoker: captureSignal, env: { MODEL_PROVIDER: "mock", RAG_RULEBOOK_FOCUSED_REPAIR_ENABLED: "false" } });
+  assert.equal(receivedSignals.length, 3);
+  assert.ok(receivedSignals.every((value) => value === controller.signal));
+});
+
 test("usage_cost_estimation_deepseek", () => {
   const cost = estimateDeepSeekCostCny({
     prompt_tokens: 1000,
@@ -1964,6 +2517,7 @@ test("usage_cost_estimation_deepseek", () => {
     prompt_cache_hit_tokens: 200,
     prompt_cache_miss_tokens: 800,
   }, {
+    RAG_MODEL_TIER: "flash",
     DEEPSEEK_INPUT_CNY_PER_MTOK: "1",
     DEEPSEEK_OUTPUT_CNY_PER_MTOK: "2",
     DEEPSEEK_CACHE_HIT_INPUT_CNY_PER_MTOK: "0.02",
@@ -1976,12 +2530,29 @@ test("usage_cost_estimation_uses_flash_prices", () => {
     prompt_tokens: 1000,
     completion_tokens: 500,
   }, {
+    RAG_MODEL_TIER: "flash",
     DEEPSEEK_INPUT_CNY_PER_MTOK: "1",
     DEEPSEEK_OUTPUT_CNY_PER_MTOK: "2",
     DEEPSEEK_FLASH_INPUT_CNY_PER_MTOK: "3",
     DEEPSEEK_FLASH_OUTPUT_CNY_PER_MTOK: "4",
   });
   assert.equal(cost, 0.005);
+});
+
+test("usage_cost_estimation_uses Pro prices when the Pro tier is selected", () => {
+  const cost = estimateDeepSeekCostCny({
+    prompt_tokens: 1_000_000,
+    completion_tokens: 1_000_000,
+  }, {
+    RAG_MODEL_TIER: "pro",
+    DEEPSEEK_FLASH_INPUT_CNY_PER_MTOK: "3",
+    DEEPSEEK_FLASH_OUTPUT_CNY_PER_MTOK: "4",
+    DEEPSEEK_PRO_INPUT_CNY_PER_MTOK: "8",
+    DEEPSEEK_PRO_OUTPUT_CNY_PER_MTOK: "9",
+    DEEPSEEK_INPUT_CNY_PER_MTOK: "1",
+    DEEPSEEK_OUTPUT_CNY_PER_MTOK: "2",
+  });
+  assert.equal(cost, 17);
 });
 
 test("budget_status_can_be_reset", async () => {

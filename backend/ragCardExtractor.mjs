@@ -461,7 +461,7 @@ function cleanUnquotedMention(value) {
     .replace(/^[,，。；;、：:\s]+|[,，。；;、：:\s]+$/gu, "")
     .trim();
   text = trimGameplaySuffix(text);
-  const leadingNoise = /^(?:了|双方|雙方|我方|对方|對方|自己|自分|只有|一只|一張|一张|怪兽|怪獸|的时候|時候|此时|此時|然后|然後|如果|假设|假設|此卡|这张卡|這張卡|这个|這個|那个|那個|手卡|墓地|除外|场上|場上|场上的|場上的|选择|選擇|适用|適用|发动|發動|要将|要將|将|將|把|想要|作为|作為|被破坏|被破壞|替代|代替|降低|提升|攻击力|攻擊力|守备力|守備力|可以|能否|是否|能|吗|嗎|的)+/u;
+  const leadingNoise = /^(?:了|双方|雙方|我方|对方|對方|自己|自分|只有|一只|一張|一张|怪兽|怪獸|的时候|時候|此时|此時|那之后|那之後|之后|之後|随后|隨後|接着|接著|接下来|接下來|其后|其後|此后|此後|然后|然後|如果|假设|假設|此卡|这张卡|這張卡|这个|這個|那个|那個|手卡|墓地|除外|场上|場上|场上的|場上的|选择|選擇|适用|適用|发动|發動|要将|要將|将|將|把|想要|作为|作為|被破坏|被破壞|替代|代替|降低|提升|攻击力|攻擊力|守备力|守備力|可以|能否|是否|能|吗|嗎|的)+/u;
   const trailingNoise = /(?:的)?(?:效果|效应|效應|破坏|破壞|被破坏|被破壞|特殊召唤|特殊召喚|能|可以|吗|嗎|的时候|時候|此时|此時|选择|選擇|适用|適用|发动|發動|降低.*|提升.*|作为.*|作為.*)$/u;
   let previous = "";
   while (text && text !== previous) {
@@ -490,7 +490,7 @@ function hasCardNameSignal(value) {
 
 function looksLikeGenericCardDescription(value) {
   const text = String(value || "").normalize("NFKC").replace(/\s+/gu, "");
-  return /^(?:(?:已(?:经)?|曾(?:经)?|又|还|還|再)?(?:发动|發動|使用)?过|一[张張只隻枚])?(?:(?:通常|速攻|永续|永續|装备|裝備|场地|場地|反击|反擊|仪式|儀式|融合|同步|同调|同調|超量|连接|連接|灵摆|靈擺|效果|通常)?(?:怪兽|怪獸|魔法|陷阱)(?:卡|牌)?|魔法陷阱卡?|魔陷|卡片)$/u.test(text);
+  return /^(?:(?:已(?:经)?|曾(?:经)?|又|还|還|再)?(?:发动|發動|使用)?过|[0-9一二三四五六七八九十百]+(?:张|張|只|隻|枚|体|體))?(?:(?:通常|速攻|永续|永續|装备|裝備|场地|場地|反击|反擊|仪式|儀式|融合|同步|同调|同調|超量|连接|連接|灵摆|靈擺|效果|通常)?(?:怪兽|怪獸|魔法|陷阱)(?:卡|牌)?|魔法陷阱卡?|魔陷|卡片)(?:(?:从|從)?(?:手卡|手牌|场上|場上|卡组|卡組|牌组|牌組)?(?:特殊召唤|特殊召喚|送去墓地|送入墓地|加入手卡|加入手牌|破坏|破壞|除外|返回|放回))?$/u.test(text);
 }
 
 function hasContextualEffectCarrierSignal(value) {
@@ -507,7 +507,7 @@ function hasContextualEffectCarrierSignal(value) {
 function hasColloquialActivationSubjectSignal(value) {
   const text = String(value || "").trim();
   if (!hasContextualEffectCarrierSignal(text)) return false;
-  if (/^(?:还|還)?(?:能|可以|可否|能否|是否)$/u.test(text)) return false;
+  if (/^(?:(?:那之后|那之後|之后|之後|随后|隨後|接着|接著|接下来|接下來|其后|其後|此后|此後|然后|然後)\s*)?(?:还|還)?(?:能|可以|可否|能否|是否)?$/u.test(text)) return false;
   if (/^(?:通常召唤|通常召喚|特殊召唤|特殊召喚|融合召唤|融合召喚|同步召唤|同步召喚|超量召唤|超量召喚|连接召唤|連接召喚|灵摆召唤|靈擺召喚|效果处理|效果處理|连锁|連鎖|攻击宣言|攻擊宣言)$/u.test(text)) return false;
   if (/(?:发出来|發出來|发动|發動|起跳)$/u.test(text)) return false;
   return true;
@@ -1322,7 +1322,7 @@ function collectQuotedMentionEntries(query) {
         mention,
         index,
         end,
-        role: classifyQuotedMentionRole(text, mention, end),
+        role: classifyQuotedMentionRole(text, mention, index, end),
       });
     }
   }
@@ -1341,8 +1341,18 @@ function collectQuotedMentionEntries(query) {
   return result;
 }
 
-function classifyQuotedMentionRole(text, mention, end) {
+function classifyQuotedMentionRole(text, mention, index, end) {
+  const prefix = String(text || "").slice(Math.max(0, index - 32), index).normalize("NFKC");
   const suffix = String(text || "").slice(end, end + 48).normalize("NFKC");
+
+  // Quotation marks are also used to define the meaning of a term in the
+  // question itself. Requiring both a metalinguistic prefix and an
+  // interpretation suffix prevents those terms from becoming fake card-name
+  // failures without weakening unresolved handling for actual quoted cards.
+  if (/(?:本题|本問|本问|问题中|問題中|这里|這裡|此处|此處)(?:所说|所說|所谓|所謂|的)?\s*$/u.test(prefix)
+      && /^\s*(?:按|应按|應按|是指|指的是|表示|意味着|意味著|定义为|定義為|理解为|理解為)/u.test(suffix)) {
+    return "metalinguistic_term";
+  }
 
   if (/^\s*(?:として扱|として使用|としてカード名を扱|视为|視為|被视为|被視為)/iu.test(suffix)) {
     return "dynamic_card_name";

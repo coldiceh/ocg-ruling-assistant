@@ -86,7 +86,7 @@ test("real ruling question stays structurally safe through the complete local pi
   assert.equal(questions.length, 4);
   assert.deepEqual(questions.map((item) => [item.id, item.type, item.card]), [
     ["q1", "temporary_banish", "完美世界-卡通世界"],
-    ["q2", "send_to_gy", "referenced_toon_monster"],
+    ["q2", "send_to_gy", "referenced_monster"],
     ["q3", "activation_location", "青眼暴君龙"],
     ["q4", "location_change", "青眼暴君龙"],
   ]);

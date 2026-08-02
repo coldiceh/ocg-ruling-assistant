@@ -61,7 +61,7 @@ test("legacy state-transition hint cannot issue a production verdict", async () 
   assert.equal(answer.usedEvidence.some((item) => item.id === "faq-for-other-field-card"), false);
 });
 
-test("legacy preflight cannot skip either auxiliary extraction model", async () => {
+test("legacy preflight cannot skip either auxiliary extraction model in an injected mock run", async () => {
   let cardNameModelCalls = 0;
   let ruleQueryModelCalls = 0;
   const answer = await answerRagRulingQuestion({
@@ -87,8 +87,8 @@ test("legacy preflight cannot skip either auxiliary extraction model", async () 
     }],
     records: [],
     qaRecords: [],
-    env: localEnv,
-    dryRun: true,
+    env: { ...localEnv, RAG_DRY_RUN: "0" },
+    dryRun: false,
     cardModelInvoker: async () => {
       cardNameModelCalls += 1;
       return JSON.stringify({ cardNames: [] });
@@ -106,7 +106,7 @@ test("legacy preflight cannot skip either auxiliary extraction model", async () 
   assert.equal(answer.debug.deterministicDecision, null);
 });
 
-test("incomplete deterministic preflight preserves auxiliary extraction models", async () => {
+test("incomplete deterministic preflight preserves auxiliary extraction models in an injected mock run", async () => {
   let cardNameModelCalls = 0;
   let ruleQueryModelCalls = 0;
   const answer = await answerRagRulingQuestion({
@@ -114,8 +114,8 @@ test("incomplete deterministic preflight preserves auxiliary extraction models",
     cards: [],
     records: [],
     qaRecords: [],
-    env: localEnv,
-    dryRun: true,
+    env: { ...localEnv, RAG_DRY_RUN: "0" },
+    dryRun: false,
     fetchImpl: async () => new Response(JSON.stringify({ result: [], next: 0 }), {
       status: 200,
       headers: { "content-type": "application/json" },
@@ -178,8 +178,8 @@ test("a public-hand wording plus an untyped note cannot block before the final m
       text: "自己的手牌已因其他卡的效果持续公开时，不能发动需要把自己的手牌给对方观看的效果。",
     }],
     qaRecords: [],
-    env: localEnv,
-    dryRun: true,
+    env: { ...localEnv, RAG_DRY_RUN: "0" },
+    dryRun: false,
   });
 
   assert.match(answer.shortAnswer, /未确认分析/u);

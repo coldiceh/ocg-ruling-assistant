@@ -151,14 +151,40 @@ export function mockPublicProofVerifier({ certificate, queryResult, capabilities
   };
 }
 
+export function mockScenarioDraftCompletenessVerifier({ draftSha256, scenarioSha256, questionSha256 }) {
+  return {
+    valid: true,
+    verifierId: "mock-scenario-draft-completeness-verifier",
+    verifierVersion: "mock-scenario-draft-completeness/v1",
+    draftSha256,
+    scenarioSha256,
+    questionSha256,
+  };
+}
+
 export function materializeFixture(fixture) {
   const draft = structuredClone(fixture.draft);
+  const resolvedCards = structuredClone(fixture.resolvedCards);
   draft.question = { text: fixture.question };
+  for (const instance of draft.cardInstances || []) {
+    const card = resolvedCards.find((candidate) => String(candidate?.cardId ?? candidate?.id) === String(instance?.cardId));
+    const surface = unwrapFixtureCardMention(instance?.mention);
+    if (!card || !surface) continue;
+    card.input ||= surface;
+    card.name ||= surface;
+    card.aliases = [...new Set([...(Array.isArray(card.aliases) ? card.aliases : []), surface])];
+  }
   for (const collection of [draft.cardInstances, draft.stateFacts, draft.eventHistory, draft.intents, draft.queries, draft.assumptions]) {
     for (const item of collection) {
       item.sourceSpan = sourceSpanFor(fixture.question, item.mention);
       delete item.mention;
     }
   }
-  return { question: fixture.question, draft, resolvedCards: structuredClone(fixture.resolvedCards) };
+  return { question: fixture.question, draft, resolvedCards };
+}
+
+function unwrapFixtureCardMention(value) {
+  const text = String(value || "");
+  const wrappers = new Map([["「", "」"], ["『", "』"], ["“", "”"], ["‘", "’"], ["\"", "\""], ["《", "》"], ["〈", "〉"], ["【", "】"], ["[", "]"]]);
+  return wrappers.get(text[0]) === text.at(-1) ? text.slice(1, -1) : text;
 }

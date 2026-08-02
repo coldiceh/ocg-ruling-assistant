@@ -19,6 +19,7 @@ import {
 } from "./adminRunStore.mjs";
 import { callDeepSeekJsonTask } from "./ragModelClient.mjs";
 import {
+  CompatibleEvidencePreparationProvider,
   ExistingDeepSeekProvider,
   OpenAIResponsesProvider,
 } from "./rulingModelProviders.mjs";
@@ -84,6 +85,9 @@ function createAdminModelLabComposedService({
   runStore,
   recordStore,
   deepSeekProvider,
+  glmProvider,
+  kimiProvider,
+  preparationProviders,
   openAIProvider,
   baseService,
   callDeepSeekJsonTaskImpl = callDeepSeekJsonTask,
@@ -140,6 +144,28 @@ function createAdminModelLabComposedService({
         callDeepSeekJsonTaskImpl,
       }),
     });
+    const resolvedGlmProvider = glmProvider || (
+      hasServerSecret(env.GLM_API_KEY)
+        ? new CompatibleEvidencePreparationProvider({
+            providerId: "glm",
+            apiKey: env.GLM_API_KEY,
+            baseUrl: serverGlmBaseUrl(env),
+            fetchImpl,
+            env,
+          })
+        : null
+    );
+    const resolvedKimiProvider = kimiProvider || (
+      hasServerSecret(env.KIMI_API_KEY)
+        ? new CompatibleEvidencePreparationProvider({
+            providerId: "kimi",
+            apiKey: env.KIMI_API_KEY,
+            baseUrl: serverKimiBaseUrl(env),
+            fetchImpl,
+            env,
+          })
+        : null
+    );
     const resolvedOpenAIProvider = openAIProvider || new OpenAIResponsesProvider({
       apiKey: requiredServerSecret(env.OPENAI_API_KEY, "OPENAI_API_KEY"),
       baseUrl: serverOpenAIBaseUrl(env),
@@ -149,6 +175,13 @@ function createAdminModelLabComposedService({
     resolvedBaseService = createAdminModelLabService({
       runStore: resolvedRunStore,
       deepSeekProvider: resolvedDeepSeekProvider,
+      preparationProviders: {
+        ...(preparationProviders && typeof preparationProviders === "object"
+          ? preparationProviders
+          : {}),
+        ...(resolvedGlmProvider ? { glm: resolvedGlmProvider } : {}),
+        ...(resolvedKimiProvider ? { kimi: resolvedKimiProvider } : {}),
+      },
       openAIProvider: resolvedOpenAIProvider,
       env,
     });
@@ -566,6 +599,9 @@ export function createDeepSeekEvidencePreparationInvoke({
       env,
       fetchImpl,
       temperature: 0,
+      thinkingMode: request.thinkingMode,
+      reasoningEffort: request.reasoningEffort,
+      signal: request.signal,
     });
   };
 }
@@ -643,6 +679,26 @@ function serverOpenAIBaseUrl(env) {
     || env.OPENAI_BASE_URL
     || "https://api.openai.com/v1",
   ).trim();
+}
+
+function serverGlmBaseUrl(env) {
+  return String(
+    env.ADMIN_GLM_BASE_URL
+    || env.GLM_BASE_URL
+    || "https://open.bigmodel.cn/api/paas/v4",
+  ).trim();
+}
+
+function serverKimiBaseUrl(env) {
+  return String(
+    env.ADMIN_KIMI_BASE_URL
+    || env.KIMI_BASE_URL
+    || "https://api.moonshot.ai/v1",
+  ).trim();
+}
+
+function hasServerSecret(value) {
+  return typeof value === "string" && value.trim() !== "";
 }
 
 function compactObject(value) {

@@ -148,6 +148,7 @@ const tests = [
     assert(answer) {
       assert.ok(["unknown", "inferred"].includes(answer.subAnswers[0].status));
       assert.notEqual(answer.subAnswers[0].status, "confirmed");
+      assert.doesNotMatch(`${answer.verdictTitle} ${answer.verdict} ${answer.subAnswers[0].verdict}`, /不回卡组|洗回卡组|不按原预定破坏/);
     },
   },
   {
@@ -175,16 +176,19 @@ const tests = [
     assert(answer) {
       assert.notEqual(answer.subAnswers[0].status, "confirmed");
       assert.ok(answer.evidence.cardTextEvidence.length > 0);
+      assert.equal(answer.subAnswers[0].ruleDerivedAnswer, undefined);
+      assert.doesNotMatch(`${answer.verdictTitle} ${answer.verdict} ${answer.subAnswers[0].verdict}`, /发动时满足5张|不会倒回去取消|已经适用的保护/);
     },
   },
   {
     name: "未知问题类型在未发售文本场景中保守降级",
     question: `${mindForcePreviewText}
 
-这张卡的发动和效果不会被无效化，那还能被黑玛丽或者暗黑界龙神王这种改写效果类处理改写吗？`,
+这张卡的发动和效果不会被无效化，那还能被黑玛丽或者暗黑界龙神王处理吗？`,
     assert(answer) {
       assert.ok(["unknown", "parse_failed"].includes(answer.subAnswers[0].status));
       assert.notEqual(answer.subAnswers[0].status, "confirmed");
+      assert.doesNotMatch(`${answer.verdictTitle} ${answer.verdict} ${answer.subAnswers[0].verdict}`, /不被无效化不等于不能被改写|仍可能适用/);
     },
   },
   {
@@ -195,6 +199,7 @@ const tests = [
     assert(answer) {
       assert.notEqual(answer.subAnswers[0].status, "confirmed");
       assert.ok(answer.evidence.cardTextEvidence.length > 0);
+      assert.doesNotMatch(`${answer.verdictTitle} ${answer.verdict} ${answer.subAnswers[0].verdict}`, /无效发动并破坏不满足|通常不视为从场上被破坏/);
     },
   },
   {

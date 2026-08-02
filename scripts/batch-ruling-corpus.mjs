@@ -16,16 +16,17 @@ export async function runRulingCorpusBatch(options = {}) {
   const limit = boundedInteger(options.limit, corpus.cases.length, 1, corpus.cases.length);
   const offset = boundedInteger(options.offset, 0, 0, corpus.cases.length);
   const selectedCases = corpus.cases.slice(offset, offset + limit);
+  const modelConfiguration = normalizeModelConfiguration(options);
   const report = options.resume === false
-    ? createReport(corpus, { inputPath, endpoint, runners })
-    : await loadOrCreateReport(outputPath, corpus, { inputPath, endpoint, runners });
+    ? createReport(corpus, { inputPath, endpoint, runners, modelConfiguration, rulingVersion: options.rulingVersion })
+    : await loadOrCreateReport(outputPath, corpus, { inputPath, endpoint, runners, modelConfiguration, rulingVersion: options.rulingVersion });
   const answerers = await buildAnswerers({
     endpoint,
     runners,
     fetchImpl: options.fetchImpl,
     timeoutMs: options.timeoutMs,
     rulingVersion: options.rulingVersion,
-    modelTier: options.modelTier,
+    ...modelConfiguration,
     env: options.env,
     onlineAnswerer: options.onlineAnswerer,
     localAnswerer: options.localAnswerer,
@@ -159,19 +160,22 @@ export function evaluateRulingAnswer(corpusCase = {}, answer = {}) {
 
   const answerText = collectAnswerText(answer);
   const correctness = evaluateCorrectness(corpusCase, answerText, officialQa);
+  const requireExpectedQaIds = corpusCase.requireExpectedQaIds === true;
   const hardFailure = cardResolution.status === "miss"
-    || officialQa.status === "miss"
+    || (requireExpectedQaIds && officialQa.status === "miss")
     || correctness.status === "fail"
     || execution.policyStatus === "fail";
   const needsReview = execution.dryRun
     || correctness.status === "needs_review"
     || cardResolution.status === "unresolved"
+    || (!requireExpectedQaIds && officialQa.status === "miss")
     || officialQa.status === "not_found" && correctness.status !== "pass";
   return {
     overall: execution.dryRun ? "dry_run" : (hardFailure ? "fail" : (needsReview ? "needs_review" : "pass")),
     execution,
     cardResolution,
     officialQa,
+    requireExpectedQaIds,
     correctness,
   };
 }
@@ -408,6 +412,8 @@ async function buildAnswerers(options) {
           mode: "rag",
           ...(options.rulingVersion ? { rulingVersion: options.rulingVersion } : {}),
           ...(options.modelTier ? { modelTier: options.modelTier } : {}),
+          ...(options.thinkingMode ? { thinkingMode: options.thinkingMode } : {}),
+          ...(options.reasoningEffort ? { reasoningEffort: options.reasoningEffort } : {}),
         }),
         signal,
       });
@@ -421,11 +427,16 @@ async function buildAnswerers(options) {
       answerers.local = options.localAnswerer;
     } else {
       const { answerRagRulingQuestionForVersion } = await import("../backend/rulingVersionRegistry.mjs");
-      answerers.local = (corpusCase) => answerRagRulingQuestionForVersion({
-        question: corpusCase.question,
-        rulingVersion: options.rulingVersion,
-        env: options.env || globalThis.process?.env || {},
-      });
+      answerers.local = (corpusCase) => {
+        const baseEnv = options.env || globalThis.process?.env || {};
+        return answerRagRulingQuestionForVersion({
+          question: corpusCase.question,
+          rulingVersion: options.rulingVersion,
+          env: options.modelTier ? { ...baseEnv, RAG_MODEL_TIER: options.modelTier } : baseEnv,
+          thinkingMode: options.thinkingMode,
+          reasoningEffort: options.reasoningEffort,
+        });
+      };
     }
   }
   return answerers;
@@ -463,7 +474,9 @@ function createReport(corpus, metadata) {
     corpusCaseCount: corpus.cases.length,
     inputPath: metadata.inputPath,
     endpoint: metadata.endpoint || "",
+    rulingVersion: String(metadata.rulingVersion || ""),
     runners: metadata.runners,
+    modelConfiguration: metadata.modelConfiguration || {},
     startedAt: new Date().toISOString(),
     finishedAt: null,
     summary: {},
@@ -474,7 +487,11 @@ function createReport(corpus, metadata) {
 async function loadOrCreateReport(outputPath, corpus, metadata) {
   try {
     const report = JSON.parse(await readFile(outputPath, "utf8"));
-    if (report.inputPath === metadata.inputPath && Number(report.corpusCaseCount) === corpus.cases.length) {
+    if (report.inputPath === metadata.inputPath
+        && Number(report.corpusCaseCount) === corpus.cases.length
+        && String(report.endpoint || "") === String(metadata.endpoint || "")
+        && String(report.rulingVersion || "") === String(metadata.rulingVersion || "")
+        && sameModelConfiguration(report.modelConfiguration, metadata.modelConfiguration)) {
       report.runners = [...new Set([...(report.runners || []), ...metadata.runners])];
       report.endpoint = metadata.endpoint || report.endpoint || "";
       return report;
@@ -594,6 +611,36 @@ function boundedInteger(value, fallback, min, max) {
   return Math.max(min, Math.min(max, Math.floor(number)));
 }
 
+function normalizeModelConfiguration(options = {}) {
+  const modelTier = normalizeChoice(options.modelTier, ["flash", "pro"], "model tier");
+  const thinkingMode = normalizeChoice(options.thinkingMode, ["enabled", "disabled"], "thinking mode");
+  const reasoningEffort = normalizeChoice(
+    options.reasoningEffort,
+    ["high", "max"],
+    "reasoning effort",
+  );
+  if (thinkingMode === "disabled" && reasoningEffort) {
+    throw new Error("reasoning effort cannot be set when thinking mode is disabled");
+  }
+  return {
+    ...(modelTier ? { modelTier } : {}),
+    ...(thinkingMode ? { thinkingMode } : {}),
+    ...(reasoningEffort ? { reasoningEffort } : {}),
+  };
+}
+
+function normalizeChoice(value, allowed, label) {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (!normalized) return "";
+  if (!allowed.includes(normalized)) throw new Error(`invalid ${label}: ${normalized}`);
+  return normalized;
+}
+
+function sameModelConfiguration(left, right) {
+  return JSON.stringify(normalizeModelConfiguration(left || {}))
+    === JSON.stringify(normalizeModelConfiguration(right || {}));
+}
+
 function parseCli(argv) {
   const options = {};
   for (let index = 0; index < argv.length; index += 1) {
@@ -609,6 +656,8 @@ function parseCli(argv) {
     else if (arg === "--timeout-ms") options.timeoutMs = value, index += 1;
     else if (arg === "--ruling-version") options.rulingVersion = value, index += 1;
     else if (arg === "--model-tier") options.modelTier = value, index += 1;
+    else if (arg === "--thinking-mode") options.thinkingMode = value, index += 1;
+    else if (arg === "--reasoning-effort") options.reasoningEffort = value, index += 1;
     else if (arg === "--failure-policy") options.failurePolicy = value, index += 1;
     else if (arg === "--no-resume") options.resume = false;
     else if (arg === "--help") options.help = true;
@@ -631,6 +680,8 @@ function printUsage() {
     "  --timeout-ms <n>        Per-request timeout",
     "  --ruling-version <id>   latest, previous, or a registered revision",
     "  --model-tier <tier>     flash or pro",
+    "  --thinking-mode <mode>  enabled or disabled",
+    "  --reasoning-effort <n>  Provider-supported effort (for DeepSeek: high or max)",
     "  --failure-policy <mode>  strict (default) or transport (only request/runtime failures)",
     "  --no-resume             Ignore an existing output report",
   ].join("\n"));

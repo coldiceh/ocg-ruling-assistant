@@ -173,6 +173,37 @@ test("an unrelated single QA is not promoted only because its card set is exact"
   assert.equal(matches.exact.length, 0);
 });
 
+test("RAG keeps live card metadata after canonical QA identity reconciliation", async () => {
+  const question = "岩石族怪兽已经存在时，可以发动手牌怪兽的效果吗？";
+  const fixture = liveFetchFixture({
+    cardIds: [13447, 14741],
+    qaId: 22803,
+    question: "「<<13447>>」の適用中、「<<14741>>」の効果を発動できますか？",
+    answer: "発動できません。",
+  });
+  const cards = [
+    { id: "13447", name: "物种配额", jaName: "センサー万別", effectText: "双方场上的种族受限制。" },
+    { id: "14741", name: "陨星巨灵", jaName: "原始生命態ニビル", effectText: "从手牌发动并特殊召唤。" },
+  ];
+  const evidence = await retrieveRagEvidence({
+    userQuery: question,
+    cardResolution: {
+      resolvedCards: cards,
+      unresolvedMentions: [],
+      ambiguousMentions: [],
+      userProvidedCardTexts: [],
+    },
+    cards,
+    records: [],
+    qaRecords: [],
+    env: { RAG_LIVE_OFFICIAL_QA: "true" },
+    fetchImpl: fixture.fetchImpl,
+  });
+
+  assert.equal(evidence.retrievedCards.find((card) => card.id === "14741")?.race, "Rock");
+  assert.ok(evidence.retrievalWarnings.includes("live_official_qa_retrieved:1"));
+});
+
 test("a unique broad official QA can govern two listed example cards", () => {
   const matches = searchOfficialQaEvidence({
     question: "卡片100的持续效果适用中，可以发动卡片200吗？",

@@ -13,7 +13,7 @@ const BOTH_PLAYERS_WORD = /(?:双方|双方玩家|彼此|お互い|両方のプ�
 const PER_PLAYER_SAME_RACE_LIMIT = /(?:双方|雙方|お互い|each player).{0,48}(?:各|それぞれ|only|可有).{0,20}(?:1|１|一)(?:只|隻|体|體|枚)?.{0,28}(?:同种族|同種族|同じ種族|same Type).{0,28}(?:表侧|表側|face-up)/iu;
 const PER_PLAYER_ONE_RACE_LIMIT = /(?:双方|雙方|お互い|each player).{0,48}(?:仅可有|只可有|只能有|only control).{0,20}(?:1|１|一)(?:种|種|type).{0,16}(?:种族|種族|Type)/iu;
 const PER_PLAYER_ONE_ATTRIBUTE_LIMIT = /(?:双方|雙方|お互い|each player).{0,48}(?:仅可有|只可有|只能有|only control).{0,20}(?:1|１|一)(?:种|種|type).{0,16}(?:属性|Attribute)/iu;
-const SUMMON_BOUND_DURATION = /(?:以|用)(?:此|这个|這個|该|該)效果特殊召唤的怪兽|この効果で特殊召喚したモンスター|monster(?:s)? Special Summoned by this effect/iu;
+const SUMMON_BOUND_DURATION = /(?:(?:以|用)?(?:此|这个|這個|该|該)效果特殊召唤的怪兽|この効果で特殊召喚した(?:モンスター|このカード)|(?:this card|monster(?:s)?) Special Summoned by this effect)/iu;
 const ACTIVATION_LIMIT_ONLY = /(?:此卡名|这张卡名|このカード名|cards? with this name).{0,48}(?:[1１]回合|[1１]ターン|per turn).{0,36}(?:发动|發動|発動|activate).{0,16}(?:[1１](?:张|張)|[1１]枚|一次|1 time|once)/iu;
 const SELF_FACE_UP_LEAVE_FIELD_BANISH = /(?:(?:表侧|表側)表示(?:的|の)?(?:此卡|这张卡|這張卡|このカード).{0,24}(?:离开|離開|離れる).{0,16}(?:场上|場上|フィールド).{0,32}(?:将其|將其|该卡|該卡|此卡|このカード)?[^。；;]{0,12}(?:除外|banish)|(?:if\s+)?this face-up card.{0,24}leave the field.{0,24}banish it)/iu;
 
@@ -406,7 +406,7 @@ function splitImplicitResolutionClauses(text, firstConnector) {
 
 function classifyResolutionOperation(text) {
   const value = cleanText(text);
-  if (SUMMON_BOUND_DURATION.test(value)) {
+  if (isSummonBoundExtraDeckRestriction(value)) {
     const allowedArchetype = value.match(
       /(?:仅可|只可|只能|しか)[^。；;]{0,36}[“「『"]([^”」』"]+)[”」』"][^。；;]{0,16}(?:怪兽|怪獸|モンスター)/iu,
     )?.[1] || "";
@@ -500,6 +500,25 @@ function classifyResolutionOperation(text) {
     ...(quotedNames.length ? { names: quotedNames } : {}),
     ...(extractRaceLabel(value) ? { race: extractRaceLabel(value) } : {}),
   };
+}
+
+function isSummonBoundExtraDeckRestriction(value) {
+  return SUMMON_BOUND_DURATION.test(value)
+    && CONTINUOUS_MARKER.test(value)
+    && /(?:表侧|表側|face-up)/iu.test(value)
+    && /(?:(?:自己|自分|your)[^。；;]{0,24}(?:场上|場上|フィールド|field)|(?:场上|場上|フィールド|field)[^。；;]{0,24}(?:自己|自分|your))/iu.test(value)
+    && hasExtraDeckSpecialSummonLock(value);
+}
+
+function hasExtraDeckSpecialSummonLock(value) {
+  const chineseController = /(?:自己|我方)(?!\s*(?:场上|場上))[^。；;]{0,60}?(?:仅可|僅可|只可|只能|不可|不能|不得)(?!\s*(?:被|让|讓|使|令|把|将|將))[^。；;]{0,32}(?:(?:从|從|自)\s*)?(?:(?:额外|額外)(?:卡组|卡組|牌组|牌組))[^。；;]{0,28}(?:特殊召唤|特殊召喚)(?!\s*的(?:怪兽|怪獸|卡))/iu;
+  const chineseDeckFirst = /(?:自己|我方)(?!\s*(?:场上|場上))[^。；;]{0,28}(?:(?:从|從|自)\s*)?(?:(?:额外|額外)(?:卡组|卡組|牌组|牌組))[^。；;]{0,28}(?:仅可|僅可|只可|只能|不可|不能|不得)(?!\s*(?:被|让|讓|使|令))[^。；;]{0,28}(?:特殊召唤|特殊召喚)(?!\s*的(?:怪兽|怪獸|卡))/iu;
+  const japanese = /自分(?:は|が)?[^。；;]{0,48}(?:(?:EX|エクストラ)デッキから[^。；;]{0,32}(?:しか[^。；;]{0,12}(?:特殊召喚できない|特殊召喚を行えない)|特殊召喚できない)|しか[^。；;]{0,32}(?:(?:EX|エクストラ)デッキから)?[^。；;]{0,16}(?:特殊召喚できない|特殊召喚を行えない))/iu;
+  const english = /\b(?:you|the controller)\s+(?:can only|cannot|can't)\s+Special Summon[^.;]{0,72}\bfrom\s+(?:your\s+)?(?:Extra Deck)\b/iu;
+  return chineseController.test(value)
+    || chineseDeckFirst.test(value)
+    || japanese.test(value)
+    || english.test(value);
 }
 
 function classifyAffectedPlayer(text) {

@@ -7,12 +7,21 @@ const cases = [
     question: "能用完美世界-卡通世界的效果除外该卡通怪兽吗？",
     type: "temporary_banish",
     card: "完美世界-卡通世界",
+    askedResult: "can_banish_referenced_monster",
     candidates: [{ name: "完美世界-卡通世界", aliases: ["完美世界 卡通世界", "Perfect Toon World"] }],
   },
   {
     question: "卡通怪兽还会被战破送墓吗？",
     type: "send_to_gy",
-    card: "referenced_toon_monster",
+    card: "referenced_monster",
+    askedResult: "will_still_be_sent_to_graveyard_by_battle",
+    candidates: [],
+  },
+  {
+    question: "该龙族怪兽还会被战斗破坏送墓吗？",
+    type: "send_to_gy",
+    card: "referenced_monster",
+    askedResult: "will_still_be_sent_to_graveyard_by_battle",
     candidates: [],
   },
   {
@@ -41,6 +50,7 @@ for (const shortCase of cases) {
     assert.equal(query.subQuestions.length, 1);
     assert.equal(query.subQuestions[0].type, shortCase.type);
     assert.equal(query.subQuestions[0].card, shortCase.card);
+    if (shortCase.askedResult) assert.equal(query.subQuestions[0].askedResult, shortCase.askedResult);
     assertCompleteSubQuestion(query.subQuestions[0]);
     assert.doesNotMatch(JSON.stringify(query), /parse_failed/u);
   });
@@ -87,6 +97,7 @@ test("rule-based fallback corrects wrong AI type and missing AI card", async () 
       });
       assert.equal(query.subQuestions[0].type, shortCase.type);
       assert.equal(query.subQuestions[0].card, shortCase.card);
+      if (shortCase.askedResult) assert.equal(query.subQuestions[0].askedResult, shortCase.askedResult);
       assertCompleteSubQuestion(query.subQuestions[0]);
     }
   } finally {

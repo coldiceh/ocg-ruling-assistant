@@ -43,6 +43,7 @@ export async function requestOcgEngineJson({
   timeoutMs,
   defaultTimeoutMs = 20_000,
   fetchUnavailableError,
+  signal,
 } = {}) {
   let baseUrl;
   try {
@@ -70,6 +71,9 @@ export async function requestOcgEngineJson({
   const controller = new AbortController();
   const timeout = resolveTimeout({ timeoutMs, env, defaultTimeoutMs });
   const timer = setTimeout(() => controller.abort(), timeout);
+  const abortFromCaller = () => controller.abort(signal?.reason);
+  if (signal?.aborted) abortFromCaller();
+  else signal?.addEventListener?.("abort", abortFromCaller, { once: true });
   timer.unref?.();
   try {
     const headers = { ...(suppliedHeaders || {}) };
@@ -95,5 +99,6 @@ export async function requestOcgEngineJson({
     return { status: "unavailable", error: toOcgEngineFailure(error) };
   } finally {
     clearTimeout(timer);
+    signal?.removeEventListener?.("abort", abortFromCaller);
   }
 }

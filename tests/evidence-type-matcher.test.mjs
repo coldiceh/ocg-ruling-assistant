@@ -57,7 +57,7 @@ test("generic Perfect Toon World FAQ is not direct for a battle-destroyed toon m
     id: "q1",
     type: "temporary_banish",
     card: "完美世界-卡通世界",
-    askedResult: "can_banish_that_toon_monster",
+    askedResult: "can_banish_referenced_monster",
     sourceText: "伤害计算后已经确定会被战斗破坏的卡通怪兽，能用完美世界-卡通世界的③效果暂时除外到效果处理后吗？",
   }, {
     id: "card-faq-23161-3",
@@ -77,7 +77,7 @@ test("battle-destruction-specific Perfect Toon World evidence can be direct", ()
     id: "q1",
     type: "temporary_banish",
     card: "完美世界-卡通世界",
-    askedResult: "can_banish_that_toon_monster",
+    askedResult: "can_banish_referenced_monster",
     sourceText: "伤害计算后已经确定会被战斗破坏的卡通怪兽，能用完美世界-卡通世界的③效果暂时除外到效果处理后吗？",
   }, {
     id: "qa-perfect-toon-specific",

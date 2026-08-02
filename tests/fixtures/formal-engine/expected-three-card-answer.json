@@ -34,6 +34,8 @@
     "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?fid=24006&keyword=&ope=5&request_locale=ja&tag=-1"
   ],
   "acceptanceConditions": [
+    "real-three-card.json 是把回合、开放行动时点、表示形式、区域、次数和其他适用效果全部明示的协议验收场景，不得宣称是对 originalQuestion 的无假设 STRICT 实跑",
+    "originalQuestion 在 STRICT 模式下必须因缺失时点、完整表示分支、区域和其他状态而返回 MISSING_STATE_FACT/UNKNOWN，除非改用披露假设的抽象模式",
     "只有真实 formal endpoint 返回完整结果并通过公共 proof verifier 后，预期 verdict 才能视为实跑通过",
     "本文件不能作为 formal_engine_proof，也不能替代引擎 witness、trace 或证书",
     "若定义快照把「深淵の相剣龍」属性写成 DARK 而不是 FIRE，必须报告数据冲突并保持 UNKNOWN"

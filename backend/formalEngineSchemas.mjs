@@ -8,10 +8,54 @@ export const FORMAL_PROOF_CERTIFICATE_CONTRACT = "ocg-proof-certificate/v1";
 export const FORMAL_SOURCE_SPAN_ENCODING = "UTF16_CODE_UNIT_HALF_OPEN";
 export const FORMAL_AUTHORITY_SCOPE = "SCENARIO_SLICE";
 export const FORMAL_VERDICTS = Object.freeze(["TRUE", "FALSE", "UNKNOWN"]);
+export const FORMAL_SCENARIO_PROHIBITED_DERIVED_FIELDS = Object.freeze([
+  "banishedByCardEffect",
+  "summonLegal",
+  "triggerActivates",
+  "finalChainNumber",
+  "canActivate",
+  "operationSuccessful",
+  "legal",
+  "verdict",
+  "chainPosition",
+  "canSummon",
+  "canResolve",
+  "trusted",
+  "authority",
+  "proofCertificate",
+  "certificateVerification",
+]);
 
 const VERDICTS = new Set(FORMAL_VERDICTS);
 const SHA256 = /^[a-f0-9]{64}$/u;
 const QUERY_PREDICATES = new Set(["PROCEDURE_AVAILABLE", "TRIGGER_CAN_ACTIVATE", "CHAIN_ORDER_VALID", "EVENT_ATTRIBUTION"]);
+const CARD_ZONES = new Set([
+  "DECK",
+  "HAND",
+  "MONSTER_ZONE",
+  "SPELL_TRAP_ZONE",
+  "FIELD_ZONE",
+  "GRAVEYARD",
+  "BANISHED",
+  "EXTRA_DECK",
+]);
+const CARD_POSITIONS = new Set([
+  "FACE_UP_ATTACK",
+  "FACE_UP_DEFENSE",
+  "FACE_DOWN_ATTACK",
+  "FACE_DOWN_DEFENSE",
+]);
+const BOOLEAN_FACT_TYPES = new Set([
+  "CARD_PRESENT",
+  "CARD_POSITION",
+  "PUBLIC_CONTINUOUS_EFFECT_ACTIVE",
+  "SPELL_EFFECT_ACTIVATED_THIS_TURN",
+]);
+const NON_NEGATIVE_INTEGER_FACT_TYPES = new Set([
+  "LIFE_POINTS",
+  "ZONE_CAPACITY",
+  "PUBLIC_COUNTER_VALUE",
+]);
 const INPUT_FACT_RULES = new Map([
   ["CARD_PRESENT", new Set(["USER_OBSERVED"])],
   ["CARD_POSITION", new Set(["USER_OBSERVED"])],
@@ -49,8 +93,8 @@ const INPUT_EVENT_FIELDS = new Map([
   ["CHAIN_RESPONSE_DECLARED", new Set(["player", "subjectInstanceId", "effectId"])],
 ]);
 const INPUT_FACT_REQUIRED_FIELDS = new Map([
-  ["CARD_PRESENT", ["subjectInstanceId"]],
-  ["CARD_POSITION", ["subjectInstanceId", "position"]],
+  ["CARD_PRESENT", ["subjectInstanceId", "value"]],
+  ["CARD_POSITION", ["subjectInstanceId", "position", "value"]],
   ["LIFE_POINTS", ["player", "value"]],
   ["ZONE_CAPACITY", ["player", "zone", "value"]],
   ["PUBLIC_COUNTER_VALUE", ["subjectInstanceId", "counterName", "value"]],
@@ -107,6 +151,66 @@ export class FormalContractError extends Error {
     this.name = "FormalContractError";
     this.code = code;
     this.details = details;
+  }
+}
+
+export function validateFormalMissingStateFacts(value) {
+  if (!Array.isArray(value)) {
+    fail("FORMAL_SCENARIO_SCHEMA_INVALID", "missingStateFacts must be present as an array");
+  }
+  return value.map((item, index) => {
+    if (typeof item !== "string" || !item.trim()) {
+      fail("FORMAL_SCENARIO_SCHEMA_INVALID", "missingStateFacts items must be non-empty strings", { index });
+    }
+    return item.trim();
+  });
+}
+
+export async function invokeBoundedFormalVerifier(verifier, input, {
+  signal,
+  timeoutMs = 5_000,
+  timeoutCode = "FORMAL_VERIFIER_TIMEOUT",
+  abortCode = "FORMAL_VERIFIER_ABORTED",
+  label = "formal verifier",
+} = {}) {
+  if (typeof verifier !== "function") {
+    throw new FormalContractError("FORMAL_VERIFIER_UNAVAILABLE", label + " is not configured");
+  }
+  const boundedTimeoutMs = Number.isInteger(Number(timeoutMs)) && Number(timeoutMs) > 0
+    ? Number(timeoutMs)
+    : 5_000;
+  if (signal?.aborted) {
+    throw new FormalContractError(abortCode, label + " was cancelled", { timeoutMs: boundedTimeoutMs });
+  }
+  const controller = new AbortController();
+  let rejectInterruption;
+  let interrupted = false;
+  const interruption = new Promise((_, reject) => {
+    rejectInterruption = reject;
+  });
+  const interrupt = (code, message, reason) => {
+    if (interrupted) return;
+    interrupted = true;
+    const error = new FormalContractError(code, message, { timeoutMs: boundedTimeoutMs });
+    rejectInterruption(error);
+    if (!controller.signal.aborted) controller.abort(reason ?? error);
+  };
+  const abortFromCaller = () => interrupt(abortCode, label + " was cancelled", signal?.reason);
+  signal?.addEventListener?.("abort", abortFromCaller, { once: true });
+  const timer = setTimeout(
+    () => interrupt(timeoutCode, `${label} exceeded ${boundedTimeoutMs}ms`),
+    boundedTimeoutMs,
+  );
+  timer.unref?.();
+  try {
+    const verifierCall = Promise.resolve().then(() => verifier(
+      input,
+      Object.freeze({ signal: controller.signal }),
+    ));
+    return await Promise.race([verifierCall, interruption]);
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener?.("abort", abortFromCaller);
   }
 }
 
@@ -206,6 +310,7 @@ export function deriveFormalRequiredCapabilities({ intents = [], queries = [], s
 
 export function validateSourceSpan(span, sourceText, label = "sourceSpan") {
   const value = objectValue(span, label);
+  assertClosedObject(value, new Set(["encoding", "start", "end", "text"]), label);
   equalValue(value.encoding, FORMAL_SOURCE_SPAN_ENCODING, label + ".encoding");
   const start = integerValue(value.start, label + ".start");
   const end = integerValue(value.end, label + ".end");
@@ -225,6 +330,24 @@ export function validateSourceSpan(span, sourceText, label = "sourceSpan") {
 
 export function validateFormalScenario(value) {
   const scenario = objectValue(value, "formal scenario");
+  assertClosedObject(scenario, new Set([
+    "contractVersion",
+    "scenarioId",
+    "sourceSpanEncoding",
+    "authorityScope",
+    "mode",
+    "question",
+    "turn",
+    "cardInstances",
+    "definitionSnapshot",
+    "stateFacts",
+    "eventHistory",
+    "intents",
+    "queries",
+    "assumptions",
+    "requiredCapabilities",
+    "branchPolicy",
+  ]), "scenario");
   equalValue(scenario.contractVersion, FORMAL_SCENARIO_CONTRACT, "scenario.contractVersion");
   equalValue(scenario.sourceSpanEncoding, FORMAL_SOURCE_SPAN_ENCODING, "scenario.sourceSpanEncoding");
   equalValue(scenario.authorityScope, FORMAL_AUTHORITY_SCOPE, "scenario.authorityScope");
@@ -233,6 +356,7 @@ export function validateFormalScenario(value) {
     fail("FORMAL_SCENARIO_SCHEMA_INVALID", "scenario.mode must be STRICT or ABSTRACT_ASSUMPTIONS");
   }
   const question = objectValue(scenario.question, "scenario.question");
+  assertClosedObject(question, new Set(["text"]), "scenario.question");
   const sourceText = stringValue(question.text, "scenario.question.text", false);
   if (!sourceText.trim()) fail("FORMAL_SCENARIO_SCHEMA_INVALID", "scenario.question.text is empty");
   validateTurn(scenario.turn);
@@ -250,6 +374,10 @@ export function validateFormalScenario(value) {
     fail("CAPABILITY_UNAVAILABLE", "scenario.requiredCapabilities omits capabilities implied by its semantics", { omittedCapabilities });
   }
   const branchPolicy = objectValue(scenario.branchPolicy, "scenario.branchPolicy");
+  const unexpectedBranchFields = Object.keys(branchPolicy).filter((key) => key !== "preserveUnspecifiedResponses");
+  if (unexpectedBranchFields.length) {
+    fail("UNTRUSTED_DERIVED_FACT", "branchPolicy contains fields outside the closed input schema", { unexpectedBranchFields });
+  }
   if (branchPolicy.preserveUnspecifiedResponses !== true) {
     fail("FORMAL_SCENARIO_SCHEMA_INVALID", "unspecified response branches must be preserved");
   }
@@ -336,7 +464,13 @@ export function assertRequiredCapabilities(capabilities, requiredCapabilities) {
   }
 }
 
-export function validateFormalResult(value, { scenario, capabilities, proofVerifier } = {}) {
+export async function validateFormalResult(value, {
+  scenario,
+  capabilities,
+  proofVerifier,
+  proofVerifierSignal,
+  proofVerifierTimeoutMs,
+} = {}) {
   validateFormalScenario(scenario);
   validateFormalCapabilities(capabilities);
   assertRequiredCapabilities(capabilities, scenario.requiredCapabilities);
@@ -371,26 +505,37 @@ export function validateFormalResult(value, { scenario, capabilities, proofVerif
   }
   const complete = result.querySliceComplete === true && result.searchComplete === true &&
     result.executionComplete === true && result.unresolvedSemantics.length === 0;
-  const queryResults = result.queryResults.map((queryValue) => {
+  const queryResults = await Promise.all(result.queryResults.map(async (queryValue) => {
     const queryId = String(queryValue?.queryId || "");
     try {
-      return validateQueryResult(queryValue, {
+      return await validateQueryResult(queryValue, {
         scenario,
         result,
         versions,
         capabilities,
         proofVerifier,
+        proofVerifierSignal,
+        proofVerifierTimeoutMs,
         complete,
       });
     } catch (error) {
       const normalized = normalizeContractFailure(error);
       return unknownQueryResult(queryId, normalized);
     }
-  });
+  }));
   return { ...result, queryResults };
 }
 
-function validateQueryResult(queryValue, { scenario, result, versions, capabilities, proofVerifier, complete }) {
+async function validateQueryResult(queryValue, {
+  scenario,
+  result,
+  versions,
+  capabilities,
+  proofVerifier,
+  proofVerifierSignal,
+  proofVerifierTimeoutMs,
+  complete,
+}) {
   const query = objectValue(queryValue, "query result");
   stringValue(query.queryId, "queryResult.queryId");
   for (const field of ["witness", "counterexample", "proofCertificate", "certificateVerification", "unknownReasons"]) {
@@ -415,7 +560,10 @@ function validateQueryResult(queryValue, { scenario, result, versions, capabilit
   if (query.verdict === "FALSE" && (!query.counterexample || typeof query.counterexample !== "object")) {
     fail("FORMAL_RESPONSE_SCHEMA_INVALID", "FALSE requires a counterexample");
   }
-  validateProof(query, result, versions, capabilities, proofVerifier, scenario);
+  await validateProof(query, result, versions, capabilities, proofVerifier, scenario, {
+    signal: proofVerifierSignal,
+    timeoutMs: proofVerifierTimeoutMs,
+  });
   return query;
 }
 
@@ -474,7 +622,10 @@ export function createUnknownFormalResult({ scenario, code, message, details = {
   };
 }
 
-function validateProof(query, result, versions, capabilities, proofVerifier, scenario) {
+async function validateProof(query, result, versions, capabilities, proofVerifier, scenario, {
+  signal,
+  timeoutMs,
+} = {}) {
   const certificate = objectValue(query.proofCertificate, "proofCertificate");
   equalValue(certificate.schemaVersion, FORMAL_PROOF_CERTIFICATE_CONTRACT, "certificate.schemaVersion");
   equalValue(certificate.proofKind, "QUERY_VERDICT", "certificate.proofKind");
@@ -522,20 +673,31 @@ function validateProof(query, result, versions, capabilities, proofVerifier, sce
   }
   let independentVerification;
   try {
-    independentVerification = proofVerifier(deepFreeze(structuredClone({
-      certificate,
-      receipt,
-      queryResult: query,
-      scenario,
-      capabilities,
-      resultBindings: {
-        requestSha256: result.requestSha256,
-        outputSha256: expectedOutputHash,
-        capabilityManifestSha256: result.capabilityManifestSha256,
-        definitionSnapshotSha256: result.definitionSnapshotSha256,
+    independentVerification = await invokeBoundedFormalVerifier(
+      proofVerifier,
+      deepFreeze(structuredClone({
+        certificate,
+        receipt,
+        queryResult: query,
+        scenario,
+        capabilities,
+        resultBindings: {
+          requestSha256: result.requestSha256,
+          outputSha256: expectedOutputHash,
+          capabilityManifestSha256: result.capabilityManifestSha256,
+          definitionSnapshotSha256: result.definitionSnapshotSha256,
+        },
+      })),
+      {
+        signal,
+        timeoutMs,
+        timeoutCode: "FORMAL_PROOF_VERIFIER_TIMEOUT",
+        abortCode: "FORMAL_PROOF_VERIFIER_ABORTED",
+        label: "independent public proof verifier",
       },
-    })));
+    );
   } catch (error) {
+    if (error?.code === "FORMAL_PROOF_VERIFIER_TIMEOUT" || error?.code === "FORMAL_PROOF_VERIFIER_ABORTED") throw error;
     fail("FORMAL_CERTIFICATE_INVALID", "independent public proof verifier rejected the certificate", {
       verifierError: error instanceof Error ? error.message : String(error),
     });
@@ -577,7 +739,14 @@ function assertVersionMatch(actual, expected) {
 
 function validateTurn(value) {
   const turn = objectValue(value, "scenario.turn");
+  const unexpectedFields = Object.keys(turn).filter((key) => !new Set(["activePlayer", "phase"]).has(key));
+  if (unexpectedFields.length) {
+    fail("UNTRUSTED_DERIVED_FACT", "scenario.turn contains fields outside the closed input schema", { unexpectedFields });
+  }
   stringValue(turn.activePlayer, "scenario.turn.activePlayer");
+  if (!new Set(["SELF", "OPPONENT"]).has(turn.activePlayer)) {
+    fail("FORMAL_SCENARIO_SCHEMA_INVALID", "turn.activePlayer must be SELF or OPPONENT");
+  }
   if (!new Set(["MAIN1", "MAIN2"]).has(turn.phase)) fail("FORMAL_SCENARIO_SCHEMA_INVALID", "turn.phase must be MAIN1 or MAIN2");
 }
 
@@ -586,14 +755,37 @@ function validateInstances(value, sourceText) {
   const ids = new Set();
   for (const instanceValue of value) {
     const instance = objectValue(instanceValue, "cardInstance");
+    assertClosedObject(instance, new Set([
+      "instanceId",
+      "objectEpoch",
+      "owner",
+      "controller",
+      "zone",
+      "position",
+      "definitionBinding",
+      "effectBindings",
+      "sourceSpan",
+    ]), "cardInstance");
     const id = stringValue(instance.instanceId, "cardInstance.instanceId");
     if (ids.has(id)) fail("FORMAL_SCENARIO_SCHEMA_INVALID", "duplicate instanceId: " + id);
     ids.add(id);
     if (integerValue(instance.objectEpoch, "cardInstance.objectEpoch") < 0) fail("FORMAL_SCENARIO_SCHEMA_INVALID", "objectEpoch cannot be negative");
     stringValue(instance.owner, "cardInstance.owner");
     stringValue(instance.controller, "cardInstance.controller");
+    if (!new Set(["SELF", "OPPONENT"]).has(instance.owner)
+        || !new Set(["SELF", "OPPONENT"]).has(instance.controller)) {
+      fail("FORMAL_SCENARIO_SCHEMA_INVALID", "cardInstance owner/controller must be SELF or OPPONENT");
+    }
     stringValue(instance.zone, "cardInstance.zone");
+    enumValue(instance.zone, CARD_ZONES, "cardInstance.zone");
+    if (instance.position !== null) enumValue(instance.position, CARD_POSITIONS, "cardInstance.position");
     const binding = objectValue(instance.definitionBinding, "definitionBinding");
+    assertClosedObject(binding, new Set([
+      "cardId",
+      "definitionId",
+      "snapshotId",
+      "contentSha256",
+    ]), "definitionBinding");
     stringValue(binding.cardId, "definitionBinding.cardId");
     stringValue(binding.definitionId, "definitionBinding.definitionId");
     stringValue(binding.snapshotId, "definitionBinding.snapshotId");
@@ -602,6 +794,11 @@ function validateInstances(value, sourceText) {
     const effectIds = new Set();
     for (const effectValue of instance.effectBindings) {
       const effect = objectValue(effectValue, "effectBinding");
+      assertClosedObject(effect, new Set([
+        "effectId",
+        "definitionEffectId",
+        "contentSha256",
+      ]), "effectBinding");
       const effectId = stringValue(effect.effectId, "effectBinding.effectId");
       if (effectIds.has(effectId)) fail("FORMAL_SCENARIO_SCHEMA_INVALID", "duplicate effect binding: " + effectId);
       effectIds.add(effectId);
@@ -638,11 +835,23 @@ function validateInputRecords(value, sourceText, label, idField, rules, fieldRul
     for (const key of ["player", "subjectInstanceId", "effectId", "position", "zone", "counterName", "property"]) {
       if (item[key] !== undefined) stringValue(item[key], label + "." + key);
     }
+    if (item.player !== undefined && !new Set(["SELF", "OPPONENT"]).has(item.player)) {
+      fail("FORMAL_SCENARIO_SCHEMA_INVALID", label + ".player must be SELF or OPPONENT");
+    }
+    if (item.zone !== undefined) enumValue(item.zone, CARD_ZONES, label + ".zone");
+    if (item.position !== undefined) enumValue(item.position, CARD_POSITIONS, label + ".position");
     if (item.value !== undefined && !["string", "number", "boolean"].includes(typeof item.value)) {
       fail("UNTRUSTED_DERIVED_FACT", label + ".value must be a scalar observation, not a nested conclusion");
     }
     if (typeof item.value === "number" && !Number.isFinite(item.value)) {
       fail("FORMAL_SCENARIO_SCHEMA_INVALID", label + ".value must be finite");
+    }
+    if (BOOLEAN_FACT_TYPES.has(type) && typeof item.value !== "boolean") {
+      fail("FORMAL_SCENARIO_SCHEMA_INVALID", label + ".value must be boolean for " + type);
+    }
+    if (NON_NEGATIVE_INTEGER_FACT_TYPES.has(type)
+        && (!Number.isSafeInteger(item.value) || item.value < 0)) {
+      fail("FORMAL_SCENARIO_SCHEMA_INVALID", label + ".value must be a non-negative integer for " + type);
     }
     if (provenance === "PRINTED_TEXT") {
       const reference = objectValue(item.definitionRef, label + ".definitionRef");
@@ -668,7 +877,19 @@ function validateIntents(value, sourceText) {
     if (intent.type !== "TRY_SUMMON_PROCEDURE") {
       fail("FORMAL_SCENARIO_SCHEMA_INVALID", "only high-level TRY_SUMMON_PROCEDURE intents are accepted");
     }
+    const allowedFields = new Set([
+      "intentId", "type", "actorInstanceId", "procedureId", "procedureInputInstanceIds", "sourceSpan",
+    ]);
+    const unexpectedFields = Object.keys(intent).filter((key) => !allowedFields.has(key));
+    if (unexpectedFields.length) {
+      fail("UNTRUSTED_DERIVED_FACT", "intent contains fields outside the closed input schema", { unexpectedFields });
+    }
+    stringValue(intent.actorInstanceId, "intent.actorInstanceId");
     stringValue(intent.procedureId, "intent.procedureId");
+    if (!Array.isArray(intent.procedureInputInstanceIds)) {
+      fail("FORMAL_SCENARIO_SCHEMA_INVALID", "intent.procedureInputInstanceIds must be an array");
+    }
+    for (const instanceId of intent.procedureInputInstanceIds) stringValue(instanceId, "intent.procedureInputInstanceIds item");
     validateSourceSpan(intent.sourceSpan, sourceText, "intent.sourceSpan");
   }
 }
@@ -683,7 +904,47 @@ function validateQueries(value, sourceText) {
     ids.add(id);
     const predicate = stringValue(query.predicate, "query.predicate");
     if (!QUERY_PREDICATES.has(predicate)) fail("CAPABILITY_UNAVAILABLE", "unsupported formal query predicate: " + predicate);
+    const predicateFields = {
+      PROCEDURE_AVAILABLE: ["intentId"],
+      TRIGGER_CAN_ACTIVATE: ["subjectInstanceId", "effectId"],
+      CHAIN_ORDER_VALID: ["chainCandidates"],
+      EVENT_ATTRIBUTION: ["eventId"],
+    }[predicate];
+    const allowedFields = new Set([
+      "queryId", "predicate", "sourceSpan", "dependsOn", "requiredCapabilities", ...predicateFields,
+    ]);
+    const unexpectedFields = Object.keys(query).filter((key) => !allowedFields.has(key));
+    if (unexpectedFields.length) {
+      fail("UNTRUSTED_DERIVED_FACT", "query contains fields outside the closed input schema", { predicate, unexpectedFields });
+    }
+    for (const key of predicateFields.filter((field) => field !== "chainCandidates")) {
+      stringValue(query[key], `query.${key}`);
+    }
+    if (query.dependsOn !== undefined) {
+      if (!Array.isArray(query.dependsOn)) fail("FORMAL_SCENARIO_SCHEMA_INVALID", "query.dependsOn must be an array");
+      for (const dependency of query.dependsOn) stringValue(dependency, "query.dependsOn item");
+    }
+    if (query.requiredCapabilities !== undefined) {
+      if (!Array.isArray(query.requiredCapabilities)) fail("FORMAL_SCENARIO_SCHEMA_INVALID", "query.requiredCapabilities must be an array");
+      for (const capabilityId of query.requiredCapabilities) validateVersionedCapabilityId(capabilityId, "query required capability");
+    }
+    if (predicate === "CHAIN_ORDER_VALID") validateChainCandidates(query.chainCandidates);
     validateSourceSpan(query.sourceSpan, sourceText, "query.sourceSpan");
+  }
+}
+
+function validateChainCandidates(value) {
+  if (!Array.isArray(value) || !value.length) {
+    fail("FORMAL_SCENARIO_SCHEMA_INVALID", "chain order query requires chainCandidates");
+  }
+  for (const candidateValue of value) {
+    const candidate = objectValue(candidateValue, "chain candidate");
+    const unexpectedFields = Object.keys(candidate).filter((key) => !new Set(["instanceId", "effectId"]).has(key));
+    if (unexpectedFields.length) {
+      fail("UNTRUSTED_DERIVED_FACT", "chain candidate contains fields outside the closed input schema", { unexpectedFields });
+    }
+    stringValue(candidate.instanceId, "chain candidate.instanceId");
+    stringValue(candidate.effectId, "chain candidate.effectId");
   }
 }
 
@@ -692,6 +953,12 @@ function validateAssumptions(value, sourceText, mode) {
   if (mode === "STRICT" && value.length) fail("MISSING_STATE_FACT", "STRICT mode cannot replace missing state with assumptions");
   for (const assumptionValue of value) {
     const assumption = objectValue(assumptionValue, "assumption");
+    assertClosedObject(assumption, new Set([
+      "assumptionId",
+      "type",
+      "assumesFactId",
+      "sourceSpan",
+    ]), "assumption");
     stringValue(assumption.assumptionId, "assumption.assumptionId");
     stringValue(assumption.type, "assumption.type");
     if (mode === "ABSTRACT_ASSUMPTIONS") stringValue(assumption.assumesFactId, "assumption.assumesFactId");
@@ -708,11 +975,7 @@ function validateCapabilityIds(value) {
 }
 
 function assertNoTrustedConclusions(value, path = "scenario") {
-  const forbidden = new Set([
-    "banishedByCardEffect", "summonLegal", "triggerActivates", "finalChainNumber", "canActivate", "operationSuccessful",
-    "legal", "verdict", "chainPosition", "canSummon", "canResolve", "trusted", "authority", "proofCertificate",
-    "certificateVerification",
-  ]);
+  const forbidden = new Set(FORMAL_SCENARIO_PROHIBITED_DERIVED_FIELDS);
   if (!value || typeof value !== "object") return;
   for (const [key, child] of Object.entries(value)) {
     if (forbidden.has(key)) fail("UNTRUSTED_DERIVED_FACT", "scenario cannot author engine-derived conclusion: " + path + "." + key);
@@ -722,6 +985,11 @@ function assertNoTrustedConclusions(value, path = "scenario") {
 
 function validateDefinitionSnapshot(value, instances) {
   const snapshot = objectValue(value, "scenario.definitionSnapshot");
+  assertClosedObject(snapshot, new Set([
+    "snapshotId",
+    "manifestSha256",
+    "definitions",
+  ]), "scenario.definitionSnapshot");
   const snapshotId = stringValue(snapshot.snapshotId, "definitionSnapshot.snapshotId");
   digestValue(snapshot.manifestSha256, "definitionSnapshot.manifestSha256");
   if (!Array.isArray(snapshot.definitions) || !snapshot.definitions.length) {
@@ -730,6 +998,12 @@ function validateDefinitionSnapshot(value, instances) {
   const definitions = new Map();
   for (const definitionValue of snapshot.definitions) {
     const definition = objectValue(definitionValue, "definition snapshot entry");
+    assertClosedObject(definition, new Set([
+      "cardId",
+      "definitionId",
+      "contentSha256",
+      "effects",
+    ]), "definition snapshot entry");
     const cardId = stringValue(definition.cardId, "definition.cardId");
     if (definitions.has(cardId)) fail("FORMAL_DEFINITION_SNAPSHOT_INVALID", "duplicate definition cardId: " + cardId);
     const definitionId = stringValue(definition.definitionId, "definition.definitionId");
@@ -738,6 +1012,11 @@ function validateDefinitionSnapshot(value, instances) {
     const effects = new Map();
     for (const effectValue of definition.effects) {
       const effect = objectValue(effectValue, "definition effect entry");
+      assertClosedObject(effect, new Set([
+        "effectId",
+        "definitionEffectId",
+        "contentSha256",
+      ]), "definition effect entry");
       const effectId = stringValue(effect.effectId, "definitionEffect.effectId");
       if (effects.has(effectId)) fail("FORMAL_DEFINITION_SNAPSHOT_INVALID", "duplicate definition effectId: " + effectId);
       effects.set(effectId, {
@@ -947,9 +1226,29 @@ function objectValue(value, label) {
   return value;
 }
 
+function assertClosedObject(value, allowedFields, label) {
+  const unexpectedFields = Object.keys(value).filter((key) => !allowedFields.has(key));
+  if (unexpectedFields.length) {
+    fail("UNTRUSTED_DERIVED_FACT", label + " contains fields outside the closed input schema", {
+      unexpectedFields,
+    });
+  }
+}
+
 function stringValue(value, label, trim = true) {
   if (typeof value !== "string" || !(trim ? value.trim() : value).length) fail("FORMAL_RESPONSE_SCHEMA_INVALID", label + " must be a non-empty string");
   return trim ? value.trim() : value;
+}
+
+function enumValue(value, allowed, label) {
+  const text = stringValue(value, label);
+  if (!allowed.has(text)) {
+    fail("FORMAL_SCENARIO_SCHEMA_INVALID", label + " contains an unsupported value", {
+      actual: text,
+      allowed: [...allowed],
+    });
+  }
+  return text;
 }
 
 function integerValue(value, label) {

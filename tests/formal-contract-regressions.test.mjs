@@ -145,6 +145,36 @@ test("missing provenance and unresolved opponent priority fail closed instead of
   assert.equal(branchResult.unknownReasons[0].code, "FORMAL_SCENARIO_SCHEMA_INVALID");
 });
 
+test("formal scenario request objects are closed and reject runtime outcome injection before transport", async () => {
+  const mutations = [
+    ["scenario", (candidate) => { candidate.forceOutcome = "TRUE"; }],
+    ["question", (candidate) => { candidate.question.forceOutcome = "TRUE"; }],
+    ["cardInstance", (candidate) => { candidate.cardInstances[0].runtimeEffectOverrides = ["always-legal"]; }],
+    ["definitionBinding", (candidate) => { candidate.cardInstances[0].definitionBinding.forceOutcome = "TRUE"; }],
+    ["effectBinding", (candidate) => { candidate.cardInstances[0].effectBindings[0].runtimeEffectOverrides = []; }],
+    ["definitionSnapshot", (candidate) => { candidate.definitionSnapshot.forceOutcome = "TRUE"; }],
+    ["definition", (candidate) => { candidate.definitionSnapshot.definitions[0].runtimeEffectOverrides = []; }],
+    ["definitionEffect", (candidate) => { candidate.definitionSnapshot.definitions[0].effects[0].forceOutcome = "TRUE"; }],
+    ["sourceSpan", (candidate) => { candidate.cardInstances[0].sourceSpan.forceOutcome = "TRUE"; }],
+  ];
+  for (const [label, mutate] of mutations) {
+    const candidate = structuredClone(anonymousScenario);
+    mutate(candidate);
+    let transportCalls = 0;
+    const response = await requestFormalScenarioAnalysis({
+      formalScenario: candidate,
+      env: { OCG_ENGINE_URL: "http://formal.test" },
+      fetchImpl: async () => {
+        transportCalls += 1;
+        throw new Error("closed request must be rejected before transport");
+      },
+    });
+    assert.equal(response.status, "unknown", label);
+    assert.equal(response.error.code, "UNTRUSTED_DERIVED_FACT", label);
+    assert.equal(transportCalls, 0, label);
+  }
+});
+
 test("incomplete execution or search downgrades definitive engine output to UNKNOWN, never FALSE", async () => {
   for (const field of ["executionComplete", "searchComplete", "querySliceComplete"]) {
     const mock = formalEndpointMock({ resultMutator(result) { result[field] = false; } });

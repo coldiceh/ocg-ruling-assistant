@@ -5,7 +5,17 @@ import { buildSubQuestionDependencyGraph } from "../backend/subQuestionDependenc
 test("A. the send-to-graveyard question depends on the temporary-banish verdict", () => {
   const graph = buildSubQuestionDependencyGraph(query([
     question("q1", "temporary_banish", "完美世界-卡通世界", "能否除外该卡通怪兽？"),
-    question("q2", "send_to_gy", "referenced_toon_monster", "该卡通怪兽还会不会送墓？"),
+    question("q2", "send_to_gy", "referenced_monster", "该卡通怪兽还会不会送墓？"),
+  ]));
+  assert.ok(graph.edges.some((edge) => edge.fromQuestionId === "q1"
+    && edge.toQuestionId === "q2"
+    && edge.relation === "depends_on_verdict"));
+});
+
+test("D. dependency inference is identical for a non-Toon referenced monster", () => {
+  const graph = buildSubQuestionDependencyGraph(query([
+    question("q1", "temporary_banish", "某张效果卡", "能否除外该龙族怪兽？"),
+    question("q2", "send_to_gy", "referenced_monster", "该龙族怪兽还会不会送墓？"),
   ]));
   assert.ok(graph.edges.some((edge) => edge.fromQuestionId === "q1"
     && edge.toQuestionId === "q2"

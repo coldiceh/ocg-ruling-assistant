@@ -1,15 +1,20 @@
 export function evaluateDamageStepBlocker(analysis) {
-  if (!analysis?.isDamageStep || analysis.confirmationLevel === "official_confirmed" || analysis.allowedInDamageStep === true) {
+  if (!analysis?.isDamageStep || analysis.allowedInDamageStep === true) {
     return { hasBlocker: false, kind: "none", analysis };
   }
-  if (analysis.allowedInDamageStep === false) return { hasBlocker: true, kind: "activation_restricted", analysis };
+  if (analysis.confirmationLevel === "official_confirmed") {
+    return analysis.allowedInDamageStep === false
+      ? { hasBlocker: true, kind: "official_restriction", analysis }
+      : { hasBlocker: false, kind: "none", analysis };
+  }
+  if (analysis.allowedInDamageStep === false) return { hasBlocker: true, kind: "analysis_hint", analysis };
   return { hasBlocker: true, kind: "insufficient_info", analysis };
 }
 
 export function buildDamageStepBlockerAnswer(result) {
   if (!result?.hasBlocker) return null;
   const analysis = result.analysis;
-  const restricted = result.kind === "activation_restricted";
+  const restricted = result.kind === "official_restriction";
   return {
     answerType: restricted ? "rule_judgment" : "needs_clarification",
     verdict: restricted ? "activation_illegal_or_unsupported_in_damage_step" : "insufficient_info",
@@ -27,7 +32,7 @@ export function buildDamageStepBlockerAnswer(result) {
     assumptions: [],
     possibleCounterCases: [],
     confidence: "low",
-    confirmationLevel: restricted ? "rule_derived" : "insufficient_info",
+    confirmationLevel: restricted ? "official_confirmed" : "insufficient_info",
     damageStepAnalysis: analysis,
   };
 }

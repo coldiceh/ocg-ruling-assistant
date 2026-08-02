@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 import { loadRagData } from "../backend/ragEvidenceRetriever.mjs";
 import { answerRagRulingQuestion } from "../backend/ragRulingPipeline.mjs";
@@ -7,6 +10,7 @@ import {
   buildBatchSummary,
   evaluateRulingAnswer,
   renderBatchMarkdownSummary,
+  runRulingCorpusBatch,
   shouldFailBatchProcess,
 } from "../scripts/batch-ruling-corpus.mjs";
 
@@ -56,6 +60,146 @@ test("batch evaluator fails independently on missing cards, missing QA, and a co
   assert.deepEqual(evaluation.cardResolution.missingCardIds, ["200"]);
   assert.equal(evaluation.officialQa.status, "miss");
   assert.equal(evaluation.correctness.reason, "verdict_contradiction");
+});
+
+test("an expected QA miss is diagnostic unless the corpus explicitly requires that citation", () => {
+  const answer = {
+    shortAnswer: "可以发动。",
+    resolvedCards: [],
+    usedEvidence: [],
+    debug: {
+      retrievalCounts: { officialQaDirectCandidates: 0 },
+      unresolvedMentions: [],
+      ambiguousMentions: [],
+    },
+  };
+  const diagnostic = evaluateRulingAnswer({
+    question: "可以发动吗？",
+    expectedQaId: "300",
+    expectedAnswer: "可以发动。",
+  }, answer);
+  assert.equal(diagnostic.officialQa.status, "miss");
+  assert.equal(diagnostic.requireExpectedQaIds, false);
+  assert.equal(diagnostic.overall, "needs_review");
+
+  const required = evaluateRulingAnswer({
+    question: "可以发动吗？",
+    expectedQaId: "300",
+    requireExpectedQaIds: true,
+    expectedAnswer: "可以发动。",
+  }, answer);
+  assert.equal(required.requireExpectedQaIds, true);
+  assert.equal(required.overall, "fail");
+});
+
+test("batch reports isolate model configuration and forward it to the deployed answer API", async (t) => {
+  const tempRoot = await mkdtemp(join(tmpdir(), "ocg-ruling-batch-model-config-"));
+  t.after(() => rm(tempRoot, { recursive: true, force: true }));
+  const inputPath = join(tempRoot, "corpus.json");
+  const outputPath = join(tempRoot, "report.json");
+  await writeFile(inputPath, JSON.stringify({
+    cases: [{ id: "one", question: "可以发动吗？", expectedAnswer: "可以发动。" }],
+  }), "utf8");
+  const requestBodies = [];
+  const fetchImpl = async (_url, options) => {
+    requestBodies.push(JSON.parse(options.body));
+    return {
+      ok: true,
+      status: 200,
+      async json() {
+        return {
+          shortAnswer: "可以发动。",
+          resolvedCards: [],
+          usedEvidence: [],
+          debug: {
+            providerUsed: "deepseek",
+            modelUsed: "deepseek-v4-flash",
+            dryRun: false,
+            retrievalCounts: {},
+            unresolvedMentions: [],
+            ambiguousMentions: [],
+          },
+        };
+      },
+    };
+  };
+
+  const first = await runRulingCorpusBatch({
+    inputPath,
+    outputPath,
+    endpoint: "https://example.test/api/answer",
+    runners: ["online"],
+    modelTier: "flash",
+    thinkingMode: "disabled",
+    fetchImpl,
+  });
+  assert.deepEqual(first.modelConfiguration, {
+    modelTier: "flash",
+    thinkingMode: "disabled",
+  });
+  assert.deepEqual(requestBodies[0], {
+    question: "可以发动吗？",
+    mode: "rag",
+    modelTier: "flash",
+    thinkingMode: "disabled",
+  });
+
+  const second = await runRulingCorpusBatch({
+    inputPath,
+    outputPath,
+    endpoint: "https://example.test/api/answer",
+    runners: ["online"],
+    modelTier: "flash",
+    thinkingMode: "enabled",
+    reasoningEffort: "max",
+    fetchImpl,
+  });
+  assert.equal(requestBodies.length, 2, "a different model configuration must not reuse the previous answer");
+  assert.deepEqual(second.modelConfiguration, {
+    modelTier: "flash",
+    thinkingMode: "enabled",
+    reasoningEffort: "max",
+  });
+
+  await runRulingCorpusBatch({
+    inputPath,
+    outputPath,
+    endpoint: "https://second.example.test/api/answer",
+    runners: ["online"],
+    modelTier: "flash",
+    thinkingMode: "enabled",
+    reasoningEffort: "max",
+    fetchImpl,
+  });
+  assert.equal(requestBodies.length, 3, "a different endpoint must not reuse the previous answer");
+
+  const differentVersion = await runRulingCorpusBatch({
+    inputPath,
+    outputPath,
+    endpoint: "https://second.example.test/api/answer",
+    runners: ["online"],
+    rulingVersion: "previous",
+    modelTier: "flash",
+    thinkingMode: "enabled",
+    reasoningEffort: "max",
+    fetchImpl,
+  });
+  assert.equal(requestBodies.length, 4, "a different ruling version must not reuse the previous answer");
+  assert.equal(differentVersion.rulingVersion, "previous");
+
+  await assert.rejects(
+    runRulingCorpusBatch({
+      inputPath,
+      outputPath,
+      endpoint: "https://example.test/api/answer",
+      runners: ["online"],
+      modelTier: "flash",
+      thinkingMode: "disabled",
+      reasoningEffort: "high",
+      fetchImpl,
+    }),
+    /reasoning effort cannot be set when thinking mode is disabled/u,
+  );
 });
 
 test("complex official answers remain manual review even when the expected QA is cited", () => {

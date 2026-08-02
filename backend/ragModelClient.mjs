@@ -5,9 +5,12 @@ import { compileRuleScenario } from "./ruleScenarioCompiler.mjs";
 const DEFAULT_DEEPSEEK_BASE_URL = "https://api.deepseek.com";
 const DEFAULT_DEEPSEEK_MODEL = "deepseek-v4-flash";
 const DEFAULT_DEEPSEEK_CARD_MODEL = "deepseek-v4-flash";
+const DEFAULT_JSON_TASK_MAX_OUTPUT_TOKENS = 4000;
 const DEFAULT_LIGHTWEIGHT_EXTRACTION_TIMEOUT_MS = 4500;
 const DEFAULT_DAILY_BUDGET_CNY = 10;
 const DEFAULT_BUDGET_TIMEZONE = "Asia/Tokyo";
+const DEEPSEEK_THINKING_MODES = new Set(["enabled", "disabled"]);
+const DEEPSEEK_REASONING_EFFORTS = new Set(["high", "max"]);
 const RESTRICTIVE_EVIDENCE_PATTERN = /(?:不能|不可|不得|无法|不可以|不适用|不在场上存在|禁止|不满足|不存在|cannot|can't|must not|may not|not allowed|できません|発動できません)/iu;
 const GROUNDING_MECHANISM_PATTERNS = Object.freeze([
   ["activation", /发动|發動|発動|activate/iu],
@@ -49,11 +52,31 @@ export async function callRagModel({
   dryRun,
   fetchImpl = globalThis.fetch,
   now = new Date(),
+  thinkingMode,
+  reasoningEffort,
+  signal,
 } = {}) {
   const providerResolution = resolveRagProvider(env);
   const provider = providerResolution.provider;
   const modelName = modelNameForProvider(provider, env);
-  const maxTokens = resolveRagMaxOutputTokens(env);
+  const deepSeekGeneration = provider === "deepseek"
+    ? resolveDeepSeekGenerationConfig({ modelName, thinkingMode, reasoningEffort, env })
+    : null;
+  const maxTokens = resolveRagMaxOutputTokens(env, {
+    provider,
+    thinkingMode: deepSeekGeneration?.thinkingMode,
+  });
+  const generationConfig = {
+    requestModel: modelName,
+    maxOutputTokens: maxTokens,
+    ...(deepSeekGeneration ? {
+      thinkingMode: deepSeekGeneration.thinkingMode,
+      reasoningEffort: deepSeekGeneration.reasoningEffort,
+      thinkingModeSource: deepSeekGeneration.thinkingModeSource,
+      reasoningEffortSource: deepSeekGeneration.reasoningEffortSource,
+    } : {}),
+  };
+  const generationWarnings = deepSeekGeneration?.warnings || [];
   const forcedDryRun = dryRun === true || isEnabled(env.RAG_DRY_RUN);
   const willCallRemote = !modelInvoker && !forcedDryRun && provider !== "mock" && hasProviderKey(provider, env) && typeof fetchImpl === "function";
   const budget = await buildBudgetPreflight({
@@ -66,20 +89,47 @@ export async function callRagModel({
     trackSpend: willCallRemote,
   });
 
+  if (forcedDryRun) {
+    return {
+      answer: buildMockAnswer({ evidence, cardResolution }),
+      rawText: "",
+      provider: "mock",
+      providerUsed: "mock",
+      modelName: "mock-rag",
+      modelUsed: "mock-rag",
+      dryRun: true,
+      warnings: [...providerResolution.warnings, ...generationWarnings, ...budget.warnings],
+      tokenUsage: {},
+      estimatedCostCny: 0,
+      budgetStatus: budget.status,
+      generationConfig,
+    };
+  }
+
   if (modelInvoker) {
-    const raw = await modelInvoker({ prompt, provider, modelName, maxTokens });
+    const raw = await modelInvoker({
+      prompt,
+      provider,
+      modelName,
+      maxTokens,
+      thinkingMode: deepSeekGeneration?.thinkingMode,
+      reasoningEffort: deepSeekGeneration?.reasoningEffort,
+      signal,
+    });
     const parsed = parseModelResult(raw, {
       provider,
       modelName,
       dryRun: false,
-      warnings: providerResolution.warnings,
+      warnings: [...providerResolution.warnings, ...generationWarnings],
       budgetStatus: budget.status,
+      generationConfig,
     });
     return {
       ...parsed,
       tokenUsage: {},
       estimatedCostCny: 0,
       budgetStatus: budget.status,
+      generationConfig,
     };
   }
 
@@ -92,14 +142,15 @@ export async function callRagModel({
       modelName,
       modelUsed: modelName || provider,
       dryRun: true,
-      warnings: [...providerResolution.warnings, "api_daily_budget_exceeded", ...budget.warnings],
+      warnings: [...providerResolution.warnings, ...generationWarnings, "api_daily_budget_exceeded", ...budget.warnings],
       tokenUsage: {},
       estimatedCostCny: budget.status.estimatedThisCallCny,
       budgetStatus: budget.status,
+      generationConfig,
     };
   }
 
-  if (forcedDryRun || provider === "mock" || !hasProviderKey(provider, env) || typeof fetchImpl !== "function") {
+  if (provider === "mock" || !hasProviderKey(provider, env) || typeof fetchImpl !== "function") {
     return {
       answer: buildMockAnswer({ evidence, cardResolution }),
       rawText: "",
@@ -108,56 +159,89 @@ export async function callRagModel({
       modelName: "mock-rag",
       modelUsed: "mock-rag",
       dryRun: true,
-      warnings: [...providerResolution.warnings, ...budget.warnings],
+      warnings: [...providerResolution.warnings, ...generationWarnings, ...budget.warnings],
       tokenUsage: {},
       estimatedCostCny: 0,
       budgetStatus: budget.status,
+      generationConfig,
     };
   }
 
   try {
     let response = provider === "gemini"
-      ? await callGemini({ prompt, env, modelName, maxTokens, fetchImpl })
-      : await callDeepSeek({ prompt, env, modelName, maxTokens, fetchImpl });
+      ? await callGemini({ prompt, env, modelName, maxTokens, fetchImpl, signal })
+      : await callDeepSeek({
+          prompt,
+          env,
+          modelName,
+          maxTokens,
+          fetchImpl,
+          thinkingMode: deepSeekGeneration.thinkingMode,
+          reasoningEffort: deepSeekGeneration.reasoningEffort,
+          signal,
+        });
     const responses = [response];
     if (provider === "deepseek" && shouldRetryCompactDeepSeek(response) && recoveryPrompt) {
       const recoveryMaxTokens = readPositiveNumber(
         env.RAG_RECOVERY_MAX_OUTPUT_TOKENS,
         Math.max(maxTokens * 2, 8000),
       );
-      const recovery = await callDeepSeek({
-        prompt: recoveryPrompt,
-        env,
-        modelName,
-        maxTokens: recoveryMaxTokens,
-        fetchImpl,
-        temperature: 0,
-      });
-      responses.push(recovery);
-      const recoveryAssessment = assessDeepSeekRecovery(recovery);
-      response = recoveryAssessment.ok
-        ? {
-            ...recovery,
-            warnings: [
-              ...withoutRecoverableDeepSeekWarnings(responses[0].warnings || []),
-              "deepseek_compact_recovery_attempted",
-              "deepseek_compact_recovery_succeeded",
-              ...(recovery.warnings || []),
-            ],
-          }
-        : {
-            ...responses[0],
-            warnings: [
-              ...(responses[0].warnings || []),
-              "deepseek_compact_recovery_attempted",
-              "deepseek_compact_recovery_failed",
-              recoveryAssessment.warning,
-              ...(recovery.warnings || []),
-            ],
-          };
+      try {
+        const recovery = await callDeepSeek({
+          prompt: recoveryPrompt,
+          env,
+          modelName,
+          maxTokens: recoveryMaxTokens,
+          fetchImpl,
+          temperature: 0,
+          thinkingMode: deepSeekGeneration.thinkingMode,
+          reasoningEffort: deepSeekGeneration.reasoningEffort,
+          signal,
+        });
+        responses.push(recovery);
+        const recoveryAssessment = assessDeepSeekRecovery(recovery);
+        response = recoveryAssessment.ok
+          ? {
+              ...recovery,
+              warnings: [
+                ...withoutRecoverableDeepSeekWarnings(responses[0].warnings || []),
+                "deepseek_compact_recovery_attempted",
+                "deepseek_compact_recovery_succeeded",
+                ...(recovery.warnings || []),
+              ],
+            }
+          : {
+              ...responses[0],
+              warnings: [
+                ...(responses[0].warnings || []),
+                "deepseek_compact_recovery_attempted",
+                "deepseek_compact_recovery_failed",
+                recoveryAssessment.warning,
+                ...(recovery.warnings || []),
+              ],
+            };
+      } catch (error) {
+        // The primary response is already billable. A failed or aborted compact
+        // recovery must not route through the outer reservation-refund path.
+        response = {
+          ...responses[0],
+          warnings: [
+            ...(responses[0].warnings || []),
+            "deepseek_compact_recovery_attempted",
+            "deepseek_compact_recovery_failed",
+            `deepseek_compact_recovery_call_failed:${safeErrorMessage(error)}`,
+          ],
+        };
+      }
     }
     const tokenUsage = sumTokenUsage(responses.map((item) => normalizeUsage(provider, item.usage)));
-    const actualCost = estimateActualCostCny(provider, tokenUsage, env);
+    const reportedTokens = Number(tokenUsage.prompt_tokens || 0)
+      + Number(tokenUsage.completion_tokens || 0)
+      + Number(tokenUsage.total_tokens || 0);
+    const measuredCost = estimateActualCostCny(provider, tokenUsage, env);
+    const actualCost = reportedTokens > 0 || provider === "gemini"
+      ? measuredCost
+      : roundCost(budget.reservedAmountCny || Number(budget.status?.estimatedThisCallCny || 0));
     const spendWarnings = [];
     let budgetStatus = budget.status;
     try {
@@ -178,7 +262,13 @@ export async function callRagModel({
       provider,
       modelName,
       dryRun: false,
-      warnings: [...providerResolution.warnings, ...budget.warnings, ...spendWarnings, ...(response.warnings || [])],
+      warnings: [
+        ...providerResolution.warnings,
+        ...generationWarnings,
+        ...budget.warnings,
+        ...spendWarnings,
+        ...(response.warnings || []),
+      ],
       budgetStatus,
     });
     return {
@@ -187,6 +277,7 @@ export async function callRagModel({
       estimatedCostCny: actualCost,
       budgetStatus,
       generationAttempts: responses.map((item, index) => summarizeGenerationAttempt(item, index)),
+      generationConfig,
     };
   } catch (error) {
     const warning = `model_call_failed:${error instanceof Error ? error.message : String(error)}`;
@@ -199,18 +290,20 @@ export async function callRagModel({
       modelName,
       modelUsed: modelName || provider,
       dryRun: false,
-      warnings: [...providerResolution.warnings, warning, ...budget.warnings],
+      warnings: [...providerResolution.warnings, ...generationWarnings, warning, ...budget.warnings],
       tokenUsage: {},
       estimatedCostCny: 0,
       budgetStatus: releasedBudgetStatus,
+      generationConfig,
     };
   }
 }
 
 /**
- * Runs one server-side DeepSeek JSON task without applying the public answer
- * budget. The admin model lab uses this only for evidence preparation; final
- * ruling authorization is enforced by its provider adapter.
+ * Runs one server-side DeepSeek JSON task for non-authoritative evidence/draft
+ * preparation. Callers on the public path must opt into public budget tracking;
+ * final ruling authorization is enforced by the downstream proof gate or the
+ * provider adapter.
  */
 export async function callDeepSeekJsonTask({
   prompt,
@@ -219,6 +312,11 @@ export async function callDeepSeekJsonTask({
   env = globalThis.process?.env || {},
   fetchImpl = globalThis.fetch,
   temperature = 0,
+  thinkingMode = "disabled",
+  reasoningEffort,
+  signal,
+  trackPublicBudget = false,
+  now = new Date(),
 } = {}) {
   const normalizedPrompt = String(prompt || "").trim();
   if (!normalizedPrompt) throw new TypeError("DeepSeek JSON task prompt must not be empty");
@@ -228,22 +326,65 @@ export async function callDeepSeekJsonTask({
     throw error;
   }
   if (typeof fetchImpl !== "function") throw new TypeError("DeepSeek JSON task requires fetch");
+  const resolvedMaxTokens = optionalPositiveInteger(maxTokens);
+  const budget = trackPublicBudget === true
+    ? await buildBudgetPreflight({
+        provider: "deepseek",
+        prompt: normalizedPrompt,
+        maxTokens: resolvedMaxTokens || DEFAULT_JSON_TASK_MAX_OUTPUT_TOKENS,
+        env,
+        fetchImpl,
+        now,
+        trackSpend: true,
+      })
+    : null;
+  if (budget?.blocked) {
+    const error = new Error("public DeepSeek budget is exhausted");
+    error.code = "api_daily_budget_exceeded";
+    throw error;
+  }
 
-  const response = await callDeepSeek({
-    prompt: normalizedPrompt,
-    env,
-    modelName: String(modelName || env.DEEPSEEK_MODEL || DEFAULT_DEEPSEEK_MODEL).trim(),
-    maxTokens: optionalPositiveInteger(maxTokens),
-    fetchImpl,
-    temperature: readNumber(temperature, 0),
-  });
-  const parsed = parseStrictJsonObject(response.rawText);
-  return {
-    ...parsed,
-    rawText: response.rawText,
-    usage: normalizeUsage("deepseek", response.usage),
-    warnings: [...(response.warnings || [])],
-  };
+  let remoteCallCompleted = false;
+  try {
+    const response = await callDeepSeek({
+      prompt: normalizedPrompt,
+      env,
+      modelName: String(modelName || env.DEEPSEEK_MODEL || DEFAULT_DEEPSEEK_MODEL).trim(),
+      maxTokens: resolvedMaxTokens,
+      fetchImpl,
+      temperature: readNumber(temperature, 0),
+      thinkingMode,
+      reasoningEffort,
+      signal,
+    });
+    remoteCallCompleted = true;
+    const usage = normalizeUsage("deepseek", response.usage);
+    const estimatedCostCny = estimateActualCostCny("deepseek", usage, env);
+    let budgetStatus = budget?.status || null;
+    const budgetWarnings = [];
+    if (budget) {
+      try {
+        budgetStatus = await recordBudgetSpend({ preflight: budget, actualCostCny: estimatedCostCny, env, fetchImpl });
+      } catch (error) {
+        budgetWarnings.push(`budget_spend_record_failed:${safeErrorMessage(error)}`);
+        budgetStatus = { ...budget.status, budgetStorage: "unavailable" };
+      }
+    }
+    const parsed = parseStrictJsonObject(response.rawText);
+    return {
+      ...parsed,
+      rawText: response.rawText,
+      usage,
+      warnings: [...(response.warnings || []), ...(budget?.warnings || []), ...budgetWarnings],
+      estimatedCostCny,
+      budgetStatus,
+    };
+  } catch (error) {
+    if (budget && !remoteCallCompleted) {
+      await releaseBudgetReservation({ preflight: budget, env, fetchImpl }).catch(() => {});
+    }
+    throw error;
+  }
 }
 
 export async function callCardNameExtractionModel({
@@ -251,6 +392,9 @@ export async function callCardNameExtractionModel({
   env = globalThis.process?.env || {},
   modelInvoker,
   fetchImpl = globalThis.fetch,
+  now = new Date(),
+  dryRun = false,
+  signal,
 } = {}) {
   const providerResolution = resolveCardExtractionProvider(env);
   const provider = providerResolution.provider;
@@ -258,22 +402,58 @@ export async function callCardNameExtractionModel({
   const maxTokens = readNumber(env.RAG_CARD_MODEL_MAX_OUTPUT_TOKENS, 800);
   const prompt = buildCardNameExtractionPrompt(userQuery);
 
+  if (dryRun === true || isEnabled(env.RAG_DRY_RUN)) {
+    return emptyCardNameExtractionResult(provider, modelName, true, [
+      ...providerResolution.warnings,
+      "card_name_model_dry_run_skipped",
+    ]);
+  }
+
   if (modelInvoker) {
     try {
-      const raw = await modelInvoker({ prompt, provider, modelName, maxTokens, task: "card_name_extraction" });
+      const execution = await runBudgetedAuxiliaryModelCall({
+        provider,
+        prompt,
+        maxTokens,
+        env,
+        fetchImpl,
+        now,
+        invoke: async () => {
+          const raw = await modelInvoker({ prompt, provider, modelName, maxTokens, task: "card_name_extraction", signal });
+          return { rawPayload: raw, rawText: String(raw || ""), usage: raw?.usage || {} };
+        },
+      });
+      if (execution.blocked) {
+        return {
+          ...emptyCardNameExtractionResult(provider, modelName, true, [
+            ...providerResolution.warnings,
+            ...execution.warnings,
+            "api_daily_budget_exceeded_card_name_model_skipped",
+          ]),
+          budgetStatus: execution.budgetStatus,
+        };
+      }
+      const raw = execution.value.rawPayload;
       return {
         candidates: normalizeCardNameCandidates(raw),
         rawText: String(raw || ""),
         providerUsed: provider,
         modelUsed: modelName,
         dryRun: false,
-        warnings: providerResolution.warnings,
+        warnings: [...providerResolution.warnings, ...execution.warnings],
+        tokenUsage: execution.usage,
+        estimatedCostCny: execution.estimatedCostCny,
+        budgetStatus: execution.budgetStatus,
       };
     } catch (error) {
-      return emptyCardNameExtractionResult(provider, modelName, false, [
-        ...providerResolution.warnings,
-        `card_name_model_failed:${safeErrorMessage(error)}`,
-      ]);
+      return {
+        ...emptyCardNameExtractionResult(provider, modelName, false, [
+          ...providerResolution.warnings,
+          ...(error.budgetWarnings || []),
+          `card_name_model_failed:${safeErrorMessage(error)}`,
+        ]),
+        budgetStatus: error.budgetStatus || null,
+      };
     }
   }
 
@@ -293,40 +473,72 @@ export async function callCardNameExtractionModel({
 
   try {
     const timeoutMs = readPositiveNumber(env.RAG_CARD_MODEL_TIMEOUT_MS, DEFAULT_LIGHTWEIGHT_EXTRACTION_TIMEOUT_MS);
-    const call = provider === "gemini"
-      ? callGemini({
-        prompt,
-        env,
-        modelName,
-        maxTokens,
-        fetchImpl,
-        temperature: readNumber(env.RAG_CARD_MODEL_TEMPERATURE, 0),
-        maxTokensEnvName: "GEMINI_CARD_MODEL_MAX_OUTPUT_TOKENS",
-      })
-      : callDeepSeek({
-        prompt,
-        env,
-        modelName,
-        maxTokens,
-        fetchImpl,
-        temperature: readNumber(env.RAG_CARD_MODEL_TEMPERATURE, 0),
-      });
-    const response = await withTimeout(call, timeoutMs, "card_name_model_timeout");
+    const execution = await runBudgetedAuxiliaryModelCall({
+      provider,
+      prompt,
+      maxTokens,
+      env,
+      fetchImpl,
+      now,
+      invoke: () => withTimeout(
+        provider === "gemini"
+          ? callGemini({
+            prompt,
+            env,
+            modelName,
+            maxTokens,
+            fetchImpl,
+            temperature: readNumber(env.RAG_CARD_MODEL_TEMPERATURE, 0),
+            maxTokensEnvName: "GEMINI_CARD_MODEL_MAX_OUTPUT_TOKENS",
+            signal,
+          })
+          : callDeepSeek({
+            prompt,
+            env,
+            modelName,
+            maxTokens,
+            fetchImpl,
+            temperature: readNumber(env.RAG_CARD_MODEL_TEMPERATURE, 0),
+            thinkingMode: "disabled",
+            signal,
+          }),
+        timeoutMs,
+        "card_name_model_timeout",
+      ),
+    });
+    if (execution.blocked) {
+      return {
+        ...emptyCardNameExtractionResult(provider, modelName, true, [
+          ...providerResolution.warnings,
+          ...execution.warnings,
+          "api_daily_budget_exceeded_card_name_model_skipped",
+        ]),
+        budgetStatus: execution.budgetStatus,
+      };
+    }
+    const response = execution.value;
     const result = {
       candidates: normalizeCardNameCandidates(response.rawText),
       rawText: response.rawText,
       providerUsed: provider,
       modelUsed: modelName,
       dryRun: false,
-      warnings: [...providerResolution.warnings, ...(response.warnings || [])],
+      warnings: [...providerResolution.warnings, ...execution.warnings, ...(response.warnings || [])],
+      tokenUsage: execution.usage,
+      estimatedCostCny: execution.estimatedCostCny,
+      budgetStatus: execution.budgetStatus,
     };
     writeCachedExtraction(cardNameExtractionCache, cacheKey, result, env);
     return result;
   } catch (error) {
-    return emptyCardNameExtractionResult(provider, modelName, false, [
-      ...providerResolution.warnings,
-      `card_name_model_failed:${safeErrorMessage(error)}`,
-    ]);
+    return {
+      ...emptyCardNameExtractionResult(provider, modelName, false, [
+        ...providerResolution.warnings,
+        ...(error.budgetWarnings || []),
+        `card_name_model_failed:${safeErrorMessage(error)}`,
+      ]),
+      budgetStatus: error.budgetStatus || null,
+    };
   }
 }
 
@@ -335,6 +547,9 @@ export async function callRuleQueryExtractionModel({
   env = globalThis.process?.env || {},
   modelInvoker,
   fetchImpl = globalThis.fetch,
+  now = new Date(),
+  dryRun = false,
+  signal,
 } = {}) {
   const providerResolution = resolveRuleQueryExtractionProvider(env);
   const provider = providerResolution.provider;
@@ -342,22 +557,58 @@ export async function callRuleQueryExtractionModel({
   const maxTokens = readNumber(env.RAG_RULE_MODEL_MAX_OUTPUT_TOKENS, 700);
   const prompt = buildRuleQueryExtractionPrompt(userQuery);
 
+  if (dryRun === true || isEnabled(env.RAG_DRY_RUN)) {
+    return emptyRuleQueryExtractionResult(provider, modelName, true, [
+      ...providerResolution.warnings,
+      "rule_query_model_dry_run_skipped",
+    ]);
+  }
+
   if (modelInvoker) {
     try {
-      const raw = await modelInvoker({ prompt, provider, modelName, maxTokens, task: "rule_query_extraction" });
+      const execution = await runBudgetedAuxiliaryModelCall({
+        provider,
+        prompt,
+        maxTokens,
+        env,
+        fetchImpl,
+        now,
+        invoke: async () => {
+          const raw = await modelInvoker({ prompt, provider, modelName, maxTokens, task: "rule_query_extraction", signal });
+          return { rawPayload: raw, rawText: String(raw || ""), usage: raw?.usage || {} };
+        },
+      });
+      if (execution.blocked) {
+        return {
+          ...emptyRuleQueryExtractionResult(provider, modelName, true, [
+            ...providerResolution.warnings,
+            ...execution.warnings,
+            "api_daily_budget_exceeded_rule_query_model_skipped",
+          ]),
+          budgetStatus: execution.budgetStatus,
+        };
+      }
+      const raw = execution.value.rawPayload;
       return {
         queries: normalizeRuleSearchQueries(raw),
         rawText: String(raw || ""),
         providerUsed: provider,
         modelUsed: modelName,
         dryRun: false,
-        warnings: providerResolution.warnings,
+        warnings: [...providerResolution.warnings, ...execution.warnings],
+        tokenUsage: execution.usage,
+        estimatedCostCny: execution.estimatedCostCny,
+        budgetStatus: execution.budgetStatus,
       };
     } catch (error) {
-      return emptyRuleQueryExtractionResult(provider, modelName, false, [
-        ...providerResolution.warnings,
-        `rule_query_model_failed:${safeErrorMessage(error)}`,
-      ]);
+      return {
+        ...emptyRuleQueryExtractionResult(provider, modelName, false, [
+          ...providerResolution.warnings,
+          ...(error.budgetWarnings || []),
+          `rule_query_model_failed:${safeErrorMessage(error)}`,
+        ]),
+        budgetStatus: error.budgetStatus || null,
+      };
     }
   }
 
@@ -377,40 +628,72 @@ export async function callRuleQueryExtractionModel({
 
   try {
     const timeoutMs = readPositiveNumber(env.RAG_RULE_MODEL_TIMEOUT_MS, readPositiveNumber(env.RAG_CARD_MODEL_TIMEOUT_MS, DEFAULT_LIGHTWEIGHT_EXTRACTION_TIMEOUT_MS));
-    const call = provider === "gemini"
-      ? callGemini({
-        prompt,
-        env,
-        modelName,
-        maxTokens,
-        fetchImpl,
-        temperature: readNumber(env.RAG_RULE_MODEL_TEMPERATURE, readNumber(env.RAG_CARD_MODEL_TEMPERATURE, 0)),
-        maxTokensEnvName: "GEMINI_RULE_MODEL_MAX_OUTPUT_TOKENS",
-      })
-      : callDeepSeek({
-        prompt,
-        env,
-        modelName,
-        maxTokens,
-        fetchImpl,
-        temperature: readNumber(env.RAG_RULE_MODEL_TEMPERATURE, readNumber(env.RAG_CARD_MODEL_TEMPERATURE, 0)),
-      });
-    const response = await withTimeout(call, timeoutMs, "rule_query_model_timeout");
+    const execution = await runBudgetedAuxiliaryModelCall({
+      provider,
+      prompt,
+      maxTokens,
+      env,
+      fetchImpl,
+      now,
+      invoke: () => withTimeout(
+        provider === "gemini"
+          ? callGemini({
+            prompt,
+            env,
+            modelName,
+            maxTokens,
+            fetchImpl,
+            temperature: readNumber(env.RAG_RULE_MODEL_TEMPERATURE, readNumber(env.RAG_CARD_MODEL_TEMPERATURE, 0)),
+            maxTokensEnvName: "GEMINI_RULE_MODEL_MAX_OUTPUT_TOKENS",
+            signal,
+          })
+          : callDeepSeek({
+            prompt,
+            env,
+            modelName,
+            maxTokens,
+            fetchImpl,
+            temperature: readNumber(env.RAG_RULE_MODEL_TEMPERATURE, readNumber(env.RAG_CARD_MODEL_TEMPERATURE, 0)),
+            thinkingMode: "disabled",
+            signal,
+          }),
+        timeoutMs,
+        "rule_query_model_timeout",
+      ),
+    });
+    if (execution.blocked) {
+      return {
+        ...emptyRuleQueryExtractionResult(provider, modelName, true, [
+          ...providerResolution.warnings,
+          ...execution.warnings,
+          "api_daily_budget_exceeded_rule_query_model_skipped",
+        ]),
+        budgetStatus: execution.budgetStatus,
+      };
+    }
+    const response = execution.value;
     const result = {
       queries: normalizeRuleSearchQueries(response.rawText),
       rawText: response.rawText,
       providerUsed: provider,
       modelUsed: modelName,
       dryRun: false,
-      warnings: [...providerResolution.warnings, ...(response.warnings || [])],
+      warnings: [...providerResolution.warnings, ...execution.warnings, ...(response.warnings || [])],
+      tokenUsage: execution.usage,
+      estimatedCostCny: execution.estimatedCostCny,
+      budgetStatus: execution.budgetStatus,
     };
     writeCachedExtraction(ruleQueryExtractionCache, cacheKey, result, env);
     return result;
   } catch (error) {
-    return emptyRuleQueryExtractionResult(provider, modelName, false, [
-      ...providerResolution.warnings,
-      `rule_query_model_failed:${safeErrorMessage(error)}`,
-    ]);
+    return {
+      ...emptyRuleQueryExtractionResult(provider, modelName, false, [
+        ...providerResolution.warnings,
+        ...(error.budgetWarnings || []),
+        `rule_query_model_failed:${safeErrorMessage(error)}`,
+      ]),
+      budgetStatus: error.budgetStatus || null,
+    };
   }
 }
 
@@ -423,6 +706,8 @@ export async function callRulebookGroundingModel({
   modelInvoker,
   fetchImpl = globalThis.fetch,
   now = new Date(),
+  dryRun = false,
+  signal,
 } = {}) {
   const maxRulebookCandidates = readPositiveNumber(env.RAG_MAX_RULEBOOK_CANDIDATES, 24);
   const maxQaCandidates = readPositiveNumber(env.RAG_MAX_QA_GROUNDING_CANDIDATES, 12);
@@ -489,6 +774,15 @@ export async function callRulebookGroundingModel({
     : "rulebook_state_transition_repair";
 
   const focusedReviewEnabled = Boolean(repairPrompt) && !isDisabled(env.RAG_RULEBOOK_FOCUSED_REPAIR_ENABLED);
+  if (dryRun === true || isEnabled(env.RAG_DRY_RUN)) {
+    return emptyRulebookGroundingResult(
+      provider,
+      modelName,
+      true,
+      [...providerResolution.warnings, "rulebook_grounding_dry_run_skipped"],
+      priorityConstraintEvidence,
+    );
+  }
   if (modelInvoker) {
     const primaryTask = Promise.resolve().then(() => modelInvoker({
       prompt,
@@ -496,6 +790,7 @@ export async function callRulebookGroundingModel({
       modelName,
       maxTokens,
       task: "rulebook_grounding",
+      signal,
     }));
     const focusedTask = focusedReviewEnabled
       ? Promise.resolve().then(() => modelInvoker({
@@ -504,6 +799,7 @@ export async function callRulebookGroundingModel({
         modelName,
         maxTokens: repairMaxTokens,
         task: focusedTaskName,
+        signal,
       }))
       : null;
     const [primaryOutcome, focusedOutcome] = await Promise.allSettled([
@@ -540,7 +836,7 @@ export async function callRulebookGroundingModel({
       budgetStatus: null,
     };
   }
-  if (provider === "mock" || !hasProviderKey(provider, env) || typeof fetchImpl !== "function" || isEnabled(env.RAG_DRY_RUN)) {
+  if (provider === "mock" || !hasProviderKey(provider, env) || typeof fetchImpl !== "function") {
     return emptyRulebookGroundingResult(
       "mock",
       "mock-rulebook-grounding",
@@ -582,6 +878,11 @@ export async function callRulebookGroundingModel({
     };
   }
 
+  let remoteCallCompleted = false;
+  let budgetStatus = budget.status;
+  let tokenUsage = {};
+  let actualCost = 0;
+  const spendWarnings = [];
   try {
     const timeoutMs = readPositiveNumber(env.RAG_RULEBOOK_MODEL_TIMEOUT_MS, 10000);
     const invokeGrounding = (modelPrompt, outputTokens) => provider === "gemini"
@@ -593,6 +894,7 @@ export async function callRulebookGroundingModel({
         fetchImpl,
         temperature: 0,
         maxTokensEnvName: "GEMINI_RULEBOOK_MODEL_MAX_OUTPUT_TOKENS",
+        signal,
       })
       : callDeepSeek({
         prompt: modelPrompt,
@@ -601,6 +903,8 @@ export async function callRulebookGroundingModel({
         maxTokens: outputTokens,
         fetchImpl,
         temperature: 0,
+        thinkingMode: "disabled",
+        signal,
       });
     const primaryTask = withTimeout(
       invokeGrounding(prompt, maxTokens),
@@ -619,6 +923,26 @@ export async function callRulebookGroundingModel({
       primaryTask,
       ...(focusedTask ? [focusedTask] : []),
     ]);
+    const responses = [primaryOutcome, focusedOutcome]
+      .filter((outcome) => outcome?.status === "fulfilled")
+      .map((outcome) => outcome.value);
+    remoteCallCompleted = responses.length > 0;
+    tokenUsage = sumTokenUsage(responses.map((item) => normalizeUsage(provider, item.usage)));
+    const reportedTokens = Number(tokenUsage.prompt_tokens || 0)
+      + Number(tokenUsage.completion_tokens || 0)
+      + Number(tokenUsage.total_tokens || 0);
+    const measuredCost = estimateActualCostCny(provider, tokenUsage, env);
+    actualCost = reportedTokens > 0 || provider === "gemini"
+      ? measuredCost
+      : roundCost(budget.reservedAmountCny || Number(budget.status?.estimatedThisCallCny || 0));
+    if (remoteCallCompleted) {
+      try {
+        budgetStatus = await recordBudgetSpend({ preflight: budget, actualCostCny: actualCost, env, fetchImpl });
+      } catch (error) {
+        spendWarnings.push("budget_spend_record_failed:" + safeErrorMessage(error));
+        budgetStatus = { ...budget.status, budgetStorage: "unavailable" };
+      }
+    }
     const combined = combineRulebookGroundingOutcomes({
       primaryOutcome,
       focusedOutcome: focusedTask ? focusedOutcome : null,
@@ -632,21 +956,8 @@ export async function callRulebookGroundingModel({
       const message = combined.warnings.join(";") || "rulebook_grounding_model_failed";
       throw new Error(message);
     }
-    const responses = [primaryOutcome, focusedOutcome]
-      .filter((outcome) => outcome?.status === "fulfilled")
-      .map((outcome) => outcome.value);
     const rawText = combined.rawText;
     const operationLegality = combined.operationLegality;
-    const tokenUsage = sumTokenUsage(responses.map((item) => normalizeUsage(provider, item.usage)));
-    const actualCost = estimateActualCostCny(provider, tokenUsage, env);
-    let budgetStatus = budget.status;
-    const spendWarnings = [];
-    try {
-      budgetStatus = await recordBudgetSpend({ preflight: budget, actualCostCny: actualCost, env, fetchImpl });
-    } catch (error) {
-      spendWarnings.push("budget_spend_record_failed:" + safeErrorMessage(error));
-      budgetStatus = { ...budget.status, budgetStorage: "unavailable" };
-    }
     const result = {
       operationLegality,
       rawText,
@@ -672,14 +983,19 @@ export async function callRulebookGroundingModel({
     }
     return result;
   } catch (error) {
-    const releasedBudgetStatus = await releaseBudgetReservation({ preflight: budget, env, fetchImpl }).catch(() => budget.status);
+    const failedBudgetStatus = remoteCallCompleted
+      ? budgetStatus
+      : await releaseBudgetReservation({ preflight: budget, env, fetchImpl }).catch(() => budget.status);
     return {
       ...emptyRulebookGroundingResult(provider, modelName, false, [
         ...providerResolution.warnings,
         ...budget.warnings,
+        ...spendWarnings,
         `rulebook_grounding_model_failed:${safeErrorMessage(error)}`,
       ], priorityConstraintEvidence),
-      budgetStatus: releasedBudgetStatus,
+      tokenUsage,
+      estimatedCostCny: actualCost,
+      budgetStatus: failedBudgetStatus,
     };
   }
 }
@@ -867,20 +1183,37 @@ export function parseRagModelJson(rawText) {
   }
 }
 
-async function callDeepSeek({ prompt, env, modelName, maxTokens, fetchImpl, temperature }) {
+async function callDeepSeek({
+  prompt,
+  env,
+  modelName,
+  maxTokens,
+  fetchImpl,
+  temperature,
+  thinkingMode,
+  reasoningEffort,
+  signal,
+}) {
   const endpoint = deepSeekChatCompletionsUrl(env.DEEPSEEK_BASE_URL);
   const body = {
     model: modelName || DEFAULT_DEEPSEEK_MODEL,
     messages: [{ role: "user", content: prompt }],
     stream: false,
     response_format: { type: "json_object" },
-    temperature: temperature ?? readNumber(env.RAG_MODEL_TEMPERATURE, 0),
   };
+  if (DEEPSEEK_THINKING_MODES.has(thinkingMode)) {
+    body.thinking = { type: thinkingMode };
+  }
+  if (thinkingMode === "enabled") {
+    if (DEEPSEEK_REASONING_EFFORTS.has(reasoningEffort)) body.reasoning_effort = reasoningEffort;
+  } else {
+    body.temperature = temperature ?? readNumber(env.RAG_MODEL_TEMPERATURE, 0);
+  }
   if (Number.isInteger(maxTokens) && maxTokens > 0) body.max_tokens = maxTokens;
   let response = await postJson(fetchImpl, endpoint, {
     authorization: `Bearer ${env.DEEPSEEK_API_KEY}`,
     "content-type": "application/json",
-  }, body);
+  }, body, { signal });
   const warnings = [];
   if (!response.ok && response.status === 400) {
     const fallbackBody = { ...body };
@@ -888,7 +1221,7 @@ async function callDeepSeek({ prompt, env, modelName, maxTokens, fetchImpl, temp
     response = await postJson(fetchImpl, endpoint, {
       authorization: `Bearer ${env.DEEPSEEK_API_KEY}`,
       "content-type": "application/json",
-    }, fallbackBody);
+    }, fallbackBody, { signal });
     warnings.push("deepseek_response_format_fallback");
   }
   if (!response.ok) throw new Error(`deepseek ${response.status}`);
@@ -906,6 +1239,14 @@ async function callDeepSeek({ prompt, env, modelName, maxTokens, fetchImpl, temp
     contentChars: rawText.length,
     reasoningContentPresent: Boolean(reasoningContent),
     reasoningContentChars: reasoningContent.length,
+    requestModel: String(body.model || ""),
+    responseModel: String(payload?.model || ""),
+    systemFingerprint: String(payload?.system_fingerprint || ""),
+    thinkingMode: DEEPSEEK_THINKING_MODES.has(thinkingMode) ? thinkingMode : "provider_default",
+    reasoningEffort: thinkingMode === "enabled" && DEEPSEEK_REASONING_EFFORTS.has(reasoningEffort)
+      ? reasoningEffort
+      : null,
+    maxOutputTokens: Number.isInteger(maxTokens) && maxTokens > 0 ? maxTokens : null,
     usage: payload?.usage || {},
     warnings,
   };
@@ -946,24 +1287,30 @@ function hasBasicRagAnswerSchema(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   if (!RAG_ANSWER_LEVELS.includes(value.answerLevel)) return false;
   if (!String(value.shortAnswer || "").trim()) return false;
-  if (!Array.isArray(value.reasoning)
-      || !value.reasoning.some((item) => typeof item === "string" && item.trim())) return false;
-  if (!Array.isArray(value.usedCards)
-      || !Array.isArray(value.usedEvidence)
-      || !Array.isArray(value.missingInfo)
-      || !Array.isArray(value.riskFlags)) return false;
-  if (!["low", "medium", "high"].includes(value.confidenceSelfEstimate)) return false;
-  return value.usedEvidence.every((item) => item && typeof item === "object" && !Array.isArray(item));
+  const reasoning = Array.isArray(value.reasoning) ? value.reasoning : [value.reasoning];
+  if (!reasoning.some((item) => String(item || "").trim())) return false;
+  for (const field of ["usedCards", "usedEvidence", "missingInfo", "riskFlags"]) {
+    if (value[field] !== undefined && !Array.isArray(value[field])) return false;
+  }
+  if (value.confidenceSelfEstimate !== undefined
+      && !["low", "medium", "high"].includes(value.confidenceSelfEstimate)) return false;
+  return (value.usedEvidence || []).every((item) => item && typeof item === "object" && !Array.isArray(item));
 }
 
 function summarizeGenerationAttempt(response = {}, index = 0) {
   return {
     attempt: index === 0 ? "primary" : "compact_recovery",
+    requestModel: String(response.requestModel || ""),
+    responseModel: String(response.responseModel || ""),
+    systemFingerprint: String(response.systemFingerprint || ""),
+    thinkingMode: String(response.thinkingMode || "not_applicable"),
+    reasoningEffort: response.reasoningEffort ? String(response.reasoningEffort) : null,
+    maxOutputTokens: Number.isFinite(Number(response.maxOutputTokens)) ? Number(response.maxOutputTokens) : null,
     finishReason: String(response.finishReason || ""),
     contentChars: Number(response.contentChars ?? String(response.rawText || "").length),
     reasoningContentPresent: response.reasoningContentPresent === true,
     reasoningContentChars: Number(response.reasoningContentChars || 0),
-    usage: response.usage && typeof response.usage === "object" ? { ...response.usage } : {},
+    usage: normalizeUsage("deepseek", response.usage),
   };
 }
 
@@ -976,7 +1323,7 @@ function extractChatMessageText(content) {
   }).filter(Boolean).join("\n");
 }
 
-async function callGemini({ prompt, env, modelName, maxTokens, fetchImpl, temperature, maxTokensEnvName = "GEMINI_MAX_OUTPUT_TOKENS" }) {
+async function callGemini({ prompt, env, modelName, maxTokens, fetchImpl, temperature, maxTokensEnvName = "GEMINI_MAX_OUTPUT_TOKENS", signal }) {
   const model = modelName || env.GEMINI_MODEL || "gemini-1.5-flash";
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(env.GEMINI_API_KEY)}`;
   const body = {
@@ -987,7 +1334,7 @@ async function callGemini({ prompt, env, modelName, maxTokens, fetchImpl, temper
       responseMimeType: "application/json",
     },
   };
-  const response = await postJson(fetchImpl, endpoint, { "content-type": "application/json" }, body);
+  const response = await postJson(fetchImpl, endpoint, { "content-type": "application/json" }, body, { signal });
   if (!response.ok) throw new Error(`gemini ${response.status}`);
   const payload = await response.json();
   return {
@@ -997,11 +1344,12 @@ async function callGemini({ prompt, env, modelName, maxTokens, fetchImpl, temper
   };
 }
 
-async function postJson(fetchImpl, url, headers, body) {
+async function postJson(fetchImpl, url, headers, body, { signal } = {}) {
   return fetchImpl(url, {
     method: "POST",
     headers,
     body: JSON.stringify(body),
+    ...(signal === undefined ? {} : { signal }),
   });
 }
 
@@ -1422,6 +1770,74 @@ async function buildBudgetPreflight({ provider, prompt, maxTokens, env, fetchImp
   };
 }
 
+async function runBudgetedAuxiliaryModelCall({
+  provider,
+  prompt,
+  maxTokens,
+  env,
+  fetchImpl,
+  now,
+  invoke,
+}) {
+  const budget = await buildBudgetPreflight({
+    provider,
+    prompt,
+    maxTokens,
+    env,
+    fetchImpl,
+    now,
+    trackSpend: true,
+  });
+  if (budget.blocked) {
+    return {
+      blocked: true,
+      value: null,
+      usage: {},
+      estimatedCostCny: 0,
+      budgetStatus: budget.status,
+      warnings: budget.warnings,
+    };
+  }
+
+  let remoteCallCompleted = false;
+  try {
+    const value = await invoke();
+    remoteCallCompleted = true;
+    const usage = normalizeUsage(provider, value?.usage || {});
+    const reportedTokens = Number(usage.prompt_tokens || 0)
+      + Number(usage.completion_tokens || 0)
+      + Number(usage.total_tokens || 0);
+    const measuredCost = estimateActualCostCny(provider, usage, env);
+    // Some providers omit usage from otherwise successful responses. In that
+    // case keep the preflight estimate instead of silently refunding a paid call.
+    const estimatedCostCny = reportedTokens > 0 || provider === "gemini"
+      ? measuredCost
+      : roundCost(budget.reservedAmountCny || Number(budget.status?.estimatedThisCallCny || 0));
+    let budgetStatus = budget.status;
+    const warnings = [...budget.warnings];
+    try {
+      budgetStatus = await recordBudgetSpend({ preflight: budget, actualCostCny: estimatedCostCny, env, fetchImpl });
+    } catch (error) {
+      warnings.push(`budget_spend_record_failed:${safeErrorMessage(error)}`);
+      budgetStatus = { ...budget.status, budgetStorage: "unavailable" };
+    }
+    return {
+      blocked: false,
+      value,
+      usage,
+      estimatedCostCny,
+      budgetStatus,
+      warnings,
+    };
+  } catch (error) {
+    error.budgetStatus = remoteCallCompleted
+      ? budget.status
+      : await releaseBudgetReservation({ preflight: budget, env, fetchImpl }).catch(() => budget.status);
+    error.budgetWarnings = budget.warnings;
+    throw error;
+  }
+}
+
 async function recordBudgetSpend({ preflight, actualCostCny, env, fetchImpl }) {
   if (preflight.storage === "unconfigured") {
     return {
@@ -1591,6 +2007,7 @@ function normalizeUsage(provider, usage = {}) {
     prompt_tokens: Number(usage.prompt_tokens || 0),
     completion_tokens: Number(usage.completion_tokens || 0),
     total_tokens: Number(usage.total_tokens || 0),
+    reasoning_tokens: Number(usage.reasoning_tokens || usage.completion_tokens_details?.reasoning_tokens || 0),
     prompt_cache_hit_tokens: Number(usage.prompt_cache_hit_tokens || usage.prompt_tokens_details?.cached_tokens || 0),
     prompt_cache_miss_tokens: Number(usage.prompt_cache_miss_tokens || 0),
   };
@@ -2089,10 +2506,70 @@ function emptyRulebookGroundingResult(
   };
 }
 
-function resolveRagMaxOutputTokens(env = {}) {
+function resolveDeepSeekGenerationConfig({ modelName, thinkingMode, reasoningEffort, env = {} } = {}) {
+  const warnings = [];
+  const modeSetting = firstConfiguredValue([
+    ["request", thinkingMode],
+    ["RAG_THINKING_MODE", env.RAG_THINKING_MODE],
+    ["DEEPSEEK_THINKING_MODE", env.DEEPSEEK_THINKING_MODE],
+  ]);
+  let effectiveThinkingMode = String(modeSetting.value || "enabled").trim().toLowerCase();
+  if (!DEEPSEEK_THINKING_MODES.has(effectiveThinkingMode)) {
+    warnings.push("deepseek_thinking_mode_invalid_defaulted_enabled");
+    effectiveThinkingMode = "enabled";
+  }
+
+  const effortSetting = firstConfiguredValue([
+    ["request", reasoningEffort],
+    ["RAG_REASONING_EFFORT", env.RAG_REASONING_EFFORT],
+    ["DEEPSEEK_REASONING_EFFORT", env.DEEPSEEK_REASONING_EFFORT],
+  ]);
+  let effectiveReasoningEffort = String(effortSetting.value || "high").trim().toLowerCase();
+  if (!DEEPSEEK_REASONING_EFFORTS.has(effectiveReasoningEffort)) {
+    warnings.push("deepseek_reasoning_effort_invalid_defaulted_high");
+    effectiveReasoningEffort = "high";
+  }
+
+  if (effectiveThinkingMode === "disabled") {
+    if (effortSetting.value !== undefined) warnings.push("deepseek_reasoning_effort_ignored_when_thinking_disabled");
+    return {
+      thinkingMode: "disabled",
+      reasoningEffort: null,
+      thinkingModeSource: modeSetting.source || "default",
+      reasoningEffortSource: "not_applicable",
+      warnings,
+    };
+  }
+
+  return {
+    thinkingMode: "enabled",
+    reasoningEffort: effectiveReasoningEffort,
+    thinkingModeSource: modeSetting.source || "default",
+    reasoningEffortSource: effortSetting.source || "default",
+    warnings,
+  };
+}
+
+function firstConfiguredValue(entries = []) {
+  for (const [source, value] of entries) {
+    if (value === undefined || value === null || String(value).trim() === "") continue;
+    return { source, value };
+  }
+  return { source: "", value: undefined };
+}
+
+function resolveRagMaxOutputTokens(env = {}, { provider = "", thinkingMode = "" } = {}) {
   const configured = Number(env.RAG_MAX_OUTPUT_TOKENS);
   if (Number.isFinite(configured) && configured > 0) return Math.floor(configured);
-  return readPositiveNumber(env.RAG_FLASH_MAX_OUTPUT_TOKENS, 3600);
+  const tier = resolveConfiguredModelTier(env);
+  if (provider === "deepseek" && thinkingMode === "enabled") {
+    const tierSpecific = tier === "flash"
+      ? env.RAG_FLASH_THINKING_MAX_OUTPUT_TOKENS
+      : env.RAG_PRO_THINKING_MAX_OUTPUT_TOKENS;
+    return readPositiveNumber(tierSpecific || env.RAG_THINKING_MAX_OUTPUT_TOKENS, 32000);
+  }
+  if (tier === "flash") return readPositiveNumber(env.RAG_FLASH_MAX_OUTPUT_TOKENS, 8000);
+  return readPositiveNumber(env.RAG_PRO_MAX_OUTPUT_TOKENS, 8000);
 }
 
 function dedupeGroundingEvidence(items = []) {
@@ -2314,12 +2791,38 @@ function isFaqGroundingEvidence(item = {}) {
 
 function modelNameForProvider(provider, env) {
   if (provider === "deepseek") {
-    return String(env.DEEPSEEK_FLASH_MODEL || env.DEEPSEEK_CARD_MODEL || env.RAG_CARD_MODEL || DEFAULT_DEEPSEEK_CARD_MODEL);
+    const tier = resolveConfiguredModelTier(env);
+    if (tier === "flash") {
+      return String(env.DEEPSEEK_FLASH_MODEL
+        || env.DEEPSEEK_CARD_MODEL
+        || env.RAG_CARD_MODEL
+        || DEFAULT_DEEPSEEK_CARD_MODEL);
+    }
+    return String(env.DEEPSEEK_PRO_MODEL
+      || env.DEEPSEEK_MODEL
+      || env.RAG_MODEL
+      || "deepseek-v4-pro");
   }
   if (provider === "gemini") {
-    return String(env.GEMINI_FLASH_MODEL || env.GEMINI_CARD_MODEL || "gemini-1.5-flash");
+    const tier = resolveConfiguredModelTier(env);
+    if (tier === "flash") {
+      return String(env.GEMINI_FLASH_MODEL
+        || env.GEMINI_CARD_MODEL
+        || "gemini-1.5-flash");
+    }
+    return String(env.GEMINI_PRO_MODEL
+      || env.GEMINI_MODEL
+      || env.RAG_MODEL
+      || env.GEMINI_FLASH_MODEL
+      || env.GEMINI_CARD_MODEL
+      || "gemini-1.5-flash");
   }
   return "mock-rag";
+}
+
+function resolveConfiguredModelTier(env = {}) {
+  const tier = String(env.RAG_MODEL_TIER || "").trim().toLowerCase();
+  return tier === "flash" ? "flash" : "pro";
 }
 
 function modelNameForCardExtractionProvider(provider, env) {
@@ -2389,8 +2892,9 @@ function readPositiveNumber(value, fallback) {
 }
 
 function readTieredProviderNumber(env, providerPrefix, suffix, fallback) {
-  const flashValue = Number(env[`${providerPrefix}_FLASH_${suffix}`]);
-  if (Number.isFinite(flashValue)) return flashValue;
+  const tier = resolveConfiguredModelTier(env);
+  const tierValue = Number(env[`${providerPrefix}_${tier.toUpperCase()}_${suffix}`]);
+  if (Number.isFinite(tierValue)) return tierValue;
   return readNumber(env[`${providerPrefix}_${suffix}`], fallback);
 }
 

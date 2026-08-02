@@ -9,5 +9,5 @@
     { "id": "7777", "name": "雷破", "aliases": ["雷破"], "cardType": "trap", "effectText": "以场上1张卡为对象发动，那张卡破坏。" }
   ],
   "gameState": {},
-  "expected": { "status": "illegal_question", "evidenceGrade": "illegal_question", "programVerdict": "original_chain_illegal", "mustHaveBlockers": ["activation.no_legal_target"], "mustHaveTrace": ["activation.no_legal_target"], "mustNotHaveTrace": ["primitive_resolution_started"], "mustNotContainInAnswer": ["原连锁合法"] }
+  "expected": { "status": "insufficient", "evidenceGrade": "insufficient", "mustHaveBlockers": [], "mustHaveTrace": [], "mustNotHaveTrace": ["primitive_resolution_started", "activation.no_legal_target"], "mustNotContainInAnswer": ["原连锁合法", "原连锁不合法"] }
 }

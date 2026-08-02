@@ -7,7 +7,7 @@ test("a matching temporary-banish Q&A fixture is accepted as direct evidence", (
     id: "q1",
     type: "temporary_banish",
     card: "完美世界-卡通世界",
-    askedResult: "can_banish_that_toon_monster",
+    askedResult: "can_banish_referenced_monster",
     sourceText: "能用完美世界-卡通世界的效果除外该卡通怪兽吗？",
   };
   const qa = {

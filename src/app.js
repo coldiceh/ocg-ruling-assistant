@@ -5,19 +5,6 @@
 // treating a handful of historical examples as authoritative card knowledge.
 const baseCardIndex = [];
 
-const topicIndex = [
-  { id: "activation", label: "能否发动", keywords: ["能否发动", "可以发动", "发动②", "发动2", "发动效果", "诱发"] },
-  { id: "chain", label: "连锁处理", keywords: ["C1", "C2", "连锁", "处理完", "这时"] },
-  { id: "control", label: "控制权变更", keywords: ["获得控制权", "控制权", "夺取"] },
-  { id: "battle", label: "战斗伤害", keywords: ["攻击", "守备表示", "战斗伤害", "伤害计算", "攻击力"] },
-  { id: "replacement", label: "代替破坏", keywords: ["代破", "代替破坏", "破坏代替"] },
-  { id: "spelltrap", label: "魔法陷阱状态", keywords: ["表侧发动中", "魔法陷阱", "永续", "场地", "装备"] },
-];
-
-// Offline notes are deliberately empty. Rule guidance must be retrieved from
-// the versioned evidence corpus instead of historical question templates.
-const builtInNotes = [];
-
 const ui = {
   questionInput: document.querySelector("#questionInput"),
   analyzeButton: document.querySelector("#analyzeButton"),
@@ -72,6 +59,10 @@ const ui = {
   adminLogoutButton: document.querySelector("#adminLogoutButton"),
   adminQuestionInput: document.querySelector("#adminQuestionInput"),
   adminCopyPublicQuestionButton: document.querySelector("#adminCopyPublicQuestionButton"),
+  adminPreparationProviderSelect: document.querySelector("#adminPreparationProviderSelect"),
+  adminPreparationModelSelect: document.querySelector("#adminPreparationModelSelect"),
+  adminPreparationEffortSelect: document.querySelector("#adminPreparationEffortSelect"),
+  adminPreparationModeSelect: document.querySelector("#adminPreparationModeSelect"),
   adminProviderSelect: document.querySelector("#adminProviderSelect"),
   adminModelSelect: document.querySelector("#adminModelSelect"),
   adminEffortSelect: document.querySelector("#adminEffortSelect"),
@@ -116,7 +107,6 @@ let appConfig = {
   rulingVersionIds: ["latest"],
 };
 let syncedCards = [];
-let syncedNotes = [];
 let sourceMeta = null;
 let sourceLoadError = "";
 let analysisRequestId = 0;
@@ -179,10 +169,6 @@ function getPendingStages() {
   ];
 }
 
-function allNotes() {
-  return [...syncedNotes, ...builtInNotes];
-}
-
 function allCards() {
   const merged = new Map();
   for (const card of [...syncedCards, ...baseCardIndex]) {
@@ -205,19 +191,16 @@ function allCards() {
 async function loadSyncedData() {
   try {
     const cardsUrl = appConfig.answerApiUrl ? "data/cards-lite.json" : "data/cards.json";
-    const [cardsPayload, rulingsPayload, metaPayload] = await Promise.all([
+    const [cardsPayload, metaPayload] = await Promise.all([
       readJson(cardsUrl).catch(() => ({ records: [] })),
-      appConfig.answerApiUrl ? Promise.resolve({ records: [] }) : readJson("data/rulings.json"),
       readJson("data/snapshot-meta.json"),
     ]);
 
     syncedCards = normalizeCardRecords(cardsPayload);
-    syncedNotes = normalizeRulingRecords(rulingsPayload);
     sourceMeta = normalizeSourceMeta(metaPayload);
   } catch (error) {
     sourceLoadError = error instanceof Error ? error.message : String(error);
     syncedCards = [];
-    syncedNotes = [];
     sourceMeta = {
       status: "unavailable",
       generatedAt: null,
@@ -312,40 +295,6 @@ function normalizeCardRecords(payload) {
       sourceUrl: record.sourceUrl || "",
     }))
     .filter((record) => record.name);
-}
-
-function normalizeRulingRecords(payload) {
-  const records = payload?.records || payload?.rulings || payload?.notes || [];
-  return records
-    .map((record) => ({
-      id: record.id || record.sourceId || `synced-${Math.random().toString(36).slice(2)}`,
-      title: record.title || "未命名裁定",
-      status: record.status || "confirmed",
-      cards: record.cards || [],
-      keywords: record.keywords || [],
-      conclusion: record.conclusion || record.answer || "该条目缺少结论文本。",
-      steps: record.steps || [],
-      questions: record.questions || [],
-      sources: Array.isArray(record.sources) && record.sources.length ? record.sources : sourceFromSyncedRecord(record),
-      updatedAt: record.updatedAt || record.lastModified || "",
-      recordType: record.recordType || inferRecordType(record),
-    }))
-    .filter((record) => record.title && record.conclusion);
-}
-
-function inferRecordType(record) {
-  if (String(record.id || "").startsWith("card-text-") || /效果文本/.test(record.title || "")) return "card-text";
-  if (String(record.id || "").startsWith("card-faq-") || /FAQ/.test(record.title || "")) return "card-faq";
-  if (String(record.id || "").includes("qa")) return "qa";
-  return "note";
-}
-
-function sourceFromSyncedRecord(record) {
-  const sources = [];
-  if (record.officialUrl) sources.push({ label: "官方数据库", detail: record.officialUrl });
-  if (record.sourceUrl) sources.push({ label: record.sourceName || "同步来源", detail: record.sourceUrl });
-  if (!sources.length) sources.push({ label: "同步资料", detail: "缺少来源链接，不能视作最终裁定。" });
-  return sources;
 }
 
 function normalizeSourceMeta(payload) {
@@ -483,122 +432,6 @@ function getDetectedCards(text) {
     .filter(Boolean);
 }
 
-function getDetectedTopics(text) {
-  const normalized = normalizeText(text).toLowerCase();
-  return topicIndex.filter((topic) =>
-    topic.keywords.some((keyword) => normalized.includes(normalizeText(keyword).toLowerCase()))
-  );
-}
-
-function getChainItems(text) {
-  const normalized = normalizeText(text);
-  const matches = [...normalized.matchAll(/\bC\s*([0-9]+)\s*(?:发动|连锁发动)?([^，。；;\n]*)/gi)];
-  return matches
-    .map((match) => ({
-      number: Number(match[1]),
-      content: match[2].trim() || "未识别动作",
-    }))
-    .sort((a, b) => a.number - b.number);
-}
-
-function tokenize(text) {
-  return normalizeText(text)
-    .toLowerCase()
-    .split(/[\s,，.。;；:：、"「」『』()（）/]+/)
-    .filter((part) => part.length >= 2);
-}
-
-function scoreNote(note, detectedCards, detectedTopics, textTokens) {
-  let score = 0;
-  const cardNames = new Set(detectedCards.map((card) => card.name));
-  const topicLabels = new Set(detectedTopics.map((topic) => topic.label));
-
-  for (const card of note.cards || []) {
-    if (cardNames.has(card)) score += 4;
-  }
-
-  for (const keyword of note.keywords || []) {
-    const normalizedKeyword = normalizeText(keyword).toLowerCase();
-    if (textTokens.some((token) => token.includes(normalizedKeyword) || normalizedKeyword.includes(token))) {
-      score += 1;
-    }
-  }
-
-  for (const tag of note.tags || []) {
-    if (topicLabels.has(tag)) score += 1;
-  }
-
-  if (note.status === "confirmed") score += 2;
-  if (note.status === "needs-source") score -= 1;
-  return score;
-}
-
-function findMatches(text, detectedCards, detectedTopics) {
-  const tokens = tokenize(text);
-  return allNotes()
-    .map((note) => ({ note, score: scoreNote(note, detectedCards, detectedTopics, tokens) }))
-    .filter((match) => match.score > 0)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 5);
-}
-
-function filterRelevantMatches(matches, detectedCards) {
-  if (!detectedCards.length) return [];
-
-  const detectedNames = new Set(detectedCards.map((card) => normalizeText(card.name)));
-  const detectedAliases = new Set(
-    detectedCards.flatMap((card) => [card.name, card.matched, ...(card.aliases || [])].filter(Boolean).map(normalizeText))
-  );
-
-  return matches.filter((match) => {
-    const cards = match.note.cards || [];
-    if (!cards.length) return false;
-    return cards.some((cardName) => {
-      const normalizedCardName = normalizeText(cardName);
-      return detectedNames.has(normalizedCardName) || detectedAliases.has(normalizedCardName);
-    });
-  });
-}
-
-function buildGeneratedQuestions(text, detectedCards, detectedTopics, chainItems, matches) {
-  const questions = [];
-  const hasVagueCard = detectedCards.some((card) => card.vague);
-  const hasActivation = detectedTopics.some((topic) => topic.id === "activation");
-  const hasBattle = detectedTopics.some((topic) => topic.id === "battle");
-  const hasReplacement = detectedTopics.some((topic) => topic.id === "replacement");
-  const bestStatus = matches[0]?.note.status;
-
-  if (hasVagueCard) questions.push("有俗称或描述性卡名，系统会尝试解析；解析不到时再补日文、英文或效果原文。");
-  if (hasActivation && chainItems.length === 0) questions.push("如果涉及发动时点，请补充连锁顺序或触发事件。");
-  if (hasActivation && /②|2/.test(text)) questions.push("请补充被问效果②的完整文本或官方数据库截图。");
-  if (hasBattle) questions.push("请确认攻击目标的守备力，以及所有已经适用的伤害变更效果。");
-  if (hasReplacement) questions.push("请确认被破坏的卡在那个时点是否仍在场上，以及代破文本指定的范围。");
-  if (!bestStatus || bestStatus === "needs-source") {
-    questions.push("资料库没有已确认出处，建议补官方 Q&A、规则书条目或可信记录。");
-  }
-
-  return [...new Set(questions)];
-}
-
-function confidenceFor(match, generatedQuestions) {
-  if (!match) return { label: "无Q&A支持", className: "is-risky" };
-  if (match.note.recordType === "card-text") return { label: "仅命中效果文本", className: "is-risky" };
-  const freshness = getFreshness();
-  if (match.note.status === "confirmed" && match.score >= 7 && generatedQuestions.length <= 1) {
-    return {
-      label: freshness.className === "is-fresh" ? "高置信" : "需复核",
-      className: freshness.className === "is-fresh" ? "is-confirmed" : "is-risky",
-    };
-  }
-  if (match.note.status === "confirmed") {
-    return {
-      label: freshness.className === "is-fresh" ? "中高置信" : "需复核",
-      className: freshness.className === "is-fresh" ? "is-confirmed" : "is-risky",
-    };
-  }
-  return { label: "需要Q&A确认", className: "is-risky" };
-}
-
 async function analyzeQuestion() {
   const text = ui.questionInput.value.trim();
   const requestId = ++analysisRequestId;
@@ -626,16 +459,7 @@ async function analyzeQuestion() {
     }
   }
 
-  const detectedCards = getDetectedCards(text);
-  const detectedTopics = getDetectedTopics(text);
-  const chainItems = getChainItems(text);
-  const matches = findMatches(text, detectedCards, detectedTopics);
-  const relevantMatches = filterRelevantMatches(matches, detectedCards);
-  const generatedQuestions = buildGeneratedQuestions(text, detectedCards, detectedTopics, chainItems, relevantMatches);
-  const bestMatch = relevantMatches[0];
-  const confidence = confidenceFor(bestMatch, generatedQuestions);
-
-  renderResult(text, bestMatch, confidence, generatedQuestions, detectedCards);
+  renderBackendUnavailable(getDetectedCards(text));
 }
 
 async function requestBackendAnswer(text, requestedRulingVersion) {
@@ -821,7 +645,7 @@ function renderAnswerVersion(answer) {
     ui.answerVersionText.textContent = "";
     return;
   }
-  const label = effectiveVersion === "previous" ? "上一版" : "最新版";
+  const label = effectiveVersion === "previous" ? "上一版（兼容）" : "最新版";
   ui.answerVersionText.textContent = `本次回答：${label}`;
   ui.answerVersionText.hidden = false;
 }
@@ -839,9 +663,9 @@ function renderBackendVersionError(error, requestedRulingVersion) {
   ui.confidenceText.textContent = "版本不可用";
   ui.verdictTitle.textContent = "无法确认回答版本";
   ui.rulingBasisText.textContent = "版本协议校验失败";
-  const requestedLabel = requestedRulingVersion === "previous" ? "上一版" : "最新版";
+  const requestedLabel = requestedRulingVersion === "previous" ? "上一版（兼容）" : "最新版";
   const effectiveVersion = normalizeRulingVersion(error?.effectiveVersion);
-  const effectiveLabel = effectiveVersion === "previous" ? "上一版" : "最新版";
+  const effectiveLabel = effectiveVersion === "previous" ? "上一版（兼容）" : "最新版";
   ui.answerVersionText.classList.add("is-error");
   ui.answerVersionText.hidden = false;
   ui.answerVersionText.textContent = effectiveVersion
@@ -1169,7 +993,7 @@ function syncRulingVersionButtons(isPending = false) {
     const disabled = Boolean(isPending) || !supported;
     button.disabled = disabled;
     button.setAttribute("aria-disabled", String(disabled));
-    button.title = supported ? "" : "当前后端暂未提供上一版";
+    button.title = supported ? "" : "当前后端暂未提供上一版兼容实现";
   }
 }
 
@@ -1201,54 +1025,26 @@ function renderParserDebug(debug) {
   console.debug("[Formal Query Trace]", debug);
 }
 
-function renderResult(text, bestMatch, confidence, generatedQuestions, detectedCards = []) {
+function renderBackendUnavailable(detectedCards = []) {
   clearPendingStages();
+  lastRenderedBackendAnswer = null;
+  renderAnswerVersion(null);
   ui.resultGrid.hidden = false;
   renderCards(detectedCards);
   renderEngineSimulation(null, null);
   renderParserDebug(null);
-  updateModelStatus(debugUiEnabled ? "本地模板" : "分析完成");
-  ui.verdictBlock.className = `result-block verdict-block ${confidence.className}`.trim();
-
-  if (!bestMatch) {
-    ui.confidenceText.textContent = confidence.label;
-    ui.verdictTitle.textContent = "资料库没有命中";
-    ui.rulingBasisText.textContent = "资料不足";
-    ui.verdictBody.textContent = "暂时不能给确定裁定。可以继续使用俗称，但需要补一点能帮助识别的线索，例如日文、英文、效果原文或卡片种类。";
-    renderSubAnswers([]);
-    renderList(ui.stepsList, [
-      "补充常用别名、日文/英文片段或效果原文，不必强制输入完整官方卡名。",
-      "补全连锁、阶段、表示形式、控制者和效果编号。",
-      "用官方数据库、规则书或已确认记录补出处。",
-    ]);
-    renderList(ui.questionsList, generatedQuestions);
-    renderSources([]);
-    return;
-  }
-
-  const note = bestMatch.note;
-  const questions = [...new Set([...(note.questions || []), ...generatedQuestions])];
-  ui.confidenceText.textContent = confidence.label;
-  if (note.recordType === "card-text") {
-    ui.verdictTitle.textContent = "只找到相关卡片文本";
-    ui.rulingBasisText.textContent = "缺少直接问答资料";
-    ui.verdictBody.textContent =
-      "资料库识别到了相关卡片，但没有命中能直接回答这个场面的官方 Q&A 或已确认裁定。不能把效果文本直接当作具体处理结论。";
-    renderSubAnswers([]);
-    renderList(ui.stepsList, [
-      "先核对题目里的俗称对应哪张卡，以及效果编号、连锁和控制者。",
-      "再查该卡相关 Q&A 或规则条目。",
-      "若没有命中 Q&A，需要进入后端规则推理或人工确认，不能用无关卡片文本套答案。",
-    ]);
-  } else {
-    ui.verdictTitle.textContent = note.status === "confirmed" ? "可以按已确认资料处理" : "按以下方式处理";
-    ui.rulingBasisText.textContent = note.status === "confirmed" ? "本地已确认资料" : "本地资料";
-    ui.verdictBody.textContent = note.conclusion;
-    renderSubAnswers([]);
-    renderList(ui.stepsList, note.steps || []);
-  }
-  renderList(ui.questionsList, questions);
-  renderSources(note.sources || []);
+  renderFeedbackPanel(null);
+  updateModelStatus("服务不可用");
+  ui.verdictBlock.className = "result-block verdict-block is-risky";
+  ui.confidenceText.textContent = "无法裁定";
+  ui.verdictTitle.textContent = "裁定服务不可用";
+  ui.rulingBasisText.textContent = "后端裁定服务未配置";
+  ui.verdictBody.textContent =
+    "当前页面没有可用的后端裁定服务，无法生成或验证这道题的裁定。已识别的本地卡片资料仅供查看，不会被当作裁定答案。";
+  renderSubAnswers([]);
+  renderList(ui.stepsList, ["请在后端裁定服务恢复或完成配置后重试。"]);
+  renderList(ui.questionsList, []);
+  renderSources([]);
 }
 
 function renderCards(cards) {
@@ -1280,30 +1076,30 @@ function renderCards(cards) {
 }
 
 function normalizeVisibleCards(cards) {
+  const normalizedCards = (cards || []).map((card) => ({
+    id: String(card.id || card.cardId || "").trim(),
+    passcode: String(card.passcode || card.cardId || card.id || "").trim(),
+    name: String(card.name || card.cnName || card.jaName || card.enName || "").trim(),
+    cnName: String(card.cnName || "").trim(),
+    jaName: String(card.jaName || card.jpName || "").trim(),
+    enName: String(card.enName || "").trim(),
+    matched: String(card.matched || "").trim(),
+    cardType: String(card.cardType || card.type || "").trim(),
+    effectText: String(card.effectText || card.text || "").trim(),
+    source: String(card.source || "").trim(),
+    sourceLabel: String(card.sourceLabel || "").trim(),
+    official: card.official === true,
+    sourceUrl: String(card.sourceUrl || "").trim(),
+    imageUrl: String(card.imageUrl || "").trim(),
+    imageCandidates: Array.isArray(card.imageCandidates) ? card.imageCandidates.map((url) => String(url || "").trim()).filter(Boolean) : [],
+    ygoResourcesUrl: String(card.ygoResourcesUrl || "").trim(),
+    liveId: String(card.liveId || "").trim(),
+    aliases: Array.isArray(card.aliases) ? card.aliases.map((alias) => String(alias || "").trim()).filter(Boolean) : [],
+  })).filter((card) => card.name);
+  const ambiguousAliasKeys = collectAmbiguousVisibleAliasKeys(normalizedCards);
   const map = new Map();
-  for (const card of cards || []) {
-    const normalized = {
-      id: String(card.id || card.cardId || "").trim(),
-      passcode: String(card.passcode || card.cardId || card.id || "").trim(),
-      name: String(card.name || card.cnName || card.jaName || card.enName || "").trim(),
-      cnName: String(card.cnName || "").trim(),
-      jaName: String(card.jaName || card.jpName || "").trim(),
-      enName: String(card.enName || "").trim(),
-      matched: String(card.matched || "").trim(),
-      cardType: String(card.cardType || card.type || "").trim(),
-      effectText: String(card.effectText || card.text || "").trim(),
-      source: String(card.source || "").trim(),
-      sourceLabel: String(card.sourceLabel || "").trim(),
-      official: card.official === true,
-      sourceUrl: String(card.sourceUrl || "").trim(),
-      imageUrl: String(card.imageUrl || "").trim(),
-      imageCandidates: Array.isArray(card.imageCandidates) ? card.imageCandidates.map((url) => String(url || "").trim()).filter(Boolean) : [],
-      ygoResourcesUrl: String(card.ygoResourcesUrl || "").trim(),
-      liveId: String(card.liveId || "").trim(),
-      aliases: Array.isArray(card.aliases) ? card.aliases.map((alias) => String(alias || "").trim()).filter(Boolean) : [],
-    };
-    if (!normalized.name) continue;
-    const key = findVisibleMergeKey(map, normalized) || canonicalVisibleCardKey(normalized);
+  for (const normalized of normalizedCards) {
+    const key = findVisibleMergeKey(map, normalized, ambiguousAliasKeys) || canonicalVisibleCardKey(normalized);
     const existing = map.get(key);
     if (!existing) {
       map.set(key, normalized);
@@ -1329,12 +1125,12 @@ function normalizeVisibleCards(cards) {
   return [...map.values()];
 }
 
-function findVisibleMergeKey(map, card) {
+function findVisibleMergeKey(map, card, ambiguousAliasKeys = new Set()) {
   const key = canonicalVisibleCardKey(card);
   if (map.has(key)) return key;
-  const keys = visibleCardIdentityKeys(card);
+  const keys = visibleCardIdentityKeys(card, ambiguousAliasKeys);
   for (const [existingKey, existing] of map.entries()) {
-    const existingKeys = visibleCardIdentityKeys(existing);
+    const existingKeys = visibleCardIdentityKeys(existing, ambiguousAliasKeys);
     if ([...keys].some((item) => existingKeys.has(item))) return existingKey;
   }
   return "";
@@ -1349,7 +1145,7 @@ function canonicalVisibleCardKey(card) {
   return `name:${normalizeText(card.name).toLowerCase()}`;
 }
 
-function visibleCardIdentityKeys(card) {
+function visibleCardIdentityKeys(card, ambiguousAliasKeys = new Set()) {
   const keys = new Set();
   const numeric = normalizeCardId(card.passcode || card.id || card.liveId);
   if (numeric) keys.add(`id:${numeric}`);
@@ -1358,7 +1154,7 @@ function visibleCardIdentityKeys(card) {
   if (normalizedSourceId) keys.add(`id:${normalizedSourceId}`);
   for (const alias of [card.name, card.cnName, card.jaName, card.enName, card.matched, ...(card.aliases || [])]) {
     const key = normalizeText(alias).toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
-    if (key.length >= 3 && !isGenericVisibleAliasKey(key)) keys.add(`alias:${key}`);
+    if (key.length >= 3 && !ambiguousAliasKeys.has(key)) keys.add(`alias:${key}`);
   }
   return keys;
 }
@@ -1378,8 +1174,24 @@ function preferChineseDisplayText(left, right) {
   return current;
 }
 
-function isGenericVisibleAliasKey(key) {
-  return /^(卡通世界|toonworld|トゥーンワールド|闪刀姬|閃刀姫|闪刀|閃刀|时空)$/.test(key);
+function collectAmbiguousVisibleAliasKeys(cards = []) {
+  const identitiesByAlias = new Map();
+  for (const card of cards) {
+    const identity = canonicalVisibleCardKey(card);
+    if (!identity || identity === "name:") continue;
+    for (const alias of [card.name, card.cnName, card.jaName, card.enName, card.matched, ...(card.aliases || [])]) {
+      const key = normalizeText(alias).toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
+      if (key.length < 3) continue;
+      const identities = identitiesByAlias.get(key) || new Set();
+      identities.add(identity);
+      identitiesByAlias.set(key, identities);
+    }
+  }
+  return new Set(
+    [...identitiesByAlias.entries()]
+      .filter(([, identities]) => identities.size > 1)
+      .map(([key]) => key),
+  );
 }
 
 function normalizeCardId(value) {
@@ -1590,7 +1402,8 @@ async function loadAdminCapabilities() {
     });
     adminCapabilityState = normalizeAdminCapabilities(data);
     renderAdminCapabilities(adminCapabilityState);
-    const hasModels = adminCapabilityState.models.length > 0;
+    const hasModels = adminCapabilityState.models.length > 0
+      && adminCapabilityState.preparationModels.length > 0;
     setAdminControlsEnabled(hasModels);
     setAdminRunStatus(hasModels ? "配置已就绪，可以开始实验。" : "后端没有返回可用模型。", hasModels ? "good" : "error");
   } catch (error) {
@@ -1658,15 +1471,28 @@ function normalizeAdminCapabilities(data) {
   const models = hasStageCapabilities
     ? normalizedModels.filter((item) => item.allowedStages.includes("final_ruling"))
     : normalizedModels;
+  const preparationModels = hasStageCapabilities
+    ? normalizedModels.filter((item) => item.allowedStages.includes("evidence_preparation"))
+    : normalizedModels.filter((item) => item.provider !== "openai");
   const inferredProviders = models.map((model) => ({ id: model.provider, label: adminProviderLabel(model.provider) }));
   const providers = uniqueAdminOptions([
     ...rawProviders.map(normalizeAdminBasicOption),
     ...inferredProviders,
   ]).filter((item) => item.id && models.some((model) => model.provider === item.id));
+  const inferredPreparationProviders = preparationModels.map((model) => ({
+    id: model.provider,
+    label: adminProviderLabel(model.provider),
+  }));
+  const preparationProviders = uniqueAdminOptions([
+    ...rawProviders.map(normalizeAdminBasicOption),
+    ...inferredPreparationProviders,
+  ]).filter((item) => item.id && preparationModels.some((model) => model.provider === item.id));
 
   return {
     providers,
     models,
+    preparationProviders,
+    preparationModels,
     efforts: uniqueAdminOptions(normalizeAdminOptionList(
       source.reasoningEfforts || source.efforts || source.reasoning_efforts,
     ).map(normalizeAdminBasicOption)),
@@ -1750,11 +1576,58 @@ function uniqueAdminOptions(options) {
 }
 
 function renderAdminCapabilities(capabilities) {
+  populateAdminSelect(
+    ui.adminPreparationProviderSelect,
+    capabilities.preparationProviders,
+    "没有可用资料服务",
+  );
+  const preferredPreparationProvider = capabilities.preparationProviders.some(
+    (item) => item.id === "deepseek",
+  ) ? "deepseek" : capabilities.preparationProviders[0]?.id;
+  if (preferredPreparationProvider) {
+    ui.adminPreparationProviderSelect.value = preferredPreparationProvider;
+  }
+  syncAdminPreparationModelControls();
   populateAdminSelect(ui.adminProviderSelect, capabilities.providers, "没有可用服务");
   const preferredProvider = capabilities.providers.some((item) => item.id === "openai") ? "openai" : capabilities.providers[0]?.id;
   if (preferredProvider) ui.adminProviderSelect.value = preferredProvider;
   syncAdminModelControls();
   applyAdminFeatureAvailability();
+}
+
+function syncAdminPreparationModelControls() {
+  if (!adminCapabilityState) return;
+  const provider = String(ui.adminPreparationProviderSelect?.value || "");
+  const models = adminCapabilityState.preparationModels.filter(
+    (model) => !model.provider || model.provider === provider,
+  );
+  const previousModel = String(ui.adminPreparationModelSelect?.value || "");
+  populateAdminSelect(ui.adminPreparationModelSelect, models, "没有可用资料模型");
+  if (models.some((item) => item.id === previousModel)) {
+    ui.adminPreparationModelSelect.value = previousModel;
+  } else if (models[0]) {
+    ui.adminPreparationModelSelect.value = models[0].id;
+  }
+  syncAdminPreparationModelSpecificControls();
+}
+
+function syncAdminPreparationModelSpecificControls() {
+  if (!adminCapabilityState) return;
+  const model = adminCapabilityState.preparationModels.find(
+    (item) => item.id === ui.adminPreparationModelSelect?.value,
+  );
+  populateAdminSelect(ui.adminPreparationEffortSelect, model?.efforts || [], "无");
+  populateAdminSelect(ui.adminPreparationModeSelect, model?.modes || [], "标准");
+  selectPreferredAdminOption(ui.adminPreparationEffortSelect, [
+    model?.defaultReasoningEffort,
+    "none",
+    "low",
+  ].filter(Boolean));
+  selectPreferredAdminOption(ui.adminPreparationModeSelect, [
+    model?.defaultReasoningMode,
+    "standard",
+    "pro",
+  ].filter(Boolean));
 }
 
 function adminFeatureEnabled(name) {
@@ -1866,6 +1739,10 @@ function selectPreferredAdminOption(select, preferred) {
 
 function setAdminControlsEnabled(enabled) {
   for (const control of [
+    ui.adminPreparationProviderSelect,
+    ui.adminPreparationModelSelect,
+    ui.adminPreparationEffortSelect,
+    ui.adminPreparationModeSelect,
     ui.adminProviderSelect,
     ui.adminModelSelect,
     ui.adminEffortSelect,
@@ -1909,6 +1786,10 @@ async function startAdminExperiment() {
   setAdminRunStatus("正在建立实验记录…");
 
   const configuration = {
+    preparationProvider: String(ui.adminPreparationProviderSelect?.value || ""),
+    preparationModel: String(ui.adminPreparationModelSelect?.value || ""),
+    preparationReasoningEffort: String(ui.adminPreparationEffortSelect?.value || ""),
+    preparationReasoningMode: String(ui.adminPreparationModeSelect?.value || ""),
     provider: String(ui.adminProviderSelect?.value || ""),
     model: String(ui.adminModelSelect?.value || ""),
     effort: String(ui.adminEffortSelect?.value || ""),
@@ -2569,7 +2450,7 @@ function renderAdminMetrics(run) {
   const formatMissingCostStages = (values) => {
     if (!Array.isArray(values) || !values.length) return "";
     const labels = {
-      evidencePreparation: "证据准备（DeepSeek）",
+      evidencePreparation: "证据准备模型",
       finalRuling: "最终裁定（OpenAI）",
     };
     return values
@@ -3168,7 +3049,7 @@ function firstAdminArray(...values) {
 }
 
 function adminProviderLabel(value) {
-  const labels = { openai: "OpenAI", deepseek: "DeepSeek" };
+  const labels = { openai: "OpenAI", deepseek: "DeepSeek", glm: "智谱 GLM", kimi: "Kimi" };
   return labels[String(value || "").toLowerCase()] || String(value || "");
 }
 
@@ -4034,7 +3915,7 @@ function buildFeedbackIssueUrl(answer) {
   const rulingVersion = normalizeRulingVersion(
     answer?.effectiveRulingVersion || answer?.rulingVersion,
   );
-  const rulingVersionLabel = rulingVersion === "previous" ? "上一版" : "最新版";
+  const rulingVersionLabel = rulingVersion === "previous" ? "上一版（兼容）" : "最新版";
   const body = [
     "## 原问题",
     question,
@@ -4112,6 +3993,8 @@ async function init() {
   });
   ui.adminProviderSelect?.addEventListener("change", syncAdminModelControls);
   ui.adminModelSelect?.addEventListener("change", syncAdminModelSpecificControls);
+  ui.adminPreparationProviderSelect?.addEventListener("change", syncAdminPreparationModelControls);
+  ui.adminPreparationModelSelect?.addEventListener("change", syncAdminPreparationModelSpecificControls);
   ui.adminStartButton?.addEventListener("click", startAdminExperiment);
   ui.adminCancelButton?.addEventListener("click", cancelAdminExperiment);
   ui.adminHistoryRefreshButton?.addEventListener("click", loadAdminHistory);

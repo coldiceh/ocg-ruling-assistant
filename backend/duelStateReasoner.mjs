@@ -2,14 +2,9 @@ import { createDestinationReplacement, createEffectPrimitive } from "./effectPri
 import {
   evaluateFusionOperation,
   resolveEffectChain,
-  runAfterEffectResolutionCheckpoint,
 } from "./effectResolutionEngine.mjs";
 import { splitEffectTextBlocks } from "./cardEffectBlocks.mjs";
 import { normalizeCardText } from "./cardTextNormalizer.mjs";
-import {
-  advanceEffectInstanceLifecycles,
-  createBoundLingeringEffectInstance,
-} from "./effectInstanceLifecycle.mjs";
 
 const RETURN_TO_HAND = /(?:放回|返回|回到).{0,12}(?:手牌|手卡|手札)|(?:手牌|手卡|手札).{0,12}(?:放回|返回|回到)|return.{0,20}(?:to )?(?:the )?hand/isu;
 const LOWEST_DEFENSE = /(?:守备力|守備力|防御力|防禦力).{0,8}(?:最低|最小|一番低)|lowest\s+DEF/iu;
@@ -35,23 +30,9 @@ function analyzeDuelStateTransitionInternal({
   userQuery = "",
   resolvedCards = [],
   cardTexts = [],
-  corroboratingEvidence = [],
 } = {}) {
   const query = String(userQuery || "");
   const programs = compileResolvedCardPrograms(resolvedCards, cardTexts);
-  const lifecycleTransition = analyzeBoundLingeringRestrictionLifecycle({
-    query,
-    programs,
-    cardTexts,
-  });
-  if (lifecycleTransition) return lifecycleTransition;
-  const orderedCheckpointTransition = analyzeOrderedSummonDestroyCheckpoint({
-    query,
-    programs,
-    cardTexts,
-    corroboratingEvidence,
-  });
-  if (orderedCheckpointTransition) return orderedCheckpointTransition;
   const compiled = compileQuestionScenario({ query, programs });
   if (!compiled.complete) {
     const symbolicTransition = analyzeSymbolicFusionReplacementTransition({
@@ -61,6 +42,10 @@ function analyzeDuelStateTransitionInternal({
       compileFailure: compiled,
     });
     if (symbolicTransition) return symbolicTransition;
+    const unsupportedMechanism = identifyUncompiledMechanism({ query, programs });
+    if (unsupportedMechanism) {
+      return unknownUncompiledMechanism(unsupportedMechanism, compiled);
+    }
     return notApplicable(compiled.reason, compiled);
   }
 
@@ -817,262 +802,6 @@ function normalizedSemanticsForBlock(cardTextIr, blockText) {
   };
 }
 
-function analyzeBoundLingeringRestrictionLifecycle({ query, programs, cardTexts }) {
-  const asksControlChange = /(?:控制权|控制權|control).{0,24}(?:变更|變更|转移|轉移|change|switch)/iu.test(query);
-  const asksControlReturn = /(?:控制权|控制權|control).{0,16}(?:归还|歸還|返还|返還|返回|回到|return)|(?:归还|歸還|返还|返還|返回|回到|return).{0,16}(?:控制权|控制權|control)/iu.test(query);
-  if (!asksControlChange || !asksControlReturn) return null;
-
-  const candidates = [];
-  for (const program of programs || []) {
-    if (locateCardMention(query, program).index < 0) continue;
-    for (const effect of normalizedEffectsForProgram(program)) {
-      const lingering = effect.resolution
-        ?.map((step) => step.operation)
-        .find((operation) => operation?.type === "create_lingering_restriction");
-      if (lingering) candidates.push({ program, effect, lingering });
-    }
-  }
-  if (candidates.length !== 1) return null;
-
-  const [{ program, effect, lingering }] = candidates;
-  const boundId = "symbolic-effect-summoned-monster#1";
-  const instance = createBoundLingeringEffectInstance({
-    id: `${effect.id}:instance#1`,
-    sourceEffectId: effect.id,
-    boundInstanceIds: [boundId],
-    controller: "self",
-    zone: lingering.activeWhile?.zone || "monster_zone",
-    faceUp: lingering.activeWhile?.faceUp !== false,
-    restriction: lingering.restriction,
-  });
-  const initialState = {
-    cards: [{
-      instanceId: boundId,
-      definitionId: "symbolic-effect-summoned-monster",
-      name: "以该效果特殊召唤的怪兽",
-      controller: "self",
-      owner: "self",
-      zone: "monster_zone",
-      faceUp: true,
-    }],
-    effectInstances: [instance],
-  };
-  const changedState = structuredClone(initialState);
-  changedState.cards[0].controller = "opponent";
-  const afterControlChange = advanceEffectInstanceLifecycles(changedState, {
-    timing: "after_control_change",
-    cause: "bound_monster_control_changed",
-  });
-  if (!afterControlChange.complete) return null;
-  const returnedState = structuredClone(afterControlChange.gameState);
-  returnedState.cards[0].controller = "self";
-  const afterReturn = advanceEffectInstanceLifecycles(returnedState, {
-    timing: "after_control_return",
-    cause: "bound_monster_control_returned",
-  });
-  if (!afterReturn.complete || afterReturn.gameState.effectInstances[0]?.status !== "expired") return null;
-
-  const allowed = lingering.restriction?.allowedArchetype;
-  const restrictionLabel = lingering.restriction?.type === "extra_deck_special_summon_lock"
-    ? `“自己从额外牌组仅可特殊召唤${allowed ? `「${allowed}」` : "指定"}怪兽”的限制`
-    : "该限制";
-  return {
-    status: "resolved",
-    complete: true,
-    activation: "already_resolved",
-    resolution: "lingering_restriction_expired_irreversibly",
-    shortAnswer: `控制权变更后，${restrictionLabel}立即不再适用；之后控制权归还也不会恢复适用。`,
-    reasoning: [
-      "这不是根据卡名记忆答案，而是把已处理效果记录为绑定于本次特殊召唤怪兽的效果实例。",
-      "怪兽控制权变更后，绑定条件首次不满足，效果实例由 active 单向变为 expired，该时点立即结束适用。",
-      "控制权归还只改变怪兽当前状态，不会重新创建该效果实例；已经 expired 的实例不会恢复。",
-    ],
-    trace: [
-      {
-        phase: "effect_instance_created",
-        effectInstanceId: instance.id,
-        status: "active",
-        conclusion: "效果处理完成时创建绑定于该特殊召唤怪兽的一次性效果实例。",
-      },
-      ...afterControlChange.trace,
-      ...afterReturn.trace,
-    ],
-    evidenceIds: [evidenceIdFor(program, cardTexts)],
-    activationEvidenceType: "normalized_card_text_effect_instance",
-    program: {
-      identityModel: "effect_instance_bound_to_card_instance",
-      initialState,
-      afterControlChange: afterControlChange.gameState,
-      finalState: afterReturn.gameState,
-      normalizedOperation: lingering,
-    },
-  };
-}
-
-function analyzeOrderedSummonDestroyCheckpoint({
-  query,
-  programs,
-  cardTexts,
-  corroboratingEvidence,
-}) {
-  if (!/(?:能否|是否|可以|能不能|可否).{0,16}(?:发动|發動|発動|activate)|(?:发动|發動|発動|activate).{0,16}(?:吗|嗎|\?|？)/iu.test(query)) return null;
-  const mentioned = (programs || []).filter((program) => locateCardMention(query, program).index >= 0);
-  const effectCandidates = [];
-  const restrictionCandidates = [];
-
-  for (const program of mentioned) {
-    for (const effect of normalizedEffectsForProgram(program)) {
-      const operations = (effect.resolution || []).map((step) => step.operation).filter(Boolean);
-      const summonIndex = operations.findIndex((operation) => (
-        operation.type === "special_summon"
-        && (Number(operation.amount) >= 2 || (operation.names || []).length >= 2)
-      ));
-      const destroyIndex = operations.findIndex((operation, index) => (
-        index > summonIndex && operation.type === "destroy"
-      ));
-      if (summonIndex >= 0 && destroyIndex > summonIndex) {
-        effectCandidates.push({
-          program,
-          effect,
-          summon: operations[summonIndex],
-          destroy: operations[destroyIndex],
-        });
-      }
-      for (const semantic of effect.continuous || []) {
-        if (semantic.type === "field_count_limit" && semantic.scope === "per_player") {
-          restrictionCandidates.push({ program, semantic });
-        }
-      }
-    }
-  }
-  if (effectCandidates.length !== 1 || restrictionCandidates.length !== 1) return null;
-  const effectCandidate = effectCandidates[0];
-  const restrictionCandidate = restrictionCandidates[0];
-  const activationEvidence = findOrderedCheckpointActivationEvidence({
-    evidence: corroboratingEvidence,
-    effectProgram: effectCandidate.program,
-    restrictionProgram: restrictionCandidate.program,
-  });
-
-  const restriction = normalizedFieldRestriction(restrictionCandidate.semantic);
-  if (!restriction) return null;
-  const carrierId = `${restrictionCandidate.program.definitionId}#checkpoint-carrier`;
-  const summonedIds = ["symbolic-summoned#1", "symbolic-summoned#2"];
-  const sharedRace = restrictionCandidate.semantic.groupBy === "race" ? "shared-race" : "known-race";
-  const sharedAttribute = restrictionCandidate.semantic.groupBy === "attribute" ? "shared-attribute" : "known-attribute";
-  const baseCards = [
-    {
-      instanceId: carrierId,
-      definitionId: restrictionCandidate.program.definitionId,
-      name: restrictionCandidate.program.name,
-      controller: "opponent",
-      owner: "opponent",
-      zone: "spell_trap_zone",
-      faceUp: true,
-    },
-    ...summonedIds.map((instanceId, index) => ({
-      instanceId,
-      definitionId: `symbolic-summoned-${index + 1}`,
-      name: effectCandidate.summon.names?.[index] || `以该效果特殊召唤的怪兽${index + 1}`,
-      controller: "self",
-      owner: "self",
-      zone: "monster_zone",
-      faceUp: true,
-      race: sharedRace,
-      attribute: sharedAttribute,
-    })),
-  ];
-  const continuousEffect = {
-    id: `${restrictionCandidate.program.definitionId}:field-limit@${carrierId}`,
-    sourceCardId: carrierId,
-    sourceInstanceId: carrierId,
-    sourceCardName: restrictionCandidate.program.name,
-    activeWhen: { zone: "spell_trap_zone", faceUp: true },
-    fieldRestrictions: [restriction],
-  };
-
-  const remains = runAfterEffectResolutionCheckpoint({
-    gameState: { cards: structuredClone(baseCards) },
-    continuousEffects: [continuousEffect],
-    chainLink: "C1",
-  });
-  const destroyedCards = structuredClone(baseCards);
-  const destroyedCarrier = destroyedCards.find((card) => card.instanceId === carrierId);
-  destroyedCarrier.zone = "graveyard";
-  destroyedCarrier.faceUp = false;
-  const destroyed = runAfterEffectResolutionCheckpoint({
-    gameState: { cards: destroyedCards },
-    continuousEffects: [continuousEffect],
-    chainLink: "C1",
-  });
-  if (!remains.complete || !destroyed.complete) return null;
-
-  const pending = remains.adjustments.find((item) => item.status === "choice_required");
-  const restrictionStillSatisfied = remains.adjustments.length === 0;
-  const resolutionSuffix = pending
-    ? `若处理结束时「${restrictionCandidate.program.name}」仍在适用，再从这两只中选择1只送去墓地；`
-    : restrictionStillSatisfied
-      ? `若处理结束时「${restrictionCandidate.program.name}」仍在适用，当前两只怪兽仍满足该限制，不需要送墓；`
-      : "";
-  return {
-    status: "resolved",
-    complete: true,
-    activation: "legal",
-    activationBasis: activationEvidence
-      ? "official_activation_evidence_and_effect_program"
-      : "normalized_effect_program_and_after_resolution_checkpoint",
-    resolution: "ordered_resolution_then_field_checkpoint",
-    shortAnswer: `可以发动。处理时先特殊召唤两只怪兽，然后再选择是否破坏场上1张卡；不是特殊召唤后立刻送墓。${resolutionSuffix}若后段破坏了「${restrictionCandidate.program.name}」，处理结束时该限制已不适用，两只怪兽都留下。`,
-    reasoning: [
-      "按范式化卡文顺序，特殊召唤与之后可选的破坏属于同一个效果的连续处理。",
-      "场面数量限制不插入同一效果的两个处理步骤之间；要先完成后段破坏，再进入 after_effect_resolution_checkpoint。",
-      pending
-        ? "限制源仍存在的分支在检查点发现数量超限，因此此时才要求选择并送墓1只。"
-        : "限制源仍存在的分支在检查点没有发现超限，因此无需送墓。",
-      "若后段破坏限制源，检查点判定该持续限制 inactive，所以不会进行送墓调整。",
-    ],
-    trace: [
-      {
-        phase: "activation_check",
-        status: "legal",
-        conclusion: activationEvidence
-          ? "直接官方发动资料确认当前场景可以发动；处理结果不倒推发动非法。"
-          : "范式化卡文存在“特殊召唤两只→之后可破坏限制源”的完整合法处理分支，因此可以发动；场面数量调整不插入效果中途。",
-        ...(activationEvidence?.id ? { evidenceId: activationEvidence.id } : {}),
-      },
-      {
-        phase: "resolve_effect_operation",
-        operation: "special_summon_cards",
-        status: "applied",
-        conclusion: "先同时特殊召唤两只怪兽；此时不插入场面数量调整。",
-      },
-      {
-        phase: "resolve_effect_operation",
-        operation: "optional_destroy",
-        status: "branch",
-        conclusion: "那之后，选择是否破坏场上1张卡。",
-      },
-      ...remains.trace.map((entry) => ({ ...entry, branch: "restriction_remains" })),
-      ...destroyed.trace.map((entry) => ({ ...entry, branch: "restriction_destroyed" })),
-    ],
-    evidenceIds: unique([
-      activationEvidence?.id,
-      evidenceIdFor(effectCandidate.program, cardTexts),
-      evidenceIdFor(restrictionCandidate.program, cardTexts),
-    ].filter(Boolean)),
-    activationEvidenceType: activationEvidence?.sourceType || "normalized_card_text_and_rule_checkpoint",
-    program: {
-      identityModel: "ordered_operations_then_after_resolution_checkpoint",
-      sourceDefinitionId: effectCandidate.program.definitionId,
-      restrictionDefinitionId: restrictionCandidate.program.definitionId,
-      normalizedOperations: [effectCandidate.summon, effectCandidate.destroy],
-      restriction,
-      branchWhereRestrictionRemains: remains,
-      branchWhereRestrictionDestroyed: destroyed,
-    },
-  };
-}
-
 function normalizedEffectsForProgram(program) {
   return normalizeCardText({
     id: program.definitionId,
@@ -1083,46 +812,51 @@ function normalizedEffectsForProgram(program) {
   }).effects || [];
 }
 
-function normalizedFieldRestriction(semantic) {
-  if (!semantic || semantic.type !== "field_count_limit") return null;
-  const maxCount = Number(semantic.maxCount) || 1;
-  if (semantic.distinctGroups && semantic.groupBy === "race") {
-    return { type: "max_distinct_races_per_player", maxCount };
+function identifyUncompiledMechanism({ query, programs }) {
+  const mentionedEffects = (programs || [])
+    .filter((program) => locateCardMention(query, program).index >= 0)
+    .flatMap((program) => normalizedEffectsForProgram(program));
+  const operationLists = mentionedEffects.map((effect) => (
+    (effect.resolution || []).map((step) => step.operation).filter(Boolean)
+  ));
+
+  if (operationLists.some((operations) => (
+    operations.some((operation) => operation.type === "create_lingering_restriction")
+  ))) {
+    return "bound_lingering_restriction_lifecycle_not_compiled";
   }
-  if (semantic.distinctGroups && semantic.groupBy === "attribute") {
-    return { type: "max_distinct_attributes_per_player", maxCount };
+
+  const hasOrderedSummonThenDestroy = operationLists.some((operations) => {
+    const summonIndex = operations.findIndex((operation) => operation.type === "special_summon");
+    return summonIndex >= 0
+      && operations.some((operation, index) => index > summonIndex && operation.type === "destroy");
+  });
+  const hasFieldCountLimit = mentionedEffects.some((effect) => (
+    (effect.continuous || []).some((semantic) => semantic.type === "field_count_limit")
+  ));
+  if (hasOrderedSummonThenDestroy && hasFieldCountLimit) {
+    return "ordered_summon_destroy_checkpoint_not_compiled";
   }
-  if (semantic.groupBy === "race") {
-    return { type: "max_face_up_monsters_per_race_per_player", maxCount };
-  }
-  return null;
+  return "";
 }
 
-function findOrderedCheckpointActivationEvidence({ evidence, effectProgram, restrictionProgram }) {
-  const sourceKeys = unique([effectProgram.definitionId, effectProgram.name, ...effectProgram.names]);
-  const restrictionKeys = unique([restrictionProgram.definitionId, restrictionProgram.name, ...restrictionProgram.names]);
-  return (evidence || []).map((item) => {
-    const text = JSON.stringify(item);
-    return {
-      item,
-      text: normalizeSemanticText(text),
-      supportsActivation: /(?:canactivate|可以发动|能够发动|能发动|発動でき)/iu.test(text),
-    };
-  }).find(({ text, supportsActivation }) => (
-    supportsActivation
-    && sourceKeys.some((key) => text.includes(normalizeSemanticText(key)))
-    && restrictionKeys.some((key) => text.includes(normalizeSemanticText(key)))
-  ))?.item
-    ? {
-        id: String((evidence || []).find((item) => {
-          const text = normalizeSemanticText(JSON.stringify(item));
-          return /(?:canactivate|可以发动|能够发动|能发动|発動でき)/iu.test(text)
-            && sourceKeys.some((key) => text.includes(normalizeSemanticText(key)))
-            && restrictionKeys.some((key) => text.includes(normalizeSemanticText(key)));
-        })?.id || ""),
-        sourceType: "official_qa",
-      }
-    : null;
+function unknownUncompiledMechanism(reason, compiled) {
+  return {
+    status: "unknown",
+    complete: false,
+    authoritative: false,
+    conditional: false,
+    activation: "unknown",
+    resolution: "unknown",
+    reason,
+    authorityReason: "uncompiled_mechanism",
+    authorityReasons: [reason],
+    shortAnswer: "统一 compiler/executor 尚未完整编译并验证这一状态转移，当前不能给出权威结论。",
+    reasoning: ["该问题已进入统一场景编译流程，但现有执行图不足以证明发动合法性或后续处理结果。"],
+    trace: [],
+    evidenceIds: [],
+    debug: { compiled },
+  };
 }
 
 function analyzeSymbolicFusionReplacementTransition({

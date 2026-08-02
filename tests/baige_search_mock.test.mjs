@@ -434,11 +434,9 @@ test("a newly indexed continuous effect feeds generic hand-visibility legality r
     env: {
       MODEL_PROVIDER: "mock",
       RAG_MODEL_PROVIDER: "mock",
-      RAG_DRY_RUN: "1",
       RAG_LIVE_OFFICIAL_QA: "0",
       OCG_ENGINE_ENABLED: "0",
     },
-    dryRun: true,
     modelInvoker: async ({ prompt }) => {
       finalPrompt = prompt;
       return JSON.stringify({

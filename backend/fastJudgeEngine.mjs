@@ -2,7 +2,6 @@ import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildCardProfiles } from "./cardProfile.mjs";
-import { classifyQaForSubQuestion } from "./engine.mjs";
 import { detectIssueFrames, issueFrameIds } from "./issueFrameDetector.mjs";
 import { buildProgramAnswerModel, runJudgeAnswerModel } from "./judgeAnswerModel.mjs";
 import { buildSafeClarification, validateJudgeAnswer } from "./judgeAnswerValidator.mjs";
@@ -11,7 +10,6 @@ import { buildRulingContextPack, buildTemporaryCardProfiles, resolveCardsForFast
 import { checkStaleness } from "./stalenessGuard.mjs";
 import { detectCurrentVerdictConflicts, filterCurrentEvidence } from "./currentEvidenceFilter.mjs";
 import { evaluateEvidenceFreshness } from "./evidenceFreshness.mjs";
-import { buildBlockerAnswer, evaluateRulingBlockers } from "./rulingBlockers.mjs";
 import { buildCardIdentityGateAnswer, evaluateCardIdentityGate } from "./cardIdentityGate.mjs";
 import { applyProgramVerdictPolicy, evidenceGradeFor, statusForProgramVerdict } from "./verdictPolicy.mjs";
 import { runSafeChainPipeline } from "./chainSafety.mjs";
@@ -119,12 +117,18 @@ export async function answerRulingQuestionFast({ question, mode = "duel", maxLat
       freshness: evidenceFreshness,
       staleEvidenceIds: staleness.staleEvidenceIds || [],
     });
-    contextPack.answerRouter = { officialQaRoute: officialQaRoute.level, conflicts: officialQaRoute.conflicts || [] };
-    if (officialQaRoute.answer) {
-      return finalize(officialQaRoute.answer, { mode, budget, issueFrames, contextPack, debug });
-    }
-    const legacyDirectOfficial = officialQaRoute.answer ? null : findDirectOfficialAnswer(input, contextPack, issueFrames, staleness, evidenceFreshness);
-    const directOfficial = officialQaRoute.answer?.answerType === "direct_official" ? officialQaRoute.answer : legacyDirectOfficial;
+    const directOfficial = cardIdentityGate.passed ? bindExactOfficialQaAnswer({
+      route: officialQaRoute,
+      matches: officialQaSearch,
+      cardIdentityGate,
+      resolvedCards: resolution.resolvedCards,
+    }) : null;
+    contextPack.answerRouter = {
+      officialQaRoute: officialQaRoute.level,
+      officialQaBinding: directOfficial ? "canonical_exact_bound" : "not_bound_for_direct_answer",
+      conflicts: officialQaRoute.conflicts || [],
+    };
+    if (directOfficial) return finalize(directOfficial, { mode, budget, issueFrames, contextPack, debug });
     const officialEvidenceIds = directOfficial?.judgeReasoning?.flatMap((item) => item.refs || []) || [];
     const profileText = cardProfileRuleText(cardProfiles);
     const damageStepAnalysis = buildDamageStepAnalysis({
@@ -199,24 +203,8 @@ export async function answerRulingQuestionFast({ question, mode = "duel", maxLat
       }
     }
 
-    // Template and legality routes run only when no exact or near-exact official QA answer was selected.
-    const blockerCards = collectBlockerCards(resolution, localSnapshot.cards || []);
-    const blockerResult = evaluateRulingBlockers({ question: input, cards: blockerCards });
-    if (blockerResult.hasBlocker) {
-      const answer = buildBlockerAnswer(blockerResult);
-      if (!cardIdentityGate.passed) {
-        answer.uncertainCards = cardIdentityGate.uncertainCards;
-        answer.warnings = [...new Set([...(answer.warnings || []), ...cardIdentityGate.warnings])];
-      }
-      return finalize(answer, { mode, budget, issueFrames, contextPack, debug });
-    }
     if (!cardIdentityGate.passed && !temporaryProfiles.length) {
       return finalize(buildCardIdentityGateAnswer(cardIdentityGate), { mode, budget, issueFrames, contextPack, debug });
-    }
-
-    if (legacyDirectOfficial) {
-      const validation = validateJudgeAnswer({ question: input, issueFrames, contextPack, modelAnswer: legacyDirectOfficial });
-      if (validation.ok) return finalize(legacyDirectOfficial, { mode, budget, issueFrames, contextPack, validation, debug });
     }
 
     const damageStepBlocker = evaluateDamageStepBlocker(damageStepAnalysis);
@@ -322,38 +310,21 @@ export async function loadFastJudgeSnapshot(dataDir = join(root, "data")) {
   return promise;
 }
 
-export function findDirectOfficialAnswer(question, contextPack, issueFrames, staleness = contextPack.staleness || {}, freshness = contextPack.evidenceFreshness || {}) {
-  if (freshness.freshness !== "fresh" || freshness.safetyPenalty > 0) return null;
-  const primaryCard = contextPack.resolvedCards?.[0];
-  if (!primaryCard || !issueFrames.primaryIssueFrames?.length) return null;
-  const subQuestion = buildLegacySubQuestion(question, primaryCard.name, issueFrames.primaryIssueFrames);
-  const staleIds = new Set(staleness.staleEvidenceIds || []);
-  const candidates = [...(contextPack.officialQaCandidates || []), ...(contextPack.faqCandidates || [])]
-    .filter((candidate) => !staleIds.has(String(candidate.id)));
-  const direct = candidates.map((candidate) => {
-    const classification = classifyQaForSubQuestion(subQuestion, normalizeIndexedEvidence(candidate.record || candidate));
-    return { candidate, classification };
-  }).filter((item) => item.classification.match === "direct" && item.classification.extractedVerdict && item.classification.extractedVerdict !== "unknown");
-  if (!direct.length) return null;
-  const verdicts = new Set(direct.map((item) => normalizeFastVerdict(item.classification.extractedVerdict, subQuestion.type)));
-  if (verdicts.size !== 1) return null;
-  const verdict = [...verdicts][0];
-  const selected = direct[0];
-  const issueText = humanIssue(issueFrameIds(issueFrames));
-  return {
-    answerType: "direct_official",
-    verdict,
-    shortAnswer: directShortAnswer(primaryCard.name, verdict),
-    judgeReasoning: [{
-      text: `${selected.candidate.title || "官方问答"}直接覆盖${primaryCard.name}的${issueText}。`,
-      basis: ["official_qa"],
-      refs: [selected.candidate.id],
-    }],
-    requiredFacts: [],
-    assumptions: [],
-    possibleCounterCases: [],
-    confidence: "high",
-  };
+function bindExactOfficialQaAnswer({ route, matches, cardIdentityGate, resolvedCards }) {
+  if (route?.level !== "official_qa_exact_match" || route.answer?.answerType !== "direct_official") return null;
+  if (!cardIdentityGate?.passed) return null;
+  const canonicalIds = new Set((resolvedCards || []).map((card) => String(card.id || card.cardId || "")).filter(Boolean));
+  if (!canonicalIds.size) return null;
+
+  const refs = new Set((route.answer.judgeReasoning || []).flatMap((item) => item.refs || []).map(String));
+  const candidates = (matches?.exact || []).filter((match) => refs.has(String(match.id)));
+  if (candidates.length !== 1) return null;
+  const candidate = candidates[0];
+  const matchedIds = new Set((candidate.matchedCardIds || []).map(String));
+  const identitiesBound = candidate.identityCompatibleForExact === true
+    && Number(candidate.cardIdCoverage) === 1
+    && [...canonicalIds].every((id) => matchedIds.has(id));
+  return identitiesBound ? route.answer : null;
 }
 
 function finalize(answer, { mode, budget, issueFrames, contextPack, validation = null, debug = false, error = null }) {
@@ -522,40 +493,6 @@ function buildTemplateInsufficientAnswer(chainSafety) {
   };
 }
 
-function buildLegacySubQuestion(question, cardName, frames) {
-  const ids = frames.map((item) => item.id);
-  let type = "unknown";
-  let askedResult = "unknown";
-  if (ids.includes("activation_legality") || ids.includes("damage_step_timing")) { type = "activation_condition"; askedResult = "can_activate"; }
-  else if (ids.includes("piercing_battle_damage") || ids.includes("battle_damage_calculation")) { type = "resolution_handling"; askedResult = "battle_damage_result"; }
-  else if (ids.includes("attack_target_legality")) { type = "resolution_handling"; askedResult = "attack_target_legality"; }
-  else if (ids.includes("effect_resolution") || ids.includes("copy_or_gain_effect")) { type = "resolution_handling"; askedResult = "effect_resolution_result"; }
-  return { id: "fast-q1", type, card: cardName, askedResult, sourceText: question };
-}
-
-function normalizeFastVerdict(verdict, type) {
-  const mapping = {
-    can: type === "activation_condition" ? "can_activate" : "yes",
-    cannot: type === "activation_condition" ? "cannot_activate" : "no",
-    yes: "yes",
-    no: "no",
-    sent_to_graveyard: "applies",
-    not_sent_to_graveyard: "does_not_apply",
-    banished_temporarily: "applies",
-  };
-  return mapping[verdict] || (String(verdict).startsWith("activates_") ? "applies" : "unknown");
-}
-
-function directShortAnswer(cardName, verdict) {
-  const labels = { yes: "可以。", no: "不可以。", can_activate: "可以发动。", cannot_activate: "不能发动。", applies: "该处理适用。", does_not_apply: "该处理不适用。" };
-  return `${cardName}：${labels[verdict] || "官方问答给出了直接处理。"}`;
-}
-
-function humanIssue(ids) {
-  const labels = { activation_legality: "发动条件", damage_step_timing: "伤害步骤时点", effect_resolution: "效果处理", piercing_battle_damage: "贯穿伤害", battle_damage_calculation: "战斗伤害", attack_target_legality: "攻击对象", copy_or_gain_effect: "获得效果" };
-  return ids.map((id) => labels[id] || id).join("、");
-}
-
 function hasRequiredTextGap(issueFrames, profiles) {
   const required = new Set((issueFrames.primaryIssueFrames || []).flatMap((frame) => frame.requiredCardSections || []));
   if (required.has("pendulumEffects") && !profiles.some((profile) => profile.sections?.pendulumEffects?.length)) return true;
@@ -565,12 +502,6 @@ function hasRequiredTextGap(issueFrames, profiles) {
 function hasUnresolvedCardsWithoutText(unresolvedCards, temporaryProfiles) {
   const covered = new Set(temporaryProfiles.map((profile) => profile.names.zh || profile.names.ja || profile.names.en));
   return unresolvedCards.some((item) => !covered.has(item.unresolvedCardName));
-}
-
-function collectBlockerCards(resolution, cards) {
-  const ids = new Set((resolution.unresolvedCards || []).flatMap((item) => item.candidateCards || []).map((item) => String(item.cardId || item.id || "")).filter(Boolean));
-  const candidates = cards.filter((card) => ids.has(String(card.id || card.cardId || "")));
-  return [...(resolution.resolvedCards || []), ...candidates];
 }
 
 function buildNoIssueClarification(question, contextPack) {

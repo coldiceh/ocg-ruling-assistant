@@ -490,6 +490,63 @@ test("program compilation consumes normalized mandatory outputs and grouped fiel
   });
 });
 
+test("an uncompiled bound-restriction lifecycle cannot bypass the compiler with a fixed verdict", () => {
+  const result = analyzeDuelStateTransition({
+    userQuery: [
+      "「架空月影兽」的①效果已经适用。",
+      "以该效果特殊召唤的怪兽控制权变更后，限制还适用吗？",
+      "之后控制权归还时会恢复吗？",
+    ].join(""),
+    resolvedCards: [{
+      id: "fictional-bound-restriction-source",
+      name: "架空月影兽",
+      cardType: "monster",
+      effectText: "①：可以发动。从卡组特殊召唤1只怪兽。只要以此效果特殊召唤的怪兽以表侧表示存在于自己场上，自己从额外牌组只能特殊召唤「月影」怪兽。",
+    }],
+  });
+
+  assert.equal(result.status, "unknown", JSON.stringify(result));
+  assert.equal(result.complete, false);
+  assert.equal(result.authoritative, false);
+  assert.equal(result.activation, "unknown");
+  assert.equal(result.resolution, "unknown");
+  assert.equal(result.reason, "bound_lingering_restriction_lifecycle_not_compiled");
+  assert.equal(result.debug.compiled.complete, false);
+  assert.deepEqual(result.trace, []);
+  assert.doesNotMatch(result.shortAnswer, /立即不再适用|不会恢复适用/u);
+});
+
+test("an uncompiled summon-then-destroy checkpoint cannot claim activation or branch outcomes", () => {
+  const result = analyzeDuelStateTransition({
+    userQuery: [
+      "对方场上表侧表示存在「架空种族限制」。",
+      "我方可以发动「架空双体术」吗？",
+      "特殊召唤后若破坏「架空种族限制」，两只怪兽会怎样处理？",
+    ].join(""),
+    resolvedCards: [{
+      id: "fictional-ordered-summon-destroy",
+      name: "架空双体术",
+      cardType: "spell",
+      effectText: "①：可以发动。从卡组将「架空战士甲」「架空战士乙」各1只特殊召唤。然后，可以将场上1张卡破坏。",
+    }, {
+      id: "fictional-field-count-limit",
+      name: "架空种族限制",
+      cardType: "trap",
+      effectText: "①：只要此卡存在于魔法与陷阱区域，双方场上各只可有1只同种族怪兽以表侧表示存在。",
+    }],
+  });
+
+  assert.equal(result.status, "unknown", JSON.stringify(result));
+  assert.equal(result.complete, false);
+  assert.equal(result.authoritative, false);
+  assert.equal(result.activation, "unknown");
+  assert.equal(result.resolution, "unknown");
+  assert.equal(result.reason, "ordered_summon_destroy_checkpoint_not_compiled");
+  assert.equal(result.debug.compiled.complete, false);
+  assert.deepEqual(result.trace, []);
+  assert.doesNotMatch(result.shortAnswer, /可以发动|先特殊召唤两只|两只怪兽都留下/u);
+});
+
 test("generic symbolic fusion preserves its trace but is conditional rather than complete", () => {
   const result = analyzeDuelStateTransition({
     userQuery: "当对方场上存在「墓地改道兽」时，自己仍然可以发动「融合术式」吗？如果发动时丢弃手牌，并将对方的「墓地改道兽」和自己场上的怪兽作为融合素材，卡片分别去哪里？",
@@ -714,7 +771,7 @@ test("both original user phrasings resolve all cards while the final model owns 
       cards: data.cards,
       records: data.records,
       qaRecords: data.qaRecords,
-      dryRun: true,
+      dryRun: false,
       env: {
         RAG_PROVIDER: "mock",
         MODEL_PROVIDER: "mock",
@@ -1117,7 +1174,7 @@ function runNo41ColdStart(question) {
     "const { answerRagRulingQuestion } = await import(" + JSON.stringify(moduleUrl) + ");",
     "const question = Buffer.from(" + JSON.stringify(encodedQuestion) + ", 'base64').toString('utf8');",
     "const answer = await answerRagRulingQuestion({",
-    "  question, dryRun: true,",
+    "  question, dryRun: false,",
     "  env: { RAG_PROVIDER: 'mock', RAG_MODEL_PROVIDER: 'mock', MODEL_PROVIDER: 'mock', OCG_ENGINE_ENABLED: '0', OCG_ENGINE_AUTO_SIMULATION: 'false' },",
     "  cardModelInvoker: async () => JSON.stringify({ cardNames: [] }),",
     "  ruleModelInvoker: async () => JSON.stringify({ queries: [] }),",

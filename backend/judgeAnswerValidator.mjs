@@ -21,12 +21,6 @@ const frameCoverage = {
   spell_trap_card_activation_vs_effect_activation: /卡的发动|效果发动|card activation|effect activation/iu,
 };
 
-const offTopicGroups = [
-  { triggers: /超量|Xyz|XYZ|素材|叠放|重叠/iu, terms: [/素材叠放/iu, /超量素材/iu] },
-  { triggers: /青眼白龙|Blue-Eyes White Dragon/iu, terms: [/青眼白龙/iu] },
-  { triggers: /守备表示攻击|超重武者|伤害计算前|翻开/iu, terms: [/守备表示攻击仍可继续/iu, /攻击怪兽转守后战斗停止/iu, /超重武者/iu] },
-];
-
 const internalCodePattern = /\b(?:no_direct_evidence|similar_evidence|question_type_mismatch|matcher_rejected_all|conflicting_direct_evidence|parser_warning)\b/iu;
 
 export function validateJudgeAnswer({ question = "", issueFrames = {}, contextPack = {}, modelAnswer = {} } = {}) {
@@ -34,16 +28,11 @@ export function validateJudgeAnswer({ question = "", issueFrames = {}, contextPa
   const visibleText = answerText(modelAnswer);
   const coveredIssueFrames = primary.filter((frame) => (frameCoverage[frame.id] || /./u).test(visibleText)).map((frame) => frame.id);
   const missingIssueFrames = primary.map((frame) => frame.id).filter((id) => !coveredIssueFrames.includes(id));
-  const contextText = contextPackText(contextPack);
   const offTopicTerms = [];
-  for (const group of offTopicGroups) {
-    if (group.triggers.test(`${question}\n${contextText}`)) continue;
-    for (const term of group.terms) {
-      const match = visibleText.match(term);
-      if (match) offTopicTerms.push(match[0]);
-    }
-  }
   if (internalCodePattern.test(visibleText)) offTopicTerms.push("internal_reason_code");
+
+  const entityGrounding = evaluateCardEntityGrounding({ contextPack, modelAnswer, visibleText });
+  const unsupportedCardEntities = entityGrounding.unsupportedCardEntities;
 
   const knownRefs = collectKnownRefs(contextPack);
   const unsupportedClaims = [];
@@ -70,11 +59,8 @@ export function validateJudgeAnswer({ question = "", issueFrames = {}, contextPa
   if (modelAnswer.answerType === "direct_official" && evidenceFreshness.freshness !== "fresh") unsupportedClaims.push("official_answer_requires_fresh_source");
   if (modelAnswer.answerType === "direct_official" && evidenceFreshness.safetyPenalty > 0) unsupportedClaims.push("official_answer_blocked_by_freshness_penalty");
 
-  const currentNames = [
-    ...(contextPack.resolvedCards || []).flatMap((card) => [card.name, card.names?.zh, card.names?.ja, card.names?.en]),
-    ...(contextPack.unresolvedCards || []).map((item) => item.unresolvedCardName),
-  ].map(clean).filter((item) => item.length >= 2);
-  const currentCardsMentioned = currentNames.filter((name) => visibleText.includes(name));
+  const currentNames = entityGrounding.parsedCardEntities;
+  const currentCardsMentioned = currentNames.filter((name) => includesEntityName(visibleText, name));
   if (currentNames.length && !currentCardsMentioned.length) unsupportedClaims.push("current_card_not_mentioned");
 
   if (!modelAnswer.shortAnswer) unsupportedClaims.push("missing_short_answer");
@@ -86,11 +72,16 @@ export function validateJudgeAnswer({ question = "", issueFrames = {}, contextPa
     coveredIssueFrames,
     missingIssueFrames,
     offTopicTerms: [...new Set(offTopicTerms)],
+    unsupportedCardEntities,
+    entityGroundingStatus: entityGrounding.status,
     unsupportedClaims: [...new Set(unsupportedClaims)],
     currentCardsMentioned,
     sourceRefsValid: !unsupportedClaims.some((item) => item.startsWith("invalid_ref:") || item.includes("missing_refs")),
   };
-  const ok = !missingIssueFrames.length && !diagnostics.offTopicTerms.length && !diagnostics.unsupportedClaims.length;
+  const ok = !missingIssueFrames.length
+    && !diagnostics.offTopicTerms.length
+    && !diagnostics.unsupportedCardEntities.length
+    && !diagnostics.unsupportedClaims.length;
   return {
     ok,
     ...(ok ? {} : {
@@ -125,8 +116,124 @@ export function buildSafeClarification(question, issueFrames = {}, contextPack =
     assumptions: [],
     possibleCounterCases: [],
     confidence: "low",
-    warnings: diagnostics.offTopicTerms?.length ? ["模型答案包含未触发争点，已拦截。"] : [],
+    warnings: diagnostics.unsupportedCardEntities?.length
+      ? ["模型答案引用了未被题目解析或证据支持的卡片实体，已拦截。"]
+      : diagnostics.offTopicTerms?.length ? ["模型答案包含内部诊断代码，已拦截。"] : [],
   };
+}
+
+function evaluateCardEntityGrounding({ contextPack = {}, modelAnswer = {}, visibleText = "" } = {}) {
+  const parsedCardEntities = uniqueEntityNames([
+    ...(contextPack.resolvedCards || []).flatMap(cardEntityNames),
+    ...(contextPack.unresolvedCards || []).flatMap(unresolvedCardEntityNames),
+    ...entityNamesFromCollection(contextPack.parsedCardEntities),
+    ...entityNamesFromCollection(contextPack.questionCardEntities),
+  ]);
+  const evidenceCardEntities = uniqueEntityNames([
+    ...(contextPack.relevantCardSections || []).flatMap(evidenceCardEntityNames),
+    ...(contextPack.officialQaCandidates || []).flatMap(evidenceCardEntityNames),
+    ...(contextPack.faqCandidates || []).flatMap(evidenceCardEntityNames),
+    ...(contextPack.ruleSnippets || []).flatMap(evidenceCardEntityNames),
+    ...(contextPack.knownAnalogies || []).flatMap(evidenceCardEntityNames),
+  ]);
+  const allowed = uniqueEntityNames([...parsedCardEntities, ...evidenceCardEntities]);
+  const universe = uniqueEntityNames([
+    ...entityNamesFromCollection(contextPack.cardEntityUniverse),
+    ...entityNamesFromCollection(contextPack.knownCardEntities),
+    ...entityNamesFromCollection(contextPack.allCardNames),
+  ]);
+  const explicit = uniqueEntityNames([
+    ...entityNamesFromCollection(modelAnswer.mentionedCards),
+    ...entityNamesFromCollection(modelAnswer.cardEntities),
+    ...typedAnswerEntityNames(modelAnswer.entities),
+  ]);
+  const detectedFromUniverse = universe.filter((name) => includesEntityName(visibleText, name));
+  const mentioned = uniqueEntityNames([...explicit, ...detectedFromUniverse]);
+  const allowedKeys = new Set(allowed.map(normalizeEntityKey));
+  const unsupportedCardEntities = mentioned.filter((name) => !allowedKeys.has(normalizeEntityKey(name)));
+  return {
+    status: explicit.length || universe.length ? "checked" : "unavailable",
+    parsedCardEntities,
+    evidenceCardEntities,
+    unsupportedCardEntities,
+  };
+}
+
+function cardEntityNames(card) {
+  if (!card || typeof card !== "object") return [];
+  return [
+    card.cardName,
+    card.name,
+    card.cnName,
+    card.jaName,
+    card.enName,
+    card.names?.zh,
+    card.names?.ja,
+    card.names?.en,
+    ...(Array.isArray(card.aliases) ? card.aliases : []),
+  ];
+}
+
+function unresolvedCardEntityNames(item) {
+  if (!item || typeof item !== "object") return [];
+  return [
+    item.unresolvedCardName,
+    item.cardName,
+    ...entityNamesFromCollection(item.candidates),
+  ];
+}
+
+function evidenceCardEntityNames(item) {
+  if (!item || typeof item !== "object") return [];
+  return [
+    item.cardName,
+    item.subjectCardName,
+    ...entityNamesFromCollection(item.cards),
+    ...entityNamesFromCollection(item.cardNames),
+    ...entityNamesFromCollection(item.matchedCards),
+    ...entityNamesFromCollection(item.matchedCardNames),
+    ...entityNamesFromCollection(item.relatedCards),
+    ...entityNamesFromCollection(item.card),
+  ];
+}
+
+function entityNamesFromCollection(value) {
+  if (!value) return [];
+  const values = Array.isArray(value) ? value : [value];
+  return values.flatMap((item) => {
+    if (typeof item === "string") return [item];
+    if (!item || typeof item !== "object") return [];
+    return cardEntityNames(item);
+  });
+}
+
+function typedAnswerEntityNames(value) {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    if (!item || typeof item !== "object") return [];
+    const type = normalizeEntityKey(item.type || item.entityType || "");
+    if (!["card", "cardname", "cardentity", "卡片", "卡名"].includes(type)) return [];
+    return cardEntityNames(item);
+  });
+}
+
+function uniqueEntityNames(values) {
+  const byKey = new Map();
+  for (const value of values || []) {
+    const name = clean(value);
+    if (name.length < 2) continue;
+    const key = normalizeEntityKey(name);
+    if (key && !byKey.has(key)) byKey.set(key, name);
+  }
+  return [...byKey.values()];
+}
+
+function normalizeEntityKey(value) {
+  return clean(value).toLocaleLowerCase().replace(/[\s·・．.\-—_]+/gu, "");
+}
+
+function includesEntityName(text, entityName) {
+  return normalizeEntityKey(text).includes(normalizeEntityKey(entityName));
 }
 
 function collectKnownRefs(pack) {
@@ -146,15 +253,6 @@ function isValidRef(ref, knownRefs) {
 
 function answerText(answer) {
   return clean([answer.shortAnswer, ...(answer.judgeReasoning || []).map((item) => item.text), ...(answer.requiredFacts || [])].join("\n"));
-}
-
-function contextPackText(pack) {
-  return clean([
-    ...(pack.relevantCardSections || []).map((item) => item.text),
-    ...(pack.officialQaCandidates || []).map((item) => item.text),
-    ...(pack.faqCandidates || []).map((item) => item.text),
-    ...(pack.ruleSnippets || []).map((item) => item.text),
-  ].join("\n"));
 }
 
 function humanIssueSummary(ids) {
@@ -186,13 +284,14 @@ function humanIssueSummary(ids) {
 }
 
 function rejectionReason(diagnostics) {
+  if (diagnostics.unsupportedCardEntities.length) return "unsupported_card_entity";
   if (diagnostics.offTopicTerms.length) return "off_topic_content";
   if (diagnostics.missingIssueFrames.length) return "primary_issue_not_covered";
   return "unsupported_claims";
 }
 
 function clean(value) {
-  return String(value || "").replace(/\s+/gu, " ").trim();
+  return String(value || "").normalize("NFKC").replace(/\s+/gu, " ").trim();
 }
 
 function trim(value, max) {

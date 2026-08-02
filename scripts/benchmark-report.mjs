@@ -41,7 +41,7 @@ export const BENCHMARK_CASES = [
     id: "toon-battle-destruction-chain",
     expectedSafety: "must_not_confirm",
     expectedPrimaryReason: "unresolved_dependency",
-    expectedCards: ["完美世界-卡通世界", "青眼暴君龙", "referenced_toon_monster"],
+    expectedCards: ["完美世界-卡通世界", "青眼暴君龙", "referenced_monster"],
     expectedQuestionTypes: ["temporary_banish", "send_to_gy", "activation_location", "location_change"],
     question: `被青眼暴君龙战破的卡通怪兽在伤害步骤结束阶段发动盖放墓地陷阱卡效果的时候：
 能用完美世界-卡通世界的效果除外该卡通怪兽吗？
@@ -198,7 +198,7 @@ export function classifyPrimaryUnknownReason({ answer = {}, subAnswer = {}, trac
   if (trace.branchSelector?.status === "ambiguous") return "condition_branch_ambiguous";
 
   const resolvedCardIds = trace.resolvedCardIds || [];
-  const isSymbolicReference = subAnswer.card === "referenced_toon_monster";
+  const isSymbolicReference = subAnswer.card === "referenced_monster";
   if (!isSymbolicReference && (
     trace.evidenceCoverageReason === "card_resolution_failed"
     || trace.evidenceCoverageReason === "alias_without_card_id"
@@ -445,7 +445,7 @@ export async function runBenchmarkReport() {
 export function classifyPrimaryNoDirectReason({ trace = {}, dataCoverage = {}, topN = 50 } = {}) {
   if (trace.evidenceCoverageReason === "alias_without_card_id"
     || trace.evidenceCoverageReason === "card_resolution_failed"
-    || ((trace.resolvedCardIds || []).length === 0 && trace.card !== "referenced_toon_monster")) {
+    || ((trace.resolvedCardIds || []).length === 0 && trace.card !== "referenced_monster")) {
     return "alias_or_card_resolution_issue";
   }
 
