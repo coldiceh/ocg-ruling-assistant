@@ -1223,6 +1223,32 @@ li + li {
   box-shadow: 0 0 0 4px rgba(80, 220, 255, 0.08);
 }
 
+.progress-step.is-failed {
+  color: var(--bad);
+}
+
+.progress-step.is-failed .progress-step-marker {
+  border-color: var(--bad);
+  background: color-mix(in srgb, var(--bad) 12%, transparent);
+}
+
+.pipeline-timing {
+  margin-bottom: 16px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.pipeline-timing[hidden] {
+  display: none;
+}
+
+.pipeline-elapsed {
+  color: var(--accent);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 .sub-answers {
   margin-top: 14px;
   display: grid;

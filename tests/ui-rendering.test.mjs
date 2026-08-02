@@ -150,7 +150,12 @@ test("ui_has_single_query_button", async () => {
   assert.match(app, /pendingStageTickTimer/u);
   assert.match(app, /formatPendingStageDuration/u);
   assert.match(app, /progress-step-time/u);
+  assert.match(app, /readMonotonicNow/u);
+  assert.match(app, /extractBackendPipelineTimings/u);
   assert.match(app, /startPendingStages/u);
+  assert.match(html, /id="pipelineTimingPanel" hidden/u);
+  assert.match(html, /id="pipelineStageList"/u);
+  assert.match(html, /id="pipelineElapsedText"/u);
   assert.match(html, /DeepSeek V4 Flash/u);
   assert.doesNotMatch(html, /id="flashModelButton"|id="proModelButton"|>Pro</u);
   assert.match(app, /const selectedModelTier = "flash"/u);
@@ -192,6 +197,64 @@ test("ui_has_single_query_button", async () => {
   assert.doesNotMatch(app, /FAST JUDGE/u);
   assert.doesNotMatch(app, /damage\.reasonCode|timing\.reasonCode/u);
   assert.doesNotMatch(app, /blocker\.id/u);
+});
+
+test("public pipeline timing prefers backend stage measurements and wall-clock total", async () => {
+  const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
+  const start = app.indexOf("function extractBackendPipelineTimings");
+  const end = app.indexOf("function readMonotonicNow", start);
+  assert.notEqual(start, -1);
+  assert.notEqual(end, -1);
+  const extractTimings = new Function(
+    `${app.slice(start, end)}; return extractBackendPipelineTimings;`,
+  )();
+  const stages = [
+    { id: "understand" },
+    { id: "extract_card_names" },
+    { id: "retrieve_card_texts" },
+    { id: "retrieve_rulings" },
+    { id: "simulate" },
+    { id: "generate_ruling" },
+  ];
+  const result = extractTimings({
+    debug: {
+      timingsMs: {
+        dataLoad: 10,
+        deterministicPreflight: 5,
+        auxiliaryExtractionModels: 100,
+        localReasoning: 4,
+        rulebookGrounding: 6,
+        formalEngineAwait: 2,
+        finalModel: 1_000,
+        engineAwait: 3,
+        total: 1_200,
+      },
+      retrievalStageTimingsMs: {
+        data: 1,
+        cardResolution: 20,
+        rulebook: 30,
+        officialQa: 40,
+        relatedEvidence: 50,
+      },
+    },
+  }, stages);
+  assert.deepEqual(result, {
+    stageDurationsMs: {
+      understand: 15,
+      extract_card_names: 100,
+      retrieve_card_texts: 20,
+      retrieve_rulings: 121,
+      simulate: 5,
+      generate_ruling: 1_010,
+    },
+    totalMs: 1_200,
+    usesServerTiming: true,
+  });
+  assert.deepEqual(extractTimings({}, stages), {
+    stageDurationsMs: {},
+    totalMs: null,
+    usesServerTiming: false,
+  });
 });
 
 test("missing answer API fails closed instead of answering from local ruling notes", async () => {
@@ -281,7 +344,8 @@ test("backend answers bypass persistent browser cache and bust static assets", a
     readFile(new URL("../config.json", import.meta.url), "utf8"),
   ]);
   const config = JSON.parse(configText.replace(/^\uFEFF/u, ""));
-  assert.match(html, /src\/app\.js\?v=20260722-answer-version-1/u);
+  assert.match(html, /src\/app\.js\?v=20260803-pipeline-timing-1/u);
+  assert.match(html, /src\/styles\.css\?v=20260803-pipeline-timing-1/u);
   assert.match(config.answerApiUrl, /\?client=20260722-answer-version-1$/u);
   assert.match(app, /cache: "no-store"/u);
   assert.doesNotMatch(app, /backendAnswerCacheTtlMs|buildBackendCacheKey|readCachedBackendAnswer|writeCachedBackendAnswer|ocg-ruling-answer:v/u);
