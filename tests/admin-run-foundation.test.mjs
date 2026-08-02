@@ -655,3 +655,118 @@ test("accept-before-record ambiguity becomes durable outcome_unknown and is neve
     (error) => error?.code === "admin_run_execution_fenced",
   );
 });
+
+test("directed repair has its own one-shot durable fence and preserves the primary attempt audit", async () => {
+  const storage = createMemoryAdminRunStorage();
+  let wallMs = Date.parse("2026-07-29T03:00:00.000Z");
+  const snapshot = createAdminEvidenceSnapshot({
+    evidence: {
+      preparationStatus: "finalized",
+      evidenceDecisionPacket: {
+        decisionPacketId: "decision-packet-test",
+        packetContentSha256: "d".repeat(64),
+      },
+    },
+  });
+  const storeA = createAdminRunStore({
+    storage,
+    now: () => new Date(wallMs),
+    runIdFactory: () => "provider-repair-fence-run",
+    executionTokenFactory: () => "repair-worker-a-token",
+    submissionAttemptIdFactory: (() => {
+      let sequence = 0;
+      return () => `repair-attempt-${++sequence}`;
+    })(),
+    executionLeaseMs: 100,
+  });
+  const storeB = createAdminRunStore({
+    storage,
+    now: () => new Date(wallMs),
+    executionTokenFactory: () => "repair-worker-b-token",
+    executionLeaseMs: 100,
+  });
+  await storeA.createRun({
+    evidenceSnapshot: snapshot,
+    executionProfile: {
+      status: "evidence_frozen",
+      evidenceSnapshotId: snapshot.snapshotId,
+      prompt: { sha256: "p".repeat(64) },
+    },
+    preparationFinalized: true,
+  });
+  const leaseA = await storeA.acquireExecutionLease("provider-repair-fence-run", {
+    ownerId: "repair-worker-a",
+  });
+  const primary = await storeA.beginProviderSubmission("provider-repair-fence-run", {
+    executionToken: leaseA.executionToken,
+    providerId: "glm",
+  });
+  await storeA.recordProviderSubmissionAccepted("provider-repair-fence-run", {
+    executionToken: leaseA.executionToken,
+    attemptId: primary.submissionIntent.attemptId,
+    providerId: "glm",
+    requestId: "glm-primary-request",
+  });
+  const invariants = {
+    evidenceSnapshotId: snapshot.snapshotId,
+    evidenceSnapshotSha256: snapshot.contentSha256,
+    decisionPacketId: "decision-packet-test",
+    decisionPacketSha256: "d".repeat(64),
+    promptSha256: "p".repeat(64),
+  };
+  await assert.rejects(
+    storeA.beginProviderRepairSubmission("provider-repair-fence-run", {
+      executionToken: leaseA.executionToken,
+      providerId: "glm",
+      validationErrors: ["claims[0].evidenceIds is required"],
+      initialAttempt: { requestId: "glm-primary-request" },
+      invariants: { ...invariants, evidenceSnapshotSha256: "0".repeat(64) },
+    }),
+    (error) => error?.code === "admin_run_provider_repair_invariant_mismatch",
+  );
+  const repair = await storeA.beginProviderRepairSubmission("provider-repair-fence-run", {
+    executionToken: leaseA.executionToken,
+    providerId: "glm",
+    validationErrors: ["claims[0].evidenceIds is required"],
+    initialAttempt: {
+      requestId: "glm-primary-request",
+      usage: { totalTokens: 123 },
+      cost: { totalCostCny: 0.25 },
+    },
+    invariants,
+  });
+  assert.equal(repair.run.execution.repairSubmission.state, "SUBMITTING");
+  assert.equal(repair.run.execution.repair.initialAttempt.usage.totalTokens, 123);
+  assert.deepEqual(repair.run.execution.repair.invariants, invariants);
+  await assert.rejects(
+    storeA.beginProviderRepairSubmission("provider-repair-fence-run", {
+      executionToken: leaseA.executionToken,
+      providerId: "glm",
+      validationErrors: ["retry again"],
+      initialAttempt: {},
+      invariants,
+    }),
+    (error) => error?.code === "admin_run_provider_submission_in_progress",
+  );
+
+  wallMs += 101;
+  const leaseB = await storeB.acquireExecutionLease("provider-repair-fence-run", {
+    ownerId: "repair-worker-b",
+  });
+  assert.equal(leaseB.run.execution.providerSubmission.state, "SUBMITTED");
+  assert.equal(leaseB.run.execution.repairSubmission.state, "OUTCOME_UNKNOWN");
+  assert.equal(
+    leaseB.run.execution.repairSubmission.error.code,
+    "provider_repair_submission_owner_lost",
+  );
+  await assert.rejects(
+    storeB.beginProviderRepairSubmission("provider-repair-fence-run", {
+      executionToken: leaseB.executionToken,
+      providerId: "glm",
+      validationErrors: ["must not resubmit"],
+      initialAttempt: {},
+      invariants,
+    }),
+    (error) => error?.code === "admin_run_provider_submission_outcome_unknown",
+  );
+});

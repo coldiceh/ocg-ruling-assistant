@@ -187,6 +187,199 @@ test("a domestic experimental final ruling completes synchronously and is labell
   assert.equal(fixture.openAICreateCalls.length, 0);
 });
 
+test("one directed repair succeeds on the same frozen evidence and accumulates both paid attempts", async () => {
+  const fixture = makeFixture();
+  const calls = [];
+  const responses = [
+    {
+      id: "deepseek-primary-invalid",
+      status: "completed",
+      model: "deepseek-v4-flash",
+      output_text: "{}",
+      usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 },
+    },
+    {
+      id: "deepseek-repair-valid",
+      status: "completed",
+      model: "deepseek-v4-flash",
+      output_text: JSON.stringify(makeStructuredRuling()),
+      usage: { prompt_tokens: 80, completion_tokens: 40, total_tokens: 120 },
+    },
+  ];
+  const service = makeService(fixture, {
+    ADMIN_MODEL_LAB_DEEPSEEK_PRICING_VERSION: "test-v1",
+    ADMIN_MODEL_LAB_DEEPSEEK_PRICING_EFFECTIVE_DATE: "2027-01-01",
+    ADMIN_MODEL_LAB_DEEPSEEK_INPUT_CNY_PER_MTOK: "1",
+    ADMIN_MODEL_LAB_DEEPSEEK_OUTPUT_CNY_PER_MTOK: "2",
+    ADMIN_MODEL_LAB_USD_TO_CNY_RATE: "7",
+  }, {
+    finalRulingProviders: {
+      deepseek: {
+        providerId: "deepseek",
+        async create(request) {
+          calls.push(request);
+          return responses[calls.length - 1];
+        },
+      },
+    },
+  });
+  const created = await service.createRun({
+    body: {
+      question: "匿名修复问题",
+      provider: "deepseek",
+      model: "deepseek-v4-flash",
+      reasoningEffort: "none",
+    },
+  });
+  const originalSnapshot = structuredClone(created.evidenceSnapshot);
+  const completed = (await service.executeRun({ runId: created.runId })).run;
+
+  assert.equal(completed.status, ADMIN_RUN_STATUSES.SUCCEEDED);
+  assert.equal(calls.length, 2);
+  assert.equal(fixture.deepSeekPrepareCalls, 1);
+  assert.equal(fixture.loadDataCalls, 1);
+  assert.deepEqual(completed.evidenceSnapshot.evidence.initialRequest, originalSnapshot);
+  assert.equal(
+    completed.execution.repair.invariants.evidenceSnapshotId,
+    completed.evidenceSnapshot.snapshotId,
+  );
+  assert.equal(
+    completed.execution.repair.invariants.promptSha256,
+    completed.executionProfile.prompt.sha256,
+  );
+  assert.equal(calls[0].instructions, calls[1].instructions);
+  assert.match(calls[1].input, /单次定向修复/u);
+  assert.match(calls[1].input, /validationErrors/u);
+  assert.equal(completed.result.provider.requestId, "deepseek-repair-valid");
+  assert.equal(completed.result.repair.attempted, true);
+  assert.equal(completed.result.repair.attempts.length, 2);
+  assert.equal(completed.result.metering.stages.finalRuling.attempts.length, 2);
+  assert.equal(completed.result.metering.stages.finalRuling.usage.totalTokens, 270);
+  assert.equal(completed.execution.repair.totals.usage.totalTokens, 270);
+  const [firstAttempt, repairAttempt] = completed.result.metering.stages.finalRuling.attempts;
+  assert.equal(
+    completed.result.metering.stages.finalRuling.cost.totalCostCny,
+    firstAttempt.cost.totalCostCny + repairAttempt.cost.totalCostCny,
+  );
+});
+
+test("a second invalid completed response fails closed without a third submission", async () => {
+  const fixture = makeFixture();
+  const calls = [];
+  const service = makeService(fixture, {}, {
+    finalRulingProviders: {
+      glm: {
+        providerId: "glm",
+        async create(request) {
+          calls.push(request);
+          return {
+            id: `glm-invalid-${calls.length}`,
+            status: "completed",
+            model: "glm-5.2",
+            output_text: "{}",
+            usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+          };
+        },
+      },
+    },
+  });
+  const created = await service.createRun({
+    body: { question: "匿名二次失败问题", provider: "glm", model: "glm-5.2" },
+  });
+  const failed = (await service.executeRun({ runId: created.runId })).run;
+
+  assert.equal(failed.status, ADMIN_RUN_STATUSES.FAILED);
+  assert.equal(failed.error.code, "model_ruling_validation_failed");
+  assert.equal(calls.length, 2);
+  assert.equal(failed.execution.repairSubmission.state, "SUBMITTED");
+  assert.equal(failed.execution.repair.attempts.length, 2);
+  assert.equal(failed.execution.repair.totals.usage.totalTokens, 30);
+  assert.equal(failed.execution.repair.completedAttempt.validation.ok, false);
+  await service.executeRun({ runId: created.runId });
+  assert.equal(calls.length, 2);
+});
+
+test("an unrecoverable empty completed response never opens a repair submission", async () => {
+  const fixture = makeFixture();
+  const calls = [];
+  const service = makeService(fixture, {}, {
+    finalRulingProviders: {
+      kimi: {
+        providerId: "kimi",
+        async create(request) {
+          calls.push(request);
+          return {
+            id: "kimi-empty-primary",
+            status: "completed",
+            model: "kimi-k2.6",
+            output_text: "",
+            usage: { prompt_tokens: 10, completion_tokens: 0, total_tokens: 10 },
+          };
+        },
+      },
+    },
+  });
+  const created = await service.createRun({
+    body: { question: "匿名空输出问题", provider: "kimi", model: "kimi-k2.6" },
+  });
+  const failed = (await service.executeRun({ runId: created.runId })).run;
+
+  assert.equal(failed.status, ADMIN_RUN_STATUSES.FAILED);
+  assert.equal(calls.length, 1);
+  assert.equal(failed.execution.repair, null);
+  assert.equal(failed.execution.repairSubmission.state, "NONE");
+});
+
+test("cancelling an in-flight repair aborts it and an unknown outcome is never retried", async () => {
+  const fixture = makeFixture();
+  const calls = [];
+  const repairStarted = deferred();
+  let repairSignal = null;
+  const service = makeService(fixture, {}, {
+    finalRulingProviders: {
+      glm: {
+        providerId: "glm",
+        async create(request) {
+          calls.push(request);
+          if (calls.length === 1) {
+            return {
+              id: "glm-primary-invalid",
+              status: "completed",
+              model: "glm-5.2",
+              output_text: "{}",
+              usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+            };
+          }
+          repairSignal = request.signal;
+          repairStarted.resolve();
+          return new Promise((resolve, reject) => {
+            const abort = () => reject(request.signal.reason || new Error("repair aborted"));
+            if (request.signal.aborted) abort();
+            else request.signal.addEventListener("abort", abort, { once: true });
+          });
+        },
+      },
+    },
+  });
+  const created = await service.createRun({
+    body: { question: "匿名取消修复问题", provider: "glm", model: "glm-5.2" },
+  });
+  const execution = service.executeRun({ runId: created.runId });
+  await repairStarted.promise;
+  await service.cancelRun({
+    runId: created.runId,
+    body: { reason: "cancel repair", requestedBy: "test" },
+  });
+  const failed = (await execution).run;
+
+  assert.equal(repairSignal.aborted, true);
+  assert.equal(failed.status, ADMIN_RUN_STATUSES.FAILED);
+  assert.equal(failed.execution.repairSubmission.state, "OUTCOME_UNKNOWN");
+  assert.equal(calls.length, 2);
+  await service.executeRun({ runId: created.runId });
+  assert.equal(calls.length, 2);
+});
+
 test("polling cannot fail a domestic synchronous result while its executor still owns the lease", async () => {
   const fixture = makeFixture();
   const acceptedGate = deferred();
@@ -410,18 +603,22 @@ test("missing DeepSeek usage remains null and makes aggregate token totals expli
   );
 });
 
-test("invalid final JSON fails closed instead of accepting or repairing it", async () => {
+test("invalid final JSON receives one directed repair and then fails closed", async () => {
   const fixture = makeFixture();
   const service = makeService(fixture);
   const created = await service.createRun({ body: { question: "匿名问题" } });
   await service.executeRun({ runId: created.runId });
   fixture.providerResponse = completedResponse("```json\n{}\n```");
 
+  const repairing = await service.getRun({ runId: created.runId });
+  assert.equal(repairing.status, ADMIN_RUN_STATUSES.RUNNING);
+  assert.equal(repairing.execution.repairSubmission.state, "SUBMITTED");
   const failed = await service.getRun({ runId: created.runId });
 
   assert.equal(failed.status, ADMIN_RUN_STATUSES.FAILED);
   assert.equal(failed.error.code, "model_ruling_validation_failed");
   assert.equal(failed.stageTiming.status, "CANCELLED");
+  assert.equal(fixture.openAICreateCalls.length, 2);
   const replay = await service.replayEvents({ runId: created.runId });
   assert.equal(
     replay.events.some((event) => event.type === ADMIN_MODEL_LAB_SERVICE_EVENT_TYPES.MODEL_VALIDATION_FAILED),
@@ -483,6 +680,8 @@ test("final validation rejects an audit-only evidence ID omitted from the model 
   };
   fixture.providerResponse = completedResponse(auditOnlyCitation);
 
+  const repairing = await service.getRun({ runId: created.runId });
+  assert.equal(repairing.status, ADMIN_RUN_STATUSES.RUNNING);
   const failed = await service.getRun({ runId: created.runId });
 
   assert.equal(failed.status, ADMIN_RUN_STATUSES.FAILED);
@@ -1172,6 +1371,7 @@ test("fork permits a failed source only after evidence is frozen and billing is 
 
   fixture.providerResponse = completedResponse("{}");
   await service.executeRun({ runId: queued.runId });
+  await service.getRun({ runId: queued.runId });
   const failed = await service.getRun({ runId: queued.runId });
   assert.equal(failed.status, ADMIN_RUN_STATUSES.FAILED);
   assert.equal(failed.execution.providerSubmission.state, "SUBMITTED");

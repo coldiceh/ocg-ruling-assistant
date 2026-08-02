@@ -1,5 +1,5 @@
 const RECORD_SCHEMA_VERSION = 1;
-const EXPORT_SCHEMA_VERSION = 3;
+const EXPORT_SCHEMA_VERSION = 4;
 const DEFAULT_KEY_PREFIX = "admin-lab-records:v1";
 const DEFAULT_PAGE_LIMIT = 25;
 const MAX_PAGE_LIMIT = 100;
@@ -62,6 +62,26 @@ end
 return "SAVED"
 `.trim();
 
+const SAVE_REPAIR_AUDIT_SCRIPT = `
+-- admin-lab-record-save-repair-audit-v1
+if redis.call("EXISTS", KEYS[1]) == 0 then
+  return "NOT_FOUND"
+end
+local existingRaw = redis.call("GET", KEYS[2])
+if existingRaw then
+  if existingRaw == ARGV[1] then
+    return "UNCHANGED"
+  end
+  return "CONFLICT"
+end
+redis.call("SET", KEYS[2], ARGV[1])
+local auditTtl = tonumber(ARGV[2])
+if auditTtl ~= nil and auditTtl > 0 then
+  redis.call("EXPIRE", KEYS[2], auditTtl)
+end
+return "SAVED"
+`.trim();
+
 /**
  * Explicit process-local test double. Production callers should use
  * createConfiguredAdminLabRecordStore(), which fails closed without Redis.
@@ -72,6 +92,7 @@ export function createMemoryAdminLabRecordStore({
   if (typeof now !== "function") throw new TypeError("now must be a function");
   const records = new Map();
   const ratings = new Map();
+  const repairAudits = new Map();
 
   async function registerRun(input = {}) {
     const record = normalizeRunRecord(input, { now });
@@ -86,7 +107,8 @@ export function createMemoryAdminLabRecordStore({
 
   async function getRun(runId) {
     const id = normalizeRunId(runId);
-    return records.has(id) ? cloneJson(records.get(id)) : null;
+    if (!records.has(id)) return null;
+    return cloneJson(attachRepairAudit(records.get(id), repairAudits.get(id)));
   }
 
   async function listRuns(options = {}) {
@@ -95,7 +117,10 @@ export function createMemoryAdminLabRecordStore({
     const page = ordered.slice(pagination.offset, pagination.offset + pagination.limit);
     const nextOffset = pagination.offset + page.length;
     return {
-      records: page.map((record) => attachRating(record, ratings.get(record.runId))),
+      records: page.map((record) => attachRating(
+        attachRepairAudit(record, repairAudits.get(record.runId)),
+        ratings.get(record.runId),
+      )),
       nextCursor: nextOffset < ordered.length ? encodeCursor(nextOffset) : null,
       count: page.length,
     };
@@ -114,6 +139,19 @@ export function createMemoryAdminLabRecordStore({
     return ratings.has(id) ? cloneJson(ratings.get(id)) : null;
   }
 
+  async function saveRunRepairProvenance(input = {}) {
+    const runId = normalizeRunId(input.runId);
+    if (!records.has(runId)) throw recordNotFound(runId);
+    const repairProvenance = normalizeRepairProvenance(input.repairProvenance);
+    if (!repairProvenance) throw new TypeError("repairProvenance is required");
+    const existing = repairAudits.get(runId);
+    if (existing && JSON.stringify(existing) !== JSON.stringify(repairProvenance)) {
+      throw recordConflict(runId);
+    }
+    repairAudits.set(runId, cloneJson(repairProvenance));
+    return cloneJson(repairProvenance);
+  }
+
   return Object.freeze({
     kind: "memory",
     persistent: false,
@@ -123,6 +161,7 @@ export function createMemoryAdminLabRecordStore({
     listRuns,
     saveHumanRating,
     getHumanRating,
+    saveRunRepairProvenance,
   });
 }
 
@@ -182,7 +221,12 @@ export function createRedisAdminLabRecordStore(options = {}) {
   async function getRun(runId) {
     const id = normalizeRunId(runId);
     const record = await readCompatibleRunRecord(id);
-    return record ? attachRating(record, await getHumanRating(id)) : null;
+    if (!record) return null;
+    const [rating, repairAudit] = await Promise.all([
+      getHumanRating(id),
+      getRunRepairProvenance(id),
+    ]);
+    return attachRating(attachRepairAudit(record, repairAudit), rating);
   }
 
   async function listRuns(options = {}) {
@@ -218,12 +262,14 @@ export function createRedisAdminLabRecordStore(options = {}) {
 
     const recordKeys = pageRunIds.map((runId) => redisKeys(keyPrefix, runId).record);
     const ratingKeys = pageRunIds.map((runId) => redisKeys(keyPrefix, runId).rating);
+    const repairAuditKeys = pageRunIds.map((runId) => redisKeys(keyPrefix, runId).repairAudit);
     const values = await redisCommand(config, fetchImpl, timeoutMs, [
       "MGET",
       ...recordKeys,
       ...ratingKeys,
+      ...repairAuditKeys,
     ]);
-    if (!Array.isArray(values) || values.length !== pageRunIds.length * 2) {
+    if (!Array.isArray(values) || values.length !== pageRunIds.length * 3) {
       throw storageCorrupt("history MGET returned an unexpected shape");
     }
 
@@ -236,7 +282,11 @@ export function createRedisAdminLabRecordStore(options = {}) {
       const rating = rawRating === null || rawRating === undefined
         ? null
         : parseHumanRating(rawRating, pageRunIds[index]);
-      result.push(attachRating(record, rating));
+      const rawRepairAudit = values[index + (pageRunIds.length * 2)];
+      const repairAudit = rawRepairAudit === null || rawRepairAudit === undefined
+        ? null
+        : parseRepairProvenance(rawRepairAudit, pageRunIds[index]);
+      result.push(attachRating(attachRepairAudit(record, repairAudit), rating));
     }
     return {
       records: result,
@@ -295,6 +345,36 @@ export function createRedisAdminLabRecordStore(options = {}) {
     return raw === null || raw === undefined ? null : parseHumanRating(raw, id);
   }
 
+  async function saveRunRepairProvenance(input = {}) {
+    const runId = normalizeRunId(input.runId);
+    const repairProvenance = normalizeRepairProvenance(input.repairProvenance);
+    if (!repairProvenance) throw new TypeError("repairProvenance is required");
+    const keys = redisKeys(keyPrefix, runId);
+    const serialized = serializeJson(repairProvenance);
+    const result = await redisCommand(config, fetchImpl, timeoutMs, [
+      "EVAL",
+      SAVE_REPAIR_AUDIT_SCRIPT,
+      "2",
+      keys.record,
+      keys.repairAudit,
+      serialized,
+      ttlSeconds === null ? "" : String(ttlSeconds),
+    ]);
+    if (result === "SAVED" || result === "UNCHANGED") return cloneJson(repairProvenance);
+    if (result === "NOT_FOUND") throw recordNotFound(runId);
+    if (result === "CONFLICT") throw recordConflict(runId);
+    throw storageCorrupt(`unexpected repair audit result: ${String(result)}`);
+  }
+
+  async function getRunRepairProvenance(runId) {
+    const id = normalizeRunId(runId);
+    const raw = await redisCommand(config, fetchImpl, timeoutMs, [
+      "GET",
+      redisKeys(keyPrefix, id).repairAudit,
+    ]);
+    return raw === null || raw === undefined ? null : parseRepairProvenance(raw, id);
+  }
+
   async function readCompatibleRunRecord(runId) {
     let raw = await redisCommand(config, fetchImpl, timeoutMs, [
       "GET",
@@ -328,7 +408,12 @@ export function createRedisAdminLabRecordStore(options = {}) {
       const batch = runIds.slice(offset, offset + 16);
       const loaded = await Promise.all(batch.map(async (runId) => {
         const record = await readCompatibleRunRecord(runId);
-        return record ? attachRating(record, await getHumanRating(runId)) : null;
+        if (!record) return null;
+        const [rating, repairAudit] = await Promise.all([
+          getHumanRating(runId),
+          getRunRepairProvenance(runId),
+        ]);
+        return attachRating(attachRepairAudit(record, repairAudit), rating);
       }));
       records.push(...loaded.filter(Boolean));
     }
@@ -354,6 +439,7 @@ export function createRedisAdminLabRecordStore(options = {}) {
     listRuns,
     saveHumanRating,
     getHumanRating,
+    saveRunRepairProvenance,
   });
 }
 
@@ -423,6 +509,11 @@ export function exportAdminLabRecordsCsv(records) {
     "sourceEvidenceSnapshotSha256",
     "sourceDecisionPacketId",
     "sourceDecisionPacketSha256",
+    "repairAttempted",
+    "repairOutcome",
+    "repairInitialRequestId",
+    "repairRequestId",
+    "repairValidationErrorsJson",
     "resultJson",
     "meteringJson",
     "humanRating",
@@ -434,6 +525,7 @@ export function exportAdminLabRecordsCsv(records) {
     const finalRuling = record.modelConfig.finalRuling || {};
     const prompt = record.modelConfig.prompt || {};
     const fork = record.forkProvenance || {};
+    const repair = record.repairProvenance || record.result?.repair || {};
     return [
       record.runId,
       record.createdAt,
@@ -458,6 +550,11 @@ export function exportAdminLabRecordsCsv(records) {
       fork.sourceEvidenceSnapshotSha256 || "",
       fork.sourceDecisionPacketId || "",
       fork.sourceDecisionPacketSha256 || "",
+      repair.attempted === true ? "true" : "",
+      repair.outcome || "",
+      repair.initialAttempt?.requestId || repair.attempts?.[0]?.requestId || "",
+      repair.submission?.requestId || repair.attempts?.[1]?.requestId || "",
+      repair.validationErrors ? JSON.stringify(repair.validationErrors) : "",
       record.result ? JSON.stringify(record.result) : "",
       record.metering ? JSON.stringify(record.metering) : "",
       record.humanRating?.rating || "",
@@ -489,6 +586,7 @@ function normalizeRunRecord(input, { now }) {
     decisionPacketId: optionalText(input.decisionPacketId, 240),
     decisionPacketSha256: normalizeSha256(input.decisionPacketSha256),
     forkProvenance: normalizeForkProvenance(input.forkProvenance),
+    repairProvenance: normalizeRepairProvenance(input.repairProvenance),
   });
 }
 
@@ -582,6 +680,24 @@ function normalizeForkProvenance(value) {
   });
 }
 
+function normalizeRepairProvenance(value) {
+  if (!isPlainObject(value)) return undefined;
+  return sanitizeExportValue(compactObject({
+    schemaVersion: optionalNonNegativeNumber(value.schemaVersion),
+    attempted: value.attempted === true ? true : undefined,
+    maxAttempts: optionalNonNegativeNumber(value.maxAttempts),
+    outcome: optionalText(value.outcome, 120),
+    requestedAt: normalizeOptionalDate(value.requestedAt, "repairProvenance.requestedAt"),
+    validationErrors: Array.isArray(value.validationErrors)
+      ? value.validationErrors.slice(0, 12).map((item) => String(item).slice(0, 320))
+      : undefined,
+    invariants: isPlainObject(value.invariants) ? value.invariants : undefined,
+    initialAttempt: isPlainObject(value.initialAttempt) ? value.initialAttempt : undefined,
+    submission: isPlainObject(value.submission) ? value.submission : undefined,
+    attempts: Array.isArray(value.attempts) ? value.attempts.slice(0, 2) : undefined,
+  }));
+}
+
 function normalizeExportRecords(records) {
   if (!Array.isArray(records)) throw new TypeError("records must be an array");
   return records.map((input) => {
@@ -595,6 +711,7 @@ function normalizeExportRecords(records) {
       decisionPacketId: input?.decisionPacketId,
       decisionPacketSha256: input?.decisionPacketSha256,
       forkProvenance: input?.forkProvenance,
+      repairProvenance: input?.repairProvenance,
     }, { now: () => new Date(0) });
     const rating = input?.humanRating === null || input?.humanRating === undefined
       ? null
@@ -612,6 +729,9 @@ function normalizeExportRecords(records) {
       startedAt: normalizeOptionalDate(input?.startedAt, "startedAt"),
       endedAt: normalizeOptionalDate(input?.endedAt, "endedAt"),
       evidenceSnapshotId,
+      repairProvenance: normalizeRepairProvenance(
+        input?.repairProvenance ?? result?.repair,
+      ) || null,
       result,
       metering: sanitizeExportValue(input?.metering ?? result?.metering),
     };
@@ -632,6 +752,7 @@ function normalizeExportResult(value) {
     "metrics",
     "latency",
     "prompt",
+    "repair",
   ];
   const result = {};
   for (const key of allowedKeys) {
@@ -694,6 +815,12 @@ function attachRating(record, rating) {
   };
 }
 
+function attachRepairAudit(record, repairProvenance) {
+  return repairProvenance
+    ? { ...cloneJson(record), repairProvenance: cloneJson(repairProvenance) }
+    : cloneJson(record);
+}
+
 function parseRunRecord(raw, expectedRunId) {
   const parsed = parseStoredJson(raw, "run record");
   let normalized;
@@ -720,6 +847,17 @@ function parseHumanRating(raw, expectedRunId) {
     throw storageCorrupt("stored human rating id mismatch");
   }
   return normalized;
+}
+
+function parseRepairProvenance(raw) {
+  const parsed = parseStoredJson(raw, "repair provenance");
+  try {
+    const normalized = normalizeRepairProvenance(parsed);
+    if (!normalized) throw new TypeError("repair provenance is required");
+    return normalized;
+  } catch {
+    throw storageCorrupt("stored repair provenance is invalid");
+  }
 }
 
 function normalizePagination({ cursor = null, limit = DEFAULT_PAGE_LIMIT } = {}) {
@@ -759,6 +897,7 @@ function redisKeys(prefix, runId) {
     index: `${slotPrefix}:created`,
     record: `${slotPrefix}:run:${encodedRunId}`,
     rating: `${slotPrefix}:rating:${encodedRunId}`,
+    repairAudit: `${slotPrefix}:repair:${encodedRunId}`,
   };
 }
 

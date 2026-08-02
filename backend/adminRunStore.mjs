@@ -21,6 +21,11 @@ export const ADMIN_RUN_EVENT_TYPES = Object.freeze({
   PROVIDER_SUBMISSION_ACCEPTED: "PROVIDER_SUBMISSION_ACCEPTED",
   PROVIDER_SUBMISSION_REJECTED: "PROVIDER_SUBMISSION_REJECTED",
   PROVIDER_SUBMISSION_OUTCOME_UNKNOWN: "PROVIDER_SUBMISSION_OUTCOME_UNKNOWN",
+  PROVIDER_REPAIR_SUBMISSION_STARTED: "PROVIDER_REPAIR_SUBMISSION_STARTED",
+  PROVIDER_REPAIR_SUBMISSION_ACCEPTED: "PROVIDER_REPAIR_SUBMISSION_ACCEPTED",
+  PROVIDER_REPAIR_SUBMISSION_REJECTED: "PROVIDER_REPAIR_SUBMISSION_REJECTED",
+  PROVIDER_REPAIR_SUBMISSION_OUTCOME_UNKNOWN: "PROVIDER_REPAIR_SUBMISSION_OUTCOME_UNKNOWN",
+  PROVIDER_REPAIR_RESPONSE_COMPLETED: "PROVIDER_REPAIR_RESPONSE_COMPLETED",
   RUN_EVENT: "RUN_EVENT",
   STAGE_PROGRESS: "STAGE_PROGRESS",
   CANCEL_REQUESTED: "CANCEL_REQUESTED",
@@ -149,6 +154,8 @@ export function createAdminRunStore({
         epoch: 0,
         lease: null,
         providerSubmission: createEmptyProviderSubmission(),
+        repairSubmission: createEmptyProviderSubmission(),
+        repair: null,
       },
     };
     await storage.createRun({ run: cloneJson(run), event: cloneJson(event) });
@@ -226,6 +233,13 @@ export function createAdminRunStore({
           message: "execution lease expired before the provider request id was durably recorded",
         })
         : execution.providerSubmission;
+      const repairSubmission = execution.repairSubmission.state
+        === ADMIN_PROVIDER_SUBMISSION_STATES.SUBMITTING
+        ? providerSubmissionOutcomeUnknown(execution.repairSubmission, timestamp, {
+          code: "provider_repair_submission_owner_lost",
+          message: "execution lease expired before the repair provider request id was durably recorded",
+        })
+        : execution.repairSubmission;
       const lease = {
         epoch,
         tokenHash,
@@ -246,14 +260,19 @@ export function createAdminRunStore({
           providerSubmissionOutcomeUnknown:
             providerSubmission.state === ADMIN_PROVIDER_SUBMISSION_STATES.OUTCOME_UNKNOWN
             && execution.providerSubmission.state === ADMIN_PROVIDER_SUBMISSION_STATES.SUBMITTING,
+          repairSubmissionOutcomeUnknown:
+            repairSubmission.state === ADMIN_PROVIDER_SUBMISSION_STATES.OUTCOME_UNKNOWN
+            && execution.repairSubmission.state === ADMIN_PROVIDER_SUBMISSION_STATES.SUBMITTING,
         },
         patch: {
           status: starting ? ADMIN_RUN_STATUSES.RUNNING : current.status,
           ...(starting ? { startedAt: timestamp } : {}),
           execution: {
+            ...execution,
             epoch,
             lease,
             providerSubmission,
+            repairSubmission,
           },
         },
       };
@@ -595,6 +614,282 @@ export function createAdminRunStore({
     });
   }
 
+  /**
+   * Opens the single allowed directed-repair attempt after a completed primary
+   * response failed output validation. The first attempt audit and immutable
+   * evidence proof are committed together with the pre-submit intent so a
+   * crash can never erase the first charge or silently submit a third request.
+   */
+  async function beginProviderRepairSubmission(runId, {
+    executionToken,
+    providerId,
+    requestFingerprint = null,
+    validationErrors = [],
+    initialAttempt = {},
+    invariants = {},
+  } = {}) {
+    const provider = requiredString(providerId, "providerId");
+    const attemptId = requiredString(submissionAttemptIdFactory(), "submissionAttemptId");
+    const fingerprint = requestFingerprint === null || requestFingerprint === undefined
+      ? null
+      : requiredString(requestFingerprint, "requestFingerprint");
+    const normalizedErrors = canonicalJson(validationErrors).map((item) => String(item));
+    if (normalizedErrors.length === 0) {
+      throw new TypeError("repair validationErrors must not be empty");
+    }
+    const normalizedInitialAttempt = canonicalJson(initialAttempt);
+    const normalizedInvariants = canonicalJson(invariants);
+    const run = await mutateRun(runId, (current, timestamp) => {
+      requireStatus(current, [ADMIN_RUN_STATUSES.RUNNING], "begin provider repair submission");
+      const execution = requireExecutionFence(
+        current,
+        executionToken,
+        timestamp,
+        "begin provider repair submission",
+      );
+      requireProviderSubmissionState(
+        execution.providerSubmission,
+        ADMIN_PROVIDER_SUBMISSION_STATES.SUBMITTED,
+        "begin provider repair submission",
+      );
+      requireProviderSubmissionState(
+        execution.repairSubmission,
+        ADMIN_PROVIDER_SUBMISSION_STATES.NONE,
+        "begin provider repair submission",
+      );
+      if (execution.repair) {
+        throw runStoreError(
+          "cannot begin provider repair submission: repair was already attempted",
+          "admin_run_provider_repair_already_attempted",
+        );
+      }
+      assertRepairInvariants(current, normalizedInvariants);
+      const repairSubmission = {
+        state: ADMIN_PROVIDER_SUBMISSION_STATES.SUBMITTING,
+        attemptId,
+        attemptEpoch: execution.epoch,
+        providerId: provider,
+        requestFingerprint: fingerprint,
+        intentAt: timestamp,
+        requestId: null,
+        acceptedAt: null,
+        rejectedAt: null,
+        outcomeUnknownAt: null,
+        error: null,
+      };
+      const repair = {
+        schemaVersion: 1,
+        attempted: true,
+        requestedAt: timestamp,
+        validationErrors: normalizedErrors,
+        initialAttempt: normalizedInitialAttempt,
+        invariants: normalizedInvariants,
+      };
+      return {
+        eventType: ADMIN_RUN_EVENT_TYPES.PROVIDER_REPAIR_SUBMISSION_STARTED,
+        eventPayload: {
+          attemptId,
+          executionEpoch: execution.epoch,
+          providerId: provider,
+          requestFingerprint: fingerprint,
+          validationErrors: normalizedErrors,
+          invariants: normalizedInvariants,
+          initialAttempt: normalizedInitialAttempt,
+        },
+        patch: {
+          execution: {
+            ...execution,
+            repairSubmission,
+            repair,
+          },
+        },
+      };
+    });
+    return immutable({
+      run,
+      submissionIntent: {
+        attemptId,
+        executionEpoch: run.execution.epoch,
+        providerId: provider,
+        requestFingerprint: fingerprint,
+        intentAt: run.execution.repairSubmission.intentAt,
+      },
+    });
+  }
+
+  async function recordProviderRepairSubmissionAccepted(runId, {
+    executionToken,
+    attemptId,
+    requestId,
+    providerId,
+  } = {}) {
+    const attempt = requiredString(attemptId, "attemptId");
+    const request = requiredString(requestId, "requestId");
+    const provider = requiredString(providerId, "providerId");
+    return mutateRun(runId, (current, timestamp) => {
+      requireStatus(current, [
+        ADMIN_RUN_STATUSES.RUNNING,
+        ADMIN_RUN_STATUSES.CANCEL_REQUESTED,
+      ], "record provider repair submission accepted");
+      const execution = requireExecutionFence(
+        current,
+        executionToken,
+        timestamp,
+        "record provider repair submission accepted",
+      );
+      const existingSubmission = execution.repairSubmission;
+      if (
+        existingSubmission?.state === ADMIN_PROVIDER_SUBMISSION_STATES.SUBMITTED
+        && existingSubmission.attemptId === attempt
+        && existingSubmission.providerId === provider
+        && existingSubmission.requestId === request
+        && existingSubmission.attemptEpoch === execution.epoch
+      ) return { noChange: true };
+      requireProviderSubmissionAttempt(execution, {
+        attemptId: attempt,
+        providerId: provider,
+        submissionField: "repairSubmission",
+      });
+      const repairSubmission = {
+        ...execution.repairSubmission,
+        state: ADMIN_PROVIDER_SUBMISSION_STATES.SUBMITTED,
+        requestId: request,
+        acceptedAt: timestamp,
+        error: null,
+      };
+      return {
+        eventType: ADMIN_RUN_EVENT_TYPES.PROVIDER_REPAIR_SUBMISSION_ACCEPTED,
+        eventPayload: {
+          attemptId: attempt,
+          executionEpoch: execution.epoch,
+          providerId: provider,
+          requestId: request,
+        },
+        patch: { execution: { ...execution, repairSubmission } },
+      };
+    });
+  }
+
+  async function recordProviderRepairSubmissionRejected(runId, options = {}) {
+    return settleProviderRepairSubmission(runId, {
+      ...options,
+      state: ADMIN_PROVIDER_SUBMISSION_STATES.REJECTED,
+      eventType: ADMIN_RUN_EVENT_TYPES.PROVIDER_REPAIR_SUBMISSION_REJECTED,
+      timestampField: "rejectedAt",
+      action: "record provider repair submission rejected",
+    });
+  }
+
+  async function markProviderRepairSubmissionOutcomeUnknown(runId, options = {}) {
+    return settleProviderRepairSubmission(runId, {
+      ...options,
+      state: ADMIN_PROVIDER_SUBMISSION_STATES.OUTCOME_UNKNOWN,
+      eventType: ADMIN_RUN_EVENT_TYPES.PROVIDER_REPAIR_SUBMISSION_OUTCOME_UNKNOWN,
+      timestampField: "outcomeUnknownAt",
+      action: "mark provider repair submission outcome unknown",
+    });
+  }
+
+  async function settleProviderRepairSubmission(runId, {
+    executionToken,
+    attemptId,
+    providerId,
+    error = {},
+    state,
+    eventType,
+    timestampField,
+    action,
+  } = {}) {
+    const attempt = requiredString(attemptId, "attemptId");
+    const provider = requiredString(providerId, "providerId");
+    const normalizedError = normalizeError(error);
+    return mutateRun(runId, (current, timestamp) => {
+      requireStatus(current, [
+        ADMIN_RUN_STATUSES.RUNNING,
+        ADMIN_RUN_STATUSES.CANCEL_REQUESTED,
+      ], action);
+      const execution = requireExecutionFence(current, executionToken, timestamp, action);
+      requireProviderSubmissionAttempt(execution, {
+        attemptId: attempt,
+        providerId: provider,
+        submissionField: "repairSubmission",
+      });
+      const repairSubmission = {
+        ...execution.repairSubmission,
+        state,
+        [timestampField]: timestamp,
+        error: normalizedError,
+      };
+      return {
+        eventType,
+        eventPayload: {
+          attemptId: attempt,
+          executionEpoch: execution.epoch,
+          providerId: provider,
+          error: normalizedError,
+        },
+        patch: { execution: { ...execution, repairSubmission } },
+      };
+    });
+  }
+
+  async function recordProviderRepairResponseCompleted(runId, {
+    executionToken,
+    completedAttempt,
+    totals,
+  } = {}) {
+    const normalizedAttempt = canonicalJson(completedAttempt);
+    const normalizedTotals = canonicalJson(totals);
+    return mutateRun(runId, (current, timestamp) => {
+      requireStatus(current, [
+        ADMIN_RUN_STATUSES.RUNNING,
+        ADMIN_RUN_STATUSES.CANCEL_REQUESTED,
+      ], "record provider repair response completed");
+      const execution = requireExecutionFence(
+        current,
+        executionToken,
+        timestamp,
+        "record provider repair response completed",
+      );
+      requireProviderSubmissionState(
+        execution.repairSubmission,
+        ADMIN_PROVIDER_SUBMISSION_STATES.SUBMITTED,
+        "record provider repair response completed",
+      );
+      if (normalizedAttempt.requestId !== execution.repairSubmission.requestId) {
+        throw runStoreError(
+          "repair response request id does not match the submitted repair",
+          "admin_run_provider_repair_response_fenced",
+        );
+      }
+      if (execution.repair?.completedAttempt) {
+        if (
+          JSON.stringify(execution.repair.completedAttempt) === JSON.stringify(normalizedAttempt)
+          && JSON.stringify(execution.repair.totals) === JSON.stringify(normalizedTotals)
+        ) return { noChange: true };
+        throw runStoreError(
+          "a different repair response was already recorded",
+          "admin_run_provider_repair_response_conflict",
+        );
+      }
+      const repair = {
+        ...execution.repair,
+        completedAt: timestamp,
+        completedAttempt: normalizedAttempt,
+        attempts: [execution.repair.initialAttempt, normalizedAttempt],
+        totals: normalizedTotals,
+      };
+      return {
+        eventType: ADMIN_RUN_EVENT_TYPES.PROVIDER_REPAIR_RESPONSE_COMPLETED,
+        eventPayload: {
+          completedAttempt: normalizedAttempt,
+          totals: normalizedTotals,
+        },
+        patch: { execution: { ...execution, repair } },
+      };
+    });
+  }
+
   async function requestCancellation(runId, {
     reason = "",
     requestedBy = "",
@@ -840,6 +1135,11 @@ export function createAdminRunStore({
     recordProviderSubmissionAccepted,
     recordProviderSubmissionRejected,
     markProviderSubmissionOutcomeUnknown,
+    beginProviderRepairSubmission,
+    recordProviderRepairSubmissionAccepted,
+    recordProviderRepairSubmissionRejected,
+    markProviderRepairSubmissionOutcomeUnknown,
+    recordProviderRepairResponseCompleted,
     requestCancellation,
     markCancelled,
     completeRun,
@@ -983,6 +1283,20 @@ function normalizeRunExecution(value) {
       "admin_run_provider_submission_state_invalid",
     );
   }
+  const repairSubmissionInput = input.repairSubmission
+    && typeof input.repairSubmission === "object"
+    && !Array.isArray(input.repairSubmission)
+    ? input.repairSubmission
+    : createEmptyProviderSubmission();
+  const repairState = String(
+    repairSubmissionInput.state || ADMIN_PROVIDER_SUBMISSION_STATES.NONE,
+  ).trim().toUpperCase();
+  if (!Object.values(ADMIN_PROVIDER_SUBMISSION_STATES).includes(repairState)) {
+    throw runStoreError(
+      "invalid persisted provider repair submission state",
+      "admin_run_provider_repair_submission_state_invalid",
+    );
+  }
   return canonicalJson({
     epoch,
     lease: input.lease || null,
@@ -991,6 +1305,12 @@ function normalizeRunExecution(value) {
       ...providerSubmissionInput,
       state: providerState,
     },
+    repairSubmission: {
+      ...createEmptyProviderSubmission(),
+      ...repairSubmissionInput,
+      state: repairState,
+    },
+    repair: input.repair || null,
   });
 }
 
@@ -1046,8 +1366,9 @@ function requireProviderSubmissionState(providerSubmission, expected, action) {
 function requireProviderSubmissionAttempt(execution, {
   attemptId,
   providerId,
+  submissionField = "providerSubmission",
 }) {
-  const submission = execution.providerSubmission;
+  const submission = execution[submissionField];
   requireProviderSubmissionState(
     submission,
     ADMIN_PROVIDER_SUBMISSION_STATES.SUBMITTING,
@@ -1062,6 +1383,27 @@ function requireProviderSubmissionAttempt(execution, {
       "provider submission attempt belongs to an older worker",
       "admin_run_provider_submission_fenced",
     );
+  }
+}
+
+function assertRepairInvariants(run, invariants) {
+  const snapshot = run.evidenceSnapshot || {};
+  const decisionPacket = snapshot?.evidence?.evidenceDecisionPacket || {};
+  const prompt = run.executionProfile?.prompt || {};
+  const expected = {
+    evidenceSnapshotId: snapshot.snapshotId || null,
+    evidenceSnapshotSha256: snapshot.contentSha256 || null,
+    decisionPacketId: decisionPacket.decisionPacketId || null,
+    decisionPacketSha256: decisionPacket.packetContentSha256 || null,
+    promptSha256: prompt.sha256 || null,
+  };
+  for (const [key, value] of Object.entries(expected)) {
+    if ((invariants?.[key] ?? null) !== value) {
+      throw runStoreError(
+        `cannot begin provider repair submission: ${key} changed`,
+        "admin_run_provider_repair_invariant_mismatch",
+      );
+    }
   }
 }
 
