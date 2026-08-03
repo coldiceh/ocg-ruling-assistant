@@ -140,7 +140,7 @@ test("normalized lingering restriction facts reach both final prompts without ca
   assert.match(bundle.recoveryPrompt, /条件后来恢复不会自动重启/u);
 });
 
-test("user-provided card text reaches the final model as generic lifecycle facts", async () => {
+test("user-provided card text reaches the final model as raw evidence without a local verdict", async () => {
   let finalPrompt = "";
   await answerRagRulingQuestion({
     question: [
@@ -159,7 +159,7 @@ test("user-provided card text reaches the final model as generic lifecycle facts
       finalPrompt = prompt;
       return JSON.stringify({
         answerLevel: "rule_analysis",
-        shortAnswer: "仅用于验证通用语义事实进入最终提示。",
+        shortAnswer: "仅用于验证用户卡文作为原始证据进入最终提示。",
         reasoning: ["依据用户提供的匿名卡文分析。"],
         usedCards: ["匿名期限效果卡"],
         usedEvidence: [],
@@ -169,11 +169,9 @@ test("user-provided card text reaches the final model as generic lifecycle facts
       });
     },
   });
-  assert.match(finalPrompt, /create_lingering_restriction/u);
-  assert.match(finalPrompt, /irreversible_on_first_condition_failure/u);
-  assert.match(finalPrompt, /"reactivates": false/u);
   assert.match(finalPrompt, /user-card-text-/u);
-  assert.doesNotMatch(finalPrompt, /"cardId": "user-card-text-/u);
+  assert.match(finalPrompt, /只要这个效果特殊召唤的怪兽/u);
+  assert.match(finalPrompt, /"cardSemanticFacts": \[\]/u);
 });
 
 test("rag_pipeline_returns_answer_with_mock_model", async () => {
@@ -1265,7 +1263,7 @@ test("final reasoner uses retrieved restrictive evidence without a local blocker
   assert.match(answer.shortAnswer, /不能发动/u);
   assert.match(answer.shortAnswer, /无限泡影/u);
   assert.equal(answer.answerLevel, "rule_analysis");
-  assert.equal(answer.debug.retrievalCounts.operationLegalityChecks, 1);
+  assert.equal(answer.debug.retrievalCounts.operationLegalityChecks, 0);
   assert.ok(answer.usedEvidence.some((item) => item.id === "rule-activated-normal-spell-trap-cannot-return#p1-1"));
   assert.ok(!answer.riskFlags.includes("operation_legality_blocker_applied"));
   assert.ok(!answer.riskFlags.includes("model_answer_overridden_by_operation_legality"));
@@ -1280,14 +1278,13 @@ test("final reasoner can reject a generic trigger answer after reading restricti
     cards: ["天雷之双风神 息那"],
     text: "对手发动魔法・陷阱・怪兽效果时，自己场上有风属性怪兽的场合，可以直接连锁发动。",
   };
-  let groundingPrompt = "";
+  let finalPrompt = "";
   const answer = await answerRagRulingQuestion({
     question: "对方场上有「绚岚之达维」，我方以达维为对象发动「无限泡影」，这个时候场上没有其他魔陷，对方能不能发动「天雷之双风神」的效果？",
     cards: thunderImpermanenceCards(),
     records: [activatedSpellTrapReturnRule],
     qaRecords: [genericFaq],
-    rulebookModelInvoker: async ({ prompt }) => {
-      groundingPrompt = prompt;
+    rulebookModelInvoker: async () => {
       return JSON.stringify({
         constraintReviews: [],
         operationChecks: [{
@@ -1305,7 +1302,9 @@ test("final reasoner can reject a generic trigger answer after reading restricti
         overallConclusion: "可以发动。",
       });
     },
-    modelInvoker: async () => JSON.stringify({
+    modelInvoker: async ({ prompt }) => {
+      finalPrompt = prompt;
+      return JSON.stringify({
       answerLevel: "rule_analysis",
       shortAnswer: "不能发动。虽然一般诱发条件满足，但场上没有能完成必做返回处理的魔法・陷阱卡。",
       reasoning: ["正在发动的通常陷阱不能由这个处理返回手卡。"],
@@ -1314,11 +1313,12 @@ test("final reasoner can reject a generic trigger answer after reading restricti
       missingInfo: [],
       riskFlags: [],
       confidenceSelfEstimate: "medium",
-    }),
+      });
+    },
   });
 
-  assert.match(groundingPrompt, /priorityConstraintCandidates/u);
-  assert.match(groundingPrompt, /rule-activated-normal-spell-trap-cannot-return#p1-1/u);
+  assert.match(finalPrompt, /rule-activated-normal-spell-trap-cannot-return#p1-1/u);
+  assert.match(finalPrompt, /発動中の通常魔法・通常罠カード/u);
   assert.match(answer.shortAnswer, /不能发动/u);
   assert.ok(!answer.riskFlags.includes("operation_legality_blocker_applied"));
   assert.ok(!answer.riskFlags.includes("model_answer_overridden_by_operation_legality"));
@@ -1353,7 +1353,7 @@ test("raw restrictive evidence remains visible when the preparation model is emp
 
   assert.match(finalPrompt, /発動中の通常魔法・通常罠カードはその処理で手札に戻せません/u);
   assert.match(finalPrompt, /"hasBlockingCheck": false/u);
-  assert.match(finalPrompt, /"hasUnresolvedConstraints": true/u);
+  assert.match(finalPrompt, /"hasUnresolvedConstraints": false/u);
   assert.match(answer.shortAnswer, /不能发动/u);
   assert.ok(!answer.riskFlags.includes("operation_legality_blocker_applied"));
 });
@@ -1452,11 +1452,10 @@ test("focused preparation fallback still leaves the final verdict to the final r
     }),
   });
 
-  assert.deepEqual(tasks, ["rulebook_grounding", "rulebook_constraint_repair"]);
+  assert.deepEqual(tasks, []);
   assert.match(answer.shortAnswer, /不能发动/u);
   assert.doesNotMatch(answer.shortAnswer, /^可以发动/u);
-  assert.ok(answer.debug.rulebookGroundingWarnings.includes("rulebook_grounding_focused_fallback_applied"));
-  assert.ok(answer.debug.rulebookGroundingWarnings.includes("rulebook_grounding_primary_failed:rulebook_grounding_model_timeout"));
+  assert.ok(answer.debug.rulebookGroundingWarnings.includes("rulebook_grounding_disabled_simple_pipeline"));
   assert.ok(!answer.riskFlags.includes("operation_legality_blocker_applied"));
   assert.ok(!answer.riskFlags.includes("model_answer_overridden_by_operation_legality"));
 });
@@ -2850,6 +2849,7 @@ test("unique exact official QA uses a focused complete-answer route", async () =
       DEEPSEEK_PRO_MODEL: "pro-test",
       DEEPSEEK_FLASH_MODEL: "flash-test",
       RAG_THINKING_MODE: "enabled",
+      RAG_OFFICIAL_DIRECT_FOCUSED_PROMPT: "true",
     },
     rulebookModelInvoker: async () => {
       rulebookModelCalled = true;
@@ -2873,9 +2873,9 @@ test("unique exact official QA uses a focused complete-answer route", async () =
 
   assert.equal(rulebookModelCalled, false);
   assert.deepEqual(finalGeneration, {
-    modelName: "flash-test",
-    thinkingMode: "disabled",
-    maxTokens: 4000,
+    modelName: "pro-test",
+    thinkingMode: "enabled",
+    maxTokens: 32000,
   });
   assert.match(finalPrompt, /本回合不能再次宣言/u);
   assert.doesNotMatch(finalPrompt, /无关卡文的特殊召唤限制/u);
@@ -2885,9 +2885,7 @@ test("unique exact official QA uses a focused complete-answer route", async () =
   assert.doesNotMatch(answer.shortAnswer, /官方 Q&A 完整回答原文/u);
   assert.doesNotMatch(answer.shortAnswer, /<<91001>>|「「/u);
   assert.doesNotMatch(answer.shortAnswer, /<<95000>>/u);
-  assert.ok(answer.reasoning.some((item) => /完整原文见资料来源/u.test(item)));
-  assert.ok(answer.reasoning.every((item) => !/官方问答确认可以发动/u.test(item)));
-  assert.ok(answer.reasoning.some((item) => /形式规则内核本次未签发确定性证明/u.test(item)));
+  assert.ok(answer.reasoning.some((item) => /官方问答确认可以发动/u.test(item)));
   assert.ok(!answer.riskFlags.includes("official_direct_evidence_enforced"));
   assert.ok(answer.debug.retrievalWarnings.includes("official_direct_focused_prompt"));
 
@@ -2896,7 +2894,9 @@ test("unique exact official QA uses a focused complete-answer route", async () =
     cards: directCards,
     records: [],
     qaRecords: [directQa],
-    modelInvoker: async () => JSON.stringify({
+    modelInvoker: async ({ prompt }) => {
+      finalPrompt = prompt;
+      return JSON.stringify({
       answerLevel: "official_confirmed",
       shortAnswer: "不能发动。",
       reasoning: ["错误地把官方结论写反。"],
@@ -2905,11 +2905,10 @@ test("unique exact official QA uses a focused complete-answer route", async () =
       missingInfo: [],
       riskFlags: [],
       confidenceSelfEstimate: "high",
-    }),
+      });
+    },
   });
-  assert.match(contradicted.shortAnswer, /官方 Q&A 完整回答原文/u);
-  assert.match(contradicted.shortAnswer, /可以宣言并发动/u);
-  assert.ok(contradicted.riskFlags.includes("official_direct_source_fallback_after_incomplete_summary"));
+  assert.match(contradicted.shortAnswer, /不能发动/u);
 });
 
 test("focused official QA prompt preserves the full-source tail without invalid JSON slicing", () => {
@@ -2944,7 +2943,7 @@ test("focused official QA prompt preserves the full-source tail without invalid 
       rawRelatedEvidence: [],
       retrievalWarnings: [],
     },
-    env: { RAG_MAX_PROMPT_CHARS: "1800" },
+    env: { RAG_MAX_PROMPT_CHARS: "1800", RAG_OFFICIAL_DIRECT_FOCUSED_PROMPT: "true" },
   });
 
   assert.equal(bundle.prompt.length <= 1800, true);
@@ -2994,7 +2993,7 @@ test("focused official QA prompt keeps the ruling but omits a dense placeholder 
       rawRelatedEvidence: [],
       retrievalWarnings: [],
     },
-    env: { RAG_MAX_PROMPT_CHARS: "12000" },
+    env: { RAG_MAX_PROMPT_CHARS: "12000", RAG_OFFICIAL_DIRECT_FOCUSED_PROMPT: "true" },
   });
 
   assert.ok(bundle.warnings.includes("official_direct_focused_prompt"));
@@ -3041,7 +3040,8 @@ test("certified semantic question subsumption allows a long official question to
     retrievalWarnings: [],
   };
 
-  const accepted = buildRagRulingPromptBundle({ userQuery: "能用不能作为融合素材的怪兽进行这次特殊召唤吗？", cardResolution, evidence });
+  const directEnv = { RAG_OFFICIAL_DIRECT_FOCUSED_PROMPT: "true" };
+  const accepted = buildRagRulingPromptBundle({ userQuery: "能用不能作为融合素材的怪兽进行这次特殊召唤吗？", cardResolution, evidence, env: directEnv });
   assert.ok(accepted.warnings.includes("official_direct_focused_prompt"));
   assert.match(accepted.prompt, /这个特殊召唤不是融合召唤/u);
 
@@ -3052,6 +3052,7 @@ test("certified semantic question subsumption allows a long official question to
       ...evidence,
       officialQaDirectCandidates: [{ ...candidate, semanticSubsumptionCertified: false }],
     },
+    env: directEnv,
   });
   assert.equal(rejected.warnings.includes("official_direct_focused_prompt"), false);
 
@@ -3062,6 +3063,7 @@ test("certified semantic question subsumption allows a long official question to
       ...evidence,
       officialQaDirectCandidates: [{ ...candidate, subsumptionCandidatePoolComplete: false }],
     },
+    env: directEnv,
   });
   assert.equal(incompletePoolRejected.warnings.includes("official_direct_focused_prompt"), false);
 
@@ -3083,6 +3085,7 @@ test("certified semantic question subsumption allows a long official question to
         questionCardSubsumptionCertified: true,
       }],
     },
+    env: directEnv,
   });
   assert.ok(multiCardAccepted.warnings.includes("official_direct_focused_prompt"));
 
@@ -3104,6 +3107,7 @@ test("certified semantic question subsumption allows a long official question to
         questionCardSubsumptionCertified: true,
       }],
     },
+    env: directEnv,
   });
   assert.equal(extraUnboundCardRejected.warnings.includes("official_direct_focused_prompt"), false);
 });
@@ -3258,15 +3262,14 @@ test("final reasoner uses inline-linked official QA for the Stardust chain", asy
     text: "对魔法・陷阱卡的卡的发动连锁发动<<15105>>的无效并破坏效果时，能否再连锁发动<<7734>>？\n不能。魔法・陷阱卡的卡的发动被无效后，不再视为场上的卡。因此该破坏不视为破坏场上的卡。",
     sourceUrl: "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=11290&request_locale=ja",
   };
-  let groundingPrompt = "";
+  let finalPrompt = "";
   const answer = await answerRagRulingQuestion({
     question: "我方C1发动「神鹰羽毛扫」，对手C2连锁「鲜花之女男爵」的无效并破坏效果，我方是否可以C3发动「星尘龙」？",
     cards: scenarioCards,
     records: [],
     qaRecords: [qaRecord],
     env: { RAG_MODEL_TIER: "flash" },
-    rulebookModelInvoker: async ({ prompt }) => {
-      groundingPrompt = prompt;
+    rulebookModelInvoker: async () => {
       return JSON.stringify({
         operationChecks: [{
           operationId: "chain-stardust",
@@ -3283,20 +3286,23 @@ test("final reasoner uses inline-linked official QA for the Stardust chain", asy
         overallConclusion: "不能在C3发动星尘龙。",
       });
     },
-    modelInvoker: async () => JSON.stringify({
+    modelInvoker: async ({ prompt }) => {
+      finalPrompt = prompt;
+      return JSON.stringify({
       answerLevel: "rule_analysis",
       shortAnswer: "不能在C3发动星尘龙。羽毛扫的卡的发动被无效后不再视为场上的卡，因此男爵的处理不属于破坏场上的卡。",
-      reasoning: ["星尘龙要求直接连锁会破坏场上卡片的效果。", "官方Q&A明确该场景不满足。"],
+      reasoning: ["星尘龙要求直接连锁会破坏场上卡片的效果，本题不满足，因此不能在C3发动。", "官方Q&A明确该场景不满足。"],
       usedCards: ["神鹰羽毛扫", "鲜花之女男爵", "星尘龙"],
       usedEvidence: [{ id: qaRecord.id, type: "faq", title: qaRecord.title }],
       missingInfo: [],
       riskFlags: [],
       confidenceSelfEstimate: "medium",
-    }),
+      });
+    },
   });
 
-  assert.match(groundingPrompt, /ygoresources-qa-11290/u);
-  assert.match(answer.shortAnswer, /不能(?:在C3)?发动星尘龙/u);
+  assert.match(finalPrompt, /ygoresources-qa-11290/u);
+  assert.match(answer.shortAnswer, /不能(?:在C3)?发动星尘龙/u, JSON.stringify(answer.debug.publicFinalValidation));
   assert.doesNotMatch(answer.shortAnswer, /可以在C3发动/u);
   assert.match(answer.shortAnswer, /不再视为场上的卡/u);
   assert.ok(answer.usedEvidence.some((item) => item.id === qaRecord.id));

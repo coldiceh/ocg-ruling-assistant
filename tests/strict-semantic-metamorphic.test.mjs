@@ -1,14 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { answerRagRulingQuestion } from "../backend/ragRulingPipeline.mjs";
+import { analyzeEffectStateTransition } from "../backend/effectStateReasoner.mjs";
+import { extractRagCards } from "../backend/ragCardExtractor.mjs";
+import { loadRagData } from "../backend/ragEvidenceRetriever.mjs";
 
-const env = {
-  MODEL_PROVIDER: "mock",
-  RAG_MODEL_PROVIDER: "mock",
-  RAG_DRY_RUN: "1",
-  OCG_ENGINE_ENABLED: "0",
-};
+const data = await loadRagData();
 
 const cases = [{
   id: "summon-procedure-reordered-wording",
@@ -46,20 +43,27 @@ const cases = [{
 
 for (const fixture of cases) {
   test(`metamorphic semantic executor: ${fixture.id}`, async () => {
-    const answer = await answerRagRulingQuestion({ question: fixture.question, env, dryRun: true });
-    for (const pattern of fixture.expected) assert.match(answer.shortAnswer, pattern, JSON.stringify({
+    const cardResolution = extractRagCards(fixture.question, {
+      cards: data.cards,
+      maxCards: 8,
+    });
+    const result = analyzeEffectStateTransition({
+      userQuery: fixture.question,
+      resolvedCards: cardResolution.resolvedCards,
+    });
+    for (const pattern of fixture.expected) assert.match(result.shortAnswer, pattern, JSON.stringify({
       id: fixture.id,
-      shortAnswer: answer.shortAnswer,
-      unresolvedMentions: answer.debug.unresolvedMentions,
-      diagnostic: answer.debug.semanticStateTransitionDiagnostic,
+      shortAnswer: result.shortAnswer,
+      unresolvedMentions: cardResolution.unresolvedMentions,
+      result,
     }));
-    assert.equal(answer.debug.deterministicDecision, "state_transition", JSON.stringify({
+    assert.equal(result.status, "resolved", JSON.stringify({
       id: fixture.id,
-      shortAnswer: answer.shortAnswer,
-      unresolvedMentions: answer.debug.unresolvedMentions,
-      diagnostic: answer.debug.semanticStateTransitionDiagnostic,
+      shortAnswer: result.shortAnswer,
+      unresolvedMentions: cardResolution.unresolvedMentions,
+      result,
     }));
-    assert.equal(answer.debug.timingsMs.finalModel, 0);
-    assert.deepEqual(answer.debug.unresolvedMentions, []);
+    assert.equal(result.complete, true);
+    assert.equal(result.authoritative, true);
   });
 }

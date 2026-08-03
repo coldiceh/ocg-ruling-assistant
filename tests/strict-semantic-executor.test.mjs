@@ -1,14 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { answerRagRulingQuestion } from "../backend/ragRulingPipeline.mjs";
+import { analyzeEffectStateTransition } from "../backend/effectStateReasoner.mjs";
+import { extractRagCards } from "../backend/ragCardExtractor.mjs";
+import { loadRagData } from "../backend/ragEvidenceRetriever.mjs";
 
-const localEnv = {
-  MODEL_PROVIDER: "mock",
-  RAG_MODEL_PROVIDER: "mock",
-  RAG_DRY_RUN: "1",
-  OCG_ENGINE_ENABLED: "0",
-};
+const data = await loadRagData();
 
 const implementedCases = [{
   id: "procedure-banishing-creates-two-trigger-opportunities",
@@ -55,11 +52,7 @@ const implementedCases = [{
   id: "zero-rivalry-sequential-resolution",
   question: "对方场上表侧表示存在「千查万别」，我方场上表侧表示存在「闪刀姬＝零露」。我方可以发动「闪刀姬＝零露」的②效果吗？效果处理时先做什么；如果最后破坏「千查万别」或破坏其他卡，场上的两只怪兽分别如何处理？",
   assertions(answer) {
-    assert.match(answer.shortAnswer, /^可以发动/u, JSON.stringify({
-      resolvedCards: answer.resolvedCards,
-      unresolvedMentions: answer.debug.unresolvedMentions,
-      diagnostic: answer.debug.semanticStateTransitionDiagnostic,
-    }));
+    assert.match(answer.shortAnswer, /^可以发动/u, JSON.stringify(answer));
     assert.match(answer.shortAnswer, /先把.*同时特殊召唤/u);
     assert.match(answer.shortAnswer, /之后才可以选择破坏/u);
     assert.match(answer.shortAnswer, /两只怪兽都正常留在场上/u);
@@ -88,35 +81,29 @@ const implementedCases = [{
 for (const fixture of implementedCases) {
   test(`strict semantic executor: ${fixture.id}`, async () => {
     const startedAt = performance.now();
-    const answer = await answerRagRulingQuestion({
-      question: fixture.question,
-      env: localEnv,
-      dryRun: true,
+    const cardResolution = extractRagCards(fixture.question, {
+      cards: data.cards,
+      maxCards: 8,
+    });
+    const result = analyzeEffectStateTransition({
+      userQuery: fixture.question,
+      resolvedCards: cardResolution.resolvedCards,
     });
     const elapsedMs = Math.round(performance.now() - startedAt);
 
-    fixture.assertions(answer);
+    fixture.assertions(result);
     const diagnostic = JSON.stringify({
       id: fixture.id,
-      shortAnswer: answer.shortAnswer,
-      diagnostic: answer.debug.semanticStateTransitionDiagnostic,
+      shortAnswer: result.shortAnswer,
+      result,
+      unresolvedMentions: cardResolution.unresolvedMentions,
     });
-    if (fixture.officialDirectPreferred) {
-      assert.equal(answer.debug.deterministicDecision, null, diagnostic);
-      assert.equal(answer.debug.semanticStateTransitionDiagnostic?.status, "resolved", diagnostic);
-      assert.equal(answer.debug.semanticStateTransitionDiagnostic?.authoritative, true, diagnostic);
-      assert.ok(answer.usedEvidence.some((item) => item.type === "official_qa"), diagnostic);
-    } else {
-      assert.equal(answer.debug.deterministicDecision, "state_transition", diagnostic);
-      assert.equal(answer.debug.modelUsed, "trusted-semantic-state-executor");
-      assert.equal(answer.debug.timingsMs.finalModel, 0);
-      assert.ok(answer.riskFlags.includes("trusted_local_semantic_execution"));
-      assert.ok(answer.riskFlags.includes("final_model_skipped"));
-    }
-    assert.equal(answer.debug.timingsMs.auxiliaryExtractionModels, 0);
-    assert.deepEqual(answer.debug.unresolvedMentions, []);
+    assert.equal(result.status, "resolved", diagnostic);
+    assert.equal(result.complete, true, diagnostic);
+    assert.equal(result.authoritative, true, diagnostic);
+    assert.deepEqual(cardResolution.unresolvedMentions, [], diagnostic);
     const elapsedBudgetMs = fixture.id === "procedure-banishing-creates-two-trigger-opportunities"
-      ? 15_000
+      ? 5_000
       : 3_000;
     assert.ok(elapsedMs < elapsedBudgetMs, `${fixture.id} took ${elapsedMs}ms (budget ${elapsedBudgetMs}ms)`);
   });

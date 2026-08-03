@@ -106,8 +106,8 @@ function formalEndpointMock(verdicts, events) {
 
 async function answerWithFormal(verdicts, {
   draft = input.draft,
-  modelShortAnswer = "错误模型结论：两问都不能。",
-  modelReasoning = ["错误地把召唤手续的除外当成最终移动归因。", "错误地把未证明当成不能。"],
+  modelShortAnswer = "可以将「混沌の黒魔術師」除外并特殊召唤「滅びの黒魔術師」；之后可以发动「深淵の相剣龍」的①效果。",
+  modelReasoning = ["最终模型根据冻结的题面、卡文和检索资料独立签发两问结论。"],
   qaRecords = [],
   formalFetchImpl,
 } = {}) {
@@ -162,18 +162,15 @@ function exactOfficialQa(answer) {
   };
 }
 
-test("verified formal claims enter the final prompt before the model and gate both query answers", async () => {
-  const { answer, events, finalPrompt } = await answerWithFormal({
+test("verified formal claims remain diagnostics while the final model signs both answers", async () => {
+  const { answer, events } = await answerWithFormal({
     "q1-summon-procedure": "TRUE",
     "q2-hand-trigger": "TRUE",
   });
   assert.deepEqual(events, ["formal-capabilities", "formal-analysis", "final-model"], JSON.stringify(answer.formalEngine));
-  assert.match(finalPrompt, /formalEngineProofs/u);
-  assert.match(finalPrompt, /q1-summon-procedure/u);
-  assert.match(finalPrompt, /q2-hand-trigger/u);
-  assert.match(answer.shortAnswer, /特殊召唤/u);
-  assert.match(answer.shortAnswer, /深淵の相剣龍/u);
-  assert.doesNotMatch(answer.shortAnswer, /两问都不能/u);
+  assert.equal(answer.shortAnswer, "可以将「混沌の黒魔術師」除外并特殊召唤「滅びの黒魔術師」；之后可以发动「深淵の相剣龍」的①效果。");
+  assert.equal(answer.debug.modelUsed, "mock-rag");
+  assert.equal(answer.debug.deterministicDecision, null);
   assert.deepEqual(answer.formalEngine.queryResults.map((item) => item.verdict), ["TRUE", "TRUE"]);
   assert.equal(answer.formalEngine.queryResults.every((item) => item.certificateVerified), true);
   assert.deepEqual(answer.formalEngine.draftVerification, {
@@ -184,49 +181,42 @@ test("verified formal claims enter the final prompt before the model and gate bo
     expectedVerifierId: "mock-scenario-draft-completeness-verifier",
     expectedVerifierVersion: "mock-scenario-draft-completeness/v1",
   });
-  assert.match(finalPrompt, /mock-scenario-draft-completeness-verifier/u);
 });
 
-test("formal UNKNOWN is preserved and cannot be rewritten as a definite negative", async () => {
+test("formal UNKNOWN remains diagnostic and does not rewrite the final model answer", async () => {
   const { answer } = await answerWithFormal({
     "q1-summon-procedure": "TRUE",
     "q2-hand-trigger": "UNKNOWN",
   });
   assert.equal(answer.formalEngine.queryResults[1].verdict, "UNKNOWN");
-  assert.doesNotMatch(answer.shortAnswer, /两问都不能|深淵の相剣龍.*(?:不可以发动|不能发动)/u);
-  assert.match(answer.shortAnswer, /特殊召唤.*形式证明已通过校验/u);
-  assert.match(answer.shortAnswer, /深淵の相剣龍.*未签发确定性证明\/UNKNOWN/u);
-  assert.equal(answer.formalQueryResults.length, 2);
-  assert.equal(answer.formalQueryResults.find((item) => item.queryId === "q2-hand-trigger").verdict, "UNKNOWN");
+  assert.match(answer.shortAnswer, /之后可以发动「深淵の相剣龍」/u);
+  assert.deepEqual(answer.formalQueryResults, []);
+  assert.equal(answer.riskFlags.some((item) => item.startsWith("formal_engine_unknown_blocked_model_")), false);
 });
 
-test("formal UNKNOWN symmetrically blocks a model's definite positive answer and preserves every query", async () => {
+test("formal UNKNOWN cannot block a definite answer signed by the final model", async () => {
+  const { answer } = await answerWithFormal({
+    "q1-summon-procedure": "UNKNOWN",
+    "q2-hand-trigger": "UNKNOWN",
+  });
+  assert.match(answer.shortAnswer, /可以将.*特殊召唤/u);
+  assert.match(answer.shortAnswer, /之后可以发动/u);
+  assert.equal(answer.formalEngine.queryResults.every((item) => item.verdict === "UNKNOWN"), true);
+  assert.deepEqual(answer.formalQueryResults, []);
+  assert.equal(answer.riskFlags.some((item) => item.startsWith("formal_engine_unknown_blocked_model_")), false);
+  assert.equal(answer.confidenceSelfEstimate, "high");
+});
+
+test("UNKNOWN diagnostics do not redact internally consistent final-model reasoning", async () => {
   const { answer } = await answerWithFormal({
     "q1-summon-procedure": "UNKNOWN",
     "q2-hand-trigger": "UNKNOWN",
   }, {
-    modelShortAnswer: "错误模型结论：两问都可以。",
+    modelShortAnswer: "可以将「混沌の黒魔術師」除外并特殊召唤「滅びの黒魔術師」；之后可以发动「深淵の相剣龍」的①效果。",
+    modelReasoning: ["最终模型判断两项都可以进行。"],
   });
-  assert.doesNotMatch(answer.shortAnswer, /两问都可以/u);
-  assert.equal(answer.shortAnswer.match(/未签发确定性证明\/UNKNOWN/gu)?.length, 2);
-  assert.equal(answer.formalQueryResults.length, 2);
-  assert.equal(answer.formalQueryResults.every((item) => item.verdict === "UNKNOWN"), true);
-  assert.deepEqual(answer.formalQueryResults.map((item) => item.queryId), ["q1-summon-procedure", "q2-hand-trigger"]);
-  assert.equal(new Set(answer.formalQueryResults.map((item) => item.queryId)).size, 2);
-  assert.equal(answer.riskFlags.some((item) => item.startsWith("formal_engine_unknown_blocked_model_")), true);
-  assert.equal(answer.confidenceSelfEstimate, "low");
-});
-
-test("UNKNOWN also blocks definitive claims hidden in model reasoning", async () => {
-  const { answer } = await answerWithFormal({
-    "q1-summon-procedure": "UNKNOWN",
-    "q2-hand-trigger": "UNKNOWN",
-  }, {
-    modelShortAnswer: "目前仅能继续核对。",
-    modelReasoning: ["其实两项都可以发动并正常处理。"],
-  });
-  assert.doesNotMatch(answer.reasoning.join("\n"), /其实两项都可以发动/u);
-  assert.equal(answer.riskFlags.includes("formal_engine_unknown_blocked_model_positive"), true);
+  assert.match(answer.reasoning.join("\n"), /最终模型判断两项都可以进行/u);
+  assert.equal(answer.riskFlags.includes("formal_engine_unknown_blocked_model_positive"), false);
 });
 
 test("caller-authored formal evidence cannot inject authority or diagnostics", async () => {
@@ -264,7 +254,7 @@ test("caller-authored formal evidence cannot inject authority or diagnostics", a
   assert.equal(answer.riskFlags.some((item) => item.includes("blocked_model")), false);
 });
 
-test("formal transport errors preserve exact official answers and expose only code and stage", async () => {
+test("formal transport errors preserve the final-model answer and expose only code and stage", async () => {
   const secretMessage = "private endpoint message and internal details";
   const { answer } = await answerWithFormal({}, {
     formalFetchImpl: async () => {
@@ -272,7 +262,8 @@ test("formal transport errors preserve exact official answers and expose only co
     },
   });
 
-  assert.equal(answer.reasoning.some((item) => /未签发确定性证明/u.test(item)), true);
+  assert.match(answer.shortAnswer, /可以将.*特殊召唤/u);
+  assert.equal(answer.reasoning.some((item) => /未签发确定性证明/u.test(item)), false);
   assert.deepEqual(Object.keys(answer.formalEngine.error).sort(), ["code", "stage"]);
   assert.doesNotMatch(JSON.stringify({
     formalEngine: answer.formalEngine,
@@ -280,7 +271,7 @@ test("formal transport errors preserve exact official answers and expose only co
   }), new RegExp(secretMessage, "u"));
 });
 
-test("ABSTRACT_ASSUMPTIONS results remain UNKNOWN and never become authority", async () => {
+test("ABSTRACT_ASSUMPTIONS results remain diagnostic and never become public authority", async () => {
   const draft = structuredClone(input.draft);
   draft.mode = "ABSTRACT_ASSUMPTIONS";
   draft.assumptions = [{
@@ -292,14 +283,14 @@ test("ABSTRACT_ASSUMPTIONS results remain UNKNOWN and never become authority", a
   const { answer } = await answerWithFormal({
     "q1-summon-procedure": "TRUE",
     "q2-hand-trigger": "TRUE",
-  }, { draft, modelShortAnswer: "错误模型结论：两问都可以。" });
+  }, { draft });
 
-  assert.equal(answer.formalQueryResults.length, 2);
-  assert.equal(answer.formalQueryResults.every((item) => item.trusted === false && item.verdict === "UNKNOWN"), true);
-  assert.equal(answer.shortAnswer.match(/未签发确定性证明\/UNKNOWN/gu)?.length, 2);
-  assert.doesNotMatch(answer.shortAnswer, /形式证明已通过校验/u);
-  assert.equal(answer.answerLevel, "low_confidence_analysis");
-  assert.equal(answer.riskFlags.some((item) => item.startsWith("formal_engine_unknown:")), true);
+  assert.equal(answer.formalEngine.queryResults.every((item) => item.verdict === "UNKNOWN"), true);
+  assert.deepEqual(answer.formalQueryResults, []);
+  assert.match(answer.shortAnswer, /可以将.*特殊召唤/u);
+  assert.doesNotMatch(answer.shortAnswer, /形式证明已通过校验|未签发确定性证明/u);
+  assert.equal(answer.answerLevel, "rule_analysis");
+  assert.equal(answer.riskFlags.some((item) => item.startsWith("formal_engine_unknown:")), false);
 });
 
 test("formal shadow disabled leaves the public answer path available", async () => {

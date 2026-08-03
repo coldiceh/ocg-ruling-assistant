@@ -933,6 +933,7 @@ test("both original user phrasings resolve all cards while the final model owns 
     );
 
     let finalPrompt = "";
+    let finalModelCalls = 0;
     const answer = await answerRagRulingQuestion({
       question,
       cards: data.cards,
@@ -947,6 +948,7 @@ test("both original user phrasings resolve all cards while the final model owns 
       cardModelInvoker: async () => JSON.stringify({ cardNames: [] }),
       ruleModelInvoker: async () => JSON.stringify({ queries: [] }),
       modelInvoker: async ({ prompt }) => {
+        finalModelCalls += 1;
         finalPrompt = prompt;
         return JSON.stringify({
           answerLevel: "rule_analysis",
@@ -976,8 +978,9 @@ test("both original user phrasings resolve all cards while the final model owns 
     assert.doesNotMatch(answer.shortAnswer, /不会把怪兽返回手牌/u);
     assert.match(finalPrompt, /no\.41/iu);
     assert.match(finalPrompt, /vs狂魔博士|对击斗魂 狂恋博士/iu);
-    assert.equal(answer.debug.semanticStateTransition.status, "resolved");
-    assert.equal(answer.debug.semanticStateTransition.complete, true);
+    assert.equal(finalModelCalls, 1);
+    assert.equal(answer.debug.semanticStateTransition, null);
+    assert.equal(answer.debug.semanticStateTransitionDiagnostic, null);
     assert.equal(answer.debug.deterministicDecision, null);
     assert.notEqual(answer.debug.modelUsed, "deterministic-ruling-reasoner");
   }
@@ -1377,8 +1380,7 @@ test("the original No.41 wording resolves cards in a cold process and delegates 
   assert.deepEqual(result.unresolved, []);
   assert.equal(result.decision, null);
   assert.notEqual(result.modelUsed, "deterministic-ruling-reasoner");
-  assert.equal(result.transition.status, "resolved");
-  assert.equal(result.transition.complete, true);
+  assert.equal(result.transition, null);
   assert.match(result.shortAnswer, /C1可以发动/u);
   assert.match(result.shortAnswer, /C2/u);
   assert.match(result.shortAnswer, /被无效/u);

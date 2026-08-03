@@ -347,8 +347,8 @@ test("backend answers bypass persistent browser cache and bust static assets", a
     readFile(new URL("../config.json", import.meta.url), "utf8"),
   ]);
   const config = JSON.parse(configText.replace(/^\uFEFF/u, ""));
-  assert.match(html, /src\/app\.js\?v=20260803-executor-label-1/u);
-  assert.match(html, /src\/styles\.css\?v=20260803-pipeline-timing-1/u);
+  assert.match(html, /src\/app\.js\?v=20260803-admin-model-compare-1/u);
+  assert.match(html, /src\/styles\.css\?v=20260803-admin-model-compare-1/u);
   assert.match(config.answerApiUrl, /\?client=20260722-answer-version-1$/u);
   assert.match(app, /cache: "no-store"/u);
   assert.doesNotMatch(app, /backendAnswerCacheTtlMs|buildBackendCacheKey|readCachedBackendAnswer|writeCachedBackendAnswer|ocg-ruling-answer:v/u);
@@ -464,6 +464,8 @@ test("admin_model_lab_is_hidden_and_requires_a_real_session", async () => {
   assert.match(app, /adminFeatureEnabled\("history"\)/u);
   assert.match(html, /id="adminHistoryTitle">实验历史/u);
   assert.match(html, /id="adminQuestionHistoryTitle">后台历史提问/u);
+  assert.match(html, /id="adminComparisonTitle">同一冻结证据模型对比/u);
+  assert.match(html, /不会重新检索资料/u);
   assert.match(html, /最多 100 条；不等同于上方的模型实验历史/u);
   assert.match(app, /getAdminEndpointUrl\("\/api\/admin-queries"\)/u);
   assert.match(app, /url\.searchParams\.set\("limit", "100"\)/u);
@@ -479,6 +481,14 @@ test("admin_model_lab_is_hidden_and_requires_a_real_session", async () => {
   assert.match(app, /cnyCostIncomplete \? "人民币估算（仅已知部分）" : "人民币估算"/u);
   assert.match(app, /adminObjectToCsv/u);
   assert.match(app, /query: \{ runId: adminCurrentRunId, format \}/u);
+  assert.match(app, /action: "fork"/u);
+  assert.match(app, /forkFromRunId: sourceRunId/u);
+  assert.match(app, /action: "execute"/u);
+  assert.doesNotMatch(sourceBetween(
+    app,
+    "async function runAdminModelComparison",
+    "function createAdminComparisonIdempotencyKey",
+  ), /action: "create"|question:/u);
   assert.match(app, /typeof data\?\.content === "string"/u);
   assert.match(app, /data\?\.fileName/u);
   assert.match(app, /data\?\.contentType/u);
@@ -492,6 +502,114 @@ test("admin_model_lab_is_hidden_and_requires_a_real_session", async () => {
   assert.match(adminSession, /timingSafeEqual/u);
   assert.match(adminSession, /HttpOnly/u);
   assert.match(adminSession, /SameSite=None/u);
+});
+
+test("admin frozen-evidence comparison offers supported low-cost model combinations", async () => {
+  const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
+  const source = sourceBetween(
+    app,
+    "function buildAdminComparisonOptions",
+    "function renderAdminComparisonOptions",
+  );
+  const build = new Function(`${source}; return buildAdminComparisonOptions;`)();
+  const models = [
+    {
+      id: "deepseek-v4-flash",
+      label: "DeepSeek V4 Flash",
+      provider: "deepseek",
+      modes: [{ id: "standard" }, { id: "pro" }],
+      efforts: [{ id: "none" }, { id: "high" }, { id: "max" }],
+      defaultReasoningMode: "standard",
+      defaultReasoningEffort: "none",
+    },
+    {
+      id: "deepseek-v4-pro",
+      label: "DeepSeek V4 Pro",
+      provider: "deepseek",
+      modes: [{ id: "pro" }],
+      efforts: [{ id: "max" }],
+    },
+    {
+      id: "glm-5.2",
+      label: "GLM-5.2",
+      provider: "glm",
+      modes: [{ id: "standard" }, { id: "pro" }],
+      efforts: [{ id: "none" }, { id: "high" }, { id: "max" }],
+      defaultReasoningMode: "pro",
+      defaultReasoningEffort: "max",
+    },
+    {
+      id: "kimi-k2.6",
+      label: "Kimi K2.6",
+      provider: "kimi",
+      modes: [{ id: "standard" }, { id: "pro" }],
+      efforts: [{ id: "none" }],
+    },
+    {
+      id: "kimi-k3",
+      label: "Kimi K3",
+      provider: "kimi",
+      modes: [{ id: "pro" }],
+      efforts: [{ id: "low" }, { id: "high" }, { id: "max" }],
+      defaultReasoningMode: "pro",
+      defaultReasoningEffort: "max",
+    },
+  ];
+  const options = build(models);
+
+  assert.deepEqual(options.map((item) => item.id), [
+    "deepseek-v4-flash:standard:none",
+    "deepseek-v4-flash:pro:high",
+    "glm-5.2:standard:none",
+    "glm-5.2:pro:max",
+    "kimi-k2.6:standard:none",
+    "kimi-k2.6:pro:none",
+    "kimi-k3:pro:max",
+  ]);
+  assert.equal(options.some((item) => item.model === "deepseek-v4-pro"), false);
+});
+
+test("admin frozen-evidence comparison summarizes answer latency tokens and available cost", async () => {
+  const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
+  const source = sourceBetween(
+    app,
+    "function summarizeAdminComparisonRun",
+    "function shouldTriggerAdminRunExecution",
+  );
+  const summarize = new Function(
+    "formatAdminCnyCost",
+    "formatAdminCost",
+    "adminRunStatusLabel",
+    "formatAdminDuration",
+    `${source}; return summarizeAdminComparisonRun;`,
+  )(
+    (value) => Number.isFinite(Number(value)) ? `¥${Number(value).toFixed(4)}` : "",
+    (value) => Number.isFinite(Number(value)) ? `$${Number(value).toFixed(6)}` : "",
+    () => "已完成",
+    (value) => Number.isFinite(Number(value)) ? `${Number(value)}ms` : "",
+  );
+  const summary = summarize({
+    status: "SUCCEEDED",
+    result: {
+      finalRuling: { conciseAnswer: "可以发动，但处理时不进行特殊召唤。" },
+      latency: { totalWallClockMs: 4200, finalRulingMs: 3100 },
+      metering: {
+        totals: {
+          usage: { totalTokens: 1234 },
+          cost: { totalCostCny: 0.08, totalCostUsd: 0.011 },
+        },
+      },
+    },
+  });
+
+  assert.equal(summary.answer, "可以发动，但处理时不进行特殊召唤。");
+  assert.deepEqual(summary.metrics, [
+    "状态 已完成",
+    "总耗时 4200ms",
+    "final 3100ms",
+    "Token 1,234",
+    "成本 ¥0.0800 / $0.011000",
+  ]);
 });
 
 test("admin model lab renders the current structured ruling schema", async () => {

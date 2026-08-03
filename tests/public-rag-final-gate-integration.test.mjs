@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { answerRagRulingQuestion } from "../backend/ragRulingPipeline.mjs";
 
-test("public RAG repairs a grounded conclusion conflict once without retrieving a new packet", async () => {
+test("public RAG does not let the preparation model sign or veto the final answer", async () => {
   const prompts = [];
   const cards = [
     {
@@ -27,47 +27,38 @@ test("public RAG repairs a grounded conclusion conflict once without retrieving 
     text: "发动时不存在能够完成必做处理的卡的场合，那个效果不能发动。",
   };
   let finalCalls = 0;
+  let preparationCalls = 0;
 
   const answer = await answerRagRulingQuestion({
     question: "对方发动「中立测试陷阱」时，场上没有其他卡。我方能连锁发动「中立测试响应者」的效果吗？",
     cards,
     records: [restrictiveRule],
     qaRecords: [],
-    rulebookModelInvoker: async () => JSON.stringify({
-      operationChecks: [{
-        operationId: "neutral-response-operation",
-        action: "连锁发动响应者并完成必做处理",
-        status: "illegal",
-        conclusion: "不能连锁发动，因为场上没有能完成必做处理的卡。",
-        reasoning: ["限制性规则直接阻止发动。"],
-        citations: [{
-          id: "neutral-public-final-rule#p1-1",
-          quote: "发动时不存在能够完成必做处理的卡的场合，那个效果不能发动。",
+    rulebookModelInvoker: async () => {
+      preparationCalls += 1;
+      return JSON.stringify({
+        operationChecks: [{
+          status: "illegal",
+          conclusion: "这是旧准备模型的判断，不得签发公开结论。",
         }],
-      }],
-      overallConclusion: "不能发动。",
-    }),
+      });
+    },
     modelInvoker: async ({ prompt }) => {
       prompts.push(prompt);
       finalCalls += 1;
-      return JSON.stringify(finalCalls === 1
-        ? modelAnswer("可以连锁发动并正常处理。")
-        : modelAnswer("不能连锁发动，因为场上没有能完成必做处理的卡。", [{
-            id: "neutral-public-final-rule#p1-1",
-            type: "rulebook",
-            title: "必须处理没有可适用卡时的发动限制",
-          }]));
+      return JSON.stringify(modelAnswer("可以连锁发动并正常处理。"));
     },
     env: { MODEL_PROVIDER: "mock" },
   });
 
-  assert.equal(finalCalls, 2);
-  assert.equal(answer.debug.publicFinalValidation.outcome, "repair_valid");
-  assert.equal(answer.debug.publicFinalValidation.callCount, 2);
-  assert.match(answer.shortAnswer, /不能连锁发动/u);
-  assert.ok(prompts[1].startsWith(prompts[0]));
-  assert.match(prompts[1], /同一冻结题面/u);
-  assert.ok(answer.riskFlags.includes("public_final_validation_failed"));
+  assert.equal(preparationCalls, 0);
+  assert.equal(finalCalls, 1);
+  assert.equal(answer.debug.publicFinalValidation.outcome, "primary_valid");
+  assert.equal(answer.debug.publicFinalValidation.callCount, 1);
+  assert.match(answer.shortAnswer, /^可以连锁发动/u);
+  assert.equal(prompts.length, 1);
+  assert.doesNotMatch(prompts[0], /这是旧准备模型的判断/u);
+  assert.equal(answer.debug.rulebookGroundingWarnings.includes("rulebook_grounding_disabled_simple_pipeline"), true);
 });
 
 function modelAnswer(shortAnswer, usedEvidence = []) {

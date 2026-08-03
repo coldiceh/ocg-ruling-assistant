@@ -163,7 +163,9 @@ test("analyzeEffectStateTransition routes the real question to the printed-refer
   assert.equal(result.condition, "not_satisfied");
 });
 
-test("the public RAG path trusts the real printed-reference execution and skips the final model", async () => {
+test("the public RAG path keeps printed-reference execution offline and delegates to the final model", async () => {
+  let finalModelCalls = 0;
+  let finalPrompt = "";
   const answer = await answerRagRulingQuestion({
     question: realQuestion,
     cards: realCards,
@@ -172,16 +174,33 @@ test("the public RAG path trusts the real printed-reference execution and skips 
     env: {
       MODEL_PROVIDER: "mock",
       RAG_MODEL_PROVIDER: "mock",
-      RAG_DRY_RUN: "1",
+      RAG_DRY_RUN: "0",
       OCG_ENGINE_ENABLED: "0",
     },
-    dryRun: true,
+    dryRun: false,
+    cardModelInvoker: async () => JSON.stringify({ cardNames: [] }),
+    ruleModelInvoker: async () => JSON.stringify({ ruleQueries: [] }),
+    modelInvoker: async ({ prompt }) => {
+      finalModelCalls += 1;
+      finalPrompt = prompt;
+      return JSON.stringify({
+        answerLevel: "rule_analysis",
+        shortAnswer: "不能仅凭复制的卡名和效果满足条件；判断的是该卡卡面原本的效果文本，复制不会改写卡面印刷文本，因此不能据此发动。",
+        reasoning: ["最终模型使用题面中的三张卡文独立判断印刷文本条件。"],
+        usedCards: realCards.map((card) => card.name),
+        usedEvidence: [],
+        missingInfo: [],
+        riskFlags: [],
+        confidenceSelfEstimate: "high",
+      });
+    },
   });
+  assert.equal(finalModelCalls, 1);
   assert.match(answer.shortAnswer, /^不能仅凭复制/u);
-  assert.equal(answer.debug.deterministicDecision, "state_transition");
-  assert.equal(answer.debug.modelUsed, "trusted-semantic-state-executor");
-  assert.equal(answer.debug.timingsMs.finalModel, 0);
-  assert.ok(answer.riskFlags.includes("trusted_local_semantic_execution"));
+  assert.equal(answer.debug.deterministicDecision, null);
+  assert.equal(answer.debug.semanticStateTransition, null);
+  assert.equal(answer.debug.modelUsed, "mock-rag");
+  assert.match(finalPrompt, /卡面原本的效果文本|复制/u);
   assert.deepEqual(new Set(answer.resolvedCards.map((card) => card.id)), new Set(["13077", "19842", "19892"]));
 });
 

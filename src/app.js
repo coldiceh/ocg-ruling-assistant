@@ -91,6 +91,11 @@ const ui = {
   adminRatingNotes: document.querySelector("#adminRatingNotes"),
   adminRatingButton: document.querySelector("#adminRatingButton"),
   adminRatingStatus: document.querySelector("#adminRatingStatus"),
+  adminComparisonSection: document.querySelector("#adminComparisonSection"),
+  adminComparisonOptions: document.querySelector("#adminComparisonOptions"),
+  adminCompareButton: document.querySelector("#adminCompareButton"),
+  adminComparisonStatus: document.querySelector("#adminComparisonStatus"),
+  adminComparisonResults: document.querySelector("#adminComparisonResults"),
   adminHistoryRefreshButton: document.querySelector("#adminHistoryRefreshButton"),
   adminHistoryStatus: document.querySelector("#adminHistoryStatus"),
   adminHistoryList: document.querySelector("#adminHistoryList"),
@@ -135,6 +140,8 @@ let adminStreamAbortController = null;
 let adminClientStartedAt = 0;
 let adminElapsedTimer = 0;
 let adminEvaluationCases = [];
+let adminComparisonRunning = false;
+let adminComparisonOptions = [];
 const adminExecuteAttemptedRunIds = new Set();
 const adminStageStates = new Map();
 const adminCurrentRunStorageKey = "ocg-admin-current-run:v1";
@@ -1395,6 +1402,7 @@ function setAdminAuthenticated(authenticated, payload = {}) {
   } else {
     adminCapabilityState = null;
     setAdminControlsEnabled(false);
+    updateAdminComparisonAvailability();
   }
 }
 
@@ -1619,7 +1627,82 @@ function renderAdminCapabilities(capabilities) {
   const preferredProvider = capabilities.providers.some((item) => item.id === "openai") ? "openai" : capabilities.providers[0]?.id;
   if (preferredProvider) ui.adminProviderSelect.value = preferredProvider;
   syncAdminModelControls();
+  adminComparisonOptions = buildAdminComparisonOptions(capabilities.models);
+  renderAdminComparisonOptions();
   applyAdminFeatureAvailability();
+}
+
+function buildAdminComparisonOptions(models = []) {
+  const supportedProviders = new Set(["deepseek", "glm", "kimi"]);
+  const selectedModels = models.filter((model) => {
+    if (!supportedProviders.has(String(model?.provider || ""))) return false;
+    if (model?.id === "deepseek-v4-pro") return false;
+    return model?.available !== false;
+  });
+  const options = [];
+  for (const model of selectedModels) {
+    const modes = (model.modes || []).map((item) => String(item?.id || item || ""));
+    const efforts = (model.efforts || []).map((item) => String(item?.id || item || ""));
+    if (modes.includes("standard") && efforts.includes("none")) {
+      options.push({
+        id: `${model.id}:standard:none`,
+        label: `${model.label || model.id} · 不思考`,
+        provider: model.provider,
+        model: model.id,
+        reasoningMode: "standard",
+        reasoningEffort: "none",
+      });
+    }
+    if (modes.includes("pro")) {
+      const effort = preferredAdminComparisonEffort(model, efforts);
+      if (effort) {
+        options.push({
+          id: `${model.id}:pro:${effort}`,
+          label: `${model.label || model.id} · 思考`,
+          provider: model.provider,
+          model: model.id,
+          reasoningMode: "pro",
+          reasoningEffort: effort,
+        });
+      }
+    }
+  }
+  return options;
+}
+
+function preferredAdminComparisonEffort(model, efforts) {
+  const preferred = [
+    model?.defaultReasoningMode === "pro" ? model?.defaultReasoningEffort : "",
+    "high",
+    "max",
+    "medium",
+    "low",
+    "none",
+  ];
+  return preferred.find((effort) => effort && efforts.includes(effort)) || "";
+}
+
+function renderAdminComparisonOptions() {
+  if (!ui.adminComparisonOptions) return;
+  clearElement(ui.adminComparisonOptions);
+  for (const option of adminComparisonOptions) {
+    const label = document.createElement("label");
+    label.className = "admin-comparison-option";
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.value = option.id;
+    input.checked = option.model === "deepseek-v4-flash";
+    input.disabled = adminComparisonRunning;
+    const text = document.createElement("div");
+    appendText(text, "span", option.label);
+    appendText(text, "small", `${adminProviderLabel(option.provider)} · ${option.reasoningMode} / ${option.reasoningEffort}`);
+    label.append(input, text);
+    ui.adminComparisonOptions.appendChild(label);
+  }
+  if (!adminComparisonOptions.length) {
+    appendText(ui.adminComparisonOptions, "p", "当前环境没有可用于对比的 DeepSeek Flash、GLM 或 Kimi 模型。");
+  }
+  updateAdminComparisonAvailability();
 }
 
 function syncAdminPreparationModelControls() {
@@ -1668,6 +1751,7 @@ function adminFeatureEnabled(name) {
     events: ["eventReplay", "events", "streaming", "sse"],
     create: ["createRun", "create"],
     execute: ["executeRun", "execute"],
+    fork: ["forkRun", "fork", "sharedEvidenceSnapshotFork"],
   };
   const features = adminCapabilityState.features || {};
   for (const key of aliases[name] || [name]) {
@@ -1688,6 +1772,7 @@ function applyAdminFeatureAvailability() {
     [ui.adminExportJsonButton, "export"],
     [ui.adminExportCsvButton, "export"],
     [ui.adminRatingButton, "rating"],
+    [ui.adminCompareButton, "fork"],
   ];
   for (const [control, feature] of controls) {
     if (!control) continue;
@@ -1800,6 +1885,7 @@ function setAdminControlsEnabled(enabled) {
       || !adminFeatureEnabled("create")
       || !adminFeatureEnabled("execute");
   }
+  updateAdminComparisonAvailability();
 }
 
 async function startAdminExperiment() {
@@ -1817,6 +1903,7 @@ async function startAdminExperiment() {
   }
 
   stopFollowingAdminRun();
+  resetAdminComparisonResults();
   adminCurrentRun = null;
   adminCurrentRunId = "";
   adminAfterSequence = 0;
@@ -1866,6 +1953,181 @@ async function startAdminExperiment() {
       setAdminRunningState(false);
     }
   }
+}
+
+function canAdminCompareCurrentRun() {
+  return Boolean(
+    adminSession.authenticated
+    && adminFeatureEnabled("fork")
+    && adminFeatureEnabled("execute")
+    && isAdminRunTerminal(adminCurrentRun)
+    && adminCurrentRun?.preparationFinalizedAt
+    && adminCurrentRun?.evidenceSnapshot,
+  );
+}
+
+function selectedAdminComparisonOptions() {
+  if (!ui.adminComparisonOptions) return [];
+  const selectedIds = new Set(
+    [...ui.adminComparisonOptions.querySelectorAll('input[type="checkbox"]:checked')]
+      .map((input) => String(input.value || "")),
+  );
+  return adminComparisonOptions.filter((option) => selectedIds.has(option.id));
+}
+
+function updateAdminComparisonAvailability() {
+  const canCompare = canAdminCompareCurrentRun();
+  if (ui.adminCompareButton) {
+    ui.adminCompareButton.disabled = adminComparisonRunning || !canCompare || !selectedAdminComparisonOptions().length;
+    ui.adminCompareButton.textContent = adminComparisonRunning ? "对比进行中…" : "开始对比";
+  }
+  if (ui.adminComparisonOptions) {
+    for (const input of ui.adminComparisonOptions.querySelectorAll('input[type="checkbox"]')) {
+      input.disabled = adminComparisonRunning || !canCompare;
+    }
+  }
+  if (!ui.adminComparisonStatus || adminComparisonRunning) return;
+  if (!canCompare) {
+    ui.adminComparisonStatus.textContent = "先完成或载入一条含冻结证据的实验。";
+  } else {
+    ui.adminComparisonStatus.textContent = "已就绪：每个选项只复用当前 Evidence Snapshot，不重新检索。";
+  }
+}
+
+async function runAdminModelComparison() {
+  if (adminComparisonRunning || !canAdminCompareCurrentRun()) return;
+  const selections = selectedAdminComparisonOptions();
+  if (!selections.length) {
+    if (ui.adminComparisonStatus) ui.adminComparisonStatus.textContent = "请至少勾选一个模型配置。";
+    return;
+  }
+  const sourceRunId = extractAdminRunId(adminCurrentRun);
+  if (!sourceRunId) return;
+  adminComparisonRunning = true;
+  clearElement(ui.adminComparisonResults);
+  updateAdminComparisonAvailability();
+  let completed = 0;
+  let failed = 0;
+  for (const [index, option] of selections.entries()) {
+    if (ui.adminComparisonStatus) {
+      ui.adminComparisonStatus.textContent = `正在运行 ${index + 1}/${selections.length}：${option.label}（冻结证据复用）`;
+    }
+    renderAdminComparisonResult(option, null, null, "正在创建冻结证据 fork…");
+    try {
+      const forked = await requestAdminLab({
+        method: "POST",
+        action: "fork",
+        body: {
+          forkFromRunId: sourceRunId,
+          idempotencyKey: createAdminComparisonIdempotencyKey(index),
+          label: `model-compare:${option.label}`,
+          provider: option.provider,
+          model: option.model,
+          reasoningEffort: option.reasoningEffort,
+          reasoningMode: option.reasoningMode,
+        },
+      });
+      const forkRun = extractAdminRun(forked);
+      const forkRunId = extractAdminRunId(forked);
+      if (!forkRunId) throw new Error("后端没有返回 fork 运行编号。");
+      renderAdminComparisonResult(option, forkRun, null, "冻结证据已复用，正在生成裁定…");
+      const executed = await requestAdminLab({
+        method: "POST",
+        action: "execute",
+        body: { runId: forkRunId },
+      });
+      const completedRun = extractAdminRun(executed);
+      renderAdminComparisonResult(option, completedRun);
+      if (isAdminRunTerminal(completedRun) && String(completedRun?.status || "").toLowerCase() !== "failed") {
+        completed += 1;
+      } else {
+        failed += 1;
+      }
+    } catch (error) {
+      failed += 1;
+      renderAdminComparisonResult(option, null, error);
+    }
+  }
+  adminComparisonRunning = false;
+  updateAdminComparisonAvailability();
+  if (ui.adminComparisonStatus) {
+    ui.adminComparisonStatus.textContent = `对比完成：${completed} 个成功，${failed} 个失败。所有运行共用源运行 ${sourceRunId} 的冻结证据。`;
+  }
+  void loadAdminHistory();
+}
+
+function createAdminComparisonIdempotencyKey(index) {
+  const randomPart = globalThis.crypto?.randomUUID?.().replace(/-/gu, "")
+    || Math.random().toString(36).slice(2).padEnd(16, "0");
+  return `matrix-${Date.now().toString(36)}-${Number(index) || 0}-${randomPart}`.slice(0, 128);
+}
+
+function resetAdminComparisonResults() {
+  if (ui.adminComparisonResults) clearElement(ui.adminComparisonResults);
+  if (ui.adminComparisonStatus) ui.adminComparisonStatus.textContent = "先完成或载入一条含冻结证据的实验。";
+  updateAdminComparisonAvailability();
+}
+
+function renderAdminComparisonResult(option, run, error = null, pendingText = "") {
+  if (!ui.adminComparisonResults) return;
+  const resultId = `admin-compare-${option.id.replace(/[^a-z0-9_-]+/giu, "-")}`;
+  let card = ui.adminComparisonResults.querySelector(`[data-comparison-id="${resultId}"]`);
+  if (!card) {
+    card = document.createElement("article");
+    card.className = "admin-comparison-result";
+    card.dataset.comparisonId = resultId;
+    ui.adminComparisonResults.appendChild(card);
+  }
+  clearElement(card);
+  card.classList.toggle("is-error", Boolean(error) || String(run?.status || "").toLowerCase() === "failed");
+  appendText(card, "h4", option.label);
+  if (error) {
+    appendText(card, "p", adminErrorMessage(error, "模型对比运行失败。"));
+    return;
+  }
+  if (pendingText) {
+    appendText(card, "p", pendingText);
+    return;
+  }
+  const summary = summarizeAdminComparisonRun(run);
+  appendText(card, "p", summary.answer || "未返回可显示的简短答案。");
+  const metrics = appendText(card, "p", summary.metrics.join(" · "));
+  metrics.className = "admin-comparison-metrics";
+}
+
+function summarizeAdminComparisonRun(run) {
+  const result = run?.result || {};
+  const ruling = result.finalRuling || result.ruling || result.output || {};
+  const verdictConclusions = Array.isArray(ruling.verdicts)
+    ? ruling.verdicts.map((item) => String(item?.conclusion || "").trim()).filter(Boolean)
+    : [];
+  const rawAnswer = String(
+    ruling.conciseAnswer
+    || ruling.shortAnswer
+    || ruling.answer
+    || verdictConclusions.join("；")
+    || run?.error?.message
+    || "",
+  ).trim();
+  const answer = rawAnswer.length > 320 ? `${rawAnswer.slice(0, 317)}…` : rawAnswer;
+  const latency = result.latency || result.metrics?.latency || {};
+  const usage = result.metering?.totals?.usage || result.metrics?.usage || result.usage || {};
+  const cost = result.metering?.totals?.cost || result.metrics?.cost || result.cost || {};
+  const totalTokens = usage.totalTokens ?? usage.knownTotalTokens ?? usage.total_tokens;
+  const costParts = [
+    formatAdminCnyCost(cost.totalCostCny ?? cost.knownCostCny),
+    formatAdminCost(cost.totalCostUsd ?? cost.knownCostUsd),
+  ].filter(Boolean);
+  return {
+    answer,
+    metrics: [
+      `状态 ${adminRunStatusLabel(run?.status)}`,
+      `总耗时 ${formatAdminDuration(latency.totalWallClockMs) || "未知"}`,
+      `final ${formatAdminDuration(latency.finalRulingMs) || "未知"}`,
+      `Token ${Number.isFinite(Number(totalTokens)) ? Number(totalTokens).toLocaleString("zh-CN") : "未知"}`,
+      `成本 ${costParts.join(" / ") || "暂无可用定价"}`,
+    ],
+  };
 }
 
 function shouldTriggerAdminRunExecution(run, nowMs = Date.now()) {
@@ -2290,6 +2552,7 @@ function renderAdminRun(run) {
   if (ui.adminExportCsvButton) ui.adminExportCsvButton.disabled = !runId || !adminFeatureEnabled("export");
   if (ui.adminRatingButton) ui.adminRatingButton.disabled = !runId || !terminal || !adminFeatureEnabled("rating");
   setAdminRunningState(Boolean(runId) && !terminal);
+  updateAdminComparisonAvailability();
 }
 
 function renderAdminStructuredResult(run) {
@@ -2699,6 +2962,7 @@ function renderAdminHistory(records) {
 
 async function loadAdminRunFromHistory(runId) {
   stopFollowingAdminRun();
+  resetAdminComparisonResults();
   adminCurrentRunId = normalizeStoredAdminRunId(runId);
   if (!adminCurrentRunId) return false;
   storeAdminRunId(adminCurrentRunId);
@@ -4228,6 +4492,8 @@ async function init() {
   ui.adminEvaluationRefreshButton?.addEventListener("click", loadAdminEvaluationCases);
   ui.adminEvaluationLoadButton?.addEventListener("click", loadSelectedAdminEvaluation);
   ui.adminRatingForm?.addEventListener("submit", submitAdminRating);
+  ui.adminComparisonOptions?.addEventListener("change", updateAdminComparisonAvailability);
+  ui.adminCompareButton?.addEventListener("click", runAdminModelComparison);
   ui.adminExportJsonButton?.addEventListener("click", () => exportAdminRun("json"));
   ui.adminExportCsvButton?.addEventListener("click", () => exportAdminRun("csv"));
 }

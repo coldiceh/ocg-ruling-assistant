@@ -1,6 +1,6 @@
 import { requestOcgEngineSimulation } from "./ocgEngineClient.mjs";
 import { autoEngineSimulationEnabled, buildBestEffortEngineScenario } from "./ocgScenarioPlanner.mjs";
-import { applyFormalAnswerGate, runFormalEngineShadow } from "./formalEngineShadow.mjs";
+import { runFormalEngineShadow } from "./formalEngineShadow.mjs";
 import { createDefaultFormalScenarioDraftInvoker } from "./formalScenarioDraftModel.mjs";
 import { normalizeCardText } from "./cardTextNormalizer.mjs";
 import { extractRagCards, normalizeCardKey } from "./ragCardExtractor.mjs";
@@ -8,21 +8,13 @@ import { evidenceBucketsToList, loadRagData, retrieveRagEvidence } from "./ragEv
 import {
   callCardNameExtractionModel,
   callRagModel,
-  callRulebookGroundingModel,
   callRuleQueryExtractionModel,
 } from "./ragModelClient.mjs";
 import {
   buildRagRulingPromptBundle,
   RAG_ANSWER_LEVELS,
-  selectAuthoritativeOfficialDirectCandidate,
 } from "./ragRulingPrompt.mjs";
 import { hasNumberedCardIdentityConflict } from "./numberedCardIdentity.mjs";
-import {
-  extractOfficialQaAnswer,
-  extractRelevantOfficialQaAnswerExcerpt,
-} from "./officialQaAnswerExtractor.mjs";
-import { analyzeEffectStateTransition } from "./effectStateReasoner.mjs";
-import { assessSemanticTransitionAuthority } from "./semanticAuthorityGate.mjs";
 import { runValidatedPublicRagFinal } from "./publicRagAnswerValidator.mjs";
 
 export async function answerRagRulingQuestion({
@@ -74,62 +66,39 @@ export async function answerRagRulingQuestion({
     cards: data.cards || [],
     maxCards,
   });
-  const localPreflightTransition = !modelInvoker
-      && !cardModelInvoker
-      && !ruleModelInvoker
-      && !rulebookModelInvoker
-      && hasCompleteCardResolution(localCardResolution)
-    ? analyzeEffectStateTransition({
-        userQuery: query,
-        resolvedCards: localCardResolution.resolvedCards || [],
-      })
-    : null;
-  const skipAuxiliaryExtractionModels = hasTrustedSemanticStateTransition({
-    semanticStateTransition: localPreflightTransition,
-    cardResolution: localCardResolution,
-  });
+  // Card/rule extraction is evidence preparation.  A partial local reasoner
+  // must never skip it or sign a public ruling on its own.
   timingsMs.deterministicPreflight = elapsedMs(preflightStartedAt);
 
   const auxiliaryExtractionStartedAt = Date.now();
-  let cardNameModel;
-  let ruleQueryModel;
-  let cardResolution;
-  if (skipAuxiliaryExtractionModels) {
-    cardNameModel = skippedExtractionResult("card_name_model_skipped_trusted_semantic_preflight", "candidates");
-    ruleQueryModel = skippedExtractionResult("rule_query_model_skipped_trusted_semantic_preflight", "queries");
-    cardResolution = localCardResolution;
-  } else {
-    [cardNameModel, ruleQueryModel] = await Promise.all([
-      callCardNameExtractionModel({
-        userQuery: query,
-        env,
-        modelInvoker: cardModelInvoker,
-        fetchImpl,
-        dryRun,
-        now,
-        signal,
-      }),
-      callRuleQueryExtractionModel({
-        userQuery: query,
-        env,
-        modelInvoker: ruleModelInvoker,
-        fetchImpl,
-        dryRun,
-        now,
-        signal,
-      }),
-    ]);
-    cardResolution = (cardNameModel.candidates || []).length
-      ? extractRagCards(query, {
-          cards: data.cards || [],
-          maxCards,
-          modelCardNameCandidates: cardNameModel.candidates,
-        })
-      : localCardResolution;
-  }
-  timingsMs.auxiliaryExtractionModels = skipAuxiliaryExtractionModels
-    ? 0
-    : elapsedMs(auxiliaryExtractionStartedAt);
+  const [cardNameModel, ruleQueryModel] = await Promise.all([
+    callCardNameExtractionModel({
+      userQuery: query,
+      env,
+      modelInvoker: cardModelInvoker,
+      fetchImpl,
+      dryRun,
+      now,
+      signal,
+    }),
+    callRuleQueryExtractionModel({
+      userQuery: query,
+      env,
+      modelInvoker: ruleModelInvoker,
+      fetchImpl,
+      dryRun,
+      now,
+      signal,
+    }),
+  ]);
+  const cardResolution = (cardNameModel.candidates || []).length
+    ? extractRagCards(query, {
+        cards: data.cards || [],
+        maxCards,
+        modelCardNameCandidates: cardNameModel.candidates,
+      })
+    : localCardResolution;
+  timingsMs.auxiliaryExtractionModels = elapsedMs(auxiliaryExtractionStartedAt);
   timingsMs.dataAndQueryExtraction = elapsedMs(extractionStartedAt);
   const retrievalStartedAt = Date.now();
   const retrievedEvidence = await retrieveRagEvidence({
@@ -147,12 +116,6 @@ export async function answerRagRulingQuestion({
   });
   timingsMs.retrieval = elapsedMs(retrievalStartedAt);
   const effectiveCardResolution = reconcileCardResolution(cardResolution, retrievedEvidence);
-  const authoritativeOfficialDirectCandidate = selectAuthoritativeOfficialDirectCandidate({
-    candidates: retrievedEvidence.officialQaDirectCandidates || [],
-    cardResolution: effectiveCardResolution,
-    baigeAmbiguousMentions: retrievedEvidence.baigeAmbiguousMentions,
-  });
-  const authoritativeOfficialDirect = Boolean(authoritativeOfficialDirectCandidate);
   const explicitEngineScenario = engineScenario !== undefined && engineScenario !== null;
   const enginePlan = explicitEngineScenario
     ? {
@@ -220,108 +183,60 @@ export async function answerRagRulingQuestion({
     env,
   });
   const locallyGroundedEvidence = attachRulebookGrounding(retrievedEvidence, localRulebookGrounding);
-  const semanticStateStartedAt = Date.now();
-  const localSemanticStateTransition = analyzeEffectStateTransition({
-    userQuery: query,
-    cardTexts: reasoningCardTexts,
-    corroboratingEvidence,
-    resolvedCards: effectiveCardResolution.resolvedCards || [],
-  });
-  timingsMs.semanticStateExecution = elapsedMs(semanticStateStartedAt);
-  const semanticAuthorityAssessment = assessSemanticTransitionAuthority({
-    semanticStateTransition: localSemanticStateTransition,
-    cardResolution: effectiveCardResolution,
-    extraAmbiguousMentions: retrievedEvidence.baigeAmbiguousMentions,
-  });
-  const trustedSemanticStateTransition = semanticAuthorityAssessment.trusted
-    ? {
-        ...localSemanticStateTransition,
-        queryCoverage: semanticAuthorityAssessment.queryCoverage,
-        identityBindingProof: semanticAuthorityAssessment.identityBinding,
-      }
-    : null;
-  // An exact official answer remains authoritative.  Until the semantic
-  // executor can compare every operation, subject, condition, and branch at
-  // claim level, a coarse polarity match is not enough to merge the answers.
-  const trustedSemanticCanLead = Boolean(trustedSemanticStateTransition)
-    && !authoritativeOfficialDirect;
-  const localDecisionComplete = !modelInvoker && trustedSemanticCanLead;
+  // Legacy semantic executors are deliberately excluded from the public
+  // answer path.  They may remain as offline experiments, but their partial
+  // state cannot become a final answer or a hard constraint for the model.
+  const localSemanticStateTransition = null;
+  const semanticAuthorityAssessment = null;
+  const semanticStateTransition = null;
+  const localDecisionComplete = false;
+  timingsMs.semanticStateExecution = 0;
   timingsMs.localReasoning = elapsedMs(localReasoningStartedAt);
 
   const rulebookStartedAt = Date.now();
-  const rulebookGrounding = authoritativeOfficialDirect || localDecisionComplete
-    ? localRulebookGrounding
-    : await callRulebookGroundingModel({
-        userQuery: query,
-        cardTexts: reasoningCardTexts,
-        ruleEvidence: retrievedEvidence.rulebookCandidates || [],
-        qaEvidence: dedupeEvidenceRefs([
-          ...(retrievedEvidence.officialQaDirectCandidates || []),
-          ...(retrievedEvidence.officialQaRelated || []),
-          ...(retrievedEvidence.provisionalOfficialResponses || []),
-          ...(retrievedEvidence.faqRelated || []),
-        ]),
-        env,
-        modelInvoker: rulebookModelInvoker,
-        fetchImpl,
-        dryRun,
-        signal,
-        now,
-      });
+  // The old grounding model attempted to decide legality while preparing
+  // evidence.  That duplicated the final judge and could bind player roles
+  // incorrectly.  Retrieval candidates are now passed directly to the final
+  // model, which performs the only ruling analysis.
+  const rulebookGrounding = {
+    ...localRulebookGrounding,
+    warnings: ["rulebook_grounding_disabled_simple_pipeline"],
+  };
   timingsMs.rulebookGrounding = elapsedMs(rulebookStartedAt);
   const groundedEvidence = attachRulebookGrounding(retrievedEvidence, rulebookGrounding);
-  const semanticStateTransition = trustedSemanticCanLead
-    ? trustedSemanticStateTransition
-    : null;
   const formalStartedAt = Date.now();
   const formalShadow = await formalShadowPromise;
   timingsMs.formalEngineAwait = elapsedMs(formalStartedAt);
   const evidence = {
     ...groundedEvidence,
     semanticStateTransition,
-    cardSemanticFacts: buildCardSemanticFacts([
-      ...(effectiveCardResolution.resolvedCards || []),
-      ...semanticCardsFromEvidence(groundedEvidence.cardTexts || []),
-      ...semanticCardsFromEvidence(groundedEvidence.userProvidedCardTexts || []),
-    ]),
-    formalEngineProofs: formalShadow.evidence || [],
+    // Experimental normalizers and engines remain visible in debug output,
+    // but their incomplete drafts are not evidence for the public judge.
+    cardSemanticFacts: [],
+    formalEngineProofs: [],
     formalEngineStatus: summarizeFormalShadow(formalShadow),
   };
-  const deterministicDecision = localDecisionComplete
-    ? { kind: "state_transition", semanticStateTransition }
-    : null;
-  const promptBundle = deterministicDecision
-    ? {
-        prompt: "",
-        recoveryPrompt: "",
-        promptChars: 0,
-        promptTruncated: false,
-        warnings: ["final_model_skipped_trusted_semantic_state_transition"],
-      }
-    : buildRagRulingPromptBundle({
-        userQuery: query,
-        cardResolution: effectiveCardResolution,
-        evidence,
-        env,
-      });
+  const deterministicDecision = null;
+  const promptBundle = buildRagRulingPromptBundle({
+    userQuery: query,
+    cardResolution: effectiveCardResolution,
+    evidence,
+    env,
+  });
   const displayCards = dedupeCards([
     ...(effectiveCardResolution.resolvedCards || []),
     ...userProvidedCards(evidence.userProvidedCardTexts || []),
   ]);
   const finalModelStartedAt = Date.now();
-  const finalModelEnv = authoritativeOfficialDirect
-    ? buildOfficialDirectModelEnv(env)
-    : env;
-  const finalThinkingMode = authoritativeOfficialDirect
-    ? readOfficialDirectThinkingMode(env)
-    : thinkingMode;
-  const modelResult = deterministicDecision
-    ? buildTrustedSemanticModelResult(deterministicDecision)
-    : await runValidatedPublicRagFinal({
+  const finalModelEnv = env;
+  const finalThinkingMode = thinkingMode;
+  const modelResult = await runValidatedPublicRagFinal({
         originalPrompt: promptBundle.prompt,
         userQuery: query,
         evidence,
-        authoritativeOfficialDirect,
+        // A matcher candidate is evidence, not permission to copy a ruling
+        // whose player roles or conditions may differ from the question.
+        authoritativeOfficialDirect: false,
         invoke: ({ prompt, attemptKind }) => callRagModel({
           prompt,
           recoveryPrompt: attemptKind === "primary" ? promptBundle.recoveryPrompt : "",
@@ -337,20 +252,9 @@ export async function answerRagRulingQuestion({
           signal,
         }),
       });
-  timingsMs.finalModel = deterministicDecision ? 0 : elapsedMs(finalModelStartedAt);
+  timingsMs.finalModel = elapsedMs(finalModelStartedAt);
   const modelAnswer = normalizeRagAnswer(modelResult.answer, { evidence, cardResolution: effectiveCardResolution, modelWarnings: modelResult.warnings || [] });
-  const normalizedWithoutFormalGate = authoritativeOfficialDirect
-    ? applyOfficialDirectAnswerContract(modelAnswer, evidence, effectiveCardResolution)
-    : modelAnswer;
-  const preserveTrustedSemanticAnswer = Boolean(deterministicDecision)
-    && !hasTrustedFormalVerdict(evidence.formalEngineProofs);
-  const normalized = attachFormalShadowRisk(
-    applyFormalAnswerGate(normalizedWithoutFormalGate, evidence.formalEngineProofs, {
-      preserveAuthoritativeAnswer: authoritativeOfficialDirect || preserveTrustedSemanticAnswer,
-    }),
-    formalShadow,
-    { preserveAuthoritativeAnswer: authoritativeOfficialDirect || preserveTrustedSemanticAnswer },
-  );
+  const normalized = modelAnswer;
   const engineStartedAt = Date.now();
   const engine = await enginePromise;
   timingsMs.engineAwait = elapsedMs(engineStartedAt);
@@ -472,174 +376,6 @@ function buildLocalRulebookGrounding({
   };
 }
 
-function applyOfficialDirectAnswerContract(answer, evidence = {}, cardResolution = {}) {
-  const direct = evidence.officialQaDirectCandidates?.[0];
-  if (!direct) return answer;
-  const extracted = extractOfficialQaAnswer({
-    ...direct,
-    text: direct.fullText || direct.text,
-  });
-  const relevantAnswerExcerpt = extractRelevantOfficialQaAnswerExcerpt({
-    ...direct,
-    answer: extracted.answerText,
-  });
-  const officialAnswerText = replaceOfficialCardPlaceholders(
-    String(relevantAnswerExcerpt || extracted.answerText || direct.answer || direct.officialText || "").trim(),
-    cardResolution.resolvedCards || [],
-  );
-  const alreadyUsedDirect = (answer.usedEvidence || []).some((item) => String(item.id) === String(direct.id));
-  const modelFailed = (answer.riskFlags || []).some((flag) => /(?:model_call_failed|model_json_parse_failed|deepseek_empty_content|model_output_not_json)/u.test(String(flag)));
-  const modelCannotSafelySummarize = modelFailed
-    || answer.answerLevel === "budget_limited"
-    || answer.answerLevel === "needs_more_info"
-    || !alreadyUsedDirect
-    || officialSummaryDefersToSource(answer.shortAnswer)
-    || primaryPolarityConflict(officialAnswerText, answer.shortAnswer);
-  const translatedSummary = modelCannotSafelySummarize ? "" : String(answer.shortAnswer || "").trim();
-  const officialSourceLine = modelCannotSafelySummarize && officialAnswerText
-    ? `官方 Q&A 完整回答原文：${officialAnswerText}`
-    : "";
-  const shortAnswer = translatedSummary || officialSourceLine || answer.shortAnswer;
-  const officialAnswerReason = translatedSummary
-    ? `官方 Q&A（${String(direct.id || "")}）直接覆盖本题，完整原文见资料来源。`
-    : officialSourceLine;
-  return {
-    ...answer,
-    answerLevel: "official_confirmed",
-    shortAnswer,
-    reasoning: cleanStringArray([
-      officialAnswerReason,
-    ]),
-    usedEvidence: dedupeEvidenceRefs([
-      {
-        id: direct.id,
-        type: "official_qa",
-        title: direct.title || direct.id,
-        sourceUrl: direct.sourceUrl || "",
-      },
-      ...(answer.usedEvidence || []),
-    ]),
-    riskFlags: [...new Set([
-      ...(answer.riskFlags || []),
-      ...(!alreadyUsedDirect ? ["official_direct_evidence_enforced"] : []),
-      ...(modelFailed ? ["official_direct_source_fallback_after_model_failure"] : []),
-      ...(modelCannotSafelySummarize && !modelFailed ? ["official_direct_source_fallback_after_incomplete_summary"] : []),
-    ])],
-    confidenceSelfEstimate: "high",
-  };
-}
-
-function buildOfficialDirectModelEnv(env = {}) {
-  const configuredTier = String(env.RAG_OFFICIAL_DIRECT_MODEL_TIER || "flash").trim().toLowerCase();
-  const configuredMaxTokens = Number(env.RAG_OFFICIAL_DIRECT_MAX_OUTPUT_TOKENS);
-  return {
-    ...env,
-    RAG_MODEL_TIER: configuredTier === "pro" ? "pro" : "flash",
-    RAG_MAX_OUTPUT_TOKENS: String(
-      Number.isFinite(configuredMaxTokens) && configuredMaxTokens > 0
-        ? Math.floor(configuredMaxTokens)
-        : 4000,
-    ),
-  };
-}
-
-function readOfficialDirectThinkingMode(env = {}) {
-  return String(env.RAG_OFFICIAL_DIRECT_THINKING_MODE || "disabled").trim().toLowerCase() === "enabled"
-    ? "enabled"
-    : "disabled";
-}
-
-function replaceOfficialCardPlaceholders(text, cards = []) {
-  const namesById = new Map();
-  for (const card of cards || []) {
-    const id = String(card.id || card.cardId || "").trim();
-    const name = String(card.name || card.cnName || card.jaName || card.enName || "").trim();
-    if (id && name && !namesById.has(id)) namesById.set(id, name);
-  }
-  const replacementName = (id) => namesById.get(id) || "相关卡片";
-  return String(text || "")
-    .replace(/「<<(\d+)>>」/gu, (_placeholder, id) => `「${replacementName(id)}」`)
-    .replace(/<<(\d+)>>/gu, (_placeholder, id) => replacementName(id));
-}
-
-function primaryPolarityConflict(officialText, modelText) {
-  const official = primaryAnswerPolarity(officialText);
-  const model = primaryAnswerPolarity(modelText);
-  return official !== "unknown" && model !== "unknown" && official !== model;
-}
-
-function officialSummaryDefersToSource(value) {
-  return /(?:请|應|应|须|須).{0,16}(?:以|参照|參照|查看|查阅|查閱).{0,16}(?:官方)?(?:原文|资料|資料|来源|來源)(?:为准|為準)?|(?:完整原文|详情|詳情).{0,8}(?:见|見|参见|參見)(?:资料|資料|来源|來源)|refer\s+to.{0,24}(?:source|official\s+(?:answer|text))/iu.test(String(value || ""));
-}
-
-function primaryAnswerPolarity(value) {
-  const text = String(value || "").trim();
-  if (/^(?:no\b|いいえ|不能|不可以|无法|不可|不得|できません|発動できません)/iu.test(text)) return "negative";
-  if (/^(?:yes\b|はい|可以|能够|能(?:够)?发动|できます|発動できます)/iu.test(text)) return "positive";
-  return "unknown";
-}
-
-function hasTrustedSemanticStateTransition({
-  semanticStateTransition,
-  cardResolution = {},
-  extraAmbiguousMentions = [],
-} = {}) {
-  return assessSemanticTransitionAuthority({
-    semanticStateTransition,
-    cardResolution,
-    extraAmbiguousMentions,
-  }).trusted;
-}
-
-function hasCompleteCardResolution(cardResolution = {}, extraAmbiguousMentions = []) {
-  return !(cardResolution.unresolvedMentions || []).length
-    && !(cardResolution.ambiguousMentions || []).length
-    && !(cardResolution.omittedResolvedCards || []).length
-    && !(extraAmbiguousMentions || []).length;
-}
-
-function buildTrustedSemanticModelResult(decision = {}) {
-  const state = decision.semanticStateTransition || {};
-  return {
-    answer: {
-      answerLevel: "rule_analysis",
-      shortAnswer: String(state.shortAnswer || "").trim(),
-      reasoning: cleanStringArray(state.reasoning || []),
-      usedCards: [],
-      usedEvidence: (state.evidenceIds || []).map((id) => ({
-        id,
-        type: "related",
-        title: String(id),
-      })),
-      missingInfo: [],
-      riskFlags: [
-        "trusted_local_semantic_execution",
-        "semantic_state_transition_applied",
-        "final_model_skipped",
-      ],
-      confidenceSelfEstimate: "medium",
-    },
-    rawText: "",
-    provider: "local",
-    providerUsed: "local",
-    modelName: "trusted-semantic-state-executor",
-    modelUsed: "trusted-semantic-state-executor",
-    dryRun: true,
-    warnings: [],
-    tokenUsage: {},
-    estimatedCostCny: 0,
-    budgetStatus: null,
-    generationConfig: null,
-    generationAttempts: [],
-  };
-}
-
-function hasTrustedFormalVerdict(formalEvidence = []) {
-  return (formalEvidence || []).some((item) => (
-    item?.trusted === true && (item.verdict === "TRUE" || item.verdict === "FALSE")
-  ));
-}
-
 function summarizeSemanticStateDiagnostic(transition, authorityAssessment = null) {
   if (!transition || typeof transition !== "object") return null;
   return {
@@ -651,20 +387,6 @@ function summarizeSemanticStateDiagnostic(transition, authorityAssessment = null
     authorityGateReasons: cleanStringArray(authorityAssessment?.reasons || []),
     queryCoverage: authorityAssessment?.queryCoverage || transition.queryCoverage || null,
     identityBinding: authorityAssessment?.identityBinding || null,
-  };
-}
-
-function skippedExtractionResult(warning, collectionKey) {
-  return {
-    [collectionKey]: [],
-    rawText: "",
-    providerUsed: "local",
-    modelUsed: "none",
-    dryRun: true,
-    warnings: [warning],
-    tokenUsage: {},
-    estimatedCostCny: 0,
-    budgetStatus: null,
   };
 }
 

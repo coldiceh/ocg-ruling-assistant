@@ -38,11 +38,93 @@
       ]
     },
     {
-      "id": "already-public-hand-cannot-be-shown-again",
+      "id": "opponent-public-hand-does-not-block-showing-own-hand",
       "question": "我方看透心灵之眼适用中，我方有手牌，我方能发动红莲的指名者吗？",
       "expectedCardNames": ["看透心灵之眼", "红莲的指名者"],
       "expectedQaIds": ["ygoresources-qa-20844"],
-      "expectedAnswer": "不能发动。"
+      "expectedAnswer": "可以发动。",
+      "expectedAnswerKeyPoints": [
+        "我方控制的看透心灵之眼持续公开的是对方手牌",
+        "我方自己的手牌仍可作为发动手续给对方观看",
+        "角色相反的FAQ只能作为相关资料，不能直接套用结论"
+      ]
+    },
+    {
+      "id": "prohibition-declared-monster-can-be-ritual-tribute",
+      "question": "被「禁止令」宣言的怪兽能被仪式魔法解放吗？",
+      "expectedCardNames": ["禁止令"],
+      "expectedAnswer": "可以。",
+      "expectedAnswerKeyPoints": [
+        "禁止令禁止作为需要素材的融合、同调、超量、连接召唤素材",
+        "仪式召唤时的解放不在该封闭列举中"
+      ]
+    },
+    {
+      "id": "gagaga-atlantis-xyz-activation-and-resolution-path",
+      "question": "如果对方「传说之都 亚特兰蒂斯」的降星效果适用中，我方使用「我我我魔导士-我我我魔导」的效果，以墓地里一只6星怪兽为对象，并适用『那之后，要作为多维素材的1只怪兽的等级视为与另1只怪兽相同的等级』的效果，可以发动吗，处理怎样进行？",
+      "expectedAnswerKeyPoints": [
+        "发动前额外卡组必须有可以超量召唤的3阶或6阶怪兽",
+        "不存在该发动时可行路径时不能发动",
+        "特殊召唤两只怪兽后因等级变化已无可行超量召唤时，效果就在特殊召唤两只怪兽后结束"
+      ]
+    },
+    {
+      "id": "albaz-cost-enables-opponent-immunity",
+      "question": "我方的额外卡组有「冰剑龙 幻冰龙」，手牌只有「教导的圣女 艾克莉西娅」和「阿不思的落胤」各1张。对方场上只有表侧表示的「吞食圣痕之龙」1只，双方墓地没有卡。我方召唤「阿不思的落胤」时，可以将「教导的圣女 艾克莉西娅」作为Cost丢弃送去墓地，来发动「阿不思的落胤」的『①』效果吗？",
+      "expectedAnswer": "可以发动，但是不会进行任何效果处理。",
+      "expectedAnswerKeyPoints": [
+        "发动前存在合法的融合召唤路径",
+        "丢弃圣女作为cost后墓地状态改变",
+        "吞食圣痕之龙的不受其他效果影响开始适用",
+        "效果处理时无法将其作为融合素材，因此不融合召唤"
+      ]
+    },
+    {
+      "id": "evenly-matched-hand-activation-cannot-be-chained-by-great-thief",
+      "question": "对方从手卡把「颉颃胜负」以『自己场上没有卡存在的场合，这张卡的发动从手卡也能用』的方法发动的场合，我方能发动「天下独步的大义贼」的①效果吗？",
+      "expectedAnswer": "不能连锁发动。",
+      "expectedAnswerKeyPoints": [
+        "从手卡发动颉颃胜负的场景不满足天下独步的大义贼①效果的连锁条件"
+      ]
+    },
+    {
+      "id": "yubel-rewritten-effect-destruction-attribution",
+      "question": "我方场上存在「于贝尔精灵」和「献祭魔界莲」，对方场上存在「于贝尔」。对方结束阶段，对方「于贝尔」的③效果发动时，我方连锁发动「献祭魔界莲」的②效果，把这个效果处理改写为『场上1只「于贝尔」怪兽破坏』后，对方选「于贝尔」自身破坏的场合，是被自身③效果破坏吗，可以发动④效果吗？",
+      "expectedAnswer": "不是被自身③效果破坏，可以发动④效果。",
+      "expectedAnswerKeyPoints": [
+        "改写后破坏的效果归因不是于贝尔自身③",
+        "满足于贝尔④的发动条件"
+      ]
+    },
+    {
+      "id": "rivalry-zero-resolution-order",
+      "question": "对方场上存在「千查万别」时，我方可以发动「闪刀姬=零露」的②效果吗？",
+      "expectedAnswer": "可以发动。",
+      "expectedAnswerKeyPoints": [
+        "先特殊召唤闪刀姬-零衣和闪刀姬-露世",
+        "再选择破坏场上1张卡",
+        "破坏千查万别时两只怪兽正常留场",
+        "破坏其他卡时处理后必须选一只送去墓地"
+      ]
+    },
+    {
+      "id": "moonlight-silver-hound-lingering-restriction-ends-irreversibly",
+      "question": "「月光银狗」的①效果适用后，这个效果特殊召唤的怪兽控制权变更的场合，『自己不是「月光」怪兽不能从额外卡组特殊召唤』还适用吗，之后控制权归还后还会恢复适用吗？",
+      "expectedAnswer": "控制权变更时立即不适用，之后控制权归还也不会恢复适用。",
+      "expectedAnswerKeyPoints": [
+        "只要该特殊召唤怪兽在自己场上存在的条件首次不满足时效果实例结束",
+        "之后条件再次满足也不自动恢复"
+      ]
+    },
+    {
+      "id": "dark-magician-destruction-and-abyss-swordsoul-chain-order",
+      "question": "自己场上表侧表示存在「混沌之黑魔术师」，手牌中有「深渊之相剑龙」。本回合，自己已经发动过魔法卡的效果。是否可以将「混沌之黑魔术师」除外，从额外卡组特殊召唤「毁灭之黑魔术师」？如果可以特殊召唤，那么之后是否还可以发动手牌中「深渊之相剑龙」的效果？",
+      "expectedAnswer": "可以特殊召唤，也可以发动深渊之相剑龙的①效果。",
+      "expectedAnswerKeyPoints": [
+        "先宣言发动毁灭之黑魔术师的②效果",
+        "确认对方是否连锁",
+        "对方不连锁时可以连锁发动手牌深渊之相剑龙的①效果"
+      ]
     }
   ]
 }
