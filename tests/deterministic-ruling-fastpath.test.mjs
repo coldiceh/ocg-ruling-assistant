@@ -5,394 +5,127 @@ import { answerRagRulingQuestion } from "../backend/ragRulingPipeline.mjs";
 const localEnv = {
   MODEL_PROVIDER: "mock",
   RAG_MODEL_PROVIDER: "mock",
-  RAG_DRY_RUN: "1",
+  RAG_DRY_RUN: "0",
+  RAG_LIVE_OFFICIAL_QA_ENABLED: "false",
+  RAG_AUTO_ENGINE_SIMULATION: "false",
+  RAG_FORMAL_ENGINE_MODE: "off",
   OCG_ENGINE_ENABLED: "0",
 };
 
-test("trusted semantic execution answers the real post-cost immunity scenario without calling the final model", async () => {
-  const remoteModelCalls = [];
+const completeScenarioCards = [{
+  id: "architecture-source",
+  name: "测试融合术士",
+  effectText: "这张卡召唤・特殊召唤的场合，舍弃1张手牌可以发动。将包含此卡在内的自己或对方场上的怪兽作为融合素材进行融合召唤。不可将自己场上其他怪兽作为融合素材。",
+}, {
+  id: "architecture-cost",
+  name: "圣女代价卡",
+  effectText: "“圣女”怪兽。",
+}, {
+  id: "architecture-protected",
+  name: "测试抗性龙",
+  cardType: "fusion",
+  effectText: "只要自己或对方的场上或墓地存在“圣女”怪兽，此卡不受此卡以外的效果影响。",
+}, {
+  id: "architecture-target",
+  name: "测试冰剑融合龙",
+  cardType: "fusion",
+  effectText: "“测试融合术士”＋融合・同步・超量・连接怪兽",
+}];
+
+test("a complete scene still runs both evidence extractors and exactly one final judge", async () => {
+  let cardExtractorCalls = 0;
+  let ruleExtractorCalls = 0;
+  let finalModelCalls = 0;
+  let finalPrompt = "";
+
   const answer = await answerRagRulingQuestion({
-    question: "我方额外卡组有「测试冰剑融合龙」。对方场上存在的卡只有表侧表示的「吞食圣痕之龙」1只，双方墓地没有卡。我方召唤「阿不思的落胤」时，可以将「教导的圣女 艾克莉西亚」作为Cost丢弃来发动其效果吗，后续怎么处理？",
-    cards: [{
-      id: "100001",
-      name: "阿不思的落胤",
-      aliases: ["阿不思的落胤"],
-      effectText: "这张卡召唤・特殊召唤的场合，舍弃1张手牌可以发动。将包含此卡在内的自己或对方场上的怪兽作为融合素材进行融合召唤。不可将自己场上其他的怪兽作为融合素材。",
-    }, {
-      id: "100002",
-      name: "教导的圣女 艾克莉西亚",
-      aliases: ["教导的圣女 艾克莉西亚"],
-      effectText: "“艾克利西亚”怪兽。",
-    }, {
-      id: "100003",
-      name: "吞喰圣痕之龙",
-      aliases: ["吞喰圣痕之龙"],
-      cardType: "fusion",
-      effectText: "只要自己或对方的场上或墓地存在“艾克利西亚”怪兽，此卡不受此卡以外的效果影响。",
-    }, {
-      id: "100004",
-      name: "测试冰剑融合龙",
-      aliases: ["测试冰剑融合龙"],
-      effectText: "“阿不思的落胤”＋融合・同步・超量・连接怪兽",
-    }],
-    records: [{
-      id: "faq-for-activated-source",
-      recordType: "card-faq",
-      title: "发动源卡的处理 FAQ",
-      cardIds: ["100001"],
-      text: "这条 FAQ 只直接关联发动效果的测试融合怪兽。",
-    }, {
-      id: "faq-for-other-field-card",
-      recordType: "card-faq",
-      title: "另一张场上卡的 FAQ",
-      cardIds: ["100003"],
-      text: "这条 FAQ 只直接关联场上的测试抗性怪兽。",
-    }],
+    question: "我方额外卡组有「测试冰剑融合龙」。对方场上只有表侧表示的「测试抗性龙」。我方召唤「测试融合术士」时，可以将「圣女代价卡」作为Cost丢弃来发动其效果吗，后续怎么处理？",
+    cards: completeScenarioCards,
+    records: [],
     qaRecords: [],
-    env: {
-      ...localEnv,
-      MODEL_PROVIDER: "deepseek",
-      RAG_MODEL_PROVIDER: "deepseek",
-      RAG_PROVIDER: "deepseek",
-      RAG_DRY_RUN: "0",
-      DEEPSEEK_API_KEY: "test-key",
-    },
+    env: localEnv,
     dryRun: false,
-    cardModelInvoker: async () => JSON.stringify({ cardNames: [] }),
-    ruleModelInvoker: async () => JSON.stringify({ ruleQueries: [] }),
-    fetchImpl: async (url) => {
-      if (/api\.deepseek\.com/iu.test(String(url))) remoteModelCalls.push(String(url));
-      return new Response(JSON.stringify({ result: [], next: 0 }), {
-        status: 200,
-        headers: { "content-type": "application/json" },
+    cardModelInvoker: async () => {
+      cardExtractorCalls += 1;
+      return JSON.stringify({ cardNames: [] });
+    },
+    ruleModelInvoker: async () => {
+      ruleExtractorCalls += 1;
+      return JSON.stringify({ ruleQueries: [] });
+    },
+    modelInvoker: async ({ prompt }) => {
+      finalModelCalls += 1;
+      finalPrompt = prompt;
+      return JSON.stringify({
+        answerLevel: "rule_analysis",
+        shortAnswer: "可以发动；支付代价后重新检查效果处理，不能使用已不受影响的怪兽作素材时，不进行融合召唤。",
+        reasoning: [
+          "发动时手牌可支付，发动合法。",
+          "代价支付后场面状态改变，处理时必须按当前状态重新判断可用融合素材。",
+        ],
+        usedCards: ["测试融合术士", "圣女代价卡", "测试抗性龙", "测试冰剑融合龙"],
+        usedEvidence: [
+          { id: "card-text-architecture-source", type: "card_text", title: "测试融合术士 的卡片文本" },
+          { id: "card-text-architecture-protected", type: "card_text", title: "测试抗性龙 的卡片文本" },
+        ],
+        missingInfo: [],
+        riskFlags: ["no_official_direct_qa"],
+        confidenceSelfEstimate: "medium",
       });
     },
   });
 
+  assert.equal(cardExtractorCalls, 1);
+  assert.equal(ruleExtractorCalls, 1);
+  assert.equal(finalModelCalls, 1);
   assert.match(answer.shortAnswer, /^可以发动/u);
-  assert.match(answer.shortAnswer, /cost.*进入墓地/u);
-  assert.match(answer.shortAnswer, /开始不受这次效果影响/u);
-  assert.match(answer.shortAnswer, /不进行融合召唤/u);
-  assert.ok(answer.resolvedCards.some((card) => card.name === "吞喰圣痕之龙"));
-  assert.deepEqual(answer.debug.unresolvedMentions, []);
-  assert.equal(answer.debug.deterministicDecision, "state_transition");
-  assert.equal(answer.debug.modelUsed, "trusted-semantic-state-executor");
-  assert.equal(answer.debug.timingsMs.finalModel, 0);
-  assert.deepEqual(remoteModelCalls, []);
-  assert.ok(answer.riskFlags.includes("trusted_local_semantic_execution"));
-  assert.ok(answer.riskFlags.includes("final_model_skipped"));
-  assert.ok(answer.usedEvidence.some((item) => item.type === "card_text"));
-  assert.equal(answer.usedEvidence.some((item) => item.id === "faq-for-other-field-card"), false);
+  assert.equal(answer.debug.deterministicDecision, null);
+  assert.equal(answer.debug.semanticStateTransition, null);
+  assert.equal(answer.debug.semanticStateTransitionDiagnostic, null);
+  assert.equal(answer.usedEvidence.some((item) => item.type === "semantic_state_transition"), false);
+  assert.match(finalPrompt, /"semanticStateTransition": \{\s*"status": "not_applicable",\s*"complete": false\s*\}/u);
+  assert.doesNotMatch(finalPrompt, /"activation":|"resolution":|"structuredTrace": \[[^\]]/u);
+  assert.doesNotMatch(finalPrompt, /trusted-semantic-state-executor|trusted_local_semantic_execution|final_model_skipped/u);
 });
 
-test("renaming every card preserves the trusted semantic fast-path result", async () => {
-  let cardNameModelCalls = 0;
-  let ruleQueryModelCalls = 0;
-  const answer = await answerRagRulingQuestion({
-    question: "我方额外卡组有「测试冰剑融合龙」。对方场上只有表侧表示的「测试抗性龙」。我方召唤「测试融合术士」时，可以将「圣女代价卡」作为Cost丢弃来发动其效果吗，后续怎么处理？",
-    cards: [{
-      id: "preflight-source",
-      name: "测试融合术士",
-      effectText: "这张卡召唤・特殊召唤的场合，舍弃1张手牌可以发动。将包含此卡在内的自己或对方场上的怪兽作为融合素材进行融合召唤。不可将自己场上其他的怪兽作为融合素材。",
-    }, {
-      id: "preflight-cost",
-      name: "圣女代价卡",
-      effectText: "“圣女”怪兽。",
-    }, {
-      id: "preflight-protected",
-      name: "测试抗性龙",
-      cardType: "fusion",
-      effectText: "只要自己或对方的场上或墓地存在“圣女”怪兽，此卡不受此卡以外的效果影响。",
-    }, {
-      id: "preflight-target",
-      name: "测试冰剑融合龙",
-      cardType: "fusion",
-      effectText: "“测试融合术士”＋融合・同步・超量・连接怪兽",
-    }],
-    records: [],
-    qaRecords: [],
-    env: { ...localEnv, RAG_DRY_RUN: "0" },
-    dryRun: false,
-    cardModelInvoker: async () => {
-      cardNameModelCalls += 1;
-      return JSON.stringify({ cardNames: [] });
-    },
-    ruleModelInvoker: async () => {
-      ruleQueryModelCalls += 1;
-      return JSON.stringify({ ruleQueries: [] });
-    },
-  });
+test("an unresolved card cannot revive a local fast path and still reaches the final judge", async () => {
+  let finalModelCalls = 0;
+  let finalPrompt = "";
 
-  assert.equal(cardNameModelCalls, 1);
-  assert.equal(ruleQueryModelCalls, 1);
-  assert.notEqual(answer.debug.cardNameModelUsed, "none");
-  assert.notEqual(answer.debug.ruleQueryModelUsed, "none");
-  assert.equal(answer.debug.deterministicDecision, "state_transition");
-  assert.equal(answer.debug.modelUsed, "trusted-semantic-state-executor");
-  assert.equal(answer.debug.semanticStateTransition.activation, "legal");
-  assert.equal(answer.debug.semanticStateTransition.resolution, "not_performed");
-  assert.match(answer.shortAnswer, /^可以发动/u);
-  assert.match(answer.shortAnswer, /不进行融合召唤/u);
-  assert.doesNotMatch(JSON.stringify(answer), /阿不思|艾克利西亚|吞(?:食|喰)圣痕|冰剑龙/u);
-});
-
-test("incomplete deterministic preflight preserves auxiliary extraction models in an injected mock run", async () => {
-  let cardNameModelCalls = 0;
-  let ruleQueryModelCalls = 0;
   const answer = await answerRagRulingQuestion({
     question: "「尚未收录的测试龙」的效果可以发动吗？",
     cards: [],
     records: [],
     qaRecords: [],
-    env: { ...localEnv, RAG_DRY_RUN: "0" },
+    env: localEnv,
     dryRun: false,
-    fetchImpl: async () => new Response(JSON.stringify({ result: [], next: 0 }), {
-      status: 200,
-      headers: { "content-type": "application/json" },
-    }),
-    cardModelInvoker: async () => {
-      cardNameModelCalls += 1;
-      return JSON.stringify({ cardNames: [] });
+    cardModelInvoker: async () => JSON.stringify({ cardNames: ["尚未收录的测试龙"] }),
+    ruleModelInvoker: async () => JSON.stringify({ ruleQueries: ["效果发动条件"] }),
+    modelInvoker: async ({ prompt }) => {
+      finalModelCalls += 1;
+      finalPrompt = prompt;
+      return JSON.stringify({
+        answerLevel: "needs_more_info",
+        shortAnswer: "尚未取得这张卡的卡片文本，暂时无法判断能否发动。",
+        reasoning: [
+          "当前证据中没有这张卡的效果文本。",
+          "必须先确认效果文本、所在区域和当前时点，才能检查发动条件。",
+        ],
+        usedCards: [],
+        usedEvidence: [],
+        missingInfo: ["尚未收录的测试龙的完整卡片文本"],
+        riskFlags: ["unresolved_card_name"],
+        confidenceSelfEstimate: "low",
+      });
     },
-    ruleModelInvoker: async () => {
-      ruleQueryModelCalls += 1;
-      return JSON.stringify({ ruleQueries: [] });
-    },
   });
 
-  assert.equal(cardNameModelCalls, 1);
-  assert.equal(ruleQueryModelCalls, 1);
-  assert.notEqual(answer.debug.cardNameModelUsed, "none");
-  assert.notEqual(answer.debug.ruleQueryModelUsed, "none");
+  assert.ok(finalModelCalls >= 1, "an unresolved card must still reach the final judge");
+  assert.ok(answer.debug.unresolvedMentions.some((mention) => mention.input === "尚未收录的测试龙"));
   assert.equal(answer.debug.deterministicDecision, null);
-});
-
-test("the historical production wording uses the generic trusted semantic executor", async () => {
-  const answer = await answerRagRulingQuestion({
-    question: "我方的额外卡组有「冰剑龙 幻冰龙」，手牌只有「教导的圣女 艾克莉西娅」和「阿不思的落胤」各1张。\n\n对方场上存在的卡只有表侧表示的「吞食圣痕之龙」1只，双方墓地没有卡。\n\n我方召唤「阿不思的落胤」时，可以将「教导的圣女 艾克莉西娅」作为Cost丢弃送去墓地，来发动「阿不思的落胤」的『①』效果吗",
-    env: localEnv,
-    dryRun: true,
-  });
-
-  assert.match(answer.shortAnswer, /^可以发动/u);
-  assert.match(answer.shortAnswer, /不进行融合召唤/u);
-  assert.equal(
-    answer.debug.unresolvedMentions.some((mention) => mention.input === "冰剑龙 幻冰龙"),
-    false,
-  );
-  assert.ok(answer.resolvedCards.some((card) => card.name === "教导之圣女 艾克利西亚"));
-  assert.ok(answer.resolvedCards.some((card) => card.name === "阿尔白斯之落胤"));
-  assert.ok(answer.resolvedCards.some((card) => card.name === "吞喰圣痕之龙"));
-  assert.equal(answer.debug.deterministicDecision, "state_transition");
-  assert.equal(answer.debug.modelUsed, "trusted-semantic-state-executor");
-  assert.equal(answer.debug.timingsMs.finalModel, 0);
-  assert.equal(answer.debug.cardNameModelUsed, "none");
-  assert.equal(answer.debug.ruleQueryModelUsed, "none");
-  assert.equal(answer.debug.timingsMs.auxiliaryExtractionModels, 0);
-  assert.ok(answer.debug.cardNameWarnings.includes("card_name_model_skipped_trusted_semantic_preflight"));
-  assert.ok(answer.debug.ruleQueryWarnings.includes("rule_query_model_skipped_trusted_semantic_preflight"));
-});
-
-test("a summon-bound restriction expires permanently through the public trusted fast path", async () => {
-  const answer = await answerRagRulingQuestion({
-    question: "「测试银犬」的①效果适用后，以该效果特殊召唤的怪兽控制权转移给对方，之后又回到自己场上的场合，『自己不是「测试月影」怪兽不能从额外卡组特殊召唤』如何适用？",
-    cards: [{
-      id: "generic-silver-hound",
-      name: "测试银犬",
-      cardType: "monster",
-      effectText: "①：此卡因效果被送至墓地的情况下可以发动。从牌组将“测试银犬”以外的1只“测试月影”怪兽特殊召唤。只要以此效果特殊召唤的怪兽以表侧表示存在于自己场上，自己从额外牌组仅可特殊召唤“测试月影”怪兽。",
-    }],
-    records: [],
-    qaRecords: [],
-    env: localEnv,
-    dryRun: true,
-  });
-
-  assert.match(answer.shortAnswer, /控制权变更后.*立即不再适用/u);
-  assert.match(answer.shortAnswer, /控制权归还.*不会恢复适用/u);
-  assert.equal(answer.debug.deterministicDecision, "state_transition");
-  assert.equal(answer.debug.modelUsed, "trusted-semantic-state-executor");
-  assert.equal(answer.debug.timingsMs.finalModel, 0);
-  assert.equal(answer.debug.timingsMs.auxiliaryExtractionModels, 0);
-  assert.ok(answer.riskFlags.includes("trusted_local_semantic_execution"));
-  assert.doesNotMatch(JSON.stringify(answer), /月光银狗/u);
-});
-
-test("authority-boundary downgrade remains diagnostic and cannot skip the final model", async () => {
-  const answer = await answerRagRulingQuestion({
-    question: "对方场上存在「匿名去向载体」。自己可以发动「匿名融合操作」吗？发动时丢弃手牌，并将双方场上的怪兽作为素材。",
-    cards: [{
-      id: "anonymous-fusion-operation",
-      name: "匿名融合操作",
-      cardType: "spell",
-      effectText: "①：舍弃1张手牌可以发动。以自己・对手场上的怪兽作为融合素材，将1只融合怪兽融合召唤。",
-    }, {
-      id: "anonymous-destination-carrier",
-      name: "匿名去向载体",
-      cardType: "monster",
-      effectText: "①：只要此卡存在于怪兽区域，对方的卡送去墓地的场合，不去墓地而除外。",
-    }],
-    records: [],
-    qaRecords: [],
-    env: localEnv,
-    dryRun: true,
-  });
-
-  assert.equal(answer.debug.deterministicDecision, null);
-  assert.notEqual(answer.debug.modelUsed, "trusted-semantic-state-executor");
   assert.equal(answer.debug.semanticStateTransition, null);
-  assert.equal(answer.debug.semanticStateTransitionDiagnostic.complete, false);
-  assert.ok(answer.debug.semanticStateTransitionDiagnostic.authorityReasons.includes("synthetic_entity_or_material"));
-});
-
-test("a public-hand wording plus an untyped note cannot block before the final model", async () => {
-  const answer = await answerRagRulingQuestion({
-    question: "我方看透心灵之眼适用中，我方有手牌，我方能发动红莲的指名者吗？",
-    cards: [{
-      id: "neutral-opponent-hand-reveal",
-      name: "看透心灵之眼",
-      effectText: "自己场上或墓地存在指定系列卡期间，对方必须持续公开全部手牌。",
-    }, {
-      id: "neutral-hand-show-procedure",
-      name: "红莲的指名者",
-      effectText: "支付2000基本分，将手牌全部出示给对手可以发动。确认对方的手牌，从其中选1张除外。",
-    }],
-    records: [{
-      id: "neutral-public-hand-procedure-rule",
-      recordType: "faq",
-      type: "faq",
-      title: "已经公开的手牌与展示手续",
-      cardIds: ["neutral-hand-show-procedure"],
-      cards: ["红莲的指名者"],
-      text: "自己的手牌已因其他卡的效果持续公开时，不能发动需要把自己的手牌给对方观看的效果。",
-    }],
-    qaRecords: [],
-    env: { ...localEnv, RAG_DRY_RUN: "0" },
-    dryRun: false,
-  });
-
-  assert.match(answer.shortAnswer, /未确认分析/u);
-  assert.equal(answer.debug.deterministicDecision, null);
-  assert.notEqual(answer.debug.modelUsed, "deterministic-ruling-reasoner");
-});
-
-test("deterministic fast path does not ignore an unresolved card in the described state", async () => {
-  const answer = await answerRagRulingQuestion({
-    question: [
-      "我方额外卡组有「测试冰剑融合龙」，手牌有「测试代价卡」。",
-      "对方场上有表侧表示的「测试抗性龙」和「未识别屏障」。",
-      "我方召唤「测试融合术士」时，将「测试代价卡」作为Cost丢弃发动效果，后续怎么处理？",
-    ].join(""),
-    cards: [{
-      id: "guarded-source",
-      name: "测试融合术士",
-      effectText: "这张卡召唤的场合，舍弃1张手牌可以发动。将包含此卡在内的自己或对方场上的怪兽作为融合素材进行融合召唤。",
-    }, {
-      id: "guarded-cost",
-      name: "测试代价卡",
-      effectText: "测试系列怪兽。",
-    }, {
-      id: "guarded-material",
-      name: "测试抗性龙",
-      cardType: "fusion",
-      effectText: "只要场上或墓地存在“测试系列”怪兽，此卡不受此卡以外的效果影响。",
-    }, {
-      id: "guarded-target",
-      name: "测试冰剑融合龙",
-      cardType: "fusion",
-      effectText: "「测试融合术士」＋融合怪兽",
-    }],
-    records: [],
-    qaRecords: [],
-    env: localEnv,
-    dryRun: true,
-    fetchImpl: async () => ({
-      ok: true,
-      status: 200,
-      json: async () => ({ result: [], next: 0 }),
-    }),
-  });
-
-  assert.ok(answer.debug.unresolvedMentions.some((mention) => mention.input === "未识别屏障"));
-  assert.equal(answer.debug.deterministicDecision, null);
-  assert.notEqual(answer.debug.modelUsed, "deterministic-ruling-reasoner");
-});
-
-test("an untyped mandatory-return template cannot issue a production rejection", async () => {
-  const answer = await answerRagRulingQuestion({
-    question: "对方场上有「绚岚之达维」，我方以达维为对象发动「无限泡影」，这个时候场上没有其他魔陷，对方能不能发动「天雷之双风神」的效果？",
-    cards: [{
-      id: "wind-monster",
-      name: "绚岚之达象",
-      aliases: ["绚岚之达象"],
-      cardType: "monster",
-      effectText: "风属性怪兽。",
-    }, {
-      id: "active-trap",
-      name: "无限泡影",
-      aliases: ["无限泡影"],
-      cardType: "trap",
-      effectText: "以场上1只怪兽为对象发动。那只怪兽的效果直到回合结束时无效。",
-    }, {
-      id: "mandatory-returner",
-      name: "天雷之双风神 息那",
-      aliases: ["天雷之双风神", "天雷之双风神 息那"],
-      cardType: "monster",
-      effectText: "自己场上存在风属性怪兽，且对手发动魔法・陷阱卡的效果时可以发动。从手牌将此卡特殊召唤。然后，将场上的魔法・陷阱卡全部放回手牌。",
-    }],
-    records: [{
-      id: "rule-active-trap-return",
-      recordType: "rule-doc",
-      sourceId: "ocg-rule",
-      type: "rulebook",
-      title: "发动中卡片与必做处理",
-      text: "正在发动或连锁处理中的非永续魔法・陷阱卡不能从场上返回手牌。除自身以外没有其他能适用返回处理的魔法・陷阱卡时，要求进行该必做处理的效果不能发动。",
-    }],
-    qaRecords: [],
-    env: localEnv,
-    dryRun: true,
-  });
-
-  assert.match(answer.shortAnswer, /未确认分析/u);
-  assert.ok(answer.resolvedCards.some((card) => card.name === "绚岚之达象"));
-  assert.deepEqual(answer.debug.unresolvedMentions, []);
-  assert.equal(answer.debug.deterministicDecision, null);
-  assert.notEqual(answer.debug.modelUsed, "deterministic-ruling-reasoner");
-});
-
-test("an untyped destruction-replacement template cannot issue a production sequence", async () => {
-  const answer = await answerRagRulingQuestion({
-    question: "双方场上都只有一只怪兽的时候，对方发动了手卡「破械冥官·笔」的效果，要将场上的「破械焰魔天·阎摩」破坏，此时对方选择适用「破械焰魔天·阎摩」的效果想要破坏我方场上的「完美电子多元驱动蛇·神龙」，我方场上的「完美电子多元驱动蛇·神龙」可以作为被破坏的替代降低1000攻击力吗？如果适用降低1000攻击力，对方的「破械冥官·笔」还能特殊召唤吗？",
-    cards: [{
-      id: "23172",
-      name: "破械冥官カムラ",
-      aliases: ["破械冥官·笔", "破械冥官カムラ"],
-      effectText: "①：自分フィールドのカードを３枚まで対象として発動できる。そのカードを破壊し、このカードを手札から特殊召喚する。その後、破壊したカードの元々の種類によって以下の効果をそれぞれ適用できる。",
-    }, {
-      id: "23173",
-      name: "破械焔魔天ヤマ",
-      aliases: ["破械焰魔天·阎摩", "破械焰魔天 阎摩", "破械焔魔天ヤマ"],
-      effectText: "②：フィールドのこのカードが戦闘・効果で破壊される場合、代わりに自分か相手のフィールドの表側表示カード１枚を破壊できる。",
-    }, {
-      id: "22743",
-      name: "パーフェクトロン・ハイドライブ・ドラゴン",
-      aliases: ["完美电子多元驱动蛇·神龙", "パーフェクトロン・ハイドライブ・ドラゴン"],
-      effectText: "③：攻撃力１０００以上のこのカードが戦闘・効果で破壊される場合、代わりにこのカードの攻撃力を１０００下げた数値にできる。",
-    }],
-    records: [{
-      id: "rule-turn-player-replacement-first",
-      recordType: "rule-doc",
-      sourceId: "ocg-rule",
-      type: "rulebook",
-      title: "同一时点双方的代替破坏",
-      text: "同1时点双方都要适用代替破坏的效果时，回合玩家的先适用，之后非回合玩家持有这类效果的卡已经不在场上存在的场合，不适用。",
-    }],
-    qaRecords: [],
-    env: localEnv,
-    dryRun: true,
-  });
-
-  assert.match(answer.shortAnswer, /未确认分析/u);
-  assert.equal(answer.debug.deterministicDecision, null);
-  assert.notEqual(answer.debug.modelUsed, "deterministic-ruling-reasoner");
+  assert.equal(answer.debug.semanticStateTransitionDiagnostic, null);
+  assert.match(finalPrompt, /尚未收录的测试龙/u);
+  assert.notEqual(answer.debug.modelUsed, "trusted-semantic-state-executor");
+  assert.doesNotMatch(JSON.stringify(answer.usedEvidence), /semantic|state_transition/u);
 });

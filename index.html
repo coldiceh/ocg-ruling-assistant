@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>游戏王OCG规则助手</title>
-    <link rel="stylesheet" href="src/styles.css?v=20260803-pipeline-timing-1" />
+    <link rel="stylesheet" href="src/styles.css?v=20260803-admin-model-compare-1" />
   </head>
   <body class="theme-night">
     <div class="page-background" aria-hidden="true"></div>
@@ -290,6 +290,19 @@
                 </form>
               </section>
 
+              <section class="admin-lab-section" id="adminComparisonSection" aria-labelledby="adminComparisonTitle">
+                <div class="admin-section-head">
+                  <div>
+                    <h3 id="adminComparisonTitle">同一冻结证据模型对比</h3>
+                    <p>源运行完成后，可用完全相同的 Evidence Snapshot 依次测试多个模型；不会重新检索资料。</p>
+                  </div>
+                  <button class="primary-button" id="adminCompareButton" type="button" disabled>开始对比</button>
+                </div>
+                <div class="admin-comparison-options" id="adminComparisonOptions" role="group" aria-label="选择对比模型"></div>
+                <p class="admin-status" id="adminComparisonStatus" role="status">先完成或载入一条已有实验。</p>
+                <div class="admin-comparison-results" id="adminComparisonResults"></div>
+              </section>
+
               <div class="admin-lab-columns">
                 <section class="admin-lab-section" aria-labelledby="adminHistoryTitle">
                   <div class="admin-section-head">
@@ -343,6 +356,6 @@
       </main>
     </div>
 
-    <script src="src/app.js?v=20260803-executor-label-1"></script>
+    <script src="src/app.js?v=20260803-admin-model-compare-1"></script>
   </body>
 </html>

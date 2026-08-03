@@ -397,7 +397,7 @@ test("baige_card_text_is_not_official_direct", async () => {
   assert.ok(!answer.usedEvidence.some((item) => item.type === "official_qa"));
 });
 
-test("a newly indexed continuous effect feeds generic hand-visibility legality reasoning", async () => {
+test("player-role binding keeps an opponent-public hand distinct from the actor's own hand", async () => {
   clearBaigeSearchCache();
   let finalPrompt = "";
   const answer = await answerRagRulingQuestion({
@@ -441,10 +441,10 @@ test("a newly indexed continuous effect feeds generic hand-visibility legality r
       finalPrompt = prompt;
       return JSON.stringify({
         answerLevel: "rule_analysis",
-        shortAnswer: "不能发动。自己的手牌已经因其他卡的效果公开时，不能再进行『将手牌全部出示给对手』这一发动手续。",
+        shortAnswer: "可以发动。看透心灵之眼公开的是对方手牌，我方自己的手牌仍能给对方观看。",
         reasoning: [
           "红莲指名者要求把自己的全部手牌出示给对手后才能发动。",
-          "相关 FAQ 明确：自己的手牌已有1张以上因其他卡的效果公开时，不能发动。",
+          "相关 FAQ 只约束自己的手牌已经公开的场景；本题公开的是对方手牌，玩家角色相反。",
         ],
         usedCards: ["红莲指名者", "看透心灵之眼"],
         usedEvidence: [{ id: "card-faq-8515-1", type: "official_qa", title: "红莲指名者 FAQ" }],
@@ -455,11 +455,12 @@ test("a newly indexed continuous effect feeds generic hand-visibility legality r
     },
   });
 
-  assert.match(answer.shortAnswer, /^不能发动/u);
+  assert.match(answer.shortAnswer, /^可以发动/u);
   assert.ok(answer.resolvedCards.some((card) => card.name === "看透心灵之眼"));
   assert.equal(answer.debug.unresolvedMentions.length, 0);
   assert.match(finalPrompt, /自己的手牌有1张以上已经因其他卡的效果公开时，不能发动/u);
   assert.match(finalPrompt, /将手牌全部出示给对手/u);
+  assert.match(finalPrompt, /先绑定参与者角色/u);
   assert.equal(answer.debug.deterministicDecision, null);
   assert.notEqual(answer.debug.modelUsed, "deterministic-ruling-reasoner");
 });
@@ -654,8 +655,8 @@ test("albaz_activation_rechecks_continuous_effects_after_paying_cost", async () 
     new Set(answer.resolvedCards.map((card) => card.id)),
     new Set(["15239", "15245", "17069", "22090"]),
   );
-  assert.match(finalPrompt, /支付cost后艾克利西亚进入墓地/u);
-  assert.match(finalPrompt, /按支付后的场面重新判断/u);
+  assert.match(finalPrompt, /发动合法性与效果处理必须分开/u);
+  assert.match(finalPrompt, /支付cost后逐步更新状态/u);
 });
 
 test("numbered card identity keeps No and CNo families distinct", () => {

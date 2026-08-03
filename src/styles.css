@@ -684,6 +684,73 @@ button:focus-visible {
   background: var(--glass-soft);
 }
 
+.admin-comparison-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.admin-comparison-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: var(--glass-strong);
+  cursor: pointer;
+}
+
+.admin-comparison-option input {
+  margin-top: 3px;
+}
+
+.admin-comparison-option span,
+.admin-comparison-option small {
+  display: block;
+}
+
+.admin-comparison-option span {
+  font-weight: 900;
+}
+
+.admin-comparison-option small {
+  margin-top: 3px;
+  color: var(--muted);
+}
+
+.admin-comparison-results {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.admin-comparison-result {
+  padding: 12px;
+  border-left: 3px solid var(--cyan);
+  background: var(--glass-strong);
+}
+
+.admin-comparison-result.is-error {
+  border-left-color: var(--bad);
+}
+
+.admin-comparison-result h4,
+.admin-comparison-result p {
+  margin: 0;
+}
+
+.admin-comparison-result p {
+  margin-top: 7px;
+  line-height: 1.6;
+}
+
+.admin-comparison-metrics {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
 .admin-question-field {
   display: block;
   margin-top: 14px;

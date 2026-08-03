@@ -56,7 +56,12 @@ export function buildRagRulingPromptBundle({
     cardResolution,
     baigeAmbiguousMentions: evidence.baigeAmbiguousMentions,
   });
-  if (authoritativeDirect && !(evidence.formalEngineProofs || []).length) {
+  // Keep the focused official-Q&A path opt-in until scene equivalence includes
+  // player roles, zones and the exact processing node.  The candidate itself
+  // is still included verbatim in the normal evidence payload.
+  if (isEnabled(env.RAG_OFFICIAL_DIRECT_FOCUSED_PROMPT)
+    && authoritativeDirect
+    && !(evidence.formalEngineProofs || []).length) {
     warnings.push("official_direct_focused_prompt");
     const promptResult = buildOfficialDirectPrompt({
       userQuery: payload.userQuery,
@@ -106,14 +111,14 @@ export function buildRagRulingPromptBundle({
     "如果没有官方直接 Q&A，允许根据卡片文本、百鸽卡片资料、用户提供文本、FAQ、官方相似案例和 rulebook 规则书资料进行分析。",
     "ruleSearchQueries 是后端为检索规则资料生成的查询词，只能作为检索线索；最终理由必须基于 evidence 中真实存在的资料、卡片文本和题目事实。",
     "resolvedCards 是本地资料或百鸽已经匹配成功的卡片；其中已有 cardType、attribute 或效果文本时，不得再把该卡写成‘未识别’或‘属性未确定’。只有 unresolvedMentions 中仍存在的项目才算未解析。",
-    "operationChecks 是 Flash 证据判读模型对题目每一步操作所做的检查；候选依据可以是规则书、官方 Q&A 或卡片 FAQ。后端已经校验其中引用的 evidence id 和逐字引文，未通过校验的 legal/illegal/conditional 会被降为 unknown。",
-    "对同一操作，operationChecks 中 citations 非空的 illegal 结论是强约束。legal 或 conditional 只有在 constraintAudit.hasUnresolvedConstraints=false 时才能作为强约束；status=unknown 不能作为肯定或否定依据。",
-    "constraintAudit 列出后端优先核对的限制性规则。hasUnresolvedConstraints=true 时，不得回答‘可以发动/可以进行’；必须继续依据列出的规则核对，无法完成时只能给保守的不确定结论。",
-    "hasUnresolvedConstraints=true 表示前置判读没有完成，不表示规则不适用。此时必须直接阅读 unresolvedConstraints.text，逐项比较规则条件与题目事实；若题目已明确满足阻断条件，应据此回答不能发动或不能进行，只有缺少必要事实时才保留不确定。",
-    "operationChecks、constraintAudit 和 semanticStateTransition 只属于证据整理或旧诊断信息，不是裁定证明；不得仅凭它们翻转官方资料、补造事实或签发最终结论。最终推理必须重新核对其逐字引文、卡文与题面事实。",
+    "operationChecks、constraintAudit 和 semanticStateTransition 即使存在也只是旧的证据整理诊断，不是裁定证明或强约束；最终结论必须由你重新阅读原始卡文、官方 Q&A、FAQ 与规则资料后独立得出。",
     "cardSemanticFacts 是卡文范式化器从已解析卡文抽取的候选操作，不是裁定证明；必须对照原始卡文复核。若候选为 create_lingering_restriction 且 expiration.mode=irreversible_on_first_condition_failure、reactivates=false，它表示已处理效果创建的限制实例在 activeWhile 首次不成立时永久终止，之后条件再次成立也不会自行恢复，只有重新适用原效果才能创建新实例。",
     "formalEngineProofs 来自版本协商、能力检查、完整执行检查和独立证明校验后的声明式规则内核。trusted=true 且 verdict=TRUE/FALSE 的逐查询结论是强约束，模型只能解释，不能翻转；verdict=UNKNOWN 只表示未获证明，绝不等于 FALSE，也不能单独支持‘不能’。",
     "分析任何操作时使用同一套通用执行顺序：从卡文和题面建立带来源的初始状态；分别检查手续或发动前提；执行手续、cost 与每个效果步骤并记录实际移动及归因；每次状态变化后重算持续效果；在检查点收集诱发候选并保留对方响应分支。禁止根据卡名、FAQ 编号、题面暗示答案或历史错题模板补造缺失事实。",
+    "先绑定参与者角色：逐项写清每张卡的控制者、每个动作的执行者、‘自己/对方’分别指谁、被公开或被影响的是哪一方的手卡或场。相似 Q&A 若交换了控制者、动作主体或受影响玩家，只能作为相关资料，不能直接照搬结论。",
+    "必须把发动合法性与效果处理分开：先以发动时状态检查全部必需对象、可执行后续召唤/处理及隐藏区域要求；发动合法后再逐步处理。若处理中条件变化导致后续步骤不能进行，要明确处理在哪一步结束，不得把处理时失败倒推成不能发动。",
+    "卡文或官方资料明确列举适用类型时，默认按封闭集合解释；不得把未列举的仪式、融合、同调、超量、连接、解放、素材、cost、召唤手续等不同操作自行归为同类。只有另有原文明确扩张集合时才能扩张。",
+    "效果要求在特殊召唤后继续进行融合、同调、超量、连接或其他召唤时，发动前先检查额外卡组是否至少存在一条在发动时可行的后续召唤路径；处理中再按实际新状态重算等级、属性、种族、区域与持续效果。若处理时已无可行路径，应说明前段已完成、后段不进行。",
     "较早步骤已经不合法时，结论应直接说明实际阻断原因，不要继续描述未发生的后续处理，也不要添加与当前场景无关的假设分支。",
     "相关 Q&A / FAQ 可以作为规则适用案例，但必须比较卡片、效果、时点、位置、素材数量和处理顺序；不是当前原题时不得升级为 official_confirmed。",
     "rawRelatedEvidence 中 source=rulebook_model_grounding 或 qa_rule_model_grounding 的资料是校验后的逐操作检查，不是官方 direct Q&A；其引文对应的原始证据也会作为独立 evidence 提供。",
@@ -394,7 +399,7 @@ function limitEvidence(items = [], limit, textLimit, label, warnings) {
   const source = Array.isArray(items) ? items : [];
   if (source.length > limit) warnings.push(`${label}_evidence_limited:${source.length}->${limit}`);
   return source.slice(0, limit).map((item) => {
-    const text = String(item.text || "");
+    const text = String(item.fullText || item.text || item.officialText || item.answer || "");
     const truncated = text.length > textLimit;
     if (truncated) warnings.push(`${label}_text_truncated:${item.id}`);
     return {
@@ -411,7 +416,7 @@ function limitEvidence(items = [], limit, textLimit, label, warnings) {
       atk: item.atk ?? null,
       def: item.def ?? null,
       level: item.level ?? null,
-      text: truncated ? `${text.slice(0, Math.max(0, textLimit - 1))}…` : text,
+      text: truncated ? preserveTextEnds(text, textLimit) : text,
       sourceUrl: item.sourceUrl || "",
       source: item.source || "",
       official: item.official === true,
@@ -448,8 +453,10 @@ function limitEvidence(items = [], limit, textLimit, label, warnings) {
 
 function buildCompactRagPrompt({ payload, maxPromptChars }) {
   const maxChars = Math.max(600, Number(maxPromptChars) || 30000);
-  const textLimit = maxChars >= 30000 ? 1400 : maxChars >= 12000 ? 900 : maxChars >= 4000 ? 360 : 100;
-  const totalEvidenceLimit = maxChars >= 30000 ? 20 : maxChars >= 12000 ? 14 : maxChars >= 4000 ? 7 : 3;
+  // When the normal prompt is compacted, retain enough candidates to include
+  // the full FAQ section of a matched card instead of only the first entries.
+  const textLimit = maxChars >= 30000 ? 900 : maxChars >= 12000 ? 700 : maxChars >= 4000 ? 320 : 100;
+  const totalEvidenceLimit = maxChars >= 30000 ? 42 : maxChars >= 12000 ? 21 : maxChars >= 4000 ? 7 : 3;
   const evidence = {
     officialQaDirectCandidates: [],
     officialQaRelated: [],
@@ -480,7 +487,7 @@ function buildCompactRagPrompt({ payload, maxPromptChars }) {
         type: item.type,
         title: item.title,
         isDirect: Boolean(item.isDirect),
-        text: String(item.text || "").slice(0, textLimit),
+        text: preserveTextEnds(String(item.text || ""), textLimit),
         sourceUrl: item.sourceUrl || "",
       });
       evidenceCount += 1;
@@ -533,6 +540,9 @@ function buildCompactRagPrompt({ payload, maxPromptChars }) {
     "operationChecks、constraintAudit 与 semanticStateTransition 是便宜模型/旧诊断整理出的待核对假设；只能帮助定位证据，不能替代最终推理。unknown 或未核对限制不能支持肯定或否定结论。",
     "cardSemanticFacts 是卡文范式化候选而非证明。create_lingering_restriction 的 irreversible_on_first_condition_failure/ reactivates=false 表示期限条件首次失效后该效果实例永久结束，条件后来恢复不会自动重启。必须对照原卡文复核。",
     "按通用状态执行顺序判断手续或发动前提、手续或cost、每步状态更新、持续效果重算、逐项处理与诱发检查点；严格区分区域、移动归因、对象资格与效果抗性，同一步同时移动按原子批次处理。禁止按卡名或历史题模板补造事实。",
+    "先绑定玩家角色：区分每张卡的控制者、动作执行者、受影响玩家与手牌所属者。交换了自己/对方或控制者的相似FAQ不能直接套用结论。",
+    "发动合法性与效果处理必须分开。先按发动时状态检查必需对象和至少一条可行后续路径；支付cost后逐步更新状态并重算持续效果。处理中后续步骤变得不可行时，明确处理在哪一步结束，不得倒推为不能发动。",
+    "卡文或官方资料明确列举类型时按封闭集合解释，不得把未列举的仪式、融合、同调、超量、连接、解放、素材、cost或召唤手续自行归入同类。",
     "formalEngineProofs 中 trusted=true 的 TRUE/FALSE 是逐查询强约束；UNKNOWN 不是 FALSE，不能据此回答不能。",
     "resolvedCards 是已匹配卡片，effectText 是其效果依据；不得把已有字段说成未确定。任何非 formal 的状态轨迹都必须由最终模型依据原始文本重新验证。",
     "输出单个 JSON 对象，字段为 answerLevel、shortAnswer、reasoning、usedCards、usedEvidence、missingInfo、riskFlags、confidenceSelfEstimate。",
@@ -649,4 +659,8 @@ function truncatePromptText(value, maxChars) {
 function readNumber(value, fallback) {
   const number = Number(value);
   return Number.isFinite(number) && number > 0 ? number : fallback;
+}
+
+function isEnabled(value) {
+  return /^(?:1|true|yes|on)$/iu.test(String(value || "").trim());
 }
