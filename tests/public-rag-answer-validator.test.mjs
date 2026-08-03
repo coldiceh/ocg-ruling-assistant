@@ -159,7 +159,6 @@ test("validator rejects a performed fusion that contradicts an authoritative dir
 
   assert.equal(validation.ok, false);
   assert.ok(validation.errors.includes("final resolution contradicts the authoritative official direct answer"));
-  assert.ok(validation.errors.includes("shortAnswer resolution conclusion conflicts with reasoning"));
 });
 
 test("authoritative Chinese direct evidence compares Special Summon and non-Fusion Summon separately", () => {
@@ -201,6 +200,30 @@ test("authoritative Japanese direct evidence accepts the same mixed operation re
   const validation = validatePublicRagFinalAnswer(answer, {
     rawText: JSON.stringify(answer),
     userQuery: "能否用这个方法特殊召唤？这是否属于融合召唤？",
+    evidence,
+    authoritativeOfficialDirect: true,
+  });
+
+  assert.equal(validation.ok, true, JSON.stringify(validation.errors));
+});
+
+test("authoritative direct validation does not let explanatory branches override a correct headline", () => {
+  const evidence = {
+    officialQaDirectCandidates: [{
+      id: "official-direct-branching-explanation",
+      question: "この方法で特殊召喚できますか。",
+      answer: "この方法で特殊召喚できます。",
+      text: "この方法で特殊召喚できますか。 この方法で特殊召喚できます。",
+    }],
+  };
+  const answer = makeAnswer(
+    "可以用这个方法特殊召唤。",
+    [{ id: "official-direct-branching-explanation" }],
+  );
+  answer.reasoning = ["另一个不满足手续的条件分支不能特殊召唤；官方直接回答会在输出契约中取代这段模型解释。"];
+  const validation = validatePublicRagFinalAnswer(answer, {
+    rawText: JSON.stringify(answer),
+    userQuery: "能否用这个方法特殊召唤？",
     evidence,
     authoritativeOfficialDirect: true,
   });
