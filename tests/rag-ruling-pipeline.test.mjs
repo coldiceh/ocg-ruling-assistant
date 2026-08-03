@@ -2826,7 +2826,7 @@ test("unique exact official QA uses a focused complete-answer route", async () =
     id: "ygoresources-qa-focused-route",
     recordType: "qa",
     question: "可以宣言「规则神兽」发动「规则学都」②效果吗？",
-    answer: `可以宣言并发动，因为「规则神兽」在规则上也视为“规则学”卡。（本回合不能再次宣言「规则神兽」。） 以下卡片也适用相同裁定：${officialCatalogue}`,
+    answer: `可以宣言并发动，因为「<<91001>>」在规则上也视为“规则学”卡。（本回合不能再次宣言「<<91001>>」。） 以下卡片也适用相同裁定：${officialCatalogue}`,
     cardIds: ["91001", "91002"],
     questionCardIds: ["91001", "91002"],
     sourceUrl: "https://example.test/qa/focused-route",
@@ -2860,10 +2860,10 @@ test("unique exact official QA uses a focused complete-answer route", async () =
       finalGeneration = { modelName, thinkingMode, maxTokens };
       return JSON.stringify({
         answerLevel: "official_confirmed",
-        shortAnswer: "可以发动。",
-        reasoning: ["官方问答确认可以发动。"],
+        shortAnswer: "可以宣言并发动；但本回合不能再次宣言「规则神兽」。",
+        reasoning: ["官方问答确认可以发动，并给出了本回合的后续限制。"],
         usedCards: ["规则神兽", "规则学都"],
-        usedEvidence: [{ id: "card-text-91002", type: "card_text", title: "规则学都 的卡片文本" }],
+        usedEvidence: [{ id: directQa.id, type: "official_qa", title: "精确官方问答" }],
         missingInfo: [],
         riskFlags: [],
         confidenceSelfEstimate: "high",
@@ -2882,11 +2882,13 @@ test("unique exact official QA uses a focused complete-answer route", async () =
   assert.equal(answer.answerLevel, "official_confirmed");
   assert.ok(answer.usedEvidence.some((item) => item.id === directQa.id && item.type === "official_qa"));
   assert.match(answer.shortAnswer, /本回合不能再次宣言/u);
+  assert.doesNotMatch(answer.shortAnswer, /官方 Q&A 完整回答原文/u);
+  assert.doesNotMatch(answer.shortAnswer, /<<91001>>|「「/u);
   assert.doesNotMatch(answer.shortAnswer, /<<95000>>/u);
-  assert.ok(answer.reasoning.some((item) => /本回合不能再次宣言/u.test(item)));
+  assert.ok(answer.reasoning.some((item) => /完整原文见资料来源/u.test(item)));
   assert.ok(answer.reasoning.every((item) => !/官方问答确认可以发动/u.test(item)));
   assert.ok(answer.reasoning.some((item) => /形式规则内核本次未签发确定性证明/u.test(item)));
-  assert.ok(answer.riskFlags.includes("official_direct_evidence_enforced"));
+  assert.ok(!answer.riskFlags.includes("official_direct_evidence_enforced"));
   assert.ok(answer.debug.retrievalWarnings.includes("official_direct_focused_prompt"));
 
   const contradicted = await answerRagRulingQuestion({

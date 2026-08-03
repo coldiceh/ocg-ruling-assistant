@@ -31,11 +31,18 @@ export function extractAnswerText(record = {}) {
   }
   const questionEnd = Math.max(text.lastIndexOf("?"), text.lastIndexOf("？"));
   if (questionEnd >= 0) {
-    const tail = text.slice(questionEnd + 1);
+    const tail = removeRepeatedTitlePrefix(text.slice(questionEnd + 1), record.title);
     const marker = findAnswerMarker(tail);
     return clean(marker >= 0 ? tail.slice(marker) : tail);
   }
   return clean(record.conclusion || text);
+}
+
+function removeRepeatedTitlePrefix(value, title) {
+  const tail = clean(value);
+  const titleText = clean(title);
+  if (!tail || !titleText || !tail.startsWith(titleText)) return tail;
+  return clean(tail.slice(titleText.length));
 }
 
 /**

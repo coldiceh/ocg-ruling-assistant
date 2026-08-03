@@ -74,6 +74,17 @@ test("official extractor preserves explicit answer instead of replacing it with 
   assert.equal(extracted.answerText, "不可以发动。");
 });
 
+test("official extractor removes a repeated truncated title between the question and answer", () => {
+  const question = "不能作为融合召唤素材的怪兽可以用于这个特殊召唤手续吗?";
+  const title = "不能作为融合召唤素材的怪兽可以用于这个特殊召唤手续吗…";
+  const extracted = extractOfficialQaAnswer({
+    title,
+    text: `${question} ${title} 可以送去墓地并特殊召唤。这次特殊召唤不是融合召唤。`,
+  });
+
+  assert.equal(extracted.answerText, "可以送去墓地并特殊召唤。这次特殊召唤不是融合召唤。");
+});
+
 test("official answer excerpt removes a dense following-card catalogue but keeps the ruling", () => {
   const catalogue = Array.from({ length: 16 }, (_, index) => `「<<${23000 + index}>>」①`).join("\n");
   const answer = [
