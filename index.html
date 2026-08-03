@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>游戏王OCG规则助手</title>
-    <link rel="stylesheet" href="src/styles.css?v=20260803-admin-model-compare-1" />
+    <link rel="stylesheet" href="src/styles.css?v=20260803-public-model-profile-1" />
   </head>
   <body class="theme-night">
     <div class="page-background" aria-hidden="true"></div>
@@ -36,10 +36,14 @@
           <textarea id="questionInput" spellcheck="false" placeholder="输入需要分析的 OCG 裁定问题..."></textarea>
 
           <div class="actions">
-            <div class="model-tier-label" aria-label="当前裁定模型">
+            <label class="model-tier-label" for="rulingModelSelect">
               <span>裁定模型</span>
-              <strong>DeepSeek V4 Flash</strong>
-            </div>
+              <select id="rulingModelSelect" aria-describedby="rulingModelStatus" disabled>
+                <option value="glm-5.2-high" selected>GLM 5.2 · 思考 high</option>
+                <option value="deepseek-v4-flash-high">DeepSeek V4 Flash · 思考 high</option>
+              </select>
+              <small id="rulingModelStatus">正在确认模型可用性</small>
+            </label>
             <div class="answer-version-selector" role="group" aria-label="回答版本">
               <span>回答版本</span>
               <button class="answer-version-button is-active" type="button" data-ruling-version="latest" aria-pressed="true">最新版</button>
@@ -142,6 +146,7 @@
               <span id="budgetLimitText"></span>
             </div>
             <p id="budgetHint">统计后端今日累计模型用量。</p>
+            <div class="budget-buckets" id="budgetBucketList" aria-label="分模型今日用量"></div>
             <button class="text-button" id="budgetResetButton" type="button" hidden>重置额度</button>
           </section>
 
@@ -356,6 +361,6 @@
       </main>
     </div>
 
-    <script src="src/app.js?v=20260803-admin-model-compare-1"></script>
+    <script src="src/app.js?v=20260803-public-model-profile-1"></script>
   </body>
 </html>

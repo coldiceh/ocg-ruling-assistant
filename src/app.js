@@ -4,11 +4,30 @@
 // Keeping an empty offline index prevents the browser fallback from silently
 // treating a handful of historical examples as authoritative card knowledge.
 const baseCardIndex = [];
+const DEFAULT_RULING_MODEL_PROFILE = "glm-5.2-high";
+const PUBLIC_RULING_MODEL_PROFILE_ORDER = Object.freeze([
+  "glm-5.2-high",
+  "deepseek-v4-flash-high",
+]);
+const PUBLIC_RULING_MODEL_PROFILES = Object.freeze({
+  "glm-5.2-high": Object.freeze({
+    id: "glm-5.2-high",
+    label: "GLM 5.2 · 思考 high",
+    provider: "glm",
+  }),
+  "deepseek-v4-flash-high": Object.freeze({
+    id: "deepseek-v4-flash-high",
+    label: "DeepSeek V4 Flash · 思考 high",
+    provider: "deepseek",
+  }),
+});
 
 const ui = {
   questionInput: document.querySelector("#questionInput"),
   analyzeButton: document.querySelector("#analyzeButton"),
   analyzeButtonText: document.querySelector("#analyzeButtonText"),
+  rulingModelSelect: document.querySelector("#rulingModelSelect"),
+  rulingModelStatus: document.querySelector("#rulingModelStatus"),
   rulingVersionButtons: [...document.querySelectorAll("[data-ruling-version]")],
   clearButton: document.querySelector("#clearButton"),
   resultGrid: document.querySelector("#resultGrid"),
@@ -52,6 +71,7 @@ const ui = {
   budgetSpentText: document.querySelector("#budgetSpentText"),
   budgetLimitText: document.querySelector("#budgetLimitText"),
   budgetHint: document.querySelector("#budgetHint"),
+  budgetBucketList: document.querySelector("#budgetBucketList"),
   budgetResetButton: document.querySelector("#budgetResetButton"),
   adminLabPanel: document.querySelector("#adminLabPanel"),
   adminLabWorkspace: document.querySelector("#adminLabWorkspace"),
@@ -114,6 +134,8 @@ let appConfig = {
   budgetApiUrl: "",
   engineEnabled: false,
   rulingVersionIds: ["latest"],
+  defaultRulingModelProfile: DEFAULT_RULING_MODEL_PROFILE,
+  rulingModelProfiles: fallbackRulingModelProfiles(),
 };
 let syncedCards = [];
 let sourceMeta = null;
@@ -146,7 +168,8 @@ const adminExecuteAttemptedRunIds = new Set();
 const adminStageStates = new Map();
 const adminCurrentRunStorageKey = "ocg-admin-current-run:v1";
 const themeStorageKey = "ocg-ruling-theme:v1";
-const selectedModelTier = "flash";
+let selectedRulingModelProfile = DEFAULT_RULING_MODEL_PROFILE;
+let rulingModelCapabilitiesAvailable = false;
 let selectedRulingVersion = "latest";
 const pendingStages = [
   { id: "understand", label: "理解问题", body: "正在读取问题中的卡片、场面、连锁和时点。" },
@@ -236,26 +259,142 @@ async function loadAppConfig() {
     modelLabel: "",
     engineEnabled: false,
     rulingVersionIds: ["latest"],
+    defaultRulingModelProfile: DEFAULT_RULING_MODEL_PROFILE,
+    rulingModelProfiles: fallbackRulingModelProfiles(),
   };
   if (!appConfig.budgetApiUrl) appConfig.budgetApiUrl = getBudgetApiUrl();
 }
 
 async function loadBackendModelInfo() {
-  if (!appConfig.answerApiUrl) return;
+  if (!appConfig.answerApiUrl) {
+    setRulingModelCapabilitiesUnavailable("未配置模型能力接口；默认 GLM 5.2 尚未确认可用。");
+    return;
+  }
   try {
     const response = await fetch(appConfig.answerApiUrl, { cache: "no-store" });
     if (!response.ok) throw new Error(`model info ${response.status}`);
     const info = await response.json();
+    const modelCapabilities = normalizeRulingModelCapabilities(info);
     appConfig.modelLabel = formatModelInfo(info);
     appConfig.engineEnabled = info?.engineEnabled === true;
     appConfig.rulingVersionIds = normalizeRulingVersionCapabilities(info?.rulingVersions);
+    appConfig.defaultRulingModelProfile = modelCapabilities.defaultProfile;
+    appConfig.rulingModelProfiles = modelCapabilities.profiles;
+    selectedRulingModelProfile = modelCapabilities.defaultProfile;
+    rulingModelCapabilitiesAvailable = true;
+    renderRulingModelOptions();
     syncRulingVersionButtons();
   } catch {
     appConfig.modelLabel = "后端自动选择";
     appConfig.engineEnabled = false;
     appConfig.rulingVersionIds = ["latest"];
+    setRulingModelCapabilitiesUnavailable("模型能力接口不可用；默认 GLM 5.2 尚未确认可用。");
     syncRulingVersionButtons();
   }
+}
+
+function normalizeRulingModelCapabilities(info = {}) {
+  const defaultProfile = normalizeRulingModelProfileId(info?.defaultRulingModelProfile);
+  if (!defaultProfile) throw new TypeError("invalid default ruling model profile");
+  const rawProfiles = Array.isArray(info?.rulingModelProfiles)
+    ? info.rulingModelProfiles
+    : info?.rulingModelProfiles && typeof info.rulingModelProfiles === "object"
+      ? Object.entries(info.rulingModelProfiles).map(([id, descriptor]) => (
+          descriptor && typeof descriptor === "object" ? { id, ...descriptor } : { id }
+        ))
+      : [];
+  const profilesById = new Map(rawProfiles.map((item) => {
+    const id = normalizeRulingModelProfileId(typeof item === "string" ? item : item?.id);
+    return [id, item];
+  }).filter(([id]) => id));
+  if (!profilesById.has(defaultProfile)) {
+    throw new TypeError("default ruling model profile is missing from capabilities");
+  }
+  return {
+    defaultProfile,
+    profiles: PUBLIC_RULING_MODEL_PROFILE_ORDER.map((id) => {
+      const descriptor = profilesById.get(id);
+      return {
+        ...PUBLIC_RULING_MODEL_PROFILES[id],
+        available: Boolean(descriptor) && (typeof descriptor === "string" || descriptor.available !== false),
+      };
+    }),
+  };
+}
+
+function normalizeRulingModelProfileId(value) {
+  const id = String(value || "").trim().toLowerCase();
+  return Object.hasOwn(PUBLIC_RULING_MODEL_PROFILES, id) ? id : "";
+}
+
+function fallbackRulingModelProfiles() {
+  return PUBLIC_RULING_MODEL_PROFILE_ORDER.map((id) => ({
+    ...PUBLIC_RULING_MODEL_PROFILES[id],
+    available: false,
+  }));
+}
+
+function setRulingModelCapabilitiesUnavailable(message) {
+  selectedRulingModelProfile = DEFAULT_RULING_MODEL_PROFILE;
+  rulingModelCapabilitiesAvailable = false;
+  appConfig.defaultRulingModelProfile = DEFAULT_RULING_MODEL_PROFILE;
+  appConfig.rulingModelProfiles = fallbackRulingModelProfiles();
+  renderRulingModelOptions(message);
+}
+
+function renderRulingModelOptions(message = "") {
+  if (!ui.rulingModelSelect) return;
+  ui.rulingModelSelect.replaceChildren();
+  for (const profile of appConfig.rulingModelProfiles || []) {
+    const option = document.createElement("option");
+    option.value = profile.id;
+    option.textContent = profile.available === false ? `${profile.label}（不可用）` : profile.label;
+    option.disabled = profile.available === false;
+    ui.rulingModelSelect.appendChild(option);
+  }
+  ui.rulingModelSelect.value = selectedRulingModelProfile;
+  updateRulingModelSelectionStatus(message);
+  syncRulingModelSelect();
+}
+
+function updateRulingModelSelectionStatus(message = "") {
+  if (!ui.rulingModelStatus) return;
+  const selected = (appConfig.rulingModelProfiles || [])
+    .find((profile) => profile.id === selectedRulingModelProfile);
+  const status = message || (selected?.available === false
+    ? `${selected.label} 当前不可用；请选择可用模型，系统不会自动改用其他模型。`
+    : "");
+  ui.rulingModelStatus.textContent = status;
+  ui.rulingModelStatus.hidden = !status;
+  ui.rulingModelSelect?.setAttribute("aria-invalid", String(Boolean(status)));
+}
+
+function syncRulingModelSelect(isPending = false) {
+  if (!ui.rulingModelSelect) return;
+  const hasAvailableProfile = (appConfig.rulingModelProfiles || []).some((profile) => profile.available !== false);
+  const disabled = Boolean(isPending) || !rulingModelCapabilitiesAvailable || !hasAvailableProfile;
+  ui.rulingModelSelect.disabled = disabled;
+  ui.rulingModelSelect.setAttribute("aria-disabled", String(disabled));
+}
+
+function selectedRulingModelIsAvailable() {
+  return rulingModelCapabilitiesAvailable && (appConfig.rulingModelProfiles || [])
+    .some((profile) => profile.id === selectedRulingModelProfile && profile.available !== false);
+}
+
+function selectRulingModelProfile(value) {
+  const nextProfile = normalizeRulingModelProfileId(value);
+  if (!nextProfile) return;
+  const descriptor = (appConfig.rulingModelProfiles || []).find((profile) => profile.id === nextProfile);
+  if (!descriptor || descriptor.available === false) {
+    ui.rulingModelSelect.value = selectedRulingModelProfile;
+    updateRulingModelSelectionStatus();
+    return;
+  }
+  selectedRulingModelProfile = nextProfile;
+  ui.rulingModelSelect.value = nextProfile;
+  updateRulingModelSelectionStatus();
+  setQueryPending(false);
 }
 
 function normalizeRulingVersionCapabilities(versions) {
@@ -491,7 +630,7 @@ async function requestBackendAnswer(text, requestedRulingVersion) {
       body: JSON.stringify({
         question: text,
         mode: backendMode,
-        modelTier: selectedModelTier,
+        rulingModelProfile: selectedRulingModelProfile,
         rulingVersion: requestedRulingVersion,
       }),
     });
@@ -710,6 +849,7 @@ function renderRagAnswer(answer) {
   ui.resultGrid.hidden = false;
   renderCards(answer?.resolvedCards || []);
   renderBudgetStatus(answer.debug?.budgetStatus || null);
+  void loadBudgetStatus();
   renderEngineSimulation(answer?.engine || null, answer?.engineSimulation || null);
   const labels = {
     official_confirmed: { confidence: "官方依据", className: "is-confirmed", title: "官方直接裁定", basis: "官方 direct Q&A" },
@@ -898,6 +1038,28 @@ function renderBudgetStatus(status, message = "") {
     || status?.storageWarning
     || [storage, mode].filter(Boolean).join(" · ")
     || "统计后端今日累计模型用量。";
+  renderBudgetBuckets(status?.buckets || (status?.bucket ? [status.bucket] : []));
+}
+
+function renderBudgetBuckets(buckets = []) {
+  if (!ui.budgetBucketList) return;
+  ui.budgetBucketList.replaceChildren();
+  for (const bucket of Array.isArray(buckets) ? buckets : []) {
+    const row = document.createElement("div");
+    row.className = "budget-bucket";
+    const label = document.createElement("span");
+    label.textContent = String(bucket?.label || [bucket?.provider, bucket?.stage].filter(Boolean).join(" · ") || "模型用量");
+    const value = document.createElement("strong");
+    const spent = bucket?.spentTodayCny === null ? Number.NaN : Number(bucket?.spentTodayCny);
+    const limit = bucket?.dailyBudgetCny === null ? Number.NaN : Number(bucket?.dailyBudgetCny);
+    const spentText = Number.isFinite(spent) ? `${formatCny(spent)} 元` : "未读取";
+    value.textContent = Number.isFinite(limit) && limit > 0
+      ? `${spentText} / ${formatCny(limit)} 元`
+      : `${spentText}（计入总额度）`;
+    row.append(label, value);
+    ui.budgetBucketList.appendChild(row);
+  }
+  ui.budgetBucketList.hidden = ui.budgetBucketList.childElementCount === 0;
 }
 
 function updateBudgetResetVisibility(resetEnabled) {
@@ -1007,8 +1169,9 @@ function fastJudgeSources(summary = {}) {
 
 function setQueryPending(isPending) {
   if (!ui.analyzeButton) return;
-  ui.analyzeButton.disabled = Boolean(isPending);
+  ui.analyzeButton.disabled = Boolean(isPending) || !selectedRulingModelIsAvailable();
   ui.analyzeButton.setAttribute("aria-busy", String(Boolean(isPending)));
+  syncRulingModelSelect(Boolean(isPending));
   syncRulingVersionButtons(Boolean(isPending));
   if (ui.analyzeButtonText) {
     ui.analyzeButtonText.textContent = isPending ? "查询中…" : "查询";
@@ -3585,6 +3748,7 @@ function modelStatusFromAnswer(answer) {
 function modelProviderLabel(provider) {
   const value = String(provider || "").toLowerCase();
   if (value === "deepseek") return "DeepSeek";
+  if (value === "glm") return "智谱 GLM";
   if (value === "gemini") return "Gemini";
   if (value === "openai") return "OpenAI";
   if (value === "ollama") return "Ollama";
@@ -4473,6 +4637,9 @@ async function init() {
   for (const button of ui.rulingVersionButtons || []) {
     button.addEventListener("click", () => selectRulingVersion(button.dataset.rulingVersion));
   }
+  ui.rulingModelSelect?.addEventListener("change", () => {
+    selectRulingModelProfile(ui.rulingModelSelect.value);
+  });
   ui.budgetResetButton?.addEventListener("click", () => resetBudgetStatus());
   ui.adminLoginForm?.addEventListener("submit", handleAdminLogin);
   ui.adminLogoutButton?.addEventListener("click", handleAdminLogout);

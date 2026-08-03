@@ -352,7 +352,8 @@ button:focus-visible {
 
 .model-tier-label {
   min-height: 34px;
-  display: inline-flex;
+  display: inline-grid;
+  grid-template-columns: max-content minmax(220px, 1fr);
   align-items: center;
   gap: 10px;
   padding: 6px 10px;
@@ -367,9 +368,26 @@ button:focus-visible {
   font-weight: 800;
 }
 
-.model-tier-label strong {
+.model-tier-label select {
+  min-width: 0;
+  border: 0;
+  background: transparent;
   color: var(--accent);
   font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.model-tier-label select:disabled {
+  color: var(--faint);
+  cursor: not-allowed;
+}
+
+.model-tier-label small {
+  grid-column: 1 / -1;
+  color: var(--warn);
+  font-size: 11px;
+  line-height: 1.4;
 }
 
 .judge-actions {
@@ -543,6 +561,27 @@ button:focus-visible {
   border-radius: 4px;
   background: var(--glass);
   box-shadow: var(--shadow);
+}
+
+.budget-buckets {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 6px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+
+.budget-bucket {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.budget-bucket strong {
+  color: var(--text);
+  text-align: right;
 }
 
 .admin-lab code {

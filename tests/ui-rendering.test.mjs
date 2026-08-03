@@ -156,10 +156,15 @@ test("ui_has_single_query_button", async () => {
   assert.match(html, /id="pipelineTimingPanel" hidden/u);
   assert.match(html, /id="pipelineStageList"/u);
   assert.match(html, /id="pipelineElapsedText"/u);
-  assert.match(html, /DeepSeek V4 Flash/u);
+  assert.match(html, /id="rulingModelSelect"[^>]+disabled/u);
+  assert.match(html, /value="glm-5\.2-high" selected>GLM 5\.2 · 思考 high/u);
+  assert.match(html, /value="deepseek-v4-flash-high">DeepSeek V4 Flash · 思考 high/u);
+  assert.match(html, /id="rulingModelStatus">正在确认模型可用性/u);
   assert.doesNotMatch(html, /id="flashModelButton"|id="proModelButton"|>Pro</u);
-  assert.match(app, /const selectedModelTier = "flash"/u);
-  assert.match(app, /modelTier: selectedModelTier/u);
+  assert.match(app, /let selectedRulingModelProfile = DEFAULT_RULING_MODEL_PROFILE/u);
+  assert.match(app, /rulingModelProfile: selectedRulingModelProfile/u);
+  assert.doesNotMatch(app, /modelTier: selectedModelTier/u);
+  assert.doesNotMatch(app, /thinkingMode:\s*selected|reasoningEffort:\s*selected/u);
   assert.match(html, /data-ruling-version="latest"[^>]+aria-pressed="true"[^>]*>最新版</u);
   assert.match(html, /data-ruling-version="previous"[^>]+aria-pressed="false"[^>]+disabled[^>]*>上一版（兼容）</u);
   assert.match(app, /let selectedRulingVersion = "latest"/u);
@@ -197,6 +202,63 @@ test("ui_has_single_query_button", async () => {
   assert.doesNotMatch(app, /FAST JUDGE/u);
   assert.doesNotMatch(app, /damage\.reasonCode|timing\.reasonCode/u);
   assert.doesNotMatch(app, /blocker\.id/u);
+});
+
+test("public ruling model selector uses the allowlisted backend profiles without silent fallback", async () => {
+  const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
+  const definitions = sourceBetween(
+    app,
+    "const DEFAULT_RULING_MODEL_PROFILE",
+    "const ui =",
+  );
+  const functions = sourceBetween(
+    app,
+    "function normalizeRulingModelCapabilities",
+    "function normalizeRulingVersionCapabilities",
+  );
+  const normalizeCapabilities = new Function(
+    `${definitions}\n${functions}\nreturn normalizeRulingModelCapabilities;`,
+  )();
+  const capabilities = normalizeCapabilities({
+    defaultRulingModelProfile: "glm-5.2-high",
+    rulingModelProfiles: [
+      { id: "deepseek-v4-flash-high", available: true, label: "untrusted label" },
+      { id: "glm-5.2-high", available: true },
+      { id: "not-allowlisted", available: true },
+    ],
+  });
+
+  assert.equal(capabilities.defaultProfile, "glm-5.2-high");
+  assert.deepEqual(capabilities.profiles, [
+    { id: "glm-5.2-high", label: "GLM 5.2 · 思考 high", provider: "glm", available: true },
+    {
+      id: "deepseek-v4-flash-high",
+      label: "DeepSeek V4 Flash · 思考 high",
+      provider: "deepseek",
+      available: true,
+    },
+  ]);
+  const partialAvailability = normalizeCapabilities({
+    defaultRulingModelProfile: "glm-5.2-high",
+    rulingModelProfiles: [
+      { id: "glm-5.2-high", available: false },
+      { id: "deepseek-v4-flash-high", available: true },
+    ],
+  });
+  assert.deepEqual(
+    partialAvailability.profiles.map((profile) => [profile.id, profile.available]),
+    [["glm-5.2-high", false], ["deepseek-v4-flash-high", true]],
+  );
+  assert.throws(
+    () => normalizeCapabilities({
+      defaultRulingModelProfile: "not-allowlisted",
+      rulingModelProfiles: ["glm-5.2-high", "deepseek-v4-flash-high"],
+    }),
+    /invalid default ruling model profile/u,
+  );
+  assert.match(app, /setRulingModelCapabilitiesUnavailable\("模型能力接口不可用/u);
+  assert.match(app, /系统不会自动改用其他模型/u);
+  assert.match(app, /selectedRulingModelProfile = DEFAULT_RULING_MODEL_PROFILE/u);
 });
 
 test("public pipeline timing prefers backend stage measurements and wall-clock total", async () => {
@@ -289,7 +351,7 @@ test("versioned backend answers require a matching server confirmation", async (
   const buildRequest = (fetchImpl) => new Function(
     "fetch",
     `const appConfig = { answerApiUrl: "https://example.test/api/answer" };
-     const selectedModelTier = "flash";
+     const selectedRulingModelProfile = "glm-5.2-high";
      ${versionClientSource}
      return requestBackendAnswer;`,
   )(fetchImpl);
@@ -303,7 +365,12 @@ test("versioned backend answers require a matching server confirmation", async (
     };
   });
   const confirmed = await confirmedRequest("问题", "previous");
-  assert.equal(requestBody.rulingVersion, "previous");
+  assert.deepEqual(requestBody, {
+    question: "问题",
+    mode: "rag",
+    rulingModelProfile: "glm-5.2-high",
+    rulingVersion: "previous",
+  });
   assert.equal(confirmed.effectiveRulingVersion, "previous");
 
   const missingConfirmationRequest = buildRequest(async () => ({
@@ -347,8 +414,8 @@ test("backend answers bypass persistent browser cache and bust static assets", a
     readFile(new URL("../config.json", import.meta.url), "utf8"),
   ]);
   const config = JSON.parse(configText.replace(/^\uFEFF/u, ""));
-  assert.match(html, /src\/app\.js\?v=20260803-admin-model-compare-1/u);
-  assert.match(html, /src\/styles\.css\?v=20260803-admin-model-compare-1/u);
+  assert.match(html, /src\/app\.js\?v=20260803-public-model-profile-1/u);
+  assert.match(html, /src\/styles\.css\?v=20260803-public-model-profile-1/u);
   assert.match(config.answerApiUrl, /\?client=20260722-answer-version-1$/u);
   assert.match(app, /cache: "no-store"/u);
   assert.doesNotMatch(app, /backendAnswerCacheTtlMs|buildBackendCacheKey|readCachedBackendAnswer|writeCachedBackendAnswer|ocg-ruling-answer:v/u);
@@ -371,6 +438,7 @@ test("ui_hides_engine_details_by_default", async () => {
   ]);
   assert.match(html, /裁定流程/u);
   assert.match(html, /今日额度/u);
+  assert.match(html, /id="budgetBucketList"/u);
   assert.match(html, /id="budgetResetButton"[^>]+hidden/u);
   assert.match(html, /免责声明/u);
   assert.match(html, /不是 KONAMI 官方项目/u);
@@ -411,6 +479,8 @@ test("card_dossier_nodes_and_theme_backgrounds_exist", async () => {
   assert.match(css, /\.model-tier-label/u);
   assert.doesNotMatch(css, /\.model-tier-toggle/u);
   assert.match(css, /\.budget-panel/u);
+  assert.match(css, /\.budget-bucket/u);
+  assert.match(app, /status\?\.buckets \|\| \(status\?\.bucket/u);
   assert.doesNotMatch(css, /body::before|body::after/u);
   assert.match(app, /baige_card_text/u);
   assert.match(app, /百鸽卡片文本/u);
@@ -431,8 +501,10 @@ test("query_button_has_visible_pending_state", async () => {
 
   assert.match(html, /id="analyzeButtonText">查询</u);
   assert.match(app, /setQueryPending\(true\)/u);
-  assert.match(app, /analyzeButton\.disabled = Boolean\(isPending\)/u);
+  assert.match(app, /analyzeButton\.disabled = Boolean\(isPending\) \|\| !selectedRulingModelIsAvailable\(\)/u);
   assert.match(app, /setAttribute\("aria-busy"/u);
+  assert.match(app, /syncRulingModelSelect\(Boolean\(isPending\)\)/u);
+  assert.match(app, /rulingModelSelect\.disabled = disabled/u);
   assert.match(app, /查询中…/u);
   assert.match(css, /\.primary-button:disabled/u);
   assert.match(css, /cursor: wait/u);

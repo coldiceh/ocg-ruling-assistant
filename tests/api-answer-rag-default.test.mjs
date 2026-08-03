@@ -62,6 +62,38 @@ test("api_answer_reports_engine_availability_from_backend_configuration", async 
   }
 });
 
+test("api_answer_exposes only the two public ruling profiles and rejects unknown profiles", async () => {
+  const previousGlm = process.env.GLM_API_KEY;
+  const previousDeepSeek = process.env.DEEPSEEK_API_KEY;
+  try {
+    process.env.GLM_API_KEY = "test-glm-key";
+    process.env.DEEPSEEK_API_KEY = "test-deepseek-key";
+    const info = createJsonResponse();
+    await handler({ method: "GET" }, info);
+    assert.equal(info.payload.defaultRulingModelProfile, "glm-5.2-high");
+    assert.deepEqual(info.payload.rulingModelProfiles.map((profile) => ({
+      id: profile.id,
+      available: profile.available,
+    })), [
+      { id: "glm-5.2-high", available: true },
+      { id: "deepseek-v4-flash-high", available: true },
+    ]);
+
+    const invalid = createJsonResponse();
+    await handler({
+      method: "POST",
+      body: { question: "问题", rulingModelProfile: "arbitrary-provider-model" },
+    }, invalid);
+    assert.equal(invalid.statusCode, 400);
+    assert.equal(invalid.payload.code, "invalid_ruling_model_profile");
+  } finally {
+    if (previousGlm === undefined) delete process.env.GLM_API_KEY;
+    else process.env.GLM_API_KEY = previousGlm;
+    if (previousDeepSeek === undefined) delete process.env.DEEPSEEK_API_KEY;
+    else process.env.DEEPSEEK_API_KEY = previousDeepSeek;
+  }
+});
+
 test("api_answer_dispatches_previous_and_rejects_invalid_ruling_versions", async () => {
   const previousProvider = process.env.MODEL_PROVIDER;
   process.env.MODEL_PROVIDER = "mock";
