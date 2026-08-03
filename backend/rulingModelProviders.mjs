@@ -15,6 +15,28 @@ const DEFAULT_GLM_BASE_URL = "https://open.bigmodel.cn/api/paas/v4";
 const DEFAULT_KIMI_BASE_URL = "https://api.moonshot.cn/v1";
 const MODEL_RULING_FORMAT_NAME = "model_ruling_result";
 const EVIDENCE_PREPARATION_PROVIDER_IDS = new Set(["deepseek", "glm", "kimi"]);
+const MODEL_RULING_JSON_SHAPE_EXAMPLE = Object.freeze({
+  schemaVersion: "1.0",
+  verdicts: [{
+    questionId: "q1",
+    value: "UNKNOWN",
+    conclusion: "根据实际问题与证据填写，不得复制示例结论。",
+    conditions: [],
+  }],
+  conciseAnswer: "根据实际问题与证据填写。",
+  claims: [],
+  timeline: [],
+  assumptions: [],
+  evidenceUsage: [],
+  counterChecks: [],
+  unresolved: [{
+    questionId: "q1",
+    code: "example_only",
+    decisive: true,
+    explanation: "这里只展示 JSON 字段结构。",
+  }],
+  confidence: { level: "LOW", reasons: ["这里只展示 JSON 字段结构。"] },
+});
 
 export class RulingModelProviderError extends Error {
   constructor(message, {
@@ -252,11 +274,24 @@ export class CompatibleEvidencePreparationProvider {
     // empty `content` even though the upstream request succeeded.
     const maxTokens = optionalPositiveInteger(maxOutputTokens, "maxOutputTokens")
       ?? (selection.reasoningMode === "pro" ? 64_000 : 16_000);
+    // DeepSeek documents that JSON Output can occasionally return an empty
+    // `content`. In thinking mode that failure is particularly costly because
+    // the response can contain only billed reasoning tokens. Keep strict JSON
+    // enforcement in our validator, but use text transport plus an explicit
+    // shape example for this one provider/mode combination.
+    const deepSeekThinkingTextMode = this.providerId === "deepseek"
+      && selection.reasoningMode === "pro";
     const schemaInstruction = [
       String(instructions || "").trim(),
       "这是隔离后台中的实验性最终裁定运行，不代表正式裁定或普通用户答案。",
       "只输出一个符合下列 JSON Schema 的 JSON 对象，不要输出 Markdown、代码围栏或额外说明：",
       JSON.stringify(MODEL_RULING_RESULT_JSON_SCHEMA),
+      ...(deepSeekThinkingTextMode
+        ? [
+            "以下 JSON 仅展示字段结构；必须用本题的 questionId、结论、证据和检查结果替换全部示例内容：",
+            JSON.stringify(MODEL_RULING_JSON_SHAPE_EXAMPLE),
+          ]
+        : []),
     ].filter(Boolean).join("\n\n");
     const body = {
       model: selection.model,
@@ -264,7 +299,7 @@ export class CompatibleEvidencePreparationProvider {
         { role: "system", content: schemaInstruction },
         { role: "user", content: finalInput },
       ],
-      response_format: { type: "json_object" },
+      ...(deepSeekThinkingTextMode ? {} : { response_format: { type: "json_object" } }),
       ...compatibleThinkingParameters(selection),
     };
     if (maxTokens !== undefined) {
