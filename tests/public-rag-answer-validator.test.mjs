@@ -230,6 +230,29 @@ test("authoritative direct comparison aligns a general result and a restricted e
   assert.equal(validation.ok, true, JSON.stringify(validation.errors));
 });
 
+test("an operation quoted inside example card text is not the official resolution claim", () => {
+  const evidence = {
+    officialQaDirectCandidates: [{
+      id: "official-direct-quoted-example",
+      question: "この方法で特殊召喚できますか。",
+      answer: "通常は特殊召喚できます。なお、『リリースできない』効果も適用される場合、一例として『モンスター1体を除外し、モンスター2体をリリースした場合にEXデッキから特殊召喚できる』のような手順には使用できません。",
+      text: "この方法で特殊召喚できますか。 通常は特殊召喚できます。なお、『リリースできない』効果も適用される場合、一例として『モンスター1体を除外し、モンスター2体をリリースした場合にEXデッキから特殊召喚できる』のような手順には使用できません。",
+    }],
+  };
+  const answer = makeAnswer(
+    "通常可以特殊召唤；但若另外受到‘不能解放’效果影响，则不能用于要求解放的特殊召唤手续。",
+    [{ id: "official-direct-quoted-example" }],
+  );
+  const validation = validatePublicRagFinalAnswer(answer, {
+    rawText: JSON.stringify(answer),
+    userQuery: "这个方法能否特殊召唤？",
+    evidence,
+    authoritativeOfficialDirect: true,
+  });
+
+  assert.equal(validation.ok, true, JSON.stringify(validation.errors));
+});
+
 test("authoritative direct comparison rejects a reversed restricted exception", () => {
   const evidence = {
     officialQaDirectCandidates: [{

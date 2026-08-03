@@ -755,6 +755,13 @@ function resolutionOperationClaims(value, { branchScoped = false } = {}) {
     for (const match of text.matchAll(matcher)) {
       const clause = surroundingResolutionClause(text, match.index || 0);
       const localIndex = Math.max(0, (match.index || 0) - clause.start);
+      const quotedOutcome = quotedEffectTextResolutionOutcome(
+        text,
+        match.index || 0,
+        match[0]?.length || 0,
+        clause,
+      );
+      if (quotedOutcome === "ignore") continue;
       const prefix = clause.text.slice(Math.max(0, localIndex - 40), localIndex);
       const suffix = clause.text.slice(localIndex + match[0].length, localIndex + match[0].length + 16);
       const broadNegativePrefix = prefix.match(/(?:不能|无法|無法|不会|不會).{0,24}$/u)?.[0] || "";
@@ -770,6 +777,12 @@ function resolutionOperationClaims(value, { branchScoped = false } = {}) {
         || /^(?:は|が)?(?:ではありません|ではない)/u.test(suffix);
       const branch = branchScoped ? `:${resolutionBranchScope(clause, localIndex)}` : "";
       const scopedKind = `${resolutionChainScope(clause.text, localIndex)}${branch}:${kind}`;
+      if (quotedOutcome === "performed" || quotedOutcome === "not_performed") {
+        const set = claimSets.get(scopedKind) || new Set();
+        set.add(quotedOutcome);
+        claimSets.set(scopedKind, set);
+        continue;
+      }
       if (negative) {
         const set = claimSets.get(scopedKind) || new Set();
         set.add("not_performed");
@@ -802,6 +815,30 @@ function resolutionOperationClaims(value, { branchScoped = false } = {}) {
     kind,
     values.size > 1 ? "conflict" : [...values][0],
   ]));
+}
+
+function quotedEffectTextResolutionOutcome(fullText, operationIndex, operationLength, clause = {}) {
+  const text = String(fullText || "");
+  const open = text.lastIndexOf("『", operationIndex);
+  const priorClose = text.lastIndexOf("』", operationIndex);
+  if (open < 0 || open < priorClose) return null;
+  const close = text.indexOf("』", operationIndex);
+  if (close < 0) return null;
+  const remainingQuotedText = text.slice(operationIndex + Math.max(1, operationLength), close);
+  if (RESOLUTION_OPERATION.test(remainingQuotedText)) {
+    // An outer predicate about whether a quoted procedure can be used belongs
+    // to that procedure's terminal/main operation, not to every prerequisite
+    // mentioned inside it (for example, banish first, then Special Summon).
+    return "ignore";
+  }
+  const clauseEnd = Number(clause.start || 0) + String(clause.text || "").length;
+  const outerPredicate = text.slice(close + 1, Math.max(close + 1, clauseEnd));
+  const negative = /(?:手顺|手順|手续|手續|方法|procedure).{0,48}(?:使用できなくなります|使用できません|使用できない|不能使用|不能用于|不可用于|无法使用|無法使用|cannot\s+be\s+used)/iu.test(outerPredicate);
+  if (negative) return "not_performed";
+  const positive = /(?:手顺|手順|手续|手續|方法|procedure).{0,48}(?:使用できます|使用できる|可以使用|能够使用|can\s+be\s+used)/iu.test(outerPredicate);
+  if (positive) return "performed";
+  // The quoted effect text is evidence or an example, not itself the answer.
+  return "ignore";
 }
 
 function hasResolutionOperationSelfConflict(value) {
