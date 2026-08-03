@@ -38,6 +38,34 @@ export function extractAnswerText(record = {}) {
   return clean(record.conclusion || text);
 }
 
+/**
+ * Return the part of an official answer that explains the ruling itself.
+ *
+ * Some official database answers finish with a mechanically maintained list
+ * of dozens (occasionally hundreds) of cards written as `<<12345>>`.  Those
+ * examples are useful for search indexing, but sending the whole catalogue to
+ * the final model obscures the conclusion and consumes most of the prompt.
+ * This deliberately trims only a dense list introduced by wording such as
+ * "以下", "下列", or "the following".  Ordinary long prose, including a
+ * trailing condition or exception, is returned unchanged.
+ */
+export function extractRelevantOfficialQaAnswerExcerpt(record = {}) {
+  const sourceText = String(
+    record.fullText
+      || record.text
+      || record.officialText
+      || record.conclusion
+      || "",
+  );
+  const answerText = extractAnswerText({ ...record, text: sourceText }) || clean(sourceText);
+  if (!answerText) return "";
+
+  const exhaustiveListStart = findExhaustivePlaceholderListStart(answerText);
+  return exhaustiveListStart < 0
+    ? answerText
+    : answerText.slice(0, exhaustiveListStart).trim();
+}
+
 function detectOfficialVerdict(type, text, polarity, subject) {
   if (!text) return "unknown";
   if (type === "who_can_activate") {
@@ -82,6 +110,35 @@ function hasExplicitResolutionStatement(text) {
 function findAnswerMarker(text) {
   const match = /(?:^|\s)(?:可以|不可以|不能|自己|对方|当时的控制者|はい|いいえ|自分|相手|その時点|できます|できません|Yes\b|No\b|It can|It cannot|They can|They cannot|You can|You cannot|The current controller)/iu.exec(text);
   return match?.index ?? -1;
+}
+
+function findExhaustivePlaceholderListStart(text) {
+  const markerPattern = /(?:以下|下記|下列|下述|如下|(?:the\s+)?following|listed\s+below|the\s+cards?\s+below)/giu;
+  for (const marker of text.matchAll(markerPattern)) {
+    const markerIndex = Number(marker.index || 0);
+    const sentenceEnd = findListIntroductionEnd(text, markerIndex + marker[0].length);
+    if (sentenceEnd < 0) continue;
+
+    const listTail = text.slice(sentenceEnd);
+    const placeholderOffsets = [...listTail.matchAll(/<<\d{3,}>>/gu)]
+      .map((match) => Number(match.index || 0));
+    if (placeholderOffsets.length < 8) continue;
+
+    // The first examples must begin near the introductory sentence, and the
+    // first eight IDs must form a compact run.  This prevents an unrelated
+    // "following" in ordinary prose from deleting a later, substantive tail.
+    if (placeholderOffsets[0] > 240) continue;
+    if (placeholderOffsets[7] - placeholderOffsets[0] > 800) continue;
+    return sentenceEnd;
+  }
+  return -1;
+}
+
+function findListIntroductionEnd(text, fromIndex) {
+  const remainder = text.slice(fromIndex);
+  const boundary = /[。！？.!?：:]/u.exec(remainder);
+  if (!boundary || boundary.index > 500) return -1;
+  return fromIndex + boundary.index + boundary[0].length;
 }
 
 function clean(value) {

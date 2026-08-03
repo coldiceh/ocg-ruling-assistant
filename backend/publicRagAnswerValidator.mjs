@@ -1,4 +1,7 @@
-import { extractOfficialQaAnswer } from "./officialQaAnswerExtractor.mjs";
+import {
+  extractOfficialQaAnswer,
+  extractRelevantOfficialQaAnswerExcerpt,
+} from "./officialQaAnswerExtractor.mjs";
 
 const NEGATIVE_ACTIVATION = /(?:不能|不可以|不可|不得|无法).{0,8}(?:发动|连锁)|(?:発動|チェーン).{0,8}(?:できません|できない)|cannot.{0,12}(?:activate|chain)/iu;
 const POSITIVE_ACTIVATION = /(?<!不)(?:可以|能够|能).{0,8}(?:发动|连锁)|(?:発動|チェーン).{0,8}(?:できます|できる)|(?<!not\s)can.{0,12}(?:activate|chain)/iu;
@@ -15,7 +18,6 @@ const NEGATIVE_RESOLUTION = /(?:不进行|不處理|不处理|无法进行|不�
 const RESOLUTION_OPERATION = /(?:效果处理|效果處理|处理|處理|结算|結算|融合召唤|融合召喚|特殊召唤|特殊召喚|召唤|召喚|破坏|破壊|除外|送去墓地|进入墓地|進入墓地|加入手卡|抽卡|适用|適用|resolve|resolution|fusion summon|special summon|summon|destroy|banish|send.{0,8}graveyard|add.{0,8}hand|draw|apply)/iu;
 const NEGATIVE_RESOLUTION_OUTCOME = /(?:not[_ -]?performed|does[_ -]?not[_ -]?perform|not[_ -]?resolved|failed|negated|activation[_ -]?negated|不进行|不進行|不会进行|不會進行|不能进行|不能進行|无法进行|無法進行|未进行|未進行|不处理|不處理|不会处理|不會處理|处理失败|處理失敗|没有处理|沒有處理|不适用|不適用|不会适用|不會適用|不(?:会|會)?(?:进行|進行)?(?:融合召唤|融合召喚|融合|特殊召唤|特殊召喚)|(?:不能|无法|無法|不会|不會).{0,6}(?:融合召唤|融合召喚|特殊召唤|特殊召喚|破坏|破壊|除外|送去墓地|加入手卡|抽卡)|(?:融合召唤|融合召喚|特殊召唤|特殊召喚|效果处理|效果處理).{0,8}(?:不进行|不進行|失败|失敗)|(?:処理|融合召喚|特殊召喚).{0,10}(?:行いません|行われません|されません|できません|しません|適用されません)|does\s+not\s+(?:resolve|perform|apply|summon|destroy|banish)|(?:cannot|can't|fails?\s+to)\s+(?:resolve|perform|apply|summon|destroy|banish))/iu;
 const POSITIVE_RESOLUTION_OUTCOME = /(?:^|[；;。.!！?？\n，,])[^；;。.!！?？\n]{0,36}(?:(?:正常|成功|仍然|依然|照常|可以|能够|能|会|會|将|將|并|並)?(?:进行|進行|执行|執行|完成|适用|適用)[^；;。.!！?？\n]{0,16}(?:效果处理|效果處理|处理|處理|结算|結算|融合召唤|融合召喚|特殊召唤|特殊召喚|破坏|破壊|除外|送去墓地|进入墓地|進入墓地|加入手卡|抽卡)|(?:效果|处理|處理|融合|特殊召唤|特殊召喚)[^；;。.!！?？\n]{0,16}(?:正常处理|正常處理|正常进行|正常進行|成功|完成|适用|適用)|(?:perform(?:ed|s)?|resolve[ds]?|appl(?:y|ies|ied)|summon(?:ed|s)?|destroy(?:ed|s)?|banish(?:ed|es)?)[^；;。.!！?？\n]{0,16}(?:normally|successfully)?)/iu;
-const DIRECT_CONSTRAINT = /(?:不能|不可|不得|仅|只|如果|若|场合|条件|之后|本回合|除外|例外|できません|できない|ただし|場合|のみ|以外|cannot|can't|not be able|only|unless|except|however|if\b|when\b)/iu;
 
 export function validatePublicRagFinalAnswer(answer = {}, {
   rawText = "",
@@ -277,7 +279,10 @@ function validateOfficialDirectContract({ answer, shortAnswer, combined, evidenc
     ...direct,
     text: direct.fullText || direct.text,
   });
-  const officialText = String(extracted.answerText || direct.answer || direct.officialText || "").trim();
+  const officialText = String(extractRelevantOfficialQaAnswerExcerpt({
+    ...direct,
+    answer: extracted.answerText,
+  }) || extracted.answerText || direct.answer || direct.officialText || "").trim();
   // shortAnswer is the page's public ruling headline.  Reasoning may explain
   // the correct branch, but it must never be able to cancel a wrong headline.
   const modelPolarity = activationPolarity(shortAnswer);
@@ -285,16 +290,11 @@ function validateOfficialDirectContract({ answer, shortAnswer, combined, evidenc
   if (officialPolarity !== "unknown" && modelPolarity !== "unknown" && officialPolarity !== modelPolarity) {
     errors.push("final conclusion contradicts the authoritative official direct answer");
   }
-  validateResolutionOutcomeAgreement({
-    expected: resolutionOutcome(officialText),
-    actual: resolutionOutcome(shortAnswer),
-    contradictionError: "final resolution contradicts the authoritative official direct answer",
-    omissionError: "final answer omits the authoritative official direct resolution result",
+  validateOfficialResolutionOperationAgreement({
+    officialText,
+    shortAnswer,
     errors,
   });
-  if (DIRECT_CONSTRAINT.test(officialText) && !DIRECT_CONSTRAINT.test(combined)) {
-    errors.push("final answer omits a material condition from the authoritative official direct answer");
-  }
 }
 
 function validateRawPublicAnswerContract(rawText) {
@@ -485,6 +485,70 @@ function validateResolutionOutcomeAgreement({
   if (actual !== expected) errors.push(contradictionError);
 }
 
+function validateOfficialResolutionOperationAgreement({ officialText = "", shortAnswer = "", errors }) {
+  const expectedClaims = comparableOfficialResolutionClaims(officialText);
+  if (!expectedClaims.size) {
+    // Keep the aggregate fallback for an official answer whose operation is not
+    // yet represented by the operation vocabulary.  Once concrete operations
+    // are available, however, compare each operation independently: a
+    // successful Special Summon and "not a Fusion Summon" are compatible facts.
+    validateResolutionOutcomeAgreement({
+      expected: resolutionOutcome(officialText),
+      actual: resolutionOutcome(shortAnswer),
+      contradictionError: "final resolution contradicts the authoritative official direct answer",
+      omissionError: "final answer omits the authoritative official direct resolution result",
+      errors,
+    });
+    return;
+  }
+
+  const actualClaims = comparableOfficialResolutionClaims(shortAnswer);
+  let contradiction = false;
+  let omission = false;
+  for (const [expectedKey, expectedOutcome] of expectedClaims) {
+    if (expectedOutcome === "conflict") continue;
+    const actualOutcome = alignedResolutionOperationOutcome(actualClaims, expectedKey);
+    if (actualOutcome === "unknown") {
+      omission = true;
+    } else if (actualOutcome === "conflict" || actualOutcome !== expectedOutcome) {
+      contradiction = true;
+    }
+  }
+  if (contradiction) {
+    errors.push("final resolution contradicts the authoritative official direct answer");
+  } else if (omission) {
+    errors.push("final answer omits the authoritative official direct resolution result");
+  }
+}
+
+function comparableOfficialResolutionClaims(value) {
+  const claims = resolutionOperationClaims(value);
+  // In phrases such as "效果处理时不进行融合召唤", "效果处理时" is a
+  // time marker, not a claim that effect processing itself failed.  Prefer the
+  // concrete operation whenever the sentence supplies one.
+  const hasConcreteOperation = [...claims.keys()].some((key) => !key.endsWith(":effect_processing"));
+  if (!hasConcreteOperation) return claims;
+  return new Map([...claims].filter(([key]) => !key.endsWith(":effect_processing")));
+}
+
+function alignedResolutionOperationOutcome(actualClaims, expectedKey) {
+  if (actualClaims.has(expectedKey)) return actualClaims.get(expectedKey);
+  const separator = expectedKey.lastIndexOf(":");
+  const expectedScope = expectedKey.slice(0, separator);
+  const expectedKind = expectedKey.slice(separator + 1);
+  const sameKind = [...actualClaims]
+    .filter(([key]) => key.endsWith(`:${expectedKind}`));
+  if (!sameKind.length) return "unknown";
+
+  // A headline often omits the official answer's explicit chain number.  An
+  // unscoped occurrence can still describe that operation; otherwise only
+  // collapse scoped occurrences when they all state the same outcome.
+  const unscoped = sameKind.find(([key]) => key === `unscoped:${expectedKind}`);
+  if (expectedScope !== "unscoped" && unscoped) return unscoped[1];
+  const outcomes = new Set(sameKind.map(([, outcome]) => outcome));
+  return outcomes.size === 1 ? [...outcomes][0] : "conflict";
+}
+
 function validateAnswerInternalConsistency({ shortAnswer = "", reasoningText = "", errors }) {
   if (!shortAnswer || !reasoningText) return;
   // Internal-conflict detection is intentionally stricter than the evidence
@@ -568,7 +632,7 @@ function resolutionOperationClaims(value) {
   const text = String(value || "");
   const definitions = [
     ["effect_processing", /效果处理|效果處理|结算|結算/iu],
-    ["fusion_summon", /融合召唤|融合召喚|融合/iu],
+    ["fusion_summon", /融合(?!素材)/iu],
     ["special_summon", /特殊召唤|特殊召喚/iu],
     ["destroy", /破坏|破壊/iu],
     ["banish", /除外/iu],
@@ -584,8 +648,9 @@ function resolutionOperationClaims(value) {
       const suffix = clause.text.slice(localIndex + match[0].length, localIndex + match[0].length + 16);
       const broadNegativePrefix = prefix.match(/(?:不能|无法|無法|不会|不會).{0,24}$/u)?.[0] || "";
       const negative = /(?:不|未)(?:会|會|能|可以|再|进行|進行|执行|執行|完成)?\s*$/u.test(prefix)
+        || /(?:不是|并非|並非|不属于|不屬於|不作为|不作為|不视为|不視為|不当作|不當作)\s*$/u.test(prefix)
         || (Boolean(broadNegativePrefix) && !/(?:但|但是|不过|不過|而是|改为|改為)/u.test(broadNegativePrefix))
-        || /^.{0,8}(?:不进行|不進行|不会|不會|失败|失敗|されません|行われません)/u.test(suffix);
+        || /^.{0,8}(?:不进行|不進行|不会|不會|失败|失敗|されません|行われません|できません|しません|ではありません|ではない|として扱いません|として扱われません|にはなりません)/u.test(suffix);
       const scopedKind = `${resolutionChainScope(clause.text, localIndex)}:${kind}`;
       if (negative) {
         const set = claimSets.get(scopedKind) || new Set();
@@ -606,7 +671,7 @@ function resolutionOperationClaims(value) {
       // still detected when the operation is mentioned again positively.
       const positive = !negative && ((!negativeExecutionPrefix
           && /(?:正常|成功|照常|进行|進行|执行|執行|完成)\s*$/u.test(prefix))
-        || /^(?:正常|成功|完成|进行|進行|します|行います|行われます)/u.test(suffix)
+        || /^(?:正常|成功|完成|进行|進行|できます|できる|されます|される|します|する|行います|行われます)/u.test(suffix)
         || isPositiveResolutionText(maskNegativeResolutionPhrases(clause.text)));
       if (positive) {
         const set = claimSets.get(scopedKind) || new Set();

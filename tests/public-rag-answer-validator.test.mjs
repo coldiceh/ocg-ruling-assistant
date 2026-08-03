@@ -162,6 +162,76 @@ test("validator rejects a performed fusion that contradicts an authoritative dir
   assert.ok(validation.errors.includes("shortAnswer resolution conclusion conflicts with reasoning"));
 });
 
+test("authoritative Chinese direct evidence compares Special Summon and non-Fusion Summon separately", () => {
+  const evidence = {
+    officialQaDirectCandidates: [{
+      id: "official-direct-operation-scoped-zh",
+      question: "这次特殊召唤是融合召唤吗？",
+      answer: "可以特殊召唤，但这次特殊召唤不是融合召唤。",
+      text: "这次特殊召唤是融合召唤吗？ 可以特殊召唤，但这次特殊召唤不是融合召唤。",
+    }],
+  };
+  const answer = makeAnswer(
+    "可以特殊召唤；这次特殊召唤不当作融合召唤。",
+    [{ id: "official-direct-operation-scoped-zh" }],
+  );
+  const validation = validatePublicRagFinalAnswer(answer, {
+    rawText: JSON.stringify(answer),
+    userQuery: "这次特殊召唤是融合召唤吗？",
+    evidence,
+    authoritativeOfficialDirect: true,
+  });
+
+  assert.equal(validation.ok, true, JSON.stringify(validation.errors));
+});
+
+test("authoritative Japanese direct evidence accepts the same mixed operation result in Chinese", () => {
+  const evidence = {
+    officialQaDirectCandidates: [{
+      id: "official-direct-operation-scoped-ja",
+      question: "この方法で特殊召喚できますか。また、融合召喚として扱いますか。",
+      answer: "特殊召喚できますが、この特殊召喚は融合召喚ではありません。（ただし、使用したモンスターは融合素材として扱います。）",
+      text: "この方法で特殊召喚できますか。また、融合召喚として扱いますか。 特殊召喚できますが、この特殊召喚は融合召喚ではありません。（ただし、使用したモンスターは融合素材として扱います。）",
+    }],
+  };
+  const answer = makeAnswer(
+    "可以特殊召唤，但不作为融合召唤处理；使用的怪兽仍作为融合素材处理。",
+    [{ id: "official-direct-operation-scoped-ja" }],
+  );
+  const validation = validatePublicRagFinalAnswer(answer, {
+    rawText: JSON.stringify(answer),
+    userQuery: "能否用这个方法特殊召唤？这是否属于融合召唤？",
+    evidence,
+    authoritativeOfficialDirect: true,
+  });
+
+  assert.equal(validation.ok, true, JSON.stringify(validation.errors));
+});
+
+test("operation-scoped official comparison still rejects the opposite result for the same operation", () => {
+  const evidence = {
+    officialQaDirectCandidates: [{
+      id: "official-direct-operation-conflict-ja",
+      question: "この方法で特殊召喚できますか。",
+      answer: "この方法で特殊召喚できます。",
+      text: "この方法で特殊召喚できますか。 この方法で特殊召喚できます。",
+    }],
+  };
+  const answer = makeAnswer(
+    "这个方法不能进行特殊召唤。",
+    [{ id: "official-direct-operation-conflict-ja" }],
+  );
+  const validation = validatePublicRagFinalAnswer(answer, {
+    rawText: JSON.stringify(answer),
+    userQuery: "能否用这个方法特殊召唤？",
+    evidence,
+    authoritativeOfficialDirect: true,
+  });
+
+  assert.equal(validation.ok, false);
+  assert.ok(validation.errors.includes("final resolution contradicts the authoritative official direct answer"));
+});
+
 test("validator rejects trusted semantic activation and resolution reversals", () => {
   const evidence = {
     semanticStateTransition: {

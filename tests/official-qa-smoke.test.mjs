@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { routeAnswer, selectOfficialQaRoute } from "../backend/answerRouter.mjs";
-import { extractOfficialQaAnswer } from "../backend/officialQaAnswerExtractor.mjs";
+import {
+  extractOfficialQaAnswer,
+  extractRelevantOfficialQaAnswerExcerpt,
+} from "../backend/officialQaAnswerExtractor.mjs";
 import {
   classifyOfficialQaQuestionType,
   searchOfficialQaEvidence,
@@ -69,6 +72,36 @@ test("official extractor preserves explicit answer instead of replacing it with 
   const extracted = extractOfficialQaAnswer(qa({ question: "这张卡能发动吗？", answer: "不可以发动。" }), { questionType: "can_activate" });
   assert.equal(extracted.verdict, "cannot_activate");
   assert.equal(extracted.answerText, "不可以发动。");
+});
+
+test("official answer excerpt removes a dense following-card catalogue but keeps the ruling", () => {
+  const catalogue = Array.from({ length: 16 }, (_, index) => `「<<${23000 + index}>>」①`).join("\n");
+  const answer = [
+    "可以发动。",
+    "处理时仍会进行特殊召唤。",
+    "但是，处理时对象已经不在场上的场合不进行后续处理。",
+    "例として、以下のカードの効果も同様に処理します。",
+    "モンスター効果",
+    catalogue,
+    "CATALOGUE_END",
+  ].join("\n");
+
+  const excerpt = extractRelevantOfficialQaAnswerExcerpt({ answer });
+
+  assert.match(excerpt, /可以发动/u);
+  assert.match(excerpt, /对象已经不在场上的场合不进行后续处理/u);
+  assert.match(excerpt, /以下のカードの効果も同様/u);
+  assert.doesNotMatch(excerpt, /<<23000>>/u);
+  assert.doesNotMatch(excerpt, /CATALOGUE_END/u);
+});
+
+test("official answer excerpt keeps an ordinary long prose tail and its final exception", () => {
+  const answer = `可以发动。${"这是普通的说明文字。".repeat(240)}最后的例外：本回合不能再次发动。`;
+
+  const excerpt = extractRelevantOfficialQaAnswerExcerpt({ answer });
+
+  assert.equal(excerpt, answer);
+  assert.match(excerpt, /最后的例外：本回合不能再次发动/u);
 });
 
 test("Fast Judge requires canonical identity binding before an official direct answer", async () => {
