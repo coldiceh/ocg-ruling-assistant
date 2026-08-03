@@ -680,6 +680,7 @@ test("a complete answer agreeing with string semantic resolution remains a one-c
   assert.equal(calls, 1);
   assert.equal(result.publicFinalValidation.outcome, "primary_valid");
   assert.equal(result.publicFinalValidation.repairAttempted, false);
+  assert.equal(result.publicFinalValidation.primary.candidate.shortAnswer, answer.shortAnswer);
 });
 
 test("bare temporal follow-up does not manufacture a resolution question", () => {
