@@ -207,6 +207,100 @@ test("authoritative Japanese direct evidence accepts the same mixed operation re
   assert.equal(validation.ok, true, JSON.stringify(validation.errors));
 });
 
+test("authoritative direct comparison aligns a general result and a restricted exception", () => {
+  const evidence = {
+    officialQaDirectCandidates: [{
+      id: "official-direct-default-and-exception-ja",
+      question: "融合召喚の素材にできないモンスターを使用できますか。",
+      answer: "いずれの状況でも墓地へ送って特殊召喚できます。この特殊召喚は融合召喚ではありませんので、使用するモンスターは融合召喚の素材としては扱われません。ただし、融合素材としては扱います。なお、『リリースできない』効果も適用される場合、リリースする特殊召喚手順には使用できません。",
+      text: "融合召喚の素材にできないモンスターを使用できますか。 いずれの状況でも墓地へ送って特殊召喚できます。この特殊召喚は融合召喚ではありません。なお、『リリースできない』効果も適用される場合、リリースする特殊召喚手順には使用できません。",
+    }],
+  };
+  const answer = makeAnswer(
+    "可以送去墓地并特殊召唤。这次特殊召唤不是融合召唤，但所用怪兽仍作为融合素材。不过，若怪兽同时受到‘不能解放’效果影响，则不能用于需要解放的特殊召唤手续。",
+    [{ id: "official-direct-default-and-exception-ja" }],
+  );
+  const validation = validatePublicRagFinalAnswer(answer, {
+    rawText: JSON.stringify(answer),
+    userQuery: "能否用这些怪兽特殊召唤？",
+    evidence,
+    authoritativeOfficialDirect: true,
+  });
+
+  assert.equal(validation.ok, true, JSON.stringify(validation.errors));
+});
+
+test("authoritative direct comparison rejects a reversed restricted exception", () => {
+  const evidence = {
+    officialQaDirectCandidates: [{
+      id: "official-direct-restricted-reversal",
+      question: "この方法で特殊召喚できますか。",
+      answer: "通常は特殊召喚できます。ただし、制限が適用される場合は特殊召喚できません。",
+      text: "この方法で特殊召喚できますか。 通常は特殊召喚できます。ただし、制限が適用される場合は特殊召喚できません。",
+    }],
+  };
+  const answer = makeAnswer(
+    "通常可以特殊召唤；但在限制适用的场合也可以特殊召唤。",
+    [{ id: "official-direct-restricted-reversal" }],
+  );
+  const validation = validatePublicRagFinalAnswer(answer, {
+    rawText: JSON.stringify(answer),
+    userQuery: "这个方法能否特殊召唤？",
+    evidence,
+    authoritativeOfficialDirect: true,
+  });
+
+  assert.equal(validation.ok, false);
+  assert.ok(validation.errors.includes("final resolution contradicts the authoritative official direct answer"));
+});
+
+test("authoritative direct comparison supports opposite outcomes in different conditions", () => {
+  const evidence = {
+    officialQaDirectCandidates: [{
+      id: "official-direct-two-opposite-conditions",
+      question: "条件ごとの特殊召喚の処理はどうなりますか。",
+      answer: "Aが適用される場合は特殊召喚できません。Bが適用される場合は特殊召喚できます。",
+      text: "条件ごとの特殊召喚の処理はどうなりますか。 Aが適用される場合は特殊召喚できません。Bが適用される場合は特殊召喚できます。",
+    }],
+  };
+  const answer = makeAnswer(
+    "A适用的场合不能特殊召唤；B适用的场合可以特殊召唤。",
+    [{ id: "official-direct-two-opposite-conditions" }],
+  );
+  const validation = validatePublicRagFinalAnswer(answer, {
+    rawText: JSON.stringify(answer),
+    userQuery: "A与B条件下分别能否特殊召唤？",
+    evidence,
+    authoritativeOfficialDirect: true,
+  });
+
+  assert.equal(validation.ok, true, JSON.stringify(validation.errors));
+});
+
+test("authoritative direct comparison rejects swapped outcomes between aligned conditions", () => {
+  const evidence = {
+    officialQaDirectCandidates: [{
+      id: "official-direct-swapped-conditions",
+      question: "AとBの場合はどうなりますか。",
+      answer: "Aが適用される場合は特殊召喚できません。Bが適用される場合は特殊召喚できます。",
+      text: "AとBの場合はどうなりますか。 Aが適用される場合は特殊召喚できません。Bが適用される場合は特殊召喚できます。",
+    }],
+  };
+  const answer = makeAnswer(
+    "A适用的场合可以特殊召唤；B适用的场合不能特殊召唤。",
+    [{ id: "official-direct-swapped-conditions" }],
+  );
+  const validation = validatePublicRagFinalAnswer(answer, {
+    rawText: JSON.stringify(answer),
+    userQuery: "A与B条件下分别能否特殊召唤？",
+    evidence,
+    authoritativeOfficialDirect: true,
+  });
+
+  assert.equal(validation.ok, false);
+  assert.ok(validation.errors.includes("final resolution contradicts the authoritative official direct answer"));
+});
+
 test("authoritative direct validation does not let explanatory branches override a correct headline", () => {
   const evidence = {
     officialQaDirectCandidates: [{
