@@ -511,6 +511,7 @@ function validateOfficialResolutionOperationAgreement({ officialText = "", short
   let contradiction = false;
   let omission = false;
   for (const [expectedKey, expectedOutcome] of expectedClaims) {
+    if (resolutionClaimKeyParts(expectedKey).branch !== "default") continue;
     if (expectedOutcome === "conflict") continue;
     const actualOutcome = alignedResolutionOperationOutcome(actualClaims, expectedKey);
     if (actualOutcome === "unknown") {
@@ -519,6 +520,9 @@ function validateOfficialResolutionOperationAgreement({ officialText = "", short
       contradiction = true;
     }
   }
+  const conditionalAgreement = compareConditionalResolutionOutcomes(expectedClaims, actualClaims);
+  contradiction ||= conditionalAgreement.contradiction;
+  omission ||= conditionalAgreement.omission;
   if (contradiction) {
     errors.push("final resolution contradicts the authoritative official direct answer");
   } else if (omission) {
@@ -526,8 +530,79 @@ function validateOfficialResolutionOperationAgreement({ officialText = "", short
   }
 }
 
+function compareConditionalResolutionOutcomes(expectedClaims, actualClaims) {
+  const expectedItems = conditionalOutcomeItems(expectedClaims);
+  const actualItems = conditionalOutcomeItems(actualClaims);
+  const unmatchedExpected = [];
+  const unmatchedActual = new Set(actualItems.map((_, index) => index));
+  let contradiction = false;
+  let omission = false;
+
+  // First bind branches whose normalized condition signature survives the
+  // translation (card names, labels, numbers, and many short conditions do).
+  // This prevents A/B outcomes from being swapped while retaining the
+  // language-agnostic fallback for genuinely translated condition prose.
+  for (const expected of expectedItems) {
+    const exactIndex = actualItems.findIndex((actual, index) => (
+      unmatchedActual.has(index)
+      && actual.kind === expected.kind
+      && actual.branch === expected.branch
+      && (actual.chain === expected.chain || actual.chain === "unscoped" || expected.chain === "unscoped")
+    ));
+    if (exactIndex < 0) {
+      unmatchedExpected.push(expected);
+      continue;
+    }
+    unmatchedActual.delete(exactIndex);
+    if (actualItems[exactIndex].outcome !== expected.outcome) contradiction = true;
+  }
+
+  const expectedByKind = conditionalOutcomeSets(unmatchedExpected);
+  const actualByKind = conditionalOutcomeSets(
+    actualItems.filter((_, index) => unmatchedActual.has(index)),
+  );
+  for (const [kind, expectedOutcomes] of expectedByKind) {
+    const actualOutcomes = actualByKind.get(kind);
+    if (!actualOutcomes?.size) {
+      omission = true;
+      continue;
+    }
+    if (actualOutcomes.has("conflict")) {
+      contradiction = true;
+      continue;
+    }
+    for (const outcome of expectedOutcomes) {
+      if (!actualOutcomes.has(outcome)) omission = true;
+    }
+    for (const outcome of actualOutcomes) {
+      if (!expectedOutcomes.has(outcome)) contradiction = true;
+    }
+  }
+  return { contradiction, omission };
+}
+
+function conditionalOutcomeItems(claims) {
+  const items = [];
+  for (const [key, outcome] of claims) {
+    const parts = resolutionClaimKeyParts(key);
+    if (parts.branch === "default") continue;
+    items.push({ ...parts, outcome });
+  }
+  return items;
+}
+
+function conditionalOutcomeSets(items) {
+  const grouped = new Map();
+  for (const { kind, outcome } of items) {
+    const outcomes = grouped.get(kind) || new Set();
+    outcomes.add(outcome);
+    grouped.set(kind, outcomes);
+  }
+  return grouped;
+}
+
 function comparableOfficialResolutionClaims(value) {
-  const claims = resolutionOperationClaims(value);
+  const claims = resolutionOperationClaims(value, { branchScoped: true });
   // In phrases such as "效果处理时不进行融合召唤", "效果处理时" is a
   // time marker, not a claim that effect processing itself failed.  Prefer the
   // concrete operation whenever the sentence supplies one.
@@ -538,20 +613,37 @@ function comparableOfficialResolutionClaims(value) {
 
 function alignedResolutionOperationOutcome(actualClaims, expectedKey) {
   if (actualClaims.has(expectedKey)) return actualClaims.get(expectedKey);
-  const separator = expectedKey.lastIndexOf(":");
-  const expectedScope = expectedKey.slice(0, separator);
-  const expectedKind = expectedKey.slice(separator + 1);
+  const expected = resolutionClaimKeyParts(expectedKey);
   const sameKind = [...actualClaims]
-    .filter(([key]) => key.endsWith(`:${expectedKind}`));
+    .map(([key, outcome]) => ({ ...resolutionClaimKeyParts(key), key, outcome }))
+    .filter((claim) => claim.kind === expected.kind);
   if (!sameKind.length) return "unknown";
 
-  // A headline often omits the official answer's explicit chain number.  An
-  // unscoped occurrence can still describe that operation; otherwise only
-  // collapse scoped occurrences when they all state the same outcome.
-  const unscoped = sameKind.find(([key]) => key === `unscoped:${expectedKind}`);
-  if (expectedScope !== "unscoped" && unscoped) return unscoped[1];
-  const outcomes = new Set(sameKind.map(([, outcome]) => outcome));
+  // Compare the default result with the default result and restricted
+  // exceptions with restricted exceptions.  Their condition wording can be
+  // translated or paraphrased, so the branch category is stable while its
+  // normalized phrase is not.  A headline may omit an official chain number;
+  // an unscoped claim remains acceptable for that same branch category.
+  const sameBranchCategory = sameKind.filter((claim) => (
+    (expected.branch === "default") === (claim.branch === "default")
+  ));
+  if (!sameBranchCategory.length) return "unknown";
+  const sameChain = sameBranchCategory.filter((claim) => (
+    claim.chain === expected.chain
+    || claim.chain === "unscoped"
+    || expected.chain === "unscoped"
+  ));
+  const comparable = sameChain.length ? sameChain : sameBranchCategory;
+  const outcomes = new Set(comparable.map((claim) => claim.outcome));
   return outcomes.size === 1 ? [...outcomes][0] : "conflict";
+}
+
+function resolutionClaimKeyParts(key) {
+  const parts = String(key || "").split(":");
+  const kind = parts.pop() || "";
+  const chain = parts.shift() || "unscoped";
+  const branch = parts.join(":") || "default";
+  return { chain, branch, kind };
 }
 
 function validateAnswerInternalConsistency({
@@ -745,7 +837,7 @@ function resolutionBranchSegmentScope(segment, inheritedScope = "default") {
   // "Under the same condition" explicitly denies a new branch distinction.
   if (/(?:同一|相同|同样|同樣)条件|同じ条件|same\s+conditions?/iu.test(text)) return "default";
 
-  const explicitCondition = /(?:如果|若|当|當|只有|仅当|僅當|在.{0,20}(?:时|時)|场合|場合|情况下|情況下|条件|條件|のみ|場合|if\b|when\b|unless\b|provided\b)/iu.test(text);
+  const explicitCondition = /(?:如果|若(?=.{0,24}(?:时|時|则|則|，|,|不能|可以))|(?<!不)当(?=.{0,24}(?:时|则|，|,))|當(?=.{0,24}(?:時|則|，|,))|只有|仅当|僅當|在.{0,20}(?:时|時)|场合|場合|情况下|情況下|条件|條件|のみ|場合|if\b|when\b|unless\b|provided\b)/iu.test(text);
   const exceptionConnector = /^(?:\s|[，,])*(?:但|但是|不过|不過|然而|只是|ただし|なお|一方|except\b|however\b|but\b)/iu.test(text);
   const restrictedSubject = /(?:(?:受|受到|被|适用|適用|具有|带有|帶有|处于|處於).{0,40}(?:限制|制限|效果|効果|状态|狀態|影响|影響)|(?:限制|制限|效果|効果).{0,24}(?:适用|適用|受到|受け)).{0,24}(?:卡|怪兽|怪獸|对象|對象|素材|手续|手續|場合|场合|ため|ので)/iu.test(text);
   if (explicitCondition || restrictedSubject) {
@@ -772,6 +864,7 @@ function resolutionConditionSignature(value) {
     .replace(/(?:不能|不可以|无法|無法|可以|能够|能|会|會)(?:再|进行|進行|执行|執行|完成)?\s*$/iu, "")
     .replace(/(?:时|時|则|則|就|那么|那麼)\s*$/iu, "")
     .replace(/[\s　‘’“”"'「」『』《》【】()（），,。.;；:：]/gu, "")
+    .replace(/(?:が|は|を|に)$/u, "")
     .slice(0, 96);
   return normalized || "anonymous";
 }
