@@ -403,6 +403,17 @@ test("one headline cannot state opposite outcomes for the same chain operation",
   assert.ok(validation.errors.includes("shortAnswer contains conflicting resolution conclusions for the same operation"));
 });
 
+test("a qualified exception branch may have a different result for the same operation", () => {
+  const answer = makeAnswer("通常可以特殊召唤；但当某只怪兽还适用不能解放的限制时，不能用要求解放的手续特殊召唤。");
+  const validation = validatePublicRagFinalAnswer(answer, {
+    rawText: JSON.stringify(answer),
+    userQuery: "这种特殊召唤手续如何处理？",
+    evidence: {},
+  });
+
+  assert.equal(validation.ok, true, JSON.stringify(validation.errors));
+});
+
 test("a complete answer agreeing with string semantic resolution remains a one-call fast result", async () => {
   let calls = 0;
   const answer = makeAnswer("可以发动，但是不会进行任何效果处理，因此不进行融合召唤。");
