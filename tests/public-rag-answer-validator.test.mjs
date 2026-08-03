@@ -401,12 +401,16 @@ test("directed repair keeps the original frozen prompt and exposes only validati
     originalPrompt: prompt,
     priorOutput: "{\"shortAnswer\":\"可以发动\"}",
     validationErrors: ["shortAnswer omits the requested post-activation resolution result"],
+    allowedEvidenceIds: ["qa-allowed-1", "card-text-allowed-2"],
   });
 
   assert.ok(repaired.startsWith(prompt));
   assert.match(repaired, /唯一一次定向修复/u);
   assert.match(repaired, /不得重新检索/u);
   assert.match(repaired, /post-activation resolution/u);
+  assert.match(repaired, /allowedEvidenceIds/u);
+  assert.match(repaired, /qa-allowed-1/u);
+  assert.match(repaired, /id 必须非空/u);
 });
 
 test("safe fallback uses a grounded blocker and never guesses a conflicting conclusion", () => {

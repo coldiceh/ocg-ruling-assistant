@@ -37,13 +37,19 @@ export async function answerRulingQuestionFast({ question, mode = "duel", maxLat
 
   try {
     const localSnapshot = snapshot || await runWithinLatencyBudget(() => loadFastJudgeSnapshot(dataDir), budget, "fast_context_load");
+    const subsumptionCandidatePoolComplete = !snapshot
+      || snapshot?.snapshotMeta?.subsumptionCandidatePoolComplete === true;
     const evidenceSelection = filterCurrentEvidence(localSnapshot.records || [], {
       evidenceIndex: localSnapshot.evidenceIndex || [],
       sourceFreshness: localSnapshot.snapshotMeta?.sourceFreshness || "unknown",
       detectConflicts: false,
     });
     const activeSnapshot = { ...localSnapshot, records: evidenceSelection.currentEvidence };
-    const rawOfficialQaSearch = searchOfficialQaEvidence({ question: input, records: activeSnapshot.records });
+    const rawOfficialQaSearch = searchOfficialQaEvidence({
+      question: input,
+      records: activeSnapshot.records,
+      subsumptionCandidatePoolComplete,
+    });
     const initialResolution = resolveCardsForFastJudge(input, localSnapshot.cards || []);
     const entityResolution = resolveEntitiesFromOfficialQaMatch({
       resolution: initialResolution,
@@ -58,6 +64,7 @@ export async function answerRulingQuestionFast({ question, mode = "duel", maxLat
       question: input,
       records: activeSnapshot.records,
       resolvedCards: resolution.resolvedCards,
+      subsumptionCandidatePoolComplete,
     });
     const databaseProfiles = buildCardProfiles(resolution.resolvedCards);
     const temporaryProfiles = buildTemporaryCardProfiles(input, resolution.unresolvedCards);

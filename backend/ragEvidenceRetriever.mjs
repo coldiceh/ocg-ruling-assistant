@@ -39,6 +39,7 @@ export async function retrieveRagEvidence({
   qaRecords,
   ruleSearchQueries = [],
   enableLiveOfficialQa = false,
+  subsumptionCandidatePoolComplete = false,
   maxPerBucket = 5,
   env = {},
   fetchImpl = globalThis.fetch,
@@ -160,6 +161,10 @@ export async function retrieveRagEvidence({
     records: scopedRecordBuckets.officialQa,
     resolvedCards: effectiveQaIdentityCards,
     limit: Math.max(20, limits.maxOfficialQa * 4),
+    // The scoped bucket comes from the complete local QA snapshot and keeps
+    // every record indexed to any resolved query card.
+    subsumptionCandidatePoolComplete: subsumptionCandidatePoolComplete === true
+      || !(cards || records || qaRecords),
   });
   const localCandidateQaIds = localOfficialMatches.all
     .map((match) => officialQaNumericId(match.record))
@@ -767,6 +772,7 @@ function evidenceFromOfficialMatch(match, type, maxTextChars, warnings) {
     score: match.score,
     retrievalScore,
     matchLevel: match.matchLevel,
+    questionType: match.questionType || "unknown",
     matchedBy: match.matchedBy || [],
     matchedQuestionCardIds: match.matchedQuestionCardIds || [],
     questionCardIdCoverage: Number(match.questionCardIdCoverage || 0),
@@ -774,6 +780,16 @@ function evidenceFromOfficialMatch(match, type, maxTextChars, warnings) {
     authoritativeSceneMatch: match.authoritativeSceneMatch === true,
     authoritativeSceneMatchReason: match.authoritativeSceneMatchReason || "",
     candidatePoolComplete: match.candidatePoolComplete === true,
+    subsumptionCandidatePoolComplete: match.subsumptionCandidatePoolComplete === true,
+    semanticSubsumptionCertified: match.semanticSubsumptionCertified === true,
+    semanticSubsumptionScoreMargin: Number(match.semanticSubsumptionScoreMargin || 0),
+    semanticSubsumptionRunnerUpId: match.semanticSubsumptionRunnerUpId || "",
+    semanticSubsumptionMetrics: match.semanticSubsumptionMetrics || null,
+    questionCardSubsumptionCertified: match.questionCardSubsumptionCertified === true,
+    questionCardSubsumptionMetrics: match.questionCardSubsumptionMetrics || null,
+    semanticQueryCoverage: Number(match.semanticQueryCoverage || 0),
+    distinctiveSemanticQueryCoverage: Number(match.distinctiveSemanticQueryCoverage || 0),
+    semanticScore: Number(match.semanticScore || 0),
     distinctiveSemanticHits: match.distinctiveSemanticHits || [],
     effectNumberCompatible: match.effectNumberCompatible !== false,
     sceneQualifiersCompatible: match.sceneQualifiersCompatible !== false,
