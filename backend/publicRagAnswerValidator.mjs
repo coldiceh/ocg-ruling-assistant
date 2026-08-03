@@ -27,6 +27,7 @@ export function validatePublicRagFinalAnswer(answer = {}, {
   authoritativeOfficialDirect = false,
 } = {}) {
   const errors = [];
+  const validationDiagnostics = {};
   const warnings = Array.isArray(modelWarnings) ? modelWarnings.map(String) : [];
   const shortAnswer = String(answer?.shortAnswer || "").trim();
   const reasoning = Array.isArray(answer?.reasoning)
@@ -71,6 +72,7 @@ export function validatePublicRagFinalAnswer(answer = {}, {
     evidence,
     authoritativeOfficialDirect,
     errors,
+    diagnostics: validationDiagnostics,
   });
   validateOperationLegalityContract({ answer, shortAnswer, evidence, errors });
   validateTrustedSemanticContract({ answer, shortAnswer, evidence, errors });
@@ -92,6 +94,9 @@ export function validatePublicRagFinalAnswer(answer = {}, {
       operationLegality: Boolean(evidence?.operationLegality?.hasGroundedChecks),
       trustedSemantic: evidence?.semanticStateTransition?.authoritative === true,
       multiPartQuestion: asksActivationAndResolution(userQuery),
+      ...(validationDiagnostics.officialResolutionComparison
+        ? { officialResolutionComparison: validationDiagnostics.officialResolutionComparison }
+        : {}),
     },
   };
 }
@@ -271,7 +276,15 @@ export async function runValidatedPublicRagFinal({
   });
 }
 
-function validateOfficialDirectContract({ answer, shortAnswer, combined, evidence, authoritativeOfficialDirect, errors }) {
+function validateOfficialDirectContract({
+  answer,
+  shortAnswer,
+  combined,
+  evidence,
+  authoritativeOfficialDirect,
+  errors,
+  diagnostics = {},
+}) {
   if (!authoritativeOfficialDirect) {
     return;
   }
@@ -295,7 +308,7 @@ function validateOfficialDirectContract({ answer, shortAnswer, combined, evidenc
   if (officialPolarity !== "unknown" && modelPolarity !== "unknown" && officialPolarity !== modelPolarity) {
     errors.push("final conclusion contradicts the authoritative official direct answer");
   }
-  validateOfficialResolutionOperationAgreement({
+  diagnostics.officialResolutionComparison = validateOfficialResolutionOperationAgreement({
     officialText,
     shortAnswer,
     errors,
@@ -395,11 +408,13 @@ function aggregateValidatedAttempts({
       primary: {
         ok: primaryValidation?.ok === true,
         errors: primaryValidation?.errors || [],
+        checks: primaryValidation?.checks || {},
         latencyMs: primaryLatencyMs,
       },
       repair: repairAttempted ? {
         ok: repairValidation?.ok === true,
         errors: repairValidation?.errors || [],
+        checks: repairValidation?.checks || {},
         latencyMs: repairLatencyMs,
       } : null,
       totalLatencyMs,
@@ -492,6 +507,11 @@ function validateResolutionOutcomeAgreement({
 
 function validateOfficialResolutionOperationAgreement({ officialText = "", shortAnswer = "", errors }) {
   const expectedClaims = comparableOfficialResolutionClaims(officialText);
+  const actualClaims = comparableOfficialResolutionClaims(shortAnswer);
+  const comparison = {
+    expectedClaims: serializeResolutionClaims(expectedClaims),
+    actualClaims: serializeResolutionClaims(actualClaims),
+  };
   if (!expectedClaims.size) {
     // Keep the aggregate fallback for an official answer whose operation is not
     // yet represented by the operation vocabulary.  Once concrete operations
@@ -504,10 +524,9 @@ function validateOfficialResolutionOperationAgreement({ officialText = "", short
       omissionError: "final answer omits the authoritative official direct resolution result",
       errors,
     });
-    return;
+    return comparison;
   }
 
-  const actualClaims = comparableOfficialResolutionClaims(shortAnswer);
   let contradiction = false;
   let omission = false;
   for (const [expectedKey, expectedOutcome] of expectedClaims) {
@@ -528,6 +547,11 @@ function validateOfficialResolutionOperationAgreement({ officialText = "", short
   } else if (omission) {
     errors.push("final answer omits the authoritative official direct resolution result");
   }
+  return comparison;
+}
+
+function serializeResolutionClaims(claims) {
+  return [...claims].map(([key, outcome]) => ({ key, outcome }));
 }
 
 function compareConditionalResolutionOutcomes(expectedClaims, actualClaims) {
