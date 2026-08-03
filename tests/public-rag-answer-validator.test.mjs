@@ -414,6 +414,132 @@ test("a qualified exception branch may have a different result for the same oper
   assert.equal(validation.ok, true, JSON.stringify(validation.errors));
 });
 
+test("an attributive restricted subset is a separate resolution branch", () => {
+  const answer = makeAnswer(
+    "通常可以特殊召唤；但受到‘不能解放’效果影响的怪兽，不能用于要求解放融合素材的特殊召唤手续。",
+  );
+  const validation = validatePublicRagFinalAnswer(answer, {
+    rawText: JSON.stringify(answer),
+    userQuery: "这种特殊召唤手续如何处理？",
+    evidence: {},
+  });
+
+  assert.equal(validation.ok, true, JSON.stringify(validation.errors));
+});
+
+test("synonymous attributive restriction wording is a separate branch", () => {
+  const answer = makeAnswer(
+    "一般可以特殊召唤；不过，适用‘不能解放’限制的怪兽不能用于要求解放的特殊召唤手续。",
+  );
+  const validation = validatePublicRagFinalAnswer(answer, {
+    rawText: JSON.stringify(answer),
+    userQuery: "这种特殊召唤手续如何处理？",
+    evidence: {},
+  });
+
+  assert.equal(validation.ok, true, JSON.stringify(validation.errors));
+});
+
+test("opposite outcomes explicitly under the same condition remain a conflict", () => {
+  const answer = makeAnswer("通常可以特殊召唤；但在同一条件下不能特殊召唤。");
+  const validation = validatePublicRagFinalAnswer(answer, {
+    rawText: JSON.stringify(answer),
+    userQuery: "这种特殊召唤手续如何处理？",
+    evidence: {},
+  });
+
+  assert.equal(validation.ok, false);
+  assert.ok(validation.errors.includes("shortAnswer contains conflicting resolution conclusions for the same operation"));
+});
+
+test("opposite outcomes inside one restricted branch remain a conflict", () => {
+  const answer = makeAnswer(
+    "可以特殊召唤；但受到限制效果影响的怪兽不能特殊召唤，但又可以特殊召唤。",
+  );
+  const validation = validatePublicRagFinalAnswer(answer, {
+    rawText: JSON.stringify(answer),
+    userQuery: "这种特殊召唤手续如何处理？",
+    evidence: {},
+  });
+
+  assert.equal(validation.ok, false);
+  assert.ok(validation.errors.includes("shortAnswer contains conflicting resolution conclusions for the same operation"));
+});
+
+test("a same-sentence conditional exception is not merged into the default branch", () => {
+  const answer = makeAnswer("通常可以特殊召唤，但如果怪兽受到不能解放的限制，则不能用于该特殊召唤手续。");
+  const validation = validatePublicRagFinalAnswer(answer, {
+    rawText: JSON.stringify(answer),
+    userQuery: "这种特殊召唤手续如何处理？",
+    evidence: {},
+  });
+
+  assert.equal(validation.ok, true, JSON.stringify(validation.errors));
+});
+
+test("the same repeated condition across sentences retains one branch scope", () => {
+  const answer = makeAnswer("当A适用时不能特殊召唤。当A适用时又可以特殊召唤。");
+  const validation = validatePublicRagFinalAnswer(answer, {
+    rawText: JSON.stringify(answer),
+    userQuery: "A适用时能否特殊召唤？",
+    evidence: {},
+  });
+
+  assert.equal(validation.ok, false);
+  assert.ok(validation.errors.includes("shortAnswer contains conflicting resolution conclusions for the same operation"));
+});
+
+test("material classification is not mistaken for performing a Fusion Summon", () => {
+  const answer = makeAnswer(
+    "可以将这些怪兽送去墓地并特殊召唤。这个特殊召唤不是融合召唤，所使用的怪兽不作为融合召唤的素材，但仍作为融合素材。",
+  );
+  const validation = validatePublicRagFinalAnswer(answer, {
+    rawText: JSON.stringify(answer),
+    userQuery: "能否用记载的手续特殊召唤？这是融合召唤吗？",
+    evidence: {},
+  });
+
+  assert.equal(validation.ok, true, JSON.stringify(validation.errors));
+});
+
+test("extended material-role wording is not mistaken for a Fusion Summon operation", () => {
+  const answer = makeAnswer(
+    "可以特殊召唤，但这不是融合召唤，所用怪兽仍作为融合召唤所使用的素材，也就是融合召唤素材。",
+  );
+  const validation = validatePublicRagFinalAnswer(answer, {
+    rawText: JSON.stringify(answer),
+    userQuery: "这是融合召唤吗？所用怪兽如何处理？",
+    evidence: {},
+  });
+
+  assert.equal(validation.ok, true, JSON.stringify(validation.errors));
+});
+
+test("a monster object after Fusion Summon remains an operation claim", () => {
+  const answer = makeAnswer("不能融合召唤怪兽，但在同一条件下又可以融合召唤怪兽。");
+  const validation = validatePublicRagFinalAnswer(answer, {
+    rawText: JSON.stringify(answer),
+    userQuery: "能否融合召唤怪兽？",
+    evidence: {},
+  });
+
+  assert.equal(validation.ok, false);
+  assert.ok(validation.errors.includes("shortAnswer contains conflicting resolution conclusions for the same operation"));
+});
+
+test("Japanese Fusion Summon material wording is a role rather than an operation", () => {
+  const answer = makeAnswer(
+    "特殊召喚できます。この特殊召喚は融合召喚ではありませんので、使用するモンスターは融合召喚の素材としては扱われません。ただし、融合素材としては扱います。",
+  );
+  const validation = validatePublicRagFinalAnswer(answer, {
+    rawText: JSON.stringify(answer),
+    userQuery: "この手順で特殊召喚できますか。",
+    evidence: {},
+  });
+
+  assert.equal(validation.ok, true, JSON.stringify(validation.errors));
+});
+
 test("a complete answer agreeing with string semantic resolution remains a one-call fast result", async () => {
   let calls = 0;
   const answer = makeAnswer("可以发动，但是不会进行任何效果处理，因此不进行融合召唤。");
