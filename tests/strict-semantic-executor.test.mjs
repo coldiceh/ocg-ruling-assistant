@@ -29,11 +29,12 @@ const implementedCases = [{
   },
 }, {
   id: "evenly-from-hand-is-field-card-activation",
+  officialDirectPreferred: true,
   question: "对方场上通常召唤的「天下独步的大义贼（天下独歩の大義賊）」存在。自己场上没有卡，在战斗阶段结束时从手牌发动「颉颃胜负」。对方可以直接连锁发动「天下独步的大义贼（天下独歩の大義賊）」的①效果吗？",
   assertions(answer) {
-    assert.match(answer.shortAnswer, /^不能连锁发动/u);
-    assert.match(answer.shortAnswer, /魔法与陷阱区域/u);
-    assert.match(answer.shortAnswer, /最初来自手牌不会改写实际发动区域/u);
+    assert.match(answer.shortAnswer, /(?:不能连锁发动|できません)/u);
+    assert.match(answer.shortAnswer, /(?:魔法与陷阱区域|魔法・罠カード)/u);
+    assert.match(answer.shortAnswer, /(?:最初来自手牌不会改写实际发动区域|手札からフィールドに置いて発動)/u);
   },
 }, {
   id: "lotus-changes-yubel-effect-destruction-source",
@@ -95,17 +96,25 @@ for (const fixture of implementedCases) {
     const elapsedMs = Math.round(performance.now() - startedAt);
 
     fixture.assertions(answer);
-    assert.equal(answer.debug.deterministicDecision, "state_transition", JSON.stringify({
+    const diagnostic = JSON.stringify({
       id: fixture.id,
       shortAnswer: answer.shortAnswer,
       diagnostic: answer.debug.semanticStateTransitionDiagnostic,
-    }));
-    assert.equal(answer.debug.modelUsed, "trusted-semantic-state-executor");
-    assert.equal(answer.debug.timingsMs.finalModel, 0);
+    });
+    if (fixture.officialDirectPreferred) {
+      assert.equal(answer.debug.deterministicDecision, null, diagnostic);
+      assert.equal(answer.debug.semanticStateTransitionDiagnostic?.status, "resolved", diagnostic);
+      assert.equal(answer.debug.semanticStateTransitionDiagnostic?.authoritative, true, diagnostic);
+      assert.ok(answer.usedEvidence.some((item) => item.type === "official_qa"), diagnostic);
+    } else {
+      assert.equal(answer.debug.deterministicDecision, "state_transition", diagnostic);
+      assert.equal(answer.debug.modelUsed, "trusted-semantic-state-executor");
+      assert.equal(answer.debug.timingsMs.finalModel, 0);
+      assert.ok(answer.riskFlags.includes("trusted_local_semantic_execution"));
+      assert.ok(answer.riskFlags.includes("final_model_skipped"));
+    }
     assert.equal(answer.debug.timingsMs.auxiliaryExtractionModels, 0);
     assert.deepEqual(answer.debug.unresolvedMentions, []);
-    assert.ok(answer.riskFlags.includes("trusted_local_semantic_execution"));
-    assert.ok(answer.riskFlags.includes("final_model_skipped"));
     const elapsedBudgetMs = fixture.id === "procedure-banishing-creates-two-trigger-opportunities"
       ? 15_000
       : 3_000;

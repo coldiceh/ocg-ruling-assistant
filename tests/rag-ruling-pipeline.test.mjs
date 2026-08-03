@@ -5,7 +5,10 @@ import { createLocalCardDataProvider } from "../backend/cardDataProvider.mjs";
 import { loadRagData, retrieveRagEvidence } from "../backend/ragEvidenceRetriever.mjs";
 import { buildRagRulingPromptBundle } from "../backend/ragRulingPrompt.mjs";
 import { callCardNameExtractionModel, callRagModel, callRulebookGroundingModel, callRuleQueryExtractionModel, estimateDeepSeekCostCny, getRagBudgetStatus, resetRagBudget, resolveRagProvider } from "../backend/ragModelClient.mjs";
-import { answerRagRulingQuestion, buildCardSemanticFacts } from "../backend/ragRulingPipeline.mjs";
+import {
+  answerRagRulingQuestion,
+  buildCardSemanticFacts,
+} from "../backend/ragRulingPipeline.mjs";
 import { analyzeEffectStateTransition } from "../backend/effectStateReasoner.mjs";
 
 const cards = [
@@ -2725,6 +2728,9 @@ test("rag_prompt_truncates_context", () => {
   assert.ok(bundle.warnings.some((warning) => warning.includes("compacted")));
   assert.equal(bundle.promptTruncated, true);
   assert.doesNotMatch(bundle.prompt, /上下文因 RAG_MAX_PROMPT_CHARS 限制被截断/u);
+  assert.match(bundle.prompt, /allowedEvidenceIds/u);
+  assert.match(bundle.prompt, /card-text-long/u);
+  assert.match(bundle.prompt, /usedEvidence.{0,80}id 必须非空/su);
 });
 
 test("compact recovery prompt retains card effect text and semantic state transition", () => {
@@ -2766,6 +2772,7 @@ test("compact recovery prompt retains card effect text and semantic state transi
   assert.match(bundle.recoveryPrompt, /SEMANTIC_STATE_RECOVERY_MARKER/u);
   assert.match(bundle.recoveryPrompt, /shortAnswer 不超过300字/u);
   assert.match(bundle.recoveryPrompt, /reasoning 为2至5条/u);
+  assert.match(bundle.recoveryPrompt, /usedEvidence.{0,80}id 必须非空/su);
 });
 
 test("compacted_prompt_keeps_each_critical_evidence_bucket", () => {
@@ -2925,6 +2932,106 @@ test("focused official QA prompt preserves the full-source tail without invalid 
   assert.equal(bundle.promptTruncated, true);
   assert.match(bundle.prompt, /TAIL_MARKER/u);
   assert.doesNotThrow(() => JSON.parse(bundle.prompt.split("\n").at(-1)));
+});
+
+test("certified semantic question subsumption allows a long official question to cover its shorter scene", () => {
+  const candidate = {
+    id: "qa-semantic-superset",
+    type: "official_qa",
+    title: "列举多个例卡的官方长问题",
+    fullText: "列举多个形成素材限制的例卡后，询问目标怪兽的特殊召唤手续。可以送去墓地并特殊召唤；这个特殊召唤不是融合召唤。",
+    text: "可以送去墓地并特殊召唤。",
+    isDirect: true,
+    matchLevel: "official_qa_exact",
+    matchedQuestionCardIds: ["7403"],
+    questionCardIdCoverage: 1,
+    questionCardIdCount: 8,
+    authoritativeSceneMatch: true,
+    authoritativeSceneMatchReason: "unique_semantic_question_subsumption",
+    subsumptionCandidatePoolComplete: true,
+    semanticSubsumptionCertified: true,
+    semanticSubsumptionScoreMargin: 0.2,
+  };
+  const cardResolution = {
+    resolvedCards: [{ id: "7403", name: "嵌合要塞龙" }],
+    unresolvedMentions: [],
+    ambiguousMentions: [],
+  };
+  const evidence = {
+    officialQaDirectCandidates: [candidate],
+    officialQaRelated: [],
+    faqRelated: [],
+    cardTexts: [],
+    userProvidedCardTexts: [],
+    rawRelatedEvidence: [],
+    retrievalWarnings: [],
+  };
+
+  const accepted = buildRagRulingPromptBundle({ userQuery: "能用不能作为融合素材的怪兽进行这次特殊召唤吗？", cardResolution, evidence });
+  assert.ok(accepted.warnings.includes("official_direct_focused_prompt"));
+  assert.match(accepted.prompt, /这个特殊召唤不是融合召唤/u);
+
+  const rejected = buildRagRulingPromptBundle({
+    userQuery: "能用不能作为融合素材的怪兽进行这次特殊召唤吗？",
+    cardResolution,
+    evidence: {
+      ...evidence,
+      officialQaDirectCandidates: [{ ...candidate, semanticSubsumptionCertified: false }],
+    },
+  });
+  assert.equal(rejected.warnings.includes("official_direct_focused_prompt"), false);
+
+  const incompletePoolRejected = buildRagRulingPromptBundle({
+    userQuery: "能用不能作为融合素材的怪兽进行这次特殊召唤吗？",
+    cardResolution,
+    evidence: {
+      ...evidence,
+      officialQaDirectCandidates: [{ ...candidate, subsumptionCandidatePoolComplete: false }],
+    },
+  });
+  assert.equal(incompletePoolRejected.warnings.includes("official_direct_focused_prompt"), false);
+
+  const multiCardAccepted = buildRagRulingPromptBundle({
+    userQuery: "两张题面卡共同形成的场景如何处理？",
+    cardResolution: {
+      resolvedCards: [{ id: "7403", name: "目标卡" }, { id: "7404", name: "发动卡" }],
+      unresolvedMentions: [],
+      ambiguousMentions: [],
+    },
+    evidence: {
+      ...evidence,
+      officialQaDirectCandidates: [{
+        ...candidate,
+        matchedQuestionCardIds: ["7403", "7404"],
+        questionCardIdCount: 2,
+        authoritativeSceneMatchReason: "unique_question_card_subsumption",
+        semanticSubsumptionCertified: false,
+        questionCardSubsumptionCertified: true,
+      }],
+    },
+  });
+  assert.ok(multiCardAccepted.warnings.includes("official_direct_focused_prompt"));
+
+  const extraUnboundCardRejected = buildRagRulingPromptBundle({
+    userQuery: "两张题面卡共同形成的场景如何处理？",
+    cardResolution: {
+      resolvedCards: [{ id: "7403", name: "目标卡" }, { id: "7404", name: "发动卡" }],
+      unresolvedMentions: [],
+      ambiguousMentions: [],
+    },
+    evidence: {
+      ...evidence,
+      officialQaDirectCandidates: [{
+        ...candidate,
+        matchedQuestionCardIds: ["7403", "7404"],
+        questionCardIdCount: 3,
+        authoritativeSceneMatchReason: "unique_question_card_subsumption",
+        semanticSubsumptionCertified: false,
+        questionCardSubsumptionCertified: true,
+      }],
+    },
+  });
+  assert.equal(extraUnboundCardRejected.warnings.includes("official_direct_focused_prompt"), false);
 });
 
 test("non-exact or ambiguous official candidates do not enter the authoritative fast route", () => {

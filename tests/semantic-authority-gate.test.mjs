@@ -537,7 +537,7 @@ test("a complete production-data question exposes an auditable authority decisio
     env: { MODEL_PROVIDER: "mock", RAG_MODEL_PROVIDER: "mock", RAG_DRY_RUN: "1", OCG_ENGINE_ENABLED: "0" },
     dryRun: true,
   });
-  assert.equal(answer.debug.deterministicDecision, "state_transition", JSON.stringify({
+  assert.equal(answer.debug.deterministicDecision, null, JSON.stringify({
     diagnostic: answer.debug.semanticStateTransitionDiagnostic,
     resolvedCards: answer.resolvedCards.map((card) => ({
       id: card.id,
@@ -547,6 +547,9 @@ test("a complete production-data question exposes an auditable authority decisio
       resolutionSource: card.resolutionSource,
     })),
   }));
+  assert.equal(answer.debug.semanticStateTransitionDiagnostic?.status, "resolved");
+  assert.equal(answer.debug.semanticStateTransitionDiagnostic?.authoritative, true);
+  assert.ok(answer.usedEvidence.some((item) => item.type === "official_qa"));
 });
 
 for (const fixture of [{

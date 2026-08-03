@@ -11,7 +11,7 @@ const corpus = JSON.parse(readFileSync(
 
 const expectedPatterns = new Map([
   ["albaz-cost-enables-opponent-immunity", [/^可以发动/u, /不受这次效果影响/u, /不进行融合召唤/u]],
-  ["evenly-from-hand-is-field-card-activation", [/不能连锁发动/u, /魔法与陷阱区域/u]],
+  ["evenly-from-hand-is-field-card-activation", [/(?:不能连锁发动|できません)/u, /(?:魔法与陷阱区域|魔法・罠カード)/u]],
   ["lotus-changes-yubel-effect-destruction-source", [/^不算被/u, /可以发动④效果/u]],
   ["zero-resolves-before-tcboo-cleanup", [/^可以发动/u, /同时特殊召唤/u, /两只怪兽都正常留在场上/u, /选择1只送去墓地/u]],
   ["silver-hound-control-condition-does-not-restart", [/立即不再适用/u, /不会恢复适用/u]],
@@ -43,9 +43,16 @@ for (const fixture of corpus.cases) {
     for (const pattern of expectedPatterns.get(fixture.id) || []) {
       assert.match(answer.shortAnswer, pattern, diagnostic);
     }
-    assert.equal(answer.debug.deterministicDecision, "state_transition", diagnostic);
-    assert.equal(answer.debug.modelUsed, "trusted-semantic-state-executor", diagnostic);
-    assert.equal(answer.debug.timingsMs.finalModel, 0, diagnostic);
+    if (fixture.id === "evenly-from-hand-is-field-card-activation") {
+      assert.equal(answer.debug.deterministicDecision, null, diagnostic);
+      assert.equal(answer.debug.semanticStateTransitionDiagnostic?.status, "resolved", diagnostic);
+      assert.equal(answer.debug.semanticStateTransitionDiagnostic?.authoritative, true, diagnostic);
+      assert.ok(answer.usedEvidence.some((item) => item.type === "official_qa"), diagnostic);
+    } else {
+      assert.equal(answer.debug.deterministicDecision, "state_transition", diagnostic);
+      assert.equal(answer.debug.modelUsed, "trusted-semantic-state-executor", diagnostic);
+      assert.equal(answer.debug.timingsMs.finalModel, 0, diagnostic);
+    }
     assert.deepEqual(answer.debug.unresolvedMentions, [], diagnostic);
   });
 }

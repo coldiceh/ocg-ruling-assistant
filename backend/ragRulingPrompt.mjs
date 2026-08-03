@@ -172,15 +172,30 @@ export function selectAuthoritativeOfficialDirectCandidate({
   const exactQuestionCardSet = candidate?.questionCardIdCoverage === 1
     && candidate?.questionCardIdCount > 0
     && candidate?.questionCardIdCount === (candidate?.matchedQuestionCardIds || []).length;
+  const certifiedQuestionSuperset = candidate?.authoritativeSceneMatchReason === "unique_semantic_question_subsumption"
+    && candidate?.semanticSubsumptionCertified === true
+    && candidate?.subsumptionCandidatePoolComplete === true
+    && candidate?.questionCardIdCoverage === 1
+    && (candidate?.matchedQuestionCardIds || []).length > 0
+    && ((candidate?.matchedQuestionCardIds || []).length === 1
+      || candidate?.questionCardIdCount === (candidate?.matchedQuestionCardIds || []).length);
+  const certifiedQuestionCardSuperset = candidate?.authoritativeSceneMatchReason === "unique_question_card_subsumption"
+    && candidate?.questionCardSubsumptionCertified === true
+    && candidate?.subsumptionCandidatePoolComplete === true
+    && candidate?.questionCardIdCoverage === 1
+    && (candidate?.matchedQuestionCardIds || []).length >= 2
+    && candidate?.questionCardIdCount === (candidate?.matchedQuestionCardIds || []).length;
   const sceneProvenanceComplete = candidate?.authoritativeSceneMatchReason === "raw_or_normalized_query"
     || (candidate?.authoritativeSceneMatchReason === "unique_structured_scene"
-      && candidate?.candidatePoolComplete === true);
+      && candidate?.candidatePoolComplete === true)
+    || certifiedQuestionSuperset
+    || certifiedQuestionCardSuperset;
   return candidate?.isDirect === true
     && candidate?.matchLevel === "official_qa_exact"
     && candidate?.type === "official_qa"
     && candidate?.authoritativeSceneMatch === true
     && sceneProvenanceComplete
-    && exactQuestionCardSet
+    && (exactQuestionCardSet || certifiedQuestionSuperset || certifiedQuestionCardSuperset)
     && completeIdentity
     && Boolean(candidate?.id)
     && Boolean(candidate?.fullText || candidate?.text || candidate?.answer || candidate?.officialText)
@@ -395,6 +410,16 @@ function limitEvidence(items = [], limit, textLimit, label, warnings) {
       official: item.official === true,
       sourceType: item.sourceType || "",
       displayStatus: item.displayStatus || "",
+      authoritativeSceneMatch: item.authoritativeSceneMatch === true,
+      authoritativeSceneMatchReason: item.authoritativeSceneMatchReason || "",
+      questionType: item.questionType || "unknown",
+      subsumptionCandidatePoolComplete: item.subsumptionCandidatePoolComplete === true,
+      semanticSubsumptionCertified: item.semanticSubsumptionCertified === true,
+      semanticSubsumptionScoreMargin: Number(item.semanticSubsumptionScoreMargin || 0),
+      semanticSubsumptionRunnerUpId: item.semanticSubsumptionRunnerUpId || "",
+      semanticSubsumptionMetrics: item.semanticSubsumptionMetrics || null,
+      questionCardSubsumptionCertified: item.questionCardSubsumptionCertified === true,
+      questionCardSubsumptionMetrics: item.questionCardSubsumptionMetrics || null,
       officialVerdict: item.officialVerdict ?? "unknown",
       officialText: item.officialText || "",
       explanation: item.explanation || "",
@@ -457,6 +482,9 @@ function buildCompactRagPrompt({ payload, maxPromptChars }) {
     }
     if (!added) break;
   }
+  const allowedEvidenceIds = [...new Set(
+    bucketOrder.flatMap((bucket) => evidence[bucket].map((item) => String(item.id || "").trim())).filter(Boolean),
+  )];
   const compactPayload = {
     userQuery: String(payload.userQuery || "").slice(0, maxChars >= 4000 ? 1000 : 260),
     resolvedCards: (payload.resolvedCards || []).slice(0, 6).map((card) => ({
@@ -489,6 +517,7 @@ function buildCompactRagPrompt({ payload, maxPromptChars }) {
     }),
     cardSemanticFacts: (payload.cardSemanticFacts || []).slice(0, maxChars >= 12000 ? 12 : 5),
     formalEngineStatus: payload.formalEngineStatus,
+    allowedEvidenceIds,
     evidence,
   };
   const render = (context) => [
@@ -500,6 +529,7 @@ function buildCompactRagPrompt({ payload, maxPromptChars }) {
     "formalEngineProofs 中 trusted=true 的 TRUE/FALSE 是逐查询强约束；UNKNOWN 不是 FALSE，不能据此回答不能。",
     "resolvedCards 是已匹配卡片，effectText 是其效果依据；不得把已有字段说成未确定。任何非 formal 的状态轨迹都必须由最终模型依据原始文本重新验证。",
     "输出单个 JSON 对象，字段为 answerLevel、shortAnswer、reasoning、usedCards、usedEvidence、missingInfo、riskFlags、confidenceSelfEstimate。",
+    "usedEvidence 每项的 id 必须非空，并从 allowedEvidenceIds 中逐字选择；没有实际引用时输出空数组，禁止输出空 id 或自造 id。",
     "shortAnswer 不超过300字；若题目同时询问能否发动和后续如何处理，必须同时写明发动结论与最终处理结果，不得只写“可以发动”。",
     "reasoning 为2至5条字符串，每条不超过240字；usedCards、usedEvidence 各不超过8项；missingInfo、riskFlags 各不超过6项。不要输出 JSON 以外内容。",
     JSON.stringify(context),
@@ -525,12 +555,13 @@ function buildCompactRagPrompt({ payload, maxPromptChars }) {
     }),
     cardSemanticFacts: (payload.cardSemanticFacts || []).slice(0, 3),
     formalEngineStatus: payload.formalEngineStatus,
+    allowedEvidenceIds: allowedEvidenceIds.slice(0, 10),
     evidenceIds: evidenceIds.slice(0, 10),
   });
   if (prompt.length <= maxChars) return prompt;
 
   const minimalPrompt = [
-    "仅依据上下文输出裁定 JSON；不得编造证据。",
+    "仅依据上下文输出规定字段的裁定 JSON；不得编造证据。usedEvidence 的 id 必须非空并逐字取自 allowedEvidenceIds；没有引用则为 []。",
     JSON.stringify({
       userQuery: String(payload.userQuery || "").slice(0, 80),
       resolvedCards: (payload.resolvedCards || []).slice(0, 2).map((card) => ({
@@ -544,6 +575,7 @@ function buildCompactRagPrompt({ payload, maxPromptChars }) {
       }),
       cardSemanticFacts: (payload.cardSemanticFacts || []).slice(0, 1),
       formalEngineStatus: payload.formalEngineStatus,
+      allowedEvidenceIds: allowedEvidenceIds.slice(0, 3),
       evidenceIds: evidenceIds.slice(0, 3).map((item) => item.id),
     }),
   ].join("\n");

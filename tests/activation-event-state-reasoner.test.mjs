@@ -157,7 +157,7 @@ test("missing the field-empty fact fails closed instead of assuming hand activat
   assert.equal(result.reason, "activating_player_field_empty_state_unknown");
 });
 
-test("the production data path answers the historical wording without a final-model call", async () => {
+test("an exact official QA owns the historical wording instead of a coarse semantic merge", async () => {
   const answer = await answerRagRulingQuestion({
     question: "对方场上通常召唤的「天下独步的大义贼（天下独歩の大義賊）」存在。自己场上没有卡，在战斗阶段结束时从手牌发动「颉颃胜负」。对方可以直接连锁发动「天下独步的大义贼（天下独歩の大義賊）」的①效果吗？",
     env: {
@@ -169,11 +169,12 @@ test("the production data path answers the historical wording without a final-mo
     dryRun: true,
   });
 
-  assert.match(answer.shortAnswer, /^不能连锁发动/u);
-  assert.match(answer.shortAnswer, /魔法与陷阱区域/u);
-  assert.equal(answer.debug.deterministicDecision, "state_transition");
-  assert.equal(answer.debug.modelUsed, "trusted-semantic-state-executor");
-  assert.equal(answer.debug.timingsMs.finalModel, 0);
+  assert.match(answer.shortAnswer, /(?:不能|できません)/u);
+  assert.match(answer.shortAnswer, /(?:魔法与陷阱|魔法・罠カード)/u);
+  assert.equal(answer.debug.deterministicDecision, null);
+  assert.equal(answer.debug.modelUsed, "mock-rag");
   assert.equal(answer.debug.timingsMs.auxiliaryExtractionModels, 0);
   assert.deepEqual(answer.debug.unresolvedMentions, []);
+  assert.ok(answer.usedEvidence.some((item) => item.type === "official_qa"));
+  assert.equal(answer.riskFlags.includes("official_direct_corroborates_trusted_semantic_execution"), false);
 });

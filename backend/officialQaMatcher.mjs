@@ -113,7 +113,13 @@ export function extractOfficialQaSemanticConcepts(value) {
   return SEMANTIC_CONCEPTS.filter(([, pattern]) => pattern.test(text)).map(([id]) => id);
 }
 
-export function searchOfficialQaEvidence({ question, records = [], resolvedCards = [], limit = 20 } = {}) {
+export function searchOfficialQaEvidence({
+  question,
+  records = [],
+  resolvedCards = [],
+  limit = 20,
+  subsumptionCandidatePoolComplete = false,
+} = {}) {
   const query = String(question || "").trim();
   const normalizedQuery = normalizeOfficialQaQuery(query);
   const normalizedQuerySkeleton = normalizeOfficialQaSkeleton(query);
@@ -135,6 +141,7 @@ export function searchOfficialQaEvidence({ question, records = [], resolvedCards
       queryConcepts,
       resolvedIds,
       resolvedNames,
+      subsumptionCandidatePoolComplete,
     }))
     .filter((item) => item.score >= 0.2);
   markAuthoritativeSceneMatches(scored);
@@ -197,6 +204,7 @@ function scoreRecord({
   queryConcepts,
   resolvedIds,
   resolvedNames,
+  subsumptionCandidatePoolComplete,
 }) {
   const {
     questionText,
@@ -316,7 +324,15 @@ function scoreRecord({
     structuredSceneMatch,
     authoritativeSceneMatch: false,
     authoritativeSceneMatchReason: "",
+    resolvedCardIdCount: resolvedIds.size,
+    semanticSubsumptionCertified: false,
+    semanticSubsumptionScoreMargin: null,
+    semanticSubsumptionRunnerUpId: "",
+    semanticSubsumptionMetrics: null,
+    questionCardSubsumptionCertified: false,
+    questionCardSubsumptionMetrics: null,
     candidatePoolComplete: record?.retrievalContext?.candidatePoolComplete === true,
+    subsumptionCandidatePoolComplete: subsumptionCandidatePoolComplete === true,
     matchedBy: [
       rawExact && "raw_or_normalized_query",
       exactSkeleton && "card_name_agnostic_skeleton",
@@ -441,6 +457,45 @@ function promoteUniqueExactCardSet(items, queryType, resolvedIds) {
 
 function promoteUniqueQuestionCardMatch(items, resolvedIds, queryType) {
   if (resolvedIds.size < 2 || queryType === "unknown") return;
+  const subsumptionCandidates = items.filter((item) => (
+    item.subsumptionCandidatePoolComplete
+    && item.typeCompatible
+    && item.questionType === queryType
+    && item.questionCardIdCoverage === 1
+    && item.matchedQuestionCardIds.length === resolvedIds.size
+    && item.questionCardIdCount === item.matchedQuestionCardIds.length
+    && item.effectNumberCompatible
+    && item.sceneQualifiersCompatible
+    && item.semanticQueryCoverage >= 0.8
+    && item.semanticScore >= 0.6
+    && item.score >= 0.88
+    && (item.distinctiveSemanticHits.length >= 1 || item.lexicalScore >= 0.5)
+  ));
+  if (subsumptionCandidates.length === 1) {
+    const [candidate] = subsumptionCandidates;
+    if (candidate.matchLevel !== "official_qa_exact") {
+      candidate.authoritativeSceneMatch = true;
+      candidate.authoritativeSceneMatchReason = "unique_question_card_subsumption";
+      candidate.questionCardSubsumptionCertified = true;
+      candidate.questionCardSubsumptionMetrics = {
+        resolvedCardIdCount: resolvedIds.size,
+        matchedQuestionCardIdCount: candidate.matchedQuestionCardIds.length,
+        questionCardIdCount: candidate.questionCardIdCount,
+        questionCardIdCoverage: candidate.questionCardIdCoverage,
+        distinctiveSemanticHitCount: candidate.distinctiveSemanticHits.length,
+        semanticQueryCoverage: candidate.semanticQueryCoverage,
+        semanticScore: candidate.semanticScore,
+        lexicalScore: candidate.lexicalScore,
+        score: candidate.score,
+        eligibleCandidateCount: subsumptionCandidates.length,
+        evaluatedCandidateCount: items.length,
+      };
+      candidate.matchLevel = "official_qa_exact";
+      candidate.score = Math.max(candidate.score, 0.94);
+      candidate.matchedBy = [...new Set([...candidate.matchedBy, "unique_question_card_subsumption"])];
+      return;
+    }
+  }
   const candidates = items.filter((item) => (
     item.typeCompatible
     && item.questionType === queryType
@@ -471,8 +526,51 @@ function promoteUniqueSemanticMatch(items, resolvedIds, queryType) {
     && top.semanticScore >= 0.5;
   if ((!generalSemanticSignature && !uniqueResolvedCardOperation) || top.score < 0.78) return;
   if (resolvedIds.size && !top.identityCompatibleForExact) return;
-  if (!top.authoritativeSceneMatch) return;
   const margin = top.score - Number(second?.score || 0);
+  const semanticQuestionSubsumption = Boolean(second)
+    && top.subsumptionCandidatePoolComplete
+    && resolvedIds.size >= 1
+    && queryType !== "unknown"
+    && top.questionType === queryType
+    && top.questionCardIdCoverage === 1
+    && top.matchedQuestionCardIds.length === resolvedIds.size
+    && (resolvedIds.size === 1 || top.questionCardIdCount === top.matchedQuestionCardIds.length)
+    && top.effectNumberCompatible
+    && top.sceneQualifiersCompatible
+    && top.distinctiveQueryConcepts.length >= 3
+    && top.distinctiveSemanticHits.length >= 3
+    && top.distinctiveSemanticQueryCoverage >= 0.9
+    && top.semanticQueryCoverage >= 0.9
+    && top.semanticScore >= 0.72
+    && top.score >= 0.85
+    && margin >= 0.1;
+
+  if (semanticQuestionSubsumption) {
+    top.authoritativeSceneMatch = true;
+    top.authoritativeSceneMatchReason = "unique_semantic_question_subsumption";
+    top.semanticSubsumptionCertified = true;
+    top.semanticSubsumptionScoreMargin = Number(margin.toFixed(4));
+    top.semanticSubsumptionRunnerUpId = String(second.id || second.record?.id || "");
+    top.semanticSubsumptionMetrics = {
+      resolvedCardIdCount: resolvedIds.size,
+      matchedQuestionCardIdCount: top.matchedQuestionCardIds.length,
+      questionCardIdCount: top.questionCardIdCount,
+      questionCardIdCoverage: top.questionCardIdCoverage,
+      distinctiveQueryConceptCount: top.distinctiveQueryConcepts.length,
+      distinctiveSemanticHitCount: top.distinctiveSemanticHits.length,
+      distinctiveSemanticQueryCoverage: top.distinctiveSemanticQueryCoverage,
+      semanticQueryCoverage: top.semanticQueryCoverage,
+      semanticScore: top.semanticScore,
+      score: top.score,
+      runnerUpScore: second.score,
+      scoreMargin: Number(margin.toFixed(4)),
+    };
+    top.matchLevel = "official_qa_exact";
+    top.matchedBy = [...new Set([...top.matchedBy, "unique_semantic_question_subsumption"])];
+    return;
+  }
+
+  if (!top.authoritativeSceneMatch) return;
   if (second && margin < 0.08) return;
   top.matchLevel = "official_qa_exact";
   top.matchedBy = [...new Set([...top.matchedBy, "unique_semantic_signature"])];

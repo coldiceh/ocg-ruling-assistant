@@ -59,7 +59,8 @@ export async function answerRagRulingQuestion({
 
   const extractionStartedAt = Date.now();
   const dataStartedAt = Date.now();
-  const data = await Promise.resolve(cards || records || qaRecords
+  const usesCompleteDefaultSnapshot = !(cards || records || qaRecords);
+  const data = await Promise.resolve(!usesCompleteDefaultSnapshot
     ? { cards: cards || [], records: records || [], qaRecords: qaRecords || [] }
     : loadRagData(dataDir));
   timingsMs.dataLoad = elapsedMs(dataStartedAt);
@@ -136,13 +137,19 @@ export async function answerRagRulingQuestion({
     records: data.records,
     qaRecords: data.qaRecords,
     enableLiveOfficialQa: true,
+    subsumptionCandidatePoolComplete: usesCompleteDefaultSnapshot,
     ruleSearchQueries: ruleQueryModel.queries || [],
     env,
     fetchImpl,
   });
   timingsMs.retrieval = elapsedMs(retrievalStartedAt);
   const effectiveCardResolution = reconcileCardResolution(cardResolution, retrievedEvidence);
-  const authoritativeOfficialDirect = hasAuthoritativeOfficialDirect(retrievedEvidence, effectiveCardResolution);
+  const authoritativeOfficialDirectCandidate = selectAuthoritativeOfficialDirectCandidate({
+    candidates: retrievedEvidence.officialQaDirectCandidates || [],
+    cardResolution: effectiveCardResolution,
+    baigeAmbiguousMentions: retrievedEvidence.baigeAmbiguousMentions,
+  });
+  const authoritativeOfficialDirect = Boolean(authoritativeOfficialDirectCandidate);
   const explicitEngineScenario = engineScenario !== undefined && engineScenario !== null;
   const enginePlan = explicitEngineScenario
     ? {
@@ -230,12 +237,12 @@ export async function answerRagRulingQuestion({
         identityBindingProof: semanticAuthorityAssessment.identityBinding,
       }
     : null;
-  // An exact official answer remains the highest-priority contract. The local
-  // executor is used as a production fast path only after the generic
-  // authority boundary and complete card-identity checks both succeed.
-  const localDecisionComplete = !authoritativeOfficialDirect
-    && !modelInvoker
-    && Boolean(trustedSemanticStateTransition);
+  // An exact official answer remains authoritative.  Until the semantic
+  // executor can compare every operation, subject, condition, and branch at
+  // claim level, a coarse polarity match is not enough to merge the answers.
+  const trustedSemanticCanLead = Boolean(trustedSemanticStateTransition)
+    && !authoritativeOfficialDirect;
+  const localDecisionComplete = !modelInvoker && trustedSemanticCanLead;
   timingsMs.localReasoning = elapsedMs(localReasoningStartedAt);
 
   const rulebookStartedAt = Date.now();
@@ -260,9 +267,9 @@ export async function answerRagRulingQuestion({
       });
   timingsMs.rulebookGrounding = elapsedMs(rulebookStartedAt);
   const groundedEvidence = attachRulebookGrounding(retrievedEvidence, rulebookGrounding);
-  const semanticStateTransition = authoritativeOfficialDirect
-    ? null
-    : trustedSemanticStateTransition;
+  const semanticStateTransition = trustedSemanticCanLead
+    ? trustedSemanticStateTransition
+    : null;
   const formalStartedAt = Date.now();
   const formalShadow = await formalShadowPromise;
   timingsMs.formalEngineAwait = elapsedMs(formalStartedAt);
@@ -454,14 +461,6 @@ function buildLocalRulebookGrounding({
     estimatedCostCny: 0,
     budgetStatus: null,
   };
-}
-
-function hasAuthoritativeOfficialDirect(evidence = {}, cardResolution = {}) {
-  return Boolean(selectAuthoritativeOfficialDirectCandidate({
-    candidates: evidence.officialQaDirectCandidates || [],
-    cardResolution,
-    baigeAmbiguousMentions: evidence.baigeAmbiguousMentions,
-  }));
 }
 
 function applyOfficialDirectAnswerContract(answer, evidence = {}, cardResolution = {}) {
