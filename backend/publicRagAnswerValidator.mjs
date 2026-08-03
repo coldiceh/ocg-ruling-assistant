@@ -69,6 +69,7 @@ export function validatePublicRagFinalAnswer(answer = {}, {
     answer,
     shortAnswer,
     combined,
+    userQuery,
     evidence,
     authoritativeOfficialDirect,
     errors,
@@ -280,6 +281,7 @@ function validateOfficialDirectContract({
   answer,
   shortAnswer,
   combined,
+  userQuery,
   evidence,
   authoritativeOfficialDirect,
   errors,
@@ -311,6 +313,7 @@ function validateOfficialDirectContract({
   diagnostics.officialResolutionComparison = validateOfficialResolutionOperationAgreement({
     officialText,
     shortAnswer,
+    userQuery,
     errors,
   });
 }
@@ -517,7 +520,7 @@ function validateResolutionOutcomeAgreement({
   if (actual !== expected) errors.push(contradictionError);
 }
 
-function validateOfficialResolutionOperationAgreement({ officialText = "", shortAnswer = "", errors }) {
+function validateOfficialResolutionOperationAgreement({ officialText = "", shortAnswer = "", userQuery = "", errors }) {
   const expectedClaims = comparableOfficialResolutionClaims(officialText);
   const actualClaims = comparableOfficialResolutionClaims(shortAnswer);
   const comparison = {
@@ -551,15 +554,23 @@ function validateOfficialResolutionOperationAgreement({ officialText = "", short
       contradiction = true;
     }
   }
-  const conditionalAgreement = compareConditionalResolutionOutcomes(expectedClaims, actualClaims);
-  contradiction ||= conditionalAgreement.contradiction;
-  omission ||= conditionalAgreement.omission;
+  const actualConditionalItems = conditionalOutcomeItems(actualClaims);
+  if (actualConditionalItems.length || asksForConditionalBranchCoverage(userQuery)) {
+    const conditionalAgreement = compareConditionalResolutionOutcomes(expectedClaims, actualClaims);
+    contradiction ||= conditionalAgreement.contradiction;
+    omission ||= conditionalAgreement.omission;
+  }
   if (contradiction) {
     errors.push("final resolution contradicts the authoritative official direct answer");
   } else if (omission) {
     errors.push("final answer omits the authoritative official direct resolution result");
   }
   return comparison;
+}
+
+function asksForConditionalBranchCoverage(value) {
+  const text = String(value || "");
+  return /(?:分别|分別|各自|各(?:个|個)?(?:条件|條件|场合|場合)|条件(?:下|ごと)|條件下|(?:情况|情況)下|(?:如果|若|当|當).{0,28}(?:时|時|则|則)|(?:存在|不存在|适用|適用|不适用|不適用|满足|滿足|不满足|不滿足|満たす|満たさない).{0,16}(?:时|時|場合|とき)|(?:场上|場上|手牌|手卡|墓地|除外区|除外區|区域|區域|フィールド|手札).{0,16}(?:有|没有|沒有).{0,16}(?:时|時|場合|とき)|なら|限制.{0,12}适用|限制.{0,12}適用|制限.{0,12}適用|\b(?:if|when|unless)\b)/iu.test(text);
 }
 
 function serializeResolutionClaims(claims) {
