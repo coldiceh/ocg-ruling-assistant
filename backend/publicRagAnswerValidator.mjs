@@ -640,11 +640,18 @@ function explicitActivationPolarity(value) {
   return "unknown";
 }
 
-function resolutionOperationClaims(value) {
+function resolutionOperationClaims(value, { branchScoped = false } = {}) {
   const text = String(value || "");
   const definitions = [
     ["effect_processing", /效果处理|效果處理|结算|結算/iu],
-    ["fusion_summon", /融合(?!素材)/iu],
+    // "Fusion Summon" is an operation, while "Fusion Summon material" is a
+    // role/classification.  They can legitimately have different predicates:
+    // an alternative Summoning procedure may not be a Fusion Summon even
+    // though its monsters are still treated as Fusion Materials.  Match the
+    // operation only when the words are not immediately forming a material
+    // noun phrase (Chinese or Japanese), and prevent the bare-融合 branch
+    // from backtracking into the same noun phrase.
+    ["fusion_summon", /(?:融合召(?:唤|喚)(?!\s*(?:素材|(?:(?:的|の)|(?:所)?(?:使用|需(?:要)?)(?:的)?|用(?:的)?|に(?:使用|用い)(?:する|した)?|で(?:使用|用い)(?:する|した)?)\s*(?:素材|怪兽|怪獸|モンスター|カード)))|融合(?!\s*(?:素材|召(?:唤|喚))))/iu],
     ["special_summon", /特殊召唤|特殊召喚/iu],
     ["destroy", /破坏|破壊/iu],
     ["banish", /除外/iu],
@@ -662,8 +669,15 @@ function resolutionOperationClaims(value) {
       const negative = /(?:不|未)(?:会|會|能|可以|再|进行|進行|执行|執行|完成)?\s*$/u.test(prefix)
         || /(?:不是|并非|並非|不属于|不屬於|不作为|不作為|不视为|不視為|不当作|不當作)\s*$/u.test(prefix)
         || (Boolean(broadNegativePrefix) && !/(?:但|但是|不过|不過|而是|改为|改為)/u.test(broadNegativePrefix))
-        || /^.{0,8}(?:不进行|不進行|不会|不會|失败|失敗|されません|行われません|できません|しません|ではありません|ではない|として扱いません|として扱われません|にはなりません)/u.test(suffix);
-      const scopedKind = `${resolutionChainScope(clause.text, localIndex)}:${kind}`;
+        || /^.{0,8}(?:不进行|不進行|不会|不會|失败|失敗|されません|行われません|できません|しません|として扱いません|として扱われません|にはなりません)/u.test(suffix)
+        // Japanese copular negation describes the operation it immediately
+        // follows.  In "この特殊召喚は融合召喚ではありません", it negates the
+        // Fusion-Summon classification, not the fact that a Special Summon was
+        // performed.  Requiring adjacency prevents that predicate from
+        // leaking backwards across another operation noun.
+        || /^(?:は|が)?(?:ではありません|ではない)/u.test(suffix);
+      const branch = branchScoped ? `:${resolutionBranchScope(clause, localIndex)}` : "";
+      const scopedKind = `${resolutionChainScope(clause.text, localIndex)}${branch}:${kind}`;
       if (negative) {
         const set = claimSets.get(scopedKind) || new Set();
         set.add("not_performed");
@@ -699,15 +713,67 @@ function resolutionOperationClaims(value) {
 }
 
 function hasResolutionOperationSelfConflict(value) {
-  if (hasExplicitAlternativeBranches(value) || hasConditionalResolutionException(value)) return false;
-  return [...resolutionOperationClaims(value).values()].some((outcome) => outcome === "conflict");
+  // Compare opposite outcomes inside the same chain and semantic branch.  A
+  // general rule and a genuinely restricted subset may differ, while two
+  // claims under the same conditions must still be rejected.  This avoids the
+  // previous all-or-nothing exception bypass and also covers attributive
+  // conditions such as "monsters affected by X cannot ...".
+  return [...resolutionOperationClaims(value, { branchScoped: true }).values()]
+    .some((outcome) => outcome === "conflict");
 }
 
-function hasConditionalResolutionException(value) {
-  const text = String(value || "");
-  const hasCondition = /(?:如果|若|当|在.{0,16}(?:时|時)|场合|場合|情况下|情況下|条件|條件|のみ|場合|if\b|when\b|unless\b)/iu.test(text);
-  const hasExceptionConnector = /(?:但|但是|不过|不過|然而|其中|仅在|僅在|ただし|なお|一方|except\b|however\b|but\b)/iu.test(text);
-  return hasCondition && hasExceptionConnector;
+function resolutionBranchScope(clause = {}, operationIndex = 0) {
+  const text = String(clause.text || "");
+  const branchMarker = /(?:但是|但|不过|不過|然而|只是|ただし|なお|一方|如果|若(?=.{0,24}(?:时|時|则|則|，|,))|当(?=.{0,24}(?:时|则|，|,))|當(?=.{0,24}(?:時|則|，|,))|\b(?:but|however|except|if|when)\b)/giu;
+  const boundaries = [0, ...[...text.matchAll(branchMarker)].map((match) => match.index || 0)]
+    .filter((value, index, values) => index === 0 || value !== values[index - 1])
+    .sort((left, right) => left - right);
+  let inheritedScope = "default";
+  for (let index = 0; index < boundaries.length; index += 1) {
+    const start = boundaries[index];
+    const end = boundaries[index + 1] ?? text.length;
+    const segment = text.slice(start, end);
+    const segmentScope = resolutionBranchSegmentScope(segment, inheritedScope);
+    if (operationIndex >= start && operationIndex < end) return segmentScope;
+    inheritedScope = segmentScope;
+  }
+  return inheritedScope;
+}
+
+function resolutionBranchSegmentScope(segment, inheritedScope = "default") {
+  const text = String(segment || "");
+  // "Under the same condition" explicitly denies a new branch distinction.
+  if (/(?:同一|相同|同样|同樣)条件|同じ条件|same\s+conditions?/iu.test(text)) return "default";
+
+  const explicitCondition = /(?:如果|若|当|當|只有|仅当|僅當|在.{0,20}(?:时|時)|场合|場合|情况下|情況下|条件|條件|のみ|場合|if\b|when\b|unless\b|provided\b)/iu.test(text);
+  const exceptionConnector = /^(?:\s|[，,])*(?:但|但是|不过|不過|然而|只是|ただし|なお|一方|except\b|however\b|but\b)/iu.test(text);
+  const restrictedSubject = /(?:(?:受|受到|被|适用|適用|具有|带有|帶有|处于|處於).{0,40}(?:限制|制限|效果|効果|状态|狀態|影响|影響)|(?:限制|制限|效果|効果).{0,24}(?:适用|適用|受到|受け)).{0,24}(?:卡|怪兽|怪獸|对象|對象|素材|手续|手續|場合|场合|ため|ので)/iu.test(text);
+  if (explicitCondition || restrictedSubject) {
+    return `condition_${resolutionConditionSignature(text)}`;
+  }
+  // A contrast which omits the already stated restricted subject remains in
+  // that branch ("affected monsters cannot ..., but can ...").
+  if (exceptionConnector && inheritedScope !== "default") return inheritedScope;
+  return "default";
+}
+
+function resolutionConditionSignature(value) {
+  const source = String(value || "");
+  const firstOperationIndex = source.search(new RegExp(
+    RESOLUTION_OPERATION.source,
+    RESOLUTION_OPERATION.flags.replace("g", ""),
+  ));
+  const conditionSource = firstOperationIndex > 0 ? source.slice(0, firstOperationIndex) : source;
+  const normalized = conditionSource
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(/^(?:\s|[，,])*(?:(?:但是|但|不过|然而|ただし|なお|一方|but|however|except)\s*)+/giu, "")
+    .replace(/^(?:如果|若|当|當|if|when)\s*/iu, "")
+    .replace(/(?:不能|不可以|无法|無法|可以|能够|能|会|會)(?:再|进行|進行|执行|執行|完成)?\s*$/iu, "")
+    .replace(/(?:时|時|则|則|就|那么|那麼)\s*$/iu, "")
+    .replace(/[\s　‘’“”"'「」『』《》【】()（），,。.;；:：]/gu, "")
+    .slice(0, 96);
+  return normalized || "anonymous";
 }
 
 function resolutionChainScope(clause, operationIndex) {
