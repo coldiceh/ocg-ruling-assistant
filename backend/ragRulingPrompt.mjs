@@ -1,4 +1,5 @@
 import { evidenceBucketsToList } from "./ragEvidenceRetriever.mjs";
+import { extractRelevantOfficialQaAnswerExcerpt } from "./officialQaAnswerExtractor.mjs";
 
 export const RAG_ANSWER_LEVELS = Object.freeze([
   "official_confirmed",
@@ -210,6 +211,7 @@ function buildOfficialDirectPrompt({
   maxPromptChars,
 } = {}) {
   const maxChars = Math.max(600, Number(maxPromptChars) || 12000);
+  const arrayFieldInstruction = "JSON字段类型：reasoning、usedCards、missingInfo、riskFlags必须是字符串数组；usedEvidence必须是对象数组，每项包含id、type、title；即使没有内容也输出[]。";
   const instructions = [
     "你是游戏王 OCG 官方 Q&A 转述助手。检索器已经确认下方唯一 officialQaDirectCandidate 与用户问题精确对应。",
     "以该官方 Q&A 为最高且唯一的裁定依据，用中文完整回答；不要再用卡片文本、相似 FAQ 或常见场面改写官方结论。",
@@ -217,6 +219,7 @@ function buildOfficialDirectPrompt({
     "不要添加官方回答没有说明的处理。resolvedCards 只用于把 <<数字ID>> 等占位符还原为卡名。",
     `usedEvidence 必须包含 id=${String(directQa.id || "")}，type 必须为 official_qa。`,
     "answerLevel 必须为 official_confirmed；shortAnswer 直接给出完整结论，reasoning 至少两条并说明官方回答如何适用于本题。",
+    arrayFieldInstruction,
     "输出单个 JSON 对象，字段为 answerLevel、shortAnswer、reasoning、usedCards、usedEvidence、missingInfo、riskFlags、confidenceSelfEstimate；不要输出 JSON 以外内容。",
   ];
   const cardIdentities = (resolvedCards || []).map((card) => ({
@@ -238,7 +241,7 @@ function buildOfficialDirectPrompt({
       },
     }),
   ].join("\n");
-  const sourceText = String(directQa.fullText || directQa.text || directQa.officialText || "");
+  const sourceText = extractRelevantOfficialQaAnswerExcerpt(directQa);
   const fullPrompt = render({
     instructionLines: instructions,
     query: String(userQuery || ""),
@@ -250,6 +253,7 @@ function buildOfficialDirectPrompt({
   const compactInstructions = [
     "唯一精确官方Q&A如下。用中文完整转述全部条件、括号、例外、后续处理和限制，不得增删结论。",
     `输出规定字段的单个JSON；answerLevel=official_confirmed，usedEvidence必须含official_qa:${String(directQa.id || "")}。`,
+    arrayFieldInstruction,
   ];
   const compactCards = cardIdentities.slice(0, 6).map((card) => ({ id: card.id, name: card.name }));
   const compactQuery = String(userQuery || "").slice(0, 300);
@@ -267,7 +271,10 @@ function buildOfficialDirectPrompt({
     text: preserveTextEnds(sourceText, textBudget),
   });
   if (prompt.length > maxChars) {
-    const minimalInstructions = ["完整转述唯一官方Q&A，保留全部限制；输出JSON并引用给定official_qa id。"];
+    const minimalInstructions = [
+      "完整转述唯一官方Q&A，保留全部限制；输出JSON并引用给定official_qa id。",
+      arrayFieldInstruction,
+    ];
     const minimalFixed = render({
       instructionLines: minimalInstructions,
       query: String(userQuery || "").slice(0, 80),

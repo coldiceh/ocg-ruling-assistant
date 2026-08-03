@@ -2805,6 +2805,7 @@ test("compacted_prompt_keeps_each_critical_evidence_bucket", () => {
 });
 
 test("unique exact official QA uses a focused complete-answer route", async () => {
+  const officialCatalogue = Array.from({ length: 10 }, (_, index) => `「<<${95000 + index}>>」`).join(" ");
   const directCards = [
     {
       id: "91001",
@@ -2825,12 +2826,13 @@ test("unique exact official QA uses a focused complete-answer route", async () =
     id: "ygoresources-qa-focused-route",
     recordType: "qa",
     question: "可以宣言「规则神兽」发动「规则学都」②效果吗？",
-    answer: "可以宣言并发动，因为「规则神兽」在规则上也视为“规则学”卡。（本回合不能再次宣言「规则神兽」。）",
+    answer: `可以宣言并发动，因为「规则神兽」在规则上也视为“规则学”卡。（本回合不能再次宣言「规则神兽」。） 以下卡片也适用相同裁定：${officialCatalogue}`,
     cardIds: ["91001", "91002"],
     questionCardIds: ["91001", "91002"],
     sourceUrl: "https://example.test/qa/focused-route",
   };
   let finalPrompt = "";
+  let finalGeneration = null;
   let rulebookModelCalled = false;
   const answer = await answerRagRulingQuestion({
     question: directQa.question,
@@ -2841,13 +2843,21 @@ test("unique exact official QA uses a focused complete-answer route", async () =
       RAG_FORMAL_ENGINE_MODE: "formal-shadow",
       RAG_AUTO_ENGINE_SIMULATION: "false",
       OCG_ENGINE_URL: "http://formal.test",
+      MODEL_PROVIDER: "deepseek",
+      RAG_MODEL_PROVIDER: "deepseek",
+      RAG_MODEL_TIER: "pro",
+      DEEPSEEK_API_KEY: "test-key",
+      DEEPSEEK_PRO_MODEL: "pro-test",
+      DEEPSEEK_FLASH_MODEL: "flash-test",
+      RAG_THINKING_MODE: "enabled",
     },
     rulebookModelInvoker: async () => {
       rulebookModelCalled = true;
       throw new Error("exact official QA must skip broad rulebook grounding");
     },
-    modelInvoker: async ({ prompt }) => {
+    modelInvoker: async ({ prompt, modelName, thinkingMode, maxTokens }) => {
       finalPrompt = prompt;
+      finalGeneration = { modelName, thinkingMode, maxTokens };
       return JSON.stringify({
         answerLevel: "official_confirmed",
         shortAnswer: "可以发动。",
@@ -2862,11 +2872,17 @@ test("unique exact official QA uses a focused complete-answer route", async () =
   });
 
   assert.equal(rulebookModelCalled, false);
+  assert.deepEqual(finalGeneration, {
+    modelName: "flash-test",
+    thinkingMode: "disabled",
+    maxTokens: 4000,
+  });
   assert.match(finalPrompt, /本回合不能再次宣言/u);
   assert.doesNotMatch(finalPrompt, /无关卡文的特殊召唤限制/u);
   assert.equal(answer.answerLevel, "official_confirmed");
   assert.ok(answer.usedEvidence.some((item) => item.id === directQa.id && item.type === "official_qa"));
   assert.match(answer.shortAnswer, /本回合不能再次宣言/u);
+  assert.doesNotMatch(answer.shortAnswer, /<<95000>>/u);
   assert.ok(answer.reasoning.some((item) => /本回合不能再次宣言/u.test(item)));
   assert.ok(answer.reasoning.some((item) => /形式规则内核本次未签发确定性证明/u.test(item)));
   assert.ok(answer.riskFlags.includes("official_direct_evidence_enforced"));
@@ -2932,6 +2948,61 @@ test("focused official QA prompt preserves the full-source tail without invalid 
   assert.equal(bundle.promptTruncated, true);
   assert.match(bundle.prompt, /TAIL_MARKER/u);
   assert.doesNotThrow(() => JSON.parse(bundle.prompt.split("\n").at(-1)));
+});
+
+test("focused official QA prompt keeps the ruling but omits a dense placeholder catalogue", () => {
+  const catalogue = Array.from({ length: 20 }, (_, index) => `「<<${94000 + index}>>」①`).join("\n");
+  const sourceText = [
+    "この効果を発動できますか？",
+    "発動できます。処理時には対象のカードを除外します。",
+    "ただし、対象が存在しない場合には除外する処理を行いません。",
+    "例として、以下のカードの効果についても同様です。",
+    "モンスター効果",
+    catalogue,
+    "ENUMERATION_END",
+  ].join("\n");
+  const bundle = buildRagRulingPromptBundle({
+    userQuery: "这个效果可以发动吗？",
+    cardResolution: {
+      resolvedCards: [{ id: "93001", name: "目录测试卡", aliases: ["目录测试卡"] }],
+      unresolvedMentions: [],
+      ambiguousMentions: [],
+    },
+    evidence: {
+      officialQaDirectCandidates: [{
+        id: "ygoresources-qa-placeholder-catalogue",
+        type: "official_qa",
+        title: "带穷举目录的官方回答",
+        fullText: sourceText,
+        text: sourceText,
+        sourceUrl: "https://example.test/qa/placeholder-catalogue",
+        isDirect: true,
+        matchLevel: "official_qa_exact",
+        matchedQuestionCardIds: ["93001"],
+        questionCardIdCoverage: 1,
+        questionCardIdCount: 1,
+        authoritativeSceneMatch: true,
+        authoritativeSceneMatchReason: "raw_or_normalized_query",
+      }],
+      officialQaRelated: [],
+      faqRelated: [],
+      cardTexts: [],
+      userProvidedCardTexts: [],
+      rawRelatedEvidence: [],
+      retrievalWarnings: [],
+    },
+    env: { RAG_MAX_PROMPT_CHARS: "12000" },
+  });
+
+  assert.ok(bundle.warnings.includes("official_direct_focused_prompt"));
+  assert.match(bundle.prompt, /発動できます/u);
+  assert.match(bundle.prompt, /対象が存在しない場合/u);
+  assert.doesNotMatch(bundle.prompt, /<<94000>>/u);
+  assert.doesNotMatch(bundle.prompt, /ENUMERATION_END/u);
+  assert.match(bundle.prompt, /reasoning、usedCards、missingInfo、riskFlags必须是字符串数组/u);
+  assert.match(bundle.prompt, /usedEvidence必须是对象数组/u);
+  const payload = JSON.parse(bundle.prompt.split("\n").at(-1));
+  assert.doesNotMatch(payload.officialQaDirectCandidate.text, /<<94000>>/u);
 });
 
 test("certified semantic question subsumption allows a long official question to cover its shorter scene", () => {

@@ -17,7 +17,10 @@ import {
   selectAuthoritativeOfficialDirectCandidate,
 } from "./ragRulingPrompt.mjs";
 import { hasNumberedCardIdentityConflict } from "./numberedCardIdentity.mjs";
-import { extractOfficialQaAnswer } from "./officialQaAnswerExtractor.mjs";
+import {
+  extractOfficialQaAnswer,
+  extractRelevantOfficialQaAnswerExcerpt,
+} from "./officialQaAnswerExtractor.mjs";
 import { analyzeEffectStateTransition } from "./effectStateReasoner.mjs";
 import { assessSemanticTransitionAuthority } from "./semanticAuthorityGate.mjs";
 import { runValidatedPublicRagFinal } from "./publicRagAnswerValidator.mjs";
@@ -306,6 +309,12 @@ export async function answerRagRulingQuestion({
     ...userProvidedCards(evidence.userProvidedCardTexts || []),
   ]);
   const finalModelStartedAt = Date.now();
+  const finalModelEnv = authoritativeOfficialDirect
+    ? buildOfficialDirectModelEnv(env)
+    : env;
+  const finalThinkingMode = authoritativeOfficialDirect
+    ? readOfficialDirectThinkingMode(env)
+    : thinkingMode;
   const modelResult = deterministicDecision
     ? buildTrustedSemanticModelResult(deterministicDecision)
     : await runValidatedPublicRagFinal({
@@ -318,12 +327,12 @@ export async function answerRagRulingQuestion({
           recoveryPrompt: attemptKind === "primary" ? promptBundle.recoveryPrompt : "",
           evidence,
           cardResolution: effectiveCardResolution,
-          env,
+          env: finalModelEnv,
           modelInvoker,
           dryRun,
           fetchImpl,
           now,
-          thinkingMode,
+          thinkingMode: finalThinkingMode,
           reasoningEffort,
           signal,
         }),
@@ -470,8 +479,12 @@ function applyOfficialDirectAnswerContract(answer, evidence = {}, cardResolution
     ...direct,
     text: direct.fullText || direct.text,
   });
+  const relevantAnswerExcerpt = extractRelevantOfficialQaAnswerExcerpt({
+    ...direct,
+    answer: extracted.answerText,
+  });
   const officialAnswerText = replaceOfficialCardPlaceholders(
-    String(extracted.answerText || direct.answer || direct.officialText || "").trim(),
+    String(relevantAnswerExcerpt || extracted.answerText || direct.answer || direct.officialText || "").trim(),
     cardResolution.resolvedCards || [],
   );
   const alreadyUsedDirect = (answer.usedEvidence || []).some((item) => String(item.id) === String(direct.id));
@@ -480,8 +493,7 @@ function applyOfficialDirectAnswerContract(answer, evidence = {}, cardResolution
     || answer.answerLevel === "budget_limited"
     || answer.answerLevel === "needs_more_info"
     || !alreadyUsedDirect
-    || primaryPolarityConflict(officialAnswerText, answer.shortAnswer)
-    || officialConstraintLost(officialAnswerText, `${answer.shortAnswer || ""}\n${(answer.reasoning || []).join("\n")}`);
+    || primaryPolarityConflict(officialAnswerText, answer.shortAnswer);
   const translatedSummary = modelCannotSafelySummarize ? "" : String(answer.shortAnswer || "").trim();
   const officialSourceLine = officialAnswerText ? `官方 Q&A 完整回答原文：${officialAnswerText}` : "";
   const shortAnswer = [translatedSummary, officialSourceLine].filter(Boolean).join("\n") || answer.shortAnswer;
@@ -515,6 +527,26 @@ function applyOfficialDirectAnswerContract(answer, evidence = {}, cardResolution
   };
 }
 
+function buildOfficialDirectModelEnv(env = {}) {
+  const configuredTier = String(env.RAG_OFFICIAL_DIRECT_MODEL_TIER || "flash").trim().toLowerCase();
+  const configuredMaxTokens = Number(env.RAG_OFFICIAL_DIRECT_MAX_OUTPUT_TOKENS);
+  return {
+    ...env,
+    RAG_MODEL_TIER: configuredTier === "pro" ? "pro" : "flash",
+    RAG_MAX_OUTPUT_TOKENS: String(
+      Number.isFinite(configuredMaxTokens) && configuredMaxTokens > 0
+        ? Math.floor(configuredMaxTokens)
+        : 4000,
+    ),
+  };
+}
+
+function readOfficialDirectThinkingMode(env = {}) {
+  return String(env.RAG_OFFICIAL_DIRECT_THINKING_MODE || "disabled").trim().toLowerCase() === "enabled"
+    ? "enabled"
+    : "disabled";
+}
+
 function replaceOfficialCardPlaceholders(text, cards = []) {
   const namesById = new Map();
   for (const card of cards || []) {
@@ -538,14 +570,6 @@ function primaryAnswerPolarity(value) {
   if (/^(?:no\b|いいえ|不能|不可以|无法|不可|不得|できません|発動できません)/iu.test(text)) return "negative";
   if (/^(?:yes\b|はい|可以|能够|能(?:够)?发动|できます|発動できます)/iu.test(text)) return "positive";
   return "unknown";
-}
-
-function officialConstraintLost(officialText, modelText) {
-  const official = String(officialText || "");
-  const model = String(modelText || "");
-  const sourceHasConstraint = /(?:cannot|can't|not be able|only|unless|except|however|if\b|when\b|できません|できない|ただし|場合|のみ|以外|不能|不可|不得|仅|只|如果|之后|本回合)/iu.test(official);
-  if (!sourceHasConstraint) return false;
-  return !/(?:不能|不可|不得|仅|只|如果|场合|条件|之后|本回合|除外|例外|cannot|can't|not be able|only|unless|except|however|if\b|when\b|できません|できない|ただし|場合|のみ|以外)/iu.test(model);
 }
 
 function hasTrustedSemanticStateTransition({
