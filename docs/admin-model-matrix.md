@@ -38,7 +38,8 @@ node scripts/admin-model-matrix.mjs `
 
 - `--poll-ms 1500`：轮询间隔。
 - `--timeout-ms 600000`：每个运行的最长等待时间。
-- `--concurrency 2`：fork 后的模型并发数，避免同时产生过多费用。
+- `--source-run-id ID`：在已有源运行上继续追加模型，完全复用冻结证据。
+- `--concurrency 1`：fork 后的模型并发数；默认为 1，避免同一源记录并发写入。
 - `--output report.json`：写入文件；省略时输出到终端。
 
 报告包含每个模型的 `conciseAnswer`、`verdicts`、`timeline`、运行总耗时、最终

@@ -791,7 +791,7 @@ function serverKimiBaseUrl(env) {
   return String(
     env.ADMIN_KIMI_BASE_URL
     || env.KIMI_BASE_URL
-    || "https://api.moonshot.ai/v1",
+    || "https://api.moonshot.cn/v1",
   ).trim();
 }
 

@@ -336,7 +336,7 @@ test("Kimi K2.6 supports optional thinking while K3 uses its always-on reasoning
   assert.equal(k2Body.max_completion_tokens, 800);
   assert.equal(Object.hasOwn(k3Body, "thinking"), false);
   assert.equal(k3Body.reasoning_effort, "max");
-  assert.match(calls[0].url, /^https:\/\/api\.moonshot\.ai\/v1\//u);
+  assert.match(calls[0].url, /^https:\/\/api\.moonshot\.cn\/v1\//u);
   await assert.rejects(
     provider.create({
       model: "kimi-k3",
