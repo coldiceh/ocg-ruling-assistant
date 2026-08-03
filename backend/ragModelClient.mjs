@@ -200,8 +200,17 @@ export async function callRagModel({
           reasoningEffort: reasoningGeneration.reasoningEffort,
           signal,
         });
+    const compactRecoveryAssessment = provider === "deepseek"
+      ? assessDeepSeekPrimaryForCompactRecovery(response)
+      : { retry: false, warning: "" };
+    if (compactRecoveryAssessment.warning) {
+      response = {
+        ...response,
+        warnings: [...(response.warnings || []), compactRecoveryAssessment.warning],
+      };
+    }
     const responses = [response];
-    if (provider === "deepseek" && shouldRetryCompactDeepSeek(response) && recoveryPrompt) {
+    if (provider === "deepseek" && compactRecoveryAssessment.retry && recoveryPrompt) {
       const recoveryMaxTokens = readPositiveNumber(
         env.RAG_RECOVERY_MAX_OUTPUT_TOKENS,
         Math.max(maxTokens * 2, 8000),
@@ -214,8 +223,10 @@ export async function callRagModel({
           maxTokens: recoveryMaxTokens,
           fetchImpl,
           temperature: 0,
-          thinkingMode: reasoningGeneration.thinkingMode,
-          reasoningEffort: reasoningGeneration.reasoningEffort,
+          // Compact recovery prioritizes a strict structured result. Disable
+          // thinking so DeepSeek can enforce JSON response mode on this pass.
+          thinkingMode: "disabled",
+          reasoningEffort: undefined,
           signal,
         });
         responses.push(recovery);
@@ -1396,9 +1407,26 @@ async function callGlm({
   };
 }
 
-function shouldRetryCompactDeepSeek(response = {}) {
-  if (!String(response.rawText || "").trim()) return true;
-  return (response.warnings || []).includes("deepseek_output_truncated_by_token_limit");
+function assessDeepSeekPrimaryForCompactRecovery(response = {}) {
+  if (!String(response.rawText || "").trim()) return { retry: true, warning: "" };
+  if ((response.warnings || []).includes("deepseek_output_truncated_by_token_limit")) {
+    return { retry: true, warning: "" };
+  }
+  // Thinking-mode responses are not sent with response_format because some
+  // DeepSeek endpoints otherwise return an empty content field. Validate the
+  // completed response here and recover through a non-thinking JSON pass when
+  // the model returned prose, broken JSON, or the wrong RAG shape.
+  if (response.thinkingMode !== "enabled") return { retry: false, warning: "" };
+  let parsed;
+  try {
+    parsed = parseStrictJsonObject(response.rawText);
+  } catch {
+    return { retry: true, warning: "deepseek_primary_invalid_json" };
+  }
+  if (!hasBasicRagAnswerSchema(parsed)) {
+    return { retry: true, warning: "deepseek_primary_invalid_schema" };
+  }
+  return { retry: false, warning: "" };
 }
 
 function withoutRecoverableDeepSeekWarnings(warnings = []) {

@@ -171,7 +171,9 @@ test("user-provided card text reaches the final model as raw evidence without a 
   });
   assert.match(finalPrompt, /user-card-text-/u);
   assert.match(finalPrompt, /只要这个效果特殊召唤的怪兽/u);
-  assert.match(finalPrompt, /"cardSemanticFacts": \[\]/u);
+  assert.match(finalPrompt, /"type": "create_lingering_restriction"/u);
+  assert.match(finalPrompt, /"mode": "irreversible_on_first_condition_failure"/u);
+  assert.match(finalPrompt, /"reactivates": false/u);
 });
 
 test("rag_pipeline_returns_answer_with_mock_model", async () => {
@@ -1910,6 +1912,10 @@ test("deepseek_empty_truncated_output_retries_with_compact_prompt", async () => 
   assert.equal(calls.length, 2);
   assert.equal(calls[1].messages[0].content, "紧凑恢复提示词");
   assert.equal(calls[1].max_tokens, 8000);
+  assert.deepEqual(calls[1].thinking, { type: "disabled" });
+  assert.deepEqual(calls[1].response_format, { type: "json_object" });
+  assert.equal(Object.hasOwn(calls[1], "reasoning_effort"), false);
+  assert.equal(calls[1].temperature, 0);
   assert.equal(result.answer.shortAnswer, "恢复后的答案");
   assert.equal(result.tokenUsage.prompt_tokens, 140);
   assert.equal(result.tokenUsage.completion_tokens, 381);
@@ -1920,6 +1926,49 @@ test("deepseek_empty_truncated_output_retries_with_compact_prompt", async () => 
   assert.equal(result.generationAttempts[0].reasoningContentPresent, true);
   assert.equal(result.generationAttempts[0].reasoningContentChars > 0, true);
   assert.equal("reasoningContent" in result.generationAttempts[0], false);
+  assert.deepEqual(result.generationAttempts.map((item) => item.thinkingMode), ["enabled", "disabled"]);
+});
+
+test("deepseek_thinking_invalid_json_retries_with_non_thinking_json_recovery", async () => {
+  const calls = [];
+  const result = await callRagModel({
+    prompt: "原始推理提示词",
+    recoveryPrompt: "只整理为合法 RAG JSON",
+    env: {
+      MODEL_PROVIDER: "deepseek",
+      DEEPSEEK_API_KEY: "test-deepseek-key",
+      RAG_MAX_OUTPUT_TOKENS: "500",
+      API_DAILY_BUDGET_CNY: "10",
+    },
+    fetchImpl: async (_url, options) => {
+      calls.push(JSON.parse(options.body));
+      if (calls.length === 1) {
+        return jsonResponse({
+          choices: [{ message: { content: "可以发动，但这是自然语言而不是 RAG JSON。" }, finish_reason: "stop" }],
+          usage: { prompt_tokens: 70, completion_tokens: 30, total_tokens: 100 },
+        });
+      }
+      return jsonResponse({
+        choices: [{ message: { content: JSON.stringify(modelJson("恢复后的结构化答案")) }, finish_reason: "stop" }],
+        usage: { prompt_tokens: 40, completion_tokens: 20, total_tokens: 60 },
+      });
+    },
+  });
+
+  assert.equal(calls.length, 2);
+  assert.deepEqual(calls[0].thinking, { type: "enabled" });
+  assert.equal(Object.hasOwn(calls[0], "response_format"), false);
+  assert.deepEqual(calls[1].thinking, { type: "disabled" });
+  assert.deepEqual(calls[1].response_format, { type: "json_object" });
+  assert.equal(Object.hasOwn(calls[1], "reasoning_effort"), false);
+  assert.equal(calls[1].temperature, 0);
+  assert.equal(result.answer.shortAnswer, "恢复后的结构化答案");
+  assert.equal(result.tokenUsage.prompt_tokens, 110);
+  assert.equal(result.tokenUsage.completion_tokens, 50);
+  assert.ok(result.warnings.includes("deepseek_primary_invalid_json"));
+  assert.ok(result.warnings.includes("deepseek_compact_recovery_attempted"));
+  assert.ok(result.warnings.includes("deepseek_compact_recovery_succeeded"));
+  assert.deepEqual(result.generationAttempts.map((item) => item.thinkingMode), ["enabled", "disabled"]);
 });
 
 test("deepseek_compact_recovery_accepts_minimal_normalizable_json", async () => {
