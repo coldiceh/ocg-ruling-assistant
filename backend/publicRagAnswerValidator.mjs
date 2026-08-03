@@ -75,7 +75,12 @@ export function validatePublicRagFinalAnswer(answer = {}, {
   validateOperationLegalityContract({ answer, shortAnswer, evidence, errors });
   validateTrustedSemanticContract({ answer, shortAnswer, evidence, errors });
   validateFormalUnknownContract({ combined, evidence, errors });
-  validateAnswerInternalConsistency({ shortAnswer, reasoningText, errors });
+  validateAnswerInternalConsistency({
+    shortAnswer,
+    reasoningText,
+    compareReasoning: !authoritativeOfficialDirect,
+    errors,
+  });
   validateQuestionCoverage({ userQuery, shortAnswer, errors });
 
   return {
@@ -549,8 +554,13 @@ function alignedResolutionOperationOutcome(actualClaims, expectedKey) {
   return outcomes.size === 1 ? [...outcomes][0] : "conflict";
 }
 
-function validateAnswerInternalConsistency({ shortAnswer = "", reasoningText = "", errors }) {
-  if (!shortAnswer || !reasoningText) return;
+function validateAnswerInternalConsistency({
+  shortAnswer = "",
+  reasoningText = "",
+  compareReasoning = true,
+  errors,
+}) {
+  if (!shortAnswer) return;
   // Internal-conflict detection is intentionally stricter than the evidence
   // polarity parser: a phrase such as "不能作为素材，但可以发动" must not be
   // mistaken for a negative activation conclusion merely because the two
@@ -560,7 +570,9 @@ function validateAnswerInternalConsistency({ shortAnswer = "", reasoningText = "
   if (hasActivationSelfConflict(shortAnswer)) {
     errors.push("shortAnswer contains conflicting activation conclusions for the same subject");
   }
-  if (headlineActivation !== "unknown"
+  if (compareReasoning
+      && reasoningText
+      && headlineActivation !== "unknown"
       && reasoningActivation !== "unknown"
       && headlineActivation !== reasoningActivation) {
     errors.push("shortAnswer activation conclusion conflicts with reasoning");
@@ -571,7 +583,7 @@ function validateAnswerInternalConsistency({ shortAnswer = "", reasoningText = "
   if (hasResolutionOperationSelfConflict(shortAnswer)) {
     errors.push("shortAnswer contains conflicting resolution conclusions for the same operation");
   }
-  const operationConflict = [...headlineOperations.keys()].some((kind) => (
+  const operationConflict = compareReasoning && reasoningText && [...headlineOperations.keys()].some((kind) => (
     reasoningOperations.has(kind)
     && headlineOperations.get(kind) !== reasoningOperations.get(kind)
   ));

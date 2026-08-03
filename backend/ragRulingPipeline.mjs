@@ -506,7 +506,6 @@ function applyOfficialDirectAnswerContract(answer, evidence = {}, cardResolution
     shortAnswer,
     reasoning: cleanStringArray([
       officialAnswerReason,
-      ...(answer.reasoning || []),
     ]),
     usedEvidence: dedupeEvidenceRefs([
       {

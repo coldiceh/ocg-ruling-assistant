@@ -2884,6 +2884,7 @@ test("unique exact official QA uses a focused complete-answer route", async () =
   assert.match(answer.shortAnswer, /本回合不能再次宣言/u);
   assert.doesNotMatch(answer.shortAnswer, /<<95000>>/u);
   assert.ok(answer.reasoning.some((item) => /本回合不能再次宣言/u.test(item)));
+  assert.ok(answer.reasoning.every((item) => !/官方问答确认可以发动/u.test(item)));
   assert.ok(answer.reasoning.some((item) => /形式规则内核本次未签发确定性证明/u.test(item)));
   assert.ok(answer.riskFlags.includes("official_direct_evidence_enforced"));
   assert.ok(answer.debug.retrievalWarnings.includes("official_direct_focused_prompt"));
