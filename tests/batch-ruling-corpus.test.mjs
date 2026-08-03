@@ -145,6 +145,7 @@ test("batch reports isolate model configuration and forward it to the deployed a
             retrievalCounts: {},
             unresolvedMentions: [],
             ambiguousMentions: [],
+            publicFinalValidation: { outcome: "primary_valid" },
           },
         };
       },
@@ -170,6 +171,7 @@ test("batch reports isolate model configuration and forward it to the deployed a
     modelTier: "flash",
     thinkingMode: "disabled",
   });
+  assert.equal(first.cases[0].runs.online.answer.debug.publicFinalValidation.outcome, "primary_valid");
 
   const second = await runRulingCorpusBatch({
     inputPath,

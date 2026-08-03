@@ -431,6 +431,7 @@ function summarizeAnswer(answer = {}) {
       modelUsed: answer.debug?.modelUsed || "",
       dryRun: answer.debug?.dryRun === true,
       timingsMs: answer.debug?.timingsMs || {},
+      publicFinalValidation: answer.debug?.publicFinalValidation || null,
     },
   };
 }

@@ -409,16 +409,28 @@ function aggregateValidatedAttempts({
         ok: primaryValidation?.ok === true,
         errors: primaryValidation?.errors || [],
         checks: primaryValidation?.checks || {},
+        candidate: summarizeValidationCandidate(primary?.answer),
         latencyMs: primaryLatencyMs,
       },
       repair: repairAttempted ? {
         ok: repairValidation?.ok === true,
         errors: repairValidation?.errors || [],
         checks: repairValidation?.checks || {},
+        candidate: summarizeValidationCandidate(repair?.answer),
         latencyMs: repairLatencyMs,
       } : null,
       totalLatencyMs,
     },
+  };
+}
+
+function summarizeValidationCandidate(answer = {}) {
+  return {
+    shortAnswer: String(answer?.shortAnswer || "").slice(0, 1200),
+    reasoning: (Array.isArray(answer?.reasoning) ? answer.reasoning : [])
+      .map((item) => String(item || "").slice(0, 600))
+      .filter(Boolean)
+      .slice(0, 5),
   };
 }
 
