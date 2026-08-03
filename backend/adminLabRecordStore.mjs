@@ -3,6 +3,9 @@ const EXPORT_SCHEMA_VERSION = 4;
 const DEFAULT_KEY_PREFIX = "admin-lab-records:v1";
 const DEFAULT_PAGE_LIMIT = 25;
 const MAX_PAGE_LIMIT = 100;
+const DEFAULT_MAX_ENTRIES = 100;
+const MAX_RETENTION_ENTRIES = 10_000;
+const RETENTION_PRUNE_BATCH_SIZE = 100;
 const DEFAULT_TIMEOUT_MS = 1_800;
 const MAX_TIMEOUT_MS = 30_000;
 const MAX_TTL_SECONDS = 2_147_483_647;
@@ -43,6 +46,27 @@ if ttl ~= nil and ttl > 0 then
   redis.call("EXPIRE", KEYS[1], ttl)
 end
 return "REGISTERED"
+`.trim();
+
+const PRUNE_HISTORY_SCRIPT = `
+-- admin-lab-record-prune-v1
+local maxEntries = tonumber(ARGV[1])
+if maxEntries == nil or maxEntries < 1 then
+  return -1
+end
+
+local deleted = 0
+for argumentIndex = 2, #ARGV do
+  local runId = ARGV[argumentIndex]
+  local reverseRank = redis.call("ZREVRANK", KEYS[1], runId)
+  if reverseRank and reverseRank >= maxEntries then
+    local keyOffset = 2 + ((argumentIndex - 2) * 3)
+    redis.call("ZREM", KEYS[1], runId)
+    redis.call("DEL", KEYS[keyOffset], KEYS[keyOffset + 1], KEYS[keyOffset + 2])
+    deleted = deleted + 1
+  end
+end
+return deleted
 `.trim();
 
 const SAVE_RATING_SCRIPT = `
@@ -88,8 +112,10 @@ return "SAVED"
  */
 export function createMemoryAdminLabRecordStore({
   now = () => new Date(),
+  maxEntries = DEFAULT_MAX_ENTRIES,
 } = {}) {
   if (typeof now !== "function") throw new TypeError("now must be a function");
+  const retentionLimit = normalizeMaxEntries(maxEntries);
   const records = new Map();
   const ratings = new Map();
   const repairAudits = new Map();
@@ -102,7 +128,20 @@ export function createMemoryAdminLabRecordStore({
       return cloneJson(existing);
     }
     records.set(record.runId, cloneJson(record));
+    pruneMemoryHistory();
     return cloneJson(record);
+  }
+
+  function pruneMemoryHistory() {
+    if (records.size <= retentionLimit) return;
+    const expired = [...records.values()]
+      .sort(compareRunRecords)
+      .slice(retentionLimit);
+    for (const record of expired) {
+      records.delete(record.runId);
+      ratings.delete(record.runId);
+      repairAudits.delete(record.runId);
+    }
   }
 
   async function getRun(runId) {
@@ -156,6 +195,7 @@ export function createMemoryAdminLabRecordStore({
     kind: "memory",
     persistent: false,
     ttlSeconds: null,
+    maxEntries: retentionLimit,
     registerRun,
     getRun,
     listRuns,
@@ -168,9 +208,13 @@ export function createMemoryAdminLabRecordStore({
 /**
  * Upstash/Vercel KV Redis REST implementation.
  *
- * A sorted-set index is never trimmed. Record/rating TTL is disabled by
- * default. Opting into TTL may leave stale index members; listRuns filters
- * missing records without deleting any history entry as a side effect.
+ * The current sorted-set index retains the newest configured number of records
+ * (100 by default). Pruning removes each expired member and its exact current
+ * record/rating/repair keys in one cluster-safe script. Legacy untagged keys
+ * remain read-only compatible and are never deleted by current retention.
+ * Record/rating TTL is disabled by default. Opting into TTL may leave stale
+ * retained index members; listRuns filters missing records without deleting a
+ * history entry as a side effect.
  */
 export function createRedisAdminLabRecordStore(options = {}) {
   const env = options.env || globalThis.process?.env || {};
@@ -195,6 +239,11 @@ export function createRedisAdminLabRecordStore(options = {}) {
       ? options.ttlSeconds
       : env.ADMIN_LAB_RECORD_TTL_SECONDS,
   );
+  const maxEntries = normalizeMaxEntries(
+    options.maxEntries !== undefined
+      ? options.maxEntries
+      : env.ADMIN_LAB_RECORD_MAX_ENTRIES,
+  );
   const now = options.now || (() => new Date());
   if (typeof now !== "function") throw new TypeError("now must be a function");
 
@@ -212,10 +261,47 @@ export function createRedisAdminLabRecordStore(options = {}) {
       record.runId,
       ttlSeconds === null ? "" : String(ttlSeconds),
     ]);
-    if (result === "REGISTERED" || result === "UNCHANGED") return cloneJson(record);
+    if (result === "REGISTERED" || result === "UNCHANGED") {
+      await pruneRedisHistory();
+      return cloneJson(record);
+    }
     if (result === "CONFLICT") throw recordConflict(record.runId);
     if (result === "INVALID") throw storageCorrupt("register transaction rejected invalid data");
     throw storageCorrupt(`unexpected register result: ${String(result)}`);
+  }
+
+  async function pruneRedisHistory() {
+    const indexKey = redisKeys(keyPrefix, "_").index;
+    for (;;) {
+      const overflow = await redisCommand(config, fetchImpl, timeoutMs, [
+        "ZREVRANGE",
+        indexKey,
+        String(maxEntries),
+        String(maxEntries + RETENTION_PRUNE_BATCH_SIZE - 1),
+      ]);
+      if (!Array.isArray(overflow)) {
+        throw storageCorrupt("history retention scan is not an array");
+      }
+      if (overflow.length === 0) return;
+
+      const runIds = overflow.map(normalizeRunId);
+      const exactKeys = runIds.flatMap((runId) => {
+        const keys = redisKeys(keyPrefix, runId);
+        return [keys.record, keys.rating, keys.repairAudit];
+      });
+      const result = await redisCommand(config, fetchImpl, timeoutMs, [
+        "EVAL",
+        PRUNE_HISTORY_SCRIPT,
+        String(1 + exactKeys.length),
+        indexKey,
+        ...exactKeys,
+        String(maxEntries),
+        ...runIds,
+      ]);
+      if (!Number.isInteger(Number(result)) || Number(result) < 0) {
+        throw storageCorrupt("history retention transaction returned an unexpected result");
+      }
+    }
   }
 
   async function getRun(runId) {
@@ -434,6 +520,7 @@ export function createRedisAdminLabRecordStore(options = {}) {
     kind: "redis-rest",
     persistent: true,
     ttlSeconds,
+    maxEntries,
     registerRun,
     getRun,
     listRuns,
@@ -990,6 +1077,19 @@ function normalizeTtlSeconds(value) {
   const number = Number(value);
   if (!Number.isSafeInteger(number) || number < 1 || number > MAX_TTL_SECONDS) {
     throw new RangeError("ADMIN_LAB_RECORD_TTL_SECONDS must be null or a positive integer");
+  }
+  return number;
+}
+
+function normalizeMaxEntries(value) {
+  if (value === null || value === undefined || String(value).trim() === "") {
+    return DEFAULT_MAX_ENTRIES;
+  }
+  const number = Number(value);
+  if (!Number.isSafeInteger(number) || number < 1 || number > MAX_RETENTION_ENTRIES) {
+    throw new RangeError(
+      `ADMIN_LAB_RECORD_MAX_ENTRIES must be between 1 and ${MAX_RETENTION_ENTRIES}`,
+    );
   }
   return number;
 }

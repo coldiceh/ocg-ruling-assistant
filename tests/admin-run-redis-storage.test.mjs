@@ -39,7 +39,7 @@ test("configured storage requires persistence and memory needs mode plus code op
   });
   assert.equal(redis.kind, "redis-rest");
   assert.equal(redis.persistent, true);
-  assert.equal(redis.ttlSeconds, null);
+  assert.equal(redis.ttlSeconds, 30 * 24 * 60 * 60);
 });
 
 test("Redis adapter persists state and ordered replay across store instances", async () => {
@@ -100,6 +100,92 @@ test("Redis adapter persists state and ordered replay across store instances", a
     )).length,
     1,
   );
+});
+
+test("Redis fork runs reuse one frozen evidence snapshot through immutable references", async () => {
+  const mock = createMockRedisRest();
+  const storage = createRedisAdminRunStorage({ env: REDIS_ENV, fetchImpl: mock.fetchImpl });
+  const store = createAdminRunStore({ storage });
+  const snapshot = createAdminEvidenceSnapshot({
+    question: "shared frozen evidence",
+    evidence: { payload: "x".repeat(8_000) },
+    createdAt: "2026-07-28T00:30:00.000Z",
+  });
+  const source = await store.createRun({
+    runId: "snapshot-source-run",
+    evidenceSnapshot: snapshot,
+  });
+  const forkMetadata = (sourceRunId) => ({
+    source: "admin_model_lab_snapshot_fork",
+    fork: {
+      sourceRunId,
+      sourceEvidenceSnapshotId: snapshot.snapshotId,
+      sourceEvidenceSnapshotSha256: snapshot.contentSha256,
+    },
+  });
+  await store.createRun({
+    runId: "snapshot-fork-one",
+    evidenceSnapshot: snapshot,
+    metadata: forkMetadata(source.runId),
+  });
+  await store.createRun({
+    runId: "snapshot-fork-two",
+    evidenceSnapshot: snapshot,
+    metadata: forkMetadata("snapshot-fork-one"),
+  });
+
+  const snapshotRecords = [...mock.strings.entries()]
+    .filter(([key]) => String(key).includes(":snapshot:"))
+    .map(([key, value]) => [key, JSON.parse(value)]);
+  assert.equal(snapshotRecords.length, 3);
+  assert.equal(
+    snapshotRecords.filter(([, value]) => value.recordType !== "admin_evidence_snapshot_reference").length,
+    1,
+  );
+  const references = snapshotRecords
+    .map(([, value]) => value)
+    .filter((value) => value.recordType === "admin_evidence_snapshot_reference");
+  assert.equal(references.length, 2);
+  assert.equal(references.every((value) => value.ownerRunId === source.runId), true);
+  assert.equal(references.every((value) => value.payload === undefined), true);
+
+  const freshStorage = createRedisAdminRunStorage({ env: REDIS_ENV, fetchImpl: mock.fetchImpl });
+  const persistedFork = await freshStorage.getRun("snapshot-fork-two");
+  assert.deepEqual(persistedFork.evidenceSnapshot, snapshot);
+  await store.appendEvent("snapshot-fork-one", { payload: { stillReferenced: true } });
+  const forkOneKey = snapshotRecords
+    .find(([key]) => String(key).includes("snapshot-fork-one"))[0];
+  assert.equal(
+    JSON.parse(mock.strings.get(forkOneKey)).recordType,
+    "admin_evidence_snapshot_reference",
+  );
+});
+
+test("Redis keeps legacy full fork snapshots readable and unchanged on later commits", async () => {
+  const mock = createMockRedisRest();
+  const storage = createRedisAdminRunStorage({ env: REDIS_ENV, fetchImpl: mock.fetchImpl });
+  const store = createAdminRunStore({ storage });
+  const snapshot = createAdminEvidenceSnapshot({ question: "legacy full fork" });
+  await store.createRun({ runId: "legacy-source", evidenceSnapshot: snapshot });
+  await store.createRun({
+    runId: "legacy-fork",
+    evidenceSnapshot: snapshot,
+    metadata: {
+      fork: {
+        sourceRunId: "legacy-source",
+        sourceEvidenceSnapshotId: snapshot.snapshotId,
+        sourceEvidenceSnapshotSha256: snapshot.contentSha256,
+      },
+    },
+  });
+  const forkKey = [...mock.strings.keys()]
+    .find((key) => String(key).includes("legacy-fork") && String(key).includes(":snapshot:"));
+  mock.strings.set(forkKey, JSON.stringify(snapshot));
+
+  await store.appendEvent("legacy-fork", { payload: { compatible: true } });
+
+  assert.deepEqual(JSON.parse(mock.strings.get(forkKey)), snapshot);
+  assert.deepEqual((await storage.getRun("legacy-fork")).evidenceSnapshot, snapshot);
 });
 
 test("Redis snapshot reads reject tampered content that retains the stored snapshot id", async () => {
@@ -542,6 +628,40 @@ test("a snapshot staged by a losing CAS remains temporary instead of becoming an
   assert.equal(mock.expiries.get(losingKey), 300);
 });
 
+test("finalizing preparation shortens only the superseded initial snapshot TTL", async () => {
+  const mock = createMockRedisRest();
+  const storage = createRedisAdminRunStorage({ env: REDIS_ENV, fetchImpl: mock.fetchImpl });
+  const store = createAdminRunStore({
+    storage,
+    runIdFactory: () => "snapshot-finalization-run",
+  });
+  const initialSnapshot = createAdminEvidenceSnapshot({ question: "initial request" });
+  const created = await store.createRun({ evidenceSnapshot: initialSnapshot });
+  await store.startRun(created.runId);
+  const finalSnapshot = createAdminEvidenceSnapshot({
+    question: "initial request",
+    evidence: { frozen: true },
+  });
+  await store.finalizePreparation(created.runId, {
+    evidenceSnapshot: finalSnapshot,
+    executionProfile: {
+      status: "evidence_frozen",
+      evidenceSnapshotId: finalSnapshot.snapshotId,
+    },
+  });
+
+  const initialKey = [...mock.strings.keys()].find((key) => (
+    String(key).includes(":snapshot:")
+    && String(key).endsWith(encodeURIComponent(initialSnapshot.snapshotId))
+  ));
+  const finalKey = [...mock.strings.keys()].find((key) => (
+    String(key).includes(":snapshot:")
+    && String(key).endsWith(encodeURIComponent(finalSnapshot.snapshotId))
+  ));
+  assert.equal(mock.expiries.get(initialKey), 300);
+  assert.equal(mock.expiries.get(finalKey), 30 * 24 * 60 * 60);
+});
+
 test("persistent leases use Redis TIME across instances instead of application host clocks", async () => {
   const mock = createMockRedisRest();
   mock.setServerTime("2026-07-28T03:00:00.000Z");
@@ -582,10 +702,33 @@ test("persistent leases use Redis TIME across instances instead of application h
   assert.ok(mock.commands.filter((command) => command[0] === "TIME").length >= 4);
 });
 
-test("TTL is opt-in, applies to all persisted run keys, and zero is never a disabled sentinel", async () => {
+test("TTL defaults to 30 days, applies to all persisted run keys, and has an explicit opt-out", async () => {
+  const defaultTtlMock = createMockRedisRest();
+  const defaultTtlStorage = createRedisAdminRunStorage({
+    env: REDIS_ENV,
+    fetchImpl: defaultTtlMock.fetchImpl,
+  });
+  const defaultTtlStore = createAdminRunStore({
+    storage: defaultTtlStorage,
+    runIdFactory: () => "default-ttl-run",
+  });
+  await defaultTtlStore.createRun({
+    evidenceSnapshot: createAdminEvidenceSnapshot({ evidence: { anonymous: true } }),
+  });
+  assert.equal(defaultTtlStorage.ttlSeconds, 30 * 24 * 60 * 60);
+  assert.equal(defaultTtlMock.expiries.size, 3);
+  assert.equal(
+    defaultTtlMock.commands.find((command) => (
+      command[0] === "EVAL"
+      && command[1].includes("admin-run-create-v1")
+    )).at(-1),
+    String(30 * 24 * 60 * 60),
+  );
+
   const noTtlMock = createMockRedisRest();
   const noTtlStorage = createRedisAdminRunStorage({
     env: REDIS_ENV,
+    ttlSeconds: null,
     fetchImpl: noTtlMock.fetchImpl,
   });
   const noTtlStore = createAdminRunStore({
@@ -597,13 +740,6 @@ test("TTL is opt-in, applies to all persisted run keys, and zero is never a disa
   });
   assert.equal(noTtlStorage.ttlSeconds, null);
   assert.equal(noTtlMock.expiries.size, 0);
-  assert.equal(
-    noTtlMock.commands.find((command) => (
-      command[0] === "EVAL"
-      && command[1].includes("admin-run-create-v1")
-    )).at(-1),
-    "",
-  );
 
   const ttlMock = createMockRedisRest();
   const ttlStorage = createRedisAdminRunStorage({
@@ -620,6 +756,28 @@ test("TTL is opt-in, applies to all persisted run keys, and zero is never a disa
   assert.equal(ttlStorage.ttlSeconds, 3600);
   assert.equal(ttlMock.expiries.size, 3);
   assert.deepEqual([...ttlMock.expiries.values()], [3600, 3600, 3600]);
+
+  const sharedSnapshot = createAdminEvidenceSnapshot({ question: "ttl shared snapshot" });
+  await ttlStore.createRun({ runId: "ttl-source", evidenceSnapshot: sharedSnapshot });
+  await ttlStore.createRun({
+    runId: "ttl-fork",
+    evidenceSnapshot: sharedSnapshot,
+    metadata: {
+      fork: {
+        sourceRunId: "ttl-source",
+        sourceEvidenceSnapshotId: sharedSnapshot.snapshotId,
+        sourceEvidenceSnapshotSha256: sharedSnapshot.contentSha256,
+      },
+    },
+  });
+  const ttlSourceSnapshotKey = [...ttlMock.strings.keys()].find((key) => (
+    String(key).includes("ttl-source") && String(key).includes(":snapshot:")
+  ));
+  const ttlForkSnapshotKey = [...ttlMock.strings.keys()].find((key) => (
+    String(key).includes("ttl-fork") && String(key).includes(":snapshot:")
+  ));
+  assert.equal(ttlMock.expiries.get(ttlSourceSnapshotKey), 3900);
+  assert.equal(ttlMock.expiries.get(ttlForkSnapshotKey), 3600);
 
   assert.throws(
     () => createRedisAdminRunStorage({
@@ -722,6 +880,7 @@ function createMockRedisRest() {
           }
         }
         } else if (script.includes("admin-run-commit-v1")) {
+          const supersededSnapshotKey = command[6];
           const currentRaw = strings.get(runKey);
           if (!currentRaw) {
             result = "NOT_FOUND";
@@ -729,9 +888,9 @@ function createMockRedisRest() {
             result = "MISSING_SNAPSHOT";
           } else {
             const current = JSON.parse(currentRaw);
-            const expectedRevision = Number(command[6]);
-            const next = JSON.parse(command[7]);
-            const event = JSON.parse(command[8]);
+            const expectedRevision = Number(command[7]);
+            const next = JSON.parse(command[8]);
+            const event = JSON.parse(command[9]);
             if (
               current.runId !== next.runId
               || current.runId !== event.runId
@@ -743,18 +902,25 @@ function createMockRedisRest() {
               const existingEvent = (lists.get(eventKey) || [])[event.sequence - 1];
               result = current.revision >= expectedRevision + 1
                 && current.lastSequence >= event.sequence
-                && existingEvent === command[8]
+                && existingEvent === command[9]
                 ? "ALREADY_COMMITTED"
                 : `CONFLICT:${current.revision}`;
+              if (
+                result === "ALREADY_COMMITTED"
+                && supersededSnapshotKey !== snapshotKey
+              ) expiries.set(supersededSnapshotKey, Number(command[11]));
             } else if (
               next.lastSequence !== current.lastSequence + 1
               || event.sequence !== current.lastSequence + 1
             ) {
               result = "INVALID";
             } else {
-              strings.set(runKey, command[7]);
-              lists.get(eventKey).push(command[8]);
-              applyMockTtl([runKey, eventKey, snapshotKey], command[9], expiries);
+              strings.set(runKey, command[8]);
+              lists.get(eventKey).push(command[9]);
+              applyMockTtl([runKey, eventKey, snapshotKey], command[10], expiries);
+              if (supersededSnapshotKey !== snapshotKey) {
+                expiries.set(supersededSnapshotKey, Number(command[11]));
+              }
               result = "COMMITTED";
             }
           }
@@ -766,6 +932,19 @@ function createMockRedisRest() {
       result = strings.get(command[1]) ?? null;
     } else if (command[0] === "EXISTS") {
       result = strings.has(command[1]) ? 1 : 0;
+    } else if (command[0] === "EXPIRE") {
+      if (strings.has(command[1])) {
+        expiries.set(command[1], Number(command[2]));
+        result = 1;
+      } else {
+        result = 0;
+      }
+    } else if (command[0] === "PERSIST") {
+      if (!strings.has(command[1])) {
+        result = 0;
+      } else {
+        result = expiries.delete(command[1]) ? 1 : 0;
+      }
     } else if (command[0] === "SET") {
       const key = command[1];
       const value = command[2];

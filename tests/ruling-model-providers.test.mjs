@@ -305,6 +305,41 @@ test("GLM compatible adapter emits an experimental final JSON result with filter
   assert.equal(JSON.stringify(response).includes("glm-server-secret"), false);
 });
 
+test("empty compatible final reports bounded diagnostics without exposing reasoning content", async () => {
+  const provider = new CompatibleEvidencePreparationProvider({
+    providerId: "deepseek",
+    apiKey: "deepseek-server-secret",
+    fetchImpl: mockFetch([], {
+      choices: [{
+        finish_reason: "stop",
+        message: { content: "", reasoning_content: "private reasoning" },
+      }],
+      usage: {
+        completion_tokens: 11,
+        completion_tokens_details: { reasoning_tokens: 10 },
+      },
+    }),
+  });
+
+  await assert.rejects(
+    provider.create({
+      model: "deepseek-v4-flash",
+      reasoningEffort: "high",
+      reasoningMode: "pro",
+      input: "匿名问题与冻结证据",
+      instructions: "只输出 JSON。",
+      metadata: { runId: "run-empty", promptVersion: "openai-ruling-v1" },
+    }),
+    (error) => (
+      error.code === "deepseek_empty_final_ruling"
+      && /finish_reason=stop/u.test(error.message)
+      && /reasoning_chars=17/u.test(error.message)
+      && /reasoning_tokens=10/u.test(error.message)
+      && !error.message.includes("private reasoning")
+    ),
+  );
+});
+
 test("Kimi K2.6 supports optional thinking while K3 uses its always-on reasoning effort", async () => {
   const calls = [];
   const provider = new CompatibleEvidencePreparationProvider({
