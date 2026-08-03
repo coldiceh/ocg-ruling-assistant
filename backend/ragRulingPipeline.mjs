@@ -493,13 +493,16 @@ function applyOfficialDirectAnswerContract(answer, evidence = {}, cardResolution
     || answer.answerLevel === "budget_limited"
     || answer.answerLevel === "needs_more_info"
     || !alreadyUsedDirect
+    || officialSummaryDefersToSource(answer.shortAnswer)
     || primaryPolarityConflict(officialAnswerText, answer.shortAnswer);
   const translatedSummary = modelCannotSafelySummarize ? "" : String(answer.shortAnswer || "").trim();
-  const officialSourceLine = officialAnswerText ? `官方 Q&A 完整回答原文：${officialAnswerText}` : "";
-  const shortAnswer = [translatedSummary, officialSourceLine].filter(Boolean).join("\n") || answer.shortAnswer;
-  const officialAnswerReason = officialAnswerText
+  const officialSourceLine = modelCannotSafelySummarize && officialAnswerText
     ? `官方 Q&A 完整回答原文：${officialAnswerText}`
     : "";
+  const shortAnswer = translatedSummary || officialSourceLine || answer.shortAnswer;
+  const officialAnswerReason = translatedSummary
+    ? `官方 Q&A（${String(direct.id || "")}）直接覆盖本题，完整原文见资料来源。`
+    : officialSourceLine;
   return {
     ...answer,
     answerLevel: "official_confirmed",
@@ -553,15 +556,20 @@ function replaceOfficialCardPlaceholders(text, cards = []) {
     const name = String(card.name || card.cnName || card.jaName || card.enName || "").trim();
     if (id && name && !namesById.has(id)) namesById.set(id, name);
   }
-  return String(text || "").replace(/<<(\d+)>>/gu, (placeholder, id) => (
-    namesById.has(id) ? `「${namesById.get(id)}」` : placeholder
-  ));
+  const replacementName = (id) => namesById.get(id) || "相关卡片";
+  return String(text || "")
+    .replace(/「<<(\d+)>>」/gu, (_placeholder, id) => `「${replacementName(id)}」`)
+    .replace(/<<(\d+)>>/gu, (_placeholder, id) => replacementName(id));
 }
 
 function primaryPolarityConflict(officialText, modelText) {
   const official = primaryAnswerPolarity(officialText);
   const model = primaryAnswerPolarity(modelText);
   return official !== "unknown" && model !== "unknown" && official !== model;
+}
+
+function officialSummaryDefersToSource(value) {
+  return /(?:请|應|应|须|須).{0,16}(?:以|参照|參照|查看|查阅|查閱).{0,16}(?:官方)?(?:原文|资料|資料|来源|來源)(?:为准|為準)?|(?:完整原文|详情|詳情).{0,8}(?:见|見|参见|參見)(?:资料|資料|来源|來源)|refer\s+to.{0,24}(?:source|official\s+(?:answer|text))/iu.test(String(value || ""));
 }
 
 function primaryAnswerPolarity(value) {
