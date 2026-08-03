@@ -255,6 +255,7 @@ test("DeepSeek V4 experimental finals send both the thinking toggle and effort",
   const body = JSON.parse(calls[0].options.body);
   assert.deepEqual(body.thinking, { type: "enabled" });
   assert.equal(body.reasoning_effort, "max");
+  assert.equal(body.max_tokens, 64_000);
   assert.equal((await provider.create({
     model: "deepseek-v4-flash",
     reasoningEffort: "none",
@@ -266,6 +267,7 @@ test("DeepSeek V4 experimental finals send both the thinking toggle and effort",
   const standardBody = JSON.parse(calls[1].options.body);
   assert.deepEqual(standardBody.thinking, { type: "disabled" });
   assert.equal(Object.hasOwn(standardBody, "reasoning_effort"), false);
+  assert.equal(standardBody.max_tokens, 16_000);
 });
 
 test("GLM compatible adapter emits an experimental final JSON result with filtered thinking controls", async () => {
@@ -336,6 +338,7 @@ test("Kimi K2.6 supports optional thinking while K3 uses its always-on reasoning
   assert.equal(k2Body.max_completion_tokens, 800);
   assert.equal(Object.hasOwn(k3Body, "thinking"), false);
   assert.equal(k3Body.reasoning_effort, "max");
+  assert.equal(k3Body.max_completion_tokens, 64_000);
   assert.match(calls[0].url, /^https:\/\/api\.moonshot\.cn\/v1\//u);
   await assert.rejects(
     provider.create({
