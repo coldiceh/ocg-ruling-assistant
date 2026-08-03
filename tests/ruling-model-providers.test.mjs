@@ -231,7 +231,7 @@ test("existing DeepSeek adapter remains evidence-only while Flash is the fixed p
   );
 });
 
-test("DeepSeek V4 experimental finals send both the thinking toggle and effort", async () => {
+test("DeepSeek V4 finals avoid the documented JSON Output empty-content path only while thinking", async () => {
   const calls = [];
   const provider = new CompatibleEvidencePreparationProvider({
     providerId: "deepseek",
@@ -256,6 +256,8 @@ test("DeepSeek V4 experimental finals send both the thinking toggle and effort",
   assert.deepEqual(body.thinking, { type: "enabled" });
   assert.equal(body.reasoning_effort, "max");
   assert.equal(body.max_tokens, 64_000);
+  assert.equal(Object.hasOwn(body, "response_format"), false);
+  assert.match(body.messages[0].content, /仅展示字段结构/u);
   assert.equal((await provider.create({
     model: "deepseek-v4-flash",
     reasoningEffort: "none",
@@ -268,6 +270,7 @@ test("DeepSeek V4 experimental finals send both the thinking toggle and effort",
   assert.deepEqual(standardBody.thinking, { type: "disabled" });
   assert.equal(Object.hasOwn(standardBody, "reasoning_effort"), false);
   assert.equal(standardBody.max_tokens, 16_000);
+  assert.deepEqual(standardBody.response_format, { type: "json_object" });
 });
 
 test("GLM compatible adapter emits an experimental final JSON result with filtered thinking controls", async () => {
