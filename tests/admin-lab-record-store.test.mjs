@@ -33,8 +33,9 @@ test("configured record storage fails closed and memory is an explicit test opt-
   assert.equal(memory.persistent, false);
 });
 
-test("memory history is paginated without a 100-run retention cap and strips secrets", async () => {
+test("memory history retains the newest 100 runs and strips secrets", async () => {
   const store = createMemoryAdminLabRecordStore();
+  assert.equal(store.maxEntries, 100);
   for (let index = 0; index < 135; index += 1) {
     await store.registerRun({
       runId: `run-${String(index).padStart(3, "0")}`,
@@ -69,9 +70,9 @@ test("memory history is paginated without a 100-run retention cap and strips sec
     cursor = page.nextCursor;
   } while (cursor);
 
-  assert.equal(seen.length, 135);
+  assert.equal(seen.length, 100);
   assert.equal(seen[0].runId, "run-134");
-  assert.equal(seen.at(-1).runId, "run-000");
+  assert.equal(seen.at(-1).runId, "run-035");
   assert.equal(seen[0].questionSummary, "问题 134 带有空白");
   assert.equal(JSON.stringify(seen).includes("must-not-survive"), false);
 });
@@ -141,13 +142,14 @@ test("human rating uses a closed enum and later saves update note and timestamp"
   assert.equal((await store.listRuns()).records[0].humanRating.rating, "correct");
 });
 
-test("Redis history persists index and ratings with no default trim or TTL", async () => {
+test("Redis history persists lightweight records and ratings with bounded default retention and no TTL", async () => {
   const redis = createMockRedisRest();
   const storeA = createRedisAdminLabRecordStore({
     env: REDIS_ENV,
     fetchImpl: redis.fetchImpl,
   });
   assert.equal(storeA.ttlSeconds, null);
+  assert.equal(storeA.maxEntries, 100);
   await storeA.registerRun({
     runId: "redis-old",
     createdAt: "2026-07-28T02:00:00.000Z",
@@ -209,6 +211,69 @@ test("Redis history persists index and ratings with no default trim or TTL", asy
   assert.equal(redis.commands.some((command) => command[0] === "LTRIM"), false);
   assert.equal(redis.commands.some((command) => command[0] === "EXPIRE"), false);
   assert.equal(JSON.stringify(redis.commands).includes("never-store-this"), false);
+});
+
+test("Redis history prunes only overflow current records and their exact sidecar keys", async () => {
+  const redis = createMockRedisRest();
+  const keyPrefix = "history-retention-test";
+  const store = createRedisAdminLabRecordStore({
+    env: REDIS_ENV,
+    fetchImpl: redis.fetchImpl,
+    keyPrefix,
+    maxEntries: 2,
+  });
+  assert.equal(store.maxEntries, 2);
+
+  await store.registerRun({
+    runId: "oldest/run",
+    createdAt: "2026-07-28T01:00:00.000Z",
+    question: "应被清理的旧记录",
+  });
+  await store.saveHumanRating({
+    runId: "oldest/run",
+    rating: "needs_review",
+    note: "旧评分也应清理",
+  });
+  await store.saveRunRepairProvenance({
+    runId: "oldest/run",
+    repairProvenance: {
+      schemaVersion: 1,
+      attempted: true,
+      outcome: "failed",
+    },
+  });
+  await store.registerRun({
+    runId: "middle-run",
+    createdAt: "2026-07-28T02:00:00.000Z",
+    question: "保留的中间记录",
+  });
+  await store.registerRun({
+    runId: "newest-run",
+    createdAt: "2026-07-28T03:00:00.000Z",
+    question: "保留的最新记录",
+  });
+
+  const page = await store.listRuns({ limit: 10 });
+  assert.deepEqual(page.records.map((record) => record.runId), [
+    "newest-run",
+    "middle-run",
+  ]);
+  assert.equal(await store.getRun("oldest/run"), null);
+  assert.equal(await store.getHumanRating("oldest/run"), null);
+
+  const prune = redis.commands.find((command) => (
+    command[0] === "EVAL"
+    && command[1].includes("admin-lab-record-prune-v1")
+  ));
+  assert.ok(prune);
+  const pruneKeys = prune.slice(3, 3 + Number(prune[2]));
+  assert.deepEqual(pruneKeys, [
+    `{${keyPrefix}}:created`,
+    `{${keyPrefix}}:run:oldest%2Frun`,
+    `{${keyPrefix}}:rating:oldest%2Frun`,
+    `{${keyPrefix}}:repair:oldest%2Frun`,
+  ]);
+  assert.equal(new Set(pruneKeys.map(redisClusterHashTag)).size, 1);
 });
 
 test("Redis registration recovers idempotently when the first response is lost after commit", async () => {
@@ -514,6 +579,27 @@ function createMockRedisRest() {
           sortedSets.set(indexKey, index);
           result = "REGISTERED";
         }
+      } else if (script.includes("admin-lab-record-prune-v1")) {
+        const keyCount = Number(command[2]);
+        const indexKey = command[3];
+        const argumentOffset = 3 + keyCount;
+        const maxEntries = Number(command[argumentOffset]);
+        const runIds = command.slice(argumentOffset + 1);
+        const index = sortedSets.get(indexKey) || new Map();
+        const ordered = sortedSetMembersDescending(index);
+        let deleted = 0;
+        for (const [runIndex, runId] of runIds.entries()) {
+          const reverseRank = ordered.indexOf(runId);
+          if (reverseRank < 0 || reverseRank < maxEntries) continue;
+          const keyOffset = 4 + (runIndex * 3);
+          index.delete(runId);
+          strings.delete(command[keyOffset]);
+          strings.delete(command[keyOffset + 1]);
+          strings.delete(command[keyOffset + 2]);
+          deleted += 1;
+        }
+        sortedSets.set(indexKey, index);
+        result = deleted;
       } else if (script.includes("admin-lab-record-rating-v1")) {
         const recordKey = command[3];
         const ratingKey = command[4];
@@ -548,9 +634,7 @@ function createMockRedisRest() {
       result = command.slice(1).map((key) => strings.get(key) ?? null);
     } else if (command[0] === "ZREVRANGE") {
       const index = sortedSets.get(command[1]) || new Map();
-      const ordered = [...index.entries()]
-        .sort((left, right) => right[1] - left[1] || right[0].localeCompare(left[0]))
-        .map(([member]) => member);
+      const ordered = sortedSetMembersDescending(index);
       const stop = Number(command[3]);
       result = ordered.slice(Number(command[2]), stop < 0 ? undefined : stop + 1);
     } else {
@@ -578,6 +662,12 @@ function createMockRedisRest() {
       sortedSets.set(`${prefix}:created`, index);
     },
   };
+}
+
+function sortedSetMembersDescending(index) {
+  return [...index.entries()]
+    .sort((left, right) => right[1] - left[1] || right[0].localeCompare(left[0]))
+    .map(([member]) => member);
 }
 
 function redisClusterHashTag(key) {

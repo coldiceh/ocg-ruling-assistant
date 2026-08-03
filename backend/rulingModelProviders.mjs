@@ -278,8 +278,24 @@ export class CompatibleEvidencePreparationProvider {
     });
     const text = extractChatCompletionText(payload);
     if (!text) {
-      const finishReason = String(payload?.choices?.[0]?.finish_reason || "").trim();
-      throw new RulingModelProviderError(`${this.providerId} returned an empty final ruling`, {
+      const choice = payload?.choices?.[0] || {};
+      const message = choice?.message || {};
+      const finishReason = String(choice?.finish_reason || "").trim();
+      const reasoningLength = typeof message?.reasoning_content === "string"
+        ? message.reasoning_content.length
+        : 0;
+      const toolCallCount = Array.isArray(message?.tool_calls) ? message.tool_calls.length : 0;
+      const completionTokens = Number(payload?.usage?.completion_tokens);
+      const reasoningTokens = Number(payload?.usage?.completion_tokens_details?.reasoning_tokens);
+      const diagnostics = [
+        `finish_reason=${finishReason || "missing"}`,
+        `reasoning_chars=${reasoningLength}`,
+        `tool_calls=${toolCallCount}`,
+        `completion_tokens=${Number.isFinite(completionTokens) ? completionTokens : "missing"}`,
+        `reasoning_tokens=${Number.isFinite(reasoningTokens) ? reasoningTokens : "missing"}`,
+      ].join(", ");
+      throw new RulingModelProviderError(
+        `${this.providerId} returned an empty final ruling (${diagnostics})`, {
         code: finishReason === "length"
           ? `${this.providerId}_final_ruling_output_exhausted`
           : `${this.providerId}_empty_final_ruling`,

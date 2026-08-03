@@ -6,8 +6,10 @@ const DEFAULT_TIMEOUT_MS = 5_000;
 const MAX_TIMEOUT_MS = 30_000;
 const AMBIGUOUS_WRITE_ATTEMPTS = 3;
 const MAX_TTL_SECONDS = 2_147_483_647;
+const DEFAULT_RUN_TTL_SECONDS = 30 * 24 * 60 * 60;
 const MAX_SNAPSHOT_CACHE_ENTRIES = 4;
 const SNAPSHOT_CANDIDATE_TTL_SECONDS = 300;
+const EVIDENCE_SNAPSHOT_REFERENCE_TYPE = "admin_evidence_snapshot_reference";
 
 const PREPARE_SNAPSHOT_SCRIPT = `
 -- admin-run-snapshot-prepare-v1
@@ -78,6 +80,12 @@ return "CREATED"
 
 const COMMIT_RUN_SCRIPT = `
 -- admin-run-commit-v1
+local function expireSupersededSnapshot()
+  if KEYS[4] and KEYS[4] ~= "" and KEYS[4] ~= KEYS[3] then
+    redis.call("EXPIRE", KEYS[4], ARGV[5])
+  end
+end
+
 local currentRaw = redis.call("GET", KEYS[1])
 if not currentRaw then
   return "NOT_FOUND"
@@ -112,6 +120,7 @@ if tonumber(current["revision"]) ~= expectedRevision then
   if tonumber(current["revision"]) >= nextRevision
     and tonumber(current["lastSequence"]) >= eventSequence
     and existingEventRaw == ARGV[3] then
+    expireSupersededSnapshot()
     return "ALREADY_COMMITTED"
   end
   return "CONFLICT:" .. tostring(current["revision"])
@@ -135,6 +144,7 @@ else
   redis.call("PERSIST", KEYS[2])
   redis.call("PERSIST", KEYS[3])
 end
+expireSupersededSnapshot()
 return "COMMITTED"
 `.trim();
 
@@ -193,10 +203,14 @@ export function createRedisAdminRunStorage(options = {}) {
     const runId = requiredString(run.runId, "runId");
     const detached = detachEvidenceSnapshot(run);
     const keys = redisKeys(keyPrefix, runId, detached.snapshot.snapshotId);
-    const snapshot = await prepareEvidenceSnapshot(keys.snapshot, detached.snapshot);
+    const storedSnapshotRecord = await prepareRunEvidenceSnapshotRecord(
+      keys.snapshot,
+      detached,
+    );
+    const snapshot = detached.snapshot;
     const serializedRun = serializeJson(detached.run);
     const serializedEvent = serializeJson(event);
-    const serializedSnapshot = serializeJson(snapshot);
+    const serializedSnapshot = serializeJson(storedSnapshotRecord);
     let result;
     try {
       result = await redisCommand(config, fetchImpl, timeoutMs, [
@@ -249,6 +263,7 @@ export function createRedisAdminRunStorage(options = {}) {
         run.evidenceSnapshot,
         run.evidenceSnapshotId || run.evidenceSnapshot.snapshotId,
       );
+      run.evidenceSnapshotId ||= run.evidenceSnapshot.snapshotId;
       return cloneJson(run);
     }
     const snapshotId = requiredString(run.evidenceSnapshotId, "stored evidenceSnapshotId");
@@ -274,18 +289,27 @@ export function createRedisAdminRunStorage(options = {}) {
     });
     const detached = detachEvidenceSnapshot(run);
     const keys = redisKeys(keyPrefix, id, detached.snapshot.snapshotId);
-    const snapshot = await prepareEvidenceSnapshot(keys.snapshot, detached.snapshot);
+    const storedSnapshotRecord = await prepareRunEvidenceSnapshotRecord(
+      keys.snapshot,
+      detached,
+    );
+    const snapshot = detached.snapshot;
+    const supersededSnapshotKey = detached.supersededSnapshotId
+      ? redisKeys(keyPrefix, id, detached.supersededSnapshotId).snapshot
+      : keys.snapshot;
     const command = [
       "EVAL",
       COMMIT_RUN_SCRIPT,
-      "3",
+      "4",
       keys.run,
       keys.events,
       keys.snapshot,
+      supersededSnapshotKey,
       String(revision),
       serializeJson(detached.run),
       serializeJson(event),
       ttlSeconds === null ? "" : String(ttlSeconds),
+      String(SNAPSHOT_CANDIDATE_TTL_SECONDS),
     ];
     for (let attempt = 0; attempt < AMBIGUOUS_WRITE_ATTEMPTS; attempt += 1) {
       let result;
@@ -314,7 +338,46 @@ export function createRedisAdminRunStorage(options = {}) {
       snapshot,
       snapshot?.snapshotId,
     );
-    const serializedSnapshot = serializeJson(canonicalSnapshot);
+    await prepareEvidenceSnapshotRecord(snapshotKey, canonicalSnapshot);
+    return canonicalSnapshot;
+  }
+
+  async function prepareRunEvidenceSnapshotRecord(snapshotKey, detached) {
+    if (!detached.reference) {
+      return prepareEvidenceSnapshotRecord(snapshotKey, detached.snapshot);
+    }
+    const reference = await prepareEvidenceSnapshotReference(
+      detached.reference,
+      detached.snapshot,
+    );
+    const prepared = await prepareEvidenceSnapshotRecord(snapshotKey, reference, {
+      allowConflict: true,
+    });
+    if (prepared) return reference;
+
+    // Runs written before snapshot references were introduced can already have
+    // a full fork-local snapshot at this key. Keep that immutable record valid
+    // instead of trying to rewrite it in place.
+    const existingRaw = await redisCommand(config, fetchImpl, timeoutMs, ["GET", snapshotKey]);
+    if (existingRaw !== null && existingRaw !== undefined) {
+      const existing = parseStoredJson(existingRaw, "evidence snapshot");
+      if (!isEvidenceSnapshotReference(existing)) {
+        const legacySnapshot = parseStoredEvidenceSnapshot(
+          existing,
+          detached.snapshot.snapshotId,
+        );
+        if (serializeJson(legacySnapshot) === serializeJson(detached.snapshot)) {
+          return legacySnapshot;
+        }
+      }
+    }
+    throw storageCorrupt("stored evidence snapshot conflicts with canonical snapshot identity");
+  }
+
+  async function prepareEvidenceSnapshotRecord(snapshotKey, record, {
+    allowConflict = false,
+  } = {}) {
+    const serializedSnapshot = serializeJson(record);
     const command = [
       "EVAL",
       PREPARE_SNAPSHOT_SCRIPT,
@@ -334,12 +397,95 @@ export function createRedisAdminRunStorage(options = {}) {
         ) throw error;
         continue;
       }
-      if (result === "STAGED" || result === "UNCHANGED") return canonicalSnapshot;
+      if (result === "STAGED" || result === "UNCHANGED") return record;
       if (result === "CONFLICT") {
+        if (allowConflict) return null;
         throw storageCorrupt("stored evidence snapshot conflicts with canonical snapshot identity");
       }
       throw storageCorrupt(`unexpected evidence snapshot prepare result: ${String(result)}`);
     }
+  }
+
+  async function prepareEvidenceSnapshotReference(reference, snapshot) {
+    const canonicalReference = parseEvidenceSnapshotReference(reference, snapshot?.snapshotId);
+    let resolved = await resolveEvidenceSnapshotReference(canonicalReference, new Set());
+    if (!resolved) {
+      const targetKey = snapshotKeyForReference(canonicalReference);
+      const canonicalSnapshot = await prepareEvidenceSnapshot(targetKey, snapshot);
+      resolved = {
+        key: targetKey,
+        reference: canonicalReference,
+        snapshot: canonicalSnapshot,
+      };
+    }
+    const canonicalSnapshot = parseStoredEvidenceSnapshot(snapshot, canonicalReference.snapshotId);
+    if (serializeJson(resolved.snapshot) !== serializeJson(canonicalSnapshot)) {
+      throw storageCorrupt("referenced evidence snapshot conflicts with the fork snapshot");
+    }
+    await keepEvidenceSnapshotAlive(resolved.key);
+    return resolved.reference;
+  }
+
+  function snapshotKeyForReference(reference) {
+    return redisKeys(
+      keyPrefix,
+      requiredString(reference.ownerRunId, "evidence snapshot reference ownerRunId"),
+      requiredString(reference.snapshotId, "evidence snapshot reference snapshotId"),
+    ).snapshot;
+  }
+
+  async function resolveEvidenceSnapshotReference(reference, visited) {
+    const canonicalReference = parseEvidenceSnapshotReference(reference, reference?.snapshotId);
+    const snapshotKey = snapshotKeyForReference(canonicalReference);
+    if (visited.has(snapshotKey)) {
+      throw storageCorrupt("stored evidence snapshot reference cycle detected");
+    }
+    visited.add(snapshotKey);
+    try {
+      const result = await redisCommand(config, fetchImpl, timeoutMs, ["GET", snapshotKey]);
+      if (result === null || result === undefined) return null;
+      const record = parseStoredJson(result, "evidence snapshot");
+      if (isEvidenceSnapshotReference(record)) {
+        const nextReference = parseEvidenceSnapshotReference(
+          record,
+          canonicalReference.snapshotId,
+        );
+        if (nextReference.contentSha256 !== canonicalReference.contentSha256) {
+          throw storageCorrupt("stored evidence snapshot reference hash mismatch");
+        }
+        return resolveEvidenceSnapshotReference(nextReference, visited);
+      }
+      const resolvedSnapshot = parseStoredEvidenceSnapshot(record, canonicalReference.snapshotId);
+      if (resolvedSnapshot.contentSha256 !== canonicalReference.contentSha256) {
+        throw storageCorrupt("stored evidence snapshot reference hash mismatch");
+      }
+      return {
+        key: snapshotKey,
+        reference: canonicalReference,
+        snapshot: resolvedSnapshot,
+      };
+    } finally {
+      visited.delete(snapshotKey);
+    }
+  }
+
+  async function keepEvidenceSnapshotAlive(snapshotKey) {
+    // Refresh the shared target before the fork-local alias is committed. A
+    // small grace period prevents the target from expiring in the narrow gap
+    // before an equally-lived alias reaches its own TTL.
+    const referencedSnapshotTtl = ttlSeconds === null
+      ? null
+      : Math.min(MAX_TTL_SECONDS, ttlSeconds + SNAPSHOT_CANDIDATE_TTL_SECONDS);
+    const command = ttlSeconds === null
+      ? ["PERSIST", snapshotKey]
+      : ["EXPIRE", snapshotKey, String(referencedSnapshotTtl)];
+    const result = await redisCommand(config, fetchImpl, timeoutMs, command);
+    if (Number(result) === 1) return;
+    if (
+      ttlSeconds === null
+      && Number(await redisCommand(config, fetchImpl, timeoutMs, ["EXISTS", snapshotKey])) === 1
+    ) return;
+    throw storageCorrupt("referenced evidence snapshot disappeared during fork creation");
   }
 
   async function verifyCreatedRun(keys, {
@@ -385,7 +531,14 @@ export function createRedisAdminRunStorage(options = {}) {
       if (snapshotResult === null || snapshotResult === undefined) {
         throw storageCorrupt("stored run evidence snapshot is missing");
       }
-      const snapshot = parseStoredEvidenceSnapshot(snapshotResult, snapshotId);
+      const record = parseStoredJson(snapshotResult, "evidence snapshot");
+      const snapshot = isEvidenceSnapshotReference(record)
+        ? (await resolveEvidenceSnapshotReference(
+          parseEvidenceSnapshotReference(record, snapshotId),
+          new Set([snapshotKey]),
+        ))?.snapshot
+        : parseStoredEvidenceSnapshot(record, snapshotId);
+      if (!snapshot) throw storageCorrupt("stored run evidence snapshot is missing");
       cacheEvidenceSnapshot(snapshotKey, snapshot);
       return snapshot;
     })();
@@ -607,11 +760,74 @@ function detachEvidenceSnapshot(run) {
     "evidenceSnapshot.snapshotId",
   );
   const detachedRun = cloneJson(run);
+  const previousSnapshotId = String(detachedRun.evidenceSnapshotId || "").trim();
   delete detachedRun.evidenceSnapshot;
   detachedRun.evidenceSnapshotId = snapshotId;
   return {
     run: detachedRun,
     snapshot: cloneJson(canonicalSnapshot),
+    reference: forkEvidenceSnapshotReference(run, canonicalSnapshot),
+    supersededSnapshotId:
+      run?.preparationFinalizedAt && previousSnapshotId && previousSnapshotId !== snapshotId
+        ? previousSnapshotId
+        : null,
+  };
+}
+
+function forkEvidenceSnapshotReference(run, snapshot) {
+  const fork = run?.metadata?.fork;
+  if (!fork || typeof fork !== "object" || Array.isArray(fork)) return null;
+  const sourceRunId = String(fork.sourceRunId || "").trim();
+  if (!sourceRunId) return null;
+  if (
+    String(fork.sourceEvidenceSnapshotId || "") !== String(snapshot.snapshotId)
+    || String(fork.sourceEvidenceSnapshotSha256 || "") !== String(snapshot.contentSha256)
+  ) {
+    throw storageCorrupt("fork metadata does not match its evidence snapshot");
+  }
+  return parseEvidenceSnapshotReference({
+    recordType: EVIDENCE_SNAPSHOT_REFERENCE_TYPE,
+    schemaVersion: 1,
+    ownerRunId: sourceRunId,
+    snapshotId: snapshot.snapshotId,
+    contentSha256: snapshot.contentSha256,
+  }, snapshot.snapshotId);
+}
+
+function isEvidenceSnapshotReference(value) {
+  return Boolean(
+    value
+    && typeof value === "object"
+    && !Array.isArray(value)
+    && value.recordType === EVIDENCE_SNAPSHOT_REFERENCE_TYPE,
+  );
+}
+
+function parseEvidenceSnapshotReference(value, expectedSnapshotId) {
+  if (!isEvidenceSnapshotReference(value) || value.schemaVersion !== 1) {
+    throw storageCorrupt("stored evidence snapshot reference is invalid");
+  }
+  const ownerRunId = String(value.ownerRunId || "").trim();
+  const snapshotId = String(value.snapshotId || "").trim();
+  const contentSha256 = String(value.contentSha256 || "").trim().toLowerCase();
+  if (!ownerRunId) {
+    throw storageCorrupt("stored evidence snapshot reference owner is invalid");
+  }
+  if (
+    snapshotId !== String(expectedSnapshotId || "")
+    || snapshotId !== `evidence_${contentSha256.slice(0, 24)}`
+  ) {
+    throw storageCorrupt("stored evidence snapshot reference id mismatch");
+  }
+  if (!/^[a-f0-9]{64}$/u.test(contentSha256)) {
+    throw storageCorrupt("stored evidence snapshot reference hash is invalid");
+  }
+  return {
+    recordType: EVIDENCE_SNAPSHOT_REFERENCE_TYPE,
+    schemaVersion: 1,
+    ownerRunId,
+    snapshotId,
+    contentSha256,
   };
 }
 
@@ -633,9 +849,13 @@ function validateCommitPair(current, run, event, { checkCurrentSequence = true }
 
 function normalizeTtlSeconds(value) {
   if (
-    value === null
-    || value === undefined
+    value === undefined
     || String(value).trim() === ""
+  ) {
+    return DEFAULT_RUN_TTL_SECONDS;
+  }
+  if (
+    value === null
     || /^(?:none|null|off|disabled)$/iu.test(String(value).trim())
   ) {
     return null;
