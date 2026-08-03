@@ -699,8 +699,15 @@ function resolutionOperationClaims(value) {
 }
 
 function hasResolutionOperationSelfConflict(value) {
-  if (hasExplicitAlternativeBranches(value)) return false;
+  if (hasExplicitAlternativeBranches(value) || hasConditionalResolutionException(value)) return false;
   return [...resolutionOperationClaims(value).values()].some((outcome) => outcome === "conflict");
+}
+
+function hasConditionalResolutionException(value) {
+  const text = String(value || "");
+  const hasCondition = /(?:如果|若|当|在.{0,16}(?:时|時)|场合|場合|情况下|情況下|条件|條件|のみ|場合|if\b|when\b|unless\b)/iu.test(text);
+  const hasExceptionConnector = /(?:但|但是|不过|不過|然而|其中|仅在|僅在|ただし|なお|一方|except\b|however\b|but\b)/iu.test(text);
+  return hasCondition && hasExceptionConnector;
 }
 
 function resolutionChainScope(clause, operationIndex) {
