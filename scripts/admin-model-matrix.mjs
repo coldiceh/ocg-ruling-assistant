@@ -55,11 +55,12 @@ export async function runAdminModelMatrix({
   origin,
   password,
   question,
+  sourceRunId: requestedSourceRunId,
   configurations = DEFAULT_MATRIX_CONFIGURATIONS,
   fetchImpl = globalThis.fetch,
   pollIntervalMs = 1_500,
   runTimeoutMs = 10 * 60_000,
-  concurrency = 2,
+  concurrency = 1,
   now = () => new Date(),
   sleep = defaultSleep,
 } = {}) {
@@ -82,23 +83,35 @@ export async function runAdminModelMatrix({
     throw new Error(`DeepSeek Flash source configuration is unavailable: ${sourceAvailability.reason}`);
   }
 
-  const sourceCreated = await client.createRun({
-    question: normalizedQuestion,
-    preparationProvider: SOURCE_CONFIGURATION.provider,
-    preparationModel: SOURCE_CONFIGURATION.model,
-    preparationReasoningMode: SOURCE_CONFIGURATION.reasoningMode,
-    preparationReasoningEffort: SOURCE_CONFIGURATION.reasoningEffort,
-    ...SOURCE_CONFIGURATION,
-  });
-  const sourceRunId = extractRunId(sourceCreated);
-  if (!sourceRunId) throw new Error("Admin lab create did not return a runId");
-  const sourceRun = await executeAndWait({
-    client,
-    runId: sourceRunId,
-    pollIntervalMs,
-    runTimeoutMs,
-    sleep,
-  });
+  let sourceRunId = optionalText(requestedSourceRunId);
+  let sourceRun;
+  if (sourceRunId) {
+    sourceRun = extractRun(await client.getRun(sourceRunId));
+    if (!sourceRun || !TERMINAL_STATUSES.has(normalizeStatus(sourceRun.status))) {
+      throw new Error(`Source run ${sourceRunId} is missing or not terminal`);
+    }
+    if (!hasFrozenEvidence(sourceRun)) {
+      throw new Error(`Source run ${sourceRunId} does not contain frozen evidence`);
+    }
+  } else {
+    const sourceCreated = await client.createRun({
+      question: normalizedQuestion,
+      preparationProvider: SOURCE_CONFIGURATION.provider,
+      preparationModel: SOURCE_CONFIGURATION.model,
+      preparationReasoningMode: SOURCE_CONFIGURATION.reasoningMode,
+      preparationReasoningEffort: SOURCE_CONFIGURATION.reasoningEffort,
+      ...SOURCE_CONFIGURATION,
+    });
+    sourceRunId = extractRunId(sourceCreated);
+    if (!sourceRunId) throw new Error("Admin lab create did not return a runId");
+    sourceRun = await executeAndWait({
+      client,
+      runId: sourceRunId,
+      pollIntervalMs,
+      runTimeoutMs,
+      sleep,
+    });
+  }
   const sourceResult = summarizeRun({
     role: "source",
     configuration: SOURCE_CONFIGURATION,
@@ -310,6 +323,7 @@ export function parseMatrixArguments(argv = []) {
     };
     if (argument === "--question") options.question = take();
     else if (argument === "--question-file") options.questionFile = take();
+    else if (argument === "--source-run-id") options.sourceRunId = take();
     else if (argument === "--base-url") options.baseUrl = take();
     else if (argument === "--origin") options.origin = take();
     else if (argument === "--config") options.configurations.push(parseConfiguration(take()));
@@ -525,6 +539,17 @@ function extractRunId(value) {
   return String(run?.runId || run?.id || value?.runId || "").trim() || null;
 }
 
+function hasFrozenEvidence(run) {
+  return Boolean(
+    run?.evidenceSnapshot
+    || run?.frozenEvidence
+    || run?.evidenceSnapshotId
+    || run?.evidenceArchiveId
+    || run?.result?.evidenceSnapshot
+    || run?.result?.evidenceSnapshotId,
+  );
+}
+
 function extractCookie(headers) {
   const setCookies = typeof headers?.getSetCookie === "function" ? headers.getSetCookie() : [];
   const raw = setCookies[0] || headers?.get?.("set-cookie") || "";
@@ -565,6 +590,11 @@ function requiredText(value, name) {
   const text = String(value || "").trim();
   if (!text) throw new Error(`${name} is required`);
   return text;
+}
+
+function optionalText(value) {
+  const text = String(value || "").trim();
+  return text || null;
 }
 
 function positiveInteger(value, name) {
@@ -625,9 +655,10 @@ async function promptSecret(label) {
 function usageText() {
   return `用法：node scripts/admin-model-matrix.mjs --base-url URL --origin ORIGIN --question "问题" [选项]\n\n` +
     `密码从 ADMIN_MODEL_LAB_PASSWORD（或 ADMIN_PASSWORD）读取；未设置时在 TTY 中隐藏输入。\n` +
+    `--source-run-id ID 复用已有冻结证据，不再创建源运行。\n` +
     `--config provider:model:reasoningMode:reasoningEffort 可重复指定。\n` +
     `--config-file FILE 读取配置 JSON 数组。\n` +
-    `--format json|markdown  --output FILE  --concurrency N\n`;
+    `--format json|markdown  --output FILE  --concurrency N（默认 1）\n`;
 }
 
 function isMain(metaUrl) {

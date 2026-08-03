@@ -106,11 +106,13 @@ test("matrix creates one Flash source, forks frozen evidence, skips unavailable 
 test("argument and capability normalization keep only server-available configurations", () => {
   const parsed = parseMatrixArguments([
     "--question", "Q",
+    "--source-run-id", "source-existing",
     "--config", "glm:glm-5.2:standard:none",
     "--format", "markdown",
     "--concurrency", "3",
   ]);
   assert.equal(parsed.question, "Q");
+  assert.equal(parsed.sourceRunId, "source-existing");
   assert.equal(parsed.format, "markdown");
   assert.equal(parsed.concurrency, 3);
   assert.deepEqual(parsed.configurations[0], {
@@ -139,8 +141,40 @@ test("argument and capability normalization keep only server-available configura
   assert.deepEqual([...available.keys()], ["glm-5.2"]);
 });
 
+test("matrix can reuse an existing frozen source without creating or executing it", async () => {
+  const fixture = createFetchFixture();
+  const report = await runAdminModelMatrix({
+    baseUrl: "https://lab.example.test",
+    origin: "https://admin.example.test",
+    password: "test-only-password",
+    question: "测试问题",
+    sourceRunId: "source-existing",
+    configurations: [{
+      provider: "deepseek",
+      model: "deepseek-v4-flash",
+      reasoningMode: "standard",
+      reasoningEffort: "none",
+    }],
+    fetchImpl: fixture.fetch,
+    pollIntervalMs: 1,
+    runTimeoutMs: 1_000,
+    sleep: async () => {},
+  });
+
+  assert.equal(report.sourceRunId, "source-existing");
+  assert.equal(report.results[0].conciseAnswer, "answer:deepseek-v4-flash");
+  assert.equal(fixture.calls.some((call) => call.action === "create"), false);
+  assert.equal(fixture.calls.some((call) => call.action === "execute"), false);
+});
+
 function createFetchFixture() {
   const runs = new Map();
+  runs.set("source-existing", {
+    runId: "source-existing",
+    status: "SUCCEEDED",
+    evidenceSnapshotId: "snapshot-existing",
+    result: completedResult("deepseek-v4-flash"),
+  });
   const calls = [];
   const protectedHeaders = [];
   const auth = {};
