@@ -230,6 +230,165 @@ test("authoritative direct comparison aligns a general result and a restricted e
   assert.equal(validation.ok, true, JSON.stringify(validation.errors));
 });
 
+test("a material restriction inside a concessive clause does not negate the later Summon operation", () => {
+  const evidence = {
+    officialQaDirectCandidates: [{
+      id: "official-direct-concessive-material-restriction",
+      question: "融合召唤的素材にできない怪兽を使用できますか。",
+      answer: "墓地へ送って特殊召唤できます。この特殊召唤は融合召唤ではありません。",
+      text: "融合召唤的素材にできない怪兽を使用できますか。墓地へ送って特殊召唤できます。この特殊召唤は融合召唤ではありません。",
+    }],
+  };
+  const answer = makeAnswer(
+    "可以。即使怪兽带有‘不能作为融合召唤的素材’的效果，也能将其送入墓地来特殊召唤。这次特殊召唤不是融合召唤。",
+    [{ id: "official-direct-concessive-material-restriction" }],
+  );
+  const validation = validatePublicRagFinalAnswer(answer, {
+    rawText: JSON.stringify(answer),
+    userQuery: "能否使用受到素材限制的怪兽进行这个特殊召唤？",
+    evidence,
+    authoritativeOfficialDirect: true,
+  });
+
+  assert.equal(validation.ok, true, JSON.stringify(validation.errors));
+});
+
+test("a positive modal nested inside a real prohibition does not cancel that prohibition", () => {
+  const evidence = {
+    officialQaDirectCandidates: [{
+      id: "official-direct-nested-negative-modal",
+      question: "特殊召唤できますか。",
+      answer: "特殊召唤できません。",
+      text: "特殊召唤できますか。特殊召唤できません。",
+    }],
+  };
+  for (const shortAnswer of [
+    "不能使其能够特殊召唤。",
+    "不能认为其仍然能够特殊召唤。",
+    "不能据此断定，仍然能够特殊召唤。",
+    "不能认为，即使受到限制也能特殊召唤。",
+    "这并不意味着它仍然可以特殊召唤。",
+    "该裁定不代表它也能特殊召唤。",
+    "并非表示这只怪兽也可以特殊召唤。",
+  ]) {
+    const answer = makeAnswer(shortAnswer, [{ id: "official-direct-nested-negative-modal" }]);
+    const validation = validatePublicRagFinalAnswer(answer, {
+      rawText: JSON.stringify(answer),
+      userQuery: "能否特殊召唤？",
+      evidence,
+      authoritativeOfficialDirect: true,
+    });
+    assert.equal(validation.ok, true, `${shortAnswer}: ${JSON.stringify(validation.errors)}`);
+  }
+});
+
+test("a metalinguistic prohibition remains negative inside a concessive scenario", () => {
+  const shortAnswer = "即使满足其他条件，也不能认为其仍然能够特殊召唤。";
+  const evidence = {
+    officialQaDirectCandidates: [{
+      id: "official-direct-concessive-metalinguistic-negative",
+      question: "满足其他条件时可以特殊召唤吗。",
+      answer: shortAnswer,
+      text: `满足其他条件时可以特殊召唤吗。${shortAnswer}`,
+    }],
+  };
+  const answer = makeAnswer(shortAnswer, [{ id: "official-direct-concessive-metalinguistic-negative" }]);
+  const validation = validatePublicRagFinalAnswer(answer, {
+    rawText: JSON.stringify(answer),
+    userQuery: "满足其他条件时可以特殊召唤吗？",
+    evidence,
+    authoritativeOfficialDirect: true,
+  });
+
+  assert.equal(validation.ok, true, JSON.stringify(validation.errors));
+});
+
+test("a metalinguistic prohibition does not cross an explicit discourse reset", () => {
+  const shortAnswer = "不能认为前者可以破坏卡片，但是后者可以特殊召唤。";
+  const evidence = {
+    officialQaDirectCandidates: [{
+      id: "official-direct-discourse-reset",
+      question: "后者可以特殊召唤吗。",
+      answer: "后者可以特殊召唤。",
+      text: "后者可以特殊召唤吗。后者可以特殊召唤。",
+    }],
+  };
+  const answer = makeAnswer(shortAnswer, [{ id: "official-direct-discourse-reset" }]);
+  const validation = validatePublicRagFinalAnswer(answer, {
+    rawText: JSON.stringify(answer),
+    userQuery: "后者可以特殊召唤吗？",
+    evidence,
+    authoritativeOfficialDirect: true,
+  });
+
+  assert.equal(validation.ok, true, JSON.stringify(validation.errors));
+});
+
+test("a negated negative proposition is not flattened into a negative operation claim", () => {
+  const evidence = {
+    officialQaDirectCandidates: [{
+      id: "official-direct-metalinguistic-double-negative",
+      question: "可以特殊召唤吗。",
+      answer: "可以特殊召唤。",
+      text: "可以特殊召唤吗。可以特殊召唤。",
+    }],
+  };
+  for (const shortAnswer of [
+    "不能认为这只怪兽不能特殊召唤；事实上仍然可以特殊召唤。",
+    "这并不意味着它不能特殊召唤；相反，它仍然可以特殊召唤。",
+    "不能理解为该手续不能特殊召唤。实际可以特殊召唤。",
+  ]) {
+    const answer = makeAnswer(shortAnswer, [{ id: "official-direct-metalinguistic-double-negative" }]);
+    const validation = validatePublicRagFinalAnswer(answer, {
+      rawText: JSON.stringify(answer),
+      userQuery: "可以特殊召唤吗？",
+      evidence,
+      authoritativeOfficialDirect: true,
+    });
+    assert.equal(validation.ok, true, `${shortAnswer}: ${JSON.stringify(validation.errors)}`);
+  }
+});
+
+test("a standalone positive 可 form is recognized as a performed operation", () => {
+  const evidence = {
+    officialQaDirectCandidates: [{
+      id: "official-direct-bare-ke-positive",
+      question: "特殊召唤できますか。",
+      answer: "特殊召唤できます。",
+      text: "特殊召唤できますか。特殊召唤できます。",
+    }],
+  };
+  const answer = makeAnswer("不过仍可特殊召唤。", [{ id: "official-direct-bare-ke-positive" }]);
+  const validation = validatePublicRagFinalAnswer(answer, {
+    rawText: JSON.stringify(answer),
+    userQuery: "能否特殊召唤？",
+    evidence,
+    authoritativeOfficialDirect: true,
+  });
+
+  assert.equal(validation.ok, true, JSON.stringify(validation.errors));
+});
+
+test("opposite claims for the same Summon operation remain a conflict across discourse pivots", () => {
+  for (const shortAnswer of [
+    "不能特殊召唤，也能特殊召唤。",
+    "不能特殊召唤，却可以特殊召唤。",
+    "不能特殊召唤，然而依然可以特殊召唤。",
+  ]) {
+    const answer = makeAnswer(shortAnswer);
+    const validation = validatePublicRagFinalAnswer(answer, {
+      rawText: JSON.stringify(answer),
+      userQuery: "能否特殊召唤？",
+      evidence: {},
+    });
+    assert.equal(validation.ok, false, shortAnswer);
+    assert.ok(
+      validation.errors.includes("shortAnswer contains conflicting resolution conclusions for the same operation"),
+      `${shortAnswer}: ${JSON.stringify(validation.errors)}`,
+    );
+  }
+});
+
 test("an operation quoted inside example card text is not the official resolution claim", () => {
   const evidence = {
     officialQaDirectCandidates: [{

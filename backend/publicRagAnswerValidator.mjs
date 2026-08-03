@@ -800,10 +800,30 @@ function resolutionOperationClaims(value, { branchScoped = false } = {}) {
       if (quotedOutcome === "ignore") continue;
       const prefix = clause.text.slice(Math.max(0, localIndex - 40), localIndex);
       const suffix = clause.text.slice(localIndex + match[0].length, localIndex + match[0].length + 16);
-      const broadNegativePrefix = prefix.match(/(?:不能|无法|無法|不会|不會).{0,24}$/u)?.[0] || "";
-      const negative = /(?:不|未)(?:会|會|能|可以|再|进行|進行|执行|執行|完成)?\s*$/u.test(prefix)
-        || /(?:不是|并非|並非|不属于|不屬於|不作为|不作為|不视为|不視為|不当作|不當作)\s*$/u.test(prefix)
-        || (Boolean(broadNegativePrefix) && !/(?:但|但是|不过|不過|而是|改为|改為)/u.test(broadNegativePrefix))
+      const localPrefix = prefix.slice(Math.max(
+        prefix.lastIndexOf("，"),
+        prefix.lastIndexOf(","),
+        prefix.lastIndexOf("；"),
+        prefix.lastIndexOf(";"),
+      ) + 1);
+      const broadNegativePrefix = localPrefix.match(/(?:不能|无法|無法|不会|不會).{0,24}$/u)?.[0] || "";
+      const discourseReset = [...prefix.matchAll(/(?:(?<!不)但(?!凡)(?:是)?|不过|不過|然而|而是|可是|却|卻|相反|反之|ただし|しかし|一方|\bbut\b|\bhowever\b)/giu)].at(-1);
+      const metalinguisticScopePrefix = discourseReset
+        ? prefix.slice((discourseReset.index || 0) + discourseReset[0].length)
+        : prefix;
+      const metalinguisticScopeMatch = metalinguisticScopePrefix.match(/(?:不能|无法|無法|不可|不应|不應)(?:据此|據此)?(?:断定|斷定|认为|認為|理解为|理解為|认定|認定|视为|視為)|(?:并不|並不|不)(?:代表|意味着|意味著)|并非(?:表示|意味)|並非(?:表示|意味)/u);
+      const embeddedMetalinguisticPredicate = metalinguisticScopeMatch
+        ? metalinguisticScopePrefix.slice((metalinguisticScopeMatch.index || 0) + metalinguisticScopeMatch[0].length)
+        : "";
+      const metalinguisticDoubleNegative = Boolean(metalinguisticScopeMatch)
+        && /(?:不能|无法|無法|不会|不會)\s*$/u.test(embeddedMetalinguisticPredicate);
+      const metalinguisticNegativeScope = Boolean(metalinguisticScopeMatch) && !metalinguisticDoubleNegative;
+      const localNegative = /(?:不|未)(?:会|會|能|可以|再|进行|進行|执行|執行|完成)?\s*$/u.test(localPrefix)
+        || /(?:不是|并非|並非|不属于|不屬於|不作为|不作為|不视为|不視為|不当作|不當作)\s*$/u.test(localPrefix)
+        || (Boolean(broadNegativePrefix)
+          && !/(?:但|但是|不过|不過|而是|改为|改為)/u.test(broadNegativePrefix));
+      const negative = (!metalinguisticDoubleNegative && localNegative)
+        || metalinguisticNegativeScope
         || /^.{0,8}(?:不进行|不進行|不会|不會|失败|失敗|されません|行われません|できません|しません|として扱いません|として扱われません|にはなりません)/u.test(suffix)
         // Japanese copular negation describes the operation it immediately
         // follows.  In "この特殊召喚は融合召喚ではありません", it negates the
@@ -1063,6 +1083,7 @@ function isPositiveResolutionText(value) {
   return POSITIVE_RESOLUTION_OUTCOME.test(text)
     || /(?:正常|成功|照常)(?:进行|進行|完成)?(?:效果处理|效果處理|处理|處理|结算|結算|融合(?:召唤|召喚)?|特殊召唤|特殊召喚|破坏|破壊|除外|送去墓地|加入手卡)/iu.test(text)
     || /(?:可以|能够|能|会|會|将|將).{0,10}(?:进行|進行|执行|執行|完成)?(?:融合召唤|融合召喚|特殊召唤|特殊召喚|破坏|破壊|除外|送去墓地|加入手卡|抽卡)/iu.test(text)
+    || /(?:^|[，,；;。.!！?？\n]|仍(?:然)?|依然|依旧|依舊|也|却|卻|不过|不過)\s*可.{0,10}(?:融合召唤|融合召喚|特殊召唤|特殊召喚|破坏|破壊|除外|送去墓地|加入手卡|抽卡)/iu.test(text)
     || /(?:将|將|把).{0,30}(?:作为|作為|当作|當作).{0,12}(?:素材).{0,12}(?:融合召唤|融合召喚)/iu.test(text)
     || /(?:処理|融合召喚|特殊召喚).{0,10}(?:行います|行われます|します|適用されます)/iu.test(text);
 }
