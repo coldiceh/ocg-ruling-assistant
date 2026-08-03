@@ -247,7 +247,11 @@ export class CompatibleEvidencePreparationProvider {
     const finalInput = normalizeDeepSeekInput(input);
     if (!finalInput) throw new TypeError(`${this.providerId} final-ruling input must not be empty`);
     sanitizeMetadata(metadata, { requireTraceFields: true });
-    const maxTokens = optionalPositiveInteger(maxOutputTokens, "maxOutputTokens") ?? 16_000;
+    // Thinking tokens share the completion budget with the final JSON. The
+    // former 16k default could be exhausted by reasoning alone, producing an
+    // empty `content` even though the upstream request succeeded.
+    const maxTokens = optionalPositiveInteger(maxOutputTokens, "maxOutputTokens")
+      ?? (selection.reasoningMode === "pro" ? 64_000 : 16_000);
     const schemaInstruction = [
       String(instructions || "").trim(),
       "这是隔离后台中的实验性最终裁定运行，不代表正式裁定或普通用户答案。",
@@ -274,8 +278,11 @@ export class CompatibleEvidencePreparationProvider {
     });
     const text = extractChatCompletionText(payload);
     if (!text) {
+      const finishReason = String(payload?.choices?.[0]?.finish_reason || "").trim();
       throw new RulingModelProviderError(`${this.providerId} returned an empty final ruling`, {
-        code: `${this.providerId}_empty_final_ruling`,
+        code: finishReason === "length"
+          ? `${this.providerId}_final_ruling_output_exhausted`
+          : `${this.providerId}_empty_final_ruling`,
         provider: this.providerId,
         outcomeKnown: true,
       });
