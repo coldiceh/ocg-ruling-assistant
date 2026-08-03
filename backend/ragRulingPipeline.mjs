@@ -170,6 +170,7 @@ export async function answerRagRulingQuestion({
     ...(retrievedEvidence.cardTexts || []),
     ...(retrievedEvidence.userProvidedCardTexts || []),
   ], query);
+  const cardSemanticFacts = buildCardSemanticFacts(reasoningCardTexts);
   const corroboratingEvidence = dedupeEvidenceRefs([
     ...(retrievedEvidence.officialQaDirectCandidates || []),
     ...(retrievedEvidence.provisionalOfficialResponses || []),
@@ -210,9 +211,10 @@ export async function answerRagRulingQuestion({
   const evidence = {
     ...groundedEvidence,
     semanticStateTransition,
-    // Experimental normalizers and engines remain visible in debug output,
-    // but their incomplete drafts are not evidence for the public judge.
-    cardSemanticFacts: [],
+    // Normalized operations remain explicitly non-authoritative candidates.
+    // They give the final model a lossless description of card-text lifecycles,
+    // while the prompt still requires verification against the raw card text.
+    cardSemanticFacts,
     formalEngineProofs: [],
     formalEngineStatus: summarizeFormalShadow(formalShadow),
   };
