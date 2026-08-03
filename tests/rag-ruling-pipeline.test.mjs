@@ -4,7 +4,7 @@ import { buildAliasIndex, extractQuotedMentions, extractRagCards, extractUnquote
 import { createLocalCardDataProvider } from "../backend/cardDataProvider.mjs";
 import { loadRagData, retrieveRagEvidence } from "../backend/ragEvidenceRetriever.mjs";
 import { buildRagRulingPromptBundle } from "../backend/ragRulingPrompt.mjs";
-import { callCardNameExtractionModel, callRagModel, callRulebookGroundingModel, callRuleQueryExtractionModel, estimateDeepSeekCostCny, getRagBudgetStatus, resetRagBudget, resolveRagProvider } from "../backend/ragModelClient.mjs";
+import { callCardNameExtractionModel, callRagModel, callRulebookGroundingModel, callRuleQueryExtractionModel, estimateDeepSeekCostCny, estimateGlmCostCny, getRagBudgetStatus, resetRagBudget, resolveRagProvider } from "../backend/ragModelClient.mjs";
 import {
   answerRagRulingQuestion,
   buildCardSemanticFacts,
@@ -2096,7 +2096,7 @@ test("deepseek_provider_builds_request", async () => {
   assert.equal(calls[0].url, "https://api.deepseek.com/chat/completions");
   assert.equal(calls[0].body.model, "deepseek-test");
   assert.deepEqual(calls[0].body.messages, [{ role: "user", content: "输出 JSON" }]);
-  assert.deepEqual(calls[0].body.response_format, { type: "json_object" });
+  assert.equal(Object.hasOwn(calls[0].body, "response_format"), false);
   assert.equal(calls[0].body.max_tokens, 321);
   assert.equal(calls[0].body.stream, false);
   assert.deepEqual(calls[0].body.thinking, { type: "enabled" });
@@ -2197,6 +2197,7 @@ test("deepseek_flash_non-thinking_mode uses a smaller answer budget and no reaso
     },
   });
   assert.deepEqual(calls[0].thinking, { type: "disabled" });
+  assert.deepEqual(calls[0].response_format, { type: "json_object" });
   assert.equal(calls[0].max_tokens, 8000);
   assert.equal(calls[0].temperature, 0);
   assert.equal(Object.hasOwn(calls[0], "reasoning_effort"), false);
@@ -2298,6 +2299,51 @@ test("reasoning_is_recovered_or_explicitly_marked_missing", async () => {
   assert.match(missing.answer.reasoning.join(" "), /没有提供可核对的理由/u);
   assert.ok(missing.answer.riskFlags.includes("model_reasoning_missing"));
   assert.doesNotMatch(missing.answer.reasoning.join(" "), /RAG baseline/u);
+});
+
+test("glm_high_provider_uses_the_public_chat_completions_endpoint_and_thinking_contract", async () => {
+  const calls = [];
+  const result = await callRagModel({
+    prompt: "输出 GLM JSON",
+    env: {
+      MODEL_PROVIDER: "glm",
+      GLM_API_KEY: "test-glm-key",
+      GLM_MODEL: "glm-5.2",
+      RAG_THINKING_MODE: "enabled",
+      RAG_REASONING_EFFORT: "high",
+      RAG_MAX_OUTPUT_TOKENS: "456",
+      API_DAILY_BUDGET_CNY: "10",
+      API_BUDGET_TIMEZONE: "UTC",
+    },
+    now: new Date("2038-02-01T00:00:00.000Z"),
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options, body: JSON.parse(options.body) });
+      return jsonResponse({
+        id: "glm-public-1",
+        model: "glm-5.2",
+        choices: [{
+          finish_reason: "stop",
+          message: { content: JSON.stringify(modelJson("GLM high OK")) },
+        }],
+        usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 },
+      });
+    },
+  });
+
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, "https://open.bigmodel.cn/api/paas/v4/chat/completions");
+  assert.equal(calls[0].options.headers.authorization, "Bearer test-glm-key");
+  assert.equal(calls[0].body.model, "glm-5.2");
+  assert.deepEqual(calls[0].body.messages, [{ role: "user", content: "输出 GLM JSON" }]);
+  assert.deepEqual(calls[0].body.response_format, { type: "json_object" });
+  assert.deepEqual(calls[0].body.thinking, { type: "enabled" });
+  assert.equal(calls[0].body.reasoning_effort, "high");
+  assert.equal(calls[0].body.max_tokens, 456);
+  assert.equal(calls[0].body.stream, false);
+  assert.equal(result.providerUsed, "glm");
+  assert.equal(result.modelUsed, "glm-5.2");
+  assert.equal(result.generationConfig.reasoningEffort, "high");
+  assert.equal(result.budgetStatus.bucket.id, "final_ruling:glm");
 });
 
 test("gemini_provider_builds_request", async () => {
@@ -2617,6 +2663,139 @@ test("usage_cost_estimation_uses Pro prices when the Pro tier is selected", () =
   assert.equal(cost, 17);
 });
 
+test("usage_cost_estimation_glm_defaults_to_8_input_and_28_output_cny_per_million", () => {
+  const cost = estimateGlmCostCny({
+    prompt_tokens: 1_000_000,
+    completion_tokens: 1_000_000,
+  });
+  assert.equal(cost, 36);
+});
+
+test("daily budget meters evidence, GLM final, and DeepSeek final in independent buckets", async () => {
+  const now = new Date("2038-02-02T00:00:00.000Z");
+  const env = {
+    API_DAILY_BUDGET_CNY: "10",
+    API_EVIDENCE_DAILY_BUDGET_CNY: "0.01",
+    API_GLM_FINAL_DAILY_BUDGET_CNY: "0.03",
+    API_DEEPSEEK_FINAL_DAILY_BUDGET_CNY: "0.01",
+    API_BUDGET_TIMEZONE: "UTC",
+    RAG_MAX_OUTPUT_TOKENS: "1000",
+    DEEPSEEK_API_KEY: "test-deepseek-key",
+    DEEPSEEK_INPUT_CNY_PER_MTOK: "1",
+    DEEPSEEK_OUTPUT_CNY_PER_MTOK: "2",
+    GLM_API_KEY: "test-glm-key",
+  };
+  await resetRagBudget({ env, now });
+
+  const preparation = await callCardNameExtractionModel({
+    userQuery: "三个分桶独立计量-资料准备-20380202",
+    env: { ...env, RAG_CARD_MODEL_PROVIDER: "deepseek" },
+    now,
+    fetchImpl: async () => jsonResponse({
+      choices: [{
+        finish_reason: "stop",
+        message: { content: JSON.stringify({ cardNames: [] }) },
+      }],
+      usage: { prompt_tokens: 1_000, completion_tokens: 500, total_tokens: 1_500 },
+    }),
+  });
+
+  let glmFetchCount = 0;
+  const callGlmFinal = () => callRagModel({
+    prompt: "GLM bucket",
+    env: {
+      ...env,
+      MODEL_PROVIDER: "glm",
+      GLM_MODEL: "glm-5.2",
+      RAG_THINKING_MODE: "enabled",
+      RAG_REASONING_EFFORT: "high",
+    },
+    now,
+    fetchImpl: async () => {
+      glmFetchCount += 1;
+      return jsonResponse({
+        model: "glm-5.2",
+        choices: [{ message: { content: JSON.stringify(modelJson("GLM bucket OK")) }, finish_reason: "stop" }],
+        usage: { prompt_tokens: 1_000, completion_tokens: 500, total_tokens: 1_500 },
+      });
+    },
+  });
+  const glmFinal = await callGlmFinal();
+  const blockedSecondGlm = await callGlmFinal();
+
+  const deepSeekFinal = await callRagModel({
+    prompt: "DeepSeek bucket",
+    thinkingMode: "disabled",
+    env: {
+      ...env,
+      MODEL_PROVIDER: "deepseek",
+      RAG_MODEL_TIER: "flash",
+      DEEPSEEK_FLASH_MODEL: "deepseek-v4-flash",
+    },
+    now,
+    fetchImpl: async () => jsonResponse({
+      model: "deepseek-v4-flash",
+      choices: [{ message: { content: JSON.stringify(modelJson("DeepSeek bucket OK")) }, finish_reason: "stop" }],
+      usage: { prompt_tokens: 1_000, completion_tokens: 500, total_tokens: 1_500 },
+    }),
+  });
+  const status = await getRagBudgetStatus({ env, now });
+
+  assert.equal(glmFetchCount, 1, "the exhausted GLM bucket must block only the second GLM call");
+  assert.equal(blockedSecondGlm.answer.answerLevel, "budget_limited");
+  assert.equal(preparation.budgetStatus.bucket.id, "evidence_preparation:deepseek");
+  assert.equal(glmFinal.budgetStatus.bucket.id, "final_ruling:glm");
+  assert.equal(deepSeekFinal.budgetStatus.bucket.id, "final_ruling:deepseek");
+  assert.equal(status.spentTodayCny, 0.026);
+  assert.equal(status.remainingTodayCny, 9.974);
+  assert.deepEqual(status.buckets.map((bucket) => ({
+    id: bucket.id,
+    spent: bucket.spentTodayCny,
+    limit: bucket.dailyBudgetCny,
+    remaining: bucket.remainingTodayCny,
+  })), [
+    { id: "evidence_preparation:deepseek", spent: 0.002, limit: 0.01, remaining: 0.008 },
+    { id: "final_ruling:glm", spent: 0.022, limit: 0.03, remaining: 0.008 },
+    { id: "final_ruling:deepseek", spent: 0.002, limit: 0.01, remaining: 0.008 },
+  ]);
+});
+
+test("legacy total daily budget remains a ceiling above a larger provider bucket", async () => {
+  const now = new Date("2038-02-03T00:00:00.000Z");
+  const env = {
+    MODEL_PROVIDER: "deepseek",
+    RAG_MODEL_TIER: "flash",
+    RAG_MAX_OUTPUT_TOKENS: "1000",
+    DEEPSEEK_API_KEY: "test-deepseek-key",
+    DEEPSEEK_FLASH_MODEL: "deepseek-v4-flash",
+    DEEPSEEK_INPUT_CNY_PER_MTOK: "1",
+    DEEPSEEK_OUTPUT_CNY_PER_MTOK: "2",
+    API_DAILY_BUDGET_CNY: "0.001",
+    API_DEEPSEEK_FINAL_DAILY_BUDGET_CNY: "10",
+    API_BUDGET_TIMEZONE: "UTC",
+  };
+  await resetRagBudget({ env, now });
+  let fetchCount = 0;
+  const result = await callRagModel({
+    prompt: "the total ceiling is smaller than this call",
+    env,
+    now,
+    fetchImpl: async () => {
+      fetchCount += 1;
+      return jsonResponse({});
+    },
+  });
+
+  assert.equal(fetchCount, 0);
+  assert.equal(result.answer.answerLevel, "budget_limited");
+  assert.equal(result.budgetStatus.dailyBudgetCny, 0.001);
+  assert.equal(result.budgetStatus.spentTodayCny, 0);
+  assert.equal(result.budgetStatus.bucket.id, "final_ruling:deepseek");
+  assert.equal(result.budgetStatus.bucket.dailyBudgetCny, 10);
+  assert.equal(result.budgetStatus.bucket.spentTodayCny, 0);
+  assert.equal(result.budgetStatus.limitEnforced, true);
+});
+
 test("budget_status_can_be_reset", async () => {
   const env = { API_DAILY_BUDGET_CNY: "10", API_BUDGET_TIMEZONE: "UTC" };
   await resetRagBudget({ env, now: new Date("2026-07-09T00:00:00Z") });
@@ -2654,8 +2833,18 @@ test("budget_status_uses_kv_rest_aliases_for_persistent_storage", async () => {
   const redis = createRedisFetch();
   let status = await getRagBudgetStatus({ env, fetchImpl: redis.fetchImpl, now: new Date("2026-07-09T00:00:00Z") });
   assert.equal(status.budgetStorage, "redis");
-  await resetRagBudget({ env, fetchImpl: redis.fetchImpl, now: new Date("2026-07-09T00:00:00Z") });
-  assert.deepEqual(redis.commands.at(-1), ["SET", "rag-api-budget:2026-07-09", "0", "EX", "172800"]);
+  status = await resetRagBudget({ env, fetchImpl: redis.fetchImpl, now: new Date("2026-07-09T00:00:00Z") });
+  assert.equal(status.buckets.length, 3);
+  const resetCommands = redis.commands.filter((command) => command[0] === "SET");
+  assert.deepEqual(resetCommands.map((command) => command[1]).sort(), [
+    "rag-api-budget:2026-07-09",
+    "rag-api-budget:v2:2026-07-09:evidence_preparation:deepseek",
+    "rag-api-budget:v2:2026-07-09:final_ruling:deepseek",
+    "rag-api-budget:v2:2026-07-09:final_ruling:glm",
+  ]);
+  assert.ok(resetCommands.every((command) => (
+    command[2] === "0" && command[3] === "EX" && command[4] === "172800"
+  )));
 });
 
 test("budget_status_requires_persistent_storage_on_vercel", async () => {

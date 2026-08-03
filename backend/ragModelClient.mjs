@@ -1,16 +1,24 @@
 import { emptyOperationLegality, validateOperationLegalityModelOutput } from "./operationLegalityAnalyzer.mjs";
 import { RAG_ANSWER_LEVELS } from "./ragRulingPrompt.mjs";
 import { compileRuleScenario } from "./ruleScenarioCompiler.mjs";
+import { resolvePublicRulingModelProfile } from "./publicRulingModelConfig.mjs";
 
 const DEFAULT_DEEPSEEK_BASE_URL = "https://api.deepseek.com";
 const DEFAULT_DEEPSEEK_MODEL = "deepseek-v4-flash";
 const DEFAULT_DEEPSEEK_CARD_MODEL = "deepseek-v4-flash";
+const DEFAULT_GLM_BASE_URL = "https://open.bigmodel.cn/api/paas/v4";
+const DEFAULT_GLM_MODEL = "glm-5.2";
 const DEFAULT_JSON_TASK_MAX_OUTPUT_TOKENS = 4000;
 const DEFAULT_LIGHTWEIGHT_EXTRACTION_TIMEOUT_MS = 4500;
 const DEFAULT_DAILY_BUDGET_CNY = 10;
-const DEFAULT_BUDGET_TIMEZONE = "Asia/Tokyo";
+const DEFAULT_BUDGET_TIMEZONE = "Asia/Shanghai";
 const DEEPSEEK_THINKING_MODES = new Set(["enabled", "disabled"]);
 const DEEPSEEK_REASONING_EFFORTS = new Set(["high", "max"]);
+const PUBLIC_BUDGET_BUCKETS = Object.freeze([
+  Object.freeze({ id: "evidence_preparation:deepseek", stage: "evidence_preparation", provider: "deepseek", label: "DeepSeek 资料准备" }),
+  Object.freeze({ id: "final_ruling:glm", stage: "final_ruling", provider: "glm", label: "GLM 最终裁定" }),
+  Object.freeze({ id: "final_ruling:deepseek", stage: "final_ruling", provider: "deepseek", label: "DeepSeek 最终裁定" }),
+]);
 const RESTRICTIVE_EVIDENCE_PATTERN = /(?:不能|不可|不得|无法|不可以|不适用|不在场上存在|禁止|不满足|不存在|cannot|can't|must not|may not|not allowed|できません|発動できません)/iu;
 const GROUNDING_MECHANISM_PATTERNS = Object.freeze([
   ["activation", /发动|發動|発動|activate/iu],
@@ -59,28 +67,29 @@ export async function callRagModel({
   const providerResolution = resolveRagProvider(env);
   const provider = providerResolution.provider;
   const modelName = modelNameForProvider(provider, env);
-  const deepSeekGeneration = provider === "deepseek"
-    ? resolveDeepSeekGenerationConfig({ modelName, thinkingMode, reasoningEffort, env })
+  const reasoningGeneration = provider === "deepseek" || provider === "glm"
+    ? resolveReasoningGenerationConfig({ provider, modelName, thinkingMode, reasoningEffort, env })
     : null;
   const maxTokens = resolveRagMaxOutputTokens(env, {
     provider,
-    thinkingMode: deepSeekGeneration?.thinkingMode,
+    thinkingMode: reasoningGeneration?.thinkingMode,
   });
   const generationConfig = {
     requestModel: modelName,
     maxOutputTokens: maxTokens,
-    ...(deepSeekGeneration ? {
-      thinkingMode: deepSeekGeneration.thinkingMode,
-      reasoningEffort: deepSeekGeneration.reasoningEffort,
-      thinkingModeSource: deepSeekGeneration.thinkingModeSource,
-      reasoningEffortSource: deepSeekGeneration.reasoningEffortSource,
+    ...(reasoningGeneration ? {
+      thinkingMode: reasoningGeneration.thinkingMode,
+      reasoningEffort: reasoningGeneration.reasoningEffort,
+      thinkingModeSource: reasoningGeneration.thinkingModeSource,
+      reasoningEffortSource: reasoningGeneration.reasoningEffortSource,
     } : {}),
   };
-  const generationWarnings = deepSeekGeneration?.warnings || [];
+  const generationWarnings = reasoningGeneration?.warnings || [];
   const forcedDryRun = dryRun === true || isEnabled(env.RAG_DRY_RUN);
   const willCallRemote = !modelInvoker && !forcedDryRun && provider !== "mock" && hasProviderKey(provider, env) && typeof fetchImpl === "function";
   const budget = await buildBudgetPreflight({
     provider,
+    stage: "final_ruling",
     prompt,
     maxTokens,
     env,
@@ -112,8 +121,8 @@ export async function callRagModel({
       provider,
       modelName,
       maxTokens,
-      thinkingMode: deepSeekGeneration?.thinkingMode,
-      reasoningEffort: deepSeekGeneration?.reasoningEffort,
+      thinkingMode: reasoningGeneration?.thinkingMode,
+      reasoningEffort: reasoningGeneration?.reasoningEffort,
       signal,
     });
     const parsed = parseModelResult(raw, {
@@ -170,14 +179,25 @@ export async function callRagModel({
   try {
     let response = provider === "gemini"
       ? await callGemini({ prompt, env, modelName, maxTokens, fetchImpl, signal })
-      : await callDeepSeek({
+      : provider === "glm"
+        ? await callGlm({
           prompt,
           env,
           modelName,
           maxTokens,
           fetchImpl,
-          thinkingMode: deepSeekGeneration.thinkingMode,
-          reasoningEffort: deepSeekGeneration.reasoningEffort,
+          thinkingMode: reasoningGeneration.thinkingMode,
+          reasoningEffort: reasoningGeneration.reasoningEffort,
+          signal,
+        })
+        : await callDeepSeek({
+          prompt,
+          env,
+          modelName,
+          maxTokens,
+          fetchImpl,
+          thinkingMode: reasoningGeneration.thinkingMode,
+          reasoningEffort: reasoningGeneration.reasoningEffort,
           signal,
         });
     const responses = [response];
@@ -194,8 +214,8 @@ export async function callRagModel({
           maxTokens: recoveryMaxTokens,
           fetchImpl,
           temperature: 0,
-          thinkingMode: deepSeekGeneration.thinkingMode,
-          reasoningEffort: deepSeekGeneration.reasoningEffort,
+          thinkingMode: reasoningGeneration.thinkingMode,
+          reasoningEffort: reasoningGeneration.reasoningEffort,
           signal,
         });
         responses.push(recovery);
@@ -330,6 +350,7 @@ export async function callDeepSeekJsonTask({
   const budget = trackPublicBudget === true
     ? await buildBudgetPreflight({
         provider: "deepseek",
+        stage: "evidence_preparation",
         prompt: normalizedPrompt,
         maxTokens: resolvedMaxTokens || DEFAULT_JSON_TASK_MAX_OUTPUT_TOKENS,
         env,
@@ -860,6 +881,7 @@ export async function callRulebookGroundingModel({
 
   const budget = await buildBudgetPreflight({
     provider,
+    stage: "evidence_preparation",
     prompt: repairPrompt ? prompt + "\n" + repairPrompt : prompt,
     maxTokens: maxTokens + (repairPrompt ? repairMaxTokens : 0),
     env,
@@ -1008,12 +1030,17 @@ export function resolveRagProvider(env = {}) {
     if (!env.DEEPSEEK_API_KEY) warnings.push("deepseek_api_key_missing_using_mock");
     return { provider: env.DEEPSEEK_API_KEY ? "deepseek" : "mock", requested, warnings };
   }
+  if (requested === "glm") {
+    if (!env.GLM_API_KEY) warnings.push("glm_api_key_missing_using_mock");
+    return { provider: env.GLM_API_KEY ? "glm" : "mock", requested, warnings };
+  }
   if (requested === "gemini") {
     if (!env.GEMINI_API_KEY) warnings.push("gemini_api_key_missing_using_mock");
     return { provider: env.GEMINI_API_KEY ? "gemini" : "mock", requested, warnings };
   }
   if (requested !== "auto") warnings.push(`unsupported_model_provider:${requested}`);
   if (env.DEEPSEEK_API_KEY) return { provider: "deepseek", requested, warnings };
+  if (env.GLM_API_KEY) return { provider: "glm", requested, warnings };
   if (env.GEMINI_API_KEY) return { provider: "gemini", requested, warnings };
   warnings.push("no_model_api_key_using_mock");
   return { provider: "mock", requested, warnings };
@@ -1029,26 +1056,42 @@ export function resolveRagProvider(env = {}) {
  * server-side admin OpenAI key could otherwise enable anonymous paid calls.
  *
  * The explicit mock mode is retained for offline tests. Every other public
- * configuration is pinned to DeepSeek and falls back to the existing mock
- * behavior when no DeepSeek key is configured.
+ * configuration is resolved from the server-owned public profile allowlist;
+ * evidence preparation remains pinned to DeepSeek Flash while the selected
+ * allowlisted provider performs the final ruling.
  */
-export function createPublicAnswerModelEnv(env = {}) {
+export function createPublicAnswerModelEnv(env = {}, profileValue) {
   const source = env && typeof env === "object" ? env : {};
   const result = { ...source };
   for (const key of Object.keys(result)) {
-    if (/^(?:OPENAI_|ADMIN_|GLM_|KIMI_)/iu.test(key)) delete result[key];
+    if (/^(?:OPENAI_|ADMIN_|KIMI_)/iu.test(key)) delete result[key];
+  }
+
+  const profile = resolvePublicRulingModelProfile(profileValue);
+  if (!result.GLM_BASE_URL && source.ADMIN_GLM_BASE_URL) {
+    result.GLM_BASE_URL = source.ADMIN_GLM_BASE_URL;
   }
 
   const mockRequested = [
     source.RAG_MODEL_PROVIDER,
     source.MODEL_PROVIDER,
   ].some((value) => String(value || "").trim().toLowerCase() === "mock");
-  const provider = mockRequested ? "mock" : "deepseek";
+  const provider = mockRequested ? "mock" : profile.provider;
   result.MODEL_PROVIDER = provider;
   result.RAG_MODEL_PROVIDER = provider;
-  result.RAG_CARD_MODEL_PROVIDER = provider;
-  result.RAG_RULE_MODEL_PROVIDER = provider;
-  result.RAG_RULEBOOK_MODEL_PROVIDER = provider;
+  result.RAG_MODEL = profile.model;
+  result.RAG_THINKING_MODE = profile.thinkingMode;
+  result.RAG_REASONING_EFFORT = profile.reasoningEffort;
+  result.PUBLIC_RULING_MODEL_PROFILE = profile.id;
+  // The tier flag is still consumed by DeepSeek evidence-preparation pricing;
+  // every public DeepSeek stage is Flash, even when GLM is the final model.
+  result.RAG_MODEL_TIER = "flash";
+  result.RAG_CARD_MODEL_PROVIDER = mockRequested ? "mock" : "deepseek";
+  result.RAG_RULE_MODEL_PROVIDER = mockRequested ? "mock" : "deepseek";
+  result.RAG_RULEBOOK_MODEL_PROVIDER = mockRequested ? "mock" : "deepseek";
+  result.DEEPSEEK_CARD_MODEL = String(source.DEEPSEEK_CARD_MODEL || "deepseek-v4-flash");
+  result.DEEPSEEK_RULE_MODEL = String(source.DEEPSEEK_RULE_MODEL || result.DEEPSEEK_CARD_MODEL);
+  result.DEEPSEEK_RULEBOOK_MODEL = String(source.DEEPSEEK_RULEBOOK_MODEL || result.DEEPSEEK_RULE_MODEL);
   return result;
 }
 
@@ -1141,10 +1184,34 @@ export async function getRagBudgetStatus({
   const dayKey = budgetDayKey(config.timezone, now);
   const storage = budgetStorage(env);
   if (storage === "unconfigured") {
-    return budgetStatusPayload({ config, storage, dayKey, spent: null, estimated: 0, blocked: false });
+    return {
+      ...budgetStatusPayload({ config, storage, dayKey, spent: null, estimated: 0, blocked: false }),
+      currency: "CNY",
+      buckets: PUBLIC_BUDGET_BUCKETS.map((bucket) => budgetBucketStatusPayload({
+        bucket,
+        bucketConfig: budgetBucketConfig(env, bucket),
+        spent: null,
+      })),
+    };
   }
-  const spent = await readBudgetSpent({ storage, dayKey, env, fetchImpl });
-  return budgetStatusPayload({ config, storage, dayKey, spent, estimated: 0, blocked: false });
+  const [spent, ...bucketSpent] = await Promise.all([
+    readBudgetSpent({ storage, dayKey, env, fetchImpl }),
+    ...PUBLIC_BUDGET_BUCKETS.map((bucket) => readBudgetSpent({
+      storage,
+      dayKey: budgetBucketDayKey(config.timezone, now, bucket.id),
+      env,
+      fetchImpl,
+    })),
+  ]);
+  return {
+    ...budgetStatusPayload({ config, storage, dayKey, spent, estimated: 0, blocked: false }),
+    currency: "CNY",
+    buckets: PUBLIC_BUDGET_BUCKETS.map((bucket, index) => budgetBucketStatusPayload({
+      bucket,
+      bucketConfig: budgetBucketConfig(env, bucket),
+      spent: bucketSpent[index],
+    })),
+  };
 }
 
 export async function resetRagBudget({
@@ -1156,10 +1223,19 @@ export async function resetRagBudget({
   const dayKey = budgetDayKey(config.timezone, now);
   const storage = budgetStorage(env);
   if (storage === "unconfigured") {
-    return budgetStatusPayload({ config, storage, dayKey, spent: null, estimated: 0, blocked: false });
+    return getRagBudgetStatus({ env, fetchImpl, now });
   }
-  await setBudgetSpent({ storage, dayKey, value: 0, env, fetchImpl });
-  return budgetStatusPayload({ config, storage, dayKey, spent: 0, estimated: 0, blocked: false });
+  await Promise.all([
+    setBudgetSpent({ storage, dayKey, value: 0, env, fetchImpl }),
+    ...PUBLIC_BUDGET_BUCKETS.map((bucket) => setBudgetSpent({
+      storage,
+      dayKey: budgetBucketDayKey(config.timezone, now, bucket.id),
+      value: 0,
+      env,
+      fetchImpl,
+    })),
+  ]);
+  return getRagBudgetStatus({ env, fetchImpl, now });
 }
 
 export function parseRagModelJson(rawText) {
@@ -1199,7 +1275,7 @@ async function callDeepSeek({
     model: modelName || DEFAULT_DEEPSEEK_MODEL,
     messages: [{ role: "user", content: prompt }],
     stream: false,
-    response_format: { type: "json_object" },
+    ...(thinkingMode === "enabled" ? {} : { response_format: { type: "json_object" } }),
   };
   if (DEEPSEEK_THINKING_MODES.has(thinkingMode)) {
     body.thinking = { type: thinkingMode };
@@ -1246,6 +1322,74 @@ async function callDeepSeek({
     reasoningEffort: thinkingMode === "enabled" && DEEPSEEK_REASONING_EFFORTS.has(reasoningEffort)
       ? reasoningEffort
       : null,
+    maxOutputTokens: Number.isInteger(maxTokens) && maxTokens > 0 ? maxTokens : null,
+    usage: payload?.usage || {},
+    warnings,
+  };
+}
+
+export function estimateGlmCostCny(usage = {}, env = {}) {
+  const inputPrice = readNumber(env.GLM_INPUT_CNY_PER_MTOK, 8);
+  const outputPrice = readNumber(env.GLM_OUTPUT_CNY_PER_MTOK, 28);
+  const cacheHitPrice = readNumber(env.GLM_CACHE_HIT_INPUT_CNY_PER_MTOK, 2);
+  const promptTokens = Number(usage.prompt_tokens || 0);
+  const completionTokens = Number(usage.completion_tokens || 0);
+  const cacheHit = Number(usage.prompt_cache_hit_tokens || 0);
+  const uncachedInput = Math.max(0, promptTokens - cacheHit);
+  return roundCost(
+    mtok(cacheHit) * cacheHitPrice
+    + mtok(uncachedInput) * inputPrice
+    + mtok(completionTokens) * outputPrice,
+  );
+}
+
+async function callGlm({
+  prompt,
+  env,
+  modelName,
+  maxTokens,
+  fetchImpl,
+  thinkingMode,
+  reasoningEffort,
+  signal,
+}) {
+  const endpoint = compatibleChatCompletionsUrl(env.GLM_BASE_URL || DEFAULT_GLM_BASE_URL);
+  const body = {
+    model: modelName || DEFAULT_GLM_MODEL,
+    messages: [{ role: "user", content: prompt }],
+    stream: false,
+    response_format: { type: "json_object" },
+    thinking: { type: thinkingMode === "disabled" ? "disabled" : "enabled" },
+  };
+  if (thinkingMode !== "disabled" && DEEPSEEK_REASONING_EFFORTS.has(reasoningEffort)) {
+    body.reasoning_effort = reasoningEffort;
+  }
+  if (Number.isInteger(maxTokens) && maxTokens > 0) body.max_tokens = maxTokens;
+  const response = await postJson(fetchImpl, endpoint, {
+    authorization: `Bearer ${env.GLM_API_KEY}`,
+    "content-type": "application/json",
+  }, body, { signal });
+  if (!response.ok) throw new Error(`glm ${response.status}`);
+  const payload = await response.json();
+  const choice = payload?.choices?.[0] || {};
+  const message = choice.message || {};
+  const rawText = extractChatMessageText(message.content);
+  const finishReason = String(choice.finish_reason || "");
+  const reasoningContent = extractChatMessageText(message.reasoning_content);
+  const warnings = [];
+  if (!rawText) warnings.push(`glm_empty_content:${finishReason || "unknown"}`);
+  if (finishReason === "length") warnings.push("glm_output_truncated_by_token_limit");
+  return {
+    rawText,
+    finishReason,
+    contentChars: rawText.length,
+    reasoningContentPresent: Boolean(reasoningContent),
+    reasoningContentChars: reasoningContent.length,
+    requestModel: String(body.model || ""),
+    responseModel: String(payload?.model || ""),
+    systemFingerprint: String(payload?.system_fingerprint || ""),
+    thinkingMode: thinkingMode === "disabled" ? "disabled" : "enabled",
+    reasoningEffort: thinkingMode === "disabled" ? null : reasoningEffort,
     maxOutputTokens: Number.isInteger(maxTokens) && maxTokens > 0 ? maxTokens : null,
     usage: payload?.usage || {},
     warnings,
@@ -1700,40 +1844,54 @@ function safeFallbackAnswer(reason, shortAnswer = "当前资料不足，无法�
   });
 }
 
-async function buildBudgetPreflight({ provider, prompt, maxTokens, env, fetchImpl, now, trackSpend = true }) {
+async function buildBudgetPreflight({ provider, stage, prompt, maxTokens, env, fetchImpl, now, trackSpend = true }) {
   const config = budgetConfig(env);
+  const bucket = resolveBudgetBucket(stage, provider, env);
+  const bucketConfig = budgetBucketConfig(env, bucket);
   const dayKey = budgetDayKey(config.timezone, now);
+  const bucketDayKey = budgetBucketDayKey(config.timezone, now, bucket.id);
   let storage = budgetStorage(env);
   const warnings = budgetStorageWarnings(storage);
   const estimated = estimatePreflightCostCny(provider, prompt, maxTokens, env);
-  if (storage === "unconfigured") {
-    const blocked = trackSpend && config.mode === "hard";
-    return {
+  const emptyResult = ({ blocked, spent, bucketSpent }) => ({
+    config,
+    bucketConfig,
+    bucket,
+    storage,
+    dayKey,
+    bucketDayKey,
+    blocked,
+    reservedAmountCny: 0,
+    bucketReservedAmountCny: 0,
+    warnings,
+    status: budgetStatusPayload({
       config,
       storage,
       dayKey,
+      spent,
+      estimated,
       blocked,
-      reservedAmountCny: 0,
-      warnings,
-      status: budgetStatusPayload({ config, storage, dayKey, spent: null, estimated, blocked }),
-    };
+      bucket,
+      bucketConfig,
+      bucketSpent,
+    }),
+  });
+
+  if (storage === "unconfigured") {
+    return emptyResult({ blocked: trackSpend && config.mode === "hard", spent: null, bucketSpent: null });
   }
-  if (!trackSpend) {
-    return {
-      config,
-      storage,
-      dayKey,
-      blocked: false,
-      reservedAmountCny: 0,
-      warnings,
-      status: budgetStatusPayload({ config, storage, dayKey, spent: 0, estimated, blocked: false }),
-    };
-  }
+  if (!trackSpend) return emptyResult({ blocked: false, spent: 0, bucketSpent: 0 });
+
   let spent = 0;
+  let bucketSpent = 0;
   let blocked = false;
   let reservedAmountCny = 0;
+  let bucketReservedAmountCny = 0;
   try {
-    spent = await readBudgetSpent({ storage, dayKey, env, fetchImpl });
+    [spent, bucketSpent] = await Promise.all([
+      readBudgetSpent({ storage, dayKey, env, fetchImpl }),
+      readBudgetSpent({ storage, dayKey: bucketDayKey, env, fetchImpl }),
+    ]);
   } catch (error) {
     warnings.push(`budget_storage_unavailable:${safeErrorMessage(error)}`);
     if (storage === "redis" && config.mode === "hard") {
@@ -1742,31 +1900,75 @@ async function buildBudgetPreflight({ provider, prompt, maxTokens, env, fetchImp
     } else {
       storage = "memory";
       warnings.push("redis_budget_unavailable_using_memory_soft_limit");
-      spent = await readBudgetSpent({ storage, dayKey, env, fetchImpl });
+      [spent, bucketSpent] = await Promise.all([
+        readBudgetSpent({ storage, dayKey, env, fetchImpl }),
+        readBudgetSpent({ storage, dayKey: bucketDayKey, env, fetchImpl }),
+      ]);
     }
   }
-  if (!blocked && trackSpend && config.dailyBudgetCny > 0 && estimated > 0) {
-    if (spent + estimated > config.dailyBudgetCny) {
+
+  const totalLimitExceeded = config.dailyBudgetCny > 0 && spent + estimated > config.dailyBudgetCny;
+  const bucketLimitExceeded = bucketConfig.dailyBudgetCny !== null
+    && bucketConfig.dailyBudgetCny > 0
+    && bucketSpent + estimated > bucketConfig.dailyBudgetCny;
+  if (!blocked && (totalLimitExceeded || bucketLimitExceeded)) blocked = true;
+
+  if (!blocked && estimated > 0) {
+    spent = await addBudgetSpent({ storage, dayKey, amount: estimated, env, fetchImpl });
+    reservedAmountCny = estimated;
+    if (config.dailyBudgetCny > 0 && spent > config.dailyBudgetCny) {
+      await addBudgetSpent({ storage, dayKey, amount: -estimated, env, fetchImpl }).catch(() => null);
+      spent = await readBudgetSpent({ storage, dayKey, env, fetchImpl }).catch(() => spent);
       blocked = true;
-    } else {
-      spent = await addBudgetSpent({ storage, dayKey, amount: estimated, env, fetchImpl });
-      reservedAmountCny = estimated;
-      if (spent > config.dailyBudgetCny) {
-        await addBudgetSpent({ storage, dayKey, amount: -estimated, env, fetchImpl }).catch(() => null);
-        spent = await readBudgetSpent({ storage, dayKey, env, fetchImpl }).catch(() => spent);
-        blocked = true;
-        reservedAmountCny = 0;
-      }
+      reservedAmountCny = 0;
     }
   }
+
+  if (!blocked && estimated > 0) {
+    try {
+      bucketSpent = await addBudgetSpent({ storage, dayKey: bucketDayKey, amount: estimated, env, fetchImpl });
+      bucketReservedAmountCny = estimated;
+      if (bucketConfig.dailyBudgetCny !== null
+          && bucketConfig.dailyBudgetCny > 0
+          && bucketSpent > bucketConfig.dailyBudgetCny) {
+        await addBudgetSpent({ storage, dayKey: bucketDayKey, amount: -estimated, env, fetchImpl }).catch(() => null);
+        bucketSpent = await readBudgetSpent({ storage, dayKey: bucketDayKey, env, fetchImpl }).catch(() => bucketSpent);
+        blocked = true;
+      }
+    } catch (error) {
+      warnings.push(`budget_bucket_storage_unavailable:${safeErrorMessage(error)}`);
+      blocked = config.mode === "hard";
+    }
+    if (blocked && reservedAmountCny) {
+      await addBudgetSpent({ storage, dayKey, amount: -reservedAmountCny, env, fetchImpl }).catch(() => null);
+      spent = await readBudgetSpent({ storage, dayKey, env, fetchImpl }).catch(() => spent);
+      reservedAmountCny = 0;
+      bucketReservedAmountCny = 0;
+    }
+  }
+
   return {
     config,
+    bucketConfig,
+    bucket,
     storage,
     dayKey,
+    bucketDayKey,
     blocked,
     reservedAmountCny,
+    bucketReservedAmountCny,
     warnings,
-    status: budgetStatusPayload({ config, storage, dayKey, spent, estimated, blocked }),
+    status: budgetStatusPayload({
+      config,
+      storage,
+      dayKey,
+      spent,
+      estimated,
+      blocked,
+      bucket,
+      bucketConfig,
+      bucketSpent,
+    }),
   };
 }
 
@@ -1781,6 +1983,7 @@ async function runBudgetedAuxiliaryModelCall({
 }) {
   const budget = await buildBudgetPreflight({
     provider,
+    stage: "evidence_preparation",
     prompt,
     maxTokens,
     env,
@@ -1856,27 +2059,64 @@ async function recordBudgetSpend({ preflight, actualCostCny, env, fetchImpl }) {
     env,
     fetchImpl,
   });
-  return {
-    ...preflight.status,
-    spentTodayCny: roundCost(spent),
-    estimatedThisCallCny: actualCostCny,
-    limitEnforced: preflight.blocked,
-  };
-}
-
-async function releaseBudgetReservation({ preflight, env, fetchImpl }) {
-  if (!preflight.reservedAmountCny) return preflight.status;
-  const spent = await addBudgetSpent({
+  const bucketDelta = preflight.bucketReservedAmountCny
+    ? actualCostCny - preflight.bucketReservedAmountCny
+    : actualCostCny;
+  const bucketSpent = await addBudgetSpent({
     storage: preflight.storage,
-    dayKey: preflight.dayKey,
-    amount: -preflight.reservedAmountCny,
+    dayKey: preflight.bucketDayKey,
+    amount: bucketDelta,
     env,
     fetchImpl,
   });
   return {
     ...preflight.status,
     spentTodayCny: roundCost(spent),
+    estimatedThisCallCny: actualCostCny,
+    limitEnforced: preflight.blocked,
+    bucket: budgetBucketStatusPayload({
+      bucket: preflight.bucket,
+      bucketConfig: preflight.bucketConfig,
+      spent: bucketSpent,
+      estimated: actualCostCny,
+      blocked: preflight.blocked,
+    }),
+  };
+}
+
+async function releaseBudgetReservation({ preflight, env, fetchImpl }) {
+  if (!preflight.reservedAmountCny && !preflight.bucketReservedAmountCny) return preflight.status;
+  const [spent, bucketSpent] = await Promise.all([
+    preflight.reservedAmountCny
+      ? addBudgetSpent({
+        storage: preflight.storage,
+        dayKey: preflight.dayKey,
+        amount: -preflight.reservedAmountCny,
+        env,
+        fetchImpl,
+      })
+      : readBudgetSpent({ storage: preflight.storage, dayKey: preflight.dayKey, env, fetchImpl }),
+    preflight.bucketReservedAmountCny
+      ? addBudgetSpent({
+        storage: preflight.storage,
+        dayKey: preflight.bucketDayKey,
+        amount: -preflight.bucketReservedAmountCny,
+        env,
+        fetchImpl,
+      })
+      : readBudgetSpent({ storage: preflight.storage, dayKey: preflight.bucketDayKey, env, fetchImpl }),
+  ]);
+  return {
+    ...preflight.status,
+    spentTodayCny: roundCost(spent),
     estimatedThisCallCny: 0,
+    bucket: budgetBucketStatusPayload({
+      bucket: preflight.bucket,
+      bucketConfig: preflight.bucketConfig,
+      spent: bucketSpent,
+      estimated: 0,
+      blocked: false,
+    }),
   };
 }
 
@@ -1959,17 +2199,31 @@ function budgetStorageWarnings(storage) {
   return [];
 }
 
-function budgetStatusPayload({ config, storage, dayKey, spent, estimated, blocked }) {
+function budgetStatusPayload({ config, storage, dayKey, spent, estimated, blocked, bucket = null, bucketConfig = null, bucketSpent = null }) {
   const status = {
+    schemaVersion: 2,
     dailyBudgetCny: config.dailyBudgetCny,
     spentTodayCny: spent === null ? null : roundCost(spent),
+    remainingTodayCny: spent === null || config.dailyBudgetCny <= 0
+      ? null
+      : roundCost(Math.max(0, config.dailyBudgetCny - spent)),
     estimatedThisCallCny: estimated,
     budgetMode: config.mode,
     budgetStorage: storage,
     budgetPersistent: storage === "redis",
     limitEnforced: blocked,
     dayKey,
+    timezone: config.timezone,
   };
+  if (bucket && bucketConfig) {
+    status.bucket = budgetBucketStatusPayload({
+      bucket,
+      bucketConfig,
+      spent: bucketSpent,
+      estimated,
+      blocked,
+    });
+  }
   if (storage === "unconfigured") {
     status.storageWarning = "后端未启用持久化预算存储；请配置 KV_REST_API_URL/KV_REST_API_TOKEN 或 UPSTASH_REDIS_REST_URL/UPSTASH_REDIS_REST_TOKEN。";
   } else if (storage === "memory") {
@@ -1978,10 +2232,30 @@ function budgetStatusPayload({ config, storage, dayKey, spent, estimated, blocke
   return status;
 }
 
+function budgetBucketStatusPayload({ bucket, bucketConfig, spent, estimated = 0, blocked = false }) {
+  const limit = bucketConfig?.dailyBudgetCny ?? null;
+  return {
+    id: bucket.id,
+    stage: bucket.stage,
+    provider: bucket.provider,
+    label: bucket.label,
+    dailyBudgetCny: limit,
+    spentTodayCny: spent === null ? null : roundCost(spent),
+    remainingTodayCny: spent === null || limit === null || limit <= 0
+      ? null
+      : roundCost(Math.max(0, limit - spent)),
+    estimatedThisCallCny: roundCost(estimated),
+    limitEnforced: blocked,
+  };
+}
+
 function estimatePreflightCostCny(provider, prompt, maxTokens, env) {
   const promptTokens = Math.ceil(String(prompt || "").length / 4);
   if (provider === "deepseek") {
     return estimateDeepSeekCostCny({ prompt_tokens: promptTokens, completion_tokens: maxTokens }, env);
+  }
+  if (provider === "glm") {
+    return estimateGlmCostCny({ prompt_tokens: promptTokens, completion_tokens: maxTokens }, env);
   }
   if (provider === "gemini") {
     return roundCost(readTieredProviderNumber(env, "GEMINI", "ESTIMATED_CNY_PER_CALL", 0.01));
@@ -1991,6 +2265,7 @@ function estimatePreflightCostCny(provider, prompt, maxTokens, env) {
 
 function estimateActualCostCny(provider, usage, env) {
   if (provider === "deepseek") return estimateDeepSeekCostCny(usage, env);
+  if (provider === "glm") return estimateGlmCostCny(usage, env);
   if (provider === "gemini") return roundCost(readTieredProviderNumber(env, "GEMINI", "ESTIMATED_CNY_PER_CALL", 0.01));
   return 0;
 }
@@ -2010,6 +2285,42 @@ function normalizeUsage(provider, usage = {}) {
     reasoning_tokens: Number(usage.reasoning_tokens || usage.completion_tokens_details?.reasoning_tokens || 0),
     prompt_cache_hit_tokens: Number(usage.prompt_cache_hit_tokens || usage.prompt_tokens_details?.cached_tokens || 0),
     prompt_cache_miss_tokens: Number(usage.prompt_cache_miss_tokens || 0),
+  };
+}
+
+function resolveBudgetBucket(stage, provider, env = {}) {
+  const normalizedStage = String(stage || "").trim().toLowerCase();
+  let normalizedProvider = String(provider || "").trim().toLowerCase();
+  if (normalizedProvider === "mock") {
+    normalizedProvider = normalizedStage === "evidence_preparation"
+      ? "deepseek"
+      : String(env.PUBLIC_RULING_MODEL_PROFILE || "").startsWith("glm-")
+        ? "glm"
+        : "deepseek";
+  }
+  const id = `${normalizedStage}:${normalizedProvider}`;
+  const bucket = PUBLIC_BUDGET_BUCKETS.find((item) => item.id === id);
+  if (bucket) return bucket;
+  if (normalizedProvider === "gemini") {
+    return Object.freeze({ id: `internal:${normalizedStage}:gemini`, stage: normalizedStage, provider: "gemini", label: "Gemini 内部调用" });
+  }
+  throw new TypeError(`Unsupported public budget bucket: ${id}`);
+}
+
+function budgetBucketConfig(env, bucket) {
+  if (String(bucket?.id || "").startsWith("internal:")) {
+    return { envName: "", dailyBudgetCny: null };
+  }
+  const envName = bucket.id === "evidence_preparation:deepseek"
+    ? "API_EVIDENCE_DAILY_BUDGET_CNY"
+    : bucket.id === "final_ruling:glm"
+      ? "API_GLM_FINAL_DAILY_BUDGET_CNY"
+      : "API_DEEPSEEK_FINAL_DAILY_BUDGET_CNY";
+  const configured = String(env[envName] ?? "").trim();
+  const parsed = configured === "" ? null : Number(configured);
+  return {
+    envName,
+    dailyBudgetCny: Number.isFinite(parsed) && parsed >= 0 ? parsed : null,
   };
 }
 
@@ -2506,32 +2817,33 @@ function emptyRulebookGroundingResult(
   };
 }
 
-function resolveDeepSeekGenerationConfig({ modelName, thinkingMode, reasoningEffort, env = {} } = {}) {
+function resolveReasoningGenerationConfig({ provider = "deepseek", modelName, thinkingMode, reasoningEffort, env = {} } = {}) {
   const warnings = [];
+  const providerPrefix = String(provider || "deepseek").trim().toUpperCase();
   const modeSetting = firstConfiguredValue([
     ["request", thinkingMode],
     ["RAG_THINKING_MODE", env.RAG_THINKING_MODE],
-    ["DEEPSEEK_THINKING_MODE", env.DEEPSEEK_THINKING_MODE],
+    [`${providerPrefix}_THINKING_MODE`, env[`${providerPrefix}_THINKING_MODE`]],
   ]);
   let effectiveThinkingMode = String(modeSetting.value || "enabled").trim().toLowerCase();
   if (!DEEPSEEK_THINKING_MODES.has(effectiveThinkingMode)) {
-    warnings.push("deepseek_thinking_mode_invalid_defaulted_enabled");
+    warnings.push(`${provider}_thinking_mode_invalid_defaulted_enabled`);
     effectiveThinkingMode = "enabled";
   }
 
   const effortSetting = firstConfiguredValue([
     ["request", reasoningEffort],
     ["RAG_REASONING_EFFORT", env.RAG_REASONING_EFFORT],
-    ["DEEPSEEK_REASONING_EFFORT", env.DEEPSEEK_REASONING_EFFORT],
+    [`${providerPrefix}_REASONING_EFFORT`, env[`${providerPrefix}_REASONING_EFFORT`]],
   ]);
   let effectiveReasoningEffort = String(effortSetting.value || "high").trim().toLowerCase();
   if (!DEEPSEEK_REASONING_EFFORTS.has(effectiveReasoningEffort)) {
-    warnings.push("deepseek_reasoning_effort_invalid_defaulted_high");
+    warnings.push(`${provider}_reasoning_effort_invalid_defaulted_high`);
     effectiveReasoningEffort = "high";
   }
 
   if (effectiveThinkingMode === "disabled") {
-    if (effortSetting.value !== undefined) warnings.push("deepseek_reasoning_effort_ignored_when_thinking_disabled");
+    if (effortSetting.value !== undefined) warnings.push(`${provider}_reasoning_effort_ignored_when_thinking_disabled`);
     return {
       thinkingMode: "disabled",
       reasoningEffort: null,
@@ -2562,7 +2874,7 @@ function resolveRagMaxOutputTokens(env = {}, { provider = "", thinkingMode = "" 
   const configured = Number(env.RAG_MAX_OUTPUT_TOKENS);
   if (Number.isFinite(configured) && configured > 0) return Math.floor(configured);
   const tier = resolveConfiguredModelTier(env);
-  if (provider === "deepseek" && thinkingMode === "enabled") {
+  if ((provider === "deepseek" || provider === "glm") && thinkingMode === "enabled") {
     const tierSpecific = tier === "flash"
       ? env.RAG_FLASH_THINKING_MAX_OUTPUT_TOKENS
       : env.RAG_PRO_THINKING_MAX_OUTPUT_TOKENS;
@@ -2790,6 +3102,9 @@ function isFaqGroundingEvidence(item = {}) {
 }
 
 function modelNameForProvider(provider, env) {
+  if (provider === "glm") {
+    return String(env.GLM_MODEL || env.RAG_MODEL || DEFAULT_GLM_MODEL);
+  }
   if (provider === "deepseek") {
     const tier = resolveConfiguredModelTier(env);
     if (tier === "flash") {
@@ -2845,6 +3160,7 @@ function modelNameForRulebookGroundingProvider(provider, env) {
 
 function hasProviderKey(provider, env) {
   if (provider === "deepseek") return Boolean(env.DEEPSEEK_API_KEY);
+  if (provider === "glm") return Boolean(env.GLM_API_KEY);
   if (provider === "gemini") return Boolean(env.GEMINI_API_KEY);
   return false;
 }
@@ -2896,6 +3212,11 @@ function readTieredProviderNumber(env, providerPrefix, suffix, fallback) {
   const tierValue = Number(env[`${providerPrefix}_${tier.toUpperCase()}_${suffix}`]);
   if (Number.isFinite(tierValue)) return tierValue;
   return readNumber(env[`${providerPrefix}_${suffix}`], fallback);
+}
+
+function compatibleChatCompletionsUrl(baseUrl) {
+  const base = String(baseUrl || "").replace(/\/+$/u, "");
+  return base.endsWith("/chat/completions") ? base : `${base}/chat/completions`;
 }
 
 function withTimeout(promise, timeoutMs, message) {
@@ -2965,6 +3286,18 @@ function roundCost(value) {
 }
 
 function budgetDayKey(timezone, now) {
+  return `rag-api-budget:${budgetDate(timezone, now)}`;
+}
+
+function budgetBucketDayKey(timezone, now, bucketId) {
+  if (!PUBLIC_BUDGET_BUCKETS.some((bucket) => bucket.id === bucketId)
+      && !/^internal:(?:evidence_preparation|final_ruling):gemini$/u.test(String(bucketId || ""))) {
+    throw new TypeError(`Unsupported public budget bucket: ${bucketId}`);
+  }
+  return `rag-api-budget:v2:${budgetDate(timezone, now)}:${bucketId}`;
+}
+
+function budgetDate(timezone, now) {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: timezone || DEFAULT_BUDGET_TIMEZONE,
     year: "numeric",
@@ -2972,5 +3305,5 @@ function budgetDayKey(timezone, now) {
     day: "2-digit",
   }).formatToParts(now);
   const lookup = Object.fromEntries(parts.map((part) => [part.type, part.value]));
-  return `rag-api-budget:${lookup.year}-${lookup.month}-${lookup.day}`;
+  return `${lookup.year}-${lookup.month}-${lookup.day}`;
 }

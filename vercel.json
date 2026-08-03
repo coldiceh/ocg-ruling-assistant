@@ -1,6 +1,9 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "functions": {
+    "api/answer.js": {
+      "maxDuration": 300
+    },
     "api/admin-model-lab.js": {
       "maxDuration": 300
     }

@@ -9,6 +9,11 @@ import {
   resolveCardExtractionProvider,
   resolveRagProvider,
 } from "./ragModelClient.mjs";
+import {
+  assertPublicRulingModelProfileAvailable,
+  getPublicRulingModelCapabilities,
+  resolvePublicRulingModelProfile,
+} from "./publicRulingModelConfig.mjs";
 import { getOcgEngineHealth, requestOcgEngineSimulation } from "./ocgEngineClient.mjs";
 import { getFormalEngineCapabilities } from "./formalEngineClient.mjs";
 import { formalShadowEnabled } from "./formalEngineShadow.mjs";
@@ -108,25 +113,25 @@ const server = createServer(async (request, response) => {
       const body = await readBody(request);
       const payload = JSON.parse(body || "{}");
       const mode = String(payload.mode || "rag").toLowerCase();
-      const publicEnv = createPublicAnswerModelEnv(process.env);
-      auditPromise = appendQueryAudit({
-        question: payload.question,
-        mode,
-        env: publicEnv,
-      }).catch(() => null);
       if (mode !== "rag") {
         const error = new Error("Only the evidence-grounded RAG answer mode is public");
         error.statusCode = 400;
         error.code = "unsupported_answer_mode";
         throw error;
       }
+      const profile = resolvePublicRulingModelProfile(payload.rulingModelProfile);
+      assertPublicRulingModelProfileAvailable(profile, process.env);
+      const publicEnv = createPublicAnswerModelEnv(process.env, profile.id);
+      auditPromise = appendQueryAudit({
+        question: payload.question,
+        mode,
+        env: publicEnv,
+      }).catch(() => null);
       const answer = await answerRagRulingQuestionForVersion({
         rulingVersion: payload.rulingVersion,
         question: payload.question,
-        env: envForModelTier(publicEnv, payload.modelTier),
+        env: publicEnv,
         engineScenario: payload.engineScenario,
-        thinkingMode: payload.thinkingMode,
-        reasoningEffort: payload.reasoningEffort,
         signal: requestAbort.signal,
       });
       await auditPromise;
@@ -134,7 +139,7 @@ const server = createServer(async (request, response) => {
     } catch (error) {
       await auditPromise;
       if (requestAbort.signal.aborted) return;
-      sendJson(response, error?.statusCode === 400 ? 400 : 500, {
+      sendJson(response, [400, 503].includes(error?.statusCode) ? error.statusCode : 500, {
         error: error instanceof Error ? error.message : String(error),
         code: error?.code || "answer_failed",
       });
@@ -179,7 +184,6 @@ function sendJson(response, status, payload) {
   response.writeHead(status, { "content-type": "application/json; charset=utf-8" });
   response.end(JSON.stringify(payload, null, 2));
 }
-
 function createRequestAbortContext(request, response) {
   if (request?.signal && typeof request.signal.aborted === "boolean") {
     return { signal: request.signal, cleanup() {} };
@@ -322,7 +326,8 @@ function requestPathname(request) {
 }
 
 async function getModelInfo() {
-  const publicEnv = createPublicAnswerModelEnv(process.env);
+  const modelCapabilities = getPublicRulingModelCapabilities(process.env);
+  const publicEnv = createPublicAnswerModelEnv(process.env, modelCapabilities.defaultRulingModelProfile);
   const ragProvider = resolveRagProvider(publicEnv);
   const cardProvider = resolveCardExtractionProvider(publicEnv);
   const budget = await getRagBudgetStatus({ env: publicEnv }).catch(() => null);
@@ -330,81 +335,19 @@ async function getModelInfo() {
     String(publicEnv.RAG_AUTO_ENGINE_SIMULATION ?? "true").trim(),
   ) && Boolean(String(publicEnv.OCG_ENGINE_URL || "").trim());
   const rulingVersionCapabilities = getRulingVersionCapabilities();
-  if (ragProvider.provider === "deepseek") {
-    return {
-      ...rulingVersionCapabilities,
-      provider: "deepseek",
-      requestedProvider: ragProvider.requested,
-      models: [publicEnv.DEEPSEEK_MODEL || "deepseek-v4-flash"],
-      cardNameProvider: cardProvider.provider,
-      cardNameModels: [publicEnv.DEEPSEEK_CARD_MODEL || publicEnv.RAG_CARD_MODEL || "deepseek-v4-flash"],
-      modelTiers: buildModelTiers("deepseek", publicEnv),
-      budget,
-      engineEnabled,
-      enabled: true,
-      pipeline: "rag_baseline",
-      legacyModes: [],
-    };
-  }
-  if (ragProvider.provider === "gemini") {
-    return {
-      ...rulingVersionCapabilities,
-      provider: "gemini",
-      requestedProvider: ragProvider.requested,
-      models: [publicEnv.GEMINI_MODEL || "gemini-1.5-flash"],
-      cardNameProvider: cardProvider.provider,
-      cardNameModels: splitList(publicEnv.GEMINI_CARD_MODEL || publicEnv.GEMINI_CARD_RESOLUTION_MODELS || publicEnv.GEMINI_CARD_RESOLUTION_MODEL || "gemini-1.5-flash"),
-      modelTiers: buildModelTiers("gemini", publicEnv),
-      budget,
-      engineEnabled,
-      enabled: true,
-      pipeline: "rag_baseline",
-      legacyModes: [],
-    };
-  }
   return {
     ...rulingVersionCapabilities,
-    provider: "mock",
+    ...modelCapabilities,
+    provider: "glm",
     requestedProvider: ragProvider.requested,
-    models: [],
+    models: modelCapabilities.rulingModelProfiles.map((profile) => profile.model),
+    cardNameProvider: cardProvider.provider,
+    cardNameModels: [publicEnv.DEEPSEEK_CARD_MODEL || "deepseek-v4-flash"],
     modelTiers: [],
     budget,
     engineEnabled,
-    enabled: false,
+    enabled: modelCapabilities.rulingModelProfiles.some((profile) => profile.available),
     pipeline: "rag_baseline",
     legacyModes: [],
   };
-}
-
-function envForModelTier(env, tier) {
-  const normalized = normalizeModelTier(tier);
-  return normalized ? { ...env, RAG_MODEL_TIER: normalized } : env;
-}
-
-function normalizeModelTier(value) {
-  const tier = String(value || "").trim().toLowerCase();
-  return tier === "flash" || tier === "pro" ? tier : "";
-}
-
-function buildModelTiers(provider, env) {
-  if (provider === "deepseek") {
-    return [
-      { id: "flash", label: "Flash", model: env.DEEPSEEK_FLASH_MODEL || env.DEEPSEEK_CARD_MODEL || env.RAG_CARD_MODEL || "deepseek-v4-flash" },
-      { id: "pro", label: "Pro", model: env.DEEPSEEK_PRO_MODEL || env.DEEPSEEK_MODEL || "deepseek-v4-pro" },
-    ];
-  }
-  if (provider === "gemini") {
-    return [
-      { id: "flash", label: "Flash", model: env.GEMINI_FLASH_MODEL || env.GEMINI_CARD_MODEL || "gemini-1.5-flash" },
-      { id: "pro", label: "Pro", model: env.GEMINI_PRO_MODEL || env.GEMINI_MODEL || "gemini-1.5-flash" },
-    ];
-  }
-  return [];
-}
-
-function splitList(value) {
-  return String(value || "")
-    .split(",")
-    .map((item) => item.trim())
-    .filter(Boolean);
 }

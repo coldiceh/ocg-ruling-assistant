@@ -98,7 +98,7 @@ test("public answer payload cannot select an admin-only provider or depend on Op
   }
 });
 
-test("public model environment strips every admin-only model setting and pins all model stages", () => {
+test("public model environment pins the selected final profile and keeps preparation on DeepSeek", () => {
   const publicEnv = createPublicAnswerModelEnv({
     MODEL_PROVIDER: "openai",
     RAG_MODEL_PROVIDER: "gemini",
@@ -115,13 +115,25 @@ test("public model environment strips every admin-only model setting and pins al
     DEEPSEEK_API_KEY: "public-deepseek-key",
   });
 
-  assert.equal(publicEnv.MODEL_PROVIDER, "deepseek");
-  assert.equal(publicEnv.RAG_MODEL_PROVIDER, "deepseek");
+  assert.equal(publicEnv.MODEL_PROVIDER, "glm");
+  assert.equal(publicEnv.RAG_MODEL_PROVIDER, "glm");
+  assert.equal(publicEnv.RAG_MODEL, "glm-5.2");
+  assert.equal(publicEnv.RAG_THINKING_MODE, "enabled");
+  assert.equal(publicEnv.RAG_REASONING_EFFORT, "high");
   assert.equal(publicEnv.RAG_CARD_MODEL_PROVIDER, "deepseek");
   assert.equal(publicEnv.RAG_RULE_MODEL_PROVIDER, "deepseek");
   assert.equal(publicEnv.RAG_RULEBOOK_MODEL_PROVIDER, "deepseek");
-  assert.equal(Object.keys(publicEnv).some((key) => /^(?:OPENAI_|ADMIN_|GLM_|KIMI_)/iu.test(key)), false);
+  assert.equal(Object.keys(publicEnv).some((key) => /^(?:OPENAI_|ADMIN_|KIMI_)/iu.test(key)), false);
+  assert.equal(publicEnv.GLM_API_KEY, "admin-glm-key");
   assert.equal(publicEnv.DEEPSEEK_API_KEY, "public-deepseek-key");
+
+  const deepSeekEnv = createPublicAnswerModelEnv({
+    GLM_API_KEY: "glm-key",
+    DEEPSEEK_API_KEY: "deepseek-key",
+  }, "deepseek-v4-flash-high");
+  assert.equal(deepSeekEnv.RAG_MODEL_PROVIDER, "deepseek");
+  assert.equal(deepSeekEnv.RAG_MODEL, "deepseek-v4-flash");
+  assert.equal(deepSeekEnv.RAG_MODEL_TIER, "flash");
 
   const mockEnv = createPublicAnswerModelEnv({
     MODEL_PROVIDER: "mock",
@@ -193,9 +205,11 @@ test("public legacy and fastjudge modes are rejected before any admin OpenAI cal
 
 test("local Node public entry point applies the same public model boundary", async () => {
   const source = await readFile(new URL("../backend/server.mjs", import.meta.url), "utf8");
-  assert.match(source, /createPublicAnswerModelEnv\(process\.env\)/u);
+  assert.match(source, /createPublicAnswerModelEnv\(process\.env, profile\.id\)/u);
+  assert.match(source, /resolvePublicRulingModelProfile\(payload\.rulingModelProfile\)/u);
   assert.match(source, /if \(mode !== "rag"\)[\s\S]*?unsupported_answer_mode/u);
-  assert.match(source, /answerRagRulingQuestionForVersion\(\{[\s\S]*?env:\s*envForModelTier\(publicEnv,/u);
+  assert.match(source, /answerRagRulingQuestionForVersion\(\{[\s\S]*?env:\s*publicEnv,/u);
+  assert.doesNotMatch(source, /payload\.(?:thinkingMode|reasoningEffort|modelTier)/u);
   assert.doesNotMatch(source, /answerQuestion\(payload|answerRulingQuestionFast/u);
 });
 
