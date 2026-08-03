@@ -436,6 +436,77 @@ test("authoritative direct comparison rejects a reversed restricted exception", 
   assert.ok(validation.errors.includes("final resolution contradicts the authoritative official direct answer"));
 });
 
+test("an unasked tangential official exception does not force a second model call", () => {
+  const evidence = {
+    officialQaDirectCandidates: [{
+      id: "official-direct-unasked-exception",
+      question: "この方法で特殊召唤できますか。",
+      answer: "通常は特殊召唤できます。ただし、別の制限が適用される場合は特殊召唤できません。",
+      text: "この方法で特殊召唤できますか。通常は特殊召唤できます。ただし、別の制限が適用される場合は特殊召唤できません。",
+    }],
+  };
+  const answer = makeAnswer(
+    "可以用这个方法特殊召唤。",
+    [{ id: "official-direct-unasked-exception" }],
+  );
+  const validation = validatePublicRagFinalAnswer(answer, {
+    rawText: JSON.stringify(answer),
+    userQuery: "能否用这个方法特殊召唤？",
+    evidence,
+    authoritativeOfficialDirect: true,
+  });
+
+  assert.equal(validation.ok, true, JSON.stringify(validation.errors));
+
+  const timingValidation = validatePublicRagFinalAnswer(answer, {
+    rawText: JSON.stringify(answer),
+    userQuery: "这个效果发动时能否用这个方法特殊召唤？",
+    evidence,
+    authoritativeOfficialDirect: true,
+  });
+  assert.equal(timingValidation.ok, true, JSON.stringify(timingValidation.errors));
+
+  const necessityValidation = validatePublicRagFinalAnswer(answer, {
+    rawText: JSON.stringify(answer),
+    userQuery: "有必要在效果发动时用这个方法特殊召唤吗？",
+    evidence,
+    authoritativeOfficialDirect: true,
+  });
+  assert.equal(necessityValidation.ok, true, JSON.stringify(necessityValidation.errors));
+});
+
+test("an explicitly requested conditional branch remains mandatory", () => {
+  const evidence = {
+    officialQaDirectCandidates: [{
+      id: "official-direct-requested-exception",
+      question: "通常の場合と制限が適用される場合はどうなりますか。",
+      answer: "通常は特殊召唤できます。ただし、制限が適用される場合は特殊召唤できません。",
+      text: "通常の場合と制限が適用される場合はどうなりますか。通常は特殊召唤できます。ただし、制限が適用される場合は特殊召唤できません。",
+    }],
+  };
+  const answer = makeAnswer(
+    "通常可以特殊召唤。",
+    [{ id: "official-direct-requested-exception" }],
+  );
+  for (const userQuery of [
+    "通常情况和限制适用的场合分别能否特殊召唤？",
+    "对方场上存在限制A时，可以特殊召唤吗？",
+    "在限制A适用的情况下如何处理？",
+  ]) {
+    const validation = validatePublicRagFinalAnswer(answer, {
+      rawText: JSON.stringify(answer),
+      userQuery,
+      evidence,
+      authoritativeOfficialDirect: true,
+    });
+    assert.equal(validation.ok, false, userQuery);
+    assert.ok(
+      validation.errors.includes("final answer omits the authoritative official direct resolution result"),
+      `${userQuery}: ${JSON.stringify(validation.errors)}`,
+    );
+  }
+});
+
 test("authoritative direct comparison supports opposite outcomes in different conditions", () => {
   const evidence = {
     officialQaDirectCandidates: [{
