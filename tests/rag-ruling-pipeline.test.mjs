@@ -10,6 +10,10 @@ import {
   buildCardSemanticFacts,
 } from "../backend/ragRulingPipeline.mjs";
 import { analyzeEffectStateTransition } from "../backend/effectStateReasoner.mjs";
+import {
+  collectEffectiveLegacyLuaPasscodes,
+  createDefaultLegacyLuaSemanticPacketFactory,
+} from "../backend/legacyLuaSemanticPacketFactory.mjs";
 
 const cards = [
   {
@@ -2942,6 +2946,87 @@ test("card_text_derived_rule_queries_enter_rulebook_retrieval", async () => {
   assert.ok(evidence.ruleSearchQueries.some((item) => item.source === "card_text_derived_rule_search_query"));
   assert.ok(evidence.rawRelatedEvidence.some((item) => item.id.startsWith("rule-spell-trap-return#p") && item.type === "rulebook"));
   assert.ok(evidence.rulebookCandidates.some((item) => /発動中の通常魔法/u.test(item.text)));
+});
+
+test("configured Legacy Lua lookup hydrates a real Baige passcode when automatic simulation is disabled", async () => {
+  const cid = "24680";
+  const passcode = "01234567";
+  const genericCard = {
+    id: cid,
+    cardId: cid,
+    // Reproduce the legacy local-provider shape that copied a CID here. It
+    // must never win over the verified Baige password.
+    passcode: cid,
+    name: "通用桥接测试卡",
+    cnName: "通用桥接测试卡",
+    cardType: "monster",
+    effectText: "①：自己主要阶段可以发动。抽1张卡。",
+    aliases: ["通用桥接测试卡"],
+  };
+  let baigeRequests = 0;
+
+  const evidence = await retrieveRagEvidence({
+    userQuery: "通用桥接测试卡的效果如何处理？",
+    cardResolution: {
+      resolvedCards: [genericCard],
+      unresolvedMentions: [],
+      ambiguousMentions: [],
+      userProvidedCardTexts: [],
+    },
+    cards: [genericCard],
+    records: [],
+    qaRecords: [],
+    env: {
+      OCG_ENGINE_URL: "https://engine.example.test",
+      RAG_AUTO_ENGINE_SIMULATION: "false",
+      RAG_LIVE_OFFICIAL_QA: "false",
+    },
+    fetchImpl: async () => {
+      baigeRequests += 1;
+      return jsonResponse({
+        result: [{
+          id: passcode,
+          cid,
+          cn_name: genericCard.name,
+          desc: genericCard.effectText,
+          type: "monster",
+        }],
+      });
+    },
+  });
+
+  assert.equal(baigeRequests, 1);
+  assert.equal(evidence.retrievedCards.length, 1);
+  assert.equal(evidence.retrievedCards[0].id, cid);
+  assert.equal(evidence.retrievedCards[0].passcode, passcode);
+  assert.notEqual(evidence.retrievedCards[0].passcode, cid);
+  assert.deepEqual(collectEffectiveLegacyLuaPasscodes({
+    retrievedCards: evidence.retrievedCards,
+    cardResolution: { resolvedCards: [genericCard] },
+  }), [passcode]);
+
+  const sourceLookups = [];
+  const packetFactory = createDefaultLegacyLuaSemanticPacketFactory({
+    env: {
+      OCG_ENGINE_URL: "https://engine.example.test",
+      RAG_AUTO_ENGINE_SIMULATION: "false",
+    },
+    facadeFactory: () => ({
+      async resolveLegacyLuaSource(value) {
+        sourceLookups.push(value);
+        const error = new Error("locked script was not found");
+        error.code = "LOCKED_SCRIPT_NOT_FOUND";
+        throw error;
+      },
+    }),
+  });
+  const packet = await packetFactory({ retrievedCards: evidence.retrievedCards });
+  assert.deepEqual(sourceLookups, [passcode]);
+  assert.equal(packet.resources.length, 1);
+  assert.equal(packet.resources[0].status, "TYPED_UNKNOWN");
+  assert.equal(packet.resources[0].resourceBinding.locator, `legacy-lua-passcode:${passcode}`);
+  assert.equal(packet.resources[0].unknownReasons[0].code, "LOCKED_SCRIPT_NOT_FOUND");
+  assert.equal(packet.resources[0].unknownReasons[0].details.passcode, passcode);
 });
 
 test("cross-card official lifecycle analogues survive card-scoped QA retrieval", async () => {

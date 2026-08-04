@@ -1747,7 +1747,10 @@ function mergeCard(localCard, baigeCard) {
     ...localCard,
     id: localCard.id || baigeCard.id,
     cardId: localCard.cardId || baigeCard.cardId,
-    passcode: localCard.passcode || baigeCard.passcode,
+    // Local card ids are KONAMI CIDs and some older normalization paths also
+    // copied them into `passcode`. Only a verified 8-digit password may cross
+    // the Legacy Lua boundary; otherwise prefer the Baige password.
+    passcode: verifiedEnginePasscode(localCard) || verifiedEnginePasscode(baigeCard),
     cid: localCard.cid ?? baigeCard.cid ?? null,
     name: localCard.name || baigeCard.name,
     cnName: localCard.cnName || baigeCard.cnName,
@@ -1809,12 +1812,22 @@ function hasUsableCardText(card) {
 }
 
 function enginePasscodeRequired(env = {}) {
-  const enabled = !/^(?:0|false|off|disabled|no)$/iu.test(String(env.RAG_AUTO_ENGINE_SIMULATION ?? "true").trim());
-  return enabled && Boolean(String(env.OCG_ENGINE_URL || "").trim());
+  // Legacy Lua discovery is independently enabled by OCG_ENGINE_URL. Turning
+  // off automatic scenario simulation must not disable passcode hydration for
+  // the production packet factory.
+  return Boolean(String(env.OCG_ENGINE_URL || "").trim());
 }
 
 function hasEnginePasscode(card = {}) {
-  return /^\d{8}$/u.test(String(card.passcode || card.password || "").trim());
+  return Boolean(verifiedEnginePasscode(card));
+}
+
+function verifiedEnginePasscode(card = {}) {
+  for (const value of [card.passcode, card.password]) {
+    const passcode = String(value ?? "").trim();
+    if (/^\d{8}$/u.test(passcode) && Number(passcode) > 0) return passcode;
+  }
+  return "";
 }
 
 function normalizeUserProvidedCardTexts(items, limits) {
