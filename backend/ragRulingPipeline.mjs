@@ -16,6 +16,10 @@ import {
 } from "./ragRulingPrompt.mjs";
 import { hasNumberedCardIdentityConflict } from "./numberedCardIdentity.mjs";
 import { runValidatedPublicRagFinal } from "./publicRagAnswerValidator.mjs";
+import {
+  createLegacyLuaUnknownPacket,
+  validateLegacyLuaSemanticPacket,
+} from "./legacyLuaSemanticPacket.mjs";
 
 export async function answerRagRulingQuestion({
   question,
@@ -43,6 +47,7 @@ export async function answerRagRulingQuestion({
   formalExpectedVersions,
   formalFetchImpl,
   formalScenarioDraftTimeoutMs,
+  legacyLuaSemanticPacketFactory,
   thinkingMode,
   reasoningEffort,
   signal,
@@ -166,6 +171,15 @@ export async function answerRagRulingQuestion({
     dryRun,
     signal,
   });
+  const legacyLuaSemanticPacketPromise = buildLegacyLuaSemanticPacket({
+    factory: legacyLuaSemanticPacketFactory,
+    userQuery: query,
+    cardResolution: effectiveCardResolution,
+    evidence: retrievedEvidence,
+    env,
+    fetchImpl: formalFetchImpl || engineFetchImpl || fetchImpl || globalThis.fetch,
+    signal,
+  });
   const reasoningCardTexts = attachUserQueryToCardTexts([
     ...(retrievedEvidence.cardTexts || []),
     ...(retrievedEvidence.userProvidedCardTexts || []),
@@ -208,6 +222,9 @@ export async function answerRagRulingQuestion({
   const formalStartedAt = Date.now();
   const formalShadow = await formalShadowPromise;
   timingsMs.formalEngineAwait = elapsedMs(formalStartedAt);
+  const legacyLuaStartedAt = Date.now();
+  const legacyLuaSemanticPacket = await legacyLuaSemanticPacketPromise;
+  timingsMs.legacyLuaSemanticPacketAwait = elapsedMs(legacyLuaStartedAt);
   const evidence = {
     ...groundedEvidence,
     semanticStateTransition,
@@ -215,6 +232,7 @@ export async function answerRagRulingQuestion({
     // They give the final model a lossless description of card-text lifecycles,
     // while the prompt still requires verification against the raw card text.
     cardSemanticFacts,
+    legacyLuaSemanticPacket,
     formalEngineProofs: [],
     formalEngineStatus: summarizeFormalShadow(formalShadow),
   };
@@ -307,6 +325,8 @@ export async function answerRagRulingQuestion({
         rulebookCandidates: evidence.rulebookCandidates?.length || 0,
         operationLegalityChecks: evidence.operationLegality?.checks?.length || 0,
         unresolvedOperationConstraints: evidence.operationLegality?.unresolvedConstraintEvidence?.length || 0,
+        legacyLuaEffectCandidates: evidence.legacyLuaSemanticPacket?.effectCandidates?.length || 0,
+        legacyLuaUnknownReasons: evidence.legacyLuaSemanticPacket?.unknownReasons?.length || 0,
       },
       unresolvedMentions: effectiveCardResolution.unresolvedMentions,
       ambiguousMentions: [...(effectiveCardResolution.ambiguousMentions || []), ...(evidence.baigeAmbiguousMentions || [])],
@@ -390,6 +410,58 @@ function summarizeSemanticStateDiagnostic(transition, authorityAssessment = null
     queryCoverage: authorityAssessment?.queryCoverage || transition.queryCoverage || null,
     identityBinding: authorityAssessment?.identityBinding || null,
   };
+}
+
+export async function buildLegacyLuaSemanticPacket({
+  factory,
+  userQuery,
+  cardResolution,
+  evidence,
+  env,
+  fetchImpl,
+  signal,
+} = {}) {
+  if (typeof factory !== "function") {
+    return createLegacyLuaUnknownPacket({
+      code: "LEGACY_LUA_PACKET_NOT_CONFIGURED",
+      message: "legacy Lua semantic packet factory is not configured",
+    });
+  }
+  const timeoutMs = Math.max(
+    50,
+    Math.min(10000, readNumber(env?.RAG_LEGACY_LUA_TIMEOUT_MS, 5000)),
+  );
+  let timer;
+  try {
+    const timeout = new Promise((_, reject) => {
+      timer = setTimeout(() => {
+        const error = new Error(
+          `legacy Lua semantic packet timed out after ${timeoutMs}ms`,
+        );
+        error.code = "LEGACY_LUA_PACKET_TIMEOUT";
+        reject(error);
+      }, timeoutMs);
+    });
+    const packet = await Promise.race([
+      Promise.resolve(factory({
+        userQuery,
+        cardResolution,
+        evidence,
+        env,
+        fetchImpl,
+        signal,
+      })),
+      timeout,
+    ]);
+    return validateLegacyLuaSemanticPacket(packet);
+  } catch (error) {
+    return createLegacyLuaUnknownPacket({
+      code: error?.code || "LEGACY_LUA_PACKET_UNAVAILABLE",
+      message: error instanceof Error ? error.message : String(error),
+    });
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 function elapsedMs(startedAt) {

@@ -43,10 +43,17 @@ import {
   loadRagData,
   retrieveRagEvidence,
 } from "./ragEvidenceRetriever.mjs";
+import {
+  createLegacyLuaUnknownPacket,
+  projectLegacyLuaSemanticPacketForModel,
+  serializeLegacyLuaSemanticPacket,
+  validateLegacyLuaSemanticPacket,
+} from "./legacyLuaSemanticPacket.mjs";
 
 const DEFAULT_PROMPT_VERSION = "openai-ruling-v1";
 const DEFAULT_PROMPT_FILE_URL = new URL("../prompts/openai-ruling-v1.md", import.meta.url);
 export const MAX_FINAL_RULING_INPUT_BYTES = 512 * 1024;
+const DEFAULT_MAX_LEGACY_LUA_SEMANTIC_PACKET_BYTES = 192 * 1024;
 const FINAL_STAGE_ID = "generate_ruling";
 const PREPARATION_STAGE_IDS = Object.freeze([
   "understand",
@@ -109,6 +116,9 @@ export function createAdminModelLabService({
   dataDir,
   retrievalFetchImpl = globalThis.fetch,
   dataVersions = {},
+  legacyLuaSemanticPacketFactory = null,
+  legacyLuaSemanticTimeoutMs,
+  legacyLuaSemanticMaxBytes,
 } = {}) {
   assertRunStore(runStore);
   const config = readAdminModelLabConfig(env);
@@ -143,6 +153,14 @@ export function createAdminModelLabService({
   const activeFinalAbortControllers = new Map();
   const serviceInstanceId = randomUUID();
   const executionHeartbeatMs = readExecutionHeartbeatMs(env);
+  const resolvedLegacyLuaSemanticTimeoutMs = readLegacyLuaSemanticTimeoutMs(
+    legacyLuaSemanticTimeoutMs,
+    env,
+  );
+  const resolvedLegacyLuaSemanticMaxBytes = readLegacyLuaSemanticMaxBytes(
+    legacyLuaSemanticMaxBytes,
+    env,
+  );
 
   async function capabilities() {
     return immutableJson({
@@ -162,6 +180,12 @@ export function createAdminModelLabService({
         experimentalFinalRulingAvailable: finalRulingProviderRegistry.listProviderIds()
           .some((providerId) => providerId !== "openai"),
         simulatorUsed: false,
+        legacyLuaSemanticPacket: {
+          enabled: typeof legacyLuaSemanticPacketFactory === "function",
+          authority: "LEGACY_COMPATIBILITY",
+          canConfirmOfficialRuling: false,
+          legacyAcceptedAsTruth: false,
+        },
       },
       providers: getAdminModelProviderCapabilities({ env }),
       models: getRulingModelCapabilityTable(),
@@ -408,6 +432,8 @@ export function createAdminModelLabService({
       evidenceSnapshotSha256: sourceRun.evidenceSnapshot.contentSha256,
       decisionPacketId: forkEvidence.decisionPacket.decisionPacketId,
       decisionPacketSha256: forkEvidence.decisionPacket.packetContentSha256,
+      legacyLuaSemanticPacketSha256:
+        forkEvidence.legacyLuaSemanticPacket?.packetSha256 || null,
       promptSha256: sourceRun.executionProfile.prompt?.sha256 || null,
       finalRuling: finalRulingProfile,
     }));
@@ -424,6 +450,8 @@ export function createAdminModelLabService({
         sourceEvidenceSnapshotSha256: sourceRun.evidenceSnapshot.contentSha256,
         sourceDecisionPacketId: forkEvidence.decisionPacket.decisionPacketId,
         sourceDecisionPacketSha256: forkEvidence.decisionPacket.packetContentSha256,
+        sourceLegacyLuaSemanticPacketSha256:
+          forkEvidence.legacyLuaSemanticPacket?.packetSha256 || null,
         requestFingerprint,
         idempotencyKeySha256: sha256(idempotencyKey),
       },
@@ -1042,6 +1070,7 @@ export function createAdminModelLabService({
     let cardResolution;
     let cardTextCandidates;
     let retrieval;
+    let legacyLuaSemanticPacket;
 
     preparationOutput = await runTrackedStage(run.runId, tracker, "understand", async (signal) => {
       data = await loadData(dataDir);
@@ -1082,11 +1111,11 @@ export function createAdminModelLabService({
       })
     ), executionToken);
 
-    retrieval = await runTrackedStage(run.runId, tracker, "retrieve_rulings_evidence", async () => {
+    retrieval = await runTrackedStage(run.runId, tracker, "retrieve_rulings_evidence", async (signal) => {
       const exhaustiveEnv = buildExhaustiveRetrievalEnv(env, data, {
         liveOfficialQaEnabled,
       });
-      return retrieveEvidence({
+      const retrievedEvidence = await retrieveEvidence({
         userQuery: question,
         cardResolution,
         dataDir,
@@ -1099,6 +1128,22 @@ export function createAdminModelLabService({
         env: exhaustiveEnv,
         fetchImpl: retrievalFetchImpl,
       });
+      legacyLuaSemanticPacket = await collectLegacyLuaSemanticPacketForSnapshot({
+        factory: legacyLuaSemanticPacketFactory,
+        timeoutMs: resolvedLegacyLuaSemanticTimeoutMs,
+        maxSerializedBytes: resolvedLegacyLuaSemanticMaxBytes,
+        signal,
+        input: {
+          question,
+          questions,
+          providedFacts: run.executionProfile.providedFacts,
+          cardResolution: jsonSafe(cardResolution),
+          cardTextCandidates: jsonSafe(cardTextCandidates),
+          retrievedCards: jsonSafe(retrievedEvidence?.retrievedCards || []),
+          dataVersions: jsonSafe(resolveServerDataVersions(dataVersions)),
+        },
+      });
+      return retrievedEvidence;
     }, executionToken);
 
     const evidenceArchive = createAdminEvidenceArchive({
@@ -1151,6 +1196,7 @@ export function createAdminModelLabService({
         cardResolution: jsonSafe(cardResolution),
         evidenceArchive,
         evidenceDecisionPacket,
+        legacyLuaSemanticPacket,
         retrievalMetadata: collectRetrievalMetadata(retrieval),
         unresolved: {
           cardMentions: jsonSafe(cardResolution?.unresolvedMentions || []),
@@ -2269,6 +2315,11 @@ export function buildFinalRulingInput(snapshot) {
     retrievalWarnings: evidence.retrievalWarnings || [],
     completeness: evidence.completeness || {},
     evidenceDecisionPacket: finalRulingModelEvidencePacket(snapshot),
+    legacyLuaSemanticPacket: evidence.legacyLuaSemanticPacket
+      ? projectLegacyLuaSemanticPacketForModel(
+        evidence.legacyLuaSemanticPacket,
+      )
+      : null,
     dataVersions: snapshot?.dataVersions || {},
     metadata: snapshot?.metadata || {},
   };
@@ -2277,6 +2328,7 @@ export function buildFinalRulingInput(snapshot) {
     "完整候选与完整冲突均保存在审计归档中；此处只包含确定性分层规则选出的卡文、FAQ 与机制资料，以及有界冲突目录、完整计数/哈希、遗漏和截断摘要。",
     "资料准备模型只提供候选卡名与补充检索词，不是裁定；确定性查询始终优先，但模型补充词仍可能扩展候选集合，所以必须独立核对每条可见证据。",
     "只能引用 evidenceDecisionPacket.evidenceItems 中实际展示正文的 evidenceId/evidenceIds；omissionSummary.catalog 仅用于提示未展示的候选，不能作为可引用证据。",
+    "legacyLuaSemanticPacket 是旧 Lua 脚本自动提取的非权威语义旁路，只能提示可能需要检查的条件、操作和底层 API 依赖；它不是官方资料，不能加入 evidenceIds，candidateVerdict 不能直接支持结论，verdict=UNKNOWN 也绝不表示不能发动或不能处理。",
     "不得调用网络搜索，不得引用快照外资料。",
     JSON.stringify(boundedInput),
   ].join("\n");
@@ -3036,7 +3088,21 @@ function assertForkSourceRun(sourceRun) {
       "admin_fork_source_decision_packet_invalid",
     );
   }
-  return { archive, decisionPacket };
+  const legacyLuaSemanticPacket = sourceRun.evidenceSnapshot?.evidence
+    ?.legacyLuaSemanticPacket || null;
+  if (legacyLuaSemanticPacket) {
+    try {
+      validateLegacyLuaSemanticPacket(legacyLuaSemanticPacket);
+    } catch (error) {
+      const invalid = serviceError(
+        "Source run legacy Lua semantic packet is invalid",
+        "admin_fork_source_legacy_lua_packet_invalid",
+      );
+      invalid.cause = error;
+      throw invalid;
+    }
+  }
+  return { archive, decisionPacket, legacyLuaSemanticPacket };
 }
 
 function unwrapBody(argument) {
@@ -3128,6 +3194,99 @@ function readExecutionHeartbeatMs(env) {
     throw new TypeError("ADMIN_MODEL_LAB_EXECUTION_HEARTBEAT_MS must be a positive integer");
   }
   return number;
+}
+
+function readLegacyLuaSemanticTimeoutMs(explicitValue, env) {
+  const value = explicitValue ?? env.ADMIN_MODEL_LAB_LEGACY_LUA_TIMEOUT_MS;
+  if (value === undefined || value === null || value === "") return 5_000;
+  const number = Number(value);
+  if (!Number.isInteger(number) || number < 1) {
+    throw new TypeError("ADMIN_MODEL_LAB_LEGACY_LUA_TIMEOUT_MS must be a positive integer");
+  }
+  return number;
+}
+
+function readLegacyLuaSemanticMaxBytes(explicitValue, env) {
+  const value = explicitValue ?? env.ADMIN_MODEL_LAB_LEGACY_LUA_MAX_BYTES;
+  if (value === undefined || value === null || value === "") {
+    return DEFAULT_MAX_LEGACY_LUA_SEMANTIC_PACKET_BYTES;
+  }
+  const number = Number(value);
+  if (!Number.isInteger(number) || number < 1_024 || number >= MAX_FINAL_RULING_INPUT_BYTES) {
+    throw new TypeError(
+      `ADMIN_MODEL_LAB_LEGACY_LUA_MAX_BYTES must be an integer between 1024 and ${MAX_FINAL_RULING_INPUT_BYTES - 1}`,
+    );
+  }
+  return number;
+}
+
+async function collectLegacyLuaSemanticPacketForSnapshot({
+  factory,
+  input,
+  timeoutMs,
+  maxSerializedBytes,
+  signal,
+}) {
+  if (typeof factory !== "function") {
+    return createLegacyLuaUnknownPacket({
+      code: "LEGACY_LUA_SEMANTIC_UNSUPPORTED",
+      message: "legacy Lua semantic packet factory is not configured",
+      details: { retryable: false },
+    });
+  }
+
+  const controller = new AbortController();
+  const forwardAbort = () => controller.abort(signal?.reason);
+  if (signal?.aborted) forwardAbort();
+  else signal?.addEventListener?.("abort", forwardAbort, { once: true });
+  let timer = null;
+  const timeoutError = serviceError(
+    `legacy Lua semantic packet generation exceeded ${timeoutMs}ms`,
+    "LEGACY_LUA_SEMANTIC_TIMEOUT",
+  );
+
+  try {
+    const timeoutPromise = new Promise((_, reject) => {
+      timer = setTimeout(() => {
+        controller.abort(timeoutError);
+        reject(timeoutError);
+      }, timeoutMs);
+    });
+    const packet = await Promise.race([
+      Promise.resolve().then(() => factory({
+        ...jsonSafe(input),
+        maxSerializedBytes,
+        signal: controller.signal,
+      })),
+      timeoutPromise,
+    ]);
+    const validated = validateLegacyLuaSemanticPacket(packet);
+    const packetBytes = Buffer.byteLength(
+      serializeLegacyLuaSemanticPacket(validated),
+      "utf8",
+    );
+    if (packetBytes > maxSerializedBytes) {
+      throw serviceError(
+        `legacy Lua semantic packet exceeds ${maxSerializedBytes} UTF-8 bytes`,
+        "LEGACY_LUA_SEMANTIC_PACKET_TOO_LARGE",
+      );
+    }
+    return validated;
+  } catch (error) {
+    const normalized = normalizeError(error);
+    return createLegacyLuaUnknownPacket({
+      code: normalized.code || "LEGACY_LUA_SEMANTIC_PACKET_INVALID",
+      message: normalized.message || "legacy Lua semantic packet is unavailable",
+      details: {
+        phase: "ADMIN_MODEL_LAB_EVIDENCE_PREPARATION",
+        retryable: normalized.code === "LEGACY_LUA_SEMANTIC_TIMEOUT",
+        errorName: normalized.name,
+      },
+    });
+  } finally {
+    if (timer) clearTimeout(timer);
+    signal?.removeEventListener?.("abort", forwardAbort);
+  }
 }
 
 function readSynchronousFinalTimeoutMs(env) {

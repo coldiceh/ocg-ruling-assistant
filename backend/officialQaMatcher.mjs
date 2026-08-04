@@ -12,7 +12,7 @@ const QUESTION_TYPES = [
   ["continuous_effect_during_resolution", /效果处理中.*(?:永续|持续|自坏)|処理中.*永続|continuous effect.*resol/iu],
   ["can_activate", /(?:能否|是否(?:可以|能)?|可不可以|能不能|可以|不能|能).{0,12}(?:发动|连锁)|発動(?:する(?:事|こと)は)?(?:でき|出来)ますか|発動できません|can(?:not)?\b.{0,80}\bactivate/iu],
   ["action_legality", /(?:できますか|できませんか|可能ですか)|(?:能否|是否(?:可以|能)?|可不可以|能不能).{0,30}(?:召唤|送去|作为|进行|处理)|\bcan (?:i|you|a player|that|this)\b|\bis it possible\b/iu],
-  ["resolution_result", /如何处理|怎么处理|处理后|效果处理|どう処理|どうなりますか|処理はどうな|what happens|resolution|resolve/iu],
+  ["resolution_result", /如何处理|怎么处理|处理后|效果处理|(?:还|仍然?|是否).{0,16}(?:适用|生效)|恢复适用|重新适用|どう処理|どうなりますか|処理はどうな|再び適用|what happens|resolution|resolve|still appl|appl(?:y|ies) again/iu],
 ];
 
 const EFFECT_PHRASES = [
@@ -62,6 +62,9 @@ const SEMANTIC_CONCEPTS = [
   ["monster_zone", /モンスターゾーン|怪兽区域|怪獸區域|monster zone/iu],
   ["field_presence", /フィールド|场上|場上|\bfield\b/iu],
   ["continuous_applying", /適用中|适用中|適用され|正在适用|while.{0,30}(?:appl|in effect)|is applying/iu],
+  ["own_field_duration", /自分(?:の)?(?:フィールド|モンスターゾーン).{0,30}存在する限り|只要.{0,36}(?:自己|我方).{0,12}(?:场上|怪兽区域).{0,16}存在|(?:自己|我方).{0,12}(?:场上|怪兽区域).{0,24}(?:存在期间|存在的期间)|while.{0,40}(?:your|its owner's).{0,20}(?:field|monster zone)/iu],
+  ["control_return", /コントロール.{0,40}再び自分に戻|控制权.{0,40}(?:归还|回到|返回).{0,12}(?:自己|我方)|control.{0,40}(?:returns?|returned).{0,24}(?:you|owner|original)/iu],
+  ["condition_reactivation", /再び適用|恢复适用|恢復適用|重新适用|再次适用|重新生效|再次生效|re-?appl|appl(?:y|ies).{0,12}again/iu],
 ];
 
 const GENERIC_SEMANTIC_CONCEPTS = new Set([

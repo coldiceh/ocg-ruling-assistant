@@ -28,6 +28,7 @@ const ui = {
   analyzeButtonText: document.querySelector("#analyzeButtonText"),
   rulingModelSelect: document.querySelector("#rulingModelSelect"),
   rulingModelStatus: document.querySelector("#rulingModelStatus"),
+  rulingModelLatency: document.querySelector("#rulingModelLatency"),
   rulingVersionButtons: [...document.querySelectorAll("[data-ruling-version]")],
   clearButton: document.querySelector("#clearButton"),
   resultGrid: document.querySelector("#resultGrid"),
@@ -317,8 +318,37 @@ function normalizeRulingModelCapabilities(info = {}) {
       return {
         ...PUBLIC_RULING_MODEL_PROFILES[id],
         available: Boolean(descriptor) && (typeof descriptor === "string" || descriptor.available !== false),
+        answerLatency: normalizePublicAnswerLatency(
+          typeof descriptor === "string" ? null : descriptor?.answerLatency,
+          id,
+        ),
       };
     }),
+  };
+}
+
+function normalizePublicAnswerLatency(value, profileId) {
+  const source = value && typeof value === "object" ? value : {};
+  const status = ["available", "no_samples", "unavailable"].includes(String(source.status || ""))
+    ? String(source.status)
+    : "unavailable";
+  const averageMs = Number(source.averageMs);
+  const sampleCount = Number(source.sampleCount);
+  const windowSize = Number(source.windowSize);
+  const available = status === "available"
+    && Number.isFinite(averageMs)
+    && averageMs >= 0
+    && Number.isInteger(sampleCount)
+    && sampleCount > 0
+    && sampleCount <= 20;
+  return {
+    profileId,
+    status: available ? "available" : status === "no_samples" ? "no_samples" : "unavailable",
+    averageMs: available ? Math.round(averageMs) : null,
+    sampleCount: available ? sampleCount : 0,
+    windowSize: Number.isInteger(windowSize) && windowSize > 0 && windowSize <= 20 ? windowSize : 20,
+    storage: String(source.storage || "unavailable").slice(0, 32),
+    reason: String(source.reason || "").slice(0, 64),
   };
 }
 
@@ -367,6 +397,36 @@ function updateRulingModelSelectionStatus(message = "") {
   ui.rulingModelStatus.textContent = status;
   ui.rulingModelStatus.hidden = !status;
   ui.rulingModelSelect?.setAttribute("aria-invalid", String(Boolean(status)));
+  renderSelectedRulingModelLatency(selected);
+}
+
+function renderSelectedRulingModelLatency(selected) {
+  if (!ui.rulingModelLatency) return;
+  const latency = selected?.answerLatency;
+  let message = "平均出答案时间暂不可用。";
+  if (latency?.status === "available") {
+    message = `最近 ${latency.sampleCount} 次成功回答：平均 ${formatPublicAnswerLatency(latency.averageMs)}（最多统计 ${latency.windowSize} 次）。`;
+  } else if (latency?.status === "no_samples") {
+    message = "暂无该模型的成功回答耗时样本。";
+  } else if (latency?.reason === "disabled" || latency?.storage === "disabled") {
+    message = "平均出答案时间统计已关闭。";
+  } else if (latency?.reason === "unconfigured" || latency?.storage === "unconfigured") {
+    message = "平均出答案时间暂不可用（未配置统计存储）。";
+  } else if (latency?.reason === "storage_error") {
+    message = "平均出答案时间暂时读取失败。";
+  }
+  ui.rulingModelLatency.textContent = message;
+}
+
+function formatPublicAnswerLatency(durationMs) {
+  const milliseconds = Number(durationMs);
+  if (!Number.isFinite(milliseconds) || milliseconds < 0) return "未知";
+  if (milliseconds < 1000) return `${Math.round(milliseconds)} 毫秒`;
+  const totalSeconds = Math.round(milliseconds / 1000);
+  if (totalSeconds < 60) return `${totalSeconds} 秒`;
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return seconds ? `${minutes} 分 ${seconds} 秒` : `${minutes} 分钟`;
 }
 
 function syncRulingModelSelect(isPending = false) {

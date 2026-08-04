@@ -34,7 +34,10 @@
 ↓
 按段落检索规则书，并由轻量模型逐步绑定规则引文
 ↓
-构造 RAG context
+（已配置相邻引擎时）从资源锁中的旧 Lua 自动提取
+操作、发动合法性依赖和底层 API 检查项
+↓
+构造有界 RAG context
 ↓
 LLM 生成裁定分析
 ↓
@@ -47,6 +50,16 @@ LLM 生成裁定分析
 
 系统会区分不同证据来源的可信度。官方直接问答可以支持较高置信的结论；卡片文本、FAQ、相关资料和用户提供文本可以支持裁定分析，但不能被表述为官方确认。
 
+旧 Lua 只是一条自动生成的兼容性发现旁路：它可以提醒模型某个效果含有
+`RETURN_TO_HAND`、`CARD_CAN_RETURN_TO_HAND` 等操作或合法性依赖，但正式
+`verdict` 永远是 `UNKNOWN`，不能被引用为官方资料，也不能直接决定“能/不能”。
+脚本缺失、未知 API、超时、超限或版本/哈希不一致都会显式降级为 typed
+`UNKNOWN`；多卡问题中单张脚本失败不会丢掉其他卡已经验证的语义候选。
+
+公开页面还会按裁定模型显示最近 20 次成功回答的真实平均耗时。统计使用可选的
+Upstash Redis；未配置、没有样本或存储失败时会明确显示不可用，不会捏造数字，
+也不会阻塞主回答。
+
 ## 管理模型实验室
 
 公开问答默认由 DeepSeek V4 Flash 准备检索证据，再由 GLM 5.2（思考 high）生成最终裁定；用户也可以明确选择 DeepSeek V4 Flash（思考 high）作为最终模型。两种最终模型不会自动互相降级。总预算仍是统一的消费上限，并额外按“资料准备 / GLM 最终裁定 / DeepSeek 最终裁定”分账显示。
@@ -56,6 +69,21 @@ LLM 生成裁定分析
 - `docs/admin-model-lab-architecture.md`
 - `docs/admin-auth-security.md`
 - `.env.example`
+
+同一组模型分叉会复用内容哈希一致的 Evidence Snapshot，其中 Lua 语义包也只在
+源运行生成一次。模型看到的是去除源码、AST 和 source span 后的有界投影；完整包
+只保留在审计快照中。这样可以比较 DeepSeek、GLM、Kimi 等模型本身的裁定差异，
+而不是让每个模型拿到不同资料。
+
+## 相邻规则引擎
+
+引擎项目通过五个版本化端点提供 Legacy Lua 静态发现：capabilities、source、
+effect-candidates、compile-plan 和 analyze-activation。助手会闭合校验资源锁、脚本
+SHA-256、版本、能力清单与 Lua API 语义注册表，并限制卡数、候选数、响应字节和总
+耗时。详细的本地、Windows 服务与 Cloudflare Tunnel 步骤见：
+
+- `docs/ocg-engine-integration.md`
+- `docs/ocg-engine-quick-tunnel.md`
 
 ## 数据来源
 
@@ -72,7 +100,9 @@ LLM 生成裁定分析
 
 ## 未来计划
 
-- 模拟器验证
+- 模拟器验证：继续把范式化卡文编译为声明式卡片语义
+- 扩展统一状态转移内核、时点/连锁/替代处理与效果实例生命周期
+- 用冻结证据模型实验和真实问题集记录“第一处失败阶段”
 - 支持日文版本
 - 支持 TCG 版本
 
