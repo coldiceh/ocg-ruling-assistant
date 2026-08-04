@@ -78,6 +78,15 @@ test("api_answer_exposes only the two public ruling profiles and rejects unknown
       { id: "glm-5.2-high", available: true },
       { id: "deepseek-v4-flash-high", available: true },
     ]);
+    assert.equal(info.payload.answerLatency.storage, "unconfigured");
+    assert.deepEqual(info.payload.rulingModelProfiles.map((profile) => ({
+      id: profile.id,
+      status: profile.answerLatency.status,
+      averageMs: profile.answerLatency.averageMs,
+    })), [
+      { id: "glm-5.2-high", status: "unavailable", averageMs: null },
+      { id: "deepseek-v4-flash-high", status: "unavailable", averageMs: null },
+    ]);
 
     const invalid = createJsonResponse();
     await handler({
@@ -91,6 +100,130 @@ test("api_answer_exposes only the two public ruling profiles and rejects unknown
     else process.env.GLM_API_KEY = previousGlm;
     if (previousDeepSeek === undefined) delete process.env.DEEPSEEK_API_KEY;
     else process.env.DEEPSEEK_API_KEY = previousDeepSeek;
+  }
+});
+
+test("api_answer GET returns real rolling latency for each available profile", async () => {
+  const restore = captureEnvironment([
+    "GLM_API_KEY",
+    "DEEPSEEK_API_KEY",
+    "PUBLIC_ANSWER_LATENCY_REDIS_REST_URL",
+    "PUBLIC_ANSWER_LATENCY_REDIS_REST_TOKEN",
+  ]);
+  const originalFetch = globalThis.fetch;
+  const requestedProfiles = [];
+  const timestamp = Date.now();
+  try {
+    process.env.GLM_API_KEY = "test-glm-key";
+    process.env.DEEPSEEK_API_KEY = "test-deepseek-key";
+    process.env.PUBLIC_ANSWER_LATENCY_REDIS_REST_URL = "https://latency.example.test";
+    process.env.PUBLIC_ANSWER_LATENCY_REDIS_REST_TOKEN = "test-token";
+    globalThis.fetch = async (_url, options) => {
+      const command = JSON.parse(options.body);
+      assert.equal(command[0], "LRANGE");
+      requestedProfiles.push(command[1].split(":").at(-1));
+      return redisJsonResponse(command[1].endsWith(":glm-5.2-high")
+        ? [`${timestamp}:60000`, `${timestamp - 10}:90000`]
+        : [`${timestamp}:30000`]);
+    };
+
+    const response = createJsonResponse();
+    await handler({ method: "GET" }, response);
+
+    assert.equal(response.statusCode, 200);
+    assert.deepEqual(requestedProfiles.sort(), ["deepseek-v4-flash-high", "glm-5.2-high"]);
+    assert.equal(response.payload.answerLatency.storage, "redis");
+    assert.deepEqual(response.payload.rulingModelProfiles.map((profile) => ({
+      id: profile.id,
+      status: profile.answerLatency.status,
+      averageMs: profile.answerLatency.averageMs,
+      sampleCount: profile.answerLatency.sampleCount,
+    })), [
+      { id: "glm-5.2-high", status: "available", averageMs: 75000, sampleCount: 2 },
+      { id: "deepseek-v4-flash-high", status: "available", averageMs: 30000, sampleCount: 1 },
+    ]);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restore();
+  }
+});
+
+test("api_answer sends a successful answer before best-effort latency storage finishes", async () => {
+  const restore = captureEnvironment([
+    "MODEL_PROVIDER",
+    "QUERY_AUDIT_ENABLED",
+    "PUBLIC_ANSWER_LATENCY_REDIS_REST_URL",
+    "PUBLIC_ANSWER_LATENCY_REDIS_REST_TOKEN",
+  ]);
+  const originalFetch = globalThis.fetch;
+  let releaseRedis;
+  let latencyCommand = null;
+  let handlerSettled = false;
+  try {
+    process.env.MODEL_PROVIDER = "mock";
+    process.env.QUERY_AUDIT_ENABLED = "false";
+    process.env.PUBLIC_ANSWER_LATENCY_REDIS_REST_URL = "https://latency.example.test";
+    process.env.PUBLIC_ANSWER_LATENCY_REDIS_REST_TOKEN = "test-token";
+    globalThis.fetch = async (_url, options) => {
+      latencyCommand = JSON.parse(options.body);
+      return new Promise((resolve) => {
+        releaseRedis = () => resolve(redisJsonResponse([]));
+      });
+    };
+
+    const response = createJsonResponse();
+    const handlerPromise = handler({
+      method: "POST",
+      body: { question: "", rulingModelProfile: "glm-5.2-high" },
+    }, response).finally(() => {
+      handlerSettled = true;
+    });
+
+    await waitFor(() => response.payload !== null && typeof releaseRedis === "function");
+    assert.equal(response.statusCode, 200);
+    assert.equal(handlerSettled, false);
+    assert.equal(latencyCommand[0], "EVAL");
+    assert.match(latencyCommand[3], /rag-public-answer-latency:v1:glm-5\.2-high/u);
+
+    releaseRedis();
+    await handlerPromise;
+    assert.equal(handlerSettled, true);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restore();
+  }
+});
+
+test("api_answer never records latency for a failed public request", async () => {
+  const restore = captureEnvironment([
+    "MODEL_PROVIDER",
+    "QUERY_AUDIT_ENABLED",
+    "PUBLIC_ANSWER_LATENCY_REDIS_REST_URL",
+    "PUBLIC_ANSWER_LATENCY_REDIS_REST_TOKEN",
+  ]);
+  const originalFetch = globalThis.fetch;
+  let fetchCalls = 0;
+  try {
+    process.env.MODEL_PROVIDER = "mock";
+    process.env.QUERY_AUDIT_ENABLED = "false";
+    process.env.PUBLIC_ANSWER_LATENCY_REDIS_REST_URL = "https://latency.example.test";
+    process.env.PUBLIC_ANSWER_LATENCY_REDIS_REST_TOKEN = "test-token";
+    globalThis.fetch = async () => {
+      fetchCalls += 1;
+      return redisJsonResponse([]);
+    };
+
+    const response = createJsonResponse();
+    await handler({
+      method: "POST",
+      body: { question: "问题", mode: "legacy" },
+    }, response);
+
+    assert.equal(response.statusCode, 400);
+    assert.equal(fetchCalls, 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restore();
   }
 });
 
@@ -153,4 +286,30 @@ function createJsonResponse() {
       return this;
     },
   };
+}
+
+function redisJsonResponse(result) {
+  return {
+    ok: true,
+    status: 200,
+    json: async () => ({ result }),
+  };
+}
+
+function captureEnvironment(keys) {
+  const original = new Map(keys.map((key) => [key, process.env[key]]));
+  return () => {
+    for (const [key, value] of original) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  };
+}
+
+async function waitFor(predicate, attempts = 200) {
+  for (let index = 0; index < attempts; index += 1) {
+    if (predicate()) return;
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  throw new Error("condition_not_met");
 }

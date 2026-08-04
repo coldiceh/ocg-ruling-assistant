@@ -10,6 +10,10 @@ import {
   buildCardSemanticFacts,
 } from "../backend/ragRulingPipeline.mjs";
 import { analyzeEffectStateTransition } from "../backend/effectStateReasoner.mjs";
+import {
+  collectEffectiveLegacyLuaPasscodes,
+  createDefaultLegacyLuaSemanticPacketFactory,
+} from "../backend/legacyLuaSemanticPacketFactory.mjs";
 
 const cards = [
   {
@@ -2942,6 +2946,146 @@ test("card_text_derived_rule_queries_enter_rulebook_retrieval", async () => {
   assert.ok(evidence.ruleSearchQueries.some((item) => item.source === "card_text_derived_rule_search_query"));
   assert.ok(evidence.rawRelatedEvidence.some((item) => item.id.startsWith("rule-spell-trap-return#p") && item.type === "rulebook"));
   assert.ok(evidence.rulebookCandidates.some((item) => /発動中の通常魔法/u.test(item.text)));
+});
+
+test("configured Legacy Lua lookup hydrates a real Baige passcode when automatic simulation is disabled", async () => {
+  const cid = "24680";
+  const passcode = "01234567";
+  const genericCard = {
+    id: cid,
+    cardId: cid,
+    // Reproduce the legacy local-provider shape that copied a CID here. It
+    // must never win over the verified Baige password.
+    passcode: cid,
+    name: "通用桥接测试卡",
+    cnName: "通用桥接测试卡",
+    cardType: "monster",
+    effectText: "①：自己主要阶段可以发动。抽1张卡。",
+    aliases: ["通用桥接测试卡"],
+  };
+  let baigeRequests = 0;
+
+  const evidence = await retrieveRagEvidence({
+    userQuery: "通用桥接测试卡的效果如何处理？",
+    cardResolution: {
+      resolvedCards: [genericCard],
+      unresolvedMentions: [],
+      ambiguousMentions: [],
+      userProvidedCardTexts: [],
+    },
+    cards: [genericCard],
+    records: [],
+    qaRecords: [],
+    env: {
+      OCG_ENGINE_URL: "https://engine.example.test",
+      RAG_AUTO_ENGINE_SIMULATION: "false",
+      RAG_LIVE_OFFICIAL_QA: "false",
+    },
+    fetchImpl: async () => {
+      baigeRequests += 1;
+      return jsonResponse({
+        result: [{
+          id: passcode,
+          cid,
+          cn_name: genericCard.name,
+          desc: genericCard.effectText,
+          type: "monster",
+        }],
+      });
+    },
+  });
+
+  assert.equal(baigeRequests, 1);
+  assert.equal(evidence.retrievedCards.length, 1);
+  assert.equal(evidence.retrievedCards[0].id, cid);
+  assert.equal(evidence.retrievedCards[0].passcode, passcode);
+  assert.notEqual(evidence.retrievedCards[0].passcode, cid);
+  assert.deepEqual(collectEffectiveLegacyLuaPasscodes({
+    retrievedCards: evidence.retrievedCards,
+    cardResolution: { resolvedCards: [genericCard] },
+  }), [passcode]);
+
+  const sourceLookups = [];
+  const packetFactory = createDefaultLegacyLuaSemanticPacketFactory({
+    env: {
+      OCG_ENGINE_URL: "https://engine.example.test",
+      RAG_AUTO_ENGINE_SIMULATION: "false",
+    },
+    facadeFactory: () => ({
+      async resolveLegacyLuaSource(value) {
+        sourceLookups.push(value);
+        const error = new Error("locked script was not found");
+        error.code = "LOCKED_SCRIPT_NOT_FOUND";
+        throw error;
+      },
+    }),
+  });
+  const packet = await packetFactory({ retrievedCards: evidence.retrievedCards });
+  assert.deepEqual(sourceLookups, [passcode]);
+  assert.equal(packet.resources.length, 1);
+  assert.equal(packet.resources[0].status, "TYPED_UNKNOWN");
+  assert.equal(packet.resources[0].resourceBinding.locator, `legacy-lua-passcode:${passcode}`);
+  assert.equal(packet.resources[0].unknownReasons[0].code, "LOCKED_SCRIPT_NOT_FOUND");
+  assert.equal(packet.resources[0].unknownReasons[0].details.passcode, passcode);
+});
+
+test("cross-card official lifecycle analogues survive card-scoped QA retrieval", async () => {
+  const lifecycleCard = {
+    id: "lifecycle-current-card",
+    name: "匿名期限卡",
+    cnName: "匿名期限卡",
+    effectText: "①：可以发动。将1只怪兽特殊召唤。只要以此效果特殊召唤的怪兽以表侧表示存在于自己场上，自己从额外牌组仅可特殊召唤‘示例’怪兽。",
+    aliases: ["匿名期限卡"],
+  };
+  const scopedNoise = {
+    id: "qa-current-card-noise",
+    recordType: "qa",
+    title: "匿名期限卡的其他问答",
+    question: "匿名期限卡被破坏时可以发动吗？",
+    answer: "可以发动。",
+    text: "匿名期限卡被破坏时可以发动吗？ 可以发动。",
+    cardIds: ["lifecycle-current-card"],
+    cards: ["匿名期限卡"],
+  };
+  const lifecycleAnalogue = {
+    id: "qa-unrelated-lifecycle-analogue",
+    recordType: "qa",
+    title: "別のカードで特殊召喚したモンスターのコントロールが移った場合",
+    question: "この効果で特殊召喚したモンスターは自分フィールドに存在する限り効果が適用されます。そのモンスターのコントロールが相手に移った場合、どうなりますか？",
+    answer: "効果の適用はなくなります。その後、コントロールが再び自分に戻ったとしても、効果が再び適用される事はありません。",
+    text: "この効果で特殊召喚したモンスターは自分フィールドに存在する限り効果が適用されます。そのモンスターのコントロールが相手に移った場合、効果の適用はなくなります。その後、コントロールが再び自分に戻ったとしても、効果が再び適用される事はありません。",
+    cardIds: ["unrelated-card"],
+    cards: ["別のカード"],
+  };
+  const ordinaryControlQa = {
+    id: "qa-ordinary-control-change",
+    recordType: "qa",
+    title: "コントロールが移ったモンスターを対象にできますか？",
+    question: "モンスターのコントロールが相手に移った場合、そのモンスターを対象にできますか？",
+    answer: "対象にできます。",
+    text: "モンスターのコントロールが相手に移った場合、そのモンスターを対象にできます。",
+    cardIds: ["another-unrelated-card"],
+  };
+
+  const evidence = await retrieveRagEvidence({
+    userQuery: "匿名期限卡的效果已经适用。这个效果特殊召唤的怪兽控制权转移后，只要在自己场上存在的限制还适用吗？之后控制权归还时会恢复适用吗？",
+    cardResolution: {
+      resolvedCards: [lifecycleCard],
+      unresolvedMentions: [],
+      ambiguousMentions: [],
+      userProvidedCardTexts: [],
+    },
+    cards: [lifecycleCard],
+    records: [],
+    qaRecords: [scopedNoise, lifecycleAnalogue, ordinaryControlQa],
+    env: { RAG_LIVE_OFFICIAL_QA: "false" },
+  });
+
+  assert.ok(evidence.ruleSearchQueries.some((item) => item.source === "effect_lifecycle_rule_search_query"));
+  assert.ok(evidence.officialQaRelated.some((item) => item.id === lifecycleAnalogue.id));
+  assert.ok(!evidence.officialQaRelated.some((item) => item.id === ordinaryControlQa.id));
+  assert.ok(!evidence.officialQaDirectCandidates.some((item) => item.id === lifecycleAnalogue.id));
+  assert.equal(evidence.debug.officialMechanismAnalogueCount, 1);
 });
 
 test("rag_prompt_truncates_context", () => {

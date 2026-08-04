@@ -103,9 +103,14 @@ $EngineToken = Read-Host "粘贴模拟器密码"
 Invoke-RestMethod `
   -Uri "$PublicEngineUrl/health" `
   -Headers @{ Authorization = "Bearer $EngineToken" }
+
+Invoke-RestMethod `
+  -Uri "$PublicEngineUrl/formal/v1/legacy-lua/capabilities" `
+  -Headers @{ Authorization = "Bearer $EngineToken" }
 ```
 
-也应看到 `ok=True`。
+两次都应看到 `ok=True`；第二次还应看到
+`authority=LEGACY_DISCOVERY_ONLY` 与 `verdict=UNKNOWN`。
 
 ## 7. 配置 Vercel Production
 
@@ -117,6 +122,9 @@ OCG_ENGINE_TOKEN=刚才的原始密码
 OCG_ENGINE_TIMEOUT_MS=20000
 RAG_AUTO_ENGINE_SIMULATION=false
 RAG_FORMAL_ENGINE_MODE=off
+RAG_LEGACY_LUA_TIMEOUT_MS=5000
+RAG_LEGACY_LUA_MAX_CARDS=8
+RAG_LEGACY_LUA_MAX_CANDIDATES=48
 ```
 
 `OCG_ENGINE_TOKEN` 不要带 `Bearer `，也不要添加多余空格。保存后重新部署
@@ -129,7 +137,8 @@ $AssistantUrl = Read-Host "粘贴 Vercel 地址，例如 https://xxx.vercel.app"
 Invoke-RestMethod -Uri "$AssistantUrl/api/engine"
 ```
 
-确认返回 `ready` 后，把 `RAG_AUTO_ENGINE_SIMULATION` 改成 `true`，再次重新部署。
+确认返回 `ready` 后即可测试 Lua 语义发现；它不要求开启旧模拟。只有确实要测试
+`/simulate` 轨迹时，才把 `RAG_AUTO_ENGINE_SIMULATION` 改成 `true` 并再次部署。
 
 ## 8. 测试一次规则回答
 
@@ -142,7 +151,11 @@ $Result = Invoke-RestMethod -Method Post `
   -Body $Body
 $Result.engine
 $Result.engineSimulation
+$Result.debug.retrievalCounts
 ```
+
+其中 `legacyLuaEffectCandidates` 大于 0 表示助手已取得至少一个 Lua 语义候选；
+完整冻结包只保存在管理实验的 Evidence Snapshot 中，公开接口不会回传整段 Lua/AST。
 
 ## 9. 停止测试
 

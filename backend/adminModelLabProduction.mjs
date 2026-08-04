@@ -12,6 +12,9 @@ import {
   exportAdminLabRecordsJson,
 } from "./adminLabRecordStore.mjs";
 import { createAdminModelLabService } from "./adminModelLabService.mjs";
+import {
+  createConfiguredLegacyLuaSemanticPacketFactory,
+} from "./legacyLuaSemanticProduction.mjs";
 import { createConfiguredAdminRunStorage } from "./adminRunRedisStorage.mjs";
 import {
   createAdminRunStore,
@@ -89,6 +92,7 @@ function createAdminModelLabComposedService({
   kimiProvider,
   preparationProviders,
   openAIProvider,
+  legacyLuaSemanticPacketFactory,
   baseService,
   callDeepSeekJsonTaskImpl = callDeepSeekJsonTask,
   evaluationLoader = loadAdminLabEvaluationCorpus,
@@ -182,6 +186,10 @@ function createAdminModelLabComposedService({
           })
         : null
     );
+    const resolvedLegacyLuaSemanticPacketFactory =
+      legacyLuaSemanticPacketFactory === undefined
+        ? createConfiguredLegacyLuaSemanticPacketFactory({ env, fetchImpl })
+        : legacyLuaSemanticPacketFactory;
     resolvedBaseService = createAdminModelLabService({
       runStore: resolvedRunStore,
       deepSeekProvider: resolvedDeepSeekProvider,
@@ -196,6 +204,8 @@ function createAdminModelLabComposedService({
         ...(typeof resolvedGlmProvider?.create === "function" ? { glm: resolvedGlmProvider } : {}),
         ...(typeof resolvedKimiProvider?.create === "function" ? { kimi: resolvedKimiProvider } : {}),
       },
+      legacyLuaSemanticPacketFactory:
+        resolvedLegacyLuaSemanticPacketFactory,
       env,
     });
   }

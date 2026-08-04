@@ -20,7 +20,7 @@ test("loads and freezes the eight-case structured evaluation corpus", async () =
     },
   });
   assert.equal(readCount, 1);
-  assert.equal(corpus.cases.length, 8);
+  assert.equal(corpus.cases.length, 9);
   assert.equal(Object.isFrozen(corpus), true);
   assert.ok(corpus.cases.every((item) => item.expectedVerdict));
   assert.ok(corpus.cases.every((item) => item.expectedEvidenceIds.length > 0));

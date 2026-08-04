@@ -219,7 +219,21 @@ export async function retrieveRagEvidence({
   const directIds = new Set(officialQaDirectCandidates.map((item) => item.id));
 
   stageStartedAt = Date.now();
+  const globalMechanismOfficialQaSource = retrieveGlobalMechanismOfficialQaAnalogues({
+    userQuery,
+    records: recordBuckets.qa,
+    deterministicRuleQueries,
+    supplementalRuleQueries: effectiveSupplementalRuleQueries,
+    maxResults: limits.maxRelatedEvidence,
+  });
+  if (globalMechanismOfficialQaSource.length) {
+    retrievalWarnings.push(`official_mechanism_analogues_retrieved:${globalMechanismOfficialQaSource.length}`);
+  }
   const officialQaRelatedSource = dedupeBy([
+    // A card-scoped pass cannot find an official ruling for another card that
+    // instantiates the same rule mechanism.  Strongly matched global analogues
+    // are related evidence only; they can never become a direct ruling.
+    ...globalMechanismOfficialQaSource,
     // `all` is globally ranked. Concatenating the near bucket before the
     // related bucket used to bury a source with the exact multi-card scene
     // merely because its wording had a different question type/language.
@@ -318,6 +332,7 @@ export async function retrieveRagEvidence({
       cardCount: data.cards.length,
       userProvidedCardTextCount: providedTexts.length,
       rulebookCandidateCount: rulebookCandidates.length,
+      officialMechanismAnalogueCount: globalMechanismOfficialQaSource.length,
       scopedRecordCounts: {
         officialQa: scopedRecordBuckets.officialQa.length,
         qa: scopedRecordBuckets.qa.length,
@@ -957,6 +972,70 @@ function rankRecordsWithSupplementalQueries({
   return dedupeBy([...deterministic, ...supplemental], stableRecordKey);
 }
 
+function retrieveGlobalMechanismOfficialQaAnalogues({
+  userQuery,
+  records,
+  deterministicRuleQueries = [],
+  supplementalRuleQueries = [],
+  maxResults = 5,
+} = {}) {
+  const lifecycleQueries = [...deterministicRuleQueries, ...supplementalRuleQueries]
+    .filter((item) => item?.source === "effect_lifecycle_rule_search_query");
+  if (!lifecycleQueries.length) return [];
+  const queryConcepts = new Set(extractOfficialQaSemanticConcepts([
+    userQuery,
+    ...lifecycleQueries.map((item) => item.query),
+  ].join("\n")));
+  if (!isEffectLifecycleConceptSet(queryConcepts)) return [];
+  return (records || [])
+    .filter((record) => record?.recordType === "qa" && record.status !== "removed" && record.status !== "superseded")
+    .map((record) => {
+      const concepts = new Set(extractOfficialQaSemanticConcepts([
+        record.question,
+        record.answer,
+        record.title,
+        record.text,
+      ].filter(Boolean).join("\n")));
+      const lifecycleScore = effectLifecycleAnalogueScore(concepts);
+      return {
+        ...record,
+        retrievalScore: normalizeEvidenceRelevanceScore(0.72 + lifecycleScore * 0.06),
+        retrievalSignals: {
+          ...(record.retrievalSignals || {}),
+          matchedSemanticConcepts: [...concepts].filter((concept) => queryConcepts.has(concept)),
+          mechanismAnalogue: "bound_effect_lifecycle",
+          mechanismAnalogueScore: lifecycleScore,
+        },
+      };
+    })
+    .filter((record) => isStrongEffectLifecycleAnalogue(record))
+    .sort((left, right) => (
+      Number(right.retrievalSignals?.mechanismAnalogueScore || 0)
+        - Number(left.retrievalSignals?.mechanismAnalogueScore || 0)
+      || String(left.id || "").localeCompare(String(right.id || ""))
+    ))
+    .slice(0, Math.max(1, maxResults));
+}
+
+function isStrongEffectLifecycleAnalogue(record = {}) {
+  const concepts = new Set(record.retrievalSignals?.matchedSemanticConcepts || []);
+  return isEffectLifecycleConceptSet(concepts);
+}
+
+function isEffectLifecycleConceptSet(concepts) {
+  return concepts.has("control_change")
+    && concepts.has("own_field_duration")
+    && (concepts.has("control_return") || concepts.has("condition_reactivation"));
+}
+
+function effectLifecycleAnalogueScore(concepts) {
+  if (!isEffectLifecycleConceptSet(concepts)) return 0;
+  return 3
+    + Number(concepts.has("control_return"))
+    + Number(concepts.has("condition_reactivation"))
+    + Number(concepts.has("continuous_applying"));
+}
+
 function scoreRecord(record, {
   queryTerms,
   ruleTerms,
@@ -1243,6 +1322,25 @@ function deriveMechanismRuleQueries(value) {
   }
   if (/(然后|那之后|之后|之後|并且|並且|再|仍然|尽可能|不能处理)/u.test(text)) {
     add("效果文本 连续处理 前一项不能处理 后续处理 是否进行", "检索多段效果的处理顺序和依赖关系。");
+  }
+  const controlChanged = /(?:控制权|控制權|コントロール|control)/iu.test(text)
+    && /(?:变更|轉移|转移|改变|移る|移った|移す|change|transfer|gain)/iu.test(text);
+  const ownFieldDuration = /(?:只要|期间|存在于|存在於|存在する限り|while)/iu.test(text)
+    && /(?:自己|我方|自分|your).{0,20}(?:场上|場上|怪兽区域|怪獸區域|フィールド|モンスターゾーン|field|monster zone)/iu.test(text);
+  const returnOrReapply = /(?:归还|歸還|回到自己|返回自己|再び自分に戻|恢复适用|恢復適用|重新适用|再次适用|再び適用|return|re-?appl|again)/iu.test(text);
+  if (controlChanged && ownFieldDuration && returnOrReapply) {
+    queries.push({
+      query: "コントロール 相手に移った 自分フィールドに存在する限り 再び自分に戻った 再び適用",
+      reason: "检索已处理效果绑定‘在自己场上存在期间’时，控制权转移及归还后的效果实例生命周期。",
+      confidence: "high",
+      source: "effect_lifecycle_rule_search_query",
+    });
+    queries.push({
+      query: "控制权转移 只要在自己场上存在 限制停止 控制权归还 恢复适用",
+      reason: "检索持续条件首次不成立及后来再次成立时，既有适用是否重启。",
+      confidence: "high",
+      source: "effect_lifecycle_rule_search_query",
+    });
   }
   const printedReferenceScenario = analyzePrintedTextReferenceScenario({
     userQuery: text,
@@ -1649,7 +1747,10 @@ function mergeCard(localCard, baigeCard) {
     ...localCard,
     id: localCard.id || baigeCard.id,
     cardId: localCard.cardId || baigeCard.cardId,
-    passcode: localCard.passcode || baigeCard.passcode,
+    // Local card ids are KONAMI CIDs and some older normalization paths also
+    // copied them into `passcode`. Only a verified 8-digit password may cross
+    // the Legacy Lua boundary; otherwise prefer the Baige password.
+    passcode: verifiedEnginePasscode(localCard) || verifiedEnginePasscode(baigeCard),
     cid: localCard.cid ?? baigeCard.cid ?? null,
     name: localCard.name || baigeCard.name,
     cnName: localCard.cnName || baigeCard.cnName,
@@ -1711,12 +1812,22 @@ function hasUsableCardText(card) {
 }
 
 function enginePasscodeRequired(env = {}) {
-  const enabled = !/^(?:0|false|off|disabled|no)$/iu.test(String(env.RAG_AUTO_ENGINE_SIMULATION ?? "true").trim());
-  return enabled && Boolean(String(env.OCG_ENGINE_URL || "").trim());
+  // Legacy Lua discovery is independently enabled by OCG_ENGINE_URL. Turning
+  // off automatic scenario simulation must not disable passcode hydration for
+  // the production packet factory.
+  return Boolean(String(env.OCG_ENGINE_URL || "").trim());
 }
 
 function hasEnginePasscode(card = {}) {
-  return /^\d{8}$/u.test(String(card.passcode || card.password || "").trim());
+  return Boolean(verifiedEnginePasscode(card));
+}
+
+function verifiedEnginePasscode(card = {}) {
+  for (const value of [card.passcode, card.password]) {
+    const passcode = String(value ?? "").trim();
+    if (/^\d{8}$/u.test(passcode) && Number(passcode) > 0) return passcode;
+  }
+  return "";
 }
 
 function normalizeUserProvidedCardTexts(items, limits) {
