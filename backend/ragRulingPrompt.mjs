@@ -45,6 +45,9 @@ export function buildRagRulingPromptBundle({
     semanticStateTransition: summarizeSemanticStateTransition(evidence.semanticStateTransition),
     cardSemanticFacts: summarizeCardSemanticFacts(evidence.cardSemanticFacts),
     formalEngineStatus: evidence.formalEngineStatus || { mode: "off", status: "disabled" },
+    legacyLuaSemanticPacket: summarizeLegacyLuaSemanticPacket(
+      evidence.legacyLuaSemanticPacket,
+    ),
     evidence: {
       ...evidencePayload,
       retrievalWarnings: [...(evidence.retrievalWarnings || []), ...warnings],
@@ -114,6 +117,7 @@ export function buildRagRulingPromptBundle({
     "operationChecks、constraintAudit 和 semanticStateTransition 即使存在也只是旧的证据整理诊断，不是裁定证明或强约束；最终结论必须由你重新阅读原始卡文、官方 Q&A、FAQ 与规则资料后独立得出。",
     "cardSemanticFacts 是卡文范式化器从已解析卡文抽取的候选操作，不是裁定证明；必须对照原始卡文复核。若候选为 create_lingering_restriction 且 expiration.mode=irreversible_on_first_condition_failure、reactivates=false，它表示已处理效果创建的限制实例在 activeWhile 首次不成立时永久终止，之后条件再次成立也不会自行恢复，只有重新适用原效果才能创建新实例。",
     "formalEngineProofs 来自版本协商、能力检查、完整执行检查和独立证明校验后的声明式规则内核。trusted=true 且 verdict=TRUE/FALSE 的逐查询结论是强约束，模型只能解释，不能翻转；verdict=UNKNOWN 只表示未获证明，绝不等于 FALSE，也不能单独支持‘不能’。",
+    "legacyLuaSemanticPacket 是从锁定旧版 Lua 脚本静态编译出的非权威语义提示，只用于发现应检查的发动条件、移动能力、cost 与处理操作。它的正式 verdict 永远是 UNKNOWN；candidateVerdict 只描述旧脚本在完整输入下的候选行为，不能直接支持任何裁定、不能覆盖题面/卡文/官方资料，UNKNOWN 也绝不等于不能。",
     "分析任何操作时使用同一套通用执行顺序：从卡文和题面建立带来源的初始状态；分别检查手续或发动前提；执行手续、cost 与每个效果步骤并记录实际移动及归因；每次状态变化后重算持续效果；在检查点收集诱发候选并保留对方响应分支。禁止根据卡名、FAQ 编号、题面暗示答案或历史错题模板补造缺失事实。",
     "先绑定参与者角色：逐项写清每张卡的控制者、每个动作的执行者、‘自己/对方’分别指谁、被公开或被影响的是哪一方的手卡或场。相似 Q&A 若交换了控制者、动作主体或受影响玩家，只能作为相关资料，不能直接照搬结论。",
     "必须把发动合法性与效果处理分开：先以发动时状态检查全部必需对象、可执行后续召唤/处理及隐藏区域要求；发动合法后再逐步处理。若处理中条件变化导致后续步骤不能进行，要明确处理在哪一步结束，不得把处理时失败倒推成不能发动。",
@@ -531,6 +535,10 @@ function buildCompactRagPrompt({ payload, maxPromptChars }) {
     }),
     cardSemanticFacts: (payload.cardSemanticFacts || []).slice(0, maxChars >= 12000 ? 12 : 5),
     formalEngineStatus: payload.formalEngineStatus,
+    legacyLuaSemanticPacket: compactLegacyLuaSemanticPacket(
+      payload.legacyLuaSemanticPacket,
+      { candidateLimit: maxChars >= 12000 ? 10 : maxChars >= 4000 ? 5 : 2 },
+    ),
     allowedEvidenceIds,
     evidence,
   };
@@ -539,6 +547,7 @@ function buildCompactRagPrompt({ payload, maxPromptChars }) {
     "官方直接 Q&A 才能支持 official_confirmed；相关 Q&A、FAQ、规则书和卡文只能支持 rule_analysis 或 low_confidence_analysis。",
     "operationChecks、constraintAudit 与 semanticStateTransition 是便宜模型/旧诊断整理出的待核对假设；只能帮助定位证据，不能替代最终推理。unknown 或未核对限制不能支持肯定或否定结论。",
     "cardSemanticFacts 是卡文范式化候选而非证明。create_lingering_restriction 的 irreversible_on_first_condition_failure/ reactivates=false 表示期限条件首次失效后该效果实例永久结束，条件后来恢复不会自动重启。必须对照原卡文复核。",
+    "legacyLuaSemanticPacket 只是锁定旧脚本的非权威语义提示。只能据此发现要检查的条件和操作；正式 verdict 永远 UNKNOWN，candidateVerdict 不能直接支持结论、不能覆盖卡文或官方资料。",
     "按通用状态执行顺序判断手续或发动前提、手续或cost、每步状态更新、持续效果重算、逐项处理与诱发检查点；严格区分区域、移动归因、对象资格与效果抗性，同一步同时移动按原子批次处理。禁止按卡名或历史题模板补造事实。",
     "先绑定玩家角色：区分每张卡的控制者、动作执行者、受影响玩家与手牌所属者。交换了自己/对方或控制者的相似FAQ不能直接套用结论。",
     "发动合法性与效果处理必须分开。先按发动时状态检查必需对象和至少一条可行后续路径；支付cost后逐步更新状态并重算持续效果。处理中后续步骤变得不可行时，明确处理在哪一步结束，不得倒推为不能发动。",
@@ -572,6 +581,10 @@ function buildCompactRagPrompt({ payload, maxPromptChars }) {
     }),
     cardSemanticFacts: (payload.cardSemanticFacts || []).slice(0, 3),
     formalEngineStatus: payload.formalEngineStatus,
+    legacyLuaSemanticPacket: compactLegacyLuaSemanticPacket(
+      payload.legacyLuaSemanticPacket,
+      { candidateLimit: 2 },
+    ),
     allowedEvidenceIds: allowedEvidenceIds.slice(0, 10),
     evidenceIds: evidenceIds.slice(0, 10),
   });
@@ -592,6 +605,10 @@ function buildCompactRagPrompt({ payload, maxPromptChars }) {
       }),
       cardSemanticFacts: (payload.cardSemanticFacts || []).slice(0, 1),
       formalEngineStatus: payload.formalEngineStatus,
+      legacyLuaSemanticPacket: compactLegacyLuaSemanticPacket(
+        payload.legacyLuaSemanticPacket,
+        { candidateLimit: 1 },
+      ),
       allowedEvidenceIds: allowedEvidenceIds.slice(0, 3),
       evidenceIds: evidenceIds.slice(0, 3).map((item) => item.id),
     }),
@@ -616,6 +633,141 @@ function summarizeCardSemanticFacts(facts = {}) {
       sourceEvidenceIds: fact.sourceEvidenceIds || [],
       authority: "normalizer_candidate_only",
     }));
+}
+
+function summarizeLegacyLuaSemanticPacket(packet) {
+  if (!packet || typeof packet !== "object") {
+    return {
+      status: "unavailable",
+      verdict: "UNKNOWN",
+      canConfirmOfficialRuling: false,
+      legacyAcceptedAsTruth: false,
+      effectCandidates: [],
+      unknownReasonCodes: ["LEGACY_LUA_PACKET_UNAVAILABLE"],
+    };
+  }
+  const effectCandidates = Array.isArray(packet.effectCandidates)
+    ? packet.effectCandidates.slice(0, 24).map(summarizeLegacyLuaCandidate)
+    : [];
+  return {
+    status: effectCandidates.length ? "available" : "typed_unknown",
+    schemaVersion: String(packet.schemaVersion || ""),
+    packetId: String(packet.packetId || ""),
+    packetSha256: String(packet.packetSha256 || ""),
+    authority: String(packet.authority || ""),
+    verdict: "UNKNOWN",
+    canConfirmOfficialRuling: false,
+    legacyAcceptedAsTruth: false,
+    resources: (Array.isArray(packet.resources) ? packet.resources : [])
+      .slice(0, 12)
+      .map((resource) => ({
+        resourceId: String(resource?.resourceId || ""),
+        status: String(resource?.status || ""),
+        candidateCount: Number(resource?.candidateCount || 0),
+        sourceDocumentId: String(
+          resource?.resourceBinding?.sourceDocumentId || "",
+        ),
+        sourceContentSha256: String(
+          resource?.resourceBinding?.sourceContentSha256 || "",
+        ),
+        unknownReasonCodes: reasonCodes(resource?.unknownReasons),
+      })),
+    effectCandidates,
+    omittedCandidateCount: Number(
+      packet.truncation?.omittedCandidateCount ||
+      (Array.isArray(packet.omittedCandidates)
+        ? packet.omittedCandidates.length
+        : 0),
+    ),
+    unknownReasonCodes: reasonCodes(packet.unknownReasons),
+  };
+}
+
+function summarizeLegacyLuaCandidate(candidate = {}) {
+  const artifact = candidate.semanticArtifact || {};
+  const plan = artifact.plan || artifact.partialPlan || {};
+  const analysis = candidate.analysisArtifact || {};
+  return {
+    resourceId: String(candidate.resourceId || ""),
+    semanticEffectIdentity: String(candidate.semanticEffectIdentity || ""),
+    kind: String(candidate.kind || "TYPED_UNKNOWN"),
+    verdict: "UNKNOWN",
+    candidateVerdict: ["TRUE", "FALSE", "UNKNOWN"].includes(
+      analysis.candidateVerdict,
+    ) ? analysis.candidateVerdict : "UNKNOWN",
+    costAtomicOperations: stringList(plan.costAtomicOperations, 10),
+    atomicOperations: stringList(plan.atomicOperations, 16),
+    activationLegalityDependencies: stringList(
+      plan.activationLegalityDependencies,
+      20,
+    ),
+    activationLegalityChecks: (Array.isArray(plan.activationLegalityChecks)
+      ? plan.activationLegalityChecks
+      : []).slice(0, 12).map((check) => ({
+        callbackSlot: String(check?.callbackSlot || ""),
+        predicateApi: String(check?.predicateApi || ""),
+        atomicOperation: String(check?.atomicOperation || ""),
+        requiredMinimum: Number.isSafeInteger(check?.requiredMinimum)
+          ? check.requiredMinimum
+          : null,
+        dependencyNodes: stringList(
+          check?.dependencyGraph?.nodes?.map((node) =>
+            typeof node === "string" ? node : node?.name || node?.id
+          ),
+          16,
+        ),
+      })),
+    operationApis: stringList(plan.operationApis, 16),
+    requiredLegacyApis: stringList(plan.requiredLegacyApis, 20),
+    unresolvedSemantics: reasonCodes(plan.unresolvedSemantics),
+    unknownReasonCodes: reasonCodes(candidate.unknownReasons),
+  };
+}
+
+function compactLegacyLuaSemanticPacket(packet, { candidateLimit = 5 } = {}) {
+  if (!packet || typeof packet !== "object") return packet || null;
+  return {
+    status: packet.status || "typed_unknown",
+    packetId: packet.packetId || "",
+    packetSha256: packet.packetSha256 || "",
+    authority: packet.authority || "LEGACY_COMPATIBILITY",
+    verdict: "UNKNOWN",
+    canConfirmOfficialRuling: false,
+    legacyAcceptedAsTruth: false,
+    effectCandidates: (packet.effectCandidates || [])
+      .slice(0, candidateLimit)
+      .map((candidate) => ({
+        resourceId: candidate.resourceId,
+        semanticEffectIdentity: candidate.semanticEffectIdentity,
+        kind: candidate.kind,
+        verdict: "UNKNOWN",
+        candidateVerdict: candidate.candidateVerdict || "UNKNOWN",
+        costAtomicOperations: candidate.costAtomicOperations || [],
+        atomicOperations: candidate.atomicOperations || [],
+        activationLegalityDependencies:
+          candidate.activationLegalityDependencies || [],
+        activationLegalityChecks: candidate.activationLegalityChecks || [],
+        unknownReasonCodes: candidate.unknownReasonCodes || [],
+      })),
+    omittedCandidateCount: Number(packet.omittedCandidateCount || 0),
+    unknownReasonCodes: packet.unknownReasonCodes || [],
+  };
+}
+
+function reasonCodes(reasons) {
+  return [...new Set((Array.isArray(reasons) ? reasons : [])
+    .map((reason) => String(reason?.code || "").trim())
+    .filter(Boolean))]
+    .sort()
+    .slice(0, 24);
+}
+
+function stringList(values, limit) {
+  return [...new Set((Array.isArray(values) ? values : [])
+    .map((value) => String(value || "").trim())
+    .filter(Boolean))]
+    .sort()
+    .slice(0, limit);
 }
 
 function compactSemanticStateTransition(state = {}, { textLimit = 360, traceLimit = 5 } = {}) {

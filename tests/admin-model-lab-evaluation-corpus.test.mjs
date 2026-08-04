@@ -5,15 +5,15 @@ import test from "node:test";
 const corpusUrl = new URL("../data/test/admin-model-lab-evaluations.json", import.meta.url);
 const cardsUrl = new URL("../data/cards-lite.json", import.meta.url);
 
-test("admin model lab corpus keeps the eight mechanism regressions complete and resolvable", async () => {
+test("admin model lab corpus keeps the nine mechanism regressions complete and resolvable", async () => {
   const corpus = JSON.parse(await readFile(corpusUrl, "utf8"));
   const cardData = JSON.parse(await readFile(cardsUrl, "utf8"));
   const cards = Array.isArray(cardData) ? cardData : cardData.records;
   const knownCardIds = new Set(cards.map((card) => String(card.id)));
 
   assert.equal(corpus.schemaVersion, 1);
-  assert.equal(corpus.cases.length, 8);
-  assert.equal(new Set(corpus.cases.map((item) => item.id)).size, 8);
+  assert.equal(corpus.cases.length, 9);
+  assert.equal(new Set(corpus.cases.map((item) => item.id)).size, 9);
 
   const requiredUserCases = new Set([
     "procedure-banishing-creates-two-trigger-opportunities",
@@ -22,6 +22,7 @@ test("admin model lab corpus keeps the eight mechanism regressions complete and 
     "lotus-changes-yubel-effect-destruction-source",
     "zero-rivalry-sequential-resolution",
     "silver-hound-control-change-ends-lingering-restriction",
+    "pending-normal-trap-cannot-satisfy-return-to-hand-legality",
   ]);
   for (const id of requiredUserCases) {
     assert.equal(corpus.cases.some((item) => item.id === id), true, `missing required case ${id}`);

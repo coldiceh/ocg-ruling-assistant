@@ -11,9 +11,17 @@ import {
 } from "../backend/publicRulingModelConfig.mjs";
 import { appendQueryAudit } from "../backend/queryAuditStore.mjs";
 import {
+  publicAnswerLatencyStorageStatus,
+  readPublicAnswerLatencyProfiles,
+  recordPublicAnswerLatency,
+} from "../backend/publicAnswerLatencyStore.mjs";
+import {
   answerRagRulingQuestionForVersion,
   getRulingVersionCapabilities,
 } from "../backend/rulingVersionRegistry.mjs";
+import {
+  createConfiguredLegacyLuaSemanticPacketFactory,
+} from "../backend/legacyLuaSemanticProduction.mjs";
 
 const allowedOrigin = process.env.ALLOWED_ORIGIN || "*";
 
@@ -36,6 +44,8 @@ export default async function handler(request, response) {
   }
 
   let auditPromise = Promise.resolve();
+  let answerStartedAt = 0;
+  let selectedProfileId = "";
   const requestAbort = createRequestAbortContext(request, response);
   try {
     const payload = typeof request.body === "string" ? JSON.parse(request.body || "{}") : request.body || {};
@@ -48,21 +58,35 @@ export default async function handler(request, response) {
     }
     const profile = resolvePublicRulingModelProfile(payload.rulingModelProfile);
     assertPublicRulingModelProfileAvailable(profile, process.env);
+    selectedProfileId = profile.id;
     const publicEnv = createPublicAnswerModelEnv(process.env, profile.id);
+    const legacyLuaSemanticPacketFactory =
+      createConfiguredLegacyLuaSemanticPacketFactory({ env: publicEnv });
     auditPromise = appendQueryAudit({
       question: payload.question,
       mode,
       env: publicEnv,
     }).catch(() => null);
+    answerStartedAt = Date.now();
     const answer = await answerRagRulingQuestionForVersion({
       rulingVersion: payload.rulingVersion,
       question: payload.question,
       env: publicEnv,
       engineScenario: payload.engineScenario,
+      legacyLuaSemanticPacketFactory,
       signal: requestAbort.signal,
     });
     await auditPromise;
+    const durationMs = Math.max(0, Date.now() - answerStartedAt);
     response.status(200).json(answer);
+    // The answer is already on the wire. Keep the serverless invocation alive
+    // only long enough for this best-effort write; failures never change the
+    // successful response the user has received.
+    await recordPublicAnswerLatency({
+      profileId: selectedProfileId,
+      durationMs,
+      env: process.env,
+    }).catch(() => null);
   } catch (error) {
     await auditPromise;
     if (requestAbort.signal.aborted) return;
@@ -83,6 +107,21 @@ function setCors(response) {
 
 async function getModelInfo() {
   const modelCapabilities = getPublicRulingModelCapabilities(process.env);
+  const availableProfileIds = modelCapabilities.rulingModelProfiles
+    .filter((profile) => profile.available)
+    .map((profile) => profile.id);
+  const latencyStorage = publicAnswerLatencyStorageStatus(process.env);
+  const latencyResult = await readPublicAnswerLatencyProfiles({
+    profileIds: availableProfileIds,
+    env: process.env,
+  }).catch(() => ({ profiles: [] }));
+  const latencyByProfile = new Map(
+    (latencyResult.profiles || []).map((item) => [item.profileId, item]),
+  );
+  const rulingModelProfiles = modelCapabilities.rulingModelProfiles.map((profile) => ({
+    ...profile,
+    ...(profile.available ? { answerLatency: latencyByProfile.get(profile.id) || null } : {}),
+  }));
   const publicEnv = createPublicAnswerModelEnv(process.env, modelCapabilities.defaultRulingModelProfile);
   const ragProvider = resolveRagProvider(publicEnv);
   const cardProvider = resolveCardExtractionProvider(publicEnv);
@@ -94,15 +133,20 @@ async function getModelInfo() {
   return {
     ...rulingVersionCapabilities,
     ...modelCapabilities,
+    rulingModelProfiles,
+    answerLatency: {
+      ...latencyStorage,
+      profiles: latencyResult.profiles || [],
+    },
     provider: "glm",
     requestedProvider: ragProvider.requested,
-    models: modelCapabilities.rulingModelProfiles.map((profile) => profile.model),
+    models: rulingModelProfiles.map((profile) => profile.model),
     cardNameProvider: cardProvider.provider,
     cardNameModels: [publicEnv.DEEPSEEK_CARD_MODEL || "deepseek-v4-flash"],
     modelTiers: [],
     budget,
     engineEnabled,
-    enabled: modelCapabilities.rulingModelProfiles.some((profile) => profile.available),
+    enabled: rulingModelProfiles.some((profile) => profile.available),
     pipeline: "rag_baseline",
     legacyModes: [],
   };

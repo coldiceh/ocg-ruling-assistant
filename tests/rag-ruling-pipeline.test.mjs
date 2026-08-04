@@ -2944,6 +2944,65 @@ test("card_text_derived_rule_queries_enter_rulebook_retrieval", async () => {
   assert.ok(evidence.rulebookCandidates.some((item) => /発動中の通常魔法/u.test(item.text)));
 });
 
+test("cross-card official lifecycle analogues survive card-scoped QA retrieval", async () => {
+  const lifecycleCard = {
+    id: "lifecycle-current-card",
+    name: "匿名期限卡",
+    cnName: "匿名期限卡",
+    effectText: "①：可以发动。将1只怪兽特殊召唤。只要以此效果特殊召唤的怪兽以表侧表示存在于自己场上，自己从额外牌组仅可特殊召唤‘示例’怪兽。",
+    aliases: ["匿名期限卡"],
+  };
+  const scopedNoise = {
+    id: "qa-current-card-noise",
+    recordType: "qa",
+    title: "匿名期限卡的其他问答",
+    question: "匿名期限卡被破坏时可以发动吗？",
+    answer: "可以发动。",
+    text: "匿名期限卡被破坏时可以发动吗？ 可以发动。",
+    cardIds: ["lifecycle-current-card"],
+    cards: ["匿名期限卡"],
+  };
+  const lifecycleAnalogue = {
+    id: "qa-unrelated-lifecycle-analogue",
+    recordType: "qa",
+    title: "別のカードで特殊召喚したモンスターのコントロールが移った場合",
+    question: "この効果で特殊召喚したモンスターは自分フィールドに存在する限り効果が適用されます。そのモンスターのコントロールが相手に移った場合、どうなりますか？",
+    answer: "効果の適用はなくなります。その後、コントロールが再び自分に戻ったとしても、効果が再び適用される事はありません。",
+    text: "この効果で特殊召喚したモンスターは自分フィールドに存在する限り効果が適用されます。そのモンスターのコントロールが相手に移った場合、効果の適用はなくなります。その後、コントロールが再び自分に戻ったとしても、効果が再び適用される事はありません。",
+    cardIds: ["unrelated-card"],
+    cards: ["別のカード"],
+  };
+  const ordinaryControlQa = {
+    id: "qa-ordinary-control-change",
+    recordType: "qa",
+    title: "コントロールが移ったモンスターを対象にできますか？",
+    question: "モンスターのコントロールが相手に移った場合、そのモンスターを対象にできますか？",
+    answer: "対象にできます。",
+    text: "モンスターのコントロールが相手に移った場合、そのモンスターを対象にできます。",
+    cardIds: ["another-unrelated-card"],
+  };
+
+  const evidence = await retrieveRagEvidence({
+    userQuery: "匿名期限卡的效果已经适用。这个效果特殊召唤的怪兽控制权转移后，只要在自己场上存在的限制还适用吗？之后控制权归还时会恢复适用吗？",
+    cardResolution: {
+      resolvedCards: [lifecycleCard],
+      unresolvedMentions: [],
+      ambiguousMentions: [],
+      userProvidedCardTexts: [],
+    },
+    cards: [lifecycleCard],
+    records: [],
+    qaRecords: [scopedNoise, lifecycleAnalogue, ordinaryControlQa],
+    env: { RAG_LIVE_OFFICIAL_QA: "false" },
+  });
+
+  assert.ok(evidence.ruleSearchQueries.some((item) => item.source === "effect_lifecycle_rule_search_query"));
+  assert.ok(evidence.officialQaRelated.some((item) => item.id === lifecycleAnalogue.id));
+  assert.ok(!evidence.officialQaRelated.some((item) => item.id === ordinaryControlQa.id));
+  assert.ok(!evidence.officialQaDirectCandidates.some((item) => item.id === lifecycleAnalogue.id));
+  assert.equal(evidence.debug.officialMechanismAnalogueCount, 1);
+});
+
 test("rag_prompt_truncates_context", () => {
   const bundle = buildRagRulingPromptBundle({
     userQuery: "测试问题",

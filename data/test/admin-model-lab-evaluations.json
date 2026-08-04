@@ -437,6 +437,69 @@
         "仍然只能特殊召唤恶魔族怪兽",
         "可以再次发动①"
       ]
+    },
+    {
+      "id": "pending-normal-trap-cannot-satisfy-return-to-hand-legality",
+      "mechanisms": [
+        "activation-legality",
+        "pending-chain-card-lifecycle",
+        "return-to-hand-capability",
+        "mandatory-follow-up-processing"
+      ],
+      "question": "对方场上只有表侧表示的风属性怪兽「绚岚之达象（絢嵐たるエルダム）」，我方以它为对象发动「无限泡影」，发动前场上没有其他魔法·陷阱卡。对方可以直接连锁发动手牌中「天雷之双风神 息那」的①效果吗？",
+      "expectedCardIds": [
+        "21779",
+        "13631",
+        "22130"
+      ],
+      "expectedEvidenceIds": [
+        "card-faq-22130-1"
+      ],
+      "expectedVerdict": "不能发动。正在发动且处理后通常送去墓地的「无限泡影」不能回到手牌，场上又没有其他能够回到手牌的魔法·陷阱卡，因而不满足该效果陷阱分支的发动合法性。",
+      "expectedAssertions": {
+        "verdicts": [
+          { "questionId": "q1", "value": "FALSE" }
+        ],
+        "claims": [
+          {
+            "assertionId": "twin-tempests-cannot-activate",
+            "questionId": "q1",
+            "status": "TRUE",
+            "proposition": {
+              "allOf": [["天雷之双风神", "双风神"], ["不能", "不可"], ["发动", "连锁"]],
+              "noneOf": ["可以发动", "能够发动"]
+            }
+          },
+          {
+            "assertionId": "pending-impermanence-cannot-return-to-hand",
+            "questionId": "q1",
+            "status": "TRUE",
+            "proposition": {
+              "allOf": [["无限泡影"], ["正在发动", "连锁处理中", "处理后送去墓地"], ["不能", "无法"], ["回到手牌", "返回手牌", "回手"]]
+            }
+          },
+          {
+            "assertionId": "returnable-spell-trap-is-required-at-activation",
+            "questionId": "q1",
+            "status": "TRUE",
+            "proposition": {
+              "allOf": [["发动时", "发动前"], ["能够回到手牌", "可以回手"], ["魔法", "陷阱"], ["至少1张", "一张"]]
+            }
+          }
+        ],
+        "timelineOrder": []
+      },
+      "expectedAnswerKeyPoints": [
+        "不能连锁发动天雷之双风神",
+        "风属性怪兽与对方发动陷阱的基本响应条件虽然满足",
+        "正在发动且处理后通常送墓的无限泡影不能回到手牌",
+        "没有其他可回手魔陷，必须进行的陷阱分支在发动时已不可执行"
+      ],
+      "mustNotInclude": [
+        "天雷之双风神可以发动",
+        "无限泡影回到手牌",
+        "只要有风属性怪兽就能发动"
+      ]
     }
   ]
 }
