@@ -390,6 +390,11 @@ button:focus-visible {
   line-height: 1.4;
 }
 
+.model-tier-label .model-latency {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
 .judge-actions {
   display: flex;
   align-items: center;

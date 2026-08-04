@@ -160,6 +160,8 @@ test("ui_has_single_query_button", async () => {
   assert.match(html, /value="glm-5\.2-high" selected>GLM 5\.2 · 思考 high/u);
   assert.match(html, /value="deepseek-v4-flash-high">DeepSeek V4 Flash · 思考 high/u);
   assert.match(html, /id="rulingModelStatus">正在确认模型可用性/u);
+  assert.match(html, /id="rulingModelLatency"[^>]+aria-live="polite"/u);
+  assert.match(app, /最近 \$\{latency\.sampleCount\} 次成功回答/u);
   assert.doesNotMatch(html, /id="flashModelButton"|id="proModelButton"|>Pro</u);
   assert.match(app, /let selectedRulingModelProfile = DEFAULT_RULING_MODEL_PROFILE/u);
   assert.match(app, /rulingModelProfile: selectedRulingModelProfile/u);
@@ -230,12 +232,35 @@ test("public ruling model selector uses the allowlisted backend profiles without
 
   assert.equal(capabilities.defaultProfile, "glm-5.2-high");
   assert.deepEqual(capabilities.profiles, [
-    { id: "glm-5.2-high", label: "GLM 5.2 · 思考 high", provider: "glm", available: true },
+    {
+      id: "glm-5.2-high",
+      label: "GLM 5.2 · 思考 high",
+      provider: "glm",
+      available: true,
+      answerLatency: {
+        profileId: "glm-5.2-high",
+        status: "unavailable",
+        averageMs: null,
+        sampleCount: 0,
+        windowSize: 20,
+        storage: "unavailable",
+        reason: "",
+      },
+    },
     {
       id: "deepseek-v4-flash-high",
       label: "DeepSeek V4 Flash · 思考 high",
       provider: "deepseek",
       available: true,
+      answerLatency: {
+        profileId: "deepseek-v4-flash-high",
+        status: "unavailable",
+        averageMs: null,
+        sampleCount: 0,
+        windowSize: 20,
+        storage: "unavailable",
+        reason: "",
+      },
     },
   ]);
   const partialAvailability = normalizeCapabilities({
@@ -259,6 +284,40 @@ test("public ruling model selector uses the allowlisted backend profiles without
   assert.match(app, /setRulingModelCapabilitiesUnavailable\("模型能力接口不可用/u);
   assert.match(app, /系统不会自动改用其他模型/u);
   assert.match(app, /selectedRulingModelProfile = DEFAULT_RULING_MODEL_PROFILE/u);
+});
+
+test("public ruling model selector renders measured latency and explicit fallback states", async () => {
+  const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
+  const source = sourceBetween(
+    app,
+    "function renderSelectedRulingModelLatency",
+    "function syncRulingModelSelect",
+  );
+  const latencyNode = { textContent: "" };
+  const render = new Function(
+    "ui",
+    `${source}; return renderSelectedRulingModelLatency;`,
+  )({ rulingModelLatency: latencyNode });
+
+  render({
+    answerLatency: {
+      status: "available",
+      averageMs: 83_000,
+      sampleCount: 7,
+      windowSize: 20,
+    },
+  });
+  assert.equal(latencyNode.textContent, "最近 7 次成功回答：平均 1 分 23 秒（最多统计 20 次）。");
+
+  render({ answerLatency: { status: "no_samples" } });
+  assert.equal(latencyNode.textContent, "暂无该模型的成功回答耗时样本。");
+
+  render({ answerLatency: { status: "unavailable", reason: "storage_error" } });
+  assert.equal(latencyNode.textContent, "平均出答案时间暂时读取失败。");
+
+  render({ answerLatency: { status: "unavailable", storage: "unconfigured" } });
+  assert.match(latencyNode.textContent, /未配置统计存储/u);
+  assert.doesNotMatch(latencyNode.textContent, /\d+ 秒|\d+ 分/u);
 });
 
 test("public pipeline timing prefers backend stage measurements and wall-clock total", async () => {

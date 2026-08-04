@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { requestOcgEngineSimulation } from "../backend/ocgEngineClient.mjs";
+import { requestOcgEngineJson } from "../backend/ocgEngineHttpClient.mjs";
 import { answerRagRulingQuestion } from "../backend/ragRulingPipeline.mjs";
 
 const binding = {
@@ -14,6 +15,86 @@ const binding = {
   patchSetSha256: "7".repeat(64),
   apiAbi: "ocgcore/11.0",
 };
+
+test("engine HTTP client rejects oversized Content-Length before reading", async () => {
+  let cancelled = false;
+  let pulled = false;
+  const body = new ReadableStream({
+    pull(controller) {
+      pulled = true;
+      controller.enqueue(new TextEncoder().encode('{"ok":true}'));
+    },
+    cancel() {
+      cancelled = true;
+    },
+  });
+  const result = await requestOcgEngineJson({
+    path: "/formal/v1/test",
+    env: { OCG_ENGINE_URL: "https://engine.example.test" },
+    maxResponseBytes: 16,
+    fetchImpl: async () => new Response(body, {
+      status: 200,
+      headers: { "content-length": "4096" },
+    }),
+  });
+
+  assert.equal(result.status, "unavailable");
+  assert.equal(result.error.code, "OCG_ENGINE_RESPONSE_TOO_LARGE");
+  assert.equal(cancelled, true);
+  // A WHATWG stream implementation may schedule one pull eagerly, but no
+  // response bytes are consumed through a reader before the preflight reject.
+  assert.equal(typeof pulled, "boolean");
+});
+
+test("engine HTTP client cancels a streaming response at the wire byte limit", async () => {
+  let cancelled = false;
+  const chunks = [
+    new TextEncoder().encode('{"ok":true,"data":"'),
+    new TextEncoder().encode("x".repeat(64)),
+    new TextEncoder().encode('"}'),
+  ];
+  const body = new ReadableStream({
+    pull(controller) {
+      const chunk = chunks.shift();
+      if (chunk) controller.enqueue(chunk);
+      else controller.close();
+    },
+    cancel() {
+      cancelled = true;
+    },
+  });
+  const result = await requestOcgEngineJson({
+    path: "/formal/v1/test",
+    env: { OCG_ENGINE_URL: "https://engine.example.test" },
+    maxResponseBytes: 32,
+    fetchImpl: async () => new Response(body, { status: 200 }),
+  });
+
+  assert.equal(result.status, "unavailable");
+  assert.equal(result.error.code, "OCG_ENGINE_RESPONSE_TOO_LARGE");
+  assert.equal(cancelled, true);
+});
+
+test("engine HTTP client keeps text-only fetch mocks compatible with a byte limit", async () => {
+  const response = {
+    ok: true,
+    status: 200,
+    body: null,
+    headers: { get: () => null },
+    async text() {
+      return '{"ok":true,"value":"small"}';
+    },
+  };
+  const result = await requestOcgEngineJson({
+    path: "/formal/v1/test",
+    env: { OCG_ENGINE_URL: "https://engine.example.test" },
+    maxResponseBytes: 64,
+    fetchImpl: async () => response,
+  });
+
+  assert.equal(result.status, "response");
+  assert.equal(result.payload.value, "small");
+});
 
 test("engine simulation remains non-official evidence", async () => {
   const result = await requestOcgEngineSimulation({
