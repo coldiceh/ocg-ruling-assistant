@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-04T14:43:14.913Z",
+  "generatedAt": "2026-08-04T20:02:15.217Z",
   "cardCount": 14334,
   "rulingCount": 42324,
   "cardAliasCount": 35906,
@@ -18,9 +18,5 @@
   "warnings": [],
   "sourceRetirementWarnings": [],
   "dataQualityWarnings": [],
-  "changedPaths": [
-    "/data/card/8868",
-    "/data/card/23383",
-    "/data/card/23393"
-  ]
+  "changedPaths": []
 }
