@@ -497,6 +497,216 @@ test("baige_resolved_card_metadata_replaces_the_unresolved_prompt_mention", asyn
   assert.match(finalPrompt, /"unresolvedMentions": \[\]/u);
 });
 
+test("source-bound unique local identities survive an unavailable external verification lookup", async () => {
+  clearBaigeSearchCache();
+  const data = await loadRagData();
+  const question = "「教导的圣女 艾克莉西亚」和「闪刀姬＝零露」的效果如何处理？";
+  const resolution = extractRagCards(question, { cards: data.cards, maxCards: 8 });
+  const expectedIds = new Set(["15239", "21460"]);
+
+  assert.ok(resolution.resolvedCards
+    .filter((card) => expectedIds.has(String(card.id)))
+    .every((card) => Number(card.confidence) >= 0.94));
+
+  const evidence = await retrieveRagEvidence({
+    userQuery: question,
+    cardResolution: resolution,
+    cards: data.cards,
+    records: [],
+    qaRecords: [],
+    fetchImpl: async () => jsonResponse({ result: [], next: 0 }),
+    env: { RAG_LIVE_OFFICIAL_QA: "0" },
+  });
+
+  for (const id of expectedIds) {
+    const card = evidence.cardResolution.resolvedCards.find((item) => String(item.id) === id);
+    assert.ok(card, `${id} must retain its unique local identity`);
+    assert.equal(card.identityVerificationStatus, "verified_local_unique");
+  }
+  assert.ok(!evidence.cardResolution.unresolvedMentions.some(
+    (mention) => mention.reason === "external_identity_verification_failed",
+  ));
+});
+
+test("an unbound local edit candidate still fails closed when external verification is unavailable", async () => {
+  clearBaigeSearchCache();
+  const userSurface = "测试风之达维";
+  const unboundLocalCard = {
+    id: "601",
+    name: "测试风之达象",
+    aliases: ["测试风之达象"],
+    effectText: "本地候选卡文。",
+  };
+  const evidence = await retrieveRagEvidence({
+    userQuery: `「${userSurface}」可以发动吗？`,
+    cardResolution: {
+      resolvedCards: [{
+        ...unboundLocalCard,
+        input: userSurface,
+        cardId: unboundLocalCard.id,
+        confidence: 0.94,
+        resolutionSource: "query",
+      }],
+      unresolvedMentions: [],
+      ambiguousMentions: [],
+      userProvidedCardTexts: [],
+    },
+    cards: [unboundLocalCard],
+    records: [],
+    qaRecords: [],
+    fetchImpl: async () => jsonResponse({ result: [], next: 0 }),
+    env: { RAG_LIVE_OFFICIAL_QA: "0" },
+  });
+
+  assert.ok(evidence.cardResolution.unresolvedMentions.some((mention) => (
+    mention.input === userSurface
+    && mention.reason === "external_identity_verification_failed"
+  )));
+  assert.equal(evidence.retrievedCards[0].identityVerificationStatus, "unverified");
+});
+
+test("a unique source-bound identity may retain a generated near alias when verification is unavailable", async () => {
+  clearBaigeSearchCache();
+  const userSurface = "AA简称乙";
+  const canonicalCard = {
+    id: "602",
+    name: "测试系列 完整代号",
+    aliases: ["测试系列 完整代号"],
+    effectText: "本地候选卡文。",
+    sourceUrl: "https://db.ygoresources.com/data/card/602",
+  };
+  const evidence = await retrieveRagEvidence({
+    userQuery: `「${userSurface}」可以发动吗？`,
+    cardResolution: {
+      resolvedCards: [{
+        ...canonicalCard,
+        input: userSurface,
+        aliases: [...canonicalCard.aliases, "AA简称甲"],
+        confidence: 0.94,
+        resolutionSource: "query",
+      }],
+      unresolvedMentions: [],
+      ambiguousMentions: [],
+      userProvidedCardTexts: [],
+    },
+    cards: [canonicalCard],
+    records: [],
+    qaRecords: [],
+    fetchImpl: async () => jsonResponse({ result: [], next: 0 }),
+    env: { RAG_LIVE_OFFICIAL_QA: "0" },
+  });
+
+  assert.deepEqual(evidence.cardResolution.unresolvedMentions, []);
+  assert.equal(evidence.retrievedCards[0].identityVerificationStatus, "verified_local_unique");
+});
+
+test("external CID identity replaces a same-surface local edit match and freezes the reconciled local card", async () => {
+  clearBaigeSearchCache();
+  const userSurface = "测试风之达维";
+  const wrongLocalCard = {
+    id: "701",
+    name: "测试风之达象",
+    aliases: ["测试风之达象"],
+    effectText: "错误候选卡文。",
+  };
+  const canonicalLocalCard = {
+    id: "702",
+    name: "本地规范译名",
+    aliases: ["Local Canonical Name"],
+    effectText: "本地完整卡文：这张卡特殊召唤。",
+  };
+  const externalCard = {
+    cid: 702,
+    id: 12345678,
+    cn_name: userSurface,
+    jp_name: "テスト・カード",
+    en_name: "Test Card",
+    text: { types: "[怪兽|效果]", desc: "社区卡文。" },
+    data: { type: 33 },
+  };
+
+  const evidence = await retrieveRagEvidence({
+    userQuery: `「${userSurface}」可以发动吗？`,
+    cardResolution: {
+      resolvedCards: [{
+        input: userSurface,
+        id: wrongLocalCard.id,
+        cardId: wrongLocalCard.id,
+        name: wrongLocalCard.name,
+        aliases: wrongLocalCard.aliases,
+        effectText: wrongLocalCard.effectText,
+        confidence: 0.94,
+        resolutionSource: "query",
+      }],
+      unresolvedMentions: [],
+      ambiguousMentions: [],
+      userProvidedCardTexts: [],
+    },
+    cards: [wrongLocalCard, canonicalLocalCard],
+    records: [],
+    qaRecords: [],
+    fetchImpl: async () => jsonResponse({ result: [externalCard], next: 0 }),
+    env: { RAG_LIVE_OFFICIAL_QA: "0" },
+  });
+
+  assert.equal(evidence.retrievedCards.length, 1);
+  assert.equal(evidence.retrievedCards[0].id, "702");
+  assert.equal(evidence.retrievedCards[0].passcode, "12345678");
+  assert.equal(evidence.retrievedCards[0].name, userSurface);
+  assert.equal(evidence.retrievedCards[0].input, userSurface);
+  assert.ok(evidence.retrievedCards[0].aliases.includes(userSurface));
+  assert.match(evidence.retrievedCards[0].effectText, /本地完整卡文/u);
+  assert.deepEqual(evidence.cardResolution.resolvedCards, evidence.retrievedCards);
+  assert.deepEqual(evidence.cardResolution.unresolvedMentions, []);
+  assert.ok(!evidence.retrievedCards.some((card) => card.id === "701"));
+});
+
+test("conflicting external identities fail closed instead of blessing a local edit match", async () => {
+  clearBaigeSearchCache();
+  const userSurface = "测试风之达维";
+  const wrongLocalCard = {
+    id: "801",
+    name: "测试风之达象",
+    aliases: ["测试风之达象"],
+    effectText: "错误候选卡文。",
+  };
+  const externalCandidates = [
+    { cid: 802, id: 22345678, cn_name: userSurface, text: { desc: "候选甲。" } },
+    { cid: 803, id: 32345678, cn_name: userSurface, text: { desc: "候选乙。" } },
+  ];
+
+  const evidence = await retrieveRagEvidence({
+    userQuery: `「${userSurface}」可以发动吗？`,
+    cardResolution: {
+      resolvedCards: [{
+        input: userSurface,
+        id: wrongLocalCard.id,
+        cardId: wrongLocalCard.id,
+        name: wrongLocalCard.name,
+        aliases: wrongLocalCard.aliases,
+        effectText: wrongLocalCard.effectText,
+        confidence: 0.94,
+        resolutionSource: "query",
+      }],
+      unresolvedMentions: [],
+      ambiguousMentions: [],
+      userProvidedCardTexts: [],
+    },
+    cards: [wrongLocalCard],
+    records: [],
+    qaRecords: [],
+    fetchImpl: async () => jsonResponse({ result: externalCandidates, next: 0 }),
+    env: { RAG_LIVE_OFFICIAL_QA: "0" },
+  });
+
+  assert.deepEqual(evidence.retrievedCards, []);
+  assert.deepEqual(evidence.cardResolution.resolvedCards, []);
+  assert.ok(evidence.cardResolution.unresolvedMentions.some((item) => item.input === userSurface));
+  assert.ok(evidence.cardResolution.ambiguousMentions.some((item) => (
+    item.input === userSurface && item.candidateCards.length === 2
+  )));
+});
+
 function jsonResponse(payload, ok = true, status = 200) {
   return {
     ok,

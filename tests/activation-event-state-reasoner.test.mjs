@@ -157,7 +157,7 @@ test("missing the field-empty fact fails closed instead of assuming hand activat
   assert.equal(result.reason, "activating_player_field_empty_state_unknown");
 });
 
-test("an exact official QA is evidence while the final model owns the historical wording", async () => {
+test("an exact official QA focuses the final model on the complete authoritative answer", async () => {
   let finalModelCalls = 0;
   let finalPrompt = "";
   const answer = await answerRagRulingQuestion({
@@ -195,6 +195,7 @@ test("an exact official QA is evidence while the final model owns the historical
   assert.equal(answer.debug.modelUsed, "mock-rag");
   assert.deepEqual(answer.debug.unresolvedMentions, []);
   assert.ok(answer.debug.retrievalCounts.officialQaDirectCandidates > 0);
-  assert.match(finalPrompt, /officialQaDirectCandidates/u);
+  assert.match(finalPrompt, /officialQaDirectCandidate/u);
+  assert.match(finalPrompt, /最高且唯一的裁定依据/u);
   assert.equal(answer.riskFlags.includes("official_direct_corroborates_trusted_semantic_execution"), false);
 });

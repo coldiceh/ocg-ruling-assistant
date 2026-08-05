@@ -9,6 +9,17 @@ export const RAG_ANSWER_LEVELS = Object.freeze([
   "budget_limited",
 ]);
 
+const RAG_JSON_SHAPE_EXAMPLE = Object.freeze({
+  answerLevel: "rule_analysis",
+  shortAnswer: "根据现有资料可以给出分析，但不是官方直接裁定。",
+  reasoning: ["先核对卡片文本。", "再比对官方相似资料。"],
+  usedCards: ["示例卡名"],
+  usedEvidence: [{ id: "card-text-example", type: "card_text", title: "示例卡名 的卡片文本" }],
+  missingInfo: [],
+  riskFlags: ["no_official_direct_qa"],
+  confidenceSelfEstimate: "medium",
+});
+
 export function buildRagRulingPrompt({
   userQuery,
   cardResolution = {},
@@ -59,11 +70,11 @@ export function buildRagRulingPromptBundle({
     cardResolution,
     baigeAmbiguousMentions: evidence.baigeAmbiguousMentions,
   });
-  // Keep the focused official-Q&A path opt-in until scene equivalence includes
-  // player roles, zones and the exact processing node.  The candidate itself
-  // is still included verbatim in the normal evidence payload.
-  if (isEnabled(env.RAG_OFFICIAL_DIRECT_FOCUSED_PROMPT)
-    && authoritativeDirect
+  // The selector above is deliberately strict: it requires one exact official
+  // candidate, complete card identities and a certified scene/card-set match.
+  // Once those checks pass, always focus the final model on that Q&A instead of
+  // allowing unrelated evidence to dilute the official answer.
+  if (authoritativeDirect
     && !(evidence.formalEngineProofs || []).length) {
     warnings.push("official_direct_focused_prompt");
     const promptResult = buildOfficialDirectPrompt({
@@ -85,19 +96,10 @@ export function buildRagRulingPromptBundle({
       warnings,
       promptChars: promptResult.prompt.length,
       promptTruncated: promptResult.truncated,
+      authoritativeOfficialDirectId: String(authoritativeDirect.id),
     };
   }
 
-  const example = {
-    answerLevel: "rule_analysis",
-    shortAnswer: "根据现有资料可以给出分析，但不是官方直接裁定。",
-    reasoning: ["先核对卡片文本。", "再比对官方相似资料。"],
-    usedCards: ["示例卡名"],
-    usedEvidence: [{ id: "card-text-example", type: "card_text", title: "示例卡名 的卡片文本" }],
-    missingInfo: [],
-    riskFlags: ["no_official_direct_qa"],
-    confidenceSelfEstimate: "medium",
-  };
   const recoveryPrompt = buildCompactRagPrompt({
     payload,
     maxPromptChars: readNumber(env.RAG_RECOVERY_PROMPT_CHARS, 12000),
@@ -118,6 +120,7 @@ export function buildRagRulingPromptBundle({
     "cardSemanticFacts 是卡文范式化器从已解析卡文抽取的候选操作，不是裁定证明；必须对照原始卡文复核。若候选为 create_lingering_restriction 且 expiration.mode=irreversible_on_first_condition_failure、reactivates=false，它表示已处理效果创建的限制实例在 activeWhile 首次不成立时永久终止，之后条件再次成立也不会自行恢复，只有重新适用原效果才能创建新实例。",
     "formalEngineProofs 来自版本协商、能力检查、完整执行检查和独立证明校验后的声明式规则内核。trusted=true 且 verdict=TRUE/FALSE 的逐查询结论是强约束，模型只能解释，不能翻转；verdict=UNKNOWN 只表示未获证明，绝不等于 FALSE，也不能单独支持‘不能’。",
     "legacyLuaSemanticPacket 是从锁定旧版 Lua 脚本静态编译出的非权威语义提示，只用于发现应检查的发动条件、移动能力、cost 与处理操作。它的正式 verdict 永远是 UNKNOWN；candidateVerdict 只描述旧脚本在完整输入下的候选行为，不能直接支持任何裁定、不能覆盖题面/卡文/官方资料，UNKNOWN 也绝不等于不能。",
+    "legacyLuaSemanticPacket.activationLegalityChecks 是旧脚本在发动检查阶段实际执行的通用候选条件。必须对题设状态枚举能通过 predicateApi 的候选；若 requiredMinimum 无法达到，则该效果不能发动，不得误解为可以发动后空处理。候选卡的具体合法性仍必须用卡文或规则资料复核。",
     "分析任何操作时使用同一套通用执行顺序：从卡文和题面建立带来源的初始状态；分别检查手续或发动前提；执行手续、cost 与每个效果步骤并记录实际移动及归因；每次状态变化后重算持续效果；在检查点收集诱发候选并保留对方响应分支。禁止根据卡名、FAQ 编号、题面暗示答案或历史错题模板补造缺失事实。",
     "先绑定参与者角色：逐项写清每张卡的控制者、每个动作的执行者、‘自己/对方’分别指谁、被公开或被影响的是哪一方的手卡或场。相似 Q&A 若交换了控制者、动作主体或受影响玩家，只能作为相关资料，不能直接照搬结论。",
     "必须把发动合法性与效果处理分开：先以发动时状态检查全部必需对象、可执行后续召唤/处理及隐藏区域要求；发动合法后再逐步处理。若处理中条件变化导致后续步骤不能进行，要明确处理在哪一步结束，不得把处理时失败倒推成不能发动。",
@@ -150,7 +153,7 @@ export function buildRagRulingPromptBundle({
     `允许的 answerLevel：${RAG_ANSWER_LEVELS.join(", ")}。`,
     "usedEvidence 只能引用下方 evidence 中真实存在的 id。",
     "示例结构如下，示例不是具体裁定：",
-    JSON.stringify(example, null, 2),
+    JSON.stringify(RAG_JSON_SHAPE_EXAMPLE, null, 2),
     "本次检索上下文如下：",
     JSON.stringify(payload, null, 2),
     `可引用 evidence id 列表：${evidenceBucketsToList(evidencePayload).map((item) => item.id).join(", ") || "(none)"}`,
@@ -165,6 +168,7 @@ export function buildRagRulingPromptBundle({
     warnings,
     promptChars: prompt.length,
     promptTruncated: warnings.some((warning) => warning.includes("truncated") || warning.includes("compacted")),
+    authoritativeOfficialDirectId: null,
   };
 }
 
@@ -548,6 +552,7 @@ function buildCompactRagPrompt({ payload, maxPromptChars }) {
     "operationChecks、constraintAudit 与 semanticStateTransition 是便宜模型/旧诊断整理出的待核对假设；只能帮助定位证据，不能替代最终推理。unknown 或未核对限制不能支持肯定或否定结论。",
     "cardSemanticFacts 是卡文范式化候选而非证明。create_lingering_restriction 的 irreversible_on_first_condition_failure/ reactivates=false 表示期限条件首次失效后该效果实例永久结束，条件后来恢复不会自动重启。必须对照原卡文复核。",
     "legacyLuaSemanticPacket 只是锁定旧脚本的非权威语义提示。只能据此发现要检查的条件和操作；正式 verdict 永远 UNKNOWN，candidateVerdict 不能直接支持结论、不能覆盖卡文或官方资料。",
+    "legacyLuaSemanticPacket.activationLegalityChecks 是旧脚本在发动检查阶段实际执行的通用候选条件。必须对题设状态枚举能通过 predicateApi 的候选；若 requiredMinimum 无法达到，则该效果不能发动，不得误解为可以发动后空处理。候选卡的具体合法性仍必须用卡文或规则资料复核。",
     "按通用状态执行顺序判断手续或发动前提、手续或cost、每步状态更新、持续效果重算、逐项处理与诱发检查点；严格区分区域、移动归因、对象资格与效果抗性，同一步同时移动按原子批次处理。禁止按卡名或历史题模板补造事实。",
     "先绑定玩家角色：区分每张卡的控制者、动作执行者、受影响玩家与手牌所属者。交换了自己/对方或控制者的相似FAQ不能直接套用结论。",
     "发动合法性与效果处理必须分开。先按发动时状态检查必需对象和至少一条可行后续路径；支付cost后逐步更新状态并重算持续效果。处理中后续步骤变得不可行时，明确处理在哪一步结束，不得倒推为不能发动。",
@@ -558,6 +563,8 @@ function buildCompactRagPrompt({ payload, maxPromptChars }) {
     "usedEvidence 每项的 id 必须非空，并从 allowedEvidenceIds 中逐字选择；没有实际引用时输出空数组，禁止输出空 id 或自造 id。",
     "shortAnswer 不超过300字；若题目同时询问能否发动和后续如何处理，必须同时写明发动结论与最终处理结果，不得只写“可以发动”。",
     "reasoning 为2至5条字符串，每条不超过240字；usedCards、usedEvidence 各不超过8项；missingInfo、riskFlags 各不超过6项。不要输出 JSON 以外内容。",
+    "以下 JSON 仅展示字段结构，内容不是本题答案：",
+    JSON.stringify(RAG_JSON_SHAPE_EXAMPLE),
     JSON.stringify(context),
   ].join("\n");
   let prompt = render(compactPayload);
@@ -711,8 +718,10 @@ function summarizeLegacyLuaCandidate(candidate = {}) {
           ? check.requiredMinimum
           : null,
         dependencyNodes: stringList(
-          check?.dependencyGraph?.nodes?.map((node) =>
-            typeof node === "string" ? node : node?.name || node?.id
+          legacyLuaDependencyEntries(check?.dependencyGraph).map((node) =>
+            typeof node === "string"
+              ? node
+              : node?.name || node?.id || node?.dependency
           ),
           16,
         ),
@@ -760,6 +769,11 @@ function reasonCodes(reasons) {
     .filter(Boolean))]
     .sort()
     .slice(0, 24);
+}
+
+function legacyLuaDependencyEntries(value) {
+  if (Array.isArray(value?.dependencies)) return value.dependencies;
+  return Array.isArray(value?.nodes) ? value.nodes : [];
 }
 
 function stringList(values, limit) {
@@ -811,8 +825,4 @@ function truncatePromptText(value, maxChars) {
 function readNumber(value, fallback) {
   const number = Number(value);
   return Number.isFinite(number) && number > 0 ? number : fallback;
-}
-
-function isEnabled(value) {
-  return /^(?:1|true|yes|on)$/iu.test(String(value || "").trim());
 }

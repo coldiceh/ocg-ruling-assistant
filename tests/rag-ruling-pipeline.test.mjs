@@ -1915,7 +1915,7 @@ test("deepseek_empty_truncated_output_retries_with_compact_prompt", async () => 
 
   assert.equal(calls.length, 2);
   assert.equal(calls[1].messages[0].content, "紧凑恢复提示词");
-  assert.equal(calls[1].max_tokens, 8000);
+  assert.equal(calls[1].max_tokens, 4096);
   assert.deepEqual(calls[1].thinking, { type: "disabled" });
   assert.deepEqual(calls[1].response_format, { type: "json_object" });
   assert.equal(Object.hasOwn(calls[1], "reasoning_effort"), false);
@@ -1975,6 +1975,79 @@ test("deepseek_thinking_invalid_json_retries_with_non_thinking_json_recovery", a
   assert.deepEqual(result.generationAttempts.map((item) => item.thinkingMode), ["enabled", "disabled"]);
 });
 
+test("deepseek valid JSON is deterministically normalized before public raw validation", async () => {
+  const calls = [];
+  const result = await callRagModel({
+    prompt: "输出 RAG JSON",
+    recoveryPrompt: "不应调用恢复",
+    env: {
+      MODEL_PROVIDER: "deepseek",
+      DEEPSEEK_API_KEY: "test-deepseek-key",
+      API_DAILY_BUDGET_CNY: "10",
+    },
+    fetchImpl: async (_url, options) => {
+      calls.push(JSON.parse(options.body));
+      return jsonResponse({
+        choices: [{
+          message: {
+            content: JSON.stringify({
+              answerLevel: "rule_analysis",
+              shortAnswer: "结构可确定性补全。",
+              reasoning: "单条理由转换为数组。",
+              usedEvidence: [null, { id: "" }],
+            }),
+          },
+          finish_reason: "stop",
+        }],
+        usage: { prompt_tokens: 20, completion_tokens: 20, total_tokens: 40 },
+      });
+    },
+  });
+
+  assert.equal(calls.length, 1);
+  assert.equal(Object.hasOwn(calls[0], "response_format"), false);
+  assert.ok(result.warnings.includes("model_json_structure_normalized"));
+  assert.deepEqual(JSON.parse(result.rawText), {
+    answerLevel: "rule_analysis",
+    shortAnswer: "结构可确定性补全。",
+    reasoning: ["单条理由转换为数组。"],
+    usedCards: [],
+    usedEvidence: [],
+    missingInfo: [],
+    riskFlags: [],
+    confidenceSelfEstimate: "low",
+  });
+});
+
+test("deepseek illegal answerLevel is never normalized into an accepted semantic core", async () => {
+  const result = await callRagModel({
+    prompt: "输出 RAG JSON",
+    env: {
+      MODEL_PROVIDER: "deepseek",
+      DEEPSEEK_API_KEY: "test-deepseek-key",
+      API_DAILY_BUDGET_CNY: "10",
+    },
+    fetchImpl: async () => jsonResponse({
+      choices: [{
+        message: {
+          content: JSON.stringify({
+            answerLevel: "certain_yes",
+            shortAnswer: "不得采用此结论。",
+            reasoning: ["非法枚举不能被升级。"],
+          }),
+        },
+        finish_reason: "stop",
+      }],
+      usage: {},
+    }),
+  });
+
+  assert.equal(result.answer.answerLevel, "needs_more_info");
+  assert.doesNotMatch(result.answer.shortAnswer, /不得采用此结论/u);
+  assert.ok(result.warnings.includes("deepseek_primary_invalid_schema"));
+  assert.ok(result.warnings.includes("model_json_invalid_schema"));
+});
+
 test("deepseek_compact_recovery_accepts_minimal_normalizable_json", async () => {
   const calls = [];
   const result = await callRagModel({
@@ -2015,6 +2088,17 @@ test("deepseek_compact_recovery_accepts_minimal_normalizable_json", async () => 
   assert.deepEqual(result.answer.reasoning, ["紧凑恢复仍保留了结论依据。"]);
   assert.deepEqual(result.answer.usedEvidence, []);
   assert.ok(result.warnings.includes("deepseek_compact_recovery_succeeded"));
+  assert.ok(result.warnings.includes("model_json_structure_normalized"));
+  assert.deepEqual(JSON.parse(result.rawText), {
+    answerLevel: "rule_analysis",
+    shortAnswer: "恢复后的最小答案",
+    reasoning: ["紧凑恢复仍保留了结论依据。"],
+    usedCards: [],
+    usedEvidence: [],
+    missingInfo: [],
+    riskFlags: [],
+    confidenceSelfEstimate: "low",
+  });
 });
 
 test("an aborted compact recovery still records the completed primary response", async () => {
@@ -2053,8 +2137,9 @@ test("an aborted compact recovery still records the completed primary response",
 
   assert.equal(callCount, 2);
   assert.ok(result.warnings.some((warning) => warning.startsWith("deepseek_compact_recovery_call_failed:")));
-  assert.equal(result.estimatedCostCny, 0.002);
-  assert.equal(status.spentTodayCny, 0.002);
+  assert.ok(result.warnings.includes("budget_reservation_retained_after_ambiguous_remote_failure"));
+  assert.equal(result.estimatedCostCny > 0.002, true);
+  assert.equal(status.spentTodayCny, result.estimatedCostCny);
 });
 
 test("deepseek_primary_and_compact_recovery_both_empty_fail_safely", async () => {
@@ -2072,13 +2157,13 @@ test("deepseek_primary_and_compact_recovery_both_empty_fail_safely", async () =>
       calls.push(JSON.parse(options.body));
       return jsonResponse({
         choices: [{ message: { content: "", reasoning_content: "只产生了内部推理" }, finish_reason: "length" }],
-        usage: { prompt_tokens: 30, completion_tokens: calls.length === 1 ? 500 : 8000, total_tokens: calls.length === 1 ? 530 : 8030 },
+        usage: { prompt_tokens: 30, completion_tokens: calls.length === 1 ? 500 : 4096, total_tokens: calls.length === 1 ? 530 : 4126 },
       });
     },
   });
 
   assert.equal(calls.length, 2);
-  assert.equal(calls[1].max_tokens, 8000);
+  assert.equal(calls[1].max_tokens, 4096);
   assert.ok(result.warnings.includes("deepseek_compact_recovery_attempted"));
   assert.ok(result.warnings.includes("deepseek_compact_recovery_failed"));
   assert.ok(result.warnings.includes("deepseek_compact_recovery_empty"));
@@ -2123,6 +2208,28 @@ test("deepseek_compact_recovery_rejects_incomplete_json_even_when_nonempty", asy
   assert.equal(result.warnings.includes("deepseek_compact_recovery_succeeded"), false);
   assert.doesNotMatch(result.answer.shortAnswer, /这段残缺结果不得采用/u);
 });
+
+test("deepseek thinking requests omit incompatible JSON response mode without retrying HTTP 400", async () => {
+  const calls = [];
+  const result = await callRagModel({
+    prompt: "输出 JSON",
+    env: {
+      MODEL_PROVIDER: "deepseek",
+      DEEPSEEK_API_KEY: "test-deepseek-key",
+      API_DAILY_BUDGET_CNY: "10",
+    },
+    fetchImpl: async (_url, options) => {
+      calls.push(JSON.parse(options.body));
+      return jsonResponse({ error: { message: "bad request" } }, false, 400);
+    },
+  });
+
+  assert.equal(calls.length, 1);
+  assert.deepEqual(calls[0].thinking, { type: "enabled" });
+  assert.equal(Object.hasOwn(calls[0], "response_format"), false);
+  assert.ok(result.warnings.includes("model_call_failed:deepseek 400"));
+});
+
 test("deepseek_provider_builds_request", async () => {
   const calls = [];
   const result = await callRagModel({
@@ -2155,6 +2262,29 @@ test("deepseek_provider_builds_request", async () => {
   assert.deepEqual(calls[0].body.thinking, { type: "enabled" });
   assert.equal(calls[0].body.reasoning_effort, "high");
   assert.equal(Object.hasOwn(calls[0].body, "temperature"), false);
+});
+
+test("deepseek response extraction accepts structured text content parts", async () => {
+  const result = await callRagModel({
+    prompt: "输出 JSON",
+    env: {
+      MODEL_PROVIDER: "deepseek",
+      DEEPSEEK_API_KEY: "test-deepseek-key",
+      API_DAILY_BUDGET_CNY: "10",
+    },
+    fetchImpl: async () => jsonResponse({
+      choices: [{
+        message: {
+          content: [{ type: "text", content: JSON.stringify(modelJson("Structured content OK")) }],
+        },
+        finish_reason: "stop",
+      }],
+      usage: {},
+    }),
+  });
+
+  assert.equal(result.answer.shortAnswer, "Structured content OK");
+  assert.equal(result.warnings.some((warning) => warning.includes("empty_content")), false);
 });
 
 test("deepseek_final_generation_uses_configured_primary_model", async () => {
@@ -2278,6 +2408,7 @@ test("deepseek thinking mode accepts max effort and records reasoning usage with
       assert.deepEqual(body.thinking, { type: "enabled" });
       assert.equal(body.reasoning_effort, "max");
       assert.equal(body.max_tokens, 32000);
+      assert.equal(Object.hasOwn(body, "response_format"), false);
       assert.equal(Object.hasOwn(body, "temperature"), false);
       return jsonResponse({
         id: "request-2",
@@ -2454,6 +2585,191 @@ test("budget_soft_limit_blocks_call_when_exceeded", async () => {
   assert.equal(result.answer.answerLevel, "budget_limited");
   assert.equal(result.budgetStatus.limitEnforced, true);
   assert.equal(result.budgetStatus.budgetStorage, "memory");
+});
+
+test("public final-call reservations survive ambiguous dispatch failures and only refund explicit 400 rejection", async () => {
+  const now = new Date("2026-08-01T00:10:00.000Z");
+  const env = {
+    MODEL_PROVIDER: "deepseek",
+    DEEPSEEK_API_KEY: "test-deepseek-key",
+    API_DAILY_BUDGET_CNY: "10",
+    API_BUDGET_TIMEZONE: "UTC",
+    DEEPSEEK_INPUT_CNY_PER_MTOK: "1",
+    DEEPSEEK_OUTPUT_CNY_PER_MTOK: "2",
+    RAG_MAX_OUTPUT_TOKENS: "100",
+  };
+  const cases = [
+    {
+      label: "abort after dispatch",
+      retained: true,
+      fetchImpl: async () => {
+        const error = new Error("client aborted after dispatch");
+        error.name = "AbortError";
+        throw error;
+      },
+    },
+    {
+      label: "network failure after dispatch",
+      retained: true,
+      fetchImpl: async () => {
+        throw new Error("socket reset after request write");
+      },
+    },
+    {
+      label: "HTTP 429",
+      retained: true,
+      fetchImpl: async () => jsonResponse({ error: { message: "rate limited" } }, false, 429),
+    },
+    {
+      label: "HTTP 500",
+      retained: true,
+      fetchImpl: async () => jsonResponse({ error: { message: "upstream failed" } }, false, 500),
+    },
+    {
+      label: "HTTP 200 malformed JSON",
+      retained: true,
+      fetchImpl: async () => ({
+        ok: true,
+        status: 200,
+        async json() {
+          throw new SyntaxError("malformed upstream JSON");
+        },
+      }),
+    },
+    {
+      label: "HTTP 400 explicit rejection",
+      retained: false,
+      fetchImpl: async () => jsonResponse({ error: { message: "invalid request" } }, false, 400),
+    },
+  ];
+
+  for (const item of cases) {
+    await resetRagBudget({ env, now });
+    let fetchCount = 0;
+    const result = await callRagModel({
+      prompt: `预算分类 ${item.label}`,
+      thinkingMode: "disabled",
+      env,
+      now,
+      fetchImpl: async (...args) => {
+        fetchCount += 1;
+        return item.fetchImpl(...args);
+      },
+    });
+    const status = await getRagBudgetStatus({ env, now });
+    assert.equal(fetchCount, 1, item.label);
+    assert.equal(status.spentTodayCny > 0, item.retained, item.label);
+    assert.equal(
+      result.warnings.includes("budget_reservation_retained_after_ambiguous_remote_failure"),
+      item.retained,
+      item.label,
+    );
+  }
+});
+
+test("auxiliary-call reservations retain aborts but refund an explicit 400 rejection", async () => {
+  const now = new Date("2026-08-01T00:20:00.000Z");
+  const env = {
+    MODEL_PROVIDER: "deepseek",
+    RAG_CARD_MODEL_PROVIDER: "deepseek",
+    DEEPSEEK_API_KEY: "test-deepseek-key",
+    API_DAILY_BUDGET_CNY: "10",
+    API_BUDGET_TIMEZONE: "UTC",
+    DEEPSEEK_INPUT_CNY_PER_MTOK: "1",
+    DEEPSEEK_OUTPUT_CNY_PER_MTOK: "2",
+  };
+
+  await resetRagBudget({ env, now });
+  const aborted = await callCardNameExtractionModel({
+    userQuery: "辅助调用派发后中止-20260801",
+    env,
+    now,
+    fetchImpl: async () => {
+      const error = new Error("auxiliary abort after dispatch");
+      error.name = "AbortError";
+      throw error;
+    },
+  });
+  assert.equal((await getRagBudgetStatus({ env, now })).spentTodayCny > 0, true);
+  assert.ok(aborted.warnings.includes("budget_reservation_retained_after_ambiguous_remote_failure"));
+
+  await resetRagBudget({ env, now });
+  const timedOut = await callCardNameExtractionModel({
+    userQuery: "辅助调用派发后超时-20260801",
+    env: { ...env, RAG_CARD_MODEL_TIMEOUT_MS: "1" },
+    now,
+    fetchImpl: async () => new Promise(() => {}),
+  });
+  assert.equal((await getRagBudgetStatus({ env, now })).spentTodayCny > 0, true);
+  assert.ok(timedOut.warnings.includes("budget_reservation_retained_after_ambiguous_remote_failure"));
+
+  await resetRagBudget({ env, now });
+  const rejected = await callCardNameExtractionModel({
+    userQuery: "辅助调用明确拒绝-20260801",
+    env,
+    now,
+    fetchImpl: async () => jsonResponse({ error: { message: "invalid request" } }, false, 400),
+  });
+  assert.equal((await getRagBudgetStatus({ env, now })).spentTodayCny, 0);
+  assert.equal(rejected.warnings.includes("budget_reservation_retained_after_ambiguous_remote_failure"), false);
+});
+
+test("DeepSeek compact recovery reserves both possible calls before any fetch", async () => {
+  const now = new Date("2026-08-01T00:30:00.000Z");
+  const env = {
+    MODEL_PROVIDER: "deepseek",
+    DEEPSEEK_API_KEY: "test-deepseek-key",
+    API_DAILY_BUDGET_CNY: "0.00015",
+    API_BUDGET_TIMEZONE: "UTC",
+    DEEPSEEK_INPUT_CNY_PER_MTOK: "0",
+    DEEPSEEK_OUTPUT_CNY_PER_MTOK: "1",
+    RAG_MAX_OUTPUT_TOKENS: "100",
+    RAG_RECOVERY_MAX_OUTPUT_TOKENS: "100",
+  };
+  await resetRagBudget({ env, now });
+  let fetchCount = 0;
+  const result = await callRagModel({
+    prompt: "主请求",
+    recoveryPrompt: "可能发生的第二次请求",
+    thinkingMode: "disabled",
+    env,
+    now,
+    fetchImpl: async () => {
+      fetchCount += 1;
+      return jsonResponse({});
+    },
+  });
+
+  assert.equal(fetchCount, 0);
+  assert.equal(result.answer.answerLevel, "budget_limited");
+  assert.equal(result.budgetStatus.limitEnforced, true);
+});
+
+test("persistent public budget requirement fails closed without Redis even in default soft mode", async () => {
+  for (const persistenceEnv of [
+    { VERCEL: "1" },
+    { API_BUDGET_REQUIRE_PERSISTENT_STORAGE: "true" },
+  ]) {
+    let fetchCount = 0;
+    const result = await callRagModel({
+      prompt: "持久预算缺失时不得联网",
+      thinkingMode: "disabled",
+      env: {
+        MODEL_PROVIDER: "deepseek",
+        DEEPSEEK_API_KEY: "test-deepseek-key",
+        API_DAILY_BUDGET_CNY: "10",
+        ...persistenceEnv,
+      },
+      fetchImpl: async () => {
+        fetchCount += 1;
+        return jsonResponse({});
+      },
+    });
+    assert.equal(fetchCount, 0);
+    assert.equal(result.answer.answerLevel, "budget_limited");
+    assert.equal(result.budgetStatus.budgetStorage, "unconfigured");
+    assert.equal(result.budgetStatus.limitEnforced, true);
+  }
 });
 
 test("public card-name and rule-query helpers cannot bypass the shared daily budget", async () => {
@@ -2810,6 +3126,7 @@ test("daily budget meters evidence, GLM final, and DeepSeek final in independent
     { id: "evidence_preparation:deepseek", spent: 0.002, limit: 0.01, remaining: 0.008 },
     { id: "final_ruling:glm", spent: 0.022, limit: 0.03, remaining: 0.008 },
     { id: "final_ruling:deepseek", spent: 0.002, limit: 0.01, remaining: 0.008 },
+    { id: "final_ruling:relay", spent: 0, limit: null, remaining: null },
   ]);
 });
 
@@ -2887,13 +3204,14 @@ test("budget_status_uses_kv_rest_aliases_for_persistent_storage", async () => {
   let status = await getRagBudgetStatus({ env, fetchImpl: redis.fetchImpl, now: new Date("2026-07-09T00:00:00Z") });
   assert.equal(status.budgetStorage, "redis");
   status = await resetRagBudget({ env, fetchImpl: redis.fetchImpl, now: new Date("2026-07-09T00:00:00Z") });
-  assert.equal(status.buckets.length, 3);
+  assert.equal(status.buckets.length, 4);
   const resetCommands = redis.commands.filter((command) => command[0] === "SET");
   assert.deepEqual(resetCommands.map((command) => command[1]).sort(), [
     "rag-api-budget:2026-07-09",
     "rag-api-budget:v2:2026-07-09:evidence_preparation:deepseek",
     "rag-api-budget:v2:2026-07-09:final_ruling:deepseek",
     "rag-api-budget:v2:2026-07-09:final_ruling:glm",
+    "rag-api-budget:v2:2026-07-09:final_ruling:relay",
   ]);
   assert.ok(resetCommands.every((command) => (
     command[2] === "0" && command[3] === "EX" && command[4] === "172800"
@@ -2964,6 +3282,7 @@ test("configured Legacy Lua lookup hydrates a real Baige passcode when automatic
     aliases: ["通用桥接测试卡"],
   };
   let baigeRequests = 0;
+  const baigeQueries = [];
 
   const evidence = await retrieveRagEvidence({
     userQuery: "通用桥接测试卡的效果如何处理？",
@@ -2981,8 +3300,9 @@ test("configured Legacy Lua lookup hydrates a real Baige passcode when automatic
       RAG_AUTO_ENGINE_SIMULATION: "false",
       RAG_LIVE_OFFICIAL_QA: "false",
     },
-    fetchImpl: async () => {
+    fetchImpl: async (url) => {
       baigeRequests += 1;
+      baigeQueries.push(new URL(url).searchParams.get("search"));
       return jsonResponse({
         result: [{
           id: passcode,
@@ -2996,6 +3316,7 @@ test("configured Legacy Lua lookup hydrates a real Baige passcode when automatic
   });
 
   assert.equal(baigeRequests, 1);
+  assert.deepEqual(baigeQueries, [cid]);
   assert.equal(evidence.retrievedCards.length, 1);
   assert.equal(evidence.retrievedCards[0].id, cid);
   assert.equal(evidence.retrievedCards[0].passcode, passcode);
@@ -3290,7 +3611,9 @@ test("unique exact official QA uses a focused complete-answer route", async () =
       });
     },
   });
-  assert.match(contradicted.shortAnswer, /不能发动/u);
+  assert.match(contradicted.shortAnswer, /可以宣言并发动/u);
+  assert.doesNotMatch(contradicted.shortAnswer, /不能发动|<<91001>>/u);
+  assert.ok(contradicted.riskFlags.includes("authoritative_official_direct_fallback_applied"));
 });
 
 test("focused official QA prompt preserves the full-source tail without invalid JSON slicing", () => {

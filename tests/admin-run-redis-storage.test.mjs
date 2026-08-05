@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { gunzipSync, gzipSync } from "node:zlib";
 import { createAdminEvidenceSnapshot } from "../backend/adminEvidenceSnapshot.mjs";
 import { createAdminRunStore } from "../backend/adminRunStore.mjs";
 import {
@@ -205,7 +206,7 @@ test("Redis snapshot reads reject tampered content that retains the stored snaps
   const snapshotKey = [...mock.strings.keys()]
     .find((key) => String(key).includes(":snapshot:"));
   const tampered = JSON.parse(mock.strings.get(snapshotKey));
-  tampered.evidence.item = "tampered";
+  tampered.payload = `${tampered.payload.startsWith("A") ? "B" : "A"}${tampered.payload.slice(1)}`;
   mock.strings.set(snapshotKey, JSON.stringify(tampered));
 
   const storageB = createRedisAdminRunStorage({ env: REDIS_ENV, fetchImpl: mock.fetchImpl });
@@ -214,6 +215,273 @@ test("Redis snapshot reads reject tampered content that retains the stored snaps
     (error) => error?.code === "admin_run_storage_corrupt"
       && /integrity/u.test(error.message),
   );
+});
+
+test("Redis stores full snapshots as deterministic gzip envelopes while references stay plain", async () => {
+  const mock = createMockRedisRest();
+  const storage = createRedisAdminRunStorage({ env: REDIS_ENV, fetchImpl: mock.fetchImpl });
+  const store = createAdminRunStore({ storage });
+  const snapshot = createAdminEvidenceSnapshot({
+    question: "deterministic compressed snapshot",
+    evidence: { repeated: "evidence-body-".repeat(2_000) },
+    createdAt: "2026-07-28T01:15:00.000Z",
+  });
+  await store.createRun({ runId: "compressed-source-a", evidenceSnapshot: snapshot });
+  await store.createRun({ runId: "compressed-source-b", evidenceSnapshot: snapshot });
+  await store.createRun({
+    runId: "compressed-reference",
+    evidenceSnapshot: snapshot,
+    metadata: {
+      fork: {
+        sourceRunId: "compressed-source-a",
+        sourceEvidenceSnapshotId: snapshot.snapshotId,
+        sourceEvidenceSnapshotSha256: snapshot.contentSha256,
+      },
+    },
+  });
+
+  const records = [...mock.strings.entries()]
+    .filter(([key]) => String(key).includes(":snapshot:"))
+    .map(([key, raw]) => ({ key, raw, parsed: JSON.parse(raw) }));
+  const fullRecords = records.filter(({ parsed }) => (
+    parsed.recordType === "admin_evidence_snapshot_gzip"
+  ));
+  const references = records.filter(({ parsed }) => (
+    parsed.recordType === "admin_evidence_snapshot_reference"
+  ));
+  assert.equal(fullRecords.length, 2);
+  assert.equal(references.length, 1);
+  assert.equal(fullRecords[0].raw, fullRecords[1].raw);
+  const envelope = fullRecords[0].parsed;
+  assert.deepEqual(
+    JSON.parse(gunzipSync(Buffer.from(envelope.payload, "base64")).toString("utf8")),
+    snapshot,
+  );
+  assert.equal(envelope.encoding, "gzip+base64");
+  assert.equal(envelope.snapshotId, snapshot.snapshotId);
+  assert.equal(envelope.contentSha256, snapshot.contentSha256);
+  assert.equal(envelope.compressedBytes < envelope.uncompressedBytes, true);
+  assert.equal("payload" in references[0].parsed, false);
+});
+
+test("Redis compressed snapshot decoding rejects output beyond the configured limit", async () => {
+  const mock = createMockRedisRest();
+  const initialStorage = createRedisAdminRunStorage({ env: REDIS_ENV, fetchImpl: mock.fetchImpl });
+  const store = createAdminRunStore({ storage: initialStorage });
+  await store.createRun({
+    runId: "compressed-output-limit",
+    evidenceSnapshot: createAdminEvidenceSnapshot({ question: "bounded decompression" }),
+  });
+  const snapshotKey = [...mock.strings.keys()]
+    .find((key) => String(key).includes(":snapshot:"));
+  const envelope = JSON.parse(mock.strings.get(snapshotKey));
+  const oversizedBody = gzipSync(Buffer.from("x".repeat(2_048), "utf8"), {
+    level: 9,
+    mtime: 0,
+  });
+  envelope.uncompressedBytes = 512;
+  envelope.compressedBytes = oversizedBody.byteLength;
+  envelope.payload = oversizedBody.toString("base64");
+  mock.strings.set(snapshotKey, JSON.stringify(envelope));
+
+  const boundedStorage = createRedisAdminRunStorage({
+    env: REDIS_ENV,
+    fetchImpl: mock.fetchImpl,
+    maxSnapshotUncompressedBytes: 1_024,
+    maxSnapshotCompressedBytes: 1_024,
+  });
+  await assert.rejects(
+    boundedStorage.getRun("compressed-output-limit"),
+    (error) => error?.code === "admin_run_storage_corrupt"
+      && /integrity/u.test(error.message),
+  );
+});
+
+test("Redis rejects legacy bare snapshots whose canonical JSON exceeds the byte limit", async () => {
+  const mock = createMockRedisRest();
+  const initialStorage = createRedisAdminRunStorage({ env: REDIS_ENV, fetchImpl: mock.fetchImpl });
+  const store = createAdminRunStore({ storage: initialStorage });
+  const snapshot = createAdminEvidenceSnapshot({
+    evidence: { values: Array.from({ length: 50 }, () => 1e20) },
+  });
+  const canonical = JSON.stringify(snapshot);
+  const compactLegacy = canonical.replaceAll("100000000000000000000", "1e20");
+  assert.equal(Buffer.byteLength(compactLegacy, "utf8") < 1_024, true);
+  assert.equal(Buffer.byteLength(canonical, "utf8") > 1_024, true);
+  await store.createRun({
+    runId: "oversized-legacy-bare-snapshot",
+    evidenceSnapshot: snapshot,
+  });
+  const snapshotKey = [...mock.strings.keys()].find((key) => (
+    String(key).includes("oversized-legacy-bare-snapshot")
+    && String(key).includes(":snapshot:")
+  ));
+  mock.strings.set(snapshotKey, compactLegacy);
+
+  const boundedStorage = createRedisAdminRunStorage({
+    env: REDIS_ENV,
+    fetchImpl: mock.fetchImpl,
+    maxSnapshotUncompressedBytes: 1_024,
+    maxSnapshotCompressedBytes: 1_024,
+  });
+  await assert.rejects(
+    boundedStorage.getRun("oversized-legacy-bare-snapshot"),
+    (error) => error?.code === "admin_run_storage_corrupt"
+      && /uncompressed byte limit/u.test(error.message),
+  );
+});
+
+test("Redis rejects compressed snapshots whose canonical JSON expands beyond the byte limit", async () => {
+  const mock = createMockRedisRest();
+  const initialStorage = createRedisAdminRunStorage({ env: REDIS_ENV, fetchImpl: mock.fetchImpl });
+  const store = createAdminRunStore({ storage: initialStorage });
+  const snapshot = createAdminEvidenceSnapshot({
+    evidence: { values: Array.from({ length: 50 }, () => 1e20) },
+  });
+  await store.createRun({
+    runId: "canonical-expansion-gzip",
+    evidenceSnapshot: snapshot,
+  });
+  const snapshotKey = [...mock.strings.keys()].find((key) => (
+    String(key).includes("canonical-expansion-gzip")
+    && String(key).includes(":snapshot:")
+  ));
+  const envelope = JSON.parse(mock.strings.get(snapshotKey));
+  const canonical = JSON.stringify(snapshot);
+  const compactJson = canonical.replaceAll("100000000000000000000", "1e20");
+  const compactBytes = Buffer.from(compactJson, "utf8");
+  const compressed = gzipSync(compactBytes, { level: 9, mtime: 0 });
+  assert.equal(compactBytes.byteLength < 1_024, true);
+  assert.equal(Buffer.byteLength(canonical, "utf8") > 1_024, true);
+  envelope.uncompressedBytes = compactBytes.byteLength;
+  envelope.compressedBytes = compressed.byteLength;
+  envelope.payload = compressed.toString("base64");
+  mock.strings.set(snapshotKey, JSON.stringify(envelope));
+
+  const boundedStorage = createRedisAdminRunStorage({
+    env: REDIS_ENV,
+    fetchImpl: mock.fetchImpl,
+    maxSnapshotUncompressedBytes: 1_024,
+    maxSnapshotCompressedBytes: 1_024,
+  });
+  await assert.rejects(
+    boundedStorage.getRun("canonical-expansion-gzip"),
+    (error) => error?.code === "admin_run_storage_corrupt"
+      && /uncompressed byte limit/u.test(error.message),
+  );
+});
+
+test("Redis rejects oversized embedded legacy snapshots using UTF-8 byte length", async () => {
+  const mock = createMockRedisRest();
+  const initialStorage = createRedisAdminRunStorage({ env: REDIS_ENV, fetchImpl: mock.fetchImpl });
+  const store = createAdminRunStore({ storage: initialStorage });
+  const snapshot = createAdminEvidenceSnapshot({
+    question: "界".repeat(300),
+  });
+  const canonical = JSON.stringify(snapshot);
+  assert.equal(canonical.length < 1_024, true);
+  assert.equal(Buffer.byteLength(canonical, "utf8") > 1_024, true);
+  await store.createRun({
+    runId: "oversized-embedded-legacy-snapshot",
+    evidenceSnapshot: snapshot,
+  });
+  const stateKey = [...mock.strings.keys()].find((key) => (
+    String(key).includes("oversized-embedded-legacy-snapshot")
+    && String(key).endsWith(":state")
+  ));
+  const legacyRun = JSON.parse(mock.strings.get(stateKey));
+  legacyRun.evidenceSnapshot = snapshot;
+  mock.strings.set(stateKey, JSON.stringify(legacyRun));
+
+  const boundedStorage = createRedisAdminRunStorage({
+    env: REDIS_ENV,
+    fetchImpl: mock.fetchImpl,
+    maxSnapshotUncompressedBytes: 1_024,
+  });
+  await assert.rejects(
+    boundedStorage.getRun("oversized-embedded-legacy-snapshot"),
+    (error) => error?.code === "admin_run_storage_corrupt"
+      && /uncompressed byte limit/u.test(error.message),
+  );
+});
+
+test("Redis accepts a legacy bare snapshot exactly at the canonical byte limit", async () => {
+  const mock = createMockRedisRest();
+  const initialStorage = createRedisAdminRunStorage({ env: REDIS_ENV, fetchImpl: mock.fetchImpl });
+  const store = createAdminRunStore({ storage: initialStorage });
+  const snapshot = createAdminEvidenceSnapshot({ question: "b".repeat(900) });
+  const canonical = JSON.stringify(snapshot);
+  const canonicalBytes = Buffer.byteLength(canonical, "utf8");
+  assert.equal(canonicalBytes >= 1_024, true);
+  await store.createRun({
+    runId: "legacy-snapshot-exact-byte-limit",
+    evidenceSnapshot: snapshot,
+  });
+  const snapshotKey = [...mock.strings.keys()].find((key) => (
+    String(key).includes("legacy-snapshot-exact-byte-limit")
+    && String(key).includes(":snapshot:")
+  ));
+  mock.strings.set(snapshotKey, canonical);
+
+  const boundedStorage = createRedisAdminRunStorage({
+    env: REDIS_ENV,
+    fetchImpl: mock.fetchImpl,
+    maxSnapshotUncompressedBytes: canonicalBytes,
+  });
+  assert.deepEqual(
+    (await boundedStorage.getRun("legacy-snapshot-exact-byte-limit")).evidenceSnapshot,
+    snapshot,
+  );
+});
+
+test("Redis accepts a verified equivalent gzip envelope without rewriting immutable bytes", async () => {
+  const mock = createMockRedisRest();
+  const storage = createRedisAdminRunStorage({ env: REDIS_ENV, fetchImpl: mock.fetchImpl });
+  const store = createAdminRunStore({ storage });
+  const snapshot = createAdminEvidenceSnapshot({
+    question: "equivalent compressed bytes",
+    evidence: { body: "same-evidence-".repeat(500) },
+  });
+  await store.createRun({ runId: "equivalent-gzip-run", evidenceSnapshot: snapshot });
+  const snapshotKey = [...mock.strings.keys()]
+    .find((key) => String(key).includes(":snapshot:"));
+  const envelope = JSON.parse(mock.strings.get(snapshotKey));
+  const alternative = gzipSync(Buffer.from(JSON.stringify(snapshot), "utf8"), {
+    level: 1,
+    mtime: 0,
+  });
+  envelope.compressedBytes = alternative.byteLength;
+  envelope.payload = alternative.toString("base64");
+  const alternativeRaw = JSON.stringify(envelope);
+  mock.strings.set(snapshotKey, alternativeRaw);
+
+  const updated = await store.appendEvent("equivalent-gzip-run", {
+    payload: { compatible: true },
+  });
+  assert.equal(updated.revision, 2);
+  assert.equal(mock.strings.get(snapshotKey), alternativeRaw);
+  assert.deepEqual((await storage.getRun("equivalent-gzip-run")).evidenceSnapshot, snapshot);
+});
+
+test("Redis rejects an oversized snapshot before any key is written", async () => {
+  const mock = createMockRedisRest();
+  const storage = createRedisAdminRunStorage({
+    env: REDIS_ENV,
+    fetchImpl: mock.fetchImpl,
+    maxSnapshotUncompressedBytes: 1_024,
+  });
+  const store = createAdminRunStore({ storage });
+  await assert.rejects(
+    store.createRun({
+      runId: "oversized-snapshot-write",
+      evidenceSnapshot: createAdminEvidenceSnapshot({
+        question: "x".repeat(2_000),
+      }),
+    }),
+    (error) => error?.code === "admin_run_snapshot_too_large",
+  );
+  assert.equal(mock.commands.every((command) => command[0] === "TIME"), true);
+  assert.equal(mock.strings.size, 0);
 });
 
 test("Redis snapshot identity rejects two canonical objects with the same content id", async () => {

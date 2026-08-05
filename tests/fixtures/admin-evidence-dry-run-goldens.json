@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "goldens": [
+    {
+      "id": "double-tempest-impermanence",
+      "expectedAnswer": "不能发动。正在发动且处理后通常送去墓地的《无限泡影》不能返回手牌；场上又没有其他能返回手牌的魔法·陷阱卡，因此《天雷之双风神 息那》的陷阱分支不满足发动时的处理合法性。",
+      "leakCanary": "GOLD_ONLY_CANARY_01_DO_NOT_SEND"
+    },
+    {
+      "id": "unchained-replacement",
+      "expectedAnswer": "可以适用《完美电子多元驱动蛇·神龙》的破坏替代并降低1000攻击力；由于《破械焰魔天·阎摩》最终没有被破坏，《破械冥官·篁》不能特殊召唤。",
+      "leakCanary": "GOLD_ONLY_CANARY_02_DO_NOT_SEND"
+    },
+    {
+      "id": "accel-synchro-trigger-window",
+      "expectedAnswer": "该处理正确。《加速同调士》的效果在连锁1处理时完成同调召唤，整条连锁处理完毕后仍是该次同调召唤成功后的诱发时点；必发的《纠罪巧恐怖》先组成连锁1，选发的《黑蔷薇龙》可以组成连锁2，没有错过时点。",
+      "leakCanary": "GOLD_ONLY_CANARY_03_DO_NOT_SEND"
+    },
+    {
+      "id": "lost-target-continue-resolution",
+      "expectedAnswer": "已经发动的效果处理到不能处理为止。对象离场后，《谜式密码大师》仍处理丢弃1张手卡；《无垢者·墨迪乌斯》离开墓地后，仍处理让自己手牌或场上的1只怪兽回到卡组。",
+      "leakCanary": "GOLD_ONLY_CANARY_04_DO_NOT_SEND"
+    }
+  ]
+}

@@ -155,8 +155,16 @@ function plan(identity, { registryValue = registry(), engineVersions = versions(
     operationProgram: { kind: "SEQUENCE", steps: [] },
     operationApis: [],
     atomicOperations: [],
-    activationLegalityChecks: [],
-    activationLegalityDependencies: [],
+    activationLegalityChecks: [{
+      callbackSlot: "TARGET",
+      predicateApi: "Card.IsAbleToHand",
+      atomicOperation: "RETURN_TO_HAND",
+      requiredMinimum: 1,
+      dependencyGraph: {
+        dependencies: ["CARD_CAN_RETURN_TO_HAND"],
+      },
+    }],
+    activationLegalityDependencies: ["CARD_CAN_RETURN_TO_HAND"],
     requiredLegacyApis: [],
     requiredCapabilities: [
       "compatibility/legacy-lua-semantic-discovery/v1",
@@ -294,6 +302,37 @@ function mockEngine({
   return { engine, calls };
 }
 
+function effectCandidatesEnvelope(source, result, {
+  kind = "TYPED_UNKNOWN",
+  unknownReasons = [{
+    phase: "LEGACY_DISCOVERY",
+    code: "HTTP_ENUMERATION_TYPED_UNKNOWN",
+    message: "effect enumeration returned typed UNKNOWN",
+    evidenceIds: [source.sourceDocumentId],
+  }],
+} = {}) {
+  return {
+    schemaVersion: "ocg-legacy-lua-http-effect-candidates/v1",
+    authority: "LEGACY_DISCOVERY_ONLY",
+    canConfirmOfficialRuling: false,
+    legacyAcceptedAsTruth: false,
+    verdict: "UNKNOWN",
+    kind,
+    operation: "EFFECT_CANDIDATES",
+    sourceBinding: {
+      mode: "SOURCE_DOCUMENT",
+      sourceDocumentId: source.sourceDocumentId,
+      sourceContentSha256: source.contentHash,
+      documentVersion: source.documentVersion,
+      locator: source.provenance.locator,
+      retrievedAt: source.provenance.retrievedAt,
+      script: null,
+    },
+    result,
+    unknownReasons,
+  };
+}
+
 test("client preserves every effect candidate and never promotes legacy output to authority", async () => {
   const identities = [
     rawSha256("effect-c"),
@@ -382,6 +421,97 @@ test("client preserves partial compile and UNKNOWN analysis artifacts", async ()
   ));
 });
 
+test("client retains a verified envelope-bound null-hash candidate set as typed UNKNOWN", async () => {
+  const { engine } = mockEngine();
+  const enumerate = engine.enumerateLegacyLuaEffectCandidates.bind(engine);
+  engine.enumerateLegacyLuaEffectCandidatesEnvelope = (source) => {
+    const result = enumerate(source);
+    result.sourceContentHash = null;
+    result.candidates = [];
+    result.unknownReasons = [{
+      phase: "LEGACY_DISCOVERY",
+      code: "LUA_PARSE_UNSUPPORTED",
+      message: "the locked Lua source is outside the static parser subset",
+      evidenceIds: [source.sourceDocumentId],
+    }];
+    return effectCandidatesEnvelope(source, result, {
+      unknownReasons: [{
+        phase: "LEGACY_DISCOVERY",
+        code: "HTTP_ENUMERATION_TYPED_UNKNOWN",
+        message: "effect enumeration returned typed UNKNOWN",
+        evidenceIds: [source.sourceDocumentId],
+      }],
+    });
+  };
+
+  const source = sourceDocument();
+  const resource = await collectLegacyLuaSemanticResource({
+    sourceDocument: source,
+    engine,
+  });
+
+  assert.equal(resource.status, "TYPED_UNKNOWN");
+  assert.equal(resource.verdict, "UNKNOWN");
+  assert.equal(resource.canConfirmOfficialRuling, false);
+  assert.equal(resource.legacyAcceptedAsTruth, false);
+  assert.equal(resource.resourceBinding.sourceContentSha256, source.contentHash);
+  assert.notEqual(resource.candidateSetSha256, null);
+  assert.deepEqual(resource.effectCandidates, []);
+  assert.ok(resource.unknownReasons.some(
+    (reason) => reason.code === "LUA_PARSE_UNSUPPORTED",
+  ));
+  assert.ok(resource.unknownReasons.some(
+    (reason) => reason.code === "HTTP_ENUMERATION_TYPED_UNKNOWN",
+  ));
+  assert.equal(resource.unknownReasons.some(
+    (reason) => reason.code === "LEGACY_LUA_BINDING_INVALID",
+  ), false);
+});
+
+test("client rejects conflicting or candidate-bearing unbound candidate sets", async (t) => {
+  await t.test("conflicting result hash", async () => {
+    const { engine } = mockEngine();
+    const enumerate = engine.enumerateLegacyLuaEffectCandidates.bind(engine);
+    engine.enumerateLegacyLuaEffectCandidatesEnvelope = (source) => {
+      const result = enumerate(source);
+      result.sourceContentHash = "0".repeat(64);
+      return effectCandidatesEnvelope(source, result);
+    };
+    const resource = await collectLegacyLuaSemanticResource({
+      sourceDocument: sourceDocument(),
+      engine,
+    });
+    assert.equal(resource.status, "TYPED_UNKNOWN");
+    assert.equal(resource.verdict, "UNKNOWN");
+    assert.deepEqual(resource.effectCandidates, []);
+    assert.equal(resource.candidateSetSha256, null);
+    assert.ok(resource.unknownReasons.some(
+      (reason) => reason.code === "LEGACY_LUA_BINDING_INVALID",
+    ));
+  });
+
+  await t.test("null hash with candidates", async () => {
+    const { engine } = mockEngine();
+    const enumerate = engine.enumerateLegacyLuaEffectCandidates.bind(engine);
+    engine.enumerateLegacyLuaEffectCandidatesEnvelope = (source) => {
+      const result = enumerate(source);
+      result.sourceContentHash = null;
+      return effectCandidatesEnvelope(source, result);
+    };
+    const resource = await collectLegacyLuaSemanticResource({
+      sourceDocument: sourceDocument(),
+      engine,
+    });
+    assert.equal(resource.status, "TYPED_UNKNOWN");
+    assert.equal(resource.verdict, "UNKNOWN");
+    assert.deepEqual(resource.effectCandidates, []);
+    assert.equal(resource.candidateSetSha256, null);
+    assert.ok(resource.unknownReasons.some(
+      (reason) => reason.code === "LEGACY_LUA_CANDIDATE_SET_INVALID",
+    ));
+  });
+});
+
 test("model projection keeps generic dependencies but drops source and AST payload", async () => {
   const { engine } = mockEngine();
   const resource = await collectLegacyLuaSemanticResource({
@@ -405,6 +535,10 @@ test("model projection keeps generic dependencies but drops source and AST paylo
     view.effectCandidates[0].requiredCapabilities,
     [...resource.effectCandidates[0].semanticArtifact.plan.requiredCapabilities]
       .sort(),
+  );
+  assert.deepEqual(
+    view.effectCandidates[0].activationLegalityChecks[0].dependencyNodes,
+    ["CARD_CAN_RETURN_TO_HAND"],
   );
   assert.ok(Buffer.byteLength(serializedView) < Buffer.byteLength(serializedPacket));
   assert.doesNotMatch(serializedView, /sourceSpans|exactText|conditionProgram/u);

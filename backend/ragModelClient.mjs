@@ -1,7 +1,11 @@
 import { emptyOperationLegality, validateOperationLegalityModelOutput } from "./operationLegalityAnalyzer.mjs";
 import { RAG_ANSWER_LEVELS } from "./ragRulingPrompt.mjs";
 import { compileRuleScenario } from "./ruleScenarioCompiler.mjs";
-import { resolvePublicRulingModelProfile } from "./publicRulingModelConfig.mjs";
+import {
+  DEFAULT_PUBLIC_RELAY_BASE_URL,
+  DEFAULT_PUBLIC_RELAY_MODEL,
+  resolvePublicRulingModelProfile,
+} from "./publicRulingModelConfig.mjs";
 
 const DEFAULT_DEEPSEEK_BASE_URL = "https://api.deepseek.com";
 const DEFAULT_DEEPSEEK_MODEL = "deepseek-v4-flash";
@@ -9,15 +13,18 @@ const DEFAULT_DEEPSEEK_CARD_MODEL = "deepseek-v4-flash";
 const DEFAULT_GLM_BASE_URL = "https://open.bigmodel.cn/api/paas/v4";
 const DEFAULT_GLM_MODEL = "glm-5.2";
 const DEFAULT_JSON_TASK_MAX_OUTPUT_TOKENS = 4000;
+const DEFAULT_RAG_RECOVERY_MAX_OUTPUT_TOKENS = 4096;
 const DEFAULT_LIGHTWEIGHT_EXTRACTION_TIMEOUT_MS = 4500;
 const DEFAULT_DAILY_BUDGET_CNY = 10;
 const DEFAULT_BUDGET_TIMEZONE = "Asia/Shanghai";
 const DEEPSEEK_THINKING_MODES = new Set(["enabled", "disabled"]);
 const DEEPSEEK_REASONING_EFFORTS = new Set(["high", "max"]);
+const RELAY_REASONING_EFFORTS = new Set(["none", "low", "medium", "high", "xhigh", "max"]);
 const PUBLIC_BUDGET_BUCKETS = Object.freeze([
   Object.freeze({ id: "evidence_preparation:deepseek", stage: "evidence_preparation", provider: "deepseek", label: "DeepSeek 资料准备" }),
   Object.freeze({ id: "final_ruling:glm", stage: "final_ruling", provider: "glm", label: "GLM 最终裁定" }),
   Object.freeze({ id: "final_ruling:deepseek", stage: "final_ruling", provider: "deepseek", label: "DeepSeek 最终裁定" }),
+  Object.freeze({ id: "final_ruling:relay", stage: "final_ruling", provider: "relay", label: "第三方中转最终裁定（模型身份未验证）" }),
 ]);
 const RESTRICTIVE_EVIDENCE_PATTERN = /(?:不能|不可|不得|无法|不可以|不适用|不在场上存在|禁止|不满足|不存在|cannot|can't|must not|may not|not allowed|できません|発動できません)/iu;
 const GROUNDING_MECHANISM_PATTERNS = Object.freeze([
@@ -69,11 +76,19 @@ export async function callRagModel({
   const modelName = modelNameForProvider(provider, env);
   const reasoningGeneration = provider === "deepseek" || provider === "glm"
     ? resolveReasoningGenerationConfig({ provider, modelName, thinkingMode, reasoningEffort, env })
-    : null;
+    : provider === "relay"
+      ? resolveRelayReasoningGenerationConfig({ reasoningEffort, env })
+      : null;
   const maxTokens = resolveRagMaxOutputTokens(env, {
     provider,
     thinkingMode: reasoningGeneration?.thinkingMode,
   });
+  const compactRecoveryMaxTokens = provider === "deepseek" && recoveryPrompt
+    ? readPositiveNumber(
+        env.RAG_RECOVERY_MAX_OUTPUT_TOKENS,
+        DEFAULT_RAG_RECOVERY_MAX_OUTPUT_TOKENS,
+      )
+    : 0;
   const generationConfig = {
     requestModel: modelName,
     maxOutputTokens: maxTokens,
@@ -90,8 +105,10 @@ export async function callRagModel({
   const budget = await buildBudgetPreflight({
     provider,
     stage: "final_ruling",
-    prompt,
-    maxTokens,
+    // Compact recovery is a second paid request. Reserve both worst-case
+    // outputs before the primary call so the retry cannot bypass the day cap.
+    prompt: compactRecoveryMaxTokens > 0 ? `${prompt}\n${recoveryPrompt}` : prompt,
+    maxTokens: maxTokens + compactRecoveryMaxTokens,
     env,
     fetchImpl,
     now,
@@ -177,6 +194,7 @@ export async function callRagModel({
   }
 
   try {
+    let retainFullReservation = false;
     let response = provider === "gemini"
       ? await callGemini({ prompt, env, modelName, maxTokens, fetchImpl, signal })
       : provider === "glm"
@@ -190,6 +208,16 @@ export async function callRagModel({
           reasoningEffort: reasoningGeneration.reasoningEffort,
           signal,
         })
+        : provider === "relay"
+          ? await callRelay({
+            prompt,
+            env,
+            modelName,
+            maxTokens,
+            fetchImpl,
+            reasoningEffort: reasoningGeneration.reasoningEffort,
+            signal,
+          })
         : await callDeepSeek({
           prompt,
           env,
@@ -198,6 +226,7 @@ export async function callRagModel({
           fetchImpl,
           thinkingMode: reasoningGeneration.thinkingMode,
           reasoningEffort: reasoningGeneration.reasoningEffort,
+          requireJson: true,
           signal,
         });
     const compactRecoveryAssessment = provider === "deepseek"
@@ -211,10 +240,7 @@ export async function callRagModel({
     }
     const responses = [response];
     if (provider === "deepseek" && compactRecoveryAssessment.retry && recoveryPrompt) {
-      const recoveryMaxTokens = readPositiveNumber(
-        env.RAG_RECOVERY_MAX_OUTPUT_TOKENS,
-        Math.max(maxTokens * 2, 8000),
-      );
+      const recoveryMaxTokens = compactRecoveryMaxTokens;
       try {
         const recovery = await callDeepSeek({
           prompt: recoveryPrompt,
@@ -227,6 +253,7 @@ export async function callRagModel({
           // thinking so DeepSeek can enforce JSON response mode on this pass.
           thinkingMode: "disabled",
           reasoningEffort: undefined,
+          requireJson: true,
           signal,
         });
         responses.push(recovery);
@@ -254,6 +281,7 @@ export async function callRagModel({
       } catch (error) {
         // The primary response is already billable. A failed or aborted compact
         // recovery must not route through the outer reservation-refund path.
+        retainFullReservation = !isBudgetReservationReleaseSafe(error);
         response = {
           ...responses[0],
           warnings: [
@@ -261,6 +289,9 @@ export async function callRagModel({
             "deepseek_compact_recovery_attempted",
             "deepseek_compact_recovery_failed",
             `deepseek_compact_recovery_call_failed:${safeErrorMessage(error)}`,
+            ...(retainFullReservation
+              ? ["budget_reservation_retained_after_ambiguous_remote_failure"]
+              : []),
           ],
         };
       }
@@ -270,9 +301,11 @@ export async function callRagModel({
       + Number(tokenUsage.completion_tokens || 0)
       + Number(tokenUsage.total_tokens || 0);
     const measuredCost = estimateActualCostCny(provider, tokenUsage, env);
-    const actualCost = reportedTokens > 0 || provider === "gemini"
-      ? measuredCost
-      : roundCost(budget.reservedAmountCny || Number(budget.status?.estimatedThisCallCny || 0));
+    const actualCost = retainFullReservation
+      ? roundCost(budget.reservedAmountCny || Number(budget.status?.estimatedThisCallCny || 0))
+      : reportedTokens > 0 || provider === "gemini"
+        ? measuredCost
+        : roundCost(budget.reservedAmountCny || Number(budget.status?.estimatedThisCallCny || 0));
     const spendWarnings = [];
     let budgetStatus = budget.status;
     try {
@@ -312,7 +345,10 @@ export async function callRagModel({
     };
   } catch (error) {
     const warning = `model_call_failed:${error instanceof Error ? error.message : String(error)}`;
-    const releasedBudgetStatus = await releaseBudgetReservation({ preflight: budget, env, fetchImpl }).catch(() => budget.status);
+    const releaseSafe = isBudgetReservationReleaseSafe(error);
+    const failedBudgetStatus = releaseSafe
+      ? await releaseBudgetReservation({ preflight: budget, env, fetchImpl }).catch(() => budget.status)
+      : budget.status;
     return {
       answer: safeFallbackAnswer("model_call_failed"),
       rawText: "",
@@ -321,10 +357,16 @@ export async function callRagModel({
       modelName,
       modelUsed: modelName || provider,
       dryRun: false,
-      warnings: [...providerResolution.warnings, ...generationWarnings, warning, ...budget.warnings],
+      warnings: [
+        ...providerResolution.warnings,
+        ...generationWarnings,
+        warning,
+        ...(releaseSafe ? [] : ["budget_reservation_retained_after_ambiguous_remote_failure"]),
+        ...budget.warnings,
+      ],
       tokenUsage: {},
-      estimatedCostCny: 0,
-      budgetStatus: releasedBudgetStatus,
+      estimatedCostCny: releaseSafe ? 0 : budget.reservedAmountCny,
+      budgetStatus: failedBudgetStatus,
       generationConfig,
     };
   }
@@ -376,7 +418,6 @@ export async function callDeepSeekJsonTask({
     throw error;
   }
 
-  let remoteCallCompleted = false;
   try {
     const response = await callDeepSeek({
       prompt: normalizedPrompt,
@@ -387,9 +428,10 @@ export async function callDeepSeekJsonTask({
       temperature: readNumber(temperature, 0),
       thinkingMode,
       reasoningEffort,
+      requireJson: true,
+      allowResponseFormatFallback: true,
       signal,
     });
-    remoteCallCompleted = true;
     const usage = normalizeUsage("deepseek", response.usage);
     const estimatedCostCny = estimateActualCostCny("deepseek", usage, env);
     let budgetStatus = budget?.status || null;
@@ -412,7 +454,7 @@ export async function callDeepSeekJsonTask({
       budgetStatus,
     };
   } catch (error) {
-    if (budget && !remoteCallCompleted) {
+    if (budget && isBudgetReservationReleaseSafe(error)) {
       await releaseBudgetReservation({ preflight: budget, env, fetchImpl }).catch(() => {});
     }
     throw error;
@@ -912,6 +954,7 @@ export async function callRulebookGroundingModel({
   }
 
   let remoteCallCompleted = false;
+  let allFailedCallsWereReleaseSafe = false;
   let budgetStatus = budget.status;
   let tokenUsage = {};
   let actualCost = 0;
@@ -960,6 +1003,13 @@ export async function callRulebookGroundingModel({
       .filter((outcome) => outcome?.status === "fulfilled")
       .map((outcome) => outcome.value);
     remoteCallCompleted = responses.length > 0;
+    const attemptedOutcomes = [primaryOutcome, focusedOutcome].filter(Boolean);
+    allFailedCallsWereReleaseSafe = !remoteCallCompleted
+      && attemptedOutcomes.length > 0
+      && attemptedOutcomes.every((outcome) => (
+        outcome.status === "rejected"
+        && isBudgetReservationReleaseSafe(outcome.reason)
+      ));
     tokenUsage = sumTokenUsage(responses.map((item) => normalizeUsage(provider, item.usage)));
     const reportedTokens = Number(tokenUsage.prompt_tokens || 0)
       + Number(tokenUsage.completion_tokens || 0)
@@ -1016,14 +1066,17 @@ export async function callRulebookGroundingModel({
     }
     return result;
   } catch (error) {
-    const failedBudgetStatus = remoteCallCompleted
-      ? budgetStatus
-      : await releaseBudgetReservation({ preflight: budget, env, fetchImpl }).catch(() => budget.status);
+    const failedBudgetStatus = allFailedCallsWereReleaseSafe
+      ? await releaseBudgetReservation({ preflight: budget, env, fetchImpl }).catch(() => budget.status)
+      : budgetStatus;
     return {
       ...emptyRulebookGroundingResult(provider, modelName, false, [
         ...providerResolution.warnings,
         ...budget.warnings,
         ...spendWarnings,
+        ...(!remoteCallCompleted && !allFailedCallsWereReleaseSafe
+          ? ["budget_reservation_retained_after_ambiguous_remote_failure"]
+          : []),
         `rulebook_grounding_model_failed:${safeErrorMessage(error)}`,
       ], priorityConstraintEvidence),
       tokenUsage,
@@ -1044,6 +1097,11 @@ export function resolveRagProvider(env = {}) {
   if (requested === "glm") {
     if (!env.GLM_API_KEY) warnings.push("glm_api_key_missing_using_mock");
     return { provider: env.GLM_API_KEY ? "glm" : "mock", requested, warnings };
+  }
+  if (requested === "relay") {
+    const configured = Boolean(String(env.RELAY_API_KEY || "").trim());
+    if (!configured) warnings.push("relay_api_key_missing_using_mock");
+    return { provider: configured ? "relay" : "mock", requested, warnings };
   }
   if (requested === "gemini") {
     if (!env.GEMINI_API_KEY) warnings.push("gemini_api_key_missing_using_mock");
@@ -1075,14 +1133,17 @@ export function createPublicAnswerModelEnv(env = {}, profileValue) {
   const source = env && typeof env === "object" ? env : {};
   const result = { ...source };
   for (const key of Object.keys(result)) {
-    if (/^(?:OPENAI_|ADMIN_|KIMI_)/iu.test(key)) delete result[key];
+    if (/^(?:OPENAI_|ADMIN_|GLM_|KIMI_)/iu.test(key)) delete result[key];
   }
 
-  const profile = resolvePublicRulingModelProfile(profileValue);
-  if (!result.GLM_BASE_URL && source.ADMIN_GLM_BASE_URL) {
-    result.GLM_BASE_URL = source.ADMIN_GLM_BASE_URL;
+  const profile = resolvePublicRulingModelProfile(
+    profileValue || source.PUBLIC_RULING_MODEL_PROFILE,
+  );
+  if (profile.provider !== "relay") {
+    for (const key of Object.keys(result)) {
+      if (/^RELAY_/iu.test(key)) delete result[key];
+    }
   }
-
   const mockRequested = [
     source.RAG_MODEL_PROVIDER,
     source.MODEL_PROVIDER,
@@ -1094,8 +1155,8 @@ export function createPublicAnswerModelEnv(env = {}, profileValue) {
   result.RAG_THINKING_MODE = profile.thinkingMode;
   result.RAG_REASONING_EFFORT = profile.reasoningEffort;
   result.PUBLIC_RULING_MODEL_PROFILE = profile.id;
-  // The tier flag is still consumed by DeepSeek evidence-preparation pricing;
-  // every public DeepSeek stage is Flash, even when GLM is the final model.
+  // The tier flag is consumed by DeepSeek evidence-preparation pricing; every
+  // public DeepSeek stage is Flash.
   result.RAG_MODEL_TIER = "flash";
   result.RAG_CARD_MODEL_PROVIDER = mockRequested ? "mock" : "deepseek";
   result.RAG_RULE_MODEL_PROVIDER = mockRequested ? "mock" : "deepseek";
@@ -1279,14 +1340,17 @@ async function callDeepSeek({
   temperature,
   thinkingMode,
   reasoningEffort,
+  requireJson = true,
+  allowResponseFormatFallback = false,
   signal,
 }) {
   const endpoint = deepSeekChatCompletionsUrl(env.DEEPSEEK_BASE_URL);
+  const jsonResponseModeEnabled = requireJson && thinkingMode !== "enabled";
   const body = {
     model: modelName || DEFAULT_DEEPSEEK_MODEL,
     messages: [{ role: "user", content: prompt }],
     stream: false,
-    ...(thinkingMode === "enabled" ? {} : { response_format: { type: "json_object" } }),
+    ...(jsonResponseModeEnabled ? { response_format: { type: "json_object" } } : {}),
   };
   if (DEEPSEEK_THINKING_MODES.has(thinkingMode)) {
     body.thinking = { type: thinkingMode };
@@ -1302,7 +1366,7 @@ async function callDeepSeek({
     "content-type": "application/json",
   }, body, { signal });
   const warnings = [];
-  if (!response.ok && response.status === 400) {
+  if (allowResponseFormatFallback && jsonResponseModeEnabled && !response.ok && response.status === 400) {
     const fallbackBody = { ...body };
     delete fallbackBody.response_format;
     response = await postJson(fetchImpl, endpoint, {
@@ -1311,7 +1375,7 @@ async function callDeepSeek({
     }, fallbackBody, { signal });
     warnings.push("deepseek_response_format_fallback");
   }
-  if (!response.ok) throw new Error(`deepseek ${response.status}`);
+  assertProviderHttpResponse(response, "deepseek");
   const payload = await response.json();
   const choice = payload?.choices?.[0] || {};
   const message = choice.message || {};
@@ -1334,6 +1398,7 @@ async function callDeepSeek({
       ? reasoningEffort
       : null,
     maxOutputTokens: Number.isInteger(maxTokens) && maxTokens > 0 ? maxTokens : null,
+    responseFormat: jsonResponseModeEnabled ? "json_object" : "text",
     usage: payload?.usage || {},
     warnings,
   };
@@ -1380,7 +1445,7 @@ async function callGlm({
     authorization: `Bearer ${env.GLM_API_KEY}`,
     "content-type": "application/json",
   }, body, { signal });
-  if (!response.ok) throw new Error(`glm ${response.status}`);
+  assertProviderHttpResponse(response, "glm");
   const payload = await response.json();
   const choice = payload?.choices?.[0] || {};
   const message = choice.message || {};
@@ -1407,16 +1472,80 @@ async function callGlm({
   };
 }
 
+/**
+ * Third-party relay adapter for the public final-ruling stage.
+ *
+ * This intentionally does not reuse OpenAIResponsesProvider: relay capability
+ * parity for background Responses, retrieval/cancellation and strict schemas is
+ * unverified. One synchronous Chat Completions request is made, with no tools,
+ * automatic retry or official-provider attribution.
+ */
+async function callRelay({
+  prompt,
+  env,
+  modelName,
+  maxTokens,
+  fetchImpl,
+  reasoningEffort,
+  signal,
+}) {
+  const endpoint = relayChatCompletionsUrl(env.RELAY_BASE_URL || DEFAULT_PUBLIC_RELAY_BASE_URL);
+  const body = {
+    model: modelName || DEFAULT_PUBLIC_RELAY_MODEL,
+    messages: [{ role: "user", content: prompt }],
+    stream: false,
+    response_format: { type: "json_object" },
+  };
+  if (RELAY_REASONING_EFFORTS.has(reasoningEffort)) {
+    body.reasoning_effort = reasoningEffort;
+  }
+  if (Number.isInteger(maxTokens) && maxTokens > 0) {
+    body.max_completion_tokens = maxTokens;
+  }
+
+  const response = await postJson(fetchImpl, endpoint, {
+    authorization: `Bearer ${String(env.RELAY_API_KEY || "").trim()}`,
+    "content-type": "application/json",
+  }, body, { signal });
+  assertProviderHttpResponse(response, "relay");
+  const payload = await response.json();
+  const choice = payload?.choices?.[0] || {};
+  const message = choice.message || {};
+  const rawText = extractChatMessageText(message.content);
+  const finishReason = String(choice.finish_reason || "");
+  const responseModel = String(payload?.model || "");
+  const warnings = [];
+  if (!rawText) warnings.push(`relay_empty_content:${finishReason || "unknown"}`);
+  if (finishReason === "length") warnings.push("relay_output_truncated_by_token_limit");
+  if (responseModel && responseModel !== String(body.model)) {
+    warnings.push("relay_response_model_mismatch");
+  }
+  return {
+    rawText,
+    finishReason,
+    contentChars: rawText.length,
+    reasoningContentPresent: false,
+    reasoningContentChars: 0,
+    requestModel: String(body.model || ""),
+    responseModel,
+    systemFingerprint: String(payload?.system_fingerprint || ""),
+    thinkingMode: "not_applicable",
+    reasoningEffort: RELAY_REASONING_EFFORTS.has(reasoningEffort) ? reasoningEffort : null,
+    maxOutputTokens: Number.isInteger(maxTokens) && maxTokens > 0 ? maxTokens : null,
+    responseFormat: "json_object",
+    usage: payload?.usage || {},
+    warnings,
+  };
+}
+
 function assessDeepSeekPrimaryForCompactRecovery(response = {}) {
   if (!String(response.rawText || "").trim()) return { retry: true, warning: "" };
   if ((response.warnings || []).includes("deepseek_output_truncated_by_token_limit")) {
     return { retry: true, warning: "" };
   }
-  // Thinking-mode responses are not sent with response_format because some
-  // DeepSeek endpoints otherwise return an empty content field. Validate the
-  // completed response here and recover through a non-thinking JSON pass when
-  // the model returned prose, broken JSON, or the wrong RAG shape.
-  if (response.thinkingMode !== "enabled") return { retry: false, warning: "" };
+  // JSON Output guarantees syntax but can still return empty content or the
+  // wrong application shape. Validate the completed response here
+  // and recover through a smaller non-thinking JSON pass when necessary.
   let parsed;
   try {
     parsed = parseStrictJsonObject(response.rawText);
@@ -1456,17 +1585,7 @@ function assessDeepSeekRecovery(response = {}) {
 }
 
 function hasBasicRagAnswerSchema(value) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-  if (!RAG_ANSWER_LEVELS.includes(value.answerLevel)) return false;
-  if (!String(value.shortAnswer || "").trim()) return false;
-  const reasoning = Array.isArray(value.reasoning) ? value.reasoning : [value.reasoning];
-  if (!reasoning.some((item) => String(item || "").trim())) return false;
-  for (const field of ["usedCards", "usedEvidence", "missingInfo", "riskFlags"]) {
-    if (value[field] !== undefined && !Array.isArray(value[field])) return false;
-  }
-  if (value.confidenceSelfEstimate !== undefined
-      && !["low", "medium", "high"].includes(value.confidenceSelfEstimate)) return false;
-  return (value.usedEvidence || []).every((item) => item && typeof item === "object" && !Array.isArray(item));
+  return normalizeRagJsonContractObject(value) !== null;
 }
 
 function summarizeGenerationAttempt(response = {}, index = 0) {
@@ -1478,6 +1597,7 @@ function summarizeGenerationAttempt(response = {}, index = 0) {
     thinkingMode: String(response.thinkingMode || "not_applicable"),
     reasoningEffort: response.reasoningEffort ? String(response.reasoningEffort) : null,
     maxOutputTokens: Number.isFinite(Number(response.maxOutputTokens)) ? Number(response.maxOutputTokens) : null,
+    responseFormat: String(response.responseFormat || "text"),
     finishReason: String(response.finishReason || ""),
     contentChars: Number(response.contentChars ?? String(response.rawText || "").length),
     reasoningContentPresent: response.reasoningContentPresent === true,
@@ -1488,11 +1608,22 @@ function summarizeGenerationAttempt(response = {}, index = 0) {
 
 function extractChatMessageText(content) {
   if (typeof content === "string") return content;
-  if (!Array.isArray(content)) return "";
-  return content.map((part) => {
-    if (typeof part === "string") return part;
-    return typeof part?.text === "string" ? part.text : "";
-  }).filter(Boolean).join("\n");
+  if (Array.isArray(content)) {
+    return content.map(extractChatMessagePartText).filter(Boolean).join("\n");
+  }
+  return extractChatMessagePartText(content);
+}
+
+function extractChatMessagePartText(part) {
+  if (typeof part === "string") return part;
+  if (!part || typeof part !== "object") return "";
+  if (typeof part.text === "string") return part.text;
+  if (typeof part.content === "string") return part.content;
+  if (typeof part.text?.value === "string") return part.text.value;
+  if (Array.isArray(part.content)) {
+    return part.content.map(extractChatMessagePartText).filter(Boolean).join("\n");
+  }
+  return "";
 }
 
 async function callGemini({ prompt, env, modelName, maxTokens, fetchImpl, temperature, maxTokensEnvName = "GEMINI_MAX_OUTPUT_TOKENS", signal }) {
@@ -1507,7 +1638,7 @@ async function callGemini({ prompt, env, modelName, maxTokens, fetchImpl, temper
     },
   };
   const response = await postJson(fetchImpl, endpoint, { "content-type": "application/json" }, body, { signal });
-  if (!response.ok) throw new Error(`gemini ${response.status}`);
+  assertProviderHttpResponse(response, "gemini");
   const payload = await response.json();
   return {
     rawText: (payload?.candidates?.[0]?.content?.parts || []).map((part) => part.text || "").join("\n"),
@@ -1517,15 +1648,89 @@ async function callGemini({ prompt, env, modelName, maxTokens, fetchImpl, temper
 }
 
 async function postJson(fetchImpl, url, headers, body, { signal } = {}) {
-  return fetchImpl(url, {
-    method: "POST",
-    headers,
-    body: JSON.stringify(body),
-    ...(signal === undefined ? {} : { signal }),
-  });
+  try {
+    return await fetchImpl(url, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(body),
+      ...(signal === undefined ? {} : { signal }),
+    });
+  } catch (cause) {
+    throw markBudgetReservationOutcome(cause, { mayExist: true });
+  }
+}
+
+function assertProviderHttpResponse(response, provider) {
+  if (response?.ok) return;
+  const status = Number(response?.status);
+  const releaseSafe = isProvablePreAcceptanceHttpRejection(status);
+  const error = new Error(`${provider} ${Number.isInteger(status) ? status : "unknown"}`);
+  error.status = Number.isInteger(status) ? status : null;
+  throw markBudgetReservationOutcome(error, { mayExist: !releaseSafe });
+}
+
+function isProvablePreAcceptanceHttpRejection(status) {
+  const value = Number(status);
+  if (!Number.isInteger(value) || value < 400 || value >= 500) return false;
+  // These statuses may be emitted by a gateway after the request was already
+  // forwarded. Without provider idempotency they are not refund evidence.
+  return !new Set([408, 409, 425, 429]).has(value);
+}
+
+function markBudgetReservationOutcome(value, { mayExist }) {
+  const source = value instanceof Error ? value : new Error(String(value));
+  try {
+    source.budgetReservationMayExist = mayExist === true;
+    source.budgetReservationReleaseSafe = mayExist !== true;
+    return source;
+  } catch {
+    const wrapped = new Error(source.message, { cause: source });
+    wrapped.name = source.name;
+    wrapped.budgetReservationMayExist = mayExist === true;
+    wrapped.budgetReservationReleaseSafe = mayExist !== true;
+    return wrapped;
+  }
+}
+
+function isBudgetReservationReleaseSafe(error) {
+  return error?.budgetReservationReleaseSafe === true
+    || error?.budgetReservationMayExist === false;
 }
 
 function parseModelResult(rawText, { provider, modelName, dryRun, warnings = [], budgetStatus = null }) {
+  const strictContract = normalizeStrictRagJsonOutput(rawText);
+  if (strictContract?.valid) {
+    return {
+      answer: strictContract.answer,
+      // Public validation must inspect the deterministic contract object, not
+      // reject a syntactically valid response merely because optional arrays
+      // were omitted or reasoning was emitted as one string.
+      rawText: strictContract.rawText,
+      provider,
+      providerUsed: provider,
+      modelName,
+      modelUsed: modelName || provider,
+      dryRun,
+      warnings: [
+        ...warnings,
+        ...(strictContract.normalized ? ["model_json_structure_normalized"] : []),
+      ],
+      budgetStatus,
+    };
+  }
+  if (strictContract?.valid === false) {
+    return {
+      answer: safeFallbackAnswer("model_json_invalid_schema"),
+      rawText: strictContract.rawText,
+      provider,
+      providerUsed: provider,
+      modelName,
+      modelUsed: modelName || provider,
+      dryRun,
+      warnings: [...warnings, "model_json_invalid_schema"],
+      budgetStatus,
+    };
+  }
   try {
     const parsed = rawText && typeof rawText === "object" ? rawText : parseRagModelJson(rawText);
     const parseWarnings = parsed?.__modelJsonRepaired ? ["model_json_repaired"] : [];
@@ -1613,6 +1818,107 @@ function parseStrictJsonObject(rawText) {
     throw new TypeError("DeepSeek JSON task must return a JSON object");
   }
   return parsed;
+}
+
+function normalizeStrictRagJsonOutput(rawText) {
+  let parsed;
+  try {
+    parsed = rawText && typeof rawText === "object" && !Array.isArray(rawText)
+      ? rawText
+      : parseStrictJsonObject(rawText);
+  } catch {
+    return null;
+  }
+  const answer = normalizeRagJsonContractObject(parsed);
+  if (!answer) {
+    // Preserve the existing conservative reasoning-missing wrapper for local
+    // or injected callers, but never coerce an illegal verdict level or a
+    // non-string conclusion into a valid semantic header.
+    if (RAG_ANSWER_LEVELS.includes(parsed?.answerLevel)
+        && typeof parsed?.shortAnswer === "string"
+        && parsed.shortAnswer.trim()) {
+      return null;
+    }
+    return {
+      valid: false,
+      rawText: typeof rawText === "string" ? rawText : JSON.stringify(parsed),
+    };
+  }
+  return {
+    valid: true,
+    answer,
+    rawText: JSON.stringify(answer),
+    normalized: !jsonValuesEqual(parsed, answer),
+  };
+}
+
+function normalizeRagJsonContractObject(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  if (!RAG_ANSWER_LEVELS.includes(value.answerLevel)) return null;
+  if (typeof value.shortAnswer !== "string" || !value.shortAnswer.trim()) return null;
+  const reasoningSource = Array.isArray(value.reasoning)
+    ? value.reasoning
+    : typeof value.reasoning === "string"
+      ? [value.reasoning]
+      : [];
+  const reasoning = reasoningSource
+    .filter((item) => typeof item === "string")
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .slice(0, 12);
+  if (!reasoning.length) return null;
+
+  return {
+    answerLevel: value.answerLevel,
+    shortAnswer: value.shortAnswer.trim(),
+    reasoning,
+    usedCards: normalizeContractStringArray(value.usedCards),
+    usedEvidence: normalizeContractUsedEvidence(value.usedEvidence),
+    missingInfo: normalizeContractStringArray(value.missingInfo),
+    riskFlags: normalizeContractStringArray(value.riskFlags),
+    confidenceSelfEstimate: ["low", "medium", "high"].includes(value.confidenceSelfEstimate)
+      ? value.confidenceSelfEstimate
+      : "low",
+  };
+}
+
+function normalizeContractStringArray(value) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((item) => typeof item === "string")
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .slice(0, 12);
+}
+
+function normalizeContractUsedEvidence(value) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((item) => item && typeof item === "object" && !Array.isArray(item))
+    .map((item) => ({
+      id: typeof item.id === "string" || typeof item.id === "number"
+        ? String(item.id).trim()
+        : "",
+      type: typeof item.type === "string" && item.type.trim() ? item.type.trim() : "related",
+      title: typeof item.title === "string" ? item.title.trim() : "",
+    }))
+    .filter((item) => item.id)
+    .slice(0, 12);
+}
+
+function jsonValuesEqual(left, right) {
+  if (Object.is(left, right)) return true;
+  if (Array.isArray(left) || Array.isArray(right)) {
+    return Array.isArray(left)
+      && Array.isArray(right)
+      && left.length === right.length
+      && left.every((item, index) => jsonValuesEqual(item, right[index]));
+  }
+  if (!left || !right || typeof left !== "object" || typeof right !== "object") return false;
+  const leftKeys = Object.keys(left).sort();
+  const rightKeys = Object.keys(right).sort();
+  return leftKeys.length === rightKeys.length
+    && leftKeys.every((key, index) => key === rightKeys[index] && jsonValuesEqual(left[key], right[key]));
 }
 
 function parseLooseRagModelJson(text) {
@@ -1906,7 +2212,10 @@ async function buildBudgetPreflight({ provider, stage, prompt, maxTokens, env, f
   });
 
   if (storage === "unconfigured") {
-    return emptyResult({ blocked: trackSpend && config.mode === "hard", spent: null, bucketSpent: null });
+    // A deployment that requires persistent accounting cannot enforce a
+    // process-wide limit in memory. Missing Redis is therefore fail-closed,
+    // even when API_BUDGET_MODE was not explicitly set to hard.
+    return emptyResult({ blocked: trackSpend, spent: null, bucketSpent: null });
   }
   if (!trackSpend) return emptyResult({ blocked: false, spent: 0, bucketSpent: 0 });
 
@@ -1922,7 +2231,7 @@ async function buildBudgetPreflight({ provider, stage, prompt, maxTokens, env, f
     ]);
   } catch (error) {
     warnings.push(`budget_storage_unavailable:${safeErrorMessage(error)}`);
-    if (storage === "redis" && config.mode === "hard") {
+    if (storage === "redis" && (config.mode === "hard" || requiresPersistentBudget(env))) {
       blocked = true;
       storage = "unavailable";
     } else {
@@ -1965,7 +2274,7 @@ async function buildBudgetPreflight({ provider, stage, prompt, maxTokens, env, f
       }
     } catch (error) {
       warnings.push(`budget_bucket_storage_unavailable:${safeErrorMessage(error)}`);
-      blocked = config.mode === "hard";
+      blocked = config.mode === "hard" || requiresPersistentBudget(env);
     }
     if (blocked && reservedAmountCny) {
       await addBudgetSpent({ storage, dayKey, amount: -reservedAmountCny, env, fetchImpl }).catch(() => null);
@@ -2030,10 +2339,8 @@ async function runBudgetedAuxiliaryModelCall({
     };
   }
 
-  let remoteCallCompleted = false;
   try {
     const value = await invoke();
-    remoteCallCompleted = true;
     const usage = normalizeUsage(provider, value?.usage || {});
     const reportedTokens = Number(usage.prompt_tokens || 0)
       + Number(usage.completion_tokens || 0)
@@ -2060,11 +2367,16 @@ async function runBudgetedAuxiliaryModelCall({
       budgetStatus,
       warnings,
     };
-  } catch (error) {
-    error.budgetStatus = remoteCallCompleted
-      ? budget.status
-      : await releaseBudgetReservation({ preflight: budget, env, fetchImpl }).catch(() => budget.status);
-    error.budgetWarnings = budget.warnings;
+  } catch (caught) {
+    const releaseSafe = isBudgetReservationReleaseSafe(caught);
+    const error = markBudgetReservationOutcome(caught, { mayExist: !releaseSafe });
+    error.budgetStatus = releaseSafe
+      ? await releaseBudgetReservation({ preflight: budget, env, fetchImpl }).catch(() => budget.status)
+      : budget.status;
+    error.budgetWarnings = [
+      ...budget.warnings,
+      ...(releaseSafe ? [] : ["budget_reservation_retained_after_ambiguous_remote_failure"]),
+    ];
     throw error;
   }
 }
@@ -2285,6 +2597,9 @@ function estimatePreflightCostCny(provider, prompt, maxTokens, env) {
   if (provider === "glm") {
     return estimateGlmCostCny({ prompt_tokens: promptTokens, completion_tokens: maxTokens }, env);
   }
+  if (provider === "relay") {
+    return roundCost(readPositiveNumber(env.RELAY_ESTIMATED_CNY_PER_CALL, 10));
+  }
   if (provider === "gemini") {
     return roundCost(readTieredProviderNumber(env, "GEMINI", "ESTIMATED_CNY_PER_CALL", 0.01));
   }
@@ -2294,6 +2609,7 @@ function estimatePreflightCostCny(provider, prompt, maxTokens, env) {
 function estimateActualCostCny(provider, usage, env) {
   if (provider === "deepseek") return estimateDeepSeekCostCny(usage, env);
   if (provider === "glm") return estimateGlmCostCny(usage, env);
+  if (provider === "relay") return roundCost(readPositiveNumber(env.RELAY_ESTIMATED_CNY_PER_CALL, 10));
   if (provider === "gemini") return roundCost(readTieredProviderNumber(env, "GEMINI", "ESTIMATED_CNY_PER_CALL", 0.01));
   return 0;
 }
@@ -2324,6 +2640,8 @@ function resolveBudgetBucket(stage, provider, env = {}) {
       ? "deepseek"
       : String(env.PUBLIC_RULING_MODEL_PROFILE || "").startsWith("glm-")
         ? "glm"
+        : String(env.PUBLIC_RULING_MODEL_PROFILE || "").startsWith("relay-")
+          ? "relay"
         : "deepseek";
   }
   const id = `${normalizedStage}:${normalizedProvider}`;
@@ -2343,7 +2661,9 @@ function budgetBucketConfig(env, bucket) {
     ? "API_EVIDENCE_DAILY_BUDGET_CNY"
     : bucket.id === "final_ruling:glm"
       ? "API_GLM_FINAL_DAILY_BUDGET_CNY"
-      : "API_DEEPSEEK_FINAL_DAILY_BUDGET_CNY";
+      : bucket.id === "final_ruling:relay"
+        ? "API_RELAY_FINAL_DAILY_BUDGET_CNY"
+        : "API_DEEPSEEK_FINAL_DAILY_BUDGET_CNY";
   const configured = String(env[envName] ?? "").trim();
   const parsed = configured === "" ? null : Number(configured);
   return {
@@ -2890,6 +3210,27 @@ function resolveReasoningGenerationConfig({ provider = "deepseek", modelName, th
   };
 }
 
+function resolveRelayReasoningGenerationConfig({ reasoningEffort, env = {} } = {}) {
+  const effortSetting = firstConfiguredValue([
+    ["request", reasoningEffort],
+    ["RAG_REASONING_EFFORT", env.RAG_REASONING_EFFORT],
+    ["RELAY_REASONING_EFFORT", env.RELAY_REASONING_EFFORT],
+  ]);
+  let effectiveReasoningEffort = String(effortSetting.value || "high").trim().toLowerCase();
+  const warnings = ["third_party_relay_model_identity_unverified"];
+  if (!RELAY_REASONING_EFFORTS.has(effectiveReasoningEffort)) {
+    warnings.push("relay_reasoning_effort_invalid_defaulted_high");
+    effectiveReasoningEffort = "high";
+  }
+  return {
+    thinkingMode: "not_applicable",
+    reasoningEffort: effectiveReasoningEffort,
+    thinkingModeSource: "not_applicable",
+    reasoningEffortSource: effortSetting.source || "default",
+    warnings,
+  };
+}
+
 function firstConfiguredValue(entries = []) {
   for (const [source, value] of entries) {
     if (value === undefined || value === null || String(value).trim() === "") continue;
@@ -2901,6 +3242,9 @@ function firstConfiguredValue(entries = []) {
 function resolveRagMaxOutputTokens(env = {}, { provider = "", thinkingMode = "" } = {}) {
   const configured = Number(env.RAG_MAX_OUTPUT_TOKENS);
   if (Number.isFinite(configured) && configured > 0) return Math.floor(configured);
+  if (provider === "relay") {
+    return readPositiveNumber(env.RELAY_MAX_COMPLETION_TOKENS, 32000);
+  }
   const tier = resolveConfiguredModelTier(env);
   if ((provider === "deepseek" || provider === "glm") && thinkingMode === "enabled") {
     const tierSpecific = tier === "flash"
@@ -3136,15 +3480,17 @@ function modelNameForProvider(provider, env) {
   if (provider === "deepseek") {
     const tier = resolveConfiguredModelTier(env);
     if (tier === "flash") {
-      return String(env.DEEPSEEK_FLASH_MODEL
-        || env.DEEPSEEK_CARD_MODEL
-        || env.RAG_CARD_MODEL
+      return String(env.RAG_MODEL
+        || env.DEEPSEEK_FLASH_MODEL
         || DEFAULT_DEEPSEEK_CARD_MODEL);
     }
-    return String(env.DEEPSEEK_PRO_MODEL
+    return String(env.RAG_MODEL
+      || env.DEEPSEEK_PRO_MODEL
       || env.DEEPSEEK_MODEL
-      || env.RAG_MODEL
       || "deepseek-v4-pro");
+  }
+  if (provider === "relay") {
+    return String(env.RAG_MODEL || env.RELAY_MODEL || DEFAULT_PUBLIC_RELAY_MODEL);
   }
   if (provider === "gemini") {
     const tier = resolveConfiguredModelTier(env);
@@ -3189,6 +3535,7 @@ function modelNameForRulebookGroundingProvider(provider, env) {
 function hasProviderKey(provider, env) {
   if (provider === "deepseek") return Boolean(env.DEEPSEEK_API_KEY);
   if (provider === "glm") return Boolean(env.GLM_API_KEY);
+  if (provider === "relay") return Boolean(String(env.RELAY_API_KEY || "").trim());
   if (provider === "gemini") return Boolean(env.GEMINI_API_KEY);
   return false;
 }
@@ -3245,6 +3592,22 @@ function readTieredProviderNumber(env, providerPrefix, suffix, fallback) {
 function compatibleChatCompletionsUrl(baseUrl) {
   const base = String(baseUrl || "").replace(/\/+$/u, "");
   return base.endsWith("/chat/completions") ? base : `${base}/chat/completions`;
+}
+
+function relayChatCompletionsUrl(baseUrl) {
+  let parsed;
+  try {
+    parsed = new URL(String(baseUrl || DEFAULT_PUBLIC_RELAY_BASE_URL).trim());
+  } catch {
+    throw new TypeError("RELAY_BASE_URL must be a valid HTTPS URL");
+  }
+  if (parsed.protocol !== "https:" || !parsed.hostname) {
+    throw new TypeError("RELAY_BASE_URL must use HTTPS");
+  }
+  if (parsed.username || parsed.password || parsed.search || parsed.hash) {
+    throw new TypeError("RELAY_BASE_URL must not contain credentials, query parameters or fragments");
+  }
+  return compatibleChatCompletionsUrl(parsed.toString());
 }
 
 function withTimeout(promise, timeoutMs, message) {

@@ -6,6 +6,7 @@ import {
   canonicalLegacyLuaSha256,
   createLegacyLuaSemanticPacket,
   finalizeLegacyLuaSemanticResource,
+  normalizeLegacyLuaPasscode,
   normalizeLegacyLuaUnknownReasons,
 } from "./legacyLuaSemanticPacket.mjs";
 
@@ -30,8 +31,10 @@ export const LEGACY_LUA_REQUIRED_ARTIFACT_VERSIONS = Object.freeze({
 
 const SHA256 = /^[a-f0-9]{64}$/u;
 const GIT_COMMIT = /^[a-f0-9]{40}$/u;
-const PASSCODE = /^\d{8}$/u;
 const CAPABILITY_STATUS = new Set(["PARTIAL", "SUPPORTED"]);
+const EFFECT_CANDIDATES_HTTP_SCHEMA =
+  "ocg-legacy-lua-http-effect-candidates/v1";
+const EFFECT_CANDIDATES_HTTP_AUTHORITY = "LEGACY_DISCOVERY_ONLY";
 
 /**
  * Represents a source-resolution failure without pretending that a source
@@ -45,11 +48,11 @@ export function createUnresolvedLegacyLuaSourceResource({
   message = "legacy Lua source is unavailable",
   details = {},
 } = {}) {
-  const normalizedPasscode = String(passcode ?? "").trim();
-  if (!PASSCODE.test(normalizedPasscode) || Number(normalizedPasscode) <= 0) {
+  const normalizedPasscode = normalizeLegacyLuaPasscode(passcode);
+  if (normalizedPasscode === null) {
     throw clientError(
       "LEGACY_LUA_PASSCODE_INVALID",
-      "unresolved legacy Lua source requires a non-zero 8-digit passcode",
+      "unresolved legacy Lua source requires a non-zero uint32 passcode",
     );
   }
   const safe = safeDetails(details);
@@ -90,12 +93,48 @@ export async function collectLegacyLuaSemanticResource({
     validateCapabilities(capabilities);
     const registry = await facade.getRegistry();
     const registryBinding = validateRegistry(registry);
-    const candidateSet = await facade.enumerate(source);
-    validateCandidateSet(candidateSet, source, versions);
+    const enumeration = unwrapCandidateEnumeration(
+      await facade.enumerate(source),
+      source,
+    );
+    const candidateSet = enumeration.candidateSet;
+    validateCandidateSet(candidateSet, source, versions, {
+      allowMissingSourceHash: enumeration.kind === "TYPED_UNKNOWN",
+    });
+
+    const sourceBinding = resourceBinding(source);
+    const resourceId = resourceIdFor(sourceBinding);
+    const resourceReasons = normalizeLegacyLuaUnknownReasons([
+      ...(candidateSet.unknownReasons || []),
+      ...enumeration.unknownReasons,
+    ]);
+    if (candidateSet.sourceContentHash === null) {
+      if (enumeration.kind !== "TYPED_UNKNOWN" ||
+          candidateSet.candidates.length !== 0) {
+        throw clientError(
+          "LEGACY_LUA_CANDIDATE_SET_INVALID",
+          "an unbound candidate set may only be retained as an empty typed UNKNOWN",
+        );
+      }
+      return finalizeLegacyLuaSemanticResource({
+        status: "TYPED_UNKNOWN",
+        resourceId,
+        resourceBinding: sourceBinding,
+        engineBinding: {
+          versions,
+          versionsSha256: canonicalLegacyLuaSha256(versions),
+          capabilitiesSha256: canonicalLegacyLuaSha256(capabilities),
+          requiredCapabilities: [...LEGACY_LUA_REQUIRED_CAPABILITIES].sort(),
+        },
+        registryBinding,
+        candidateSetSha256: canonicalLegacyLuaSha256(candidateSet),
+        effectCandidates: [],
+        unknownReasons: resourceReasons,
+      });
+    }
 
     const effectCandidates = [];
-    const resourceReasons = [...(candidateSet.unknownReasons || [])];
-    let partial = false;
+    let partial = enumeration.kind === "TYPED_UNKNOWN";
     const ordered = [...candidateSet.candidates].sort((left, right) =>
       compareText(rawCandidateSortKey(left), rawCandidateSortKey(right))
     );
@@ -127,8 +166,6 @@ export async function collectLegacyLuaSemanticResource({
     effectCandidates.sort((left, right) =>
       compareText(candidateSortKey(left), candidateSortKey(right))
     );
-    const sourceBinding = resourceBinding(source);
-    const resourceId = resourceIdFor(sourceBinding);
     return finalizeLegacyLuaSemanticResource({
       status: partial ? "TYPED_UNKNOWN" : "READY",
       resourceId,
@@ -381,8 +418,10 @@ function validateEngineFacade(engine, needsAnalysis) {
   ]);
   const getRegistry = bindFunction(engine,
     "getLegacyLuaApiSemanticsRegistry");
-  const enumerate = bindFunction(engine,
-    "enumerateLegacyLuaEffectCandidates");
+  const enumerate = bindFirstFunction(engine, [
+    "enumerateLegacyLuaEffectCandidatesEnvelope",
+    "enumerateLegacyLuaEffectCandidates",
+  ]);
   const compile = bindFirstFunction(engine, [
     "compileLegacyLuaActivationPlanV2",
     "compileLegacyLuaActivationPlan",
@@ -528,7 +567,9 @@ function validateRegistry(value) {
   };
 }
 
-function validateCandidateSet(value, source, versions) {
+function validateCandidateSet(value, source, versions, {
+  allowMissingSourceHash = false,
+} = {}) {
   if (!isPlainObject(value)) {
     throw clientError(
       "LEGACY_LUA_CANDIDATE_SET_INVALID",
@@ -544,8 +585,15 @@ function validateCandidateSet(value, source, versions) {
     "candidateSet.legacyAcceptedAsTruth");
   equal(value.sourceDocumentId, source.sourceDocumentId,
     "candidateSet.sourceDocumentId");
-  equal(value.sourceContentHash, source.contentHash,
-    "candidateSet.sourceContentHash");
+  if (value.sourceContentHash === null && allowMissingSourceHash) {
+    // A transport envelope that was independently bound to this exact source
+    // may carry an empty typed-UNKNOWN artifact whose redundant inner hash is
+    // null. It remains unusable as candidate evidence and is handled above as
+    // a zero-candidate TYPED_UNKNOWN resource.
+  } else {
+    equal(value.sourceContentHash, source.contentHash,
+      "candidateSet.sourceContentHash");
+  }
   if (!Array.isArray(value.candidates) ||
       !Array.isArray(value.unknownReasons) ||
       !Array.isArray(value.requiredCapabilities)) {
@@ -562,6 +610,75 @@ function validateCandidateSet(value, source, versions) {
       "candidate set contains duplicate semantic identities",
     );
   }
+}
+
+function unwrapCandidateEnumeration(value, source) {
+  if (value?.schemaVersion !== EFFECT_CANDIDATES_HTTP_SCHEMA) {
+    return {
+      kind: "COMPLETED",
+      candidateSet: value,
+      unknownReasons: [],
+    };
+  }
+  if (!isPlainObject(value) || value.operation !== "EFFECT_CANDIDATES" ||
+      !new Set(["COMPLETED", "TYPED_UNKNOWN"]).has(value.kind)) {
+    throw clientError(
+      "LEGACY_LUA_CANDIDATE_SET_INVALID",
+      "legacy Lua effect-candidate envelope is invalid",
+    );
+  }
+  equal(value.authority, EFFECT_CANDIDATES_HTTP_AUTHORITY,
+    "effectCandidatesEnvelope.authority");
+  equal(value.canConfirmOfficialRuling, false,
+    "effectCandidatesEnvelope.canConfirmOfficialRuling");
+  equal(value.legacyAcceptedAsTruth, false,
+    "effectCandidatesEnvelope.legacyAcceptedAsTruth");
+  equal(value.verdict, "UNKNOWN", "effectCandidatesEnvelope.verdict");
+  if (!Array.isArray(value.unknownReasons) ||
+      (value.kind === "TYPED_UNKNOWN" && value.unknownReasons.length === 0)) {
+    throw clientError(
+      "LEGACY_LUA_CANDIDATE_SET_INVALID",
+      "typed UNKNOWN effect-candidate envelope must retain its reasons",
+    );
+  }
+  validateCandidateEnvelopeSourceBinding(value.sourceBinding, source);
+  if (!isPlainObject(value.result)) {
+    throw clientError(
+      "LEGACY_LUA_CANDIDATE_SET_INVALID",
+      "effect-candidate envelope result must be an object",
+    );
+  }
+  return {
+    kind: value.kind,
+    candidateSet: value.result,
+    unknownReasons: value.unknownReasons,
+  };
+}
+
+function validateCandidateEnvelopeSourceBinding(value, source) {
+  if (!isPlainObject(value)) {
+    throw clientError(
+      "LEGACY_LUA_BINDING_INVALID",
+      "effect-candidate envelope sourceBinding is missing",
+    );
+  }
+  equal(value.mode, "SOURCE_DOCUMENT",
+    "effectCandidatesEnvelope.sourceBinding.mode");
+  equal(value.script, null,
+    "effectCandidatesEnvelope.sourceBinding.script");
+  equal(value.sourceDocumentId, source.sourceDocumentId,
+    "effectCandidatesEnvelope.sourceBinding.sourceDocumentId");
+  equalDigest(value.sourceContentSha256, source.contentHash,
+    "effectCandidatesEnvelope.sourceBinding.sourceContentSha256");
+  equal(value.documentVersion, source.documentVersion,
+    "effectCandidatesEnvelope.sourceBinding.documentVersion");
+  equal(value.locator, source.provenance.locator,
+    "effectCandidatesEnvelope.sourceBinding.locator");
+  equal(
+    new Date(value.retrievedAt).toISOString(),
+    new Date(source.provenance.retrievedAt).toISOString(),
+    "effectCandidatesEnvelope.sourceBinding.retrievedAt",
+  );
 }
 
 function validateEngineCandidate(candidate, source, registryBinding, versions) {
@@ -856,10 +973,10 @@ function candidateSortKey(candidate) {
 }
 
 function inputSortKey(input) {
-  const unresolvedPasscode = String(
-    input?.unresolvedSource?.passcode ?? "",
-  ).trim();
-  if (PASSCODE.test(unresolvedPasscode)) {
+  const unresolvedPasscode = normalizeLegacyLuaPasscode(
+    input?.unresolvedSource?.passcode,
+  );
+  if (unresolvedPasscode !== null) {
     return `~unresolved\u0000${unresolvedPasscode}`;
   }
   const binding = safeResourceBinding(input?.sourceDocument);

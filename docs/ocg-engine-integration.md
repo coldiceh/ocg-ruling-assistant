@@ -83,6 +83,7 @@ pnpm dev:with-engine
 - `POST /api/engine`：请求体为 `{ "scenario": { ... } }` 或场景本身，直接返回模拟结果。
 - `POST /api/answer`：照常传 `question`；未传 `engineScenario` 时自动尽力编译场景，显式传入时覆盖自动场景。
 - `GET /formal/v1/legacy-lua/capabilities`：协商 Lua 发现能力、版本和只读 API 语义注册表。
+- `POST /formal/v1/legacy-lua/card-identities`：把检索阶段确认的准确卡名绑定到锁定 CDB 中唯一的非零 uint32 passcode；未找到或有歧义时返回非权威未知结果。
 - `POST /formal/v1/legacy-lua/source|effect-candidates|compile-plan|analyze-activation`：解析锁定脚本并返回非权威候选；所有正式 envelope 的 verdict 恒为 `UNKNOWN`。
 
 示例：
@@ -238,7 +239,7 @@ RAG_LEGACY_LUA_MAX_HTTP_RESPONSE_BYTES=2097152
 `RAG_AUTO_ENGINE_SIMULATION=true`；它仍然不参与最终裁定。
 
 Legacy Lua 静态发现不依赖 `RAG_AUTO_ENGINE_SIMULATION`。只要配置了
-`OCG_ENGINE_URL`，助手就会在卡片检索得到可信 8 位 passcode 后并行请求该旁路；没有 passcode、脚本缺失、超时、超限、哈希/版本不一致或语义不完整都会降级为 typed `UNKNOWN`，不会把“未知”解释为“不能发动”。
+`OCG_ENGINE_URL`，助手就会在卡片检索得到可信的非零 uint32 passcode 后并行请求该旁路；没有 passcode、脚本缺失、超时、超限、哈希/版本不一致或语义不完整都会降级为 typed `UNKNOWN`，不会把“未知”解释为“不能发动”。
 
 ## 能力边界
 

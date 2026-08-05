@@ -11,6 +11,8 @@ export const LEGACY_LUA_SEMANTIC_IDENTITY_SCHEME =
 const PACKET_KIND = "LEGACY_LUA_SEMANTIC_PACKET";
 const RESOURCE_KIND = "LEGACY_LUA_SEMANTIC_RESOURCE";
 const SHA256 = /^[a-f0-9]{64}$/u;
+const LEGACY_LUA_PASSCODE = /^[0-9]{1,10}$/u;
+const MAX_LEGACY_LUA_PASSCODE = 0xffff_ffffn;
 const STATUS = new Set(["READY", "TYPED_UNKNOWN"]);
 const CANDIDATE_KINDS = new Set(["CANDIDATE", "TYPED_UNKNOWN"]);
 const REQUIRED_ENGINE_ARTIFACTS = Object.freeze({
@@ -64,6 +66,25 @@ export function createLegacyLuaSemanticPacket({
       details: jsonDetails(error?.details),
     });
   }
+}
+
+/**
+ * Normalizes the uint32 card-code namespace used by c{code}.lua. Values below
+ * eight digits keep the conventional zero-padded display form, while nine and
+ * ten digit uint32 values remain unchanged. The engine strips display padding
+ * again before resolving the locked script path.
+ */
+export function normalizeLegacyLuaPasscode(value) {
+  const text = typeof value === "number" && Number.isSafeInteger(value)
+    ? String(value)
+    : typeof value === "string"
+      ? value.trim()
+      : "";
+  if (!LEGACY_LUA_PASSCODE.test(text)) return null;
+  const numeric = BigInt(text);
+  if (numeric === 0n || numeric > MAX_LEGACY_LUA_PASSCODE) return null;
+  const canonical = numeric.toString(10);
+  return canonical.length < 8 ? canonical.padStart(8, "0") : canonical;
 }
 
 export function createLegacyLuaUnknownPacket({
@@ -348,7 +369,7 @@ export function projectLegacyLuaSemanticPacketForModel(
               ? check.requiredMinimum
               : null,
             dependencyNodes: modelStringList(
-              (check?.dependencyGraph?.nodes || []).map((node) =>
+              dependencyGraphEntries(check?.dependencyGraph).map((node) =>
                 typeof node === "string"
                   ? node
                   : node?.name || node?.id || node?.dependency
@@ -432,6 +453,12 @@ export function canonicalLegacyLuaSha256(value) {
 
 export function normalizeLegacyLuaUnknownReasons(value) {
   return normalizeUnknownReasons(value);
+}
+
+function dependencyGraphEntries(value) {
+  if (Array.isArray(value?.dependencies)) return value.dependencies;
+  // v1 fixtures used `nodes`; retain it only as a compatibility fallback.
+  return Array.isArray(value?.nodes) ? value.nodes : [];
 }
 
 function buildPacket({

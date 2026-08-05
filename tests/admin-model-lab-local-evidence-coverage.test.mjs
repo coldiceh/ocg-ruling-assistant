@@ -4,6 +4,9 @@ import test from "node:test";
 
 import { createAdminModelLabService } from "../backend/adminModelLabService.mjs";
 import {
+  createMemoryAdminFinalCallBudgetLedger,
+} from "../backend/adminFinalCallBudgetLedger.mjs";
+import {
   createAdminRunStore,
   createMemoryAdminRunStorage,
 } from "../backend/adminRunStore.mjs";
@@ -24,6 +27,12 @@ test("local Evidence Snapshot covers every expected card without network or mode
   });
   const service = createAdminModelLabService({
     runStore,
+    finalCallBudgetLedger: createMemoryAdminFinalCallBudgetLedger({
+      timezone: "UTC",
+      pools: {
+        openai: { dailyBudgetCny: 1_000, reservationCny: 10 },
+      },
+    }),
     env: {
       ADMIN_MODEL_LAB_ENABLED: "true",
       ADMIN_OPENAI_ENABLED: "true",

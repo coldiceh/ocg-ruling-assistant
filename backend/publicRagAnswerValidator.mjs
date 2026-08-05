@@ -11,11 +11,11 @@ const UNCERTAINTY_LANGUAGE = /(?:无法确认|不能确认|资料不足|信息�
 // for a resolution result only when the nearby words actually ask how the
 // effect is processed/settled or what its result is.  This keeps an unrelated
 // follow-up question from manufacturing a second answer obligation.
-const RESOLUTION_QUESTION = /(?:效果处理|效果處理|处理时|處理時|如何处理|如何處理|怎(?:么|樣|么样)处理|怎(?:麼|樣)處理|结算|結算|结果如何|結果如何|どう処理|どうなりますか|処理はどうな|(?:后续|後續|之后|之後|后面|後面).{0,16}(?:如何|怎么|怎麼|怎样|怎樣|处理|處理|结算|結算|结果|結果|会怎样|會怎樣)|(?:如何|怎么|怎麼|怎样|怎樣).{0,16}(?:后续|後續|之后|之後|后面|後面).{0,8}(?:处理|處理|结算|結算|结果|結果)?)/iu;
+const RESOLUTION_QUESTION = /(?:效果处理|效果處理|处理时|處理時|如何处理|如何處理|怎(?:么|樣|么样)处理|怎(?:麼|樣)處理|结算|結算|结果如何|結果如何|どう処理|どうなりますか|処理はどうな|(?:如何|怎么|怎麼|怎样|怎樣|以何种方式|以何種方式).{0,16}(?:适用|適用|生效|影响|影響)|(?:适用|適用).{0,16}(?:如何|怎么|怎麼|怎样|怎樣)|(?:どのように|どう).{0,16}(?:適用|作用)|(?:適用|作用).{0,16}(?:どうな|されますか)|how.{0,20}(?:apply|applies|applied)|(?:后续|後續|之后|之後|后面|後面).{0,16}(?:如何|怎么|怎麼|怎样|怎樣|处理|處理|结算|結算|结果|結果|会怎样|會怎樣)|(?:如何|怎么|怎麼|怎样|怎樣).{0,16}(?:后续|後續|之后|之後|后面|後面).{0,8}(?:处理|處理|结算|結算|结果|結果)?)/iu;
 const ACTIVATION_QUESTION = /(?:(?:是否|能否|可否|可以|能不能|能).{0,18}(?:发动|發動|発動|连锁|連鎖|チェーン)|(?:发动|發動|発動|连锁|連鎖|チェーン).{0,18}(?:吗|嗎|是否|能否|可否|できますか|できるか)|can.{0,18}(?:activate|chain)|(?:activate|chain).{0,18}\?)/iu;
-const RESOLUTION_ANSWER = /(?:效果处理|效果處理|处理时|處理時|处理|處理|结算|結算|不进行|不進行|融合|特殊召唤|特殊召喚|破坏|破壊|除外|送去|进入墓地|進入墓地|留在场上|留在場上|适用|適用|失效|结束适用|結束適用|resolve|resolution|summon|destroy|banish|graveyard)/iu;
+const RESOLUTION_ANSWER = /(?:效果处理|效果處理|处理时|處理時|处理|處理|结算|結算|不进行|不進行|融合|特殊召唤|特殊召喚|破坏|破壊|除外|送去|进入墓地|進入墓地|墓地(?:へ|に)(?:は)?(?:送|行)|留在场上|留在場上|适用|適用|失效|结束适用|結束適用|resolve|resolution|summon|destroy|banish|graveyard|appl(?:y|ies|ied))/iu;
 const NEGATIVE_RESOLUTION = /(?:不进行|不處理|不处理|无法进行|不能进行|处理失败|處理失敗|不适用|不適用|不会|不會|失败|失敗|does not|cannot|fails? to|not apply)/iu;
-const RESOLUTION_OPERATION = /(?:效果处理|效果處理|处理|處理|结算|結算|融合召唤|融合召喚|特殊召唤|特殊召喚|召唤|召喚|破坏|破壊|除外|送去墓地|进入墓地|進入墓地|加入手卡|抽卡|适用|適用|resolve|resolution|fusion summon|special summon|summon|destroy|banish|send.{0,8}graveyard|add.{0,8}hand|draw|apply)/iu;
+const RESOLUTION_OPERATION = /(?:效果处理|效果處理|处理|處理|结算|結算|融合召唤|融合召喚|特殊召唤|特殊召喚|召唤|召喚|破坏|破壊|除外|送(?:去|入|到|往)?墓地|进入墓地|進入墓地|墓地(?:へ|に)(?:は)?(?:送|行)|加入手卡|抽卡|适用|適用|resolve|resolution|fusion summon|special summon|summon|destroy|banish|(?:send|sent).{0,12}(?:to\s+the\s+)?graveyard|add.{0,8}hand|draw|appl(?:y|ies|ied|ication))/iu;
 const NEGATIVE_RESOLUTION_OUTCOME = /(?:not[_ -]?performed|does[_ -]?not[_ -]?perform|not[_ -]?resolved|failed|negated|activation[_ -]?negated|不进行|不進行|不会进行|不會進行|不能进行|不能進行|无法进行|無法進行|未进行|未進行|不处理|不處理|不会处理|不會處理|处理失败|處理失敗|没有处理|沒有處理|不适用|不適用|不会适用|不會適用|不(?:会|會)?(?:进行|進行)?(?:融合召唤|融合召喚|融合|特殊召唤|特殊召喚)|(?:不能|无法|無法|不会|不會).{0,6}(?:融合召唤|融合召喚|特殊召唤|特殊召喚|破坏|破壊|除外|送去墓地|加入手卡|抽卡)|(?:融合召唤|融合召喚|特殊召唤|特殊召喚|效果处理|效果處理).{0,8}(?:不进行|不進行|失败|失敗)|(?:処理|融合召喚|特殊召喚).{0,10}(?:行いません|行われません|されません|できません|しません|適用されません)|does\s+not\s+(?:resolve|perform|apply|summon|destroy|banish)|(?:cannot|can't|fails?\s+to)\s+(?:resolve|perform|apply|summon|destroy|banish))/iu;
 const POSITIVE_RESOLUTION_OUTCOME = /(?:^|[；;。.!！?？\n，,])[^；;。.!！?？\n]{0,36}(?:(?:正常|成功|仍然|依然|照常|可以|能够|能|会|會|将|將|并|並)?(?:进行|進行|执行|執行|完成|适用|適用)[^；;。.!！?？\n]{0,16}(?:效果处理|效果處理|处理|處理|结算|結算|融合召唤|融合召喚|特殊召唤|特殊召喚|破坏|破壊|除外|送去墓地|进入墓地|進入墓地|加入手卡|抽卡)|(?:效果|处理|處理|融合|特殊召唤|特殊召喚)[^；;。.!！?？\n]{0,16}(?:正常处理|正常處理|正常进行|正常進行|成功|完成|适用|適用)|(?:perform(?:ed|s)?|resolve[ds]?|appl(?:y|ies|ied)|summon(?:ed|s)?|destroy(?:ed|s)?|banish(?:ed|es)?)[^；;。.!！?？\n]{0,16}(?:normally|successfully)?)/iu;
 
@@ -51,7 +51,7 @@ export function validatePublicRagFinalAnswer(answer = {}, {
   if (!String(rawText || "").trim() && warnings.some(isModelOutputFailureWarning)) {
     errors.push("model output is empty");
   }
-  if (warnings.some((warning) => /(?:model_json_parse_failed|model_output_not_json|model_json_repaired)/u.test(warning))) {
+  if (hasStrictModelContractFailure(warnings)) {
     errors.push("model output did not satisfy the strict JSON contract");
   }
 
@@ -88,10 +88,15 @@ export function validatePublicRagFinalAnswer(answer = {}, {
 
   return {
     ok: errors.length === 0,
-    errors: unique(errors).slice(0, 16),
+    // Keep the semantic/coverage failures visible even when a malformed raw
+    // payload also produces several field-level contract errors.
+    errors: unique(errors).slice(0, 24),
     checks: {
-      strictJson: !warnings.some((warning) => /(?:model_json_parse_failed|model_output_not_json|model_json_repaired)/u.test(warning)),
-      officialDirect: authoritativeOfficialDirect === true,
+      strictJson: !hasStrictModelContractFailure(warnings),
+      officialDirect: Boolean(resolveAuthoritativeOfficialDirectCandidate(
+        evidence,
+        authoritativeOfficialDirect,
+      )),
       operationLegality: Boolean(evidence?.operationLegality?.hasGroundedChecks),
       trustedSemantic: evidence?.semanticStateTransition?.authoritative === true,
       multiPartQuestion: asksActivationAndResolution(userQuery),
@@ -127,8 +132,44 @@ export function buildPublicRagDirectedRepairPrompt({
   return `${String(originalPrompt || "")}\n=== 单次定向修复（冻结证据）===\n${JSON.stringify(directive)}`;
 }
 
-export function buildSafePublicRagFallback({ evidence = {}, validationErrors = [] } = {}) {
+export function buildSafePublicRagFallback({
+  evidence = {},
+  validationErrors = [],
+  authoritativeOfficialDirect = false,
+  resolvedCards = [],
+} = {}) {
   const validationFlags = validationRiskFlags(validationErrors);
+  const direct = resolveAuthoritativeOfficialDirectCandidate(
+    evidence,
+    authoritativeOfficialDirect,
+  );
+  if (direct) {
+    const extracted = extractOfficialQaAnswer({
+      ...direct,
+      text: direct.fullText || direct.text,
+    });
+    const officialText = replaceResolvedCardPlaceholders(String(extractRelevantOfficialQaAnswerExcerpt({
+      ...direct,
+      answer: extracted.answerText,
+    }) || extracted.answerText || direct.answer || direct.officialText || "").trim(), resolvedCards);
+    if (officialText) {
+      return normalizedFallback({
+        answerLevel: "official_confirmed",
+        shortAnswer: officialText,
+        reasoning: [
+          "检索器已严格确认这是一条与题面卡片集合和场景唯一对应的官方直接 Q&A。",
+          "最终模型输出未通过官方答案一致性校验，因此这里直接展示该官方回答，不采用模型的相反或不完整结论。",
+        ],
+        usedEvidence: [evidenceReference(evidence, direct.id)],
+        riskFlags: [
+          "public_final_model_validation_failed",
+          "authoritative_official_direct_fallback_applied",
+          ...validationFlags,
+        ],
+        validationErrors,
+      });
+    }
+  }
   const transition = evidence?.semanticStateTransition;
   if (transition?.status === "resolved" && transition?.complete === true && transition?.authoritative === true) {
     return normalizedFallback({
@@ -205,6 +246,7 @@ export async function runValidatedPublicRagFinal({
   userQuery = "",
   evidence = {},
   authoritativeOfficialDirect = false,
+  resolvedCards = [],
 } = {}) {
   if (typeof invoke !== "function") throw new TypeError("invoke is required");
   const startedAt = Date.now();
@@ -228,7 +270,12 @@ export async function runValidatedPublicRagFinal({
   if (primaryValidation.ok || formalGateWillRender || !mayAttemptDirectedRepair(primary)) {
     const fallback = primaryValidation.ok
       ? null
-      : buildSafePublicRagFallback({ evidence, validationErrors: primaryValidation.errors });
+      : buildSafePublicRagFallback({
+          evidence,
+          validationErrors: primaryValidation.errors,
+          authoritativeOfficialDirect,
+          resolvedCards,
+        });
     return aggregateValidatedAttempts({
       primary,
       selected: primary,
@@ -262,6 +309,8 @@ export async function runValidatedPublicRagFinal({
     : buildSafePublicRagFallback({
         evidence,
         validationErrors: [...primaryValidation.errors, ...repairValidation.errors],
+        authoritativeOfficialDirect,
+        resolvedCards,
       });
   return aggregateValidatedAttempts({
     primary,
@@ -290,7 +339,10 @@ function validateOfficialDirectContract({
   if (!authoritativeOfficialDirect) {
     return;
   }
-  const direct = evidence?.officialQaDirectCandidates?.[0];
+  const direct = resolveAuthoritativeOfficialDirectCandidate(
+    evidence,
+    authoritativeOfficialDirect,
+  );
   if (!direct) {
     errors.push("authoritative official direct answer is missing from the frozen packet");
     return;
@@ -316,6 +368,44 @@ function validateOfficialDirectContract({
     userQuery,
     errors,
   });
+}
+
+function resolveAuthoritativeOfficialDirectCandidate(evidence, authority) {
+  if (!authority) return null;
+  const candidates = Array.isArray(evidence?.officialQaDirectCandidates)
+    ? evidence.officialQaDirectCandidates
+    : [];
+  // Production passes the exact id emitted by the strict singleton selector.
+  // The boolean form remains supported for the validator's focused unit tests.
+  if (typeof authority === "string") {
+    if (candidates.length !== 1) return null;
+    return String(candidates[0]?.id || "") === authority ? candidates[0] : null;
+  }
+  return authority === true ? candidates[0] || null : null;
+}
+
+function replaceResolvedCardPlaceholders(value, resolvedCards = []) {
+  const identities = new Map();
+  for (const card of Array.isArray(resolvedCards) ? resolvedCards : []) {
+    const name = String(
+      card?.name
+        || card?.cnName
+        || card?.zhName
+        || card?.jaName
+        || card?.enName
+        || "",
+    ).trim();
+    if (!name) continue;
+    for (const rawId of [card?.id, card?.cardId, card?.cid, card?.konamiId, card?.databaseId]) {
+      const id = String(rawId ?? "").trim();
+      if (!/^\d+$/u.test(id)) continue;
+      const previous = identities.get(id);
+      identities.set(id, previous && previous !== name ? null : name);
+    }
+  }
+  return String(value || "").replace(/<<(\d+)>>/gu, (placeholder, id) => (
+    identities.get(String(id)) || placeholder
+  ));
 }
 
 function validateRawPublicAnswerContract(rawText) {
@@ -354,6 +444,25 @@ function validateRawPublicAnswerContract(rawText) {
   if ((value.usedEvidence || []).some((item) => !item || typeof item !== "object" || !String(item.id || "").trim())) {
     errors.push("raw usedEvidence entries must contain a non-empty id");
   }
+  if (![
+    "official_confirmed",
+    "rule_analysis",
+    "low_confidence_analysis",
+    "needs_more_info",
+    "budget_limited",
+  ].includes(value.answerLevel)) {
+    errors.push("raw answerLevel is invalid");
+  }
+  if (typeof value.shortAnswer !== "string" || !value.shortAnswer.trim()) {
+    errors.push("raw shortAnswer must be a non-empty string");
+  }
+  if (!Array.isArray(value.reasoning)
+      || value.reasoning.some((item) => typeof item !== "string" || !item.trim())) {
+    errors.push("raw reasoning entries must be non-empty strings");
+  }
+  if (!["low", "medium", "high"].includes(value.confidenceSelfEstimate)) {
+    errors.push("raw confidenceSelfEstimate is invalid");
+  }
   return errors;
 }
 
@@ -361,7 +470,16 @@ function mayAttemptDirectedRepair(result = {}) {
   if (result?.dryRun === true) return false;
   if (!String(result?.rawText || "").trim() && !result?.answer) return false;
   const warnings = result?.warnings || [];
-  return !warnings.some((warning) => /(?:model_call_failed|api_daily_budget_exceeded)/u.test(String(warning)));
+  return !warnings.some((warning) => /(?:model_call_failed|api_daily_budget_exceeded|deepseek_compact_recovery_failed)/u.test(String(warning)));
+}
+
+function hasStrictModelContractFailure(warnings = []) {
+  const values = warnings.map(String);
+  if (values.some((warning) => /(?:model_json_parse_failed|model_output_not_json|model_json_repaired)/u.test(warning))) {
+    return true;
+  }
+  if (values.includes("deepseek_compact_recovery_succeeded")) return false;
+  return values.some((warning) => /(?:deepseek_primary_invalid_(?:json|schema)|deepseek_compact_recovery_(?:failed|invalid_json|invalid_schema|empty|truncated))/u.test(warning));
 }
 
 function aggregateValidatedAttempts({
@@ -565,7 +683,88 @@ function validateOfficialResolutionOperationAgreement({ officialText = "", short
   } else if (omission) {
     errors.push("final answer omits the authoritative official direct resolution result");
   }
+  if (RESOLUTION_QUESTION.test(String(userQuery || ""))) {
+    const expectedContextualFacts = contextualResolutionFacts(officialText);
+    const actualContextualFacts = contextualResolutionFacts(shortAnswer);
+    comparison.expectedContextualFacts = serializeResolutionClaims(expectedContextualFacts);
+    comparison.actualContextualFacts = serializeResolutionClaims(actualContextualFacts);
+    let contextualContradiction = false;
+    let contextualOmission = false;
+    for (const [key, expectedOutcome] of expectedContextualFacts) {
+      const actualOutcome = actualContextualFacts.get(key);
+      if (!actualOutcome) contextualOmission = true;
+      else if (actualOutcome === "conflict" || actualOutcome !== expectedOutcome) contextualContradiction = true;
+    }
+    if (contextualContradiction) {
+      errors.push("final contextual processing contradicts the authoritative official direct answer");
+    } else if (contextualOmission) {
+      errors.push("final answer omits material contextual processing from the authoritative official direct answer");
+    }
+  }
   return comparison;
+}
+
+function contextualResolutionFacts(value) {
+  const facts = new Map();
+  const clauses = String(value || "")
+    .split(/[；;。.!！?？\n]+/u)
+    .map((item) => item.trim())
+    .filter(Boolean);
+  for (const clause of clauses) {
+    const claims = resolutionOperationClaims(clause, { branchScoped: true });
+    const outcomesByKind = new Map();
+    for (const [key, outcome] of claims) {
+      const kind = resolutionClaimKeyParts(key).kind;
+      const outcomes = outcomesByKind.get(kind) || new Set();
+      outcomes.add(outcome);
+      outcomesByKind.set(kind, outcomes);
+    }
+    const outcome = (kind) => {
+      const values = outcomesByKind.get(kind);
+      if (!values?.size) return "unknown";
+      return values.size === 1 ? [...values][0] : "conflict";
+    };
+    const hasCostContext = /(?:作为|作為)?(?:cost|コスト|代价|代價|费用|費用)(?:として)?|(?:发动|發動|発動).{0,20}(?:舍弃|捨てる|discard)|(?:舍弃|捨てる|discard).{0,20}(?:发动|發動|発動)/iu.test(clause);
+    const hasMaterialContext = /(?:融合|同调|同調|超量|连接|連接|リンク)?素材|materials?/iu.test(clause);
+    const hasMaterialGroupContext = /(?:其他|其它|其余|其餘|所有|全部|各(?:个|個)?|双方|雙方|两方|兩方).{0,18}(?:融合)?素材|(?:融合)?素材.{0,18}(?:都|均|全部|各自|正常)|(?:それら|これら)のモンスター|素材となるモンスター.{0,12}(?:いずれも|通常通り)|(?:those|these)\s+monsters|(?:other|all)\s+(?:fusion\s+)?materials?/iu.test(clause);
+    const hasSourceIdentity = /(?:自身|本身|其自身|该卡|該卡|这张卡|這張卡|このカード自身|発生源|发生源|發生源|来源|來源|itself|effect source)/iu.test(clause);
+    const hasDepartureContext = /(?:离开|離開|离场|離場|フィールド.{0,8}離れ|墓地(?:へ|に)(?:は)?送|送(?:去|入|到|往)?墓地|(?:sent|send).{0,12}graveyard)/iu.test(clause)
+      || outcome("graveyard") === "performed";
+
+    if (hasCostContext) {
+      for (const kind of ["banish", "graveyard", "destroy"]) {
+        if (outcome(kind) !== "unknown") addContextualFact(facts, `cost:${kind}`, outcome(kind));
+      }
+    }
+    if (hasMaterialContext && hasMaterialGroupContext) {
+      for (const kind of ["banish", "graveyard"]) {
+        if (outcome(kind) !== "unknown") addContextualFact(facts, `material_group:${kind}`, outcome(kind));
+      }
+    }
+    const effectApplication = effectApplicationOutcome(clause);
+    if (effectApplication !== "unknown"
+        && hasDepartureContext
+        && (hasSourceIdentity || (hasMaterialContext && outcome("graveyard") === "performed"))) {
+      addContextualFact(facts, "source_departure:effect_application", effectApplication);
+    }
+  }
+  return facts;
+}
+
+function effectApplicationOutcome(value) {
+  const text = String(value || "");
+  if (/(?:不再|不|未|不会|不會|无法|無法).{0,8}(?:适用|適用|生效)|(?:適用|作用).{0,8}(?:されません|されない|しません)|(?:does\s+not|no\s+longer|cannot)\s+appl(?:y|ies)/iu.test(text)) {
+    return "not_performed";
+  }
+  if (/(?:正常|仍然|依然|继续|繼續|会|會|将|將)?(?:适用|適用|生效)|(?:適用|作用).{0,8}(?:されます|される|します)|\bappl(?:y|ies|ied)\b/iu.test(text)) {
+    return "performed";
+  }
+  return "unknown";
+}
+
+function addContextualFact(facts, key, outcome) {
+  const previous = facts.get(key);
+  facts.set(key, previous && previous !== outcome ? "conflict" : outcome);
 }
 
 function asksForConditionalBranchCoverage(value) {
@@ -794,7 +993,7 @@ function resolutionOperationClaims(value, { branchScoped = false } = {}) {
     ["special_summon", /特殊召唤|特殊召喚/iu],
     ["destroy", /破坏|破壊/iu],
     ["banish", /除外/iu],
-    ["graveyard", /送去墓地|进入墓地|進入墓地/iu],
+    ["graveyard", /(?:送(?:去|入|到|往)?墓地|进入墓地|進入墓地|墓地(?:へ|に)(?:は)?(?:送(?:られ(?:る|ます|ました|ない|ません)?|る|り(?:ます|ました)?|った|って|らず)?|行(?:く|き(?:ます|ました)?|かず|きません)?)|(?:send|sent).{0,12}(?:to\s+the\s+)?graveyard)/iu],
   ];
   const claimSets = new Map();
   for (const [kind, pattern] of definitions) {
@@ -829,11 +1028,13 @@ function resolutionOperationClaims(value, { branchScoped = false } = {}) {
       const metalinguisticDoubleNegative = Boolean(metalinguisticScopeMatch)
         && /(?:不能|无法|無法|不会|不會)\s*$/u.test(embeddedMetalinguisticPredicate);
       const metalinguisticNegativeScope = Boolean(metalinguisticScopeMatch) && !metalinguisticDoubleNegative;
+      const surfaceOutcome = operationSurfaceOutcome(kind, match[0]);
       const localNegative = /(?:不|未)(?:会|會|能|可以|再|进行|進行|执行|執行|完成)?\s*$/u.test(localPrefix)
         || /(?:不是|并非|並非|不属于|不屬於|不作为|不作為|不视为|不視為|不当作|不當作)\s*$/u.test(localPrefix)
         || (Boolean(broadNegativePrefix)
           && !/(?:但|但是|不过|不過|而是|改为|改為)/u.test(broadNegativePrefix));
-      const negative = (!metalinguisticDoubleNegative && localNegative)
+      const negative = surfaceOutcome === "not_performed"
+        || (!metalinguisticDoubleNegative && localNegative)
         || metalinguisticNegativeScope
         || /^.{0,8}(?:不进行|不進行|不会|不會|失败|失敗|されません|行われません|できません|しません|として扱いません|として扱われません|にはなりません)/u.test(suffix)
         // Japanese copular negation describes the operation it immediately
@@ -867,10 +1068,10 @@ function resolutionOperationClaims(value, { branchScoped = false } = {}) {
       // no Fusion Summon is performed”, `适用` must not turn the *negative*
       // Fusion-Summon occurrence into a positive one.  Opposite outcomes are
       // still detected when the operation is mentioned again positively.
-      const positive = !negative && ((!negativeExecutionPrefix
+      const positive = !negative && (surfaceOutcome === "performed" || ((!negativeExecutionPrefix
           && /(?:正常|成功|照常|进行|進行|执行|執行|完成)\s*$/u.test(prefix))
         || /^(?:正常|成功|完成|进行|進行|できます|できる|されます|される|します|する|行います|行われます)/u.test(suffix)
-        || isPositiveResolutionText(maskNegativeResolutionPhrases(clause.text)));
+        || isPositiveResolutionText(maskNegativeResolutionPhrases(clause.text))));
       if (positive) {
         const set = claimSets.get(scopedKind) || new Set();
         set.add("performed");
@@ -882,6 +1083,17 @@ function resolutionOperationClaims(value, { branchScoped = false } = {}) {
     kind,
     values.size > 1 ? "conflict" : [...values][0],
   ]));
+}
+
+function operationSurfaceOutcome(kind, value) {
+  if (kind !== "graveyard") return "unknown";
+  const text = String(value || "");
+  if (/(?:墓地(?:へ|に)(?:は)?(?:送られ(?:ない|ません)|送らず|行かず|行きません)|(?:cannot|not)\s+(?:be\s+)?sent.{0,12}graveyard)/iu.test(text)) {
+    return "not_performed";
+  }
+  return /(?:送(?:去|入|到|往)?墓地|进入墓地|進入墓地|墓地(?:へ|に)(?:は)?(?:送|行)|(?:send|sent).{0,12}graveyard)/iu.test(text)
+    ? "performed"
+    : "unknown";
 }
 
 function quotedEffectTextResolutionOutcome(fullText, operationIndex, operationLength, clause = {}) {
@@ -1141,11 +1353,40 @@ function asksActivationAndResolution(userQuery) {
 }
 
 function activationPolarity(value) {
-  const text = String(value || "").trim();
-  const first = text.split(/[。！？!?；;\n]/u).find(Boolean) || text;
-  if (NEGATIVE_ACTIVATION.test(first)) return "negative";
-  if (POSITIVE_ACTIVATION.test(first)) return "positive";
-  return "unknown";
+  const source = String(value || "").trim();
+  if (!source) return "unknown";
+  // Official answers commonly explain the operation in their first sentence
+  // and state whether it can be activated only in a later sentence.  Inspect
+  // every answer clause instead of silently treating sentence one as the
+  // verdict.  Quoted card text is masked because it describes the printed
+  // procedure, not the ruling being issued about that procedure.
+  const text = source.replace(/『[^』]*』/gu, (match) => " ".repeat(match.length));
+  let result = "unknown";
+  for (const clause of text.split(/[。！？!?；;\n]+/u).map((item) => item.trim()).filter(Boolean)) {
+    const negative = NEGATIVE_ACTIVATION.test(clause);
+    const positive = POSITIVE_ACTIVATION.test(clause);
+    if (!negative && !positive) continue;
+    if (negative && !positive) {
+      result = "negative";
+      continue;
+    }
+    if (positive && !negative) {
+      result = "positive";
+      continue;
+    }
+    if (/(?:不能|无法|無法|不可|不应|不應)(?:据此|據此)?(?:断定|斷定|认为|認為|理解为|理解為|认定|認定|视为|視為)|(?:并不|並不|不)(?:代表|意味着|意味著)|并非(?:表示|意味)|並非(?:表示|意味)/u.test(clause)) {
+      result = "negative";
+      continue;
+    }
+    if (hasExplicitAlternativeBranches(clause)) {
+      result = "unknown";
+      continue;
+    }
+    const negativeIndex = lastPatternIndex(clause, NEGATIVE_ACTIVATION);
+    const positiveIndex = lastPatternIndex(clause, POSITIVE_ACTIVATION);
+    result = negativeIndex > positiveIndex ? "negative" : "positive";
+  }
+  return result;
 }
 
 function collectAvailableEvidenceIds(evidence = {}) {
@@ -1220,7 +1461,9 @@ function normalizedFallback({
       ...riskFlags,
       ...compactErrors(validationErrors).map((error) => `public_final_validation:${error}`),
     ]),
-    confidenceSelfEstimate: answerLevel === "rule_analysis" ? "medium" : "low",
+    confidenceSelfEstimate: answerLevel === "official_confirmed"
+      ? "high"
+      : (answerLevel === "rule_analysis" ? "medium" : "low"),
   };
 }
 

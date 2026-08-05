@@ -48,3 +48,13 @@ test("OCG Rule content hash ignores order and timestamps but changes with text",
   assert.equal(hashOcgRuleRecords(source), hashOcgRuleRecords(reordered));
   assert.notEqual(hashOcgRuleRecords(source), hashOcgRuleRecords(source.map((item, index) => index ? item : { ...item, text: "changed" })));
 });
+
+test("OCG Rule content hash uses locale-independent code-unit ordering", () => {
+  const source = [
+    { id: "ocg-rule:中文", recordType: "rule-doc", title: "中", docname: "中", sourceUrl: "https://example.test/c", keywords: [], text: "C" },
+    { id: "ocg-rule:ASCII", recordType: "rule-doc", title: "A", docname: "a", sourceUrl: "https://example.test/a", keywords: [], text: "A" },
+  ];
+
+  assert.equal(hashOcgRuleRecords(source), hashOcgRuleRecords([...source].reverse()));
+  assert.equal(hashOcgRuleRecords(source).length, 64);
+});

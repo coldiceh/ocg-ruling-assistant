@@ -7,6 +7,7 @@ import {
   createLegacyLuaSemanticHttpFacade,
 } from "../backend/legacyLuaSemanticHttpFacade.mjs";
 import {
+  collectEffectiveLegacyLuaCardIdentities,
   collectEffectiveLegacyLuaPasscodes,
   createDefaultLegacyLuaSemanticPacketFactory,
 } from "../backend/legacyLuaSemanticPacketFactory.mjs";
@@ -30,7 +31,7 @@ const RESOURCE_BINDING = Object.freeze({
   apiAbi: "ocgcore/test",
 });
 
-test("passcode discovery accepts only explicit non-zero 8-digit passwords", () => {
+test("passcode discovery accepts canonical non-zero uint32 passwords only", () => {
   assert.deepEqual(collectEffectiveLegacyLuaPasscodes({
     cardResolution: {
       resolvedCards: [
@@ -39,6 +40,9 @@ test("passcode discovery accepts only explicit non-zero 8-digit passwords", () =
         { passcode: "12345678" },
         { passcode: "00000000" },
         { passcode: "1234" },
+        { passcode: "123456789" },
+        { passcode: "4294967295" },
+        { passcode: "4294967296" },
         { id: "87654321" },
       ],
     },
@@ -46,7 +50,156 @@ test("passcode discovery accepts only explicit non-zero 8-digit passwords", () =
       { password: "23456789" },
       { raw: { passcode: "34567890" } },
     ],
-  }), ["07293697", "12345678", "23456789", "34567890"]);
+  }), [
+    "00001234",
+    "07293697",
+    "12345678",
+    "123456789",
+    "23456789",
+    "34567890",
+    "4294967295",
+  ]);
+});
+
+test("a nested numeric Baige password is not reinterpreted as a stable CID", () => {
+  const input = {
+    retrievedCards: [{
+      cid: "4909",
+      id: "4909",
+      passcode: "05318639",
+      name: "匿名卡A",
+      raw: {
+        cid: 4909,
+        id: 5318639,
+        raw: { id: 5318639 },
+      },
+    }],
+  };
+  assert.deepEqual(collectEffectiveLegacyLuaPasscodes(input), ["05318639"]);
+  assert.deepEqual(collectEffectiveLegacyLuaCardIdentities(input), []);
+});
+
+test("cards without a password produce exact-name identity requests instead of treating CID as passcode", () => {
+  assert.deepEqual(collectEffectiveLegacyLuaCardIdentities({
+    cardResolution: {
+      resolvedCards: [
+        {
+          id: "22130",
+          name: "天雷之双风神 息那",
+          jaName: "天雷ノ双風神 シーナ",
+          aliases: ["天雷之双风神 息那"],
+        },
+        { name: "已有卡密", passcode: "12345678" },
+      ],
+    },
+  }), [{
+    clientKey: "resolved-card-1",
+    names: ["天雷之双风神 息那", "天雷ノ双風神 シーナ"],
+  }]);
+});
+
+test("identity planning merges low- and high-information duplicates without a redundant name lookup", () => {
+  const input = {
+    retrievedCards: [{
+      id: "22130",
+      name: "天雷之双风神 息那",
+      jaName: "天雷ノ双風神 シーナ",
+    }],
+    cardResolution: {
+      resolvedCards: [{
+        cid: "22130",
+        passcode: "12197223",
+        name: "天雷之双风神 息那",
+        aliases: ["天雷ノ双風神 シーナ"],
+      }],
+    },
+  };
+  assert.deepEqual(collectEffectiveLegacyLuaPasscodes(input), ["12197223"]);
+  assert.deepEqual(collectEffectiveLegacyLuaCardIdentities(input), []);
+
+  const aliasOnlyDuplicate = {
+    retrievedCards: [{ name: "匿名精确别名" }],
+    cardResolution: {
+      resolvedCards: [{
+        passcode: "12345678",
+        aliases: ["匿名精确别名"],
+      }],
+    },
+  };
+  assert.deepEqual(
+    collectEffectiveLegacyLuaCardIdentities(aliasOnlyDuplicate),
+    [],
+  );
+});
+
+test("identity planning rejects conflicting CID, passcode, and alias mappings", () => {
+  for (const input of [
+    {
+      retrievedCards: [
+        { cid: "22130", passcode: "12345678", name: "冲突卡" },
+        { cid: "22130", passcode: "87654321", name: "冲突卡" },
+      ],
+    },
+    {
+      retrievedCards: [
+        { cid: "22130", passcode: "12345678", name: "冲突卡A" },
+        { cid: "22131", passcode: "12345678", name: "冲突卡B" },
+      ],
+    },
+    {
+      retrievedCards: [
+        { passcode: "12345678", name: "歧义别名" },
+        { passcode: "87654321", name: "歧义别名" },
+      ],
+    },
+  ]) {
+    assert.throws(
+      () => collectEffectiveLegacyLuaCardIdentities(input),
+      (error) => error.code === "LEGACY_LUA_CARD_IDENTITY_CONFLICT",
+    );
+  }
+});
+
+test("identity aliases fail closed instead of being coerced or truncated", async (t) => {
+  await t.test("factory rejects 17 aliases as typed UNKNOWN", async () => {
+    const factory = createDefaultLegacyLuaSemanticPacketFactory({
+      facadeFactory: () => {
+        throw new Error("invalid identity input must not contact the engine");
+      },
+    });
+    const packet = await factory({
+      cardResolution: {
+        resolvedCards: [{
+          aliases: Array.from({ length: 17 }, (_, index) => `alias-${index}`),
+        }],
+      },
+    });
+    assert.equal(packet.verdict, "UNKNOWN");
+    assert.equal(packet.unknownReasons[0].code,
+      "LEGACY_LUA_CARD_IDENTITY_INVALID");
+  });
+
+  for (const [label, names] of [
+    ["17 names", Array.from({ length: 17 }, (_, index) => `name-${index}`)],
+    ["non-string", ["valid", 123]],
+    ["overlength", ["x".repeat(257)]],
+  ]) {
+    await t.test(label, async () => {
+      const facade = createLegacyLuaSemanticHttpFacade({
+        env: { OCG_ENGINE_URL: "https://engine.example.test" },
+        requestJson: async () => {
+          throw new Error("invalid identity input must not contact the engine");
+        },
+      });
+      await assert.rejects(
+        facade.resolveLegacyLuaCardIdentities([{
+          clientKey: "invalid",
+          names,
+        }]),
+        (error) => error.code === "LEGACY_LUA_CARD_IDENTITY_INVALID",
+      );
+    });
+  }
 });
 
 test("HTTP facade pins capability, registry, source, and operation bindings", async () => {
@@ -92,6 +245,147 @@ test("HTTP facade pins capability, registry, source, and operation bindings", as
     true);
 });
 
+test("HTTP facade resolves and memoizes exact card names against the locked CDB", async () => {
+  const fixture = httpFixture();
+  const calls = [];
+  const facade = createLegacyLuaSemanticHttpFacade({
+    env: { OCG_ENGINE_URL: "https://engine.example.test" },
+    requestJson: async ({ path, body }) => {
+      calls.push({ path, body });
+      return fixture.transport(path, body);
+    },
+  });
+  const request = [{
+    clientKey: "card-1",
+    names: ["天雷之双风神 息那", "天雷ノ双風神 シーナ"],
+  }];
+
+  const first = await facade.resolveLegacyLuaCardIdentities(request);
+  const second = await facade.resolveLegacyLuaCardIdentities(request);
+  assert.deepEqual(first, second);
+  assert.equal(first.matches[0].status, "RESOLVED");
+  assert.equal(first.matches[0].passcode, "12197223");
+  assert.equal(calls.filter((call) =>
+    call.path === LEGACY_LUA_HTTP_ENDPOINTS.cardIdentities).length, 1);
+});
+
+test("HTTP facade accepts stable 9 and 10 digit uint32 passcodes", async () => {
+  const fixture = httpFixture();
+  const calls = [];
+  const facade = createLegacyLuaSemanticHttpFacade({
+    env: { OCG_ENGINE_URL: "https://engine.example.test" },
+    requestJson: async ({ path, body }) => {
+      calls.push({ path, body });
+      return fixture.transport(path, body);
+    },
+  });
+
+  const nine = await facade.resolveLegacyLuaSource("123456789");
+  const ten = await facade.resolveLegacyLuaSource(4294967295);
+  assert.equal(nine.passcode, "123456789");
+  assert.equal(ten.passcode, "4294967295");
+  assert.deepEqual(calls.filter((call) =>
+    call.path === LEGACY_LUA_HTTP_ENDPOINTS.source).map((call) =>
+    call.body.passcode), ["123456789", "4294967295"]);
+  await assert.rejects(
+    facade.resolveLegacyLuaSource("4294967296"),
+    (error) => error.code === "LEGACY_LUA_PASSCODE_INVALID",
+  );
+});
+
+test("HTTP facade requires exact-name capability and endpoint negotiation", async (t) => {
+  for (const [label, mutate] of [
+    ["lockedExactCardNames", (payload) => {
+      payload.sourceResolution.lockedExactCardNames = false;
+    }],
+    ["cardIdentities endpoint", (payload) => {
+      delete payload.endpoints.cardIdentities;
+    }],
+  ]) {
+    await t.test(label, async () => {
+      const fixture = httpFixture();
+      const facade = createLegacyLuaSemanticHttpFacade({
+        env: { OCG_ENGINE_URL: "https://engine.example.test" },
+        requestJson: async ({ path, body }) => {
+          const response = fixture.transport(path, body);
+          if (path === LEGACY_LUA_HTTP_ENDPOINTS.capabilities) {
+            mutate(response.payload);
+          }
+          return response;
+        },
+      });
+      await assert.rejects(
+        facade.getEngineVersions(),
+        (error) => [
+          "LEGACY_LUA_HTTP_BINDING_INVALID",
+          "LEGACY_LUA_HTTP_SCHEMA_INVALID",
+        ].includes(error.code),
+      );
+    });
+  }
+});
+
+test("HTTP facade closes identity response binding, keys, and cardinality", async (t) => {
+  const mutations = [
+    ["scriptSetSha256", (result) => {
+      result.scriptSetSha256 = "0".repeat(64);
+    }],
+    ["missing clientKey", (result) => {
+      result.matches = [];
+    }],
+    ["extra clientKey", (result) => {
+      result.matches.push({
+        clientKey: "extra",
+        status: "NOT_FOUND",
+        passcode: null,
+        candidates: [],
+      });
+    }],
+    ["unexpected clientKey", (result) => {
+      result.matches[0].clientKey = "unexpected";
+    }],
+    ["resolved without candidate", (result) => {
+      result.matches[0].candidates = [];
+    }],
+    ["not found with candidate", (result) => {
+      result.matches[0].status = "NOT_FOUND";
+      result.matches[0].passcode = null;
+    }],
+    ["ambiguous with one candidate", (result) => {
+      result.matches[0].status = "AMBIGUOUS";
+      result.matches[0].passcode = null;
+    }],
+    ["candidate passcode mismatch", (result) => {
+      result.matches[0].candidates[0].passcode = "87654321";
+    }],
+  ];
+  for (const [label, mutate] of mutations) {
+    await t.test(label, async () => {
+      const fixture = httpFixture();
+      const facade = createLegacyLuaSemanticHttpFacade({
+        env: { OCG_ENGINE_URL: "https://engine.example.test" },
+        requestJson: async ({ path, body }) => {
+          const response = fixture.transport(path, body);
+          if (path === LEGACY_LUA_HTTP_ENDPOINTS.cardIdentities) {
+            mutate(response.payload.result);
+          }
+          return response;
+        },
+      });
+      await assert.rejects(
+        facade.resolveLegacyLuaCardIdentities([{
+          clientKey: "card-1",
+          names: ["天雷ノ双風神 シーナ"],
+        }]),
+        (error) => [
+          "LEGACY_LUA_HTTP_BINDING_INVALID",
+          "LEGACY_LUA_HTTP_SCHEMA_INVALID",
+        ].includes(error.code),
+      );
+    });
+  }
+});
+
 test("HTTP facade preserves a bound TYPED_UNKNOWN partial result", async () => {
   const fixture = httpFixture();
   const facade = createLegacyLuaSemanticHttpFacade({
@@ -100,6 +394,7 @@ test("HTTP facade preserves a bound TYPED_UNKNOWN partial result", async () => {
       const response = fixture.transport(path, body);
       if (path === LEGACY_LUA_HTTP_ENDPOINTS.effectCandidates) {
         response.payload.kind = "TYPED_UNKNOWN";
+        response.payload.result.sourceContentHash = null;
         response.payload.unknownReasons = [{
           phase: "LEGACY_DISCOVERY",
           code: "STATIC_SUBSET_INCOMPLETE",
@@ -113,6 +408,14 @@ test("HTTP facade preserves a bound TYPED_UNKNOWN partial result", async () => {
   const source = await facade.resolveLegacyLuaSource("07293697");
   const result = await facade.enumerateLegacyLuaEffectCandidates(source);
   assert.equal(result.kind, "LEGACY_LUA_EFFECT_CANDIDATE_SET");
+  assert.equal(result.sourceContentHash, null);
+  const envelope = await facade
+    .enumerateLegacyLuaEffectCandidatesEnvelope(source);
+  assert.equal(envelope.kind, "TYPED_UNKNOWN");
+  assert.equal(envelope.verdict, "UNKNOWN");
+  assert.equal(envelope.result.sourceContentHash, null);
+  assert.equal(envelope.sourceBinding.sourceContentSha256, source.contentHash);
+  assert.equal(envelope.unknownReasons[0].code, "STATIC_SUBSET_INCOMPLETE");
 
   const rejectingFacade = createLegacyLuaSemanticHttpFacade({
     env: { OCG_ENGINE_URL: "https://engine.example.test" },
@@ -252,6 +555,134 @@ test("default factory resolves each passcode once and memoizes one run", async (
   );
   assert.equal(observedOptions.maxCandidates, 48);
   assert.equal(observedOptions.maxSerializedBytes, 64 * 1024);
+});
+
+test("default factory uses locked exact-name identity lookup when no explicit passcode exists", async () => {
+  const identityCalls = [];
+  const sourceCalls = [];
+  const factory = createDefaultLegacyLuaSemanticPacketFactory({
+    facadeFactory: () => ({
+      async resolveLegacyLuaCardIdentities(cards) {
+        identityCalls.push(cards);
+        return {
+          schemaVersion: "ocg-locked-card-identity-resolution/v1",
+          dbSetSha256: RESOURCE_BINDING.dbSetSha256,
+          scriptSetSha256: RESOURCE_BINDING.scriptSetSha256,
+          matches: cards.map((card) => ({
+            clientKey: card.clientKey,
+            status: "RESOLVED",
+            passcode: "12197223",
+            candidates: [{ passcode: "12197223" }],
+          })),
+        };
+      },
+      async resolveLegacyLuaSource(passcode) {
+        sourceCalls.push(passcode);
+        return sourceDocument(passcode);
+      },
+    }),
+    collectPacket: async () => createLegacyLuaUnknownPacket({
+      code: "LOCKED_NAME_LOOKUP_TEST",
+      message: "locked exact-name lookup reached packet collection",
+    }),
+  });
+
+  const packet = await factory({
+    cardResolution: {
+      resolvedCards: [{
+        id: "22130",
+        name: "天雷之双风神 息那",
+        jaName: "天雷ノ双風神 シーナ",
+      }],
+    },
+  });
+  assert.equal(packet.unknownReasons[0].code, "LOCKED_NAME_LOOKUP_TEST");
+  assert.equal(identityCalls.length, 1);
+  assert.deepEqual(sourceCalls, ["12197223"]);
+});
+
+test("default factory does not let a duplicate low-information card block a verified passcode", async () => {
+  const sourceCalls = [];
+  let identityCalls = 0;
+  const factory = createDefaultLegacyLuaSemanticPacketFactory({
+    facadeFactory: () => ({
+      async resolveLegacyLuaCardIdentities() {
+        identityCalls += 1;
+        throw new Error("duplicate identity lookup must not run");
+      },
+      async resolveLegacyLuaSource(passcode) {
+        sourceCalls.push(passcode);
+        return sourceDocument(passcode);
+      },
+    }),
+    collectPacket: async () => createLegacyLuaUnknownPacket({
+      code: "DEDUP_REACHED_COLLECTION",
+      message: "deduplicated source reached packet collection",
+    }),
+  });
+  const packet = await factory({
+    retrievedCards: [{
+      id: "22130",
+      name: "天雷之双风神 息那",
+    }],
+    cardResolution: {
+      resolvedCards: [{
+        cid: "22130",
+        passcode: "12197223",
+        name: "天雷之双风神 息那",
+      }],
+    },
+  });
+
+  assert.equal(identityCalls, 0);
+  assert.deepEqual(sourceCalls, ["12197223"]);
+  assert.equal(packet.unknownReasons[0].code, "DEDUP_REACHED_COLLECTION");
+});
+
+test("default factory still blocks a genuinely different unresolved card", async () => {
+  const identityCalls = [];
+  let sourceCalls = 0;
+  const factory = createDefaultLegacyLuaSemanticPacketFactory({
+    facadeFactory: () => ({
+      async resolveLegacyLuaCardIdentities(cards) {
+        identityCalls.push(cards);
+        return {
+          matches: cards.map((card) => ({
+            clientKey: card.clientKey,
+            status: "NOT_FOUND",
+            passcode: null,
+            candidates: [],
+          })),
+        };
+      },
+      async resolveLegacyLuaSource() {
+        sourceCalls += 1;
+        throw new Error("unresolved identity must block source collection");
+      },
+    }),
+  });
+  const packet = await factory({
+    retrievedCards: [
+      { id: "22130", name: "天雷之双风神 息那" },
+      { id: "22131", name: "真正不同的未知卡" },
+    ],
+    cardResolution: {
+      resolvedCards: [{
+        cid: "22130",
+        passcode: "12197223",
+        name: "天雷之双风神 息那",
+      }],
+    },
+  });
+
+  assert.equal(identityCalls.length, 1);
+  assert.deepEqual(identityCalls[0].map((item) => item.names), [
+    ["真正不同的未知卡"],
+  ]);
+  assert.equal(sourceCalls, 0);
+  assert.equal(packet.verdict, "UNKNOWN");
+  assert.equal(packet.unknownReasons[0].code,
+    "LEGACY_LUA_CARD_IDENTITY_UNRESOLVED");
 });
 
 test("production gate is zero-network without OCG_ENGINE_URL and injects configured transport", async () => {
@@ -412,6 +843,7 @@ function httpFixture() {
     pinnedCoreApiAbi: registry.compatibilityEvidence.pinnedCoreApiAbi,
   };
   const endpoints = {
+    cardIdentities: endpoint("cardIdentities"),
     source: endpoint("source"),
     effectCandidates: endpoint("effectCandidates"),
     compilePlan: endpoint("compilePlan"),
@@ -432,7 +864,7 @@ function httpFixture() {
     capabilities,
     registry,
     source,
-    transport(path) {
+    transport(path, body) {
       let payload;
       if (path === LEGACY_LUA_HTTP_ENDPOINTS.capabilities) {
         payload = {
@@ -444,19 +876,47 @@ function httpFixture() {
           sourceResolution: {
             sourceDocument: true,
             lockedPasscode: true,
+            lockedExactCardNames: true,
             passcodeMapping: "c{uint32-passcode}.lua",
             selectedScriptVerification: ["sha256", "size", "resourceBinding"],
           },
           endpoints,
         };
+      } else if (path === LEGACY_LUA_HTTP_ENDPOINTS.cardIdentities) {
+        payload = {
+          ...common,
+          schemaVersion: "ocg-legacy-lua-http-card-identities/v1",
+          kind: "COMPLETED",
+          operation: "RESOLVE_CARD_IDENTITIES",
+          sourceBinding: null,
+          result: {
+            schemaVersion: "ocg-locked-card-identity-resolution/v1",
+            dbSetSha256: RESOURCE_BINDING.dbSetSha256,
+            scriptSetSha256: RESOURCE_BINDING.scriptSetSha256,
+            matches: [{
+              clientKey: "card-1",
+              status: "RESOLVED",
+              passcode: "12197223",
+              candidates: [{
+                passcode: "12197223",
+                matchedNames: ["天雷ノ双風神 シーナ"],
+                queryNames: ["天雷ノ双風神 シーナ"],
+              }],
+            }],
+          },
+          unknownReasons: [],
+        };
       } else if (path === LEGACY_LUA_HTTP_ENDPOINTS.source) {
+        const resolvedSource = body?.passcode
+          ? sourceDocument(body.passcode)
+          : source;
         payload = {
           ...common,
           schemaVersion: "ocg-legacy-lua-http-source/v1",
           kind: "COMPLETED",
           operation: "RESOLVE_SOURCE",
-          sourceBinding: lockedSourceBinding(source),
-          result: source,
+          sourceBinding: lockedSourceBinding(resolvedSource),
+          result: resolvedSource,
           unknownReasons: [],
         };
       } else if (path === LEGACY_LUA_HTTP_ENDPOINTS.effectCandidates) {
@@ -488,6 +948,7 @@ function httpFixture() {
 
 function endpoint(name) {
   const schemas = {
+    cardIdentities: "ocg-legacy-lua-http-card-identities/v1",
     source: "ocg-legacy-lua-http-source/v1",
     effectCandidates: "ocg-legacy-lua-http-effect-candidates/v1",
     compilePlan: "ocg-legacy-lua-http-compile-plan/v1",

@@ -27,6 +27,12 @@ const OPENAI_MODEL_IDS = Object.freeze([
   "gpt-5.6-luna",
 ]);
 
+const RELAY_MODEL_IDS = Object.freeze([
+  "relay-gpt-5.6-sol",
+  "relay-gpt-5.6-terra",
+  "relay-gpt-5.6-luna",
+]);
+
 const DEEPSEEK_MODEL_IDS = Object.freeze([
   "deepseek-v4-flash",
   "deepseek-v4-pro",
@@ -69,6 +75,13 @@ const CAPABILITY_TABLE = {
     modelId,
     openAiCapability(modelId, modelId, OPENAI_MODEL_DETAILS[modelId]),
   ])),
+  ...Object.fromEntries(RELAY_MODEL_IDS.map((modelId) => {
+    const canonicalModelId = modelId.replace(/^relay-/u, "");
+    return [
+      modelId,
+      relayCapability(modelId, canonicalModelId, OPENAI_MODEL_DETAILS[canonicalModelId]),
+    ];
+  })),
   "deepseek-v4-flash": domesticFinalCapability({
     providerId: "deepseek",
     modelId: "deepseek-v4-flash",
@@ -254,11 +267,14 @@ export function getAdminModelProviderCapabilities({
   const deepSeekAvailable = Boolean(env.DEEPSEEK_API_KEY);
   const glmAvailable = Boolean(env.GLM_API_KEY);
   const kimiAvailable = Boolean(env.KIMI_API_KEY);
+  const relayAvailable = Boolean(env.RELAY_API_KEY)
+    && isSecureBaseUrl(env.ADMIN_RELAY_BASE_URL || env.RELAY_BASE_URL);
   const availability = {
     openai: openAiAvailable,
     deepseek: deepSeekAvailable,
     glm: glmAvailable,
     kimi: kimiAvailable,
+    relay: relayAvailable,
   };
   const models = Object.values(ADMIN_MODEL_CAPABILITY_TABLE).map((entry) => ({
     ...entry,
@@ -292,6 +308,14 @@ export function getAdminModelProviderCapabilities({
         role: "experimental_final_ruling",
         available: kimiAvailable,
         models: models.filter((entry) => entry.providerId === "kimi"),
+      },
+      {
+        providerId: "relay",
+        role: "experimental_final_ruling",
+        available: relayAvailable,
+        thirdParty: true,
+        modelIdentityVerified: false,
+        models: models.filter((entry) => entry.providerId === "relay"),
       },
     ],
   });
@@ -403,6 +427,52 @@ function domesticFinalCapability({
   };
 }
 
+function relayCapability(modelId, canonicalModelId, details) {
+  return {
+    providerId: "relay",
+    modelId,
+    canonicalModelId,
+    displayName: `第三方中转 · ${details.displayName}`,
+    alias: true,
+    allowedStages: [ADMIN_MODEL_LAB_STAGES.EXPERIMENTAL_FINAL_RULING],
+    supportedReasoningEfforts: [...OPENAI_REASONING_EFFORTS],
+    supportedReasoningModes: ["pro"],
+    defaultReasoningEffort: "high",
+    defaultReasoningMode: "pro",
+    thinkingControl: "always_on",
+    supportsStructuredOutputs: false,
+    structuredOutputMode: "json_object",
+    supportsBackground: false,
+    supportsRetrieve: false,
+    supportsCancel: false,
+    supportsStoreFalse: false,
+    supportsStreaming: false,
+    supportsPromptCaching: false,
+    contextWindowTokens: details.contextWindowTokens,
+    maxOutputTokens: details.maxOutputTokens,
+    canMakeFinalRuling: false,
+    canMakeAuthoritativeFinalRuling: false,
+    canMakeExperimentalRuling: true,
+    experimentalFinalRuling: true,
+    thirdParty: true,
+    modelIdentityVerified: false,
+  };
+}
+
+function isSecureBaseUrl(value) {
+  try {
+    const parsed = new URL(String(value || "").trim());
+    return parsed.protocol === "https:"
+      && Boolean(parsed.hostname)
+      && !parsed.username
+      && !parsed.password
+      && !parsed.search
+      && !parsed.hash;
+  } catch {
+    return false;
+  }
+}
+
 function readBoolean(value, fallback) {
   if (value === undefined || value === null || String(value).trim() === "") return fallback;
   return /^(?:1|true|yes|on)$/iu.test(String(value).trim());
@@ -418,3 +488,4 @@ export const ADMIN_OPENAI_MODEL_IDS = OPENAI_MODEL_IDS;
 export const ADMIN_DEEPSEEK_MODEL_IDS = DEEPSEEK_MODEL_IDS;
 export const ADMIN_GLM_MODEL_IDS = GLM_MODEL_IDS;
 export const ADMIN_KIMI_MODEL_IDS = KIMI_MODEL_IDS;
+export const ADMIN_RELAY_MODEL_IDS = RELAY_MODEL_IDS;

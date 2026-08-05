@@ -56,7 +56,9 @@ export default async function handler(request, response) {
       error.code = "unsupported_answer_mode";
       throw error;
     }
-    const profile = resolvePublicRulingModelProfile(payload.rulingModelProfile);
+    const profile = resolvePublicRulingModelProfile(
+      payload.rulingModelProfile || process.env.PUBLIC_RULING_MODEL_PROFILE,
+    );
     assertPublicRulingModelProfileAvailable(profile, process.env);
     selectedProfileId = profile.id;
     const publicEnv = createPublicAnswerModelEnv(process.env, profile.id);
@@ -122,6 +124,9 @@ async function getModelInfo() {
     ...profile,
     ...(profile.available ? { answerLatency: latencyByProfile.get(profile.id) || null } : {}),
   }));
+  const defaultRulingModelProfile = rulingModelProfiles.find(
+    (profile) => profile.id === modelCapabilities.defaultRulingModelProfile,
+  );
   const publicEnv = createPublicAnswerModelEnv(process.env, modelCapabilities.defaultRulingModelProfile);
   const ragProvider = resolveRagProvider(publicEnv);
   const cardProvider = resolveCardExtractionProvider(publicEnv);
@@ -138,7 +143,7 @@ async function getModelInfo() {
       ...latencyStorage,
       profiles: latencyResult.profiles || [],
     },
-    provider: "glm",
+    provider: defaultRulingModelProfile?.provider || "none",
     requestedProvider: ragProvider.requested,
     models: rulingModelProfiles.map((profile) => profile.model),
     cardNameProvider: cardProvider.provider,

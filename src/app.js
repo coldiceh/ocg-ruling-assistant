@@ -4,17 +4,11 @@
 // Keeping an empty offline index prevents the browser fallback from silently
 // treating a handful of historical examples as authoritative card knowledge.
 const baseCardIndex = [];
-const DEFAULT_RULING_MODEL_PROFILE = "glm-5.2-high";
+const DEFAULT_RULING_MODEL_PROFILE = "deepseek-v4-flash-high";
 const PUBLIC_RULING_MODEL_PROFILE_ORDER = Object.freeze([
-  "glm-5.2-high",
   "deepseek-v4-flash-high",
 ]);
 const PUBLIC_RULING_MODEL_PROFILES = Object.freeze({
-  "glm-5.2-high": Object.freeze({
-    id: "glm-5.2-high",
-    label: "GLM 5.2 · 思考 high",
-    provider: "glm",
-  }),
   "deepseek-v4-flash-high": Object.freeze({
     id: "deepseek-v4-flash-high",
     label: "DeepSeek V4 Flash · 思考 high",
@@ -268,7 +262,7 @@ async function loadAppConfig() {
 
 async function loadBackendModelInfo() {
   if (!appConfig.answerApiUrl) {
-    setRulingModelCapabilitiesUnavailable("未配置模型能力接口；默认 GLM 5.2 尚未确认可用。");
+    setRulingModelCapabilitiesUnavailable("未配置模型能力接口；默认 DeepSeek V4 Flash 尚未确认可用。");
     return;
   }
   try {
@@ -289,7 +283,7 @@ async function loadBackendModelInfo() {
     appConfig.modelLabel = "后端自动选择";
     appConfig.engineEnabled = false;
     appConfig.rulingVersionIds = ["latest"];
-    setRulingModelCapabilitiesUnavailable("模型能力接口不可用；默认 GLM 5.2 尚未确认可用。");
+    setRulingModelCapabilitiesUnavailable("模型能力接口不可用；默认 DeepSeek V4 Flash 尚未确认可用。");
     syncRulingVersionButtons();
   }
 }
@@ -935,6 +929,7 @@ function renderRagAnswer(answer) {
   renderList(ui.stepsList, answer.reasoning || []);
   renderList(ui.questionsList, [
     ...publicFormalQueryLines(answer.formalQueryResults || []),
+    ...publicLegacyLuaLines(answer.legacyLua || null),
     ...(answer.missingInfo || []),
     ...publicRiskLines(answer.riskFlags || []),
     ...(debugUiEnabled ? ragBudgetLines(answer.debug?.budgetStatus) : []),
@@ -947,6 +942,28 @@ function renderRagAnswer(answer) {
   })));
   renderParserDebug(answer.debug || null);
   renderFeedbackPanel(answer);
+}
+
+function publicLegacyLuaLines(summary) {
+  if (!summary || summary.requested !== true) return [];
+  if (summary.status === "analyzed") {
+    const predicates = (Array.isArray(summary.predicateApis)
+      ? summary.predicateApis
+      : []).slice(0, 4).join("、");
+    const details = [
+      `读取 ${Number(summary.resourceCount || 0)} 份锁定 Lua`,
+      `发现 ${Number(summary.effectCandidateCount || 0)} 个效果候选`,
+      `${Number(summary.activationLegalityCheckCount || 0)} 项发动合法性检查`,
+      predicates ? `检查 ${predicates}` : "",
+    ].filter(Boolean).join("；");
+    return [`内核 Lua 语义辅助：${details}（非官方辅助证据，不等于完整场景模拟）。`];
+  }
+  const reasons = (Array.isArray(summary.unknownReasonCodes)
+    ? summary.unknownReasonCodes
+    : []).slice(0, 3).join("、");
+  return [
+    `内核 Lua 语义辅助：本次未取得可用效果候选${reasons ? `（${reasons}）` : ""}。`,
+  ];
 }
 
 function ragEvidenceLabel(type) {
@@ -1856,10 +1873,9 @@ function renderAdminCapabilities(capabilities) {
 }
 
 function buildAdminComparisonOptions(models = []) {
-  const supportedProviders = new Set(["deepseek", "glm", "kimi"]);
+  const supportedProviders = new Set(["deepseek", "glm", "kimi", "relay"]);
   const selectedModels = models.filter((model) => {
     if (!supportedProviders.has(String(model?.provider || ""))) return false;
-    if (model?.id === "deepseek-v4-pro") return false;
     return model?.available !== false;
   });
   const options = [];
@@ -1923,7 +1939,7 @@ function renderAdminComparisonOptions() {
     ui.adminComparisonOptions.appendChild(label);
   }
   if (!adminComparisonOptions.length) {
-    appendText(ui.adminComparisonOptions, "p", "当前环境没有可用于对比的 DeepSeek Flash、GLM 或 Kimi 模型。");
+    appendText(ui.adminComparisonOptions, "p", "当前环境没有可用于对比的 DeepSeek Flash、GLM、Kimi 或第三方中转模型。");
   }
   updateAdminComparisonAvailability();
 }
@@ -2150,6 +2166,7 @@ async function startAdminExperiment() {
     mode: String(ui.adminModeSelect?.value || ""),
     reasoningMode: String(ui.adminModeSelect?.value || ""),
     promptVersion: String(ui.adminPromptVersionSelect?.value || ""),
+    finalAttemptPolicy: "single",
   };
 
   try {
@@ -2185,7 +2202,8 @@ function canAdminCompareCurrentRun() {
     && adminFeatureEnabled("execute")
     && isAdminRunTerminal(adminCurrentRun)
     && adminCurrentRun?.preparationFinalizedAt
-    && adminCurrentRun?.evidenceSnapshot,
+    && adminCurrentRun?.evidenceSnapshot
+    && adminCurrentRun?.executionProfile?.finalRuling?.finalAttemptPolicy === "single"
   );
 }
 
@@ -2213,7 +2231,7 @@ function updateAdminComparisonAvailability() {
   if (!canCompare) {
     ui.adminComparisonStatus.textContent = "先完成或载入一条含冻结证据的实验。";
   } else {
-    ui.adminComparisonStatus.textContent = "已就绪：每个选项只复用当前 Evidence Snapshot，不重新检索。";
+    ui.adminComparisonStatus.textContent = "已就绪：每个选项只复用当前 Evidence Snapshot，不重新检索；最终模型只调用一次。";
   }
 }
 
@@ -3588,7 +3606,13 @@ function firstAdminArray(...values) {
 }
 
 function adminProviderLabel(value) {
-  const labels = { openai: "OpenAI", deepseek: "DeepSeek", glm: "智谱 GLM", kimi: "Kimi" };
+  const labels = {
+    openai: "OpenAI",
+    deepseek: "DeepSeek",
+    glm: "智谱 GLM",
+    kimi: "Kimi",
+    relay: "第三方中转（模型身份未验证）",
+  };
   return labels[String(value || "").toLowerCase()] || String(value || "");
 }
 
@@ -3811,6 +3835,7 @@ function modelProviderLabel(provider) {
   if (value === "glm") return "智谱 GLM";
   if (value === "gemini") return "Gemini";
   if (value === "openai") return "OpenAI";
+  if (value === "relay") return "第三方中转（身份未验证）";
   if (value === "ollama") return "Ollama";
   if (value === "mock") return "RAG Mock";
   if (value === "auto") return "自动";

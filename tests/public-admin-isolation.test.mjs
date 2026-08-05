@@ -115,16 +115,17 @@ test("public model environment pins the selected final profile and keeps prepara
     DEEPSEEK_API_KEY: "public-deepseek-key",
   });
 
-  assert.equal(publicEnv.MODEL_PROVIDER, "glm");
-  assert.equal(publicEnv.RAG_MODEL_PROVIDER, "glm");
-  assert.equal(publicEnv.RAG_MODEL, "glm-5.2");
+  assert.equal(publicEnv.MODEL_PROVIDER, "deepseek");
+  assert.equal(publicEnv.RAG_MODEL_PROVIDER, "deepseek");
+  assert.equal(publicEnv.RAG_MODEL, "deepseek-v4-flash");
   assert.equal(publicEnv.RAG_THINKING_MODE, "enabled");
   assert.equal(publicEnv.RAG_REASONING_EFFORT, "high");
   assert.equal(publicEnv.RAG_CARD_MODEL_PROVIDER, "deepseek");
   assert.equal(publicEnv.RAG_RULE_MODEL_PROVIDER, "deepseek");
   assert.equal(publicEnv.RAG_RULEBOOK_MODEL_PROVIDER, "deepseek");
   assert.equal(Object.keys(publicEnv).some((key) => /^(?:OPENAI_|ADMIN_|KIMI_)/iu.test(key)), false);
-  assert.equal(publicEnv.GLM_API_KEY, "admin-glm-key");
+  assert.equal(publicEnv.GLM_API_KEY, undefined);
+  assert.equal(publicEnv.GLM_BASE_URL, undefined);
   assert.equal(publicEnv.DEEPSEEK_API_KEY, "public-deepseek-key");
 
   const deepSeekEnv = createPublicAnswerModelEnv({
@@ -206,7 +207,10 @@ test("public legacy and fastjudge modes are rejected before any admin OpenAI cal
 test("local Node public entry point applies the same public model boundary", async () => {
   const source = await readFile(new URL("../backend/server.mjs", import.meta.url), "utf8");
   assert.match(source, /createPublicAnswerModelEnv\(process\.env, profile\.id\)/u);
-  assert.match(source, /resolvePublicRulingModelProfile\(payload\.rulingModelProfile\)/u);
+  assert.match(
+    source,
+    /resolvePublicRulingModelProfile\(\s*payload\.rulingModelProfile\s*\|\|\s*process\.env\.PUBLIC_RULING_MODEL_PROFILE,?\s*\)/u,
+  );
   assert.match(source, /if \(mode !== "rag"\)[\s\S]*?unsupported_answer_mode/u);
   assert.match(source, /answerRagRulingQuestionForVersion\(\{[\s\S]*?env:\s*publicEnv,/u);
   assert.doesNotMatch(source, /payload\.(?:thinkingMode|reasoningEffort|modelTier)/u);

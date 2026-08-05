@@ -2,11 +2,13 @@ import { createHash } from "node:crypto";
 
 import {
   canonicalLegacyLuaSha256,
+  normalizeLegacyLuaPasscode,
 } from "./legacyLuaSemanticPacket.mjs";
 import { requestOcgEngineJson } from "./ocgEngineHttpClient.mjs";
 
 export const LEGACY_LUA_HTTP_ENDPOINTS = Object.freeze({
   capabilities: "/formal/v1/legacy-lua/capabilities",
+  cardIdentities: "/formal/v1/legacy-lua/card-identities",
   source: "/formal/v1/legacy-lua/source",
   effectCandidates: "/formal/v1/legacy-lua/effect-candidates",
   compilePlan: "/formal/v1/legacy-lua/compile-plan",
@@ -15,6 +17,7 @@ export const LEGACY_LUA_HTTP_ENDPOINTS = Object.freeze({
 
 export const LEGACY_LUA_HTTP_SCHEMAS = Object.freeze({
   capabilities: "ocg-legacy-lua-http-capabilities/v1",
+  cardIdentities: "ocg-legacy-lua-http-card-identities/v1",
   source: "ocg-legacy-lua-http-source/v1",
   effectCandidates: "ocg-legacy-lua-http-effect-candidates/v1",
   compilePlan: "ocg-legacy-lua-http-compile-plan/v1",
@@ -22,10 +25,13 @@ export const LEGACY_LUA_HTTP_SCHEMAS = Object.freeze({
 });
 
 const SHA256 = /^[a-f0-9]{64}$/u;
-const PASSCODE = /^\d{8}$/u;
 const HTTP_AUTHORITY = "LEGACY_DISCOVERY_ONLY";
 const DEFAULT_TIMEOUT_MS = 5_000;
 const DEFAULT_MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
+const MAX_IDENTITY_CARDS = 32;
+const MAX_IDENTITY_NAMES = 16;
+const MAX_IDENTITY_CLIENT_KEY_LENGTH = 128;
+const MAX_IDENTITY_NAME_LENGTH = 256;
 
 /**
  * Adapts the versioned HTTP API to the in-process facade consumed by
@@ -53,6 +59,7 @@ export function createLegacyLuaSemanticHttpFacade({
   );
   let negotiationPromise = null;
   const sourcePromises = new Map();
+  const identityPromises = new Map();
 
   const request = async ({ endpoint, method, body }) => {
     if (signal?.aborted) {
@@ -145,12 +152,27 @@ export function createLegacyLuaSemanticHttpFacade({
     async getLegacyLuaApiSemanticsRegistry() {
       return structuredClone((await negotiate()).apiSemanticsRegistry);
     },
+    async resolveLegacyLuaCardIdentities(cards) {
+      const normalized = normalizeCardIdentityRequests(cards);
+      const key = canonicalLegacyLuaSha256(normalized);
+      if (!identityPromises.has(key)) {
+        identityPromises.set(key, invoke({
+          endpoint: "cardIdentities",
+          operation: "RESOLVE_CARD_IDENTITIES",
+          body: { cards: normalized },
+        }).then((envelope) => validateCardIdentityResolution(
+          envelope,
+          normalized,
+        )));
+      }
+      return identityPromises.get(key);
+    },
     async resolveLegacyLuaSource(passcode) {
-      const normalized = normalizeEightDigitPasscode(passcode);
+      const normalized = normalizeLegacyLuaPasscode(passcode);
       if (normalized === null) {
         throw httpError(
           "LEGACY_LUA_PASSCODE_INVALID",
-          "legacy Lua source resolution requires a non-zero 8-digit passcode",
+          "legacy Lua source resolution requires a non-zero uint32 passcode",
         );
       }
       if (!sourcePromises.has(normalized)) {
@@ -170,6 +192,19 @@ export function createLegacyLuaSemanticHttpFacade({
         sourceDocument,
       });
       return structuredClone(response.result);
+    },
+    async enumerateLegacyLuaEffectCandidatesEnvelope(sourceDocument) {
+      const response = await invoke({
+        endpoint: "effectCandidates",
+        operation: "EFFECT_CANDIDATES",
+        body: { sourceDocument },
+        sourceDocument,
+      });
+      // The candidate-set artifact can legitimately omit its redundant source
+      // hash when static parsing fails. Keep the already verified HTTP
+      // envelope available to the semantic client instead of manufacturing a
+      // hash inside the artifact or discarding the remote UNKNOWN reason.
+      return structuredClone(response);
     },
     async compileLegacyLuaActivationPlan(sourceDocument, selection = {}) {
       const response = await invoke({
@@ -233,6 +268,8 @@ function validateCapabilitiesEnvelope(payload) {
   plainObject(payload.sourceResolution, "sourceResolution");
   equal(payload.sourceResolution.lockedPasscode, true,
     "sourceResolution.lockedPasscode");
+  equal(payload.sourceResolution.lockedExactCardNames, true,
+    "sourceResolution.lockedExactCardNames");
   validateEndpointManifest(payload.endpoints);
   return Object.freeze({
     resourceBinding: structuredClone(payload.resourceBinding),
@@ -433,9 +470,103 @@ function validateResolvedSource(envelope, requestedPasscode) {
   return structuredClone(sourceDocument);
 }
 
+function validateCardIdentityResolution(envelope, requests) {
+  const result = envelope.result;
+  plainObject(result, "cardIdentities.result");
+  equal(result.schemaVersion, "ocg-locked-card-identity-resolution/v1",
+    "cardIdentities.result.schemaVersion");
+  equalDigest(result.dbSetSha256, envelope.resourceBinding.dbSetSha256,
+    "cardIdentities.result.dbSetSha256");
+  equalDigest(result.scriptSetSha256,
+    envelope.resourceBinding.scriptSetSha256,
+    "cardIdentities.result.scriptSetSha256");
+  if (!Array.isArray(result.matches)) {
+    throw httpError(
+      "LEGACY_LUA_HTTP_SCHEMA_INVALID",
+      "cardIdentities.result.matches must be an array",
+    );
+  }
+  const expectedByKey = new Map(requests.map((request) => [
+    request.clientKey,
+    request,
+  ]));
+  if (result.matches.length !== expectedByKey.size) {
+    throw httpError(
+      "LEGACY_LUA_HTTP_SCHEMA_INVALID",
+      "card identity response must contain exactly one match per request",
+    );
+  }
+  const seen = new Set();
+  for (const match of result.matches) {
+    plainObject(match, "cardIdentities.result.matches[]");
+    nonEmptyString(match.clientKey, "cardIdentities.match.clientKey");
+    if (seen.has(match.clientKey)) {
+      throw httpError("LEGACY_LUA_HTTP_SCHEMA_INVALID",
+        "card identity response contains duplicate clientKey");
+    }
+    seen.add(match.clientKey);
+    const request = expectedByKey.get(match.clientKey);
+    if (!request) {
+      throw httpError("LEGACY_LUA_HTTP_SCHEMA_INVALID",
+        "card identity response contains an unexpected clientKey");
+    }
+    if (!["RESOLVED", "NOT_FOUND", "AMBIGUOUS"].includes(match.status)) {
+      throw httpError("LEGACY_LUA_HTTP_SCHEMA_INVALID",
+        "card identity response contains an invalid status");
+    }
+    if (!Array.isArray(match.candidates)) {
+      throw httpError("LEGACY_LUA_HTTP_SCHEMA_INVALID",
+        "card identity candidates must be an array");
+    }
+    const candidatePasscodes = new Set();
+    for (const candidate of match.candidates) {
+      plainObject(candidate, "cardIdentities.match.candidates[]");
+      const candidatePasscode = normalizeLegacyLuaPasscode(candidate.passcode);
+      if (candidatePasscode === null || candidate.passcode !== candidatePasscode ||
+          candidatePasscodes.has(candidatePasscode)) {
+        throw httpError("LEGACY_LUA_HTTP_SCHEMA_INVALID",
+          "card identity candidates must contain unique canonical uint32 passcodes");
+      }
+      candidatePasscodes.add(candidatePasscode);
+      validateIdentityNameList(candidate.matchedNames,
+        "cardIdentities.candidate.matchedNames");
+      const queryNames = validateIdentityNameList(candidate.queryNames,
+        "cardIdentities.candidate.queryNames");
+      if (queryNames.some((name) => !request.names.includes(name))) {
+        throw httpError("LEGACY_LUA_HTTP_SCHEMA_INVALID",
+          "card identity candidate queryNames must come from the request");
+      }
+    }
+    const normalizedPasscode = normalizeLegacyLuaPasscode(match.passcode);
+    if (match.status === "RESOLVED") {
+      if (match.candidates.length !== 1 || normalizedPasscode === null ||
+          match.passcode !== normalizedPasscode ||
+          !candidatePasscodes.has(normalizedPasscode)) {
+        throw httpError("LEGACY_LUA_HTTP_SCHEMA_INVALID",
+          "resolved card identity must contain exactly one matching canonical passcode candidate");
+      }
+    } else if (match.passcode !== null) {
+      throw httpError("LEGACY_LUA_HTTP_SCHEMA_INVALID",
+        "unresolved card identity must not contain a passcode");
+    } else if (match.status === "NOT_FOUND" && match.candidates.length !== 0) {
+      throw httpError("LEGACY_LUA_HTTP_SCHEMA_INVALID",
+        "NOT_FOUND card identity must not contain candidates");
+    } else if (match.status === "AMBIGUOUS" && match.candidates.length < 2) {
+      throw httpError("LEGACY_LUA_HTTP_SCHEMA_INVALID",
+        "AMBIGUOUS card identity must contain at least two candidates");
+    }
+  }
+  if (seen.size !== expectedByKey.size) {
+    throw httpError("LEGACY_LUA_HTTP_SCHEMA_INVALID",
+      "card identity response is missing one or more requested clientKeys");
+  }
+  return structuredClone(result);
+}
+
 function validateEndpointManifest(value) {
   plainObject(value, "endpoints");
   const expected = [
+    ["cardIdentities", "POST", "cardIdentities"],
     ["source", "POST", "source"],
     ["effectCandidates", "POST", "effectCandidates"],
     ["compilePlan", "POST", "compilePlan"],
@@ -452,13 +583,87 @@ function validateEndpointManifest(value) {
   }
 }
 
-function normalizeEightDigitPasscode(value) {
-  const text = typeof value === "string"
-    ? value.trim()
-    : typeof value === "number" && Number.isSafeInteger(value)
-      ? String(value).padStart(8, "0")
-      : "";
-  return PASSCODE.test(text) && Number(text) > 0 ? text : null;
+function normalizeCardIdentityRequests(value) {
+  if (!Array.isArray(value) || value.length === 0 ||
+      value.length > MAX_IDENTITY_CARDS) {
+    throw httpError(
+      "LEGACY_LUA_CARD_IDENTITY_INVALID",
+      `card identity lookup requires 1-${MAX_IDENTITY_CARDS} cards`,
+    );
+  }
+  const seen = new Set();
+  return value.map((item, index) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      throw httpError(
+        "LEGACY_LUA_CARD_IDENTITY_INVALID",
+        "each card identity request must be an object",
+      );
+    }
+    if (item.clientKey !== undefined && typeof item.clientKey !== "string") {
+      throw httpError(
+        "LEGACY_LUA_CARD_IDENTITY_INVALID",
+        "card identity clientKey must be a string",
+      );
+    }
+    const clientKey = (item.clientKey ?? String(index)).trim();
+    if (!clientKey || clientKey.length > MAX_IDENTITY_CLIENT_KEY_LENGTH ||
+        seen.has(clientKey) || !Array.isArray(item.names) ||
+        item.names.length === 0 || item.names.length > MAX_IDENTITY_NAMES) {
+      throw httpError(
+        "LEGACY_LUA_CARD_IDENTITY_INVALID",
+        `each card identity request requires a unique clientKey and 1-${MAX_IDENTITY_NAMES} names`,
+      );
+    }
+    const names = [];
+    const normalizedNames = new Set();
+    for (const value of item.names) {
+      if (typeof value !== "string") {
+        throw httpError(
+          "LEGACY_LUA_CARD_IDENTITY_INVALID",
+          "card identity names must be strings",
+        );
+      }
+      const name = value.trim();
+      const normalized = normalizeExactIdentityName(name);
+      if (!normalized || name.length > MAX_IDENTITY_NAME_LENGTH) {
+        throw httpError(
+          "LEGACY_LUA_CARD_IDENTITY_INVALID",
+          `card identity names must contain 1-${MAX_IDENTITY_NAME_LENGTH} characters`,
+        );
+      }
+      if (!normalizedNames.has(normalized)) {
+        normalizedNames.add(normalized);
+        names.push(name);
+      }
+    }
+    seen.add(clientKey);
+    return { clientKey, names };
+  });
+}
+
+function normalizeExactIdentityName(value) {
+  return value
+    .normalize("NFKC")
+    .trim()
+    .replace(/\s+/gu, " ")
+    .toLocaleLowerCase("und");
+}
+
+function validateIdentityNameList(value, label) {
+  if (!Array.isArray(value) || value.length === 0) {
+    throw httpError("LEGACY_LUA_HTTP_SCHEMA_INVALID",
+      `${label} must be a non-empty array`);
+  }
+  const names = [];
+  for (const name of value) {
+    if (typeof name !== "string" || !name.trim() ||
+        name.length > MAX_IDENTITY_NAME_LENGTH) {
+      throw httpError("LEGACY_LUA_HTTP_SCHEMA_INVALID",
+        `${label} must contain valid strings`);
+    }
+    names.push(name);
+  }
+  return names;
 }
 
 function assertPayloadSize(value, limit, endpoint) {

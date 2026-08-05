@@ -157,8 +157,10 @@ test("ui_has_single_query_button", async () => {
   assert.match(html, /id="pipelineStageList"/u);
   assert.match(html, /id="pipelineElapsedText"/u);
   assert.match(html, /id="rulingModelSelect"[^>]+disabled/u);
-  assert.match(html, /value="glm-5\.2-high" selected>GLM 5\.2 · 思考 high/u);
-  assert.match(html, /value="deepseek-v4-flash-high">DeepSeek V4 Flash · 思考 high/u);
+  assert.match(html, /value="deepseek-v4-flash-high" selected>DeepSeek V4 Flash · 思考 high/u);
+  assert.doesNotMatch(html, /value="glm-5\.2-high"/u);
+  assert.doesNotMatch(html, /value="kimi-[^"]+"/u);
+  assert.doesNotMatch(html, /value="relay-gpt-5\.6-sol-high"/u);
   assert.match(html, /id="rulingModelStatus">正在确认模型可用性/u);
   assert.match(html, /id="rulingModelLatency"[^>]+aria-live="polite"/u);
   assert.match(app, /最近 \$\{latency\.sampleCount\} 次成功回答/u);
@@ -222,31 +224,17 @@ test("public ruling model selector uses the allowlisted backend profiles without
     `${definitions}\n${functions}\nreturn normalizeRulingModelCapabilities;`,
   )();
   const capabilities = normalizeCapabilities({
-    defaultRulingModelProfile: "glm-5.2-high",
+    defaultRulingModelProfile: "deepseek-v4-flash-high",
     rulingModelProfiles: [
       { id: "deepseek-v4-flash-high", available: true, label: "untrusted label" },
       { id: "glm-5.2-high", available: true },
+      { id: "relay-gpt-5.6-sol-high", available: true, label: "OpenAI official" },
       { id: "not-allowlisted", available: true },
     ],
   });
 
-  assert.equal(capabilities.defaultProfile, "glm-5.2-high");
+  assert.equal(capabilities.defaultProfile, "deepseek-v4-flash-high");
   assert.deepEqual(capabilities.profiles, [
-    {
-      id: "glm-5.2-high",
-      label: "GLM 5.2 · 思考 high",
-      provider: "glm",
-      available: true,
-      answerLatency: {
-        profileId: "glm-5.2-high",
-        status: "unavailable",
-        averageMs: null,
-        sampleCount: 0,
-        windowSize: 20,
-        storage: "unavailable",
-        reason: "",
-      },
-    },
     {
       id: "deepseek-v4-flash-high",
       label: "DeepSeek V4 Flash · 思考 high",
@@ -264,15 +252,16 @@ test("public ruling model selector uses the allowlisted backend profiles without
     },
   ]);
   const partialAvailability = normalizeCapabilities({
-    defaultRulingModelProfile: "glm-5.2-high",
+    defaultRulingModelProfile: "deepseek-v4-flash-high",
     rulingModelProfiles: [
       { id: "glm-5.2-high", available: false },
       { id: "deepseek-v4-flash-high", available: true },
+      { id: "relay-gpt-5.6-sol-high", available: false },
     ],
   });
   assert.deepEqual(
     partialAvailability.profiles.map((profile) => [profile.id, profile.available]),
-    [["glm-5.2-high", false], ["deepseek-v4-flash-high", true]],
+    [["deepseek-v4-flash-high", true]],
   );
   assert.throws(
     () => normalizeCapabilities({
@@ -410,7 +399,7 @@ test("versioned backend answers require a matching server confirmation", async (
   const buildRequest = (fetchImpl) => new Function(
     "fetch",
     `const appConfig = { answerApiUrl: "https://example.test/api/answer" };
-     const selectedRulingModelProfile = "glm-5.2-high";
+     const selectedRulingModelProfile = "deepseek-v4-flash-high";
      ${versionClientSource}
      return requestBackendAnswer;`,
   )(fetchImpl);
@@ -427,7 +416,7 @@ test("versioned backend answers require a matching server confirmation", async (
   assert.deepEqual(requestBody, {
     question: "问题",
     mode: "rag",
-    rulingModelProfile: "glm-5.2-high",
+    rulingModelProfile: "deepseek-v4-flash-high",
     rulingVersion: "previous",
   });
   assert.equal(confirmed.effectiveRulingVersion, "previous");
@@ -516,6 +505,9 @@ test("ui_hides_engine_details_by_default", async () => {
   assert.match(app, /storageWarning/u);
   assert.match(app, /rulebook/u);
   assert.match(app, /publicRiskLines/u);
+  assert.match(app, /publicLegacyLuaLines/u);
+  assert.match(app, /内核 Lua 语义辅助/u);
+  assert.match(app, /不等于完整场景模拟/u);
   assert.match(app, /"trusted_local_semantic_execution"/u);
   assert.match(app, /"semantic_state_transition_applied"/u);
   assert.match(app, /"final_model_skipped"/u);
@@ -621,6 +613,7 @@ test("admin_model_lab_is_hidden_and_requires_a_real_session", async () => {
     "function createAdminComparisonIdempotencyKey",
   ), /action: "create"|question:/u);
   assert.match(app, /typeof data\?\.content === "string"/u);
+  assert.match(app, /finalAttemptPolicy: "single"/u);
   assert.match(app, /data\?\.fileName/u);
   assert.match(app, /data\?\.contentType/u);
   assert.match(html, /option value="partially_correct">部分正确/u);
@@ -635,7 +628,7 @@ test("admin_model_lab_is_hidden_and_requires_a_real_session", async () => {
   assert.match(adminSession, /SameSite=None/u);
 });
 
-test("admin frozen-evidence comparison offers supported low-cost model combinations", async () => {
+test("admin frozen-evidence comparison offers supported configured model combinations", async () => {
   const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
   const source = sourceBetween(
     app,
@@ -685,19 +678,34 @@ test("admin frozen-evidence comparison offers supported low-cost model combinati
       defaultReasoningMode: "pro",
       defaultReasoningEffort: "max",
     },
+    {
+      id: "relay-gpt-5.6-sol",
+      label: "第三方中转 · GPT-5.6 Sol",
+      provider: "relay",
+      modes: [{ id: "pro" }],
+      efforts: [{ id: "high" }],
+      defaultReasoningMode: "pro",
+      defaultReasoningEffort: "high",
+    },
   ];
   const options = build(models);
 
   assert.deepEqual(options.map((item) => item.id), [
     "deepseek-v4-flash:standard:none",
     "deepseek-v4-flash:pro:high",
+    "deepseek-v4-pro:pro:max",
     "glm-5.2:standard:none",
     "glm-5.2:pro:max",
     "kimi-k2.6:standard:none",
     "kimi-k2.6:pro:none",
     "kimi-k3:pro:max",
+    "relay-gpt-5.6-sol:pro:high",
   ]);
-  assert.equal(options.some((item) => item.model === "deepseek-v4-pro"), false);
+  assert.equal(options.some((item) => (
+    item.model === "deepseek-v4-pro"
+    && item.reasoningMode === "pro"
+    && item.reasoningEffort === "max"
+  )), true);
 });
 
 test("admin frozen-evidence comparison summarizes answer latency tokens and available cost", async () => {
