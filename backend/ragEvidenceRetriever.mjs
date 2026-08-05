@@ -16,6 +16,7 @@ import { hasNumberedCardIdentityConflict } from "./numberedCardIdentity.mjs";
 import { compileRuleScenario } from "./ruleScenarioCompiler.mjs";
 import { retrieveLiveOfficialQa } from "./liveOfficialQaProvider.mjs";
 import { analyzePrintedTextReferenceScenario } from "./printedTextReferences.mjs";
+import { normalizeLegacyLuaPasscode } from "./legacyLuaSemanticPacket.mjs";
 
 const projectRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 const defaultDataDir = join(projectRoot, "data");
@@ -29,6 +30,7 @@ const evidenceListCache = new WeakMap();
 const retrievalRecordFeatureCache = new WeakMap();
 const recordIdentityIndexCache = new WeakMap();
 const canonicalCardIdentityIndexCache = new WeakMap();
+const uniqueLocalSurfaceIdentityCache = new WeakMap();
 
 export async function retrieveRagEvidence({
   userQuery,
@@ -75,11 +77,56 @@ export async function retrieveRagEvidence({
   const unresolvedForBaige = unresolvedResolutionCandidates
     .filter((mention) => !providedNameKeys.has(normalizeCardKey(mention.input)));
   const [enrichedLocalCards, baigeResolvedCards] = await Promise.all([
-    enrichCardsWithBaige(dedupeCards([...resolvedCards, ...fuzzyCards]), { fetchImpl, env, limits, warnings: retrievalWarnings, debug: baigeDebug }),
+    enrichCardsWithBaige(dedupeCards([...resolvedCards, ...fuzzyCards]), {
+      fetchImpl,
+      env,
+      limits,
+      warnings: retrievalWarnings,
+      debug: baigeDebug,
+      canonicalCards: data.cards,
+    }),
     resolveUnresolvedMentionCardsWithBaige(unresolvedForBaige, { fetchImpl, env, limits, warnings: retrievalWarnings, debug: baigeDebug }),
   ]);
-  const verifiedLocalCards = suppressModelExpansionConflicts(enrichedLocalCards, baigeResolvedCards, retrievalWarnings);
-  let retrievalCards = dedupeCards([...verifiedLocalCards, ...baigeResolvedCards]).slice(0, limits.maxCards);
+  const identityVerificationFailures = enrichedLocalCards
+    .filter((card) => card.identityVerificationStatus === "unverified")
+    .map((card) => ({
+      input: card.input || card.matchedQuery || card.name,
+      reason: "external_identity_verification_failed",
+      source: "retrieval_identity_verification",
+      candidateCards: [{
+        id: card.id || card.cardId || "",
+        name: card.name || "",
+        confidence: Number(card.confidence || 0),
+      }],
+    }));
+  const canonicalBaigeCandidates = baigeResolvedCards.map((card) => canonicalizeRetrievedCardIdentity(
+    card,
+    data.cards,
+    retrievalWarnings,
+  ));
+  const canonicalBaigeCards = canonicalBaigeCandidates.filter(
+    (card) => card.identityCanonicalizationConflict !== true,
+  );
+  for (const conflict of canonicalBaigeCandidates.filter((card) => card.identityCanonicalizationConflict === true)) {
+    baigeDebug.ambiguousMentions.push(identityConflictMention(conflict));
+  }
+  const verifiedLocalCards = suppressModelExpansionConflicts(
+    enrichedLocalCards,
+    canonicalBaigeCards,
+    retrievalWarnings,
+  );
+  const canonicalLocalCandidates = verifiedLocalCards.map((card) => canonicalizeRetrievedCardIdentity(
+    card,
+    data.cards,
+    retrievalWarnings,
+  ));
+  for (const conflict of canonicalLocalCandidates.filter((card) => card.identityCanonicalizationConflict === true)) {
+    baigeDebug.ambiguousMentions.push(identityConflictMention(conflict));
+  }
+  let retrievalCards = mergeCardsByStableIdentity([
+    ...canonicalLocalCandidates.filter((card) => card.identityCanonicalizationConflict !== true),
+    ...canonicalBaigeCards,
+  ]).slice(0, limits.maxCards);
   const qaIdentityCards = retrievalCards.filter((card) => card.resolutionSource !== "card_text_reference");
   if (qaIdentityCards.length !== retrievalCards.length) {
     retrievalWarnings.push(`qa_identity_excludes_card_text_references:${retrievalCards.length - qaIdentityCards.length}`);
@@ -90,7 +137,10 @@ export async function retrieveRagEvidence({
     retrievalWarnings,
   );
   timingsMs.cardResolution = Date.now() - stageStartedAt;
-  const remainingUnresolvedMentions = unresolvedMentionsAfterRetrieval(unresolvedResolutionCandidates, retrievalCards);
+  const remainingUnresolvedMentions = dedupeMentions([
+    ...unresolvedMentionsAfterRetrieval(unresolvedResolutionCandidates, retrievalCards),
+    ...identityVerificationFailures,
+  ]);
   if (parentheticalAliasKeys.size) retrievalWarnings.push(`parenthetical_alias_mentions_collapsed:${parentheticalAliasKeys.size}`);
   if (fuzzyCards.length) retrievalWarnings.push(`unresolved_mentions_fuzzy_matched:${fuzzyCards.map((card) => card.name).join(",")}`);
   if (baigeResolvedCards.length) retrievalWarnings.push(`unresolved_mentions_baige_matched:${baigeResolvedCards.map((card) => card.name).join(",")}`);
@@ -308,6 +358,16 @@ export async function retrieveRagEvidence({
   if (!cardTexts.length && retrievalCards.length) retrievalWarnings.push("resolved_card_text_not_found");
   if (!officialQaDirectCandidates.length) retrievalWarnings.push("official_direct_qa_not_found");
 
+  const reconciledCardResolution = reconcileRetrievedCardResolution({
+    cardResolution,
+    // Card-text dependency cards remain part of the frozen resolution/Lua
+    // input even though they are intentionally excluded from direct-QA
+    // identity matching above.
+    retrievedCards: retrievalCards,
+    remainingUnresolvedMentions,
+    baigeAmbiguousMentions: baigeDebug.ambiguousMentions,
+  });
+
   return {
     cardTexts: dedupeEvidence(cardTexts),
     userProvidedCardTexts: userProvidedCardTextEvidence,
@@ -319,7 +379,8 @@ export async function retrieveRagEvidence({
     rulebookCandidates,
     // Keep the canonical local card id on the answer path even when the card
     // was first found through a Baige passcode or another external id.
-    retrievedCards: effectiveQaIdentityCards,
+    retrievedCards: reconciledCardResolution.resolvedCards,
+    cardResolution: reconciledCardResolution,
     remainingUnresolvedMentions,
     fuzzyResolvedCards: fuzzyCards,
     baigeResolvedCards,
@@ -523,45 +584,27 @@ function cardIdentityKeys(cards) {
 }
 
 function canonicalizeQaIdentityCards(cards, canonicalCards, warnings) {
-  const index = canonicalCardIdentityIndex(canonicalCards);
-  return (cards || []).map((card) => {
-    const currentId = normalizeId(card.id || card.cardId);
-    const direct = currentId ? index.byId.get(currentId) : null;
-    if (direct) return mergeQaIdentityCard(card, direct);
-
-    const candidates = new Set();
-    for (const name of [card.name, card.cnName, card.jaName, card.enName, ...(card.aliases || [])]) {
-      const key = normalizeCardKey(name);
-      if (!key) continue;
-      for (const candidate of index.byAlias.get(key) || []) candidates.add(candidate);
-    }
-    if (candidates.size !== 1) {
-      if (candidates.size > 1) {
-        warnings.push(`qa_identity_canonicalization_ambiguous:${card.name || card.input || currentId}`);
-      }
-      return card;
-    }
-    const canonical = [...candidates][0];
-    const canonicalId = normalizeId(canonical.id || canonical.cardId);
-    if (!canonicalId || canonicalId === currentId) return mergeQaIdentityCard(card, canonical);
-    warnings.push(`qa_identity_canonicalized:${currentId || "name"}->${canonicalId}`);
-    return {
-      ...mergeQaIdentityCard(card, canonical),
-      qaIdentityOriginalId: String(card.id || card.cardId || ""),
-      id: canonicalId,
-      cardId: canonicalId,
-    };
-  });
+  return (cards || []).map((card) => canonicalizeRetrievedCardIdentity(
+    card,
+    canonicalCards,
+    warnings,
+  ));
 }
 
 function canonicalCardIdentityIndex(cards) {
   const cached = canonicalCardIdentityIndexCache.get(cards);
   if (cached) return cached;
   const byId = new Map();
+  const byCid = new Map();
+  const byPasscode = new Map();
   const byAlias = new Map();
   for (const card of cards || []) {
     const id = normalizeId(card.id || card.cardId);
     if (id) byId.set(id, card);
+    const cid = verifiedLocalCardCid(card);
+    if (cid) addIdentityIndexCandidate(byCid, cid, card);
+    const passcode = verifiedEnginePasscode(card);
+    if (passcode) addIdentityIndexCandidate(byPasscode, passcode, card);
     for (const name of [card.name, card.cnName, card.jaName, card.enName, ...(card.aliases || [])]) {
       const key = normalizeCardKey(name);
       if (!key) continue;
@@ -570,9 +613,136 @@ function canonicalCardIdentityIndex(cards) {
       byAlias.set(key, matches);
     }
   }
-  const index = { byId, byAlias };
+  const index = { byId, byCid, byPasscode, byAlias };
   canonicalCardIdentityIndexCache.set(cards, index);
   return index;
+}
+
+function addIdentityIndexCandidate(index, key, card) {
+  const candidates = index.get(key) || [];
+  if (!candidates.includes(card)) candidates.push(card);
+  index.set(key, candidates);
+}
+
+function canonicalizeRetrievedCardIdentity(card, canonicalCards, warnings = []) {
+  if (!card || typeof card !== "object") return card;
+  const index = canonicalCardIdentityIndex(canonicalCards);
+  const currentId = normalizeId(card.id || card.cardId);
+  const strongCandidates = new Set();
+  const direct = currentId ? index.byId.get(currentId) : null;
+  if (direct) strongCandidates.add(direct);
+
+  const cid = verifiedExternalCardCid(card);
+  if (cid) {
+    for (const candidate of index.byCid.get(cid) || []) strongCandidates.add(candidate);
+  }
+  const passcode = verifiedEnginePasscode(card)
+    || (/^[1-9]\d{4,9}$/u.test(currentId) ? currentId : "");
+  if (passcode) {
+    for (const candidate of index.byPasscode.get(passcode) || []) strongCandidates.add(candidate);
+  }
+
+  if (strongCandidates.size > 1) {
+    warnings.push(`qa_identity_canonicalization_conflict:${card.input || card.name || currentId}`);
+    return {
+      ...card,
+      identityCanonicalizationConflict: true,
+      identityCanonicalizationCandidates: [...strongCandidates].map(summarizeIdentityCandidate),
+    };
+  }
+
+  let canonical = strongCandidates.size === 1 ? [...strongCandidates][0] : null;
+  if (!canonical) {
+    const aliasCandidates = new Set();
+    for (const name of cardIdentityNames(card)) {
+      const key = normalizeCardKey(name);
+      if (!key) continue;
+      for (const candidate of index.byAlias.get(key) || []) aliasCandidates.add(candidate);
+    }
+    if (aliasCandidates.size > 1) {
+      warnings.push(`qa_identity_canonicalization_ambiguous:${card.name || card.input || currentId}`);
+      return {
+        ...card,
+        identityCanonicalizationConflict: true,
+        identityCanonicalizationCandidates: [...aliasCandidates].map(summarizeIdentityCandidate),
+      };
+    }
+    canonical = aliasCandidates.size === 1 ? [...aliasCandidates][0] : null;
+  }
+  if (!canonical) return ensureCardMentionAlias(card);
+
+  const canonicalId = normalizeId(canonical.id || canonical.cardId);
+  if (canonicalId && canonicalId !== currentId) {
+    warnings.push(`qa_identity_canonicalized:${currentId || cid || passcode || "name"}->${canonicalId}`);
+  }
+  return mergeCanonicalIdentityCard(card, canonical, canonicalId);
+}
+
+function mergeCanonicalIdentityCard(card, canonical, canonicalId) {
+  const externalPasscode = verifiedEnginePasscode(card);
+  const inputKey = normalizeCardKey(card.input);
+  const externalSurfaceExact = inputKey && [
+    card.name,
+    card.cnName,
+    card.jaName,
+    card.jpName,
+    card.enName,
+    ...(card.aliases || []),
+  ].map(normalizeCardKey).includes(inputKey);
+  return ensureCardMentionAlias({
+    ...card,
+    id: canonicalId || String(card.id || card.cardId || ""),
+    cardId: canonicalId || String(card.cardId || card.id || ""),
+    passcode: externalPasscode || verifiedEnginePasscode(canonical),
+    cid: verifiedLocalCardCid(canonical) || verifiedExternalCardCid(card) || null,
+    name: externalSurfaceExact
+      ? card.name || card.cnName || canonical.name
+      : canonical.name || canonical.cnName || card.name,
+    cnName: externalSurfaceExact
+      ? card.cnName || canonical.cnName
+      : canonical.cnName || card.cnName,
+    jaName: canonical.jaName || card.jaName || card.jpName,
+    jpName: canonical.jpName || canonical.jaName || card.jpName || card.jaName,
+    enName: canonical.enName || card.enName,
+    type: canonical.type || canonical.cardType || card.type || card.cardType,
+    cardType: canonical.cardType || canonical.type || card.cardType || card.type,
+    attribute: hasValue(canonical.attribute) ? canonical.attribute : card.attribute,
+    race: hasValue(canonical.race) ? canonical.race : card.race,
+    atk: canonical.atk ?? canonical.attack ?? card.atk ?? card.attack,
+    def: canonical.def ?? canonical.defense ?? card.def ?? card.defense,
+    level: canonical.level ?? card.level,
+    rank: canonical.rank ?? card.rank,
+    link: canonical.link ?? canonical.linkRating ?? card.link ?? card.linkRating,
+    effectText: canonical.effectText || card.effectText || card.text,
+    text: canonical.text || canonical.effectText || card.text || card.effectText,
+    sourceUrl: canonical.sourceUrl || card.sourceUrl,
+    aliases: cardIdentityNames(card, canonical),
+    qaIdentityOriginalId: canonicalId && canonicalId !== String(card.id || card.cardId || "")
+      ? String(card.id || card.cardId || "")
+      : card.qaIdentityOriginalId,
+    identityCanonicalizationSource: verifiedExternalCardCid(card)
+      ? "cid"
+      : externalPasscode
+        ? "passcode"
+        : "exact_alias",
+  });
+}
+
+function summarizeIdentityCandidate(card = {}) {
+  return {
+    id: String(card.id || card.cardId || ""),
+    passcode: verifiedEnginePasscode(card),
+    name: card.name || card.cnName || card.jaName || card.enName || "",
+  };
+}
+
+function identityConflictMention(card = {}) {
+  return {
+    input: card.input || card.matchedQuery || card.name || "",
+    reason: "conflicting_external_card_identity",
+    source: "retrieval_identity_canonicalization",
+    candidateCards: card.identityCanonicalizationCandidates || [],
+  };
 }
 
 function mergeQaIdentityCard(card, canonical) {
@@ -1606,17 +1776,36 @@ async function resolveUnresolvedMentionCardsWithBaige(unresolvedMentions, { fetc
         warnings.push(`baige_no_result:${query}`);
         continue;
       }
-      const best = candidates[0];
-      const confidence = Number(best.confidence || 0);
-      if (confidence >= minConfidence) {
+      const selection = selectUniqueBaigeCandidate(candidates, minConfidence);
+      const best = selection.card;
+      const confidence = Number(best?.confidence || 0);
+      if (best) {
         warnings.push(`baige_match:${query}->${best.name}`);
         return {
           ...toRagCard(best, mention.input, confidence),
           matchedQuery: query,
         };
       }
-      if (!bestLowConfidence || confidence > Number(bestLowConfidence.confidence || 0)) {
-        bestLowConfidence = best;
+      if (selection.ambiguous) {
+        debug.ambiguousMentions.push({
+          input: mention.input,
+          reason: "conflicting_baige_card_identity",
+          candidateCards: selection.candidates.slice(0, 3).map((card) => ({
+            id: card.id || card.cardId || "",
+            cid: card.cid ?? null,
+            name: card.name || card.cnName || card.jpName || card.enName || "",
+            source: "baige",
+            confidence: card.confidence || 0,
+            matchedQuery: query,
+          })),
+        });
+        warnings.push(`baige_ambiguous:${mention.input}`);
+        return null;
+      }
+      const lowConfidenceBest = candidates[0];
+      const lowConfidence = Number(lowConfidenceBest?.confidence || 0);
+      if (!bestLowConfidence || lowConfidence > Number(bestLowConfidence.confidence || 0)) {
+        bestLowConfidence = lowConfidenceBest;
         bestLowConfidenceCandidates = candidates.slice(0, 3);
         bestLowConfidenceQuery = query;
       }
@@ -1650,31 +1839,251 @@ function mentionSearchQueries(mention) {
   return dedupeBy(queries, normalizeCardKey).slice(0, 3);
 }
 
-async function enrichCardsWithBaige(cards, { fetchImpl, env, limits, warnings, debug }) {
+async function enrichCardsWithBaige(cards, {
+  fetchImpl,
+  env,
+  limits,
+  warnings,
+  debug,
+  canonicalCards = [],
+}) {
   const sourceCards = (cards || []).slice(0, limits.maxCards);
   const result = await Promise.all(sourceCards.map(async (card) => {
     const needsNumberedIdentityEnrichment = card.numberedIdentityNameMismatch === true;
-    if (!needsNumberedIdentityEnrichment && hasUsableCardText(card) && (card.id || card.cardId) && (!enginePasscodeRequired(env) || hasEnginePasscode(card))) {
+    const needsSurfaceIdentityVerification = !needsNumberedIdentityEnrichment
+      && cardInputNeedsIdentityVerification(card);
+    if (!needsNumberedIdentityEnrichment && !needsSurfaceIdentityVerification
+      && hasUsableCardText(card) && (card.id || card.cardId)
+      && (!enginePasscodeRequired(env) || hasEnginePasscode(card))) {
       return card;
     }
-    const query = needsNumberedIdentityEnrichment
+    const nameQuery = needsNumberedIdentityEnrichment || needsSurfaceIdentityVerification
       ? card.numberedIdentityInput || card.input || card.name
       : card.name || card.cnName || card.jaName || card.enName || card.input;
-    if (!query) {
+    const localCid = !needsSurfaceIdentityVerification
+      && enginePasscodeRequired(env) && !hasEnginePasscode(card)
+      ? verifiedLocalCardCid(card)
+      : "";
+    if (localCid) {
+      const cidSearchResult = await searchBaige(localCid, {
+        fetchImpl,
+        env,
+        limits,
+        debug,
+      });
+      warnings.push(...cidSearchResult.warnings);
+      const exactCidCard = (cidSearchResult.results || []).find((candidate) => (
+        normalizedDecimal(candidate.cid) === localCid
+        && Boolean(verifiedEnginePasscode(candidate))
+      ));
+      if (exactCidCard) {
+        warnings.push(`engine_passcode_baige_cid_enriched:${localCid}`);
+        return mergeCard(
+          card,
+          toRagCard(exactCidCard, card.input || nameQuery || localCid, 1),
+        );
+      }
+      warnings.push(`engine_passcode_baige_cid_not_found:${localCid}`);
+    }
+    if (!nameQuery) {
       return card;
     }
-    const searchResult = await searchBaige(query, { fetchImpl, env, limits, debug });
+    const searchResult = await searchBaige(nameQuery, { fetchImpl, env, limits, debug });
     warnings.push(...searchResult.warnings);
-    const best = (searchResult.results || [])[0];
-    if (!best || Number(best.confidence || 0) < 0.72) {
-      return card;
+    const selection = selectUniqueBaigeCandidate(searchResult.results || [], 0.72);
+    const best = selection.card;
+    if (!best) {
+      if (selection.ambiguous) {
+        debug.ambiguousMentions.push({
+          input: card.input || nameQuery,
+          reason: "conflicting_baige_card_identity",
+          candidateCards: selection.candidates.slice(0, 3).map((candidate) => ({
+            id: candidate.id || candidate.cardId || "",
+            cid: candidate.cid ?? null,
+            name: candidate.name || candidate.cnName || candidate.jpName || candidate.enName || "",
+            source: "baige",
+            confidence: candidate.confidence || 0,
+            matchedQuery: nameQuery,
+          })),
+        });
+      }
+      if (
+        needsSurfaceIdentityVerification
+        && !selection.ambiguous
+        && hasUniqueHighConfidenceLocalIdentityBinding(card, canonicalCards)
+      ) {
+        warnings.push(`external_identity_verification_unavailable_local_binding_retained:${card.input}:${card.name}`);
+        return { ...card, identityVerificationStatus: "verified_local_unique" };
+      }
+      return needsSurfaceIdentityVerification
+        ? { ...card, identityVerificationStatus: "unverified" }
+        : card;
     }
     if (needsNumberedIdentityEnrichment) {
-      warnings.push(`numbered_identity_baige_enriched:${query}->${best.name}`);
+      warnings.push(`numbered_identity_baige_enriched:${nameQuery}->${best.name}`);
     }
-    return mergeCard(card, toRagCard(best, card.input || query, Number(best.confidence || 0)));
+    const externalCard = {
+      ...toRagCard(best, card.input || nameQuery, Number(best.confidence || 0)),
+      matchedQuery: nameQuery,
+    };
+    if (needsSurfaceIdentityVerification && !sameStableCardIdentity(card, externalCard)) {
+      warnings.push(`local_approximate_identity_replaced:${card.input}:${card.name}->${externalCard.name}`);
+      return ensureCardMentionAlias({
+        ...externalCard,
+        resolutionSource: card.resolutionSource || "external_identity_verification",
+        identityVerificationStatus: "verified_external_replacement",
+        replacedLocalCandidate: summarizeIdentityCandidate(card),
+      });
+    }
+    return {
+      ...mergeCard(card, externalCard),
+      identityVerificationStatus: needsSurfaceIdentityVerification
+        ? "verified_same_identity"
+        : card.identityVerificationStatus,
+    };
   }));
   return result.filter(Boolean);
+}
+
+function cardInputNeedsIdentityVerification(card = {}) {
+  const inputKey = normalizeCardKey(card.input);
+  if (!inputKey || card.resolutionSource === "card_text_reference") return false;
+  const canonicalKeys = [
+    card.name,
+    card.cnName,
+    card.jaName,
+    card.jpName,
+    card.enName,
+    ...(card.aliases || []),
+  ].map(normalizeCardKey).filter(Boolean);
+  if (canonicalKeys.some((key) => (
+    key === inputKey
+    || (Math.min(key.length, inputKey.length) >= 3 && (key.includes(inputKey) || inputKey.includes(key)))
+  ))) return false;
+  // The risky local path is an edit-distance correction: it can turn a valid
+  // new/community name into a different existing card. Locale translations
+  // and contextual nicknames are not edit corrections and remain offline.
+  return Number(card.confidence || 0) >= 0.92
+    && canonicalKeys.some((key) => boundedIdentityEditDistance(inputKey, key, 2) <= 2);
+}
+
+function hasUniqueHighConfidenceLocalIdentityBinding(card = {}, canonicalCards = []) {
+  if (Number(card.confidence || 0) < 0.94 || !hasUsableCardText(card)) return false;
+  const inputKey = normalizeCardKey(card.input);
+  if (!inputKey || !Array.isArray(canonicalCards) || !canonicalCards.length) return false;
+  const canonicalCard = uniqueCanonicalSingleEditCard(inputKey, canonicalCards)
+    || sourceBoundCanonicalCardForResolvedAlias(inputKey, card, canonicalCards);
+  if (!canonicalCard || !sameStableCardIdentity(card, canonicalCard)) return false;
+
+  const canonicalCid = verifiedLocalCardCid(canonicalCard);
+  const sourceCid = sourceBoundLocalCardCid(canonicalCard);
+  return Boolean(canonicalCid && sourceCid && canonicalCid === sourceCid);
+}
+
+function sourceBoundCanonicalCardForResolvedAlias(inputKey, card, canonicalCards) {
+  const hasNearResolvedAlias = cardIdentityNames(card).some((name) => {
+    const key = normalizeCardKey(name);
+    return key && key !== inputKey
+      && Math.abs(key.length - inputKey.length) <= 1
+      && boundedIdentityEditDistance(inputKey, key, 1) <= 1;
+  });
+  if (!hasNearResolvedAlias) return null;
+
+  let match = null;
+  for (const candidate of canonicalCards) {
+    if (!sameStableCardIdentity(card, candidate)) continue;
+    if (match && !sameStableCardIdentity(match, candidate)) return null;
+    match = candidate;
+  }
+  return match;
+}
+
+function uniqueCanonicalSingleEditCard(inputKey, canonicalCards) {
+  let cache = uniqueLocalSurfaceIdentityCache.get(canonicalCards);
+  if (!cache) {
+    cache = new Map();
+    uniqueLocalSurfaceIdentityCache.set(canonicalCards, cache);
+  }
+  if (cache.has(inputKey)) return cache.get(inputKey);
+
+  let match = null;
+  for (const candidate of canonicalCards) {
+    const candidateMatches = cardIdentityNames(candidate).some((name) => {
+      const candidateKey = normalizeCardKey(name);
+      return candidateKey
+        && Math.abs(candidateKey.length - inputKey.length) <= 1
+        && boundedIdentityEditDistance(inputKey, candidateKey, 1) <= 1;
+    });
+    if (!candidateMatches) continue;
+    if (match && !sameStableCardIdentity(match, candidate)) {
+      cache.set(inputKey, null);
+      return null;
+    }
+    match = candidate;
+  }
+  cache.set(inputKey, match);
+  return match;
+}
+
+function sourceBoundLocalCardCid(card = {}) {
+  return String(card.sourceUrl || card.ygoResourcesUrl || "")
+    .match(/\/data\/card\/(\d{1,7})(?:$|[/?#])/u)?.[1] || "";
+}
+
+function boundedIdentityEditDistance(left, right, limit) {
+  if (left === right) return 0;
+  if (Math.abs(left.length - right.length) > limit) return limit + 1;
+  let previous = Array.from({ length: right.length + 1 }, (_, index) => index);
+  for (let leftIndex = 1; leftIndex <= left.length; leftIndex += 1) {
+    const current = [leftIndex];
+    let rowMinimum = current[0];
+    for (let rightIndex = 1; rightIndex <= right.length; rightIndex += 1) {
+      const cost = left[leftIndex - 1] === right[rightIndex - 1] ? 0 : 1;
+      const value = Math.min(
+        current[rightIndex - 1] + 1,
+        previous[rightIndex] + 1,
+        previous[rightIndex - 1] + cost,
+      );
+      current.push(value);
+      rowMinimum = Math.min(rowMinimum, value);
+    }
+    if (rowMinimum > limit) return limit + 1;
+    previous = current;
+  }
+  return previous[right.length];
+}
+
+function selectUniqueBaigeCandidate(candidates, minConfidence) {
+  const eligible = (candidates || [])
+    .filter((candidate) => Number(candidate?.confidence || 0) >= minConfidence);
+  if (!eligible.length) return { card: null, ambiguous: false, candidates: [] };
+  const identities = new Map();
+  for (const candidate of eligible) {
+    const key = externalCardIdentityKey(candidate);
+    if (!identities.has(key)) identities.set(key, candidate);
+  }
+  const uniqueCandidates = [...identities.values()]
+    .sort((left, right) => Number(right.confidence || 0) - Number(left.confidence || 0));
+  if (uniqueCandidates.length === 1) {
+    return { card: uniqueCandidates[0], ambiguous: false, candidates: uniqueCandidates };
+  }
+  const best = uniqueCandidates[0];
+  const runnerUp = uniqueCandidates[1];
+  const margin = Number(best.confidence || 0) - Number(runnerUp.confidence || 0);
+  const providerCertifiedUnique = /(?:unique|high_gap)/u.test(String(best.confidenceSource || ""));
+  if (margin >= 0.05 || providerCertifiedUnique) {
+    return { card: best, ambiguous: false, candidates: uniqueCandidates };
+  }
+  return { card: null, ambiguous: true, candidates: uniqueCandidates };
+}
+
+function externalCardIdentityKey(card = {}) {
+  const passcode = verifiedEnginePasscode(card)
+    || (/^[1-9]\d{4,9}$/u.test(normalizeId(card.id || card.cardId))
+      ? normalizeId(card.id || card.cardId)
+      : "");
+  const cid = verifiedExternalCardCid(card);
+  return passcode ? `passcode:${passcode}` : cid ? `cid:${cid}` : `name:${normalizeCardKey(card.name)}`;
 }
 
 function suppressModelExpansionConflicts(localCards, baigeCards, warnings) {
@@ -1686,7 +2095,7 @@ function suppressModelExpansionConflicts(localCards, baigeCards, warnings) {
   return (localCards || []).filter((localCard) => {
     const conflict = surfaceVerified.find((verifiedCard) => (
       normalizeCardKey(verifiedCard.input) === normalizeCardKey(localCard.input)
-      && normalizeId(verifiedCard.id || verifiedCard.cardId) !== normalizeId(localCard.id || localCard.cardId)
+      && !sameStableCardIdentity(verifiedCard, localCard)
       && (
         normalizeCardKey(localCard.matchedQuery) !== normalizeCardKey(localCard.input)
         || Number(verifiedCard.confidence || 0) >= Number(localCard.confidence || 0) + 0.02
@@ -1707,7 +2116,7 @@ async function searchBaige(query, { fetchImpl, env, limits, debug }) {
 }
 
 function toRagCard(card, input, confidence) {
-  return {
+  return ensureCardMentionAlias({
     input,
     id: String(card.id || card.cardId || ""),
     cardId: String(card.cardId || card.id || ""),
@@ -1738,7 +2147,7 @@ function toRagCard(card, input, confidence) {
     aliases: card.aliases || [card.name, card.cnName, card.jpName, card.enName].filter(Boolean),
     raw: card.raw || card,
     confidence,
-  };
+  });
 }
 
 function mergeCard(localCard, baigeCard) {
@@ -1748,8 +2157,8 @@ function mergeCard(localCard, baigeCard) {
     id: localCard.id || baigeCard.id,
     cardId: localCard.cardId || baigeCard.cardId,
     // Local card ids are KONAMI CIDs and some older normalization paths also
-    // copied them into `passcode`. Only a verified 8-digit password may cross
-    // the Legacy Lua boundary; otherwise prefer the Baige password.
+    // copied them into `passcode`. Only an explicit non-zero uint32 password
+    // may cross the Legacy Lua boundary; otherwise prefer the Baige password.
     passcode: verifiedEnginePasscode(localCard) || verifiedEnginePasscode(baigeCard),
     cid: localCard.cid ?? baigeCard.cid ?? null,
     name: localCard.name || baigeCard.name,
@@ -1775,7 +2184,7 @@ function mergeCard(localCard, baigeCard) {
     imageCandidates: [...new Set([...(localCard.imageCandidates || []), ...(baigeCard.imageCandidates || [])])],
     aliases: [...new Set([...(localCard.aliases || []), ...(baigeCard.aliases || [])])],
     raw: localCard.raw || baigeCard.raw,
-    official: false,
+    official: localCard.official ?? baigeCard.official ?? false,
     confidence: Math.max(Number(localCard.confidence || 0), Number(baigeCard.confidence || 0)),
   };
 }
@@ -1823,11 +2232,156 @@ function hasEnginePasscode(card = {}) {
 }
 
 function verifiedEnginePasscode(card = {}) {
+  const cid = verifiedLocalCardCid(card);
   for (const value of [card.passcode, card.password]) {
-    const passcode = String(value ?? "").trim();
-    if (/^\d{8}$/u.test(passcode) && Number(passcode) > 0) return passcode;
+    const passcode = normalizeLegacyLuaPasscode(value);
+    if (passcode !== null &&
+        (!cid || BigInt(passcode) !== BigInt(cid))) return passcode;
   }
   return "";
+}
+
+function verifiedExternalCardCid(card = {}) {
+  const normalized = normalizedDecimal(card.cid);
+  return /^[1-9]\d{2,6}$/u.test(normalized) ? normalized : "";
+}
+
+function sameStableCardIdentity(left = {}, right = {}) {
+  const leftId = normalizeId(left.id || left.cardId);
+  const rightId = normalizeId(right.id || right.cardId);
+  if (leftId && rightId && leftId === rightId) return true;
+
+  const leftPasscode = verifiedEnginePasscode(left)
+    || (/^[1-9]\d{4,9}$/u.test(leftId) ? leftId : "");
+  const rightPasscode = verifiedEnginePasscode(right)
+    || (/^[1-9]\d{4,9}$/u.test(rightId) ? rightId : "");
+  if (leftPasscode && rightPasscode && leftPasscode === rightPasscode) return true;
+
+  const leftCid = verifiedExternalCardCid(left) || verifiedLocalCardCid(left);
+  const rightCid = verifiedExternalCardCid(right) || verifiedLocalCardCid(right);
+  if (leftCid && rightCid && leftCid === rightCid) return true;
+  return Boolean(
+    (leftCid && rightId === leftCid)
+    || (rightCid && leftId === rightCid),
+  );
+}
+
+function stableCardIdentityKey(card = {}) {
+  const id = normalizeId(card.id || card.cardId);
+  const passcode = verifiedEnginePasscode(card);
+  const cid = verifiedExternalCardCid(card) || verifiedLocalCardCid(card);
+  return cid ? `cid:${cid}`
+    : passcode ? `passcode:${passcode}`
+      : id ? `id:${id}`
+        : `name:${normalizeCardKey(card.name || card.cnName || card.jaName || card.enName || card.input)}`;
+}
+
+function mergeCardsByStableIdentity(cards) {
+  const merged = [];
+  for (const candidate of (cards || []).filter(Boolean)) {
+    const index = merged.findIndex((existing) => sameStableCardIdentity(existing, candidate));
+    if (index < 0) {
+      merged.push(ensureCardMentionAlias(candidate));
+      continue;
+    }
+    merged[index] = ensureCardMentionAlias(mergeCard(merged[index], candidate));
+  }
+  return merged;
+}
+
+function ensureCardMentionAlias(card = {}) {
+  const input = String(card.input || "").trim();
+  const includeInput = card.identityVerificationStatus !== "unverified";
+  return {
+    ...card,
+    aliases: cardIdentityNames(
+      includeInput ? card : { ...card, input: "", matchedQuery: "" },
+      includeInput && input ? { name: input } : null,
+    ),
+  };
+}
+
+export function reconcileRetrievedCardResolution({
+  cardResolution = {},
+  retrievedCards = [],
+  remainingUnresolvedMentions = [],
+  baigeAmbiguousMentions = [],
+} = {}) {
+  const candidates = mergeCardsByStableIdentity(retrievedCards).map(ensureCardMentionAlias);
+  const ambiguousMentions = dedupeMentions([
+    ...(cardResolution.ambiguousMentions || []),
+    ...(baigeAmbiguousMentions || []),
+  ]);
+  const ambiguousKeys = new Set(ambiguousMentions.map((item) => normalizeCardKey(item.input)).filter(Boolean));
+  const conflictsBySurface = new Map();
+  for (const card of candidates) {
+    const surfaceKey = normalizeCardKey(card.input);
+    if (!surfaceKey) continue;
+    const cards = conflictsBySurface.get(surfaceKey) || [];
+    cards.push(card);
+    conflictsBySurface.set(surfaceKey, cards);
+  }
+  for (const [surfaceKey, cards] of conflictsBySurface.entries()) {
+    const identities = new Set(cards.map(stableCardIdentityKey));
+    if (identities.size <= 1) continue;
+    ambiguousKeys.add(surfaceKey);
+    ambiguousMentions.push({
+      input: cards[0].input,
+      reason: "conflicting_retrieved_card_identity",
+      source: "retrieval_identity_reconciliation",
+      candidateCards: cards.map(summarizeIdentityCandidate),
+    });
+  }
+
+  const resolvedCards = candidates.filter((card) => !ambiguousKeys.has(normalizeCardKey(card.input)));
+  const resolvedMentionKeys = new Set(resolvedCards
+    .filter((card) => card.identityVerificationStatus !== "unverified")
+    .map((card) => normalizeCardKey(card.input))
+    .filter(Boolean));
+  const unresolvedMentions = dedupeMentions([
+    ...(remainingUnresolvedMentions || []),
+    ...[...conflictsBySurface.entries()]
+      .filter(([key, cards]) => ambiguousKeys.has(key) && new Set(cards.map(stableCardIdentityKey)).size > 1)
+      .map(([, cards]) => ({
+        input: cards[0].input,
+        reason: "conflicting_retrieved_card_identity",
+        source: "retrieval_identity_reconciliation",
+      })),
+  ]).filter((mention) => !resolvedMentionKeys.has(normalizeCardKey(mention.input)));
+
+  return {
+    ...cardResolution,
+    resolvedCards,
+    unresolvedMentions,
+    ambiguousMentions: dedupeMentions(ambiguousMentions),
+    omittedResolvedCards: cardResolution.omittedResolvedCards || [],
+    userProvidedCardTexts: cardResolution.userProvidedCardTexts || [],
+    modelCardNameCandidates: cardResolution.modelCardNameCandidates || [],
+  };
+}
+
+function dedupeMentions(items) {
+  return dedupeBy((items || []).filter((item) => normalizeCardKey(item?.input)), (item) => (
+    `${normalizeCardKey(item.input)}:${String(item.reason || "")}`
+  ));
+}
+
+function verifiedLocalCardCid(card = {}) {
+  const sourceUrlCid = String(card.sourceUrl || card.ygoResourcesUrl || "")
+    .match(/\/data\/card\/(\d{1,7})(?:$|[/?#])/u)?.[1];
+  for (const value of [card.cid, sourceUrlCid, card.id, card.cardId]) {
+    const normalized = normalizedDecimal(value);
+    // KONAMI database CIDs in the synchronized corpus are short identifiers;
+    // Values outside the synchronized short-CID range must never be
+    // reinterpreted as a CID merely because they are decimal strings.
+    if (/^[1-9]\d{2,6}$/u.test(normalized)) return normalized;
+  }
+  return "";
+}
+
+function normalizedDecimal(value) {
+  const text = String(value ?? "").trim();
+  return /^\d+$/u.test(text) ? String(Number(text)) : "";
 }
 
 function normalizeUserProvidedCardTexts(items, limits) {

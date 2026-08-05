@@ -2,9 +2,15 @@ import { readFileSync } from "node:fs";
 
 const DEFAULT_PRICING_FILE_URL = new URL("../data/model-pricing.json", import.meta.url);
 const DEFAULT_PRICING = loadAndValidatePricing(DEFAULT_PRICING_FILE_URL);
+const DEFAULT_RELAY_PRICING_FILE_URL = new URL("../data/relay-model-pricing.json", import.meta.url);
+const DEFAULT_RELAY_PRICING = loadAndValidateRelayPricing(DEFAULT_RELAY_PRICING_FILE_URL);
 
 export function getModelPricingConfig() {
   return cloneJson(DEFAULT_PRICING);
+}
+
+export function getRelayModelPricingConfig() {
+  return cloneJson(DEFAULT_RELAY_PRICING);
 }
 
 export function resolvePricedModelId(modelId, pricing = DEFAULT_PRICING) {
@@ -234,8 +240,82 @@ export function estimateDeepSeekModelCost({
   });
 }
 
+/**
+ * Estimates a third-party relay charge from the versioned rates transcribed
+ * from the user-provided relay dashboard screenshot. The source is deliberately
+ * marked unverified; this estimate is useful for budget settlement and audit,
+ * but the relay dashboard remains the billing authority.
+ */
+export function estimateRelayModelCost({
+  model,
+  usage,
+  usdToCnyRate = null,
+  exchangeRateVersion = null,
+  pricing = DEFAULT_RELAY_PRICING,
+} = {}) {
+  const normalizedUsage = normalizeReportedModelUsage(usage);
+  const requestedModel = String(model || "").trim();
+  const canonicalModel = requestedModel.replace(/^relay-/u, "");
+  const rates = pricing.models?.[canonicalModel];
+  const exchangeRate = normalizeExchangeRate(usdToCnyRate);
+  const common = {
+    provider: "relay",
+    model: canonicalModel || null,
+    requestedModel: requestedModel || null,
+    usage: normalizedUsage,
+    exchangeRate,
+    exchangeRateVersion: exchangeRate === null ? null : stringOrNull(exchangeRateVersion),
+    pricingVersion: pricing.pricingVersion,
+    pricingEffectiveDate: pricing.effectiveDate,
+    pricingSourceVerified: pricing.source?.providerVerified === true,
+    estimateOnly: true,
+  };
+  const unavailable = (reason) => Object.freeze({
+    ...common,
+    pricingStatus: "unavailable",
+    unavailabilityReason: reason,
+    inputCostUsd: null,
+    cachedInputCostUsd: null,
+    cacheWriteCostUsd: null,
+    outputCostUsd: null,
+    totalCostUsd: null,
+    totalCostCny: null,
+  });
+
+  if (!normalizedUsage) return unavailable("provider_usage_unavailable");
+  if (!rates) return unavailable("relay_model_pricing_unavailable");
+  if (normalizedUsage.cacheWriteTokens > 0) {
+    return unavailable("relay_cache_write_price_unavailable");
+  }
+  const inputCostUsd = tokenCost(normalizedUsage.uncachedInputTokens, rates.inputUsdPerMillion);
+  const cachedInputCostUsd = tokenCost(
+    normalizedUsage.cachedInputTokens,
+    rates.cachedInputUsdPerMillion,
+  );
+  const cacheWriteCostUsd = 0;
+  const outputCostUsd = tokenCost(normalizedUsage.outputTokens, rates.outputUsdPerMillion);
+  const totalCostUsd = roundMoney(
+    inputCostUsd + cachedInputCostUsd + cacheWriteCostUsd + outputCostUsd,
+  );
+  return Object.freeze({
+    ...common,
+    pricingStatus: "estimated_unverified",
+    unavailabilityReason: null,
+    inputCostUsd,
+    cachedInputCostUsd,
+    cacheWriteCostUsd,
+    outputCostUsd,
+    totalCostUsd,
+    totalCostCny: exchangeRate === null ? null : roundMoney(totalCostUsd * exchangeRate),
+  });
+}
+
 export function loadModelPricing(fileUrl = DEFAULT_PRICING_FILE_URL) {
   return cloneJson(loadAndValidatePricing(fileUrl));
+}
+
+export function loadRelayModelPricing(fileUrl = DEFAULT_RELAY_PRICING_FILE_URL) {
+  return cloneJson(loadAndValidateRelayPricing(fileUrl));
 }
 
 function loadAndValidatePricing(fileUrl) {
@@ -258,6 +338,32 @@ function loadAndValidatePricing(fileUrl) {
       || !Number.isFinite(rates.longContext?.inputMultiplier)
       || !Number.isFinite(rates.longContext?.outputMultiplier)) {
       throw new TypeError(`Invalid longContext pricing for ${modelId}`);
+    }
+  }
+  return deepFreeze(parsed);
+}
+
+function loadAndValidateRelayPricing(fileUrl) {
+  const parsed = JSON.parse(readFileSync(fileUrl, "utf8"));
+  if (parsed.schemaVersion !== 1) throw new TypeError("Unsupported relay pricing schemaVersion");
+  if (!parsed.pricingVersion || !parsed.effectiveDate) {
+    throw new TypeError("Relay pricing version metadata is required");
+  }
+  if (!parsed.models || typeof parsed.models !== "object") {
+    throw new TypeError("Relay pricing models are required");
+  }
+  if (parsed.source?.providerVerified !== false) {
+    throw new TypeError("Relay screenshot pricing must remain explicitly unverified");
+  }
+  for (const [modelId, rates] of Object.entries(parsed.models)) {
+    for (const field of [
+      "inputUsdPerMillion",
+      "cachedInputUsdPerMillion",
+      "outputUsdPerMillion",
+    ]) {
+      if (!Number.isFinite(rates[field]) || rates[field] < 0) {
+        throw new TypeError(`Invalid relay ${field} for ${modelId}`);
+      }
     }
   }
   return deepFreeze(parsed);

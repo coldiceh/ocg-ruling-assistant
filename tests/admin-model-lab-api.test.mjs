@@ -79,7 +79,7 @@ test("all POST actions require CSRF and dispatch only through the injected servi
   assert.equal(calls.length, 0);
 
   for (const body of [
-    { action: "create", question: "test" },
+    { action: "create", question: "test", finalAttemptPolicy: "single" },
     {
       action: "fork",
       forkFromRunId: "run-1",
@@ -111,7 +111,10 @@ test("all POST actions require CSRF and dispatch only through the injected servi
     "cancelRun",
     "saveRating",
   ]);
-  assert.deepEqual(calls[0][1].body, { question: "test" });
+  assert.deepEqual(calls[0][1].body, {
+    question: "test",
+    finalAttemptPolicy: "single",
+  });
   assert.equal(calls[1][1].forkFromRunId, "run-1");
   assert.equal(calls[1][1].body.idempotencyKey, "fork-api-key-0001");
   assert.equal(calls[1][1].body.provider, "glm");

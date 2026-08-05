@@ -210,3 +210,44 @@ test("GLM and Kimi availability uses server keys and never returns them", () => 
   assert.equal(JSON.stringify(capabilities).includes("glm-secret"), false);
   assert.equal(JSON.stringify(capabilities).includes("kimi-secret"), false);
 });
+
+test("third-party relay exposes distinct experimental Sol Terra and Luna aliases", () => {
+  const selection = resolveAdminModelSelection({
+    provider: "relay",
+    model: "relay-gpt-5.6-terra",
+    reasoningEffort: "high",
+    reasoningMode: "pro",
+    stage: ADMIN_MODEL_LAB_STAGES.EXPERIMENTAL_FINAL_RULING,
+  });
+  assert.equal(selection.requestedModel, "relay-gpt-5.6-terra");
+  assert.equal(selection.model, "gpt-5.6-terra");
+  assert.equal(selection.capability.thirdParty, true);
+  assert.equal(selection.capability.modelIdentityVerified, false);
+  assert.equal(selection.capability.canMakeFinalRuling, false);
+
+  const capabilities = getAdminModelProviderCapabilities({
+    env: {
+      RELAY_API_KEY: "relay-secret",
+      RELAY_BASE_URL: "https://relay.example/v1",
+    },
+  });
+  const relay = capabilities.providers.find((provider) => provider.providerId === "relay");
+  assert.equal(relay.available, true);
+  assert.deepEqual(
+    relay.models.map((model) => model.modelId),
+    ["relay-gpt-5.6-sol", "relay-gpt-5.6-terra", "relay-gpt-5.6-luna"],
+  );
+  assert.equal(JSON.stringify(capabilities).includes("relay-secret"), false);
+  assert.equal(
+    getAdminModelProviderCapabilities({
+      env: { RELAY_API_KEY: "secret" },
+    }).providers.find((provider) => provider.providerId === "relay").available,
+    false,
+  );
+  assert.equal(
+    getAdminModelProviderCapabilities({
+      env: { RELAY_API_KEY: "secret", RELAY_BASE_URL: "http://relay.example/v1" },
+    }).providers.find((provider) => provider.providerId === "relay").available,
+    false,
+  );
+});

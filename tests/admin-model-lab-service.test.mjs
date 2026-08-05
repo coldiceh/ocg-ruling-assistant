@@ -11,6 +11,9 @@ import {
   createAdminRunStore,
   createMemoryAdminRunStorage,
 } from "../backend/adminRunStore.mjs";
+import {
+  createMemoryAdminFinalCallBudgetLedger,
+} from "../backend/adminFinalCallBudgetLedger.mjs";
 import { MODEL_RULING_COUNTER_CHECK_TYPES } from "../backend/modelRulingSchema.mjs";
 
 test("final ruling input rejects oversized peripheral snapshot fields", () => {
@@ -50,6 +53,11 @@ test("createRun returns before preparation; executeRun then preserves all eviden
   });
 
   assert.equal(created.status, ADMIN_RUN_STATUSES.QUEUED);
+  assert.equal(created.executionProfile.finalRuling.finalAttemptPolicy, "repair_once");
+  assert.equal(
+    created.evidenceSnapshot.evidence.request.finalAttemptPolicy,
+    "repair_once",
+  );
   assert.equal(created.stageTiming, null);
   assert.equal(created.evidenceSnapshot.evidence.preparationStatus, "pending");
   assert.equal(fixture.deepSeekPrepareCalls, 0);
@@ -74,8 +82,8 @@ test("createRun returns before preparation; executeRun then preserves all eviden
     true,
   );
   assert.equal(run.evidenceSnapshot.evidence.preparation.rawResult.result.organizedEvidenceIds.length, 1);
-  assert.equal(run.evidenceSnapshot.evidence.unresolved.cardMentions.length, 1);
-  assert.equal(run.evidenceSnapshot.evidence.unresolved.ambiguousMentions.length, 1);
+  assert.equal(run.evidenceSnapshot.evidence.unresolved.cardMentions.length, 0);
+  assert.equal(run.evidenceSnapshot.evidence.unresolved.ambiguousMentions.length, 0);
   assert.equal(run.evidenceSnapshot.evidence.conflicts.length >= 1, true);
   assert.equal(run.evidenceSnapshot.metadata.finalRulingRequired, true);
   assert.equal(run.evidenceSnapshot.metadata.simulatorUsed, false);
@@ -102,6 +110,75 @@ test("createRun returns before preparation; executeRun then preserves all eviden
   assert.equal(capability.promptVersions[0].id, "openai-ruling-v1");
   assert.match(capability.unavailableReasons.history, /no persistent list\/index/u);
   assert.equal(fixture.retrieveRequests[0].enableLiveOfficialQa, true);
+});
+
+test("Admin freezes the retriever-reconciled card identity instead of the pre-retrieval approximation", async () => {
+  const fixture = makeFixture();
+  fixture.data.cards.push({
+    id: "card-canonical",
+    name: "社区译名卡",
+    effectText: "检索后桥接到的本地完整卡文。",
+  });
+  fixture.retrieval.cardResolution = {
+    ...fixture.cardResolution,
+    resolvedCards: [{
+      input: "用户原始译名",
+      id: "card-canonical",
+      cardId: "card-canonical",
+      passcode: "12345678",
+      name: "社区译名卡",
+      aliases: ["社区译名卡", "用户原始译名"],
+      effectText: "检索后桥接到的本地完整卡文。",
+      confidence: 1,
+      resolutionSource: "external_identity_verification",
+    }],
+    unresolvedMentions: [],
+    ambiguousMentions: [],
+  };
+  fixture.retrieval.retrievedCards = fixture.retrieval.cardResolution.resolvedCards;
+  fixture.retrieval.remainingUnresolvedMentions = [];
+  fixture.preparationCardNameCandidates = [{
+    name: "用户原始译名",
+    originalText: "用户原始译名",
+  }];
+  const service = makeService(fixture);
+
+  const created = await service.createRun({ body: { question: "匿名身份桥接问题" } });
+  const run = (await service.executeRun({ runId: created.runId })).run;
+
+  assert.equal(run.evidenceSnapshot.evidence.cardResolution.resolvedCards.length, 1);
+  assert.equal(run.evidenceSnapshot.evidence.cardResolution.resolvedCards[0].id, "card-canonical");
+  assert.equal(run.evidenceSnapshot.evidence.cardResolution.resolvedCards[0].input, "用户原始译名");
+  assert.ok(run.evidenceSnapshot.evidence.cardResolution.resolvedCards[0].aliases.includes("用户原始译名"));
+  assert.deepEqual(run.evidenceSnapshot.evidence.unresolved.cardMentions, []);
+  assert.equal(run.evidenceSnapshot.evidence.completeness.resolvedCardCount, 1);
+  assert.equal(run.evidenceSnapshot.evidence.completeness.allCardNamesResolved, true);
+  const finalInputPayload = JSON.parse(buildFinalRulingInput(run.evidenceSnapshot).split("\n").at(-1));
+  assert.equal(finalInputPayload.cardResolution.resolvedCards[0].id, "card-canonical");
+});
+
+test("createRun accepts only allowlisted final-attempt policies", async () => {
+  const fixture = makeFixture();
+  const service = makeService(fixture);
+
+  const created = await service.createRun({
+    body: {
+      question: "匿名单次尝试问题",
+      finalAttemptPolicy: "single",
+    },
+  });
+  assert.equal(created.executionProfile.finalRuling.finalAttemptPolicy, "single");
+  assert.equal(created.evidenceSnapshot.evidence.request.finalAttemptPolicy, "single");
+
+  await assert.rejects(
+    service.createRun({
+      body: {
+        question: "匿名非法策略问题",
+        finalAttemptPolicy: "retry_forever",
+      },
+    }),
+    (error) => error?.code === "admin_final_attempt_policy_invalid" && error.status === 400,
+  );
 });
 
 test("executeRun always starts OpenAI final ruling with the complete frozen snapshot", async () => {
@@ -143,6 +220,297 @@ test("executeRun always starts OpenAI final ruling with the complete frozen snap
     replay.events.some((event) => event.type === ADMIN_MODEL_LAB_SERVICE_EVENT_TYPES.MODEL_REQUEST_CREATED),
     true,
   );
+});
+
+test("final-call budget reserves before provider create and settles reliable completed usage", async () => {
+  const fixture = makeFixture();
+  fixture.providerResponse = completedResponse(makeStructuredRuling());
+  const calls = [];
+  const ledger = {
+    kind: "test-budget-spy",
+    persistent: false,
+    async reserve(input) {
+      assert.equal(fixture.openAICreateCalls.length, 0, "reserve must precede provider create");
+      calls.push({ operation: "reserve", input });
+      return { status: "reserved" };
+    },
+    async settle(input) {
+      calls.push({ operation: "settle", input });
+      return { status: "settled" };
+    },
+    async release(input) {
+      calls.push({ operation: "release", input });
+      return { status: "released" };
+    },
+  };
+  const service = makeService(fixture, {
+    ADMIN_MODEL_LAB_USD_TO_CNY_RATE: "7",
+    ADMIN_MODEL_LAB_EXCHANGE_RATE_VERSION: "test-rate",
+  }, { finalCallBudgetLedger: ledger });
+  const created = await service.createRun({ body: { question: "匿名预算顺序问题" } });
+
+  await service.executeRun({ runId: created.runId });
+  const completed = await service.pollRun({ runId: created.runId });
+
+  assert.equal(completed.status, ADMIN_RUN_STATUSES.SUCCEEDED);
+  assert.deepEqual(calls.map((item) => item.operation), ["reserve", "settle"]);
+  assert.equal(calls[0].input.attemptKind, "primary");
+  assert.equal(calls[1].input.reservationId, calls[0].input.reservationId);
+  assert.equal(calls[1].input.actualCny > 0, true);
+});
+
+test("relay settlement charges the requested model when the unverified response reports a cheaper model", async () => {
+  const fixture = makeFixture();
+  const budgetCalls = [];
+  const response = {
+    id: "relay-mismatched-model",
+    status: "completed",
+    model: "gpt-5.6-luna",
+    output_text: JSON.stringify(makeStructuredRuling()),
+    usage: { prompt_tokens: 1000, completion_tokens: 100, total_tokens: 1100 },
+  };
+  const service = makeService(fixture, {
+    ADMIN_MODEL_LAB_USD_TO_CNY_RATE: "7.5",
+    ADMIN_MODEL_LAB_EXCHANGE_RATE_VERSION: "pilot-budget-factor-v1",
+    RELAY_API_KEY: "relay-test-key",
+  }, {
+    finalCallBudgetLedger: createRecordingBudgetLedger(budgetCalls),
+    finalRulingProviders: {
+      relay: {
+        providerId: "relay",
+        async create() {
+          return response;
+        },
+      },
+    },
+  });
+  const created = await service.createRun({
+    body: {
+      question: "匿名中转计费模型问题",
+      provider: "relay",
+      model: "relay-gpt-5.6-sol",
+      reasoningMode: "pro",
+      reasoningEffort: "high",
+      finalAttemptPolicy: "single",
+    },
+  });
+
+  const completed = (await service.executeRun({ runId: created.runId })).run;
+  const finalCost = completed.result.metering.stages.finalRuling.cost;
+  const settlement = budgetCalls.find((item) => item.operation === "settle");
+
+  assert.equal(completed.result.provider.model, "gpt-5.6-luna");
+  assert.equal(finalCost.model, "gpt-5.6-sol");
+  assert.equal(finalCost.pricingStatus, "estimated_unverified");
+  assert.equal(finalCost.pricingSourceVerified, false);
+  assert.equal(finalCost.totalCostCny, 0.0876);
+  assert.equal(settlement.input.actualCny, 0.0876);
+});
+
+test("final evidence readiness fails before provider submission, budget, and transport", async () => {
+  const fixture = makeFixture();
+  fixture.preparedCardResolution = {
+    resolvedCards: [],
+    unresolvedMentions: [{ input: "匿名卡A", reason: "not_found" }],
+    ambiguousMentions: [],
+    omittedResolvedCards: [],
+    userProvidedCardTexts: [],
+    modelCardNameCandidates: fixture.preparationCardNameCandidates,
+  };
+  const budgetCalls = [];
+  const service = makeService(fixture, {}, {
+    finalCallBudgetLedger: createRecordingBudgetLedger(budgetCalls),
+  });
+  const created = await service.createRun({ body: { question: "匿名证据未就绪问题" } });
+
+  await assert.rejects(
+    service.executeRun({ runId: created.runId }),
+    (error) => error?.code === "admin_final_evidence_not_ready",
+  );
+  const failed = await service.getRun({ runId: created.runId, reconcile: false });
+
+  assert.equal(failed.status, ADMIN_RUN_STATUSES.FAILED);
+  assert.equal(failed.error.code, "admin_final_evidence_not_ready");
+  assert.equal(failed.execution.providerSubmission.state, "NONE");
+  assert.deepEqual(budgetCalls, []);
+  assert.deepEqual(fixture.openAICreateCalls, []);
+});
+
+test("missing or exceeded final-call budget fails before provider transport", async (t) => {
+  await t.test("missing ledger", async () => {
+    const fixture = makeFixture();
+    const service = makeService(fixture, {}, { finalCallBudgetLedger: null });
+    const created = await service.createRun({ body: { question: "匿名缺少预算账本" } });
+    const result = await service.executeRun({ runId: created.runId });
+
+    assert.equal(result.run.status, ADMIN_RUN_STATUSES.FAILED);
+    assert.equal(result.run.error.code, "admin_final_budget_storage_unavailable");
+    assert.equal(fixture.openAICreateCalls.length, 0);
+  });
+
+  await t.test("daily pool exceeded", async () => {
+    const fixture = makeFixture();
+    const ledger = {
+      kind: "test-budget-reject",
+      persistent: false,
+      async reserve() {
+        const error = codedError("daily budget exceeded", "admin_final_budget_exceeded");
+        error.outcomeKnown = true;
+        error.budgetReservationMayExist = false;
+        throw error;
+      },
+      async settle() {
+        throw new Error("settle must not run");
+      },
+      async release() {
+        return { status: "missing" };
+      },
+    };
+    const service = makeService(fixture, {}, { finalCallBudgetLedger: ledger });
+    const created = await service.createRun({ body: { question: "匿名超预算问题" } });
+    const result = await service.executeRun({ runId: created.runId });
+
+    assert.equal(result.run.status, ADMIN_RUN_STATUSES.FAILED);
+    assert.equal(result.run.error.code, "admin_final_budget_exceeded");
+    assert.equal(fixture.openAICreateCalls.length, 0);
+  });
+});
+
+test("known provider rejection releases budget while unknown transport outcome retains it", async (t) => {
+  for (const outcomeKnown of [true, false]) {
+    await t.test(outcomeKnown ? "known rejection" : "unknown outcome", async () => {
+      const fixture = makeFixture();
+      const providerError = codedError(
+        outcomeKnown ? "explicit bad request" : "network interrupted",
+        outcomeKnown ? "provider_bad_request" : "provider_network_unknown",
+      );
+      providerError.outcomeKnown = outcomeKnown;
+      fixture.openAICreateError = providerError;
+      const calls = [];
+      const ledger = {
+        kind: "test-budget-spy",
+        persistent: false,
+        async reserve(input) {
+          calls.push({ operation: "reserve", input });
+          return { status: "reserved" };
+        },
+        async settle(input) {
+          calls.push({ operation: "settle", input });
+        },
+        async release(input) {
+          calls.push({ operation: "release", input });
+          return { status: "released" };
+        },
+      };
+      const service = makeService(fixture, {}, { finalCallBudgetLedger: ledger });
+      const created = await service.createRun({ body: { question: "匿名提交失败问题" } });
+      const result = await service.executeRun({ runId: created.runId });
+
+      assert.equal(result.run.status, ADMIN_RUN_STATUSES.FAILED);
+      assert.equal(fixture.openAICreateCalls.length, 1);
+      assert.deepEqual(
+        calls.map((item) => item.operation),
+        outcomeKnown ? ["reserve", "release"] : ["reserve"],
+      );
+    });
+  }
+});
+
+test("a billed HTTP 200 empty response settles reported usage or conservatively retains its reservation", async (t) => {
+  for (const usage of [
+    { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 },
+    null,
+  ]) {
+    await t.test(usage ? "reported usage settles actual cost" : "missing usage keeps reservation", async () => {
+      const fixture = makeFixture();
+      const providerError = codedError("empty successful response", "deepseek_empty_final_ruling");
+      providerError.outcomeKnown = true;
+      providerError.budgetReservationMayExist = true;
+      providerError.usage = usage;
+      providerError.model = "deepseek-v4-flash";
+      providerError.requestId = "deepseek-empty-200";
+      const calls = [];
+      const service = makeService(fixture, {
+        ADMIN_MODEL_LAB_DEEPSEEK_PRICING_VERSION: "test-v1",
+        ADMIN_MODEL_LAB_DEEPSEEK_PRICING_EFFECTIVE_DATE: "2027-01-01",
+        ADMIN_MODEL_LAB_DEEPSEEK_INPUT_CNY_PER_MTOK: "1",
+        ADMIN_MODEL_LAB_DEEPSEEK_OUTPUT_CNY_PER_MTOK: "2",
+      }, {
+        finalCallBudgetLedger: createRecordingBudgetLedger(calls),
+        finalRulingProviders: {
+          deepseek: {
+            providerId: "deepseek",
+            async create() {
+              throw providerError;
+            },
+          },
+        },
+      });
+      const created = await service.createRun({
+        body: {
+          question: "匿名空响应预算问题",
+          provider: "deepseek",
+          model: "deepseek-v4-flash",
+          reasoningEffort: "none",
+          reasoningMode: "standard",
+        },
+      });
+      const result = await service.executeRun({ runId: created.runId });
+
+      assert.equal(result.run.status, ADMIN_RUN_STATUSES.FAILED);
+      assert.equal(result.run.error.code, "deepseek_empty_final_ruling");
+      assert.deepEqual(
+        calls.map((item) => item.operation),
+        usage ? ["reserve", "settle"] : ["reserve"],
+      );
+      if (usage) {
+        assert.equal(calls[1].input.actualCny, 0.0002);
+      }
+    });
+  }
+});
+
+test("a metered relay HTTP 200 empty response settles using the requested model rate", async () => {
+  const fixture = makeFixture();
+  const providerError = codedError("empty successful relay response", "relay_empty_final_ruling");
+  providerError.outcomeKnown = true;
+  providerError.budgetReservationMayExist = true;
+  providerError.usage = { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 };
+  providerError.model = "gpt-5.6-luna";
+  providerError.requestId = "relay-empty-200";
+  const calls = [];
+  const service = makeService(fixture, {
+    ADMIN_MODEL_LAB_USD_TO_CNY_RATE: "7.5",
+    RELAY_API_KEY: "relay-test-key",
+  }, {
+    finalCallBudgetLedger: createRecordingBudgetLedger(calls),
+    finalRulingProviders: {
+      relay: {
+        providerId: "relay",
+        async create() {
+          throw providerError;
+        },
+      },
+    },
+  });
+  const created = await service.createRun({
+    body: {
+      question: "匿名中转空响应预算问题",
+      provider: "relay",
+      model: "relay-gpt-5.6-sol",
+      reasoningMode: "pro",
+      reasoningEffort: "high",
+      finalAttemptPolicy: "single",
+    },
+  });
+
+  const result = await service.executeRun({ runId: created.runId });
+
+  assert.equal(result.run.status, ADMIN_RUN_STATUSES.FAILED);
+  assert.equal(result.run.error.code, "relay_empty_final_ruling");
+  assert.deepEqual(calls.map((item) => item.operation), ["reserve", "settle"]);
+  assert.equal(calls[1].input.model, "relay-gpt-5.6-sol");
+  assert.equal(calls[1].input.actualCny, 0.0219);
 });
 
 test("a domestic experimental final ruling completes synchronously and is labelled non-authoritative", async () => {
@@ -190,6 +558,8 @@ test("a domestic experimental final ruling completes synchronously and is labell
 test("one directed repair succeeds on the same frozen evidence and accumulates both paid attempts", async () => {
   const fixture = makeFixture();
   const calls = [];
+  const budgetCalls = [];
+  const budgetLedger = createRecordingBudgetLedger(budgetCalls);
   const responses = [
     {
       id: "deepseek-primary-invalid",
@@ -213,6 +583,7 @@ test("one directed repair succeeds on the same frozen evidence and accumulates b
     ADMIN_MODEL_LAB_DEEPSEEK_OUTPUT_CNY_PER_MTOK: "2",
     ADMIN_MODEL_LAB_USD_TO_CNY_RATE: "7",
   }, {
+    finalCallBudgetLedger: budgetLedger,
     finalRulingProviders: {
       deepseek: {
         providerId: "deepseek",
@@ -232,6 +603,7 @@ test("one directed repair succeeds on the same frozen evidence and accumulates b
     },
   });
   const originalSnapshot = structuredClone(created.evidenceSnapshot);
+  assert.equal(created.executionProfile.finalRuling.finalAttemptPolicy, "repair_once");
   const completed = (await service.executeRun({ runId: created.runId })).run;
 
   assert.equal(completed.status, ADMIN_RUN_STATUSES.SUCCEEDED);
@@ -261,6 +633,88 @@ test("one directed repair succeeds on the same frozen evidence and accumulates b
     completed.result.metering.stages.finalRuling.cost.totalCostCny,
     firstAttempt.cost.totalCostCny + repairAttempt.cost.totalCostCny,
   );
+  const reservations = budgetCalls.filter((item) => item.operation === "reserve");
+  const settlements = budgetCalls.filter((item) => item.operation === "settle");
+  assert.deepEqual(reservations.map((item) => item.input.attemptKind), ["primary", "repair"]);
+  assert.equal(new Set(reservations.map((item) => item.input.reservationId)).size, 2);
+  assert.deepEqual(
+    settlements.map((item) => item.input.reservationId),
+    reservations.map((item) => item.input.reservationId),
+  );
+});
+
+test("completed output without reported usage conservatively keeps its reservation", async () => {
+  const fixture = makeFixture();
+  fixture.providerResponse = {
+    id: "resp-admin-usage-missing",
+    status: "completed",
+    model: "gpt-5.6-terra",
+    output_text: JSON.stringify(makeStructuredRuling()),
+  };
+  const budgetCalls = [];
+  const service = makeService(fixture, {}, {
+    finalCallBudgetLedger: createRecordingBudgetLedger(budgetCalls),
+  });
+  const created = await service.createRun({ body: { question: "匿名缺少用量问题" } });
+
+  await service.executeRun({ runId: created.runId });
+  const completed = await service.pollRun({ runId: created.runId });
+
+  assert.equal(completed.status, ADMIN_RUN_STATUSES.SUCCEEDED);
+  assert.deepEqual(budgetCalls.map((item) => item.operation), ["reserve"]);
+});
+
+test("single final-attempt policy fails after one invalid response and preserves its audit event", async () => {
+  const fixture = makeFixture();
+  const calls = [];
+  const service = makeService(fixture, {}, {
+    finalRulingProviders: {
+      glm: {
+        providerId: "glm",
+        async create(request) {
+          calls.push(request);
+          return {
+            id: "glm-single-invalid",
+            status: "completed",
+            model: "glm-5.2",
+            output_text: "{}",
+            usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+          };
+        },
+      },
+    },
+  });
+  const created = await service.createRun({
+    body: {
+      question: "匿名单次失败问题",
+      provider: "glm",
+      model: "glm-5.2",
+      finalAttemptPolicy: "single",
+    },
+  });
+  const failed = (await service.executeRun({ runId: created.runId })).run;
+
+  assert.equal(failed.status, ADMIN_RUN_STATUSES.FAILED);
+  assert.equal(failed.error.code, "model_ruling_validation_failed");
+  assert.equal(failed.executionProfile.finalRuling.finalAttemptPolicy, "single");
+  assert.equal(calls.length, 1);
+  assert.equal(failed.execution.repair, null);
+  assert.equal(failed.execution.repairSubmission.state, "NONE");
+
+  const replay = await service.replayEvents({ runId: created.runId });
+  const validationEvent = replay.events.find(
+    (event) => event.type === ADMIN_MODEL_LAB_SERVICE_EVENT_TYPES.MODEL_VALIDATION_FAILED,
+  );
+  assert.equal(validationEvent.payload.attemptKind, "primary");
+  assert.equal(validationEvent.payload.recoverable, true);
+  assert.equal(validationEvent.payload.completedAttempt.requestId, "glm-single-invalid");
+  assert.equal(validationEvent.payload.completedAttempt.attemptKind, "primary");
+  assert.equal(validationEvent.payload.completedAttempt.validation.ok, false);
+  assert.equal(validationEvent.payload.completedAttempt.usage.totalTokens, 15);
+  assert.match(validationEvent.payload.completedAttempt.responseContentSha256, /^[a-f0-9]{64}$/u);
+
+  await service.executeRun({ runId: created.runId });
+  assert.equal(calls.length, 1, "a terminal single-attempt run must never submit again");
 });
 
 test("a second invalid completed response fails closed without a third submission", async () => {
@@ -1222,7 +1676,9 @@ test("fork reuses the exact frozen evidence packet, skips preparation, and meter
     },
   });
   fixture.providerResponse = completedResponse(makeStructuredRuling());
-  const created = await service.createRun({ body: { question: "匿名问题" } });
+  const created = await service.createRun({
+    body: { question: "匿名问题", finalAttemptPolicy: "single" },
+  });
   await service.executeRun({ runId: created.runId });
   const source = await service.getRun({ runId: created.runId });
   assert.equal(source.status, ADMIN_RUN_STATUSES.SUCCEEDED);
@@ -1257,6 +1713,7 @@ test("fork reuses the exact frozen evidence packet, skips preparation, and meter
   assert.deepEqual(fork.executionProfile.preparation, source.executionProfile.preparation);
   assert.deepEqual(fork.executionProfile.prompt, source.executionProfile.prompt);
   assert.deepEqual(fork.executionProfile.providedFacts, source.executionProfile.providedFacts);
+  assert.equal(fork.executionProfile.finalRuling.finalAttemptPolicy, "single");
   assert.deepEqual(fork.limits, source.limits);
   assert.equal(fork.evidenceSnapshot.metadata.finalRulingProvider, "openai");
   assert.equal(fork.executionProfile.finalRuling.provider, "deepseek");
@@ -1336,6 +1793,7 @@ test("fork creation is idempotent and rejects key reuse or client evidence overr
     "configuration",
     "evidenceSnapshot",
     "dataVersions",
+    "finalAttemptPolicy",
   ]) {
     await assert.rejects(
       service.forkRun({
@@ -1392,6 +1850,7 @@ function makeService(fixture, envOverrides = {}, {
   preparationProviders = {},
   deepSeekProvider = null,
   finalRulingProviders = {},
+  finalCallBudgetLedger = createTestFinalCallBudgetLedger(),
 } = {}) {
   const baseRunStore = createAdminRunStore({
     storage,
@@ -1413,6 +1872,7 @@ function makeService(fixture, envOverrides = {}, {
   fixture.runStore = runStore;
   return createAdminModelLabService({
     runStore,
+    finalCallBudgetLedger,
     env: {
       ADMIN_MODEL_LAB_ENABLED: "true",
       ADMIN_OPENAI_ENABLED: "true",
@@ -1431,10 +1891,7 @@ function makeService(fixture, envOverrides = {}, {
           canMakeFinalRuling: false,
           canDecideEscalation: false,
           result: {
-            cardNameCandidates: [
-              { name: "匿名卡A", originalText: "匿名卡A" },
-              { name: "匿名卡B", originalText: "匿名卡B" },
-            ],
+            cardNameCandidates: fixture.preparationCardNameCandidates,
             ruleSearchQueries: [
               { query: "匿名规则", reason: "mechanism" },
             ],
@@ -1456,6 +1913,7 @@ function makeService(fixture, envOverrides = {}, {
         fixture.openAICreateCalls.push(request);
         if (fixture.openAICreateGate) await fixture.openAICreateGate;
         fixture.advance(30);
+        if (fixture.openAICreateError) throw fixture.openAICreateError;
         if (fixture.openAICreateFailuresRemaining > 0) {
           fixture.openAICreateFailuresRemaining -= 1;
           throw new Error("simulated provider submission interruption");
@@ -1503,11 +1961,15 @@ function makeService(fixture, envOverrides = {}, {
       const candidateNames = options.modelCardNameCandidates.map((item) => item.name);
       assert.equal(
         candidateNames.length === 0
-          || JSON.stringify(candidateNames) === JSON.stringify(["匿名卡A", "匿名卡B"]),
+          || JSON.stringify(candidateNames) === JSON.stringify(
+            fixture.preparationCardNameCandidates.map((item) => item.name),
+          ),
         true,
       );
       fixture.extractCardsCalls.push(candidateNames);
-      return fixture.cardResolution;
+      return candidateNames.length > 0
+        ? fixture.preparedCardResolution
+        : fixture.cardResolution;
     },
     retrieveEvidence: async (request) => {
       fixture.retrieveRequests.push(request);
@@ -1523,6 +1985,39 @@ function makeService(fixture, envOverrides = {}, {
   });
 }
 
+function createTestFinalCallBudgetLedger() {
+  return createMemoryAdminFinalCallBudgetLedger({
+    timezone: "UTC",
+    pools: {
+      openai: { dailyBudgetCny: 1_000, reservationCny: 10 },
+      deepseek: { dailyBudgetCny: 1_000, reservationCny: 10 },
+      glm: { dailyBudgetCny: 1_000, reservationCny: 10 },
+      kimi: { dailyBudgetCny: 1_000, reservationCny: 10 },
+      relay: { dailyBudgetCny: 1_000, reservationCny: 10 },
+    },
+  });
+}
+
+function createRecordingBudgetLedger(calls) {
+  const inner = createTestFinalCallBudgetLedger();
+  return Object.freeze({
+    kind: "test-recording-budget-ledger",
+    persistent: false,
+    async reserve(input) {
+      calls.push({ operation: "reserve", input: structuredClone(input) });
+      return inner.reserve(input);
+    },
+    async settle(input) {
+      calls.push({ operation: "settle", input: structuredClone(input) });
+      return inner.settle(input);
+    },
+    async release(input) {
+      calls.push({ operation: "release", input: structuredClone(input) });
+      return inner.release(input);
+    },
+  });
+}
+
 function makeFixture() {
   const baseMs = Date.parse("2027-01-01T00:00:00.000Z");
   const fixture = {
@@ -1534,6 +2029,7 @@ function makeFixture() {
     retrieveRequests: [],
     openAICreateCalls: [],
     openAICreateGate: null,
+    openAICreateError: null,
     openAICreateFailuresRemaining: 0,
     deepSeekPrepareGate: null,
     cancelledRequestIds: [],
@@ -1550,6 +2046,10 @@ function makeFixture() {
       model: "gpt-5.6-terra",
     },
     deepSeekUsage: { prompt_tokens: 20, completion_tokens: 10, total_tokens: 30 },
+    preparationCardNameCandidates: [
+      { name: "匿名卡A", originalText: "匿名卡A" },
+      { name: "匿名卡B", originalText: "匿名卡B" },
+    ],
     data: {
       cards: [
         { id: "card-a", name: "匿名卡A", text: "匿名效果A全文" },
@@ -1579,6 +2079,38 @@ function makeFixture() {
       omittedResolvedCards: [],
       userProvidedCardTexts: [],
     },
+    preparedCardResolution: {
+      resolvedCards: [{
+        id: "card-a",
+        name: "匿名卡A",
+        text: "匿名效果A全文",
+        type: "效果怪兽",
+        cardType: "monster",
+        race: "测试族",
+        attribute: "测试属性",
+        level: 4,
+        attack: 1800,
+        defense: 1200,
+        confidence: 0.6,
+        aliases: ["匿名卡A"],
+      }, {
+        id: "card-b",
+        name: "匿名卡B",
+        text: "匿名效果B全文",
+        type: "效果怪兽",
+        cardType: "monster",
+        confidence: 0.6,
+        aliases: ["匿名卡B"],
+      }],
+      unresolvedMentions: [],
+      ambiguousMentions: [],
+      omittedResolvedCards: [],
+      userProvidedCardTexts: [],
+      modelCardNameCandidates: [
+        { name: "匿名卡A", originalText: "匿名卡A" },
+        { name: "匿名卡B", originalText: "匿名卡B" },
+      ],
+    },
     retrieval: {
       cardTexts: [{
         id: "card-text-a",
@@ -1606,7 +2138,7 @@ function makeFixture() {
       rawRelatedEvidence: [],
       rulebookCandidates: [],
       retrievedCards: [{ id: "card-a", name: "匿名卡A" }],
-      remainingUnresolvedMentions: [{ input: "匿名卡C", reason: "not_found" }],
+      remainingUnresolvedMentions: [],
       fuzzyResolvedCards: [],
       baigeResolvedCards: [],
       baigeAmbiguousMentions: [],

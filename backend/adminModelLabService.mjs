@@ -15,6 +15,7 @@ import {
   assertAdminEvidenceSnapshot,
   createAdminEvidenceSnapshot,
 } from "./adminEvidenceSnapshot.mjs";
+import { assertAdminFinalEvidenceReady } from "./adminFinalEvidenceReadiness.mjs";
 import {
   ADMIN_RUN_STAGE_CATALOG,
   ADMIN_STAGE_STATUSES,
@@ -28,6 +29,7 @@ import {
 import {
   estimateDeepSeekModelCost,
   estimateOpenAIModelCost,
+  estimateRelayModelCost,
   normalizeOpenAIResponsesUsage,
   normalizeReportedModelUsage,
 } from "./modelPricing.mjs";
@@ -68,6 +70,11 @@ const TERMINAL_RUN_STATUSES = new Set([
   ADMIN_RUN_STATUSES.SUCCEEDED,
   ADMIN_RUN_STATUSES.FAILED,
 ]);
+export const ADMIN_FINAL_ATTEMPT_POLICIES = Object.freeze([
+  "single",
+  "repair_once",
+]);
+const DEFAULT_FINAL_ATTEMPT_POLICY = "repair_once";
 const PROVIDER_ACCEPTANCE_PERSIST_ATTEMPTS = 3;
 const ADMIN_FORK_ALLOWED_BODY_FIELDS = new Set([
   "forkFromRunId",
@@ -100,6 +107,7 @@ export const ADMIN_MODEL_LAB_SERVICE_EVENT_TYPES = Object.freeze({
  */
 export function createAdminModelLabService({
   runStore,
+  finalCallBudgetLedger = null,
   openAIProvider = null,
   finalRulingProviders = {},
   deepSeekProvider = null,
@@ -121,6 +129,7 @@ export function createAdminModelLabService({
   legacyLuaSemanticMaxBytes,
 } = {}) {
   assertRunStore(runStore);
+  if (finalCallBudgetLedger !== null) assertFinalCallBudgetLedger(finalCallBudgetLedger);
   const config = readAdminModelLabConfig(env);
   const preparationProviderRegistry = createEvidencePreparationProviderRegistry({
     providers: {
@@ -176,6 +185,11 @@ export function createAdminModelLabService({
           : finalRulingProviderRegistry.listProviderIds()[0] || null,
         finalRulingProviders: finalRulingProviderRegistry.listProviderIds(),
         finalRulingRequiredForEveryRun: true,
+        finalCallBudget: {
+          configured: finalCallBudgetLedger !== null,
+          persistent: finalCallBudgetLedger?.persistent === true,
+          storageKind: finalCallBudgetLedger?.kind || "unconfigured",
+        },
         sharedEvidenceSnapshotFork: true,
         experimentalFinalRulingAvailable: finalRulingProviderRegistry.listProviderIds()
           .some((providerId) => providerId !== "openai"),
@@ -265,6 +279,11 @@ export function createAdminModelLabService({
     const maxOutputTokens = Object.hasOwn(body, "maxOutputTokens")
       ? optionalPositiveInteger(body.maxOutputTokens)
       : optionalPositiveInteger(fallback.maxOutputTokens);
+    const finalAttemptPolicy = normalizeFinalAttemptPolicy(
+      Object.hasOwn(body, "finalAttemptPolicy")
+        ? body.finalAttemptPolicy
+        : fallback.finalAttemptPolicy,
+    );
     return {
       selection: finalSelection,
       profile: {
@@ -274,6 +293,7 @@ export function createAdminModelLabService({
         reasoningEffort: finalSelection.reasoningEffort,
         reasoningMode: finalSelection.reasoningMode,
         maxOutputTokens,
+        finalAttemptPolicy,
         experimental: finalSelection.stage === ADMIN_MODEL_LAB_STAGES.EXPERIMENTAL_FINAL_RULING,
         authority: finalSelection.stage === ADMIN_MODEL_LAB_STAGES.EXPERIMENTAL_FINAL_RULING
           ? "experimental_non_authoritative"
@@ -340,6 +360,7 @@ export function createAdminModelLabService({
           finalModel: finalSelection.model,
           reasoningEffort: finalSelection.reasoningEffort,
           reasoningMode: finalSelection.reasoningMode,
+          finalAttemptPolicy: finalRulingProfile.finalAttemptPolicy,
           promptVersion,
           liveOfficialQaEnabled,
         },
@@ -639,6 +660,7 @@ export function createAdminModelLabService({
       const profile = run.executionProfile.finalRuling;
       const prompt = run.executionProfile.prompt;
       const finalInput = buildFinalRulingInput(run.evidenceSnapshot);
+      assertAdminFinalEvidenceReady(run.evidenceSnapshot);
       const providerCreateRequest = {
         model: profile.requestedModel || profile.model,
         reasoningEffort: profile.reasoningEffort,
@@ -663,6 +685,21 @@ export function createAdminModelLabService({
           input: finalInput,
         })),
       });
+      try {
+        await reserveFinalCallBudgetAttempt({
+          run,
+          submissionIntent: submission.submissionIntent,
+          attemptKind: "primary",
+        });
+      } catch (error) {
+        const failed = await settleProviderCreateFailure({
+          runId: id,
+          executionToken,
+          submissionIntent: submission.submissionIntent,
+          error: markProviderOutcomeKnown(error),
+        });
+        return immutableJson({ run: failed, providerRequest: null });
+      }
       let request;
       let providerResponse;
       try {
@@ -1128,6 +1165,18 @@ export function createAdminModelLabService({
         env: exhaustiveEnv,
         fetchImpl: retrievalFetchImpl,
       });
+      // The retriever can resolve previously unknown mentions through a
+      // versioned external identity (CID/passcode) and then bridge that
+      // identity back to the local card corpus. Freeze that reconciled result,
+      // rather than the pre-retrieval approximation, so downstream gates and
+      // Lua lookup observe the same card identity as the evidence archive.
+      if (retrievedEvidence?.cardResolution) {
+        cardResolution = jsonSafe(retrievedEvidence.cardResolution);
+        cardTextCandidates = collectCompleteCardTextCandidates({
+          data,
+          cardResolution,
+        });
+      }
       legacyLuaSemanticPacket = await collectLegacyLuaSemanticPacketForSnapshot({
         factory: legacyLuaSemanticPacketFactory,
         timeoutMs: resolvedLegacyLuaSemanticTimeoutMs,
@@ -1402,15 +1451,21 @@ export function createAdminModelLabService({
         providedFacts,
         normalizeEvidenceProvenance: true,
       });
+    const completedAttempt = buildFinalAttemptAudit({
+      run,
+      response,
+      request,
+      validation,
+      attemptKind,
+    });
+    await settleFinalCallBudgetAttempt({
+      run,
+      completedAttempt,
+      attemptKind,
+    });
     let persistedCompletedAttempt = null;
     if (attemptKind === "repair") {
-      persistedCompletedAttempt = buildFinalAttemptAudit({
-        run,
-        response,
-        request,
-        validation,
-        attemptKind,
-      });
+      persistedCompletedAttempt = completedAttempt;
       const attempts = [
         run.execution?.repair?.initialAttempt,
         persistedCompletedAttempt,
@@ -1435,11 +1490,15 @@ export function createAdminModelLabService({
             response,
           }),
           errors: compactErrors,
+          completedAttempt,
         },
         executionToken,
       });
       if (
         attemptKind === "primary"
+        && normalizeFinalAttemptPolicy(
+          run.executionProfile?.finalRuling?.finalAttemptPolicy,
+        ) === "repair_once"
         && !run.execution?.repair
         && isRecoverableModelValidationFailure({ validation, response })
       ) {
@@ -1461,16 +1520,10 @@ export function createAdminModelLabService({
     }
 
     const profile = run.executionProfile?.finalRuling || {};
-    const completedAttempt = persistedCompletedAttempt || buildFinalAttemptAudit({
-      run,
-      response,
-      request,
-      validation,
-      attemptKind,
-    });
+    const effectiveCompletedAttempt = persistedCompletedAttempt || completedAttempt;
     const finalAttempts = attemptKind === "repair"
-      ? [run.execution?.repair?.initialAttempt, completedAttempt].filter(Boolean)
-      : [completedAttempt];
+      ? [run.execution?.repair?.initialAttempt, effectiveCompletedAttempt].filter(Boolean)
+      : [effectiveCompletedAttempt];
     const usage = aggregateFinalAttemptUsage(finalAttempts);
     const cost = aggregateFinalAttemptCosts(finalAttempts, profile);
     const metering = buildAdminModelLabMetering({
@@ -1597,6 +1650,7 @@ export function createAdminModelLabService({
       attemptKind: "primary",
     });
     const finalInput = buildFinalRulingInput(current.evidenceSnapshot);
+    assertAdminFinalEvidenceReady(current.evidenceSnapshot);
     const repairInput = buildDirectedRepairInput({
       finalInput,
       priorOutput: extractOpenAIResponseOutputText(response),
@@ -1654,6 +1708,22 @@ export function createAdminModelLabService({
         });
       }
       throw error;
+    }
+
+    try {
+      await reserveFinalCallBudgetAttempt({
+        run: current,
+        submissionIntent: submission.submissionIntent,
+        attemptKind: "repair",
+      });
+    } catch (error) {
+      return settleProviderCreateFailure({
+        runId: current.runId,
+        executionToken,
+        submissionIntent: submission.submissionIntent,
+        error: markProviderOutcomeKnown(error),
+        attemptKind: "repair",
+      });
     }
 
     let repairResponse;
@@ -1750,6 +1820,23 @@ export function createAdminModelLabService({
     attemptKind = "primary",
   }) {
     const outcomeKnown = error?.outcomeKnown === true;
+    const usageSettled = await settleFailedFinalCallBudgetAttempt({
+      runId,
+      submissionIntent,
+      error,
+      attemptKind,
+    });
+    if (
+      !usageSettled
+      && outcomeKnown
+      && error?.budgetReservationMayExist !== true
+    ) {
+      await releaseFinalCallBudgetAttempt({
+        runId,
+        submissionIntent,
+        attemptKind,
+      });
+    }
     const settle = attemptKind === "repair"
       ? (outcomeKnown
           ? runStore.recordProviderRepairSubmissionRejected
@@ -1784,6 +1871,146 @@ export function createAdminModelLabService({
       );
     await failRunWithStage(runId, terminalError, executionToken);
     return requireRun(runId);
+  }
+
+  async function reserveFinalCallBudgetAttempt({
+    run,
+    submissionIntent,
+    attemptKind,
+  }) {
+    const profile = run.executionProfile?.finalRuling || {};
+    if (profile.provider === "mock") return null;
+    if (!finalCallBudgetLedger) {
+      const error = serviceError(
+        "Persistent final-call budget ledger is unavailable; provider submission was not attempted",
+        "admin_final_budget_storage_unavailable",
+      );
+      error.outcomeKnown = true;
+      error.budgetReservationMayExist = false;
+      throw error;
+    }
+    return finalCallBudgetLedger.reserve({
+      reservationId: finalBudgetReservationId(
+        run.runId,
+        attemptKind,
+        submissionIntent.attemptId,
+      ),
+      runId: run.runId,
+      attemptId: submissionIntent.attemptId,
+      attemptKind,
+      provider: profile.provider,
+      model: profile.requestedModel || profile.model,
+      reservedAt: submissionIntent.intentAt,
+    });
+  }
+
+  async function settleFinalCallBudgetAttempt({ run, completedAttempt, attemptKind }) {
+    const profile = run.executionProfile?.finalRuling || {};
+    if (!finalCallBudgetLedger || profile.provider === "mock") return false;
+    const reportedUsage = normalizeReportedModelUsage(completedAttempt?.rawUsage);
+    const actualCny = completedAttempt?.cost?.totalCostCny;
+    if (!reportedUsage || !Number.isFinite(actualCny) || actualCny < 0) {
+      // Unknown provider pricing or missing usage keeps the conservative
+      // reservation. It must not turn into an implicit refund.
+      return false;
+    }
+    const submission = attemptKind === "repair"
+      ? run.execution?.repairSubmission
+      : run.execution?.providerSubmission;
+    if (!submission?.attemptId || !submission?.intentAt) return false;
+    try {
+      await finalCallBudgetLedger.settle({
+        reservationId: finalBudgetReservationId(
+          run.runId,
+          attemptKind,
+          submission.attemptId,
+        ),
+        runId: run.runId,
+        attemptId: submission.attemptId,
+        attemptKind,
+        provider: profile.provider,
+        model: profile.requestedModel || profile.model,
+        reservedAt: submission.intentAt,
+        actualCny,
+      });
+      return true;
+    } catch {
+      // Settlement acknowledgement can be ambiguous. The reservation is
+      // intentionally retained; a later idempotent settlement may reconcile it.
+      return false;
+    }
+  }
+
+  async function settleFailedFinalCallBudgetAttempt({
+    runId,
+    submissionIntent,
+    error,
+    attemptKind,
+  }) {
+    if (!finalCallBudgetLedger || !submissionIntent?.attemptId) {
+      return false;
+    }
+    try {
+      if (!normalizeReportedModelUsage(error?.usage)) return false;
+    } catch {
+      // Malformed provider metering is not a refund signal. Leave the original
+      // reservation untouched and continue recording the provider failure.
+      return false;
+    }
+    const run = await requireRun(runId);
+    const profile = run.executionProfile?.finalRuling || {};
+    let meteredAttempt;
+    try {
+      meteredAttempt = buildFinalAttemptAudit({
+        run,
+        response: {
+          id: error?.requestId || null,
+          status: "failed",
+          model: error?.model || profile.requestedModel || profile.model,
+          usage: error.usage,
+        },
+        request: {
+          providerId: profile.provider,
+          requestId: error?.requestId || null,
+        },
+        validation: {
+          ok: false,
+          errors: [String(error?.code || "provider_create_failed")],
+        },
+        attemptKind,
+      });
+    } catch {
+      return false;
+    }
+    return settleFinalCallBudgetAttempt({
+      run,
+      completedAttempt: meteredAttempt,
+      attemptKind,
+    });
+  }
+
+  async function releaseFinalCallBudgetAttempt({
+    runId,
+    submissionIntent,
+    attemptKind,
+  }) {
+    if (!finalCallBudgetLedger || !submissionIntent?.attemptId) return;
+    try {
+      await finalCallBudgetLedger.release({
+        reservationId: finalBudgetReservationId(
+          runId,
+          attemptKind,
+          submissionIntent.attemptId,
+        ),
+        runId,
+        attemptId: submissionIntent.attemptId,
+        attemptKind,
+        provider: submissionIntent.providerId,
+        reservedAt: submissionIntent.intentAt,
+      });
+    } catch {
+      // A failed/ambiguous release remains charged conservatively.
+    }
   }
 
   async function failRunWithStage(runId, error, executionToken = null) {
@@ -2074,6 +2301,9 @@ export function createAdminModelLabService({
       runStore: runStore.persistent === true,
       runStoreKind: String(runStore.storageKind || runStore.kind || "unknown"),
       runTtlSeconds: runStore.ttlSeconds ?? null,
+      finalCallBudgetConfigured: finalCallBudgetLedger !== null,
+      finalCallBudgetPersistent: finalCallBudgetLedger?.persistent === true,
+      finalCallBudgetKind: finalCallBudgetLedger?.kind || "unconfigured",
     }),
     capabilities,
     createRun,
@@ -2458,11 +2688,21 @@ function buildFinalAttemptAudit({
           usdToCnyRate: pricingProfile.usdToCnyRate,
           exchangeRateVersion: pricingProfile.exchangeRateVersion,
         })
-      : unavailablePreparationProviderCost({
-          provider: profile.provider,
-          model: response?.model || profile.model,
-          usage,
-        });
+      : profile.provider === "relay"
+        ? estimateRelayModelCost({
+            // Relay identity is explicitly unverified. Billing must use the
+            // server-selected canonical model, never a cheaper model name from
+            // the untrusted response envelope.
+            model: profile.model || profile.requestedModel,
+            usage: response?.usage || {},
+            usdToCnyRate: pricingProfile.usdToCnyRate,
+            exchangeRateVersion: pricingProfile.exchangeRateVersion,
+          })
+        : unavailablePreparationProviderCost({
+            provider: profile.provider,
+            model: response?.model || profile.model,
+            usage,
+          });
   const providerCreatedAt = normalizeProviderTimestamp(response?.created_at);
   const providerCompletedAt = normalizeProviderTimestamp(response?.completed_at);
   return jsonSafe({
@@ -3143,6 +3383,7 @@ function defaultFinalModel({ config, finalRulingProviderRegistry }) {
   if (finalRulingProviderRegistry.has("deepseek")) return "deepseek-v4-flash";
   if (finalRulingProviderRegistry.has("glm")) return "glm-5.2";
   if (finalRulingProviderRegistry.has("kimi")) return "kimi-k2.6";
+  if (finalRulingProviderRegistry.has("relay")) return "relay-gpt-5.6-sol";
   return config.defaultFinalModel;
 }
 
@@ -3179,11 +3420,40 @@ function assertRunStore(runStore) {
   }
 }
 
+function assertFinalCallBudgetLedger(ledger) {
+  for (const method of ["reserve", "settle", "release"]) {
+    if (typeof ledger?.[method] !== "function") {
+      throw new TypeError(`admin model lab requires finalCallBudgetLedger.${method}()`);
+    }
+  }
+}
+
+function finalBudgetReservationId(runId, attemptKind, attemptId) {
+  return [
+    "admin-final-call/v1",
+    requiredString(runId, "runId"),
+    requiredString(attemptKind, "attemptKind"),
+    requiredString(attemptId, "attemptId"),
+  ].join(":");
+}
+
 function optionalPositiveInteger(value) {
   if (value === undefined || value === null || value === "") return null;
   const number = Number(value);
   if (!Number.isInteger(number) || number <= 0) throw new TypeError("maxOutputTokens must be a positive integer");
   return number;
+}
+
+function normalizeFinalAttemptPolicy(value) {
+  if (value === undefined || value === null) return DEFAULT_FINAL_ATTEMPT_POLICY;
+  const normalized = String(value).trim().toLowerCase();
+  if (!ADMIN_FINAL_ATTEMPT_POLICIES.includes(normalized)) {
+    throw requestError(
+      `finalAttemptPolicy must be one of: ${ADMIN_FINAL_ATTEMPT_POLICIES.join(", ")}`,
+      "admin_final_attempt_policy_invalid",
+    );
+  }
+  return normalized;
 }
 
 function readExecutionHeartbeatMs(env) {
@@ -3438,6 +3708,15 @@ function serviceError(message, code) {
   error.status = code === "admin_run_not_found" ? 404 : 409;
   error.publicMessage = message;
   return error;
+}
+
+function markProviderOutcomeKnown(error) {
+  const normalized = error instanceof Error ? error : new Error(String(error));
+  normalized.outcomeKnown = true;
+  if (normalized.budgetReservationMayExist !== true) {
+    normalized.budgetReservationMayExist = false;
+  }
+  return normalized;
 }
 
 function requestError(message, code) {

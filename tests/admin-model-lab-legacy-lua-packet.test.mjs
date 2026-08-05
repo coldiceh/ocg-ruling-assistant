@@ -5,6 +5,9 @@ import {
   createAdminModelLabService,
 } from "../backend/adminModelLabService.mjs";
 import {
+  createMemoryAdminFinalCallBudgetLedger,
+} from "../backend/adminFinalCallBudgetLedger.mjs";
+import {
   createLegacyLuaUnknownPacket,
   projectLegacyLuaSemanticPacketForModel,
   serializeLegacyLuaSemanticPacket,
@@ -175,6 +178,12 @@ function makeService({
   });
   const service = createAdminModelLabService({
     runStore,
+    finalCallBudgetLedger: createMemoryAdminFinalCallBudgetLedger({
+      timezone: "UTC",
+      pools: {
+        deepseek: { dailyBudgetCny: 1_000, reservationCny: 10 },
+      },
+    }),
     env: {
       ADMIN_MODEL_LAB_ENABLED: "true",
       DEEPSEEK_API_KEY: "server-only-test-key",

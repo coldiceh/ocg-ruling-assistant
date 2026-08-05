@@ -110,6 +110,52 @@ test("object field order is canonical, while changed ruling substance creates a 
   assert.equal(serializedConflict.includes(changedAnswer), false);
 });
 
+test("optional undefined object fields are omitted while other non-JSON values remain rejected", () => {
+  const withUndefined = createAdminEvidenceArchive({
+    evidenceBuckets: {
+      officialQaRelated: [{
+        ...flatQa(),
+        link: undefined,
+        retrievalContext: {
+          query: "岩石族 特殊召唤",
+          optionalLabel: undefined,
+        },
+      }],
+    },
+  });
+  const withoutUndefined = createAdminEvidenceArchive({
+    evidenceBuckets: {
+      officialQaRelated: [{
+        ...flatQa(),
+        retrievalContext: {
+          query: "岩石族 特殊召唤",
+        },
+      }],
+    },
+  });
+
+  assert.equal(withUndefined.archiveId, withoutUndefined.archiveId);
+  assert.equal(withUndefined.contentSha256, withoutUndefined.contentSha256);
+  assert.equal(verifyAdminEvidenceArchive(withUndefined).ok, true);
+
+  assert.throws(
+    () => createAdminEvidenceArchive({
+      evidenceBuckets: {
+        officialQaRelated: [{ ...flatQa(), invalidArray: [undefined] }],
+      },
+    }),
+    /non-JSON value at \$\[0\]\.invalidArray\[0\]/u,
+  );
+  assert.throws(
+    () => createAdminEvidenceArchive({
+      evidenceBuckets: {
+        officialQaRelated: [{ ...flatQa(), invalidFunction: () => true }],
+      },
+    }),
+    /non-JSON value at \$\[0\]\.invalidFunction/u,
+  );
+});
+
 test("same-id full QA, summary, context snippet, and wrapper remain compatible", () => {
   const archive = createAdminEvidenceArchive({
     evidenceBuckets: {

@@ -1,14 +1,10 @@
-export const DEFAULT_PUBLIC_RULING_MODEL_PROFILE = "glm-5.2-high";
+export const DEFAULT_PUBLIC_RULING_MODEL_PROFILE = "deepseek-v4-flash-high";
+// The third-party relay endpoint is deployment-specific and intentionally has
+// no repository default. Keep the historical export name for internal imports.
+export const DEFAULT_PUBLIC_RELAY_BASE_URL = "";
+export const DEFAULT_PUBLIC_RELAY_MODEL = "gpt-5.6-sol";
 
 export const PUBLIC_RULING_MODEL_PROFILES = Object.freeze({
-  "glm-5.2-high": Object.freeze({
-    id: "glm-5.2-high",
-    label: "GLM 5.2 · 思考 high",
-    provider: "glm",
-    model: "glm-5.2",
-    thinkingMode: "enabled",
-    reasoningEffort: "high",
-  }),
   "deepseek-v4-flash-high": Object.freeze({
     id: "deepseek-v4-flash-high",
     label: "DeepSeek V4 Flash · 思考 high",
@@ -41,14 +37,14 @@ export function publicRulingModelProfileAvailable(profileOrId, env = {}) {
   const profile = typeof profileOrId === "string"
     ? resolvePublicRulingModelProfile(profileOrId)
     : profileOrId;
-  if (profile?.provider === "glm") return Boolean(String(env.GLM_API_KEY || "").trim());
   if (profile?.provider === "deepseek") return Boolean(String(env.DEEPSEEK_API_KEY || "").trim());
   return false;
 }
 
 export function getPublicRulingModelCapabilities(env = {}) {
+  const defaultProfile = resolvePublicRulingModelProfile(env.PUBLIC_RULING_MODEL_PROFILE);
   return {
-    defaultRulingModelProfile: DEFAULT_PUBLIC_RULING_MODEL_PROFILE,
+    defaultRulingModelProfile: defaultProfile.id,
     rulingModelProfiles: Object.values(PUBLIC_RULING_MODEL_PROFILES).map((profile) => ({
       id: profile.id,
       label: profile.label,
@@ -56,6 +52,9 @@ export function getPublicRulingModelCapabilities(env = {}) {
       model: profile.model,
       thinkingMode: profile.thinkingMode,
       reasoningEffort: profile.reasoningEffort,
+      transport: profile.transport || "chat_completions",
+      ...(profile.thirdParty === true ? { thirdParty: true } : {}),
+      ...(profile.modelIdentityVerified === false ? { modelIdentityVerified: false } : {}),
       available: publicRulingModelProfileAvailable(profile, env),
     })),
   };

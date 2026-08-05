@@ -5,6 +5,8 @@ import {
   createAdminModelLabProductionService,
   createDeepSeekEvidencePreparationInvoke,
 } from "../backend/adminModelLabProduction.mjs";
+import { createAdminModelLabService } from "../backend/adminModelLabService.mjs";
+import { createMemoryAdminFinalCallBudgetLedger } from "../backend/adminFinalCallBudgetLedger.mjs";
 import { createMemoryAdminLabRecordStore } from "../backend/adminLabRecordStore.mjs";
 import {
   createAdminRunStore,
@@ -226,6 +228,102 @@ test("production composition accepts the real base service when its run store is
   assert.equal(capabilities.persistence.runStoreKind, "test-persistent-run-storage");
 });
 
+test("production composition exposes an explicitly persistent final-call budget ledger", async () => {
+  const persistentRunStorage = Object.freeze({
+    ...createMemoryAdminRunStorage(),
+    kind: "test-persistent-run-storage",
+    persistent: true,
+  });
+  const service = createAdminModelLabProductionService({
+    env: ENABLED_ENV,
+    fetchImpl: async () => {
+      throw new Error("network must not run");
+    },
+    recordStore: persistentRecordStore(),
+    runStore: createAdminRunStore({ storage: persistentRunStorage }),
+    finalCallBudgetLedger: persistentBudgetLedger(),
+    deepSeekProvider: {},
+    openAIProvider: {
+      providerId: "openai",
+      async create() {
+        throw new Error("final provider must not run during capability inspection");
+      },
+    },
+  });
+
+  const capabilities = await service.capabilities();
+  assert.deepEqual(capabilities.architecture.finalCallBudget, {
+    configured: true,
+    persistent: true,
+    storageKind: "test-persistent-final-budget",
+  });
+});
+
+test("production without a budget ledger fails closed before final provider transport", async () => {
+  const persistentRunStorage = Object.freeze({
+    ...createMemoryAdminRunStorage(),
+    kind: "test-persistent-run-storage",
+    persistent: true,
+  });
+  let providerCreateCalls = 0;
+  const baseService = createAdminModelLabService({
+    runStore: createAdminRunStore({ storage: persistentRunStorage }),
+    finalCallBudgetLedger: null,
+    env: {
+      ...ENABLED_ENV,
+      OPENAI_API_KEY: "server-only-test-key",
+    },
+    openAIProvider: {
+      providerId: "openai",
+      async create() {
+        providerCreateCalls += 1;
+        throw new Error("provider transport must be blocked by the missing budget ledger");
+      },
+    },
+    loadData: async () => ({ cards: [], records: [], qaRecords: [] }),
+    extractCards: () => ({
+      resolvedCards: [],
+      unresolvedMentions: [],
+      ambiguousMentions: [],
+      omittedResolvedCards: [],
+      userProvidedCardTexts: [],
+    }),
+    retrieveEvidence: async () => ({
+      cardTexts: [],
+      userProvidedCardTexts: [],
+      officialQaDirectCandidates: [],
+      officialQaRelated: [],
+      provisionalOfficialResponses: [],
+      faqRelated: [],
+      rawRelatedEvidence: [],
+      rulebookCandidates: [],
+      retrievedCards: [],
+      remainingUnresolvedMentions: [],
+      fuzzyResolvedCards: [],
+      baigeResolvedCards: [],
+      baigeAmbiguousMentions: [],
+      ruleSearchQueries: [],
+      retrievalWarnings: [],
+    }),
+    promptLoader: async () => "只依据冻结证据输出严格 JSON。",
+  });
+  const service = createAdminModelLabProductionService({
+    env: ENABLED_ENV,
+    fetchImpl: async () => {
+      throw new Error("network must not run");
+    },
+    baseService,
+    recordStore: persistentRecordStore(),
+  });
+  const created = await service.createRun({ body: { question: "匿名预算门禁问题" } });
+
+  const execution = await service.executeRun({ runId: created.runId });
+
+  assert.equal(execution.run.status, "FAILED");
+  assert.equal(execution.run.error.code, "admin_final_budget_storage_unavailable");
+  assert.equal(providerCreateCalls, 0);
+});
+
 test("production composition rejects every ephemeral storage injection and memory env mode", () => {
   const ephemeralRecordStore = createMemoryAdminLabRecordStore();
   assert.throws(
@@ -285,6 +383,43 @@ test("production composition rejects every ephemeral storage injection and memor
     (error) => error?.code === "admin_model_lab_production_unavailable"
       && /base service run store must be persistent/u.test(error.message),
   );
+  const ephemeralBudgetBaseService = fakeBaseService();
+  ephemeralBudgetBaseService.persistence.finalCallBudgetConfigured = true;
+  ephemeralBudgetBaseService.persistence.finalCallBudgetPersistent = false;
+  ephemeralBudgetBaseService.persistence.finalCallBudgetKind = "memory-admin-final-budget";
+  assert.throws(
+    () => createAdminModelLabProductionService({
+      env: ENABLED_ENV,
+      fetchImpl: async () => null,
+      recordStore: durableRecordStore,
+      baseService: ephemeralBudgetBaseService,
+    }),
+    (error) => error?.code === "admin_model_lab_production_unavailable"
+      && /base service final-call budget ledger must be persistent/u.test(error.message),
+  );
+  assert.throws(
+    () => createAdminModelLabProductionService({
+      env: ENABLED_ENV,
+      fetchImpl: async () => null,
+      recordStore: durableRecordStore,
+      runStore: createAdminRunStore({
+        storage: Object.freeze({
+          ...createMemoryAdminRunStorage(),
+          kind: "test-persistent-run-storage",
+          persistent: true,
+        }),
+      }),
+      finalCallBudgetLedger: createMemoryAdminFinalCallBudgetLedger({
+        pools: {
+          openai: { dailyBudgetCny: 10, reservationCny: 10 },
+        },
+      }),
+      deepSeekProvider: {},
+      openAIProvider: {},
+    }),
+    (error) => error?.code === "admin_model_lab_production_unavailable"
+      && /final-call budget ledger must be persistent/u.test(error.message),
+  );
 });
 
 test("explicit local development composition works without Redis but is forbidden in production", async () => {
@@ -292,6 +427,8 @@ test("explicit local development composition works without Redis but is forbidde
     env: {
       ...ENABLED_ENV,
       NODE_ENV: "development",
+      ADMIN_FINAL_BUDGET_OPENAI_DAILY_CNY: "10",
+      ADMIN_FINAL_BUDGET_OPENAI_RESERVATION_CNY: "10",
     },
     fetchImpl: async () => {
       throw new Error("network must not run");
@@ -314,6 +451,11 @@ test("explicit local development composition works without Redis but is forbidde
   const capabilities = await service.capabilities();
   assert.equal(capabilities.persistence.runStore, "ephemeral");
   assert.equal(capabilities.persistence.recordStore, "ephemeral");
+  assert.deepEqual(capabilities.architecture.finalCallBudget, {
+    configured: true,
+    persistent: false,
+    storageKind: "memory-admin-final-budget",
+  });
   const run = await service.createRun({ body: { question: "本地开发问题" } });
   assert.equal(run.status, "QUEUED");
   assert.equal((await service.listRuns({ limit: 10 })).records.length, 1);
@@ -333,7 +475,7 @@ test("explicit local development composition works without Redis but is forbidde
   );
 });
 
-test("composition keeps DeepSeek Flash as preparation and exposes GLM/Kimi only as experimental finals", async () => {
+test("composition keeps DeepSeek Flash as preparation and exposes configured experimental finals", async () => {
   const service = createAdminModelLabDevelopmentService({
     env: {
       ADMIN_MODEL_LAB_ENABLED: "true",
@@ -341,6 +483,8 @@ test("composition keeps DeepSeek Flash as preparation and exposes GLM/Kimi only 
       DEEPSEEK_API_KEY: "server-deepseek-secret",
       GLM_API_KEY: "server-glm-secret",
       KIMI_API_KEY: "server-kimi-secret",
+      RELAY_API_KEY: "server-relay-secret",
+      RELAY_BASE_URL: "https://relay.example/v1",
     },
     fetchImpl: async () => {
       throw new Error("network must not run while reading capabilities");
@@ -349,10 +493,14 @@ test("composition keeps DeepSeek Flash as preparation and exposes GLM/Kimi only 
   });
   const capabilities = await service.capabilities();
   assert.deepEqual(capabilities.architecture.preparationProviders, ["deepseek"]);
-  assert.deepEqual([...capabilities.architecture.finalRulingProviders].sort(), ["deepseek", "glm", "kimi"]);
+  assert.deepEqual(
+    [...capabilities.architecture.finalRulingProviders].sort(),
+    ["deepseek", "glm", "kimi", "relay"],
+  );
   assert.equal(capabilities.architecture.finalRulingProvider, "deepseek");
   assert.equal(capabilities.providers.providers.find((item) => item.providerId === "glm").available, true);
   assert.equal(capabilities.providers.providers.find((item) => item.providerId === "kimi").available, true);
+  assert.equal(capabilities.providers.providers.find((item) => item.providerId === "relay").available, true);
   assert.equal(capabilities.providers.providers.find((item) => item.providerId === "openai").available, false);
   const queued = await service.createRun({ body: { question: "仅国产模型的实验问题" } });
   assert.equal(queued.executionProfile.preparation.provider, "deepseek");
@@ -360,6 +508,7 @@ test("composition keeps DeepSeek Flash as preparation and exposes GLM/Kimi only 
   assert.equal(queued.executionProfile.finalRuling.model, "deepseek-v4-flash");
   assert.equal(JSON.stringify(capabilities).includes("server-glm-secret"), false);
   assert.equal(JSON.stringify(capabilities).includes("server-kimi-secret"), false);
+  assert.equal(JSON.stringify(capabilities).includes("server-relay-secret"), false);
 });
 
 test("DeepSeek bridge accepts evidence preparation only and keeps server-owned transport", async () => {
@@ -680,6 +829,22 @@ function persistentRecordStore() {
     ...createMemoryAdminLabRecordStore(),
     kind: "test-persistent",
     persistent: true,
+  });
+}
+
+function persistentBudgetLedger() {
+  return Object.freeze({
+    kind: "test-persistent-final-budget",
+    persistent: true,
+    async reserve() {
+      return { status: "reserved" };
+    },
+    async settle() {
+      return { status: "settled" };
+    },
+    async release() {
+      return { status: "released" };
+    },
   });
 }
 

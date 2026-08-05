@@ -254,9 +254,11 @@ export async function answerRagRulingQuestion({
         originalPrompt: promptBundle.prompt,
         userQuery: query,
         evidence,
-        // A matcher candidate is evidence, not permission to copy a ruling
-        // whose player roles or conditions may differ from the question.
-        authoritativeOfficialDirect: false,
+        // Only the strict singleton/complete-scene selector in the prompt
+        // builder may cross this authority boundary. Near or ambiguous QA
+        // candidates remain ordinary evidence and never reach this option.
+        authoritativeOfficialDirect: promptBundle.authoritativeOfficialDirectId || false,
+        resolvedCards: effectiveCardResolution.resolvedCards || [],
         invoke: ({ prompt, attemptKind }) => callRagModel({
           prompt,
           recoveryPrompt: attemptKind === "primary" ? promptBundle.recoveryPrompt : "",
@@ -310,6 +312,9 @@ export async function answerRagRulingQuestion({
     },
     engineSimulation: engine.simulation || null,
     formalEngine: summarizeFormalShadow(formalShadow),
+    legacyLua: summarizeLegacyLuaForPublic(evidence.legacyLuaSemanticPacket, {
+      requested: typeof legacyLuaSemanticPacketFactory === "function",
+    }),
     debug: {
       mode: "rag_baseline",
       engineStatus: engine.status,
@@ -466,6 +471,51 @@ export async function buildLegacyLuaSemanticPacket({
 
 function elapsedMs(startedAt) {
   return Math.max(0, Date.now() - Number(startedAt || Date.now()));
+}
+
+function summarizeLegacyLuaForPublic(packet, { requested = false } = {}) {
+  const resources = Array.isArray(packet?.resources) ? packet.resources : [];
+  const candidates = (Array.isArray(packet?.effectCandidates)
+    ? packet.effectCandidates
+    : []).filter((candidate) => (
+      candidate?.kind === "CANDIDATE"
+      && typeof candidate?.semanticEffectIdentity === "string"
+    ));
+  const legalityChecks = candidates.flatMap((candidate) => (
+    Array.isArray(candidate?.semanticArtifact?.plan?.activationLegalityChecks)
+      ? candidate.semanticArtifact.plan.activationLegalityChecks
+      : Array.isArray(candidate?.activationLegalityChecks)
+        ? candidate.activationLegalityChecks
+        : []
+  ));
+  const unknownReasonCodes = [...new Set([
+    ...(Array.isArray(packet?.unknownReasons) ? packet.unknownReasons : []),
+    ...resources.flatMap((resource) => (
+      Array.isArray(resource?.unknownReasons) ? resource.unknownReasons : []
+    )),
+  ].map((reason) => String(reason?.code || reason || "").trim()).filter(Boolean))]
+    .sort()
+    .slice(0, 12);
+  return {
+    requested,
+    status: candidates.length > 0 ? "analyzed" : requested ? "unavailable" : "disabled",
+    authority: String(packet?.authority || "LEGACY_COMPATIBILITY"),
+    resourceCount: resources.length,
+    effectCandidateCount: candidates.length,
+    activationLegalityCheckCount: legalityChecks.length,
+    predicateApis: [...new Set(legalityChecks
+      .map((check) => String(check?.predicateApi || "").trim())
+      .filter(Boolean))].sort().slice(0, 12),
+    atomicOperations: [...new Set(candidates.flatMap((candidate) => (
+      Array.isArray(candidate?.semanticArtifact?.plan?.atomicOperations)
+        ? candidate.semanticArtifact.plan.atomicOperations
+        : Array.isArray(candidate?.atomicOperations)
+          ? candidate.atomicOperations
+          : []
+    )).map(String))].sort().slice(0, 12),
+    unknownReasonCodes,
+    canConfirmOfficialRuling: false,
+  };
 }
 
 function reconcileCardResolution(cardResolution = {}, evidence = {}) {

@@ -2112,6 +2112,7 @@ function canonicalizeJson(value, seen = new Set(), path = "$") {
     return Object.fromEntries(
       Object.keys(value)
         .sort()
+        .filter((key) => value[key] !== undefined)
         .map((key) => [key, canonicalizeJson(value[key], seen, `${path}.${key}`)]),
     );
   } finally {

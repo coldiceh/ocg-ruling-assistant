@@ -212,8 +212,14 @@ export function hashOcgRuleRecords(records = []) {
     sourceUrl: String(record.sourceUrl || ""),
     keywords: [...(record.keywords || [])].map(String).sort(),
     text: String(record.text || ""),
-  })).sort((left, right) => left.id.localeCompare(right.id));
+  })).sort((left, right) => compareCodeUnits(left.id, right.id));
   return createHash("sha256").update(JSON.stringify(stable)).digest("hex");
+}
+
+// Hash ordering must not depend on the host's ICU data or default locale.
+// `localeCompare()` can order Chinese identifiers differently across runtimes.
+function compareCodeUnits(left, right) {
+  return left < right ? -1 : left > right ? 1 : 0;
 }
 
 export function validateOcgRuleSnapshot({

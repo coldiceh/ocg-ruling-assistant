@@ -62,31 +62,42 @@ test("api_answer_reports_engine_availability_from_backend_configuration", async 
   }
 });
 
-test("api_answer_exposes only the two public ruling profiles and rejects unknown profiles", async () => {
+test("api_answer defaults to DeepSeek Flash and does not expose retired GLM or Kimi profiles", async () => {
   const previousGlm = process.env.GLM_API_KEY;
   const previousDeepSeek = process.env.DEEPSEEK_API_KEY;
+  const previousRelay = process.env.RELAY_API_KEY;
   try {
     process.env.GLM_API_KEY = "test-glm-key";
     process.env.DEEPSEEK_API_KEY = "test-deepseek-key";
+    delete process.env.RELAY_API_KEY;
     const info = createJsonResponse();
     await handler({ method: "GET" }, info);
-    assert.equal(info.payload.defaultRulingModelProfile, "glm-5.2-high");
+    assert.equal(info.payload.defaultRulingModelProfile, "deepseek-v4-flash-high");
     assert.deepEqual(info.payload.rulingModelProfiles.map((profile) => ({
       id: profile.id,
       available: profile.available,
     })), [
-      { id: "glm-5.2-high", available: true },
       { id: "deepseek-v4-flash-high", available: true },
     ]);
     assert.equal(info.payload.answerLatency.storage, "unconfigured");
     assert.deepEqual(info.payload.rulingModelProfiles.map((profile) => ({
       id: profile.id,
-      status: profile.answerLatency.status,
-      averageMs: profile.answerLatency.averageMs,
+      status: profile.answerLatency?.status || "unavailable",
+      averageMs: profile.answerLatency?.averageMs ?? null,
     })), [
-      { id: "glm-5.2-high", status: "unavailable", averageMs: null },
       { id: "deepseek-v4-flash-high", status: "unavailable", averageMs: null },
     ]);
+
+    assert.equal(info.payload.rulingModelProfiles.some((profile) => profile.provider === "glm"), false);
+    assert.equal(info.payload.rulingModelProfiles.some((profile) => profile.provider === "kimi"), false);
+
+    const retiredGlm = createJsonResponse();
+    await handler({
+      method: "POST",
+      body: { question: "问题", rulingModelProfile: "glm-5.2-high" },
+    }, retiredGlm);
+    assert.equal(retiredGlm.statusCode, 400);
+    assert.equal(retiredGlm.payload.code, "invalid_ruling_model_profile");
 
     const invalid = createJsonResponse();
     await handler({
@@ -100,6 +111,28 @@ test("api_answer_exposes only the two public ruling profiles and rejects unknown
     else process.env.GLM_API_KEY = previousGlm;
     if (previousDeepSeek === undefined) delete process.env.DEEPSEEK_API_KEY;
     else process.env.DEEPSEEK_API_KEY = previousDeepSeek;
+    if (previousRelay === undefined) delete process.env.RELAY_API_KEY;
+    else process.env.RELAY_API_KEY = previousRelay;
+  }
+});
+
+test("api_answer rejects a retired relay server default instead of silently falling back", async () => {
+  const restore = captureEnvironment([
+    "MODEL_PROVIDER",
+    "PUBLIC_RULING_MODEL_PROFILE",
+  ]);
+  process.env.MODEL_PROVIDER = "mock";
+  process.env.PUBLIC_RULING_MODEL_PROFILE = "relay-gpt-5.6-sol-high";
+  try {
+    const response = createJsonResponse();
+    await handler({
+      method: "POST",
+      body: { question: "测试服务器默认裁定模型。" },
+    }, response);
+    assert.equal(response.statusCode, 400);
+    assert.equal(response.payload.code, "invalid_ruling_model_profile");
+  } finally {
+    restore();
   }
 });
 
@@ -107,6 +140,7 @@ test("api_answer GET returns real rolling latency for each available profile", a
   const restore = captureEnvironment([
     "GLM_API_KEY",
     "DEEPSEEK_API_KEY",
+    "RELAY_API_KEY",
     "PUBLIC_ANSWER_LATENCY_REDIS_REST_URL",
     "PUBLIC_ANSWER_LATENCY_REDIS_REST_TOKEN",
   ]);
@@ -116,34 +150,63 @@ test("api_answer GET returns real rolling latency for each available profile", a
   try {
     process.env.GLM_API_KEY = "test-glm-key";
     process.env.DEEPSEEK_API_KEY = "test-deepseek-key";
+    delete process.env.RELAY_API_KEY;
     process.env.PUBLIC_ANSWER_LATENCY_REDIS_REST_URL = "https://latency.example.test";
     process.env.PUBLIC_ANSWER_LATENCY_REDIS_REST_TOKEN = "test-token";
     globalThis.fetch = async (_url, options) => {
       const command = JSON.parse(options.body);
       assert.equal(command[0], "LRANGE");
       requestedProfiles.push(command[1].split(":").at(-1));
-      return redisJsonResponse(command[1].endsWith(":glm-5.2-high")
-        ? [`${timestamp}:60000`, `${timestamp - 10}:90000`]
-        : [`${timestamp}:30000`]);
+      return redisJsonResponse([`${timestamp}:30000`]);
     };
 
     const response = createJsonResponse();
     await handler({ method: "GET" }, response);
 
     assert.equal(response.statusCode, 200);
-    assert.deepEqual(requestedProfiles.sort(), ["deepseek-v4-flash-high", "glm-5.2-high"]);
+    assert.deepEqual(requestedProfiles, ["deepseek-v4-flash-high"]);
     assert.equal(response.payload.answerLatency.storage, "redis");
     assert.deepEqual(response.payload.rulingModelProfiles.map((profile) => ({
       id: profile.id,
-      status: profile.answerLatency.status,
-      averageMs: profile.answerLatency.averageMs,
-      sampleCount: profile.answerLatency.sampleCount,
+      status: profile.answerLatency?.status || "unavailable",
+      averageMs: profile.answerLatency?.averageMs ?? null,
+      sampleCount: profile.answerLatency?.sampleCount || 0,
     })), [
-      { id: "glm-5.2-high", status: "available", averageMs: 75000, sampleCount: 2 },
       { id: "deepseek-v4-flash-high", status: "available", averageMs: 30000, sampleCount: 1 },
     ]);
   } finally {
     globalThis.fetch = originalFetch;
+    restore();
+  }
+});
+
+test("api_answer rejects retired public relay settings even when the relay key is present", async () => {
+  const restore = captureEnvironment([
+    "PUBLIC_RULING_MODEL_PROFILE",
+    "PUBLIC_RELAY_ENABLED",
+    "RELAY_API_KEY",
+    "GLM_API_KEY",
+    "DEEPSEEK_API_KEY",
+  ]);
+  try {
+    process.env.PUBLIC_RULING_MODEL_PROFILE = "relay-gpt-5.6-sol-high";
+    process.env.PUBLIC_RELAY_ENABLED = "true";
+    process.env.RELAY_API_KEY = "test-relay-key";
+    delete process.env.GLM_API_KEY;
+    delete process.env.DEEPSEEK_API_KEY;
+    await assert.rejects(
+      () => handler({ method: "GET" }, createJsonResponse()),
+      /Unsupported public ruling model profile/u,
+    );
+
+    const response = createJsonResponse();
+    await handler({
+      method: "POST",
+      body: { question: "问题", rulingModelProfile: "relay-gpt-5.6-sol-high" },
+    }, response);
+    assert.equal(response.statusCode, 400);
+    assert.equal(response.payload.code, "invalid_ruling_model_profile");
+  } finally {
     restore();
   }
 });
@@ -174,7 +237,7 @@ test("api_answer sends a successful answer before best-effort latency storage fi
     const response = createJsonResponse();
     const handlerPromise = handler({
       method: "POST",
-      body: { question: "", rulingModelProfile: "glm-5.2-high" },
+      body: { question: "", rulingModelProfile: "deepseek-v4-flash-high" },
     }, response).finally(() => {
       handlerSettled = true;
     });
@@ -183,7 +246,7 @@ test("api_answer sends a successful answer before best-effort latency storage fi
     assert.equal(response.statusCode, 200);
     assert.equal(handlerSettled, false);
     assert.equal(latencyCommand[0], "EVAL");
-    assert.match(latencyCommand[3], /rag-public-answer-latency:v1:glm-5\.2-high/u);
+    assert.match(latencyCommand[3], /rag-public-answer-latency:v1:deepseek-v4-flash-high/u);
 
     releaseRedis();
     await handlerPromise;

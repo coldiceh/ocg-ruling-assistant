@@ -231,7 +231,7 @@ test("existing DeepSeek adapter remains evidence-only while Flash is the fixed p
   );
 });
 
-test("DeepSeek V4 finals avoid the documented JSON Output empty-content path only while thinking", async () => {
+test("DeepSeek V4 finals omit JSON Output while thinking and retain it without thinking", async () => {
   const calls = [];
   const provider = new CompatibleEvidencePreparationProvider({
     providerId: "deepseek",
@@ -239,7 +239,7 @@ test("DeepSeek V4 finals avoid the documented JSON Output empty-content path onl
     fetchImpl: mockFetch(calls, {
       id: "deepseek-final-1",
       model: "deepseek-v4-pro",
-      choices: [{ message: { content: JSON.stringify(makeStructuredResult()) } }],
+      choices: [{ message: { content: [{ type: "text", content: JSON.stringify(makeStructuredResult()) }] } }],
       usage: { prompt_tokens: 10, completion_tokens: 5 },
     }),
   });
@@ -308,6 +308,44 @@ test("GLM compatible adapter emits an experimental final JSON result with filter
   assert.equal(JSON.stringify(response).includes("glm-server-secret"), false);
 });
 
+test("relay adapter sends one allowlisted Chat Completions request with the canonical upstream model", async () => {
+  const calls = [];
+  const provider = new CompatibleEvidencePreparationProvider({
+    providerId: "relay",
+    apiKey: "relay-server-secret",
+    baseUrl: "https://relay.example/v1",
+    env: { RELAY_MAX_COMPLETION_TOKENS: "8192" },
+    fetchImpl: mockFetch(calls, {
+      id: "relay-final-1",
+      model: "gpt-5.6-terra",
+      choices: [{ message: { content: JSON.stringify(makeStructuredResult()) } }],
+      usage: { prompt_tokens: 10, completion_tokens: 5 },
+    }),
+  });
+  const response = await provider.create({
+    model: "relay-gpt-5.6-terra",
+    reasoningEffort: "high",
+    reasoningMode: "pro",
+    input: "匿名问题与冻结证据",
+    instructions: "只输出 JSON。",
+    metadata: { runId: "run-relay", promptVersion: "openai-ruling-v1" },
+  });
+
+  assert.equal(response.status, "completed");
+  assert.equal(response.provider, "relay");
+  assert.equal(response.requested_model, "gpt-5.6-terra");
+  assert.equal(response.model_identity_verified, false);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, "https://relay.example/v1/chat/completions");
+  const body = JSON.parse(calls[0].options.body);
+  assert.equal(body.model, "gpt-5.6-terra");
+  assert.equal(body.reasoning_effort, "high");
+  assert.equal(body.max_completion_tokens, 8192);
+  assert.deepEqual(body.response_format, { type: "json_object" });
+  assert.equal(Object.hasOwn(body, "thinking"), false);
+  assert.equal(JSON.stringify(response).includes("relay-server-secret"), false);
+});
+
 test("empty compatible final reports bounded diagnostics without exposing reasoning content", async () => {
   const provider = new CompatibleEvidencePreparationProvider({
     providerId: "deepseek",
@@ -335,11 +373,57 @@ test("empty compatible final reports bounded diagnostics without exposing reason
     }),
     (error) => (
       error.code === "deepseek_empty_final_ruling"
+      && error.outcomeKnown === true
+      && error.budgetReservationMayExist === true
+      && error.model === "deepseek-v4-flash"
+      && error.usage?.completion_tokens === 11
       && /finish_reason=stop/u.test(error.message)
       && /reasoning_chars=17/u.test(error.message)
       && /reasoning_tokens=10/u.test(error.message)
       && !error.message.includes("private reasoning")
     ),
+  );
+});
+
+test("compatible transport distinguishes provable 4xx rejection from potentially billed failures", async () => {
+  for (const status of [408, 429, 500, 503]) {
+    const provider = new CompatibleEvidencePreparationProvider({
+      providerId: "deepseek",
+      apiKey: "deepseek-server-secret",
+      fetchImpl: async () => jsonResponse({
+        error: { code: `status_${status}`, message: `ambiguous ${status}` },
+      }, status),
+    });
+    await assert.rejects(
+      provider.create({
+        model: "deepseek-v4-flash",
+        reasoningEffort: "none",
+        reasoningMode: "standard",
+        input: "匿名问题与冻结证据",
+        instructions: "只输出 JSON。",
+        metadata: { runId: `run-${status}`, promptVersion: "openai-ruling-v1" },
+      }),
+      (error) => error.status === status && error.outcomeKnown === false,
+    );
+  }
+
+  const rejected = new CompatibleEvidencePreparationProvider({
+    providerId: "deepseek",
+    apiKey: "deepseek-server-secret",
+    fetchImpl: async () => jsonResponse({
+      error: { code: "invalid_request", message: "invalid request" },
+    }, 400),
+  });
+  await assert.rejects(
+    rejected.create({
+      model: "deepseek-v4-flash",
+      reasoningEffort: "none",
+      reasoningMode: "standard",
+      input: "匿名问题与冻结证据",
+      instructions: "只输出 JSON。",
+      metadata: { runId: "run-400", promptVersion: "openai-ruling-v1" },
+    }),
+    (error) => error.status === 400 && error.outcomeKnown === true,
   );
 });
 

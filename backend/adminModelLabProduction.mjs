@@ -13,6 +13,10 @@ import {
 } from "./adminLabRecordStore.mjs";
 import { createAdminModelLabService } from "./adminModelLabService.mjs";
 import {
+  createConfiguredAdminFinalCallBudgetLedger,
+  createMemoryAdminFinalCallBudgetLedger,
+} from "./adminFinalCallBudgetLedger.mjs";
+import {
   createConfiguredLegacyLuaSemanticPacketFactory,
 } from "./legacyLuaSemanticProduction.mjs";
 import { createConfiguredAdminRunStorage } from "./adminRunRedisStorage.mjs";
@@ -71,12 +75,15 @@ export function createAdminModelLabDevelopmentService(options = {}) {
   const runStorage = options.runStorage || createMemoryAdminRunStorage();
   const runStore = options.runStore || createAdminRunStore({ storage: runStorage });
   const recordStore = options.recordStore || createMemoryAdminLabRecordStore();
+  const finalCallBudgetLedger = options.finalCallBudgetLedger
+    || createMemoryAdminFinalCallBudgetLedger({ env });
   return createAdminModelLabComposedService({
     ...options,
     env,
     runStorage,
     runStore,
     recordStore,
+    finalCallBudgetLedger,
     requirePersistentStores: false,
   });
 }
@@ -90,9 +97,11 @@ function createAdminModelLabComposedService({
   deepSeekProvider,
   glmProvider,
   kimiProvider,
+  relayProvider,
   preparationProviders,
   openAIProvider,
   legacyLuaSemanticPacketFactory,
+  finalCallBudgetLedger,
   baseService,
   callDeepSeekJsonTaskImpl = callDeepSeekJsonTask,
   evaluationLoader = loadAdminLabEvaluationCorpus,
@@ -134,6 +143,22 @@ function createAdminModelLabComposedService({
       storage: resolvedRunStorage,
     });
     if (requirePersistentStores) assertPersistentDependency(resolvedRunStore, "run store");
+    let resolvedFinalCallBudgetLedger = finalCallBudgetLedger || null;
+    if (!resolvedFinalCallBudgetLedger && requirePersistentStores) {
+      try {
+        resolvedFinalCallBudgetLedger = createConfiguredAdminFinalCallBudgetLedger({
+          env,
+          fetchImpl,
+        });
+      } catch (error) {
+        if (error?.code !== "admin_final_budget_storage_unavailable") throw error;
+        // The base service remains inspectable, but every real final provider
+        // call fails closed before transport when the persistent ledger is absent.
+      }
+    }
+    if (requirePersistentStores && resolvedFinalCallBudgetLedger) {
+      assertPersistentDependency(resolvedFinalCallBudgetLedger, "final-call budget ledger");
+    }
     const resolvedDeepSeekProvider = deepSeekProvider || new ExistingDeepSeekProvider({
       env,
       invoke: createDeepSeekEvidencePreparationInvoke({
@@ -176,6 +201,17 @@ function createAdminModelLabComposedService({
           })
         : null
     );
+    const resolvedRelayProvider = relayProvider || (
+      hasServerSecret(env.RELAY_API_KEY) && hasServerSecret(serverRelayBaseUrl(env))
+        ? new CompatibleEvidencePreparationProvider({
+            providerId: "relay",
+            apiKey: env.RELAY_API_KEY,
+            baseUrl: serverRelayBaseUrl(env),
+            fetchImpl,
+            env,
+          })
+        : null
+    );
     const resolvedOpenAIProvider = openAIProvider || (
       readEnabled(env.ADMIN_OPENAI_ENABLED) && hasServerSecret(env.OPENAI_API_KEY)
         ? new OpenAIResponsesProvider({
@@ -192,6 +228,7 @@ function createAdminModelLabComposedService({
         : legacyLuaSemanticPacketFactory;
     resolvedBaseService = createAdminModelLabService({
       runStore: resolvedRunStore,
+      finalCallBudgetLedger: resolvedFinalCallBudgetLedger,
       deepSeekProvider: resolvedDeepSeekProvider,
       preparationProviders: {
         ...(preparationProviders && typeof preparationProviders === "object"
@@ -203,6 +240,7 @@ function createAdminModelLabComposedService({
         ...(resolvedDeepSeekFinalProvider ? { deepseek: resolvedDeepSeekFinalProvider } : {}),
         ...(typeof resolvedGlmProvider?.create === "function" ? { glm: resolvedGlmProvider } : {}),
         ...(typeof resolvedKimiProvider?.create === "function" ? { kimi: resolvedKimiProvider } : {}),
+        ...(typeof resolvedRelayProvider?.create === "function" ? { relay: resolvedRelayProvider } : {}),
       },
       legacyLuaSemanticPacketFactory:
         resolvedLegacyLuaSemanticPacketFactory,
@@ -746,6 +784,12 @@ function assertPersistentBaseService(service) {
   if (service?.persistence?.runStore !== true) {
     throw productionUnavailable("base service run store must be persistent");
   }
+  if (
+    service?.persistence?.finalCallBudgetConfigured === true
+    && service?.persistence?.finalCallBudgetPersistent !== true
+  ) {
+    throw productionUnavailable("base service final-call budget ledger must be persistent");
+  }
 }
 
 function matchCasesToRun(cases, run) {
@@ -802,6 +846,14 @@ function serverKimiBaseUrl(env) {
     env.ADMIN_KIMI_BASE_URL
     || env.KIMI_BASE_URL
     || "https://api.moonshot.cn/v1",
+  ).trim();
+}
+
+function serverRelayBaseUrl(env) {
+  return String(
+    env.ADMIN_RELAY_BASE_URL
+    || env.RELAY_BASE_URL
+    || "",
   ).trim();
 }
 

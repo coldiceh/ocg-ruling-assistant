@@ -1,3 +1,5 @@
+import { gunzipSync, gzipSync } from "node:zlib";
+
 import { createMemoryAdminRunStorage } from "./adminRunStore.mjs";
 import { parseAdminEvidenceSnapshot } from "./adminEvidenceSnapshot.mjs";
 
@@ -10,6 +12,13 @@ const DEFAULT_RUN_TTL_SECONDS = 30 * 24 * 60 * 60;
 const MAX_SNAPSHOT_CACHE_ENTRIES = 4;
 const SNAPSHOT_CANDIDATE_TTL_SECONDS = 300;
 const EVIDENCE_SNAPSHOT_REFERENCE_TYPE = "admin_evidence_snapshot_reference";
+const EVIDENCE_SNAPSHOT_GZIP_TYPE = "admin_evidence_snapshot_gzip";
+const EVIDENCE_SNAPSHOT_GZIP_SCHEMA_VERSION = 1;
+const EVIDENCE_SNAPSHOT_GZIP_ENCODING = "gzip+base64";
+const DEFAULT_MAX_SNAPSHOT_UNCOMPRESSED_BYTES = 32 * 1024 * 1024;
+const DEFAULT_MAX_SNAPSHOT_COMPRESSED_BYTES = 16 * 1024 * 1024;
+const MIN_SNAPSHOT_BYTE_LIMIT = 1024;
+const MAX_SNAPSHOT_BYTE_LIMIT = 256 * 1024 * 1024;
 
 const PREPARE_SNAPSHOT_SCRIPT = `
 -- admin-run-snapshot-prepare-v1
@@ -195,6 +204,7 @@ export function createRedisAdminRunStorage(options = {}) {
   const keyPrefix = normalizeKeyPrefix(
     options.keyPrefix !== undefined ? options.keyPrefix : env.ADMIN_RUN_REDIS_KEY_PREFIX,
   );
+  const snapshotLimits = normalizeSnapshotLimits({ env, options });
   const snapshotCache = new Map();
   const snapshotLoads = new Map();
 
@@ -262,6 +272,8 @@ export function createRedisAdminRunStorage(options = {}) {
       run.evidenceSnapshot = parseStoredEvidenceSnapshot(
         run.evidenceSnapshot,
         run.evidenceSnapshotId || run.evidenceSnapshot.snapshotId,
+        snapshotLimits,
+        { storedRecord: true },
       );
       run.evidenceSnapshotId ||= run.evidenceSnapshot.snapshotId;
       return cloneJson(run);
@@ -337,6 +349,7 @@ export function createRedisAdminRunStorage(options = {}) {
     const canonicalSnapshot = parseStoredEvidenceSnapshot(
       snapshot,
       snapshot?.snapshotId,
+      snapshotLimits,
     );
     await prepareEvidenceSnapshotRecord(snapshotKey, canonicalSnapshot);
     return canonicalSnapshot;
@@ -365,6 +378,8 @@ export function createRedisAdminRunStorage(options = {}) {
         const legacySnapshot = parseStoredEvidenceSnapshot(
           existing,
           detached.snapshot.snapshotId,
+          snapshotLimits,
+          { storedRecord: true },
         );
         if (serializeJson(legacySnapshot) === serializeJson(detached.snapshot)) {
           return legacySnapshot;
@@ -377,7 +392,8 @@ export function createRedisAdminRunStorage(options = {}) {
   async function prepareEvidenceSnapshotRecord(snapshotKey, record, {
     allowConflict = false,
   } = {}) {
-    const serializedSnapshot = serializeJson(record);
+    const storedRecord = encodeStoredEvidenceSnapshotRecord(record, snapshotLimits);
+    const serializedSnapshot = serializeJson(storedRecord);
     const command = [
       "EVAL",
       PREPARE_SNAPSHOT_SCRIPT,
@@ -397,13 +413,50 @@ export function createRedisAdminRunStorage(options = {}) {
         ) throw error;
         continue;
       }
-      if (result === "STAGED" || result === "UNCHANGED") return record;
+      if (result === "STAGED" || result === "UNCHANGED") return storedRecord;
       if (result === "CONFLICT") {
+        const equivalent = await readEquivalentStoredSnapshotRecord(snapshotKey, record);
+        if (equivalent) return equivalent;
         if (allowConflict) return null;
         throw storageCorrupt("stored evidence snapshot conflicts with canonical snapshot identity");
       }
       throw storageCorrupt(`unexpected evidence snapshot prepare result: ${String(result)}`);
     }
+  }
+
+  async function readEquivalentStoredSnapshotRecord(snapshotKey, expectedRecord) {
+    const existingRaw = await redisCommand(config, fetchImpl, timeoutMs, ["GET", snapshotKey]);
+    if (existingRaw === null || existingRaw === undefined) return null;
+    const existingRecord = parseStoredJson(existingRaw, "evidence snapshot");
+    if (isEvidenceSnapshotReference(expectedRecord)) {
+      if (!isEvidenceSnapshotReference(existingRecord)) return null;
+      const expectedReference = parseEvidenceSnapshotReference(
+        expectedRecord,
+        expectedRecord.snapshotId,
+      );
+      const existingReference = parseEvidenceSnapshotReference(
+        existingRecord,
+        expectedRecord.snapshotId,
+      );
+      return serializeJson(existingReference) === serializeJson(expectedReference)
+        ? existingRecord
+        : null;
+    }
+    if (isEvidenceSnapshotReference(existingRecord)) return null;
+    const expectedSnapshot = parseStoredEvidenceSnapshot(
+      expectedRecord,
+      expectedRecord?.snapshotId,
+      snapshotLimits,
+    );
+    const existingSnapshot = parseStoredEvidenceSnapshot(
+      existingRecord,
+      expectedSnapshot.snapshotId,
+      snapshotLimits,
+      { storedRecord: true },
+    );
+    return serializeJson(existingSnapshot) === serializeJson(expectedSnapshot)
+      ? existingRecord
+      : null;
   }
 
   async function prepareEvidenceSnapshotReference(reference, snapshot) {
@@ -418,7 +471,11 @@ export function createRedisAdminRunStorage(options = {}) {
         snapshot: canonicalSnapshot,
       };
     }
-    const canonicalSnapshot = parseStoredEvidenceSnapshot(snapshot, canonicalReference.snapshotId);
+    const canonicalSnapshot = parseStoredEvidenceSnapshot(
+      snapshot,
+      canonicalReference.snapshotId,
+      snapshotLimits,
+    );
     if (serializeJson(resolved.snapshot) !== serializeJson(canonicalSnapshot)) {
       throw storageCorrupt("referenced evidence snapshot conflicts with the fork snapshot");
     }
@@ -455,7 +512,12 @@ export function createRedisAdminRunStorage(options = {}) {
         }
         return resolveEvidenceSnapshotReference(nextReference, visited);
       }
-      const resolvedSnapshot = parseStoredEvidenceSnapshot(record, canonicalReference.snapshotId);
+      const resolvedSnapshot = parseStoredEvidenceSnapshot(
+        record,
+        canonicalReference.snapshotId,
+        snapshotLimits,
+        { storedRecord: true },
+      );
       if (resolvedSnapshot.contentSha256 !== canonicalReference.contentSha256) {
         throw storageCorrupt("stored evidence snapshot reference hash mismatch");
       }
@@ -537,7 +599,12 @@ export function createRedisAdminRunStorage(options = {}) {
           parseEvidenceSnapshotReference(record, snapshotId),
           new Set([snapshotKey]),
         ))?.snapshot
-        : parseStoredEvidenceSnapshot(record, snapshotId);
+        : parseStoredEvidenceSnapshot(
+          record,
+          snapshotId,
+          snapshotLimits,
+          { storedRecord: true },
+        );
       if (!snapshot) throw storageCorrupt("stored run evidence snapshot is missing");
       cacheEvidenceSnapshot(snapshotKey, snapshot);
       return snapshot;
@@ -554,6 +621,7 @@ export function createRedisAdminRunStorage(options = {}) {
     const canonicalSnapshot = parseStoredEvidenceSnapshot(
       snapshot,
       snapshot?.snapshotId,
+      snapshotLimits,
     );
     snapshotCache.delete(snapshotKey);
     snapshotCache.set(snapshotKey, cloneJson(canonicalSnapshot));
@@ -886,6 +954,39 @@ function normalizeKeyPrefix(value) {
   return prefix;
 }
 
+function normalizeSnapshotLimits({ env, options }) {
+  const maxUncompressedBytes = normalizeSnapshotByteLimit(
+    options.maxSnapshotUncompressedBytes !== undefined
+      ? options.maxSnapshotUncompressedBytes
+      : env.ADMIN_RUN_SNAPSHOT_MAX_UNCOMPRESSED_BYTES,
+    DEFAULT_MAX_SNAPSHOT_UNCOMPRESSED_BYTES,
+    "ADMIN_RUN_SNAPSHOT_MAX_UNCOMPRESSED_BYTES",
+  );
+  const maxCompressedBytes = normalizeSnapshotByteLimit(
+    options.maxSnapshotCompressedBytes !== undefined
+      ? options.maxSnapshotCompressedBytes
+      : env.ADMIN_RUN_SNAPSHOT_MAX_COMPRESSED_BYTES,
+    DEFAULT_MAX_SNAPSHOT_COMPRESSED_BYTES,
+    "ADMIN_RUN_SNAPSHOT_MAX_COMPRESSED_BYTES",
+  );
+  return Object.freeze({ maxUncompressedBytes, maxCompressedBytes });
+}
+
+function normalizeSnapshotByteLimit(value, fallback, name) {
+  if (value === null || value === undefined || String(value).trim() === "") return fallback;
+  const number = Number(value);
+  if (
+    !Number.isSafeInteger(number)
+    || number < MIN_SNAPSHOT_BYTE_LIMIT
+    || number > MAX_SNAPSHOT_BYTE_LIMIT
+  ) {
+    throw new RangeError(
+      `${name} must be between ${MIN_SNAPSHOT_BYTE_LIMIT} and ${MAX_SNAPSHOT_BYTE_LIMIT}`,
+    );
+  }
+  return number;
+}
+
 function serializeJson(value) {
   try {
     return JSON.stringify(value);
@@ -906,10 +1007,65 @@ function parseStoredJson(value, kind) {
   }
 }
 
-function parseStoredEvidenceSnapshot(value, expectedSnapshotId) {
+function encodeStoredEvidenceSnapshotRecord(value, limits) {
+  if (isEvidenceSnapshotReference(value)) return parseEvidenceSnapshotReference(
+    value,
+    value.snapshotId,
+  );
+  const snapshot = parseStoredEvidenceSnapshot(value, value?.snapshotId, limits);
+  const serialized = serializeJson(snapshot);
+  const input = Buffer.from(serialized, "utf8");
+  if (input.byteLength > limits.maxUncompressedBytes) {
+    throw snapshotTooLarge("uncompressed", input.byteLength, limits.maxUncompressedBytes);
+  }
+  const compressed = deterministicGzip(input);
+  if (compressed.byteLength > limits.maxCompressedBytes) {
+    throw snapshotTooLarge("compressed", compressed.byteLength, limits.maxCompressedBytes);
+  }
+  return {
+    recordType: EVIDENCE_SNAPSHOT_GZIP_TYPE,
+    schemaVersion: EVIDENCE_SNAPSHOT_GZIP_SCHEMA_VERSION,
+    encoding: EVIDENCE_SNAPSHOT_GZIP_ENCODING,
+    snapshotId: snapshot.snapshotId,
+    contentSha256: snapshot.contentSha256,
+    uncompressedBytes: input.byteLength,
+    compressedBytes: compressed.byteLength,
+    payload: compressed.toString("base64"),
+  };
+}
+
+function deterministicGzip(input) {
+  const compressed = gzipSync(input, {
+    level: 9,
+    // Gzip headers must not depend on wall time. Node currently emits mtime=0
+    // by default, but setting it explicitly documents and locks the invariant.
+    mtime: 0,
+  });
+  // RFC 1952 byte 9 is only an informational originating-OS field. Normalizing
+  // it prevents otherwise identical Windows and Linux encoders from producing
+  // different immutable Redis bytes.
+  compressed.writeUInt32LE(0, 4);
+  compressed[9] = 255;
+  return compressed;
+}
+
+function parseStoredEvidenceSnapshot(value, expectedSnapshotId, limits = {
+  maxUncompressedBytes: DEFAULT_MAX_SNAPSHOT_UNCOMPRESSED_BYTES,
+  maxCompressedBytes: DEFAULT_MAX_SNAPSHOT_COMPRESSED_BYTES,
+}, { storedRecord = false } = {}) {
   let parsed = value;
   if (typeof value === "string") {
+    const maximumStoredBytes = Math.max(
+      limits.maxUncompressedBytes,
+      Math.ceil(limits.maxCompressedBytes / 3) * 4 + 2048,
+    );
+    if (Buffer.byteLength(value, "utf8") > maximumStoredBytes) {
+      throw storageCorrupt("stored evidence snapshot exceeds its configured byte limit");
+    }
     parsed = parseStoredJson(value, "evidence snapshot");
+  }
+  if (isCompressedEvidenceSnapshotRecord(parsed)) {
+    parsed = decodeCompressedEvidenceSnapshotRecord(parsed, expectedSnapshotId, limits);
   }
   let snapshot;
   try {
@@ -920,7 +1076,91 @@ function parseStoredEvidenceSnapshot(value, expectedSnapshotId) {
   if (String(snapshot.snapshotId) !== String(expectedSnapshotId || "")) {
     throw storageCorrupt("stored evidence snapshot id mismatch");
   }
-  return cloneJson(snapshot);
+  const serialized = serializeJson(snapshot);
+  const canonicalBytes = Buffer.byteLength(serialized, "utf8");
+  if (canonicalBytes > limits.maxUncompressedBytes) {
+    if (storedRecord) {
+      throw storageCorrupt(
+        "stored evidence snapshot exceeds its configured uncompressed byte limit",
+      );
+    }
+    throw snapshotTooLarge("uncompressed", canonicalBytes, limits.maxUncompressedBytes);
+  }
+  return JSON.parse(serialized);
+}
+
+function isCompressedEvidenceSnapshotRecord(value) {
+  return Boolean(
+    value
+    && typeof value === "object"
+    && !Array.isArray(value)
+    && value.recordType === EVIDENCE_SNAPSHOT_GZIP_TYPE,
+  );
+}
+
+function decodeCompressedEvidenceSnapshotRecord(record, expectedSnapshotId, limits) {
+  const fail = () => storageCorrupt(
+    "compressed evidence snapshot failed its content integrity check",
+  );
+  try {
+    if (
+      record.schemaVersion !== EVIDENCE_SNAPSHOT_GZIP_SCHEMA_VERSION
+      || record.encoding !== EVIDENCE_SNAPSHOT_GZIP_ENCODING
+      || String(record.snapshotId || "") !== String(expectedSnapshotId || "")
+      || !/^[a-f0-9]{64}$/u.test(String(record.contentSha256 || ""))
+    ) throw fail();
+    const uncompressedBytes = strictPositiveInteger(record.uncompressedBytes);
+    const compressedBytes = strictPositiveInteger(record.compressedBytes);
+    if (
+      uncompressedBytes > limits.maxUncompressedBytes
+      || compressedBytes > limits.maxCompressedBytes
+    ) throw fail();
+    const payload = String(record.payload || "");
+    if (
+      payload.length === 0
+      || payload.length > Math.ceil(limits.maxCompressedBytes / 3) * 4 + 4
+      || !isCanonicalBase64(payload)
+    ) throw fail();
+    const compressed = Buffer.from(payload, "base64");
+    if (compressed.byteLength !== compressedBytes) throw fail();
+    const uncompressed = gunzipSync(compressed, {
+      maxOutputLength: limits.maxUncompressedBytes,
+    });
+    if (uncompressed.byteLength !== uncompressedBytes) throw fail();
+    const decoded = parseStoredJson(uncompressed.toString("utf8"), "compressed evidence snapshot");
+    if (
+      String(decoded.snapshotId || "") !== String(record.snapshotId)
+      || String(decoded.contentSha256 || "") !== String(record.contentSha256)
+    ) throw fail();
+    return decoded;
+  } catch (error) {
+    if (error?.code === "admin_run_storage_corrupt") throw error;
+    throw fail();
+  }
+}
+
+function strictPositiveInteger(value) {
+  const number = Number(value);
+  return Number.isSafeInteger(number) && number > 0 ? number : NaN;
+}
+
+function isCanonicalBase64(value) {
+  if (!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/u.test(value)) {
+    return false;
+  }
+  try {
+    return Buffer.from(value, "base64").toString("base64") === value;
+  } catch {
+    return false;
+  }
+}
+
+function snapshotTooLarge(kind, actual, maximum) {
+  const error = new RangeError(
+    `admin run evidence snapshot ${kind} size ${actual} exceeds ${maximum} bytes`,
+  );
+  error.code = "admin_run_snapshot_too_large";
+  return error;
 }
 
 function isAmbiguousRedisWriteError(error) {

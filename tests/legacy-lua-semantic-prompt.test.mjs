@@ -38,7 +38,9 @@ function legacyPacket() {
             predicateApi: "Card.IsAbleToHand",
             atomicOperation: "RETURN_TO_HAND",
             requiredMinimum: 1,
-            dependencyGraph: { nodes: ["CARD_CAN_RETURN_TO_HAND"] },
+            dependencyGraph: {
+              dependencies: ["CARD_CAN_RETURN_TO_HAND"],
+            },
           }],
           operationApis: ["Duel.SpecialSummon", "Duel.SendtoHand"],
           requiredLegacyApis: ["Card.IsAbleToHand"],
@@ -67,6 +69,8 @@ test("legacy Lua packet is visible as a non-authoritative operation hint", () =>
   assert.match(result.prompt, /CARD_CAN_RETURN_TO_HAND/u);
   assert.match(result.prompt, /正式 verdict 永远是 UNKNOWN/u);
   assert.match(result.prompt, /candidateVerdict 只描述旧脚本/u);
+  assert.match(result.prompt, /requiredMinimum 无法达到/u);
+  assert.match(result.prompt, /不得误解为可以发动后空处理/u);
   assert.match(result.prompt, /可引用 evidence id 列表：\(none\)/u);
   assert.doesNotMatch(
     result.prompt,

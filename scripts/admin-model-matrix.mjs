@@ -3,46 +3,49 @@ import { readFile, writeFile } from "node:fs/promises";
 import { createInterface } from "node:readline/promises";
 import { fileURLToPath } from "node:url";
 
-const TERMINAL_STATUSES = new Set(["CANCELLED", "SUCCEEDED", "FAILED"]);
+import { parseEvidenceSnapshot } from "../backend/adminEvidenceSnapshot.mjs";
+import {
+  estimateRelayModelCost,
+  getRelayModelPricingConfig,
+} from "../backend/modelPricing.mjs";
 
-export const SOURCE_CONFIGURATION = Object.freeze({
+const TERMINAL_STATUSES = new Set(["CANCELLED", "SUCCEEDED", "FAILED"]);
+const DEFAULT_MAX_FINAL_REQUESTS = 12;
+const DEFAULT_MAX_ESTIMATED_COST_CNY = 10;
+const DEFAULT_ESTIMATED_INPUT_TOKENS_PER_FINAL_REQUEST = 32_000;
+const DEFAULT_ESTIMATED_OUTPUT_TOKENS_PER_FINAL_REQUEST = 8_192;
+// This is a deliberately configurable budget-conversion factor, not a claim
+// about a live foreign-exchange quote.
+const DEFAULT_BUDGET_USD_TO_CNY = 7.5;
+const RELAY_SCREENSHOT_PRICING = getRelayModelPricingConfig();
+
+export const EVIDENCE_PREPARATION_CONFIGURATION = Object.freeze({
   provider: "deepseek",
   model: "deepseek-v4-flash",
   reasoningMode: "standard",
   reasoningEffort: "none",
 });
 
+export const SOURCE_CONFIGURATION = Object.freeze({
+  provider: "relay",
+  model: "relay-gpt-5.6-sol",
+  reasoningMode: "pro",
+  reasoningEffort: "high",
+});
+
 export const DEFAULT_MATRIX_CONFIGURATIONS = Object.freeze([
   SOURCE_CONFIGURATION,
   Object.freeze({
-    provider: "deepseek",
-    model: "deepseek-v4-flash",
+    provider: "relay",
+    model: "relay-gpt-5.6-terra",
     reasoningMode: "pro",
     reasoningEffort: "high",
   }),
   Object.freeze({
-    provider: "glm",
-    model: "glm-5.2",
-    reasoningMode: "standard",
-    reasoningEffort: "none",
-  }),
-  Object.freeze({
-    provider: "glm",
-    model: "glm-5.2",
+    provider: "relay",
+    model: "relay-gpt-5.6-luna",
     reasoningMode: "pro",
     reasoningEffort: "high",
-  }),
-  Object.freeze({
-    provider: "kimi",
-    model: "kimi-k2.6",
-    reasoningMode: "standard",
-    reasoningEffort: "none",
-  }),
-  Object.freeze({
-    provider: "kimi",
-    model: "kimi-k2.6",
-    reasoningMode: "pro",
-    reasoningEffort: "none",
   }),
 ]);
 
@@ -56,16 +59,38 @@ export async function runAdminModelMatrix({
   password,
   question,
   sourceRunId: requestedSourceRunId,
+  sourceConfiguration: requestedSourceConfiguration,
   configurations = DEFAULT_MATRIX_CONFIGURATIONS,
   fetchImpl = globalThis.fetch,
   pollIntervalMs = 1_500,
   runTimeoutMs = 10 * 60_000,
   concurrency = 1,
+  maxConcurrency = 1,
+  maxFinalRequests = DEFAULT_MAX_FINAL_REQUESTS,
+  maxEstimatedCostCny = DEFAULT_MAX_ESTIMATED_COST_CNY,
+  estimatedCnyPerFinalRequest,
+  estimatedInputTokensPerFinalRequest = DEFAULT_ESTIMATED_INPUT_TOKENS_PER_FINAL_REQUEST,
+  estimatedOutputTokensPerFinalRequest = DEFAULT_ESTIMATED_OUTPUT_TOKENS_PER_FINAL_REQUEST,
+  budgetUsdToCny = DEFAULT_BUDGET_USD_TO_CNY,
   now = () => new Date(),
   sleep = defaultSleep,
 } = {}) {
   const normalizedQuestion = requiredText(question, "question");
   const normalizedConfigurations = dedupeConfigurations(configurations);
+  if (normalizedConfigurations.length === 0) throw new Error("at least one model configuration is required");
+  const sourceConfiguration = normalizeConfiguration(
+    requestedSourceConfiguration || normalizedConfigurations[0],
+  );
+  if (!normalizedConfigurations.some((item) => (
+    configurationKey(item) === configurationKey(sourceConfiguration)
+  ))) {
+    throw new Error("sourceConfiguration must be included in configurations");
+  }
+  const safeConcurrency = positiveInteger(concurrency, "concurrency");
+  const safeMaxConcurrency = positiveInteger(maxConcurrency, "maxConcurrency");
+  if (safeConcurrency > safeMaxConcurrency) {
+    throw new Error(`concurrency ${safeConcurrency} exceeds the hard limit ${safeMaxConcurrency}`);
+  }
   const startedAt = now();
   const client = createAdminModelLabHttpClient({
     baseUrl,
@@ -78,29 +103,63 @@ export async function runAdminModelMatrix({
   const capabilities = await client.capabilities();
   assertRequiredFeatures(capabilities);
   const availableModels = collectAvailableModels(capabilities);
-  const sourceAvailability = validateConfiguration(SOURCE_CONFIGURATION, availableModels);
+  const sourceAvailability = validateConfiguration(sourceConfiguration, availableModels);
   if (!sourceAvailability.ok) {
-    throw new Error(`DeepSeek Flash source configuration is unavailable: ${sourceAvailability.reason}`);
+    throw new Error(`Source configuration is unavailable: ${sourceAvailability.reason}`);
+  }
+
+  const sourceKey = configurationKey(sourceConfiguration);
+  const availableConfigurations = normalizedConfigurations.filter(
+    (configuration) => validateConfiguration(configuration, availableModels).ok,
+  );
+  const plannedFinalRequests = availableConfigurations.filter((configuration) => (
+    !requestedSourceRunId || configurationKey(configuration) !== sourceKey
+  )).length;
+  const requestLimit = positiveInteger(maxFinalRequests, "maxFinalRequests");
+  if (plannedFinalRequests > requestLimit) {
+    throw new Error(`planned final requests ${plannedFinalRequests} exceed the hard limit ${requestLimit}`);
+  }
+  const costLimit = nonNegativeNumber(maxEstimatedCostCny, "maxEstimatedCostCny");
+  const plannedCost = estimatePlannedFinalCost({
+    configurations: availableConfigurations.filter((configuration) => (
+      !requestedSourceRunId || configurationKey(configuration) !== sourceKey
+    )),
+    estimatedCnyPerFinalRequest,
+    estimatedInputTokensPerFinalRequest,
+    estimatedOutputTokensPerFinalRequest,
+    budgetUsdToCny,
+  });
+  const plannedEstimatedCostCny = plannedCost.totalCny;
+  if (plannedEstimatedCostCny > costLimit) {
+    throw new Error(
+      `planned estimated cost CNY ${plannedEstimatedCostCny} exceeds the hard limit ${costLimit}`,
+    );
   }
 
   let sourceRunId = optionalText(requestedSourceRunId);
   let sourceRun;
+  let sourceAudit = { events: [], error: null };
   if (sourceRunId) {
     sourceRun = extractRun(await client.getRun(sourceRunId));
     if (!sourceRun || !TERMINAL_STATUSES.has(normalizeStatus(sourceRun.status))) {
       throw new Error(`Source run ${sourceRunId} is missing or not terminal`);
     }
-    if (!hasFrozenEvidence(sourceRun)) {
-      throw new Error(`Source run ${sourceRunId} does not contain frozen evidence`);
-    }
+    sourceAudit = await readRunAudit(client, sourceRunId);
+    validateReusableSourceRun({
+      run: sourceRun,
+      events: sourceAudit.events,
+      question: normalizedQuestion,
+      sourceConfiguration,
+    });
   } else {
     const sourceCreated = await client.createRun({
       question: normalizedQuestion,
-      preparationProvider: SOURCE_CONFIGURATION.provider,
-      preparationModel: SOURCE_CONFIGURATION.model,
-      preparationReasoningMode: SOURCE_CONFIGURATION.reasoningMode,
-      preparationReasoningEffort: SOURCE_CONFIGURATION.reasoningEffort,
-      ...SOURCE_CONFIGURATION,
+      preparationProvider: EVIDENCE_PREPARATION_CONFIGURATION.provider,
+      preparationModel: EVIDENCE_PREPARATION_CONFIGURATION.model,
+      preparationReasoningMode: EVIDENCE_PREPARATION_CONFIGURATION.reasoningMode,
+      preparationReasoningEffort: EVIDENCE_PREPARATION_CONFIGURATION.reasoningEffort,
+      ...sourceConfiguration,
+      finalAttemptPolicy: "single",
     });
     sourceRunId = extractRunId(sourceCreated);
     if (!sourceRunId) throw new Error("Admin lab create did not return a runId");
@@ -111,17 +170,20 @@ export async function runAdminModelMatrix({
       runTimeoutMs,
       sleep,
     });
+    sourceAudit = await readRunAudit(client, sourceRunId);
   }
   const sourceResult = summarizeRun({
     role: "source",
-    configuration: SOURCE_CONFIGURATION,
+    configuration: sourceConfiguration,
     run: sourceRun,
+    events: sourceAudit.events,
+    auditReadError: sourceAudit.error,
   });
 
   const forkConfigurations = normalizedConfigurations.filter((configuration) => (
-    configurationKey(configuration) !== configurationKey(SOURCE_CONFIGURATION)
+    configurationKey(configuration) !== sourceKey
   ));
-  const forkResults = await mapLimit(forkConfigurations, concurrency, async (configuration, index) => {
+  const forkResults = await mapLimit(forkConfigurations, safeConcurrency, async (configuration, index) => {
     const availability = validateConfiguration(configuration, availableModels);
     if (!availability.ok) {
       return summarizeSkipped(configuration, availability.reason);
@@ -142,7 +204,14 @@ export async function runAdminModelMatrix({
         runTimeoutMs,
         sleep,
       });
-      return summarizeRun({ role: "fork", configuration, run });
+      const audit = await readRunAudit(client, runId);
+      return summarizeRun({
+        role: "fork",
+        configuration,
+        run,
+        events: audit.events,
+        auditReadError: audit.error,
+      });
     } catch (error) {
       return summarizeFailure(configuration, error);
     }
@@ -156,11 +225,198 @@ export async function runAdminModelMatrix({
     startedAt: startedAt.toISOString(),
     endedAt: endedAt.toISOString(),
     durationMs: Math.max(0, endedAt.getTime() - startedAt.getTime()),
+    guard: {
+      finalAttemptPolicy: "single",
+      concurrency: safeConcurrency,
+      maxConcurrency: safeMaxConcurrency,
+      plannedFinalRequests,
+      maxFinalRequests: requestLimit,
+      ...plannedCost.guard,
+      plannedEstimatedCostCny,
+      maxEstimatedCostCny: costLimit,
+    },
     availableModels: [...availableModels.values()].map((entry) => ({
       provider: entry.provider,
       model: entry.model,
     })),
     results: [sourceResult, ...forkResults],
+  };
+}
+
+/**
+ * Runs several questions sequentially under one preflight request/cost guard.
+ * This is the paid pilot boundary: it never retries a case and delegates each
+ * question to the single-attempt frozen-evidence matrix above.
+ */
+export async function runAdminModelMatrixBatch({
+  questions,
+  configurations = DEFAULT_MATRIX_CONFIGURATIONS,
+  maxFinalRequests = DEFAULT_MAX_FINAL_REQUESTS,
+  maxEstimatedCostCny = DEFAULT_MAX_ESTIMATED_COST_CNY,
+  estimatedCnyPerFinalRequest,
+  estimatedInputTokensPerFinalRequest = DEFAULT_ESTIMATED_INPUT_TOKENS_PER_FINAL_REQUEST,
+  estimatedOutputTokensPerFinalRequest = DEFAULT_ESTIMATED_OUTPUT_TOKENS_PER_FINAL_REQUEST,
+  budgetUsdToCny = DEFAULT_BUDGET_USD_TO_CNY,
+  concurrency = 1,
+  now = () => new Date(),
+  ...options
+} = {}) {
+  const cases = normalizeQuestionCases(questions);
+  const normalizedConfigurations = dedupeConfigurations(configurations);
+  if (normalizedConfigurations.length === 0) throw new Error("at least one model configuration is required");
+  const requestLimit = positiveInteger(maxFinalRequests, "maxFinalRequests");
+  const plannedFinalRequests = cases.length * normalizedConfigurations.length;
+  if (plannedFinalRequests > requestLimit) {
+    throw new Error(`planned final requests ${plannedFinalRequests} exceed the hard limit ${requestLimit}`);
+  }
+  const costLimit = nonNegativeNumber(maxEstimatedCostCny, "maxEstimatedCostCny");
+  const plannedCost = estimatePlannedFinalCost({
+    configurations: normalizedConfigurations,
+    repetitions: cases.length,
+    estimatedCnyPerFinalRequest,
+    estimatedInputTokensPerFinalRequest,
+    estimatedOutputTokensPerFinalRequest,
+    budgetUsdToCny,
+  });
+  const plannedEstimatedCostCny = plannedCost.totalCny;
+  if (plannedEstimatedCostCny > costLimit) {
+    throw new Error(
+      `planned estimated cost CNY ${plannedEstimatedCostCny} exceeds the hard limit ${costLimit}`,
+    );
+  }
+  if (positiveInteger(concurrency, "concurrency") !== 1) {
+    throw new Error("paid matrix batch requires concurrency 1");
+  }
+
+  const startedAt = now();
+  const reports = [];
+  for (const item of cases) {
+    const report = await runAdminModelMatrix({
+      ...options,
+      question: item.question,
+      configurations: normalizedConfigurations,
+      concurrency: 1,
+      maxConcurrency: 1,
+      maxFinalRequests: normalizedConfigurations.length,
+      maxEstimatedCostCny: costLimit,
+      estimatedCnyPerFinalRequest,
+      estimatedInputTokensPerFinalRequest,
+      estimatedOutputTokensPerFinalRequest,
+      budgetUsdToCny,
+      now,
+    });
+    reports.push({ caseId: item.caseId, ...report });
+  }
+  const endedAt = now();
+  return {
+    schemaVersion: 1,
+    startedAt: startedAt.toISOString(),
+    endedAt: endedAt.toISOString(),
+    durationMs: Math.max(0, endedAt.getTime() - startedAt.getTime()),
+    guard: {
+      finalAttemptPolicy: "single",
+      concurrency: 1,
+      plannedFinalRequests,
+      maxFinalRequests: requestLimit,
+      ...plannedCost.guard,
+      plannedEstimatedCostCny,
+      maxEstimatedCostCny: costLimit,
+    },
+    reports,
+  };
+}
+
+function estimatePlannedFinalCost({
+  configurations,
+  repetitions = 1,
+  estimatedCnyPerFinalRequest,
+  estimatedInputTokensPerFinalRequest,
+  estimatedOutputTokensPerFinalRequest,
+  budgetUsdToCny,
+} = {}) {
+  const count = positiveInteger(repetitions, "repetitions");
+  const values = Array.isArray(configurations) ? configurations : [];
+  const hasUniformOverride = estimatedCnyPerFinalRequest !== undefined
+    && estimatedCnyPerFinalRequest !== null
+    && estimatedCnyPerFinalRequest !== "";
+  if (hasUniformOverride) {
+    const uniformCny = nonNegativeNumber(
+      estimatedCnyPerFinalRequest,
+      "estimatedCnyPerFinalRequest",
+    );
+    const estimates = values.map((configuration) => ({
+      model: configuration.model,
+      requests: count,
+      estimatedCnyPerRequest: uniformCny,
+      estimatedSubtotalCny: roundMoney(uniformCny * count),
+    }));
+    return {
+      totalCny: roundMoney(uniformCny * values.length * count),
+      guard: {
+        costEstimateMode: "explicit_uniform_override",
+        estimatedCnyPerFinalRequest: uniformCny,
+        requestEstimates: estimates,
+      },
+    };
+  }
+
+  const inputTokens = nonNegativeInteger(
+    estimatedInputTokensPerFinalRequest,
+    "estimatedInputTokensPerFinalRequest",
+  );
+  const outputTokens = nonNegativeInteger(
+    estimatedOutputTokensPerFinalRequest,
+    "estimatedOutputTokensPerFinalRequest",
+  );
+  const exchange = positiveNumber(budgetUsdToCny, "budgetUsdToCny");
+  const estimates = values.map((configuration) => {
+    const canonicalModel = configuration.model.replace(/^relay-/u, "");
+    const rates = RELAY_SCREENSHOT_PRICING.models[canonicalModel];
+    if (!rates) {
+      throw new Error(
+        `No default pilot pricing for ${configuration.model}; provide --estimated-cny-per-request explicitly`,
+      );
+    }
+    const cost = estimateRelayModelCost({
+      model: configuration.model,
+      usage: {
+        input_tokens: inputTokens,
+        output_tokens: outputTokens,
+        total_tokens: inputTokens + outputTokens,
+      },
+      usdToCnyRate: exchange,
+      exchangeRateVersion: "matrix-budget-factor-v1",
+    });
+    if (!Number.isFinite(cost.totalCostCny)) {
+      throw new Error(`Default pilot pricing could not estimate ${configuration.model}`);
+    }
+    const estimatedUsdPerRequest = cost.totalCostUsd;
+    const estimatedCnyPerRequest = cost.totalCostCny;
+    return {
+      model: configuration.model,
+      requests: count,
+      estimatedInputTokens: inputTokens,
+      estimatedOutputTokens: outputTokens,
+      inputUsdPerMillionTokens: rates.inputUsdPerMillion,
+      cachedInputUsdPerMillionTokens: rates.cachedInputUsdPerMillion,
+      outputUsdPerMillionTokens: rates.outputUsdPerMillion,
+      estimatedUsdPerRequest,
+      estimatedCnyPerRequest,
+      estimatedSubtotalCny: roundMoney(estimatedCnyPerRequest * count),
+    };
+  });
+  return {
+    totalCny: roundMoney(estimates.reduce((sum, item) => sum + item.estimatedSubtotalCny, 0)),
+    guard: {
+      costEstimateMode: "relay_screenshot_token_envelope",
+      estimatedCnyPerFinalRequest: null,
+      pricingSource: RELAY_SCREENSHOT_PRICING.pricingVersion,
+      pricingVerified: RELAY_SCREENSHOT_PRICING.source.providerVerified,
+      estimatedInputTokensPerFinalRequest: inputTokens,
+      estimatedOutputTokensPerFinalRequest: outputTokens,
+      budgetUsdToCny: exchange,
+      requestEstimates: estimates,
+    },
   };
 }
 
@@ -220,6 +476,37 @@ export function createAdminModelLabHttpClient({
     return payload?.data ?? payload;
   }
 
+  async function runEvents(runId) {
+    const url = new URL("/api/admin-model-lab", root);
+    url.searchParams.set("action", "events");
+    url.searchParams.set("runId", requiredText(runId, "runId"));
+    url.searchParams.set("afterSequence", "0");
+    url.searchParams.set("limit", "1000");
+    const response = await fetchImpl(url, {
+      method: "GET",
+      cache: "no-store",
+      headers: {
+        accept: "text/event-stream",
+        origin: requestOrigin,
+        ...(cookie ? { cookie } : {}),
+      },
+    });
+    const text = await response.text();
+    if (!response.ok) {
+      let payload = {};
+      try {
+        payload = JSON.parse(text);
+      } catch {
+        // Preserve a bounded generic error when an intermediary did not return JSON.
+      }
+      const error = new Error(String(payload?.message || payload?.error || `HTTP ${response.status}`));
+      error.status = response.status;
+      error.code = payload?.error || "admin_model_lab_events_failed";
+      throw error;
+    }
+    return parseSseEvents(text);
+  }
+
   return Object.freeze({
     async login() {
       const { payload, response } = await request("/api/admin-auth", {
@@ -241,6 +528,7 @@ export function createAdminModelLabHttpClient({
       body: { runId },
     }),
     getRun: (runId) => labRequest("run", { query: { runId } }),
+    getRunEvents: runEvents,
   });
 }
 
@@ -312,6 +600,26 @@ export function formatMatrixMarkdown(report) {
   return `${lines.join("\n")}\n`;
 }
 
+export function formatMatrixBatchMarkdown(report) {
+  const lines = [
+    "# 管理实验室四题模型矩阵",
+    "",
+    `- 题目数：${Number(report?.reports?.length || 0)}`,
+    `- 计划最终请求：${Number(report?.guard?.plannedFinalRequests || 0)}`,
+    `- 计划费用上界：¥${Number(report?.guard?.plannedEstimatedCostCny || 0).toFixed(6)}`,
+    `- 总耗时：${formatDuration(report?.durationMs)}`,
+  ];
+  for (const item of report?.reports || []) {
+    lines.push(
+      "",
+      `## ${escapeMarkdown(item.caseId)}`,
+      "",
+      formatMatrixMarkdown(item).replace(/^# 管理实验室模型矩阵\r?\n+/u, "").trimEnd(),
+    );
+  }
+  return `${lines.join("\n")}\n`;
+}
+
 export function parseMatrixArguments(argv = []) {
   const options = { configurations: [], format: "json" };
   for (let index = 0; index < argv.length; index += 1) {
@@ -323,6 +631,7 @@ export function parseMatrixArguments(argv = []) {
     };
     if (argument === "--question") options.question = take();
     else if (argument === "--question-file") options.questionFile = take();
+    else if (argument === "--cases-file") options.casesFile = take();
     else if (argument === "--source-run-id") options.sourceRunId = take();
     else if (argument === "--base-url") options.baseUrl = take();
     else if (argument === "--origin") options.origin = take();
@@ -333,6 +642,12 @@ export function parseMatrixArguments(argv = []) {
     else if (argument === "--poll-ms") options.pollIntervalMs = positiveInteger(take(), "poll-ms");
     else if (argument === "--timeout-ms") options.runTimeoutMs = positiveInteger(take(), "timeout-ms");
     else if (argument === "--concurrency") options.concurrency = positiveInteger(take(), "concurrency");
+    else if (argument === "--max-final-requests") options.maxFinalRequests = positiveInteger(take(), "max-final-requests");
+    else if (argument === "--max-cost-cny") options.maxEstimatedCostCny = nonNegativeNumber(take(), "max-cost-cny");
+    else if (argument === "--estimated-cny-per-request") options.estimatedCnyPerFinalRequest = nonNegativeNumber(take(), "estimated-cny-per-request");
+    else if (argument === "--estimated-input-tokens") options.estimatedInputTokensPerFinalRequest = nonNegativeInteger(take(), "estimated-input-tokens");
+    else if (argument === "--estimated-output-tokens") options.estimatedOutputTokensPerFinalRequest = nonNegativeInteger(take(), "estimated-output-tokens");
+    else if (argument === "--budget-usd-to-cny") options.budgetUsdToCny = positiveNumber(take(), "budget-usd-to-cny");
     else if (argument === "--help" || argument === "-h") options.help = true;
     else throw new Error(`Unknown argument: ${argument}`);
   }
@@ -343,35 +658,70 @@ export function parseMatrixArguments(argv = []) {
   return options;
 }
 
-export async function main(argv = process.argv.slice(2), env = process.env) {
+export async function main(argv = process.argv.slice(2), env = process.env, dependencies = {}) {
   const options = parseMatrixArguments(argv);
+  const readFileImpl = dependencies.readFileImpl || readFile;
+  const writeFileImpl = dependencies.writeFileImpl || writeFile;
+  const fetchImpl = dependencies.fetchImpl || globalThis.fetch;
+  const stdout = dependencies.stdout || process.stdout;
   if (options.help) {
-    process.stdout.write(usageText());
+    stdout.write(usageText());
     return 0;
   }
-  const password = env.ADMIN_MODEL_LAB_PASSWORD || env.ADMIN_PASSWORD || await promptSecret("管理密码：");
+  if (options.casesFile && (options.question || options.questionFile || options.sourceRunId)) {
+    throw new Error("--cases-file cannot be combined with --question, --question-file or --source-run-id");
+  }
+  if (options.question && options.questionFile) {
+    throw new Error("--question and --question-file are mutually exclusive");
+  }
+  const password = env.ADMIN_MODEL_LAB_PASSWORD
+    || env.ADMIN_PASSWORD
+    || await (dependencies.promptSecretImpl || promptSecret)("管理密码：");
   const question = options.question || (options.questionFile
-    ? await readFile(options.questionFile, "utf8")
+    ? await readFileImpl(options.questionFile, "utf8")
     : "");
   let configurations = options.configurations;
   if (options.configurationFile) {
-    const parsed = JSON.parse(await readFile(options.configurationFile, "utf8"));
+    const parsed = JSON.parse(await readFileImpl(options.configurationFile, "utf8"));
     if (!Array.isArray(parsed)) throw new Error("--config-file must contain a JSON array");
     configurations = parsed;
   }
-  const report = await runAdminModelMatrix({
+  const sharedOptions = {
     ...options,
     baseUrl: options.baseUrl || env.ADMIN_MODEL_LAB_BASE_URL,
     origin: options.origin || env.ADMIN_MODEL_LAB_ORIGIN,
-    question,
     password,
+    fetchImpl,
+    maxFinalRequests: options.maxFinalRequests
+      ?? env.ADMIN_MATRIX_MAX_FINAL_REQUESTS
+      ?? DEFAULT_MAX_FINAL_REQUESTS,
+    maxEstimatedCostCny: options.maxEstimatedCostCny
+      ?? env.ADMIN_MATRIX_MAX_ESTIMATED_COST_CNY
+      ?? DEFAULT_MAX_ESTIMATED_COST_CNY,
+    estimatedCnyPerFinalRequest: options.estimatedCnyPerFinalRequest
+      ?? optionalNumber(env.RELAY_ESTIMATED_CNY_PER_CALL),
+    estimatedInputTokensPerFinalRequest: options.estimatedInputTokensPerFinalRequest
+      ?? env.ADMIN_MATRIX_ESTIMATED_INPUT_TOKENS
+      ?? DEFAULT_ESTIMATED_INPUT_TOKENS_PER_FINAL_REQUEST,
+    estimatedOutputTokensPerFinalRequest: options.estimatedOutputTokensPerFinalRequest
+      ?? env.ADMIN_MATRIX_ESTIMATED_OUTPUT_TOKENS
+      ?? DEFAULT_ESTIMATED_OUTPUT_TOKENS_PER_FINAL_REQUEST,
+    budgetUsdToCny: options.budgetUsdToCny
+      ?? env.ADMIN_MODEL_LAB_USD_TO_CNY_RATE
+      ?? DEFAULT_BUDGET_USD_TO_CNY,
     ...(configurations ? { configurations } : {}),
-  });
+  };
+  const report = options.casesFile
+    ? await runAdminModelMatrixBatch({
+        ...sharedOptions,
+        questions: parseCasesFile(await readFileImpl(options.casesFile, "utf8")),
+      })
+    : await runAdminModelMatrix({ ...sharedOptions, question });
   const output = options.format === "markdown"
-    ? formatMatrixMarkdown(report)
+    ? (options.casesFile ? formatMatrixBatchMarkdown(report) : formatMatrixMarkdown(report))
     : `${JSON.stringify(report, null, 2)}\n`;
-  if (options.output) await writeFile(options.output, output, "utf8");
-  else process.stdout.write(output);
+  if (options.output) await writeFileImpl(options.output, output, "utf8");
+  else stdout.write(output);
   return 0;
 }
 
@@ -397,25 +747,154 @@ async function executeAndWait({ client, runId, pollIntervalMs, runTimeoutMs, sle
   throw error;
 }
 
-function summarizeRun({ role, configuration, run }) {
+async function readRunAudit(client, runId) {
+  try {
+    return {
+      events: await client.getRunEvents(runId),
+      error: null,
+    };
+  } catch (error) {
+    return {
+      events: [],
+      error: normalizeError(error),
+    };
+  }
+}
+
+export function validateReusableSourceRun({
+  run,
+  events = [],
+  question,
+  sourceConfiguration,
+} = {}) {
+  const normalizedSource = normalizeConfiguration(sourceConfiguration || SOURCE_CONFIGURATION);
+  if (configurationKey(normalizedSource) !== configurationKey(SOURCE_CONFIGURATION)) {
+    throw sourceRunError("source configuration must be relay GPT-5.6 Sol / pro / high");
+  }
+  if (!run || !TERMINAL_STATUSES.has(normalizeStatus(run.status))) {
+    throw sourceRunError("source run must be terminal");
+  }
+  const rawSnapshot = fullEvidenceSnapshot(run);
+  if (!rawSnapshot) throw sourceRunError("source run does not contain a full frozen evidence snapshot");
+  let snapshot;
+  try {
+    snapshot = parseEvidenceSnapshot(rawSnapshot);
+  } catch (error) {
+    throw sourceRunError(`source evidence snapshot integrity check failed: ${error?.message || error}`);
+  }
+  const expectedQuestion = requiredText(question, "question");
+  if (String(snapshot.question || "").trim() !== expectedQuestion) {
+    throw sourceRunError("source evidence question does not match the requested question");
+  }
+
+  const profile = run.executionProfile || {};
+  const finalProfile = profile.finalRuling || {};
+  const expectedCanonicalModel = SOURCE_CONFIGURATION.model.replace(/^relay-/u, "");
+  if (
+    profile.status !== "evidence_frozen"
+    || finalProfile.provider !== SOURCE_CONFIGURATION.provider
+    || finalProfile.requestedModel !== SOURCE_CONFIGURATION.model
+    || finalProfile.model !== expectedCanonicalModel
+    || finalProfile.reasoningMode !== SOURCE_CONFIGURATION.reasoningMode
+    || finalProfile.reasoningEffort !== SOURCE_CONFIGURATION.reasoningEffort
+    || finalProfile.finalAttemptPolicy !== "single"
+  ) {
+    throw sourceRunError("source run execution profile is not relay GPT-5.6 Sol / pro / high / single");
+  }
+  if (String(profile.evidenceSnapshotId || "") !== snapshot.snapshotId) {
+    throw sourceRunError("source execution profile is not bound to the frozen evidence snapshot");
+  }
+  for (const [label, value] of [
+    ["run evidenceSnapshotId", run.evidenceSnapshotId],
+    ["result evidenceSnapshotId", run.result?.evidenceSnapshotId],
+    ["fork sourceEvidenceSnapshotId", run.metadata?.fork?.sourceEvidenceSnapshotId],
+  ]) {
+    if (value !== undefined && value !== null && String(value) !== snapshot.snapshotId) {
+      throw sourceRunError(`${label} does not match the frozen evidence snapshot`);
+    }
+  }
+  for (const [label, value] of [
+    ["run evidenceSnapshotSha256", run.evidenceSnapshotSha256],
+    ["fork evidenceSnapshotSha256", run.metadata?.fork?.evidenceSnapshotSha256],
+  ]) {
+    if (value !== undefined && value !== null && String(value) !== snapshot.contentSha256) {
+      throw sourceRunError(`${label} does not match the frozen evidence snapshot hash`);
+    }
+  }
+  if (
+    snapshot.evidence?.request?.finalAttemptPolicy !== "single"
+    || snapshot.evidence?.request?.finalModel !== expectedCanonicalModel
+    || snapshot.metadata?.finalRulingProvider !== "relay"
+  ) {
+    throw sourceRunError("source evidence snapshot does not preserve the relay Sol single-attempt request");
+  }
+
+  const attempt = latestFinalAttempt(run, events);
+  const returnedModel = String(
+    run.result?.provider?.model
+    || run.result?.metering?.stages?.finalRuling?.model
+    || attempt?.model
+    || "",
+  ).trim();
+  if (returnedModel !== expectedCanonicalModel) {
+    throw sourceRunError("source run has no completed relay GPT-5.6 Sol response");
+  }
+  return snapshot;
+}
+
+function summarizeRun({ role, configuration, run, events = [], auditReadError = null }) {
   const finalRuling = run?.result?.finalRuling || run?.result?.ruling || run?.result?.output || null;
   const latency = run?.result?.latency || run?.result?.metrics?.latency || run?.metrics?.latency || {};
   const metering = run?.result?.metering || {};
-  const usage = metering?.totals?.usage || run?.result?.metrics?.usage || run?.result?.usage || null;
-  const cost = metering?.totals?.cost || run?.result?.metrics?.cost || run?.result?.cost || null;
+  const attempt = latestFinalAttempt(run, events);
+  const usage = metering?.totals?.usage
+    || run?.result?.metrics?.usage
+    || run?.result?.usage
+    || attempt?.usage
+    || null;
+  const cost = metering?.totals?.cost
+    || run?.result?.metrics?.cost
+    || run?.result?.cost
+    || attempt?.cost
+    || null;
+  const snapshot = safeSnapshotIdentity(run);
+  const finishReason = optionalText(
+    run?.result?.provider?.finishReason
+    || run?.result?.provider?.finish_reason
+    || attempt?.finishReason
+    || attempt?.finish_reason,
+  );
   return {
     role,
     runId: extractRunId(run),
     status: normalizeStatus(run?.status) || "UNKNOWN",
     configuration: { ...configuration },
+    requestedModel: String(configuration?.model || ""),
+    returnedModel: String(
+      metering?.stages?.finalRuling?.model
+      || run?.result?.provider?.model
+      || attempt?.model
+      || run?.execution?.providerRequest?.model
+      || run?.execution?.request?.model
+      || "",
+    ) || null,
     conciseAnswer: String(finalRuling?.conciseAnswer || ""),
     verdicts: Array.isArray(finalRuling?.verdicts) ? finalRuling.verdicts : [],
     timeline: Array.isArray(finalRuling?.timeline) ? finalRuling.timeline : [],
+    evidenceSnapshot: snapshot,
     metrics: {
       totalDurationMs: firstFinite(latency.totalWallClockMs, latency.totalMs, run?.durationMs),
+      preparationMs: firstFinite(latency.preparationMs),
       finalRulingMs: firstFinite(latency.finalRulingMs),
+      stages: stageTimingSummary(run, latency),
+      finishReason,
       tokenUsage: usage,
       cost,
+    },
+    audit: {
+      eventCount: Array.isArray(events) ? events.length : 0,
+      completedAttemptRecovered: Boolean(attempt),
+      ...(auditReadError ? { readError: auditReadError } : {}),
     },
     ...(run?.error ? { error: normalizeError(run.error) } : {}),
   };
@@ -450,7 +929,15 @@ function summarizeFailure(configuration, error) {
 }
 
 function emptyMetrics() {
-  return { totalDurationMs: null, finalRulingMs: null, tokenUsage: null, cost: null };
+  return {
+    totalDurationMs: null,
+    preparationMs: null,
+    finalRulingMs: null,
+    stages: [],
+    finishReason: null,
+    tokenUsage: null,
+    cost: null,
+  };
 }
 
 function validateConfiguration(configuration, availableModels) {
@@ -484,10 +971,119 @@ function dedupeConfigurations(configurations) {
     const normalized = normalizeConfiguration(value);
     result.set(configurationKey(normalized), normalized);
   }
-  if (!result.has(configurationKey(SOURCE_CONFIGURATION))) {
-    result.set(configurationKey(SOURCE_CONFIGURATION), { ...SOURCE_CONFIGURATION });
-  }
   return [...result.values()];
+}
+
+function normalizeQuestionCases(value) {
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new Error("questions must be a non-empty array");
+  }
+  return value.map((item, index) => {
+    if (typeof item === "string") {
+      return { caseId: `case-${index + 1}`, question: requiredText(item, `questions[${index}]`) };
+    }
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      throw new Error(`questions[${index}] must be a string or object`);
+    }
+    return {
+      caseId: requiredText(item.caseId || item.id || `case-${index + 1}`, `questions[${index}].caseId`),
+      question: requiredText(item.question, `questions[${index}].question`),
+    };
+  });
+}
+
+function parseCasesFile(serialized) {
+  let parsed;
+  try {
+    parsed = JSON.parse(String(serialized || ""));
+  } catch (error) {
+    throw new Error(`--cases-file must contain valid JSON: ${error?.message || error}`);
+  }
+  const cases = Array.isArray(parsed) ? parsed : parsed?.cases;
+  if (!Array.isArray(cases)) {
+    throw new Error("--cases-file must contain a JSON array or an object with a cases array");
+  }
+  return normalizeQuestionCases(cases);
+}
+
+function parseSseEvents(serialized) {
+  const events = [];
+  for (const block of String(serialized || "").split(/\r?\n\r?\n/gu)) {
+    let eventName = "message";
+    const data = [];
+    for (const line of block.split(/\r?\n/gu)) {
+      if (line.startsWith("event:")) eventName = line.slice(6).trim();
+      else if (line.startsWith("data:")) data.push(line.slice(5).trimStart());
+    }
+    if (!data.length || eventName === "end") continue;
+    let value;
+    try {
+      value = JSON.parse(data.join("\n"));
+    } catch (error) {
+      throw new Error(`admin model lab event stream contained invalid JSON: ${error?.message || error}`);
+    }
+    if (value && typeof value === "object" && !Array.isArray(value)) events.push(value);
+  }
+  return events;
+}
+
+function sourceRunError(message) {
+  const error = new Error(`Reusable source run rejected: ${message}`);
+  error.code = "admin_matrix_source_run_invalid";
+  return error;
+}
+
+function fullEvidenceSnapshot(run) {
+  const candidates = [run?.evidenceSnapshot, run?.result?.evidenceSnapshot];
+  return candidates.find((value) => value && typeof value === "object" && !Array.isArray(value)) || null;
+}
+
+function safeSnapshotIdentity(run) {
+  const snapshot = fullEvidenceSnapshot(run);
+  if (!snapshot) {
+    return {
+      id: optionalText(run?.evidenceSnapshotId || run?.result?.evidenceSnapshotId),
+      sha256: optionalText(run?.evidenceSnapshotSha256),
+      integrity: "unavailable",
+    };
+  }
+  try {
+    const parsed = parseEvidenceSnapshot(snapshot);
+    return {
+      id: parsed.snapshotId,
+      sha256: parsed.contentSha256,
+      integrity: "verified",
+    };
+  } catch {
+    return {
+      id: optionalText(snapshot.snapshotId),
+      sha256: optionalText(snapshot.contentSha256),
+      integrity: "invalid",
+    };
+  }
+}
+
+function latestFinalAttempt(run, events = []) {
+  const attempts = run?.result?.metering?.stages?.finalRuling?.attempts;
+  if (Array.isArray(attempts) && attempts.length) return attempts.at(-1);
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const attempt = events[index]?.payload?.completedAttempt;
+    if (attempt && typeof attempt === "object" && !Array.isArray(attempt)) return attempt;
+  }
+  return null;
+}
+
+function stageTimingSummary(run, latency) {
+  const stages = Array.isArray(latency?.stages)
+    ? latency.stages
+    : (Array.isArray(run?.stageTiming?.stages) ? run.stageTiming.stages : []);
+  return stages.map((stage) => ({
+    id: String(stage?.id || ""),
+    status: String(stage?.status || ""),
+    durationMs: firstFinite(stage?.durationMs),
+    speedLabel: optionalText(stage?.speedLabel),
+    skipReason: optionalText(stage?.skipReason),
+  }));
 }
 
 function normalizeConfiguration(value = {}) {
@@ -603,6 +1199,33 @@ function positiveInteger(value, name) {
   return number;
 }
 
+function nonNegativeNumber(value, name) {
+  const number = Number(value);
+  if (!Number.isFinite(number) || number < 0) throw new Error(`${name} must be a non-negative number`);
+  return number;
+}
+
+function optionalNumber(value) {
+  if (value === null || value === undefined || String(value).trim() === "") return undefined;
+  return nonNegativeNumber(value, "RELAY_ESTIMATED_CNY_PER_CALL");
+}
+
+function nonNegativeInteger(value, name) {
+  const number = Number(value);
+  if (!Number.isInteger(number) || number < 0) throw new Error(`${name} must be a non-negative integer`);
+  return number;
+}
+
+function positiveNumber(value, name) {
+  const number = Number(value);
+  if (!Number.isFinite(number) || number <= 0) throw new Error(`${name} must be a positive number`);
+  return number;
+}
+
+function roundMoney(value) {
+  return Math.round((Number(value) + Number.EPSILON) * 1e9) / 1e9;
+}
+
 function formatDuration(value) {
   const number = Number(value);
   return Number.isFinite(number) ? `${(number / 1_000).toFixed(2)}s` : "-";
@@ -653,12 +1276,18 @@ async function promptSecret(label) {
 }
 
 function usageText() {
-  return `用法：node scripts/admin-model-matrix.mjs --base-url URL --origin ORIGIN --question "问题" [选项]\n\n` +
+  return `用法：node scripts/admin-model-matrix.mjs --base-url URL --origin ORIGIN (--question "问题" | --cases-file FILE) [选项]\n\n` +
     `密码从 ADMIN_MODEL_LAB_PASSWORD（或 ADMIN_PASSWORD）读取；未设置时在 TTY 中隐藏输入。\n` +
-    `--source-run-id ID 复用已有冻结证据，不再创建源运行。\n` +
+    `--question-file FILE 读取一道题；--cases-file FILE 读取四题 JSON 数组或 { cases: [...] }。\n` +
+    `--source-run-id ID 只复用题面、快照哈希、relay Sol 和 single 策略均严格匹配的源运行。\n` +
+    `--cases-file 不可与单题参数或 --source-run-id 同时使用。\n` +
     `--config provider:model:reasoningMode:reasoningEffort 可重复指定。\n` +
     `--config-file FILE 读取配置 JSON 数组。\n` +
-    `--format json|markdown  --output FILE  --concurrency N（默认 1）\n`;
+    `--format json|markdown  --output FILE  --concurrency N（硬上限默认 1）\n` +
+    `--max-final-requests N（默认 12）  --max-cost-cny N（默认 10，共享池）\n` +
+    `--estimated-input-tokens N（默认 32000）  --estimated-output-tokens N（默认 8192）\n` +
+    `--budget-usd-to-cny N（默认 7.5，仅预算换算因子，不是实时汇率）\n` +
+    `--estimated-cny-per-request N（可选统一覆盖；未设置时按截图中的 Sol/Terra/Luna 分模型费率估算）\n`;
 }
 
 function isMain(metaUrl) {

@@ -80,6 +80,79 @@ test("validator rejects a generic answer that contradicts authoritative direct e
   assert.ok(validation.errors.some((item) => /official direct answer/u.test(item)));
 });
 
+test("real-style Japanese direct QA reads the later activation verdict instead of only sentence one", () => {
+  const direct = {
+    id: "official-direct-late-activation-verdict",
+    question: "岩石族モンスターが存在する場合、このモンスター効果を発動できますか？",
+    answer: "このモンスター効果は、自身の特殊召喚とトークンの特殊召喚を行う効果です。したがって、質問の状況では、新たな岩石族モンスターを特殊召喚する効果となるため、このモンスター効果を発動する事はできません。",
+  };
+  const evidence = { officialQaDirectCandidates: [direct] };
+  const answer = makeAnswer("可以发动。", [{ id: direct.id }]);
+  const validation = validatePublicRagFinalAnswer(answer, {
+    rawText: JSON.stringify(answer),
+    userQuery: "这个效果可以发动吗？",
+    evidence,
+    authoritativeOfficialDirect: direct.id,
+  });
+
+  assert.equal(validation.ok, false);
+  assert.ok(validation.errors.includes("final conclusion contradicts the authoritative official direct answer"));
+});
+
+test("real-style how-applied QA requires activation, cost destination, material destination, and source-effect expiry", () => {
+  const direct = {
+    id: "official-direct-multipart-application",
+    question: "このカードを発動できますか？発動できる場合、永続効果はどのように適用されますか？",
+    answer: "このカードを発動する事はできます。このカードを発動する際にコストとして捨てる手札1枚は、永続効果によって除外されます。次に効果処理によって、両方のモンスターが融合素材となる場合、それらのモンスターは通常通り墓地へ送られる事になります。永続効果の発生源自身が融合素材として墓地に送られる際には、その効果は適用されません。",
+  };
+  const evidence = { officialQaDirectCandidates: [direct] };
+  const incomplete = makeAnswer("可以发动。", [{ id: direct.id }]);
+  const incompleteValidation = validatePublicRagFinalAnswer(incomplete, {
+    rawText: JSON.stringify(incomplete),
+    userQuery: "可以发动吗？如果可以，那个持续效果要如何适用？",
+    evidence,
+    authoritativeOfficialDirect: direct.id,
+  });
+  assert.equal(incompleteValidation.ok, false);
+  assert.equal(incompleteValidation.checks.multiPartQuestion, true);
+  assert.ok(incompleteValidation.errors.some((item) => /omits|post-activation/u.test(item)));
+
+  const complete = makeAnswer(
+    "可以发动；作为cost丢弃的手牌会被除外；效果来源自身作为融合素材送去墓地后，其持续效果不再适用；双方的融合素材均正常送去墓地。",
+    [{ id: direct.id }],
+  );
+  const completeValidation = validatePublicRagFinalAnswer(complete, {
+    rawText: JSON.stringify(complete),
+    userQuery: "可以发动吗？如果可以，那个持续效果要如何适用？",
+    evidence,
+    authoritativeOfficialDirect: direct.id,
+  });
+  assert.equal(completeValidation.ok, true, JSON.stringify(completeValidation.errors));
+});
+
+test("authoritative fallback replaces card placeholders only from resolved identities", () => {
+  const evidence = {
+    officialQaDirectCandidates: [{
+      id: "official-direct-placeholder-fallback",
+      answer: "「<<10001>>」可以发动，处理时「<<10002>>」会被除外。",
+    }],
+  };
+  const fallback = buildSafePublicRagFallback({
+    evidence,
+    validationErrors: ["model contradicted official answer"],
+    authoritativeOfficialDirect: "official-direct-placeholder-fallback",
+    resolvedCards: [
+      { id: "10001", name: "甲卡" },
+      { cardId: 10002, name: "乙卡" },
+    ],
+  });
+
+  assert.equal(fallback.answerLevel, "official_confirmed");
+  assert.match(fallback.shortAnswer, /「甲卡」可以发动/u);
+  assert.match(fallback.shortAnswer, /「乙卡」会被除外/u);
+  assert.doesNotMatch(fallback.shortAnswer, /<<\d+>>/u);
+});
+
 test("an official-positive headline cannot hide a contradictory negative activation sentence", () => {
   const evidence = {
     officialQaDirectCandidates: [{
@@ -1060,6 +1133,73 @@ test("a valid primary answer adds no second model call", async () => {
   assert.equal(result.publicFinalValidation.outcome, "primary_valid");
   assert.equal(result.publicFinalValidation.callCount, 1);
   assert.equal(result.publicFinalValidation.repairAttempted, false);
+});
+
+test("failed DeepSeek compact recovery fails closed without a third paid call", async () => {
+  let calls = 0;
+  const normalizedPrimary = makeAnswer("可以发动。");
+  const result = await runValidatedPublicRagFinal({
+    originalPrompt: "FROZEN_INVALID_DEEPSEEK_SCHEMA",
+    userQuery: "这个效果可以发动吗？",
+    evidence: {},
+    invoke: async () => {
+      calls += 1;
+      return {
+        answer: normalizedPrimary,
+        rawText: JSON.stringify({ shortAnswer: "可以发动。" }),
+        warnings: [
+          "deepseek_primary_invalid_schema",
+          "deepseek_compact_recovery_attempted",
+          "deepseek_compact_recovery_failed",
+          "deepseek_compact_recovery_invalid_schema",
+        ],
+        dryRun: false,
+        tokenUsage: {},
+        estimatedCostCny: 0,
+      };
+    },
+  });
+
+  assert.equal(calls, 1);
+  assert.equal(result.publicFinalValidation.outcome, "primary_failed_safe_fallback");
+  assert.equal(result.answer.answerLevel, "needs_more_info");
+  assert.ok(result.answer.riskFlags.includes("model_output_schema_validation_failed"));
+  assert.doesNotMatch(result.answer.shortAnswer, /^可以发动/u);
+});
+
+test("a successful DeepSeek compact recovery supersedes the invalid primary contract warning", () => {
+  const recovered = makeAnswer("不能发动。");
+  const validation = validatePublicRagFinalAnswer(recovered, {
+    rawText: JSON.stringify(recovered),
+    modelWarnings: [
+      "deepseek_primary_invalid_schema",
+      "deepseek_compact_recovery_attempted",
+      "deepseek_compact_recovery_succeeded",
+    ],
+    userQuery: "这个效果可以发动吗？",
+    evidence: {},
+  });
+
+  assert.equal(validation.ok, true);
+  assert.equal(validation.checks.strictJson, true);
+});
+
+test("raw enum values cannot be repaired by permissive answer normalization", () => {
+  const normalized = makeAnswer("不能发动。");
+  const invalidRaw = {
+    ...normalized,
+    answerLevel: "analysis",
+    confidenceSelfEstimate: "certain",
+  };
+  const validation = validatePublicRagFinalAnswer(normalized, {
+    rawText: JSON.stringify(invalidRaw),
+    userQuery: "这个效果可以发动吗？",
+    evidence: {},
+  });
+
+  assert.equal(validation.ok, false);
+  assert.ok(validation.errors.includes("raw answerLevel is invalid"));
+  assert.ok(validation.errors.includes("raw confidenceSelfEstimate is invalid"));
 });
 
 test("a failed directed repair is not retried and safely degrades", async () => {

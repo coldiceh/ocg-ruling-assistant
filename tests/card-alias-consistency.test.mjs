@@ -240,3 +240,16 @@ test("unquoted active-effect carrier syntax extracts arbitrary names but rejects
   assert.ok(fictional.unresolvedMentions.some((mention) => mention.input === "寂静回声"));
   assert.ok(!ordinary.unresolvedMentions.some((mention) => ["效果", "怪兽效果", "场上怪兽"].includes(mention.input)));
 });
+
+test("negative scene-state phrases are not treated as unquoted card names", () => {
+  const questions = [
+    "对方发动通常陷阱，发动前场上没有其他魔法·陷阱卡。",
+    "效果处理时墓地不存在其他怪兽。",
+    "连锁中我方场上没有别的卡片存在。",
+  ];
+
+  for (const question of questions) {
+    const resolution = extractRagCards(question, { cards: [] });
+    assert.deepEqual(resolution.unresolvedMentions, [], question);
+  }
+});

@@ -62,7 +62,7 @@ Upstash Redis；未配置、没有样本或存储失败时会明确显示不可�
 
 ## 管理模型实验室
 
-公开问答默认由 DeepSeek V4 Flash 准备检索证据，再由 GLM 5.2（思考 high）生成最终裁定；用户也可以明确选择 DeepSeek V4 Flash（思考 high）作为最终模型。两种最终模型不会自动互相降级。总预算仍是统一的消费上限，并额外按“资料准备 / GLM 最终裁定 / DeepSeek 最终裁定”分账显示。
+公开问答由 DeepSeek V4 Flash 准备检索证据，并默认由 DeepSeek V4 Flash（思考 high）生成最终裁定；公开主页面不再提供 GLM 5.2、Kimi 或第三方中转选项。GLM、Kimi 与第三方中转 GPT-5.6 Sol/Terra/Luna 只保留在隔离的管理模型实验室中，中转结果始终标注“模型身份未验证”；设置中转 key 不会注册公开 profile，也不会改变公开默认模型。旧的 `PUBLIC_RULING_MODEL_PROFILE=glm-5.2-high` 不会被静默映射到 DeepSeek，部署时必须删除该变量或明确改为 `deepseek-v4-flash-high`，否则公开配置会 fail-closed。公开 API 继续受 `API_DAILY_BUDGET_CNY` 总池约束；管理实验的真实最终调用另由持久化 `ADMIN_FINAL_BUDGET_*` provider 共享池约束，两者互不增加或替代。中转的临时本地配置和安全边界见 `docs/relay-provider.md`。
 
 隔离的管理实验路径用于在冻结证据下比较其他模型配置，不会改变公开问答选择。它默认关闭，默认测试也不会调用付费模型。部署、安全配置和当前进程恢复边界见：
 
@@ -75,15 +75,56 @@ Upstash Redis；未配置、没有样本或存储失败时会明确显示不可�
 只保留在审计快照中。这样可以比较 DeepSeek、GLM、Kimi 等模型本身的裁定差异，
 而不是让每个模型拿到不同资料。
 
+完整 Snapshot 的新写入采用确定性 gzip+base64；旧裸 JSON 保持可读，但不会自动
+迁移、压缩或删除。Upstash 容量告警的原因与只读审计方法见
+`docs/upstash-storage-audit.md`。
+
 ## 相邻规则引擎
 
-引擎项目通过五个版本化端点提供 Legacy Lua 静态发现：capabilities、source、
-effect-candidates、compile-plan 和 analyze-activation。助手会闭合校验资源锁、脚本
+引擎项目通过六个版本化端点提供 Legacy Lua 静态发现：capabilities、card-identities、
+source、effect-candidates、compile-plan 和 analyze-activation。助手会闭合校验资源锁、脚本
 SHA-256、版本、能力清单与 Lua API 语义注册表，并限制卡数、候选数、响应字节和总
 耗时。详细的本地、Windows 服务与 Cloudflare Tunnel 步骤见：
 
 - `docs/ocg-engine-integration.md`
 - `docs/ocg-engine-quick-tunnel.md`
+
+### 本地一键联调
+
+当本仓库与 `游戏王游戏引擎` 目录相邻，且引擎已经执行过一次
+`pnpm run setup:local` 后，在本仓库运行：
+
+```powershell
+pnpm run dev
+```
+
+同一个终端会启动并管理规则引擎（8790）、问答后端（8787）和本地网页
+（4173），网页地址为 `http://127.0.0.1:4173/`。本地静态服务器会在内存中
+注入后端地址，不会改写 `config.json`。未显式设置 `OCG_ENGINE_TOKEN` 时，启动器
+会生成仅供这次进程使用的随机 token，并同时交给引擎和后端；它不会显示或写入
+文件。按一次 `Ctrl+C` 即可关闭这次启动器创建的全部进程。
+
+若要临时在管理模型实验室测试第三方中转，并让启动器安全提示输入中转 Base URL、
+key 和本地管理密码，只需运行：
+
+```powershell
+pnpm run dev:relay
+```
+
+中转 Base URL、key、DeepSeek key 和管理密码只存在于这次 PowerShell 及其后端子进程；不会
+传给浏览器静态服务器或规则引擎，也不会改写公开模型默认值。启动时若缺少
+`RELAY_BASE_URL` 会先询问朋友提供的 HTTPS `/v1` 地址；若缺少 `DEEPSEEK_API_KEY`，
+会用隐藏输入框安全询问；管理实验始终由 DeepSeek 准备冻结证据，
+不会伪装成本地资料降级。
+启动器会为本地开发账本设置 Relay 共享 10 元日池、每次 5 元保守预约、8192
+completion-token 上限，以及 DeepSeek 共用 10 元日池。可靠 usage 会按版本化的中转
+后台截图费率结算并释放差额；无 usage、无汇率、超时或确认不完整时保留 5 元预约，
+因此最多两次不确定调用就会停止。截图费率和 7.5 的预算换算因子都不是供应商账单或
+实时汇率，付费前仍须核对中转后台并设置真实硬限额。默认矩阵按模型分别估算，10 元
+池不承诺能跑满 12 次。启动后访问
+`http://127.0.0.1:4173/?admin=1`。4173 或 8787 已被旧进程占用时，启动器会在启动
+新进程前明确报错，避免留下半启动的服务。8790 上已有 profile 一致且 token 匹配的
+健康引擎时会安全复用，否则拒绝连接到错误内核。
 
 ## 数据来源
 

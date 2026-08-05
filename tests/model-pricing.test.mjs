@@ -3,11 +3,26 @@ import test from "node:test";
 import {
   estimateDeepSeekModelCost,
   estimateOpenAIModelCost,
+  estimateRelayModelCost,
   getModelPricingConfig,
+  getRelayModelPricingConfig,
   normalizeOpenAIResponsesUsage,
   normalizeReportedModelUsage,
   resolvePricedModelId,
 } from "../backend/modelPricing.mjs";
+
+test("versioned relay screenshot pricing remains explicitly unverified", () => {
+  const pricing = getRelayModelPricingConfig();
+  assert.equal(pricing.pricingVersion, "relay-dashboard-screenshot-2026-08-06");
+  assert.equal(pricing.source.providerVerified, false);
+  assert.deepEqual(pricing.models["gpt-5.6-sol"], {
+    inputUsdPerMillion: 7.3,
+    cachedInputUsdPerMillion: 0.73,
+    outputUsdPerMillion: 43.8,
+  });
+  assert.equal(pricing.models["gpt-5.6-terra"].outputUsdPerMillion, 17.52);
+  assert.equal(pricing.models["gpt-5.6-luna"].cachedInputUsdPerMillion, 0.03942);
+});
 
 test("versioned GPT-5.6 pricing matches current official standard rates", () => {
   const pricing = getModelPricingConfig();
@@ -123,6 +138,51 @@ test("DeepSeek pricing fails closed when a used cache tier has no versioned rate
   assert.equal(cost.totalCostCny, null);
   assert.equal(cost.pricingVersion, "incomplete-test-price-v1");
   assert.equal(cost.unavailabilityReason, "cached_input_price_unavailable");
+});
+
+test("relay usage is estimated with its model-specific screenshot rate and configurable FX", () => {
+  const cost = estimateRelayModelCost({
+    model: "relay-gpt-5.6-terra",
+    usage: {
+      prompt_tokens: 1000,
+      prompt_tokens_details: { cached_tokens: 200 },
+      completion_tokens: 100,
+      total_tokens: 1100,
+    },
+    usdToCnyRate: 7.5,
+    exchangeRateVersion: "pilot-budget-factor-v1",
+  });
+  assert.equal(cost.model, "gpt-5.6-terra");
+  assert.equal(cost.pricingStatus, "estimated_unverified");
+  assert.equal(cost.pricingSourceVerified, false);
+  assert.equal(cost.inputCostUsd, 0.002336);
+  assert.equal(cost.cachedInputCostUsd, 0.0000584);
+  assert.equal(cost.outputCostUsd, 0.001752);
+  assert.equal(cost.totalCostUsd, 0.0041464);
+  assert.equal(cost.totalCostCny, 0.031098);
+});
+
+test("relay cost keeps the reservation when usage, FX, or a used price tier is unavailable", () => {
+  assert.equal(estimateRelayModelCost({
+    model: "gpt-5.6-sol",
+    usage: null,
+    usdToCnyRate: 7.5,
+  }).totalCostCny, null);
+  assert.equal(estimateRelayModelCost({
+    model: "gpt-5.6-sol",
+    usage: { prompt_tokens: 10, completion_tokens: 5 },
+  }).totalCostCny, null);
+  const cacheWrite = estimateRelayModelCost({
+    model: "gpt-5.6-sol",
+    usage: {
+      prompt_tokens: 10,
+      prompt_tokens_details: { cache_write_tokens: 5 },
+      completion_tokens: 5,
+    },
+    usdToCnyRate: 7.5,
+  });
+  assert.equal(cacheWrite.totalCostCny, null);
+  assert.equal(cacheWrite.unavailabilityReason, "relay_cache_write_price_unavailable");
 });
 
 test("standard cost uses output_tokens once even when reasoning_tokens is present", () => {

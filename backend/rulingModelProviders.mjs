@@ -8,6 +8,7 @@ import {
   MODEL_RULING_RESULT_JSON_SCHEMA,
   parseAndValidateModelRulingResult,
 } from "./modelRulingSchema.mjs";
+import { DEFAULT_PUBLIC_RELAY_BASE_URL } from "./publicRulingModelConfig.mjs";
 
 const DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1";
 const DEFAULT_DEEPSEEK_BASE_URL = "https://api.deepseek.com";
@@ -45,6 +46,10 @@ export class RulingModelProviderError extends Error {
     status = null,
     responseBody = null,
     outcomeKnown = null,
+    budgetReservationMayExist = null,
+    usage = null,
+    model = null,
+    requestId = null,
     cause,
   } = {}) {
     super(message, cause ? { cause } : undefined);
@@ -54,6 +59,10 @@ export class RulingModelProviderError extends Error {
     this.status = status;
     this.responseBody = responseBody;
     this.outcomeKnown = outcomeKnown;
+    this.budgetReservationMayExist = budgetReservationMayExist;
+    this.usage = usage === null ? null : cloneJson(usage);
+    this.model = typeof model === "string" && model.trim() ? model.trim() : null;
+    this.requestId = typeof requestId === "string" && requestId.trim() ? requestId.trim() : null;
   }
 }
 
@@ -159,8 +168,8 @@ export class CompatibleEvidencePreparationProvider {
     env = globalThis.process?.env || {},
   } = {}) {
     const normalizedProvider = String(providerId || "").trim().toLowerCase();
-    if (!new Set(["deepseek", "glm", "kimi"]).has(normalizedProvider)) {
-      throw new TypeError("Compatible model provider must be deepseek, glm or kimi");
+    if (!new Set(["deepseek", "glm", "kimi", "relay"]).has(normalizedProvider)) {
+      throw new TypeError("Compatible model provider must be deepseek, glm, kimi or relay");
     }
     if (typeof fetchImpl !== "function") {
       throw new TypeError(`${normalizedProvider} evidence provider requires fetch`);
@@ -175,6 +184,7 @@ export class CompatibleEvidencePreparationProvider {
       deepseek: DEFAULT_DEEPSEEK_BASE_URL,
       glm: DEFAULT_GLM_BASE_URL,
       kimi: DEFAULT_KIMI_BASE_URL,
+      relay: DEFAULT_PUBLIC_RELAY_BASE_URL,
     })[normalizedProvider], { requireHttps: true });
     this.env = env;
   }
@@ -184,6 +194,7 @@ export class CompatibleEvidencePreparationProvider {
       deepseek: "DEEPSEEK_API_KEY",
       glm: "GLM_API_KEY",
       kimi: "KIMI_API_KEY",
+      relay: "RELAY_API_KEY",
     })[this.providerId];
     return getAdminModelProviderCapabilities({
       env: {
@@ -223,11 +234,13 @@ export class CompatibleEvidencePreparationProvider {
         },
         { role: "user", content: prompt },
       ],
-      response_format: { type: "json_object" },
+      ...compatibleJsonResponseFormat(selection),
       ...compatibleThinkingParameters(selection),
     };
     if (maxTokens !== undefined) {
-      body[this.providerId === "kimi" ? "max_completion_tokens" : "max_tokens"] = maxTokens;
+      body[new Set(["kimi", "relay"]).has(this.providerId)
+        ? "max_completion_tokens"
+        : "max_tokens"] = maxTokens;
     }
 
     const payload = await this.requestJson("/chat/completions", {
@@ -272,21 +285,24 @@ export class CompatibleEvidencePreparationProvider {
     // Thinking tokens share the completion budget with the final JSON. The
     // former 16k default could be exhausted by reasoning alone, producing an
     // empty `content` even though the upstream request succeeded.
+    const configuredRelayMaxTokens = this.providerId === "relay"
+      ? optionalPositiveInteger(this.env?.RELAY_MAX_COMPLETION_TOKENS, "RELAY_MAX_COMPLETION_TOKENS")
+      : undefined;
     const maxTokens = optionalPositiveInteger(maxOutputTokens, "maxOutputTokens")
+      ?? configuredRelayMaxTokens
       ?? (selection.reasoningMode === "pro" ? 64_000 : 16_000);
-    // DeepSeek documents that JSON Output can occasionally return an empty
-    // `content`. In thinking mode that failure is particularly costly because
-    // the response can contain only billed reasoning tokens. Keep strict JSON
-    // enforcement in our validator, but use text transport plus an explicit
-    // shape example for this one provider/mode combination.
-    const deepSeekThinkingTextMode = this.providerId === "deepseek"
+    // DeepSeek's JSON Output guarantees syntax, not this application's field
+    // contract. Keep the schema/example in the prompt and validate locally;
+    // an occasional empty JSON-mode content is diagnosed below rather than
+    // silently weakening a paid final-ruling request to unconstrained text.
+    const deepSeekThinkingMode = this.providerId === "deepseek"
       && selection.reasoningMode === "pro";
     const schemaInstruction = [
       String(instructions || "").trim(),
       "这是隔离后台中的实验性最终裁定运行，不代表正式裁定或普通用户答案。",
       "只输出一个符合下列 JSON Schema 的 JSON 对象，不要输出 Markdown、代码围栏或额外说明：",
       JSON.stringify(MODEL_RULING_RESULT_JSON_SCHEMA),
-      ...(deepSeekThinkingTextMode
+      ...(deepSeekThinkingMode
         ? [
             "以下 JSON 仅展示字段结构；必须用本题的 questionId、结论、证据和检查结果替换全部示例内容：",
             JSON.stringify(MODEL_RULING_JSON_SHAPE_EXAMPLE),
@@ -299,11 +315,13 @@ export class CompatibleEvidencePreparationProvider {
         { role: "system", content: schemaInstruction },
         { role: "user", content: finalInput },
       ],
-      ...(deepSeekThinkingTextMode ? {} : { response_format: { type: "json_object" } }),
+      ...compatibleJsonResponseFormat(selection),
       ...compatibleThinkingParameters(selection),
     };
     if (maxTokens !== undefined) {
-      body[this.providerId === "kimi" ? "max_completion_tokens" : "max_tokens"] = maxTokens;
+      body[new Set(["kimi", "relay"]).has(this.providerId)
+        ? "max_completion_tokens"
+        : "max_tokens"] = maxTokens;
     }
     const startedAt = new Date();
     const payload = await this.requestJson("/chat/completions", {
@@ -336,6 +354,14 @@ export class CompatibleEvidencePreparationProvider {
           : `${this.providerId}_empty_final_ruling`,
         provider: this.providerId,
         outcomeKnown: true,
+        // A successful HTTP response proves that the provider processed the
+        // request, not that it was free. Preserve the reservation when usage is
+        // absent, and expose metering-only fields so the service can settle the
+        // actual charge when the provider reported it.
+        budgetReservationMayExist: true,
+        usage: payload?.usage || null,
+        model: String(payload?.model || selection.model),
+        requestId: String(payload?.id || ""),
       });
     }
     const upstreamRequestId = String(payload?.id || "").trim();
@@ -344,12 +370,16 @@ export class CompatibleEvidencePreparationProvider {
       request_id_source: upstreamRequestId ? "upstream" : "synthetic",
       status: "completed",
       model: String(payload?.model || selection.model),
+      requested_model: selection.model,
       output_text: text,
       usage: cloneJson(payload?.usage || null),
       created_at: payload?.created ?? startedAt.toISOString(),
       completed_at: new Date().toISOString(),
       provider: this.providerId,
       experimental: true,
+      ...(this.providerId === "relay"
+        ? { third_party: true, model_identity_verified: false }
+        : {}),
     };
   }
 
@@ -623,6 +653,11 @@ export function getRulingModelCapabilityTable() {
 }
 
 function compatibleThinkingParameters(selection) {
+  if (selection.provider === "relay") {
+    return selection.reasoningEffort === "none"
+      ? {}
+      : { reasoning_effort: selection.reasoningEffort };
+  }
   if (selection.provider === "glm") {
     const enabled = selection.reasoningMode === "pro";
     return {
@@ -649,12 +684,32 @@ function compatibleThinkingParameters(selection) {
   };
 }
 
+function compatibleJsonResponseFormat(selection) {
+  // DeepSeek thinking mode and JSON Output are not combined. The prompt still
+  // carries the strict application schema and the response is validated
+  // locally. Non-thinking DeepSeek and the other compatible providers retain
+  // their existing JSON-mode request.
+  return selection.provider === "deepseek" && selection.reasoningMode === "pro"
+    ? {}
+    : { response_format: { type: "json_object" } };
+}
+
 function extractChatCompletionText(payload) {
   const content = payload?.choices?.[0]?.message?.content;
   if (typeof content === "string") return content.trim();
   if (Array.isArray(content)) {
-    return content.map((part) => String(part?.text || part?.content || "")).join("").trim();
+    return content.map(extractCompatibleContentPartText).join("").trim();
   }
+  return extractCompatibleContentPartText(content).trim();
+}
+
+function extractCompatibleContentPartText(part) {
+  if (typeof part === "string") return part;
+  if (!part || typeof part !== "object") return "";
+  if (typeof part.text === "string") return part.text;
+  if (typeof part.content === "string") return part.content;
+  if (typeof part.text?.value === "string") return part.text.value;
+  if (Array.isArray(part.content)) return part.content.map(extractCompatibleContentPartText).join("");
   return "";
 }
 

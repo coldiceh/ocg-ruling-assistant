@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 
 const rootDir = normalize(join(dirname(fileURLToPath(import.meta.url)), ".."));
 const port = Number(process.env.PORT || process.argv[2] || 4173);
+const localBackendUrl = normalizeLocalBackendUrl(process.env.LOCAL_BACKEND_URL);
 
 const mimeTypes = {
   ".html": "text/html; charset=utf-8",
@@ -31,6 +32,22 @@ createServer(async (request, response) => {
       return;
     }
 
+    if (pathname === "/config.json" && localBackendUrl) {
+      const original = await readOptionalConfig(target);
+      const answerApiUrl = `${localBackendUrl}/api/answer`;
+      const body = Buffer.from(JSON.stringify({
+        ...original,
+        answerApiUrl,
+        budgetApiUrl: `${localBackendUrl}/api/budget`,
+      }, null, 2));
+      response.writeHead(200, {
+        "content-type": "application/json; charset=utf-8",
+        "cache-control": "no-store",
+      });
+      response.end(body);
+      return;
+    }
+
     const info = await stat(target);
     if (!info.isFile()) {
       response.writeHead(404);
@@ -51,3 +68,22 @@ createServer(async (request, response) => {
 }).listen(port, "127.0.0.1", () => {
   console.log(`OCG ruling assistant: http://127.0.0.1:${port}/`);
 });
+
+function normalizeLocalBackendUrl(value) {
+  const text = String(value || "").trim();
+  if (!text) return "";
+  const url = new URL(text);
+  if (url.protocol !== "http:" || !["127.0.0.1", "localhost", "::1"].includes(url.hostname)) {
+    throw new Error("LOCAL_BACKEND_URL must be a loopback HTTP URL");
+  }
+  return url.toString().replace(/\/+$/u, "");
+}
+
+async function readOptionalConfig(target) {
+  try {
+    const parsed = JSON.parse(await readFile(target, "utf8"));
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
