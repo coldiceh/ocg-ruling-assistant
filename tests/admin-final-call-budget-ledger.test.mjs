@@ -8,17 +8,22 @@ import {
 
 const RESERVED_AT = "2026-08-05T04:00:00.000Z";
 
-test("provider models share only their configured final-call budget pool", async () => {
+test("DeepSeek models share one pool while each relay model has an independent pool", async () => {
   const ledger = createMemoryAdminFinalCallBudgetLedger({
     timezone: "UTC",
     pools: {
       deepseek: { dailyBudgetCny: 10, reservationCny: 5 },
-      relay: { dailyBudgetCny: 8, reservationCny: 4 },
+      relay_sol: { dailyBudgetCny: 10, reservationCny: 5 },
+      relay_terra: { dailyBudgetCny: 10, reservationCny: 5 },
+      relay_luna: { dailyBudgetCny: 10, reservationCny: 5 },
     },
   });
 
   assert.equal(adminFinalBudgetPool("deepseek"), "deepseek");
-  assert.equal(adminFinalBudgetPool("relay"), "relay");
+  assert.equal(adminFinalBudgetPool("relay", "relay-gpt-5.6-sol"), "relay_sol");
+  assert.equal(adminFinalBudgetPool("relay", "gpt-5.6-terra"), "relay_terra");
+  assert.equal(adminFinalBudgetPool("relay", "relay-gpt-5.6-luna"), "relay_luna");
+  assert.equal(adminFinalBudgetPool("relay", "unknown-relay-model"), null);
   assert.equal(adminFinalBudgetPool("unknown-provider"), null);
 
   await ledger.reserve({
@@ -33,8 +38,17 @@ test("provider models share only their configured final-call budget pool", async
     model: "deepseek-v4-pro",
     reservedAt: RESERVED_AT,
   });
+  const deepSeekStatus = await ledger.status({
+    provider: "deepseek",
+    reservedAt: RESERVED_AT,
+  });
   assert.deepEqual(
-    await ledger.status({ provider: "deepseek", reservedAt: RESERVED_AT }),
+    {
+      pool: deepSeekStatus.pool,
+      day: deepSeekStatus.day,
+      usedCny: deepSeekStatus.usedCny,
+      dailyBudgetCny: deepSeekStatus.dailyBudgetCny,
+    },
     {
       pool: "deepseek",
       day: "2026-08-05",
@@ -53,31 +67,59 @@ test("provider models share only their configured final-call budget pool", async
       && error?.details?.pool === "deepseek",
   );
 
-  for (const [index, model] of ["gpt-5.6-sol", "gpt-5.6-terra"].entries()) {
-    await ledger.reserve({
-      reservationId: `relay-${index + 1}`,
-      provider: "relay",
-      model,
-      reservedAt: RESERVED_AT,
-    });
-  }
+  await ledger.reserve({
+    reservationId: "relay-sol-1",
+    provider: "relay",
+    model: "gpt-5.6-sol",
+    reservedAt: RESERVED_AT,
+  });
+  await ledger.reserve({
+    reservationId: "relay-sol-2",
+    provider: "relay",
+    model: "relay-gpt-5.6-sol",
+    reservedAt: RESERVED_AT,
+  });
   await assert.rejects(
     ledger.reserve({
-      reservationId: "relay-luna-over-limit",
+      reservationId: "relay-sol-over-limit",
       provider: "relay",
-      model: "gpt-5.6-luna",
+      model: "gpt-5.6-sol",
       reservedAt: RESERVED_AT,
     }),
     (error) => error?.code === "admin_final_budget_exceeded"
-      && error?.details?.pool === "relay",
+      && error?.details?.pool === "relay_sol",
   );
+  await ledger.reserve({
+    reservationId: "relay-terra-independent",
+    provider: "relay",
+    model: "gpt-5.6-terra",
+    reservedAt: RESERVED_AT,
+  });
+  await ledger.reserve({
+    reservationId: "relay-luna-independent",
+    provider: "relay",
+    model: "gpt-5.6-luna",
+    reservedAt: RESERVED_AT,
+  });
   assert.equal(
     (await ledger.status({ provider: "deepseek", reservedAt: RESERVED_AT })).usedCny,
     10,
   );
   assert.equal(
-    (await ledger.status({ provider: "relay", reservedAt: RESERVED_AT })).usedCny,
-    8,
+    (await ledger.status({
+      provider: "relay",
+      model: "gpt-5.6-sol",
+      reservedAt: RESERVED_AT,
+    })).usedCny,
+    10,
+  );
+  assert.equal(
+    (await ledger.status({
+      provider: "relay",
+      model: "gpt-5.6-terra",
+      reservedAt: RESERVED_AT,
+    })).usedCny,
+    5,
   );
 });
 
@@ -128,7 +170,7 @@ test("an unconfigured provider pool fails closed", async () => {
   const ledger = createMemoryAdminFinalCallBudgetLedger({
     timezone: "UTC",
     pools: {
-      relay: { dailyBudgetCny: 10, reservationCny: 10 },
+      relay_sol: { dailyBudgetCny: 10, reservationCny: 10 },
     },
   });
 
@@ -141,6 +183,49 @@ test("an unconfigured provider pool fails closed", async () => {
     (error) => error?.code === "admin_final_budget_unconfigured"
       && error?.outcomeKnown === true
       && error?.budgetReservationMayExist === false,
+  );
+  await assert.rejects(
+    ledger.reserve({
+      reservationId: "unknown-relay-model",
+      provider: "relay",
+      model: "relay-gpt-5.6-unknown",
+      reservedAt: RESERVED_AT,
+    }),
+    (error) => error?.code === "admin_final_budget_unconfigured"
+      && /relay model is not budgeted/u.test(error?.message || ""),
+  );
+});
+
+test("a dynamic worst-case reservation replaces the smaller fixed reservation and fails closed above the pool limit", async () => {
+  const ledger = createMemoryAdminFinalCallBudgetLedger({
+    timezone: "UTC",
+    pools: {
+      relay_sol: { dailyBudgetCny: 10, reservationCny: 5 },
+    },
+  });
+  const base = {
+    provider: "relay",
+    model: "relay-gpt-5.6-sol",
+    reservedAt: RESERVED_AT,
+  };
+
+  const reserved = await ledger.reserve({
+    ...base,
+    reservationId: "dynamic-within-limit",
+    requiredReservationCny: 7.25,
+  });
+  assert.equal(reserved.reservedCny, 7.25);
+  assert.equal(reserved.usedCny, 7.25);
+
+  await assert.rejects(
+    ledger.reserve({
+      ...base,
+      reservationId: "dynamic-above-limit",
+      requiredReservationCny: 10.01,
+    }),
+    (error) => error?.code === "admin_final_budget_exceeded"
+      && error?.details?.reservationCny === 10.01
+      && error?.details?.dailyBudgetCny === 10,
   );
 });
 
@@ -171,6 +256,38 @@ test("concurrent reservations cannot jointly cross the daily limit", async () =>
   assert.equal(
     (await ledger.status({ provider: "glm", reservedAt: RESERVED_AT })).usedCny,
     6,
+  );
+});
+
+test("settlement cannot expand a pre-call reservation or push the ledger past its cap", async () => {
+  const ledger = createMemoryAdminFinalCallBudgetLedger({
+    timezone: "UTC",
+    pools: {
+      deepseek: { dailyBudgetCny: 10, reservationCny: 2 },
+    },
+  });
+  for (let index = 0; index < 5; index += 1) {
+    await ledger.reserve({
+      reservationId: `deepseek-${index}`,
+      provider: "deepseek",
+      model: "deepseek-v4-pro",
+      reservedAt: RESERVED_AT,
+    });
+  }
+
+  await assert.rejects(
+    ledger.settle({
+      reservationId: "deepseek-0",
+      provider: "deepseek",
+      model: "deepseek-v4-pro",
+      reservedAt: RESERVED_AT,
+      actualCny: 3,
+    }),
+    (error) => error?.code === "admin_final_budget_state_conflict",
+  );
+  assert.equal(
+    (await ledger.status({ provider: "deepseek", reservedAt: RESERVED_AT })).usedCny,
+    10,
   );
 });
 

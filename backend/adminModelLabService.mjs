@@ -63,6 +63,9 @@ const PREPARATION_STAGE_IDS = Object.freeze([
   "retrieve_card_texts",
   "retrieve_rulings_evidence",
 ]);
+const PAID_PREPARATION_SUBSTAGE_ID = "paid_model_submission";
+const DEFAULT_FINAL_MAX_OUTPUT_TOKENS = 8_192;
+const DEFAULT_PREPARATION_MAX_OUTPUT_TOKENS = 4_096;
 const OPENAI_ACTIVE_STATUSES = new Set(["queued", "in_progress"]);
 const OPENAI_FAILURE_STATUSES = new Set(["failed", "incomplete", "expired"]);
 const TERMINAL_RUN_STATUSES = new Set([
@@ -162,6 +165,16 @@ export function createAdminModelLabService({
   const activeFinalAbortControllers = new Map();
   const serviceInstanceId = randomUUID();
   const executionHeartbeatMs = readExecutionHeartbeatMs(env);
+  const serverFinalMaxOutputTokens = readBoundedOutputTokens(
+    env.ADMIN_MODEL_LAB_MAX_OUTPUT_TOKENS,
+    DEFAULT_FINAL_MAX_OUTPUT_TOKENS,
+    "ADMIN_MODEL_LAB_MAX_OUTPUT_TOKENS",
+  );
+  const serverPreparationMaxOutputTokens = readBoundedOutputTokens(
+    env.ADMIN_MODEL_LAB_PREPARATION_MAX_OUTPUT_TOKENS,
+    DEFAULT_PREPARATION_MAX_OUTPUT_TOKENS,
+    "ADMIN_MODEL_LAB_PREPARATION_MAX_OUTPUT_TOKENS",
+  );
   const resolvedLegacyLuaSemanticTimeoutMs = readLegacyLuaSemanticTimeoutMs(
     legacyLuaSemanticTimeoutMs,
     env,
@@ -172,6 +185,14 @@ export function createAdminModelLabService({
   );
 
   async function capabilities() {
+    const budgetPools = finalCallBudgetLedger?.poolStatuses
+      ? await finalCallBudgetLedger.poolStatuses()
+      : [];
+    const providerCapabilities = applyFinalBudgetAvailability(
+      getAdminModelProviderCapabilities({ env }),
+      budgetPools,
+      { ledgerConfigured: finalCallBudgetLedger !== null },
+    );
     return immutableJson({
       architecture: {
         preparationProvider: preparationProviderRegistry.has("deepseek")
@@ -189,6 +210,7 @@ export function createAdminModelLabService({
           configured: finalCallBudgetLedger !== null,
           persistent: finalCallBudgetLedger?.persistent === true,
           storageKind: finalCallBudgetLedger?.kind || "unconfigured",
+          pools: budgetPools,
         },
         sharedEvidenceSnapshotFork: true,
         experimentalFinalRulingAvailable: finalRulingProviderRegistry.listProviderIds()
@@ -201,7 +223,7 @@ export function createAdminModelLabService({
           legacyAcceptedAsTruth: false,
         },
       },
-      providers: getAdminModelProviderCapabilities({ env }),
+      providers: providerCapabilities,
       models: getRulingModelCapabilityTable(),
       limits: {
         enabled: config.limitsEnabled,
@@ -276,9 +298,19 @@ export function createAdminModelLabService({
         "final_ruling_provider_unavailable",
       );
     }
-    const maxOutputTokens = Object.hasOwn(body, "maxOutputTokens")
+    const requestedMaxOutputTokens = Object.hasOwn(body, "maxOutputTokens")
       ? optionalPositiveInteger(body.maxOutputTokens)
       : optionalPositiveInteger(fallback.maxOutputTokens);
+    if (
+      requestedMaxOutputTokens !== null
+      && requestedMaxOutputTokens > serverFinalMaxOutputTokens
+    ) {
+      throw requestError(
+        `maxOutputTokens cannot exceed server cap ${serverFinalMaxOutputTokens}`,
+        "admin_model_output_limit_exceeded",
+      );
+    }
+    const maxOutputTokens = requestedMaxOutputTokens || serverFinalMaxOutputTokens;
     const finalAttemptPolicy = normalizeFinalAttemptPolicy(
       Object.hasOwn(body, "finalAttemptPolicy")
         ? body.finalAttemptPolicy
@@ -333,6 +365,7 @@ export function createAdminModelLabService({
         model: preparationSelection.model,
         reasoningEffort: preparationSelection.reasoningEffort,
         reasoningMode: preparationSelection.reasoningMode,
+        maxOutputTokens: serverPreparationMaxOutputTokens,
         canMakeFinalRuling: false,
         canDecideEscalation: false,
       },
@@ -580,9 +613,20 @@ export function createAdminModelLabService({
       }
 
       if (!run.preparationFinalizedAt) {
-        // A RUNNING record without a frozen snapshot/request is an interrupted
-        // preparation. Rebuilding from the immutable initial request is safe;
-        // the optimistic run store ensures only one finalized snapshot wins.
+        if (hasInterruptedPaidPreparation(run.stageTiming)) {
+          const interrupted = serviceError(
+            "Evidence-preparation model outcome is unknown; automatic resubmission is disabled to avoid duplicate charges",
+            "preparation_submission_outcome_unknown",
+          );
+          await failRunWithStage(id, interrupted, executionToken);
+          return immutableJson({
+            run: await requireRun(id),
+            providerRequest: null,
+          });
+        }
+        // Rebuilding is safe only when no persisted substage shows that a paid
+        // preparation request started. The optimistic run store then ensures
+        // only one finalized snapshot wins.
         tracker = stageTrackerFactory({
           runId: id,
           monotonicNow,
@@ -690,6 +734,8 @@ export function createAdminModelLabService({
           run,
           submissionIntent: submission.submissionIntent,
           attemptKind: "primary",
+          providerCreateRequest,
+          finalProvider: selectedFinalProvider,
         });
       } catch (error) {
         const failed = await settleProviderCreateFailure({
@@ -1100,6 +1146,7 @@ export function createAdminModelLabService({
     const preparationProvider = run.executionProfile.preparation.provider;
     const preparationReasoningEffort = run.executionProfile.preparation.reasoningEffort;
     const preparationReasoningMode = run.executionProfile.preparation.reasoningMode;
+    const preparationMaxOutputTokens = run.executionProfile.preparation.maxOutputTokens;
     const startedAt = readWall(wallNow).toISOString();
     let preparationOutput;
     let data;
@@ -1121,12 +1168,16 @@ export function createAdminModelLabService({
         return skippedPreparationOutput("deterministic_card_resolution_complete");
       }
       return runCheapPreparation({
+        runId: run.runId,
+        tracker,
+        executionToken,
         question,
         questions,
         preparationProvider,
         preparationModel,
         preparationReasoningEffort,
         preparationReasoningMode,
+        preparationMaxOutputTokens,
         signal,
       });
     }, executionToken);
@@ -1260,12 +1311,16 @@ export function createAdminModelLabService({
   }
 
   async function runCheapPreparation({
+    runId,
+    tracker,
+    executionToken,
     question,
     questions,
     preparationProvider,
     preparationModel,
     preparationReasoningEffort,
     preparationReasoningMode,
+    preparationMaxOutputTokens,
     suppliedHints,
     signal,
   }) {
@@ -1274,19 +1329,93 @@ export function createAdminModelLabService({
     let usage = null;
     const provider = preparationProviderRegistry.get(preparationProvider);
     if (provider && typeof provider.prepareEvidence === "function") {
-      const prepared = await provider.prepareEvidence({
-        model: preparationModel,
-        reasoningEffort: preparationReasoningEffort,
-        reasoningMode: preparationReasoningMode,
-        input: buildPreparationInput({ question, questions }),
-        metadata: {
-          role: "evidence_preparation_only",
-          finalRulingForbidden: "true",
-        },
-        signal,
+      if (!finalCallBudgetLedger) {
+        throw serviceError(
+          "Persistent final-call budget ledger is unavailable; evidence-preparation submission was not attempted",
+          "admin_final_budget_storage_unavailable",
+        );
+      }
+      tracker.startSubstage("understand", PAID_PREPARATION_SUBSTAGE_ID, {
+        label: "低成本模型准备证据",
       });
+      await runStore.updateStageProgress(runId, tracker.snapshot(), { executionToken });
+      const reservedAt = readWall(wallNow).toISOString();
+      const reservationId = preparationBudgetReservationId(runId);
+      const preparationInput = buildPreparationInput({ question, questions });
+      await finalCallBudgetLedger.reserve({
+        reservationId,
+        runId,
+        attemptId: PAID_PREPARATION_SUBSTAGE_ID,
+        attemptKind: "evidence_preparation",
+        provider: preparationProvider,
+        model: preparationModel,
+        reservedAt,
+        requiredReservationCny: requiredDeepSeekReservationCny({
+          model: preparationModel,
+          inputTokenUpperBound: utf8TokenUpperBound(preparationInput),
+          maxOutputTokens: preparationMaxOutputTokens,
+          pricingProfile: deepSeekPricingForModel(
+            serverPricingProfile.deepSeek,
+            preparationModel,
+          ),
+          usdToCnyRate: serverPricingProfile.usdToCnyRate,
+          exchangeRateVersion: serverPricingProfile.exchangeRateVersion,
+        }),
+      });
+      let prepared;
+      try {
+        prepared = await provider.prepareEvidence({
+          model: preparationModel,
+          reasoningEffort: preparationReasoningEffort,
+          reasoningMode: preparationReasoningMode,
+          maxOutputTokens: preparationMaxOutputTokens,
+          input: preparationInput,
+          metadata: {
+            role: "evidence_preparation_only",
+            finalRulingForbidden: "true",
+          },
+          signal,
+        });
+      } catch (error) {
+        if (preparationFailureIsReleaseSafe(error)) {
+          await finalCallBudgetLedger.release({
+            reservationId,
+            runId,
+            attemptId: PAID_PREPARATION_SUBSTAGE_ID,
+            attemptKind: "evidence_preparation",
+            provider: preparationProvider,
+            model: preparationModel,
+            reservedAt,
+          }).catch(() => {});
+        }
+        throw error;
+      }
       rawResult = jsonSafe(prepared);
       usage = jsonSafe(extractPreparationUsage(prepared));
+      const cost = estimateDeepSeekModelCost({
+        model: preparationModel,
+        usage,
+        pricingProfile: deepSeekPricingForModel(
+          serverPricingProfile.deepSeek,
+          preparationModel,
+        ),
+        usdToCnyRate: serverPricingProfile.usdToCnyRate,
+        exchangeRateVersion: serverPricingProfile.exchangeRateVersion,
+      });
+      if (normalizeReportedModelUsage(usage) && Number.isFinite(cost.totalCostCny)) {
+        await finalCallBudgetLedger.settle({
+          reservationId,
+          runId,
+          attemptId: PAID_PREPARATION_SUBSTAGE_ID,
+          attemptKind: "evidence_preparation",
+          provider: preparationProvider,
+          model: preparationModel,
+          reservedAt,
+          actualCny: cost.totalCostCny,
+        }).catch(() => {});
+      }
+      tracker.finishSubstage("understand", PAID_PREPARATION_SUBSTAGE_ID);
+      await runStore.updateStageProgress(runId, tracker.snapshot(), { executionToken });
     } else {
       warnings.push(`${preparationProvider}_preparation_provider_unavailable`);
     }
@@ -1715,6 +1844,8 @@ export function createAdminModelLabService({
         run: current,
         submissionIntent: submission.submissionIntent,
         attemptKind: "repair",
+        providerCreateRequest,
+        finalProvider,
       });
     } catch (error) {
       return settleProviderCreateFailure({
@@ -1877,6 +2008,8 @@ export function createAdminModelLabService({
     run,
     submissionIntent,
     attemptKind,
+    providerCreateRequest,
+    finalProvider,
   }) {
     const profile = run.executionProfile?.finalRuling || {};
     if (profile.provider === "mock") return null;
@@ -1901,6 +2034,12 @@ export function createAdminModelLabService({
       provider: profile.provider,
       model: profile.requestedModel || profile.model,
       reservedAt: submissionIntent.intentAt,
+      requiredReservationCny: requiredFinalReservationCny({
+        profile,
+        providerCreateRequest,
+        finalProvider,
+        pricingProfile: run.executionProfile?.pricing || {},
+      }),
     });
   }
 
@@ -1996,6 +2135,8 @@ export function createAdminModelLabService({
   }) {
     if (!finalCallBudgetLedger || !submissionIntent?.attemptId) return;
     try {
+      const run = await requireRun(runId);
+      const profile = run.executionProfile?.finalRuling || {};
       await finalCallBudgetLedger.release({
         reservationId: finalBudgetReservationId(
           runId,
@@ -2006,6 +2147,7 @@ export function createAdminModelLabService({
         attemptId: submissionIntent.attemptId,
         attemptKind,
         provider: submissionIntent.providerId,
+        model: profile.requestedModel || profile.model,
         reservedAt: submissionIntent.intentAt,
       });
     } catch {
@@ -2684,7 +2826,10 @@ function buildFinalAttemptAudit({
       ? estimateDeepSeekModelCost({
           model: response?.model || profile.model,
           usage: response?.usage || {},
-          pricingProfile: pricingProfile.deepSeek,
+          pricingProfile: deepSeekPricingForModel(
+            pricingProfile.deepSeek,
+            profile.requestedModel || profile.model || response?.model,
+          ),
           usdToCnyRate: pricingProfile.usdToCnyRate,
           exchangeRateVersion: pricingProfile.exchangeRateVersion,
         })
@@ -2797,7 +2942,10 @@ function buildAdminModelLabMetering({
     ? estimateDeepSeekModelCost({
         model: preparationProfile.model,
         usage: preparationUsage,
-        pricingProfile: pricingProfile.deepSeek,
+        pricingProfile: deepSeekPricingForModel(
+          pricingProfile.deepSeek,
+          preparationProfile.model,
+        ),
         usdToCnyRate: pricingProfile.usdToCnyRate,
         exchangeRateVersion: pricingProfile.exchangeRateVersion,
       })
@@ -3100,7 +3248,7 @@ function aggregateCurrency(entries, field) {
 }
 
 function readServerDeepSeekPricingProfile(env) {
-  return {
+  const common = {
     pricingVersion: nullableString(env.ADMIN_MODEL_LAB_DEEPSEEK_PRICING_VERSION),
     pricingEffectiveDate: nullableString(env.ADMIN_MODEL_LAB_DEEPSEEK_PRICING_EFFECTIVE_DATE),
     inputCnyPerMillion: optionalNonNegativeNumber(
@@ -3115,6 +3263,151 @@ function readServerDeepSeekPricingProfile(env) {
     outputCnyPerMillion: optionalNonNegativeNumber(
       env.ADMIN_MODEL_LAB_DEEPSEEK_OUTPUT_CNY_PER_MTOK,
     ),
+  };
+  return {
+    ...common,
+    models: {
+      "deepseek-v4-flash": {
+        pricingVersion: common.pricingVersion,
+        pricingEffectiveDate: common.pricingEffectiveDate,
+        inputCnyPerMillion: optionalNonNegativeNumber(
+          env.ADMIN_MODEL_LAB_DEEPSEEK_FLASH_INPUT_CNY_PER_MTOK,
+        ) ?? common.inputCnyPerMillion,
+        cachedInputCnyPerMillion: optionalNonNegativeNumber(
+          env.ADMIN_MODEL_LAB_DEEPSEEK_FLASH_CACHED_INPUT_CNY_PER_MTOK,
+        ) ?? common.cachedInputCnyPerMillion,
+        cacheWriteInputCnyPerMillion: optionalNonNegativeNumber(
+          env.ADMIN_MODEL_LAB_DEEPSEEK_FLASH_CACHE_WRITE_INPUT_CNY_PER_MTOK,
+        ) ?? common.cacheWriteInputCnyPerMillion,
+        outputCnyPerMillion: optionalNonNegativeNumber(
+          env.ADMIN_MODEL_LAB_DEEPSEEK_FLASH_OUTPUT_CNY_PER_MTOK,
+        ) ?? common.outputCnyPerMillion,
+      },
+      "deepseek-v4-pro": {
+        pricingVersion: common.pricingVersion,
+        pricingEffectiveDate: common.pricingEffectiveDate,
+        inputCnyPerMillion: optionalNonNegativeNumber(
+          env.ADMIN_MODEL_LAB_DEEPSEEK_PRO_INPUT_CNY_PER_MTOK,
+        ),
+        cachedInputCnyPerMillion: optionalNonNegativeNumber(
+          env.ADMIN_MODEL_LAB_DEEPSEEK_PRO_CACHED_INPUT_CNY_PER_MTOK,
+        ),
+        cacheWriteInputCnyPerMillion: optionalNonNegativeNumber(
+          env.ADMIN_MODEL_LAB_DEEPSEEK_PRO_CACHE_WRITE_INPUT_CNY_PER_MTOK,
+        ),
+        outputCnyPerMillion: optionalNonNegativeNumber(
+          env.ADMIN_MODEL_LAB_DEEPSEEK_PRO_OUTPUT_CNY_PER_MTOK,
+        ),
+      },
+    },
+  };
+}
+
+function deepSeekPricingForModel(profile, model) {
+  const canonicalModel = String(model || "").trim().toLowerCase();
+  return profile?.models?.[canonicalModel] || profile;
+}
+
+function requiredFinalReservationCny({
+  profile,
+  providerCreateRequest,
+  finalProvider,
+  pricingProfile,
+}) {
+  if (!new Set(["relay", "deepseek"]).has(profile?.provider)) return null;
+  const envelope = typeof finalProvider?.getFinalRequestBudgetEnvelope === "function"
+    ? finalProvider.getFinalRequestBudgetEnvelope(providerCreateRequest)
+    : conservativeFinalRequestBudgetEnvelope(providerCreateRequest);
+  if (
+    !Number.isSafeInteger(envelope?.inputTokenUpperBound)
+    || envelope.inputTokenUpperBound < 1
+    || !Number.isSafeInteger(envelope?.maxOutputTokens)
+    || envelope.maxOutputTokens < 1
+  ) {
+    throw serviceError(
+      `${profile.provider} request budget envelope is unavailable; provider submission was not attempted`,
+      `${profile.provider}_budget_envelope_unavailable`,
+    );
+  }
+  const usage = {
+    prompt_tokens: envelope.inputTokenUpperBound,
+    completion_tokens: envelope.maxOutputTokens,
+    total_tokens: envelope.inputTokenUpperBound + envelope.maxOutputTokens,
+  };
+  const cost = profile.provider === "relay"
+    ? estimateRelayModelCost({
+        model: profile.model || profile.requestedModel,
+        usage,
+        usdToCnyRate: pricingProfile?.usdToCnyRate,
+        exchangeRateVersion: pricingProfile?.exchangeRateVersion,
+      })
+    : estimateDeepSeekModelCost({
+        model: profile.requestedModel || profile.model,
+        usage,
+        pricingProfile: deepSeekPricingForModel(
+          pricingProfile?.deepSeek,
+          profile.requestedModel || profile.model,
+        ),
+        usdToCnyRate: pricingProfile?.usdToCnyRate,
+        exchangeRateVersion: pricingProfile?.exchangeRateVersion,
+      });
+  if (!Number.isFinite(cost.totalCostCny) || cost.totalCostCny < 0) {
+    throw serviceError(
+      `${profile.provider} worst-case request cost cannot be priced; provider submission was not attempted`,
+      `${profile.provider}_budget_pricing_unavailable`,
+    );
+  }
+  return cost.totalCostCny;
+}
+
+function requiredDeepSeekReservationCny({
+  model,
+  inputTokenUpperBound,
+  maxOutputTokens,
+  pricingProfile,
+  usdToCnyRate,
+  exchangeRateVersion,
+}) {
+  const cost = estimateDeepSeekModelCost({
+    model,
+    usage: {
+      prompt_tokens: inputTokenUpperBound,
+      completion_tokens: maxOutputTokens,
+      total_tokens: inputTokenUpperBound + maxOutputTokens,
+    },
+    pricingProfile,
+    usdToCnyRate,
+    exchangeRateVersion,
+  });
+  if (!Number.isFinite(cost.totalCostCny) || cost.totalCostCny < 0) {
+    throw serviceError(
+      "DeepSeek evidence-preparation worst-case cost cannot be priced; provider submission was not attempted",
+      "deepseek_budget_pricing_unavailable",
+    );
+  }
+  return cost.totalCostCny;
+}
+
+function utf8TokenUpperBound(value, framingAllowanceBytes = 4_096) {
+  const bytes = Buffer.byteLength(String(value ?? ""), "utf8");
+  const total = bytes + framingAllowanceBytes;
+  if (!Number.isSafeInteger(total) || total < 1) {
+    throw serviceError("request budget envelope is invalid", "request_budget_envelope_invalid");
+  }
+  return total;
+}
+
+function conservativeFinalRequestBudgetEnvelope(request = {}) {
+  const serialized = JSON.stringify({
+    instructions: request.instructions || "",
+    input: request.input || "",
+  });
+  return {
+    // Built-in providers expose an exact envelope. This conservative fallback
+    // is only for injected test/development providers and reserves another full
+    // final-input allowance for hidden schema/framing text.
+    inputTokenUpperBound: utf8TokenUpperBound(serialized, MAX_FINAL_RULING_INPUT_BYTES),
+    maxOutputTokens: Number(request.maxOutputTokens),
   };
 }
 
@@ -3428,6 +3721,48 @@ function assertFinalCallBudgetLedger(ledger) {
   }
 }
 
+function applyFinalBudgetAvailability(capabilities, poolStatuses, {
+  ledgerConfigured,
+} = {}) {
+  const byModel = new Map();
+  for (const pool of Array.isArray(poolStatuses) ? poolStatuses : []) {
+    for (const model of pool?.models || []) byModel.set(String(model), pool);
+  }
+  const source = jsonSafe(capabilities);
+  const providers = (source?.providers || []).map((provider) => {
+    const models = (provider.models || []).map((model) => {
+      const pool = byModel.get(String(model.modelId || model.id || ""));
+      const budgetConfigured = pool?.configured === true;
+      const budgetAvailable = budgetConfigured && pool?.available === true;
+      return {
+        ...model,
+        transportAvailable: model.available === true,
+        budgetConfigured,
+        budgetAvailable,
+        budgetPool: pool?.pool || null,
+        available: model.available === true && budgetAvailable,
+        unavailableReason: model.available !== true
+          ? "provider_transport_unavailable"
+          : (!ledgerConfigured
+              ? "final_budget_ledger_unavailable"
+              : (!budgetConfigured
+                  ? "final_budget_pool_unconfigured"
+                  : (budgetAvailable ? null : "final_budget_pool_exhausted"))),
+      };
+    });
+    return {
+      ...provider,
+      transportAvailable: provider.available === true,
+      available: models.some((model) => model.available === true),
+      models,
+    };
+  });
+  return {
+    ...source,
+    providers,
+  };
+}
+
 function finalBudgetReservationId(runId, attemptKind, attemptId) {
   return [
     "admin-final-call/v1",
@@ -3435,6 +3770,36 @@ function finalBudgetReservationId(runId, attemptKind, attemptId) {
     requiredString(attemptKind, "attemptKind"),
     requiredString(attemptId, "attemptId"),
   ].join(":");
+}
+
+function preparationBudgetReservationId(runId) {
+  return [
+    "admin-final-call/v1",
+    requiredString(runId, "runId"),
+    "evidence_preparation",
+    PAID_PREPARATION_SUBSTAGE_ID,
+  ].join(":");
+}
+
+function hasInterruptedPaidPreparation(stageTiming) {
+  const understand = stageTiming?.stages?.find((stage) => stage.id === "understand");
+  return understand?.substages?.some((substage) => (
+    substage.id === PAID_PREPARATION_SUBSTAGE_ID
+    // The substage is created immediately before the paid request. A
+    // COMPLETED span only proves that the provider returned; its output is not
+    // durable until the evidence snapshot is finalized. Therefore every
+    // started, non-planned instance must fail closed instead of being submitted
+    // again after a crash.
+    && ![
+      ADMIN_STAGE_STATUSES.PENDING,
+      ADMIN_STAGE_STATUSES.SKIPPED,
+    ].includes(substage.status)
+  )) === true;
+}
+
+function preparationFailureIsReleaseSafe(error) {
+  return error?.budgetReservationMayExist === false
+    || error?.budgetReservationReleaseSafe === true;
 }
 
 function optionalPositiveInteger(value) {
@@ -3565,6 +3930,15 @@ function readSynchronousFinalTimeoutMs(env) {
   const number = Number(value);
   if (!Number.isInteger(number) || number < 1) {
     throw new TypeError("ADMIN_MODEL_LAB_SYNC_FINAL_TIMEOUT_MS must be a positive integer");
+  }
+  return number;
+}
+
+function readBoundedOutputTokens(value, fallback, field) {
+  if (value === undefined || value === null || String(value).trim() === "") return fallback;
+  const number = Number(value);
+  if (!Number.isInteger(number) || number < 1 || number > 128_000) {
+    throw new TypeError(`${field} must be an integer between 1 and 128000`);
   }
   return number;
 }

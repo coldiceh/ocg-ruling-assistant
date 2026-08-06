@@ -3,6 +3,8 @@ import test from "node:test";
 
 import {
   collectAvailableModels,
+  createAdminModelLabHttpClient,
+  FIVE_MODEL_PILOT_CONFIGURATIONS,
   formatMatrixMarkdown,
   main,
   parseMatrixArguments,
@@ -10,6 +12,51 @@ import {
   runAdminModelMatrixBatch,
   validateReusableSourceRun,
 } from "../scripts/admin-model-matrix.mjs";
+
+test("admin matrix client requires HTTPS remotely and never follows redirects", async () => {
+  assert.throws(
+    () => createAdminModelLabHttpClient({
+      baseUrl: "http://lab.example.test",
+      password: "test-password",
+      fetchImpl: async () => { throw new Error("must not fetch"); },
+    }),
+    /HTTPS.*loopback/iu,
+  );
+  assert.doesNotThrow(() => createAdminModelLabHttpClient({
+    baseUrl: "http://127.0.0.1:8787",
+    password: "test-password",
+    fetchImpl: async () => { throw new Error("not called"); },
+  }));
+  assert.doesNotThrow(() => createAdminModelLabHttpClient({
+    baseUrl: "http://[::1]:8787",
+    password: "test-password",
+    fetchImpl: async () => { throw new Error("not called"); },
+  }));
+
+  const requests = [];
+  const client = createAdminModelLabHttpClient({
+    baseUrl: "https://lab.example.test",
+    password: "test-password",
+    fetchImpl: async (url, options) => {
+      requests.push({ url: String(url), options });
+      return {
+        ok: false,
+        status: 307,
+        headers: new Headers({ location: "https://evil.example.test/collect" }),
+        async json() { return {}; },
+      };
+    },
+  });
+
+  await assert.rejects(
+    client.login(),
+    (error) => error?.code === "admin_model_lab_redirect_forbidden",
+  );
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].url, "https://lab.example.test/api/admin-auth");
+  assert.equal(requests[0].options.redirect, "manual");
+  assert.match(requests[0].options.body, /test-password/u);
+});
 import { createEvidenceSnapshot } from "../backend/adminEvidenceSnapshot.mjs";
 
 test("matrix creates one Flash source, forks frozen evidence, skips unavailable models, and continues after failure", async () => {
@@ -135,7 +182,14 @@ test("argument and capability normalization keep only server-available configura
         {
           providerId: "glm",
           available: true,
-          models: [{ modelId: "glm-5.2", available: true }],
+          models: [{
+            modelId: "glm-5.2",
+            available: true,
+            transportAvailable: true,
+            budgetConfigured: true,
+            budgetAvailable: true,
+            budgetPool: "glm",
+          }],
         },
         {
           providerId: "kimi",
@@ -312,7 +366,89 @@ test("matrix uses the first candidate as source and enforces request cost and co
   assert.equal(blockedByConcurrency.calls.length, 0);
 });
 
-test("four-case pilot blocks the default twelve-call estimate under the shared 10 CNY pool", async () => {
+test("paid matrix fails closed before run creation without a persistent final-call budget ledger", async () => {
+  const fixture = createFetchFixture({
+    finalCallBudget: {
+      configured: true,
+      persistent: false,
+      storageKind: "memory-admin-final-budget",
+    },
+  });
+  await assert.rejects(
+    runAdminModelMatrix({
+      baseUrl: "https://lab.example.test",
+      origin: "https://admin.example.test",
+      password: "test-only-password",
+      question: "测试问题",
+      fetchImpl: fixture.fetch,
+      estimatedCnyPerFinalRequest: 0,
+    }),
+    /configured persistent final-call budget ledger/u,
+  );
+  assert.equal(fixture.calls.some((call) => call.action === "create"), false);
+  assert.equal(fixture.calls.some((call) => call.action === "execute"), false);
+});
+
+test("paid matrix fails closed before run creation when capabilities are unavailable or incomplete", async (t) => {
+  for (const [capabilityMode, expectedError] of [
+    ["zero_available", /Evidence preparation configuration is unavailable/u],
+    ["missing_budget_fields", /Evidence preparation configuration is unavailable/u],
+    ["missing_features", /Admin lab capability is unavailable: executeRun/u],
+  ]) {
+    await t.test(capabilityMode, async () => {
+      const fixture = createFetchFixture({ capabilityMode });
+      await assert.rejects(
+        runAdminModelMatrix({
+          baseUrl: "https://lab.example.test",
+          origin: "https://admin.example.test",
+          password: "test-only-password",
+          question: "测试问题",
+          fetchImpl: fixture.fetch,
+          estimatedCnyPerFinalRequest: 0,
+        }),
+        expectedError,
+      );
+      assert.equal(fixture.calls.some((call) => call.action === "create"), false);
+      assert.equal(fixture.calls.some((call) => call.action === "fork"), false);
+      assert.equal(fixture.calls.some((call) => call.action === "execute"), false);
+    });
+  }
+});
+
+test("explicit five-model pilot performs exactly one final submission per available model", async () => {
+  const fixture = createFetchFixture();
+  const report = await runAdminModelMatrix({
+    baseUrl: "https://lab.example.test",
+    origin: "https://admin.example.test",
+    password: "test-only-password",
+    question: "测试问题",
+    configurations: FIVE_MODEL_PILOT_CONFIGURATIONS,
+    fetchImpl: fixture.fetch,
+    pollIntervalMs: 1,
+    runTimeoutMs: 1_000,
+    maxFinalRequests: 5,
+    estimatedCnyPerFinalRequest: 0,
+    sleep: async () => {},
+  });
+
+  assert.equal(report.guard.finalAttemptPolicy, "single");
+  assert.equal(report.guard.plannedFinalRequests, 5);
+  assert.deepEqual(
+    report.results.map((item) => item.requestedModel),
+    [
+      "relay-gpt-5.6-sol",
+      "relay-gpt-5.6-terra",
+      "relay-gpt-5.6-luna",
+      "deepseek-v4-flash",
+      "deepseek-v4-pro",
+    ],
+  );
+  assert.equal(fixture.calls.filter((call) => call.action === "execute").length, 5);
+  assert.equal(fixture.calls.filter((call) => call.action === "create").length, 1);
+  assert.equal(fixture.calls.filter((call) => call.action === "fork").length, 4);
+});
+
+test("four-case pilot blocks the default twelve-call estimate above the CLI 10 CNY cap", async () => {
   const blocked = createFetchFixture();
   await assert.rejects(
     runAdminModelMatrixBatch({
@@ -366,7 +502,12 @@ test("cases-file CLI executes four questions as exactly twelve single final requ
   const output = [];
   const cases = {
     cases: [
-      { caseId: "case-a", question: "Q1" },
+      {
+        caseId: "case-a",
+        question: "Q1",
+        expectedAnswer: "GOLD_ONLY_ANSWER_MUST_NOT_LEAK",
+        leakCanary: "GOLD_ONLY_CANARY_MUST_NOT_LEAK",
+      },
       { caseId: "case-b", question: "Q2" },
       { caseId: "case-c", question: "Q3" },
       { caseId: "case-d", question: "Q4" },
@@ -407,9 +548,21 @@ test("cases-file CLI executes four questions as exactly twelve single final requ
   assert.equal(fixture.calls.filter((call) => call.action === "create").length, 4);
   assert.equal(fixture.calls.filter((call) => call.action === "fork").length, 8);
   assert.equal(fixture.calls.filter((call) => call.action === "execute").length, 12);
+  assert.doesNotMatch(
+    JSON.stringify(fixture.calls),
+    /GOLD_ONLY_(?:ANSWER|CANARY)_MUST_NOT_LEAK/u,
+  );
 });
 
-function createFetchFixture({ terminalFailureModel = "" } = {}) {
+function createFetchFixture({
+  terminalFailureModel = "",
+  capabilityMode = "complete",
+  finalCallBudget = {
+    configured: true,
+    persistent: true,
+    storageKind: "redis-admin-final-budget",
+  },
+} = {}) {
   const runs = new Map();
   const events = new Map();
   const existingRun = createReusableSourceRun();
@@ -442,48 +595,10 @@ function createFetchFixture({ terminalFailureModel = "" } = {}) {
     const action = options.method === "POST" ? body.action : url.searchParams.get("action");
     calls.push({ action, body, url: url.toString() });
     if (action === "capabilities") {
-      return ok({
-        features: { createRun: true, forkRun: true, executeRun: true },
-        providers: {
-          providers: [
-            {
-              providerId: "deepseek",
-              available: true,
-              models: [{
-                modelId: "deepseek-v4-flash",
-                available: true,
-                supportedReasoningModes: ["standard", "pro"],
-                supportedReasoningEfforts: ["none", "high"],
-              }],
-            },
-            {
-              providerId: "glm",
-              available: true,
-              models: [{
-                modelId: "glm-5.2",
-                available: true,
-                supportedReasoningModes: ["standard", "pro"],
-                supportedReasoningEfforts: ["none", "high"],
-              }],
-            },
-            {
-              providerId: "kimi",
-              available: false,
-              models: [{ modelId: "kimi-k2.6", available: false }],
-            },
-            {
-              providerId: "relay",
-              available: true,
-              models: ["sol", "terra", "luna"].map((name) => ({
-                modelId: `relay-gpt-5.6-${name}`,
-                available: true,
-                supportedReasoningModes: ["pro"],
-                supportedReasoningEfforts: ["high"],
-              })),
-            },
-          ],
-        },
-      }, "capabilities");
+      return ok(createCapabilityResponse({
+        finalCallBudget,
+        capabilityMode,
+      }), "capabilities");
     }
     if (action === "create") {
       const snapshot = createFixtureSnapshot(body.question, body);
@@ -558,6 +673,113 @@ function createFetchFixture({ terminalFailureModel = "" } = {}) {
     protectedHeaders,
     auth,
     existingSnapshot: existingRun.evidenceSnapshot,
+  };
+}
+
+function createCapabilityResponse({ finalCallBudget, capabilityMode }) {
+  const budgetedModel = ({ modelId, budgetPool, modes, efforts, available = true }) => ({
+    modelId,
+    available,
+    transportAvailable: available,
+    budgetConfigured: available,
+    budgetAvailable: available,
+    budgetPool,
+    supportedReasoningModes: modes || [],
+    supportedReasoningEfforts: efforts || [],
+  });
+  let providers = [
+    {
+      providerId: "deepseek",
+      available: true,
+      transportAvailable: true,
+      models: [
+        budgetedModel({
+          modelId: "deepseek-v4-flash",
+          budgetPool: "deepseek",
+          modes: ["standard", "pro"],
+          efforts: ["none", "high"],
+        }),
+        budgetedModel({
+          modelId: "deepseek-v4-pro",
+          budgetPool: "deepseek",
+          modes: ["standard", "pro"],
+          efforts: ["none", "high", "max"],
+        }),
+      ],
+    },
+    {
+      providerId: "glm",
+      available: true,
+      transportAvailable: true,
+      models: [budgetedModel({
+        modelId: "glm-5.2",
+        budgetPool: "glm",
+        modes: ["standard", "pro"],
+        efforts: ["none", "high"],
+      })],
+    },
+    {
+      providerId: "kimi",
+      available: false,
+      transportAvailable: false,
+      models: [budgetedModel({
+        modelId: "kimi-k2.6",
+        budgetPool: "kimi",
+        available: false,
+      })],
+    },
+    {
+      providerId: "relay",
+      available: true,
+      transportAvailable: true,
+      models: ["sol", "terra", "luna"].map((name) => budgetedModel({
+        modelId: `relay-gpt-5.6-${name}`,
+        budgetPool: `relay_${name}`,
+        modes: ["pro"],
+        efforts: ["high"],
+      })),
+    },
+  ];
+  const flatModels = Object.fromEntries(providers.flatMap((provider) => (
+    provider.models.map((model) => [model.modelId, {
+      providerId: provider.providerId,
+      supportedReasoningModes: model.supportedReasoningModes,
+      supportedReasoningEfforts: model.supportedReasoningEfforts,
+    }])
+  )));
+  if (capabilityMode === "zero_available") {
+    providers = providers.map((provider) => ({
+      ...provider,
+      available: false,
+      models: provider.models.map((model) => ({
+        ...model,
+        available: false,
+        budgetAvailable: false,
+      })),
+    }));
+  } else if (capabilityMode === "missing_budget_fields") {
+    providers = providers.map((provider) => ({
+      ...provider,
+      models: provider.models.map((model) => {
+        const {
+          budgetConfigured,
+          budgetAvailable,
+          budgetPool,
+          ...remainder
+        } = model;
+        return remainder;
+      }),
+    }));
+  }
+  return {
+    features: capabilityMode === "missing_features"
+      ? { createRun: true, forkRun: true }
+      : { createRun: true, forkRun: true, executeRun: true },
+    architecture: { finalCallBudget },
+    providers: { providers },
+    // The real endpoint also exposes this unbudgeted static table. Paid matrix
+    // discovery must never fall back to it when budgeted providers are empty.
+    models: flatModels,
   };
 }
 

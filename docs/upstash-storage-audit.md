@@ -78,7 +78,8 @@ pnpm run audit:upstash-storage
 
 ## 当前边界
 
-- 没有自动清理、迁移或删除逻辑；
+- 容量审计本身没有迁移或删除逻辑；另有默认 dry-run、显式确认后才可执行的
+  [Admin Run 定向清理工具](./upstash-admin-run-cleanup.md)；
 - 没有更改默认 30 天 Admin Run TTL；
 - 只读审计也会消耗少量 Redis command quota；
 - 容量已经耗尽时，新格式不能自动释放旧 Snapshot 占用，仍需在确认备份和

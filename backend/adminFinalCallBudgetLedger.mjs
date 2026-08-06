@@ -8,11 +8,53 @@ const MONEY_SCALE = 1_000_000;
 
 const PROVIDER_POOLS = Object.freeze({
   deepseek: "deepseek",
-  relay: "relay",
   glm: "glm",
   kimi: "kimi",
   openai: "openai",
 });
+
+const RELAY_MODEL_POOLS = Object.freeze({
+  "gpt-5.6-sol": "relay_sol",
+  "gpt-5.6-terra": "relay_terra",
+  "gpt-5.6-luna": "relay_luna",
+});
+
+const BUDGET_POOL_DESCRIPTORS = Object.freeze([
+  Object.freeze({
+    pool: "deepseek",
+    provider: "deepseek",
+    label: "DeepSeek Flash / Pro",
+    models: Object.freeze(["deepseek-v4-flash", "deepseek-v4-pro"]),
+  }),
+  Object.freeze({
+    pool: "relay_sol",
+    provider: "relay",
+    label: "Relay GPT-5.6 Sol",
+    models: Object.freeze(["relay-gpt-5.6-sol"]),
+  }),
+  Object.freeze({
+    pool: "relay_terra",
+    provider: "relay",
+    label: "Relay GPT-5.6 Terra",
+    models: Object.freeze(["relay-gpt-5.6-terra"]),
+  }),
+  Object.freeze({
+    pool: "relay_luna",
+    provider: "relay",
+    label: "Relay GPT-5.6 Luna",
+    models: Object.freeze(["relay-gpt-5.6-luna"]),
+  }),
+  Object.freeze({ pool: "glm", provider: "glm", label: "GLM", models: Object.freeze(["glm-5.2"]) }),
+  Object.freeze({ pool: "kimi", provider: "kimi", label: "Kimi", models: Object.freeze(["kimi-k2.6", "kimi-k3"]) }),
+  Object.freeze({ pool: "openai", provider: "openai", label: "OpenAI", models: Object.freeze(["gpt-5.6", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"]) }),
+]);
+
+const ALL_BUDGET_POOLS = Object.freeze([
+  ...new Set([
+    ...Object.values(PROVIDER_POOLS),
+    ...Object.values(RELAY_MODEL_POOLS),
+  ]),
+]);
 
 const RESERVE_SCRIPT = String.raw`
 -- ADMIN_FINAL_BUDGET_RESERVE_V1
@@ -41,7 +83,8 @@ const SETTLE_SCRIPT = String.raw`
 -- ADMIN_FINAL_BUDGET_SETTLE_V1
 local field = ARGV[1]
 local actual = tonumber(ARGV[2])
-local ttl = tonumber(ARGV[3])
+local limit = tonumber(ARGV[3])
+local ttl = tonumber(ARGV[4])
 local existing = redis.call('HGET', KEYS[1], field)
 local used = tonumber(redis.call('HGET', KEYS[1], 'usedMicros') or '0')
 if not existing then
@@ -58,6 +101,9 @@ if state == 'X' then
 end
 if state ~= 'R' then
   return {'INVALID', state, tostring(used)}
+end
+if actual > amount then
+  return {'EXCEEDS_RESERVATION', tostring(amount), tostring(actual), tostring(used), tostring(limit)}
 end
 used = math.max(0, used - amount + actual)
 redis.call('HSET', KEYS[1], 'usedMicros', tostring(used), field, 'S|' .. tostring(actual))
@@ -152,6 +198,7 @@ export function createRedisAdminFinalCallBudgetLedger(options = {}) {
           budgetKey(keyPrefix, request.pool, request.day),
           reservationField(request.reservationId),
           String(request.actualMicros),
+          String(request.limitMicros),
           String(ttlSeconds),
         ],
         operation: "settle",
@@ -177,6 +224,38 @@ export function createRedisAdminFinalCallBudgetLedger(options = {}) {
         reservationMayExist: true,
       });
       return parseReleaseResult(result, request);
+    },
+    async status({ provider, model, reservedAt } = {}) {
+      const request = normalizeBase({
+        provider,
+        model,
+        reservedAt,
+        reservationId: "status",
+      }, policy);
+      const usedMicros = await readRedisUsedMicros({
+        redis,
+        fetchImpl,
+        timeoutMs,
+        key: budgetKey(keyPrefix, request.pool, request.day),
+      });
+      return poolStatusResult(request, usedMicros, {
+        persistent: true,
+        storageKind: "redis-admin-final-budget",
+      });
+    },
+    async poolStatuses({ reservedAt } = {}) {
+      return buildPoolStatuses({
+        policy,
+        reservedAt,
+        persistent: true,
+        storageKind: "redis-admin-final-budget",
+        readUsedMicros: (pool, day) => readRedisUsedMicros({
+          redis,
+          fetchImpl,
+          timeoutMs,
+          key: budgetKey(keyPrefix, pool, day),
+        }),
+      });
     },
   });
 }
@@ -226,6 +305,9 @@ export function createMemoryAdminFinalCallBudgetLedger(options = {}) {
       if (existing.state === "released") {
         return settlementResult("released", request, state, 0);
       }
+      if (request.actualMicros > existing.amountMicros) {
+        throw budgetStateConflict("settlement exceeds its pre-call reservation");
+      }
       state.usedMicros = Math.max(
         0,
         state.usedMicros - existing.amountMicros + request.actualMicros,
@@ -246,25 +328,42 @@ export function createMemoryAdminFinalCallBudgetLedger(options = {}) {
       existing.amountMicros = 0;
       return releaseResult("released", request, state);
     },
-    async status({ provider, reservedAt } = {}) {
+    async status({ provider, model, reservedAt } = {}) {
       const request = normalizeBase({
         provider,
+        model,
         reservedAt,
         reservationId: "status",
       }, policy);
       const state = account(request);
-      return Object.freeze({
-        pool: request.pool,
-        day: request.day,
-        usedCny: fromMicros(state.usedMicros),
-        dailyBudgetCny: fromMicros(request.limitMicros),
+      return poolStatusResult(request, state.usedMicros, {
+        persistent: false,
+        storageKind: "memory-admin-final-budget",
+      });
+    },
+    async poolStatuses({ reservedAt } = {}) {
+      return buildPoolStatuses({
+        policy,
+        reservedAt,
+        persistent: false,
+        storageKind: "memory-admin-final-budget",
+        readUsedMicros: async (pool, day) => (
+          ledgers.get(`${pool}:${day}`)?.usedMicros || 0
+        ),
       });
     },
   });
 }
 
-export function adminFinalBudgetPool(provider) {
+export function adminFinalBudgetPool(provider, model) {
   const normalized = String(provider || "").trim().toLowerCase();
+  if (normalized === "relay") {
+    const canonicalModel = String(model || "")
+      .trim()
+      .toLowerCase()
+      .replace(/^relay-/u, "");
+    return RELAY_MODEL_POOLS[canonicalModel] || null;
+  }
   return PROVIDER_POOLS[normalized] || null;
 }
 
@@ -274,7 +373,7 @@ function readPolicy(env, options) {
   ).trim() || DEFAULT_TIMEZONE;
   assertTimezone(timezone);
   const pools = {};
-  for (const pool of Object.values(PROVIDER_POOLS)) {
+  for (const pool of ALL_BUDGET_POOLS) {
     const upper = pool.toUpperCase();
     const dailyValue = options.pools?.[pool]?.dailyBudgetCny
       ?? env[`ADMIN_FINAL_BUDGET_${upper}_DAILY_CNY`];
@@ -290,9 +389,16 @@ function readPolicy(env, options) {
 
 function normalizeReservation(input, policy) {
   const base = normalizeBase(input, policy);
+  const requiredMicros = optionalMoneyMicros(
+    input.requiredReservationCny,
+    { allowZero: true },
+  );
   return {
     ...base,
-    reserveMicros: base.poolPolicy.reservationMicros,
+    reserveMicros: Math.max(
+      base.poolPolicy.reservationMicros,
+      requiredMicros ?? 0,
+    ),
   };
 }
 
@@ -310,8 +416,16 @@ function normalizeRelease(input, policy) {
 
 function normalizeBase(input, policy) {
   const provider = requiredText(input.provider, "provider").toLowerCase();
-  const pool = adminFinalBudgetPool(provider);
-  if (!pool) throw budgetUnconfigured(provider, "provider is not budgeted");
+  const model = String(input.model || "").trim();
+  const pool = adminFinalBudgetPool(provider, model);
+  if (!pool) {
+    throw budgetUnconfigured(
+      provider,
+      provider === "relay"
+        ? `relay model is not budgeted: ${model || "(missing)"}`
+        : "provider is not budgeted",
+    );
+  }
   const poolPolicy = policy.pools[pool];
   if (
     !Number.isSafeInteger(poolPolicy?.dailyBudgetMicros)
@@ -324,6 +438,7 @@ function normalizeBase(input, policy) {
   }
   return {
     provider,
+    model: model || null,
     pool,
     poolPolicy,
     reservationId: requiredText(input.reservationId, "reservationId"),
@@ -361,6 +476,9 @@ function parseSettlementResult(result, request) {
   if (values[0] === "RELEASED") {
     return settlementResult("released", request, { usedMicros: Number(values[1]) }, 0);
   }
+  if (values[0] === "EXCEEDS_RESERVATION") {
+    throw budgetStateConflict("settlement exceeds its pre-call reservation");
+  }
   throw budgetStateConflict(`unexpected settle result: ${values.join(":")}`);
 }
 
@@ -386,6 +504,7 @@ function reservationResult(status, request, account, amountMicros) {
     status,
     reservationId: request.reservationId,
     provider: request.provider,
+    model: request.model,
     pool: request.pool,
     day: request.day,
     reservedCny: fromMicros(amountMicros),
@@ -399,6 +518,7 @@ function settlementResult(status, request, account, amountMicros) {
     status,
     reservationId: request.reservationId,
     provider: request.provider,
+    model: request.model,
     pool: request.pool,
     day: request.day,
     settledCny: fromMicros(amountMicros),
@@ -411,10 +531,67 @@ function releaseResult(status, request, account) {
     status,
     reservationId: request.reservationId,
     provider: request.provider,
+    model: request.model,
     pool: request.pool,
     day: request.day,
     usedCny: fromMicros(account.usedMicros),
   });
+}
+
+function poolStatusResult(request, usedMicros, { persistent, storageKind }) {
+  const remainingMicros = Math.max(0, request.limitMicros - usedMicros);
+  return Object.freeze({
+    pool: request.pool,
+    provider: request.provider,
+    model: request.model,
+    day: request.day,
+    configured: true,
+    persistent: persistent === true,
+    storageKind,
+    usedCny: fromMicros(usedMicros),
+    dailyBudgetCny: fromMicros(request.limitMicros),
+    reservationCny: fromMicros(request.poolPolicy.reservationMicros),
+    remainingCny: fromMicros(remainingMicros),
+    available: remainingMicros >= request.poolPolicy.reservationMicros,
+  });
+}
+
+async function buildPoolStatuses({
+  policy,
+  reservedAt,
+  persistent,
+  storageKind,
+  readUsedMicros,
+}) {
+  const day = budgetDay(policy.timezone, reservedAt);
+  const statuses = [];
+  for (const descriptor of BUDGET_POOL_DESCRIPTORS) {
+    const poolPolicy = policy.pools[descriptor.pool];
+    const configured = Number.isSafeInteger(poolPolicy?.dailyBudgetMicros)
+      && Number.isSafeInteger(poolPolicy?.reservationMicros);
+    const usedMicros = configured
+      ? await readUsedMicros(descriptor.pool, day)
+      : null;
+    const remainingMicros = configured
+      ? Math.max(0, poolPolicy.dailyBudgetMicros - usedMicros)
+      : null;
+    statuses.push(Object.freeze({
+      pool: descriptor.pool,
+      provider: descriptor.provider,
+      label: descriptor.label,
+      models: [...descriptor.models],
+      day,
+      configured,
+      persistent: persistent === true,
+      storageKind,
+      usedCny: configured ? fromMicros(usedMicros) : null,
+      dailyBudgetCny: configured ? fromMicros(poolPolicy.dailyBudgetMicros) : null,
+      reservationCny: configured ? fromMicros(poolPolicy.reservationMicros) : null,
+      remainingCny: configured ? fromMicros(remainingMicros) : null,
+      available: configured && remainingMicros >= poolPolicy.reservationMicros,
+    }));
+  }
+  return Object.freeze(statuses);
 }
 
 async function redisBudgetCommand({
@@ -460,6 +637,23 @@ async function redisBudgetCommand({
     });
   }
   return payload?.result;
+}
+
+async function readRedisUsedMicros({ redis, fetchImpl, timeoutMs, key }) {
+  const result = await redisBudgetCommand({
+    redis,
+    fetchImpl,
+    timeoutMs,
+    command: ["HGET", key, "usedMicros"],
+    operation: "status",
+    reservationMayExist: false,
+  });
+  if (result === null || result === undefined || result === "") return 0;
+  const usedMicros = Number(result);
+  if (!Number.isSafeInteger(usedMicros) || usedMicros < 0) {
+    throw budgetStateConflict("status usedMicros is invalid");
+  }
+  return usedMicros;
 }
 
 function redisConfig(env, options) {
@@ -581,6 +775,7 @@ function budgetExceeded(request, usedMicros) {
   error.budgetReservationMayExist = false;
   error.details = {
     pool: request.pool,
+    model: request.model,
     day: request.day,
     usedCny: fromMicros(usedMicros),
     reservationCny: fromMicros(request.reserveMicros),

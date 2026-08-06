@@ -52,8 +52,8 @@ pnpm run dev:relay
 
 该命令不会把试运行估算冒充已经核验的中转价格，也不会自动放宽实验预算。真实批量
 实验仍受矩阵工具的请求数和费用硬闸约束。启动器设置的本地默认值为：Relay 的
-Sol/Terra/Luna 共用 10 CNY 日池、每次先预约 5 CNY、completion token 上限 8192；
-DeepSeek Flash/Pro 共用 10 CNY 日池且每次预约 10 CNY。可靠 usage 会按版本化的
+Sol/Terra/Luna 各自使用独立 10 CNY 日池、每次先预约 5 CNY、completion token
+上限 8192；DeepSeek Flash/Pro 共用 10 CNY 日池且每次预约 2 CNY。可靠 usage 会按版本化的
 中转后台截图费率结算，差额才会释放；无 usage、无预算换算因子、超时、429/5xx 或
 确认不完整时保留预约。因此两次不确定 Relay 调用就会耗尽应用内日池，且默认绝不
 承诺能跑满 12 次。仍应在中转站后台给这把 API key 设置独立硬限额。

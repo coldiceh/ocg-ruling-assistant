@@ -62,7 +62,7 @@ Upstash Redis；未配置、没有样本或存储失败时会明确显示不可�
 
 ## 管理模型实验室
 
-公开问答由 DeepSeek V4 Flash 准备检索证据，并默认由 DeepSeek V4 Flash（思考 high）生成最终裁定；公开主页面不再提供 GLM 5.2、Kimi 或第三方中转选项。GLM、Kimi 与第三方中转 GPT-5.6 Sol/Terra/Luna 只保留在隔离的管理模型实验室中，中转结果始终标注“模型身份未验证”；设置中转 key 不会注册公开 profile，也不会改变公开默认模型。旧的 `PUBLIC_RULING_MODEL_PROFILE=glm-5.2-high` 不会被静默映射到 DeepSeek，部署时必须删除该变量或明确改为 `deepseek-v4-flash-high`，否则公开配置会 fail-closed。公开 API 继续受 `API_DAILY_BUDGET_CNY` 总池约束；管理实验的真实最终调用另由持久化 `ADMIN_FINAL_BUDGET_*` provider 共享池约束，两者互不增加或替代。中转的临时本地配置和安全边界见 `docs/relay-provider.md`。
+公开问答由 DeepSeek V4 Flash 准备检索证据，并默认由 DeepSeek V4 Flash（思考 high）生成最终裁定；公开主页面不再提供 GLM 5.2、Kimi 或第三方中转选项。GLM、Kimi 与第三方中转 GPT-5.6 Sol/Terra/Luna 只保留在隔离的管理模型实验室中，中转结果始终标注“模型身份未验证”；设置中转 key 不会注册公开 profile，也不会改变公开默认模型。旧的 `PUBLIC_RULING_MODEL_PROFILE=glm-5.2-high` 不会被静默映射到 DeepSeek，部署时必须删除该变量或明确改为 `deepseek-v4-flash-high`，否则公开配置会 fail-closed。公开 API 继续受 `API_DAILY_BUDGET_CNY` 总池约束；管理实验中的 DeepSeek 证据准备和各模型最终调用另受持久化 `ADMIN_FINAL_BUDGET_*` 账本约束。DeepSeek Flash/Pro 共用一个日池，Relay Sol/Terra/Luna 各有独立日池；这些额度不会增加或替代公开额度。中转的临时本地配置和安全边界见 `docs/relay-provider.md`。
 
 隔离的管理实验路径用于在冻结证据下比较其他模型配置，不会改变公开问答选择。它默认关闭，默认测试也不会调用付费模型。部署、安全配置和当前进程恢复边界见：
 
@@ -116,12 +116,12 @@ pnpm run dev:relay
 `RELAY_BASE_URL` 会先询问朋友提供的 HTTPS `/v1` 地址；若缺少 `DEEPSEEK_API_KEY`，
 会用隐藏输入框安全询问；管理实验始终由 DeepSeek 准备冻结证据，
 不会伪装成本地资料降级。
-启动器会为本地开发账本设置 Relay 共享 10 元日池、每次 5 元保守预约、8192
-completion-token 上限，以及 DeepSeek 共用 10 元日池。可靠 usage 会按版本化的中转
-后台截图费率结算并释放差额；无 usage、无汇率、超时或确认不完整时保留 5 元预约，
-因此最多两次不确定调用就会停止。截图费率和 7.5 的预算换算因子都不是供应商账单或
-实时汇率，付费前仍须核对中转后台并设置真实硬限额。默认矩阵按模型分别估算，10 元
-池不承诺能跑满 12 次。启动后访问
+启动器会为本地开发账本设置 Relay Sol、Terra、Luna 各自独立的 10 元日池、每次
+5 元保守预约和 8192 completion-token 上限；DeepSeek Flash/Pro 共用 10 元日池，
+每次预约 2 元。可靠 usage 会按版本化费率结算并释放差额；无 usage、无定价、超时或
+确认不完整时保留预约。DeepSeek V4 的分模型费率按 2026-08-06 官方页面配置；中转
+截图费率和 7.5 的预算换算因子仍不是供应商账单或实时汇率，付费前须重新核对并在
+供应商侧设置硬限额。启动后访问
 `http://127.0.0.1:4173/?admin=1`。4173 或 8787 已被旧进程占用时，启动器会在启动
 新进程前明确报错，避免留下半启动的服务。8790 上已有 profile 一致且 token 匹配的
 健康引擎时会安全复用，否则拒绝连接到错误内核。
