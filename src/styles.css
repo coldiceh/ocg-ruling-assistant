@@ -1090,8 +1090,15 @@ button:focus-visible {
   list-style: none;
 }
 
+.admin-history-list li {
+  min-width: 0;
+}
+
 .admin-history-list button {
   width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
   padding: 10px 11px;
   border: 1px solid var(--line);
   border-radius: 3px;

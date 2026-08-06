@@ -567,7 +567,7 @@ test("DeepSeek bridge accepts evidence preparation only and keeps server-owned t
   assert.equal(calls[0].signal, controller.signal);
   assert.equal(calls[0].thinkingMode, "enabled");
   assert.equal(calls[0].reasoningEffort, "max");
-  assert.equal(calls[0].allowResponseFormatFallback, false);
+  assert.equal(calls[0].allowResponseFormatFallback, true);
 
   await assert.rejects(
     invoke({
@@ -683,7 +683,7 @@ test("DeepSeek response-format fallback keeps the caller AbortSignal", async () 
   assert.equal(Object.hasOwn(JSON.parse(calls[1].options.body), "response_format"), false);
 });
 
-test("admin DeepSeek bridge disables the implicit HTTP 400 response-format retry", async () => {
+test("admin DeepSeek evidence bridge retries one explicit HTTP 400 without response_format", async () => {
   const calls = [];
   const invoke = createDeepSeekEvidencePreparationInvoke({
     env: {
@@ -692,23 +692,105 @@ test("admin DeepSeek bridge disables the implicit HTTP 400 response-format retry
     },
     fetchImpl: async (url, options) => {
       calls.push({ url, options });
-      return jsonResponse({ error: { message: "response_format unsupported" } }, 400);
+      if (calls.length === 1) {
+        return jsonResponse({ error: { message: "private-response-format-rejection" } }, 400);
+      }
+      return jsonResponse({
+        choices: [{ finish_reason: "stop", message: { content: JSON.stringify({ ok: true }) } }],
+        usage: {},
+      });
     },
   });
 
-  await assert.rejects(
-    invoke({
-      provider: "deepseek",
-      purpose: "evidence_preparation",
-      canMakeFinalRuling: false,
-      canDecideEscalation: false,
-      prompt: "只返回 JSON",
-      modelName: "deepseek-v4-flash",
-      thinkingMode: "disabled",
-    }),
-    (error) => error?.status === 400,
-  );
-  assert.equal(calls.length, 1);
+  const result = await invoke({
+    provider: "deepseek",
+    purpose: "evidence_preparation",
+    canMakeFinalRuling: false,
+    canDecideEscalation: false,
+    prompt: "只返回 JSON",
+    modelName: "deepseek-v4-flash",
+    thinkingMode: "disabled",
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(calls.length, 2);
+  assert.deepEqual(JSON.parse(calls[0].options.body).response_format, { type: "json_object" });
+  assert.equal(Object.hasOwn(JSON.parse(calls[1].options.body), "response_format"), false);
+  assert.ok(result.warnings.includes("deepseek_response_format_fallback"));
+  assert.equal(JSON.stringify(result).includes("private-response-format-rejection"), false);
+  assert.equal(JSON.stringify(result).includes("server-secret"), false);
+});
+
+test("admin DeepSeek evidence bridge never broadens the response-format retry", async (t) => {
+  for (const fixture of [
+    { label: "repeated 400", status: 400, expectedCalls: 2, thinkingMode: "disabled" },
+    { label: "400 without JSON response mode", status: 400, expectedCalls: 1, thinkingMode: "enabled" },
+    { label: "rate limit", status: 429, expectedCalls: 1, thinkingMode: "disabled" },
+    { label: "server error", status: 503, expectedCalls: 1, thinkingMode: "disabled" },
+  ]) {
+    await t.test(fixture.label, async () => {
+      const calls = [];
+      const invoke = createDeepSeekEvidencePreparationInvoke({
+        env: {
+          DEEPSEEK_API_KEY: "server-secret",
+          DEEPSEEK_BASE_URL: "https://deepseek.example/v1",
+        },
+        fetchImpl: async (url, options) => {
+          calls.push({ url, options });
+          return jsonResponse({ error: { message: `private-${fixture.status}-body` } }, fixture.status);
+        },
+      });
+
+      let caught = null;
+      try {
+        await invoke({
+          provider: "deepseek",
+          purpose: "evidence_preparation",
+          canMakeFinalRuling: false,
+          canDecideEscalation: false,
+          prompt: "只返回 JSON",
+          modelName: "deepseek-v4-flash",
+          thinkingMode: fixture.thinkingMode,
+        });
+      } catch (error) {
+        caught = error;
+      }
+
+      assert.ok(caught);
+      assert.equal(caught.status, fixture.status);
+      assert.equal(calls.length, fixture.expectedCalls);
+      assert.equal(caught.message.includes(`private-${fixture.status}-body`), false);
+      assert.equal(caught.message.includes("server-secret"), false);
+    });
+  }
+
+  await t.test("network failure", async () => {
+    let calls = 0;
+    const invoke = createDeepSeekEvidencePreparationInvoke({
+      env: {
+        DEEPSEEK_API_KEY: "server-secret",
+        DEEPSEEK_BASE_URL: "https://deepseek.example/v1",
+      },
+      fetchImpl: async () => {
+        calls += 1;
+        throw new Error("private-network-failure");
+      },
+    });
+
+    await assert.rejects(
+      invoke({
+        provider: "deepseek",
+        purpose: "evidence_preparation",
+        canMakeFinalRuling: false,
+        canDecideEscalation: false,
+        prompt: "只返回 JSON",
+        modelName: "deepseek-v4-flash",
+        thinkingMode: "disabled",
+      }),
+      /private-network-failure/u,
+    );
+    assert.equal(calls, 1);
+  });
 });
 
 test("DeepSeek JSON task classifies completed empty and non-JSON content without retaining it", async (t) => {

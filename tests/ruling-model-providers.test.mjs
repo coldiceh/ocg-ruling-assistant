@@ -407,12 +407,16 @@ test("compatible transport distinguishes provable 4xx rejection from potentially
     );
   }
 
+  let rejectedFinalCalls = 0;
   const rejected = new CompatibleEvidencePreparationProvider({
     providerId: "deepseek",
     apiKey: "deepseek-server-secret",
-    fetchImpl: async () => jsonResponse({
-      error: { code: "invalid_request", message: "invalid request" },
-    }, 400),
+    fetchImpl: async () => {
+      rejectedFinalCalls += 1;
+      return jsonResponse({
+        error: { code: "invalid_request", message: "invalid request" },
+      }, 400);
+    },
   });
   await assert.rejects(
     rejected.create({
@@ -425,6 +429,7 @@ test("compatible transport distinguishes provable 4xx rejection from potentially
     }),
     (error) => error.status === 400 && error.outcomeKnown === true,
   );
+  assert.equal(rejectedFinalCalls, 1);
 });
 
 test("Kimi K2.6 supports optional thinking while K3 uses its always-on reasoning effort", async () => {
