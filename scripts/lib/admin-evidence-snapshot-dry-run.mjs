@@ -15,6 +15,7 @@ import {
   createMemoryAdminRunStorage,
 } from "../../backend/adminRunStore.mjs";
 import { createMemoryAdminFinalCallBudgetLedger } from "../../backend/adminFinalCallBudgetLedger.mjs";
+import { inspectAdminFinalEvidenceReadiness } from "../../backend/adminFinalEvidenceReadiness.mjs";
 import { extractRagCards, normalizeCardKey } from "../../backend/ragCardExtractor.mjs";
 import { loadRagData, retrieveRagEvidence } from "../../backend/ragEvidenceRetriever.mjs";
 import {
@@ -96,6 +97,7 @@ export async function runAdminEvidenceSnapshotDryRun({
     ? normalizeAdminEvidenceDryRunCases(casesValue)
     : await readAdminEvidenceDryRunCases(casesPath);
   const caseByQuestion = new Map(fixture.cases.map((item) => [item.question, item]));
+  const caseById = new Map(fixture.cases.map((item) => [item.id, item]));
   const telemetryById = new Map(fixture.cases.map((item) => [item.id, createTelemetry()]));
   const runStore = createAdminRunStore({
     storage: createMemoryAdminRunStorage(),
@@ -155,8 +157,14 @@ export async function runAdminEvidenceSnapshotDryRun({
       if (current) current.localFinalProviderCreateCount += 1;
       const started = performance.now();
       const finalInput = String(request?.input || "");
-      const inputPacket = parseFinalRulingInput(finalInput);
-      const definition = caseByQuestion.get(String(inputPacket.question || ""));
+      // The final packet may contain decomposed questions plus a separate
+      // scenarioText, so its first question is not a stable fixture lookup
+      // key. The runner is deliberately sequential; bind the sentinel to the
+      // active case id instead of silently validating an empty candidate set.
+      const definition = caseById.get(activeCaseId);
+      if (!definition) {
+        throw new Error("local dry-run provider has no active case definition");
+      }
       const run = await runStore.getRun(String(request?.metadata?.runId || ""));
       const snapshot = assertAdminEvidenceSnapshot(run?.evidenceSnapshot);
       const inspection = inspectAdminEvidencePaidGate({
@@ -319,8 +327,9 @@ export async function runAdminEvidenceSnapshotDryRun({
 export function inspectAdminEvidencePaidGate({ snapshot, finalInput, candidateCards }) {
   assertAdminEvidenceSnapshot(snapshot);
   const packet = parseFinalRulingInput(finalInput);
-  if (packet.evidenceSnapshotId !== snapshot.snapshotId
-    || packet.evidenceSnapshotSha256 !== snapshot.contentSha256) {
+  const snapshotReference = finalInputSnapshotReference(packet);
+  if (snapshotReference.id !== snapshot.snapshotId
+    || snapshotReference.sha256 !== snapshot.contentSha256) {
     throw new TypeError("final input is not bound to the supplied Evidence Snapshot");
   }
   const candidates = normalizeStringList(candidateCards);
@@ -442,6 +451,8 @@ function createCaseReport({ definition, run, snapshot, finalInput, inspection, t
     confidence: Number.isFinite(Number(card.confidence)) ? Number(card.confidence) : null,
     numberedIdentityNameMismatch: card.numberedIdentityNameMismatch === true,
   }));
+  const productionReadiness = inspectAdminFinalEvidenceReadiness(snapshot);
+  const paidGateBlocked = !productionReadiness.ready || !inspection.ready;
   return {
     id: definition.id,
     resolvedCards,
@@ -490,8 +501,23 @@ function createCaseReport({ definition, run, snapshot, finalInput, inspection, t
       dataLoad: rounded(telemetry.loadDataMs),
       total: rounded(telemetry.totalWallClockMs),
     },
-    paidGateBlocked: !inspection.ready,
-    paidGateCode: inspection.ready ? null : ADMIN_DRY_RUN_PAID_GATE_BLOCKED,
+    paidGateBlocked,
+    paidGateCode: !productionReadiness.ready
+      ? "admin_final_evidence_not_ready"
+      : inspection.ready
+        ? null
+        : ADMIN_DRY_RUN_PAID_GATE_BLOCKED,
+    productionReadiness: {
+      ready: productionReadiness.ready,
+      candidateCount: productionReadiness.candidateCount,
+      unresolvedCandidates: productionReadiness.unresolvedCandidates,
+      ambiguousCandidates: productionReadiness.ambiguousCandidates,
+      omittedCandidates: productionReadiness.omittedCandidates,
+      missingVisibleCardTexts: productionReadiness.missingVisibleCardTexts,
+      excerptedVisibleCardTexts: productionReadiness.excerptedVisibleCardTexts,
+      runStatus: run.status || null,
+      runErrorCode: run.error?.code || null,
+    },
     transport: {
       localFinalProviderCreateCount: telemetry.localFinalProviderCreateCount,
       realProviderCalls: 0,
@@ -555,10 +581,24 @@ function offlineServiceEnvironment({ enginePasscodeHydrationEnabled = false } = 
 function parseFinalRulingInput(input) {
   const line = String(input || "").split("\n").at(-1) || "";
   const parsed = parseJsonObject(line);
-  if (parsed.schemaVersion !== 1 || !parsed.evidenceSnapshotId) {
+  const reference = finalInputSnapshotReference(parsed);
+  if (![1, 2].includes(parsed.schemaVersion) || !reference.id || !reference.sha256) {
     throw new TypeError("final ruling input does not contain a valid bounded snapshot packet");
   }
   return parsed;
+}
+
+function finalInputSnapshotReference(packet) {
+  if (packet?.schemaVersion === 2) {
+    return {
+      id: String(packet?.evidenceSnapshot?.id || ""),
+      sha256: String(packet?.evidenceSnapshot?.sha256 || ""),
+    };
+  }
+  return {
+    id: String(packet?.evidenceSnapshotId || ""),
+    sha256: String(packet?.evidenceSnapshotSha256 || ""),
+  };
 }
 
 function parseJsonObject(value) {

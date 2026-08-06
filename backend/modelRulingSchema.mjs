@@ -17,6 +17,32 @@ export const MODEL_RULING_EVIDENCE_RELATIONS = Object.freeze([
   "IRRELEVANT",
 ]);
 
+const MODEL_RULING_EVIDENCE_RELATION_SET = new Set(MODEL_RULING_EVIDENCE_RELATIONS);
+const MODEL_RULING_EVIDENCE_RELATION_ALIASES = new Map([
+  ["DIRECT_ENTAILS", "DIRECTLY_ENTAILS"],
+  ["DIRECT_ENTAILMENT", "DIRECTLY_ENTAILS"],
+  ["ENTAILS_DIRECTLY", "DIRECTLY_ENTAILS"],
+  ["TERM_DEFINITION", "DEFINES_TERM"],
+  ["DEFINES_THE_TERM", "DEFINES_TERM"],
+  ["STEP_SUPPORT", "SUPPORTS_STEP"],
+  ["SUPPORTS_REASONING_STEP", "SUPPORTS_STEP"],
+  ["ANALOGICAL_RULING", "ANALOGOUS_RULING"],
+  ["RULING_BY_ANALOGY", "ANALOGOUS_RULING"],
+  ["PARTIALLY_SUPPORTS", "PARTIAL_SUPPORT"],
+  ["SUPPORTS_PARTIALLY", "PARTIAL_SUPPORT"],
+  ["CONTRADICTS_CLAIM", "CONTRADICTS"],
+  ["CONFLICTS_WITH_CLAIM", "CONTRADICTS"],
+  ["NOT_RELEVANT", "IRRELEVANT"],
+  ["UNRELATED_TO_CLAIM", "IRRELEVANT"],
+  ["直接蕴含", "DIRECTLY_ENTAILS"],
+  ["定义术语", "DEFINES_TERM"],
+  ["支持步骤", "SUPPORTS_STEP"],
+  ["类比裁定", "ANALOGOUS_RULING"],
+  ["部分支持", "PARTIAL_SUPPORT"],
+  ["矛盾", "CONTRADICTS"],
+  ["无关", "IRRELEVANT"],
+]);
+
 export const MODEL_RULING_INFERENCE_TYPES = Object.freeze([
   "DIRECT_OFFICIAL",
   "CARD_TEXT",
@@ -214,19 +240,77 @@ export function parseAndValidateModelRulingResult(rawText, options = {}) {
   } catch {
     return validationFailure(["model output is not valid JSON"]);
   }
-  const strictValidation = validateModelRulingResult(parsed, options);
+  const relationNormalization = options.normalizeEvidenceProvenance === true
+    ? normalizeModelRulingEvidenceRelationTokens(parsed)
+    : { normalized: parsed, corrections: [] };
+  const strictValidation = validateModelRulingResult(relationNormalization.normalized, options);
   if (strictValidation.ok || options.normalizeEvidenceProvenance !== true) {
-    return strictValidation;
+    return withProvenanceCorrections(strictValidation, relationNormalization.corrections);
   }
 
-  const provenance = normalizeModelRulingEvidenceProvenance(parsed, options);
-  if (provenance.corrections.length === 0) return strictValidation;
+  const provenance = normalizeModelRulingEvidenceProvenance(
+    relationNormalization.normalized,
+    options,
+  );
+  const corrections = [
+    ...relationNormalization.corrections,
+    ...provenance.corrections,
+  ];
+  if (provenance.corrections.length === 0) {
+    return withProvenanceCorrections(strictValidation, corrections);
+  }
   const normalizedValidation = validateModelRulingResult(provenance.normalized, options);
-  if (!normalizedValidation.ok) return normalizedValidation;
-  return {
-    ...normalizedValidation,
-    provenanceCorrections: provenance.corrections,
-  };
+  return withProvenanceCorrections(normalizedValidation, corrections);
+}
+
+/**
+ * Accepts only mechanical spellings of the public enum and a deliberately
+ * narrow list of semantically exact aliases. It never guesses from generic
+ * values such as SUPPORTS or RELATED and never mutates the parsed result.
+ */
+function normalizeModelRulingEvidenceRelationTokens(result) {
+  const normalized = cloneJson(result);
+  const corrections = [];
+  if (!isPlainObject(normalized) || !Array.isArray(normalized.evidenceUsage)) {
+    return { normalized, corrections };
+  }
+
+  normalized.evidenceUsage.forEach((usage, index) => {
+    if (!isPlainObject(usage) || typeof usage.relation !== "string") return;
+    const token = normalizeEvidenceRelationToken(usage.relation);
+    const canonical = MODEL_RULING_EVIDENCE_RELATION_SET.has(token)
+      ? token
+      : MODEL_RULING_EVIDENCE_RELATION_ALIASES.get(token);
+    if (!canonical || usage.relation === canonical) return;
+    corrections.push({
+      kind: "evidence_relation_token_normalization",
+      path: `evidenceUsage[${index}].relation`,
+      evidenceId: isNonEmptyString(usage.evidenceId) ? String(usage.evidenceId) : null,
+      from: usage.relation.slice(0, 160),
+      to: canonical,
+      reason: MODEL_RULING_EVIDENCE_RELATION_SET.has(token)
+        ? "canonical lexical variant"
+        : "approved exact alias",
+    });
+    usage.relation = canonical;
+  });
+
+  return { normalized, corrections };
+}
+
+function normalizeEvidenceRelationToken(value) {
+  const camelSeparated = String(value)
+    .normalize("NFKC")
+    .trim()
+    .replace(/([A-Z\d]+)([A-Z][a-z])/gu, "$1_$2")
+    .replace(/([a-z\d])([A-Z])/gu, "$1_$2");
+  return camelSeparated.replace(/[\s-]+/gu, "_").toUpperCase();
+}
+
+function withProvenanceCorrections(validation, corrections) {
+  return corrections.length > 0
+    ? { ...validation, provenanceCorrections: corrections }
+    : validation;
 }
 
 /**

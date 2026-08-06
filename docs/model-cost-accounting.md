@@ -41,9 +41,10 @@ reasoning tokens 通常包含在 output token 统计中，费用计算不能再�
 Redis 中的逐调用原子 reservation。每个 primary 或 directed repair 都在 provider
 `create()` 之前以持久 `attemptId` 预约；同一 attempt 重入不会重复占用额度。
 
-预算按 provider 共池：DeepSeek Flash/Pro 共用 `DEEPSEEK`，第三方中转的
-Sol/Terra/Luna 共用 `RELAY`，GLM、Kimi、官方 OpenAI 分别使用自己的池。每个池必须同时
-显式设置：
+预算按 provider/model 池结算：DeepSeek Flash/Pro（包括 DeepSeek 证据准备）共用
+`DEEPSEEK`；第三方中转的 Sol、Terra、Luna 分别使用 `RELAY_SOL`、`RELAY_TERRA`、
+`RELAY_LUNA`，彼此不共享 Relay 额度；GLM、Kimi、官方 OpenAI 分别使用自己的池。
+每个实际启用的池必须同时显式设置：
 
 - `ADMIN_FINAL_BUDGET_<POOL>_DAILY_CNY`
 - `ADMIN_FINAL_BUDGET_<POOL>_RESERVATION_CNY`
@@ -52,6 +53,37 @@ Sol/Terra/Luna 共用 `RELAY`，GLM、Kimi、官方 OpenAI 分别使用自己的
 usage 与版本化人民币价格都存在时，reservation 按实际估价结算；中转价格未知、usage 缺失、
 结算确认失败、超时、429/5xx 或网络结果不明时保留保守预约。只有能够确认请求没有被 provider
 接受的失败才释放。开发/测试只能显式注入内存账本，生产必须使用持久 Redis 账本。
+
+对应的生产环境变量是：
+
+| 模型池 | 日额度 | 单次保守预约 |
+| --- | --- | --- |
+| DeepSeek Flash / Pro | `ADMIN_FINAL_BUDGET_DEEPSEEK_DAILY_CNY` | `ADMIN_FINAL_BUDGET_DEEPSEEK_RESERVATION_CNY` |
+| Relay Sol | `ADMIN_FINAL_BUDGET_RELAY_SOL_DAILY_CNY` | `ADMIN_FINAL_BUDGET_RELAY_SOL_RESERVATION_CNY` |
+| Relay Terra | `ADMIN_FINAL_BUDGET_RELAY_TERRA_DAILY_CNY` | `ADMIN_FINAL_BUDGET_RELAY_TERRA_RESERVATION_CNY` |
+| Relay Luna | `ADMIN_FINAL_BUDGET_RELAY_LUNA_DAILY_CNY` | `ADMIN_FINAL_BUDGET_RELAY_LUNA_RESERVATION_CNY` |
+
+`RELAY` 不是有效的三模型共享池；只设置
+`ADMIN_FINAL_BUDGET_RELAY_DAILY_CNY` 不会给 Sol、Terra 或 Luna 开通额度。
+
+## DeepSeek 证据准备内容恢复
+
+证据准备默认只有一次模型提交。唯一的自动恢复条件是 DeepSeek 已明确返回 HTTP 200，
+但响应内容为空或无法解析为 JSON 对象；此时系统最多再发起一次专用 JSON 恢复请求。
+恢复请求使用独立 attempt ID 和独立 reservation，并以 `standard / none` 执行；其 usage
+与主请求分别记录后再汇总。恢复失败后不会提交第三次。
+
+网络错误、超时、取消、HTTP 400、429、5xx，以及其他不能确认是“HTTP 200 内容失败”
+的情形都不会触发该恢复。若 HTTP 200 空响应带有可靠 usage，则按 usage 结算；否则为
+避免漏记已经发生的费用，保留原保守预约。该恢复只适用于证据准备，不改变管理矩阵
+最终裁定的 `finalAttemptPolicy=single`。
+
+## 第三方 Relay 费用边界
+
+Relay 模型仅用于隔离的管理员实验。系统会同时记录 requested model 和 returned model，
+但项目无法验证中转实际返回的模型身份；截图费率、Token 包络和人民币换算都只是实验
+前估算，不是供应商账单。CLI 的请求数/估算费用上限与 Redis 的逐池日额度同时生效，
+前者不能绕过后者，也不会修改公开页面默认模型。
 
 ## 测试费用边界
 

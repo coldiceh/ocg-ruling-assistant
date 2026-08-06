@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   ADMIN_EVIDENCE_CATEGORIES,
+  DEFAULT_ADMIN_DECISION_PACKET_LIMITS,
   buildAdminEvidenceDecisionPacket,
   createAdminEvidenceArchive,
   verifyAdminEvidenceArchive,
@@ -311,19 +312,22 @@ test("rawRelatedEvidence uses QA substance instead of its mechanism collection h
   );
 });
 
-test("decision packet exposes every evidence id merged into equivalent substance", () => {
+test("decision packet exposes one citation id while sidecars retain every equivalent id", () => {
   const archive = createAdminEvidenceArchive({
     evidenceBuckets: {
-      officialQaRelated: [
-        {
-          id: "a-local-alias",
-          type: "official_qa",
-          question: "同じ質問。",
-          answer: "同じ回答。",
-        },
+      officialQaDirectCandidates: [
         {
           id: "ygoresources-qa-24189",
           type: "official_qa",
+          isDirect: true,
+          question: "同じ質問。",
+          answer: "同じ回答。",
+        },
+      ],
+      rawRelatedEvidence: [
+        {
+          id: "a-local-alias",
+          type: "related",
           question: "同じ質問。",
           answer: "同じ回答。",
         },
@@ -334,17 +338,183 @@ test("decision packet exposes every evidence id merged into equivalent substance
   const item = packet.modelPacket.evidenceItems[0];
 
   assert.equal(archive.substances.length, 1);
-  assert.equal(item.evidenceId, "a-local-alias");
+  assert.equal(item.evidenceId, "ygoresources-qa-24189");
+  assert.equal(item.direct, true);
+  assert.equal(item.authority, "official");
+  assert.equal(Object.hasOwn(item, "evidenceIds"), false);
+  assert.equal(Object.hasOwn(item, "equivalentEvidenceIdCount"), false);
   assert.deepEqual(
-    item.evidenceIds,
+    packet.includedManifest[0].evidenceIds,
     ["a-local-alias", "ygoresources-qa-24189"],
   );
-  assert.equal(item.equivalentEvidenceIdCount, 2);
   assert.equal(
-    new Set(packet.modelPacket.evidenceItems.flatMap(
-      (evidenceItem) => evidenceItem.evidenceIds,
-    )).has("ygoresources-qa-24189"),
+    packet.includedManifest[0].occurrenceIds.length,
+    2,
+  );
+  assert.equal(
+    packet.modelPacket.evidenceSummary.equivalentEvidenceIdCount,
+    2,
+  );
+  assert.equal(
+    packet.modelPacket.evidenceSummary.visibleEvidenceIdCount,
+    1,
+  );
+  assert.equal(
+    packet.omittedManifest.length,
+    0,
+  );
+  assert.equal(
+    packet.statistics.includedManifestBytes > 0,
     true,
+  );
+});
+
+test("current direct official QA candidates precede every weaker evidence category", () => {
+  const directCandidates = Array.from({ length: 4 }, (_, index) => ({
+    id: `direct-${index + 1}`,
+    type: "official_qa",
+    isDirect: true,
+    question: `直接问题 ${index + 1}`,
+    answer: `直接答案 ${index + 1}`,
+  }));
+  const archive = createAdminEvidenceArchive({
+    evidenceBuckets: {
+      officialQaDirectCandidates: directCandidates,
+      cardTexts: [{
+        id: "card-text-weaker",
+        type: "card_text",
+        effectText: "卡片文本。",
+      }],
+      officialQaRelated: [{
+        id: "related-weaker",
+        type: "official_qa",
+        question: "相关问题。",
+        answer: "相关答案。",
+      }],
+      rulebookCandidates: [{
+        id: "rule-weaker",
+        type: "rulebook",
+        text: "机制资料。",
+      }],
+      rawRelatedEvidence: [{
+        id: "other-weaker",
+        type: "article",
+        text: "其他资料。",
+      }],
+    },
+  });
+  const packet = buildAdminEvidenceDecisionPacket({
+    archive,
+    limits: {
+      maxItems: 4,
+      maxTotalBodyChars: 10_000,
+      maxTotalBodyBytes: 20_000,
+    },
+  });
+
+  assert.deepEqual(
+    packet.modelPacket.evidenceItems.map((item) => item.evidenceId),
+    ["direct-1", "direct-2", "direct-3", "direct-4"],
+  );
+  assert.equal(
+    packet.modelPacket.evidenceItems.every(
+      (item) => item.category === ADMIN_EVIDENCE_CATEGORIES.DIRECT_OFFICIAL_QA,
+    ),
+    true,
+  );
+  assert.equal(packet.modelPacket.omissionSummary.directOfficialSubstanceCount, 0);
+});
+
+test("direct official QA bypasses the ordinary per-item body cap but fails closed at total limits", () => {
+  const longAnswer = `直接裁定正文：${"界".repeat(3_000)}。`;
+  const archive = createAdminEvidenceArchive({
+    evidenceBuckets: {
+      officialQaDirectCandidates: [{
+        id: "long-direct-official",
+        type: "official_qa",
+        isDirect: true,
+        question: "长直接裁定是否保持完整？",
+        answer: longAnswer,
+      }],
+    },
+  });
+  const complete = buildAdminEvidenceDecisionPacket({ archive });
+  const completeItem = complete.modelPacket.evidenceItems[0];
+
+  assert.equal(
+    completeItem.body.length > DEFAULT_ADMIN_DECISION_PACKET_LIMITS.maxBodyCharsPerItem,
+    true,
+  );
+  assert.equal(completeItem.bodyExcerpted, false);
+  assert.equal(complete.truncationManifest.length, 0);
+
+  const bounded = buildAdminEvidenceDecisionPacket({
+    archive,
+    limits: {
+      maxTotalBodyChars: 1_000,
+      maxTotalBodyBytes: 4_000,
+    },
+  });
+  assert.equal(bounded.modelPacket.evidenceItems[0].bodyExcerpted, true);
+  assert.equal(bounded.truncationManifest.length, 1);
+  assert.match(
+    bounded.truncationManifest[0].reason,
+    /^total_body_(?:character|byte)_budget$/u,
+  );
+});
+
+test("removed catalog and equivalent-id limits no longer affect packet content hashes", () => {
+  const archive = createAdminEvidenceArchive({
+    evidenceBuckets: {
+      officialQaRelated: [{
+        id: "stable-related",
+        type: "official_qa",
+        question: "稳定问题。",
+        answer: "稳定答案。",
+      }],
+    },
+  });
+  const baseline = buildAdminEvidenceDecisionPacket({ archive });
+  const withRemovedLimits = buildAdminEvidenceDecisionPacket({
+    archive,
+    limits: {
+      maxEquivalentEvidenceIdsPerItem: 1,
+      maxOmissionCatalogItems: 1,
+      maxOmissionEvidenceIdsPerItem: 1,
+    },
+  });
+
+  assert.deepEqual(withRemovedLimits, baseline);
+  assert.equal(baseline.schemaVersion, 2);
+  assert.equal(baseline.modelPacket.schemaVersion, 2);
+  assert.equal(
+    Object.hasOwn(baseline.modelPacket.limits, "maxEquivalentEvidenceIdsPerItem"),
+    false,
+  );
+  assert.equal(
+    Object.hasOwn(baseline.modelPacket.limits, "maxOmissionCatalogItems"),
+    false,
+  );
+});
+
+test("default decision packet budgets target the bounded final-model window", () => {
+  assert.deepEqual(
+    {
+      maxPacketBytes: DEFAULT_ADMIN_DECISION_PACKET_LIMITS.maxPacketBytes,
+      maxItems: DEFAULT_ADMIN_DECISION_PACKET_LIMITS.maxItems,
+      maxTotalBodyChars: DEFAULT_ADMIN_DECISION_PACKET_LIMITS.maxTotalBodyChars,
+      maxTotalBodyBytes: DEFAULT_ADMIN_DECISION_PACKET_LIMITS.maxTotalBodyBytes,
+      maxBodyCharsPerItem: DEFAULT_ADMIN_DECISION_PACKET_LIMITS.maxBodyCharsPerItem,
+      maxBodyBytesPerItem: DEFAULT_ADMIN_DECISION_PACKET_LIMITS.maxBodyBytesPerItem,
+    },
+    {
+      maxPacketBytes: 28 * 1024,
+      maxItems: 16,
+      maxTotalBodyChars: 16_000,
+      maxTotalBodyBytes: 20 * 1024,
+      maxBodyCharsPerItem: 2_500,
+      maxBodyBytesPerItem: 4 * 1024,
+    },
   );
 });
 
@@ -416,21 +586,10 @@ test("decision packet uses deterministic generic priority and keeps a complete o
     packet.modelPacket.omissionSummary.manifestSha256.length,
     64,
   );
-  assert.equal(packet.modelPacket.omissionSummary.catalogComplete, true);
-  assert.equal(packet.modelPacket.omissionSummary.catalogedSubstanceCount, 1);
-  assert.equal(packet.modelPacket.omissionSummary.uncatalogedSubstanceCount, 0);
-  assert.deepEqual(
-    packet.modelPacket.omissionSummary.catalog[0].evidenceIds,
-    ["other-1"],
-  );
-  assert.equal(
-    packet.modelPacket.omissionSummary.catalog[0].category,
-    ADMIN_EVIDENCE_CATEGORIES.OTHER,
-  );
-  assert.equal(
-    packet.modelPacket.omissionSummary.catalog[0].authority,
-    "other",
-  );
+  assert.equal(Object.hasOwn(packet.modelPacket.omissionSummary, "catalog"), false);
+  assert.equal(packet.modelPacket.omissionSummary.omittedSubstanceCount, 1);
+  assert.equal(packet.modelPacket.omissionSummary.categories.other, 1);
+  assert.equal(packet.modelPacket.omissionSummary.authorities.other, 1);
   assert.equal(
     packet.modelPacket.policy.preparationModelCanDeleteCandidates,
     false,
@@ -548,13 +707,13 @@ test("many resolved card texts cannot starve related rulings and mechanism evide
 
   const packet = buildAdminEvidenceDecisionPacket({ archive });
   const categories = packet.modelPacket.evidenceItems.map((item) => item.category);
-  assert.equal(packet.modelPacket.evidenceItems.length, 32);
+  assert.equal(packet.modelPacket.evidenceItems.length, 16);
   assert.ok(categories.includes(ADMIN_EVIDENCE_CATEGORIES.PARSED_CARD_TEXT));
   assert.ok(categories.includes(ADMIN_EVIDENCE_CATEGORIES.RELATED_QA));
   assert.ok(categories.includes(ADMIN_EVIDENCE_CATEGORIES.MECHANISM_RULE));
 });
 
-test("decision packet omission catalog is informative and independently bounded", () => {
+test("decision packet omission summary stays compact while its sidecar remains complete", () => {
   const archive = createAdminEvidenceArchive({
     collections: [{
       name: "many-related",
@@ -580,10 +739,8 @@ test("decision packet omission catalog is informative and independently bounded"
   });
 
   assert.equal(packet.omittedManifest.length, 5);
-  assert.equal(packet.modelPacket.omissionSummary.catalog.length, 2);
-  assert.equal(packet.modelPacket.omissionSummary.catalogedSubstanceCount, 2);
-  assert.equal(packet.modelPacket.omissionSummary.uncatalogedSubstanceCount, 3);
-  assert.equal(packet.modelPacket.omissionSummary.catalogComplete, false);
+  assert.equal(Object.hasOwn(packet.modelPacket.omissionSummary, "catalog"), false);
+  assert.equal(packet.modelPacket.omissionSummary.omittedSubstanceCount, 5);
   assert.equal(
     packet.modelPacket.omissionSummary.categories[
       ADMIN_EVIDENCE_CATEGORIES.RELATED_QA
@@ -591,7 +748,8 @@ test("decision packet omission catalog is informative and independently bounded"
     5,
   );
   assert.equal(packet.modelPacket.omissionSummary.authorities.official, 5);
-  assert.ok(packet.statistics.omittedCatalogBytes > 0);
+  assert.equal(packet.statistics.omittedCatalogBytes, 0);
+  assert.equal(packet.modelPacket.omissionSummary.manifestSha256.length, 64);
 });
 
 test("body budget is bounded and truncation never becomes an evidence-sufficiency claim", () => {
@@ -668,18 +826,20 @@ test("UTF-8 packet bytes, thousands of equivalent ids, and long visible ids are 
   assert.deepEqual(first, second);
   assert.equal(packetBytes <= limits.maxPacketBytes, true);
   assert.equal(first.statistics.modelPacketBytes, packetBytes);
-  assert.equal(item.equivalentEvidenceIdCount, equivalentCount);
-  assert.equal(item.evidenceIds.length, 5);
-  assert.equal(item.evidenceIdsExcerpted, true);
-  assert.equal(item.evidenceIdsAliasedCount, 5);
-  assert.equal(item.equivalentEvidenceIdsSha256.length, 64);
   assert.equal(
-    item.evidenceIds.every((evidenceId) => /^sha256:[a-f0-9]{64}$/u.test(evidenceId)),
+    /^sha256:[a-f0-9]{64}$/u.test(item.evidenceId),
     true,
   );
+  assert.equal(item.evidenceIdAliased, true);
+  assert.equal(Object.hasOwn(item, "substanceHash"), false);
+  assert.equal(Object.hasOwn(item, "bodyHash"), false);
+  assert.equal(Object.hasOwn(item, "sourceCollections"), false);
+  assert.equal(Object.hasOwn(item, "bestCollectionRank"), false);
   assert.equal(item.bodyExcerpted, true);
-  assert.equal(item.originalBodyByteCount > item.originalBodyCharCount, true);
   assert.equal(first.includedManifest[0].evidenceIds.length, equivalentCount);
+  assert.equal(first.includedManifest[0].substanceHash.length, 64);
+  assert.equal(first.includedManifest[0].bodyHash.length, 64);
+  assert.equal(first.truncationManifest[0].originalBodyByteCount > 0, true);
   assert.equal(first.modelPacket.completeness.packetStructurallyExcerpted, true);
 });
 

@@ -147,6 +147,120 @@ test("provider provenance overclaims can be deterministically downgraded without
   assert.equal(normalized.provenanceCorrections.length, 2);
 });
 
+test("evidence relation lexical variants and narrow exact aliases normalize with an audit trail", () => {
+  for (const [relation, expected, expectedReason] of [
+    [" directly-entails ", "DIRECTLY_ENTAILS", "canonical lexical variant"],
+    ["directlyEntails", "DIRECTLY_ENTAILS", "canonical lexical variant"],
+    ["ＤＩＲＥＣＴＬＹ＿ＥＮＴＡＩＬＳ", "DIRECTLY_ENTAILS", "canonical lexical variant"],
+    ["direct entailment", "DIRECTLY_ENTAILS", "approved exact alias"],
+    ["直接蕴含", "DIRECTLY_ENTAILS", "approved exact alias"],
+  ]) {
+    const result = makeResult();
+    result.evidenceUsage[0].relation = relation;
+    const validation = parseAndValidateModelRulingResult(JSON.stringify(result), {
+      evidenceSnapshot: makeSnapshot(),
+      expectedQuestionIds: ["q1"],
+      normalizeEvidenceProvenance: true,
+    });
+
+    assert.equal(validation.ok, true, validation.errors?.join("\n"));
+    assert.equal(validation.normalized.evidenceUsage[0].relation, expected);
+    assert.deepEqual(validation.provenanceCorrections, [{
+      kind: "evidence_relation_token_normalization",
+      path: "evidenceUsage[0].relation",
+      evidenceId: "faq-1",
+      from: relation,
+      to: expected,
+      reason: expectedReason,
+    }]);
+    assert.equal(result.evidenceUsage[0].relation, relation, "normalization must not mutate input");
+  }
+});
+
+test("relation alias normalization composes with conservative provenance downgrade", () => {
+  const overclaimed = makeResult();
+  overclaimed.evidenceUsage[0].relation = "direct entailment";
+  const cardTextPacket = {
+    evidenceItems: [{
+      evidenceId: "faq-1",
+      category: "parsed_card_text",
+      authority: "other",
+      direct: false,
+      current: true,
+      bodyExcerpted: false,
+      body: "舍弃1张手牌可以发动。",
+    }],
+  };
+
+  const validation = parseAndValidateModelRulingResult(JSON.stringify(overclaimed), {
+    evidenceSnapshot: makeSnapshot(),
+    modelVisibleEvidencePacket: cardTextPacket,
+    expectedQuestionIds: ["q1"],
+    normalizeEvidenceProvenance: true,
+  });
+
+  assert.equal(validation.ok, true, validation.errors?.join("\n"));
+  assert.equal(validation.normalized.evidenceUsage[0].relation, "SUPPORTS_STEP");
+  assert.equal(validation.normalized.claims[0].inferenceType, "CARD_TEXT");
+  assert.deepEqual(
+    validation.provenanceCorrections.map((correction) => correction.kind),
+    [
+      "evidence_relation_token_normalization",
+      "evidence_relation_downgrade",
+      "claim_inference_downgrade",
+    ],
+  );
+});
+
+test("ambiguous or unknown evidence relation values remain fail-closed", () => {
+  for (const relation of ["SUPPORTS", "RELATED", "RELEVANT", "DIRECT", "OFFICIAL", "NOT_APPLICABLE", "unknown relation", "constructor", "__proto__"]) {
+    const result = makeResult();
+    result.evidenceUsage[0].relation = relation;
+    const validation = parseAndValidateModelRulingResult(JSON.stringify(result), {
+      evidenceSnapshot: makeSnapshot(),
+      expectedQuestionIds: ["q1"],
+      normalizeEvidenceProvenance: true,
+    });
+
+    assert.equal(validation.ok, false, `${relation} must not be guessed`);
+    assert.ok(validation.errors.some((error) => error.includes("evidenceUsage[0].relation")));
+    assert.equal(
+      validation.provenanceCorrections?.some(
+        (correction) => correction.kind === "evidence_relation_token_normalization",
+      ) === true,
+      false,
+    );
+  }
+});
+
+test("relation token normalization is opt-in and never repairs unrelated schema failures", () => {
+  const lexicalVariant = makeResult();
+  lexicalVariant.evidenceUsage[0].relation = "directly-entails";
+  const strict = parseAndValidateModelRulingResult(JSON.stringify(lexicalVariant), {
+    evidenceSnapshot: makeSnapshot(),
+    expectedQuestionIds: ["q1"],
+  });
+  assert.equal(strict.ok, false);
+  assert.equal(Object.hasOwn(strict, "provenanceCorrections"), false);
+
+  const malformed = makeResult();
+  malformed.evidenceUsage[0].relation = "directly-entails";
+  malformed.evidenceUsage[0].evidenceId = "fabricated-evidence";
+  malformed.claims[0].evidenceIds = ["fabricated-evidence"];
+  const normalizedButInvalid = parseAndValidateModelRulingResult(JSON.stringify(malformed), {
+    evidenceSnapshot: makeSnapshot(),
+    expectedQuestionIds: ["q1"],
+    normalizeEvidenceProvenance: true,
+  });
+  assert.equal(normalizedButInvalid.ok, false);
+  assert.ok(normalizedButInvalid.errors.some((error) => error.includes("not present in Evidence Snapshot")));
+  assert.equal(normalizedButInvalid.provenanceCorrections.length, 1);
+  assert.equal(
+    normalizedButInvalid.provenanceCorrections[0].kind,
+    "evidence_relation_token_normalization",
+  );
+});
+
 test("provenance normalization never repairs fabricated evidence references", () => {
   const fabricated = makeResult();
   fabricated.claims[0].evidenceIds = ["fabricated-evidence"];

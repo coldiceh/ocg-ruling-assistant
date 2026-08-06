@@ -497,7 +497,7 @@ test("baige_resolved_card_metadata_replaces_the_unresolved_prompt_mention", asyn
   assert.match(finalPrompt, /"unresolvedMentions": \[\]/u);
 });
 
-test("source-bound unique local identities survive an unavailable external verification lookup", async () => {
+test("source-bound local edit matches fail closed when external verification is unavailable", async () => {
   clearBaigeSearchCache();
   const data = await loadRagData();
   const question = "「教导的圣女 艾克莉西亚」和「闪刀姬＝零露」的效果如何处理？";
@@ -520,10 +520,10 @@ test("source-bound unique local identities survive an unavailable external verif
 
   for (const id of expectedIds) {
     const card = evidence.cardResolution.resolvedCards.find((item) => String(item.id) === id);
-    assert.ok(card, `${id} must retain its unique local identity`);
-    assert.equal(card.identityVerificationStatus, "verified_local_unique");
+    assert.ok(card, `${id} remains an auditable candidate`);
+    assert.equal(card.identityVerificationStatus, "unverified");
   }
-  assert.ok(!evidence.cardResolution.unresolvedMentions.some(
+  assert.ok(evidence.cardResolution.unresolvedMentions.some(
     (mention) => mention.reason === "external_identity_verification_failed",
   ));
 });
@@ -565,7 +565,7 @@ test("an unbound local edit candidate still fails closed when external verificat
   assert.equal(evidence.retrievedCards[0].identityVerificationStatus, "unverified");
 });
 
-test("a unique source-bound identity may retain a generated near alias when verification is unavailable", async () => {
+test("a generated near alias remains unverified when external verification is unavailable", async () => {
   clearBaigeSearchCache();
   const userSurface = "AA简称乙";
   const canonicalCard = {
@@ -596,8 +596,11 @@ test("a unique source-bound identity may retain a generated near alias when veri
     env: { RAG_LIVE_OFFICIAL_QA: "0" },
   });
 
-  assert.deepEqual(evidence.cardResolution.unresolvedMentions, []);
-  assert.equal(evidence.retrievedCards[0].identityVerificationStatus, "verified_local_unique");
+  assert.ok(evidence.cardResolution.unresolvedMentions.some((mention) => (
+    mention.input === userSurface
+    && mention.reason === "external_identity_verification_failed"
+  )));
+  assert.equal(evidence.retrievedCards[0].identityVerificationStatus, "unverified");
 });
 
 test("external CID identity replaces a same-surface local edit match and freezes the reconciled local card", async () => {

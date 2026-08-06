@@ -7,6 +7,7 @@ import {
   resolveAdminModelSelection,
 } from "./adminModelLabConfig.mjs";
 import {
+  ADMIN_EVIDENCE_DECISION_PACKET_SCHEMA_VERSION,
   assertAdminEvidenceArchive,
   buildAdminEvidenceDecisionPacket,
   createAdminEvidenceArchive,
@@ -54,8 +55,10 @@ import {
 
 const DEFAULT_PROMPT_VERSION = "openai-ruling-v1";
 const DEFAULT_PROMPT_FILE_URL = new URL("../prompts/openai-ruling-v1.md", import.meta.url);
-export const MAX_FINAL_RULING_INPUT_BYTES = 512 * 1024;
+export const MAX_FINAL_RULING_INPUT_BYTES = 48 * 1024;
+const MAX_FINAL_RULING_REPAIR_INPUT_BYTES = 64 * 1024;
 const DEFAULT_MAX_LEGACY_LUA_SEMANTIC_PACKET_BYTES = 192 * 1024;
+const MAX_CONFIGURED_LEGACY_LUA_SEMANTIC_PACKET_BYTES = 512 * 1024;
 const FINAL_STAGE_ID = "generate_ruling";
 const PREPARATION_STAGE_IDS = Object.freeze([
   "understand",
@@ -64,6 +67,11 @@ const PREPARATION_STAGE_IDS = Object.freeze([
   "retrieve_rulings_evidence",
 ]);
 const PAID_PREPARATION_SUBSTAGE_ID = "paid_model_submission";
+const PAID_PREPARATION_RECOVERY_SUBSTAGE_ID = "paid_model_submission_content_recovery";
+const PAID_PREPARATION_SUBSTAGE_IDS = new Set([
+  PAID_PREPARATION_SUBSTAGE_ID,
+  PAID_PREPARATION_RECOVERY_SUBSTAGE_ID,
+]);
 const DEFAULT_FINAL_MAX_OUTPUT_TOKENS = 8_192;
 const DEFAULT_PREPARATION_MAX_OUTPUT_TOKENS = 4_096;
 const OPENAI_ACTIVE_STATUSES = new Set(["queued", "in_progress"]);
@@ -1292,6 +1300,7 @@ export function createAdminModelLabService({
           extractedHints: preparationOutput.hints,
           warnings: preparationOutput.warnings,
           usage: preparationOutput.usage,
+          attempts: preparationOutput.attempts,
         },
         cardResolution: jsonSafe(cardResolution),
         evidenceArchive,
@@ -1327,6 +1336,7 @@ export function createAdminModelLabService({
     const warnings = [];
     let rawResult = null;
     let usage = null;
+    const preparationAttempts = [];
     const provider = preparationProviderRegistry.get(preparationProvider);
     if (provider && typeof provider.prepareEvidence === "function") {
       if (!finalCallBudgetLedger) {
@@ -1335,87 +1345,152 @@ export function createAdminModelLabService({
           "admin_final_budget_storage_unavailable",
         );
       }
-      tracker.startSubstage("understand", PAID_PREPARATION_SUBSTAGE_ID, {
-        label: "低成本模型准备证据",
-      });
-      await runStore.updateStageProgress(runId, tracker.snapshot(), { executionToken });
-      const reservedAt = readWall(wallNow).toISOString();
-      const reservationId = preparationBudgetReservationId(runId);
       const preparationInput = buildPreparationInput({ question, questions });
-      await finalCallBudgetLedger.reserve({
-        reservationId,
-        runId,
-        attemptId: PAID_PREPARATION_SUBSTAGE_ID,
-        attemptKind: "evidence_preparation",
-        provider: preparationProvider,
-        model: preparationModel,
-        reservedAt,
-        requiredReservationCny: requiredDeepSeekReservationCny({
-          model: preparationModel,
-          inputTokenUpperBound: utf8TokenUpperBound(preparationInput),
-          maxOutputTokens: preparationMaxOutputTokens,
-          pricingProfile: deepSeekPricingForModel(
-            serverPricingProfile.deepSeek,
-            preparationModel,
-          ),
-          usdToCnyRate: serverPricingProfile.usdToCnyRate,
-          exchangeRateVersion: serverPricingProfile.exchangeRateVersion,
-        }),
-      });
-      let prepared;
-      try {
-        prepared = await provider.prepareEvidence({
-          model: preparationModel,
-          reasoningEffort: preparationReasoningEffort,
-          reasoningMode: preparationReasoningMode,
-          maxOutputTokens: preparationMaxOutputTokens,
+      const attemptDefinitions = [
+        {
+          attemptId: PAID_PREPARATION_SUBSTAGE_ID,
+          label: "低成本模型准备证据",
           input: preparationInput,
-          metadata: {
-            role: "evidence_preparation_only",
-            finalRulingForbidden: "true",
-          },
-          signal,
-        });
-      } catch (error) {
-        if (preparationFailureIsReleaseSafe(error)) {
-          await finalCallBudgetLedger.release({
-            reservationId,
-            runId,
-            attemptId: PAID_PREPARATION_SUBSTAGE_ID,
-            attemptKind: "evidence_preparation",
-            provider: preparationProvider,
-            model: preparationModel,
-            reservedAt,
-          }).catch(() => {});
-        }
-        throw error;
-      }
-      rawResult = jsonSafe(prepared);
-      usage = jsonSafe(extractPreparationUsage(prepared));
-      const cost = estimateDeepSeekModelCost({
-        model: preparationModel,
-        usage,
-        pricingProfile: deepSeekPricingForModel(
-          serverPricingProfile.deepSeek,
-          preparationModel,
-        ),
-        usdToCnyRate: serverPricingProfile.usdToCnyRate,
-        exchangeRateVersion: serverPricingProfile.exchangeRateVersion,
-      });
-      if (normalizeReportedModelUsage(usage) && Number.isFinite(cost.totalCostCny)) {
-        await finalCallBudgetLedger.settle({
+        },
+        {
+          attemptId: PAID_PREPARATION_RECOVERY_SUBSTAGE_ID,
+          label: "低成本模型恢复证据 JSON",
+          input: buildPreparationContentRecoveryInput(preparationInput),
+        },
+      ];
+      const reportedUsages = [];
+
+      for (let attemptIndex = 0; attemptIndex < attemptDefinitions.length; attemptIndex += 1) {
+        const attempt = attemptDefinitions[attemptIndex];
+        const preReservationStop = await preparationStopError();
+        if (preReservationStop) throw preReservationStop;
+        tracker.startSubstage("understand", attempt.attemptId, { label: attempt.label });
+        await runStore.updateStageProgress(runId, tracker.snapshot(), { executionToken });
+        const reservedAt = readWall(wallNow).toISOString();
+        const reservationId = preparationBudgetReservationId(runId, attempt.attemptId);
+        await finalCallBudgetLedger.reserve({
           reservationId,
           runId,
-          attemptId: PAID_PREPARATION_SUBSTAGE_ID,
+          attemptId: attempt.attemptId,
           attemptKind: "evidence_preparation",
           provider: preparationProvider,
           model: preparationModel,
           reservedAt,
-          actualCny: cost.totalCostCny,
-        }).catch(() => {});
+          requiredReservationCny: requiredDeepSeekReservationCny({
+            model: preparationModel,
+            inputTokenUpperBound: utf8TokenUpperBound(attempt.input),
+            maxOutputTokens: preparationMaxOutputTokens,
+            pricingProfile: deepSeekPricingForModel(
+              serverPricingProfile.deepSeek,
+              preparationModel,
+            ),
+            usdToCnyRate: serverPricingProfile.usdToCnyRate,
+            exchangeRateVersion: serverPricingProfile.exchangeRateVersion,
+          }),
+        });
+        const postReservationStop = await preparationStopError();
+        if (postReservationStop) {
+          await finalCallBudgetLedger.release({
+            reservationId,
+            runId,
+            attemptId: attempt.attemptId,
+            attemptKind: "evidence_preparation",
+            provider: preparationProvider,
+            model: preparationModel,
+            reservedAt,
+          }).catch(() => {
+            // The provider was not invoked. A failed release remains reserved
+            // conservatively, but cancellation must never submit the request.
+          });
+          throw postReservationStop;
+        }
+
+        let prepared;
+        try {
+          prepared = await provider.prepareEvidence({
+            model: preparationModel,
+            reasoningEffort: attemptIndex === 0 ? preparationReasoningEffort : "none",
+            reasoningMode: attemptIndex === 0 ? preparationReasoningMode : "standard",
+            maxOutputTokens: preparationMaxOutputTokens,
+            input: attempt.input,
+            metadata: {
+              role: "evidence_preparation_only",
+              finalRulingForbidden: "true",
+              attempt: attemptIndex === 0 ? "primary" : "confirmed_content_recovery",
+            },
+            signal,
+          });
+        } catch (error) {
+          const failedUsage = jsonSafe(error?.usage || null);
+          const settled = await settlePreparationBudgetUsage({
+            reservationId,
+            runId,
+            attemptId: attempt.attemptId,
+            reservedAt,
+            provider: preparationProvider,
+            model: preparationModel,
+            usage: failedUsage,
+          });
+          if (!settled && preparationFailureIsReleaseSafe(error)) {
+            await finalCallBudgetLedger.release({
+              reservationId,
+              runId,
+              attemptId: attempt.attemptId,
+              attemptKind: "evidence_preparation",
+              provider: preparationProvider,
+              model: preparationModel,
+              reservedAt,
+            }).catch(() => {});
+          }
+          if (normalizeReportedModelUsage(failedUsage)) reportedUsages.push(failedUsage);
+          preparationAttempts.push(preparationAttemptAudit({
+            attemptId: attempt.attemptId,
+            status: "failed",
+            error,
+            usage: failedUsage,
+          }));
+
+          const retryConfirmedContentFailure = (
+            attemptIndex === 0
+            && preparationProvider === "deepseek"
+            && isConfirmedPreparationContentFailure(error)
+          );
+          if (!retryConfirmedContentFailure) throw error;
+
+          tracker.finishSubstage("understand", attempt.attemptId);
+          await runStore.updateStageProgress(runId, tracker.snapshot(), { executionToken });
+          const recoveryStop = await preparationStopError();
+          if (recoveryStop) throw recoveryStop;
+          warnings.push(`deepseek_preparation_${error.contentFailureKind}_retried_once`);
+          continue;
+        }
+
+        rawResult = jsonSafe(prepared);
+        const attemptUsage = jsonSafe(extractPreparationUsage(prepared));
+        if (normalizeReportedModelUsage(attemptUsage)) reportedUsages.push(attemptUsage);
+        await settlePreparationBudgetUsage({
+          reservationId,
+          runId,
+          attemptId: attempt.attemptId,
+          reservedAt,
+          provider: preparationProvider,
+          model: preparationModel,
+          usage: attemptUsage,
+        });
+        preparationAttempts.push(preparationAttemptAudit({
+          attemptId: attempt.attemptId,
+          status: "completed",
+          usage: attemptUsage,
+        }));
+        tracker.finishSubstage("understand", attempt.attemptId);
+        await runStore.updateStageProgress(runId, tracker.snapshot(), { executionToken });
+        break;
       }
-      tracker.finishSubstage("understand", PAID_PREPARATION_SUBSTAGE_ID);
-      await runStore.updateStageProgress(runId, tracker.snapshot(), { executionToken });
+      usage = jsonSafe(
+        reportedUsages.length === 1
+          ? reportedUsages[0]
+          : aggregatePreparationUsage(reportedUsages),
+      );
     } else {
       warnings.push(`${preparationProvider}_preparation_provider_unavailable`);
     }
@@ -1426,9 +1501,68 @@ export function createAdminModelLabService({
     return {
       rawResult,
       usage,
+      attempts: preparationAttempts,
       hints,
       warnings,
     };
+
+    async function settlePreparationBudgetUsage({
+      reservationId,
+      runId: attemptRunId,
+      attemptId,
+      reservedAt,
+      provider: attemptProvider,
+      model,
+      usage: reportedUsage,
+    }) {
+      const normalizedUsage = normalizeReportedModelUsage(reportedUsage);
+      if (!normalizedUsage) return false;
+      const cost = estimateDeepSeekModelCost({
+        model,
+        usage: reportedUsage,
+        pricingProfile: deepSeekPricingForModel(
+          serverPricingProfile.deepSeek,
+          model,
+        ),
+        usdToCnyRate: serverPricingProfile.usdToCnyRate,
+        exchangeRateVersion: serverPricingProfile.exchangeRateVersion,
+      });
+      if (!Number.isFinite(cost.totalCostCny)) return false;
+      const settlement = await finalCallBudgetLedger.settle({
+        reservationId,
+        runId: attemptRunId,
+        attemptId,
+        attemptKind: "evidence_preparation",
+        provider: attemptProvider,
+        model,
+        reservedAt,
+        actualCny: cost.totalCostCny,
+      });
+      const settlementStatus = String(settlement?.status || "").trim().toLowerCase();
+      if (!["settled", "existing"].includes(settlementStatus)) {
+        throw serviceError(
+          `Evidence-preparation budget settlement returned ${settlementStatus || "(missing status)"}`,
+          "preparation_budget_settlement_unconfirmed",
+        );
+      }
+      return true;
+    }
+
+    async function preparationStopError() {
+      if (signal?.aborted) {
+        return signal.reason instanceof Error
+          ? signal.reason
+          : serviceError(
+              "evidence preparation was aborted before provider submission",
+              "admin_run_cancelled_during_preparation",
+            );
+      }
+      if (!(await runStore.isCancellationRequested(runId))) return null;
+      return serviceError(
+        "run cancelled before evidence-preparation provider submission",
+        "admin_run_cancelled_during_preparation",
+      );
+    }
   }
 
   async function withExecutionLeaseHeartbeat({
@@ -2416,6 +2550,47 @@ export function createAdminModelLabService({
       }
       clock = Math.max(clock, numberOrZero(stage.startOffsetMs));
       tracker.startStage(stage.id);
+      const substageEvents = (Array.isArray(stage.substages) ? stage.substages : [])
+        .flatMap((substage, index) => {
+          if (![ADMIN_STAGE_STATUSES.COMPLETED, ADMIN_STAGE_STATUSES.RUNNING].includes(
+            substage.status,
+          )) {
+            throw serviceError(
+              `cannot restore ${stage.id}/${substage.id} from ${substage.status}`,
+              "admin_stage_timing_not_restorable",
+            );
+          }
+          const startOffsetMs = numberOrZero(substage.startOffsetMs);
+          const events = [{
+            kind: "start",
+            offsetMs: startOffsetMs,
+            index,
+            substage,
+          }];
+          if (substage.status === ADMIN_STAGE_STATUSES.COMPLETED) {
+            events.push({
+              kind: "finish",
+              offsetMs: Math.max(startOffsetMs, numberOrZero(substage.endOffsetMs)),
+              index,
+              substage,
+            });
+          }
+          return events;
+        })
+        .sort((left, right) => (
+          left.offsetMs - right.offsetMs
+          || (left.kind === right.kind ? left.index - right.index : left.kind === "start" ? -1 : 1)
+        ));
+      for (const event of substageEvents) {
+        clock = Math.max(clock, event.offsetMs);
+        if (event.kind === "start") {
+          tracker.startSubstage(stage.id, event.substage.id, {
+            label: event.substage.label || event.substage.id,
+          });
+        } else {
+          tracker.finishSubstage(stage.id, event.substage.id);
+        }
+      }
       if (stage.status === ADMIN_STAGE_STATUSES.COMPLETED) {
         clock = Math.max(clock, numberOrZero(stage.endOffsetMs));
         tracker.finishStage(stage.id);
@@ -2499,6 +2674,65 @@ function buildPreparationInput({ question, questions }) {
     question,
     questions,
   });
+}
+
+function buildPreparationContentRecoveryInput(primaryInput) {
+  const source = JSON.parse(String(primaryInput || "{}"));
+  return JSON.stringify({
+    ...source,
+    responseRecovery: {
+      reason: "the previous HTTP 200 response contained no valid JSON object",
+      outputOnlyOneJsonObject: true,
+      noMarkdown: true,
+      requiredTopLevelArrays: [
+        "cardNameCandidates",
+        "ruleSearchQueries",
+        "unresolvedNotes",
+        "conflicts",
+      ],
+      useEmptyArraysWhenNoCandidates: true,
+    },
+  });
+}
+
+function isConfirmedPreparationContentFailure(error) {
+  return error?.confirmedContentFailure === true
+    && error?.outcomeKnown === true
+    && Number(error?.status) === 200
+    && new Set(["empty", "invalid_json"]).has(String(error?.contentFailureKind || ""));
+}
+
+function preparationAttemptAudit({ attemptId, status, error = null, usage = null }) {
+  return jsonSafe({
+    attemptId,
+    status,
+    ...(error ? {
+      code: String(error.code || "preparation_content_invalid"),
+      contentFailureKind: error.contentFailureKind || null,
+      outcomeKnown: error.outcomeKnown === true,
+    } : {}),
+    usage: normalizeReportedModelUsage(usage),
+  });
+}
+
+function aggregatePreparationUsage(values) {
+  const normalized = values
+    .map((value) => normalizeReportedModelUsage(value))
+    .filter(Boolean);
+  if (normalized.length === 0) return null;
+  return normalized.reduce((total, value) => sumNumericUsageTree(total, value), {});
+}
+
+function sumNumericUsageTree(left, right) {
+  const result = { ...(left && typeof left === "object" ? left : {}) };
+  for (const [key, value] of Object.entries(right && typeof right === "object" ? right : {})) {
+    if (typeof value === "number" && Number.isFinite(value)) {
+      result[key] = Number(result[key] || 0) + value;
+    } else if (value && typeof value === "object" && !Array.isArray(value)) {
+      result[key] = sumNumericUsageTree(result[key], value);
+    }
+  }
+  return result;
 }
 
 function normalizePreparationHints(value) {
@@ -2675,31 +2909,40 @@ function exhaustiveEvidenceLimit(data) {
 
 export function buildFinalRulingInput(snapshot) {
   const evidence = snapshot?.evidence || {};
+  const questions = compactQuestionsForModel(evidence.questions, snapshot?.question);
+  const scenarioText = distinctScenarioTextForModel(snapshot?.question, questions);
   const boundedInput = {
-    schemaVersion: 1,
-    evidenceSnapshotId: snapshot?.snapshotId || null,
-    evidenceSnapshotSha256: snapshot?.contentSha256 || null,
-    question: snapshot?.question || "",
-    questions: evidence.questions || [],
-    providedFacts: evidence.providedFacts || [],
+    schemaVersion: 2,
+    evidenceSnapshot: compactModelObject({
+      id: snapshot?.snapshotId || null,
+      sha256: snapshot?.contentSha256 || null,
+    }),
+    ...(scenarioText ? { scenarioText } : {}),
+    questions,
+    providedFacts: Array.isArray(evidence.providedFacts)
+      ? evidence.providedFacts
+      : [],
     cardResolution: compactCardResolutionForModel(evidence.cardResolution),
-    unresolved: evidence.unresolved || {},
-    retrievalWarnings: evidence.retrievalWarnings || [],
-    completeness: evidence.completeness || {},
+    unresolved: compactUnresolvedForModel({
+      unresolved: evidence.unresolved,
+      cardResolution: evidence.cardResolution,
+    }),
+    retrievalWarnings: compactRetrievalWarningsForModel(
+      evidence.retrievalWarnings,
+    ),
+    completeness: compactCompletenessForModel(evidence.completeness),
     evidenceDecisionPacket: finalRulingModelEvidencePacket(snapshot),
     legacyLuaSemanticPacket: evidence.legacyLuaSemanticPacket
       ? projectLegacyLuaSemanticPacketForModel(
         evidence.legacyLuaSemanticPacket,
       )
       : null,
-    dataVersions: snapshot?.dataVersions || {},
-    metadata: snapshot?.metadata || {},
   };
   const input = [
     "以下是从完整、冻结且通过内容哈希校验的 Evidence Snapshot 生成的有界决策资料包。",
-    "完整候选与完整冲突均保存在审计归档中；此处只包含确定性分层规则选出的卡文、FAQ 与机制资料，以及有界冲突目录、完整计数/哈希、遗漏和截断摘要。",
+    "完整候选与冲突保存在审计归档；这里只给出确定性选出的正文、有界冲突摘要及遗漏/截断计数。",
     "资料准备模型只提供候选卡名与补充检索词，不是裁定；确定性查询始终优先，但模型补充词仍可能扩展候选集合，所以必须独立核对每条可见证据。",
-    "只能引用 evidenceDecisionPacket.evidenceItems 中实际展示正文的 evidenceId/evidenceIds；omissionSummary.catalog 仅用于提示未展示的候选，不能作为可引用证据。",
+    "只能引用 evidenceDecisionPacket.evidenceItems 中实际展示正文的 evidenceId；omissionSummary 只有计数与审计哈希，不是证据。",
     "legacyLuaSemanticPacket 是旧 Lua 脚本自动提取的非权威语义旁路，只能提示可能需要检查的条件、操作和底层 API 依赖；它不是官方资料，不能加入 evidenceIds，candidateVerdict 不能直接支持结论，verdict=UNKNOWN 也绝不表示不能发动或不能处理。",
     "不得调用网络搜索，不得引用快照外资料。",
     JSON.stringify(boundedInput),
@@ -2715,7 +2958,17 @@ export function buildFinalRulingInput(snapshot) {
 }
 
 function finalRulingModelEvidencePacket(snapshot) {
-  return snapshot?.evidence?.evidenceDecisionPacket?.modelPacket || null;
+  const evidence = snapshot?.evidence || {};
+  const modelPacket = evidence?.evidenceDecisionPacket?.modelPacket || null;
+  if (
+    modelPacket?.schemaVersion === ADMIN_EVIDENCE_DECISION_PACKET_SCHEMA_VERSION
+    || !evidence.evidenceArchive
+  ) return modelPacket;
+  // Historical snapshots remain immutable. Re-project their complete archived
+  // evidence through the current bounded policy so old 80 KiB decision packets
+  // can still be forked under the current 48 KiB final-input envelope.
+  const archive = assertAdminEvidenceArchive(evidence.evidenceArchive);
+  return buildAdminEvidenceDecisionPacket({ archive }).modelPacket;
 }
 
 function collectRetrievalMetadata(retrieval) {
@@ -2727,7 +2980,7 @@ function collectRetrievalMetadata(retrieval) {
 
 function compactCardResolutionForModel(cardResolution = {}) {
   return {
-    resolvedCards: (cardResolution.resolvedCards || []).map((card) => ({
+    resolvedCards: (cardResolution.resolvedCards || []).map((card) => compactModelObject({
       id: card.id || card.cardId || null,
       passcode: card.passcode || null,
       input: card.input || null,
@@ -2758,12 +3011,121 @@ function compactCardResolutionForModel(cardResolution = {}) {
       confidence: Number.isFinite(Number(card.confidence))
         ? Number(card.confidence)
         : null,
-      numberedIdentityNameMismatch: card.numberedIdentityNameMismatch === true,
+      numberedIdentityNameMismatch: card.numberedIdentityNameMismatch === true
+        ? true
+        : null,
     })),
-    unresolvedMentions: cardResolution.unresolvedMentions || [],
-    ambiguousMentions: cardResolution.ambiguousMentions || [],
-    omittedResolvedCards: cardResolution.omittedResolvedCards || [],
   };
+}
+
+function compactQuestionsForModel(value, fallbackQuestion = "") {
+  const source = Array.isArray(value) && value.length > 0
+    ? value
+    : (String(fallbackQuestion || "").trim()
+        ? [{ questionId: "q1", text: String(fallbackQuestion) }]
+        : []);
+  return source.map((item, index) => compactModelObject({
+    questionId: typeof item === "string"
+      ? `q${index + 1}`
+      : item?.questionId || item?.id || `q${index + 1}`,
+    text: typeof item === "string"
+      ? item
+      : item?.text || item?.question || "",
+  }));
+}
+
+function distinctScenarioTextForModel(value, questions) {
+  const scenarioText = String(value || "").trim();
+  if (!scenarioText) return "";
+  const normalizedQuestions = Array.isArray(questions) ? questions : [];
+  if (
+    normalizedQuestions.length === 1
+    && scenarioText === String(normalizedQuestions[0]?.text || "").trim()
+  ) return "";
+  const enumeratedQuestions = normalizedQuestions.map(
+    (item) => `[${item.questionId}] ${item.text}`,
+  ).join("\n").trim();
+  return scenarioText === enumeratedQuestions ? "" : scenarioText;
+}
+
+function compactUnresolvedForModel({ unresolved = {}, cardResolution = {} } = {}) {
+  const cardMentions = dedupeCompactModelValues([
+    ...(Array.isArray(unresolved?.cardMentions) ? unresolved.cardMentions : []),
+    ...(Array.isArray(cardResolution?.unresolvedMentions)
+      ? cardResolution.unresolvedMentions
+      : []),
+  ]);
+  const ambiguousMentions = dedupeCompactModelValues([
+    ...(Array.isArray(unresolved?.ambiguousMentions) ? unresolved.ambiguousMentions : []),
+    ...(Array.isArray(cardResolution?.ambiguousMentions)
+      ? cardResolution.ambiguousMentions
+      : []),
+  ]);
+  return compactModelObject({
+    cardMentions,
+    ambiguousMentions,
+    remainingAfterRetrieval: unresolved?.remainingAfterRetrieval || [],
+    omittedResolvedCards: cardResolution?.omittedResolvedCards || [],
+  });
+}
+
+function dedupeCompactModelValues(values) {
+  const result = [];
+  const seen = new Set();
+  for (const value of values) {
+    const compacted = value && typeof value === "object" && !Array.isArray(value)
+      ? compactModelObject(value)
+      : value;
+    const key = JSON.stringify(compacted);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(compacted);
+  }
+  return result;
+}
+
+function compactRetrievalWarningsForModel(value) {
+  if (!Array.isArray(value)) return [];
+  return value.map((item) => String(item || "").replace(/\s+/gu, " ").trim())
+    .filter(Boolean);
+}
+
+function compactCompletenessForModel(value = {}) {
+  return compactModelObject({
+    allCardNamesResolved: value?.allCardNamesResolved,
+    unresolvedMentionCount: finiteCardNumber(value?.unresolvedMentionCount),
+    ambiguousMentionCount: finiteCardNumber(value?.ambiguousMentionCount),
+    conflictCount: finiteCardNumber(value?.conflictCount),
+    retrieverCandidateSetUntruncated: value?.retrieverCandidateSetUntruncated,
+    completeWithinRetrieverCandidateSet: value?.completeWithinRetrieverCandidateSet,
+    decisionPacketTruncated: value?.decisionPacketTruncated,
+    decisionPacketIncludedEvidenceCount: finiteCardNumber(
+      value?.decisionPacketIncludedEvidenceCount,
+    ),
+    decisionPacketOmittedEvidenceCount: finiteCardNumber(
+      value?.decisionPacketOmittedEvidenceCount,
+    ),
+  });
+}
+
+function compactModelObject(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return Object.fromEntries(Object.entries(value).flatMap(([key, item]) => {
+    if (item === null || item === undefined || item === "") return [];
+    if (Array.isArray(item)) {
+      const compacted = item.map((entry) => (
+        entry && typeof entry === "object" && !Array.isArray(entry)
+          ? compactModelObject(entry)
+          : entry
+      ));
+      return compacted.length > 0 ? [[key, compacted]] : [];
+    }
+    if (item && typeof item === "object") {
+      const compacted = compactModelObject(item);
+      return Object.keys(compacted).length > 0 ? [[key, compacted]] : [];
+    }
+    return [[key, item]];
+  }));
 }
 
 function finiteCardNumber(value) {
@@ -3114,13 +3476,13 @@ function buildDirectedRepairInput({ finalInput, priorOutput, validationErrors })
   const prefix = `${finalInput}\n=== 单次定向修复（不改变冻结证据）===\n`;
   let candidate = `${prefix}${JSON.stringify(directive)}`;
   while (
-    Buffer.byteLength(candidate, "utf8") > MAX_FINAL_RULING_INPUT_BYTES
+    Buffer.byteLength(candidate, "utf8") > MAX_FINAL_RULING_REPAIR_INPUT_BYTES
     && directive.priorOutput.length > 512
   ) {
     directive.priorOutput = directive.priorOutput.slice(0, Math.floor(directive.priorOutput.length / 2));
     candidate = `${prefix}${JSON.stringify(directive)}`;
   }
-  if (Buffer.byteLength(candidate, "utf8") > MAX_FINAL_RULING_INPUT_BYTES) {
+  if (Buffer.byteLength(candidate, "utf8") > MAX_FINAL_RULING_REPAIR_INPUT_BYTES) {
     throw serviceError(
       "directed repair input exceeds the final-ruling input limit",
       "model_ruling_repair_input_too_large",
@@ -3445,6 +3807,7 @@ function skippedPreparationOutput(skipReason) {
       prompt_cache_hit_tokens: 0,
       prompt_cache_miss_tokens: 0,
     },
+    attempts: [],
     hints: {
       cardNameCandidates: [],
       ruleSearchQueries: [],
@@ -3772,19 +4135,19 @@ function finalBudgetReservationId(runId, attemptKind, attemptId) {
   ].join(":");
 }
 
-function preparationBudgetReservationId(runId) {
+function preparationBudgetReservationId(runId, attemptId = PAID_PREPARATION_SUBSTAGE_ID) {
   return [
     "admin-final-call/v1",
     requiredString(runId, "runId"),
     "evidence_preparation",
-    PAID_PREPARATION_SUBSTAGE_ID,
+    requiredString(attemptId, "attemptId"),
   ].join(":");
 }
 
 function hasInterruptedPaidPreparation(stageTiming) {
   const understand = stageTiming?.stages?.find((stage) => stage.id === "understand");
   return understand?.substages?.some((substage) => (
-    substage.id === PAID_PREPARATION_SUBSTAGE_ID
+    PAID_PREPARATION_SUBSTAGE_IDS.has(substage.id)
     // The substage is created immediately before the paid request. A
     // COMPLETED span only proves that the provider returned; its output is not
     // durable until the evidence snapshot is finalized. Therefore every
@@ -3847,9 +4210,13 @@ function readLegacyLuaSemanticMaxBytes(explicitValue, env) {
     return DEFAULT_MAX_LEGACY_LUA_SEMANTIC_PACKET_BYTES;
   }
   const number = Number(value);
-  if (!Number.isInteger(number) || number < 1_024 || number >= MAX_FINAL_RULING_INPUT_BYTES) {
+  if (
+    !Number.isInteger(number)
+    || number < 1_024
+    || number > MAX_CONFIGURED_LEGACY_LUA_SEMANTIC_PACKET_BYTES
+  ) {
     throw new TypeError(
-      `ADMIN_MODEL_LAB_LEGACY_LUA_MAX_BYTES must be an integer between 1024 and ${MAX_FINAL_RULING_INPUT_BYTES - 1}`,
+      `ADMIN_MODEL_LAB_LEGACY_LUA_MAX_BYTES must be an integer between 1024 and ${MAX_CONFIGURED_LEGACY_LUA_SEMANTIC_PACKET_BYTES}`,
     );
   }
   return number;

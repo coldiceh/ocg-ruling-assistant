@@ -37,9 +37,12 @@
 （已配置相邻引擎时）从资源锁中的旧 Lua 自动提取
 操作、发动合法性依赖和底层 API 检查项
 ↓
-构造有界 RAG context
+归档完整 Evidence Archive
 ↓
-LLM 生成裁定分析
+确定性投影 Evidence Packet schema v2
+（默认最多 28 KiB / 16 项）
+↓
+在 48 KiB 最终输入硬边界内由 LLM 生成裁定分析
 ↓
 展示：
 - 结论
@@ -55,6 +58,16 @@ LLM 生成裁定分析
 `verdict` 永远是 `UNKNOWN`，不能被引用为官方资料，也不能直接决定“能/不能”。
 脚本缺失、未知 API、超时、超限或版本/哈希不一致都会显式降级为 typed
 `UNKNOWN`；多卡问题中单张脚本失败不会丢掉其他卡已经验证的语义候选。
+冻结快照保留完整 Lua 审计包，最终模型只接收最多 8 KiB 的有界投影；源码、AST
+和 source span 不进入模型输入。投影中的 `candidateVerdict` 只能作为待核查线索，
+不能升级正式 `verdict`，也不能充当可引用的 evidence ID。
+
+管理实验使用两层证据结构：完整、内容寻址的 Evidence Archive 保存检索器提供的
+全部候选出现、正文、包装元数据、冲突与哈希；模型可见的 Evidence Packet schema
+v2 则按固定的权威性与机制相关性顺序确定性选取，默认上限为 28 KiB 和 16 项。
+最终裁定输入还有独立的 48 KiB UTF-8 硬上限。历史快照若保存的是旧版大 Packet，
+系统不会修改原快照，而是从其中已经冻结且通过完整性校验的 Archive 按当前策略
+重新投影，因此旧的约 80 KiB Packet 仍可在当前边界内用于 fork。
 
 公开页面还会按裁定模型显示最近 20 次成功回答的真实平均耗时。统计使用可选的
 Upstash Redis；未配置、没有样本或存储失败时会明确显示不可用，不会捏造数字，
@@ -62,7 +75,17 @@ Upstash Redis；未配置、没有样本或存储失败时会明确显示不可�
 
 ## 管理模型实验室
 
-公开问答由 DeepSeek V4 Flash 准备检索证据，并默认由 DeepSeek V4 Flash（思考 high）生成最终裁定；公开主页面不再提供 GLM 5.2、Kimi 或第三方中转选项。GLM、Kimi 与第三方中转 GPT-5.6 Sol/Terra/Luna 只保留在隔离的管理模型实验室中，中转结果始终标注“模型身份未验证”；设置中转 key 不会注册公开 profile，也不会改变公开默认模型。旧的 `PUBLIC_RULING_MODEL_PROFILE=glm-5.2-high` 不会被静默映射到 DeepSeek，部署时必须删除该变量或明确改为 `deepseek-v4-flash-high`，否则公开配置会 fail-closed。公开 API 继续受 `API_DAILY_BUDGET_CNY` 总池约束；管理实验中的 DeepSeek 证据准备和各模型最终调用另受持久化 `ADMIN_FINAL_BUDGET_*` 账本约束。DeepSeek Flash/Pro 共用一个日池，Relay Sol/Terra/Luna 各有独立日池；这些额度不会增加或替代公开额度。中转的临时本地配置和安全边界见 `docs/relay-provider.md`。
+公开问答由 DeepSeek V4 Flash 准备检索证据，并默认由 DeepSeek V4 Flash（思考 high）生成最终裁定；公开主页面不再提供 GLM 5.2、Kimi 或第三方中转选项。GLM、Kimi 与第三方中转 GPT-5.6 Sol/Terra/Luna 只保留在隔离的管理模型实验室中，中转结果始终标注“模型身份未验证”；设置中转 key 不会注册公开 profile，也不会改变公开默认模型。旧的 `PUBLIC_RULING_MODEL_PROFILE=glm-5.2-high` 不会被静默映射到 DeepSeek，部署时必须删除该变量或明确改为 `deepseek-v4-flash-high`，否则公开配置会 fail-closed。公开 API 继续受 `API_DAILY_BUDGET_CNY` 总池约束；管理实验中的 DeepSeek 证据准备和各模型最终调用另受持久化 `ADMIN_FINAL_BUDGET_*` 账本约束。DeepSeek Flash/Pro 共用 `DEEPSEEK` 日池；Relay Sol、Terra、Luna 分别使用 `RELAY_SOL`、`RELAY_TERRA`、`RELAY_LUNA`，不是一个共享 Relay 池。这些额度不会增加或替代公开额度。中转的临时本地配置和安全边界见 `docs/relay-provider.md`。
+
+付费最终请求前还会运行 `productionReadiness`：每个已发现的候选卡名必须唯一绑定
+到稳定身份，并且对应完整、未节选的卡文确实出现在模型可见 Packet 中；未解析、
+歧义、被省略、卡文缺失或卡文被截断都会在 provider transport 之前 fail-closed。
+这是资料完备性门禁，不是裁定引擎，也不会把缺资料解释成“不能发动”。
+
+DeepSeek 证据准备只有一个窄恢复例外：若 provider 已明确返回 HTTP 200，但内容为空
+或不是合法 JSON，系统可再提交一次专用 JSON 恢复请求。恢复请求有独立 attempt、
+预算预约、usage 与审计记录；第二次失败不会触发第三次。网络错误、超时、取消、
+HTTP 400、429 或 5xx 均不走该内容恢复路径，以免在提交结果不明确时重复收费。
 
 隔离的管理实验路径用于在冻结证据下比较其他模型配置，不会改变公开问答选择。它默认关闭，默认测试也不会调用付费模型。部署、安全配置和当前进程恢复边界见：
 
@@ -70,10 +93,12 @@ Upstash Redis；未配置、没有样本或存储失败时会明确显示不可�
 - `docs/admin-auth-security.md`
 - `.env.example`
 
-同一组模型分叉会复用内容哈希一致的 Evidence Snapshot，其中 Lua 语义包也只在
-源运行生成一次。模型看到的是去除源码、AST 和 source span 后的有界投影；完整包
-只保留在审计快照中。这样可以比较 DeepSeek、GLM、Kimi 等模型本身的裁定差异，
-而不是让每个模型拿到不同资料。
+同一组模型分叉会复用内容哈希一致的 Evidence Snapshot，其中 Evidence Archive、
+schema v2 Decision Packet 与 Lua 语义包均只在源运行生成一次。模型看到的是同一份
+有界投影；完整候选和 Lua 审计资料只保留在冻结快照中。这样可以比较模型本身的
+裁定差异，而不是让每个模型拿到不同资料。第三方 Relay 只用于管理员明确发起的
+实验，固定记录 requested/returned model，不能据此证明中转返回了所请求的模型，
+也不会自动切换公开默认模型。
 
 完整 Snapshot 的新写入采用确定性 gzip+base64；旧裸 JSON 保持可读，但不会自动
 迁移、压缩或删除。Upstash 容量告警的原因与只读审计方法见

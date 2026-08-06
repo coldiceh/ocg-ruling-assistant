@@ -8,7 +8,9 @@ import {
 } from "../backend/legacyLuaSemanticClient.mjs";
 import {
   canonicalLegacyLuaSha256,
+  createLegacyLuaUnknownPacket,
   createLegacyLuaSemanticPacket,
+  LEGACY_LUA_SEMANTIC_MODEL_VIEW_MAX_BYTES,
   parseLegacyLuaSemanticPacket,
   projectLegacyLuaSemanticPacketForModel,
   serializeLegacyLuaSemanticPacket,
@@ -131,8 +133,27 @@ function descriptor(capabilityId, status, dependencies = []) {
   };
 }
 
-function plan(identity, { registryValue = registry(), engineVersions = versions() } = {}) {
+function plan(identity, {
+  registryValue = registry(),
+  engineVersions = versions(),
+  activationLegalityCheckCount = 1,
+  checkValueSuffix = "",
+} = {}) {
   const registryHash = canonicalLegacyLuaSha256(registryValue);
+  const activationLegalityChecks = Array.from(
+    { length: activationLegalityCheckCount },
+    (_, index) => ({
+      callbackSlot: `TARGET${checkValueSuffix}`,
+      predicateApi: `Card.IsAbleToHand${checkValueSuffix}`,
+      atomicOperation: `RETURN_TO_HAND${checkValueSuffix}`,
+      requiredMinimum: 1,
+      dependencyGraph: {
+        dependencies: [activationLegalityCheckCount === 1 && !checkValueSuffix
+          ? "CARD_CAN_RETURN_TO_HAND"
+          : `CARD_CAN_RETURN_TO_HAND_${index}${checkValueSuffix}`],
+      },
+    }),
+  );
   return {
     schemaVersion: "ocg-legacy-lua-activation-plan/v2",
     sourceDocumentId: "legacy:test-resource",
@@ -155,16 +176,10 @@ function plan(identity, { registryValue = registry(), engineVersions = versions(
     operationProgram: { kind: "SEQUENCE", steps: [] },
     operationApis: [],
     atomicOperations: [],
-    activationLegalityChecks: [{
-      callbackSlot: "TARGET",
-      predicateApi: "Card.IsAbleToHand",
-      atomicOperation: "RETURN_TO_HAND",
-      requiredMinimum: 1,
-      dependencyGraph: {
-        dependencies: ["CARD_CAN_RETURN_TO_HAND"],
-      },
-    }],
-    activationLegalityDependencies: ["CARD_CAN_RETURN_TO_HAND"],
+    activationLegalityChecks,
+    activationLegalityDependencies: activationLegalityChecks.flatMap(
+      (check) => check.dependencyGraph.dependencies,
+    ),
     requiredLegacyApis: [],
     requiredCapabilities: [
       "compatibility/legacy-lua-semantic-discovery/v1",
@@ -205,13 +220,18 @@ function mockEngine({
   identities = [rawSha256("effect-a")],
   engineVersions = versions(),
   registryValue = registry(),
+  candidatePlanOptions = {},
   mutateCandidateSet,
   mutateCompile,
   mutateAnalysis,
   throwAt,
 } = {}) {
   const candidates = identities.map((identity) =>
-    rawCandidate(identity, { registryValue, engineVersions })
+    rawCandidate(identity, {
+      registryValue,
+      engineVersions,
+      ...candidatePlanOptions,
+    })
   );
   const calls = [];
   const engine = {
@@ -542,6 +562,140 @@ test("model projection keeps generic dependencies but drops source and AST paylo
   );
   assert.ok(Buffer.byteLength(serializedView) < Buffer.byteLength(serializedPacket));
   assert.doesNotMatch(serializedView, /sourceSpans|exactText|conditionProgram/u);
+});
+
+test("model projection defaults to six ordered candidates and six complete checks", async () => {
+  const identities = Array.from({ length: 8 }, (_, index) =>
+    rawSha256(`model-view-default-${index}`)
+  );
+  const { engine } = mockEngine({ identities });
+  const resource = await collectLegacyLuaSemanticResource({
+    sourceDocument: sourceDocument(),
+    engine,
+  });
+  const packet = createLegacyLuaSemanticPacket({ resources: [resource] });
+  const frozenBeforeProjection = serializeLegacyLuaSemanticPacket(packet);
+  const view = projectLegacyLuaSemanticPacketForModel(packet);
+
+  assert.equal(view.effectCandidates.length, 6);
+  assert.deepEqual(
+    view.effectCandidates.map((candidate) => candidate.semanticEffectIdentity),
+    packet.effectCandidates.slice(0, 6).map(
+      (candidate) => candidate.semanticEffectIdentity,
+    ),
+  );
+  assert.equal(
+    view.effectCandidates.every(
+      (candidate) => candidate.activationLegalityChecks.length === 1,
+    ),
+    true,
+  );
+  assert.equal(view.totalCandidateCount, 8);
+  assert.equal(view.includedCandidateCount, 6);
+  assert.equal(view.omittedCandidateCount, 2);
+  assert.equal(view.omittedActivationLegalityCheckCount, 0);
+  assert.equal(
+    Buffer.byteLength(JSON.stringify(view), "utf8")
+      <= LEGACY_LUA_SEMANTIC_MODEL_VIEW_MAX_BYTES,
+    true,
+  );
+  assert.equal(serializeLegacyLuaSemanticPacket(packet), frozenBeforeProjection);
+});
+
+test("model projection removes whole checks beyond the per-candidate limit", async () => {
+  const { engine } = mockEngine({
+    candidatePlanOptions: { activationLegalityCheckCount: 9 },
+  });
+  const resource = await collectLegacyLuaSemanticResource({
+    sourceDocument: sourceDocument(),
+    engine,
+  });
+  const packet = createLegacyLuaSemanticPacket({ resources: [resource] });
+  const view = projectLegacyLuaSemanticPacketForModel(packet);
+
+  assert.equal(view.effectCandidates.length, 1);
+  assert.equal(view.effectCandidates[0].activationLegalityChecks.length, 6);
+  assert.equal(view.omittedActivationLegalityCheckCount, 3);
+});
+
+test("model projection enforces 8 KiB deterministically by deleting complete suffix candidates", async () => {
+  const identities = Array.from({ length: 12 }, (_, index) =>
+    rawSha256(`model-view-byte-limit-${index}`)
+  );
+  const fullMarker = `LONG_MARKER_${"界".repeat(80)}`;
+  const { engine } = mockEngine({
+    identities,
+    candidatePlanOptions: {
+      activationLegalityCheckCount: 6,
+      checkValueSuffix: fullMarker,
+    },
+  });
+  const resource = await collectLegacyLuaSemanticResource({
+    sourceDocument: sourceDocument(),
+    engine,
+  });
+  const packet = createLegacyLuaSemanticPacket({ resources: [resource] });
+  const first = projectLegacyLuaSemanticPacketForModel(packet);
+  const second = projectLegacyLuaSemanticPacketForModel(packet);
+  const serialized = JSON.stringify(first);
+
+  assert.deepEqual(first, second);
+  assert.equal(
+    Buffer.byteLength(serialized, "utf8")
+      <= LEGACY_LUA_SEMANTIC_MODEL_VIEW_MAX_BYTES,
+    true,
+  );
+  assert.equal(first.effectCandidates.length > 0, true);
+  assert.equal(first.effectCandidates.length < 6, true);
+  assert.deepEqual(
+    first.effectCandidates.map((candidate) => candidate.semanticEffectIdentity),
+    packet.effectCandidates.slice(0, first.effectCandidates.length).map(
+      (candidate) => candidate.semanticEffectIdentity,
+    ),
+  );
+  assert.equal(
+    first.effectCandidates.every(
+      (candidate) => candidate.activationLegalityChecks.length === 6,
+    ),
+    true,
+  );
+  assert.equal(
+    first.effectCandidates[0].activationLegalityChecks[0].predicateApi,
+    `Card.IsAbleToHand${fullMarker}`,
+    "model strings must not be byte-sliced",
+  );
+  assert.equal(
+    first.omittedCandidateCount,
+    first.totalCandidateCount - first.includedCandidateCount,
+  );
+  assert.equal(first.verdict, "UNKNOWN");
+  assert.doesNotThrow(() => JSON.parse(serialized));
+});
+
+test("candidate-free UNKNOWN projection is minimal, bounded, and keeps its audit boundary", () => {
+  const packet = createLegacyLuaUnknownPacket({
+    code: "MODEL_VIEW_TYPED_UNKNOWN",
+    message: "no legacy Lua candidate is available",
+  });
+  const view = projectLegacyLuaSemanticPacketForModel(packet);
+
+  assert.equal(view.status, "TYPED_UNKNOWN");
+  assert.equal(view.sourcePacketSha256, packet.packetSha256);
+  assert.equal(view.authority, "LEGACY_COMPATIBILITY");
+  assert.equal(view.canConfirmOfficialRuling, false);
+  assert.equal(view.legacyAcceptedAsTruth, false);
+  assert.equal(view.verdict, "UNKNOWN");
+  assert.deepEqual(view.effectCandidates, []);
+  assert.equal(view.totalCandidateCount, 0);
+  assert.equal(view.includedCandidateCount, 0);
+  assert.equal(view.omittedCandidateCount, 0);
+  assert.equal(Object.hasOwn(view, "resources"), false);
+  assert.equal(Object.hasOwn(view, "packetTruncation"), false);
+  assert.equal(
+    Buffer.byteLength(JSON.stringify(view), "utf8")
+      <= LEGACY_LUA_SEMANTIC_MODEL_VIEW_MAX_BYTES,
+    true,
+  );
 });
 
 test("packet hashing is stable and rejects caller-reordered candidate artifacts fail-closed", async () => {

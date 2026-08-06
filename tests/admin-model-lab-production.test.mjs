@@ -567,6 +567,7 @@ test("DeepSeek bridge accepts evidence preparation only and keeps server-owned t
   assert.equal(calls[0].signal, controller.signal);
   assert.equal(calls[0].thinkingMode, "enabled");
   assert.equal(calls[0].reasoningEffort, "max");
+  assert.equal(calls[0].allowResponseFormatFallback, false);
 
   await assert.rejects(
     invoke({
@@ -680,6 +681,103 @@ test("DeepSeek response-format fallback keeps the caller AbortSignal", async () 
   assert.equal(calls[0].options.signal, controller.signal);
   assert.equal(calls[1].options.signal, controller.signal);
   assert.equal(Object.hasOwn(JSON.parse(calls[1].options.body), "response_format"), false);
+});
+
+test("admin DeepSeek bridge disables the implicit HTTP 400 response-format retry", async () => {
+  const calls = [];
+  const invoke = createDeepSeekEvidencePreparationInvoke({
+    env: {
+      DEEPSEEK_API_KEY: "server-secret",
+      DEEPSEEK_BASE_URL: "https://deepseek.example/v1",
+    },
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options });
+      return jsonResponse({ error: { message: "response_format unsupported" } }, 400);
+    },
+  });
+
+  await assert.rejects(
+    invoke({
+      provider: "deepseek",
+      purpose: "evidence_preparation",
+      canMakeFinalRuling: false,
+      canDecideEscalation: false,
+      prompt: "只返回 JSON",
+      modelName: "deepseek-v4-flash",
+      thinkingMode: "disabled",
+    }),
+    (error) => error?.status === 400,
+  );
+  assert.equal(calls.length, 1);
+});
+
+test("DeepSeek JSON task classifies completed empty and non-JSON content without retaining it", async (t) => {
+  for (const fixture of [
+    {
+      label: "empty content",
+      content: "",
+      expectedKind: "empty",
+      expectedCode: "deepseek_json_task_empty_content",
+    },
+    {
+      label: "non-JSON content",
+      content: "not-json-sensitive-body",
+      expectedKind: "invalid_json",
+      expectedCode: "deepseek_json_task_invalid_json",
+    },
+  ]) {
+    await t.test(fixture.label, async () => {
+      let caught = null;
+      try {
+        await callDeepSeekJsonTask({
+          prompt: "返回严格 JSON",
+          modelName: "deepseek-v4-flash",
+          env: {
+            DEEPSEEK_API_KEY: "server-secret",
+            DEEPSEEK_BASE_URL: "https://deepseek.example/v1",
+          },
+          fetchImpl: async () => jsonResponse({
+            id: "deepseek-content-failure-1",
+            model: "deepseek-v4-flash",
+            choices: [{
+              finish_reason: "stop",
+              message: { content: fixture.content },
+            }],
+            usage: {
+              prompt_tokens: 120,
+              completion_tokens: 40,
+              total_tokens: 160,
+            },
+          }),
+        });
+      } catch (error) {
+        caught = error;
+      }
+
+      assert.ok(caught);
+      assert.equal(caught.name, "DeepSeekJsonTaskContentError");
+      assert.equal(caught.code, fixture.expectedCode);
+      assert.equal(caught.provider, "deepseek");
+      assert.equal(caught.status, 200);
+      assert.equal(caught.outcomeKnown, true);
+      assert.equal(caught.budgetReservationMayExist, true);
+      assert.equal(caught.budgetReservationReleaseSafe, false);
+      assert.equal(caught.confirmedContentFailure, true);
+      assert.equal(caught.contentFailureKind, fixture.expectedKind);
+      assert.equal(caught.model, "deepseek-v4-flash");
+      assert.equal(caught.requestId, "deepseek-content-failure-1");
+      assert.deepEqual(caught.usage, {
+        prompt_tokens: 120,
+        completion_tokens: 40,
+        total_tokens: 160,
+        reasoning_tokens: 0,
+        prompt_cache_hit_tokens: 0,
+        prompt_cache_miss_tokens: 0,
+      });
+      assert.equal(Object.hasOwn(caught, "rawText"), false);
+      assert.equal(JSON.stringify(caught).includes("not-json-sensitive-body"), false);
+    });
+  }
 });
 
 test("DeepSeek JSON task records paid usage before rejecting invalid JSON", async () => {

@@ -32,6 +32,54 @@ test("final evidence readiness accepts uniquely bound cards with complete visibl
   assert.equal(inspection.bindings[0].visibleEvidenceId, "card-a");
 });
 
+test("final evidence readiness maps multiple compact card-text items through audit sidecars", () => {
+  const cards = [
+    resolvedCard("card-a", "匿名卡A", "匿名卡A完整卡文"),
+    resolvedCard("card-b", "匿名卡B", "匿名卡B完整卡文"),
+    resolvedCard("card-c", "匿名卡C", "匿名卡C完整卡文"),
+  ];
+  const snapshot = makeSnapshot({ resolvedCards: cards });
+  const inspection = inspectAdminFinalEvidenceReadiness(snapshot);
+  const visibleItems = snapshot.evidence.evidenceDecisionPacket.modelPacket.evidenceItems;
+
+  assert.equal(inspection.ready, true);
+  assert.equal(inspection.candidateCount, 3);
+  assert.deepEqual(
+    inspection.bindings.map((binding) => binding.visibleEvidenceId).sort(),
+    ["card-a", "card-b", "card-c"],
+  );
+  assert.equal(
+    visibleItems.every(
+      (item) => !Object.hasOwn(item, "bodyHash") && !Object.hasOwn(item, "evidenceIds"),
+    ),
+    true,
+  );
+});
+
+test("final evidence readiness resolves equivalent card texts from one compact item and full sidecar IDs", () => {
+  const sharedText = "两张不同卡共用的完整印刷卡文。";
+  const snapshot = makeSnapshot({
+    resolvedCards: [
+      resolvedCard("card-a", "同文卡A", sharedText),
+      resolvedCard("card-b", "同文卡B", sharedText),
+    ],
+  });
+  const inspection = inspectAdminFinalEvidenceReadiness(snapshot);
+  const packet = snapshot.evidence.evidenceDecisionPacket;
+
+  assert.equal(inspection.ready, true);
+  assert.equal(packet.modelPacket.evidenceItems.length, 1);
+  assert.equal(Object.hasOwn(packet.modelPacket.evidenceItems[0], "evidenceIds"), false);
+  assert.deepEqual(
+    packet.includedManifest[0].evidenceIds,
+    ["card-a", "card-b"],
+  );
+  assert.deepEqual(
+    inspection.bindings.map((binding) => binding.visibleEvidenceId).sort(),
+    ["card-a", "card-b"],
+  );
+});
+
 test("final evidence readiness accepts a user-supplied unknown card with complete visible text", () => {
   const supplied = { name: "尚未收录的新卡", text: "①：可以发动。进行通用处理。" };
   const inspection = inspectAdminFinalEvidenceReadiness(makeSnapshot({
@@ -107,6 +155,25 @@ test("final evidence readiness rejects a candidate surface shared by two card id
   );
 });
 
+test("final evidence readiness rejects an explicitly unverified identity even when its input is in aliases", () => {
+  const card = {
+    ...resolvedCard("card-a", "规范卡名", "规范卡名完整卡文", ["规范卡名", "未验证输入"]),
+    input: "未验证输入",
+    identityVerificationStatus: "unverified",
+  };
+  const inspection = inspectAdminFinalEvidenceReadiness(makeSnapshot({
+    resolvedCards: [card],
+    preparationCandidates: [{ name: "未验证输入", originalText: "未验证输入" }],
+  }));
+
+  assert.equal(inspection.ready, false);
+  assert.equal(
+    inspection.bindings.find((item) => item.candidate === "未验证输入")?.bindingStatus,
+    "UNRESOLVED",
+  );
+  assert.ok(inspection.unresolvedCandidates.some((item) => item.candidate === "未验证输入"));
+});
+
 test("final evidence readiness rejects missing or excerpted model-visible card text", async (t) => {
   const card = resolvedCard("card-a", "匿名卡A", "匿名卡A完整卡文");
 
@@ -135,6 +202,46 @@ test("final evidence readiness rejects missing or excerpted model-visible card t
   });
 });
 
+test("final evidence readiness fails closed when compact item or audit mapping is tampered", async (t) => {
+  const card = resolvedCard("card-a", "匿名卡A", "匿名卡A完整卡文");
+  const cases = [{
+    name: "visible body changed without matching the sidecar body hash",
+    mutate(packet) {
+      packet.modelPacket.evidenceItems[0].body = "被篡改的卡文";
+    },
+  }, {
+    name: "packet item no longer maps to its manifest",
+    mutate(packet) {
+      packet.modelPacket.evidenceItems[0].packetItemId = "packet_item_tampered";
+    },
+  }, {
+    name: "manifest equivalent IDs no longer contain the card",
+    mutate(packet) {
+      packet.includedManifest[0].evidenceIds = ["unrelated-card"];
+    },
+  }, {
+    name: "duplicate packet item mappings are ambiguous",
+    mutate(packet) {
+      packet.includedManifest.push(structuredClone(packet.includedManifest[0]));
+    },
+  }];
+
+  for (const definition of cases) {
+    await t.test(definition.name, () => {
+      const snapshot = makeSnapshot({
+        resolvedCards: [card],
+        mutateDecisionPacket: definition.mutate,
+      });
+      const inspection = inspectAdminFinalEvidenceReadiness(snapshot);
+      assert.equal(inspection.ready, false);
+      assert.deepEqual(
+        inspection.missingVisibleCardTexts.map((item) => item.candidate),
+        ["匿名卡A"],
+      );
+    });
+  }
+});
+
 function makeSnapshot({
   resolvedCards = [],
   unresolvedMentions = [],
@@ -144,6 +251,7 @@ function makeSnapshot({
   preparationCandidates = [],
   removeVisibleCardTexts = false,
   excerptVisibleCardTexts = false,
+  mutateDecisionPacket = null,
 } = {}) {
   const cardTextCandidates = {
     resolved: resolvedCards.map((card) => ({
@@ -180,6 +288,9 @@ function makeSnapshot({
     for (const item of evidenceDecisionPacket.modelPacket.evidenceItems) {
       if (item.category === "parsed_card_text") item.bodyExcerpted = true;
     }
+  }
+  if (typeof mutateDecisionPacket === "function") {
+    mutateDecisionPacket(evidenceDecisionPacket);
   }
   return createAdminEvidenceSnapshot({
     question: "匿名规则问题",

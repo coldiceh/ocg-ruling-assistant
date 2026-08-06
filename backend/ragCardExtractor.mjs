@@ -1450,6 +1450,14 @@ function classifyQuotedMentionRole(text, mention, index, end) {
 function looksLikeQuotedEffectClause(mention) {
   const text = String(mention || "").normalize("NFKC").trim();
   if (text.length < 8) return false;
+  const hasResolutionTerm = /(?:处理|處理|処理|结算|結算|解決|resolv(?:e|ed|ing)|process(?:ed|ing)?)/iu.test(text);
+  const hasResolutionMetaGrammar = /(?:不能|无法|無法|不再|不进行|不進行|为止|為止|对象|對象|対象|丢失|丟失|离场|離場|不适用|不適用|继续|繼續|できない|行えない|行わない|ところまで|存在しない|離れた|失われた|cannot|can't|unable|no\s+longer|as\s+far\s+as\s+possible|target)/iu.test(text);
+  // Players often quote competing rule interpretations rather than card
+  // names, for example “process as far as possible” or “the target is gone,
+  // do not resolve”.  Treat only propositions that contain both a resolution
+  // term and meta-resolution grammar as non-card clauses; ordinary long card
+  // names such as “不能停止的机械巨龙” remain card mentions.
+  if (hasResolutionTerm && hasResolutionMetaGrammar) return true;
   const hasReferencedObject = /(?:(?:その|この|あの|対象の|選んだ|選択した|该|該|此|这|這|那)(?:カード|怪獣|モンスター|発動|効果)|(?:その|この|该|該|此|这|這|那)(?:発動|效果|効果))/u.test(text);
   const hasEffectOperation = /(?:発動|发动|發動|適用|适用|無効|无效|戻す|返回|放回|破壊|破坏|除外|墓地へ送|送去墓地|手札に加|加入手牌|召喚|召唤|特殊召喚|特殊召唤)/u.test(text);
   if (!hasEffectOperation) return false;
