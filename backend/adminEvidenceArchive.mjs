@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 
 export const ADMIN_EVIDENCE_ARCHIVE_SCHEMA_VERSION = 1;
-export const ADMIN_EVIDENCE_DECISION_PACKET_SCHEMA_VERSION = 1;
+export const ADMIN_EVIDENCE_DECISION_PACKET_SCHEMA_VERSION = 2;
 
 export const ADMIN_EVIDENCE_CATEGORIES = Object.freeze({
   DIRECT_OFFICIAL_QA: "direct_official_qa",
@@ -13,16 +13,13 @@ export const ADMIN_EVIDENCE_CATEGORIES = Object.freeze({
 });
 
 export const DEFAULT_ADMIN_DECISION_PACKET_LIMITS = Object.freeze({
-  maxPacketBytes: 80 * 1024,
-  maxItems: 32,
-  maxTotalBodyChars: 36_000,
-  maxTotalBodyBytes: 48 * 1024,
-  maxBodyCharsPerItem: 5_000,
-  maxBodyBytesPerItem: 8 * 1024,
-  maxEquivalentEvidenceIdsPerItem: 16,
+  maxPacketBytes: 28 * 1024,
+  maxItems: 16,
+  maxTotalBodyChars: 16_000,
+  maxTotalBodyBytes: 20 * 1024,
+  maxBodyCharsPerItem: 2_500,
+  maxBodyBytesPerItem: 4 * 1024,
   maxEvidenceIdBytes: 160,
-  maxOmissionCatalogItems: 16,
-  maxOmissionEvidenceIdsPerItem: 8,
   maxConflictCatalogItems: 8,
   maxConflictItemBytes: 4 * 1024,
   maxConflictReferencesPerItem: 8,
@@ -331,14 +328,12 @@ export function buildAdminEvidenceDecisionPacket({
       ));
       continue;
     }
-    const allowedChars = Math.min(
-      remainingChars,
-      normalizedLimits.maxBodyCharsPerItem,
+    const candidateBodyLimits = bodyLimitsForCandidate(
+      candidate,
+      normalizedLimits,
     );
-    const allowedBytes = Math.min(
-      remainingBytes,
-      normalizedLimits.maxBodyBytesPerItem,
-    );
+    const allowedChars = Math.min(remainingChars, candidateBodyLimits.maxChars);
+    const allowedBytes = Math.min(remainingBytes, candidateBodyLimits.maxBytes);
     if (
       (allowedChars < 64 || allowedBytes < 128)
       && (
@@ -369,17 +364,13 @@ export function buildAdminEvidenceDecisionPacket({
             candidate,
             allowedChars,
             allowedBytes,
-            limits: normalizedLimits,
+            bodyLimits: candidateBodyLimits,
           }),
         ),
       );
     }
   }
 
-  let omissionCatalogLimit = Math.min(
-    normalizedLimits.maxOmissionCatalogItems,
-    omittedManifest.length,
-  );
   let conflictCatalogLimit = Math.min(
     normalizedLimits.maxConflictCatalogItems,
     archive.conflicts.length,
@@ -395,15 +386,10 @@ export function buildAdminEvidenceDecisionPacket({
       omittedManifest,
       truncationManifest,
       limits: normalizedLimits,
-      omissionCatalogLimit,
       conflictCatalogLimit,
     });
     if (packetSnapshot.bytes <= normalizedLimits.maxPacketBytes) break;
 
-    if (omissionCatalogLimit > 0) {
-      omissionCatalogLimit = Math.floor(omissionCatalogLimit / 2);
-      continue;
-    }
     if (conflictCatalogLimit > 0) {
       conflictCatalogLimit = Math.floor(conflictCatalogLimit / 2);
       continue;
@@ -418,10 +404,7 @@ export function buildAdminEvidenceDecisionPacket({
         currentBodyBytes - excessBytes - 256,
       );
       const bounded = boundedEvidenceBody(bodySelection.candidate.bodyText, {
-        maxChars: Math.min(
-          bodySelection.item.body.length,
-          normalizedLimits.maxBodyCharsPerItem,
-        ),
+        maxChars: bodySelection.item.body.length,
         maxBytes: nextBodyBytes,
       });
       bodySelection.item = modelEvidenceItem(
@@ -487,9 +470,7 @@ export function buildAdminEvidenceDecisionPacket({
       maxPacketBytes: normalizedLimits.maxPacketBytes,
       includedManifestBytes: byteLength(canonicalStringify(includedManifest)),
       omittedManifestBytes: byteLength(canonicalStringify(omittedManifest)),
-      omittedCatalogBytes: byteLength(
-        canonicalStringify(modelPacketContent.omissionSummary.catalog),
-      ),
+      omittedCatalogBytes: 0,
       truncationManifestBytes: byteLength(canonicalStringify(truncationManifest)),
       conflictManifestBytes: byteLength(canonicalStringify(archive.conflicts)),
       conflictCatalogBytes: byteLength(canonicalStringify(modelPacketContent.conflicts)),
@@ -1190,6 +1171,7 @@ function aggregateDecisionCandidates(archive) {
       bestCollectionRank: occurrence.index,
       bestSourceCollectionPriority: sourceCollectionPriority(occurrence.collection),
       sourceCollections: [],
+      representativeOccurrence: occurrence,
     };
     if (!candidate.evidenceIds.includes(occurrence.evidenceId)) {
       candidate.evidenceIds.push(occurrence.evidenceId);
@@ -1221,16 +1203,49 @@ function aggregateDecisionCandidates(archive) {
       candidate.bestSourceCollectionPriority,
       sourceCollectionPriority(occurrence.collection),
     );
+    if (compareRepresentativeOccurrences(
+      occurrence,
+      candidate.representativeOccurrence,
+    ) < 0) {
+      candidate.representativeOccurrence = occurrence;
+    }
     bySubstance.set(occurrence.substanceHash, candidate);
   }
   return layerDecisionCandidates([...bySubstance.values()]
-    .map((candidate) => ({
-      ...candidate,
-      evidenceIds: [...candidate.evidenceIds].sort(),
-      occurrenceIds: [...candidate.occurrenceIds].sort(),
-      categories: [...candidate.categories].sort(),
-      sourceCollections: [...candidate.sourceCollections].sort(),
-    })));
+    .map((candidate) => {
+      const {
+        representativeOccurrence: representative,
+        ...candidateWithoutRepresentative
+      } = candidate;
+      return {
+        ...candidateWithoutRepresentative,
+        representativeEvidenceId: representative.evidenceId,
+        category: representative.category,
+        authority: representative.authority,
+        direct: representative.direct,
+        current: representative.current,
+        relevanceScore: representative.relevanceScore,
+        bestCollectionRank: representative.index,
+        bestSourceCollectionPriority: sourceCollectionPriority(
+          representative.collection,
+        ),
+        evidenceIds: [...candidate.evidenceIds].sort(),
+        occurrenceIds: [...candidate.occurrenceIds].sort(),
+        categories: [...candidate.categories].sort(),
+        sourceCollections: [...candidate.sourceCollections].sort(),
+      };
+    }));
+}
+
+function compareRepresentativeOccurrences(left, right) {
+  return Number(right.direct) - Number(left.direct)
+    || Number(right.authority === "official") - Number(left.authority === "official")
+    || Number(right.current) - Number(left.current)
+    || sourceCollectionPriority(left.collection) - sourceCollectionPriority(right.collection)
+    || categoryPriority(left.category) - categoryPriority(right.category)
+    || left.index - right.index
+    || left.evidenceId.localeCompare(right.evidenceId, "en")
+    || left.occurrenceId.localeCompare(right.occurrenceId, "en");
 }
 
 function layerDecisionCandidates(candidates) {
@@ -1253,6 +1268,23 @@ function layerDecisionCandidates(candidates) {
   }
   const layered = [];
   const offsets = new Map(categories.map((category) => [category, 0]));
+
+  // A current direct official answer is the strongest available source. Keep
+  // every such candidate ahead of weaker card-text, analogous-QA, mechanism,
+  // context, and other evidence. Stale or otherwise ineligible direct records
+  // remain in the normal weighted schedule and cannot inherit this privilege.
+  const directCategory = ADMIN_EVIDENCE_CATEGORIES.DIRECT_OFFICIAL_QA;
+  const directCandidates = byCategory.get(directCategory) || [];
+  const priorityDirectCandidates = directCandidates.filter(
+    isEligibleDirectOfficialCandidate,
+  );
+  if (priorityDirectCandidates.length > 0) {
+    layered.push(...priorityDirectCandidates);
+    byCategory.set(
+      directCategory,
+      directCandidates.filter((candidate) => !isEligibleDirectOfficialCandidate(candidate)),
+    );
+  }
   const takeNext = (category) => {
     const source = byCategory.get(category) || [];
     const offset = offsets.get(category) || 0;
@@ -1403,53 +1435,20 @@ function omittedEntry(candidate, reason) {
 }
 
 function modelEvidenceItem(candidate, bounded, limits) {
-  const identifiers = boundedIdentifierList(candidate.evidenceIds, {
-    maxItems: limits.maxEquivalentEvidenceIdsPerItem,
-    maxIdentifierBytes: limits.maxEvidenceIdBytes,
-  });
+  const identifier = boundedVisibleIdentifier(
+    candidate.representativeEvidenceId,
+    limits.maxEvidenceIdBytes,
+  );
   return {
     packetItemId: `packet_item_${candidate.substanceHash.slice(0, 20)}`,
-    evidenceId: identifiers.values[0]
-      || boundedVisibleIdentifier(candidate.evidenceIds[0], limits.maxEvidenceIdBytes).value,
-    evidenceIds: identifiers.values,
-    equivalentEvidenceIdCount: identifiers.totalCount,
-    equivalentEvidenceIdsSha256: identifiers.manifestSha256,
-    evidenceIdsExcerpted: identifiers.excerpted,
-    evidenceIdsAliasedCount: identifiers.aliasedCount,
+    evidenceId: identifier.value,
+    evidenceIdAliased: identifier.aliased,
     category: candidate.category,
     authority: candidate.authority,
     direct: candidate.direct,
     current: candidate.current,
-    relevanceScore: Number.isFinite(candidate.relevanceScore)
-      ? candidate.relevanceScore
-      : null,
-    bestCollectionRank: candidate.bestCollectionRank,
-    sourceCollections: candidate.sourceCollections,
-    substanceHash: candidate.substanceHash,
-    bodyHash: candidate.bodyHash,
     body: bounded.text,
     bodyExcerpted: bounded.truncated,
-    originalBodyCharCount: candidate.bodyText.length,
-    originalBodyByteCount: byteLength(candidate.bodyText),
-    includedBodyCharCount: bounded.text.length,
-    includedBodyByteCount: byteLength(bounded.text),
-  };
-}
-
-function boundedIdentifierList(values, {
-  maxItems,
-  maxIdentifierBytes,
-}) {
-  const source = arrayValue(values).map((value) => String(value));
-  const bounded = source.slice(0, maxItems).map(
-    (value) => boundedVisibleIdentifier(value, maxIdentifierBytes),
-  );
-  return {
-    values: bounded.map((entry) => entry.value),
-    totalCount: source.length,
-    manifestSha256: sha256(canonicalStringify(source)),
-    excerpted: source.length > bounded.length,
-    aliasedCount: bounded.filter((entry) => entry.aliased).length,
   };
 }
 
@@ -1482,25 +1481,51 @@ function initialBodyTruncationReason({
   candidate,
   allowedChars,
   allowedBytes,
-  limits,
+  bodyLimits,
 }) {
-  if (allowedChars < limits.maxBodyCharsPerItem) {
+  if (allowedChars < bodyLimits.maxChars) {
     return "total_body_character_budget";
   }
-  if (allowedBytes < limits.maxBodyBytesPerItem) {
+  if (allowedBytes < bodyLimits.maxBytes) {
     return "total_body_byte_budget";
   }
-  if (candidate.bodyText.length > limits.maxBodyCharsPerItem) {
-    return "per_item_body_character_budget";
+  if (candidate.bodyText.length > bodyLimits.maxChars) {
+    return bodyLimits.scope === "total"
+      ? "total_body_character_budget"
+      : "per_item_body_character_budget";
   }
-  return "per_item_body_byte_budget";
+  return bodyLimits.scope === "total"
+    ? "total_body_byte_budget"
+    : "per_item_body_byte_budget";
+}
+
+function bodyLimitsForCandidate(candidate, limits) {
+  if (isEligibleDirectOfficialCandidate(candidate)) {
+    return {
+      maxChars: limits.maxTotalBodyChars,
+      maxBytes: limits.maxTotalBodyBytes,
+      scope: "total",
+    };
+  }
+  return {
+    maxChars: limits.maxBodyCharsPerItem,
+    maxBytes: limits.maxBodyBytesPerItem,
+    scope: "per_item",
+  };
+}
+
+function isEligibleDirectOfficialCandidate(candidate) {
+  return candidate.category === ADMIN_EVIDENCE_CATEGORIES.DIRECT_OFFICIAL_QA
+    && candidate.direct === true
+    && candidate.authority === "official"
+    && candidate.current === true;
 }
 
 function createIncludedManifest(includedSelections) {
   return includedSelections.map(({ candidate, item }) => ({
     packetItemId: item.packetItemId,
-    substanceHash: item.substanceHash,
-    bodyHash: item.bodyHash,
+    substanceHash: candidate.substanceHash,
+    bodyHash: candidate.bodyHash,
     evidenceIds: candidate.evidenceIds,
     occurrenceIds: candidate.occurrenceIds,
   }));
@@ -1512,34 +1537,23 @@ function createModelPacketSnapshot({
   omittedManifest,
   truncationManifest,
   limits,
-  omissionCatalogLimit,
   conflictCatalogLimit,
 }) {
   const included = includedSelections.map((entry) => entry.item);
   const includedManifest = createIncludedManifest(includedSelections);
-  const omittedEvidenceCatalog = createOmittedEvidenceCatalog(
-    omittedManifest,
-    limits,
-    omissionCatalogLimit,
-  );
   const conflictCatalog = createModelConflictCatalog(
     archive.conflicts,
     limits,
     conflictCatalogLimit,
   );
-  const omissionCatalogExcerptedCount = omittedEvidenceCatalog.filter(
-    (entry) => entry.evidenceIdsExcerpted || entry.evidenceIdsAliasedCount > 0,
-  ).length;
   const conflictCatalogExcerptedCount = conflictCatalog.filter(
     (entry) => entry.itemExcerpted,
   ).length;
   const includedIdExcerptedCount = included.filter(
-    (entry) => entry.evidenceIdsExcerpted || entry.evidenceIdsAliasedCount > 0,
+    (entry) => entry.evidenceIdAliased,
   ).length;
   const packetStructurallyExcerpted = (
     includedIdExcerptedCount > 0
-    || omissionCatalogLimit < omittedManifest.length
-    || omissionCatalogExcerptedCount > 0
     || conflictCatalogLimit < archive.conflicts.length
     || conflictCatalogExcerptedCount > 0
   );
@@ -1586,7 +1600,7 @@ function createModelPacketSnapshot({
         0,
       ),
       visibleEvidenceIdCount: included.reduce(
-        (total, entry) => total + entry.evidenceIds.length,
+        (total, entry) => total + (entry.evidenceId ? 1 : 0),
         0,
       ),
       evidenceIdExcerptedItemCount: includedIdExcerptedCount,
@@ -1611,14 +1625,6 @@ function createModelPacketSnapshot({
       directOfficialSubstanceCount: omittedManifest.filter(
         (entry) => entry.direct && entry.authority === "official",
       ).length,
-      catalog: omittedEvidenceCatalog,
-      catalogedSubstanceCount: omittedEvidenceCatalog.length,
-      uncatalogedSubstanceCount:
-        omittedManifest.length - omittedEvidenceCatalog.length,
-      catalogComplete:
-        omittedEvidenceCatalog.length === omittedManifest.length
-        && omissionCatalogExcerptedCount === 0,
-      catalogEvidenceIdsExcerptedCount: omissionCatalogExcerptedCount,
       manifestSha256: sha256(canonicalStringify(omittedManifest)),
     },
     truncationSummary: {
@@ -1646,28 +1652,6 @@ function createModelPacketSnapshot({
   };
 }
 
-function createOmittedEvidenceCatalog(omittedManifest, limits, catalogLimit) {
-  return omittedManifest.slice(0, catalogLimit).map((entry) => {
-    const identifiers = boundedIdentifierList(entry.evidenceIds, {
-      maxItems: limits.maxOmissionEvidenceIdsPerItem,
-      maxIdentifierBytes: limits.maxEvidenceIdBytes,
-    });
-    return {
-      evidenceIds: identifiers.values,
-      equivalentEvidenceIdCount: identifiers.totalCount,
-      evidenceIdsSha256: identifiers.manifestSha256,
-      evidenceIdsExcerpted: identifiers.excerpted,
-      evidenceIdsAliasedCount: identifiers.aliasedCount,
-      category: entry.category,
-      authority: entry.authority,
-      direct: entry.direct,
-      current: entry.current,
-      reason: entry.reason,
-      priorityRank: entry.priorityRank,
-    };
-  });
-}
-
 function createModelConflictCatalog(conflicts, limits, catalogLimit) {
   return conflicts.slice(0, catalogLimit).map(
     (conflict) => createModelConflictItem(conflict, limits),
@@ -1680,7 +1664,7 @@ function createModelConflictItem(conflict, limits) {
     limits.maxEvidenceIdBytes,
   );
   const referenceLimit = limits.maxConflictReferencesPerItem;
-  const differenceSummary = arrayValue(conflict.differenceSummary)
+  const differenceFields = arrayValue(conflict.differenceSummary)
     .slice(0, referenceLimit)
     .map((difference) => ({
       field: boundedVisibleIdentifier(
@@ -1688,24 +1672,11 @@ function createModelConflictItem(conflict, limits) {
         limits.maxEvidenceIdBytes,
       ).value,
       variantCount: arrayValue(difference.variants).length,
-      variants: arrayValue(difference.variants)
-        .slice(0, referenceLimit)
-        .map((variant) => ({
-          substanceHash: String(variant.substanceHash || ""),
-          valueHash: variant.valueHash === null
-            ? null
-            : String(variant.valueHash || ""),
-          charCount: Number(variant.charCount) || 0,
-        })),
-      variantsExcerpted:
-        arrayValue(difference.variants).length > referenceLimit,
     }));
   const item = {
     type: String(conflict.type || "evidence_id_substance_conflict"),
     evidenceId: evidenceId.value,
     evidenceIdAliased: evidenceId.aliased,
-    evidenceIdSha256: sha256(String(conflict.evidenceId || "")),
-    conflictSha256: sha256(canonicalStringify(conflict)),
     counts: {
       substanceHashCount: arrayValue(conflict.substanceHashes).length,
       bodyHashCount: arrayValue(conflict.bodyHashes).length,
@@ -1713,21 +1684,14 @@ function createModelConflictItem(conflict, limits) {
       incompatiblePairCount: arrayValue(conflict.incompatiblePairs).length,
       differenceFieldCount: arrayValue(conflict.differenceSummary).length,
     },
-    substanceHashes: arrayValue(conflict.substanceHashes).slice(0, referenceLimit),
-    bodyHashes: arrayValue(conflict.bodyHashes).slice(0, referenceLimit),
-    occurrenceIds: arrayValue(conflict.occurrenceIds).slice(0, referenceLimit),
-    incompatiblePairs: arrayValue(conflict.incompatiblePairs)
-      .slice(0, referenceLimit)
-      .map((pair) => arrayValue(pair).slice(0, 2).map(String)),
-    differenceSummary,
+    differenceFields,
     itemExcerpted:
       evidenceId.aliased
-      || arrayValue(conflict.substanceHashes).length > referenceLimit
-      || arrayValue(conflict.bodyHashes).length > referenceLimit
-      || arrayValue(conflict.occurrenceIds).length > referenceLimit
-      || arrayValue(conflict.incompatiblePairs).length > referenceLimit
-      || arrayValue(conflict.differenceSummary).length > referenceLimit
-      || differenceSummary.some((entry) => entry.variantsExcerpted),
+      || arrayValue(conflict.substanceHashes).length > 0
+      || arrayValue(conflict.bodyHashes).length > 0
+      || arrayValue(conflict.occurrenceIds).length > 0
+      || arrayValue(conflict.incompatiblePairs).length > 0
+      || arrayValue(conflict.differenceSummary).length > referenceLimit,
   };
   return boundConflictItemBytes(item, limits.maxConflictItemBytes);
 }
@@ -1735,11 +1699,7 @@ function createModelConflictItem(conflict, limits) {
 function boundConflictItemBytes(item, maxBytes) {
   const bounded = canonicalizeJson(item);
   const removableArrays = [
-    "differenceSummary",
-    "incompatiblePairs",
-    "occurrenceIds",
-    "bodyHashes",
-    "substanceHashes",
+    "differenceFields",
   ];
   for (const field of removableArrays) {
     while (
@@ -1755,14 +1715,8 @@ function boundConflictItemBytes(item, maxBytes) {
     type: bounded.type,
     evidenceId: bounded.evidenceId,
     evidenceIdAliased: bounded.evidenceIdAliased,
-    evidenceIdSha256: bounded.evidenceIdSha256,
-    conflictSha256: bounded.conflictSha256,
     counts: bounded.counts,
-    substanceHashes: [],
-    bodyHashes: [],
-    occurrenceIds: [],
-    incompatiblePairs: [],
-    differenceSummary: [],
+    differenceFields: [],
     itemExcerpted: true,
   });
   if (byteLength(JSON.stringify(minimal)) > maxBytes) {
@@ -1937,29 +1891,12 @@ function normalizeDecisionPacketLimits(limits) {
       DEFAULT_ADMIN_DECISION_PACKET_LIMITS.maxBodyBytesPerItem,
       "maxBodyBytesPerItem",
     ),
-    maxEquivalentEvidenceIdsPerItem: positiveIntegerInRangeOrDefault(
-      limits.maxEquivalentEvidenceIdsPerItem,
-      DEFAULT_ADMIN_DECISION_PACKET_LIMITS.maxEquivalentEvidenceIdsPerItem,
-      "maxEquivalentEvidenceIdsPerItem",
-      1,
-      256,
-    ),
     maxEvidenceIdBytes: positiveIntegerInRangeOrDefault(
       limits.maxEvidenceIdBytes,
       DEFAULT_ADMIN_DECISION_PACKET_LIMITS.maxEvidenceIdBytes,
       "maxEvidenceIdBytes",
       80,
       512,
-    ),
-    maxOmissionCatalogItems: positiveIntegerOrDefault(
-      limits.maxOmissionCatalogItems,
-      DEFAULT_ADMIN_DECISION_PACKET_LIMITS.maxOmissionCatalogItems,
-      "maxOmissionCatalogItems",
-    ),
-    maxOmissionEvidenceIdsPerItem: positiveIntegerOrDefault(
-      limits.maxOmissionEvidenceIdsPerItem,
-      DEFAULT_ADMIN_DECISION_PACKET_LIMITS.maxOmissionEvidenceIdsPerItem,
-      "maxOmissionEvidenceIdsPerItem",
     ),
     maxConflictCatalogItems: positiveIntegerOrDefault(
       limits.maxConflictCatalogItems,

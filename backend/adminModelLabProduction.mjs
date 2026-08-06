@@ -738,6 +738,10 @@ export function createDeepSeekEvidencePreparationInvoke({
       thinkingMode: request.thinkingMode,
       reasoningEffort: request.reasoningEffort,
       signal: request.signal,
+      // The admin service owns every paid attempt and its budget reservation.
+      // Do not let the lower-level client issue an untracked second request
+      // after an HTTP 400 response-format rejection.
+      allowResponseFormatFallback: false,
     });
   };
 }

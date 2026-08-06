@@ -389,6 +389,7 @@ export async function callDeepSeekJsonTask({
   reasoningEffort,
   signal,
   trackPublicBudget = false,
+  allowResponseFormatFallback = true,
   now = new Date(),
 } = {}) {
   const normalizedPrompt = String(prompt || "").trim();
@@ -429,7 +430,7 @@ export async function callDeepSeekJsonTask({
       thinkingMode,
       reasoningEffort,
       requireJson: true,
-      allowResponseFormatFallback: true,
+      allowResponseFormatFallback: allowResponseFormatFallback === true,
       signal,
     });
     const usage = normalizeUsage("deepseek", response.usage);
@@ -444,7 +445,23 @@ export async function callDeepSeekJsonTask({
         budgetStatus = { ...budget.status, budgetStorage: "unavailable" };
       }
     }
-    const parsed = parseStrictJsonObject(response.rawText);
+    let parsed;
+    try {
+      parsed = parseStrictJsonObject(response.rawText);
+    } catch (error) {
+      const contentFailureKind = classifyDeepSeekJsonTaskContentFailure(
+        response.rawText,
+        error,
+      );
+      if (contentFailureKind) {
+        throw deepSeekJsonTaskContentError({
+          contentFailureKind,
+          response,
+          usage,
+        });
+      }
+      throw error;
+    }
     return {
       ...parsed,
       rawText: response.rawText,
@@ -1392,6 +1409,7 @@ async function callDeepSeek({
     reasoningContentChars: reasoningContent.length,
     requestModel: String(body.model || ""),
     responseModel: String(payload?.model || ""),
+    requestId: String(payload?.id || ""),
     systemFingerprint: String(payload?.system_fingerprint || ""),
     thinkingMode: DEEPSEEK_THINKING_MODES.has(thinkingMode) ? thinkingMode : "provider_default",
     reasoningEffort: thinkingMode === "enabled" && DEEPSEEK_REASONING_EFFORTS.has(reasoningEffort)
@@ -1818,6 +1836,36 @@ function parseStrictJsonObject(rawText) {
     throw new TypeError("DeepSeek JSON task must return a JSON object");
   }
   return parsed;
+}
+
+function classifyDeepSeekJsonTaskContentFailure(rawText, error) {
+  const normalized = stripJsonCodeFence(String(rawText || "").trim());
+  if (!normalized) return "empty";
+  return error instanceof SyntaxError ? "invalid_json" : null;
+}
+
+function deepSeekJsonTaskContentError({ contentFailureKind, response, usage }) {
+  const error = new Error(
+    contentFailureKind === "empty"
+      ? "DeepSeek JSON task returned empty content"
+      : "DeepSeek JSON task returned invalid JSON",
+  );
+  error.name = "DeepSeekJsonTaskContentError";
+  error.code = contentFailureKind === "empty"
+    ? "deepseek_json_task_empty_content"
+    : "deepseek_json_task_invalid_json";
+  error.provider = "deepseek";
+  error.status = 200;
+  error.outcomeKnown = true;
+  error.budgetReservationMayExist = true;
+  error.budgetReservationReleaseSafe = false;
+  error.confirmedContentFailure = true;
+  error.contentFailureKind = contentFailureKind;
+  error.usage = usage && typeof usage === "object" ? { ...usage } : null;
+  error.model = String(response?.responseModel || response?.requestModel || "").trim() || null;
+  error.requestId = String(response?.requestId || "").trim() || null;
+  error.finishReason = String(response?.finishReason || "").trim() || null;
+  return error;
 }
 
 function normalizeStrictRagJsonOutput(rawText) {

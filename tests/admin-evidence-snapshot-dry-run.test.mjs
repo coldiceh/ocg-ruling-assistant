@@ -79,6 +79,13 @@ test("four local cases freeze snapshots, never leak goldens, and never use a pai
   assert.equal(result.allPaidTransportsPrevented, true);
   assert.equal(result.reports.some((item) => item.paidGateBlocked), true);
   for (const report of result.reports) {
+    const definition = cases.cases.find((item) => item.id === report.id);
+    assert.ok(definition, `missing fixture definition for ${report.id}`);
+    assert.equal(
+      report.candidateBindings.length,
+      definition.candidateCards.length,
+      "the paid sentinel must validate every fixture candidate even after question decomposition",
+    );
     assert.match(report.snapshot.id, /^evidence_[a-f0-9]{24}$/u);
     assert.match(report.snapshot.sha256, /^[a-f0-9]{64}$/u);
     assert.equal(report.snapshot.frozen, true);
@@ -97,16 +104,29 @@ test("four local cases freeze snapshots, never leak goldens, and never use a pai
     const missingCount = report.missing.unresolvedCandidates.length
       + report.missing.missingVisibleCardTexts.length
       + report.missing.incompleteVisibleCardTexts.length;
-    assert.equal(report.paidGateBlocked, missingCount > 0);
+    assert.equal(
+      report.paidGateBlocked,
+      missingCount > 0 || !report.productionReadiness.ready,
+    );
     assert.equal(
       report.paidGateCode,
-      missingCount > 0 ? ADMIN_DRY_RUN_PAID_GATE_BLOCKED : null,
+      !report.productionReadiness.ready
+        ? "admin_final_evidence_not_ready"
+        : missingCount > 0
+          ? ADMIN_DRY_RUN_PAID_GATE_BLOCKED
+          : null,
     );
-    if (report.paidGateBlocked) {
+    if (!report.productionReadiness.ready) {
       assert.equal(
         report.transport.localFinalProviderCreateCount,
         0,
         "production readiness gate must block before even the local provider sentinel",
+      );
+    } else {
+      assert.equal(
+        report.transport.localFinalProviderCreateCount,
+        1,
+        "a production-ready run must reach the local no-cost provider sentinel exactly once",
       );
     }
     assert.ok(Number.isFinite(report.timingsMs.total));

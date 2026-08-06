@@ -41,13 +41,12 @@ test("high-value local evidence is ranked ahead of weak same-card matches withou
         RAG_MAX_RELATED_EVIDENCE: "64",
         RAG_MAX_RULEBOOK_CANDIDATES: "64",
       },
-      fetchImpl: async () => {
-        throw new Error("offline priority test must not call the network");
-      },
+      fetchImpl: createIdentityFixtureFetch(),
     });
     const officialCandidates = [
       ...(evidence.officialQaDirectCandidates || []),
       ...(evidence.officialQaRelated || []),
+      ...(evidence.provisionalOfficialResponses || []),
     ];
     const faqCandidates = evidence.faqRelated || [];
     const allCandidates = evidenceBucketsToList(evidence);
@@ -128,3 +127,33 @@ test("high-value local evidence is ranked ahead of weak same-card matches withou
 
   t.diagnostic(JSON.stringify(diagnostics));
 });
+
+function createIdentityFixtureFetch() {
+  return async (url) => {
+    const parsed = new URL(String(url));
+    const search = parsed.searchParams.get("search") || "";
+    if (parsed.hostname === "ygocdb.com" && /(?:教导.*圣女|艾克|莉西亚)/u.test(search)) {
+      return jsonResponse({
+        result: [{
+          cid: 15239,
+          id: 60303688,
+          cn_name: "教导的圣女 艾克莉西亚",
+          sc_name: "教导之圣女 艾克利西亚",
+          jp_name: "教導の聖女エクレシア",
+          en_name: "Dogmatika Ecclesia, the Virtuous",
+          text: { desc: "测试身份夹具；卡片正文仍必须取自本地稳定 CID 记录。" },
+        }],
+        next: 0,
+      });
+    }
+    throw new Error(`offline priority test received an unexpected URL: ${parsed}`);
+  };
+}
+
+function jsonResponse(payload) {
+  return {
+    ok: true,
+    status: 200,
+    json: async () => payload,
+  };
+}

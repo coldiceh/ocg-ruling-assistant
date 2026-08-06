@@ -91,9 +91,7 @@
         "17069"
       ],
       "expectedEvidenceIds": [
-        "card-faq-15245-0",
-        "card-faq-15245-1",
-        "card-faq-22090-2"
+        "official-response-screenshot-albaz-quem-stigmata-001"
       ],
       "expectedEvidenceMaxRank": 32,
       "expectedVerdict": "可以发动；作为COST丢弃后场上状态改变，处理时不能使用不受该效果影响的怪兽作为融合素材，因此不进行融合召唤。",

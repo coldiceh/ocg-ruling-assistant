@@ -526,6 +526,8 @@ test("quoted effect and restriction clauses are not treated as card names", () =
     "『本回合自己已经发动过魔法卡的效果』",
     "『自己不是「星群」怪兽不能从额外卡组特殊召唤』",
     "『这个回合自己只能特殊召唤恶魔族怪兽』",
+    "《处理到不能处理为止》",
+    "《对象丢失，不进行处理》",
   ].join("；");
   const localCards = [
     { id: "series-a", name: "星群先锋", aliases: ["星群先锋", "星群"] },
@@ -541,6 +543,21 @@ test("quoted effect and restriction clauses are not treated as card names", () =
   assert.deepEqual(resolution.unresolvedMentions, []);
   assert.deepEqual(resolution.ambiguousMentions, []);
   assert.deepEqual(resolution.modelCardNameCandidates, []);
+});
+
+test("Japanese and English resolution propositions are not treated as card names", () => {
+  const query = [
+    "『対象が存在しないため処理できない』",
+    "『処理できるところまで処理する』",
+    "《the target is no longer present, so the effect cannot resolve》",
+    "《process as far as possible》",
+  ].join("；");
+  const resolution = extractRagCards(query, { cards: [] });
+
+  assert.deepEqual(extractQuotedMentions(query), []);
+  assert.deepEqual(resolution.resolvedCards, []);
+  assert.deepEqual(resolution.unresolvedMentions, []);
+  assert.deepEqual(resolution.ambiguousMentions, []);
 });
 
 test("past-action grammar does not leave a generic card category as an unquoted name", () => {

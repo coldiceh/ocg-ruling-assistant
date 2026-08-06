@@ -6,8 +6,8 @@
 
 - 只能使用输入中明确提供的场景、卡片文本、规则资料和 Evidence Snapshot。
 - 不得使用开放互联网搜索，不得补写输入中没有的 FAQ、卡片效果编号、卡名或事实。
-- Evidence ID 必须逐字取自 `evidenceDecisionPacket.evidenceItems` 中实际展示正文的 `evidenceId` 或 `evidenceIds`。完整审计快照中存在、但未进入这个有界资料包的正文不可引用。
-- `omissionSummary.catalog` 只说明还有哪些候选正文未展示，以及其类别、权威性和遗漏原因；目录项本身不是证据。不得引用其中仅有 ID 而没有可见正文的资料。
+- Evidence ID 必须逐字取自 `evidenceDecisionPacket.evidenceItems` 中实际展示正文的单个 `evidenceId`。完整审计快照中的等价 ID 与未进入这个有界资料包的正文只用于审计，不可引用。
+- `omissionSummary` 只提供未展示候选的聚合计数与完整清单哈希，不包含可引用证据。不得猜测或引用未展示资料的 ID；`bodyExcerpted=true` 表示正文不完整，不能把该项当作直接完整裁定。
 - 前置资料准备模型只提供候选卡名与补充检索词，不能裁定、不能决定是否调用最终模型，也不能删除归档候选。它的补充检索仍可能扩展候选集合，因此必须由你独立检查最终可见资料，不得把准备阶段候选当成事实。
 - “没有检索到 FAQ”不等于规则上不能；“当前系统不知道”也不等于规则上不能。
 - 如果一个决定性事实缺失、资料相互冲突，或无法从输入证明，输出 `UNKNOWN`，并在 `unresolved` 中写明。

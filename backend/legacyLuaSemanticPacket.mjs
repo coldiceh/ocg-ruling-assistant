@@ -7,6 +7,10 @@ export const LEGACY_LUA_SEMANTIC_RESOURCE_SCHEMA =
 export const LEGACY_LUA_SEMANTIC_AUTHORITY = "LEGACY_COMPATIBILITY";
 export const LEGACY_LUA_SEMANTIC_IDENTITY_SCHEME =
   "ocg-legacy-lua-semantic-effect-identity/v1";
+export const LEGACY_LUA_SEMANTIC_MODEL_VIEW_MAX_BYTES = 8 * 1024;
+
+const DEFAULT_MODEL_VIEW_MAX_CANDIDATES = 6;
+const DEFAULT_MODEL_VIEW_MAX_CHECKS_PER_CANDIDATE = 6;
 
 const PACKET_KIND = "LEGACY_LUA_SEMANTIC_PACKET";
 const RESOURCE_KIND = "LEGACY_LUA_SEMANTIC_RESOURCE";
@@ -333,18 +337,24 @@ export function serializeLegacyLuaSemanticPacket(packet) {
  */
 export function projectLegacyLuaSemanticPacketForModel(
   value,
-  { maxCandidates = 16, maxChecksPerCandidate = 12 } = {},
+  {
+    maxCandidates = DEFAULT_MODEL_VIEW_MAX_CANDIDATES,
+    maxChecksPerCandidate = DEFAULT_MODEL_VIEW_MAX_CHECKS_PER_CANDIDATE,
+  } = {},
 ) {
   const packet = validateLegacyLuaSemanticPacket(value);
   const candidateLimit = normalizeCandidateLimit(maxCandidates);
   const checkLimit = normalizeCandidateLimit(maxChecksPerCandidate);
-  const effectCandidates = packet.effectCandidates
+  const candidateEntries = packet.effectCandidates
     .slice(0, candidateLimit)
     .map((candidate) => {
       const artifact = candidate.semanticArtifact || {};
       const plan = artifact.plan || artifact.partialPlan || {};
       const analysis = candidate.analysisArtifact || {};
-      return {
+      const sourceChecks = Array.isArray(plan.activationLegalityChecks)
+        ? plan.activationLegalityChecks
+        : [];
+      const view = {
         resourceId: candidate.resourceId,
         semanticEffectIdentity: candidate.semanticEffectIdentity,
         candidateSha256: candidate.candidateSha256,
@@ -353,15 +363,9 @@ export function projectLegacyLuaSemanticPacketForModel(
         candidateVerdict: ["TRUE", "FALSE", "UNKNOWN"].includes(
           analysis.candidateVerdict,
         ) ? analysis.candidateVerdict : "UNKNOWN",
-        costAtomicOperations: modelStringList(plan.costAtomicOperations, 12),
-        atomicOperations: modelStringList(plan.atomicOperations, 20),
-        activationLegalityDependencies: modelStringList(
-          plan.activationLegalityDependencies,
-          24,
-        ),
-        activationLegalityChecks: (Array.isArray(plan.activationLegalityChecks)
-          ? plan.activationLegalityChecks
-          : []).slice(0, checkLimit).map((check) => ({
+        activationLegalityChecks: sourceChecks
+          .slice(0, checkLimit)
+          .map((check) => ({
             callbackSlot: modelString(check?.callbackSlot),
             predicateApi: modelString(check?.predicateApi),
             atomicOperation: modelString(check?.atomicOperation),
@@ -377,34 +381,46 @@ export function projectLegacyLuaSemanticPacketForModel(
               20,
             ),
           })),
-        operationApis: modelStringList(plan.operationApis, 20),
-        requiredLegacyApis: modelStringList(plan.requiredLegacyApis, 24),
-        requiredCapabilities: modelStringList(plan.requiredCapabilities, 24),
-        witnessInstanceIds: modelStringList(
-          analysis.witnessInstanceIds,
-          16,
-        ),
-        structuredTrace: (Array.isArray(analysis.structuredTrace)
+      };
+      addNonEmptyModelList(view, "costAtomicOperations",
+        modelStringList(plan.costAtomicOperations, 12));
+      addNonEmptyModelList(view, "atomicOperations",
+        modelStringList(plan.atomicOperations, 20));
+      addNonEmptyModelList(view, "activationLegalityDependencies",
+        modelStringList(plan.activationLegalityDependencies, 24));
+      addNonEmptyModelList(view, "operationApis",
+        modelStringList(plan.operationApis, 20));
+      addNonEmptyModelList(view, "requiredLegacyApis",
+        modelStringList(plan.requiredLegacyApis, 24));
+      addNonEmptyModelList(view, "requiredCapabilities",
+        modelStringList(plan.requiredCapabilities, 24));
+      addNonEmptyModelList(view, "witnessInstanceIds",
+        modelStringList(analysis.witnessInstanceIds, 16));
+      addNonEmptyModelList(view, "structuredTrace",
+        (Array.isArray(analysis.structuredTrace)
           ? analysis.structuredTrace
           : []).slice(0, 16).map((entry) => ({
             instanceId: modelString(entry?.instanceId),
             check: modelString(entry?.check),
             result: modelString(entry?.result),
             reasonCode: modelString(entry?.reasonCode),
-          })),
-        unresolvedReasonCodes: modelReasonCodes(plan.unresolvedSemantics),
-        unknownReasonCodes: modelReasonCodes(candidate.unknownReasons),
+          })));
+      addNonEmptyModelList(view, "unresolvedReasonCodes",
+        modelReasonCodes(plan.unresolvedSemantics));
+      addNonEmptyModelList(view, "unknownReasonCodes",
+        modelReasonCodes(candidate.unknownReasons));
+      if (view.activationLegalityChecks.length === 0) {
+        delete view.activationLegalityChecks;
+      }
+      return {
+        view,
+        sourceCheckCount: sourceChecks.length,
+        removedOptionalFieldCount: 0,
       };
     });
-  const body = {
-    schemaVersion: "ocg-assistant-lua-semantic-model-view/v1",
-    sourcePacketId: packet.packetId,
-    sourcePacketSha256: packet.packetSha256,
-    authority: LEGACY_LUA_SEMANTIC_AUTHORITY,
-    canConfirmOfficialRuling: false,
-    legacyAcceptedAsTruth: false,
-    verdict: "UNKNOWN",
-    resources: packet.resources.map((resource) => ({
+  const topLevelOptionals = new Map();
+  if (candidateEntries.length > 0) {
+    topLevelOptionals.set("resources", packet.resources.map((resource) => ({
       resourceId: resource.resourceId,
       status: resource.status,
       resourceSha256: resource.resourceSha256,
@@ -412,18 +428,151 @@ export function projectLegacyLuaSemanticPacketForModel(
       sourceDocumentId: resource.resourceBinding.sourceDocumentId,
       sourceContentSha256: resource.resourceBinding.sourceContentSha256,
       unknownReasonCodes: modelReasonCodes(resource.unknownReasons),
-    })),
+    })));
+    topLevelOptionals.set("packetTruncation", packet.truncation);
+  }
+  const packetUnknownReasonCodes = modelReasonCodes(packet.unknownReasons);
+  if (packetUnknownReasonCodes.length > 0) {
+    topLevelOptionals.set("unknownReasonCodes", packetUnknownReasonCodes);
+  }
+  let removedTopLevelOptionalFieldCount = 0;
+
+  const currentView = () => finalizeLegacyLuaModelView(buildLegacyLuaModelViewBody({
+    packet,
+    candidateEntries,
+    topLevelOptionals,
+    removedTopLevelOptionalFieldCount,
+  }));
+  let view = currentView();
+
+  // These fields are useful for audit/debugging but do not carry the core
+  // activation-legality signal. Remove complete fields in a fixed order before
+  // omitting any complete candidate.
+  for (const field of ["resources", "packetTruncation", "unknownReasonCodes"]) {
+    if (modelViewByteLength(view) <= LEGACY_LUA_SEMANTIC_MODEL_VIEW_MAX_BYTES) break;
+    if (!topLevelOptionals.delete(field)) continue;
+    removedTopLevelOptionalFieldCount += 1;
+    view = currentView();
+  }
+
+  const lowPriorityCandidateFields = [
+    "structuredTrace",
+    "witnessInstanceIds",
+    "requiredLegacyApis",
+    "requiredCapabilities",
+    "operationApis",
+    "unresolvedReasonCodes",
+  ];
+  for (const field of lowPriorityCandidateFields) {
+    for (let index = candidateEntries.length - 1; index >= 0; index -= 1) {
+      if (modelViewByteLength(view) <= LEGACY_LUA_SEMANTIC_MODEL_VIEW_MAX_BYTES) break;
+      const entry = candidateEntries[index];
+      if (!Object.hasOwn(entry.view, field)) continue;
+      delete entry.view[field];
+      entry.removedOptionalFieldCount += 1;
+      view = currentView();
+    }
+  }
+
+  // Candidate order is inherited from the verified full packet. If the view is
+  // still too large, remove candidates only from the end so the surviving
+  // prefix and every candidate object remain intact.
+  while (
+    candidateEntries.length > 1
+    && modelViewByteLength(view) > LEGACY_LUA_SEMANTIC_MODEL_VIEW_MAX_BYTES
+  ) {
+    candidateEntries.pop();
+    view = currentView();
+  }
+
+  // A single pathological candidate can still exceed the envelope because Lua
+  // identifiers are not byte-bounded by the frozen packet contract. Its
+  // semantic arrays are optional in the model view: remove whole fields, never
+  // string fragments or a partial JSON suffix, then omit the candidate itself
+  // as the final fail-closed fallback.
+  const lastResortCandidateFields = [
+    "costAtomicOperations",
+    "atomicOperations",
+    "activationLegalityDependencies",
+    "unknownReasonCodes",
+    "activationLegalityChecks",
+  ];
+  for (const field of lastResortCandidateFields) {
+    if (modelViewByteLength(view) <= LEGACY_LUA_SEMANTIC_MODEL_VIEW_MAX_BYTES) break;
+    const entry = candidateEntries[0];
+    if (!entry || !Object.hasOwn(entry.view, field)) continue;
+    delete entry.view[field];
+    entry.removedOptionalFieldCount += 1;
+    view = currentView();
+  }
+  if (modelViewByteLength(view) > LEGACY_LUA_SEMANTIC_MODEL_VIEW_MAX_BYTES) {
+    candidateEntries.pop();
+    view = currentView();
+  }
+  if (modelViewByteLength(view) > LEGACY_LUA_SEMANTIC_MODEL_VIEW_MAX_BYTES) {
+    throw contractError(
+      "LEGACY_LUA_MODEL_VIEW_LIMIT_UNSATISFIED",
+      "legacy Lua model view cannot satisfy the 8 KiB UTF-8 limit",
+    );
+  }
+  return deepFreeze(view);
+}
+
+function buildLegacyLuaModelViewBody({
+  packet,
+  candidateEntries,
+  topLevelOptionals,
+  removedTopLevelOptionalFieldCount,
+}) {
+  const effectCandidates = candidateEntries.map((entry) => entry.view);
+  const totalCandidateCount = packet.truncation.totalCandidateCount;
+  const omittedActivationLegalityCheckCount = candidateEntries.reduce(
+    (total, entry) => total + Math.max(
+      0,
+      entry.sourceCheckCount - (
+        Array.isArray(entry.view.activationLegalityChecks)
+          ? entry.view.activationLegalityChecks.length
+          : 0
+      ),
+    ),
+    0,
+  );
+  return {
+    schemaVersion: "ocg-assistant-lua-semantic-model-view/v1",
+    status: effectCandidates.length > 0 ? "CANDIDATES_AVAILABLE" : "TYPED_UNKNOWN",
+    sourcePacketId: packet.packetId,
+    sourcePacketSha256: packet.packetSha256,
+    authority: LEGACY_LUA_SEMANTIC_AUTHORITY,
+    canConfirmOfficialRuling: false,
+    legacyAcceptedAsTruth: false,
+    verdict: "UNKNOWN",
+    ...Object.fromEntries(topLevelOptionals),
     effectCandidates,
-    omittedCandidateCount:
-      packet.truncation.omittedCandidateCount +
-      Math.max(0, packet.effectCandidates.length - effectCandidates.length),
-    packetTruncation: packet.truncation,
-    unknownReasonCodes: modelReasonCodes(packet.unknownReasons),
+    totalCandidateCount,
+    includedCandidateCount: effectCandidates.length,
+    omittedCandidateCount: totalCandidateCount - effectCandidates.length,
+    omittedActivationLegalityCheckCount,
+    omittedOptionalFieldCount: removedTopLevelOptionalFieldCount
+      + candidateEntries.reduce(
+        (total, entry) => total + entry.removedOptionalFieldCount,
+        0,
+      ),
   };
-  return deepFreeze({
+}
+
+function finalizeLegacyLuaModelView(body) {
+  return {
     ...body,
     modelViewSha256: canonicalLegacyLuaSha256(body),
-  });
+  };
+}
+
+function modelViewByteLength(view) {
+  return Buffer.byteLength(JSON.stringify(view), "utf8");
+}
+
+function addNonEmptyModelList(target, key, values) {
+  if (Array.isArray(values) && values.length > 0) target[key] = values;
 }
 
 export function parseLegacyLuaSemanticPacket(serialized) {
@@ -1197,7 +1346,7 @@ function compareText(left, right) {
 }
 
 function modelString(value) {
-  return typeof value === "string" ? value.slice(0, 240) : "";
+  return typeof value === "string" ? value : "";
 }
 
 function modelStringList(values, limit) {

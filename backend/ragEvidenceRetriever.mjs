@@ -30,7 +30,6 @@ const evidenceListCache = new WeakMap();
 const retrievalRecordFeatureCache = new WeakMap();
 const recordIdentityIndexCache = new WeakMap();
 const canonicalCardIdentityIndexCache = new WeakMap();
-const uniqueLocalSurfaceIdentityCache = new WeakMap();
 
 export async function retrieveRagEvidence({
   userQuery,
@@ -83,7 +82,6 @@ export async function retrieveRagEvidence({
       limits,
       warnings: retrievalWarnings,
       debug: baigeDebug,
-      canonicalCards: data.cards,
     }),
     resolveUnresolvedMentionCardsWithBaige(unresolvedForBaige, { fetchImpl, env, limits, warnings: retrievalWarnings, debug: baigeDebug }),
   ]);
@@ -1845,7 +1843,6 @@ async function enrichCardsWithBaige(cards, {
   limits,
   warnings,
   debug,
-  canonicalCards = [],
 }) {
   const sourceCards = (cards || []).slice(0, limits.maxCards);
   const result = await Promise.all(sourceCards.map(async (card) => {
@@ -1907,14 +1904,6 @@ async function enrichCardsWithBaige(cards, {
           })),
         });
       }
-      if (
-        needsSurfaceIdentityVerification
-        && !selection.ambiguous
-        && hasUniqueHighConfidenceLocalIdentityBinding(card, canonicalCards)
-      ) {
-        warnings.push(`external_identity_verification_unavailable_local_binding_retained:${card.input}:${card.name}`);
-        return { ...card, identityVerificationStatus: "verified_local_unique" };
-      }
       return needsSurfaceIdentityVerification
         ? { ...card, identityVerificationStatus: "unverified" }
         : card;
@@ -1965,69 +1954,6 @@ function cardInputNeedsIdentityVerification(card = {}) {
   // and contextual nicknames are not edit corrections and remain offline.
   return Number(card.confidence || 0) >= 0.92
     && canonicalKeys.some((key) => boundedIdentityEditDistance(inputKey, key, 2) <= 2);
-}
-
-function hasUniqueHighConfidenceLocalIdentityBinding(card = {}, canonicalCards = []) {
-  if (Number(card.confidence || 0) < 0.94 || !hasUsableCardText(card)) return false;
-  const inputKey = normalizeCardKey(card.input);
-  if (!inputKey || !Array.isArray(canonicalCards) || !canonicalCards.length) return false;
-  const canonicalCard = uniqueCanonicalSingleEditCard(inputKey, canonicalCards)
-    || sourceBoundCanonicalCardForResolvedAlias(inputKey, card, canonicalCards);
-  if (!canonicalCard || !sameStableCardIdentity(card, canonicalCard)) return false;
-
-  const canonicalCid = verifiedLocalCardCid(canonicalCard);
-  const sourceCid = sourceBoundLocalCardCid(canonicalCard);
-  return Boolean(canonicalCid && sourceCid && canonicalCid === sourceCid);
-}
-
-function sourceBoundCanonicalCardForResolvedAlias(inputKey, card, canonicalCards) {
-  const hasNearResolvedAlias = cardIdentityNames(card).some((name) => {
-    const key = normalizeCardKey(name);
-    return key && key !== inputKey
-      && Math.abs(key.length - inputKey.length) <= 1
-      && boundedIdentityEditDistance(inputKey, key, 1) <= 1;
-  });
-  if (!hasNearResolvedAlias) return null;
-
-  let match = null;
-  for (const candidate of canonicalCards) {
-    if (!sameStableCardIdentity(card, candidate)) continue;
-    if (match && !sameStableCardIdentity(match, candidate)) return null;
-    match = candidate;
-  }
-  return match;
-}
-
-function uniqueCanonicalSingleEditCard(inputKey, canonicalCards) {
-  let cache = uniqueLocalSurfaceIdentityCache.get(canonicalCards);
-  if (!cache) {
-    cache = new Map();
-    uniqueLocalSurfaceIdentityCache.set(canonicalCards, cache);
-  }
-  if (cache.has(inputKey)) return cache.get(inputKey);
-
-  let match = null;
-  for (const candidate of canonicalCards) {
-    const candidateMatches = cardIdentityNames(candidate).some((name) => {
-      const candidateKey = normalizeCardKey(name);
-      return candidateKey
-        && Math.abs(candidateKey.length - inputKey.length) <= 1
-        && boundedIdentityEditDistance(inputKey, candidateKey, 1) <= 1;
-    });
-    if (!candidateMatches) continue;
-    if (match && !sameStableCardIdentity(match, candidate)) {
-      cache.set(inputKey, null);
-      return null;
-    }
-    match = candidate;
-  }
-  cache.set(inputKey, match);
-  return match;
-}
-
-function sourceBoundLocalCardCid(card = {}) {
-  return String(card.sourceUrl || card.ygoResourcesUrl || "")
-    .match(/\/data\/card\/(\d{1,7})(?:$|[/?#])/u)?.[1] || "";
 }
 
 function boundedIdentityEditDistance(left, right, limit) {

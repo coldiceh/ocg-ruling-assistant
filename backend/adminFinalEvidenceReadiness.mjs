@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { assertAdminEvidenceSnapshot } from "./adminEvidenceSnapshot.mjs";
 import { normalizeCardKey } from "./ragCardExtractor.mjs";
 
@@ -27,10 +28,14 @@ export function inspectAdminFinalEvidenceReadiness(snapshot) {
     resolvedBindings,
   );
   const allBindings = [...resolvedBindings, ...userProvidedBindings];
+  const evidenceDecisionPacket = evidence.evidenceDecisionPacket || {};
   const visibleItems = Array.isArray(
-    evidence.evidenceDecisionPacket?.modelPacket?.evidenceItems,
+    evidenceDecisionPacket?.modelPacket?.evidenceItems,
   )
-    ? evidence.evidenceDecisionPacket.modelPacket.evidenceItems
+    ? evidenceDecisionPacket.modelPacket.evidenceItems
+    : [];
+  const includedManifest = Array.isArray(evidenceDecisionPacket?.includedManifest)
+    ? evidenceDecisionPacket.includedManifest
     : [];
   const archiveOccurrences = Array.isArray(evidence.evidenceArchive?.occurrences)
     ? evidence.evidenceArchive.occurrences
@@ -40,6 +45,7 @@ export function inspectAdminFinalEvidenceReadiness(snapshot) {
     candidate,
     allBindings,
     visibleItems,
+    includedManifest,
     archiveOccurrences,
   }));
   const explicitlyUnresolved = collectFlaggedCandidates(
@@ -181,6 +187,11 @@ function collectCandidateSurfaces({ cardResolution = {}, preparation = {} }) {
 function collectResolvedBindings(cards) {
   const byIdentity = new Map();
   for (const [index, card] of asArray(cards).entries()) {
+    // An upstream resolver may retain an edit-distance candidate for audit
+    // while explicitly marking that the queried surface was not verified.
+    // Such a record must never become eligible merely because the surface was
+    // also copied into aliases: the paid-call gate remains fail-closed.
+    if (card?.identityVerificationStatus === "unverified") continue;
     const cardId = String(card?.id || card?.cardId || "").trim();
     const identity = cardId
       ? `id:${cardId}`
@@ -233,6 +244,7 @@ function inspectCandidateBinding({
   candidate,
   allBindings,
   visibleItems,
+  includedManifest,
   archiveOccurrences,
 }) {
   const matches = allBindings.filter((binding) => (
@@ -256,6 +268,7 @@ function inspectCandidateBinding({
   const visible = inspectVisibleCardText({
     binding: match,
     visibleItems,
+    includedManifest,
     archiveOccurrences,
   });
   return {
@@ -271,7 +284,12 @@ function inspectCandidateBinding({
   };
 }
 
-function inspectVisibleCardText({ binding, visibleItems, archiveOccurrences }) {
+function inspectVisibleCardText({
+  binding,
+  visibleItems,
+  includedManifest,
+  archiveOccurrences,
+}) {
   const expectedIds = expectedEvidenceIds(binding);
   const expectedOccurrences = archiveOccurrences.filter((occurrence) => (
     occurrence?.category === PARSED_CARD_TEXT_CATEGORY
@@ -285,28 +303,79 @@ function inspectVisibleCardText({ binding, visibleItems, archiveOccurrences }) {
   const expectedBodyHashes = new Set(
     expectedOccurrences.map((occurrence) => String(occurrence.bodyHash)),
   );
-  const matchingItems = visibleItems.filter((item) => (
-    item?.category === PARSED_CARD_TEXT_CATEGORY
-    && String(item?.body || "").trim()
-    && expectedBodyHashes.has(String(item?.bodyHash || ""))
-    && intersects(itemEvidenceIds(item), expectedIds)
-  ));
-  const complete = matchingItems.find((item) => item?.bodyExcerpted !== true);
+  const expectedSubstanceHashes = new Set(
+    expectedOccurrences.map((occurrence) => String(occurrence.substanceHash)),
+  );
+  const expectedOccurrenceIds = new Set(
+    expectedOccurrences.map((occurrence) => String(occurrence.occurrenceId)),
+  );
+  const manifestsByPacketItemId = uniqueManifestIndex(includedManifest);
+  const matchingItems = visibleItems.flatMap((item) => {
+    if (
+      item?.category !== PARSED_CARD_TEXT_CATEGORY
+      || !String(item?.body || "").trim()
+    ) return [];
+    const packetItemId = String(item?.packetItemId || "");
+    const manifest = manifestsByPacketItemId.get(packetItemId);
+    if (!packetItemId || !manifest) return [];
+    const manifestSubstanceHash = String(manifest.substanceHash || "");
+    if (
+      !expectedSubstanceHashes.has(manifestSubstanceHash)
+      || packetItemId !== `packet_item_${manifestSubstanceHash.slice(0, 20)}`
+      || !expectedBodyHashes.has(String(manifest.bodyHash || ""))
+      || !intersects(itemEvidenceIds(manifest), expectedIds)
+      || !intersects(stringSet(manifest.occurrenceIds), expectedOccurrenceIds)
+      || !visibleEvidenceIdBelongsToManifest(item, manifest)
+    ) return [];
+    if (
+      item?.bodyExcerpted !== true
+      && sha256(String(item.body)) !== String(manifest.bodyHash || "")
+    ) return [];
+    return [{ item, manifest }];
+  });
+  const complete = matchingItems.find(({ item }) => item?.bodyExcerpted !== true);
   if (complete) {
     return {
       complete: true,
       excerpted: false,
-      evidenceId: firstMatchingValue(itemEvidenceIds(complete), expectedIds),
+      evidenceId: firstMatchingValue(itemEvidenceIds(complete.manifest), expectedIds),
     };
   }
-  const excerpted = matchingItems.find((item) => item?.bodyExcerpted === true);
+  const excerpted = matchingItems.find(({ item }) => item?.bodyExcerpted === true);
   return {
     complete: false,
     excerpted: Boolean(excerpted),
     evidenceId: excerpted
-      ? firstMatchingValue(itemEvidenceIds(excerpted), expectedIds)
+      ? firstMatchingValue(itemEvidenceIds(excerpted.manifest), expectedIds)
       : null,
   };
+}
+
+function uniqueManifestIndex(entries) {
+  const index = new Map();
+  const duplicates = new Set();
+  for (const entry of asArray(entries)) {
+    const packetItemId = String(entry?.packetItemId || "");
+    if (!packetItemId) continue;
+    if (index.has(packetItemId)) {
+      duplicates.add(packetItemId);
+      continue;
+    }
+    index.set(packetItemId, entry);
+  }
+  for (const packetItemId of duplicates) index.set(packetItemId, null);
+  return index;
+}
+
+function visibleEvidenceIdBelongsToManifest(item, manifest) {
+  const visibleEvidenceId = String(item?.evidenceId || "");
+  if (!visibleEvidenceId) return false;
+  const manifestEvidenceIds = itemEvidenceIds(manifest);
+  if (manifestEvidenceIds.has(visibleEvidenceId)) return true;
+  if (item?.evidenceIdAliased !== true) return false;
+  return [...manifestEvidenceIds].some(
+    (evidenceId) => `sha256:${sha256(evidenceId)}` === visibleEvidenceId,
+  );
 }
 
 function expectedEvidenceIds(binding) {
@@ -392,6 +461,14 @@ function itemEvidenceIds(item) {
     item?.evidenceId,
     ...asArray(item?.evidenceIds),
   ].map((value) => String(value || "")).filter(Boolean));
+}
+
+function stringSet(values) {
+  return new Set(asArray(values).map((value) => String(value || "")).filter(Boolean));
+}
+
+function sha256(value) {
+  return createHash("sha256").update(String(value)).digest("hex");
 }
 
 function intersects(left, right) {

@@ -6,6 +6,7 @@ import {
   buildFinalRulingInput,
   createAdminModelLabService,
 } from "../backend/adminModelLabService.mjs";
+import { createAdminEvidenceArchive } from "../backend/adminEvidenceArchive.mjs";
 import {
   ADMIN_RUN_STATUSES,
   createAdminRunStore,
@@ -17,14 +18,17 @@ import {
 import { createAdminStageTracker } from "../backend/adminStageTracker.mjs";
 import { MODEL_RULING_COUNTER_CHECK_TYPES } from "../backend/modelRulingSchema.mjs";
 
-test("final ruling input rejects oversized peripheral snapshot fields", () => {
+test("final ruling input rejects oversized model-visible question text", () => {
   assert.throws(
     () => buildFinalRulingInput({
       snapshotId: "snapshot-oversized",
       contentSha256: "a".repeat(64),
-      question: "问".repeat(MAX_FINAL_RULING_INPUT_BYTES),
+      question: "审计副本不会重复进入模型输入",
       evidence: {
-        questions: [],
+        questions: [{
+          questionId: "q1",
+          text: "问".repeat(MAX_FINAL_RULING_INPUT_BYTES),
+        }],
         providedFacts: [],
         cardResolution: {},
         unresolved: {},
@@ -37,6 +41,135 @@ test("final ruling input rejects oversized peripheral snapshot fields", () => {
     }),
     (error) => error?.code === "final_ruling_input_too_large",
   );
+});
+
+test("final ruling input omits duplicate audit metadata while retaining snapshot identity", () => {
+  const input = buildFinalRulingInput({
+    snapshotId: "snapshot-compact",
+    contentSha256: "b".repeat(64),
+    question: "匿名问题",
+    evidence: {
+      questions: [{ questionId: "q1", text: "匿名问题" }],
+      providedFacts: [],
+      cardResolution: { resolvedCards: [] },
+      unresolved: {},
+      retrievalWarnings: [],
+      completeness: {
+        allCardNamesResolved: true,
+        sourceCorpusCounts: { cards: 99_999, records: 99_999 },
+      },
+      evidenceDecisionPacket: { modelPacket: { evidenceItems: [] } },
+    },
+    dataVersions: { auditPayload: "版本".repeat(40_000) },
+    metadata: { auditPayload: "元数据".repeat(40_000) },
+  });
+  const payload = JSON.parse(input.split("\n").at(-1));
+
+  assert.deepEqual(payload.evidenceSnapshot, {
+    id: "snapshot-compact",
+    sha256: "b".repeat(64),
+  });
+  assert.equal(Object.hasOwn(payload, "metadata"), false);
+  assert.equal(Object.hasOwn(payload, "dataVersions"), false);
+  assert.doesNotMatch(input, /auditPayload/u);
+  assert.equal(Buffer.byteLength(input) <= MAX_FINAL_RULING_INPUT_BYTES, true);
+});
+
+test("final ruling input retains distinct shared scenario text beside subquestions", () => {
+  const input = buildFinalRulingInput({
+    snapshotId: "snapshot-scenario",
+    contentSha256: "c".repeat(64),
+    question: "共同场面：匿名卡A在场上，连锁1已经发动。",
+    evidence: {
+      questions: [
+        { questionId: "q1", text: "能否连锁发动匿名卡B？" },
+        { questionId: "q2", text: "处理后匿名卡A是否留场？" },
+      ],
+      providedFacts: [],
+      cardResolution: { resolvedCards: [] },
+      unresolved: {},
+      retrievalWarnings: [],
+      completeness: {},
+      evidenceDecisionPacket: { modelPacket: { evidenceItems: [] } },
+    },
+  });
+  const payload = JSON.parse(input.split("\n").at(-1));
+
+  assert.equal(payload.scenarioText, "共同场面：匿名卡A在场上，连锁1已经发动。");
+  assert.deepEqual(
+    payload.questions.map((item) => item.questionId),
+    ["q1", "q2"],
+  );
+});
+
+test("final ruling input preserves legacy question and unresolved shapes", () => {
+  const input = buildFinalRulingInput({
+    snapshotId: "snapshot-legacy-shapes",
+    contentSha256: "d".repeat(64),
+    question: "[q1] 旧字符串子问题",
+    evidence: {
+      questions: ["旧字符串子问题"],
+      providedFacts: [],
+      cardResolution: {
+        resolvedCards: [],
+        unresolvedMentions: [{ input: "卡B", reason: "not_found" }],
+      },
+      unresolved: {
+        cardMentions: [{ input: "卡A", reason: "not_found" }],
+      },
+      retrievalWarnings: [],
+      completeness: {},
+      evidenceDecisionPacket: { modelPacket: { evidenceItems: [] } },
+    },
+  });
+  const payload = JSON.parse(input.split("\n").at(-1));
+
+  assert.deepEqual(payload.questions, [{ questionId: "q1", text: "旧字符串子问题" }]);
+  assert.deepEqual(
+    payload.unresolved.cardMentions.map((item) => item.input),
+    ["卡A", "卡B"],
+  );
+  assert.equal(Object.hasOwn(payload, "scenarioText"), false);
+});
+
+test("historical large decision packets are deterministically reprojected from their archive", () => {
+  const archive = createAdminEvidenceArchive({
+    evidenceBuckets: {
+      officialQaRelated: [{
+        id: "legacy-related",
+        type: "official_qa",
+        question: "历史问题",
+        answer: "历史答案",
+      }],
+    },
+  });
+  const legacyOnlyMarker = `legacy-large-${"旧".repeat(30_000)}`;
+  const input = buildFinalRulingInput({
+    snapshotId: "snapshot-legacy-packet",
+    contentSha256: "e".repeat(64),
+    question: "历史问题",
+    evidence: {
+      questions: [{ questionId: "q1", text: "历史问题" }],
+      providedFacts: [],
+      cardResolution: { resolvedCards: [] },
+      unresolved: {},
+      retrievalWarnings: [],
+      completeness: {},
+      evidenceArchive: archive,
+      evidenceDecisionPacket: {
+        modelPacket: {
+          schemaVersion: 1,
+          evidenceItems: [{ evidenceId: "legacy-large", body: legacyOnlyMarker }],
+        },
+      },
+    },
+  });
+  const payload = JSON.parse(input.split("\n").at(-1));
+
+  assert.equal(payload.evidenceDecisionPacket.schemaVersion, 2);
+  assert.equal(payload.evidenceDecisionPacket.evidenceItems[0].evidenceId, "legacy-related");
+  assert.doesNotMatch(input, /legacy-large/u);
+  assert.equal(Buffer.byteLength(input) <= MAX_FINAL_RULING_INPUT_BYTES, true);
 });
 
 test("createRun returns before preparation; executeRun then preserves all evidence with real stages", async () => {
@@ -197,11 +330,16 @@ test("executeRun always starts OpenAI final ruling with the complete frozen snap
   assert.equal(request.metadata.runId, created.runId);
   assert.match(request.input, /evidence-direct/u);
   assert.match(request.input, /evidence-related/u);
-  assert.match(request.input, /finalRulingRequired/u);
+  assert.doesNotMatch(request.input, /finalRulingRequired/u);
   assert.doesNotMatch(request.input, /organizedEvidenceIds/u);
-  assert.equal(Buffer.byteLength(request.input) < 150_000, true);
+  assert.equal(Buffer.byteLength(request.input) <= MAX_FINAL_RULING_INPUT_BYTES, true);
   const boundedInput = JSON.parse(request.input.split("\n").at(-1));
+  assert.equal(boundedInput.schemaVersion, 2);
+  assert.equal(Object.hasOwn(boundedInput, "question"), false);
+  assert.equal(Object.hasOwn(boundedInput, "metadata"), false);
+  assert.equal(Object.hasOwn(boundedInput, "dataVersions"), false);
   assert.equal(Object.hasOwn(boundedInput, "conflicts"), false);
+  assert.equal(Object.hasOwn(boundedInput.cardResolution, "unresolvedMentions"), false);
   assert.equal(
     boundedInput.evidenceDecisionPacket.conflictSummary.totalConflictCount >= 1,
     true,
@@ -211,6 +349,14 @@ test("executeRun always starts OpenAI final ruling with the complete frozen snap
   assert.equal(boundedInput.cardResolution.resolvedCards[0].attribute, "测试属性");
   assert.equal(boundedInput.cardResolution.resolvedCards[0].level, 4);
   assert.equal(boundedInput.cardResolution.resolvedCards[0].attack, 1800);
+  assert.equal(
+    Object.hasOwn(boundedInput.cardResolution.resolvedCards[0], "rank"),
+    false,
+  );
+  assert.equal(
+    Object.hasOwn(boundedInput.completeness, "sourceCorpusCounts"),
+    false,
+  );
 
   const replay = await service.replayEvents({ runId: created.runId });
   assert.deepEqual(
@@ -494,7 +640,8 @@ test("missing or exceeded final-call budget fails before provider transport", as
         error.budgetReservationMayExist = false;
         throw error;
       },
-      async settle() {
+      async settle(input) {
+        if (input.attemptKind === "evidence_preparation") return { status: "settled" };
         throw new Error("settle must not run");
       },
       async release() {
@@ -550,6 +697,272 @@ test("evidence preparation releases only provably unaccepted failures and is nev
   }
 });
 
+test("confirmed HTTP 200 preparation content failure retries once with independent budget and aggregated usage", async () => {
+  const fixture = makeFixture();
+  const budgetCalls = [];
+  const providerCalls = [];
+  const service = makeService(fixture, {}, {
+    finalCallBudgetLedger: createRecordingBudgetLedger(budgetCalls),
+    deepSeekProvider: {
+      providerId: "deepseek",
+      async prepareEvidence(request) {
+        providerCalls.push(request);
+        if (providerCalls.length === 1) {
+          throw confirmedPreparationContentError("invalid_json", {
+            prompt_tokens: 11,
+            completion_tokens: 7,
+            total_tokens: 18,
+          });
+        }
+        return {
+          provider: "deepseek",
+          model: "deepseek-v4-flash",
+          result: {
+            cardNameCandidates: fixture.preparationCardNameCandidates,
+            ruleSearchQueries: [{ query: "匿名规则", reason: "mechanism" }],
+            unresolvedNotes: [],
+            conflicts: [],
+          },
+          usage: {
+            prompt_tokens: 20,
+            completion_tokens: 10,
+            total_tokens: 30,
+          },
+        };
+      },
+    },
+  });
+  const created = await service.createRun({ body: { question: "匿名内容恢复问题" } });
+
+  const execution = await service.executeRun({ runId: created.runId });
+  const preparation = execution.run.evidenceSnapshot.evidence.preparation;
+  const preparationBudgetCalls = budgetCalls.filter((entry) => (
+    entry.input.attemptKind === "evidence_preparation"
+  ));
+
+  assert.equal(providerCalls.length, 2);
+  assert.equal(providerCalls[0].metadata.attempt, "primary");
+  assert.equal(providerCalls[1].metadata.attempt, "confirmed_content_recovery");
+  assert.equal(providerCalls[1].reasoningMode, "standard");
+  assert.equal(providerCalls[1].reasoningEffort, "none");
+  assert.deepEqual(
+    preparationBudgetCalls.map((entry) => entry.operation),
+    ["reserve", "settle", "reserve", "settle"],
+  );
+  const reservationIds = preparationBudgetCalls
+    .filter((entry) => entry.operation === "reserve")
+    .map((entry) => entry.input.reservationId);
+  assert.equal(new Set(reservationIds).size, 2);
+  assert.deepEqual(
+    preparation.attempts.map((attempt) => [attempt.attemptId, attempt.status]),
+    [
+      ["paid_model_submission", "failed"],
+      ["paid_model_submission_content_recovery", "completed"],
+    ],
+  );
+  assert.equal(preparation.usage.inputTokens, 31);
+  assert.equal(preparation.usage.outputTokens, 17);
+  assert.equal(preparation.usage.totalTokens, 48);
+  assert.ok(preparation.warnings.includes("deepseek_preparation_invalid_json_retried_once"));
+
+  fixture.providerResponse = completedResponse(makeStructuredRuling());
+  const completed = await service.getRun({ runId: created.runId });
+  const restoredSubstages = completed.stageTiming.stages
+    .find((stage) => stage.id === "understand")
+    .substages;
+  assert.deepEqual(
+    restoredSubstages.map((substage) => [substage.id, substage.status]),
+    [
+      ["paid_model_submission", "COMPLETED"],
+      ["paid_model_submission_content_recovery", "COMPLETED"],
+    ],
+  );
+});
+
+test("preparation content recovery is attempted at most once", async () => {
+  const fixture = makeFixture();
+  const budgetCalls = [];
+  let providerCalls = 0;
+  const service = makeService(fixture, {}, {
+    finalCallBudgetLedger: createRecordingBudgetLedger(budgetCalls),
+    deepSeekProvider: {
+      providerId: "deepseek",
+      async prepareEvidence() {
+        providerCalls += 1;
+        throw confirmedPreparationContentError("empty", {
+          prompt_tokens: 5,
+          completion_tokens: 1,
+          total_tokens: 6,
+        });
+      },
+    },
+  });
+  const created = await service.createRun({ body: { question: "匿名最多一次恢复问题" } });
+
+  await assert.rejects(
+    service.executeRun({ runId: created.runId }),
+    (error) => error?.code === "deepseek_json_task_empty_content",
+  );
+  const failed = await service.getRun({ runId: created.runId, reconcile: false });
+  const preparationBudgetCalls = budgetCalls.filter((entry) => (
+    entry.input.attemptKind === "evidence_preparation"
+  ));
+
+  assert.equal(providerCalls, 2);
+  assert.deepEqual(
+    preparationBudgetCalls.map((entry) => entry.operation),
+    ["reserve", "settle", "reserve", "settle"],
+  );
+  assert.equal(failed.status, ADMIN_RUN_STATUSES.FAILED);
+  assert.deepEqual(
+    failed.stageTiming.stages
+      .find((stage) => stage.id === "understand")
+      .substages
+      .map((substage) => [substage.id, substage.status]),
+    [
+      ["paid_model_submission", "COMPLETED"],
+      ["paid_model_submission_content_recovery", "CANCELLED"],
+    ],
+  );
+  const repeated = await service.executeRun({ runId: created.runId });
+  assert.equal(repeated.run.status, ADMIN_RUN_STATUSES.FAILED);
+  assert.equal(providerCalls, 2, "a terminal recovery failure must never be resubmitted");
+  assert.equal(
+    budgetCalls.filter((entry) => entry.operation === "reserve").length,
+    2,
+  );
+});
+
+test("cancellation after recovery reservation releases it without invoking the recovery model", async () => {
+  const fixture = makeFixture();
+  const budgetCalls = [];
+  const recoveryReserveEntered = deferred();
+  const allowRecoveryReserveReturn = deferred();
+  const innerLedger = createTestFinalCallBudgetLedger();
+  let providerCalls = 0;
+  const service = makeService(fixture, {}, {
+    finalCallBudgetLedger: {
+      kind: "test-cancellable-preparation-budget",
+      persistent: false,
+      async reserve(input) {
+        const result = await innerLedger.reserve(input);
+        budgetCalls.push({ operation: "reserve", input: structuredClone(input) });
+        if (input.attemptId === "paid_model_submission_content_recovery") {
+          recoveryReserveEntered.resolve();
+          await allowRecoveryReserveReturn.promise;
+        }
+        return result;
+      },
+      async settle(input) {
+        budgetCalls.push({ operation: "settle", input: structuredClone(input) });
+        return innerLedger.settle(input);
+      },
+      async release(input) {
+        budgetCalls.push({ operation: "release", input: structuredClone(input) });
+        return innerLedger.release(input);
+      },
+    },
+    deepSeekProvider: {
+      providerId: "deepseek",
+      async prepareEvidence() {
+        providerCalls += 1;
+        if (providerCalls > 1) throw new Error("recovery model must not be invoked");
+        throw confirmedPreparationContentError("invalid_json", {
+          prompt_tokens: 5,
+          completion_tokens: 1,
+          total_tokens: 6,
+        });
+      },
+    },
+  });
+  const created = await service.createRun({ body: { question: "匿名恢复预约取消问题" } });
+
+  const executionPromise = service.executeRun({ runId: created.runId });
+  await recoveryReserveEntered.promise;
+  const cancellation = await service.cancelRun({
+    runId: created.runId,
+    body: { reason: "取消恢复调用", requestedBy: "tester" },
+  });
+  allowRecoveryReserveReturn.resolve();
+  const execution = await executionPromise;
+
+  assert.ok([
+    ADMIN_RUN_STATUSES.CANCEL_REQUESTED,
+    ADMIN_RUN_STATUSES.CANCELLED,
+  ].includes(cancellation.status));
+  assert.equal(execution.run.status, ADMIN_RUN_STATUSES.CANCELLED);
+  assert.equal(providerCalls, 1);
+  assert.deepEqual(
+    budgetCalls
+      .filter((entry) => entry.input.attemptKind === "evidence_preparation")
+      .map((entry) => [entry.operation, entry.input.attemptId]),
+    [
+      ["reserve", "paid_model_submission"],
+      ["settle", "paid_model_submission"],
+      ["reserve", "paid_model_submission_content_recovery"],
+      ["release", "paid_model_submission_content_recovery"],
+    ],
+  );
+});
+
+test("preparation budget settlement fails closed for unconfirmed ledger states", async (t) => {
+  for (const scenario of ["missing", "released", "throws"]) {
+    await t.test(scenario, async () => {
+      const fixture = makeFixture();
+      let providerCalls = 0;
+      const ledgerError = codedError(
+        "settlement exceeds reservation",
+        "admin_final_budget_state_conflict",
+      );
+      const service = makeService(fixture, {}, {
+        finalCallBudgetLedger: {
+          kind: "test-preparation-settlement-state",
+          persistent: false,
+          async reserve() {
+            return { status: "reserved" };
+          },
+          async settle() {
+            if (scenario === "throws") throw ledgerError;
+            return { status: scenario };
+          },
+          async release() {
+            return { status: "released" };
+          },
+        },
+        deepSeekProvider: {
+          providerId: "deepseek",
+          async prepareEvidence() {
+            providerCalls += 1;
+            return {
+              result: {
+                cardNameCandidates: fixture.preparationCardNameCandidates,
+                ruleSearchQueries: [],
+                unresolvedNotes: [],
+                conflicts: [],
+              },
+              usage: { prompt_tokens: 5, completion_tokens: 1, total_tokens: 6 },
+            };
+          },
+        },
+      });
+      const created = await service.createRun({ body: { question: `匿名结算 ${scenario}` } });
+
+      await assert.rejects(
+        service.executeRun({ runId: created.runId }),
+        (error) => error?.code === (
+          scenario === "throws"
+            ? "admin_final_budget_state_conflict"
+            : "preparation_budget_settlement_unconfirmed"
+        ),
+      );
+      const failed = await service.getRun({ runId: created.runId, reconcile: false });
+      assert.equal(providerCalls, 1);
+      assert.equal(fixture.openAICreateCalls.length, 0);
+      assert.equal(failed.status, ADMIN_RUN_STATUSES.FAILED);
+    });
+  }
+});
+
 test("known provider rejection releases budget while unknown transport outcome retains it", async (t) => {
   for (const outcomeKnown of [true, false]) {
     await t.test(outcomeKnown ? "known rejection" : "unknown outcome", async () => {
@@ -570,6 +983,7 @@ test("known provider rejection releases budget while unknown transport outcome r
         },
         async settle(input) {
           calls.push({ operation: "settle", input });
+          return { status: "settled" };
         },
         async release(input) {
           calls.push({ operation: "release", input });
@@ -2097,6 +2511,27 @@ test("fork permits a failed source only after evidence is frozen and billing is 
 
 function codedError(message, code) {
   return Object.assign(new Error(message), { code });
+}
+
+function confirmedPreparationContentError(contentFailureKind, usage) {
+  return Object.assign(
+    codedError(
+      `confirmed preparation ${contentFailureKind}`,
+      contentFailureKind === "empty"
+        ? "deepseek_json_task_empty_content"
+        : "deepseek_json_task_invalid_json",
+    ),
+    {
+      provider: "deepseek",
+      status: 200,
+      outcomeKnown: true,
+      budgetReservationMayExist: true,
+      budgetReservationReleaseSafe: false,
+      confirmedContentFailure: true,
+      contentFailureKind,
+      usage,
+    },
+  );
 }
 
 function makeService(fixture, envOverrides = {}, {

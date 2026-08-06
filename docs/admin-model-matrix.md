@@ -4,10 +4,18 @@
 一次证据，再通过后端 `fork` 接口让其他最终模型复用完全相同、带哈希校验的
 冻结 Evidence Snapshot。标准答案文件不会被读取，也不会进入模型输入。
 
+冻结快照保留完整 Evidence Archive；最终模型接收的是从 Archive 确定性生成的
+Evidence Packet schema v2，默认最多 28 KiB / 16 项。Legacy Lua 的完整审计包也
+保存在快照中，模型只接收最多 8 KiB、正式 `verdict` 始终为 `UNKNOWN` 的投影。
+整个最终裁定输入另有 48 KiB UTF-8 硬上限。若复用的历史快照带有旧版大 Packet，
+后端会校验并保留原快照，再从完整 Archive 按当前策略重投影，不会修改历史快照。
+
 正式运行前，CLI 会登录并读取后端 capabilities；只有后端明确报告已配置
 **持久化**管理模型预算账本，且证据准备池和所选最终模型池都有足够余额时，才允许创建运行。每个最终模型固定使用
 `finalAttemptPolicy=single`，CLI 不进行模型重试或 JSON 修复调用；并发硬上限默认为
 1。后端 Redis 预算账本仍是实际支出的最终硬门槛，CLI 的估算上限只是额外预检。
+最终模型请求前，后端还会执行 `productionReadiness`：所有候选卡都必须唯一绑定，
+且完整未节选卡文实际存在于模型可见 Packet；否则在 provider transport 前终止。
 
 ## 单题默认矩阵
 
@@ -32,38 +40,35 @@ $Node = "C:\Users\11953\.cache\codex-runtimes\codex-primary-runtime\dependencies
 `ADMIN_MODEL_LAB_PASSWORD`，也可以不设置；交互式终端会隐藏输入并询问密码。不要把
 密码放在命令行参数、配置文件或提交记录中。
 
-## 四题、五模型显式试验
+## 显式扩展边界
 
 四题文件是
 `tests/fixtures/admin-evidence-dry-run-cases.json`，只包含题面和候选卡，不包含标准
 答案。标准答案位于另一个文件，模型矩阵不会加载它。
 
-以下矩阵一共计划 20 次最终模型请求：每题分别测试 DeepSeek V4 Flash 思考 high、
-DeepSeek V4 Pro 思考 max，以及中转 Sol/Terra/Luna 思考 high。后端 capabilities 中
-未配置的模型会记为 `SKIPPED`，不会发起请求。
+CLI 可以用重复的 `--config provider:model:reasoningMode:reasoningEffort` 显式扩大
+矩阵，但不会自动启用五模型或执行四题全量实验。批量模式默认硬限制是 12 次最终
+请求、10 元 CLI 估算上限和并发 1；超过任一上限会在创建运行前拒绝。若确实需要
+更大实验，必须由管理员同时显式提高 `--max-final-requests` 与 `--max-cost-cny`，并
+确保这仍符合 Redis 日额度，不能通过调低 `--estimated-cny-per-request` 规避预算。
 
-```powershell
-& $Node scripts/admin-model-matrix.mjs `
-  --cases-file tests/fixtures/admin-evidence-dry-run-cases.json `
-  --config relay:relay-gpt-5.6-sol:pro:high `
-  --config relay:relay-gpt-5.6-terra:pro:high `
-  --config relay:relay-gpt-5.6-luna:pro:high `
-  --config deepseek:deepseek-v4-flash:pro:high `
-  --config deepseek:deepseek-v4-pro:pro:max `
-  --concurrency 1 `
-  --max-final-requests 20 `
-  --estimated-cny-per-request 5 `
-  --max-cost-cny 100 `
-  --format markdown `
-  --output artifacts/five-model-pilot.md
-```
+创建新源运行时使用去重后配置列表的第一项；未传 `--config` 的默认矩阵第一项才是
+Relay Sol / pro / high，并在该源快照上 fork Relay Terra 与 Luna。显式配置矩阵时，
+第一个 `--config` 就是新源配置，其余配置复用该源运行的冻结快照。
+`--source-run-id` 是更窄的历史复用入口：它只允许单题模式复用严格匹配、已经冻结的
+Relay Sol / pro / high 源运行。其他模型即使在服务端 allowlist 中，也只有通过显式
+`--config` 才会加入；capabilities 未配置、transport 不可用或预算池未就绪时记录为
+`SKIPPED`，不会发请求。
 
-这里的 `5 × 20 = 100 元` 是保守的 CLI 计划估算上界，不是允许实际消费 100 元。
-实际调用仍必须先通过 Vercel 上的 Redis 日额度和逐次预留：证据准备与
-DeepSeek Flash/Pro 最终裁定共用 10 元 DeepSeek 池，中转 Sol、Terra、Luna 各自使用
-独立 10 元池，因此本轮所有管理模型调用的实际总硬上限为 40 元。余额不足时，后续
-请求会在连接模型前失败。正式执行前仍要核对
-中转截图费率与 DeepSeek 官方费率；不要通过降低 CLI 估算来绕过这个检查。
+第三方 Relay 的模型身份与价格均未经项目验证，且只允许出现在隔离的管理员实验室。
+报告必须同时保留 requested model 与 returned model；returned model 也不能被解释为
+供应商身份认证。Relay 配置不会注册公开 profile、不会改写公开默认模型，也不能在
+公开主页选择。
+
+Redis 预算池并非一个共享 `RELAY`：DeepSeek Flash/Pro（包括证据准备）共用
+`DEEPSEEK`；Relay Sol、Terra、Luna 分别使用 `RELAY_SOL`、`RELAY_TERRA`、
+`RELAY_LUNA`。若四个池各配置 10 元，其合计理论日硬上限才是 40 元；实际实验只会
+使用所选模型对应的池。
 
 ## 零费用证据验收
 
@@ -82,13 +87,24 @@ sentinel 阻止所有最终模型 transport。验收时应看到：
 - `realProviderTransportCalls: 0`
 - `allSnapshotsFrozen: true`
 - 每题 `paidGateBlocked: false`
+- 每题 `productionReadiness.ready: true`
 - 所有候选卡 `bindingStatus: RESOLVED`
+
+离线本地唯一近似匹配不等于稳定身份验证。若题面译名与本地卡库只有近似对应，而
+没有可验证的外部 CID/passcode 或用户完整卡文，`productionReadiness` 会保持
+fail-closed；`--allow-community-card-network` 只开放上面的百鸽只读身份补全，不开放
+任何模型请求。
 
 ## 报告内容与边界
 
 报告记录每个模型的 `conciseAnswer`、`verdicts`、`timeline`、requested/returned model、
 Evidence Snapshot 哈希、运行总耗时、最终裁定耗时、Token、finish reason 和后端可计算
 的费用。某个模型失败不会自动调用第二次，也不会阻止后续可用模型。
+
+“最终请求单次”不代表证据准备永远只有一个 HTTP 请求。DeepSeek 证据准备仅在已确认
+HTTP 200 且内容为空或非法 JSON 时，最多执行一次带独立预算预约的内容恢复；网络、
+超时、取消、400、429、5xx 不恢复，恢复失败也不会再提交第三次。该恢复计入
+`DEEPSEEK` 池，但不增加矩阵报告中的最终裁定请求数。
 
 CLI 不让被测模型给自己评分。运行完成后可将报告与独立 golden 文件进行人工或本地
 结构化检查；不得把 golden、正确答案或 canary 合并进 cases 文件后发送给模型。
@@ -97,7 +113,7 @@ CLI 不让被测模型给自己评分。运行完成后可将报告与独立 gol
 
 - `--poll-ms 1500`：轮询间隔。
 - `--timeout-ms 600000`：每个运行的最长等待时间。
-- `--source-run-id ID`：单题模式复用严格匹配的已冻结 Sol 源运行。
+- `--source-run-id ID`：单题模式复用严格匹配的已冻结 Relay Sol / pro / high 源运行。
 - `--output report.json`：写入文件；省略时输出到终端。
 - `--estimated-input-tokens` / `--estimated-output-tokens`：默认中转费率估算的 Token 包络。
 - `--budget-usd-to-cny`：预算换算因子，不是实时汇率。
