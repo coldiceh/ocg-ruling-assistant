@@ -271,58 +271,17 @@ export class CompatibleEvidencePreparationProvider {
     metadata = {},
     signal,
   } = {}) {
-    const capability = ADMIN_MODEL_CAPABILITY_TABLE[String(model || "").trim()];
-    const selection = resolveAdminModelSelection({
-      provider: this.providerId,
+    const { selection, body } = buildCompatibleFinalRequest({
+      providerId: this.providerId,
+      env: this.env,
       model,
-      reasoningEffort: reasoningEffort || capability?.defaultReasoningEffort,
-      reasoningMode: reasoningMode || capability?.defaultReasoningMode,
-      stage: ADMIN_MODEL_LAB_STAGES.EXPERIMENTAL_FINAL_RULING,
+      reasoningEffort,
+      reasoningMode,
+      instructions,
+      input,
+      maxOutputTokens,
+      metadata,
     });
-    const finalInput = normalizeDeepSeekInput(input);
-    if (!finalInput) throw new TypeError(`${this.providerId} final-ruling input must not be empty`);
-    sanitizeMetadata(metadata, { requireTraceFields: true });
-    // Thinking tokens share the completion budget with the final JSON. The
-    // former 16k default could be exhausted by reasoning alone, producing an
-    // empty `content` even though the upstream request succeeded.
-    const configuredRelayMaxTokens = this.providerId === "relay"
-      ? optionalPositiveInteger(this.env?.RELAY_MAX_COMPLETION_TOKENS, "RELAY_MAX_COMPLETION_TOKENS")
-      : undefined;
-    const maxTokens = optionalPositiveInteger(maxOutputTokens, "maxOutputTokens")
-      ?? configuredRelayMaxTokens
-      ?? (selection.reasoningMode === "pro" ? 64_000 : 16_000);
-    // DeepSeek's JSON Output guarantees syntax, not this application's field
-    // contract. Keep the schema/example in the prompt and validate locally;
-    // an occasional empty JSON-mode content is diagnosed below rather than
-    // silently weakening a paid final-ruling request to unconstrained text.
-    const deepSeekThinkingMode = this.providerId === "deepseek"
-      && selection.reasoningMode === "pro";
-    const schemaInstruction = [
-      String(instructions || "").trim(),
-      "这是隔离后台中的实验性最终裁定运行，不代表正式裁定或普通用户答案。",
-      "只输出一个符合下列 JSON Schema 的 JSON 对象，不要输出 Markdown、代码围栏或额外说明：",
-      JSON.stringify(MODEL_RULING_RESULT_JSON_SCHEMA),
-      ...(deepSeekThinkingMode
-        ? [
-            "以下 JSON 仅展示字段结构；必须用本题的 questionId、结论、证据和检查结果替换全部示例内容：",
-            JSON.stringify(MODEL_RULING_JSON_SHAPE_EXAMPLE),
-          ]
-        : []),
-    ].filter(Boolean).join("\n\n");
-    const body = {
-      model: selection.model,
-      messages: [
-        { role: "system", content: schemaInstruction },
-        { role: "user", content: finalInput },
-      ],
-      ...compatibleJsonResponseFormat(selection),
-      ...compatibleThinkingParameters(selection),
-    };
-    if (maxTokens !== undefined) {
-      body[new Set(["kimi", "relay"]).has(this.providerId)
-        ? "max_completion_tokens"
-        : "max_tokens"] = maxTokens;
-    }
     const startedAt = new Date();
     const payload = await this.requestJson("/chat/completions", {
       method: "POST",
@@ -383,6 +342,26 @@ export class CompatibleEvidencePreparationProvider {
     };
   }
 
+  getFinalRequestBudgetEnvelope(request = {}) {
+    const { selection, body, maxTokens } = buildCompatibleFinalRequest({
+      providerId: this.providerId,
+      env: this.env,
+      ...request,
+    });
+    // One tokenizer token cannot encode fewer than one source byte. Treating
+    // every UTF-8 byte as a token plus a fixed chat-framing allowance is a
+    // deliberately conservative upper bound for pre-call budget reservation.
+    const inputTokenUpperBound = new TextEncoder().encode(
+      JSON.stringify(body.messages),
+    ).length + 4_096;
+    return Object.freeze({
+      provider: this.providerId,
+      model: selection.model,
+      inputTokenUpperBound,
+      maxOutputTokens: maxTokens,
+    });
+  }
+
   async runRuling(request = {}) {
     return this.create(request);
   }
@@ -422,13 +401,15 @@ export class CompatibleEvidencePreparationProvider {
     }
     const payload = await readResponsePayload(response);
     if (!response.ok) {
+      const outcomeKnown = isProvableHttpRejection(response.status);
       throw new RulingModelProviderError(
         payload?.error?.message || `${this.providerId} Chat Completions API returned HTTP ${response.status}`,
         {
           code: payload?.error?.code || `${this.providerId}_http_error`,
           provider: this.providerId,
           status: response.status,
-          outcomeKnown: isProvableHttpRejection(response.status),
+          outcomeKnown,
+          budgetReservationMayExist: !outcomeKnown,
         },
       );
     }
@@ -466,6 +447,63 @@ export function createEvidencePreparationProviderRegistry({ providers = [] } = {
       return Object.freeze([...registry.keys()]);
     },
   });
+}
+
+function buildCompatibleFinalRequest({
+  providerId,
+  env,
+  model,
+  reasoningEffort,
+  reasoningMode,
+  instructions,
+  input,
+  maxOutputTokens,
+  metadata = {},
+}) {
+  const capability = ADMIN_MODEL_CAPABILITY_TABLE[String(model || "").trim()];
+  const selection = resolveAdminModelSelection({
+    provider: providerId,
+    model,
+    reasoningEffort: reasoningEffort || capability?.defaultReasoningEffort,
+    reasoningMode: reasoningMode || capability?.defaultReasoningMode,
+    stage: ADMIN_MODEL_LAB_STAGES.EXPERIMENTAL_FINAL_RULING,
+  });
+  const finalInput = normalizeDeepSeekInput(input);
+  if (!finalInput) throw new TypeError(`${providerId} final-ruling input must not be empty`);
+  sanitizeMetadata(metadata, { requireTraceFields: true });
+  const configuredRelayMaxTokens = providerId === "relay"
+    ? optionalPositiveInteger(env?.RELAY_MAX_COMPLETION_TOKENS, "RELAY_MAX_COMPLETION_TOKENS")
+    : undefined;
+  const maxTokens = optionalPositiveInteger(maxOutputTokens, "maxOutputTokens")
+    ?? configuredRelayMaxTokens
+    ?? (selection.reasoningMode === "pro" ? 64_000 : 16_000);
+  const deepSeekThinkingMode = providerId === "deepseek"
+    && selection.reasoningMode === "pro";
+  const schemaInstruction = [
+    String(instructions || "").trim(),
+    "这是隔离后台中的实验性最终裁定运行，不代表正式裁定或普通用户答案。",
+    "只输出一个符合下列 JSON Schema 的 JSON 对象，不要输出 Markdown、代码围栏或额外说明：",
+    JSON.stringify(MODEL_RULING_RESULT_JSON_SCHEMA),
+    ...(deepSeekThinkingMode
+      ? [
+          "以下 JSON 仅展示字段结构；必须用本题的 questionId、结论、证据和检查结果替换全部示例内容：",
+          JSON.stringify(MODEL_RULING_JSON_SHAPE_EXAMPLE),
+        ]
+      : []),
+  ].filter(Boolean).join("\n\n");
+  const body = {
+    model: selection.model,
+    messages: [
+      { role: "system", content: schemaInstruction },
+      { role: "user", content: finalInput },
+    ],
+    ...compatibleJsonResponseFormat(selection),
+    ...compatibleThinkingParameters(selection),
+  };
+  body[new Set(["kimi", "relay"]).has(providerId)
+    ? "max_completion_tokens"
+    : "max_tokens"] = maxTokens;
+  return { selection, body, maxTokens };
 }
 
 export class OpenAIResponsesProvider {
@@ -608,6 +646,7 @@ export class OpenAIResponsesProvider {
     const payload = await readResponsePayload(response);
     if (!response.ok) {
       const upstreamCode = payload?.error?.code || payload?.error?.type;
+      const outcomeKnown = isProvableHttpRejection(response.status);
       throw new RulingModelProviderError(
         payload?.error?.message || `OpenAI Responses API returned HTTP ${response.status}`,
         {
@@ -615,7 +654,8 @@ export class OpenAIResponsesProvider {
           provider: "openai",
           status: response.status,
           responseBody: payload,
-          outcomeKnown: isProvableHttpRejection(response.status),
+          outcomeKnown,
+          budgetReservationMayExist: !outcomeKnown,
         },
       );
     }

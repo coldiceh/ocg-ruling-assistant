@@ -14,6 +14,7 @@ import {
 import {
   createMemoryAdminFinalCallBudgetLedger,
 } from "../backend/adminFinalCallBudgetLedger.mjs";
+import { createAdminStageTracker } from "../backend/adminStageTracker.mjs";
 import { MODEL_RULING_COUNTER_CHECK_TYPES } from "../backend/modelRulingSchema.mjs";
 
 test("final ruling input rejects oversized peripheral snapshot fields", () => {
@@ -253,10 +254,11 @@ test("final-call budget reserves before provider create and settles reliable com
   const completed = await service.pollRun({ runId: created.runId });
 
   assert.equal(completed.status, ADMIN_RUN_STATUSES.SUCCEEDED);
-  assert.deepEqual(calls.map((item) => item.operation), ["reserve", "settle"]);
-  assert.equal(calls[0].input.attemptKind, "primary");
-  assert.equal(calls[1].input.reservationId, calls[0].input.reservationId);
-  assert.equal(calls[1].input.actualCny > 0, true);
+  const finalCalls = calls.filter((item) => item.input.attemptKind !== "evidence_preparation");
+  assert.deepEqual(finalCalls.map((item) => item.operation), ["reserve", "settle"]);
+  assert.equal(finalCalls[0].input.attemptKind, "primary");
+  assert.equal(finalCalls[1].input.reservationId, finalCalls[0].input.reservationId);
+  assert.equal(finalCalls[1].input.actualCny > 0, true);
 });
 
 test("relay settlement charges the requested model when the unverified response reports a cheaper model", async () => {
@@ -278,6 +280,14 @@ test("relay settlement charges the requested model when the unverified response 
     finalRulingProviders: {
       relay: {
         providerId: "relay",
+        getFinalRequestBudgetEnvelope() {
+          return {
+            provider: "relay",
+            model: "gpt-5.6-sol",
+            inputTokenUpperBound: 2_000,
+            maxOutputTokens: 1_000,
+          };
+        },
         async create() {
           return response;
         },
@@ -297,7 +307,9 @@ test("relay settlement charges the requested model when the unverified response 
 
   const completed = (await service.executeRun({ runId: created.runId })).run;
   const finalCost = completed.result.metering.stages.finalRuling.cost;
-  const settlement = budgetCalls.find((item) => item.operation === "settle");
+  const settlement = budgetCalls.find((item) => (
+    item.operation === "settle" && item.input.attemptKind === "primary"
+  ));
 
   assert.equal(completed.result.provider.model, "gpt-5.6-luna");
   assert.equal(finalCost.model, "gpt-5.6-sol");
@@ -305,6 +317,121 @@ test("relay settlement charges the requested model when the unverified response 
   assert.equal(finalCost.pricingSourceVerified, false);
   assert.equal(finalCost.totalCostCny, 0.0876);
   assert.equal(settlement.input.actualCny, 0.0876);
+});
+
+test("relay worst-case cost above its daily pool is rejected before provider transport", async () => {
+  const fixture = makeFixture();
+  fixture.cardResolution = {
+    ...fixture.cardResolution,
+    unresolvedMentions: [],
+    ambiguousMentions: [],
+  };
+  let transportCalls = 0;
+  const service = makeService(fixture, {
+    ADMIN_MODEL_LAB_USD_TO_CNY_RATE: "7.5",
+    RELAY_API_KEY: "relay-test-key",
+  }, {
+    finalCallBudgetLedger: createMemoryAdminFinalCallBudgetLedger({
+      timezone: "UTC",
+      pools: {
+        relay_sol: { dailyBudgetCny: 10, reservationCny: 5 },
+      },
+    }),
+    finalRulingProviders: {
+      relay: {
+        providerId: "relay",
+        getFinalRequestBudgetEnvelope() {
+          return {
+            provider: "relay",
+            model: "gpt-5.6-sol",
+            inputTokenUpperBound: 1_000,
+            maxOutputTokens: 100_000,
+          };
+        },
+        async create() {
+          transportCalls += 1;
+          throw new Error("transport must not run");
+        },
+      },
+    },
+  });
+  const created = await service.createRun({
+    body: {
+      question: "匿名中转最坏成本问题",
+      provider: "relay",
+      model: "relay-gpt-5.6-sol",
+      reasoningMode: "pro",
+      reasoningEffort: "high",
+      finalAttemptPolicy: "single",
+    },
+  });
+
+  const result = await service.executeRun({ runId: created.runId });
+
+  assert.equal(result.run.status, ADMIN_RUN_STATUSES.FAILED);
+  assert.equal(result.run.error.code, "admin_final_budget_exceeded");
+  assert.equal(transportCalls, 0);
+  assert.equal(fixture.deepSeekPrepareCalls, 0);
+});
+
+test("DeepSeek final reserves its priced worst-case token envelope before transport", async () => {
+  const fixture = makeFixture();
+  fixture.cardResolution = {
+    ...fixture.cardResolution,
+    unresolvedMentions: [],
+    ambiguousMentions: [],
+  };
+  const budgetCalls = [];
+  const transportCalls = [];
+  const service = makeService(fixture, {
+    ADMIN_MODEL_LAB_MAX_OUTPUT_TOKENS: "128000",
+  }, {
+    finalCallBudgetLedger: createRecordingBudgetLedger(budgetCalls),
+    finalRulingProviders: {
+      deepseek: {
+        providerId: "deepseek",
+        getFinalRequestBudgetEnvelope(request) {
+          assert.equal(request.maxOutputTokens, 128_000);
+          return {
+            provider: "deepseek",
+            model: "deepseek-v4-pro",
+            inputTokenUpperBound: 524_288,
+            maxOutputTokens: 128_000,
+          };
+        },
+        async create(request) {
+          transportCalls.push(request);
+          return {
+            id: "deepseek-dynamic-budget-1",
+            status: "completed",
+            model: "deepseek-v4-pro",
+            output_text: JSON.stringify(makeStructuredRuling()),
+            usage: { prompt_tokens: 1_000, completion_tokens: 500, total_tokens: 1_500 },
+          };
+        },
+      },
+    },
+  });
+  const created = await service.createRun({
+    body: {
+      question: "匿名 DeepSeek 动态预算问题",
+      provider: "deepseek",
+      model: "deepseek-v4-pro",
+      reasoningMode: "pro",
+      reasoningEffort: "max",
+      finalAttemptPolicy: "single",
+    },
+  });
+
+  const result = await service.executeRun({ runId: created.runId });
+  const finalReservation = budgetCalls.find((item) => (
+    item.operation === "reserve" && item.input.attemptKind === "primary"
+  ));
+
+  assert.equal(result.run.status, ADMIN_RUN_STATUSES.SUCCEEDED);
+  assert.equal(transportCalls.length, 1);
+  assert.equal(fixture.deepSeekPrepareCalls, 0);
+  assert.equal(finalReservation.input.requiredReservationCny, 2.340864);
 });
 
 test("final evidence readiness fails before provider submission, budget, and transport", async () => {
@@ -332,7 +459,10 @@ test("final evidence readiness fails before provider submission, budget, and tra
   assert.equal(failed.status, ADMIN_RUN_STATUSES.FAILED);
   assert.equal(failed.error.code, "admin_final_evidence_not_ready");
   assert.equal(failed.execution.providerSubmission.state, "NONE");
-  assert.deepEqual(budgetCalls, []);
+  assert.deepEqual(
+    budgetCalls.filter((item) => item.input.attemptKind !== "evidence_preparation"),
+    [],
+  );
   assert.deepEqual(fixture.openAICreateCalls, []);
 });
 
@@ -341,10 +471,14 @@ test("missing or exceeded final-call budget fails before provider transport", as
     const fixture = makeFixture();
     const service = makeService(fixture, {}, { finalCallBudgetLedger: null });
     const created = await service.createRun({ body: { question: "匿名缺少预算账本" } });
-    const result = await service.executeRun({ runId: created.runId });
+    await assert.rejects(
+      service.executeRun({ runId: created.runId }),
+      (error) => error?.code === "admin_final_budget_storage_unavailable",
+    );
+    const result = await service.getRun({ runId: created.runId, reconcile: false });
 
-    assert.equal(result.run.status, ADMIN_RUN_STATUSES.FAILED);
-    assert.equal(result.run.error.code, "admin_final_budget_storage_unavailable");
+    assert.equal(result.status, ADMIN_RUN_STATUSES.FAILED);
+    assert.equal(result.error.code, "admin_final_budget_storage_unavailable");
     assert.equal(fixture.openAICreateCalls.length, 0);
   });
 
@@ -353,7 +487,8 @@ test("missing or exceeded final-call budget fails before provider transport", as
     const ledger = {
       kind: "test-budget-reject",
       persistent: false,
-      async reserve() {
+      async reserve(input) {
+        if (input.attemptKind === "evidence_preparation") return { status: "reserved" };
         const error = codedError("daily budget exceeded", "admin_final_budget_exceeded");
         error.outcomeKnown = true;
         error.budgetReservationMayExist = false;
@@ -374,6 +509,45 @@ test("missing or exceeded final-call budget fails before provider transport", as
     assert.equal(result.run.error.code, "admin_final_budget_exceeded");
     assert.equal(fixture.openAICreateCalls.length, 0);
   });
+});
+
+test("evidence preparation releases only provably unaccepted failures and is never retried", async (t) => {
+  for (const releaseSafe of [true, false]) {
+    await t.test(releaseSafe ? "known rejection releases" : "unknown outcome retains", async () => {
+      const fixture = makeFixture();
+      const budgetCalls = [];
+      let preparationCalls = 0;
+      const providerError = codedError(
+        releaseSafe ? "request rejected before acceptance" : "network outcome unknown",
+        releaseSafe ? "deepseek_bad_request" : "deepseek_network_unknown",
+      );
+      providerError.budgetReservationMayExist = !releaseSafe;
+      const service = makeService(fixture, {}, {
+        finalCallBudgetLedger: createRecordingBudgetLedger(budgetCalls),
+        deepSeekProvider: {
+          async prepareEvidence() {
+            preparationCalls += 1;
+            throw providerError;
+          },
+        },
+      });
+      const created = await service.createRun({ body: { question: "匿名证据准备失败问题" } });
+
+      await assert.rejects(
+        service.executeRun({ runId: created.runId }),
+        (error) => error?.code === providerError.code,
+      );
+      assert.deepEqual(
+        budgetCalls.map((item) => item.operation),
+        releaseSafe ? ["reserve", "release"] : ["reserve"],
+      );
+      assert.equal(preparationCalls, 1);
+      const repeated = await service.executeRun({ runId: created.runId });
+      assert.equal(repeated.run.status, ADMIN_RUN_STATUSES.FAILED);
+      assert.equal(repeated.run.error.code, providerError.code);
+      assert.equal(preparationCalls, 1);
+    });
+  }
 });
 
 test("known provider rejection releases budget while unknown transport outcome retains it", async (t) => {
@@ -408,10 +582,14 @@ test("known provider rejection releases budget while unknown transport outcome r
 
       assert.equal(result.run.status, ADMIN_RUN_STATUSES.FAILED);
       assert.equal(fixture.openAICreateCalls.length, 1);
+      const finalCalls = calls.filter((item) => item.input.attemptKind !== "evidence_preparation");
       assert.deepEqual(
-        calls.map((item) => item.operation),
+        finalCalls.map((item) => item.operation),
         outcomeKnown ? ["reserve", "release"] : ["reserve"],
       );
+      if (outcomeKnown) {
+        assert.equal(finalCalls.find((item) => item.operation === "release")?.input?.model, "gpt-5.6-terra");
+      }
     });
   }
 });
@@ -459,12 +637,13 @@ test("a billed HTTP 200 empty response settles reported usage or conservatively 
 
       assert.equal(result.run.status, ADMIN_RUN_STATUSES.FAILED);
       assert.equal(result.run.error.code, "deepseek_empty_final_ruling");
+      const finalCalls = calls.filter((item) => item.input.attemptKind !== "evidence_preparation");
       assert.deepEqual(
-        calls.map((item) => item.operation),
+        finalCalls.map((item) => item.operation),
         usage ? ["reserve", "settle"] : ["reserve"],
       );
       if (usage) {
-        assert.equal(calls[1].input.actualCny, 0.0002);
+        assert.equal(finalCalls[1].input.actualCny, 0.0002);
       }
     });
   }
@@ -487,6 +666,14 @@ test("a metered relay HTTP 200 empty response settles using the requested model 
     finalRulingProviders: {
       relay: {
         providerId: "relay",
+        getFinalRequestBudgetEnvelope() {
+          return {
+            provider: "relay",
+            model: "gpt-5.6-sol",
+            inputTokenUpperBound: 2_000,
+            maxOutputTokens: 1_000,
+          };
+        },
         async create() {
           throw providerError;
         },
@@ -508,15 +695,23 @@ test("a metered relay HTTP 200 empty response settles using the requested model 
 
   assert.equal(result.run.status, ADMIN_RUN_STATUSES.FAILED);
   assert.equal(result.run.error.code, "relay_empty_final_ruling");
-  assert.deepEqual(calls.map((item) => item.operation), ["reserve", "settle"]);
-  assert.equal(calls[1].input.model, "relay-gpt-5.6-sol");
-  assert.equal(calls[1].input.actualCny, 0.0219);
+  const finalCalls = calls.filter((item) => item.input.attemptKind !== "evidence_preparation");
+  assert.deepEqual(finalCalls.map((item) => item.operation), ["reserve", "settle"]);
+  assert.equal(finalCalls[1].input.model, "relay-gpt-5.6-sol");
+  assert.equal(finalCalls[1].input.actualCny, 0.0219);
 });
 
 test("a domestic experimental final ruling completes synchronously and is labelled non-authoritative", async () => {
   const fixture = makeFixture();
   const domesticCalls = [];
-  const service = makeService(fixture, {}, {
+  const service = makeService(fixture, {
+    ADMIN_MODEL_LAB_DEEPSEEK_PRICING_VERSION: "official-test-v4",
+    ADMIN_MODEL_LAB_DEEPSEEK_PRICING_EFFECTIVE_DATE: "2026-08-06",
+    ADMIN_MODEL_LAB_DEEPSEEK_FLASH_INPUT_CNY_PER_MTOK: "1",
+    ADMIN_MODEL_LAB_DEEPSEEK_FLASH_OUTPUT_CNY_PER_MTOK: "2",
+    ADMIN_MODEL_LAB_DEEPSEEK_PRO_INPUT_CNY_PER_MTOK: "3",
+    ADMIN_MODEL_LAB_DEEPSEEK_PRO_OUTPUT_CNY_PER_MTOK: "6",
+  }, {
     finalRulingProviders: {
       deepseek: {
         providerId: "deepseek",
@@ -525,7 +720,7 @@ test("a domestic experimental final ruling completes synchronously and is labell
           return {
             id: "deepseek-final-1",
             status: "completed",
-            model: "deepseek-v4-flash",
+            model: "deepseek-v4-pro",
             output_text: JSON.stringify(makeStructuredRuling()),
             usage: { prompt_tokens: 900, completion_tokens: 600, total_tokens: 1500 },
           };
@@ -537,9 +732,9 @@ test("a domestic experimental final ruling completes synchronously and is labell
     body: {
       question: "匿名问题",
       provider: "deepseek",
-      model: "deepseek-v4-flash",
-      reasoningEffort: "none",
-      reasoningMode: "standard",
+      model: "deepseek-v4-pro",
+      reasoningEffort: "max",
+      reasoningMode: "pro",
     },
   });
   const execution = await service.executeRun({ runId: created.runId });
@@ -550,6 +745,9 @@ test("a domestic experimental final ruling completes synchronously and is labell
   assert.equal(execution.run.result.authority.publicAnswerEligible, false);
   assert.equal(execution.run.result.provider.providerId, "deepseek");
   assert.equal(execution.run.result.finalRuling.conciseAnswer, "可以发动，并完成处理。");
+  assert.equal(execution.run.result.metering.stages.finalRuling.cost.model, "deepseek-v4-pro");
+  assert.equal(execution.run.result.metering.stages.finalRuling.cost.totalCostCny, 0.0063);
+  assert.equal(execution.run.result.metering.stages.evidencePreparation.cost.model, "deepseek-v4-flash");
   assert.equal(domesticCalls.length, 1);
   assert.match(domesticCalls[0].input, /evidence-direct/u);
   assert.equal(fixture.openAICreateCalls.length, 0);
@@ -635,11 +833,13 @@ test("one directed repair succeeds on the same frozen evidence and accumulates b
   );
   const reservations = budgetCalls.filter((item) => item.operation === "reserve");
   const settlements = budgetCalls.filter((item) => item.operation === "settle");
-  assert.deepEqual(reservations.map((item) => item.input.attemptKind), ["primary", "repair"]);
-  assert.equal(new Set(reservations.map((item) => item.input.reservationId)).size, 2);
+  const finalReservations = reservations.filter((item) => item.input.attemptKind !== "evidence_preparation");
+  const finalSettlements = settlements.filter((item) => item.input.attemptKind !== "evidence_preparation");
+  assert.deepEqual(finalReservations.map((item) => item.input.attemptKind), ["primary", "repair"]);
+  assert.equal(new Set(finalReservations.map((item) => item.input.reservationId)).size, 2);
   assert.deepEqual(
-    settlements.map((item) => item.input.reservationId),
-    reservations.map((item) => item.input.reservationId),
+    finalSettlements.map((item) => item.input.reservationId),
+    finalReservations.map((item) => item.input.reservationId),
   );
 });
 
@@ -661,7 +861,12 @@ test("completed output without reported usage conservatively keeps its reservati
   const completed = await service.pollRun({ runId: created.runId });
 
   assert.equal(completed.status, ADMIN_RUN_STATUSES.SUCCEEDED);
-  assert.deepEqual(budgetCalls.map((item) => item.operation), ["reserve"]);
+  assert.deepEqual(
+    budgetCalls
+      .filter((item) => item.input.attemptKind !== "evidence_preparation")
+      .map((item) => item.operation),
+    ["reserve"],
+  );
 });
 
 test("single final-attempt policy fails after one invalid response and preserves its audit event", async () => {
@@ -982,8 +1187,8 @@ test("getRun reconciles a completed background response, validates it, and persi
   assert.equal(completed.result.metering.stages.finalRuling.usage.totalTokens, 1500);
   assert.equal(completed.result.metering.totals.usage.totalTokens, 1530);
   assert.equal(completed.result.metering.totals.usage.complete, true);
-  assert.equal(completed.result.metering.stages.evidencePreparation.cost.totalCostCny, null);
-  assert.equal(completed.result.metering.stages.evidencePreparation.cost.pricingVersion, null);
+  assert.equal(completed.result.metering.stages.evidencePreparation.cost.totalCostCny, 0.00004);
+  assert.equal(completed.result.metering.stages.evidencePreparation.cost.pricingVersion, "test-deepseek-v4");
   assert.equal(completed.result.metering.totals.cost.totalCostUsd, null);
   assert.equal(
     completed.result.metering.totals.cost.knownCostUsd,
@@ -1326,6 +1531,55 @@ test("a RUNNING run interrupted before evidence finalization can restart from it
   assert.equal(execution.run.preparationFinalizedAt !== null, true);
   assert.equal(execution.providerRequest.requestId, "resp_admin_1");
   assert.equal(fixture.deepSeekPrepareCalls, 1);
+});
+
+test("a completed paid preparation substage without a frozen snapshot fails closed", async () => {
+  const fixture = makeFixture();
+  const storage = createMemoryAdminRunStorage();
+  const firstService = makeService(fixture, {}, { storage });
+  const created = await firstService.createRun({
+    body: { question: "匿名准备模型完成后崩溃问题" },
+  });
+  await fixture.runStore.startRun(created.runId);
+  const claim = await fixture.runStore.acquireExecutionLease(created.runId, {
+    ownerId: "abandoned-preparation-worker",
+  });
+  const tracker = createAdminStageTracker({
+    runId: created.runId,
+    monotonicNow: () => fixture.monotonicMs,
+    wallNow: () => fixture.wallNow(),
+  });
+  tracker.startStage("understand");
+  tracker.startSubstage("understand", "paid_model_submission", {
+    label: "低成本模型准备证据",
+  });
+  fixture.advance(20);
+  tracker.finishSubstage("understand", "paid_model_submission");
+  await fixture.runStore.updateStageProgress(created.runId, tracker.snapshot(), {
+    executionToken: claim.executionToken,
+  });
+  await fixture.runStore.releaseExecutionLease(created.runId, {
+    executionToken: claim.executionToken,
+  });
+
+  const persisted = await fixture.runStore.getRun(created.runId);
+  assert.equal(persisted.preparationFinalizedAt, null);
+  assert.equal(
+    persisted.stageTiming.stages
+      .find((stage) => stage.id === "understand")
+      .substages.find((substage) => substage.id === "paid_model_submission")
+      .status,
+    "COMPLETED",
+  );
+
+  const resumedService = makeService(fixture, {}, { storage });
+  const resumed = await resumedService.executeRun({ runId: created.runId });
+
+  assert.equal(resumed.run.status, ADMIN_RUN_STATUSES.FAILED);
+  assert.equal(resumed.run.error.code, "preparation_submission_outcome_unknown");
+  assert.equal(resumed.providerRequest, null);
+  assert.equal(fixture.deepSeekPrepareCalls, 0, "paid preparation must not be resubmitted");
+  assert.equal(fixture.openAICreateCalls.length, 0, "final ruling must not start");
 });
 
 test("cancelling SUBMITTING persists the accepted request id before provider cancellation", async () => {
@@ -1878,6 +2132,12 @@ function makeService(fixture, envOverrides = {}, {
       ADMIN_OPENAI_ENABLED: "true",
       OPENAI_API_KEY: "server-only-test-key",
       DEEPSEEK_API_KEY: "server-only-test-key",
+      ADMIN_MODEL_LAB_DEEPSEEK_PRICING_VERSION: "test-deepseek-v4",
+      ADMIN_MODEL_LAB_DEEPSEEK_PRICING_EFFECTIVE_DATE: "2027-01-01",
+      ADMIN_MODEL_LAB_DEEPSEEK_FLASH_INPUT_CNY_PER_MTOK: "1",
+      ADMIN_MODEL_LAB_DEEPSEEK_FLASH_OUTPUT_CNY_PER_MTOK: "2",
+      ADMIN_MODEL_LAB_DEEPSEEK_PRO_INPUT_CNY_PER_MTOK: "3",
+      ADMIN_MODEL_LAB_DEEPSEEK_PRO_OUTPUT_CNY_PER_MTOK: "6",
       ...envOverrides,
     },
     deepSeekProvider: deepSeekProvider || {
@@ -1993,7 +2253,9 @@ function createTestFinalCallBudgetLedger() {
       deepseek: { dailyBudgetCny: 1_000, reservationCny: 10 },
       glm: { dailyBudgetCny: 1_000, reservationCny: 10 },
       kimi: { dailyBudgetCny: 1_000, reservationCny: 10 },
-      relay: { dailyBudgetCny: 1_000, reservationCny: 10 },
+      relay_sol: { dailyBudgetCny: 1_000, reservationCny: 10 },
+      relay_terra: { dailyBudgetCny: 1_000, reservationCny: 10 },
+      relay_luna: { dailyBudgetCny: 1_000, reservationCny: 10 },
     },
   });
 }

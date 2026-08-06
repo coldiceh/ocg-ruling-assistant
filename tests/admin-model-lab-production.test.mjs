@@ -252,11 +252,13 @@ test("production composition exposes an explicitly persistent final-call budget 
   });
 
   const capabilities = await service.capabilities();
-  assert.deepEqual(capabilities.architecture.finalCallBudget, {
-    configured: true,
-    persistent: true,
-    storageKind: "test-persistent-final-budget",
-  });
+  assert.equal(capabilities.architecture.finalCallBudget.configured, true);
+  assert.equal(capabilities.architecture.finalCallBudget.persistent, true);
+  assert.equal(
+    capabilities.architecture.finalCallBudget.storageKind,
+    "test-persistent-final-budget",
+  );
+  assert.deepEqual(capabilities.architecture.finalCallBudget.pools, []);
 });
 
 test("production without a budget ledger fails closed before final provider transport", async () => {
@@ -451,11 +453,18 @@ test("explicit local development composition works without Redis but is forbidde
   const capabilities = await service.capabilities();
   assert.equal(capabilities.persistence.runStore, "ephemeral");
   assert.equal(capabilities.persistence.recordStore, "ephemeral");
-  assert.deepEqual(capabilities.architecture.finalCallBudget, {
-    configured: true,
-    persistent: false,
-    storageKind: "memory-admin-final-budget",
-  });
+  assert.equal(capabilities.architecture.finalCallBudget.configured, true);
+  assert.equal(capabilities.architecture.finalCallBudget.persistent, false);
+  assert.equal(
+    capabilities.architecture.finalCallBudget.storageKind,
+    "memory-admin-final-budget",
+  );
+  assert.ok(Array.isArray(capabilities.architecture.finalCallBudget.pools));
+  assert.equal(
+    capabilities.architecture.finalCallBudget.pools
+      .find((pool) => pool.pool === "openai")?.available,
+    true,
+  );
   const run = await service.createRun({ body: { question: "本地开发问题" } });
   assert.equal(run.status, "QUEUED");
   assert.equal((await service.listRuns({ limit: 10 })).records.length, 1);
@@ -485,6 +494,18 @@ test("composition keeps DeepSeek Flash as preparation and exposes configured exp
       KIMI_API_KEY: "server-kimi-secret",
       RELAY_API_KEY: "server-relay-secret",
       RELAY_BASE_URL: "https://relay.example/v1",
+      ADMIN_FINAL_BUDGET_DEEPSEEK_DAILY_CNY: "10",
+      ADMIN_FINAL_BUDGET_DEEPSEEK_RESERVATION_CNY: "2",
+      ADMIN_FINAL_BUDGET_GLM_DAILY_CNY: "10",
+      ADMIN_FINAL_BUDGET_GLM_RESERVATION_CNY: "2",
+      ADMIN_FINAL_BUDGET_KIMI_DAILY_CNY: "10",
+      ADMIN_FINAL_BUDGET_KIMI_RESERVATION_CNY: "2",
+      ADMIN_FINAL_BUDGET_RELAY_SOL_DAILY_CNY: "10",
+      ADMIN_FINAL_BUDGET_RELAY_SOL_RESERVATION_CNY: "5",
+      ADMIN_FINAL_BUDGET_RELAY_TERRA_DAILY_CNY: "10",
+      ADMIN_FINAL_BUDGET_RELAY_TERRA_RESERVATION_CNY: "5",
+      ADMIN_FINAL_BUDGET_RELAY_LUNA_DAILY_CNY: "10",
+      ADMIN_FINAL_BUDGET_RELAY_LUNA_RESERVATION_CNY: "5",
     },
     fetchImpl: async () => {
       throw new Error("network must not run while reading capabilities");

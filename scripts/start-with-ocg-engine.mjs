@@ -42,8 +42,12 @@ export function createLocalStackChildEnvironments({
     OCG_ENGINE_URL: settings.engineUrl,
     OCG_ENGINE_TOKEN: engineToken,
   };
-  const engineBase = stripServerSecrets(env);
-  const frontendBase = stripServerSecrets(env);
+  // The engine and static-file server do not need the backend's provider,
+  // Redis, budget or authentication configuration. Build their environment
+  // from an explicit runtime allowlist instead of trying to recognize every
+  // possible secret-bearing variable name.
+  const engineBase = createLocalChildRuntimeEnvironment(env);
+  const frontendBase = createLocalChildRuntimeEnvironment(env);
   return {
     engine: {
       ...engineBase,
@@ -79,12 +83,49 @@ function mergeCsvValues(value, requiredValue) {
   ].map((item) => item.trim()).filter(Boolean))].join(",");
 }
 
-function stripServerSecrets(env) {
-  const result = { ...env };
-  for (const name of Object.keys(result)) {
-    if (/(?:API_KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL)/iu.test(name)) delete result[name];
-  }
-  return result;
+const LOCAL_CHILD_RUNTIME_ENV_NAMES = new Set([
+  "APPDATA",
+  "COMSPEC",
+  "FORCE_COLOR",
+  "HOME",
+  "HOMEDRIVE",
+  "HOMEPATH",
+  "LANG",
+  "LANGUAGE",
+  "LC_ALL",
+  "LC_CTYPE",
+  "LOCALAPPDATA",
+  "NODE_EXTRA_CA_CERTS",
+  "NODE_NO_WARNINGS",
+  "NODE_OPTIONS",
+  "NO_COLOR",
+  "NUMBER_OF_PROCESSORS",
+  "OCG_ENGINE_REQUEST_TIMEOUT_MS",
+  "OCG_ENGINE_SNAPSHOT",
+  "PATH",
+  "PATHEXT",
+  "PROCESSOR_ARCHITECTURE",
+  "PROGRAMDATA",
+  "SSL_CERT_DIR",
+  "SSL_CERT_FILE",
+  "SYSTEMROOT",
+  "TEMP",
+  "TERM",
+  "TMP",
+  "TMPDIR",
+  "TZ",
+  "USERPROFILE",
+  "UV_THREADPOOL_SIZE",
+  "WINDIR",
+  "WT_SESSION",
+]);
+
+function createLocalChildRuntimeEnvironment(env) {
+  return Object.fromEntries(
+    Object.entries(env || {}).filter(([name]) => (
+      LOCAL_CHILD_RUNTIME_ENV_NAMES.has(String(name).toUpperCase())
+    )),
+  );
 }
 
 export async function probeEngineHealth({

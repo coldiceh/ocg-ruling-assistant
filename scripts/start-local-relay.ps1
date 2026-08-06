@@ -29,16 +29,29 @@ if ([string]::IsNullOrWhiteSpace($env:DEEPSEEK_API_KEY)) {
 # lab. This still does not change PUBLIC_RULING_MODEL_PROFILE.
 $env:ADMIN_MODEL_LAB_ENABLED = "true"
 
-# Local-only budget defaults. Sol/Terra/Luna share one 10 CNY pool. Each request
-# reserves 5 CNY before transport, so two ambiguous or unmetered calls stop the
-# pool. Successful calls with reliable usage are settled from the versioned,
+# Local-only budget defaults. Sol/Terra/Luna each have an independent 10 CNY
+# pool. Each request reserves 5 CNY before transport, so two ambiguous or
+# unmetered calls stop that model's pool. Successful calls with reliable usage
+# are settled from the versioned,
 # explicitly unverified relay-dashboard rates. The relay account itself remains
 # the authoritative hard spending limit.
-if ([string]::IsNullOrWhiteSpace($env:ADMIN_FINAL_BUDGET_RELAY_DAILY_CNY)) {
-  $env:ADMIN_FINAL_BUDGET_RELAY_DAILY_CNY = "10"
+if ([string]::IsNullOrWhiteSpace($env:ADMIN_FINAL_BUDGET_RELAY_SOL_DAILY_CNY)) {
+  $env:ADMIN_FINAL_BUDGET_RELAY_SOL_DAILY_CNY = "10"
 }
-if ([string]::IsNullOrWhiteSpace($env:ADMIN_FINAL_BUDGET_RELAY_RESERVATION_CNY)) {
-  $env:ADMIN_FINAL_BUDGET_RELAY_RESERVATION_CNY = "5"
+if ([string]::IsNullOrWhiteSpace($env:ADMIN_FINAL_BUDGET_RELAY_SOL_RESERVATION_CNY)) {
+  $env:ADMIN_FINAL_BUDGET_RELAY_SOL_RESERVATION_CNY = "5"
+}
+if ([string]::IsNullOrWhiteSpace($env:ADMIN_FINAL_BUDGET_RELAY_TERRA_DAILY_CNY)) {
+  $env:ADMIN_FINAL_BUDGET_RELAY_TERRA_DAILY_CNY = "10"
+}
+if ([string]::IsNullOrWhiteSpace($env:ADMIN_FINAL_BUDGET_RELAY_TERRA_RESERVATION_CNY)) {
+  $env:ADMIN_FINAL_BUDGET_RELAY_TERRA_RESERVATION_CNY = "5"
+}
+if ([string]::IsNullOrWhiteSpace($env:ADMIN_FINAL_BUDGET_RELAY_LUNA_DAILY_CNY)) {
+  $env:ADMIN_FINAL_BUDGET_RELAY_LUNA_DAILY_CNY = "10"
+}
+if ([string]::IsNullOrWhiteSpace($env:ADMIN_FINAL_BUDGET_RELAY_LUNA_RESERVATION_CNY)) {
+  $env:ADMIN_FINAL_BUDGET_RELAY_LUNA_RESERVATION_CNY = "5"
 }
 if ([string]::IsNullOrWhiteSpace($env:RELAY_MAX_COMPLETION_TOKENS)) {
   $env:RELAY_MAX_COMPLETION_TOKENS = "8192"
@@ -51,13 +64,38 @@ if ([string]::IsNullOrWhiteSpace($env:ADMIN_MODEL_LAB_EXCHANGE_RATE_VERSION)) {
 }
 
 # DeepSeek Flash and Pro share one deliberately conservative local final-call
-# pool. A real final call reserves the full 10 CNY pool until usage/pricing can
-# be settled, so the launcher cannot accidentally fan out DeepSeek finals.
+# pool. The 2 CNY reservation conservatively covers this application's bounded
+# final input and 64K output envelope at the official V4 rates checked on
+# 2026-08-06; reported usage settles the smaller actual estimate.
 if ([string]::IsNullOrWhiteSpace($env:ADMIN_FINAL_BUDGET_DEEPSEEK_DAILY_CNY)) {
   $env:ADMIN_FINAL_BUDGET_DEEPSEEK_DAILY_CNY = "10"
 }
 if ([string]::IsNullOrWhiteSpace($env:ADMIN_FINAL_BUDGET_DEEPSEEK_RESERVATION_CNY)) {
-  $env:ADMIN_FINAL_BUDGET_DEEPSEEK_RESERVATION_CNY = "10"
+  $env:ADMIN_FINAL_BUDGET_DEEPSEEK_RESERVATION_CNY = "2"
+}
+if ([string]::IsNullOrWhiteSpace($env:ADMIN_MODEL_LAB_DEEPSEEK_PRICING_VERSION)) {
+  $env:ADMIN_MODEL_LAB_DEEPSEEK_PRICING_VERSION = "deepseek-official-cny-2026-08-06"
+}
+if ([string]::IsNullOrWhiteSpace($env:ADMIN_MODEL_LAB_DEEPSEEK_PRICING_EFFECTIVE_DATE)) {
+  $env:ADMIN_MODEL_LAB_DEEPSEEK_PRICING_EFFECTIVE_DATE = "2026-08-06"
+}
+if ([string]::IsNullOrWhiteSpace($env:ADMIN_MODEL_LAB_DEEPSEEK_FLASH_CACHED_INPUT_CNY_PER_MTOK)) {
+  $env:ADMIN_MODEL_LAB_DEEPSEEK_FLASH_CACHED_INPUT_CNY_PER_MTOK = "0.02"
+}
+if ([string]::IsNullOrWhiteSpace($env:ADMIN_MODEL_LAB_DEEPSEEK_FLASH_INPUT_CNY_PER_MTOK)) {
+  $env:ADMIN_MODEL_LAB_DEEPSEEK_FLASH_INPUT_CNY_PER_MTOK = "1"
+}
+if ([string]::IsNullOrWhiteSpace($env:ADMIN_MODEL_LAB_DEEPSEEK_FLASH_OUTPUT_CNY_PER_MTOK)) {
+  $env:ADMIN_MODEL_LAB_DEEPSEEK_FLASH_OUTPUT_CNY_PER_MTOK = "2"
+}
+if ([string]::IsNullOrWhiteSpace($env:ADMIN_MODEL_LAB_DEEPSEEK_PRO_CACHED_INPUT_CNY_PER_MTOK)) {
+  $env:ADMIN_MODEL_LAB_DEEPSEEK_PRO_CACHED_INPUT_CNY_PER_MTOK = "0.025"
+}
+if ([string]::IsNullOrWhiteSpace($env:ADMIN_MODEL_LAB_DEEPSEEK_PRO_INPUT_CNY_PER_MTOK)) {
+  $env:ADMIN_MODEL_LAB_DEEPSEEK_PRO_INPUT_CNY_PER_MTOK = "3"
+}
+if ([string]::IsNullOrWhiteSpace($env:ADMIN_MODEL_LAB_DEEPSEEK_PRO_OUTPUT_CNY_PER_MTOK)) {
+  $env:ADMIN_MODEL_LAB_DEEPSEEK_PRO_OUTPUT_CNY_PER_MTOK = "6"
 }
 
 if ([string]::IsNullOrWhiteSpace($env:ADMIN_SESSION_PASSWORD)) {

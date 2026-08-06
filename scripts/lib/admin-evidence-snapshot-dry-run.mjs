@@ -14,6 +14,7 @@ import {
   createAdminRunStore,
   createMemoryAdminRunStorage,
 } from "../../backend/adminRunStore.mjs";
+import { createMemoryAdminFinalCallBudgetLedger } from "../../backend/adminFinalCallBudgetLedger.mjs";
 import { extractRagCards, normalizeCardKey } from "../../backend/ragCardExtractor.mjs";
 import { loadRagData, retrieveRagEvidence } from "../../backend/ragEvidenceRetriever.mjs";
 import {
@@ -184,11 +185,24 @@ export async function runAdminEvidenceSnapshotDryRun({
     },
   };
 
+  const offlineEnv = offlineServiceEnvironment({ enginePasscodeHydrationEnabled });
+  const dryRunBudgetLedger = createMemoryAdminFinalCallBudgetLedger({
+    env: {
+      ...offlineEnv,
+      // This ledger gates injected local sentinels only. It has no credentials
+      // or transport and cannot authorize a production provider call.
+      ADMIN_FINAL_BUDGET_DEEPSEEK_DAILY_CNY: "100",
+      ADMIN_FINAL_BUDGET_DEEPSEEK_RESERVATION_CNY: "1",
+      ADMIN_FINAL_BUDGET_OPENAI_DAILY_CNY: "100",
+      ADMIN_FINAL_BUDGET_OPENAI_RESERVATION_CNY: "1",
+    },
+  });
   const service = createAdminModelLabService({
     runStore,
+    finalCallBudgetLedger: dryRunBudgetLedger,
     deepSeekProvider: offlinePreparationProvider,
     openAIProvider: localPaidBoundaryProvider,
-    env: offlineServiceEnvironment({ enginePasscodeHydrationEnabled }),
+    env: offlineEnv,
     dataDir,
     loadData: (...args) => timed("loadDataMs", () => loadData(...args)),
     extractCards: (...args) => timedSync("extractCardsMs", () => extractCards(...args)),
@@ -526,6 +540,15 @@ function offlineServiceEnvironment({ enginePasscodeHydrationEnabled = false } = 
       : {}),
     OPENAI_API_KEY: "offline-placeholder-never-transported",
     DEEPSEEK_API_KEY: "offline-placeholder-never-transported",
+    // Offline sentinels still exercise the same pre-transport cost envelope.
+    // Versioned test rates keep that calculation deterministic without making
+    // any real provider request.
+    ADMIN_MODEL_LAB_DEEPSEEK_PRICING_VERSION: "offline-test-deepseek-v4",
+    ADMIN_MODEL_LAB_DEEPSEEK_PRICING_EFFECTIVE_DATE: "2026-08-06",
+    ADMIN_MODEL_LAB_DEEPSEEK_FLASH_INPUT_CNY_PER_MTOK: "1",
+    ADMIN_MODEL_LAB_DEEPSEEK_FLASH_OUTPUT_CNY_PER_MTOK: "2",
+    ADMIN_MODEL_LAB_DEEPSEEK_PRO_INPUT_CNY_PER_MTOK: "3",
+    ADMIN_MODEL_LAB_DEEPSEEK_PRO_OUTPUT_CNY_PER_MTOK: "6",
   };
 }
 

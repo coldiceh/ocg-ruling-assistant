@@ -49,6 +49,26 @@ export const DEFAULT_MATRIX_CONFIGURATIONS = Object.freeze([
   }),
 ]);
 
+// Explicit opt-in pilot requested for the four real ruling cases. Keep this
+// separate from the cheaper 12-request default: four cases across these five
+// models are 20 paid final-ruling submissions before unavailable models are
+// skipped by the server capability preflight.
+export const FIVE_MODEL_PILOT_CONFIGURATIONS = Object.freeze([
+  ...DEFAULT_MATRIX_CONFIGURATIONS,
+  Object.freeze({
+    provider: "deepseek",
+    model: "deepseek-v4-flash",
+    reasoningMode: "pro",
+    reasoningEffort: "high",
+  }),
+  Object.freeze({
+    provider: "deepseek",
+    model: "deepseek-v4-pro",
+    reasoningMode: "pro",
+    reasoningEffort: "max",
+  }),
+]);
+
 /**
  * Runs one evidence-preparation source, then evaluates final models against
  * frozen evidence through the admin lab fork contract.
@@ -102,7 +122,17 @@ export async function runAdminModelMatrix({
   await client.login();
   const capabilities = await client.capabilities();
   assertRequiredFeatures(capabilities);
+  assertPersistentFinalCallBudget(capabilities);
   const availableModels = collectAvailableModels(capabilities);
+  const preparationAvailability = validateConfiguration(
+    EVIDENCE_PREPARATION_CONFIGURATION,
+    availableModels,
+  );
+  if (!preparationAvailability.ok) {
+    throw new Error(
+      `Evidence preparation configuration is unavailable: ${preparationAvailability.reason}`,
+    );
+  }
   const sourceAvailability = validateConfiguration(sourceConfiguration, availableModels);
   if (!sourceAvailability.ok) {
     throw new Error(`Source configuration is unavailable: ${sourceAvailability.reason}`);
@@ -427,7 +457,7 @@ export function createAdminModelLabHttpClient({
   fetchImpl = globalThis.fetch,
 } = {}) {
   if (typeof fetchImpl !== "function") throw new TypeError("fetchImpl must be a function");
-  const root = new URL(requiredText(baseUrl, "baseUrl"));
+  const root = normalizeAdminModelLabBaseUrl(baseUrl);
   const requestOrigin = String(origin || root.origin).replace(/\/$/u, "");
   const adminPassword = requiredText(password, "password");
   let cookie = "";
@@ -452,9 +482,19 @@ export function createAdminModelLabHttpClient({
     const response = await fetchImpl(url, {
       method,
       cache: "no-store",
+      // Never let fetch replay the admin password, session cookie, CSRF token,
+      // or request body to a redirect target. Operators must configure the
+      // canonical backend URL explicitly.
+      redirect: "manual",
       headers,
       ...(method === "GET" ? {} : { body: JSON.stringify(body || {}) }),
     });
+    if (response.status >= 300 && response.status < 400) {
+      const error = new Error("Admin Model Lab redirects are forbidden");
+      error.status = response.status;
+      error.code = "admin_model_lab_redirect_forbidden";
+      throw error;
+    }
     const payload = await response.json().catch(() => ({}));
     if (!response.ok || payload?.ok === false) {
       const error = new Error(String(payload?.message || payload?.error || `HTTP ${response.status}`));
@@ -485,12 +525,19 @@ export function createAdminModelLabHttpClient({
     const response = await fetchImpl(url, {
       method: "GET",
       cache: "no-store",
+      redirect: "manual",
       headers: {
         accept: "text/event-stream",
         origin: requestOrigin,
         ...(cookie ? { cookie } : {}),
       },
     });
+    if (response.status >= 300 && response.status < 400) {
+      const error = new Error("Admin Model Lab redirects are forbidden");
+      error.status = response.status;
+      error.code = "admin_model_lab_redirect_forbidden";
+      throw error;
+    }
     const text = await response.text();
     if (!response.ok) {
       let payload = {};
@@ -544,7 +591,7 @@ export function collectAvailableModels(capabilities = {}) {
     const provider = String(
       providerEntry?.providerId || providerEntry?.id || providerEntry?.provider || "",
     ).trim().toLowerCase();
-    const providerAvailable = providerEntry?.available !== false;
+    const providerAvailable = providerEntry?.available === true;
     for (const modelEntry of Array.isArray(providerEntry?.models) ? providerEntry.models : []) {
       const model = String(
         typeof modelEntry === "string"
@@ -552,31 +599,49 @@ export function collectAvailableModels(capabilities = {}) {
           : modelEntry?.modelId || modelEntry?.id || modelEntry?.model || "",
       ).trim();
       const descriptor = typeof modelEntry === "string" ? {} : modelEntry;
-      if (!provider || !model || !providerAvailable || descriptor?.available === false) continue;
+      if (
+        !provider
+        || !model
+        || !providerAvailable
+        || descriptor?.available !== true
+        || descriptor?.transportAvailable !== true
+        || descriptor?.budgetConfigured !== true
+        || descriptor?.budgetAvailable !== true
+        || !String(descriptor?.budgetPool || "").trim()
+      ) continue;
       result.set(model, {
         provider,
         model,
+        budgetPool: String(descriptor.budgetPool),
         supportedReasoningModes: arrayOrEmpty(descriptor?.supportedReasoningModes),
         supportedReasoningEfforts: arrayOrEmpty(descriptor?.supportedReasoningEfforts),
       });
     }
   }
-
-  // Older test or self-hosted deployments may expose only a flat model table.
-  if (result.size === 0 && source.models && typeof source.models === "object") {
-    for (const [model, descriptor] of Object.entries(source.models)) {
-      if (!descriptor || descriptor.available === false) continue;
-      const provider = String(descriptor.providerId || descriptor.provider || "").trim().toLowerCase();
-      if (!provider) continue;
-      result.set(model, {
-        provider,
-        model,
-        supportedReasoningModes: arrayOrEmpty(descriptor.supportedReasoningModes),
-        supportedReasoningEfforts: arrayOrEmpty(descriptor.supportedReasoningEfforts),
-      });
-    }
-  }
   return result;
+}
+
+function normalizeAdminModelLabBaseUrl(value) {
+  let url;
+  try {
+    url = new URL(requiredText(value, "baseUrl"));
+  } catch (cause) {
+    throw new TypeError(`baseUrl must be a valid URL: ${cause?.message || cause}`);
+  }
+  if (url.username || url.password) {
+    throw new TypeError("baseUrl must not contain credentials");
+  }
+  if (url.protocol === "https:") return url;
+  if (url.protocol === "http:" && isLoopbackHostname(url.hostname)) return url;
+  throw new TypeError("baseUrl must use HTTPS; HTTP is allowed only for loopback development");
+}
+
+function isLoopbackHostname(value) {
+  const hostname = String(value || "").trim().toLowerCase();
+  if (hostname === "localhost" || hostname === "[::1]" || hostname === "::1") return true;
+  const match = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/u.exec(hostname);
+  if (!match || match.slice(1).some((part) => Number(part) > 255)) return false;
+  return Number(match[1]) === 127;
 }
 
 export function formatMatrixMarkdown(report) {
@@ -960,7 +1025,22 @@ function validateConfiguration(configuration, availableModels) {
 function assertRequiredFeatures(capabilities) {
   const features = capabilities?.features || capabilities?.capabilities?.features || {};
   for (const name of ["createRun", "forkRun", "executeRun"]) {
-    if (features[name] === false) throw new Error(`Admin lab capability is unavailable: ${name}`);
+    if (features[name] !== true) throw new Error(`Admin lab capability is unavailable: ${name}`);
+  }
+}
+
+function assertPersistentFinalCallBudget(capabilities) {
+  const source = capabilities?.capabilities || capabilities || {};
+  const budget = source?.architecture?.finalCallBudget;
+  if (
+    budget?.configured !== true
+    || budget?.persistent !== true
+    || !String(budget?.storageKind || "").trim()
+    || budget?.storageKind === "unconfigured"
+  ) {
+    throw new Error(
+      "Admin lab must report a configured persistent final-call budget ledger before paid matrix runs",
+    );
   }
 }
 
