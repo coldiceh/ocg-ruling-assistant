@@ -462,8 +462,8 @@ test("backend answers bypass persistent browser cache and bust static assets", a
     readFile(new URL("../config.json", import.meta.url), "utf8"),
   ]);
   const config = JSON.parse(configText.replace(/^\uFEFF/u, ""));
-  assert.match(html, /src\/app\.js\?v=20260803-public-model-profile-1/u);
-  assert.match(html, /src\/styles\.css\?v=20260803-public-model-profile-1/u);
+  assert.match(html, /src\/app\.js\?v=20260806-admin-history-fit-1/u);
+  assert.match(html, /src\/styles\.css\?v=20260806-admin-history-fit-1/u);
   assert.match(config.answerApiUrl, /\?client=20260722-answer-version-1$/u);
   assert.match(app, /cache: "no-store"/u);
   assert.doesNotMatch(app, /backendAnswerCacheTtlMs|buildBackendCacheKey|readCachedBackendAnswer|writeCachedBackendAnswer|ocg-ruling-answer:v/u);
@@ -562,9 +562,10 @@ test("query_button_has_visible_pending_state", async () => {
 });
 
 test("admin_model_lab_is_hidden_and_requires_a_real_session", async () => {
-  const [html, app, adminAuthApi, adminSession] = await Promise.all([
+  const [html, app, css, adminAuthApi, adminSession] = await Promise.all([
     readFile(new URL("../index.html", import.meta.url), "utf8"),
     readFile(new URL("../src/app.js", import.meta.url), "utf8"),
+    readFile(new URL("../src/styles.css", import.meta.url), "utf8"),
     readFile(new URL("../api/admin-auth.js", import.meta.url), "utf8"),
     readFile(new URL("../backend/adminSession.mjs", import.meta.url), "utf8"),
   ]);
@@ -587,6 +588,8 @@ test("admin_model_lab_is_hidden_and_requires_a_real_session", async () => {
   assert.match(app, /adminFeatureEnabled\("history"\)/u);
   assert.match(html, /id="adminHistoryTitle">实验历史/u);
   assert.match(html, /id="adminQuestionHistoryTitle">后台历史提问/u);
+  assert.match(css, /\.admin-history-list li\s*\{[^}]*min-width:\s*0/u);
+  assert.match(css, /\.admin-history-list button\s*\{[^}]*max-width:\s*100%[^}]*overflow:\s*hidden/u);
   assert.match(html, /id="adminComparisonTitle">同一冻结证据模型对比/u);
   assert.match(html, /不会重新检索资料/u);
   assert.match(html, /最多 100 条；不等同于上方的模型实验历史/u);

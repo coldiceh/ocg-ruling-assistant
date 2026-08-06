@@ -738,10 +738,12 @@ export function createDeepSeekEvidencePreparationInvoke({
       thinkingMode: request.thinkingMode,
       reasoningEffort: request.reasoningEffort,
       signal: request.signal,
-      // The admin service owns every paid attempt and its budget reservation.
-      // Do not let the lower-level client issue an untracked second request
-      // after an HTTP 400 response-format rejection.
-      allowResponseFormatFallback: false,
+      // Evidence preparation may encounter DeepSeek-compatible gateways that
+      // reject JSON Output with an explicit HTTP 400. Reuse the JSON client's
+      // one-shot fallback, which removes only response_format. The client does
+      // not retry rate limits, server failures, transport errors, or final
+      // ruling calls through this evidence-only bridge.
+      allowResponseFormatFallback: true,
     });
   };
 }
