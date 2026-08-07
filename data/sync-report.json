@@ -1,9 +1,9 @@
 {
-  "generatedAt": "2026-08-07T13:43:15.503Z",
+  "generatedAt": "2026-08-07T19:22:56.940Z",
   "cardCount": 14342,
-  "rulingCount": 42346,
+  "rulingCount": 42347,
   "cardAliasCount": 35914,
-  "qaIndexCount": 28004,
+  "qaIndexCount": 28005,
   "syncAllReleasedCards": true,
   "syncOnlyReleasedCards": true,
   "maxCards": 0,
@@ -18,5 +18,9 @@
   "warnings": [],
   "sourceRetirementWarnings": [],
   "dataQualityWarnings": [],
-  "changedPaths": []
+  "changedPaths": [
+    "/data/card/10956",
+    "/data/card/11207",
+    "/data/card/11851"
+  ]
 }
