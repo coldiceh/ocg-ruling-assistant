@@ -6,6 +6,7 @@ import {
   DEFAULT_ADMIN_DECISION_PACKET_LIMITS,
   buildAdminEvidenceDecisionPacket,
   createAdminEvidenceArchive,
+  createAdminEvidenceSelectionContext,
   verifyAdminEvidenceArchive,
 } from "../backend/adminEvidenceArchive.mjs";
 
@@ -657,6 +658,7 @@ test("decision packet weights related rulings while preserving authoritative mec
   assert.deepEqual(
     first.modelPacket.policy.withinCategoryPriority,
     [
+      "mechanismOperationRelevance",
       "direct",
       "official",
       "current",
@@ -678,6 +680,130 @@ test("decision packet weights related rulings while preserving authoritative mec
   assert.equal(first.omittedManifest[0].bodyHash.length, 64);
   assert.equal(first.modelPacket.omissionSummary.manifestSha256.length, 64);
   assert.equal(first.modelPacket.completeness.evidenceSufficiency, "NOT_ASSESSED");
+});
+
+test("question operations keep the matching mechanism rule inside a bounded packet", () => {
+  const unrelatedRules = Array.from({ length: 20 }, (_, index) => ({
+    id: `unrelated-mechanism-${index + 1}`,
+    type: "rulebook",
+    sourceType: "official_rulebook",
+    official: true,
+    status: "current",
+    text: `无关机制${index + 1}：伤害计算采用攻击力与守备力。`,
+  }));
+  const archive = createAdminEvidenceArchive({
+    evidenceBuckets: {
+      rulebookCandidates: [
+        ...unrelatedRules,
+        {
+          id: "matching-return-mechanism",
+          type: "rulebook",
+          sourceType: "official_rulebook",
+          official: true,
+          status: "current",
+          text: "正在发动且处理后通常送去墓地的通常魔法或通常陷阱，不能在连锁处理中返回手牌。",
+        },
+      ],
+    },
+    metadata: {
+      selectionContext: createAdminEvidenceSelectionContext({
+        question: "对方刚发动通常陷阱，场上没有其他魔法陷阱时，能否连锁发动把场上的魔法陷阱全部返回手牌的效果？",
+      }),
+    },
+  });
+  const packet = buildAdminEvidenceDecisionPacket({
+    archive,
+    limits: {
+      maxItems: 1,
+      maxTotalBodyChars: 2_000,
+      maxBodyCharsPerItem: 2_000,
+    },
+  });
+
+  assert.deepEqual(
+    packet.modelPacket.evidenceItems.map((item) => item.evidenceId),
+    ["matching-return-mechanism"],
+  );
+  assert.ok(packet.includedManifest[0].operationRelevanceScore > 0);
+  assert.equal(packet.omittedManifest.length, unrelatedRules.length);
+  assert.equal(
+    packet.omittedManifest.every((item) => (
+      item.reason === "item_limit" && item.operationRelevanceScore === 0
+    )),
+    true,
+  );
+});
+
+test("printed operations can prioritize matching mechanisms without a decisive question phrase", () => {
+  const archive = createAdminEvidenceArchive({
+    cardTextCandidates: {
+      resolved: [{
+        id: "anonymous-card-text",
+        text: "这个效果发动后，将场上的1张卡除外。",
+      }],
+    },
+    evidenceBuckets: {
+      rulebookCandidates: [
+        {
+          id: "unrelated-destruction-rule",
+          type: "rulebook",
+          text: "被战斗破坏的怪兽在伤害步骤结束时送去墓地。",
+        },
+        {
+          id: "matching-banish-rule",
+          type: "rulebook",
+          text: "里侧表示除外的卡不能确认卡片信息。",
+        },
+      ],
+    },
+    metadata: {
+      selectionContext: createAdminEvidenceSelectionContext({
+        question: "这个效果可以发动吗？",
+      }),
+    },
+  });
+  const packet = buildAdminEvidenceDecisionPacket({
+    archive,
+    limits: {
+      maxItems: 2,
+      maxTotalBodyChars: 2_000,
+      maxBodyCharsPerItem: 2_000,
+    },
+  });
+
+  assert.deepEqual(
+    packet.modelPacket.evidenceItems.map((item) => item.evidenceId),
+    ["anonymous-card-text", "matching-banish-rule"],
+  );
+  assert.equal(
+    packet.omittedManifest.some((item) => (
+      item.evidenceIds.includes("unrelated-destruction-rule")
+      && item.reason === "item_limit"
+    )),
+    true,
+  );
+});
+
+test("selection context is deterministically bounded before it enters archive metadata", () => {
+  const context = createAdminEvidenceSelectionContext({
+    question: "问".repeat(100_000),
+    questions: Array.from({ length: 40 }, (_, index) => ({
+      questionId: `q${index + 1}`,
+      text: `子问题${index + 1}`,
+    })),
+  });
+
+  assert.equal(context.truncated, true);
+  assert.equal(context.texts.length, 1);
+  assert.equal(context.charCount <= 24_000, true);
+  assert.equal(context.byteCount <= 32 * 1024, true);
+  assert.deepEqual(context, createAdminEvidenceSelectionContext({
+    question: "问".repeat(100_000),
+    questions: Array.from({ length: 40 }, (_, index) => ({
+      questionId: `q${index + 1}`,
+      text: `子问题${index + 1}`,
+    })),
+  }));
 });
 
 test("many resolved card texts cannot starve related rulings and mechanism evidence", () => {

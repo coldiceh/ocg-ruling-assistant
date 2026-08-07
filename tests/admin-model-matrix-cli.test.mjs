@@ -97,6 +97,48 @@ test("admin matrix client binds an uncharged reservation release to run and atte
   });
   assert.equal(requests[1].options.headers["x-csrf-token"], "csrf-test");
 });
+
+test("admin matrix client binds total-only reconciliation and can list persisted runs", async () => {
+  const requests = [];
+  const client = createAdminModelLabHttpClient({
+    baseUrl: "https://lab.example.test",
+    origin: "https://admin.example.test",
+    password: "test-password",
+    fetchImpl: async (url, options) => {
+      requests.push({ url: String(url), options });
+      if (String(url).endsWith("/api/admin-auth")) {
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers({ "set-cookie": "admin_session=test; Path=/; HttpOnly" }),
+          async json() {
+            return { authenticated: true, csrfToken: "csrf-test" };
+          },
+        };
+      }
+      return {
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        async json() { return { ok: true, data: {} }; },
+      };
+    },
+  });
+
+  await client.login();
+  await client.reconcileRelayTotalOnlyUsage({ runId: "run-2", attemptId: "attempt-2" });
+  await client.listRuns({ limit: 50, cursor: "cursor-1" });
+
+  assert.deepEqual(JSON.parse(requests[1].options.body), {
+    action: "reconcile-relay-total-only-usage",
+    runId: "run-2",
+    confirmation: "relay-total-only-usage-reconciliation/v1:run-2:attempt-2",
+  });
+  const listUrl = new URL(requests[2].url);
+  assert.equal(listUrl.searchParams.get("action"), "list");
+  assert.equal(listUrl.searchParams.get("limit"), "50");
+  assert.equal(listUrl.searchParams.get("cursor"), "cursor-1");
+});
 import { createEvidenceSnapshot } from "../backend/adminEvidenceSnapshot.mjs";
 
 test("matrix creates one Flash source, forks frozen evidence, skips unavailable models, and continues after failure", async () => {

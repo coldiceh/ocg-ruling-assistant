@@ -11,6 +11,7 @@ import {
   assertAdminEvidenceArchive,
   buildAdminEvidenceDecisionPacket,
   createAdminEvidenceArchive,
+  createAdminEvidenceSelectionContext,
 } from "./adminEvidenceArchive.mjs";
 import {
   assertAdminEvidenceSnapshot,
@@ -1341,6 +1342,11 @@ export function createAdminModelLabService({
       retrievalWarnings: retrieval?.retrievalWarnings || [],
       metadata: {
         questionSha256: sha256(question),
+        selectionContext: createAdminEvidenceSelectionContext({
+          question,
+          questions,
+          providedFacts: run.executionProfile.providedFacts,
+        }),
         retrievalMetadata: collectRetrievalMetadata(retrieval),
       },
     });

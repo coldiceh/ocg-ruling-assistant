@@ -25,6 +25,10 @@ export const DEFAULT_ADMIN_DECISION_PACKET_LIMITS = Object.freeze({
   maxConflictReferencesPerItem: 8,
 });
 
+const MAX_ADMIN_EVIDENCE_SELECTION_CONTEXT_ITEMS = 24;
+const MAX_ADMIN_EVIDENCE_SELECTION_CONTEXT_CHARS = 24_000;
+const MAX_ADMIN_EVIDENCE_SELECTION_CONTEXT_BYTES = 32 * 1024;
+
 const MIN_ADMIN_DECISION_PACKET_BYTES = 4 * 1024;
 const MIN_CONFLICT_ITEM_BYTES = 768;
 
@@ -68,6 +72,44 @@ const ALL_SUBSTANTIVE_FIELDS = new Set([
 ]);
 const OPERATIONAL_COLLECTION_PATTERN = /(?:unresolved|ambiguous|warning|query|debug|retrievedcards|fuzzyresolved|baigeresolved)/iu;
 const TRUNCATION_WARNING_PATTERN = /(?:limited|truncated|limit_exceeded|candidate_pool_incomplete)/iu;
+
+// These are card-name-neutral operation/mechanism features. They let the
+// bounded model packet retain rules about operations that actually occur in
+// the question or printed card text, without turning retrieval terms into a
+// ruling or adding scenario-specific branches.
+const MECHANISM_RELEVANCE_FEATURES = Object.freeze([
+  feature("return_to_hand", 24, true, /(?:回手|(?:返回|放回|回到).{0,16}(?:手牌|手卡|手札)|手札.{0,10}(?:戻|返)|return.{0,24}(?:to )?(?:the )?hand)/isu),
+  feature("return_to_deck", 24, true, /(?:(?:返回|放回|回到).{0,16}(?:卡组|牌组|デッキ)|デッキ.{0,10}(?:戻|返)|return.{0,24}(?:to )?(?:the )?deck)/isu),
+  feature("destroy", 14, true, /(?:破坏|破壊|destroy)/iu),
+  feature("banish", 14, true, /(?:除外|banish)/iu),
+  feature("send_to_graveyard", 14, true, /(?:送去墓地|送入墓地|送墓|墓地へ送|send.{0,20}(?:to )?(?:the )?(?:graveyard|gy))/isu),
+  feature("special_summon", 14, true, /(?:特殊召唤|特殊召喚|特殊召喚する|special summon)/iu),
+  feature("summon_material", 14, true, /(?:融合素材|同调素材|同調素材|超量素材|连接素材|連結素材|リンク素材|仪式召唤.{0,12}解放|儀式召喚.{0,12}リリース|summon material)/isu),
+  feature("negate", 14, true, /(?:无效|無效|negate)/iu),
+  feature("target", 12, true, /(?:取对象|取對象|作为对象|作為對象|对象.{0,8}(?:不在|离开|丢失)|対象|target)/isu),
+  feature("cost", 12, true, /(?:cost|コスト|支付|支払|作为代价|作為代價)/iu),
+  feature("tribute", 12, true, /(?:解放|リリース|tribute)/iu),
+  feature("draw", 10, true, /(?:抽卡|抽牌|ドロー|draw)/iu),
+  feature("discard", 10, true, /(?:舍弃|丢弃|捨て|discard)/iu),
+  feature("reveal", 10, true, /(?:公开|公開|给对方观看|給對方觀看|展示|見せ|reveal|show.{0,12}(?:hand|opponent))/isu),
+  feature("control_change", 14, true, /(?:控制权|控制權|コントロール|control).{0,24}(?:变更|轉移|转移|改变|移|change|transfer|gain)/isu),
+  feature("replacement", 16, true, /(?:(?:代替|替代).{0,12}(?:破坏|破壊|处理|處理)|(?:破坏|破壊).{0,12}(?:代替|替代|代わり)|replacement)/isu),
+  feature("effect_duration_or_reapply", 12, true, /(?:只要.{0,24}存在|存在.{0,24}期间|存在する限り|恢复适用|恢復適用|重新适用|再次适用|再び適用|re-?appl)/isu),
+  feature("timing_window", 12, true, /(?:发动时点|發動時點|时点|時点|错过时点|錯過時點|タイミング|timing window|miss.{0,12}timing)/isu),
+  feature("sequential_processing", 10, true, /(?:然后|那之后|之后|之後|接着|再进行|その後|then|after that).{0,40}(?:处理|處理|适用|適用|进行|行う|resolve|apply)?/isu),
+  feature("extra_deck_restriction", 14, true, /(?:不能|只能|不得|できない|のみ).{0,32}(?:额外卡组|額外牌組|エクストラデッキ|extra deck).{0,16}(?:特殊召唤|特殊召喚|special summon)|(?:额外卡组|額外牌組|エクストラデッキ|extra deck).{0,32}(?:不能|只能|不得|できない|のみ)/isu),
+  feature("spell_trap", 6, false, /(?:魔法.{0,4}陷阱|魔法.{0,4}罠|魔陷|spell.{0,8}trap)/isu),
+  feature("monster", 3, false, /(?:怪兽|怪獸|モンスター|monster)/iu),
+  feature("chain", 7, false, /(?:连锁|連鎖|チェーン|\bchain\b|\bC\d+\b)/iu),
+  feature("activated_card_pending", 10, false, /(?:正在发动|發動中的|发动后|發動後|连锁处理中|連鎖處理中|チェーン処理中|activated.{0,24}(?:card|spell|trap)|pending.{0,16}(?:chain|resolution))/isu),
+  feature("activation_legality", 4, false, /(?:(?:可以|能|可否|能否|不能|无法|不得).{0,16}(?:发动|發動|発動)|(?:发动|發動|発動).{0,16}(?:条件|合法|できる|できない)|activation.{0,16}(?:legal|condition|require))/isu),
+  feature("mandatory_processing", 5, false, /(?:必须|必須|必ず|必做|必须进行|must|mandatory)/iu),
+  feature("no_applicable_candidate", 7, false, /(?:没有其他|不存在其他|并无其他|无其他|没有.{0,16}(?:能够|可以|可)|没有可|不存在可|no other|no applicable|none available)/isu),
+  feature("field", 3, false, /(?:场上|場上|フィールド|on (?:the )?field)/iu),
+  feature("hand", 3, false, /(?:手牌|手卡|手札|\bhand\b)/iu),
+  feature("deck", 3, false, /(?:卡组|牌组|デッキ|\bdeck\b)/iu),
+  feature("graveyard", 3, false, /(?:墓地|graveyard|\bGY\b)/iu),
+]);
 
 /**
  * Builds a lossless audit archive for the candidate collections supplied by
@@ -287,6 +329,64 @@ export function collectAdminEvidenceCollections({
     throw new TypeError(`duplicate evidence collection name: ${duplicateNames[0]}`);
   }
   return result;
+}
+
+/**
+ * Creates a small audit-safe relevance context for bounded packet selection.
+ * The context influences ordering only: it cannot add, delete, or reinterpret
+ * evidence, and it is never treated as a source supporting the final ruling.
+ */
+export function createAdminEvidenceSelectionContext({
+  question = "",
+  questions = [],
+  providedFacts = [],
+} = {}) {
+  const sourceTexts = [
+    question,
+    ...arrayValue(questions).map((item) => (
+      typeof item === "string" ? item : item?.text || item?.question || ""
+    )),
+    ...arrayValue(providedFacts).flatMap((item) => selectionContextScalarStrings(item)),
+  ];
+  const texts = [];
+  const seen = new Set();
+  let usedChars = 0;
+  let usedBytes = 0;
+  let truncated = false;
+  for (const sourceText of sourceTexts) {
+    if (texts.length >= MAX_ADMIN_EVIDENCE_SELECTION_CONTEXT_ITEMS) {
+      truncated = true;
+      break;
+    }
+    const normalized = normalizeSubstantiveText(sourceText);
+    if (!normalized || seen.has(normalized)) continue;
+    const remainingChars = MAX_ADMIN_EVIDENCE_SELECTION_CONTEXT_CHARS - usedChars;
+    const remainingBytes = MAX_ADMIN_EVIDENCE_SELECTION_CONTEXT_BYTES - usedBytes;
+    if (remainingChars <= 0 || remainingBytes <= 0) {
+      truncated = true;
+      break;
+    }
+    const bounded = utf8PrefixWithin(normalized, remainingChars, remainingBytes);
+    if (!bounded) {
+      truncated = true;
+      break;
+    }
+    texts.push(bounded);
+    seen.add(normalized);
+    usedChars += bounded.length;
+    usedBytes += byteLength(bounded);
+    if (bounded.length < normalized.length) {
+      truncated = true;
+      break;
+    }
+  }
+  return canonicalizeJson({
+    role: "packet_selection_relevance_only",
+    texts,
+    truncated,
+    charCount: usedChars,
+    byteCount: usedBytes,
+  });
 }
 
 /**
@@ -1211,7 +1311,7 @@ function aggregateDecisionCandidates(archive) {
     }
     bySubstance.set(occurrence.substanceHash, candidate);
   }
-  return layerDecisionCandidates([...bySubstance.values()]
+  const aggregated = [...bySubstance.values()]
     .map((candidate) => {
       const {
         representativeOccurrence: representative,
@@ -1234,7 +1334,78 @@ function aggregateDecisionCandidates(archive) {
         categories: [...candidate.categories].sort(),
         sourceCollections: [...candidate.sourceCollections].sort(),
       };
-    }));
+    });
+  const relevanceContext = buildMechanismRelevanceContext(archive, aggregated);
+  return layerDecisionCandidates(aggregated.map((candidate) => ({
+    ...candidate,
+    operationRelevanceScore:
+      candidate.category === ADMIN_EVIDENCE_CATEGORIES.MECHANISM_RULE
+        ? mechanismOperationRelevance(candidate.bodyText, relevanceContext)
+        : 0,
+  })));
+}
+
+function buildMechanismRelevanceContext(archive, candidates) {
+  const wrappers = new Map(archive.wrappers.map((item) => [item.wrapperHash, item]));
+  const ruleQueryTexts = archive.occurrences
+    .filter((occurrence) => /ruleSearchQueries/iu.test(occurrence.collection))
+    .flatMap((occurrence) => selectionContextScalarStrings(
+      wrappers.get(occurrence.wrapperHash)?.metadata,
+    ));
+  const selectionTexts = selectionContextScalarStrings(
+    archive.metadata?.selectionContext,
+  );
+  const cardTexts = candidates
+    .filter((candidate) => (
+      candidate.category === ADMIN_EVIDENCE_CATEGORIES.PARSED_CARD_TEXT
+    ))
+    .map((candidate) => candidate.bodyText);
+  const boundedContext = createAdminEvidenceSelectionContext({
+    question: selectionTexts.join("\n"),
+    questions: ruleQueryTexts.map((text, index) => ({
+      questionId: `rule-query-${index + 1}`,
+      text,
+    })),
+    providedFacts: cardTexts,
+  });
+  return extractMechanismFeatureSet(boundedContext.texts.join("\n"));
+}
+
+function mechanismOperationRelevance(bodyText, contextFeatures) {
+  if (!(contextFeatures instanceof Set) || contextFeatures.size === 0) return 0;
+  const candidateFeatures = extractMechanismFeatureSet(bodyText);
+  const shared = MECHANISM_RELEVANCE_FEATURES.filter((item) => (
+    contextFeatures.has(item.id) && candidateFeatures.has(item.id)
+  ));
+  if (!shared.some((item) => item.core)) return 0;
+  return shared.reduce((total, item) => total + item.weight, 0);
+}
+
+function extractMechanismFeatureSet(value) {
+  const text = normalizeSubstantiveText(value);
+  if (!text) return new Set();
+  return new Set(MECHANISM_RELEVANCE_FEATURES
+    .filter((item) => item.pattern.test(text))
+    .map((item) => item.id));
+}
+
+function feature(id, weight, core, pattern) {
+  return Object.freeze({ id, weight, core, pattern });
+}
+
+function selectionContextScalarStrings(value, depth = 0) {
+  if (depth > 8 || value === null || value === undefined) return [];
+  if (typeof value === "string" || typeof value === "number") {
+    const normalized = normalizeSubstantiveText(String(value));
+    return normalized ? [normalized] : [];
+  }
+  if (Array.isArray(value)) {
+    return value.flatMap((item) => selectionContextScalarStrings(item, depth + 1));
+  }
+  if (!isPlainObject(value)) return [];
+  return Object.keys(value)
+    .sort()
+    .flatMap((key) => selectionContextScalarStrings(value[key], depth + 1));
 }
 
 function compareRepresentativeOccurrences(left, right) {
@@ -1326,7 +1497,8 @@ function layerDecisionCandidates(candidates) {
 }
 
 function compareDecisionCandidatesWithinCategory(left, right) {
-  return Number(right.direct) - Number(left.direct)
+  return mechanismOperationRelevanceDelta(left, right)
+    || Number(right.direct) - Number(left.direct)
     || Number(right.authority === "official") - Number(left.authority === "official")
     || Number(right.current) - Number(left.current)
     || left.bestSourceCollectionPriority - right.bestSourceCollectionPriority
@@ -1335,6 +1507,15 @@ function compareDecisionCandidatesWithinCategory(left, right) {
       - numberOrNegativeInfinity(left.relevanceScore)
     || left.evidenceIds[0].localeCompare(right.evidenceIds[0], "en")
     || left.substanceHash.localeCompare(right.substanceHash, "en");
+}
+
+function mechanismOperationRelevanceDelta(left, right) {
+  if (
+    left.category !== ADMIN_EVIDENCE_CATEGORIES.MECHANISM_RULE
+    || right.category !== ADMIN_EVIDENCE_CATEGORIES.MECHANISM_RULE
+  ) return 0;
+  return Number(right.operationRelevanceScore || 0)
+    - Number(left.operationRelevanceScore || 0);
 }
 
 function sourceCollectionPriority(collection) {
@@ -1425,6 +1606,7 @@ function omittedEntry(candidate, reason) {
     relevanceScore: Number.isFinite(candidate.relevanceScore)
       ? candidate.relevanceScore
       : null,
+    operationRelevanceScore: candidate.operationRelevanceScore || 0,
     bestCollectionRank: candidate.bestCollectionRank,
     sourceCollections: candidate.sourceCollections,
     priorityRank: categoryPriority(candidate.category),
@@ -1528,6 +1710,7 @@ function createIncludedManifest(includedSelections) {
     bodyHash: candidate.bodyHash,
     evidenceIds: candidate.evidenceIds,
     occurrenceIds: candidate.occurrenceIds,
+    operationRelevanceScore: candidate.operationRelevanceScore || 0,
   }));
 }
 
@@ -1574,6 +1757,7 @@ function createModelPacketSnapshot({
       categoryMinimumGuarantee:
         "weighted_grounding_and_support_coverage_without_category_starvation",
       withinCategoryPriority: [
+        "mechanismOperationRelevance",
         "direct",
         "official",
         "current",
