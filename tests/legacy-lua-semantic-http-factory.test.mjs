@@ -694,6 +694,7 @@ test("production gate is zero-network without OCG_ENGINE_URL and injects configu
   assert.equal(createConfiguredLegacyLuaSemanticPacketFactory({
     env: {},
     fetchImpl,
+    precomputedCache: null,
   }), null);
   assert.equal(fetchCalls, 0);
 
@@ -701,6 +702,7 @@ test("production gate is zero-network without OCG_ENGINE_URL and injects configu
   const factory = createConfiguredLegacyLuaSemanticPacketFactory({
     env: { OCG_ENGINE_URL: "https://engine.example.test" },
     fetchImpl,
+    precomputedCache: null,
     facadeFactory: (options) => {
       captured = options;
       return {
@@ -723,6 +725,119 @@ test("production gate is zero-network without OCG_ENGINE_URL and injects configu
   assert.equal(captured.env.OCG_ENGINE_URL,
     "https://engine.example.test");
   assert.equal(fetchCalls, 0);
+});
+
+test("production composition uses precomputed evidence before live fallback", async () => {
+  let liveCalls = 0;
+  const cachedPacket = Object.freeze({
+    effectCandidates: Object.freeze([{ fixture: true }]),
+  });
+  const cachedFactory = () => cachedPacket;
+  const factory = createConfiguredLegacyLuaSemanticPacketFactory({
+    env: { OCG_ENGINE_URL: "https://engine.example.test" },
+    precomputedCache: { entries: [] },
+    precomputedFactory: () => cachedFactory,
+    facadeFactory: () => ({
+      async resolveLegacyLuaSource() {
+        liveCalls += 1;
+        throw new Error("live fallback must not run on a static hit");
+      },
+    }),
+  });
+  const packet = await factory({
+    cardResolution: { resolvedCards: [{ passcode: "12345678" }] },
+  });
+  assert.equal(packet, cachedPacket);
+  assert.equal(liveCalls, 0);
+});
+
+test("production composition does not treat a partial static hit as complete", async () => {
+  let sourceCalls = 0;
+  let mergedPackets = null;
+  const cachedPacket = Object.freeze({
+    effectCandidates: Object.freeze([{ fixture: "static" }]),
+    unknownReasons: Object.freeze([Object.freeze({
+      code: "LEGACY_LUA_PRECOMPUTED_COVERAGE_INCOMPLETE",
+    })]),
+  });
+  const livePacket = createLegacyLuaUnknownPacket({
+    code: "LIVE_PARTIAL_FIXTURE",
+    message: "live side remains partial",
+  });
+  const mergedPacket = Object.freeze({ fixture: "merged" });
+  const factory = createConfiguredLegacyLuaSemanticPacketFactory({
+    env: { OCG_ENGINE_URL: "https://engine.example.test" },
+    precomputedCache: { entries: [] },
+    precomputedFactory: () => () => cachedPacket,
+    facadeFactory: () => ({
+      async resolveLegacyLuaSource(passcode) {
+        sourceCalls += 1;
+        return sourceDocument(passcode);
+      },
+    }),
+    collectPacket: async () => livePacket,
+    packetMerger(options) {
+      mergedPackets = options.packets;
+      return mergedPacket;
+    },
+  });
+
+  const packet = await factory({
+    cardResolution: { resolvedCards: [{ passcode: "12345678" }] },
+  });
+  assert.equal(sourceCalls, 1);
+  assert.deepEqual(mergedPackets, [cachedPacket, livePacket]);
+  assert.equal(packet, mergedPacket);
+});
+
+test("production composition uses the v2 manifest and lazy shard loader by default", async () => {
+  const manifest = { schemaVersion: "fixture-v2-manifest" };
+  const loadShard = async () => ({ schemaVersion: "fixture-v2-shard" });
+  const cachedPacket = Object.freeze({
+    effectCandidates: Object.freeze([{ fixture: "v2" }]),
+  });
+  let captured = null;
+  const factory = createConfiguredLegacyLuaSemanticPacketFactory({
+    env: {},
+    precomputedManifest: manifest,
+    precomputedShardLoader: loadShard,
+    shardedPrecomputedFactory(options) {
+      captured = options;
+      return async () => cachedPacket;
+    },
+  });
+
+  assert.equal(typeof factory, "function");
+  assert.equal(await factory({ cards: [{ cid: "1001" }] }), cachedPacket);
+  assert.equal(captured.manifest, manifest);
+  assert.equal(captured.loadShard, loadShard);
+});
+
+test("production composition falls through a static miss to the live factory", async () => {
+  let sourceCalls = 0;
+  const factory = createConfiguredLegacyLuaSemanticPacketFactory({
+    env: { OCG_ENGINE_URL: "https://engine.example.test" },
+    precomputedCache: { entries: [] },
+    precomputedFactory: () => () => createLegacyLuaUnknownPacket({
+      code: "STATIC_MISS",
+      message: "static miss",
+    }),
+    facadeFactory: () => ({
+      async resolveLegacyLuaSource(passcode) {
+        sourceCalls += 1;
+        return sourceDocument(passcode);
+      },
+    }),
+    collectPacket: async () => createLegacyLuaUnknownPacket({
+      code: "LIVE_FALLBACK",
+      message: "live fallback",
+    }),
+  });
+  const packet = await factory({
+    cardResolution: { resolvedCards: [{ passcode: "12345678" }] },
+  });
+  assert.equal(packet.unknownReasons[0].code, "LIVE_FALLBACK");
+  assert.equal(sourceCalls, 1);
 });
 
 test("missing passcode, card limit, and unavailable endpoint are typed UNKNOWN", async (t) => {

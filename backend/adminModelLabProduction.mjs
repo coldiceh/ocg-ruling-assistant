@@ -116,6 +116,9 @@ function createAdminModelLabComposedService({
   if (!readEnabled(env.ADMIN_MODEL_LAB_ENABLED)) {
     throw productionUnavailable("ADMIN_MODEL_LAB_ENABLED is not enabled");
   }
+  const finalCallBudgetBypassDailyLimit = readEnabled(
+    env.ADMIN_MODEL_LAB_BYPASS_DAILY_BUDGET,
+  );
 
   const resolvedRecordStore = recordStore || createConfiguredAdminLabRecordStore({
     env,
@@ -244,6 +247,7 @@ function createAdminModelLabComposedService({
       },
       legacyLuaSemanticPacketFactory:
         resolvedLegacyLuaSemanticPacketFactory,
+      finalCallBudgetBypassDailyLimit,
       env,
     });
   }

@@ -278,11 +278,53 @@ test("production composition exposes an explicitly persistent final-call budget 
   const capabilities = await service.capabilities();
   assert.equal(capabilities.architecture.finalCallBudget.configured, true);
   assert.equal(capabilities.architecture.finalCallBudget.persistent, true);
+  assert.equal(capabilities.architecture.finalCallBudget.dailyLimitBypassed, false);
+  assert.equal(capabilities.architecture.finalCallBudget.usageMeteringRetained, true);
   assert.equal(
     capabilities.architecture.finalCallBudget.storageKind,
     "test-persistent-final-budget",
   );
   assert.deepEqual(capabilities.architecture.finalCallBudget.pools, []);
+});
+
+test("production reads the admin-only daily-budget bypass from an explicit server setting", async () => {
+  const persistentRunStorage = Object.freeze({
+    ...createMemoryAdminRunStorage(),
+    kind: "test-persistent-run-storage",
+    persistent: true,
+  });
+  const service = createAdminModelLabProductionService({
+    env: {
+      ...ENABLED_ENV,
+      OPENAI_API_KEY: "server-only-test-key",
+      ADMIN_MODEL_LAB_BYPASS_DAILY_BUDGET: "true",
+    },
+    fetchImpl: async () => {
+      throw new Error("network must not run");
+    },
+    recordStore: persistentRecordStore(),
+    runStore: createAdminRunStore({ storage: persistentRunStorage }),
+    finalCallBudgetLedger: persistentBudgetLedger(),
+    deepSeekProvider: {},
+    openAIProvider: {
+      providerId: "openai",
+      async create() {
+        throw new Error("final provider must not run during capability inspection");
+      },
+    },
+  });
+
+  const capabilities = await service.capabilities();
+  assert.equal(capabilities.architecture.finalCallBudget.dailyLimitBypassed, true);
+  assert.equal(capabilities.architecture.finalCallBudget.usageMeteringRetained, true);
+  const openAi = capabilities.providers.providers.find(
+    (provider) => provider.providerId === "openai",
+  );
+  const terra = openAi.models.find((model) => model.modelId === "gpt-5.6-terra");
+  assert.equal(terra.transportAvailable, true);
+  assert.equal(terra.budgetDailyLimitBypassed, true);
+  assert.equal(terra.budgetAvailable, true);
+  assert.equal(terra.available, true);
 });
 
 test("production without a budget ledger fails closed before final provider transport", async () => {

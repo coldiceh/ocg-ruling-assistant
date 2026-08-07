@@ -66,6 +66,13 @@ usage 与版本化人民币价格都存在时，reservation 按实际估价结�
 `RELAY` 不是有效的三模型共享池；只设置
 `ADMIN_FINAL_BUDGET_RELAY_DAILY_CNY` 不会给 Sol、Terra 或 Luna 开通额度。
 
+仅在管理员明确批准了不受日额度限制的付费实验时，可在服务器环境设置
+`ADMIN_MODEL_LAB_BYPASS_DAILY_BUDGET=true`。它默认关闭，只由已鉴权的管理模型实验室组合层读取，
+不会进入公开问答的模型环境。开启后，管理实验的证据准备、primary 和 directed repair
+都不创建或结算日额度 reservation；供应商返回的 Token、分阶段耗时与估算费用仍写入 run
+和实验历史。该开关不会改变公开 API 的 `API_DAILY_BUDGET_CNY`，实验结束后应恢复为
+`false`。
+
 ## DeepSeek 证据准备内容恢复
 
 证据准备默认只有一次模型提交。唯一的自动恢复条件是 DeepSeek 已明确返回 HTTP 200，

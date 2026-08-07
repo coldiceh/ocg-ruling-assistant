@@ -77,6 +77,12 @@ Upstash Redis；未配置、没有样本或存储失败时会明确显示不可�
 
 公开问答由 DeepSeek V4 Flash 准备检索证据，并默认由 DeepSeek V4 Flash（思考 high）生成最终裁定；公开主页面不再提供 GLM 5.2、Kimi 或第三方中转选项。GLM、Kimi 与第三方中转 GPT-5.6 Sol/Terra/Luna 只保留在隔离的管理模型实验室中，中转结果始终标注“模型身份未验证”；设置中转 key 不会注册公开 profile，也不会改变公开默认模型。旧的 `PUBLIC_RULING_MODEL_PROFILE=glm-5.2-high` 不会被静默映射到 DeepSeek，部署时必须删除该变量或明确改为 `deepseek-v4-flash-high`，否则公开配置会 fail-closed。公开 API 继续受 `API_DAILY_BUDGET_CNY` 总池约束；管理实验中的 DeepSeek 证据准备和各模型最终调用另受持久化 `ADMIN_FINAL_BUDGET_*` 账本约束。DeepSeek Flash/Pro 共用 `DEEPSEEK` 日池；Relay Sol、Terra、Luna 分别使用 `RELAY_SOL`、`RELAY_TERRA`、`RELAY_LUNA`，不是一个共享 Relay 池。这些额度不会增加或替代公开额度。中转的临时本地配置和安全边界见 `docs/relay-provider.md`。
 
+管理员明确批准付费模型实验不受项目日额度限制时，可仅在服务器环境设置
+`ADMIN_MODEL_LAB_BYPASS_DAILY_BUDGET=true`。该开关默认关闭，只作用于已鉴权的管理实验室，
+不改变公开 API 的 `API_DAILY_BUDGET_CNY`。开启后，证据准备、primary 和 directed repair
+不占用 `ADMIN_FINAL_BUDGET_*` reservation，但仍保留供应商返回的 Token、真实耗时和费用记录；
+Relay 费用仍是未验证估算，最终扣费以供应商后台为准。这是短期实验开关，实验结束后应恢复为 `false`。
+
 付费最终请求前还会运行 `productionReadiness`：每个已发现的候选卡名必须唯一绑定
 到稳定身份，并且对应完整、未节选的卡文确实出现在模型可见 Packet 中；未解析、
 歧义、被省略、卡文缺失或卡文被截断都会在 provider transport 之前 fail-closed。
@@ -129,6 +135,14 @@ SHA-256、版本、能力清单与 Lua API 语义注册表，并限制卡数、�
 
 - `docs/ocg-engine-integration.md`
 - `docs/ocg-engine-quick-tunnel.md`
+
+助手已支持版本化 manifest、按 CID/passcode/精确别名索引及按题懒加载 shard 的 v2
+静态 Lua 缓存。仓库只有在离线构建并提交
+`data/legacy-lua-semantic-cache-v2/manifest.json` 与对应 shards 后才会启用它；未生成完整缓存时不会
+退回少量测试卡 PoC，而是显式降级为 typed `UNKNOWN`。可先用
+`pnpm run build:legacy-lua-cache -- --plan-only` 只生成规模与耗时估算，再在 CI/离线单进程中执行完整构建。
+完成预编译后，本地电脑关机也不会让线上助手丢失已编译卡片的语义；实时内核只处理静态未命中、
+新卡或脚本版本变化，以及必须运行对局状态的动态模拟。
 
 ### 本地一键联调
 

@@ -112,6 +112,81 @@ export function createLegacyLuaUnknownPacket({
 }
 
 /**
+ * Merges already validated packet envelopes without trusting caller-provided
+ * candidate or resource fields. Packet-level merging is required when a
+ * precomputed cache covers only part of a question and the live sidecar also
+ * returns a partial result. Conflicting resource bindings fail closed.
+ */
+export function mergeLegacyLuaSemanticPackets({
+  packets = [],
+  maxCandidates = Number.MAX_SAFE_INTEGER,
+  maxSerializedBytes = null,
+} = {}) {
+  try {
+    if (!Array.isArray(packets) || packets.length === 0) {
+      throw contractError(
+        "LEGACY_LUA_PACKET_MERGE_INVALID",
+        "legacy Lua packet merge requires at least one packet",
+      );
+    }
+    const normalized = packets.map(validateLegacyLuaSemanticPacket);
+    const resourcesById = new Map();
+    const includedByKey = new Map();
+    const omittedByKey = new Map();
+    for (const packet of normalized) {
+      for (const resource of packet.resources) {
+        const previous = resourcesById.get(resource.resourceId);
+        if (previous && canonicalLegacyLuaStringify(previous) !==
+            canonicalLegacyLuaStringify(resource)) {
+          throw contractError(
+            "LEGACY_LUA_PACKET_MERGE_CONFLICT",
+            "legacy Lua packets bind the same resourceId to different resources",
+            { resourceId: resource.resourceId },
+          );
+        }
+        resourcesById.set(resource.resourceId, resource);
+      }
+      for (const candidate of packet.effectCandidates) {
+        const key = mergedCandidateKey(candidate);
+        const previous = includedByKey.get(key);
+        if (previous && canonicalLegacyLuaStringify(previous) !==
+            canonicalLegacyLuaStringify(candidate)) {
+          throw contractError(
+            "LEGACY_LUA_PACKET_MERGE_CONFLICT",
+            "legacy Lua packets bind one candidate digest to different candidates",
+            { resourceId: candidate.resourceId },
+          );
+        }
+        includedByKey.set(key, candidate);
+        omittedByKey.delete(key);
+      }
+      for (const omitted of packet.omittedCandidates) {
+        const key = mergedCandidateKey(omitted);
+        if (!includedByKey.has(key) && !omittedByKey.has(key)) {
+          omittedByKey.set(key, omitted);
+        }
+      }
+    }
+    return buildPacketFromSummaries({
+      resources: [...resourcesById.values()],
+      included: [...includedByKey.values()],
+      omitted: [...omittedByKey.values()],
+      candidateLimit: normalizeCandidateLimit(maxCandidates),
+      byteLimit: normalizeByteLimit(maxSerializedBytes),
+      unknownReasons: normalizeUnknownReasons(normalized.flatMap((packet) =>
+        packet.unknownReasons
+      )),
+    });
+  } catch (error) {
+    return createLegacyLuaUnknownPacket({
+      code: error?.code || "LEGACY_LUA_PACKET_MERGE_INVALID",
+      message: error instanceof Error ? error.message : String(error),
+      details: jsonDetails(error?.details),
+    });
+  }
+}
+
+/**
  * Finalizes the resource artifact produced by the client. Invalid resource
  * material is intentionally rejected here; callers convert that rejection to
  * a TYPED_UNKNOWN resource before packet construction.
@@ -345,9 +420,21 @@ export function projectLegacyLuaSemanticPacketForModel(
   const packet = validateLegacyLuaSemanticPacket(value);
   const candidateLimit = normalizeCandidateLimit(maxCandidates);
   const checkLimit = normalizeCandidateLimit(maxChecksPerCandidate);
+  const resourcesById = new Map(packet.resources.map((resource) => [
+    resource.resourceId,
+    resource,
+  ]));
   const candidateEntries = packet.effectCandidates
     .slice(0, candidateLimit)
-    .map((candidate) => {
+    .flatMap((candidate) => {
+      const sourceBinding = projectLegacyLuaCandidateSourceBinding(
+        resourcesById.get(candidate.resourceId),
+      );
+      // A candidate without a complete source binding cannot be safely tied to
+      // a resolved card after the optional top-level resources manifest is
+      // removed for the 8 KiB model envelope. Omit it fail-closed instead of
+      // exposing an apparently usable but source-free semantic candidate.
+      if (!sourceBinding) return [];
       const artifact = candidate.semanticArtifact || {};
       const plan = artifact.plan || artifact.partialPlan || {};
       const analysis = candidate.analysisArtifact || {};
@@ -358,6 +445,7 @@ export function projectLegacyLuaSemanticPacketForModel(
         resourceId: candidate.resourceId,
         semanticEffectIdentity: candidate.semanticEffectIdentity,
         candidateSha256: candidate.candidateSha256,
+        sourceBinding,
         kind: candidate.kind,
         verdict: "UNKNOWN",
         candidateVerdict: ["TRUE", "FALSE", "UNKNOWN"].includes(
@@ -365,22 +453,7 @@ export function projectLegacyLuaSemanticPacketForModel(
         ) ? analysis.candidateVerdict : "UNKNOWN",
         activationLegalityChecks: sourceChecks
           .slice(0, checkLimit)
-          .map((check) => ({
-            callbackSlot: modelString(check?.callbackSlot),
-            predicateApi: modelString(check?.predicateApi),
-            atomicOperation: modelString(check?.atomicOperation),
-            requiredMinimum: Number.isSafeInteger(check?.requiredMinimum)
-              ? check.requiredMinimum
-              : null,
-            dependencyNodes: modelStringList(
-              dependencyGraphEntries(check?.dependencyGraph).map((node) =>
-                typeof node === "string"
-                  ? node
-                  : node?.name || node?.id || node?.dependency
-              ),
-              20,
-            ),
-          })),
+          .map(projectActivationLegalityCheckForModel),
       };
       addNonEmptyModelList(view, "costAtomicOperations",
         modelStringList(plan.costAtomicOperations, 12));
@@ -412,11 +485,11 @@ export function projectLegacyLuaSemanticPacketForModel(
       if (view.activationLegalityChecks.length === 0) {
         delete view.activationLegalityChecks;
       }
-      return {
+      return [{
         view,
         sourceCheckCount: sourceChecks.length,
         removedOptionalFieldCount: 0,
-      };
+      }];
     });
   const topLevelOptionals = new Map();
   if (candidateEntries.length > 0) {
@@ -610,6 +683,175 @@ function dependencyGraphEntries(value) {
   return Array.isArray(value?.nodes) ? value.nodes : [];
 }
 
+function projectLegacyLuaCandidateSourceBinding(resource) {
+  if (!isPlainObject(resource)) return null;
+  const resourceSha256 = modelString(resource.resourceSha256);
+  const sourceDocumentId = modelString(
+    resource?.resourceBinding?.sourceDocumentId,
+  );
+  const sourceContentSha256 = modelString(
+    resource?.resourceBinding?.sourceContentSha256,
+  );
+  if (!resourceSha256 || !sourceDocumentId || !sourceContentSha256) return null;
+  return {
+    resourceSha256,
+    sourceDocumentId,
+    sourceContentSha256,
+  };
+}
+
+function projectActivationLegalityCheckForModel(check = {}) {
+  const view = {
+    callbackSlot: modelString(check?.callbackSlot),
+    predicateApi: modelString(check?.predicateApi),
+    atomicOperation: modelString(check?.atomicOperation),
+    requiredMinimum: Number.isSafeInteger(check?.requiredMinimum)
+      ? check.requiredMinimum
+      : null,
+    dependencyNodes: modelStringList(
+      dependencyGraphEntries(check?.dependencyGraph).map((node) =>
+        typeof node === "string"
+          ? node
+          : node?.name || node?.id || node?.dependency
+      ),
+      20,
+    ),
+  };
+  const predicateSubject = projectLegacyLuaSubjectForModel(
+    check?.predicateSubject,
+  );
+  if (predicateSubject) view.predicateSubject = predicateSubject;
+  const discoveryPath = modelStringList(check?.discoveryPath, 12);
+  if (discoveryPath.length > 0) view.discoveryPath = discoveryPath;
+  const selectorSummary = projectLegacyLuaSelectorForModel(check?.selector);
+  if (selectorSummary) view.selectorSummary = selectorSummary;
+  return view;
+}
+
+/**
+ * Converts a legacy selector AST into a bounded, source-free expression. This
+ * keeps the branch, zone and card-type dependencies that make a minimum-count
+ * check meaningful without exposing Lua source, source spans, or the full AST.
+ */
+function projectLegacyLuaSelectorForModel(selector) {
+  if (!isPlainObject(selector)) return null;
+  const summary = {};
+  const selectorApi = modelString(selector.api);
+  if (selectorApi) summary.selectorApi = selectorApi;
+  const controllerLocation = renderLegacyLuaExpressionForModel(
+    selector.controllerLocation,
+  );
+  if (controllerLocation) summary.controllerLocation = controllerLocation;
+  const opponentLocation = renderLegacyLuaExpressionForModel(
+    selector.opponentLocation,
+  );
+  if (opponentLocation) summary.opponentLocation = opponentLocation;
+  if (Number.isSafeInteger(selector.requiredMinimum)) {
+    summary.requiredMinimum = selector.requiredMinimum;
+  }
+  const filterParameters = modelStringList(selector?.filter?.parameters, 12);
+  if (filterParameters.length > 0) summary.filterParameters = filterParameters;
+  const filterExpression = renderLegacyLuaExpressionForModel(
+    selector?.filter?.body || selector?.filter,
+  );
+  if (filterExpression) summary.filterExpression = filterExpression;
+  const filterArgumentExpressions = (Array.isArray(selector.filterArguments)
+    ? selector.filterArguments
+    : [])
+    .slice(0, 8)
+    .map(renderLegacyLuaExpressionForModel)
+    .filter(Boolean);
+  if (filterArgumentExpressions.length > 0) {
+    summary.filterArgumentExpressions = filterArgumentExpressions;
+  }
+  return Object.keys(summary).length > 0 ? summary : null;
+}
+
+function projectLegacyLuaSubjectForModel(subject) {
+  if (!isPlainObject(subject)) return null;
+  const kind = modelString(subject.kind);
+  const name = modelString(subject.name);
+  if (!kind && !name) return null;
+  return {
+    ...(kind ? { kind } : {}),
+    ...(name ? { name } : {}),
+  };
+}
+
+function renderLegacyLuaExpressionForModel(value) {
+  const state = { nodes: 0, truncated: false };
+  const rendered = renderLegacyLuaExpressionNode(value, state, 0);
+  if (!rendered) return "";
+  const suffix = state.truncated ? " …" : "";
+  return `${rendered}${suffix}`.slice(0, 1_600);
+}
+
+function renderLegacyLuaExpressionNode(value, state, depth) {
+  if (state.nodes >= 96 || depth > 14) {
+    state.truncated = true;
+    return "…";
+  }
+  if (value === null) return "null";
+  if (["string", "number", "boolean"].includes(typeof value)) {
+    return JSON.stringify(value);
+  }
+  if (!isPlainObject(value)) return "";
+  state.nodes += 1;
+  const kind = modelString(value.kind);
+  if (kind === "VARIABLE" || kind === "SYMBOL") {
+    return modelString(value.name) || kind;
+  }
+  if (kind === "LITERAL") return renderLegacyLuaLiteralForModel(value.value);
+  if (kind === "CALL") {
+    const api = modelString(value.api) || "CALL";
+    const args = (Array.isArray(value.arguments) ? value.arguments : [])
+      .slice(0, 12)
+      .map((argument) => renderLegacyLuaExpressionNode(
+        argument,
+        state,
+        depth + 1,
+      ))
+      .filter(Boolean);
+    return `${api}(${args.join(", ")})`;
+  }
+  if (kind === "NOT") {
+    return `NOT(${renderLegacyLuaExpressionNode(
+      value.argument,
+      state,
+      depth + 1,
+    )})`;
+  }
+  if (kind === "LUA_AND" || kind === "LUA_OR") {
+    const operator = kind === "LUA_AND" ? "AND" : "OR";
+    return `(${renderLegacyLuaExpressionNode(value.left, state, depth + 1)} ${operator} ${renderLegacyLuaExpressionNode(value.right, state, depth + 1)})`;
+  }
+  if (kind === "ALL" || kind === "ANY") {
+    const operator = kind === "ALL" ? " AND " : " OR ";
+    const terms = (Array.isArray(value.terms) ? value.terms : [])
+      .slice(0, 16)
+      .map((term) => renderLegacyLuaExpressionNode(term, state, depth + 1))
+      .filter(Boolean);
+    return terms.length > 0 ? `(${terms.join(operator)})` : kind;
+  }
+  if (kind === "BITSET_UNION") {
+    const members = (Array.isArray(value.members) ? value.members : [])
+      .slice(0, 16)
+      .map((member) => renderLegacyLuaExpressionNode(member, state, depth + 1))
+      .filter(Boolean);
+    return members.length > 0 ? `(${members.join(" | ")})` : kind;
+  }
+  const api = modelString(value.api);
+  if (api) return api;
+  return kind;
+}
+
+function renderLegacyLuaLiteralForModel(value) {
+  if (value === null || ["string", "number", "boolean"].includes(typeof value)) {
+    return JSON.stringify(value);
+  }
+  return "LITERAL";
+}
+
 function buildPacket({
   resources,
   candidateLimit,
@@ -645,19 +887,49 @@ function buildPacket({
       packetCandidateSortKey(left),
       packetCandidateSortKey(right),
     ));
-  let included = allCandidates.slice(0, candidateLimit);
-  let omitted = allCandidates.slice(candidateLimit).map((candidate) =>
-    omission(candidate, "MAX_CANDIDATES")
-  );
   const inheritedReasons = orderedResources.flatMap((resource) =>
     resource.unknownReasons
   );
-  const unknownReasons = normalizeUnknownReasons([
-    ...inheritedReasons,
-    ...additionalUnknownReasons,
-  ]);
-  let content = packetContent({
+  return buildPacketFromSummaries({
     resources: packetResources,
+    included: allCandidates,
+    omitted: [],
+    candidateLimit,
+    byteLimit,
+    unknownReasons: normalizeUnknownReasons([
+      ...inheritedReasons,
+      ...additionalUnknownReasons,
+    ]),
+  });
+}
+
+function buildPacketFromSummaries({
+  resources,
+  included: sourceIncluded,
+  omitted: sourceOmitted,
+  candidateLimit,
+  byteLimit,
+  unknownReasons,
+}) {
+  const orderedResources = [...resources].sort((left, right) =>
+    compareText(left.resourceId, right.resourceId)
+  );
+  const allIncluded = [...sourceIncluded].sort((left, right) => compareText(
+    packetCandidateSortKey(left),
+    packetCandidateSortKey(right),
+  ));
+  let included = allIncluded.slice(0, candidateLimit);
+  let omitted = [
+    ...sourceOmitted,
+    ...allIncluded.slice(candidateLimit).map((candidate) =>
+      omission(candidate, "MAX_CANDIDATES")
+    ),
+  ].sort((left, right) => compareText(
+    packetCandidateSortKey(left),
+    packetCandidateSortKey(right),
+  ));
+  let content = packetContent({
+    resources: orderedResources,
     included,
     omitted,
     candidateLimit,
@@ -674,7 +946,7 @@ function buildPacket({
         packetCandidateSortKey(right),
       ));
       content = packetContent({
-        resources: packetResources,
+        resources: orderedResources,
         included,
         omitted,
         candidateLimit,
@@ -686,7 +958,7 @@ function buildPacket({
     const budgetSatisfied = packetSerializedSize(content) <= byteLimit;
     if (!budgetSatisfied) {
       content = packetContent({
-        resources: packetResources,
+        resources: orderedResources,
         included,
         omitted,
         candidateLimit,
@@ -1141,6 +1413,10 @@ function omission(candidate, reason) {
     candidateSha256: candidate.candidateSha256,
     reason,
   };
+}
+
+function mergedCandidateKey(candidate) {
+  return `${candidate.resourceId}\u0000${candidate.candidateSha256}`;
 }
 
 function normalizeUnknownReasons(value) {

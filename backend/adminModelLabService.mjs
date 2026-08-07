@@ -161,6 +161,7 @@ export function createAdminModelLabService({
   legacyLuaSemanticPacketFactory = null,
   legacyLuaSemanticTimeoutMs,
   legacyLuaSemanticMaxBytes,
+  finalCallBudgetBypassDailyLimit = false,
 } = {}) {
   assertRunStore(runStore);
   if (finalCallBudgetLedger !== null) assertFinalCallBudgetLedger(finalCallBudgetLedger);
@@ -215,6 +216,7 @@ export function createAdminModelLabService({
     legacyLuaSemanticMaxBytes,
     env,
   );
+  const budgetDailyLimitBypassed = finalCallBudgetBypassDailyLimit === true;
 
   async function capabilities() {
     const budgetPools = finalCallBudgetLedger?.poolStatuses
@@ -223,7 +225,10 @@ export function createAdminModelLabService({
     const providerCapabilities = applyFinalBudgetAvailability(
       getAdminModelProviderCapabilities({ env }),
       budgetPools,
-      { ledgerConfigured: finalCallBudgetLedger !== null },
+      {
+        ledgerConfigured: finalCallBudgetLedger !== null,
+        dailyLimitBypassed: budgetDailyLimitBypassed,
+      },
     );
     return immutableJson({
       architecture: {
@@ -242,6 +247,8 @@ export function createAdminModelLabService({
           configured: finalCallBudgetLedger !== null,
           persistent: finalCallBudgetLedger?.persistent === true,
           storageKind: finalCallBudgetLedger?.kind || "unconfigured",
+          dailyLimitBypassed: budgetDailyLimitBypassed,
+          usageMeteringRetained: true,
           pools: budgetPools,
         },
         sharedEvidenceSnapshotFork: true,
@@ -1426,7 +1433,7 @@ export function createAdminModelLabService({
     const preparationAttempts = [];
     const provider = preparationProviderRegistry.get(preparationProvider);
     if (provider && typeof provider.prepareEvidence === "function") {
-      if (!finalCallBudgetLedger) {
+      if (!finalCallBudgetLedger && !budgetDailyLimitBypassed) {
         throw serviceError(
           "Persistent final-call budget ledger is unavailable; evidence-preparation submission was not attempted",
           "admin_final_budget_storage_unavailable",
@@ -1455,29 +1462,8 @@ export function createAdminModelLabService({
         await runStore.updateStageProgress(runId, tracker.snapshot(), { executionToken });
         const reservedAt = readWall(wallNow).toISOString();
         const reservationId = preparationBudgetReservationId(runId, attempt.attemptId);
-        await finalCallBudgetLedger.reserve({
-          reservationId,
-          runId,
-          attemptId: attempt.attemptId,
-          attemptKind: "evidence_preparation",
-          provider: preparationProvider,
-          model: preparationModel,
-          reservedAt,
-          requiredReservationCny: requiredDeepSeekReservationCny({
-            model: preparationModel,
-            inputTokenUpperBound: utf8TokenUpperBound(attempt.input),
-            maxOutputTokens: preparationMaxOutputTokens,
-            pricingProfile: deepSeekPricingForModel(
-              serverPricingProfile.deepSeek,
-              preparationModel,
-            ),
-            usdToCnyRate: serverPricingProfile.usdToCnyRate,
-            exchangeRateVersion: serverPricingProfile.exchangeRateVersion,
-          }),
-        });
-        const postReservationStop = await preparationStopError();
-        if (postReservationStop) {
-          await finalCallBudgetLedger.release({
+        if (!budgetDailyLimitBypassed) {
+          await finalCallBudgetLedger.reserve({
             reservationId,
             runId,
             attemptId: attempt.attemptId,
@@ -1485,10 +1471,35 @@ export function createAdminModelLabService({
             provider: preparationProvider,
             model: preparationModel,
             reservedAt,
-          }).catch(() => {
-            // The provider was not invoked. A failed release remains reserved
-            // conservatively, but cancellation must never submit the request.
+            requiredReservationCny: requiredDeepSeekReservationCny({
+              model: preparationModel,
+              inputTokenUpperBound: utf8TokenUpperBound(attempt.input),
+              maxOutputTokens: preparationMaxOutputTokens,
+              pricingProfile: deepSeekPricingForModel(
+                serverPricingProfile.deepSeek,
+                preparationModel,
+              ),
+              usdToCnyRate: serverPricingProfile.usdToCnyRate,
+              exchangeRateVersion: serverPricingProfile.exchangeRateVersion,
+            }),
           });
+        }
+        const postReservationStop = await preparationStopError();
+        if (postReservationStop) {
+          if (!budgetDailyLimitBypassed) {
+            await finalCallBudgetLedger.release({
+              reservationId,
+              runId,
+              attemptId: attempt.attemptId,
+              attemptKind: "evidence_preparation",
+              provider: preparationProvider,
+              model: preparationModel,
+              reservedAt,
+            }).catch(() => {
+              // The provider was not invoked. A failed release remains reserved
+              // conservatively, but cancellation must never submit the request.
+            });
+          }
           throw postReservationStop;
         }
 
@@ -1518,7 +1529,11 @@ export function createAdminModelLabService({
             model: preparationModel,
             usage: failedUsage,
           });
-          if (!settled && preparationFailureIsReleaseSafe(error)) {
+          if (
+            !budgetDailyLimitBypassed
+            && !settled
+            && preparationFailureIsReleaseSafe(error)
+          ) {
             await finalCallBudgetLedger.release({
               reservationId,
               runId,
@@ -1615,6 +1630,7 @@ export function createAdminModelLabService({
         exchangeRateVersion: serverPricingProfile.exchangeRateVersion,
       });
       if (!Number.isFinite(cost.totalCostCny)) return false;
+      if (budgetDailyLimitBypassed) return true;
       const settlement = await finalCallBudgetLedger.settle({
         reservationId,
         runId: attemptRunId,
@@ -2338,6 +2354,14 @@ export function createAdminModelLabService({
   }) {
     const profile = run.executionProfile?.finalRuling || {};
     if (profile.provider === "mock") return null;
+    if (budgetDailyLimitBypassed) {
+      return Object.freeze({
+        status: "bypassed",
+        scope: "admin_model_lab",
+        dailyLimitBypassed: true,
+        usageMeteringRetained: true,
+      });
+    }
     if (!finalCallBudgetLedger) {
       const error = serviceError(
         "Persistent final-call budget ledger is unavailable; provider submission was not attempted",
@@ -2370,7 +2394,7 @@ export function createAdminModelLabService({
 
   async function settleFinalCallBudgetAttempt({ run, completedAttempt, attemptKind }) {
     const profile = run.executionProfile?.finalRuling || {};
-    if (!finalCallBudgetLedger || profile.provider === "mock") return false;
+    if (profile.provider === "mock") return false;
     const reportedUsage = normalizeReportedModelUsage(completedAttempt?.rawUsage);
     const actualCny = completedAttempt?.cost?.totalCostCny;
     if (!reportedUsage || !Number.isFinite(actualCny) || actualCny < 0) {
@@ -2378,6 +2402,8 @@ export function createAdminModelLabService({
       // reservation. It must not turn into an implicit refund.
       return false;
     }
+    if (budgetDailyLimitBypassed) return true;
+    if (!finalCallBudgetLedger) return false;
     const submission = attemptKind === "repair"
       ? run.execution?.repairSubmission
       : run.execution?.providerSubmission;
@@ -2453,6 +2479,7 @@ export function createAdminModelLabService({
         cost: meteredAttempt.cost,
       };
     }
+    if (budgetDailyLimitBypassed) return true;
     if (!finalCallBudgetLedger || !submissionIntent?.attemptId) return false;
     return settleFinalCallBudgetAttempt({
       run,
@@ -2466,6 +2493,7 @@ export function createAdminModelLabService({
     submissionIntent,
     attemptKind,
   }) {
+    if (budgetDailyLimitBypassed) return;
     if (!finalCallBudgetLedger || !submissionIntent?.attemptId) return;
     try {
       const run = await requireRun(runId);
@@ -3119,6 +3147,7 @@ export function createAdminModelLabService({
       finalCallBudgetConfigured: finalCallBudgetLedger !== null,
       finalCallBudgetPersistent: finalCallBudgetLedger?.persistent === true,
       finalCallBudgetKind: finalCallBudgetLedger?.kind || "unconfigured",
+      finalCallBudgetDailyLimitBypassed: budgetDailyLimitBypassed,
     }),
     capabilities,
     createRun,
@@ -3515,6 +3544,8 @@ function finalRulingInputPreamble(variant) {
       "资料准备模型只提供候选卡名与补充检索词，不是裁定；确定性查询始终优先，但模型补充词仍可能扩展候选集合，所以必须独立核对每条可见证据。",
       "只能引用 evidenceDecisionPacket.evidenceItems 中实际展示正文的 evidenceId；omissionSummary 只有计数与审计哈希，不是证据。",
       "legacyLuaSemanticPacket 是旧 Lua 脚本自动提取的非权威语义旁路，只能提示可能需要检查的条件、操作和底层 API 依赖；它不是官方资料，不能加入 evidenceIds，candidateVerdict 不能直接支持结论，verdict=UNKNOWN 也绝不表示不能发动或不能处理。",
+      "使用 Lua 候选前必须先读取候选自身的 sourceBinding，并在 resources 存在时按 resourceId 交叉核对来源；预计算 sourceDocumentId 中的 cid-<卡片CID>/passcode-<脚本密码> 只允许绑定 Evidence Snapshot 内 resolvedCards.cid 相同的已解析卡片，禁止跨卡套用。activationLegalityChecks 的 requiredMinimum 是发动前最低候选数，不满足时不能改写成发动后空处理。",
+      "selectorSummary 是 Lua 筛选器自动生成的有界布尔摘要；FILTER_ARGUMENT_n 依次绑定 filterArgumentExpressions[n-1]。必须先按题设的响应效果种类代入分支，再依据 controllerLocation、opponentLocation、filterExpression 和 predicateApi 逐项计算候选，不能把另一分支的怪兽或魔陷混入数量。",
       "不得调用网络搜索，不得引用快照外资料。",
     ];
   }
@@ -3546,6 +3577,7 @@ function compactCardResolutionForModel(cardResolution = {}) {
   return {
     resolvedCards: (cardResolution.resolvedCards || []).map((card) => compactModelObject({
       id: card.id || card.cardId || null,
+      cid: card.cid ?? null,
       passcode: card.passcode || null,
       input: card.input || null,
       name: card.name || null,
@@ -4820,6 +4852,7 @@ function assertFinalCallBudgetLedger(ledger) {
 
 function applyFinalBudgetAvailability(capabilities, poolStatuses, {
   ledgerConfigured,
+  dailyLimitBypassed = false,
 } = {}) {
   const byModel = new Map();
   for (const pool of Array.isArray(poolStatuses) ? poolStatuses : []) {
@@ -4830,21 +4863,25 @@ function applyFinalBudgetAvailability(capabilities, poolStatuses, {
     const models = (provider.models || []).map((model) => {
       const pool = byModel.get(String(model.modelId || model.id || ""));
       const budgetConfigured = pool?.configured === true;
-      const budgetAvailable = budgetConfigured && pool?.available === true;
+      const budgetAvailable = dailyLimitBypassed === true
+        || (budgetConfigured && pool?.available === true);
       return {
         ...model,
         transportAvailable: model.available === true,
         budgetConfigured,
         budgetAvailable,
+        budgetDailyLimitBypassed: dailyLimitBypassed === true,
         budgetPool: pool?.pool || null,
         available: model.available === true && budgetAvailable,
         unavailableReason: model.available !== true
           ? "provider_transport_unavailable"
-          : (!ledgerConfigured
+          : (dailyLimitBypassed === true
+              ? null
+              : (!ledgerConfigured
               ? "final_budget_ledger_unavailable"
               : (!budgetConfigured
                   ? "final_budget_pool_unconfigured"
-                  : (budgetAvailable ? null : "final_budget_pool_exhausted"))),
+                  : (budgetAvailable ? null : "final_budget_pool_exhausted")))),
       };
     });
     return {

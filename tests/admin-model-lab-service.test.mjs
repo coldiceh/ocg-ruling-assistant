@@ -262,6 +262,7 @@ test("Admin freezes the retriever-reconciled card identity instead of the pre-re
       input: "用户原始译名",
       id: "card-canonical",
       cardId: "card-canonical",
+      cid: "24680",
       passcode: "12345678",
       name: "社区译名卡",
       aliases: ["社区译名卡", "用户原始译名"],
@@ -285,6 +286,7 @@ test("Admin freezes the retriever-reconciled card identity instead of the pre-re
 
   assert.equal(run.evidenceSnapshot.evidence.cardResolution.resolvedCards.length, 1);
   assert.equal(run.evidenceSnapshot.evidence.cardResolution.resolvedCards[0].id, "card-canonical");
+  assert.equal(run.evidenceSnapshot.evidence.cardResolution.resolvedCards[0].cid, "24680");
   assert.equal(run.evidenceSnapshot.evidence.cardResolution.resolvedCards[0].input, "用户原始译名");
   assert.ok(run.evidenceSnapshot.evidence.cardResolution.resolvedCards[0].aliases.includes("用户原始译名"));
   assert.deepEqual(run.evidenceSnapshot.evidence.unresolved.cardMentions, []);
@@ -292,6 +294,8 @@ test("Admin freezes the retriever-reconciled card identity instead of the pre-re
   assert.equal(run.evidenceSnapshot.evidence.completeness.allCardNamesResolved, true);
   const finalInputPayload = JSON.parse(buildFinalRulingInput(run.evidenceSnapshot).split("\n").at(-1));
   assert.equal(finalInputPayload.cardResolution.resolvedCards[0].id, "card-canonical");
+  assert.equal(finalInputPayload.cardResolution.resolvedCards[0].cid, "24680");
+  assert.equal(finalInputPayload.cardResolution.resolvedCards[0].passcode, "12345678");
 });
 
 test("createRun accepts only allowlisted final-attempt policies", async () => {
@@ -397,7 +401,13 @@ test("final-call budget reserves before provider create and settles reliable com
     ADMIN_MODEL_LAB_USD_TO_CNY_RATE: "7",
     ADMIN_MODEL_LAB_EXCHANGE_RATE_VERSION: "test-rate",
   }, { finalCallBudgetLedger: ledger });
-  const created = await service.createRun({ body: { question: "匿名预算顺序问题" } });
+  const created = await service.createRun({
+    body: {
+      question: "匿名预算顺序问题",
+      finalCallBudgetBypassDailyLimit: true,
+      bypassDailyBudget: true,
+    },
+  });
 
   await service.executeRun({ runId: created.runId });
   const completed = await service.pollRun({ runId: created.runId });
@@ -408,6 +418,40 @@ test("final-call budget reserves before provider create and settles reliable com
   assert.equal(finalCalls[0].input.attemptKind, "primary");
   assert.equal(finalCalls[1].input.reservationId, finalCalls[0].input.reservationId);
   assert.equal(finalCalls[1].input.actualCny > 0, true);
+});
+
+test("explicit admin experiment bypass skips daily reservations but retains usage and cost metering", async () => {
+  const fixture = makeFixture();
+  fixture.providerResponse = completedResponse(makeStructuredRuling());
+  const budgetCalls = [];
+  const service = makeService(fixture, {
+    ADMIN_MODEL_LAB_USD_TO_CNY_RATE: "7",
+    ADMIN_MODEL_LAB_EXCHANGE_RATE_VERSION: "test-rate",
+  }, {
+    finalCallBudgetLedger: createRecordingBudgetLedger(budgetCalls),
+    finalCallBudgetBypassDailyLimit: true,
+  });
+
+  const capabilities = await service.capabilities();
+  assert.equal(capabilities.architecture.finalCallBudget.dailyLimitBypassed, true);
+  assert.equal(capabilities.architecture.finalCallBudget.usageMeteringRetained, true);
+
+  const created = await service.createRun({ body: { question: "匿名管理实验旁路问题" } });
+  await service.executeRun({ runId: created.runId });
+  const completed = await service.pollRun({ runId: created.runId });
+
+  assert.equal(completed.status, ADMIN_RUN_STATUSES.SUCCEEDED);
+  assert.deepEqual(budgetCalls, []);
+  assert.equal(
+    completed.result.metering.stages.evidencePreparation.usage.totalTokens,
+    30,
+  );
+  assert.equal(completed.result.metering.stages.finalRuling.usage.totalTokens, 1500);
+  assert.equal(
+    Number.isFinite(completed.result.metering.stages.finalRuling.cost.totalCostCny),
+    true,
+  );
+  assert.equal(completed.result.metering.stages.finalRuling.cost.totalCostCny > 0, true);
 });
 
 test("relay model mismatch fails closed while settling reported usage at the requested model rate", async () => {
@@ -3261,6 +3305,7 @@ function makeService(fixture, envOverrides = {}, {
   deepSeekProvider = null,
   finalRulingProviders = {},
   finalCallBudgetLedger = createTestFinalCallBudgetLedger(),
+  finalCallBudgetBypassDailyLimit = false,
 } = {}) {
   const baseRunStore = createAdminRunStore({
     storage,
@@ -3283,6 +3328,7 @@ function makeService(fixture, envOverrides = {}, {
   return createAdminModelLabService({
     runStore,
     finalCallBudgetLedger,
+    finalCallBudgetBypassDailyLimit,
     env: {
       ADMIN_MODEL_LAB_ENABLED: "true",
       ADMIN_OPENAI_ENABLED: "true",

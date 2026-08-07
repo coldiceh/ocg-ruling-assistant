@@ -11,6 +11,7 @@ import {
   createLegacyLuaUnknownPacket,
   createLegacyLuaSemanticPacket,
   LEGACY_LUA_SEMANTIC_MODEL_VIEW_MAX_BYTES,
+  mergeLegacyLuaSemanticPackets,
   parseLegacyLuaSemanticPacket,
   projectLegacyLuaSemanticPacketForModel,
   serializeLegacyLuaSemanticPacket,
@@ -138,6 +139,7 @@ function plan(identity, {
   engineVersions = versions(),
   activationLegalityCheckCount = 1,
   checkValueSuffix = "",
+  selector = null,
 } = {}) {
   const registryHash = canonicalLegacyLuaSha256(registryValue);
   const activationLegalityChecks = Array.from(
@@ -152,6 +154,17 @@ function plan(identity, {
           ? "CARD_CAN_RETURN_TO_HAND"
           : `CARD_CAN_RETURN_TO_HAND_${index}${checkValueSuffix}`],
       },
+      ...(selector
+        ? {
+            predicateSubject: { kind: "VARIABLE", name: "FILTER_CARD" },
+            discoveryPath: [
+              "Effect.SetTarget",
+              "Duel.IsExistingMatchingCard",
+              "Card.IsAbleToHand",
+            ],
+            selector,
+          }
+        : {}),
     }),
   );
   return {
@@ -560,8 +573,91 @@ test("model projection keeps generic dependencies but drops source and AST paylo
     view.effectCandidates[0].activationLegalityChecks[0].dependencyNodes,
     ["CARD_CAN_RETURN_TO_HAND"],
   );
+  assert.deepEqual(view.effectCandidates[0].sourceBinding, {
+    resourceSha256: resource.resourceSha256,
+    sourceDocumentId: resource.resourceBinding.sourceDocumentId,
+    sourceContentSha256: resource.resourceBinding.sourceContentSha256,
+  });
   assert.ok(Buffer.byteLength(serializedView) < Buffer.byteLength(serializedPacket));
   assert.doesNotMatch(serializedView, /sourceSpans|exactText|conditionProgram/u);
+});
+
+test("model projection renders selector branches into a bounded semantic expression", async () => {
+  const selector = {
+    api: "Duel.IsExistingMatchingCard",
+    controllerLocation: { kind: "SYMBOL", name: "LOCATION_ONFIELD" },
+    opponentLocation: { kind: "SYMBOL", name: "LOCATION_ONFIELD" },
+    requiredMinimum: 1,
+    filter: {
+      kind: "LAMBDA",
+      parameters: ["FILTER_CARD", "FILTER_ARGUMENT_1"],
+      body: {
+        kind: "ALL",
+        terms: [
+          {
+            kind: "CALL",
+            api: "Card.IsType",
+            arguments: [
+              { kind: "VARIABLE", name: "FILTER_CARD" },
+              {
+                kind: "BITSET_UNION",
+                members: [
+                  { kind: "SYMBOL", name: "TYPE_SPELL" },
+                  { kind: "SYMBOL", name: "TYPE_TRAP" },
+                ],
+              },
+            ],
+          },
+          {
+            kind: "CALL",
+            api: "Card.IsAbleToHand",
+            arguments: [{ kind: "VARIABLE", name: "FILTER_CARD" }],
+          },
+        ],
+      },
+    },
+    filterArguments: [{
+      kind: "CALL",
+      api: "Effect.IsActiveType",
+      arguments: [
+        { kind: "VARIABLE", name: "RESPONDING_EFFECT" },
+        { kind: "SYMBOL", name: "TYPE_MONSTER" },
+      ],
+    }],
+  };
+  const { engine } = mockEngine({ candidatePlanOptions: { selector } });
+  const resource = await collectLegacyLuaSemanticResource({
+    sourceDocument: sourceDocument(),
+    engine,
+  });
+  const packet = createLegacyLuaSemanticPacket({ resources: [resource] });
+  const view = projectLegacyLuaSemanticPacketForModel(packet);
+  const check = view.effectCandidates[0].activationLegalityChecks[0];
+
+  assert.deepEqual(check.predicateSubject, {
+    kind: "VARIABLE",
+    name: "FILTER_CARD",
+  });
+  assert.deepEqual(check.discoveryPath, [
+    "Card.IsAbleToHand",
+    "Duel.IsExistingMatchingCard",
+    "Effect.SetTarget",
+  ]);
+  assert.equal(check.selectorSummary.selectorApi, "Duel.IsExistingMatchingCard");
+  assert.equal(check.selectorSummary.controllerLocation, "LOCATION_ONFIELD");
+  assert.equal(check.selectorSummary.opponentLocation, "LOCATION_ONFIELD");
+  assert.match(check.selectorSummary.filterExpression, /TYPE_SPELL/u);
+  assert.match(check.selectorSummary.filterExpression, /TYPE_TRAP/u);
+  assert.match(check.selectorSummary.filterExpression, /Card\.IsAbleToHand/u);
+  assert.match(
+    check.selectorSummary.filterArgumentExpressions[0],
+    /Effect\.IsActiveType\(RESPONDING_EFFECT, TYPE_MONSTER\)/u,
+  );
+  assert.doesNotMatch(JSON.stringify(view), /sourceSpans|exactText|conditionProgram/u);
+  assert.ok(
+    Buffer.byteLength(JSON.stringify(view), "utf8")
+      <= LEGACY_LUA_SEMANTIC_MODEL_VIEW_MAX_BYTES,
+  );
 });
 
 test("model projection defaults to six ordered candidates and six complete checks", async () => {
@@ -622,7 +718,11 @@ test("model projection enforces 8 KiB deterministically by deleting complete suf
   const identities = Array.from({ length: 12 }, (_, index) =>
     rawSha256(`model-view-byte-limit-${index}`)
   );
-  const fullMarker = `LONG_MARKER_${"界".repeat(80)}`;
+  // Keep each individual candidate below the envelope while the six-candidate
+  // projection still exceeds it, so this specifically exercises deterministic
+  // suffix-candidate removal rather than the pathological single-candidate
+  // fallback.
+  const fullMarker = `LONG_MARKER_${"界".repeat(60)}`;
   const { engine } = mockEngine({
     identities,
     candidatePlanOptions: {
@@ -647,6 +747,11 @@ test("model projection enforces 8 KiB deterministically by deleting complete suf
   );
   assert.equal(first.effectCandidates.length > 0, true);
   assert.equal(first.effectCandidates.length < 6, true);
+  assert.equal(
+    Object.hasOwn(first, "resources"),
+    false,
+    "the oversized projection must exercise the resource-manifest removal path",
+  );
   assert.deepEqual(
     first.effectCandidates.map((candidate) => candidate.semanticEffectIdentity),
     packet.effectCandidates.slice(0, first.effectCandidates.length).map(
@@ -658,6 +763,17 @@ test("model projection enforces 8 KiB deterministically by deleting complete suf
       (candidate) => candidate.activationLegalityChecks.length === 6,
     ),
     true,
+  );
+  assert.equal(
+    first.effectCandidates.every((candidate) => (
+      candidate.sourceBinding?.resourceSha256 === resource.resourceSha256
+      && candidate.sourceBinding?.sourceDocumentId
+        === resource.resourceBinding.sourceDocumentId
+      && candidate.sourceBinding?.sourceContentSha256
+        === resource.resourceBinding.sourceContentSha256
+    )),
+    true,
+    "every surviving candidate must retain its complete inline source binding",
   );
   assert.equal(
     first.effectCandidates[0].activationLegalityChecks[0].predicateApi,
@@ -726,6 +842,52 @@ test("packet hashing is stable and rejects caller-reordered candidate artifacts 
   assert.deepEqual(
     packetA.effectCandidates.map((item) => item.semanticEffectIdentity),
     [rawSha256("effect-a"), rawSha256("effect-z")].sort(),
+  );
+});
+
+test("packet merge retains static candidates and both UNKNOWN reasons after a live fallback failure", async () => {
+  const { engine } = mockEngine();
+  const resource = await collectLegacyLuaSemanticResource({
+    sourceDocument: sourceDocument(),
+    engine,
+  });
+  const staticPacket = mergeLegacyLuaSemanticPackets({
+    packets: [
+      createLegacyLuaSemanticPacket({ resources: [resource] }),
+      createLegacyLuaUnknownPacket({
+        code: "LEGACY_LUA_PRECOMPUTED_COVERAGE_INCOMPLETE",
+        message: "one requested card is not present in the static cache",
+      }),
+    ],
+  });
+  const merged = mergeLegacyLuaSemanticPackets({
+    packets: [
+      staticPacket,
+      createLegacyLuaUnknownPacket({
+        code: "LEGACY_LUA_LIVE_FALLBACK_FAILED",
+        message: "live fallback failed",
+      }),
+    ],
+  });
+
+  validateLegacyLuaSemanticPacket(merged);
+  assert.deepEqual(
+    merged.effectCandidates.map((candidate) => candidate.candidateSha256),
+    staticPacket.effectCandidates.map((candidate) => candidate.candidateSha256),
+  );
+  assert.equal(merged.resources.length, 1);
+  assert.equal(merged.verdict, "UNKNOWN");
+  assert.equal(
+    merged.unknownReasons.some((reason) =>
+      reason.code === "LEGACY_LUA_PRECOMPUTED_COVERAGE_INCOMPLETE"
+    ),
+    true,
+  );
+  assert.equal(
+    merged.unknownReasons.some((reason) =>
+      reason.code === "LEGACY_LUA_LIVE_FALLBACK_FAILED"
+    ),
+    true,
   );
 });
 
