@@ -648,7 +648,7 @@ test("relay stream that reports usage but closes before DONE keeps safe usage an
 
 test("relay classifies the admin synchronous outer deadline as a stream timeout", async () => {
   const controller = new AbortController();
-  const timeout = new Error("final ruling provider exceeded 240000ms");
+  const timeout = new Error("final ruling provider exceeded 290000ms");
   timeout.code = "final_ruling_provider_timeout";
   controller.abort(timeout);
   const provider = new CompatibleEvidencePreparationProvider({
@@ -679,6 +679,33 @@ test("relay classifies the admin synchronous outer deadline as a stream timeout"
       return true;
     },
   );
+});
+
+test("relay rejects a stream deadline that leaves no room below the admin outer guard", async () => {
+  let transportCalls = 0;
+  const provider = new CompatibleEvidencePreparationProvider({
+    providerId: "relay",
+    apiKey: "relay-server-secret",
+    baseUrl: "https://relay.example/v1",
+    env: { RELAY_STREAM_TIMEOUT_MS: "280001" },
+    fetchImpl: async () => {
+      transportCalls += 1;
+      throw new Error("transport must not be reached");
+    },
+  });
+
+  await assert.rejects(
+    provider.create({
+      model: "relay-gpt-5.6-sol",
+      reasoningEffort: "high",
+      reasoningMode: "pro",
+      input: "匿名问题与冻结证据",
+      instructions: "只输出 JSON。",
+      metadata: { runId: "run-relay-timeout-bound", promptVersion: "openai-ruling-v1" },
+    }),
+    /RELAY_STREAM_TIMEOUT_MS must be between 1000 and 280000/u,
+  );
+  assert.equal(transportCalls, 0);
 });
 
 test("relay non-JSON HTTP errors persist only a bounded redacted summary", async () => {

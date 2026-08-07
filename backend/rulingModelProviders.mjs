@@ -503,8 +503,8 @@ export class CompatibleEvidencePreparationProvider {
     const timeoutMs = boundedPositiveInteger(
       this.env.RELAY_STREAM_TIMEOUT_MS,
       "RELAY_STREAM_TIMEOUT_MS",
-      225_000,
-      { minimum: 1_000, maximum: 235_000 },
+      270_000,
+      { minimum: 1_000, maximum: 280_000 },
     );
     const maxBytes = boundedPositiveInteger(
       this.env.RELAY_STREAM_MAX_BYTES,
