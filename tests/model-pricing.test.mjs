@@ -211,6 +211,21 @@ test("relay pricing multiplier scales every cost component and the total", () =>
   assert.equal(cost.totalCostCny, 0.015549);
 });
 
+test("relay total-only usage settles a conservative highest-rate upper bound instead of zero", () => {
+  const cost = estimateRelayModelCost({
+    model: "relay-gpt-5.6-luna",
+    usage: { total_tokens: 13_412 },
+    usdToCnyRate: 7.5,
+  });
+
+  assert.equal(cost.pricingStatus, "estimated_upper_bound_unverified");
+  assert.equal(cost.usageBreakdownComplete, false);
+  assert.equal(cost.upperBoundApplied, true);
+  assert.equal(cost.upperBoundTokenBasis, "total_tokens_at_highest_rate");
+  assert.equal(cost.totalCostCny > 0, true);
+  assert.equal(cost.totalCostCny, 0.064237178);
+});
+
 test("relay cost keeps the reservation when usage, FX, or a used price tier is unavailable", () => {
   assert.equal(estimateRelayModelCost({
     model: "gpt-5.6-sol",

@@ -240,12 +240,18 @@ export function parseAndValidateModelRulingResult(rawText, options = {}) {
   } catch {
     return validationFailure(["model output is not valid JSON"]);
   }
-  const relationNormalization = options.normalizeEvidenceProvenance === true
-    ? normalizeModelRulingEvidenceRelationTokens(parsed)
+  const structuralNormalization = options.normalizeStructuralBindings === true
+    ? normalizeModelRulingStructuralBindings(parsed, options)
     : { normalized: parsed, corrections: [] };
+  const relationNormalization = options.normalizeEvidenceProvenance === true
+    ? normalizeModelRulingEvidenceRelationTokens(structuralNormalization.normalized)
+    : { normalized: structuralNormalization.normalized, corrections: [] };
   const strictValidation = validateModelRulingResult(relationNormalization.normalized, options);
   if (strictValidation.ok || options.normalizeEvidenceProvenance !== true) {
-    return withProvenanceCorrections(strictValidation, relationNormalization.corrections);
+    return withStructuralCorrections(
+      withProvenanceCorrections(strictValidation, relationNormalization.corrections),
+      structuralNormalization.corrections,
+    );
   }
 
   const provenance = normalizeModelRulingEvidenceProvenance(
@@ -257,10 +263,148 @@ export function parseAndValidateModelRulingResult(rawText, options = {}) {
     ...provenance.corrections,
   ];
   if (provenance.corrections.length === 0) {
-    return withProvenanceCorrections(strictValidation, corrections);
+    return withStructuralCorrections(
+      withProvenanceCorrections(strictValidation, corrections),
+      structuralNormalization.corrections,
+    );
   }
   const normalizedValidation = validateModelRulingResult(provenance.normalized, options);
-  return withProvenanceCorrections(normalizedValidation, corrections);
+  return withStructuralCorrections(
+    withProvenanceCorrections(normalizedValidation, corrections),
+    structuralNormalization.corrections,
+  );
+}
+
+/**
+ * Repairs only model-generated identifiers and redundant relation indexes.
+ * It never changes the answer text, claims, evidence IDs, or evidence
+ * relations. Unknown evidence and conflicting duplicate relations therefore
+ * continue to fail normal semantic validation.
+ */
+export function normalizeModelRulingStructuralBindings(result, {
+  expectedQuestionIds,
+} = {}) {
+  const normalized = cloneJson(result);
+  const corrections = [];
+  if (!isPlainObject(normalized)) return { normalized, corrections };
+
+  normalizeDuplicateVerdictIds(normalized, expectedQuestionIds, corrections);
+  normalizeEvidenceUsageIndex(normalized, corrections);
+  bindClaimEvidenceUsage(normalized, corrections);
+  return { normalized, corrections };
+}
+
+function normalizeDuplicateVerdictIds(result, expectedQuestionIds, corrections) {
+  if (!Array.isArray(result.verdicts)) return;
+  const expected = normalizedExpectedQuestionIds(expectedQuestionIds);
+  const groups = new Map();
+  for (const verdict of result.verdicts) {
+    if (!isPlainObject(verdict) || !isNonEmptyString(verdict.questionId)) continue;
+    const questionId = String(verdict.questionId);
+    if (!resolveExpectedQuestionParent(questionId, expected)) continue;
+    const values = groups.get(questionId) || [];
+    values.push(verdict);
+    groups.set(questionId, values);
+  }
+  for (const [questionId, verdicts] of groups.entries()) {
+    if (verdicts.length < 2) continue;
+    const unique = [];
+    const seen = new Set();
+    for (const verdict of verdicts) {
+      const signature = JSON.stringify(verdict);
+      if (seen.has(signature)) {
+        const index = result.verdicts.indexOf(verdict);
+        if (index >= 0) result.verdicts.splice(index, 1);
+        corrections.push({
+          kind: "duplicate_verdict_deduplicated",
+          questionId,
+        });
+        continue;
+      }
+      seen.add(signature);
+      unique.push(verdict);
+    }
+    if (unique.length < 2) continue;
+    unique.forEach((verdict, index) => {
+      const nextQuestionId = `${questionId}-part-${index + 1}`;
+      corrections.push({
+        kind: "duplicate_verdict_question_id_disambiguated",
+        from: questionId,
+        to: nextQuestionId,
+      });
+      verdict.questionId = nextQuestionId;
+    });
+  }
+}
+
+function normalizeEvidenceUsageIndex(result, corrections) {
+  if (!Array.isArray(result.evidenceUsage)) return;
+  const groups = new Map();
+  for (const usage of result.evidenceUsage) {
+    if (!isPlainObject(usage) || !isNonEmptyString(usage.evidenceId)) continue;
+    const evidenceId = String(usage.evidenceId);
+    const entries = groups.get(evidenceId) || [];
+    entries.push(usage);
+    groups.set(evidenceId, entries);
+  }
+  const replacements = new Map();
+  for (const [evidenceId, entries] of groups.entries()) {
+    if (entries.length < 2) continue;
+    const relations = new Set(entries.map((entry) => entry.relation));
+    if (relations.size !== 1) continue;
+    const merged = cloneJson(entries[0]);
+    merged.supportedClaimIds = dedupeStrings(
+      entries.flatMap((entry) => (
+        Array.isArray(entry.supportedClaimIds) ? entry.supportedClaimIds : []
+      )),
+    );
+    replacements.set(evidenceId, merged);
+    corrections.push({
+      kind: "duplicate_evidence_usage_merged",
+      evidenceId,
+      duplicateCount: entries.length,
+    });
+  }
+  if (replacements.size === 0) return;
+  const emitted = new Set();
+  result.evidenceUsage = result.evidenceUsage.flatMap((usage) => {
+    const evidenceId = isPlainObject(usage) && isNonEmptyString(usage.evidenceId)
+      ? String(usage.evidenceId)
+      : "";
+    if (!replacements.has(evidenceId)) return [usage];
+    if (emitted.has(evidenceId)) return [];
+    emitted.add(evidenceId);
+    return [replacements.get(evidenceId)];
+  });
+}
+
+function bindClaimEvidenceUsage(result, corrections) {
+  if (!Array.isArray(result.claims) || !Array.isArray(result.evidenceUsage)) return;
+  const usageByEvidence = new Map();
+  const duplicateEvidence = new Set();
+  for (const usage of result.evidenceUsage) {
+    if (!isPlainObject(usage) || !isNonEmptyString(usage.evidenceId)) continue;
+    const evidenceId = String(usage.evidenceId);
+    if (usageByEvidence.has(evidenceId)) duplicateEvidence.add(evidenceId);
+    else usageByEvidence.set(evidenceId, usage);
+  }
+  for (const evidenceId of duplicateEvidence) usageByEvidence.delete(evidenceId);
+  for (const claim of result.claims) {
+    if (!isPlainObject(claim) || !isNonEmptyString(claim.claimId)) continue;
+    for (const evidenceIdValue of Array.isArray(claim.evidenceIds) ? claim.evidenceIds : []) {
+      const evidenceId = String(evidenceIdValue);
+      const usage = usageByEvidence.get(evidenceId);
+      if (!usage || !Array.isArray(usage.supportedClaimIds)) continue;
+      if (usage.supportedClaimIds.includes(String(claim.claimId))) continue;
+      usage.supportedClaimIds.push(String(claim.claimId));
+      usage.supportedClaimIds = dedupeStrings(usage.supportedClaimIds);
+      corrections.push({
+        kind: "evidence_usage_claim_binding_added",
+        evidenceId,
+        claimId: String(claim.claimId),
+      });
+    }
+  }
 }
 
 /**
@@ -310,6 +454,12 @@ function normalizeEvidenceRelationToken(value) {
 function withProvenanceCorrections(validation, corrections) {
   return corrections.length > 0
     ? { ...validation, provenanceCorrections: corrections }
+    : validation;
+}
+
+function withStructuralCorrections(validation, corrections) {
+  return corrections.length > 0
+    ? { ...validation, structuralCorrections: corrections }
     : validation;
 }
 
@@ -463,12 +613,17 @@ function validateSchemaShape(result, errors) {
 
 function validateQuestionCoverage(verdictsByQuestion, expectedQuestionIds, errors) {
   if (!Array.isArray(expectedQuestionIds)) return;
-  const expected = [...new Set(expectedQuestionIds.map(String))];
+  const expected = normalizedExpectedQuestionIds(expectedQuestionIds);
   for (const questionId of expected) {
-    if (!verdictsByQuestion.has(questionId)) errors.push(`missing verdict for questionId: ${questionId}`);
+    const covered = [...verdictsByQuestion.keys()].some(
+      (candidate) => resolveExpectedQuestionParent(candidate, expected) === questionId,
+    );
+    if (!covered) errors.push(`missing verdict for questionId: ${questionId}`);
   }
   for (const questionId of verdictsByQuestion.keys()) {
-    if (!expected.includes(questionId)) errors.push(`unexpected verdict questionId: ${questionId}`);
+    if (!resolveExpectedQuestionParent(questionId, expected)) {
+      errors.push(`unexpected verdict questionId: ${questionId}`);
+    }
   }
 }
 
@@ -574,6 +729,7 @@ function validateQuestionScopedReasoning(
   errors,
 ) {
   const questionIds = questionIdUniverse(result, expectedQuestionIds);
+  const expected = normalizedExpectedQuestionIds(expectedQuestionIds);
   const claimsByQuestion = scopedItemsByQuestion(
     result.claims,
     questionIds,
@@ -588,21 +744,37 @@ function validateQuestionScopedReasoning(
   );
 
   for (const [questionId, claims] of claimsByQuestion.entries()) {
-    if (!verdictsByQuestion.has(questionId)) {
+    const isCoveredParent = expected.includes(questionId)
+      && [...verdictsByQuestion.keys()].some(
+        (candidate) => resolveExpectedQuestionParent(candidate, expected) === questionId,
+      );
+    if (!verdictsByQuestion.has(questionId) && !isCoveredParent) {
       errors.push(`claim references unknown questionId: ${questionId}`);
     }
   }
   for (const [questionId] of unresolvedByQuestion.entries()) {
-    if (!verdictsByQuestion.has(questionId)) {
+    const isCoveredParent = expected.includes(questionId)
+      && [...verdictsByQuestion.keys()].some(
+        (candidate) => resolveExpectedQuestionParent(candidate, expected) === questionId,
+      );
+    if (!verdictsByQuestion.has(questionId) && !isCoveredParent) {
       errors.push(`unresolved item references unknown questionId: ${questionId}`);
     }
   }
 
   for (const verdict of result.verdicts) {
-    const questionClaims = claimsByQuestion.get(verdict.questionId) || [];
+    const questionClaims = scopedItemsForVerdict(
+      claimsByQuestion,
+      verdict.questionId,
+      expected,
+    );
     const decisiveClaims = questionClaims.filter((claim) => claim.decisive);
     const decisiveUnknownClaims = decisiveClaims.filter((claim) => claim.status === "UNKNOWN");
-    const decisiveUnresolved = (unresolvedByQuestion.get(verdict.questionId) || [])
+    const decisiveUnresolved = scopedItemsForVerdict(
+      unresolvedByQuestion,
+      verdict.questionId,
+      expected,
+    )
       .filter((item) => item.decisive);
 
     if (verdict.value !== "UNKNOWN") {
@@ -648,6 +820,7 @@ function validateUnknownAndConditional(
     providedFacts,
   });
   const questionIds = questionIdUniverse(result, expectedQuestionIds);
+  const expected = normalizedExpectedQuestionIds(expectedQuestionIds);
   const claimsByQuestion = scopedItemsByQuestion(result.claims, questionIds);
   const unresolvedByQuestion = scopedItemsByQuestion(result.unresolved, questionIds);
   for (const verdict of result.verdicts) {
@@ -661,9 +834,17 @@ function validateUnknownAndConditional(
       }
     }
     if (verdict.value === "UNKNOWN") {
-      const decisiveUnresolved = (unresolvedByQuestion.get(verdict.questionId) || [])
+      const decisiveUnresolved = scopedItemsForVerdict(
+        unresolvedByQuestion,
+        verdict.questionId,
+        expected,
+      )
         .filter((item) => item.decisive);
-      const hasDecisiveUnknown = (claimsByQuestion.get(verdict.questionId) || [])
+      const hasDecisiveUnknown = scopedItemsForVerdict(
+        claimsByQuestion,
+        verdict.questionId,
+        expected,
+      )
         .some((claim) => claim.decisive && claim.status === "UNKNOWN")
         || decisiveUnresolved.length > 0;
       if (!hasDecisiveUnknown) {
@@ -1106,10 +1287,40 @@ function detectAnswerPolarity(text) {
 }
 
 function questionIdUniverse(result, expectedQuestionIds) {
-  const source = Array.isArray(expectedQuestionIds) && expectedQuestionIds.length > 0
-    ? expectedQuestionIds
+  const expected = normalizedExpectedQuestionIds(expectedQuestionIds);
+  const source = expected.length > 0
+    ? [...expected, ...result.verdicts.map((verdict) => verdict.questionId)]
     : result.verdicts.map((verdict) => verdict.questionId);
   return [...new Set(source.map(String))];
+}
+
+function normalizedExpectedQuestionIds(value) {
+  return [...new Set(
+    (Array.isArray(value) ? value : [])
+      .filter(isNonEmptyString)
+      .map(String),
+  )];
+}
+
+function resolveExpectedQuestionParent(questionId, expectedQuestionIds) {
+  const candidate = String(questionId || "");
+  const expected = normalizedExpectedQuestionIds(expectedQuestionIds);
+  if (expected.includes(candidate)) return candidate;
+  const parents = expected.filter((parent) => isQuestionSubId(candidate, parent));
+  return parents.length === 1 ? parents[0] : null;
+}
+
+function isQuestionSubId(candidate, parent) {
+  if (!candidate.startsWith(parent) || candidate === parent) return false;
+  const suffix = candidate.slice(parent.length);
+  return /^(?:[A-Za-z]+(?:[._:-][A-Za-z0-9]+)*|[._:-][A-Za-z0-9]+(?:[._:-][A-Za-z0-9]+)*)$/u.test(suffix);
+}
+
+function scopedItemsForVerdict(itemsByQuestion, verdictQuestionId, expectedQuestionIds) {
+  const direct = itemsByQuestion.get(verdictQuestionId) || [];
+  const parent = resolveExpectedQuestionParent(verdictQuestionId, expectedQuestionIds);
+  if (!parent || parent === verdictQuestionId) return direct;
+  return [...direct, ...(itemsByQuestion.get(parent) || [])];
 }
 
 function claimStatusSupportsVerdict(claimStatus, verdictValue) {
@@ -1146,6 +1357,15 @@ function uniqueIndex(items, key, path, errors) {
     index.set(id, item);
   }
   return index;
+}
+
+function dedupeStrings(values) {
+  return [...new Set(
+    (Array.isArray(values) ? values : [])
+      .filter((value) => typeof value === "string")
+      .map((value) => value.trim())
+      .filter(Boolean),
+  )];
 }
 
 function validateObjectArray(value, path, errors, validateItem, { minItems = 0 } = {}) {

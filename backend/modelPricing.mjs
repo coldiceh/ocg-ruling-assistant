@@ -309,6 +309,47 @@ export function estimateRelayModelCost({
   if (normalizedUsage.cacheWriteTokens > 0) {
     return unavailable("relay_cache_write_price_unavailable");
   }
+  const inputBreakdownReported = hasAnyOwnField(usage, [
+    "input_tokens",
+    "prompt_tokens",
+    "inputTokens",
+  ]);
+  const outputBreakdownReported = hasAnyOwnField(usage, [
+    "output_tokens",
+    "completion_tokens",
+    "outputTokens",
+  ]);
+  if (!inputBreakdownReported || !outputBreakdownReported) {
+    if (normalizedUsage.totalTokens <= 0) {
+      return unavailable("provider_usage_breakdown_unavailable");
+    }
+    // Some relay models report only total_tokens. Charging that entire total at
+    // the highest applicable token rate is a conservative ledger upper bound:
+    // it never turns an incomplete usage report into a zero-cost refund.
+    const highestRate = Math.max(
+      rates.inputUsdPerMillion,
+      rates.cachedInputUsdPerMillion,
+      rates.outputUsdPerMillion,
+    );
+    const upperBoundCostUsd = tokenCost(
+      normalizedUsage.totalTokens,
+      highestRate * resolvedPricingMultiplier,
+    );
+    return Object.freeze({
+      ...common,
+      pricingStatus: "estimated_upper_bound_unverified",
+      unavailabilityReason: "provider_usage_breakdown_unavailable",
+      usageBreakdownComplete: false,
+      upperBoundApplied: true,
+      upperBoundTokenBasis: "total_tokens_at_highest_rate",
+      inputCostUsd: 0,
+      cachedInputCostUsd: 0,
+      cacheWriteCostUsd: 0,
+      outputCostUsd: upperBoundCostUsd,
+      totalCostUsd: upperBoundCostUsd,
+      totalCostCny: exchangeRate === null ? null : roundMoney(upperBoundCostUsd * exchangeRate),
+    });
+  }
   const inputCostUsd = tokenCost(
     normalizedUsage.uncachedInputTokens,
     rates.inputUsdPerMillion * resolvedPricingMultiplier,
@@ -329,6 +370,8 @@ export function estimateRelayModelCost({
     ...common,
     pricingStatus: "estimated_unverified",
     unavailabilityReason: null,
+    usageBreakdownComplete: true,
+    upperBoundApplied: false,
     inputCostUsd,
     cachedInputCostUsd,
     cacheWriteCostUsd,
@@ -336,6 +379,15 @@ export function estimateRelayModelCost({
     totalCostUsd,
     totalCostCny: exchangeRate === null ? null : roundMoney(totalCostUsd * exchangeRate),
   });
+}
+
+function hasAnyOwnField(value, fields) {
+  return Boolean(
+    value
+    && typeof value === "object"
+    && !Array.isArray(value)
+    && fields.some((field) => Object.hasOwn(value, field)),
+  );
 }
 
 export function loadModelPricing(fileUrl = DEFAULT_PRICING_FILE_URL) {

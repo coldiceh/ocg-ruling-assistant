@@ -87,6 +87,7 @@ export async function runAdminModelMatrix({
   origin,
   password,
   question,
+  cardNameCandidates = [],
   sourceRunId: requestedSourceRunId,
   sourceConfiguration: requestedSourceConfiguration,
   configurations = DEFAULT_MATRIX_CONFIGURATIONS,
@@ -105,6 +106,7 @@ export async function runAdminModelMatrix({
   sleep = defaultSleep,
 } = {}) {
   const normalizedQuestion = requiredText(question, "question");
+  const normalizedCardNameCandidates = normalizeTextList(cardNameCandidates);
   const normalizedConfigurations = dedupeConfigurations(configurations);
   if (normalizedConfigurations.length === 0) throw new Error("at least one model configuration is required");
   const sourceConfiguration = normalizeConfiguration(
@@ -188,12 +190,14 @@ export async function runAdminModelMatrix({
       run: sourceRun,
       events: sourceAudit.events,
       question: normalizedQuestion,
+      cardNameCandidates: normalizedCardNameCandidates,
       sourceConfiguration,
       availableModels,
     });
   } else {
     const sourceCreated = await client.createRun({
       question: normalizedQuestion,
+      cardNameCandidates: normalizedCardNameCandidates,
       preparationProvider: EVIDENCE_PREPARATION_CONFIGURATION.provider,
       preparationModel: EVIDENCE_PREPARATION_CONFIGURATION.model,
       preparationReasoningMode: EVIDENCE_PREPARATION_CONFIGURATION.reasoningMode,
@@ -338,6 +342,7 @@ export async function runAdminModelMatrixBatch({
     const report = await runAdminModelMatrix({
       ...options,
       question: item.question,
+      cardNameCandidates: item.candidateCards,
       configurations: normalizedConfigurations,
       concurrency: 1,
       maxConcurrency: 1,
@@ -1135,6 +1140,7 @@ function normalizeQuestionCases(value) {
     return {
       caseId: requiredText(item.caseId || item.id || `case-${index + 1}`, `questions[${index}].caseId`),
       question: requiredText(item.question, `questions[${index}].question`),
+      candidateCards: normalizeTextList(item.candidateCards || item.cardNameCandidates),
     };
   });
 }
@@ -1449,6 +1455,14 @@ function firstFinite(...values) {
 
 function arrayOrEmpty(value) {
   return Array.isArray(value) ? value.map(String) : [];
+}
+
+function normalizeTextList(value) {
+  return [...new Set(
+    (Array.isArray(value) ? value : [])
+      .map((item) => String(item || "").trim())
+      .filter(Boolean),
+  )];
 }
 
 function requiredText(value, name) {

@@ -1305,9 +1305,6 @@ async function readRelayChatCompletionSse(response, {
   if (!state.chunks) {
     throw protocolError("relay stream completed without any JSON chunk", "relay_stream_empty");
   }
-  if (!state.finishReason) {
-    throw protocolError("relay stream completed without finish_reason", "relay_stream_finish_reason_missing");
-  }
   state.requestToCompleteMs = elapsedMonotonicMs(clock, requestStartedAt);
   return {
     ...(state.id ? { id: state.id } : {}),

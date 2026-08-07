@@ -2044,6 +2044,73 @@ test("complete deterministic card resolution skips the paid preparation model", 
   assert.equal(completed.result.metering.stages.evidencePreparation.cost.totalCostCny, 0);
 });
 
+test("provided card candidates form a closed scope that ignores preparation nickname noise", async () => {
+  const fixture = makeFixture();
+  const noisyPreparationProvider = {
+    async prepareEvidence() {
+      fixture.deepSeekPrepareCalls += 1;
+      fixture.advance(20);
+      return {
+        provider: "deepseek",
+        model: "deepseek-v4-flash",
+        canMakeFinalRuling: false,
+        canDecideEscalation: false,
+        result: {
+          cardNameCandidates: [
+            ...fixture.preparationCardNameCandidates,
+            { name: "廉价模型误猜昵称", originalText: "廉价模型误猜昵称" },
+          ],
+          ruleSearchQueries: [{ query: "匿名规则", reason: "mechanism" }],
+          unresolvedNotes: [],
+          conflicts: [],
+        },
+        usage: fixture.deepSeekUsage,
+      };
+    },
+    async runRuling() {
+      throw new Error("must never be called");
+    },
+  };
+  const service = makeService(fixture, {}, {
+    deepSeekProvider: noisyPreparationProvider,
+  });
+  const created = await service.createRun({
+    body: {
+      question: "简称可能产生噪声，但候选卡已经由评测用例明确给出。",
+      cardNameCandidates: ["匿名卡A", "匿名卡B"],
+      finalAttemptPolicy: "single",
+    },
+  });
+
+  const execution = await service.executeRun({ runId: created.runId });
+  const snapshot = execution.run.evidenceSnapshot;
+
+  assert.equal(fixture.deepSeekPrepareCalls, 1);
+  assert.equal(execution.run.status, ADMIN_RUN_STATUSES.RUNNING);
+  assert.equal(execution.providerRequest.requestId, "resp_admin_1");
+  assert.equal(snapshot.evidence.cardResolution.candidateScope, "provided_closed");
+  assert.deepEqual(
+    snapshot.evidence.cardResolution.providedCardNameCandidates,
+    ["匿名卡A", "匿名卡B"],
+  );
+  assert.deepEqual(
+    snapshot.evidence.cardResolution.resolvedCards.map((card) => card.name),
+    ["匿名卡A", "匿名卡B"],
+  );
+  assert.equal(
+    snapshot.evidence.preparation.extractedHints.cardNameCandidates.some(
+      (candidate) => candidate.name === "廉价模型误猜昵称",
+    ),
+    true,
+  );
+  assert.equal(
+    snapshot.evidence.unresolved.cardMentions.some(
+      (mention) => mention.input === "廉价模型误猜昵称",
+    ),
+    false,
+  );
+});
+
 test("zero deterministic card matches still invokes preparation even without quote marks", async () => {
   const fixture = makeFixture();
   fixture.cardResolution = {

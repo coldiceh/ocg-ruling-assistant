@@ -408,6 +408,9 @@ export function createAdminModelLabService({
       },
       questionIds: questions.map((item) => item.questionId),
       providedFacts: normalizeStringList(body.providedFacts),
+      cardNameCandidates: normalizeStringList(
+        body.cardNameCandidates ?? body.candidateCards,
+      ),
       evidenceVariant,
       pricing: serverPricingProfile,
     };
@@ -428,6 +431,7 @@ export function createAdminModelLabService({
           finalAttemptPolicy: finalRulingProfile.finalAttemptPolicy,
           promptVersion,
           liveOfficialQaEnabled,
+          cardNameCandidates: executionProfile.cardNameCandidates,
         },
       },
       dataVersions: jsonSafe(resolveServerDataVersions(dataVersions)),
@@ -1212,6 +1216,13 @@ export function createAdminModelLabService({
     const preparationReasoningEffort = run.executionProfile.preparation.reasoningEffort;
     const preparationReasoningMode = run.executionProfile.preparation.reasoningMode;
     const preparationMaxOutputTokens = run.executionProfile.preparation.maxOutputTokens;
+    const providedCardNameCandidates = normalizeStringList(
+      run.executionProfile.cardNameCandidates,
+    );
+    const closedCandidateScope = providedCardNameCandidates.length > 0;
+    const cardExtractionInput = closedCandidateScope
+      ? providedCardNameCandidates.map((name) => `《${name}》`).join("、")
+      : question;
     const startedAt = readWall(wallNow).toISOString();
     let preparationOutput;
     let data;
@@ -1224,11 +1235,17 @@ export function createAdminModelLabService({
     preparationOutput = await runTrackedStage(run.runId, tracker, "understand", async (signal) => {
       data = await loadData(dataDir);
       const allCards = Array.isArray(data?.cards) ? data.cards : [];
-      initialCardResolution = extractCards(question, {
+      initialCardResolution = extractCards(cardExtractionInput, {
         cards: allCards,
         maxCards: Math.max(1, allCards.length),
-        modelCardNameCandidates: [],
+        modelCardNameCandidates: closedCandidateScope
+          ? providedCardNameCandidates.map((name) => ({ name, originalText: name }))
+          : [],
       });
+      initialCardResolution = attachProvidedCandidateScope(
+        initialCardResolution,
+        providedCardNameCandidates,
+      );
       if (!needsPreparationModelHints(initialCardResolution)) {
         return skippedPreparationOutput("deterministic_card_resolution_complete");
       }
@@ -1250,11 +1267,14 @@ export function createAdminModelLabService({
     cardResolution = await runTrackedStage(run.runId, tracker, "extract_card_names", async () => {
       if (preparationOutput.skipped === true) return initialCardResolution;
       const allCards = Array.isArray(data?.cards) ? data.cards : [];
-      return extractCards(question, {
+      const resolved = extractCards(cardExtractionInput, {
         cards: allCards,
         maxCards: Math.max(1, allCards.length),
-        modelCardNameCandidates: preparationOutput.hints.cardNameCandidates,
+        modelCardNameCandidates: closedCandidateScope
+          ? providedCardNameCandidates.map((name) => ({ name, originalText: name }))
+          : preparationOutput.hints.cardNameCandidates,
       });
+      return attachProvidedCandidateScope(resolved, providedCardNameCandidates);
     }, executionToken);
 
     cardTextCandidates = await runTrackedStage(run.runId, tracker, "retrieve_card_texts", async () => (
@@ -1286,7 +1306,7 @@ export function createAdminModelLabService({
       // identity back to the local card corpus. Freeze that reconciled result,
       // rather than the pre-retrieval approximation, so downstream gates and
       // Lua lookup observe the same card identity as the evidence archive.
-      if (retrievedEvidence?.cardResolution) {
+      if (retrievedEvidence?.cardResolution && !closedCandidateScope) {
         cardResolution = jsonSafe(retrievedEvidence.cardResolution);
         cardTextCandidates = collectCompleteCardTextCandidates({
           data,
@@ -1815,6 +1835,7 @@ export function createAdminModelLabService({
         expectedQuestionIds: questionIds,
         providedFacts,
         normalizeEvidenceProvenance: true,
+        normalizeStructuralBindings: true,
       })
       : parseAndValidateModelRulingResult(extractOpenAIResponseOutputText(response), {
         evidenceSnapshot: run.evidenceSnapshot,
@@ -1822,6 +1843,7 @@ export function createAdminModelLabService({
         expectedQuestionIds: questionIds,
         providedFacts,
         normalizeEvidenceProvenance: true,
+        normalizeStructuralBindings: true,
       });
     const completedAttempt = buildFinalAttemptAudit({
       run,
@@ -1888,6 +1910,14 @@ export function createAdminModelLabService({
         "model_ruling_validation_failed",
       );
       error.reportedModel = nullableString(response?.model);
+      error.requestId = nullableString(request?.requestId);
+      error.model = nullableString(response?.model);
+      error.usage = completedAttempt.usage;
+      error.failureMetering = {
+        scope: "final_ruling_only",
+        usage: completedAttempt.usage,
+        cost: completedAttempt.cost,
+      };
       await failRunWithStage(run.runId, error, executionToken);
       return requireRun(run.runId);
     }
@@ -2927,6 +2957,17 @@ function collectCompleteCardTextCandidates({ data, cardResolution }) {
     unresolvedMentions: jsonSafe(cardResolution?.unresolvedMentions || []),
     ambiguousMentions: jsonSafe(cardResolution?.ambiguousMentions || []),
     omittedResolvedCards: jsonSafe(cardResolution?.omittedResolvedCards || []),
+  };
+}
+
+function attachProvidedCandidateScope(cardResolution, providedCardNameCandidates) {
+  const normalized = jsonSafe(cardResolution || {});
+  const candidates = normalizeStringList(providedCardNameCandidates);
+  if (candidates.length === 0) return normalized;
+  return {
+    ...normalized,
+    candidateScope: "provided_closed",
+    providedCardNameCandidates: candidates,
   };
 }
 
