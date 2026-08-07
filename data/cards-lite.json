@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-08-07T00:20:18.602Z",
+  "generatedAt": "2026-08-07T03:23:54.065Z",
   "records": [
     {
       "id": "21385",
@@ -429769,6 +429769,44 @@
       ]
     },
     {
+      "id": "23502",
+      "name": "No.101 S・H・Ark Knight－ソウル・アサイラム",
+      "jaName": "No.101 S・H・Ark Knight－ソウル・アサイラム",
+      "aliases": [
+        "No.101 S・H・Ark Knight－ソウル・アサイラム"
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Aqua",
+      "attribute": "water",
+      "attack": 2100,
+      "defense": 1000,
+      "atk": 2100,
+      "def": 1000,
+      "rank": 4,
+      "propertyIds": [
+        "31",
+        "18",
+        "4"
+      ],
+      "properties": [
+        "Aqua",
+        "Xyz",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "31",
+        "18",
+        "4"
+      ],
+      "monsterProperties": [
+        "Aqua",
+        "Xyz",
+        "Effect"
+      ]
+    },
+    {
       "id": "10588",
       "name": "青之眼少女",
       "cnName": "青之眼少女",
@@ -429811,6 +429849,111 @@
       ]
     },
     {
+      "id": "23497",
+      "name": "古の秘儀",
+      "jaName": "古の秘儀",
+      "aliases": [
+        "古の秘儀"
+      ],
+      "released": true,
+      "type": "spell",
+      "cardType": "spell"
+    },
+    {
+      "id": "23498",
+      "name": "聖なる心のバリア －マインドフォース－",
+      "jaName": "聖なる心のバリア －マインドフォース－",
+      "aliases": [
+        "聖なる心のバリア －マインドフォース－"
+      ],
+      "released": true,
+      "type": "trap",
+      "cardType": "trap"
+    },
+    {
+      "id": "23501",
+      "name": "氷結界の龍胤 エクハジャール",
+      "jaName": "氷結界の龍胤 エクハジャール",
+      "aliases": [
+        "氷結界の龍胤 エクハジャール"
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Dragon",
+      "attribute": "water",
+      "attack": 3000,
+      "defense": 1000,
+      "atk": 3000,
+      "def": 1000,
+      "level": 9,
+      "propertyIds": [
+        "21",
+        "19",
+        "4"
+      ],
+      "properties": [
+        "Dragon",
+        "Synchro",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "21",
+        "19",
+        "4"
+      ],
+      "monsterProperties": [
+        "Dragon",
+        "Synchro",
+        "Effect"
+      ]
+    },
+    {
+      "id": "23499",
+      "name": "冥府よりの使者",
+      "jaName": "冥府よりの使者",
+      "aliases": [
+        "冥府よりの使者"
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Fiend",
+      "attribute": "dark",
+      "attack": 2700,
+      "defense": 2500,
+      "atk": 2700,
+      "def": 2500,
+      "level": 7,
+      "propertyIds": [
+        "14",
+        "4"
+      ],
+      "properties": [
+        "Fiend",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "14",
+        "4"
+      ],
+      "monsterProperties": [
+        "Fiend",
+        "Effect"
+      ]
+    },
+    {
+      "id": "23503",
+      "name": "月女神の至天",
+      "jaName": "月女神の至天",
+      "aliases": [
+        "月女神の至天"
+      ],
+      "released": true,
+      "type": "spell",
+      "cardType": "spell"
+    },
+    {
       "id": "6053",
       "name": "7",
       "jaName": "7",
@@ -429821,6 +429964,82 @@
       "released": true,
       "type": "spell",
       "cardType": "spell"
+    },
+    {
+      "id": "23500",
+      "name": "ダーク・アームド・ドラゴン・バニッシャー",
+      "jaName": "ダーク・アームド・ドラゴン・バニッシャー",
+      "aliases": [
+        "ダーク・アームド・ドラゴン・バニッシャー"
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Dragon",
+      "attribute": "dark",
+      "attack": 2800,
+      "defense": 1000,
+      "atk": 2800,
+      "def": 1000,
+      "level": 7,
+      "propertyIds": [
+        "21",
+        "2",
+        "4"
+      ],
+      "properties": [
+        "Dragon",
+        "Special Summon Monster",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "21",
+        "2",
+        "4"
+      ],
+      "monsterProperties": [
+        "Dragon",
+        "Special Summon Monster",
+        "Effect"
+      ]
+    },
+    {
+      "id": "23504",
+      "name": "聖王女ローズパメラ",
+      "jaName": "聖王女ローズパメラ",
+      "aliases": [
+        "聖王女ローズパメラ"
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Spellcaster",
+      "attribute": "light",
+      "attack": 0,
+      "defense": 2000,
+      "atk": 0,
+      "def": 2000,
+      "level": 4,
+      "propertyIds": [
+        "8",
+        "20",
+        "4"
+      ],
+      "properties": [
+        "Spellcaster",
+        "Tuner",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "8",
+        "20",
+        "4"
+      ],
+      "monsterProperties": [
+        "Spellcaster",
+        "Tuner",
+        "Effect"
+      ]
     }
   ]
 }

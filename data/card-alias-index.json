@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-08-07T00:20:18.602Z",
+  "generatedAt": "2026-08-07T03:23:54.065Z",
   "records": [
     {
       "alias": "“K9刑侦案件”",
@@ -251317,6 +251317,13 @@
       "language": "en"
     },
     {
+      "alias": "No.101 S・H・Ark Knight－ソウル・アサイラム",
+      "normalizedAlias": "no.101 s・h・ark knight-ソウル・アサイラム",
+      "cardId": "23502",
+      "cardName": "No.101 S・H・Ark Knight－ソウル・アサイラム",
+      "language": "ja"
+    },
+    {
       "alias": "青之眼少女",
       "normalizedAlias": "青之眼少女",
       "cardId": "10588",
@@ -251338,11 +251345,60 @@
       "language": "en"
     },
     {
+      "alias": "古の秘儀",
+      "normalizedAlias": "古の秘儀",
+      "cardId": "23497",
+      "cardName": "古の秘儀",
+      "language": "ja"
+    },
+    {
+      "alias": "聖なる心のバリア －マインドフォース－",
+      "normalizedAlias": "聖なる心のバリア -マインドフォ-ス-",
+      "cardId": "23498",
+      "cardName": "聖なる心のバリア －マインドフォース－",
+      "language": "ja"
+    },
+    {
+      "alias": "氷結界の龍胤 エクハジャール",
+      "normalizedAlias": "氷結界の龍胤 エクハジャ-ル",
+      "cardId": "23501",
+      "cardName": "氷結界の龍胤 エクハジャール",
+      "language": "ja"
+    },
+    {
+      "alias": "冥府よりの使者",
+      "normalizedAlias": "冥府よりの使者",
+      "cardId": "23499",
+      "cardName": "冥府よりの使者",
+      "language": "ja"
+    },
+    {
+      "alias": "月女神の至天",
+      "normalizedAlias": "月女神の至天",
+      "cardId": "23503",
+      "cardName": "月女神の至天",
+      "language": "ja"
+    },
+    {
       "alias": "7",
       "normalizedAlias": "7",
       "cardId": "6053",
       "cardName": "7",
       "language": "unknown"
+    },
+    {
+      "alias": "ダーク・アームド・ドラゴン・バニッシャー",
+      "normalizedAlias": "ダ-ク・ア-ムド・ドラゴン・バニッシャ-",
+      "cardId": "23500",
+      "cardName": "ダーク・アームド・ドラゴン・バニッシャー",
+      "language": "ja"
+    },
+    {
+      "alias": "聖王女ローズパメラ",
+      "normalizedAlias": "聖王女ロ-ズパメラ",
+      "cardId": "23504",
+      "cardName": "聖王女ローズパメラ",
+      "language": "ja"
     }
   ]
 }
