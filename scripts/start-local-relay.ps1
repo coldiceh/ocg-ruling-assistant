@@ -60,10 +60,10 @@ if ([string]::IsNullOrWhiteSpace($env:RELAY_STREAM)) {
   $env:RELAY_STREAM = "true"
 }
 if ([string]::IsNullOrWhiteSpace($env:RELAY_STREAM_TIMEOUT_MS)) {
-  $env:RELAY_STREAM_TIMEOUT_MS = "700000"
+  $env:RELAY_STREAM_TIMEOUT_MS = "270000"
 }
 if ([string]::IsNullOrWhiteSpace($env:ADMIN_MODEL_LAB_SYNC_FINAL_TIMEOUT_MS)) {
-  $env:ADMIN_MODEL_LAB_SYNC_FINAL_TIMEOUT_MS = "740000"
+  $env:ADMIN_MODEL_LAB_SYNC_FINAL_TIMEOUT_MS = "290000"
 }
 if ([string]::IsNullOrWhiteSpace($env:ADMIN_MODEL_LAB_USD_TO_CNY_RATE)) {
   $env:ADMIN_MODEL_LAB_USD_TO_CNY_RATE = "7.5"

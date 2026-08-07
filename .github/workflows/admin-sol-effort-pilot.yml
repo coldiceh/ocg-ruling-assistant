@@ -1,0 +1,90 @@
+name: Admin Sol effort pilot
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_paid_run:
+        description: Confirm 12 paid Sol calls (4 cases x none/low/medium)
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: admin-sol-effort-pilot
+  cancel-in-progress: false
+
+jobs:
+  pilot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    env:
+      ADMIN_MODEL_LAB_BASE_URL: https://ocg-ruling-assistant.vercel.app
+      ADMIN_MODEL_LAB_ORIGIN: https://coldiceh.github.io
+      ADMIN_MODEL_LAB_PASSWORD: ${{ secrets.ADMIN_MODEL_LAB_PASSWORD }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+
+      - name: Require explicit confirmation and admin credential
+        shell: bash
+        env:
+          CONFIRM_PAID_RUN: ${{ inputs.confirm_paid_run }}
+        run: |
+          set -euo pipefail
+          if [ "$CONFIRM_PAID_RUN" != "true" ]; then
+            echo "Paid pilot was not explicitly confirmed" >&2
+            exit 1
+          fi
+          if [ -z "$ADMIN_MODEL_LAB_PASSWORD" ]; then
+            echo "ADMIN_MODEL_LAB_PASSWORD is not configured" >&2
+            exit 1
+          fi
+
+      - name: Prepare artifact directory
+        shell: bash
+        run: mkdir -p artifacts
+
+      - name: Run four-case Sol effort matrix sequentially
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/admin-model-matrix.mjs \
+            --cases-file tests/fixtures/admin-evidence-dry-run-cases.json \
+            --config relay:relay-gpt-5.6-sol:pro:low:full \
+            --config relay:relay-gpt-5.6-sol:pro:none:full \
+            --config relay:relay-gpt-5.6-sol:pro:medium:full \
+            --format json \
+            --output artifacts/sol-effort-none-low-medium-report.json \
+            --concurrency 1 \
+            --max-final-requests 12 \
+            --max-cost-cny 12 \
+            --estimated-cny-per-request 1 \
+            --timeout-ms 900000
+
+      - name: Export complete frozen source snapshots
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/export-admin-source-snapshots.mjs \
+            --report artifacts/sol-effort-none-low-medium-report.json \
+            --output artifacts/sol-effort-none-low-medium-source-bundle.json
+
+      - name: Upload reports and frozen source bundle
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: admin-sol-effort-pilot-${{ github.run_id }}
+          path: |
+            artifacts/sol-effort-none-low-medium-report.json
+            artifacts/sol-effort-none-low-medium-source-bundle.json
+          if-no-files-found: warn
+          retention-days: 14
