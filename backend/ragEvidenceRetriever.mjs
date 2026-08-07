@@ -1888,7 +1888,36 @@ async function enrichCardsWithBaige(cards, {
     const searchResult = await searchBaige(nameQuery, { fetchImpl, env, limits, debug });
     warnings.push(...searchResult.warnings);
     const selection = selectUniqueBaigeCandidate(searchResult.results || [], 0.72);
-    const best = selection.card;
+    let best = selection.card;
+    let matchedQuery = nameQuery;
+    let verifiedByCanonicalLookup = false;
+    if (!best && !selection.ambiguous && needsSurfaceIdentityVerification) {
+      const canonicalLookup = await verifySurfaceIdentityThroughCanonicalBaigeLookup(card, {
+        primaryQuery: nameQuery,
+        fetchImpl,
+        env,
+        limits,
+        warnings,
+        debug,
+      });
+      best = canonicalLookup.card;
+      matchedQuery = canonicalLookup.matchedQuery || nameQuery;
+      verifiedByCanonicalLookup = Boolean(best);
+      if (canonicalLookup.ambiguous) {
+        debug.ambiguousMentions.push({
+          input: card.input || nameQuery,
+          reason: "conflicting_baige_card_identity",
+          candidateCards: canonicalLookup.candidates.slice(0, 3).map((candidate) => ({
+            id: candidate.id || candidate.cardId || "",
+            cid: candidate.cid ?? null,
+            name: candidate.name || candidate.cnName || candidate.jpName || candidate.enName || "",
+            source: "baige_canonical_identity_lookup",
+            confidence: candidate.confidence || 0,
+            matchedQuery: canonicalLookup.matchedQuery || "",
+          })),
+        });
+      }
+    }
     if (!best) {
       if (selection.ambiguous) {
         debug.ambiguousMentions.push({
@@ -1913,8 +1942,16 @@ async function enrichCardsWithBaige(cards, {
     }
     const externalCard = {
       ...toRagCard(best, card.input || nameQuery, Number(best.confidence || 0)),
-      matchedQuery: nameQuery,
+      matchedQuery,
     };
+    if (verifiedByCanonicalLookup) {
+      warnings.push(`local_approximate_identity_verified_via_canonical_lookup:${card.input}:${matchedQuery}`);
+      return {
+        ...mergeCard(card, externalCard),
+        identityVerificationStatus: "verified_same_identity",
+        identityVerificationSource: "canonical_external_lookup",
+      };
+    }
     if (needsSurfaceIdentityVerification && !sameStableCardIdentity(card, externalCard)) {
       warnings.push(`local_approximate_identity_replaced:${card.input}:${card.name}->${externalCard.name}`);
       return ensureCardMentionAlias({
@@ -1932,6 +1969,90 @@ async function enrichCardsWithBaige(cards, {
     };
   }));
   return result.filter(Boolean);
+}
+
+async function verifySurfaceIdentityThroughCanonicalBaigeLookup(card, {
+  primaryQuery,
+  fetchImpl,
+  env,
+  limits,
+  warnings,
+  debug,
+}) {
+  for (const query of canonicalIdentityVerificationQueries(card, primaryQuery)) {
+    const searchResult = await searchBaige(query, { fetchImpl, env, limits, debug });
+    warnings.push(...searchResult.warnings);
+    const selection = selectUniqueBaigeCandidate(searchResult.results || [], 0.72);
+    if (selection.ambiguous) {
+      warnings.push(`baige_canonical_identity_ambiguous:${card.input || primaryQuery}:${query}`);
+      return {
+        card: null,
+        matchedQuery: query,
+        ambiguous: true,
+        candidates: selection.candidates,
+      };
+    }
+    if (!selection.card) continue;
+
+    if (!canonicalLookupVerifiesUserSurface(card, selection.card)) {
+      warnings.push(`baige_canonical_identity_mismatch:${card.input || primaryQuery}:${query}`);
+      continue;
+    }
+    return {
+      card: selection.card,
+      matchedQuery: query,
+      ambiguous: false,
+      candidates: selection.candidates,
+    };
+  }
+  return { card: null, matchedQuery: "", ambiguous: false, candidates: [] };
+}
+
+function canonicalIdentityVerificationQueries(card = {}, primaryQuery = "") {
+  const excludedKeys = new Set([
+    normalizeCardKey(primaryQuery),
+    normalizeCardKey(card.input),
+    normalizeCardKey(card.matchedQuery),
+  ].filter(Boolean));
+  return dedupeBy([
+    card.jaName,
+    card.jpName,
+    card.enName,
+    card.name,
+    card.cnName,
+  ].map((value) => String(value || "").trim()).filter((value) => (
+    value && !excludedKeys.has(normalizeCardKey(value))
+  )), normalizeCardKey).slice(0, 3);
+}
+
+function canonicalLookupVerifiesUserSurface(localCard = {}, externalCard = {}) {
+  const inputKey = normalizeCardKey(localCard.input || localCard.matchedQuery);
+  if (!inputKey) return false;
+  // This check must use only identity surfaces returned by the provider.
+  // `toRagCard()` deliberately adds the user's mention as a display alias, so
+  // validating after that conversion would make every lookup self-confirming.
+  const explicitExternalNames = [
+    externalCard.cnName,
+    externalCard.jaName,
+    externalCard.jpName,
+    externalCard.enName,
+  ].map((value) => String(value || "").trim()).filter(Boolean);
+  if (!explicitExternalNames.length) return false;
+  const externalKeys = new Set([
+    ...explicitExternalNames,
+    ...(externalCard.aliases || []),
+  ].map(normalizeCardKey).filter(Boolean));
+  if (!externalKeys.has(inputKey)) return false;
+
+  if (sameStableCardIdentity(localCard, externalCard)) return true;
+  const localCanonicalKeys = new Set([
+    localCard.name,
+    localCard.cnName,
+    localCard.jaName,
+    localCard.jpName,
+    localCard.enName,
+  ].map(normalizeCardKey).filter(Boolean));
+  return [...localCanonicalKeys].some((key) => externalKeys.has(key));
 }
 
 function cardInputNeedsIdentityVerification(card = {}) {

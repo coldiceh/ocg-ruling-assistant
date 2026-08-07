@@ -26,6 +26,8 @@
 
 若输入含有 `legacyLuaSemanticPacket`，它只是从锁定旧版脚本提取的非权威语义提示，不能单独充当官方裁定或最终真值。其中 `activationLegalityChecks` 表示旧脚本在发动检查阶段执行的候选存在性约束，必须按以下通用方法使用：
 
+- 先按 `resources[].resourceId` 绑定候选来源。预计算资源的 `sourceDocumentId` 会显式包含 `cid-<卡片CID>` 与 `passcode-<脚本密码>`；只可把该资源的检查用于 Evidence Snapshot 中 CID 相同的已解析卡片，禁止跨卡套用。
+- `selectorSummary` 是筛选器自动生成的有界布尔摘要；`FILTER_ARGUMENT_n` 依次对应 `filterArgumentExpressions[n-1]`。先根据题设中触发/响应效果的种类代入分支，再按双方区域、`filterExpression` 和 `predicateApi` 枚举候选，不能把另一分支的卡混入数量。
 - 对与当前待发动效果对应的每项检查，依据题设的发动时状态、检查范围与筛选条件，枚举范围内的全部候选；不得只看见场上“有一张卡”就默认它合法。
 - 对每个候选逐一核对其是否满足 `predicateApi` 所表示的能力或资格；该核对必须由可见卡文、规则资料或题设事实支撑。无法证明满足的候选不得计入合格数量，也不得从 API 名称反向补造规则。
 - 将合格候选数量与 `requiredMinimum` 比较。若在发动时确定无法达到 `requiredMinimum`，该项发动前提不成立，效果不能发动；不得把这个失败改写成“可以发动，之后对应处理为空”。

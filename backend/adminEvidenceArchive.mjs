@@ -111,6 +111,9 @@ const MECHANISM_RELEVANCE_FEATURES = Object.freeze([
   feature("graveyard", 3, false, /(?:墓地|graveyard|\bGY\b)/iu),
 ]);
 
+const NON_STAYING_ACTIVATED_SPELL_TRAP_PATTERN = /(?:(?:发动|發動)(?:后|後).{0,20}(?:不能|不会|無法|无法|不得).{0,16}(?:留在|停留|存在于|存在於).{0,12}(?:场上|場上|フィールド)|(?:发动|發動).{0,48}(?:连锁|連鎖).{0,24}(?:处理完毕|處理完畢|处理结束|處理結束).{0,24}(?:送去|送入|送往).{0,10}墓地|発動後.{0,24}フィールド.{0,20}(?:残ら|存在しない)|発動.{0,48}チェーン.{0,24}(?:処理|解決).{0,24}墓地へ送ら|(?:spell|trap).{0,80}(?:does not|doesn't|cannot|can't).{0,16}remain.{0,20}field|(?:after|when).{0,32}(?:resolves|resolution).{0,32}(?:sent|send).{0,16}(?:graveyard|\bGY\b))/isu;
+const PENDING_RETURN_PROHIBITION_PATTERN = /(?:(?:不能|无法|無法|不得|不可以).{0,48}(?:回到|返回|放回).{0,24}(?:手牌|手卡|卡组|牌组)|(?:手札|デッキ).{0,32}戻.{0,20}(?:できない|できません)|(?:cannot|can't|may not).{0,48}(?:return|returned).{0,24}(?:hand|deck))/isu;
+
 /**
  * Builds a lossless audit archive for the candidate collections supplied by
  * the deterministic retriever.
@@ -1338,6 +1341,11 @@ function aggregateDecisionCandidates(archive) {
   const relevanceContext = buildMechanismRelevanceContext(archive, aggregated);
   return layerDecisionCandidates(aggregated.map((candidate) => ({
     ...candidate,
+    pendingSpellTrapMovementRestrictionScore:
+      pendingSpellTrapMovementRestrictionRelevance(
+        candidate.bodyText,
+        relevanceContext,
+      ),
     operationRelevanceScore:
       candidate.category === ADMIN_EVIDENCE_CATEGORIES.MECHANISM_RULE
         ? mechanismOperationRelevance(candidate.bodyText, relevanceContext)
@@ -1379,6 +1387,37 @@ function mechanismOperationRelevance(bodyText, contextFeatures) {
   ));
   if (!shared.some((item) => item.core)) return 0;
   return shared.reduce((total, item) => total + item.weight, 0);
+}
+
+function pendingSpellTrapMovementRestrictionRelevance(bodyText, contextFeatures) {
+  if (!(contextFeatures instanceof Set)) return 0;
+  const contextMatches = contextFeatures.has("spell_trap")
+    && (
+      contextFeatures.has("return_to_hand")
+      || contextFeatures.has("return_to_deck")
+    )
+    && (
+      contextFeatures.has("chain")
+      || contextFeatures.has("activation_legality")
+      || contextFeatures.has("activated_card_pending")
+    );
+  if (!contextMatches) return 0;
+
+  const candidateFeatures = extractMechanismFeatureSet(bodyText);
+  const candidateMatches = candidateFeatures.has("spell_trap")
+    && candidateFeatures.has("chain")
+    && candidateFeatures.has("activated_card_pending")
+    && (
+      candidateFeatures.has("return_to_hand")
+      || candidateFeatures.has("return_to_deck")
+    );
+  if (!candidateMatches) return 0;
+
+  const text = normalizeSubstantiveText(bodyText);
+  return NON_STAYING_ACTIVATED_SPELL_TRAP_PATTERN.test(text)
+    && PENDING_RETURN_PROHIBITION_PATTERN.test(text)
+    ? 1
+    : 0;
 }
 
 function extractMechanismFeatureSet(value) {
@@ -1497,7 +1536,8 @@ function layerDecisionCandidates(candidates) {
 }
 
 function compareDecisionCandidatesWithinCategory(left, right) {
-  return mechanismOperationRelevanceDelta(left, right)
+  return pendingSpellTrapMovementRestrictionDelta(left, right)
+    || mechanismOperationRelevanceDelta(left, right)
     || Number(right.direct) - Number(left.direct)
     || Number(right.authority === "official") - Number(left.authority === "official")
     || Number(right.current) - Number(left.current)
@@ -1507,6 +1547,11 @@ function compareDecisionCandidatesWithinCategory(left, right) {
       - numberOrNegativeInfinity(left.relevanceScore)
     || left.evidenceIds[0].localeCompare(right.evidenceIds[0], "en")
     || left.substanceHash.localeCompare(right.substanceHash, "en");
+}
+
+function pendingSpellTrapMovementRestrictionDelta(left, right) {
+  return Number(right.pendingSpellTrapMovementRestrictionScore || 0)
+    - Number(left.pendingSpellTrapMovementRestrictionScore || 0);
 }
 
 function mechanismOperationRelevanceDelta(left, right) {
@@ -1530,6 +1575,7 @@ function sourceCollectionPriority(collection) {
 function weightedRelatedCandidateOrder(candidates) {
   const groups = new Map([
     ["direct_or_response", []],
+    ["pending_spell_trap_movement_restriction", []],
     ["faq", []],
     ["official_related", []],
     ["raw_or_other", []],
@@ -1548,6 +1594,10 @@ function weightedRelatedCandidateOrder(candidates) {
   };
   while (take("direct_or_response")) {
     // direct/traceable response candidates are always first
+  }
+  while (take("pending_spell_trap_movement_restriction")) {
+    // A self-contained applicable restriction is more useful than merely
+    // similar examples when the bounded packet cannot retain every candidate.
   }
   const schedule = [
     "faq",
@@ -1584,6 +1634,9 @@ function relatedCandidateGroup(candidate) {
   if (candidate.direct || collections.some(
     (value) => /officialQaDirectCandidates|provisionalOfficialResponses/iu.test(value),
   )) return "direct_or_response";
+  if (candidate.pendingSpellTrapMovementRestrictionScore > 0) {
+    return "pending_spell_trap_movement_restriction";
+  }
   if (collections.some((value) => /faqRelated/iu.test(value))) return "faq";
   if (collections.some((value) => /officialQaRelated/iu.test(value))) return "official_related";
   return "raw_or_other";
@@ -1606,6 +1659,8 @@ function omittedEntry(candidate, reason) {
     relevanceScore: Number.isFinite(candidate.relevanceScore)
       ? candidate.relevanceScore
       : null,
+    pendingSpellTrapMovementRestrictionScore:
+      candidate.pendingSpellTrapMovementRestrictionScore || 0,
     operationRelevanceScore: candidate.operationRelevanceScore || 0,
     bestCollectionRank: candidate.bestCollectionRank,
     sourceCollections: candidate.sourceCollections,
@@ -1710,6 +1765,8 @@ function createIncludedManifest(includedSelections) {
     bodyHash: candidate.bodyHash,
     evidenceIds: candidate.evidenceIds,
     occurrenceIds: candidate.occurrenceIds,
+    pendingSpellTrapMovementRestrictionScore:
+      candidate.pendingSpellTrapMovementRestrictionScore || 0,
     operationRelevanceScore: candidate.operationRelevanceScore || 0,
   }));
 }
@@ -1757,6 +1814,7 @@ function createModelPacketSnapshot({
       categoryMinimumGuarantee:
         "weighted_grounding_and_support_coverage_without_category_starvation",
       withinCategoryPriority: [
+        "pendingSpellTrapMovementRestriction",
         "mechanismOperationRelevance",
         "direct",
         "official",

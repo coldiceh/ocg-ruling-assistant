@@ -565,6 +565,124 @@ test("an unbound local edit candidate still fails closed when external verificat
   assert.equal(evidence.retrievedCards[0].identityVerificationStatus, "unverified");
 });
 
+test("a canonical-name lookup can verify a translated surface alias without blessing arbitrary edit matches", async () => {
+  clearBaigeSearchCache();
+  const userSurface = "测试风之达维";
+  const canonicalJapaneseName = "テスト風のエルダム";
+  const canonicalEnglishName = "Test Wind Eldam";
+  const canonicalLocalCard = {
+    id: "611",
+    name: "测试风之达象",
+    jaName: canonicalJapaneseName,
+    enName: canonicalEnglishName,
+    aliases: ["测试风之达象", canonicalJapaneseName, canonicalEnglishName],
+    effectText: "本地候选卡文。",
+    sourceUrl: "https://db.ygoresources.com/data/card/611",
+  };
+  const calls = [];
+  const evidence = await retrieveRagEvidence({
+    userQuery: `「${userSurface}」可以发动吗？`,
+    cardResolution: {
+      resolvedCards: [{
+        ...canonicalLocalCard,
+        input: userSurface,
+        cardId: canonicalLocalCard.id,
+        confidence: 0.94,
+        resolutionSource: "query",
+      }],
+      unresolvedMentions: [],
+      ambiguousMentions: [],
+      userProvidedCardTexts: [],
+    },
+    cards: [canonicalLocalCard],
+    records: [],
+    qaRecords: [],
+    fetchImpl: async (url) => {
+      const query = new URL(String(url)).searchParams.get("search");
+      calls.push(query);
+      if (query !== canonicalJapaneseName) return jsonResponse({ result: [], next: 0 });
+      return jsonResponse({
+        result: [{
+          cid: 611,
+          id: 12345611,
+          cn_name: userSurface,
+          jp_name: canonicalJapaneseName,
+          en_name: canonicalEnglishName,
+          text: { types: "[怪兽|效果]", desc: "社区卡文。" },
+          data: { type: 33 },
+        }],
+        next: 0,
+      });
+    },
+    env: { RAG_LIVE_OFFICIAL_QA: "0" },
+  });
+
+  assert.ok(calls.includes(userSurface));
+  assert.ok(calls.includes(canonicalJapaneseName));
+  assert.equal(evidence.retrievedCards.length, 1);
+  assert.equal(evidence.retrievedCards[0].id, canonicalLocalCard.id);
+  assert.equal(evidence.retrievedCards[0].identityVerificationStatus, "verified_same_identity");
+  assert.equal(evidence.retrievedCards[0].identityVerificationSource, "canonical_external_lookup");
+  assert.deepEqual(evidence.cardResolution.unresolvedMentions, []);
+});
+
+test("a canonical-name lookup fails closed when the provider record does not contain the user surface", async () => {
+  clearBaigeSearchCache();
+  const userSurface = "测试风之达维";
+  const canonicalChineseName = "测试风之达象";
+  const canonicalJapaneseName = "テスト風のエルダム";
+  const canonicalLocalCard = {
+    id: "612",
+    name: canonicalChineseName,
+    jaName: canonicalJapaneseName,
+    enName: "Test Wind Eldam Two",
+    aliases: [canonicalChineseName, canonicalJapaneseName, "Test Wind Eldam Two"],
+    effectText: "本地候选卡文。",
+    sourceUrl: "https://db.ygoresources.com/data/card/612",
+  };
+  const evidence = await retrieveRagEvidence({
+    userQuery: `「${userSurface}」可以发动吗？`,
+    cardResolution: {
+      resolvedCards: [{
+        ...canonicalLocalCard,
+        input: userSurface,
+        cardId: canonicalLocalCard.id,
+        confidence: 0.94,
+        resolutionSource: "query",
+      }],
+      unresolvedMentions: [],
+      ambiguousMentions: [],
+      userProvidedCardTexts: [],
+    },
+    cards: [canonicalLocalCard],
+    records: [],
+    qaRecords: [],
+    fetchImpl: async (url) => {
+      const query = new URL(String(url)).searchParams.get("search");
+      if (query !== canonicalJapaneseName) return jsonResponse({ result: [], next: 0 });
+      return jsonResponse({
+        result: [{
+          cid: 612,
+          id: 12345612,
+          cn_name: canonicalChineseName,
+          jp_name: canonicalJapaneseName,
+          en_name: "Test Wind Eldam Two",
+          text: { types: "[怪兽|效果]", desc: "社区卡文。" },
+          data: { type: 33 },
+        }],
+        next: 0,
+      });
+    },
+    env: { RAG_LIVE_OFFICIAL_QA: "0" },
+  });
+
+  assert.equal(evidence.retrievedCards[0].identityVerificationStatus, "unverified");
+  assert.ok(evidence.cardResolution.unresolvedMentions.some((mention) => (
+    mention.input === userSurface
+    && mention.reason === "external_identity_verification_failed"
+  )));
+});
+
 test("a generated near alias remains unverified when external verification is unavailable", async () => {
   clearBaigeSearchCache();
   const userSurface = "AA简称乙";

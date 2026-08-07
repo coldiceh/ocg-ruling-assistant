@@ -658,6 +658,7 @@ test("decision packet weights related rulings while preserving authoritative mec
   assert.deepEqual(
     first.modelPacket.policy.withinCategoryPriority,
     [
+      "pendingSpellTrapMovementRestriction",
       "mechanismOperationRelevance",
       "direct",
       "official",
@@ -731,6 +732,83 @@ test("question operations keep the matching mechanism rule inside a bounded pack
       item.reason === "item_limit" && item.operationRelevanceScore === 0
     )),
     true,
+  );
+});
+
+test("a 16-item packet keeps the self-contained pending spell/trap movement restriction", () => {
+  const archive = createAdminEvidenceArchive({
+    cardTextCandidates: {
+      resolved: Array.from({ length: 12 }, (_, index) => ({
+        id: `anonymous-card-text-${index + 1}`,
+        name: `匿名卡${index + 1}`,
+        text: index === 0
+          ? "这个效果发动后，将场上的魔法・陷阱卡全部返回手牌。"
+          : `匿名卡${index + 1}的卡片文本。`,
+      })),
+    },
+    evidenceBuckets: {
+      officialQaRelated: Array.from({ length: 8 }, (_, index) => ({
+        id: `similar-ruling-${index + 1}`,
+        type: "official_qa",
+        question: `相似但不决定发动合法性的提问${index + 1}。`,
+        answer: `相似但不决定发动合法性的回答${index + 1}。`,
+      })),
+      rulebookCandidates: [
+        {
+          id: "overlapping-exception-passage",
+          type: "rulebook",
+          score: 999,
+          text: "特别地，发动后会变成装备卡并持续在场上的魔法・陷阱卡，在连锁途中可以回到手牌・卡组。发动后会再次盖放自身或变成其他种类的魔法・陷阱卡，在连锁途中不能回到手牌・卡组。",
+        },
+        ...Array.from({ length: 20 }, (_, index) => ({
+          id: `unrelated-rule-${index + 1}`,
+          type: "rulebook",
+          score: 500 - index,
+          text: `无关机制${index + 1}：怪兽的攻击力变化按照各自效果处理。`,
+        })),
+        {
+          id: "self-contained-pending-movement-restriction",
+          type: "rulebook",
+          score: 1,
+          text: "发动后不能留在场上的魔法・陷阱卡，会在其发动的连锁处理完毕时送去墓地。这种魔法・陷阱卡在连锁途中不能从场上回到手牌・卡组。",
+        },
+      ],
+    },
+    collections: [
+      {
+        name: "one-context-item",
+        categoryHint: ADMIN_EVIDENCE_CATEGORIES.CONTEXT,
+        items: [{ id: "context-item", text: "检索上下文。" }],
+      },
+      {
+        name: "one-other-item",
+        categoryHint: ADMIN_EVIDENCE_CATEGORIES.OTHER,
+        items: [{ id: "other-item", text: "其他辅助资料。" }],
+      },
+    ],
+    metadata: {
+      selectionContext: createAdminEvidenceSelectionContext({
+        question: "某个将场上的魔法・陷阱卡全部返回手牌的效果，能否直接连锁一张正在发动的通常陷阱？场上没有其他魔法・陷阱卡。",
+      }),
+    },
+  });
+  const packet = buildAdminEvidenceDecisionPacket({ archive });
+  const includedIds = packet.modelPacket.evidenceItems.map((item) => item.evidenceId);
+
+  assert.equal(includedIds.length, 16);
+  assert.ok(includedIds.includes("self-contained-pending-movement-restriction"));
+  assert.equal(includedIds.includes("overlapping-exception-passage"), false);
+  assert.equal(
+    packet.includedManifest.find((item) => (
+      item.evidenceIds.includes("self-contained-pending-movement-restriction")
+    ))?.pendingSpellTrapMovementRestrictionScore,
+    1,
+  );
+  assert.equal(
+    packet.omittedManifest.find((item) => (
+      item.evidenceIds.includes("overlapping-exception-passage")
+    ))?.pendingSpellTrapMovementRestrictionScore,
+    0,
   );
 });
 

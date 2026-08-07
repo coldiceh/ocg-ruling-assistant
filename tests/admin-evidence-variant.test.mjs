@@ -36,6 +36,8 @@ test("full evidence variant preserves the pre-ablation final input byte for byte
     "资料准备模型只提供候选卡名与补充检索词，不是裁定；确定性查询始终优先，但模型补充词仍可能扩展候选集合，所以必须独立核对每条可见证据。",
     "只能引用 evidenceDecisionPacket.evidenceItems 中实际展示正文的 evidenceId；omissionSummary 只有计数与审计哈希，不是证据。",
     "legacyLuaSemanticPacket 是旧 Lua 脚本自动提取的非权威语义旁路，只能提示可能需要检查的条件、操作和底层 API 依赖；它不是官方资料，不能加入 evidenceIds，candidateVerdict 不能直接支持结论，verdict=UNKNOWN 也绝不表示不能发动或不能处理。",
+    "使用 Lua 候选前必须先读取候选自身的 sourceBinding，并在 resources 存在时按 resourceId 交叉核对来源；预计算 sourceDocumentId 中的 cid-<卡片CID>/passcode-<脚本密码> 只允许绑定 Evidence Snapshot 内 resolvedCards.cid 相同的已解析卡片，禁止跨卡套用。activationLegalityChecks 的 requiredMinimum 是发动前最低候选数，不满足时不能改写成发动后空处理。",
+    "selectorSummary 是 Lua 筛选器自动生成的有界布尔摘要；FILTER_ARGUMENT_n 依次绑定 filterArgumentExpressions[n-1]。必须先按题设的响应效果种类代入分支，再依据 controllerLocation、opponentLocation、filterExpression 和 predicateApi 逐项计算候选，不能把另一分支的怪兽或魔陷混入数量。",
     "不得调用网络搜索，不得引用快照外资料。",
     `{"schemaVersion":2,"evidenceSnapshot":{"id":"snapshot-full-golden","sha256":"${"f".repeat(64)}"},"questions":[{"questionId":"q1","text":"匿名问题"}],"providedFacts":["匿名事实"],"cardResolution":{"resolvedCards":[]},"unresolved":{},"retrievalWarnings":[],"completeness":{},"evidenceDecisionPacket":{"evidenceItems":[]},"legacyLuaSemanticPacket":null}`,
   ].join("\n");

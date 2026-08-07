@@ -108,6 +108,7 @@ test("public model environment pins the selected final profile and keeps prepara
     ADMIN_OPENAI_ENABLED: "true",
     ADMIN_OPENAI_BASE_URL: "https://admin-openai.example.test",
     ADMIN_MODEL_LAB_ENABLED: "true",
+    ADMIN_MODEL_LAB_BYPASS_DAILY_BUDGET: "true",
     GLM_API_KEY: "admin-glm-key",
     GLM_BASE_URL: "https://glm.example.test",
     KIMI_API_KEY: "admin-kimi-key",
@@ -124,6 +125,7 @@ test("public model environment pins the selected final profile and keeps prepara
   assert.equal(publicEnv.RAG_RULE_MODEL_PROVIDER, "deepseek");
   assert.equal(publicEnv.RAG_RULEBOOK_MODEL_PROVIDER, "deepseek");
   assert.equal(Object.keys(publicEnv).some((key) => /^(?:OPENAI_|ADMIN_|KIMI_)/iu.test(key)), false);
+  assert.equal(publicEnv.ADMIN_MODEL_LAB_BYPASS_DAILY_BUDGET, undefined);
   assert.equal(publicEnv.GLM_API_KEY, undefined);
   assert.equal(publicEnv.GLM_BASE_URL, undefined);
   assert.equal(publicEnv.DEEPSEEK_API_KEY, "public-deepseek-key");
