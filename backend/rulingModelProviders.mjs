@@ -500,11 +500,12 @@ export class CompatibleEvidencePreparationProvider {
     if (this.providerId !== "relay") {
       throw new TypeError("requestRelayStream is restricted to the relay provider");
     }
+    const timeoutMaximumMs = readRelayStreamTimeoutMaximumMs(this.env);
     const timeoutMs = boundedPositiveInteger(
       this.env.RELAY_STREAM_TIMEOUT_MS,
       "RELAY_STREAM_TIMEOUT_MS",
-      700_000,
-      { minimum: 1_000, maximum: 720_000 },
+      270_000,
+      { minimum: 1_000, maximum: timeoutMaximumMs },
     );
     const maxBytes = boundedPositiveInteger(
       this.env.RELAY_STREAM_MAX_BYTES,
@@ -609,6 +610,22 @@ export class CompatibleEvidencePreparationProvider {
       signal?.removeEventListener?.("abort", externalAbort);
     }
   }
+}
+
+function readRelayStreamTimeoutMaximumMs(env = {}) {
+  const value = env.RELAY_LOCAL_STREAM_TIMEOUT_MAX_MS;
+  if (value === undefined || value === null || value === "") return 280_000;
+  if (readBooleanFlag(env.VERCEL, false)) {
+    throw new TypeError(
+      "RELAY_LOCAL_STREAM_TIMEOUT_MAX_MS is local-only and must not be set on Vercel",
+    );
+  }
+  return boundedPositiveInteger(
+    value,
+    "RELAY_LOCAL_STREAM_TIMEOUT_MAX_MS",
+    280_000,
+    { minimum: 280_000, maximum: 3_600_000 },
+  );
 }
 
 export function createEvidencePreparationProviderRegistry({ providers = [] } = {}) {

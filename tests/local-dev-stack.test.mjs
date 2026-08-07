@@ -109,8 +109,8 @@ test("relay launcher provisions the same admin session credential used by the we
     );
   }
   assert.match(launcher, /RELAY_MAX_COMPLETION_TOKENS\)\) \{\s*\$env:RELAY_MAX_COMPLETION_TOKENS = "8192"/u);
-  assert.match(launcher, /RELAY_STREAM_TIMEOUT_MS\)\) \{\s*\$env:RELAY_STREAM_TIMEOUT_MS = "700000"/u);
-  assert.match(launcher, /ADMIN_MODEL_LAB_SYNC_FINAL_TIMEOUT_MS\)\) \{\s*\$env:ADMIN_MODEL_LAB_SYNC_FINAL_TIMEOUT_MS = "740000"/u);
+  assert.match(launcher, /RELAY_STREAM_TIMEOUT_MS\)\) \{\s*\$env:RELAY_STREAM_TIMEOUT_MS = "270000"/u);
+  assert.match(launcher, /ADMIN_MODEL_LAB_SYNC_FINAL_TIMEOUT_MS\)\) \{\s*\$env:ADMIN_MODEL_LAB_SYNC_FINAL_TIMEOUT_MS = "290000"/u);
   assert.match(launcher, /ADMIN_MODEL_LAB_USD_TO_CNY_RATE\)\) \{\s*\$env:ADMIN_MODEL_LAB_USD_TO_CNY_RATE = "7\.5"/u);
   assert.match(launcher, /ADMIN_FINAL_BUDGET_DEEPSEEK_DAILY_CNY\)\) \{\s*\$env:ADMIN_FINAL_BUDGET_DEEPSEEK_DAILY_CNY = "10"/u);
   assert.match(launcher, /ADMIN_FINAL_BUDGET_DEEPSEEK_RESERVATION_CNY\)\) \{\s*\$env:ADMIN_FINAL_BUDGET_DEEPSEEK_RESERVATION_CNY = "2"/u);
@@ -120,9 +120,9 @@ test("relay launcher provisions the same admin session credential used by the we
 
 test("Vercel deployment pins the Relay deadline ladder below the function limit", async () => {
   const config = JSON.parse(await readFile(path.join(root, "vercel.json"), "utf8"));
-  assert.equal(config.env.RELAY_STREAM_TIMEOUT_MS, "700000");
-  assert.equal(config.env.ADMIN_MODEL_LAB_SYNC_FINAL_TIMEOUT_MS, "740000");
-  assert.equal(config.functions["api/admin-model-lab.js"].maxDuration, 800);
+  assert.equal(config.env.RELAY_STREAM_TIMEOUT_MS, "270000");
+  assert.equal(config.env.ADMIN_MODEL_LAB_SYNC_FINAL_TIMEOUT_MS, "290000");
+  assert.equal(config.functions["api/admin-model-lab.js"].maxDuration, 300);
   assert.equal(config.functions["api/answer.js"].maxDuration, 300);
 });
 

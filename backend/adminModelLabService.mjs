@@ -5236,11 +5236,11 @@ async function collectLegacyLuaSemanticPacketForSnapshot({
 
 function readSynchronousFinalTimeoutMs(env) {
   const value = env.ADMIN_MODEL_LAB_SYNC_FINAL_TIMEOUT_MS;
-  if (value === undefined || value === null || value === "") return 740_000;
+  if (value === undefined || value === null || value === "") return 290_000;
   const number = Number(value);
-  if (!Number.isInteger(number) || number < 1_000 || number > 740_000) {
+  if (!Number.isInteger(number) || number < 1_000 || number > 290_000) {
     throw new TypeError(
-      "ADMIN_MODEL_LAB_SYNC_FINAL_TIMEOUT_MS must be an integer between 1000 and 740000",
+      "ADMIN_MODEL_LAB_SYNC_FINAL_TIMEOUT_MS must be an integer between 1000 and 290000",
     );
   }
   return number;

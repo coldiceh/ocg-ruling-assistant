@@ -1,0 +1,360 @@
+#!/usr/bin/env node
+
+import { createHash, randomUUID } from "node:crypto";
+import { readFile, rename, writeFile } from "node:fs/promises";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+import { parseAdminEvidenceSnapshot } from "../backend/adminEvidenceSnapshot.mjs";
+import { hashAdminFinalInput } from "../backend/adminEvidenceVariant.mjs";
+import {
+  buildFinalRulingInput,
+  buildFinalRulingModelEvidencePacket,
+} from "../backend/adminModelLabService.mjs";
+import { CompatibleEvidencePreparationProvider } from "../backend/rulingModelProviders.mjs";
+
+const DEFAULT_MODEL = "relay-gpt-5.6-sol";
+const DEFAULT_EFFORTS = Object.freeze(["none", "low", "medium", "high", "xhigh", "max"]);
+const ALLOWED_EFFORTS = new Set(DEFAULT_EFFORTS);
+const DEFAULT_TIMEOUT_MS = 900_000;
+const PROMPT_VERSION = "openai-ruling-v1";
+
+export function parseLocalRelayExperimentArgs(argv) {
+  const parsed = { efforts: [] };
+  for (let index = 0; index < argv.length; index += 1) {
+    const argument = argv[index];
+    if (argument === "--help" || argument === "-h") {
+      parsed.help = true;
+      continue;
+    }
+    const field = ({
+      "--snapshots": "snapshots",
+      "--model": "model",
+      "--effort": "effort",
+      "--output": "output",
+      "--timeout-ms": "timeoutMs",
+    })[argument];
+    if (!field) throw new TypeError(`unknown argument: ${argument}`);
+    const value = argv[index + 1];
+    if (value === undefined || String(value).startsWith("--")) {
+      throw new TypeError(`${argument} requires a value`);
+    }
+    index += 1;
+    if (field === "effort") parsed.efforts.push(String(value).trim().toLowerCase());
+    else parsed[field] = value;
+  }
+  return parsed;
+}
+
+export function normalizeLocalRelayExperimentOptions(options, env = process.env) {
+  if (!options?.snapshots) throw new TypeError("--snapshots is required");
+  if (!options?.output) throw new TypeError("--output is required");
+  const model = String(options.model || DEFAULT_MODEL).trim();
+  if (!/^relay-gpt-5\.6-(?:sol|terra|luna)$/u.test(model)) {
+    throw new TypeError("--model must be relay-gpt-5.6-sol, relay-gpt-5.6-terra or relay-gpt-5.6-luna");
+  }
+  const efforts = options.efforts?.length ? options.efforts : [...DEFAULT_EFFORTS];
+  for (const effort of efforts) {
+    if (!ALLOWED_EFFORTS.has(effort)) throw new TypeError(`unsupported --effort: ${effort}`);
+  }
+  if (new Set(efforts).size !== efforts.length) throw new TypeError("duplicate --effort values are not allowed");
+  const timeoutMs = Number(options.timeoutMs || DEFAULT_TIMEOUT_MS);
+  if (!Number.isInteger(timeoutMs) || timeoutMs < 1_000 || timeoutMs > 3_600_000) {
+    throw new TypeError("--timeout-ms must be an integer between 1000 and 3600000");
+  }
+  const apiKey = String(env.RELAY_API_KEY || "").trim();
+  if (!apiKey) throw new TypeError("RELAY_API_KEY is required");
+  const baseUrl = String(env.RELAY_BASE_URL || "").trim();
+  if (!baseUrl) throw new TypeError("RELAY_BASE_URL is required");
+  return Object.freeze({
+    snapshotsPath: path.resolve(String(options.snapshots)),
+    outputPath: path.resolve(String(options.output)),
+    model,
+    efforts: Object.freeze([...efforts]),
+    timeoutMs,
+    apiKey,
+    baseUrl,
+  });
+}
+
+export async function runLocalRelayEffortExperiment({
+  options,
+  env = process.env,
+  providerFactory,
+  now = () => new Date(),
+  log = console.log,
+} = {}) {
+  const resolved = normalizeLocalRelayExperimentOptions(options, env);
+  const serializedBundle = await readFile(resolved.snapshotsPath, "utf8");
+  const bundleSha256 = sha256(serializedBundle);
+  const cases = normalizeSnapshotBundle(JSON.parse(serializedBundle));
+  const plan = cases.flatMap((item) => resolved.efforts.map((effort) => ({
+    caseId: item.caseId,
+    effort,
+    key: `${item.caseId}::${resolved.model}::${effort}`,
+  })));
+  let checkpoint = await loadOrCreateCheckpoint({
+    outputPath: resolved.outputPath,
+    bundleSha256,
+    bundlePath: resolved.snapshotsPath,
+    model: resolved.model,
+    efforts: resolved.efforts,
+    plan,
+    now,
+  });
+  const provider = providerFactory
+    ? providerFactory({ resolved, env })
+    : new CompatibleEvidencePreparationProvider({
+        providerId: "relay",
+        apiKey: resolved.apiKey,
+        baseUrl: resolved.baseUrl,
+        env: {
+          ...env,
+          RELAY_STREAM: "true",
+          RELAY_STREAM_TIMEOUT_MS: String(resolved.timeoutMs),
+          RELAY_LOCAL_STREAM_TIMEOUT_MAX_MS: String(resolved.timeoutMs),
+        },
+      });
+
+  for (const item of cases) {
+    const evidenceVariant = item.executionProfile.evidenceVariant || "full";
+    const input = buildFinalRulingInput(item.evidenceSnapshot, { evidenceVariant });
+    const finalInputSha256 = hashAdminFinalInput(input);
+    if (
+      item.executionProfile.finalRulingInputSha256
+      && item.executionProfile.finalRulingInputSha256 !== finalInputSha256
+    ) {
+      throw new Error(`${item.caseId} final ruling input hash does not match its executionProfile`);
+    }
+    const modelVisibleEvidencePacket = buildFinalRulingModelEvidencePacket(
+      item.evidenceSnapshot,
+      { evidenceVariant },
+    );
+    for (const effort of resolved.efforts) {
+      const key = `${item.caseId}::${resolved.model}::${effort}`;
+      const existing = checkpoint.results.find((entry) => entry.key === key);
+      // A running record means the process died after submission. Skipping it
+      // prevents an ambiguous, possibly charged request from being repeated.
+      if (existing) {
+        log(`[skip] ${key} (${existing.status})`);
+        continue;
+      }
+      const startedAt = now().toISOString();
+      checkpoint.results.push({ key, caseId: item.caseId, model: resolved.model, effort, status: "running", startedAt });
+      checkpoint.updatedAt = startedAt;
+      await writeCheckpointAtomic(resolved.outputPath, checkpoint);
+      log(`[run] ${key}`);
+      const controller = new AbortController();
+      const timeout = setTimeout(
+        () => controller.abort(new Error(`local relay experiment timed out after ${resolved.timeoutMs} ms`)),
+        resolved.timeoutMs,
+      );
+      timeout.unref?.();
+      const monotonicStarted = performance.now();
+      let completed;
+      try {
+        const profile = item.executionProfile.finalRuling || {};
+        const prompt = item.executionProfile.prompt || {};
+        const response = await provider.runRuling({
+          model: resolved.model,
+          reasoningEffort: effort,
+          reasoningMode: profile.reasoningMode || "pro",
+          instructions: String(prompt.instructions),
+          input,
+          maxOutputTokens: profile.maxOutputTokens,
+          metadata: {
+            runId: `local-${item.caseId}-${effort}-${randomUUID()}`.slice(0, 512),
+            promptVersion: String(prompt.version || PROMPT_VERSION),
+          },
+          signal: controller.signal,
+        });
+        const validation = provider.validateCompletedResponse(response, {
+          evidenceSnapshot: item.evidenceSnapshot,
+          modelVisibleEvidencePacket,
+          expectedQuestionIds: item.executionProfile.questionIds || [],
+          providedFacts: item.executionProfile.providedFacts || [],
+          normalizeEvidenceProvenance: true,
+          normalizeStructuralBindings: true,
+        });
+        completed = {
+          key,
+          caseId: item.caseId,
+          model: resolved.model,
+          effort,
+          reasoningMode: profile.reasoningMode || "pro",
+          evidenceVariant,
+          status: validation.ok ? "completed_valid" : "completed_invalid",
+          startedAt,
+          endedAt: now().toISOString(),
+          durationMs: Math.round(performance.now() - monotonicStarted),
+          snapshotId: item.evidenceSnapshot.snapshotId,
+          snapshotSha256: item.evidenceSnapshot.contentSha256,
+          finalInputSha256,
+          rawOutput: response.output_text,
+          validatedResult: validation,
+          usage: response.usage || null,
+          finishReason: response.finish_reason || null,
+          requestId: response.id || null,
+          requestedModel: response.requested_model || resolved.model,
+          submittedModel: response.submitted_model || null,
+          reportedModel: response.reported_model || response.model || null,
+          sseTiming: response.stream_metrics || null,
+        };
+      } catch (error) {
+        completed = {
+          key,
+          caseId: item.caseId,
+          model: resolved.model,
+          effort,
+          reasoningMode: profile.reasoningMode || "pro",
+          evidenceVariant,
+          status: error?.outcomeKnown === true ? "error_rejected" : "error_outcome_unknown",
+          startedAt,
+          endedAt: now().toISOString(),
+          durationMs: Math.round(performance.now() - monotonicStarted),
+          snapshotId: item.evidenceSnapshot.snapshotId,
+          snapshotSha256: item.evidenceSnapshot.contentSha256,
+          finalInputSha256,
+          rawOutput: typeof error?.outputText === "string" ? error.outputText : null,
+          validatedResult: null,
+          usage: jsonSafe(error?.usage || null),
+          sseTiming: jsonSafe(error?.streamMetrics || null),
+          error: serializeError(error),
+        };
+      } finally {
+        clearTimeout(timeout);
+      }
+      checkpoint.results = checkpoint.results.map((entry) => entry.key === key ? completed : entry);
+      checkpoint.updatedAt = completed.endedAt;
+      checkpoint.status = checkpoint.results.length === plan.length
+        && checkpoint.results.every((entry) => entry.status !== "running")
+        ? "completed"
+        : "in_progress";
+      await writeCheckpointAtomic(resolved.outputPath, checkpoint);
+    }
+  }
+  return checkpoint;
+}
+
+function normalizeSnapshotBundle(bundle) {
+  const rawCases = Array.isArray(bundle?.cases)
+    ? bundle.cases
+    : (Array.isArray(bundle?.sources)
+        ? bundle.sources
+        : (Array.isArray(bundle?.snapshots) ? bundle.snapshots : (Array.isArray(bundle?.runs) ? bundle.runs : [])));
+  if (rawCases.length === 0) throw new TypeError("snapshot bundle must contain a non-empty cases array");
+  const ids = new Set();
+  return rawCases.map((raw, index) => {
+    const source = raw?.run && typeof raw.run === "object" ? raw.run : raw;
+    const caseId = String(raw?.caseId || raw?.id || source?.runId || `case-${index + 1}`).trim();
+    if (!caseId || ids.has(caseId)) throw new TypeError(`invalid or duplicate case id: ${caseId}`);
+    ids.add(caseId);
+    const evidenceSnapshot = parseAdminEvidenceSnapshot(source?.evidenceSnapshot || source?.snapshot);
+    const executionProfile = source?.executionProfile;
+    if (!executionProfile || typeof executionProfile !== "object" || Array.isArray(executionProfile)) {
+      throw new TypeError(`${caseId} is missing executionProfile`);
+    }
+    if (
+      executionProfile.evidenceSnapshotId
+      && executionProfile.evidenceSnapshotId !== evidenceSnapshot.snapshotId
+    ) {
+      throw new Error(`${caseId} executionProfile is bound to a different evidence snapshot`);
+    }
+    const prompt = executionProfile.prompt;
+    if (!prompt || typeof prompt.instructions !== "string" || !prompt.instructions.trim()) {
+      throw new TypeError(`${caseId} executionProfile is missing frozen prompt instructions`);
+    }
+    if (prompt.sha256 && prompt.sha256 !== sha256(prompt.instructions)) {
+      throw new Error(`${caseId} frozen prompt instructions fail their SHA-256 binding`);
+    }
+    return { caseId, evidenceSnapshot, executionProfile: jsonSafe(executionProfile) };
+  });
+}
+
+async function loadOrCreateCheckpoint({ outputPath, bundleSha256, bundlePath, model, efforts, plan, now }) {
+  try {
+    const existing = JSON.parse(await readFile(outputPath, "utf8"));
+    if (existing?.bundleSha256 !== bundleSha256 || existing?.model !== model) {
+      throw new Error("existing checkpoint belongs to a different snapshot bundle or model");
+    }
+    if (JSON.stringify(existing.efforts) !== JSON.stringify(efforts)) {
+      throw new Error("existing checkpoint uses a different effort list");
+    }
+    return existing;
+  } catch (error) {
+    if (error?.code !== "ENOENT") throw error;
+  }
+  const createdAt = now().toISOString();
+  const checkpoint = {
+    schemaVersion: 1,
+    runner: "local-relay-effort-experiment/v1",
+    status: "in_progress",
+    createdAt,
+    updatedAt: createdAt,
+    bundlePath,
+    bundleSha256,
+    model,
+    efforts: [...efforts],
+    concurrency: 1,
+    retries: 0,
+    plannedRequests: plan.length,
+    plan,
+    results: [],
+  };
+  await writeCheckpointAtomic(outputPath, checkpoint);
+  return checkpoint;
+}
+
+async function writeCheckpointAtomic(outputPath, value) {
+  const temporaryPath = `${outputPath}.tmp-${process.pid}-${randomUUID()}`;
+  await writeFile(temporaryPath, `${JSON.stringify(value, null, 2)}\n`, { encoding: "utf8", flag: "wx" });
+  await rename(temporaryPath, outputPath);
+}
+
+function serializeError(error) {
+  return jsonSafe({
+    name: error?.name || "Error",
+    message: error?.message || String(error),
+    code: error?.code || null,
+    provider: error?.provider || null,
+    status: error?.status ?? null,
+    outcomeKnown: error?.outcomeKnown ?? false,
+    budgetReservationMayExist: error?.budgetReservationMayExist ?? null,
+    requestId: error?.requestId || null,
+    requestedModel: error?.requestedModel || null,
+    submittedModel: error?.submittedModel || null,
+    reportedModel: error?.reportedModel || null,
+  });
+}
+
+function jsonSafe(value) {
+  return value === undefined ? null : JSON.parse(JSON.stringify(value));
+}
+
+function sha256(value) {
+  return createHash("sha256").update(value).digest("hex");
+}
+
+function printHelp() {
+  console.log(`Usage:
+  pnpm run experiment:relay:local -- --snapshots <bundle.json> --output <checkpoint.json> [options]
+
+Options:
+  --model <relay-gpt-5.6-sol|relay-gpt-5.6-terra|relay-gpt-5.6-luna>
+  --effort <none|low|medium|high|xhigh|max>  Repeat to select efforts (default: all six)
+  --timeout-ms <1000..3600000>              Per-request SSE deadline (default: 900000)
+
+The runner is serial, performs no retries, reads no golden answers, and resumes
+only combinations that have never reached the running checkpoint.`);
+}
+
+if (path.resolve(process.argv[1] || "") === fileURLToPath(import.meta.url)) {
+  try {
+    const options = parseLocalRelayExperimentArgs(process.argv.slice(2));
+    if (options.help) printHelp();
+    else await runLocalRelayEffortExperiment({ options });
+  } catch (error) {
+    console.error(error?.stack || error);
+    process.exitCode = 1;
+  }
+}
