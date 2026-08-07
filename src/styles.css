@@ -1090,6 +1090,39 @@ button:focus-visible {
   list-style: none;
 }
 
+.admin-budget-pools {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.admin-budget-pool {
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  background: var(--glass-strong);
+}
+
+.admin-budget-pool strong,
+.admin-budget-pool p,
+.admin-budget-pool small {
+  display: block;
+}
+
+.admin-budget-pool p {
+  margin: 6px 0 0;
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.admin-budget-pool small {
+  margin-top: 6px;
+  color: var(--warn);
+  line-height: 1.5;
+}
+
 .admin-history-list li {
   min-width: 0;
 }

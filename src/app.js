@@ -76,6 +76,7 @@ const ui = {
   adminLoginStatus: document.querySelector("#adminLoginStatus"),
   adminSessionBadge: document.querySelector("#adminSessionBadge"),
   adminLogoutButton: document.querySelector("#adminLogoutButton"),
+  adminBudgetPools: document.querySelector("#adminBudgetPools"),
   adminQuestionInput: document.querySelector("#adminQuestionInput"),
   adminCopyPublicQuestionButton: document.querySelector("#adminCopyPublicQuestionButton"),
   adminPreparationProviderSelect: document.querySelector("#adminPreparationProviderSelect"),
@@ -1775,6 +1776,7 @@ function normalizeAdminCapabilities(data) {
     promptVersions: uniqueAdminOptions(normalizeAdminOptionList(
       source.promptVersions || source.prompt_versions || source.prompts,
     ).map(normalizeAdminBasicOption)),
+    finalCallBudget: source?.architecture?.finalCallBudget || null,
     features: source.features && typeof source.features === "object" ? source.features : {},
   };
 }
@@ -1851,6 +1853,7 @@ function uniqueAdminOptions(options) {
 }
 
 function renderAdminCapabilities(capabilities) {
+  renderAdminFinalCallBudget(capabilities.finalCallBudget);
   populateAdminSelect(
     ui.adminPreparationProviderSelect,
     capabilities.preparationProviders,
@@ -1870,6 +1873,54 @@ function renderAdminCapabilities(capabilities) {
   adminComparisonOptions = buildAdminComparisonOptions(capabilities.models);
   renderAdminComparisonOptions();
   applyAdminFeatureAvailability();
+}
+
+function renderAdminFinalCallBudget(budget) {
+  if (!ui.adminBudgetPools) return;
+  clearElement(ui.adminBudgetPools);
+  const pools = Array.isArray(budget?.pools) ? budget.pools : [];
+  if (budget?.configured !== true || pools.length === 0) {
+    const message = document.createElement("p");
+    message.textContent = "最终模型预算账本未配置或暂不可读取。";
+    ui.adminBudgetPools.appendChild(message);
+    return;
+  }
+  for (const pool of pools.filter((item) => item?.configured === true)) {
+    const card = document.createElement("article");
+    card.className = "admin-budget-pool";
+    const title = document.createElement("strong");
+    title.textContent = String(pool.label || pool.pool || "模型预算池");
+    const details = document.createElement("p");
+    const settled = adminBudgetMoney(pool.settledCny);
+    const held = adminBudgetMoney(pool.heldReservationCny);
+    const accounted = adminBudgetMoney(pool.usedCny);
+    const limit = adminBudgetMoney(pool.dailyBudgetCny);
+    const remaining = adminBudgetMoney(pool.remainingCny);
+    details.textContent = [
+      `实际结算 ${settled}`,
+      `保留预约 ${held}`,
+      `账本占用 ${accounted} / ${limit}`,
+      `剩余可用 ${remaining}`,
+    ].join("；");
+    card.append(title, details);
+    const unattributed = Number(pool.unattributedCny);
+    if (Number.isFinite(unattributed) && unattributed > 0) {
+      const warning = document.createElement("small");
+      warning.textContent = `另有历史未分类占用 ${adminBudgetMoney(unattributed)}，不能视为已结算费用。`;
+      card.appendChild(warning);
+    }
+    ui.adminBudgetPools.appendChild(card);
+  }
+  if (ui.adminBudgetPools.childElementCount === 0) {
+    const message = document.createElement("p");
+    message.textContent = "没有已配置的最终模型预算池。";
+    ui.adminBudgetPools.appendChild(message);
+  }
+}
+
+function adminBudgetMoney(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? `¥${number.toFixed(6)}` : "—";
 }
 
 function buildAdminComparisonOptions(models = []) {

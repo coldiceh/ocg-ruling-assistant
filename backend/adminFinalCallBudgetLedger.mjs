@@ -138,6 +138,29 @@ redis.call('EXPIRE', KEYS[1], ttl)
 return {'RELEASED', tostring(amount), tostring(used)}
 `;
 
+const STATUS_BREAKDOWN_SCRIPT = String.raw`
+-- ADMIN_FINAL_BUDGET_STATUS_BREAKDOWN_V1
+local entries = redis.call('HGETALL', KEYS[1])
+local used = tonumber(redis.call('HGET', KEYS[1], 'usedMicros') or '0')
+local settled = 0
+local held = 0
+for index = 1, #entries, 2 do
+  local field = entries[index]
+  local value = entries[index + 1]
+  if string.sub(field, 1, 12) == 'reservation:' then
+    local separator = string.find(value, '|', 1, true)
+    local state = separator and string.sub(value, 1, separator - 1) or value
+    local amount = separator and tonumber(string.sub(value, separator + 1)) or 0
+    if state == 'S' then
+      settled = settled + amount
+    elseif state == 'R' then
+      held = held + amount
+    end
+  end
+end
+return {tostring(used), tostring(settled), tostring(held)}
+`;
+
 /**
  * Creates the production ledger over the same Upstash/Vercel KV REST
  * credentials used by the admin run store. Each mutation is one Redis Lua
@@ -232,13 +255,13 @@ export function createRedisAdminFinalCallBudgetLedger(options = {}) {
         reservedAt,
         reservationId: "status",
       }, policy);
-      const usedMicros = await readRedisUsedMicros({
+      const breakdown = await readRedisBudgetBreakdown({
         redis,
         fetchImpl,
         timeoutMs,
         key: budgetKey(keyPrefix, request.pool, request.day),
       });
-      return poolStatusResult(request, usedMicros, {
+      return poolStatusResult(request, breakdown, {
         persistent: true,
         storageKind: "redis-admin-final-budget",
       });
@@ -249,7 +272,7 @@ export function createRedisAdminFinalCallBudgetLedger(options = {}) {
         reservedAt,
         persistent: true,
         storageKind: "redis-admin-final-budget",
-        readUsedMicros: (pool, day) => readRedisUsedMicros({
+        readBreakdown: (pool, day) => readRedisBudgetBreakdown({
           redis,
           fetchImpl,
           timeoutMs,
@@ -336,7 +359,7 @@ export function createMemoryAdminFinalCallBudgetLedger(options = {}) {
         reservationId: "status",
       }, policy);
       const state = account(request);
-      return poolStatusResult(request, state.usedMicros, {
+      return poolStatusResult(request, memoryBudgetBreakdown(state), {
         persistent: false,
         storageKind: "memory-admin-final-budget",
       });
@@ -347,8 +370,8 @@ export function createMemoryAdminFinalCallBudgetLedger(options = {}) {
         reservedAt,
         persistent: false,
         storageKind: "memory-admin-final-budget",
-        readUsedMicros: async (pool, day) => (
-          ledgers.get(`${pool}:${day}`)?.usedMicros || 0
+        readBreakdown: async (pool, day) => memoryBudgetBreakdown(
+          ledgers.get(`${pool}:${day}`),
         ),
       });
     },
@@ -538,7 +561,9 @@ function releaseResult(status, request, account) {
   });
 }
 
-function poolStatusResult(request, usedMicros, { persistent, storageKind }) {
+function poolStatusResult(request, breakdownInput, { persistent, storageKind }) {
+  const breakdown = normalizeBudgetBreakdown(breakdownInput);
+  const { usedMicros, settledMicros, heldReservationMicros, unattributedMicros } = breakdown;
   const remainingMicros = Math.max(0, request.limitMicros - usedMicros);
   return Object.freeze({
     pool: request.pool,
@@ -549,6 +574,9 @@ function poolStatusResult(request, usedMicros, { persistent, storageKind }) {
     persistent: persistent === true,
     storageKind,
     usedCny: fromMicros(usedMicros),
+    settledCny: fromMicros(settledMicros),
+    heldReservationCny: fromMicros(heldReservationMicros),
+    unattributedCny: fromMicros(unattributedMicros),
     dailyBudgetCny: fromMicros(request.limitMicros),
     reservationCny: fromMicros(request.poolPolicy.reservationMicros),
     remainingCny: fromMicros(remainingMicros),
@@ -561,7 +589,7 @@ async function buildPoolStatuses({
   reservedAt,
   persistent,
   storageKind,
-  readUsedMicros,
+  readBreakdown,
 }) {
   const day = budgetDay(policy.timezone, reservedAt);
   const statuses = [];
@@ -569,9 +597,10 @@ async function buildPoolStatuses({
     const poolPolicy = policy.pools[descriptor.pool];
     const configured = Number.isSafeInteger(poolPolicy?.dailyBudgetMicros)
       && Number.isSafeInteger(poolPolicy?.reservationMicros);
-    const usedMicros = configured
-      ? await readUsedMicros(descriptor.pool, day)
+    const breakdown = configured
+      ? normalizeBudgetBreakdown(await readBreakdown(descriptor.pool, day))
       : null;
+    const usedMicros = breakdown?.usedMicros ?? null;
     const remainingMicros = configured
       ? Math.max(0, poolPolicy.dailyBudgetMicros - usedMicros)
       : null;
@@ -585,6 +614,9 @@ async function buildPoolStatuses({
       persistent: persistent === true,
       storageKind,
       usedCny: configured ? fromMicros(usedMicros) : null,
+      settledCny: configured ? fromMicros(breakdown.settledMicros) : null,
+      heldReservationCny: configured ? fromMicros(breakdown.heldReservationMicros) : null,
+      unattributedCny: configured ? fromMicros(breakdown.unattributedMicros) : null,
       dailyBudgetCny: configured ? fromMicros(poolPolicy.dailyBudgetMicros) : null,
       reservationCny: configured ? fromMicros(poolPolicy.reservationMicros) : null,
       remainingCny: configured ? fromMicros(remainingMicros) : null,
@@ -639,21 +671,69 @@ async function redisBudgetCommand({
   return payload?.result;
 }
 
-async function readRedisUsedMicros({ redis, fetchImpl, timeoutMs, key }) {
+async function readRedisBudgetBreakdown({ redis, fetchImpl, timeoutMs, key }) {
   const result = await redisBudgetCommand({
     redis,
     fetchImpl,
     timeoutMs,
-    command: ["HGET", key, "usedMicros"],
-    operation: "status",
+    command: ["EVAL", STATUS_BREAKDOWN_SCRIPT, "1", key],
+    operation: "status_breakdown",
     reservationMayExist: false,
   });
-  if (result === null || result === undefined || result === "") return 0;
-  const usedMicros = Number(result);
-  if (!Number.isSafeInteger(usedMicros) || usedMicros < 0) {
-    throw budgetStateConflict("status usedMicros is invalid");
+  const values = resultArray(result, "status_breakdown").map(Number);
+  if (
+    values.length !== 3
+    || values.some((value) => !Number.isSafeInteger(value) || value < 0)
+  ) {
+    throw budgetStateConflict("status breakdown is invalid");
   }
-  return usedMicros;
+  return normalizeBudgetBreakdown({
+    usedMicros: values[0],
+    settledMicros: values[1],
+    heldReservationMicros: values[2],
+  });
+}
+
+function memoryBudgetBreakdown(state) {
+  let settledMicros = 0;
+  let heldReservationMicros = 0;
+  for (const reservation of state?.reservations?.values?.() || []) {
+    if (reservation?.state === "settled") settledMicros += reservation.amountMicros;
+    if (reservation?.state === "reserved") heldReservationMicros += reservation.amountMicros;
+  }
+  return normalizeBudgetBreakdown({
+    usedMicros: state?.usedMicros || 0,
+    settledMicros,
+    heldReservationMicros,
+  });
+}
+
+function normalizeBudgetBreakdown(value) {
+  const source = typeof value === "number" ? { usedMicros: value } : (value || {});
+  const usedMicros = safeBudgetMicros(source.usedMicros, "usedMicros");
+  const settledMicros = safeBudgetMicros(source.settledMicros, "settledMicros");
+  const heldReservationMicros = safeBudgetMicros(
+    source.heldReservationMicros,
+    "heldReservationMicros",
+  );
+  const attributed = settledMicros + heldReservationMicros;
+  if (attributed > usedMicros) {
+    throw budgetStateConflict("status breakdown exceeds usedMicros");
+  }
+  return {
+    usedMicros,
+    settledMicros,
+    heldReservationMicros,
+    unattributedMicros: Math.max(0, usedMicros - attributed),
+  };
+}
+
+function safeBudgetMicros(value, field) {
+  const number = Number(value || 0);
+  if (!Number.isSafeInteger(number) || number < 0) {
+    throw budgetStateConflict(`status ${field} is invalid`);
+  }
+  return number;
 }
 
 function redisConfig(env, options) {

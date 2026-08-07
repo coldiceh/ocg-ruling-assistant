@@ -462,8 +462,8 @@ test("backend answers bypass persistent browser cache and bust static assets", a
     readFile(new URL("../config.json", import.meta.url), "utf8"),
   ]);
   const config = JSON.parse(configText.replace(/^\uFEFF/u, ""));
-  assert.match(html, /src\/app\.js\?v=20260806-admin-history-fit-1/u);
-  assert.match(html, /src\/styles\.css\?v=20260806-admin-history-fit-1/u);
+  assert.match(html, /src\/app\.js\?v=20260807-budget-breakdown-1/u);
+  assert.match(html, /src\/styles\.css\?v=20260807-budget-breakdown-1/u);
   assert.match(config.answerApiUrl, /\?client=20260722-answer-version-1$/u);
   assert.match(app, /cache: "no-store"/u);
   assert.doesNotMatch(app, /backendAnswerCacheTtlMs|buildBackendCacheKey|readCachedBackendAnswer|writeCachedBackendAnswer|ocg-ruling-answer:v/u);
@@ -587,6 +587,12 @@ test("admin_model_lab_is_hidden_and_requires_a_real_session", async () => {
   assert.match(app, /run\?\.stageTiming\?\.stages/u);
   assert.match(app, /adminFeatureEnabled\("history"\)/u);
   assert.match(html, /id="adminHistoryTitle">实验历史/u);
+  assert.match(html, /id="adminBudgetPools"/u);
+  assert.match(html, /保留预约[^<]*不代表供应商已经收费/u);
+  assert.match(app, /实际结算/u);
+  assert.match(app, /保留预约/u);
+  assert.match(app, /历史未分类占用/u);
+  assert.match(css, /\.admin-budget-pools/u);
   assert.match(html, /id="adminQuestionHistoryTitle">后台历史提问/u);
   assert.match(css, /\.admin-history-list li\s*\{[^}]*min-width:\s*0/u);
   assert.match(css, /\.admin-history-list button\s*\{[^}]*max-width:\s*100%[^}]*overflow:\s*hidden/u);

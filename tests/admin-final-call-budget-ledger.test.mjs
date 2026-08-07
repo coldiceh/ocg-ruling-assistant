@@ -164,6 +164,57 @@ test("memory reservations are idempotent and settle or release exactly once", as
   assert.equal(released.usedCny, 2.345678);
   assert.equal(duplicateRelease.status, "existing");
   assert.equal(duplicateRelease.usedCny, 2.345678);
+  const status = await ledger.status(base);
+  assert.deepEqual(
+    {
+      usedCny: status.usedCny,
+      settledCny: status.settledCny,
+      heldReservationCny: status.heldReservationCny,
+      unattributedCny: status.unattributedCny,
+    },
+    {
+      usedCny: 2.345678,
+      settledCny: 2.345678,
+      heldReservationCny: 0,
+      unattributedCny: 0,
+    },
+  );
+});
+
+test("pool status separates settled cost from reservations still held", async () => {
+  const ledger = createMemoryAdminFinalCallBudgetLedger({
+    timezone: "UTC",
+    pools: {
+      relay_sol: { dailyBudgetCny: 10, reservationCny: 5 },
+    },
+  });
+  const base = {
+    provider: "relay",
+    model: "relay-gpt-5.6-sol",
+    reservedAt: RESERVED_AT,
+  };
+  await ledger.reserve({ ...base, reservationId: "settled" });
+  await ledger.settle({ ...base, reservationId: "settled", actualCny: 0.25 });
+  await ledger.reserve({ ...base, reservationId: "ambiguous" });
+
+  const pool = (await ledger.poolStatuses({ reservedAt: RESERVED_AT }))
+    .find((item) => item.pool === "relay_sol");
+  assert.deepEqual(
+    {
+      usedCny: pool.usedCny,
+      settledCny: pool.settledCny,
+      heldReservationCny: pool.heldReservationCny,
+      unattributedCny: pool.unattributedCny,
+      remainingCny: pool.remainingCny,
+    },
+    {
+      usedCny: 5.25,
+      settledCny: 0.25,
+      heldReservationCny: 5,
+      unattributedCny: 0,
+      remainingCny: 4.75,
+    },
+  );
 });
 
 test("an unconfigured provider pool fails closed", async () => {
@@ -344,6 +395,38 @@ test("Redis reserve, settle and release each use one atomic EVAL request", async
   assert.match(calls[0].command[1], /ADMIN_FINAL_BUDGET_RESERVE_V1/u);
   assert.match(calls[1].command[1], /ADMIN_FINAL_BUDGET_SETTLE_V1/u);
   assert.match(calls[2].command[1], /ADMIN_FINAL_BUDGET_RELEASE_V1/u);
+});
+
+test("Redis status uses one atomic breakdown read and exposes legacy unattributed amounts", async () => {
+  const calls = [];
+  const fetchImpl = async (_url, options) => {
+    const command = JSON.parse(options.body);
+    calls.push(command);
+    assert.equal(command[0], "EVAL");
+    assert.match(command[1], /ADMIN_FINAL_BUDGET_STATUS_BREAKDOWN_V1/u);
+    return redisResponse(["5500000", "250000", "5000000"]);
+  };
+  const ledger = createRedisAdminFinalCallBudgetLedger({
+    env: {
+      ADMIN_RUN_REDIS_REST_URL: "https://redis.example.test",
+      ADMIN_RUN_REDIS_REST_TOKEN: "server-only-test-token",
+      ADMIN_FINAL_BUDGET_RELAY_SOL_DAILY_CNY: "10",
+      ADMIN_FINAL_BUDGET_RELAY_SOL_RESERVATION_CNY: "5",
+      ADMIN_FINAL_BUDGET_TIMEZONE: "UTC",
+    },
+    fetchImpl,
+  });
+
+  const status = await ledger.status({
+    provider: "relay",
+    model: "relay-gpt-5.6-sol",
+    reservedAt: RESERVED_AT,
+  });
+  assert.equal(calls.length, 1);
+  assert.equal(status.usedCny, 5.5);
+  assert.equal(status.settledCny, 0.25);
+  assert.equal(status.heldReservationCny, 5);
+  assert.equal(status.unattributedCny, 0.25);
 });
 
 function redisResponse(result) {
