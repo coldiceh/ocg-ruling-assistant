@@ -590,6 +590,20 @@ export function createAdminModelLabHttpClient({
       method: "POST",
       body: { runId },
     }),
+    releaseBudgetReservation: ({ runId, attemptId }) => labRequest(
+      "release-budget-reservation",
+      {
+        method: "POST",
+        body: {
+          runId: requiredText(runId, "runId"),
+          confirmation: [
+            "provider-dashboard-confirmed-not-charged/v1",
+            requiredText(runId, "runId"),
+            requiredText(attemptId, "attemptId"),
+          ].join(":"),
+        },
+      },
+    ),
     getRun: (runId) => labRequest("run", { query: { runId } }),
     getRunEvents: runEvents,
   });

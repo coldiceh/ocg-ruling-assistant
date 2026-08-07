@@ -17,6 +17,7 @@ const POST_ACTIONS = new Set([
   "fork",
   "execute",
   "cancel",
+  "release-budget-reservation",
   "rating",
 ]);
 
@@ -215,6 +216,15 @@ async function dispatchJsonAction({ service, context }) {
   if (action === "cancel") {
     return callService(service, "cancelRun", {
       runId: requiredParameter(body.runId, "runId"),
+      body: withoutAction(body),
+      request,
+      authorization,
+    });
+  }
+  if (action === "release-budget-reservation") {
+    return callService(service, "releaseUnchargedRelayReservation", {
+      runId: requiredParameter(body.runId, "runId"),
+      confirmation: requiredParameter(body.confirmation, "confirmation"),
       body: withoutAction(body),
       request,
       authorization,
@@ -507,6 +517,7 @@ function unavailableProductionService(configurationError) {
     "executeRun",
     "getRun",
     "cancelRun",
+    "releaseUnchargedRelayReservation",
     "replayEvents",
     "listRuns",
     "saveRating",

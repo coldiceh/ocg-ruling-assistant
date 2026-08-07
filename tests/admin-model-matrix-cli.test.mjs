@@ -57,6 +57,46 @@ test("admin matrix client requires HTTPS remotely and never follows redirects", 
   assert.equal(requests[0].options.redirect, "manual");
   assert.match(requests[0].options.body, /test-password/u);
 });
+
+test("admin matrix client binds an uncharged reservation release to run and attempt ids", async () => {
+  const requests = [];
+  const client = createAdminModelLabHttpClient({
+    baseUrl: "https://lab.example.test",
+    origin: "https://admin.example.test",
+    password: "test-password",
+    fetchImpl: async (url, options) => {
+      requests.push({ url: String(url), options });
+      if (String(url).endsWith("/api/admin-auth")) {
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers({ "set-cookie": "admin_session=test; Path=/; HttpOnly" }),
+          async json() {
+            return { authenticated: true, csrfToken: "csrf-test" };
+          },
+        };
+      }
+      return {
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        async json() { return { ok: true, data: { released: true } }; },
+      };
+    },
+  });
+
+  await client.login();
+  await client.releaseBudgetReservation({ runId: "run-1", attemptId: "attempt-1" });
+
+  assert.equal(requests.length, 2);
+  const body = JSON.parse(requests[1].options.body);
+  assert.deepEqual(body, {
+    action: "release-budget-reservation",
+    runId: "run-1",
+    confirmation: "provider-dashboard-confirmed-not-charged/v1:run-1:attempt-1",
+  });
+  assert.equal(requests[1].options.headers["x-csrf-token"], "csrf-test");
+});
 import { createEvidenceSnapshot } from "../backend/adminEvidenceSnapshot.mjs";
 
 test("matrix creates one Flash source, forks frozen evidence, skips unavailable models, and continues after failure", async () => {

@@ -61,6 +61,7 @@ test("production composition registers runs and exposes persistent record capabi
   assert.equal(capabilities.features.export, true);
   assert.equal(capabilities.features.evaluation, true);
   assert.equal(capabilities.features.forkRun, true);
+  assert.equal(capabilities.features.releaseUnchargedRelayReservation, true);
   assert.equal(capabilities.architecture.sharedEvidenceSnapshotFork, true);
   assert.equal(capabilities.persistence.recordStore, "persistent");
   assert.equal(capabilities.persistence.runStore, "persistent");
@@ -72,6 +73,17 @@ test("production composition registers runs and exposes persistent record capabi
     body: { idempotencyKey: "production-fork-key-0001" },
   });
   assert.equal(fork.runId, run.runId);
+  const release = await service.releaseUnchargedRelayReservation({
+    runId: run.runId,
+    confirmation: "test-confirmation",
+  });
+  assert.deepEqual(release, {
+    released: true,
+    argument: {
+      runId: run.runId,
+      confirmation: "test-confirmation",
+    },
+  });
   const history = await service.listRuns({ limit: 10 });
   assert.equal(history.records.length, 1);
   assert.equal(history.records[0].question, "测试问题");
@@ -1018,6 +1030,9 @@ function fakeBaseService({ persistent = true } = {}) {
     },
     async cancelRun() {
       return structuredClone(run);
+    },
+    async releaseUnchargedRelayReservation(argument) {
+      return { released: true, argument: structuredClone(argument) };
     },
     async replayEvents() {
       return { events: [], nextAfterSequence: 0, status: run.status, terminal: false };

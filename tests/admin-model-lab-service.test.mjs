@@ -1256,6 +1256,197 @@ test("known provider rejection releases budget while unknown transport outcome r
   }
 });
 
+test("manual reconciliation releases only an exact uncharged legacy Relay 524 reservation", async (t) => {
+  async function createFailedRelayRun({
+    status = 524,
+    code = "relay_http_error",
+    message = "relay Chat Completions API returned HTTP 524",
+    usage = null,
+    requestId = null,
+  } = {}) {
+    const fixture = makeFixture();
+    const budgetCalls = [];
+    const providerError = codedError(message, code);
+    Object.assign(providerError, {
+      provider: "relay",
+      status,
+      outcomeKnown: false,
+      budgetReservationMayExist: true,
+      ...(usage ? { usage } : {}),
+      ...(requestId ? { requestId } : {}),
+    });
+    const service = makeService(fixture, {
+      ADMIN_MODEL_LAB_USD_TO_CNY_RATE: "7.5",
+      RELAY_API_KEY: "relay-test-key",
+    }, {
+      finalCallBudgetLedger: createRecordingBudgetLedger(budgetCalls),
+      finalRulingProviders: {
+        relay: {
+          providerId: "relay",
+          async create() {
+            throw providerError;
+          },
+        },
+      },
+    });
+    const created = await service.createRun({
+      body: {
+        question: "匿名旧中转超时预约",
+        provider: "relay",
+        model: "relay-gpt-5.6-sol",
+        reasoningMode: "pro",
+        reasoningEffort: "high",
+        finalAttemptPolicy: "single",
+      },
+    });
+    const failed = (await service.executeRun({ runId: created.runId })).run;
+    return { service, failed, budgetCalls };
+  }
+
+  function confirmation(run) {
+    return [
+      "provider-dashboard-confirmed-not-charged/v1",
+      run.runId,
+      run.execution.providerSubmission.attemptId,
+    ].join(":");
+  }
+
+  await t.test("exact failed unmetered 524 is released idempotently and audited", async () => {
+    const { service, failed, budgetCalls } = await createFailedRelayRun();
+    assert.equal(failed.status, ADMIN_RUN_STATUSES.FAILED);
+    assert.equal(failed.execution.providerSubmission.state, "OUTCOME_UNKNOWN");
+    assert.equal(failed.execution.providerSubmission.error.code, "relay_http_error");
+    assert.equal(failed.execution.providerSubmission.error.status, 524);
+
+    await assert.rejects(
+      service.releaseUnchargedRelayReservation({
+        runId: failed.runId,
+        confirmation: `${confirmation(failed)}-wrong`,
+      }),
+      (error) => error?.code === "admin_budget_release_confirmation_invalid",
+    );
+    const released = await service.releaseUnchargedRelayReservation({
+      runId: failed.runId,
+      confirmation: confirmation(failed),
+    });
+    const duplicate = await service.releaseUnchargedRelayReservation({
+      runId: failed.runId,
+      confirmation: confirmation(failed),
+    });
+    assert.equal(released.release.status, "released");
+    assert.equal(duplicate.release.status, "existing");
+    assert.equal(released.attemptId, failed.execution.providerSubmission.attemptId);
+    assert.deepEqual(
+      budgetCalls
+        .filter((item) => item.input.attemptKind === "primary")
+        .map((item) => item.operation),
+      ["reserve", "release", "release"],
+    );
+    const replay = await service.replayEvents({ runId: failed.runId });
+    assert.equal(
+      replay.events.filter(
+        (event) => event.type === ADMIN_MODEL_LAB_SERVICE_EVENT_TYPES.BUDGET_RESERVATION_RELEASED,
+      ).length,
+      2,
+    );
+  });
+
+  for (const scenario of [
+    {
+      name: "reported usage",
+      options: { usage: { prompt_tokens: 10, completion_tokens: 2, total_tokens: 12 } },
+      expectedCode: "admin_budget_release_usage_present",
+    },
+    {
+      name: "provider request id",
+      options: { requestId: "relay-request-1" },
+      expectedCode: "admin_budget_release_submission_invalid",
+    },
+    {
+      name: "non-524 status",
+      options: { status: 503, message: "relay Chat Completions API returned HTTP 524" },
+      expectedCode: "admin_budget_release_error_invalid",
+    },
+    {
+      name: "non-Relay error code",
+      options: { code: "upstream_non_json_error" },
+      expectedCode: "admin_budget_release_error_invalid",
+    },
+  ]) {
+    await t.test(scenario.name, async () => {
+      const { service, failed, budgetCalls } = await createFailedRelayRun(scenario.options);
+      await assert.rejects(
+        service.releaseUnchargedRelayReservation({
+          runId: failed.runId,
+          confirmation: confirmation(failed),
+        }),
+        (error) => error?.code === scenario.expectedCode,
+      );
+      assert.equal(
+        budgetCalls.filter(
+          (item) => item.operation === "release" && item.input.attemptKind === "primary",
+        ).length,
+        0,
+      );
+    });
+  }
+
+  await t.test("non-Relay provider", async () => {
+    const fixture = makeFixture();
+    const providerError = codedError(
+      "relay Chat Completions API returned HTTP 524",
+      "relay_http_error",
+    );
+    Object.assign(providerError, {
+      status: 524,
+      outcomeKnown: false,
+      budgetReservationMayExist: true,
+    });
+    fixture.openAICreateError = providerError;
+    const service = makeService(fixture);
+    const created = await service.createRun({ body: { question: "匿名非中转超时" } });
+    const failed = (await service.executeRun({ runId: created.runId })).run;
+    await assert.rejects(
+      service.releaseUnchargedRelayReservation({
+        runId: failed.runId,
+        confirmation: confirmation(failed),
+      }),
+      (error) => error?.code === "admin_budget_release_provider_invalid",
+    );
+  });
+
+  await t.test("successful or nonterminal run", async () => {
+    const fixture = makeFixture();
+    const service = makeService(fixture, {
+      ADMIN_MODEL_LAB_USD_TO_CNY_RATE: "7.5",
+      RELAY_API_KEY: "relay-test-key",
+    }, {
+      finalRulingProviders: {
+        relay: {
+          providerId: "relay",
+          async create() {
+            throw new Error("must not run");
+          },
+        },
+      },
+    });
+    const queued = await service.createRun({
+      body: {
+        question: "匿名尚未执行中转任务",
+        provider: "relay",
+        model: "relay-gpt-5.6-sol",
+      },
+    });
+    await assert.rejects(
+      service.releaseUnchargedRelayReservation({
+        runId: queued.runId,
+        confirmation: `provider-dashboard-confirmed-not-charged/v1:${queued.runId}:`,
+      }),
+      (error) => error?.code === "admin_budget_release_run_not_failed",
+    );
+  });
+});
+
 test("a billed HTTP 200 empty response settles reported usage or conservatively retains its reservation", async (t) => {
   for (const usage of [
     { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 },
