@@ -314,7 +314,7 @@ test("relay adapter sends one allowlisted Chat Completions request with the cano
     providerId: "relay",
     apiKey: "relay-server-secret",
     baseUrl: "https://relay.example/v1",
-    env: { RELAY_MAX_COMPLETION_TOKENS: "8192" },
+    env: { RELAY_MAX_COMPLETION_TOKENS: "8192", RELAY_STREAM: "false" },
     fetchImpl: mockFetch(calls, {
       id: "relay-final-1",
       model: "gpt-5.6-terra",
@@ -333,7 +333,9 @@ test("relay adapter sends one allowlisted Chat Completions request with the cano
 
   assert.equal(response.status, "completed");
   assert.equal(response.provider, "relay");
-  assert.equal(response.requested_model, "gpt-5.6-terra");
+  assert.equal(response.requested_model, "relay-gpt-5.6-terra");
+  assert.equal(response.submitted_model, "gpt-5.6-terra");
+  assert.equal(response.reported_model, "gpt-5.6-terra");
   assert.equal(response.model_identity_verified, false);
   assert.equal(calls.length, 1);
   assert.equal(calls[0].url, "https://relay.example/v1/chat/completions");
@@ -344,6 +346,331 @@ test("relay adapter sends one allowlisted Chat Completions request with the cano
   assert.deepEqual(body.response_format, { type: "json_object" });
   assert.equal(Object.hasOwn(body, "thinking"), false);
   assert.equal(JSON.stringify(response).includes("relay-server-secret"), false);
+});
+
+test("relay adapter rejects an HTTP 200 response whose self-reported model differs from the submitted model", async () => {
+  const calls = [];
+  const provider = new CompatibleEvidencePreparationProvider({
+    providerId: "relay",
+    apiKey: "relay-server-secret",
+    baseUrl: "https://relay.example/v1",
+    env: { RELAY_STREAM: "false" },
+    fetchImpl: mockFetch(calls, {
+      id: "relay-mismatch-1",
+      model: "gpt-5.6-terra",
+      choices: [{ message: { content: JSON.stringify(makeStructuredResult()) } }],
+      usage: { prompt_tokens: 120, completion_tokens: 30, total_tokens: 150 },
+    }),
+  });
+
+  await assert.rejects(
+    provider.create({
+      model: "relay-gpt-5.6-luna",
+      reasoningEffort: "high",
+      reasoningMode: "pro",
+      input: "匿名问题与冻结证据",
+      instructions: "只输出 JSON。",
+      metadata: { runId: "run-relay-mismatch", promptVersion: "openai-ruling-v1" },
+    }),
+    (error) => {
+      assert.equal(error.code, "relay_returned_model_mismatch");
+      assert.equal(error.outcomeKnown, true);
+      assert.equal(error.budgetReservationMayExist, true);
+      assert.equal(error.requestedModel, "relay-gpt-5.6-luna");
+      assert.equal(error.submittedModel, "gpt-5.6-luna");
+      assert.equal(error.reportedModel, "gpt-5.6-terra");
+      assert.equal(error.model, "gpt-5.6-terra");
+      assert.equal(error.requestId, "relay-mismatch-1");
+      assert.deepEqual(error.usage, {
+        prompt_tokens: 120,
+        completion_tokens: 30,
+        total_tokens: 150,
+      });
+      return true;
+    },
+  );
+  assert.equal(JSON.parse(calls[0].options.body).model, "gpt-5.6-luna");
+});
+
+test("relay adapter distinguishes a missing HTTP 200 model identity from a mismatch", async () => {
+  const calls = [];
+  const provider = new CompatibleEvidencePreparationProvider({
+    providerId: "relay",
+    apiKey: "relay-server-secret",
+    baseUrl: "https://relay.example/v1",
+    env: { RELAY_STREAM: "false" },
+    fetchImpl: mockFetch(calls, {
+      id: "relay-missing-model-1",
+      choices: [{ message: { content: JSON.stringify(makeStructuredResult()) } }],
+    }),
+  });
+
+  await assert.rejects(
+    provider.create({
+      model: "relay-gpt-5.6-sol",
+      reasoningEffort: "high",
+      reasoningMode: "pro",
+      input: "匿名问题与冻结证据",
+      instructions: "只输出 JSON。",
+      metadata: { runId: "run-relay-missing", promptVersion: "openai-ruling-v1" },
+    }),
+    (error) => {
+      assert.equal(error.code, "relay_returned_model_missing");
+      assert.equal(error.outcomeKnown, true);
+      assert.equal(error.budgetReservationMayExist, true);
+      assert.equal(error.requestedModel, "relay-gpt-5.6-sol");
+      assert.equal(error.submittedModel, "gpt-5.6-sol");
+      assert.equal(error.reportedModel, null);
+      assert.equal(error.model, null);
+      assert.equal(error.requestId, "relay-missing-model-1");
+      assert.equal(error.usage, null);
+      return true;
+    },
+  );
+});
+
+test("relay adapter streams Chat Completions by default and discards reasoning deltas", async () => {
+  const calls = [];
+  const structured = JSON.stringify(makeStructuredResult());
+  const midpoint = Math.floor(structured.length / 2);
+  const clockValues = [0, 10, 20, 30, 80, 120];
+  const provider = new CompatibleEvidencePreparationProvider({
+    providerId: "relay",
+    apiKey: "relay-server-secret",
+    baseUrl: "https://relay.example/v1",
+    clock: () => clockValues.shift(),
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options });
+      return sseResponse([
+        `data: ${JSON.stringify({
+          id: "relay-stream-1",
+          model: "gpt-5.6-sol",
+          choices: [{ index: 0, delta: { role: "assistant", reasoning_content: "hidden reasoning" }, finish_reason: null }],
+        })}\n\n`,
+        `data: ${JSON.stringify({
+          id: "relay-stream-1",
+          model: "gpt-5.6-sol",
+          choices: [{ index: 0, delta: { content: structured.slice(0, midpoint) }, finish_reason: null }],
+        })}\n\n`,
+        `data: ${JSON.stringify({
+          id: "relay-stream-1",
+          model: "gpt-5.6-sol",
+          choices: [{ index: 0, delta: { content: structured.slice(midpoint) }, finish_reason: "stop" }],
+        })}\n\n`,
+        `data: ${JSON.stringify({
+          id: "relay-stream-1",
+          model: "gpt-5.6-sol",
+          choices: [],
+          usage: { prompt_tokens: 100, completion_tokens: 20, total_tokens: 120 },
+        })}\n\n`,
+        "data: [DONE]\n\n",
+      ]);
+    },
+  });
+  const response = await provider.create({
+    model: "relay-gpt-5.6-sol",
+    reasoningEffort: "high",
+    reasoningMode: "pro",
+    input: "匿名问题与冻结证据",
+    instructions: "只输出 JSON。",
+    metadata: { runId: "run-relay-stream", promptVersion: "openai-ruling-v1" },
+  });
+  const body = JSON.parse(calls[0].options.body);
+  assert.equal(body.stream, true);
+  assert.deepEqual(body.stream_options, { include_usage: true });
+  assert.equal(calls[0].options.headers.accept, "text/event-stream");
+  assert.equal(response.id, "relay-stream-1");
+  assert.equal(response.requested_model, "relay-gpt-5.6-sol");
+  assert.equal(response.submitted_model, "gpt-5.6-sol");
+  assert.equal(response.reported_model, "gpt-5.6-sol");
+  assert.equal(response.output_text, structured);
+  assert.equal(response.finish_reason, "stop");
+  assert.equal(JSON.stringify(response).includes("hidden reasoning"), false);
+  assert.deepEqual(response.usage, { prompt_tokens: 100, completion_tokens: 20, total_tokens: 120 });
+  assert.deepEqual(response.stream_metrics, {
+    schemaVersion: 1,
+    transport: "sse",
+    requestToResponseHeadersMs: 10,
+    requestToFirstByteMs: 20,
+    requestToFirstEventMs: 30,
+    requestToFirstContentMs: 80,
+    requestToCompleteMs: 120,
+    networkChunkCount: 5,
+    sseEventCount: 4,
+    visibleContentChunkCount: 2,
+    responseBytes: calls[0].options
+      ? new TextEncoder().encode([
+          `data: ${JSON.stringify({
+            id: "relay-stream-1",
+            model: "gpt-5.6-sol",
+            choices: [{ index: 0, delta: { role: "assistant", reasoning_content: "hidden reasoning" }, finish_reason: null }],
+          })}\n\n`,
+          `data: ${JSON.stringify({
+            id: "relay-stream-1",
+            model: "gpt-5.6-sol",
+            choices: [{ index: 0, delta: { content: structured.slice(0, midpoint) }, finish_reason: null }],
+          })}\n\n`,
+          `data: ${JSON.stringify({
+            id: "relay-stream-1",
+            model: "gpt-5.6-sol",
+            choices: [{ index: 0, delta: { content: structured.slice(midpoint) }, finish_reason: "stop" }],
+          })}\n\n`,
+          `data: ${JSON.stringify({
+            id: "relay-stream-1",
+            model: "gpt-5.6-sol",
+            choices: [],
+            usage: { prompt_tokens: 100, completion_tokens: 20, total_tokens: 120 },
+          })}\n\n`,
+          "data: [DONE]\n\n",
+        ].join("")).byteLength
+      : 0,
+    visibleContentBytes: new TextEncoder().encode(structured).byteLength,
+    finishReason: "stop",
+  });
+  assert.equal(clockValues.length, 0);
+});
+
+test("relay stream interruption after a valid chunk remains outcome-unknown and non-retryable", async () => {
+  const provider = new CompatibleEvidencePreparationProvider({
+    providerId: "relay",
+    apiKey: "relay-server-secret",
+    baseUrl: "https://relay.example/v1",
+    fetchImpl: async () => sseResponse([
+      `data: ${JSON.stringify({
+        id: "relay-stream-interrupted",
+        model: "gpt-5.6-luna",
+        choices: [{ index: 0, delta: { reasoning_content: "discard me" }, finish_reason: null }],
+      })}\n\n`,
+    ], { failAfterChunks: true }),
+  });
+  await assert.rejects(
+    provider.create({
+      model: "relay-gpt-5.6-luna",
+      reasoningEffort: "high",
+      reasoningMode: "pro",
+      input: "匿名问题与冻结证据",
+      instructions: "只输出 JSON。",
+      metadata: { runId: "run-relay-interrupted", promptVersion: "openai-ruling-v1" },
+    }),
+    (error) => {
+      assert.equal(error.code, "relay_stream_interrupted");
+      assert.equal(error.outcomeKnown, false);
+      assert.equal(error.budgetReservationMayExist, true);
+      assert.equal(error.requestId, "relay-stream-interrupted");
+      assert.equal(error.requestedModel, "relay-gpt-5.6-luna");
+      assert.equal(error.submittedModel, "gpt-5.6-luna");
+      assert.equal(error.reportedModel, "gpt-5.6-luna");
+      assert.equal(error.streamMetrics.transport, "sse");
+      assert.equal(error.streamMetrics.sseEventCount, 1);
+      assert.equal(error.message.includes("discard me"), false);
+      return true;
+    },
+  );
+});
+
+test("relay stream that reports usage but closes before DONE keeps safe usage and transport metrics", async () => {
+  const provider = new CompatibleEvidencePreparationProvider({
+    providerId: "relay",
+    apiKey: "relay-server-secret",
+    baseUrl: "https://relay.example/v1",
+    fetchImpl: async () => sseResponse([
+      `data: ${JSON.stringify({
+        id: "relay-stream-usage-before-close",
+        model: "gpt-5.6-sol",
+        choices: [],
+        usage: { prompt_tokens: 200, completion_tokens: 40, total_tokens: 240 },
+      })}\n\n`,
+    ]),
+  });
+
+  await assert.rejects(
+    provider.create({
+      model: "relay-gpt-5.6-sol",
+      reasoningEffort: "high",
+      reasoningMode: "pro",
+      input: "匿名问题与冻结证据",
+      instructions: "只输出 JSON。",
+      metadata: { runId: "run-relay-usage-incomplete", promptVersion: "openai-ruling-v1" },
+    }),
+    (error) => {
+      assert.equal(error.code, "relay_stream_incomplete");
+      assert.equal(error.outcomeKnown, false);
+      assert.equal(error.requestId, "relay-stream-usage-before-close");
+      assert.deepEqual(error.usage, {
+        prompt_tokens: 200,
+        completion_tokens: 40,
+        total_tokens: 240,
+      });
+      assert.equal(error.streamMetrics.sseEventCount, 1);
+      assert.equal(error.streamMetrics.finishReason, null);
+      assert.equal(JSON.stringify(error.streamMetrics).includes("reasoning"), false);
+      return true;
+    },
+  );
+});
+
+test("relay classifies the admin synchronous outer deadline as a stream timeout", async () => {
+  const controller = new AbortController();
+  const timeout = new Error("final ruling provider exceeded 240000ms");
+  timeout.code = "final_ruling_provider_timeout";
+  controller.abort(timeout);
+  const provider = new CompatibleEvidencePreparationProvider({
+    providerId: "relay",
+    apiKey: "relay-server-secret",
+    baseUrl: "https://relay.example/v1",
+    fetchImpl: async (_url, options) => {
+      throw options.signal.reason;
+    },
+  });
+
+  await assert.rejects(
+    provider.create({
+      model: "relay-gpt-5.6-sol",
+      reasoningEffort: "medium",
+      reasoningMode: "pro",
+      input: "匿名问题与冻结证据",
+      instructions: "只输出 JSON。",
+      metadata: { runId: "run-relay-outer-timeout", promptVersion: "openai-ruling-v1" },
+      signal: controller.signal,
+    }),
+    (error) => {
+      assert.equal(error.code, "relay_stream_timeout");
+      assert.equal(error.outcomeKnown, false);
+      assert.equal(error.budgetReservationMayExist, true);
+      assert.equal(error.requestedModel, "relay-gpt-5.6-sol");
+      assert.equal(error.submittedModel, "gpt-5.6-sol");
+      return true;
+    },
+  );
+});
+
+test("relay non-JSON HTTP errors persist only a bounded redacted summary", async () => {
+  const tail = "DO_NOT_PERSIST_HTML_TAIL";
+  const html = `<html><head><title>524: A timeout occurred</title></head><body>Client IP 203.0.113.42 ${"x".repeat(200_000)}${tail}</body></html>`;
+  const provider = new CompatibleEvidencePreparationProvider({
+    providerId: "relay",
+    apiKey: "relay-server-secret",
+    baseUrl: "https://relay.example/v1",
+    fetchImpl: async () => textResponse(html, 524, "text/html"),
+  });
+  await assert.rejects(
+    provider.create({
+      model: "relay-gpt-5.6-terra",
+      input: "匿名问题与冻结证据",
+      metadata: { runId: "run-relay-html", promptVersion: "openai-ruling-v1" },
+    }),
+    (error) => {
+      assert.equal(error.code, "upstream_non_json_error");
+      assert.equal(error.status, 524);
+      assert.equal(error.outcomeKnown, false);
+      assert.ok(error.message.length <= 1_000);
+      assert.match(error.message, /HTTP 524/u);
+      assert.doesNotMatch(error.message, /203\.0\.113\.42/u);
+      assert.doesNotMatch(error.message, new RegExp(tail, "u"));
+      assert.ok(JSON.stringify(error.responseBody).length < 2_000);
+      return true;
+    },
+  );
 });
 
 test("empty compatible final reports bounded diagnostics without exposing reasoning content", async () => {
@@ -536,6 +863,37 @@ function jsonResponse(payload, status = 200) {
       get: () => "application/json",
     },
     json: async () => payload,
+  };
+}
+
+function sseResponse(chunks, { failAfterChunks = false } = {}) {
+  const encoded = chunks.map((chunk) => new TextEncoder().encode(chunk));
+  let index = 0;
+  return {
+    ok: true,
+    status: 200,
+    headers: { get: (name) => String(name).toLowerCase() === "content-type" ? "text/event-stream" : null },
+    body: {
+      getReader() {
+        return {
+          async read() {
+            if (index < encoded.length) return { done: false, value: encoded[index++] };
+            if (failAfterChunks) throw new Error("socket closed");
+            return { done: true, value: undefined };
+          },
+          releaseLock() {},
+        };
+      },
+    },
+  };
+}
+
+function textResponse(text, status, contentType) {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    headers: { get: (name) => String(name).toLowerCase() === "content-type" ? contentType : null },
+    text: async () => text,
   };
 }
 

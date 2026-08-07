@@ -1,14 +1,15 @@
 {
   "schemaVersion": 1,
-  "pricingVersion": "relay-dashboard-screenshot-2026-08-06",
-  "effectiveDate": "2026-08-06",
-  "checkedAt": "2026-08-06",
+  "pricingVersion": "relay-token-group-screenshot-2026-08-07",
+  "effectiveDate": "2026-08-07",
+  "checkedAt": "2026-08-07",
   "currency": "USD",
   "unit": "per_1m_tokens",
+  "multiplier": 0.27,
   "source": {
-    "kind": "user_provided_dashboard_screenshot",
+    "kind": "user_provided_token_group_screenshot",
     "providerVerified": false,
-    "note": "Rates must be rechecked against the relay dashboard before a paid experiment."
+    "note": "The 0.27 multiplier applies only to the token group shown in the user-provided screenshot. Other token groups require an explicit server override or an updated pricing dataset; the relay dashboard remains the billing authority."
   },
   "models": {
     "gpt-5.6-sol": {

@@ -16,6 +16,13 @@ import {
   assertAdminEvidenceSnapshot,
   createAdminEvidenceSnapshot,
 } from "./adminEvidenceSnapshot.mjs";
+import {
+  DEFAULT_ADMIN_EVIDENCE_VARIANT,
+  adminEvidenceVariantIncludesLegacyLua,
+  hashAdminFinalInput,
+  normalizeAdminEvidenceVariant,
+  projectAdminModelEvidencePacket,
+} from "./adminEvidenceVariant.mjs";
 import { assertAdminFinalEvidenceReady } from "./adminFinalEvidenceReadiness.mjs";
 import {
   ADMIN_RUN_STAGE_CATALOG,
@@ -33,6 +40,7 @@ import {
   estimateRelayModelCost,
   normalizeOpenAIResponsesUsage,
   normalizeReportedModelUsage,
+  resolveRelayPricingMultiplier,
 } from "./modelPricing.mjs";
 import {
   createEvidencePreparationProviderRegistry,
@@ -96,6 +104,7 @@ const ADMIN_FORK_ALLOWED_BODY_FIELDS = new Set([
   "reasoningEffort",
   "reasoningMode",
   "maxOutputTokens",
+  "evidenceVariant",
 ]);
 const ADMIN_FORK_IDEMPOTENCY_KEY_PATTERN = /^[A-Za-z0-9._:-]{16,128}$/u;
 
@@ -166,6 +175,7 @@ export function createAdminModelLabService({
   const serverPricingProfile = {
     usdToCnyRate: optionalPositiveNumber(env.ADMIN_MODEL_LAB_USD_TO_CNY_RATE),
     exchangeRateVersion: nullableString(env.ADMIN_MODEL_LAB_EXCHANGE_RATE_VERSION),
+    relayPricingMultiplier: resolveRelayPricingMultiplier(env.RELAY_PRICING_MULTIPLIER),
     deepSeek: readServerDeepSeekPricingProfile(env),
   };
   const activeExecutionRunIds = new Set();
@@ -330,6 +340,7 @@ export function createAdminModelLabService({
         provider: finalSelection.provider,
         requestedModel: finalSelection.requestedModel,
         model: finalSelection.model,
+        submittedModel: finalSelection.model,
         reasoningEffort: finalSelection.reasoningEffort,
         reasoningMode: finalSelection.reasoningMode,
         maxOutputTokens,
@@ -346,6 +357,7 @@ export function createAdminModelLabService({
     const body = unwrapBody(argument);
     const questions = normalizeQuestions(body);
     const question = normalizeQuestionText(body, questions);
+    const evidenceVariant = resolveEvidenceVariant(body.evidenceVariant);
     const promptVersion = nonEmptyString(body.promptVersion, DEFAULT_PROMPT_VERSION);
     const { selection: finalSelection, profile: finalRulingProfile } = resolveFinalRulingProfile(body);
     const preparationModel = String(body.preparationModel || "deepseek-v4-flash").trim();
@@ -385,6 +397,7 @@ export function createAdminModelLabService({
       },
       questionIds: questions.map((item) => item.questionId),
       providedFacts: normalizeStringList(body.providedFacts),
+      evidenceVariant,
       pricing: serverPricingProfile,
     };
     const initialSnapshot = createEvidenceSnapshot({
@@ -465,9 +478,15 @@ export function createAdminModelLabService({
         forkBody,
         existingFork.executionProfile?.finalRuling,
       );
+      const retriedEvidenceVariant = resolveEvidenceVariant(
+        forkBody.evidenceVariant,
+        existingFork.executionProfile?.evidenceVariant,
+      );
       if (
         existingFork.metadata?.fork?.sourceRunId === sourceRunId
         && JSON.stringify(existingFork.executionProfile?.finalRuling) === JSON.stringify(retriedFinalProfile)
+        && resolveEvidenceVariant(existingFork.executionProfile?.evidenceVariant)
+          === retriedEvidenceVariant
       ) {
         return existingFork;
       }
@@ -483,9 +502,20 @@ export function createAdminModelLabService({
       forkBody,
       sourceRun.executionProfile.finalRuling,
     );
+    const evidenceVariant = resolveEvidenceVariant(
+      forkBody.evidenceVariant,
+      sourceRun.executionProfile?.evidenceVariant,
+    );
+    const finalInput = buildFinalRulingInput(sourceRun.evidenceSnapshot, {
+      evidenceVariant,
+    });
+    const finalInputSha256 = hashAdminFinalInput(finalInput);
     const executionProfile = {
       ...jsonSafe(sourceRun.executionProfile),
       finalRuling: finalRulingProfile,
+      evidenceVariant,
+      finalRulingInputSha256: finalInputSha256,
+      finalRulingInputBytes: Buffer.byteLength(finalInput, "utf8"),
     };
     const requestFingerprint = sha256(JSON.stringify({
       schemaVersion: 1,
@@ -498,6 +528,8 @@ export function createAdminModelLabService({
         forkEvidence.legacyLuaSemanticPacket?.packetSha256 || null,
       promptSha256: sourceRun.executionProfile.prompt?.sha256 || null,
       finalRuling: finalRulingProfile,
+      evidenceVariant,
+      finalRulingInputSha256: finalInputSha256,
     }));
     const forkMetadata = {
       label: nullableString(forkBody.label),
@@ -514,6 +546,8 @@ export function createAdminModelLabService({
         sourceDecisionPacketSha256: forkEvidence.decisionPacket.packetContentSha256,
         sourceLegacyLuaSemanticPacketSha256:
           forkEvidence.legacyLuaSemanticPacket?.packetSha256 || null,
+        evidenceVariant,
+        finalRulingInputSha256: finalInputSha256,
         requestFingerprint,
         idempotencyKeySha256: sha256(idempotencyKey),
       },
@@ -671,10 +705,17 @@ export function createAdminModelLabService({
           },
           createdAt: preparation.endedAt,
         });
+        const evidenceVariant = resolveEvidenceVariant(run.executionProfile?.evidenceVariant);
+        const frozenFinalInput = buildFinalRulingInput(finalSnapshot, {
+          evidenceVariant,
+        });
         const finalizedProfile = {
           ...jsonSafe(run.executionProfile),
           status: "evidence_frozen",
           evidenceSnapshotId: finalSnapshot.snapshotId,
+          evidenceVariant,
+          finalRulingInputSha256: hashAdminFinalInput(frozenFinalInput),
+          finalRulingInputBytes: Buffer.byteLength(frozenFinalInput, "utf8"),
         };
         run = await runStore.finalizePreparation(id, {
           evidenceSnapshot: finalSnapshot,
@@ -711,7 +752,11 @@ export function createAdminModelLabService({
       }
       const profile = run.executionProfile.finalRuling;
       const prompt = run.executionProfile.prompt;
-      const finalInput = buildFinalRulingInput(run.evidenceSnapshot);
+      const evidenceVariant = resolveEvidenceVariant(run.executionProfile?.evidenceVariant);
+      const finalInput = buildFinalRulingInput(run.evidenceSnapshot, {
+        evidenceVariant,
+      });
+      assertFrozenFinalInput(run, finalInput, evidenceVariant);
       assertAdminFinalEvidenceReady(run.evidenceSnapshot);
       const providerCreateRequest = {
         model: profile.requestedModel || profile.model,
@@ -809,6 +854,7 @@ export function createAdminModelLabService({
             `${profile.provider}_submission_record_outcome_unknown`,
           );
           ambiguous.cause = persistenceError;
+          ambiguous.reportedModel = nullableString(providerResponse?.model);
           try {
             await runStore.markProviderSubmissionOutcomeUnknown(id, {
               executionToken,
@@ -1694,22 +1740,74 @@ export function createAdminModelLabService({
     finalProvider = null,
     attemptKind = "primary",
   ) {
+    const responseProfile = run.executionProfile?.finalRuling || {};
+    const reportedModel = String(response?.model || "").trim();
+    const submittedModel = String(
+      responseProfile.model || responseProfile.requestedModel || "",
+    ).trim();
+    const relayIdentityErrorCode = responseProfile.provider !== "relay"
+      ? null
+      : (!reportedModel
+          ? "relay_returned_model_missing"
+          : (reportedModel.toLowerCase() !== submittedModel.toLowerCase()
+              ? "relay_returned_model_mismatch"
+              : null));
+    if (relayIdentityErrorCode) {
+      const completedAttempt = buildFinalAttemptAudit({
+        run,
+        response,
+        request,
+        validation: {
+          ok: false,
+          errors: [relayIdentityErrorCode],
+        },
+        attemptKind,
+      });
+      await settleFinalCallBudgetAttempt({ run, completedAttempt, attemptKind });
+      const identityError = serviceError(
+        relayIdentityErrorCode === "relay_returned_model_missing"
+          ? `relay response omitted the model identity submitted as ${submittedModel || "missing"}`
+          : `relay returned a different model identity (submitted ${submittedModel || "missing"}, returned ${reportedModel})`,
+        relayIdentityErrorCode,
+      );
+      identityError.provider = "relay";
+      identityError.status = 200;
+      identityError.outcomeKnown = true;
+      identityError.budgetReservationMayExist = true;
+      identityError.requestId = request?.requestId || null;
+      identityError.reportedModel = reportedModel || null;
+      identityError.model = reportedModel || null;
+      identityError.failureMetering = {
+        scope: "final_ruling_only",
+        usage: completedAttempt.usage,
+        cost: completedAttempt.cost,
+      };
+      if (!completedAttempt.usage) {
+        identityError.billingStatus = "possibly_charged_usage_unavailable";
+      }
+      await failRunWithStage(run.runId, identityError, executionToken);
+      return requireRun(run.runId);
+    }
     const questionIds = run.executionProfile?.questionIds || [];
     const providedFacts = run.executionProfile?.providedFacts || [];
+    const modelVisibleEvidencePacket = buildFinalRulingModelEvidencePacket(
+      run.evidenceSnapshot,
+      { evidenceVariant: run.executionProfile?.evidenceVariant },
+    );
     const selectedProvider = finalProvider || finalRulingProviderRegistry.get(
       run.executionProfile?.finalRuling?.provider,
     );
     const validation = typeof selectedProvider?.validateCompletedResponse === "function"
       ? selectedProvider.validateCompletedResponse(response, {
         evidenceSnapshot: run.evidenceSnapshot,
-        modelVisibleEvidencePacket: finalRulingModelEvidencePacket(run.evidenceSnapshot),
+        modelVisibleEvidencePacket,
         expectedQuestionIds: questionIds,
         providedFacts,
         normalizeEvidenceProvenance: true,
       })
       : parseAndValidateModelRulingResult(extractOpenAIResponseOutputText(response), {
         evidenceSnapshot: run.evidenceSnapshot,
-        modelVisibleEvidencePacket: finalRulingModelEvidencePacket(run.evidenceSnapshot),
+        modelVisibleEvidencePacket,
         expectedQuestionIds: questionIds,
         providedFacts,
         normalizeEvidenceProvenance: true,
@@ -1778,6 +1876,7 @@ export function createAdminModelLabService({
         `${attemptKind === "repair" ? "directed repair" : "final ruling"} validation failed: ${compactErrors.join("; ")}`,
         "model_ruling_validation_failed",
       );
+      error.reportedModel = nullableString(response?.model);
       await failRunWithStage(run.runId, error, executionToken);
       return requireRun(run.runId);
     }
@@ -1818,6 +1917,8 @@ export function createAdminModelLabService({
     const result = {
       schemaVersion: 1,
       evidenceSnapshotId: run.evidenceSnapshot.snapshotId,
+      evidenceVariant: resolveEvidenceVariant(run.executionProfile?.evidenceVariant),
+      finalRulingInputSha256: run.executionProfile?.finalRulingInputSha256 || null,
       finalRuling: validation.normalized,
       experimental: profile.experimental === true,
       authority: profile.experimental === true
@@ -1842,7 +1943,19 @@ export function createAdminModelLabService({
         providerId: profile.provider,
         requestId: request.requestId,
         model: response.model || profile.model,
+        requestedModel: profile.requestedModel || profile.model,
+        submittedModel: profile.model || profile.requestedModel,
+        reportedModel: response.model || null,
+        modelIdentityMatch: profile.provider === "relay"
+          ? String(response.model || "").trim().toLowerCase()
+            === String(profile.model || "").trim().toLowerCase()
+          : null,
+        modelIdentityVerified: profile.provider === "relay" ? false : null,
         status: "completed",
+        finishReason: nullableString(response.finish_reason || response.finishReason),
+        streamMetrics: copySafeRelayStreamMetrics(
+          response.stream_metrics || response.streamMetrics,
+        ),
       },
       repair: repairProvenance,
       // Backward-compatible aliases continue to mean the selected final stage.
@@ -1912,7 +2025,11 @@ export function createAdminModelLabService({
       validation,
       attemptKind: "primary",
     });
-    const finalInput = buildFinalRulingInput(current.evidenceSnapshot);
+    const evidenceVariant = resolveEvidenceVariant(current.executionProfile?.evidenceVariant);
+    const finalInput = buildFinalRulingInput(current.evidenceSnapshot, {
+      evidenceVariant,
+    });
+    assertFrozenFinalInput(current, finalInput, evidenceVariant);
     assertAdminFinalEvidenceReady(current.evidenceSnapshot);
     const repairInput = buildDirectedRepairInput({
       finalInput,
@@ -2040,6 +2157,7 @@ export function createAdminModelLabService({
           `${profile.provider}_repair_submission_record_outcome_unknown`,
         );
         ambiguous.cause = persistenceError;
+        ambiguous.reportedModel = nullableString(repairResponse?.model);
         try {
           await runStore.markProviderRepairSubmissionOutcomeUnknown(current.runId, {
             executionToken,
@@ -2084,6 +2202,8 @@ export function createAdminModelLabService({
     error,
     attemptKind = "primary",
   }) {
+    const currentRun = await requireRun(runId);
+    error = enrichRelayTerminalError(error, currentRun);
     const outcomeKnown = error?.outcomeKnown === true;
     const usageSettled = await settleFailedFinalCallBudgetAttempt({
       runId,
@@ -2134,6 +2254,26 @@ export function createAdminModelLabService({
         "Provider submission outcome is unknown; automatic resubmission is disabled to avoid duplicate charges",
         "provider_submission_outcome_unknown",
       );
+    if (!outcomeKnown) {
+      const failureMetering = copySafeFinalFailureMetering(error?.failureMetering);
+      const reportedUsage = failureMetering?.usage || copySafeReportedUsage(error?.usage);
+      terminalError.provider = submissionIntent.providerId || null;
+      terminalError.outcomeKnown = false;
+      terminalError.budgetReservationMayExist = true;
+      terminalError.billingStatus = failureMetering
+        ? "metered_final_ruling_usage_reported"
+        : "possibly_charged_usage_unavailable";
+      terminalError.upstreamErrorCode = String(error?.code || "") || null;
+      terminalError.upstreamCauseCode = String(error?.cause?.code || "") || null;
+      terminalError.requestId = nullableString(error?.requestId);
+      terminalError.requestedModel = nullableString(error?.requestedModel);
+      terminalError.submittedModel = nullableString(error?.submittedModel);
+      terminalError.reportedModel = nullableString(error?.reportedModel);
+      terminalError.model = nullableString(error?.model);
+      terminalError.usage = reportedUsage;
+      terminalError.failureMetering = failureMetering;
+      terminalError.streamMetrics = copySafeRelayStreamMetrics(error?.streamMetrics);
+    }
     await failRunWithStage(runId, terminalError, executionToken);
     return requireRun(runId);
   }
@@ -2220,9 +2360,6 @@ export function createAdminModelLabService({
     error,
     attemptKind,
   }) {
-    if (!finalCallBudgetLedger || !submissionIntent?.attemptId) {
-      return false;
-    }
     try {
       if (!normalizeReportedModelUsage(error?.usage)) return false;
     } catch {
@@ -2239,8 +2376,11 @@ export function createAdminModelLabService({
         response: {
           id: error?.requestId || null,
           status: "failed",
-          model: error?.model || profile.requestedModel || profile.model,
+          model: profile.provider === "relay"
+            ? (error?.reportedModel || null)
+            : (error?.reportedModel || error?.model || profile.model || null),
           usage: error.usage,
+          stream_metrics: error?.streamMetrics || null,
         },
         request: {
           providerId: profile.provider,
@@ -2255,6 +2395,14 @@ export function createAdminModelLabService({
     } catch {
       return false;
     }
+    if (error && typeof error === "object") {
+      error.failureMetering = {
+        scope: "final_ruling_only",
+        usage: meteredAttempt.usage,
+        cost: meteredAttempt.cost,
+      };
+    }
+    if (!finalCallBudgetLedger || !submissionIntent?.attemptId) return false;
     return settleFinalCallBudgetAttempt({
       run,
       completedAttempt: meteredAttempt,
@@ -2292,6 +2440,7 @@ export function createAdminModelLabService({
   async function failRunWithStage(runId, error, executionToken = null) {
     let run = await requireRun(runId);
     if (TERMINAL_RUN_STATUSES.has(run.status)) return run;
+    error = enrichRelayTerminalError(error, run);
     let stageTiming;
     if (run.stageTiming) {
       try {
@@ -2907,11 +3056,14 @@ function exhaustiveEvidenceLimit(data) {
   );
 }
 
-export function buildFinalRulingInput(snapshot) {
+export function buildFinalRulingInput(snapshot, {
+  evidenceVariant = DEFAULT_ADMIN_EVIDENCE_VARIANT,
+} = {}) {
+  const variant = normalizeAdminEvidenceVariant(evidenceVariant);
   const evidence = snapshot?.evidence || {};
   const questions = compactQuestionsForModel(evidence.questions, snapshot?.question);
   const scenarioText = distinctScenarioTextForModel(snapshot?.question, questions);
-  const boundedInput = {
+  const identityAndQuestion = {
     schemaVersion: 2,
     evidenceSnapshot: compactModelObject({
       id: snapshot?.snapshotId || null,
@@ -2922,29 +3074,40 @@ export function buildFinalRulingInput(snapshot) {
     providedFacts: Array.isArray(evidence.providedFacts)
       ? evidence.providedFacts
       : [],
-    cardResolution: compactCardResolutionForModel(evidence.cardResolution),
-    unresolved: compactUnresolvedForModel({
-      unresolved: evidence.unresolved,
-      cardResolution: evidence.cardResolution,
-    }),
-    retrievalWarnings: compactRetrievalWarningsForModel(
-      evidence.retrievalWarnings,
-    ),
-    completeness: compactCompletenessForModel(evidence.completeness),
-    evidenceDecisionPacket: finalRulingModelEvidencePacket(snapshot),
-    legacyLuaSemanticPacket: evidence.legacyLuaSemanticPacket
-      ? projectLegacyLuaSemanticPacketForModel(
-        evidence.legacyLuaSemanticPacket,
-      )
-      : null,
   };
+  const evidenceDecisionPacket = buildFinalRulingModelEvidencePacket(snapshot, {
+    evidenceVariant: variant,
+  });
+  const boundedInput = variant === "card_text_only"
+    ? {
+        ...identityAndQuestion,
+        cardResolution: compactCardResolutionForModel(evidence.cardResolution),
+        evidenceDecisionPacket,
+      }
+    : {
+        ...identityAndQuestion,
+        cardResolution: compactCardResolutionForModel(evidence.cardResolution),
+        unresolved: compactUnresolvedForModel({
+          unresolved: evidence.unresolved,
+          cardResolution: evidence.cardResolution,
+        }),
+        retrievalWarnings: compactRetrievalWarningsForModel(
+          evidence.retrievalWarnings,
+        ),
+        completeness: compactCompletenessForModel(evidence.completeness),
+        evidenceDecisionPacket,
+        ...(adminEvidenceVariantIncludesLegacyLua(variant)
+          ? {
+              legacyLuaSemanticPacket: evidence.legacyLuaSemanticPacket
+                ? projectLegacyLuaSemanticPacketForModel(
+                  evidence.legacyLuaSemanticPacket,
+                )
+                : null,
+            }
+          : {}),
+      };
   const input = [
-    "以下是从完整、冻结且通过内容哈希校验的 Evidence Snapshot 生成的有界决策资料包。",
-    "完整候选与冲突保存在审计归档；这里只给出确定性选出的正文、有界冲突摘要及遗漏/截断计数。",
-    "资料准备模型只提供候选卡名与补充检索词，不是裁定；确定性查询始终优先，但模型补充词仍可能扩展候选集合，所以必须独立核对每条可见证据。",
-    "只能引用 evidenceDecisionPacket.evidenceItems 中实际展示正文的 evidenceId；omissionSummary 只有计数与审计哈希，不是证据。",
-    "legacyLuaSemanticPacket 是旧 Lua 脚本自动提取的非权威语义旁路，只能提示可能需要检查的条件、操作和底层 API 依赖；它不是官方资料，不能加入 evidenceIds，candidateVerdict 不能直接支持结论，verdict=UNKNOWN 也绝不表示不能发动或不能处理。",
-    "不得调用网络搜索，不得引用快照外资料。",
+    ...finalRulingInputPreamble(variant),
     JSON.stringify(boundedInput),
   ].join("\n");
   const inputBytes = Buffer.byteLength(input, "utf8");
@@ -2957,7 +3120,18 @@ export function buildFinalRulingInput(snapshot) {
   return input;
 }
 
-function finalRulingModelEvidencePacket(snapshot) {
+export function buildFinalRulingModelEvidencePacket(snapshot, {
+  evidenceVariant = DEFAULT_ADMIN_EVIDENCE_VARIANT,
+} = {}) {
+  const variant = normalizeAdminEvidenceVariant(evidenceVariant);
+  return projectAdminModelEvidencePacket({
+    snapshot,
+    modelPacket: completeFinalRulingModelEvidencePacket(snapshot),
+    evidenceVariant: variant,
+  });
+}
+
+function completeFinalRulingModelEvidencePacket(snapshot) {
   const evidence = snapshot?.evidence || {};
   const modelPacket = evidence?.evidenceDecisionPacket?.modelPacket || null;
   if (
@@ -2969,6 +3143,34 @@ function finalRulingModelEvidencePacket(snapshot) {
   // can still be forked under the current 48 KiB final-input envelope.
   const archive = assertAdminEvidenceArchive(evidence.evidenceArchive);
   return buildAdminEvidenceDecisionPacket({ archive }).modelPacket;
+}
+
+function finalRulingInputPreamble(variant) {
+  if (variant === "full") {
+    return [
+      "以下是从完整、冻结且通过内容哈希校验的 Evidence Snapshot 生成的有界决策资料包。",
+      "完整候选与冲突保存在审计归档；这里只给出确定性选出的正文、有界冲突摘要及遗漏/截断计数。",
+      "资料准备模型只提供候选卡名与补充检索词，不是裁定；确定性查询始终优先，但模型补充词仍可能扩展候选集合，所以必须独立核对每条可见证据。",
+      "只能引用 evidenceDecisionPacket.evidenceItems 中实际展示正文的 evidenceId；omissionSummary 只有计数与审计哈希，不是证据。",
+      "legacyLuaSemanticPacket 是旧 Lua 脚本自动提取的非权威语义旁路，只能提示可能需要检查的条件、操作和底层 API 依赖；它不是官方资料，不能加入 evidenceIds，candidateVerdict 不能直接支持结论，verdict=UNKNOWN 也绝不表示不能发动或不能处理。",
+      "不得调用网络搜索，不得引用快照外资料。",
+    ];
+  }
+  if (variant === "without_lua") {
+    return [
+      "以下是从完整、冻结且通过内容哈希校验的 Evidence Snapshot 生成的有界决策资料包。",
+      "完整候选与冲突保存在审计归档；这里只给出确定性选出的正文、有界冲突摘要及遗漏/截断计数。",
+      "资料准备模型只提供候选卡名与补充检索词，不是裁定；确定性查询始终优先，但模型补充词仍可能扩展候选集合，所以必须独立核对每条可见证据。",
+      "只能引用 evidenceDecisionPacket.evidenceItems 中实际展示正文的 evidenceId；omissionSummary 只有计数与审计哈希，不是证据。",
+      "不得调用网络搜索，不得引用快照外资料。",
+    ];
+  }
+  return [
+    "以下是从同一份冻结且通过内容哈希校验的 Evidence Snapshot 生成的仅卡文消融资料包。",
+    "模型只能使用题面、providedFacts 与 evidenceDecisionPacket.evidenceItems 中完整展示的卡片文本；没有向模型提供 Q&A、机制规则、相关资料或 Lua/内核语义。",
+    "只能引用 evidenceDecisionPacket.evidenceItems 中实际展示正文的 evidenceId。",
+    "不得调用网络搜索，不得引用资料包外内容。",
+  ];
 }
 
 function collectRetrievalMetadata(retrieval) {
@@ -3204,6 +3406,7 @@ function buildFinalAttemptAudit({
             usage: response?.usage || {},
             usdToCnyRate: pricingProfile.usdToCnyRate,
             exchangeRateVersion: pricingProfile.exchangeRateVersion,
+            pricingMultiplier: pricingProfile.relayPricingMultiplier,
           })
         : unavailablePreparationProviderCost({
             provider: profile.provider,
@@ -3212,12 +3415,23 @@ function buildFinalAttemptAudit({
           });
   const providerCreatedAt = normalizeProviderTimestamp(response?.created_at);
   const providerCompletedAt = normalizeProviderTimestamp(response?.completed_at);
+  const streamMetrics = copySafeRelayStreamMetrics(
+    response?.stream_metrics || response?.streamMetrics,
+  );
   return jsonSafe({
     schemaVersion: 1,
     attemptKind,
     providerId: profile.provider || request?.providerId || null,
     requestId: request?.requestId || null,
     model: response?.model || profile.model || null,
+    requestedModel: profile.requestedModel || profile.model || null,
+    submittedModel: profile.model || profile.requestedModel || null,
+    reportedModel: response?.model || null,
+    modelIdentityMatch: profile.provider === "relay"
+      ? String(response?.model || "").trim().toLowerCase()
+        === String(profile.model || "").trim().toLowerCase()
+      : null,
+    modelIdentityVerified: profile.provider === "relay" ? false : null,
     status: normalizeProviderStatus(response?.status) || "completed",
     usageStatus: usage ? "reported" : "unavailable",
     usage,
@@ -3228,6 +3442,12 @@ function buildFinalAttemptAudit({
       errors: compactValidationErrors(validation?.errors),
     },
     responseContentSha256: sha256(extractOpenAIResponseOutputText(response)),
+    finishReason: nullableString(
+      response?.finish_reason
+      || response?.finishReason
+      || streamMetrics?.finishReason,
+    ),
+    streamMetrics,
     providerCreatedAt,
     providerCompletedAt,
     providerLatencyMs: providerCreatedAt && providerCompletedAt
@@ -3244,6 +3464,9 @@ function buildLatencyMetrics(run, stageTiming, response, finalAttempts = []) {
   const providerLatencyMs = providerCreatedAt && providerCompletedAt
     ? Math.max(0, Date.parse(providerCompletedAt) - Date.parse(providerCreatedAt))
     : null;
+  const relayStream = copySafeRelayStreamMetrics(
+    response?.stream_metrics || response?.streamMetrics,
+  );
   return {
     totalWallClockMs: stageTiming.totalElapsedMs,
     preparationMs: preparationReused ? 0 : (generation?.startOffsetMs ?? null),
@@ -3252,12 +3475,15 @@ function buildLatencyMetrics(run, stageTiming, response, finalAttempts = []) {
     providerLatencyMs,
     providerCreatedAt,
     providerCompletedAt,
+    relayStream,
     finalRulingAttempts: finalAttempts.map((attempt) => ({
       attemptKind: attempt.attemptKind,
       requestId: attempt.requestId,
       providerLatencyMs: attempt.providerLatencyMs ?? null,
       providerCreatedAt: attempt.providerCreatedAt ?? null,
       providerCompletedAt: attempt.providerCompletedAt ?? null,
+      finishReason: attempt.finishReason ?? null,
+      streamMetrics: copySafeRelayStreamMetrics(attempt.streamMetrics),
     })),
     stages: stageTiming.stages.map((stage) => ({
       id: stage.id,
@@ -3268,6 +3494,98 @@ function buildLatencyMetrics(run, stageTiming, response, finalAttempts = []) {
     })),
     runStartedAt: run.startedAt,
     runEndedObservationAt: stageTiming.endedAt,
+  };
+}
+
+function copySafeRelayStreamMetrics(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const duration = (field) => {
+    const candidate = value[field];
+    return typeof candidate === "number" && Number.isFinite(candidate) && candidate >= 0
+      ? candidate
+      : null;
+  };
+  const count = (field) => {
+    const candidate = value[field];
+    return Number.isSafeInteger(candidate) && candidate >= 0 ? candidate : 0;
+  };
+  return {
+    schemaVersion: 1,
+    transport: "sse",
+    requestToResponseHeadersMs: duration("requestToResponseHeadersMs"),
+    requestToFirstByteMs: duration("requestToFirstByteMs"),
+    requestToFirstEventMs: duration("requestToFirstEventMs"),
+    requestToFirstContentMs: duration("requestToFirstContentMs"),
+    requestToCompleteMs: duration("requestToCompleteMs"),
+    networkChunkCount: count("networkChunkCount"),
+    sseEventCount: count("sseEventCount"),
+    visibleContentChunkCount: count("visibleContentChunkCount"),
+    responseBytes: count("responseBytes"),
+    visibleContentBytes: count("visibleContentBytes"),
+    finishReason: nullableString(value.finishReason)?.slice(0, 128) || null,
+  };
+}
+
+function copySafeReportedUsage(value) {
+  try {
+    return normalizeReportedModelUsage(value) || null;
+  } catch {
+    return null;
+  }
+}
+
+function copySafeFinalFailureMetering(value) {
+  if (
+    !value
+    || typeof value !== "object"
+    || Array.isArray(value)
+    || value.scope !== "final_ruling_only"
+  ) return null;
+  const usage = copySafeReportedUsage(value.usage);
+  if (!usage) return null;
+  const sourceCost = value.cost && typeof value.cost === "object" && !Array.isArray(value.cost)
+    ? value.cost
+    : {};
+  const cost = {};
+  for (const field of [
+    "provider",
+    "model",
+    "requestedModel",
+    "exchangeRateVersion",
+    "pricingVersion",
+    "pricingEffectiveDate",
+    "pricingStatus",
+    "unavailabilityReason",
+  ]) {
+    const text = nullableString(sourceCost[field]);
+    if (text) cost[field] = text.slice(0, 512);
+  }
+  for (const field of [
+    "exchangeRate",
+    "pricingMultiplier",
+    "inputCostUsd",
+    "cachedInputCostUsd",
+    "cacheWriteCostUsd",
+    "outputCostUsd",
+    "totalCostUsd",
+    "inputCostCny",
+    "cachedInputCostCny",
+    "cacheWriteCostCny",
+    "outputCostCny",
+    "totalCostCny",
+  ]) {
+    const number = sourceCost[field];
+    if (typeof number === "number" && Number.isFinite(number) && number >= 0) {
+      cost[field] = number;
+    }
+  }
+  for (const field of ["pricingSourceVerified", "estimateOnly"]) {
+    if (typeof sourceCost[field] === "boolean") cost[field] = sourceCost[field];
+  }
+  return {
+    scope: "final_ruling_only",
+    usage,
+    cost,
   };
 }
 
@@ -3389,7 +3707,7 @@ function aggregateFinalAttemptCosts(attempts, profile = {}) {
   const monetaryFields = [
     "inputCostCny",
     "cachedInputCostCny",
-    "cacheWriteInputCny",
+    "cacheWriteCostCny",
     "outputCostCny",
     "totalCostCny",
     "totalCostUsd",
@@ -3456,6 +3774,8 @@ function repairInvariantProof(run) {
     decisionPacketId: decisionPacket.decisionPacketId || null,
     decisionPacketSha256: decisionPacket.packetContentSha256 || null,
     promptSha256: run.executionProfile?.prompt?.sha256 || null,
+    evidenceVariant: resolveEvidenceVariant(run.executionProfile?.evidenceVariant),
+    finalRulingInputSha256: run.executionProfile?.finalRulingInputSha256 || null,
   };
 }
 
@@ -3516,7 +3836,7 @@ function skippedPreparationCost({ provider, model, usage }) {
     unavailabilityReason: null,
     inputCostCny: 0,
     cachedInputCostCny: 0,
-    cacheWriteInputCny: 0,
+    cacheWriteCostCny: 0,
     outputCostCny: 0,
     totalCostCny: 0,
     totalCostUsd: 0,
@@ -3534,7 +3854,7 @@ function unavailablePreparationProviderCost({ provider, model, usage }) {
     unavailabilityReason: "versioned_server_pricing_unavailable",
     inputCostCny: null,
     cachedInputCostCny: null,
-    cacheWriteInputCny: null,
+    cacheWriteCostCny: null,
     outputCostCny: null,
     totalCostCny: null,
     totalCostUsd: null,
@@ -3702,6 +4022,7 @@ function requiredFinalReservationCny({
         usage,
         usdToCnyRate: pricingProfile?.usdToCnyRate,
         exchangeRateVersion: pricingProfile?.exchangeRateVersion,
+        pricingMultiplier: pricingProfile?.relayPricingMultiplier,
       })
     : estimateDeepSeekModelCost({
         model: profile.requestedModel || profile.model,
@@ -3879,6 +4200,47 @@ function serverLiveOfficialQaEnabled(env) {
   return !/^(?:0|false|no|off|disabled)$/iu.test(String(value).trim());
 }
 
+function resolveEvidenceVariant(value, fallback = DEFAULT_ADMIN_EVIDENCE_VARIANT) {
+  try {
+    return normalizeAdminEvidenceVariant(value, fallback || DEFAULT_ADMIN_EVIDENCE_VARIANT);
+  } catch (error) {
+    const invalid = requestError(
+      error?.message || "invalid evidenceVariant",
+      error?.code || "admin_evidence_variant_invalid",
+    );
+    invalid.cause = error;
+    throw invalid;
+  }
+}
+
+function assertFrozenFinalInput(run, finalInput, evidenceVariant) {
+  const expectedVariant = resolveEvidenceVariant(run?.executionProfile?.evidenceVariant);
+  if (expectedVariant !== evidenceVariant) {
+    throw serviceError(
+      "run evidence variant changed after evidence was frozen",
+      "admin_final_input_variant_mismatch",
+    );
+  }
+  const actualHash = hashAdminFinalInput(finalInput);
+  const expectedHash = String(run?.executionProfile?.finalRulingInputSha256 || "");
+  if (expectedHash && expectedHash !== actualHash) {
+    throw serviceError(
+      "final ruling input no longer matches its frozen hash",
+      "admin_final_input_hash_mismatch",
+    );
+  }
+  const expectedBytesValue = run?.executionProfile?.finalRulingInputBytes;
+  const expectedBytes = Number(expectedBytesValue);
+  if (expectedBytesValue !== null && expectedBytesValue !== undefined
+    && Number.isFinite(expectedBytes) && expectedBytes >= 0
+    && expectedBytes !== Buffer.byteLength(finalInput, "utf8")) {
+    throw serviceError(
+      "final ruling input byte length no longer matches its frozen profile",
+      "admin_final_input_size_mismatch",
+    );
+  }
+}
+
 function resolveServerDataVersions(value) {
   if (typeof value === "function") return value();
   return value && typeof value === "object" && !Array.isArray(value) ? value : {};
@@ -3998,6 +4360,16 @@ function assertForkSourceRun(sourceRun) {
       throw invalid;
     }
   }
+  const sourceEvidenceVariant = resolveEvidenceVariant(
+    sourceRun.executionProfile?.evidenceVariant,
+  );
+  assertFrozenFinalInput(
+    sourceRun,
+    buildFinalRulingInput(sourceRun.evidenceSnapshot, {
+      evidenceVariant: sourceEvidenceVariant,
+    }),
+    sourceEvidenceVariant,
+  );
   return { archive, decisionPacket, legacyLuaSemanticPacket };
 }
 
@@ -4410,16 +4782,33 @@ function normalizeError(error) {
 function providerSubmissionTerminalError(submission) {
   const state = String(submission?.state || "");
   const persisted = submission?.error || {};
-  if (state === ADMIN_PROVIDER_SUBMISSION_STATES.OUTCOME_UNKNOWN) {
-    return serviceError(
+  const error = state === ADMIN_PROVIDER_SUBMISSION_STATES.OUTCOME_UNKNOWN
+    ? serviceError(
       "Provider submission outcome is unknown; automatic resubmission is disabled to avoid duplicate charges",
       "provider_submission_outcome_unknown",
+    )
+    : serviceError(
+      String(persisted.message || "Provider explicitly rejected the request"),
+      String(persisted.code || "provider_submission_rejected"),
     );
+  for (const field of [
+    "provider",
+    "status",
+    "outcomeKnown",
+    "budgetReservationMayExist",
+    "requestId",
+    "model",
+    "reportedModel",
+    "billingStatus",
+    "upstreamErrorCode",
+    "upstreamCauseCode",
+    "failureMetering",
+    "streamMetrics",
+    "usage",
+  ]) {
+    if (Object.hasOwn(persisted, field)) error[field] = persisted[field];
   }
-  return serviceError(
-    String(persisted.message || "Provider explicitly rejected the request"),
-    String(persisted.code || "provider_submission_rejected"),
-  );
+  return error;
 }
 
 function isMatchingAcceptedProviderSubmission(submission, {
@@ -4449,6 +4838,29 @@ function serviceError(message, code) {
   error.status = code === "admin_run_not_found" ? 404 : 409;
   error.publicMessage = message;
   return error;
+}
+
+function enrichRelayTerminalError(error, run) {
+  const profile = run?.executionProfile?.finalRuling || {};
+  if (String(profile.provider || "").trim().toLowerCase() !== "relay") return error;
+  const normalized = error instanceof Error
+    ? error
+    : serviceError(String(error || "relay run failed"), "relay_terminal_error");
+  normalized.provider = "relay";
+  normalized.requestedModel = nullableString(profile.requestedModel || profile.model);
+  normalized.submittedModel = nullableString(profile.model || profile.requestedModel);
+  normalized.reportedModel = nullableString(normalized.reportedModel);
+  const hasReportedUsage = (() => {
+    try {
+      return Boolean(normalizeReportedModelUsage(normalized.usage));
+    } catch {
+      return false;
+    }
+  })();
+  if (normalized.budgetReservationMayExist === true && !hasReportedUsage) {
+    normalized.billingStatus = "possibly_charged_usage_unavailable";
+  }
+  return normalized;
 }
 
 function markProviderOutcomeKnown(error) {

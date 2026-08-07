@@ -52,13 +52,38 @@ CLI 可以用重复的 `--config provider:model:reasoningMode:reasoningEffort` �
 更大实验，必须由管理员同时显式提高 `--max-final-requests` 与 `--max-cost-cny`，并
 确保这仍符合 Redis 日额度，不能通过调低 `--estimated-cny-per-request` 规避预算。
 
+配置可以追加第五段通用 Evidence 变体：
+`provider:model:reasoningMode:reasoningEffort:evidenceVariant`。严格支持：
+
+- `full`：完整决策资料包及 Lua 语义旁路；
+- `card_text_only`：只保留题面、提供事实和完整准确卡文；
+- `without_lua`：保留完整检索证据，但移除 Lua 语义旁路。
+
+同一模型可以分别配置三种变体；它们 fork 同一冻结 Snapshot，并在报告中记录变体和
+最终模型输入 SHA-256。标准答案只在调用完成后评分，不进入任何变体的模型输入。
+
 创建新源运行时使用去重后配置列表的第一项；未传 `--config` 的默认矩阵第一项才是
 Relay Sol / pro / high，并在该源快照上 fork Relay Terra 与 Luna。显式配置矩阵时，
 第一个 `--config` 就是新源配置，其余配置复用该源运行的冻结快照。
 `--source-run-id` 是更窄的历史复用入口：它只允许单题模式复用严格匹配、已经冻结的
-Relay Sol / pro / high 源运行。其他模型即使在服务端 allowlist 中，也只有通过显式
+历史源运行。配置列表的第一项就是预期源配置；该 provider/model/mode/effort 必须由本次
+capabilities 明确报告可用，并与历史运行的 execution profile、快照内请求、single 策略
+及实际返回模型一致。其他模型即使在服务端 allowlist 中，也只有通过显式
 `--config` 才会加入；capabilities 未配置、transport 不可用或预算池未就绪时记录为
 `SKIPPED`，不会发请求。
+
+例如复用一个已完成的 DeepSeek Flash（standard / none）运行，再只测试 Terra：
+
+```powershell
+& $Node scripts/admin-model-matrix.mjs `
+  --question-file question.txt `
+  --source-run-id "既有运行 ID" `
+  --config deepseek:deepseek-v4-flash:standard:none `
+  --config relay:relay-gpt-5.6-terra:pro:high
+```
+
+这里第一个 `--config` 只用于声明并校验历史源身份，不会重新执行该源；只有后续配置
+会创建 fork 和最终模型请求。任一身份或快照字段不一致时，CLI 会在 fork 前拒绝。
 
 第三方 Relay 的模型身份与价格均未经项目验证，且只允许出现在隔离的管理员实验室。
 报告必须同时保留 requested model 与 returned model；returned model 也不能被解释为
@@ -100,6 +125,8 @@ fail-closed；`--allow-community-card-network` 只开放上面的百鸽只读身
 报告记录每个模型的 `conciseAnswer`、`verdicts`、`timeline`、requested/returned model、
 Evidence Snapshot 哈希、运行总耗时、最终裁定耗时、Token、finish reason 和后端可计算
 的费用。某个模型失败不会自动调用第二次，也不会阻止后续可用模型。
+Relay SSE 运行还会记录响应头、首字节、首个有效事件、首个可见正文与完成耗时，以及
+网络块/事件和响应/可见正文字节计数；隐藏 reasoning 内容不会进入报告或运行审计。
 
 “最终请求单次”不代表证据准备永远只有一个 HTTP 请求。DeepSeek 证据准备在已确认
 HTTP 200 且内容为空或非法 JSON 时，最多执行一次带独立预算预约的内容恢复。另有一个
@@ -114,7 +141,7 @@ CLI 不让被测模型给自己评分。运行完成后可将报告与独立 gol
 
 - `--poll-ms 1500`：轮询间隔。
 - `--timeout-ms 600000`：每个运行的最长等待时间。
-- `--source-run-id ID`：单题模式复用严格匹配的已冻结 Relay Sol / pro / high 源运行。
+- `--source-run-id ID`：单题模式复用与第一个 `--config` 及 capabilities 严格匹配的已冻结源运行。
 - `--output report.json`：写入文件；省略时输出到终端。
 - `--estimated-input-tokens` / `--estimated-output-tokens`：默认中转费率估算的 Token 包络。
 - `--budget-usd-to-cny`：预算换算因子，不是实时汇率。

@@ -5,6 +5,10 @@ import { fileURLToPath } from "node:url";
 
 import { parseEvidenceSnapshot } from "../backend/adminEvidenceSnapshot.mjs";
 import {
+  DEFAULT_ADMIN_EVIDENCE_VARIANT,
+  normalizeAdminEvidenceVariant,
+} from "../backend/adminEvidenceVariant.mjs";
+import {
   estimateRelayModelCost,
   getRelayModelPricingConfig,
 } from "../backend/modelPricing.mjs";
@@ -31,6 +35,7 @@ export const SOURCE_CONFIGURATION = Object.freeze({
   model: "relay-gpt-5.6-sol",
   reasoningMode: "pro",
   reasoningEffort: "high",
+  evidenceVariant: DEFAULT_ADMIN_EVIDENCE_VARIANT,
 });
 
 export const DEFAULT_MATRIX_CONFIGURATIONS = Object.freeze([
@@ -40,12 +45,14 @@ export const DEFAULT_MATRIX_CONFIGURATIONS = Object.freeze([
     model: "relay-gpt-5.6-terra",
     reasoningMode: "pro",
     reasoningEffort: "high",
+    evidenceVariant: DEFAULT_ADMIN_EVIDENCE_VARIANT,
   }),
   Object.freeze({
     provider: "relay",
     model: "relay-gpt-5.6-luna",
     reasoningMode: "pro",
     reasoningEffort: "high",
+    evidenceVariant: DEFAULT_ADMIN_EVIDENCE_VARIANT,
   }),
 ]);
 
@@ -60,12 +67,14 @@ export const FIVE_MODEL_PILOT_CONFIGURATIONS = Object.freeze([
     model: "deepseek-v4-flash",
     reasoningMode: "pro",
     reasoningEffort: "high",
+    evidenceVariant: DEFAULT_ADMIN_EVIDENCE_VARIANT,
   }),
   Object.freeze({
     provider: "deepseek",
     model: "deepseek-v4-pro",
     reasoningMode: "pro",
     reasoningEffort: "max",
+    evidenceVariant: DEFAULT_ADMIN_EVIDENCE_VARIANT,
   }),
 ]);
 
@@ -180,6 +189,7 @@ export async function runAdminModelMatrix({
       events: sourceAudit.events,
       question: normalizedQuestion,
       sourceConfiguration,
+      availableModels,
     });
   } else {
     const sourceCreated = await client.createRun({
@@ -252,6 +262,10 @@ export async function runAdminModelMatrix({
     schemaVersion: 1,
     question: normalizedQuestion,
     sourceRunId,
+    sourceEvidenceVariant: sourceConfiguration.evidenceVariant,
+    evidenceVariants: [...new Set(normalizedConfigurations.map(
+      (configuration) => configuration.evidenceVariant,
+    ))],
     startedAt: startedAt.toISOString(),
     endedAt: endedAt.toISOString(),
     durationMs: Math.max(0, endedAt.getTime() - startedAt.getTime()),
@@ -430,6 +444,7 @@ function estimatePlannedFinalCost({
       inputUsdPerMillionTokens: rates.inputUsdPerMillion,
       cachedInputUsdPerMillionTokens: rates.cachedInputUsdPerMillion,
       outputUsdPerMillionTokens: rates.outputUsdPerMillion,
+      pricingMultiplier: cost.pricingMultiplier,
       estimatedUsdPerRequest,
       estimatedCnyPerRequest,
       estimatedSubtotalCny: roundMoney(estimatedCnyPerRequest * count),
@@ -442,6 +457,7 @@ function estimatePlannedFinalCost({
       estimatedCnyPerFinalRequest: null,
       pricingSource: RELAY_SCREENSHOT_PRICING.pricingVersion,
       pricingVerified: RELAY_SCREENSHOT_PRICING.source.providerVerified,
+      pricingMultiplier: estimates[0]?.pricingMultiplier ?? RELAY_SCREENSHOT_PRICING.multiplier,
       estimatedInputTokensPerFinalRequest: inputTokens,
       estimatedOutputTokensPerFinalRequest: outputTokens,
       budgetUsdToCny: exchange,
@@ -612,6 +628,7 @@ export function collectAvailableModels(capabilities = {}) {
       result.set(model, {
         provider,
         model,
+        canonicalModel: String(descriptor?.canonicalModelId || "").trim(),
         budgetPool: String(descriptor.budgetPool),
         supportedReasoningModes: arrayOrEmpty(descriptor?.supportedReasoningModes),
         supportedReasoningEfforts: arrayOrEmpty(descriptor?.supportedReasoningEfforts),
@@ -650,16 +667,17 @@ export function formatMatrixMarkdown(report) {
     "",
     `- 问题：${escapeMarkdown(report.question)}`,
     `- 源运行：${escapeMarkdown(report.sourceRunId)}`,
+    `- 证据变体：${escapeMarkdown((report.evidenceVariants || []).join(", ") || "full")}`,
     `- 总耗时：${formatDuration(report.durationMs)}`,
     "",
-    "| 配置 | 状态 | 裁定 | 总耗时 | 最终裁定耗时 | Token | 费用 |",
-    "| --- | --- | --- | ---: | ---: | ---: | ---: |",
+    "| 配置 | 状态 | 裁定 | 总耗时 | 最终裁定耗时 | SSE | Token | 费用 |",
+    "| --- | --- | --- | ---: | ---: | --- | ---: | ---: |",
   ];
   for (const item of report.results || []) {
     const config = item.configuration || {};
-    lines.push(`| ${escapeMarkdown(`${config.model} / ${config.reasoningMode} / ${config.reasoningEffort}`)} | ${escapeMarkdown(item.status)} | ${escapeMarkdown(item.conciseAnswer || item.error?.message || "-")} | ${formatDuration(item.metrics?.totalDurationMs)} | ${formatDuration(item.metrics?.finalRulingMs)} | ${escapeMarkdown(formatTokens(item.metrics?.tokenUsage))} | ${escapeMarkdown(formatCost(item.metrics?.cost))} |`);
+    lines.push(`| ${escapeMarkdown(`${config.model} / ${config.reasoningMode} / ${config.reasoningEffort} / ${item.evidenceVariant || config.evidenceVariant || "full"}`)} | ${escapeMarkdown(item.status)} | ${escapeMarkdown(item.conciseAnswer || item.error?.message || "-")} | ${formatDuration(item.metrics?.totalDurationMs)} | ${formatDuration(item.metrics?.finalRulingMs)} | ${escapeMarkdown(formatRelayStreamMetrics(item.metrics?.relayStream))} | ${escapeMarkdown(formatTokens(item.metrics?.tokenUsage))} | ${escapeMarkdown(formatCost(item.metrics?.cost))} |`);
     if (Array.isArray(item.verdicts) && item.verdicts.length) {
-      lines.push(`| ↳ verdict |  | ${escapeMarkdown(item.verdicts.map((verdict) => `${verdict.questionId}: ${verdict.value}`).join("; "))} |  |  |  |  |`);
+      lines.push(`| ↳ verdict |  | ${escapeMarkdown(item.verdicts.map((verdict) => `${verdict.questionId}: ${verdict.value}`).join("; "))} |  |  |  |  |  |`);
     }
   }
   return `${lines.join("\n")}\n`;
@@ -831,10 +849,20 @@ export function validateReusableSourceRun({
   events = [],
   question,
   sourceConfiguration,
+  availableModels,
 } = {}) {
   const normalizedSource = normalizeConfiguration(sourceConfiguration || SOURCE_CONFIGURATION);
-  if (configurationKey(normalizedSource) !== configurationKey(SOURCE_CONFIGURATION)) {
-    throw sourceRunError("source configuration must be relay GPT-5.6 Sol / pro / high");
+  if (!(availableModels instanceof Map)) {
+    throw sourceRunError("source capabilities are required");
+  }
+  const sourceAvailability = validateConfiguration(normalizedSource, availableModels);
+  if (!sourceAvailability.ok) {
+    throw sourceRunError(`source configuration is not explicitly available: ${sourceAvailability.reason}`);
+  }
+  const capability = availableModels.get(normalizedSource.model);
+  const expectedCanonicalModel = String(capability?.canonicalModel || "").trim();
+  if (!expectedCanonicalModel) {
+    throw sourceRunError("source capability does not declare a canonical model identity");
   }
   if (!run || !TERMINAL_STATUSES.has(normalizeStatus(run.status))) {
     throw sourceRunError("source run must be terminal");
@@ -854,17 +882,18 @@ export function validateReusableSourceRun({
 
   const profile = run.executionProfile || {};
   const finalProfile = profile.finalRuling || {};
-  const expectedCanonicalModel = SOURCE_CONFIGURATION.model.replace(/^relay-/u, "");
   if (
     profile.status !== "evidence_frozen"
-    || finalProfile.provider !== SOURCE_CONFIGURATION.provider
-    || finalProfile.requestedModel !== SOURCE_CONFIGURATION.model
+    || finalProfile.provider !== normalizedSource.provider
+    || finalProfile.requestedModel !== normalizedSource.model
     || finalProfile.model !== expectedCanonicalModel
-    || finalProfile.reasoningMode !== SOURCE_CONFIGURATION.reasoningMode
-    || finalProfile.reasoningEffort !== SOURCE_CONFIGURATION.reasoningEffort
+    || finalProfile.reasoningMode !== normalizedSource.reasoningMode
+    || finalProfile.reasoningEffort !== normalizedSource.reasoningEffort
     || finalProfile.finalAttemptPolicy !== "single"
+    || normalizeAdminEvidenceVariant(profile.evidenceVariant)
+      !== normalizedSource.evidenceVariant
   ) {
-    throw sourceRunError("source run execution profile is not relay GPT-5.6 Sol / pro / high / single");
+    throw sourceRunError("source run execution profile does not match the requested capability configuration / single policy");
   }
   if (String(profile.evidenceSnapshotId || "") !== snapshot.snapshotId) {
     throw sourceRunError("source execution profile is not bound to the frozen evidence snapshot");
@@ -889,9 +918,9 @@ export function validateReusableSourceRun({
   if (
     snapshot.evidence?.request?.finalAttemptPolicy !== "single"
     || snapshot.evidence?.request?.finalModel !== expectedCanonicalModel
-    || snapshot.metadata?.finalRulingProvider !== "relay"
+    || snapshot.metadata?.finalRulingProvider !== normalizedSource.provider
   ) {
-    throw sourceRunError("source evidence snapshot does not preserve the relay Sol single-attempt request");
+    throw sourceRunError("source evidence snapshot does not preserve the requested model/provider single-attempt request");
   }
 
   const attempt = latestFinalAttempt(run, events);
@@ -902,7 +931,7 @@ export function validateReusableSourceRun({
     || "",
   ).trim();
   if (returnedModel !== expectedCanonicalModel) {
-    throw sourceRunError("source run has no completed relay GPT-5.6 Sol response");
+    throw sourceRunError(`source run has no completed response from ${expectedCanonicalModel}`);
   }
   return snapshot;
 }
@@ -912,33 +941,52 @@ function summarizeRun({ role, configuration, run, events = [], auditReadError = 
   const latency = run?.result?.latency || run?.result?.metrics?.latency || run?.metrics?.latency || {};
   const metering = run?.result?.metering || {};
   const attempt = latestFinalAttempt(run, events);
+  const failureMetering = copySafeFailureMetering(run?.error?.failureMetering);
   const usage = metering?.totals?.usage
     || run?.result?.metrics?.usage
     || run?.result?.usage
     || attempt?.usage
+    || failureMetering?.usage
     || null;
   const cost = metering?.totals?.cost
     || run?.result?.metrics?.cost
     || run?.result?.cost
     || attempt?.cost
+    || failureMetering?.cost
     || null;
   const snapshot = safeSnapshotIdentity(run);
   const finishReason = optionalText(
     run?.result?.provider?.finishReason
     || run?.result?.provider?.finish_reason
     || attempt?.finishReason
-    || attempt?.finish_reason,
+    || attempt?.finish_reason
+    || run?.error?.streamMetrics?.finishReason,
   );
+  const relayStream = copySafeStreamMetrics(run?.result?.provider?.streamMetrics
+    || latency?.relayStream
+    || attempt?.streamMetrics
+    || run?.error?.streamMetrics
+    || null);
   return {
     role,
     runId: extractRunId(run),
     status: normalizeStatus(run?.status) || "UNKNOWN",
     configuration: { ...configuration },
+    evidenceVariant: normalizeAdminEvidenceVariant(
+      run?.result?.evidenceVariant
+      || run?.executionProfile?.evidenceVariant
+      || configuration?.evidenceVariant,
+    ),
+    finalRulingInputSha256: optionalText(
+      run?.result?.finalRulingInputSha256
+      || run?.executionProfile?.finalRulingInputSha256,
+    ),
     requestedModel: String(configuration?.model || ""),
     returnedModel: String(
       metering?.stages?.finalRuling?.model
       || run?.result?.provider?.model
       || attempt?.model
+      || run?.error?.reportedModel
       || run?.execution?.providerRequest?.model
       || run?.execution?.request?.model
       || "",
@@ -953,6 +1001,7 @@ function summarizeRun({ role, configuration, run, events = [], auditReadError = 
       finalRulingMs: firstFinite(latency.finalRulingMs),
       stages: stageTimingSummary(run, latency),
       finishReason,
+      relayStream,
       tokenUsage: usage,
       cost,
     },
@@ -971,6 +1020,8 @@ function summarizeSkipped(configuration, reason) {
     runId: null,
     status: "SKIPPED",
     configuration: { ...configuration },
+    evidenceVariant: normalizeAdminEvidenceVariant(configuration?.evidenceVariant),
+    finalRulingInputSha256: null,
     conciseAnswer: "",
     verdicts: [],
     timeline: [],
@@ -985,6 +1036,8 @@ function summarizeFailure(configuration, error) {
     runId: null,
     status: "FAILED",
     configuration: { ...configuration },
+    evidenceVariant: normalizeAdminEvidenceVariant(configuration?.evidenceVariant),
+    finalRulingInputSha256: null,
     conciseAnswer: "",
     verdicts: [],
     timeline: [],
@@ -1172,15 +1225,24 @@ function normalizeConfiguration(value = {}) {
     model: requiredText(value.model, "configuration.model"),
     reasoningMode: requiredText(value.reasoningMode || value.mode, "configuration.reasoningMode").toLowerCase(),
     reasoningEffort: requiredText(value.reasoningEffort || value.effort, "configuration.reasoningEffort").toLowerCase(),
+    evidenceVariant: normalizeAdminEvidenceVariant(
+      value.evidenceVariant || value.variant,
+    ),
   };
 }
 
 function parseConfiguration(text) {
-  const [provider, model, reasoningMode, reasoningEffort, ...extra] = String(text || "").split(":");
+  const [provider, model, reasoningMode, reasoningEffort, evidenceVariant, ...extra] = String(text || "").split(":");
   if (extra.length || !provider || !model || !reasoningMode || !reasoningEffort) {
-    throw new Error("--config must be provider:model:reasoningMode:reasoningEffort");
+    throw new Error("--config must be provider:model:reasoningMode:reasoningEffort[:evidenceVariant]");
   }
-  return normalizeConfiguration({ provider, model, reasoningMode, reasoningEffort });
+  return normalizeConfiguration({
+    provider,
+    model,
+    reasoningMode,
+    reasoningEffort,
+    evidenceVariant,
+  });
 }
 
 function configurationKey(configuration) {
@@ -1189,6 +1251,7 @@ function configurationKey(configuration) {
     configuration.model,
     configuration.reasoningMode,
     configuration.reasoningEffort,
+    configuration.evidenceVariant,
   ].join(":");
 }
 
@@ -1237,16 +1300,128 @@ function normalizeStatus(value) {
 }
 
 function normalizeError(error) {
-  if (error && typeof error === "object" && !(error instanceof Error)) {
-    return {
-      code: String(error.code || error.error || "admin_matrix_run_failed"),
-      message: String(error.message || error.detail || error.code || "run failed"),
-    };
-  }
-  return {
-    code: String(error?.code || "admin_matrix_request_failed"),
-    message: String(error?.message || error || "request failed"),
+  const normalized = {
+    code: String(error?.code || error?.error || "admin_matrix_request_failed"),
+    message: String(error?.message || error?.detail || error?.code || error || "request failed"),
   };
+  if (error && typeof error === "object") {
+    for (const field of [
+      "provider",
+      "requestId",
+      "model",
+      "requestedModel",
+      "submittedModel",
+      "reportedModel",
+      "billingStatus",
+      "upstreamErrorCode",
+      "upstreamCauseCode",
+    ]) {
+      const value = optionalText(error[field]);
+      if (value) normalized[field] = value.slice(0, 512);
+      else if (field === "reportedModel" && Object.hasOwn(error, field)) normalized[field] = null;
+    }
+    const status = firstFinite(error.status);
+    if (status !== null) normalized.status = status;
+    for (const field of ["outcomeKnown", "budgetReservationMayExist"]) {
+      if (typeof error[field] === "boolean") normalized[field] = error[field];
+    }
+    const usage = copySafeUsage(error.usage);
+    if (usage) normalized.usage = usage;
+    const failureMetering = copySafeFailureMetering(error.failureMetering);
+    if (failureMetering) normalized.failureMetering = failureMetering;
+    const streamMetrics = copySafeStreamMetrics(error.streamMetrics);
+    if (streamMetrics) normalized.streamMetrics = streamMetrics;
+  }
+  return normalized;
+}
+
+function copySafeUsage(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const result = {};
+  for (const field of [
+    "inputTokens",
+    "cachedInputTokens",
+    "cacheWriteTokens",
+    "uncachedInputTokens",
+    "outputTokens",
+    "reasoningTokens",
+    "totalTokens",
+  ]) {
+    const number = firstFinite(value[field]);
+    if (number !== null) result[field] = number;
+  }
+  return Object.keys(result).length ? result : null;
+}
+
+function copySafeFailureMetering(value) {
+  if (!value || typeof value !== "object" || value.scope !== "final_ruling_only") return null;
+  const usage = copySafeUsage(value.usage);
+  const sourceCost = value.cost && typeof value.cost === "object" && !Array.isArray(value.cost)
+    ? value.cost
+    : {};
+  const cost = {};
+  for (const field of [
+    "provider",
+    "model",
+    "requestedModel",
+    "exchangeRateVersion",
+    "pricingVersion",
+    "pricingEffectiveDate",
+    "pricingStatus",
+    "unavailabilityReason",
+  ]) {
+    const text = optionalText(sourceCost[field]);
+    if (text) cost[field] = text.slice(0, 512);
+  }
+  for (const field of [
+    "exchangeRate",
+    "pricingMultiplier",
+    "inputCostUsd",
+    "cachedInputCostUsd",
+    "cacheWriteCostUsd",
+    "outputCostUsd",
+    "totalCostUsd",
+    "inputCostCny",
+    "cachedInputCostCny",
+    "cacheWriteCostCny",
+    "outputCostCny",
+    "totalCostCny",
+  ]) {
+    const number = firstFinite(sourceCost[field]);
+    if (number !== null) cost[field] = number;
+  }
+  for (const field of ["pricingSourceVerified", "estimateOnly"]) {
+    if (typeof sourceCost[field] === "boolean") cost[field] = sourceCost[field];
+  }
+  return usage || Object.keys(cost).length
+    ? { scope: "final_ruling_only", usage, cost }
+    : null;
+}
+
+function copySafeStreamMetrics(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const result = { schemaVersion: 1, transport: "sse" };
+  for (const field of [
+    "requestToResponseHeadersMs",
+    "requestToFirstByteMs",
+    "requestToFirstEventMs",
+    "requestToFirstContentMs",
+    "requestToCompleteMs",
+  ]) {
+    result[field] = firstFinite(value[field]);
+  }
+  for (const field of [
+    "networkChunkCount",
+    "sseEventCount",
+    "visibleContentChunkCount",
+    "responseBytes",
+    "visibleContentBytes",
+  ]) {
+    const number = firstFinite(value[field]);
+    result[field] = Number.isSafeInteger(number) ? number : 0;
+  }
+  result.finishReason = optionalText(value.finishReason)?.slice(0, 128) || null;
+  return result;
 }
 
 function firstFinite(...values) {
@@ -1317,6 +1492,33 @@ function formatTokens(value) {
   return total === null ? "-" : String(total);
 }
 
+function formatRelayStreamMetrics(value) {
+  if (!value || typeof value !== "object") return "-";
+  const duration = (field) => (
+    typeof value[field] === "number" && Number.isFinite(value[field])
+      ? `${(value[field] / 1_000).toFixed(2)}s`
+      : "-"
+  );
+  const counts = Number.isSafeInteger(value.networkChunkCount)
+    && Number.isSafeInteger(value.sseEventCount)
+    ? `${value.networkChunkCount}/${value.sseEventCount}`
+    : "-";
+  const bytes = Number.isSafeInteger(value.responseBytes)
+    && Number.isSafeInteger(value.visibleContentBytes)
+    ? `${value.responseBytes}/${value.visibleContentBytes}B`
+    : "-";
+  return [
+    `头 ${duration("requestToResponseHeadersMs")}`,
+    `首字节 ${duration("requestToFirstByteMs")}`,
+    `事件 ${duration("requestToFirstEventMs")}`,
+    `正文 ${duration("requestToFirstContentMs")}`,
+    `完成 ${duration("requestToCompleteMs")}`,
+    `块/事件 ${counts}`,
+    `响应/正文 ${bytes}`,
+    `finish ${optionalText(value.finishReason) || "-"}`,
+  ].join("；");
+}
+
 function formatCost(value) {
   if (!value || typeof value !== "object") return "-";
   const cny = firstFinite(value.totalCostCny, value.knownCostCny);
@@ -1359,9 +1561,10 @@ function usageText() {
   return `用法：node scripts/admin-model-matrix.mjs --base-url URL --origin ORIGIN (--question "问题" | --cases-file FILE) [选项]\n\n` +
     `密码从 ADMIN_MODEL_LAB_PASSWORD（或 ADMIN_PASSWORD）读取；未设置时在 TTY 中隐藏输入。\n` +
     `--question-file FILE 读取一道题；--cases-file FILE 读取四题 JSON 数组或 { cases: [...] }。\n` +
-    `--source-run-id ID 只复用题面、快照哈希、relay Sol 和 single 策略均严格匹配的源运行。\n` +
+    `--source-run-id ID 只复用题面、快照哈希、capabilities 配置身份和 single 策略均严格匹配的源运行。\n` +
     `--cases-file 不可与单题参数或 --source-run-id 同时使用。\n` +
-    `--config provider:model:reasoningMode:reasoningEffort 可重复指定。\n` +
+    `--config provider:model:reasoningMode:reasoningEffort[:evidenceVariant] 可重复指定。\n` +
+    `evidenceVariant 严格支持 full、card_text_only、without_lua；同一模型可重复配置不同变体并共享源快照。\n` +
     `--config-file FILE 读取配置 JSON 数组。\n` +
     `--format json|markdown  --output FILE  --concurrency N（硬上限默认 1）\n` +
     `--max-final-requests N（默认 12）  --max-cost-cny N（默认 10，共享池）\n` +

@@ -56,11 +56,22 @@ if ([string]::IsNullOrWhiteSpace($env:ADMIN_FINAL_BUDGET_RELAY_LUNA_RESERVATION_
 if ([string]::IsNullOrWhiteSpace($env:RELAY_MAX_COMPLETION_TOKENS)) {
   $env:RELAY_MAX_COMPLETION_TOKENS = "8192"
 }
+if ([string]::IsNullOrWhiteSpace($env:RELAY_STREAM)) {
+  $env:RELAY_STREAM = "true"
+}
+if ([string]::IsNullOrWhiteSpace($env:RELAY_STREAM_TIMEOUT_MS)) {
+  $env:RELAY_STREAM_TIMEOUT_MS = "225000"
+}
 if ([string]::IsNullOrWhiteSpace($env:ADMIN_MODEL_LAB_USD_TO_CNY_RATE)) {
   $env:ADMIN_MODEL_LAB_USD_TO_CNY_RATE = "7.5"
 }
 if ([string]::IsNullOrWhiteSpace($env:ADMIN_MODEL_LAB_EXCHANGE_RATE_VERSION)) {
   $env:ADMIN_MODEL_LAB_EXCHANGE_RATE_VERSION = "pilot-budget-factor-v1"
+}
+if ([string]::IsNullOrWhiteSpace($env:RELAY_PRICING_MULTIPLIER)) {
+  # Applies only to the token group shown in the user-provided 2026-08-07
+  # screenshot. Use an explicit override for any other relay token group.
+  $env:RELAY_PRICING_MULTIPLIER = "0.27"
 }
 
 # DeepSeek Flash and Pro share one deliberately conservative local final-call

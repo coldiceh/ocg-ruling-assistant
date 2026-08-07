@@ -446,7 +446,7 @@ function relayCapability(modelId, canonicalModelId, details) {
     supportsRetrieve: false,
     supportsCancel: false,
     supportsStoreFalse: false,
-    supportsStreaming: false,
+    supportsStreaming: true,
     supportsPromptCaching: false,
     contextWindowTokens: details.contextWindowTokens,
     maxOutputTokens: details.maxOutputTokens,

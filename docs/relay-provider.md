@@ -11,11 +11,35 @@
 - 管理实验室选择 ID：`relay-gpt-5.6-sol`、`relay-gpt-5.6-terra`、
   `relay-gpt-5.6-luna`；发给中转上游的 canonical model 分别为
   `gpt-5.6-sol`、`gpt-5.6-terra`、`gpt-5.6-luna`
-- 接口：同步 `POST /chat/completions`
+- 接口：`POST /chat/completions`，最终裁定默认请求 SSE 流（`stream: true`、`stream_options.include_usage: true`）；证据准备仍使用普通 JSON 响应
 - 结构：`response_format: { "type": "json_object" }`
 - 推理：固定 `reasoningMode: "pro"`；默认及预置矩阵使用
   `reasoning_effort: "high"`，管理实验室仍可在服务端允许的档位内手动选择
 - 不使用 tools、后台 Responses、轮询、自动重试或官方 OpenAI key
+
+流式只解决“必须等完整 JSON 才收到任何字节”的 524 风险，不会自动减少模型的推理
+Token 或总生成时间。中转站及其反向代理必须尽早返回 SSE 响应头、关闭响应缓冲并持续
+flush；若中转仍把完整响应缓冲后一次性返回，客户端设置 `stream: true` 也无法绕过代理
+首字节超时。应用端 `RELAY_STREAM_TIMEOUT_MS` 默认 270 秒，低于 290 秒的同步最终调用
+外层保护，并为 Vercel 300 秒函数上限内的计量与持久化预留时间；流在提交后中断仍按
+结果未知处理，绝不自动重试。
+
+管理实验只持久化非内容型 SSE 诊断：响应头、首字节、首个有效事件、首个可见正文和
+完成相对请求开始的耗时，以及网络块、SSE 事件、响应字节、可见正文字节和 finish
+reason。隐藏的 `reasoning_content` 只在协议层验证后丢弃，不进入返回对象、运行审计、
+管理页面或矩阵报告。这些指标用于区分中转握手、隐藏推理等待和可见输出阶段，不能
+反推出或保存模型思维链。
+
+每次运行必须区分三种不能互相替代的模型字段：
+
+1. `requestedModel`：管理实验室选中的项目别名，例如 `relay-gpt-5.6-luna`；
+2. `submittedModel`：请求体实际发给中转的 canonical 值，例如 `gpt-5.6-luna`；
+3. `reportedModel`：中转 HTTP 响应自报的 `model` 字段。
+
+中转控制台上的“模型归因”不是 Chat Completions 响应的一部分，只能另行人工核对，
+不能由项目伪造或反推。即使 `submittedModel === reportedModel`，真实上游模型身份仍然
+未经验证；若两者不一致或响应缺少 `model`，该答案会 fail-closed，usage 若存在仍按
+请求模型的费率结算，以免把一次已经发生的调用误当成免费。
 
 中转调用必须由使用者另行提供中转站签发的 API key；当前管理实验的证据准备还
 必须配置服务端 `DEEPSEEK_API_KEY`。缺少 DeepSeek key 时组合会明确失败，不会
@@ -69,6 +93,12 @@ Sol/Terra/Luna 各自使用独立 10 CNY 日池、每次先预约 5 CNY、comple
 这些数值在 `data/relay-model-pricing.json` 中带版本保存并明确标记为未验证；每次正式
 实验前必须以中转后台当前价格为准。启动器的 `7.5 CNY/USD` 只是保守预算换算因子，
 不是实时汇率。
+
+管理页面分别显示美元 `$` 与人民币 `¥`：人民币只是按上述预算换算因子从美元估算值
+换算，两个数字不是两笔费用。Relay 的每个成本字段都会明确标记“未验证费率估算”。
+若发生 `provider_submission_outcome_unknown`，供应商没有返回可靠 usage，项目不会把
+预算预约冒充实际费用，也不会显示虚构的 Token；页面会提示“可能已扣费”，最终以中转
+后台的调用数、Token、模型归因和费用为准。
 
 两种方式都会在同一个终端启动引擎、后端和网页。成功后直接访问
 `http://127.0.0.1:4173/?admin=1`；不用再分别打开三个 PowerShell 窗口。启动器只把

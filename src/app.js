@@ -2338,6 +2338,13 @@ function renderAdminComparisonResult(option, run, error = null, pendingText = ""
 
 function summarizeAdminComparisonRun(run) {
   const result = run?.result || {};
+  const finalConfiguration = run?.executionProfile?.finalRuling
+    || run?.configuration?.finalRuling
+    || run?.configuration
+    || {};
+  const providerId = String(finalConfiguration.provider || result?.provider?.providerId || "")
+    .trim()
+    .toLowerCase();
   const ruling = result.finalRuling || result.ruling || result.output || {};
   const verdictConclusions = Array.isArray(ruling.verdicts)
     ? ruling.verdicts.map((item) => String(item?.conclusion || "").trim()).filter(Boolean)
@@ -2352,22 +2359,99 @@ function summarizeAdminComparisonRun(run) {
   ).trim();
   const answer = rawAnswer.length > 320 ? `${rawAnswer.slice(0, 317)}…` : rawAnswer;
   const latency = result.latency || result.metrics?.latency || {};
-  const usage = result.metering?.totals?.usage || result.metrics?.usage || result.usage || {};
-  const cost = result.metering?.totals?.cost || result.metrics?.cost || result.cost || {};
+  const failureMetering = run?.error?.failureMetering
+    || (run?.error?.metering
+      ? { scope: "legacy_final_ruling_only", ...run.error.metering }
+      : {});
+  const aggregateUsage = result.metering?.totals?.usage
+    || result.metrics?.usage
+    || result.usage
+    || {};
+  const aggregateCost = result.metering?.totals?.cost
+    || result.metrics?.cost
+    || result.cost
+    || {};
+  const failureUsage = failureMetering.usage || {};
+  const failureCost = failureMetering.cost || {};
+  const hasAggregateUsage = Object.keys(aggregateUsage).length > 0;
+  const hasAggregateCost = Object.keys(aggregateCost).length > 0;
+  const usage = hasAggregateUsage ? aggregateUsage : failureUsage;
+  const cost = hasAggregateCost ? aggregateCost : failureCost;
   const totalTokens = usage.totalTokens ?? usage.knownTotalTokens ?? usage.total_tokens;
   const costParts = [
     formatAdminCnyCost(cost.totalCostCny ?? cost.knownCostCny),
     formatAdminCost(cost.totalCostUsd ?? cost.knownCostUsd),
   ].filter(Boolean);
+  const totalDuration = latency.totalWallClockMs ?? run?.stageTiming?.totalElapsedMs;
+  const finalDuration = latency.finalRulingMs
+    ?? run?.stageTiming?.stages?.find((stage) => stage?.id === "generate_ruling")?.durationMs;
+  const streamMetrics = result?.provider?.streamMetrics
+    || latency?.relayStream
+    || run?.error?.streamMetrics
+    || {};
+  const requestedModel = String(
+    finalConfiguration.requestedModel
+    || run?.requestedModel
+    || run?.model
+    || "",
+  ).trim();
+  const submittedModel = String(
+    finalConfiguration.submittedModel
+    || run?.submittedModel
+    || finalConfiguration.model
+    || "",
+  ).trim();
+  const reportedModel = String(
+    result?.provider?.reportedModel
+    || run?.error?.reportedModel
+    || "",
+  ).trim();
+  const errorCode = String(run?.error?.code || "");
+  const relayIdentity = providerId === "relay"
+    ? (!reportedModel
+        ? (errorCode === "relay_returned_model_missing"
+          ? "模型身份 响应缺少 reportedModel，结果已拒绝"
+          : "模型身份 历史记录未保存 reportedModel，无法核验")
+        : reportedModel.toLowerCase() === submittedModel.toLowerCase()
+          ? "模型字段相符（真实身份未验证）"
+          : `模型字段不一致 ${submittedModel || "未知"} → ${reportedModel}`)
+    : "";
+  const billingUncertain = new Set([
+    "provider_submission_outcome_unknown",
+    "relay_returned_model_missing",
+    "relay_returned_model_mismatch",
+  ]).has(errorCode) && !Object.keys(failureUsage).length
+    ? "计费 可能已扣费；usage 未返回，以中转后台为准"
+    : "";
+  const meteringScope = !hasAggregateUsage && Object.keys(failureUsage).length
+    ? "计量范围 仅最终裁定调用（非整条 pipeline）"
+    : "";
+  const pricingMultiplier = cost.pricingMultiplier
+    ?? finalConfiguration.pricingMultiplier;
   return {
     answer,
     metrics: [
       `状态 ${adminRunStatusLabel(run?.status)}`,
-      `总耗时 ${formatAdminDuration(latency.totalWallClockMs) || "未知"}`,
-      `final ${formatAdminDuration(latency.finalRulingMs) || "未知"}`,
-      `Token ${Number.isFinite(Number(totalTokens)) ? Number(totalTokens).toLocaleString("zh-CN") : "未知"}`,
-      `成本 ${costParts.join(" / ") || "暂无可用定价"}`,
-    ],
+      `总耗时 ${formatAdminDuration(totalDuration) || "未知"}`,
+      `final ${formatAdminDuration(finalDuration) || "未知"}`,
+      `${!hasAggregateUsage && Object.keys(failureUsage).length ? "final-only Token" : "Token"} ${Number.isFinite(Number(totalTokens)) ? Number(totalTokens).toLocaleString("zh-CN") : "未知"}`,
+      `${!hasAggregateCost && Object.keys(failureCost).length ? "final-only 成本" : "成本"} ${providerId === "relay" && costParts.length ? "未验证估算 " : ""}${costParts.join(" / ") || "暂无可用定价"}`,
+      providerId === "relay" && Number.isFinite(Number(pricingMultiplier))
+        ? `定价倍率 ${Number(pricingMultiplier)}×`
+        : "",
+      typeof streamMetrics.requestToFirstContentMs === "number"
+        && Number.isFinite(streamMetrics.requestToFirstContentMs)
+        ? `SSE 首正文 ${formatAdminDuration(streamMetrics.requestToFirstContentMs)}`
+        : "",
+      typeof streamMetrics.requestToCompleteMs === "number"
+        && Number.isFinite(streamMetrics.requestToCompleteMs)
+        ? `SSE 完成 ${formatAdminDuration(streamMetrics.requestToCompleteMs)}`
+        : "",
+      requestedModel && providerId === "relay" ? `请求 ${requestedModel}` : "",
+      relayIdentity,
+      billingUncertain,
+      meteringScope,
+    ].filter(Boolean),
   };
 }
 
@@ -2806,15 +2890,34 @@ function renderAdminStructuredResult(run) {
     || run?.output
     || run?.response;
   if (!result || typeof result !== "object") {
-    appendText(ui.adminResultSummary, "p", run ? "最终裁定尚未生成。" : "运行完成后会在这里显示结构化裁定。");
+    const errorCode = String(run?.error?.code || "");
+    if (errorCode === "provider_submission_outcome_unknown") {
+      appendText(ui.adminResultSummary, "strong", "供应商提交结果未知，可能已经产生费用。系统已禁止自动重试，避免重复扣费。");
+      appendText(ui.adminResultSummary, "p", "供应商没有返回可核算的 usage 或响应模型；实际调用次数、模型归因和费用请以中转后台记录为准。");
+    } else if (errorCode === "relay_returned_model_missing") {
+      appendText(ui.adminResultSummary, "strong", "中转响应缺少 reportedModel，本次答案已拒绝，不计入任何模型的实验结果。");
+      appendText(ui.adminResultSummary, "p", `请求模型：${run?.error?.requestedModel || "未知"}；提交模型：${run?.error?.submittedModel || "未知"}；供应商自报返回模型：缺失。调用可能已经产生费用，实际归因和金额以中转后台为准。`);
+    } else if (errorCode === "relay_returned_model_mismatch") {
+      appendText(ui.adminResultSummary, "strong", "中转返回的模型字段与请求不一致，本次答案已拒绝，不计入该模型的实验结果。");
+      appendText(ui.adminResultSummary, "p", `请求模型：${run?.error?.requestedModel || "未知"}；提交模型：${run?.error?.submittedModel || "未知"}；供应商自报返回模型：${run?.error?.reportedModel || "缺失"}。即使字段相符，也不能证明真实上游模型身份；本次调用仍可能已经产生费用。`);
+    } else {
+      appendText(ui.adminResultSummary, "p", run ? "最终裁定尚未生成。" : "运行完成后会在这里显示结构化裁定。");
+    }
     return;
   }
 
   if (run?.result?.experimental === true) {
+    const providerId = String(
+      run?.executionProfile?.finalRuling?.provider
+      || run?.result?.provider?.providerId
+      || "",
+    ).toLowerCase();
     const notice = appendText(
       ui.adminResultSummary,
       "p",
-      "实验结果：由国产模型在隔离管理实验中生成，不代表官方裁定，也不会进入普通用户回答。",
+      providerId === "relay"
+        ? "实验结果：由第三方中转生成；返回模型字段与真实上游身份均未经验证，不代表官方裁定，也不会进入普通用户回答。"
+        : "实验结果：由实验模型在隔离管理实验中生成，不代表官方裁定，也不会进入普通用户回答。",
     );
     notice.className = "admin-experimental-notice";
   }
@@ -2984,15 +3087,32 @@ function renderAdminMetrics(run) {
   )) || {};
   const metrics = firstNonEmptyObject(run?.metrics, run?.result?.metrics);
   const meteringTotals = run?.result?.metering?.totals || {};
+  const failureMetering = run?.error?.failureMetering
+    || (run?.error?.metering
+      ? { scope: "legacy_final_ruling_only", ...run.error.metering }
+      : {});
   const usage = firstNonEmptyObject(
     run?.usage,
     metrics?.usage,
     meteringTotals?.usage,
     run?.result?.usage,
   );
-  const aggregateCost = firstNonEmptyObject(metrics?.cost, meteringTotals?.cost);
+  const aggregateCost = firstNonEmptyObject(
+    metrics?.cost,
+    meteringTotals?.cost,
+  );
   const finalStageCost = run?.result?.cost || {};
+  const failureUsage = failureMetering.usage || {};
+  const failureCost = failureMetering.cost || {};
   const latency = run?.result?.latency || metrics?.latency || {};
+  const streamMetrics = firstNonEmptyObject(
+    run?.result?.provider?.streamMetrics,
+    latency?.relayStream,
+    run?.error?.streamMetrics,
+  );
+  const formatStreamDuration = (value) => (
+    typeof value === "number" && Number.isFinite(value) ? formatAdminDuration(value) : ""
+  );
   const usdCostIncomplete = (
     aggregateCost.completeInUsd === false
     && aggregateCost.totalCostUsd == null
@@ -3020,10 +3140,64 @@ function renderAdminMetrics(run) {
     || run?.options
     || {};
   const finalConfiguration = configuration.finalRuling || configuration;
+  const providerId = String(run?.provider || finalConfiguration.provider || "").trim().toLowerCase();
+  const requestedModel = finalConfiguration.requestedModel
+    || run?.requestedModel
+    || run?.model;
+  const submittedModel = finalConfiguration.submittedModel
+    || run?.submittedModel
+    || finalConfiguration.model;
+  const reportedModel = run?.result?.provider?.reportedModel
+    || run?.error?.reportedModel;
+  const errorCode = String(run?.error?.code || "");
+  const relayIdentityStatus = providerId === "relay"
+    ? (!reportedModel
+        ? (errorCode === "relay_returned_model_missing"
+          ? "响应缺少 reportedModel；结果已拒绝"
+          : "历史记录未保存 reportedModel，无法核验")
+        : String(reportedModel).trim().toLowerCase() === String(submittedModel || "").trim().toLowerCase()
+          ? "返回字段相符；真实上游身份仍未验证"
+          : "返回字段不一致；结果已拒绝")
+    : "";
+  const relayTerminalIdentityError = new Set([
+    "relay_returned_model_missing",
+    "relay_returned_model_mismatch",
+  ]).has(errorCode);
+  const failureUsageMissing = !failureUsage || Object.keys(failureUsage).length === 0;
+  const billingOutcome = errorCode === "provider_submission_outcome_unknown"
+    ? (failureUsageMissing
+      ? "可能已扣费；供应商未返回 usage，应用无法核算，且不会自动重试"
+      : "供应商已返回最终裁定 usage；已按 final-only 计量，但流未完整结束且不会自动重试")
+    : relayTerminalIdentityError && failureUsageMissing
+      ? "模型身份响应无效，但调用可能已扣费；usage 未返回，以中转后台为准"
+    : "";
+  const pricingMultiplier = aggregateCost.pricingMultiplier
+    ?? finalStageCost.pricingMultiplier
+    ?? failureCost.pricingMultiplier
+    ?? finalConfiguration.pricingMultiplier;
+  const failureMeteringScope = Object.keys(failureUsage).length || Object.keys(failureCost).length
+    ? (failureMetering.scope === "final_ruling_only"
+      ? "仅最终裁定调用（非整条 pipeline）"
+      : "历史失败计量；仅按最终裁定调用显示（非整条 pipeline）")
+    : "";
+  const usdCostLabel = providerId === "relay"
+    ? (usdCostIncomplete ? "美元估算（未验证费率，仅已知部分）" : "美元估算（未验证费率）")
+    : (usdCostIncomplete ? "估算成本（仅已知部分）" : "估算成本");
+  const cnyCostLabel = providerId === "relay"
+    ? (cnyCostIncomplete ? "人民币估算（未验证费率，仅已知部分）" : "人民币估算（未验证费率）")
+    : (cnyCostIncomplete ? "人民币估算（仅已知部分）" : "人民币估算");
   const fields = [
     ["状态", adminRunStatusLabel(run?.status)],
-    ["服务提供方", run?.provider || finalConfiguration.provider],
-    ["模型", run?.model || finalConfiguration.model || finalConfiguration.requestedModel],
+    ["服务提供方", providerId],
+    ["请求模型", requestedModel],
+    ["提交给中转的模型", providerId === "relay" ? submittedModel : ""],
+    ["供应商自报返回模型", reportedModel],
+    ["模型身份核验", relayIdentityStatus],
+    ["中转后台模型归因", providerId === "relay" ? "本记录不保存后台归因；需与中转后台逐次记录单独核对" : ""],
+    ["计费状态", billingOutcome],
+    ["Relay 定价倍率", providerId === "relay" && Number.isFinite(Number(pricingMultiplier))
+      ? `${Number(pricingMultiplier)}×`
+      : ""],
     ["推理强度", finalConfiguration.reasoningEffort || finalConfiguration.effort || run?.reasoningEffort],
     ["运行模式", finalConfiguration.reasoningMode || finalConfiguration.mode || run?.reasoningMode || run?.mode],
     ["提示词版本", configuration.prompt?.version || configuration.promptVersion || run?.promptVersion],
@@ -3032,7 +3206,13 @@ function renderAdminMetrics(run) {
     ["输出 Token", usage.outputTokens ?? usage.output_tokens ?? metrics.outputTokens],
     ["推理 Token", usage.reasoningTokens ?? usage.reasoning_tokens ?? metrics.reasoningTokens],
     ["总 Token", usage.totalTokens ?? usage.total_tokens ?? metrics.totalTokens],
-    [usdCostIncomplete ? "估算成本（仅已知部分）" : "估算成本", formatAdminCost(
+    ["失败计量范围", failureMeteringScope],
+    ["最终裁定失败输入 Token", failureUsage.inputTokens ?? failureUsage.input_tokens],
+    ["最终裁定失败缓存输入 Token", failureUsage.cachedInputTokens ?? failureUsage.cached_input_tokens],
+    ["最终裁定失败输出 Token", failureUsage.outputTokens ?? failureUsage.output_tokens],
+    ["最终裁定失败推理 Token", failureUsage.reasoningTokens ?? failureUsage.reasoning_tokens],
+    ["最终裁定失败总 Token", failureUsage.totalTokens ?? failureUsage.total_tokens],
+    [usdCostLabel, formatAdminCost(
       metrics.estimatedCostUsd
       ?? metrics.costUsd
       ?? aggregateCost.totalCostUsd
@@ -3045,7 +3225,7 @@ function renderAdminMetrics(run) {
     ["美元成本缺失阶段", usdCostIncomplete
       ? formatMissingCostStages(aggregateCost.missingUsdStages)
       : ""],
-    [cnyCostIncomplete ? "人民币估算（仅已知部分）" : "人民币估算", formatAdminCnyCost(
+    [cnyCostLabel, formatAdminCnyCost(
       metrics.estimatedCostCny
       ?? metrics.costCny
       ?? aggregateCost.totalCostCny
@@ -3058,6 +3238,14 @@ function renderAdminMetrics(run) {
     ["人民币成本缺失阶段", cnyCostIncomplete
       ? formatMissingCostStages(aggregateCost.missingCnyStages)
       : ""],
+    [providerId === "relay" ? "最终裁定失败美元估算（未验证费率）" : "最终裁定失败美元估算", formatAdminCost(
+      failureCost.totalCostUsd
+      ?? failureCost.knownCostUsd,
+    )],
+    [providerId === "relay" ? "最终裁定失败人民币估算（未验证费率）" : "最终裁定失败人民币估算", formatAdminCnyCost(
+      failureCost.totalCostCny
+      ?? failureCost.knownCostCny,
+    )],
     ["服务端总耗时", formatAdminMetricDuration(
       latency.totalWallClockMs
       ?? metrics.wallClockMs
@@ -3066,9 +3254,24 @@ function renderAdminMetrics(run) {
       ?? latency.wallClockMs
       ?? latency.totalMs
       ?? run?.wallClockMs
-      ?? run?.durationMs,
+      ?? run?.durationMs
+      ?? run?.stageTiming?.totalElapsedMs,
       metrics.speedLabel || latency.speedLabel,
     )],
+    ["SSE 响应头", formatStreamDuration(streamMetrics.requestToResponseHeadersMs)],
+    ["SSE 首字节", formatStreamDuration(streamMetrics.requestToFirstByteMs)],
+    ["SSE 首个有效事件", formatStreamDuration(streamMetrics.requestToFirstEventMs)],
+    ["SSE 首个可见正文", formatStreamDuration(streamMetrics.requestToFirstContentMs)],
+    ["SSE 完成", formatStreamDuration(streamMetrics.requestToCompleteMs)],
+    ["SSE 网络块 / 事件", Number.isSafeInteger(streamMetrics.networkChunkCount)
+      && Number.isSafeInteger(streamMetrics.sseEventCount)
+      ? `${streamMetrics.networkChunkCount} / ${streamMetrics.sseEventCount}`
+      : ""],
+    ["SSE 响应 / 正文字节", Number.isSafeInteger(streamMetrics.responseBytes)
+      && Number.isSafeInteger(streamMetrics.visibleContentBytes)
+      ? `${streamMetrics.responseBytes.toLocaleString("zh-CN")} / ${streamMetrics.visibleContentBytes.toLocaleString("zh-CN")}`
+      : ""],
+    ["SSE finish reason", streamMetrics.finishReason],
   ];
   for (const [label, value] of fields) {
     if (value === undefined || value === null || value === "") continue;

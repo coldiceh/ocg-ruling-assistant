@@ -1452,10 +1452,165 @@ function normalizeError(error) {
       name: error.name,
       code: error.code || "",
       message: error.message,
+      ...copySafeErrorAudit(error),
     });
   }
   if (typeof error === "string") return canonicalJson({ name: "Error", code: "", message: error });
   return canonicalJson(error || {});
+}
+
+function copySafeErrorAudit(error) {
+  const result = {};
+  for (const field of [
+    "provider",
+    "requestId",
+    "model",
+    "requestedModel",
+    "submittedModel",
+    "billingStatus",
+    "upstreamErrorCode",
+    "upstreamCauseCode",
+  ]) {
+    const value = safeAuditString(error?.[field]);
+    if (value !== null) result[field] = value;
+  }
+  if (Object.hasOwn(error || {}, "reportedModel")) {
+    result.reportedModel = safeAuditString(error?.reportedModel);
+  }
+  const status = safeAuditNumber(error?.status);
+  if (status !== null) result.status = status;
+  for (const field of ["outcomeKnown", "budgetReservationMayExist"]) {
+    if (typeof error?.[field] === "boolean") result[field] = error[field];
+  }
+  const streamMetrics = copySafeRelayStreamMetrics(error?.streamMetrics);
+  if (streamMetrics) result.streamMetrics = streamMetrics;
+  const usage = copySafeAuditFields(error?.usage, {
+    numbers: [
+      "inputTokens",
+      "cachedInputTokens",
+      "cacheWriteTokens",
+      "uncachedInputTokens",
+      "outputTokens",
+      "reasoningTokens",
+      "totalTokens",
+    ],
+  });
+  if (usage) result.usage = usage;
+  const failureMetering = copySafeFailureMetering(error?.failureMetering);
+  if (failureMetering) {
+    result.failureMetering = failureMetering;
+  }
+  return result;
+}
+
+function copySafeRelayStreamMetrics(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const result = {
+    schemaVersion: 1,
+    transport: "sse",
+  };
+  for (const field of [
+    "requestToResponseHeadersMs",
+    "requestToFirstByteMs",
+    "requestToFirstEventMs",
+    "requestToFirstContentMs",
+    "requestToCompleteMs",
+  ]) {
+    const number = safeAuditNumber(value[field]);
+    result[field] = number !== null && number >= 0 ? number : null;
+  }
+  for (const field of [
+    "networkChunkCount",
+    "sseEventCount",
+    "visibleContentChunkCount",
+    "responseBytes",
+    "visibleContentBytes",
+  ]) {
+    const number = safeAuditNumber(value[field]);
+    result[field] = Number.isSafeInteger(number) && number >= 0 ? number : 0;
+  }
+  result.finishReason = safeAuditString(value.finishReason)?.slice(0, 128) || null;
+  return result;
+}
+
+function copySafeFailureMetering(value) {
+  if (
+    !value
+    || typeof value !== "object"
+    || value.scope !== "final_ruling_only"
+  ) return null;
+  const usage = copySafeAuditFields(value.usage, {
+    numbers: [
+      "inputTokens",
+      "cachedInputTokens",
+      "cacheWriteTokens",
+      "uncachedInputTokens",
+      "outputTokens",
+      "reasoningTokens",
+      "totalTokens",
+    ],
+  });
+  const cost = copySafeAuditFields(value.cost, {
+    strings: [
+      "provider",
+      "model",
+      "requestedModel",
+      "exchangeRateVersion",
+      "pricingVersion",
+      "pricingEffectiveDate",
+      "pricingStatus",
+      "unavailabilityReason",
+    ],
+    numbers: [
+      "exchangeRate",
+      "pricingMultiplier",
+      "inputCostUsd",
+      "cachedInputCostUsd",
+      "cacheWriteCostUsd",
+      "outputCostUsd",
+      "totalCostUsd",
+      "inputCostCny",
+      "cachedInputCostCny",
+      "cacheWriteCostCny",
+      "outputCostCny",
+      "totalCostCny",
+    ],
+    booleans: ["pricingSourceVerified", "estimateOnly"],
+  });
+  return {
+    scope: "final_ruling_only",
+    usage,
+    cost,
+  };
+}
+
+function copySafeAuditFields(value, {
+  strings = [],
+  numbers = [],
+  booleans = [],
+} = {}) {
+  if (!value || typeof value !== "object") return null;
+  const result = {};
+  for (const field of strings) {
+    const item = safeAuditString(value[field]);
+    if (item !== null) result[field] = item;
+  }
+  for (const field of numbers) {
+    const item = safeAuditNumber(value[field]);
+    if (item !== null) result[field] = item;
+  }
+  for (const field of booleans) {
+    if (typeof value[field] === "boolean") result[field] = value[field];
+  }
+  return Object.keys(result).length ? result : null;
+}
+
+function safeAuditString(value) {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function safeAuditNumber(value) {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
 function canonicalJson(value) {

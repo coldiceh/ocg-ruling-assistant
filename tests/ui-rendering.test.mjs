@@ -735,6 +735,12 @@ test("admin frozen-evidence comparison summarizes answer latency tokens and avai
     result: {
       finalRuling: { conciseAnswer: "可以发动，但处理时不进行特殊召唤。" },
       latency: { totalWallClockMs: 4200, finalRulingMs: 3100 },
+      provider: {
+        streamMetrics: {
+          requestToFirstContentMs: 1800,
+          requestToCompleteMs: 3000,
+        },
+      },
       metering: {
         totals: {
           usage: { totalTokens: 1234 },
@@ -751,7 +757,100 @@ test("admin frozen-evidence comparison summarizes answer latency tokens and avai
     "final 3100ms",
     "Token 1,234",
     "成本 ¥0.0800 / $0.011000",
+    "SSE 首正文 1800ms",
+    "SSE 完成 3000ms",
   ]);
+});
+
+test("admin frozen-evidence comparison labels relay identity and ambiguous billing without fabricating usage", async () => {
+  const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
+  const source = sourceBetween(
+    app,
+    "function summarizeAdminComparisonRun",
+    "function shouldTriggerAdminRunExecution",
+  );
+  const summarize = new Function(
+    "formatAdminCnyCost",
+    "formatAdminCost",
+    "adminRunStatusLabel",
+    "formatAdminDuration",
+    `${source}; return summarizeAdminComparisonRun;`,
+  )(
+    () => "",
+    () => "",
+    () => "失败",
+    (value) => Number.isFinite(Number(value)) ? `${Number(value)}ms` : "",
+  );
+  const summary = summarize({
+    status: "FAILED",
+    executionProfile: {
+      finalRuling: {
+        provider: "relay",
+        requestedModel: "relay-gpt-5.6-luna",
+        model: "gpt-5.6-luna",
+      },
+    },
+    stageTiming: {
+      totalElapsedMs: 240_100,
+      stages: [{ id: "generate_ruling", durationMs: 240_000 }],
+    },
+    error: {
+      code: "provider_submission_outcome_unknown",
+      message: "Provider submission outcome is unknown",
+    },
+  });
+
+  assert.match(summary.metrics.join("\n"), /总耗时 240100ms/u);
+  assert.match(summary.metrics.join("\n"), /历史记录未保存 reportedModel，无法核验/u);
+  assert.match(summary.metrics.join("\n"), /可能已扣费.*中转后台/u);
+  assert.match(summary.metrics.join("\n"), /Token 未知/u);
+});
+
+test("admin frozen-evidence comparison keeps failed final-call metering separate from pipeline totals", async () => {
+  const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
+  const source = sourceBetween(
+    app,
+    "function summarizeAdminComparisonRun",
+    "function shouldTriggerAdminRunExecution",
+  );
+  const summarize = new Function(
+    "formatAdminCnyCost",
+    "formatAdminCost",
+    "adminRunStatusLabel",
+    "formatAdminDuration",
+    `${source}; return summarizeAdminComparisonRun;`,
+  )(
+    (value) => Number.isFinite(Number(value)) ? `¥${Number(value)}` : "",
+    (value) => Number.isFinite(Number(value)) ? `$${Number(value)}` : "",
+    () => "失败",
+    () => "",
+  );
+  const summary = summarize({
+    status: "FAILED",
+    executionProfile: {
+      finalRuling: {
+        provider: "relay",
+        requestedModel: "relay-gpt-5.6-luna",
+        submittedModel: "gpt-5.6-luna",
+        pricingMultiplier: 0.27,
+      },
+    },
+    error: {
+      code: "relay_returned_model_mismatch",
+      reportedModel: "gpt-5.6-terra",
+      failureMetering: {
+        scope: "final_ruling_only",
+        usage: { totalTokens: 321 },
+        cost: { totalCostUsd: 0.01, totalCostCny: 0.075, pricingMultiplier: 0.27 },
+      },
+    },
+  });
+  const text = summary.metrics.join("\n");
+  assert.match(text, /final-only Token 321/u);
+  assert.match(text, /final-only 成本 未验证估算/u);
+  assert.match(text, /仅最终裁定调用（非整条 pipeline）/u);
+  assert.match(text, /定价倍率 0\.27×/u);
+  assert.doesNotMatch(text, /^Token 321$/mu);
 });
 
 test("admin model lab renders the current structured ruling schema", async () => {
@@ -832,6 +931,269 @@ test("admin model lab renders the current structured ruling schema", async () =>
   assert.match(text, /支付代价 → 手牌送去墓地/u);
   assert.match(text, /后续对象仍需确认/u);
   assert.doesNotMatch(text, /已收到结构化结果/u);
+});
+
+test("admin model lab explains outcome-unknown billing instead of showing a generic empty result", async () => {
+  const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
+  const source = sourceBetween(
+    app,
+    "function renderAdminStructuredResult",
+    "function renderAdminMetrics",
+  );
+  const document = createTestDocument();
+  const summary = document.createElement("section");
+  const render = new Function(
+    "ui",
+    "document",
+    "clearElement",
+    "appendText",
+    "firstAdminArray",
+    "firstAdminValue",
+    "adminDisplayValue",
+    `${source}; return renderAdminStructuredResult;`,
+  )(
+    { adminResultSummary: summary },
+    document,
+    clearTestElement,
+    appendTestText,
+    (...values) => values.find(Array.isArray) || [],
+    (...values) => values.find((value) => value !== undefined && value !== null && value !== ""),
+    (value) => String(value?.text || value?.reason || value?.message || value || ""),
+  );
+
+  render({
+    status: "FAILED",
+    error: { code: "provider_submission_outcome_unknown" },
+  });
+  const text = testNodeText(summary);
+  assert.match(text, /可能已经产生费用/u);
+  assert.match(text, /禁止自动重试/u);
+  assert.match(text, /中转后台记录/u);
+  assert.doesNotMatch(text, /最终裁定尚未生成/u);
+});
+
+test("admin model lab rejects a relay response with a missing reportedModel and warns about billing", async () => {
+  const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
+  const source = sourceBetween(
+    app,
+    "function renderAdminStructuredResult",
+    "function renderAdminMetrics",
+  );
+  const document = createTestDocument();
+  const summary = document.createElement("section");
+  const render = new Function(
+    "ui",
+    "document",
+    "clearElement",
+    "appendText",
+    "firstAdminArray",
+    "firstAdminValue",
+    "adminDisplayValue",
+    `${source}; return renderAdminStructuredResult;`,
+  )(
+    { adminResultSummary: summary },
+    document,
+    clearTestElement,
+    appendTestText,
+    (...values) => values.find(Array.isArray) || [],
+    (...values) => values.find((value) => value !== undefined && value !== null && value !== ""),
+    (value) => String(value?.text || value?.reason || value?.message || value || ""),
+  );
+  render({
+    status: "FAILED",
+    error: {
+      code: "relay_returned_model_missing",
+      requestedModel: "relay-gpt-5.6-sol",
+      submittedModel: "gpt-5.6-sol",
+    },
+  });
+  const text = testNodeText(summary);
+  assert.match(text, /缺少 reportedModel/u);
+  assert.match(text, /请求模型：relay-gpt-5\.6-sol/u);
+  assert.match(text, /提交模型：gpt-5\.6-sol/u);
+  assert.match(text, /可能已经产生费用/u);
+});
+
+test("admin model lab distinguishes relay requested, submitted, returned and dashboard-attributed identities", async () => {
+  const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
+  const source = sourceBetween(
+    app,
+    "function renderAdminMetrics",
+    "function renderAdminEvidence",
+  );
+  const document = createTestDocument();
+  const metricsNode = document.createElement("dl");
+  const render = new Function(
+    "ui",
+    "document",
+    "clearElement",
+    "appendText",
+    "adminRunStatusLabel",
+    "formatAdminCost",
+    "formatAdminCnyCost",
+    "formatAdminMetricDuration",
+    "formatAdminDuration",
+    `${source}; return renderAdminMetrics;`,
+  )(
+    { adminMetrics: metricsNode },
+    document,
+    clearTestElement,
+    appendTestText,
+    (value) => String(value || ""),
+    (value) => Number.isFinite(Number(value)) ? `$${Number(value).toFixed(6)}` : "",
+    (value) => Number.isFinite(Number(value)) ? `¥${Number(value).toFixed(4)}` : "",
+    (value) => String(value ?? ""),
+  );
+
+  render({
+    status: "SUCCEEDED",
+    executionProfile: {
+      finalRuling: {
+        provider: "relay",
+        requestedModel: "relay-gpt-5.6-terra",
+        submittedModel: "gpt-5.6-terra",
+        pricingMultiplier: 0.27,
+      },
+    },
+    result: {
+      provider: { reportedModel: "gpt-5.6-terra" },
+      metering: {
+        totals: {
+          usage: { totalTokens: 100 },
+          cost: { totalCostUsd: 0.01, totalCostCny: 0.075 },
+        },
+      },
+    },
+  });
+
+  const text = testNodeText(metricsNode);
+  assert.match(text, /请求模型\nrelay-gpt-5\.6-terra/u);
+  assert.match(text, /提交给中转的模型\ngpt-5\.6-terra/u);
+  assert.match(text, /供应商自报返回模型\ngpt-5\.6-terra/u);
+  assert.match(text, /真实上游身份仍未验证/u);
+  assert.match(text, /中转后台模型归因\n本记录不保存后台归因/u);
+  assert.match(text, /Relay 定价倍率\n0\.27×/u);
+  assert.match(text, /美元估算（未验证费率）\n\$0\.010000/u);
+  assert.match(text, /人民币估算（未验证费率）\n¥0\.0750/u);
+});
+
+test("admin model lab never treats legacy provider.model or error.model as reportedModel", async () => {
+  const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
+  const source = sourceBetween(
+    app,
+    "function renderAdminMetrics",
+    "function renderAdminEvidence",
+  );
+  const document = createTestDocument();
+  const metricsNode = document.createElement("dl");
+  const render = new Function(
+    "ui",
+    "document",
+    "clearElement",
+    "appendText",
+    "adminRunStatusLabel",
+    "formatAdminCost",
+    "formatAdminCnyCost",
+    "formatAdminMetricDuration",
+    "formatAdminDuration",
+    `${source}; return renderAdminMetrics;`,
+  )(
+    { adminMetrics: metricsNode },
+    document,
+    clearTestElement,
+    appendTestText,
+    (value) => String(value || ""),
+    () => "",
+    () => "",
+    () => "",
+  );
+  render({
+    status: "FAILED",
+    executionProfile: {
+      finalRuling: {
+        provider: "relay",
+        requestedModel: "relay-gpt-5.6-luna",
+        submittedModel: "gpt-5.6-luna",
+      },
+    },
+    result: { provider: { model: "gpt-5.6-terra" } },
+    error: { model: "gpt-5.6-terra" },
+  });
+  const text = testNodeText(metricsNode);
+  assert.match(text, /历史记录未保存 reportedModel，无法核验/u);
+  assert.doesNotMatch(text, /供应商自报返回模型\ngpt-5\.6-terra/u);
+});
+
+test("admin model lab labels failure metering as final-only instead of pipeline totals", async () => {
+  const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
+  const source = sourceBetween(
+    app,
+    "function renderAdminMetrics",
+    "function renderAdminEvidence",
+  );
+  const document = createTestDocument();
+  const metricsNode = document.createElement("dl");
+  const render = new Function(
+    "ui",
+    "document",
+    "clearElement",
+    "appendText",
+    "adminRunStatusLabel",
+    "formatAdminCost",
+    "formatAdminCnyCost",
+    "formatAdminMetricDuration",
+    "formatAdminDuration",
+    `${source}; return renderAdminMetrics;`,
+  )(
+    { adminMetrics: metricsNode },
+    document,
+    clearTestElement,
+    appendTestText,
+    (value) => String(value || ""),
+    (value) => Number.isFinite(Number(value)) ? `$${Number(value).toFixed(6)}` : "",
+    (value) => Number.isFinite(Number(value)) ? `¥${Number(value).toFixed(4)}` : "",
+    () => "",
+    (value) => Number.isFinite(Number(value)) ? `${Number(value)}ms` : "",
+  );
+  render({
+    status: "FAILED",
+    executionProfile: {
+      finalRuling: {
+        provider: "relay",
+        requestedModel: "relay-gpt-5.6-sol",
+        submittedModel: "gpt-5.6-sol",
+      },
+    },
+    error: {
+      code: "provider_submission_outcome_unknown",
+      reportedModel: "gpt-5.6-sol",
+      streamMetrics: {
+        requestToResponseHeadersMs: 50,
+        requestToFirstByteMs: 70,
+        requestToFirstEventMs: 80,
+        requestToFirstContentMs: null,
+        requestToCompleteMs: null,
+        networkChunkCount: 2,
+        sseEventCount: 2,
+        responseBytes: 400,
+        visibleContentBytes: 0,
+        finishReason: null,
+      },
+      failureMetering: {
+        scope: "final_ruling_only",
+        usage: { inputTokens: 10, outputTokens: 2, totalTokens: 12 },
+        cost: { totalCostUsd: 0.01, totalCostCny: 0.075 },
+      },
+    },
+  });
+  const text = testNodeText(metricsNode);
+  assert.match(text, /失败计量范围\n仅最终裁定调用（非整条 pipeline）/u);
+  assert.match(text, /最终裁定失败总 Token\n12/u);
+  assert.match(text, /最终裁定失败美元估算（未验证费率）\n\$0\.010000/u);
+  assert.match(text, /计费状态\n供应商已返回最终裁定 usage；已按 final-only 计量/u);
+  assert.match(text, /SSE 首字节\n70ms/u);
+  assert.match(text, /SSE 网络块 \/ 事件\n2 \/ 2/u);
+  assert.doesNotMatch(text, /(?:^|\n)总 Token\n12(?:\n|$)/u);
 });
 
 test("admin model lab displays aggregate two-stage cost before final-stage cost", async () => {

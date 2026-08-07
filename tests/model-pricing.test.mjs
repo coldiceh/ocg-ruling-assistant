@@ -8,12 +8,17 @@ import {
   getRelayModelPricingConfig,
   normalizeOpenAIResponsesUsage,
   normalizeReportedModelUsage,
+  resolveRelayPricingMultiplier,
   resolvePricedModelId,
 } from "../backend/modelPricing.mjs";
 
 test("versioned relay screenshot pricing remains explicitly unverified", () => {
   const pricing = getRelayModelPricingConfig();
-  assert.equal(pricing.pricingVersion, "relay-dashboard-screenshot-2026-08-06");
+  assert.equal(pricing.pricingVersion, "relay-token-group-screenshot-2026-08-07");
+  assert.equal(pricing.effectiveDate, "2026-08-07");
+  assert.equal(pricing.checkedAt, "2026-08-07");
+  assert.equal(pricing.multiplier, 0.27);
+  assert.equal(pricing.source.kind, "user_provided_token_group_screenshot");
   assert.equal(pricing.source.providerVerified, false);
   assert.deepEqual(pricing.models["gpt-5.6-sol"], {
     inputUsdPerMillion: 7.3,
@@ -154,12 +159,56 @@ test("relay usage is estimated with its model-specific screenshot rate and confi
   });
   assert.equal(cost.model, "gpt-5.6-terra");
   assert.equal(cost.pricingStatus, "estimated_unverified");
+  assert.equal(cost.pricingMultiplier, 0.27);
   assert.equal(cost.pricingSourceVerified, false);
-  assert.equal(cost.inputCostUsd, 0.002336);
-  assert.equal(cost.cachedInputCostUsd, 0.0000584);
-  assert.equal(cost.outputCostUsd, 0.001752);
-  assert.equal(cost.totalCostUsd, 0.0041464);
-  assert.equal(cost.totalCostCny, 0.031098);
+  assert.equal(cost.inputCostUsd, 0.00063072);
+  assert.equal(cost.cachedInputCostUsd, 0.000015768);
+  assert.equal(cost.outputCostUsd, 0.00047304);
+  assert.equal(cost.totalCostUsd, 0.001119528);
+  assert.equal(cost.totalCostCny, 0.00839646);
+});
+
+test("relay pricing multiplier supports a strict server override", () => {
+  assert.equal(resolveRelayPricingMultiplier(undefined, { multiplier: 0.27 }), 0.27);
+  assert.equal(resolveRelayPricingMultiplier("", { multiplier: 0.27 }), 0.27);
+  assert.equal(resolveRelayPricingMultiplier("0.5", { multiplier: 0.27 }), 0.5);
+  assert.equal(resolveRelayPricingMultiplier(1, { multiplier: 0.27 }), 1);
+  for (const invalid of [0, "0", -0.1, 1.00001, "not-a-number", Number.POSITIVE_INFINITY]) {
+    assert.throws(
+      () => resolveRelayPricingMultiplier(invalid, { multiplier: 0.27 }),
+      /greater than 0 and at most 1/u,
+    );
+  }
+
+  const original = process.env.RELAY_PRICING_MULTIPLIER;
+  try {
+    process.env.RELAY_PRICING_MULTIPLIER = "0.42";
+    assert.equal(resolveRelayPricingMultiplier(), 0.42);
+    process.env.RELAY_PRICING_MULTIPLIER = "1.01";
+    assert.throws(() => resolveRelayPricingMultiplier(), /greater than 0 and at most 1/u);
+  } finally {
+    if (original === undefined) delete process.env.RELAY_PRICING_MULTIPLIER;
+    else process.env.RELAY_PRICING_MULTIPLIER = original;
+  }
+});
+
+test("relay pricing multiplier scales every cost component and the total", () => {
+  const cost = estimateRelayModelCost({
+    model: "relay-gpt-5.6-terra",
+    usage: {
+      prompt_tokens: 1000,
+      prompt_tokens_details: { cached_tokens: 200 },
+      completion_tokens: 100,
+    },
+    usdToCnyRate: 7.5,
+    pricingMultiplier: 0.5,
+  });
+  assert.equal(cost.pricingMultiplier, 0.5);
+  assert.equal(cost.inputCostUsd, 0.001168);
+  assert.equal(cost.cachedInputCostUsd, 0.0000292);
+  assert.equal(cost.outputCostUsd, 0.000876);
+  assert.equal(cost.totalCostUsd, 0.0020732);
+  assert.equal(cost.totalCostCny, 0.015549);
 });
 
 test("relay cost keeps the reservation when usage, FX, or a used price tier is unavailable", () => {

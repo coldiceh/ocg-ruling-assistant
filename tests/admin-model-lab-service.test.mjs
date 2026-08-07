@@ -4,6 +4,7 @@ import {
   ADMIN_MODEL_LAB_SERVICE_EVENT_TYPES,
   MAX_FINAL_RULING_INPUT_BYTES,
   buildFinalRulingInput,
+  buildFinalRulingModelEvidencePacket,
   createAdminModelLabService,
 } from "../backend/adminModelLabService.mjs";
 import { createAdminEvidenceArchive } from "../backend/adminEvidenceArchive.mjs";
@@ -17,6 +18,8 @@ import {
 } from "../backend/adminFinalCallBudgetLedger.mjs";
 import { createAdminStageTracker } from "../backend/adminStageTracker.mjs";
 import { MODEL_RULING_COUNTER_CHECK_TYPES } from "../backend/modelRulingSchema.mjs";
+import { CompatibleEvidencePreparationProvider } from "../backend/rulingModelProviders.mjs";
+import { hashAdminFinalInput } from "../backend/adminEvidenceVariant.mjs";
 
 test("final ruling input rejects oversized model-visible question text", () => {
   assert.throws(
@@ -407,16 +410,25 @@ test("final-call budget reserves before provider create and settles reliable com
   assert.equal(finalCalls[1].input.actualCny > 0, true);
 });
 
-test("relay settlement charges the requested model when the unverified response reports a cheaper model", async () => {
+test("relay model mismatch fails closed while settling reported usage at the requested model rate", async () => {
   const fixture = makeFixture();
   const budgetCalls = [];
-  const response = {
-    id: "relay-mismatched-model",
-    status: "completed",
-    model: "gpt-5.6-luna",
-    output_text: JSON.stringify(makeStructuredRuling()),
-    usage: { prompt_tokens: 1000, completion_tokens: 100, total_tokens: 1100 },
-  };
+  const transportCalls = [];
+  const relayProvider = new CompatibleEvidencePreparationProvider({
+    providerId: "relay",
+    apiKey: "relay-test-key",
+    baseUrl: "https://relay.example/v1",
+    env: { RELAY_STREAM: "false" },
+    fetchImpl: async (url, options) => {
+      transportCalls.push({ url, body: JSON.parse(options.body) });
+      return Response.json({
+        id: "relay-mismatched-model",
+        model: "gpt-5.6-luna",
+        choices: [{ message: { content: JSON.stringify(makeStructuredRuling()) } }],
+        usage: { prompt_tokens: 1000, completion_tokens: 100, total_tokens: 1100 },
+      });
+    },
+  });
   const service = makeService(fixture, {
     ADMIN_MODEL_LAB_USD_TO_CNY_RATE: "7.5",
     ADMIN_MODEL_LAB_EXCHANGE_RATE_VERSION: "pilot-budget-factor-v1",
@@ -424,20 +436,7 @@ test("relay settlement charges the requested model when the unverified response 
   }, {
     finalCallBudgetLedger: createRecordingBudgetLedger(budgetCalls),
     finalRulingProviders: {
-      relay: {
-        providerId: "relay",
-        getFinalRequestBudgetEnvelope() {
-          return {
-            provider: "relay",
-            model: "gpt-5.6-sol",
-            inputTokenUpperBound: 2_000,
-            maxOutputTokens: 1_000,
-          };
-        },
-        async create() {
-          return response;
-        },
-      },
+      relay: relayProvider,
     },
   });
   const created = await service.createRun({
@@ -452,17 +451,260 @@ test("relay settlement charges the requested model when the unverified response 
   });
 
   const completed = (await service.executeRun({ runId: created.runId })).run;
-  const finalCost = completed.result.metering.stages.finalRuling.cost;
-  const settlement = budgetCalls.find((item) => (
+  const finalCost = completed.error.failureMetering.cost;
+  const settlements = budgetCalls.filter((item) => (
     item.operation === "settle" && item.input.attemptKind === "primary"
   ));
 
-  assert.equal(completed.result.provider.model, "gpt-5.6-luna");
+  assert.equal(transportCalls.length, 1);
+  assert.equal(transportCalls[0].body.model, "gpt-5.6-sol");
+  assert.equal(completed.status, ADMIN_RUN_STATUSES.FAILED);
+  assert.equal(completed.error.code, "relay_returned_model_mismatch");
+  assert.equal(completed.error.requestedModel, "relay-gpt-5.6-sol");
+  assert.equal(completed.error.submittedModel, "gpt-5.6-sol");
+  assert.equal(completed.error.reportedModel, "gpt-5.6-luna");
+  assert.equal(completed.error.model, "gpt-5.6-luna");
+  assert.equal(completed.error.failureMetering.scope, "final_ruling_only");
   assert.equal(finalCost.model, "gpt-5.6-sol");
   assert.equal(finalCost.pricingStatus, "estimated_unverified");
   assert.equal(finalCost.pricingSourceVerified, false);
-  assert.equal(finalCost.totalCostCny, 0.0876);
-  assert.equal(settlement.input.actualCny, 0.0876);
+  assert.equal(Number.isFinite(finalCost.totalCostCny), true);
+  assert.equal(settlements.length, 1);
+  assert.equal(settlements[0].input.actualCny, finalCost.totalCostCny);
+});
+
+test("admin evidence variant is frozen into the run and forks project the same snapshot without new preparation", async () => {
+  const fixture = makeFixture();
+  const service = makeService(fixture);
+  await assert.rejects(
+    service.createRun({
+      body: { question: "匿名非法消融", evidenceVariant: "answer_override" },
+    }),
+    (error) => error?.code === "admin_evidence_variant_invalid" && error.status === 400,
+  );
+
+  const created = await service.createRun({
+    body: {
+      question: "匿名消融问题",
+      finalAttemptPolicy: "single",
+      evidenceVariant: "card_text_only",
+    },
+  });
+  assert.equal(created.executionProfile.evidenceVariant, "card_text_only");
+  await service.executeRun({ runId: created.runId });
+  const sourceInput = fixture.openAICreateCalls[0].input;
+  assert.match(sourceInput, /匿名效果A全文/u);
+  assert.doesNotMatch(sourceInput, /evidence-direct|相似场景资料/u);
+  let source = await service.getRun({ runId: created.runId });
+  assert.equal(source.executionProfile.finalRulingInputSha256, hashAdminFinalInput(sourceInput));
+
+  const cardEvidenceId = buildFinalRulingModelEvidencePacket(source.evidenceSnapshot, {
+    evidenceVariant: "card_text_only",
+  }).evidenceItems[0].evidenceId;
+  const cardTextRuling = makeStructuredRuling();
+  cardTextRuling.claims[0].evidenceIds = [cardEvidenceId];
+  cardTextRuling.claims[0].inferenceType = "CARD_TEXT";
+  cardTextRuling.timeline[0].evidenceIds = [cardEvidenceId];
+  cardTextRuling.evidenceUsage[0].evidenceId = cardEvidenceId;
+  cardTextRuling.evidenceUsage[0].relation = "SUPPORTS_STEP";
+  fixture.providerResponse = completedResponse(cardTextRuling);
+  source = await service.getRun({ runId: created.runId });
+  assert.equal(source.status, ADMIN_RUN_STATUSES.SUCCEEDED);
+  assert.equal(source.result.evidenceVariant, "card_text_only");
+  assert.equal(source.result.finalRulingInputSha256, hashAdminFinalInput(sourceInput));
+  const preparationCalls = fixture.deepSeekPrepareCalls;
+
+  const fork = await service.forkRun({
+    forkFromRunId: source.runId,
+    body: {
+      idempotencyKey: "ablation-fork-idempotency-0001",
+      evidenceVariant: "without_lua",
+    },
+  });
+  assert.deepEqual(fork.evidenceSnapshot, source.evidenceSnapshot);
+  assert.equal(fork.executionProfile.evidenceVariant, "without_lua");
+  assert.notEqual(
+    fork.executionProfile.finalRulingInputSha256,
+    source.executionProfile.finalRulingInputSha256,
+  );
+
+  await service.executeRun({ runId: fork.runId });
+  const forkInput = fixture.openAICreateCalls[1].input;
+  assert.match(forkInput, /evidence-direct/u);
+  assert.doesNotMatch(forkInput, /legacyLuaSemanticPacket/u);
+  assert.equal(fork.executionProfile.finalRulingInputSha256, hashAdminFinalInput(forkInput));
+  assert.equal(fixture.deepSeekPrepareCalls, preparationCalls);
+});
+
+test("relay missing model identity fails closed and preserves a possibly charged reservation when usage is absent", async () => {
+  const fixture = makeFixture();
+  const budgetCalls = [];
+  const relayProvider = new CompatibleEvidencePreparationProvider({
+    providerId: "relay",
+    apiKey: "relay-test-key",
+    baseUrl: "https://relay.example/v1",
+    env: { RELAY_STREAM: "false" },
+    fetchImpl: async () => Response.json({
+      id: "relay-missing-model",
+      choices: [{ message: { content: JSON.stringify(makeStructuredRuling()) } }],
+    }),
+  });
+  const service = makeService(fixture, {
+    ADMIN_MODEL_LAB_USD_TO_CNY_RATE: "7.5",
+    RELAY_API_KEY: "relay-test-key",
+  }, {
+    finalCallBudgetLedger: createRecordingBudgetLedger(budgetCalls),
+    finalRulingProviders: { relay: relayProvider },
+  });
+  const created = await service.createRun({
+    body: {
+      question: "匿名中转身份缺失问题",
+      provider: "relay",
+      model: "relay-gpt-5.6-luna",
+      reasoningMode: "pro",
+      reasoningEffort: "high",
+      finalAttemptPolicy: "single",
+    },
+  });
+
+  const completed = (await service.executeRun({ runId: created.runId })).run;
+  const finalCalls = budgetCalls.filter((item) => item.input.attemptKind !== "evidence_preparation");
+
+  assert.equal(completed.status, ADMIN_RUN_STATUSES.FAILED);
+  assert.equal(completed.error.code, "relay_returned_model_missing");
+  assert.equal(completed.error.requestedModel, "relay-gpt-5.6-luna");
+  assert.equal(completed.error.submittedModel, "gpt-5.6-luna");
+  assert.equal(Object.hasOwn(completed.error, "reportedModel"), true);
+  assert.equal(completed.error.reportedModel, null);
+  assert.equal(completed.error.billingStatus, "possibly_charged_usage_unavailable");
+  assert.deepEqual(finalCalls.map((item) => item.operation), ["reserve"]);
+  assert.equal(Object.hasOwn(completed.error, "failureMetering"), false);
+});
+
+test("relay SSE diagnostics reach the completed attempt, latency metrics and provider summary without reasoning content", async () => {
+  const fixture = makeFixture();
+  const structured = JSON.stringify(makeStructuredRuling());
+  const hiddenReasoning = "NEVER_PERSIST_THIS_HIDDEN_REASONING";
+  const stream = [
+    `data: ${JSON.stringify({
+      id: "relay-sse-service-success",
+      model: "gpt-5.6-terra",
+      choices: [{ index: 0, delta: { reasoning_content: hiddenReasoning }, finish_reason: null }],
+    })}\n\n`,
+    `data: ${JSON.stringify({
+      id: "relay-sse-service-success",
+      model: "gpt-5.6-terra",
+      choices: [{ index: 0, delta: { content: structured }, finish_reason: "stop" }],
+    })}\n\n`,
+    `data: ${JSON.stringify({
+      id: "relay-sse-service-success",
+      model: "gpt-5.6-terra",
+      choices: [],
+      usage: { prompt_tokens: 1000, completion_tokens: 100, total_tokens: 1100 },
+    })}\n\n`,
+    "data: [DONE]\n\n",
+  ].join("");
+  const clockValues = [0, 10, 20, 30, 40, 50];
+  const relayProvider = new CompatibleEvidencePreparationProvider({
+    providerId: "relay",
+    apiKey: "relay-test-key",
+    baseUrl: "https://relay.example/v1",
+    clock: () => clockValues.shift(),
+    fetchImpl: async () => new Response(stream, {
+      headers: { "content-type": "text/event-stream" },
+    }),
+  });
+  const service = makeService(fixture, {
+    ADMIN_MODEL_LAB_USD_TO_CNY_RATE: "7.5",
+    RELAY_API_KEY: "relay-test-key",
+  }, {
+    finalRulingProviders: { relay: relayProvider },
+  });
+  const created = await service.createRun({
+    body: {
+      question: "匿名 SSE 指标问题",
+      provider: "relay",
+      model: "relay-gpt-5.6-terra",
+      reasoningMode: "pro",
+      reasoningEffort: "high",
+      finalAttemptPolicy: "single",
+    },
+  });
+
+  const completed = (await service.executeRun({ runId: created.runId })).run;
+  const attempt = completed.result.metering.stages.finalRuling.attempts[0];
+
+  assert.equal(completed.status, ADMIN_RUN_STATUSES.SUCCEEDED);
+  assert.equal(completed.result.provider.finishReason, "stop");
+  assert.equal(completed.result.provider.streamMetrics.requestToFirstContentMs, 40);
+  assert.equal(completed.result.latency.relayStream.requestToCompleteMs, 50);
+  assert.equal(completed.result.latency.finalRulingAttempts[0].streamMetrics.sseEventCount, 3);
+  assert.equal(attempt.finishReason, "stop");
+  assert.equal(attempt.streamMetrics.networkChunkCount, 1);
+  assert.equal(attempt.streamMetrics.finishReason, "stop");
+  assert.equal(JSON.stringify(completed).includes(hiddenReasoning), false);
+  assert.equal(clockValues.length, 0);
+});
+
+test("outcome-unknown Relay stream with reported usage stays final-only metered and keeps safe diagnostics", async () => {
+  const fixture = makeFixture();
+  const budgetCalls = [];
+  const hidden = "DO_NOT_PERSIST_STREAM_PAYLOAD";
+  const stream = [
+    `data: ${JSON.stringify({
+      id: "relay-sse-usage-incomplete",
+      model: "gpt-5.6-sol",
+      choices: [{ index: 0, delta: { reasoning_content: hidden }, finish_reason: null }],
+    })}\n\n`,
+    `data: ${JSON.stringify({
+      id: "relay-sse-usage-incomplete",
+      model: "gpt-5.6-sol",
+      choices: [],
+      usage: { prompt_tokens: 1200, completion_tokens: 200, total_tokens: 1400 },
+    })}\n\n`,
+  ].join("");
+  const relayProvider = new CompatibleEvidencePreparationProvider({
+    providerId: "relay",
+    apiKey: "relay-test-key",
+    baseUrl: "https://relay.example/v1",
+    fetchImpl: async () => new Response(stream, {
+      headers: { "content-type": "text/event-stream" },
+    }),
+  });
+  const service = makeService(fixture, {
+    ADMIN_MODEL_LAB_USD_TO_CNY_RATE: "7.5",
+    RELAY_API_KEY: "relay-test-key",
+  }, {
+    finalCallBudgetLedger: createRecordingBudgetLedger(budgetCalls),
+    finalRulingProviders: { relay: relayProvider },
+  });
+  const created = await service.createRun({
+    body: {
+      question: "匿名 SSE 未完整结束问题",
+      provider: "relay",
+      model: "relay-gpt-5.6-sol",
+      reasoningMode: "pro",
+      reasoningEffort: "high",
+      finalAttemptPolicy: "single",
+    },
+  });
+
+  const failed = (await service.executeRun({ runId: created.runId })).run;
+  const finalCalls = budgetCalls.filter((item) => item.input.attemptKind === "primary");
+
+  assert.equal(failed.status, ADMIN_RUN_STATUSES.FAILED);
+  assert.equal(failed.error.code, "provider_submission_outcome_unknown");
+  assert.equal(failed.error.requestId, "relay-sse-usage-incomplete");
+  assert.equal(failed.error.requestedModel, "relay-gpt-5.6-sol");
+  assert.equal(failed.error.submittedModel, "gpt-5.6-sol");
+  assert.equal(failed.error.reportedModel, "gpt-5.6-sol");
+  assert.equal(failed.error.billingStatus, "metered_final_ruling_usage_reported");
+  assert.equal(failed.error.failureMetering.scope, "final_ruling_only");
+  assert.equal(failed.error.failureMetering.usage.totalTokens, 1400);
+  assert.equal(failed.error.usage.totalTokens, 1400);
+  assert.equal(failed.error.streamMetrics.sseEventCount, 2);
+  assert.equal(finalCalls.filter((item) => item.operation === "settle").length, 1);
+  assert.equal(JSON.stringify(failed).includes(hidden), false);
 });
 
 test("relay worst-case cost above its daily pool is rejected before provider transport", async () => {
@@ -480,7 +722,7 @@ test("relay worst-case cost above its daily pool is rejected before provider tra
     finalCallBudgetLedger: createMemoryAdminFinalCallBudgetLedger({
       timezone: "UTC",
       pools: {
-        relay_sol: { dailyBudgetCny: 10, reservationCny: 5 },
+        relay_sol: { dailyBudgetCny: 0.001, reservationCny: 0.001 },
       },
     }),
     finalRulingProviders: {
@@ -1003,6 +1245,12 @@ test("known provider rejection releases budget while unknown transport outcome r
       );
       if (outcomeKnown) {
         assert.equal(finalCalls.find((item) => item.operation === "release")?.input?.model, "gpt-5.6-terra");
+      } else {
+        assert.equal(result.run.error.code, "provider_submission_outcome_unknown");
+        assert.equal(result.run.error.outcomeKnown, false);
+        assert.equal(result.run.error.budgetReservationMayExist, true);
+        assert.equal(result.run.error.billingStatus, "possibly_charged_usage_unavailable");
+        assert.equal(result.run.error.upstreamErrorCode, "provider_network_unknown");
       }
     });
   }
@@ -1109,10 +1357,18 @@ test("a metered relay HTTP 200 empty response settles using the requested model 
 
   assert.equal(result.run.status, ADMIN_RUN_STATUSES.FAILED);
   assert.equal(result.run.error.code, "relay_empty_final_ruling");
+  assert.equal(result.run.error.requestedModel, "relay-gpt-5.6-sol");
+  assert.equal(result.run.error.submittedModel, "gpt-5.6-sol");
+  assert.equal(Object.hasOwn(result.run.error, "reportedModel"), true);
+  assert.equal(result.run.error.reportedModel, null);
+  assert.equal(result.run.error.failureMetering.scope, "final_ruling_only");
   const finalCalls = calls.filter((item) => item.input.attemptKind !== "evidence_preparation");
   assert.deepEqual(finalCalls.map((item) => item.operation), ["reserve", "settle"]);
   assert.equal(finalCalls[1].input.model, "relay-gpt-5.6-sol");
-  assert.equal(finalCalls[1].input.actualCny, 0.0219);
+  assert.equal(
+    finalCalls[1].input.actualCny,
+    result.run.error.failureMetering.cost.totalCostCny,
+  );
 });
 
 test("a domestic experimental final ruling completes synchronously and is labelled non-authoritative", async () => {
