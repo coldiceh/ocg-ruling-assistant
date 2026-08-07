@@ -269,6 +269,7 @@ function createAdminModelLabComposedService({
         ...(base?.features || {}),
         forkRun: true,
         releaseUnchargedRelayReservation: true,
+        reconcileRelayTotalOnlyUsage: true,
         history: true,
         rating: true,
         export: true,
@@ -329,6 +330,10 @@ function createAdminModelLabComposedService({
 
   async function releaseUnchargedRelayReservation(argument = {}) {
     return resolvedBaseService.releaseUnchargedRelayReservation(argument);
+  }
+
+  async function reconcileRelayTotalOnlyUsage(argument = {}) {
+    return resolvedBaseService.reconcileRelayTotalOnlyUsage(argument);
   }
 
   async function replayEvents(argument = {}) {
@@ -697,6 +702,7 @@ function createAdminModelLabComposedService({
     pollRun,
     cancelRun,
     releaseUnchargedRelayReservation,
+    reconcileRelayTotalOnlyUsage,
     replayEvents,
     listRuns,
     saveRating,
@@ -764,6 +770,7 @@ function assertBaseService(service) {
     "pollRun",
     "cancelRun",
     "releaseUnchargedRelayReservation",
+    "reconcileRelayTotalOnlyUsage",
     "replayEvents",
   ]) {
     if (typeof service?.[method] !== "function") {

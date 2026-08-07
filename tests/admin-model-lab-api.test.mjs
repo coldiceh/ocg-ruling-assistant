@@ -68,6 +68,10 @@ test("all POST actions require CSRF and dispatch only through the injected servi
       calls.push(["releaseUnchargedRelayReservation", input])
       && { released: true }
     ),
+    reconcileRelayTotalOnlyUsage: async (input) => (
+      calls.push(["reconcileRelayTotalOnlyUsage", input])
+      && { reconciled: true }
+    ),
     saveRating: async (input) => calls.push(["saveRating", input]) && { stored: true },
   };
   const { handler, cookie, csrfToken } = await createHarness({ service, login: true });
@@ -97,6 +101,11 @@ test("all POST actions require CSRF and dispatch only through the injected servi
       runId: "run-1",
       confirmation: "provider-dashboard-confirmed-not-charged/v1:run-1:attempt-1",
     },
+    {
+      action: "reconcile-relay-total-only-usage",
+      runId: "run-1",
+      confirmation: "relay-total-only-usage-reconciliation/v1:run-1:attempt-1",
+    },
     { action: "rating", runId: "run-1", rating: 4, notes: "ok" },
   ]) {
     const response = createResponse();
@@ -119,6 +128,7 @@ test("all POST actions require CSRF and dispatch only through the injected servi
     "executeRun",
     "cancelRun",
     "releaseUnchargedRelayReservation",
+    "reconcileRelayTotalOnlyUsage",
     "saveRating",
   ]);
   assert.deepEqual(calls[0][1].body, {
@@ -136,8 +146,12 @@ test("all POST actions require CSRF and dispatch only through the injected servi
     calls[4][1].confirmation,
     "provider-dashboard-confirmed-not-charged/v1:run-1:attempt-1",
   );
-  assert.equal(calls[5][1].rating, 4);
-  assert.equal(calls[5][1].notes, "ok");
+  assert.equal(
+    calls[5][1].confirmation,
+    "relay-total-only-usage-reconciliation/v1:run-1:attempt-1",
+  );
+  assert.equal(calls[6][1].rating, 4);
+  assert.equal(calls[6][1].notes, "ok");
 });
 
 test("fork is POST-only and requires source run and idempotency key before dispatch", async () => {
