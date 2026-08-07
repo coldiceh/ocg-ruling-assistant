@@ -17,11 +17,12 @@ Evidence Packet schema v2，默认最多 28 KiB / 16 项。Legacy Lua 的完整�
 最终模型请求前，后端还会执行 `productionReadiness`：所有候选卡都必须唯一绑定，
 且完整未节选卡文实际存在于模型可见 Packet；否则在 provider transport 前终止。
 
-## 单题默认矩阵
+## 单题默认模型
 
-默认只测试第三方中转的 Sol、Terra、Luna，DeepSeek V4 Flash（standard / none）
-负责准备检索提示。中转模型身份和费率都未经本项目验证；报告会保留 requested model
-与 returned model。
+当前默认只测试第三方中转的 Sol；DeepSeek V4 Flash（standard / none）负责准备检索提示。
+Terra、Luna 和消融配置仍可由管理员显式传入，但在 Sol 四道门槛题全部通过前，不进入
+默认批量或 GitHub Actions 工作流。中转模型身份和费率都未经本项目验证；报告会保留
+requested model 与 returned model。
 
 PowerShell：
 
@@ -62,8 +63,8 @@ CLI 可以用重复的 `--config provider:model:reasoningMode:reasoningEffort` �
 同一模型可以分别配置三种变体；它们 fork 同一冻结 Snapshot，并在报告中记录变体和
 最终模型输入 SHA-256。标准答案只在调用完成后评分，不进入任何变体的模型输入。
 
-创建新源运行时使用去重后配置列表的第一项；未传 `--config` 的默认矩阵第一项才是
-Relay Sol / pro / high，并在该源快照上 fork Relay Terra 与 Luna。显式配置矩阵时，
+创建新源运行时使用去重后配置列表的第一项；未传 `--config` 时只运行
+Relay Sol / pro / high。显式配置矩阵时，
 第一个 `--config` 就是新源配置，其余配置复用该源运行的冻结快照。
 `--source-run-id` 是更窄的历史复用入口：它只允许单题模式复用严格匹配、已经冻结的
 历史源运行。配置列表的第一项就是预期源配置；该 provider/model/mode/effort 必须由本次

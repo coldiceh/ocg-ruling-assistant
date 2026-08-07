@@ -514,7 +514,7 @@ test("failed Relay report safely recovers identity, final-only metering and SSE 
   assert.equal(JSON.stringify(failed).includes("DO_NOT_COPY_UNKNOWN_ERROR_FIELD"), false);
 });
 
-test("matrix uses the first candidate as source and enforces request cost and concurrency guards before paid runs", async () => {
+test("Sol-only default enforces request cost and concurrency guards before paid runs", async () => {
   const blockedByCost = createFetchFixture();
   await assert.rejects(
     runAdminModelMatrix({
@@ -523,10 +523,10 @@ test("matrix uses the first candidate as source and enforces request cost and co
       password: "test-only-password",
       question: "测试问题",
       fetchImpl: blockedByCost.fetch,
-      estimatedCnyPerFinalRequest: 10,
+      estimatedCnyPerFinalRequest: 11,
       sleep: async () => {},
     }),
-    /planned estimated cost CNY 30 exceeds the hard limit 10/u,
+    /planned estimated cost CNY 11 exceeds the hard limit 10/u,
   );
   assert.equal(blockedByCost.calls.some((call) => call.action === "create"), false);
 
@@ -546,19 +546,17 @@ test("matrix uses the first candidate as source and enforces request cost and co
   assert.equal(create.body.model, "relay-gpt-5.6-sol");
   assert.equal(create.body.preparationProvider, "deepseek");
   assert.equal(create.body.finalAttemptPolicy, "single");
-  assert.equal(report.guard.plannedFinalRequests, 3);
+  assert.equal(report.guard.plannedFinalRequests, 1);
   assert.equal(report.guard.costEstimateMode, "relay_screenshot_token_envelope");
   assert.equal(report.guard.pricingVerified, false);
   assert.equal(report.guard.pricingMultiplier, 0.27);
   assert.equal(report.guard.estimatedInputTokensPerFinalRequest, 32000);
   assert.equal(report.guard.estimatedOutputTokensPerFinalRequest, 8192);
-  assert.equal(report.guard.plannedEstimatedCostCny, 1.744261208);
+  assert.equal(report.guard.plannedEstimatedCostCny, 1.19962944);
   assert.deepEqual(
     report.guard.requestEstimates.map((item) => [item.model, item.estimatedCnyPerRequest]),
     [
       ["relay-gpt-5.6-sol", 1.19962944],
-      ["relay-gpt-5.6-terra", 0.479851778],
-      ["relay-gpt-5.6-luna", 0.06477999],
     ],
   );
 
@@ -670,7 +668,7 @@ test("four-case pilot applies the relay multiplier before enforcing the CLI cost
       fetchImpl: blocked.fetch,
       estimatedCnyPerFinalRequest: 10,
     }),
-    /planned estimated cost CNY 120 exceeds the hard limit 10/u,
+    /planned estimated cost CNY 40 exceeds the hard limit 10/u,
   );
   assert.equal(blocked.calls.length, 0);
 
@@ -682,9 +680,9 @@ test("four-case pilot applies the relay multiplier before enforcing the CLI cost
       password: "test-only-password",
       questions: ["Q1", "Q2", "Q3", "Q4"],
       fetchImpl: defaultBlocked.fetch,
-      maxEstimatedCostCny: 5,
+      maxEstimatedCostCny: 0,
     }),
-    /planned estimated cost CNY 6\.977044832 exceeds the hard limit 5/u,
+    /planned estimated cost CNY .+ exceeds the hard limit 0/u,
   );
   assert.equal(defaultBlocked.calls.length, 0);
 
@@ -700,16 +698,16 @@ test("four-case pilot applies the relay multiplier before enforcing the CLI cost
     estimatedCnyPerFinalRequest: 0,
     sleep: async () => {},
   });
-  assert.equal(report.guard.plannedFinalRequests, 12);
+  assert.equal(report.guard.plannedFinalRequests, 4);
   assert.equal(report.guard.costEstimateMode, "explicit_uniform_override");
   assert.equal(report.guard.plannedEstimatedCostCny, 0);
   assert.equal(report.reports.length, 4);
   assert.equal(fixture.calls.filter((call) => call.action === "create").length, 4);
-  assert.equal(fixture.calls.filter((call) => call.action === "fork").length, 8);
-  assert.equal(fixture.calls.filter((call) => call.action === "execute").length, 12);
+  assert.equal(fixture.calls.filter((call) => call.action === "fork").length, 0);
+  assert.equal(fixture.calls.filter((call) => call.action === "execute").length, 4);
 });
 
-test("cases-file CLI executes four questions as exactly twelve single final requests", async () => {
+test("cases-file CLI defaults to four Sol-only single final requests", async () => {
   const fixture = createFetchFixture();
   const output = [];
   const cases = {
@@ -750,7 +748,7 @@ test("cases-file CLI executes four questions as exactly twelve single final requ
   assert.equal(exitCode, 0);
   const report = JSON.parse(output.join(""));
   assert.equal(report.guard.finalAttemptPolicy, "single");
-  assert.equal(report.guard.plannedFinalRequests, 12);
+  assert.equal(report.guard.plannedFinalRequests, 4);
   assert.equal(report.reports.length, 4);
   assert.deepEqual(report.reports.map((item) => item.caseId), [
     "case-a",
@@ -759,8 +757,8 @@ test("cases-file CLI executes four questions as exactly twelve single final requ
     "case-d",
   ]);
   assert.equal(fixture.calls.filter((call) => call.action === "create").length, 4);
-  assert.equal(fixture.calls.filter((call) => call.action === "fork").length, 8);
-  assert.equal(fixture.calls.filter((call) => call.action === "execute").length, 12);
+  assert.equal(fixture.calls.filter((call) => call.action === "fork").length, 0);
+  assert.equal(fixture.calls.filter((call) => call.action === "execute").length, 4);
   const firstCreate = fixture.calls.find(
     (call) => call.action === "create" && call.body.question === "Q1",
   );

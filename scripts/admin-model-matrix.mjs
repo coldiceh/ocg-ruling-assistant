@@ -40,6 +40,9 @@ export const SOURCE_CONFIGURATION = Object.freeze({
 
 export const DEFAULT_MATRIX_CONFIGURATIONS = Object.freeze([
   SOURCE_CONFIGURATION,
+]);
+
+const DEFERRED_RELAY_CONFIGURATIONS = Object.freeze([
   Object.freeze({
     provider: "relay",
     model: "relay-gpt-5.6-terra",
@@ -57,11 +60,12 @@ export const DEFAULT_MATRIX_CONFIGURATIONS = Object.freeze([
 ]);
 
 // Explicit opt-in pilot requested for the four real ruling cases. Keep this
-// separate from the cheaper 12-request default: four cases across these five
+// separate from the Sol-only default: four cases across these five
 // models are 20 paid final-ruling submissions before unavailable models are
 // skipped by the server capability preflight.
 export const FIVE_MODEL_PILOT_CONFIGURATIONS = Object.freeze([
   ...DEFAULT_MATRIX_CONFIGURATIONS,
+  ...DEFERRED_RELAY_CONFIGURATIONS,
   Object.freeze({
     provider: "deepseek",
     model: "deepseek-v4-flash",

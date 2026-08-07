@@ -254,6 +254,7 @@ export async function runAdminEvidenceSnapshotDryRun({
     const created = await service.createRun({
       body: {
         question: definition.question,
+        cardNameCandidates: definition.candidateCards,
         label: definition.id,
         source: "local_evidence_snapshot_dry_run",
         provider: "openai",
@@ -452,6 +453,16 @@ function createCaseReport({ definition, run, snapshot, finalInput, inspection, t
     numberedIdentityNameMismatch: card.numberedIdentityNameMismatch === true,
   }));
   const productionReadiness = inspectAdminFinalEvidenceReadiness(snapshot);
+  const visibleEvidence = (
+    snapshot.evidence?.evidenceDecisionPacket?.modelPacket?.evidenceItems || []
+  ).map((item, index) => ({
+    rank: index + 1,
+    evidenceId: String(item?.evidenceId || "") || null,
+    evidenceIds: [...new Set(itemEvidenceIds(item))].sort(),
+    category: item?.category || null,
+    title: item?.title || null,
+    bodyExcerpted: item?.bodyExcerpted === true,
+  }));
   const paidGateBlocked = !productionReadiness.ready || !inspection.ready;
   return {
     id: definition.id,
@@ -469,6 +480,7 @@ function createCaseReport({ definition, run, snapshot, finalInput, inspection, t
       visiblePacketItems:
         snapshot.evidence?.evidenceDecisionPacket?.modelPacket?.evidenceItems?.length || 0,
     },
+    visibleEvidence,
     lua: {
       status: legacyLuaStatus(legacyPacket),
       verdict: legacyPacket?.verdict || "UNKNOWN",

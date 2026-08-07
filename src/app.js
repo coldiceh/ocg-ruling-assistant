@@ -1962,6 +1962,7 @@ function buildAdminComparisonOptions(models = []) {
 
 function preferredAdminComparisonEffort(model, efforts) {
   const preferred = [
+    model?.preferredComparisonReasoningEffort,
     model?.defaultReasoningMode === "pro" ? model?.defaultReasoningEffort : "",
     "high",
     "max",

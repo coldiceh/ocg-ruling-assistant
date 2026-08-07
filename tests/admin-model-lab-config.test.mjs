@@ -93,7 +93,8 @@ test("DeepSeek Flash prepares evidence and domestic models expose only experimen
     "experimental_final_ruling",
   ]);
   assert.equal(selection.capability.canMakeExperimentalRuling, true);
-  assert.deepEqual(selection.capability.supportedReasoningEfforts, ["none", "high", "max"]);
+  assert.deepEqual(selection.capability.supportedReasoningEfforts, ["none", "low", "high", "max"]);
+  assert.equal(selection.capability.preferredComparisonReasoningEffort, "low");
   assert.deepEqual(selection.capability.supportedReasoningModes, ["standard", "pro"]);
   const thinkingSelection = resolveAdminModelSelection({
     provider: "deepseek",

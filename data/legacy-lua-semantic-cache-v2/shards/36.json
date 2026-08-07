@@ -1,0 +1,3070 @@
+{
+  "schemaVersion": "ocg-assistant-precomputed-legacy-lua-cache-shard/v2",
+  "shardId": "36",
+  "generatedAt": "2026-08-07T15:53:33.233Z",
+  "entries": [
+    {
+      "cid": "15620",
+      "passcode": "61159609",
+      "aliases": [
+        "三賢者の書",
+        "伟魔三贤之书",
+        "trismagistus"
+      ],
+      "resource": {
+        "authority": "LEGACY_COMPATIBILITY",
+        "canConfirmOfficialRuling": false,
+        "candidateSetSha256": "7514e9844a34ccb17961ad74a04073a5ab9da6c9e8a91e2944f5e0b6e2216d23",
+        "effectCandidates": [
+          {
+            "analysisArtifact": null,
+            "analysisArtifactSha256": null,
+            "compileResultSha256": "d6d1d763ec94f33dd7859ab7180cfd5e00840588c4a03c33436e38d13b84c1a5",
+            "identityScheme": "ocg-legacy-lua-semantic-effect-identity/v1",
+            "kind": "TYPED_UNKNOWN",
+            "legacyAcceptedAsTruth": false,
+            "semanticArtifact": {
+              "identityScheme": "ocg-legacy-lua-semantic-effect-identity/v1",
+              "kind": "TYPED_UNKNOWN",
+              "partialPlan": {
+                "activationLegalityChecks": [
+                  {
+                    "atomicOperation": "SPECIAL_SUMMON",
+                    "callbackSlot": "TARGET",
+                    "checkId": "6cb0e0c74684c13f4287c05f308779e6fb9d2f436abcddc3ac9866b900f9b674",
+                    "dependencyGraph": {
+                      "dependencies": [
+                        "CHECK_CARD_SUMMON_ELIGIBILITY",
+                        "CHECK_ZONE_CAPACITY"
+                      ],
+                      "operation": "SPECIAL_SUMMON",
+                      "requiredMinimum": 1,
+                      "schemaVersion": "ocg-operation-dependency-graph/v1",
+                      "unresolvedSemantics": [],
+                      "versions": {
+                        "compilerVersion": "ocg-card-compiler/v1",
+                        "engineVersion": "ocg-formal-engine/0.5.0",
+                        "irVersion": "ocg-effect-ir/v1",
+                        "patternLibraryVersion": "ocg-pattern-library/v1",
+                        "proofVerifierVersion": "ocg-proof-verifier/v1",
+                        "rulesetVersion": "ocg-ruleset/2026-08-03-experimental",
+                        "schemaVersion": "ocg-formal-engine/v1"
+                      }
+                    },
+                    "discoveryPath": [
+                      "Effect.SetTarget",
+                      "CHECK_ONLY_RETURN",
+                      "Duel.IsExistingMatchingCard",
+                      "Card.IsCanBeSpecialSummoned"
+                    ],
+                    "predicateApi": "Card.IsCanBeSpecialSummoned",
+                    "predicateSubject": {
+                      "kind": "VARIABLE",
+                      "name": "FILTER_CARD"
+                    },
+                    "requiredMinimum": 1,
+                    "selector": {
+                      "api": "Duel.IsExistingMatchingCard",
+                      "controllerLocation": {
+                        "kind": "SYMBOL",
+                        "name": "LOCATION_HAND"
+                      },
+                      "exception": {
+                        "kind": "LITERAL",
+                        "value": null
+                      },
+                      "filter": {
+                        "body": {
+                          "kind": "LUA_AND",
+                          "left": {
+                            "api": "LuaMethod.IsSetCard",
+                            "arguments": [
+                              {
+                                "kind": "VARIABLE",
+                                "name": "FILTER_CARD"
+                              },
+                              {
+                                "kind": "LITERAL",
+                                "value": 336
+                              }
+                            ],
+                            "kind": "CALL"
+                          },
+                          "right": {
+                            "api": "Card.IsCanBeSpecialSummoned",
+                            "arguments": [
+                              {
+                                "kind": "VARIABLE",
+                                "name": "FILTER_CARD"
+                              },
+                              {
+                                "kind": "VARIABLE",
+                                "name": "FILTER_ARGUMENT_1"
+                              },
+                              {
+                                "kind": "LITERAL",
+                                "value": 0
+                              },
+                              {
+                                "kind": "VARIABLE",
+                                "name": "FILTER_ARGUMENT_2"
+                              },
+                              {
+                                "kind": "LITERAL",
+                                "value": false
+                              },
+                              {
+                                "kind": "LITERAL",
+                                "value": false
+                              }
+                            ],
+                            "kind": "CALL"
+                          }
+                        },
+                        "kind": "LAMBDA",
+                        "parameters": [
+                          "FILTER_CARD",
+                          "FILTER_ARGUMENT_1",
+                          "FILTER_ARGUMENT_2"
+                        ]
+                      },
+                      "filterArguments": [
+                        {
+                          "kind": "VARIABLE",
+                          "name": "EFFECT"
+                        },
+                        {
+                          "kind": "VARIABLE",
+                          "name": "PLAYER"
+                        }
+                      ],
+                      "opponentLocation": {
+                        "kind": "LITERAL",
+                        "value": 0
+                      },
+                      "player": {
+                        "kind": "VARIABLE",
+                        "name": "PLAYER"
+                      },
+                      "requiredMinimum": 1
+                    }
+                  }
+                ],
+                "activationLegalityDependencies": [
+                  "CHECK_CARD_SUMMON_ELIGIBILITY",
+                  "CHECK_ZONE_CAPACITY"
+                ],
+                "apiSemanticsRegistryHash": "346be302c791d9bbef09e579ecb7c33a6836c97849d2354de9e6f25905b79e5f",
+                "apiSemanticsRegistryId": "formal:legacy-lua-api-semantics:v2",
+                "apiSemanticsRegistryVersion": "2.0.0",
+                "atomicOperations": [
+                  "UNKNOWN_OPERATION",
+                  "SPECIAL_SUMMON"
+                ],
+                "checkOnlyTargetProgram": {
+                  "kind": "LUA_AND",
+                  "left": {
+                    "kind": "BINARY",
+                    "left": {
+                      "api": "Duel.GetLocationCount",
+                      "arguments": [
+                        {
+                          "kind": "VARIABLE",
+                          "name": "PLAYER"
+                        },
+                        {
+                          "kind": "SYMBOL",
+                          "name": "LOCATION_MZONE"
+                        }
+                      ],
+                      "kind": "CALL"
+                    },
+                    "operator": ">",
+                    "right": {
+                      "kind": "LITERAL",
+                      "value": 0
+                    }
+                  },
+                  "right": {
+                    "api": "Duel.IsExistingMatchingCard",
+                    "arguments": [
+                      {
+                        "body": {
+                          "kind": "LUA_AND",
+                          "left": {
+                            "api": "LuaMethod.IsSetCard",
+                            "arguments": [
+                              {
+                                "kind": "VARIABLE",
+                                "name": "FILTER_CARD"
+                              },
+                              {
+                                "kind": "LITERAL",
+                                "value": 336
+                              }
+                            ],
+                            "kind": "CALL"
+                          },
+                          "right": {
+                            "api": "Card.IsCanBeSpecialSummoned",
+                            "arguments": [
+                              {
+                                "kind": "VARIABLE",
+                                "name": "FILTER_CARD"
+                              },
+                              {
+                                "kind": "VARIABLE",
+                                "name": "FILTER_ARGUMENT_1"
+                              },
+                              {
+                                "kind": "LITERAL",
+                                "value": 0
+                              },
+                              {
+                                "kind": "VARIABLE",
+                                "name": "FILTER_ARGUMENT_2"
+                              },
+                              {
+                                "kind": "LITERAL",
+                                "value": false
+                              },
+                              {
+                                "kind": "LITERAL",
+                                "value": false
+                              }
+                            ],
+                            "kind": "CALL"
+                          }
+                        },
+                        "kind": "LAMBDA",
+                        "parameters": [
+                          "FILTER_CARD",
+                          "FILTER_ARGUMENT_1",
+                          "FILTER_ARGUMENT_2"
+                        ]
+                      },
+                      {
+                        "kind": "VARIABLE",
+                        "name": "PLAYER"
+                      },
+                      {
+                        "kind": "SYMBOL",
+                        "name": "LOCATION_HAND"
+                      },
+                      {
+                        "kind": "LITERAL",
+                        "value": 0
+                      },
+                      {
+                        "kind": "LITERAL",
+                        "value": 1
+                      },
+                      {
+                        "kind": "LITERAL",
+                        "value": null
+                      },
+                      {
+                        "kind": "VARIABLE",
+                        "name": "EFFECT"
+                      },
+                      {
+                        "kind": "VARIABLE",
+                        "name": "PLAYER"
+                      }
+                    ],
+                    "kind": "CALL"
+                  }
+                },
+                "conditionProgram": {
+                  "kind": "LITERAL",
+                  "value": true
+                },
+                "costAtomicOperations": [
+                  "UNKNOWN_OPERATION"
+                ],
+                "costExecutionProgram": {
+                  "kind": "SEQUENCE",
+                  "steps": [
+                    {
+                      "api": "Duel.SendtoGrave",
+                      "arguments": [
+                        {
+                          "kind": "VARIABLE",
+                          "name": "SOURCE_CARD"
+                        },
+                        {
+                          "kind": "SYMBOL",
+                          "name": "REASON_COST"
+                        }
+                      ],
+                      "kind": "CALL"
+                    }
+                  ]
+                },
+                "costOperationApis": [
+                  "Duel.SendtoGrave"
+                ],
+                "costProgram": {
+                  "api": "LuaMethod.IsAbleToGraveAsCost",
+                  "arguments": [
+                    {
+                      "kind": "VARIABLE",
+                      "name": "SOURCE_CARD"
+                    }
+                  ],
+                  "kind": "CALL"
+                },
+                "discoveredCostOperations": [
+                  {
+                    "atomicOperation": "UNKNOWN_OPERATION",
+                    "dependencyGraph": {
+                      "dependencies": [],
+                      "operation": "UNKNOWN_OPERATION",
+                      "requiredMinimum": 1,
+                      "schemaVersion": "ocg-operation-dependency-graph/v1",
+                      "unresolvedSemantics": [
+                        {
+                          "code": "UNSUPPORTED_ATOMIC_OPERATION_DEPENDENCIES",
+                          "evidenceIds": [],
+                          "message": "no dependency expansion is registered for this atomic operation",
+                          "phase": "LEGACY_DISCOVERY"
+                        }
+                      ],
+                      "versions": {
+                        "compilerVersion": "ocg-card-compiler/v1",
+                        "engineVersion": "ocg-formal-engine/0.5.0",
+                        "irVersion": "ocg-effect-ir/v1",
+                        "patternLibraryVersion": "ocg-pattern-library/v1",
+                        "proofVerifierVersion": "ocg-proof-verifier/v1",
+                        "rulesetVersion": "ocg-ruleset/2026-08-03-experimental",
+                        "schemaVersion": "ocg-formal-engine/v1"
+                      }
+                    },
+                    "discoveryPath": [
+                      "Effect.SetCost",
+                      "PAYMENT_PHASE",
+                      "Duel.SendtoGrave"
+                    ],
+                    "operationApi": "Duel.SendtoGrave"
+                  }
+                ],
+                "discoveredOperations": [
+                  {
+                    "atomicOperation": "UNKNOWN_OPERATION",
+                    "dependencyGraph": {
+                      "dependencies": [],
+                      "operation": "UNKNOWN_OPERATION",
+                      "requiredMinimum": 1,
+                      "schemaVersion": "ocg-operation-dependency-graph/v1",
+                      "unresolvedSemantics": [
+                        {
+                          "code": "UNSUPPORTED_ATOMIC_OPERATION_DEPENDENCIES",
+                          "evidenceIds": [],
+                          "message": "no dependency expansion is registered for this atomic operation",
+                          "phase": "LEGACY_DISCOVERY"
+                        }
+                      ],
+                      "versions": {
+                        "compilerVersion": "ocg-card-compiler/v1",
+                        "engineVersion": "ocg-formal-engine/0.5.0",
+                        "irVersion": "ocg-effect-ir/v1",
+                        "patternLibraryVersion": "ocg-pattern-library/v1",
+                        "proofVerifierVersion": "ocg-proof-verifier/v1",
+                        "rulesetVersion": "ocg-ruleset/2026-08-03-experimental",
+                        "schemaVersion": "ocg-formal-engine/v1"
+                      }
+                    },
+                    "discoveryPath": [
+                      "Effect.SetOperation",
+                      "RESOLUTION_PHASE",
+                      "Duel.IsPlayerAffectedByEffect"
+                    ],
+                    "operationApi": "Duel.IsPlayerAffectedByEffect"
+                  },
+                  {
+                    "atomicOperation": "UNKNOWN_OPERATION",
+                    "dependencyGraph": {
+                      "dependencies": [],
+                      "operation": "UNKNOWN_OPERATION",
+                      "requiredMinimum": 1,
+                      "schemaVersion": "ocg-operation-dependency-graph/v1",
+                      "unresolvedSemantics": [
+                        {
+                          "code": "UNSUPPORTED_ATOMIC_OPERATION_DEPENDENCIES",
+                          "evidenceIds": [],
+                          "message": "no dependency expansion is registered for this atomic operation",
+                          "phase": "LEGACY_DISCOVERY"
+                        }
+                      ],
+                      "versions": {
+                        "compilerVersion": "ocg-card-compiler/v1",
+                        "engineVersion": "ocg-formal-engine/0.5.0",
+                        "irVersion": "ocg-effect-ir/v1",
+                        "patternLibraryVersion": "ocg-pattern-library/v1",
+                        "proofVerifierVersion": "ocg-proof-verifier/v1",
+                        "rulesetVersion": "ocg-ruleset/2026-08-03-experimental",
+                        "schemaVersion": "ocg-formal-engine/v1"
+                      }
+                    },
+                    "discoveryPath": [
+                      "Effect.SetOperation",
+                      "RESOLUTION_PHASE",
+                      "LuaMethod.IsSetCard"
+                    ],
+                    "operationApi": "LuaMethod.IsSetCard"
+                  },
+                  {
+                    "atomicOperation": "UNKNOWN_OPERATION",
+                    "dependencyGraph": {
+                      "dependencies": [],
+                      "operation": "UNKNOWN_OPERATION",
+                      "requiredMinimum": 1,
+                      "schemaVersion": "ocg-operation-dependency-graph/v1",
+                      "unresolvedSemantics": [
+                        {
+                          "code": "UNSUPPORTED_ATOMIC_OPERATION_DEPENDENCIES",
+                          "evidenceIds": [],
+                          "message": "no dependency expansion is registered for this atomic operation",
+                          "phase": "LEGACY_DISCOVERY"
+                        }
+                      ],
+                      "versions": {
+                        "compilerVersion": "ocg-card-compiler/v1",
+                        "engineVersion": "ocg-formal-engine/0.5.0",
+                        "irVersion": "ocg-effect-ir/v1",
+                        "patternLibraryVersion": "ocg-pattern-library/v1",
+                        "proofVerifierVersion": "ocg-proof-verifier/v1",
+                        "rulesetVersion": "ocg-ruleset/2026-08-03-experimental",
+                        "schemaVersion": "ocg-formal-engine/v1"
+                      }
+                    },
+                    "discoveryPath": [
+                      "Effect.SetOperation",
+                      "RESOLUTION_PHASE",
+                      "Duel.Hint"
+                    ],
+                    "operationApi": "Duel.Hint"
+                  },
+                  {
+                    "atomicOperation": "UNKNOWN_OPERATION",
+                    "dependencyGraph": {
+                      "dependencies": [],
+                      "operation": "UNKNOWN_OPERATION",
+                      "requiredMinimum": 1,
+                      "schemaVersion": "ocg-operation-dependency-graph/v1",
+                      "unresolvedSemantics": [
+                        {
+                          "code": "UNSUPPORTED_ATOMIC_OPERATION_DEPENDENCIES",
+                          "evidenceIds": [],
+                          "message": "no dependency expansion is registered for this atomic operation",
+                          "phase": "LEGACY_DISCOVERY"
+                        }
+                      ],
+                      "versions": {
+                        "compilerVersion": "ocg-card-compiler/v1",
+                        "engineVersion": "ocg-formal-engine/0.5.0",
+                        "irVersion": "ocg-effect-ir/v1",
+                        "patternLibraryVersion": "ocg-pattern-library/v1",
+                        "proofVerifierVersion": "ocg-proof-verifier/v1",
+                        "rulesetVersion": "ocg-ruleset/2026-08-03-experimental",
+                        "schemaVersion": "ocg-formal-engine/v1"
+                      }
+                    },
+                    "discoveryPath": [
+                      "Effect.SetOperation",
+                      "RESOLUTION_PHASE",
+                      "LuaMethod.SelectSubGroup"
+                    ],
+                    "operationApi": "LuaMethod.SelectSubGroup"
+                  },
+                  {
+                    "atomicOperation": "SPECIAL_SUMMON",
+                    "dependencyGraph": {
+                      "dependencies": [
+                        "CHECK_CARD_SUMMON_ELIGIBILITY",
+                        "CHECK_ZONE_CAPACITY"
+                      ],
+                      "operation": "SPECIAL_SUMMON",
+                      "requiredMinimum": 1,
+                      "schemaVersion": "ocg-operation-dependency-graph/v1",
+                      "unresolvedSemantics": [],
+                      "versions": {
+                        "compilerVersion": "ocg-card-compiler/v1",
+                        "engineVersion": "ocg-formal-engine/0.5.0",
+                        "irVersion": "ocg-effect-ir/v1",
+                        "patternLibraryVersion": "ocg-pattern-library/v1",
+                        "proofVerifierVersion": "ocg-proof-verifier/v1",
+                        "rulesetVersion": "ocg-ruleset/2026-08-03-experimental",
+                        "schemaVersion": "ocg-formal-engine/v1"
+                      }
+                    },
+                    "discoveryPath": [
+                      "Effect.SetOperation",
+                      "RESOLUTION_PHASE",
+                      "Duel.SpecialSummon"
+                    ],
+                    "operationApi": "Duel.SpecialSummon"
+                  }
+                ],
+                "identityScheme": "ocg-legacy-lua-semantic-effect-identity/v1",
+                "normalizations": [
+                  "CHECK_ONLY_ZERO_GUARD"
+                ],
+                "operationApis": [
+                  "Duel.IsPlayerAffectedByEffect",
+                  "LuaMethod.IsSetCard",
+                  "Duel.Hint",
+                  "LuaMethod.SelectSubGroup",
+                  "Duel.SpecialSummon"
+                ],
+                "operationProgram": {
+                  "kind": "SEQUENCE",
+                  "steps": [
+                    {
+                      "kind": "ASSIGN",
+                      "target": "OPERATION_LOCAL_0",
+                      "value": {
+                        "api": "Duel.GetLocationCount",
+                        "arguments": [
+                          {
+                            "kind": "VARIABLE",
+                            "name": "PLAYER"
+                          },
+                          {
+                            "kind": "SYMBOL",
+                            "name": "LOCATION_MZONE"
+                          }
+                        ],
+                        "kind": "CALL"
+                      }
+                    },
+                    {
+                      "condition": {
+                        "kind": "BINARY",
+                        "left": {
+                          "kind": "VARIABLE",
+                          "name": "OPERATION_LOCAL_0"
+                        },
+                        "operator": "<=",
+                        "right": {
+                          "kind": "LITERAL",
+                          "value": 0
+                        }
+                      },
+                      "elseProgram": {
+                        "kind": "SEQUENCE",
+                        "steps": []
+                      },
+                      "kind": "IF",
+                      "thenProgram": {
+                        "kind": "SEQUENCE",
+                        "steps": [
+                          {
+                            "kind": "RETURN",
+                            "value": null
+                          }
+                        ]
+                      }
+                    },
+                    {
+                      "condition": {
+                        "api": "Duel.IsPlayerAffectedByEffect",
+                        "arguments": [
+                          {
+                            "kind": "VARIABLE",
+                            "name": "PLAYER"
+                          },
+                          {
+                            "kind": "LITERAL",
+                            "value": 59822133
+                          }
+                        ],
+                        "kind": "CALL"
+                      },
+                      "elseProgram": {
+                        "kind": "SEQUENCE",
+                        "steps": []
+                      },
+                      "kind": "IF",
+                      "thenProgram": {
+                        "kind": "SEQUENCE",
+                        "steps": [
+                          {
+                            "kind": "ASSIGN",
+                            "target": "OPERATION_LOCAL_0",
+                            "value": {
+                              "kind": "LITERAL",
+                              "value": 1
+                            }
+                          }
+                        ]
+                      }
+                    },
+                    {
+                      "kind": "ASSIGN",
+                      "target": "OPERATION_LOCAL_1",
+                      "value": {
+                        "api": "Duel.GetMatchingGroup",
+                        "arguments": [
+                          {
+                            "body": {
+                              "kind": "LUA_AND",
+                              "left": {
+                                "api": "LuaMethod.IsSetCard",
+                                "arguments": [
+                                  {
+                                    "kind": "VARIABLE",
+                                    "name": "FILTER_CARD"
+                                  },
+                                  {
+                                    "kind": "LITERAL",
+                                    "value": 336
+                                  }
+                                ],
+                                "kind": "CALL"
+                              },
+                              "right": {
+                                "api": "Card.IsCanBeSpecialSummoned",
+                                "arguments": [
+                                  {
+                                    "kind": "VARIABLE",
+                                    "name": "FILTER_CARD"
+                                  },
+                                  {
+                                    "kind": "VARIABLE",
+                                    "name": "FILTER_ARGUMENT_1"
+                                  },
+                                  {
+                                    "kind": "LITERAL",
+                                    "value": 0
+                                  },
+                                  {
+                                    "kind": "VARIABLE",
+                                    "name": "FILTER_ARGUMENT_2"
+                                  },
+                                  {
+                                    "kind": "LITERAL",
+                                    "value": false
+                                  },
+                                  {
+                                    "kind": "LITERAL",
+                                    "value": false
+                                  }
+                                ],
+                                "kind": "CALL"
+                              }
+                            },
+                            "kind": "LAMBDA",
+                            "parameters": [
+                              "FILTER_CARD",
+                              "FILTER_ARGUMENT_1",
+                              "FILTER_ARGUMENT_2"
+                            ]
+                          },
+                          {
+                            "kind": "VARIABLE",
+                            "name": "PLAYER"
+                          },
+                          {
+                            "kind": "SYMBOL",
+                            "name": "LOCATION_HAND"
+                          },
+                          {
+                            "kind": "LITERAL",
+                            "value": 0
+                          },
+                          {
+                            "kind": "LITERAL",
+                            "value": null
+                          },
+                          {
+                            "kind": "VARIABLE",
+                            "name": "EFFECT"
+                          },
+                          {
+                            "kind": "VARIABLE",
+                            "name": "PLAYER"
+                          }
+                        ],
+                        "kind": "CALL"
+                      }
+                    },
+                    {
+                      "api": "Duel.Hint",
+                      "arguments": [
+                        {
+                          "kind": "SYMBOL",
+                          "name": "HINT_SELECTMSG"
+                        },
+                        {
+                          "kind": "VARIABLE",
+                          "name": "PLAYER"
+                        },
+                        {
+                          "kind": "SYMBOL",
+                          "name": "HINTMSG_SPSUMMON"
+                        }
+                      ],
+                      "kind": "CALL"
+                    },
+                    {
+                      "kind": "ASSIGN",
+                      "target": "OPERATION_LOCAL_2",
+                      "value": {
+                        "api": "LuaMethod.SelectSubGroup",
+                        "arguments": [
+                          {
+                            "kind": "VARIABLE",
+                            "name": "OPERATION_LOCAL_1"
+                          },
+                          {
+                            "kind": "VARIABLE",
+                            "name": "PLAYER"
+                          },
+                          {
+                            "kind": "SYMBOL",
+                            "name": "aux.dncheck"
+                          },
+                          {
+                            "kind": "LITERAL",
+                            "value": false
+                          },
+                          {
+                            "kind": "LITERAL",
+                            "value": 1
+                          },
+                          {
+                            "kind": "VARIABLE",
+                            "name": "OPERATION_LOCAL_0"
+                          }
+                        ],
+                        "kind": "CALL"
+                      }
+                    },
+                    {
+                      "condition": {
+                        "kind": "LUA_AND",
+                        "left": {
+                          "kind": "VARIABLE",
+                          "name": "OPERATION_LOCAL_2"
+                        },
+                        "right": {
+                          "kind": "BINARY",
+                          "left": {
+                            "argument": {
+                              "kind": "VARIABLE",
+                              "name": "OPERATION_LOCAL_2"
+                            },
+                            "kind": "UNARY",
+                            "operator": "#"
+                          },
+                          "operator": ">",
+                          "right": {
+                            "kind": "LITERAL",
+                            "value": 0
+                          }
+                        }
+                      },
+                      "elseProgram": {
+                        "kind": "SEQUENCE",
+                        "steps": []
+                      },
+                      "kind": "IF",
+                      "thenProgram": {
+                        "kind": "SEQUENCE",
+                        "steps": [
+                          {
+                            "api": "Duel.SpecialSummon",
+                            "arguments": [
+                              {
+                                "kind": "VARIABLE",
+                                "name": "OPERATION_LOCAL_2"
+                              },
+                              {
+                                "kind": "LITERAL",
+                                "value": 0
+                              },
+                              {
+                                "kind": "VARIABLE",
+                                "name": "PLAYER"
+                              },
+                              {
+                                "kind": "VARIABLE",
+                                "name": "PLAYER"
+                              },
+                              {
+                                "kind": "LITERAL",
+                                "value": false
+                              },
+                              {
+                                "kind": "LITERAL",
+                                "value": false
+                              },
+                              {
+                                "kind": "SYMBOL",
+                                "name": "POS_FACEUP"
+                              }
+                            ],
+                            "kind": "CALL"
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                "registrationSemantics": [
+                  {
+                    "arguments": [
+                      {
+                        "kind": "LITERAL",
+                        "value": 1
+                      },
+                      {
+                        "kind": "LITERAL",
+                        "value": 61159609
+                      }
+                    ],
+                    "setter": "SetCountLimit"
+                  },
+                  {
+                    "arguments": [
+                      {
+                        "kind": "SYMBOL",
+                        "name": "LOCATION_SZONE"
+                      }
+                    ],
+                    "setter": "SetRange"
+                  },
+                  {
+                    "arguments": [
+                      {
+                        "kind": "SYMBOL",
+                        "name": "EFFECT_TYPE_IGNITION"
+                      }
+                    ],
+                    "setter": "SetType"
+                  }
+                ],
+                "requiredCapabilities": [
+                  "compatibility/legacy-lua-semantic-discovery/v1",
+                  "compatibility/legacy-lua-effect-enumeration/v1",
+                  "operation/dependency-expansion/v1"
+                ],
+                "requiredLegacyApis": [
+                  "Card.IsCanBeSpecialSummoned",
+                  "Duel.GetLocationCount",
+                  "Duel.GetMatchingGroup",
+                  "Duel.Hint",
+                  "Duel.IsExistingMatchingCard",
+                  "Duel.IsPlayerAffectedByEffect",
+                  "Duel.SendtoGrave",
+                  "Duel.SetOperationInfo",
+                  "Duel.SpecialSummon"
+                ],
+                "schemaVersion": "ocg-legacy-lua-activation-plan/v2",
+                "semanticEffectIdentity": "43e88bc8e3193c259a31f353d5fa0e98bda05a04d9be210c8d98cd119252e73d",
+                "semanticFingerprint": "ef9c3b4bcc806ee3745e28b9379833a61c29b0beee73556f54968886a042689f",
+                "sourceContentHash": "c4e3bc2f32faf7e0ec7b919a71974115e61aa8a17d2f858ca2d44a32375f51d8",
+                "sourceDocumentId": "legacy-script:cid-15620:passcode-61159609:c4e3bc2f32faf7e0",
+                "sourceSpans": [
+                  {
+                    "confidence": 1,
+                    "endOffset": 837,
+                    "exactText": "Effect.CreateEffect(c)",
+                    "parserMethod": "MIGRATED_LEGACY",
+                    "schemaVersion": "ocg-source-span/v1",
+                    "sourceDocumentId": "legacy-script:cid-15620:passcode-61159609:c4e3bc2f32faf7e0",
+                    "startOffset": 815,
+                    "textHash": "ec6dd4b57e1a940f3591d2d765582ebef0f878eac8a863943b169963684f9884",
+                    "verificationStatus": "CANDIDATE"
+                  },
+                  {
+                    "confidence": 1,
+                    "endOffset": 957,
+                    "exactText": "e3:SetType(EFFECT_TYPE_IGNITION)",
+                    "parserMethod": "MIGRATED_LEGACY",
+                    "schemaVersion": "ocg-source-span/v1",
+                    "sourceDocumentId": "legacy-script:cid-15620:passcode-61159609:c4e3bc2f32faf7e0",
+                    "startOffset": 925,
+                    "textHash": "a9d2cc559113d574ff6662bd445f5592c783f567ae39efe3a337d977d6e6cc51",
+                    "verificationStatus": "CANDIDATE"
+                  },
+                  {
+                    "confidence": 1,
+                    "endOffset": 986,
+                    "exactText": "e3:SetRange(LOCATION_SZONE)",
+                    "parserMethod": "MIGRATED_LEGACY",
+                    "schemaVersion": "ocg-source-span/v1",
+                    "sourceDocumentId": "legacy-script:cid-15620:passcode-61159609:c4e3bc2f32faf7e0",
+                    "startOffset": 959,
+                    "textHash": "4ebe5c299dd26bf129b4b352c6de59218e5ce4e9c37c77d381781fcb474408f5",
+                    "verificationStatus": "CANDIDATE"
+                  },
+                  {
+                    "confidence": 1,
+                    "endOffset": 1016,
+                    "exactText": "e3:SetCountLimit(1,61159609)",
+                    "parserMethod": "MIGRATED_LEGACY",
+                    "schemaVersion": "ocg-source-span/v1",
+                    "sourceDocumentId": "legacy-script:cid-15620:passcode-61159609:c4e3bc2f32faf7e0",
+                    "startOffset": 988,
+                    "textHash": "67e4aa19fb832def1c2e785e4b5b4d9134300032c8f45272c5785fa09de56311",
+                    "verificationStatus": "CANDIDATE"
+                  },
+                  {
+                    "confidence": 1,
+                    "endOffset": 1047,
+                    "exactText": "e3:SetCost(c61159609.spcost2)",
+                    "parserMethod": "MIGRATED_LEGACY",
+                    "schemaVersion": "ocg-source-span/v1",
+                    "sourceDocumentId": "legacy-script:cid-15620:passcode-61159609:c4e3bc2f32faf7e0",
+                    "startOffset": 1018,
+                    "textHash": "8c5352711c1a9cd9f02e050dcdf4429448b2d399be31de364512f67b71b5f8ea",
+                    "verificationStatus": "CANDIDATE"
+                  },
+                  {
+                    "confidence": 1,
+                    "endOffset": 1078,
+                    "exactText": "e3:SetTarget(c61159609.sptg2)",
+                    "parserMethod": "MIGRATED_LEGACY",
+                    "schemaVersion": "ocg-source-span/v1",
+                    "sourceDocumentId": "legacy-script:cid-15620:passcode-61159609:c4e3bc2f32faf7e0",
+                    "startOffset": 1049,
+                    "textHash": "dbb5c87f1f82080b1a0e860a3af65a163bc62961a96c1b1fc0f651c502453ae0",
+                    "verificationStatus": "CANDIDATE"
+                  },
+                  {
+                    "confidence": 1,
+                    "endOffset": 1112,
+                    "exactText": "e3:SetOperation(c61159609.spop2)",
+                    "parserMethod": "MIGRATED_LEGACY",
+                    "schemaVersion": "ocg-source-span/v1",
+                    "sourceDocumentId": "legacy-script:cid-15620:passcode-61159609:c4e3bc2f32faf7e0",
+                    "startOffset": 1080,
+                    "textHash": "7f5a5816f9da73960c81f2089449caaf97ea24bd8b7522a905827c3db249b885",
+                    "verificationStatus": "CANDIDATE"
+                  },
+                  {
+                    "confidence": 1,
+                    "endOffset": 1134,
+                    "exactText": "c:RegisterEffect(e3)",
+                    "parserMethod": "MIGRATED_LEGACY",
+                    "schemaVersion": "ocg-source-span/v1",
+                    "sourceDocumentId": "legacy-script:cid-15620:passcode-61159609:c4e3bc2f32faf7e0",
+                    "startOffset": 1114,
+                    "textHash": "d7c9d73fd0a0d6dc9e850018f67d90e60f3f06b47af666bdb5b5550b00a882e9",
+                    "verificationStatus": "CANDIDATE"
+                  },
+                  {
+                    "confidence": 1,
+                    "endOffset": 2246,
+                    "exactText": "function c61159609.spcost2(e,tp,eg,ep,ev,re,r,rp,chk)\n\tif chk==0 then return e:GetHandler():IsAbleToGraveAsCost() end\n\tDuel.SendtoGrave(e:GetHandler(),REASON_COST)\nend",
+                    "parserMethod": "MIGRATED_LEGACY",
+                    "schemaVersion": "ocg-source-span/v1",
+                    "sourceDocumentId": "legacy-script:cid-15620:passcode-61159609:c4e3bc2f32faf7e0",
+                    "startOffset": 2079,
+                    "textHash": "0b5c6fa61f686622a717fc6422f972923839e9bb1534849a11b2bc0d327937a2",
+                    "verificationStatus": "CANDIDATE"
+                  },
+                  {
+                    "confidence": 1,
+                    "endOffset": 2363,
+                    "exactText": "function c61159609.spfilter2(c,e,tp)\n\treturn c:IsSetCard(0x150) and c:IsCanBeSpecialSummoned(e,0,tp,false,false)\nend",
+                    "parserMethod": "MIGRATED_LEGACY",
+                    "schemaVersion": "ocg-source-span/v1",
+                    "sourceDocumentId": "legacy-script:cid-15620:passcode-61159609:c4e3bc2f32faf7e0",
+                    "startOffset": 2247,
+                    "textHash": "8badbdd80203b029344a03a55f2d7106fbd14f2d63dfac8db18b5215839b6468",
+                    "verificationStatus": "CANDIDATE"
+                  },
+                  {
+                    "confidence": 1,
+                    "endOffset": 2647,
+                    "exactText": "function c61159609.sptg2(e,tp,eg,ep,ev,re,r,rp,chk)\n\tif chk==0 then return Duel.GetLocationCount(tp,LOCATION_MZONE)>0\n\t\tand Duel.IsExistingMatchingCard(c61159609.spfilter2,tp,LOCATION_HAND,0,1,nil,e,tp) end\n\tDuel.SetOperationInfo(0,CATEGORY_SPECIAL_SUMMON,nil,1,tp,LOCATION_HAND)\nend",
+                    "parserMethod": "MIGRATED_LEGACY",
+                    "schemaVersion": "ocg-source-span/v1",
+                    "sourceDocumentId": "legacy-script:cid-15620:passcode-61159609:c4e3bc2f32faf7e0",
+                    "startOffset": 2364,
+                    "textHash": "f5a316ef150ea86894aacd28173406fb737b55aaf3fb5967604d337d1087e621",
+                    "verificationStatus": "CANDIDATE"
+                  },
+                  {
+                    "confidence": 1,
+                    "endOffset": 3101,
+                    "exactText": "function c61159609.spop2(e,tp,eg,ep,ev,re,r,rp)\n\tlocal ft=Duel.GetLocationCount(tp,LOCATION_MZONE)\n\tif ft<=0 then return end\n\tif Duel.IsPlayerAffectedByEffect(tp,59822133) then ft=1 end\n\tlocal g=Duel.GetMatchingGroup(c61159609.spfilter2,tp,LOCATION_HAND,0,nil,e,tp)\n\tDuel.Hint(HINT_SELECTMSG,tp,HINTMSG_SPSUMMON)\n\tlocal sg=g:SelectSubGroup(tp,aux.dncheck,false,1,ft)\n\tif sg and #sg>0 then\n\t\tDuel.SpecialSummon(sg,0,tp,tp,false,false,POS_FACEUP)\n\tend\nend",
+                    "parserMethod": "MIGRATED_LEGACY",
+                    "schemaVersion": "ocg-source-span/v1",
+                    "sourceDocumentId": "legacy-script:cid-15620:passcode-61159609:c4e3bc2f32faf7e0",
+                    "startOffset": 2648,
+                    "textHash": "fe2ab515262b1c4b7560f071c45c3f345bd45573d8f74f2e6054e7c10cdb344b",
+                    "verificationStatus": "CANDIDATE"
+                  }
+                ],
+                "targetSelectionProgram": {
+                  "kind": "SEQUENCE",
+                  "steps": [
+                    {
+                      "api": "Duel.SetOperationInfo",
+                      "arguments": [
+                        {
+                          "kind": "LITERAL",
+                          "value": 0
+                        },
+                        {
+                          "kind": "SYMBOL",
+                          "name": "CATEGORY_SPECIAL_SUMMON"
+                        },
+                        {
+                          "kind": "LITERAL",
+                          "value": null
+                        },
+                        {
+                          "kind": "LITERAL",
+                          "value": 1
+                        },
+                        {
+                          "kind": "VARIABLE",
+                          "name": "PLAYER"
+                        },
+                        {
+                          "kind": "SYMBOL",
+                          "name": "LOCATION_HAND"
+                        }
+                      ],
+                      "kind": "CALL"
+                    }
+                  ]
+                },
+                "unresolvedSemantics": [
+                  {
+                    "code": "UNSUPPORTED_LUA_OPERATION_API",
+                    "evidenceIds": [],
+                    "message": "unsupported legacy Lua API Duel.Hint",
+                    "phase": "LEGACY_DISCOVERY"
+                  },
+                  {
+                    "code": "UNSUPPORTED_LUA_OPERATION_API",
+                    "evidenceIds": [],
+                    "message": "unsupported legacy Lua API Duel.IsPlayerAffectedByEffect",
+                    "phase": "LEGACY_DISCOVERY"
+                  },
+                  {
+                    "code": "UNSUPPORTED_LUA_API",
+                    "evidenceIds": [],
+                    "message": "unsupported legacy Lua API Duel.SendtoGrave",
+                    "phase": "LEGACY_DISCOVERY"
+                  },
+                  {
+                    "code": "UNSUPPORTED_ATOMIC_OPERATION_DEPENDENCIES",
+                    "evidenceIds": [],
+                    "message": "no dependency expansion is registered for this atomic operation",
+                    "phase": "LEGACY_DISCOVERY"
+                  },
+                  {
+                    "code": "UNSUPPORTED_ATOMIC_OPERATION_DEPENDENCIES",
+                    "evidenceIds": [],
+                    "message": "no dependency expansion is registered for this atomic operation",
+                    "phase": "LEGACY_DISCOVERY"
+                  },
+                  {
+                    "code": "UNSUPPORTED_ATOMIC_OPERATION_DEPENDENCIES",
+                    "evidenceIds": [],
+                    "message": "no dependency expansion is registered for this atomic operation",
+                    "phase": "LEGACY_DISCOVERY"
+                  },
+                  {
+                    "code": "UNSUPPORTED_ATOMIC_OPERATION_DEPENDENCIES",
+                    "evidenceIds": [],
+                    "message": "no dependency expansion is registered for this atomic operation",
+                    "phase": "LEGACY_DISCOVERY"
+                  },
+                  {
+                    "code": "UNSUPPORTED_ATOMIC_OPERATION_DEPENDENCIES",
+                    "evidenceIds": [],
+                    "message": "no dependency expansion is registered for this atomic operation",
+                    "phase": "LEGACY_DISCOVERY"
+                  },
+                  {
+                    "code": "TARGET_OPERATION_SEMANTIC_MISMATCH",
+                    "evidenceIds": [
+                      "Card.IsCanBeSpecialSummoned"
+                    ],
+                    "message": "activation movement predicates are not backed by matching SetOperation APIs",
+                    "phase": "LEGACY_DISCOVERY"
+                  }
+                ],
+                "verificationStatus": "LEGACY_DISCOVERY_ONLY",
+                "versions": {
+                  "compilerVersion": "ocg-card-compiler/v1",
+                  "engineVersion": "ocg-formal-engine/0.5.0",
+                  "irVersion": "ocg-effect-ir/v1",
+                  "patternLibraryVersion": "ocg-pattern-library/v1",
+                  "proofVerifierVersion": "ocg-proof-verifier/v1",
+                  "rulesetVersion": "ocg-ruleset/2026-08-03-experimental",
+                  "schemaVersion": "ocg-formal-engine/v1"
+                }
+              },
+              "semanticEffectIdentity": "43e88bc8e3193c259a31f353d5fa0e98bda05a04d9be210c8d98cd119252e73d",
+              "sourceSpans": [
+                {
+                  "confidence": 1,
+                  "endOffset": 837,
+                  "exactText": "Effect.CreateEffect(c)",
+                  "parserMethod": "MIGRATED_LEGACY",
+                  "schemaVersion": "ocg-source-span/v1",
+                  "sourceDocumentId": "legacy-script:cid-15620:passcode-61159609:c4e3bc2f32faf7e0",
+                  "startOffset": 815,
+                  "textHash": "ec6dd4b57e1a940f3591d2d765582ebef0f878eac8a863943b169963684f9884",
+                  "verificationStatus": "CANDIDATE"
+                },
+                {
+                  "confidence": 1,
+                  "endOffset": 957,
+                  "exactText": "e3:SetType(EFFECT_TYPE_IGNITION)",
+                  "parserMethod": "MIGRATED_LEGACY",
+                  "schemaVersion": "ocg-source-span/v1",
+                  "sourceDocumentId": "legacy-script:cid-15620:passcode-61159609:c4e3bc2f32faf7e0",
+                  "startOffset": 925,
+                  "textHash": "a9d2cc559113d574ff6662bd445f5592c783f567ae39efe3a337d977d6e6cc51",
+                  "verificationStatus": "CANDIDATE"
+                },
+                {
+                  "confidence": 1,
+                  "endOffset": 986,
+                  "exactText": "e3:SetRange(LOCATION_SZONE)",
+                  "parserMethod": "MIGRATED_LEGACY",
+                  "schemaVersion": "ocg-source-span/v1",
+                  "sourceDocumentId": "legacy-script:cid-15620:passcode-61159609:c4e3bc2f32faf7e0",
+                  "startOffset": 959,
+                  "textHash": "4ebe5c299dd26bf129b4b352c6de59218e5ce4e9c37c77d381781fcb474408f5",
+                  "verificationStatus": "CANDIDATE"
+                },
+                {
+                  "confidence": 1,
+                  "endOffset": 1016,
+                  "exactText": "e3:SetCountLimit(1,61159609)",
+                  "parserMethod": "MIGRATED_LEGACY",
+                  "schemaVersion": "ocg-source-span/v1",
+                  "sourceDocumentId": "legacy-script:cid-15620:passcode-61159609:c4e3bc2f32faf7e0",
+                  "startOffset": 988,
+                  "textHash": "67e4aa19fb832def1c2e785e4b5b4d9134300032c8f45272c5785fa09de56311",
+                  "verificationStatus": "CANDIDATE"
+                },
+                {
+                  "confidence": 1,
+                  "endOffset": 1047,
+                  "exactText": "e3:SetCost(c61159609.spcost2)",
+                  "parserMethod": "MIGRATED_LEGACY",
+                  "schemaVersion": "ocg-source-span/v1",
+                  "sourceDocumentId": "legacy-script:cid-15620:passcode-61159609:c4e3bc2f32faf7e0",
+                  "startOffset": 1018,
+                  "textHash": "8c5352711c1a9cd9f02e050dcdf4429448b2d399be31de364512f67b71b5f8ea",
+                  "verificationStatus": "CANDIDATE"
+                },
+                {
+                  "confidence": 1,
+                  "endOffset": 1078,
+                  "exactText": "e3:SetTarget(c61159609.sptg2)",
+                  "parserMethod": "MIGRATED_LEGACY",
+                  "schemaVersion": "ocg-source-span/v1",
+                  "sourceDocumentId": "legacy-script:cid-15620:passcode-61159609:c4e3bc2f32faf7e0",
+                  "startOffset": 1049,
+                  "textHash": "dbb5c87f1f82080b1a0e860a3af65a163bc62961a96c1b1fc0f651c502453ae0",
+                  "verificationStatus": "CANDIDATE"
+                },
+                {
+                  "confidence": 1,
+                  "endOffset": 1112,
+                  "exactText": "e3:SetOperation(c61159609.spop2)",
+                  "parserMethod": "MIGRATED_LEGACY",
+                  "schemaVersion": "ocg-source-span/v1",
+                  "sourceDocumentId": "legacy-script:cid-15620:passcode-61159609:c4e3bc2f32faf7e0",
+                  "startOffset": 1080,
+                  "textHash": "7f5a5816f9da73960c81f2089449caaf97ea24bd8b7522a905827c3db249b885",
+                  "verificationStatus": "CANDIDATE"
+                },
+                {
+                  "confidence": 1,
+                  "endOffset": 1134,
+                  "exactText": "c:RegisterEffect(e3)",
+                  "parserMethod": "MIGRATED_LEGACY",
+                  "schemaVersion": "ocg-source-span/v1",
+                  "sourceDocumentId": "legacy-script:cid-15620:passcode-61159609:c4e3bc2f32faf7e0",
+                  "startOffset": 1114,
+                  "textHash": "d7c9d73fd0a0d6dc9e850018f67d90e60f3f06b47af666bdb5b5550b00a882e9",
+                  "verificationStatus": "CANDIDATE"
+                },
+                {
+                  "confidence": 1,
+                  "endOffset": 2246,
+                  "exactText": "function c61159609.spcost2(e,tp,eg,ep,ev,re,r,rp,chk)\n\tif chk==0 then return e:GetHandler():IsAbleToGraveAsCost() end\n\tDuel.SendtoGrave(e:GetHandler(),REASON_COST)\nend",
+                  "parserMethod": "MIGRATED_LEGACY",
+                  "schemaVersion": "ocg-source-span/v1",
+                  "sourceDocumentId": "legacy-script:cid-15620:passcode-61159609:c4e3bc2f32faf7e0",
+                  "startOffset": 2079,
+                  "textHash": "0b5c6fa61f686622a717fc6422f972923839e9bb1534849a11b2bc0d327937a2",
+                  "verificationStatus": "CANDIDATE"
+                },
+                {
+                  "confidence": 1,
+                  "endOffset": 2363,
+                  "exactText": "function c61159609.spfilter2(c,e,tp)\n\treturn c:IsSetCard(0x150) and c:IsCanBeSpecialSummoned(e,0,tp,false,false)\nend",
+                  "parserMethod": "MIGRATED_LEGACY",
+                  "schemaVersion": "ocg-source-span/v1",
+                  "sourceDocumentId": "legacy-script:cid-15620:passcode-61159609:c4e3bc2f32faf7e0",
+                  "startOffset": 2247,
+                  "textHash": "8badbdd80203b029344a03a55f2d7106fbd14f2d63dfac8db18b5215839b6468",
+                  "verificationStatus": "CANDIDATE"
+                },
+                {
+                  "confidence": 1,
+                  "endOffset": 2647,
+                  "exactText": "function c61159609.sptg2(e,tp,eg,ep,ev,re,r,rp,chk)\n\tif chk==0 then return Duel.GetLocationCount(tp,LOCATION_MZONE)>0\n\t\tand Duel.IsExistingMatchingCard(c61159609.spfilter2,tp,LOCATION_HAND,0,1,nil,e,tp) end\n\tDuel.SetOperationInfo(0,CATEGORY_SPECIAL_SUMMON,nil,1,tp,LOCATION_HAND)\nend",
+                  "parserMethod": "MIGRATED_LEGACY",
+                  "schemaVersion": "ocg-source-span/v1",
+                  "sourceDocumentId": "legacy-script:cid-15620:passcode-61159609:c4e3bc2f32faf7e0",
+                  "startOffset": 2364,
+                  "textHash": "f5a316ef150ea86894aacd28173406fb737b55aaf3fb5967604d337d1087e621",
+                  "verificationStatus": "CANDIDATE"
+                },
+                {
+                  "confidence": 1,
+                  "endOffset": 3101,
+                  "exactText": "function c61159609.spop2(e,tp,eg,ep,ev,re,r,rp)\n\tlocal ft=Duel.GetLocationCount(tp,LOCATION_MZONE)\n\tif ft<=0 then return end\n\tif Duel.IsPlayerAffectedByEffect(tp,59822133) then ft=1 end\n\tlocal g=Duel.GetMatchingGroup(c61159609.spfilter2,tp,LOCATION_HAND,0,nil,e,tp)\n\tDuel.Hint(HINT_SELECTMSG,tp,HINTMSG_SPSUMMON)\n\tlocal sg=g:SelectSubGroup(tp,aux.dncheck,false,1,ft)\n\tif sg and #sg>0 then\n\t\tDuel.SpecialSummon(sg,0,tp,tp,false,false,POS_FACEUP)\n\tend\nend",
+                  "parserMethod": "MIGRATED_LEGACY",
+                  "schemaVersion": "ocg-source-span/v1",
+                  "sourceDocumentId": "legacy-script:cid-15620:passcode-61159609:c4e3bc2f32faf7e0",
+                  "startOffset": 2648,
+                  "textHash": "fe2ab515262b1c4b7560f071c45c3f345bd45573d8f74f2e6054e7c10cdb344b",
+                  "verificationStatus": "CANDIDATE"
+                }
+              ],
+              "unknownReasons": [
+                {
+                  "code": "UNSUPPORTED_LUA_OPERATION_API",
+                  "evidenceIds": [],
+                  "message": "unsupported legacy Lua API Duel.Hint",
+                  "phase": "LEGACY_DISCOVERY"
+                },
+                {
+                  "code": "UNSUPPORTED_LUA_OPERATION_API",
+                  "evidenceIds": [],
+                  "message": "unsupported legacy Lua API Duel.IsPlayerAffectedByEffect",
+                  "phase": "LEGACY_DISCOVERY"
+                },
+                {
+                  "code": "UNSUPPORTED_LUA_API",
+                  "evidenceIds": [],
+                  "message": "unsupported legacy Lua API Duel.SendtoGrave",
+                  "phase": "LEGACY_DISCOVERY"
+                },
+                {
+                  "code": "UNSUPPORTED_ATOMIC_OPERATION_DEPENDENCIES",
+                  "evidenceIds": [],
+                  "message": "no dependency expansion is registered for this atomic operation",
+                  "phase": "LEGACY_DISCOVERY"
+                },
+                {
+                  "code": "UNSUPPORTED_ATOMIC_OPERATION_DEPENDENCIES",
+                  "evidenceIds": [],
+                  "message": "no dependency expansion is registered for this atomic operation",
+                  "phase": "LEGACY_DISCOVERY"
+                },
+                {
+                  "code": "UNSUPPORTED_ATOMIC_OPERATION_DEPENDENCIES",
+                  "evidenceIds": [],
+                  "message": "no dependency expansion is registered for this atomic operation",
+                  "phase": "LEGACY_DISCOVERY"
+                },
+                {
+                  "code": "UNSUPPORTED_ATOMIC_OPERATION_DEPENDENCIES",
+                  "evidenceIds": [],
+                  "message": "no dependency expansion is registered for this atomic operation",
+                  "phase": "LEGACY_DISCOVERY"
+                },
+                {
+                  "code": "UNSUPPORTED_ATOMIC_OPERATION_DEPENDENCIES",
+                  "evidenceIds": [],
+                  "message": "no dependency expansion is registered for this atomic operation",
+                  "phase": "LEGACY_DISCOVERY"
+                },
+                {
+                  "code": "TARGET_OPERATION_SEMANTIC_MISMATCH",
+                  "evidenceIds": [
+                    "Card.IsCanBeSpecialSummoned"
+                  ],
+                  "message": "activation movement predicates are not backed by matching SetOperation APIs",
+                  "phase": "LEGACY_DISCOVERY"
+                }
+              ]
+            },
+            "semanticArtifactSha256": "03d73c8abec584a6e8a73ba61e7fc928479db4e854f922874b316cb696529eca",
+            "semanticEffectIdentity": "43e88bc8e3193c259a31f353d5fa0e98bda05a04d9be210c8d98cd119252e73d",
+            "unknownReasons": [
+              {
+                "phase": "LEGACY_DISCOVERY",
+                "code": "LEGACY_SOURCE_NON_AUTHORITATIVE",
+                "message": "legacy Lua is discovery and differential evidence, not rules authority",
+                "evidenceIds": [
+                  "legacy-script:cid-15620:passcode-61159609:c4e3bc2f32faf7e0"
+                ]
+              },
+              {
+                "phase": "LEGACY_DISCOVERY",
+                "code": "TARGET_OPERATION_SEMANTIC_MISMATCH",
+                "message": "activation movement predicates are not backed by matching SetOperation APIs",
+                "evidenceIds": [
+                  "Card.IsCanBeSpecialSummoned"
+                ]
+              },
+              {
+                "phase": "LEGACY_DISCOVERY",
+                "code": "UNSUPPORTED_ATOMIC_OPERATION_DEPENDENCIES",
+                "message": "no dependency expansion is registered for this atomic operation",
+                "evidenceIds": []
+              },
+              {
+                "phase": "LEGACY_DISCOVERY",
+                "code": "UNSUPPORTED_LUA_API",
+                "message": "unsupported legacy Lua API Duel.SendtoGrave",
+                "evidenceIds": []
+              },
+              {
+                "phase": "LEGACY_DISCOVERY",
+                "code": "UNSUPPORTED_LUA_OPERATION_API",
+                "message": "unsupported legacy Lua API Duel.Hint",
+                "evidenceIds": []
+              },
+              {
+                "phase": "LEGACY_DISCOVERY",
+                "code": "UNSUPPORTED_LUA_OPERATION_API",
+                "message": "unsupported legacy Lua API Duel.IsPlayerAffectedByEffect",
+                "evidenceIds": []
+              }
+            ],
+            "verdict": "UNKNOWN",
+            "candidateSha256": "cefe480d26c29bf915c7ae3277b52c398a3752c38fcb3201c0a54e106f7080c4"
+          },
+          {
+            "analysisArtifact": null,
+            "analysisArtifactSha256": null,
+            "compileResultSha256": "8525b5db006018ee4af2dddfef0c68c6b71be584ff35fdb8a9a933c24daf9e75",
+            "identityScheme": "ocg-legacy-lua-semantic-effect-identity/v1",
+            "kind": "TYPED_UNKNOWN",
+            "legacyAcceptedAsTruth": false,
+            "semanticArtifact": {
+              "identityScheme": "ocg-legacy-lua-semantic-effect-identity/v1",
+              "kind": "TYPED_UNKNOWN",
+              "partialPlan": {
+                "activationLegalityChecks": [],
+                "activationLegalityDependencies": [],
+                "apiSemanticsRegistryHash": "346be302c791d9bbef09e579ecb7c33a6836c97849d2354de9e6f25905b79e5f",
+                "apiSemanticsRegistryId": "formal:legacy-lua-api-semantics:v2",
+                "apiSemanticsRegistryVersion": "2.0.0",
+                "atomicOperations": [],
+                "checkOnlyTargetProgram": {
+                  "kind": "LITERAL",
+                  "value": true
+                },
+                "conditionProgram": {
+                  "kind": "LITERAL",
+                  "value": true
+                },
+                "costAtomicOperations": [],
+                "costExecutionProgram": {
+                  "kind": "SEQUENCE",
+                  "steps": []
+                },
+                "costOperationApis": [],
+                "costProgram": {
+                  "kind": "LITERAL",
+                  "value": true
+                },
+                "discoveredCostOperations": [],
+                "discoveredOperations": [],
+                "identityScheme": "ocg-legacy-lua-semantic-effect-identity/v1",
+                "normalizations": [],
+                "operationApis": [],
+                "operationProgram": {
+                  "kind": "SEQUENCE",
+                  "steps": []
+                },
+                "registrationSemantics": [
+                  {
+                    "arguments": [
+                      {
+                        "kind": "SYMBOL",
+                        "name": "EVENT_FREE_CHAIN"
+                      }
+                    ],
+                    "setter": "SetCode"
+                  },
+                  {
+                    "arguments": [
+                      {
+                        "kind": "SYMBOL",
+                        "name": "EFFECT_TYPE_ACTIVATE"
+                      }
+                    ],
+                    "setter": "SetType"
+                  }
+                ],
+                "requiredCapabilities": [
+                  "compatibility/legacy-lua-semantic-discovery/v1",
+                  "compatibility/legacy-lua-effect-enumeration/v1",
+                  "operation/dependency-expansion/v1"
+                ],
+                "requiredLegacyApis": [],
+                "schemaVersion": "ocg-legacy-lua-activation-plan/v2",
+                "semanticEffectIdentity": "d00ea27b472303c7173e386bb32600c93a7062af26c8a55b4e6979b8478c05cb",
+                "semanticFingerprint": "f7bb5bc46ce8bb1e5bf9670ddcba3d683ebdd68043e0b169ec9e443414919386",
+                "sourceContentHash": "c4e3bc2f32faf7e0ec7b919a71974115e61aa8a17d2f858ca2d44a32375f51d8",
+                "sourceDocumentId": "legacy-script:cid-15620:passcode-61159609:c4e3bc2f32faf7e0",
+                "sourceSpans": [
+                  {
+                    "confidence": 1,
+                    "endOffset": 89,
+                    "exactText": "Effect.CreateEffect(c)",
+                    "parserMethod": "MIGRATED_LEGACY",
+                    "schemaVersion": "ocg-source-span/v1",
+                    "sourceDocumentId": "legacy-script:cid-15620:passcode-61159609:c4e3bc2f32faf7e0",
+                    "startOffset": 67,
+                    "textHash": "ec6dd4b57e1a940f3591d2d765582ebef0f878eac8a863943b169963684f9884",
+                    "verificationStatus": "CANDIDATE"
+                  },
+                  {
+                    "confidence": 1,
+                    "endOffset": 123,
+                    "exactText": "e0:SetType(EFFECT_TYPE_ACTIVATE)",
+                    "parserMethod": "MIGRATED_LEGACY",
+                    "schemaVersion": "ocg-source-span/v1",
+                    "sourceDocumentId": "legacy-script:cid-15620:passcode-61159609:c4e3bc2f32faf7e0",
+                    "startOffset": 91,
+                    "textHash": "eba446a04b161935a0705d650db33497fb29eb034f1e8712e926cf531a5b8f34",
+                    "verificationStatus": "CANDIDATE"
+                  },
+                  {
+                    "confidence": 1,
+                    "endOffset": 153,
+                    "exactText": "e0:SetCode(EVENT_FREE_CHAIN)",
+                    "parserMethod": "MIGRATED_LEGACY",
+                    "schemaVersion": "ocg-source-span/v1",
+                    "sourceDocumentId": "legacy-script:cid-15620:passcode-61159609:c4e3bc2f32faf7e0",
+                    "startOffset": 125,
+                    "textHash": "21628978e25f1f8c81a7febf5b321750180d9b17f89a4c23e143bec200bf371d",
+                    "verificationStatus": "CANDIDATE"
+                  },
+                  {
+                    "confidence": 1,
+                    "endOffset": 175,
+                    "exactText": "c:RegisterEffect(e0)",
+                    "parserMethod": "MIGRATED_LEGACY",
+                    "schemaVersion": "ocg-source-span/v1",
+                    "sourceDocumentId": "legacy-script:cid-15620:passcode-61159609:c4e3bc2f32faf7e0",
+                    "startOffset": 155,
+                    "textHash": "d0051c9c83be795e81a50bca893a3f0a0ac14d8f066c26747ab0b29bd7701ef8",
+                    "verificationStatus": "CANDIDATE"
+                  }
+                ],
+                "targetSelectionProgram": {
+                  "kind": "SEQUENCE",
+                  "steps": []
+                },
+                "unresolvedSemantics": [
+                  {
+                    "code": "UNSUPPORTED_LUA_EFFECT_SHAPE",
+                    "evidenceIds": [],
+                    "message": "the registered effect has no statically bound SetOperation callback",
+                    "phase": "LEGACY_DISCOVERY"
+                  }
+                ],
+                "verificationStatus": "LEGACY_DISCOVERY_ONLY",
+                "versions": {
+                  "compilerVersion": "ocg-card-compiler/v1",
+                  "engineVersion": "ocg-formal-engine/0.5.0",
+                  "irVersion": "ocg-effect-ir/v1",
+                  "patternLibraryVersion": "ocg-pattern-library/v1",
+                  "proofVerifierVersion": "ocg-proof-verifier/v1",
+                  "rulesetVersion": "ocg-ruleset/2026-08-03-experimental",
+                  "schemaVersion": "ocg-formal-engine/v1"
+                }
+              },
+              "semanticEffectIdentity": "d00ea27b472303c7173e386bb32600c93a7062af26c8a55b4e6979b8478c05cb",
+              "sourceSpans": [
+                {
+                  "confidence": 1,
+                  "endOffset": 89,
+                  "exactText": "Effect.CreateEffect(c)",
+                  "parserMethod": "MIGRATED_LEGACY",
+                  "schemaVersion": "ocg-source-span/v1",
+                  "sourceDocumentId": "legacy-script:cid-15620:passcode-61159609:c4e3bc2f32faf7e0",
+                  "startOffset": 67,
+                  "textHash": "ec6dd4b57e1a940f3591d2d765582ebef0f878eac8a863943b169963684f9884",
+                  "verificationStatus": "CANDIDATE"
+                },
+                {
+                  "confidence": 1,
+                  "endOffset": 123,
+                  "exactText": "e0:SetType(EFFECT_TYPE_ACTIVATE)",
+                  "parserMethod": "MIGRATED_LEGACY",
+                  "schemaVersion": "ocg-source-span/v1",
+                  "sourceDocumentId": "legacy-script:cid-15620:passcode-61159609:c4e3bc2f32faf7e0",
+                  "startOffset": 91,
+                  "textHash": "eba446a04b161935a0705d650db33497fb29eb034f1e8712e926cf531a5b8f34",
+                  "verificationStatus": "CANDIDATE"
+                },
+                {
+                  "confidence": 1,
+                  "endOffset": 153,
+                  "exactText": "e0:SetCode(EVENT_FREE_CHAIN)",
+                  "parserMethod": "MIGRATED_LEGACY",
+                  "schemaVersion": "ocg-source-span/v1",
+                  "sourceDocumentId": "legacy-script:cid-15620:passcode-61159609:c4e3bc2f32faf7e0",
+                  "startOffset": 125,
+                  "textHash": "21628978e25f1f8c81a7febf5b321750180d9b17f89a4c23e143bec200bf371d",
+                  "verificationStatus": "CANDIDATE"
+                },
+                {
+                  "confidence": 1,
+                  "endOffset": 175,
+                  "exactText": "c:RegisterEffect(e0)",
+                  "parserMethod": "MIGRATED_LEGACY",
+                  "schemaVersion": "ocg-source-span/v1",
+                  "sourceDocumentId": "legacy-script:cid-15620:passcode-61159609:c4e3bc2f32faf7e0",
+                  "startOffset": 155,
+                  "textHash": "d0051c9c83be795e81a50bca893a3f0a0ac14d8f066c26747ab0b29bd7701ef8",
+                  "verificationStatus": "CANDIDATE"
+                }
+              ],
+              "unknownReasons": [
+                {
+                  "code": "UNSUPPORTED_LUA_EFFECT_SHAPE",
+                  "evidenceIds": [],
+                  "message": "the registered effect has no statically bound SetOperation callback",
+                  "phase": "LEGACY_DISCOVERY"
+                }
+              ]
+            },
+            "semanticArtifactSha256": "f93e03098ca6f99d7851bcf25cd86df141227848ca8511d3705857b569a97dbd",
+            "semanticEffectIdentity": "d00ea27b472303c7173e386bb32600c93a7062af26c8a55b4e6979b8478c05cb",
+            "unknownReasons": [
+              {
+                "phase": "LEGACY_DISCOVERY",
+                "code": "LEGACY_SOURCE_NON_AUTHORITATIVE",
+                "message": "legacy Lua is discovery and differential evidence, not rules authority",
+                "evidenceIds": [
+                  "legacy-script:cid-15620:passcode-61159609:c4e3bc2f32faf7e0"
+                ]
+              },
+              {
+                "phase": "LEGACY_DISCOVERY",
+                "code": "UNSUPPORTED_LUA_EFFECT_SHAPE",
+                "message": "the registered effect has no statically bound SetOperation callback",
+                "evidenceIds": []
+              }
+            ],
+            "verdict": "UNKNOWN",
+            "candidateSha256": "cc3a979e6b7fd847caed390695c291b0b8e05854b6bdfe072094db2cfa9b82e4"
+          },
+          {
+            "analysisArtifact": null,
+            "analysisArtifactSha256": null,
+            "compileResultSha256": null,
+            "identityScheme": "ocg-legacy-lua-semantic-effect-identity/v1",
+            "kind": "TYPED_UNKNOWN",
+            "legacyAcceptedAsTruth": false,
+            "semanticArtifact": {
+              "identityScheme": "ocg-legacy-lua-semantic-effect-identity/v1",
+              "kind": "TYPED_UNKNOWN",
+              "partialPlan": null,
+              "semanticEffectIdentity": null,
+              "sourceSpans": [
+                {
+                  "confidence": 1,
+                  "endOffset": 515,
+                  "exactText": "Effect.CreateEffect(c)",
+                  "parserMethod": "MIGRATED_LEGACY",
+                  "schemaVersion": "ocg-source-span/v1",
+                  "sourceDocumentId": "legacy-script:cid-15620:passcode-61159609:c4e3bc2f32faf7e0",
+                  "startOffset": 493,
+                  "textHash": "ec6dd4b57e1a940f3591d2d765582ebef0f878eac8a863943b169963684f9884",
+                  "verificationStatus": "CANDIDATE"
+                },
+                {
+                  "confidence": 1,
+                  "endOffset": 635,
+                  "exactText": "e2:SetType(EFFECT_TYPE_IGNITION)",
+                  "parserMethod": "MIGRATED_LEGACY",
+                  "schemaVersion": "ocg-source-span/v1",
+                  "sourceDocumentId": "legacy-script:cid-15620:passcode-61159609:c4e3bc2f32faf7e0",
+                  "startOffset": 603,
+                  "textHash": "2b8ad2ed3b6a8f493720aa35761f732424f7c1e9394308e6a586f48b60f5b4a7",
+                  "verificationStatus": "CANDIDATE"
+                },
+                {
+                  "confidence": 1,
+                  "endOffset": 664,
+                  "exactText": "e2:SetRange(LOCATION_SZONE)",
+                  "parserMethod": "MIGRATED_LEGACY",
+                  "schemaVersion": "ocg-source-span/v1",
+                  "sourceDocumentId": "legacy-script:cid-15620:passcode-61159609:c4e3bc2f32faf7e0",
+                  "startOffset": 637,
+                  "textHash": "be2a9cba07acef57fa78b1ae57c7060d99ca29044f445210afc85c15df48b74c",
+                  "verificationStatus": "CANDIDATE"
+                },
+                {
+                  "confidence": 1,
+                  "endOffset": 694,
+                  "exactText": "e2:SetCountLimit(1,61159609)",
+                  "parserMethod": "MIGRATED_LEGACY",
+                  "schemaVersion": "ocg-source-span/v1",
+                  "sourceDocumentId": "legacy-script:cid-15620:passcode-61159609:c4e3bc2f32faf7e0",
+                  "startOffset": 666,
+                  "textHash": "45be7b2724877fccfe44e593b62a6101f5478a6b1f02401f4e73a6139dcec112",
+                  "verificationStatus": "CANDIDATE"
+                },
+                {
+                  "confidence": 1,
+                  "endOffset": 724,
+                  "exactText": "e2:SetTarget(c61159609.sptg)",
+                  "parserMethod": "MIGRATED_LEGACY",
+                  "schemaVersion": "ocg-source-span/v1",
+                  "sourceDocumentId": "legacy-script:cid-15620:passcode-61159609:c4e3bc2f32faf7e0",
+                  "startOffset": 696,
+                  "textHash": "e4ed73155fca3639eeb476d7ba223d0b3f342cb7a26791aa8318df87dc13a214",
+                  "verificationStatus": "CANDIDATE"
+                },
+                {
+                  "confidence": 1,
+                  "endOffset": 757,
+                  "exactText": "e2:SetOperation(c61159609.spop)",
+                  "parserMethod": "MIGRATED_LEGACY",
+                  "schemaVersion": "ocg-source-span/v1",
+                  "sourceDocumentId": "legacy-script:cid-15620:passcode-61159609:c4e3bc2f32faf7e0",
+                  "startOffset": 726,
+                  "textHash": "d88a9e9e40d8189ef4276ec93164fb026521d62ed4dbf84e592a8c966f53655e",
+                  "verificationStatus": "CANDIDATE"
+                },
+                {
+                  "confidence": 1,
+                  "endOffset": 779,
+                  "exactText": "c:RegisterEffect(e2)",
+                  "parserMethod": "MIGRATED_LEGACY",
+                  "schemaVersion": "ocg-source-span/v1",
+                  "sourceDocumentId": "legacy-script:cid-15620:passcode-61159609:c4e3bc2f32faf7e0",
+                  "startOffset": 759,
+                  "textHash": "310292c802925edf60bc3404859d0fb01656ae473c51412610952d2f631aada9",
+                  "verificationStatus": "CANDIDATE"
+                },
+                {
+                  "confidence": 1,
+                  "endOffset": 1472,
+                  "exactText": "function c61159609.spfilter(c,e,tp)\n\treturn c:IsLevel(4) and c:IsRace(RACE_SPELLCASTER) and c:IsCanBeSpecialSummoned(e,0,tp,false,false)\nend",
+                  "parserMethod": "MIGRATED_LEGACY",
+                  "schemaVersion": "ocg-source-span/v1",
+                  "sourceDocumentId": "legacy-script:cid-15620:passcode-61159609:c4e3bc2f32faf7e0",
+                  "startOffset": 1332,
+                  "textHash": "4f3254b32157a689249783fee1027fb8334c4339901bbf384e136799a1bd0504",
+                  "verificationStatus": "CANDIDATE"
+                },
+                {
+                  "confidence": 1,
+                  "endOffset": 1754,
+                  "exactText": "function c61159609.sptg(e,tp,eg,ep,ev,re,r,rp,chk)\n\tif chk==0 then return Duel.GetLocationCount(tp,LOCATION_MZONE)>0\n\t\tand Duel.IsExistingMatchingCard(c61159609.spfilter,tp,LOCATION_HAND,0,1,nil,e,tp) end\n\tDuel.SetOperationInfo(0,CATEGORY_SPECIAL_SUMMON,nil,1,tp,LOCATION_HAND)\nend",
+                  "parserMethod": "MIGRATED_LEGACY",
+                  "schemaVersion": "ocg-source-span/v1",
+                  "sourceDocumentId": "legacy-script:cid-15620:passcode-61159609:c4e3bc2f32faf7e0",
+                  "startOffset": 1473,
+                  "textHash": "b25c0ad266f5e32899406a402b838e72bcdf54f2a85d1ba94ac31b3641b5aa1d",
+                  "verificationStatus": "CANDIDATE"
+                },
+                {
+                  "confidence": 1,
+                  "endOffset": 2078,
+                  "exactText": "function c61159609.spop(e,tp,eg,ep,ev,re,r,rp)\n\tif Duel.GetLocationCount(tp,LOCATION_MZONE)<=0 then return end\n\tDuel.Hint(HINT_SELECTMSG,tp,HINTMSG_SPSUMMON)\n\tlocal g=Duel.SelectMatchingCard(tp,c61159609.spfilter,tp,LOCATION_HAND,0,1,1,nil,e,tp)\n\tif #g>0 then\n\t\tDuel.SpecialSummon(g,0,tp,tp,false,false,POS_FACEUP)\n\tend\nend",
+                  "parserMethod": "MIGRATED_LEGACY",
+                  "schemaVersion": "ocg-source-span/v1",
+                  "sourceDocumentId": "legacy-script:cid-15620:passcode-61159609:c4e3bc2f32faf7e0",
+                  "startOffset": 1755,
+                  "textHash": "414f200e1389846b77e8b288c382afd3060833f6961c0b993ccf468684c671d8",
+                  "verificationStatus": "CANDIDATE"
+                }
+              ],
+              "unknownReasons": [
+                {
+                  "code": "UNSUPPORTED_LUA_SEMANTICS",
+                  "evidenceIds": [],
+                  "message": "unsupported normalized Lua semantic UNSUPPORTED_INTERNAL_SEMANTIC_FUNCTION_REFERENCE",
+                  "phase": "LEGACY_DISCOVERY"
+                }
+              ]
+            },
+            "semanticArtifactSha256": "49b345f24e36f954497f784fc3bb57b19ac00ecc112b4c8f88233cad0288a506",
+            "semanticEffectIdentity": null,
+            "unknownReasons": [
+              {
+                "phase": "LEGACY_DISCOVERY",
+                "code": "UNSUPPORTED_LUA_SEMANTICS",
+                "message": "unsupported normalized Lua semantic UNSUPPORTED_INTERNAL_SEMANTIC_FUNCTION_REFERENCE",
+                "evidenceIds": []
+              },
+              {
+                "phase": "LEGACY_LUA_DISCOVERY",
+                "code": "LEGACY_LUA_EFFECT_IDENTITY_UNAVAILABLE",
+                "message": "legacy effect candidate has no stable semantic identity",
+                "evidenceIds": [
+                  "legacy-script:cid-15620:passcode-61159609:c4e3bc2f32faf7e0"
+                ]
+              }
+            ],
+            "verdict": "UNKNOWN",
+            "candidateSha256": "b69662a824435c94ac7f088936c3baa0a419274f8b5af32cd67f4971b5738155"
+          },
+          {
+            "analysisArtifact": null,
+            "analysisArtifactSha256": null,
+            "compileResultSha256": null,
+            "identityScheme": "ocg-legacy-lua-semantic-effect-identity/v1",
+            "kind": "TYPED_UNKNOWN",
+            "legacyAcceptedAsTruth": false,
+            "semanticArtifact": {
+              "identityScheme": "ocg-legacy-lua-semantic-effect-identity/v1",
+              "kind": "TYPED_UNKNOWN",
+              "partialPlan": null,
+              "semanticEffectIdentity": null,
+              "sourceSpans": [
+                {
+                  "confidence": 1,
+                  "endOffset": 451,
+                  "exactText": "c:RegisterEffect(e1)",
+                  "parserMethod": "MIGRATED_LEGACY",
+                  "schemaVersion": "ocg-source-span/v1",
+                  "sourceDocumentId": "legacy-script:cid-15620:passcode-61159609:c4e3bc2f32faf7e0",
+                  "startOffset": 431,
+                  "textHash": "cdaba3a827695106691a9246dc70561679fcc35424d2b9c03cf61947b9e05ce5",
+                  "verificationStatus": "CANDIDATE"
+                }
+              ],
+              "unknownReasons": [
+                {
+                  "code": "UNSUPPORTED_LUA_EFFECT_SETTER",
+                  "evidenceIds": [],
+                  "message": "RegisterEffect argument could not be bound to one lexical Effect allocation",
+                  "phase": "LEGACY_DISCOVERY"
+                }
+              ]
+            },
+            "semanticArtifactSha256": "2883610d509db3cb9018e29df93e7825bd85c47f6f2c931d64456e98e86022ad",
+            "semanticEffectIdentity": null,
+            "unknownReasons": [
+              {
+                "phase": "LEGACY_DISCOVERY",
+                "code": "UNSUPPORTED_LUA_EFFECT_SETTER",
+                "message": "RegisterEffect argument could not be bound to one lexical Effect allocation",
+                "evidenceIds": []
+              },
+              {
+                "phase": "LEGACY_LUA_DISCOVERY",
+                "code": "LEGACY_LUA_EFFECT_IDENTITY_UNAVAILABLE",
+                "message": "legacy effect candidate has no stable semantic identity",
+                "evidenceIds": [
+                  "legacy-script:cid-15620:passcode-61159609:c4e3bc2f32faf7e0"
+                ]
+              }
+            ],
+            "verdict": "UNKNOWN",
+            "candidateSha256": "c7fde233a26a584bca045eb5c6370a209f29033072efee8c54cb039bbe3cdcfa"
+          }
+        ],
+        "engineBinding": {
+          "capabilitiesSha256": "dc9dd6eda9170dd243e5ba02ad3dd18805b8f64a0612515af51f3e15ad0f78e3",
+          "requiredCapabilities": [
+            "compatibility/legacy-lua-effect-enumeration/v1",
+            "compatibility/legacy-lua-semantic-discovery/v1",
+            "movement/return-to-hand-legality/v1",
+            "operation/dependency-expansion/v1"
+          ],
+          "versions": {
+            "artifacts": {
+              "activationLegalityScenarioVersion": "ocg-activation-legality-scenario/v1",
+              "appliedEffectCreationResultVersion": "ocg-applied-effect-creation-result/v1",
+              "appliedEffectInstanceVersion": "ocg-applied-effect-instance/v1",
+              "appliedEffectLifecycleCertificateVersion": "ocg-applied-effect-lifecycle-certificate/v1",
+              "appliedEffectLifecycleTraceEntryVersion": "ocg-applied-effect-lifecycle-trace-entry/v1",
+              "appliedEffectReconciliationResultVersion": "ocg-applied-effect-reconciliation-result/v1",
+              "assistantContractVersion": "ocg-assistant-contract/v1",
+              "capabilityManifestVersion": "ocg-capability-manifest/v1",
+              "cardDefinitionVersion": "ocg-card-definition/v2",
+              "cardInstanceVersion": "ocg-card-instance/v1",
+              "cardProgramVersion": "ocg-card-program/v1",
+              "compileCardDefinitionResultVersion": "ocg-compile-card-definition-result/v1",
+              "compileEffectDefinitionsResultVersion": "ocg-compile-effect-definitions-result/v1",
+              "effectDefinitionVersion": "ocg-effect-definition/v1",
+              "eventGroupVersion": "ocg-event-group/v1",
+              "eventVersion": "ocg-game-event/v1",
+              "formalDifferentialSnapshotVersion": "ocg-formal-differential-snapshot/v1",
+              "informationProcedureCertificateVersion": "ocg-information-procedure-certificate/v1",
+              "informationProcedureStepResultVersion": "ocg-information-procedure-step-result/v1",
+              "informationProcedureTraceEntryVersion": "ocg-information-procedure-trace-entry/v1",
+              "informationStateVersion": "ocg-information-state/v1",
+              "legacyDifferentialCertificateVersion": "ocg-legacy-differential-certificate/v1",
+              "legacyDifferentialResultVersion": "ocg-legacy-differential-result/v1",
+              "legacyLuaActivationPlanV1Version": "ocg-legacy-lua-activation-plan/v1",
+              "legacyLuaActivationPlanVersion": "ocg-legacy-lua-activation-plan/v2",
+              "legacyLuaApiSemanticsRegistryVersion": "ocg-lua-api-semantics-registry/v1",
+              "legacyLuaCandidateAnalysisV1Version": "ocg-legacy-lua-candidate-analysis/v1",
+              "legacyLuaCandidateAnalysisVersion": "ocg-legacy-lua-candidate-analysis/v2",
+              "legacyLuaCompileResultV1Version": "ocg-legacy-lua-compile-result/v1",
+              "legacyLuaCompileResultVersion": "ocg-legacy-lua-compile-result/v2",
+              "legacyLuaEffectCandidateSetVersion": "ocg-legacy-lua-effect-candidate-set/v1",
+              "legacyObservationVersion": "ocg-legacy-observation/v1",
+              "luaApiSemanticsRegistryVersion": "ocg-lua-api-semantics-registry/v2",
+              "operationDependencyGraphVersion": "ocg-operation-dependency-graph/v1",
+              "operationVersion": "ocg-operation/v1",
+              "proofCertificateVersion": "ocg-proof-certificate/v1",
+              "replayVersion": "ocg-replay/v1",
+              "researchRunVersion": "ocg-research-run-manifest/v1",
+              "researchSampleVersion": "ocg-research-sample/v1",
+              "resolutionFrameCertificateVersion": "ocg-resolution-frame-certificate/v1",
+              "resolutionFrameExecutionResultVersion": "ocg-resolution-frame-execution-result/v1",
+              "resolutionFrameSimulationBranchVersion": "ocg-resolution-frame-simulation-branch/v1",
+              "resolutionFrameSimulationResultVersion": "ocg-resolution-frame-simulation-result/v1",
+              "resolutionFrameTraceEntryVersion": "ocg-resolution-frame-trace-entry/v1",
+              "runtimeOverlayCertificateVersion": "ocg-runtime-overlay-certificate/v1",
+              "runtimeOverlayStepResultVersion": "ocg-runtime-overlay-step-result/v1",
+              "runtimeOverlayTraceEntryVersion": "ocg-runtime-overlay-trace-entry/v1",
+              "sourceDocumentVersion": "ocg-source-document/v1",
+              "sourceSpanVersion": "ocg-source-span/v1",
+              "triggerCandidateVersion": "ocg-trigger-candidate/v1",
+              "triggerChainCertificateVersion": "ocg-trigger-chain-certificate/v1",
+              "triggerChainLinkVersion": "ocg-trigger-chain-link/v1",
+              "triggerRuleDefinitionVersion": "ocg-trigger-rule-definition/v1",
+              "triggerWindowVersion": "ocg-trigger-window/v1"
+            },
+            "compilerVersion": "ocg-card-compiler/v1",
+            "engineVersion": "ocg-formal-engine/0.5.0",
+            "irVersion": "ocg-effect-ir/v1",
+            "patternLibraryVersion": "ocg-pattern-library/v1",
+            "proofVerifierVersion": "ocg-proof-verifier/v1",
+            "rulesetVersion": "ocg-ruleset/2026-08-03-experimental",
+            "schemaVersion": "ocg-formal-engine/v1"
+          },
+          "versionsSha256": "da20b699ec6fb0102ebe70e5c508d60a88d93723b1f77e6e0ab399257927216e"
+        },
+        "kind": "LEGACY_LUA_SEMANTIC_RESOURCE",
+        "legacyAcceptedAsTruth": false,
+        "registryBinding": {
+          "pinnedCoreApiAbi": "ocgcore/11.0",
+          "pinnedCoreCommit": "0764db0c75b3d1d574880d365aa3695ab1f13b43",
+          "pinnedCoreRepository": "https://github.com/edo9300/ygopro-core.git",
+          "registryId": "formal:legacy-lua-api-semantics:v2",
+          "registrySha256": "346be302c791d9bbef09e579ecb7c33a6836c97849d2354de9e6f25905b79e5f",
+          "registryVersion": "2.0.0"
+        },
+        "resourceBinding": {
+          "documentVersion": "7bb79415e4f333be17b40ecc857273542451d7d8c5f224a80ccd1f7c316d87d9",
+          "locator": "resource-lock://62ea81162b6ca7f77681501dc416bcff2ae2c1d60c0bf725621f1f739224c06e/scripts/c61159609.lua",
+          "retrievedAt": "2026-08-04T10:06:56.716Z",
+          "sourceContentSha256": "c4e3bc2f32faf7e0ec7b919a71974115e61aa8a17d2f858ca2d44a32375f51d8",
+          "sourceDocumentId": "legacy-script:cid-15620:passcode-61159609:c4e3bc2f32faf7e0"
+        },
+        "resourceId": "legacy_lua_resource_ea387346def7858fa172d51a",
+        "schemaVersion": "ocg-assistant-lua-semantic-resource/v1",
+        "status": "TYPED_UNKNOWN",
+        "unknownReasons": [
+          {
+            "phase": "LEGACY_DISCOVERY",
+            "code": "LEGACY_SOURCE_NON_AUTHORITATIVE",
+            "message": "legacy Lua is discovery and differential evidence, not rules authority",
+            "evidenceIds": [
+              "legacy-script:cid-15620:passcode-61159609:c4e3bc2f32faf7e0"
+            ]
+          }
+        ],
+        "verdict": "UNKNOWN",
+        "resourceSha256": "70960c44ca70031793030b81af4025d7c11561fd9f1c91a3539fbc9032a09d2f"
+      }
+    },
+    {
+      "cid": "17788",
+      "passcode": "80275707",
+      "aliases": [
+        "道化鳥ラフィンパフィン",
+        "小丑鸟 笑盈盈海鹦",
+        "laughing puffin"
+      ],
+      "resource": {
+        "authority": "LEGACY_COMPATIBILITY",
+        "canConfirmOfficialRuling": false,
+        "candidateSetSha256": "a2b68ea1ddfb0c8df6e44c7dac90698fa45dbdb0de542adc179829fc1ecce127",
+        "effectCandidates": [
+          {
+            "analysisArtifact": null,
+            "analysisArtifactSha256": null,
+            "compileResultSha256": "e379a179ab2443e9554d07a813fe9fdbe4245eb72944777d7325c54bd0b1a568",
+            "identityScheme": "ocg-legacy-lua-semantic-effect-identity/v1",
+            "kind": "TYPED_UNKNOWN",
+            "legacyAcceptedAsTruth": false,
+            "semanticArtifact": {
+              "identityScheme": "ocg-legacy-lua-semantic-effect-identity/v1",
+              "kind": "TYPED_UNKNOWN",
+              "partialPlan": {
+                "activationLegalityChecks": [
+                  {
+                    "atomicOperation": "SPECIAL_SUMMON",
+                    "callbackSlot": "TARGET",
+                    "checkId": "5dc36073c456025a21d124047b63e088dd6b92a42fb9994c2babdc11b73d7f12",
+                    "dependencyGraph": {
+                      "dependencies": [
+                        "CHECK_CARD_SUMMON_ELIGIBILITY",
+                        "CHECK_ZONE_CAPACITY"
+                      ],
+                      "operation": "SPECIAL_SUMMON",
+                      "requiredMinimum": 1,
+                      "schemaVersion": "ocg-operation-dependency-graph/v1",
+                      "unresolvedSemantics": [],
+                      "versions": {
+                        "compilerVersion": "ocg-card-compiler/v1",
+                        "engineVersion": "ocg-formal-engine/0.5.0",
+                        "irVersion": "ocg-effect-ir/v1",
+                        "patternLibraryVersion": "ocg-pattern-library/v1",
+                        "proofVerifierVersion": "ocg-proof-verifier/v1",
+                        "rulesetVersion": "ocg-ruleset/2026-08-03-experimental",
+                        "schemaVersion": "ocg-formal-engine/v1"
+                      }
+                    },
+                    "discoveryPath": [
+                      "Effect.SetTarget",
+                      "CHECK_ONLY_RETURN",
+                      "Card.IsCanBeSpecialSummoned"
+                    ],
+                    "predicateApi": "Card.IsCanBeSpecialSummoned",
+                    "predicateSubject": {
+                      "kind": "VARIABLE",
+                      "name": "SOURCE_CARD"
+                    },
+                    "requiredMinimum": 1,
+                    "selector": null
+                  }
+                ],
+                "activationLegalityDependencies": [
+                  "CHECK_CARD_SUMMON_ELIGIBILITY",
+                  "CHECK_ZONE_CAPACITY"
+                ],
+                "apiSemanticsRegistryHash": "346be302c791d9bbef09e579ecb7c33a6836c97849d2354de9e6f25905b79e5f",
+                "apiSemanticsRegistryId": "formal:legacy-lua-api-semantics:v2",
+                "apiSemanticsRegistryVersion": "2.0.0",
+                "atomicOperations": [
+                  "UNKNOWN_OPERATION",
+                  "SPECIAL_SUMMON"
+                ],
+                "checkOnlyTargetProgram": {
+                  "kind": "LUA_AND",
+                  "left": {
+                    "kind": "BINARY",
+                    "left": {
+                      "api": "Duel.GetLocationCount",
+                      "arguments": [
+                        {
+                          "kind": "VARIABLE",
+                          "name": "PLAYER"
+                        },
+                        {
+                          "kind": "SYMBOL",
+                          "name": "LOCATION_MZONE"
+                        }
+                      ],
+                      "kind": "CALL"
+                    },
+                    "operator": ">",
+                    "right": {
+                      "kind": "LITERAL",
+                      "value": 0
+                    }
+                  },
+                  "right": {
+                    "api": "Card.IsCanBeSpecialSummoned",
+                    "arguments": [
+                      {
+                        "kind": "VARIABLE",
+                        "name": "SOURCE_CARD"
+                      },
+                      {
+                        "kind": "VARIABLE",
+                        "name": "EFFECT"
+                      },
+                      {
+                        "kind": "LITERAL",
+                        "value": 0
+                      },
+                      {
+                        "kind": "VARIABLE",
+                        "name": "PLAYER"
+                      },
+                      {
+                        "kind": "LITERAL",
+                        "value": false
+                      },
+                      {
+                        "kind": "LITERAL",
+                        "value": false
+                      }
+                    ],
+                    "kind": "CALL"
+                  }
+                },
+                "conditionProgram": {
+                  "api": "Duel.IsExistingMatchingCard",
+                  "arguments": [
+                    {
+                      "body": {
+                        "kind": "LUA_AND",
+                        "left": {
+                          "api": "Card.IsType",
+                          "arguments": [
+                            {
+                              "kind": "VARIABLE",
+                              "name": "FILTER_CARD"
+                            },
+                            {
+                              "kind": "BITSET_UNION",
+                              "members": [
+                                {
+                                  "kind": "SYMBOL",
+                                  "name": "TYPE_SPELL"
+                                },
+                                {
+                                  "kind": "SYMBOL",
+                                  "name": "TYPE_TRAP"
+                                }
+                              ]
+                            }
+                          ],
+                          "kind": "CALL"
+                        },
+                        "right": {
+                          "api": "Card.IsFaceup",
+                          "arguments": [
+                            {
+                              "kind": "VARIABLE",
+                              "name": "FILTER_CARD"
+                            }
+                          ],
+                          "kind": "CALL"
+                        }
+                      },
+                      "kind": "LAMBDA",
+                      "parameters": [
+                        "FILTER_CARD"
+                      ]
+                    },
+                    {
+                      "kind": "VARIABLE",
+                      "name": "PLAYER"
+                    },
+                    {
+                      "kind": "SYMBOL",
+                      "name": "LOCATION_ONFIELD"
+                    },
+                    {
+                      "kind": "SYMBOL",
+                      "name": "LOCATION_ONFIELD"
+                    },
+                    {
+                      "kind": "LITERAL",
+                      "value": 1
+                    },
+                    {
+                      "kind": "LITERAL",
+                      "value": null
+                    }
+                  ],
+                  "kind": "CALL"
+                },
+                "costAtomicOperations": [],
+                "costExecutionProgram": {
+                  "kind": "SEQUENCE",
+                  "steps": []
+                },
+                "costOperationApis": [],
+                "costProgram": {
+                  "kind": "LITERAL",
+                  "value": true
+                },
+                "discoveredCostOperations": [],
+                "discoveredOperations": [
+                  {
+                    "atomicOperation": "UNKNOWN_OPERATION",
+                    "dependencyGraph": {
+                      "dependencies": [],
+                      "operation": "UNKNOWN_OPERATION",
+                      "requiredMinimum": 1,
+                      "schemaVersion": "ocg-operation-dependency-graph/v1",
+                      "unresolvedSemantics": [
+                        {
+                          "code": "UNSUPPORTED_ATOMIC_OPERATION_DEPENDENCIES",
+                          "evidenceIds": [],
+                          "message": "no dependency expansion is registered for this atomic operation",
+                          "phase": "LEGACY_DISCOVERY"
+                        }
+                      ],
+                      "versions": {
+                        "compilerVersion": "ocg-card-compiler/v1",
+                        "engineVersion": "ocg-formal-engine/0.5.0",
+                        "irVersion": "ocg-effect-ir/v1",
+                        "patternLibraryVersion": "ocg-pattern-library/v1",
+                        "proofVerifierVersion": "ocg-proof-verifier/v1",
+                        "rulesetVersion": "ocg-ruleset/2026-08-03-experimental",
+                        "schemaVersion": "ocg-formal-engine/v1"
+                      }
+                    },
+                    "discoveryPath": [
+                      "Effect.SetOperation",
+                      "RESOLUTION_PHASE",
+                      "LuaMethod.IsRelateToEffect"
+                    ],
+                    "operationApi": "LuaMethod.IsRelateToEffect"
+                  },
+                  {
+                    "atomicOperation": "SPECIAL_SUMMON",
+                    "dependencyGraph": {
+                      "dependencies": [
+                        "CHECK_CARD_SUMMON_ELIGIBILITY",
+                        "CHECK_ZONE_CAPACITY"
+                      ],
+                      "operation": "SPECIAL_SUMMON",
+                      "requiredMinimum": 1,
+                      "schemaVersion": "ocg-operation-dependency-graph/v1",
+                      "unresolvedSemantics": [],
+                      "versions": {
+                        "compilerVersion": "ocg-card-compiler/v1",
+                        "engineVersion": "ocg-formal-engine/0.5.0",
+                        "irVersion": "ocg-effect-ir/v1",
+                        "patternLibraryVersion": "ocg-pattern-library/v1",
+                        "proofVerifierVersion": "ocg-proof-verifier/v1",
+                        "rulesetVersion": "ocg-ruleset/2026-08-03-experimental",
+                        "schemaVersion": "ocg-formal-engine/v1"
+                      }
+                    },
+                    "discoveryPath": [
+                      "Effect.SetOperation",
+                      "RESOLUTION_PHASE",
+                      "Duel.SpecialSummon"
+                    ],
+                    "operationApi": "Duel.SpecialSummon"
+                  }
+                ],
+                "identityScheme": "ocg-legacy-lua-semantic-effect-identity/v1",
+                "normalizations": [
+                  "CHECK_ONLY_ZERO_GUARD"
+                ],
+                "operationApis": [
+                  "LuaMethod.IsRelateToEffect",
+                  "Duel.SpecialSummon"
+                ],
+                "operationProgram": {
+                  "kind": "SEQUENCE",
+                  "steps": [
+                    {
+                      "kind": "ASSIGN",
+                      "target": "OPERATION_LOCAL_0",
+                      "value": {
+                        "kind": "VARIABLE",
+                        "name": "SOURCE_CARD"
+                      }
+                    },
+                    {
+                      "condition": {
+                        "argument": {
+                          "api": "LuaMethod.IsRelateToEffect",
+                          "arguments": [
+                            {
+                              "kind": "VARIABLE",
+                              "name": "OPERATION_LOCAL_0"
+                            },
+                            {
+                              "kind": "VARIABLE",
+                              "name": "EFFECT"
+                            }
+                          ],
+                          "kind": "CALL"
+                        },
+                        "kind": "NOT"
+                      },
+                      "elseProgram": {
+                        "kind": "SEQUENCE",
+                        "steps": []
+                      },
+                      "kind": "IF",
+                      "thenProgram": {
+                        "kind": "SEQUENCE",
+                        "steps": [
+                          {
+                            "kind": "RETURN",
+                            "value": null
+                          }
+                        ]
+                      }
+                    },
+                    {
+                      "api": "Duel.SpecialSummon",
+                      "arguments": [
+                        {
+                          "kind": "VARIABLE",
+                          "name": "OPERATION_LOCAL_0"
+                        },
+                        {
+                          "kind": "LITERAL",
+                          "value": 0
+                        },
+                        {
+                          "kind": "VARIABLE",
+                          "name": "PLAYER"
+                        },
+                        {
+                          "kind": "VARIABLE",
+                          "name": "PLAYER"
+                        },
+                        {
+                          "kind": "LITERAL",
+                          "value": false
+                        },
+                        {
+                          "kind": "LITERAL",
+                          "value": false
+                        },
+                        {
+                          "kind": "SYMBOL",
+                          "name": "POS_FACEUP"
+                        }
+                      ],
+                      "kind": "CALL"
+                    }
+                  ]
+                },
+                "registrationSemantics": [
+                  {
+                    "arguments": [
+                      {
+                        "kind": "LITERAL",
+                        "value": 1
+                      },
+                      {
+                        "kind": "SYMBOL",
+                        "name": "SOURCE_DEFINITION_ID"
+                      }
+                    ],
+                    "setter": "SetCountLimit"
+                  },
+                  {
+                    "arguments": [
+                      {
+                        "kind": "SYMBOL",
+                        "name": "LOCATION_HAND"
+                      }
+                    ],
+                    "setter": "SetRange"
+                  },
+                  {
+                    "arguments": [
+                      {
+                        "kind": "SYMBOL",
+                        "name": "EFFECT_TYPE_IGNITION"
+                      }
+                    ],
+                    "setter": "SetType"
+                  }
+                ],
+                "requiredCapabilities": [
+                  "compatibility/legacy-lua-semantic-discovery/v1",
+                  "compatibility/legacy-lua-effect-enumeration/v1",
+                  "operation/dependency-expansion/v1"
+                ],
+                "requiredLegacyApis": [
+                  "Card.IsCanBeSpecialSummoned",
+                  "Card.IsFaceup",
+                  "Card.IsType",
+                  "Duel.GetLocationCount",
+                  "Duel.IsExistingMatchingCard",
+                  "Duel.SetOperationInfo",
+                  "Duel.SpecialSummon"
+                ],
+                "schemaVersion": "ocg-legacy-lua-activation-plan/v2",
+                "semanticEffectIdentity": "19512a9bf33e4e36173fa42154aeb293e4ad86f46174e1e13b464fae31421627",
+                "semanticFingerprint": "95517a1c4b1e67f9507b4a2a9e92cad174f235a98464a2f72ace9bb258fdd330",
+                "sourceContentHash": "1d01880ce1f12d90c00dbe521f9cc45761020b4d9192f7e4451a09dca23bd372",
+                "sourceDocumentId": "legacy-script:cid-17788:passcode-80275707:1d01880ce1f12d90",
+                "sourceSpans": [
+                  {
+                    "confidence": 1,
+                    "endOffset": 114,
+                    "exactText": "Effect.CreateEffect(c)",
+                    "parserMethod": "MIGRATED_LEGACY",
+                    "schemaVersion": "ocg-source-span/v1",
+                    "sourceDocumentId": "legacy-script:cid-17788:passcode-80275707:1d01880ce1f12d90",
+                    "startOffset": 92,
+                    "textHash": "ec6dd4b57e1a940f3591d2d765582ebef0f878eac8a863943b169963684f9884",
+                    "verificationStatus": "CANDIDATE"
+                  },
+                  {
+                    "confidence": 1,
+                    "endOffset": 228,
+                    "exactText": "e1:SetType(EFFECT_TYPE_IGNITION)",
+                    "parserMethod": "MIGRATED_LEGACY",
+                    "schemaVersion": "ocg-source-span/v1",
+                    "sourceDocumentId": "legacy-script:cid-17788:passcode-80275707:1d01880ce1f12d90",
+                    "startOffset": 196,
+                    "textHash": "a9d850912e8d8a3c799f91b92ad63d160c69e707170e46ac357e1cdab1d1ff9e",
+                    "verificationStatus": "CANDIDATE"
+                  },
+                  {
+                    "confidence": 1,
+                    "endOffset": 256,
+                    "exactText": "e1:SetRange(LOCATION_HAND)",
+                    "parserMethod": "MIGRATED_LEGACY",
+                    "schemaVersion": "ocg-source-span/v1",
+                    "sourceDocumentId": "legacy-script:cid-17788:passcode-80275707:1d01880ce1f12d90",
+                    "startOffset": 230,
+                    "textHash": "a6f76b33c54f7c3a9bebb9d944bd5020bb24870c17bcb33fb290d525feefc116",
+                    "verificationStatus": "CANDIDATE"
+                  },
+                  {
+                    "confidence": 1,
+                    "endOffset": 280,
+                    "exactText": "e1:SetCountLimit(1,id)",
+                    "parserMethod": "MIGRATED_LEGACY",
+                    "schemaVersion": "ocg-source-span/v1",
+                    "sourceDocumentId": "legacy-script:cid-17788:passcode-80275707:1d01880ce1f12d90",
+                    "startOffset": 258,
+                    "textHash": "a15fa0fabea7fa14d1ad04e847637b2b89b9d70daf672768cdb93752dddd7657",
+                    "verificationStatus": "CANDIDATE"
+                  },
+                  {
+                    "confidence": 1,
+                    "endOffset": 306,
+                    "exactText": "e1:SetCondition(s.spcon)",
+                    "parserMethod": "MIGRATED_LEGACY",
+                    "schemaVersion": "ocg-source-span/v1",
+                    "sourceDocumentId": "legacy-script:cid-17788:passcode-80275707:1d01880ce1f12d90",
+                    "startOffset": 282,
+                    "textHash": "cf2999a18448b6bfe31893efc238d401229de169ae737e572b3f770e3203d8e0",
+                    "verificationStatus": "CANDIDATE"
+                  },
+                  {
+                    "confidence": 1,
+                    "endOffset": 328,
+                    "exactText": "e1:SetTarget(s.sptg)",
+                    "parserMethod": "MIGRATED_LEGACY",
+                    "schemaVersion": "ocg-source-span/v1",
+                    "sourceDocumentId": "legacy-script:cid-17788:passcode-80275707:1d01880ce1f12d90",
+                    "startOffset": 308,
+                    "textHash": "8e6d0e74cad7980a7e59efcf6091f81c9a90ee2c00f71716b36dba17610c37b4",
+                    "verificationStatus": "CANDIDATE"
+                  },
+                  {
+                    "confidence": 1,
+                    "endOffset": 353,
+                    "exactText": "e1:SetOperation(s.spop)",
+                    "parserMethod": "MIGRATED_LEGACY",
+                    "schemaVersion": "ocg-source-span/v1",
+                    "sourceDocumentId": "legacy-script:cid-17788:passcode-80275707:1d01880ce1f12d90",
+                    "startOffset": 330,
+                    "textHash": "d47223db38af476781b7d92012272a6e3019e6076ff908143a8b6681b5f9a0fb",
+                    "verificationStatus": "CANDIDATE"
+                  },
+                  {
+                    "confidence": 1,
+                    "endOffset": 375,
+                    "exactText": "c:RegisterEffect(e1)",
+                    "parserMethod": "MIGRATED_LEGACY",
+                    "schemaVersion": "ocg-source-span/v1",
+                    "sourceDocumentId": "legacy-script:cid-17788:passcode-80275707:1d01880ce1f12d90",
+                    "startOffset": 355,
+                    "textHash": "cdaba3a827695106691a9246dc70561679fcc35424d2b9c03cf61947b9e05ce5",
+                    "verificationStatus": "CANDIDATE"
+                  },
+                  {
+                    "confidence": 1,
+                    "endOffset": 990,
+                    "exactText": "function s.filter(c)\n\treturn c:IsType(TYPE_SPELL+TYPE_TRAP) and c:IsFaceup()\nend",
+                    "parserMethod": "MIGRATED_LEGACY",
+                    "schemaVersion": "ocg-source-span/v1",
+                    "sourceDocumentId": "legacy-script:cid-17788:passcode-80275707:1d01880ce1f12d90",
+                    "startOffset": 910,
+                    "textHash": "b05285ef865148779b19207ef01c6ddba5d069dbab58810eced13ea17cf76638",
+                    "verificationStatus": "CANDIDATE"
+                  },
+                  {
+                    "confidence": 1,
+                    "endOffset": 1123,
+                    "exactText": "function s.spcon(e,tp,eg,ep,ev,re,r,rp)\n\treturn Duel.IsExistingMatchingCard(s.filter,tp,LOCATION_ONFIELD,LOCATION_ONFIELD,1,nil)\nend",
+                    "parserMethod": "MIGRATED_LEGACY",
+                    "schemaVersion": "ocg-source-span/v1",
+                    "sourceDocumentId": "legacy-script:cid-17788:passcode-80275707:1d01880ce1f12d90",
+                    "startOffset": 991,
+                    "textHash": "d407b4974e03906537f708808fe9752e72b1eaf9dcc4bfe9f49c08f95a06fe44",
+                    "verificationStatus": "CANDIDATE"
+                  },
+                  {
+                    "confidence": 1,
+                    "endOffset": 1375,
+                    "exactText": "function s.sptg(e,tp,eg,ep,ev,re,r,rp,chk)\n\tif chk==0 then return Duel.GetLocationCount(tp,LOCATION_MZONE)>0\n\t\tand e:GetHandler():IsCanBeSpecialSummoned(e,0,tp,false,false) end\n\tDuel.SetOperationInfo(0,CATEGORY_SPECIAL_SUMMON,e:GetHandler(),1,0,0)\nend",
+                    "parserMethod": "MIGRATED_LEGACY",
+                    "schemaVersion": "ocg-source-span/v1",
+                    "sourceDocumentId": "legacy-script:cid-17788:passcode-80275707:1d01880ce1f12d90",
+                    "startOffset": 1124,
+                    "textHash": "c73a698aea876b6e715a3720eef5c5bdfab54a3a787bd8513e74372661bab52b",
+                    "verificationStatus": "CANDIDATE"
+                  },
+                  {
+                    "confidence": 1,
+                    "endOffset": 1542,
+                    "exactText": "function s.spop(e,tp,eg,ep,ev,re,r,rp)\n\tlocal c=e:GetHandler()\n\tif not c:IsRelateToEffect(e) then return end\n\tDuel.SpecialSummon(c,0,tp,tp,false,false,POS_FACEUP)\nend",
+                    "parserMethod": "MIGRATED_LEGACY",
+                    "schemaVersion": "ocg-source-span/v1",
+                    "sourceDocumentId": "legacy-script:cid-17788:passcode-80275707:1d01880ce1f12d90",
+                    "startOffset": 1376,
+                    "textHash": "1ae70d83ff611b29c99c4655da8353ad869f086bb465aa823826e32c5b071124",
+                    "verificationStatus": "CANDIDATE"
+                  }
+                ],
+                "targetSelectionProgram": {
+                  "kind": "SEQUENCE",
+                  "steps": [
+                    {
+                      "api": "Duel.SetOperationInfo",
+                      "arguments": [
+                        {
+                          "kind": "LITERAL",
+                          "value": 0
+                        },
+                        {
+                          "kind": "SYMBOL",
+                          "name": "CATEGORY_SPECIAL_SUMMON"
+                        },
+                        {
+                          "kind": "VARIABLE",
+                          "name": "SOURCE_CARD"
+                        },
+                        {
+                          "kind": "LITERAL",
+                          "value": 1
+                        },
+                        {
+                          "kind": "LITERAL",
+                          "value": 0
+                        },
+                        {
+                          "kind": "LITERAL",
+                          "value": 0
+                        }
+                      ],
+                      "kind": "CALL"
+                    }
+                  ]
+                },
+                "unresolvedSemantics": [
+                  {
+                    "code": "UNSUPPORTED_ATOMIC_OPERATION_DEPENDENCIES",
+                    "evidenceIds": [],
+                    "message": "no dependency expansion is registered for this atomic operation",
+                    "phase": "LEGACY_DISCOVERY"
+                  }
+                ],
+                "verificationStatus": "LEGACY_DISCOVERY_ONLY",
+                "versions": {
+                  "compilerVersion": "ocg-card-compiler/v1",
+                  "engineVersion": "ocg-formal-engine/0.5.0",
+                  "irVersion": "ocg-effect-ir/v1",
+                  "patternLibraryVersion": "ocg-pattern-library/v1",
+                  "proofVerifierVersion": "ocg-proof-verifier/v1",
+                  "rulesetVersion": "ocg-ruleset/2026-08-03-experimental",
+                  "schemaVersion": "ocg-formal-engine/v1"
+                }
+              },
+              "semanticEffectIdentity": "19512a9bf33e4e36173fa42154aeb293e4ad86f46174e1e13b464fae31421627",
+              "sourceSpans": [
+                {
+                  "confidence": 1,
+                  "endOffset": 114,
+                  "exactText": "Effect.CreateEffect(c)",
+                  "parserMethod": "MIGRATED_LEGACY",
+                  "schemaVersion": "ocg-source-span/v1",
+                  "sourceDocumentId": "legacy-script:cid-17788:passcode-80275707:1d01880ce1f12d90",
+                  "startOffset": 92,
+                  "textHash": "ec6dd4b57e1a940f3591d2d765582ebef0f878eac8a863943b169963684f9884",
+                  "verificationStatus": "CANDIDATE"
+                },
+                {
+                  "confidence": 1,
+                  "endOffset": 228,
+                  "exactText": "e1:SetType(EFFECT_TYPE_IGNITION)",
+                  "parserMethod": "MIGRATED_LEGACY",
+                  "schemaVersion": "ocg-source-span/v1",
+                  "sourceDocumentId": "legacy-script:cid-17788:passcode-80275707:1d01880ce1f12d90",
+                  "startOffset": 196,
+                  "textHash": "a9d850912e8d8a3c799f91b92ad63d160c69e707170e46ac357e1cdab1d1ff9e",
+                  "verificationStatus": "CANDIDATE"
+                },
+                {
+                  "confidence": 1,
+                  "endOffset": 256,
+                  "exactText": "e1:SetRange(LOCATION_HAND)",
+                  "parserMethod": "MIGRATED_LEGACY",
+                  "schemaVersion": "ocg-source-span/v1",
+                  "sourceDocumentId": "legacy-script:cid-17788:passcode-80275707:1d01880ce1f12d90",
+                  "startOffset": 230,
+                  "textHash": "a6f76b33c54f7c3a9bebb9d944bd5020bb24870c17bcb33fb290d525feefc116",
+                  "verificationStatus": "CANDIDATE"
+                },
+                {
+                  "confidence": 1,
+                  "endOffset": 280,
+                  "exactText": "e1:SetCountLimit(1,id)",
+                  "parserMethod": "MIGRATED_LEGACY",
+                  "schemaVersion": "ocg-source-span/v1",
+                  "sourceDocumentId": "legacy-script:cid-17788:passcode-80275707:1d01880ce1f12d90",
+                  "startOffset": 258,
+                  "textHash": "a15fa0fabea7fa14d1ad04e847637b2b89b9d70daf672768cdb93752dddd7657",
+                  "verificationStatus": "CANDIDATE"
+                },
+                {
+                  "confidence": 1,
+                  "endOffset": 306,
+                  "exactText": "e1:SetCondition(s.spcon)",
+                  "parserMethod": "MIGRATED_LEGACY",
+                  "schemaVersion": "ocg-source-span/v1",
+                  "sourceDocumentId": "legacy-script:cid-17788:passcode-80275707:1d01880ce1f12d90",
+                  "startOffset": 282,
+                  "textHash": "cf2999a18448b6bfe31893efc238d401229de169ae737e572b3f770e3203d8e0",
+                  "verificationStatus": "CANDIDATE"
+                },
+                {
+                  "confidence": 1,
+                  "endOffset": 328,
+                  "exactText": "e1:SetTarget(s.sptg)",
+                  "parserMethod": "MIGRATED_LEGACY",
+                  "schemaVersion": "ocg-source-span/v1",
+                  "sourceDocumentId": "legacy-script:cid-17788:passcode-80275707:1d01880ce1f12d90",
+                  "startOffset": 308,
+                  "textHash": "8e6d0e74cad7980a7e59efcf6091f81c9a90ee2c00f71716b36dba17610c37b4",
+                  "verificationStatus": "CANDIDATE"
+                },
+                {
+                  "confidence": 1,
+                  "endOffset": 353,
+                  "exactText": "e1:SetOperation(s.spop)",
+                  "parserMethod": "MIGRATED_LEGACY",
+                  "schemaVersion": "ocg-source-span/v1",
+                  "sourceDocumentId": "legacy-script:cid-17788:passcode-80275707:1d01880ce1f12d90",
+                  "startOffset": 330,
+                  "textHash": "d47223db38af476781b7d92012272a6e3019e6076ff908143a8b6681b5f9a0fb",
+                  "verificationStatus": "CANDIDATE"
+                },
+                {
+                  "confidence": 1,
+                  "endOffset": 375,
+                  "exactText": "c:RegisterEffect(e1)",
+                  "parserMethod": "MIGRATED_LEGACY",
+                  "schemaVersion": "ocg-source-span/v1",
+                  "sourceDocumentId": "legacy-script:cid-17788:passcode-80275707:1d01880ce1f12d90",
+                  "startOffset": 355,
+                  "textHash": "cdaba3a827695106691a9246dc70561679fcc35424d2b9c03cf61947b9e05ce5",
+                  "verificationStatus": "CANDIDATE"
+                },
+                {
+                  "confidence": 1,
+                  "endOffset": 990,
+                  "exactText": "function s.filter(c)\n\treturn c:IsType(TYPE_SPELL+TYPE_TRAP) and c:IsFaceup()\nend",
+                  "parserMethod": "MIGRATED_LEGACY",
+                  "schemaVersion": "ocg-source-span/v1",
+                  "sourceDocumentId": "legacy-script:cid-17788:passcode-80275707:1d01880ce1f12d90",
+                  "startOffset": 910,
+                  "textHash": "b05285ef865148779b19207ef01c6ddba5d069dbab58810eced13ea17cf76638",
+                  "verificationStatus": "CANDIDATE"
+                },
+                {
+                  "confidence": 1,
+                  "endOffset": 1123,
+                  "exactText": "function s.spcon(e,tp,eg,ep,ev,re,r,rp)\n\treturn Duel.IsExistingMatchingCard(s.filter,tp,LOCATION_ONFIELD,LOCATION_ONFIELD,1,nil)\nend",
+                  "parserMethod": "MIGRATED_LEGACY",
+                  "schemaVersion": "ocg-source-span/v1",
+                  "sourceDocumentId": "legacy-script:cid-17788:passcode-80275707:1d01880ce1f12d90",
+                  "startOffset": 991,
+                  "textHash": "d407b4974e03906537f708808fe9752e72b1eaf9dcc4bfe9f49c08f95a06fe44",
+                  "verificationStatus": "CANDIDATE"
+                },
+                {
+                  "confidence": 1,
+                  "endOffset": 1375,
+                  "exactText": "function s.sptg(e,tp,eg,ep,ev,re,r,rp,chk)\n\tif chk==0 then return Duel.GetLocationCount(tp,LOCATION_MZONE)>0\n\t\tand e:GetHandler():IsCanBeSpecialSummoned(e,0,tp,false,false) end\n\tDuel.SetOperationInfo(0,CATEGORY_SPECIAL_SUMMON,e:GetHandler(),1,0,0)\nend",
+                  "parserMethod": "MIGRATED_LEGACY",
+                  "schemaVersion": "ocg-source-span/v1",
+                  "sourceDocumentId": "legacy-script:cid-17788:passcode-80275707:1d01880ce1f12d90",
+                  "startOffset": 1124,
+                  "textHash": "c73a698aea876b6e715a3720eef5c5bdfab54a3a787bd8513e74372661bab52b",
+                  "verificationStatus": "CANDIDATE"
+                },
+                {
+                  "confidence": 1,
+                  "endOffset": 1542,
+                  "exactText": "function s.spop(e,tp,eg,ep,ev,re,r,rp)\n\tlocal c=e:GetHandler()\n\tif not c:IsRelateToEffect(e) then return end\n\tDuel.SpecialSummon(c,0,tp,tp,false,false,POS_FACEUP)\nend",
+                  "parserMethod": "MIGRATED_LEGACY",
+                  "schemaVersion": "ocg-source-span/v1",
+                  "sourceDocumentId": "legacy-script:cid-17788:passcode-80275707:1d01880ce1f12d90",
+                  "startOffset": 1376,
+                  "textHash": "1ae70d83ff611b29c99c4655da8353ad869f086bb465aa823826e32c5b071124",
+                  "verificationStatus": "CANDIDATE"
+                }
+              ],
+              "unknownReasons": [
+                {
+                  "code": "UNSUPPORTED_ATOMIC_OPERATION_DEPENDENCIES",
+                  "evidenceIds": [],
+                  "message": "no dependency expansion is registered for this atomic operation",
+                  "phase": "LEGACY_DISCOVERY"
+                }
+              ]
+            },
+            "semanticArtifactSha256": "8948a51557e64ad7ff027385f8a7d543fe0b8d257f9b3d9503d8078419201e1f",
+            "semanticEffectIdentity": "19512a9bf33e4e36173fa42154aeb293e4ad86f46174e1e13b464fae31421627",
+            "unknownReasons": [
+              {
+                "phase": "LEGACY_DISCOVERY",
+                "code": "LEGACY_SOURCE_NON_AUTHORITATIVE",
+                "message": "legacy Lua is discovery and differential evidence, not rules authority",
+                "evidenceIds": [
+                  "legacy-script:cid-17788:passcode-80275707:1d01880ce1f12d90"
+                ]
+              },
+              {
+                "phase": "LEGACY_DISCOVERY",
+                "code": "UNSUPPORTED_ATOMIC_OPERATION_DEPENDENCIES",
+                "message": "no dependency expansion is registered for this atomic operation",
+                "evidenceIds": []
+              }
+            ],
+            "verdict": "UNKNOWN",
+            "candidateSha256": "bf812732f2daaf4d9fde58aef7ac15d3bb77b5e6a4c72fe696c59d9a1a76f173"
+          },
+          {
+            "analysisArtifact": null,
+            "analysisArtifactSha256": null,
+            "compileResultSha256": null,
+            "identityScheme": "ocg-legacy-lua-semantic-effect-identity/v1",
+            "kind": "TYPED_UNKNOWN",
+            "legacyAcceptedAsTruth": false,
+            "semanticArtifact": {
+              "identityScheme": "ocg-legacy-lua-semantic-effect-identity/v1",
+              "kind": "TYPED_UNKNOWN",
+              "partialPlan": null,
+              "semanticEffectIdentity": null,
+              "sourceSpans": [
+                {
+                  "confidence": 1,
+                  "endOffset": 3372,
+                  "exactText": "Duel.RegisterEffect(e1,tp)",
+                  "parserMethod": "MIGRATED_LEGACY",
+                  "schemaVersion": "ocg-source-span/v1",
+                  "sourceDocumentId": "legacy-script:cid-17788:passcode-80275707:1d01880ce1f12d90",
+                  "startOffset": 3346,
+                  "textHash": "26fcaa7a5a1264bd35dcd86e955ba97d4a9f473f5afdfbacf69cc53b6fd66921",
+                  "verificationStatus": "CANDIDATE"
+                }
+              ],
+              "unknownReasons": [
+                {
+                  "code": "UNSUPPORTED_LUA_EFFECT_CONTROL_FLOW",
+                  "evidenceIds": [],
+                  "message": "RegisterEffect argument could not be bound to one lexical Effect allocation",
+                  "phase": "LEGACY_DISCOVERY"
+                }
+              ]
+            },
+            "semanticArtifactSha256": "f18394c88f721a855f23cbcf2b4fab3d6ad008b153e51fb7b6454abb32e88416",
+            "semanticEffectIdentity": null,
+            "unknownReasons": [
+              {
+                "phase": "LEGACY_DISCOVERY",
+                "code": "UNSUPPORTED_LUA_EFFECT_CONTROL_FLOW",
+                "message": "RegisterEffect argument could not be bound to one lexical Effect allocation",
+                "evidenceIds": []
+              },
+              {
+                "phase": "LEGACY_LUA_DISCOVERY",
+                "code": "LEGACY_LUA_EFFECT_IDENTITY_UNAVAILABLE",
+                "message": "legacy effect candidate has no stable semantic identity",
+                "evidenceIds": [
+                  "legacy-script:cid-17788:passcode-80275707:1d01880ce1f12d90"
+                ]
+              }
+            ],
+            "verdict": "UNKNOWN",
+            "candidateSha256": "8941e0de438ca469696d9ee3581f40744c24b41ee39ce66f686ddd95d94b9353"
+          },
+          {
+            "analysisArtifact": null,
+            "analysisArtifactSha256": null,
+            "compileResultSha256": null,
+            "identityScheme": "ocg-legacy-lua-semantic-effect-identity/v1",
+            "kind": "TYPED_UNKNOWN",
+            "legacyAcceptedAsTruth": false,
+            "semanticArtifact": {
+              "identityScheme": "ocg-legacy-lua-semantic-effect-identity/v1",
+              "kind": "TYPED_UNKNOWN",
+              "partialPlan": null,
+              "semanticEffectIdentity": null,
+              "sourceSpans": [
+                {
+                  "confidence": 1,
+                  "endOffset": 905,
+                  "exactText": "c:RegisterEffect(e3)",
+                  "parserMethod": "MIGRATED_LEGACY",
+                  "schemaVersion": "ocg-source-span/v1",
+                  "sourceDocumentId": "legacy-script:cid-17788:passcode-80275707:1d01880ce1f12d90",
+                  "startOffset": 885,
+                  "textHash": "d7c9d73fd0a0d6dc9e850018f67d90e60f3f06b47af666bdb5b5550b00a882e9",
+                  "verificationStatus": "CANDIDATE"
+                }
+              ],
+              "unknownReasons": [
+                {
+                  "code": "UNSUPPORTED_LUA_EFFECT_BINDING",
+                  "evidenceIds": [],
+                  "message": "RegisterEffect argument could not be bound to one lexical Effect allocation",
+                  "phase": "LEGACY_DISCOVERY"
+                }
+              ]
+            },
+            "semanticArtifactSha256": "6db490fbd69a302238c7df9b899f8367547f0740ad7b78cb71accc07d1651cba",
+            "semanticEffectIdentity": null,
+            "unknownReasons": [
+              {
+                "phase": "LEGACY_DISCOVERY",
+                "code": "UNSUPPORTED_LUA_EFFECT_BINDING",
+                "message": "RegisterEffect argument could not be bound to one lexical Effect allocation",
+                "evidenceIds": []
+              },
+              {
+                "phase": "LEGACY_LUA_DISCOVERY",
+                "code": "LEGACY_LUA_EFFECT_IDENTITY_UNAVAILABLE",
+                "message": "legacy effect candidate has no stable semantic identity",
+                "evidenceIds": [
+                  "legacy-script:cid-17788:passcode-80275707:1d01880ce1f12d90"
+                ]
+              }
+            ],
+            "verdict": "UNKNOWN",
+            "candidateSha256": "a3af37faef6969fea46ff2b654433b652cade2c27a89cb9ced5d6852604307f5"
+          },
+          {
+            "analysisArtifact": null,
+            "analysisArtifactSha256": null,
+            "compileResultSha256": null,
+            "identityScheme": "ocg-legacy-lua-semantic-effect-identity/v1",
+            "kind": "TYPED_UNKNOWN",
+            "legacyAcceptedAsTruth": false,
+            "semanticArtifact": {
+              "identityScheme": "ocg-legacy-lua-semantic-effect-identity/v1",
+              "kind": "TYPED_UNKNOWN",
+              "partialPlan": null,
+              "semanticEffectIdentity": null,
+              "sourceSpans": [
+                {
+                  "confidence": 1,
+                  "endOffset": 435,
+                  "exactText": "Effect.CreateEffect(c)",
+                  "parserMethod": "MIGRATED_LEGACY",
+                  "schemaVersion": "ocg-source-span/v1",
+                  "sourceDocumentId": "legacy-script:cid-17788:passcode-80275707:1d01880ce1f12d90",
+                  "startOffset": 413,
+                  "textHash": "ec6dd4b57e1a940f3591d2d765582ebef0f878eac8a863943b169963684f9884",
+                  "verificationStatus": "CANDIDATE"
+                },
+                {
+                  "confidence": 1,
+                  "endOffset": 502,
+                  "exactText": "e2:SetType(EFFECT_TYPE_IGNITION)",
+                  "parserMethod": "MIGRATED_LEGACY",
+                  "schemaVersion": "ocg-source-span/v1",
+                  "sourceDocumentId": "legacy-script:cid-17788:passcode-80275707:1d01880ce1f12d90",
+                  "startOffset": 470,
+                  "textHash": "2b8ad2ed3b6a8f493720aa35761f732424f7c1e9394308e6a586f48b60f5b4a7",
+                  "verificationStatus": "CANDIDATE"
+                },
+                {
+                  "confidence": 1,
+                  "endOffset": 531,
+                  "exactText": "e2:SetRange(LOCATION_MZONE)",
+                  "parserMethod": "MIGRATED_LEGACY",
+                  "schemaVersion": "ocg-source-span/v1",
+                  "sourceDocumentId": "legacy-script:cid-17788:passcode-80275707:1d01880ce1f12d90",
+                  "startOffset": 504,
+                  "textHash": "84d10b599cef1cffd99ac8e019e6308fdebc6b6a19e954f185793e7725f2ebf6",
+                  "verificationStatus": "CANDIDATE"
+                },
+                {
+                  "confidence": 1,
+                  "endOffset": 557,
+                  "exactText": "e2:SetCountLimit(1,id+o)",
+                  "parserMethod": "MIGRATED_LEGACY",
+                  "schemaVersion": "ocg-source-span/v1",
+                  "sourceDocumentId": "legacy-script:cid-17788:passcode-80275707:1d01880ce1f12d90",
+                  "startOffset": 533,
+                  "textHash": "f5341d91179f192eaae6f90cb39a5ae723059228364f74622c2326bf9964dbc7",
+                  "verificationStatus": "CANDIDATE"
+                },
+                {
+                  "confidence": 1,
+                  "endOffset": 598,
+                  "exactText": "e2:SetProperty(EFFECT_FLAG_CARD_TARGET)",
+                  "parserMethod": "MIGRATED_LEGACY",
+                  "schemaVersion": "ocg-source-span/v1",
+                  "sourceDocumentId": "legacy-script:cid-17788:passcode-80275707:1d01880ce1f12d90",
+                  "startOffset": 559,
+                  "textHash": "4733416d91465f32f346bc851397160695d459235e8c551fd259b76841b6b6bf",
+                  "verificationStatus": "CANDIDATE"
+                },
+                {
+                  "confidence": 1,
+                  "endOffset": 626,
+                  "exactText": "e2:SetCondition(s.tohcon1)",
+                  "parserMethod": "MIGRATED_LEGACY",
+                  "schemaVersion": "ocg-source-span/v1",
+                  "sourceDocumentId": "legacy-script:cid-17788:passcode-80275707:1d01880ce1f12d90",
+                  "startOffset": 600,
+                  "textHash": "70d9bc9fe770c1ded276a790f797e399753e1207373516c7872d810d8b741518",
+                  "verificationStatus": "CANDIDATE"
+                },
+                {
+                  "confidence": 1,
+                  "endOffset": 649,
+                  "exactText": "e2:SetCost(s.tohcost)",
+                  "parserMethod": "MIGRATED_LEGACY",
+                  "schemaVersion": "ocg-source-span/v1",
+                  "sourceDocumentId": "legacy-script:cid-17788:passcode-80275707:1d01880ce1f12d90",
+                  "startOffset": 628,
+                  "textHash": "9a4d0a30477ec7b6e7c0c813479c821970e004e5d23858131732e90997cb0f35",
+                  "verificationStatus": "CANDIDATE"
+                },
+                {
+                  "confidence": 1,
+                  "endOffset": 672,
+                  "exactText": "e2:SetTarget(s.tohtg)",
+                  "parserMethod": "MIGRATED_LEGACY",
+                  "schemaVersion": "ocg-source-span/v1",
+                  "sourceDocumentId": "legacy-script:cid-17788:passcode-80275707:1d01880ce1f12d90",
+                  "startOffset": 651,
+                  "textHash": "e7a56438ba250f599ed8afea2ae127d3a232293c084551968d77fa44352996d7",
+                  "verificationStatus": "CANDIDATE"
+                },
+                {
+                  "confidence": 1,
+                  "endOffset": 698,
+                  "exactText": "e2:SetOperation(s.tohop)",
+                  "parserMethod": "MIGRATED_LEGACY",
+                  "schemaVersion": "ocg-source-span/v1",
+                  "sourceDocumentId": "legacy-script:cid-17788:passcode-80275707:1d01880ce1f12d90",
+                  "startOffset": 674,
+                  "textHash": "7fa97cd31915ac58cef366f8ae16b485ed59cfffb8f73ff8f5902c6e2808aec3",
+                  "verificationStatus": "CANDIDATE"
+                },
+                {
+                  "confidence": 1,
+                  "endOffset": 720,
+                  "exactText": "c:RegisterEffect(e2)",
+                  "parserMethod": "MIGRATED_LEGACY",
+                  "schemaVersion": "ocg-source-span/v1",
+                  "sourceDocumentId": "legacy-script:cid-17788:passcode-80275707:1d01880ce1f12d90",
+                  "startOffset": 700,
+                  "textHash": "310292c802925edf60bc3404859d0fb01656ae473c51412610952d2f631aada9",
+                  "verificationStatus": "CANDIDATE"
+                },
+                {
+                  "confidence": 1,
+                  "endOffset": 1780,
+                  "exactText": "function s.tohcon1(e,tp,eg,ep,ev,re,r,rp)\n\tlocal g=Duel.GetFieldGroup(tp,LOCATION_MZONE,0)\n\treturn g:FilterCount(s.confilter,nil)>0\nend",
+                  "parserMethod": "MIGRATED_LEGACY",
+                  "schemaVersion": "ocg-source-span/v1",
+                  "sourceDocumentId": "legacy-script:cid-17788:passcode-80275707:1d01880ce1f12d90",
+                  "startOffset": 1645,
+                  "textHash": "ee7fed1ff6354461095c02c8a216f1792e8b8def7f4bca64134dbba7c6fa4432",
+                  "verificationStatus": "CANDIDATE"
+                },
+                {
+                  "confidence": 1,
+                  "endOffset": 2327,
+                  "exactText": "function s.tohcost(e,tp,eg,ep,ev,re,r,rp,chk)\n\tif chk==0 then return Duel.CheckReleaseGroup(tp,s.costfilter,1,nil,tp) end\n\tlocal g=Duel.SelectReleaseGroup(tp,s.costfilter,1,1,nil,tp)\n\tDuel.Release(g,REASON_COST)\nend",
+                  "parserMethod": "MIGRATED_LEGACY",
+                  "schemaVersion": "ocg-source-span/v1",
+                  "sourceDocumentId": "legacy-script:cid-17788:passcode-80275707:1d01880ce1f12d90",
+                  "startOffset": 2112,
+                  "textHash": "07be9ce40450368ba44b8e20ad02ca0062a97bf0e0a4a0f3ba2a18534d34f6e2",
+                  "verificationStatus": "CANDIDATE"
+                },
+                {
+                  "confidence": 1,
+                  "endOffset": 2854,
+                  "exactText": "function s.tohtg(e,tp,eg,ep,ev,re,r,rp,chk,chkc)\n\tif chkc then return chkc:IsOnField() and s.cfilter(chkc) end\n\tlocal c=e:GetHandler()\n\tif chk==0 then return Duel.IsExistingTarget(s.cfilter,tp,LOCATION_ONFIELD,LOCATION_ONFIELD,1,nil) end\n\tDuel.Hint(HINT_SELECTMSG,tp,HINTMSG_RTOHAND)\n\tlocal g=Duel.SelectTarget(tp,s.cfilter,tp,LOCATION_ONFIELD,LOCATION_ONFIELD,1,1,nil)\n\tDuel.SetOperationInfo(0,CATEGORY_TOHAND,g,1,0,0)\nend",
+                  "parserMethod": "MIGRATED_LEGACY",
+                  "schemaVersion": "ocg-source-span/v1",
+                  "sourceDocumentId": "legacy-script:cid-17788:passcode-80275707:1d01880ce1f12d90",
+                  "startOffset": 2431,
+                  "textHash": "cf2ba9a183c73c562e55fcae9dc10b88e92c69113970f0cdd8b32637fff21a44",
+                  "verificationStatus": "CANDIDATE"
+                },
+                {
+                  "confidence": 1,
+                  "endOffset": 3381,
+                  "exactText": "function s.tohop(e,tp,eg,ep,ev,re,r,rp)\n\tlocal c=e:GetHandler()\n\tlocal tc=Duel.GetFirstTarget()\n\tif tc:IsRelateToEffect(e) and tc:IsFaceup()\n\t\tand Duel.SendtoHand(tc,nil,REASON_EFFECT)>0\n\t\tand tc:IsLocation(LOCATION_HAND) then\n\t\tlocal e1=Effect.CreateEffect(c)\n\t\te1:SetType(EFFECT_TYPE_FIELD)\n\t\te1:SetProperty(EFFECT_FLAG_PLAYER_TARGET)\n\t\te1:SetCode(EFFECT_CANNOT_ACTIVATE)\n\t\te1:SetTargetRange(1,0)\n\t\te1:SetValue(s.aclimit)\n\t\te1:SetLabel(tc:GetCode())\n\t\te1:SetReset(RESET_PHASE+PHASE_END)\n\t\tDuel.RegisterEffect(e1,tp)\n\tend\nend",
+                  "parserMethod": "MIGRATED_LEGACY",
+                  "schemaVersion": "ocg-source-span/v1",
+                  "sourceDocumentId": "legacy-script:cid-17788:passcode-80275707:1d01880ce1f12d90",
+                  "startOffset": 2855,
+                  "textHash": "9d86e7cfc5727414507dd9973b2a5c39910c427b4e5b95093fcd82e9feae3f00",
+                  "verificationStatus": "CANDIDATE"
+                }
+              ],
+              "unknownReasons": [
+                {
+                  "code": "UNSUPPORTED_LUA_CONDITION_PREFIX_SEMANTICS",
+                  "evidenceIds": [],
+                  "message": "unsupported normalized Lua semantic UNSUPPORTED_CONDITION_PREFIX_SEMANTICS",
+                  "phase": "LEGACY_DISCOVERY"
+                }
+              ]
+            },
+            "semanticArtifactSha256": "6e38309061cef94201872a904ed87305e6922051693e53dae44b9e582d78d756",
+            "semanticEffectIdentity": null,
+            "unknownReasons": [
+              {
+                "phase": "LEGACY_DISCOVERY",
+                "code": "UNSUPPORTED_LUA_CONDITION_PREFIX_SEMANTICS",
+                "message": "unsupported normalized Lua semantic UNSUPPORTED_CONDITION_PREFIX_SEMANTICS",
+                "evidenceIds": []
+              },
+              {
+                "phase": "LEGACY_LUA_DISCOVERY",
+                "code": "LEGACY_LUA_EFFECT_IDENTITY_UNAVAILABLE",
+                "message": "legacy effect candidate has no stable semantic identity",
+                "evidenceIds": [
+                  "legacy-script:cid-17788:passcode-80275707:1d01880ce1f12d90"
+                ]
+              }
+            ],
+            "verdict": "UNKNOWN",
+            "candidateSha256": "ccf9bbd0ec72a145a235908b523302bee0fcdec37b2e9fd58da672812a682c0d"
+          }
+        ],
+        "engineBinding": {
+          "capabilitiesSha256": "dc9dd6eda9170dd243e5ba02ad3dd18805b8f64a0612515af51f3e15ad0f78e3",
+          "requiredCapabilities": [
+            "compatibility/legacy-lua-effect-enumeration/v1",
+            "compatibility/legacy-lua-semantic-discovery/v1",
+            "movement/return-to-hand-legality/v1",
+            "operation/dependency-expansion/v1"
+          ],
+          "versions": {
+            "artifacts": {
+              "activationLegalityScenarioVersion": "ocg-activation-legality-scenario/v1",
+              "appliedEffectCreationResultVersion": "ocg-applied-effect-creation-result/v1",
+              "appliedEffectInstanceVersion": "ocg-applied-effect-instance/v1",
+              "appliedEffectLifecycleCertificateVersion": "ocg-applied-effect-lifecycle-certificate/v1",
+              "appliedEffectLifecycleTraceEntryVersion": "ocg-applied-effect-lifecycle-trace-entry/v1",
+              "appliedEffectReconciliationResultVersion": "ocg-applied-effect-reconciliation-result/v1",
+              "assistantContractVersion": "ocg-assistant-contract/v1",
+              "capabilityManifestVersion": "ocg-capability-manifest/v1",
+              "cardDefinitionVersion": "ocg-card-definition/v2",
+              "cardInstanceVersion": "ocg-card-instance/v1",
+              "cardProgramVersion": "ocg-card-program/v1",
+              "compileCardDefinitionResultVersion": "ocg-compile-card-definition-result/v1",
+              "compileEffectDefinitionsResultVersion": "ocg-compile-effect-definitions-result/v1",
+              "effectDefinitionVersion": "ocg-effect-definition/v1",
+              "eventGroupVersion": "ocg-event-group/v1",
+              "eventVersion": "ocg-game-event/v1",
+              "formalDifferentialSnapshotVersion": "ocg-formal-differential-snapshot/v1",
+              "informationProcedureCertificateVersion": "ocg-information-procedure-certificate/v1",
+              "informationProcedureStepResultVersion": "ocg-information-procedure-step-result/v1",
+              "informationProcedureTraceEntryVersion": "ocg-information-procedure-trace-entry/v1",
+              "informationStateVersion": "ocg-information-state/v1",
+              "legacyDifferentialCertificateVersion": "ocg-legacy-differential-certificate/v1",
+              "legacyDifferentialResultVersion": "ocg-legacy-differential-result/v1",
+              "legacyLuaActivationPlanV1Version": "ocg-legacy-lua-activation-plan/v1",
+              "legacyLuaActivationPlanVersion": "ocg-legacy-lua-activation-plan/v2",
+              "legacyLuaApiSemanticsRegistryVersion": "ocg-lua-api-semantics-registry/v1",
+              "legacyLuaCandidateAnalysisV1Version": "ocg-legacy-lua-candidate-analysis/v1",
+              "legacyLuaCandidateAnalysisVersion": "ocg-legacy-lua-candidate-analysis/v2",
+              "legacyLuaCompileResultV1Version": "ocg-legacy-lua-compile-result/v1",
+              "legacyLuaCompileResultVersion": "ocg-legacy-lua-compile-result/v2",
+              "legacyLuaEffectCandidateSetVersion": "ocg-legacy-lua-effect-candidate-set/v1",
+              "legacyObservationVersion": "ocg-legacy-observation/v1",
+              "luaApiSemanticsRegistryVersion": "ocg-lua-api-semantics-registry/v2",
+              "operationDependencyGraphVersion": "ocg-operation-dependency-graph/v1",
+              "operationVersion": "ocg-operation/v1",
+              "proofCertificateVersion": "ocg-proof-certificate/v1",
+              "replayVersion": "ocg-replay/v1",
+              "researchRunVersion": "ocg-research-run-manifest/v1",
+              "researchSampleVersion": "ocg-research-sample/v1",
+              "resolutionFrameCertificateVersion": "ocg-resolution-frame-certificate/v1",
+              "resolutionFrameExecutionResultVersion": "ocg-resolution-frame-execution-result/v1",
+              "resolutionFrameSimulationBranchVersion": "ocg-resolution-frame-simulation-branch/v1",
+              "resolutionFrameSimulationResultVersion": "ocg-resolution-frame-simulation-result/v1",
+              "resolutionFrameTraceEntryVersion": "ocg-resolution-frame-trace-entry/v1",
+              "runtimeOverlayCertificateVersion": "ocg-runtime-overlay-certificate/v1",
+              "runtimeOverlayStepResultVersion": "ocg-runtime-overlay-step-result/v1",
+              "runtimeOverlayTraceEntryVersion": "ocg-runtime-overlay-trace-entry/v1",
+              "sourceDocumentVersion": "ocg-source-document/v1",
+              "sourceSpanVersion": "ocg-source-span/v1",
+              "triggerCandidateVersion": "ocg-trigger-candidate/v1",
+              "triggerChainCertificateVersion": "ocg-trigger-chain-certificate/v1",
+              "triggerChainLinkVersion": "ocg-trigger-chain-link/v1",
+              "triggerRuleDefinitionVersion": "ocg-trigger-rule-definition/v1",
+              "triggerWindowVersion": "ocg-trigger-window/v1"
+            },
+            "compilerVersion": "ocg-card-compiler/v1",
+            "engineVersion": "ocg-formal-engine/0.5.0",
+            "irVersion": "ocg-effect-ir/v1",
+            "patternLibraryVersion": "ocg-pattern-library/v1",
+            "proofVerifierVersion": "ocg-proof-verifier/v1",
+            "rulesetVersion": "ocg-ruleset/2026-08-03-experimental",
+            "schemaVersion": "ocg-formal-engine/v1"
+          },
+          "versionsSha256": "da20b699ec6fb0102ebe70e5c508d60a88d93723b1f77e6e0ab399257927216e"
+        },
+        "kind": "LEGACY_LUA_SEMANTIC_RESOURCE",
+        "legacyAcceptedAsTruth": false,
+        "registryBinding": {
+          "pinnedCoreApiAbi": "ocgcore/11.0",
+          "pinnedCoreCommit": "0764db0c75b3d1d574880d365aa3695ab1f13b43",
+          "pinnedCoreRepository": "https://github.com/edo9300/ygopro-core.git",
+          "registryId": "formal:legacy-lua-api-semantics:v2",
+          "registrySha256": "346be302c791d9bbef09e579ecb7c33a6836c97849d2354de9e6f25905b79e5f",
+          "registryVersion": "2.0.0"
+        },
+        "resourceBinding": {
+          "documentVersion": "7bb79415e4f333be17b40ecc857273542451d7d8c5f224a80ccd1f7c316d87d9",
+          "locator": "resource-lock://62ea81162b6ca7f77681501dc416bcff2ae2c1d60c0bf725621f1f739224c06e/scripts/c80275707.lua",
+          "retrievedAt": "2026-08-04T10:06:56.716Z",
+          "sourceContentSha256": "1d01880ce1f12d90c00dbe521f9cc45761020b4d9192f7e4451a09dca23bd372",
+          "sourceDocumentId": "legacy-script:cid-17788:passcode-80275707:1d01880ce1f12d90"
+        },
+        "resourceId": "legacy_lua_resource_32cde42dc9c52c1580d1e3d5",
+        "schemaVersion": "ocg-assistant-lua-semantic-resource/v1",
+        "status": "TYPED_UNKNOWN",
+        "unknownReasons": [
+          {
+            "phase": "LEGACY_DISCOVERY",
+            "code": "LEGACY_SOURCE_NON_AUTHORITATIVE",
+            "message": "legacy Lua is discovery and differential evidence, not rules authority",
+            "evidenceIds": [
+              "legacy-script:cid-17788:passcode-80275707:1d01880ce1f12d90"
+            ]
+          }
+        ],
+        "verdict": "UNKNOWN",
+        "resourceSha256": "3a989562a5b5e9518e992c60e9ef8dc3ec736a8ceded87fed2d2386d025516f0"
+      }
+    }
+  ],
+  "shardContentSha256": "d368b6d59a5ef123856dd9bfc45d8449e9e7728a29bc14372e618fff8c8eb893"
+}

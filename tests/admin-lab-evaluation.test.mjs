@@ -35,6 +35,9 @@ test("passes only when verdict, claim, ordered timeline, and visible packet evid
   });
 
   assert.equal(result.schemaVersion, 2);
+  assert.equal(result.answerPassed, true);
+  assert.equal(result.evidencePassed, true);
+  assert.equal(result.pipelinePassed, true);
   assert.equal(result.passed, true);
   assert.equal(result.humanTruth, false);
   assert.equal(result.disclaimer, ADMIN_LAB_AUTOMATED_ASSESSMENT_DISCLAIMER);
@@ -58,6 +61,9 @@ test("wrong structured verdict fails even when every legacy key phrase is presen
   });
 
   assert.equal(result.summary.keyPointCoverage, 1);
+  assert.equal(result.answerPassed, false);
+  assert.equal(result.evidencePassed, true);
+  assert.equal(result.pipelinePassed, false);
   assert.equal(result.passed, false);
   assert.equal(
     result.checks.structuredAssertions.find((item) => item.assertionType === "verdict").passed,
@@ -76,7 +82,10 @@ test("evidence present only in the full snapshot cannot satisfy final-model cove
     evidenceSnapshot: snapshot,
   });
 
-  assert.equal(result.passed, false);
+  assert.equal(result.answerPassed, true);
+  assert.equal(result.evidencePassed, false);
+  assert.equal(result.pipelinePassed, false);
+  assert.equal(result.passed, result.pipelinePassed);
   assert.equal(result.checks.evidenceCoverage[0].found, false);
   assert.match(result.checks.evidenceCoverage[0].explanation, /decision packet/u);
 });
@@ -93,7 +102,10 @@ test("missing decision packet fails even if archive and resolved cards contain a
     },
   });
 
-  assert.equal(result.passed, false);
+  assert.equal(result.answerPassed, true);
+  assert.equal(result.evidencePassed, false);
+  assert.equal(result.pipelinePassed, false);
+  assert.equal(result.passed, result.pipelinePassed);
   assert.equal(result.summary.packetAvailable, false);
   assert.equal(result.summary.evidenceCoverage, 0);
   assert.equal(result.summary.cardEvidenceCoverage, 0);
@@ -108,7 +120,10 @@ test("expected evidence rank is enforced against visible packet item order", () 
     evidenceSnapshot: visiblePacket(),
   });
 
-  assert.equal(result.passed, false);
+  assert.equal(result.answerPassed, true);
+  assert.equal(result.evidencePassed, false);
+  assert.equal(result.pipelinePassed, false);
+  assert.equal(result.passed, result.pipelinePassed);
   assert.equal(result.checks.evidenceCoverage[0].bestRank, 3);
   assert.equal(result.checks.evidenceCoverage[0].withinRank, false);
 });
@@ -170,9 +185,20 @@ test("suite reports missing results and never labels automation as human truth",
   });
 
   assert.equal(report.totalCount, 2);
+  assert.equal(report.answerPassed, false);
+  assert.equal(report.evidencePassed, false);
+  assert.equal(report.pipelinePassed, false);
+  assert.equal(report.passed, report.pipelinePassed);
+  assert.equal(report.answerPassedCount, 1);
+  assert.equal(report.evidencePassedCount, 1);
+  assert.equal(report.pipelinePassedCount, 1);
   assert.equal(report.passedCount, 1);
   assert.equal(report.humanTruth, false);
   assert.equal(report.cases.filter((item) => item.missingResult).length, 1);
+  const missing = report.cases.find((item) => item.missingResult);
+  assert.equal(missing.answerPassed, false);
+  assert.equal(missing.evidencePassed, false);
+  assert.equal(missing.pipelinePassed, false);
 });
 
 function strictCase() {

@@ -451,8 +451,10 @@
         "22130"
       ],
       "expectedEvidenceIds": [
-        "card-faq-22130-1"
+        "card-faq-22130-1",
+        "ocg-rule:c02/卡片·效果的发动#p208-212"
       ],
+      "expectedEvidenceMaxRank": 7,
       "expectedVerdict": "不能发动。正在发动且处理后通常送去墓地的「无限泡影」不能回到手牌，场上又没有其他能够回到手牌的魔法·陷阱卡，因而不满足该效果陷阱分支的发动合法性。",
       "expectedAssertions": {
         "verdicts": [

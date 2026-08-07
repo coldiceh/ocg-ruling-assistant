@@ -25,7 +25,7 @@ import {
 const casesUrl = new URL("./fixtures/admin-evidence-dry-run-cases.json", import.meta.url);
 const goldensUrl = new URL("./fixtures/admin-evidence-dry-run-goldens.json", import.meta.url);
 
-test("four-case fixture contains inputs only and uses the corrected card name", async () => {
+test("four-case fixture contains inputs only and uses the current canonical card name", async () => {
   const fixture = JSON.parse(await readFile(casesUrl, "utf8"));
   const normalized = normalizeAdminEvidenceDryRunCases(fixture);
   assert.equal(normalized.cases.length, 4);
@@ -36,8 +36,8 @@ test("four-case fixture contains inputs only and uses the corrected card name", 
     assert.equal(Object.hasOwn(item, "leakCanary"), false);
   }
   const serialized = JSON.stringify(fixture);
-  assert.match(serialized, /绚岚之达维/u);
-  assert.doesNotMatch(serialized, /绚岚之达象/u);
+  assert.match(serialized, /绚岚之达象/u);
+  assert.doesNotMatch(serialized, /绚岚之达维/u);
 });
 
 test("helper and CLI contain no case-specific ids or card-name branches", async () => {
@@ -91,6 +91,7 @@ test("four local cases freeze snapshots, never leak goldens, and never use a pai
     assert.equal(report.snapshot.frozen, true);
     assert.ok(report.snapshot.bytes > 0);
     assert.ok(report.finalInput.bytes > 0);
+    assert.equal(report.visibleEvidence.length, report.evidenceCounts.visiblePacketItems);
     assert.match(report.finalInput.sha256, /^[a-f0-9]{64}$/u);
     assert.equal(report.lua.verdict, "UNKNOWN");
     assert.ok(report.lua.serializedBytes > 0);
@@ -133,6 +134,30 @@ test("four local cases freeze snapshots, never leak goldens, and never use a pai
     assert.ok(Number.isFinite(report.timingsMs.luaSemantic));
     assert.ok(Number.isFinite(report.timingsMs.snapshotBuild));
     assert.ok(Number.isFinite(report.timingsMs.localPaidGateValidation));
+  }
+
+  const doubleTempest = result.reports.find(
+    (item) => item.id === "double-tempest-impermanence",
+  );
+  assert.ok(doubleTempest);
+  assert.equal(
+    doubleTempest.visibleEvidence.some((item) => (
+      item.evidenceIds.includes("ocg-rule:c02/卡片·效果的发动#p208-212")
+    )),
+    true,
+    "the decisive pending Spell/Trap return rule must be visible before a paid call",
+  );
+
+  const unchained = result.reports.find(
+    (item) => item.id === "unchained-replacement",
+  );
+  assert.ok(unchained);
+  for (const evidenceId of ["ygoresources-qa-24336", "card-faq-23172-1"]) {
+    assert.equal(
+      unchained.visibleEvidence.some((item) => item.evidenceIds.includes(evidenceId)),
+      true,
+      `${evidenceId} must be visible before a paid call`,
+    );
   }
 
   for (const golden of goldenFixture.goldens) {

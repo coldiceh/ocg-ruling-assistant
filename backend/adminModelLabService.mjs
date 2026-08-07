@@ -49,7 +49,10 @@ import {
   getRulingModelCapabilityTable,
 } from "./rulingModelProviders.mjs";
 import { parseAndValidateModelRulingResult } from "./modelRulingSchema.mjs";
-import { extractRagCards } from "./ragCardExtractor.mjs";
+import {
+  extractRagCards,
+  normalizeCardKey,
+} from "./ragCardExtractor.mjs";
 import {
   evidenceBucketsToList,
   loadRagData,
@@ -81,7 +84,9 @@ const PAID_PREPARATION_SUBSTAGE_IDS = new Set([
   PAID_PREPARATION_SUBSTAGE_ID,
   PAID_PREPARATION_RECOVERY_SUBSTAGE_ID,
 ]);
-const DEFAULT_FINAL_MAX_OUTPUT_TOKENS = 8_192;
+const DEFAULT_FINAL_MAX_OUTPUT_TOKENS = 16_384;
+const DEFAULT_NON_THINKING_FINAL_MAX_OUTPUT_TOKENS = 8_192;
+const DEFAULT_DEEPSEEK_THINKING_MAX_OUTPUT_TOKENS = 16_384;
 const DEFAULT_PREPARATION_MAX_OUTPUT_TOKENS = 4_096;
 const OPENAI_ACTIVE_STATUSES = new Set(["queued", "in_progress"]);
 const OPENAI_FAILURE_STATUSES = new Set(["failed", "incomplete", "expired"]);
@@ -351,7 +356,10 @@ export function createAdminModelLabService({
         "admin_model_output_limit_exceeded",
       );
     }
-    const maxOutputTokens = requestedMaxOutputTokens || serverFinalMaxOutputTokens;
+    const maxOutputTokens = requestedMaxOutputTokens || defaultFinalOutputTokens({
+      selection: finalSelection,
+      serverCap: serverFinalMaxOutputTokens,
+    });
     const finalAttemptPolicy = normalizeFinalAttemptPolicy(
       Object.hasOwn(body, "finalAttemptPolicy")
         ? body.finalAttemptPolicy
@@ -374,6 +382,14 @@ export function createAdminModelLabService({
           : "model_assisted_ruling",
       },
     };
+  }
+
+  function defaultFinalOutputTokens({ selection, serverCap }) {
+    const preferred = selection?.provider === "deepseek"
+      && selection?.reasoningMode === "pro"
+      ? DEFAULT_DEEPSEEK_THINKING_MAX_OUTPUT_TOKENS
+      : DEFAULT_NON_THINKING_FINAL_MAX_OUTPUT_TOKENS;
+    return Math.min(preferred, serverCap);
   }
 
   async function createRun(argument = {}) {
@@ -1318,8 +1334,14 @@ export function createAdminModelLabService({
       // identity back to the local card corpus. Freeze that reconciled result,
       // rather than the pre-retrieval approximation, so downstream gates and
       // Lua lookup observe the same card identity as the evidence archive.
-      if (retrievedEvidence?.cardResolution && !closedCandidateScope) {
-        cardResolution = jsonSafe(retrievedEvidence.cardResolution);
+      if (retrievedEvidence?.cardResolution) {
+        cardResolution = closedCandidateScope
+          ? reconcileProvidedCandidateCardResolution({
+              cardResolution,
+              retrievedCardResolution: retrievedEvidence.cardResolution,
+              providedCardNameCandidates,
+            })
+          : jsonSafe(retrievedEvidence.cardResolution);
         cardTextCandidates = collectCompleteCardTextCandidates({
           data,
           cardResolution,
@@ -3192,6 +3214,154 @@ function attachProvidedCandidateScope(cardResolution, providedCardNameCandidates
   };
 }
 
+/**
+ * A caller-provided candidate list is a closed set, not a ban on improving the
+ * identity of those exact candidates. The retriever may verify a new/community
+ * translation through an external CID or passcode. Accept that stronger
+ * identity only for a candidate that the deterministic pass left unresolved.
+ * A locally resolved identity is authoritative and is never replaced by a
+ * retrieval result. External upgrades require an explicit verification status,
+ * a strong stable identifier, and a one-to-one mapping to the supplied surface;
+ * never admit a preparation-model expansion.
+ */
+function reconcileProvidedCandidateCardResolution({
+  cardResolution,
+  retrievedCardResolution,
+  providedCardNameCandidates,
+}) {
+  const current = jsonSafe(cardResolution || {});
+  const retrieved = jsonSafe(retrievedCardResolution || {});
+  const candidates = normalizeStringList(providedCardNameCandidates);
+  const candidateByKey = new Map(
+    candidates.map((candidate) => [normalizeCardKey(candidate), candidate]),
+  );
+  const currentResolvedByCandidate = new Map();
+  for (const card of current.resolvedCards || []) {
+    for (const candidateKey of providedCandidateCardKeys(card)) {
+      if (candidateByKey.has(candidateKey) && !currentResolvedByCandidate.has(candidateKey)) {
+        currentResolvedByCandidate.set(candidateKey, card);
+      }
+    }
+  }
+  const currentUnresolvedKeys = new Set(
+    (current.unresolvedMentions || [])
+      .flatMap(providedCandidateMentionKeys)
+      .filter((key) => candidateByKey.has(key)),
+  );
+  const ambiguousKeys = new Set(
+    [
+      ...(current.ambiguousMentions || []),
+      ...(retrieved.ambiguousMentions || []),
+    ]
+      .flatMap(providedCandidateMentionKeys)
+      .filter((key) => candidateByKey.has(key)),
+  );
+  const verifiedByCandidate = new Map();
+
+  for (const card of retrieved.resolvedCards || []) {
+    const candidateKey = [card?.input, card?.matchedQuery]
+      .map(normalizeCardKey)
+      .find((key) => candidateByKey.has(key));
+    if (
+      !candidateKey
+      || currentResolvedByCandidate.has(candidateKey)
+      || !currentUnresolvedKeys.has(candidateKey)
+      || ambiguousKeys.has(candidateKey)
+      || card?.identityCanonicalizationConflict === true
+    ) continue;
+    if (![
+      "verified_same_identity",
+      "verified_external_replacement",
+    ].includes(String(card?.identityVerificationStatus || ""))) continue;
+    if (strongStableCardIdentityKeys(card).length === 0) continue;
+    const matches = verifiedByCandidate.get(candidateKey) || [];
+    matches.push(card);
+    verifiedByCandidate.set(candidateKey, matches);
+  }
+
+  const resolvedCards = [];
+  const resolvedKeys = new Set();
+  for (const [candidateKey] of candidateByKey) {
+    const existing = currentResolvedByCandidate.get(candidateKey);
+    if (existing) {
+      resolvedCards.push(existing);
+      resolvedKeys.add(candidateKey);
+      continue;
+    }
+
+    const verified = verifiedByCandidate.get(candidateKey) || [];
+    if (verified.length > 0 && cardsShareStrongStableIdentity(verified)) {
+      resolvedCards.push(verified[0]);
+      resolvedKeys.add(candidateKey);
+    }
+  }
+
+  const scopedMentions = (items = []) => items.filter((mention) => {
+    const key = normalizeCardKey(mention?.input);
+    return candidateByKey.has(key) && !resolvedKeys.has(key);
+  });
+
+  return attachProvidedCandidateScope({
+    ...current,
+    ...retrieved,
+    resolvedCards,
+    unresolvedMentions: scopedMentions([
+      ...(retrieved.unresolvedMentions || []),
+      ...(current.unresolvedMentions || []),
+    ]),
+    ambiguousMentions: scopedMentions([
+      ...(retrieved.ambiguousMentions || []),
+      ...(current.ambiguousMentions || []),
+    ]),
+    omittedResolvedCards: current.omittedResolvedCards || [],
+    userProvidedCardTexts: current.userProvidedCardTexts || [],
+    modelCardNameCandidates: current.modelCardNameCandidates || [],
+  }, candidates);
+}
+
+function providedCandidateCardKeys(card = {}) {
+  return [...new Set([
+    card.input,
+    card.matchedQuery,
+    card.name,
+    card.cnName,
+    card.jaName,
+    card.jpName,
+    card.enName,
+    ...(Array.isArray(card.aliases) ? card.aliases : []),
+  ].map(normalizeCardKey).filter(Boolean))];
+}
+
+function providedCandidateMentionKeys(mention = {}) {
+  return [...new Set([
+    mention?.input ?? mention,
+    mention?.matchedQuery,
+  ].map(normalizeCardKey).filter(Boolean))];
+}
+
+function strongStableCardIdentityKeys(card = {}) {
+  return [...new Set([
+    ["cid", card.cid],
+    ["passcode", card.passcode],
+    ["id", card.id],
+    ["cardId", card.cardId],
+  ].flatMap(([kind, value]) => {
+    const normalized = String(value ?? "").trim();
+    return normalized ? [`${kind}:${normalized}`] : [];
+  }))];
+}
+
+function cardsShareStrongStableIdentity(cards = []) {
+  if (cards.length === 0) return false;
+  let sharedKeys = new Set(strongStableCardIdentityKeys(cards[0]));
+  for (const card of cards.slice(1)) {
+    const cardKeys = new Set(strongStableCardIdentityKeys(card));
+    sharedKeys = new Set([...sharedKeys].filter((key) => cardKeys.has(key)));
+    if (sharedKeys.size === 0) return false;
+  }
+  return sharedKeys.size > 0;
+}
+
 function buildPreparationInput({ question, questions }) {
   return JSON.stringify({
     role: "evidence_preparation_only",
@@ -3543,6 +3713,7 @@ function finalRulingInputPreamble(variant) {
       "完整候选与冲突保存在审计归档；这里只给出确定性选出的正文、有界冲突摘要及遗漏/截断计数。",
       "资料准备模型只提供候选卡名与补充检索词，不是裁定；确定性查询始终优先，但模型补充词仍可能扩展候选集合，所以必须独立核对每条可见证据。",
       "只能引用 evidenceDecisionPacket.evidenceItems 中实际展示正文的 evidenceId；omissionSummary 只有计数与审计哈希，不是证据。",
+      "evidenceDecisionPacket.decisionFocus.mandatoryConstraintReview 是确定性预处理器按题面操作与限制性规则自动生成的必查清单，不是最终裁定。给出发动或处理合法的确定结论前，必须逐项阅读清单所指 evidenceId：分别检查诱发条件与每个必做处理，并只统计在发动时确实能接受该操作的合法候选。若清单项不适用，必须说明题设与该规则条件的具体不匹配；不得只因卡片 FAQ 说明了可连锁时点就跳过必做处理的发动合法性。",
       "legacyLuaSemanticPacket 是旧 Lua 脚本自动提取的非权威语义旁路，只能提示可能需要检查的条件、操作和底层 API 依赖；它不是官方资料，不能加入 evidenceIds，candidateVerdict 不能直接支持结论，verdict=UNKNOWN 也绝不表示不能发动或不能处理。",
       "使用 Lua 候选前必须先读取候选自身的 sourceBinding，并在 resources 存在时按 resourceId 交叉核对来源；预计算 sourceDocumentId 中的 cid-<卡片CID>/passcode-<脚本密码> 只允许绑定 Evidence Snapshot 内 resolvedCards.cid 相同的已解析卡片，禁止跨卡套用。activationLegalityChecks 的 requiredMinimum 是发动前最低候选数，不满足时不能改写成发动后空处理。",
       "selectorSummary 是 Lua 筛选器自动生成的有界布尔摘要；FILTER_ARGUMENT_n 依次绑定 filterArgumentExpressions[n-1]。必须先按题设的响应效果种类代入分支，再依据 controllerLocation、opponentLocation、filterExpression 和 predicateApi 逐项计算候选，不能把另一分支的怪兽或魔陷混入数量。",
@@ -3555,6 +3726,7 @@ function finalRulingInputPreamble(variant) {
       "完整候选与冲突保存在审计归档；这里只给出确定性选出的正文、有界冲突摘要及遗漏/截断计数。",
       "资料准备模型只提供候选卡名与补充检索词，不是裁定；确定性查询始终优先，但模型补充词仍可能扩展候选集合，所以必须独立核对每条可见证据。",
       "只能引用 evidenceDecisionPacket.evidenceItems 中实际展示正文的 evidenceId；omissionSummary 只有计数与审计哈希，不是证据。",
+      "evidenceDecisionPacket.decisionFocus.mandatoryConstraintReview 是确定性预处理器按题面操作与限制性规则自动生成的必查清单。给出发动或处理合法的确定结论前，必须逐项核对；不得只因卡片 FAQ 说明了可连锁时点就跳过必做处理的发动合法性。",
       "不得调用网络搜索，不得引用快照外资料。",
     ];
   }

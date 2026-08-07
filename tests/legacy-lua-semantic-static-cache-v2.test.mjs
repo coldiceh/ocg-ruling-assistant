@@ -15,8 +15,85 @@ import {
   validatePrecomputedLegacyLuaCacheManifest,
   validatePrecomputedLegacyLuaCacheShard,
 } from "../backend/legacyLuaSemanticStaticCacheV2.mjs";
+import {
+  resolveLegacyLuaCardIdentityBatches,
+} from "../scripts/lib/precomputed-legacy-lua-cache-v2.mjs";
 
 const GENERATED_AT = "2026-08-07T00:00:00.000Z";
+
+test("full-cache identity planning skips non-OCG corpus records without aborting", async () => {
+  const requests = [];
+  const resolved = await resolveLegacyLuaCardIdentityBatches({
+    cards: [
+      { id: "21779", name: "绚岚之达象", aliases: ["絢嵐たるエルダム"] },
+      {
+        id: "-75",
+        type: "skill",
+        cardType: "skill",
+        name: "Ancient Fusion",
+        aliases: ["Ancient Fusion"],
+      },
+    ],
+    async resolveBatch(batch) {
+      requests.push(...batch);
+      return {
+        matches: batch.map((item) => ({
+          clientKey: item.clientKey,
+          status: "RESOLVED",
+          passcode: "12345678",
+        })),
+      };
+    },
+  });
+
+  assert.deepEqual(requests.map((item) => item.clientKey), ["cid-21779"]);
+  assert.equal(resolved.length, 1);
+  assert.equal(resolved[0].cid, "21779");
+});
+
+test("full-cache identity planning fails closed for malformed non-skill records", async () => {
+  const invalidRecords = [
+    {
+      label: "invalid positive CID",
+      card: { id: "not-a-cid", type: "monster", aliases: ["Broken"] },
+    },
+    {
+      label: "negative non-skill CID",
+      card: { id: "-76", type: "monster", aliases: ["Broken"] },
+    },
+    {
+      label: "missing exact alias",
+      card: { id: "21779", type: "monster" },
+    },
+    {
+      label: "conflicting negative skill type",
+      card: {
+        id: "-75",
+        type: "skill",
+        cardType: "monster",
+        aliases: ["Broken"],
+      },
+    },
+    { label: "damaged null record", card: null },
+  ];
+
+  for (const { label, card } of invalidRecords) {
+    let resolverCalled = false;
+    await assert.rejects(
+      resolveLegacyLuaCardIdentityBatches({
+        cards: [card],
+        async resolveBatch() {
+          resolverCalled = true;
+          return { matches: [] };
+        },
+      }),
+      (error) =>
+        error?.code === "LEGACY_LUA_PRECOMPUTE_CARD_CORPUS_INVALID",
+      label,
+    );
+    assert.equal(resolverCalled, false, `${label} must fail before resolution`);
+  }
+});
 
 test("v2 lazy factory loads only shards selected by CID, passcode, or exact alias", async () => {
   const fixture = makeFixture();

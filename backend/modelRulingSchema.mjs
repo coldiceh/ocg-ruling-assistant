@@ -80,7 +80,11 @@ const CRITICAL_COUNTER_CHECK_TYPES = new Set([
 
 const verdictSchema = strictObject({
   questionId: nonEmptyString(),
-  value: { type: "string", enum: [...MODEL_RULING_VERDICT_VALUES] },
+  value: {
+    type: "string",
+    enum: [...MODEL_RULING_VERDICT_VALUES],
+    description: "Answer to the user question as phrased: TRUE=yes, FALSE=no, CONDITIONAL=branch-dependent, UNKNOWN=not decidable from the supplied facts and evidence.",
+  },
   conclusion: nonEmptyString(),
   conditions: stringArray(),
 });
@@ -89,7 +93,11 @@ const claimSchema = strictObject({
   questionId: nonEmptyString(),
   claimId: nonEmptyString(),
   proposition: nonEmptyString(),
-  status: { type: "string", enum: [...MODEL_RULING_VERDICT_VALUES] },
+  status: {
+    type: "string",
+    enum: [...MODEL_RULING_VERDICT_VALUES],
+    description: "Truth value of proposition itself, independent of verdict.value. A correct proposition such as 'the effect cannot be activated' has status TRUE even when the answer verdict is FALSE. A CONDITIONAL verdict must be supported by decisive branch propositions with status TRUE or FALSE; UNKNOWN or CONDITIONAL claims cannot provide that decisive support.",
+  },
   decisive: { type: "boolean" },
   evidenceIds: stringArray(),
   inferenceType: { type: "string", enum: [...MODEL_RULING_INFERENCE_TYPES] },
@@ -779,13 +787,16 @@ function validateQuestionScopedReasoning(
 
     if (verdict.value !== "UNKNOWN") {
       const supportedDecisiveClaims = decisiveClaims.filter((claim) => (
-        claimStatusSupportsVerdict(claim.status, verdict.value)
+        claimStatusCanSupportVerdict(claim.status, verdict.value)
         && claim.evidenceIds.length > 0
         && claim.evidenceIds.some((evidenceId) => evidenceIndex.has(evidenceId))
       ));
       if (supportedDecisiveClaims.length === 0) {
+        const requiredStatus = verdict.value === "CONDITIONAL"
+          ? "TRUE or FALSE branch claim"
+          : "TRUE claim";
         errors.push(
-          `${verdict.value} verdict ${verdict.questionId} must have at least one decisive claim with model-visible evidence`,
+          `${verdict.value} verdict ${verdict.questionId} must have at least one decisive ${requiredStatus} with model-visible evidence`,
         );
       }
       if (decisiveUnknownClaims.length > 0) {
@@ -1323,11 +1334,12 @@ function scopedItemsForVerdict(itemsByQuestion, verdictQuestionId, expectedQuest
   return [...direct, ...(itemsByQuestion.get(parent) || [])];
 }
 
-function claimStatusSupportsVerdict(claimStatus, verdictValue) {
+function claimStatusCanSupportVerdict(claimStatus, verdictValue) {
   if (verdictValue === "TRUE" || verdictValue === "FALSE") {
-    return claimStatus === verdictValue;
+    return claimStatus === "TRUE";
   }
-  return verdictValue === "CONDITIONAL" && claimStatus !== "UNKNOWN";
+  return verdictValue === "CONDITIONAL"
+    && (claimStatus === "TRUE" || claimStatus === "FALSE");
 }
 
 function scopedItemsByQuestion(items, questionIds, kind = "", errors = null) {

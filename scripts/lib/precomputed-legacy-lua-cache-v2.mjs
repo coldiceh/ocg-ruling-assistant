@@ -25,6 +25,7 @@ const CALLBACK_SETTERS = Object.freeze([
   "SetTarget",
 ]);
 const SHA256 = /^[a-f0-9]{64}$/u;
+const SKIP_NEGATIVE_SKILL_RECORD = Symbol("SKIP_NEGATIVE_SKILL_RECORD");
 
 /**
  * Derives a conservative lexical prefilter from the versioned registry. It is
@@ -80,8 +81,17 @@ export async function resolveLegacyLuaCardIdentityBatches({
       `identity resolution requires cards, a resolver, and fixed ${PRECOMPUTED_LEGACY_LUA_IDENTITY_BATCH_SIZE}-card batches`,
     );
   }
-  const normalizedCards = cards.map(normalizeCardRecord)
-    .sort((left, right) => left.cid.localeCompare(right.cid));
+  // The synchronized corpus also contains Duel Links skills whose synthetic
+  // CIDs are negative. That one explicit non-OCG shape cannot bind to c*.lua
+  // and is skipped. Every other malformed corpus record fails closed.
+  const normalizedCards = [];
+  for (const card of cards) {
+    const normalized = normalizeCardRecord(card);
+    if (normalized !== SKIP_NEGATIVE_SKILL_RECORD) {
+      normalizedCards.push(normalized);
+    }
+  }
+  normalizedCards.sort((left, right) => left.cid.localeCompare(right.cid));
   rejectDuplicates(normalizedCards.map((card) => card.cid),
     "card corpus contains duplicate stable CIDs");
   const resolved = [];
@@ -129,6 +139,10 @@ export async function createPrecomputedLegacyLuaBuildPlan({
   });
   const scripts = lockedScriptsByPasscode(runtimeConfig);
   const skippedByReason = Object.create(null);
+  const unsupportedCorpusRecordCount = Math.max(0, cards.length - identities.length);
+  if (unsupportedCorpusRecordCount > 0) {
+    skippedByReason.CARD_CORPUS_IDENTITY_UNSUPPORTED = unsupportedCorpusRecordCount;
+  }
   const eligible = [];
   let resolvedIdentityCount = 0;
   let lockedScriptCount = 0;
@@ -196,7 +210,7 @@ export async function createPrecomputedLegacyLuaBuildPlan({
     schemaVersion: PRECOMPUTED_LEGACY_LUA_BUILD_PLAN_SCHEMA,
     selectionPolicy: PRECOMPUTED_LEGACY_LUA_SELECTION_POLICY,
     registrySha256: prefilter.descriptor.registrySha256,
-    requestedCardCount: identities.length,
+    requestedCardCount: cards.length,
     resolvedIdentityCount,
     lockedScriptCount,
     registryPrefilteredCardCount: eligible.length,
@@ -320,15 +334,36 @@ export function cardAliases(card) {
 }
 
 function normalizeCardRecord(card) {
+  if (isExplicitNegativeSkillRecord(card)) {
+    return SKIP_NEGATIVE_SKILL_RECORD;
+  }
   const cid = normalizePrecomputedLegacyLuaCid(card?.id ?? card?.cid);
   const aliases = cardAliases(card);
   if (cid === null || aliases.length === 0) {
     throw buildError(
       "LEGACY_LUA_PRECOMPUTE_CARD_CORPUS_INVALID",
-      "every card corpus record requires a stable CID and an exact alias",
+      "every non-skill card corpus record requires a stable CID and an exact alias",
     );
   }
   return Object.freeze({ cid, aliases, card });
+}
+
+function isExplicitNegativeSkillRecord(card) {
+  if (card === null || typeof card !== "object" || Array.isArray(card)) {
+    return false;
+  }
+  const rawCid = card.id ?? card.cid;
+  const negativeCid = typeof rawCid === "number"
+    ? Number.isSafeInteger(rawCid) && rawCid < 0
+    : typeof rawCid === "string" && /^-\d+$/u.test(rawCid.trim()) &&
+      BigInt(rawCid.trim()) < 0n;
+  if (!negativeCid) return false;
+  const declaredTypes = [card.type, card.cardType]
+    .filter((value) => value !== undefined && value !== null && value !== "")
+    .map((value) => String(value).trim().toLowerCase());
+  return declaredTypes.length > 0 && declaredTypes.every((value) =>
+    value === "skill"
+  );
 }
 
 function lockedScriptsByPasscode(runtimeConfig) {

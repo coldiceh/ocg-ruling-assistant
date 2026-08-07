@@ -49,6 +49,7 @@ test("high-value local evidence is ranked ahead of weak same-card matches withou
       ...(evidence.provisionalOfficialResponses || []),
     ];
     const faqCandidates = evidence.faqRelated || [];
+    const rulebookCandidates = evidence.rulebookCandidates || [];
     const allCandidates = evidenceBucketsToList(evidence);
     const archive = createAdminEvidenceArchive({
       evidenceBuckets: evidence,
@@ -60,7 +61,11 @@ test("high-value local evidence is ranked ahead of weak same-card matches withou
       : 5;
 
     for (const expectedId of evaluationCase.expectedEvidenceIds || []) {
-      const bucket = expectedId.startsWith("card-faq-") ? faqCandidates : officialCandidates;
+      const bucket = expectedId.startsWith("card-faq-")
+        ? faqCandidates
+        : expectedId.startsWith("ocg-rule:")
+          ? rulebookCandidates
+          : officialCandidates;
       const highValueRank = bucket.findIndex((item) => item.id === expectedId);
       const allRank = allCandidates.findIndex((item) => item.id === expectedId);
       const candidate = bucket[highValueRank];
@@ -81,7 +86,7 @@ test("high-value local evidence is ranked ahead of weak same-card matches withou
       assert.notEqual(
         highValueRank,
         -1,
-        `${evaluationCase.id}: ${expectedId} must survive into a high-value QA/FAQ bucket`,
+        `${evaluationCase.id}: ${expectedId} must survive into its high-value evidence bucket`,
       );
       assert.ok(
         highValueRank < expectedEvidenceMaxRank,
@@ -92,7 +97,7 @@ test("high-value local evidence is ranked ahead of weak same-card matches withou
         includedManifestEntry,
         `${evaluationCase.id}: ${expectedId} must reach the bounded final-model packet`,
       );
-      if (expectedId !== "ygoresources-qa-24189") {
+      if (!expectedId.startsWith("ocg-rule:") && expectedId !== "ygoresources-qa-24189") {
         assert.notEqual(
           candidate?.isDirect,
           true,

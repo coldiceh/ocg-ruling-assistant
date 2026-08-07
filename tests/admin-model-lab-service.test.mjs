@@ -851,6 +851,7 @@ test("DeepSeek final reserves its priced worst-case token envelope before transp
       model: "deepseek-v4-pro",
       reasoningMode: "pro",
       reasoningEffort: "max",
+      maxOutputTokens: 128_000,
       finalAttemptPolicy: "single",
     },
   });
@@ -864,6 +865,44 @@ test("DeepSeek final reserves its priced worst-case token envelope before transp
   assert.equal(transportCalls.length, 1);
   assert.equal(fixture.deepSeekPrepareCalls, 0);
   assert.equal(finalReservation.input.requiredReservationCny, 2.340864);
+});
+
+test("DeepSeek thinking gets enough output room while non-thinking keeps the compact default", async () => {
+  const finalProvider = {
+    providerId: "deepseek",
+    async create() {
+      throw new Error("create is not used by this profile test");
+    },
+  };
+  const thinkingService = makeService(makeFixture(), {}, {
+    finalRulingProviders: { deepseek: finalProvider },
+  });
+  const thinking = await thinkingService.createRun({
+    body: {
+      question: "匿名思考输出上限问题",
+      provider: "deepseek",
+      model: "deepseek-v4-flash",
+      reasoningMode: "pro",
+      reasoningEffort: "low",
+      finalAttemptPolicy: "single",
+    },
+  });
+  assert.equal(thinking.executionProfile.finalRuling.maxOutputTokens, 16_384);
+
+  const standardService = makeService(makeFixture(), {}, {
+    finalRulingProviders: { deepseek: finalProvider },
+  });
+  const standard = await standardService.createRun({
+    body: {
+      question: "匿名非思考输出上限问题",
+      provider: "deepseek",
+      model: "deepseek-v4-flash",
+      reasoningMode: "standard",
+      reasoningEffort: "none",
+      finalAttemptPolicy: "single",
+    },
+  });
+  assert.equal(standard.executionProfile.finalRuling.maxOutputTokens, 8_192);
 });
 
 test("final evidence readiness fails before provider submission, budget, and transport", async () => {
@@ -2327,6 +2366,206 @@ test("provided card candidates form a closed scope that ignores preparation nick
       (mention) => mention.input === "廉价模型误猜昵称",
     ),
     false,
+  );
+});
+
+test("provided closed scope accepts verified retrieval identities without admitting extra cards", async () => {
+  const fixture = makeFixture();
+  fixture.preparationCardNameCandidates = [
+    { name: "用户新译名", originalText: "用户新译名" },
+    { name: "本地精确卡", originalText: "本地精确卡" },
+  ];
+  fixture.preparedCardResolution = {
+    resolvedCards: [{
+      input: "本地精确卡",
+      id: "card-local",
+      name: "本地精确卡",
+      aliases: ["本地精确卡"],
+      text: "本地精确卡文。",
+    }],
+    unresolvedMentions: [{ input: "用户新译名", reason: "not_found" }],
+    ambiguousMentions: [],
+    omittedResolvedCards: [],
+    userProvidedCardTexts: [],
+    modelCardNameCandidates: fixture.preparationCardNameCandidates,
+  };
+  fixture.data.cards.push(
+    { id: "card-canonical", name: "正式卡名", text: "检索后绑定的完整卡文。" },
+    { id: "card-local", name: "本地精确卡", text: "本地精确卡文。" },
+    { id: "card-noise", name: "模型扩张噪声卡", text: "不应进入封闭候选集。" },
+  );
+  fixture.retrieval.cardResolution = {
+    ...fixture.preparedCardResolution,
+    resolvedCards: [{
+      input: "用户新译名",
+      matchedQuery: "用户新译名",
+      id: "card-canonical",
+      cardId: "card-canonical",
+      cid: "24680",
+      passcode: "12345678",
+      name: "正式卡名",
+      aliases: ["用户新译名", "正式卡名"],
+      identityVerificationStatus: "verified_external_replacement",
+      resolutionSource: "external_identity_verification",
+    }, {
+      input: "本地精确卡",
+      matchedQuery: "本地精确卡",
+      id: "wrong-verified-card",
+      cid: "99999",
+      name: "外部错误替换",
+      identityVerificationStatus: "verified_external_replacement",
+    }, {
+      input: "廉价模型误猜昵称",
+      matchedQuery: "廉价模型误猜昵称",
+      id: "card-noise",
+      name: "模型扩张噪声卡",
+      identityVerificationStatus: "verified_external_replacement",
+    }],
+    unresolvedMentions: [],
+    ambiguousMentions: [],
+  };
+  fixture.retrieval.retrievedCards = fixture.retrieval.cardResolution.resolvedCards;
+  const service = makeService(fixture);
+  const created = await service.createRun({
+    body: {
+      question: "新译名与本地精确卡的匿名交互。",
+      cardNameCandidates: ["用户新译名", "本地精确卡"],
+      finalAttemptPolicy: "single",
+    },
+  });
+
+  const execution = await service.executeRun({ runId: created.runId });
+  const resolution = execution.run.evidenceSnapshot.evidence.cardResolution;
+
+  assert.equal(resolution.candidateScope, "provided_closed");
+  assert.deepEqual(
+    resolution.resolvedCards.map((card) => card.id),
+    ["card-canonical", "card-local"],
+  );
+  assert.equal(
+    resolution.resolvedCards.some((card) => card.id === "card-noise"),
+    false,
+  );
+  assert.deepEqual(resolution.unresolvedMentions, []);
+  assert.equal(resolution.resolvedCards[0].cid, "24680");
+  assert.equal(resolution.resolvedCards[1].name, "本地精确卡");
+});
+
+test("provided closed scope never promotes an unverified external identity", async () => {
+  const fixture = makeFixture();
+  fixture.preparationCardNameCandidates = [
+    { name: "未验证新译名", originalText: "未验证新译名" },
+  ];
+  fixture.preparedCardResolution = {
+    resolvedCards: [],
+    unresolvedMentions: [{ input: "未验证新译名", reason: "not_found" }],
+    ambiguousMentions: [],
+    omittedResolvedCards: [],
+    userProvidedCardTexts: [],
+    modelCardNameCandidates: fixture.preparationCardNameCandidates,
+  };
+  fixture.retrieval.cardResolution = {
+    ...fixture.preparedCardResolution,
+    resolvedCards: [{
+      input: "未验证新译名",
+      matchedQuery: "未验证新译名",
+      id: "unverified-card",
+      name: "未经确认的卡",
+      identityVerificationStatus: "unverified",
+    }],
+    unresolvedMentions: [],
+  };
+  fixture.retrieval.retrievedCards = fixture.retrieval.cardResolution.resolvedCards;
+  const service = makeService(fixture);
+  const created = await service.createRun({
+    body: {
+      question: "未验证新译名的匿名问题。",
+      cardNameCandidates: ["未验证新译名"],
+      finalAttemptPolicy: "single",
+    },
+  });
+
+  await assert.rejects(
+    service.executeRun({ runId: created.runId }),
+    (error) => (
+      error?.code === "admin_final_evidence_not_ready"
+      && error?.details?.unresolvedCandidates?.includes("未验证新译名")
+    ),
+  );
+});
+
+test("provided closed scope fails closed for missing verification, conflicts, weak identities, and non-unresolved candidates", async () => {
+  const fixture = makeFixture();
+  const unresolvedNames = [
+    "缺少验证状态",
+    "明确未验证",
+    "身份冲突",
+    "缺少强标识",
+  ];
+  const allNames = [...unresolvedNames, "不在未解决集合"];
+  fixture.preparationCardNameCandidates = allNames.map((name) => ({
+    name,
+    originalText: name,
+  }));
+  fixture.preparedCardResolution = {
+    resolvedCards: [],
+    unresolvedMentions: unresolvedNames.map((input) => ({ input, reason: "not_found" })),
+    ambiguousMentions: [],
+    omittedResolvedCards: [],
+    userProvidedCardTexts: [],
+    modelCardNameCandidates: fixture.preparationCardNameCandidates,
+  };
+  fixture.retrieval.cardResolution = {
+    ...fixture.preparedCardResolution,
+    resolvedCards: [{
+      input: "缺少验证状态",
+      matchedQuery: "缺少验证状态",
+      id: "missing-status-card",
+      name: "缺少验证状态的外部卡",
+    }, {
+      input: "明确未验证",
+      matchedQuery: "明确未验证",
+      id: "unverified-card",
+      name: "明确未验证的外部卡",
+      identityVerificationStatus: "unverified",
+    }, {
+      input: "身份冲突",
+      matchedQuery: "身份冲突",
+      id: "conflicting-card",
+      name: "发生冲突的外部卡",
+      identityVerificationStatus: "verified_same_identity",
+      identityCanonicalizationConflict: true,
+    }, {
+      input: "缺少强标识",
+      matchedQuery: "缺少强标识",
+      name: "只有名称的外部卡",
+      identityVerificationStatus: "verified_external_replacement",
+    }, {
+      input: "不在未解决集合",
+      matchedQuery: "不在未解决集合",
+      id: "not-currently-unresolved-card",
+      name: "不应升级的外部卡",
+      identityVerificationStatus: "verified_external_replacement",
+    }],
+    unresolvedMentions: [],
+    ambiguousMentions: [],
+  };
+  fixture.retrieval.retrievedCards = fixture.retrieval.cardResolution.resolvedCards;
+  const service = makeService(fixture);
+  const created = await service.createRun({
+    body: {
+      question: "多个未完成身份解析的匿名问题。",
+      cardNameCandidates: allNames,
+      finalAttemptPolicy: "single",
+    },
+  });
+
+  await assert.rejects(
+    service.executeRun({ runId: created.runId }),
+    (error) => (
+      error?.code === "admin_final_evidence_not_ready"
+      && allNames.every((name) => error?.details?.unresolvedCandidates?.includes(name))
+    ),
   );
 });
 

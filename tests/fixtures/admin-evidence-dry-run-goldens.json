@@ -8,7 +8,7 @@
     },
     {
       "id": "unchained-replacement",
-      "expectedAnswer": "可以适用《完美电子多元驱动蛇·神龙》的破坏替代并降低1000攻击力；由于《破械焰魔天·阎摩》最终没有被破坏，《破械冥官·篁》不能特殊召唤。",
+      "expectedAnswer": "不能适用《完美电子多元驱动蛇·神龙》的③效果再次代替破坏；《破械冥官·篁》不能特殊召唤。",
       "leakCanary": "GOLD_ONLY_CANARY_02_DO_NOT_SEND"
     },
     {

@@ -86,10 +86,11 @@ const CAPABILITY_TABLE = {
     providerId: "deepseek",
     modelId: "deepseek-v4-flash",
     displayName: "DeepSeek V4 Flash",
-    supportedReasoningEfforts: ["none", "high", "max"],
+    supportedReasoningEfforts: ["none", "low", "high", "max"],
     supportedReasoningModes: ["standard", "pro"],
     defaultReasoningEffort: "none",
     defaultReasoningMode: "standard",
+    preferredComparisonReasoningEffort: "low",
     thinkingControl: "optional",
     allowEvidencePreparation: true,
   }),
@@ -97,10 +98,11 @@ const CAPABILITY_TABLE = {
     providerId: "deepseek",
     modelId: "deepseek-v4-pro",
     displayName: "DeepSeek V4 Pro",
-    supportedReasoningEfforts: ["none", "high", "max"],
+    supportedReasoningEfforts: ["none", "low", "high", "max"],
     supportedReasoningModes: ["standard", "pro"],
     defaultReasoningEffort: "max",
     defaultReasoningMode: "pro",
+    preferredComparisonReasoningEffort: "high",
     thinkingControl: "optional",
   }),
   "glm-5.2": domesticFinalCapability({
@@ -365,6 +367,7 @@ function preparationCapability({
   supportedReasoningModes,
   defaultReasoningEffort,
   defaultReasoningMode,
+  preferredComparisonReasoningEffort = null,
   thinkingControl,
 }) {
   return {
@@ -378,6 +381,7 @@ function preparationCapability({
     supportedReasoningModes: [...supportedReasoningModes],
     defaultReasoningEffort,
     defaultReasoningMode,
+    preferredComparisonReasoningEffort,
     thinkingControl,
     supportsStructuredOutputs: false,
     structuredOutputMode: "json_object",
@@ -402,6 +406,7 @@ function domesticFinalCapability({
   supportedReasoningModes,
   defaultReasoningEffort,
   defaultReasoningMode,
+  preferredComparisonReasoningEffort = null,
   thinkingControl,
   allowEvidencePreparation = false,
 }) {
@@ -414,6 +419,7 @@ function domesticFinalCapability({
       supportedReasoningModes,
       defaultReasoningEffort,
       defaultReasoningMode,
+      preferredComparisonReasoningEffort,
       thinkingControl,
     }),
     allowedStages: [
