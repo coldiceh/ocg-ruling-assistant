@@ -1,8 +1,8 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "env": {
-    "RELAY_STREAM_TIMEOUT_MS": "270000",
-    "ADMIN_MODEL_LAB_SYNC_FINAL_TIMEOUT_MS": "290000",
+    "RELAY_STREAM_TIMEOUT_MS": "700000",
+    "ADMIN_MODEL_LAB_SYNC_FINAL_TIMEOUT_MS": "740000",
     "ADMIN_MODEL_LAB_BYPASS_DAILY_BUDGET": "true"
   },
   "functions": {
@@ -11,7 +11,7 @@
       "includeFiles": "data/legacy-lua-semantic-cache-v2/**"
     },
     "api/admin-model-lab.js": {
-      "maxDuration": 300,
+      "maxDuration": 800,
       "includeFiles": "data/legacy-lua-semantic-cache-v2/**"
     }
   }
