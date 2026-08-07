@@ -62,6 +62,7 @@ test("production composition registers runs and exposes persistent record capabi
   assert.equal(capabilities.features.evaluation, true);
   assert.equal(capabilities.features.forkRun, true);
   assert.equal(capabilities.features.releaseUnchargedRelayReservation, true);
+  assert.equal(capabilities.features.reconcileRelayTotalOnlyUsage, true);
   assert.equal(capabilities.architecture.sharedEvidenceSnapshotFork, true);
   assert.equal(capabilities.persistence.recordStore, "persistent");
   assert.equal(capabilities.persistence.runStore, "persistent");
@@ -82,6 +83,17 @@ test("production composition registers runs and exposes persistent record capabi
     argument: {
       runId: run.runId,
       confirmation: "test-confirmation",
+    },
+  });
+  const reconciliation = await service.reconcileRelayTotalOnlyUsage({
+    runId: run.runId,
+    confirmation: "test-total-only-confirmation",
+  });
+  assert.deepEqual(reconciliation, {
+    reconciled: true,
+    argument: {
+      runId: run.runId,
+      confirmation: "test-total-only-confirmation",
     },
   });
   const history = await service.listRuns({ limit: 10 });
@@ -1033,6 +1045,9 @@ function fakeBaseService({ persistent = true } = {}) {
     },
     async releaseUnchargedRelayReservation(argument) {
       return { released: true, argument: structuredClone(argument) };
+    },
+    async reconcileRelayTotalOnlyUsage(argument) {
+      return { reconciled: true, argument: structuredClone(argument) };
     },
     async replayEvents() {
       return { events: [], nextAfterSequence: 0, status: run.status, terminal: false };

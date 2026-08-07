@@ -1479,6 +1479,181 @@ test("manual reconciliation releases only an exact uncharged legacy Relay 524 re
   });
 });
 
+test("legacy Relay total-only usage reconciliation is server-priced, strict, and idempotent", async (t) => {
+  async function createLegacyTotalOnlyRun({
+    totalTokens = 13_412,
+    legacyCostCny = 0,
+    mutateRun = null,
+  } = {}) {
+    const fixture = makeFixture();
+    const storage = createMemoryAdminRunStorage();
+    const budgetCalls = [];
+    const stream = [
+      `data: ${JSON.stringify({
+        id: "relay-legacy-total-only",
+        model: "gpt-5.6-luna",
+        choices: [],
+        usage: { total_tokens: totalTokens },
+      })}\n\n`,
+    ].join("");
+    const relayProvider = new CompatibleEvidencePreparationProvider({
+      providerId: "relay",
+      apiKey: "relay-test-key",
+      baseUrl: "https://relay.example/v1",
+      env: { RELAY_STREAM: "true" },
+      fetchImpl: async () => new Response(stream, {
+        headers: { "content-type": "text/event-stream" },
+      }),
+    });
+    const service = makeService(fixture, {
+      ADMIN_MODEL_LAB_USD_TO_CNY_RATE: "7.5",
+      RELAY_API_KEY: "relay-test-key",
+      RELAY_PRICING_MULTIPLIER: "0.27",
+    }, {
+      storage,
+      finalCallBudgetLedger: createRecordingBudgetLedger(budgetCalls),
+      finalRulingProviders: { relay: relayProvider },
+    });
+    const created = await service.createRun({
+      body: {
+        question: "匿名中转历史总 Token 费用追补",
+        provider: "relay",
+        model: "relay-gpt-5.6-luna",
+        reasoningMode: "pro",
+        reasoningEffort: "high",
+        finalAttemptPolicy: "single",
+      },
+    });
+    const failed = (await service.executeRun({ runId: created.runId })).run;
+    assert.equal(failed.status, ADMIN_RUN_STATUSES.FAILED);
+    assert.equal(failed.error.code, "provider_submission_outcome_unknown");
+    assert.equal(failed.error.failureMetering.usage.totalTokens, totalTokens);
+
+    const persisted = await storage.getRun(failed.runId);
+    const legacy = structuredClone(persisted);
+    legacy.error.failureMetering.cost.totalCostCny = legacyCostCny;
+    if (typeof mutateRun === "function") mutateRun(legacy);
+    legacy.revision += 1;
+    legacy.lastSequence += 1;
+    await storage.commitRun({
+      runId: legacy.runId,
+      expectedRevision: persisted.revision,
+      run: legacy,
+      event: {
+        runId: legacy.runId,
+        sequence: legacy.lastSequence,
+        type: "TEST_LEGACY_TOTAL_ONLY_IMPORTED",
+        timestamp: legacy.updatedAt,
+        status: legacy.status,
+        payload: {},
+      },
+    });
+    const attemptId = legacy.execution.providerSubmission.attemptId;
+    return {
+      service,
+      run: legacy,
+      budgetCalls,
+      confirmation: [
+        "relay-total-only-usage-reconciliation/v1",
+        legacy.runId,
+        attemptId,
+      ].join(":"),
+    };
+  }
+
+  await t.test("recomputes the charge on the server and records one correction", async () => {
+    const { service, run, budgetCalls, confirmation } = await createLegacyTotalOnlyRun();
+    const first = await service.reconcileRelayTotalOnlyUsage({
+      runId: run.runId,
+      confirmation,
+      amountCny: 999,
+    });
+    const duplicate = await service.reconcileRelayTotalOnlyUsage({
+      runId: run.runId,
+      confirmation,
+      amountCny: 0.000001,
+    });
+
+    assert.equal(first.correctedCost.upperBoundApplied, true);
+    assert.equal(first.correctedCost.upperBoundTokenBasis, "total_tokens_at_highest_rate");
+    assert.equal(first.correctedCost.totalCostCny > 0, true);
+    assert.notEqual(first.correctedCost.totalCostCny, 999);
+    assert.equal(duplicate.correctionId, first.correctionId);
+    assert.equal(first.settlement.status, "settled");
+    assert.equal(duplicate.settlement.status, "existing");
+    const correctionCalls = budgetCalls.filter(
+      (item) => item.input.attemptKind === "metering_reconciliation",
+    );
+    assert.deepEqual(
+      correctionCalls.map((item) => item.operation),
+      ["reserve", "settle", "reserve", "settle"],
+    );
+    assert.equal(correctionCalls[0].input.requiredReservationCny, first.correctedCost.totalCostCny);
+    assert.equal(correctionCalls[1].input.actualCny, first.correctedCost.totalCostCny);
+    const replay = await service.replayEvents({ runId: run.runId });
+    assert.equal(
+      replay.events.filter(
+        (event) => event.type === ADMIN_MODEL_LAB_SERVICE_EVENT_TYPES.BUDGET_USAGE_RECONCILED,
+      ).length,
+      1,
+    );
+  });
+
+  for (const scenario of [
+    {
+      name: "wrong confirmation",
+      expectedCode: "admin_budget_reconcile_confirmation_invalid",
+      confirmation: "relay-total-only-usage-reconciliation/v1:wrong:wrong",
+    },
+    {
+      name: "non-Relay profile",
+      expectedCode: "admin_budget_reconcile_provider_invalid",
+      mutateRun(run) {
+        run.executionProfile.finalRuling.provider = "deepseek";
+      },
+    },
+    {
+      name: "non-total-only usage",
+      expectedCode: "admin_budget_reconcile_usage_invalid",
+      mutateRun(run) {
+        run.error.failureMetering.usage.inputTokens = 1;
+      },
+    },
+    {
+      name: "already nonzero legacy cost",
+      expectedCode: "admin_budget_reconcile_usage_invalid",
+      legacyCostCny: 0.01,
+    },
+    {
+      name: "mismatched reported model",
+      expectedCode: "admin_budget_reconcile_model_invalid",
+      mutateRun(run) {
+        run.error.reportedModel = "gpt-5.6-sol";
+      },
+    },
+  ]) {
+    await t.test(scenario.name, async () => {
+      const fixture = await createLegacyTotalOnlyRun({
+        legacyCostCny: scenario.legacyCostCny,
+        mutateRun: scenario.mutateRun,
+      });
+      await assert.rejects(
+        fixture.service.reconcileRelayTotalOnlyUsage({
+          runId: fixture.run.runId,
+          confirmation: scenario.confirmation || fixture.confirmation,
+        }),
+        (error) => error?.code === scenario.expectedCode,
+      );
+      assert.equal(
+        fixture.budgetCalls.filter(
+          (item) => item.input.attemptKind === "metering_reconciliation",
+        ).length,
+        0,
+      );
+    });
+  }
+});
+
 test("a billed HTTP 200 empty response settles reported usage or conservatively retains its reservation", async (t) => {
   for (const usage of [
     { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 },

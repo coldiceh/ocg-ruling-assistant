@@ -18,6 +18,7 @@ const POST_ACTIONS = new Set([
   "execute",
   "cancel",
   "release-budget-reservation",
+  "reconcile-relay-total-only-usage",
   "rating",
 ]);
 
@@ -223,6 +224,15 @@ async function dispatchJsonAction({ service, context }) {
   }
   if (action === "release-budget-reservation") {
     return callService(service, "releaseUnchargedRelayReservation", {
+      runId: requiredParameter(body.runId, "runId"),
+      confirmation: requiredParameter(body.confirmation, "confirmation"),
+      body: withoutAction(body),
+      request,
+      authorization,
+    });
+  }
+  if (action === "reconcile-relay-total-only-usage") {
+    return callService(service, "reconcileRelayTotalOnlyUsage", {
       runId: requiredParameter(body.runId, "runId"),
       confirmation: requiredParameter(body.confirmation, "confirmation"),
       body: withoutAction(body),

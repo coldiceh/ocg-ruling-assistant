@@ -116,10 +116,13 @@ export const ADMIN_MODEL_LAB_SERVICE_EVENT_TYPES = Object.freeze({
   MODEL_REPAIR_REQUEST_CREATED: "MODEL_REPAIR_REQUEST_CREATED",
   MODEL_CANCEL_FAILED: "MODEL_CANCEL_FAILED",
   BUDGET_RESERVATION_RELEASED: "BUDGET_RESERVATION_RELEASED",
+  BUDGET_USAGE_RECONCILED: "BUDGET_USAGE_RECONCILED",
 });
 
 const UNCHARGED_RELAY_RELEASE_CONFIRMATION_PREFIX =
   "provider-dashboard-confirmed-not-charged/v1";
+const RELAY_TOTAL_ONLY_USAGE_RECONCILIATION_PREFIX =
+  "relay-total-only-usage-reconciliation/v1";
 const LEGACY_CLOUDFLARE_524_TITLE_PATTERN =
   /<title>[^<]*\|\s*524:\s*A timeout occurred<\/title>/iu;
 const LEGACY_CLOUDFLARE_524_CODE_PATTERN =
@@ -269,6 +272,7 @@ export function createAdminModelLabService({
         reconcileRunOnRead: true,
         cancelRun: true,
         releaseUnchargedRelayReservation: true,
+        reconcileRelayTotalOnlyUsage: true,
         eventReplay: true,
         evidenceSnapshot: true,
         liveOfficialQaDefault: liveOfficialQaEnabled,
@@ -2595,6 +2599,187 @@ export function createAdminModelLabService({
     });
   }
 
+  async function reconcileRelayTotalOnlyUsage(argument = {}) {
+    const body = unwrapBody(argument);
+    const runId = String(body.runId || "").trim();
+    if (!runId) {
+      throw requestError("runId is required", "admin_budget_reconcile_run_id_required");
+    }
+    if (!finalCallBudgetLedger) {
+      throw serviceError(
+        "Persistent final-call budget ledger is unavailable",
+        "admin_final_budget_storage_unavailable",
+      );
+    }
+
+    const run = await requireRun(runId);
+    const profile = run.executionProfile?.finalRuling || {};
+    const pricingProfile = run.executionProfile?.pricing || {};
+    const submission = run.execution?.providerSubmission || {};
+    const attemptId = String(submission.attemptId || "").trim();
+    const expectedConfirmation = [
+      RELAY_TOTAL_ONLY_USAGE_RECONCILIATION_PREFIX,
+      runId,
+      attemptId,
+    ].join(":");
+    if (String(body.confirmation || "") !== expectedConfirmation) {
+      throw requestError(
+        "The total-only usage confirmation does not match this run and attempt",
+        "admin_budget_reconcile_confirmation_invalid",
+      );
+    }
+    if (run.status !== ADMIN_RUN_STATUSES.FAILED) {
+      throw requestError(
+        "Only a failed run can reconcile legacy Relay usage",
+        "admin_budget_reconcile_run_not_failed",
+      );
+    }
+    if (String(profile.provider || "").trim().toLowerCase() !== "relay") {
+      throw requestError(
+        "Only Relay usage can use total-only reconciliation",
+        "admin_budget_reconcile_provider_invalid",
+      );
+    }
+    if (
+      submission.state !== ADMIN_PROVIDER_SUBMISSION_STATES.OUTCOME_UNKNOWN
+      || String(submission.providerId || "").trim().toLowerCase() !== "relay"
+      || !attemptId
+      || !submission.intentAt
+      || run.error?.code !== "provider_submission_outcome_unknown"
+      || run.error?.outcomeKnown !== false
+      || run.error?.billingStatus !== "metered_final_ruling_usage_reported"
+      || !String(run.error?.requestId || "").trim()
+    ) {
+      throw requestError(
+        "The run is not an eligible metered Relay outcome-unknown attempt",
+        "admin_budget_reconcile_submission_invalid",
+      );
+    }
+
+    const expectedModel = String(profile.model || profile.requestedModel || "")
+      .trim()
+      .toLowerCase()
+      .replace(/^relay-/u, "");
+    const reportedModel = String(run.error?.reportedModel || "").trim().toLowerCase();
+    if (!expectedModel || reportedModel !== expectedModel) {
+      throw requestError(
+        "The persisted Relay model identity does not match the server-selected model",
+        "admin_budget_reconcile_model_invalid",
+      );
+    }
+
+    const legacyUsage = run.error?.failureMetering?.usage || run.error?.usage;
+    let normalizedUsage;
+    try {
+      normalizedUsage = normalizeReportedModelUsage(legacyUsage);
+    } catch {
+      normalizedUsage = null;
+    }
+    if (
+      !normalizedUsage
+      || normalizedUsage.totalTokens <= 0
+      || normalizedUsage.inputTokens !== 0
+      || normalizedUsage.outputTokens !== 0
+      || normalizedUsage.cachedInputTokens !== 0
+      || normalizedUsage.cacheWriteTokens !== 0
+      || normalizedUsage.reasoningTokens !== 0
+      || Number(run.error?.failureMetering?.cost?.totalCostCny) !== 0
+    ) {
+      throw requestError(
+        "The run does not contain the legacy zero-cost total-only usage shape",
+        "admin_budget_reconcile_usage_invalid",
+      );
+    }
+
+    const correctedCost = estimateRelayModelCost({
+      model: profile.model || profile.requestedModel,
+      usage: { total_tokens: normalizedUsage.totalTokens },
+      usdToCnyRate: pricingProfile.usdToCnyRate,
+      exchangeRateVersion: pricingProfile.exchangeRateVersion,
+      pricingMultiplier: pricingProfile.relayPricingMultiplier,
+    });
+    if (
+      correctedCost.upperBoundApplied !== true
+      || !Number.isFinite(correctedCost.totalCostCny)
+      || correctedCost.totalCostCny <= 0
+    ) {
+      throw serviceError(
+        "The total-only Relay usage cannot be conservatively priced",
+        "admin_budget_reconcile_pricing_unavailable",
+      );
+    }
+
+    const correctionId = [
+      "admin-final-call-metering-correction/v1",
+      runId,
+      attemptId,
+    ].join(":");
+    const correctionAttemptId = `metering-correction:${attemptId}`;
+    const reservation = await finalCallBudgetLedger.reserve({
+      reservationId: correctionId,
+      runId,
+      attemptId: correctionAttemptId,
+      attemptKind: "metering_reconciliation",
+      provider: "relay",
+      model: profile.requestedModel || profile.model,
+      reservedAt: submission.intentAt,
+      requiredReservationCny: correctedCost.totalCostCny,
+    });
+    const settlement = await finalCallBudgetLedger.settle({
+      reservationId: correctionId,
+      runId,
+      attemptId: correctionAttemptId,
+      attemptKind: "metering_reconciliation",
+      provider: "relay",
+      model: profile.requestedModel || profile.model,
+      reservedAt: submission.intentAt,
+      actualCny: correctedCost.totalCostCny,
+    });
+    if (!["settled", "existing"].includes(String(settlement?.status || ""))) {
+      throw serviceError(
+        "The total-only Relay usage settlement was not confirmed",
+        "admin_budget_reconcile_settlement_unconfirmed",
+      );
+    }
+
+    let auditEventPersisted = true;
+    try {
+      const replay = await runStore.replayEvents(runId, { afterSequence: 0, limit: null });
+      const alreadyAudited = (replay.events || []).some((event) => (
+        event.type === ADMIN_MODEL_LAB_SERVICE_EVENT_TYPES.BUDGET_USAGE_RECONCILED
+        && event.payload?.correctionId === correctionId
+      ));
+      if (!alreadyAudited) {
+        await runStore.appendEvent(runId, {
+          type: ADMIN_MODEL_LAB_SERVICE_EVENT_TYPES.BUDGET_USAGE_RECONCILED,
+          payload: {
+            correctionId,
+            attemptId,
+            provider: "relay",
+            model: profile.requestedModel || profile.model,
+            totalTokens: normalizedUsage.totalTokens,
+            settledCny: correctedCost.totalCostCny,
+            pricingStatus: correctedCost.pricingStatus,
+            upperBoundTokenBasis: correctedCost.upperBoundTokenBasis,
+          },
+        });
+      }
+    } catch {
+      auditEventPersisted = false;
+    }
+
+    return immutableJson({
+      runId,
+      attemptId,
+      correctionId,
+      usage: normalizedUsage,
+      correctedCost,
+      reservation,
+      settlement,
+      auditEventPersisted,
+    });
+  }
+
   async function failRunWithStage(runId, error, executionToken = null) {
     let run = await requireRun(runId);
     if (TERMINAL_RUN_STATUSES.has(run.status)) return run;
@@ -2937,6 +3122,7 @@ export function createAdminModelLabService({
     pollRun,
     cancelRun,
     releaseUnchargedRelayReservation,
+    reconcileRelayTotalOnlyUsage,
     replayEvents,
   });
 }
