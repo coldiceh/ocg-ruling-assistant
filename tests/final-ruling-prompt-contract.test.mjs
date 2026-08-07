@@ -29,3 +29,15 @@ test("final ruling prompt treats model-packet coverage flags as risks without fo
   assert.match(prompt, /覆盖风险本身不自动等于 `UNKNOWN`/u);
   assert.match(prompt, /当前可见卡文、规则或 Q&A 已独立支持决定性 Claim/u);
 });
+
+test("final ruling prompt separates question verdict polarity from proposition truth", async () => {
+  const prompt = await readFile(promptUrl, "utf8");
+
+  assert.match(prompt, /`verdicts\[\]\.value` 回答用户按原句提出的问题/u);
+  assert.match(prompt, /`claims\[\]\.status` 判断的是 `proposition` 这句话本身是否为真/u);
+  assert.match(prompt, /命题“该效果不能发动”若事实正确，`status` 必须是 `TRUE`/u);
+  assert.match(prompt, /不能因为 verdict 为 `FALSE` 就把这个命题标成 `FALSE`/u);
+  assert.match(prompt, /同 `questionId`、`decisive: true`、`status: "TRUE"`/u);
+  assert.match(prompt, /`CONDITIONAL` verdict 必须由明确分支中的决定性命题支撑/u);
+  assert.match(prompt, /只能是 `TRUE` 或 `FALSE`，不能用 `UNKNOWN` 或 `CONDITIONAL`/u);
+});

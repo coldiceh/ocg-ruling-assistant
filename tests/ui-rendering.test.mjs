@@ -651,16 +651,18 @@ test("admin frozen-evidence comparison offers supported configured model combina
       label: "DeepSeek V4 Flash",
       provider: "deepseek",
       modes: [{ id: "standard" }, { id: "pro" }],
-      efforts: [{ id: "none" }, { id: "high" }, { id: "max" }],
+      efforts: [{ id: "none" }, { id: "low" }, { id: "high" }, { id: "max" }],
       defaultReasoningMode: "standard",
       defaultReasoningEffort: "none",
+      preferredComparisonReasoningEffort: "low",
     },
     {
       id: "deepseek-v4-pro",
       label: "DeepSeek V4 Pro",
       provider: "deepseek",
       modes: [{ id: "pro" }],
-      efforts: [{ id: "max" }],
+      efforts: [{ id: "low" }, { id: "high" }, { id: "max" }],
+      preferredComparisonReasoningEffort: "high",
     },
     {
       id: "glm-5.2",
@@ -701,8 +703,8 @@ test("admin frozen-evidence comparison offers supported configured model combina
 
   assert.deepEqual(options.map((item) => item.id), [
     "deepseek-v4-flash:standard:none",
-    "deepseek-v4-flash:pro:high",
-    "deepseek-v4-pro:pro:max",
+    "deepseek-v4-flash:pro:low",
+    "deepseek-v4-pro:pro:high",
     "glm-5.2:standard:none",
     "glm-5.2:pro:max",
     "kimi-k2.6:standard:none",
@@ -713,7 +715,7 @@ test("admin frozen-evidence comparison offers supported configured model combina
   assert.equal(options.some((item) => (
     item.model === "deepseek-v4-pro"
     && item.reasoningMode === "pro"
-    && item.reasoningEffort === "max"
+    && item.reasoningEffort === "high"
   )), true);
 });
 

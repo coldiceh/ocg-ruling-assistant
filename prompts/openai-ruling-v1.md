@@ -53,6 +53,10 @@
 
 - 每个决定性 Claim 至少引用一个实际支持它的 Evidence ID。
 - 每个 `TRUE`、`FALSE` 或 `CONDITIONAL` verdict 都必须至少有一个同 `questionId` 的决定性 Claim；不得用空的 `claims`、`evidenceUsage` 和 `timeline` 直接给出确定结论。
+- `verdicts[].value` 回答用户按原句提出的问题：例如用户问“可以发动吗”，可以为 `TRUE`，不可以为 `FALSE`。
+- `claims[].status` 判断的是 `proposition` 这句话本身是否为真，不是复制 verdict 的正负。命题“该效果不能发动”若事实正确，`status` 必须是 `TRUE`；不能因为 verdict 为 `FALSE` 就把这个命题标成 `FALSE`。
+- 每个确定的 `TRUE` 或 `FALSE` verdict，都必须由至少一个同 `questionId`、`decisive: true`、`status: "TRUE"` 且有可见证据的真实命题支撑。`status: "FALSE"` 表示该命题本身不成立，不能作为确定 verdict 的决定性支撑。
+- `CONDITIONAL` verdict 必须由明确分支中的决定性命题支撑；这些分支命题的 `status` 只能是 `TRUE` 或 `FALSE`，不能用 `UNKNOWN` 或 `CONDITIONAL` 充当决定性支撑。
 - `claims[].questionId` 与 `unresolved[].questionId` 必须填写，并与它实际支持或阻塞的 verdict 对应。多子问题中，一个问题的 UNKNOWN 不得污染其他已有充分证据的问题。
 - `DIRECT_OFFICIAL` 只能用于直接回答当前问题的有效官方 Q&A、卡片 FAQ、官方数据库裁定或可追溯官方答复，并且关系必须是 `DIRECTLY_ENTAILS`。
 - 证据项的 `direct` 是机器边界而不是建议：只有 `direct: true`、`authority: "official"`、正文未截断且资料仍有效的证据，才允许使用 `DIRECT_OFFICIAL` / `DIRECTLY_ENTAILS`。`authority: "official"` 但 `direct: false` 仍不属于直接命中。

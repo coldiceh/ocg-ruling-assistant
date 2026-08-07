@@ -1781,6 +1781,7 @@ function createModelPacketSnapshot({
 }) {
   const included = includedSelections.map((entry) => entry.item);
   const includedManifest = createIncludedManifest(includedSelections);
+  const mandatoryConstraintReview = createMandatoryConstraintReview(includedSelections);
   const conflictCatalog = createModelConflictCatalog(
     archive.conflicts,
     limits,
@@ -1831,6 +1832,15 @@ function createModelPacketSnapshot({
       finalRulingMustConsiderConflictManifest: true,
     },
     limits,
+    decisionFocus: {
+      mandatoryConstraintReview,
+      reviewProtocol: [
+        "check_trigger_conditions_and_every_mandatory_operation_separately",
+        "count_only_candidates_that_can_legally_receive_the_required_operation_at_activation",
+        "do_not_treat_zero_legal_candidates_as_an_empty_success_unless_visible_text_or_ruling_explicitly_allows_it",
+        "an_affirmative_legality_conclusion_must_address_every_listed_constraint_or_explain_its_concrete_mismatch",
+      ],
+    },
     evidenceItems: included,
     evidenceSummary: {
       archiveSubstanceCount:
@@ -1892,6 +1902,24 @@ function createModelPacketSnapshot({
     modelPacket,
     bytes: byteLength(JSON.stringify(modelPacket)),
   };
+}
+
+function createMandatoryConstraintReview(includedSelections) {
+  return includedSelections.flatMap(({ candidate, item }) => {
+    const constraintKinds = [];
+    if ((candidate.pendingSpellTrapMovementRestrictionScore || 0) > 0) {
+      constraintKinds.push("pending_activated_spell_trap_movement_restriction");
+    }
+    if (constraintKinds.length === 0) return [];
+    return [{
+      evidenceId: item.evidenceId,
+      constraintKinds,
+      reviewRequiredBefore: [
+        "activation_legality",
+        "resolution_legality",
+      ],
+    }];
+  });
 }
 
 function createModelConflictCatalog(conflicts, limits, catalogLimit) {

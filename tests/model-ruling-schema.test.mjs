@@ -18,6 +18,18 @@ test("valid structured ruling passes schema and semantic validation", () => {
   assert.equal(MODEL_RULING_RESULT_JSON_SCHEMA.additionalProperties, false);
   assert.ok(MODEL_RULING_RESULT_JSON_SCHEMA.properties.claims.items.required.includes("questionId"));
   assert.ok(MODEL_RULING_RESULT_JSON_SCHEMA.properties.unresolved.items.required.includes("questionId"));
+  assert.match(
+    MODEL_RULING_RESULT_JSON_SCHEMA.properties.verdicts.items.properties.value.description,
+    /Answer to the user question/u,
+  );
+  assert.match(
+    MODEL_RULING_RESULT_JSON_SCHEMA.properties.claims.items.properties.status.description,
+    /Truth value of proposition itself/u,
+  );
+  assert.match(
+    MODEL_RULING_RESULT_JSON_SCHEMA.properties.claims.items.properties.status.description,
+    /decisive branch propositions with status TRUE or FALSE/u,
+  );
 });
 
 test("legacy single-question reasoning without questionId remains accepted", () => {
@@ -43,7 +55,7 @@ test("every determinate question requires a decisive claim backed by visible evi
   assert.equal(emptyValidation.ok, false);
   assert.ok(emptyValidation.errors.some(
     (error) => error.includes(
-      "TRUE verdict q1 must have at least one decisive claim with model-visible evidence",
+      "TRUE verdict q1 must have at least one decisive TRUE claim with model-visible evidence",
     ),
   ));
 
@@ -57,7 +69,7 @@ test("every determinate question requires a decisive claim backed by visible evi
   assert.equal(unrelatedValidation.ok, false);
   assert.ok(unrelatedValidation.errors.some(
     (error) => error.includes(
-      "TRUE verdict q1 must have at least one decisive claim with model-visible evidence",
+      "TRUE verdict q1 must have at least one decisive TRUE claim with model-visible evidence",
     ),
   ));
   assert.ok(unrelatedValidation.errors.includes("claim references unknown questionId: q2"));
@@ -485,7 +497,7 @@ test("unscoped reasoning is rejected as ambiguous for multiple questions", () =>
   ));
   assert.ok(validation.errors.some(
     (error) => error.includes(
-      "TRUE verdict q2 must have at least one decisive claim with model-visible evidence",
+      "TRUE verdict q2 must have at least one decisive TRUE claim with model-visible evidence",
     ),
   ));
 });
@@ -693,6 +705,54 @@ test("CONDITIONAL verdicts require concrete checkable branches instead of placeh
   assert.equal(accepted.ok, true, accepted.errors?.join("\n"));
 });
 
+test("CONDITIONAL verdicts accept decisive TRUE or FALSE branch claims but not indeterminate claims", () => {
+  for (const status of ["TRUE", "FALSE"]) {
+    const result = makeResult();
+    result.verdicts[0] = {
+      questionId: "q1",
+      value: "CONDITIONAL",
+      conclusion: "若该怪兽为攻击表示则可以；若为守备表示则不可以。",
+      conditions: [
+        "该怪兽在处理时为表侧攻击表示。",
+        "该怪兽在处理时为守备表示。",
+      ],
+    };
+    result.claims[0].proposition = status === "TRUE"
+      ? "在攻击表示分支中，该效果可以处理。"
+      : "在守备表示分支中，该效果可以处理。";
+    result.claims[0].status = status;
+
+    const validation = validateModelRulingResult(result, {
+      evidenceSnapshot: makeCompleteSnapshot(),
+      expectedQuestionIds: ["q1"],
+    });
+    assert.equal(validation.ok, true, `${status}: ${validation.errors?.join("\n")}`);
+  }
+
+  for (const status of ["UNKNOWN", "CONDITIONAL"]) {
+    const result = makeResult();
+    result.verdicts[0] = {
+      questionId: "q1",
+      value: "CONDITIONAL",
+      conclusion: "若该怪兽为攻击表示则可以；若为守备表示则不可以。",
+      conditions: [
+        "该怪兽在处理时为表侧攻击表示。",
+        "该怪兽在处理时为守备表示。",
+      ],
+    };
+    result.claims[0].status = status;
+
+    const validation = validateModelRulingResult(result, {
+      evidenceSnapshot: makeCompleteSnapshot(),
+      expectedQuestionIds: ["q1"],
+    });
+    assert.equal(validation.ok, false);
+    assert.ok(validation.errors.includes(
+      "CONDITIONAL verdict q1 must have at least one decisive TRUE or FALSE branch claim with model-visible evidence",
+    ));
+  }
+});
+
 test("timeline rejects duplicate order and mutually-exclusive operation classifications", () => {
   const result = makeResult();
   result.timeline = [
@@ -742,6 +802,34 @@ test("parser accepts JSON only and never repairs Markdown or loose output", () =
   assert.deepEqual(validation.errors, ["model output is not valid JSON"]);
 });
 
+test("a FALSE answer accepts a TRUE claim whose own proposition states the blocker", () => {
+  const result = makeResult();
+  result.verdicts[0].value = "FALSE";
+  result.verdicts[0].conclusion = "不能发动。";
+  result.conciseAnswer = "不能发动，因为当前场面不存在可返回手牌的合法卡。";
+  result.claims[0].proposition = "当前场面不存在可返回手牌的合法卡，因此该效果不能发动。";
+  result.claims[0].status = "TRUE";
+  const snapshot = makeSnapshot();
+  snapshot.selectedEvidence[0].text = "没有可返回手牌的合法卡时不能发动该效果。";
+
+  const validation = validateModelRulingResult(result, {
+    evidenceSnapshot: snapshot,
+    expectedQuestionIds: ["q1"],
+  });
+  assert.equal(validation.ok, true, validation.errors?.join("\n"));
+
+  const mirroredPolarity = structuredClone(result);
+  mirroredPolarity.claims[0].status = "FALSE";
+  const rejected = validateModelRulingResult(mirroredPolarity, {
+    evidenceSnapshot: snapshot,
+    expectedQuestionIds: ["q1"],
+  });
+  assert.equal(rejected.ok, false);
+  assert.ok(rejected.errors.includes(
+    "FALSE verdict q1 must have at least one decisive TRUE claim with model-visible evidence",
+  ));
+});
+
 test("single compound questions accept explicit sub-verdict ids with parent-scoped claims", () => {
   const result = makeResult();
   result.verdicts = [{
@@ -759,8 +847,8 @@ test("single compound questions accept explicit sub-verdict ids with parent-scop
   result.claims.push({
     questionId: "q1",
     claimId: "claim-2",
-    proposition: "第二项不满足处理条件。",
-    status: "FALSE",
+    proposition: "第二项不满足处理条件，因此不可以处理。",
+    status: "TRUE",
     decisive: true,
     evidenceIds: ["faq-1"],
     inferenceType: "DIRECT_OFFICIAL",
@@ -792,8 +880,8 @@ test("structural normalization disambiguates duplicate verdict ids and rebuilds 
   result.claims.push({
     questionId: "q1",
     claimId: "claim-2",
-    proposition: "第二项不满足处理条件。",
-    status: "FALSE",
+    proposition: "第二项不满足处理条件，因此不可以处理。",
+    status: "TRUE",
     decisive: true,
     evidenceIds: ["faq-1"],
     inferenceType: "DIRECT_OFFICIAL",

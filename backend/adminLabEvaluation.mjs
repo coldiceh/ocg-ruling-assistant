@@ -134,10 +134,11 @@ export function evaluateAdminLabResult({
   const evidenceCoverageRatio = ratio(foundEvidenceCount, evidenceCoverage.length);
   const cardEvidenceCoverage = ratio(foundCardCount, cardEvidence.length);
   const packetAvailable = Boolean(packet);
-  const passed = packetAvailable
-    && structuredAssertionCoverage === 1
+  const answerPassed = structuredAssertionCoverage === 1;
+  const evidencePassed = packetAvailable
     && evidenceCoverageRatio === 1
     && cardEvidenceCoverage === 1;
+  const pipelinePassed = answerPassed && evidencePassed;
 
   return Object.freeze({
     schemaVersion: 2,
@@ -145,7 +146,12 @@ export function evaluateAdminLabResult({
     assessmentType: "automated_regression_check",
     humanTruth: false,
     disclaimer: ADMIN_LAB_AUTOMATED_ASSESSMENT_DISCLAIMER,
-    passed,
+    answerPassed,
+    evidencePassed,
+    pipelinePassed,
+    // Backward-compatible aggregate: historically `passed` combined answer
+    // correctness and evidence-pipeline coverage into one boolean.
+    passed: pipelinePassed,
     expectedVerdict: {
       referenceText: normalizedCase.expectedVerdict,
       automaticallyCompared: false,
@@ -205,6 +211,9 @@ export function evaluateAdminLabCorpusResults({
         assessmentType: "automated_regression_check",
         humanTruth: false,
         disclaimer: ADMIN_LAB_AUTOMATED_ASSESSMENT_DISCLAIMER,
+        answerPassed: false,
+        evidencePassed: false,
+        pipelinePassed: false,
         passed: false,
         missingResult: true,
         explanation: "没有为该测试用例提供结构化结果。",
@@ -216,13 +225,25 @@ export function evaluateAdminLabCorpusResults({
       evidenceSnapshot: entry.evidenceSnapshot,
     });
   });
+  const answerPassedCount = cases.filter((item) => item.answerPassed).length;
+  const evidencePassedCount = cases.filter((item) => item.evidencePassed).length;
+  const pipelinePassedCount = cases.filter((item) => item.pipelinePassed).length;
+  const answerPassed = cases.every((item) => item.answerPassed);
+  const evidencePassed = cases.every((item) => item.evidencePassed);
+  const pipelinePassed = cases.every((item) => item.pipelinePassed);
   return {
     schemaVersion: 2,
     assessmentType: "automated_regression_suite",
     humanTruth: false,
     disclaimer: ADMIN_LAB_AUTOMATED_ASSESSMENT_DISCLAIMER,
-    passed: cases.every((item) => item.passed),
-    passedCount: cases.filter((item) => item.passed).length,
+    answerPassed,
+    evidencePassed,
+    pipelinePassed,
+    passed: pipelinePassed,
+    answerPassedCount,
+    evidencePassedCount,
+    pipelinePassedCount,
+    passedCount: pipelinePassedCount,
     totalCount: cases.length,
     cases,
   };

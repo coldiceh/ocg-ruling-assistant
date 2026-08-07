@@ -725,6 +725,7 @@ test("question operations keep the matching mechanism rule inside a bounded pack
     packet.modelPacket.evidenceItems.map((item) => item.evidenceId),
     ["matching-return-mechanism"],
   );
+  assert.deepEqual(packet.modelPacket.decisionFocus.mandatoryConstraintReview, []);
   assert.ok(packet.includedManifest[0].operationRelevanceScore > 0);
   assert.equal(packet.omittedManifest.length, unrelatedRules.length);
   assert.equal(
@@ -809,6 +810,15 @@ test("a 16-item packet keeps the self-contained pending spell/trap movement rest
       item.evidenceIds.includes("overlapping-exception-passage")
     ))?.pendingSpellTrapMovementRestrictionScore,
     0,
+  );
+  const requiredReview = packet.modelPacket.decisionFocus.mandatoryConstraintReview;
+  assert.ok(requiredReview.some((item) => (
+    item.evidenceId === "self-contained-pending-movement-restriction"
+    && item.constraintKinds.includes("pending_activated_spell_trap_movement_restriction")
+  )));
+  assert.equal(
+    requiredReview.some((item) => item.evidenceId === "overlapping-exception-passage"),
+    false,
   );
 });
 
