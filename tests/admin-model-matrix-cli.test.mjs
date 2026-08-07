@@ -675,6 +675,7 @@ test("cases-file CLI executes four questions as exactly twelve single final requ
       {
         caseId: "case-a",
         question: "Q1",
+        candidateCards: ["匿名卡A", "匿名卡B"],
         expectedAnswer: "GOLD_ONLY_ANSWER_MUST_NOT_LEAK",
         leakCanary: "GOLD_ONLY_CANARY_MUST_NOT_LEAK",
       },
@@ -718,6 +719,10 @@ test("cases-file CLI executes four questions as exactly twelve single final requ
   assert.equal(fixture.calls.filter((call) => call.action === "create").length, 4);
   assert.equal(fixture.calls.filter((call) => call.action === "fork").length, 8);
   assert.equal(fixture.calls.filter((call) => call.action === "execute").length, 12);
+  const firstCreate = fixture.calls.find(
+    (call) => call.action === "create" && call.body.question === "Q1",
+  );
+  assert.deepEqual(firstCreate.body.cardNameCandidates, ["匿名卡A", "匿名卡B"]);
   assert.doesNotMatch(
     JSON.stringify(fixture.calls),
     /GOLD_ONLY_(?:ANSWER|CANARY)_MUST_NOT_LEAK/u,

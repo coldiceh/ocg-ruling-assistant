@@ -742,6 +742,106 @@ test("parser accepts JSON only and never repairs Markdown or loose output", () =
   assert.deepEqual(validation.errors, ["model output is not valid JSON"]);
 });
 
+test("single compound questions accept explicit sub-verdict ids with parent-scoped claims", () => {
+  const result = makeResult();
+  result.verdicts = [{
+    questionId: "q1a",
+    value: "TRUE",
+    conclusion: "第一项可以。",
+    conditions: [],
+  }, {
+    questionId: "q1-example2",
+    value: "FALSE",
+    conclusion: "第二项不可以。",
+    conditions: [],
+  }];
+  result.conciseAnswer = "第一项可以，第二项不可以。";
+  result.claims.push({
+    questionId: "q1",
+    claimId: "claim-2",
+    proposition: "第二项不满足处理条件。",
+    status: "FALSE",
+    decisive: true,
+    evidenceIds: ["faq-1"],
+    inferenceType: "DIRECT_OFFICIAL",
+  });
+  result.evidenceUsage[0].supportedClaimIds.push("claim-2");
+
+  const validation = parseAndValidateModelRulingResult(JSON.stringify(result), {
+    evidenceSnapshot: makeSnapshot(),
+    expectedQuestionIds: ["q1"],
+    normalizeStructuralBindings: true,
+  });
+
+  assert.equal(validation.ok, true, validation.errors?.join("\n"));
+  assert.deepEqual(
+    validation.normalized.verdicts.map((verdict) => verdict.questionId),
+    ["q1a", "q1-example2"],
+  );
+});
+
+test("structural normalization disambiguates duplicate verdict ids and rebuilds usage bindings", () => {
+  const result = makeResult();
+  result.verdicts.push({
+    questionId: "q1",
+    value: "FALSE",
+    conclusion: "第二项不可以。",
+    conditions: [],
+  });
+  result.conciseAnswer = "第一项可以，第二项不可以。";
+  result.claims.push({
+    questionId: "q1",
+    claimId: "claim-2",
+    proposition: "第二项不满足处理条件。",
+    status: "FALSE",
+    decisive: true,
+    evidenceIds: ["faq-1"],
+    inferenceType: "DIRECT_OFFICIAL",
+  });
+  result.evidenceUsage.push({
+    evidenceId: "faq-1",
+    relation: "DIRECTLY_ENTAILS",
+    supportedClaimIds: ["claim-2"],
+  });
+
+  const strict = parseAndValidateModelRulingResult(JSON.stringify(result), {
+    evidenceSnapshot: makeSnapshot(),
+    expectedQuestionIds: ["q1"],
+  });
+  assert.equal(strict.ok, false);
+
+  const normalized = parseAndValidateModelRulingResult(JSON.stringify(result), {
+    evidenceSnapshot: makeSnapshot(),
+    expectedQuestionIds: ["q1"],
+    normalizeStructuralBindings: true,
+  });
+  assert.equal(normalized.ok, true, normalized.errors?.join("\n"));
+  assert.deepEqual(
+    normalized.normalized.verdicts.map((verdict) => verdict.questionId),
+    ["q1-part-1", "q1-part-2"],
+  );
+  assert.deepEqual(
+    normalized.normalized.evidenceUsage[0].supportedClaimIds.sort(),
+    ["claim-1", "claim-2"],
+  );
+  assert.ok(normalized.structuralCorrections.some(
+    (item) => item.kind === "duplicate_evidence_usage_merged",
+  ));
+});
+
+test("structural normalization never accepts an unrelated question id", () => {
+  const result = makeResult();
+  result.verdicts[0].questionId = "q2";
+  const validation = parseAndValidateModelRulingResult(JSON.stringify(result), {
+    evidenceSnapshot: makeSnapshot(),
+    expectedQuestionIds: ["q1"],
+    normalizeStructuralBindings: true,
+  });
+  assert.equal(validation.ok, false);
+  assert.ok(validation.errors.includes("missing verdict for questionId: q1"));
+  assert.ok(validation.errors.includes("unexpected verdict questionId: q2"));
+});
+
 function makeResult() {
   return {
     schemaVersion: "1.0",

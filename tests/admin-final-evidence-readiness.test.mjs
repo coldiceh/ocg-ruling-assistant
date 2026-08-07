@@ -134,6 +134,22 @@ test("final evidence readiness rejects unresolved, ambiguous, omitted, and cheap
   }
 });
 
+test("a closed operator candidate set ignores cheap-model nickname noise", () => {
+  const card = resolvedCard("card-a", "规范卡A", "规范卡A完整卡文");
+  const inspection = inspectAdminFinalEvidenceReadiness(makeSnapshot({
+    resolvedCards: [card],
+    unresolvedMentions: [{ input: "模型多猜的短语", reason: "not_found" }],
+    ambiguousMentions: [{ input: "模型多猜的昵称", candidates: [{ id: "1" }, { id: "2" }] }],
+    preparationCandidates: [{ name: "模型多猜的昵称", originalText: "模型多猜的昵称" }],
+    candidateScope: "provided_closed",
+    providedCardNameCandidates: ["规范卡A"],
+  }));
+
+  assert.equal(inspection.ready, true);
+  assert.equal(inspection.candidateCount, 1);
+  assert.equal(inspection.bindings[0].candidate, "规范卡A");
+});
+
 test("final evidence readiness rejects a candidate surface shared by two card identities", () => {
   const snapshot = makeSnapshot({
     resolvedCards: [
@@ -249,6 +265,8 @@ function makeSnapshot({
   omittedResolvedCards = [],
   userProvidedCardTexts = [],
   preparationCandidates = [],
+  candidateScope = null,
+  providedCardNameCandidates = [],
   removeVisibleCardTexts = false,
   excerptVisibleCardTexts = false,
   mutateDecisionPacket = null,
@@ -299,6 +317,8 @@ function makeSnapshot({
         extractedHints: { cardNameCandidates: preparationCandidates },
       },
       cardResolution: {
+        candidateScope,
+        providedCardNameCandidates,
         resolvedCards,
         unresolvedMentions,
         ambiguousMentions,

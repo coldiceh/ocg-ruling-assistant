@@ -530,6 +530,43 @@ test("relay adapter streams Chat Completions by default and discards reasoning d
   assert.equal(clockValues.length, 0);
 });
 
+test("relay accepts a complete DONE stream without a nonstandard finish_reason", async () => {
+  const structured = JSON.stringify(makeStructuredResult());
+  const provider = new CompatibleEvidencePreparationProvider({
+    providerId: "relay",
+    apiKey: "relay-server-secret",
+    baseUrl: "https://relay.example/v1",
+    fetchImpl: async () => sseResponse([
+      `data: ${JSON.stringify({
+        id: "relay-stream-no-finish-reason",
+        model: "gpt-5.6-luna",
+        choices: [{ index: 0, delta: { content: structured }, finish_reason: null }],
+      })}\n\n`,
+      `data: ${JSON.stringify({
+        id: "relay-stream-no-finish-reason",
+        model: "gpt-5.6-luna",
+        choices: [],
+        usage: { total_tokens: 120 },
+      })}\n\n`,
+      "data: [DONE]\n\n",
+    ]),
+  });
+
+  const response = await provider.create({
+    model: "relay-gpt-5.6-luna",
+    reasoningEffort: "high",
+    reasoningMode: "pro",
+    input: "匿名问题与冻结证据",
+    instructions: "只输出 JSON。",
+    metadata: { runId: "run-relay-no-finish", promptVersion: "openai-ruling-v1" },
+  });
+
+  assert.equal(response.output_text, structured);
+  assert.equal(response.finish_reason, null);
+  assert.equal(response.stream_metrics.finishReason, null);
+  assert.deepEqual(response.usage, { total_tokens: 120 });
+});
+
 test("relay stream interruption after a valid chunk remains outcome-unknown and non-retryable", async () => {
   const provider = new CompatibleEvidencePreparationProvider({
     providerId: "relay",

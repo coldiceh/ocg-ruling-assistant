@@ -18,9 +18,12 @@ export function inspectAdminFinalEvidenceReadiness(snapshot) {
   assertAdminEvidenceSnapshot(snapshot);
   const evidence = snapshot.evidence || {};
   const cardResolution = evidence.cardResolution || {};
+  const closedCandidateScope = cardResolution.candidateScope === "provided_closed"
+    && asArray(cardResolution.providedCardNameCandidates).length > 0;
   const candidates = collectCandidateSurfaces({
     cardResolution,
     preparation: evidence.preparation,
+    closedCandidateScope,
   });
   const resolvedBindings = collectResolvedBindings(cardResolution.resolvedCards);
   const userProvidedBindings = collectUserProvidedBindings(
@@ -48,15 +51,15 @@ export function inspectAdminFinalEvidenceReadiness(snapshot) {
     includedManifest,
     archiveOccurrences,
   }));
-  const explicitlyUnresolved = collectFlaggedCandidates(
+  const explicitlyUnresolved = closedCandidateScope ? [] : collectFlaggedCandidates(
     cardResolution.unresolvedMentions,
     "unresolved_parser_mention",
   ).filter((candidate) => !isSatisfiedUserProvidedUnknown(candidate, bindings));
-  const ambiguousCandidates = collectFlaggedCandidates(
+  const ambiguousCandidates = closedCandidateScope ? [] : collectFlaggedCandidates(
     cardResolution.ambiguousMentions,
     "ambiguous_parser_mention",
   );
-  const omittedCandidates = collectFlaggedCandidates(
+  const omittedCandidates = closedCandidateScope ? [] : collectFlaggedCandidates(
     cardResolution.omittedResolvedCards,
     "omitted_resolved_card",
   );
@@ -118,7 +121,11 @@ export function assertAdminFinalEvidenceReady(snapshot) {
   throw error;
 }
 
-function collectCandidateSurfaces({ cardResolution = {}, preparation = {} }) {
+function collectCandidateSurfaces({
+  cardResolution = {},
+  preparation = {},
+  closedCandidateScope = false,
+}) {
   const candidates = [];
   const add = (value, source) => {
     const surface = String(value || "").trim();
@@ -135,25 +142,28 @@ function collectCandidateSurfaces({ cardResolution = {}, preparation = {} }) {
     add(card?.enName, "resolved_card_alias");
     for (const alias of asArray(card?.aliases)) add(alias, "resolved_card_alias");
   }
-  for (const mention of asArray(cardResolution.modelCardNameCandidates)) {
+  for (const mention of asArray(cardResolution.providedCardNameCandidates)) {
+    add(mention?.name ?? mention, "provided_card_name_candidate");
+  }
+  if (!closedCandidateScope) for (const mention of asArray(cardResolution.modelCardNameCandidates)) {
     add(mention?.name ?? mention, "resolved_model_candidate");
     if (typeof mention === "object") {
       add(mention?.originalText, "resolved_model_candidate_original_text");
     }
   }
-  for (const mention of asArray(preparation?.extractedHints?.cardNameCandidates)) {
+  if (!closedCandidateScope) for (const mention of asArray(preparation?.extractedHints?.cardNameCandidates)) {
     add(mention?.name ?? mention, "preparation_model_candidate");
     if (typeof mention === "object") {
       add(mention?.originalText, "preparation_model_candidate_original_text");
     }
   }
-  for (const mention of asArray(cardResolution.unresolvedMentions)) {
+  if (!closedCandidateScope) for (const mention of asArray(cardResolution.unresolvedMentions)) {
     add(mention?.input ?? mention, "unresolved_parser_mention");
   }
-  for (const mention of asArray(cardResolution.ambiguousMentions)) {
+  if (!closedCandidateScope) for (const mention of asArray(cardResolution.ambiguousMentions)) {
     add(mention?.input ?? mention, "ambiguous_parser_mention");
   }
-  for (const mention of asArray(cardResolution.omittedResolvedCards)) {
+  if (!closedCandidateScope) for (const mention of asArray(cardResolution.omittedResolvedCards)) {
     add(mention?.input ?? mention, "omitted_resolved_card");
   }
   for (const item of asArray(cardResolution.userProvidedCardTexts)) {
