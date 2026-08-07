@@ -1259,6 +1259,7 @@ test("known provider rejection releases budget while unknown transport outcome r
 test("manual reconciliation releases only an exact uncharged legacy Relay 524 reservation", async (t) => {
   async function createFailedRelayRun({
     status = 524,
+    persistStatus = true,
     code = "relay_http_error",
     message = "relay Chat Completions API returned HTTP 524",
     usage = null,
@@ -1269,9 +1270,9 @@ test("manual reconciliation releases only an exact uncharged legacy Relay 524 re
     const providerError = codedError(message, code);
     Object.assign(providerError, {
       provider: "relay",
-      status,
       outcomeKnown: false,
       budgetReservationMayExist: true,
+      ...(persistStatus ? { status } : {}),
       ...(usage ? { usage } : {}),
       ...(requestId ? { requestId } : {}),
     });
@@ -1351,6 +1352,32 @@ test("manual reconciliation releases only an exact uncharged legacy Relay 524 re
     );
   });
 
+  await t.test("legacy Cloudflare 524 body without persisted status is released", async () => {
+    const { service, failed, budgetCalls } = await createFailedRelayRun({
+      persistStatus: false,
+      message: [
+        "<!DOCTYPE html>",
+        "<title>relay.example | 524: A timeout occurred</title>",
+        "<span class=\"code-label\">Error code 524</span>",
+        "<a href=\"https://www.cloudflare.com/5xx-error-landing\">cloudflare.com</a>",
+      ].join("\n"),
+    });
+    assert.equal(failed.execution.providerSubmission.error.status, undefined);
+
+    const released = await service.releaseUnchargedRelayReservation({
+      runId: failed.runId,
+      confirmation: confirmation(failed),
+    });
+
+    assert.equal(released.release.status, "released");
+    assert.equal(
+      budgetCalls.filter(
+        (item) => item.operation === "release" && item.input.attemptKind === "primary",
+      ).length,
+      1,
+    );
+  });
+
   for (const scenario of [
     {
       name: "reported usage",
@@ -1365,6 +1392,11 @@ test("manual reconciliation releases only an exact uncharged legacy Relay 524 re
     {
       name: "non-524 status",
       options: { status: 503, message: "relay Chat Completions API returned HTTP 524" },
+      expectedCode: "admin_budget_release_error_invalid",
+    },
+    {
+      name: "missing status with only a generic timeout message",
+      options: { persistStatus: false, message: "relay request failed: 524 A timeout occurred" },
       expectedCode: "admin_budget_release_error_invalid",
     },
     {
