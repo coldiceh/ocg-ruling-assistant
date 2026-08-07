@@ -268,6 +268,7 @@ function createAdminModelLabComposedService({
       features: {
         ...(base?.features || {}),
         forkRun: true,
+        releaseUnchargedRelayReservation: true,
         history: true,
         rating: true,
         export: true,
@@ -324,6 +325,10 @@ function createAdminModelLabComposedService({
     const registration = await ensureRunHistoryRegistration(run);
     await persistTerminalRepairAudit(run);
     return attachHistoryRegistration(run, registration);
+  }
+
+  async function releaseUnchargedRelayReservation(argument = {}) {
+    return resolvedBaseService.releaseUnchargedRelayReservation(argument);
   }
 
   async function replayEvents(argument = {}) {
@@ -691,6 +696,7 @@ function createAdminModelLabComposedService({
     getRun,
     pollRun,
     cancelRun,
+    releaseUnchargedRelayReservation,
     replayEvents,
     listRuns,
     saveRating,
@@ -757,6 +763,7 @@ function assertBaseService(service) {
     "getRun",
     "pollRun",
     "cancelRun",
+    "releaseUnchargedRelayReservation",
     "replayEvents",
   ]) {
     if (typeof service?.[method] !== "function") {

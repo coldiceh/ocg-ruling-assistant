@@ -115,7 +115,11 @@ export const ADMIN_MODEL_LAB_SERVICE_EVENT_TYPES = Object.freeze({
   MODEL_VALIDATION_FAILED: "MODEL_VALIDATION_FAILED",
   MODEL_REPAIR_REQUEST_CREATED: "MODEL_REPAIR_REQUEST_CREATED",
   MODEL_CANCEL_FAILED: "MODEL_CANCEL_FAILED",
+  BUDGET_RESERVATION_RELEASED: "BUDGET_RESERVATION_RELEASED",
 });
+
+const UNCHARGED_RELAY_RELEASE_CONFIRMATION_PREFIX =
+  "provider-dashboard-confirmed-not-charged/v1";
 
 /**
  * Orchestrates the isolated admin model lab.
@@ -258,6 +262,7 @@ export function createAdminModelLabService({
         executeRun: true,
         reconcileRunOnRead: true,
         cancelRun: true,
+        releaseUnchargedRelayReservation: true,
         eventReplay: true,
         evidenceSnapshot: true,
         liveOfficialQaDefault: liveOfficialQaEnabled,
@@ -2437,6 +2442,114 @@ export function createAdminModelLabService({
     }
   }
 
+  async function releaseUnchargedRelayReservation(argument = {}) {
+    const body = unwrapBody(argument);
+    const runId = String(body.runId || "").trim();
+    if (!runId) {
+      throw requestError("runId is required", "admin_budget_release_run_id_required");
+    }
+    if (!finalCallBudgetLedger) {
+      throw serviceError(
+        "Persistent final-call budget ledger is unavailable",
+        "admin_final_budget_storage_unavailable",
+      );
+    }
+
+    const run = await requireRun(runId);
+    const profile = run.executionProfile?.finalRuling || {};
+    const submission = run.execution?.providerSubmission || {};
+    const attemptId = String(submission.attemptId || "").trim();
+    const expectedConfirmation = [
+      UNCHARGED_RELAY_RELEASE_CONFIRMATION_PREFIX,
+      runId,
+      attemptId,
+    ].join(":");
+    if (String(body.confirmation || "") !== expectedConfirmation) {
+      throw requestError(
+        "The provider-dashboard confirmation does not match this run and attempt",
+        "admin_budget_release_confirmation_invalid",
+      );
+    }
+    if (run.status !== ADMIN_RUN_STATUSES.FAILED) {
+      throw requestError(
+        "Only a failed run can release an uncharged ambiguous reservation",
+        "admin_budget_release_run_not_failed",
+      );
+    }
+    if (String(profile.provider || "").trim().toLowerCase() !== "relay") {
+      throw requestError(
+        "Only a Relay reservation can use provider-dashboard reconciliation",
+        "admin_budget_release_provider_invalid",
+      );
+    }
+    if (
+      submission.state !== ADMIN_PROVIDER_SUBMISSION_STATES.OUTCOME_UNKNOWN
+      || !attemptId
+      || submission.requestId
+      || submission.error?.requestId
+      || run.error?.requestId
+      || submission.acceptedAt
+    ) {
+      throw requestError(
+        "The run does not contain an unaccepted ambiguous Relay attempt",
+        "admin_budget_release_submission_invalid",
+      );
+    }
+    const transportError = submission.error || {};
+    if (
+      String(transportError.code || "") !== "relay_http_error"
+      || Number(transportError.status) !== 524
+      || !/(?:\b524\b|A timeout occurred)/iu.test(String(transportError.message || ""))
+    ) {
+      throw requestError(
+        "Only the verified legacy Relay 524 shape can be reconciled",
+        "admin_budget_release_error_invalid",
+      );
+    }
+    if (
+      transportError.usage
+      || run.error?.usage
+      || run.error?.failureMetering?.usage
+      || run.result?.usage
+    ) {
+      throw requestError(
+        "A metered attempt cannot be released as uncharged",
+        "admin_budget_release_usage_present",
+      );
+    }
+
+    const release = await finalCallBudgetLedger.release({
+      reservationId: finalBudgetReservationId(runId, "primary", attemptId),
+      runId,
+      attemptId,
+      attemptKind: "primary",
+      provider: "relay",
+      model: profile.requestedModel || profile.model,
+      reservedAt: submission.intentAt,
+    });
+    let auditEventPersisted = true;
+    try {
+      await runStore.appendEvent(runId, {
+        type: ADMIN_MODEL_LAB_SERVICE_EVENT_TYPES.BUDGET_RESERVATION_RELEASED,
+        payload: {
+          attemptId,
+          provider: "relay",
+          model: profile.requestedModel || profile.model,
+          ledgerStatus: release.status,
+          confirmedBy: "provider_dashboard",
+        },
+      });
+    } catch {
+      auditEventPersisted = false;
+    }
+    return immutableJson({
+      runId,
+      attemptId,
+      release,
+      auditEventPersisted,
+    });
+  }
+
   async function failRunWithStage(runId, error, executionToken = null) {
     let run = await requireRun(runId);
     if (TERMINAL_RUN_STATUSES.has(run.status)) return run;
@@ -2778,6 +2891,7 @@ export function createAdminModelLabService({
     getRun,
     pollRun,
     cancelRun,
+    releaseUnchargedRelayReservation,
     replayEvents,
   });
 }

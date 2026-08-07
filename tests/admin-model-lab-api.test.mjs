@@ -64,6 +64,10 @@ test("all POST actions require CSRF and dispatch only through the injected servi
     forkRun: async (input) => calls.push(["forkRun", input]) && { runId: "fork-1" },
     executeRun: async (input) => calls.push(["executeRun", input]) && { accepted: true },
     cancelRun: async (input) => calls.push(["cancelRun", input]) && { requested: true },
+    releaseUnchargedRelayReservation: async (input) => (
+      calls.push(["releaseUnchargedRelayReservation", input])
+      && { released: true }
+    ),
     saveRating: async (input) => calls.push(["saveRating", input]) && { stored: true },
   };
   const { handler, cookie, csrfToken } = await createHarness({ service, login: true });
@@ -88,6 +92,11 @@ test("all POST actions require CSRF and dispatch only through the injected servi
     },
     { action: "execute", runId: "run-1", prompt: "p" },
     { action: "cancel", runId: "run-1", reason: "manual" },
+    {
+      action: "release-budget-reservation",
+      runId: "run-1",
+      confirmation: "provider-dashboard-confirmed-not-charged/v1:run-1:attempt-1",
+    },
     { action: "rating", runId: "run-1", rating: 4, notes: "ok" },
   ]) {
     const response = createResponse();
@@ -109,6 +118,7 @@ test("all POST actions require CSRF and dispatch only through the injected servi
     "forkRun",
     "executeRun",
     "cancelRun",
+    "releaseUnchargedRelayReservation",
     "saveRating",
   ]);
   assert.deepEqual(calls[0][1].body, {
@@ -121,8 +131,13 @@ test("all POST actions require CSRF and dispatch only through the injected servi
   assert.equal(Object.hasOwn(calls[1][1].body, "action"), false);
   assert.equal(calls[2][1].runId, "run-1");
   assert.equal(calls[3][1].runId, "run-1");
-  assert.equal(calls[4][1].rating, 4);
-  assert.equal(calls[4][1].notes, "ok");
+  assert.equal(calls[4][1].runId, "run-1");
+  assert.equal(
+    calls[4][1].confirmation,
+    "provider-dashboard-confirmed-not-charged/v1:run-1:attempt-1",
+  );
+  assert.equal(calls[5][1].rating, 4);
+  assert.equal(calls[5][1].notes, "ok");
 });
 
 test("fork is POST-only and requires source run and idempotency key before dispatch", async () => {
