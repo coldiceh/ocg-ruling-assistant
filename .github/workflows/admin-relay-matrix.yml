@@ -1,0 +1,166 @@
+name: Admin relay model matrix
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Run only zero-cost preflight, or the complete 18-call matrix
+        required: true
+        type: choice
+        default: preflight
+        options:
+          - preflight
+          - full
+
+permissions:
+  contents: read
+
+concurrency:
+  group: admin-relay-model-matrix
+  cancel-in-progress: false
+
+jobs:
+  matrix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    env:
+      ADMIN_MODEL_LAB_BASE_URL: https://ocg-ruling-assistant.vercel.app
+      ADMIN_MODEL_LAB_ORIGIN: https://coldiceh.github.io
+      ADMIN_MODEL_LAB_PASSWORD: ${{ secrets.ADMIN_MODEL_LAB_PASSWORD }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+
+      - name: Require admin credential
+        shell: bash
+        run: |
+          if [ -z "$ADMIN_MODEL_LAB_PASSWORD" ]; then
+            echo "ADMIN_MODEL_LAB_PASSWORD is not configured" >&2
+            exit 1
+          fi
+
+      - name: Prepare artifact directory
+        shell: bash
+        run: mkdir -p artifacts
+
+      - name: Zero-cost evidence readiness
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/admin-evidence-snapshot-dry-run.mjs \
+            --cases tests/fixtures/admin-evidence-dry-run-cases.json \
+            --allow-community-card-network \
+            --compact > artifacts/formal-18-evidence-preflight.json
+          node --input-type=module -e '
+            import { readFileSync } from "node:fs";
+            const report = JSON.parse(readFileSync("artifacts/formal-18-evidence-preflight.json", "utf8"));
+            const failures = (report.reports || []).filter((item) => (
+              item.paidGateBlocked || item.productionReadiness?.ready !== true
+            ));
+            if (report.realProviderTransportCalls !== 0) throw new Error("dry-run reached a real provider");
+            if (report.allSnapshotsFrozen !== true) throw new Error("not every snapshot was frozen");
+            if (failures.length) {
+              throw new Error(`evidence readiness failed for: ${failures.map((item) => item.caseId).join(", ")}`);
+            }
+          '
+
+      - name: Read sanitized production capabilities
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE' > artifacts/formal-18-capabilities.json
+          import { createAdminModelLabHttpClient } from "./scripts/admin-model-matrix.mjs";
+          const client = createAdminModelLabHttpClient({
+            baseUrl: process.env.ADMIN_MODEL_LAB_BASE_URL,
+            origin: process.env.ADMIN_MODEL_LAB_ORIGIN,
+            password: process.env.ADMIN_MODEL_LAB_PASSWORD,
+          });
+          await client.login();
+          const envelope = await client.capabilities();
+          const source = envelope?.capabilities || envelope || {};
+          const providerEnvelope = source.providers;
+          const providers = Array.isArray(providerEnvelope)
+            ? providerEnvelope
+            : (Array.isArray(providerEnvelope?.providers) ? providerEnvelope.providers : []);
+          const safeProviders = providers.map((provider) => ({
+            providerId: provider.providerId || provider.id || provider.provider || null,
+            available: provider.available === true,
+            models: (Array.isArray(provider.models) ? provider.models : []).map((model) => ({
+              modelId: typeof model === "string" ? model : (model.modelId || model.id || model.model || null),
+              available: typeof model === "string" ? null : model.available === true,
+              transportAvailable: typeof model === "string" ? null : model.transportAvailable === true,
+              budgetConfigured: typeof model === "string" ? null : model.budgetConfigured === true,
+              budgetAvailable: typeof model === "string" ? null : model.budgetAvailable === true,
+              reasoningModes: typeof model === "string" ? [] : (model.reasoningModes || []),
+              reasoningEfforts: typeof model === "string" ? [] : (model.reasoningEfforts || []),
+            })),
+          }));
+          console.log(JSON.stringify({
+            checkedAt: new Date().toISOString(),
+            features: source.features || null,
+            finalCallBudget: source.finalCallBudget || null,
+            providers: safeProviders,
+          }, null, 2));
+          NODE
+
+      - name: Run complete frozen-evidence matrix
+        if: inputs.mode == 'full'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Remove-Item Env:RELAY_ESTIMATED_CNY_PER_CALL -ErrorAction SilentlyContinue
+          $Fixture = Get-Content 'tests/fixtures/admin-evidence-dry-run-cases.json' -Raw | ConvertFrom-Json
+          $BaseConfigs = @(
+            'relay:relay-gpt-5.6-sol:pro:high:full',
+            'relay:relay-gpt-5.6-terra:pro:high:full',
+            'relay:relay-gpt-5.6-luna:pro:high:full',
+            'relay:relay-gpt-5.6-sol:pro:high:card_text_only'
+          )
+          $Plan = @(
+            @{ Id='double-tempest-impermanence'; WithoutLua=$true; MaxRequests='5'; MaxCost='5' },
+            @{ Id='unchained-replacement'; WithoutLua=$true; MaxRequests='5'; MaxCost='5' },
+            @{ Id='accel-synchro-trigger-window'; WithoutLua=$false; MaxRequests='4'; MaxCost='3' },
+            @{ Id='lost-target-continue-resolution'; WithoutLua=$false; MaxRequests='4'; MaxCost='3' }
+          )
+          foreach ($Item in $Plan) {
+            $Case = $Fixture.cases | Where-Object id -eq $Item.Id
+            if ($null -eq $Case) { throw "missing case $($Item.Id)" }
+            $Configs = @($BaseConfigs)
+            if ($Item.WithoutLua) {
+              $Configs += 'relay:relay-gpt-5.6-sol:pro:high:without_lua'
+            }
+            $CliArgs = @(
+              'scripts/admin-model-matrix.mjs',
+              '--question', $Case.question,
+              '--format', 'json',
+              '--output', "artifacts/formal-18-$($Item.Id)-report.json",
+              '--concurrency', '1',
+              '--max-final-requests', $Item.MaxRequests,
+              '--max-cost-cny', $Item.MaxCost,
+              '--estimated-input-tokens', '32000',
+              '--estimated-output-tokens', '8192',
+              '--budget-usd-to-cny', '7.5',
+              '--timeout-ms', '600000'
+            )
+            foreach ($Config in $Configs) {
+              $CliArgs += @('--config', $Config)
+            }
+            & node @CliArgs
+            if ($LASTEXITCODE -ne 0) {
+              throw "matrix failed for $($Item.Id)"
+            }
+          }
+
+      - name: Upload preflight and matrix reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: admin-relay-matrix-${{ inputs.mode }}-${{ github.run_id }}
+          path: artifacts/formal-18-*.json
+          if-no-files-found: warn
+          retention-days: 14
