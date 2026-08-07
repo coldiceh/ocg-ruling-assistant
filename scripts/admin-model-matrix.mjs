@@ -609,6 +609,23 @@ export function createAdminModelLabHttpClient({
         },
       },
     ),
+    reconcileRelayTotalOnlyUsage: ({ runId, attemptId }) => labRequest(
+      "reconcile-relay-total-only-usage",
+      {
+        method: "POST",
+        body: {
+          runId: requiredText(runId, "runId"),
+          confirmation: [
+            "relay-total-only-usage-reconciliation/v1",
+            requiredText(runId, "runId"),
+            requiredText(attemptId, "attemptId"),
+          ].join(":"),
+        },
+      },
+    ),
+    listRuns: ({ limit, cursor } = {}) => labRequest("list", {
+      query: { limit, cursor },
+    }),
     getRun: (runId) => labRequest("run", { query: { runId } }),
     getRunEvents: runEvents,
   });
