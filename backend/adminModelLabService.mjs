@@ -120,6 +120,12 @@ export const ADMIN_MODEL_LAB_SERVICE_EVENT_TYPES = Object.freeze({
 
 const UNCHARGED_RELAY_RELEASE_CONFIRMATION_PREFIX =
   "provider-dashboard-confirmed-not-charged/v1";
+const LEGACY_CLOUDFLARE_524_TITLE_PATTERN =
+  /<title>[^<]*\|\s*524:\s*A timeout occurred<\/title>/iu;
+const LEGACY_CLOUDFLARE_524_CODE_PATTERN =
+  /<span\s+class=["']code-label["']>\s*Error code 524\s*<\/span>/iu;
+const LEGACY_CLOUDFLARE_ERROR_PAGE_PATTERN =
+  /cloudflare\.com\/5xx-error-landing/iu;
 
 /**
  * Orchestrates the isolated admin model lab.
@@ -2496,10 +2502,19 @@ export function createAdminModelLabService({
       );
     }
     const transportError = submission.error || {};
+    const transportErrorMessage = String(transportError.message || "");
+    const explicit524 = Number(transportError.status) === 524
+      && /(?:\b524\b|A timeout occurred)/iu.test(transportErrorMessage);
+    // Runs created before the transport error serializer preserved `status`
+    // can still be reconciled, but only when the saved body is unmistakably
+    // the complete Cloudflare 524 page. A generic timeout string is not enough.
+    const legacyCloudflare524 = transportError.status == null
+      && LEGACY_CLOUDFLARE_524_TITLE_PATTERN.test(transportErrorMessage)
+      && LEGACY_CLOUDFLARE_524_CODE_PATTERN.test(transportErrorMessage)
+      && LEGACY_CLOUDFLARE_ERROR_PAGE_PATTERN.test(transportErrorMessage);
     if (
       String(transportError.code || "") !== "relay_http_error"
-      || Number(transportError.status) !== 524
-      || !/(?:\b524\b|A timeout occurred)/iu.test(String(transportError.message || ""))
+      || (!explicit524 && !legacyCloudflare524)
     ) {
       throw requestError(
         "Only the verified legacy Relay 524 shape can be reconciled",
