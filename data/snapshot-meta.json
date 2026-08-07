@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
   "status": "synced",
-  "generatedAt": "2026-08-06T14:45:56.106Z",
+  "generatedAt": "2026-08-07T00:20:18.602Z",
   "freshnessDays": 7,
   "sourceFreshness": "fresh",
-  "previousSourceRevision": "32192",
-  "sourceRevision": "32193",
-  "lastSuccessfulSyncAt": "2026-08-06T14:45:56.106Z",
+  "previousSourceRevision": "32193",
+  "sourceRevision": "32195",
+  "lastSuccessfulSyncAt": "2026-08-07T00:20:18.602Z",
   "lastFailedSyncAt": null,
   "syncFailureCount": 0,
   "aliasWarnings": [],
@@ -18,7 +18,7 @@
   "contentQualityWarningCount": 0,
   "dataQualityWarningCount": 0,
   "newItems": 0,
-  "changedItems": 1,
+  "changedItems": 0,
   "removedItems": 0,
   "sources": [
     {
@@ -39,6 +39,13 @@
   "sourceRetirementWarnings": [],
   "sourceRetirementWarningCount": 0,
   "changedPaths": [
-    "/data/card/16471"
+    "/data/card/8933",
+    "/data/card/9279",
+    "/data/card/12950",
+    "/data/card/13619",
+    "/data/card/13631",
+    "/data/card/15296",
+    "/data/card/19188",
+    "/data/idx/printcode"
   ]
 }
