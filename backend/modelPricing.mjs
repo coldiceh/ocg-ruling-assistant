@@ -13,6 +13,25 @@ export function getRelayModelPricingConfig() {
   return cloneJson(DEFAULT_RELAY_PRICING);
 }
 
+/**
+ * Resolves the relay token-group multiplier. A blank or missing override uses
+ * the versioned dataset default; any explicit override fails closed unless it
+ * is a finite value in the interval (0, 1].
+ */
+export function resolveRelayPricingMultiplier(
+  value = process.env.RELAY_PRICING_MULTIPLIER,
+  pricing = DEFAULT_RELAY_PRICING,
+) {
+  const candidate = value === null || value === undefined || String(value).trim() === ""
+    ? pricing.multiplier
+    : value;
+  const multiplier = Number(candidate);
+  if (!Number.isFinite(multiplier) || multiplier <= 0 || multiplier > 1) {
+    throw new TypeError("RELAY_PRICING_MULTIPLIER must be greater than 0 and at most 1");
+  }
+  return multiplier;
+}
+
 export function resolvePricedModelId(modelId, pricing = DEFAULT_PRICING) {
   const requested = String(modelId || "").trim();
   const canonical = pricing.aliases?.[requested] || requested;
@@ -252,12 +271,14 @@ export function estimateRelayModelCost({
   usdToCnyRate = null,
   exchangeRateVersion = null,
   pricing = DEFAULT_RELAY_PRICING,
+  pricingMultiplier = undefined,
 } = {}) {
   const normalizedUsage = normalizeReportedModelUsage(usage);
   const requestedModel = String(model || "").trim();
   const canonicalModel = requestedModel.replace(/^relay-/u, "");
   const rates = pricing.models?.[canonicalModel];
   const exchangeRate = normalizeExchangeRate(usdToCnyRate);
+  const resolvedPricingMultiplier = resolveRelayPricingMultiplier(pricingMultiplier, pricing);
   const common = {
     provider: "relay",
     model: canonicalModel || null,
@@ -267,6 +288,7 @@ export function estimateRelayModelCost({
     exchangeRateVersion: exchangeRate === null ? null : stringOrNull(exchangeRateVersion),
     pricingVersion: pricing.pricingVersion,
     pricingEffectiveDate: pricing.effectiveDate,
+    pricingMultiplier: resolvedPricingMultiplier,
     pricingSourceVerified: pricing.source?.providerVerified === true,
     estimateOnly: true,
   };
@@ -287,13 +309,19 @@ export function estimateRelayModelCost({
   if (normalizedUsage.cacheWriteTokens > 0) {
     return unavailable("relay_cache_write_price_unavailable");
   }
-  const inputCostUsd = tokenCost(normalizedUsage.uncachedInputTokens, rates.inputUsdPerMillion);
+  const inputCostUsd = tokenCost(
+    normalizedUsage.uncachedInputTokens,
+    rates.inputUsdPerMillion * resolvedPricingMultiplier,
+  );
   const cachedInputCostUsd = tokenCost(
     normalizedUsage.cachedInputTokens,
-    rates.cachedInputUsdPerMillion,
+    rates.cachedInputUsdPerMillion * resolvedPricingMultiplier,
   );
   const cacheWriteCostUsd = 0;
-  const outputCostUsd = tokenCost(normalizedUsage.outputTokens, rates.outputUsdPerMillion);
+  const outputCostUsd = tokenCost(
+    normalizedUsage.outputTokens,
+    rates.outputUsdPerMillion * resolvedPricingMultiplier,
+  );
   const totalCostUsd = roundMoney(
     inputCostUsd + cachedInputCostUsd + cacheWriteCostUsd + outputCostUsd,
   );
@@ -354,6 +382,9 @@ function loadAndValidateRelayPricing(fileUrl) {
   }
   if (parsed.source?.providerVerified !== false) {
     throw new TypeError("Relay screenshot pricing must remain explicitly unverified");
+  }
+  if (!Number.isFinite(parsed.multiplier) || parsed.multiplier <= 0 || parsed.multiplier > 1) {
+    throw new TypeError("Relay pricing multiplier must be greater than 0 and at most 1");
   }
   for (const [modelId, rates] of Object.entries(parsed.models)) {
     for (const field of [

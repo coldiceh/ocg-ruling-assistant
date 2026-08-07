@@ -174,7 +174,18 @@ test("argument and capability normalization keep only server-available configura
     model: "glm-5.2",
     reasoningMode: "standard",
     reasoningEffort: "none",
+    evidenceVariant: "full",
   });
+
+  const ablation = parseMatrixArguments([
+    "--question", "Q",
+    "--config", "relay:relay-gpt-5.6-sol:pro:high:card_text_only",
+    "--config", "relay:relay-gpt-5.6-sol:pro:high:without_lua",
+  ]);
+  assert.deepEqual(
+    ablation.configurations.map((configuration) => configuration.evidenceVariant),
+    ["card_text_only", "without_lua"],
+  );
 
   const available = collectAvailableModels({
     providers: {
@@ -228,12 +239,100 @@ test("matrix can reuse an existing frozen source without creating or executing i
   assert.equal(fixture.calls.some((call) => call.action === "execute"), false);
 });
 
+test("matrix forks all evidence variants from one frozen source snapshot and reports their input hashes", async () => {
+  const fixture = createFetchFixture();
+  const base = relaySolConfiguration();
+  const configurations = [
+    { ...base, evidenceVariant: "full" },
+    { ...base, evidenceVariant: "card_text_only" },
+    { ...base, evidenceVariant: "without_lua" },
+  ];
+  const report = await runAdminModelMatrix({
+    baseUrl: "https://lab.example.test",
+    origin: "https://admin.example.test",
+    password: "test-only-password",
+    question: "测试问题",
+    configurations,
+    fetchImpl: fixture.fetch,
+    pollIntervalMs: 1,
+    runTimeoutMs: 1_000,
+    concurrency: 1,
+    estimatedCnyPerFinalRequest: 0,
+    sleep: async () => {},
+  });
+
+  assert.deepEqual(report.evidenceVariants, ["full", "card_text_only", "without_lua"]);
+  assert.deepEqual(
+    report.results.map((item) => item.evidenceVariant),
+    ["full", "card_text_only", "without_lua"],
+  );
+  assert.equal(new Set(report.results.map((item) => item.evidenceSnapshot.sha256)).size, 1);
+  assert.equal(new Set(report.results.map((item) => item.finalRulingInputSha256)).size, 3);
+  const forks = fixture.calls.filter((call) => call.action === "fork");
+  assert.deepEqual(
+    forks.map((call) => call.body.evidenceVariant),
+    ["card_text_only", "without_lua"],
+  );
+});
+
+test("matrix can reuse an explicitly available DeepSeek frozen source", async () => {
+  const sourceConfiguration = deepSeekFlashConfiguration();
+  const fixture = createFetchFixture({ existingSourceConfiguration: sourceConfiguration });
+  const report = await runAdminModelMatrix({
+    baseUrl: "https://lab.example.test",
+    origin: "https://admin.example.test",
+    password: "test-only-password",
+    question: "测试问题",
+    sourceRunId: "source-existing",
+    configurations: [sourceConfiguration, relayConfiguration("terra")],
+    fetchImpl: fixture.fetch,
+    pollIntervalMs: 1,
+    runTimeoutMs: 1_000,
+    estimatedCnyPerFinalRequest: 0,
+    sleep: async () => {},
+  });
+
+  assert.equal(report.results[0].requestedModel, "deepseek-v4-flash");
+  assert.equal(report.results[0].returnedModel, "deepseek-v4-flash");
+  assert.equal(fixture.calls.some((call) => call.action === "create"), false);
+  assert.equal(fixture.calls.filter((call) => call.action === "execute").length, 1);
+  assert.equal(fixture.calls.filter((call) => call.action === "fork").length, 1);
+});
+
 test("reusable source fails closed when question, snapshot, policy, returned model, or full evidence differs", () => {
+  const availableModels = collectAvailableModels(createCapabilityResponse({
+    finalCallBudget: {
+      configured: true,
+      persistent: true,
+      storageKind: "redis-admin-final-budget",
+    },
+    capabilityMode: "complete",
+  }));
   const validate = (run, question = "测试问题") => validateReusableSourceRun({
     run,
     question,
     sourceConfiguration: relaySolConfiguration(),
+    availableModels,
   });
+
+  assert.throws(
+    () => validateReusableSourceRun({
+      run: createReusableSourceRun(),
+      question: "测试问题",
+      sourceConfiguration: relaySolConfiguration(),
+    }),
+    /source capabilities are required/u,
+  );
+
+  assert.throws(
+    () => validateReusableSourceRun({
+      run: createReusableSourceRun(),
+      question: "测试问题",
+      sourceConfiguration: deepSeekFlashConfiguration(),
+      availableModels,
+    }),
+    /execution profile does not match/u,
+  );
 
   assert.throws(
     () => validate(createReusableSourceRun(), "另一道题"),
@@ -258,7 +357,7 @@ test("reusable source fails closed when question, snapshot, policy, returned mod
   returnedOtherModel.result.provider.model = "gpt-5.6-terra";
   assert.throws(
     () => validate(returnedOtherModel),
-    /no completed relay GPT-5\.6 Sol response/u,
+    /no completed response from gpt-5\.6-sol/u,
   );
 
   const missingFullSnapshot = createReusableSourceRun();
@@ -304,6 +403,35 @@ test("failed terminal call recovers returned model, usage, and cost from validat
   assert.equal(failed.error.code, "mock_validation_failed");
 });
 
+test("failed Relay report safely recovers identity, final-only metering and SSE diagnostics from run error", async () => {
+  const fixture = createFetchFixture({ terminalFailureErrorOnlyModel: "relay-gpt-5.6-terra" });
+  const report = await runAdminModelMatrix({
+    baseUrl: "https://lab.example.test",
+    origin: "https://admin.example.test",
+    password: "test-only-password",
+    question: "失败错误白名单测试",
+    configurations: [relaySolConfiguration(), relayConfiguration("terra")],
+    fetchImpl: fixture.fetch,
+    pollIntervalMs: 1,
+    runTimeoutMs: 1_000,
+    concurrency: 1,
+    estimatedCnyPerFinalRequest: 0,
+    sleep: async () => {},
+  });
+
+  const failed = report.results.find((item) => item.configuration.model === "relay-gpt-5.6-terra");
+  assert.equal(failed.returnedModel, "gpt-5.6-terra");
+  assert.equal(failed.metrics.tokenUsage.totalTokens, 21);
+  assert.equal(failed.metrics.cost.cacheWriteCostCny, 0.003);
+  assert.equal(failed.metrics.relayStream.requestToFirstContentMs, null);
+  assert.equal(failed.metrics.relayStream.sseEventCount, 2);
+  assert.equal(failed.error.requestId, "request-error-only");
+  assert.equal(failed.error.reportedModel, "gpt-5.6-terra");
+  assert.equal(failed.error.billingStatus, "metered_final_ruling_usage_reported");
+  assert.equal(failed.error.failureMetering.usage.totalTokens, 21);
+  assert.equal(JSON.stringify(failed).includes("DO_NOT_COPY_UNKNOWN_ERROR_FIELD"), false);
+});
+
 test("matrix uses the first candidate as source and enforces request cost and concurrency guards before paid runs", async () => {
   const blockedByCost = createFetchFixture();
   await assert.rejects(
@@ -339,15 +467,16 @@ test("matrix uses the first candidate as source and enforces request cost and co
   assert.equal(report.guard.plannedFinalRequests, 3);
   assert.equal(report.guard.costEstimateMode, "relay_screenshot_token_envelope");
   assert.equal(report.guard.pricingVerified, false);
+  assert.equal(report.guard.pricingMultiplier, 0.27);
   assert.equal(report.guard.estimatedInputTokensPerFinalRequest, 32000);
   assert.equal(report.guard.estimatedOutputTokensPerFinalRequest, 8192);
-  assert.equal(report.guard.plannedEstimatedCostCny, 6.460226685);
+  assert.equal(report.guard.plannedEstimatedCostCny, 1.744261208);
   assert.deepEqual(
     report.guard.requestEstimates.map((item) => [item.model, item.estimatedCnyPerRequest]),
     [
-      ["relay-gpt-5.6-sol", 4.443072],
-      ["relay-gpt-5.6-terra", 1.7772288],
-      ["relay-gpt-5.6-luna", 0.239925885],
+      ["relay-gpt-5.6-sol", 1.19962944],
+      ["relay-gpt-5.6-terra", 0.479851778],
+      ["relay-gpt-5.6-luna", 0.06477999],
     ],
   );
 
@@ -448,7 +577,7 @@ test("explicit five-model pilot performs exactly one final submission per availa
   assert.equal(fixture.calls.filter((call) => call.action === "fork").length, 4);
 });
 
-test("four-case pilot blocks the default twelve-call estimate above the CLI 10 CNY cap", async () => {
+test("four-case pilot applies the relay multiplier before enforcing the CLI cost cap", async () => {
   const blocked = createFetchFixture();
   await assert.rejects(
     runAdminModelMatrixBatch({
@@ -471,8 +600,9 @@ test("four-case pilot blocks the default twelve-call estimate above the CLI 10 C
       password: "test-only-password",
       questions: ["Q1", "Q2", "Q3", "Q4"],
       fetchImpl: defaultBlocked.fetch,
+      maxEstimatedCostCny: 5,
     }),
-    /planned estimated cost CNY 25\.84090674 exceeds the hard limit 10/u,
+    /planned estimated cost CNY 6\.977044832 exceeds the hard limit 5/u,
   );
   assert.equal(defaultBlocked.calls.length, 0);
 
@@ -556,7 +686,9 @@ test("cases-file CLI executes four questions as exactly twelve single final requ
 
 function createFetchFixture({
   terminalFailureModel = "",
+  terminalFailureErrorOnlyModel = "",
   capabilityMode = "complete",
+  existingSourceConfiguration = relaySolConfiguration(),
   finalCallBudget = {
     configured: true,
     persistent: true,
@@ -565,7 +697,7 @@ function createFetchFixture({
 } = {}) {
   const runs = new Map();
   const events = new Map();
-  const existingRun = createReusableSourceRun();
+  const existingRun = createReusableSourceRun({ configuration: existingSourceConfiguration });
   runs.set(existingRun.runId, existingRun);
   const calls = [];
   const protectedHeaders = [];
@@ -628,7 +760,40 @@ function createFetchFixture({
       const run = runs.get(body.runId);
       if (!run) return jsonResponse({ ok: false, error: "not_found" }, 404);
       const returnedModel = canonicalModel(run.configuration.model);
-      if (run.configuration.model === terminalFailureModel) {
+      if (run.configuration.model === terminalFailureErrorOnlyModel) {
+        run.status = "FAILED";
+        run.error = {
+          code: "provider_submission_outcome_unknown",
+          message: "stream closed without DONE",
+          provider: "relay",
+          requestId: "request-error-only",
+          requestedModel: "relay-gpt-5.6-terra",
+          submittedModel: "gpt-5.6-terra",
+          reportedModel: "gpt-5.6-terra",
+          billingStatus: "metered_final_ruling_usage_reported",
+          outcomeKnown: false,
+          usage: { inputTokens: 17, outputTokens: 4, totalTokens: 21 },
+          failureMetering: {
+            scope: "final_ruling_only",
+            usage: { inputTokens: 17, outputTokens: 4, totalTokens: 21 },
+            cost: { totalCostCny: 0.03, cacheWriteCostCny: 0.003 },
+          },
+          streamMetrics: {
+            requestToResponseHeadersMs: 20,
+            requestToFirstByteMs: 30,
+            requestToFirstEventMs: 40,
+            requestToFirstContentMs: null,
+            requestToCompleteMs: null,
+            networkChunkCount: 2,
+            sseEventCount: 2,
+            visibleContentChunkCount: 0,
+            responseBytes: 300,
+            visibleContentBytes: 0,
+            finishReason: null,
+          },
+          unknownSecret: "DO_NOT_COPY_UNKNOWN_ERROR_FIELD",
+        };
+      } else if (run.configuration.model === terminalFailureModel) {
         run.status = "FAILED";
         run.error = {
           code: "mock_validation_failed",
@@ -679,6 +844,7 @@ function createFetchFixture({
 function createCapabilityResponse({ finalCallBudget, capabilityMode }) {
   const budgetedModel = ({ modelId, budgetPool, modes, efforts, available = true }) => ({
     modelId,
+    canonicalModelId: canonicalModel(modelId),
     available,
     transportAvailable: available,
     budgetConfigured: available,
@@ -811,9 +977,12 @@ function completedResult(model, snapshot = null) {
   };
 }
 
-function createReusableSourceRun({ question = "测试问题" } = {}) {
-  const configuration = relaySolConfiguration();
+function createReusableSourceRun({
+  question = "测试问题",
+  configuration = relaySolConfiguration(),
+} = {}) {
   const snapshot = createFixtureSnapshot(question, configuration);
+  const canonical = canonicalModel(configuration.model);
   return structuredClone({
     runId: "source-existing",
     status: "SUCCEEDED",
@@ -824,16 +993,18 @@ function createReusableSourceRun({ question = "测试问题" } = {}) {
     executionProfile: {
       status: "evidence_frozen",
       evidenceSnapshotId: snapshot.snapshotId,
+      evidenceVariant: configuration.evidenceVariant || "full",
+      finalRulingInputSha256: fixtureFinalInputHash(configuration),
       finalRuling: {
-        provider: "relay",
-        requestedModel: "relay-gpt-5.6-sol",
-        model: "gpt-5.6-sol",
-        reasoningMode: "pro",
-        reasoningEffort: "high",
+        provider: configuration.provider,
+        requestedModel: configuration.model,
+        model: canonical,
+        reasoningMode: configuration.reasoningMode,
+        reasoningEffort: configuration.reasoningEffort,
         finalAttemptPolicy: "single",
       },
     },
-    result: completedResult("gpt-5.6-sol", snapshot),
+    result: completedResult(canonical, snapshot),
   });
 }
 
@@ -850,6 +1021,8 @@ function createQueuedRun({ runId, configuration, snapshot, sourceRun = null }) {
     executionProfile: {
       status: "evidence_frozen",
       evidenceSnapshotId: resolvedSnapshot.snapshotId,
+      evidenceVariant: configuration.evidenceVariant || "full",
+      finalRulingInputSha256: fixtureFinalInputHash(configuration),
       finalRuling: {
         provider: configuration.provider,
         requestedModel: configuration.model,
@@ -888,6 +1061,24 @@ function createFixtureSnapshot(question, configuration) {
 
 function relaySolConfiguration() {
   return relayConfiguration("sol");
+}
+
+function fixtureFinalInputHash(configuration) {
+  const marker = {
+    full: "f",
+    card_text_only: "c",
+    without_lua: "a",
+  }[configuration?.evidenceVariant || "full"] || "0";
+  return marker.repeat(64);
+}
+
+function deepSeekFlashConfiguration() {
+  return {
+    provider: "deepseek",
+    model: "deepseek-v4-flash",
+    reasoningMode: "standard",
+    reasoningEffort: "none",
+  };
 }
 
 function relayConfiguration(name) {

@@ -49,7 +49,11 @@ export class RulingModelProviderError extends Error {
     budgetReservationMayExist = null,
     usage = null,
     model = null,
+    requestedModel = null,
+    submittedModel = null,
+    reportedModel = null,
     requestId = null,
+    streamMetrics = null,
     cause,
   } = {}) {
     super(message, cause ? { cause } : undefined);
@@ -62,7 +66,17 @@ export class RulingModelProviderError extends Error {
     this.budgetReservationMayExist = budgetReservationMayExist;
     this.usage = usage === null ? null : cloneJson(usage);
     this.model = typeof model === "string" && model.trim() ? model.trim() : null;
+    this.requestedModel = typeof requestedModel === "string" && requestedModel.trim()
+      ? requestedModel.trim()
+      : null;
+    this.submittedModel = typeof submittedModel === "string" && submittedModel.trim()
+      ? submittedModel.trim()
+      : null;
+    this.reportedModel = typeof reportedModel === "string" && reportedModel.trim()
+      ? reportedModel.trim()
+      : null;
     this.requestId = typeof requestId === "string" && requestId.trim() ? requestId.trim() : null;
+    this.streamMetrics = copySafeRelayStreamMetrics(streamMetrics);
   }
 }
 
@@ -166,6 +180,7 @@ export class CompatibleEvidencePreparationProvider {
     fetchImpl = globalThis.fetch,
     baseUrl,
     env = globalThis.process?.env || {},
+    clock = defaultMonotonicClock,
   } = {}) {
     const normalizedProvider = String(providerId || "").trim().toLowerCase();
     if (!new Set(["deepseek", "glm", "kimi", "relay"]).has(normalizedProvider)) {
@@ -177,6 +192,9 @@ export class CompatibleEvidencePreparationProvider {
     if (typeof apiKey !== "string" || apiKey.trim() === "") {
       throw new TypeError(`${normalizedProvider} evidence provider requires a server-side API key`);
     }
+    if (typeof clock !== "function") {
+      throw new TypeError(`${normalizedProvider} evidence provider clock must be a function`);
+    }
     this.providerId = normalizedProvider;
     this.apiKey = apiKey.trim();
     this.fetchImpl = fetchImpl;
@@ -187,6 +205,7 @@ export class CompatibleEvidencePreparationProvider {
       relay: DEFAULT_PUBLIC_RELAY_BASE_URL,
     })[normalizedProvider], { requireHttps: true });
     this.env = env;
+    this.clock = clock;
   }
 
   async getCapabilities() {
@@ -283,11 +302,65 @@ export class CompatibleEvidencePreparationProvider {
       metadata,
     });
     const startedAt = new Date();
-    const payload = await this.requestJson("/chat/completions", {
-      method: "POST",
-      body,
-      signal,
-    });
+    let payload;
+    try {
+      if (this.providerId === "relay" && readBooleanFlag(this.env.RELAY_STREAM, true)) {
+        payload = await this.requestRelayStream("/chat/completions", {
+          method: "POST",
+          body: {
+            ...body,
+            stream: true,
+            stream_options: { include_usage: true },
+          },
+          signal,
+        });
+      } else {
+        payload = await this.requestJson("/chat/completions", {
+          method: "POST",
+          body,
+          signal,
+        });
+      }
+    } catch (error) {
+      if (error instanceof RulingModelProviderError) {
+        error.requestedModel = selection.requestedModel;
+        error.submittedModel = selection.model;
+      }
+      throw error;
+    }
+    const upstreamRequestId = String(payload?.id || "").trim();
+    const reportedModel = String(payload?.model || "").trim();
+    const relayIdentityErrorCode = this.providerId !== "relay"
+      ? null
+      : (!reportedModel
+          ? "relay_returned_model_missing"
+          : (reportedModel.toLowerCase() !== selection.model.toLowerCase()
+              ? "relay_returned_model_mismatch"
+              : null));
+    if (relayIdentityErrorCode) {
+      throw new RulingModelProviderError(
+        relayIdentityErrorCode === "relay_returned_model_missing"
+          ? `relay response omitted the model identity submitted as ${selection.model}`
+          : `relay returned a different model identity (submitted ${selection.model}, returned ${reportedModel})`,
+        {
+          code: relayIdentityErrorCode,
+          provider: this.providerId,
+          status: 200,
+          outcomeKnown: true,
+          // HTTP 200 proves the request reached the third party. Preserve and
+          // settle the charge from reported usage even though the answer is
+          // rejected for experiment-integrity purposes.
+          budgetReservationMayExist: true,
+          usage: payload?.usage || null,
+          model: reportedModel || null,
+          requestedModel: selection.requestedModel,
+          submittedModel: selection.model,
+          reportedModel: reportedModel || null,
+          requestId: upstreamRequestId,
+          streamMetrics: payload?.stream_metrics,
+        },
+      );
+    }
     const text = extractChatCompletionText(payload);
     if (!text) {
       const choice = payload?.choices?.[0] || {};
@@ -320,16 +393,23 @@ export class CompatibleEvidencePreparationProvider {
         budgetReservationMayExist: true,
         usage: payload?.usage || null,
         model: String(payload?.model || selection.model),
+        requestedModel: selection.requestedModel,
+        submittedModel: selection.model,
+        reportedModel: reportedModel || null,
         requestId: String(payload?.id || ""),
+        streamMetrics: payload?.stream_metrics,
       });
     }
-    const upstreamRequestId = String(payload?.id || "").trim();
     return {
       id: upstreamRequestId || `${this.providerId}-synthetic-${Date.now()}`,
       request_id_source: upstreamRequestId ? "upstream" : "synthetic",
       status: "completed",
       model: String(payload?.model || selection.model),
-      requested_model: selection.model,
+      requested_model: selection.requestedModel,
+      submitted_model: selection.model,
+      reported_model: reportedModel || null,
+      finish_reason: String(payload?.choices?.[0]?.finish_reason || "").trim() || null,
+      stream_metrics: copySafeRelayStreamMetrics(payload?.stream_metrics),
       output_text: text,
       usage: cloneJson(payload?.usage || null),
       created_at: payload?.created ?? startedAt.toISOString(),
@@ -414,6 +494,120 @@ export class CompatibleEvidencePreparationProvider {
       );
     }
     return payload;
+  }
+
+  async requestRelayStream(path, { method, body, signal } = {}) {
+    if (this.providerId !== "relay") {
+      throw new TypeError("requestRelayStream is restricted to the relay provider");
+    }
+    const timeoutMs = boundedPositiveInteger(
+      this.env.RELAY_STREAM_TIMEOUT_MS,
+      "RELAY_STREAM_TIMEOUT_MS",
+      225_000,
+      { minimum: 1_000, maximum: 235_000 },
+    );
+    const maxBytes = boundedPositiveInteger(
+      this.env.RELAY_STREAM_MAX_BYTES,
+      "RELAY_STREAM_MAX_BYTES",
+      16 * 1024 * 1024,
+      { minimum: 1_024, maximum: 32 * 1024 * 1024 },
+    );
+    const maxContentBytes = boundedPositiveInteger(
+      this.env.RELAY_STREAM_MAX_CONTENT_BYTES,
+      "RELAY_STREAM_MAX_CONTENT_BYTES",
+      1024 * 1024,
+      { minimum: 1_024, maximum: 4 * 1024 * 1024 },
+    );
+    const controller = new AbortController();
+    const externalAbort = () => controller.abort(signal?.reason);
+    if (signal?.aborted) externalAbort();
+    else signal?.addEventListener?.("abort", externalAbort, { once: true });
+    const timeout = setTimeout(
+      () => controller.abort(new Error("relay stream timed out")),
+      timeoutMs,
+    );
+    timeout.unref?.();
+    const requestStartedAt = readMonotonicClock(this.clock);
+    let requestToResponseHeadersMs = null;
+    let response;
+    try {
+      response = await this.fetchImpl(`${this.baseUrl}${path}`, {
+        method,
+        headers: {
+          accept: "text/event-stream",
+          authorization: `Bearer ${this.apiKey}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+      requestToResponseHeadersMs = elapsedMonotonicMs(this.clock, requestStartedAt);
+      if (!response.ok) {
+        const payload = await readResponsePayload(response);
+        const outcomeKnown = isProvableHttpRejection(response.status);
+        throw new RulingModelProviderError(
+          payload?.error?.message || `relay Chat Completions API returned HTTP ${response.status}`,
+          {
+            code: payload?.error?.code || "relay_http_error",
+            provider: "relay",
+            status: response.status,
+            responseBody: payload,
+            outcomeKnown,
+            budgetReservationMayExist: !outcomeKnown,
+            streamMetrics: makeRelayStreamMetrics({
+              requestToResponseHeadersMs,
+            }),
+          },
+        );
+      }
+      const contentType = String(response?.headers?.get?.("content-type") || "").toLowerCase();
+      if (!contentType.includes("text/event-stream")) {
+        throw new RulingModelProviderError(
+          `relay stream returned unsupported content type ${contentType || "missing"}`,
+          {
+            code: "relay_stream_content_type_invalid",
+            provider: "relay",
+            status: response.status,
+            outcomeKnown: false,
+            budgetReservationMayExist: true,
+            streamMetrics: makeRelayStreamMetrics({
+              requestToResponseHeadersMs,
+            }),
+          },
+        );
+      }
+      return await readRelayChatCompletionSse(response, {
+        maxBytes,
+        maxContentBytes,
+        signal: controller.signal,
+        clock: this.clock,
+        requestStartedAt,
+        requestToResponseHeadersMs,
+      });
+    } catch (cause) {
+      if (cause instanceof RulingModelProviderError) throw cause;
+      const timedOut = controller.signal.aborted
+        && isTimeoutAbortReason(controller.signal.reason);
+      throw new RulingModelProviderError(
+        timedOut
+          ? "relay stream timed out after submission"
+          : "relay stream ended unexpectedly after submission",
+        {
+          code: timedOut ? "relay_stream_timeout" : "relay_stream_interrupted",
+          provider: "relay",
+          status: response?.status ?? null,
+          outcomeKnown: false,
+          budgetReservationMayExist: true,
+          streamMetrics: makeRelayStreamMetrics({
+            requestToResponseHeadersMs,
+          }),
+          cause,
+        },
+      );
+    } finally {
+      clearTimeout(timeout);
+      signal?.removeEventListener?.("abort", externalAbort);
+    }
   }
 }
 
@@ -823,6 +1017,22 @@ function optionalPositiveInteger(value, field) {
   return number;
 }
 
+function boundedPositiveInteger(value, field, fallback, { minimum, maximum }) {
+  const resolved = optionalPositiveInteger(value, field) ?? fallback;
+  if (resolved < minimum || resolved > maximum) {
+    throw new RangeError(`${field} must be between ${minimum} and ${maximum}`);
+  }
+  return resolved;
+}
+
+function readBooleanFlag(value, fallback) {
+  if (value === undefined || value === null || String(value).trim() === "") return fallback;
+  const normalized = String(value).trim().toLowerCase();
+  if (new Set(["1", "true", "yes", "on"]).has(normalized)) return true;
+  if (new Set(["0", "false", "no", "off"]).has(normalized)) return false;
+  throw new TypeError("RELAY_STREAM must be true or false when provided");
+}
+
 function validateResponseId(responseId) {
   const id = String(responseId || "").trim();
   if (!/^resp_[A-Za-z0-9_-]{1,240}$/u.test(id)) {
@@ -860,16 +1070,458 @@ async function readResponsePayload(response) {
       return {};
     }
   }
-  if (typeof response?.text === "function") {
-    const text = await response.text();
+  if (typeof response?.text === "function" || response?.body?.getReader) {
+    const text = await readBoundedResponseText(response, 64 * 1024);
     if (!text) return {};
     try {
       return JSON.parse(text);
     } catch {
-      return { error: { message: text } };
+      return {
+        error: {
+          code: "upstream_non_json_error",
+          message: summarizeNonJsonProviderError(text, response?.status),
+        },
+      };
     }
   }
   return {};
+}
+
+async function readRelayChatCompletionSse(response, {
+  maxBytes,
+  maxContentBytes,
+  signal,
+  clock = defaultMonotonicClock,
+  requestStartedAt = readMonotonicClock(clock),
+  requestToResponseHeadersMs = null,
+} = {}) {
+  const reader = response?.body?.getReader?.();
+  if (!reader || typeof reader.read !== "function") {
+    throw new RulingModelProviderError("relay stream response has no readable body", {
+      code: "relay_stream_body_missing",
+      provider: "relay",
+      status: response?.status ?? 200,
+      outcomeKnown: false,
+      budgetReservationMayExist: true,
+    });
+  }
+  const decoder = new TextDecoder("utf-8", { fatal: true });
+  const encoder = new TextEncoder();
+  const state = {
+    bytes: 0,
+    networkChunks: 0,
+    chunks: 0,
+    contentChunks: 0,
+    done: false,
+    finishReason: null,
+    id: null,
+    model: null,
+    usage: null,
+    content: "",
+    contentBytes: 0,
+    requestToFirstByteMs: null,
+    requestToFirstEventMs: null,
+    requestToFirstContentMs: null,
+    requestToCompleteMs: null,
+  };
+  let buffer = "";
+  const metrics = () => makeRelayStreamMetrics({
+    requestToResponseHeadersMs,
+    requestToFirstByteMs: state.requestToFirstByteMs,
+    requestToFirstEventMs: state.requestToFirstEventMs,
+    requestToFirstContentMs: state.requestToFirstContentMs,
+    requestToCompleteMs: state.requestToCompleteMs,
+    networkChunkCount: state.networkChunks,
+    sseEventCount: state.chunks,
+    visibleContentChunkCount: state.contentChunks,
+    responseBytes: state.bytes,
+    visibleContentBytes: state.contentBytes,
+    finishReason: state.finishReason,
+  });
+  const protocolError = (message, code = "relay_stream_protocol_error", cause) => (
+    new RulingModelProviderError(message, {
+      code,
+      provider: "relay",
+      status: response?.status ?? 200,
+      outcomeKnown: false,
+      budgetReservationMayExist: true,
+      usage: state.usage,
+      model: state.model,
+      reportedModel: state.model,
+      requestId: state.id,
+      streamMetrics: metrics(),
+      cause,
+    })
+  );
+  const processFrame = (rawFrame) => {
+    const frame = String(rawFrame || "");
+    if (!frame.trim()) return;
+    if (state.done) throw protocolError("relay stream contained data after [DONE]");
+    const dataLines = [];
+    for (const line of frame.split(/\r?\n/u)) {
+      if (!line || line.startsWith(":")) continue;
+      const separator = line.indexOf(":");
+      const field = (separator === -1 ? line : line.slice(0, separator)).trim();
+      const rawValue = separator === -1 ? "" : line.slice(separator + 1);
+      const value = rawValue.startsWith(" ") ? rawValue.slice(1) : rawValue;
+      if (field === "data") dataLines.push(value);
+      else if (!new Set(["event", "id", "retry"]).has(field)) {
+        throw protocolError(`relay stream used unsupported SSE field ${field || "missing"}`);
+      }
+    }
+    if (!dataLines.length) return;
+    const data = dataLines.join("\n").trim();
+    if (data === "[DONE]") {
+      state.done = true;
+      return;
+    }
+    let chunk;
+    try {
+      chunk = JSON.parse(data);
+    } catch (cause) {
+      throw protocolError("relay stream contained malformed JSON", "relay_stream_json_invalid", cause);
+    }
+    if (!isPlainObject(chunk)) throw protocolError("relay stream chunk must be a JSON object");
+    state.chunks += 1;
+    if (state.requestToFirstEventMs === null) {
+      state.requestToFirstEventMs = elapsedMonotonicMs(clock, requestStartedAt);
+    }
+    if (state.chunks > 250_000) throw protocolError("relay stream exceeded the chunk limit");
+    const chunkId = optionalBoundedString(chunk.id, "relay stream id", 512);
+    const chunkModel = optionalBoundedString(chunk.model, "relay stream model", 256);
+    state.id = mergeStableStreamIdentity(state.id, chunkId, "id", protocolError);
+    state.model = mergeStableStreamIdentity(state.model, chunkModel, "model", protocolError);
+    if (chunk.usage !== undefined && chunk.usage !== null) {
+      state.usage = sanitizeRelayStreamUsage(chunk.usage, protocolError);
+    }
+    if (chunk.choices === undefined) return;
+    if (!Array.isArray(chunk.choices) || chunk.choices.length > 16) {
+      throw protocolError("relay stream choices must be a bounded array");
+    }
+    for (const choice of chunk.choices) {
+      if (!isPlainObject(choice) || choice.index !== 0) {
+        throw protocolError("relay stream must contain only choice index 0");
+      }
+      if (choice.finish_reason !== undefined && choice.finish_reason !== null) {
+        const finishReason = optionalBoundedString(
+          choice.finish_reason,
+          "relay stream finish_reason",
+          128,
+        );
+        state.finishReason = mergeStableStreamIdentity(
+          state.finishReason,
+          finishReason,
+          "finish_reason",
+          protocolError,
+        );
+      }
+      if (choice.delta === undefined || choice.delta === null) continue;
+      if (!isPlainObject(choice.delta)) throw protocolError("relay stream delta must be an object");
+      for (const reasoningField of ["reasoning_content", "reasoning"]) {
+        const reasoning = choice.delta[reasoningField];
+        if (reasoning !== undefined && reasoning !== null && typeof reasoning !== "string") {
+          throw protocolError(`relay stream ${reasoningField} must be text when present`);
+        }
+        // Reasoning content is deliberately validated and discarded. It is
+        // never copied into the response, logs or persisted run data.
+      }
+      if (
+        (Array.isArray(choice.delta.tool_calls) && choice.delta.tool_calls.length)
+        || choice.delta.function_call
+      ) {
+        throw protocolError("relay final-ruling stream must not contain tool calls");
+      }
+      const content = choice.delta.content;
+      if (content === undefined || content === null || content === "") continue;
+      if (typeof content !== "string") throw protocolError("relay stream content must be text");
+      const contentBytes = encoder.encode(content).byteLength;
+      state.contentBytes += contentBytes;
+      if (state.contentBytes > maxContentBytes) {
+        throw protocolError("relay stream content exceeded the byte limit", "relay_stream_content_too_large");
+      }
+      state.contentChunks += 1;
+      if (state.requestToFirstContentMs === null) {
+        state.requestToFirstContentMs = elapsedMonotonicMs(clock, requestStartedAt);
+      }
+      state.content += content;
+    }
+  };
+  const processBufferedFrames = ({ flush = false } = {}) => {
+    while (true) {
+      const match = /\r?\n\r?\n/u.exec(buffer);
+      if (!match) break;
+      const frame = buffer.slice(0, match.index);
+      buffer = buffer.slice(match.index + match[0].length);
+      processFrame(frame);
+    }
+    if (flush && buffer.trim()) {
+      processFrame(buffer);
+      buffer = "";
+    }
+    if (encoder.encode(buffer).byteLength > Math.min(maxBytes, 2 * 1024 * 1024)) {
+      throw protocolError("relay stream event exceeded the byte limit", "relay_stream_event_too_large");
+    }
+  };
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!(value instanceof Uint8Array)) {
+        throw protocolError("relay stream yielded a non-byte chunk");
+      }
+      state.networkChunks += 1;
+      state.bytes += value.byteLength;
+      if (value.byteLength > 0 && state.requestToFirstByteMs === null) {
+        state.requestToFirstByteMs = elapsedMonotonicMs(clock, requestStartedAt);
+      }
+      if (state.bytes > maxBytes) {
+        throw protocolError("relay stream exceeded the response byte limit", "relay_stream_too_large");
+      }
+      buffer += decoder.decode(value, { stream: true });
+      processBufferedFrames();
+    }
+    buffer += decoder.decode();
+    processBufferedFrames({ flush: true });
+  } catch (cause) {
+    if (cause instanceof RulingModelProviderError) throw cause;
+    const timedOut = signal?.aborted && isTimeoutAbortReason(signal.reason);
+    throw protocolError(
+      timedOut
+        ? "relay stream timed out after submission"
+        : `relay stream was interrupted ${state.chunks ? "after" : "before"} the first valid chunk`,
+      timedOut ? "relay_stream_timeout" : "relay_stream_interrupted",
+      cause,
+    );
+  } finally {
+    try {
+      reader.releaseLock?.();
+    } catch {
+      // Best-effort cleanup only.
+    }
+  }
+  if (!state.done) {
+    throw protocolError("relay stream closed without [DONE]", "relay_stream_incomplete");
+  }
+  if (!state.chunks) {
+    throw protocolError("relay stream completed without any JSON chunk", "relay_stream_empty");
+  }
+  if (!state.finishReason) {
+    throw protocolError("relay stream completed without finish_reason", "relay_stream_finish_reason_missing");
+  }
+  state.requestToCompleteMs = elapsedMonotonicMs(clock, requestStartedAt);
+  return {
+    ...(state.id ? { id: state.id } : {}),
+    ...(state.model ? { model: state.model } : {}),
+    choices: [{
+      index: 0,
+      message: { role: "assistant", content: state.content },
+      finish_reason: state.finishReason,
+    }],
+    usage: state.usage,
+    stream_metrics: metrics(),
+  };
+}
+
+function defaultMonotonicClock() {
+  const value = globalThis.performance?.now?.();
+  return Number.isFinite(value) ? value : Date.now();
+}
+
+function isTimeoutAbortReason(reason) {
+  const code = String(reason?.code || "").trim().toLowerCase();
+  const message = String(reason?.message || reason || "");
+  return code === "final_ruling_provider_timeout"
+    || /(?:timed out|timeout|exceeded\s+\d+ms)/iu.test(message);
+}
+
+function readMonotonicClock(clock) {
+  const value = Number(clock());
+  if (!Number.isFinite(value)) throw new TypeError("provider clock must return a finite number");
+  return value;
+}
+
+function elapsedMonotonicMs(clock, startedAt) {
+  const elapsed = Math.max(0, readMonotonicClock(clock) - Number(startedAt));
+  return Math.round(elapsed * 1_000) / 1_000;
+}
+
+function makeRelayStreamMetrics(value = {}) {
+  return copySafeRelayStreamMetrics({
+    schemaVersion: 1,
+    transport: "sse",
+    requestToResponseHeadersMs: null,
+    requestToFirstByteMs: null,
+    requestToFirstEventMs: null,
+    requestToFirstContentMs: null,
+    requestToCompleteMs: null,
+    networkChunkCount: 0,
+    sseEventCount: 0,
+    visibleContentChunkCount: 0,
+    responseBytes: 0,
+    visibleContentBytes: 0,
+    finishReason: null,
+    ...value,
+  });
+}
+
+function copySafeRelayStreamMetrics(value) {
+  if (!isPlainObject(value)) return null;
+  const duration = (field) => {
+    const candidate = value[field];
+    return typeof candidate === "number" && Number.isFinite(candidate) && candidate >= 0
+      ? candidate
+      : null;
+  };
+  const count = (field) => {
+    const candidate = value[field];
+    return Number.isSafeInteger(candidate) && candidate >= 0 ? candidate : 0;
+  };
+  const finishReason = typeof value.finishReason === "string" && value.finishReason.trim()
+    ? value.finishReason.trim().slice(0, 128)
+    : null;
+  return {
+    schemaVersion: 1,
+    transport: "sse",
+    requestToResponseHeadersMs: duration("requestToResponseHeadersMs"),
+    requestToFirstByteMs: duration("requestToFirstByteMs"),
+    requestToFirstEventMs: duration("requestToFirstEventMs"),
+    requestToFirstContentMs: duration("requestToFirstContentMs"),
+    requestToCompleteMs: duration("requestToCompleteMs"),
+    networkChunkCount: count("networkChunkCount"),
+    sseEventCount: count("sseEventCount"),
+    visibleContentChunkCount: count("visibleContentChunkCount"),
+    responseBytes: count("responseBytes"),
+    visibleContentBytes: count("visibleContentBytes"),
+    finishReason,
+  };
+}
+
+function mergeStableStreamIdentity(previous, next, field, protocolError) {
+  if (!next) return previous;
+  if (previous && previous !== next) {
+    throw protocolError(`relay stream changed ${field} between chunks`);
+  }
+  return previous || next;
+}
+
+function optionalBoundedString(value, field, maximumLength) {
+  if (value === undefined || value === null || value === "") return null;
+  if (typeof value !== "string" || !value.trim() || value.length > maximumLength) {
+    throw new TypeError(`${field} must be non-empty text within ${maximumLength} characters`);
+  }
+  return value.trim();
+}
+
+function sanitizeRelayStreamUsage(value, protocolError) {
+  if (!isPlainObject(value)) throw protocolError("relay stream usage must be an object");
+  const result = {};
+  for (const field of [
+    "prompt_tokens",
+    "completion_tokens",
+    "total_tokens",
+    "input_tokens",
+    "output_tokens",
+  ]) {
+    if (value[field] === undefined) continue;
+    if (!Number.isFinite(value[field]) || value[field] < 0) {
+      throw protocolError(`relay stream usage.${field} must be a non-negative number`);
+    }
+    result[field] = value[field];
+  }
+  for (const [field, allowed] of Object.entries({
+    prompt_tokens_details: ["cached_tokens", "cache_read_input_tokens", "cache_write_input_tokens"],
+    completion_tokens_details: ["reasoning_tokens"],
+    input_tokens_details: ["cached_tokens", "cache_read_input_tokens", "cache_write_input_tokens"],
+    output_tokens_details: ["reasoning_tokens"],
+  })) {
+    if (value[field] === undefined || value[field] === null) continue;
+    if (!isPlainObject(value[field])) throw protocolError(`relay stream usage.${field} must be an object`);
+    const details = {};
+    for (const detail of allowed) {
+      if (value[field][detail] === undefined) continue;
+      if (!Number.isFinite(value[field][detail]) || value[field][detail] < 0) {
+        throw protocolError(`relay stream usage.${field}.${detail} must be a non-negative number`);
+      }
+      details[detail] = value[field][detail];
+    }
+    result[field] = details;
+  }
+  return result;
+}
+
+function isPlainObject(value) {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+async function readBoundedResponseText(response, maxBytes) {
+  const reader = response?.body?.getReader?.();
+  if (!reader || typeof reader.read !== "function") {
+    const text = typeof response?.text === "function" ? await response.text() : "";
+    return new TextDecoder().decode(new TextEncoder().encode(String(text || "")).slice(0, maxBytes));
+  }
+  const decoder = new TextDecoder("utf-8", { fatal: false });
+  const chunks = [];
+  let bytes = 0;
+  try {
+    while (bytes < maxBytes) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!(value instanceof Uint8Array)) break;
+      const remaining = maxBytes - bytes;
+      const part = value.byteLength > remaining ? value.slice(0, remaining) : value;
+      chunks.push(decoder.decode(part, { stream: true }));
+      bytes += part.byteLength;
+      if (part.byteLength < value.byteLength) break;
+    }
+    chunks.push(decoder.decode());
+  } finally {
+    try {
+      await reader.cancel?.();
+    } catch {
+      // Best-effort truncation cleanup only.
+    }
+    try {
+      reader.releaseLock?.();
+    } catch {
+      // Best-effort cleanup only.
+    }
+  }
+  return chunks.join("");
+}
+
+function summarizeNonJsonProviderError(text, status) {
+  const source = String(text || "");
+  const title = source.match(/<title[^>]*>([\s\S]*?)<\/title>/iu)?.[1] || "";
+  const plain = source
+    .replace(/<script[^>]*>[\s\S]*?<\/script>/giu, " ")
+    .replace(/<style[^>]*>[\s\S]*?<\/style>/giu, " ")
+    .replace(/<[^>]+>/gu, " ")
+    .replace(/&nbsp;/giu, " ")
+    .replace(/&amp;/giu, "&")
+    .replace(/&lt;/giu, "<")
+    .replace(/&gt;/giu, ">")
+    .replace(/&quot;/giu, "\"")
+    .replace(/&#39;/giu, "'")
+    .replace(/\b(?:\d{1,3}\.){3}\d{1,3}\b/gu, "[redacted-ip]")
+    .replace(/\b(?:[A-Fa-f0-9]{1,4}:){2,7}[A-Fa-f0-9]{1,4}\b/gu, "[redacted-ip]")
+    .replace(/\s+/gu, " ")
+    .trim();
+  const safeTitle = String(title)
+    .replace(/<[^>]+>/gu, " ")
+    .replace(/\b(?:\d{1,3}\.){3}\d{1,3}\b/gu, "[redacted-ip]")
+    .replace(/\s+/gu, " ")
+    .trim()
+    .slice(0, 240);
+  const prefix = `Upstream returned non-JSON HTTP ${Number(responseStatus(status)) || "unknown"}`;
+  const summary = plain.slice(0, 700);
+  return [prefix, safeTitle, summary]
+    .filter(Boolean)
+    .join(" — ")
+    .slice(0, 1_000);
+}
+
+function responseStatus(value) {
+  return Number.isInteger(Number(value)) ? Number(value) : 0;
 }
 
 function cloneJson(value) {

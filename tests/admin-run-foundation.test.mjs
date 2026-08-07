@@ -292,6 +292,103 @@ test("success and cancellation race through one idempotent atomic terminal mutat
   );
 });
 
+test("failed runs persist only whitelisted final-call metering fields from hostile error objects", async () => {
+  const storage = createMemoryAdminRunStorage();
+  const store = createAdminRunStore({
+    storage,
+    runIdFactory: () => "safe-error-audit-run",
+  });
+  const snapshot = createAdminEvidenceSnapshot({ evidence: { anonymous: true } });
+  await store.createRun({ evidenceSnapshot: snapshot });
+  await store.startRun("safe-error-audit-run");
+  const circular = { secret: "must-not-persist", tokenCount: 9n };
+  circular.self = circular;
+  const error = new Error("relay identity failed");
+  error.code = "relay_returned_model_missing";
+  error.provider = "relay";
+  error.status = 200;
+  error.requestedModel = "relay-gpt-5.6-sol";
+  error.submittedModel = "gpt-5.6-sol";
+  error.reportedModel = null;
+  error.usage = {
+    inputTokens: 10,
+    outputTokens: 2,
+    totalTokens: 12,
+    unsafeBigInt: 12n,
+    circular,
+  };
+  error.streamMetrics = {
+    requestToResponseHeadersMs: 10,
+    requestToFirstByteMs: 20,
+    requestToFirstEventMs: 30,
+    requestToFirstContentMs: null,
+    requestToCompleteMs: null,
+    networkChunkCount: 2,
+    sseEventCount: 1,
+    visibleContentChunkCount: 0,
+    responseBytes: 123,
+    visibleContentBytes: 0,
+    finishReason: null,
+    hiddenReasoning: "must-not-persist",
+    circular,
+  };
+  error.metering = circular;
+  error.failureMetering = {
+    scope: "final_ruling_only",
+    usage: {
+      inputTokens: 10,
+      outputTokens: 2,
+      totalTokens: 12,
+      unsafeBigInt: 12n,
+      circular,
+    },
+    cost: {
+      provider: "relay",
+      model: "gpt-5.6-sol",
+      pricingStatus: "estimated_unverified",
+      totalCostCny: 0.01,
+      cacheWriteCostCny: 0.002,
+      unsafeBigInt: 1n,
+      circular,
+    },
+    circular,
+  };
+
+  const failed = await store.failRun("safe-error-audit-run", { error });
+
+  assert.equal(failed.status, ADMIN_RUN_STATUSES.FAILED);
+  assert.equal(Object.hasOwn(failed.error, "metering"), false);
+  assert.equal(Object.hasOwn(failed.error, "reportedModel"), true);
+  assert.equal(failed.error.reportedModel, null);
+  assert.deepEqual(failed.error.usage, { inputTokens: 10, outputTokens: 2, totalTokens: 12 });
+  assert.deepEqual(failed.error.streamMetrics, {
+    schemaVersion: 1,
+    transport: "sse",
+    requestToResponseHeadersMs: 10,
+    requestToFirstByteMs: 20,
+    requestToFirstEventMs: 30,
+    requestToFirstContentMs: null,
+    requestToCompleteMs: null,
+    networkChunkCount: 2,
+    sseEventCount: 1,
+    visibleContentChunkCount: 0,
+    responseBytes: 123,
+    visibleContentBytes: 0,
+    finishReason: null,
+  });
+  assert.deepEqual(failed.error.failureMetering, {
+    scope: "final_ruling_only",
+    usage: { inputTokens: 10, outputTokens: 2, totalTokens: 12 },
+    cost: {
+      provider: "relay",
+      model: "gpt-5.6-sol",
+      pricingStatus: "estimated_unverified",
+      totalCostCny: 0.01,
+      cacheWriteCostCny: 0.002,
+    },
+  });
+});
+
 test("preparation finalization atomically replaces the initial request snapshot exactly once", async () => {
   const storage = createMemoryAdminRunStorage();
   const store = createAdminRunStore({
