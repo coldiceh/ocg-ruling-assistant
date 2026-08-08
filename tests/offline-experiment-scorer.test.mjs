@@ -59,6 +59,25 @@ test("generic assertion fixture scores all four current required outcomes", asyn
   assert.equal(scored.results.every((item) => item.status === "PASS"), true);
 });
 
+test("current model aliases pass while an explicitly unresolved chain order fails", async () => {
+  const assertionFixture = JSON.parse(await readFile(fixtureUrl, "utf8"));
+  const report = batchReport([
+    succeededCase("accel-synchro-trigger-window", {
+      conciseAnswer: "原连锁处理完毕后另开连锁，纠罪巧的强制反转效果为连锁1，黑蔷薇龙为连锁2；没有错过时点。",
+    }, "low"),
+    succeededCase("accel-synchro-trigger-window", {
+      conciseAnswer: "另开连锁，但无法确认一定是纠罪巧恐怖连锁1、黑蔷薇龙连锁2；黑蔷薇龙没有错过时点。",
+    }, "medium"),
+    succeededCase("lost-target-continue-resolution", {
+      conciseAnswer: "《谜码圣手・封元》的对象离场后仍丢弃1张手牌；墨迪乌斯离开墓地后仍要让1只怪兽回卡组。",
+    }, "low"),
+  ]);
+
+  const scored = scoreOfflineExperimentReport({ report, assertionFixture });
+  assert.deepEqual(scored.results.map((item) => item.status), ["PASS", "FAIL", "PASS"]);
+  assert.deepEqual(scored.counts, { PASS: 2, FAIL: 1, INCONCLUSIVE: 0 });
+});
+
 test("missing a necessary conclusion is FAIL with a concrete description", async () => {
   const assertionFixture = JSON.parse(await readFile(fixtureUrl, "utf8"));
   const report = batchReport([succeededCase("unchained-replacement", {

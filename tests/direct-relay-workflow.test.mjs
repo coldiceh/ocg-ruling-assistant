@@ -14,7 +14,12 @@ test("Direct Relay workflow has a hard paid-call gate and no Admin or Upstash de
   assert.match(workflow, /--bundle-output/u);
   assert.match(workflow, /--max-calls "\$MAX_CALLS"/u);
   assert.match(workflow, /score-admin-model-experiment\.mjs/u);
-  assert.match(workflow, /direct-relay-sol-scored\.json/u);
+  assert.match(workflow, /direct-relay-scored\.json/u);
+  assert.match(workflow, /relay-gpt-5\.6-sol/u);
+  assert.match(workflow, /relay-gpt-5\.6-terra/u);
+  assert.match(workflow, /relay-gpt-5\.6-luna/u);
+  assert.match(workflow, /low-only/u);
+  assert.match(workflow, /low-medium/u);
   assert.match(workflow, /none-low-medium/u);
   assert.match(workflow, /all-six/u);
   assert.match(workflow, /if: always\(\)/u);
