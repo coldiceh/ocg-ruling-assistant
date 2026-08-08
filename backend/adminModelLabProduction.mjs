@@ -576,7 +576,16 @@ function createAdminModelLabComposedService({
       question: record.questionSummary,
       status: run?.status || null,
       startedAt: run?.startedAt || null,
+      updatedAt: run?.updatedAt || record.updatedAt || null,
       endedAt: run?.endedAt || null,
+      stageTiming: run?.stageTiming ? cloneJson(run.stageTiming) : null,
+      error: run?.error ? cloneJson(run.error) : null,
+      providerSubmission: run?.execution?.providerSubmission
+        ? cloneJson(run.execution.providerSubmission)
+        : null,
+      repairSubmission: run?.execution?.repairSubmission
+        ? cloneJson(run.execution.repairSubmission)
+        : null,
       model: finalRuling.model || finalRuling.requestedModel || "",
       configuration: cloneJson(record.modelConfig || {}),
       repairProvenance: run?.execution?.repair

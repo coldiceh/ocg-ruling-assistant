@@ -10,23 +10,24 @@ import {
 import { scoreAdminModelExperimentFiles } from "../scripts/score-admin-model-experiment.mjs";
 
 const fixtureUrl = new URL("./fixtures/admin-evidence-dry-run-goldens.json", import.meta.url);
-const doubleTempestReportUrl = new URL(
-  "../artifacts/sol-double-tempest-2026-08-08-retry-report.json",
-  import.meta.url,
-);
-const unchainedReportUrl = new URL(
-  "../artifacts/sol-unchained-2026-08-08-report.json",
-  import.meta.url,
-);
 
-test("scores the existing successful Sol result PASS and the timed-out result INCONCLUSIVE", async () => {
+test("scores a successful Sol result PASS and a timed-out result INCONCLUSIVE without artifact files", async () => {
   const assertionFixture = JSON.parse(await readFile(fixtureUrl, "utf8"));
-  const successfulReport = JSON.parse(await readFile(doubleTempestReportUrl, "utf8"));
-  const failedReport = JSON.parse(await readFile(unchainedReportUrl, "utf8"));
+  const successfulReport = batchReport([succeededCase("double-tempest-impermanence", {
+    conciseAnswer: "不能发动。无限泡影不能返回手牌，场上没有合法候选。",
+  })]);
+  const failedReport = batchReport([{
+    caseId: "unchained-replacement",
+    results: [{
+      status: "FAILED",
+      requestedModel: "relay-gpt-5.6-sol",
+      configuration: { reasoningMode: "pro", reasoningEffort: "high", evidenceVariant: "full" },
+    }],
+  }]);
 
   const success = scoreOfflineExperimentReport({ report: successfulReport, assertionFixture });
   assert.deepEqual(success.counts, { PASS: 1, FAIL: 0, INCONCLUSIVE: 0 });
-  assert.equal(success.results[0].structuredResultSource, "matrixSummary");
+  assert.equal(success.results[0].structuredResultSource, "validatedStructuredResult");
   assert.deepEqual(success.results[0].missingConclusions, []);
   assert.ok(success.results[0].checks.every((item) => item.passed));
 
@@ -116,6 +117,31 @@ test("scores the local single-process checkpoint format after transport completi
   assert.equal(scored.results[0].structuredResultSource, "validatedStructuredResult");
 });
 
+test("local Relay rawOutput is mapped to the same four-case assertion fixture", async () => {
+  const assertionFixture = JSON.parse(await readFile(fixtureUrl, "utf8"));
+  const report = {
+    schemaVersion: 1,
+    runner: "local-relay-effort-experiment/v1",
+    status: "completed",
+    plannedRequests: 1,
+    results: [{
+      caseId: "unchained-replacement",
+      model: "relay-gpt-5.6-sol",
+      effort: "medium",
+      reasoningMode: "pro",
+      evidenceVariant: "full",
+      status: "completed_valid",
+      rawOutput: JSON.stringify({
+        conciseAnswer: "神龙不能再次适用③效果代替破坏，破械冥官·篁不能特殊召唤。",
+      }),
+    }],
+  };
+  const scored = scoreOfflineExperimentReport({ report, assertionFixture });
+  assert.deepEqual(scored.counts, { PASS: 1, FAIL: 0, INCONCLUSIVE: 0 });
+  assert.equal(scored.results[0].structuredResultSource, "validatedStructuredResult");
+  assert.equal(scored.results[0].reasoningEffort, "medium");
+});
+
 test("goldens are read only after a terminal generated report is loaded", async () => {
   const assertionFixture = JSON.parse(await readFile(fixtureUrl, "utf8"));
   const report = batchReport([succeededCase("double-tempest-impermanence", {
@@ -145,6 +171,25 @@ test("goldens are read only after a terminal generated report is loaded", async 
     /contains no generated model results/u,
   );
   assert.deepEqual(rejectedReads, ["empty-report.json"]);
+
+  const runningReads = [];
+  await assert.rejects(
+    scoreAdminModelExperimentFiles({
+      reportFile: "running-local-checkpoint.json",
+      assertionsFile: "goldens.json",
+      async readFileImpl(pathname) {
+        runningReads.push(String(pathname));
+        return JSON.stringify({
+          runner: "local-relay-effort-experiment/v1",
+          status: "in_progress",
+          plannedRequests: 1,
+          results: [{ caseId: "anonymous", status: "running" }],
+        });
+      },
+    }),
+    /checkpoint is not completed/u,
+  );
+  assert.deepEqual(runningReads, ["running-local-checkpoint.json"]);
 });
 
 test("scorer implementation contains no four-case identities and fixture validation fails closed", async () => {

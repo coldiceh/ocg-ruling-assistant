@@ -17,6 +17,7 @@ const DEFAULT_MODEL = "relay-gpt-5.6-sol";
 const DEFAULT_EFFORTS = Object.freeze(["none", "low", "medium", "high", "xhigh", "max"]);
 const ALLOWED_EFFORTS = new Set(DEFAULT_EFFORTS);
 const DEFAULT_TIMEOUT_MS = 900_000;
+const DEFAULT_MAX_CALLS = 24;
 const PROMPT_VERSION = "openai-ruling-v1";
 
 export function parseLocalRelayExperimentArgs(argv) {
@@ -33,6 +34,7 @@ export function parseLocalRelayExperimentArgs(argv) {
       "--effort": "effort",
       "--output": "output",
       "--timeout-ms": "timeoutMs",
+      "--max-calls": "maxCalls",
     })[argument];
     if (!field) throw new TypeError(`unknown argument: ${argument}`);
     const value = argv[index + 1];
@@ -62,6 +64,10 @@ export function normalizeLocalRelayExperimentOptions(options, env = process.env)
   if (!Number.isInteger(timeoutMs) || timeoutMs < 1_000 || timeoutMs > 3_600_000) {
     throw new TypeError("--timeout-ms must be an integer between 1000 and 3600000");
   }
+  const maxCalls = Number(options.maxCalls || DEFAULT_MAX_CALLS);
+  if (!Number.isInteger(maxCalls) || maxCalls < 1 || maxCalls > 24) {
+    throw new TypeError("--max-calls must be an integer between 1 and 24");
+  }
   const apiKey = String(env.RELAY_API_KEY || "").trim();
   if (!apiKey) throw new TypeError("RELAY_API_KEY is required");
   const baseUrl = String(env.RELAY_BASE_URL || "").trim();
@@ -72,6 +78,7 @@ export function normalizeLocalRelayExperimentOptions(options, env = process.env)
     model,
     efforts: Object.freeze([...efforts]),
     timeoutMs,
+    maxCalls,
     apiKey,
     baseUrl,
   });
@@ -93,6 +100,9 @@ export async function runLocalRelayEffortExperiment({
     effort,
     key: `${item.caseId}::${resolved.model}::${effort}`,
   })));
+  if (plan.length > resolved.maxCalls) {
+    throw new Error(`planned relay calls ${plan.length} exceed --max-calls ${resolved.maxCalls}`);
+  }
   let checkpoint = await loadOrCreateCheckpoint({
     outputPath: resolved.outputPath,
     bundleSha256,
@@ -152,8 +162,8 @@ export async function runLocalRelayEffortExperiment({
       timeout.unref?.();
       const monotonicStarted = performance.now();
       let completed;
+      const profile = item.executionProfile.finalRuling || {};
       try {
-        const profile = item.executionProfile.finalRuling || {};
         const prompt = item.executionProfile.prompt || {};
         const response = await provider.runRuling({
           model: resolved.model,
@@ -236,7 +246,7 @@ export async function runLocalRelayEffortExperiment({
   return checkpoint;
 }
 
-function normalizeSnapshotBundle(bundle) {
+export function normalizeSnapshotBundle(bundle) {
   const rawCases = Array.isArray(bundle?.cases)
     ? bundle.cases
     : (Array.isArray(bundle?.sources)
@@ -267,6 +277,15 @@ function normalizeSnapshotBundle(bundle) {
     if (prompt.sha256 && prompt.sha256 !== sha256(prompt.instructions)) {
       throw new Error(`${caseId} frozen prompt instructions fail their SHA-256 binding`);
     }
+    const evidenceVariant = executionProfile.evidenceVariant || "full";
+    const rebuiltFinalInput = buildFinalRulingInput(evidenceSnapshot, { evidenceVariant });
+    const rebuiltFinalInputSha256 = hashAdminFinalInput(rebuiltFinalInput);
+    if (
+      executionProfile.finalRulingInputSha256
+      && executionProfile.finalRulingInputSha256 !== rebuiltFinalInputSha256
+    ) {
+      throw new Error(`${caseId} final ruling input hash does not match its executionProfile`);
+    }
     return { caseId, evidenceSnapshot, executionProfile: jsonSafe(executionProfile) };
   });
 }
@@ -277,9 +296,25 @@ async function loadOrCreateCheckpoint({ outputPath, bundleSha256, bundlePath, mo
     if (existing?.bundleSha256 !== bundleSha256 || existing?.model !== model) {
       throw new Error("existing checkpoint belongs to a different snapshot bundle or model");
     }
-    if (JSON.stringify(existing.efforts) !== JSON.stringify(efforts)) {
-      throw new Error("existing checkpoint uses a different effort list");
+    const previousEfforts = Array.isArray(existing.efforts) ? existing.efforts : [];
+    const requestedEfforts = new Set(efforts);
+    if (!previousEfforts.every((effort) => requestedEfforts.has(effort))) {
+      throw new Error("existing checkpoint effort list is not a subset of the requested effort list");
     }
+    const requestedKeys = new Set(plan.map((entry) => entry.key));
+    if (!Array.isArray(existing.results)
+      || existing.results.some((entry) => !requestedKeys.has(entry?.key))) {
+      throw new Error("existing checkpoint contains results outside the requested plan");
+    }
+    existing.efforts = [...efforts];
+    existing.plan = plan;
+    existing.plannedRequests = plan.length;
+    existing.status = existing.results.length === plan.length
+      && existing.results.every((entry) => entry.status !== "running")
+      ? "completed"
+      : "in_progress";
+    existing.updatedAt = now().toISOString();
+    await writeCheckpointAtomic(outputPath, existing);
     return existing;
   } catch (error) {
     if (error?.code !== "ENOENT") throw error;
@@ -343,6 +378,7 @@ Options:
   --model <relay-gpt-5.6-sol|relay-gpt-5.6-terra|relay-gpt-5.6-luna>
   --effort <none|low|medium|high|xhigh|max>  Repeat to select efforts (default: all six)
   --timeout-ms <1000..3600000>              Per-request SSE deadline (default: 900000)
+  --max-calls <1..24>                        Hard plan limit before transport (default: 24)
 
 The runner is serial, performs no retries, reads no golden answers, and resumes
 only combinations that have never reached the running checkpoint.`);

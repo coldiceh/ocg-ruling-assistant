@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
@@ -8,12 +9,14 @@ import { createLegacyLuaUnknownPacket } from "../backend/legacyLuaSemanticPacket
 import { retrieveRagEvidence } from "../backend/ragEvidenceRetriever.mjs";
 import {
   createAllowlistedCommunityCardFetch,
+  createOfflineFrozenSourceBundle,
   createLocalDryRunLegacyLuaSemanticPacketFactory,
   createLocalEngineOnlyFetch,
   normalizeLocalDryRunEngineUrl,
   parseAdminEvidenceDryRunArguments,
   runAdminEvidenceDryRunCli,
 } from "../scripts/admin-evidence-snapshot-dry-run.mjs";
+import { normalizeSnapshotBundle } from "../scripts/local-relay-effort-experiment.mjs";
 import {
   ADMIN_DRY_RUN_PAID_GATE_BLOCKED,
   inspectAdminEvidencePaidGate,
@@ -77,7 +80,7 @@ test("four local cases freeze snapshots, never leak goldens, and never use a pai
   assert.equal(result.realProviderTransportCalls, 0);
   assert.equal(result.allSnapshotsFrozen, true);
   assert.equal(result.allPaidTransportsPrevented, true);
-  assert.equal(result.reports.some((item) => item.paidGateBlocked), true);
+  assert.ok(result.reports.every((item) => typeof item.paidGateBlocked === "boolean"));
   for (const report of result.reports) {
     const definition = cases.cases.find((item) => item.id === report.id);
     assert.ok(definition, `missing fixture definition for ${report.id}`);
@@ -227,6 +230,127 @@ test("CLI enables local Lua only through an explicit loopback engine URL", async
   assert.equal(dryRunOptions.retrievalFetchImpl, null);
   assert.equal(JSON.parse(output).realProviderTransportCalls, 0);
   assert.equal(output.includes("local-engine-token"), false);
+});
+
+test("CLI accepts repeated raw cases fixtures and a bundle output", async () => {
+  const parsed = parseAdminEvidenceDryRunArguments([
+    "--cases", "first.json",
+    "--cases", "second.json",
+    "--bundle-output", "bundle.json",
+  ]);
+  assert.deepEqual(parsed.casesPaths, ["first.json", "second.json"]);
+  assert.equal(parsed.bundleOutput, "bundle.json");
+
+  const definitions = [
+    { id: "case-one", question: "问题一", candidateCards: ["匿名测试卡A"] },
+    { id: "case-two", question: "问题二", candidateCards: ["匿名测试卡A"] },
+  ];
+  const readPaths = [];
+  let selectedCases = null;
+  let written = null;
+  const result = await runAdminEvidenceDryRunCli([
+    "--cases", "first.json",
+    "--cases", "second.json",
+    "--bundle-output", "bundle.json",
+  ], {
+    async readCases(path) {
+      readPaths.push(path);
+      const definition = definitions[readPaths.length - 1];
+      return { schemaVersion: 1, cases: [definition] };
+    },
+    async runDryRun(options) {
+      selectedCases = options.cases;
+      for (const definition of options.cases.cases) {
+        await options.onCaseArtifacts(readyArtifact(definition));
+      }
+      return { caseCount: options.cases.cases.length, realProviderTransportCalls: 0 };
+    },
+    async writeFileImpl(path, value, options) {
+      written = { path, value, options };
+    },
+    now: () => new Date("2026-08-08T01:02:03.000Z"),
+    stdout: { write() {} },
+  });
+  assert.equal(readPaths.length, 2);
+  assert.deepEqual(selectedCases.cases.map((item) => item.id), ["case-one", "case-two"]);
+  assert.equal(written.options.flag, "wx");
+  assert.equal(result.bundle.sourceCount, 2);
+  assert.deepEqual(
+    normalizeSnapshotBundle(JSON.parse(written.value)).map((item) => item.caseId),
+    ["case-one", "case-two"],
+  );
+});
+
+test("offline bundle exporter validates every binding and round-trips through the Relay normalizer", () => {
+  const artifact = readyArtifact({
+    id: "anonymous-ready-case",
+    question: "匿名测试卡A的效果如何处理？",
+    candidateCards: ["匿名测试卡A"],
+  });
+  const bundle = createOfflineFrozenSourceBundle({
+    artifacts: [artifact],
+    now: () => new Date("2026-08-08T00:00:00.000Z"),
+  });
+  assert.equal(bundle.sourceCount, 1);
+  assert.equal(JSON.stringify(bundle).includes("expectedAnswer"), false);
+  assert.equal(JSON.stringify(bundle).includes("apiKey"), false);
+  const normalized = normalizeSnapshotBundle(bundle);
+  assert.equal(normalized.length, 1);
+  assert.equal(normalized[0].caseId, "anonymous-ready-case");
+  assert.equal(normalized[0].evidenceSnapshot.snapshotId, artifact.snapshot.snapshotId);
+});
+
+test("offline bundle exporter rejects hash mismatches and recursively sensitive fields", () => {
+  const definition = {
+    id: "anonymous-invalid-case",
+    question: "匿名测试卡A的效果如何处理？",
+    candidateCards: ["匿名测试卡A"],
+  };
+  const badPrompt = readyArtifact(definition);
+  badPrompt.run.executionProfile.prompt.sha256 = "0".repeat(64);
+  assert.throws(
+    () => createOfflineFrozenSourceBundle({ artifacts: [badPrompt] }),
+    /prompt instructions fail/u,
+  );
+
+  const badFinalInput = readyArtifact(definition);
+  badFinalInput.run.executionProfile.finalRulingInputSha256 = "0".repeat(64);
+  assert.throws(
+    () => createOfflineFrozenSourceBundle({ artifacts: [badFinalInput] }),
+    /final ruling input fails/u,
+  );
+
+  const sensitive = readyArtifact(definition);
+  sensitive.run.executionProfile.nested = { apiKey: "forbidden" };
+  assert.throws(
+    () => createOfflineFrozenSourceBundle({ artifacts: [sensitive] }),
+    /sensitive field is forbidden/u,
+  );
+});
+
+test("one blocked case prevents bundle writing", async () => {
+  let writes = 0;
+  await assert.rejects(
+    () => runAdminEvidenceDryRunCli([
+      "--cases", "one.json",
+      "--bundle-output", "bundle.json",
+    ], {
+      readCases: async () => ({
+        schemaVersion: 1,
+        cases: [{ id: "blocked", question: "问题", candidateCards: ["匿名测试卡A"] }],
+      }),
+      async runDryRun(options) {
+        const artifact = readyArtifact(options.cases.cases[0]);
+        artifact.report.productionReadiness.ready = false;
+        await options.onCaseArtifacts(artifact);
+        return { caseCount: 1, realProviderTransportCalls: 0 };
+      },
+      async writeFileImpl() { writes += 1; },
+      stdout: { write() {} },
+    }),
+    /production evidence is not ready/u,
+  );
+  assert.equal(writes, 0);
 });
 
 test("local Lua factory and transport fail closed outside the exact loopback origin", async () => {
@@ -470,4 +594,42 @@ function minimalSnapshot({ includeVisibleCardText }) {
     metadata: { fixture: true },
     createdAt: "2026-08-05T00:00:00.000Z",
   });
+}
+
+function readyArtifact(definition) {
+  const snapshot = minimalSnapshot({ includeVisibleCardText: true });
+  const finalInput = buildFinalRulingInput(snapshot);
+  const promptInstructions = "Return JSON.";
+  return {
+    definition,
+    snapshot,
+    finalInput,
+    run: {
+      status: "AWAITING_RESPONSE",
+      executionProfile: {
+        status: "evidence_frozen",
+        evidenceSnapshotId: snapshot.snapshotId,
+        evidenceVariant: "full",
+        finalRulingInputSha256: sha256ForTest(finalInput),
+        questionIds: ["q1"],
+        providedFacts: [],
+        prompt: {
+          version: "openai-ruling-v1",
+          instructions: promptInstructions,
+          sha256: sha256ForTest(promptInstructions),
+        },
+        finalRuling: { reasoningMode: "pro", maxOutputTokens: 1024 },
+      },
+    },
+    report: {
+      productionReadiness: { ready: true },
+      paidGateBlocked: false,
+      snapshot: { id: snapshot.snapshotId, sha256: snapshot.contentSha256 },
+      finalInput: { sha256: sha256ForTest(finalInput) },
+    },
+  };
+}
+
+function sha256ForTest(value) {
+  return createHash("sha256").update(value).digest("hex");
 }

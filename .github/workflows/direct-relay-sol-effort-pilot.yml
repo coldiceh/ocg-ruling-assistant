@@ -1,0 +1,140 @@
+name: Direct Relay Sol effort pilot
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_paid_run:
+        description: Confirm direct paid Relay calls
+        required: true
+        type: boolean
+        default: false
+      effort_range:
+        description: Sol reasoning efforts
+        required: true
+        type: choice
+        default: none-low-medium
+        options:
+          - none-low-medium
+          - none-low-medium-high
+          - all-six
+      max_calls:
+        description: Hard maximum paid calls (4 cases x selected efforts)
+        required: true
+        type: choice
+        default: "12"
+        options:
+          - "4"
+          - "8"
+          - "12"
+          - "16"
+          - "20"
+          - "24"
+      resume_run_id:
+        description: Optional prior workflow run ID whose artifact should be resumed
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: direct-relay-sol-effort-pilot
+  cancel-in-progress: false
+
+jobs:
+  pilot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+
+      - name: Require explicit paid-run confirmation
+        shell: bash
+        env:
+          CONFIRM_PAID_RUN: ${{ inputs.confirm_paid_run }}
+        run: |
+          set -euo pipefail
+          test "$CONFIRM_PAID_RUN" = "true" || { echo "Paid run was not confirmed" >&2; exit 1; }
+
+      - name: Prepare artifact directory
+        shell: bash
+        run: mkdir -p artifacts
+
+      - name: Download prior checkpoint for fail-closed resume
+        if: ${{ inputs.resume_run_id != '' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: direct-relay-sol-${{ inputs.resume_run_id }}
+          path: artifacts
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.resume_run_id }}
+
+      - name: Build frozen source bundle without Admin API or model transport
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ ! -s artifacts/direct-relay-sol-source-bundle.json ]; then
+            node scripts/admin-evidence-snapshot-dry-run.mjs \
+              --compact \
+              --bundle-output artifacts/direct-relay-sol-source-bundle.json \
+              > /dev/null
+          fi
+
+      - name: Run direct Sol matrix sequentially
+        shell: bash
+        env:
+          RELAY_API_KEY: ${{ secrets.RELAY_API_KEY }}
+          RELAY_BASE_URL: https://api.986310.xyz/v1
+          EFFORT_RANGE: ${{ inputs.effort_range }}
+          MAX_CALLS: ${{ inputs.max_calls }}
+        run: |
+          set -euo pipefail
+          test -n "$RELAY_API_KEY" || { echo "RELAY_API_KEY secret is not configured" >&2; exit 1; }
+          case "$EFFORT_RANGE" in
+            none-low-medium) efforts=(none low medium) ;;
+            none-low-medium-high) efforts=(none low medium high) ;;
+            all-six) efforts=(none low medium high xhigh max) ;;
+            *) echo "Unsupported effort range" >&2; exit 1 ;;
+          esac
+          planned=$((4 * ${#efforts[@]}))
+          if [ "$planned" -gt "$MAX_CALLS" ]; then
+            echo "Planned calls $planned exceed max_calls $MAX_CALLS" >&2
+            exit 1
+          fi
+          args=()
+          for effort in "${efforts[@]}"; do args+=(--effort "$effort"); done
+          node scripts/local-relay-effort-experiment.mjs \
+            --snapshots artifacts/direct-relay-sol-source-bundle.json \
+            --model relay-gpt-5.6-sol \
+            "${args[@]}" \
+            --output artifacts/direct-relay-sol-result-checkpoint.json \
+            --timeout-ms 900000 \
+            --max-calls "$MAX_CALLS"
+
+      - name: Score completed checkpoint offline
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/score-admin-model-experiment.mjs \
+            --report artifacts/direct-relay-sol-result-checkpoint.json \
+            --output artifacts/direct-relay-sol-scored.json
+
+      - name: Upload frozen bundle, checkpoint, and results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: direct-relay-sol-${{ github.run_id }}
+          path: |
+            artifacts/direct-relay-sol-source-bundle.json
+            artifacts/direct-relay-sol-result-checkpoint.json
+            artifacts/direct-relay-sol-scored.json
+          if-no-files-found: warn
+          retention-days: 14
