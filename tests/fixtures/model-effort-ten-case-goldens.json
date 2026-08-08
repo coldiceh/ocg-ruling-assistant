@@ -1,0 +1,284 @@
+{
+  "schemaVersion": 1,
+  "goldens": [
+    {
+      "id": "double-tempest-impermanence",
+      "expectedAnswer": "不能发动。正在发动且处理后通常送去墓地的《无限泡影》不能返回手牌；场上又没有其他能返回手牌的魔法·陷阱卡，因此《天雷之双风神 息那》的陷阱分支不满足发动时的处理合法性。",
+      "leakCanary": "GOLD_ONLY_CANARY_01_DO_NOT_SEND",
+      "assertions": [
+        {
+          "id": "cannot-activate",
+          "description": "明确结论：天雷之双风神的①效果不能发动。",
+          "source": "all",
+          "allOf": [["不能发动", "不可以发动", "不可发动", "无法发动", "不能直接连锁发动"]]
+        },
+        {
+          "id": "impermanence-cannot-return",
+          "description": "指出发动中的无限泡影不能返回手牌。",
+          "source": "all",
+          "allOf": [["不能返回手牌", "无法返回手牌", "不能回到手牌", "不能回手"]]
+        },
+        {
+          "id": "no-legal-return-candidate",
+          "description": "指出场上没有其他合法的魔法·陷阱返手候选。",
+          "source": "all",
+          "allOf": [["没有合法的返手候选", "没有合法候选", "合法候选数为零", "不存在能够接受该必做处理的合法卡", "没有满足发动所需的必做处理条件", "没有其他能返回手牌的魔法陷阱卡", "没有其他可以返回手牌的魔法陷阱卡", "没有其他魔法陷阱卡可以返回手牌", "无其他魔法陷阱卡可返回手牌"]]
+        }
+      ]
+    },
+    {
+      "id": "unchained-replacement",
+      "expectedAnswer": "不能适用《完美电子多元驱动蛇·神龙》的③效果再次代替破坏；《破械冥官·篁》不能特殊召唤。",
+      "leakCanary": "GOLD_ONLY_CANARY_02_DO_NOT_SEND",
+      "assertions": [
+        {
+          "id": "replacement-cannot-apply-again",
+          "description": "明确结论：神龙不能再次适用③效果代替破坏。",
+          "source": "all",
+          "allOf": [
+            ["不能再次适用", "不能再适用", "无法再次适用", "不可再次适用", "不能再次代替", "不能再代替", "不可再次代替"],
+            ["代替破坏", "代破"]
+          ]
+        },
+        {
+          "id": "kamura-not-special-summoned",
+          "description": "明确结论：破械冥官·篁不能特殊召唤。",
+          "source": "all",
+          "allOf": [["篁不能特殊召唤", "篁不会特殊召唤", "篁不会被特殊召唤", "篁不能被特殊召唤", "不能特殊召唤篁", "カムラ不能特殊召唤", "卡姆拉不能特殊召唤"]]
+        }
+      ]
+    },
+    {
+      "id": "accel-synchro-trigger-window",
+      "expectedAnswer": "该处理正确。《加速同调士》的效果在连锁1处理时完成同调召唤，整条连锁处理完毕后仍是该次同调召唤成功后的诱发时点；必发的《纠罪巧恐怖》先组成连锁1，选发的《黑蔷薇龙》可以组成连锁2，没有错过时点。",
+      "leakCanary": "GOLD_ONLY_CANARY_03_DO_NOT_SEND",
+      "assertions": [
+        {
+          "id": "opens-new-chain",
+          "description": "指出原连锁处理完毕后另开新连锁处理诱发效果。",
+          "source": "all",
+          "allOf": [["另开连锁", "另起连锁", "新连锁", "新的连锁", "原连锁处理完毕后", "整条连锁处理完毕后"]]
+        },
+        {
+          "id": "terror-is-chain-link-one",
+          "description": "指出纠罪巧恐怖在新连锁中组成连锁1。",
+          "source": "all",
+          "allOf": [
+            ["纠罪巧恐怖", "纠罪巧的强制反转效果", "纠罪巧效果", "纠罪巧"],
+            ["连锁1", "c1"]
+          ],
+          "noneOf": ["无法确认", "不能确认", "无法确定", "不能确定"]
+        },
+        {
+          "id": "black-rose-is-chain-link-two",
+          "description": "指出黑蔷薇龙可以组成连锁2。",
+          "source": "all",
+          "allOf": [
+            ["黑蔷薇龙", "花龙"],
+            ["连锁2", "c2"]
+          ]
+        },
+        {
+          "id": "black-rose-does-not-miss-timing",
+          "description": "明确结论：黑蔷薇龙没有错过同调召唤成功的时点。",
+          "source": "all",
+          "allOf": [["没有错过时点", "不会错过时点", "未错过时点", "没有错过这张卡同调召唤时的时点"]]
+        }
+      ]
+    },
+    {
+      "id": "lost-target-continue-resolution",
+      "expectedAnswer": "已经发动的效果处理到不能处理为止。对象离场后，《谜码圣手・封元》（题目所称谜式密码大师）仍处理丢弃1张手卡；《无垢者·墨迪乌斯》离开墓地后，仍处理让自己手牌或场上的1只怪兽回到卡组。",
+      "leakCanary": "GOLD_ONLY_CANARY_04_DO_NOT_SEND",
+      "assertions": [
+        {
+          "id": "cipher-master-discard-continues",
+          "description": "第一个例子中，对象离场后谜式密码大师仍处理丢弃1张手牌。",
+          "source": "all",
+          "allOf": [
+            ["谜式密码大师", "密码大师", "谜码圣手封元", "封元"],
+            ["仍处理", "仍然处理", "继续处理", "仍需", "仍要", "仍丢弃", "仍舍弃", "后续处理"],
+            ["丢弃1张手卡", "丢弃一张手卡", "丢弃1张手牌", "丢弃一张手牌", "舍弃1张手卡", "舍弃一张手卡", "舍弃1张手牌", "舍弃一张手牌"]
+          ]
+        },
+        {
+          "id": "mudeus-return-continues",
+          "description": "第二个例子中，无垢者离开墓地后仍处理让自己手牌或场上的怪兽回到卡组。",
+          "source": "all",
+          "allOf": [
+            ["无垢者墨迪乌斯", "墨迪乌斯"],
+            ["仍处理", "仍然处理", "继续处理", "仍需", "仍要", "后续处理"],
+            ["回到卡组", "返回卡组", "回卡组"]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "tearlaments-scream-activation-window",
+      "expectedAnswer": "不能发动《泪冠哀歌・劈斩的刺耳弦声》①。怪兽特殊召唤的发动契机虽然出现过，但在连锁处理完毕、实际发动该效果的时点，对方场上已经没有表侧表示的“泪冠哀歌”怪兽或《维萨思・史塔弗罗斯特》。",
+      "leakCanary": "GOLD_ONLY_CANARY_05_DO_NOT_SEND",
+      "officialSources": [
+        "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?fid=23807&ope=5&request_locale=ja"
+      ],
+      "assertions": [
+        {
+          "id": "scream-cannot-activate",
+          "description": "明确结论：弦声①不能发动。",
+          "source": "all",
+          "allOf": [["弦声不能发动", "弦声的①效果不能发动", "不能发动弦声", "不能发动《弦声》", "无法发动弦声", "不可以发动弦声"]]
+        },
+        {
+          "id": "activation-time-condition-missing",
+          "description": "指出条件必须在实际发动时满足，而当时场上没有泪冠哀歌怪兽或维萨思。",
+          "source": "all",
+          "allOf": [
+            ["实际发动", "发动该效果的时点", "发动时", "发动的时点", "发动之际"],
+            ["没有泪冠哀歌怪兽", "不存在泪冠哀歌怪兽", "没有“泪冠哀歌”怪兽", "不存在“泪冠哀歌”怪兽", "没有ティアラメンツ怪兽", "不存在ティアラメンツ怪兽"],
+            ["维萨思", "ヴィサス"]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "mind-scan-red-lotus-public-hand",
+      "expectedAnswer": "可以发动。《看透心灵之眼》只让对方手牌持续公开，不会让发动者自己的手牌公开，所以题设中的我方仍能支付2000LP并把自己的手牌全部给对方观看作为发动代价；即使对方手牌已经公开，也仍可进行“确认对方手牌”的处理。",
+      "leakCanary": "GOLD_ONLY_CANARY_06_DO_NOT_SEND",
+      "officialSources": [
+        "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?fid=16536&ope=5&request_locale=ja",
+        "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?cid=8515&ope=4&request_locale=ja"
+      ],
+      "assertions": [
+        {
+          "id": "red-lotus-can-activate",
+          "description": "明确结论：红莲指名者可以发动。",
+          "source": "all",
+          "allOf": [["可以发动红莲指名者", "红莲指名者可以发动", "可以发动《红莲指名者》", "可以正常发动", "仍可发动"]]
+        },
+        {
+          "id": "only-opponent-hand-is-public",
+          "description": "区分对方持续公开的手牌与发动者自己的未公开手牌。",
+          "source": "all",
+          "allOf": [
+            ["对方手牌持续公开", "公开的是对方手牌", "只让对方手牌公开", "仅让对方手牌公开"],
+            ["自己手牌没有公开", "我方手牌没有公开", "自己的手牌未公开", "我方手牌未公开", "不会公开自己的手牌", "不影响我方展示手牌"]
+          ]
+        },
+        {
+          "id": "public-hand-can-still-be-confirmed",
+          "description": "指出对方手牌已经公开也不妨碍确认手牌的处理。",
+          "source": "all",
+          "allOf": [["已经公开也可以确认", "已公开也可以确认", "仍可确认对方手牌", "仍然可以确认对方手牌", "不妨碍确认对方手牌", "不影响确认对方手牌"]]
+        }
+      ]
+    },
+    {
+      "id": "harmonia-topologic-field-activation",
+      "expectedAnswer": "不能发动《拓扑逻辑轰炸龙》②。它是从额外牌组特殊召唤的非同步怪兽，而且②在它仍处于怪兽区域时发动，正受《调和之天救龙》留下的发动限制。",
+      "leakCanary": "GOLD_ONLY_CANARY_07_DO_NOT_SEND",
+      "officialSources": [
+        "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?cid=22533&ope=4&request_locale=ja"
+      ],
+      "assertions": [
+        {
+          "id": "topologic-cannot-activate",
+          "description": "明确结论：拓扑逻辑轰炸龙②不能发动。",
+          "source": "all",
+          "allOf": [["拓扑逻辑轰炸龙不能发动", "拓扑逻辑轰炸龙的②效果不能发动", "不能发动拓扑逻辑轰炸龙", "不能发动自身②效果", "②效果不能发动"]]
+        },
+        {
+          "id": "extra-deck-non-synchro-field-effect",
+          "description": "指出其为从额外牌组特殊召唤的非同步怪兽，且效果在怪兽区域发动。",
+          "source": "all",
+          "allOf": [
+            ["从额外牌组", "由额外牌组", "EX牌组", "EX卡组"],
+            ["非同步怪兽", "不是同步怪兽", "连接怪兽", "リンク怪兽"],
+            ["怪兽区域发动", "在怪兽区域发动", "场上发动的效果", "在场上发动"]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "photon-emperor-mausoleum-extra-summon",
+      "expectedAnswer": "不能分别使用两项效果各追加召唤一次。一回合中实际只能选择一种“通常召唤外追加召唤”效果来进行追加召唤；因此连同本回合通常召唤，最多召唤2次，而不是3次。",
+      "leakCanary": "GOLD_ONLY_CANARY_08_DO_NOT_SEND",
+      "officialSources": [
+        "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?fid=24288&ope=5&request_locale=ja",
+        "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?cid=18146&ope=4&request_locale=ja",
+        "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?cid=12331&ope=4&request_locale=ja"
+      ],
+      "assertions": [
+        {
+          "id": "only-one-extra-normal-summon-method",
+          "description": "指出两项追加通常召唤效果一回合只能选择其中一种实际使用。",
+          "source": "all",
+          "allOf": [
+            ["只能选择其中一种", "只能选其中一种", "只能使用其中一个", "只能适用其中一个", "不能分别使用", "不能各使用一次"],
+            ["追加召唤", "通常召唤外", "通常召唤之外"]
+          ]
+        },
+        {
+          "id": "at-most-two-normal-summons",
+          "description": "得出连同通常召唤最多召唤2次，而非3次。",
+          "source": "all",
+          "allOf": [["最多召唤2次", "最多进行2次召唤", "合计2次", "总共2次", "不能召唤3次", "不能进行3次召唤"]]
+        }
+      ]
+    },
+    {
+      "id": "timaeus-gaze-dragoon-one-destruction",
+      "expectedAnswer": "《超魔导龙骑士－真红眼龙骑兵》②本回合最多发动1次。《提玛欧斯之眼光》只使用的《黑魔导》仍是作为融合素材使用的通常怪兽，所以通常怪兽素材数量为1。",
+      "leakCanary": "GOLD_ONLY_CANARY_09_DO_NOT_SEND",
+      "officialSources": [
+        "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?fid=22920&ope=5&request_locale=ja"
+      ],
+      "assertions": [
+        {
+          "id": "dragoon-effect-once",
+          "description": "明确回答龙骑兵②最多发动1次。",
+          "source": "all",
+          "allOf": [
+            ["龙骑兵", "超魔导龙骑士", "ドラグーン"],
+            ["最多发动1次", "只能发动1次", "一回合能发动1次", "1回合可以发动1次", "一回合一次"]
+          ]
+        },
+        {
+          "id": "dark-magician-counts-as-one-normal-material",
+          "description": "指出黑魔导作为一只通常怪兽融合素材计数。",
+          "source": "all",
+          "allOf": [
+            ["黑魔导", "ブラック・マジシャン"],
+            ["通常怪兽", "通常怪兽素材"],
+            ["数量为1", "计为1只", "算1只", "1只融合素材", "一只融合素材"]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "memento-cactus-avramax-direct-attack",
+      "expectedAnswer": "可以直接攻击对方玩家。《双穹之圣骑联盟・机界骑士》①只限制对方把其他怪兽选为攻击对象，并不限制把对方玩家作为直接攻击的对象。",
+      "leakCanary": "GOLD_ONLY_CANARY_10_DO_NOT_SEND",
+      "officialSources": [
+        "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?fid=23993&ope=5&request_locale=ja",
+        "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?cid=20491&ope=4&request_locale=ja"
+      ],
+      "assertions": [
+        {
+          "id": "memento-can-direct-attack",
+          "description": "明确结论：冥骸合龙可以直接攻击玩家。",
+          "source": "all",
+          "allOf": [["可以直接攻击", "能够直接攻击", "可直接攻击对方玩家", "可以不攻击双穹", "可以绕过双穹直接攻击"]]
+        },
+        {
+          "id": "avramax-does-not-restrict-player-target",
+          "description": "区分阿斯特拉姆对其他怪兽攻击对象的限制与直接攻击玩家。",
+          "source": "all",
+          "allOf": [
+            ["只限制", "仅限制", "限制的是"],
+            ["其他怪兽", "别的怪兽", "怪兽作为攻击对象"],
+            ["不限制直接攻击", "不限制攻击玩家", "不限制对方玩家", "不会阻止直接攻击", "不能限制直接攻击"]
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -42,7 +42,7 @@ flowchart TD
 
 <!-- MODEL_EFFORT_MATRIX:START -->
 
-> Sol、Terra、Luna 的六档四题严格矩阵正在远程串行运行。完成后会在这里更新每题结果、正确率、耗时、Token 和估算费用。
+> 严格实验按“Sol 六档 → 选出最低稳定档位 → 仅 Sol 消融 → 固定证据方案 → 其他模型”的顺序远程串行执行。完成后会在这里用表格列出完整测试题面、逐题结果、正确率、耗时、Token 和估算费用。
 
 <!-- MODEL_EFFORT_MATRIX:END -->
 

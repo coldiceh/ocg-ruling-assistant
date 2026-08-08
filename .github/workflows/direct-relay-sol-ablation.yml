@@ -1,0 +1,240 @@
+name: Direct Relay Sol evidence ablation
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_paid_run:
+        description: Confirm at most 6 paid Sol calls (4 card_text_only + 2 without_lua)
+        required: true
+        type: boolean
+        default: false
+      effort:
+        description: Sol reasoning effort used for both ablations
+        required: true
+        type: choice
+        default: low
+        options:
+          - none
+          - low
+          - medium
+          - high
+          - xhigh
+          - max
+      source_run_id:
+        description: Canonical workflow run ID supplying the exact frozen source bundle used by the full baseline
+        required: true
+        type: string
+      source_artifact_name:
+        description: Exact canonical artifact name containing one source-bundle.json
+        required: true
+        type: string
+      resume_run_id:
+        description: Optional prior ablation workflow run ID whose checkpoints should be resumed fail-closed
+        required: false
+        type: string
+        default: ""
+      resume_artifact_name:
+        description: Optional exact prior ablation artifact name
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: direct-relay-gpt-5.6-effort-pilot
+  cancel-in-progress: false
+
+jobs:
+  ablation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+
+      - name: Require explicit paid-run confirmation
+        shell: bash
+        env:
+          CONFIRM_PAID_RUN: ${{ inputs.confirm_paid_run }}
+        run: |
+          set -euo pipefail
+          test "$CONFIRM_PAID_RUN" = "true" || {
+            echo "Paid ablation run was not explicitly confirmed" >&2
+            exit 1
+          }
+
+      - name: Prepare artifact directories
+        shell: bash
+        run: mkdir -p artifacts/source artifacts/resume
+
+      - name: Require the canonical source coordinates
+        shell: bash
+        env:
+          SOURCE_RUN_ID: ${{ inputs.source_run_id }}
+          SOURCE_ARTIFACT_NAME: ${{ inputs.source_artifact_name }}
+        run: |
+          set -euo pipefail
+          test -n "$SOURCE_RUN_ID" || { echo "source_run_id is required" >&2; exit 1; }
+          test -n "$SOURCE_ARTIFACT_NAME" || { echo "source_artifact_name is required" >&2; exit 1; }
+
+      - name: Download canonical frozen source bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.source_artifact_name }}
+          path: artifacts/source
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.source_run_id }}
+
+      - name: Download prior ablation checkpoints by default name
+        if: ${{ inputs.resume_run_id != '' && inputs.resume_artifact_name == '' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: direct-relay-sol-ablation-${{ inputs.resume_run_id }}
+          path: artifacts/resume
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.resume_run_id }}
+
+      - name: Download explicitly named prior ablation checkpoints
+        if: ${{ inputs.resume_run_id != '' && inputs.resume_artifact_name != '' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.resume_artifact_name }}
+          path: artifacts/resume
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.resume_run_id }}
+
+      - name: Normalize the one source bundle and optional checkpoints
+        shell: bash
+        run: |
+          set -euo pipefail
+          copy_exactly_one() {
+            local directory="$1"
+            local pattern="$2"
+            local destination="$3"
+            mapfile -t matches < <(find "$directory" -type f -name "$pattern" -print)
+            if [ "${#matches[@]}" -ne 1 ]; then
+              echo "Expected exactly one $pattern in $directory, found ${#matches[@]}" >&2
+              exit 1
+            fi
+            cp "${matches[0]}" "$destination"
+          }
+          copy_at_most_one() {
+            local directory="$1"
+            local pattern="$2"
+            local destination="$3"
+            mapfile -t matches < <(find "$directory" -type f -name "$pattern" -print)
+            if [ "${#matches[@]}" -gt 1 ]; then
+              echo "Expected at most one $pattern in $directory, found ${#matches[@]}" >&2
+              exit 1
+            fi
+            if [ "${#matches[@]}" -eq 1 ]; then
+              cp "${matches[0]}" "$destination"
+            fi
+          }
+          copy_exactly_one artifacts/source '*source-bundle.json' artifacts/direct-relay-source-bundle.json
+          copy_at_most_one artifacts/resume '*card-text-only-result-checkpoint.json' artifacts/sol-card-text-only-result-checkpoint.json
+          copy_at_most_one artifacts/resume '*without-lua-result-checkpoint.json' artifacts/sol-without-lua-result-checkpoint.json
+          sha256sum artifacts/direct-relay-source-bundle.json > artifacts/direct-relay-source-bundle.sha256
+
+      - name: Run card_text_only on all four fixed cases sequentially
+        shell: bash
+        env:
+          RELAY_API_KEY: ${{ secrets.RELAY_API_KEY }}
+          RELAY_BASE_URL: https://api.986310.xyz/v1
+          EFFORT: ${{ inputs.effort }}
+        run: |
+          set -euo pipefail
+          test -n "$RELAY_API_KEY" || { echo "RELAY_API_KEY secret is not configured" >&2; exit 1; }
+          case "$EFFORT" in
+            none|low|medium|high|xhigh|max) ;;
+            *) echo "Unsupported effort" >&2; exit 1 ;;
+          esac
+          sha256sum --check artifacts/direct-relay-source-bundle.sha256
+          node scripts/local-relay-effort-experiment.mjs \
+            --snapshots artifacts/direct-relay-source-bundle.json \
+            --model relay-gpt-5.6-sol \
+            --effort "$EFFORT" \
+            --evidence-variant card_text_only \
+            --case double-tempest-impermanence \
+            --case unchained-replacement \
+            --case accel-synchro-trigger-window \
+            --case lost-target-continue-resolution \
+            --output artifacts/sol-card-text-only-result-checkpoint.json \
+            --timeout-ms 900000 \
+            --max-calls 4
+          sha256sum --check artifacts/direct-relay-source-bundle.sha256
+
+      - name: Run without_lua on the two Lua-relevant cases sequentially
+        shell: bash
+        env:
+          RELAY_API_KEY: ${{ secrets.RELAY_API_KEY }}
+          RELAY_BASE_URL: https://api.986310.xyz/v1
+          EFFORT: ${{ inputs.effort }}
+        run: |
+          set -euo pipefail
+          test -n "$RELAY_API_KEY" || { echo "RELAY_API_KEY secret is not configured" >&2; exit 1; }
+          case "$EFFORT" in
+            none|low|medium|high|xhigh|max) ;;
+            *) echo "Unsupported effort" >&2; exit 1 ;;
+          esac
+          sha256sum --check artifacts/direct-relay-source-bundle.sha256
+          node scripts/local-relay-effort-experiment.mjs \
+            --snapshots artifacts/direct-relay-source-bundle.json \
+            --model relay-gpt-5.6-sol \
+            --effort "$EFFORT" \
+            --evidence-variant without_lua \
+            --case double-tempest-impermanence \
+            --case unchained-replacement \
+            --output artifacts/sol-without-lua-result-checkpoint.json \
+            --timeout-ms 900000 \
+            --max-calls 2
+          sha256sum --check artifacts/direct-relay-source-bundle.sha256
+
+      - name: Score card_text_only checkpoint offline
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -s artifacts/sol-card-text-only-result-checkpoint.json ]; then
+            node scripts/score-admin-model-experiment.mjs \
+              --report artifacts/sol-card-text-only-result-checkpoint.json \
+              --output artifacts/sol-card-text-only-scored.json
+          else
+            echo "card_text_only checkpoint was not created; nothing to score" >&2
+          fi
+
+      - name: Score without_lua checkpoint offline
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -s artifacts/sol-without-lua-result-checkpoint.json ]; then
+            node scripts/score-admin-model-experiment.mjs \
+              --report artifacts/sol-without-lua-result-checkpoint.json \
+              --output artifacts/sol-without-lua-scored.json
+          else
+            echo "without_lua checkpoint was not created; nothing to score" >&2
+          fi
+
+      - name: Upload canonical source, checkpoints, and independent scores
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: direct-relay-sol-ablation-${{ github.run_id }}
+          path: |
+            artifacts/direct-relay-source-bundle.json
+            artifacts/direct-relay-source-bundle.sha256
+            artifacts/sol-card-text-only-result-checkpoint.json
+            artifacts/sol-card-text-only-scored.json
+            artifacts/sol-without-lua-result-checkpoint.json
+            artifacts/sol-without-lua-scored.json
+          if-no-files-found: warn
+          retention-days: 14
