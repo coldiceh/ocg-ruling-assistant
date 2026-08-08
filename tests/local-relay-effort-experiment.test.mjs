@@ -126,6 +126,7 @@ test("local relay runner is serial, single-attempt, checkpointed and resumable",
     log: () => {},
   });
   assert.equal(calls.length, 4, "resume must not repeat completed requests");
+  assert.ok(calls.every((call) => call.reasoningMode === "pro"));
 });
 
 test("local relay runner safely expands an existing effort checkpoint without repeating prior calls", async () => {
