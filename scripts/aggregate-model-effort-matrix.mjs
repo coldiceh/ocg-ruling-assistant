@@ -104,6 +104,8 @@ export function aggregateModelEffortMatrix({
     metricDefinitions: {
       accuracy: "PASS / planned cases",
       availability: "(PASS + FAIL) / planned cases; INCONCLUSIVE is unavailable for scoring",
+      cost: "attributable final-ruling model calls only; shared Evidence Snapshot preparation is not duplicated across configurations",
+      costPerCorrectAnswer: "complete attributable configuration cost / PASS count; unavailable when cost coverage is incomplete or PASS count is zero",
     },
     pricingAssumptions: {
       relay: {
@@ -132,6 +134,7 @@ export function renderModelEffortMatrixMarkdown(report) {
     `证据一致性：**${report.evidenceConsistency.valid ? "通过" : "失败"}**。`,
     "",
     "正确率 = PASS 数 / 计划题数；可用率 = (PASS + FAIL) / 计划题数，INCONCLUSIVE 视为不可评分。",
+    "费用仅统计可归属的最终裁定模型调用；共享 Evidence Snapshot 的准备费用不重复计入各模型配置。",
   ];
   if (report.evidenceConsistency.errors.length) {
     lines.push("", ...report.evidenceConsistency.errors.map((error) => `- 错误：${escapeMarkdown(error)}`));

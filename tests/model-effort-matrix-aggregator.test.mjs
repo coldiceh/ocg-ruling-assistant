@@ -87,6 +87,8 @@ test("aggregates model+effort accuracy, availability, streaming latency, tokens 
   assert.equal(report.pricingAssumptions.relay.relayCreditToCny, 1);
   assert.equal(report.pricingAssumptions.relay.pricingMultiplier, 0.27);
   assert.equal(report.pricingAssumptions.relay.pricingSourceVerified, false);
+  assert.match(report.metricDefinitions.cost, /final-ruling model calls only/u);
+  assert.match(report.metricDefinitions.costPerCorrectAnswer, /PASS count/u);
   const markdown = renderModelEffortMatrixMarkdown(report);
   assert.match(markdown, /relay-gpt-5\.6-sol/u);
   assert.match(markdown, /\| 正确 \| 正确 \| 正确 \| 错误 \|/u);
