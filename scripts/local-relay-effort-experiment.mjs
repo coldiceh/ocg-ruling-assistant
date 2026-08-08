@@ -163,12 +163,17 @@ export async function runLocalRelayEffortExperiment({
       const monotonicStarted = performance.now();
       let completed;
       const profile = item.executionProfile.finalRuling || {};
+      // Relay GPT-5.6 capabilities are always-on reasoning models. The frozen
+      // source profile may originate from the public standard-mode pipeline,
+      // but this experiment varies effort within the Relay model's required
+      // pro mode rather than replaying that incompatible transport setting.
+      const reasoningMode = "pro";
       try {
         const prompt = item.executionProfile.prompt || {};
         const response = await provider.runRuling({
           model: resolved.model,
           reasoningEffort: effort,
-          reasoningMode: profile.reasoningMode || "pro",
+          reasoningMode,
           instructions: String(prompt.instructions),
           input,
           maxOutputTokens: profile.maxOutputTokens,
@@ -191,7 +196,7 @@ export async function runLocalRelayEffortExperiment({
           caseId: item.caseId,
           model: resolved.model,
           effort,
-          reasoningMode: profile.reasoningMode || "pro",
+          reasoningMode,
           evidenceVariant,
           status: validation.ok ? "completed_valid" : "completed_invalid",
           startedAt,
@@ -216,7 +221,7 @@ export async function runLocalRelayEffortExperiment({
           caseId: item.caseId,
           model: resolved.model,
           effort,
-          reasoningMode: profile.reasoningMode || "pro",
+          reasoningMode,
           evidenceVariant,
           status: error?.outcomeKnown === true ? "error_rejected" : "error_outcome_unknown",
           startedAt,
