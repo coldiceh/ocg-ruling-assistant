@@ -31,6 +31,10 @@ export function parseLocalRelayExperimentArgs(argv) {
       parsed.help = true;
       continue;
     }
+    if (argument === "--recover-running-as-outcome-unknown") {
+      parsed.recoverRunningAsOutcomeUnknown = true;
+      continue;
+    }
     const field = ({
       "--snapshots": "snapshots",
       "--model": "model",
@@ -91,6 +95,7 @@ export function normalizeLocalRelayExperimentOptions(options, env = process.env)
     caseIds: Object.freeze([...caseIds]),
     timeoutMs,
     maxCalls,
+    recoverRunningAsOutcomeUnknown: options.recoverRunningAsOutcomeUnknown === true,
     apiKey,
     baseUrl,
   });
@@ -133,6 +138,7 @@ export async function runLocalRelayEffortExperiment({
     evidenceVariant: resolved.evidenceVariant,
     caseIds: selectedCaseIds,
     plan,
+    recoverRunningAsOutcomeUnknown: resolved.recoverRunningAsOutcomeUnknown,
     now,
   });
   const provider = providerFactory
@@ -328,6 +334,7 @@ async function loadOrCreateCheckpoint({
   evidenceVariant,
   caseIds,
   plan,
+  recoverRunningAsOutcomeUnknown,
   now,
 }) {
   try {
@@ -355,6 +362,33 @@ async function loadOrCreateCheckpoint({
       || existing.results.some((entry) => !requestedKeys.has(entry?.key))) {
       throw new Error("existing checkpoint contains results outside the requested plan");
     }
+    const resumedAt = now().toISOString();
+    if (recoverRunningAsOutcomeUnknown) {
+      existing.results = existing.results.map((entry) => {
+        if (entry.status !== "running") return entry;
+        // The explicit recovery flag acknowledges that a previous process
+        // stopped after submission. Its provider outcome may have been charged
+        // even though no response was durably recorded, so seal it as unknown
+        // instead of retrying or leaving the whole checkpoint permanently open.
+        return {
+          ...entry,
+          status: "error_outcome_unknown",
+          endedAt: resumedAt,
+          durationMs: null,
+          validatedResult: null,
+          usage: null,
+          sseTiming: null,
+          recoveredFromInterruptedCheckpoint: true,
+          budgetReservationMayExist: true,
+          error: {
+            name: "InterruptedRelayRunError",
+            code: "local_relay_interrupted_outcome_unknown",
+            message: "A persisted running request has an unknown provider outcome and was not retried.",
+            outcomeKnown: false,
+          },
+        };
+      });
+    }
     existing.efforts = [...efforts];
     existing.evidenceVariant = evidenceVariant;
     existing.caseIds = [...caseIds];
@@ -364,11 +398,14 @@ async function loadOrCreateCheckpoint({
       && existing.results.every((entry) => entry.status !== "running")
       ? "completed"
       : "in_progress";
-    existing.updatedAt = now().toISOString();
+    existing.updatedAt = resumedAt;
     await writeCheckpointAtomic(outputPath, existing);
     return existing;
   } catch (error) {
     if (error?.code !== "ENOENT") throw error;
+    if (recoverRunningAsOutcomeUnknown) {
+      throw new Error("--recover-running-as-outcome-unknown requires an existing checkpoint");
+    }
   }
   const createdAt = now().toISOString();
   const checkpoint = {
@@ -438,6 +475,7 @@ Options:
   --evidence-variant <full|card_text_only|without_lua>
                                               Evidence ablation (default: full)
   --case <case-id>                            Repeat to select cases (default: all)
+  --recover-running-as-outcome-unknown        Seal interrupted submissions without retrying (resume only)
   --timeout-ms <1000..3600000>              Per-request SSE deadline (default: 900000)
   --max-calls <1..24>                        Hard plan limit before transport (default: 24)
 

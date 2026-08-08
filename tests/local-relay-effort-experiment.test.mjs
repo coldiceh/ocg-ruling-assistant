@@ -20,11 +20,13 @@ test("local relay CLI accepts repeatable effort flags and validates secrets", ()
     "--effort", "high",
     "--evidence-variant", "without_lua",
     "--case", "case-b",
+    "--recover-running-as-outcome-unknown",
     "--output", "report.json",
     "--timeout-ms", "600000",
     "--max-calls", "4",
   ]);
   assert.deepEqual(parsed.efforts, ["low", "high"]);
+  assert.equal(parsed.recoverRunningAsOutcomeUnknown, true);
   const options = normalizeLocalRelayExperimentOptions(parsed, {
     RELAY_API_KEY: "server-secret",
     RELAY_BASE_URL: "https://relay.example/v1",
@@ -33,6 +35,7 @@ test("local relay CLI accepts repeatable effort flags and validates secrets", ()
   assert.equal(options.maxCalls, 4);
   assert.equal(options.evidenceVariant, "without_lua");
   assert.deepEqual(options.caseIds, ["case-b"]);
+  assert.equal(options.recoverRunningAsOutcomeUnknown, true);
   assert.equal(options.apiKey, "server-secret");
   assert.throws(
     () => normalizeLocalRelayExperimentOptions(parsed, { RELAY_BASE_URL: "https://relay.example/v1" }),
@@ -131,6 +134,104 @@ test("local relay runner is serial, single-attempt, checkpointed and resumable",
   });
   assert.equal(calls.length, 4, "resume must not repeat completed requests");
   assert.ok(calls.every((call) => call.reasoningMode === "pro"));
+});
+
+test("resume seals an interrupted running request as outcome unknown without retrying it", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "relay-interrupted-resume-test-"));
+  const bundlePath = path.join(directory, "bundle.json");
+  const outputPath = path.join(directory, "checkpoint.json");
+  const evidenceSnapshot = createAdminEvidenceSnapshot({
+    question: "Q",
+    evidence: { questions: [{ questionId: "q1", text: "Q" }] },
+    createdAt: "2026-08-08T00:00:00.000Z",
+  });
+  await writeFile(bundlePath, JSON.stringify({
+    sources: [{
+      caseId: "case-a",
+      evidenceSnapshot,
+      executionProfile: {
+        questionIds: ["q1"],
+        prompt: { version: "openai-ruling-v1", instructions: "Return JSON." },
+        finalRuling: { reasoningMode: "pro", maxOutputTokens: 1024 },
+      },
+    }],
+  }), "utf8");
+
+  const calls = [];
+  const provider = {
+    async runRuling(request) {
+      calls.push(request.reasoningEffort);
+      return {
+        id: `request-${calls.length}`,
+        status: "completed",
+        model: "gpt-5.6-sol",
+        output_text: JSON.stringify({ verdict: "UNKNOWN" }),
+        usage: { prompt_tokens: 10, completion_tokens: 3 },
+        stream_metrics: { requestToFirstContentMs: 12, requestToCompleteMs: 20 },
+      };
+    },
+    validateCompletedResponse() {
+      return { ok: true, errors: [], normalized: { verdict: "UNKNOWN" } };
+    },
+  };
+  const options = {
+    snapshots: bundlePath,
+    output: outputPath,
+    model: "relay-gpt-5.6-sol",
+    efforts: ["low", "high"],
+    maxCalls: 2,
+  };
+  const env = { RELAY_API_KEY: "secret", RELAY_BASE_URL: "https://relay.example/v1" };
+  await runLocalRelayEffortExperiment({
+    options,
+    env,
+    providerFactory: () => provider,
+    log: () => {},
+  });
+  const interrupted = JSON.parse(await readFile(outputPath, "utf8"));
+  interrupted.results = [{
+    key: "case-a::relay-gpt-5.6-sol::low",
+    caseId: "case-a",
+    model: "relay-gpt-5.6-sol",
+    effort: "low",
+    status: "running",
+    startedAt: "2026-08-08T00:01:00.000Z",
+  }];
+  interrupted.status = "in_progress";
+  await writeFile(outputPath, JSON.stringify(interrupted), "utf8");
+  calls.length = 0;
+
+  const resumed = await runLocalRelayEffortExperiment({
+    options: { ...options, recoverRunningAsOutcomeUnknown: true },
+    env,
+    providerFactory: () => provider,
+    now: () => new Date("2026-08-08T00:02:00.000Z"),
+    log: () => {},
+  });
+  assert.deepEqual(calls, ["high"], "the ambiguous low request must not be submitted again");
+  assert.equal(resumed.status, "completed");
+  assert.equal(resumed.results.length, 2);
+  const sealed = resumed.results.find((entry) => entry.effort === "low");
+  assert.equal(sealed.status, "error_outcome_unknown");
+  assert.equal(sealed.recoveredFromInterruptedCheckpoint, true);
+  assert.equal(sealed.budgetReservationMayExist, true);
+  assert.equal(sealed.error.code, "local_relay_interrupted_outcome_unknown");
+  assert.equal(sealed.usage, null);
+  assert.equal(resumed.results.find((entry) => entry.effort === "high").status, "completed_valid");
+
+  await assert.rejects(
+    () => runLocalRelayEffortExperiment({
+      options: {
+        ...options,
+        output: path.join(directory, "missing-checkpoint.json"),
+        recoverRunningAsOutcomeUnknown: true,
+      },
+      env,
+      providerFactory: () => provider,
+      log: () => {},
+    }),
+    /requires an existing checkpoint/u,
+  );
 });
 
 test("local relay runner filters cases and isolates ablation checkpoints", async () => {
