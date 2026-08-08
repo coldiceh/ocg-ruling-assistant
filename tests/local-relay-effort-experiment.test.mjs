@@ -18,6 +18,8 @@ test("local relay CLI accepts repeatable effort flags and validates secrets", ()
     "--model", "relay-gpt-5.6-sol",
     "--effort", "low",
     "--effort", "high",
+    "--evidence-variant", "without_lua",
+    "--case", "case-b",
     "--output", "report.json",
     "--timeout-ms", "600000",
     "--max-calls", "4",
@@ -29,6 +31,8 @@ test("local relay CLI accepts repeatable effort flags and validates secrets", ()
   });
   assert.equal(options.timeoutMs, 600000);
   assert.equal(options.maxCalls, 4);
+  assert.equal(options.evidenceVariant, "without_lua");
+  assert.deepEqual(options.caseIds, ["case-b"]);
   assert.equal(options.apiKey, "server-secret");
   assert.throws(
     () => normalizeLocalRelayExperimentOptions(parsed, { RELAY_BASE_URL: "https://relay.example/v1" }),
@@ -127,6 +131,84 @@ test("local relay runner is serial, single-attempt, checkpointed and resumable",
   });
   assert.equal(calls.length, 4, "resume must not repeat completed requests");
   assert.ok(calls.every((call) => call.reasoningMode === "pro"));
+});
+
+test("local relay runner filters cases and isolates ablation checkpoints", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "relay-ablation-test-"));
+  const bundlePath = path.join(directory, "bundle.json");
+  const outputPath = path.join(directory, "checkpoint.json");
+  const sources = ["case-a", "case-b"].map((caseId) => {
+    const evidenceSnapshot = createAdminEvidenceSnapshot({
+      question: `${caseId} question`,
+      evidence: {
+        questions: [{ questionId: "q1", text: `${caseId} question` }],
+        luaSemantics: [{ cardId: caseId, summary: "Lua-only evidence" }],
+      },
+      createdAt: "2026-08-08T00:00:00.000Z",
+    });
+    return {
+      caseId,
+      evidenceSnapshot,
+      executionProfile: {
+        evidenceVariant: "full",
+        questionIds: ["q1"],
+        prompt: { instructions: "Return JSON." },
+        finalRuling: { reasoningMode: "pro" },
+      },
+    };
+  });
+  await writeFile(bundlePath, JSON.stringify({ sources }), "utf8");
+  const calls = [];
+  const providerFactory = () => ({
+    async runRuling(request) {
+      calls.push(request);
+      return {
+        answer: { verdict: "UNKNOWN", explanation: "test" },
+        requestedModel: "relay-gpt-5.6-sol",
+        returnedModel: "relay-gpt-5.6-sol",
+        finishReason: "stop",
+        usage: {},
+      };
+    },
+  });
+  const env = { RELAY_API_KEY: "secret", RELAY_BASE_URL: "https://relay.example/v1" };
+  const report = await runLocalRelayEffortExperiment({
+    options: {
+      snapshots: bundlePath,
+      output: outputPath,
+      model: "relay-gpt-5.6-sol",
+      efforts: ["low"],
+      evidenceVariant: "without_lua",
+      caseIds: ["case-b"],
+      maxCalls: 1,
+    },
+    env,
+    providerFactory,
+    log: () => {},
+  });
+  assert.equal(calls.length, 1);
+  assert.equal(report.results.length, 1);
+  assert.deepEqual(report.caseIds, ["case-b"]);
+  assert.equal(report.evidenceVariant, "without_lua");
+  assert.match(report.results[0].key, /case-b.*without_lua/u);
+  assert.doesNotMatch(JSON.stringify(calls[0].input), /Lua-only evidence/u);
+  await assert.rejects(
+    () => runLocalRelayEffortExperiment({
+      options: {
+        snapshots: bundlePath,
+        output: outputPath,
+        model: "relay-gpt-5.6-sol",
+        efforts: ["low"],
+        evidenceVariant: "full",
+        caseIds: ["case-b"],
+        maxCalls: 1,
+      },
+      env,
+      providerFactory,
+      log: () => {},
+    }),
+    /different evidence variant/u,
+  );
 });
 
 test("local relay runner safely expands an existing effort checkpoint without repeating prior calls", async () => {

@@ -45,6 +45,21 @@ on:
         required: false
         type: string
         default: ""
+      resume_artifact_name:
+        description: Optional exact artifact name for the prior checkpoint (defaults to this model/run)
+        required: false
+        type: string
+        default: ""
+      source_run_id:
+        description: Optional canonical workflow run ID supplying the frozen Evidence Snapshot bundle
+        required: false
+        type: string
+        default: ""
+      source_artifact_name:
+        description: Exact canonical source artifact name (required with source_run_id)
+        required: false
+        type: string
+        default: ""
 
 permissions:
   actions: read
@@ -77,16 +92,66 @@ jobs:
 
       - name: Prepare artifact directory
         shell: bash
-        run: mkdir -p artifacts
+        run: mkdir -p artifacts/source artifacts/resume
+
+      - name: Require an explicit canonical source artifact name
+        if: ${{ inputs.source_run_id != '' }}
+        shell: bash
+        env:
+          SOURCE_ARTIFACT_NAME: ${{ inputs.source_artifact_name }}
+        run: |
+          set -euo pipefail
+          test -n "$SOURCE_ARTIFACT_NAME" || {
+            echo "source_artifact_name is required when source_run_id is set" >&2
+            exit 1
+          }
+
+      - name: Download canonical frozen source bundle
+        if: ${{ inputs.source_run_id != '' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.source_artifact_name }}
+          path: artifacts/source
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.source_run_id }}
 
       - name: Download prior checkpoint for fail-closed resume
-        if: ${{ inputs.resume_run_id != '' }}
+        if: ${{ inputs.resume_run_id != '' && inputs.resume_artifact_name == '' }}
         uses: actions/download-artifact@v4
         with:
           name: direct-relay-${{ inputs.model }}-${{ inputs.resume_run_id }}
-          path: artifacts
+          path: artifacts/resume
           github-token: ${{ github.token }}
           run-id: ${{ inputs.resume_run_id }}
+
+      - name: Download explicitly named prior checkpoint for fail-closed resume
+        if: ${{ inputs.resume_run_id != '' && inputs.resume_artifact_name != '' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.resume_artifact_name }}
+          path: artifacts/resume
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.resume_run_id }}
+
+      - name: Normalize canonical source and resume checkpoint paths
+        shell: bash
+        run: |
+          set -euo pipefail
+          copy_unique() {
+            local directory="$1"
+            local pattern="$2"
+            local destination="$3"
+            mapfile -t matches < <(find "$directory" -type f -name "$pattern" -print)
+            if [ "${#matches[@]}" -gt 1 ]; then
+              echo "Expected at most one $pattern in $directory, found ${#matches[@]}" >&2
+              exit 1
+            fi
+            if [ "${#matches[@]}" -eq 1 ]; then
+              cp "${matches[0]}" "$destination"
+            fi
+          }
+          copy_unique artifacts/source '*source-bundle.json' artifacts/direct-relay-source-bundle.json
+          copy_unique artifacts/resume '*result-checkpoint.json' artifacts/direct-relay-result-checkpoint.json
 
       - name: Build frozen source bundle without Admin API or model transport
         shell: bash

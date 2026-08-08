@@ -6,7 +6,10 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { parseAdminEvidenceSnapshot } from "../backend/adminEvidenceSnapshot.mjs";
-import { hashAdminFinalInput } from "../backend/adminEvidenceVariant.mjs";
+import {
+  hashAdminFinalInput,
+  normalizeAdminEvidenceVariant,
+} from "../backend/adminEvidenceVariant.mjs";
 import {
   buildFinalRulingInput,
   buildFinalRulingModelEvidencePacket,
@@ -21,7 +24,7 @@ const DEFAULT_MAX_CALLS = 24;
 const PROMPT_VERSION = "openai-ruling-v1";
 
 export function parseLocalRelayExperimentArgs(argv) {
-  const parsed = { efforts: [] };
+  const parsed = { efforts: [], caseIds: [] };
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
     if (argument === "--help" || argument === "-h") {
@@ -32,6 +35,8 @@ export function parseLocalRelayExperimentArgs(argv) {
       "--snapshots": "snapshots",
       "--model": "model",
       "--effort": "effort",
+      "--evidence-variant": "evidenceVariant",
+      "--case": "caseId",
       "--output": "output",
       "--timeout-ms": "timeoutMs",
       "--max-calls": "maxCalls",
@@ -43,6 +48,7 @@ export function parseLocalRelayExperimentArgs(argv) {
     }
     index += 1;
     if (field === "effort") parsed.efforts.push(String(value).trim().toLowerCase());
+    else if (field === "caseId") parsed.caseIds.push(String(value).trim());
     else parsed[field] = value;
   }
   return parsed;
@@ -60,6 +66,10 @@ export function normalizeLocalRelayExperimentOptions(options, env = process.env)
     if (!ALLOWED_EFFORTS.has(effort)) throw new TypeError(`unsupported --effort: ${effort}`);
   }
   if (new Set(efforts).size !== efforts.length) throw new TypeError("duplicate --effort values are not allowed");
+  const evidenceVariant = normalizeAdminEvidenceVariant(options.evidenceVariant || "full");
+  const caseIds = (options.caseIds || []).map((value) => String(value).trim());
+  if (caseIds.some((value) => !value)) throw new TypeError("--case must not be empty");
+  if (new Set(caseIds).size !== caseIds.length) throw new TypeError("duplicate --case values are not allowed");
   const timeoutMs = Number(options.timeoutMs || DEFAULT_TIMEOUT_MS);
   if (!Number.isInteger(timeoutMs) || timeoutMs < 1_000 || timeoutMs > 3_600_000) {
     throw new TypeError("--timeout-ms must be an integer between 1000 and 3600000");
@@ -77,6 +87,8 @@ export function normalizeLocalRelayExperimentOptions(options, env = process.env)
     outputPath: path.resolve(String(options.output)),
     model,
     efforts: Object.freeze([...efforts]),
+    evidenceVariant,
+    caseIds: Object.freeze([...caseIds]),
     timeoutMs,
     maxCalls,
     apiKey,
@@ -94,11 +106,20 @@ export async function runLocalRelayEffortExperiment({
   const resolved = normalizeLocalRelayExperimentOptions(options, env);
   const serializedBundle = await readFile(resolved.snapshotsPath, "utf8");
   const bundleSha256 = sha256(serializedBundle);
-  const cases = normalizeSnapshotBundle(JSON.parse(serializedBundle));
+  const allCases = normalizeSnapshotBundle(JSON.parse(serializedBundle));
+  const casesById = new Map(allCases.map((item) => [item.caseId, item]));
+  for (const caseId of resolved.caseIds) {
+    if (!casesById.has(caseId)) throw new TypeError(`unknown --case: ${caseId}`);
+  }
+  const cases = resolved.caseIds.length
+    ? resolved.caseIds.map((caseId) => casesById.get(caseId))
+    : allCases;
+  const selectedCaseIds = cases.map((item) => item.caseId);
   const plan = cases.flatMap((item) => resolved.efforts.map((effort) => ({
     caseId: item.caseId,
     effort,
-    key: `${item.caseId}::${resolved.model}::${effort}`,
+    evidenceVariant: resolved.evidenceVariant,
+    key: resultKey(item.caseId, resolved.model, effort, resolved.evidenceVariant),
   })));
   if (plan.length > resolved.maxCalls) {
     throw new Error(`planned relay calls ${plan.length} exceed --max-calls ${resolved.maxCalls}`);
@@ -109,6 +130,8 @@ export async function runLocalRelayEffortExperiment({
     bundlePath: resolved.snapshotsPath,
     model: resolved.model,
     efforts: resolved.efforts,
+    evidenceVariant: resolved.evidenceVariant,
+    caseIds: selectedCaseIds,
     plan,
     now,
   });
@@ -127,10 +150,11 @@ export async function runLocalRelayEffortExperiment({
       });
 
   for (const item of cases) {
-    const evidenceVariant = item.executionProfile.evidenceVariant || "full";
+    const evidenceVariant = resolved.evidenceVariant;
     const input = buildFinalRulingInput(item.evidenceSnapshot, { evidenceVariant });
     const finalInputSha256 = hashAdminFinalInput(input);
-    if (
+    if (evidenceVariant === (item.executionProfile.evidenceVariant || "full")
+      &&
       item.executionProfile.finalRulingInputSha256
       && item.executionProfile.finalRulingInputSha256 !== finalInputSha256
     ) {
@@ -141,7 +165,7 @@ export async function runLocalRelayEffortExperiment({
       { evidenceVariant },
     );
     for (const effort of resolved.efforts) {
-      const key = `${item.caseId}::${resolved.model}::${effort}`;
+      const key = resultKey(item.caseId, resolved.model, effort, evidenceVariant);
       const existing = checkpoint.results.find((entry) => entry.key === key);
       // A running record means the process died after submission. Skipping it
       // prevents an ambiguous, possibly charged request from being repeated.
@@ -295,11 +319,31 @@ export function normalizeSnapshotBundle(bundle) {
   });
 }
 
-async function loadOrCreateCheckpoint({ outputPath, bundleSha256, bundlePath, model, efforts, plan, now }) {
+async function loadOrCreateCheckpoint({
+  outputPath,
+  bundleSha256,
+  bundlePath,
+  model,
+  efforts,
+  evidenceVariant,
+  caseIds,
+  plan,
+  now,
+}) {
   try {
     const existing = JSON.parse(await readFile(outputPath, "utf8"));
     if (existing?.bundleSha256 !== bundleSha256 || existing?.model !== model) {
       throw new Error("existing checkpoint belongs to a different snapshot bundle or model");
+    }
+    if (String(existing.evidenceVariant || "full") !== evidenceVariant) {
+      throw new Error("existing checkpoint belongs to a different evidence variant");
+    }
+    // Checkpoints written before case filtering existed have no caseIds field.
+    // Their result keys still provide fail-closed plan validation below, so
+    // treating them as the current full selection preserves safe resume.
+    const existingCaseIds = Array.isArray(existing.caseIds) ? existing.caseIds : caseIds;
+    if (JSON.stringify(existingCaseIds) !== JSON.stringify(caseIds)) {
+      throw new Error("existing checkpoint belongs to a different case selection");
     }
     const previousEfforts = Array.isArray(existing.efforts) ? existing.efforts : [];
     const requestedEfforts = new Set(efforts);
@@ -312,6 +356,8 @@ async function loadOrCreateCheckpoint({ outputPath, bundleSha256, bundlePath, mo
       throw new Error("existing checkpoint contains results outside the requested plan");
     }
     existing.efforts = [...efforts];
+    existing.evidenceVariant = evidenceVariant;
+    existing.caseIds = [...caseIds];
     existing.plan = plan;
     existing.plannedRequests = plan.length;
     existing.status = existing.results.length === plan.length
@@ -335,6 +381,8 @@ async function loadOrCreateCheckpoint({ outputPath, bundleSha256, bundlePath, mo
     bundleSha256,
     model,
     efforts: [...efforts],
+    evidenceVariant,
+    caseIds: [...caseIds],
     concurrency: 1,
     retries: 0,
     plannedRequests: plan.length,
@@ -375,6 +423,11 @@ function sha256(value) {
   return createHash("sha256").update(value).digest("hex");
 }
 
+function resultKey(caseId, model, effort, evidenceVariant) {
+  const base = `${caseId}::${model}::${effort}`;
+  return evidenceVariant === "full" ? base : `${base}::${evidenceVariant}`;
+}
+
 function printHelp() {
   console.log(`Usage:
   pnpm run experiment:relay:local -- --snapshots <bundle.json> --output <checkpoint.json> [options]
@@ -382,6 +435,9 @@ function printHelp() {
 Options:
   --model <relay-gpt-5.6-sol|relay-gpt-5.6-terra|relay-gpt-5.6-luna>
   --effort <none|low|medium|high|xhigh|max>  Repeat to select efforts (default: all six)
+  --evidence-variant <full|card_text_only|without_lua>
+                                              Evidence ablation (default: full)
+  --case <case-id>                            Repeat to select cases (default: all)
   --timeout-ms <1000..3600000>              Per-request SSE deadline (default: 900000)
   --max-calls <1..24>                        Hard plan limit before transport (default: 24)
 

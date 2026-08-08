@@ -22,6 +22,14 @@ test("Direct Relay workflow has a hard paid-call gate and no Admin or Upstash de
   assert.match(workflow, /low-medium/u);
   assert.match(workflow, /none-low-medium/u);
   assert.match(workflow, /all-six/u);
+  assert.match(workflow, /source_run_id:/u);
+  assert.match(workflow, /source_artifact_name:/u);
+  assert.match(workflow, /resume_artifact_name:/u);
+  assert.match(workflow, /Download canonical frozen source bundle/u);
+  assert.match(workflow, /artifacts\/source/u);
+  assert.match(workflow, /artifacts\/resume/u);
+  assert.match(workflow, /copy_unique artifacts\/source '\*source-bundle\.json'/u);
+  assert.match(workflow, /copy_unique artifacts\/resume '\*result-checkpoint\.json'/u);
   assert.match(workflow, /if: always\(\)/u);
   assert.match(workflow, /actions\/upload-artifact@v4/u);
   assert.match(workflow, /cancel-in-progress: false/u);
