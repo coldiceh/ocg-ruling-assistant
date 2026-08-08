@@ -71,11 +71,22 @@ test("current model aliases pass while an explicitly unresolved chain order fail
     succeededCase("lost-target-continue-resolution", {
       conciseAnswer: "《谜码圣手・封元》的对象离场后仍丢弃1张手牌；墨迪乌斯离开墓地后仍要让1只怪兽回卡组。",
     }, "low"),
+    succeededCase("double-tempest-impermanence", {
+      conciseAnswer: "不可以发动。无限泡影不能回到手牌，因此息那没有满足发动所需的必做处理条件。",
+    }, "low"),
+    succeededCase("accel-synchro-trigger-window", {
+      conciseAnswer: "原连锁处理完毕后，纠罪巧为连锁1，黑蔷薇龙为连锁2；未错过时点。",
+    }, "low"),
+    succeededCase("lost-target-continue-resolution", {
+      conciseAnswer: "《谜码圣手・封元》仍要舍弃1张手卡；墨迪乌斯仍要把1只怪兽返回卡组。",
+    }, "low"),
   ]);
 
   const scored = scoreOfflineExperimentReport({ report, assertionFixture });
-  assert.deepEqual(scored.results.map((item) => item.status), ["PASS", "FAIL", "PASS"]);
-  assert.deepEqual(scored.counts, { PASS: 2, FAIL: 1, INCONCLUSIVE: 0 });
+  assert.deepEqual(scored.results.map((item) => item.status), [
+    "PASS", "FAIL", "PASS", "PASS", "PASS", "PASS",
+  ]);
+  assert.deepEqual(scored.counts, { PASS: 5, FAIL: 1, INCONCLUSIVE: 0 });
 });
 
 test("missing a necessary conclusion is FAIL with a concrete description", async () => {
