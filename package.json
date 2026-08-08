@@ -14,6 +14,8 @@
     "experiment:relay:local": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/run-local-relay-effort-experiment.ps1",
     "test:direct-relay-workflow": "node --test tests/local-relay-effort-experiment.test.mjs tests/direct-relay-workflow.test.mjs",
     "score:admin-experiment": "node scripts/score-admin-model-experiment.mjs",
+    "report:model-effort-matrix": "node scripts/aggregate-model-effort-matrix.mjs",
+    "test:model-effort-matrix": "node --test tests/model-effort-matrix-aggregator.test.mjs",
     "test:relay-local-experiment": "node --test tests/local-relay-effort-experiment.test.mjs",
     "dev:backend": "node backend/server.mjs",
     "dev:with-engine": "node scripts/start-with-ocg-engine.mjs",
