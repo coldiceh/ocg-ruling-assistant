@@ -1,0 +1,71 @@
+name: Admin read-only run diagnostics
+
+on:
+  workflow_dispatch:
+    inputs:
+      start_utc:
+        description: Inclusive UTC window start (ISO-8601, ending in Z)
+        required: true
+        type: string
+        default: "2026-08-08T01:51:00Z"
+      end_utc:
+        description: Inclusive UTC window end (ISO-8601, ending in Z)
+        required: true
+        type: string
+        default: "2026-08-08T01:54:00Z"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: admin-readonly-run-diagnostics
+  cancel-in-progress: false
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      ADMIN_MODEL_LAB_BASE_URL: https://ocg-ruling-assistant.vercel.app
+      ADMIN_MODEL_LAB_ORIGIN: https://coldiceh.github.io
+      ADMIN_MODEL_LAB_PASSWORD: ${{ secrets.ADMIN_MODEL_LAB_PASSWORD }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+
+      - name: Require admin credential
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "$ADMIN_MODEL_LAB_PASSWORD" ]; then
+            echo "ADMIN_MODEL_LAB_PASSWORD is not configured" >&2
+            exit 1
+          fi
+
+      - name: Collect zero-paid terminal run diagnostics
+        shell: bash
+        env:
+          DIAGNOSTIC_START_UTC: ${{ inputs.start_utc }}
+          DIAGNOSTIC_END_UTC: ${{ inputs.end_utc }}
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          node scripts/diagnose-admin-runs-readonly.mjs \
+            --start-utc "$DIAGNOSTIC_START_UTC" \
+            --end-utc "$DIAGNOSTIC_END_UTC" \
+            --output artifacts/admin-readonly-run-diagnostics.json
+
+      - name: Upload sanitized diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: admin-readonly-run-diagnostics-${{ github.run_id }}
+          path: artifacts/admin-readonly-run-diagnostics.json
+          if-no-files-found: warn
+          retention-days: 7

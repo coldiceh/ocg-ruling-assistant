@@ -1,4 +1,10 @@
 const TERMINAL_RESULT_STATUSES = new Set(["SUCCEEDED", "FAILED", "CANCELLED", "SKIPPED"]);
+const LOCAL_TERMINAL_RESULT_STATUSES = new Set([
+  "completed_valid",
+  "completed_invalid",
+  "error_rejected",
+  "error_outcome_unknown",
+]);
 const EFFORT_ORDER = Object.freeze(["none", "low", "medium", "high", "xhigh", "max"]);
 
 /**
@@ -40,6 +46,7 @@ export function scoreOfflineExperimentReport({ report, assertionFixture } = {}) 
 }
 
 export function assertPaidExperimentReportGenerated(report) {
+  assertLocalRelayCheckpointTerminal(report);
   const normalized = normalizeExperimentReports(report);
   if (normalized.length === 0 || normalized.every((item) => item.results.length === 0)) {
     throw scorerError("experiment report contains no generated model results");
@@ -55,6 +62,28 @@ export function assertPaidExperimentReportGenerated(report) {
     }
   }
   return normalized;
+}
+
+function assertLocalRelayCheckpointTerminal(report) {
+  if (report?.runner !== "local-relay-effort-experiment/v1") return;
+  if (String(report?.status || "").trim().toLowerCase() !== "completed") {
+    throw scorerError("local Relay checkpoint is not completed");
+  }
+  if (!Array.isArray(report.results) || report.results.length === 0) {
+    throw scorerError("local Relay checkpoint contains no generated model results");
+  }
+  if (Number.isInteger(report.plannedRequests)
+    && report.plannedRequests !== report.results.length) {
+    throw scorerError("local Relay checkpoint does not contain every planned result");
+  }
+  for (const item of report.results) {
+    const status = String(item?.status || "").trim().toLowerCase();
+    if (!LOCAL_TERMINAL_RESULT_STATUSES.has(status)) {
+      throw scorerError(
+        `local Relay result is not terminal: ${item?.caseId || "unknown"}/${status || "unknown"}`,
+      );
+    }
+  }
 }
 
 export function validateAssertionFixture(value) {
@@ -233,6 +262,7 @@ function normalizeLocalExperimentResult(item) {
   const localStatus = String(item?.status || "").trim().toLowerCase();
   const transportCompleted = new Set(["completed_valid", "completed_invalid"]).has(localStatus);
   const validation = item?.validatedResult || null;
+  const rawStructuredResult = parseLocalRawOutput(item?.rawOutput);
   return {
     ...item,
     status: transportCompleted ? "SUCCEEDED" : "FAILED",
@@ -245,9 +275,27 @@ function normalizeLocalExperimentResult(item) {
       evidenceVariant: item?.evidenceVariant || "full",
     },
     validation,
-    validatedStructuredResult: validation?.normalized || null,
+    validatedStructuredResult: validation?.normalized || rawStructuredResult,
     localExecutionStatus: localStatus || null,
   };
+}
+
+function parseLocalRawOutput(value) {
+  if (typeof value !== "string" || !value.trim()) return null;
+  const text = value.trim();
+  const candidates = [text];
+  const fenced = text.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/iu);
+  if (fenced?.[1]) candidates.push(fenced[1]);
+  for (const candidate of candidates) {
+    try {
+      const parsed = JSON.parse(candidate);
+      if (isObject(parsed)) return parsed;
+    } catch {
+      // Invalid raw output remains unscorable; this offline adapter never asks
+      // a model to repair it.
+    }
+  }
+  return null;
 }
 
 function inconclusiveScore(caseId, item, reason, identity = resultIdentity(caseId, item)) {

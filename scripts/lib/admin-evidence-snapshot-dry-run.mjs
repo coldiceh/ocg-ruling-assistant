@@ -38,7 +38,14 @@ export class AdminDryRunPaidGateBlockedError extends Error {
 
 export async function readAdminEvidenceDryRunCases(pathOrUrl) {
   const parsed = JSON.parse(await readFile(pathOrUrl, "utf8"));
-  return normalizeAdminEvidenceDryRunCases(parsed);
+  // Small one-case experiment inputs predate the unified fixture envelope and
+  // intentionally contain only { cases }. Treat that exact raw shape as v1;
+  // explicit but unsupported versions still fail closed in the normalizer.
+  return normalizeAdminEvidenceDryRunCases(
+    parsed?.schemaVersion === undefined
+      ? { ...parsed, schemaVersion: ADMIN_EVIDENCE_DRY_RUN_SCHEMA_VERSION }
+      : parsed,
+  );
 }
 
 export function normalizeAdminEvidenceDryRunCases(value) {

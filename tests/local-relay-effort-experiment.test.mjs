@@ -7,6 +7,7 @@ import test from "node:test";
 import { createAdminEvidenceSnapshot } from "../backend/adminEvidenceSnapshot.mjs";
 import {
   normalizeLocalRelayExperimentOptions,
+  normalizeSnapshotBundle,
   parseLocalRelayExperimentArgs,
   runLocalRelayEffortExperiment,
 } from "../scripts/local-relay-effort-experiment.mjs";
@@ -19,6 +20,7 @@ test("local relay CLI accepts repeatable effort flags and validates secrets", ()
     "--effort", "high",
     "--output", "report.json",
     "--timeout-ms", "600000",
+    "--max-calls", "4",
   ]);
   assert.deepEqual(parsed.efforts, ["low", "high"]);
   const options = normalizeLocalRelayExperimentOptions(parsed, {
@@ -26,6 +28,7 @@ test("local relay CLI accepts repeatable effort flags and validates secrets", ()
     RELAY_BASE_URL: "https://relay.example/v1",
   });
   assert.equal(options.timeoutMs, 600000);
+  assert.equal(options.maxCalls, 4);
   assert.equal(options.apiKey, "server-secret");
   assert.throws(
     () => normalizeLocalRelayExperimentOptions(parsed, { RELAY_BASE_URL: "https://relay.example/v1" }),
@@ -123,6 +126,172 @@ test("local relay runner is serial, single-attempt, checkpointed and resumable",
     log: () => {},
   });
   assert.equal(calls.length, 4, "resume must not repeat completed requests");
+});
+
+test("local relay runner safely expands an existing effort checkpoint without repeating prior calls", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "relay-effort-expand-test-"));
+  const bundlePath = path.join(directory, "bundle.json");
+  const outputPath = path.join(directory, "checkpoint.json");
+  const snapshot = createAdminEvidenceSnapshot({
+    question: "Q",
+    evidence: { questions: [{ questionId: "q1", text: "Q" }] },
+    createdAt: "2026-08-08T00:00:00.000Z",
+  });
+  await writeFile(bundlePath, JSON.stringify({
+    sources: [{
+      caseId: "case-a",
+      evidenceSnapshot: snapshot,
+      executionProfile: {
+        prompt: { instructions: "Return JSON." },
+        questionIds: ["q1"],
+        finalRuling: { reasoningMode: "pro" },
+      },
+    }],
+  }), "utf8");
+  const calls = [];
+  const providerFactory = () => ({
+    async runRuling(input) {
+      calls.push(input.reasoningEffort);
+      return {
+        answer: { verdict: "UNKNOWN", explanation: "test" },
+        requestedModel: "relay-gpt-5.6-sol",
+        returnedModel: "relay-gpt-5.6-sol",
+        finishReason: "stop",
+        usage: {},
+      };
+    },
+  });
+  const common = {
+    snapshots: bundlePath,
+    output: outputPath,
+    model: "relay-gpt-5.6-sol",
+    maxCalls: 6,
+  };
+  const env = { RELAY_API_KEY: "secret", RELAY_BASE_URL: "https://relay.example/v1" };
+  await runLocalRelayEffortExperiment({
+    options: { ...common, efforts: ["none", "low", "medium"] },
+    env,
+    providerFactory,
+    log: () => {},
+  });
+  const expanded = await runLocalRelayEffortExperiment({
+    options: { ...common, efforts: ["none", "low", "medium", "high", "xhigh", "max"] },
+    env,
+    providerFactory,
+    log: () => {},
+  });
+  assert.deepEqual(calls, ["none", "low", "medium", "high", "xhigh", "max"]);
+  assert.equal(expanded.results.length, 6);
+  assert.equal(expanded.plannedRequests, 6);
+  assert.deepEqual(expanded.efforts, ["none", "low", "medium", "high", "xhigh", "max"]);
+  assert.equal(expanded.status, "completed");
+});
+
+test("local relay runner rejects a plan above max-calls before provider construction", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "relay-effort-limit-test-"));
+  const bundlePath = path.join(directory, "bundle.json");
+  const outputPath = path.join(directory, "checkpoint.json");
+  const snapshot = createAdminEvidenceSnapshot({
+    question: "Q",
+    evidence: { questions: [{ questionId: "q1", text: "Q" }] },
+    createdAt: "2026-08-08T00:00:00.000Z",
+  });
+  await writeFile(bundlePath, JSON.stringify({
+    sources: [{
+      caseId: "case-a",
+      evidenceSnapshot: snapshot,
+      executionProfile: {
+        prompt: { instructions: "Return JSON." },
+        questionIds: ["q1"],
+        finalRuling: { reasoningMode: "pro" },
+      },
+    }],
+  }), "utf8");
+  let constructed = false;
+  await assert.rejects(
+    runLocalRelayEffortExperiment({
+      options: {
+        snapshots: bundlePath,
+        output: outputPath,
+        efforts: ["none", "low"],
+        maxCalls: 1,
+      },
+      env: { RELAY_API_KEY: "secret", RELAY_BASE_URL: "https://relay.example/v1" },
+      providerFactory: () => {
+        constructed = true;
+        throw new Error("must not construct");
+      },
+      log: () => {},
+    }),
+    /planned relay calls 2 exceed --max-calls 1/u,
+  );
+  assert.equal(constructed, false);
+});
+
+test("invalid frozen bundle is rejected before a Relay provider is constructed", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "relay-invalid-bundle-"));
+  const bundlePath = path.join(directory, "bundle.json");
+  const outputPath = path.join(directory, "checkpoint.json");
+  const snapshot = createAdminEvidenceSnapshot({
+    question: "anonymous",
+    evidence: { questions: [{ questionId: "q1", text: "anonymous" }], providedFacts: [] },
+    createdAt: "2026-08-08T00:00:00.000Z",
+  });
+  await writeFile(bundlePath, JSON.stringify({
+    schemaVersion: 1,
+    sources: [{
+      caseId: "invalid",
+      evidenceSnapshot: snapshot,
+      executionProfile: {
+        evidenceSnapshotId: snapshot.snapshotId,
+        evidenceVariant: "full",
+        finalRulingInputSha256: "0".repeat(64),
+        prompt: { instructions: "Return JSON." },
+      },
+    }],
+  }));
+  let providerFactoryCalls = 0;
+  await assert.rejects(
+    () => runLocalRelayEffortExperiment({
+      options: {
+        snapshots: bundlePath,
+        output: outputPath,
+        model: "relay-gpt-5.6-sol",
+        efforts: ["low"],
+      },
+      env: {
+        RELAY_API_KEY: "not-used",
+        RELAY_BASE_URL: "https://relay.example/v1",
+      },
+      providerFactory() {
+        providerFactoryCalls += 1;
+        throw new Error("provider must not be constructed");
+      },
+    }),
+    /final ruling input hash/u,
+  );
+  assert.equal(providerFactoryCalls, 0);
+});
+
+test("snapshot bundle normalizer rejects prompt hash mismatches", () => {
+  const snapshot = createAdminEvidenceSnapshot({
+    question: "anonymous",
+    evidence: { questions: [{ questionId: "q1", text: "anonymous" }], providedFacts: [] },
+    createdAt: "2026-08-08T00:00:00.000Z",
+  });
+  assert.throws(
+    () => normalizeSnapshotBundle({
+      sources: [{
+        caseId: "invalid-prompt",
+        evidenceSnapshot: snapshot,
+        executionProfile: {
+          evidenceSnapshotId: snapshot.snapshotId,
+          prompt: { instructions: "Return JSON.", sha256: "0".repeat(64) },
+        },
+      }],
+    }),
+    /prompt instructions fail/u,
+  );
 });
 
 test("secure wrapper defaults the relay base URL and starts one Node process", async () => {
