@@ -386,7 +386,12 @@ function normalizeText(value) {
     .normalize("NFKC")
     .toLowerCase()
     .replace(/[\s\u3000]+/gu, "")
-    .replace(/[，。；：、！？,.!?;:'"“”‘’「」『』（）()[\]【】《》〈〉·•—–\-_=+]/gu, "");
+    .replace(/[，。；：、！？,.!?;:'"“”‘’「」『』（）()[\]【】《》〈〉·•—–\-_=+]/gu, "")
+    // Normalize common Chinese OCG translation variants before matching the
+    // generic assertion vocabulary. These are language equivalents, not
+    // case-specific ruling shortcuts.
+    .replace(/(?:牌组|牌库)/gu, "卡组")
+    .replace(/(?:丢弃|舍弃)(?=[0-9一二两])/gu, "弃");
 }
 
 function normalizedRequiredText(value, label) {

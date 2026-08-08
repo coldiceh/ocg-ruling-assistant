@@ -78,7 +78,7 @@ test("current model aliases pass while an explicitly unresolved chain order fail
       conciseAnswer: "原连锁处理完毕后，纠罪巧为连锁1，黑蔷薇龙为连锁2；未错过时点。",
     }, "low"),
     succeededCase("lost-target-continue-resolution", {
-      conciseAnswer: "《谜码圣手・封元》仍要舍弃1张手卡；墨迪乌斯仍要把1只怪兽返回卡组。",
+      conciseAnswer: "《谜码圣手・封元》仍要弃1张手卡；墨迪乌斯仍要把1只怪兽返回牌组。",
     }, "low"),
   ]);
 
