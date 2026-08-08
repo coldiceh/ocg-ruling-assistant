@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 import {
   auditConfiguredUpstashStorage,
@@ -6,6 +7,26 @@ import {
   configuredAuditTargets,
   READ_ONLY_REDIS_COMMANDS,
 } from "../scripts/audit-upstash-storage.mjs";
+
+test("Upstash maintenance workflow defaults to read-only and gates execute with four explicit controls", async () => {
+  const workflow = await readFile(
+    new URL("../.github/workflows/upstash-maintenance.yml", import.meta.url),
+    "utf8",
+  );
+  assert.match(workflow, /default: audit/u);
+  assert.match(workflow, /- audit\s+- plan\s+- execute/u);
+  assert.match(workflow, /secrets\.UPSTASH_REDIS_REST_URL/u);
+  assert.match(workflow, /secrets\.UPSTASH_REDIS_REST_TOKEN/u);
+  assert.match(workflow, /test "\$MAINTENANCE_CONFIRMED" = "true"/u);
+  assert.match(workflow, /DELETE TERMINAL ADMIN RUN DATA DURING MAINTENANCE/u);
+  assert.match(workflow, /\^\[a-f0-9\]\{64\}\$/u);
+  assert.match(workflow, /--plan-fingerprint "\$APPROVED_PLAN_FINGERPRINT"/u);
+  assert.match(workflow, /--execute/u);
+  assert.equal((workflow.match(/--execute/gu) || []).length, 1);
+  assert.match(workflow, /Admin Model Lab create\/fork traffic is disabled/u);
+  assert.doesNotMatch(workflow, /set -x|printenv|env\s*>|cat\s+artifacts/iu);
+  assert.doesNotMatch(workflow, /ADMIN_MODEL_LAB_PASSWORD|question|raw[_ -]?key/iu);
+});
 
 const AUDIT_ENV = Object.freeze({
   UPSTASH_REDIS_REST_URL: "https://redis.example.test",

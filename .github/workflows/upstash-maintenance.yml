@@ -1,0 +1,113 @@
+name: Upstash storage audit and maintenance
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Operation mode (audit and plan never delete)
+        required: true
+        type: choice
+        default: audit
+        options:
+          - audit
+          - plan
+          - execute
+      older_than_days:
+        description: Terminal Admin Run age threshold for plan/execute
+        required: true
+        type: string
+        default: "30"
+      plan_fingerprint:
+        description: Execute only - exact 64-character fingerprint from a reviewed plan
+        required: false
+        type: string
+        default: ""
+      confirmation_phrase:
+        description: Execute only - type DELETE TERMINAL ADMIN RUN DATA DURING MAINTENANCE
+        required: false
+        type: string
+        default: ""
+      maintenance_confirmed:
+        description: Confirm Admin Model Lab create/fork traffic is disabled
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: upstash-storage-maintenance
+  cancel-in-progress: false
+
+jobs:
+  maintain:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
+      UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
+      OPERATION_MODE: ${{ inputs.mode }}
+      OLDER_THAN_DAYS: ${{ inputs.older_than_days }}
+      APPROVED_PLAN_FINGERPRINT: ${{ inputs.plan_fingerprint }}
+      EXECUTION_CONFIRMATION: ${{ inputs.confirmation_phrase }}
+      MAINTENANCE_CONFIRMED: ${{ inputs.maintenance_confirmed }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+
+      - name: Require configured Upstash credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$UPSTASH_REDIS_REST_URL" || { echo "UPSTASH_REDIS_REST_URL is not configured" >&2; exit 1; }
+          test -n "$UPSTASH_REDIS_REST_TOKEN" || { echo "UPSTASH_REDIS_REST_TOKEN is not configured" >&2; exit 1; }
+          mkdir -p artifacts
+
+      - name: Run selected fail-closed operation
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "$OPERATION_MODE" in
+            audit)
+              node scripts/audit-upstash-storage.mjs > artifacts/upstash-storage-audit.json
+              ;;
+            plan)
+              node scripts/cleanup-upstash-admin-runs.mjs \
+                --older-than-days "$OLDER_THAN_DAYS" \
+                > artifacts/upstash-admin-run-cleanup-plan.json
+              ;;
+            execute)
+              test "$MAINTENANCE_CONFIRMED" = "true" || { echo "Admin maintenance was not confirmed" >&2; exit 1; }
+              test "$EXECUTION_CONFIRMATION" = "DELETE TERMINAL ADMIN RUN DATA DURING MAINTENANCE" || { echo "Exact cleanup confirmation phrase is required" >&2; exit 1; }
+              [[ "$APPROVED_PLAN_FINGERPRINT" =~ ^[a-f0-9]{64}$ ]] || { echo "Exact 64-character plan fingerprint is required" >&2; exit 1; }
+              node scripts/cleanup-upstash-admin-runs.mjs \
+                --older-than-days "$OLDER_THAN_DAYS" \
+                --execute \
+                --confirm "$EXECUTION_CONFIRMATION" \
+                --plan-fingerprint "$APPROVED_PLAN_FINGERPRINT" \
+                > artifacts/upstash-admin-run-cleanup-execution.json
+              ;;
+            *)
+              echo "Unsupported maintenance mode" >&2
+              exit 1
+              ;;
+          esac
+
+      - name: Upload sanitized audit or cleanup report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: upstash-maintenance-${{ github.run_id }}
+          path: |
+            artifacts/upstash-storage-audit.json
+            artifacts/upstash-admin-run-cleanup-plan.json
+            artifacts/upstash-admin-run-cleanup-execution.json
+          if-no-files-found: warn
+          retention-days: 7
