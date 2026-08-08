@@ -152,7 +152,7 @@ export function renderModelEffortMatrixMarkdown(report) {
       "输出 Token",
       "推理 Token",
       "总 Token",
-      "估算费用",
+      "费用（总计 / 平均每题 / 每答对一题）",
   ];
   lines.push(
     "",
@@ -492,6 +492,7 @@ function summarizeEstimatedCosts(cases, planned) {
   const entries = cases.flatMap((item) => item.estimatedCost || []);
   if (entries.length === 0) return null;
   const caseCount = cases.filter((item) => item.estimatedCost?.length).length;
+  const correctCount = cases.filter((item) => item.status === "PASS").length;
   const totals = {};
   const sourceFields = new Set();
   const verification = new Set();
@@ -513,6 +514,14 @@ function summarizeEstimatedCosts(cases, planned) {
     plannedCaseCount: planned,
     complete: caseCount === planned,
     totals,
+    averagesPerReportedCase: Object.fromEntries(
+      Object.entries(totals).map(([currency, amount]) => [currency, round(amount / caseCount, 9)]),
+    ),
+    costsPerCorrectAnswer: caseCount === planned && correctCount > 0
+      ? Object.fromEntries(
+          Object.entries(totals).map(([currency, amount]) => [currency, round(amount / correctCount, 9)]),
+        )
+      : null,
     sourceFields: [...sourceFields].sort(),
     verification: [...verification].sort(),
     pricingVersions: [...pricingVersions].sort(),
@@ -610,7 +619,11 @@ function formatTokenMetric(value) {
 
 function formatEstimatedCost(value) {
   if (!value) return "—";
-  const totals = Object.entries(value.totals).map(([currency, amount]) => `${currency} ${round(amount, 6)}`);
+  const totals = Object.entries(value.totals).map(([currency, amount]) => {
+    const average = value.averagesPerReportedCase?.[currency];
+    const perCorrect = value.costsPerCorrectAnswer?.[currency];
+    return `${currency} ${round(amount, 6)} / ${round(average, 6)} / ${perCorrect === undefined ? "—" : round(perCorrect, 6)}`;
+  });
   const verification = value.verification.includes("unverified") ? "未验证；" : "";
   return `${totals.join(" + ")} (${verification}${value.reportedCaseCount}/${value.plannedCaseCount})`;
 }
