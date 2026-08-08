@@ -38,10 +38,15 @@ test("aggregates model+effort accuracy, availability, streaming latency, tokens 
         source: "manual screenshot",
       }],
     },
+    caseMetadata: {
+      cases: CASE_IDS.map((id, index) => ({ id, question: `完整测试问题 ${index + 1}` })),
+    },
   });
 
   assert.equal(report.publishable, true);
   assert.deepEqual(report.caseIds, CASE_IDS);
+  assert.deepEqual(report.caseCatalog.map((item) => item.label), ["Q1", "Q2", "Q3", "Q4"]);
+  assert.equal(report.caseCatalog[0].question, "完整测试问题 1");
   assert.equal(report.evidenceConsistency.bundleSha256, "bundle-shared");
   assert.deepEqual(report.evidenceConsistency.finalInputSha256ByCase, {
     "case-a": ["input-case-a"],
@@ -91,6 +96,8 @@ test("aggregates model+effort accuracy, availability, streaming latency, tokens 
   assert.match(report.metricDefinitions.costPerCorrectAnswer, /PASS count/u);
   const markdown = renderModelEffortMatrixMarkdown(report);
   assert.match(markdown, /relay-gpt-5\.6-sol/u);
+  assert.match(markdown, /## 测试内容/u);
+  assert.match(markdown, /\| Q1 \| case-a \| 完整测试问题 1 \|/u);
   assert.match(markdown, /\| 正确 \| 正确 \| 正确 \| 错误 \|/u);
   assert.match(markdown, /3\/4 \(75\.0%\)/u);
   assert.match(markdown, /2\.5 \/ 2\.5 s/u);
@@ -190,10 +197,12 @@ test("file loader and CLI parser accept repeated checkpoint/scored pairs without
     ["checkpoint.json", JSON.stringify(run.checkpoint)],
     ["scored.json", JSON.stringify(run.scored)],
     ["dashboard.json", JSON.stringify({ batches: [{ label: "one batch", delta: 1 }] })],
+    ["cases.json", JSON.stringify({ cases: CASE_IDS.map((id) => ({ id, question: `${id} question` })) })],
   ]);
   const report = await aggregateModelEffortMatrixFiles({
     pairs: [{ checkpointFile: "checkpoint.json", scoredFile: "scored.json" }],
     dashboardMetadataFile: "dashboard.json",
+    caseMetadataFile: "cases.json",
     expectedCaseCount: 4,
     now: () => new Date("2026-08-08T00:00:00.000Z"),
     readFileImpl: async (pathname) => {
@@ -209,6 +218,7 @@ test("file loader and CLI parser accept repeated checkpoint/scored pairs without
     "--checkpoint", "b.json",
     "--scored", "b-scored.json",
     "--expected-case-count", "4",
+    "--case-metadata", "cases.json",
     "--relay-credit-to-cny", "1",
     "--allow-evidence-mismatch",
   ]);
@@ -217,6 +227,7 @@ test("file loader and CLI parser accept repeated checkpoint/scored pairs without
     { checkpointFile: "b.json", scoredFile: "b-scored.json" },
   ]);
   assert.equal(parsed.expectedCaseCount, 4);
+  assert.equal(parsed.caseMetadataFile, "cases.json");
   assert.equal(parsed.relayCreditToCny, 1);
   assert.equal(parsed.strictEvidence, false);
 
