@@ -42,7 +42,7 @@ The table below uses only a fixed evaluation set and the same frozen evidence. G
 
 <!-- MODEL_EFFORT_MATRIX:START -->
 
-> The strict four-question matrix for all six reasoning-effort levels of Sol, Terra, and Luna is running serially on a remote worker. Per-question results, accuracy, latency, Token usage, and estimated cost will be added here when it is complete.
+> The strict experiment runs serially in this order: all six Sol effort levels, the lowest stable Sol level, Sol-only ablations, one fixed evidence variant, and then the other models. The final tables will include the full test questions, per-question results, accuracy, latency, Token usage, and estimated cost.
 
 <!-- MODEL_EFFORT_MATRIX:END -->
 
