@@ -190,6 +190,9 @@ jobs:
           fi
           args=()
           for effort in "${efforts[@]}"; do args+=(--effort "$effort"); done
+          if [ -s artifacts/direct-relay-result-checkpoint.json ]; then
+            args+=(--recover-running-as-outcome-unknown)
+          fi
           node scripts/local-relay-effort-experiment.mjs \
             --snapshots artifacts/direct-relay-source-bundle.json \
             --model "$RELAY_MODEL" \

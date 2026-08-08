@@ -30,6 +30,7 @@ test("Direct Relay workflow has a hard paid-call gate and no Admin or Upstash de
   assert.match(workflow, /artifacts\/resume/u);
   assert.match(workflow, /copy_unique artifacts\/source '\*source-bundle\.json'/u);
   assert.match(workflow, /copy_unique artifacts\/resume '\*result-checkpoint\.json'/u);
+  assert.match(workflow, /\[ -s artifacts\/direct-relay-result-checkpoint\.json \][\s\S]*--recover-running-as-outcome-unknown/u);
   assert.match(workflow, /if: always\(\)/u);
   assert.match(workflow, /actions\/upload-artifact@v4/u);
   assert.match(workflow, /cancel-in-progress: false/u);
