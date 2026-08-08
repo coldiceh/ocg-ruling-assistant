@@ -19,6 +19,7 @@ const DEFAULT_RELAY_CREDIT_TO_CNY = 1;
 export async function aggregateModelEffortMatrixFiles({
   pairs = [],
   dashboardMetadataFile = "",
+  caseMetadataFile = "",
   expectedCaseCount,
   strictEvidence = true,
   relayCreditToCny = DEFAULT_RELAY_CREDIT_TO_CNY,
@@ -51,9 +52,17 @@ export async function aggregateModelEffortMatrixFiles({
       `dashboard metadata ${dashboardMetadataFile}`,
     );
   }
+  let caseMetadata = null;
+  if (caseMetadataFile) {
+    caseMetadata = parseJson(
+      await readFileImpl(caseMetadataFile, "utf8"),
+      `case metadata ${caseMetadataFile}`,
+    );
+  }
   return aggregateModelEffortMatrix({
     runs,
     dashboardMetadata,
+    caseMetadata,
     expectedCaseCount,
     strictEvidence,
     relayCreditToCny,
@@ -64,6 +73,7 @@ export async function aggregateModelEffortMatrixFiles({
 export function aggregateModelEffortMatrix({
   runs = [],
   dashboardMetadata = null,
+  caseMetadata = null,
   expectedCaseCount,
   strictEvidence = true,
   relayCreditToCny = DEFAULT_RELAY_CREDIT_TO_CNY,
@@ -93,6 +103,7 @@ export function aggregateModelEffortMatrix({
     throw error;
   }
   const caseIds = configurations[0]?.plannedCaseIds || [];
+  const caseCatalog = normalizeCaseCatalog(caseMetadata, caseIds);
   const dashboard = normalizeDashboardMetadata(dashboardMetadata);
   return {
     schemaVersion: 1,
@@ -100,6 +111,7 @@ export function aggregateModelEffortMatrix({
     generatedAt,
     publishable: evidenceConsistency.valid,
     caseIds,
+    caseCatalog,
     evidenceConsistency,
     metricDefinitions: {
       accuracy: "PASS / planned cases",
@@ -142,7 +154,20 @@ export function renderModelEffortMatrixMarkdown(report) {
   if (report.evidenceConsistency.warnings.length) {
     lines.push("", ...report.evidenceConsistency.warnings.map((warning) => `- 警告：${escapeMarkdown(warning)}`));
   }
-  const caseHeaders = report.caseIds.map((caseId) => escapeMarkdown(caseId));
+  const caseCatalog = normalizeCaseCatalog(report.caseCatalog, report.caseIds);
+  const caseHeaders = caseCatalog.map((item) => escapeMarkdown(item.label));
+  if (caseCatalog.some((item) => item.question)) {
+    lines.push(
+      "",
+      "## 测试内容",
+      "",
+      "| 编号 | Case ID | 完整问题 |",
+      "| --- | --- | --- |",
+      ...caseCatalog.map((item) => (
+        `| ${escapeMarkdown(item.label)} | ${escapeMarkdown(item.caseId)} | ${escapeMarkdown(item.question || "—")} |`
+      )),
+    );
+  }
   const headers = [
       "模型",
       "推理强度",
@@ -566,6 +591,26 @@ function normalizeDashboardMetadata(value) {
   };
 }
 
+function normalizeCaseCatalog(value, caseIds) {
+  const rawItems = Array.isArray(value) ? value : (Array.isArray(value?.cases) ? value.cases : []);
+  const byId = new Map();
+  for (const item of rawItems) {
+    if (!item || typeof item !== "object") continue;
+    const caseId = optionalText(item.caseId || item.id);
+    if (!caseId || byId.has(caseId)) continue;
+    byId.set(caseId, {
+      question: optionalText(item.question || item.text),
+      mechanism: optionalText(item.mechanism || item.category),
+    });
+  }
+  return caseIds.map((caseId, index) => ({
+    label: `Q${index + 1}`,
+    caseId,
+    question: byId.get(caseId)?.question || null,
+    mechanism: byId.get(caseId)?.mechanism || null,
+  }));
+}
+
 function numericSummary(values, { includeSum = false } = {}) {
   const usable = values.filter((value) => Number.isFinite(value)).map(Number).sort((a, b) => a - b);
   const result = {
@@ -728,6 +773,9 @@ export function parseModelEffortMatrixArguments(argv) {
     } else if (argument === "--dashboard-metadata") {
       options.dashboardMetadataFile = take(argument, index);
       index += 1;
+    } else if (argument === "--case-metadata") {
+      options.caseMetadataFile = take(argument, index);
+      index += 1;
     } else if (argument === "--expected-case-count") {
       options.expectedCaseCount = Number(take(argument, index));
       index += 1;
@@ -769,6 +817,7 @@ export async function main(argv = process.argv.slice(2), dependencies = {}) {
     stdout.write([
       "Usage: node scripts/aggregate-model-effort-matrix.mjs --pair CHECKPOINT.json SCORED.json [--pair ...]",
       "  [--expected-case-count 4] [--dashboard-metadata DASHBOARD.json]",
+      "  [--case-metadata CASES.json]",
       "  [--relay-credit-to-cny 1]",
       "  [--json-out MATRIX.json] [--markdown-out MATRIX.md] [--allow-evidence-mismatch] [--compact]",
       "",
@@ -778,6 +827,7 @@ export async function main(argv = process.argv.slice(2), dependencies = {}) {
   const report = await aggregateModelEffortMatrixFiles({
     pairs: options.pairs,
     dashboardMetadataFile: options.dashboardMetadataFile,
+    caseMetadataFile: options.caseMetadataFile,
     expectedCaseCount: options.expectedCaseCount,
     strictEvidence: options.strictEvidence,
     relayCreditToCny: options.relayCreditToCny,
