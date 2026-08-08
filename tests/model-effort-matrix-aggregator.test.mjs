@@ -66,6 +66,8 @@ test("aggregates model+effort accuracy, availability, streaming latency, tokens 
     plannedCaseCount: 4,
     complete: true,
     totals: { CNY: 0.00031536 },
+    averagesPerReportedCase: { CNY: 0.00007884 },
+    costsPerCorrectAnswer: { CNY: 0.00010512 },
     sourceFields: ["estimateRelayModelCost"],
     verification: ["unverified"],
     pricingVersions: ["relay-token-group-screenshot-2026-08-07"],
@@ -91,7 +93,7 @@ test("aggregates model+effort accuracy, availability, streaming latency, tokens 
   assert.match(markdown, /3\/4 \(75\.0%\)/u);
   assert.match(markdown, /2\.5 \/ 2\.5 s/u);
   assert.match(markdown, /100 \(4\)/u);
-  assert.match(markdown, /CNY 0\.000315 \(未验证；4\/4\)/u);
+  assert.match(markdown, /CNY 0\.000315 \/ 0\.000079 \/ 0\.000105 \(未验证；4\/4\)/u);
   assert.match(markdown, /看板实际批次增量/u);
   assert.match(markdown, /不推导、不分摊为单次请求费用/u);
 });
@@ -171,6 +173,8 @@ test("DeepSeek keeps only an estimate explicitly present in the raw checkpoint",
     plannedCaseCount: 4,
     complete: true,
     totals: { CNY: 0.1 },
+    averagesPerReportedCase: { CNY: 0.025 },
+    costsPerCorrectAnswer: { CNY: 0.025 },
     sourceFields: ["estimatedCostCny"],
     verification: ["raw_record"],
     pricingVersions: [],
