@@ -61,9 +61,10 @@ function buildPassage(record, paragraphs, hitIndex, score, maxPassageChars) {
   const hit = paragraphs[hitIndex];
   if (!hit?.text) return null;
 
-  let start = hitIndex;
-  let end = hitIndex;
-  let text = hit.text;
+  const listRange = findListAwareRange(paragraphs, hitIndex, limit);
+  let start = listRange?.start ?? hitIndex;
+  let end = listRange?.end ?? hitIndex;
+  let text = joinRange(paragraphs, start, end);
   if (text.length <= limit) {
     while (start > 0 || end < paragraphs.length - 1) {
       if (end - start + 1 >= 5) break;
@@ -111,6 +112,65 @@ function buildPassage(record, paragraphs, hitIndex, score, maxPassageChars) {
   };
 }
 
+function findListAwareRange(paragraphs, hitIndex, limit) {
+  const firstCandidate = Math.max(0, hitIndex - 12);
+  const lastCandidate = Math.min(paragraphs.length - 1, hitIndex + 2);
+  for (let introIndex = lastCandidate; introIndex >= firstCandidate; introIndex -= 1) {
+    if (!isListIntroduction(paragraphs[introIndex]?.text)) continue;
+
+    let end = introIndex;
+    let compactItems = 0;
+    let trailingExplanations = 0;
+    for (let index = introIndex + 1; index < paragraphs.length && index <= introIndex + 16; index += 1) {
+      const text = paragraphs[index]?.text || "";
+      if (isSectionBoundary(text)) break;
+      if (isCompactListItem(text)) {
+        compactItems += 1;
+        trailingExplanations = 0;
+        end = index;
+        continue;
+      }
+      if (!compactItems || trailingExplanations >= 1) break;
+      trailingExplanations += 1;
+      end = index;
+    }
+    if (compactItems < 2) continue;
+
+    const headingIndex = introIndex > 0 && isShortSectionHeading(paragraphs[introIndex - 1]?.text)
+      ? introIndex - 1
+      : introIndex;
+    if (hitIndex < headingIndex || hitIndex > end) continue;
+    if (joinRange(paragraphs, headingIndex, end).length > limit) continue;
+    return { start: headingIndex, end };
+  }
+  return null;
+}
+
+function isListIntroduction(value) {
+  const text = String(value || "").trim();
+  if (!text || text.length > 320) return false;
+  return /(?:以下|如下|下列).{0,100}(?:顺序|次序|优先度|优先级|排列|组成连锁)/u.test(text)
+    || /(?:顺序|次序|优先度|优先级).{0,100}(?:以下|如下|下列)/u.test(text);
+}
+
+function isCompactListItem(value) {
+  const text = String(value || "").trim();
+  if (!text || text.length > 100 || isSectionBoundary(text)) return false;
+  if (/^(?:[-*•●▪]|\d+[.、．)]|[一二三四五六七八九十]+[、．.)]|[①②③④⑤⑥⑦⑧⑨⑩])/u.test(text)) return true;
+  return !/[。！？；]$/u.test(text) && !text.includes("\n");
+}
+
+function isShortSectionHeading(value) {
+  const text = String(value || "").trim();
+  return Boolean(text) && text.length <= 80 && /¶$/u.test(text);
+}
+
+function isSectionBoundary(value) {
+  const text = String(value || "").trim();
+  return isShortSectionHeading(text)
+    || /^(?:备注|注|注意|例|示例|说明|补充|Q\s*&\s*A)\s*[:：]?$/iu.test(text);
+}
+
 function truncateFocusedParagraph(value, limit) {
   const text = String(value || "");
   if (text.length <= limit) return text;
@@ -127,7 +187,8 @@ function buildWeightedTerms({ userQuery, ruleSearchQueries }) {
   addTerms(weighted, userQuery, 0.7);
   for (const query of ruleSearchQueries || []) {
     const confidence = String(query?.confidence || "medium").toLowerCase();
-    const weight = confidence === "high" ? 3 : confidence === "low" ? 1 : 2;
+    const baseWeight = confidence === "high" ? 3 : confidence === "low" ? 1 : 2;
+    const weight = baseWeight * ruleQuerySourceMultiplier(query?.source);
     addTerms(weighted, query?.query || query, weight);
     addTerms(weighted, query?.reason || "", weight * 0.35);
   }
@@ -211,6 +272,22 @@ function comparePassages(left, right) {
   return (right.rankingScore ?? right.score) - (left.rankingScore ?? left.score)
     || String(left.sourceRecordId).localeCompare(String(right.sourceRecordId))
     || left.paragraphStart - right.paragraphStart;
+}
+
+function ruleQuerySourceMultiplier(value) {
+  const source = String(value || "").trim().toLowerCase();
+  if ([
+    "compiled_scenario_rule_search_query",
+    "simultaneous_trigger_order_rule_search_query",
+    "chain_resolution_reverse_rule_search_query",
+    "effect_lifecycle_rule_search_query",
+  ].includes(source)) return 1.75;
+  if (source === "mechanism_rule_search_query") return 1.35;
+  if (source === "derived_rule_search_query") return 1.15;
+  // Printed-card queries remain useful, but a repeated card name or generic
+  // effect word must not outweigh a scenario-specific mechanism query.
+  if (source === "card_text_derived_rule_search_query") return 0.75;
+  return 1;
 }
 
 function normalizeRulebookRelevance(score) {

@@ -50,6 +50,7 @@ const GROUNDING_MECHANISM_PATTERNS = Object.freeze([
 const PRIORITY_SCENARIO_ABSENCE_PATTERN = /(?:没有其他|不存在其他|并无其他|无其他|除.{0,12}以外没有|只有.{0,24}(?:1|一)张|only.{0,24}(?:one|1)|no other|none(?:\s+(?:available|applicable))?)/iu;
 const PRIORITY_ACTIVE_SPELL_TRAP_RETURN_PATTERN = /(?:发动|發動|発動|连锁|連鎖|チェーン|chain).{0,80}(?:魔法|陷阱|罠|spell|trap).{0,80}(?:回到|返回|放回|弹回|彈回|戻|return)|(?:魔法|陷阱|罠|spell|trap).{0,80}(?:连锁|連鎖|チェーン|chain).{0,80}(?:回到|返回|放回|弹回|彈回|戻|return)/iu;
 const PRIORITY_NO_APPLICABLE_CARD_PATTERN = /(?:(?:除(?:了)?自身以外|除.{0,20}以外|没有其他|不存在其他|并无其他|无其他|no other|none|ほか|他).{0,180}(?:适用|適用|返回|回到|放回|选择|選択|对象|対象|处理|處理|処理|カード|card).{0,100}(?:(?:不能|不可|不得|无法|不可以|cannot).{0,16}(?:发动|發動|発動|activate)|発動できません|cannot activate))|(?:(?:(?:不能|不可|不得|无法|不可以|cannot).{0,16}(?:发动|發動|発動|activate)|発動できません|cannot activate).{0,100}(?:除自身以外|没有其他|不存在其他|no other|ほか.{0,24}ない))/iu;
+const PRIORITY_GENERIC_NO_APPLICABLE_CARD_PATTERN = /(?:(?:除(?:了)?自身以外|除.{0,20}以外).{0,40}(?:没有|不存在|并无|无).{0,20}(?:适用|適用|处理|處理|选择|選択|返回|回到).{0,20}(?:卡|カード|card).{0,24}(?:不能|不可|不得|无法|不可以|発動できません|cannot).{0,12}(?:发动|發動|発動|activate)?|(?:no other|none).{0,40}(?:applicable|eligible).{0,24}(?:card).{0,24}(?:cannot|can't|may not).{0,12}activate)/iu;
 const PRIORITY_TARGET_RESTRICTION_PATTERN = /(?:不能|不可|不得|无法|不可以|cannot|can't|対象にできません).{0,28}(?:作为|成为|选为|選択|取为|取作|対象|target).{0,16}(?:对象|對象|対象|target)|(?:不能|不可|不得|无法|不可以|cannot|can't).{0,20}(?:取|选择|選択).{0,12}(?:对象|對象|対象|target)/iu;
 const PRIORITY_SIMULTANEOUS_REPLACEMENT_PATTERN = /同\s*1?\s*时点.{0,24}双方.{0,30}(?:代替破坏|破坏.{0,12}代替).{0,60}回合玩家.{0,18}先适用.{0,100}非回合玩家.{0,60}(?:不在场上存在|已经不在场上).{0,30}不适用/su;
 const memoryBudget = new Map();
@@ -3425,10 +3426,13 @@ function classifyPriorityConstraintSegment({
   if (scenarioHasConstrainedCardOperation
       && (scenarioHasNoAlternative || ruleScenario?.noOtherSpellTraps)
       && evidenceHasNoApplicableCardRule) {
+    const genericRuleBonus = PRIORITY_GENERIC_NO_APPLICABLE_CARD_PATTERN.test(text)
+      ? 120
+      : 0;
     return {
       text,
       signature: "no_applicable_card_for_mandatory_operation",
-      score: 160 + sharedConcepts.length * 10,
+      score: 160 + genericRuleBonus + sharedConcepts.length * 10,
     };
   }
 

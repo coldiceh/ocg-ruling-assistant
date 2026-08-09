@@ -221,6 +221,7 @@ export async function runLocalRelayEffortExperiment({
           normalizeEvidenceProvenance: true,
           normalizeStructuralBindings: true,
         });
+        const hardValidity = modelRulingHardValidity(validation);
         completed = {
           key,
           caseId: item.caseId,
@@ -228,7 +229,7 @@ export async function runLocalRelayEffortExperiment({
           effort,
           reasoningMode,
           evidenceVariant,
-          status: validation.ok ? "completed_valid" : "completed_invalid",
+          status: hardValidity.ok ? "completed_valid" : "completed_invalid",
           startedAt,
           endedAt: now().toISOString(),
           durationMs: Math.round(performance.now() - monotonicStarted),
@@ -237,6 +238,8 @@ export async function runLocalRelayEffortExperiment({
           finalInputSha256,
           rawOutput: response.output_text,
           validatedResult: validation,
+          hardValidity,
+          semanticAssessment: validation?.semanticAssessment || null,
           usage: response.usage || null,
           finishReason: response.finish_reason || null,
           requestId: response.id || null,
@@ -458,6 +461,22 @@ function jsonSafe(value) {
 
 function sha256(value) {
   return createHash("sha256").update(value).digest("hex");
+}
+
+function modelRulingHardValidity(validation) {
+  if (validation?.hardValidity
+    && typeof validation.hardValidity.ok === "boolean") {
+    return {
+      ok: validation.hardValidity.ok,
+      errors: Array.isArray(validation.hardValidity.errors)
+        ? validation.hardValidity.errors
+        : [],
+    };
+  }
+  return {
+    ok: validation?.ok === true,
+    errors: Array.isArray(validation?.errors) ? validation.errors : [],
+  };
 }
 
 function resultKey(caseId, model, effort, evidenceVariant) {

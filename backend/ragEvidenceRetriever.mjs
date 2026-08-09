@@ -285,7 +285,11 @@ export async function retrieveRagEvidence({
     // `all` is globally ranked. Concatenating the near bucket before the
     // related bucket used to bury a source with the exact multi-card scene
     // merely because its wording had a different question type/language.
-    ...officialMatches.all.filter((match) => isOfficialQaRecord(match.record) && isUsefulOfficialRelatedMatch(match)),
+    ...officialMatches.all.filter((match) => (
+      isOfficialQaRecord(match.record)
+      && isUsefulOfficialRelatedMatch(match)
+      && !isIncidentalMultiCardExampleMatch(match, retrievalCards.length)
+    )),
     ...rankRecordsWithSupplementalQueries({
       userQuery,
       records: scopedRecordBuckets.qa,
@@ -294,7 +298,7 @@ export async function retrieveRagEvidence({
       deterministicRuleQueries,
       supplementalRuleQueries: effectiveSupplementalRuleQueries,
       allowNoCardMatch: retrievalCards.length === 0 && normalizedRuleQueries.length > 0,
-    }),
+    }).filter((record) => !isIncidentalMultiCardExampleRecord(record, retrievalCards.length)),
   ], (item) => stableRecordKey(item?.record || item));
   if (officialQaRelatedSource.length > limits.maxRelatedEvidence) retrievalWarnings.push(`official_related_limited:${officialQaRelatedSource.length}->${limits.maxRelatedEvidence}`);
   const officialQaRelated = officialQaRelatedSource
@@ -343,7 +347,7 @@ export async function retrieveRagEvidence({
     deterministicRuleQueries,
     supplementalRuleQueries: effectiveSupplementalRuleQueries,
     allowNoCardMatch: retrievalCards.length === 0,
-  });
+  }).filter((record) => !isIncidentalMultiCardExampleRecord(record, retrievalCards.length));
   if (rawRelatedSource.length > limits.maxRelatedEvidence) retrievalWarnings.push(`raw_related_limited:${rawRelatedSource.length}->${limits.maxRelatedEvidence}`);
   const rawRelatedEvidence = rawRelatedSource
     .slice(0, limits.maxRelatedEvidence)
@@ -1147,42 +1151,150 @@ function retrieveGlobalMechanismOfficialQaAnalogues({
   supplementalRuleQueries = [],
   maxResults = 5,
 } = {}) {
-  const lifecycleQueries = [...deterministicRuleQueries, ...supplementalRuleQueries]
+  const allQueries = [...deterministicRuleQueries, ...supplementalRuleQueries];
+  const lifecycleQueries = allQueries
     .filter((item) => item?.source === "effect_lifecycle_rule_search_query");
-  if (!lifecycleQueries.length) return [];
-  const queryConcepts = new Set(extractOfficialQaSemanticConcepts([
-    userQuery,
-    ...lifecycleQueries.map((item) => item.query),
-  ].join("\n")));
-  if (!isEffectLifecycleConceptSet(queryConcepts)) return [];
-  return (records || [])
-    .filter((record) => record?.recordType === "qa" && record.status !== "removed" && record.status !== "superseded")
-    .map((record) => {
-      const concepts = new Set(extractOfficialQaSemanticConcepts([
-        record.question,
-        record.answer,
-        record.title,
-        record.text,
-      ].filter(Boolean).join("\n")));
-      const lifecycleScore = effectLifecycleAnalogueScore(concepts);
-      return {
+  const triggerOrderQueries = allQueries.filter((item) => (
+    item?.source === "simultaneous_trigger_order_rule_search_query"
+  ));
+  const candidates = [];
+
+  if (lifecycleQueries.length) {
+    const queryConcepts = new Set(extractOfficialQaSemanticConcepts([
+      userQuery,
+      ...lifecycleQueries.map((item) => item.query),
+    ].join("\n")));
+    if (isEffectLifecycleConceptSet(queryConcepts)) {
+      candidates.push(...(records || [])
+        .filter(isCurrentOfficialQaRecord)
+        .map((record) => {
+          const concepts = new Set(extractOfficialQaSemanticConcepts([
+            record.question,
+            record.answer,
+            record.title,
+            record.text,
+          ].filter(Boolean).join("\n")));
+          const lifecycleScore = effectLifecycleAnalogueScore(concepts);
+          return {
+            ...record,
+            retrievalScore: normalizeEvidenceRelevanceScore(0.72 + lifecycleScore * 0.06),
+            retrievalSignals: {
+              ...(record.retrievalSignals || {}),
+              matchedSemanticConcepts: [...concepts].filter((concept) => queryConcepts.has(concept)),
+              mechanismAnalogue: "bound_effect_lifecycle",
+              mechanismAnalogueScore: lifecycleScore,
+            },
+          };
+        })
+        .filter((record) => isStrongEffectLifecycleAnalogue(record)));
+    }
+  }
+
+  if (triggerOrderQueries.length) {
+    candidates.push(...(records || [])
+      .filter(isCurrentOfficialQaRecord)
+      .filter(isSimultaneousTriggerOrderOfficialQa)
+      .map((record) => ({
         ...record,
-        retrievalScore: normalizeEvidenceRelevanceScore(0.72 + lifecycleScore * 0.06),
+        retrievalScore: 0.99,
         retrievalSignals: {
           ...(record.retrievalSignals || {}),
-          matchedSemanticConcepts: [...concepts].filter((concept) => queryConcepts.has(concept)),
-          mechanismAnalogue: "bound_effect_lifecycle",
-          mechanismAnalogueScore: lifecycleScore,
+          mechanismAnalogue: "simultaneous_trigger_order",
+          mechanismAnalogueScore: 5,
         },
-      };
-    })
-    .filter((record) => isStrongEffectLifecycleAnalogue(record))
+      })));
+  }
+
+  return dedupeBy(candidates, stableRecordKey)
     .sort((left, right) => (
       Number(right.retrievalSignals?.mechanismAnalogueScore || 0)
         - Number(left.retrievalSignals?.mechanismAnalogueScore || 0)
+      || Number(right.retrievalScore || 0) - Number(left.retrievalScore || 0)
       || String(left.id || "").localeCompare(String(right.id || ""))
     ))
     .slice(0, Math.max(1, maxResults));
+}
+
+function isIncidentalMultiCardExampleMatch(match = {}, resolvedCardCount = 0) {
+  const record = match.record || {};
+  const questionCardIdCount = principalQuestionCardIds(record).size;
+  const matchedQuestionCardIdCount = Array.isArray(match.matchedQuestionCardIds)
+    ? match.matchedQuestionCardIds.length
+    : Number(match.matchedQuestionCardIdCount || 0);
+  const questionCoverage = Number(match.questionCardIdCoverage ?? (
+    resolvedCardCount ? matchedQuestionCardIdCount / resolvedCardCount : 0
+  ));
+  const unmatchedQuestionCardIdCount = Math.max(
+    0,
+    questionCardIdCount - matchedQuestionCardIdCount,
+  );
+  const hasSpecificPhraseMatch = (match.matchedBy || []).includes("effect_phrase");
+  const hasSceneMatch = match.matchLevel === "official_qa_exact"
+    || match.rawSceneMatch === true
+    || match.structuredSceneMatch === true
+    || match.authoritativeSceneMatch === true;
+  return resolvedCardCount >= 2
+    && unmatchedQuestionCardIdCount >= 2
+    && matchedQuestionCardIdCount <= 1
+    && questionCoverage <= 0.5
+    && !hasSpecificPhraseMatch
+    && !hasSceneMatch;
+}
+
+function isIncidentalMultiCardExampleRecord(record = {}, resolvedCardCount = 0) {
+  if (record.recordType !== "qa") return false;
+  const signals = record.retrievalSignals || {};
+  const questionCardIdCount = principalQuestionCardIds(record).size;
+  const matchedQuestionCardIdCount = Number(
+    signals.matchedQuestionCardIdCount || 0,
+  );
+  const unmatchedQuestionCardIdCount = Math.max(
+    0,
+    questionCardIdCount - matchedQuestionCardIdCount,
+  );
+  return resolvedCardCount >= 2
+    && unmatchedQuestionCardIdCount >= 2
+    && matchedQuestionCardIdCount <= 1
+    && (matchedQuestionCardIdCount / resolvedCardCount) <= 0.5
+    && !(signals.matchedEffectPhrases || []).length
+    && signals.rulePhraseMatched !== true
+    && signals.fullQueryMatched !== true
+    && !signals.mechanismAnalogue;
+}
+
+function principalQuestionCardIds(record = {}) {
+  const explicitQuestion = String(record.question || "").trim();
+  let questionText = explicitQuestion;
+  if (!questionText) {
+    const text = String(record.text || "");
+    const title = String(record.title || "").trim();
+    // Some compact QA snapshots retain the complete question only at the
+    // beginning of `text`, followed by a repeated truncated title and the
+    // answer.  Bound identity counting to that leading question instead of
+    // treating every card listed later as part of the asked scene.
+    const repeatedTitleIndex = title.length >= 12 ? text.indexOf(title, 1) : -1;
+    if (repeatedTitleIndex > 0) questionText = text.slice(0, repeatedTitleIndex);
+  }
+  return new Set([
+    ...(record.questionCardIds || []),
+    ...extractInlineCardIds(questionText),
+  ].map(normalizeId).filter(Boolean));
+}
+
+function isCurrentOfficialQaRecord(record) {
+  return record?.recordType === "qa"
+    && record.status !== "removed"
+    && record.status !== "superseded";
+}
+
+function isSimultaneousTriggerOrderOfficialQa(record) {
+  const text = [record?.question, record?.answer, record?.title, record?.text]
+    .filter(Boolean)
+    .join("\n");
+  return /同じタイミング.{0,80}(?:効果|カード).{0,80}複数/su.test(text)
+    && /優先度\s*1.{0,80}必ず発動/su.test(text)
+    && /優先度\s*2.{0,120}任意.{0,80}公開/su.test(text)
+    && /ターンを進めているプレイヤー.{0,80}先にチェーン/su.test(text);
 }
 
 function isStrongEffectLifecycleAnalogue(record = {}) {
@@ -1417,10 +1529,16 @@ function deriveRuleSearchQueriesFromCardTexts(userQuery, cardTexts = []) {
       .slice(0, 4);
   });
   const interleaved = roundRobin(perCardQueries, 12);
-  const combinedText = [userQuery, ...(cardTexts || []).map((item) => `${(item.cards || []).join(" ")} ${item.cardType || ""} ${item.text || ""}`)].join("\n");
+  // Mechanism regexes must stay inside one printed-effect clause. Combining
+  // every effect of every card allowed unrelated clauses to satisfy opposite
+  // halves of a regex (for example, one effect mentions a chain while another
+  // mentions banishing), which produced irrelevant rule searches.
+  const perEffectMechanismQueries = (cardTexts || []).flatMap((item) => (
+    splitCardTextClauses(item.text).flatMap((clause) => deriveMechanismRuleQueries(clause))
+  ));
   return dedupeBy([
     ...deriveScenarioMechanismRuleQueries(userQuery, cardTexts),
-    ...deriveMechanismRuleQueries(combinedText),
+    ...perEffectMechanismQueries,
     ...interleaved,
   ], (item) => normalizeCardKey(item.query)).slice(0, 12);
 }
@@ -1454,12 +1572,48 @@ function deriveScenarioMechanismRuleQueries(userQuery, cardTexts) {
 function deriveMechanismRuleQueries(value) {
   const text = String(value || "");
   const queries = [];
-  const add = (query, reason) => queries.push({
+  const add = (query, reason, source = "mechanism_rule_search_query") => queries.push({
     query: expandRetrievalVocabulary(query).slice(0, 120),
     reason,
     confidence: "high",
-    source: "mechanism_rule_search_query",
+    source,
   });
+  const chainLinkNumbers = new Set([
+    ...[...text.normalize("NFKC").matchAll(/[cＣ]\s*([1-9]\d*)/giu)].map((match) => Number(match[1])),
+    ...[...text.matchAll(/(?:连锁|連鎖|チェーン)\s*([1-9]\d*)/gu)].map((match) => Number(match[1])),
+  ].filter(Number.isFinite));
+  const mentionsMultipleChainLinks = chainLinkNumbers.size >= 2;
+  const explicitSameTimingTriggers = /(?:同一|相同|同じ).{0,12}(?:时点|時點|タイミング).{0,40}(?:多个|多個|複数|诱发|誘発|trigger)/iu.test(text);
+  const explicitMandatoryOptionalTriggers = /(?:必发|必發|必须发动|必須発動|必ず発動).{0,80}(?:选发|選發|任意|可以发动|可以發動|発動できる)/isu.test(text);
+  const newTriggerChainMatch = text.match(/(?:另|再|新)(?:开|開|起|组成|組成|构筑|構築|建立).{0,12}(?:连锁|連鎖|チェーン)/iu);
+  const newTriggerChainTail = newTriggerChainMatch
+    ? text.slice((newTriggerChainMatch.index || 0) + newTriggerChainMatch[0].length)
+    : "";
+  const tailChainLinkNumbers = new Set([
+    ...[...newTriggerChainTail.normalize("NFKC").matchAll(/[cＣ]\s*([1-9]\d*)/giu)].map((match) => Number(match[1])),
+    ...[...newTriggerChainTail.matchAll(/(?:连锁|連鎖|チェーン)\s*([1-9]\d*)/gu)].map((match) => Number(match[1])),
+  ].filter(Number.isFinite));
+  const explicitPostChainTriggerOrdering = tailChainLinkNumbers.size >= 2
+    && /(?:诱发|誘発|时点|時點|タイミング|错过|錯過|召唤|召喚|反转|反轉)/iu.test(text);
+  if (explicitSameTimingTriggers || explicitMandatoryOptionalTriggers || explicitPostChainTriggerOrdering) {
+    add(
+      "同一时点 多个诱发效果 必发 公开选发 回合玩家 非回合玩家 组成连锁 顺序",
+      "题面要求排列同一发动窗口中的多个诱发效果，检索必发、公开选发和双方玩家的组链优先级。",
+      "simultaneous_trigger_order_rule_search_query",
+    );
+    add(
+      "同じタイミング 発動する効果 複数 優先度1 必ず発動 優先度2 任意 公開 ターンを進めているプレイヤー 先にチェーン",
+      "检索官方数据库中同一时点多个效果按优先度组成连锁的通用 Q&A。",
+      "simultaneous_trigger_order_rule_search_query",
+    );
+  }
+  if (mentionsMultipleChainLinks && /(?:处理|處理|结算|結算|解決|逆序|resolve)/iu.test(text)) {
+    add(
+      "连锁 组成后 从最后发动的效果开始 最高连锁逆序结算 连锁2 连锁1",
+      "题面同时给出多个连锁环节及其处理，检索从最高连锁环节开始逆序结算的基础规则。",
+      "chain_resolution_reverse_rule_search_query",
+    );
+  }
   if (/(?:连锁|連鎖|チェーン|\bC\d+\b|chain)/iu.test(text) && /(除外|送去墓地|送墓|离场|離場|不在|回到手|返回手|回到卡组|返回卡组|回去|位置)/u.test(text)) {
     add("已经发动的效果 连锁处理中 发动效果的卡离开原位置 效果处理", "检索发动源在连锁处理中改变位置后的处理规则。");
     add("效果处理 部分不能处理 后续处理 尽可能处理", "检索一项处理不能完成时其余处理是否继续。");

@@ -89,6 +89,95 @@ test("current model aliases pass while an explicitly unresolved chain order fail
   assert.deepEqual(scored.counts, { PASS: 5, FAIL: 1, INCONCLUSIVE: 0 });
 });
 
+test("determinate fixtures reject CONDITIONAL and UNKNOWN verdicts even when every keyword appears", async () => {
+  const assertionFixture = JSON.parse(await readFile(fixtureUrl, "utf8"));
+  const reports = ["CONDITIONAL", "UNKNOWN"].map((value) => succeededCase(
+    "accel-synchro-trigger-window",
+    {
+      conciseAnswer: "原连锁处理完毕后另开连锁；纠罪巧恐怖为连锁1，黑蔷薇龙为连锁2，且没有错过时点。",
+      verdicts: [{
+        questionId: "q1",
+        value,
+        conclusion: "纠罪巧恐怖为连锁1，黑蔷薇龙为连锁2。",
+        conditions: value === "CONDITIONAL" ? ["若未说明的条件成立"] : [],
+      }],
+    },
+    value.toLowerCase(),
+  ));
+
+  const scored = scoreOfflineExperimentReport({ report: batchReport(reports), assertionFixture });
+  assert.deepEqual(scored.results.map((item) => item.status), ["FAIL", "FAIL"]);
+  for (const result of scored.results) {
+    assert.equal(result.checks.find((item) => item.assertionId === "verdict-mode")?.passed, false);
+  }
+});
+
+test("a fixture may explicitly allow an indeterminate verdict", () => {
+  const assertionFixture = {
+    schemaVersion: 1,
+    goldens: [{
+      id: "conditional-case",
+      verdictMode: "any",
+      assertions: [{
+        id: "branch",
+        description: "保留条件分支。",
+        source: "all",
+        allOf: [["分支A"]],
+      }],
+    }],
+  };
+  const report = batchReport([succeededCase("conditional-case", {
+    conciseAnswer: "若满足条件则适用分支A。",
+    verdicts: [{
+      questionId: "q1",
+      value: "CONDITIONAL",
+      conclusion: "若满足条件则适用分支A。",
+      conditions: ["满足条件"],
+    }],
+  })]);
+
+  const scored = scoreOfflineExperimentReport({ report, assertionFixture });
+  assert.equal(scored.results[0].status, "PASS");
+});
+
+test("assertion groups must co-occur in conciseAnswer or one determinate verdict conclusion", () => {
+  const assertionFixture = {
+    schemaVersion: 1,
+    goldens: [{
+      id: "single-surface",
+      assertions: [{
+        id: "cooccurrence",
+        description: "两个词必须出现在同一个确定结论中。",
+        source: "all",
+        allOf: [["alpha"], ["beta"]],
+      }],
+    }],
+  };
+  const split = succeededCase("single-surface", {
+    conciseAnswer: "alpha",
+    verdicts: [{
+      questionId: "q1",
+      value: "TRUE",
+      conclusion: "gamma",
+      conditions: ["beta"],
+    }],
+    claims: [{ proposition: "beta" }],
+    timeline: [{ action: "beta", result: "" }],
+  }, "low");
+  const together = succeededCase("single-surface", {
+    conciseAnswer: "short answer",
+    verdicts: [{
+      questionId: "q1",
+      value: "TRUE",
+      conclusion: "alpha beta",
+      conditions: [],
+    }],
+  }, "medium");
+
+  const scored = scoreOfflineExperimentReport({ report: batchReport([split, together]), assertionFixture });
+  assert.deepEqual(scored.results.map((item) => item.status), ["FAIL", "PASS"]);
+});
+
 test("missing a necessary conclusion is FAIL with a concrete description", async () => {
   const assertionFixture = JSON.parse(await readFile(fixtureUrl, "utf8"));
   const report = batchReport([succeededCase("unchained-replacement", {
@@ -147,7 +236,7 @@ test("scores the local single-process checkpoint format after transport completi
   assert.equal(scored.results[0].structuredResultSource, "validatedStructuredResult");
 });
 
-test("local Relay rawOutput is mapped to the same four-case assertion fixture", async () => {
+test("local Relay rawOutput is never scored without a successful normalized validation", async () => {
   const assertionFixture = JSON.parse(await readFile(fixtureUrl, "utf8"));
   const report = {
     schemaVersion: 1,
@@ -167,9 +256,85 @@ test("local Relay rawOutput is mapped to the same four-case assertion fixture", 
     }],
   };
   const scored = scoreOfflineExperimentReport({ report, assertionFixture });
-  assert.deepEqual(scored.counts, { PASS: 1, FAIL: 0, INCONCLUSIVE: 0 });
-  assert.equal(scored.results[0].structuredResultSource, "validatedStructuredResult");
+  assert.deepEqual(scored.counts, { PASS: 0, FAIL: 0, INCONCLUSIVE: 1 });
+  assert.equal(scored.results[0].structuredResultSource, null);
   assert.equal(scored.results[0].reasoningEffort, "medium");
+});
+
+test("every completed_invalid local result is INCONCLUSIVE even if raw or normalized output looks correct", async () => {
+  const assertionFixture = JSON.parse(await readFile(fixtureUrl, "utf8"));
+  const normalized = {
+    conciseAnswer: "不能发动。无限泡影不能返回手牌，场上没有合法候选。",
+  };
+  const variants = [
+    { validatedResult: null },
+    { validatedResult: { ok: false, errors: ["invalid"] } },
+    { validatedResult: { ok: true, errors: [], normalized } },
+  ];
+  const report = {
+    schemaVersion: 1,
+    runner: "local-relay-effort-experiment/v1",
+    status: "completed",
+    plannedRequests: variants.length,
+    results: variants.map((variant, index) => ({
+      caseId: "double-tempest-impermanence",
+      model: "relay-gpt-5.6-sol",
+      effort: ["low", "medium", "high"][index],
+      status: "completed_invalid",
+      rawOutput: JSON.stringify(normalized),
+      ...variant,
+    })),
+  };
+
+  const scored = scoreOfflineExperimentReport({ report, assertionFixture });
+  assert.deepEqual(scored.counts, { PASS: 0, FAIL: 0, INCONCLUSIVE: 3 });
+  assert.ok(scored.results.every((item) => item.structuredResultSource === null));
+  assert.ok(scored.results.every((item) => /completed_invalid/u.test(item.reason)));
+});
+
+test("completed_valid requires hard validity and a normalized object while semantic issues remain scoreable", async () => {
+  const assertionFixture = JSON.parse(await readFile(fixtureUrl, "utf8"));
+  const normalized = {
+    conciseAnswer: "不能发动。无限泡影不能返回手牌，场上没有合法候选。",
+  };
+  const report = {
+    schemaVersion: 1,
+    runner: "local-relay-effort-experiment/v1",
+    status: "completed",
+    plannedRequests: 4,
+    results: [
+      { effort: "low", validatedResult: null },
+      { effort: "medium", validatedResult: { ok: true } },
+      { effort: "high", validatedResult: { ok: false, normalized } },
+      {
+        effort: "xhigh",
+        validatedResult: {
+          ok: false,
+          errors: ["semantic review required"],
+          normalized,
+          hardValidity: { ok: true, errors: [] },
+          semanticAssessment: {
+            evaluated: true,
+            ok: false,
+            issues: ["semantic review required"],
+          },
+        },
+      },
+    ].map((item) => ({
+      caseId: "double-tempest-impermanence",
+      model: "relay-gpt-5.6-sol",
+      status: "completed_valid",
+      rawOutput: JSON.stringify(normalized),
+      ...item,
+    })),
+  };
+
+  const scored = scoreOfflineExperimentReport({ report, assertionFixture });
+  assert.deepEqual(scored.counts, { PASS: 1, FAIL: 0, INCONCLUSIVE: 3 });
+  assert.ok(scored.results.slice(0, 3).every(
+    (item) => /结构化校验|normalized/u.test(item.reason),
+  ));
+  assert.equal(scored.results[3].status, "PASS");
 });
 
 test("goldens are read only after a terminal generated report is loaded", async () => {
@@ -240,6 +405,25 @@ test("scorer implementation contains no four-case identities and fixture validat
   assert.throws(
     () => validateAssertionFixture({ schemaVersion: 1, goldens: [{ id: "x" }] }),
     /assertions must be a non-empty array/u,
+  );
+  const defaultMode = validateAssertionFixture({
+    schemaVersion: 1,
+    goldens: [{
+      id: "x",
+      assertions: [{ id: "a", description: "a", allOf: [["a"]] }],
+    }],
+  });
+  assert.equal(defaultMode.get("x").verdictMode, "determinate");
+  assert.throws(
+    () => validateAssertionFixture({
+      schemaVersion: 1,
+      goldens: [{
+        id: "x",
+        verdictMode: "sometimes",
+        assertions: [{ id: "a", description: "a", allOf: [["a"]] }],
+      }],
+    }),
+    /verdictMode must be determinate or any/u,
   );
   assert.throws(
     () => assertPaidExperimentReportGenerated({ reports: [{ caseId: "x", results: [{ status: "RUNNING" }] }] }),

@@ -72,6 +72,12 @@ const ALL_SUBSTANTIVE_FIELDS = new Set([
 ]);
 const OPERATIONAL_COLLECTION_PATTERN = /(?:unresolved|ambiguous|warning|query|debug|retrievedcards|fuzzyresolved|baigeresolved)/iu;
 const TRUNCATION_WARNING_PATTERN = /(?:limited|truncated|limit_exceeded|candidate_pool_incomplete)/iu;
+const CRITICAL_MECHANISM_FEATURE_IDS = Object.freeze([
+  "simultaneous_trigger_order",
+  "chain_resolution_reverse",
+  "event_immediate_trigger_window",
+  "zero_legal_candidate_activation",
+]);
 
 // These are card-name-neutral operation/mechanism features. They let the
 // bounded model packet retain rules about operations that actually occur in
@@ -95,6 +101,34 @@ const MECHANISM_RELEVANCE_FEATURES = Object.freeze([
   feature("control_change", 14, true, /(?:控制权|控制權|コントロール|control).{0,24}(?:变更|轉移|转移|改变|移|change|transfer|gain)/isu),
   feature("replacement", 16, true, /(?:(?:代替|替代).{0,12}(?:破坏|破壊|处理|處理)|(?:破坏|破壊).{0,12}(?:代替|替代|代わり)|replacement)/isu),
   feature("effect_duration_or_reapply", 12, true, /(?:只要.{0,24}存在|存在.{0,24}期间|存在する限り|恢复适用|恢復適用|重新适用|再次适用|再び適用|re-?appl)/isu),
+  feature(
+    "simultaneous_trigger_order",
+    40,
+    true,
+    /(?:(?:同一|相同|同じ).{0,12}(?:时点|時點|タイミング).{0,32}(?:多个|多個|複数).{0,24}(?:诱发|誘発|效果|効果).{0,48}(?:顺序|順序|順番|优先|優先|连锁|連鎖|チェーン)|(?:必发|必發|必须发动|必須発動|必ず発動).{0,48}(?:选发|選發|任意|公開).{0,48}(?:顺序|順序|优先|優先|连锁|連鎖|チェーン)|(?:multiple|several).{0,24}trigger(?:ed)? effects?.{0,48}(?:same (?:time|timing)|chain order|priority))/isu,
+    /(?:(?:同一|相同|同じ).{0,12}(?:时点|時點|タイミング).{0,48}(?:多个|多個|複数|诱发|誘発|效果|効果|发动|發動|発動)|(?:必发|必發|必须发动|必須発動|必ず発動).{0,80}(?:选发|選發|任意|可以发动|可以發動|発動できる)|(?:两个|兩個|多个|多個|两者|兩者).{0,32}(?:诱发|誘発|誘発効果|trigger(?:ed)? effect).{0,48}(?:连锁|連鎖|チェーン|顺序|順序|先后|先後)|(?:multiple|several).{0,24}trigger(?:ed)? effects?.{0,48}(?:same (?:time|timing)|chain order|priority))/isu,
+  ),
+  feature(
+    "chain_resolution_reverse",
+    38,
+    true,
+    /(?:(?:连锁|連鎖|チェーン|\bchain\b).{0,64}(?:逆序|逆順|倒序|从最后|從最後|最後.{0,12}(?:开始|開始|先|処理)|reverse order|last.{0,12}first)|(?:从|從).{0,12}(?:最后|最後)发动.{0,24}(?:开始|開始).{0,12}(?:处理|處理|结算|結算)|最後に発動.{0,24}(?:処理|解決)|resolve.{0,32}(?:reverse order|last.{0,12}first))/isu,
+    /(?:(?:连锁|連鎖|チェーン|\bchain\b).{0,64}(?:逆序|逆順|倒序|从最后|從最後|最後.{0,12}(?:开始|開始|先|処理)|reverse order|last.{0,12}first)|(?:C(?:L)?1|连锁1|連鎖1|チェーン1).{0,200}(?:C(?:L)?2|连锁2|連鎖2|チェーン2).{0,200}(?:处理|處理|结算|結算|resolve)|(?:C(?:L)?2|连锁2|連鎖2|チェーン2).{0,200}(?:C(?:L)?1|连锁1|連鎖1|チェーン1).{0,200}(?:处理|處理|结算|結算|resolve))/isu,
+  ),
+  feature(
+    "event_immediate_trigger_window",
+    36,
+    true,
+    /(?:(?:召唤|召喚|特殊召唤|特殊召喚|同调召唤|同調召喚|S召唤|S召喚|シンクロ召喚).{0,24}(?:成功).{0,24}(?:直后|直後|之后|之後).{0,80}(?:发动|發動|発動|不能|できません)|(?:チェーン|连锁|連鎖).{0,24}(?:2|二).{0,80}(?:召唤|召喚).{0,80}(?:別の処理|其他处理|別の処理が行われた).{0,48}(?:发动|發動|発動|できません)|(?:召唤|召喚).{0,48}(?:后|後).{0,48}(?:其他处理|別の処理).{0,48}(?:不能发动|発動できません))/isu,
+    /(?:(?:错过|錯過|没有错过|沒有錯過|miss(?:ed)?).{0,48}(?:召唤|召喚|特殊召唤|特殊召喚|同调召唤|同調召喚|S召唤|S召喚|シンクロ召喚)|(?:召唤|召喚|特殊召唤|特殊召喚|同调召唤|同調召喚|S召唤|S召喚|シンクロ召喚).{0,24}(?:时的时点|時的時點|成功直后|成功直後|後のタイミング|后的时点|後的時點)|(?:连锁|連鎖|チェーン|\bC(?:L)?\d+\b).{0,80}(?:召唤|召喚).{0,80}(?:召唤后还有|召喚後還有|召唤后另有|召喚後另有|後に別の処理))/isu,
+  ),
+  feature(
+    "zero_legal_candidate_activation",
+    42,
+    true,
+    /(?:(?:除自身以外|自身以外).{0,48}(?:没有|不存在|无).{0,16}(?:能|可).{0,12}(?:适用|處理|处理).{0,24}(?:不能|不可|无法).{0,12}(?:发动|發動|発動)|(?:no|zero).{0,32}(?:applicable|eligible|legal).{0,24}(?:card|candidate).{0,32}(?:cannot|can't|may not).{0,16}(?:activate|be activated))/isu,
+    /(?:(?:没有其他|不存在其他|并无其他|無其他|无其他).{0,64}(?:魔法|陷阱|卡|候选|候選).{0,96}(?:能否|可否|能不能|可以|不能|无法|無法).{0,20}(?:发动|發動|発動)|(?:能否|可否|能不能|可以|不能|无法|無法).{0,20}(?:发动|發動|発動).{0,96}(?:没有其他|不存在其他|并无其他|無其他|无其他).{0,64}(?:魔法|陷阱|卡|候选|候選)|(?:no other|no applicable|zero (?:legal|eligible)).{0,64}(?:card|candidate).{0,64}(?:activate|activation))/isu,
+  ),
   feature("timing_window", 12, true, /(?:发动时点|發動時點|时点|時点|错过时点|錯過時點|タイミング|timing window|miss.{0,12}timing)/isu),
   feature("sequential_processing", 10, true, /(?:然后|那之后|之后|之後|接着|再进行|その後|then|after that).{0,40}(?:处理|處理|适用|適用|进行|行う|resolve|apply)?/isu),
   feature("extra_deck_restriction", 14, true, /(?:不能|只能|不得|できない|のみ).{0,32}(?:额外卡组|額外牌組|エクストラデッキ|extra deck).{0,16}(?:特殊召唤|特殊召喚|special summon)|(?:额外卡组|額外牌組|エクストラデッキ|extra deck).{0,32}(?:不能|只能|不得|できない|のみ)/isu),
@@ -408,7 +442,10 @@ export function buildAdminEvidenceDecisionPacket({
 } = {}) {
   assertAdminEvidenceArchive(archive);
   const normalizedLimits = normalizeDecisionPacketLimits(limits);
-  const candidates = aggregateDecisionCandidates(archive);
+  const {
+    candidates,
+    requiredCriticalMechanisms,
+  } = aggregateDecisionCandidates(archive);
   const includedSelections = [];
   const omittedManifest = [];
   const truncationBySubstance = new Map();
@@ -490,6 +527,8 @@ export function buildAdminEvidenceDecisionPacket({
       truncationManifest,
       limits: normalizedLimits,
       conflictCatalogLimit,
+      requiredCriticalMechanisms,
+      archiveSubstanceCount: archive.substances.length,
     });
     if (packetSnapshot.bytes <= normalizedLimits.maxPacketBytes) break;
 
@@ -561,7 +600,8 @@ export function buildAdminEvidenceDecisionPacket({
     truncationManifest,
     conflictManifest: archive.conflicts,
     statistics: {
-      archiveSubstanceCount: candidates.length,
+      archiveSubstanceCount: archive.substances.length,
+      decisionCandidateCount: candidates.length,
       includedSubstanceCount: includedSelections.length,
       omittedSubstanceCount: omittedManifest.length,
       excerptedSubstanceCount: truncationManifest.length,
@@ -1314,7 +1354,7 @@ function aggregateDecisionCandidates(archive) {
     }
     bySubstance.set(occurrence.substanceHash, candidate);
   }
-  const aggregated = [...bySubstance.values()]
+  const rawAggregated = [...bySubstance.values()]
     .map((candidate) => {
       const {
         representativeOccurrence: representative,
@@ -1338,19 +1378,170 @@ function aggregateDecisionCandidates(archive) {
         sourceCollections: [...candidate.sourceCollections].sort(),
       };
     });
+  const aggregated = collapseCompatibleDecisionCandidates(rawAggregated, archive);
   const relevanceContext = buildMechanismRelevanceContext(archive, aggregated);
-  return layerDecisionCandidates(aggregated.map((candidate) => ({
-    ...candidate,
-    pendingSpellTrapMovementRestrictionScore:
-      pendingSpellTrapMovementRestrictionRelevance(
-        candidate.bodyText,
-        relevanceContext,
+  const requiredCriticalMechanisms = CRITICAL_MECHANISM_FEATURE_IDS.filter(
+    (featureId) => relevanceContext.has(featureId),
+  );
+  const enriched = aggregated.map((candidate) => {
+    const candidateFeatures = extractMechanismFeatureSet(candidate.bodyText);
+    const criticalMechanismMatches = requiredCriticalMechanisms.filter(
+      (featureId) => candidateFeatures.has(featureId),
+    );
+    return {
+      ...candidate,
+      criticalMechanismMatches,
+      criticalMechanismRelevanceScore: mechanismFeatureWeight(
+        criticalMechanismMatches,
       ),
-    operationRelevanceScore:
-      candidate.category === ADMIN_EVIDENCE_CATEGORIES.MECHANISM_RULE
-        ? mechanismOperationRelevance(candidate.bodyText, relevanceContext)
-        : 0,
-  })));
+      pendingSpellTrapMovementRestrictionScore:
+        pendingSpellTrapMovementRestrictionRelevance(
+          candidate.bodyText,
+          relevanceContext,
+        ),
+      operationRelevanceScore:
+        candidate.category === ADMIN_EVIDENCE_CATEGORIES.MECHANISM_RULE
+          ? mechanismOperationRelevance(candidate.bodyText, relevanceContext)
+          : 0,
+    };
+  });
+  return {
+    candidates: reserveCriticalMechanismCoverage(
+      layerDecisionCandidates(enriched),
+      requiredCriticalMechanisms,
+    ),
+    requiredCriticalMechanisms,
+  };
+}
+
+function collapseCompatibleDecisionCandidates(candidates, archive) {
+  if (!Array.isArray(candidates) || candidates.length < 2) return candidates;
+  const conflictingEvidenceIds = new Set(
+    arrayValue(archive?.conflicts).map((item) => item?.evidenceId).filter(Boolean),
+  );
+  const parent = candidates.map((_, index) => index);
+  const find = (index) => {
+    let current = index;
+    while (parent[current] !== current) current = parent[current];
+    while (parent[index] !== index) {
+      const next = parent[index];
+      parent[index] = current;
+      index = next;
+    }
+    return current;
+  };
+  const union = (left, right) => {
+    const leftRoot = find(left);
+    const rightRoot = find(right);
+    if (leftRoot !== rightRoot) parent[rightRoot] = leftRoot;
+  };
+  const byEvidenceId = new Map();
+  candidates.forEach((candidate, index) => {
+    for (const evidenceId of candidate.evidenceIds || []) {
+      if (conflictingEvidenceIds.has(evidenceId)) continue;
+      const indexes = byEvidenceId.get(evidenceId) || [];
+      indexes.push(index);
+      byEvidenceId.set(evidenceId, indexes);
+    }
+  });
+  for (const indexes of byEvidenceId.values()) {
+    for (let index = 1; index < indexes.length; index += 1) {
+      union(indexes[0], indexes[index]);
+    }
+  }
+  const groups = new Map();
+  candidates.forEach((candidate, index) => {
+    const root = find(index);
+    const group = groups.get(root) || [];
+    group.push(candidate);
+    groups.set(root, group);
+  });
+  const substancesByHash = new Map(
+    arrayValue(archive?.substances).map((item) => [item?.substanceHash, item]),
+  );
+  const documentsByHash = new Map(
+    arrayValue(archive?.documents).map((item) => [item?.bodyHash, item]),
+  );
+  return [...groups.values()].flatMap((group) => (
+    compatibleDecisionCandidateClique(group, substancesByHash, documentsByHash)
+      ? [mergeCompatibleDecisionCandidateGroup(group)]
+      : group
+  ));
+}
+
+function compatibleDecisionCandidateClique(group, substancesByHash, documentsByHash) {
+  for (let leftIndex = 0; leftIndex < group.length; leftIndex += 1) {
+    for (let rightIndex = leftIndex + 1; rightIndex < group.length; rightIndex += 1) {
+      const left = substancesByHash.get(group[leftIndex].substanceHash);
+      const right = substancesByHash.get(group[rightIndex].substanceHash);
+      if (!left || !right || !substancesCompatible(left, right, documentsByHash)) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+function mergeCompatibleDecisionCandidateGroup(group) {
+  if (group.length === 1) return group[0];
+  const bodyRepresentative = [...group].sort(compareCompatibleCandidateBodies)[0];
+  const metadataRepresentative = [...group].sort(compareCompatibleCandidateMetadata)[0];
+  const finiteRelevanceScores = group
+    .map((candidate) => candidate.relevanceScore)
+    .filter(Number.isFinite);
+  return {
+    ...bodyRepresentative,
+    representativeEvidenceId: metadataRepresentative.representativeEvidenceId,
+    category: metadataRepresentative.category,
+    authority: group.some((candidate) => candidate.authority === "official")
+      ? "official"
+      : metadataRepresentative.authority,
+    direct: group.some((candidate) => candidate.direct),
+    current: group.some((candidate) => candidate.current),
+    relevanceScore: finiteRelevanceScores.length > 0
+      ? Math.max(...finiteRelevanceScores)
+      : metadataRepresentative.relevanceScore,
+    bestCollectionRank: Math.min(...group.map((candidate) => candidate.bestCollectionRank)),
+    bestSourceCollectionPriority: Math.min(
+      ...group.map((candidate) => candidate.bestSourceCollectionPriority),
+    ),
+    evidenceIds: [...new Set(group.flatMap((candidate) => candidate.evidenceIds))].sort(),
+    occurrenceIds: [...new Set(group.flatMap((candidate) => candidate.occurrenceIds))].sort(),
+    categories: [...new Set(group.flatMap((candidate) => candidate.categories))].sort(),
+    sourceCollections: [
+      ...new Set(group.flatMap((candidate) => candidate.sourceCollections)),
+    ].sort(),
+  };
+}
+
+function compareCompatibleCandidateBodies(left, right) {
+  return rulingQaBodyStructureRank(right.bodyText)
+    - rulingQaBodyStructureRank(left.bodyText)
+    || right.bodyText.length - left.bodyText.length
+    || left.substanceHash.localeCompare(right.substanceHash, "en");
+}
+
+function rulingQaBodyStructureRank(value) {
+  const text = normalizeSubstantiveText(value);
+  if (text.startsWith("Question:\n") && text.includes("\n\nRuling:\n")) return 2;
+  if (text.startsWith("Question:\n") || text.startsWith("Ruling:\n")) return 1;
+  return 0;
+}
+
+function compareCompatibleCandidateMetadata(left, right) {
+  return Number(right.direct) - Number(left.direct)
+    || Number(right.authority === "official") - Number(left.authority === "official")
+    || Number(right.current) - Number(left.current)
+    || categoryPriority(left.category) - categoryPriority(right.category)
+    || numberOrNegativeInfinity(right.relevanceScore)
+      - numberOrNegativeInfinity(left.relevanceScore)
+    || left.bestSourceCollectionPriority - right.bestSourceCollectionPriority
+    || left.bestCollectionRank - right.bestCollectionRank
+    || left.representativeEvidenceId.localeCompare(
+      right.representativeEvidenceId,
+      "en",
+    )
+    || left.substanceHash.localeCompare(right.substanceHash, "en");
 }
 
 function buildMechanismRelevanceContext(archive, candidates) {
@@ -1376,7 +1567,10 @@ function buildMechanismRelevanceContext(archive, candidates) {
     })),
     providedFacts: cardTexts,
   });
-  return extractMechanismFeatureSet(boundedContext.texts.join("\n"));
+  return extractMechanismFeatureSet(
+    boundedContext.texts.join("\n"),
+    { context: true },
+  );
 }
 
 function mechanismOperationRelevance(bodyText, contextFeatures) {
@@ -1420,16 +1614,25 @@ function pendingSpellTrapMovementRestrictionRelevance(bodyText, contextFeatures)
     : 0;
 }
 
-function extractMechanismFeatureSet(value) {
+function extractMechanismFeatureSet(value, { context = false } = {}) {
   const text = normalizeSubstantiveText(value);
   if (!text) return new Set();
   return new Set(MECHANISM_RELEVANCE_FEATURES
-    .filter((item) => item.pattern.test(text))
+    .filter((item) => (
+      context ? item.contextPattern : item.pattern
+    ).test(text))
     .map((item) => item.id));
 }
 
-function feature(id, weight, core, pattern) {
-  return Object.freeze({ id, weight, core, pattern });
+function feature(id, weight, core, pattern, contextPattern = pattern) {
+  return Object.freeze({ id, weight, core, pattern, contextPattern });
+}
+
+function mechanismFeatureWeight(featureIds) {
+  const selected = new Set(featureIds);
+  return MECHANISM_RELEVANCE_FEATURES.reduce((total, item) => (
+    selected.has(item.id) ? total + item.weight : total
+  ), 0);
 }
 
 function selectionContextScalarStrings(value, depth = 0) {
@@ -1535,8 +1738,45 @@ function layerDecisionCandidates(candidates) {
   return layered;
 }
 
+function reserveCriticalMechanismCoverage(candidates, requiredMechanisms) {
+  if (!Array.isArray(requiredMechanisms) || requiredMechanisms.length === 0) {
+    return candidates;
+  }
+  const priorityDirect = candidates.filter(isEligibleDirectOfficialCandidate);
+  const priorityDirectSet = new Set(
+    priorityDirect.map((candidate) => candidate.substanceHash),
+  );
+  const remaining = candidates.filter(
+    (candidate) => !priorityDirectSet.has(candidate.substanceHash),
+  );
+  const reserved = [];
+  const reservedSet = new Set();
+  const pendingMovementRestriction = remaining.find((candidate) => (
+    (candidate.pendingSpellTrapMovementRestrictionScore || 0) > 0
+  ));
+  if (pendingMovementRestriction) {
+    reserved.push(pendingMovementRestriction);
+    reservedSet.add(pendingMovementRestriction.substanceHash);
+  }
+  for (const mechanism of requiredMechanisms) {
+    const candidate = remaining.find((item) => (
+      !reservedSet.has(item.substanceHash)
+      && item.criticalMechanismMatches.includes(mechanism)
+    ));
+    if (!candidate) continue;
+    reserved.push(candidate);
+    reservedSet.add(candidate.substanceHash);
+  }
+  return [
+    ...priorityDirect,
+    ...reserved,
+    ...remaining.filter((candidate) => !reservedSet.has(candidate.substanceHash)),
+  ];
+}
+
 function compareDecisionCandidatesWithinCategory(left, right) {
-  return pendingSpellTrapMovementRestrictionDelta(left, right)
+  return criticalMechanismRelevanceDelta(left, right)
+    || pendingSpellTrapMovementRestrictionDelta(left, right)
     || mechanismOperationRelevanceDelta(left, right)
     || Number(right.direct) - Number(left.direct)
     || Number(right.authority === "official") - Number(left.authority === "official")
@@ -1547,6 +1787,11 @@ function compareDecisionCandidatesWithinCategory(left, right) {
       - numberOrNegativeInfinity(left.relevanceScore)
     || left.evidenceIds[0].localeCompare(right.evidenceIds[0], "en")
     || left.substanceHash.localeCompare(right.substanceHash, "en");
+}
+
+function criticalMechanismRelevanceDelta(left, right) {
+  return Number(right.criticalMechanismRelevanceScore || 0)
+    - Number(left.criticalMechanismRelevanceScore || 0);
 }
 
 function pendingSpellTrapMovementRestrictionDelta(left, right) {
@@ -1659,6 +1904,9 @@ function omittedEntry(candidate, reason) {
     relevanceScore: Number.isFinite(candidate.relevanceScore)
       ? candidate.relevanceScore
       : null,
+    criticalMechanismMatches: candidate.criticalMechanismMatches || [],
+    criticalMechanismRelevanceScore:
+      candidate.criticalMechanismRelevanceScore || 0,
     pendingSpellTrapMovementRestrictionScore:
       candidate.pendingSpellTrapMovementRestrictionScore || 0,
     operationRelevanceScore: candidate.operationRelevanceScore || 0,
@@ -1765,6 +2013,9 @@ function createIncludedManifest(includedSelections) {
     bodyHash: candidate.bodyHash,
     evidenceIds: candidate.evidenceIds,
     occurrenceIds: candidate.occurrenceIds,
+    criticalMechanismMatches: candidate.criticalMechanismMatches || [],
+    criticalMechanismRelevanceScore:
+      candidate.criticalMechanismRelevanceScore || 0,
     pendingSpellTrapMovementRestrictionScore:
       candidate.pendingSpellTrapMovementRestrictionScore || 0,
     operationRelevanceScore: candidate.operationRelevanceScore || 0,
@@ -1778,10 +2029,16 @@ function createModelPacketSnapshot({
   truncationManifest,
   limits,
   conflictCatalogLimit,
+  requiredCriticalMechanisms,
+  archiveSubstanceCount,
 }) {
   const included = includedSelections.map((entry) => entry.item);
   const includedManifest = createIncludedManifest(includedSelections);
   const mandatoryConstraintReview = createMandatoryConstraintReview(includedSelections);
+  const mechanismCoverage = createCriticalMechanismCoverage(
+    requiredCriticalMechanisms,
+    includedSelections,
+  );
   const conflictCatalog = createModelConflictCatalog(
     archive.conflicts,
     limits,
@@ -1815,6 +2072,7 @@ function createModelPacketSnapshot({
       categoryMinimumGuarantee:
         "weighted_grounding_and_support_coverage_without_category_starvation",
       withinCategoryPriority: [
+        "criticalMechanismCoverage",
         "pendingSpellTrapMovementRestriction",
         "mechanismOperationRelevance",
         "direct",
@@ -1833,6 +2091,7 @@ function createModelPacketSnapshot({
     },
     limits,
     decisionFocus: {
+      mechanismCoverage,
       mandatoryConstraintReview,
       reviewProtocol: [
         "check_trigger_conditions_and_every_mandatory_operation_separately",
@@ -1843,7 +2102,8 @@ function createModelPacketSnapshot({
     },
     evidenceItems: included,
     evidenceSummary: {
-      archiveSubstanceCount:
+      archiveSubstanceCount,
+      decisionCandidateCount:
         includedSelections.length + omittedManifest.length,
       includedSubstanceCount: includedSelections.length,
       omittedSubstanceCount: omittedManifest.length,
@@ -1910,6 +2170,11 @@ function createMandatoryConstraintReview(includedSelections) {
     if ((candidate.pendingSpellTrapMovementRestrictionScore || 0) > 0) {
       constraintKinds.push("pending_activated_spell_trap_movement_restriction");
     }
+    if (candidate.criticalMechanismMatches?.includes(
+      "zero_legal_candidate_activation",
+    )) {
+      constraintKinds.push("zero_legal_candidate_activation");
+    }
     if (constraintKinds.length === 0) return [];
     return [{
       evidenceId: item.evidenceId,
@@ -1920,6 +2185,34 @@ function createMandatoryConstraintReview(includedSelections) {
       ],
     }];
   });
+}
+
+function createCriticalMechanismCoverage(
+  requiredMechanisms,
+  includedSelections,
+) {
+  const required = Array.isArray(requiredMechanisms)
+    ? [...requiredMechanisms]
+    : [];
+  const evidenceByMechanism = required.map((mechanism) => ({
+    mechanism,
+    evidenceIds: includedSelections
+      .filter(({ candidate }) => (
+        candidate.criticalMechanismMatches?.includes(mechanism)
+      ))
+      .map(({ item }) => item.evidenceId),
+  }));
+  const covered = evidenceByMechanism
+    .filter((entry) => entry.evidenceIds.length > 0)
+    .map((entry) => entry.mechanism);
+  const coveredSet = new Set(covered);
+  return {
+    scope: "packet_presence_only_not_evidence_entailment",
+    required,
+    covered,
+    missing: required.filter((mechanism) => !coveredSet.has(mechanism)),
+    evidenceByMechanism,
+  };
 }
 
 function createModelConflictCatalog(conflicts, limits, catalogLimit) {

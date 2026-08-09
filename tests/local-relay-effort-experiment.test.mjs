@@ -95,7 +95,17 @@ test("local relay runner is serial, single-attempt, checkpointed and resumable",
       };
     },
     validateCompletedResponse(response) {
-      return { ok: true, errors: [], normalized: JSON.parse(response.output_text) };
+      return {
+        ok: false,
+        errors: ["semantic review required"],
+        normalized: JSON.parse(response.output_text),
+        hardValidity: { ok: true, errors: [] },
+        semanticAssessment: {
+          evaluated: true,
+          ok: false,
+          issues: ["semantic review required"],
+        },
+      };
     },
   };
   const options = {
@@ -120,7 +130,12 @@ test("local relay runner is serial, single-attempt, checkpointed and resumable",
   assert.equal(first.status, "completed");
   assert.equal(first.results.length, 4);
   assert.ok(first.results.every((result) => result.status === "completed_valid"));
-  assert.ok(first.results.every((result) => result.rawOutput && result.validatedResult.ok));
+  assert.ok(first.results.every((result) => (
+    result.rawOutput
+    && result.validatedResult.ok === false
+    && result.hardValidity.ok === true
+    && result.semanticAssessment.ok === false
+  )));
   assert.ok(first.results.every((result) => result.usage && result.sseTiming));
   const saved = await readFile(outputPath, "utf8");
   assert.equal(saved.includes("not-sent-to-output"), false);

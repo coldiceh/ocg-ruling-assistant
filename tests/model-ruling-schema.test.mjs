@@ -15,6 +15,12 @@ test("valid structured ruling passes schema and semantic validation", () => {
   });
   assert.equal(validation.ok, true, validation.errors?.join("\n"));
   assert.deepEqual(validation.normalized, result);
+  assert.deepEqual(validation.hardValidity, { ok: true, errors: [] });
+  assert.deepEqual(validation.semanticAssessment, {
+    evaluated: true,
+    ok: true,
+    issues: [],
+  });
   assert.equal(MODEL_RULING_RESULT_JSON_SCHEMA.additionalProperties, false);
   assert.ok(MODEL_RULING_RESULT_JSON_SCHEMA.properties.claims.items.required.includes("questionId"));
   assert.ok(MODEL_RULING_RESULT_JSON_SCHEMA.properties.unresolved.items.required.includes("questionId"));
@@ -75,8 +81,8 @@ test("every determinate question requires a decisive claim backed by visible evi
   assert.ok(unrelatedValidation.errors.includes("claim references unknown questionId: q2"));
 });
 
-test("failed evidence or missing-fact counter-check blocks determinate verdicts", () => {
-  for (const type of ["EVIDENCE_ENTAILMENT", "MISSING_FACT"]) {
+test("failed evidence, missing-fact, or resolution-order counter-check blocks determinate verdicts", () => {
+  for (const type of ["EVIDENCE_ENTAILMENT", "MISSING_FACT", "RESOLUTION_ORDER"]) {
     const result = makeResult();
     result.counterChecks.find((item) => item.type === type).passed = false;
     result.counterChecks.find((item) => item.type === type).note = "关键检查未通过。";
@@ -111,6 +117,8 @@ test("fabricated evidence and fabricated DIRECT_OFFICIAL claims fail closed", ()
     expectedQuestionIds: ["q1"],
   });
   assert.equal(missing.ok, false);
+  assert.equal(missing.hardValidity.ok, false);
+  assert.equal(Object.hasOwn(missing, "normalized"), false);
   assert.ok(missing.errors.some((error) => error.includes("not present in Evidence Snapshot")));
 
   const wrongType = makeResult();
@@ -530,6 +538,11 @@ test("complete evidence rejects generic UNKNOWN but permits a concrete missing g
     expectedQuestionIds: ["q1"],
   });
   assert.equal(rejected.ok, false);
+  assert.equal(rejected.hardValidity.ok, true);
+  assert.deepEqual(rejected.hardValidity.errors, []);
+  assert.equal(rejected.semanticAssessment.evaluated, true);
+  assert.equal(rejected.semanticAssessment.ok, false);
+  assert.deepEqual(rejected.normalized, generic);
   assert.ok(rejected.errors.some((error) => error.includes("concrete decisive missing fact")));
   assert.ok(rejected.errors.some((error) => error.includes("Evidence Snapshot completeness is sufficient")));
 
@@ -705,6 +718,48 @@ test("CONDITIONAL verdicts require concrete checkable branches instead of placeh
   assert.equal(accepted.ok, true, accepted.errors?.join("\n"));
 });
 
+test("explicit chain resolution order is a semantic diagnostic, not a paid-repair hard failure", () => {
+  const forward = makeResult();
+  forward.timeline = [
+    { order: 1, action: "结算C1", result: "连锁1处理完成。", evidenceIds: ["faq-1"] },
+    { order: 2, action: "结算C2", result: "连锁2处理完成。", evidenceIds: ["faq-1"] },
+  ];
+  const invalid = validateModelRulingResult(forward, {
+    evidenceSnapshot: makeSnapshot(),
+    expectedQuestionIds: ["q1"],
+  });
+  assert.equal(invalid.ok, false);
+  assert.equal(invalid.hardValidity.ok, true);
+  assert.ok(invalid.semanticAssessment.issues.includes(
+    "timeline resolves chain links in forward order: C1 before C2",
+  ));
+
+  const reverse = makeResult();
+  reverse.timeline = [
+    { order: 1, action: "结算C2", result: "连锁2处理完成。", evidenceIds: ["faq-1"] },
+    { order: 2, action: "结算C1", result: "连锁1处理完成。", evidenceIds: ["faq-1"] },
+  ];
+  const valid = validateModelRulingResult(reverse, {
+    evidenceSnapshot: makeSnapshot(),
+    expectedQuestionIds: ["q1"],
+  });
+  assert.equal(valid.ok, true, valid.errors?.join("\n"));
+
+  const metaNarrative = makeResult();
+  metaNarrative.timeline = [{
+    order: 1,
+    action: "检查连锁1和连锁2的处理顺序",
+    result: "先结算连锁2，再结算连锁1。",
+    evidenceIds: ["faq-1"],
+  }];
+  const metaValidation = validateModelRulingResult(metaNarrative, {
+    evidenceSnapshot: makeSnapshot(),
+    expectedQuestionIds: ["q1"],
+  });
+  assert.equal(metaValidation.hardValidity.ok, true);
+  assert.equal(metaValidation.semanticAssessment.ok, true, metaValidation.errors?.join("\n"));
+});
+
 test("CONDITIONAL verdicts accept decisive TRUE or FALSE branch claims but not indeterminate claims", () => {
   for (const status of ["TRUE", "FALSE"]) {
     const result = makeResult();
@@ -773,6 +828,10 @@ test("timeline rejects duplicate order and mutually-exclusive operation classifi
     evidenceSnapshot: makeSnapshot(),
   });
   assert.equal(validation.ok, false);
+  assert.equal(validation.hardValidity.ok, false);
+  assert.ok(validation.hardValidity.errors.some((error) => error.includes("order must be unique")));
+  assert.equal(validation.semanticAssessment.ok, false);
+  assert.ok(validation.semanticAssessment.issues.some((issue) => issue.includes("mutually exclusive")));
   assert.ok(validation.errors.some((error) => error.includes("mutually exclusive")));
   assert.ok(validation.errors.some((error) => error.includes("order must be unique")));
 });
@@ -800,6 +859,45 @@ test("parser accepts JSON only and never repairs Markdown or loose output", () =
   });
   assert.equal(validation.ok, false);
   assert.deepEqual(validation.errors, ["model output is not valid JSON"]);
+  assert.deepEqual(validation.hardValidity, {
+    ok: false,
+    errors: ["model output is not valid JSON"],
+  });
+  assert.deepEqual(validation.semanticAssessment, {
+    evaluated: false,
+    ok: false,
+    issues: [],
+  });
+});
+
+test("heuristic semantic findings preserve a normalized hard-valid candidate for later judging", () => {
+  const result = makeResult();
+  result.conciseAnswer = "不能发动。";
+  result.assumptions = [{
+    statement: "假定场上还有一张未说明的永续陷阱。",
+    decisive: true,
+  }];
+  result.timeline = [{
+    order: 1,
+    action: "把同一操作同时作为发动代价与效果处理",
+    result: "处理完成。",
+    evidenceIds: ["faq-1"],
+  }];
+
+  const validation = validateModelRulingResult(result, {
+    evidenceSnapshot: makeSnapshot(),
+    expectedQuestionIds: ["q1"],
+    providedFacts: ["场上只有题面明确记载的卡。"],
+  });
+
+  assert.equal(validation.ok, false);
+  assert.deepEqual(validation.hardValidity, { ok: true, errors: [] });
+  assert.equal(validation.semanticAssessment.evaluated, true);
+  assert.equal(validation.semanticAssessment.ok, false);
+  assert.ok(validation.semanticAssessment.issues.includes("TRUE verdict contradicts conciseAnswer"));
+  assert.ok(validation.semanticAssessment.issues.some((issue) => issue.includes("decisive assumption")));
+  assert.ok(validation.semanticAssessment.issues.some((issue) => issue.includes("mutually exclusive")));
+  assert.deepEqual(validation.normalized, result);
 });
 
 test("a FALSE answer accepts a TRUE claim whose own proposition states the blocker", () => {

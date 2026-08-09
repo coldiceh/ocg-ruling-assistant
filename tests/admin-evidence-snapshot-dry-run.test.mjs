@@ -226,10 +226,48 @@ test("CLI enables local Lua only through an explicit loopback engine URL", async
   assert.equal(factoryOptions.engineUrl, "http://localhost:8790");
   assert.equal(factoryOptions.engineToken, "local-engine-token");
   assert.equal(dryRunOptions.legacyLuaSemanticPacketFactory, localFactory);
+  assert.equal(
+    dryRunOptions.legacyLuaMode,
+    "PRECOMPUTED_STATIC_WITH_LOCAL_FALLBACK",
+  );
   assert.equal(dryRunOptions.enginePasscodeHydrationEnabled, true);
   assert.equal(dryRunOptions.retrievalFetchImpl, null);
   assert.equal(JSON.parse(output).realProviderTransportCalls, 0);
   assert.equal(output.includes("local-engine-token"), false);
+});
+
+test("CLI uses bundled precomputed Lua without requiring a live local engine", async () => {
+  const cases = {
+    schemaVersion: 1,
+    cases: [{
+      id: "anonymous-static-case",
+      question: "匿名静态 Lua 问题",
+      candidateCards: ["匿名卡"],
+    }],
+  };
+  const staticFactory = async () => createLegacyLuaUnknownPacket({
+    code: "STATIC_TEST",
+    message: "static test packet",
+  });
+  let factoryOptions = null;
+  let dryRunOptions = null;
+  await runAdminEvidenceDryRunCli(["--compact"], {
+    readCases: async () => cases,
+    createLegacyLuaFactory(options) {
+      factoryOptions = options;
+      return staticFactory;
+    },
+    async runDryRun(options) {
+      dryRunOptions = options;
+      return { mode: "LOCAL_ONLY_ZERO_COST" };
+    },
+    stdout: { write() {} },
+  });
+
+  assert.equal(factoryOptions.engineUrl, null);
+  assert.equal(dryRunOptions.legacyLuaSemanticPacketFactory, staticFactory);
+  assert.equal(dryRunOptions.legacyLuaMode, "PRECOMPUTED_STATIC");
+  assert.equal(dryRunOptions.enginePasscodeHydrationEnabled, false);
 });
 
 test("CLI accepts repeated raw cases fixtures and a bundle output", async () => {
