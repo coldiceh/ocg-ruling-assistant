@@ -3,15 +3,13 @@ name: Direct Relay GPT-5.6 effort pilot
 on:
   workflow_dispatch:
     inputs:
-      model:
-        description: Relay GPT-5.6 model
+      case_scope:
+        description: Run only the six unfinished cases; the completed original four are reused offline
         required: true
         type: choice
-        default: relay-gpt-5.6-sol
+        default: new-six
         options:
-          - relay-gpt-5.6-sol
-          - relay-gpt-5.6-terra
-          - relay-gpt-5.6-luna
+          - new-six
       confirm_paid_run:
         description: Confirm direct paid Relay calls
         required: true
@@ -23,23 +21,19 @@ on:
         type: choice
         default: low-only
         options:
+          - none-only
           - low-only
-          - low-medium
-          - none-low-medium
-          - none-low-medium-high
-          - all-six
+          - medium-only
+          - high-only
+          - xhigh-only
+          - max-only
       max_calls:
-        description: Hard maximum paid calls (4 cases x selected efforts)
+        description: Hard maximum paid calls (selected cases x selected efforts)
         required: true
         type: choice
-        default: "12"
+        default: "6"
         options:
-          - "4"
-          - "8"
-          - "12"
-          - "16"
-          - "20"
-          - "24"
+          - "6"
       resume_run_id:
         description: Optional prior workflow run ID whose artifact should be resumed
         required: false
@@ -66,7 +60,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: direct-relay-gpt-5.6-effort-pilot
+  group: direct-relay-gpt-5.6-sol-${{ inputs.case_scope }}-${{ inputs.effort_range }}
   cancel-in-progress: false
 
 jobs:
@@ -119,7 +113,7 @@ jobs:
         if: ${{ inputs.resume_run_id != '' && inputs.resume_artifact_name == '' }}
         uses: actions/download-artifact@v4
         with:
-          name: direct-relay-${{ inputs.model }}-${{ inputs.resume_run_id }}
+          name: direct-relay-relay-gpt-5.6-sol-${{ inputs.resume_run_id }}
           path: artifacts/resume
           github-token: ${{ github.token }}
           run-id: ${{ inputs.resume_run_id }}
@@ -155,10 +149,18 @@ jobs:
 
       - name: Build frozen source bundle without Admin API or model transport
         shell: bash
+        env:
+          CASE_SCOPE: ${{ inputs.case_scope }}
         run: |
           set -euo pipefail
           if [ ! -s artifacts/direct-relay-source-bundle.json ]; then
+            case "$CASE_SCOPE" in
+              four) cases_file=tests/fixtures/admin-evidence-dry-run-cases.json ;;
+              new-six|ten) cases_file=tests/fixtures/model-effort-ten-case-cases.json ;;
+              *) echo "Unsupported case scope" >&2; exit 1 ;;
+            esac
             node scripts/admin-evidence-snapshot-dry-run.mjs \
+              --cases "$cases_file" \
               --compact \
               --bundle-output artifacts/direct-relay-source-bundle.json \
               > /dev/null
@@ -169,21 +171,81 @@ jobs:
         env:
           RELAY_API_KEY: ${{ secrets.RELAY_API_KEY }}
           RELAY_BASE_URL: https://api.986310.xyz/v1
-          RELAY_MODEL: ${{ inputs.model }}
+          RELAY_MODEL: relay-gpt-5.6-sol
+          CASE_SCOPE: ${{ inputs.case_scope }}
           EFFORT_RANGE: ${{ inputs.effort_range }}
           MAX_CALLS: ${{ inputs.max_calls }}
         run: |
           set -euo pipefail
           test -n "$RELAY_API_KEY" || { echo "RELAY_API_KEY secret is not configured" >&2; exit 1; }
           case "$EFFORT_RANGE" in
+            none-only) efforts=(none) ;;
             low-only) efforts=(low) ;;
+            medium-only) efforts=(medium) ;;
+            high-only) efforts=(high) ;;
+            xhigh-only) efforts=(xhigh) ;;
+            max-only) efforts=(max) ;;
             low-medium) efforts=(low medium) ;;
             none-low-medium) efforts=(none low medium) ;;
             none-low-medium-high) efforts=(none low medium high) ;;
             all-six) efforts=(none low medium high xhigh max) ;;
             *) echo "Unsupported effort range" >&2; exit 1 ;;
           esac
-          planned=$((4 * ${#efforts[@]}))
+          bundle_case_ids=$(node --input-type=module -e '
+            import { readFile } from "node:fs/promises";
+            const bundle = JSON.parse(await readFile("artifacts/direct-relay-source-bundle.json", "utf8"));
+            if (!Array.isArray(bundle.sources)) throw new Error("source bundle has no sources array");
+            const ids = bundle.sources.map((item) => String(item?.caseId || ""));
+            if (ids.some((id) => !id) || new Set(ids).size !== ids.length) {
+              throw new Error("source bundle case IDs must be non-empty and unique");
+            }
+            process.stdout.write(ids.join("\n"));
+          ')
+          mapfile -t available_case_ids <<< "$bundle_case_ids"
+          original_four=(
+            double-tempest-impermanence
+            unchained-replacement
+            accel-synchro-trigger-window
+            lost-target-continue-resolution
+          )
+          new_six=(
+            tearlaments-scream-activation-window
+            mind-scan-red-lotus-public-hand
+            harmonia-topologic-field-activation
+            photon-emperor-mausoleum-extra-summon
+            timaeus-gaze-dragoon-one-destruction
+            memento-cactus-avramax-direct-attack
+          )
+          case_args=()
+          case "$CASE_SCOPE" in
+            four)
+              required_case_ids=("${original_four[@]}")
+              ;;
+            new-six)
+              required_case_ids=("${new_six[@]}")
+              if [ "${#available_case_ids[@]}" -ne 6 ] && [ "${#available_case_ids[@]}" -ne 10 ]; then
+                echo "case_scope new-six requires a 6-case or 10-case source bundle" >&2
+                exit 1
+              fi
+              ;;
+            ten)
+              required_case_ids=("${original_four[@]}" "${new_six[@]}")
+              if [ "${#available_case_ids[@]}" -ne 10 ]; then
+                echo "case_scope ten requires a 10-case source bundle" >&2
+                exit 1
+              fi
+              ;;
+            *) echo "Unsupported case scope" >&2; exit 1 ;;
+          esac
+          for case_id in "${required_case_ids[@]}"; do
+            if ! printf '%s\n' "${available_case_ids[@]}" | grep -Fqx -- "$case_id"; then
+              echo "source bundle is missing case $case_id" >&2
+              exit 1
+            fi
+            case_args+=(--case "$case_id")
+          done
+          selected_case_count=${#required_case_ids[@]}
+          planned=$((selected_case_count * ${#efforts[@]}))
           if [ "$planned" -gt "$MAX_CALLS" ]; then
             echo "Planned calls $planned exceed max_calls $MAX_CALLS" >&2
             exit 1
@@ -197,6 +259,7 @@ jobs:
             --snapshots artifacts/direct-relay-source-bundle.json \
             --model "$RELAY_MODEL" \
             "${args[@]}" \
+            "${case_args[@]}" \
             --output artifacts/direct-relay-result-checkpoint.json \
             --timeout-ms 900000 \
             --max-calls "$MAX_CALLS"
@@ -213,7 +276,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: direct-relay-${{ inputs.model }}-${{ github.run_id }}
+          name: direct-relay-relay-gpt-5.6-sol-${{ github.run_id }}
           path: |
             artifacts/direct-relay-source-bundle.json
             artifacts/direct-relay-result-checkpoint.json

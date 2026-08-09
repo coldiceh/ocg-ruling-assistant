@@ -430,7 +430,7 @@ test("relevant official related QA may support a derivation without being mislab
   assert.equal(validation.ok, true, validation.errors?.join("\n"));
 });
 
-test("definite verdict cannot depend on decisive UNKNOWN or unresolved facts", () => {
+test("decisive UNKNOWN or unresolved facts are semantic diagnostics, not paid-repair hard failures", () => {
   const result = makeResult();
   result.claims[0].status = "UNKNOWN";
   result.unresolved.push({ code: "MISSING_STATE", decisive: true, explanation: "缺少决定性状态。" });
@@ -439,8 +439,12 @@ test("definite verdict cannot depend on decisive UNKNOWN or unresolved facts", (
     expectedQuestionIds: ["q1"],
   });
   assert.equal(validation.ok, false);
+  assert.equal(validation.hardValidity.ok, true);
+  assert.deepEqual(validation.hardValidity.errors, []);
   assert.ok(validation.errors.some((error) => error.includes("decisive UNKNOWN")));
   assert.ok(validation.errors.some((error) => error.includes("decisive unresolved")));
+  assert.ok(validation.semanticAssessment.issues.some((error) => error.includes("decisive UNKNOWN")));
+  assert.ok(validation.semanticAssessment.issues.some((error) => error.includes("decisive unresolved")));
 });
 
 test("multiple questions need independent verdicts with no extras", () => {
@@ -758,6 +762,37 @@ test("explicit chain resolution order is a semantic diagnostic, not a paid-repai
   });
   assert.equal(metaValidation.hardValidity.ok, true);
   assert.equal(metaValidation.semanticAssessment.ok, true, metaValidation.errors?.join("\n"));
+
+  const constructionThenResolution = makeResult();
+  constructionThenResolution.timeline = [
+    {
+      order: 1,
+      action: "C1建立，其处理包含先舍弃手牌、再放置对象的步骤。",
+      result: "随后C2位于C1之后，连锁处理时先处理C2。",
+      evidenceIds: ["faq-1"],
+    },
+    {
+      order: 2,
+      action: "逆序处理C2。",
+      result: "C2处理完成。",
+      evidenceIds: ["faq-1"],
+    },
+    {
+      order: 3,
+      action: "处理C1。",
+      result: "C1处理完成。",
+      evidenceIds: ["faq-1"],
+    },
+  ];
+  const constructionValidation = validateModelRulingResult(constructionThenResolution, {
+    evidenceSnapshot: makeSnapshot(),
+    expectedQuestionIds: ["q1"],
+  });
+  assert.equal(
+    constructionValidation.semanticAssessment.ok,
+    true,
+    constructionValidation.errors?.join("\n"),
+  );
 });
 
 test("CONDITIONAL verdicts accept decisive TRUE or FALSE branch claims but not indeterminate claims", () => {

@@ -27,6 +27,11 @@ test("final ruling prompt treats model-packet coverage flags as risks without fo
   assert.match(prompt, /不得把资料包称为完整/u);
   assert.match(prompt, /不得套用“资料完整所以必须作出确定裁定”的反拒答前提/u);
   assert.match(prompt, /覆盖风险本身不自动等于 `UNKNOWN`/u);
+  assert.match(prompt, /已经作为 C1\/C2 组成连锁/u);
+  assert.match(prompt, /把“该次发动已经合法成立”视为题面事实/u);
+  assert.match(prompt, /不得假设未记载的候选消失/u);
+  assert.match(prompt, /当前子问题要求判断某次发动是否合法/u);
+  assert.match(prompt, /不得用本段重新审查既有发动/u);
   assert.match(prompt, /当前可见卡文、规则或 Q&A 已独立支持决定性 Claim/u);
 });
 

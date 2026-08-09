@@ -45,6 +45,27 @@ test("local relay CLI accepts repeatable effort flags and validates secrets", ()
   );
 });
 
+test("local relay CLI permits a ten-case all-six hard limit and rejects larger plans", () => {
+  const base = {
+    snapshots: "bundle.json",
+    output: "report.json",
+    efforts: ["none", "low", "medium", "high", "xhigh", "max"],
+    maxCalls: "60",
+  };
+  const options = normalizeLocalRelayExperimentOptions(base, {
+    RELAY_API_KEY: "server-secret",
+    RELAY_BASE_URL: "https://relay.example/v1",
+  });
+  assert.equal(options.maxCalls, 60);
+  assert.throws(
+    () => normalizeLocalRelayExperimentOptions(
+      { ...base, maxCalls: "61" },
+      { RELAY_API_KEY: "server-secret", RELAY_BASE_URL: "https://relay.example/v1" },
+    ),
+    /--max-calls must be an integer between 1 and 60/u,
+  );
+});
+
 test("local relay runner is serial, single-attempt, checkpointed and resumable", async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), "relay-effort-test-"));
   const bundlePath = path.join(directory, "bundle.json");

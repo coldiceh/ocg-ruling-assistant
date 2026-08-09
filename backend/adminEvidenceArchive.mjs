@@ -78,6 +78,27 @@ const CRITICAL_MECHANISM_FEATURE_IDS = Object.freeze([
   "event_immediate_trigger_window",
   "zero_legal_candidate_activation",
 ]);
+const ACTIVATION_CANDIDATE_REVIEW_PROTOCOL = Object.freeze([
+  "check_trigger_conditions_and_every_mandatory_operation_separately",
+  "count_only_candidates_that_can_legally_receive_the_required_operation_at_activation",
+  "do_not_treat_zero_legal_candidates_as_an_empty_success_unless_visible_text_or_ruling_explicitly_allows_it",
+  "an_affirmative_legality_conclusion_must_address_every_listed_constraint_or_explain_its_concrete_mismatch",
+]);
+const ACTIVATION_LEGALITY_QUESTION_PATTERNS = Object.freeze([
+  /(?:(?:能否|能不能|可否|可不可以|是否可以|是否能够?).{0,20}(?:直接)?(?:连锁|連鎖|チェーン)?(?:.{0,8})?(?:发动|發動|発動))/isu,
+  /(?:(?:可|可以|能够?|不能|无法|無法|不可以).{0,20}(?:直接)?(?:连锁|連鎖|チェーン)?(?:.{0,8})?(?:发动|發動|発動).{0,6}(?:吗|么|呢|[?？]))/isu,
+  /(?:(?:为什么|為什麼|为何|為何|何故).{0,24}(?:不能|无法|無法|不可以)?(?:.{0,8})?(?:发动|發動|発動))/isu,
+  /(?:(?:发动|發動|発動).{0,16}(?:是否合法|合不合法|能否成立|能不能成立|可以吗|能吗|可否|できる(?:か|[?？])|できますか|可能))/isu,
+  /(?:(?:发动合法性|發動合法性|发动条件|發動條件|発動条件).{0,16}(?:是什么|是否满足|满足吗|为何|為何|怎么|如何|[?？])|(?:什么|哪些|怎样|如何).{0,16}(?:发动条件|發動條件|発動条件))/isu,
+  /(?:what.{0,24}activation\s+(?:condition|requirement)|activation\s+(?:condition|legality).{0,24}(?:what|whether|satisfied|[?]))/isu,
+  /(?:(?:can|may|could)\b.{0,40}\b(?:activate|be activated)\b|\bactivation\b.{0,24}\b(?:legal|allowed|possible)\b)/isu,
+]);
+const ACTIVATION_LEGALITY_NEGATED_INTENT_PATTERNS = Object.freeze([
+  /(?:(?:不是|并非|並非|无需|無需|无须|無須|不用|不需要).{0,10}(?:询问|詢問|问|問|判断|判斷|讨论|討論|审查|審查|确认|確認).{0,24}(?:能否|是否|可否|可以|能够?)?.{0,10}(?:发动|發動|発動))/isu,
+  /(?:(?:发动|發動|発動).{0,20}(?:无需|無需|无须|無須|不用|不需要).{0,8}(?:判断|判斷|讨论|討論|审查|審查|确认|確認))/isu,
+  /(?:発動(?:できるか|可能か|の可否|条件).{0,16}(?:は)?(?:問わない|判断しない|確認不要|検討不要))/isu,
+  /(?:\bnot\s+(?:asking|deciding|checking|reviewing|questioning)\b.{0,48}\bactivat)/isu,
+]);
 
 // These are card-name-neutral operation/mechanism features. They let the
 // bounded model packet retain rules about operations that actually occur in
@@ -378,11 +399,14 @@ export function createAdminEvidenceSelectionContext({
   questions = [],
   providedFacts = [],
 } = {}) {
-  const sourceTexts = [
+  const questionTexts = [
     question,
     ...arrayValue(questions).map((item) => (
       typeof item === "string" ? item : item?.text || item?.question || ""
     )),
+  ];
+  const sourceTexts = [
+    ...questionTexts,
     ...arrayValue(providedFacts).flatMap((item) => selectionContextScalarStrings(item)),
   ];
   const texts = [];
@@ -419,6 +443,7 @@ export function createAdminEvidenceSelectionContext({
   }
   return canonicalizeJson({
     role: "packet_selection_relevance_only",
+    asksActivationLegality: questionTexts.some(questionAsksActivationLegality),
     texts,
     truncated,
     charCount: usedChars,
@@ -445,6 +470,7 @@ export function buildAdminEvidenceDecisionPacket({
   const {
     candidates,
     requiredCriticalMechanisms,
+    asksActivationLegality,
   } = aggregateDecisionCandidates(archive);
   const includedSelections = [];
   const omittedManifest = [];
@@ -528,6 +554,7 @@ export function buildAdminEvidenceDecisionPacket({
       limits: normalizedLimits,
       conflictCatalogLimit,
       requiredCriticalMechanisms,
+      asksActivationLegality,
       archiveSubstanceCount: archive.substances.length,
     });
     if (packetSnapshot.bytes <= normalizedLimits.maxPacketBytes) break;
@@ -1411,6 +1438,8 @@ function aggregateDecisionCandidates(archive) {
       requiredCriticalMechanisms,
     ),
     requiredCriticalMechanisms,
+    asksActivationLegality:
+      archive.metadata?.selectionContext?.asksActivationLegality === true,
   };
 }
 
@@ -2030,6 +2059,7 @@ function createModelPacketSnapshot({
   limits,
   conflictCatalogLimit,
   requiredCriticalMechanisms,
+  asksActivationLegality,
   archiveSubstanceCount,
 }) {
   const included = includedSelections.map((entry) => entry.item);
@@ -2039,6 +2069,8 @@ function createModelPacketSnapshot({
     requiredCriticalMechanisms,
     includedSelections,
   );
+  const activationCandidateReviewRequired = asksActivationLegality === true
+    || mandatoryConstraintReview.length > 0;
   const conflictCatalog = createModelConflictCatalog(
     archive.conflicts,
     limits,
@@ -2091,14 +2123,12 @@ function createModelPacketSnapshot({
     },
     limits,
     decisionFocus: {
+      asksActivationLegality: asksActivationLegality === true,
       mechanismCoverage,
       mandatoryConstraintReview,
-      reviewProtocol: [
-        "check_trigger_conditions_and_every_mandatory_operation_separately",
-        "count_only_candidates_that_can_legally_receive_the_required_operation_at_activation",
-        "do_not_treat_zero_legal_candidates_as_an_empty_success_unless_visible_text_or_ruling_explicitly_allows_it",
-        "an_affirmative_legality_conclusion_must_address_every_listed_constraint_or_explain_its_concrete_mismatch",
-      ],
+      reviewProtocol: activationCandidateReviewRequired
+        ? [...ACTIVATION_CANDIDATE_REVIEW_PROTOCOL]
+        : [],
     },
     evidenceItems: included,
     evidenceSummary: {
@@ -2185,6 +2215,15 @@ function createMandatoryConstraintReview(includedSelections) {
       ],
     }];
   });
+}
+
+function questionAsksActivationLegality(value) {
+  const text = normalizeSubstantiveText(value);
+  if (!text) return false;
+  if (ACTIVATION_LEGALITY_NEGATED_INTENT_PATTERNS.some((pattern) => pattern.test(text))) {
+    return false;
+  }
+  return ACTIVATION_LEGALITY_QUESTION_PATTERNS.some((pattern) => pattern.test(text));
 }
 
 function createCriticalMechanismCoverage(

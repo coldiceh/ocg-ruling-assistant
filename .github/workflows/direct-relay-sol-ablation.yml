@@ -3,8 +3,15 @@ name: Direct Relay Sol evidence ablation
 on:
   workflow_dispatch:
     inputs:
+      case_scope:
+        description: Run only the 14 missing ablation calls; completed calls are reused offline
+        required: true
+        type: choice
+        default: missing-only
+        options:
+          - missing-only
       confirm_paid_run:
-        description: Confirm at most 6 paid Sol calls (4 card_text_only + 2 without_lua)
+        description: Confirm the 14 missing paid Sol calls
         required: true
         type: boolean
         default: false
@@ -44,13 +51,13 @@ permissions:
   contents: read
 
 concurrency:
-  group: direct-relay-gpt-5.6-effort-pilot
+  group: direct-relay-gpt-5.6-sol-ablation-${{ inputs.case_scope }}-${{ inputs.effort }}
   cancel-in-progress: false
 
 jobs:
   ablation:
     runs-on: ubuntu-latest
-    timeout-minutes: 180
+    timeout-minutes: 360
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -144,12 +151,84 @@ jobs:
           copy_at_most_one artifacts/resume '*without-lua-result-checkpoint.json' artifacts/sol-without-lua-result-checkpoint.json
           sha256sum artifacts/direct-relay-source-bundle.json > artifacts/direct-relay-source-bundle.sha256
 
-      - name: Run card_text_only on all four fixed cases sequentially
+      - name: Validate selected case set and calculate exact call limits
+        shell: bash
+        env:
+          CASE_SCOPE: ${{ inputs.case_scope }}
+        run: |
+          set -euo pipefail
+          bundle_case_ids=$(node --input-type=module -e '
+            import { readFile } from "node:fs/promises";
+            const bundle = JSON.parse(await readFile("artifacts/direct-relay-source-bundle.json", "utf8"));
+            if (!Array.isArray(bundle.sources)) throw new Error("source bundle has no sources array");
+            const ids = bundle.sources.map((item) => String(item?.caseId || ""));
+            if (ids.some((id) => !id) || new Set(ids).size !== ids.length) {
+              throw new Error("source bundle case IDs must be non-empty and unique");
+            }
+            process.stdout.write(ids.join("\n"));
+          ')
+          mapfile -t available_case_ids <<< "$bundle_case_ids"
+          original_four=(
+            double-tempest-impermanence
+            unchained-replacement
+            accel-synchro-trigger-window
+            lost-target-continue-resolution
+          )
+          new_six=(
+            tearlaments-scream-activation-window
+            mind-scan-red-lotus-public-hand
+            harmonia-topologic-field-activation
+            photon-emperor-mausoleum-extra-summon
+            timaeus-gaze-dragoon-one-destruction
+            memento-cactus-avramax-direct-attack
+          )
+          case "$CASE_SCOPE" in
+            four)
+              required_case_ids=("${original_four[@]}")
+              card_text_only_case_count=4
+              without_lua_case_count=2
+              expected_total_planned_calls=6
+              ;;
+            missing-only)
+              required_case_ids=(
+                accel-synchro-trigger-window
+                lost-target-continue-resolution
+                "${new_six[@]}"
+              )
+              card_text_only_case_count=6
+              without_lua_case_count=8
+              expected_total_planned_calls=14
+              ;;
+            ten)
+              required_case_ids=("${original_four[@]}" "${new_six[@]}")
+              card_text_only_case_count=10
+              without_lua_case_count=10
+              expected_total_planned_calls=20
+              ;;
+            *) echo "Unsupported case scope" >&2; exit 1 ;;
+          esac
+          for case_id in "${required_case_ids[@]}"; do
+            if ! printf '%s\n' "${available_case_ids[@]}" | grep -Fqx -- "$case_id"; then
+              echo "source bundle is missing case $case_id" >&2
+              exit 1
+            fi
+          done
+          total_planned_calls=$((card_text_only_case_count + without_lua_case_count))
+          if [ "$total_planned_calls" -ne "$expected_total_planned_calls" ]; then
+            echo "Calculated $total_planned_calls calls, expected $expected_total_planned_calls" >&2
+            exit 1
+          fi
+          echo "Validated $total_planned_calls serial paid calls for case_scope=$CASE_SCOPE"
+          echo "CARD_TEXT_ONLY_CASE_COUNT=$card_text_only_case_count" >> "$GITHUB_ENV"
+          echo "WITHOUT_LUA_CASE_COUNT=$without_lua_case_count" >> "$GITHUB_ENV"
+
+      - name: Run card_text_only on every selected case sequentially
         shell: bash
         env:
           RELAY_API_KEY: ${{ secrets.RELAY_API_KEY }}
           RELAY_BASE_URL: https://api.986310.xyz/v1
           EFFORT: ${{ inputs.effort }}
+          CASE_SCOPE: ${{ inputs.case_scope }}
         run: |
           set -euo pipefail
           test -n "$RELAY_API_KEY" || { echo "RELAY_API_KEY secret is not configured" >&2; exit 1; }
@@ -162,27 +241,47 @@ jobs:
           if [ -s artifacts/sol-card-text-only-result-checkpoint.json ]; then
             resume_args+=(--recover-running-as-outcome-unknown)
           fi
+          original_four=(
+            double-tempest-impermanence
+            unchained-replacement
+            accel-synchro-trigger-window
+            lost-target-continue-resolution
+          )
+          new_six=(
+            tearlaments-scream-activation-window
+            mind-scan-red-lotus-public-hand
+            harmonia-topologic-field-activation
+            photon-emperor-mausoleum-extra-summon
+            timaeus-gaze-dragoon-one-destruction
+            memento-cactus-avramax-direct-attack
+          )
+          case "$CASE_SCOPE" in
+            four) selected_case_ids=("${original_four[@]}") ;;
+            missing-only) selected_case_ids=("${new_six[@]}") ;;
+            ten) selected_case_ids=("${original_four[@]}" "${new_six[@]}") ;;
+            *) echo "Unsupported case scope" >&2; exit 1 ;;
+          esac
+          case_args=()
+          for case_id in "${selected_case_ids[@]}"; do case_args+=(--case "$case_id"); done
           node scripts/local-relay-effort-experiment.mjs \
             --snapshots artifacts/direct-relay-source-bundle.json \
             --model relay-gpt-5.6-sol \
             --effort "$EFFORT" \
             "${resume_args[@]}" \
             --evidence-variant card_text_only \
-            --case double-tempest-impermanence \
-            --case unchained-replacement \
-            --case accel-synchro-trigger-window \
-            --case lost-target-continue-resolution \
+            "${case_args[@]}" \
             --output artifacts/sol-card-text-only-result-checkpoint.json \
             --timeout-ms 900000 \
-            --max-calls 4
+            --max-calls "$CARD_TEXT_ONLY_CASE_COUNT"
           sha256sum --check artifacts/direct-relay-source-bundle.sha256
 
-      - name: Run without_lua on the two Lua-relevant cases sequentially
+      - name: Run without_lua on the selected cases sequentially
         shell: bash
         env:
           RELAY_API_KEY: ${{ secrets.RELAY_API_KEY }}
           RELAY_BASE_URL: https://api.986310.xyz/v1
           EFFORT: ${{ inputs.effort }}
+          CASE_SCOPE: ${{ inputs.case_scope }}
         run: |
           set -euo pipefail
           test -n "$RELAY_API_KEY" || { echo "RELAY_API_KEY secret is not configured" >&2; exit 1; }
@@ -195,17 +294,38 @@ jobs:
           if [ -s artifacts/sol-without-lua-result-checkpoint.json ]; then
             resume_args+=(--recover-running-as-outcome-unknown)
           fi
+          original_without_lua=(
+            double-tempest-impermanence
+            unchained-replacement
+          )
+          missing_without_lua=(
+            accel-synchro-trigger-window
+            lost-target-continue-resolution
+            tearlaments-scream-activation-window
+            mind-scan-red-lotus-public-hand
+            harmonia-topologic-field-activation
+            photon-emperor-mausoleum-extra-summon
+            timaeus-gaze-dragoon-one-destruction
+            memento-cactus-avramax-direct-attack
+          )
+          case "$CASE_SCOPE" in
+            four) selected_case_ids=("${original_without_lua[@]}") ;;
+            missing-only) selected_case_ids=("${missing_without_lua[@]}") ;;
+            ten) selected_case_ids=("${original_without_lua[@]}" "${missing_without_lua[@]}") ;;
+            *) echo "Unsupported case scope" >&2; exit 1 ;;
+          esac
+          case_args=()
+          for case_id in "${selected_case_ids[@]}"; do case_args+=(--case "$case_id"); done
           node scripts/local-relay-effort-experiment.mjs \
             --snapshots artifacts/direct-relay-source-bundle.json \
             --model relay-gpt-5.6-sol \
             --effort "$EFFORT" \
             "${resume_args[@]}" \
             --evidence-variant without_lua \
-            --case double-tempest-impermanence \
-            --case unchained-replacement \
+            "${case_args[@]}" \
             --output artifacts/sol-without-lua-result-checkpoint.json \
             --timeout-ms 900000 \
-            --max-calls 2
+            --max-calls "$WITHOUT_LUA_CASE_COUNT"
           sha256sum --check artifacts/direct-relay-source-bundle.sha256
 
       - name: Score card_text_only checkpoint offline

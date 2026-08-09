@@ -111,15 +111,15 @@ test("keeps semantic review, auto assertion and hard validation as separate metr
     plannedCaseCount: 4,
     complete: true,
     coverageByCurrency: {
-      CNY: { reportedCaseCount: 4, plannedCaseCount: 4, complete: true },
+      USD: { reportedCaseCount: 4, plannedCaseCount: 4, complete: true },
     },
-    totals: { CNY: 0.00031536 },
-    averagesPerReportedCase: { CNY: 0.00007884 },
-    costsPerCorrectAnswer: { CNY: 0.00015768 },
-    sourceFields: ["estimateRelayModelCost"],
-    verification: ["unverified"],
-    pricingVersions: ["relay-token-group-screenshot-2026-08-07"],
-    relayCreditTotal: 0.00031536,
+    totals: { USD: 0.0008 },
+    averagesPerReportedCase: { USD: 0.0002 },
+    costsPerCorrectAnswer: { USD: 0.0004 },
+    sourceFields: ["official_standard_api_list_price"],
+    verification: ["official_list_rate_estimate"],
+    pricingVersions: ["openai-gpt-5.6-standard-2026-07-09"],
+    relayCreditTotal: null,
   });
 
   const terra = report.configurations.find((item) => item.model === "relay-gpt-5.6-terra");
@@ -132,15 +132,14 @@ test("keeps semantic review, auto assertion and hard validation as separate metr
   });
   assert.equal(terra.autoAssertion.humanTruth, false);
   assert.deepEqual(terra.hardValidationRate, { numerator: 3, denominator: 4, rate: 0.75 });
-  assert.deepEqual(terra.estimatedCost.verification, ["unverified"]);
+  assert.deepEqual(terra.estimatedCost.verification, ["official_list_rate_estimate"]);
   assert.equal(terra.estimatedCost.complete, true);
 
   assert.equal(report.dashboard.attributionScope, "batch_only");
   assert.equal(report.dashboard.perRequestAllocation, null);
   assert.equal(report.dashboard.batches[0].perRequestAllocation, null);
-  assert.equal(report.pricingAssumptions.relay.relayCreditToCny, 1);
-  assert.equal(report.pricingAssumptions.relay.pricingMultiplier, 0.27);
-  assert.equal(report.pricingAssumptions.relay.pricingSourceVerified, false);
+  assert.equal(report.pricingAssumptions.officialListPrice.currency, "USD");
+  assert.equal(report.pricingAssumptions.officialListPrice.pricingVersion, "openai-gpt-5.6-standard-2026-07-09");
   assert.match(report.metricDefinitions.cost, /final-ruling model calls only/u);
   assert.match(report.metricDefinitions.costPerCorrectAnswer, /semantically correct count/u);
   assert.equal(report.autoAssertionAccuracy.humanTruth, false);
@@ -148,16 +147,120 @@ test("keeps semantic review, auto assertion and hard validation as separate metr
   assert.match(markdown, /relay-gpt-5\.6-sol/u);
   assert.match(markdown, /## 测试内容/u);
   assert.match(markdown, /\| 请求模型 \| 实际返回模型 \| 推理强度 \| 证据方案 \|/u);
-  assert.match(markdown, /语义正确率 \| 复核覆盖率 \| Auto 断言通过率 \| Hard Validator 通过率/u);
+  assert.match(markdown, /用户答案正确率 \| 复核覆盖率 \| 平均 \/ 中位总耗时/u);
+  assert.doesNotMatch(markdown, /Auto 断言通过率|Hard Validator 通过率/u);
   assert.match(markdown, /\| relay-gpt-5\.6-sol \| gpt-5\.6-sol \| low \| 完整资料 \|/u);
   assert.match(markdown, /\| Q1 \| case-a \| 完整测试问题 1 \|/u);
   assert.match(markdown, /\| 人工: 正确 \| 人工: 正确 \| 人工: 部分正确 \| 人工: 错误 \|/u);
   assert.match(markdown, /2\/4 \(50\.0%\)/u);
   assert.match(markdown, /2\.5 \/ 2\.5 s/u);
   assert.match(markdown, /100 \(4\)/u);
-  assert.match(markdown, /CNY 0\.000315 \/ 0\.000079 \/ 0\.000158 \(未验证；4\/4\)/u);
+  assert.match(markdown, /USD 0\.0008 \/ 0\.0002 \/ 0\.0004 \(4\/4\)/u);
   assert.match(markdown, /看板实际批次增量/u);
   assert.match(markdown, /不推导、不分摊为单次请求费用/u);
+});
+
+test("marks transport timeout and empty response separately from a wrong ruling", () => {
+  const run = fixtureRun({
+    model: "relay-gpt-5.6-sol",
+    effort: "max",
+    caseIds: ["case-a", "case-b"],
+    scores: ["INCONCLUSIVE", "INCONCLUSIVE"],
+  });
+  const [empty, timeout] = run.checkpoint.results;
+  empty.status = "error_rejected";
+  empty.durationMs = 788_300;
+  empty.rawOutput = null;
+  empty.error = { code: "relay_empty_final_ruling" };
+  delete empty.reportedModel;
+  timeout.status = "error_outcome_unknown";
+  timeout.durationMs = 900_000;
+  timeout.rawOutput = null;
+  timeout.error = { code: "relay_stream_timeout" };
+  delete timeout.reportedModel;
+  for (let index = 0; index < run.scored.results.length; index += 1) {
+    run.scored.results[index].sourceBinding = createExperimentResultBinding(
+      run.checkpoint.results[index],
+    );
+  }
+  const report = aggregateModelEffortMatrix({
+    runs: [run],
+    semanticReviews: [fixtureSemanticReview([run], {
+      kind: "codex",
+      ratings: { "case-a": "incorrect", "case-b": "incorrect" },
+    })],
+    expectedCaseCount: 2,
+    generatedAt: "2026-08-09T00:00:00.000Z",
+  });
+
+  assert.equal(report.configurations[0].cases[0].failureKind, "empty_response");
+  assert.equal(report.configurations[0].cases[1].failureKind, "timeout");
+  const zh = renderModelEffortMatrixMarkdown(report, { locale: "zh" });
+  assert.match(zh, /Codex: 错误 \(空响应, 788\.3 s\)/u);
+  assert.match(zh, /Codex: 错误 \(超时, 900\.0 s\)/u);
+  const en = renderModelEffortMatrixMarkdown(report, { locale: "en" });
+  assert.match(en, /Codex: Incorrect \(Empty response, 788\.3 s\)/u);
+  assert.match(en, /Codex: Incorrect \(Timed out, 900\.0 s\)/u);
+});
+
+test("official cost uses the same prompt and completion token aliases as the displayed usage", () => {
+  const run = fixtureRun({
+    model: "relay-gpt-5.6-sol",
+    effort: "low",
+    caseIds: ["case-a"],
+  });
+  run.checkpoint.results[0].usage = {
+    prompt_tokens: 10_000,
+    completion_tokens: 1_000,
+    total_tokens: 11_000,
+    prompt_tokens_details: { cached_tokens: 4_000 },
+    completion_tokens_details: { reasoning_tokens: 700 },
+    input_tokens: 0,
+    output_tokens: 0,
+    input_tokens_details: { cached_tokens: 0 },
+    output_tokens_details: { reasoning_tokens: 0 },
+  };
+
+  const report = aggregateModelEffortMatrix({
+    runs: [run],
+    semanticReviews: [fixtureSemanticReview([run])],
+    expectedCaseCount: 1,
+  });
+  const summary = report.configurations[0];
+
+  assert.deepEqual(summary.tokens.input, {
+    reportedCount: 1,
+    average: 10_000,
+    median: 10_000,
+    sum: 10_000,
+  });
+  assert.deepEqual(summary.tokens.output, {
+    reportedCount: 1,
+    average: 1_000,
+    median: 1_000,
+    sum: 1_000,
+  });
+  assert.deepEqual(summary.tokens.reasoning, {
+    reportedCount: 1,
+    average: 700,
+    median: 700,
+    sum: 700,
+  });
+  assert.deepEqual(summary.estimatedCost, {
+    reportedCaseCount: 1,
+    plannedCaseCount: 1,
+    complete: true,
+    coverageByCurrency: {
+      USD: { reportedCaseCount: 1, plannedCaseCount: 1, complete: true },
+    },
+    totals: { USD: 0.062 },
+    averagesPerReportedCase: { USD: 0.062 },
+    costsPerCorrectAnswer: { USD: 0.062 },
+    sourceFields: ["official_standard_api_list_price"],
+    verification: ["official_list_rate_estimate"],
+    pricingVersions: ["openai-gpt-5.6-standard-2026-07-09"],
+    relayCreditTotal: null,
+  });
 });
 
 test("different evidence variants may use distinct input hashes and planned case subsets", () => {
