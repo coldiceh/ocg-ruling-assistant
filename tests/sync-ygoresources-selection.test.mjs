@@ -222,3 +222,25 @@ test("withdrawn remote QA is non-fatal and removed from the cumulative snapshot"
   assert.equal(merged.some((record) => record.id === "ygoresources-qa-70002"), true);
   assert.equal(merged.some((record) => record.id === "card-faq-70001-1"), true);
 });
+
+test("a complete card snapshot replaces vanished card text and FAQ while retaining unsynchronized QA", () => {
+  const previous = [
+    { id: "card-text-100", recordType: "card-text", conclusion: "旧卡文" },
+    { id: "card-faq-100-1", recordType: "card-faq", conclusion: "已撤回 FAQ" },
+    { id: "card-faq-100-2", recordType: "card-faq", conclusion: "旧 FAQ" },
+    { id: "ygoresources-qa-900", recordType: "qa", conclusion: "本轮未刷新但仍有效" },
+  ];
+  const current = [
+    { id: "card-text-100", recordType: "card-text", conclusion: "新卡文" },
+    { id: "card-faq-100-2", recordType: "card-faq", conclusion: "新 FAQ" },
+  ];
+
+  const merged = mergeRulingsCumulatively(previous, current, {
+    authoritativeRecordTypes: ["card-text", "card-faq"],
+  });
+
+  assert.equal(merged.find((record) => record.id === "card-text-100")?.conclusion, "新卡文");
+  assert.equal(merged.some((record) => record.id === "card-faq-100-1"), false);
+  assert.equal(merged.find((record) => record.id === "card-faq-100-2")?.conclusion, "新 FAQ");
+  assert.equal(merged.some((record) => record.id === "ygoresources-qa-900"), true);
+});
