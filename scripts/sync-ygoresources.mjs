@@ -50,6 +50,7 @@ async function main() {
   const cardTargets = buildCardTargets(trackedCards, nameIndexes);
   const monsterPropertyMetadata = await loadMonsterPropertyMetadata();
   const cardPayloads = await loadCards(cardTargets, nameIndexes, monsterPropertyMetadata);
+  const cardSnapshotAuthoritative = syncAllReleasedCards && sourceSyncWarnings.length === 0;
   const manifest = await loadManifest(previousMeta.sourceRevision);
   let cards = cardPayloads.map(({ record }) => record);
   const rulingSync = await loadRulings(cards, cardPayloads, manifest.changedQaIds);
@@ -59,6 +60,7 @@ async function main() {
   }
   rulings = mergeRulingsCumulatively(previousRulings.records || [], rulings, {
     removedQaIds: rulingSync.removedQaIds,
+    authoritativeRecordTypes: cardSnapshotAuthoritative ? ["card-text", "card-faq"] : [],
   });
   const rulingQuarantine = quarantineRulingData(rulings, previousRulings.records || []);
   for (const issue of rulingQuarantine.issues) {
@@ -794,9 +796,16 @@ function mergeCardRecords(previous, current) {
   return [...records.values()];
 }
 
-export function mergeRulingsCumulatively(previous, current, { removedQaIds = [] } = {}) {
+export function mergeRulingsCumulatively(previous, current, {
+  removedQaIds = [],
+  authoritativeRecordTypes = [],
+} = {}) {
   const removed = new Set((removedQaIds || []).map((id) => String(id || "")).filter(Boolean));
+  const authoritativeTypes = new Set(
+    (authoritativeRecordTypes || []).map((value) => String(value || "").trim()).filter(Boolean),
+  );
   const retainedPrevious = (previous || []).filter((record) => {
+    if (authoritativeTypes.has(String(record?.recordType || ""))) return false;
     if (!removed.size || String(record?.recordType || "") !== "qa") return true;
     const sourceId = String(record?.sourceId || "").trim()
       || String(record?.id || "").match(/^ygoresources-qa-(\d+)$/u)?.[1]
