@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import {
@@ -14,6 +15,39 @@ import {
   normalizeLuaAblationPreflightOptions,
   parseLuaAblationPreflightArgs,
 } from "../scripts/assert-lua-ablation-preflight.mjs";
+import { normalizeAdminEvidenceDryRunCases } from "../scripts/lib/admin-evidence-snapshot-dry-run.mjs";
+import { validateAssertionFixture } from "../scripts/lib/offline-experiment-scorer.mjs";
+
+test("Lua ablation fixtures isolate only return-to-hand candidate availability", async () => {
+  const [caseText, goldenText] = await Promise.all([
+    readFile(new URL("./fixtures/lua-return-to-hand-ablation-cases.json", import.meta.url), "utf8"),
+    readFile(new URL("./fixtures/lua-return-to-hand-ablation-goldens.json", import.meta.url), "utf8"),
+  ]);
+  const cases = normalizeAdminEvidenceDryRunCases(JSON.parse(caseText));
+  const goldens = validateAssertionFixture(JSON.parse(goldenText));
+
+  assert.equal(cases.cases.length, 2);
+  assert.deepEqual(
+    cases.cases.map((item) => item.id).sort(),
+    [...goldens.keys()].sort(),
+  );
+  assert.doesNotMatch(caseText, /expectedAnswer|leakCanary|LUA_ABLATION_GOLD_ONLY/u);
+  for (const item of cases.cases) {
+    assert.match(item.question, /本回合尚未使用过/u);
+    assert.match(item.question, /怪兽区域有可用区域/u);
+    assert.match(item.question, /不存在阻止对方特殊召唤/u);
+  }
+  const noExtraCandidate = cases.cases.find((item) => (
+    item.id === "double-tempest-impermanence"
+  ));
+  const withExtraCandidate = cases.cases.find((item) => (
+    item.id === "double-tempest-impermanence-extra-returnable"
+  ));
+  assert.match(noExtraCandidate.question, /场上没有其他魔法·陷阱卡/u);
+  assert.doesNotMatch(noExtraCandidate.question, /强制脱出装置/u);
+  assert.match(withExtraCandidate.question, /盖放、尚未发动的『强制脱出装置』/u);
+  assert.match(withExtraCandidate.question, /使『强制脱出装置』不能回到手牌/u);
+});
 
 test("Lua ablation preflight accepts the bundled Twin Tempests legality check", async () => {
   const packetFactory = createConfiguredLegacyLuaSemanticPacketFactory({ env: {} });
