@@ -1,3 +1,5 @@
+import { createExperimentResultBinding } from "./experiment-result-binding.mjs";
+
 const TERMINAL_RESULT_STATUSES = new Set(["SUCCEEDED", "FAILED", "CANCELLED", "SKIPPED"]);
 const LOCAL_TERMINAL_RESULT_STATUSES = new Set([
   "completed_valid",
@@ -75,8 +77,10 @@ function assertLocalRelayCheckpointTerminal(report) {
   if (!Array.isArray(report.results) || report.results.length === 0) {
     throw scorerError("local Relay checkpoint contains no generated model results");
   }
-  if (Number.isInteger(report.plannedRequests)
-    && report.plannedRequests !== report.results.length) {
+  if (!Number.isInteger(report.plannedRequests) || report.plannedRequests < 1) {
+    throw scorerError("local Relay checkpoint plannedRequests must be a positive integer");
+  }
+  if (report.plannedRequests !== report.results.length) {
     throw scorerError("local Relay checkpoint does not contain every planned result");
   }
   for (const item of report.results) {
@@ -412,6 +416,7 @@ function resultIdentity(caseId, item) {
     reasoningMode: String(configuration.reasoningMode || configuration.mode || "") || null,
     reasoningEffort: String(configuration.reasoningEffort || configuration.effort || "") || null,
     evidenceVariant: String(item?.evidenceVariant || configuration.evidenceVariant || "") || null,
+    sourceBinding: createExperimentResultBinding(item),
   };
 }
 

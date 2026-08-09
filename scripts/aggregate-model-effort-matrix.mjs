@@ -8,8 +8,15 @@ import {
   estimateRelayModelCost,
   getRelayModelPricingConfig,
 } from "../backend/modelPricing.mjs";
+import {
+  createExperimentResultBinding,
+  hashExperimentRawOutput,
+} from "./lib/experiment-result-binding.mjs";
 
 const SCORE_STATUSES = new Set(["PASS", "FAIL", "INCONCLUSIVE"]);
+const SEMANTIC_RATINGS = new Set(["correct", "partially_correct", "incorrect", "needs_review"]);
+const DETERMINATE_SEMANTIC_RATINGS = new Set(["correct", "partially_correct", "incorrect"]);
+const SEMANTIC_REVIEWER_KINDS = new Set(["human", "codex"]);
 const EFFORT_ORDER = new Map(
   ["none", "low", "medium", "high", "xhigh", "max"].map((value, index) => [value, index]),
 );
@@ -17,6 +24,20 @@ const RELAY_PRICING = getRelayModelPricingConfig();
 const DEFAULT_RELAY_CREDIT_TO_CNY = 1;
 const DEFAULT_MARKDOWN_LOCALE = "zh";
 const SUPPORTED_MARKDOWN_LOCALES = new Set(["zh", "en", "ja"]);
+const DIRECT_RELAY_RUNNERS = new Set([
+  "local-relay-effort-experiment/v1",
+  "local-relay-effort-experiment/v2",
+]);
+const DIRECT_RELAY_TERMINAL_RESULT_STATUSES = new Set([
+  "completed_valid",
+  "completed_invalid",
+  "error_rejected",
+  "error_outcome_unknown",
+]);
+const DIRECT_RELAY_RESPONSE_RESULT_STATUSES = new Set([
+  "completed_valid",
+  "completed_invalid",
+]);
 
 const MARKDOWN_TEXT = Object.freeze({
   zh: Object.freeze({
@@ -24,19 +45,22 @@ const MARKDOWN_TEXT = Object.freeze({
     evidenceConsistency: "证据一致性",
     passed: "通过",
     failed: "失败",
-    accuracyDefinition: "正确率 = PASS 数 / 计划题数；可用率 = (PASS + FAIL) / 计划题数，INCONCLUSIVE 视为不可评分。",
-    costDefinition: "费用仅统计可归属的最终裁定模型调用；共享 Evidence Snapshot 的准备费用不重复计入各模型配置。",
+    accuracyDefinition: "语义正确率只来自严格绑定的人工/Codex 复核；Auto 断言和 Hard Validator 仅单独展示，均不作为裁定真值。",
+    costDefinition: "费用仅统计可归属的最终裁定模型调用；只有语义复核完整时才计算每答对一题的费用。",
     error: "错误",
     warning: "警告",
     testContent: "测试内容",
     number: "编号",
     caseId: "Case ID",
     fullQuestion: "完整问题",
-    model: "模型",
+    requestedModel: "请求模型",
+    returnedModel: "实际返回模型",
     effort: "推理强度",
     evidenceVariant: "证据方案",
-    accuracy: "正确率",
-    availability: "可用率",
+    semanticAccuracy: "语义正确率",
+    reviewCoverage: "复核覆盖率",
+    autoAssertionRate: "Auto 断言通过率",
+    hardValidationRate: "Hard Validator 通过率",
     totalLatency: "平均 / 中位总耗时",
     firstContentLatency: "平均 / 中位首正文",
     inputTokens: "输入 Token",
@@ -54,7 +78,17 @@ const MARKDOWN_TEXT = Object.freeze({
     unit: "单位",
     source: "来源",
     unverified: "未验证；",
-    statuses: Object.freeze({ PASS: "正确", FAIL: "错误", INCONCLUSIVE: "不确定", NOT_PLANNED: "未测试" }),
+    perCurrencyCoverage: "按币种覆盖率",
+    noReturnedModel: "未返回",
+    reviewKinds: Object.freeze({ human: "人工", codex: "Codex" }),
+    ratings: Object.freeze({
+      correct: "正确",
+      partially_correct: "部分正确",
+      incorrect: "错误",
+      needs_review: "需复核",
+      unreviewed: "未复核",
+      not_planned: "未测试",
+    }),
     variants: Object.freeze({ full: "完整资料", card_text_only: "仅卡文", without_lua: "不含 Lua" }),
   }),
   en: Object.freeze({
@@ -62,19 +96,22 @@ const MARKDOWN_TEXT = Object.freeze({
     evidenceConsistency: "Evidence consistency",
     passed: "passed",
     failed: "failed",
-    accuracyDefinition: "Accuracy = PASS / planned cases; availability = (PASS + FAIL) / planned cases. INCONCLUSIVE is unscorable.",
-    costDefinition: "Cost includes attributable final-ruling model calls only; shared Evidence Snapshot preparation is not duplicated across configurations.",
+    accuracyDefinition: "Semantic accuracy comes only from strictly bound human/Codex reviews. Auto assertions and the Hard Validator are reported separately and are not ruling truth.",
+    costDefinition: "Cost includes attributable final-ruling model calls only; cost per correct answer is available only with complete semantic review.",
     error: "Error",
     warning: "Warning",
     testContent: "Test cases",
     number: "No.",
     caseId: "Case ID",
     fullQuestion: "Full question",
-    model: "Model",
+    requestedModel: "Requested model",
+    returnedModel: "Returned model",
     effort: "Reasoning effort",
     evidenceVariant: "Evidence variant",
-    accuracy: "Accuracy",
-    availability: "Availability",
+    semanticAccuracy: "Semantic accuracy",
+    reviewCoverage: "Review coverage",
+    autoAssertionRate: "Auto assertion pass rate",
+    hardValidationRate: "Hard Validator pass rate",
     totalLatency: "Average / median total latency",
     firstContentLatency: "Average / median first content",
     inputTokens: "Input tokens",
@@ -92,7 +129,17 @@ const MARKDOWN_TEXT = Object.freeze({
     unit: "Unit",
     source: "Source",
     unverified: "unverified; ",
-    statuses: Object.freeze({ PASS: "Correct", FAIL: "Incorrect", INCONCLUSIVE: "Inconclusive", NOT_PLANNED: "Not tested" }),
+    perCurrencyCoverage: "per-currency coverage",
+    noReturnedModel: "Not returned",
+    reviewKinds: Object.freeze({ human: "Human", codex: "Codex" }),
+    ratings: Object.freeze({
+      correct: "Correct",
+      partially_correct: "Partially correct",
+      incorrect: "Incorrect",
+      needs_review: "Needs review",
+      unreviewed: "Unreviewed",
+      not_planned: "Not tested",
+    }),
     variants: Object.freeze({ full: "Full evidence", card_text_only: "Card text only", without_lua: "Without Lua" }),
   }),
   ja: Object.freeze({
@@ -100,19 +147,22 @@ const MARKDOWN_TEXT = Object.freeze({
     evidenceConsistency: "証拠の一貫性",
     passed: "合格",
     failed: "不合格",
-    accuracyDefinition: "正答率 = PASS / 実施予定問題数、採点可能率 = (PASS + FAIL) / 実施予定問題数です。INCONCLUSIVE は採点不能として扱います。",
-    costDefinition: "費用は最終裁定モデルの呼び出しに帰属できる分だけを集計し、共有 Evidence Snapshot の準備費用は各設定へ重複計上しません。",
+    accuracyDefinition: "意味的な正答率は厳密に紐付けられた人間/Codex のレビューだけから算出します。Auto 判定と Hard Validator は別指標であり、裁定の真実値ではありません。",
+    costDefinition: "費用は最終裁定モデルの呼び出しに帰属できる分だけを集計し、正答1件あたりの費用は意味レビューが完全な場合だけ算出します。",
     error: "エラー",
     warning: "警告",
     testContent: "テスト内容",
     number: "番号",
     caseId: "Case ID",
     fullQuestion: "質問全文",
-    model: "モデル",
+    requestedModel: "リクエストモデル",
+    returnedModel: "応答モデル",
     effort: "推論強度",
     evidenceVariant: "証拠構成",
-    accuracy: "正答率",
-    availability: "採点可能率",
+    semanticAccuracy: "意味正答率",
+    reviewCoverage: "レビュー網羅率",
+    autoAssertionRate: "Auto 判定合格率",
+    hardValidationRate: "Hard Validator 合格率",
     totalLatency: "総所要時間（平均 / 中央値）",
     firstContentLatency: "最初の本文まで（平均 / 中央値）",
     inputTokens: "入力 Token",
@@ -130,13 +180,24 @@ const MARKDOWN_TEXT = Object.freeze({
     unit: "単位",
     source: "出典",
     unverified: "未検証；",
-    statuses: Object.freeze({ PASS: "正解", FAIL: "不正解", INCONCLUSIVE: "判定不能", NOT_PLANNED: "未実施" }),
+    perCurrencyCoverage: "通貨別カバレッジ",
+    noReturnedModel: "未返却",
+    reviewKinds: Object.freeze({ human: "人間", codex: "Codex" }),
+    ratings: Object.freeze({
+      correct: "正解",
+      partially_correct: "一部正解",
+      incorrect: "不正解",
+      needs_review: "要レビュー",
+      unreviewed: "未レビュー",
+      not_planned: "未実施",
+    }),
     variants: Object.freeze({ full: "完全な証拠", card_text_only: "カードテキストのみ", without_lua: "Lua なし" }),
   }),
 });
 
 export async function aggregateModelEffortMatrixFiles({
   pairs = [],
+  semanticReviewFiles = [],
   dashboardMetadataFile = "",
   caseMetadataFile = "",
   expectedCaseCount,
@@ -164,6 +225,17 @@ export async function aggregateModelEffortMatrixFiles({
       scoredPath: String(pair.scoredFile),
     });
   }
+  const semanticReviews = [];
+  for (const semanticReviewFile of semanticReviewFiles) {
+    const sourcePath = requiredText(semanticReviewFile, "semantic review file");
+    semanticReviews.push({
+      document: parseJson(
+        await readFileImpl(sourcePath, "utf8"),
+        `semantic review ${sourcePath}`,
+      ),
+      sourcePath,
+    });
+  }
   let dashboardMetadata = null;
   if (dashboardMetadataFile) {
     dashboardMetadata = parseJson(
@@ -180,6 +252,7 @@ export async function aggregateModelEffortMatrixFiles({
   }
   return aggregateModelEffortMatrix({
     runs,
+    semanticReviews,
     dashboardMetadata,
     caseMetadata,
     expectedCaseCount,
@@ -191,6 +264,7 @@ export async function aggregateModelEffortMatrixFiles({
 
 export function aggregateModelEffortMatrix({
   runs = [],
+  semanticReviews = [],
   dashboardMetadata = null,
   caseMetadata = null,
   expectedCaseCount,
@@ -207,8 +281,16 @@ export function aggregateModelEffortMatrix({
     runIndex,
     normalizedRelayCreditToCny,
   ));
-  const records = dedupeRecords(plannedRecords);
+  if (plannedRecords.length === 0) throw new Error("experiment matrix contains no planned records");
+  const dedupedRecords = dedupeRecords(plannedRecords);
+  if (dedupedRecords.length === 0) throw new Error("experiment matrix contains no deduplicated records");
+  const semanticReview = normalizeSemanticReviews(semanticReviews, dedupedRecords);
+  const records = dedupedRecords.map((record) => ({
+    ...record,
+    semanticReview: semanticReview.selectedByIdentity.get(record.identity) || null,
+  }));
   const configurations = groupRecords(records);
+  if (configurations.length === 0) throw new Error("experiment matrix contains no configurations");
   const evidenceConsistency = inspectEvidenceConsistency({
     runs,
     records,
@@ -224,19 +306,43 @@ export function aggregateModelEffortMatrix({
   const caseIds = evidenceConsistency.canonicalCaseIds;
   const caseCatalog = normalizeCaseCatalog(caseMetadata, caseIds);
   const dashboard = normalizeDashboardMetadata(dashboardMetadata);
+  const configurationSummaries = configurations.map((group) => summarizeConfiguration(group, caseIds));
+  const semanticPublishable = configurationSummaries.length > 0
+    && configurationSummaries.every((configuration) => configuration.semanticPublishable);
+  const aggregateMetrics = summarizeReportMetrics(configurationSummaries);
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     reportType: "offline_model_effort_matrix",
     generatedAt,
-    publishable: evidenceConsistency.valid,
+    publishable: evidenceConsistency.valid && semanticPublishable,
+    semanticPublishable,
     caseIds,
     caseCatalog,
     evidenceConsistency,
+    semanticReview: {
+      schemaVersion: 1,
+      assessmentType: "semantic_result_review",
+      precedence: ["human", "codex"],
+      inputDocumentCount: semanticReview.inputDocumentCount,
+      suppliedReviewCount: semanticReview.suppliedReviewCount,
+      selectedReviewCount: semanticReview.selectedByIdentity.size,
+      selectedHumanCount: semanticReview.selectedHumanCount,
+      selectedCodexCount: semanticReview.selectedCodexCount,
+      diagnostics: semanticReview.diagnostics,
+    },
+    semanticAccuracy: aggregateMetrics.semanticAccuracy,
+    reviewCoverage: aggregateMetrics.reviewCoverage,
+    autoAssertion: aggregateMetrics.autoAssertion,
+    autoAssertionAccuracy: aggregateMetrics.autoAssertionAccuracy,
+    hardValidation: aggregateMetrics.hardValidation,
+    hardValidationRate: aggregateMetrics.hardValidationRate,
     metricDefinitions: {
-      accuracy: "PASS / planned cases",
-      availability: "(PASS + FAIL) / planned cases; INCONCLUSIVE is unavailable for scoring",
+      semanticAccuracy: "semantically correct / planned cases; rate is withheld until every planned result has a determinate human/Codex review",
+      reviewCoverage: "determinate semantic reviews / planned cases",
+      autoAssertionAccuracy: "offline scorer PASS / planned cases; humanTruth is always false",
+      hardValidationRate: "hard_validity PASS / planned cases; validatedResult.ok is labeled legacy_combined_validator for diagnostics and is UNAVAILABLE for this rate",
       cost: "attributable final-ruling model calls only; shared Evidence Snapshot preparation is not duplicated across configurations",
-      costPerCorrectAnswer: "complete attributable configuration cost / PASS count; unavailable when cost coverage is incomplete or PASS count is zero",
+      costPerCorrectAnswer: "complete attributable configuration cost / semantically correct count; unavailable until semantic review and cost coverage are complete or when correct count is zero",
     },
     pricingAssumptions: {
       relay: {
@@ -251,7 +357,7 @@ export function aggregateModelEffortMatrix({
       },
     },
     dashboard,
-    configurations: configurations.map((group) => summarizeConfiguration(group, caseIds)),
+    configurations: configurationSummaries,
   };
 }
 
@@ -274,6 +380,11 @@ export function renderModelEffortMatrixMarkdown(report, { locale = DEFAULT_MARKD
   if (report.evidenceConsistency.warnings.length) {
     lines.push("", ...report.evidenceConsistency.warnings.map((warning) => `- ${text.warning}: ${escapeMarkdown(warning)}`));
   }
+  if (report.semanticReview?.diagnostics?.length) {
+    lines.push("", ...report.semanticReview.diagnostics.map((diagnostic) => (
+      `- ${text.warning}: ${escapeMarkdown(diagnostic)}`
+    )));
+  }
   const caseCatalog = normalizeCaseCatalog(report.caseCatalog, report.caseIds);
   const caseHeaders = caseCatalog.map((item) => escapeMarkdown(item.label));
   if (caseCatalog.some((item) => item.question)) {
@@ -289,12 +400,15 @@ export function renderModelEffortMatrixMarkdown(report, { locale = DEFAULT_MARKD
     );
   }
   const headers = [
-      text.model,
+      text.requestedModel,
+      text.returnedModel,
       text.effort,
       text.evidenceVariant,
       ...caseHeaders,
-      text.accuracy,
-      text.availability,
+      text.semanticAccuracy,
+      text.reviewCoverage,
+      text.autoAssertionRate,
+      text.hardValidationRate,
       text.totalLatency,
       text.firstContentLatency,
       text.inputTokens,
@@ -309,14 +423,17 @@ export function renderModelEffortMatrixMarkdown(report, { locale = DEFAULT_MARKD
     headers.map(() => "| --- ").join("") + "|",
   );
   for (const configuration of report.configurations) {
-    const caseStatus = new Map(configuration.cases.map((item) => [item.caseId, item]));
+    const casesById = new Map(configuration.cases.map((item) => [item.caseId, item]));
     lines.push([
       configuration.model,
+      formatReturnedModel(configuration, text),
       configuration.effort,
       formatEvidenceVariant(configuration.evidenceVariant, text),
-      ...report.caseIds.map((caseId) => formatCaseStatus(caseStatus.get(caseId), text)),
-      formatRatio(configuration.accuracy),
-      formatRatio(configuration.availability),
+      ...report.caseIds.map((caseId) => formatSemanticReview(casesById.get(caseId), text)),
+      formatSemanticAccuracy(configuration.semanticAccuracy),
+      formatRatio(configuration.reviewCoverage),
+      formatRatio(configuration.autoAssertionAccuracy),
+      formatRatio(configuration.hardValidationRate),
       formatLatency(configuration.latency.totalMs),
       formatLatency(configuration.latency.firstContentMs),
       formatTokenMetric(configuration.tokens.input),
@@ -346,15 +463,31 @@ export function renderModelEffortMatrixMarkdown(report, { locale = DEFAULT_MARKD
 function normalizeRunPair(run, runIndex, relayCreditToCny) {
   const checkpoint = requiredObject(run?.checkpoint, `run ${runIndex + 1} checkpoint`);
   const scored = requiredObject(run?.scored, `run ${runIndex + 1} scored report`);
+  const isDirectRelay = isDirectRelayCheckpoint(checkpoint);
   if (!Array.isArray(checkpoint.results)) {
     throw new TypeError(`run ${runIndex + 1} checkpoint.results must be an array`);
   }
   if (!Array.isArray(scored.results)) {
     throw new TypeError(`run ${runIndex + 1} scored.results must be an array`);
   }
-  if (checkpoint.status && checkpoint.status !== "completed") {
+  if (checkpoint.results.length === 0) {
+    throw new Error(`run ${runIndex + 1} checkpoint.results must not be empty`);
+  }
+  if (isDirectRelay && !Array.isArray(checkpoint.plan)) {
+    throw new Error(`run ${runIndex + 1} Direct Relay checkpoint.plan must be a non-empty array`);
+  }
+  if (Array.isArray(checkpoint.plan) && checkpoint.plan.length === 0) {
+    throw new Error(`run ${runIndex + 1} checkpoint.plan must not be empty`);
+  }
+  if (isDirectRelay && checkpoint.status !== "completed") {
+    throw new Error(`run ${runIndex + 1} Direct Relay checkpoint status must be completed`);
+  }
+  if (!isDirectRelay && checkpoint.status && checkpoint.status !== "completed") {
     throw new Error(`run ${runIndex + 1} checkpoint is not completed (${checkpoint.status})`);
   }
+  const directRelayContract = isDirectRelay
+    ? validateDirectRelayCheckpointContract(checkpoint, runIndex)
+    : null;
   const rawPlans = Array.isArray(checkpoint.plan) && checkpoint.plan.length
     ? checkpoint.plan
     : checkpoint.results.map((result) => ({
@@ -364,6 +497,21 @@ function normalizeRunPair(run, runIndex, relayCreditToCny) {
         effort: result.effort,
         evidenceVariant: result.evidenceVariant,
       }));
+  if (rawPlans.length === 0) throw new Error(`run ${runIndex + 1} checkpoint has no plan`);
+  if (isDirectRelay) {
+    if (checkpoint.plannedRequests === undefined) {
+      throw new Error(`run ${runIndex + 1} Direct Relay plannedRequests is required`);
+    }
+    const plannedRequests = Number(checkpoint.plannedRequests);
+    if (!Number.isInteger(plannedRequests) || plannedRequests < 1) {
+      throw new Error(`run ${runIndex + 1} Direct Relay plannedRequests must be a positive integer`);
+    }
+    if (plannedRequests !== rawPlans.length || plannedRequests !== checkpoint.results.length) {
+      throw new Error(
+        `run ${runIndex + 1} Direct Relay plannedRequests ${plannedRequests} does not match plan/results ${rawPlans.length}/${checkpoint.results.length}`,
+      );
+    }
+  }
   const plans = rawPlans.map((plan, planIndex) => {
     const descriptor = {
       caseId: requiredText(plan.caseId, `plan[${planIndex}].caseId`),
@@ -371,12 +519,32 @@ function normalizeRunPair(run, runIndex, relayCreditToCny) {
       effort: requiredText(plan.effort, `plan[${planIndex}] effort`).toLowerCase(),
       evidenceVariant: String(plan.evidenceVariant || checkpoint.evidenceVariant || "full"),
     };
-    return {
+    const normalizedPlan = {
       raw: plan,
       key: optionalText(plan.key),
+      finalInputSha256: optionalText(plan.finalInputSha256),
       descriptor,
       identity: recordIdentity(descriptor),
     };
+    if (directRelayContract) {
+      assertDirectRelayDescriptorMatchesCheckpoint(
+        descriptor,
+        directRelayContract,
+        `plan[${planIndex}]`,
+      );
+      const expectedKey = directRelayResultKey(
+        descriptor.caseId,
+        descriptor.model,
+        descriptor.effort,
+        descriptor.evidenceVariant,
+      );
+      if (normalizedPlan.key !== expectedKey) {
+        throw new Error(
+          `run ${runIndex + 1} Direct Relay plan[${planIndex}].key must be ${expectedKey}`,
+        );
+      }
+    }
+    return normalizedPlan;
   });
   const planKeys = new Set();
   const planIdentities = new Set();
@@ -390,16 +558,56 @@ function normalizeRunPair(run, runIndex, relayCreditToCny) {
       planKeys.add(plan.key);
     }
   }
+  if (directRelayContract) {
+    const expectedPlanKeys = directRelayContract.caseIds.flatMap((caseId) => (
+      directRelayContract.efforts.map((effort) => directRelayResultKey(
+        caseId,
+        directRelayContract.model,
+        effort,
+        directRelayContract.evidenceVariant,
+      ))
+    )).sort();
+    const actualPlanKeys = plans.map((plan) => plan.key).sort();
+    if (JSON.stringify(actualPlanKeys) !== JSON.stringify(expectedPlanKeys)) {
+      throw new Error(
+        `run ${runIndex + 1} Direct Relay checkpoint.plan must equal caseIds × efforts`,
+      );
+    }
+  }
   const resultByKey = new Map();
   const resultByIdentity = new Map();
   const resultIdentity = new Map();
   for (const [resultIndex, result] of checkpoint.results.entries()) {
+    const resultStatus = String(result.status || "");
+    if (isDirectRelay && !DIRECT_RELAY_TERMINAL_RESULT_STATUSES.has(resultStatus)) {
+      throw new Error(
+        `run ${runIndex + 1} Direct Relay result[${resultIndex}].status must be terminal; received ${resultStatus || "missing"}`,
+      );
+    }
     const descriptor = {
       caseId: requiredText(result.caseId, `result[${resultIndex}].caseId`),
       model: requiredText(result.model || checkpoint.model, `result[${resultIndex}] model`),
       effort: requiredText(result.effort, `result[${resultIndex}] effort`).toLowerCase(),
       evidenceVariant: result.evidenceVariant || checkpoint.evidenceVariant || "full",
     };
+    if (directRelayContract) {
+      assertDirectRelayDescriptorMatchesCheckpoint(
+        descriptor,
+        directRelayContract,
+        `result[${resultIndex}]`,
+      );
+      const expectedKey = directRelayResultKey(
+        descriptor.caseId,
+        descriptor.model,
+        descriptor.effort,
+        descriptor.evidenceVariant,
+      );
+      if (optionalText(result.key) !== expectedKey) {
+        throw new Error(
+          `run ${runIndex + 1} Direct Relay result[${resultIndex}].key must be ${expectedKey}`,
+        );
+      }
+    }
     const identity = recordIdentity(descriptor);
     if (resultByIdentity.has(identity)) throw new Error(`duplicate checkpoint result identity: ${identity}`);
     resultByIdentity.set(identity, result);
@@ -421,7 +629,14 @@ function normalizeRunPair(run, runIndex, relayCreditToCny) {
       evidenceVariant: score.evidenceVariant || checkpoint.evidenceVariant || "full",
     });
     if (scoreByIdentity.has(identity)) throw new Error(`duplicate scored result: ${identity}`);
-    scoreByIdentity.set(identity, { ...score, status });
+    scoreByIdentity.set(identity, {
+      ...score,
+      status,
+      sourceBinding: normalizeScoreSourceBinding(
+        score.sourceBinding,
+        `score[${scoreIndex}].sourceBinding`,
+      ),
+    });
   }
   const matchedResults = new Set();
   const records = plans.map((plan) => {
@@ -437,6 +652,12 @@ function normalizeRunPair(run, runIndex, relayCreditToCny) {
     if (!result) throw new Error(`checkpoint plan is missing result: ${identity}`);
     if (!score) throw new Error(`checkpoint plan is missing score: ${identity}`);
     if (
+      plan.finalInputSha256
+      && plan.finalInputSha256 !== optionalText(result.finalInputSha256)
+    ) {
+      throw new Error(`checkpoint plan finalInputSha256 mismatch: ${identity}`);
+    }
+    if (
       new Set(["PASS", "FAIL"]).has(score.status)
       && result?.status !== "completed_valid"
     ) {
@@ -444,7 +665,10 @@ function normalizeRunPair(run, runIndex, relayCreditToCny) {
         `scored ${score.status} requires completed_valid result: ${identity} (${result?.status || "missing_result"})`,
       );
     }
+    assertScoreSourceBindingMatchesResult(score.sourceBinding, result, identity);
     if (result) matchedResults.add(result);
+    const checkpointReturnedModel = optionalText(result?.reportedModel || result?.returnedModel);
+    const scoredReturnedModel = optionalText(score?.returnedModel);
     return {
       ...descriptor,
       identity,
@@ -454,16 +678,26 @@ function normalizeRunPair(run, runIndex, relayCreditToCny) {
       bundleSha256: optionalText(checkpoint.bundleSha256),
       snapshotSha256: optionalText(result?.snapshotSha256),
       finalInputSha256: optionalText(result?.finalInputSha256),
+      resultKey: score.sourceBinding.resultKey,
+      requestId: score.sourceBinding.requestId,
+      rawOutputSha256: score.sourceBinding.rawOutputSha256,
+      sourceBinding: score.sourceBinding,
       rawStatus: result?.status || "missing_result",
       scoreStatus: score?.status || "INCONCLUSIVE",
       scoreReason: score?.reason || null,
-      returnedModel: score?.returnedModel || result?.reportedModel || result?.returnedModel || null,
+      isDirectRelay,
+      checkpointReturnedModel,
+      scoredReturnedModel,
+      returnedModel: isDirectRelay
+        ? checkpointReturnedModel
+        : (checkpointReturnedModel || scoredReturnedModel),
       durationMs: firstFinite(result?.durationMs, result?.sseTiming?.requestToCompleteMs),
       firstContentMs: firstFinite(
         result?.sseTiming?.requestToFirstContentMs,
         result?.streamMetrics?.requestToFirstContentMs,
       ),
       usage: extractUsage(result),
+      hardValidation: normalizeHardValidation(result),
       estimatedCosts: extractEstimatedCosts(result, descriptor.model, relayCreditToCny),
     };
   });
@@ -476,6 +710,226 @@ function normalizeRunPair(run, runIndex, relayCreditToCny) {
   return records;
 }
 
+function normalizeScoreSourceBinding(value, label) {
+  const binding = requiredObject(value, label);
+  if (binding.status !== "bound") {
+    const reasons = Array.isArray(binding.unavailableReasons)
+      ? binding.unavailableReasons.join(", ")
+      : "unknown reason";
+    throw new Error(`${label} must be bound (${reasons})`);
+  }
+  return {
+    status: "bound",
+    resultKey: requiredText(binding.resultKey, `${label}.resultKey`),
+    requestId: explicitNullableText(binding, "requestId", `${label}.requestId`),
+    finalInputSha256: requiredText(binding.finalInputSha256, `${label}.finalInputSha256`),
+    rawOutputSha256: requiredText(binding.rawOutputSha256, `${label}.rawOutputSha256`),
+  };
+}
+
+function assertScoreSourceBindingMatchesResult(binding, result, identity) {
+  const expected = createExperimentResultBinding(result);
+  if (expected.status !== "bound") {
+    throw new Error(
+      `checkpoint result source binding is unavailable for ${identity}: ${expected.unavailableReasons.join(", ")}`,
+    );
+  }
+  const recomputedRawOutputSha256 = hashExperimentRawOutput(result.rawOutput);
+  if (expected.rawOutputSha256 !== recomputedRawOutputSha256) {
+    throw new Error(`checkpoint rawOutput hash helper mismatch for ${identity}`);
+  }
+  const comparisons = [
+    ["status", binding.status, expected.status],
+    ["resultKey", binding.resultKey, expected.resultKey],
+    ["requestId", binding.requestId, expected.requestId],
+    ["finalInputSha256", binding.finalInputSha256, expected.finalInputSha256],
+    ["rawOutputSha256", binding.rawOutputSha256, recomputedRawOutputSha256],
+  ];
+  for (const [field, scoredValue, resultValue] of comparisons) {
+    if (scoredValue !== resultValue) {
+      throw new Error(
+        `score sourceBinding ${field} mismatch for ${identity}: ${nullable(scoredValue)} != ${nullable(resultValue)}`,
+      );
+    }
+  }
+}
+
+function normalizeSemanticReviews(values, records) {
+  if (!Array.isArray(values)) throw new TypeError("semanticReviews must be an array");
+  const recordsByIdentity = new Map(records.map((record) => [record.identity, record]));
+  const reviewByLevel = new Map();
+  let suppliedReviewCount = 0;
+  for (const [documentIndex, entry] of values.entries()) {
+    const document = entry?.document || entry;
+    const sourcePath = optionalText(entry?.sourcePath) || `semantic-review-${documentIndex + 1}`;
+    requiredObject(document, `semantic review document ${documentIndex + 1}`);
+    if (Number(document.schemaVersion) !== 1) {
+      throw new Error(`semantic review ${sourcePath} must use schemaVersion 1`);
+    }
+    if (document.assessmentType !== "semantic_result_review") {
+      throw new Error(`semantic review ${sourcePath} has unsupported assessmentType`);
+    }
+    if (!Array.isArray(document.reviews)) {
+      throw new TypeError(`semantic review ${sourcePath}.reviews must be an array`);
+    }
+    for (const [reviewIndex, rawReview] of document.reviews.entries()) {
+      const label = `semantic review ${sourcePath}[${reviewIndex}]`;
+      const review = requiredObject(rawReview, label);
+      const descriptor = {
+        caseId: requiredText(review.caseId, `${label}.caseId`),
+        model: requiredText(review.requestedModel, `${label}.requestedModel`),
+        effort: requiredText(review.reasoningEffort, `${label}.reasoningEffort`).toLowerCase(),
+        evidenceVariant: requiredText(review.evidenceVariant, `${label}.evidenceVariant`),
+      };
+      const identity = recordIdentity(descriptor);
+      const record = recordsByIdentity.get(identity);
+      if (!record) throw new Error(`orphan semantic review: ${identity}`);
+      const binding = {
+        resultKey: requiredText(review.resultKey, `${label}.resultKey`),
+        requestId: explicitNullableText(review, "requestId", `${label}.requestId`),
+        finalInputSha256: requiredText(review.finalInputSha256, `${label}.finalInputSha256`),
+        rawOutputSha256: requiredText(review.rawOutputSha256, `${label}.rawOutputSha256`),
+      };
+      assertSemanticReviewBinding(record, binding, identity);
+      const rating = requiredText(review.rating, `${label}.rating`).toLowerCase();
+      if (!SEMANTIC_RATINGS.has(rating)) throw new Error(`unsupported semantic review rating: ${review.rating}`);
+      const reviewer = requiredObject(review.reviewer, `${label}.reviewer`);
+      const kind = requiredText(reviewer.kind, `${label}.reviewer.kind`).toLowerCase();
+      if (!SEMANTIC_REVIEWER_KINDS.has(kind)) {
+        throw new Error(`unsupported semantic reviewer kind: ${reviewer.kind}`);
+      }
+      const reviewedAt = requiredText(review.reviewedAt, `${label}.reviewedAt`);
+      if (Number.isNaN(Date.parse(reviewedAt))) throw new Error(`${label}.reviewedAt must be an ISO date-time`);
+      const normalized = {
+        caseId: descriptor.caseId,
+        requestedModel: descriptor.model,
+        reasoningEffort: descriptor.effort,
+        evidenceVariant: descriptor.evidenceVariant,
+        resultKey: binding.resultKey,
+        requestId: binding.requestId,
+        finalInputSha256: binding.finalInputSha256,
+        rawOutputSha256: binding.rawOutputSha256,
+        rating,
+        reviewer: {
+          kind,
+          name: requiredText(reviewer.name, `${label}.reviewer.name`),
+          model: optionalText(reviewer.model),
+          version: optionalText(reviewer.version),
+        },
+        reviewedAt,
+        rationale: requiredText(review.rationale, `${label}.rationale`),
+        firstErrorStage: optionalText(review.firstErrorStage),
+        sourcePath,
+      };
+      const levelKey = `${identity}::${kind}`;
+      const existing = reviewByLevel.get(levelKey);
+      if (existing) {
+        if (semanticReviewFingerprint(existing) === semanticReviewFingerprint(normalized)) {
+          throw new Error(`duplicate semantic review at ${kind} level: ${identity}`);
+        }
+        throw new Error(`conflicting semantic reviews at ${kind} level: ${identity}`);
+      }
+      reviewByLevel.set(levelKey, normalized);
+      suppliedReviewCount += 1;
+    }
+  }
+  const selectedByIdentity = new Map();
+  let selectedHumanCount = 0;
+  let selectedCodexCount = 0;
+  for (const identity of recordsByIdentity.keys()) {
+    const human = reviewByLevel.get(`${identity}::human`);
+    const codex = reviewByLevel.get(`${identity}::codex`);
+    const selected = human || codex || null;
+    if (!selected) continue;
+    selectedByIdentity.set(identity, selected);
+    if (selected.reviewer.kind === "human") selectedHumanCount += 1;
+    else selectedCodexCount += 1;
+  }
+  const missingCount = records.length - selectedByIdentity.size;
+  const needsReviewCount = [...selectedByIdentity.values()]
+    .filter((review) => review.rating === "needs_review").length;
+  const diagnostics = [];
+  if (missingCount) diagnostics.push(`${missingCount} planned result(s) have no semantic review`);
+  if (needsReviewCount) diagnostics.push(`${needsReviewCount} planned result(s) still need semantic review`);
+  return {
+    inputDocumentCount: values.length,
+    suppliedReviewCount,
+    selectedByIdentity,
+    selectedHumanCount,
+    selectedCodexCount,
+    diagnostics,
+  };
+}
+
+function assertSemanticReviewBinding(record, binding, identity) {
+  for (const field of ["resultKey", "requestId", "finalInputSha256", "rawOutputSha256"]) {
+    if (binding[field] !== record.sourceBinding[field]) {
+      throw new Error(
+        `semantic review ${field} binding mismatch for ${identity}: ${nullable(binding[field])} != ${nullable(record.sourceBinding[field])}`,
+      );
+    }
+  }
+}
+
+function semanticReviewFingerprint(review) {
+  return JSON.stringify({
+    caseId: review.caseId,
+    requestedModel: review.requestedModel,
+    reasoningEffort: review.reasoningEffort,
+    evidenceVariant: review.evidenceVariant,
+    resultKey: review.resultKey,
+    requestId: review.requestId,
+    finalInputSha256: review.finalInputSha256,
+    rawOutputSha256: review.rawOutputSha256,
+    rating: review.rating,
+    reviewer: review.reviewer,
+    reviewedAt: review.reviewedAt,
+    rationale: review.rationale,
+    firstErrorStage: review.firstErrorStage,
+  });
+}
+
+function normalizeHardValidation(result) {
+  const explicit = result?.hardValidity ?? result?.validatedResult?.hardValidity;
+  if (typeof explicit?.ok === "boolean") {
+    return {
+      status: explicit.ok ? "PASS" : "FAIL",
+      ok: explicit.ok,
+      source: "hard_validity",
+      errors: Array.isArray(explicit.errors) ? explicit.errors.map(String) : [],
+      semanticTruth: false,
+    };
+  }
+  if (typeof explicit === "boolean") {
+    return {
+      status: explicit ? "PASS" : "FAIL",
+      ok: explicit,
+      source: "hard_validity",
+      errors: [],
+      semanticTruth: false,
+    };
+  }
+  if (typeof result?.validatedResult?.ok === "boolean") {
+    return {
+      status: "UNAVAILABLE",
+      ok: result.validatedResult.ok,
+      source: "legacy_combined_validator",
+      legacyStatus: result.validatedResult.ok ? "PASS" : "FAIL",
+      errors: Array.isArray(result.validatedResult.errors)
+        ? result.validatedResult.errors.map(String)
+        : [],
+      semanticTruth: false,
+    };
+  }
+  return {
+    status: "UNAVAILABLE",
+    ok: null,
+    source: "unavailable",
+    errors: [],
+    semanticTruth: false,
+  };
+}
+
 function dedupeRecords(records) {
   const byIdentity = new Map();
   for (const record of records) {
@@ -486,10 +940,13 @@ function dedupeRecords(records) {
     }
     const comparableKeys = [
       "bundleSha256", "snapshotSha256", "finalInputSha256", "rawStatus", "scoreStatus",
+      "returnedModel", "checkpointReturnedModel", "scoredReturnedModel",
       "durationMs", "firstContentMs",
     ];
     if (comparableKeys.some((key) => existing[key] !== record[key])
       || JSON.stringify(existing.usage) !== JSON.stringify(record.usage)
+      || JSON.stringify(existing.sourceBinding) !== JSON.stringify(record.sourceBinding)
+      || JSON.stringify(existing.hardValidation) !== JSON.stringify(record.hardValidation)
       || JSON.stringify(existing.estimatedCosts) !== JSON.stringify(record.estimatedCosts)) {
       throw new Error(`conflicting duplicate experiment record: ${record.identity}`);
     }
@@ -518,10 +975,33 @@ function inspectEvidenceConsistency({ runs, records, configurations, expectedCas
   const errors = [];
   const warnings = [];
   const bundleHashes = unique(runs.map((run) => optionalText(run.checkpoint?.bundleSha256)).filter(Boolean));
-  if (bundleHashes.length > 1) errors.push(`bundleSha256 mismatch: ${bundleHashes.join(", ")}`);
-  if (bundleHashes.length === 0) warnings.push("bundleSha256 was unavailable for every checkpoint");
-  if (bundleHashes.length === 1 && runs.some((run) => !optionalText(run.checkpoint?.bundleSha256))) {
-    warnings.push("bundleSha256 was unavailable for one or more checkpoints");
+  const directRelayRuns = runs.map((run, index) => ({ run, runNumber: index + 1 }))
+    .filter(({ run }) => isDirectRelayCheckpoint(run.checkpoint));
+  const legacyRuns = runs.map((run, index) => ({ run, runNumber: index + 1 }))
+    .filter(({ run }) => !isDirectRelayCheckpoint(run.checkpoint));
+  const directRelayBundleHashes = unique(
+    directRelayRuns.map(({ run }) => optionalText(run.checkpoint?.bundleSha256)).filter(Boolean),
+  );
+  if (directRelayBundleHashes.length > 1) {
+    errors.push(`Direct Relay bundleSha256 mismatch: ${directRelayBundleHashes.join(", ")}`);
+  }
+  const missingDirectBundleRunNumbers = directRelayRuns.flatMap(({ run, runNumber }) => (
+    optionalText(run.checkpoint?.bundleSha256) ? [] : [runNumber]
+  ));
+  if (missingDirectBundleRunNumbers.length) {
+    errors.push(
+      `Direct Relay v2 requires bundleSha256 for every Direct Relay checkpoint; missing run(s): ${missingDirectBundleRunNumbers.join(", ")}`,
+    );
+  }
+  const missingLegacyBundleRunNumbers = legacyRuns.flatMap(({ run, runNumber }) => (
+    optionalText(run.checkpoint?.bundleSha256) ? [] : [runNumber]
+  ));
+  if (legacyRuns.length === runs.length && missingLegacyBundleRunNumbers.length === runs.length) {
+    warnings.push("bundleSha256 was unavailable for every checkpoint");
+  } else if (missingLegacyBundleRunNumbers.length) {
+    warnings.push(
+      `bundleSha256 was unavailable for one or more legacy checkpoints; run(s): ${missingLegacyBundleRunNumbers.join(", ")}`,
+    );
   }
   const referenceCaseIdsByVariant = new Map();
   for (const configuration of configurations) {
@@ -534,6 +1014,61 @@ function inspectEvidenceConsistency({ runs, records, configurations, expectedCas
       referenceCaseIdsByVariant.set(variant, [...configuration.plannedCaseIds]);
     } else if (sortedSetKey(configuration.plannedCaseIds) !== sortedSetKey(reference)) {
       errors.push(`${configuration.key} does not use the same planned case set within evidence variant ${variant}`);
+    }
+  }
+  const returnedModelsByConfiguration = {};
+  for (const record of records) {
+    const diagnostics = record.isDirectRelay ? errors : warnings;
+    const directResponseRequiresModel = record.isDirectRelay
+      && DIRECT_RELAY_RESPONSE_RESULT_STATUSES.has(record.rawStatus);
+    if (directResponseRequiresModel && !record.checkpointReturnedModel) {
+      errors.push(`${record.identity} Direct Relay checkpoint returnedModel was unavailable`);
+    }
+    if (!record.returnedModel) {
+      if (record.isDirectRelay && !directResponseRequiresModel) {
+        warnings.push(`${record.identity} returnedModel was not returned (${record.rawStatus})`);
+      } else {
+        diagnostics.push(`${record.identity} returnedModel was unavailable`);
+      }
+      continue;
+    }
+    if (
+      record.checkpointReturnedModel
+      && record.scoredReturnedModel
+      && record.checkpointReturnedModel !== record.scoredReturnedModel
+    ) {
+      diagnostics.push(
+        `${record.identity} returnedModel source mismatch: checkpoint ${record.checkpointReturnedModel}, scored ${record.scoredReturnedModel}`,
+      );
+    }
+    if (!isAllowedReturnedModel(record.model, record.returnedModel)) {
+      diagnostics.push(
+        `${record.identity} returnedModel mismatch: requested ${record.model}, returned ${record.returnedModel}`,
+      );
+    }
+  }
+  for (const configuration of configurations) {
+    const returnedModels = unique(
+      configuration.records.map((record) => record.returnedModel).filter(Boolean),
+    ).sort();
+    returnedModelsByConfiguration[configuration.key] = returnedModels;
+    const directReturnedModels = unique(configuration.records
+      .filter((record) => record.isDirectRelay)
+      .map((record) => record.returnedModel)
+      .filter(Boolean)).sort();
+    const legacyReturnedModels = unique(configuration.records
+      .filter((record) => !record.isDirectRelay)
+      .map((record) => record.returnedModel)
+      .filter(Boolean)).sort();
+    if (directReturnedModels.length > 1) {
+      errors.push(
+        `${configuration.key} Direct Relay returnedModel is inconsistent within configuration: ${directReturnedModels.join(", ")}`,
+      );
+    }
+    if (legacyReturnedModels.length > 1) {
+      warnings.push(
+        `${configuration.key} legacy returnedModel is inconsistent within configuration: ${legacyReturnedModels.join(", ")}`,
+      );
     }
   }
   const [canonicalVariant, canonicalCaseIds] = selectCanonicalVariant(referenceCaseIdsByVariant);
@@ -577,8 +1112,12 @@ function inspectEvidenceConsistency({ runs, records, configurations, expectedCas
     checkedRunCount: runs.length,
     checkedConfigurationCount: configurations.length,
     expectedCaseCount: expectedCaseCount === undefined ? null : Number(expectedCaseCount),
-    bundleSha256: bundleHashes.length === 1 ? bundleHashes[0] : null,
+    bundleSha256: directRelayRuns.length
+      ? (directRelayBundleHashes.length === 1 ? directRelayBundleHashes[0] : null)
+      : (bundleHashes.length === 1 ? bundleHashes[0] : null),
     observedBundleSha256: bundleHashes,
+    observedDirectRelayBundleSha256: directRelayBundleHashes,
+    returnedModelsByConfiguration,
     canonicalVariant,
     canonicalCaseIds,
     plannedCaseIdsByVariant: Object.fromEntries(referenceCaseIdsByVariant),
@@ -591,18 +1130,35 @@ function inspectEvidenceConsistency({ runs, records, configurations, expectedCas
 
 function summarizeConfiguration(group, caseIds) {
   const byCase = new Map(group.records.map((record) => [record.caseId, record]));
+  const observedReturnedModels = unique(
+    group.records.map((record) => record.returnedModel).filter(Boolean),
+  ).sort();
+  const missingReturnedModelCount = group.records.filter((record) => !record.returnedModel).length;
   const plannedCaseIds = [...group.plannedCaseIds];
   const plannedCaseIdSet = new Set(plannedCaseIds);
   const cases = caseIds.map((caseId) => {
     const record = byCase.get(caseId);
     if (!plannedCaseIdSet.has(caseId)) {
-      return { caseId, status: "INCONCLUSIVE", rawStatus: "not_planned", planned: false };
+      return {
+        caseId,
+        planned: false,
+        semanticReview: null,
+        autoAssertion: null,
+        hardValidation: null,
+        rawStatus: "not_planned",
+      };
     }
-    if (!record) return { caseId, status: "INCONCLUSIVE", rawStatus: "missing_result", planned: true };
+    if (!record) throw new Error(`configuration is missing planned record: ${group.key} ${caseId}`);
     return {
       caseId,
       planned: true,
-      status: record.scoreStatus,
+      semanticReview: record.semanticReview,
+      autoAssertion: {
+        status: record.scoreStatus,
+        reason: record.scoreReason,
+        humanTruth: false,
+      },
+      hardValidation: record.hardValidation,
       rawStatus: record.rawStatus,
       returnedModel: record.returnedModel,
       durationMs: record.durationMs,
@@ -612,22 +1168,59 @@ function summarizeConfiguration(group, caseIds) {
     };
   });
   const plannedCases = cases.filter((item) => item.planned);
-  const counts = Object.fromEntries([...SCORE_STATUSES].map((status) => [
+  const semanticCounts = Object.fromEntries([...SEMANTIC_RATINGS].map((rating) => [
+    rating,
+    plannedCases.filter((item) => item.semanticReview?.rating === rating).length,
+  ]));
+  semanticCounts.unreviewed = plannedCases.filter((item) => !item.semanticReview).length;
+  const determinateReviewCount = [...DETERMINATE_SEMANTIC_RATINGS]
+    .reduce((sum, rating) => sum + semanticCounts[rating], 0);
+  const autoAssertionCounts = Object.fromEntries([...SCORE_STATUSES].map((status) => [
     status,
-    plannedCases.filter((item) => item.status === status).length,
+    plannedCases.filter((item) => item.autoAssertion?.status === status).length,
   ]));
   const planned = plannedCases.length;
-  const scorable = counts.PASS + counts.FAIL;
+  const semanticPublishable = planned > 0 && determinateReviewCount === planned;
+  const hardValidationCounts = {
+    PASS: plannedCases.filter((item) => item.hardValidation?.status === "PASS").length,
+    FAIL: plannedCases.filter((item) => item.hardValidation?.status === "FAIL").length,
+    UNAVAILABLE: plannedCases.filter((item) => item.hardValidation?.status === "UNAVAILABLE").length,
+  };
   return {
     configurationKey: group.key,
     model: group.model,
+    requestedModel: group.model,
+    returnedModel: observedReturnedModels.length === 1 ? observedReturnedModels[0] : null,
+    observedReturnedModels,
+    missingReturnedModelCount,
     effort: group.effort,
     evidenceVariant: group.evidenceVariant,
     plannedCaseIds,
     cases,
-    counts,
-    accuracy: ratio(counts.PASS, planned),
-    availability: ratio(scorable, planned),
+    semanticReview: {
+      counts: semanticCounts,
+      selectedCount: planned - semanticCounts.unreviewed,
+      determinateCount: determinateReviewCount,
+      missingCount: semanticCounts.unreviewed,
+      needsReviewCount: semanticCounts.needs_review,
+    },
+    semanticAccuracy: semanticAccuracy(semanticCounts.correct, determinateReviewCount, planned),
+    reviewCoverage: ratio(determinateReviewCount, planned),
+    semanticPublishable,
+    autoAssertion: {
+      counts: autoAssertionCounts,
+      humanTruth: false,
+    },
+    autoAssertionAccuracy: {
+      ...ratio(autoAssertionCounts.PASS, planned),
+      humanTruth: false,
+    },
+    hardValidation: {
+      counts: hardValidationCounts,
+      sources: unique(plannedCases.map((item) => item.hardValidation?.source).filter(Boolean)).sort(),
+      semanticTruth: false,
+    },
+    hardValidationRate: ratio(hardValidationCounts.PASS, planned),
     latency: {
       totalMs: numericSummary(plannedCases.map((item) => item.durationMs)),
       firstContentMs: numericSummary(plannedCases.map((item) => item.firstContentMs)),
@@ -638,7 +1231,59 @@ function summarizeConfiguration(group, caseIds) {
       reasoning: numericSummary(plannedCases.map((item) => item.usage?.reasoningTokens), { includeSum: true }),
       total: numericSummary(plannedCases.map((item) => item.usage?.totalTokens), { includeSum: true }),
     },
-    estimatedCost: summarizeEstimatedCosts(plannedCases, planned),
+    estimatedCost: summarizeEstimatedCosts(plannedCases, planned, {
+      semanticComplete: semanticPublishable,
+      correctCount: semanticCounts.correct,
+    }),
+  };
+}
+
+function summarizeReportMetrics(configurations) {
+  const cases = configurations.flatMap((configuration) => (
+    configuration.cases.filter((item) => item.planned)
+  ));
+  const planned = cases.length;
+  const determinateReviewCount = cases.filter((item) => (
+    DETERMINATE_SEMANTIC_RATINGS.has(item.semanticReview?.rating)
+  )).length;
+  const correctCount = cases.filter((item) => item.semanticReview?.rating === "correct").length;
+  const autoAssertionCounts = Object.fromEntries([...SCORE_STATUSES].map((status) => [
+    status,
+    cases.filter((item) => item.autoAssertion?.status === status).length,
+  ]));
+  const hardValidationCounts = {
+    PASS: cases.filter((item) => item.hardValidation?.status === "PASS").length,
+    FAIL: cases.filter((item) => item.hardValidation?.status === "FAIL").length,
+    UNAVAILABLE: cases.filter((item) => item.hardValidation?.status === "UNAVAILABLE").length,
+  };
+  return {
+    semanticAccuracy: semanticAccuracy(correctCount, determinateReviewCount, planned),
+    reviewCoverage: ratio(determinateReviewCount, planned),
+    autoAssertion: {
+      counts: autoAssertionCounts,
+      humanTruth: false,
+    },
+    autoAssertionAccuracy: {
+      ...ratio(autoAssertionCounts.PASS, planned),
+      humanTruth: false,
+    },
+    hardValidation: {
+      counts: hardValidationCounts,
+      sources: unique(cases.map((item) => item.hardValidation?.source).filter(Boolean)).sort(),
+      semanticTruth: false,
+    },
+    hardValidationRate: ratio(hardValidationCounts.PASS, planned),
+  };
+}
+
+function semanticAccuracy(correctCount, determinateReviewCount, plannedCaseCount) {
+  const complete = plannedCaseCount > 0 && determinateReviewCount === plannedCaseCount;
+  return {
+    numerator: correctCount,
+    denominator: plannedCaseCount,
+    rate: complete && plannedCaseCount ? round(correctCount / plannedCaseCount) : null,
+    determinateReviewCount,
+    complete,
   };
 }
 
@@ -722,17 +1367,26 @@ function addCost(target, currency, amount, source) {
   });
 }
 
-function summarizeEstimatedCosts(cases, planned) {
+function summarizeEstimatedCosts(cases, planned, {
+  semanticComplete = false,
+  correctCount = 0,
+} = {}) {
   const entries = cases.flatMap((item) => item.estimatedCost || []);
   if (entries.length === 0) return null;
   const caseCount = cases.filter((item) => item.estimatedCost?.length).length;
-  const correctCount = cases.filter((item) => item.status === "PASS").length;
   const totals = {};
+  const reportedCaseCountByCurrency = {};
   const sourceFields = new Set();
   const verification = new Set();
   const pricingVersions = new Set();
   let relayCreditTotal = 0;
   let relayCreditReported = false;
+  for (const item of cases) {
+    const currencies = unique((item.estimatedCost || []).map((entry) => entry.currency));
+    for (const currency of currencies) {
+      reportedCaseCountByCurrency[currency] = (reportedCaseCountByCurrency[currency] || 0) + 1;
+    }
+  }
   for (const entry of entries) {
     totals[entry.currency] = round((totals[entry.currency] || 0) + entry.amount, 9);
     sourceFields.add(entry.source);
@@ -743,18 +1397,36 @@ function summarizeEstimatedCosts(cases, planned) {
       relayCreditReported = true;
     }
   }
+  const coverageByCurrency = Object.fromEntries(Object.keys(totals).sort().map((currency) => {
+    const reportedCaseCount = reportedCaseCountByCurrency[currency] || 0;
+    return [currency, {
+      reportedCaseCount,
+      plannedCaseCount: planned,
+      complete: reportedCaseCount === planned,
+    }];
+  }));
+  const completeCurrencies = new Set(Object.entries(coverageByCurrency)
+    .filter(([, coverage]) => coverage.complete)
+    .map(([currency]) => currency));
+  const costsPerCorrectAnswer = semanticComplete && correctCount > 0
+    ? Object.fromEntries(Object.entries(totals)
+        .filter(([currency]) => completeCurrencies.has(currency))
+        .map(([currency, amount]) => [currency, round(amount / correctCount, 9)]))
+    : {};
   return {
     reportedCaseCount: caseCount,
     plannedCaseCount: planned,
-    complete: caseCount === planned,
+    complete: Object.values(coverageByCurrency).every((coverage) => coverage.complete),
+    coverageByCurrency,
     totals,
     averagesPerReportedCase: Object.fromEntries(
-      Object.entries(totals).map(([currency, amount]) => [currency, round(amount / caseCount, 9)]),
+      Object.entries(totals).map(([currency, amount]) => [
+        currency,
+        round(amount / coverageByCurrency[currency].reportedCaseCount, 9),
+      ]),
     ),
-    costsPerCorrectAnswer: caseCount === planned && correctCount > 0
-      ? Object.fromEntries(
-          Object.entries(totals).map(([currency, amount]) => [currency, round(amount / correctCount, 9)]),
-        )
+    costsPerCorrectAnswer: Object.keys(costsPerCorrectAnswer).length
+      ? costsPerCorrectAnswer
       : null,
     sourceFields: [...sourceFields].sort(),
     verification: [...verification].sort(),
@@ -856,9 +1528,22 @@ function formatRatio(value) {
   return `${value.numerator}/${value.denominator} (${value.rate === null ? "n/a" : `${round(value.rate * 100, 1).toFixed(1)}%`})`;
 }
 
-function formatCaseStatus(value, text) {
-  if (value?.planned === false) return text.statuses.NOT_PLANNED;
-  return text.statuses[value?.status] || text.statuses.INCONCLUSIVE;
+function formatSemanticReview(value, text) {
+  if (value?.planned === false) return text.ratings.not_planned;
+  const review = value?.semanticReview;
+  if (!review) return text.ratings.unreviewed;
+  const kind = text.reviewKinds[review.reviewer?.kind] || review.reviewer?.kind || "?";
+  const rating = text.ratings[review.rating] || review.rating;
+  return `${kind}: ${rating}`;
+}
+
+function formatSemanticAccuracy(value) {
+  if (!value || value.rate === null) {
+    return value
+      ? `${value.numerator}/${value.denominator} (n/a; ${value.determinateReviewCount}/${value.denominator})`
+      : "—";
+  }
+  return formatRatio(value);
 }
 
 function selectCanonicalVariant(referenceCaseIdsByVariant) {
@@ -880,6 +1565,20 @@ function formatEvidenceVariant(value, text) {
   return text.variants[normalized] || normalized;
 }
 
+function formatReturnedModel(configuration, text) {
+  const missingLabel = text.noReturnedModel;
+  if (configuration.returnedModel && !configuration.missingReturnedModelCount) {
+    return configuration.returnedModel;
+  }
+  if (Array.isArray(configuration.observedReturnedModels) && configuration.observedReturnedModels.length) {
+    const observed = configuration.observedReturnedModels.join(", ");
+    return configuration.missingReturnedModelCount
+      ? `${observed}, ${missingLabel} (${configuration.missingReturnedModelCount})`
+      : observed;
+  }
+  return missingLabel;
+}
+
 function formatLatency(value) {
   if (value.average === null) return "—";
   return `${round(value.average / 1000, 1).toFixed(1)} / ${round(value.median / 1000, 1).toFixed(1)} s`;
@@ -894,10 +1593,17 @@ function formatEstimatedCost(value, text) {
   const totals = Object.entries(value.totals).map(([currency, amount]) => {
     const average = value.averagesPerReportedCase?.[currency];
     const perCorrect = value.costsPerCorrectAnswer?.[currency];
-    return `${currency} ${round(amount, 6)} / ${round(average, 6)} / ${perCorrect === undefined ? "—" : round(perCorrect, 6)}`;
+    const coverage = value.coverageByCurrency?.[currency];
+    const coverageSuffix = Object.keys(value.totals).length > 1 && coverage
+      ? ` [${coverage.reportedCaseCount}/${coverage.plannedCaseCount}]`
+      : "";
+    return `${currency} ${round(amount, 6)} / ${round(average, 6)} / ${perCorrect === undefined ? "—" : round(perCorrect, 6)}${coverageSuffix}`;
   });
   const verification = value.verification.includes("unverified") ? text.unverified : "";
-  return `${totals.join(" + ")} (${verification}${value.reportedCaseCount}/${value.plannedCaseCount})`;
+  const coverageLabel = totals.length > 1
+    ? text.perCurrencyCoverage
+    : `${value.reportedCaseCount}/${value.plannedCaseCount}`;
+  return `${totals.join(" + ")} (${verification}${coverageLabel})`;
 }
 
 function markdownText(locale) {
@@ -962,6 +1668,88 @@ function optionalText(value) {
   return normalized || null;
 }
 
+function isDirectRelayCheckpoint(checkpoint) {
+  return DIRECT_RELAY_RUNNERS.has(optionalText(checkpoint?.runner));
+}
+
+function validateDirectRelayCheckpointContract(checkpoint, runIndex) {
+  const prefix = `run ${runIndex + 1} Direct Relay`;
+  if (checkpoint.schemaVersion !== 1) {
+    throw new Error(`${prefix} schemaVersion must be 1`);
+  }
+  const model = requiredText(checkpoint.model, `${prefix} model`);
+  const evidenceVariant = requiredText(
+    checkpoint.evidenceVariant,
+    `${prefix} evidenceVariant`,
+  );
+  const caseIds = requiredUniqueTextArray(checkpoint.caseIds, `${prefix} caseIds`);
+  const efforts = requiredUniqueTextArray(checkpoint.efforts, `${prefix} efforts`)
+    .map((effort) => effort.toLowerCase());
+  if (new Set(efforts).size !== efforts.length) {
+    throw new Error(`${prefix} efforts must be unique after normalization`);
+  }
+  for (const effort of efforts) {
+    if (!EFFORT_ORDER.has(effort)) throw new Error(`${prefix} effort is unsupported: ${effort}`);
+  }
+  if (checkpoint.concurrency !== 1) throw new Error(`${prefix} concurrency must be 1`);
+  if (checkpoint.retries !== 0) throw new Error(`${prefix} retries must be 0`);
+  return {
+    model,
+    evidenceVariant,
+    caseIds,
+    caseIdSet: new Set(caseIds),
+    efforts,
+    effortSet: new Set(efforts),
+  };
+}
+
+function requiredUniqueTextArray(value, label) {
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new Error(`${label} must be a non-empty array`);
+  }
+  const normalized = value.map((item, index) => requiredText(item, `${label}[${index}]`));
+  if (new Set(normalized).size !== normalized.length) {
+    throw new Error(`${label} must contain unique values`);
+  }
+  return normalized;
+}
+
+function assertDirectRelayDescriptorMatchesCheckpoint(descriptor, contract, label) {
+  if (descriptor.model !== contract.model) {
+    throw new Error(`Direct Relay ${label} model must match checkpoint.model`);
+  }
+  if (descriptor.evidenceVariant !== contract.evidenceVariant) {
+    throw new Error(`Direct Relay ${label} evidenceVariant must match checkpoint.evidenceVariant`);
+  }
+  if (!contract.caseIdSet.has(descriptor.caseId)) {
+    throw new Error(`Direct Relay ${label} caseId is not declared by checkpoint.caseIds`);
+  }
+  if (!contract.effortSet.has(descriptor.effort)) {
+    throw new Error(`Direct Relay ${label} effort is not declared by checkpoint.efforts`);
+  }
+}
+
+function directRelayResultKey(caseId, model, effort, evidenceVariant) {
+  const base = `${caseId}::${model}::${effort}`;
+  return evidenceVariant === "full" ? base : `${base}::${evidenceVariant}`;
+}
+
+function isAllowedReturnedModel(requestedModel, returnedModel) {
+  const requested = optionalText(requestedModel);
+  const returned = optionalText(returnedModel);
+  if (!requested || !returned) return false;
+  return returned === requested
+    || (requested.startsWith("relay-") && returned === requested.slice("relay-".length));
+}
+
+function explicitNullableText(object, field, label) {
+  if (!Object.prototype.hasOwnProperty.call(object, field)) {
+    throw new TypeError(`${label} must be present and may be null`);
+  }
+  if (object[field] === null) return null;
+  return requiredText(object[field], label);
+}
+
 function unique(values) {
   return [...new Set(values)];
 }
@@ -983,6 +1771,7 @@ export function parseModelEffortMatrixArguments(argv) {
     pairs: [],
     checkpoints: [],
     scored: [],
+    semanticReviewFiles: [],
     strictEvidence: true,
     relayCreditToCny: DEFAULT_RELAY_CREDIT_TO_CNY,
   };
@@ -1001,6 +1790,9 @@ export function parseModelEffortMatrixArguments(argv) {
       index += 1;
     } else if (argument === "--scored") {
       options.scored.push(take(argument, index));
+      index += 1;
+    } else if (argument === "--semantic-review") {
+      options.semanticReviewFiles.push(take(argument, index));
       index += 1;
     } else if (argument === "--dashboard-metadata") {
       options.dashboardMetadataFile = take(argument, index);
@@ -1054,6 +1846,7 @@ export async function main(argv = process.argv.slice(2), dependencies = {}) {
   if (options.help) {
     stdout.write([
       "Usage: node scripts/aggregate-model-effort-matrix.mjs --pair CHECKPOINT.json SCORED.json [--pair ...]",
+      "  [--semantic-review REVIEW.json] [--semantic-review ...]",
       "  [--expected-case-count 4] [--dashboard-metadata DASHBOARD.json]",
       "  [--case-metadata CASES.json]",
       "  [--relay-credit-to-cny 1]",
@@ -1064,6 +1857,7 @@ export async function main(argv = process.argv.slice(2), dependencies = {}) {
   }
   const report = await aggregateModelEffortMatrixFiles({
     pairs: options.pairs,
+    semanticReviewFiles: options.semanticReviewFiles,
     dashboardMetadataFile: options.dashboardMetadataFile,
     caseMetadataFile: options.caseMetadataFile,
     expectedCaseCount: options.expectedCaseCount,

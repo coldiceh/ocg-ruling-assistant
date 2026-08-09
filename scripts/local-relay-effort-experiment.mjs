@@ -58,7 +58,11 @@ export function parseLocalRelayExperimentArgs(argv) {
   return parsed;
 }
 
-export function normalizeLocalRelayExperimentOptions(options, env = process.env) {
+export function normalizeLocalRelayExperimentOptions(
+  options,
+  env = process.env,
+  { requireCredentials = true } = {},
+) {
   if (!options?.snapshots) throw new TypeError("--snapshots is required");
   if (!options?.output) throw new TypeError("--output is required");
   const model = String(options.model || DEFAULT_MODEL).trim();
@@ -83,9 +87,9 @@ export function normalizeLocalRelayExperimentOptions(options, env = process.env)
     throw new TypeError("--max-calls must be an integer between 1 and 24");
   }
   const apiKey = String(env.RELAY_API_KEY || "").trim();
-  if (!apiKey) throw new TypeError("RELAY_API_KEY is required");
   const baseUrl = String(env.RELAY_BASE_URL || "").trim();
-  if (!baseUrl) throw new TypeError("RELAY_BASE_URL is required");
+  if (requireCredentials && !apiKey) throw new TypeError("RELAY_API_KEY is required");
+  if (requireCredentials && !baseUrl) throw new TypeError("RELAY_BASE_URL is required");
   return Object.freeze({
     snapshotsPath: path.resolve(String(options.snapshots)),
     outputPath: path.resolve(String(options.output)),
@@ -108,7 +112,11 @@ export async function runLocalRelayEffortExperiment({
   now = () => new Date(),
   log = console.log,
 } = {}) {
-  const resolved = normalizeLocalRelayExperimentOptions(options, env);
+  const resolved = normalizeLocalRelayExperimentOptions(
+    options,
+    env,
+    { requireCredentials: false },
+  );
   const serializedBundle = await readFile(resolved.snapshotsPath, "utf8");
   const bundleSha256 = sha256(serializedBundle);
   const allCases = normalizeSnapshotBundle(JSON.parse(serializedBundle));
@@ -120,15 +128,37 @@ export async function runLocalRelayEffortExperiment({
     ? resolved.caseIds.map((caseId) => casesById.get(caseId))
     : allCases;
   const selectedCaseIds = cases.map((item) => item.caseId);
-  const plan = cases.flatMap((item) => resolved.efforts.map((effort) => ({
+  const plannedRequestCount = cases.length * resolved.efforts.length;
+  if (plannedRequestCount > resolved.maxCalls) {
+    throw new Error(`planned relay calls ${plannedRequestCount} exceed --max-calls ${resolved.maxCalls}`);
+  }
+  const preparedCases = cases.map((item) => {
+    const evidenceVariant = resolved.evidenceVariant;
+    const input = buildFinalRulingInput(item.evidenceSnapshot, { evidenceVariant });
+    const finalInputSha256 = hashAdminFinalInput(input);
+    if (evidenceVariant === (item.executionProfile.evidenceVariant || "full")
+      && item.executionProfile.finalRulingInputSha256
+      && item.executionProfile.finalRulingInputSha256 !== finalInputSha256
+    ) {
+      throw new Error(`${item.caseId} final ruling input hash does not match its executionProfile`);
+    }
+    return {
+      item,
+      input,
+      finalInputSha256,
+      modelVisibleEvidencePacket: buildFinalRulingModelEvidencePacket(
+        item.evidenceSnapshot,
+        { evidenceVariant },
+      ),
+    };
+  });
+  const plan = preparedCases.flatMap(({ item, finalInputSha256 }) => resolved.efforts.map((effort) => ({
     caseId: item.caseId,
     effort,
     evidenceVariant: resolved.evidenceVariant,
+    finalInputSha256,
     key: resultKey(item.caseId, resolved.model, effort, resolved.evidenceVariant),
   })));
-  if (plan.length > resolved.maxCalls) {
-    throw new Error(`planned relay calls ${plan.length} exceed --max-calls ${resolved.maxCalls}`);
-  }
   let checkpoint = await loadOrCreateCheckpoint({
     outputPath: resolved.outputPath,
     bundleSha256,
@@ -141,35 +171,32 @@ export async function runLocalRelayEffortExperiment({
     recoverRunningAsOutcomeUnknown: resolved.recoverRunningAsOutcomeUnknown,
     now,
   });
-  const provider = providerFactory
-    ? providerFactory({ resolved, env })
-    : new CompatibleEvidencePreparationProvider({
-        providerId: "relay",
-        apiKey: resolved.apiKey,
-        baseUrl: resolved.baseUrl,
-        env: {
-          ...env,
-          RELAY_STREAM: "true",
-          RELAY_STREAM_TIMEOUT_MS: String(resolved.timeoutMs),
-          RELAY_LOCAL_STREAM_TIMEOUT_MAX_MS: String(resolved.timeoutMs),
-        },
-      });
-
-  for (const item of cases) {
-    const evidenceVariant = resolved.evidenceVariant;
-    const input = buildFinalRulingInput(item.evidenceSnapshot, { evidenceVariant });
-    const finalInputSha256 = hashAdminFinalInput(input);
-    if (evidenceVariant === (item.executionProfile.evidenceVariant || "full")
-      &&
-      item.executionProfile.finalRulingInputSha256
-      && item.executionProfile.finalRulingInputSha256 !== finalInputSha256
-    ) {
-      throw new Error(`${item.caseId} final ruling input hash does not match its executionProfile`);
+  let provider = null;
+  const getProvider = () => {
+    if (provider) return provider;
+    if (providerFactory) {
+      provider = providerFactory({ resolved, env });
+      return provider;
     }
-    const modelVisibleEvidencePacket = buildFinalRulingModelEvidencePacket(
-      item.evidenceSnapshot,
-      { evidenceVariant },
-    );
+    if (!resolved.apiKey) throw new TypeError("RELAY_API_KEY is required");
+    if (!resolved.baseUrl) throw new TypeError("RELAY_BASE_URL is required");
+    provider = new CompatibleEvidencePreparationProvider({
+      providerId: "relay",
+      apiKey: resolved.apiKey,
+      baseUrl: resolved.baseUrl,
+      env: {
+        ...env,
+        RELAY_STREAM: "true",
+        RELAY_STREAM_TIMEOUT_MS: String(resolved.timeoutMs),
+        RELAY_LOCAL_STREAM_TIMEOUT_MAX_MS: String(resolved.timeoutMs),
+      },
+    });
+    return provider;
+  };
+
+  for (const prepared of preparedCases) {
+    const { item, input, finalInputSha256, modelVisibleEvidencePacket } = prepared;
+    const evidenceVariant = resolved.evidenceVariant;
     for (const effort of resolved.efforts) {
       const key = resultKey(item.caseId, resolved.model, effort, evidenceVariant);
       const existing = checkpoint.results.find((entry) => entry.key === key);
@@ -179,8 +206,19 @@ export async function runLocalRelayEffortExperiment({
         log(`[skip] ${key} (${existing.status})`);
         continue;
       }
+      const activeProvider = getProvider();
       const startedAt = now().toISOString();
-      checkpoint.results.push({ key, caseId: item.caseId, model: resolved.model, effort, status: "running", startedAt });
+      checkpoint.results.push({
+        key,
+        caseId: item.caseId,
+        model: resolved.model,
+        effort,
+        status: "running",
+        startedAt,
+        finalInputSha256,
+        rawOutput: null,
+        requestId: null,
+      });
       checkpoint.updatedAt = startedAt;
       await writeCheckpointAtomic(resolved.outputPath, checkpoint);
       log(`[run] ${key}`);
@@ -200,7 +238,7 @@ export async function runLocalRelayEffortExperiment({
       const reasoningMode = "pro";
       try {
         const prompt = item.executionProfile.prompt || {};
-        const response = await provider.runRuling({
+        const response = await activeProvider.runRuling({
           model: resolved.model,
           reasoningEffort: effort,
           reasoningMode,
@@ -213,7 +251,7 @@ export async function runLocalRelayEffortExperiment({
           },
           signal: controller.signal,
         });
-        const validation = provider.validateCompletedResponse(response, {
+        const validation = activeProvider.validateCompletedResponse(response, {
           evidenceSnapshot: item.evidenceSnapshot,
           modelVisibleEvidencePacket,
           expectedQuestionIds: item.executionProfile.questionIds || [],
@@ -264,6 +302,7 @@ export async function runLocalRelayEffortExperiment({
           snapshotSha256: item.evidenceSnapshot.contentSha256,
           finalInputSha256,
           rawOutput: typeof error?.outputText === "string" ? error.outputText : null,
+          requestId: null,
           validatedResult: null,
           usage: jsonSafe(error?.usage || null),
           sseTiming: jsonSafe(error?.streamMetrics || null),
@@ -367,8 +406,18 @@ async function loadOrCreateCheckpoint({
     }
     const resumedAt = now().toISOString();
     if (recoverRunningAsOutcomeUnknown) {
+      const plannedByKey = new Map(plan.map((entry) => [entry.key, entry]));
       existing.results = existing.results.map((entry) => {
         if (entry.status !== "running") return entry;
+        const planned = plannedByKey.get(entry.key);
+        if (!planned?.finalInputSha256) {
+          throw new Error(`cannot recover ${entry.key}: planned final input binding is unavailable`);
+        }
+        if (entry.finalInputSha256
+          && entry.finalInputSha256 !== planned.finalInputSha256
+        ) {
+          throw new Error(`cannot recover ${entry.key}: persisted final input binding does not match the current plan`);
+        }
         // The explicit recovery flag acknowledges that a previous process
         // stopped after submission. Its provider outcome may have been charged
         // even though no response was durably recorded, so seal it as unknown
@@ -378,6 +427,9 @@ async function loadOrCreateCheckpoint({
           status: "error_outcome_unknown",
           endedAt: resumedAt,
           durationMs: null,
+          finalInputSha256: planned.finalInputSha256,
+          rawOutput: null,
+          requestId: null,
           validatedResult: null,
           usage: null,
           sseTiming: null,
