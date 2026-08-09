@@ -5,6 +5,7 @@ import { ADMIN_EVIDENCE_CATEGORIES } from "./adminEvidenceArchive.mjs";
 export const ADMIN_EVIDENCE_VARIANTS = Object.freeze([
   "full",
   "card_text_only",
+  "card_text_plus_lua",
   "without_lua",
 ]);
 
@@ -39,9 +40,11 @@ export function normalizeAdminEvidenceVariant(
  * validator are allowed to see for a variant.
  *
  * `full` and `without_lua` share the complete decision packet. Lua is a
- * separate packet and is removed by the final-input builder. `card_text_only`
- * rebuilds a minimal packet from complete card-text archive documents when
- * available, with a bounded-packet fallback for historical fixtures.
+ * separate packet and is removed by the final-input builder. Both card-text
+ * variants rebuild the same minimal packet from complete card-text archive
+ * documents when available, with a bounded-packet fallback for historical
+ * fixtures. Their only difference is whether the independent Lua packet is
+ * present in the final input.
  */
 export function projectAdminModelEvidencePacket({
   snapshot,
@@ -49,7 +52,9 @@ export function projectAdminModelEvidencePacket({
   evidenceVariant = DEFAULT_ADMIN_EVIDENCE_VARIANT,
 } = {}) {
   const variant = normalizeAdminEvidenceVariant(evidenceVariant);
-  if (variant !== "card_text_only") return modelPacket;
+  if (variant !== "card_text_only" && variant !== "card_text_plus_lua") {
+    return modelPacket;
+  }
 
   const archiveItems = completeCardTextItemsFromArchive(snapshot?.evidence?.evidenceArchive);
   const fallbackItems = Array.isArray(modelPacket?.evidenceItems)
@@ -62,7 +67,8 @@ export function projectAdminModelEvidencePacket({
 }
 
 export function adminEvidenceVariantIncludesLegacyLua(value) {
-  return normalizeAdminEvidenceVariant(value) === "full";
+  const variant = normalizeAdminEvidenceVariant(value);
+  return variant === "full" || variant === "card_text_plus_lua";
 }
 
 export function hashAdminFinalInput(input) {

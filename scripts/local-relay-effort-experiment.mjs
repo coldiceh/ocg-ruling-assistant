@@ -543,7 +543,7 @@ function printHelp() {
 Options:
   --model <relay-gpt-5.6-sol|relay-gpt-5.6-terra|relay-gpt-5.6-luna>
   --effort <none|low|medium|high|xhigh|max>  Repeat to select efforts (default: all six)
-  --evidence-variant <full|card_text_only|without_lua>
+  --evidence-variant <full|card_text_only|card_text_plus_lua|without_lua>
                                               Evidence ablation (default: full)
   --case <case-id>                            Repeat to select cases (default: all)
   --recover-running-as-outcome-unknown        Seal interrupted submissions without retrying (resume only)
