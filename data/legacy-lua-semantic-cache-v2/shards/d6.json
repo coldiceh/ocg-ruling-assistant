@@ -7,8 +7,8 @@
       "cid": "13738",
       "passcode": "48468330",
       "aliases": [
-        "魔神童",
-        "terrifying toddler of torment"
+        "terrifying toddler of torment",
+        "魔神童"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1098,8 +1098,8 @@
       "cid": "22063",
       "passcode": "87750925",
       "aliases": [
-        "虚英雄ディスガイス",
-        "disguise, the copycat hero"
+        "disguise, the copycat hero",
+        "虚英雄ディスガイス"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -2433,5 +2433,5 @@
       }
     }
   ],
-  "shardContentSha256": "d1a1ca9e738af924fedb678f7107ab95ee4ad37346bc1e9d19723ec68056960c"
+  "shardContentSha256": "4cfa5f55069e0b38bc4f285b6023da22197da921bfd6bb74ca646cbe051b0547"
 }

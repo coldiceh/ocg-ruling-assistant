@@ -7,9 +7,9 @@
       "cid": "21790",
       "passcode": "10966439",
       "aliases": [
-        "棉花喵☆黯蜜",
         "marshmao☆yummy",
-        "マシュマオ☆ヤミー"
+        "マシュマオ☆ヤミー",
+        "棉花喵☆黯蜜"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1527,5 +1527,5 @@
       }
     }
   ],
-  "shardContentSha256": "cb16abf20378b48b96e0a450cc48e43c167117a719f57c02ed18e94f8be79512"
+  "shardContentSha256": "db11a98527c068e332fa3a56ebabd78dfe2ff4a931aa5c8253b16a86eb0e1eb1"
 }

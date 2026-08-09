@@ -7,9 +7,9 @@
       "cid": "18796",
       "passcode": "27132400",
       "aliases": [
-        "幻变骚灵・恶意无线提供者",
         "altergeist malwisp",
-        "オルターガイスト・マルウィスプ"
+        "オルターガイスト・マルウィスプ",
+        "幻变骚灵・恶意无线提供者"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1108,9 +1108,9 @@
       "cid": "12830",
       "passcode": "53819028",
       "aliases": [
+        "predaplant sarraceniant",
         "捕食植物 瓶子草蚁",
-        "捕食植物セラセニアント",
-        "predaplant sarraceniant"
+        "捕食植物セラセニアント"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -2329,9 +2329,9 @@
       "cid": "14413",
       "passcode": "56894757",
       "aliases": [
-        "魔女工艺・立体裁剪",
         "witchcrafter draping",
-        "ウィッチクラフト・ドレーピング"
+        "ウィッチクラフト・ドレーピング",
+        "魔女工艺・立体裁剪"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -3374,5 +3374,5 @@
       }
     }
   ],
-  "shardContentSha256": "fdbd2880eccf5afae19976e9131b6af15d551f4366b27258bf4792965df261ae"
+  "shardContentSha256": "c21c1498479ad44845fb5d8225e1602620ba1ddec2ec9205b923f4c42b045250"
 }

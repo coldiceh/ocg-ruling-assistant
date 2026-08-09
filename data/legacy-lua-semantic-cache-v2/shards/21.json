@@ -1080,9 +1080,9 @@
       "cid": "20480",
       "passcode": "54475145",
       "aliases": [
+        "heart of the blue-eyes",
         "寄托于心的青眼龙",
-        "心宿りし青眼竜",
-        "heart of the blue-eyes"
+        "心宿りし青眼竜"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -2860,5 +2860,5 @@
       }
     }
   ],
-  "shardContentSha256": "8f039dd7426a5bd13d82edc91ad0fddd1c6c65a833ae6bb9e27ee8f0126cf57d"
+  "shardContentSha256": "a06cd3ff4dd7d9c846d4eac16df1765b09b96a58ae62f77a29f3b99985d7c41a"
 }

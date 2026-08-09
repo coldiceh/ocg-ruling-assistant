@@ -7,9 +7,9 @@
       "cid": "11717",
       "passcode": "57477163",
       "aliases": [
-        "魔玩具・锁链羊",
         "frightfur sheep",
-        "デストーイ・チェーン・シープ"
+        "デストーイ・チェーン・シープ",
+        "魔玩具・锁链羊"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1528,9 +1528,9 @@
       "cid": "15261",
       "passcode": "81951640",
       "aliases": [
+        "unauthorized bootup device",
         "奇动装置 恣动机",
-        "奇動装置メイルファクター",
-        "unauthorized bootup device"
+        "奇動装置メイルファクター"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -2401,5 +2401,5 @@
       }
     }
   ],
-  "shardContentSha256": "53e9091ecafe91b21de18a7581c6f7fa4e378521e1dfd0005c2228e74f685d49"
+  "shardContentSha256": "a5aad510719cbdc336143d7373d6878797a5fafdcdfb16a4d6acce8cd14af927"
 }

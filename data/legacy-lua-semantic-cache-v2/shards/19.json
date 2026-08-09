@@ -7,9 +7,9 @@
       "cid": "19829",
       "passcode": "79627627",
       "aliases": [
-        "半缠鸟官-翻飞鸟",
+        "conbirdable",
         "半纏鳥官-コンバード",
-        "conbirdable"
+        "半缠鸟官-翻飞鸟"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1619,5 +1619,5 @@
       }
     }
   ],
-  "shardContentSha256": "141c8ccc811554e7e55c15bf956b2a189b68fa97f429abe277e2a7d040c003d0"
+  "shardContentSha256": "8f442175c26056983d94c9052f5a7ca8f257e5a82e65cafa6a241fbab83e67ae"
 }

@@ -1402,9 +1402,9 @@
       "cid": "12723",
       "passcode": "25451652",
       "aliases": [
+        "darklord morningstar",
         "堕天使 路西菲尔",
-        "堕天使ルシフェル",
-        "darklord morningstar"
+        "堕天使ルシフェル"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -3475,9 +3475,9 @@
       "cid": "12357",
       "passcode": "71703785",
       "aliases": [
+        "palladium oracle mahad",
         "守护神官 马哈德",
-        "守護神官マハード",
-        "palladium oracle mahad"
+        "守護神官マハード"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -4511,9 +4511,9 @@
       "cid": "12714",
       "passcode": "88412339",
       "aliases": [
+        "abyss actor - extras",
         "魔界剧团-群演",
-        "魔界劇団-エキストラ",
-        "abyss actor - extras"
+        "魔界劇団-エキストラ"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -5618,5 +5618,5 @@
       }
     }
   ],
-  "shardContentSha256": "774b04b353c9a38dcf9e20a6dce7322c194efc658c9e067faf9a8d594be2c440"
+  "shardContentSha256": "ec405d6b83d3edc871f00684713e5300c4a81bbd997a38a0028d324f53c5b7c0"
 }

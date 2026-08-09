@@ -7,8 +7,8 @@
       "cid": "10062",
       "passcode": "66499018",
       "aliases": [
-        "焔虎",
-        "flame tiger"
+        "flame tiger",
+        "焔虎"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1411,5 +1411,5 @@
       }
     }
   ],
-  "shardContentSha256": "8871ac8266521620da23f4a88978a9e57caf38b353135779c83d2e6ddbe9229b"
+  "shardContentSha256": "c701be1a874f86d51fe66f0ebc00820e54fb0d96543496a491d9bdf0f2852904"
 }

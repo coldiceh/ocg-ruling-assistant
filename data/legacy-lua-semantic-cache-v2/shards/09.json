@@ -7,8 +7,8 @@
       "cid": "14955",
       "passcode": "36795102",
       "aliases": [
-        "究極宝玉獣 レインボー・ドラゴン",
-        "crystal beast rainbow dragon"
+        "crystal beast rainbow dragon",
+        "究極宝玉獣 レインボー・ドラゴン"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -2090,5 +2090,5 @@
       }
     }
   ],
-  "shardContentSha256": "66db6df625aadd1905fee7c230121952ebf0c1b63f92f9fc481d4ef3363f9a97"
+  "shardContentSha256": "f477b4147e8da5eb49161ea57af568ebc5c865aec1622ca2186d9d39b37803e2"
 }

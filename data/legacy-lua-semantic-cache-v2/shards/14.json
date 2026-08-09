@@ -7,8 +7,8 @@
       "cid": "12128",
       "passcode": "76218313",
       "aliases": [
-        "破壊剣-ドラゴンバスターブレード",
-        "dragon buster destruction sword"
+        "dragon buster destruction sword",
+        "破壊剣-ドラゴンバスターブレード"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1048,9 +1048,9 @@
       "cid": "21783",
       "passcode": "85315450",
       "aliases": [
-        "绚岚豪火 凤尼克斯",
+        "radiant typhoon fonix, the great flame",
         "絢嵐豪火フォニクス",
-        "radiant typhoon fonix, the great flame"
+        "绚岚豪火 凤尼克斯"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -2246,5 +2246,5 @@
       }
     }
   ],
-  "shardContentSha256": "0001401629177b0397fbb988eb86dbb856a8e23668a4652d302d6c7437dde758"
+  "shardContentSha256": "d4d680214d0c06e6d444eb7659402e46a19c0cc9dc9edc31143fb45722c8a0a9"
 }

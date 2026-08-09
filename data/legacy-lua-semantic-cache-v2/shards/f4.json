@@ -7,9 +7,9 @@
       "cid": "18909",
       "passcode": "57357130",
       "aliases": [
-        "转生炎兽 黄鼠狼",
+        "salamangreat weasel",
         "転生炎獣ウィーゼル",
-        "salamangreat weasel"
+        "转生炎兽 黄鼠狼"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -928,8 +928,8 @@
       "cid": "15967",
       "passcode": "94821366",
       "aliases": [
-        "驚楽園の支配人 <∀rlechino>",
-        "amazement administrator arlekino"
+        "amazement administrator arlekino",
+        "驚楽園の支配人 <∀rlechino>"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -2261,5 +2261,5 @@
       }
     }
   ],
-  "shardContentSha256": "9af089e38fd0d9195e814f55d30b0a9ac4dc43a09d71bff283d40ede89283f79"
+  "shardContentSha256": "41c4b7036e385ef34d30f1e9dd3fb38d3d467d20825ffb4c1c7b625a70735fd1"
 }

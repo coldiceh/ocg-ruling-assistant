@@ -7,9 +7,9 @@
       "cid": "14814",
       "passcode": "41306080",
       "aliases": [
-        "凉飕飕@伊格尼斯者",
         "hiyari @ignister",
-        "ヒヤリ@イグニスター"
+        "ヒヤリ@イグニスター",
+        "凉飕飕@伊格尼斯者"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1104,9 +1104,9 @@
       "cid": "14064",
       "passcode": "90020780",
       "aliases": [
-        "忍尸",
         "shinobi necro",
-        "シノビネクロ"
+        "シノビネクロ",
+        "忍尸"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -2671,5 +2671,5 @@
       }
     }
   ],
-  "shardContentSha256": "ccb2c2b7367109e26ccf7e2f6cf7fe022c1a980415b59fd82a4e429631aabf46"
+  "shardContentSha256": "1904307a50953ff7e60bc025df064ccfefbdea53023133b7bbbb6acab924ad22"
 }

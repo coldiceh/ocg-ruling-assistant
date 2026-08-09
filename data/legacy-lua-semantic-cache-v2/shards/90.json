@@ -1606,9 +1606,9 @@
       "cid": "14855",
       "passcode": "24882256",
       "aliases": [
-        "火不死鸟@伊格尼斯者",
         "fire phoenix @ignister",
-        "ファイアフェニックス@イグニスター"
+        "ファイアフェニックス@イグニスター",
+        "火不死鸟@伊格尼斯者"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -4546,5 +4546,5 @@
       }
     }
   ],
-  "shardContentSha256": "e2be718314cc05a20e8ec67b3a0187db934ae3b7ba091e0900cf934f434138e6"
+  "shardContentSha256": "e21865ed94e268d2bbebdcd7e402c32d700da57ac4c1383e17e3a961970e925a"
 }

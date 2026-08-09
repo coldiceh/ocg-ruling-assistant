@@ -7,9 +7,9 @@
       "cid": "14567",
       "passcode": "65899613",
       "aliases": [
-        "蜂军-必中之图钉",
+        "battlewasp - pin the bullseye",
         "b・f-必中のピン",
-        "battlewasp - pin the bullseye"
+        "蜂军-必中之图钉"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1020,5 +1020,5 @@
       }
     }
   ],
-  "shardContentSha256": "e65c718fc1a8957d6f0838313692ce231998afa18768cf088bbf4be19dc2d14f"
+  "shardContentSha256": "24a273c4f1238ad580e5a683e656640028019ac1c03fdbce8819c5b85ffdafb9"
 }

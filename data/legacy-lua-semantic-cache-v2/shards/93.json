@@ -7,9 +7,9 @@
       "cid": "11633",
       "passcode": "62957424",
       "aliases": [
-        "彼岸恶鬼 利比欧谷",
+        "libic, malebranche of the burning abyss",
         "彼岸の悪鬼 リビオッコ",
-        "libic, malebranche of the burning abyss"
+        "彼岸恶鬼 利比欧谷"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -3007,5 +3007,5 @@
       }
     }
   ],
-  "shardContentSha256": "931318a7a7a155b85e15879f48ae176b912dbdb7446708f1a6c8928ef9072fa7"
+  "shardContentSha256": "e0aae99ed1c989f105fff229910dcbfa0a1bb320cf0b666a2c2fc0b8c0859492"
 }

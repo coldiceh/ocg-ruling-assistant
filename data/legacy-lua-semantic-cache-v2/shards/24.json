@@ -1091,9 +1091,9 @@
       "cid": "17403",
       "passcode": "13256226",
       "aliases": [
-        "元素-英雄 新宇侠之精灵",
+        "elemental hero spirit of neos",
         "e・hero スピリット・オブ・ネオス",
-        "elemental hero spirit of neos"
+        "元素-英雄 新宇侠之精灵"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -2908,9 +2908,9 @@
       "cid": "11183",
       "passcode": "34475451",
       "aliases": [
-        "工程列车 红色信号",
+        "construction train signal red",
         "工作列車シグナル・レッド",
-        "construction train signal red"
+        "工程列车 红色信号"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -4505,9 +4505,9 @@
       "cid": "12416",
       "passcode": "35191415",
       "aliases": [
-        "黑幻像之魔导",
         "magician of dark illusion",
-        "マジシャン・オブ・ブラック・イリュージョン"
+        "マジシャン・オブ・ブラック・イリュージョン",
+        "黑幻像之魔导"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -5610,5 +5610,5 @@
       }
     }
   ],
-  "shardContentSha256": "680ce46f546ac2a3b17bec30c87bc850bd6fe5073c0d72f5715db1ffa8761231"
+  "shardContentSha256": "24214f674180685154aacb2ef8e5f2269d2c80fa017bebc74577bccd670c8e54"
 }

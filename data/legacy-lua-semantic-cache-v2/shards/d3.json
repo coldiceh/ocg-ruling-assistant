@@ -7,8 +7,8 @@
       "cid": "12747",
       "passcode": "05489987",
       "aliases": [
-        "花札衛-桜に幕-",
-        "flower cardian cherry blossom with curtain"
+        "flower cardian cherry blossom with curtain",
+        "花札衛-桜に幕-"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -4228,5 +4228,5 @@
       }
     }
   ],
-  "shardContentSha256": "4153fe5eec4287c8701089406462adbdbff7d6410c66b97fb7ce833d8e0c3431"
+  "shardContentSha256": "c465ace600efe1d14f24e6c222addc14b89d85dc11c8867323f612a6e0b0b757"
 }

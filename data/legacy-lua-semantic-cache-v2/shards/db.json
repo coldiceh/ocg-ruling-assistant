@@ -7,9 +7,9 @@
       "cid": "22320",
       "passcode": "07656689",
       "aliases": [
-        "恩底弥翁的侍女 杰妮",
         "genni, the maid of endymion",
-        "エンディミオンの侍女ジェニー"
+        "エンディミオンの侍女ジェニー",
+        "恩底弥翁的侍女 杰妮"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1009,5 +1009,5 @@
       }
     }
   ],
-  "shardContentSha256": "4c0b6f136f4da204ba7f16f6e71e8130ee1c64b1688227490fdcaf3d3f3790db"
+  "shardContentSha256": "c7bc8a0332469ef1e2f0affaf1cfd88c1efe6b3ffb43fc8831e41649365bdfbd"
 }

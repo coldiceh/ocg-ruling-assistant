@@ -7,9 +7,9 @@
       "cid": "7956",
       "passcode": "14983497",
       "aliases": [
-        "霞之谷的幼怪鸟",
+        "mist valley baby roc",
         "霞の谷の幼怪鳥",
-        "mist valley baby roc"
+        "霞之谷的幼怪鸟"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -756,5 +756,5 @@
       }
     }
   ],
-  "shardContentSha256": "36ab2eeac7f53638bf55832e5539ae75c1429bf079b615893a34451648aabf02"
+  "shardContentSha256": "5f3b2177e5de443f4952092f181172fe9da43bdb6b2b869a8f28f147d3a32dad"
 }

@@ -7,8 +7,8 @@
       "cid": "14553",
       "passcode": "05298175",
       "aliases": [
-        "占い魔女 スィーちゃん",
-        "fortune fairy swee"
+        "fortune fairy swee",
+        "占い魔女 スィーちゃん"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1077,9 +1077,9 @@
       "cid": "16736",
       "passcode": "16474916",
       "aliases": [
-        "驱魔姐妹・以利斯",
         "exosister elis",
-        "エクソシスター・エリス"
+        "エクソシスター・エリス",
+        "驱魔姐妹・以利斯"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -2316,9 +2316,9 @@
       "cid": "13137",
       "passcode": "44179224",
       "aliases": [
+        "abyss actor - curtain raiser",
         "魔界剧团-启幕人",
-        "魔界劇団カーテン・ライザー",
-        "abyss actor - curtain raiser"
+        "魔界劇団カーテン・ライザー"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -3390,5 +3390,5 @@
       }
     }
   ],
-  "shardContentSha256": "86fac0081122b77e6ae6eb2f1fa9a0a040da0522db995d1c49719bccb7b79ead"
+  "shardContentSha256": "af1dd200d78f44ad0f7a1d97b2665ff6d9e3925d390b8203413536f52f0aa4d9"
 }

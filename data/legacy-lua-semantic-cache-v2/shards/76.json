@@ -1302,9 +1302,9 @@
       "cid": "12933",
       "passcode": "69610326",
       "aliases": [
+        "supreme king dragon darkwurm",
         "覇王眷竜ダークヴルム",
-        "霸王眷龙 暗黑亚龙",
-        "supreme king dragon darkwurm"
+        "霸王眷龙 暗黑亚龙"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -2602,5 +2602,5 @@
       }
     }
   ],
-  "shardContentSha256": "9d284325425b5e2d74f4b20c70fbf5c2f14cab921e37acb2040dc4fcf003f6d2"
+  "shardContentSha256": "0fc50b29b2deeaa1ec193c8d88b4ea84e660a47339e8703f39fe036cfa3ec8b2"
 }

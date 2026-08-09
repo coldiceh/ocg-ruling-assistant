@@ -7,9 +7,9 @@
       "cid": "15713",
       "passcode": "82913020",
       "aliases": [
-        "星圣 卡多克乌斯",
         "constellar caduceus",
-        "セイクリッド・カドケウス"
+        "セイクリッド・カドケウス",
+        "星圣 卡多克乌斯"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1195,5 +1195,5 @@
       }
     }
   ],
-  "shardContentSha256": "da07267a892b012230822e3b225d09401b160eec6b2ef4030930f8ba585d823b"
+  "shardContentSha256": "2394dc3b99db5470dd49886b55924311126deb4e483cebe6831e3839648ec347"
 }

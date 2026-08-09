@@ -7,9 +7,9 @@
       "cid": "15241",
       "passcode": "33296432",
       "aliases": [
+        "dogmatika adin, the enlightened",
         "教导之天启 亚丁",
-        "教導の天啓アディン",
-        "dogmatika adin, the enlightened"
+        "教導の天啓アディン"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1090,9 +1090,9 @@
       "cid": "11506",
       "passcode": "47728740",
       "aliases": [
-        "彼岸恶鬼 亚利几诺",
+        "alich, malebranche of the burning abyss",
         "彼岸の悪鬼 アリキーノ",
-        "alich, malebranche of the burning abyss"
+        "彼岸恶鬼 亚利几诺"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -2630,8 +2630,8 @@
       "cid": "15991",
       "passcode": "87468732",
       "aliases": [
-        "変導機咎 クロックアーク",
-        "clock arc"
+        "clock arc",
+        "変導機咎 クロックアーク"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -4080,9 +4080,9 @@
       "cid": "19513",
       "passcode": "91434208",
       "aliases": [
-        "白之轮回",
+        "white reincarnation",
         "白の輪廻",
-        "white reincarnation"
+        "白之轮回"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -5635,5 +5635,5 @@
       }
     }
   ],
-  "shardContentSha256": "0f08ecf90b920de3e1079e2a4c8565934963008f597058e3c51366d1b9112e01"
+  "shardContentSha256": "c2e78c1c51953a54ea71b7bb06f89e7e1aba2c8dcec130966f9de13a2e714d60"
 }

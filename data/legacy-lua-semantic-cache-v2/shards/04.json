@@ -7,9 +7,9 @@
       "cid": "11632",
       "passcode": "36553319",
       "aliases": [
-        "彼岸恶鬼 法法雷鲁",
+        "farfa, malebranche of the burning abyss",
         "彼岸の悪鬼 ファーファレル",
-        "farfa, malebranche of the burning abyss"
+        "彼岸恶鬼 法法雷鲁"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1489,5 +1489,5 @@
       }
     }
   ],
-  "shardContentSha256": "f9f681fb014438bbc276befe7c5a676b458d754386e4f84782eb312df8ee3dfa"
+  "shardContentSha256": "e0ec389862e27ed6dcad5daf097468e06aa34b5e02ddce5b2132ecaddd97498f"
 }

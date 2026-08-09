@@ -7,9 +7,9 @@
       "cid": "8554",
       "passcode": "29905795",
       "aliases": [
-        "魔轰神兽吉娃",
+        "the fabled chawa",
         "魔轟神獣チャワ",
-        "the fabled chawa"
+        "魔轰神兽吉娃"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1372,5 +1372,5 @@
       }
     }
   ],
-  "shardContentSha256": "65906ce17adf796094171c4ae33d6df7f6aff681612951274c7bc330a451f6a9"
+  "shardContentSha256": "541c3e8e8b22552a2828a70e029229e018282f1e187333a2584655cf81173650"
 }

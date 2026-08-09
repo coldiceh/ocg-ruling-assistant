@@ -7,9 +7,9 @@
       "cid": "21770",
       "passcode": "66100116",
       "aliases": [
-        "暴紫罗女巫",
         "vengeful witch",
-        "バイオレンス・ウィッチ"
+        "バイオレンス・ウィッチ",
+        "暴紫罗女巫"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1147,5 +1147,5 @@
       }
     }
   ],
-  "shardContentSha256": "57840363bf23f63a5089d64a012ead63b5e7f44fa135d9273d9309cb27a25f1c"
+  "shardContentSha256": "ed9ad1d958c9c6362bb62e2d138858dd3eb296e4b900c6dae260a3ca48d9bb00"
 }

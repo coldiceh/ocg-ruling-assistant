@@ -7,9 +7,9 @@
       "cid": "17784",
       "passcode": "54092240",
       "aliases": [
-        "至崇圣灵器",
         "celestial apparatus tesea",
-        "テセア聖霊器"
+        "テセア聖霊器",
+        "至崇圣灵器"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1109,5 +1109,5 @@
       }
     }
   ],
-  "shardContentSha256": "39926fc0bedc180388f6210eda349c848f4ce315191a5910de6fccc6f20bdec6"
+  "shardContentSha256": "417971a6025c34c777ee8bb8fc050db5b7ef73f8dd0215fe78bd5ab6eb8da49a"
 }

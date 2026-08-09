@@ -7,9 +7,9 @@
       "cid": "10860",
       "passcode": "24731453",
       "aliases": [
+        "snow plow hustle rustle",
         "除雪机关车 扫雪冲锋",
-        "除雪機関車ハッスル・ラッセル",
-        "snow plow hustle rustle"
+        "除雪機関車ハッスル・ラッセル"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1425,8 +1425,8 @@
       "cid": "20038",
       "passcode": "26857786",
       "aliases": [
-        "呪炎王 バースト・カースド",
-        "cursed fire king doom burst"
+        "cursed fire king doom burst",
+        "呪炎王 バースト・カースド"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -2726,9 +2726,9 @@
       "cid": "17442",
       "passcode": "29348048",
       "aliases": [
-        "仇尸・殇痕食腐者",
         "vendread scavenger",
-        "ヴェンデット・スカヴェンジャー"
+        "ヴェンデット・スカヴェンジャー",
+        "仇尸・殇痕食腐者"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -4336,9 +4336,9 @@
       "cid": "17063",
       "passcode": "45484331",
       "aliases": [
-        "守宝团・姬特",
         "springans kitt",
-        "スプリガンズ・キット"
+        "スプリガンズ・キット",
+        "守宝团・姬特"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -6577,5 +6577,5 @@
       }
     }
   ],
-  "shardContentSha256": "1871dafe67dac085596a93a27e8efa2aed6b2b5c8876c59a6e4235169da673b3"
+  "shardContentSha256": "407049241fdbde0c2b4e0e1ca0deca1ec2b40f6ea03f93e5b75394b7e683401e"
 }

@@ -7,9 +7,9 @@
       "cid": "7701",
       "passcode": "23571046",
       "aliases": [
-        "螺丝刺猬",
         "quillbolt hedgehog",
-        "ボルト・ヘッジホッグ"
+        "ボルト・ヘッジホッグ",
+        "螺丝刺猬"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -2564,5 +2564,5 @@
       }
     }
   ],
-  "shardContentSha256": "7d97a4ed484e259a48695668fc45b19aba50ffe5a44fb8909c9758620a6b2792"
+  "shardContentSha256": "9d1f79d7e87b767a2a6832c4eba5d4c54d974133c75e81e008f637b341a8818e"
 }

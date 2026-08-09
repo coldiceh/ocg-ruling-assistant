@@ -7,9 +7,9 @@
       "cid": "21782",
       "passcode": "53927851",
       "aliases": [
-        "绚岚涡丽 伐楼仑",
+        "radiant typhoon varuroon, the vibrant vortex",
         "絢嵐渦麗ヴァルルーン",
-        "radiant typhoon varuroon, the vibrant vortex"
+        "绚岚涡丽 伐楼仑"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -2426,5 +2426,5 @@
       }
     }
   ],
-  "shardContentSha256": "b679598a9bd3311c0a8a31f924566dce6d9889f4be443ee89ceb8e1e9512715c"
+  "shardContentSha256": "cfb95dd3cd29c1895259436722388f8aa022738d4514710101b71ce85a9894c7"
 }

@@ -7,9 +7,9 @@
       "cid": "15392",
       "passcode": "42052439",
       "aliases": [
-        "取火女郎",
         "fire flint lady",
-        "キリビ・レディ"
+        "キリビ・レディ",
+        "取火女郎"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1100,9 +1100,9 @@
       "cid": "11772",
       "passcode": "45593826",
       "aliases": [
-        "彼岸恶鬼 德拉格涅",
+        "draghig, malebranche of the burning abyss",
         "彼岸の悪鬼 ドラゴネル",
-        "draghig, malebranche of the burning abyss"
+        "彼岸恶鬼 德拉格涅"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -2530,9 +2530,9 @@
       "cid": "15689",
       "passcode": "69975751",
       "aliases": [
-        "龙骑兵团-草铁枪",
         "dragunity guisarme",
-        "ドラグニティ-ギザーム"
+        "ドラグニティ-ギザーム",
+        "龙骑兵团-草铁枪"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -3551,5 +3551,5 @@
       }
     }
   ],
-  "shardContentSha256": "9ba32ce6256686c5eccc4b754bc4613343330eba1043deb38551e0d4e8eeb903"
+  "shardContentSha256": "5596a601ad200b9d74da6abe87002d8640064a9b8081014732e0771a5430ce50"
 }

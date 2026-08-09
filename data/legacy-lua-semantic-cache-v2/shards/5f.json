@@ -7,9 +7,9 @@
       "cid": "15266",
       "passcode": "43218406",
       "aliases": [
+        "gizmek okami, the dreaded deluge dragon",
         "机巧辰-高暗御津羽靇",
-        "機巧辰-高闇御津羽靇",
-        "gizmek okami, the dreaded deluge dragon"
+        "機巧辰-高闇御津羽靇"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1317,9 +1317,9 @@
       "cid": "19874",
       "passcode": "83819309",
       "aliases": [
-        "冷却之火",
+        "cooling embers",
         "冷える火",
-        "cooling embers"
+        "冷却之火"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -2791,5 +2791,5 @@
       }
     }
   ],
-  "shardContentSha256": "5a7c3bfd840b180a848555978530aad6fc30d10efc0b0f4f041bf6ff6fc0b028"
+  "shardContentSha256": "0246104a0bd5282b61836c93d294eaf62fb01415916705e6b58b66728f5870bf"
 }

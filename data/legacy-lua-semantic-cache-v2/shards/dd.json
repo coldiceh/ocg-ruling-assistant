@@ -7,8 +7,8 @@
       "cid": "18172",
       "passcode": "26259179",
       "aliases": [
-        "交杯ace",
-        "couple of aces"
+        "couple of aces",
+        "交杯ace"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -3569,5 +3569,5 @@
       }
     }
   ],
-  "shardContentSha256": "7a46179e9f5ef333e68d1b67943e20ffd455edc4e673e9ef741fde7905efc61b"
+  "shardContentSha256": "90312ecf8776f4018d1a1ea98e1dd0093d78d0da7148add9e47fdd95f6da73a6"
 }

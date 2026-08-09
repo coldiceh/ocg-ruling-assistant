@@ -7,8 +7,8 @@
       "cid": "15732",
       "passcode": "00284224",
       "aliases": [
-        "双天将 密迹",
-        "dual avatar - empowered mitsu-jaku"
+        "dual avatar - empowered mitsu-jaku",
+        "双天将 密迹"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1776,8 +1776,8 @@
       "cid": "14550",
       "passcode": "06311717",
       "aliases": [
-        "占い魔女 ヒカリちゃん",
-        "fortune fairy hikari"
+        "fortune fairy hikari",
+        "占い魔女 ヒカリちゃん"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -2788,5 +2788,5 @@
       }
     }
   ],
-  "shardContentSha256": "8a99b3764bb484010115a9c8251db18f400bbe799b21b86f9650517ab9ef2070"
+  "shardContentSha256": "d2ccb3df2cddcb299b722bac76c54aba87c77172c1ab5a98d8960dbcc3d71e62"
 }

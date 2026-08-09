@@ -7,9 +7,9 @@
       "cid": "19157",
       "passcode": "10113611",
       "aliases": [
-        "电力黄鳍金枪鱼",
         "wattuna",
-        "エレキハダマグロ"
+        "エレキハダマグロ",
+        "电力黄鳍金枪鱼"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1309,9 +1309,9 @@
       "cid": "19470",
       "passcode": "99529628",
       "aliases": [
-        "游魊之胧 基夫",
         "keaf, murk of the ghoti",
-        "ゴーティスの朧キーフ"
+        "ゴーティスの朧キーフ",
+        "游魊之胧 基夫"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -2854,5 +2854,5 @@
       }
     }
   ],
-  "shardContentSha256": "5fc277cbd5473569d6ae03a99c8af6da052eb0ae241d46a0c732672dee589d9f"
+  "shardContentSha256": "672d4f2d80e1eb29a9273328098cc280d6c722cf17b5bf6c6f156a7678645391"
 }

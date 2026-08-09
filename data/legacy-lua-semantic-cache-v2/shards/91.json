@@ -1202,9 +1202,9 @@
       "cid": "19466",
       "passcode": "64257161",
       "aliases": [
-        "百鬼羅刹 冷血ミアンダ",
+        "goblin biker mean merciless",
         "格布林百罗刹 冷血米安达",
-        "goblin biker mean merciless"
+        "百鬼羅刹 冷血ミアンダ"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -2943,5 +2943,5 @@
       }
     }
   ],
-  "shardContentSha256": "9b8d8be48346f2cf2610d68402ad3c842de20422f5e131038ce0a0a0d72b3723"
+  "shardContentSha256": "46fef204e8ee4285a92669b010a9d0e1589dbbbde95b09dedcf5c25ce567a9f2"
 }

@@ -4,6 +4,7 @@ import {
   normalizeLegacyLuaPasscode,
 } from "./legacyLuaSemanticPacket.mjs";
 import {
+  comparePrecomputedLegacyLuaStableText,
   collectPrecomputedLegacyLuaRequestedIdentities,
   createPrecomputedLegacyLuaSemanticPacketFactory,
   normalizePrecomputedLegacyLuaAlias,
@@ -169,7 +170,8 @@ export function createPrecomputedLegacyLuaCacheManifest({
     );
   }
   const summaries = shardSummaries.map(validateShardSummary)
-    .sort((left, right) => left.descriptor.shardId.localeCompare(
+    .sort((left, right) => comparePrecomputedLegacyLuaStableText(
+      left.descriptor.shardId,
       right.descriptor.shardId,
     ));
   rejectDuplicates(
@@ -381,7 +383,7 @@ function selectShardIds(identities, indexes) {
       );
     }
   }
-  return [...selected].sort();
+  return [...selected].sort(comparePrecomputedLegacyLuaStableText);
 }
 
 function validateSelection(value) {
@@ -440,7 +442,7 @@ function validateShardSummary(value) {
         );
       }
       return normalized;
-    }))].sort();
+    }))].sort(comparePrecomputedLegacyLuaStableText);
     return { cid, passcode, aliases };
   });
   return { descriptor, identities };
@@ -498,7 +500,8 @@ function validateIndex(value, shardIds, validKey) {
         "manifest identity index contains an invalid key or shard list",
       );
     }
-    const normalized = [...new Set(rawShardIds)].sort();
+    const normalized = [...new Set(rawShardIds)]
+      .sort(comparePrecomputedLegacyLuaStableText);
     if (normalized.length !== rawShardIds.length ||
         normalized.some((item, index) => item !== rawShardIds[index] ||
           !shardIds.has(item))) {
@@ -521,7 +524,8 @@ function addIndexValue(index, key, shardId) {
 function normalizeIndexValues(indexes) {
   for (const index of Object.values(indexes)) {
     for (const key of Object.keys(index)) {
-      index[key] = [...new Set(index[key])].sort();
+      index[key] = [...new Set(index[key])]
+        .sort(comparePrecomputedLegacyLuaStableText);
     }
   }
 }
@@ -553,9 +557,12 @@ function validateShardPath(value, shardId) {
 }
 
 function compareEntries(left, right) {
-  return String(left.passcode).localeCompare(String(right.passcode)) ||
-    String(left.cid).localeCompare(String(right.cid)) ||
-    left.resource.resourceId.localeCompare(right.resource.resourceId);
+  return comparePrecomputedLegacyLuaStableText(left.passcode, right.passcode) ||
+    comparePrecomputedLegacyLuaStableText(left.cid, right.cid) ||
+    comparePrecomputedLegacyLuaStableText(
+      left.resource.resourceId,
+      right.resource.resourceId,
+    );
 }
 
 function normalizeTimestamp(value) {
@@ -609,7 +616,7 @@ function assertExactKeys(value, allowed, label) {
 }
 
 function assertSorted(values, message) {
-  const sorted = [...values].sort();
+  const sorted = [...values].sort(comparePrecomputedLegacyLuaStableText);
   if (values.some((value, index) => value !== sorted[index])) {
     throw contractError("LEGACY_LUA_PRECOMPUTED_MANIFEST_INVALID", message);
   }

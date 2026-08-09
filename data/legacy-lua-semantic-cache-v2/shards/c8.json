@@ -7,9 +7,9 @@
       "cid": "12621",
       "passcode": "16759958",
       "aliases": [
-        "芬芳炽天使-欧白芷",
         "aromaseraphy angelica",
-        "アロマセラフィ-アンゼリカ"
+        "アロマセラフィ-アンゼリカ",
+        "芬芳炽天使-欧白芷"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1613,9 +1613,9 @@
       "cid": "17361",
       "passcode": "48745395",
       "aliases": [
-        "白銀の城の魔神像",
+        "labrynth archfiend",
         "拉比丽斯的恶魔像",
-        "labrynth archfiend"
+        "白銀の城の魔神像"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -2768,5 +2768,5 @@
       }
     }
   ],
-  "shardContentSha256": "cb2b6bc15e0abb8d6ff500a320cf3bab00f9e5189eb793e3cf19473225cfc609"
+  "shardContentSha256": "36ef9ffa05e5c33ba1f24f875286a0b6a5ce1d95faf9bc42382e766bf36f2dce"
 }

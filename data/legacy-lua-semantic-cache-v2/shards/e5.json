@@ -7,9 +7,9 @@
       "cid": "19463",
       "passcode": "24079759",
       "aliases": [
-        "百鬼羅刹 特攻ダグ",
+        "goblin biker dugg charger",
         "格布林百罗刹 特攻达格",
-        "goblin biker dugg charger"
+        "百鬼羅刹 特攻ダグ"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1114,9 +1114,9 @@
       "cid": "15182",
       "passcode": "69838761",
       "aliases": [
-        "机甲部队・金属粉碎爪",
         "machina metalcruncher",
-        "マシンナーズ・メタルクランチ"
+        "マシンナーズ・メタルクランチ",
+        "机甲部队・金属粉碎爪"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -4003,8 +4003,8 @@
       "cid": "9973",
       "passcode": "80208158",
       "aliases": [
-        "異次元エスパー・スター・ロビン",
-        "d.d. esper star sparrow"
+        "d.d. esper star sparrow",
+        "異次元エスパー・スター・ロビン"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -5479,5 +5479,5 @@
       }
     }
   ],
-  "shardContentSha256": "34d5a0c57a819699618cd18b56cced352c0e105632482b464e7c78efa95f550e"
+  "shardContentSha256": "aaaefc5ad7260cb4a50455b4d1fae9fbc0a900e4a7e5f13f27986558ed73d33c"
 }

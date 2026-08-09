@@ -7,9 +7,9 @@
       "cid": "18010",
       "passcode": "56700100",
       "aliases": [
-        "我的朋友・皮尔莉",
         "my friend purrely",
-        "ピュアリィ・マイフレンド"
+        "ピュアリィ・マイフレンド",
+        "我的朋友・皮尔莉"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1957,5 +1957,5 @@
       }
     }
   ],
-  "shardContentSha256": "ab42388e3ac341672244e94203a1edd0aa2c47251e7548f024bef8a2b172ee8b"
+  "shardContentSha256": "0606c976d0dbf57aecd420fa593e9dded583be39af6f1530500181de38b52bf3"
 }

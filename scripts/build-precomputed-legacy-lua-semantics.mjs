@@ -13,6 +13,9 @@ import {
   validateLegacyLuaSemanticResource,
 } from "../backend/legacyLuaSemanticPacket.mjs";
 import {
+  comparePrecomputedLegacyLuaStableText,
+} from "../backend/legacyLuaSemanticStaticCacheFactory.mjs";
+import {
   createPrecomputedLegacyLuaCacheManifest,
   createPrecomputedLegacyLuaCacheShard,
   createPrecomputedLegacyLuaShardSummary,
@@ -332,7 +335,7 @@ async function findNewestRuntimeConfig(engineRoot, profileId) {
   }
   candidates.sort((left, right) => (
     right.createdAt - left.createdAt ||
-    right.configPath.localeCompare(left.configPath)
+    comparePrecomputedLegacyLuaStableText(right.configPath, left.configPath)
   ));
   if (!candidates[0]) {
     throw new Error(`No ${profileId} runtime config found below ${runtimeRoot}`);
@@ -398,7 +401,7 @@ function increment(counts, key) {
 
 function sortedCountObject(value) {
   return Object.fromEntries(Object.entries(value).sort(([left], [right]) =>
-    left.localeCompare(right)
+    comparePrecomputedLegacyLuaStableText(left, right)
   ));
 }
 

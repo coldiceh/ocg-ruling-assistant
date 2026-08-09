@@ -7,9 +7,9 @@
       "cid": "14352",
       "passcode": "29913783",
       "aliases": [
+        "super anti-kaiju war machine mecha-thunder-king",
         "对坏兽用决战兵器 机械雷霆王",
-        "対壊獣用決戦兵器メカサンダー・キング",
-        "super anti-kaiju war machine mecha-thunder-king"
+        "対壊獣用決戦兵器メカサンダー・キング"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1185,5 +1185,5 @@
       }
     }
   ],
-  "shardContentSha256": "4de85f35979ec5539e49f8fe1629350752b164602eb93be23f5b2a1f3e6888df"
+  "shardContentSha256": "b3e3ed2ded9c2d3d35fa84cfbc0cc9d722e3616954e8c3af898c75f3235fc0cb"
 }

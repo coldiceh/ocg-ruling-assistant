@@ -7,9 +7,9 @@
       "cid": "15009",
       "passcode": "32422602",
       "aliases": [
+        "ancient warriors - ingenious zhuge kong",
         "战华之智-诸葛孔",
-        "戦華の智-諸葛孔",
-        "ancient warriors - ingenious zhuge kong"
+        "戦華の智-諸葛孔"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1170,5 +1170,5 @@
       }
     }
   ],
-  "shardContentSha256": "6a9c332c593623ab82f88400b80f96286e001ccbef224458c104a4b8a7fead0e"
+  "shardContentSha256": "13e77bc6dcde07b3a942f3d586a8b71fd0d4ec28fe94eeb6a09cc1f064c79667"
 }

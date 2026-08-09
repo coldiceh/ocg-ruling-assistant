@@ -7,9 +7,9 @@
       "cid": "22512",
       "passcode": "56838842",
       "aliases": [
-        "噩块魔像",
         "fiend piece golem",
-        "デモン・ピース・ゴーレム"
+        "デモン・ピース・ゴーレム",
+        "噩块魔像"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1214,5 +1214,5 @@
       }
     }
   ],
-  "shardContentSha256": "e5e8bb4d9570f169bee626fb61a07b43b2862291a3785a671e1c5f211b7d7d18"
+  "shardContentSha256": "a131ca8aaf516a2d88ff98b6fa88bd3bc489cbf0c87b2e565c9913efe536697c"
 }

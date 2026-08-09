@@ -7,9 +7,9 @@
       "cid": "6558",
       "passcode": "44330098",
       "aliases": [
-        "冥府之使者格斯",
+        "gorz the emissary of darkness",
         "冥府の使者ゴーズ",
-        "gorz the emissary of darkness"
+        "冥府之使者格斯"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1277,9 +1277,9 @@
       "cid": "19362",
       "passcode": "81677154",
       "aliases": [
-        "冥铭途・海马",
         "mementotlan tatsunootoshigo",
-        "メメント・シーホース"
+        "メメント・シーホース",
+        "冥铭途・海马"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -2308,5 +2308,5 @@
       }
     }
   ],
-  "shardContentSha256": "e61ea868bf9ab97e17819af170a682267afd9691ed933e2cc0542c678e6d8ed0"
+  "shardContentSha256": "f1e22b8a5baf3836e8e9062d527a44e183b278f6ae5d5119226f89213f716ffe"
 }

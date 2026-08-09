@@ -7,9 +7,9 @@
       "cid": "12144",
       "passcode": "98301564",
       "aliases": [
-        "解放之阿里阿德涅",
+        "guiding ariadne",
         "解放のアリアドネ",
-        "guiding ariadne"
+        "解放之阿里阿德涅"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1520,8 +1520,8 @@
       "cid": "11423",
       "passcode": "99733359",
       "aliases": [
-        "盾航戦車ステゴサイバー",
-        "stegocyber"
+        "stegocyber",
+        "盾航戦車ステゴサイバー"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -3226,5 +3226,5 @@
       }
     }
   ],
-  "shardContentSha256": "e732a99fd16f657777925e54e7ed3d0eb89aa1e99230b370805b1cb14ef9d849"
+  "shardContentSha256": "339480c2013941847c56841ed18b4f81b6da0d499b537491d29f78a1395aed52"
 }

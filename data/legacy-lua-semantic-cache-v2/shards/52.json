@@ -7,9 +7,9 @@
       "cid": "14922",
       "passcode": "59724555",
       "aliases": [
-        "怒怒怒矮人-隆隆隆手套",
         "dodododwarf gogogoglove",
-        "ドドドドワーフ-gg"
+        "ドドドドワーフ-gg",
+        "怒怒怒矮人-隆隆隆手套"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1674,5 +1674,5 @@
       }
     }
   ],
-  "shardContentSha256": "7d23eddea32e726b37f5a9f35a81115cbaeb7c741ac420036283e4dc710d4362"
+  "shardContentSha256": "67afb41e70d2b5697bd29d41569221d7322fd3d7ed401be5e852e5efcf29b534"
 }

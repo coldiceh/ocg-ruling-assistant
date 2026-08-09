@@ -7,9 +7,9 @@
       "cid": "19864",
       "passcode": "59481082",
       "aliases": [
-        "光道之龙",
+        "lightsworn dragonling",
         "光道の龍",
-        "lightsworn dragonling"
+        "光道之龙"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1193,5 +1193,5 @@
       }
     }
   ],
-  "shardContentSha256": "a99156c0f4d7546f421b6bf548b0461aa048ed9ec7bfcd22d006331ab6761e45"
+  "shardContentSha256": "55439bde8187ee19dce14cf7946d4a455e362553dbc2878d41838bebdbf44265"
 }

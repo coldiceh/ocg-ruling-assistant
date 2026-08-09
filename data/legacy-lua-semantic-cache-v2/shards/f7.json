@@ -7,9 +7,9 @@
       "cid": "19168",
       "passcode": "71545247",
       "aliases": [
-        "離世召人形",
+        "cursed bride doll",
         "于归世佳偶",
-        "cursed bride doll"
+        "離世召人形"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -2829,5 +2829,5 @@
       }
     }
   ],
-  "shardContentSha256": "cbc3d9173281e807621f5e9342428c6c18e1024712a925b6fe5a8e72eaec011a"
+  "shardContentSha256": "974fac9cc1ca4907ee858f36f514146834210c5e39227893bf636bb502a32d2a"
 }

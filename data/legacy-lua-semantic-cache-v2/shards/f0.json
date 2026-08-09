@@ -7,9 +7,9 @@
       "cid": "11505",
       "passcode": "00734741",
       "aliases": [
-        "彼岸恶鬼 路比冈德",
+        "rubic, malebranche of the burning abyss",
         "彼岸の悪鬼 ラビキャント",
-        "rubic, malebranche of the burning abyss"
+        "彼岸恶鬼 路比冈德"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1338,8 +1338,8 @@
       "cid": "7981",
       "passcode": "30915572",
       "aliases": [
-        "星見獣ガリス",
-        "gallis the star beast"
+        "gallis the star beast",
+        "星見獣ガリス"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -2630,9 +2630,9 @@
       "cid": "13586",
       "passcode": "46247282",
       "aliases": [
-        "铁骑龙提亚马顿",
+        "iron dragon tiamaton",
         "鉄騎龍ティアマトン",
-        "iron dragon tiamaton"
+        "铁骑龙提亚马顿"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -4655,9 +4655,9 @@
       "cid": "19741",
       "passcode": "69925461",
       "aliases": [
-        "玩具坦克",
         "toy tank",
-        "トイ・タンク"
+        "トイ・タンク",
+        "玩具坦克"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -5718,5 +5718,5 @@
       }
     }
   ],
-  "shardContentSha256": "6e0d936281be78807df2ff5bbf5895ed3339e387242f33f5abf80ccb3efd3010"
+  "shardContentSha256": "04f4818bcc7e78c5a222c8a8a6d5518bd99e941207d904912ef3803dee9f4560"
 }

@@ -7,9 +7,9 @@
       "cid": "17438",
       "passcode": "94076521",
       "aliases": [
-        "水界的秘石-卡特林",
+        "cartorhyn the hidden gem of the seafront",
         "水界の秘石-カトリン",
-        "cartorhyn the hidden gem of the seafront"
+        "水界的秘石-卡特林"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -2959,5 +2959,5 @@
       }
     }
   ],
-  "shardContentSha256": "2cae4286b3f296f24dfe8ff73237a3f7a2f6853dba68a75349cb81ffe2b4be34"
+  "shardContentSha256": "2ed3b35733c6d24e7efb3ca1fd228883570e6aea48aac1c0291647e7b9cc8aea"
 }

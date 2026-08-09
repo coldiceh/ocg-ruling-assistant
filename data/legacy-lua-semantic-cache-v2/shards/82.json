@@ -7,9 +7,9 @@
       "cid": "14165",
       "passcode": "39392286",
       "aliases": [
-        "神鹰调香师",
         "harpie perfumer",
-        "ハーピィ・パフューマー"
+        "ハーピィ・パフューマー",
+        "神鹰调香师"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1523,9 +1523,9 @@
       "cid": "20760",
       "passcode": "52854600",
       "aliases": [
-        "天威龙-素露雅",
+        "tenyi spirit - suruya",
         "天威龍-スールヤ",
-        "tenyi spirit - suruya"
+        "天威龙-素露雅"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -2641,9 +2641,9 @@
       "cid": "13889",
       "passcode": "67225377",
       "aliases": [
-        "转生炎兽 狐猛",
+        "salamangreat meer",
         "転生炎獣ミーア",
-        "salamangreat meer"
+        "转生炎兽 狐猛"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -3711,9 +3711,9 @@
       "cid": "15053",
       "passcode": "70226289",
       "aliases": [
-        "魔女工艺・演示",
         "witchcrafter unveiling",
-        "ウィッチクラフト・デモンストレーション"
+        "ウィッチクラフト・デモンストレーション",
+        "魔女工艺・演示"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -4825,8 +4825,8 @@
       "cid": "13582",
       "passcode": "70975131",
       "aliases": [
-        "番猫-ウォッチキャット",
-        "watch cat"
+        "watch cat",
+        "番猫-ウォッチキャット"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -6242,9 +6242,9 @@
       "cid": "8770",
       "passcode": "91215724",
       "aliases": [
-        "废品装甲",
         "junk armor",
-        "ジャンク・アーマー"
+        "ジャンク・アーマー",
+        "废品装甲"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -7259,5 +7259,5 @@
       }
     }
   ],
-  "shardContentSha256": "62efba18015181efa722532b9f1cc9f0658675cf238084f13c6222444c406545"
+  "shardContentSha256": "a09e4053b0d3ca15603e33efbcccf5cc8df109f025c6ad6ed1a81c4770010afe"
 }

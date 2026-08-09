@@ -1131,9 +1131,9 @@
       "cid": "14457",
       "passcode": "24557335",
       "aliases": [
-        "天威龙-休塔纳",
+        "tenyi spirit - shthana",
         "天威龍-シュターナ",
-        "tenyi spirit - shthana"
+        "天威龙-休塔纳"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -2188,9 +2188,9 @@
       "cid": "15239",
       "passcode": "60303688",
       "aliases": [
+        "dogmatika ecclesia, the virtuous",
         "教导之圣女 艾克利西亚",
-        "教導の聖女エクレシア",
-        "dogmatika ecclesia, the virtuous"
+        "教導の聖女エクレシア"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -3359,9 +3359,9 @@
       "cid": "21786",
       "passcode": "84693918",
       "aliases": [
-        "音服和弦・索露菲基娅",
         "solfachord solfegia",
-        "ドレミコード・ソルフェージア"
+        "ドレミコード・ソルフェージア",
+        "音服和弦・索露菲基娅"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -5526,5 +5526,5 @@
       }
     }
   ],
-  "shardContentSha256": "095a5924a80384126a39e6a065914e022572e9c21c2e1daf486670c87b8ddb68"
+  "shardContentSha256": "937d24a0bf6814b8bf87643eb4fba39a26ba40facbec69ab0322ac9c11135393"
 }

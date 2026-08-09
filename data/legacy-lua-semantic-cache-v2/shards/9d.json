@@ -891,9 +891,9 @@
       "cid": "19182",
       "passcode": "20145685",
       "aliases": [
-        "超量装甲・要塞",
         "xyz armor fortress",
-        "エクシーズ・アーマー・フォートレス"
+        "エクシーズ・アーマー・フォートレス",
+        "超量装甲・要塞"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -2609,5 +2609,5 @@
       }
     }
   ],
-  "shardContentSha256": "8309fcbee17c40813ea8ab3cfbb617b581d68f45c0a30517b0345f36dadb7fee"
+  "shardContentSha256": "c10075a87608011a7b458c7017a234d13512931ab0c5bb99be3322c1f667250b"
 }

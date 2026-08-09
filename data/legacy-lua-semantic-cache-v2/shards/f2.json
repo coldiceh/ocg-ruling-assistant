@@ -1028,8 +1028,8 @@
       "cid": "16217",
       "passcode": "83116692",
       "aliases": [
-        "死眼の伝霊-プシュコポンポス",
-        "doombearer psychopompos"
+        "doombearer psychopompos",
+        "死眼の伝霊-プシュコポンポス"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -2463,5 +2463,5 @@
       }
     }
   ],
-  "shardContentSha256": "99920a57a197d6648ad7c26003c0d678b7de555cb3afdf2648cb9b5515790a84"
+  "shardContentSha256": "5be4a8c78174183ba4159b0e4bcc29ea66ddabba5c5fbc295b01c4e692734d28"
 }

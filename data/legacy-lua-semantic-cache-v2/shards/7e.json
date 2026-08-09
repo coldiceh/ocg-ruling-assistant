@@ -7,9 +7,9 @@
       "cid": "14821",
       "passcode": "76416959",
       "aliases": [
+        "ancient warriors - loyal guan yun",
         "战华之义-关云",
-        "戦華の義-関雲",
-        "ancient warriors - loyal guan yun"
+        "戦華の義-関雲"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1063,5 +1063,5 @@
       }
     }
   ],
-  "shardContentSha256": "7de6770b6cc03026cd17c72f4e265c4d4e56be444521883e3c3b6a265a7ecb2d"
+  "shardContentSha256": "5fb20123de7408ecc854b1c4969d860b4c1b8790a23b954330925abea9f67505"
 }

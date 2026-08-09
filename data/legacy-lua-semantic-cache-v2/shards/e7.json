@@ -7,9 +7,9 @@
       "cid": "17064",
       "passcode": "82489470",
       "aliases": [
-        "轩辕的相剑师",
+        "the golden swordsoul",
         "軒轅の相剣師",
-        "the golden swordsoul"
+        "轩辕的相剑师"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1600,5 +1600,5 @@
       }
     }
   ],
-  "shardContentSha256": "e382a592d811b250f9944bf5435f7e8e09c23d508d2430bcdfa6e4545eefd4c8"
+  "shardContentSha256": "5636d66d8c7cbc359f7b0c60bcfc6bc0872225da3aac2d3da48d7ea38e865caa"
 }

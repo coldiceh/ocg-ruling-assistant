@@ -7,9 +7,9 @@
       "cid": "8392",
       "passcode": "59755122",
       "aliases": [
-        "龙骑兵团-方阵",
         "dragunity phalanx",
-        "ドラグニティ-ファランクス"
+        "ドラグニティ-ファランクス",
+        "龙骑兵团-方阵"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -760,5 +760,5 @@
       }
     }
   ],
-  "shardContentSha256": "1872684e80076f3dda842c7d1ad35f6fb35c9ba143173beaf2abe567f40f71fe"
+  "shardContentSha256": "6fc69222f271c010c38cb71b1d7d41daefc1c64fc6f3adedc00932b9bcd0c166"
 }

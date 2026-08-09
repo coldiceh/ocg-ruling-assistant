@@ -7,9 +7,9 @@
       "cid": "11634",
       "passcode": "09342162",
       "aliases": [
-        "彼岸恶鬼 哈洛杭德",
+        "cagna, malebranche of the burning abyss",
         "彼岸の悪鬼 ハロウハウンド",
-        "cagna, malebranche of the burning abyss"
+        "彼岸恶鬼 哈洛杭德"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1448,9 +1448,9 @@
       "cid": "21954",
       "passcode": "43904702",
       "aliases": [
-        "杀手旋律・酷莉普",
         "kewl tune clip",
-        "キラーチューン・クリップ"
+        "キラーチューン・クリップ",
+        "杀手旋律・酷莉普"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -4448,8 +4448,8 @@
       "cid": "17622",
       "passcode": "84813516",
       "aliases": [
-        "鉄球魔神ゴロゴーン",
-        "thunder ball"
+        "thunder ball",
+        "鉄球魔神ゴロゴーン"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -5582,9 +5582,9 @@
       "cid": "18789",
       "passcode": "97682931",
       "aliases": [
-        "革命同步士",
         "revolution synchron",
-        "レボリューション・シンクロン"
+        "レボリューション・シンクロン",
+        "革命同步士"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -7467,5 +7467,5 @@
       }
     }
   ],
-  "shardContentSha256": "ec16b549dedf8f44634c7f03c0fee865882017f97f9fc9d49fa2b02ac03bec44"
+  "shardContentSha256": "1efdb278dbf58cfff5ebb07c98d44caf55c1e65db8135fb7b05face4ec6b2067"
 }

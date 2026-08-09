@@ -7,9 +7,9 @@
       "cid": "16493",
       "passcode": "55273560",
       "aliases": [
-        "白之圣女 艾克利西亚",
+        "incredible ecclesia, the virtuous",
         "白の聖女エクレシア",
-        "incredible ecclesia, the virtuous"
+        "白之圣女 艾克利西亚"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -2496,5 +2496,5 @@
       }
     }
   ],
-  "shardContentSha256": "bb01514e28e549e12bf84e52cade46ccdf05680a5704b8209fc20b01b49a2f2f"
+  "shardContentSha256": "8013d4c6dad0de93c6a81214a7ad80cb92bf30c4a64ec7263f5e2c3019a3d1b5"
 }

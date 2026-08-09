@@ -7,9 +7,9 @@
       "cid": "14644",
       "passcode": "14169843",
       "aliases": [
-        "芬芳法师-月桂",
         "aromage laurel",
-        "アロマージ-ローリエ"
+        "アロマージ-ローリエ",
+        "芬芳法师-月桂"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1726,9 +1726,9 @@
       "cid": "22511",
       "passcode": "19434243",
       "aliases": [
-        "力量恶龙",
         "power vice dragon",
-        "パワー・バイス・ドラゴン"
+        "パワー・バイス・ドラゴン",
+        "力量恶龙"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -3835,5 +3835,5 @@
       }
     }
   ],
-  "shardContentSha256": "d0879a97f3b3e552e666ae8beef1b47e61b94412c9707ce82328ac31a9b5ae3c"
+  "shardContentSha256": "7f04d1a47f7d24295fcfdb4b5c0ab9fd03573e6c348e184baba9b26694e8d6ea"
 }

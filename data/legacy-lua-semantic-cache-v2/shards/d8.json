@@ -7,9 +7,9 @@
       "cid": "15983",
       "passcode": "26914168",
       "aliases": [
-        "暗黑奥尼斯特",
         "dark honest",
-        "ダーク・オネスト"
+        "ダーク・オネスト",
+        "暗黑奥尼斯特"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -967,9 +967,9 @@
       "cid": "14843",
       "passcode": "37061511",
       "aliases": [
-        "水勒维亚坦@伊格尼斯者",
         "water leviathan @ignister",
-        "ウォーターリヴァイアサン@イグニスター"
+        "ウォーターリヴァイアサン@イグニスター",
+        "水勒维亚坦@伊格尼斯者"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -2450,5 +2450,5 @@
       }
     }
   ],
-  "shardContentSha256": "4a43fecaa12c1c2284b843de96fd51ba72dba2336f6d2eec5372a404e29a18dd"
+  "shardContentSha256": "35fc3b30a67cdd44c95166db2a2e3940be9965d0a8728fb2e85129b472cf0395"
 }

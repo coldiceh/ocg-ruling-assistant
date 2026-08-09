@@ -7,9 +7,9 @@
       "cid": "12028",
       "passcode": "69304426",
       "aliases": [
-        "古遗物-伐折罗",
         "artifact vajra",
-        "アーティファクト-ヴァジュラ"
+        "アーティファクト-ヴァジュラ",
+        "古遗物-伐折罗"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -2205,9 +2205,9 @@
       "cid": "14251",
       "passcode": "86605184",
       "aliases": [
-        "防火墙守护者",
         "firewall guardian",
-        "ファイアウォール・ガーディアン"
+        "ファイアウォール・ガーディアン",
+        "防火墙守护者"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -3864,5 +3864,5 @@
       }
     }
   ],
-  "shardContentSha256": "d3961a2091840a9c32b163f3e284705c247f1787afe02850985466c62d76724c"
+  "shardContentSha256": "eecb80f1fbfc39bb22ea2a24aa7866d67802c49db10b9d25146631f2198f6564"
 }

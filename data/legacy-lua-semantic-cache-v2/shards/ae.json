@@ -7,9 +7,9 @@
       "cid": "7734",
       "passcode": "44508094",
       "aliases": [
-        "星尘龙",
         "stardust dragon",
-        "スターダスト・ドラゴン"
+        "スターダスト・ドラゴン",
+        "星尘龙"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1003,5 +1003,5 @@
       }
     }
   ],
-  "shardContentSha256": "9b027f675b5030c8d89c37e28f2b3079a59ebff6a6e8b7c96e51897f6cba064a"
+  "shardContentSha256": "4482c0425fc24931567d9f3f9660bbe1cd13426c1eaeb5b95f264e25d4d20ff1"
 }

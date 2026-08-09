@@ -893,9 +893,9 @@
       "cid": "16196",
       "passcode": "99456344",
       "aliases": [
-        "惨绝戏之大导剧神",
         "dramaturge of despia",
-        "デスピアの大導劇神"
+        "デスピアの大導劇神",
+        "惨绝戏之大导剧神"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -2045,5 +2045,5 @@
       }
     }
   ],
-  "shardContentSha256": "c509893203dc349e3f3e92f03daf2becaa006a2d59117df6416ce831c1d8bcd3"
+  "shardContentSha256": "2ce2c7343a21e5feef8df989de6025106184a0c652a0f3c74089983d20bf74d8"
 }

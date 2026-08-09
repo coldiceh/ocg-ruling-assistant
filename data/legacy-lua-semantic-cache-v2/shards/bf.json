@@ -7,9 +7,9 @@
       "cid": "11773",
       "passcode": "81992475",
       "aliases": [
-        "彼岸恶鬼 巴巴利却",
+        "barbar, malebranche of the burning abyss",
         "彼岸の悪鬼 バルバリッチャ",
-        "barbar, malebranche of the burning abyss"
+        "彼岸恶鬼 巴巴利却"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1434,5 +1434,5 @@
       }
     }
   ],
-  "shardContentSha256": "d3aa75c0609872eef37b10e7609b90772123d22733461cb6c28979be5967d13b"
+  "shardContentSha256": "af970e88fa352db9035860318fece36374918bfe7f5c37d9c4ec09616d5dd764"
 }

@@ -7,9 +7,9 @@
       "cid": "18456",
       "passcode": "59900655",
       "aliases": [
-        "黄金荣耀-硝化头",
         "gold pride - nytro head",
-        "gp-nヘッド"
+        "gp-nヘッド",
+        "黄金荣耀-硝化头"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1278,9 +1278,9 @@
       "cid": "18457",
       "passcode": "96305350",
       "aliases": [
-        "黄金荣耀-船长卡莉",
         "gold pride - captain carrie",
-        "gp-キャプテン・キャリー"
+        "gp-キャプテン・キャリー",
+        "黄金荣耀-船长卡莉"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -2535,5 +2535,5 @@
       }
     }
   ],
-  "shardContentSha256": "061a9e594c5446d1078905b4b58d6d78e0a9ee3877cb60f18ba20e8d34f2e1df"
+  "shardContentSha256": "3e2fe9c73344757e57571312f000013f6e0f6487bb87022999b86c5c1a094729"
 }

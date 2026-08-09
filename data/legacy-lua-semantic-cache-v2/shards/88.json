@@ -1626,9 +1626,9 @@
       "cid": "16219",
       "passcode": "46999905",
       "aliases": [
-        "绊醒师 塞姆贝尔",
+        "saambell the star bonder",
         "絆醒師セームベル",
-        "saambell the star bonder"
+        "绊醒师 塞姆贝尔"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -2854,5 +2854,5 @@
       }
     }
   ],
-  "shardContentSha256": "6168eede8483aaad7205dc229b6c18e62e233b4a47c76d7fb76e3c18597d17e4"
+  "shardContentSha256": "1f808d24e98a8a90b55b7b52efcdfb4f6f61905e54035371c4ef39db8de57d10"
 }

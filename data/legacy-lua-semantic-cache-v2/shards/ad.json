@@ -7,9 +7,9 @@
       "cid": "19861",
       "passcode": "60203670",
       "aliases": [
-        "黄金荣耀-暗袭手",
         "gold pride - eliminator",
-        "gp-アサシネーター"
+        "gp-アサシネーター",
+        "黄金荣耀-暗袭手"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1278,8 +1278,8 @@
       "cid": "5724",
       "passcode": "69243953",
       "aliases": [
-        "蝶の短剣-エルマ",
-        "butterfly dagger - elma"
+        "butterfly dagger - elma",
+        "蝶の短剣-エルマ"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -2391,5 +2391,5 @@
       }
     }
   ],
-  "shardContentSha256": "191ec8b0edbc11e9be52d1ef544cfb7ec7d0d7792655a122004cc4d8cc4dab1d"
+  "shardContentSha256": "33e3508b9e2b73104b341f4f74ddfdae5f406e7cfc2dbdaaec13a773b29fa9de"
 }

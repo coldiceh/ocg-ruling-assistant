@@ -8,8 +8,8 @@
       "passcode": "27564031",
       "aliases": [
         "malefic world",
-        "sin 世界",
-        "sin world"
+        "sin world",
+        "sin 世界"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1741,9 +1741,9 @@
       "cid": "20383",
       "passcode": "46789706",
       "aliases": [
+        "detonating kuriboh",
         "机雷化的库里波",
-        "機雷化するクリボー",
-        "detonating kuriboh"
+        "機雷化するクリボー"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -2923,5 +2923,5 @@
       }
     }
   ],
-  "shardContentSha256": "8d05d832a457bdcb42a54b86d533845fe6292c425237bc8459030260b103ea7f"
+  "shardContentSha256": "d23cd617c95c1fcb7f6f049ac9110e384eeead98ab830e66d01b343588877b67"
 }

@@ -1333,8 +1333,8 @@
       "cid": "16832",
       "passcode": "87116749",
       "aliases": [
-        "游覧艇サブマリード",
-        "submareed tour ride"
+        "submareed tour ride",
+        "游覧艇サブマリード"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -2240,5 +2240,5 @@
       }
     }
   ],
-  "shardContentSha256": "f8e036d7d025cef16123da2a8f1e26f3e4509e5cc98323acf9dfddb7e0e78476"
+  "shardContentSha256": "003043d9ad3f124e2d66705bc0ff94084203e184f9f35de1a3fb54dea74abfab"
 }

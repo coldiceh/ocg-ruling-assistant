@@ -7,8 +7,8 @@
       "cid": "11198",
       "passcode": "20579538",
       "aliases": [
-        "森羅の姫芽君 スプラウト",
-        "sylvan princessprout"
+        "sylvan princessprout",
+        "森羅の姫芽君 スプラウト"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1571,8 +1571,8 @@
       "cid": "14552",
       "passcode": "79890560",
       "aliases": [
-        "占い魔女 フウちゃん",
-        "fortune fairy hu"
+        "fortune fairy hu",
+        "占い魔女 フウちゃん"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -2583,5 +2583,5 @@
       }
     }
   ],
-  "shardContentSha256": "381303e1f745f7fea551d82bae8f77efae0a3184f29829c161400871b2cdebf9"
+  "shardContentSha256": "03df35be9bfebb9fa915dfb42d19be3f252888f2fcaa6923dd0e815887c82d5e"
 }

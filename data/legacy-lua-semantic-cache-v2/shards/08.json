@@ -953,9 +953,9 @@
       "cid": "13045",
       "passcode": "98700941",
       "aliases": [
-        "淘气仙星・莉莉贝尔",
         "trickstar lilybell",
-        "トリックスター・リリーベル"
+        "トリックスター・リリーベル",
+        "淘气仙星・莉莉贝尔"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -2180,5 +2180,5 @@
       }
     }
   ],
-  "shardContentSha256": "1bd087de31fb263d6fbd56811ceb3e3ced7e36bba2884440c82ee0e83b6d3ae2"
+  "shardContentSha256": "681d6e930c007bc21e37f44d10676f9ebaca41c1431209ca48249e3fd19de66c"
 }

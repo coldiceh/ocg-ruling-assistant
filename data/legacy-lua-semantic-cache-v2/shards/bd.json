@@ -7,9 +7,9 @@
       "cid": "11949",
       "passcode": "41141943",
       "aliases": [
+        "superheavy samurai transporter",
         "超重武者 飞脚-q",
-        "超重武者ヒキャ-q",
-        "superheavy samurai transporter"
+        "超重武者ヒキャ-q"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1983,8 +1983,8 @@
       "cid": "17775",
       "passcode": "66069967",
       "aliases": [
-        "占術姫ビブリオムーサ",
-        "prediction princess bibliomuse"
+        "prediction princess bibliomuse",
+        "占術姫ビブリオムーサ"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -3191,5 +3191,5 @@
       }
     }
   ],
-  "shardContentSha256": "313929b25602bd7e0631b5b8dbb0ce8b52ae54dafb08f787125edfb2185b7c0f"
+  "shardContentSha256": "5a0500a75d8e9fbf32e4deb7a94911eba4f840ec1fbd0f1a10212e9632247916"
 }

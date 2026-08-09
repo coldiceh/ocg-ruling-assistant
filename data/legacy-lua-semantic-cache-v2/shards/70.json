@@ -7,9 +7,9 @@
       "cid": "10890",
       "passcode": "02830693",
       "aliases": [
-        "虹库里波",
+        "rainbow kuriboh",
         "虹クリボー",
-        "rainbow kuriboh"
+        "虹库里波"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1683,9 +1683,9 @@
       "cid": "14977",
       "passcode": "47840168",
       "aliases": [
-        "左手鲨",
         "left-hand shark",
-        "レフトハンド・シャーク"
+        "レフトハンド・シャーク",
+        "左手鲨"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -4183,9 +4183,9 @@
       "cid": "19086",
       "passcode": "59504256",
       "aliases": [
-        "提斯蒂娜的半神",
         "demigod of the tistina",
-        "ティスティナの半神"
+        "ティスティナの半神",
+        "提斯蒂娜的半神"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -5897,5 +5897,5 @@
       }
     }
   ],
-  "shardContentSha256": "4c466142a774f64893610f63943e3806796cb26377fcb967b2a0c9cb55289513"
+  "shardContentSha256": "fa1962d941d5d59e16e1c16da3042e48e174bf027167775721d3fd8407dc9f40"
 }

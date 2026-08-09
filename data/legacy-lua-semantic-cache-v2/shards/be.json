@@ -7,9 +7,9 @@
       "cid": "16505",
       "passcode": "42090294",
       "aliases": [
-        "爬虫妖・尼亚米尼",
         "reptilianne nyami",
-        "レプティレス・ニャミニ"
+        "レプティレス・ニャミニ",
+        "爬虫妖・尼亚米尼"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1153,5 +1153,5 @@
       }
     }
   ],
-  "shardContentSha256": "d606aa358b349f083584947ee193e5824ec462dfebde68f988ce9d623c290804"
+  "shardContentSha256": "a21d9ea77eda9166352a9ae950803d2ac69486eabb700d19e6039540cd4fc1ce"
 }

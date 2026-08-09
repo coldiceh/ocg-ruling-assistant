@@ -7,9 +7,9 @@
       "cid": "8755",
       "passcode": "05220687",
       "aliases": [
+        "super-nimble mega hamster",
         "素早いビッグハムスター",
-        "迅捷大仓鼠",
-        "super-nimble mega hamster"
+        "迅捷大仓鼠"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1384,9 +1384,9 @@
       "cid": "11627",
       "passcode": "74892653",
       "aliases": [
-        "星尘战士",
         "stardust warrior",
-        "スターダスト・ウォリアー"
+        "スターダスト・ウォリアー",
+        "星尘战士"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -2558,5 +2558,5 @@
       }
     }
   ],
-  "shardContentSha256": "3453885a61089370213da36d006fbe79c9896c807a5c901c11a6f7b39b33551a"
+  "shardContentSha256": "cb8647bd7506a5df16c2caf176b0997a3123afd63d7ac8773bb21080c1571e6a"
 }

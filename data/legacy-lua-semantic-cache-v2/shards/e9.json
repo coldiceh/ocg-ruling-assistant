@@ -7,9 +7,9 @@
       "cid": "11038",
       "passcode": "13313278",
       "aliases": [
-        "燃烧拳斗士 护罩",
         "battlin' boxer veil",
-        "bk ベイル"
+        "bk ベイル",
+        "燃烧拳斗士 护罩"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1906,5 +1906,5 @@
       }
     }
   ],
-  "shardContentSha256": "0882810ece017052c54f3907b11e2c4e65af9f73e0a1780829c80f8545dca8e9"
+  "shardContentSha256": "14ca8c6333731580f42c49b59e902569191a4a968a99d6457a7e2320856d105c"
 }

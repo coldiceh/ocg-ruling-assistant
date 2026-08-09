@@ -7,9 +7,9 @@
       "cid": "11640",
       "passcode": "97007933",
       "aliases": [
-        "高速疾行机人 魔剑玉",
         "hi-speedroid kendama",
-        "hsr魔剣ダーマ"
+        "hsr魔剣ダーマ",
+        "高速疾行机人 魔剑玉"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1987,5 +1987,5 @@
       }
     }
   ],
-  "shardContentSha256": "76d90d79734f98cf50737ab373f5822699a2067695a0b9e2f33e9502bc927cc0"
+  "shardContentSha256": "5ed423e3c3d0a80894ca661bdad99238ad06c0fca4ef73f388ea3dffd5ab52f5"
 }

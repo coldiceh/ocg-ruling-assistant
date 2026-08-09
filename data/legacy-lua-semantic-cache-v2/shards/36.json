@@ -7,9 +7,9 @@
       "cid": "15620",
       "passcode": "61159609",
       "aliases": [
+        "trismagistus",
         "三賢者の書",
-        "伟魔三贤之书",
-        "trismagistus"
+        "伟魔三贤之书"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1889,9 +1889,9 @@
       "cid": "17788",
       "passcode": "80275707",
       "aliases": [
-        "道化鳥ラフィンパフィン",
+        "laughing puffin",
         "小丑鸟 笑盈盈海鹦",
-        "laughing puffin"
+        "道化鳥ラフィンパフィン"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -3066,5 +3066,5 @@
       }
     }
   ],
-  "shardContentSha256": "d368b6d59a5ef123856dd9bfc45d8449e9e7728a29bc14372e618fff8c8eb893"
+  "shardContentSha256": "93833c3230af433c640f658c3b3e4686d091675de8903a317dcf251e5050b1e4"
 }

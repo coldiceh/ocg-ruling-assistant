@@ -7,9 +7,9 @@
       "cid": "18455",
       "passcode": "23512906",
       "aliases": [
-        "黄金荣耀-里昂",
         "gold pride - leon",
-        "gp-リオン"
+        "gp-リオン",
+        "黄金荣耀-里昂"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1286,5 +1286,5 @@
       }
     }
   ],
-  "shardContentSha256": "b23b8bf00e3af8295370549fc5fe5522265513dd6359b57b91adcbac34280d9e"
+  "shardContentSha256": "b030a7ee54f84a281ca02beb462c4fdbd4355f82c2cd04185477086f5933f5bd"
 }

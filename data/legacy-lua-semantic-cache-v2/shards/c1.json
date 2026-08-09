@@ -7,9 +7,9 @@
       "cid": "14166",
       "passcode": "66386380",
       "aliases": [
-        "神鹰预见师",
         "harpie oracle",
-        "ハーピィ・オラクル"
+        "ハーピィ・オラクル",
+        "神鹰预见师"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1118,5 +1118,5 @@
       }
     }
   ],
-  "shardContentSha256": "8c0b37d8887da7d1c718ca3ef7e1b3812ba8901123837ce4797fee6d7c5172cd"
+  "shardContentSha256": "6c10ca308692302be2395af68096a016dea356bc22267f598a48083655156388"
 }

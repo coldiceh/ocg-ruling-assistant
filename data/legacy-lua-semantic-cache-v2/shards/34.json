@@ -1252,8 +1252,8 @@
       "cid": "20210",
       "passcode": "10474647",
       "aliases": [
-        "五月豹",
-        "depresspard"
+        "depresspard",
+        "五月豹"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -4428,5 +4428,5 @@
       }
     }
   ],
-  "shardContentSha256": "dc44b5f7fefbf72ad117a8a5bd7309e024f4ab0b21399fd6753a4a0944d7eff5"
+  "shardContentSha256": "e7b5e15079cca8c283996ce3276f0bb51ffacc6297a554104ba8b2980ca9e46e"
 }

@@ -15,6 +15,19 @@ const MAX_INPUT_IDENTITIES = 64;
 const MAX_ALIASES_PER_IDENTITY = 32;
 
 /**
+ * Locale-independent UTF-16 code-unit ordering for every cache-bound string.
+ * Do not replace this with localeCompare(): cache hashes must be identical on
+ * Windows and Linux regardless of the host's default language.
+ */
+export function comparePrecomputedLegacyLuaStableText(left, right) {
+  const leftText = String(left);
+  const rightText = String(right);
+  if (leftText < rightText) return -1;
+  if (leftText > rightText) return 1;
+  return 0;
+}
+
+/**
  * Validates the reusable part of an offline cache. Source and selection are
  * retained as JSON audit metadata, while every resource crosses the same
  * content-addressed validation boundary as a live engine resource.
@@ -342,7 +355,10 @@ export function collectPrecomputedLegacyLuaRequestedIdentities(input) {
     if (!byKey.has(key)) byKey.set(key, identity);
   }
   return [...byKey.values()].sort((left, right) =>
-    JSON.stringify(left).localeCompare(JSON.stringify(right))
+    comparePrecomputedLegacyLuaStableText(
+      JSON.stringify(left),
+      JSON.stringify(right),
+    )
   );
 }
 
@@ -506,7 +522,7 @@ function identityError(message) {
 
 function uniqueSorted(values) {
   return [...new Set(values)].sort((left, right) =>
-    String(left).localeCompare(String(right))
+    comparePrecomputedLegacyLuaStableText(left, right)
   );
 }
 
@@ -517,7 +533,7 @@ function duplicates(values) {
     if (seen.has(value)) repeated.add(value);
     seen.add(value);
   });
-  return [...repeated].sort();
+  return [...repeated].sort(comparePrecomputedLegacyLuaStableText);
 }
 
 function isPlainObject(value) {

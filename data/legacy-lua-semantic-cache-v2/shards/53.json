@@ -7,9 +7,9 @@
       "cid": "16749",
       "passcode": "30680659",
       "aliases": [
+        "water enchantress of the temple",
         "圣殿的遣水士",
-        "聖殿の水遣い",
-        "water enchantress of the temple"
+        "聖殿の水遣い"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1223,5 +1223,5 @@
       }
     }
   ],
-  "shardContentSha256": "9ce8b8f7f7f4e63fee73febab9786ef4394e451aaf04e6c2d09f563d746f237a"
+  "shardContentSha256": "fb712dd27a841dcc6c9fba1c17c77dc6a3bf2238165fdc1403f00aca66db8abc"
 }

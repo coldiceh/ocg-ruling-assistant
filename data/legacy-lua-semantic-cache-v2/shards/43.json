@@ -7,8 +7,8 @@
       "cid": "10984",
       "passcode": "11682713",
       "aliases": [
-        "森羅の葉心棒 ブレイド",
-        "sylvan bladefender"
+        "sylvan bladefender",
+        "森羅の葉心棒 ブレイド"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -986,5 +986,5 @@
       }
     }
   ],
-  "shardContentSha256": "a7772a3d3fc56fc6ba7b5271f9333dd7f6cfb44c3ffbaa3e5f24b39b47de8ac7"
+  "shardContentSha256": "6bcbf44da03ef79a00532209cbaa96adbbc106e27d9b4009f0fb7a0cadf3714e"
 }

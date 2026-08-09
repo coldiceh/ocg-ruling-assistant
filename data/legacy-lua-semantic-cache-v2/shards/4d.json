@@ -7,8 +7,8 @@
       "cid": "9965",
       "passcode": "19353570",
       "aliases": [
-        "影無茶ナイト",
-        "kagemucha knight"
+        "kagemucha knight",
+        "影無茶ナイト"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -882,9 +882,9 @@
       "cid": "8207",
       "passcode": "36623431",
       "aliases": [
-        "核成之钢核",
         "iron core of koa'ki meiru",
-        "コアキメイルの鋼核"
+        "コアキメイルの鋼核",
+        "核成之钢核"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -2097,5 +2097,5 @@
       }
     }
   ],
-  "shardContentSha256": "08d70c19c87170e964bd4c5fceeb9036aa13616fe9e9fc11a3fcf8f71abdfbba"
+  "shardContentSha256": "57c3075bb3dccf00e5c9058f81c99d58aa0591e5f72732037c6b84c542715488"
 }

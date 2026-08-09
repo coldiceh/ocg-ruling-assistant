@@ -7,8 +7,8 @@
       "cid": "15389",
       "passcode": "43175027",
       "aliases": [
-        "極氷獣ブリザード・ウルフ",
-        "glacial beast blizzard wolf"
+        "glacial beast blizzard wolf",
+        "極氷獣ブリザード・ウルフ"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1594,5 +1594,5 @@
       }
     }
   ],
-  "shardContentSha256": "d414ea36e107b2c776a6fe9c31e259fab24c7c7adcbce1c05eee912c84e4b15c"
+  "shardContentSha256": "faa41a6ad0f390c2e03ab369f5e06d77da1dd7f21e8bcb8864c5b6d62257ea78"
 }

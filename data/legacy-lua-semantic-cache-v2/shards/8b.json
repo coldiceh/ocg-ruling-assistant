@@ -3463,9 +3463,9 @@
       "cid": "9162",
       "passcode": "92784374",
       "aliases": [
-        "咒仪・艾莉娅儿",
         "gishki ariel",
-        "リチュア・エリアル"
+        "リチュア・エリアル",
+        "咒仪・艾莉娅儿"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -4626,5 +4626,5 @@
       }
     }
   ],
-  "shardContentSha256": "ac585d685bec16b50e61ff9705c6abc7c675537ddec7f0d4304b02271748a376"
+  "shardContentSha256": "893732e75e30b549b4f17475aacf6c5e16c8bf4b4c6acea01ff45402c225d73a"
 }

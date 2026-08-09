@@ -7,9 +7,9 @@
       "cid": "12743",
       "passcode": "70117860",
       "aliases": [
-        "风魔女-雪铃",
         "windwitch - snow bell",
-        "ww-スノウ・ベル"
+        "ww-スノウ・ベル",
+        "风魔女-雪铃"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1117,5 +1117,5 @@
       }
     }
   ],
-  "shardContentSha256": "95b9066eb69c836004bf8f7ec5f090dcde956581c0fa6672abd9b1cfbd3de6a9"
+  "shardContentSha256": "44c55d286f9ef596191c3884524bac5da64b6f54ea0f2b08c0093240e590dc19"
 }

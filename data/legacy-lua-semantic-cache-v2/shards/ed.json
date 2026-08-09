@@ -7,9 +7,9 @@
       "cid": "16622",
       "passcode": "04991081",
       "aliases": [
-        "神鹰的宠物龙-千兆圣火",
         "harpie's pet dragon - fearsome fire blast",
-        "ハーピィズペット竜-セイント・ファイアー・ギガ"
+        "ハーピィズペット竜-セイント・ファイアー・ギガ",
+        "神鹰的宠物龙-千兆圣火"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1130,5 +1130,5 @@
       }
     }
   ],
-  "shardContentSha256": "99b392a4af789d5294eac5cfa53d184812751b781a749847366fd6b75210090b"
+  "shardContentSha256": "a579e268eecf279f9d4f3aca76f244b91922c1f97176e0c9a5c36a6411c2c72c"
 }
