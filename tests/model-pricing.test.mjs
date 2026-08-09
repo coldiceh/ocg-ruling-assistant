@@ -4,6 +4,7 @@ import {
   estimateDeepSeekModelCost,
   estimateOpenAIModelCost,
   estimateRelayModelCost,
+  getDeepSeekModelPricingConfig,
   getModelPricingConfig,
   getRelayModelPricingConfig,
   normalizeOpenAIResponsesUsage,
@@ -209,6 +210,26 @@ test("relay pricing multiplier scales every cost component and the total", () =>
   assert.equal(cost.outputCostUsd, 0.000876);
   assert.equal(cost.totalCostUsd, 0.0020732);
   assert.equal(cost.totalCostCny, 0.015549);
+});
+
+test("versioned DeepSeek V4 pricing matches the checked official list rates", () => {
+  const pricing = getDeepSeekModelPricingConfig();
+  assert.equal(pricing.pricingVersion, "deepseek-v4-standard-2026-08-10");
+  assert.equal(pricing.checkedAt, "2026-08-10");
+  assert.deepEqual(pricing.models["deepseek-v4-flash"], {
+    inputUsdPerMillion: 0.14,
+    cachedInputUsdPerMillion: 0.0028,
+    cacheWriteUsdPerMillion: 0.14,
+    outputUsdPerMillion: 0.28,
+    longContext: {
+      thresholdInputTokensExclusive: 1_000_000,
+      inputMultiplier: 1,
+      outputMultiplier: 1,
+    },
+  });
+  assert.equal(pricing.models["deepseek-v4-pro"].inputUsdPerMillion, 0.435);
+  assert.equal(pricing.models["deepseek-v4-pro"].cachedInputUsdPerMillion, 0.003625);
+  assert.equal(pricing.models["deepseek-v4-pro"].outputUsdPerMillion, 0.87);
 });
 
 test("relay total-only usage settles a conservative highest-rate upper bound instead of zero", () => {

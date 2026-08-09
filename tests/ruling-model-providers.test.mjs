@@ -708,6 +708,33 @@ test("relay rejects a stream deadline that leaves no room below the admin outer 
   assert.equal(transportCalls, 0);
 });
 
+test("relay keeps the Vercel stream deadline at or below 270 seconds", async () => {
+  let transportCalls = 0;
+  const provider = new CompatibleEvidencePreparationProvider({
+    providerId: "relay",
+    apiKey: "relay-server-secret",
+    baseUrl: "https://relay.example/v1",
+    env: { VERCEL: "1", RELAY_STREAM_TIMEOUT_MS: "270001" },
+    fetchImpl: async () => {
+      transportCalls += 1;
+      throw new Error("transport must not be reached");
+    },
+  });
+
+  await assert.rejects(
+    provider.create({
+      model: "relay-gpt-5.6-sol",
+      reasoningEffort: "high",
+      reasoningMode: "pro",
+      input: "匿名问题与冻结证据",
+      instructions: "只输出 JSON。",
+      metadata: { runId: "run-relay-vercel-timeout-bound", promptVersion: "openai-ruling-v1" },
+    }),
+    /RELAY_STREAM_TIMEOUT_MS must be between 1000 and 270000/u,
+  );
+  assert.equal(transportCalls, 0);
+});
+
 test("relay permits an explicitly extended deadline only for a local direct experiment", async () => {
   const calls = [];
   const structured = JSON.stringify(makeStructuredResult());

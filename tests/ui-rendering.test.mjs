@@ -157,7 +157,7 @@ test("ui_has_single_query_button", async () => {
   assert.match(html, /id="pipelineStageList"/u);
   assert.match(html, /id="pipelineElapsedText"/u);
   assert.match(html, /id="rulingModelSelect"[^>]+disabled/u);
-  assert.match(html, /value="deepseek-v4-flash-high" selected>DeepSeek V4 Flash · 思考 high/u);
+  assert.match(html, /value="relay-gpt-5\.6-luna-low" selected>GPT-5\.6 Luna · 思考 low（第三方中转）/u);
   assert.doesNotMatch(html, /value="glm-5\.2-high"/u);
   assert.doesNotMatch(html, /value="kimi-[^"]+"/u);
   assert.doesNotMatch(html, /value="relay-gpt-5\.6-sol-high"/u);
@@ -224,8 +224,9 @@ test("public ruling model selector uses the allowlisted backend profiles without
     `${definitions}\n${functions}\nreturn normalizeRulingModelCapabilities;`,
   )();
   const capabilities = normalizeCapabilities({
-    defaultRulingModelProfile: "deepseek-v4-flash-high",
+    defaultRulingModelProfile: "relay-gpt-5.6-luna-low",
     rulingModelProfiles: [
+      { id: "relay-gpt-5.6-luna-low", available: true, label: "OpenAI official" },
       { id: "deepseek-v4-flash-high", available: true, label: "untrusted label" },
       { id: "glm-5.2-high", available: true },
       { id: "relay-gpt-5.6-sol-high", available: true, label: "OpenAI official" },
@@ -233,8 +234,27 @@ test("public ruling model selector uses the allowlisted backend profiles without
     ],
   });
 
-  assert.equal(capabilities.defaultProfile, "deepseek-v4-flash-high");
+  assert.equal(capabilities.defaultProfile, "relay-gpt-5.6-luna-low");
   assert.deepEqual(capabilities.profiles, [
+    {
+      id: "relay-gpt-5.6-luna-low",
+      label: "GPT-5.6 Luna · 思考 low（第三方中转）",
+      provider: "relay",
+      model: "gpt-5.6-luna",
+      reasoningEffort: "low",
+      thirdParty: true,
+      modelIdentityVerified: false,
+      available: true,
+      answerLatency: {
+        profileId: "relay-gpt-5.6-luna-low",
+        status: "unavailable",
+        averageMs: null,
+        sampleCount: 0,
+        windowSize: 20,
+        storage: "unavailable",
+        reason: "",
+      },
+    },
     {
       id: "deepseek-v4-flash-high",
       label: "DeepSeek V4 Flash · 思考 high",
@@ -252,16 +272,20 @@ test("public ruling model selector uses the allowlisted backend profiles without
     },
   ]);
   const partialAvailability = normalizeCapabilities({
-    defaultRulingModelProfile: "deepseek-v4-flash-high",
+    defaultRulingModelProfile: "relay-gpt-5.6-luna-low",
     rulingModelProfiles: [
       { id: "glm-5.2-high", available: false },
       { id: "deepseek-v4-flash-high", available: true },
+      { id: "relay-gpt-5.6-luna-low", available: false },
       { id: "relay-gpt-5.6-sol-high", available: false },
     ],
   });
   assert.deepEqual(
     partialAvailability.profiles.map((profile) => [profile.id, profile.available]),
-    [["deepseek-v4-flash-high", true]],
+    [
+      ["relay-gpt-5.6-luna-low", false],
+      ["deepseek-v4-flash-high", true],
+    ],
   );
   assert.throws(
     () => normalizeCapabilities({
@@ -500,7 +524,7 @@ test("ui_hides_engine_details_by_default", async () => {
   assert.match(html, /id="themeToggle"/u);
   assert.match(html, /class="page-background"/u);
   assert.doesNotMatch(html, /ANALYSIS CORE|TOKEN|provider debug/u);
-  assert.match(html, /DeepSeek V4 Flash/u);
+  assert.match(html, /GPT-5\.6 Luna/u);
   assert.doesNotMatch(html, /AI裁定分析|RAG 裁定分析|RAG 分析/u);
   assert.doesNotMatch(html, /后端模式|公开资料检索|卡片文本分析/u);
   assert.doesNotMatch(html, /terminal-theme|OCG RULING TERMINAL/u);

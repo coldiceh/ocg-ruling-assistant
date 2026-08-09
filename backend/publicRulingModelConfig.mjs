@@ -1,10 +1,21 @@
-export const DEFAULT_PUBLIC_RULING_MODEL_PROFILE = "deepseek-v4-flash-high";
+export const DEFAULT_PUBLIC_RULING_MODEL_PROFILE = "relay-gpt-5.6-luna-low";
 // The third-party relay endpoint is deployment-specific and intentionally has
 // no repository default. Keep the historical export name for internal imports.
 export const DEFAULT_PUBLIC_RELAY_BASE_URL = "";
-export const DEFAULT_PUBLIC_RELAY_MODEL = "gpt-5.6-sol";
+export const DEFAULT_PUBLIC_RELAY_MODEL = "gpt-5.6-luna";
 
 export const PUBLIC_RULING_MODEL_PROFILES = Object.freeze({
+  "relay-gpt-5.6-luna-low": Object.freeze({
+    id: "relay-gpt-5.6-luna-low",
+    label: "GPT-5.6 Luna · 思考 low（第三方中转）",
+    provider: "relay",
+    model: "gpt-5.6-luna",
+    thinkingMode: "enabled",
+    reasoningEffort: "low",
+    transport: "chat_completions_sse",
+    thirdParty: true,
+    modelIdentityVerified: false,
+  }),
   "deepseek-v4-flash-high": Object.freeze({
     id: "deepseek-v4-flash-high",
     label: "DeepSeek V4 Flash · 思考 high",
@@ -38,6 +49,22 @@ export function publicRulingModelProfileAvailable(profileOrId, env = {}) {
     ? resolvePublicRulingModelProfile(profileOrId)
     : profileOrId;
   if (profile?.provider === "deepseek") return Boolean(String(env.DEEPSEEK_API_KEY || "").trim());
+  if (profile?.provider === "relay") {
+    const apiKey = String(env.RELAY_API_KEY || "").trim();
+    const baseUrl = String(env.RELAY_BASE_URL || "").trim();
+    if (!apiKey || !baseUrl) return false;
+    try {
+      const parsed = new URL(baseUrl);
+      return parsed.protocol === "https:"
+        && Boolean(parsed.hostname)
+        && !parsed.username
+        && !parsed.password
+        && !parsed.search
+        && !parsed.hash;
+    } catch {
+      return false;
+    }
+  }
   return false;
 }
 

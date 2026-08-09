@@ -4,11 +4,21 @@
 // Keeping an empty offline index prevents the browser fallback from silently
 // treating a handful of historical examples as authoritative card knowledge.
 const baseCardIndex = [];
-const DEFAULT_RULING_MODEL_PROFILE = "deepseek-v4-flash-high";
+const DEFAULT_RULING_MODEL_PROFILE = "relay-gpt-5.6-luna-low";
 const PUBLIC_RULING_MODEL_PROFILE_ORDER = Object.freeze([
+  "relay-gpt-5.6-luna-low",
   "deepseek-v4-flash-high",
 ]);
 const PUBLIC_RULING_MODEL_PROFILES = Object.freeze({
+  "relay-gpt-5.6-luna-low": Object.freeze({
+    id: "relay-gpt-5.6-luna-low",
+    label: "GPT-5.6 Luna · 思考 low（第三方中转）",
+    provider: "relay",
+    model: "gpt-5.6-luna",
+    reasoningEffort: "low",
+    thirdParty: true,
+    modelIdentityVerified: false,
+  }),
   "deepseek-v4-flash-high": Object.freeze({
     id: "deepseek-v4-flash-high",
     label: "DeepSeek V4 Flash · 思考 high",
@@ -263,7 +273,7 @@ async function loadAppConfig() {
 
 async function loadBackendModelInfo() {
   if (!appConfig.answerApiUrl) {
-    setRulingModelCapabilitiesUnavailable("未配置模型能力接口；默认 DeepSeek V4 Flash 尚未确认可用。");
+    setRulingModelCapabilitiesUnavailable("未配置模型能力接口；默认 GPT-5.6 Luna low 尚未确认可用。");
     return;
   }
   try {
@@ -284,7 +294,7 @@ async function loadBackendModelInfo() {
     appConfig.modelLabel = "后端自动选择";
     appConfig.engineEnabled = false;
     appConfig.rulingVersionIds = ["latest"];
-    setRulingModelCapabilitiesUnavailable("模型能力接口不可用；默认 DeepSeek V4 Flash 尚未确认可用。");
+    setRulingModelCapabilitiesUnavailable("模型能力接口不可用；默认 GPT-5.6 Luna low 尚未确认可用。");
     syncRulingVersionButtons();
   }
 }

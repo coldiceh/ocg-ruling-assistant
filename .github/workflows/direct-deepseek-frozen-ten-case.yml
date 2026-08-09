@@ -1,0 +1,197 @@
+name: Direct DeepSeek frozen ten-case matrix
+
+on:
+  workflow_dispatch:
+    inputs:
+      configuration:
+        description: Run all four configurations or one independently
+        required: true
+        type: choice
+        default: all-four
+        options:
+          - all-four
+          - flash-standard
+          - flash-pro
+          - pro-standard
+          - pro-pro
+      confirm_paid_run:
+        description: Confirm the 40 direct paid DeepSeek calls
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: direct-deepseek-frozen-ten-case
+  cancel-in-progress: false
+
+jobs:
+  select-configurations:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.select.outputs.matrix }}
+    steps:
+      - name: Select an exact bounded configuration matrix
+        id: select
+        shell: bash
+        env:
+          CONFIGURATION: ${{ inputs.configuration }}
+        run: |
+          set -euo pipefail
+          flash_standard='{"configuration":"flash-standard","model":"deepseek-v4-flash","reasoning_mode":"standard","reasoning_effort":"none"}'
+          flash_pro='{"configuration":"flash-pro","model":"deepseek-v4-flash","reasoning_mode":"pro","reasoning_effort":"high"}'
+          pro_standard='{"configuration":"pro-standard","model":"deepseek-v4-pro","reasoning_mode":"standard","reasoning_effort":"none"}'
+          pro_pro='{"configuration":"pro-pro","model":"deepseek-v4-pro","reasoning_mode":"pro","reasoning_effort":"max"}'
+          case "$CONFIGURATION" in
+            all-four) selected="$flash_standard,$flash_pro,$pro_standard,$pro_pro" ;;
+            flash-standard) selected="$flash_standard" ;;
+            flash-pro) selected="$flash_pro" ;;
+            pro-standard) selected="$pro_standard" ;;
+            pro-pro) selected="$pro_pro" ;;
+            *) echo "Unsupported configuration: $CONFIGURATION" >&2; exit 1 ;;
+          esac
+          printf 'matrix={"include":[%s]}\n' "$selected" >> "$GITHUB_OUTPUT"
+
+  frozen-matrix:
+    needs: select-configurations
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    env:
+      ADMIN_MODEL_LAB_BASE_URL: https://ocg-ruling-assistant.vercel.app
+      ADMIN_MODEL_LAB_ORIGIN: https://coldiceh.github.io
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix: ${{ fromJSON(needs.select-configurations.outputs.matrix) }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+
+      - name: Preflight paid-run confirmation and bridge credential
+        shell: bash
+        env:
+          CONFIRM_PAID_RUN: ${{ inputs.confirm_paid_run }}
+          ADMIN_MODEL_LAB_PASSWORD: ${{ secrets.ADMIN_MODEL_LAB_PASSWORD }}
+        run: |
+          set -euo pipefail
+          test "$CONFIRM_PAID_RUN" = "true" || {
+            echo "Paid DeepSeek benchmark was not confirmed" >&2
+            exit 1
+          }
+          test -n "$ADMIN_MODEL_LAB_PASSWORD" || {
+            echo "ADMIN_MODEL_LAB_PASSWORD GitHub Actions secret is not configured; no request was sent" >&2
+            exit 1
+          }
+          test -n "$ADMIN_MODEL_LAB_BASE_URL" || { echo "ADMIN_MODEL_LAB_BASE_URL is missing" >&2; exit 1; }
+          test -n "$ADMIN_MODEL_LAB_ORIGIN" || { echo "ADMIN_MODEL_LAB_ORIGIN is missing" >&2; exit 1; }
+
+      - name: Prepare artifact directory
+        shell: bash
+        run: mkdir -p artifacts/source
+
+      - name: Download the canonical frozen Evidence Snapshot bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: direct-relay-relay-gpt-5.6-sol-31309665167
+          path: artifacts/source
+          github-token: ${{ github.token }}
+          run-id: "31309665167"
+
+      - name: Select and verify the exact canonical ten-case bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t matches < <(find artifacts/source -type f -name '*source-bundle.json' -print)
+          if [ "${#matches[@]}" -ne 1 ]; then
+            echo "Expected exactly one *source-bundle.json, found ${#matches[@]}" >&2
+            exit 1
+          fi
+          cp "${matches[0]}" artifacts/deepseek-source-bundle.json
+          printf '%s  %s\n' \
+            'bc83754cf0b38a5a83817bb9935cd7687b404595fb36f51827a2e9fa29233090' \
+            'artifacts/deepseek-source-bundle.json' \
+            > artifacts/deepseek-source-bundle.sha256
+          sha256sum --check artifacts/deepseek-source-bundle.sha256
+          node --input-type=module <<'NODE'
+          import { readFile } from "node:fs/promises";
+
+          const expected = [
+            "double-tempest-impermanence",
+            "unchained-replacement",
+            "accel-synchro-trigger-window",
+            "lost-target-continue-resolution",
+            "tearlaments-scream-activation-window",
+            "mind-scan-red-lotus-public-hand",
+            "harmonia-topologic-field-activation",
+            "photon-emperor-mausoleum-extra-summon",
+            "timaeus-gaze-dragoon-one-destruction",
+            "memento-cactus-avramax-direct-attack",
+          ];
+          const bundle = JSON.parse(await readFile("artifacts/deepseek-source-bundle.json", "utf8"));
+          if (!Array.isArray(bundle.sources) || bundle.sources.length !== 10) {
+            throw new Error("canonical source bundle must contain exactly ten cases");
+          }
+          const ids = bundle.sources.map((source) => String(source?.caseId || ""));
+          if (JSON.stringify(ids) !== JSON.stringify(expected)) {
+            throw new Error(`canonical case order or identity changed: ${ids.join(",")}`);
+          }
+          if (bundle.sources.some((source) => !source?.evidenceSnapshot)) {
+            throw new Error("every canonical case must contain a frozen Evidence Snapshot");
+          }
+          NODE
+
+      - name: Run one DeepSeek configuration over ten frozen cases
+        shell: bash
+        env:
+          ADMIN_MODEL_LAB_PASSWORD: ${{ secrets.ADMIN_MODEL_LAB_PASSWORD }}
+          DEEPSEEK_MODEL: ${{ matrix.model }}
+          DEEPSEEK_REASONING_MODE: ${{ matrix.reasoning_mode }}
+          DEEPSEEK_REASONING_EFFORT: ${{ matrix.reasoning_effort }}
+        run: |
+          set -euo pipefail
+          sha256sum --check artifacts/deepseek-source-bundle.sha256
+          node scripts/local-relay-effort-experiment.mjs \
+            --snapshots artifacts/deepseek-source-bundle.json \
+            --provider deepseek \
+            --model "$DEEPSEEK_MODEL" \
+            --reasoning-mode "$DEEPSEEK_REASONING_MODE" \
+            --effort "$DEEPSEEK_REASONING_EFFORT" \
+            --bridge-url "$ADMIN_MODEL_LAB_BASE_URL/api/admin-frozen-deepseek" \
+            --bridge-origin "$ADMIN_MODEL_LAB_ORIGIN" \
+            --output artifacts/deepseek-result-checkpoint.json \
+            --timeout-ms 300000 \
+            --max-calls 10
+          sha256sum --check artifacts/deepseek-source-bundle.sha256
+
+      - name: Score the completed checkpoint offline
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -s artifacts/deepseek-result-checkpoint.json ]; then
+            node scripts/score-admin-model-experiment.mjs \
+              --report artifacts/deepseek-result-checkpoint.json \
+              --output artifacts/deepseek-scored.json
+          fi
+
+      - name: Upload frozen input, checkpoint, and offline score
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: direct-deepseek-${{ matrix.configuration }}-${{ github.run_id }}
+          path: |
+            artifacts/deepseek-source-bundle.json
+            artifacts/deepseek-source-bundle.sha256
+            artifacts/deepseek-result-checkpoint.json
+            artifacts/deepseek-scored.json
+          if-no-files-found: warn
+          retention-days: 14

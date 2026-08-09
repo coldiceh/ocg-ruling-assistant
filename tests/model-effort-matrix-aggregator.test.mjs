@@ -1140,7 +1140,7 @@ test("legacy missing optional bundle and metrics remain null instead of becoming
   assert.equal(summary.estimatedCost, null);
 });
 
-test("DeepSeek keeps only an estimate explicitly present in the raw checkpoint", () => {
+test("DeepSeek uses the versioned official list price instead of run-specific billing", () => {
   const run = fixtureRun({
     model: "deepseek-v4-pro",
     effort: "high",
@@ -1156,21 +1156,21 @@ test("DeepSeek keeps only an estimate explicitly present in the raw checkpoint",
     plannedCaseCount: 4,
     complete: true,
     coverageByCurrency: {
-      CNY: { reportedCaseCount: 4, plannedCaseCount: 4, complete: true },
+      USD: { reportedCaseCount: 4, plannedCaseCount: 4, complete: true },
     },
-    totals: { CNY: 0.1 },
-    averagesPerReportedCase: { CNY: 0.025 },
-    costsPerCorrectAnswer: { CNY: 0.025 },
-    sourceFields: ["estimatedCostCny"],
-    verification: ["raw_record"],
-    pricingVersions: [],
+    totals: { USD: 0.0000522 },
+    averagesPerReportedCase: { USD: 0.00001305 },
+    costsPerCorrectAnswer: { USD: 0.00001305 },
+    sourceFields: ["official_deepseek_api_list_price"],
+    verification: ["official_list_rate_estimate"],
+    pricingVersions: ["deepseek-v4-standard-2026-08-10"],
     relayCreditTotal: null,
   });
 });
 
 test("mixed-currency cost coverage is calculated independently per currency", () => {
   const run = fixtureRun({
-    model: "deepseek-v4-pro",
+    model: "glm-5.2",
     effort: "high",
     estimatedCostCny: [0.01, 0.02, 0.03, 0.04],
   });

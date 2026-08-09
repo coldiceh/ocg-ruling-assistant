@@ -14,11 +14,14 @@ import {
   buildFinalRulingInput,
   buildFinalRulingModelEvidencePacket,
 } from "../backend/adminModelLabService.mjs";
+import { FrozenDeepseekExperimentBridgeClient } from "../backend/frozenDeepseekExperimentBridge.mjs";
 import { CompatibleEvidencePreparationProvider } from "../backend/rulingModelProviders.mjs";
 
 const DEFAULT_MODEL = "relay-gpt-5.6-sol";
 const DEFAULT_EFFORTS = Object.freeze(["none", "low", "medium", "high", "xhigh", "max"]);
 const ALLOWED_EFFORTS = new Set(DEFAULT_EFFORTS);
+const ALLOWED_PROVIDERS = new Set(["relay", "deepseek"]);
+const ALLOWED_REASONING_MODES = new Set(["standard", "pro"]);
 const DEFAULT_TIMEOUT_MS = 900_000;
 const DEFAULT_MAX_CALLS = 60;
 const PROMPT_VERSION = "openai-ruling-v1";
@@ -37,8 +40,12 @@ export function parseLocalRelayExperimentArgs(argv) {
     }
     const field = ({
       "--snapshots": "snapshots",
+      "--provider": "provider",
       "--model": "model",
       "--effort": "effort",
+      "--reasoning-mode": "reasoningMode",
+      "--bridge-url": "bridgeUrl",
+      "--bridge-origin": "bridgeOrigin",
       "--evidence-variant": "evidenceVariant",
       "--case": "caseId",
       "--output": "output",
@@ -66,14 +73,44 @@ export function normalizeLocalRelayExperimentOptions(
   if (!options?.snapshots) throw new TypeError("--snapshots is required");
   if (!options?.output) throw new TypeError("--output is required");
   const model = String(options.model || DEFAULT_MODEL).trim();
-  if (!/^relay-gpt-5\.6-(?:sol|terra|luna)$/u.test(model)) {
-    throw new TypeError("--model must be relay-gpt-5.6-sol, relay-gpt-5.6-terra or relay-gpt-5.6-luna");
+  const inferredProvider = model.startsWith("deepseek-") ? "deepseek" : "relay";
+  const providerId = String(options.provider || inferredProvider).trim().toLowerCase();
+  if (!ALLOWED_PROVIDERS.has(providerId)) {
+    throw new TypeError("--provider must be relay or deepseek");
+  }
+  if (providerId !== inferredProvider) {
+    throw new TypeError(`--provider ${providerId} does not match --model ${model}`);
+  }
+  if (providerId === "relay" && !/^relay-gpt-5\.6-(?:sol|terra|luna)$/u.test(model)) {
+    throw new TypeError("Relay --model must be relay-gpt-5.6-sol, relay-gpt-5.6-terra or relay-gpt-5.6-luna");
+  }
+  if (providerId === "deepseek" && !/^deepseek-v4-(?:flash|pro)$/u.test(model)) {
+    throw new TypeError("DeepSeek --model must be deepseek-v4-flash or deepseek-v4-pro");
+  }
+  if (providerId === "deepseek" && !options.efforts?.length) {
+    throw new TypeError("DeepSeek experiments require at least one explicit --effort");
   }
   const efforts = options.efforts?.length ? options.efforts : [...DEFAULT_EFFORTS];
   for (const effort of efforts) {
     if (!ALLOWED_EFFORTS.has(effort)) throw new TypeError(`unsupported --effort: ${effort}`);
   }
   if (new Set(efforts).size !== efforts.length) throw new TypeError("duplicate --effort values are not allowed");
+  const reasoningMode = String(
+    options.reasoningMode || (providerId === "relay" ? "pro" : "standard"),
+  ).trim().toLowerCase();
+  if (!ALLOWED_REASONING_MODES.has(reasoningMode)) {
+    throw new TypeError("--reasoning-mode must be standard or pro");
+  }
+  if (providerId === "relay" && reasoningMode !== "pro") {
+    throw new TypeError("Relay GPT-5.6 experiments require --reasoning-mode pro");
+  }
+  if (providerId === "deepseek") {
+    for (const effort of efforts) {
+      if (!new Set(["none", "low", "high", "max"]).has(effort)) {
+        throw new TypeError(`unsupported DeepSeek --effort: ${effort}`);
+      }
+    }
+  }
   const evidenceVariant = normalizeAdminEvidenceVariant(options.evidenceVariant || "full");
   const caseIds = (options.caseIds || []).map((value) => String(value).trim());
   if (caseIds.some((value) => !value)) throw new TypeError("--case must not be empty");
@@ -86,15 +123,33 @@ export function normalizeLocalRelayExperimentOptions(
   if (!Number.isInteger(maxCalls) || maxCalls < 1 || maxCalls > 60) {
     throw new TypeError("--max-calls must be an integer between 1 and 60");
   }
-  const apiKey = String(env.RELAY_API_KEY || "").trim();
-  const baseUrl = String(env.RELAY_BASE_URL || "").trim();
-  if (requireCredentials && !apiKey) throw new TypeError("RELAY_API_KEY is required");
-  if (requireCredentials && !baseUrl) throw new TypeError("RELAY_BASE_URL is required");
+  const credentialName = providerId === "deepseek" ? "DEEPSEEK_API_KEY" : "RELAY_API_KEY";
+  const baseUrlName = providerId === "deepseek" ? "DEEPSEEK_BASE_URL" : "RELAY_BASE_URL";
+  const apiKey = String(env[credentialName] || "").trim();
+  const baseUrl = String(env[baseUrlName] || "").trim();
+  const bridgeUrl = String(options.bridgeUrl || "").trim();
+  const bridgeOrigin = String(options.bridgeOrigin || env.ADMIN_MODEL_LAB_ORIGIN || "").trim();
+  const bridgePassword = String(env.ADMIN_MODEL_LAB_PASSWORD || "").trim();
+  if (bridgeUrl && providerId !== "deepseek") {
+    throw new TypeError("--bridge-url is restricted to DeepSeek experiments");
+  }
+  if (requireCredentials && bridgeUrl && !bridgePassword) {
+    throw new TypeError("ADMIN_MODEL_LAB_PASSWORD is required with --bridge-url");
+  }
+  if (requireCredentials && bridgeUrl && !bridgeOrigin) {
+    throw new TypeError("--bridge-origin or ADMIN_MODEL_LAB_ORIGIN is required with --bridge-url");
+  }
+  if (requireCredentials && !bridgeUrl && !apiKey) throw new TypeError(`${credentialName} is required`);
+  if (requireCredentials && providerId === "relay" && !baseUrl) {
+    throw new TypeError("RELAY_BASE_URL is required");
+  }
   return Object.freeze({
     snapshotsPath: path.resolve(String(options.snapshots)),
     outputPath: path.resolve(String(options.output)),
+    providerId,
     model,
     efforts: Object.freeze([...efforts]),
+    reasoningMode,
     evidenceVariant,
     caseIds: Object.freeze([...caseIds]),
     timeoutMs,
@@ -102,6 +157,9 @@ export function normalizeLocalRelayExperimentOptions(
     recoverRunningAsOutcomeUnknown: options.recoverRunningAsOutcomeUnknown === true,
     apiKey,
     baseUrl,
+    bridgeUrl,
+    bridgeOrigin,
+    bridgePassword,
   });
 }
 
@@ -130,7 +188,7 @@ export async function runLocalRelayEffortExperiment({
   const selectedCaseIds = cases.map((item) => item.caseId);
   const plannedRequestCount = cases.length * resolved.efforts.length;
   if (plannedRequestCount > resolved.maxCalls) {
-    throw new Error(`planned relay calls ${plannedRequestCount} exceed --max-calls ${resolved.maxCalls}`);
+    throw new Error(`planned ${resolved.providerId} calls ${plannedRequestCount} exceed --max-calls ${resolved.maxCalls}`);
   }
   const preparedCases = cases.map((item) => {
     const evidenceVariant = resolved.evidenceVariant;
@@ -155,16 +213,26 @@ export async function runLocalRelayEffortExperiment({
   const plan = preparedCases.flatMap(({ item, finalInputSha256 }) => resolved.efforts.map((effort) => ({
     caseId: item.caseId,
     effort,
+    reasoningMode: resolved.reasoningMode,
     evidenceVariant: resolved.evidenceVariant,
     finalInputSha256,
-    key: resultKey(item.caseId, resolved.model, effort, resolved.evidenceVariant),
+    key: resultKey(
+      item.caseId,
+      resolved.model,
+      effort,
+      resolved.evidenceVariant,
+      resolved.providerId,
+      resolved.reasoningMode,
+    ),
   })));
   let checkpoint = await loadOrCreateCheckpoint({
     outputPath: resolved.outputPath,
     bundleSha256,
     bundlePath: resolved.snapshotsPath,
+    providerId: resolved.providerId,
     model: resolved.model,
     efforts: resolved.efforts,
+    reasoningMode: resolved.reasoningMode,
     evidenceVariant: resolved.evidenceVariant,
     caseIds: selectedCaseIds,
     plan,
@@ -178,12 +246,23 @@ export async function runLocalRelayEffortExperiment({
       provider = providerFactory({ resolved, env });
       return provider;
     }
-    if (!resolved.apiKey) throw new TypeError("RELAY_API_KEY is required");
-    if (!resolved.baseUrl) throw new TypeError("RELAY_BASE_URL is required");
+    if (resolved.bridgeUrl) {
+      provider = new FrozenDeepseekExperimentBridgeClient({
+        bridgeUrl: resolved.bridgeUrl,
+        password: resolved.bridgePassword,
+        origin: resolved.bridgeOrigin,
+      });
+      return provider;
+    }
+    const credentialName = resolved.providerId === "deepseek" ? "DEEPSEEK_API_KEY" : "RELAY_API_KEY";
+    if (!resolved.apiKey) throw new TypeError(`${credentialName} is required`);
+    if (resolved.providerId === "relay" && !resolved.baseUrl) {
+      throw new TypeError("RELAY_BASE_URL is required");
+    }
     provider = new CompatibleEvidencePreparationProvider({
-      providerId: "relay",
+      providerId: resolved.providerId,
       apiKey: resolved.apiKey,
-      baseUrl: resolved.baseUrl,
+      ...(resolved.baseUrl ? { baseUrl: resolved.baseUrl } : {}),
       env: {
         ...env,
         RELAY_STREAM: "true",
@@ -198,7 +277,14 @@ export async function runLocalRelayEffortExperiment({
     const { item, input, finalInputSha256, modelVisibleEvidencePacket } = prepared;
     const evidenceVariant = resolved.evidenceVariant;
     for (const effort of resolved.efforts) {
-      const key = resultKey(item.caseId, resolved.model, effort, evidenceVariant);
+      const key = resultKey(
+        item.caseId,
+        resolved.model,
+        effort,
+        evidenceVariant,
+        resolved.providerId,
+        resolved.reasoningMode,
+      );
       const existing = checkpoint.results.find((entry) => entry.key === key);
       // A running record means the process died after submission. Skipping it
       // prevents an ambiguous, possibly charged request from being repeated.
@@ -211,8 +297,10 @@ export async function runLocalRelayEffortExperiment({
       checkpoint.results.push({
         key,
         caseId: item.caseId,
+        provider: resolved.providerId,
         model: resolved.model,
         effort,
+        reasoningMode: resolved.reasoningMode,
         status: "running",
         startedAt,
         finalInputSha256,
@@ -224,18 +312,17 @@ export async function runLocalRelayEffortExperiment({
       log(`[run] ${key}`);
       const controller = new AbortController();
       const timeout = setTimeout(
-        () => controller.abort(new Error(`local relay experiment timed out after ${resolved.timeoutMs} ms`)),
+        () => controller.abort(new Error(`local ${resolved.providerId} experiment timed out after ${resolved.timeoutMs} ms`)),
         resolved.timeoutMs,
       );
       timeout.unref?.();
       const monotonicStarted = performance.now();
       let completed;
       const profile = item.executionProfile.finalRuling || {};
-      // Relay GPT-5.6 capabilities are always-on reasoning models. The frozen
-      // source profile may originate from the public standard-mode pipeline,
-      // but this experiment varies effort within the Relay model's required
-      // pro mode rather than replaying that incompatible transport setting.
-      const reasoningMode = "pro";
+      // The transport selection is explicit and independent from the frozen
+      // source profile. Relay is restricted to pro; DeepSeek experiments can
+      // compare standard and pro over the exact same final input.
+      const reasoningMode = resolved.reasoningMode;
       try {
         const prompt = item.executionProfile.prompt || {};
         const response = await activeProvider.runRuling({
@@ -246,7 +333,7 @@ export async function runLocalRelayEffortExperiment({
           input,
           maxOutputTokens: profile.maxOutputTokens,
           metadata: {
-            runId: `local-${item.caseId}-${effort}-${randomUUID()}`.slice(0, 512),
+            runId: `local-${resolved.providerId}-${item.caseId}-${reasoningMode}-${effort}-${randomUUID()}`.slice(0, 512),
             promptVersion: String(prompt.version || PROMPT_VERSION),
           },
           signal: controller.signal,
@@ -263,6 +350,7 @@ export async function runLocalRelayEffortExperiment({
         completed = {
           key,
           caseId: item.caseId,
+          provider: resolved.providerId,
           model: resolved.model,
           effort,
           reasoningMode,
@@ -290,6 +378,7 @@ export async function runLocalRelayEffortExperiment({
         completed = {
           key,
           caseId: item.caseId,
+          provider: resolved.providerId,
           model: resolved.model,
           effort,
           reasoningMode,
@@ -371,8 +460,10 @@ async function loadOrCreateCheckpoint({
   outputPath,
   bundleSha256,
   bundlePath,
+  providerId,
   model,
   efforts,
+  reasoningMode,
   evidenceVariant,
   caseIds,
   plan,
@@ -383,6 +474,14 @@ async function loadOrCreateCheckpoint({
     const existing = JSON.parse(await readFile(outputPath, "utf8"));
     if (existing?.bundleSha256 !== bundleSha256 || existing?.model !== model) {
       throw new Error("existing checkpoint belongs to a different snapshot bundle or model");
+    }
+    const existingProviderId = String(existing.provider || "relay");
+    if (existingProviderId !== providerId) {
+      throw new Error("existing checkpoint belongs to a different provider");
+    }
+    const existingReasoningMode = String(existing.reasoningMode || "pro");
+    if (existingReasoningMode !== reasoningMode) {
+      throw new Error("existing checkpoint belongs to a different reasoning mode");
     }
     if (String(existing.evidenceVariant || "full") !== evidenceVariant) {
       throw new Error("existing checkpoint belongs to a different evidence variant");
@@ -445,6 +544,8 @@ async function loadOrCreateCheckpoint({
       });
     }
     existing.efforts = [...efforts];
+    existing.provider = providerId;
+    existing.reasoningMode = reasoningMode;
     existing.evidenceVariant = evidenceVariant;
     existing.caseIds = [...caseIds];
     existing.plan = plan;
@@ -471,8 +572,10 @@ async function loadOrCreateCheckpoint({
     updatedAt: createdAt,
     bundlePath,
     bundleSha256,
+    provider: providerId,
     model,
     efforts: [...efforts],
+    reasoningMode,
     evidenceVariant,
     caseIds: [...caseIds],
     concurrency: 1,
@@ -531,8 +634,10 @@ function modelRulingHardValidity(validation) {
   };
 }
 
-function resultKey(caseId, model, effort, evidenceVariant) {
-  const base = `${caseId}::${model}::${effort}`;
+function resultKey(caseId, model, effort, evidenceVariant, providerId = "relay", reasoningMode = "pro") {
+  const base = providerId === "relay"
+    ? `${caseId}::${model}::${effort}`
+    : `${caseId}::${model}::${reasoningMode}::${effort}`;
   return evidenceVariant === "full" ? base : `${base}::${evidenceVariant}`;
 }
 
@@ -541,8 +646,14 @@ function printHelp() {
   pnpm run experiment:relay:local -- --snapshots <bundle.json> --output <checkpoint.json> [options]
 
 Options:
+  --provider <relay|deepseek>                  Inferred from --model when omitted
   --model <relay-gpt-5.6-sol|relay-gpt-5.6-terra|relay-gpt-5.6-luna>
+          <deepseek-v4-flash|deepseek-v4-pro>
   --effort <none|low|medium|high|xhigh|max>  Repeat to select efforts (default: all six)
+  --reasoning-mode <standard|pro>              Relay requires pro; DeepSeek requires an explicit effort
+  --bridge-url <https://host/api/admin-frozen-deepseek>
+                                               Use the authenticated Vercel DeepSeek bridge
+  --bridge-origin <https://allowed-origin>     Exact Origin sent to the bridge
   --evidence-variant <full|card_text_only|card_text_plus_lua|without_lua>
                                               Evidence ablation (default: full)
   --case <case-id>                            Repeat to select cases (default: all)
