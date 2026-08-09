@@ -15,6 +15,125 @@ const EFFORT_ORDER = new Map(
 );
 const RELAY_PRICING = getRelayModelPricingConfig();
 const DEFAULT_RELAY_CREDIT_TO_CNY = 1;
+const DEFAULT_MARKDOWN_LOCALE = "zh";
+const SUPPORTED_MARKDOWN_LOCALES = new Set(["zh", "en", "ja"]);
+
+const MARKDOWN_TEXT = Object.freeze({
+  zh: Object.freeze({
+    title: "模型与推理强度实验矩阵",
+    evidenceConsistency: "证据一致性",
+    passed: "通过",
+    failed: "失败",
+    accuracyDefinition: "正确率 = PASS 数 / 计划题数；可用率 = (PASS + FAIL) / 计划题数，INCONCLUSIVE 视为不可评分。",
+    costDefinition: "费用仅统计可归属的最终裁定模型调用；共享 Evidence Snapshot 的准备费用不重复计入各模型配置。",
+    error: "错误",
+    warning: "警告",
+    testContent: "测试内容",
+    number: "编号",
+    caseId: "Case ID",
+    fullQuestion: "完整问题",
+    model: "模型",
+    effort: "推理强度",
+    evidenceVariant: "证据方案",
+    accuracy: "正确率",
+    availability: "可用率",
+    totalLatency: "平均 / 中位总耗时",
+    firstContentLatency: "平均 / 中位首正文",
+    inputTokens: "输入 Token",
+    outputTokens: "输出 Token",
+    reasoningTokens: "推理 Token",
+    totalTokens: "总 Token",
+    cost: "费用（总计 / 平均每题 / 每答对一题）",
+    dashboardTitle: "看板实际批次增量",
+    dashboardNote: "以下数值只是批次级观测，不推导、不分摊为单次请求费用。",
+    batch: "批次",
+    requests: "请求数",
+    start: "开始值",
+    end: "结束值",
+    delta: "增量",
+    unit: "单位",
+    source: "来源",
+    unverified: "未验证；",
+    statuses: Object.freeze({ PASS: "正确", FAIL: "错误", INCONCLUSIVE: "不确定", NOT_PLANNED: "未测试" }),
+    variants: Object.freeze({ full: "完整资料", card_text_only: "仅卡文", without_lua: "不含 Lua" }),
+  }),
+  en: Object.freeze({
+    title: "Model and reasoning-effort evaluation matrix",
+    evidenceConsistency: "Evidence consistency",
+    passed: "passed",
+    failed: "failed",
+    accuracyDefinition: "Accuracy = PASS / planned cases; availability = (PASS + FAIL) / planned cases. INCONCLUSIVE is unscorable.",
+    costDefinition: "Cost includes attributable final-ruling model calls only; shared Evidence Snapshot preparation is not duplicated across configurations.",
+    error: "Error",
+    warning: "Warning",
+    testContent: "Test cases",
+    number: "No.",
+    caseId: "Case ID",
+    fullQuestion: "Full question",
+    model: "Model",
+    effort: "Reasoning effort",
+    evidenceVariant: "Evidence variant",
+    accuracy: "Accuracy",
+    availability: "Availability",
+    totalLatency: "Average / median total latency",
+    firstContentLatency: "Average / median first content",
+    inputTokens: "Input tokens",
+    outputTokens: "Output tokens",
+    reasoningTokens: "Reasoning tokens",
+    totalTokens: "Total tokens",
+    cost: "Cost (total / per case / per correct answer)",
+    dashboardTitle: "Observed dashboard batch delta",
+    dashboardNote: "These are batch-level observations only and are not inferred or allocated to individual requests.",
+    batch: "Batch",
+    requests: "Requests",
+    start: "Start",
+    end: "End",
+    delta: "Delta",
+    unit: "Unit",
+    source: "Source",
+    unverified: "unverified; ",
+    statuses: Object.freeze({ PASS: "Correct", FAIL: "Incorrect", INCONCLUSIVE: "Inconclusive", NOT_PLANNED: "Not tested" }),
+    variants: Object.freeze({ full: "Full evidence", card_text_only: "Card text only", without_lua: "Without Lua" }),
+  }),
+  ja: Object.freeze({
+    title: "モデル・推論強度評価マトリクス",
+    evidenceConsistency: "証拠の一貫性",
+    passed: "合格",
+    failed: "不合格",
+    accuracyDefinition: "正答率 = PASS / 実施予定問題数、採点可能率 = (PASS + FAIL) / 実施予定問題数です。INCONCLUSIVE は採点不能として扱います。",
+    costDefinition: "費用は最終裁定モデルの呼び出しに帰属できる分だけを集計し、共有 Evidence Snapshot の準備費用は各設定へ重複計上しません。",
+    error: "エラー",
+    warning: "警告",
+    testContent: "テスト内容",
+    number: "番号",
+    caseId: "Case ID",
+    fullQuestion: "質問全文",
+    model: "モデル",
+    effort: "推論強度",
+    evidenceVariant: "証拠構成",
+    accuracy: "正答率",
+    availability: "採点可能率",
+    totalLatency: "総所要時間（平均 / 中央値）",
+    firstContentLatency: "最初の本文まで（平均 / 中央値）",
+    inputTokens: "入力 Token",
+    outputTokens: "出力 Token",
+    reasoningTokens: "推論 Token",
+    totalTokens: "合計 Token",
+    cost: "費用（合計 / 1問平均 / 正答1件あたり）",
+    dashboardTitle: "ダッシュボードで観測したバッチ増分",
+    dashboardNote: "以下はバッチ単位の観測値であり、個別リクエストへの推定・按分は行いません。",
+    batch: "バッチ",
+    requests: "リクエスト数",
+    start: "開始値",
+    end: "終了値",
+    delta: "増分",
+    unit: "単位",
+    source: "出典",
+    unverified: "未検証；",
+    statuses: Object.freeze({ PASS: "正解", FAIL: "不正解", INCONCLUSIVE: "判定不能", NOT_PLANNED: "未実施" }),
+    variants: Object.freeze({ full: "完全な証拠", card_text_only: "カードテキストのみ", without_lua: "Lua なし" }),
+  }),
+});
 
 export async function aggregateModelEffortMatrixFiles({
   pairs = [],
@@ -102,7 +221,7 @@ export function aggregateModelEffortMatrix({
     error.details = evidenceConsistency;
     throw error;
   }
-  const caseIds = configurations[0]?.plannedCaseIds || [];
+  const caseIds = evidenceConsistency.canonicalCaseIds;
   const caseCatalog = normalizeCaseCatalog(caseMetadata, caseIds);
   const dashboard = normalizeDashboardMetadata(dashboardMetadata);
   return {
@@ -136,32 +255,33 @@ export function aggregateModelEffortMatrix({
   };
 }
 
-export function renderModelEffortMatrixMarkdown(report) {
+export function renderModelEffortMatrixMarkdown(report, { locale = DEFAULT_MARKDOWN_LOCALE } = {}) {
   if (!report || report.reportType !== "offline_model_effort_matrix") {
     throw new TypeError("report must be an offline_model_effort_matrix report");
   }
+  const text = markdownText(locale);
   const lines = [
-    "# 模型与推理强度实验矩阵",
+    `# ${text.title}`,
     "",
-    `证据一致性：**${report.evidenceConsistency.valid ? "通过" : "失败"}**。`,
+    `${text.evidenceConsistency}: **${report.evidenceConsistency.valid ? text.passed : text.failed}**.`,
     "",
-    "正确率 = PASS 数 / 计划题数；可用率 = (PASS + FAIL) / 计划题数，INCONCLUSIVE 视为不可评分。",
-    "费用仅统计可归属的最终裁定模型调用；共享 Evidence Snapshot 的准备费用不重复计入各模型配置。",
+    text.accuracyDefinition,
+    text.costDefinition,
   ];
   if (report.evidenceConsistency.errors.length) {
-    lines.push("", ...report.evidenceConsistency.errors.map((error) => `- 错误：${escapeMarkdown(error)}`));
+    lines.push("", ...report.evidenceConsistency.errors.map((error) => `- ${text.error}: ${escapeMarkdown(error)}`));
   }
   if (report.evidenceConsistency.warnings.length) {
-    lines.push("", ...report.evidenceConsistency.warnings.map((warning) => `- 警告：${escapeMarkdown(warning)}`));
+    lines.push("", ...report.evidenceConsistency.warnings.map((warning) => `- ${text.warning}: ${escapeMarkdown(warning)}`));
   }
   const caseCatalog = normalizeCaseCatalog(report.caseCatalog, report.caseIds);
   const caseHeaders = caseCatalog.map((item) => escapeMarkdown(item.label));
   if (caseCatalog.some((item) => item.question)) {
     lines.push(
       "",
-      "## 测试内容",
+      `## ${text.testContent}`,
       "",
-      "| 编号 | Case ID | 完整问题 |",
+      `| ${text.number} | ${text.caseId} | ${text.fullQuestion} |`,
       "| --- | --- | --- |",
       ...caseCatalog.map((item) => (
         `| ${escapeMarkdown(item.label)} | ${escapeMarkdown(item.caseId)} | ${escapeMarkdown(item.question || "—")} |`
@@ -169,18 +289,19 @@ export function renderModelEffortMatrixMarkdown(report) {
     );
   }
   const headers = [
-      "模型",
-      "推理强度",
+      text.model,
+      text.effort,
+      text.evidenceVariant,
       ...caseHeaders,
-      "正确率",
-      "可用率",
-      "平均 / 中位总耗时",
-      "平均 / 中位首正文",
-      "输入 Token",
-      "输出 Token",
-      "推理 Token",
-      "总 Token",
-      "费用（总计 / 平均每题 / 每答对一题）",
+      text.accuracy,
+      text.availability,
+      text.totalLatency,
+      text.firstContentLatency,
+      text.inputTokens,
+      text.outputTokens,
+      text.reasoningTokens,
+      text.totalTokens,
+      text.cost,
   ];
   lines.push(
     "",
@@ -188,11 +309,12 @@ export function renderModelEffortMatrixMarkdown(report) {
     headers.map(() => "| --- ").join("") + "|",
   );
   for (const configuration of report.configurations) {
-    const caseStatus = new Map(configuration.cases.map((item) => [item.caseId, item.status]));
+    const caseStatus = new Map(configuration.cases.map((item) => [item.caseId, item]));
     lines.push([
       configuration.model,
       configuration.effort,
-      ...report.caseIds.map((caseId) => formatCaseStatus(caseStatus.get(caseId))),
+      formatEvidenceVariant(configuration.evidenceVariant, text),
+      ...report.caseIds.map((caseId) => formatCaseStatus(caseStatus.get(caseId), text)),
       formatRatio(configuration.accuracy),
       formatRatio(configuration.availability),
       formatLatency(configuration.latency.totalMs),
@@ -201,17 +323,17 @@ export function renderModelEffortMatrixMarkdown(report) {
       formatTokenMetric(configuration.tokens.output),
       formatTokenMetric(configuration.tokens.reasoning),
       formatTokenMetric(configuration.tokens.total),
-      formatEstimatedCost(configuration.estimatedCost),
+      formatEstimatedCost(configuration.estimatedCost, text),
     ].map((value) => `| ${escapeMarkdown(value)} `).join("") + "|");
   }
   if (report.dashboard) {
     lines.push(
       "",
-      "## 看板实际批次增量",
+      `## ${text.dashboardTitle}`,
       "",
-      "以下数值只是批次级观测，不推导、不分摊为单次请求费用。",
+      text.dashboardNote,
       "",
-      "| 批次 | 请求数 | 开始值 | 结束值 | 增量 | 单位 | 来源 |",
+      `| ${text.batch} | ${text.requests} | ${text.start} | ${text.end} | ${text.delta} | ${text.unit} | ${text.source} |`,
       "| --- | ---: | ---: | ---: | ---: | --- | --- |",
     );
     for (const batch of report.dashboard.batches) {
@@ -233,7 +355,7 @@ function normalizeRunPair(run, runIndex, relayCreditToCny) {
   if (checkpoint.status && checkpoint.status !== "completed") {
     throw new Error(`run ${runIndex + 1} checkpoint is not completed (${checkpoint.status})`);
   }
-  const plans = Array.isArray(checkpoint.plan) && checkpoint.plan.length
+  const rawPlans = Array.isArray(checkpoint.plan) && checkpoint.plan.length
     ? checkpoint.plan
     : checkpoint.results.map((result) => ({
         key: result.key,
@@ -242,42 +364,87 @@ function normalizeRunPair(run, runIndex, relayCreditToCny) {
         effort: result.effort,
         evidenceVariant: result.evidenceVariant,
       }));
+  const plans = rawPlans.map((plan, planIndex) => {
+    const descriptor = {
+      caseId: requiredText(plan.caseId, `plan[${planIndex}].caseId`),
+      model: requiredText(plan.model || checkpoint.model, `plan[${planIndex}] model`),
+      effort: requiredText(plan.effort, `plan[${planIndex}] effort`).toLowerCase(),
+      evidenceVariant: String(plan.evidenceVariant || checkpoint.evidenceVariant || "full"),
+    };
+    return {
+      raw: plan,
+      key: optionalText(plan.key),
+      descriptor,
+      identity: recordIdentity(descriptor),
+    };
+  });
+  const planKeys = new Set();
+  const planIdentities = new Set();
+  for (const plan of plans) {
+    if (planIdentities.has(plan.identity)) {
+      throw new Error(`duplicate checkpoint plan identity: ${plan.identity}`);
+    }
+    planIdentities.add(plan.identity);
+    if (plan.key) {
+      if (planKeys.has(plan.key)) throw new Error(`duplicate checkpoint plan key: ${plan.key}`);
+      planKeys.add(plan.key);
+    }
+  }
   const resultByKey = new Map();
-  for (const result of checkpoint.results) {
-    const identity = recordIdentity({
-      caseId: result.caseId,
-      model: result.model || checkpoint.model,
-      effort: result.effort,
+  const resultByIdentity = new Map();
+  const resultIdentity = new Map();
+  for (const [resultIndex, result] of checkpoint.results.entries()) {
+    const descriptor = {
+      caseId: requiredText(result.caseId, `result[${resultIndex}].caseId`),
+      model: requiredText(result.model || checkpoint.model, `result[${resultIndex}] model`),
+      effort: requiredText(result.effort, `result[${resultIndex}] effort`).toLowerCase(),
       evidenceVariant: result.evidenceVariant || checkpoint.evidenceVariant || "full",
-    });
-    for (const key of [result.key, identity].filter(Boolean)) {
-      if (resultByKey.has(key)) throw new Error(`duplicate checkpoint result: ${key}`);
+    };
+    const identity = recordIdentity(descriptor);
+    if (resultByIdentity.has(identity)) throw new Error(`duplicate checkpoint result identity: ${identity}`);
+    resultByIdentity.set(identity, result);
+    resultIdentity.set(result, identity);
+    const key = optionalText(result.key);
+    if (key) {
+      if (resultByKey.has(key)) throw new Error(`duplicate checkpoint result key: ${key}`);
       resultByKey.set(key, result);
     }
   }
   const scoreByIdentity = new Map();
-  for (const score of scored.results) {
+  for (const [scoreIndex, score] of scored.results.entries()) {
     const status = String(score.status || "").toUpperCase();
     if (!SCORE_STATUSES.has(status)) throw new Error(`unsupported scored status: ${score.status}`);
     const identity = recordIdentity({
-      caseId: score.caseId,
-      model: score.requestedModel || score.model,
-      effort: score.reasoningEffort || score.effort,
+      caseId: requiredText(score.caseId, `score[${scoreIndex}].caseId`),
+      model: requiredText(score.requestedModel || score.model, `score[${scoreIndex}] model`),
+      effort: requiredText(score.reasoningEffort || score.effort, `score[${scoreIndex}] effort`).toLowerCase(),
       evidenceVariant: score.evidenceVariant || checkpoint.evidenceVariant || "full",
     });
     if (scoreByIdentity.has(identity)) throw new Error(`duplicate scored result: ${identity}`);
     scoreByIdentity.set(identity, { ...score, status });
   }
-  return plans.map((plan) => {
-    const descriptor = {
-      caseId: requiredText(plan.caseId, "plan.caseId"),
-      model: requiredText(plan.model || checkpoint.model, "plan model"),
-      effort: requiredText(plan.effort, "plan effort").toLowerCase(),
-      evidenceVariant: String(plan.evidenceVariant || checkpoint.evidenceVariant || "full"),
-    };
-    const identity = recordIdentity(descriptor);
-    const result = resultByKey.get(plan.key) || resultByKey.get(identity) || null;
+  const matchedResults = new Set();
+  const records = plans.map((plan) => {
+    const { descriptor, identity } = plan;
+    const keyedResult = plan.key ? resultByKey.get(plan.key) || null : null;
+    if (keyedResult && resultIdentity.get(keyedResult) !== identity) {
+      throw new Error(
+        `checkpoint plan key identity mismatch: ${plan.key} expected ${identity}, found ${resultIdentity.get(keyedResult)}`,
+      );
+    }
+    const result = keyedResult || resultByIdentity.get(identity) || null;
     const score = scoreByIdentity.get(identity) || null;
+    if (!result) throw new Error(`checkpoint plan is missing result: ${identity}`);
+    if (!score) throw new Error(`checkpoint plan is missing score: ${identity}`);
+    if (
+      new Set(["PASS", "FAIL"]).has(score.status)
+      && result?.status !== "completed_valid"
+    ) {
+      throw new Error(
+        `scored ${score.status} requires completed_valid result: ${identity} (${result?.status || "missing_result"})`,
+      );
+    }
+    if (result) matchedResults.add(result);
     return {
       ...descriptor,
       identity,
@@ -300,6 +467,13 @@ function normalizeRunPair(run, runIndex, relayCreditToCny) {
       estimatedCosts: extractEstimatedCosts(result, descriptor.model, relayCreditToCny),
     };
   });
+  const orphanResult = checkpoint.results.find((result) => !matchedResults.has(result));
+  if (orphanResult) {
+    throw new Error(`orphan checkpoint result: ${resultIdentity.get(orphanResult)}`);
+  }
+  const orphanScore = [...scoreByIdentity.keys()].find((identity) => !planIdentities.has(identity));
+  if (orphanScore) throw new Error(`orphan scored result: ${orphanScore}`);
+  return records;
 }
 
 function dedupeRecords(records) {
@@ -349,34 +523,55 @@ function inspectEvidenceConsistency({ runs, records, configurations, expectedCas
   if (bundleHashes.length === 1 && runs.some((run) => !optionalText(run.checkpoint?.bundleSha256))) {
     warnings.push("bundleSha256 was unavailable for one or more checkpoints");
   }
-  const referenceCaseIds = configurations[0]?.plannedCaseIds || [];
-  if (expectedCaseCount !== undefined) {
-    const expected = Number(expectedCaseCount);
-    if (!Number.isInteger(expected) || expected < 1) throw new TypeError("expectedCaseCount must be a positive integer");
-    if (referenceCaseIds.length !== expected) {
-      errors.push(`expected ${expected} planned cases, found ${referenceCaseIds.length}`);
-    }
-  }
-  const referenceCaseKey = sortedSetKey(referenceCaseIds);
+  const referenceCaseIdsByVariant = new Map();
   for (const configuration of configurations) {
     if (new Set(configuration.plannedCaseIds).size !== configuration.plannedCaseIds.length) {
       errors.push(`${configuration.key} contains duplicate planned cases`);
     }
-    if (sortedSetKey(configuration.plannedCaseIds) !== referenceCaseKey) {
-      errors.push(`${configuration.key} does not use the same planned case set`);
+    const variant = configuration.evidenceVariant || "full";
+    const reference = referenceCaseIdsByVariant.get(variant);
+    if (!reference) {
+      referenceCaseIdsByVariant.set(variant, [...configuration.plannedCaseIds]);
+    } else if (sortedSetKey(configuration.plannedCaseIds) !== sortedSetKey(reference)) {
+      errors.push(`${configuration.key} does not use the same planned case set within evidence variant ${variant}`);
     }
   }
-  const finalInputSha256ByCase = {};
-  for (const caseId of referenceCaseIds) {
-    const caseRecords = records.filter((record) => record.caseId === caseId);
-    const hashes = unique(caseRecords.map((record) => record.finalInputSha256).filter(Boolean));
-    finalInputSha256ByCase[caseId] = hashes;
-    if (hashes.length > 1) errors.push(`${caseId} finalInputSha256 mismatch: ${hashes.join(", ")}`);
-    if (hashes.length === 0) warnings.push(`${caseId} finalInputSha256 was unavailable`);
-    else if (caseRecords.some((record) => !record.finalInputSha256)) {
-      warnings.push(`${caseId} finalInputSha256 was unavailable for one or more planned records`);
+  const [canonicalVariant, canonicalCaseIds] = selectCanonicalVariant(referenceCaseIdsByVariant);
+  const canonicalCaseIdSet = new Set(canonicalCaseIds);
+  if (expectedCaseCount !== undefined) {
+    const expected = Number(expectedCaseCount);
+    if (!Number.isInteger(expected) || expected < 1) throw new TypeError("expectedCaseCount must be a positive integer");
+    if (canonicalCaseIds.length !== expected) {
+      errors.push(`expected ${expected} canonical planned cases, found ${canonicalCaseIds.length}`);
     }
   }
+  for (const [variant, variantCaseIds] of referenceCaseIdsByVariant.entries()) {
+    const outsideCanonical = variantCaseIds.filter((caseId) => !canonicalCaseIdSet.has(caseId));
+    if (outsideCanonical.length) {
+      errors.push(
+        `${variant} planned case set is not a subset of canonical ${canonicalVariant}: ${outsideCanonical.join(", ")}`,
+      );
+    }
+  }
+  const finalInputSha256ByVariant = {};
+  for (const [variant, variantCaseIds] of referenceCaseIdsByVariant.entries()) {
+    finalInputSha256ByVariant[variant] = {};
+    for (const caseId of variantCaseIds) {
+      const caseRecords = records.filter((record) => (
+        record.caseId === caseId && record.evidenceVariant === variant
+      ));
+      const hashes = unique(caseRecords.map((record) => record.finalInputSha256).filter(Boolean));
+      finalInputSha256ByVariant[variant][caseId] = hashes;
+      if (hashes.length > 1) errors.push(`${variant}/${caseId} finalInputSha256 mismatch: ${hashes.join(", ")}`);
+      if (hashes.length === 0) warnings.push(`${variant}/${caseId} finalInputSha256 was unavailable`);
+      else if (caseRecords.some((record) => !record.finalInputSha256)) {
+        warnings.push(`${variant}/${caseId} finalInputSha256 was unavailable for one or more planned records`);
+      }
+    }
+  }
+  const finalInputSha256ByCase = canonicalVariant
+    ? finalInputSha256ByVariant[canonicalVariant]
+    : {};
   return {
     valid: errors.length === 0,
     checkedRunCount: runs.length,
@@ -384,7 +579,11 @@ function inspectEvidenceConsistency({ runs, records, configurations, expectedCas
     expectedCaseCount: expectedCaseCount === undefined ? null : Number(expectedCaseCount),
     bundleSha256: bundleHashes.length === 1 ? bundleHashes[0] : null,
     observedBundleSha256: bundleHashes,
+    canonicalVariant,
+    canonicalCaseIds,
+    plannedCaseIdsByVariant: Object.fromEntries(referenceCaseIdsByVariant),
     finalInputSha256ByCase,
+    finalInputSha256ByVariant,
     errors,
     warnings,
   };
@@ -392,11 +591,17 @@ function inspectEvidenceConsistency({ runs, records, configurations, expectedCas
 
 function summarizeConfiguration(group, caseIds) {
   const byCase = new Map(group.records.map((record) => [record.caseId, record]));
+  const plannedCaseIds = [...group.plannedCaseIds];
+  const plannedCaseIdSet = new Set(plannedCaseIds);
   const cases = caseIds.map((caseId) => {
     const record = byCase.get(caseId);
-    if (!record) return { caseId, status: "INCONCLUSIVE", rawStatus: "not_planned" };
+    if (!plannedCaseIdSet.has(caseId)) {
+      return { caseId, status: "INCONCLUSIVE", rawStatus: "not_planned", planned: false };
+    }
+    if (!record) return { caseId, status: "INCONCLUSIVE", rawStatus: "missing_result", planned: true };
     return {
       caseId,
+      planned: true,
       status: record.scoreStatus,
       rawStatus: record.rawStatus,
       returnedModel: record.returnedModel,
@@ -406,33 +611,34 @@ function summarizeConfiguration(group, caseIds) {
       estimatedCost: record.estimatedCosts.length ? record.estimatedCosts : null,
     };
   });
+  const plannedCases = cases.filter((item) => item.planned);
   const counts = Object.fromEntries([...SCORE_STATUSES].map((status) => [
     status,
-    cases.filter((item) => item.status === status).length,
+    plannedCases.filter((item) => item.status === status).length,
   ]));
-  const planned = cases.length;
+  const planned = plannedCases.length;
   const scorable = counts.PASS + counts.FAIL;
   return {
     configurationKey: group.key,
     model: group.model,
     effort: group.effort,
     evidenceVariant: group.evidenceVariant,
-    plannedCaseIds: [...caseIds],
+    plannedCaseIds,
     cases,
     counts,
     accuracy: ratio(counts.PASS, planned),
     availability: ratio(scorable, planned),
     latency: {
-      totalMs: numericSummary(cases.map((item) => item.durationMs)),
-      firstContentMs: numericSummary(cases.map((item) => item.firstContentMs)),
+      totalMs: numericSummary(plannedCases.map((item) => item.durationMs)),
+      firstContentMs: numericSummary(plannedCases.map((item) => item.firstContentMs)),
     },
     tokens: {
-      input: numericSummary(cases.map((item) => item.usage?.inputTokens), { includeSum: true }),
-      output: numericSummary(cases.map((item) => item.usage?.outputTokens), { includeSum: true }),
-      reasoning: numericSummary(cases.map((item) => item.usage?.reasoningTokens), { includeSum: true }),
-      total: numericSummary(cases.map((item) => item.usage?.totalTokens), { includeSum: true }),
+      input: numericSummary(plannedCases.map((item) => item.usage?.inputTokens), { includeSum: true }),
+      output: numericSummary(plannedCases.map((item) => item.usage?.outputTokens), { includeSum: true }),
+      reasoning: numericSummary(plannedCases.map((item) => item.usage?.reasoningTokens), { includeSum: true }),
+      total: numericSummary(plannedCases.map((item) => item.usage?.totalTokens), { includeSum: true }),
     },
-    estimatedCost: summarizeEstimatedCosts(cases, planned),
+    estimatedCost: summarizeEstimatedCosts(plannedCases, planned),
   };
 }
 
@@ -641,19 +847,37 @@ function compareConfigurations(left, right) {
   const leftEffort = EFFORT_ORDER.get(left.effort) ?? Number.MAX_SAFE_INTEGER;
   const rightEffort = EFFORT_ORDER.get(right.effort) ?? Number.MAX_SAFE_INTEGER;
   if (leftEffort !== rightEffort) return leftEffort - rightEffort;
-  return left.effort.localeCompare(right.effort, "en");
+  const effort = left.effort.localeCompare(right.effort, "en");
+  if (effort) return effort;
+  return left.evidenceVariant.localeCompare(right.evidenceVariant, "en");
 }
 
 function formatRatio(value) {
   return `${value.numerator}/${value.denominator} (${value.rate === null ? "n/a" : `${round(value.rate * 100, 1).toFixed(1)}%`})`;
 }
 
-function formatCaseStatus(value) {
-  return ({
-    PASS: "正确",
-    FAIL: "错误",
-    INCONCLUSIVE: "不确定",
-  })[value] || "不确定";
+function formatCaseStatus(value, text) {
+  if (value?.planned === false) return text.statuses.NOT_PLANNED;
+  return text.statuses[value?.status] || text.statuses.INCONCLUSIVE;
+}
+
+function selectCanonicalVariant(referenceCaseIdsByVariant) {
+  if (referenceCaseIdsByVariant.has("full")) {
+    return ["full", [...referenceCaseIdsByVariant.get("full")]];
+  }
+  const candidates = [...referenceCaseIdsByVariant.entries()].sort((left, right) => {
+    const size = right[1].length - left[1].length;
+    if (size) return size;
+    const variant = left[0].localeCompare(right[0], "en");
+    if (variant) return variant;
+    return sortedSetKey(left[1]).localeCompare(sortedSetKey(right[1]), "en");
+  });
+  return candidates.length ? [candidates[0][0], [...candidates[0][1]]] : [null, []];
+}
+
+function formatEvidenceVariant(value, text) {
+  const normalized = String(value || "full");
+  return text.variants[normalized] || normalized;
 }
 
 function formatLatency(value) {
@@ -665,15 +889,23 @@ function formatTokenMetric(value) {
   return value.sum === null ? "—" : `${formatInteger(value.sum)} (${value.reportedCount})`;
 }
 
-function formatEstimatedCost(value) {
+function formatEstimatedCost(value, text) {
   if (!value) return "—";
   const totals = Object.entries(value.totals).map(([currency, amount]) => {
     const average = value.averagesPerReportedCase?.[currency];
     const perCorrect = value.costsPerCorrectAnswer?.[currency];
     return `${currency} ${round(amount, 6)} / ${round(average, 6)} / ${perCorrect === undefined ? "—" : round(perCorrect, 6)}`;
   });
-  const verification = value.verification.includes("unverified") ? "未验证；" : "";
+  const verification = value.verification.includes("unverified") ? text.unverified : "";
   return `${totals.join(" + ")} (${verification}${value.reportedCaseCount}/${value.plannedCaseCount})`;
+}
+
+function markdownText(locale) {
+  const normalized = String(locale || DEFAULT_MARKDOWN_LOCALE).trim().toLowerCase();
+  if (!SUPPORTED_MARKDOWN_LOCALES.has(normalized)) {
+    throw new TypeError(`unsupported Markdown locale: ${locale}`);
+  }
+  return MARKDOWN_TEXT[normalized];
 }
 
 function formatInteger(value) {
@@ -788,6 +1020,12 @@ export function parseModelEffortMatrixArguments(argv) {
     } else if (argument === "--markdown-out") {
       options.markdownOut = take(argument, index);
       index += 1;
+    } else if (argument === "--locale") {
+      options.locale = take(argument, index).toLowerCase();
+      if (!SUPPORTED_MARKDOWN_LOCALES.has(options.locale)) {
+        throw new TypeError("--locale must be zh, en or ja");
+      }
+      index += 1;
     } else if (argument === "--allow-evidence-mismatch") {
       options.strictEvidence = false;
     } else if (argument === "--compact") {
@@ -819,7 +1057,7 @@ export async function main(argv = process.argv.slice(2), dependencies = {}) {
       "  [--expected-case-count 4] [--dashboard-metadata DASHBOARD.json]",
       "  [--case-metadata CASES.json]",
       "  [--relay-credit-to-cny 1]",
-      "  [--json-out MATRIX.json] [--markdown-out MATRIX.md] [--allow-evidence-mismatch] [--compact]",
+      "  [--json-out MATRIX.json] [--markdown-out MATRIX.md] [--locale zh|en|ja] [--allow-evidence-mismatch] [--compact]",
       "",
     ].join("\n"));
     return 0;
@@ -834,7 +1072,7 @@ export async function main(argv = process.argv.slice(2), dependencies = {}) {
     readFileImpl: dependencies.readFileImpl,
     now: dependencies.now,
   });
-  const markdown = renderModelEffortMatrixMarkdown(report);
+  const markdown = renderModelEffortMatrixMarkdown(report, { locale: options.locale });
   const writeFileImpl = dependencies.writeFileImpl || writeFile;
   if (options.jsonOut) {
     await writeFileImpl(resolve(options.jsonOut), `${JSON.stringify(report, null, options.compact ? 0 : 2)}\n`, "utf8");

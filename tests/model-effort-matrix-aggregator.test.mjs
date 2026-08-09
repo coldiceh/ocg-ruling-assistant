@@ -45,6 +45,8 @@ test("aggregates model+effort accuracy, availability, streaming latency, tokens 
 
   assert.equal(report.publishable, true);
   assert.deepEqual(report.caseIds, CASE_IDS);
+  assert.equal(report.evidenceConsistency.canonicalVariant, "full");
+  assert.deepEqual(report.evidenceConsistency.canonicalCaseIds, CASE_IDS);
   assert.deepEqual(report.caseCatalog.map((item) => item.label), ["Q1", "Q2", "Q3", "Q4"]);
   assert.equal(report.caseCatalog[0].question, "完整测试问题 1");
   assert.equal(report.evidenceConsistency.bundleSha256, "bundle-shared");
@@ -97,6 +99,8 @@ test("aggregates model+effort accuracy, availability, streaming latency, tokens 
   const markdown = renderModelEffortMatrixMarkdown(report);
   assert.match(markdown, /relay-gpt-5\.6-sol/u);
   assert.match(markdown, /## 测试内容/u);
+  assert.match(markdown, /\| 模型 \| 推理强度 \| 证据方案 \|/u);
+  assert.match(markdown, /\| relay-gpt-5\.6-sol \| low \| 完整资料 \|/u);
   assert.match(markdown, /\| Q1 \| case-a \| 完整测试问题 1 \|/u);
   assert.match(markdown, /\| 正确 \| 正确 \| 正确 \| 错误 \|/u);
   assert.match(markdown, /3\/4 \(75\.0%\)/u);
@@ -105,6 +109,297 @@ test("aggregates model+effort accuracy, availability, streaming latency, tokens 
   assert.match(markdown, /CNY 0\.000315 \/ 0\.000079 \/ 0\.000105 \(未验证；4\/4\)/u);
   assert.match(markdown, /看板实际批次增量/u);
   assert.match(markdown, /不推导、不分摊为单次请求费用/u);
+});
+
+test("different evidence variants may use distinct input hashes and planned case subsets", () => {
+  const full = fixtureRun({
+    model: "relay-gpt-5.6-sol",
+    effort: "low",
+    evidenceVariant: "full",
+  });
+  const cardTextOnly = fixtureRun({
+    model: "relay-gpt-5.6-sol",
+    effort: "low",
+    evidenceVariant: "card_text_only",
+    scores: ["PASS", "FAIL", "PASS", "PASS"],
+  });
+  const withoutLua = fixtureRun({
+    model: "relay-gpt-5.6-sol",
+    effort: "low",
+    evidenceVariant: "without_lua",
+    caseIds: CASE_IDS.slice(0, 2),
+    scores: ["PASS", "FAIL"],
+  });
+  const report = aggregateModelEffortMatrix({
+    runs: [full, cardTextOnly, withoutLua],
+    expectedCaseCount: 4,
+    generatedAt: "2026-08-08T00:00:00.000Z",
+  });
+
+  assert.equal(report.publishable, true);
+  assert.deepEqual(report.caseIds, CASE_IDS);
+  assert.deepEqual(report.evidenceConsistency.plannedCaseIdsByVariant, {
+    full: CASE_IDS,
+    card_text_only: CASE_IDS,
+    without_lua: CASE_IDS.slice(0, 2),
+  });
+  assert.deepEqual(report.evidenceConsistency.finalInputSha256ByCase, {
+    "case-a": ["input-case-a"],
+    "case-b": ["input-case-b"],
+    "case-c": ["input-case-c"],
+    "case-d": ["input-case-d"],
+  });
+  assert.deepEqual(report.evidenceConsistency.finalInputSha256ByVariant.without_lua, {
+    "case-a": ["input-without_lua-case-a"],
+    "case-b": ["input-without_lua-case-b"],
+  });
+
+  const withoutLuaSummary = report.configurations.find((item) => (
+    item.evidenceVariant === "without_lua"
+  ));
+  assert.deepEqual(withoutLuaSummary.plannedCaseIds, CASE_IDS.slice(0, 2));
+  assert.deepEqual(
+    withoutLuaSummary.cases.map((item) => item.status),
+    ["PASS", "FAIL", "INCONCLUSIVE", "INCONCLUSIVE"],
+  );
+  assert.deepEqual(
+    withoutLuaSummary.cases.map((item) => item.planned),
+    [true, true, false, false],
+  );
+  assert.deepEqual(withoutLuaSummary.counts, { PASS: 1, FAIL: 1, INCONCLUSIVE: 0 });
+  assert.deepEqual(withoutLuaSummary.accuracy, { numerator: 1, denominator: 2, rate: 0.5 });
+  assert.equal(withoutLuaSummary.estimatedCost.plannedCaseCount, 2);
+
+  const zh = renderModelEffortMatrixMarkdown(report, { locale: "zh" });
+  assert.match(zh, /\| 模型 \| 推理强度 \| 证据方案 \|/u);
+  assert.match(zh, /\| 仅卡文 \|/u);
+  assert.match(zh, /\| 不含 Lua \| 正确 \| 错误 \| 未测试 \| 未测试 \|/u);
+
+  const en = renderModelEffortMatrixMarkdown(report, { locale: "en" });
+  assert.match(en, /^# Model and reasoning-effort evaluation matrix/mu);
+  assert.match(en, /\| Model \| Reasoning effort \| Evidence variant \|/u);
+  assert.match(en, /\| Card text only \|/u);
+  assert.match(en, /\| Without Lua \| Correct \| Incorrect \| Not tested \| Not tested \|/u);
+
+  const ja = renderModelEffortMatrixMarkdown(report, { locale: "ja" });
+  assert.match(ja, /^# モデル・推論強度評価マトリクス/mu);
+  assert.match(ja, /\| モデル \| 推論強度 \| 証拠構成 \|/u);
+  assert.match(ja, /\| カードテキストのみ \|/u);
+  assert.match(ja, /\| Lua なし \| 正解 \| 不正解 \| 未実施 \| 未実施 \|/u);
+  assert.throws(
+    () => renderModelEffortMatrixMarkdown(report, { locale: "fr" }),
+    /unsupported Markdown locale/u,
+  );
+});
+
+test("strict aggregation rejects crossed keys, duplicate plans, missing or orphan records, and invalid scored success", () => {
+  const crossedKey = fixtureRun({ model: "relay-gpt-5.6-sol", effort: "low" });
+  crossedKey.checkpoint.plan[0].key = crossedKey.checkpoint.results[1].key;
+  crossedKey.checkpoint.plan[1].key = "unique-fallback-key";
+  assert.throws(
+    () => aggregateModelEffortMatrix({ runs: [crossedKey], expectedCaseCount: 4 }),
+    /checkpoint plan key identity mismatch/u,
+  );
+
+  const duplicatePlan = fixtureRun({ model: "relay-gpt-5.6-sol", effort: "low" });
+  duplicatePlan.checkpoint.plan.push({ ...duplicatePlan.checkpoint.plan[0] });
+  assert.throws(
+    () => aggregateModelEffortMatrix({ runs: [duplicatePlan], expectedCaseCount: 4 }),
+    /duplicate checkpoint plan identity/u,
+  );
+
+  const duplicatePlanKey = fixtureRun({ model: "relay-gpt-5.6-sol", effort: "low" });
+  duplicatePlanKey.checkpoint.plan[1].key = duplicatePlanKey.checkpoint.plan[0].key;
+  assert.throws(
+    () => aggregateModelEffortMatrix({ runs: [duplicatePlanKey], expectedCaseCount: 4 }),
+    /duplicate checkpoint plan key/u,
+  );
+
+  const missingResult = fixtureRun({ model: "relay-gpt-5.6-sol", effort: "low" });
+  missingResult.checkpoint.results.shift();
+  assert.throws(
+    () => aggregateModelEffortMatrix({ runs: [missingResult], expectedCaseCount: 4 }),
+    /checkpoint plan is missing result/u,
+  );
+
+  const orphanResult = fixtureRun({ model: "relay-gpt-5.6-sol", effort: "low" });
+  orphanResult.checkpoint.results.push({
+    ...orphanResult.checkpoint.results[0],
+    key: "orphan-case::relay-gpt-5.6-sol::low",
+    caseId: "orphan-case",
+    finalInputSha256: "input-orphan-case",
+  });
+  assert.throws(
+    () => aggregateModelEffortMatrix({ runs: [orphanResult], expectedCaseCount: 4 }),
+    /orphan checkpoint result/u,
+  );
+
+  const missingScore = fixtureRun({ model: "relay-gpt-5.6-sol", effort: "low" });
+  missingScore.scored.results.shift();
+  assert.throws(
+    () => aggregateModelEffortMatrix({ runs: [missingScore], expectedCaseCount: 4 }),
+    /checkpoint plan is missing score/u,
+  );
+
+  const orphanScore = fixtureRun({ model: "relay-gpt-5.6-sol", effort: "low" });
+  orphanScore.scored.results.push({
+    ...orphanScore.scored.results[0],
+    caseId: "orphan-case",
+  });
+  assert.throws(
+    () => aggregateModelEffortMatrix({ runs: [orphanScore], expectedCaseCount: 4 }),
+    /orphan scored result/u,
+  );
+
+  const invalidPass = fixtureRun({ model: "relay-gpt-5.6-sol", effort: "low" });
+  invalidPass.checkpoint.results[0].status = "completed_invalid";
+  assert.throws(
+    () => aggregateModelEffortMatrix({ runs: [invalidPass], expectedCaseCount: 4 }),
+    /scored PASS requires completed_valid result/u,
+  );
+
+  const invalidFail = fixtureRun({
+    model: "relay-gpt-5.6-sol",
+    effort: "low",
+    scores: ["FAIL", "PASS", "PASS", "PASS"],
+  });
+  invalidFail.checkpoint.results[0].status = "completed_invalid";
+  assert.throws(
+    () => aggregateModelEffortMatrix({ runs: [invalidFail], expectedCaseCount: 4 }),
+    /scored FAIL requires completed_valid result/u,
+  );
+});
+
+test("the evidence mismatch override never relaxes run integrity checks", () => {
+  const invalidPass = fixtureRun({ model: "relay-gpt-5.6-sol", effort: "low" });
+  invalidPass.checkpoint.results[0].status = "completed_invalid";
+  assert.throws(
+    () => aggregateModelEffortMatrix({
+      runs: [invalidPass],
+      expectedCaseCount: 4,
+      strictEvidence: false,
+    }),
+    /scored PASS requires completed_valid result/u,
+  );
+
+  const missingResult = fixtureRun({ model: "relay-gpt-5.6-sol", effort: "low" });
+  missingResult.checkpoint.results.shift();
+  assert.throws(
+    () => aggregateModelEffortMatrix({
+      runs: [missingResult],
+      expectedCaseCount: 4,
+      strictEvidence: false,
+    }),
+    /checkpoint plan is missing result/u,
+  );
+
+  const orphanResult = fixtureRun({ model: "relay-gpt-5.6-sol", effort: "low" });
+  orphanResult.checkpoint.results.push({
+    ...orphanResult.checkpoint.results[0],
+    key: "orphan-case::relay-gpt-5.6-sol::low",
+    caseId: "orphan-case",
+    finalInputSha256: "input-orphan-case",
+  });
+  assert.throws(
+    () => aggregateModelEffortMatrix({
+      runs: [orphanResult],
+      expectedCaseCount: 4,
+      strictEvidence: false,
+    }),
+    /orphan checkpoint result/u,
+  );
+
+  const orphanScore = fixtureRun({ model: "relay-gpt-5.6-sol", effort: "low" });
+  orphanScore.scored.results.push({
+    ...orphanScore.scored.results[0],
+    caseId: "orphan-case",
+  });
+  assert.throws(
+    () => aggregateModelEffortMatrix({
+      runs: [orphanScore],
+      expectedCaseCount: 4,
+      strictEvidence: false,
+    }),
+    /orphan scored result/u,
+  );
+});
+
+test("canonical case selection prefers full, otherwise the deterministic largest variant", () => {
+  const noFull = aggregateModelEffortMatrix({
+    runs: [
+      fixtureRun({
+        model: "relay-gpt-5.6-sol",
+        effort: "low",
+        evidenceVariant: "card_text_only",
+        caseIds: CASE_IDS,
+      }),
+      fixtureRun({
+        model: "relay-gpt-5.6-sol",
+        effort: "low",
+        evidenceVariant: "without_lua",
+        caseIds: CASE_IDS.slice(0, 2),
+      }),
+    ],
+    expectedCaseCount: 4,
+  });
+  assert.equal(noFull.evidenceConsistency.canonicalVariant, "card_text_only");
+  assert.deepEqual(noFull.caseIds, CASE_IDS);
+
+  const tie = aggregateModelEffortMatrix({
+    runs: [
+      fixtureRun({
+        model: "relay-gpt-5.6-sol",
+        effort: "low",
+        evidenceVariant: "without_lua",
+        caseIds: CASE_IDS.slice(0, 2),
+      }),
+      fixtureRun({
+        model: "relay-gpt-5.6-sol",
+        effort: "low",
+        evidenceVariant: "card_text_only",
+        caseIds: CASE_IDS.slice(0, 2),
+      }),
+    ],
+    expectedCaseCount: 2,
+  });
+  assert.equal(tie.evidenceConsistency.canonicalVariant, "card_text_only");
+
+  const unionMask = [
+    fixtureRun({
+      model: "relay-gpt-5.6-sol",
+      effort: "low",
+      evidenceVariant: "card_text_only",
+      caseIds: CASE_IDS.slice(0, 2),
+    }),
+    fixtureRun({
+      model: "relay-gpt-5.6-sol",
+      effort: "low",
+      evidenceVariant: "without_lua",
+      caseIds: CASE_IDS.slice(2),
+    }),
+  ];
+  assert.throws(
+    () => aggregateModelEffortMatrix({ runs: unionMask, expectedCaseCount: 4 }),
+    /expected 4 canonical planned cases, found 2/u,
+  );
+
+  const outsideFull = [
+    fixtureRun({
+      model: "relay-gpt-5.6-sol",
+      effort: "low",
+      caseIds: CASE_IDS.slice(0, 2),
+    }),
+    fixtureRun({
+      model: "relay-gpt-5.6-sol",
+      effort: "low",
+      evidenceVariant: "without_lua",
+      caseIds: [CASE_IDS[0], CASE_IDS[2]],
+    }),
+  ];
+  assert.throws(
+    () => aggregateModelEffortMatrix({ runs: outsideFull, expectedCaseCount: 2 }),
+    /is not a subset of canonical full/u,
+  );
 });
 
 test("strict evidence validation rejects bundle, per-case input and planned-case mismatches", () => {
@@ -220,6 +515,7 @@ test("file loader and CLI parser accept repeated checkpoint/scored pairs without
     "--expected-case-count", "4",
     "--case-metadata", "cases.json",
     "--relay-credit-to-cny", "1",
+    "--locale", "en",
     "--allow-evidence-mismatch",
   ]);
   assert.deepEqual(parsed.pairs, [
@@ -229,7 +525,12 @@ test("file loader and CLI parser accept repeated checkpoint/scored pairs without
   assert.equal(parsed.expectedCaseCount, 4);
   assert.equal(parsed.caseMetadataFile, "cases.json");
   assert.equal(parsed.relayCreditToCny, 1);
+  assert.equal(parsed.locale, "en");
   assert.equal(parsed.strictEvidence, false);
+  assert.throws(
+    () => parseModelEffortMatrixArguments(["--locale", "fr"]),
+    /--locale must be zh, en or ja/u,
+  );
 
   const writes = [];
   const exitCode = await main([
@@ -237,6 +538,7 @@ test("file loader and CLI parser accept repeated checkpoint/scored pairs without
     "--expected-case-count", "4",
     "--json-out", "matrix.json",
     "--markdown-out", "matrix.md",
+    "--locale", "ja",
   ], {
     readFileImpl: async (pathname) => files.get(String(pathname)),
     writeFileImpl: async (pathname, content) => writes.push({ pathname: String(pathname), content }),
@@ -246,31 +548,43 @@ test("file loader and CLI parser accept repeated checkpoint/scored pairs without
   assert.equal(exitCode, 0);
   assert.equal(writes.length, 2);
   assert.ok(writes.some((item) => item.pathname.endsWith("matrix.json") && /offline_model_effort_matrix/u.test(item.content)));
-  assert.ok(writes.some((item) => item.pathname.endsWith("matrix.md") && /模型与推理强度实验矩阵/u.test(item.content)));
+  assert.ok(writes.some((item) => (
+    item.pathname.endsWith("matrix.md")
+      && /モデル・推論強度評価マトリクス/u.test(item.content)
+      && /\| モデル \| 推論強度 \| 証拠構成 \|/u.test(item.content)
+      && /\| 正解 \|/u.test(item.content)
+  )));
 });
 
 function fixtureRun({
   model,
   effort,
+  evidenceVariant = "full",
   scores = ["PASS", "PASS", "PASS", "PASS"],
   caseIds = CASE_IDS,
   estimatedCostCny = [],
 } = {}) {
+  const resultKey = (caseId) => {
+    const base = `${caseId}::${model}::${effort}`;
+    return evidenceVariant === "full" ? base : `${base}::${evidenceVariant}`;
+  };
   const plan = caseIds.map((caseId) => ({
     caseId,
     effort,
-    evidenceVariant: "full",
-    key: `${caseId}::${model}::${effort}`,
+    evidenceVariant,
+    key: resultKey(caseId),
   }));
   const results = caseIds.map((caseId, index) => ({
-    key: `${caseId}::${model}::${effort}`,
+    key: resultKey(caseId),
     caseId,
     model,
     effort,
-    evidenceVariant: "full",
+    evidenceVariant,
     status: scores[index] === "INCONCLUSIVE" ? "completed_invalid" : "completed_valid",
     durationMs: (index + 1) * 1000,
-    finalInputSha256: `input-${caseId}`,
+    finalInputSha256: evidenceVariant === "full"
+      ? `input-${caseId}`
+      : `input-${evidenceVariant}-${caseId}`,
     snapshotSha256: `snapshot-${caseId}`,
     reportedModel: model.replace(/^relay-/u, ""),
     usage: {
@@ -292,7 +606,7 @@ function fixtureRun({
     requestedModel: model,
     returnedModel: model.replace(/^relay-/u, ""),
     reasoningEffort: effort,
-    evidenceVariant: "full",
+    evidenceVariant,
     status: scores[index],
   }));
   return {
