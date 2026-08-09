@@ -310,6 +310,7 @@ export async function runAdminModelMatrixBatch({
   estimatedOutputTokensPerFinalRequest = DEFAULT_ESTIMATED_OUTPUT_TOKENS_PER_FINAL_REQUEST,
   budgetUsdToCny = DEFAULT_BUDGET_USD_TO_CNY,
   concurrency = 1,
+  onCaseComplete = null,
   now = () => new Date(),
   ...options
 } = {}) {
@@ -339,33 +340,22 @@ export async function runAdminModelMatrixBatch({
   if (positiveInteger(concurrency, "concurrency") !== 1) {
     throw new Error("paid matrix batch requires concurrency 1");
   }
+  if (onCaseComplete !== null && typeof onCaseComplete !== "function") {
+    throw new TypeError("onCaseComplete must be a function when provided");
+  }
 
   const startedAt = now();
   const reports = [];
-  for (const item of cases) {
-    const report = await runAdminModelMatrix({
-      ...options,
-      question: item.question,
-      cardNameCandidates: item.candidateCards,
-      configurations: normalizedConfigurations,
-      concurrency: 1,
-      maxConcurrency: 1,
-      maxFinalRequests: normalizedConfigurations.length,
-      maxEstimatedCostCny: costLimit,
-      estimatedCnyPerFinalRequest,
-      estimatedInputTokensPerFinalRequest,
-      estimatedOutputTokensPerFinalRequest,
-      budgetUsdToCny,
-      now,
-    });
-    reports.push({ caseId: item.caseId, ...report });
-  }
-  const endedAt = now();
-  return {
+  const createReport = (endedAt, complete) => ({
     schemaVersion: 1,
     startedAt: startedAt.toISOString(),
     endedAt: endedAt.toISOString(),
     durationMs: Math.max(0, endedAt.getTime() - startedAt.getTime()),
+    progress: {
+      completedCases: reports.length,
+      totalCases: cases.length,
+      complete,
+    },
     guard: {
       finalAttemptPolicy: "single",
       concurrency: 1,
@@ -375,7 +365,72 @@ export async function runAdminModelMatrixBatch({
       plannedEstimatedCostCny,
       maxEstimatedCostCny: costLimit,
     },
-    reports,
+    reports: [...reports],
+  });
+  for (const item of cases) {
+    const caseStartedAt = now();
+    try {
+      const report = await runAdminModelMatrix({
+        ...options,
+        question: item.question,
+        cardNameCandidates: item.candidateCards,
+        configurations: normalizedConfigurations,
+        concurrency: 1,
+        maxConcurrency: 1,
+        maxFinalRequests: normalizedConfigurations.length,
+        maxEstimatedCostCny: costLimit,
+        estimatedCnyPerFinalRequest,
+        estimatedInputTokensPerFinalRequest,
+        estimatedOutputTokensPerFinalRequest,
+        budgetUsdToCny,
+        now,
+      });
+      reports.push({ caseId: item.caseId, ...report });
+    } catch (error) {
+      const caseEndedAt = now();
+      reports.push(createFailedBatchCaseReport({
+        item,
+        configurations: normalizedConfigurations,
+        error,
+        startedAt: caseStartedAt,
+        endedAt: caseEndedAt,
+      }));
+    }
+    if (onCaseComplete) await onCaseComplete(createReport(now(), false));
+  }
+  const endedAt = now();
+  return createReport(endedAt, true);
+}
+
+function createFailedBatchCaseReport({ item, configurations, error, startedAt, endedAt }) {
+  const normalizedError = normalizeError(error);
+  return {
+    caseId: item.caseId,
+    schemaVersion: 1,
+    question: item.question,
+    sourceRunId: null,
+    sourceEvidenceVariant: configurations[0]?.evidenceVariant || "full",
+    evidenceVariants: [...new Set(configurations.map(
+      (configuration) => configuration.evidenceVariant,
+    ))],
+    startedAt: startedAt.toISOString(),
+    endedAt: endedAt.toISOString(),
+    durationMs: Math.max(0, endedAt.getTime() - startedAt.getTime()),
+    status: "FAILED",
+    caseError: normalizedError,
+    availableModels: [],
+    results: configurations.map((configuration, index) => {
+      if (index === 0) {
+        return {
+          ...summarizeFailure(configuration, error),
+          role: "source",
+        };
+      }
+      return summarizeSkipped(
+        configuration,
+        `source case failed before frozen evidence was available: ${normalizedError.message}`,
+      );
+    }),
   };
 }
 
@@ -737,6 +792,10 @@ export function formatMatrixBatchMarkdown(report) {
       "",
       `## ${escapeMarkdown(item.caseId)}`,
       "",
+      ...(item.caseError ? [
+        `- 题目级失败：${escapeMarkdown(item.caseError.message || item.caseError.code)}`,
+        "",
+      ] : []),
       formatMatrixMarkdown(item).replace(/^# 管理实验室模型矩阵\r?\n+/u, "").trimEnd(),
     );
   }
@@ -834,12 +893,21 @@ export async function main(argv = process.argv.slice(2), env = process.env, depe
       ?? DEFAULT_BUDGET_USD_TO_CNY,
     ...(configurations ? { configurations } : {}),
   };
-  const report = options.casesFile
-    ? await runAdminModelMatrixBatch({
-        ...sharedOptions,
-        questions: parseCasesFile(await readFileImpl(options.casesFile, "utf8")),
-      })
-    : await runAdminModelMatrix({ ...sharedOptions, question });
+  let report;
+  if (options.casesFile) {
+    const questions = parseCasesFile(await readFileImpl(options.casesFile, "utf8"));
+    report = await runAdminModelMatrixBatch({
+      ...sharedOptions,
+      questions,
+      ...(options.output && options.format === "json" ? {
+        onCaseComplete: async (checkpoint) => {
+          await writeFileImpl(options.output, `${JSON.stringify(checkpoint, null, 2)}\n`, "utf8");
+        },
+      } : {}),
+    });
+  } else {
+    report = await runAdminModelMatrix({ ...sharedOptions, question });
+  }
   const output = options.format === "markdown"
     ? (options.casesFile ? formatMatrixBatchMarkdown(report) : formatMatrixMarkdown(report))
     : `${JSON.stringify(report, null, 2)}\n`;
