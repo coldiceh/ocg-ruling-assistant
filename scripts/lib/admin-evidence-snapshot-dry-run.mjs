@@ -97,6 +97,7 @@ export async function runAdminEvidenceSnapshotDryRun({
   extractCards = extractRagCards,
   retrieveEvidence = retrieveRagEvidence,
   legacyLuaSemanticPacketFactory = null,
+  legacyLuaMode = null,
   retrievalFetchImpl = null,
   enginePasscodeHydrationEnabled = false,
 } = {}) {
@@ -319,7 +320,7 @@ export async function runAdminEvidenceSnapshotDryRun({
       ? "ALLOWLISTED_EVIDENCE_NETWORK_ZERO_MODEL_COST"
       : "LOCAL_ONLY_ZERO_COST",
     legacyLuaMode: typeof legacyLuaSemanticPacketFactory === "function"
-      ? "INJECTED_LOCAL_ENGINE"
+      ? String(legacyLuaMode || "INJECTED_LOCAL_ENGINE")
       : "UNAVAILABLE",
     enginePasscodeHydrationEnabled:
       enginePasscodeHydrationEnabled === true,

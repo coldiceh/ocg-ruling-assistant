@@ -470,13 +470,20 @@ test("backend answers bypass persistent browser cache and bust static assets", a
 });
 
 test("readme_keeps_only_requested_future_plans", async () => {
-  const readme = await readFile(new URL("../README.md", import.meta.url), "utf8");
-  assert.doesNotMatch(readme, /## 技术架构|## 本地运行/u);
-  const future = readme.match(/## 未来计划([\s\S]*?)## Disclaimer/u)?.[1] || "";
-  assert.match(future, /模拟器验证/u);
-  assert.match(future, /支持日文版本/u);
-  assert.match(future, /支持 TCG 版本/u);
-  assert.doesNotMatch(future, /validator|critic|更强规则分析/u);
+  const [readme, english, japanese] = await Promise.all([
+    readFile(new URL("../README.md", import.meta.url), "utf8"),
+    readFile(new URL("../README.en.md", import.meta.url), "utf8"),
+    readFile(new URL("../README.ja.md", import.meta.url), "utf8"),
+  ]);
+  assert.doesNotMatch(readme, /## 技术架构|## 本地运行|## 贡献|## 未来计划/u);
+  assert.match(readme, /```mermaid[\s\S]*裁定模型分析/u);
+  assert.match(readme, /MODEL_EFFORT_MATRIX:START/u);
+  assert.match(readme, /Fluorohydride\/ygopro-core/u);
+  assert.match(readme, /space\.bilibili\.com\/869711/u);
+  assert.match(readme, /\[English\]\(README\.en\.md\)/u);
+  assert.match(readme, /\[日本語\]\(README\.ja\.md\)/u);
+  assert.match(english, /## How it works/u);
+  assert.match(japanese, /## 仕組み/u);
 });
 
 test("ui_hides_engine_details_by_default", async () => {

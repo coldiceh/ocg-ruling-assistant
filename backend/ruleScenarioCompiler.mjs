@@ -182,7 +182,7 @@ export function compileRuleScenario({
     nonTurnReplacementCarrierDestroyed: replacementSequenceComplete,
     dependentSpecialSummonNotPerformed: replacementSequenceComplete && destructionDependentFollowUps.length > 0,
     simultaneousTriggerChain,
-    simultaneousPublicPrivateTriggers: simultaneousTriggerChain.recognized === true,
+    simultaneousPublicPrivateTriggers: simultaneousTriggerChain.mode === "public_private",
   };
 }
 

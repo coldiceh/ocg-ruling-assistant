@@ -6,6 +6,9 @@ const LOCAL_TERMINAL_RESULT_STATUSES = new Set([
   "error_outcome_unknown",
 ]);
 const EFFORT_ORDER = Object.freeze(["none", "low", "medium", "high", "xhigh", "max"]);
+const VERDICT_MODES = new Set(["determinate", "any"]);
+const DETERMINATE_VERDICT_VALUES = new Set(["TRUE", "FALSE"]);
+const INDETERMINATE_VERDICT_VALUES = new Set(["CONDITIONAL", "UNKNOWN"]);
 
 /**
  * Scores a completed paid-experiment report against an independently loaded
@@ -96,13 +99,31 @@ export function validateAssertionFixture(value) {
     const id = requiredText(item.id, `goldens[${index}].id`);
     if (result.has(id)) throw scorerError(`duplicate golden id: ${id}`);
     const assertions = normalizeAssertions(item.assertions, `goldens[${index}].assertions`);
-    result.set(id, Object.freeze({ id, assertions }));
+    const verdictMode = normalizeVerdictMode(item.verdictMode, `goldens[${index}].verdictMode`);
+    result.set(id, Object.freeze({ id, assertions, verdictMode }));
   }
   return result;
 }
 
 function scoreResult({ caseId, item, testCase }) {
   const identity = resultIdentity(caseId, item);
+  if (item?.localExecutionStatus && item.localExecutionStatus !== "completed_valid") {
+    return inconclusiveScore(
+      caseId,
+      item,
+      `本地模型结果状态为 ${item.localExecutionStatus}，只有 completed_valid 可以评分。`,
+      identity,
+    );
+  }
+  if (item?.localExecutionStatus === "completed_valid"
+    && (!validationHardOk(item?.validation) || !isObject(item?.validation?.normalized))) {
+    return inconclusiveScore(
+      caseId,
+      item,
+      "本地模型结果缺少成功的结构化校验或 normalized 结果。",
+      identity,
+    );
+  }
   if (normalizeStatus(item?.status) !== "SUCCEEDED") {
     return inconclusiveScore(
       caseId,
@@ -110,19 +131,22 @@ function scoreResult({ caseId, item, testCase }) {
       `模型运行状态为 ${normalizeStatus(item?.status) || "UNKNOWN"}，没有可判定的成功结果。`,
     );
   }
-  if (item?.validation?.ok === false || item?.result?.validation?.ok === false) {
+  if ((item?.validation && !validationHardOk(item.validation))
+    || (item?.result?.validation && !validationHardOk(item.result.validation))) {
     return inconclusiveScore(caseId, item, "模型结果没有通过结构化校验。", identity);
   }
   const extracted = extractStructuredRuling(item);
   if (!extracted) {
     return inconclusiveScore(caseId, item, "成功运行中没有可读取的结构化裁定。", identity);
   }
+  const verdictModeCheck = evaluateVerdictMode(testCase.verdictMode, extracted.ruling);
   const surfaces = collectTextSurfaces(extracted.ruling);
-  if (!surfaces.all) {
+  if (surfaces.all.length === 0) {
     return inconclusiveScore(caseId, item, "结构化裁定没有任何可评分文本。", identity);
   }
 
   const checks = testCase.assertions.map((assertion) => evaluateAssertion(assertion, surfaces));
+  if (!verdictModeCheck.passed) checks.unshift(verdictModeCheck);
   const missingConclusions = checks
     .filter((check) => !check.passed)
     .map((check) => ({ assertionId: check.assertionId, description: check.description }));
@@ -137,22 +161,86 @@ function scoreResult({ caseId, item, testCase }) {
 }
 
 function evaluateAssertion(assertion, surfaces) {
-  const text = surfaces[assertion.source];
-  const matchedAlternatives = assertion.allOf.map((alternatives) => (
-    alternatives.find((candidate) => text.includes(candidate)) || null
-  ));
-  const forbiddenMatches = assertion.noneOf.filter((candidate) => text.includes(candidate));
-  const passed = matchedAlternatives.every(Boolean) && forbiddenMatches.length === 0;
+  const candidates = surfaces[assertion.source] || [];
+  const evaluations = candidates.map((text, surfaceIndex) => {
+    const matchedAlternatives = assertion.allOf.map((alternatives) => (
+      alternatives.find((candidate) => text.includes(candidate)) || null
+    ));
+    const forbiddenMatches = assertion.noneOf.filter((candidate) => text.includes(candidate));
+    return {
+      surfaceIndex,
+      matchedAlternatives,
+      forbiddenMatches,
+      matchedGroupCount: matchedAlternatives.filter(Boolean).length,
+      passed: matchedAlternatives.every(Boolean) && forbiddenMatches.length === 0,
+    };
+  });
+  const passing = evaluations.find((item) => item.passed);
+  const best = passing || evaluations.sort((left, right) => (
+    right.matchedGroupCount - left.matchedGroupCount
+    || left.forbiddenMatches.length - right.forbiddenMatches.length
+    || left.surfaceIndex - right.surfaceIndex
+  ))[0] || {
+    surfaceIndex: null,
+    matchedAlternatives: assertion.allOf.map(() => null),
+    forbiddenMatches: [],
+    passed: false,
+  };
   return {
     assertionId: assertion.id,
     description: assertion.description,
     source: assertion.source,
-    passed,
-    matchedAlternatives,
+    passed: best.passed,
+    matchedSurfaceIndex: best.surfaceIndex,
+    matchedAlternatives: best.matchedAlternatives,
     missingGroups: assertion.allOf
-      .map((alternatives, index) => matchedAlternatives[index] ? null : alternatives)
+      .map((alternatives, index) => best.matchedAlternatives[index] ? null : alternatives)
       .filter(Boolean),
-    forbiddenMatches,
+    forbiddenMatches: best.forbiddenMatches,
+  };
+}
+
+function evaluateVerdictMode(verdictMode, ruling) {
+  const mode = VERDICT_MODES.has(verdictMode) ? verdictMode : "determinate";
+  if (mode === "any") return passedVerdictModeCheck("该评测允许条件性或未知裁定。");
+
+  const verdicts = array(ruling?.verdicts);
+  // Preserve compatibility with legacy independently-produced reports that
+  // contain only conciseAnswer. Whenever structured verdicts are present,
+  // however, a determinate fixture must not accept CONDITIONAL or UNKNOWN.
+  if (verdicts.length === 0) {
+    return passedVerdictModeCheck("需要确定裁定（旧版仅 conciseAnswer 结果）。");
+  }
+
+  const values = verdicts.map((item) => String(item?.value || "").trim().toUpperCase());
+  const indeterminate = values.filter((value) => INDETERMINATE_VERDICT_VALUES.has(value));
+  const invalid = values.filter((value) => !DETERMINATE_VERDICT_VALUES.has(value)
+    && !INDETERMINATE_VERDICT_VALUES.has(value));
+  const passed = indeterminate.length === 0
+    && invalid.length === 0
+    && values.every((value) => DETERMINATE_VERDICT_VALUES.has(value));
+  return {
+    assertionId: "verdict-mode",
+    description: "该 case 要求所有结构化 verdict 都是确定裁定（TRUE 或 FALSE）。",
+    source: "verdicts",
+    passed,
+    matchedSurfaceIndex: null,
+    matchedAlternatives: passed ? values : [],
+    missingGroups: passed ? [] : [["TRUE", "FALSE"]],
+    forbiddenMatches: [...indeterminate, ...invalid],
+  };
+}
+
+function passedVerdictModeCheck(description) {
+  return {
+    assertionId: "verdict-mode",
+    description,
+    source: "verdicts",
+    passed: true,
+    matchedSurfaceIndex: null,
+    matchedAlternatives: [],
+    missingGroups: [],
+    forbiddenMatches: [],
   };
 }
 
@@ -174,22 +262,35 @@ function extractStructuredRuling(value) {
 
 function collectTextSurfaces(ruling) {
   const concise = normalizeText(ruling?.conciseAnswer);
-  const verdicts = normalizeText(array(ruling?.verdicts).flatMap((item) => [
-    item?.conclusion,
-    ...array(item?.conditions),
-  ]).join("\n"));
-  const claims = normalizeText(array(ruling?.claims).map((item) => item?.proposition).join("\n"));
-  const timeline = normalizeText(array(ruling?.timeline).flatMap((item) => [
-    item?.action,
-    item?.result,
-  ]).join("\n"));
+  const verdicts = array(ruling?.verdicts)
+    .filter((item) => DETERMINATE_VERDICT_VALUES.has(String(item?.value || "").trim().toUpperCase()))
+    .map((item) => normalizeText(item?.conclusion))
+    .filter(Boolean);
+  const claims = array(ruling?.claims)
+    .map((item) => normalizeText(item?.proposition))
+    .filter(Boolean);
+  const timeline = array(ruling?.timeline)
+    .map((item) => normalizeText([item?.action, item?.result].filter(Boolean).join("\n")))
+    .filter(Boolean);
+  const primary = [concise, ...verdicts].filter(Boolean);
   return {
-    concise,
+    concise: concise ? [concise] : [],
     verdicts,
     claims,
     timeline,
-    all: [concise, verdicts, claims, timeline].filter(Boolean).join("\n"),
+    // Every assertion must be satisfied by one primary answer surface. Do not
+    // combine rejected conditions, supporting claims, or separate timeline
+    // steps into a conclusion the model never actually stated.
+    all: primary,
   };
+}
+
+function normalizeVerdictMode(value, label) {
+  const mode = String(value || "determinate").trim().toLowerCase();
+  if (!VERDICT_MODES.has(mode)) {
+    throw scorerError(`${label} must be determinate or any`);
+  }
+  return mode;
 }
 
 function normalizeAssertions(value, label) {
@@ -260,12 +361,13 @@ function normalizeExperimentReports(value) {
 
 function normalizeLocalExperimentResult(item) {
   const localStatus = String(item?.status || "").trim().toLowerCase();
-  const transportCompleted = new Set(["completed_valid", "completed_invalid"]).has(localStatus);
   const validation = item?.validatedResult || null;
-  const rawStructuredResult = parseLocalRawOutput(item?.rawOutput);
+  const validated = localStatus === "completed_valid"
+    && validationHardOk(validation)
+    && isObject(validation?.normalized);
   return {
     ...item,
-    status: transportCompleted ? "SUCCEEDED" : "FAILED",
+    status: validated ? "SUCCEEDED" : "FAILED",
     requestedModel: item?.requestedModel || item?.model || null,
     returnedModel: item?.reportedModel || item?.submittedModel || null,
     configuration: {
@@ -275,27 +377,18 @@ function normalizeLocalExperimentResult(item) {
       evidenceVariant: item?.evidenceVariant || "full",
     },
     validation,
-    validatedStructuredResult: validation?.normalized || rawStructuredResult,
+    validatedStructuredResult: validated ? validation.normalized : null,
     localExecutionStatus: localStatus || null,
   };
 }
 
-function parseLocalRawOutput(value) {
-  if (typeof value !== "string" || !value.trim()) return null;
-  const text = value.trim();
-  const candidates = [text];
-  const fenced = text.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/iu);
-  if (fenced?.[1]) candidates.push(fenced[1]);
-  for (const candidate of candidates) {
-    try {
-      const parsed = JSON.parse(candidate);
-      if (isObject(parsed)) return parsed;
-    } catch {
-      // Invalid raw output remains unscorable; this offline adapter never asks
-      // a model to repair it.
-    }
+function validationHardOk(validation) {
+  if (!isObject(validation)) return false;
+  if (isObject(validation.hardValidity)
+    && typeof validation.hardValidity.ok === "boolean") {
+    return validation.hardValidity.ok;
   }
-  return null;
+  return validation.ok === true;
 }
 
 function inconclusiveScore(caseId, item, reason, identity = resultIdentity(caseId, item)) {

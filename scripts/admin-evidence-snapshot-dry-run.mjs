@@ -90,6 +90,7 @@ export async function runAdminEvidenceDryRunCli(
       "                    final-model transport remains a local sentinel",
       "  --engine-url <url> Use the already-running local Lua engine at",
       "                    http://127.0.0.1:<port> or http://localhost:<port>;",
+      "                    bundled precomputed Lua remains enabled without it;",
       "                    OCG_ENGINE_TOKEN is read only for this local engine",
       "  --bundle-output <path>",
       "                    Write a validated frozen-source bundle for the local Relay runner",
@@ -121,13 +122,11 @@ export async function runAdminEvidenceDryRunCli(
   const localEngineUrl = options.engineUrl
     ? normalizeLocalDryRunEngineUrl(options.engineUrl)
     : null;
-  const legacyLuaSemanticPacketFactory = localEngineUrl
-    ? createLegacyLuaFactory({
-        engineUrl: localEngineUrl,
-        engineToken,
-        fetchImpl,
-      })
-    : null;
+  const legacyLuaSemanticPacketFactory = createLegacyLuaFactory({
+    engineUrl: localEngineUrl,
+    engineToken,
+    fetchImpl,
+  });
   const artifacts = [];
   const report = await runDryRun({
     cases: selected,
@@ -136,6 +135,9 @@ export async function runAdminEvidenceDryRunCli(
       ? createAllowlistedCommunityCardFetch({ fetchImpl })
       : null,
     legacyLuaSemanticPacketFactory,
+    legacyLuaMode: localEngineUrl
+      ? "PRECOMPUTED_STATIC_WITH_LOCAL_FALLBACK"
+      : "PRECOMPUTED_STATIC",
     enginePasscodeHydrationEnabled: localEngineUrl !== null,
     async onCaseArtifacts(value) {
       artifacts.push(value);
@@ -255,9 +257,9 @@ function sha256(value) {
 }
 
 /**
- * Opt-in composition for the zero-cost dry-run. It intentionally copies only
- * the local engine URL and token into the production Lua factory; unrelated
- * process credentials can never become part of this transport environment.
+ * Zero-cost composition for bundled precomputed Lua, with an optional local
+ * live-engine fallback. Only an explicitly supplied loopback URL and token may
+ * enter the live transport environment; unrelated process credentials never do.
  */
 export function createLocalDryRunLegacyLuaSemanticPacketFactory({
   engineUrl,
@@ -268,21 +270,28 @@ export function createLocalDryRunLegacyLuaSemanticPacketFactory({
   if (typeof configuredFactory !== "function") {
     throw new TypeError("configured legacy Lua factory must be a function");
   }
-  const normalizedEngineUrl = normalizeLocalDryRunEngineUrl(engineUrl);
-  const localFetch = createLocalEngineOnlyFetch({
-    engineUrl: normalizedEngineUrl,
-    fetchImpl,
-  });
+  const hasLocalEngine = String(engineUrl || "").trim() !== "";
+  const normalizedEngineUrl = hasLocalEngine
+    ? normalizeLocalDryRunEngineUrl(engineUrl)
+    : null;
+  const localFetch = hasLocalEngine
+    ? createLocalEngineOnlyFetch({
+        engineUrl: normalizedEngineUrl,
+        fetchImpl,
+      })
+    : fetchImpl;
   const token = String(engineToken || "").trim();
   const configured = configuredFactory({
-    env: {
-      OCG_ENGINE_URL: normalizedEngineUrl,
-      ...(token ? { OCG_ENGINE_TOKEN: token } : {}),
-    },
+    env: hasLocalEngine
+      ? {
+          OCG_ENGINE_URL: normalizedEngineUrl,
+          ...(token ? { OCG_ENGINE_TOKEN: token } : {}),
+        }
+      : {},
     fetchImpl: localFetch,
   });
   if (typeof configured !== "function") {
-    throw new TypeError("local legacy Lua factory was not configured");
+    throw new TypeError("precomputed legacy Lua factory was not configured");
   }
   return async (input) => {
     const packet = await configured(input);

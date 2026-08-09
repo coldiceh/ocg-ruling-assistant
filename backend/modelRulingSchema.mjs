@@ -76,6 +76,7 @@ export const MODEL_RULING_COUNTER_CHECK_TYPES = Object.freeze([
 const CRITICAL_COUNTER_CHECK_TYPES = new Set([
   "EVIDENCE_ENTAILMENT",
   "MISSING_FACT",
+  "RESOLUTION_ORDER",
 ]);
 
 const verdictSchema = strictObject({
@@ -180,21 +181,22 @@ export function validateModelRulingResult(result, {
   expectedQuestionIds,
   providedFacts = [],
 } = {}) {
-  const errors = [];
-  validateSchemaShape(result, errors);
-  if (errors.length > 0) return validationFailure(errors);
+  const hardErrors = [];
+  const semanticIssues = [];
+  validateSchemaShape(result, hardErrors);
+  if (hardErrors.length > 0) return validationFailure(hardErrors);
 
   if (!evidenceSnapshot || typeof evidenceSnapshot !== "object") {
-    errors.push("Evidence Snapshot is required for semantic validation");
+    hardErrors.push("Evidence Snapshot is required for semantic validation");
   }
   if (!Array.isArray(expectedQuestionIds) || expectedQuestionIds.length === 0) {
-    errors.push("expectedQuestionIds is required for complete question coverage validation");
+    hardErrors.push("expectedQuestionIds is required for complete question coverage validation");
   }
   const validatesAgainstModelVisiblePacket = modelVisibleEvidencePacket !== undefined;
   if (validatesAgainstModelVisiblePacket
     && (!isPlainObject(modelVisibleEvidencePacket)
       || !Array.isArray(modelVisibleEvidencePacket.evidenceItems))) {
-    errors.push("modelVisibleEvidencePacket.evidenceItems is required for model-visible evidence validation");
+    hardErrors.push("modelVisibleEvidencePacket.evidenceItems is required for model-visible evidence validation");
   }
   const evidenceIndex = validatesAgainstModelVisiblePacket
     ? buildModelVisibleEvidenceIndex(modelVisibleEvidencePacket)
@@ -202,20 +204,20 @@ export function validateModelRulingResult(result, {
   const evidenceReferenceScope = validatesAgainstModelVisiblePacket
     ? "model-visible Evidence Packet"
     : "Evidence Snapshot";
-  const claimsById = uniqueIndex(result.claims, "claimId", "claims", errors);
-  const verdictsByQuestion = uniqueIndex(result.verdicts, "questionId", "verdicts", errors);
-  const usageByEvidence = uniqueIndex(result.evidenceUsage, "evidenceId", "evidenceUsage", errors);
+  const claimsById = uniqueIndex(result.claims, "claimId", "claims", hardErrors);
+  const verdictsByQuestion = uniqueIndex(result.verdicts, "questionId", "verdicts", hardErrors);
+  const usageByEvidence = uniqueIndex(result.evidenceUsage, "evidenceId", "evidenceUsage", hardErrors);
 
-  validateQuestionCoverage(verdictsByQuestion, expectedQuestionIds, errors);
-  validateEvidenceReferences(result, evidenceIndex, errors, evidenceReferenceScope);
-  validateEvidenceUsage(result, claimsById, usageByEvidence, evidenceIndex, errors);
-  validateClaims(result, claimsById, usageByEvidence, evidenceIndex, errors);
+  validateQuestionCoverage(verdictsByQuestion, expectedQuestionIds, hardErrors);
+  validateEvidenceReferences(result, evidenceIndex, hardErrors, evidenceReferenceScope);
+  validateEvidenceUsage(result, claimsById, usageByEvidence, evidenceIndex, hardErrors);
+  validateClaims(result, claimsById, usageByEvidence, evidenceIndex, hardErrors);
   validateQuestionScopedReasoning(
     result,
     verdictsByQuestion,
     expectedQuestionIds,
     evidenceIndex,
-    errors,
+    hardErrors,
   );
   validateUnknownAndConditional(
     result,
@@ -223,19 +225,15 @@ export function validateModelRulingResult(result, {
     modelVisibleEvidencePacket,
     providedFacts,
     expectedQuestionIds,
-    errors,
+    hardErrors,
+    semanticIssues,
   );
-  validateDecisiveAssumptions(result, providedFacts, errors);
-  validateTimeline(result.timeline, errors);
-  validateAnswerConsistency(result, errors);
-  validateCounterChecks(result, errors);
+  validateDecisiveAssumptions(result, providedFacts, semanticIssues);
+  validateTimeline(result.timeline, hardErrors, semanticIssues);
+  validateAnswerConsistency(result, semanticIssues);
+  validateCounterChecks(result, hardErrors);
 
-  if (errors.length > 0) return validationFailure(errors);
-  return {
-    ok: true,
-    errors: [],
-    normalized: cloneJson(result),
-  };
+  return layeredValidationResult(result, { hardErrors, semanticIssues });
 }
 
 export function parseAndValidateModelRulingResult(rawText, options = {}) {
@@ -819,7 +817,8 @@ function validateUnknownAndConditional(
   modelVisibleEvidencePacket,
   providedFacts,
   expectedQuestionIds,
-  errors,
+  hardErrors,
+  semanticIssues,
 ) {
   const evidenceCompleteness = assessEvidenceCompleteness(
     evidenceSnapshot,
@@ -836,12 +835,12 @@ function validateUnknownAndConditional(
   const unresolvedByQuestion = scopedItemsByQuestion(result.unresolved, questionIds);
   for (const verdict of result.verdicts) {
     if (verdict.value === "CONDITIONAL" && verdict.conditions.length === 0) {
-      errors.push(`CONDITIONAL verdict ${verdict.questionId} must list conditions`);
+      hardErrors.push(`CONDITIONAL verdict ${verdict.questionId} must list conditions`);
     }
     if (verdict.value === "CONDITIONAL") {
       const vagueConditions = verdict.conditions.filter((condition) => !isSpecificBranchCondition(condition));
       if (vagueConditions.length > 0) {
-        errors.push(`CONDITIONAL verdict ${verdict.questionId} must list concrete, checkable branch conditions`);
+        semanticIssues.push(`CONDITIONAL verdict ${verdict.questionId} must list concrete, checkable branch conditions`);
       }
     }
     if (verdict.value === "UNKNOWN") {
@@ -859,24 +858,24 @@ function validateUnknownAndConditional(
         .some((claim) => claim.decisive && claim.status === "UNKNOWN")
         || decisiveUnresolved.length > 0;
       if (!hasDecisiveUnknown) {
-        errors.push(`UNKNOWN verdict ${verdict.questionId} must identify a decisive unresolved item`);
+        hardErrors.push(`UNKNOWN verdict ${verdict.questionId} must identify a decisive unresolved item`);
       }
       if (decisiveUnresolved.length === 0) {
-        errors.push(`UNKNOWN verdict ${verdict.questionId} must describe the decisive missing fact in unresolved`);
+        hardErrors.push(`UNKNOWN verdict ${verdict.questionId} must describe the decisive missing fact in unresolved`);
       } else if (decisiveUnresolved.some((item) => !isSpecificMissingFact(item))) {
-        errors.push(`UNKNOWN verdict ${verdict.questionId} must name a concrete decisive missing fact, not generic insufficient information`);
+        semanticIssues.push(`UNKNOWN verdict ${verdict.questionId} must name a concrete decisive missing fact, not generic insufficient information`);
       }
       const alreadyProvided = decisiveUnresolved.find(
         (item) => isClaimedMissingFactAlreadyProvided(item, knownFacts),
       );
       if (alreadyProvided) {
-        errors.push(
+        semanticIssues.push(
           `UNKNOWN verdict ${verdict.questionId} claims a missing fact that is already present in the question, provided facts, or model-visible evidence: ${alreadyProvided.explanation}`,
         );
       }
       if (evidenceCompleteness.sufficientForAntiRefusal
         && decisiveUnresolved.some((item) => isRetrievalOnlyGap(item))) {
-        errors.push(`UNKNOWN verdict ${verdict.questionId} cannot claim a generic retrieval or evidence gap when Evidence Snapshot completeness is sufficient`);
+        semanticIssues.push(`UNKNOWN verdict ${verdict.questionId} cannot claim a generic retrieval or evidence gap when Evidence Snapshot completeness is sufficient`);
       }
     }
   }
@@ -1081,7 +1080,7 @@ function isRelevantRulingEvidence(evidence) {
   );
 }
 
-function validateDecisiveAssumptions(result, providedFacts, errors) {
+function validateDecisiveAssumptions(result, providedFacts, semanticIssues) {
   if (!Array.isArray(providedFacts) || providedFacts.length === 0) return;
   const normalizedFacts = providedFacts.map(normalizeComparableText);
   for (const assumption of result.assumptions) {
@@ -1090,48 +1089,95 @@ function validateDecisiveAssumptions(result, providedFacts, errors) {
     const supported = normalizedFacts.some((fact) => fact.includes(normalizedAssumption)
       || normalizedAssumption.includes(fact));
     if (!supported) {
-      errors.push(`decisive assumption is not present in provided facts: ${assumption.statement}`);
+      semanticIssues.push(`decisive assumption is not present in provided facts: ${assumption.statement}`);
     }
   }
 }
 
-function validateTimeline(timeline, errors) {
+function validateTimeline(timeline, hardErrors, semanticIssues) {
   const orders = new Set();
   for (const item of timeline) {
-    if (orders.has(item.order)) errors.push(`timeline order must be unique: ${item.order}`);
+    if (orders.has(item.order)) hardErrors.push(`timeline order must be unique: ${item.order}`);
     orders.add(item.order);
     const kinds = detectOperationKinds(item.action);
     if (kinds.size > 1) {
-      errors.push(`timeline operation ${item.order} is classified as mutually exclusive kinds: ${[...kinds].join(", ")}`);
+      semanticIssues.push(`timeline operation ${item.order} is classified as mutually exclusive kinds: ${[...kinds].join(", ")}`);
     }
   }
   const sorted = [...orders].sort((a, b) => a - b);
   for (let index = 0; index < sorted.length; index += 1) {
     if (sorted[index] !== index + 1) {
-      errors.push("timeline order must be contiguous and start at 1");
+      hardErrors.push("timeline order must be contiguous and start at 1");
       break;
+    }
+  }
+  validateExplicitChainResolutionOrder(timeline, semanticIssues);
+}
+
+function validateExplicitChainResolutionOrder(timeline, errors) {
+  let previousChainLink = null;
+  for (const item of [...timeline].sort((left, right) => left.order - right.order)) {
+    const text = `${item.action}\n${item.result}`.normalize("NFKC");
+    if (/(?:另开|另起|新(?:的)?|下一(?:组|条)?)(?:连锁|chain)/iu.test(text)) {
+      previousChainLink = null;
+    }
+    for (const chainLink of extractExplicitResolvedChainLinks(text)) {
+      if (previousChainLink !== null && chainLink > previousChainLink) {
+        errors.push(
+          `timeline resolves chain links in forward order: C${previousChainLink} before C${chainLink}`,
+        );
+        return;
+      }
+      previousChainLink = chainLink;
     }
   }
 }
 
-function validateAnswerConsistency(result, errors) {
+function extractExplicitResolvedChainLinks(value) {
+  const matches = [];
+  const patterns = [
+    /(?:连锁|chain|c)\s*([1-9]\d*)[^。；;\n]{0,24}?(?:处理|结算|解決|resolve(?:d|s|ing)?)/giu,
+    /(?:处理|结算|解決|resolve(?:d|s|ing)?)[^。；;\n]{0,24}?(?:连锁|chain|c)\s*([1-9]\d*)/giu,
+  ];
+  for (const pattern of patterns) {
+    for (const match of String(value || "").matchAll(pattern)) {
+      const nearby = String(value || "").slice(
+        Math.max(0, (match.index ?? 0) - 8),
+        (match.index ?? 0) + match[0].length + 12,
+      );
+      if (/(?:处理|結算|结算|解決|resolve|resolution).{0,4}(?:顺序|順序|先后|先後|order)/iu.test(nearby)) {
+        continue;
+      }
+      const chainLink = Number(match[1]);
+      if (Number.isInteger(chainLink) && chainLink > 0) {
+        matches.push({ index: match.index ?? 0, chainLink });
+      }
+    }
+  }
+  matches.sort((left, right) => left.index - right.index);
+  return matches
+    .map((item) => item.chainLink)
+    .filter((chainLink, index, all) => index === 0 || chainLink !== all[index - 1]);
+}
+
+function validateAnswerConsistency(result, semanticIssues) {
   if (result.verdicts.length === 1) {
     const verdict = result.verdicts[0];
     const polarity = detectAnswerPolarity(result.conciseAnswer)
       || detectAnswerPolarity(verdict.conclusion);
     if (verdict.value === "TRUE" && polarity === "negative") {
-      errors.push("TRUE verdict contradicts conciseAnswer");
+      semanticIssues.push("TRUE verdict contradicts conciseAnswer");
     }
     if (verdict.value === "FALSE" && polarity === "positive") {
-      errors.push("FALSE verdict contradicts conciseAnswer");
+      semanticIssues.push("FALSE verdict contradicts conciseAnswer");
     }
   }
   const combined = `${result.conciseAnswer}\n${result.claims.map((claim) => claim.proposition).join("\n")}`;
   if (/(?:未找到|没找到|未检索到|没有检索到).{0,30}(?:FAQ|Q&A|裁定).{0,30}(?:所以|因此|故).{0,20}(?:不能|不可以|不得)/iu.test(combined)) {
-    errors.push("absence of a retrieved FAQ cannot prove a negative ruling");
+    semanticIssues.push("absence of a retrieved FAQ cannot prove a negative ruling");
   }
   if (/(?:系统|模型|资料库).{0,20}(?:不知道|未知|未实现).{0,30}(?:所以|因此|故).{0,20}(?:不能|不可以|不得)/iu.test(combined)) {
-    errors.push("system UNKNOWN cannot be converted into a rule-level prohibition");
+    semanticIssues.push("system UNKNOWN cannot be converted into a rule-level prohibition");
   }
 }
 
@@ -1609,10 +1655,41 @@ const ANSWER_POLARITY_PATTERNS = Object.freeze([
   ]],
 ]);
 
+function layeredValidationResult(result, { hardErrors = [], semanticIssues = [] } = {}) {
+  const normalizedHardErrors = [...new Set(hardErrors)];
+  const normalizedSemanticIssues = [...new Set(semanticIssues)];
+  const hardOk = normalizedHardErrors.length === 0;
+  const semanticOk = normalizedSemanticIssues.length === 0;
+  return {
+    ok: hardOk && semanticOk,
+    errors: [...normalizedHardErrors, ...normalizedSemanticIssues],
+    ...(hardOk ? { normalized: cloneJson(result) } : {}),
+    hardValidity: {
+      ok: hardOk,
+      errors: normalizedHardErrors,
+    },
+    semanticAssessment: {
+      evaluated: true,
+      ok: semanticOk,
+      issues: normalizedSemanticIssues,
+    },
+  };
+}
+
 function validationFailure(errors) {
+  const normalizedErrors = [...new Set(errors)];
   return {
     ok: false,
-    errors: [...new Set(errors)],
+    errors: normalizedErrors,
+    hardValidity: {
+      ok: false,
+      errors: normalizedErrors,
+    },
+    semanticAssessment: {
+      evaluated: false,
+      ok: false,
+      issues: [],
+    },
   };
 }
 

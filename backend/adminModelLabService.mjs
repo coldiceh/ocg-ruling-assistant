@@ -1900,6 +1900,7 @@ export function createAdminModelLabService({
       validation,
       attemptKind,
     });
+    const hardValidity = modelRulingHardValidity(validation);
     await settleFinalCallBudgetAttempt({
       run,
       completedAttempt,
@@ -1921,8 +1922,8 @@ export function createAdminModelLabService({
         },
       });
     }
-    if (!validation?.ok) {
-      const compactErrors = compactValidationErrors(validation?.errors);
+    if (!hardValidity.ok) {
+      const compactErrors = compactValidationErrors(hardValidity.errors);
       await runStore.appendEvent(run.runId, {
         type: ADMIN_MODEL_LAB_SERVICE_EVENT_TYPES.MODEL_VALIDATION_FAILED,
         payload: {
@@ -2024,8 +2025,11 @@ export function createAdminModelLabService({
             publicAnswerEligible: false,
           },
       validation: {
-        ok: true,
-        errors: [],
+        ok: hardValidity.ok,
+        errors: hardValidity.errors,
+        overallOk: validation?.ok === true,
+        hardValidity: jsonSafe(hardValidity),
+        semanticAssessment: jsonSafe(modelRulingSemanticAssessment(validation)),
         provenanceCorrections: jsonSafe(validation.provenanceCorrections || []),
       },
       provider: {
@@ -2106,7 +2110,9 @@ export function createAdminModelLabService({
 
     const profile = current.executionProfile?.finalRuling || {};
     const prompt = current.executionProfile?.prompt || {};
-    const compactErrors = compactValidationErrors(validation?.errors);
+    const compactErrors = compactValidationErrors(
+      modelRulingHardValidity(validation).errors,
+    );
     const initialAttempt = buildFinalAttemptAudit({
       run: current,
       response,
@@ -3941,6 +3947,8 @@ function buildFinalAttemptAudit({
 }) {
   const profile = run.executionProfile?.finalRuling || {};
   const pricingProfile = run.executionProfile?.pricing || {};
+  const hardValidity = modelRulingHardValidity(validation);
+  const semanticAssessment = modelRulingSemanticAssessment(validation);
   const usage = profile.provider === "openai"
     ? normalizeOpenAIResponsesUsage(response?.usage || {})
     : normalizeReportedModelUsage(response?.usage || {});
@@ -4004,8 +4012,11 @@ function buildFinalAttemptAudit({
     rawUsage: response?.usage ?? null,
     cost,
     validation: {
-      ok: validation?.ok === true,
-      errors: compactValidationErrors(validation?.errors),
+      ok: hardValidity.ok,
+      errors: hardValidity.ok ? [] : compactValidationErrors(hardValidity.errors),
+      overallOk: validation?.ok === true,
+      hardValidity: jsonSafe(hardValidity),
+      semanticAssessment: jsonSafe(semanticAssessment),
     },
     responseContentSha256: sha256(extractOpenAIResponseOutputText(response)),
     finishReason: nullableString(
@@ -4326,10 +4337,46 @@ function compactValidationErrors(errors) {
 function isRecoverableModelValidationFailure({ validation, response }) {
   if (normalizeProviderStatus(response?.status) !== "completed") return false;
   if (!String(extractOpenAIResponseOutputText(response) || "").trim()) return false;
-  const errors = compactValidationErrors(validation?.errors);
+  const errors = compactValidationErrors(
+    modelRulingHardValidity(validation).errors,
+  );
   if (errors.length === 0) return false;
   const internalPrerequisiteFailure = /(?:Evidence Snapshot is required|expectedQuestionIds is required|modelVisibleEvidencePacket\.evidenceItems is required)/iu;
   return !errors.some((error) => internalPrerequisiteFailure.test(error));
+}
+
+function modelRulingHardValidity(validation) {
+  if (validation?.hardValidity
+    && typeof validation.hardValidity.ok === "boolean") {
+    return {
+      ok: validation.hardValidity.ok,
+      errors: Array.isArray(validation.hardValidity.errors)
+        ? validation.hardValidity.errors
+        : [],
+    };
+  }
+  return {
+    ok: validation?.ok === true,
+    errors: Array.isArray(validation?.errors) ? validation.errors : [],
+  };
+}
+
+function modelRulingSemanticAssessment(validation) {
+  if (validation?.semanticAssessment
+    && typeof validation.semanticAssessment === "object") {
+    return {
+      evaluated: validation.semanticAssessment.evaluated === true,
+      ok: validation.semanticAssessment.ok === true,
+      issues: Array.isArray(validation.semanticAssessment.issues)
+        ? validation.semanticAssessment.issues
+        : [],
+    };
+  }
+  return {
+    evaluated: false,
+    ok: null,
+    issues: [],
+  };
 }
 
 function repairInvariantProof(run) {

@@ -190,6 +190,50 @@ test("same-id full QA, summary, context snippet, and wrapper remain compatible",
   assert.equal(archive.conflicts.length, 0);
   assert.equal(archive.statistics.conflictCount, 0);
   assert.equal(verifyAdminEvidenceArchive(archive).ok, true);
+  const packet = buildAdminEvidenceDecisionPacket({ archive });
+  const visibleVariants = packet.modelPacket.evidenceItems.filter(
+    (item) => item.evidenceId === "qa-22803",
+  );
+  assert.equal(visibleVariants.length, 1);
+  assert.match(visibleVariants[0].body, /^Question:/u);
+  assert.match(visibleVariants[0].body, /\n\nRuling:/u);
+});
+
+test("compatible aliases cannot transitively collapse two incompatible rulings", () => {
+  const sharedRuling = "Shared rule.";
+  const archive = createAdminEvidenceArchive({
+    evidenceBuckets: {
+      officialQaRelated: [
+        { id: "qa-x", type: "context_snippet", text: sharedRuling },
+        { id: "qa-y", type: "context_snippet", text: sharedRuling },
+        {
+          id: "qa-x",
+          type: "official_qa",
+          question: "Question X",
+          answer: `${sharedRuling} Conclusion X: may activate.`,
+        },
+        {
+          id: "qa-y",
+          type: "official_qa",
+          question: "Question Y",
+          answer: `${sharedRuling} Conclusion Y: cannot activate.`,
+        },
+      ],
+    },
+  });
+
+  assert.equal(archive.occurrences.length, 4);
+  assert.equal(archive.conflicts.length, 0);
+  const packet = buildAdminEvidenceDecisionPacket({ archive });
+  assert.equal(
+    packet.modelPacket.evidenceItems.some((item) => item.body.includes("Conclusion X: may activate.")),
+    true,
+  );
+  assert.equal(
+    packet.modelPacket.evidenceItems.some((item) => item.body.includes("Conclusion Y: cannot activate.")),
+    true,
+  );
+  assert.ok(packet.modelPacket.evidenceItems.length >= 2);
 });
 
 test("QA containment compatibility still reports a genuinely changed answer", () => {
@@ -658,6 +702,7 @@ test("decision packet weights related rulings while preserving authoritative mec
   assert.deepEqual(
     first.modelPacket.policy.withinCategoryPriority,
     [
+      "criticalMechanismCoverage",
       "pendingSpellTrapMovementRestriction",
       "mechanismOperationRelevance",
       "direct",
@@ -773,6 +818,12 @@ test("a 16-item packet keeps the self-contained pending spell/trap movement rest
           score: 1,
           text: "发动后不能留在场上的魔法・陷阱卡，会在其发动的连锁处理完毕时送去墓地。这种魔法・陷阱卡在连锁途中不能从场上回到手牌・卡组。",
         },
+        {
+          id: "zero-legal-candidate-activation-rule",
+          type: "rulebook",
+          score: 0.5,
+          text: "这类魔法・陷阱卡的效果基本上不会对自身适用，除自身以外没有能适用的卡时不能发动。",
+        },
       ],
     },
     collections: [
@@ -798,6 +849,7 @@ test("a 16-item packet keeps the self-contained pending spell/trap movement rest
 
   assert.equal(includedIds.length, 16);
   assert.ok(includedIds.includes("self-contained-pending-movement-restriction"));
+  assert.ok(includedIds.includes("zero-legal-candidate-activation-rule"));
   assert.equal(includedIds.includes("overlapping-exception-passage"), false);
   assert.equal(
     packet.includedManifest.find((item) => (
@@ -816,6 +868,18 @@ test("a 16-item packet keeps the self-contained pending spell/trap movement rest
     item.evidenceId === "self-contained-pending-movement-restriction"
     && item.constraintKinds.includes("pending_activated_spell_trap_movement_restriction")
   )));
+  assert.ok(requiredReview.some((item) => (
+    item.evidenceId === "zero-legal-candidate-activation-rule"
+    && item.constraintKinds.includes("zero_legal_candidate_activation")
+  )));
+  assert.deepEqual(
+    packet.modelPacket.decisionFocus.mechanismCoverage.required,
+    ["zero_legal_candidate_activation"],
+  );
+  assert.deepEqual(
+    packet.modelPacket.decisionFocus.mechanismCoverage.missing,
+    [],
+  );
   assert.equal(
     requiredReview.some((item) => item.evidenceId === "overlapping-exception-passage"),
     false,
@@ -925,6 +989,134 @@ test("many resolved card texts cannot starve related rulings and mechanism evide
   assert.ok(categories.includes(ADMIN_EVIDENCE_CATEGORIES.PARSED_CARD_TEXT));
   assert.ok(categories.includes(ADMIN_EVIDENCE_CATEGORIES.RELATED_QA));
   assert.ok(categories.includes(ADMIN_EVIDENCE_CATEGORIES.MECHANISM_RULE));
+});
+
+test("simultaneous trigger order and reverse chain resolution survive more than 16 noisy candidates", () => {
+  const archive = createAdminEvidenceArchive({
+    cardTextCandidates: {
+      resolved: Array.from({ length: 20 }, (_, index) => ({
+        id: `timing-card-${index + 1}`,
+        text: `匿名怪兽${index + 1}的无关卡片文本。`,
+      })),
+    },
+    evidenceBuckets: {
+      officialQaRelated: [
+        ...Array.from({ length: 24 }, (_, index) => ({
+          id: `timing-noise-qa-${index + 1}`,
+          type: "official_qa",
+          official: true,
+          status: "current",
+          question: `无关官方问答${index + 1}。`,
+          answer: "攻击力变化按照该效果处理。",
+        })),
+        {
+          id: "simultaneous-trigger-order-qa",
+          type: "official_qa",
+          official: true,
+          status: "current",
+          question: "同じタイミングで発動する/できる効果が複数存在する場合、どのような順番でチェーンを組んで発動しますか？",
+          answer: "優先度1の必ず発動する効果、優先度2の公開されている状態の任意効果の順にチェーンを組み、同じ優先度ではターンプレイヤーが先にチェーンを組みます。",
+        },
+      ],
+      faqRelated: [{
+        id: "event-immediate-trigger-faq",
+        type: "card-faq",
+        official: true,
+        status: "current",
+        text: "S召唤成功直后才能发动。因连锁2以后的效果进行S召唤，且召唤后还有其他处理时不能发动。",
+      }],
+      rulebookCandidates: [
+        ...Array.from({ length: 24 }, (_, index) => ({
+          id: `timing-noise-rule-${index + 1}`,
+          type: "rulebook",
+          official: true,
+          status: "current",
+          text: `无关规则${index + 1}：伤害计算采用攻击力与守备力。`,
+        })),
+        {
+          id: "chain-resolution-reverse-rule",
+          type: "rulebook",
+          official: true,
+          status: "current",
+          text: "连锁处理时，从最后发动的效果开始逆序结算：先处理连锁2，再处理连锁1。",
+        },
+      ],
+    },
+    metadata: {
+      selectionContext: createAdminEvidenceSelectionContext({
+        question: "原连锁C1发动效果，C2把怪兽反转。处理后，反转时的必发诱发效果与C1同调召唤怪兽的选发诱发效果在同一时点如何另开连锁？该怪兽是否没有错过同调召唤时的时点？",
+      }),
+    },
+  });
+
+  const packet = buildAdminEvidenceDecisionPacket({ archive });
+  const includedIds = packet.modelPacket.evidenceItems.map(
+    (item) => item.evidenceId,
+  );
+  assert.equal(includedIds.length, 16);
+  assert.ok(includedIds.includes("simultaneous-trigger-order-qa"));
+  assert.ok(includedIds.includes("chain-resolution-reverse-rule"));
+  assert.ok(includedIds.includes("event-immediate-trigger-faq"));
+  assert.deepEqual(
+    packet.modelPacket.decisionFocus.mechanismCoverage,
+    {
+      scope: "packet_presence_only_not_evidence_entailment",
+      required: [
+        "simultaneous_trigger_order",
+        "chain_resolution_reverse",
+        "event_immediate_trigger_window",
+      ],
+      covered: [
+        "simultaneous_trigger_order",
+        "chain_resolution_reverse",
+        "event_immediate_trigger_window",
+      ],
+      missing: [],
+      evidenceByMechanism: [
+        {
+          mechanism: "simultaneous_trigger_order",
+          evidenceIds: ["simultaneous-trigger-order-qa"],
+        },
+        {
+          mechanism: "chain_resolution_reverse",
+          evidenceIds: ["chain-resolution-reverse-rule"],
+        },
+        {
+          mechanism: "event_immediate_trigger_window",
+          evidenceIds: ["event-immediate-trigger-faq"],
+        },
+      ],
+    },
+  );
+  assert.ok(packet.includedManifest.every((item) => (
+    item.criticalMechanismRelevanceScore >= 0
+  )));
+});
+
+test("ordinary opposing effects in C1 and C2 do not become simultaneous trigger ordering", () => {
+  const archive = createAdminEvidenceArchive({
+    evidenceBuckets: {
+      rulebookCandidates: [{
+        id: "reverse-chain-rule",
+        type: "rulebook",
+        text: "连锁处理时先处理连锁2，再处理连锁1，从最后发动的效果开始逆序结算。",
+      }, {
+        id: "unrelated-trigger-order-rule",
+        type: "rulebook",
+        text: "同一时点存在多个诱发效果时，必发效果与选发效果按优先顺序组成连锁。",
+      }],
+    },
+    metadata: {
+      selectionContext: createAdminEvidenceSelectionContext({
+        question: "双方主要阶段，对方以怪兽为对象发动效果，我方连锁该怪兽效果。C2处理后对象离场，C1是否继续处理？",
+      }),
+    },
+  });
+
+  const coverage = buildAdminEvidenceDecisionPacket({ archive })
+    .modelPacket.decisionFocus.mechanismCoverage;
+  assert.deepEqual(coverage.required, ["chain_resolution_reverse"]);
+  assert.deepEqual(coverage.covered, ["chain_resolution_reverse"]);
 });
 
 test("decision packet omission summary stays compact while its sidecar remains complete", () => {

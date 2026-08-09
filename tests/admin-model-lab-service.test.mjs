@@ -2073,6 +2073,90 @@ test("single final-attempt policy fails after one invalid response and preserves
   assert.equal(calls.length, 1, "a terminal single-attempt run must never submit again");
 });
 
+test("semantic-only assessment issues complete without opening a paid repair", async () => {
+  const fixture = makeFixture();
+  const calls = [];
+  const normalized = makeStructuredRuling();
+  const semanticIssue = "answer polarity requires independent semantic review";
+  const service = makeService(fixture, {}, {
+    finalRulingProviders: {
+      glm: {
+        providerId: "glm",
+        async create(request) {
+          calls.push(request);
+          return {
+            id: "glm-semantic-only",
+            status: "completed",
+            model: "glm-5.2",
+            output_text: JSON.stringify(normalized),
+            usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+          };
+        },
+        validateCompletedResponse() {
+          return {
+            ok: false,
+            errors: [semanticIssue],
+            normalized,
+            hardValidity: { ok: true, errors: [] },
+            semanticAssessment: {
+              evaluated: true,
+              ok: false,
+              issues: [semanticIssue],
+            },
+          };
+        },
+      },
+    },
+  });
+  const created = await service.createRun({
+    body: {
+      question: "匿名语义诊断问题",
+      provider: "glm",
+      model: "glm-5.2",
+      finalAttemptPolicy: "repair_once",
+    },
+  });
+  const completed = (await service.executeRun({ runId: created.runId })).run;
+
+  assert.equal(completed.status, ADMIN_RUN_STATUSES.SUCCEEDED);
+  assert.equal(calls.length, 1);
+  assert.equal(completed.execution.repair, null);
+  assert.equal(completed.result.validation.ok, true);
+  assert.equal(completed.result.validation.overallOk, false);
+  assert.deepEqual(completed.result.validation.hardValidity, {
+    ok: true,
+    errors: [],
+  });
+  assert.deepEqual(completed.result.validation.semanticAssessment, {
+    evaluated: true,
+    ok: false,
+    issues: [semanticIssue],
+  });
+  assert.deepEqual(completed.result.finalRuling, normalized);
+  assert.equal(completed.result.metering.stages.finalRuling.attempts.length, 1);
+  assert.deepEqual(
+    completed.result.metering.stages.finalRuling.attempts[0].validation,
+    {
+      ok: true,
+      errors: [],
+      overallOk: false,
+      hardValidity: { ok: true, errors: [] },
+      semanticAssessment: {
+        evaluated: true,
+        ok: false,
+        issues: [semanticIssue],
+      },
+    },
+  );
+  const replay = await service.replayEvents({ runId: created.runId });
+  assert.equal(
+    replay.events.some(
+      (event) => event.type === ADMIN_MODEL_LAB_SERVICE_EVENT_TYPES.MODEL_VALIDATION_FAILED,
+    ),
+    false,
+  );
+});
+
 test("a second invalid completed response fails closed without a third submission", async () => {
   const fixture = makeFixture();
   const calls = [];

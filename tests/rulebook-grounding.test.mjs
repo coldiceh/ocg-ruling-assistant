@@ -212,6 +212,16 @@ test("actual_return_constraints_are_prioritized_for_operation_grounding", async 
   const priorities = grounding.operationLegality.priorityConstraintEvidence;
   assert.ok(priorities.some((item) => /这种魔法·陷阱卡在连锁途中不能从场上回到手卡·卡组/u.test(item.text)), "expected the activated Spell/Trap return restriction");
   assert.ok(priorities.some((item) => /除自身以外没有能适用的卡时不能发动/u.test(item.text)), "expected the no-applicable-card activation restriction");
+  assert.equal(
+    evidence.officialQaRelated.some((item) => item.id === "ygoresources-qa-24174"),
+    false,
+    "a long multi-card example that merely mentions one resolved card must not enter an unrelated activation case",
+  );
+  assert.equal(
+    evidence.rawRelatedEvidence.some((item) => item.id === "ygoresources-qa-24174"),
+    false,
+    "the same incidental example must not re-enter through the raw-related bucket",
+  );
   assert.ok(priorities.length <= 5);
   assert.match(prompt, /priorityConstraintCandidates/u);
   assert.match(prompt, /只说明诱发条件或可连锁时点的一般卡片 FAQ/u);
@@ -313,6 +323,101 @@ test("rulebook_passage_keeps_the_matched_paragraph_when_context_is_too_long", ()
   assert.ok(passages.length > 0);
   assert.match(passages[0].text, /命中规则：卡的发动被无效后，不再视为场上的卡/u);
   assert.ok(passages[0].text.length <= 180);
+});
+
+test("rulebook_passage_keeps_a_contiguous_simultaneous_trigger_order_list_whole", async () => {
+  const payload = JSON.parse(await readFile(new URL("../data/ocg-rule-corpus.json", import.meta.url), "utf8"));
+  const passages = retrieveRulebookPassages({
+    records: payload.records || [],
+    userQuery: "同一时点有必发效果和公开状态的选发效果时，回合玩家与非回合玩家如何组成连锁？",
+    ruleSearchQueries: [{
+      query: "同一时点 多个诱发效果 必发 公开情报 选发 回合玩家 组成连锁 顺序",
+      confidence: "high",
+    }],
+    maxPassages: 16,
+  });
+
+  const relevant = passages.find((item) => (
+    item.sourceRecordId === "ocg-rule:c03/诱发类效果"
+    && /同一时点满足多个诱发类效果的发动条件/u.test(item.text)
+  ));
+  assert.ok(relevant, "expected the simultaneous-trigger ordering passage");
+  assert.match(relevant.text, /回合玩家的必发的诱发类效果/u);
+  assert.match(relevant.text, /非回合玩家的必发的诱发类效果/u);
+  assert.match(relevant.text, /回合玩家的公开情报的选发的诱发类效果/u);
+  assert.match(relevant.text, /非回合玩家的公开情报的选发的诱发类效果/u);
+  assert.match(relevant.text, /回合玩家的必发的诱发即时类效果/u);
+  assert.match(relevant.text, /非回合玩家的必发的诱发即时类效果/u);
+  assert.match(relevant.text, /这组连锁最后发动效果的玩家把优先权转移给对方/u);
+});
+
+test("a post-chain trigger scenario retrieves both ordering and reverse-resolution rules", async () => {
+  const data = await loadRagData();
+  const resolvedCards = ["11629", "21944", "7898"]
+    .map((id) => data.cards.find((card) => card.id === id))
+    .filter(Boolean)
+    .map((card) => ({ ...card, input: card.name, confidence: 1 }));
+  const question = "加速同步士C1发动加速同调，对方C2把纠罪巧恐怖变成表侧。逆序处理完毕后另开连锁：纠罪巧恐怖与同调召唤的黑蔷薇龙应当如何组成C1、C2并结算？";
+  const evidence = await retrieveRagEvidence({
+    userQuery: question,
+    cardResolution: {
+      resolvedCards,
+      unresolvedMentions: [],
+      ambiguousMentions: [],
+      userProvidedCardTexts: [],
+    },
+    cards: data.cards,
+    records: data.records,
+    qaRecords: data.qaRecords,
+    enableLiveOfficialQa: false,
+  });
+
+  assert.ok(evidence.ruleSearchQueries.some(
+    (item) => item.source === "simultaneous_trigger_order_rule_search_query",
+  ));
+  assert.ok(evidence.ruleSearchQueries.some(
+    (item) => item.source === "chain_resolution_reverse_rule_search_query",
+  ));
+  assert.doesNotMatch(
+    evidence.ruleSearchQueries
+      .filter((item) => item.source === "compiled_scenario_rule_search_query")
+      .map((item) => item.query)
+      .join("\n"),
+    /手卡诱发|手牌诱发|顺序7/u,
+  );
+  assert.ok(evidence.officialQaRelated.some((item) => item.id === "ygoresources-qa-24174"));
+  assert.ok(evidence.rulebookCandidates.some(
+    (item) => /同一时点满足多个诱发类效果的发动条件/u.test(item.text),
+  ));
+  assert.ok(evidence.rulebookCandidates.some(
+    (item) => /从最后发动的效果开始/u.test(item.text),
+  ));
+});
+
+test("ordinary C1/C2 resolution and target loss do not imply simultaneous trigger ordering", async () => {
+  const question = [
+    "双方主要阶段，对方以场上的怪兽为对象发动效果，我方连锁该怪兽的效果。",
+    "处理时C2令对象离场，C1对象丢失，后续处理是否继续？",
+  ].join("");
+  const evidence = await retrieveRagEvidence({
+    userQuery: question,
+    cardResolution: {
+      resolvedCards: [],
+      unresolvedMentions: [],
+      ambiguousMentions: [],
+      userProvidedCardTexts: [],
+    },
+    cards: [],
+    records: [],
+    qaRecords: [],
+  });
+
+  assert.equal(evidence.ruleSearchQueries.some(
+    (item) => item.source === "simultaneous_trigger_order_rule_search_query",
+  ), false);
+  assert.ok(evidence.ruleSearchQueries.some(
+    (item) => item.source === "chain_resolution_reverse_rule_search_query",
+  ));
 });
 
 test("inline_card_references_link_the_stardust_official_qa", async () => {

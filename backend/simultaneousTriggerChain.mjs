@@ -1,4 +1,6 @@
 import { normalizeCardText, findNormalizedSemantics } from "./cardTextNormalizer.mjs";
+import { splitEffectTextBlocks } from "./cardEffectBlocks.mjs";
+import { classifyTriggerWording } from "./triggerTimingRules.mjs";
 
 export const TRIGGER_PRIORITY_TIERS = Object.freeze({
   TURN_PLAYER_MANDATORY_PUBLIC: 1,
@@ -22,6 +24,26 @@ const PUBLIC_ZONES = new Set([
 const SPECIAL_SUMMON_TRIGGER = /(?:此卡|这张卡|這張卡|このカード|this card).{0,30}(?:特殊召唤|特殊召喚|special summoned).{0,24}(?:场合|場合|情况(?:下)?|情形(?:下)?|if|when).{0,24}(?:可以发动|可发动|発動できる|can be activated)/iu;
 const EFFECT_BANISH_TRIGGER = /(?=[^。；;\n]{0,200}(?:(?:卡片|卡|カード)(?:的|の)?(?:效果|効果)|card effect))(?=[^。；;\n]{0,200}(?:怪兽|怪獸|モンスター|monster))(?=[^。；;\n]{0,200}(?:除外|banish))[^。；;\n]{0,200}(?:场合|場合|情况(?:下)?|情形(?:下)?|if|when)[^。；;\n]{0,40}(?:可以发动|可发动|発動できる|can be activated)/iu;
 const SELF_LEAVE_FIELD_BANISH = /(?:(?:表侧|表側|face-up).{0,20})?(?:此卡|这张卡|這張卡|このカード|this card).{0,32}(?:离开场上|離開場上|フィールドから離れ|leaves the field).{0,32}(?:除外|banish)/iu;
+const SIMULTANEOUS_TRIGGER_ORDER_QUERY = /(?:另(?:开|起)(?:一组|一个|条)?连锁|新(?:的)?连锁|同一时点|同时诱发|同时发动|连锁处理完毕后|连锁处理后|(?:C|连锁)\s*1.{0,80}(?:C|连锁)\s*2)/iu;
+const TRIGGER_ACTIVATION_WORDING = /(?:发动|發動|発動|activate)/iu;
+const GENERIC_PUBLIC_TRIGGER_PATTERNS = Object.freeze([
+  {
+    eventType: "synchro_summoned",
+    pattern: /(?:此卡|这张卡|這張卡|このカード|this card).{0,24}(?:同步召唤|同调召唤|同調召喚|S召唤|S召喚|synchro summon)(?:成功|した|ed)?[^。；;\n]{0,40}(?:时|時|场合|場合|if|when)/iu,
+  },
+  {
+    eventType: "flipped_face_up",
+    pattern: /(?:此卡|这张卡|這張卡|このカード|this card).{0,24}(?:反转|反轉|翻开|翻開|リバース|flipped? face-up)[^。；;\n]{0,40}(?:时|時|场合|場合|情况下|if|when)/iu,
+  },
+  {
+    eventType: "special_summoned",
+    pattern: /(?:此卡|这张卡|這張卡|このカード|this card).{0,24}(?:特殊召唤|特殊召喚|special summoned?)(?:成功|した|ed)?[^。；;\n]{0,40}(?:时|時|场合|場合|if|when)/iu,
+  },
+  {
+    eventType: "normal_summoned",
+    pattern: /(?:此卡|这张卡|這張卡|このカード|this card).{0,24}(?:召唤|召喚|normal summoned?)(?:成功|した|ed)?[^。；;\n]{0,40}(?:时|時|场合|場合|if|when)/iu,
+  },
+]);
 
 export function normalizeTriggerCandidate(input = {}, index = 0, turnPlayer = "self") {
   const controller = normalizePlayer(input.controller || input.player || "self");
@@ -164,6 +186,10 @@ export function collectEligibleTriggerCandidates({
       matchedEventIds: windowEvents
         .filter((event) => triggerCandidateMatchesEvent(candidate, event))
         .map((event) => String(event.id || event.eventId || event.type || "event")),
+      matchedTriggerWindowIds: unique(windowEvents
+        .filter((event) => triggerCandidateMatchesEvent(candidate, event))
+        .map(eventTriggerWindowId)
+        .filter(Boolean)),
     }))
     .filter((candidate) => (
       candidate.eligible
@@ -184,10 +210,23 @@ export function buildSimultaneousTriggerChain({
   responseActions = [],
 } = {}) {
   const currentTurnPlayer = normalizePlayer(turnPlayer);
+  const windowResolution = resolveTriggerWindow({
+    candidates,
+    events,
+    requestedTriggerWindowId: triggerWindowId,
+    turnPlayer: currentTurnPlayer,
+  });
+  if (!windowResolution.complete) {
+    return incompleteTriggerWindowPlan({
+      turnPlayer: currentTurnPlayer,
+      windowResolution,
+    });
+  }
+  const effectiveTriggerWindowId = windowResolution.triggerWindowId;
   const eligible = collectEligibleTriggerCandidates({
     events,
     candidates,
-    triggerWindowId,
+    triggerWindowId: effectiveTriggerWindowId,
     turnPlayer: currentTurnPlayer,
   });
   const publicCandidates = eligible
@@ -328,9 +367,21 @@ export function buildSimultaneousTriggerChain({
     && !requiresPublicTriggerOrder
     && selection.invalid.length === 0
     && publicOrder.invalid.length === 0;
+  const complete = publicQueueComplete;
 
   return {
-    triggerWindowId: String(triggerWindowId || ""),
+    status: complete ? "resolved" : "unknown",
+    verdict: complete ? "ORDERED" : "UNKNOWN",
+    complete,
+    reason: complete
+      ? "simultaneous_trigger_queue_ordered"
+      : requiresPublicTriggerSelection
+        ? "optional_public_trigger_selection_witness_required"
+        : requiresPublicTriggerOrder
+          ? "same_tier_public_trigger_order_witness_required"
+          : "public_trigger_queue_witness_invalid",
+    triggerWindowId: String(effectiveTriggerWindowId || ""),
+    triggerWindowResolution: windowResolution,
     turnPlayer: currentTurnPlayer,
     chainLinks,
     pendingPriorityTriggers: [...pending.values()],
@@ -378,6 +429,14 @@ export function analyzeSimultaneousTriggerScenario({
     && cardMentionedInHandClause(query, card.names)
   ));
   if (!specialSummonTriggerCards.length || !privateBanishTriggerCards.length) {
+    const genericPublicScenario = analyzeGenericPublicTriggerScenario({
+      query,
+      cards,
+      events: Array.isArray(movementEvents) ? movementEvents : [],
+      turnPlayer,
+      branchWitness,
+    });
+    if (genericPublicScenario.recognized) return genericPublicScenario;
     return {
       recognized: false,
       complete: false,
@@ -512,6 +571,7 @@ export function analyzeSimultaneousTriggerScenario({
       : "missing";
   return {
     recognized: true,
+    mode: "public_private",
     status: complete ? "resolved" : "unknown",
     complete,
     reason: complete
@@ -556,6 +616,240 @@ export function analyzeSimultaneousTriggerScenario({
       ? `存在以下已验证选择分支：自己选择发动公开区域的「${publicLink.name}」诱发效果；把连锁响应机会交给对方。对方不发动效果、响应机会回到自己后，可以从手牌连锁发动「${privateLink.name}」的诱发效果。`
       : "",
   };
+}
+
+function analyzeGenericPublicTriggerScenario({
+  query,
+  cards,
+  events,
+  turnPlayer,
+  branchWitness,
+} = {}) {
+  if (!SIMULTANEOUS_TRIGGER_ORDER_QUERY.test(String(query || ""))) {
+    return { recognized: false, complete: false };
+  }
+  const discovery = discoverGenericPublicTriggerCandidates({ query, cards, events });
+  if (discovery.candidates.length < 2) {
+    return {
+      recognized: discovery.candidates.length > 0,
+      mode: "generic_public_triggers",
+      status: "unknown",
+      complete: false,
+      reason: "at_least_two_public_trigger_candidates_required",
+      candidates: discovery.candidates,
+      events,
+      unresolved: [
+        ...discovery.unresolved,
+        {
+          code: "PUBLIC_TRIGGER_CANDIDATES_INCOMPLETE",
+          detail: "需要确认同一诱发时点中至少两个公开区域诱发效果及各自效果文本。",
+        },
+      ],
+    };
+  }
+
+  const witnessProvided = Boolean(branchWitness && typeof branchWitness === "object");
+  const plan = buildSimultaneousTriggerChain({
+    candidates: discovery.candidates,
+    events,
+    triggerWindowId: witnessProvided
+      ? String(branchWitness.triggerWindowId || "")
+      : "",
+    turnPlayer,
+    publicTriggerSelections: witnessProvided
+      ? branchWitness.publicTriggerSelections
+      : undefined,
+    publicTriggerOrder: witnessProvided
+      ? branchWitness.publicTriggerOrder
+      : undefined,
+    responseActions: witnessProvided
+      ? branchWitness.responseActions || []
+      : [],
+  });
+  const complete = discovery.unresolved.length === 0
+    && events.length > 0
+    && plan.complete === true;
+  const reason = complete
+    ? "generic_public_trigger_queue_verified"
+    : discovery.unresolved.length
+      ? "public_trigger_candidate_facts_incomplete"
+      : !events.length
+        ? "explicit_trigger_events_required"
+        : plan.reason;
+
+  return {
+    recognized: true,
+    mode: "generic_public_triggers",
+    status: complete ? "resolved" : "unknown",
+    complete,
+    reason,
+    eventMode: events.length ? "explicit" : "missing",
+    candidates: discovery.candidates,
+    events,
+    plan,
+    unresolved: [
+      ...discovery.unresolved,
+      ...(plan.complete ? [] : [{
+        code: plan.reason || "PUBLIC_TRIGGER_QUEUE_UNKNOWN",
+        detail: describePlanUnknown(plan),
+      }]),
+    ],
+    witness: witnessProvided
+      ? {
+        kind: "player_choice_witness",
+        supplied: true,
+        validated: complete,
+        triggerWindowId: branchWitness.triggerWindowId || null,
+        publicTriggerSelections: branchWitness.publicTriggerSelections ?? null,
+        publicTriggerOrder: branchWitness.publicTriggerOrder ?? null,
+      }
+      : null,
+    conclusion: complete
+      ? plan.chainLinks.map((link) => `${link.id}「${link.name}」`).join("，")
+      : "",
+  };
+}
+
+function discoverGenericPublicTriggerCandidates({ query, cards, events } = {}) {
+  const candidates = [];
+  const unresolved = [];
+  for (const card of cards || []) {
+    if (!card.names.some((name) => normalizedIncludes(query, name))) continue;
+    for (const block of splitEffectTextBlocks(card.text)) {
+      if (!TRIGGER_ACTIVATION_WORDING.test(block.text)) continue;
+      const eventType = inferGenericPublicTriggerEventType(block.text);
+      const triggerWording = classifyTriggerWording(block.text);
+      if (!eventType || triggerWording === "unknown") continue;
+
+      const matchingEvents = (events || []).filter((event) => (
+        eventTypeMatches(event, eventType)
+        && eventSubjectMatchesCard(event, card.id)
+      ));
+      const controller = readExplicitController(card, matchingEvents, query);
+      const sourceZone = readPublicSourceZone(card, matchingEvents, eventType);
+      const faceUp = readPublicFaceUp(card, matchingEvents, query);
+      const id = `public-trigger:${card.id}:${block.id}`;
+      const missing = [];
+      if (!controller) missing.push("controller");
+      if (!sourceZone) missing.push("source_zone");
+      if (sourceZone && !isPublicActivationLocation({ sourceZone, faceUp })) {
+        missing.push("public_activation_location");
+      }
+      if (!matchingEvents.length) missing.push("matching_trigger_event");
+      if (missing.length) {
+        unresolved.push({
+          code: "PUBLIC_TRIGGER_CANDIDATE_FACTS_MISSING",
+          candidateId: id,
+          cardId: card.id,
+          missing,
+          detail: `「${card.title}」缺少：${missing.join(", ")}。`,
+        });
+      }
+      candidates.push({
+        id,
+        name: card.title,
+        controller: controller || "self",
+        sourceZone: sourceZone || "unknown",
+        faceUp,
+        mandatory: triggerWording.startsWith("mandatory_"),
+        optional: triggerWording.startsWith("optional_"),
+        triggerWording,
+        triggerEventTypes: [eventType],
+        subjectDefinitionId: card.id,
+        subjectBound: true,
+        effectText: block.text,
+        effectBlockId: block.id,
+        discoveryComplete: missing.length === 0,
+      });
+    }
+  }
+  return { candidates, unresolved };
+}
+
+function inferGenericPublicTriggerEventType(value) {
+  const text = String(value || "");
+  for (const item of GENERIC_PUBLIC_TRIGGER_PATTERNS) {
+    if (item.pattern.test(text)) return item.eventType;
+  }
+  const patterns = [
+    ["destroyed", /(?:此卡|这张卡|這張卡|このカード|this card).{0,30}(?:被)?(?:战斗|戰鬥|戦闘|效果|効果|effect)?[・·]?(?:破坏|破壊|destroyed)[^。；;\n]{0,40}(?:时|時|场合|場合|if|when)/iu],
+    ["sent_to_graveyard", /(?:此卡|这张卡|這張卡|このカード|this card).{0,30}(?:送去墓地|墓地へ送|sent to the graveyard)[^。；;\n]{0,40}(?:时|時|场合|場合|if|when)/iu],
+    ["banished", /(?:此卡|这张卡|這張卡|このカード|this card).{0,30}(?:除外|banished)[^。；;\n]{0,40}(?:时|時|场合|場合|if|when)/iu],
+  ];
+  return patterns.find(([, pattern]) => pattern.test(text))?.[0] || "";
+}
+
+function readExplicitController(card, matchingEvents, query) {
+  const direct = normalizeExplicitPlayer(card.controller || card.player);
+  if (direct) return direct;
+  for (const event of matchingEvents || []) {
+    const fromEvent = normalizeExplicitPlayer(event.controller || event.player || event.subject?.controller);
+    if (fromEvent) return fromEvent;
+  }
+  const clauses = String(query || "").split(/[，,。；;！？?\n]+/u);
+  for (const clause of clauses) {
+    if (!card.names.some((name) => normalizedIncludes(clause, name))) continue;
+    if (/(?:对方|對方|对手|相手|opponent)/iu.test(clause)) return "opponent";
+    if (/(?:我方|自己|本方|自分|my|I )/iu.test(clause)) return "self";
+  }
+  return "";
+}
+
+function readPublicSourceZone(card, matchingEvents, eventType) {
+  const direct = normalizeZone(card.sourceZone || card.activationZone || card.zone);
+  if (direct !== "unknown") return direct;
+  for (const event of matchingEvents || []) {
+    const destination = normalizeZone(
+      event.actualToZone
+        || event.toZone
+        || event.destination
+        || event.move?.actualToZone,
+    );
+    if (destination !== "unknown") return destination;
+  }
+  if (["synchro_summoned", "special_summoned", "normal_summoned"].includes(eventType)) {
+    return "monster_zone";
+  }
+  if (/(?:spell|trap|魔法|陷阱|罠)/iu.test(card.cardType || card.type || "")) {
+    return "spell_trap_zone";
+  }
+  return "";
+}
+
+function readPublicFaceUp(card, matchingEvents, query) {
+  if (typeof card.faceUp === "boolean") return card.faceUp;
+  for (const event of matchingEvents || []) {
+    const faceUp = readExplicitFaceUp(event);
+    if (typeof faceUp === "boolean") return faceUp;
+  }
+  const clauses = String(query || "").split(/[，,。；;！？?\n]+/u);
+  return clauses.some((clause) => (
+    card.names.some((name) => normalizedIncludes(clause, name))
+    && /(?:表侧|表側|face-up)/iu.test(clause)
+  )) || undefined;
+}
+
+function eventTypeMatches(event, expectedType) {
+  return String(event?.type || event?.eventType || "") === String(expectedType || "");
+}
+
+function eventSubjectMatchesCard(event, cardId) {
+  const actual = String(
+    event?.subjectDefinitionId
+      || event?.definitionId
+      || event?.subject?.definitionId
+      || "",
+  );
+  return Boolean(actual) && actual === String(cardId || "");
+}
+
+function describePlanUnknown(plan = {}) {
+  if (plan.reason === "different_trigger_windows_require_separate_chains") {
+    return "检测到不同诱发时点，不能把这些效果合并到同一连锁。";
+  }
+  if (plan.requiresPublicTriggerSelection) return "需要玩家明确选择哪些公开区域选发诱发效果发动。";
+  if (plan.requiresPublicTriggerOrder) return "同一优先层存在多个效果，需要该玩家提供发动顺序。";
+  return "同时诱发连锁尚缺少可验证的玩家选择或事件窗口信息。";
 }
 
 export function isPublicThenPrivateTriggerRule(value) {
@@ -607,8 +901,131 @@ function triggerCandidateMatchesEvent(candidate, event = {}) {
       );
       return actual === expected;
     }
-    return String(event.type || event.eventType || "") === String(type);
+    if (String(event.type || event.eventType || "") !== String(type)) return false;
+    if (candidate.subjectBound !== true) return true;
+    const expected = String(candidate.subjectInstanceId || candidate.subjectDefinitionId || "");
+    if (!expected) return false;
+    const actual = String(
+      event.subjectInstanceId
+        || event.subjectDefinitionId
+        || event.instanceId
+        || event.definitionId
+        || event.subject?.instanceId
+        || event.subject?.definitionId
+        || "",
+    );
+    return Boolean(actual) && actual === expected;
   });
+}
+
+function resolveTriggerWindow({
+  candidates = [],
+  events = [],
+  requestedTriggerWindowId = "",
+  turnPlayer = "self",
+} = {}) {
+  const requested = String(requestedTriggerWindowId || "");
+  const normalizedCandidates = (candidates || []).map((candidate, index) => (
+    normalizeTriggerCandidate(candidate, index, turnPlayer)
+  ));
+  const matchedEvents = (events || []).filter((event) => (
+    normalizedCandidates.some((candidate) => triggerCandidateMatchesEvent(candidate, event))
+  ));
+  const matchedWindowIds = unique(matchedEvents.map(eventTriggerWindowId).filter(Boolean));
+  const unscopedMatchedEventIds = matchedEvents
+    .filter((event) => !eventTriggerWindowId(event))
+    .map((event) => String(event.id || event.eventId || event.type || "event"));
+
+  if (requested) {
+    const requestedExists = (events || []).some((event) => eventTriggerWindowId(event) === requested);
+    if (events.length && !requestedExists) {
+      return {
+        complete: false,
+        reason: "requested_trigger_window_not_found",
+        triggerWindowId: requested,
+        matchedTriggerWindowIds: matchedWindowIds,
+        unscopedMatchedEventIds,
+      };
+    }
+    return {
+      complete: true,
+      reason: "explicit_trigger_window_selected",
+      triggerWindowId: requested,
+      matchedTriggerWindowIds: matchedWindowIds,
+      unscopedMatchedEventIds,
+    };
+  }
+
+  if (matchedWindowIds.length > 1 || (matchedWindowIds.length && unscopedMatchedEventIds.length)) {
+    return {
+      complete: false,
+      reason: "different_trigger_windows_require_separate_chains",
+      triggerWindowId: "",
+      matchedTriggerWindowIds: matchedWindowIds,
+      unscopedMatchedEventIds,
+    };
+  }
+  if (!matchedWindowIds.length && matchedEvents.length > 1) {
+    return {
+      complete: false,
+      reason: "trigger_window_identity_missing",
+      triggerWindowId: "",
+      matchedTriggerWindowIds: [],
+      unscopedMatchedEventIds,
+    };
+  }
+  return {
+    complete: true,
+    reason: matchedWindowIds.length
+      ? "single_trigger_window_inferred"
+      : "no_window_conflict_detected",
+    triggerWindowId: matchedWindowIds[0] || "",
+    matchedTriggerWindowIds: matchedWindowIds,
+    unscopedMatchedEventIds,
+  };
+}
+
+function incompleteTriggerWindowPlan({ turnPlayer, windowResolution } = {}) {
+  return {
+    status: "unknown",
+    verdict: "UNKNOWN",
+    complete: false,
+    reason: windowResolution.reason,
+    triggerWindowId: String(windowResolution.triggerWindowId || ""),
+    triggerWindowResolution: windowResolution,
+    turnPlayer,
+    chainLinks: [],
+    pendingPriorityTriggers: [],
+    publicTriggerCount: 0,
+    mandatoryPublicTriggerCount: 0,
+    optionalPublicTriggerCandidates: [],
+    selectedOptionalPublicTriggers: [],
+    requiresPublicTriggerSelection: false,
+    requiresPublicTriggerOrder: false,
+    ambiguousPublicOrderTierGroups: [],
+    publicQueueComplete: false,
+    publicSelectionWitness: null,
+    privateTriggerCount: 0,
+    priorityPlayer: turnPlayer,
+    requiresResponseConfirmation: false,
+    closed: false,
+    transcript: [{
+      type: "await_trigger_window_selection",
+      reason: windowResolution.reason,
+      candidateWindowIds: windowResolution.matchedTriggerWindowIds,
+      unscopedMatchedEventIds: windowResolution.unscopedMatchedEventIds,
+    }],
+  };
+}
+
+function eventTriggerWindowId(event = {}) {
+  return String(
+    event.triggerWindowId
+      || event.eventWindowId
+      || event.timingWindowId
+      || event.simultaneousGroupId
+      || "",
+  );
 }
 
 function compareTriggerCandidates(left, right) {
@@ -860,6 +1277,13 @@ function normalizePlayer(value) {
   const player = String(value || "").trim().toLowerCase();
   if (["opponent", "other", "non_turn_player", "对方", "对手"].includes(player)) return "opponent";
   return "self";
+}
+
+function normalizeExplicitPlayer(value) {
+  const player = String(value || "").trim().toLowerCase();
+  if (["self", "turn_player", "我方", "自己", "本方"].includes(player)) return "self";
+  if (["opponent", "other", "non_turn_player", "对方", "对手"].includes(player)) return "opponent";
+  return "";
 }
 
 function opponentOf(player) {
