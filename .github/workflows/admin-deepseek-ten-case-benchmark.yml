@@ -1,0 +1,212 @@
+name: Admin DeepSeek ten-case benchmark
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_paid_run:
+        description: Confirm the 40 paid DeepSeek final-ruling calls
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: admin-deepseek-ten-case-benchmark
+  cancel-in-progress: false
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    env:
+      ADMIN_MODEL_LAB_BASE_URL: https://ocg-ruling-assistant.vercel.app
+      ADMIN_MODEL_LAB_ORIGIN: https://coldiceh.github.io
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+
+      - name: Prepare artifact directory
+        shell: bash
+        run: mkdir -p artifacts
+
+      - name: Zero-cost ten-case evidence readiness preflight
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/admin-evidence-snapshot-dry-run.mjs \
+            --cases tests/fixtures/model-effort-ten-case-cases.json \
+            --allow-community-card-network \
+            --compact > artifacts/deepseek-ten-case-evidence-preflight.json
+          node --input-type=module -e '
+            import { readFileSync } from "node:fs";
+            const report = JSON.parse(readFileSync("artifacts/deepseek-ten-case-evidence-preflight.json", "utf8"));
+            const reports = Array.isArray(report.reports) ? report.reports : [];
+            const failures = reports.filter((item) => (
+              item.paidGateBlocked || item.productionReadiness?.ready !== true
+            ));
+            if (report.realProviderTransportCalls !== 0) throw new Error("evidence preflight reached a real provider");
+            if (reports.length !== 10) throw new Error(`expected 10 evidence reports, received ${reports.length}`);
+            if (report.allSnapshotsFrozen !== true) throw new Error("not every evidence snapshot was frozen");
+            if (failures.length) {
+              throw new Error(`evidence readiness failed for: ${failures.map((item) => item.caseId).join(", ")}`);
+            }
+          '
+
+      - name: Save and validate sanitized production capabilities
+        shell: bash
+        env:
+          ADMIN_MODEL_LAB_PASSWORD: ${{ secrets.ADMIN_MODEL_LAB_PASSWORD }}
+        run: |
+          set -euo pipefail
+          test -n "$ADMIN_MODEL_LAB_PASSWORD" || {
+            echo "ADMIN_MODEL_LAB_PASSWORD is not configured" >&2
+            exit 1
+          }
+          node --input-type=module <<'NODE' > artifacts/deepseek-ten-case-capabilities-preflight.json
+          import { createAdminModelLabHttpClient } from "./scripts/admin-model-matrix.mjs";
+
+          const client = createAdminModelLabHttpClient({
+            baseUrl: process.env.ADMIN_MODEL_LAB_BASE_URL,
+            origin: process.env.ADMIN_MODEL_LAB_ORIGIN,
+            password: process.env.ADMIN_MODEL_LAB_PASSWORD,
+          });
+          await client.login();
+          const envelope = await client.capabilities();
+          const source = envelope?.capabilities || envelope || {};
+          const providerEnvelope = source.providers;
+          const providers = Array.isArray(providerEnvelope)
+            ? providerEnvelope
+            : (Array.isArray(providerEnvelope?.providers) ? providerEnvelope.providers : []);
+          const safeProviders = providers.map((provider) => ({
+            providerId: provider.providerId || provider.id || provider.provider || null,
+            available: provider.available === true,
+            transportAvailable: provider.transportAvailable === true,
+            models: (Array.isArray(provider.models) ? provider.models : []).map((model) => ({
+              modelId: typeof model === "string" ? model : (model.modelId || model.id || model.model || null),
+              canonicalModelId: typeof model === "string" ? null : (model.canonicalModelId || null),
+              available: typeof model === "string" ? null : model.available === true,
+              transportAvailable: typeof model === "string" ? null : model.transportAvailable === true,
+              budgetConfigured: typeof model === "string" ? null : model.budgetConfigured === true,
+              budgetAvailable: typeof model === "string" ? null : model.budgetAvailable === true,
+              budgetPoolConfigured: typeof model === "string" ? null : Boolean(model.budgetPool),
+              unavailableReason: typeof model === "string" ? null : (model.unavailableReason || null),
+              supportedReasoningModes: typeof model === "string"
+                ? []
+                : (model.supportedReasoningModes || model.reasoningModes || []),
+              supportedReasoningEfforts: typeof model === "string"
+                ? []
+                : (model.supportedReasoningEfforts || model.reasoningEfforts || []),
+            })),
+          }));
+          const finalCallBudget = source.architecture?.finalCallBudget || source.finalCallBudget || {};
+          const sanitized = {
+            checkedAt: new Date().toISOString(),
+            features: source.features || null,
+            finalCallBudget: {
+              configured: finalCallBudget.configured === true,
+              persistent: finalCallBudget.persistent === true,
+              storageKind: finalCallBudget.storageKind || null,
+              dailyLimitBypassed: finalCallBudget.dailyLimitBypassed === true,
+            },
+            providers: safeProviders,
+          };
+          console.log(JSON.stringify(sanitized, null, 2));
+
+          const failures = [];
+          for (const feature of ["createRun", "forkRun", "executeRun"]) {
+            if (source.features?.[feature] !== true) failures.push(`missing feature ${feature}`);
+          }
+          if (finalCallBudget.configured !== true || finalCallBudget.persistent !== true) {
+            failures.push("persistent final-call budget is unavailable");
+          }
+          const deepseek = providers.find((provider) => (
+            String(provider.providerId || provider.id || provider.provider || "").toLowerCase() === "deepseek"
+          ));
+          if (!deepseek || deepseek.available !== true || deepseek.transportAvailable !== true) {
+            failures.push("DeepSeek provider transport is unavailable");
+          }
+          const requiredConfigurations = [
+            { modelId: "deepseek-v4-flash", mode: "standard", effort: "none" },
+            { modelId: "deepseek-v4-flash", mode: "pro", effort: "high" },
+            { modelId: "deepseek-v4-pro", mode: "standard", effort: "none" },
+            { modelId: "deepseek-v4-pro", mode: "pro", effort: "max" },
+          ];
+          for (const configuration of requiredConfigurations) {
+            const model = (deepseek?.models || []).find((item) => (
+              String(typeof item === "string" ? item : (item.modelId || item.id || item.model || ""))
+                === configuration.modelId
+            ));
+            const modes = typeof model === "string"
+              ? []
+              : (model?.supportedReasoningModes || model?.reasoningModes || []);
+            const efforts = typeof model === "string"
+              ? []
+              : (model?.supportedReasoningEfforts || model?.reasoningEfforts || []);
+            if (!model
+              || model.available !== true
+              || model.transportAvailable !== true
+              || model.budgetConfigured !== true
+              || model.budgetAvailable !== true
+              || !model.budgetPool
+              || !modes.includes(configuration.mode)
+              || !efforts.includes(configuration.effort)) {
+              failures.push(
+                `${configuration.modelId}/${configuration.mode}/${configuration.effort} is unavailable`,
+              );
+            }
+          }
+          if (failures.length) throw new Error(`capabilities preflight failed: ${failures.join("; ")}`);
+          NODE
+
+      - name: Require explicit paid-run confirmation
+        shell: bash
+        env:
+          CONFIRM_PAID_RUN: ${{ inputs.confirm_paid_run }}
+        run: |
+          set -euo pipefail
+          test "$CONFIRM_PAID_RUN" = "true" || {
+            echo "Paid DeepSeek benchmark was not confirmed" >&2
+            exit 1
+          }
+
+      - name: Run four-config DeepSeek benchmark sequentially
+        shell: bash
+        env:
+          ADMIN_MODEL_LAB_PASSWORD: ${{ secrets.ADMIN_MODEL_LAB_PASSWORD }}
+        run: |
+          set -euo pipefail
+          node scripts/admin-model-matrix.mjs \
+            --base-url "$ADMIN_MODEL_LAB_BASE_URL" \
+            --origin "$ADMIN_MODEL_LAB_ORIGIN" \
+            --cases-file tests/fixtures/model-effort-ten-case-cases.json \
+            --config deepseek:deepseek-v4-flash:standard:none:full \
+            --config deepseek:deepseek-v4-flash:pro:high:full \
+            --config deepseek:deepseek-v4-pro:standard:none:full \
+            --config deepseek:deepseek-v4-pro:pro:max:full \
+            --concurrency 1 \
+            --max-final-requests 40 \
+            --estimated-cny-per-request 0.20 \
+            --max-cost-cny 8 \
+            --timeout-ms 600000 \
+            --format json \
+            --output artifacts/deepseek-ten-case-benchmark.json
+
+      - name: Upload preflight and benchmark reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: admin-deepseek-ten-case-benchmark-${{ github.run_id }}
+          path: |
+            artifacts/deepseek-ten-case-evidence-preflight.json
+            artifacts/deepseek-ten-case-capabilities-preflight.json
+            artifacts/deepseek-ten-case-benchmark.json
+          if-no-files-found: warn
+          retention-days: 14

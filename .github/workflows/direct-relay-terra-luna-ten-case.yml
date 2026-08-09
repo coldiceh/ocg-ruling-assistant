@@ -1,0 +1,238 @@
+name: Direct Relay GPT-5.6 frozen-source effort pilot
+
+on:
+  workflow_dispatch:
+    inputs:
+      model:
+        description: Relay GPT-5.6 model
+        required: true
+        type: choice
+        default: relay-gpt-5.6-terra
+        options:
+          - relay-gpt-5.6-sol
+          - relay-gpt-5.6-terra
+          - relay-gpt-5.6-luna
+      effort:
+        description: Reasoning effort
+        required: true
+        type: choice
+        default: low
+        options:
+          - none
+          - low
+          - medium
+          - high
+          - xhigh
+          - max
+      case_scope:
+        description: Run the original four cases or all ten frozen cases
+        required: true
+        type: choice
+        default: ten
+        options:
+          - original-four
+          - ten
+      source_run_id:
+        description: Workflow run ID containing the canonical ten-case Evidence Snapshot artifact
+        required: true
+        type: string
+      source_artifact_name:
+        description: Exact canonical ten-case Evidence Snapshot artifact name
+        required: true
+        type: string
+      confirm_paid_run:
+        description: Confirm direct paid Relay calls for the selected scope
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: direct-relay-frozen-${{ inputs.model }}-${{ inputs.case_scope }}-${{ inputs.effort }}
+  cancel-in-progress: false
+
+jobs:
+  ten-case:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+
+      - name: Validate dispatch inputs and paid-run confirmation
+        shell: bash
+        env:
+          CONFIRM_PAID_RUN: ${{ inputs.confirm_paid_run }}
+          RELAY_MODEL: ${{ inputs.model }}
+          REASONING_EFFORT: ${{ inputs.effort }}
+          CASE_SCOPE: ${{ inputs.case_scope }}
+          SOURCE_RUN_ID: ${{ inputs.source_run_id }}
+          SOURCE_ARTIFACT_NAME: ${{ inputs.source_artifact_name }}
+        run: |
+          set -euo pipefail
+          test "$CONFIRM_PAID_RUN" = "true" || { echo "Paid run was not confirmed" >&2; exit 1; }
+          test -n "$SOURCE_RUN_ID" || { echo "source_run_id is required" >&2; exit 1; }
+          test -n "$SOURCE_ARTIFACT_NAME" || { echo "source_artifact_name is required" >&2; exit 1; }
+          case "$RELAY_MODEL" in
+            relay-gpt-5.6-sol|relay-gpt-5.6-terra|relay-gpt-5.6-luna) ;;
+            *) echo "Unsupported model" >&2; exit 1 ;;
+          esac
+          case "$REASONING_EFFORT" in
+            none|low|medium|high|xhigh|max) ;;
+            *) echo "Unsupported reasoning effort" >&2; exit 1 ;;
+          esac
+          case "$CASE_SCOPE" in
+            original-four|ten) ;;
+            *) echo "Unsupported case scope" >&2; exit 1 ;;
+          esac
+
+      - name: Prepare artifact directory
+        shell: bash
+        run: mkdir -p artifacts/source
+
+      - name: Download canonical frozen ten-case source bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.source_artifact_name }}
+          path: artifacts/source
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.source_run_id }}
+
+      - name: Select exactly one source bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t matches < <(find artifacts/source -type f -name '*source-bundle.json' -print)
+          if [ "${#matches[@]}" -ne 1 ]; then
+            echo "Expected exactly one *source-bundle.json in the downloaded artifact, found ${#matches[@]}" >&2
+            exit 1
+          fi
+          cp "${matches[0]}" artifacts/direct-relay-source-bundle.json
+          sha256sum artifacts/direct-relay-source-bundle.json > artifacts/direct-relay-source-bundle.sha256
+
+      - name: Validate exact ten-case Evidence Snapshot bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import { readFile } from "node:fs/promises";
+
+          const expected = [
+            "double-tempest-impermanence",
+            "unchained-replacement",
+            "accel-synchro-trigger-window",
+            "lost-target-continue-resolution",
+            "tearlaments-scream-activation-window",
+            "mind-scan-red-lotus-public-hand",
+            "harmonia-topologic-field-activation",
+            "photon-emperor-mausoleum-extra-summon",
+            "timaeus-gaze-dragoon-one-destruction",
+            "memento-cactus-avramax-direct-attack",
+          ];
+          const bundle = JSON.parse(await readFile("artifacts/direct-relay-source-bundle.json", "utf8"));
+          if (!Array.isArray(bundle.sources)) throw new Error("source bundle has no sources array");
+          const ids = bundle.sources.map((source) => String(source?.caseId || ""));
+          if (ids.length !== 10) throw new Error(`source bundle must contain exactly 10 cases, found ${ids.length}`);
+          if (ids.some((id) => !id) || new Set(ids).size !== ids.length) {
+            throw new Error("source bundle case IDs must be non-empty and unique");
+          }
+          if (bundle.sources.some((source) => !source?.evidenceSnapshot)) {
+            throw new Error("every source bundle case must contain an Evidence Snapshot");
+          }
+          const expectedSet = new Set(expected);
+          const missing = expected.filter((id) => !ids.includes(id));
+          const unexpected = ids.filter((id) => !expectedSet.has(id));
+          if (missing.length || unexpected.length) {
+            throw new Error(`source bundle case mismatch; missing=${missing.join(",")}; unexpected=${unexpected.join(",")}`);
+          }
+          NODE
+          sha256sum --check artifacts/direct-relay-source-bundle.sha256
+
+      - name: Run one model and effort over the selected frozen cases sequentially
+        shell: bash
+        env:
+          RELAY_API_KEY: ${{ secrets.RELAY_API_KEY }}
+          RELAY_BASE_URL: https://api.986310.xyz/v1
+          RELAY_MODEL: ${{ inputs.model }}
+          REASONING_EFFORT: ${{ inputs.effort }}
+          CASE_SCOPE: ${{ inputs.case_scope }}
+        run: |
+          set -euo pipefail
+          test -n "$RELAY_API_KEY" || { echo "RELAY_API_KEY secret is not configured" >&2; exit 1; }
+          case "$RELAY_MODEL" in
+            relay-gpt-5.6-sol|relay-gpt-5.6-terra|relay-gpt-5.6-luna) ;;
+            *) echo "Unsupported model" >&2; exit 1 ;;
+          esac
+          case "$REASONING_EFFORT" in
+            none|low|medium|high|xhigh|max) ;;
+            *) echo "Unsupported reasoning effort" >&2; exit 1 ;;
+          esac
+          original_four_args=(
+            --case double-tempest-impermanence
+            --case unchained-replacement
+            --case accel-synchro-trigger-window
+            --case lost-target-continue-resolution
+          )
+          ten_args=(
+            "${original_four_args[@]}"
+            --case tearlaments-scream-activation-window
+            --case mind-scan-red-lotus-public-hand
+            --case harmonia-topologic-field-activation
+            --case photon-emperor-mausoleum-extra-summon
+            --case timaeus-gaze-dragoon-one-destruction
+            --case memento-cactus-avramax-direct-attack
+          )
+          case "$CASE_SCOPE" in
+            original-four)
+              case_args=("${original_four_args[@]}")
+              max_calls=4
+              ;;
+            ten)
+              case_args=("${ten_args[@]}")
+              max_calls=10
+              ;;
+            *) echo "Unsupported case scope" >&2; exit 1 ;;
+          esac
+          if [ "${#case_args[@]}" -ne "$max_calls" ]; then
+            echo "Selected case count does not match max_calls" >&2
+            exit 1
+          fi
+          sha256sum --check artifacts/direct-relay-source-bundle.sha256
+          node scripts/local-relay-effort-experiment.mjs \
+            --snapshots artifacts/direct-relay-source-bundle.json \
+            --model "$RELAY_MODEL" \
+            --effort "$REASONING_EFFORT" \
+            "${case_args[@]}" \
+            --output artifacts/direct-relay-result-checkpoint.json \
+            --timeout-ms 900000 \
+            --max-calls "$max_calls"
+          sha256sum --check artifacts/direct-relay-source-bundle.sha256
+
+      - name: Score completed checkpoint offline
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/score-admin-model-experiment.mjs \
+            --report artifacts/direct-relay-result-checkpoint.json \
+            --output artifacts/direct-relay-scored.json
+
+      - name: Upload frozen bundle, checkpoint, and results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: direct-relay-${{ inputs.model }}-${{ inputs.case_scope }}-${{ inputs.effort }}-${{ github.run_id }}
+          path: |
+            artifacts/direct-relay-source-bundle.json
+            artifacts/direct-relay-source-bundle.sha256
+            artifacts/direct-relay-result-checkpoint.json
+            artifacts/direct-relay-scored.json
+          if-no-files-found: warn
+          retention-days: 14
