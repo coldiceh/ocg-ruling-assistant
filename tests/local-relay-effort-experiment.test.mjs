@@ -5,12 +5,14 @@ import path from "node:path";
 import test from "node:test";
 
 import { createAdminEvidenceSnapshot } from "../backend/adminEvidenceSnapshot.mjs";
+import { hashAdminFinalInput } from "../backend/adminEvidenceVariant.mjs";
 import {
   normalizeLocalRelayExperimentOptions,
   normalizeSnapshotBundle,
   parseLocalRelayExperimentArgs,
   runLocalRelayEffortExperiment,
 } from "../scripts/local-relay-effort-experiment.mjs";
+import { createExperimentResultBinding } from "../scripts/lib/experiment-result-binding.mjs";
 
 test("local relay CLI accepts repeatable effort flags and validates secrets", () => {
   const parsed = parseLocalRelayExperimentArgs([
@@ -129,6 +131,17 @@ test("local relay runner is serial, single-attempt, checkpointed and resumable",
   assert.equal(calls.length, 4);
   assert.equal(first.status, "completed");
   assert.equal(first.results.length, 4);
+  assert.equal(first.plannedRequests, 4);
+  assert.equal(first.plan.length, 4);
+  assert.deepEqual(first.caseIds, ["case-a", "case-b"]);
+  assert.deepEqual(first.efforts, ["low", "high"]);
+  assert.equal(first.concurrency, 1);
+  assert.equal(first.retries, 0);
+  for (const [index, call] of calls.entries()) {
+    const inputSha256 = hashAdminFinalInput(call.input);
+    assert.equal(first.plan[index].finalInputSha256, inputSha256);
+    assert.equal(first.results[index].finalInputSha256, inputSha256);
+  }
   assert.ok(first.results.every((result) => result.status === "completed_valid"));
   assert.ok(first.results.every((result) => (
     result.rawOutput
@@ -223,16 +236,54 @@ test("resume seals an interrupted running request as outcome unknown without ret
     now: () => new Date("2026-08-08T00:02:00.000Z"),
     log: () => {},
   });
-  assert.deepEqual(calls, ["high"], "the ambiguous low request must not be submitted again");
+  assert.deepEqual(calls, ["high"], "only the unstarted request may be submitted");
   assert.equal(resumed.status, "completed");
   assert.equal(resumed.results.length, 2);
-  const sealed = resumed.results.find((entry) => entry.effort === "low");
+  const sealed = resumed.results.find((item) => item.effort === "low");
+  const completedHigh = resumed.results.find((item) => item.effort === "high");
   assert.equal(sealed.status, "error_outcome_unknown");
   assert.equal(sealed.recoveredFromInterruptedCheckpoint, true);
   assert.equal(sealed.budgetReservationMayExist, true);
   assert.equal(sealed.error.code, "local_relay_interrupted_outcome_unknown");
   assert.equal(sealed.usage, null);
-  assert.equal(resumed.results.find((entry) => entry.effort === "high").status, "completed_valid");
+  assert.match(sealed.finalInputSha256, /^[a-f0-9]{64}$/u);
+  assert.equal(sealed.rawOutput, null);
+  assert.equal(sealed.requestId, null);
+  assert.equal(createExperimentResultBinding(sealed).status, "bound");
+  assert.equal(completedHigh.status, "completed_valid");
+
+  const recoveryOnly = JSON.parse(await readFile(outputPath, "utf8"));
+  recoveryOnly.results = recoveryOnly.results.map((item) => ({
+    key: item.key,
+    caseId: item.caseId,
+    model: item.model,
+    effort: item.effort,
+    evidenceVariant: item.evidenceVariant,
+    status: "running",
+    startedAt: item.startedAt,
+    finalInputSha256: item.finalInputSha256,
+    rawOutput: null,
+    requestId: null,
+  }));
+  recoveryOnly.status = "in_progress";
+  await writeFile(outputPath, JSON.stringify(recoveryOnly), "utf8");
+  let providerFactoryCalls = 0;
+  const fullyRecovered = await runLocalRelayEffortExperiment({
+    options: { ...options, recoverRunningAsOutcomeUnknown: true },
+    env: {},
+    providerFactory() {
+      providerFactoryCalls += 1;
+      throw new Error("provider must not be constructed for recovery-only work");
+    },
+    now: () => new Date("2026-08-08T00:03:00.000Z"),
+    log: () => {},
+  });
+  assert.equal(providerFactoryCalls, 0);
+  assert.equal(fullyRecovered.status, "completed");
+  assert.ok(fullyRecovered.results.every((item) => (
+    item.status === "error_outcome_unknown"
+      && createExperimentResultBinding(item).status === "bound"
+  )));
 
   await assert.rejects(
     () => runLocalRelayEffortExperiment({

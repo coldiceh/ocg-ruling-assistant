@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
@@ -7,6 +8,11 @@ import {
   scoreOfflineExperimentReport,
   validateAssertionFixture,
 } from "../scripts/lib/offline-experiment-scorer.mjs";
+import {
+  createExperimentResultBinding,
+  hashExperimentRawOutput,
+  serializeExperimentRawOutput,
+} from "../scripts/lib/experiment-result-binding.mjs";
 import { scoreAdminModelExperimentFiles } from "../scripts/score-admin-model-experiment.mjs";
 
 const fixtureUrl = new URL("./fixtures/admin-evidence-dry-run-goldens.json", import.meta.url);
@@ -212,7 +218,11 @@ test("scores the local single-process checkpoint format after transport completi
     schemaVersion: 1,
     runner: "local-relay-effort-experiment/v1",
     status: "completed",
+    plannedRequests: 1,
     results: [{
+      key: "double-tempest:sol:low:full",
+      requestId: "request-123",
+      finalInputSha256: "input-sha-123",
       caseId: "double-tempest-impermanence",
       model: "relay-gpt-5.6-sol",
       effort: "low",
@@ -220,6 +230,7 @@ test("scores the local single-process checkpoint format after transport completi
       evidenceVariant: "full",
       status: "completed_valid",
       reportedModel: "gpt-5.6-sol",
+      rawOutput: "{\"conciseAnswer\":\"不能发动。\"}",
       validatedResult: {
         ok: true,
         normalized: {
@@ -234,6 +245,261 @@ test("scores the local single-process checkpoint format after transport completi
   assert.deepEqual(scored.counts, { PASS: 1, FAIL: 0, INCONCLUSIVE: 0 });
   assert.equal(scored.results[0].reasoningEffort, "low");
   assert.equal(scored.results[0].structuredResultSource, "validatedStructuredResult");
+  assert.deepEqual(scored.results[0].sourceBinding, {
+    status: "bound",
+    resultKey: "double-tempest:sol:low:full",
+    requestId: "request-123",
+    finalInputSha256: "input-sha-123",
+    rawOutputSha256: sha256("{\"conciseAnswer\":\"不能发动。\"}"),
+    unavailableReasons: [],
+  });
+
+  for (const invalid of [undefined, 0, 1.5, "1"]) {
+    const invalidReport = structuredClone(report);
+    if (invalid === undefined) delete invalidReport.plannedRequests;
+    else invalidReport.plannedRequests = invalid;
+    assert.throws(
+      () => assertPaidExperimentReportGenerated(invalidReport),
+      /plannedRequests must be a positive integer/u,
+    );
+  }
+  const truncated = structuredClone(report);
+  truncated.plannedRequests = 2;
+  assert.throws(
+    () => assertPaidExperimentReportGenerated(truncated),
+    /does not contain every planned result/u,
+  );
+});
+
+test("direct Relay terminal outcomes retain exact source bindings across three execution states", async () => {
+  const assertionFixture = JSON.parse(await readFile(fixtureUrl, "utf8"));
+  const base = {
+    caseId: "double-tempest-impermanence",
+    model: "relay-gpt-5.6-sol",
+    reasoningMode: "pro",
+    evidenceVariant: "full",
+    requestId: null,
+  };
+  const validRaw = "{\"conciseAnswer\":\"不能发动。无限泡影不能返回手牌，场上没有合法候选。\"}";
+  const report = {
+    schemaVersion: 1,
+    runner: "local-relay-effort-experiment/v1",
+    status: "completed",
+    plannedRequests: 3,
+    results: [
+      {
+        ...base,
+        key: "direct-valid",
+        effort: "low",
+        status: "completed_valid",
+        finalInputSha256: "input-valid",
+        rawOutput: validRaw,
+        validatedResult: {
+          ok: true,
+          normalized: {
+            conciseAnswer: "不能发动。无限泡影不能返回手牌，场上没有合法候选。",
+          },
+        },
+      },
+      {
+        ...base,
+        key: "direct-invalid",
+        effort: "medium",
+        status: "completed_invalid",
+        finalInputSha256: "input-invalid",
+        rawOutput: "not valid structured output",
+      },
+      {
+        ...base,
+        key: "direct-rejected",
+        effort: "high",
+        status: "error_rejected",
+        finalInputSha256: "input-rejected",
+        rawOutput: null,
+      },
+    ],
+  };
+
+  assertPaidExperimentReportGenerated(report);
+  const scored = scoreOfflineExperimentReport({ report, assertionFixture });
+  assert.deepEqual(scored.results.map((item) => item.status), [
+    "PASS",
+    "INCONCLUSIVE",
+    "INCONCLUSIVE",
+  ]);
+  assert.deepEqual(scored.results.map((item) => item.sourceBinding.status), [
+    "bound",
+    "bound",
+    "bound",
+  ]);
+  assert.deepEqual(scored.results.map((item) => item.sourceBinding.rawOutputSha256), [
+    sha256(validRaw),
+    sha256("not valid structured output"),
+    sha256("null"),
+  ]);
+});
+
+test("source bindings hash exact string and JSON-stringified object outputs", async () => {
+  const assertionFixture = JSON.parse(await readFile(fixtureUrl, "utf8"));
+  const stringOutput = "  exact model output\r\nwith whitespace  ";
+  const objectOutput = { conciseAnswer: "不同输出", nested: { order: 1 } };
+  const reports = [
+    succeededCase("double-tempest-impermanence", {
+      conciseAnswer: "不能发动。无限泡影不能返回手牌，场上没有合法候选。",
+    }, "low", {
+      key: "same-logical-identity",
+      requestId: "request-string",
+      finalInputSha256: "input-string",
+      rawOutput: stringOutput,
+    }),
+    succeededCase("double-tempest-impermanence", {
+      conciseAnswer: "可以发动。",
+    }, "low", {
+      key: "same-logical-identity",
+      requestId: "request-object",
+      finalInputSha256: "input-object",
+      rawOutput: objectOutput,
+    }),
+  ];
+
+  const scored = scoreOfflineExperimentReport({ report: batchReport(reports), assertionFixture });
+  assert.deepEqual(scored.results.map((item) => item.status), ["PASS", "FAIL"]);
+  assert.equal(serializeExperimentRawOutput(stringOutput), stringOutput);
+  assert.equal(serializeExperimentRawOutput(objectOutput), JSON.stringify(objectOutput));
+  assert.throws(() => serializeExperimentRawOutput(undefined), /not JSON serializable/u);
+  assert.equal(hashExperimentRawOutput(stringOutput), sha256(stringOutput));
+  assert.equal(hashExperimentRawOutput(objectOutput), sha256(JSON.stringify(objectOutput)));
+  assert.throws(() => hashExperimentRawOutput(undefined), /not JSON serializable/u);
+  assert.notEqual(
+    scored.results[0].sourceBinding.rawOutputSha256,
+    scored.results[1].sourceBinding.rawOutputSha256,
+  );
+  assert.deepEqual(scored.results[0].sourceBinding, {
+    status: "bound",
+    resultKey: "same-logical-identity",
+    requestId: "request-string",
+    finalInputSha256: "input-string",
+    rawOutputSha256: sha256(stringOutput),
+    unavailableReasons: [],
+  });
+  assert.deepEqual(scored.results[1].sourceBinding, {
+    status: "bound",
+    resultKey: "same-logical-identity",
+    requestId: "request-object",
+    finalInputSha256: "input-object",
+    rawOutputSha256: sha256(JSON.stringify(objectOutput)),
+    unavailableReasons: [],
+  });
+});
+
+test("PASS, FAIL, and INCONCLUSIVE scores always carry a source binding", async () => {
+  const assertionFixture = JSON.parse(await readFile(fixtureUrl, "utf8"));
+  const report = batchReport([
+    succeededCase("double-tempest-impermanence", {
+      conciseAnswer: "不能发动。无限泡影不能返回手牌，场上没有合法候选。",
+    }, "low", {
+      key: "pass-key",
+      finalInputSha256: "pass-input",
+      rawOutput: "pass",
+    }),
+    succeededCase("double-tempest-impermanence", {
+      conciseAnswer: "可以发动。",
+    }, "medium", {
+      key: "fail-key",
+      requestId: "fail-request",
+      finalInputSha256: "fail-input",
+      rawOutput: "fail",
+    }),
+    {
+      caseId: "double-tempest-impermanence",
+      results: [{
+        status: "FAILED",
+        requestedModel: "relay-gpt-5.6-sol",
+        key: "inconclusive-key",
+        requestId: null,
+        finalInputSha256: "inconclusive-input",
+        rawOutput: "inconclusive",
+        configuration: {
+          reasoningMode: "pro",
+          reasoningEffort: "high",
+          evidenceVariant: "full",
+        },
+      }],
+    },
+  ]);
+
+  const scored = scoreOfflineExperimentReport({ report, assertionFixture });
+  assert.deepEqual(scored.results.map((item) => item.status), ["PASS", "FAIL", "INCONCLUSIVE"]);
+  assert.deepEqual(
+    scored.results.map((item) => item.sourceBinding.rawOutputSha256),
+    ["pass", "fail", "inconclusive"].map(sha256),
+  );
+  assert.ok(scored.results.every((item) => item.sourceBinding.status === "bound"));
+  assert.ok(scored.results.every((item) => item.sourceBinding.unavailableReasons.length === 0));
+  assert.ok(scored.results.every((item) => (
+    Object.hasOwn(item.sourceBinding, "resultKey")
+    && Object.hasOwn(item.sourceBinding, "requestId")
+    && Object.hasOwn(item.sourceBinding, "finalInputSha256")
+  )));
+});
+
+test("legacy admin results stay scoreable but cannot masquerade as review-bound output", async () => {
+  const assertionFixture = JSON.parse(await readFile(fixtureUrl, "utf8"));
+  const report = batchReport([succeededCase("double-tempest-impermanence", {
+    conciseAnswer: "不能发动。无限泡影不能返回手牌，场上没有合法候选。",
+  })]);
+
+  const scored = scoreOfflineExperimentReport({ report, assertionFixture });
+  assert.equal(scored.results[0].status, "PASS");
+  assert.deepEqual(scored.results[0].sourceBinding, {
+    status: "unavailable",
+    resultKey: null,
+    requestId: null,
+    finalInputSha256: null,
+    rawOutputSha256: null,
+    unavailableReasons: [
+      "result_key_missing",
+      "final_input_sha256_missing",
+      "raw_output_missing",
+    ],
+  });
+});
+
+test("empty, missing, and unserializable raw outputs fail closed without a null digest", () => {
+  const missing = createExperimentResultBinding({
+    key: "missing-output",
+    finalInputSha256: "input-missing",
+  });
+  const undefinedOutput = createExperimentResultBinding({
+    key: "undefined-output",
+    finalInputSha256: "input-undefined",
+    rawOutput: undefined,
+  });
+  const circular = {};
+  circular.self = circular;
+  const unserializable = createExperimentResultBinding({
+    key: "circular-output",
+    finalInputSha256: "input-circular",
+    rawOutput: circular,
+  });
+  const explicitNull = createExperimentResultBinding({
+    key: "null-output",
+    requestId: null,
+    finalInputSha256: "input-null",
+    rawOutput: null,
+  });
+
+  assert.equal(missing.status, "unavailable");
+  assert.equal(missing.rawOutputSha256, null);
+  assert.deepEqual(missing.unavailableReasons, ["raw_output_missing"]);
+  assert.equal(undefinedOutput.status, "unavailable");
+  assert.equal(undefinedOutput.rawOutputSha256, null);
+  assert.deepEqual(undefinedOutput.unavailableReasons, ["raw_output_unserializable"]);
+  assert.equal(unserializable.status, "unavailable");
+  assert.equal(unserializable.rawOutputSha256, null);
+  assert.deepEqual(unserializable.unavailableReasons, ["raw_output_unserializable"]);
+  assert.equal(explicitNull.status, "bound");
+  assert.equal(explicitNull.rawOutputSha256, sha256("null"));
 });
 
 test("local Relay rawOutput is never scored without a successful normalized validation", async () => {
@@ -431,7 +697,7 @@ test("scorer implementation contains no four-case identities and fixture validat
   );
 });
 
-function succeededCase(caseId, validatedStructuredResult, reasoningEffort = "high") {
+function succeededCase(caseId, validatedStructuredResult, reasoningEffort = "high", source = {}) {
   return {
     caseId,
     results: [{
@@ -449,10 +715,15 @@ function succeededCase(caseId, validatedStructuredResult, reasoningEffort = "hig
       conciseAnswer: validatedStructuredResult.conciseAnswer,
       verdicts: validatedStructuredResult.verdicts || [],
       timeline: validatedStructuredResult.timeline || [],
+      ...source,
     }],
   };
 }
 
 function batchReport(reports) {
   return { schemaVersion: 1, reports };
+}
+
+function sha256(value) {
+  return createHash("sha256").update(value, "utf8").digest("hex");
 }
