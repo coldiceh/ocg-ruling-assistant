@@ -218,6 +218,7 @@ export function validateModelRulingResult(result, {
     expectedQuestionIds,
     evidenceIndex,
     hardErrors,
+    semanticIssues,
   );
   validateUnknownAndConditional(
     result,
@@ -732,7 +733,8 @@ function validateQuestionScopedReasoning(
   verdictsByQuestion,
   expectedQuestionIds,
   evidenceIndex,
-  errors,
+  hardErrors,
+  semanticIssues,
 ) {
   const questionIds = questionIdUniverse(result, expectedQuestionIds);
   const expected = normalizedExpectedQuestionIds(expectedQuestionIds);
@@ -740,13 +742,13 @@ function validateQuestionScopedReasoning(
     result.claims,
     questionIds,
     "claim",
-    errors,
+    hardErrors,
   );
   const unresolvedByQuestion = scopedItemsByQuestion(
     result.unresolved,
     questionIds,
     "unresolved item",
-    errors,
+    hardErrors,
   );
 
   for (const [questionId, claims] of claimsByQuestion.entries()) {
@@ -755,7 +757,7 @@ function validateQuestionScopedReasoning(
         (candidate) => resolveExpectedQuestionParent(candidate, expected) === questionId,
       );
     if (!verdictsByQuestion.has(questionId) && !isCoveredParent) {
-      errors.push(`claim references unknown questionId: ${questionId}`);
+      hardErrors.push(`claim references unknown questionId: ${questionId}`);
     }
   }
   for (const [questionId] of unresolvedByQuestion.entries()) {
@@ -764,7 +766,7 @@ function validateQuestionScopedReasoning(
         (candidate) => resolveExpectedQuestionParent(candidate, expected) === questionId,
       );
     if (!verdictsByQuestion.has(questionId) && !isCoveredParent) {
-      errors.push(`unresolved item references unknown questionId: ${questionId}`);
+      hardErrors.push(`unresolved item references unknown questionId: ${questionId}`);
     }
   }
 
@@ -793,17 +795,17 @@ function validateQuestionScopedReasoning(
         const requiredStatus = verdict.value === "CONDITIONAL"
           ? "TRUE or FALSE branch claim"
           : "TRUE claim";
-        errors.push(
+        semanticIssues.push(
           `${verdict.value} verdict ${verdict.questionId} must have at least one decisive ${requiredStatus} with model-visible evidence`,
         );
       }
       if (decisiveUnknownClaims.length > 0) {
-        errors.push(
+        semanticIssues.push(
           `${verdict.value} verdict ${verdict.questionId} cannot depend on a decisive UNKNOWN claim`,
         );
       }
       if (decisiveUnresolved.length > 0) {
-        errors.push(
+        semanticIssues.push(
           `${verdict.value} verdict ${verdict.questionId} cannot retain a decisive unresolved item`,
         );
       }
@@ -1136,8 +1138,8 @@ function validateExplicitChainResolutionOrder(timeline, errors) {
 function extractExplicitResolvedChainLinks(value) {
   const matches = [];
   const patterns = [
-    /(?:连锁|chain|c)\s*([1-9]\d*)[^。；;\n]{0,24}?(?:处理|结算|解決|resolve(?:d|s|ing)?)/giu,
-    /(?:处理|结算|解決|resolve(?:d|s|ing)?)[^。；;\n]{0,24}?(?:连锁|chain|c)\s*([1-9]\d*)/giu,
+    /(?:连锁|chain|c)\s*([1-9]\d*)\s*(?:开始|開始|进行|進行|已经|已|正常|不)?\s*(?:处理|處理|结算|結算|解決|resolve(?:d|s|ing)?)/giu,
+    /(?:处理|處理|结算|結算|解決|resolve(?:d|s|ing)?)\s*(?:连锁|chain|c)\s*([1-9]\d*)/giu,
   ];
   for (const pattern of patterns) {
     for (const match of String(value || "").matchAll(pattern)) {

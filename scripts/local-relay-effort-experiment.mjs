@@ -20,7 +20,7 @@ const DEFAULT_MODEL = "relay-gpt-5.6-sol";
 const DEFAULT_EFFORTS = Object.freeze(["none", "low", "medium", "high", "xhigh", "max"]);
 const ALLOWED_EFFORTS = new Set(DEFAULT_EFFORTS);
 const DEFAULT_TIMEOUT_MS = 900_000;
-const DEFAULT_MAX_CALLS = 24;
+const DEFAULT_MAX_CALLS = 60;
 const PROMPT_VERSION = "openai-ruling-v1";
 
 export function parseLocalRelayExperimentArgs(argv) {
@@ -83,8 +83,8 @@ export function normalizeLocalRelayExperimentOptions(
     throw new TypeError("--timeout-ms must be an integer between 1000 and 3600000");
   }
   const maxCalls = Number(options.maxCalls || DEFAULT_MAX_CALLS);
-  if (!Number.isInteger(maxCalls) || maxCalls < 1 || maxCalls > 24) {
-    throw new TypeError("--max-calls must be an integer between 1 and 24");
+  if (!Number.isInteger(maxCalls) || maxCalls < 1 || maxCalls > 60) {
+    throw new TypeError("--max-calls must be an integer between 1 and 60");
   }
   const apiKey = String(env.RELAY_API_KEY || "").trim();
   const baseUrl = String(env.RELAY_BASE_URL || "").trim();
@@ -548,7 +548,7 @@ Options:
   --case <case-id>                            Repeat to select cases (default: all)
   --recover-running-as-outcome-unknown        Seal interrupted submissions without retrying (resume only)
   --timeout-ms <1000..3600000>              Per-request SSE deadline (default: 900000)
-  --max-calls <1..24>                        Hard plan limit before transport (default: 24)
+  --max-calls <1..60>                        Hard plan limit before transport (default: 60)
 
 The runner is serial, performs no retries, reads no golden answers, and resumes
 only combinations that have never reached the running checkpoint.`);

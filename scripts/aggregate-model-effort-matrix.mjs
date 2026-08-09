@@ -5,8 +5,8 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import {
-  estimateRelayModelCost,
-  getRelayModelPricingConfig,
+  estimateOpenAIModelCost,
+  getModelPricingConfig,
 } from "../backend/modelPricing.mjs";
 import {
   createExperimentResultBinding,
@@ -20,7 +20,7 @@ const SEMANTIC_REVIEWER_KINDS = new Set(["human", "codex"]);
 const EFFORT_ORDER = new Map(
   ["none", "low", "medium", "high", "xhigh", "max"].map((value, index) => [value, index]),
 );
-const RELAY_PRICING = getRelayModelPricingConfig();
+const OFFICIAL_MODEL_PRICING = getModelPricingConfig();
 const DEFAULT_RELAY_CREDIT_TO_CNY = 1;
 const DEFAULT_MARKDOWN_LOCALE = "zh";
 const SUPPORTED_MARKDOWN_LOCALES = new Set(["zh", "en", "ja"]);
@@ -45,8 +45,8 @@ const MARKDOWN_TEXT = Object.freeze({
     evidenceConsistency: "证据一致性",
     passed: "通过",
     failed: "失败",
-    accuracyDefinition: "语义正确率只来自严格绑定的人工/Codex 复核；Auto 断言和 Hard Validator 仅单独展示，均不作为裁定真值。",
-    costDefinition: "费用仅统计可归属的最终裁定模型调用；只有语义复核完整时才计算每答对一题的费用。",
+    accuracyDefinition: "用户答案正确率只来自与原始输出哈希严格绑定的逐题语义复核；自动关键词断言和结构 Validator 不参与正确率。",
+    costDefinition: "费用按模型官方标准 API 单价和接口返回 Token 估算，不采用第三方中转倍率或余额扣款；它不是实际账单。只有语义复核完整时才计算每答对一题的费用。",
     error: "错误",
     warning: "警告",
     testContent: "测试内容",
@@ -57,7 +57,7 @@ const MARKDOWN_TEXT = Object.freeze({
     returnedModel: "实际返回模型",
     effort: "推理强度",
     evidenceVariant: "证据方案",
-    semanticAccuracy: "语义正确率",
+    semanticAccuracy: "用户答案正确率",
     reviewCoverage: "复核覆盖率",
     autoAssertionRate: "Auto 断言通过率",
     hardValidationRate: "Hard Validator 通过率",
@@ -89,6 +89,7 @@ const MARKDOWN_TEXT = Object.freeze({
       unreviewed: "未复核",
       not_planned: "未测试",
     }),
+    failureKinds: Object.freeze({ timeout: "超时", empty_response: "空响应" }),
     variants: Object.freeze({ full: "完整资料", card_text_only: "仅卡文", without_lua: "不含 Lua" }),
   }),
   en: Object.freeze({
@@ -96,8 +97,8 @@ const MARKDOWN_TEXT = Object.freeze({
     evidenceConsistency: "Evidence consistency",
     passed: "passed",
     failed: "failed",
-    accuracyDefinition: "Semantic accuracy comes only from strictly bound human/Codex reviews. Auto assertions and the Hard Validator are reported separately and are not ruling truth.",
-    costDefinition: "Cost includes attributable final-ruling model calls only; cost per correct answer is available only with complete semantic review.",
+    accuracyDefinition: "User-answer accuracy comes only from case-by-case semantic reviews bound to the original-output hash. Keyword assertions and structural validators do not contribute to accuracy.",
+    costDefinition: "Cost is estimated from official standard API list prices and provider-reported tokens, not relay multipliers or balance deductions. It is not an invoice. Cost per correct answer requires complete semantic review.",
     error: "Error",
     warning: "Warning",
     testContent: "Test cases",
@@ -108,7 +109,7 @@ const MARKDOWN_TEXT = Object.freeze({
     returnedModel: "Returned model",
     effort: "Reasoning effort",
     evidenceVariant: "Evidence variant",
-    semanticAccuracy: "Semantic accuracy",
+    semanticAccuracy: "User-answer accuracy",
     reviewCoverage: "Review coverage",
     autoAssertionRate: "Auto assertion pass rate",
     hardValidationRate: "Hard Validator pass rate",
@@ -140,6 +141,7 @@ const MARKDOWN_TEXT = Object.freeze({
       unreviewed: "Unreviewed",
       not_planned: "Not tested",
     }),
+    failureKinds: Object.freeze({ timeout: "Timed out", empty_response: "Empty response" }),
     variants: Object.freeze({ full: "Full evidence", card_text_only: "Card text only", without_lua: "Without Lua" }),
   }),
   ja: Object.freeze({
@@ -147,8 +149,8 @@ const MARKDOWN_TEXT = Object.freeze({
     evidenceConsistency: "証拠の一貫性",
     passed: "合格",
     failed: "不合格",
-    accuracyDefinition: "意味的な正答率は厳密に紐付けられた人間/Codex のレビューだけから算出します。Auto 判定と Hard Validator は別指標であり、裁定の真実値ではありません。",
-    costDefinition: "費用は最終裁定モデルの呼び出しに帰属できる分だけを集計し、正答1件あたりの費用は意味レビューが完全な場合だけ算出します。",
+    accuracyDefinition: "ユーザー回答の正答率は、元出力のハッシュに厳密に紐付けた問題別の意味レビューだけから算出します。キーワード判定と構造 Validator は正答率に含めません。",
+    costDefinition: "費用は公式の標準 API 価格と返却 Token から推定し、中継業者の倍率や残高控除は使いません。実際の請求額ではありません。正答1件あたりの費用は意味レビューが完全な場合だけ算出します。",
     error: "エラー",
     warning: "警告",
     testContent: "テスト内容",
@@ -159,7 +161,7 @@ const MARKDOWN_TEXT = Object.freeze({
     returnedModel: "応答モデル",
     effort: "推論強度",
     evidenceVariant: "証拠構成",
-    semanticAccuracy: "意味正答率",
+    semanticAccuracy: "ユーザー回答正答率",
     reviewCoverage: "レビュー網羅率",
     autoAssertionRate: "Auto 判定合格率",
     hardValidationRate: "Hard Validator 合格率",
@@ -191,6 +193,7 @@ const MARKDOWN_TEXT = Object.freeze({
       unreviewed: "未レビュー",
       not_planned: "未実施",
     }),
+    failureKinds: Object.freeze({ timeout: "タイムアウト", empty_response: "空の応答" }),
     variants: Object.freeze({ full: "完全な証拠", card_text_only: "カードテキストのみ", without_lua: "Lua なし" }),
   }),
 });
@@ -345,15 +348,15 @@ export function aggregateModelEffortMatrix({
       costPerCorrectAnswer: "complete attributable configuration cost / semantically correct count; unavailable until semantic review and cost coverage are complete or when correct count is zero",
     },
     pricingAssumptions: {
-      relay: {
-        status: "estimated_unverified",
+      officialListPrice: {
+        status: "estimated",
         estimateOnly: true,
-        relayCreditToCny: normalizedRelayCreditToCny,
-        conversionBasis: "user_confirmed_relay_dashboard_credit_to_cny",
-        pricingMultiplier: RELAY_PRICING.multiplier,
-        pricingVersion: RELAY_PRICING.pricingVersion,
-        pricingSourceVerified: false,
-        disclaimer: "Relay estimates are unverified; the relay dashboard remains the billing authority.",
+        currency: OFFICIAL_MODEL_PRICING.currency,
+        processingTier: OFFICIAL_MODEL_PRICING.processingTier,
+        pricingVersion: OFFICIAL_MODEL_PRICING.pricingVersion,
+        effectiveDate: OFFICIAL_MODEL_PRICING.effectiveDate,
+        sources: OFFICIAL_MODEL_PRICING.sources,
+        disclaimer: "Official list-price estimate only; third-party relay billing may differ.",
       },
     },
     dashboard,
@@ -407,8 +410,6 @@ export function renderModelEffortMatrixMarkdown(report, { locale = DEFAULT_MARKD
       ...caseHeaders,
       text.semanticAccuracy,
       text.reviewCoverage,
-      text.autoAssertionRate,
-      text.hardValidationRate,
       text.totalLatency,
       text.firstContentLatency,
       text.inputTokens,
@@ -432,8 +433,6 @@ export function renderModelEffortMatrixMarkdown(report, { locale = DEFAULT_MARKD
       ...report.caseIds.map((caseId) => formatSemanticReview(casesById.get(caseId), text)),
       formatSemanticAccuracy(configuration.semanticAccuracy),
       formatRatio(configuration.reviewCoverage),
-      formatRatio(configuration.autoAssertionAccuracy),
-      formatRatio(configuration.hardValidationRate),
       formatLatency(configuration.latency.totalMs),
       formatLatency(configuration.latency.firstContentMs),
       formatTokenMetric(configuration.tokens.input),
@@ -683,6 +682,7 @@ function normalizeRunPair(run, runIndex, relayCreditToCny) {
       rawOutputSha256: score.sourceBinding.rawOutputSha256,
       sourceBinding: score.sourceBinding,
       rawStatus: result?.status || "missing_result",
+      failureKind: classifyResultFailure(result),
       scoreStatus: score?.status || "INCONCLUSIVE",
       scoreReason: score?.reason || null,
       isDirectRelay,
@@ -939,7 +939,7 @@ function dedupeRecords(records) {
       continue;
     }
     const comparableKeys = [
-      "bundleSha256", "snapshotSha256", "finalInputSha256", "rawStatus", "scoreStatus",
+      "bundleSha256", "snapshotSha256", "finalInputSha256", "rawStatus", "failureKind", "scoreStatus",
       "returnedModel", "checkpointReturnedModel", "scoredReturnedModel",
       "durationMs", "firstContentMs",
     ];
@@ -1160,6 +1160,7 @@ function summarizeConfiguration(group, caseIds) {
       },
       hardValidation: record.hardValidation,
       rawStatus: record.rawStatus,
+      failureKind: record.failureKind,
       returnedModel: record.returnedModel,
       durationMs: record.durationMs,
       firstContentMs: record.firstContentMs,
@@ -1290,44 +1291,74 @@ function semanticAccuracy(correctCount, determinateReviewCount, plannedCaseCount
 function extractUsage(result) {
   if (!result) return null;
   const usage = result.usage || result.metering?.usage || result.metering?.totals?.usage || {};
-  const inputTokens = firstFinite(usage.inputTokens, usage.prompt_tokens, usage.promptTokens);
-  const outputTokens = firstFinite(usage.outputTokens, usage.completion_tokens, usage.completionTokens);
+  const inputTokens = firstFinite(
+    usage.inputTokens,
+    usage.prompt_tokens,
+    usage.promptTokens,
+    usage.input_tokens,
+  );
+  const outputTokens = firstFinite(
+    usage.outputTokens,
+    usage.completion_tokens,
+    usage.completionTokens,
+    usage.output_tokens,
+  );
   const reasoningTokens = firstFinite(
     usage.reasoningTokens,
     usage.reasoning_tokens,
-    usage.output_tokens_details?.reasoning_tokens,
     usage.completion_tokens_details?.reasoning_tokens,
+    usage.output_tokens_details?.reasoning_tokens,
+  );
+  const cachedInputTokens = firstFinite(
+    usage.cachedInputTokens,
+    usage.cached_input_tokens,
+    usage.prompt_cache_hit_tokens,
+    usage.prompt_tokens_details?.cached_tokens,
+    usage.input_tokens_details?.cached_tokens,
+  );
+  const cacheWriteTokens = firstFinite(
+    usage.cacheWriteTokens,
+    usage.cache_write_tokens,
+    usage.prompt_tokens_details?.cache_write_tokens,
+    usage.input_tokens_details?.cache_write_tokens,
   );
   const explicitTotal = firstFinite(usage.totalTokens, usage.total_tokens);
   const totalTokens = explicitTotal ?? (
     inputTokens !== null && outputTokens !== null ? inputTokens + outputTokens : null
   );
   if ([inputTokens, outputTokens, reasoningTokens, totalTokens].every((value) => value === null)) return null;
-  return { inputTokens, outputTokens, reasoningTokens, totalTokens };
+  return {
+    inputTokens,
+    outputTokens,
+    reasoningTokens,
+    totalTokens,
+    ...(cachedInputTokens === null ? {} : { cachedInputTokens }),
+    ...(cacheWriteTokens === null ? {} : { cacheWriteTokens }),
+  };
 }
 
 function extractEstimatedCosts(result, model, relayCreditToCny) {
   if (!result) return [];
   if (/^relay-gpt-5\.6-(?:sol|terra|luna)$/u.test(String(model || ""))) {
-    const estimate = estimateRelayModelCost({
-      model,
-      usage: result.usage,
-      usdToCnyRate: relayCreditToCny,
-      exchangeRateVersion: "user-confirmed-relay-credit-to-cny",
-      pricing: RELAY_PRICING,
-      pricingMultiplier: RELAY_PRICING.multiplier,
+    const usage = extractUsage(result);
+    if (!usage) return [];
+    const canonicalModel = String(model).replace(/^relay-/u, "");
+    const estimate = estimateOpenAIModelCost({
+      model: canonicalModel,
+      usage,
+      reasoningMode: ["standard", "pro"].includes(result.reasoningMode)
+        ? result.reasoningMode
+        : "standard",
+      pricing: OFFICIAL_MODEL_PRICING,
     });
-    if (Number.isFinite(estimate.totalCostCny)) {
+    if (Number.isFinite(estimate.totalCostUsd)) {
       return [{
-        currency: "CNY",
-        amount: estimate.totalCostCny,
-        source: "estimateRelayModelCost",
-        verification: "unverified",
+        currency: "USD",
+        amount: estimate.totalCostUsd,
+        source: "official_standard_api_list_price",
+        verification: "official_list_rate_estimate",
         estimateOnly: true,
         pricingVersion: estimate.pricingVersion,
-        pricingMultiplier: estimate.pricingMultiplier,
-        relayCreditAmount: estimate.totalCostUsd,
-        relayCreditToCny,
       }];
     }
   }
@@ -1534,7 +1565,19 @@ function formatSemanticReview(value, text) {
   if (!review) return text.ratings.unreviewed;
   const kind = text.reviewKinds[review.reviewer?.kind] || review.reviewer?.kind || "?";
   const rating = text.ratings[review.rating] || review.rating;
-  return `${kind}: ${rating}`;
+  const failureKind = text.failureKinds?.[value.failureKind];
+  if (!failureKind || review.rating !== "incorrect") return `${kind}: ${rating}`;
+  const duration = Number.isFinite(value.durationMs)
+    ? `, ${round(value.durationMs / 1000, 1).toFixed(1)} s`
+    : "";
+  return `${kind}: ${rating} (${failureKind}${duration})`;
+}
+
+function classifyResultFailure(result) {
+  const code = optionalText(result?.error?.code);
+  if (code === "relay_stream_timeout") return "timeout";
+  if (code === "relay_empty_final_ruling") return "empty_response";
+  return null;
 }
 
 function formatSemanticAccuracy(value) {

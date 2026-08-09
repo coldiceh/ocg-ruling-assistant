@@ -771,6 +771,8 @@ test("question operations keep the matching mechanism rule inside a bounded pack
     ["matching-return-mechanism"],
   );
   assert.deepEqual(packet.modelPacket.decisionFocus.mandatoryConstraintReview, []);
+  assert.equal(packet.modelPacket.decisionFocus.asksActivationLegality, true);
+  assert.equal(packet.modelPacket.decisionFocus.reviewProtocol.length, 4);
   assert.ok(packet.includedManifest[0].operationRelevanceScore > 0);
   assert.equal(packet.omittedManifest.length, unrelatedRules.length);
   assert.equal(
@@ -886,6 +888,30 @@ test("a 16-item packet keeps the self-contained pending spell/trap movement rest
   );
 });
 
+test("mandatory constraints retain activation candidate review for a resolution question", () => {
+  const archive = createAdminEvidenceArchive({
+    evidenceBuckets: {
+      rulebookCandidates: [{
+        id: "pending-movement-restriction",
+        type: "rulebook",
+        text: "发动后不能留在场上的魔法・陷阱卡，会在其发动的连锁处理完毕时送去墓地。这种魔法・陷阱卡在连锁途中不能从场上回到手牌・卡组。",
+      }],
+    },
+    metadata: {
+      selectionContext: createAdminEvidenceSelectionContext({
+        question: "C1的通常陷阱已经发动。另一个效果将场上的魔法・陷阱全部返回手牌，结算时哪些卡回手？",
+      }),
+    },
+  });
+  const packet = buildAdminEvidenceDecisionPacket({ archive });
+
+  assert.equal(packet.modelPacket.decisionFocus.asksActivationLegality, false);
+  assert.ok(
+    packet.modelPacket.decisionFocus.mandatoryConstraintReview.length > 0,
+  );
+  assert.equal(packet.modelPacket.decisionFocus.reviewProtocol.length, 4);
+});
+
 test("printed operations can prioritize matching mechanisms without a decisive question phrase", () => {
   const archive = createAdminEvidenceArchive({
     cardTextCandidates: {
@@ -956,6 +982,27 @@ test("selection context is deterministically bounded before it enters archive me
       text: `子问题${index + 1}`,
     })),
   }));
+});
+
+test("provided facts cannot turn a resolution question into activation legality intent", () => {
+  const context = createAdminEvidenceSelectionContext({
+    question: "C2处理后对象离场，已经组成连锁的C1如何继续处理？",
+    providedFacts: ["另一个效果的发动条件要求场上存在合法候选。"],
+  });
+
+  assert.equal(context.asksActivationLegality, false);
+  assert.equal(createAdminEvidenceSelectionContext({
+    question: "C1的发动条件已经满足并且已经组成连锁，C2处理后对象离场，C1如何继续处理？",
+  }).asksActivationLegality, false);
+  assert.equal(createAdminEvidenceSelectionContext({
+    question: "这不是问能否发动，也无需判断能否发动，只问已经组成连锁后如何处理。",
+  }).asksActivationLegality, false);
+  assert.equal(createAdminEvidenceSelectionContext({
+    question: "这个效果可发动吗？",
+  }).asksActivationLegality, true);
+  assert.equal(createAdminEvidenceSelectionContext({
+    question: "この効果は発動できる？",
+  }).asksActivationLegality, true);
 });
 
 test("many resolved card texts cannot starve related rulings and mechanism evidence", () => {
@@ -1113,10 +1160,19 @@ test("ordinary opposing effects in C1 and C2 do not become simultaneous trigger 
     },
   });
 
-  const coverage = buildAdminEvidenceDecisionPacket({ archive })
-    .modelPacket.decisionFocus.mechanismCoverage;
-  assert.deepEqual(coverage.required, ["chain_resolution_reverse"]);
-  assert.deepEqual(coverage.covered, ["chain_resolution_reverse"]);
+  const decisionFocus = buildAdminEvidenceDecisionPacket({ archive })
+    .modelPacket.decisionFocus;
+  assert.deepEqual(
+    decisionFocus.mechanismCoverage.required,
+    ["chain_resolution_reverse"],
+  );
+  assert.deepEqual(
+    decisionFocus.mechanismCoverage.covered,
+    ["chain_resolution_reverse"],
+  );
+  assert.equal(decisionFocus.asksActivationLegality, false);
+  assert.deepEqual(decisionFocus.mandatoryConstraintReview, []);
+  assert.deepEqual(decisionFocus.reviewProtocol, []);
 });
 
 test("decision packet omission summary stays compact while its sidecar remains complete", () => {

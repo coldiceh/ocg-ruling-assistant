@@ -3674,7 +3674,10 @@ export function buildFinalRulingInput(snapshot, {
           : {}),
       };
   const input = [
-    ...finalRulingInputPreamble(variant),
+    ...finalRulingInputPreamble(variant, {
+      activationCandidateReviewRequired:
+        requiresActivationCandidateReview(evidenceDecisionPacket),
+    }),
     JSON.stringify(boundedInput),
   ].join("\n");
   const inputBytes = Buffer.byteLength(input, "utf8");
@@ -3691,9 +3694,13 @@ export function buildFinalRulingModelEvidencePacket(snapshot, {
   evidenceVariant = DEFAULT_ADMIN_EVIDENCE_VARIANT,
 } = {}) {
   const variant = normalizeAdminEvidenceVariant(evidenceVariant);
+  const modelPacket = alignHistoricalActivationReviewFocus(
+    completeFinalRulingModelEvidencePacket(snapshot),
+    snapshot,
+  );
   return projectAdminModelEvidencePacket({
     snapshot,
-    modelPacket: completeFinalRulingModelEvidencePacket(snapshot),
+    modelPacket,
     evidenceVariant: variant,
   });
 }
@@ -3712,17 +3719,23 @@ function completeFinalRulingModelEvidencePacket(snapshot) {
   return buildAdminEvidenceDecisionPacket({ archive }).modelPacket;
 }
 
-function finalRulingInputPreamble(variant) {
+function finalRulingInputPreamble(variant, {
+  activationCandidateReviewRequired = false,
+} = {}) {
   if (variant === "full") {
     return [
       "以下是从完整、冻结且通过内容哈希校验的 Evidence Snapshot 生成的有界决策资料包。",
       "完整候选与冲突保存在审计归档；这里只给出确定性选出的正文、有界冲突摘要及遗漏/截断计数。",
       "资料准备模型只提供候选卡名与补充检索词，不是裁定；确定性查询始终优先，但模型补充词仍可能扩展候选集合，所以必须独立核对每条可见证据。",
       "只能引用 evidenceDecisionPacket.evidenceItems 中实际展示正文的 evidenceId；omissionSummary 只有计数与审计哈希，不是证据。",
-      "evidenceDecisionPacket.decisionFocus.mandatoryConstraintReview 是确定性预处理器按题面操作与限制性规则自动生成的必查清单，不是最终裁定。给出发动或处理合法的确定结论前，必须逐项阅读清单所指 evidenceId：分别检查诱发条件与每个必做处理，并只统计在发动时确实能接受该操作的合法候选。若清单项不适用，必须说明题设与该规则条件的具体不匹配；不得只因卡片 FAQ 说明了可连锁时点就跳过必做处理的发动合法性。",
+      ...(activationCandidateReviewRequired ? [
+        "evidenceDecisionPacket.decisionFocus.mandatoryConstraintReview 是确定性预处理器按题面操作与限制性规则自动生成的必查清单，不是最终裁定。给出发动或处理合法的确定结论前，必须逐项阅读清单所指 evidenceId：分别检查诱发条件与每个必做处理，并只统计在发动时确实能接受该操作的合法候选。若清单项不适用，必须说明题设与该规则条件的具体不匹配；不得只因卡片 FAQ 说明了可连锁时点就跳过必做处理的发动合法性。",
+      ] : []),
       "legacyLuaSemanticPacket 是旧 Lua 脚本自动提取的非权威语义旁路，只能提示可能需要检查的条件、操作和底层 API 依赖；它不是官方资料，不能加入 evidenceIds，candidateVerdict 不能直接支持结论，verdict=UNKNOWN 也绝不表示不能发动或不能处理。",
-      "使用 Lua 候选前必须先读取候选自身的 sourceBinding，并在 resources 存在时按 resourceId 交叉核对来源；预计算 sourceDocumentId 中的 cid-<卡片CID>/passcode-<脚本密码> 只允许绑定 Evidence Snapshot 内 resolvedCards.cid 相同的已解析卡片，禁止跨卡套用。activationLegalityChecks 的 requiredMinimum 是发动前最低候选数，不满足时不能改写成发动后空处理。",
-      "selectorSummary 是 Lua 筛选器自动生成的有界布尔摘要；FILTER_ARGUMENT_n 依次绑定 filterArgumentExpressions[n-1]。必须先按题设的响应效果种类代入分支，再依据 controllerLocation、opponentLocation、filterExpression 和 predicateApi 逐项计算候选，不能把另一分支的怪兽或魔陷混入数量。",
+      ...(activationCandidateReviewRequired ? [
+        "使用 Lua 候选前必须先读取候选自身的 sourceBinding，并在 resources 存在时按 resourceId 交叉核对来源；预计算 sourceDocumentId 中的 cid-<卡片CID>/passcode-<脚本密码> 只允许绑定 Evidence Snapshot 内 resolvedCards.cid 相同的已解析卡片，禁止跨卡套用。activationLegalityChecks 的 requiredMinimum 是发动前最低候选数，不满足时不能改写成发动后空处理。",
+        "selectorSummary 是 Lua 筛选器自动生成的有界布尔摘要；FILTER_ARGUMENT_n 依次绑定 filterArgumentExpressions[n-1]。必须先按题设的响应效果种类代入分支，再依据 controllerLocation、opponentLocation、filterExpression 和 predicateApi 逐项计算候选，不能把另一分支的怪兽或魔陷混入数量。",
+      ] : []),
       "不得调用网络搜索，不得引用快照外资料。",
     ];
   }
@@ -3732,7 +3745,9 @@ function finalRulingInputPreamble(variant) {
       "完整候选与冲突保存在审计归档；这里只给出确定性选出的正文、有界冲突摘要及遗漏/截断计数。",
       "资料准备模型只提供候选卡名与补充检索词，不是裁定；确定性查询始终优先，但模型补充词仍可能扩展候选集合，所以必须独立核对每条可见证据。",
       "只能引用 evidenceDecisionPacket.evidenceItems 中实际展示正文的 evidenceId；omissionSummary 只有计数与审计哈希，不是证据。",
-      "evidenceDecisionPacket.decisionFocus.mandatoryConstraintReview 是确定性预处理器按题面操作与限制性规则自动生成的必查清单。给出发动或处理合法的确定结论前，必须逐项核对；不得只因卡片 FAQ 说明了可连锁时点就跳过必做处理的发动合法性。",
+      ...(activationCandidateReviewRequired ? [
+        "evidenceDecisionPacket.decisionFocus.mandatoryConstraintReview 是确定性预处理器按题面操作与限制性规则自动生成的必查清单。给出发动或处理合法的确定结论前，必须逐项核对；不得只因卡片 FAQ 说明了可连锁时点就跳过必做处理的发动合法性。",
+      ] : []),
       "不得调用网络搜索，不得引用快照外资料。",
     ];
   }
@@ -3742,6 +3757,50 @@ function finalRulingInputPreamble(variant) {
     "只能引用 evidenceDecisionPacket.evidenceItems 中实际展示正文的 evidenceId。",
     "不得调用网络搜索，不得引用资料包外内容。",
   ];
+}
+
+function requiresActivationCandidateReview(evidenceDecisionPacket) {
+  const decisionFocus = evidenceDecisionPacket?.decisionFocus;
+  return decisionFocus?.asksActivationLegality === true
+    || (
+      Array.isArray(decisionFocus?.mandatoryConstraintReview)
+      && decisionFocus.mandatoryConstraintReview.length > 0
+    );
+}
+
+function alignHistoricalActivationReviewFocus(modelPacket, snapshot) {
+  const decisionFocus = modelPacket?.decisionFocus;
+  if (
+    !decisionFocus
+    || typeof decisionFocus !== "object"
+    || Array.isArray(decisionFocus)
+    || typeof decisionFocus.asksActivationLegality === "boolean"
+  ) return modelPacket;
+  const asksActivationLegality = createAdminEvidenceSelectionContext({
+    question: snapshot?.question || "",
+    questions: snapshot?.evidence?.questions || [],
+  }).asksActivationLegality === true;
+  const mandatoryConstraintReview = Array.isArray(
+    decisionFocus.mandatoryConstraintReview,
+  )
+    ? decisionFocus.mandatoryConstraintReview
+    : [];
+  const activationCandidateReviewRequired = asksActivationLegality
+    || mandatoryConstraintReview.length > 0;
+  return {
+    ...modelPacket,
+    decisionFocus: {
+      ...decisionFocus,
+      asksActivationLegality,
+      reviewProtocol: activationCandidateReviewRequired
+        ? (
+            Array.isArray(decisionFocus.reviewProtocol)
+              ? decisionFocus.reviewProtocol
+              : []
+          )
+        : [],
+    },
+  };
 }
 
 function collectRetrievalMetadata(retrieval) {
