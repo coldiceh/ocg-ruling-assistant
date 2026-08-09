@@ -1,0 +1,87 @@
+name: Collect benchmark result files
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_ids:
+        description: Comma-separated workflow run IDs (maximum 24)
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: collect-benchmark-results
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Validate run IDs
+        id: validate
+        shell: bash
+        env:
+          RUN_IDS: ${{ inputs.run_ids }}
+        run: |
+          set -euo pipefail
+          compact="${RUN_IDS//[[:space:]]/}"
+          [[ "$compact" =~ ^[0-9]+(,[0-9]+){0,23}$ ]] || {
+            echo "run_ids must contain 1-24 comma-separated numeric IDs" >&2
+            exit 1
+          }
+          IFS=',' read -r -a ids <<< "$compact"
+          printf '%s\n' "${ids[@]}" | sort -u > run-ids.txt
+          test "$(wc -l < run-ids.txt)" -eq "${#ids[@]}" || {
+            echo "run_ids must not contain duplicates" >&2
+            exit 1
+          }
+
+      - name: Download artifacts and retain result files only
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p incoming results
+          while IFS= read -r run_id
+          do
+            mkdir -p "incoming/$run_id" "results/$run_id"
+            gh run download "$run_id" \
+              --repo "$GITHUB_REPOSITORY" \
+              --dir "incoming/$run_id"
+            while IFS= read -r -d '' file
+            do
+              base="$(basename "$file")"
+              destination="results/$run_id/$base"
+              test ! -e "$destination" || {
+                echo "duplicate retained file for run $run_id: $base" >&2
+                exit 1
+              }
+              cp "$file" "$destination"
+            done < <(find "incoming/$run_id" -type f \
+              \( -name '*checkpoint.json' \
+                 -o -name '*scored.json' \
+                 -o -name '*benchmark.json' \
+                 -o -name '*preflight.json' \
+                 -o -name '*semantic-review*.json' \) \
+              ! -name '*source-bundle*' -print0)
+            test -n "$(find "results/$run_id" -type f -print -quit)" || {
+              echo "run $run_id contained no retained benchmark result files" >&2
+              exit 1
+            }
+          done < run-ids.txt
+          find results -type f -print0 \
+            | sort -z \
+            | xargs -0 sha256sum > results/SHA256SUMS
+
+      - name: Upload compact result collection
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-result-collection-${{ github.run_id }}
+          path: results
+          if-no-files-found: error
+          retention-days: 14
