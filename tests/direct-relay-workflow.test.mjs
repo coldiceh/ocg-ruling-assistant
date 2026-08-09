@@ -98,6 +98,15 @@ test("Sol ablation workflow reuses one canonical bundle for exactly six serial z
   assert.match(workflow, /Download prior ablation checkpoints/u);
   assert.match(workflow, /copy_at_most_one artifacts\/resume '\*card-text-only-result-checkpoint\.json'/u);
   assert.match(workflow, /copy_at_most_one artifacts\/resume '\*without-lua-result-checkpoint\.json'/u);
+  assert.match(
+    workflow,
+    /if \[ -s artifacts\/sol-card-text-only-result-checkpoint\.json \]; then[\s\S]*?resume_args\+=\(--recover-running-as-outcome-unknown\)[\s\S]*?--evidence-variant card_text_only/u,
+  );
+  assert.match(
+    workflow,
+    /if \[ -s artifacts\/sol-without-lua-result-checkpoint\.json \]; then[\s\S]*?resume_args\+=\(--recover-running-as-outcome-unknown\)[\s\S]*?--evidence-variant without_lua/u,
+  );
+  assert.equal((workflow.match(/"\$\{resume_args\[@\]\}"/gu) || []).length, 2);
   assert.doesNotMatch(workflow, /retry|for\s+attempt/iu);
 });
 

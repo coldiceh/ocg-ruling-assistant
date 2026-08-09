@@ -158,10 +158,15 @@ jobs:
             *) echo "Unsupported effort" >&2; exit 1 ;;
           esac
           sha256sum --check artifacts/direct-relay-source-bundle.sha256
+          resume_args=()
+          if [ -s artifacts/sol-card-text-only-result-checkpoint.json ]; then
+            resume_args+=(--recover-running-as-outcome-unknown)
+          fi
           node scripts/local-relay-effort-experiment.mjs \
             --snapshots artifacts/direct-relay-source-bundle.json \
             --model relay-gpt-5.6-sol \
             --effort "$EFFORT" \
+            "${resume_args[@]}" \
             --evidence-variant card_text_only \
             --case double-tempest-impermanence \
             --case unchained-replacement \
@@ -186,10 +191,15 @@ jobs:
             *) echo "Unsupported effort" >&2; exit 1 ;;
           esac
           sha256sum --check artifacts/direct-relay-source-bundle.sha256
+          resume_args=()
+          if [ -s artifacts/sol-without-lua-result-checkpoint.json ]; then
+            resume_args+=(--recover-running-as-outcome-unknown)
+          fi
           node scripts/local-relay-effort-experiment.mjs \
             --snapshots artifacts/direct-relay-source-bundle.json \
             --model relay-gpt-5.6-sol \
             --effort "$EFFORT" \
+            "${resume_args[@]}" \
             --evidence-variant without_lua \
             --case double-tempest-impermanence \
             --case unchained-replacement \
