@@ -6,6 +6,7 @@ import { pathToFileURL } from "node:url";
 
 import {
   estimateOpenAIModelCost,
+  getDeepSeekModelPricingConfig,
   getModelPricingConfig,
 } from "../backend/modelPricing.mjs";
 import {
@@ -21,6 +22,7 @@ const EFFORT_ORDER = new Map(
   ["none", "low", "medium", "high", "xhigh", "max"].map((value, index) => [value, index]),
 );
 const OFFICIAL_MODEL_PRICING = getModelPricingConfig();
+const OFFICIAL_DEEPSEEK_PRICING = getDeepSeekModelPricingConfig();
 const DEFAULT_RELAY_CREDIT_TO_CNY = 1;
 const DEFAULT_MARKDOWN_LOCALE = "zh";
 const SUPPORTED_MARKDOWN_LOCALES = new Set(["zh", "en", "ja"]);
@@ -357,6 +359,16 @@ export function aggregateModelEffortMatrix({
         effectiveDate: OFFICIAL_MODEL_PRICING.effectiveDate,
         sources: OFFICIAL_MODEL_PRICING.sources,
         disclaimer: "Official list-price estimate only; third-party relay billing may differ.",
+      },
+      officialDeepSeekListPrice: {
+        status: "estimated",
+        estimateOnly: true,
+        currency: OFFICIAL_DEEPSEEK_PRICING.currency,
+        processingTier: OFFICIAL_DEEPSEEK_PRICING.processingTier,
+        pricingVersion: OFFICIAL_DEEPSEEK_PRICING.pricingVersion,
+        effectiveDate: OFFICIAL_DEEPSEEK_PRICING.effectiveDate,
+        sources: OFFICIAL_DEEPSEEK_PRICING.sources,
+        disclaimer: "Official DeepSeek list-price estimate only; actual billing may differ.",
       },
     },
     dashboard,
@@ -1356,6 +1368,28 @@ function extractEstimatedCosts(result, model, relayCreditToCny) {
         currency: "USD",
         amount: estimate.totalCostUsd,
         source: "official_standard_api_list_price",
+        verification: "official_list_rate_estimate",
+        estimateOnly: true,
+        pricingVersion: estimate.pricingVersion,
+      }];
+    }
+  }
+  if (/^deepseek-v4-(?:flash|pro)$/u.test(String(model || ""))) {
+    const usage = extractUsage(result);
+    if (!usage) return [];
+    const estimate = estimateOpenAIModelCost({
+      model: String(model),
+      usage,
+      reasoningMode: ["standard", "pro"].includes(result.reasoningMode)
+        ? result.reasoningMode
+        : "standard",
+      pricing: OFFICIAL_DEEPSEEK_PRICING,
+    });
+    if (Number.isFinite(estimate.totalCostUsd)) {
+      return [{
+        currency: "USD",
+        amount: estimate.totalCostUsd,
+        source: "official_deepseek_api_list_price",
         verification: "official_list_rate_estimate",
         estimateOnly: true,
         pricingVersion: estimate.pricingVersion,

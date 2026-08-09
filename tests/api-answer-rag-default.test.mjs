@@ -62,29 +62,40 @@ test("api_answer_reports_engine_availability_from_backend_configuration", async 
   }
 });
 
-test("api_answer defaults to DeepSeek Flash and does not expose retired GLM or Kimi profiles", async () => {
+test("api_answer defaults to Luna low and keeps DeepSeek as an optional fallback", async () => {
   const previousGlm = process.env.GLM_API_KEY;
   const previousDeepSeek = process.env.DEEPSEEK_API_KEY;
   const previousRelay = process.env.RELAY_API_KEY;
+  const previousRelayBaseUrl = process.env.RELAY_BASE_URL;
   try {
     process.env.GLM_API_KEY = "test-glm-key";
     process.env.DEEPSEEK_API_KEY = "test-deepseek-key";
-    delete process.env.RELAY_API_KEY;
+    process.env.RELAY_API_KEY = "test-relay-key";
+    process.env.RELAY_BASE_URL = "https://relay.example.test/v1";
     const info = createJsonResponse();
     await handler({ method: "GET" }, info);
-    assert.equal(info.payload.defaultRulingModelProfile, "deepseek-v4-flash-high");
+    assert.equal(info.payload.defaultRulingModelProfile, "relay-gpt-5.6-luna-low");
     assert.deepEqual(info.payload.rulingModelProfiles.map((profile) => ({
       id: profile.id,
       available: profile.available,
     })), [
+      { id: "relay-gpt-5.6-luna-low", available: true },
       { id: "deepseek-v4-flash-high", available: true },
     ]);
+    const relay = info.payload.rulingModelProfiles[0];
+    assert.equal(relay.provider, "relay");
+    assert.equal(relay.model, "gpt-5.6-luna");
+    assert.equal(relay.reasoningEffort, "low");
+    assert.equal(relay.thirdParty, true);
+    assert.equal(relay.modelIdentityVerified, false);
+    assert.doesNotMatch(JSON.stringify(info.payload), /test-relay-key|relay\.example/u);
     assert.equal(info.payload.answerLatency.storage, "unconfigured");
     assert.deepEqual(info.payload.rulingModelProfiles.map((profile) => ({
       id: profile.id,
       status: profile.answerLatency?.status || "unavailable",
       averageMs: profile.answerLatency?.averageMs ?? null,
     })), [
+      { id: "relay-gpt-5.6-luna-low", status: "unavailable", averageMs: null },
       { id: "deepseek-v4-flash-high", status: "unavailable", averageMs: null },
     ]);
 
@@ -113,6 +124,8 @@ test("api_answer defaults to DeepSeek Flash and does not expose retired GLM or K
     else process.env.DEEPSEEK_API_KEY = previousDeepSeek;
     if (previousRelay === undefined) delete process.env.RELAY_API_KEY;
     else process.env.RELAY_API_KEY = previousRelay;
+    if (previousRelayBaseUrl === undefined) delete process.env.RELAY_BASE_URL;
+    else process.env.RELAY_BASE_URL = previousRelayBaseUrl;
   }
 });
 
@@ -141,6 +154,7 @@ test("api_answer GET returns real rolling latency for each available profile", a
     "GLM_API_KEY",
     "DEEPSEEK_API_KEY",
     "RELAY_API_KEY",
+    "RELAY_BASE_URL",
     "PUBLIC_ANSWER_LATENCY_REDIS_REST_URL",
     "PUBLIC_ANSWER_LATENCY_REDIS_REST_TOKEN",
   ]);
@@ -150,7 +164,8 @@ test("api_answer GET returns real rolling latency for each available profile", a
   try {
     process.env.GLM_API_KEY = "test-glm-key";
     process.env.DEEPSEEK_API_KEY = "test-deepseek-key";
-    delete process.env.RELAY_API_KEY;
+    process.env.RELAY_API_KEY = "test-relay-key";
+    process.env.RELAY_BASE_URL = "https://relay.example.test/v1";
     process.env.PUBLIC_ANSWER_LATENCY_REDIS_REST_URL = "https://latency.example.test";
     process.env.PUBLIC_ANSWER_LATENCY_REDIS_REST_TOKEN = "test-token";
     globalThis.fetch = async (_url, options) => {
@@ -164,7 +179,10 @@ test("api_answer GET returns real rolling latency for each available profile", a
     await handler({ method: "GET" }, response);
 
     assert.equal(response.statusCode, 200);
-    assert.deepEqual(requestedProfiles, ["deepseek-v4-flash-high"]);
+    assert.deepEqual(requestedProfiles, [
+      "relay-gpt-5.6-luna-low",
+      "deepseek-v4-flash-high",
+    ]);
     assert.equal(response.payload.answerLatency.storage, "redis");
     assert.deepEqual(response.payload.rulingModelProfiles.map((profile) => ({
       id: profile.id,
@@ -172,6 +190,7 @@ test("api_answer GET returns real rolling latency for each available profile", a
       averageMs: profile.answerLatency?.averageMs ?? null,
       sampleCount: profile.answerLatency?.sampleCount || 0,
     })), [
+      { id: "relay-gpt-5.6-luna-low", status: "available", averageMs: 30000, sampleCount: 1 },
       { id: "deepseek-v4-flash-high", status: "available", averageMs: 30000, sampleCount: 1 },
     ]);
   } finally {

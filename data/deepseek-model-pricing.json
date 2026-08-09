@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "pricingVersion": "deepseek-v4-standard-2026-08-10",
+  "effectiveDate": "2026-04-24",
+  "checkedAt": "2026-08-10",
+  "currency": "USD",
+  "unit": "per_1m_tokens",
+  "processingTier": "standard",
+  "sources": [
+    "https://api-docs.deepseek.com/quick_start/pricing/"
+  ],
+  "notes": {
+    "cacheHits": "Cached input tokens use the published cache-hit rate; all other input tokens use the cache-miss rate.",
+    "reasoningTokens": "Thinking tokens are included in output tokens and are not billed a second time.",
+    "longContext": "No separate long-context surcharge is listed for DeepSeek V4; multipliers therefore remain 1 within the supported context window.",
+    "estimateOnly": "Calculated costs are official list-price estimates, not invoices."
+  },
+  "aliases": {},
+  "models": {
+    "deepseek-v4-flash": {
+      "inputUsdPerMillion": 0.14,
+      "cachedInputUsdPerMillion": 0.0028,
+      "cacheWriteUsdPerMillion": 0.14,
+      "outputUsdPerMillion": 0.28,
+      "longContext": {
+        "thresholdInputTokensExclusive": 1000000,
+        "inputMultiplier": 1,
+        "outputMultiplier": 1
+      }
+    },
+    "deepseek-v4-pro": {
+      "inputUsdPerMillion": 0.435,
+      "cachedInputUsdPerMillion": 0.003625,
+      "cacheWriteUsdPerMillion": 0.435,
+      "outputUsdPerMillion": 0.87,
+      "longContext": {
+        "thresholdInputTokensExclusive": 1000000,
+        "inputMultiplier": 1,
+        "outputMultiplier": 1
+      }
+    }
+  },
+  "fx": {
+    "baseCurrency": "USD",
+    "quoteCurrency": "CNY",
+    "defaultRate": null,
+    "defaultVersion": null,
+    "configurable": true
+  }
+}

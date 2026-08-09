@@ -6,6 +6,7 @@ import {
   DEFAULT_PUBLIC_RELAY_MODEL,
   resolvePublicRulingModelProfile,
 } from "./publicRulingModelConfig.mjs";
+import { requestRelayChatCompletionSse } from "./rulingModelProviders.mjs";
 
 const DEFAULT_DEEPSEEK_BASE_URL = "https://api.deepseek.com";
 const DEFAULT_DEEPSEEK_MODEL = "deepseek-v4-flash";
@@ -16,6 +17,12 @@ const DEFAULT_JSON_TASK_MAX_OUTPUT_TOKENS = 4000;
 const DEFAULT_RAG_RECOVERY_MAX_OUTPUT_TOKENS = 4096;
 const DEFAULT_LIGHTWEIGHT_EXTRACTION_TIMEOUT_MS = 4500;
 const DEFAULT_DAILY_BUDGET_CNY = 10;
+// A missing relay estimate must not consume the entire default daily budget in
+// one reservation. Luna low has stayed well below this amount in the frozen
+// ten-case benchmark, while 0.5 CNY still leaves conservative headroom for a
+// longer public answer. Deployments can override it with the dashboard-backed
+// RELAY_ESTIMATED_CNY_PER_CALL value.
+const DEFAULT_RELAY_ESTIMATED_CNY_PER_CALL = 0.5;
 const DEFAULT_BUDGET_TIMEZONE = "Asia/Shanghai";
 const DEEPSEEK_THINKING_MODES = new Set(["enabled", "disabled"]);
 const DEEPSEEK_REASONING_EFFORTS = new Set(["high", "max"]);
@@ -1496,7 +1503,7 @@ async function callGlm({
  *
  * This intentionally does not reuse OpenAIResponsesProvider: relay capability
  * parity for background Responses, retrieval/cancellation and strict schemas is
- * unverified. One synchronous Chat Completions request is made, with no tools,
+ * unverified. One SSE Chat Completions request is made, with no tools,
  * automatic retry or official-provider attribution.
  */
 async function callRelay({
@@ -1512,7 +1519,6 @@ async function callRelay({
   const body = {
     model: modelName || DEFAULT_PUBLIC_RELAY_MODEL,
     messages: [{ role: "user", content: prompt }],
-    stream: false,
     response_format: { type: "json_object" },
   };
   if (RELAY_REASONING_EFFORTS.has(reasoningEffort)) {
@@ -1522,12 +1528,14 @@ async function callRelay({
     body.max_completion_tokens = maxTokens;
   }
 
-  const response = await postJson(fetchImpl, endpoint, {
-    authorization: `Bearer ${String(env.RELAY_API_KEY || "").trim()}`,
-    "content-type": "application/json",
-  }, body, { signal });
-  assertProviderHttpResponse(response, "relay");
-  const payload = await response.json();
+  const payload = await requestRelayChatCompletionSse({
+    fetchImpl,
+    endpoint,
+    apiKey: env.RELAY_API_KEY,
+    body,
+    env,
+    signal,
+  });
   const choice = payload?.choices?.[0] || {};
   const message = choice.message || {};
   const rawText = extractChatMessageText(message.content);
@@ -1552,6 +1560,8 @@ async function callRelay({
     reasoningEffort: RELAY_REASONING_EFFORTS.has(reasoningEffort) ? reasoningEffort : null,
     maxOutputTokens: Number.isInteger(maxTokens) && maxTokens > 0 ? maxTokens : null,
     responseFormat: "json_object",
+    transport: "chat_completions_sse",
+    streamMetrics: payload?.stream_metrics || null,
     usage: payload?.usage || {},
     warnings,
   };
@@ -2647,7 +2657,10 @@ function estimatePreflightCostCny(provider, prompt, maxTokens, env) {
     return estimateGlmCostCny({ prompt_tokens: promptTokens, completion_tokens: maxTokens }, env);
   }
   if (provider === "relay") {
-    return roundCost(readPositiveNumber(env.RELAY_ESTIMATED_CNY_PER_CALL, 10));
+    return roundCost(readPositiveNumber(
+      env.RELAY_ESTIMATED_CNY_PER_CALL,
+      DEFAULT_RELAY_ESTIMATED_CNY_PER_CALL,
+    ));
   }
   if (provider === "gemini") {
     return roundCost(readTieredProviderNumber(env, "GEMINI", "ESTIMATED_CNY_PER_CALL", 0.01));
@@ -2658,7 +2671,12 @@ function estimatePreflightCostCny(provider, prompt, maxTokens, env) {
 function estimateActualCostCny(provider, usage, env) {
   if (provider === "deepseek") return estimateDeepSeekCostCny(usage, env);
   if (provider === "glm") return estimateGlmCostCny(usage, env);
-  if (provider === "relay") return roundCost(readPositiveNumber(env.RELAY_ESTIMATED_CNY_PER_CALL, 10));
+  if (provider === "relay") {
+    return roundCost(readPositiveNumber(
+      env.RELAY_ESTIMATED_CNY_PER_CALL,
+      DEFAULT_RELAY_ESTIMATED_CNY_PER_CALL,
+    ));
+  }
   if (provider === "gemini") return roundCost(readTieredProviderNumber(env, "GEMINI", "ESTIMATED_CNY_PER_CALL", 0.01));
   return 0;
 }

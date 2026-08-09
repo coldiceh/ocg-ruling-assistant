@@ -500,126 +500,175 @@ export class CompatibleEvidencePreparationProvider {
     if (this.providerId !== "relay") {
       throw new TypeError("requestRelayStream is restricted to the relay provider");
     }
-    const timeoutMaximumMs = readRelayStreamTimeoutMaximumMs(this.env);
-    const timeoutMs = boundedPositiveInteger(
-      this.env.RELAY_STREAM_TIMEOUT_MS,
-      "RELAY_STREAM_TIMEOUT_MS",
-      270_000,
-      { minimum: 1_000, maximum: timeoutMaximumMs },
-    );
-    const maxBytes = boundedPositiveInteger(
-      this.env.RELAY_STREAM_MAX_BYTES,
-      "RELAY_STREAM_MAX_BYTES",
-      16 * 1024 * 1024,
-      { minimum: 1_024, maximum: 32 * 1024 * 1024 },
-    );
-    const maxContentBytes = boundedPositiveInteger(
-      this.env.RELAY_STREAM_MAX_CONTENT_BYTES,
-      "RELAY_STREAM_MAX_CONTENT_BYTES",
-      1024 * 1024,
-      { minimum: 1_024, maximum: 4 * 1024 * 1024 },
-    );
-    const controller = new AbortController();
-    const externalAbort = () => controller.abort(signal?.reason);
-    if (signal?.aborted) externalAbort();
-    else signal?.addEventListener?.("abort", externalAbort, { once: true });
-    const timeout = setTimeout(
-      () => controller.abort(new Error("relay stream timed out")),
-      timeoutMs,
-    );
-    timeout.unref?.();
-    const requestStartedAt = readMonotonicClock(this.clock);
-    let requestToResponseHeadersMs = null;
-    let response;
-    try {
-      response = await this.fetchImpl(`${this.baseUrl}${path}`, {
-        method,
-        headers: {
-          accept: "text/event-stream",
-          authorization: `Bearer ${this.apiKey}`,
-          "content-type": "application/json",
-        },
-        body: JSON.stringify(body),
-        signal: controller.signal,
-      });
-      requestToResponseHeadersMs = elapsedMonotonicMs(this.clock, requestStartedAt);
-      if (!response.ok) {
-        const payload = await readResponsePayload(response);
-        const outcomeKnown = isProvableHttpRejection(response.status);
-        throw new RulingModelProviderError(
-          payload?.error?.message || `relay Chat Completions API returned HTTP ${response.status}`,
-          {
-            code: payload?.error?.code || "relay_http_error",
-            provider: "relay",
-            status: response.status,
-            responseBody: payload,
-            outcomeKnown,
-            budgetReservationMayExist: !outcomeKnown,
-            streamMetrics: makeRelayStreamMetrics({
-              requestToResponseHeadersMs,
-            }),
-          },
-        );
-      }
-      const contentType = String(response?.headers?.get?.("content-type") || "").toLowerCase();
-      if (!contentType.includes("text/event-stream")) {
-        throw new RulingModelProviderError(
-          `relay stream returned unsupported content type ${contentType || "missing"}`,
-          {
-            code: "relay_stream_content_type_invalid",
-            provider: "relay",
-            status: response.status,
-            outcomeKnown: false,
-            budgetReservationMayExist: true,
-            streamMetrics: makeRelayStreamMetrics({
-              requestToResponseHeadersMs,
-            }),
-          },
-        );
-      }
-      return await readRelayChatCompletionSse(response, {
-        maxBytes,
-        maxContentBytes,
-        signal: controller.signal,
-        clock: this.clock,
-        requestStartedAt,
-        requestToResponseHeadersMs,
-      });
-    } catch (cause) {
-      if (cause instanceof RulingModelProviderError) throw cause;
-      const timedOut = controller.signal.aborted
-        && isTimeoutAbortReason(controller.signal.reason);
+    return requestRelayChatCompletionSse({
+      fetchImpl: this.fetchImpl,
+      endpoint: `${this.baseUrl}${path}`,
+      apiKey: this.apiKey,
+      method,
+      body,
+      env: this.env,
+      signal,
+      clock: this.clock,
+    });
+  }
+}
+
+/**
+ * Execute exactly one Relay Chat Completions request over SSE.
+ *
+ * Both the isolated model lab and the public ruling adapter use this transport
+ * so timeout, abort, byte-limit and protocol handling cannot drift between the
+ * two call sites. Reasoning deltas are validated and discarded by the shared
+ * parser; only visible assistant content and safe usage metadata are returned.
+ */
+export async function requestRelayChatCompletionSse({
+  fetchImpl = globalThis.fetch,
+  endpoint,
+  apiKey,
+  method = "POST",
+  body = {},
+  env = globalThis.process?.env || {},
+  signal,
+  clock = defaultMonotonicClock,
+} = {}) {
+  if (typeof fetchImpl !== "function") {
+    throw new TypeError("relay stream transport requires fetch");
+  }
+  if (typeof clock !== "function") {
+    throw new TypeError("relay stream transport clock must be a function");
+  }
+  const normalizedApiKey = String(apiKey || "").trim();
+  if (!normalizedApiKey) {
+    throw new TypeError("relay stream transport requires a server-side API key");
+  }
+  const normalizedEndpoint = normalizeRelayStreamEndpoint(endpoint);
+  const requestBody = {
+    ...(isPlainObject(body) ? body : {}),
+    stream: true,
+    stream_options: { include_usage: true },
+  };
+  const timeoutMaximumMs = readRelayStreamTimeoutMaximumMs(env);
+  const timeoutMs = boundedPositiveInteger(
+    env.RELAY_STREAM_TIMEOUT_MS,
+    "RELAY_STREAM_TIMEOUT_MS",
+    270_000,
+    { minimum: 1_000, maximum: timeoutMaximumMs },
+  );
+  const maxBytes = boundedPositiveInteger(
+    env.RELAY_STREAM_MAX_BYTES,
+    "RELAY_STREAM_MAX_BYTES",
+    16 * 1024 * 1024,
+    { minimum: 1_024, maximum: 32 * 1024 * 1024 },
+  );
+  const maxContentBytes = boundedPositiveInteger(
+    env.RELAY_STREAM_MAX_CONTENT_BYTES,
+    "RELAY_STREAM_MAX_CONTENT_BYTES",
+    1024 * 1024,
+    { minimum: 1_024, maximum: 4 * 1024 * 1024 },
+  );
+  const controller = new AbortController();
+  const externalAbort = () => controller.abort(signal?.reason);
+  if (signal?.aborted) externalAbort();
+  else signal?.addEventListener?.("abort", externalAbort, { once: true });
+  const timeout = setTimeout(
+    () => controller.abort(new Error("relay stream timed out")),
+    timeoutMs,
+  );
+  timeout.unref?.();
+  const requestStartedAt = readMonotonicClock(clock);
+  let requestToResponseHeadersMs = null;
+  let response;
+  try {
+    response = await fetchImpl(normalizedEndpoint, {
+      method,
+      headers: {
+        accept: "text/event-stream",
+        authorization: `Bearer ${normalizedApiKey}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(requestBody),
+      signal: controller.signal,
+    });
+    requestToResponseHeadersMs = elapsedMonotonicMs(clock, requestStartedAt);
+    if (!response.ok) {
+      const payload = await readResponsePayload(response);
+      const outcomeKnown = isProvableHttpRejection(response.status);
       throw new RulingModelProviderError(
-        timedOut
-          ? "relay stream timed out after submission"
-          : "relay stream ended unexpectedly after submission",
+        payload?.error?.message || `relay Chat Completions API returned HTTP ${response.status}`,
         {
-          code: timedOut ? "relay_stream_timeout" : "relay_stream_interrupted",
+          code: payload?.error?.code || "relay_http_error",
           provider: "relay",
-          status: response?.status ?? null,
+          status: response.status,
+          responseBody: payload,
+          outcomeKnown,
+          budgetReservationMayExist: !outcomeKnown,
+          streamMetrics: makeRelayStreamMetrics({
+            requestToResponseHeadersMs,
+          }),
+        },
+      );
+    }
+    const contentType = String(response?.headers?.get?.("content-type") || "").toLowerCase();
+    if (!contentType.includes("text/event-stream")) {
+      throw new RulingModelProviderError(
+        `relay stream returned unsupported content type ${contentType || "missing"}`,
+        {
+          code: "relay_stream_content_type_invalid",
+          provider: "relay",
+          status: response.status,
           outcomeKnown: false,
           budgetReservationMayExist: true,
           streamMetrics: makeRelayStreamMetrics({
             requestToResponseHeadersMs,
           }),
-          cause,
         },
       );
-    } finally {
-      clearTimeout(timeout);
-      signal?.removeEventListener?.("abort", externalAbort);
     }
+    return await readRelayChatCompletionSse(response, {
+      maxBytes,
+      maxContentBytes,
+      signal: controller.signal,
+      clock,
+      requestStartedAt,
+      requestToResponseHeadersMs,
+    });
+  } catch (cause) {
+    if (cause instanceof RulingModelProviderError) throw cause;
+    const timedOut = controller.signal.aborted
+      && isTimeoutAbortReason(controller.signal.reason);
+    throw new RulingModelProviderError(
+      timedOut
+        ? "relay stream timed out after submission"
+        : "relay stream ended unexpectedly after submission",
+      {
+        code: timedOut ? "relay_stream_timeout" : "relay_stream_interrupted",
+        provider: "relay",
+        status: response?.status ?? null,
+        outcomeKnown: false,
+        budgetReservationMayExist: true,
+        streamMetrics: makeRelayStreamMetrics({
+          requestToResponseHeadersMs,
+        }),
+        cause,
+      },
+    );
+  } finally {
+    clearTimeout(timeout);
+    signal?.removeEventListener?.("abort", externalAbort);
   }
 }
 
 function readRelayStreamTimeoutMaximumMs(env = {}) {
   const value = env.RELAY_LOCAL_STREAM_TIMEOUT_MAX_MS;
-  if (value === undefined || value === null || value === "") return 280_000;
   if (readBooleanFlag(env.VERCEL, false)) {
-    throw new TypeError(
-      "RELAY_LOCAL_STREAM_TIMEOUT_MAX_MS is local-only and must not be set on Vercel",
-    );
+    if (value !== undefined && value !== null && value !== "") {
+      throw new TypeError(
+        "RELAY_LOCAL_STREAM_TIMEOUT_MAX_MS is local-only and must not be set on Vercel",
+      );
+    }
+    return 270_000;
   }
+  if (value === undefined || value === null || value === "") return 280_000;
   return boundedPositiveInteger(
     value,
     "RELAY_LOCAL_STREAM_TIMEOUT_MAX_MS",
@@ -1076,6 +1125,24 @@ function normalizeBaseUrl(baseUrl, { requireHttps = false } = {}) {
     throw new TypeError("evidence preparation baseUrl must use HTTPS");
   }
   return value;
+}
+
+function normalizeRelayStreamEndpoint(endpoint) {
+  let parsed;
+  try {
+    parsed = new URL(String(endpoint || "").trim());
+  } catch {
+    throw new TypeError("relay stream endpoint must be a valid HTTPS URL");
+  }
+  if (parsed.protocol !== "https:" || !parsed.hostname) {
+    throw new TypeError("relay stream endpoint must use HTTPS");
+  }
+  if (parsed.username || parsed.password || parsed.search || parsed.hash) {
+    throw new TypeError(
+      "relay stream endpoint must not contain credentials, query parameters or fragments",
+    );
+  }
+  return parsed.toString();
 }
 
 async function readResponsePayload(response) {

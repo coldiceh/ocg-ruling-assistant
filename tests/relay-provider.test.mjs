@@ -11,66 +11,124 @@ import {
   publicRulingModelProfileAvailable,
 } from "../backend/publicRulingModelConfig.mjs";
 
-const RELAY_PROFILE_ID = "relay-gpt-5.6-sol-high";
+const RELAY_PROFILE_ID = "relay-gpt-5.6-luna-low";
 
-test("relay is not registered as a public ruling profile", () => {
-  const capabilities = getPublicRulingModelCapabilities({
+test("public Luna relay profile requires both a key and an HTTPS endpoint", () => {
+  const unavailable = getPublicRulingModelCapabilities({
     RELAY_API_KEY: "relay-issued-key",
-    PUBLIC_RELAY_ENABLED: "true",
   });
   assert.deepEqual(
-    capabilities.rulingModelProfiles.map((profile) => profile.id),
-    ["deepseek-v4-flash-high"],
+    unavailable.rulingModelProfiles.map((profile) => [profile.id, profile.available]),
+    [
+      [RELAY_PROFILE_ID, false],
+      ["deepseek-v4-flash-high", false],
+    ],
   );
-  assert.equal(capabilities.rulingModelProfiles.some((profile) => profile.provider === "relay"), false);
-  assert.throws(
-    () => publicRulingModelProfileAvailable(RELAY_PROFILE_ID, {
+  assert.equal(publicRulingModelProfileAvailable(RELAY_PROFILE_ID, {
+    RELAY_API_KEY: "relay-issued-key",
+    RELAY_BASE_URL: "http://relay.example.test/v1",
+  }), false);
+  assert.equal(publicRulingModelProfileAvailable(RELAY_PROFILE_ID, {
+    RELAY_BASE_URL: "https://relay.example.test/v1",
+  }), false);
+  for (const invalidBaseUrl of [
+    "https://user:pass@relay.example.test/v1",
+    "https://relay.example.test/v1?tenant=public",
+    "https://relay.example.test/v1#fragment",
+  ]) {
+    assert.equal(publicRulingModelProfileAvailable(RELAY_PROFILE_ID, {
       RELAY_API_KEY: "relay-issued-key",
-      PUBLIC_RELAY_ENABLED: "true",
-    }),
-    /Unsupported public ruling model profile/u,
-  );
+      RELAY_BASE_URL: invalidBaseUrl,
+    }), false);
+  }
+  assert.equal(publicRulingModelProfileAvailable(RELAY_PROFILE_ID, {
+    RELAY_API_KEY: "relay-issued-key",
+    RELAY_BASE_URL: "https://relay.example.test/v1/chat/completions/",
+  }), true);
+
+  const configured = getPublicRulingModelCapabilities({
+    RELAY_API_KEY: "relay-issued-key",
+    RELAY_BASE_URL: "https://relay.example.test/v1",
+    DEEPSEEK_API_KEY: "deepseek-key",
+  });
+  assert.equal(configured.defaultRulingModelProfile, RELAY_PROFILE_ID);
+  assert.deepEqual(configured.rulingModelProfiles.map((profile) => ({
+    id: profile.id,
+    available: profile.available,
+    model: profile.model,
+    reasoningEffort: profile.reasoningEffort,
+    transport: profile.transport,
+    thirdParty: profile.thirdParty === true,
+    modelIdentityVerified: profile.modelIdentityVerified !== false,
+  })), [
+    {
+      id: RELAY_PROFILE_ID,
+      available: true,
+      model: "gpt-5.6-luna",
+      reasoningEffort: "low",
+      transport: "chat_completions_sse",
+      thirdParty: true,
+      modelIdentityVerified: false,
+    },
+    {
+      id: "deepseek-v4-flash-high",
+      available: true,
+      model: "deepseek-v4-flash",
+      reasoningEffort: "high",
+      transport: "chat_completions",
+      thirdParty: false,
+      modelIdentityVerified: true,
+    },
+  ]);
+  assert.doesNotMatch(JSON.stringify(configured), /relay-issued-key|relay\.example/u);
 });
 
-test("server rejects a retired relay profile as the public default", () => {
-  assert.throws(
-    () => getPublicRulingModelCapabilities({
-      PUBLIC_RULING_MODEL_PROFILE: RELAY_PROFILE_ID,
-      RELAY_API_KEY: "relay-issued-key",
-      PUBLIC_RELAY_ENABLED: "true",
-    }),
-    /Unsupported public ruling model profile/u,
-  );
+test("server accepts Luna low as the explicit public default", () => {
+  const capabilities = getPublicRulingModelCapabilities({
+    PUBLIC_RULING_MODEL_PROFILE: RELAY_PROFILE_ID,
+    RELAY_API_KEY: "relay-issued-key",
+    RELAY_BASE_URL: "https://relay.example.test/v1",
+  });
+  assert.equal(capabilities.defaultRulingModelProfile, RELAY_PROFILE_ID);
+  assert.equal(capabilities.rulingModelProfiles[0].available, true);
 });
 
-test("public answer environment rejects relay even when relay credentials exist", () => {
-  assert.throws(
-    () => createPublicAnswerModelEnv({
-      OPENAI_API_KEY: "official-key-must-not-be-used",
-      RELAY_API_KEY: "relay-issued-key",
-      PUBLIC_RELAY_ENABLED: "true",
-      DEEPSEEK_API_KEY: "evidence-key",
-    }, RELAY_PROFILE_ID),
-    /Unsupported public ruling model profile/u,
-  );
+test("public answer environment retains relay secrets only for the relay profile", () => {
+  const relayEnv = createPublicAnswerModelEnv({
+    OPENAI_API_KEY: "official-key-must-not-be-used",
+    ADMIN_MODEL_LAB_PASSWORD: "admin-secret",
+    RELAY_API_KEY: "relay-issued-key",
+    RELAY_BASE_URL: "https://relay.example.test/v1",
+    DEEPSEEK_API_KEY: "evidence-key",
+  }, RELAY_PROFILE_ID);
+  assert.equal(relayEnv.MODEL_PROVIDER, "relay");
+  assert.equal(relayEnv.RAG_MODEL_PROVIDER, "relay");
+  assert.equal(relayEnv.RAG_MODEL, "gpt-5.6-luna");
+  assert.equal(relayEnv.RAG_REASONING_EFFORT, "low");
+  assert.equal(relayEnv.RELAY_API_KEY, "relay-issued-key");
+  assert.equal(relayEnv.RELAY_BASE_URL, "https://relay.example.test/v1");
+  assert.equal(relayEnv.OPENAI_API_KEY, undefined);
+  assert.equal(relayEnv.ADMIN_MODEL_LAB_PASSWORD, undefined);
+  assert.equal(relayEnv.DEEPSEEK_API_KEY, "evidence-key");
 
   const nonRelayEnv = createPublicAnswerModelEnv({
     GLM_API_KEY: "glm-key",
     RELAY_API_KEY: "relay-key",
     RELAY_BASE_URL: "https://relay.example.test/v1",
-  });
+    DEEPSEEK_API_KEY: "deepseek-key",
+  }, "deepseek-v4-flash-high");
   assert.equal(nonRelayEnv.RELAY_API_KEY, undefined);
   assert.equal(nonRelayEnv.RELAY_BASE_URL, undefined);
 });
 
-test("relay final ruling uses one synchronous Chat Completions request with the relay-only contract", async () => {
+test("relay final ruling uses one SSE Chat Completions request with the relay-only contract", async () => {
   const calls = [];
   const result = await callRagModel({
     prompt: "只输出裁定 JSON",
     env: {
       MODEL_PROVIDER: "relay",
       RELAY_API_KEY: "relay-issued-key",
-      RELAY_BASE_URL: "https://relay.example.test/v1",
+      RELAY_BASE_URL: "https://relay.example.test/v1/",
       RAG_MODEL: "gpt-5.6-sol",
       RAG_REASONING_EFFORT: "high",
       RELAY_MAX_COMPLETION_TOKENS: "512",
@@ -81,12 +139,13 @@ test("relay final ruling uses one synchronous Chat Completions request with the 
     now: new Date("2039-01-01T00:00:00.000Z"),
     fetchImpl: async (url, options) => {
       calls.push({ url, options, body: JSON.parse(options.body) });
-      return jsonResponse({
+      return relaySseResponse({
         id: "relay-response-1",
         model: "gpt-5.6-sol",
         choices: [{
+          index: 0,
           finish_reason: "stop",
-          message: { content: JSON.stringify(modelJson("Relay JSON OK")) },
+          delta: { content: JSON.stringify(modelJson("Relay JSON OK")) },
         }],
         usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 },
       });
@@ -99,11 +158,13 @@ test("relay final ruling uses one synchronous Chat Completions request with the 
   assert.deepEqual(calls[0].body, {
     model: "gpt-5.6-sol",
     messages: [{ role: "user", content: "只输出裁定 JSON" }],
-    stream: false,
     response_format: { type: "json_object" },
     reasoning_effort: "high",
     max_completion_tokens: 512,
+    stream: true,
+    stream_options: { include_usage: true },
   });
+  assert.equal(calls[0].options.headers.accept, "text/event-stream");
   assert.equal(Object.hasOwn(calls[0].body, "tools"), false);
   assert.equal(Object.hasOwn(calls[0].body, "background"), false);
   assert.equal(Object.hasOwn(calls[0].body, "store"), false);
@@ -111,12 +172,48 @@ test("relay final ruling uses one synchronous Chat Completions request with the 
   assert.equal(result.providerUsed, "relay");
   assert.equal(result.modelUsed, "gpt-5.6-sol");
   assert.equal(result.answer.shortAnswer, "Relay JSON OK");
+  assert.equal(result.generationAttempts[0].finishReason, "stop");
+  assert.equal(result.generationAttempts[0].usage.prompt_tokens, 100);
+  assert.equal(result.generationAttempts[0].usage.completion_tokens, 50);
   assert.equal(result.budgetStatus.bucket.id, "final_ruling:relay");
   assert.equal(result.estimatedCostCny, 0.25);
   assert.ok(result.warnings.includes("third_party_relay_model_identity_unverified"));
 });
 
-test("relay uses a conservative one-call default against the existing daily budget", async () => {
+test("public relay keeps the returned-model mismatch warning with an SSE response", async () => {
+  const result = await callRagModel({
+    prompt: "只输出裁定 JSON",
+    env: {
+      MODEL_PROVIDER: "relay",
+      RELAY_API_KEY: "relay-issued-key",
+      RELAY_BASE_URL: "https://relay.example.test/v1/chat/completions/",
+      RAG_MODEL: "gpt-5.6-sol",
+      RELAY_MAX_COMPLETION_TOKENS: "128",
+      RELAY_ESTIMATED_CNY_PER_CALL: "0.01",
+      API_DAILY_BUDGET_CNY: "10",
+      API_BUDGET_TIMEZONE: "Etc/GMT-14",
+    },
+    now: new Date("2041-01-01T00:00:00.000Z"),
+    fetchImpl: async (url) => {
+      assert.equal(url, "https://relay.example.test/v1/chat/completions");
+      return relaySseResponse({
+        id: "relay-response-mismatch",
+        model: "gpt-5.6-terra",
+        choices: [{
+          index: 0,
+          finish_reason: "stop",
+          delta: { content: JSON.stringify(modelJson("Mismatch warning OK")) },
+        }],
+        usage: { prompt_tokens: 10, completion_tokens: 10, total_tokens: 20 },
+      });
+    },
+  });
+
+  assert.equal(result.answer.shortAnswer, "Mismatch warning OK");
+  assert.ok(result.warnings.includes("relay_response_model_mismatch"));
+});
+
+test("relay default estimate allows multiple calls without exhausting the daily budget", async () => {
   const env = {
     MODEL_PROVIDER: "relay",
     RELAY_API_KEY: "relay-issued-key",
@@ -130,9 +227,13 @@ test("relay uses a conservative one-call default against the existing daily budg
   let fetchCount = 0;
   const fetchImpl = async () => {
     fetchCount += 1;
-    return jsonResponse({
+    return relaySseResponse({
       model: "gpt-5.6-sol",
-      choices: [{ message: { content: JSON.stringify(modelJson("Budgeted relay OK")) } }],
+      choices: [{
+        index: 0,
+        finish_reason: "stop",
+        delta: { content: JSON.stringify(modelJson("Budgeted relay OK")) },
+      }],
       usage: { prompt_tokens: 10, completion_tokens: 10, total_tokens: 20 },
     });
   };
@@ -140,10 +241,11 @@ test("relay uses a conservative one-call default against the existing daily budg
   const first = await callRagModel({ prompt: "第一次", env, now, fetchImpl });
   const second = await callRagModel({ prompt: "第二次", env, now, fetchImpl });
 
-  assert.equal(fetchCount, 1);
-  assert.equal(first.estimatedCostCny, 10);
+  assert.equal(fetchCount, 2);
+  assert.equal(first.estimatedCostCny, 0.5);
   assert.equal(first.budgetStatus.bucket.id, "final_ruling:relay");
-  assert.equal(second.answer.answerLevel, "budget_limited");
+  assert.equal(second.estimatedCostCny, 0.5);
+  assert.notEqual(second.answer.answerLevel, "budget_limited");
 });
 
 test("relay rejects an insecure endpoint before fetch and never falls back to an OpenAI key", async () => {
@@ -197,5 +299,12 @@ function jsonResponse(payload, status = 200) {
   return new Response(JSON.stringify(payload), {
     status,
     headers: { "content-type": "application/json" },
+  });
+}
+
+function relaySseResponse(chunk) {
+  return new Response(`data: ${JSON.stringify(chunk)}\n\ndata: [DONE]\n\n`, {
+    status: 200,
+    headers: { "content-type": "text/event-stream" },
   });
 }

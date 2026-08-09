@@ -114,13 +114,15 @@ test("public model environment pins the selected final profile and keeps prepara
     KIMI_API_KEY: "admin-kimi-key",
     KIMI_BASE_URL: "https://kimi.example.test",
     DEEPSEEK_API_KEY: "public-deepseek-key",
+    RELAY_API_KEY: "public-relay-key",
+    RELAY_BASE_URL: "https://relay.example.test/v1",
   });
 
-  assert.equal(publicEnv.MODEL_PROVIDER, "deepseek");
-  assert.equal(publicEnv.RAG_MODEL_PROVIDER, "deepseek");
-  assert.equal(publicEnv.RAG_MODEL, "deepseek-v4-flash");
+  assert.equal(publicEnv.MODEL_PROVIDER, "relay");
+  assert.equal(publicEnv.RAG_MODEL_PROVIDER, "relay");
+  assert.equal(publicEnv.RAG_MODEL, "gpt-5.6-luna");
   assert.equal(publicEnv.RAG_THINKING_MODE, "enabled");
-  assert.equal(publicEnv.RAG_REASONING_EFFORT, "high");
+  assert.equal(publicEnv.RAG_REASONING_EFFORT, "low");
   assert.equal(publicEnv.RAG_CARD_MODEL_PROVIDER, "deepseek");
   assert.equal(publicEnv.RAG_RULE_MODEL_PROVIDER, "deepseek");
   assert.equal(publicEnv.RAG_RULEBOOK_MODEL_PROVIDER, "deepseek");
@@ -129,6 +131,8 @@ test("public model environment pins the selected final profile and keeps prepara
   assert.equal(publicEnv.GLM_API_KEY, undefined);
   assert.equal(publicEnv.GLM_BASE_URL, undefined);
   assert.equal(publicEnv.DEEPSEEK_API_KEY, "public-deepseek-key");
+  assert.equal(publicEnv.RELAY_API_KEY, "public-relay-key");
+  assert.equal(publicEnv.RELAY_BASE_URL, "https://relay.example.test/v1");
 
   const deepSeekEnv = createPublicAnswerModelEnv({
     GLM_API_KEY: "glm-key",

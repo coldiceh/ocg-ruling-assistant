@@ -2,11 +2,17 @@ import { readFileSync } from "node:fs";
 
 const DEFAULT_PRICING_FILE_URL = new URL("../data/model-pricing.json", import.meta.url);
 const DEFAULT_PRICING = loadAndValidatePricing(DEFAULT_PRICING_FILE_URL);
+const DEFAULT_DEEPSEEK_PRICING_FILE_URL = new URL("../data/deepseek-model-pricing.json", import.meta.url);
+const DEFAULT_DEEPSEEK_PRICING = loadAndValidatePricing(DEFAULT_DEEPSEEK_PRICING_FILE_URL);
 const DEFAULT_RELAY_PRICING_FILE_URL = new URL("../data/relay-model-pricing.json", import.meta.url);
 const DEFAULT_RELAY_PRICING = loadAndValidateRelayPricing(DEFAULT_RELAY_PRICING_FILE_URL);
 
 export function getModelPricingConfig() {
   return cloneJson(DEFAULT_PRICING);
+}
+
+export function getDeepSeekModelPricingConfig() {
+  return cloneJson(DEFAULT_DEEPSEEK_PRICING);
 }
 
 export function getRelayModelPricingConfig() {
