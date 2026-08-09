@@ -7,9 +7,9 @@
       "cid": "8333",
       "passcode": "25958491",
       "aliases": [
-        "上古圣翼龙",
         "ancient sacred wyvern",
-        "エンシェント・ホーリー・ワイバーン"
+        "エンシェント・ホーリー・ワイバーン",
+        "上古圣翼龙"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -958,5 +958,5 @@
       }
     }
   ],
-  "shardContentSha256": "576ece05c625818033b5843a4f35b240d917009f7347f51217dcdc0ea2b2214b"
+  "shardContentSha256": "e9345268765369f0742f9cf9bdffe95888cd4824f54968d7ea51412379e8c443"
 }

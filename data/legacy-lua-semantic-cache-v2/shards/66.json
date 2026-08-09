@@ -7,9 +7,9 @@
       "cid": "8080",
       "passcode": "01834753",
       "aliases": [
-        "极限瞬动者",
         "overdrive teleporter",
-        "マックス・テレポーター"
+        "マックス・テレポーター",
+        "极限瞬动者"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1590,5 +1590,5 @@
       }
     }
   ],
-  "shardContentSha256": "188a77b3f7c65791bfe8183c1efb9bf5e96ac49e603c76d19ff778da588bad8f"
+  "shardContentSha256": "d3ef1c4bd2ecbcc5a76ccbed22f99d623bc63a6b21845177888491a081947f1b"
 }

@@ -2132,9 +2132,9 @@
       "cid": "17794",
       "passcode": "84330567",
       "aliases": [
-        "泪冠哀歌・露露卡洛斯",
         "tearlaments rulkallos",
-        "ティアラメンツ・ルルカロス"
+        "ティアラメンツ・ルルカロス",
+        "泪冠哀歌・露露卡洛斯"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -3242,5 +3242,5 @@
       }
     }
   ],
-  "shardContentSha256": "7aa3d5a980a48fdc42be6515bbad9b9d220d30887da3045a657afbf36f8bc52c"
+  "shardContentSha256": "dcb6d25b4de3fd9145fb0b251816cef50f26a42c5be794030da64e40f2a88c80"
 }

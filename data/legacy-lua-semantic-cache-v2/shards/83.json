@@ -7,8 +7,8 @@
       "cid": "5088",
       "passcode": "24514503",
       "aliases": [
-        "心を凍らせるスノークリスタル",
-        "soulicer crystal"
+        "soulicer crystal",
+        "心を凍らせるスノークリスタル"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1180,9 +1180,9 @@
       "cid": "21046",
       "passcode": "58354899",
       "aliases": [
-        "腐死鸟 食尸秃鹫",
+        "vulcarrion the rotting phoenix",
         "腐死鳥ヴァルコプス",
-        "vulcarrion the rotting phoenix"
+        "腐死鸟 食尸秃鹫"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -4054,9 +4054,9 @@
       "cid": "11317",
       "passcode": "84764038",
       "aliases": [
-        "彼岸恶鬼 司加密林",
+        "scarm, malebranche of the burning abyss",
         "彼岸の悪鬼 スカラマリオン",
-        "scarm, malebranche of the burning abyss"
+        "彼岸恶鬼 司加密林"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -5918,9 +5918,9 @@
       "cid": "21250",
       "passcode": "93413793",
       "aliases": [
-        "宇迦之御狐玉响",
         "ukanomitsune-no-tamayura",
-        "うかのみつねのたまゆら"
+        "うかのみつねのたまゆら",
+        "宇迦之御狐玉响"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -7140,5 +7140,5 @@
       }
     }
   ],
-  "shardContentSha256": "28d928ac688c4f30e89d2e525f744fae63ffe8e9aa7211093c6d7b08ff5604ce"
+  "shardContentSha256": "c5912dfefa90d67aa610e887ce5677fe8fc01565420f85bece9d35f693122774"
 }

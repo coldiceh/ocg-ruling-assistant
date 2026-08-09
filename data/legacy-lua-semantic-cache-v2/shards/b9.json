@@ -7,9 +7,9 @@
       "cid": "11319",
       "passcode": "57143342",
       "aliases": [
-        "彼岸恶鬼 加特霍格",
+        "cir, malebranche of the burning abyss",
         "彼岸の悪鬼 ガトルホッグ",
-        "cir, malebranche of the burning abyss"
+        "彼岸恶鬼 加特霍格"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -2711,5 +2711,5 @@
       }
     }
   ],
-  "shardContentSha256": "dc16b3f81a242c23d5de4aceea7e0c1d14a19bc6531cca16389e6645a2ebe715"
+  "shardContentSha256": "f78af55936bd64f8f3485351aa0a939dee665fa8cea63e3ffcf095c597b0cf95"
 }

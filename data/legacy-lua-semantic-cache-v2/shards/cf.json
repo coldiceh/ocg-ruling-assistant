@@ -7,8 +7,8 @@
       "cid": "16817",
       "passcode": "91011603",
       "aliases": [
-        "極星工イーヴァルディ",
-        "nordic smith ivaldi"
+        "nordic smith ivaldi",
+        "極星工イーヴァルディ"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1089,5 +1089,5 @@
       }
     }
   ],
-  "shardContentSha256": "cc24401c7fff830496d84b942fc89089da4acb63d11151fcf71bf8b107d01683"
+  "shardContentSha256": "6aecf68c58ef0020cdc85d68122e1f8b62e9e29d9f37d0a52bbdb9bdd1e77e0b"
 }

@@ -7,9 +7,9 @@
       "cid": "12418",
       "passcode": "07084129",
       "aliases": [
-        "魔术师之杖",
         "magician's rod",
-        "マジシャンズ・ロッド"
+        "マジシャンズ・ロッド",
+        "魔术师之杖"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1302,9 +1302,9 @@
       "cid": "15136",
       "passcode": "28651380",
       "aliases": [
-        "幻魔皇拉比艾尔-天界蹂躏拳",
+        "raviel, lord of phantasms - shimmering scraper",
         "幻魔皇ラビエル-天界蹂躙拳",
-        "raviel, lord of phantasms - shimmering scraper"
+        "幻魔皇拉比艾尔-天界蹂躏拳"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -3091,9 +3091,9 @@
       "cid": "19482",
       "passcode": "86346363",
       "aliases": [
-        "时间重绕机",
         "time reloader",
-        "タイム・リワインダー"
+        "タイム・リワインダー",
+        "时间重绕机"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -4606,5 +4606,5 @@
       }
     }
   ],
-  "shardContentSha256": "25b04240d5c26b8bba254cefda980b85eb6aa52f22fe0ea1fc13b55cbc2d9b92"
+  "shardContentSha256": "4df981cbc4dd9beb38ee9a1cc6920e4cdde07464e746f8d9c917cc37b1f69512"
 }

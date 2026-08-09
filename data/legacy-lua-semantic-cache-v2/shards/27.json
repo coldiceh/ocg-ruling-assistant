@@ -7,9 +7,9 @@
       "cid": "18801",
       "passcode": "89809665",
       "aliases": [
+        "infernoble knight turpin",
         "焔聖騎士-テュルパン",
-        "焰圣骑士-托宾",
-        "infernoble knight turpin"
+        "焰圣骑士-托宾"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1781,8 +1781,8 @@
       "cid": "7711",
       "passcode": "97904474",
       "aliases": [
-        "手錠龍",
-        "handcuffs dragon"
+        "handcuffs dragon",
+        "手錠龍"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -2847,5 +2847,5 @@
       }
     }
   ],
-  "shardContentSha256": "1e4ecb2a972ade7e660fec5eef15129320e21c1509a9337ea607035842ecbff9"
+  "shardContentSha256": "a831b8596abae21d5cab7beb9fa3e60e1ad50469c8cb10856820249ac4e63bba"
 }

@@ -7,9 +7,9 @@
       "cid": "16467",
       "passcode": "69852487",
       "aliases": [
-        "希望皇阿斯特拉尔・霍普",
+        "astraltopia",
         "希望皇アストラル・ホープ",
-        "astraltopia"
+        "希望皇阿斯特拉尔・霍普"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1039,9 +1039,9 @@
       "cid": "19723",
       "passcode": "74652966",
       "aliases": [
-        "魂之代码",
         "code of soul",
-        "コード・オブ・ソウル"
+        "コード・オブ・ソウル",
+        "魂之代码"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -2295,5 +2295,5 @@
       }
     }
   ],
-  "shardContentSha256": "dccbc95384a7199cc3cd8e32c372eaa75fd0fad3ca9e2dffb89765e804fecf04"
+  "shardContentSha256": "894178c86d2bc6cc978c9074eccf1d5aa29a33253e9a67e4802725452501918a"
 }

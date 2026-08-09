@@ -7,9 +7,9 @@
       "cid": "19047",
       "passcode": "33872334",
       "aliases": [
-        "不死鸟・机亚锋烈刀",
         "phoenix gearblade",
-        "フェニックス・ギア・ブレード"
+        "フェニックス・ギア・ブレード",
+        "不死鸟・机亚锋烈刀"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1354,8 +1354,8 @@
       "cid": "10835",
       "passcode": "64605089",
       "aliases": [
-        "護封剣の剣士",
-        "swordsman of revealing light"
+        "swordsman of revealing light",
+        "護封剣の剣士"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -2869,8 +2869,8 @@
       "cid": "17773",
       "passcode": "94670654",
       "aliases": [
-        "獣の忍者-獏",
-        "baku the beast ninja"
+        "baku the beast ninja",
+        "獣の忍者-獏"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -3911,5 +3911,5 @@
       }
     }
   ],
-  "shardContentSha256": "9b59e1cb7e9a51b98d33c7e2ef644fd5bcedeb0ea38d1617f845f9ff1ed3ee1a"
+  "shardContentSha256": "5fdb85960dc8507470899059c020217bf97ba9016f8aa2506c63a35885e76fa6"
 }

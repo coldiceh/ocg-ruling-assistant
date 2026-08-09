@@ -7,9 +7,9 @@
       "cid": "15563",
       "passcode": "00545781",
       "aliases": [
-        "妖龙 摩诃摩",
+        "mahaama the fairy dragon",
         "妖竜マハーマ",
-        "mahaama the fairy dragon"
+        "妖龙 摩诃摩"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1330,9 +1330,9 @@
       "cid": "11232",
       "passcode": "37445295",
       "aliases": [
-        "影依・隼",
         "shaddoll falco",
-        "シャドール・ファルコン"
+        "シャドール・ファルコン",
+        "影依・隼"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -2407,5 +2407,5 @@
       }
     }
   ],
-  "shardContentSha256": "b60334cc7305d457bde45d7a4f1cf1bec2a46f444be1b79a31883fef39f12257"
+  "shardContentSha256": "9f7e9af7264042a0a9153882705f80fc71d42b8203c7ea914b503badc2c10a43"
 }

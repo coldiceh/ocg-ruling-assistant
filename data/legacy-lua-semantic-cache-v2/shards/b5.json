@@ -7,9 +7,9 @@
       "cid": "10558",
       "passcode": "06148016",
       "aliases": [
-        "齿轮齿轮齿轮",
         "geargiagear",
-        "ギアギアギア"
+        "ギアギアギア",
+        "齿轮齿轮齿轮"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -2187,8 +2187,8 @@
       "cid": "14551",
       "passcode": "32305461",
       "aliases": [
-        "占い魔女 エンちゃん",
-        "fortune fairy en"
+        "fortune fairy en",
+        "占い魔女 エンちゃん"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -3199,5 +3199,5 @@
       }
     }
   ],
-  "shardContentSha256": "6f1fb1caea66466f59edcd973dbfcd6d215ec269ad84fcdde21ab5562a944ca9"
+  "shardContentSha256": "d356eceb6f29552832cbd9ce55a3b0236f6abe85448b2bf6741219b5a292bbda"
 }

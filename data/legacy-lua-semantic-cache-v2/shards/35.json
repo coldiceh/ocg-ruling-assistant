@@ -7,9 +7,9 @@
       "cid": "20185",
       "passcode": "00342673",
       "aliases": [
-        "黒き魔術師-ブラック・マジシャン",
+        "dark magician the magician of black magic",
         "黑色魔术师-黑魔导",
-        "dark magician the magician of black magic"
+        "黒き魔術師-ブラック・マジシャン"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1881,9 +1881,9 @@
       "cid": "16835",
       "passcode": "86993168",
       "aliases": [
-        "疯帽骇客",
         "mad hacker",
-        "マッド・ハッカー"
+        "マッド・ハッカー",
+        "疯帽骇客"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -3044,9 +3044,9 @@
       "cid": "13220",
       "passcode": "91505214",
       "aliases": [
-        "淘气仙星・娜尔姬丝",
         "trickstar narkissus",
-        "トリックスター・ナルキッス"
+        "トリックスター・ナルキッス",
+        "淘气仙星・娜尔姬丝"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -5102,5 +5102,5 @@
       }
     }
   ],
-  "shardContentSha256": "57d491d09e3c0d1c7b408d9cbb59f0d0c2f240e9d4b38b43471241df83bc2b97"
+  "shardContentSha256": "acdd6ba1bec62f10648561a1b3f308b7e029813134f5a277ef33186b29cb6332"
 }

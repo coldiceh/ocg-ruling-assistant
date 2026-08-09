@@ -7,9 +7,9 @@
       "cid": "14095",
       "passcode": "05177985",
       "aliases": [
-        "不知火的师范",
+        "shiranui swordmaster",
         "不知火の師範",
-        "shiranui swordmaster"
+        "不知火的师范"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1702,8 +1702,8 @@
       "cid": "6696",
       "passcode": "20951752",
       "aliases": [
-        "裁きを下す者-ボルテニス",
-        "voltanis the adjudicator"
+        "voltanis the adjudicator",
+        "裁きを下す者-ボルテニス"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -3965,9 +3965,9 @@
       "cid": "14454",
       "passcode": "35770983",
       "aliases": [
-        "恐龙摔跤手・武术甲龙",
         "dinowrestler martial ankylo",
-        "ダイナレスラー・マーシャルアンキロ"
+        "ダイナレスラー・マーシャルアンキロ",
+        "恐龙摔跤手・武术甲龙"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -6104,9 +6104,9 @@
       "cid": "21426",
       "passcode": "62606805",
       "aliases": [
-        "心灵推进者",
         "mind procedure",
-        "メンタルプロシージャー"
+        "メンタルプロシージャー",
+        "心灵推进者"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -7204,5 +7204,5 @@
       }
     }
   ],
-  "shardContentSha256": "cff2cfca3f5241593cd1db72ae7eeea57d1954fea28f7d6e47dd9881aab85165"
+  "shardContentSha256": "72d102685511981ce766ba44ae5e632d3accd8dc2adced08992dd8977b60a9a5"
 }

@@ -7,9 +7,9 @@
       "cid": "5636",
       "passcode": "59546797",
       "aliases": [
-        "灸拉盖德",
         "juragedo",
-        "ジュラゲド"
+        "ジュラゲド",
+        "灸拉盖德"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1293,9 +1293,9 @@
       "cid": "15252",
       "passcode": "93018428",
       "aliases": [
-        "梅尔菲・凯西",
         "melffy catty",
-        "メルフィー・キャシィ"
+        "メルフィー・キャシィ",
+        "梅尔菲・凯西"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -2460,5 +2460,5 @@
       }
     }
   ],
-  "shardContentSha256": "b998a55f638a682e089abbddcdf2dd7eeead4c6afe2098f07570069192e1c851"
+  "shardContentSha256": "e6709042bc6c0369508e1a7f804d6ae225e447bd1b0299033f17eb3b6b7c1e58"
 }

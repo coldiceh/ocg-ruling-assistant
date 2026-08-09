@@ -7,9 +7,9 @@
       "cid": "15841",
       "passcode": "05130393",
       "aliases": [
-        "千年血族",
+        "millennium seeker",
         "千年の血族",
-        "millennium seeker"
+        "千年血族"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1092,9 +1092,9 @@
       "cid": "14687",
       "passcode": "56577312",
       "aliases": [
-        "电力机关车",
         "wattrain",
-        "エレキカンシャ"
+        "エレキカンシャ",
+        "电力机关车"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -2784,5 +2784,5 @@
       }
     }
   ],
-  "shardContentSha256": "ec91c8be060bf9383441d0de61341e7f0392fc7afa7ad31d635713fed3a9f42f"
+  "shardContentSha256": "d395d681d8015782ed1059ec7e4891cfb9d58a85eae99b2db7924ece129126c0"
 }

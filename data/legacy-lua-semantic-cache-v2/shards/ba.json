@@ -7,9 +7,9 @@
       "cid": "12413",
       "passcode": "45313993",
       "aliases": [
-        "红莲狼",
         "red warg",
-        "レッド・ウルフ"
+        "レッド・ウルフ",
+        "红莲狼"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1587,9 +1587,9 @@
       "cid": "11200",
       "passcode": "82962242",
       "aliases": [
-        "吸血鬼妖女",
         "vampire vamp",
-        "ヴァンプ・オブ・ヴァンパイア"
+        "ヴァンプ・オブ・ヴァンパイア",
+        "吸血鬼妖女"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -2935,9 +2935,9 @@
       "cid": "21436",
       "passcode": "92034192",
       "aliases": [
+        "super quantum black layer",
         "超级量子士 黑层",
-        "超量士ブラックレイヤー",
-        "super quantum black layer"
+        "超量士ブラックレイヤー"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -4600,5 +4600,5 @@
       }
     }
   ],
-  "shardContentSha256": "8648a6858b82b0a1d52d322bfe2b380655325e0dc8fec76a802c7ff1b1d309e2"
+  "shardContentSha256": "d7079d0d1fcdaf1ae5db292c87cc0bde4544b691f8f432563d37508dafe286eb"
 }

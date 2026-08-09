@@ -1171,8 +1171,8 @@
       "cid": "17983",
       "passcode": "77895328",
       "aliases": [
-        "暗黒界の門番 ゼンタ",
-        "genta, gateman of dark world"
+        "genta, gateman of dark world",
+        "暗黒界の門番 ゼンタ"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -2203,9 +2203,9 @@
       "cid": "8089",
       "passcode": "98777036",
       "aliases": [
-        "悲怆魔",
         "tragoedia",
-        "トラゴエディア"
+        "トラゴエディア",
+        "悲怆魔"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -3564,5 +3564,5 @@
       }
     }
   ],
-  "shardContentSha256": "260b483f278ee13181157231e21651041dd3ee7cabc3cdd4562b471000fac2c1"
+  "shardContentSha256": "720928c8b9bfd44c3203f077241a69e7c07e4c584de46f7d35eb47df4fbc804e"
 }

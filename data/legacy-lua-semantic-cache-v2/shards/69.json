@@ -7,8 +7,8 @@
       "cid": "15071",
       "passcode": "56198785",
       "aliases": [
-        "背護衛",
-        "guard ghost"
+        "guard ghost",
+        "背護衛"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1489,8 +1489,8 @@
       "cid": "17139",
       "passcode": "78360952",
       "aliases": [
-        "白昼のスナイパー",
-        "sunlit sentinel"
+        "sunlit sentinel",
+        "白昼のスナイパー"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -3225,9 +3225,9 @@
       "cid": "15710",
       "passcode": "83039608",
       "aliases": [
-        "魔轰神兽阿凡可",
+        "the fabled abanc",
         "魔轟神獣アバンク",
-        "the fabled abanc"
+        "魔轰神兽阿凡可"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -5064,5 +5064,5 @@
       }
     }
   ],
-  "shardContentSha256": "f3a2f75605a6943c70cbf9cf4fba503db071d1c976562a835a6517adc0164b4c"
+  "shardContentSha256": "8a8048618d46f7687f860d49899a20dc9d937a551d60cfd31ec60d5dc21ae2dc"
 }

@@ -7,9 +7,9 @@
       "cid": "17412",
       "passcode": "01295442",
       "aliases": [
-        "氷水艇エーギロカシス",
+        "icejade creation aegirocassis",
         "冰翡艇 海神盔虾",
-        "icejade creation aegirocassis"
+        "氷水艇エーギロカシス"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1134,5 +1134,5 @@
       }
     }
   ],
-  "shardContentSha256": "ad87845c66482e9bd14d9c5adb5308b934b89f327ff970b6f44f4a2356a5a45f"
+  "shardContentSha256": "c4527656d77e44226ce7939942c06a140a56c09a7cff1c612b85da743fe5432d"
 }

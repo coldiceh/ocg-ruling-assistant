@@ -7,8 +7,8 @@
       "cid": "14554",
       "passcode": "31683874",
       "aliases": [
-        "占い魔女 アンちゃん",
-        "fortune fairy ann"
+        "fortune fairy ann",
+        "占い魔女 アンちゃん"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1030,5 +1030,5 @@
       }
     }
   ],
-  "shardContentSha256": "58a43c0ba982122b25fafd0a7f43d02ee4e47e93f3526f49105ca00673a368c8"
+  "shardContentSha256": "5ddb587b437b80cc222c3a387c0864de27937b481915fca036ab6d26f03fa7af"
 }

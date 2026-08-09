@@ -7,9 +7,9 @@
       "cid": "20203",
       "passcode": "85314178",
       "aliases": [
-        "祈祷的女王-宇宙女皇",
+        "cosmo queen the queen of prayers",
         "祈りの女王-コスモクイーン",
-        "cosmo queen the queen of prayers"
+        "祈祷的女王-宇宙女皇"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1143,5 +1143,5 @@
       }
     }
   ],
-  "shardContentSha256": "c3e0fcc2cff420ae9569573c97792308848b20551cf3a5dd44ac8a922bae71da"
+  "shardContentSha256": "5f43611dd56e190e7a58567053b4ed331f39452b08dab4b1c773c3c12c5c33c0"
 }

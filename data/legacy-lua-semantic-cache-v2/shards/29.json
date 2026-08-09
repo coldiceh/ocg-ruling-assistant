@@ -7,9 +7,9 @@
       "cid": "14921",
       "passcode": "23720856",
       "aliases": [
-        "刷拉拉番长-我我我外套",
         "zubababancho gagagacoat",
-        "ズバババンチョー-gc"
+        "ズバババンチョー-gc",
+        "刷拉拉番长-我我我外套"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1104,9 +1104,9 @@
       "cid": "22535",
       "passcode": "43471513",
       "aliases": [
-        "卷尺骑士",
         "convex knight",
-        "コンベックス・ナイト"
+        "コンベックス・ナイト",
+        "卷尺骑士"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -3584,8 +3584,8 @@
       "cid": "14555",
       "passcode": "68078978",
       "aliases": [
-        "占い魔女 チーちゃん",
-        "fortune fairy chee"
+        "fortune fairy chee",
+        "占い魔女 チーちゃん"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -5051,8 +5051,8 @@
       "cid": "8713",
       "passcode": "90616316",
       "aliases": [
-        "魔轟神獣ペガラサス",
-        "the fabled peggulsus"
+        "the fabled peggulsus",
+        "魔轟神獣ペガラサス"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -6107,9 +6107,9 @@
       "cid": "19859",
       "passcode": "91810826",
       "aliases": [
+        "tenpai dragon chundra",
         "天杯龙 红中龙",
-        "天盃龍チュンドラ",
-        "tenpai dragon chundra"
+        "天盃龍チュンドラ"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -7347,5 +7347,5 @@
       }
     }
   ],
-  "shardContentSha256": "980164a43f2c100e76f4720f93d647fe0e9a08f57098281c1a21b55c6712a570"
+  "shardContentSha256": "48407da22541de19724d8ea64984f48620764c01c8ac5fe55c332d1f45a2e619"
 }

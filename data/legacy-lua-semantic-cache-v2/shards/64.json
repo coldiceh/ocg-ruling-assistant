@@ -7,9 +7,9 @@
       "cid": "14456",
       "passcode": "98159737",
       "aliases": [
-        "天威龙-阿靼剌",
+        "tenyi spirit - adhara",
         "天威龍-アーダラ",
-        "tenyi spirit - adhara"
+        "天威龙-阿靼剌"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1061,5 +1061,5 @@
       }
     }
   ],
-  "shardContentSha256": "a1ea1cc60eff1c71dd68871107afe98e9771fc56138cd7ab322b7edf301da3f0"
+  "shardContentSha256": "3158ff68ea9db30d6400cfc0b8563d14706f9febf680c44846c76d44271dc560"
 }

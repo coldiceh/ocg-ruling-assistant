@@ -7,8 +7,8 @@
       "cid": "16936",
       "passcode": "20295753",
       "aliases": [
-        "夜刀蛇巳",
-        "night sword serpent"
+        "night sword serpent",
+        "夜刀蛇巳"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1388,9 +1388,9 @@
       "cid": "19456",
       "passcode": "90829280",
       "aliases": [
-        "尤贝尔之精灵",
         "spirit of yubel",
-        "スピリット・オブ・ユベル"
+        "スピリット・オブ・ユベル",
+        "尤贝尔之精灵"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -2679,5 +2679,5 @@
       }
     }
   ],
-  "shardContentSha256": "7d7851c14c92a3fde2eb30c2e64056817da65c7674419ecd50d2fe532866546f"
+  "shardContentSha256": "33fef40403f57ac5868939b5c4d681fd53368efcfaf15708c721d18178a8f94d"
 }

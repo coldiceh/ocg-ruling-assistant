@@ -1384,9 +1384,9 @@
       "cid": "15483",
       "passcode": "51933043",
       "aliases": [
-        "急袭猛禽-恶棍猎鹰",
         "raidraptor - heel eagle",
-        "rr-ヒール・イーグル"
+        "rr-ヒール・イーグル",
+        "急袭猛禽-恶棍猎鹰"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -2461,5 +2461,5 @@
       }
     }
   ],
-  "shardContentSha256": "5c2eaf64585f36a7f5870d6ead83ddd08fd10f36b67f5d47948e0145ebbf1da4"
+  "shardContentSha256": "69799666be93de70043b7b0af1c03d0040e15f6b2917b37c8b493abbeb29ae44"
 }

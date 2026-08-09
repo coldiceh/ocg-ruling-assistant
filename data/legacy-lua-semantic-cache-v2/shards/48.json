@@ -1932,9 +1932,9 @@
       "cid": "13561",
       "passcode": "86825114",
       "aliases": [
-        "淘气仙星・菲沃斯",
         "trickstar nightshade",
-        "トリックスター・ヒヨス"
+        "トリックスター・ヒヨス",
+        "淘气仙星・菲沃斯"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -3316,5 +3316,5 @@
       }
     }
   ],
-  "shardContentSha256": "83cbe24aee51709db2d9325c801e20c970991a51ac8da35cea84e910514b2cb5"
+  "shardContentSha256": "7569b00c7daddb2bfb9b1fd76324444d246fd8d200bdb48ddef20d6eede4e61b"
 }

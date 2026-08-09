@@ -7,8 +7,8 @@
       "cid": "23326",
       "passcode": "101306004",
       "aliases": [
-        "大海の伝説-フィッシャーマン",
-        "fisherman of legend"
+        "fisherman of legend",
+        "大海の伝説-フィッシャーマン"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1244,8 +1244,8 @@
       "cid": "22716",
       "passcode": "30397786",
       "aliases": [
-        "白き幻獣-青眼の白龍",
-        "blue-eyes white dragon, the white phantom beast"
+        "blue-eyes white dragon, the white phantom beast",
+        "白き幻獣-青眼の白龍"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -2676,8 +2676,8 @@
       "cid": "15320",
       "passcode": "55349375",
       "aliases": [
-        "海造賊-青髭の海技士",
-        "bluebeard, the plunder patroll shipwright"
+        "bluebeard, the plunder patroll shipwright",
+        "海造賊-青髭の海技士"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -3753,5 +3753,5 @@
       }
     }
   ],
-  "shardContentSha256": "336e4bfb569d8d5f02bf291d00d3674780e44c9bea3d4cfe7cc29dece1489421"
+  "shardContentSha256": "696f78f21b7e55e3ce70f5a30d72fd56baeef13f542feb720962251d2955138c"
 }

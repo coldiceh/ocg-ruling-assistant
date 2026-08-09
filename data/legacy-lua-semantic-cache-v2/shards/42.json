@@ -7,9 +7,9 @@
       "cid": "14412",
       "passcode": "10805153",
       "aliases": [
-        "魔女工艺・协作",
         "witchcrafter collaboration",
-        "ウィッチクラフト・コラボレーション"
+        "ウィッチクラフト・コラボレーション",
+        "魔女工艺・协作"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -3200,5 +3200,5 @@
       }
     }
   ],
-  "shardContentSha256": "304d7dc1efef0603d080abee12b4cef144a8ee9cd31d13677f3931e1ce5d5d70"
+  "shardContentSha256": "2dc4c756850ed94891756a56fc2983c032a7e0bd08c00be2b0b94fac55c67f28"
 }

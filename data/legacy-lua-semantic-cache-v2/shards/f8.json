@@ -7,9 +7,9 @@
       "cid": "21139",
       "passcode": "30118811",
       "aliases": [
-        "备援@伊格尼斯者",
         "backup @ignister",
-        "バックアップ@イグニスター"
+        "バックアップ@イグニスター",
+        "备援@伊格尼斯者"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -3352,9 +3352,9 @@
       "cid": "8764",
       "passcode": "93169863",
       "aliases": [
-        "水晶女孩",
         "crystal girl",
-        "クリスタル・ガール"
+        "クリスタル・ガール",
+        "水晶女孩"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -5096,5 +5096,5 @@
       }
     }
   ],
-  "shardContentSha256": "40b66bfa74f70fdb14544712d5ed8a478796f5cc431fa53125797790ea45275b"
+  "shardContentSha256": "06443cbcd7f376e08a33a0799ab9c0b031bf74baf86629ea1ee81c2d6bfaa479"
 }

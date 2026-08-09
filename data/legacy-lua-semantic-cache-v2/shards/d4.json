@@ -1453,9 +1453,9 @@
       "cid": "14354",
       "passcode": "82496097",
       "aliases": [
-        "时潜怪盗・表圈潜航艇",
         "time thief bezel ship",
-        "クロノダイバー・ベゼルシップ"
+        "クロノダイバー・ベゼルシップ",
+        "时潜怪盗・表圈潜航艇"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -3082,5 +3082,5 @@
       }
     }
   ],
-  "shardContentSha256": "a9dcefb8d200ea55cd1ec1f27e3109be05868b39ce98c36083f023f775d1ac3b"
+  "shardContentSha256": "3ecd49ad887bb1b7d1585cd19385ddda9b2fa5b55eaa6dcac435a6783d2781ee"
 }

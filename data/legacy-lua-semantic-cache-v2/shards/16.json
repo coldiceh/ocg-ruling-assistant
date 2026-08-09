@@ -7,9 +7,9 @@
       "cid": "11829",
       "passcode": "46502744",
       "aliases": [
+        "retaliating \"c\"",
         "应战的z",
-        "応戦するg",
-        "retaliating \"c\""
+        "応戦するg"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1352,5 +1352,5 @@
       }
     }
   ],
-  "shardContentSha256": "d6a3acc1562bb8c0ec950ffd994c0640620463396f6e6ec72a462944dbee3a9a"
+  "shardContentSha256": "cefc2b94411cc5d5318689e45ca5870a64ba76d8ac2ede5d6116ae36a3e9a79a"
 }

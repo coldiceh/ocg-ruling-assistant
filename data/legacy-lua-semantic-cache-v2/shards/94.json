@@ -7,9 +7,9 @@
       "cid": "14258",
       "passcode": "11755663",
       "aliases": [
-        "恐龙摔跤手・武术崇高龙",
         "dinowrestler martial anga",
-        "ダイナレスラー・マーシャルアンガ"
+        "ダイナレスラー・マーシャルアンガ",
+        "恐龙摔跤手・武术崇高龙"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1182,9 +1182,9 @@
       "cid": "15263",
       "passcode": "44440058",
       "aliases": [
-        "星义・基石",
         "nemeses keystone",
-        "ネメシス・キーストーン"
+        "ネメシス・キーストーン",
+        "星义・基石"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -2533,9 +2533,9 @@
       "cid": "15254",
       "passcode": "56401775",
       "aliases": [
-        "梅尔菲・波尼",
         "melffy pony",
-        "メルフィー・ポニィ"
+        "メルフィー・ポニィ",
+        "梅尔菲・波尼"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -3689,5 +3689,5 @@
       }
     }
   ],
-  "shardContentSha256": "aa29ba590532e0059a2621ba67b8b13668ec1e4bc43eca349b6f99cc29565189"
+  "shardContentSha256": "73481f491cff4b61ada41e1832f09a4ffd9df612b16d5355709161e5717204e1"
 }

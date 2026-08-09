@@ -7,9 +7,9 @@
       "cid": "16942",
       "passcode": "14357527",
       "aliases": [
-        "重骑甲虫 雄威尼普顿",
+        "heavy beetrooper mighty neptune",
         "重騎甲虫マイティ・ネプチューン",
-        "heavy beetrooper mighty neptune"
+        "重骑甲虫 雄威尼普顿"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1455,9 +1455,9 @@
       "cid": "6791",
       "passcode": "65504487",
       "aliases": [
-        "玩具士兵",
         "toy soldier",
-        "トイ・ソルジャー"
+        "トイ・ソルジャー",
+        "玩具士兵"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -2565,9 +2565,9 @@
       "cid": "19467",
       "passcode": "90241276",
       "aliases": [
-        "蛇眼炎燐",
+        "snake-eyes poplar",
         "蛇眼の炎燐",
-        "snake-eyes poplar"
+        "蛇眼炎燐"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -3828,5 +3828,5 @@
       }
     }
   ],
-  "shardContentSha256": "c44f9754e3af51fec2351dc86cd3d768651a6bc6fc988d8b3452b232ed6edc35"
+  "shardContentSha256": "7bf3efba359bd14869926ba7259dbf6d153c7c167294e4b2983ca319fe3efd55"
 }

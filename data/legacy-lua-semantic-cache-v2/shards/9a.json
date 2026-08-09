@@ -7,9 +7,9 @@
       "cid": "14241",
       "passcode": "52277807",
       "aliases": [
-        "转生炎兽 刺尾蜥",
+        "salamangreat spinny",
         "転生炎獣スピニー",
-        "salamangreat spinny"
+        "转生炎兽 刺尾蜥"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1659,9 +1659,9 @@
       "cid": "16506",
       "passcode": "89594399",
       "aliases": [
-        "爬虫妖・科亚特尔",
         "reptilianne coatl",
-        "レプティレス・コアトル"
+        "レプティレス・コアトル",
+        "爬虫妖・科亚特尔"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -3489,5 +3489,5 @@
       }
     }
   ],
-  "shardContentSha256": "29367995e2f5d08fafb799347b88c70462c6b2f4fbee6704c83387fdc66d996f"
+  "shardContentSha256": "bc6c3ef2be70b927ceac4f0803c60fa18304d8ee9bbcd1cc5fb6e873a48bdc54"
 }

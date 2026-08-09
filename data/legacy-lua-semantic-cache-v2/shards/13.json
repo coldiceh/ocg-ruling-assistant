@@ -7,9 +7,9 @@
       "cid": "14267",
       "passcode": "09794980",
       "aliases": [
-        "梦魇曲 转星之伊德丽丝",
+        "knightmare incarnation idlee",
         "夢幻転星イドリース",
-        "knightmare incarnation idlee"
+        "梦魇曲 转星之伊德丽丝"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1892,5 +1892,5 @@
       }
     }
   ],
-  "shardContentSha256": "2349b9d8b5879f62c29fb05b48a4bff393a7c23ba068ee882131c4fc1a63e14a"
+  "shardContentSha256": "e51635cb4d332f3d0bff2c1e322a34139b8b13073c9ebdc80726eca6d8a430c4"
 }

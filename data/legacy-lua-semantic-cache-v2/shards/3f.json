@@ -7,9 +7,9 @@
       "cid": "12866",
       "passcode": "34773082",
       "aliases": [
+        "frightfur patchwork",
         "魔玩具补缀",
-        "魔玩具補綴",
-        "frightfur patchwork"
+        "魔玩具補綴"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1570,9 +1570,9 @@
       "cid": "15830",
       "passcode": "44308317",
       "aliases": [
-        "氷結界の依巫",
+        "speaker for the ice barriers",
         "冰结界的依巫",
-        "speaker for the ice barriers"
+        "氷結界の依巫"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -2671,5 +2671,5 @@
       }
     }
   ],
-  "shardContentSha256": "c426f3a1e136089862d524a9566896ad6e9bc4b70ceeba5543f4f0af687dbc03"
+  "shardContentSha256": "dab084746ac81bba14eabedf26d06c023bfeb51f64ca26517388c374fc722ae6"
 }

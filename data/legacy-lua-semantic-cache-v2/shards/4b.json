@@ -7,9 +7,9 @@
       "cid": "14083",
       "passcode": "12950294",
       "aliases": [
-        "速装龙",
         "speedburst dragon",
-        "スピードローダー・ドラゴン"
+        "スピードローダー・ドラゴン",
+        "速装龙"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1400,9 +1400,9 @@
       "cid": "14070",
       "passcode": "99745551",
       "aliases": [
-        "未界域之土龙",
+        "danger!? tsuchinoko?",
         "未界域のツチノコ",
-        "danger!? tsuchinoko?"
+        "未界域之土龙"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -2350,5 +2350,5 @@
       }
     }
   ],
-  "shardContentSha256": "2c5876178d884ecbaec0ade09c0e60e6d77000a5b53a0b95f36a0d507ac2afda"
+  "shardContentSha256": "4483ad9a9ee5eae7891552afed62638f92a153823a0bd10f494c32203c5855ce"
 }

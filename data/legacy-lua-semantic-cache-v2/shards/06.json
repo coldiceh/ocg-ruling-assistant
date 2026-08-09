@@ -7,8 +7,8 @@
       "cid": "13966",
       "passcode": "17509503",
       "aliases": [
-        "一色即発",
-        "the revenge of the normal"
+        "the revenge of the normal",
+        "一色即発"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1511,5 +1511,5 @@
       }
     }
   ],
-  "shardContentSha256": "94bfb29ae0bf236249896118a3f480ac7b7069fcf3218a5bfdd6e35c21280550"
+  "shardContentSha256": "7aaa6af5ab9abdfb322384db8ce7bbe6e1a3588ff722e695d655dbb306bcc607"
 }

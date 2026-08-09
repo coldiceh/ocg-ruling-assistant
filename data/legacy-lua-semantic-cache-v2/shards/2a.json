@@ -7,9 +7,9 @@
       "cid": "19842",
       "passcode": "02333466",
       "aliases": [
+        "gandora-g the dragon of destruction",
         "破坏龙 钢多拉g",
-        "破壊竜ガンドラg",
-        "gandora-g the dragon of destruction"
+        "破壊竜ガンドラg"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1171,9 +1171,9 @@
       "cid": "19620",
       "passcode": "32991027",
       "aliases": [
-        "氷結界の剣士 ゲオルギアス",
+        "georgius, swordman of the ice barrier",
         "冰结界的剑士 格奥鲁吉亚斯",
-        "georgius, swordman of the ice barrier"
+        "氷結界の剣士 ゲオルギアス"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -2305,9 +2305,9 @@
       "cid": "20292",
       "passcode": "37405032",
       "aliases": [
-        "淘气仙星・水葵天使",
         "trickstar aqua angel",
-        "トリックスター・アクアエンジェル"
+        "トリックスター・アクアエンジェル",
+        "淘气仙星・水葵天使"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -3409,9 +3409,9 @@
       "cid": "14081",
       "passcode": "59577547",
       "aliases": [
-        "转生炎兽 鹦武",
+        "salamangreat parro",
         "転生炎獣パロー",
-        "salamangreat parro"
+        "转生炎兽 鹦武"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -5169,9 +5169,9 @@
       "cid": "17424",
       "passcode": "98416533",
       "aliases": [
-        "梅尔菲・瓦莱皮",
         "melffy wally",
-        "メルフィー・ワラビィ"
+        "メルフィー・ワラビィ",
+        "梅尔菲・瓦莱皮"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -6336,5 +6336,5 @@
       }
     }
   ],
-  "shardContentSha256": "0ee6f026c67969c6808abd69ba4fe3484a4f128583270e80334dcd925aa6e557"
+  "shardContentSha256": "c2185648d4080534059d895ab3924fb8601afa71696c1347f36e744c5b9e9562"
 }

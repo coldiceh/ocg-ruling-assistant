@@ -2111,8 +2111,8 @@
       "cid": "14419",
       "passcode": "45955628",
       "aliases": [
-        "呪眼の眷属 カトブレパス",
-        "catoblepas, familiar of the evil eye"
+        "catoblepas, familiar of the evil eye",
+        "呪眼の眷属 カトブレパス"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -3710,5 +3710,5 @@
       }
     }
   ],
-  "shardContentSha256": "068cfdbbdfa9f93d16f32abebed5dc2052eb8b120a4b6265d5558aa4099750b7"
+  "shardContentSha256": "60d240b1f98fdcc6c768729edafe8ba7797fc34373f7c6902a47a01c1f3a2019"
 }

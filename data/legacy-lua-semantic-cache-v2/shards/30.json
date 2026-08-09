@@ -7,9 +7,9 @@
       "cid": "12064",
       "passcode": "40159926",
       "aliases": [
-        "镜共鸣者",
         "mirror resonator",
-        "ミラー・リゾネーター"
+        "ミラー・リゾネーター",
+        "镜共鸣者"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1641,5 +1641,5 @@
       }
     }
   ],
-  "shardContentSha256": "3b43afdca527c94e624aee022d7e290d24859dcebbdb75b52d71973ca5a7d195"
+  "shardContentSha256": "0a5e4b52762840aed412f074f28d88f7449b485aa692610cff0a5db81bf96607"
 }

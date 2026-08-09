@@ -7,8 +7,8 @@
       "cid": "20708",
       "passcode": "22916418",
       "aliases": [
-        "超人伝-マントマン",
-        "mantman the ultrahuman"
+        "mantman the ultrahuman",
+        "超人伝-マントマン"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1334,9 +1334,9 @@
       "cid": "14460",
       "passcode": "23431858",
       "aliases": [
-        "天威龙-暝虚堕",
+        "tenyi spirit - vishuda",
         "天威龍-ヴィシュダ",
-        "tenyi spirit - vishuda"
+        "天威龙-暝虚堕"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -2388,5 +2388,5 @@
       }
     }
   ],
-  "shardContentSha256": "d3fa248d04e559dd92597dfec858d6b4ef553e7f615e48090e89171c14f99720"
+  "shardContentSha256": "448d02817f1ca5ef804d901b869a8e2da606b0d38627e7268e2c422e575982e1"
 }

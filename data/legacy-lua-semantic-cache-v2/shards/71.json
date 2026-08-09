@@ -7,9 +7,9 @@
       "cid": "20198",
       "passcode": "23657016",
       "aliases": [
-        "幻禄天杯龙",
+        "tenpai dragon genroku",
         "幻禄の天盃龍",
-        "tenpai dragon genroku"
+        "幻禄天杯龙"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -2085,8 +2085,8 @@
       "cid": "12408",
       "passcode": "33656832",
       "aliases": [
-        "曲芸の魔術師",
-        "acrobatic magician"
+        "acrobatic magician",
+        "曲芸の魔術師"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -3619,5 +3619,5 @@
       }
     }
   ],
-  "shardContentSha256": "dd7eca03af182252ee0e90ae21459b9b15afee6cdf65d30cde183e813d038bcd"
+  "shardContentSha256": "8fb1bcb959d854a15fe71eb1d64505e1d24df2cccf17d691e12151361e760cbe"
 }

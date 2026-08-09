@@ -7,8 +7,8 @@
       "cid": "17128",
       "passcode": "18548966",
       "aliases": [
-        "h・c モーニング・スター",
-        "heroic challenger - morning star"
+        "heroic challenger - morning star",
+        "h・c モーニング・スター"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1356,8 +1356,8 @@
       "cid": "15344",
       "passcode": "39987731",
       "aliases": [
-        "脅威の人造人間-サイコ・ショッカー",
-        "jinzo the machine menace"
+        "jinzo the machine menace",
+        "脅威の人造人間-サイコ・ショッカー"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -3064,5 +3064,5 @@
       }
     }
   ],
-  "shardContentSha256": "675d1409918af0329ee81ee0fe76b874945416d6510451af8b93dc50de6fd698"
+  "shardContentSha256": "70612d0a2761ed22d291023e583122eae619d5af8f13227c4019075e84962cdb"
 }

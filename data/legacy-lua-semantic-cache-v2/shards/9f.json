@@ -7,9 +7,9 @@
       "cid": "19084",
       "passcode": "86111442",
       "aliases": [
-        "提斯蒂娜的哨兵",
         "sentinel of the tistina",
-        "ティスティナの歩哨"
+        "ティスティナの歩哨",
+        "提斯蒂娜的哨兵"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1048,5 +1048,5 @@
       }
     }
   ],
-  "shardContentSha256": "6d63087a0b230f18f596476ab4189d2aa7f88f3fa6119375335af07b50109440"
+  "shardContentSha256": "3304a0420324d1de98ff3341f7f382ef0c0da89a34aaf081018232232d301355"
 }

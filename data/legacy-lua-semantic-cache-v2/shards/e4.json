@@ -7,9 +7,9 @@
       "cid": "15240",
       "passcode": "96891787",
       "aliases": [
+        "dogmatika theo, the iron punch",
         "教导之铁槌 提奥",
-        "教導の鉄槌テオ",
-        "dogmatika theo, the iron punch"
+        "教導の鉄槌テオ"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1164,5 +1164,5 @@
       }
     }
   ],
-  "shardContentSha256": "c76d5b26417ccab6414f8a827c8939002f0650de115bb06ee73d58b75e742a1e"
+  "shardContentSha256": "dd375c856213ad6281a19bc8541a5206dfde361101300c5b235cc9761db9a75b"
 }

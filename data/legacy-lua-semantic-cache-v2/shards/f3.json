@@ -7,9 +7,9 @@
       "cid": "22499",
       "passcode": "22623509",
       "aliases": [
-        "恩底弥翁的侍女 薇儿",
         "verre, the maid of endymion",
-        "エンディミオンの侍女ヴェール"
+        "エンディミオンの侍女ヴェール",
+        "恩底弥翁的侍女 薇儿"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1026,8 +1026,8 @@
       "cid": "6704",
       "passcode": "81896370",
       "aliases": [
-        "疾風鳥人ジョー",
-        "swift birdman joe"
+        "swift birdman joe",
+        "疾風鳥人ジョー"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -2028,9 +2028,9 @@
       "cid": "13238",
       "passcode": "83477829",
       "aliases": [
+        "world legacy - \"world armor\"",
         "星遗物-星铠-",
-        "星遺物-『星鎧』",
-        "world legacy - \"world armor\""
+        "星遺物-『星鎧』"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -3222,5 +3222,5 @@
       }
     }
   ],
-  "shardContentSha256": "522ee46843983440c118732e69368e803814804212ae19f5cdb228095dbcb2ef"
+  "shardContentSha256": "aec489b325d806921fd5b3735307619921986939311f4aadaef771c1849bfa4c"
 }

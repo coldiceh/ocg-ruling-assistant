@@ -7,9 +7,9 @@
       "cid": "19085",
       "passcode": "13510157",
       "aliases": [
-        "提斯蒂娜的猎犬",
         "hound of the tistina",
-        "ティスティナの猟犬"
+        "ティスティナの猟犬",
+        "提斯蒂娜的猎犬"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -964,9 +964,9 @@
       "cid": "21781",
       "passcode": "16922142",
       "aliases": [
-        "绚岚之鹤罗莎",
+        "radiant typhoon krosea",
         "絢嵐たるクローゼア",
-        "radiant typhoon krosea"
+        "绚岚之鹤罗莎"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -2173,5 +2173,5 @@
       }
     }
   ],
-  "shardContentSha256": "bbb617a6ec7737705f3f3445209466ba059bb0e064e7ee22f7ab93dcb349b79a"
+  "shardContentSha256": "b1a9a450306eacd966ecc6e57075d1d4065e9344cd599cd1b238cc0460ad06fc"
 }

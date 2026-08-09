@@ -7,9 +7,9 @@
       "cid": "20291",
       "passcode": "01410324",
       "aliases": [
-        "淘气仙星・芙蒂",
         "trickstar hoody",
-        "トリックスター・フーディ"
+        "トリックスター・フーディ",
+        "淘气仙星・芙蒂"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1076,9 +1076,9 @@
       "cid": "18728",
       "passcode": "66401502",
       "aliases": [
-        "对击斗魂 豹特拉",
         "vanquish soul pantera",
-        "vs パンテラ"
+        "vs パンテラ",
+        "对击斗魂 豹特拉"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -2416,5 +2416,5 @@
       }
     }
   ],
-  "shardContentSha256": "6372a74923f0d3a8ff31889ace2b3f2faa430d18b893e6731ad9200f098c1ae3"
+  "shardContentSha256": "ebab7071f582f2fe1d5411124357792f2eed472dd23a622a02b41821b82a5052"
 }

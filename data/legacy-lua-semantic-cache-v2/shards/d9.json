@@ -7,9 +7,9 @@
       "cid": "14822",
       "passcode": "02801664",
       "aliases": [
+        "ancient warriors - valiant zhang de",
         "战华之雄-张德",
-        "戦華の雄-張徳",
-        "ancient warriors - valiant zhang de"
+        "戦華の雄-張徳"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -2010,9 +2010,9 @@
       "cid": "14104",
       "passcode": "03111207",
       "aliases": [
-        "彩宝龙",
+        "lappis dragon",
         "彩宝龍",
-        "lappis dragon"
+        "彩宝龙"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -4181,9 +4181,9 @@
       "cid": "9731",
       "passcode": "55501446",
       "aliases": [
-        "光之海蛇",
         "lightserpent",
-        "ライト・サーペント"
+        "ライト・サーペント",
+        "光之海蛇"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -5024,5 +5024,5 @@
       }
     }
   ],
-  "shardContentSha256": "e5bc04ef28d30f04dfd5b73a9bec9bf1bfaf9871e5ed0bff1fe0f963b89dedee"
+  "shardContentSha256": "56cdc46a28cc064c493ccd6fb23f613b5fd5be5df1577884c96c9778d1a99248"
 }

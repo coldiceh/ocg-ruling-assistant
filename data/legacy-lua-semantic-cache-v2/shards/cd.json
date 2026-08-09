@@ -7,8 +7,8 @@
       "cid": "15393",
       "passcode": "78447174",
       "aliases": [
-        "電幻機塊コンセントロール",
-        "appliancer socketroll"
+        "appliancer socketroll",
+        "電幻機塊コンセントロール"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1066,9 +1066,9 @@
       "cid": "13100",
       "passcode": "97926515",
       "aliases": [
+        "emerging emergency rescute rescue",
         "紧急救急救命救援",
-        "緊急救急救命レスキュー",
-        "emerging emergency rescute rescue"
+        "緊急救急救命レスキュー"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -3666,5 +3666,5 @@
       }
     }
   ],
-  "shardContentSha256": "13a54e1796dc50449fd0799cc4abe0138fc2ad4b376ae93d67d083be4fa11a23"
+  "shardContentSha256": "d0331c5f7c10d3bdc842b3504a68d9d9ceac317eda98e5a45ec76518fa2da9b2"
 }

@@ -7,9 +7,9 @@
       "cid": "15859",
       "passcode": "30013902",
       "aliases": [
+        "sunseed shadow",
         "圣种之影芽",
-        "聖種の影芽",
-        "sunseed shadow"
+        "聖種の影芽"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1218,5 +1218,5 @@
       }
     }
   ],
-  "shardContentSha256": "8587e54626db2d4dd50c93ed1b78327faf98027e1fa2441bc517a8fa9d6ae133"
+  "shardContentSha256": "7edcd36f195244ebb19c8d10f2fefce8b6aec1f2ed7333df7e25aa6e503573d9"
 }

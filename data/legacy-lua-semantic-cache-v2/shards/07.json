@@ -7,9 +7,9 @@
       "cid": "6603",
       "passcode": "12538374",
       "aliases": [
-        "黄泉青蛙",
+        "treeborn frog",
         "黄泉ガエル",
-        "treeborn frog"
+        "黄泉青蛙"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1878,5 +1878,5 @@
       }
     }
   ],
-  "shardContentSha256": "9d0d9cd79be66958cd5703d0b5b3eadf0d2c37c2badc836b22f2f17c868bb461"
+  "shardContentSha256": "72a2325dee45307323be0fa7f629b207bfb590329bf679135eee5489cfc8955e"
 }

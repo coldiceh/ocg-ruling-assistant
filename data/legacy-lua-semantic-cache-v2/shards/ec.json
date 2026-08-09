@@ -7,9 +7,9 @@
       "cid": "12581",
       "passcode": "04628897",
       "aliases": [
+        "imperion magnum the superconductive battlebot",
         "超电导战机 帝皇机翁麦格农",
-        "超電導戦機インペリオン・マグナム",
-        "imperion magnum the superconductive battlebot"
+        "超電導戦機インペリオン・マグナム"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -2846,9 +2846,9 @@
       "cid": "8403",
       "passcode": "10178757",
       "aliases": [
-        "真次代机・预言机",
         "r-genex oracle",
-        "レアル・ジェネクス・オラクル"
+        "レアル・ジェネクス・オラクル",
+        "真次代机・预言机"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -3762,9 +3762,9 @@
       "cid": "8091",
       "passcode": "61257789",
       "aliases": [
-        "星尘龙/爆裂",
         "stardust dragon/assault mode",
-        "スターダスト・ドラゴン/バスター"
+        "スターダスト・ドラゴン/バスター",
+        "星尘龙/爆裂"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -5785,8 +5785,8 @@
       "cid": "17772",
       "passcode": "67282505",
       "aliases": [
-        "蟲の忍者-蜜",
-        "mitsu the insect ninja"
+        "mitsu the insect ninja",
+        "蟲の忍者-蜜"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -6869,9 +6869,9 @@
       "cid": "20188",
       "passcode": "99229085",
       "aliases": [
-        "机关傀偶-牛啸",
         "gimmick puppet cattle scream",
-        "ギミック・パペット-カトル・スクリーム"
+        "ギミック・パペット-カトル・スクリーム",
+        "机关傀偶-牛啸"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -8466,5 +8466,5 @@
       }
     }
   ],
-  "shardContentSha256": "a6e140250f73e41da24a467bd9be0aa3645df08db2e436b504888250a06e7b67"
+  "shardContentSha256": "c4ed7ea3741bb9da391b38f94a5dadcfeba04403ef1153993241341014fb72d8"
 }

@@ -7,9 +7,9 @@
       "cid": "16271",
       "passcode": "85847157",
       "aliases": [
-        "证明之普鲁弗拉斯",
         "proof of pruflas",
-        "プルーフ・プルフラス"
+        "プルーフ・プルフラス",
+        "证明之普鲁弗拉斯"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -2449,5 +2449,5 @@
       }
     }
   ],
-  "shardContentSha256": "3eecda254ee20411c445c82ed2c6a45149e4791b815a54fca67d32e90c68b8f7"
+  "shardContentSha256": "384033fae579a7e1b2e4d37ccfc93e343adc64b48523c6ab0fcd820b4d55af3a"
 }

@@ -7,9 +7,9 @@
       "cid": "16730",
       "passcode": "18313046",
       "aliases": [
-        "浮-朋.克.鲤跃",
         "uk-p.u.n.k.カープ・ライジング",
-        "ukiyoe-p.u.n.k. rising carp"
+        "ukiyoe-p.u.n.k. rising carp",
+        "浮-朋.克.鲤跃"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1987,9 +1987,9 @@
       "cid": "20406",
       "passcode": "34323367",
       "aliases": [
-        "娱乐巫师・水舞者",
         "emウォーター・ダンサー",
-        "performage water dancer"
+        "performage water dancer",
+        "娱乐巫师・水舞者"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -3367,9 +3367,9 @@
       "cid": "18146",
       "passcode": "73478096",
       "aliases": [
-        "光子皇帝",
         "photon emperor",
-        "フォトン・エンペラー"
+        "フォトン・エンペラー",
+        "光子皇帝"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -5570,5 +5570,5 @@
       }
     }
   ],
-  "shardContentSha256": "b90d44aeefd090ceec351dc2d9e0fbcefe3a81c9a2445e0bc06a74930931200e"
+  "shardContentSha256": "db026fd513f63e65a92e4a2e476c77bcea1d69e9c406270f51c140bcc5fabb13"
 }

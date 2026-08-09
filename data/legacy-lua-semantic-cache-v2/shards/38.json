@@ -7,9 +7,9 @@
       "cid": "15316",
       "passcode": "29177818",
       "aliases": [
-        "玫瑰少女",
         "rose girl",
-        "バラガール"
+        "バラガール",
+        "玫瑰少女"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1086,5 +1086,5 @@
       }
     }
   ],
-  "shardContentSha256": "a469812161706e9e72d7701c8a17714bea21cc3552ced74e62e372faa87244f1"
+  "shardContentSha256": "26b8d052b0d98b3abee87860f36c4d000b60d64bfa16cdfaddf776e4d8dd1147"
 }

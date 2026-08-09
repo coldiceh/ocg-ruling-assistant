@@ -7,9 +7,9 @@
       "cid": "19144",
       "passcode": "41908872",
       "aliases": [
+        "supreme king dragon lightwurm",
         "覇王眷竜ライトヴルム",
-        "霸王眷龙 光明亚龙",
-        "supreme king dragon lightwurm"
+        "霸王眷龙 光明亚龙"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -3093,5 +3093,5 @@
       }
     }
   ],
-  "shardContentSha256": "e3a0a537a0dabcec3e65b5e801b347b9c900a8fe67bed7ecc7d5e32d17451103"
+  "shardContentSha256": "2578f12a79a08e169dc08e78988204e6f07f339af02f8af918d9f6da6243ceef"
 }

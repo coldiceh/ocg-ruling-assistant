@@ -7,9 +7,9 @@
       "cid": "21145",
       "passcode": "34873741",
       "aliases": [
+        "kuribon the fairy spirit",
         "妖精灵 库里缎带",
-        "妖精霊クリボン",
-        "kuribon the fairy spirit"
+        "妖精霊クリボン"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1607,5 +1607,5 @@
       }
     }
   ],
-  "shardContentSha256": "5f8fc1b29d4af9ae6c3d1d9d4f87b74a192764e2f3a1c3cbf80091b82fccd8ba"
+  "shardContentSha256": "0402e25691bcc037f7557a2a67b77500d34cb6442f50ac2fc42644cc09409cb6"
 }

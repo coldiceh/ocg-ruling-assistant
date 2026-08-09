@@ -7,9 +7,9 @@
       "cid": "14192",
       "passcode": "12213463",
       "aliases": [
-        "白蔷薇龙",
         "white rose dragon",
-        "ホワイトローズ・ドラゴン"
+        "ホワイトローズ・ドラゴン",
+        "白蔷薇龙"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1998,5 +1998,5 @@
       }
     }
   ],
-  "shardContentSha256": "09b92e0a1fe689f073923d18d63ed2e8a4b97f5a37f9dd622e4465f848e02f9b"
+  "shardContentSha256": "d5cf5fd73bf0243aec1307340ee4566b81467d31a4a4f71211754d9ad118a360"
 }

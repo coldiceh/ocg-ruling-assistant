@@ -7,9 +7,9 @@
       "cid": "22086",
       "passcode": "30394645",
       "aliases": [
+        "dogmatika lawbringer",
         "教导之死徒",
-        "教導の死徒",
-        "dogmatika lawbringer"
+        "教導の死徒"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1130,9 +1130,9 @@
       "cid": "13463",
       "passcode": "42790071",
       "aliases": [
-        "幻变骚灵・多重伪装者",
         "altergeist multifaker",
-        "オルターガイスト・マルチフェイカー"
+        "オルターガイスト・マルチフェイカー",
+        "幻变骚灵・多重伪装者"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -2261,5 +2261,5 @@
       }
     }
   ],
-  "shardContentSha256": "e38c2adb30faedea450892855f33ca9958a04d43e5c97c189b0a9b47ed2a7744"
+  "shardContentSha256": "964136b91ab46cf6f3979d001074e6c1eaf1c74137f4acd8af5b24915a385f62"
 }

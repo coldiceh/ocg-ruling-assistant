@@ -7,9 +7,9 @@
       "cid": "13193",
       "passcode": "18789533",
       "aliases": [
-        "点画替罪者",
         "dotscaper",
-        "ドットスケーパー"
+        "ドットスケーパー",
+        "点画替罪者"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1036,8 +1036,8 @@
       "cid": "11925",
       "passcode": "27103517",
       "aliases": [
-        "邪神官チラム・サバク",
-        "wicked acolyte chilam sabak"
+        "wicked acolyte chilam sabak",
+        "邪神官チラム・サバク"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -2461,5 +2461,5 @@
       }
     }
   ],
-  "shardContentSha256": "21751b99353dcbca5a7ab3e52e7295ef88f13e5673805d694198c4de9fd450c5"
+  "shardContentSha256": "42285e3194962dad9a98e6360288533dace635f4e31ed69592195ae10501f860"
 }

@@ -7,6 +7,7 @@ import {
   validateLegacyLuaSemanticResource,
 } from "../../backend/legacyLuaSemanticPacket.mjs";
 import {
+  comparePrecomputedLegacyLuaStableText,
   normalizePrecomputedLegacyLuaAlias,
   normalizePrecomputedLegacyLuaCid,
 } from "../../backend/legacyLuaSemanticStaticCacheFactory.mjs";
@@ -91,7 +92,9 @@ export async function resolveLegacyLuaCardIdentityBatches({
       normalizedCards.push(normalized);
     }
   }
-  normalizedCards.sort((left, right) => left.cid.localeCompare(right.cid));
+  normalizedCards.sort((left, right) =>
+    comparePrecomputedLegacyLuaStableText(left.cid, right.cid)
+  );
   rejectDuplicates(normalizedCards.map((card) => card.cid),
     "card corpus contains duplicate stable CIDs");
   const resolved = [];
@@ -309,7 +312,7 @@ export function groupPrecomputedLegacyLuaPlanByShard(plan) {
   }
   for (const cards of groups.values()) cards.sort(comparePlannedCards);
   return new Map([...groups.entries()].sort(([left], [right]) =>
-    left.localeCompare(right)
+    comparePrecomputedLegacyLuaStableText(left, right)
   ));
 }
 
@@ -417,9 +420,9 @@ function countEffectRegistrations(source) {
 }
 
 function comparePlannedCards(left, right) {
-  return left.shardId.localeCompare(right.shardId) ||
-    left.passcode.localeCompare(right.passcode) ||
-    left.cid.localeCompare(right.cid);
+  return comparePrecomputedLegacyLuaStableText(left.shardId, right.shardId) ||
+    comparePrecomputedLegacyLuaStableText(left.passcode, right.passcode) ||
+    comparePrecomputedLegacyLuaStableText(left.cid, right.cid);
 }
 
 function increment(counts, key) {
@@ -428,7 +431,7 @@ function increment(counts, key) {
 
 function sortedCountObject(value) {
   return Object.fromEntries(Object.entries(value).sort(([left], [right]) =>
-    left.localeCompare(right)
+    comparePrecomputedLegacyLuaStableText(left, right)
   ));
 }
 

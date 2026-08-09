@@ -7,9 +7,9 @@
       "cid": "12688",
       "passcode": "41091257",
       "aliases": [
-        "秘旋谍-花花公子",
         "spyral super agent",
-        "spyral-ダンディ"
+        "spyral-ダンディ",
+        "秘旋谍-花花公子"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1498,9 +1498,9 @@
       "cid": "19868",
       "passcode": "85753549",
       "aliases": [
-        "月牙龙-新月龙",
+        "mikazukinoyaiba, the moon fang dragon",
         "月牙龍-クレセント・ドラゴン",
-        "mikazukinoyaiba, the moon fang dragon"
+        "月牙龙-新月龙"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -3107,5 +3107,5 @@
       }
     }
   ],
-  "shardContentSha256": "96b5ead342d03c87a2a84ed9861700a4a0b5b37f3cc0b23a8c9ddc119dc46645"
+  "shardContentSha256": "735c388ba80c1f0167bf6533e18f28a9546ecfafe613a26a519c5068ae0f3521"
 }

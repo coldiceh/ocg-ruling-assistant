@@ -7,8 +7,8 @@
       "cid": "10245",
       "passcode": "26732909",
       "aliases": [
-        "魔導教士 システィ",
-        "justice of prophecy"
+        "justice of prophecy",
+        "魔導教士 システィ"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -2087,8 +2087,8 @@
       "cid": "7430",
       "passcode": "52035300",
       "aliases": [
-        "不死武士",
-        "the immortal bushi"
+        "the immortal bushi",
+        "不死武士"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -3293,5 +3293,5 @@
       }
     }
   ],
-  "shardContentSha256": "24ef64bfe176c54029eaac6af1deaa3e11121f99fbc563bee141bee560ea8223"
+  "shardContentSha256": "a025561bf7aa1bd362b01e6abe80cdab5f1722faf3332485f04ebc8efd5f83cf"
 }

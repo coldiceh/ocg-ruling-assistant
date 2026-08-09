@@ -7,9 +7,9 @@
       "cid": "14458",
       "passcode": "60942444",
       "aliases": [
-        "天威龙-马尼剌",
+        "tenyi spirit - mapura",
         "天威龍-マニラ",
-        "tenyi spirit - mapura"
+        "天威龙-马尼剌"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -2570,5 +2570,5 @@
       }
     }
   ],
-  "shardContentSha256": "0341e4797d65e323df8bfa2df4bf6acb1b0e1f7c00df7c8b54c59e4e6161159e"
+  "shardContentSha256": "4da08665f6e93e834dfe7ee3831df338fbe3eaaa3b6a51dbb13276ce0d3e5a3d"
 }

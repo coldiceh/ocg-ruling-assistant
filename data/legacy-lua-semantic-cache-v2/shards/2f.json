@@ -7,9 +7,9 @@
       "cid": "15253",
       "passcode": "20003027",
       "aliases": [
-        "梅尔菲・帕皮",
         "melffy puppy",
-        "メルフィー・パピィ"
+        "メルフィー・パピィ",
+        "梅尔菲・帕皮"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1177,9 +1177,9 @@
       "cid": "20751",
       "passcode": "64911387",
       "aliases": [
-        "原物质・仄普托环禽",
         "materiactor zeptwing",
-        "マテリアクトル・ゼプトウィング"
+        "マテリアクトル・ゼプトウィング",
+        "原物质・仄普托环禽"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -2315,9 +2315,9 @@
       "cid": "14646",
       "passcode": "87052196",
       "aliases": [
-        "天威龙-阿舒那",
+        "tenyi spirit - ashuna",
         "天威龍-アシュナ",
-        "tenyi spirit - ashuna"
+        "天威龙-阿舒那"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -3424,5 +3424,5 @@
       }
     }
   ],
-  "shardContentSha256": "0ff3a795563b1f4a7d89c379283211d38142e32d0501690bec51a052f043930c"
+  "shardContentSha256": "3a991e3528053f63851baeb03e15b536d73561db50a2e08c80723c70fc09979d"
 }

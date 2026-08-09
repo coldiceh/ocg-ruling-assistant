@@ -7,9 +7,9 @@
       "cid": "14410",
       "passcode": "57916305",
       "aliases": [
-        "魔女工艺・创生",
         "witchcrafter creation",
-        "ウィッチクラフト・クリエイション"
+        "ウィッチクラフト・クリエイション",
+        "魔女工艺・创生"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1052,5 +1052,5 @@
       }
     }
   ],
-  "shardContentSha256": "773e44ff8762d45729ba3f086adcb00e3d510fcf346a6786b514ed4b229c33b4"
+  "shardContentSha256": "9fee9ed3f4fcc517ef55cffbc8156afd8a5c8a2d82f8fc171e39b156b0dbb394"
 }

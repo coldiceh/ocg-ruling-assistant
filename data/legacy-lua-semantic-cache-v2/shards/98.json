@@ -7,9 +7,9 @@
       "cid": "22130",
       "passcode": "12197223",
       "aliases": [
-        "天雷之双风神 息那",
+        "shiina, twin tempests of celestial thunder",
         "天雷ノ双風神 シーナ",
-        "shiina, twin tempests of celestial thunder"
+        "天雷之双风神 息那"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1900,5 +1900,5 @@
       }
     }
   ],
-  "shardContentSha256": "cf1f6f9077ced9d37bdc2281f9d4f200a445388f5ae379118f6059eaf3973c41"
+  "shardContentSha256": "d63a8873318563d4e1d653e981226c5d15601bb607bab3b3de34abc631dc0ece"
 }

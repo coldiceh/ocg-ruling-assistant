@@ -7,9 +7,9 @@
       "cid": "14353",
       "passcode": "56308388",
       "aliases": [
-        "时潜怪盗・扭转者",
         "time thief winder",
-        "クロノダイバー・リューズ"
+        "クロノダイバー・リューズ",
+        "时潜怪盗・扭转者"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1151,9 +1151,9 @@
       "cid": "17133",
       "passcode": "70204022",
       "aliases": [
+        "symphonic warrior djj",
         "音响战士 混音骑师",
-        "音響戦士ディージェス",
-        "symphonic warrior djj"
+        "音響戦士ディージェス"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -2518,5 +2518,5 @@
       }
     }
   ],
-  "shardContentSha256": "211ba7c2ae0e18b26523bd07c27cc2a0571ba2d246e34226b5bdee2634ebfa81"
+  "shardContentSha256": "a622613b7570b02be0321b6ccc031e6bbf83fdb3f5981f5a85384eb3c32f731e"
 }

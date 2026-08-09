@@ -7,9 +7,9 @@
       "cid": "14459",
       "passcode": "97036149",
       "aliases": [
-        "天威龙-纳哈塔",
+        "tenyi spirit - nahata",
         "天威龍-ナハタ",
-        "tenyi spirit - nahata"
+        "天威龙-纳哈塔"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1083,5 +1083,5 @@
       }
     }
   ],
-  "shardContentSha256": "9995d57c81102793e03c034363dd2e4906435f051fcbc78c9b9319e8bc4ba094"
+  "shardContentSha256": "77c05f79398708b5e6116640089c9158792b082e212988e7a21e6412323c42ae"
 }

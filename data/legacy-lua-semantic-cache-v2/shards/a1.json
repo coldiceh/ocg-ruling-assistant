@@ -7,9 +7,9 @@
       "cid": "11318",
       "passcode": "20758643",
       "aliases": [
-        "彼岸恶鬼 格拉伯尼",
+        "graff, malebranche of the burning abyss",
         "彼岸の悪鬼 グラバースニッチ",
-        "graff, malebranche of the burning abyss"
+        "彼岸恶鬼 格拉伯尼"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1430,5 +1430,5 @@
       }
     }
   ],
-  "shardContentSha256": "0bf19e5644b95ca02d5dedc9c0c982143c0278d45080e7454df8b4f48213bf39"
+  "shardContentSha256": "e8a3700be7570023839802592142ff1822ea0e511b6e8a9d5725e18f51aac0bc"
 }

@@ -7,9 +7,9 @@
       "cid": "11528",
       "passcode": "64373401",
       "aliases": [
+        "superheavy samurai trumpeter",
         "超重武者 法螺贝-e",
-        "超重武者ホラガ-e",
-        "superheavy samurai trumpeter"
+        "超重武者ホラガ-e"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1099,5 +1099,5 @@
       }
     }
   ],
-  "shardContentSha256": "2451eda232a255971b6aff8a4cdafe4b9b144a696ac7407598ebc6bdf3da95bf"
+  "shardContentSha256": "feb42d72f447e70853e89e94524d667c9b23699c4315305612dc2faac8b45c50"
 }

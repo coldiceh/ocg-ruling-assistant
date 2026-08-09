@@ -1130,9 +1130,9 @@
       "cid": "13209",
       "passcode": "31772684",
       "aliases": [
-        "仇尸・归来者",
         "vendread revenants",
-        "ヴェンデット・レヴナント"
+        "ヴェンデット・レヴナント",
+        "仇尸・归来者"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -4298,9 +4298,9 @@
       "cid": "20761",
       "passcode": "98248208",
       "aliases": [
-        "暗黒海龍-ドライアグル",
+        "driangle, dragon of the dark deep",
         "暗黑海龙-龙三角",
-        "driangle, dragon of the dark deep"
+        "暗黒海龍-ドライアグル"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -7034,5 +7034,5 @@
       }
     }
   ],
-  "shardContentSha256": "7c20ffd33194f8df4414d97a1c1b6d9488fbabb2e989480612df0c2331b9d7de"
+  "shardContentSha256": "10a92838191903a642724d27c529f50f771e9085c64ac548307de06dc9fac136"
 }

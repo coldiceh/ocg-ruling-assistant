@@ -7,9 +7,9 @@
       "cid": "7574",
       "passcode": "37742478",
       "aliases": [
-        "奥尼斯特",
         "honest",
-        "オネスト"
+        "オネスト",
+        "奥尼斯特"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -969,9 +969,9 @@
       "cid": "13078",
       "passcode": "70771599",
       "aliases": [
+        "supreme king dragon clear wing",
         "覇王眷竜クリアウィング",
-        "霸王眷龙 清透翼",
-        "supreme king dragon clear wing"
+        "霸王眷龙 清透翼"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -2307,5 +2307,5 @@
       }
     }
   ],
-  "shardContentSha256": "7415807218400dbb11f6889fe6adab579d9de101c008f201da7b5df7304f2c66"
+  "shardContentSha256": "84845bd54654e96d20e87faa5ce015bcbda71a93962425f222128edef43fd586"
 }

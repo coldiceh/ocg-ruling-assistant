@@ -7,9 +7,9 @@
       "cid": "10252",
       "passcode": "51282878",
       "aliases": [
-        "鱼博格-栽培者",
         "fishborg planter",
-        "フィッシュボーグ-プランター"
+        "フィッシュボーグ-プランター",
+        "鱼博格-栽培者"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1196,5 +1196,5 @@
       }
     }
   ],
-  "shardContentSha256": "eed84a02f2b81cd7d9b6603ba530c0b706ad2188d6c2a1fea6c6ea6485324d3a"
+  "shardContentSha256": "1c743a745cda4da374e4f6810e8912b83aea1f7a1821ce7e604afceac7d1fc24"
 }

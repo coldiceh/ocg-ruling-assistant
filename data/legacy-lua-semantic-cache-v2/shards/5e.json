@@ -7,9 +7,9 @@
       "cid": "12721",
       "passcode": "13662809",
       "aliases": [
+        "abyss script - rise of the abyss king",
         "魔界剧本“魔王降临”",
-        "魔界台本「魔王の降臨」",
-        "abyss script - rise of the abyss king"
+        "魔界台本「魔王の降臨」"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1634,9 +1634,9 @@
       "cid": "16834",
       "passcode": "50599453",
       "aliases": [
-        "枯鰈葉リプレース",
+        "leafplace plaice",
         "枯叶拟态鲽",
-        "leafplace plaice"
+        "枯鰈葉リプレース"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -2661,9 +2661,9 @@
       "cid": "8558",
       "passcode": "55277252",
       "aliases": [
-        "魔轰神兽野槌",
+        "the fabled nozoochee",
         "魔轟神獣ノズチ",
-        "the fabled nozoochee"
+        "魔轰神兽野槌"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -5711,5 +5711,5 @@
       }
     }
   ],
-  "shardContentSha256": "69c8639b3f74b7678a44a21658b86ab55d96f5b705ee8b41f9d915de7ea6d1af"
+  "shardContentSha256": "88c8fcfa5eb44f0c358c5ab4f3a6458d949d27696b780320661df64be075c41b"
 }

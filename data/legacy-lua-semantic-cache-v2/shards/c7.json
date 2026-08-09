@@ -7,9 +7,9 @@
       "cid": "14815",
       "passcode": "78751195",
       "aliases": [
-        "沉咚咚@伊格尼斯者",
         "doshin @ignister",
-        "ドシン@イグニスター"
+        "ドシン@イグニスター",
+        "沉咚咚@伊格尼斯者"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1013,5 +1013,5 @@
       }
     }
   ],
-  "shardContentSha256": "f58f9bba0835f7d97009e0b9b69a015de361d161edaf9b042afc4b3944a51c4e"
+  "shardContentSha256": "6842335931277a4393cd4eaae6157b04167831ee308b4041379996e3d3f691b5"
 }

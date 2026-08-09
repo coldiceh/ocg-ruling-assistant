@@ -7,9 +7,9 @@
       "cid": "8137",
       "passcode": "02403771",
       "aliases": [
-        "动力工具龙",
         "power tool dragon",
-        "パワー・ツール・ドラゴン"
+        "パワー・ツール・ドラゴン",
+        "动力工具龙"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1512,8 +1512,8 @@
       "cid": "5790",
       "passcode": "68191243",
       "aliases": [
-        "黒蠍団召集",
-        "mustering of the dark scorpions"
+        "mustering of the dark scorpions",
+        "黒蠍団召集"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -2917,5 +2917,5 @@
       }
     }
   ],
-  "shardContentSha256": "253c6b35f4bc3b542198c792bfcb25acb310fb2fc11cfce4f0955ad83b526caf"
+  "shardContentSha256": "074df41f2646c557130430f7b61be98abdbef47494597baac630026995ecc29e"
 }

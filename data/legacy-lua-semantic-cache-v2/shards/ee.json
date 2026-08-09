@@ -7,9 +7,9 @@
       "cid": "9095",
       "passcode": "67441435",
       "aliases": [
-        "成长球茎",
         "glow-up bulb",
-        "グローアップ・バルブ"
+        "グローアップ・バルブ",
+        "成长球茎"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1912,9 +1912,9 @@
       "cid": "13555",
       "passcode": "98169343",
       "aliases": [
-        "淘气仙星・卡罗贝恩",
         "trickstar corobane",
-        "トリックスター・キャロベイン"
+        "トリックスター・キャロベイン",
+        "淘气仙星・卡罗贝恩"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -3022,5 +3022,5 @@
       }
     }
   ],
-  "shardContentSha256": "8fc67bd7229e27b89f944a6fad3eede6c1e2ec28b2a6015947e4466f18a7f663"
+  "shardContentSha256": "b531ddc8494cf274f5ec129e5c580ac90ce22e91d3b400bf0f6a424661de0088"
 }

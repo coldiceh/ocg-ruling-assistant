@@ -7,8 +7,8 @@
       "cid": "18491",
       "passcode": "03361010",
       "aliases": [
-        "愉怪な燐のきつねびゆらら",
-        "kitsuni kitsunebi"
+        "kitsuni kitsunebi",
+        "愉怪な燐のきつねびゆらら"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -933,9 +933,9 @@
       "cid": "7407",
       "passcode": "05592689",
       "aliases": [
-        "纳祭魔莲",
         "samsara lotus",
-        "サクリファイス・ロータス"
+        "サクリファイス・ロータス",
+        "纳祭魔莲"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -2816,9 +2816,9 @@
       "cid": "13515",
       "passcode": "85638822",
       "aliases": [
+        "gouki cage match",
         "刚鬼死斗",
-        "剛鬼死闘",
-        "gouki cage match"
+        "剛鬼死闘"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -5164,5 +5164,5 @@
       }
     }
   ],
-  "shardContentSha256": "054987dc8040fda20f85af3d369f373ddf706f9426a21abda2469f3007cf48ff"
+  "shardContentSha256": "064c288ef101d15c794cba16e98b156cf960228575fa41774629b36bce8d2870"
 }

@@ -7,9 +7,9 @@
       "cid": "22128",
       "passcode": "19304410",
       "aliases": [
-        "铁兽守宝团 炎工之姬特",
+        "tri-brigade springans kitt",
         "鉄獣の炎工 キット",
-        "tri-brigade springans kitt"
+        "铁兽守宝团 炎工之姬特"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1000,9 +1000,9 @@
       "cid": "13433",
       "passcode": "64697431",
       "aliases": [
-        "局部性飓风",
+        "hey, trunade!",
         "局所的ハリケーン",
-        "hey, trunade!"
+        "局部性飓风"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -2042,5 +2042,5 @@
       }
     }
   ],
-  "shardContentSha256": "0fb67ac74da4aebfa04e9d2f88f7c21408cb9244b3d9a5242e2ae09c6d5e9e0d"
+  "shardContentSha256": "10194bd3defe4b0c7e1a94486755f322808c9263a3b73bb949112773dfd611ca"
 }

@@ -7,9 +7,9 @@
       "cid": "20195",
       "passcode": "24779554",
       "aliases": [
-        "白森的露西亚",
+        "rucia of the white forest",
         "白き森のルシア",
-        "rucia of the white forest"
+        "白森的露西亚"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -2792,5 +2792,5 @@
       }
     }
   ],
-  "shardContentSha256": "e825fd43922f649d265bddda97c7bfdfe813eb9d88f09891c6589c68d3aedc05"
+  "shardContentSha256": "042e1450dbd544d3198bb8dae608442c31e8bfd9062f8eca91d8d2b8d3b6288e"
 }

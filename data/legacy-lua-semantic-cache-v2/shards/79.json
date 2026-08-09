@@ -7,8 +7,8 @@
       "cid": "20502",
       "passcode": "11024707",
       "aliases": [
-        "回猫",
-        "flipping feline"
+        "flipping feline",
+        "回猫"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1514,9 +1514,9 @@
       "cid": "16541",
       "passcode": "29948294",
       "aliases": [
-        "烙印之气炎",
+        "branded in high spirits",
         "烙印の気炎",
-        "branded in high spirits"
+        "烙印之气炎"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -2559,5 +2559,5 @@
       }
     }
   ],
-  "shardContentSha256": "468b10609758a90c7f36dee58cb33a92b54deb0c073a6aee79681299ccdefcfa"
+  "shardContentSha256": "81a4f471cdd0a1d884b1de28593301650e37425a48eb150c66a76a5450830169"
 }

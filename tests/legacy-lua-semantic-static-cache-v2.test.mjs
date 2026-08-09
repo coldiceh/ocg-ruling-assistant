@@ -1,10 +1,14 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import {
   finalizeLegacyLuaSemanticResource,
   validateLegacyLuaSemanticPacket,
 } from "../backend/legacyLuaSemanticPacket.mjs";
+import {
+  comparePrecomputedLegacyLuaStableText,
+} from "../backend/legacyLuaSemanticStaticCacheFactory.mjs";
 import {
   createPrecomputedLegacyLuaCacheManifest,
   createPrecomputedLegacyLuaCacheShard,
@@ -15,6 +19,11 @@ import {
   validatePrecomputedLegacyLuaCacheManifest,
   validatePrecomputedLegacyLuaCacheShard,
 } from "../backend/legacyLuaSemanticStaticCacheV2.mjs";
+import {
+  bundledLegacyLuaManifestUrl,
+  createBundledLegacyLuaShardLoader,
+  loadBundledLegacyLuaSemanticManifest,
+} from "../backend/legacyLuaSemanticStaticCacheV2Data.mjs";
 import {
   resolveLegacyLuaCardIdentityBatches,
 } from "../scripts/lib/precomputed-legacy-lua-cache-v2.mjs";
@@ -191,6 +200,97 @@ test("v2 manifest and shards are stable, content-addressed, and reject tampering
     () => validatePrecomputedLegacyLuaCacheShard(tamperedShard),
     (error) => error?.code === "LEGACY_LUA_PRECOMPUTED_SHARD_INVALID",
   );
+});
+
+test("cache-bound alias ordering is identical for opposing input orders", () => {
+  const aliases = [
+    "天雷之双风神 息那",
+    "shiina, twin tempests of celestial thunder",
+    "天雷ノ双風神 シーナ",
+  ];
+  const forwardInput = [...aliases];
+  const reverseInput = [...aliases].reverse();
+  assert.notDeepEqual(forwardInput, reverseInput);
+
+  const makeShard = (orderedAliases) => createPrecomputedLegacyLuaCacheShard({
+    shardId: precomputedLegacyLuaShardId("12197223"),
+    generatedAt: GENERATED_AT,
+    entries: [{
+      cid: "22130",
+      passcode: "12197223",
+      aliases: orderedAliases,
+      resource: unknownResource("legacy:locale-independent-order"),
+    }],
+  });
+  const forwardShard = makeShard(forwardInput);
+  const reverseShard = makeShard(reverseInput);
+
+  assert.equal(forwardShard.shardContentSha256,
+    reverseShard.shardContentSha256);
+  assert.deepEqual(forwardShard.entries[0].aliases,
+    reverseShard.entries[0].aliases);
+  assert.deepEqual(forwardShard.entries[0].aliases,
+    [...new Set(aliases.map((value) => value.normalize("NFKC").toLowerCase()))]
+      .sort(comparePrecomputedLegacyLuaStableText));
+});
+
+test("every bundled shard matches its manifest descriptor", async () => {
+  const manifest = validatePrecomputedLegacyLuaCacheManifest(
+    loadBundledLegacyLuaSemanticManifest(),
+  );
+  const manifestUrl = bundledLegacyLuaManifestUrl();
+  assert.equal(manifest.shards.length, 213);
+
+  let entryCount = 0;
+  for (const descriptor of manifest.shards) {
+    const serialized = await readFile(new URL(descriptor.path, manifestUrl),
+      "utf8");
+    assert.equal(Buffer.byteLength(serialized, "utf8"),
+      descriptor.serializedBytes, descriptor.path);
+    const shard = validatePrecomputedLegacyLuaCacheShard(
+      JSON.parse(serialized),
+      { descriptor, manifestGeneratedAt: manifest.generatedAt },
+    );
+    entryCount += shard.entries.length;
+  }
+  assert.equal(entryCount, manifest.selection.retainedResourceCount);
+});
+
+test("bundled Q1 shard loads with the decisive return-to-hand legality check", async () => {
+  const manifest = loadBundledLegacyLuaSemanticManifest();
+  const factory = createShardedPrecomputedLegacyLuaSemanticPacketFactory({
+    manifest,
+    loadShard: createBundledLegacyLuaShardLoader(),
+  });
+  const packet = await factory({
+    cards: [{
+      cid: "22130",
+      passcode: "12197223",
+      name: "天雷之双风神 息那",
+    }],
+  });
+
+  assert.equal(packet.unknownReasons.some((reason) =>
+    reason.code === "LEGACY_LUA_PRECOMPUTED_SHARD_INVALID"), false);
+  const resource = packet.resources.find((item) =>
+    item.resourceBinding?.sourceDocumentId?.includes(
+      "cid-22130:passcode-12197223",
+    ));
+  assert.ok(resource, "Q1 must load the exact Twin Tempests script resource");
+  const check = packet.effectCandidates.flatMap((candidate) => {
+    const artifact = candidate.semanticArtifact;
+    const plan = artifact?.plan || artifact?.partialPlan;
+    return Array.isArray(plan?.activationLegalityChecks)
+      ? plan.activationLegalityChecks
+      : [];
+  }).find((item) =>
+    item.atomicOperation === "RETURN_TO_HAND" &&
+    item.predicateApi === "Card.IsAbleToHand"
+  );
+  assert.ok(check, "Q1 must expose the IsAbleToHand activation check");
+  assert.equal(check.requiredMinimum, 1);
+  assert.equal(check.callbackSlot, "TARGET");
+  assert.equal(check.selector?.api, "Duel.IsExistingMatchingCard");
 });
 
 test("invalid loaded shard fails closed instead of falling back to unverified data", async () => {

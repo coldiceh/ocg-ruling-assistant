@@ -7,9 +7,9 @@
       "cid": "13424",
       "passcode": "36668118",
       "aliases": [
-        "轮转导引扇区",
         "boot sector launch",
-        "リボルブート・セクター"
+        "リボルブート・セクター",
+        "轮转导引扇区"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -3249,5 +3249,5 @@
       }
     }
   ],
-  "shardContentSha256": "cffee05189ff6846895b488e9d82479e5b6c6ab69d03f46813f73dfe423560d0"
+  "shardContentSha256": "b62b7a5eee597d91fdc925cb1934026374042db49588f66bd69446a1d72bdef9"
 }

@@ -7,9 +7,9 @@
       "cid": "22691",
       "passcode": "14965712",
       "aliases": [
+        "multiplying kuriboh!",
         "増殖するクリボー!",
-        "增殖的库里波!",
-        "multiplying kuriboh!"
+        "增殖的库里波!"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1169,9 +1169,9 @@
       "cid": "13844",
       "passcode": "93437091",
       "aliases": [
-        "宾果机器 冲!冲!",
         "bingo machine, go!!!",
-        "ビンゴマシーンgo!go!"
+        "ビンゴマシーンgo!go!",
+        "宾果机器 冲!冲!"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -2961,5 +2961,5 @@
       }
     }
   ],
-  "shardContentSha256": "7b051cc33bffa887aeb03eaaf4a5d5592aa47333be97bce1f4aec154cab1430a"
+  "shardContentSha256": "37920e038cb42cde7430dc04b67531262e1de8d5bd1619e809575559d5e68288"
 }

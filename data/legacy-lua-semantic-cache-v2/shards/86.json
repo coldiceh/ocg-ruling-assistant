@@ -7,9 +7,9 @@
       "cid": "20284",
       "passcode": "70860415",
       "aliases": [
-        "x-交叉加农",
         "x-cross cannon",
-        "x-クロス・キャノン"
+        "x-クロス・キャノン",
+        "x-交叉加农"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1113,5 +1113,5 @@
       }
     }
   ],
-  "shardContentSha256": "3f2865f4e5664b6ed79c0f83e65fa14fdc703797f70de3d321800036c31cf041"
+  "shardContentSha256": "429a22d17c1b97f1d04e5a9b0b334cae54110556c845a3493479c57ea1eab202"
 }

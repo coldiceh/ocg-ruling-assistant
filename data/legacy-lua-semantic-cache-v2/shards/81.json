@@ -1753,9 +1753,9 @@
       "cid": "20278",
       "passcode": "72705654",
       "aliases": [
+        "tachyon cloudragon",
         "时空云笼",
-        "時空の雲篭",
-        "tachyon cloudragon"
+        "時空の雲篭"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -2818,5 +2818,5 @@
       }
     }
   ],
-  "shardContentSha256": "ba8f24f219172f6d8e4828f7b721f39b72f10df04b68696ff73ffed23e91bf10"
+  "shardContentSha256": "c7ed609328a44134878a97eccbe503525542835ab59c1d45d70db7b91047b14a"
 }

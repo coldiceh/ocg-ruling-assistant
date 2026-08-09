@@ -7,9 +7,9 @@
       "cid": "22514",
       "passcode": "18711696",
       "aliases": [
-        "爆裂音速战士",
         "assault sonic warrior",
-        "バスターソニック・ウォリアー"
+        "バスターソニック・ウォリアー",
+        "爆裂音速战士"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1268,9 +1268,9 @@
       "cid": "16750",
       "passcode": "66078354",
       "aliases": [
+        "magicore warrior of the relics",
         "遗迹的魔矿战士",
-        "遺跡の魔鉱戦士",
-        "magicore warrior of the relics"
+        "遺跡の魔鉱戦士"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -2718,5 +2718,5 @@
       }
     }
   ],
-  "shardContentSha256": "1874995353d000b3fb56e22ff837dc1e51a8d701f616902c056e4e884f4dd983"
+  "shardContentSha256": "a313379df002faf777820da3400fb7d37c1b1a073f5d057e10a889f0398ed308"
 }

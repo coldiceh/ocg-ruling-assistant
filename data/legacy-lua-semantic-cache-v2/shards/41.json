@@ -7,9 +7,9 @@
       "cid": "17452",
       "passcode": "53776969",
       "aliases": [
-        "恐惧爪・赖特哈忒",
         "scareclaw light-heart",
-        "スケアクロー・ライトハート"
+        "スケアクロー・ライトハート",
+        "恐惧爪・赖特哈忒"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1044,5 +1044,5 @@
       }
     }
   ],
-  "shardContentSha256": "c105066b52c4d444a1958fb74d19d09e335bcf8f3fa210a1fadd68b3a8a49d5f"
+  "shardContentSha256": "9a160413bf4842833190397e45e2c335136e6a5b1f34fe67e072151ea37ce18c"
 }

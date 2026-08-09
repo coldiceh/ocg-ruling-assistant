@@ -7,8 +7,8 @@
       "cid": "17127",
       "passcode": "71549257",
       "aliases": [
-        "h・c ナックル・ナイフ",
-        "heroic challenger - knuckle sword"
+        "heroic challenger - knuckle sword",
+        "h・c ナックル・ナイフ"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1197,5 +1197,5 @@
       }
     }
   ],
-  "shardContentSha256": "4d52462f18d4477d5e620bc79396afea375091fb670f3b4ba72aa455d91e3d48"
+  "shardContentSha256": "b6f1a52114796f2138e7be200cfcbe3de36de50dd2f7d01d1749bac7da2de0b4"
 }

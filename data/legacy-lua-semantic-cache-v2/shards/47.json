@@ -1262,9 +1262,9 @@
       "cid": "15251",
       "passcode": "57523313",
       "aliases": [
-        "梅尔菲・芬尼",
         "melffy fenny",
-        "メルフィー・フェニィ"
+        "メルフィー・フェニィ",
+        "梅尔菲・芬尼"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -2429,5 +2429,5 @@
       }
     }
   ],
-  "shardContentSha256": "bade15687ce14f7b36614904b37e4aedf6227eba693c90176dbc781b436be492"
+  "shardContentSha256": "4558a4e16db3ebfd388d80fdb3ec19ed4de7c2fd048cc7c95572491470d00231"
 }

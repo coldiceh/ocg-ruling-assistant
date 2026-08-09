@@ -7,9 +7,9 @@
       "cid": "14411",
       "passcode": "83301414",
       "aliases": [
-        "魔女工艺・怠工",
         "witchcrafter holiday",
-        "ウィッチクラフト・サボタージュ"
+        "ウィッチクラフト・サボタージュ",
+        "魔女工艺・怠工"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1052,5 +1052,5 @@
       }
     }
   ],
-  "shardContentSha256": "48058078457575158d81e2b4a58343fb6f47f7f9a379ef7ef9a527088bada37f"
+  "shardContentSha256": "19ef319bdb6dc50c0bc52a1f3fddf86393a58e0e150a87cccccfb697048d00e3"
 }

@@ -7,9 +7,9 @@
       "cid": "19147",
       "passcode": "40785230",
       "aliases": [
-        "韦陀・优婆尼沙昙",
         "veda kalarcanum",
-        "ヴェーダ=ウパニシャッド"
+        "ヴェーダ=ウパニシャッド",
+        "韦陀・优婆尼沙昙"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -2323,5 +2323,5 @@
       }
     }
   ],
-  "shardContentSha256": "2490155a241c1660412e3acb8f0ee745abb1dd061535df9718eba0ee35679d3f"
+  "shardContentSha256": "ecfef60b264b5c41963d84e4f2f97865bc7d52e84dc8185ef8279d38cd35e7ce"
 }

@@ -7,8 +7,8 @@
       "cid": "16937",
       "passcode": "56790702",
       "aliases": [
-        "異次元の強襲艦",
-        "d.d. assault carrier"
+        "d.d. assault carrier",
+        "異次元の強襲艦"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -969,5 +969,5 @@
       }
     }
   ],
-  "shardContentSha256": "3b6658a1b33a261dba4ccf03870c7b478519aeb34252b8ca184a8cad2a8ee17b"
+  "shardContentSha256": "ba00b3114761efc4487c52854613b6cf21823747b071fbb1367798fe7b3aa5f0"
 }

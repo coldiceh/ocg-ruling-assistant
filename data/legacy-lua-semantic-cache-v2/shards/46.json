@@ -7,8 +7,8 @@
       "cid": "17628",
       "passcode": "83575471",
       "aliases": [
-        "a宝玉獣 ルビー・カーバンクル",
-        "advanced crystal beast ruby carbuncle"
+        "advanced crystal beast ruby carbuncle",
+        "a宝玉獣 ルビー・カーバンクル"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -3074,9 +3074,9 @@
       "cid": "19871",
       "passcode": "84631951",
       "aliases": [
-        "新世侵略梁龙",
         "dinovatus docus",
-        "ディノベーダー・ドクス"
+        "ディノベーダー・ドクス",
+        "新世侵略梁龙"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -4118,5 +4118,5 @@
       }
     }
   ],
-  "shardContentSha256": "7d8c2639c849ba53850287e4bbc6c3382da87c5e025fbd70f33f03c353c930c4"
+  "shardContentSha256": "5b9ee38955fb204be09230bf0bad01a4047e7cbc59fb8b1f1f6c046ed074038a"
 }

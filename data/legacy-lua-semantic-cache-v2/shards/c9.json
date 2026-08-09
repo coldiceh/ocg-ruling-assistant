@@ -7,9 +7,9 @@
       "cid": "14976",
       "passcode": "11845050",
       "aliases": [
-        "右手鲨",
         "right-hand shark",
-        "ライトハンド・シャーク"
+        "ライトハンド・シャーク",
+        "右手鲨"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -3497,5 +3497,5 @@
       }
     }
   ],
-  "shardContentSha256": "3d2ee0fef864345cc746b6da890bd90bbe46f2afb4b1760d5213239e02ad0734"
+  "shardContentSha256": "26d6cd49386ee331d9f62b5675524b5b453bc14b8ba83e0c04a4531da772a0bb"
 }

@@ -7,9 +7,9 @@
       "cid": "11860",
       "passcode": "05650082",
       "aliases": [
-        "神风防护罩 -大气之力-",
+        "storming mirror force",
         "神風のバリア -エア・フォース-",
-        "storming mirror force"
+        "神风防护罩 -大气之力-"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -961,5 +961,5 @@
       }
     }
   ],
-  "shardContentSha256": "3e46b71425456efae49877113fa72bc556771965b6f2d8f6787bbba4cf21e7f8"
+  "shardContentSha256": "7023e0bd2abc671a9cf38a9d59ecdcd201d8ff4520ac5a3e75619fb693171cf9"
 }

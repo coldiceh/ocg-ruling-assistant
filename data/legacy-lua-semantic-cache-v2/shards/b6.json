@@ -2094,9 +2094,9 @@
       "cid": "16207",
       "passcode": "59789370",
       "aliases": [
+        "gizmek arakami, the hailbringer hog",
         "机巧猪-伊服岐雹荒神",
-        "機巧猪-伊服岐雹荒神",
-        "gizmek arakami, the hailbringer hog"
+        "機巧猪-伊服岐雹荒神"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -3248,8 +3248,8 @@
       "cid": "5230",
       "passcode": "92377303",
       "aliases": [
-        "黒衣の大賢者",
-        "dark sage"
+        "dark sage",
+        "黒衣の大賢者"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -4646,5 +4646,5 @@
       }
     }
   ],
-  "shardContentSha256": "a6a9b44467839c9c45b9bdffa2dcf912a5ee14dcfda6caf5cab2bde2030cb442"
+  "shardContentSha256": "711229f6358cc66859ca5cbba8e560dbf64a16727a175994d5a27ba1c585a8ef"
 }

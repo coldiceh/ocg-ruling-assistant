@@ -2319,9 +2319,9 @@
       "cid": "12417",
       "passcode": "71696014",
       "aliases": [
-        "魔术师之袍",
         "magician's robe",
-        "マジシャンズ・ローブ"
+        "マジシャンズ・ローブ",
+        "魔术师之袍"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -4019,5 +4019,5 @@
       }
     }
   ],
-  "shardContentSha256": "bca0bd718f2267334d0d200484afdf5c1ba7a06089ffce29adc30b6ddc62ec29"
+  "shardContentSha256": "c59ce3038c78d49b42f0af6e726bbbc169607bdc547168460c3a19258faf2605"
 }

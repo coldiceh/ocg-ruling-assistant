@@ -7,9 +7,9 @@
       "cid": "8624",
       "passcode": "44125452",
       "aliases": [
+        "rose fairy",
         "蔷薇之妖精",
-        "薔薇の妖精",
-        "rose fairy"
+        "薔薇の妖精"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -860,5 +860,5 @@
       }
     }
   ],
-  "shardContentSha256": "a53d4aaf312f5f0503bc92015433ebd6fa46a219319e3af320bf88451611b830"
+  "shardContentSha256": "5065263bbeaa30da1ab17631ed5c73bf2d64ef66d03f3c433f83012dd1bcb41a"
 }

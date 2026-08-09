@@ -7,8 +7,8 @@
       "cid": "12495",
       "passcode": "57354389",
       "aliases": [
-        "岩石の番兵",
-        "sentry soldier of stone"
+        "sentry soldier of stone",
+        "岩石の番兵"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -914,9 +914,9 @@
       "cid": "20478",
       "passcode": "81096431",
       "aliases": [
-        "龙兽鲨",
         "drake shark",
-        "ドレイク・シャーク"
+        "ドレイク・シャーク",
+        "龙兽鲨"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -2001,5 +2001,5 @@
       }
     }
   ],
-  "shardContentSha256": "c53aa6e263bb6374d0ee64b6d3f47e111e68756e6a3373c98096e46c4e30fffa"
+  "shardContentSha256": "7f070dcbb841df991471ea8a13cade14b0b5f384b9b08119dd416be7bfab83ab"
 }

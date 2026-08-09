@@ -7,9 +7,9 @@
       "cid": "11291",
       "passcode": "01833916",
       "aliases": [
-        "英豪挑战者 千刃",
+        "heroic challenger - thousand blades",
         "h・c サウザンド・ブレード",
-        "heroic challenger - thousand blades"
+        "英豪挑战者 千刃"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -3074,9 +3074,9 @@
       "cid": "10111",
       "passcode": "66853752",
       "aliases": [
-        "鱼博格-发炮者",
         "fishborg launcher",
-        "フィッシュボーグ-ランチャー"
+        "フィッシュボーグ-ランチャー",
+        "鱼博格-发炮者"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -4876,5 +4876,5 @@
       }
     }
   ],
-  "shardContentSha256": "8f49149b5a083ede06473c64f6739a18e8f993d1a81950aac3f5f64ca5929784"
+  "shardContentSha256": "a38046d621c36c37ffe6ff3160cae86c122ce1ba9ded1930642ec77712b714a1"
 }

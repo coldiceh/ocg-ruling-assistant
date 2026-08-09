@@ -7,9 +7,9 @@
       "cid": "11253",
       "passcode": "58695102",
       "aliases": [
-        "复活圣经",
         "re-cover",
-        "リ・バイブル"
+        "リ・バイブル",
+        "复活圣经"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -1447,9 +1447,9 @@
       "cid": "11507",
       "passcode": "73213494",
       "aliases": [
-        "彼岸恶鬼 哈克斯帕",
+        "calcab, malebranche of the burning abyss",
         "彼岸の悪鬼 ハックルスパー",
-        "calcab, malebranche of the burning abyss"
+        "彼岸恶鬼 哈克斯帕"
       ],
       "resource": {
         "authority": "LEGACY_COMPATIBILITY",
@@ -2874,5 +2874,5 @@
       }
     }
   ],
-  "shardContentSha256": "57b49e19a49f7936d120d2c54be990f5f393e4ce678943de2e3d588b62f42418"
+  "shardContentSha256": "9bf2e1dc2e0cbbeea36073fd1ead909881dae9f9d313578844b69cd5980f0011"
 }
