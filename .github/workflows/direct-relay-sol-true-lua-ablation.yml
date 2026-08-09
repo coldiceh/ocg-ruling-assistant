@@ -1,0 +1,137 @@
+name: Direct Relay Sol true Lua ablation
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_paid_run:
+        description: Confirm exactly four paid Sol low calls
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: direct-relay-sol-true-lua-ablation
+  cancel-in-progress: false
+
+jobs:
+  ablation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+
+      - name: Require explicit paid-run confirmation
+        shell: bash
+        env:
+          CONFIRM_PAID_RUN: ${{ inputs.confirm_paid_run }}
+        run: |
+          set -euo pipefail
+          test "$CONFIRM_PAID_RUN" = "true" || {
+            echo "Paid run was not confirmed" >&2
+            exit 1
+          }
+
+      - name: Build one frozen two-case source bundle without final-model calls
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          node scripts/admin-evidence-snapshot-dry-run.mjs \
+            --cases tests/fixtures/lua-return-to-hand-ablation-cases.json \
+            --allow-community-card-network \
+            --bundle-output artifacts/lua-ablation-source-bundle.json \
+            --compact > artifacts/lua-ablation-evidence-preflight.json
+
+      - name: Require a usable Twin Tempests Lua activation check
+        shell: bash
+        run: |
+          set -euo pipefail
+          for case_id in \
+            double-tempest-impermanence \
+            double-tempest-impermanence-extra-returnable
+          do
+            node scripts/assert-lua-ablation-preflight.mjs \
+              --bundle artifacts/lua-ablation-source-bundle.json \
+              --case "$case_id" \
+              --cid 22130 \
+              --passcode 12197223 \
+              --atomic-operation RETURN_TO_HAND \
+              --predicate-api Card.IsAbleToHand \
+              --selector-api Duel.IsExistingMatchingCard \
+              --required-minimum 1
+          done
+          node --input-type=module <<'NODE'
+          import { readFile } from "node:fs/promises";
+          const source = await readFile("artifacts/lua-ablation-source-bundle.json", "utf8");
+          for (const canary of [
+            "LUA_ABLATION_GOLD_ONLY_CANARY_A",
+            "LUA_ABLATION_GOLD_ONLY_CANARY_B",
+          ]) {
+            if (source.includes(canary)) throw new Error(`golden leaked into source: ${canary}`);
+          }
+          NODE
+
+      - name: Run exactly four Sol low final-ruling calls sequentially
+        shell: bash
+        env:
+          RELAY_API_KEY: ${{ secrets.RELAY_API_KEY }}
+          RELAY_BASE_URL: https://api.986310.xyz/v1
+        run: |
+          set -euo pipefail
+          test -n "$RELAY_API_KEY" || {
+            echo "RELAY_API_KEY secret is not configured" >&2
+            exit 1
+          }
+          common_args=(
+            --snapshots artifacts/lua-ablation-source-bundle.json
+            --model relay-gpt-5.6-sol
+            --effort low
+            --case double-tempest-impermanence
+            --case double-tempest-impermanence-extra-returnable
+            --timeout-ms 900000
+            --max-calls 2
+          )
+          node scripts/local-relay-effort-experiment.mjs \
+            "${common_args[@]}" \
+            --evidence-variant card_text_only \
+            --output artifacts/lua-ablation-card-text-only-checkpoint.json
+          node scripts/local-relay-effort-experiment.mjs \
+            "${common_args[@]}" \
+            --evidence-variant card_text_plus_lua \
+            --output artifacts/lua-ablation-card-text-plus-lua-checkpoint.json
+
+      - name: Run non-authoritative offline assertions after paid calls
+        shell: bash
+        run: |
+          set -euo pipefail
+          for variant in card-text-only card-text-plus-lua
+          do
+            node scripts/score-admin-model-experiment.mjs \
+              --report "artifacts/lua-ablation-${variant}-checkpoint.json" \
+              --assertions tests/fixtures/lua-return-to-hand-ablation-goldens.json \
+              --output "artifacts/lua-ablation-${variant}-scored.json"
+          done
+
+      - name: Upload source, preflight, and results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: direct-relay-sol-true-lua-ablation-${{ github.run_id }}
+          path: |
+            artifacts/lua-ablation-source-bundle.json
+            artifacts/lua-ablation-evidence-preflight.json
+            artifacts/lua-ablation-card-text-only-checkpoint.json
+            artifacts/lua-ablation-card-text-plus-lua-checkpoint.json
+            artifacts/lua-ablation-card-text-only-scored.json
+            artifacts/lua-ablation-card-text-plus-lua-scored.json
+          if-no-files-found: warn
+          retention-days: 14

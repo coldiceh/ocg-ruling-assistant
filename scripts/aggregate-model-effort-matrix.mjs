@@ -90,7 +90,7 @@ const MARKDOWN_TEXT = Object.freeze({
       not_planned: "未测试",
     }),
     failureKinds: Object.freeze({ timeout: "超时", empty_response: "空响应" }),
-    variants: Object.freeze({ full: "完整资料", card_text_only: "仅卡文", without_lua: "不含 Lua" }),
+    variants: Object.freeze({ full: "完整资料", card_text_only: "仅卡文", card_text_plus_lua: "卡文＋Lua", without_lua: "不含 Lua" }),
   }),
   en: Object.freeze({
     title: "Model and reasoning-effort evaluation matrix",
@@ -142,7 +142,7 @@ const MARKDOWN_TEXT = Object.freeze({
       not_planned: "Not tested",
     }),
     failureKinds: Object.freeze({ timeout: "Timed out", empty_response: "Empty response" }),
-    variants: Object.freeze({ full: "Full evidence", card_text_only: "Card text only", without_lua: "Without Lua" }),
+    variants: Object.freeze({ full: "Full evidence", card_text_only: "Card text only", card_text_plus_lua: "Card text + Lua", without_lua: "Without Lua" }),
   }),
   ja: Object.freeze({
     title: "モデル・推論強度評価マトリクス",
@@ -194,7 +194,7 @@ const MARKDOWN_TEXT = Object.freeze({
       not_planned: "未実施",
     }),
     failureKinds: Object.freeze({ timeout: "タイムアウト", empty_response: "空の応答" }),
-    variants: Object.freeze({ full: "完全な証拠", card_text_only: "カードテキストのみ", without_lua: "Lua なし" }),
+    variants: Object.freeze({ full: "完全な証拠", card_text_only: "カードテキストのみ", card_text_plus_lua: "カードテキスト＋Lua", without_lua: "Lua なし" }),
   }),
 });
 

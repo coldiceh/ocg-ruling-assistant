@@ -142,7 +142,7 @@ test("historical packets lose unconditional activation review only for resolutio
   );
 });
 
-test("generic evidence projections expose exactly full, no-Lua, and card-text-only views", () => {
+test("generic evidence projections expose full, no-Lua, card-text-only, and card-text-plus-Lua views", () => {
   const archive = createAdminEvidenceArchive({
     evidenceBuckets: {
       cardTexts: [{
@@ -197,6 +197,9 @@ test("generic evidence projections expose exactly full, no-Lua, and card-text-on
   const full = buildFinalRulingInput(snapshot, { evidenceVariant: "full" });
   const withoutLua = buildFinalRulingInput(snapshot, { evidenceVariant: "without_lua" });
   const cardTextOnly = buildFinalRulingInput(snapshot, { evidenceVariant: "card_text_only" });
+  const cardTextPlusLua = buildFinalRulingInput(snapshot, {
+    evidenceVariant: "card_text_plus_lua",
+  });
 
   assert.match(full, /QA_ONLY_ANSWER_CANARY/u);
   assert.match(full, /RULE_ONLY_CANARY/u);
@@ -210,7 +213,13 @@ test("generic evidence projections expose exactly full, no-Lua, and card-text-on
   assert.doesNotMatch(cardTextOnly, /QA_ONLY_(?:QUESTION|ANSWER)_CANARY/u);
   assert.doesNotMatch(cardTextOnly, /RULE_ONLY_CANARY/u);
   assert.doesNotMatch(cardTextOnly, /ARBITRARY_LUA_UNAVAILABLE/u);
-  for (const input of [full, withoutLua, cardTextOnly]) {
+  assert.match(cardTextPlusLua, /QUESTION_ONLY_CANARY/u);
+  assert.match(cardTextPlusLua, /PROVIDED_FACT_ONLY_CANARY/u);
+  assert.match(cardTextPlusLua, /CARD_TEXT_ONLY_CANARY/u);
+  assert.match(cardTextPlusLua, /ARBITRARY_LUA_UNAVAILABLE/u);
+  assert.doesNotMatch(cardTextPlusLua, /QA_ONLY_(?:QUESTION|ANSWER)_CANARY/u);
+  assert.doesNotMatch(cardTextPlusLua, /RULE_ONLY_CANARY/u);
+  for (const input of [full, withoutLua, cardTextOnly, cardTextPlusLua]) {
     assert.doesNotMatch(input, /GOLD_ONLY_(?:ANSWER|EXPECTED)_MUST_NOT_LEAK/u);
   }
 
@@ -232,10 +241,22 @@ test("generic evidence projections expose exactly full, no-Lua, and card-text-on
     ["parsed_card_text"],
   );
   assert.equal(cardPayload.evidenceDecisionPacket.evidenceItems[0].bodyExcerpted, false);
+  const cardPlusLuaPayload = JSON.parse(cardTextPlusLua.split("\n").at(-1));
+  assert.deepEqual(
+    cardPlusLuaPayload.evidenceDecisionPacket,
+    cardPayload.evidenceDecisionPacket,
+    "the two card-text projections must differ only by the independent Lua packet",
+  );
+  assert.ok(cardPlusLuaPayload.legacyLuaSemanticPacket);
 });
 
 test("evidence variants are a strict generic enum", () => {
-  assert.deepEqual(ADMIN_EVIDENCE_VARIANTS, ["full", "card_text_only", "without_lua"]);
+  assert.deepEqual(ADMIN_EVIDENCE_VARIANTS, [
+    "full",
+    "card_text_only",
+    "card_text_plus_lua",
+    "without_lua",
+  ]);
   assert.equal(normalizeAdminEvidenceVariant(undefined), "full");
   assert.throws(
     () => normalizeAdminEvidenceVariant("case-specific-override"),

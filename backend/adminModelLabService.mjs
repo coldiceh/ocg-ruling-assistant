@@ -3645,11 +3645,22 @@ export function buildFinalRulingInput(snapshot, {
   const evidenceDecisionPacket = buildFinalRulingModelEvidencePacket(snapshot, {
     evidenceVariant: variant,
   });
-  const boundedInput = variant === "card_text_only"
+  const isCardTextProjection = variant === "card_text_only"
+    || variant === "card_text_plus_lua";
+  const boundedInput = isCardTextProjection
     ? {
         ...identityAndQuestion,
         cardResolution: compactCardResolutionForModel(evidence.cardResolution),
         evidenceDecisionPacket,
+        ...(adminEvidenceVariantIncludesLegacyLua(variant)
+          ? {
+              legacyLuaSemanticPacket: evidence.legacyLuaSemanticPacket
+                ? projectLegacyLuaSemanticPacketForModel(
+                  evidence.legacyLuaSemanticPacket,
+                )
+                : null,
+            }
+          : {}),
       }
     : {
         ...identityAndQuestion,
@@ -3749,6 +3760,16 @@ function finalRulingInputPreamble(variant, {
         "evidenceDecisionPacket.decisionFocus.mandatoryConstraintReview 是确定性预处理器按题面操作与限制性规则自动生成的必查清单。给出发动或处理合法的确定结论前，必须逐项核对；不得只因卡片 FAQ 说明了可连锁时点就跳过必做处理的发动合法性。",
       ] : []),
       "不得调用网络搜索，不得引用快照外资料。",
+    ];
+  }
+  if (variant === "card_text_plus_lua") {
+    return [
+      "以下是从同一份冻结且通过内容哈希校验的 Evidence Snapshot 生成的卡文＋Lua 消融资料包。",
+      "模型只能使用题面、providedFacts、evidenceDecisionPacket.evidenceItems 中完整展示的卡片文本，以及 legacyLuaSemanticPacket；没有向模型提供 Q&A、机制规则或其他相关资料。",
+      "只能引用 evidenceDecisionPacket.evidenceItems 中实际展示正文的 evidenceId；Lua 不是官方资料，不能加入 evidenceIds，也不能直接作为最终裁定。",
+      "legacyLuaSemanticPacket 只用于发现脚本实现要求检查的条件、原子操作和底层 API 依赖；candidateVerdict 不是答案，verdict=UNKNOWN 也绝不表示不能发动或不能处理。",
+      "使用 Lua 候选前必须读取候选的 sourceBinding，并只绑定 Evidence Snapshot 内 resolvedCards.cid 相同的卡片。activationLegalityChecks.requiredMinimum 是发动前最低合法候选数；必须按题设状态和 selectorSummary 逐项计算，不能把无法接受该操作的卡计入。",
+      "不得调用网络搜索，不得引用资料包外内容。",
     ];
   }
   return [
