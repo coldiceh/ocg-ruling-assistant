@@ -707,6 +707,56 @@ test("four-case pilot applies the relay multiplier before enforcing the CLI cost
   assert.equal(fixture.calls.filter((call) => call.action === "execute").length, 4);
 });
 
+test("batch checkpoints every case and continues after a source request fails", async () => {
+  const fixture = createFetchFixture();
+  const checkpoints = [];
+  let injectedFailure = false;
+  const fetchImpl = async (url, options = {}) => {
+    const body = options.body ? JSON.parse(options.body) : {};
+    if (!injectedFailure && body.action === "create" && body.question === "Q2") {
+      injectedFailure = true;
+      return jsonResponse({
+        ok: false,
+        error: "admin_model_lab_internal_error",
+        message: "injected source failure",
+      }, 500);
+    }
+    return fixture.fetch(url, options);
+  };
+
+  const report = await runAdminModelMatrixBatch({
+    baseUrl: "https://lab.example.test",
+    origin: "https://admin.example.test",
+    password: "test-only-password",
+    questions: [
+      { caseId: "case-a", question: "Q1" },
+      { caseId: "case-b", question: "Q2" },
+      { caseId: "case-c", question: "Q3" },
+    ],
+    fetchImpl,
+    pollIntervalMs: 1,
+    runTimeoutMs: 1_000,
+    estimatedCnyPerFinalRequest: 0,
+    sleep: async () => {},
+    onCaseComplete: async (checkpoint) => checkpoints.push(checkpoint),
+  });
+
+  assert.equal(report.progress.complete, true);
+  assert.equal(report.progress.completedCases, 3);
+  assert.equal(report.reports.length, 3);
+  assert.equal(report.reports[1].caseId, "case-b");
+  assert.equal(report.reports[1].status, "FAILED");
+  assert.equal(report.reports[1].caseError.code, "admin_model_lab_internal_error");
+  assert.equal(report.reports[1].results[0].role, "source");
+  assert.equal(report.reports[1].results[0].status, "FAILED");
+  assert.deepEqual(checkpoints.map((item) => item.progress.completedCases), [1, 2, 3]);
+  assert.equal(checkpoints.every((item) => item.progress.complete === false), true);
+  assert.equal(
+    fixture.calls.some((call) => call.action === "create" && call.body.question === "Q3"),
+    true,
+  );
+});
+
 test("cases-file CLI defaults to four Sol-only single final requests", async () => {
   const fixture = createFetchFixture();
   const output = [];
