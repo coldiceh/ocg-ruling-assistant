@@ -201,7 +201,12 @@ jobs:
               ;;
             *) echo "Unsupported case scope" >&2; exit 1 ;;
           esac
-          if [ "${#case_args[@]}" -ne "$max_calls" ]; then
+          if [ "$(( ${#case_args[@]} % 2 ))" -ne 0 ]; then
+            echo "Selected case arguments must be --case/value pairs" >&2
+            exit 1
+          fi
+          selected_case_count="$(( ${#case_args[@]} / 2 ))"
+          if [ "$selected_case_count" -ne "$max_calls" ]; then
             echo "Selected case count does not match max_calls" >&2
             exit 1
           fi

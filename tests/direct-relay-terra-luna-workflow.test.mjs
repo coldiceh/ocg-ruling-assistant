@@ -69,6 +69,9 @@ test("frozen-source workflow is serial, zero-retry, scope-bounded, and isolated 
   assert.match(workflow, /original-four\)[\s\S]*max_calls=4/u);
   assert.match(workflow, /ten\)[\s\S]*max_calls=10/u);
   assert.match(workflow, /--max-calls "\$max_calls"/u);
+  assert.match(workflow, /selected_case_count="\$\(\( \$\{#case_args\[@\]\} \/ 2 \)\)"/u);
+  assert.match(workflow, /"\$selected_case_count" -ne "\$max_calls"/u);
+  assert.doesNotMatch(workflow, /if \[ "\$\{#case_args\[@\]\}" -ne "\$max_calls" \]/u);
   assert.match(workflow, /Selected case count does not match max_calls/u);
   assert.match(workflow, /--model "\$RELAY_MODEL"/u);
   assert.match(workflow, /--effort "\$REASONING_EFFORT"/u);
