@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-09T07:25:29.620Z",
+  "generatedAt": "2026-08-09T13:18:58.102Z",
   "cardCount": 14342,
   "rulingCount": 42367,
   "cardAliasCount": 35914,
@@ -10,42 +10,15 @@
   "maxQaTotal": 3000,
   "qaSyncSelection": {
     "selectedCount": 3000,
-    "discoveredCount": 11543,
-    "truncatedCount": 8543,
-    "changedSelectedCount": 3,
+    "discoveredCount": 11542,
+    "truncatedCount": 8542,
+    "changedSelectedCount": 0,
     "recentSelectedCount": 120
   },
   "warnings": [],
   "sourceRetirementWarnings": [],
   "dataQualityWarnings": [],
   "changedPaths": [
-    "/data/card/4803",
-    "/data/card/4812",
-    "/data/card/5123",
-    "/data/card/5234",
-    "/data/card/5433",
-    "/data/card/7714",
-    "/data/card/8175",
-    "/data/card/13010",
-    "/data/card/13011",
-    "/data/card/13293",
-    "/data/card/17428",
-    "/data/card/21379",
-    "/data/card/22199",
-    "/data/card/23022",
-    "/data/card/23316",
-    "/data/card/23397",
-    "/data/card/23498",
-    "/data/card/23500",
-    "/data/card/23501",
-    "/data/card/23502",
-    "/data/card/23504",
-    "/data/idx/card",
-    "/data/idx/qa",
-    "/data/meta/index",
-    "/data/meta/recent",
-    "/data/qa/20325",
-    "/data/qa/23649",
-    "/data/qa/24152"
+    "/data/card/17768"
   ]
 }
