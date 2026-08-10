@@ -1502,6 +1502,11 @@ function sanitizeRelayStreamUsage(value, protocolError) {
     "total_tokens",
     "input_tokens",
     "output_tokens",
+    "prompt_cache_hit_tokens",
+    "prompt_cache_miss_tokens",
+    "cache_read_input_tokens",
+    "cache_write_input_tokens",
+    "cache_write_tokens",
   ]) {
     if (value[field] === undefined) continue;
     if (!Number.isFinite(value[field]) || value[field] < 0) {
@@ -1510,9 +1515,9 @@ function sanitizeRelayStreamUsage(value, protocolError) {
     result[field] = value[field];
   }
   for (const [field, allowed] of Object.entries({
-    prompt_tokens_details: ["cached_tokens", "cache_read_input_tokens", "cache_write_input_tokens"],
+    prompt_tokens_details: ["cached_tokens", "cache_read_input_tokens", "cache_write_input_tokens", "cache_write_tokens"],
     completion_tokens_details: ["reasoning_tokens"],
-    input_tokens_details: ["cached_tokens", "cache_read_input_tokens", "cache_write_input_tokens"],
+    input_tokens_details: ["cached_tokens", "cache_read_input_tokens", "cache_write_input_tokens", "cache_write_tokens"],
     output_tokens_details: ["reasoning_tokens"],
   })) {
     if (value[field] === undefined || value[field] === null) continue;

@@ -120,7 +120,7 @@ test("public model environment pins the selected final profile and keeps prepara
 
   assert.equal(publicEnv.MODEL_PROVIDER, "relay");
   assert.equal(publicEnv.RAG_MODEL_PROVIDER, "relay");
-  assert.equal(publicEnv.RAG_MODEL, "gpt-5.6-luna");
+  assert.equal(publicEnv.RAG_MODEL, "gpt-5.6-sol");
   assert.equal(publicEnv.RAG_THINKING_MODE, "enabled");
   assert.equal(publicEnv.RAG_REASONING_EFFORT, "low");
   assert.equal(publicEnv.RAG_CARD_MODEL_PROVIDER, "deepseek");

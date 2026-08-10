@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
-  "pricingVersion": "openai-gpt-5.6-standard-2026-07-09",
-  "effectiveDate": "2026-07-09",
-  "checkedAt": "2026-08-02",
+  "pricingVersion": "openai-gpt-5.6-standard-2026-08-10",
+  "effectiveDate": "2026-08-10",
+  "checkedAt": "2026-08-10",
   "currency": "USD",
   "unit": "per_1m_tokens",
   "processingTier": "standard",
@@ -34,10 +34,10 @@
       }
     },
     "gpt-5.6-terra": {
-      "inputUsdPerMillion": 2.5,
-      "cachedInputUsdPerMillion": 0.25,
-      "cacheWriteUsdPerMillion": 3.125,
-      "outputUsdPerMillion": 15,
+      "inputUsdPerMillion": 2,
+      "cachedInputUsdPerMillion": 0.2,
+      "cacheWriteUsdPerMillion": 2.5,
+      "outputUsdPerMillion": 12,
       "longContext": {
         "thresholdInputTokensExclusive": 272000,
         "inputMultiplier": 2,
@@ -45,10 +45,10 @@
       }
     },
     "gpt-5.6-luna": {
-      "inputUsdPerMillion": 1,
-      "cachedInputUsdPerMillion": 0.1,
-      "cacheWriteUsdPerMillion": 1.25,
-      "outputUsdPerMillion": 6,
+      "inputUsdPerMillion": 0.2,
+      "cachedInputUsdPerMillion": 0.02,
+      "cacheWriteUsdPerMillion": 0.25,
+      "outputUsdPerMillion": 1.2,
       "longContext": {
         "thresholdInputTokensExclusive": 272000,
         "inputMultiplier": 2,

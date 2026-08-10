@@ -1,6 +1,12 @@
 name: Deploy GitHub Pages
 
 on:
+  workflow_call:
+    inputs:
+      checkout_ref:
+        description: Git ref to publish. Callers that push during a workflow should pass main.
+        required: false
+        type: string
   workflow_dispatch:
   push:
     branches:
@@ -21,6 +27,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          # A reusable caller may have pushed a newer commit than its original
+          # GITHUB_SHA. Publishing the requested ref avoids deploying stale data.
+          ref: ${{ inputs.checkout_ref || github.sha }}
 
       - name: Configure Pages
         uses: actions/configure-pages@v6

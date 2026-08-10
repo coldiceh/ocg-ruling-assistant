@@ -62,19 +62,23 @@ test("api_answer_reports_engine_availability_from_backend_configuration", async 
   }
 });
 
-test("api_answer defaults to Luna low and keeps DeepSeek as an optional fallback", async () => {
-  const previousGlm = process.env.GLM_API_KEY;
-  const previousDeepSeek = process.env.DEEPSEEK_API_KEY;
-  const previousRelay = process.env.RELAY_API_KEY;
-  const previousRelayBaseUrl = process.env.RELAY_BASE_URL;
+test("api_answer defaults to Sol low and keeps DeepSeek as an optional fallback", async () => {
+  const restore = captureEnvironment([
+    "GLM_API_KEY",
+    "DEEPSEEK_API_KEY",
+    "RELAY_API_KEY",
+    "RELAY_BASE_URL",
+    "PUBLIC_RULING_MODEL_PROFILE",
+  ]);
   try {
+    delete process.env.PUBLIC_RULING_MODEL_PROFILE;
     process.env.GLM_API_KEY = "test-glm-key";
     process.env.DEEPSEEK_API_KEY = "test-deepseek-key";
     process.env.RELAY_API_KEY = "test-relay-key";
     process.env.RELAY_BASE_URL = "https://relay.example.test/v1";
     const info = createJsonResponse();
     await handler({ method: "GET" }, info);
-    assert.equal(info.payload.defaultRulingModelProfile, "relay-gpt-5.6-luna-low");
+    assert.equal(info.payload.defaultRulingModelProfile, "relay-gpt-5.6-sol-low");
     assert.deepEqual(info.payload.rulingModelProfiles.map((profile) => ({
       id: profile.id,
       available: profile.available,
@@ -86,12 +90,14 @@ test("api_answer defaults to Luna low and keeps DeepSeek as an optional fallback
       { id: "deepseek-v4-flash-high", available: true },
       { id: "deepseek-v4-flash-max", available: true },
     ]);
-    const relay = info.payload.rulingModelProfiles[0];
-    assert.equal(relay.provider, "relay");
-    assert.equal(relay.model, "gpt-5.6-luna");
-    assert.equal(relay.reasoningEffort, "low");
-    assert.equal(relay.thirdParty, true);
-    assert.equal(relay.modelIdentityVerified, false);
+    const defaultProfile = info.payload.rulingModelProfiles.find(
+      (profile) => profile.id === info.payload.defaultRulingModelProfile,
+    );
+    assert.equal(defaultProfile.provider, "relay");
+    assert.equal(defaultProfile.model, "gpt-5.6-sol");
+    assert.equal(defaultProfile.reasoningEffort, "low");
+    assert.equal(defaultProfile.thirdParty, true);
+    assert.equal(defaultProfile.modelIdentityVerified, false);
     assert.doesNotMatch(JSON.stringify(info.payload), /test-relay-key|relay\.example/u);
     assert.equal(info.payload.answerLatency.storage, "unconfigured");
     assert.deepEqual(info.payload.rulingModelProfiles.map((profile) => ({
@@ -126,14 +132,7 @@ test("api_answer defaults to Luna low and keeps DeepSeek as an optional fallback
     assert.equal(invalid.statusCode, 400);
     assert.equal(invalid.payload.code, "invalid_ruling_model_profile");
   } finally {
-    if (previousGlm === undefined) delete process.env.GLM_API_KEY;
-    else process.env.GLM_API_KEY = previousGlm;
-    if (previousDeepSeek === undefined) delete process.env.DEEPSEEK_API_KEY;
-    else process.env.DEEPSEEK_API_KEY = previousDeepSeek;
-    if (previousRelay === undefined) delete process.env.RELAY_API_KEY;
-    else process.env.RELAY_API_KEY = previousRelay;
-    if (previousRelayBaseUrl === undefined) delete process.env.RELAY_BASE_URL;
-    else process.env.RELAY_BASE_URL = previousRelayBaseUrl;
+    restore();
   }
 });
 

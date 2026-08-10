@@ -920,7 +920,8 @@ test("DeepSeek JSON task classifies completed empty and non-JSON content without
         total_tokens: 160,
         reasoning_tokens: 0,
         prompt_cache_hit_tokens: 0,
-        prompt_cache_miss_tokens: 0,
+        prompt_cache_miss_tokens: 120,
+        cache_write_tokens: 0,
       });
       assert.equal(Object.hasOwn(caught, "rawText"), false);
       assert.equal(JSON.stringify(caught).includes("not-json-sensitive-body"), false);

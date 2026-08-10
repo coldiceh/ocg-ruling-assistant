@@ -32,7 +32,7 @@ test("versioned relay screenshot pricing remains explicitly unverified", () => {
 
 test("versioned GPT-5.6 pricing matches current official standard rates", () => {
   const pricing = getModelPricingConfig();
-  assert.equal(pricing.pricingVersion, "openai-gpt-5.6-standard-2026-07-09");
+  assert.equal(pricing.pricingVersion, "openai-gpt-5.6-standard-2026-08-10");
   assert.deepEqual(pricing.models["gpt-5.6-sol"], {
     inputUsdPerMillion: 5,
     cachedInputUsdPerMillion: 0.5,
@@ -44,8 +44,28 @@ test("versioned GPT-5.6 pricing matches current official standard rates", () => 
       outputMultiplier: 1.5,
     },
   });
-  assert.equal(pricing.models["gpt-5.6-terra"].inputUsdPerMillion, 2.5);
-  assert.equal(pricing.models["gpt-5.6-luna"].outputUsdPerMillion, 6);
+  assert.deepEqual(pricing.models["gpt-5.6-terra"], {
+    inputUsdPerMillion: 2,
+    cachedInputUsdPerMillion: 0.2,
+    cacheWriteUsdPerMillion: 2.5,
+    outputUsdPerMillion: 12,
+    longContext: {
+      thresholdInputTokensExclusive: 272000,
+      inputMultiplier: 2,
+      outputMultiplier: 1.5,
+    },
+  });
+  assert.deepEqual(pricing.models["gpt-5.6-luna"], {
+    inputUsdPerMillion: 0.2,
+    cachedInputUsdPerMillion: 0.02,
+    cacheWriteUsdPerMillion: 0.25,
+    outputUsdPerMillion: 1.2,
+    longContext: {
+      thresholdInputTokensExclusive: 272000,
+      inputMultiplier: 2,
+      outputMultiplier: 1.5,
+    },
+  });
   assert.equal(resolvePricedModelId("gpt-5.6"), "gpt-5.6-sol");
 });
 
@@ -71,6 +91,81 @@ test("usage separates cached, cache-write and uncached input without charging re
     reasoningTokens: 400,
     totalTokens: 1500,
   });
+});
+
+test("public benchmark estimates bill every GPT-5.6 input token as uncached without double-charging reasoning", () => {
+  const pricing = getModelPricingConfig();
+  for (const model of ["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"]) {
+    const rates = pricing.models[model];
+    const cost = estimateOpenAIModelCost({
+      model,
+      inputBillingBasis: "all_uncached",
+      usage: {
+        input_tokens: 1000,
+        input_tokens_details: {
+          cached_tokens: 100,
+          cache_write_tokens: 200,
+        },
+        output_tokens: 500,
+        output_tokens_details: { reasoning_tokens: 400 },
+      },
+    });
+    assert.ok(Math.abs(
+      cost.inputCostUsd - 1000 * rates.inputUsdPerMillion / 1_000_000,
+    ) < 1e-12);
+    assert.equal(cost.cachedInputCostUsd, 0);
+    assert.equal(cost.cacheWriteCostUsd, 0);
+    assert.ok(Math.abs(
+      cost.outputCostUsd - 500 * rates.outputUsdPerMillion / 1_000_000,
+    ) < 1e-12);
+    assert.equal(cost.reasoningCostUsd, 0);
+    assert.equal(cost.inputBillingBasis, "all_uncached");
+    assert.equal(cost.billingAssumption, "all_input_uncached");
+    assert.equal(cost.cacheDiscountApplied, false);
+    assert.ok(Math.abs(
+      cost.totalCostUsd - cost.inputCostUsd - cost.outputCostUsd,
+    ) < 1e-12);
+  }
+});
+
+test("all-uncached mode works for DeepSeek and relay even when cache tiers are reported", () => {
+  const deepSeek = estimateDeepSeekModelCost({
+    model: "deepseek-v4-flash",
+    inputBillingBasis: "all_uncached",
+    usage: {
+      prompt_tokens: 1000,
+      prompt_cache_hit_tokens: 100,
+      cache_write_tokens: 200,
+      completion_tokens: 500,
+    },
+    pricingProfile: {
+      pricingVersion: "test-all-uncached-v1",
+      inputCnyPerMillion: 1,
+      outputCnyPerMillion: 2,
+    },
+  });
+  assert.equal(deepSeek.totalCostCny, 0.002);
+  assert.equal(deepSeek.cachedInputCostCny, 0);
+  assert.equal(deepSeek.cacheWriteCostCny, 0);
+  assert.equal(deepSeek.cacheDiscountApplied, false);
+
+  const relayPricing = getRelayModelPricingConfig();
+  const relayRates = relayPricing.models["gpt-5.6-sol"];
+  const relay = estimateRelayModelCost({
+    model: "relay-gpt-5.6-sol",
+    inputBillingBasis: "all_uncached",
+    pricingMultiplier: 1,
+    usage: {
+      prompt_tokens: 1000,
+      prompt_tokens_details: { cached_tokens: 100, cache_write_tokens: 200 },
+      completion_tokens: 500,
+    },
+  });
+  assert.equal(relay.inputCostUsd, 1000 * relayRates.inputUsdPerMillion / 1_000_000);
+  assert.equal(relay.cachedInputCostUsd, 0);
+  assert.equal(relay.cacheWriteCostUsd, 0);
+  assert.equal(relay.outputCostUsd, 500 * relayRates.outputUsdPerMillion / 1_000_000);
+  assert.equal(relay.cacheDiscountApplied, false);
 });
 
 test("reported usage keeps missing provider metrics distinct from a real measurement", () => {
@@ -280,11 +375,11 @@ test("standard cost uses output_tokens once even when reasoning_tokens is presen
       output_tokens_details: { reasoning_tokens: 80 },
     },
   });
-  assert.equal(cost.inputCostUsd, 0.002);
-  assert.equal(cost.cachedInputCostUsd, 0.00005);
-  assert.equal(cost.outputCostUsd, 0.0015);
+  assert.equal(cost.inputCostUsd, 0.0016);
+  assert.equal(cost.cachedInputCostUsd, 0.00004);
+  assert.equal(cost.outputCostUsd, 0.0012);
   assert.equal(cost.reasoningCostUsd, 0);
-  assert.equal(cost.totalCostUsd, 0.00355);
+  assert.equal(cost.totalCostUsd, 0.00284);
   assert.equal(cost.totalCostCny, null);
 });
 
@@ -332,10 +427,10 @@ test("configurable FX is recorded with its version", () => {
     usdToCnyRate: 7.25,
     exchangeRateVersion: "manual-2026-07-27",
   });
-  assert.equal(cost.totalCostUsd, 0.7);
+  assert.equal(cost.totalCostUsd, 0.14);
   assert.equal(cost.exchangeRate, 7.25);
   assert.equal(cost.exchangeRateVersion, "manual-2026-07-27");
-  assert.equal(cost.totalCostCny, 5.075);
+  assert.equal(cost.totalCostCny, 1.015);
 });
 
 test("unknown models and invalid rates fail closed", () => {
@@ -348,4 +443,9 @@ test("unknown models and invalid rates fail closed", () => {
     usage: {},
     usdToCnyRate: 0,
   }), /positive number/u);
+  assert.throws(() => estimateOpenAIModelCost({
+    model: "gpt-5.6-sol",
+    usage: {},
+    inputBillingBasis: "sometimes_cached",
+  }), /Unsupported input billing basis/u);
 });

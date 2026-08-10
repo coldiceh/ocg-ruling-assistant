@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { emptyOperationLegality, validateOperationLegalityModelOutput } from "./operationLegalityAnalyzer.mjs";
 import { RAG_ANSWER_LEVELS } from "./ragRulingPrompt.mjs";
 import { compileRuleScenario } from "./ruleScenarioCompiler.mjs";
@@ -7,6 +8,7 @@ import {
   resolvePublicRulingModelProfile,
 } from "./publicRulingModelConfig.mjs";
 import { requestRelayChatCompletionSse } from "./rulingModelProviders.mjs";
+import { estimateOpenAIModelCost } from "./modelPricing.mjs";
 
 const DEFAULT_DEEPSEEK_BASE_URL = "https://api.deepseek.com";
 const DEFAULT_DEEPSEEK_MODEL = "deepseek-v4-flash";
@@ -17,21 +19,36 @@ const DEFAULT_JSON_TASK_MAX_OUTPUT_TOKENS = 4000;
 const DEFAULT_RAG_RECOVERY_MAX_OUTPUT_TOKENS = 4096;
 const DEFAULT_LIGHTWEIGHT_EXTRACTION_TIMEOUT_MS = 4500;
 const DEFAULT_DAILY_BUDGET_CNY = 10;
-// A missing relay estimate must not consume the entire default daily budget in
-// one reservation. Luna low has stayed well below this amount in the frozen
-// ten-case benchmark, while 0.5 CNY still leaves conservative headroom for a
-// longer public answer. Deployments can override it with the dashboard-backed
-// RELAY_ESTIMATED_CNY_PER_CALL value.
-const DEFAULT_RELAY_ESTIMATED_CNY_PER_CALL = 0.5;
+const DEFAULT_CHATGPT_DAILY_BUDGET_USD = 10;
 const DEFAULT_BUDGET_TIMEZONE = "Asia/Shanghai";
+const BUDGET_LEDGER_TTL_SECONDS = 172800;
+const LEGACY_BUDGET_RECONCILE_LUA = [
+  "local current = tonumber(redis.call('GET', KEYS[1]) or '0')",
+  "local legacy = math.max(0, tonumber(redis.call('GET', KEYS[2]) or '0'))",
+  "local watermark = math.max(0, tonumber(redis.call('GET', KEYS[3]) or '0'))",
+  "local mode = ARGV[1]",
+  "local cap = tonumber(ARGV[2]) or 0",
+  "local ttl = tonumber(ARGV[3]) or 172800",
+  "if mode == 'reset' then",
+  "  current = 0",
+  "elseif mode == 'relay_cap' then",
+  "  if legacy > watermark and legacy > 0 then current = math.max(current, cap) end",
+  "else",
+  "  current = current + math.max(0, legacy - watermark)",
+  "end",
+  "watermark = math.max(watermark, legacy)",
+  "redis.call('SET', KEYS[1], tostring(current), 'EX', ttl)",
+  "redis.call('SET', KEYS[3], tostring(watermark), 'EX', ttl)",
+  "return tostring(current)",
+].join("\n");
 const DEEPSEEK_THINKING_MODES = new Set(["enabled", "disabled"]);
 const DEEPSEEK_REASONING_EFFORTS = new Set(["low", "high", "max"]);
 const RELAY_REASONING_EFFORTS = new Set(["none", "low", "medium", "high", "xhigh", "max"]);
 const PUBLIC_BUDGET_BUCKETS = Object.freeze([
-  Object.freeze({ id: "evidence_preparation:deepseek", stage: "evidence_preparation", provider: "deepseek", label: "DeepSeek 资料准备" }),
-  Object.freeze({ id: "final_ruling:glm", stage: "final_ruling", provider: "glm", label: "GLM 最终裁定" }),
-  Object.freeze({ id: "final_ruling:deepseek", stage: "final_ruling", provider: "deepseek", label: "DeepSeek 最终裁定" }),
-  Object.freeze({ id: "final_ruling:relay", stage: "final_ruling", provider: "relay", label: "第三方中转最终裁定（模型身份未验证）" }),
+  Object.freeze({ id: "evidence_preparation:deepseek", stage: "evidence_preparation", provider: "deepseek", label: "DeepSeek 资料准备", currency: "CNY" }),
+  Object.freeze({ id: "final_ruling:glm", stage: "final_ruling", provider: "glm", label: "GLM 最终裁定", currency: "CNY" }),
+  Object.freeze({ id: "final_ruling:deepseek", stage: "final_ruling", provider: "deepseek", label: "DeepSeek 最终裁定", currency: "CNY" }),
+  Object.freeze({ id: "final_ruling:relay", stage: "final_ruling", provider: "relay", label: "ChatGPT 最终裁定", currency: "USD" }),
 ]);
 const RESTRICTIVE_EVIDENCE_PATTERN = /(?:不能|不可|不得|无法|不可以|不适用|不在场上存在|禁止|不满足|不存在|cannot|can't|must not|may not|not allowed|できません|発動できません)/iu;
 const GROUNDING_MECHANISM_PATTERNS = Object.freeze([
@@ -64,6 +81,9 @@ const memoryBudget = new Map();
 const cardNameExtractionCache = new Map();
 const ruleQueryExtractionCache = new Map();
 const rulebookGroundingCache = new Map();
+const cardNameExtractionFlights = new Map();
+const ruleQueryExtractionFlights = new Map();
+const rulebookGroundingFlights = new Map();
 
 export async function callRagModel({
   prompt,
@@ -134,7 +154,7 @@ export async function callRagModel({
       dryRun: true,
       warnings: [...providerResolution.warnings, ...generationWarnings, ...budget.warnings],
       tokenUsage: {},
-      estimatedCostCny: 0,
+      ...budgetCostResultFields(budget, 0),
       budgetStatus: budget.status,
       generationConfig,
     };
@@ -161,13 +181,14 @@ export async function callRagModel({
     return {
       ...parsed,
       tokenUsage: {},
-      estimatedCostCny: 0,
+      ...budgetCostResultFields(budget, 0),
       budgetStatus: budget.status,
       generationConfig,
     };
   }
 
   if (budget.blocked) {
+    const blockedEstimate = Number(budget.status?.bucket?.estimatedThisCall ?? 0);
     return {
       answer: safeFallbackAnswer("api_daily_budget_exceeded", "今日 API 预算已用完，未调用模型。", "budget_limited"),
       rawText: "",
@@ -178,7 +199,7 @@ export async function callRagModel({
       dryRun: true,
       warnings: [...providerResolution.warnings, ...generationWarnings, "api_daily_budget_exceeded", ...budget.warnings],
       tokenUsage: {},
-      estimatedCostCny: budget.status.estimatedThisCallCny,
+      ...budgetCostResultFields(budget, blockedEstimate),
       budgetStatus: budget.status,
       generationConfig,
     };
@@ -195,7 +216,7 @@ export async function callRagModel({
       dryRun: true,
       warnings: [...providerResolution.warnings, ...generationWarnings, ...budget.warnings],
       tokenUsage: {},
-      estimatedCostCny: 0,
+      ...budgetCostResultFields(budget, 0),
       budgetStatus: budget.status,
       generationConfig,
     };
@@ -305,21 +326,19 @@ export async function callRagModel({
       }
     }
     const tokenUsage = sumTokenUsage(responses.map((item) => normalizeUsage(provider, item.usage)));
-    const reportedTokens = Number(tokenUsage.prompt_tokens || 0)
-      + Number(tokenUsage.completion_tokens || 0)
-      + Number(tokenUsage.total_tokens || 0);
-    const measuredCost = estimateActualCostCny(provider, tokenUsage, env);
-    const actualCost = retainFullReservation
-      ? roundCost(budget.reservedAmountCny || Number(budget.status?.estimatedThisCallCny || 0))
-      : reportedTokens > 0 || provider === "gemini"
-        ? measuredCost
-        : roundCost(budget.reservedAmountCny || Number(budget.status?.estimatedThisCallCny || 0));
-    const spendWarnings = [];
+    const usageComplete = responses.length > 0
+      && responses.every((item) => assessUsageCompleteness(provider, item.usage).complete);
+    const measuredCost = estimateActualCostAmount(provider, tokenUsage, env);
+    const reservedCost = roundCost(budget.reservedAmount || 0);
+    const actualCost = retainFullReservation || !usageComplete ? reservedCost : measuredCost;
+    const spendWarnings = usageComplete
+      ? []
+      : ["provider_usage_incomplete_reservation_retained"];
     let budgetStatus = budget.status;
     try {
       budgetStatus = await recordBudgetSpend({
         preflight: budget,
-        actualCostCny: actualCost,
+        actualCostAmount: actualCost,
         env,
         fetchImpl,
       });
@@ -346,7 +365,7 @@ export async function callRagModel({
     return {
       ...parsed,
       tokenUsage,
-      estimatedCostCny: actualCost,
+      ...budgetCostResultFields(budget, actualCost),
       budgetStatus,
       generationAttempts: responses.map((item, index) => summarizeGenerationAttempt(item, index)),
       generationConfig,
@@ -373,7 +392,7 @@ export async function callRagModel({
         ...budget.warnings,
       ],
       tokenUsage: {},
-      estimatedCostCny: releaseSafe ? 0 : budget.reservedAmountCny,
+      ...budgetCostResultFields(budget, releaseSafe ? 0 : budget.reservedAmount),
       budgetStatus: failedBudgetStatus,
       generationConfig,
     };
@@ -442,7 +461,17 @@ export async function callDeepSeekJsonTask({
       signal,
     });
     const usage = normalizeUsage("deepseek", response.usage);
-    const estimatedCostCny = estimateActualCostCny("deepseek", usage, env);
+    const usageComplete = assessUsageCompleteness("deepseek", response.usage).complete;
+    const measuredCostCny = estimateActualCostAmount("deepseek", usage, env);
+    const conservativeCostCny = budget
+      ? roundCost(budget.reservedAmount || 0)
+      : estimatePreflightCostAmount(
+          "deepseek",
+          normalizedPrompt,
+          resolvedMaxTokens || DEFAULT_JSON_TASK_MAX_OUTPUT_TOKENS,
+          env,
+        );
+    const estimatedCostCny = usageComplete ? measuredCostCny : conservativeCostCny;
     let budgetStatus = budget?.status || null;
     const budgetWarnings = [];
     if (budget) {
@@ -474,7 +503,12 @@ export async function callDeepSeekJsonTask({
       ...parsed,
       rawText: response.rawText,
       usage,
-      warnings: [...(response.warnings || []), ...(budget?.warnings || []), ...budgetWarnings],
+      warnings: [
+        ...(response.warnings || []),
+        ...(budget?.warnings || []),
+        ...budgetWarnings,
+        ...(usageComplete ? [] : ["provider_usage_incomplete_reservation_retained"]),
+      ],
       estimatedCostCny,
       budgetStatus,
     };
@@ -488,6 +522,7 @@ export async function callDeepSeekJsonTask({
 
 export async function callCardNameExtractionModel({
   userQuery,
+  dataRevision = "",
   env = globalThis.process?.env || {},
   modelInvoker,
   fetchImpl = globalThis.fetch,
@@ -560,17 +595,26 @@ export async function callCardNameExtractionModel({
     return emptyCardNameExtractionResult("mock", "mock-card-extractor", true, providerResolution.warnings);
   }
 
-  const cacheKey = extractionCacheKey("card", provider, modelName, userQuery);
-  const cached = readCachedExtraction(cardNameExtractionCache, cacheKey, env);
-  if (cached) {
-    return {
-      ...cached,
-      cacheHit: true,
-      warnings: [...new Set([...(cached.warnings || []), "card_name_model_cache_hit"])],
-    };
-  }
-
-  try {
+  const cacheKey = extractionCacheKey({
+    kind: "card-v2",
+    provider,
+    modelName,
+    dataRevision,
+    input: {
+      prompt,
+      maxTokens,
+      temperature: readNumber(env.RAG_CARD_MODEL_TEMPERATURE, 0),
+    },
+  });
+  return runCachedAuxiliaryCall({
+    cache: cardNameExtractionCache,
+    flights: cardNameExtractionFlights,
+    cacheKey,
+    cacheWarning: "card_name_model_cache_hit",
+    env,
+    signal,
+    work: async (sharedSignal) => {
+      try {
     const timeoutMs = readPositiveNumber(env.RAG_CARD_MODEL_TIMEOUT_MS, DEFAULT_LIGHTWEIGHT_EXTRACTION_TIMEOUT_MS);
     const execution = await runBudgetedAuxiliaryModelCall({
       provider,
@@ -589,7 +633,7 @@ export async function callCardNameExtractionModel({
             fetchImpl,
             temperature: readNumber(env.RAG_CARD_MODEL_TEMPERATURE, 0),
             maxTokensEnvName: "GEMINI_CARD_MODEL_MAX_OUTPUT_TOKENS",
-            signal,
+            signal: sharedSignal,
           })
           : callDeepSeek({
             prompt,
@@ -599,7 +643,7 @@ export async function callCardNameExtractionModel({
             fetchImpl,
             temperature: readNumber(env.RAG_CARD_MODEL_TEMPERATURE, 0),
             thinkingMode: "disabled",
-            signal,
+            signal: sharedSignal,
           }),
         timeoutMs,
         "card_name_model_timeout",
@@ -616,33 +660,42 @@ export async function callCardNameExtractionModel({
       };
     }
     const response = execution.value;
+    const parsedExtraction = validateExtractionResponse(response, "card");
     const result = {
-      candidates: normalizeCardNameCandidates(response.rawText),
+      candidates: parsedExtraction.items,
       rawText: response.rawText,
       providerUsed: provider,
       modelUsed: modelName,
       dryRun: false,
-      warnings: [...providerResolution.warnings, ...execution.warnings, ...(response.warnings || [])],
+      warnings: [
+        ...providerResolution.warnings,
+        ...execution.warnings,
+        ...(response.warnings || []),
+        ...(parsedExtraction.cacheable ? [] : [`card_name_model_not_cached:${parsedExtraction.reason}`]),
+      ],
       tokenUsage: execution.usage,
       estimatedCostCny: execution.estimatedCostCny,
       budgetStatus: execution.budgetStatus,
     };
-    writeCachedExtraction(cardNameExtractionCache, cacheKey, result, env);
-    return result;
-  } catch (error) {
-    return {
-      ...emptyCardNameExtractionResult(provider, modelName, false, [
-        ...providerResolution.warnings,
-        ...(error.budgetWarnings || []),
-        `card_name_model_failed:${safeErrorMessage(error)}`,
-      ]),
-      budgetStatus: error.budgetStatus || null,
-    };
-  }
+    if (parsedExtraction.cacheable) writeCachedExtraction(cardNameExtractionCache, cacheKey, result, env);
+        return result;
+      } catch (error) {
+        return {
+          ...emptyCardNameExtractionResult(provider, modelName, false, [
+            ...providerResolution.warnings,
+            ...(error.budgetWarnings || []),
+            `card_name_model_failed:${safeErrorMessage(error)}`,
+          ]),
+          budgetStatus: error.budgetStatus || null,
+        };
+      }
+    },
+  });
 }
 
 export async function callRuleQueryExtractionModel({
   userQuery,
+  dataRevision = "",
   env = globalThis.process?.env || {},
   modelInvoker,
   fetchImpl = globalThis.fetch,
@@ -715,17 +768,26 @@ export async function callRuleQueryExtractionModel({
     return emptyRuleQueryExtractionResult("mock", "mock-rule-query-extractor", true, providerResolution.warnings);
   }
 
-  const cacheKey = extractionCacheKey("rule", provider, modelName, userQuery);
-  const cached = readCachedExtraction(ruleQueryExtractionCache, cacheKey, env);
-  if (cached) {
-    return {
-      ...cached,
-      cacheHit: true,
-      warnings: [...new Set([...(cached.warnings || []), "rule_query_model_cache_hit"])],
-    };
-  }
-
-  try {
+  const cacheKey = extractionCacheKey({
+    kind: "rule-v2",
+    provider,
+    modelName,
+    dataRevision,
+    input: {
+      prompt,
+      maxTokens,
+      temperature: readNumber(env.RAG_RULE_MODEL_TEMPERATURE, readNumber(env.RAG_CARD_MODEL_TEMPERATURE, 0)),
+    },
+  });
+  return runCachedAuxiliaryCall({
+    cache: ruleQueryExtractionCache,
+    flights: ruleQueryExtractionFlights,
+    cacheKey,
+    cacheWarning: "rule_query_model_cache_hit",
+    env,
+    signal,
+    work: async (sharedSignal) => {
+      try {
     const timeoutMs = readPositiveNumber(env.RAG_RULE_MODEL_TIMEOUT_MS, readPositiveNumber(env.RAG_CARD_MODEL_TIMEOUT_MS, DEFAULT_LIGHTWEIGHT_EXTRACTION_TIMEOUT_MS));
     const execution = await runBudgetedAuxiliaryModelCall({
       provider,
@@ -744,7 +806,7 @@ export async function callRuleQueryExtractionModel({
             fetchImpl,
             temperature: readNumber(env.RAG_RULE_MODEL_TEMPERATURE, readNumber(env.RAG_CARD_MODEL_TEMPERATURE, 0)),
             maxTokensEnvName: "GEMINI_RULE_MODEL_MAX_OUTPUT_TOKENS",
-            signal,
+            signal: sharedSignal,
           })
           : callDeepSeek({
             prompt,
@@ -754,7 +816,7 @@ export async function callRuleQueryExtractionModel({
             fetchImpl,
             temperature: readNumber(env.RAG_RULE_MODEL_TEMPERATURE, readNumber(env.RAG_CARD_MODEL_TEMPERATURE, 0)),
             thinkingMode: "disabled",
-            signal,
+            signal: sharedSignal,
           }),
         timeoutMs,
         "rule_query_model_timeout",
@@ -771,29 +833,37 @@ export async function callRuleQueryExtractionModel({
       };
     }
     const response = execution.value;
+    const parsedExtraction = validateExtractionResponse(response, "rule");
     const result = {
-      queries: normalizeRuleSearchQueries(response.rawText),
+      queries: parsedExtraction.items,
       rawText: response.rawText,
       providerUsed: provider,
       modelUsed: modelName,
       dryRun: false,
-      warnings: [...providerResolution.warnings, ...execution.warnings, ...(response.warnings || [])],
+      warnings: [
+        ...providerResolution.warnings,
+        ...execution.warnings,
+        ...(response.warnings || []),
+        ...(parsedExtraction.cacheable ? [] : [`rule_query_model_not_cached:${parsedExtraction.reason}`]),
+      ],
       tokenUsage: execution.usage,
       estimatedCostCny: execution.estimatedCostCny,
       budgetStatus: execution.budgetStatus,
     };
-    writeCachedExtraction(ruleQueryExtractionCache, cacheKey, result, env);
-    return result;
-  } catch (error) {
-    return {
-      ...emptyRuleQueryExtractionResult(provider, modelName, false, [
-        ...providerResolution.warnings,
-        ...(error.budgetWarnings || []),
-        `rule_query_model_failed:${safeErrorMessage(error)}`,
-      ]),
-      budgetStatus: error.budgetStatus || null,
-    };
-  }
+    if (parsedExtraction.cacheable) writeCachedExtraction(ruleQueryExtractionCache, cacheKey, result, env);
+        return result;
+      } catch (error) {
+        return {
+          ...emptyRuleQueryExtractionResult(provider, modelName, false, [
+            ...providerResolution.warnings,
+            ...(error.budgetWarnings || []),
+            `rule_query_model_failed:${safeErrorMessage(error)}`,
+          ]),
+          budgetStatus: error.budgetStatus || null,
+        };
+      }
+    },
+  });
 }
 
 export async function callRulebookGroundingModel({
@@ -801,6 +871,7 @@ export async function callRulebookGroundingModel({
   cardTexts = [],
   ruleEvidence = [],
   qaEvidence = [],
+  dataRevision = "",
   env = globalThis.process?.env || {},
   modelInvoker,
   fetchImpl = globalThis.fetch,
@@ -945,19 +1016,28 @@ export async function callRulebookGroundingModel({
     );
   }
 
-  const cacheInput = `${userQuery}\n${candidates.map((item) => item.id).join("|")}\n${(cardTexts || []).map((item) => item.id || item.title || "").join("|")}`;
-  const cacheKey = extractionCacheKey("rulebook-grounding-v9", provider, modelName, cacheInput);
-  const cached = readCachedExtraction(rulebookGroundingCache, cacheKey, env);
-  if (cached) {
-    return {
-      ...cached,
-      cacheHit: true,
-      estimatedCostCny: 0,
-      warnings: [...new Set([...(cached.warnings || []), "rulebook_grounding_model_cache_hit"])],
-    };
-  }
-
-  const budget = await buildBudgetPreflight({
+  const cacheKey = extractionCacheKey({
+    kind: "rulebook-grounding-v10",
+    provider,
+    modelName,
+    dataRevision,
+    input: {
+      prompt,
+      repairPrompt,
+      maxTokens,
+      repairMaxTokens,
+      focusedReviewEnabled,
+    },
+  });
+  return runCachedAuxiliaryCall({
+    cache: rulebookGroundingCache,
+    flights: rulebookGroundingFlights,
+    cacheKey,
+    cacheWarning: "rulebook_grounding_model_cache_hit",
+    env,
+    signal,
+    work: async (sharedSignal) => {
+      const budget = await buildBudgetPreflight({
     provider,
     stage: "evidence_preparation",
     prompt: repairPrompt ? prompt + "\n" + repairPrompt : prompt,
@@ -967,24 +1047,24 @@ export async function callRulebookGroundingModel({
     now,
     trackSpend: true,
   });
-  if (budget.blocked) {
-    return {
-      ...emptyRulebookGroundingResult(provider, modelName, true, [
-        ...providerResolution.warnings,
-        ...budget.warnings,
-        "api_daily_budget_exceeded_rulebook_grounding_skipped",
-      ], priorityConstraintEvidence),
-      budgetStatus: budget.status,
-    };
-  }
+      if (budget.blocked) {
+        return {
+          ...emptyRulebookGroundingResult(provider, modelName, true, [
+            ...providerResolution.warnings,
+            ...budget.warnings,
+            "api_daily_budget_exceeded_rulebook_grounding_skipped",
+          ], priorityConstraintEvidence),
+          budgetStatus: budget.status,
+        };
+      }
 
-  let remoteCallCompleted = false;
-  let allFailedCallsWereReleaseSafe = false;
-  let budgetStatus = budget.status;
-  let tokenUsage = {};
-  let actualCost = 0;
-  const spendWarnings = [];
-  try {
+      let remoteCallCompleted = false;
+      let allFailedCallsWereReleaseSafe = false;
+      let budgetStatus = budget.status;
+      let tokenUsage = {};
+      let actualCost = 0;
+      const spendWarnings = [];
+      try {
     const timeoutMs = readPositiveNumber(env.RAG_RULEBOOK_MODEL_TIMEOUT_MS, 10000);
     const invokeGrounding = (modelPrompt, outputTokens) => provider === "gemini"
       ? callGemini({
@@ -995,7 +1075,7 @@ export async function callRulebookGroundingModel({
         fetchImpl,
         temperature: 0,
         maxTokensEnvName: "GEMINI_RULEBOOK_MODEL_MAX_OUTPUT_TOKENS",
-        signal,
+        signal: sharedSignal,
       })
       : callDeepSeek({
         prompt: modelPrompt,
@@ -1005,7 +1085,7 @@ export async function callRulebookGroundingModel({
         fetchImpl,
         temperature: 0,
         thinkingMode: "disabled",
-        signal,
+        signal: sharedSignal,
       });
     const primaryTask = withTimeout(
       invokeGrounding(prompt, maxTokens),
@@ -1034,15 +1114,15 @@ export async function callRulebookGroundingModel({
       && attemptedOutcomes.every((outcome) => (
         outcome.status === "rejected"
         && isBudgetReservationReleaseSafe(outcome.reason)
-      ));
+    ));
     tokenUsage = sumTokenUsage(responses.map((item) => normalizeUsage(provider, item.usage)));
-    const reportedTokens = Number(tokenUsage.prompt_tokens || 0)
-      + Number(tokenUsage.completion_tokens || 0)
-      + Number(tokenUsage.total_tokens || 0);
-    const measuredCost = estimateActualCostCny(provider, tokenUsage, env);
-    actualCost = reportedTokens > 0 || provider === "gemini"
+    const usageComplete = responses.length > 0
+      && responses.every((item) => assessUsageCompleteness(provider, item.usage).complete);
+    const measuredCost = estimateActualCostAmount(provider, tokenUsage, env);
+    actualCost = usageComplete
       ? measuredCost
-      : roundCost(budget.reservedAmountCny || Number(budget.status?.estimatedThisCallCny || 0));
+      : roundCost(budget.reservedAmount || 0);
+    if (!usageComplete) spendWarnings.push("provider_usage_incomplete_reservation_retained");
     if (remoteCallCompleted) {
       try {
         budgetStatus = await recordBudgetSpend({ preflight: budget, actualCostCny: actualCost, env, fetchImpl });
@@ -1084,31 +1164,41 @@ export async function callRulebookGroundingModel({
       estimatedCostCny: actualCost,
       budgetStatus,
     };
-    if (operationLegality.hasGroundedChecks && !operationLegality.hasUnresolvedConstraints) {
+    const responseCacheable = rulebookResponsesAreCacheable(attemptedOutcomes);
+    if (responseCacheable
+        && operationLegality.hasGroundedChecks
+        && !operationLegality.hasUnresolvedConstraints) {
       writeCachedExtraction(rulebookGroundingCache, cacheKey, result, env);
     } else {
-      result.warnings = [...new Set([...result.warnings, "rulebook_grounding_unresolved_not_cached"])];
+      result.warnings = [...new Set([
+        ...result.warnings,
+        responseCacheable
+          ? "rulebook_grounding_unresolved_not_cached"
+          : "rulebook_grounding_response_invalid_not_cached",
+      ])];
     }
-    return result;
-  } catch (error) {
-    const failedBudgetStatus = allFailedCallsWereReleaseSafe
-      ? await releaseBudgetReservation({ preflight: budget, env, fetchImpl }).catch(() => budget.status)
-      : budgetStatus;
-    return {
-      ...emptyRulebookGroundingResult(provider, modelName, false, [
-        ...providerResolution.warnings,
-        ...budget.warnings,
-        ...spendWarnings,
-        ...(!remoteCallCompleted && !allFailedCallsWereReleaseSafe
-          ? ["budget_reservation_retained_after_ambiguous_remote_failure"]
-          : []),
-        `rulebook_grounding_model_failed:${safeErrorMessage(error)}`,
-      ], priorityConstraintEvidence),
-      tokenUsage,
-      estimatedCostCny: actualCost,
-      budgetStatus: failedBudgetStatus,
-    };
-  }
+        return result;
+      } catch (error) {
+        const failedBudgetStatus = allFailedCallsWereReleaseSafe
+          ? await releaseBudgetReservation({ preflight: budget, env, fetchImpl }).catch(() => budget.status)
+          : budgetStatus;
+        return {
+          ...emptyRulebookGroundingResult(provider, modelName, false, [
+            ...providerResolution.warnings,
+            ...budget.warnings,
+            ...spendWarnings,
+            ...(!remoteCallCompleted && !allFailedCallsWereReleaseSafe
+              ? ["budget_reservation_retained_after_ambiguous_remote_failure"]
+              : []),
+            `rulebook_grounding_model_failed:${safeErrorMessage(error)}`,
+          ], priorityConstraintEvidence),
+          tokenUsage,
+          estimatedCostCny: actualCost,
+          budgetStatus: failedBudgetStatus,
+        };
+      }
+    },
+  });
 }
 
 export function resolveRagProvider(env = {}) {
@@ -1261,14 +1351,12 @@ export function resolveRulebookGroundingProvider(env = {}) {
 export function estimateDeepSeekCostCny(usage = {}, env = {}) {
   const inputPrice = readTieredProviderNumber(env, "DEEPSEEK", "INPUT_CNY_PER_MTOK", 1);
   const outputPrice = readTieredProviderNumber(env, "DEEPSEEK", "OUTPUT_CNY_PER_MTOK", 2);
-  const cacheHitPrice = readTieredProviderNumber(env, "DEEPSEEK", "CACHE_HIT_INPUT_CNY_PER_MTOK", 0.02);
   const promptTokens = Number(usage.prompt_tokens || 0);
   const completionTokens = Number(usage.completion_tokens || 0);
-  const cacheHit = Number(usage.prompt_cache_hit_tokens || 0);
-  const cacheMiss = Number(usage.prompt_cache_miss_tokens || 0);
-  const inputCost = cacheHit + cacheMiss > 0
-    ? mtok(cacheHit) * cacheHitPrice + mtok(cacheMiss) * inputPrice
-    : mtok(promptTokens) * inputPrice;
+  // Public budgets intentionally assume every input token missed cache. Cache
+  // telemetry is retained separately, but must never make the displayed or
+  // reserved amount less conservative.
+  const inputCost = mtok(promptTokens) * inputPrice;
   return roundCost(inputCost + mtok(completionTokens) * outputPrice);
 }
 
@@ -1433,14 +1521,10 @@ async function callDeepSeek({
 export function estimateGlmCostCny(usage = {}, env = {}) {
   const inputPrice = readNumber(env.GLM_INPUT_CNY_PER_MTOK, 8);
   const outputPrice = readNumber(env.GLM_OUTPUT_CNY_PER_MTOK, 28);
-  const cacheHitPrice = readNumber(env.GLM_CACHE_HIT_INPUT_CNY_PER_MTOK, 2);
   const promptTokens = Number(usage.prompt_tokens || 0);
   const completionTokens = Number(usage.completion_tokens || 0);
-  const cacheHit = Number(usage.prompt_cache_hit_tokens || 0);
-  const uncachedInput = Math.max(0, promptTokens - cacheHit);
   return roundCost(
-    mtok(cacheHit) * cacheHitPrice
-    + mtok(uncachedInput) * inputPrice
+    mtok(promptTokens) * inputPrice
     + mtok(completionTokens) * outputPrice,
   );
 }
@@ -1669,10 +1753,14 @@ async function callGemini({ prompt, env, modelName, maxTokens, fetchImpl, temper
   const response = await postJson(fetchImpl, endpoint, { "content-type": "application/json" }, body, { signal });
   assertProviderHttpResponse(response, "gemini");
   const payload = await response.json();
+  const finishReason = String(payload?.candidates?.[0]?.finishReason || "");
   return {
     rawText: (payload?.candidates?.[0]?.content?.parts || []).map((part) => part.text || "").join("\n"),
+    finishReason,
     usage: payload?.usageMetadata || {},
-    warnings: [],
+    warnings: /MAX_TOKENS|TOKEN_LIMIT/iu.test(finishReason)
+      ? ["gemini_output_truncated_by_token_limit"]
+      : [],
   };
 }
 
@@ -2241,11 +2329,12 @@ async function buildBudgetPreflight({ provider, stage, prompt, maxTokens, env, f
   const config = budgetConfig(env);
   const bucket = resolveBudgetBucket(stage, provider, env);
   const bucketConfig = budgetBucketConfig(env, bucket);
+  const appliesToGlobalCnyBudget = bucketConfig.currency === "CNY";
   const dayKey = budgetDayKey(config.timezone, now);
   const bucketDayKey = budgetBucketDayKey(config.timezone, now, bucket.id);
   let storage = budgetStorage(env);
-  const warnings = budgetStorageWarnings(storage);
-  const estimated = estimatePreflightCostCny(provider, prompt, maxTokens, env);
+  const warnings = budgetStorageWarnings(storage, env);
+  const estimated = estimatePreflightCostAmount(provider, prompt, maxTokens, env);
   const emptyResult = ({ blocked, spent, bucketSpent }) => ({
     config,
     bucketConfig,
@@ -2254,8 +2343,12 @@ async function buildBudgetPreflight({ provider, stage, prompt, maxTokens, env, f
     dayKey,
     bucketDayKey,
     blocked,
+    reservedAmount: 0,
     reservedAmountCny: 0,
+    reservedAmountUsd: 0,
+    bucketReservedAmount: 0,
     bucketReservedAmountCny: 0,
+    bucketReservedAmountUsd: 0,
     warnings,
     status: budgetStatusPayload({
       config,
@@ -2282,7 +2375,7 @@ async function buildBudgetPreflight({ provider, stage, prompt, maxTokens, env, f
   let bucketSpent = 0;
   let blocked = false;
   let reservedAmountCny = 0;
-  let bucketReservedAmountCny = 0;
+  let bucketReservedAmount = 0;
   try {
     [spent, bucketSpent] = await Promise.all([
       readBudgetSpent({ storage, dayKey, env, fetchImpl }),
@@ -2303,13 +2396,15 @@ async function buildBudgetPreflight({ provider, stage, prompt, maxTokens, env, f
     }
   }
 
-  const totalLimitExceeded = config.dailyBudgetCny > 0 && spent + estimated > config.dailyBudgetCny;
-  const bucketLimitExceeded = bucketConfig.dailyBudgetCny !== null
-    && bucketConfig.dailyBudgetCny > 0
-    && bucketSpent + estimated > bucketConfig.dailyBudgetCny;
+  const totalLimitExceeded = appliesToGlobalCnyBudget
+    && config.dailyBudgetCny > 0
+    && spent + estimated > config.dailyBudgetCny;
+  const bucketLimitExceeded = bucketConfig.dailyBudgetAmount !== null
+    && bucketConfig.dailyBudgetAmount > 0
+    && bucketSpent + estimated > bucketConfig.dailyBudgetAmount;
   if (!blocked && (totalLimitExceeded || bucketLimitExceeded)) blocked = true;
 
-  if (!blocked && estimated > 0) {
+  if (!blocked && appliesToGlobalCnyBudget && estimated > 0) {
     spent = await addBudgetSpent({ storage, dayKey, amount: estimated, env, fetchImpl });
     reservedAmountCny = estimated;
     if (config.dailyBudgetCny > 0 && spent > config.dailyBudgetCny) {
@@ -2323,23 +2418,26 @@ async function buildBudgetPreflight({ provider, stage, prompt, maxTokens, env, f
   if (!blocked && estimated > 0) {
     try {
       bucketSpent = await addBudgetSpent({ storage, dayKey: bucketDayKey, amount: estimated, env, fetchImpl });
-      bucketReservedAmountCny = estimated;
-      if (bucketConfig.dailyBudgetCny !== null
-          && bucketConfig.dailyBudgetCny > 0
-          && bucketSpent > bucketConfig.dailyBudgetCny) {
+      bucketReservedAmount = estimated;
+      if (bucketConfig.dailyBudgetAmount !== null
+          && bucketConfig.dailyBudgetAmount > 0
+          && bucketSpent > bucketConfig.dailyBudgetAmount) {
         await addBudgetSpent({ storage, dayKey: bucketDayKey, amount: -estimated, env, fetchImpl }).catch(() => null);
         bucketSpent = await readBudgetSpent({ storage, dayKey: bucketDayKey, env, fetchImpl }).catch(() => bucketSpent);
         blocked = true;
+        bucketReservedAmount = 0;
       }
     } catch (error) {
       warnings.push(`budget_bucket_storage_unavailable:${safeErrorMessage(error)}`);
       blocked = config.mode === "hard" || requiresPersistentBudget(env);
     }
-    if (blocked && reservedAmountCny) {
-      await addBudgetSpent({ storage, dayKey, amount: -reservedAmountCny, env, fetchImpl }).catch(() => null);
-      spent = await readBudgetSpent({ storage, dayKey, env, fetchImpl }).catch(() => spent);
-      reservedAmountCny = 0;
-      bucketReservedAmountCny = 0;
+    if (blocked) {
+      if (reservedAmountCny) {
+        await addBudgetSpent({ storage, dayKey, amount: -reservedAmountCny, env, fetchImpl }).catch(() => null);
+        spent = await readBudgetSpent({ storage, dayKey, env, fetchImpl }).catch(() => spent);
+        reservedAmountCny = 0;
+      }
+      bucketReservedAmount = 0;
     }
   }
 
@@ -2351,8 +2449,12 @@ async function buildBudgetPreflight({ provider, stage, prompt, maxTokens, env, f
     dayKey,
     bucketDayKey,
     blocked,
+    reservedAmount: bucketReservedAmount,
     reservedAmountCny,
-    bucketReservedAmountCny,
+    reservedAmountUsd: bucketConfig.currency === "USD" ? bucketReservedAmount : 0,
+    bucketReservedAmount,
+    bucketReservedAmountCny: bucketConfig.currency === "CNY" ? bucketReservedAmount : 0,
+    bucketReservedAmountUsd: bucketConfig.currency === "USD" ? bucketReservedAmount : 0,
     warnings,
     status: budgetStatusPayload({
       config,
@@ -2401,17 +2503,16 @@ async function runBudgetedAuxiliaryModelCall({
   try {
     const value = await invoke();
     const usage = normalizeUsage(provider, value?.usage || {});
-    const reportedTokens = Number(usage.prompt_tokens || 0)
-      + Number(usage.completion_tokens || 0)
-      + Number(usage.total_tokens || 0);
-    const measuredCost = estimateActualCostCny(provider, usage, env);
-    // Some providers omit usage from otherwise successful responses. In that
-    // case keep the preflight estimate instead of silently refunding a paid call.
-    const estimatedCostCny = reportedTokens > 0 || provider === "gemini"
+    const usageComplete = assessUsageCompleteness(provider, value?.usage || {}).complete;
+    const measuredCost = estimateActualCostAmount(provider, usage, env);
+    const estimatedCostCny = usageComplete
       ? measuredCost
-      : roundCost(budget.reservedAmountCny || Number(budget.status?.estimatedThisCallCny || 0));
+      : roundCost(budget.reservedAmount || 0);
     let budgetStatus = budget.status;
-    const warnings = [...budget.warnings];
+    const warnings = [
+      ...budget.warnings,
+      ...(usageComplete ? [] : ["provider_usage_incomplete_reservation_retained"]),
+    ];
     try {
       budgetStatus = await recordBudgetSpend({ preflight: budget, actualCostCny: estimatedCostCny, env, fetchImpl });
     } catch (error) {
@@ -2440,27 +2541,42 @@ async function runBudgetedAuxiliaryModelCall({
   }
 }
 
-async function recordBudgetSpend({ preflight, actualCostCny, env, fetchImpl }) {
+async function recordBudgetSpend({ preflight, actualCostAmount, actualCostCny, env, fetchImpl }) {
+  const amount = roundCost(actualCostAmount ?? actualCostCny ?? 0);
+  const appliesToGlobalCnyBudget = preflight.bucketConfig?.currency === "CNY";
   if (preflight.storage === "unconfigured") {
     return {
       ...preflight.status,
-      estimatedThisCallCny: actualCostCny,
+      estimatedThisCallCny: appliesToGlobalCnyBudget ? amount : 0,
       limitEnforced: preflight.blocked,
+      bucket: budgetBucketStatusPayload({
+        bucket: preflight.bucket,
+        bucketConfig: preflight.bucketConfig,
+        spent: null,
+        estimated: amount,
+        blocked: preflight.blocked,
+      }),
     };
   }
-  const delta = preflight.reservedAmountCny
-    ? actualCostCny - preflight.reservedAmountCny
-    : actualCostCny;
-  const spent = await addBudgetSpent({
-    storage: preflight.storage,
-    dayKey: preflight.dayKey,
-    amount: delta,
-    env,
-    fetchImpl,
-  });
-  const bucketDelta = preflight.bucketReservedAmountCny
-    ? actualCostCny - preflight.bucketReservedAmountCny
-    : actualCostCny;
+  const spent = appliesToGlobalCnyBudget
+    ? await addBudgetSpent({
+        storage: preflight.storage,
+        dayKey: preflight.dayKey,
+        amount: preflight.reservedAmountCny
+          ? amount - preflight.reservedAmountCny
+          : amount,
+        env,
+        fetchImpl,
+      })
+    : await readBudgetSpent({
+        storage: preflight.storage,
+        dayKey: preflight.dayKey,
+        env,
+        fetchImpl,
+      });
+  const bucketDelta = preflight.bucketReservedAmount
+    ? amount - preflight.bucketReservedAmount
+    : amount;
   const bucketSpent = await addBudgetSpent({
     storage: preflight.storage,
     dayKey: preflight.bucketDayKey,
@@ -2471,20 +2587,23 @@ async function recordBudgetSpend({ preflight, actualCostCny, env, fetchImpl }) {
   return {
     ...preflight.status,
     spentTodayCny: roundCost(spent),
-    estimatedThisCallCny: actualCostCny,
+    remainingTodayCny: preflight.config.dailyBudgetCny > 0
+      ? roundCost(Math.max(0, preflight.config.dailyBudgetCny - spent))
+      : null,
+    estimatedThisCallCny: appliesToGlobalCnyBudget ? amount : 0,
     limitEnforced: preflight.blocked,
     bucket: budgetBucketStatusPayload({
       bucket: preflight.bucket,
       bucketConfig: preflight.bucketConfig,
       spent: bucketSpent,
-      estimated: actualCostCny,
+      estimated: amount,
       blocked: preflight.blocked,
     }),
   };
 }
 
 async function releaseBudgetReservation({ preflight, env, fetchImpl }) {
-  if (!preflight.reservedAmountCny && !preflight.bucketReservedAmountCny) return preflight.status;
+  if (!preflight.reservedAmountCny && !preflight.bucketReservedAmount) return preflight.status;
   const [spent, bucketSpent] = await Promise.all([
     preflight.reservedAmountCny
       ? addBudgetSpent({
@@ -2495,11 +2614,11 @@ async function releaseBudgetReservation({ preflight, env, fetchImpl }) {
         fetchImpl,
       })
       : readBudgetSpent({ storage: preflight.storage, dayKey: preflight.dayKey, env, fetchImpl }),
-    preflight.bucketReservedAmountCny
+    preflight.bucketReservedAmount
       ? addBudgetSpent({
         storage: preflight.storage,
         dayKey: preflight.bucketDayKey,
-        amount: -preflight.bucketReservedAmountCny,
+        amount: -preflight.bucketReservedAmount,
         env,
         fetchImpl,
       })
@@ -2508,6 +2627,9 @@ async function releaseBudgetReservation({ preflight, env, fetchImpl }) {
   return {
     ...preflight.status,
     spentTodayCny: roundCost(spent),
+    remainingTodayCny: preflight.config.dailyBudgetCny > 0
+      ? roundCost(Math.max(0, preflight.config.dailyBudgetCny - spent))
+      : null,
     estimatedThisCallCny: 0,
     bucket: budgetBucketStatusPayload({
       bucket: preflight.bucket,
@@ -2531,23 +2653,87 @@ function budgetConfig(env) {
 
 function budgetStorage(env) {
   const redis = redisConfig(env);
+  if (redis.error) return "unconfigured";
   if (redis.url && redis.token) return "redis";
   return requiresPersistentBudget(env) ? "unconfigured" : "memory";
 }
 
 async function readBudgetSpent({ storage, dayKey, env, fetchImpl }) {
   if (storage === "redis" && typeof fetchImpl === "function") {
+    if (legacyBudgetMigration(dayKey)) {
+      return reconcileLegacyBudgetSpent({ dayKey, env, fetchImpl });
+    }
     const result = await redisCommand(env, fetchImpl, ["GET", dayKey]);
     return Number(result || 0) || 0;
   }
-  return Number(memoryBudget.get(dayKey) || 0);
+  const migration = legacyBudgetMigration(dayKey);
+  if (!migration) return Number(memoryBudget.get(dayKey) || 0);
+  return reconcileLegacyMemoryBudget(dayKey, migration);
+}
+
+async function reconcileLegacyBudgetSpent({ dayKey, env, fetchImpl, reset = false }) {
+  const migration = legacyBudgetMigration(dayKey);
+  if (!migration) return 0;
+  const result = await redisCommand(env, fetchImpl, [
+    "EVAL",
+    LEGACY_BUDGET_RECONCILE_LUA,
+    "3",
+    dayKey,
+    migration.legacyKey,
+    legacyBudgetWatermarkKey(dayKey),
+    reset ? "reset" : migration.mode,
+    String(DEFAULT_CHATGPT_DAILY_BUDGET_USD),
+    String(BUDGET_LEDGER_TTL_SECONDS),
+  ]);
+  return Number(result || 0) || 0;
+}
+
+function reconcileLegacyMemoryBudget(dayKey, migration, { reset = false } = {}) {
+  const watermarkKey = legacyBudgetWatermarkKey(dayKey);
+  let current = Math.max(0, Number(memoryBudget.get(dayKey) || 0));
+  const legacy = Math.max(0, Number(memoryBudget.get(migration.legacyKey) || 0));
+  const watermark = Math.max(0, Number(memoryBudget.get(watermarkKey) || 0));
+  if (reset) {
+    current = 0;
+  } else if (migration.mode === "relay_cap") {
+    if (legacy > watermark && legacy > 0) current = Math.max(current, DEFAULT_CHATGPT_DAILY_BUDGET_USD);
+  } else {
+    current += Math.max(0, legacy - watermark);
+  }
+  memoryBudget.set(dayKey, current);
+  memoryBudget.set(watermarkKey, Math.max(watermark, legacy));
+  return current;
+}
+
+function legacyBudgetMigration(dayKey) {
+  const total = String(dayKey || "").match(/^rag-api-budget:v3:(\d{4}-\d{2}-\d{2}):cny-total$/u);
+  if (total) {
+    return {
+      legacyKey: `rag-api-budget:${total[1]}`,
+      mode: "delta",
+    };
+  }
+  const bucket = String(dayKey || "").match(/^rag-api-budget:v3:(\d{4}-\d{2}-\d{2}):(.+):(cny|usd)$/u);
+  if (!bucket) return null;
+  const [, date, bucketId, currency] = bucket;
+  return {
+    legacyKey: `rag-api-budget:v2:${date}:${bucketId}`,
+    // A legacy relay amount was recorded in CNY and cannot be safely converted
+    // into the new USD ledger. Any positive legacy spend therefore closes the
+    // $10 public pool for the remainder of that migration day.
+    mode: currency === "usd" ? "relay_cap" : "delta",
+  };
+}
+
+function legacyBudgetWatermarkKey(dayKey) {
+  return `${dayKey}:legacy-watermark`;
 }
 
 async function addBudgetSpent({ storage, dayKey, amount, env, fetchImpl }) {
   if (!Number.isFinite(amount) || amount === 0) return readBudgetSpent({ storage, dayKey, env, fetchImpl });
   if (storage === "redis" && typeof fetchImpl === "function") {
     const result = await redisCommand(env, fetchImpl, ["INCRBYFLOAT", dayKey, String(amount)]);
-    await redisCommand(env, fetchImpl, ["EXPIRE", dayKey, "172800"]);
+    await redisCommand(env, fetchImpl, ["EXPIRE", dayKey, String(BUDGET_LEDGER_TTL_SECONDS)]);
     return Number(result || 0) || 0;
   }
   const next = Math.max(0, Number(memoryBudget.get(dayKey) || 0) + amount);
@@ -2557,8 +2743,15 @@ async function addBudgetSpent({ storage, dayKey, amount, env, fetchImpl }) {
 
 async function setBudgetSpent({ storage, dayKey, value, env, fetchImpl }) {
   const next = Math.max(0, Number(value || 0));
+  const migration = legacyBudgetMigration(dayKey);
+  if (migration && next === 0) {
+    if (storage === "redis" && typeof fetchImpl === "function") {
+      return reconcileLegacyBudgetSpent({ dayKey, env, fetchImpl, reset: true });
+    }
+    return reconcileLegacyMemoryBudget(dayKey, migration, { reset: true });
+  }
   if (storage === "redis" && typeof fetchImpl === "function") {
-    await redisCommand(env, fetchImpl, ["SET", dayKey, String(next), "EX", "172800"]);
+    await redisCommand(env, fetchImpl, ["SET", dayKey, String(next), "EX", String(BUDGET_LEDGER_TTL_SECONDS)]);
     return next;
   }
   memoryBudget.set(dayKey, next);
@@ -2582,31 +2775,55 @@ async function redisCommand(env, fetchImpl, command) {
 }
 
 function redisConfig(env = {}) {
-  return {
-    url: String(env.UPSTASH_REDIS_REST_URL || env.KV_REST_API_URL || env.REDIS_REST_API_URL || "").trim(),
-    token: String(env.UPSTASH_REDIS_REST_TOKEN || env.KV_REST_API_TOKEN || env.REDIS_REST_API_TOKEN || "").trim(),
-  };
+  const aliases = [
+    ["UPSTASH_BUDGET_KV_REST_API_URL", "UPSTASH_BUDGET_KV_REST_API_TOKEN"],
+    ["UPSTASH_REDIS_REST_URL", "UPSTASH_REDIS_REST_TOKEN"],
+    ["KV_REST_API_URL", "KV_REST_API_TOKEN"],
+    ["REDIS_REST_API_URL", "REDIS_REST_API_TOKEN"],
+  ].map(([urlName, tokenName]) => ({
+    urlName,
+    tokenName,
+    url: String(env[urlName] || "").trim(),
+    token: String(env[tokenName] || "").trim(),
+  }));
+  const partial = aliases.filter((pair) => Boolean(pair.url) !== Boolean(pair.token));
+  const complete = aliases.filter((pair) => pair.url && pair.token);
+  if (partial.length) {
+    return { url: "", token: "", error: "redis_alias_pair_incomplete" };
+  }
+  const distinctPairs = new Set(complete.map((pair) => `${pair.url}\u0000${pair.token}`));
+  if (distinctPairs.size > 1) {
+    return { url: "", token: "", error: "redis_alias_pairs_conflict" };
+  }
+  const selected = complete[0];
+  return selected
+    ? { url: selected.url, token: selected.token, alias: selected.urlName, error: "" }
+    : { url: "", token: "", alias: "", error: "" };
 }
 
 function requiresPersistentBudget(env = {}) {
   return isEnabled(env.API_BUDGET_REQUIRE_PERSISTENT_STORAGE) || isEnabled(env.VERCEL);
 }
 
-function budgetStorageWarnings(storage) {
+function budgetStorageWarnings(storage, env = {}) {
+  const redisError = redisConfig(env).error;
+  if (redisError) return [redisError, "persistent_budget_storage_aliases_must_be_complete_matching_pairs"];
   if (storage === "memory") return ["persistent_budget_storage_missing_vercel_limit_is_soft"];
   if (storage === "unconfigured") return ["persistent_budget_storage_missing_backend_kv_required"];
   return [];
 }
 
 function budgetStatusPayload({ config, storage, dayKey, spent, estimated, blocked, bucket = null, bucketConfig = null, bucketSpent = null }) {
+  const globalEstimatedCny = bucketConfig?.currency === "USD" ? 0 : estimated;
   const status = {
-    schemaVersion: 2,
+    schemaVersion: 3,
+    currency: "CNY",
     dailyBudgetCny: config.dailyBudgetCny,
     spentTodayCny: spent === null ? null : roundCost(spent),
     remainingTodayCny: spent === null || config.dailyBudgetCny <= 0
       ? null
       : roundCost(Math.max(0, config.dailyBudgetCny - spent)),
-    estimatedThisCallCny: estimated,
+    estimatedThisCallCny: globalEstimatedCny,
     budgetMode: config.mode,
     budgetStorage: storage,
     budgetPersistent: storage === "redis",
@@ -2632,24 +2849,41 @@ function budgetStatusPayload({ config, storage, dayKey, spent, estimated, blocke
 }
 
 function budgetBucketStatusPayload({ bucket, bucketConfig, spent, estimated = 0, blocked = false }) {
-  const limit = bucketConfig?.dailyBudgetCny ?? null;
-  return {
+  const currency = bucketConfig?.currency || bucket?.currency || "CNY";
+  const limit = bucketConfig?.dailyBudgetAmount ?? null;
+  const roundedSpent = spent === null ? null : roundCost(spent);
+  const roundedEstimated = roundCost(estimated);
+  const remaining = spent === null || limit === null || limit <= 0
+    ? null
+    : roundCost(Math.max(0, limit - spent));
+  const status = {
     id: bucket.id,
     stage: bucket.stage,
     provider: bucket.provider,
     label: bucket.label,
-    dailyBudgetCny: limit,
-    spentTodayCny: spent === null ? null : roundCost(spent),
-    remainingTodayCny: spent === null || limit === null || limit <= 0
-      ? null
-      : roundCost(Math.max(0, limit - spent)),
-    estimatedThisCallCny: roundCost(estimated),
+    currency,
+    dailyBudget: limit,
+    spentToday: roundedSpent,
+    remainingToday: remaining,
+    estimatedThisCall: roundedEstimated,
+    dailyBudgetCny: currency === "CNY" ? limit : null,
+    spentTodayCny: currency === "CNY" ? roundedSpent : null,
+    remainingTodayCny: currency === "CNY" ? remaining : null,
+    estimatedThisCallCny: currency === "CNY" ? roundedEstimated : null,
+    dailyBudgetUsd: currency === "USD" ? limit : null,
+    spentTodayUsd: currency === "USD" ? roundedSpent : null,
+    remainingTodayUsd: currency === "USD" ? remaining : null,
+    estimatedThisCallUsd: currency === "USD" ? roundedEstimated : null,
     limitEnforced: blocked,
   };
+  return status;
 }
 
-function estimatePreflightCostCny(provider, prompt, maxTokens, env) {
-  const promptTokens = Math.ceil(String(prompt || "").length / 4);
+function estimatePreflightCostAmount(provider, prompt, maxTokens, env) {
+  const promptText = String(prompt || "");
+  const promptTokens = provider === "relay"
+    ? utf8ByteLength(promptText)
+    : Math.ceil(promptText.length / 4);
   if (provider === "deepseek") {
     return estimateDeepSeekCostCny({ prompt_tokens: promptTokens, completion_tokens: maxTokens }, env);
   }
@@ -2657,10 +2891,10 @@ function estimatePreflightCostCny(provider, prompt, maxTokens, env) {
     return estimateGlmCostCny({ prompt_tokens: promptTokens, completion_tokens: maxTokens }, env);
   }
   if (provider === "relay") {
-    return roundCost(readPositiveNumber(
-      env.RELAY_ESTIMATED_CNY_PER_CALL,
-      DEFAULT_RELAY_ESTIMATED_CNY_PER_CALL,
-    ));
+    return estimateChatGptUncachedCostUsd({
+      usage: { input_tokens: promptTokens, output_tokens: maxTokens },
+      env,
+    });
   }
   if (provider === "gemini") {
     return roundCost(readTieredProviderNumber(env, "GEMINI", "ESTIMATED_CNY_PER_CALL", 0.01));
@@ -2668,14 +2902,11 @@ function estimatePreflightCostCny(provider, prompt, maxTokens, env) {
   return 0;
 }
 
-function estimateActualCostCny(provider, usage, env) {
+function estimateActualCostAmount(provider, usage, env) {
   if (provider === "deepseek") return estimateDeepSeekCostCny(usage, env);
   if (provider === "glm") return estimateGlmCostCny(usage, env);
   if (provider === "relay") {
-    return roundCost(readPositiveNumber(
-      env.RELAY_ESTIMATED_CNY_PER_CALL,
-      DEFAULT_RELAY_ESTIMATED_CNY_PER_CALL,
-    ));
+    return estimateChatGptUncachedCostUsd({ usage, env });
   }
   if (provider === "gemini") return roundCost(readTieredProviderNumber(env, "GEMINI", "ESTIMATED_CNY_PER_CALL", 0.01));
   return 0;
@@ -2689,14 +2920,126 @@ function normalizeUsage(provider, usage = {}) {
       total_tokens: Number(usage.totalTokenCount || 0),
     };
   }
+  const promptTokens = firstFiniteUsageNumber(
+    usage.prompt_tokens,
+    usage.input_tokens,
+    usage.input_token_count,
+  );
+  const completionTokens = firstFiniteUsageNumber(
+    usage.completion_tokens,
+    usage.output_tokens,
+    usage.output_token_count,
+  );
+  const totalTokens = firstFiniteUsageNumber(
+    usage.total_tokens,
+    usage.total_token_count,
+    promptTokens + completionTokens,
+  );
+  const cacheHitTokens = firstFiniteUsageNumber(
+    usage.prompt_cache_hit_tokens,
+    usage.cache_read_input_tokens,
+    usage.prompt_tokens_details?.cached_tokens,
+    usage.prompt_tokens_details?.cache_read_input_tokens,
+    usage.input_tokens_details?.cached_tokens,
+    usage.input_tokens_details?.cache_read_input_tokens,
+  );
+  const explicitCacheMissTokens = firstFiniteUsageNumberOrNull(
+    usage.prompt_cache_miss_tokens,
+    usage.cache_miss_input_tokens,
+    usage.prompt_tokens_details?.cache_miss_tokens,
+    usage.input_tokens_details?.cache_miss_tokens,
+  );
   return {
-    prompt_tokens: Number(usage.prompt_tokens || 0),
-    completion_tokens: Number(usage.completion_tokens || 0),
-    total_tokens: Number(usage.total_tokens || 0),
-    reasoning_tokens: Number(usage.reasoning_tokens || usage.completion_tokens_details?.reasoning_tokens || 0),
-    prompt_cache_hit_tokens: Number(usage.prompt_cache_hit_tokens || usage.prompt_tokens_details?.cached_tokens || 0),
-    prompt_cache_miss_tokens: Number(usage.prompt_cache_miss_tokens || 0),
+    prompt_tokens: promptTokens,
+    completion_tokens: completionTokens,
+    total_tokens: totalTokens,
+    reasoning_tokens: firstFiniteUsageNumber(
+      usage.reasoning_tokens,
+      usage.completion_tokens_details?.reasoning_tokens,
+      usage.output_tokens_details?.reasoning_tokens,
+    ),
+    prompt_cache_hit_tokens: cacheHitTokens,
+    prompt_cache_miss_tokens: explicitCacheMissTokens === null
+      ? Math.max(0, promptTokens - cacheHitTokens)
+      : explicitCacheMissTokens,
+    cache_write_tokens: firstFiniteUsageNumber(
+      usage.cache_write_tokens,
+      usage.cache_write_input_tokens,
+      usage.prompt_tokens_details?.cache_write_tokens,
+      usage.prompt_tokens_details?.cache_write_input_tokens,
+      usage.input_tokens_details?.cache_write_tokens,
+      usage.input_tokens_details?.cache_write_input_tokens,
+    ),
   };
+}
+
+function firstFiniteUsageNumber(...values) {
+  return firstFiniteUsageNumberOrNull(...values) ?? 0;
+}
+
+function firstFiniteUsageNumberOrNull(...values) {
+  for (const value of values) {
+    if (value === null || value === undefined || value === "") continue;
+    const number = Number(value);
+    if (Number.isFinite(number) && number >= 0) return number;
+  }
+  return null;
+}
+
+function assessUsageCompleteness(provider, usage = {}) {
+  const inputPaths = provider === "gemini"
+    ? [["promptTokenCount"]]
+    : [["prompt_tokens"], ["input_tokens"], ["input_token_count"]];
+  const outputPaths = provider === "gemini"
+    ? [["candidatesTokenCount"]]
+    : [["completion_tokens"], ["output_tokens"], ["output_token_count"]];
+  const totalPaths = provider === "gemini"
+    ? [["totalTokenCount"]]
+    : [["total_tokens"], ["total_token_count"]];
+  const input = readExplicitUsageField(usage, inputPaths);
+  const output = readExplicitUsageField(usage, outputPaths);
+  const total = readExplicitUsageField(usage, totalPaths);
+  if (!input.present || !output.present || !input.valid || !output.valid) {
+    return { complete: false, reason: "missing_input_or_output_breakdown" };
+  }
+  const calculatedTotal = input.value + output.value;
+  if (calculatedTotal <= 0) return { complete: false, reason: "empty_breakdown" };
+  if (total.present && (!total.valid || total.value !== calculatedTotal)) {
+    return { complete: false, reason: "inconsistent_total" };
+  }
+  return { complete: true, reason: "complete", input: input.value, output: output.value, total: calculatedTotal };
+}
+
+function readExplicitUsageField(value, paths) {
+  for (const path of paths) {
+    let current = value;
+    let present = true;
+    for (const segment of path) {
+      if (!current || typeof current !== "object" || !Object.hasOwn(current, segment)) {
+        present = false;
+        break;
+      }
+      current = current[segment];
+    }
+    if (!present) continue;
+    const number = Number(current);
+    return {
+      present: true,
+      valid: current !== null && current !== "" && Number.isFinite(number) && number >= 0,
+      value: Number.isFinite(number) && number >= 0 ? number : 0,
+    };
+  }
+  return { present: false, valid: false, value: 0 };
+}
+
+function estimateChatGptUncachedCostUsd({ usage, env }) {
+  const estimate = estimateOpenAIModelCost({
+    model: modelNameForProvider("relay", env),
+    usage,
+    reasoningMode: "standard",
+    inputBillingBasis: "all_uncached",
+  });
+  return roundCost(estimate.totalCostUsd);
 }
 
 function resolveBudgetBucket(stage, provider, env = {}) {
@@ -2722,20 +3065,39 @@ function resolveBudgetBucket(stage, provider, env = {}) {
 
 function budgetBucketConfig(env, bucket) {
   if (String(bucket?.id || "").startsWith("internal:")) {
-    return { envName: "", dailyBudgetCny: null };
+    return { envName: "", currency: bucket?.currency || "CNY", dailyBudgetAmount: null, dailyBudgetCny: null, dailyBudgetUsd: null };
+  }
+  if (bucket.id === "final_ruling:relay") {
+    const envName = "API_CHATGPT_DAILY_BUDGET_USD";
+    const configured = String(env[envName] ?? "").trim();
+    const parsed = configured === "" ? DEFAULT_CHATGPT_DAILY_BUDGET_USD : Number(configured);
+    // Anonymous public ChatGPT calls must always have a positive hard ceiling.
+    // An explicit value may lower the cap, but cannot raise it above $10 or turn
+    // zero into the legacy "unlimited" meaning.
+    const dailyBudgetAmount = Number.isFinite(parsed) && parsed > 0
+      ? Math.min(parsed, DEFAULT_CHATGPT_DAILY_BUDGET_USD)
+      : DEFAULT_CHATGPT_DAILY_BUDGET_USD;
+    return {
+      envName,
+      currency: "USD",
+      dailyBudgetAmount,
+      dailyBudgetCny: null,
+      dailyBudgetUsd: dailyBudgetAmount,
+    };
   }
   const envName = bucket.id === "evidence_preparation:deepseek"
     ? "API_EVIDENCE_DAILY_BUDGET_CNY"
     : bucket.id === "final_ruling:glm"
       ? "API_GLM_FINAL_DAILY_BUDGET_CNY"
-      : bucket.id === "final_ruling:relay"
-        ? "API_RELAY_FINAL_DAILY_BUDGET_CNY"
-        : "API_DEEPSEEK_FINAL_DAILY_BUDGET_CNY";
+      : "API_DEEPSEEK_FINAL_DAILY_BUDGET_CNY";
   const configured = String(env[envName] ?? "").trim();
   const parsed = configured === "" ? null : Number(configured);
   return {
     envName,
+    currency: "CNY",
+    dailyBudgetAmount: Number.isFinite(parsed) && parsed >= 0 ? parsed : null,
     dailyBudgetCny: Number.isFinite(parsed) && parsed >= 0 ? parsed : null,
+    dailyBudgetUsd: null,
   };
 }
 
@@ -3107,6 +3469,77 @@ function sumTokenUsage(items = []) {
   }
   return totals;
 }
+
+function validateExtractionResponse(response = {}, kind) {
+  if (isTruncatedProviderResponse(response)) {
+    return { items: [], cacheable: false, reason: "truncated" };
+  }
+  const rawText = String(response?.rawText || "").trim();
+  if (!rawText) return { items: [], cacheable: false, reason: "empty_content" };
+  let parsed;
+  try {
+    parsed = parseStrictJsonObject(rawText);
+  } catch {
+    return { items: [], cacheable: false, reason: "invalid_json" };
+  }
+  const fieldNames = kind === "card"
+    ? ["cardNames", "cards", "names"]
+    : ["ruleQueries", "queries", "ruleSearchQueries", "keywords"];
+  const selectedField = fieldNames.find((field) => Object.hasOwn(parsed, field));
+  if (!selectedField || !Array.isArray(parsed[selectedField])) {
+    return { items: [], cacheable: false, reason: "invalid_schema" };
+  }
+  const source = parsed[selectedField];
+  const structurallyValid = source.every((item) => {
+    if (typeof item === "string") return Boolean(item.trim());
+    if (!item || typeof item !== "object" || Array.isArray(item)) return false;
+    const value = kind === "card"
+      ? item.name ?? item.cardName ?? item.candidate
+      : item.query ?? item.searchQuery ?? item.keyword ?? item.topic;
+    return typeof value === "string" && Boolean(value.trim());
+  });
+  if (!structurallyValid) return { items: [], cacheable: false, reason: "invalid_schema" };
+  const items = kind === "card"
+    ? normalizeCardNameCandidates(parsed)
+    : normalizeRuleSearchQueries(parsed);
+  if (source.length > 0 && items.length === 0) {
+    return { items: [], cacheable: false, reason: "no_valid_items" };
+  }
+  return { items, cacheable: true, reason: "valid" };
+}
+
+function isTruncatedProviderResponse(response = {}) {
+  const finishReason = String(response?.finishReason || "").trim().toLowerCase();
+  return ["length", "max_tokens", "max_token", "max_output_tokens"].includes(finishReason)
+    || (response?.warnings || []).some((warning) => /truncated|token_limit|max_tokens/iu.test(String(warning || "")));
+}
+
+function rulebookResponsesAreCacheable(outcomes = []) {
+  const attempted = (outcomes || []).filter(Boolean);
+  if (!attempted.length || attempted.some((outcome) => outcome.status !== "fulfilled")) return false;
+  return attempted.every((outcome) => {
+    const response = outcome.value || {};
+    if (isTruncatedProviderResponse(response)) return false;
+    let parsed;
+    try {
+      parsed = parseStrictJsonObject(response.rawText);
+    } catch {
+      return false;
+    }
+    const operationField = Object.hasOwn(parsed, "operationChecks")
+      ? parsed.operationChecks
+      : Object.hasOwn(parsed, "operations")
+        ? parsed.operations
+        : undefined;
+    const reviewField = Object.hasOwn(parsed, "constraintReviews")
+      ? parsed.constraintReviews
+      : undefined;
+    return (Array.isArray(operationField) || Array.isArray(reviewField))
+      && (operationField === undefined || Array.isArray(operationField))
+      && (reviewField === undefined || Array.isArray(reviewField));
+  });
+}
+
 function normalizeCardNameCandidates(rawText) {
   let parsed = null;
   try {
@@ -3697,24 +4130,30 @@ function withTimeout(promise, timeoutMs, message) {
   });
 }
 
-function extractionCacheKey(kind, provider, modelName, userQuery) {
-  return [
-    kind,
-    provider || "",
-    modelName || "",
-    String(userQuery || "").normalize("NFKC").trim().toLowerCase(),
-  ].join("\u0000");
+function extractionCacheKey({ kind, provider, modelName, dataRevision = "", input = {} }) {
+  return sha256Hex(stableJson({
+    schemaVersion: 2,
+    kind: String(kind || ""),
+    provider: String(provider || ""),
+    modelName: String(modelName || ""),
+    dataRevision: String(dataRevision || ""),
+    input,
+  }));
 }
 
 function readCachedExtraction(cache, key, env) {
   const ttlMs = readPositiveNumber(env.RAG_EXTRACTION_CACHE_TTL_MS, 6 * 60 * 60 * 1000);
   const item = cache.get(key);
   if (!item) return null;
-  if (Date.now() - item.savedAt > ttlMs) {
+  const ageMs = Math.max(0, Date.now() - item.savedAt);
+  if (ageMs > ttlMs) {
     cache.delete(key);
     return null;
   }
-  return JSON.parse(JSON.stringify(item.value));
+  return {
+    ageMs,
+    value: JSON.parse(JSON.stringify(item.value)),
+  };
 }
 
 function writeCachedExtraction(cache, key, value, env) {
@@ -3724,6 +4163,171 @@ function writeCachedExtraction(cache, key, value, env) {
     const oldestKey = cache.keys().next().value;
     cache.delete(oldestKey);
   }
+}
+
+async function runCachedAuxiliaryCall({
+  cache,
+  flights,
+  cacheKey,
+  cacheWarning,
+  env,
+  signal,
+  work,
+}) {
+  const cached = readCachedExtraction(cache, cacheKey, env);
+  if (cached) {
+    return noChargeAuxiliaryReuse(cached.value, {
+      cacheHit: true,
+      singleflightHit: false,
+      warning: cacheWarning,
+      cacheKey,
+      cacheAgeMs: cached.ageMs,
+    });
+  }
+
+  const maxFlights = Math.min(
+    512,
+    readPositiveNumber(env.RAG_EXTRACTION_SINGLEFLIGHT_MAX_ENTRIES, 64),
+  );
+  let flight = flights.get(cacheKey);
+  let leader = false;
+  if (!flight && flights.size < maxFlights) {
+    leader = true;
+    const controller = new AbortController();
+    flight = {
+      controller,
+      waiters: 0,
+      settled: false,
+      promise: null,
+    };
+    flight.promise = Promise.resolve().then(() => work(controller.signal));
+    flights.set(cacheKey, flight);
+    flight.promise.then(
+      () => settleSharedFlight(flights, cacheKey, flight),
+      () => settleSharedFlight(flights, cacheKey, flight),
+    );
+  }
+
+  if (!flight) {
+    const result = await work(signal);
+    return {
+      ...result,
+      cacheHit: false,
+      singleflightHit: false,
+      cacheMetadata: {
+        keySha256: cacheKey,
+        ageMs: null,
+      },
+    };
+  }
+
+  const result = await waitForSharedFlight(flight, signal);
+  if (!leader) {
+    return noChargeAuxiliaryReuse(result, {
+      cacheHit: false,
+      singleflightHit: true,
+      warning: String(cacheWarning || "auxiliary_cache_hit").replace(/_cache_hit$/u, "_singleflight_joined"),
+      cacheKey,
+      cacheAgeMs: null,
+    });
+  }
+  return {
+    ...result,
+    cacheHit: false,
+    singleflightHit: false,
+    cacheMetadata: {
+      keySha256: cacheKey,
+      ageMs: null,
+    },
+  };
+}
+
+function settleSharedFlight(flights, cacheKey, flight) {
+  flight.settled = true;
+  if (flights.get(cacheKey) === flight) flights.delete(cacheKey);
+}
+
+function waitForSharedFlight(flight, signal) {
+  if (signal?.aborted) return Promise.reject(abortSignalError(signal));
+  flight.waiters += 1;
+  return new Promise((resolve, reject) => {
+    let done = false;
+    const finish = (callback, value) => {
+      if (done) return;
+      done = true;
+      if (signal) signal.removeEventListener("abort", onAbort);
+      flight.waiters = Math.max(0, flight.waiters - 1);
+      if (!flight.settled && flight.waiters === 0) flight.controller.abort("all_singleflight_waiters_aborted");
+      callback(value);
+    };
+    const onAbort = () => finish(reject, abortSignalError(signal));
+    if (signal) signal.addEventListener("abort", onAbort, { once: true });
+    flight.promise.then(
+      (value) => finish(resolve, value),
+      (error) => finish(reject, error),
+    );
+  });
+}
+
+function abortSignalError(signal) {
+  const error = new Error(String(signal?.reason || "request_aborted"));
+  error.name = "AbortError";
+  error.code = "ABORT_ERR";
+  return error;
+}
+
+function noChargeAuxiliaryReuse(value, {
+  cacheHit,
+  singleflightHit,
+  warning,
+  cacheKey,
+  cacheAgeMs,
+}) {
+  const cloned = JSON.parse(JSON.stringify(value || {}));
+  return {
+    ...cloned,
+    cacheHit,
+    singleflightHit,
+    tokenUsage: {},
+    estimatedCost: 0,
+    estimatedCostCny: 0,
+    estimatedCostUsd: 0,
+    budgetStatus: zeroCurrentCallBudgetEstimate(cloned.budgetStatus),
+    warnings: [...new Set([...(cloned.warnings || []), warning].filter(Boolean))],
+    cacheMetadata: {
+      keySha256: cacheKey,
+      ageMs: cacheAgeMs,
+    },
+  };
+}
+
+function zeroCurrentCallBudgetEstimate(status) {
+  if (!status || typeof status !== "object") return status || null;
+  return {
+    ...status,
+    estimatedThisCallCny: 0,
+    ...(status.bucket && typeof status.bucket === "object" ? {
+      bucket: {
+        ...status.bucket,
+        estimatedThisCall: 0,
+        estimatedThisCallCny: status.bucket.currency === "CNY" ? 0 : null,
+        estimatedThisCallUsd: status.bucket.currency === "USD" ? 0 : null,
+      },
+    } : {}),
+  };
+}
+
+function stableJson(value) {
+  if (value === undefined) return '"[undefined]"';
+  if (value === null || typeof value !== "object") return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map((item) => stableJson(item)).join(",")}]`;
+  return `{${Object.keys(value).sort().map((key) => (
+    `${JSON.stringify(key)}:${stableJson(value[key])}`
+  )).join(",")}}`;
+}
+
+function sha256Hex(value) {
+  return createHash("sha256").update(String(value || ""), "utf8").digest("hex");
 }
 
 function isEnabled(value) {
@@ -3742,12 +4346,29 @@ function mtok(tokens) {
   return Number(tokens || 0) / 1_000_000;
 }
 
+function utf8ByteLength(value) {
+  return new TextEncoder().encode(String(value || "")).byteLength;
+}
+
 function roundCost(value) {
   return Math.round(Number(value || 0) * 1_000_000) / 1_000_000;
 }
 
+function budgetCostResultFields(preflight, amount) {
+  const currency = preflight?.bucketConfig?.currency || preflight?.bucket?.currency || "CNY";
+  const estimatedCost = roundCost(amount);
+  return {
+    costCurrency: currency,
+    estimatedCost,
+    estimatedCostCny: currency === "CNY" ? estimatedCost : 0,
+    estimatedCostUsd: currency === "USD" ? estimatedCost : 0,
+  };
+}
+
 function budgetDayKey(timezone, now) {
-  return `rag-api-budget:${budgetDate(timezone, now)}`;
+  // v1 mixed relay CNY approximations into this total. Never reinterpret those
+  // existing values after the public ChatGPT ledger moves to USD.
+  return `rag-api-budget:v3:${budgetDate(timezone, now)}:cny-total`;
 }
 
 function budgetBucketDayKey(timezone, now, bucketId) {
@@ -3755,7 +4376,9 @@ function budgetBucketDayKey(timezone, now, bucketId) {
       && !/^internal:(?:evidence_preparation|final_ruling):gemini$/u.test(String(bucketId || ""))) {
     throw new TypeError(`Unsupported public budget bucket: ${bucketId}`);
   }
-  return `rag-api-budget:v2:${budgetDate(timezone, now)}:${bucketId}`;
+  const bucket = PUBLIC_BUDGET_BUCKETS.find((item) => item.id === bucketId);
+  const currency = bucket?.currency || "CNY";
+  return `rag-api-budget:v3:${budgetDate(timezone, now)}:${bucketId}:${currency.toLowerCase()}`;
 }
 
 function budgetDate(timezone, now) {
