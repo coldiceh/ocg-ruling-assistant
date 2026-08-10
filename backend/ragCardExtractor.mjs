@@ -617,6 +617,19 @@ export function normalizeCardKey(value) {
 export function extractUnquotedCardMentionCandidates(query) {
   const text = String(query || "").normalize("NFKC");
   const candidates = [];
+
+  // A newly released or locally untranslated card is often written as the
+  // sentence subject without title marks: "<card name>可以用...".  Known-card
+  // substring scanning cannot discover that surface, so preserve the subject
+  // as an unresolved lookup seed.  Keeping this at a sentence/clause boundary
+  // and requiring a ruling predicate avoids treating arbitrary noun phrases as
+  // card names.
+  const sentenceInitialRulingSubjectPattern = /(?:^|[，,。；;、！？!?\r\n])\s*([\p{L}\p{N}・·･．.\-－—–\s]{2,30}?)(?=\s*(?:还|還)?\s*(?:能否|能不能|可否|可不可以|是否\s*(?:可以|能够|能夠|能)|可以\s*(?:用|发动|發動|适用|適用|成为|成為|选择|選擇|特殊召唤|特殊召喚|代替|替代|吗|嗎|么|嘛|[？?])|(?:能够|能夠|能)\s*(?:用|发动|發動|适用|適用|成为|成為|选择|選擇|特殊召唤|特殊召喚)))/giu;
+  for (const match of text.matchAll(sentenceInitialRulingSubjectPattern)) {
+    const candidate = cleanUnquotedMention(match[1]);
+    if (candidate && hasSentenceInitialRulingSubjectSignal(candidate, match[1])) candidates.push(candidate);
+  }
+
   const numberedEffectCarrierPattern = /(?:^|[，,。；;、！？!?\s])([\p{L}\p{N}・·･．.\-－—–\s]{2,30}?)(?=\s*(?:的\s*)?[①②③④⑤⑥⑦⑧⑨⑩1-9]\s*(?:效果|效应|效應))/giu;
   for (const match of text.matchAll(numberedEffectCarrierPattern)) {
     const candidate = cleanUnquotedMention(match[1]);
@@ -697,9 +710,34 @@ function cleanUnquotedMention(value) {
 
 function trimGameplaySuffix(value) {
   const text = String(value || "").trim();
-  const suffixPattern = /(?:一[张張只]|[0-9０-９]+[张張只]|里侧|裏側|表侧|表側|盖放|覆蓋|魔陷|魔法陷阱|发动|發動|处理|處理|检索|檢索|破坏|破壞|送墓|除外|回到|返回|回去|起跳)/u;
+  // Do not use a bare "攻击" as a suffix boundary. It is common inside card
+  // names, whereas the other entries below describe an operation following a
+  // mention. Contextual attack phrases are filtered as generic prose later.
+  const suffixPattern = /(?:一[张張只]|[0-9０-９]+[张張只]|里侧|裏側|表侧|表側|盖放|覆蓋|魔陷|魔法陷阱|发动|發動|处理|處理|检索|檢索|(?:代替|替代)?破坏|(?:代替|替代)?破壞|代破|送墓|除外|回到|返回|回去|起跳)/u;
   const match = text.match(suffixPattern);
   return match && match.index && match.index >= 2 ? text.slice(0, match.index).trim() : text;
+}
+
+function hasSentenceInitialRulingSubjectSignal(value, rawValue = value) {
+  const text = String(value || "").normalize("NFKC").replace(/\s+/gu, " ").trim();
+  const rawText = String(rawValue || "").normalize("NFKC").replace(/\s+/gu, " ").trim();
+  const key = normalizeCardKey(text);
+  if (key.length < 2 || key.length > 28 || !/[\p{L}\p{N}]/u.test(text)) return false;
+  if (!hasContextualEffectCarrierSignal(text) || looksLikeGenericCardDescription(text)) return false;
+  // Sentence-initial ruling questions also commonly begin with a timing,
+  // state, or generic card-class condition. These are grammatical subjects,
+  // not unknown card names. Check the untrimmed surface too, because the
+  // general cleaner intentionally removes words such as "效果" and "怪兽".
+  if (/(?:这个|這個|那个|那個|该|該|此)(?:卡|怪兽|怪獸|效果)?$/u.test(rawText)) return false;
+  if (/^(?:没有|沒有|并无|並無|不存在|不再存在)(?:其他|其它|别的|別的)?/u.test(rawText)) return false;
+  if (/^(?:被)?(?:战斗|戰鬥|效果)(?:破坏|破壞|无效|無效|处理|處理)?(?:的情况下|的情況下|的场合|的場合|后|後|时|時|中|下)?$/u.test(text)) return false;
+  if (/(?:召唤|召喚|发动|發動|处理|處理|结算|結算|连锁|連鎖|攻击|攻擊|伤害步骤|傷害步驟|伤害阶段|傷害階段|主要阶段|主要階段|战斗阶段|戰鬥階段|回合|状态|狀態|情况下|情況下|场合|場合|期间|期間|时点|時點).*(?:成功|无效|無效|失败|失敗|后|後|前|中|下|时|時|这个|這個|那个|那個|该|該|此)$/u.test(text)) return false;
+  if (/^(?:等级|等級|阶级|階級|星级|星級)?\s*[0-9一二三四五六七八九十]*\s*(?:光|暗|闇|地|水|炎|火|风|風|神)?(?:属性|屬性)?(?:通常|效果|融合|仪式|儀式|同步|同调|同調|超量|连接|連接|灵摆|靈擺)?(?:怪兽|怪獸|魔法|陷阱)(?:卡|牌)?$/u.test(rawText.replace(/\s+/gu, ""))) return false;
+  if (/^(?:效果|效应|效應)(?:可以|能够|能夠|能否|能不能|可否|是否|处理|處理|适用|適用|发动|發動|结算|結算)/u.test(text)) return false;
+  if (/^(?:双方|雙方|我方|对方|對方|自己|自分|玩家|这个|這個|那个|那個|这种|這種|该|該|此|这张卡|這張卡|那张卡|那張卡|某张卡|某張卡|这只怪兽|這隻怪獸|那只怪兽|那隻怪獸|某只怪兽|某隻怪獸|原效果|这个效果|這個效果|该效果|該效果|此效果|效果处理|效果處理|连锁|連鎖|场上|場上|手卡|手牌|墓地|卡组|卡組|牌组|牌組|除外区|除外區)(?:的|中|里|裡|上|内|內|外|后|後|前|时|時|阶段|階段|情况|情況|场合|場合|$)/u.test(text)) return false;
+  if (/(?:的情况下|的情況下|的场合|的場合|之后|之後|以后|以後|以前|处理后|處理後|发动后|發動後|结算后|結算後|时|時|期间|期間|阶段|階段)$/u.test(text)) return false;
+  if (/(?:有哪些|有何|有什么|哪些|何种|何種|几种|幾種|几个|幾個|如何|怎样|怎樣|为什么|為什麼)/u.test(text)) return false;
+  return true;
 }
 
 function hasCardNameSignal(value) {
@@ -734,7 +772,7 @@ function hasContextualEffectCarrierSignal(value) {
 
 function hasColloquialActivationSubjectSignal(value) {
   const text = String(value || "").trim();
-  if (!hasContextualEffectCarrierSignal(text)) return false;
+  if (!hasSentenceInitialRulingSubjectSignal(text)) return false;
   // Interrogative noun phrases describe the requested result (for example
   // “which trigger effects can activate”), not an unquoted card name.
   if (/(?:有哪些|有何|有什么|哪些|何种|几种|幾種|几个|幾個|如何|怎样|怎樣)/u.test(text)) return false;

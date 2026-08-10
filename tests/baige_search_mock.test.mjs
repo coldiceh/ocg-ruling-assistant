@@ -113,6 +113,19 @@ const redLotusRawCard = {
   weight: 50,
 };
 
+const newUntranslatedRawCard = {
+  cid: 23173,
+  id: 100000001,
+  cn_name: "破械焰魔天",
+  jp_name: "アンチェインド・アバドン",
+  en_name: "Unchained Abaddon",
+  text: {
+    types: "[怪兽|效果] 恶魔/暗\n[★8] 3000/1500",
+    desc: "这张卡被破坏的场合，可以适用其破坏代替处理。",
+  },
+  data: { type: 33, atk: 3000, def: 1500, level: 8, race: 8, attribute: 32 },
+};
+
 const numberedRawCards = [
   { cid: 10659, id: 49456901, cn_name: "混沌No.104 假面魔蹈士 黑影", text: { desc: "旧卡干扰项。" } },
   { cid: 23364, id: 101306042, cn_name: "No.104 假面魔蹈士 闪光·杠然", text: { desc: "新卡文本。" } },
@@ -323,6 +336,51 @@ test("unquoted_card_mention_stops_before_gameplay_suffix", () => {
 
   assert.ok(resolution.unresolvedMentions.some((item) => item.input === "黑龙埃克利西亚"));
   assert.ok(!resolution.unresolvedMentions.some((item) => item.input.includes("一张里侧魔陷")));
+});
+
+test("sentence-initial unknown Chinese card name is resolved by Baige and scopes its card-id FAQ", async () => {
+  clearBaigeSearchCache();
+  const question = "破械焰魔天可以用对方场上的混沌之三幻魔代破吗？";
+  const localJapaneseCard = {
+    id: "23173",
+    cid: 23173,
+    passcode: "100000001",
+    name: "アンチェインド・アバドン",
+    jaName: "アンチェインド・アバドン",
+    aliases: ["アンチェインド・アバドン"],
+    effectText: "このカードが破壊される場合に適用できる。",
+  };
+  const cardResolution = extractRagCards(question, { cards: [localJapaneseCard] });
+  assert.ok(cardResolution.unresolvedMentions.some((item) => item.input === "破械焰魔天"));
+
+  const calls = [];
+  const evidence = await retrieveRagEvidence({
+    userQuery: question,
+    cardResolution,
+    cards: [localJapaneseCard],
+    records: [],
+    qaRecords: [{
+      id: "card-faq-23173-1",
+      recordType: "card-faq",
+      cardIds: ["23173"],
+      cards: ["アンチェインド・アバドン"],
+      title: "破坏代替处理",
+      text: "这张卡的破坏代替处理适用范围说明。",
+    }],
+    fetchImpl: async (url) => {
+      const decoded = decodeURIComponent(String(url)).replace(/\+/gu, " ");
+      calls.push(decoded);
+      return decoded.includes("破械焰魔天")
+        ? jsonResponse({ result: [newUntranslatedRawCard], next: 1 })
+        : jsonResponse({ result: [], next: 0 });
+    },
+  });
+
+  assert.ok(calls.some((url) => url.includes("破械焰魔天")));
+  assert.ok(evidence.baigeResolvedCards.some((card) => card.cid === 23173));
+  assert.ok(evidence.retrievedCards.some((card) => card.id === "23173"));
+  assert.ok(evidence.faqRelated.some((item) => item.id === "card-faq-23173-1"));
+  assert.ok(!evidence.remainingUnresolvedMentions.some((item) => item.input === "破械焰魔天"));
 });
 
 test("baige_card_text_enters_rag_context", async () => {

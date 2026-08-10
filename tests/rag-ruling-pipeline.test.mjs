@@ -667,6 +667,41 @@ test("unquoted_card_mentions_seed_retrieval_candidates", () => {
   assert.ok(resolution.unresolvedMentions.some((item) => item.input === "破械童子罗安"));
 });
 
+test("sentence-initial unquoted ruling subject becomes an external card lookup seed", () => {
+  const question = "破械焰魔天可以用对方场上的混沌之三幻魔代破吗？是消耗混沌之三幻魔不会被破坏的次数吗？";
+  const candidates = extractUnquotedCardMentionCandidates(question);
+  const resolution = extractRagCards(question, { cards: [], maxCards: 8 });
+
+  assert.ok(candidates.includes("破械焰魔天"));
+  assert.ok(candidates.includes("混沌之三幻魔"));
+  assert.ok(!candidates.some((item) => item.includes("代破")));
+  assert.ok(resolution.unresolvedMentions.some((item) => item.input === "破械焰魔天"));
+  assert.ok(resolution.unresolvedMentions.some((item) => item.input === "混沌之三幻魔"));
+});
+
+test("ordinary sentence subjects are not promoted to unquoted card names", () => {
+  const questions = [
+    "双方卡组和手卡均不存在能被特殊召唤的怪兽，这种情况下可以发动吗？",
+    "这个效果可以在伤害步骤发动吗？",
+    "处理后能否发动诱发效果？",
+    "召唤成功后这个效果可以发动吗？",
+    "伤害步骤中这个效果可以发动吗？",
+    "对方回合这个效果可以发动吗？",
+    "效果无效状态下可以发动吗？",
+    "没有其他魔法陷阱时可以发动吗？",
+    "怪兽被战斗破坏的场合可以特殊召唤吗？",
+    "炎属性怪兽可以用作融合素材吗？",
+  ];
+
+  for (const question of questions) {
+    assert.deepEqual(extractUnquotedCardMentionCandidates(question), []);
+  }
+});
+
+test("an unknown unquoted card name containing attack is not truncated", () => {
+  assert.ok(extractUnquotedCardMentionCandidates("高速攻击战士可以发动吗？").includes("高速攻击战士"));
+});
+
 test("traditional_unquoted_card_name_resolves_to_local_card", () => {
   const resolution = extractRagCards("对方发动破械雙王神來迎的效果。", {
     cards: [{

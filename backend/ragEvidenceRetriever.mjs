@@ -1577,6 +1577,9 @@ function retrieveGlobalMechanismOfficialQaAnalogues({
   const triggerOrderQueries = allQueries.filter((item) => (
     item?.source === "simultaneous_trigger_order_rule_search_query"
   ));
+  const publicHandTriggerOrderQueries = allQueries.filter((item) => (
+    item?.source === "public_hand_trigger_order_rule_search_query"
+  ));
   const candidates = [];
 
   if (lifecycleQueries.length) {
@@ -1621,6 +1624,21 @@ function retrieveGlobalMechanismOfficialQaAnalogues({
           ...(record.retrievalSignals || {}),
           mechanismAnalogue: "simultaneous_trigger_order",
           mechanismAnalogueScore: 5,
+        },
+      })));
+  }
+
+  if (publicHandTriggerOrderQueries.length) {
+    candidates.push(...(records || [])
+      .filter(isCurrentOfficialQaRecord)
+      .filter(isPublicHandTriggerOrderOfficialQa)
+      .map((record) => ({
+        ...record,
+        retrievalScore: 0.99,
+        retrievalSignals: {
+          ...(record.retrievalSignals || {}),
+          mechanismAnalogue: "public_hand_trigger_order",
+          mechanismAnalogueScore: 6,
         },
       })));
   }
@@ -1715,6 +1733,18 @@ function isSimultaneousTriggerOrderOfficialQa(record) {
     && /優先度\s*1.{0,80}必ず発動/su.test(text)
     && /優先度\s*2.{0,120}任意.{0,80}公開/su.test(text)
     && /ターンを進めているプレイヤー.{0,80}先にチェーン/su.test(text);
+}
+
+function isPublicHandTriggerOrderOfficialQa(record) {
+  const text = [record?.question, record?.answer, record?.title, record?.text]
+    .filter(Boolean)
+    .join("\n");
+  const hasPublicHandContext = /(?:手札|手牌|手卡|\bhand\b)/iu.test(text)
+    && /(?:公開|公开|公開されている|revealed|face[ -]?up|public)/iu.test(text);
+  const hasBothChainPositions = /(?:チェーン|连锁|連鎖|\bchain\b)\s*1/iu.test(text)
+    && /(?:チェーン|连锁|連鎖|\bchain\b)\s*2/iu.test(text);
+  const explicitlyOrdersRevealedEffect = /(?:公開されている|已公开|已公開|公开的|公開的|revealed|public).{0,160}(?:効果|效果|effect).{0,80}(?:チェーン|连锁|連鎖|chain)\s*1.{0,200}(?:効果|效果|effect).{0,80}(?:チェーン|连锁|連鎖|chain)\s*2/isu.test(text);
+  return hasPublicHandContext && hasBothChainPositions && explicitlyOrdersRevealedEffect;
 }
 
 function isStrongEffectLifecycleAnalogue(record = {}) {
@@ -1985,6 +2015,14 @@ function deriveScenarioMechanismRuleQueries(userQuery, cardTexts) {
   if (scenario.simultaneousPublicPrivateTriggers) {
     add("同一时点发动多个诱发类效果 回合玩家 公开情报 选发 手卡诱发 顺序7 优先权转移 对方", "场景中同时存在公开区域的选发诱发效果与非公开手牌的诱发效果，检索 OCG 组链优先顺序。 ");
     add("公开区域诱发先组成连锁 对方确认是否连锁 手卡诱发之后连锁发动", "检索公开区域诱发进入连锁后，响应权逐次转移及手牌诱发的发动窗口。 ");
+  }
+  if (scenario.simultaneousContinuouslyPublicHandTriggers) {
+    queries.push({
+      query: expandRetrievalVocabulary("手札 持続的に公開 誘発効果 チェーン1 チェーン2 任意の順番").slice(0, 120),
+      reason: "题面说明手牌已持续公开，并询问该手牌效果与同一时点的另一诱发效果能否自行排列连锁。",
+      confidence: "high",
+      source: "public_hand_trigger_order_rule_search_query",
+    });
   }
   return queries;
 }

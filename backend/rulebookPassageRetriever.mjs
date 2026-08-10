@@ -279,6 +279,7 @@ function ruleQuerySourceMultiplier(value) {
   if ([
     "compiled_scenario_rule_search_query",
     "simultaneous_trigger_order_rule_search_query",
+    "public_hand_trigger_order_rule_search_query",
     "chain_resolution_reverse_rule_search_query",
     "effect_lifecycle_rule_search_query",
   ].includes(source)) return 1.75;
