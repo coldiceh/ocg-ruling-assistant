@@ -2086,6 +2086,21 @@ function deriveMechanismRuleQueries(value) {
     add("卡片效果发动 支付cost 顺序 支付后 状态立即变化", "检索发动时支付 cost 的顺序以及支付后卡片位置何时改变。");
     add("支付cost后 效果处理前 永续效果 适用条件重新判断", "检索 cost 改变场面后，连锁处理前持续适用效果是否开始或停止适用。");
   }
+  const asksLaterChainLinkActivation = mentionsMultipleChainLinks
+    && /(?:[cＣ]\s*2|(?:连锁|連鎖|チェーン)\s*2).{0,48}(?:能否|能不能|可否|是否|可以|发动|發動|発動|activate)|(?:能否|能不能|可否|是否|可以).{0,48}(?:[cＣ]\s*2|(?:连锁|連鎖|チェーン)\s*2)/isu.test(text);
+  const earlierChainLinkPaysCost = /(?:[cＣ]\s*1|(?:连锁|連鎖|チェーン)\s*1).{0,80}(?:舍弃|丢弃|捨て|送去墓地|送墓|支付|支払|cost|コスト)|(?:舍弃|丢弃|捨て|送去墓地|送墓|支付|支払|cost|コスト).{0,80}(?:[cＣ]\s*1|(?:连锁|連鎖|チェーン)\s*1)/isu.test(text);
+  if (asksLaterChainLinkActivation && earlierChainLinkPaysCost) {
+    add(
+      "同一时点 诱发类效果 组成连锁之前 各自满足发动条件 C1支付cost C2不能事后取得发动资格 对象存在",
+      "题面询问 C1 支付 cost 后是否能让同一诱发窗口中的 C2 新取得发动资格；检索组链开始前的发动合法性快照。",
+      "pre_chain_trigger_legality_rule_search_query",
+    );
+    add(
+      "诱发效果 连锁发生之前 满足发动条件 支付cost后才出现对象 不能连锁发动",
+      "区分多个公开区域诱发的组链前合法性与单一效果自身支付 cost 后选择对象。",
+      "pre_chain_trigger_legality_rule_search_query",
+    );
+  }
   if (/(?:代替破坏|破坏.{0,12}代替|破壊.{0,12}代わり|替代破坏)/u.test(text)
       && /(?:同时|同一时点|双方|多个|复数|複数|各自|都要|一起)/u.test(text)) {
     add("同一时点 多个不入连锁效果 适用顺序 回合玩家 非回合玩家", "检索多个不入连锁效果同时适用时的先后顺序。");

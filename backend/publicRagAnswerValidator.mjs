@@ -84,11 +84,12 @@ export function validatePublicRagFinalAnswer(answer = {}, {
     errors,
     diagnostics: validationDiagnostics,
   });
-  // Operation-legality packets and prose self-consistency checks are
-  // heuristic diagnostics, not proofs.  They may locate a suspicious answer
-  // for later review, but must not trigger a paid repair or hide an otherwise
-  // valid model answer.  Only strict shape/citation checks, authoritative
-  // direct evidence and trusted semantic/formal proofs remain blocking.
+  // Operation-legality packets, prose self-consistency checks and regex-based
+  // question-coverage checks are heuristic diagnostics, not proofs. They may
+  // locate a suspicious answer for later review, but must not trigger a paid
+  // repair or hide an otherwise valid model answer. Only strict
+  // shape/citation checks, authoritative direct evidence and trusted
+  // semantic/formal proofs remain blocking.
   validateOperationLegalityContract({ answer, shortAnswer, evidence, errors: diagnosticWarnings });
   validateTrustedSemanticContract({ answer, shortAnswer, evidence, errors });
   validateFormalUnknownContract({ combined, evidence, errors: diagnosticWarnings });
@@ -98,7 +99,7 @@ export function validatePublicRagFinalAnswer(answer = {}, {
     compareReasoning: !authoritativeOfficialDirect,
     errors: diagnosticWarnings,
   });
-  validateQuestionCoverage({ userQuery, shortAnswer, errors });
+  validateQuestionCoverage({ userQuery, shortAnswer, errors: diagnosticWarnings });
 
   return {
     ok: errors.length === 0,

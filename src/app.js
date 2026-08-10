@@ -962,6 +962,25 @@ function providerFailurePresentation(flags = []) {
   };
 }
 
+function publicSystemFailurePresentation(flags = []) {
+  const providerFailure = providerFailurePresentation(flags);
+  if (providerFailure) return providerFailure;
+  const values = new Set((Array.isArray(flags) ? flags : []).map(String));
+  if (!values.has("public_final_model_validation_failed")
+      && !values.has("model_output_schema_validation_failed")
+      && !values.has("public_final_repair_failed")) {
+    return null;
+  }
+  return {
+    confidence: "生成异常",
+    className: "is-risky",
+    title: "裁定生成未通过校验",
+    basis: values.has("model_output_schema_validation_failed")
+      ? "模型输出无法解析"
+      : "最终回答校验失败",
+  };
+}
+
 function renderRagAnswer(answer) {
   ui.resultGrid.hidden = false;
   renderCards(answer?.resolvedCards || []);
@@ -971,17 +990,20 @@ function renderRagAnswer(answer) {
   const labels = {
     official_confirmed: { confidence: "官方依据", className: "is-confirmed", title: "官方直接裁定", basis: "官方 direct Q&A" },
     rule_analysis: { confidence: "规则分析", className: "is-rule-derived", title: "裁定分析", basis: "卡片文本 / FAQ / 相关资料" },
-    low_confidence_analysis: { confidence: "低置信", className: "is-risky", title: "低置信分析", basis: "资料不足或仅有弱相关资料" },
-    needs_more_info: { confidence: "需要补充", className: "is-risky", title: "需要补充信息", basis: "当前检索资料不足" },
+    low_confidence_analysis: { confidence: "需要核对", className: "is-caution", title: "条件性规则分析", basis: "已有资料可供分析，但部分条件仍需核对" },
+    needs_more_info: { confidence: "需要补充", className: "is-caution", title: "需要补充信息", basis: "缺少作出判断所需的场景或卡片资料" },
     budget_limited: { confidence: "预算限制", className: "is-risky", title: "今日预算已用完", basis: "API 预算守卫" },
   };
   const providerFailureState = providerFailurePresentation(answer?.riskFlags);
-  const state = providerFailureState || labels[answer.answerLevel] || labels.needs_more_info;
+  const systemFailureState = publicSystemFailurePresentation(answer?.riskFlags);
+  const state = systemFailureState || labels[answer.answerLevel] || labels.needs_more_info;
   const providerLabel = modelProviderLabel(answer.debug?.providerUsed);
   const modelLabel = answer.debug?.modelUsed || answer.debug?.modelName || "";
   updateModelStatus(debugUiEnabled
     ? (answer.debug?.dryRun ? "RAG MOCK" : [providerLabel, modelLabel].filter(Boolean).join(" · ") || "RAG")
-    : (providerFailureState ? "模型服务暂不可用" : "分析完成"));
+    : (providerFailureState
+      ? "模型服务暂不可用"
+      : (systemFailureState ? "裁定生成异常" : "分析完成")));
   ui.verdictBlock.className = `result-block verdict-block ${state.className}`;
   ui.confidenceText.textContent = state.confidence;
   ui.verdictTitle.textContent = state.title;
@@ -1065,6 +1087,8 @@ function publicRiskLines(flags) {
     "trusted_local_semantic_execution",
     "semantic_state_transition_applied",
     "final_model_skipped",
+    "public_final_nonblocking_semantic_diagnostic",
+    "public_final_repair_nonblocking_semantic_diagnostic",
   ]);
   const hiddenPrefixes = [
     "persistent_budget_storage_missing",

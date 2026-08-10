@@ -4274,6 +4274,13 @@ test("compact recovery prompt retains card effect text and semantic state transi
         id: "recovery-card",
         name: "恢复测试龙",
         cardType: "monster",
+        attribute: "WIND",
+        race: "Dragon",
+        atk: 2500,
+        def: 2000,
+        level: 8,
+        rank: null,
+        link: null,
         effectText: "EFFECT_TEXT_RECOVERY_MARKER：舍弃1张手牌发动，处理时再检查场面。",
       }],
     },
@@ -4303,6 +4310,13 @@ test("compact recovery prompt retains card effect text and semantic state transi
 
   assert.match(bundle.recoveryPrompt, /EFFECT_TEXT_RECOVERY_MARKER/u);
   assert.match(bundle.recoveryPrompt, /SEMANTIC_STATE_RECOVERY_MARKER/u);
+  assert.match(bundle.recoveryPrompt, /"attribute":"WIND"/u);
+  assert.match(bundle.recoveryPrompt, /"race":"Dragon"/u);
+  assert.match(bundle.recoveryPrompt, /"atk":2500/u);
+  assert.match(bundle.recoveryPrompt, /"def":2000/u);
+  assert.match(bundle.recoveryPrompt, /"level":8/u);
+  assert.match(bundle.recoveryPrompt, /"rank":null/u);
+  assert.match(bundle.recoveryPrompt, /"link":null/u);
   assert.match(bundle.recoveryPrompt, /shortAnswer 不超过300字/u);
   assert.match(bundle.recoveryPrompt, /reasoning 为2至5条/u);
   assert.match(bundle.recoveryPrompt, /usedEvidence.{0,80}id 必须非空/su);

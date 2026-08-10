@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-08-10T08:08:09.655Z",
+  "generatedAt": "2026-08-10T19:02:08.917Z",
   "records": [
     {
       "alias": "“K9刑侦案件”",
@@ -4047,27 +4047,6 @@
       "cardId": "15994",
       "cardName": "烙印龙 阿尔比昂",
       "language": "en"
-    },
-    {
-      "alias": "神炎龙 赫界龙",
-      "normalizedAlias": "神炎龙 赫界龙",
-      "cardId": "15994",
-      "cardName": "烙印龙 阿尔比昂",
-      "language": "zh"
-    },
-    {
-      "alias": "神炎龙",
-      "normalizedAlias": "神炎龙",
-      "cardId": "15994",
-      "cardName": "烙印龙 阿尔比昂",
-      "language": "zh"
-    },
-    {
-      "alias": "赫界龙",
-      "normalizedAlias": "赫界龙",
-      "cardId": "15994",
-      "cardName": "烙印龙 阿尔比昂",
-      "language": "zh"
     },
     {
       "alias": "真炎龙 阿尔比昂",
@@ -105668,6 +105647,41 @@
       "language": "en"
     },
     {
+      "alias": "引导之圣女 奎姆",
+      "normalizedAlias": "引导之圣女 奎姆",
+      "cardId": "18474",
+      "cardName": "引导之圣女 库妸㽗",
+      "language": "zh"
+    },
+    {
+      "alias": "引导的圣女 奎姆",
+      "normalizedAlias": "引导的圣女 奎姆",
+      "cardId": "18474",
+      "cardName": "引导之圣女 库妸㽗",
+      "language": "zh"
+    },
+    {
+      "alias": "引导之圣女奎姆",
+      "normalizedAlias": "引导之圣女奎姆",
+      "cardId": "18474",
+      "cardName": "引导之圣女 库妸㽗",
+      "language": "zh"
+    },
+    {
+      "alias": "奎姆",
+      "normalizedAlias": "奎姆",
+      "cardId": "18474",
+      "cardName": "引导之圣女 库妸㽗",
+      "language": "zh"
+    },
+    {
+      "alias": "导圣",
+      "normalizedAlias": "导圣",
+      "cardId": "18474",
+      "cardName": "引导之圣女 库妸㽗",
+      "language": "zh"
+    },
+    {
       "alias": "拥抱罪咎的绿柱魔瞳",
       "normalizedAlias": "拥抱罪咎的绿柱魔瞳",
       "cardId": "21481",
@@ -131916,6 +131930,34 @@
       "cardId": "17070",
       "cardName": "神炎龙 卢绯里昂",
       "language": "en"
+    },
+    {
+      "alias": "神炎龙 卢贝里昂",
+      "normalizedAlias": "神炎龙 卢贝里昂",
+      "cardId": "17070",
+      "cardName": "神炎龙 卢绯里昂",
+      "language": "zh"
+    },
+    {
+      "alias": "神炎龙",
+      "normalizedAlias": "神炎龙",
+      "cardId": "17070",
+      "cardName": "神炎龙 卢绯里昂",
+      "language": "zh"
+    },
+    {
+      "alias": "卢绯里昂",
+      "normalizedAlias": "卢绯里昂",
+      "cardId": "17070",
+      "cardName": "神炎龙 卢绯里昂",
+      "language": "zh"
+    },
+    {
+      "alias": "卢贝里昂",
+      "normalizedAlias": "卢贝里昂",
+      "cardId": "17070",
+      "cardName": "神炎龙 卢绯里昂",
+      "language": "zh"
     },
     {
       "alias": "宵闇のルーチェ",

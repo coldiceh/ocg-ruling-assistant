@@ -444,3 +444,62 @@ test("negative scene-state phrases are not treated as unquoted card names", () =
     assert.deepEqual(resolution.unresolvedMentions, [], question);
   }
 });
+
+test("gameplay prose wrapped around already resolved aliases is not reported as another card", () => {
+  const cards = [
+    { id: "quem", name: "引导之圣女 奎姆", aliases: ["引导之圣女 奎姆", "导圣"] },
+    { id: "lubellion", name: "神炎龙 卢绯里昂", aliases: ["神炎龙 卢绯里昂", "神炎龙"] },
+    { id: "albaz", name: "阿不思的落胤", aliases: ["阿不思的落胤", "阿不思"] },
+  ];
+  const question = "在墓地没有引导之圣女能苏生的怪兽时，神炎龙C1支付cost丢下阿不思；导圣能不能C2发动，把神炎龙cost送下去的阿不思苏生？";
+  const resolution = extractRagCards(question, { cards, maxCards: 8 });
+
+  assert.deepEqual(new Set(resolution.resolvedCards.map((card) => card.id)), new Set(["quem", "lubellion", "albaz"]));
+  assert.equal(resolution.unresolvedMentions.length, 0);
+});
+
+test("canonical names outrank a conflicting supplemental alias for real and fictional card surfaces", () => {
+  const real = extractRagCards("神炎龙能发动吗？", {
+    cards: [
+      { id: "15994", name: "烙印龙 阿尔比昂", aliases: ["神炎龙"] },
+      { id: "17070", name: "神炎龙 卢绯里昂", aliases: [] },
+    ],
+  });
+  const fictional = extractRagCards("星刻龙能发动吗？", {
+    cards: [
+      { id: "wrong", name: "旧候选卡", aliases: ["星刻龙"] },
+      { id: "right", name: "星刻龙 新式", aliases: [] },
+    ],
+  });
+
+  assert.deepEqual(real.resolvedCards.map((card) => card.id), ["17070"]);
+  assert.deepEqual(fictional.resolvedCards.map((card) => card.id), ["right"]);
+});
+
+test("multiple canonical prefix owners fail closed instead of trusting a conflicting alias", () => {
+  const resolution = extractRagCards("星刻龙能发动吗？", {
+    cards: [
+      { id: "wrong", name: "旧候选卡", aliases: ["星刻龙"] },
+      { id: "right-a", name: "星刻龙 甲", aliases: [] },
+      { id: "right-b", name: "星刻龙 乙", aliases: [] },
+    ],
+  });
+
+  assert.equal(resolution.resolvedCards.some((card) => card.id === "wrong"), false);
+  assert.ok(resolution.ambiguousMentions.some((mention) => (
+    mention.input === "星刻龙" && mention.candidateCards.length === 2
+  )));
+});
+
+test("the reported Quem and Lubellion colloquial question resolves only the three real card identities", async () => {
+  const data = await loadRagData();
+  const question = "在墓地没有引导之圣女能苏生的怪兽的情况下，神炎龙C1 cost丢下去阿不思，此时导圣能不能C2发动效果，把神炎龙cost送下去的阿不思苏生？";
+  const resolution = extractRagCards(question, { cards: data.cards, maxCards: 8 });
+
+  assert.deepEqual(
+    new Set(resolution.resolvedCards.map((card) => String(card.id))),
+    new Set(["18474", "17070", "15245"]),
+  );
+  assert.deepEqual(resolution.unresolvedMentions, []);
+  assert.deepEqual(resolution.ambiguousMentions, []);
+});

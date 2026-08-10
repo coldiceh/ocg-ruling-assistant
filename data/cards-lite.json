@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-08-10T08:08:09.655Z",
+  "generatedAt": "2026-08-10T19:02:08.917Z",
   "records": [
     {
       "id": "21385",
@@ -6278,10 +6278,7 @@
       "aliases": [
         "烙印龙 阿尔比昂",
         "烙印竜アルビオン",
-        "Albion the Branded Dragon",
-        "神炎龙 赫界龙",
-        "神炎龙",
-        "赫界龙"
+        "Albion the Branded Dragon"
       ],
       "released": true,
       "type": "monster",
@@ -180327,7 +180324,12 @@
       "aliases": [
         "引导之圣女 库妸㽗",
         "導きの聖女クエム",
-        "Guiding Quem, the Virtuous"
+        "Guiding Quem, the Virtuous",
+        "引导之圣女 奎姆",
+        "引导的圣女 奎姆",
+        "引导之圣女奎姆",
+        "奎姆",
+        "导圣"
       ],
       "released": true,
       "type": "monster",
@@ -227397,7 +227399,11 @@
       "aliases": [
         "神炎龙 卢绯里昂",
         "神炎竜ルベリオン",
-        "Lubellion the Searing Dragon"
+        "Lubellion the Searing Dragon",
+        "神炎龙 卢贝里昂",
+        "神炎龙",
+        "卢绯里昂",
+        "卢贝里昂"
       ],
       "released": true,
       "type": "monster",

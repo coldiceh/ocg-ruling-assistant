@@ -152,6 +152,12 @@ test("ui_has_single_query_button", async () => {
   assert.match(app, /progress-step-time/u);
   assert.match(app, /readMonotonicNow/u);
   assert.match(app, /extractBackendPipelineTimings/u);
+  assert.match(app, /low_confidence_analysis:\s*\{[^}]+className:\s*"is-caution"/u);
+  assert.match(app, /needs_more_info:\s*\{[^}]+className:\s*"is-caution"/u);
+  assert.match(app, /budget_limited:\s*\{[^}]+className:\s*"is-risky"/u);
+  assert.match(app, /publicSystemFailurePresentation/u);
+  const css = await readFile(new URL("../src/styles.css", import.meta.url), "utf8");
+  assert.match(css, /\.verdict-block\.is-caution\s*\{[^}]*var\(--warn\)/su);
   assert.match(app, /startPendingStages/u);
   assert.match(html, /id="pipelineTimingPanel" hidden/u);
   assert.match(html, /id="pipelineStageList"/u);
@@ -1621,6 +1627,9 @@ test("rag UI presents provider failures as model service unavailable in Chinese"
   const presentation = new Function(
     `${presentationSource}; return providerFailurePresentation;`,
   )();
+  const systemPresentation = new Function(
+    `${presentationSource}; return publicSystemFailurePresentation;`,
+  )();
   const formatSource = sourceBetween(
     app,
     "function formatRiskFlag",
@@ -1652,11 +1661,21 @@ test("rag UI presents provider failures as model service unavailable in Chinese"
     "model_provider_call_failed",
     "model_provider_access_denied",
   ]), ["所选裁定模型当前无访问权限，请切换模型或稍后重试。"]);
+  assert.deepEqual(riskLines([
+    "public_final_nonblocking_semantic_diagnostic",
+    "public_final_repair_nonblocking_semantic_diagnostic",
+  ]), []);
   assert.equal(
     format("model_provider_timeout"),
     "模型服务调用超时，模型没有生成裁定，请稍后重试。",
   );
-  assert.match(app, /providerFailureState \? "模型服务暂不可用" : "分析完成"/u);
+  assert.deepEqual(systemPresentation(["model_output_schema_validation_failed"]), {
+    confidence: "生成异常",
+    className: "is-risky",
+    title: "裁定生成未通过校验",
+    basis: "模型输出无法解析",
+  });
+  assert.match(app, /providerFailureState\s*\? "模型服务暂不可用"\s*:\s*\(systemFailureState \? "裁定生成异常" : "分析完成"\)/u);
 });
 
 function sourceBetween(source, startMarker, endMarker) {

@@ -50,6 +50,7 @@ async function main() {
   const cardTargets = buildCardTargets(trackedCards, nameIndexes);
   const monsterPropertyMetadata = await loadMonsterPropertyMetadata();
   const cardPayloads = await loadCards(cardTargets, nameIndexes, monsterPropertyMetadata);
+  quarantineConflictingTrackedAliases(cardPayloads);
   const cardSnapshotAuthoritative = syncAllReleasedCards && sourceSyncWarnings.length === 0;
   const manifest = await loadManifest(previousMeta.sourceRevision);
   let cards = cardPayloads.map(({ record }) => record);
@@ -611,6 +612,39 @@ export function normalizeQa(payload, id, cards) {
     answerLocale: answerSelection?.locale || "unknown",
     updatedAt: new Date().toISOString(),
   };
+}
+
+export function quarantineConflictingTrackedAliases(cardPayloads = [], onWarning = addAliasWarning) {
+  const canonicalNamesByCardId = new Map((cardPayloads || []).map((entry) => [
+    String(entry?.record?.id || ""),
+    [...new Set([
+      entry?.payload?.cardData?.cn?.name,
+      entry?.payload?.cardData?.ja?.name,
+      entry?.payload?.cardData?.en?.name,
+      entry?.tracked?.lookupName,
+      entry?.tracked?.name,
+    ].map((value) => String(value || "").trim()).filter(Boolean))],
+  ]));
+
+  for (const entry of cardPayloads || []) {
+    const targetId = String(entry?.record?.id || "");
+    const trackedAliases = Array.isArray(entry?.tracked?.aliases) ? entry.tracked.aliases : [];
+    for (const alias of trackedAliases) {
+      const aliasKey = normalizeKey(alias);
+      if (aliasKey.length < 3) continue;
+      const matchingIds = [...canonicalNamesByCardId.entries()]
+        .filter(([, names]) => names.some((name) => normalizeKey(name).includes(aliasKey)))
+        .map(([cardId]) => cardId);
+      if (matchingIds.length !== 1 || matchingIds[0] === targetId) continue;
+      entry.record.aliases = (entry.record.aliases || []).filter(
+        (candidate) => normalizeKey(candidate) !== aliasKey,
+      );
+      onWarning(
+        `Tracked alias quarantined: ${alias} was assigned to card ${targetId} but uniquely matches canonical card ${matchingIds[0]}`,
+      );
+    }
+  }
+  return cardPayloads;
 }
 
 function collectQaIds(payload) {

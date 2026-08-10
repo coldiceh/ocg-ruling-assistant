@@ -394,6 +394,32 @@ test("a post-chain trigger scenario retrieves both ordering and reverse-resoluti
   ));
 });
 
+test("a C1 cost cannot create C2 eligibility without retrieving the pre-chain trigger snapshot rule", async () => {
+  const data = await loadRagData();
+  const question = "开始组成诱发连锁前墓地没有合法对象。公开区域诱发A排C1，支付cost把对象送墓后，公开区域诱发B能不能C2发动？";
+  const evidence = await retrieveRagEvidence({
+    userQuery: question,
+    cardResolution: {
+      resolvedCards: [],
+      unresolvedMentions: [],
+      ambiguousMentions: [],
+      userProvidedCardTexts: [],
+    },
+    cards: data.cards,
+    records: data.records,
+    qaRecords: data.qaRecords,
+    enableLiveOfficialQa: false,
+  });
+
+  assert.ok(evidence.ruleSearchQueries.some(
+    (item) => item.source === "pre_chain_trigger_legality_rule_search_query",
+  ));
+  assert.ok(evidence.rulebookCandidates.some((item) => (
+    item.sourceRecordId === "ocg-rule:c03/诱发类效果"
+      && /连锁发生之前就满足发动条件/u.test(item.text)
+  )));
+});
+
 test("ordinary C1/C2 resolution and target loss do not imply simultaneous trigger ordering", async () => {
   const question = [
     "双方主要阶段，对方以场上的怪兽为对象发动效果，我方连锁该怪兽的效果。",
