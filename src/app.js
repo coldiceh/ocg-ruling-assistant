@@ -107,8 +107,6 @@ const ui = {
   cardSourceLink: document.querySelector("#cardSourceLink"),
   themeToggle: document.querySelector("#themeToggle"),
   budgetPanel: document.querySelector("#budgetPanel"),
-  budgetSpentText: document.querySelector("#budgetSpentText"),
-  budgetLimitText: document.querySelector("#budgetLimitText"),
   budgetHint: document.querySelector("#budgetHint"),
   budgetBucketList: document.querySelector("#budgetBucketList"),
   budgetResetButton: document.querySelector("#budgetResetButton"),
@@ -1153,14 +1151,6 @@ async function resetBudgetStatus() {
 
 function renderBudgetStatus(status, message = "") {
   if (!ui.budgetPanel) return;
-  const storageMissing = status?.budgetStorage === "unconfigured"
-    || (status?.budgetPersistent === false && status?.budgetStorage !== "memory");
-  const spent = Number(status?.spentTodayCny);
-  const limit = Number(status?.dailyBudgetCny);
-  ui.budgetSpentText.textContent = storageMissing
-    ? "未持久化"
-    : Number.isFinite(spent) ? `人民币 ${formatCny(spent)} 元` : "未读取";
-  ui.budgetLimitText.textContent = Number.isFinite(limit) && limit > 0 ? ` / ${formatCny(limit)} 元` : "";
   const storage = status?.budgetStorage ? `存储：${status.budgetStorage}` : "";
   const mode = status?.budgetMode ? `模式：${status.budgetMode}` : "";
   ui.budgetHint.textContent = message

@@ -483,8 +483,8 @@ test("backend answers bypass persistent browser cache and bust static assets", a
     readFile(new URL("../config.json", import.meta.url), "utf8"),
   ]);
   const config = JSON.parse(configText.replace(/^\uFEFF/u, ""));
-  assert.match(html, /src\/app\.js\?v=20260810-public-models-1/u);
-  assert.match(html, /src\/styles\.css\?v=20260807-budget-breakdown-1/u);
+  assert.match(html, /src\/app\.js\?v=20260810-budget-summary-1/u);
+  assert.match(html, /src\/styles\.css\?v=20260810-budget-summary-1/u);
   assert.match(config.answerApiUrl, /\?client=20260722-answer-version-1$/u);
   assert.match(app, /cache: "no-store"/u);
   assert.doesNotMatch(app, /backendAnswerCacheTtlMs|buildBackendCacheKey|readCachedBackendAnswer|writeCachedBackendAnswer|ocg-ruling-answer:v/u);
@@ -544,6 +544,8 @@ test("ui_hides_engine_details_by_default", async () => {
   assert.match(html, /裁定流程/u);
   assert.match(html, /今日 API 额度（分币种）/u);
   assert.match(html, /id="budgetBucketList"/u);
+  assert.doesNotMatch(html, /budgetSpentText|budgetLimitText/u);
+  assert.doesNotMatch(app, /budgetSpentText|budgetLimitText/u);
   assert.match(html, /id="budgetResetButton"[^>]+hidden/u);
   const publicBudget = sourceBetween(html, '<section class="budget-panel"', '<section class="admin-lab"');
   const adminPanel = sourceBetween(html, '<section class="admin-lab"', '<section class="disclaimer-panel"');
@@ -562,7 +564,6 @@ test("ui_hides_engine_details_by_default", async () => {
   assert.match(app, /params\.get\("debug"\) === "1"/u);
   assert.match(app, /prompt\("请输入重置额度密码"\)/u);
   assert.match(app, /JSON\.stringify\(\{ password \}\)/u);
-  assert.match(app, /未持久化/u);
   assert.match(app, /storageWarning/u);
   assert.match(app, /bucket\?\.id !== "final_ruling:glm"/u);
   assert.match(app, /label: "ChatGPT 最终裁定"/u);
