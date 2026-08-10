@@ -50,8 +50,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
-      UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
-      UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
+      # Prefer the names injected by this project's Vercel/Upstash Budget KV
+      # integration. Keep the older generic names as a migration fallback.
+      UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_BUDGET_KV_REST_API_URL || secrets.UPSTASH_REDIS_REST_URL }}
+      UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_BUDGET_KV_REST_API_TOKEN || secrets.UPSTASH_REDIS_REST_TOKEN }}
       OPERATION_MODE: ${{ inputs.mode }}
       OLDER_THAN_DAYS: ${{ inputs.older_than_days }}
       APPROVED_PLAN_FINGERPRINT: ${{ inputs.plan_fingerprint }}
