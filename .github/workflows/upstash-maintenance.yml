@@ -17,6 +17,21 @@ on:
         required: true
         type: string
         default: "30"
+      max_runs:
+        description: Maximum terminal Admin Runs allowed in this reviewed batch
+        required: true
+        type: string
+        default: "25"
+      max_keys:
+        description: Maximum exact Admin Run keys allowed in this reviewed batch
+        required: true
+        type: string
+        default: "250"
+      max_known_bytes:
+        description: Maximum measured bytes allowed in this reviewed batch
+        required: true
+        type: string
+        default: "134217728"
       plan_fingerprint:
         description: Execute only - exact 64-character fingerprint from a reviewed plan
         required: false
@@ -56,6 +71,9 @@ jobs:
       UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_BUDGET_KV_REST_API_TOKEN || secrets.UPSTASH_REDIS_REST_TOKEN }}
       OPERATION_MODE: ${{ inputs.mode }}
       OLDER_THAN_DAYS: ${{ inputs.older_than_days }}
+      MAX_RUNS: ${{ inputs.max_runs }}
+      MAX_KEYS: ${{ inputs.max_keys }}
+      MAX_KNOWN_BYTES: ${{ inputs.max_known_bytes }}
       APPROVED_PLAN_FINGERPRINT: ${{ inputs.plan_fingerprint }}
       EXECUTION_CONFIRMATION: ${{ inputs.confirmation_phrase }}
       WRITES_DISABLED_CONFIRMATION: ${{ inputs.writes_disabled_confirmation }}
@@ -89,6 +107,9 @@ jobs:
             plan)
               node scripts/cleanup-upstash-admin-runs.mjs \
                 --older-than-days "$OLDER_THAN_DAYS" \
+                --max-runs "$MAX_RUNS" \
+                --max-keys "$MAX_KEYS" \
+                --max-known-bytes "$MAX_KNOWN_BYTES" \
                 > artifacts/upstash-admin-run-cleanup-plan.json
               ;;
             execute)
@@ -98,6 +119,9 @@ jobs:
               [[ "$APPROVED_PLAN_FINGERPRINT" =~ ^[a-f0-9]{64}$ ]] || { echo "Exact 64-character plan fingerprint is required" >&2; exit 1; }
               node scripts/cleanup-upstash-admin-runs.mjs \
                 --older-than-days "$OLDER_THAN_DAYS" \
+                --max-runs "$MAX_RUNS" \
+                --max-keys "$MAX_KEYS" \
+                --max-known-bytes "$MAX_KNOWN_BYTES" \
                 --execute \
                 --confirm "$EXECUTION_CONFIRMATION" \
                 --confirm-writes-disabled "$WRITES_DISABLED_CONFIRMATION" \

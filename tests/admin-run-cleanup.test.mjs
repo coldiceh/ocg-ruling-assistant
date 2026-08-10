@@ -250,6 +250,42 @@ test("execution binds approval to the reviewed plan and stops if the run namespa
   assert.equal(redis.commands.some((entry) => entry.command[0] === "EVAL"), false);
 });
 
+test("batch execution validates full snapshot contents only at batch boundaries", async () => {
+  const redis = createRedisFixture();
+  for (const runId of ["batch-one", "batch-two", "batch-three"]) {
+    seedRun(redis.run, { runId });
+    seedHistory(redis.history, runId, `${runId} question`);
+  }
+  const retained = seedRun(redis.run, {
+    runId: "recent-retained",
+    endedAt: RECENT,
+    updatedAt: RECENT,
+  });
+  seedHistory(redis.history, "recent-retained", "recent question");
+  const plan = await planFixture(redis, { olderThanDays: 7 });
+  assert.equal(plan.totals.runCount, 3);
+  const commandStart = redis.commands.length;
+
+  await executeAdminRunCleanup(plan, {
+    execute: true,
+    confirmation: ADMIN_RUN_CLEANUP_CONFIRMATION,
+    writesDisabledConfirmation: ADMIN_RUN_WRITES_DISABLED_CONFIRMATION,
+    approvalFingerprint: plan.planFingerprint,
+    fetchImpl: redis.fetchImpl,
+  });
+
+  const executionSnapshotGets = redis.commands.slice(commandStart).filter(
+    (entry) => entry.url === RUN_URL
+      && entry.command[0] === "GET"
+      && /:snapshot:/u.test(String(entry.command[1])),
+  );
+  assert.equal(executionSnapshotGets.length, 5);
+  assert.equal(
+    executionSnapshotGets.filter((entry) => entry.command[1] === retained.keys.snapshot).length,
+    2,
+  );
+});
+
 test("incomplete reference graphs and configurable hard limits block execution", async () => {
   const broken = createRedisFixture();
   const seeded = seedRun(broken.run, { runId: "broken-ref" });

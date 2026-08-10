@@ -309,8 +309,9 @@ export async function planAdminRunCleanup(options = {}) {
       limitation:
         "Redis Cluster slots prevent this tool from atomically locking every Admin Run writer.",
       failClosedChecks: [
-        "all snapshot reference targets are deferred to a later cleanup plan",
-        "the namespace key set and complete snapshot graph are revalidated around every delete",
+      "all snapshot reference targets are deferred to a later cleanup plan",
+      "the namespace key set is revalidated around every delete",
+      "the complete snapshot graph is revalidated before and after the deletion batch",
       ],
     },
     historyRetentionNotice:
@@ -412,11 +413,10 @@ export async function executeAdminRunCleanup(plan, {
   });
   const deleted = [];
   for (const candidate of internal.candidates) {
-    await assertNamespaceAndSnapshotGraphUnchanged(runRedis, {
+    await assertNamespaceUnchanged(runRedis, {
       runPrefix: internal.runPrefix,
       maxScanKeys: internal.maxScanKeys,
       expectedNamespaceKeys,
-      expectedSnapshotRaw,
     });
     assertCandidateDeletionScope(candidate, internal.runPrefix);
     const historyRaw = await historyRedis(["GET", candidate.historyKey]);
@@ -452,14 +452,19 @@ export async function executeAdminRunCleanup(plan, {
     expectedSnapshotRaw = new Map(
       [...expectedSnapshotRaw].filter(([key]) => !deletedKeys.has(key)),
     );
-    await assertNamespaceAndSnapshotGraphUnchanged(runRedis, {
+    await assertNamespaceUnchanged(runRedis, {
       runPrefix: internal.runPrefix,
       maxScanKeys: internal.maxScanKeys,
       expectedNamespaceKeys,
-      expectedSnapshotRaw,
     });
     deleted.push(candidate.keys.length);
   }
+  await assertNamespaceAndSnapshotGraphUnchanged(runRedis, {
+    runPrefix: internal.runPrefix,
+    maxScanKeys: internal.maxScanKeys,
+    expectedNamespaceKeys,
+    expectedSnapshotRaw,
+  });
   return deepFreeze({
     schemaVersion: 1,
     mode: "executed",
@@ -609,14 +614,11 @@ async function assertNamespaceAndSnapshotGraphUnchanged(redis, {
   expectedNamespaceKeys,
   expectedSnapshotRaw,
 }) {
-  const currentKeys = await scanKeys(
-    redis,
-    `${escapeRedisGlob(runPrefix)}:*`,
+  const currentKeys = await assertNamespaceUnchanged(redis, {
+    runPrefix,
     maxScanKeys,
-  );
-  if (digestJson(currentKeys) !== digestJson(expectedNamespaceKeys)) {
-    throw cleanupConflict("admin_run_namespace_changed");
-  }
+    expectedNamespaceKeys,
+  });
   const currentSnapshotRaw = new Map();
   for (const key of currentKeys) {
     const parsed = parseAdminRunKey(key, runPrefix);
@@ -630,6 +632,22 @@ async function assertNamespaceAndSnapshotGraphUnchanged(redis, {
   if (digestSnapshotGraph(currentSnapshotRaw) !== digestSnapshotGraph(expectedSnapshotRaw)) {
     throw cleanupConflict("snapshot_graph_changed");
   }
+}
+
+async function assertNamespaceUnchanged(redis, {
+  runPrefix,
+  maxScanKeys,
+  expectedNamespaceKeys,
+}) {
+  const currentKeys = await scanKeys(
+    redis,
+    `${escapeRedisGlob(runPrefix)}:*`,
+    maxScanKeys,
+  );
+  if (digestJson(currentKeys) !== digestJson(expectedNamespaceKeys)) {
+    throw cleanupConflict("admin_run_namespace_changed");
+  }
+  return currentKeys;
 }
 
 function parseAdminRunKey(key, prefix) {

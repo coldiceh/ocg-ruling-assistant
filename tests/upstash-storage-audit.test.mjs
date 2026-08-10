@@ -24,6 +24,9 @@ test("Upstash maintenance workflow defaults to read-only and gates execute with 
   assert.match(workflow, /\^\[a-f0-9\]\{64\}\$/u);
   assert.match(workflow, /--plan-fingerprint "\$APPROVED_PLAN_FINGERPRINT"/u);
   assert.match(workflow, /--confirm-writes-disabled "\$WRITES_DISABLED_CONFIRMATION"/u);
+  assert.match(workflow, /--max-runs "\$MAX_RUNS"/u);
+  assert.match(workflow, /--max-keys "\$MAX_KEYS"/u);
+  assert.match(workflow, /--max-known-bytes "\$MAX_KNOWN_BYTES"/u);
   assert.match(workflow, /--execute/u);
   assert.equal((workflow.match(/--execute/gu) || []).length, 1);
   assert.match(workflow, /Admin Model Lab create\/fork traffic is disabled/u);
