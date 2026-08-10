@@ -1,5 +1,9 @@
-import { evidenceBucketsToList } from "./ragEvidenceRetriever.mjs";
+import {
+  evidenceBucketsToList,
+  findOperationQuestionSubject,
+} from "./ragEvidenceRetriever.mjs";
 import { extractRelevantOfficialQaAnswerExcerpt } from "./officialQaAnswerExtractor.mjs";
+import { extractPrintedReferenceRequirement } from "./printedTextReferences.mjs";
 
 export const RAG_ANSWER_LEVELS = Object.freeze([
   "official_confirmed",
@@ -19,6 +23,15 @@ const RAG_JSON_SHAPE_EXAMPLE = Object.freeze({
   riskFlags: ["no_official_direct_qa"],
   confidenceSelfEstimate: "medium",
 });
+
+const PRINTED_TEXT_REFERENCE_INSTRUCTIONS = Object.freeze([
+  "必须把卡片的运行时状态与其不可变的卡片定义分开：当前卡名，以及通过效果临时获得、复制或适用的卡名与效果，可以影响明确参照当前卡名或当前所持有效果的判断，但不会改写该卡自身原始／印刷／数据库规范卡文。",
+  "当条件写有『有「X」卡名记述』『效果文本中记述了「X」』或同义措辞时，只检查候选卡自身原始规范 effectText 中是否实际记述该精确卡名；必须将该候选卡与其 card_text、baige_card_text 或 user_provided_text 证据唯一绑定，不能拿被复制来源卡的卡文代替候选卡自身卡文。",
+  "复制或获得来源卡的卡名与效果，不会把来源卡效果文本中的卡名引用写入接收者的原始卡文，因此不能仅凭运行时复制满足『卡名记述』条件；反之，如果接收者自身原始卡文本来就记述该精确卡名，应按原始卡文判断，而不是归因于复制。缺少候选卡自身可绑定的原始卡文时保留 UNKNOWN，不得用当前卡名或获得的效果补齐。",
+]);
+
+const MINIMAL_PRINTED_TEXT_REFERENCE_INSTRUCTION =
+  "『卡名记述』只查候选卡自身原始规范卡文；当前卡名或复制／获得的卡名与效果不会改写原始卡文，也不能用来源卡文替代，缺少候选卡自身卡文时必须保留 UNKNOWN。";
 
 export function buildRagRulingPrompt({
   userQuery,
@@ -45,6 +58,11 @@ export function buildRagRulingPromptBundle({
     maxPromptChars: readNumber(env.RAG_MAX_PROMPT_CHARS, 60000),
   };
   const evidencePayload = prepareEvidenceForPrompt(evidence, promptLimits, warnings);
+  const printedTextReferenceIntent = detectPrintedTextReferenceIntent({
+    userQuery,
+    resolvedCards: cardResolution.resolvedCards || [],
+    evidence,
+  });
   const payload = {
     userQuery: String(userQuery || ""),
     resolvedCards: summarizeCards(cardResolution.resolvedCards || [], promptLimits.maxCards),
@@ -59,6 +77,11 @@ export function buildRagRulingPromptBundle({
     legacyLuaSemanticPacket: summarizeLegacyLuaSemanticPacket(
       evidence.legacyLuaSemanticPacket,
     ),
+    rulingIntents: {
+      ...(printedTextReferenceIntent.detected
+        ? { printedNameReference: printedTextReferenceIntent }
+        : {}),
+    },
     evidence: {
       ...evidencePayload,
       retrievalWarnings: [...(evidence.retrievalWarnings || []), ...warnings],
@@ -118,6 +141,7 @@ export function buildRagRulingPromptBundle({
     "resolvedCards 是本地资料或百鸽已经匹配成功的卡片；其中已有 cardType、attribute 或效果文本时，不得再把该卡写成‘未识别’或‘属性未确定’。只有 unresolvedMentions 中仍存在的项目才算未解析。",
     "operationChecks、constraintAudit 和 semanticStateTransition 即使存在也只是旧的证据整理诊断，不是裁定证明或强约束；最终结论必须由你重新阅读原始卡文、官方 Q&A、FAQ 与规则资料后独立得出。",
     "cardSemanticFacts 是卡文范式化器从已解析卡文抽取的候选操作，不是裁定证明；必须对照原始卡文复核。若候选为 create_lingering_restriction 且 expiration.mode=irreversible_on_first_condition_failure、reactivates=false，它表示已处理效果创建的限制实例在 activeWhile 首次不成立时永久终止，之后条件再次成立也不会自行恢复，只有重新适用原效果才能创建新实例。",
+    ...printedTextReferenceInstructionsFor(payload),
     "formalEngineProofs 来自版本协商、能力检查、完整执行检查和独立证明校验后的声明式规则内核。trusted=true 且 verdict=TRUE/FALSE 的逐查询结论是强约束，模型只能解释，不能翻转；verdict=UNKNOWN 只表示未获证明，绝不等于 FALSE，也不能单独支持‘不能’。",
     "legacyLuaSemanticPacket 是从锁定旧版 Lua 脚本静态编译出的非权威语义提示，只用于发现应检查的发动条件、移动能力、cost 与处理操作。它的正式 verdict 永远是 UNKNOWN；candidateVerdict 只描述旧脚本在完整输入下的候选行为，不能直接支持任何裁定、不能覆盖题面/卡文/官方资料，UNKNOWN 也绝不等于不能。",
     "使用 Lua 候选前先以 resourceId 绑定 resources：预计算 sourceDocumentId 内的 cid-<卡片CID>/passcode-<脚本密码> 只对应 resolvedCards 中 CID 相同的卡片，禁止把一张卡的检查套到另一张卡。",
@@ -545,6 +569,7 @@ function buildCompactRagPrompt({ payload, maxPromptChars }) {
       payload.legacyLuaSemanticPacket,
       { candidateLimit: maxChars >= 12000 ? 10 : maxChars >= 4000 ? 5 : 2 },
     ),
+    rulingIntents: payload.rulingIntents || {},
     allowedEvidenceIds,
     evidence,
   };
@@ -553,6 +578,7 @@ function buildCompactRagPrompt({ payload, maxPromptChars }) {
     "官方直接 Q&A 才能支持 official_confirmed；相关 Q&A、FAQ、规则书和卡文只能支持 rule_analysis 或 low_confidence_analysis。",
     "operationChecks、constraintAudit 与 semanticStateTransition 是便宜模型/旧诊断整理出的待核对假设；只能帮助定位证据，不能替代最终推理。unknown 或未核对限制不能支持肯定或否定结论。",
     "cardSemanticFacts 是卡文范式化候选而非证明。create_lingering_restriction 的 irreversible_on_first_condition_failure/ reactivates=false 表示期限条件首次失效后该效果实例永久结束，条件后来恢复不会自动重启。必须对照原卡文复核。",
+    ...printedTextReferenceInstructionsFor(context),
     "legacyLuaSemanticPacket 只是锁定旧脚本的非权威语义提示。只能据此发现要检查的条件和操作；正式 verdict 永远 UNKNOWN，candidateVerdict 不能直接支持结论、不能覆盖卡文或官方资料。",
     "使用 Lua 候选前先以 resourceId 绑定 resources；预计算 sourceDocumentId 的 cid-<卡片CID>/passcode-<脚本密码> 只可用于 resolvedCards 中 CID 相同的卡片，禁止跨卡套用。",
     "legacyLuaSemanticPacket.activationLegalityChecks 是旧脚本在发动检查阶段实际执行的通用候选条件。必须对题设状态枚举能通过 predicateApi 的候选；若 requiredMinimum 无法达到，则该效果不能发动，不得误解为可以发动后空处理。候选卡的具体合法性仍必须用卡文或规则资料复核。",
@@ -596,6 +622,7 @@ function buildCompactRagPrompt({ payload, maxPromptChars }) {
       payload.legacyLuaSemanticPacket,
       { candidateLimit: 2 },
     ),
+    rulingIntents: payload.rulingIntents || {},
     allowedEvidenceIds: allowedEvidenceIds.slice(0, 10),
     evidenceIds: evidenceIds.slice(0, 10),
   });
@@ -603,6 +630,9 @@ function buildCompactRagPrompt({ payload, maxPromptChars }) {
 
   const minimalPrompt = [
     "仅依据上下文输出规定字段的裁定 JSON；不得编造证据。usedEvidence 的 id 必须非空并逐字取自 allowedEvidenceIds；没有引用则为 []。",
+    ...(hasPrintedTextReferenceIntent(payload)
+      ? [MINIMAL_PRINTED_TEXT_REFERENCE_INSTRUCTION]
+      : []),
     JSON.stringify({
       userQuery: String(payload.userQuery || "").slice(0, 80),
       resolvedCards: (payload.resolvedCards || []).slice(0, 2).map((card) => ({
@@ -620,6 +650,7 @@ function buildCompactRagPrompt({ payload, maxPromptChars }) {
         payload.legacyLuaSemanticPacket,
         { candidateLimit: 1 },
       ),
+      rulingIntents: payload.rulingIntents || {},
       allowedEvidenceIds: allowedEvidenceIds.slice(0, 3),
       evidenceIds: evidenceIds.slice(0, 3).map((item) => item.id),
     }),
@@ -627,6 +658,87 @@ function buildCompactRagPrompt({ payload, maxPromptChars }) {
   return minimalPrompt.length <= maxChars
     ? minimalPrompt
     : minimalPrompt.slice(0, maxChars);
+}
+
+function detectPrintedTextReferenceIntent({
+  userQuery = "",
+  resolvedCards = [],
+  evidence = {},
+} = {}) {
+  const query = String(userQuery || "");
+  const subject = findOperationQuestionSubject(query, resolvedCards);
+  const subjectText = String(subject?.card?.effectText || subject?.card?.text || "");
+  const queryRequiredName = extractPrintedReferenceRequirement(query);
+  const subjectRequiredName = extractPrintedReferenceRequirement(subjectText);
+  const definitionFaqs = (evidence.faqRelated || []).filter((item) => {
+    const signals = item?.retrievalSignals || {};
+    const overlap = signals.operationSubjectDefinitionOverlap || [];
+    return signals.operationSubjectDefinitionFaq === true
+      && overlap.some((key) => key === "card_name_reference" || key === "printed_text");
+  });
+  const faqRequiredName = definitionFaqs
+    .map((item) => extractPrintedReferenceRequirement([
+      item.question,
+      item.fullText,
+      item.text,
+      item.answer,
+    ].filter(Boolean).join("\n")))
+    .find(Boolean) || "";
+  const requiredName = queryRequiredName || subjectRequiredName || faqRequiredName;
+  const explicitPrintedReference = /(?:卡名|カード名|card\s+name).{0,24}(?:记载|记述|記載|記述|写有|寫有|書かれ|mention|list)|(?:记载|记述|記載|記述|写有|寫有|書かれ|mention|list).{0,24}(?:卡名|カード名|card\s+name)/iu.test(query);
+  const detectedFrom = [
+    ...(queryRequiredName || explicitPrintedReference ? ["user_query"] : []),
+    ...(subjectRequiredName ? ["operation_subject_card_text"] : []),
+    ...(definitionFaqs.length ? ["operation_subject_definition_faq"] : []),
+  ];
+  const sourceEvidenceIds = definitionFaqs.map((item) => String(item.id || "").trim()).filter(Boolean);
+  if (subject) {
+    sourceEvidenceIds.push(...(evidence.cardTexts || [])
+      .filter((item) => evidenceMatchesOperationSubject(item, subject))
+      .map((item) => String(item.id || "").trim())
+      .filter(Boolean));
+  }
+  return {
+    type: "printed_name_reference",
+    detected: Boolean(requiredName || explicitPrintedReference || definitionFaqs.length),
+    ...(requiredName ? { requiredName } : {}),
+    ...(subject?.identity?.id ? { subjectCardId: subject.identity.id } : {}),
+    ...(subject?.card?.name ? { subjectCardName: subject.card.name } : {}),
+    ...(detectedFrom.length ? { detectedFrom: [...new Set(detectedFrom)] } : {}),
+    ...(sourceEvidenceIds.length
+      ? { sourceEvidenceIds: [...new Set(sourceEvidenceIds)] }
+      : {}),
+  };
+}
+
+function evidenceMatchesOperationSubject(item = {}, subject = {}) {
+  const subjectId = String(subject?.identity?.id || "").trim();
+  const evidenceIds = (item.cardIds || []).map((value) => String(value || "").trim()).filter(Boolean);
+  if (subjectId && evidenceIds.includes(subjectId)) return true;
+  if (subjectId && evidenceIds.length) return false;
+  const subjectNames = new Set((subject?.identity?.aliases || [])
+    .map(normalizePromptCardIdentity)
+    .filter(Boolean));
+  return [item.title, ...(item.cards || [])]
+    .map(normalizePromptCardIdentity)
+    .some((name) => name && subjectNames.has(name));
+}
+
+function normalizePromptCardIdentity(value) {
+  return String(value || "")
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, "");
+}
+
+function hasPrintedTextReferenceIntent(payload = {}) {
+  return payload?.rulingIntents?.printedNameReference?.detected === true;
+}
+
+function printedTextReferenceInstructionsFor(payload = {}) {
+  return hasPrintedTextReferenceIntent(payload)
+    ? PRINTED_TEXT_REFERENCE_INSTRUCTIONS
+    : [];
 }
 
 function summarizeCardSemanticFacts(facts = {}) {
