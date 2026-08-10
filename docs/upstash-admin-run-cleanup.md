@@ -107,12 +107,14 @@ pnpm run cleanup:upstash-admin-runs --older-than-days 14 `
 执行器会在每个 Run 删除前：
 
 1. 再次读取并逐字节比较 History record；
-2. 确认整个 Admin Run 命名空间键集合和完整 Snapshot 引用图仍与已审批计划一致；
+2. 整批开始时确认完整 Snapshot 引用图与已审批计划一致，并在每个 Run
+   删除前后确认 Admin Run 命名空间键集合未发生计划外变化；
 3. 通过同一 Redis Cluster slot 的 Lua 事务，逐字节 CAS 当前 state；
 4. 确认计划中的每一个精确键仍存在；
 5. 只删除该事务显式列出的 state、events 和未受保护 Snapshot；
 6. 校验实际删除键数，确认 state 已消失且 History record 原样保留；
-7. 删除后再次核对命名空间和 Snapshot 图，发现任何并发写入立即停止后续 Run。
+7. 整批结束时再次核对剩余 Snapshot 图；发现键集合并发变化会立即停止后续
+   Run，发现不可变 Snapshot 内容异常则将执行标记为冲突并停止。
 
 任一 Run 在计划后发生变化、History 消失或精确键缺失时，工具立即停止，不会
 对该 Run 做部分删除。不同 Run 无法跨 slot 组成一个原子事务，因此先前已经
