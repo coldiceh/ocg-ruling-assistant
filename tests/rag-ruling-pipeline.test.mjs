@@ -8,6 +8,7 @@ import { callCardNameExtractionModel, callRagModel, callRulebookGroundingModel, 
 import {
   answerRagRulingQuestion,
   buildCardSemanticFacts,
+  normalizeRagAnswer,
 } from "../backend/ragRulingPipeline.mjs";
 import { analyzeEffectStateTransition } from "../backend/effectStateReasoner.mjs";
 import {
@@ -2974,6 +2975,79 @@ test("pipeline cost summary includes both auxiliary extractors on the caller's b
   assert.equal(result.debug.ruleQueryModelCostCny, 0.002);
   assert.equal(result.debug.estimatedCostCny, 0.004);
   assert.equal(status.spentTodayCny, 0.004);
+});
+
+test("public answer risk flags hide relay group names and request ids on provider denial", () => {
+  const answer = normalizeRagAnswer({
+    answerLevel: "needs_more_info",
+    shortAnswer: "模型服务不可用。",
+    reasoning: ["没有生成答案。"],
+    usedEvidence: [],
+    missingInfo: [],
+    riskFlags: [],
+    confidenceSelfEstimate: "low",
+  }, {
+    evidence: {},
+    cardResolution: {},
+    modelWarnings: [
+      "model_call_failed:request rejected",
+    ],
+    providerFailure: {
+      kind: "access_denied",
+      code: "private routing group (request id: sensitive-internal-id)",
+    },
+  });
+
+  assert.ok(answer.riskFlags.includes("model_provider_call_failed"));
+  assert.ok(answer.riskFlags.includes("model_provider_access_denied"));
+  assert.doesNotMatch(answer.riskFlags.join("\n"), /private routing group|sensitive-internal-id/u);
+});
+
+test("complete public pipeline response removes relay group names and request ids", async () => {
+  const now = new Date("2044-01-01T00:00:00.000Z");
+  const env = {
+    MODEL_PROVIDER: "relay",
+    RAG_MODEL_PROVIDER: "relay",
+    RAG_MODEL: "gpt-5.6-sol",
+    RELAY_API_KEY: "relay-test-key",
+    RELAY_BASE_URL: "https://relay.example.test/v1",
+    RAG_CARD_MODEL_PROVIDER: "mock",
+    RAG_RULE_MODEL_PROVIDER: "mock",
+    RAG_RULEBOOK_MODEL_PROVIDER: "mock",
+    RAG_LIVE_OFFICIAL_QA_ENABLED: "false",
+    RAG_AUTO_ENGINE_SIMULATION: "false",
+    API_DAILY_BUDGET_USD: "10",
+    API_BUDGET_TIMEZONE: "UTC",
+  };
+  await resetRagBudget({ env, now });
+  const result = await answerRagRulingQuestion({
+    question: "这个操作可以进行吗？",
+    cards: [],
+    records: [],
+    qaRecords: [],
+    env,
+    now,
+    cardModelInvoker: async () => ({ cardNames: [] }),
+    ruleModelInvoker: async () => ({ ruleQueries: [] }),
+    rulebookModelInvoker: async () => JSON.stringify({
+      operationChecks: [],
+      constraintReviews: [],
+    }),
+    fetchImpl: async () => jsonResponse({
+      error: {
+        message: "无权访问 private-routing-group (request id: sensitive-internal-id)",
+        code: "private-routing-group:sensitive-internal-id",
+      },
+    }, false, 403),
+  });
+  const serialized = JSON.stringify(result);
+
+  assert.equal(result.answerLevel, "needs_more_info");
+  assert.ok(result.riskFlags.includes("model_provider_call_failed"));
+  assert.ok(result.riskFlags.includes("model_provider_access_denied"));
+  assert.equal(result.debug.providerFailure.kind, "access_denied");
+  assert.equal(result.debug.providerFailure.code, "model_provider_access_denied");
+  assert.doesNotMatch(serialized, /private-routing-group|sensitive-internal-id/u);
 });
 
 test("public pipeline caches only identical-query extraction work and still invokes the final model every time", async () => {

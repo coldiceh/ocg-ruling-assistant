@@ -311,7 +311,14 @@ export async function answerRagRulingQuestion({
         }),
       });
   timingsMs.finalModel = elapsedMs(finalModelStartedAt);
-  const modelAnswer = normalizeRagAnswer(modelResult.answer, { evidence, cardResolution: effectiveCardResolution, modelWarnings: modelResult.warnings || [] });
+  const publicProviderFailure = sanitizePublicProviderFailure(modelResult.providerFailure);
+  const publicGenerationAttempts = sanitizePublicGenerationAttempts(modelResult.generationAttempts);
+  const modelAnswer = normalizeRagAnswer(modelResult.answer, {
+    evidence,
+    cardResolution: effectiveCardResolution,
+    modelWarnings: modelResult.warnings || [],
+    providerFailure: publicProviderFailure,
+  });
   const normalized = modelAnswer;
   const engineStartedAt = Date.now();
   const engine = await enginePromise;
@@ -422,7 +429,7 @@ export async function answerRagRulingQuestion({
       modelUsed: modelResult.modelUsed,
       modelName: modelResult.modelName,
       requestedModel: String(modelResult.generationConfig?.requestModel || modelResult.modelName || "") || null,
-      returnedModel: firstReturnedModel(modelResult.generationAttempts),
+      returnedModel: firstReturnedModel(publicGenerationAttempts),
       dryRun: modelResult.dryRun,
       tokenUsage: modelResult.tokenUsage || {},
       estimatedCostCny:
@@ -433,7 +440,8 @@ export async function answerRagRulingQuestion({
       estimatedCostUsd: modelResult.estimatedCostUsd || 0,
       budgetStatus: modelResult.budgetStatus || null,
       generationConfig: modelResult.generationConfig || null,
-      generationAttempts: modelResult.generationAttempts || [],
+      generationAttempts: publicGenerationAttempts,
+      providerFailure: publicProviderFailure,
       publicFinalValidation: modelResult.publicFinalValidation || null,
       promptChars: promptBundle.promptChars,
       dataRevision,
@@ -639,7 +647,12 @@ function attachRulebookGrounding(evidence, groundingResult = {}) {
   };
 }
 
-export function normalizeRagAnswer(answer = {}, { evidence = {}, cardResolution = {}, modelWarnings = [] } = {}) {
+export function normalizeRagAnswer(answer = {}, {
+  evidence = {},
+  cardResolution = {},
+  modelWarnings = [],
+  providerFailure = null,
+} = {}) {
   const availableEvidence = evidenceBucketsToList(evidence);
   const userTextEvidence = evidence.userProvidedCardTexts || [];
   const availableCards = [
@@ -652,7 +665,12 @@ export function normalizeRagAnswer(answer = {}, { evidence = {}, cardResolution 
   const directIds = new Set((evidence.officialQaDirectCandidates || []).map((item) => String(item.id)));
   const hasCardTextGrounding = Boolean((evidence.cardTexts || []).length || userTextEvidence.length);
   const hasAnyEvidence = availableEvidence.length > 0;
-  const riskFlags = new Set([...(answer.riskFlags || []), ...modelWarnings]);
+  const publicModelWarningFlags = (modelWarnings || []).flatMap(publicRiskFlagsForModelWarning);
+  const riskFlags = new Set([
+    ...(answer.riskFlags || []),
+    ...publicModelWarningFlags,
+    ...publicRiskFlagsForProviderFailure(providerFailure),
+  ]);
   if (userTextEvidence.length) riskFlags.add("user_provided_text_not_official");
   let answerLevel = RAG_ANSWER_LEVELS.includes(answer.answerLevel) ? answer.answerLevel : "low_confidence_analysis";
 
@@ -970,6 +988,134 @@ function userProvidedCards(items) {
     official: false,
     aliases: (item.cards || []).filter(Boolean),
   })).filter((card) => card.name && card.effectText);
+}
+
+function publicRiskFlagsForModelWarning(value) {
+  const warning = String(value || "").trim();
+  if (!warning) return [];
+  if (!warning.startsWith("model_call_failed:")) return [warning];
+  const flags = ["model_provider_call_failed"];
+  if (/(?:无权访问|没有权限|权限不足|拒绝访问|access denied|permission denied|forbidden|unauthori[sz]ed|model_provider_access_denied|\bHTTP\s*(?:401|403)\b)/iu.test(warning)) {
+    flags.push("model_provider_access_denied");
+  } else if (/(?:超时|timed out|timeout|ETIMEDOUT|UND_ERR_[A-Z_]*TIMEOUT|model_provider_timeout|\bHTTP\s*(?:408|504|524)\b)/iu.test(warning)) {
+    flags.push("model_provider_timeout");
+  }
+  return flags;
+}
+
+function publicRiskFlagsForProviderFailure(value) {
+  const kind = normalizePublicProviderFailureKind(value?.kind);
+  if (!kind) return [];
+  return [
+    "model_provider_call_failed",
+    ...(kind === "access_denied" ? ["model_provider_access_denied"] : []),
+    ...(kind === "timeout" ? ["model_provider_timeout"] : []),
+  ];
+}
+
+function sanitizePublicProviderFailure(value) {
+  const kind = normalizePublicProviderFailureKind(value?.kind);
+  if (!kind) return null;
+  const status = Number(value?.status);
+  return {
+    schemaVersion: 1,
+    kind,
+    provider: publicMachineIdentifier(value?.provider, 64),
+    code: kind === "access_denied"
+      ? "model_provider_access_denied"
+      : kind === "timeout"
+        ? "model_provider_timeout"
+        : "model_provider_error",
+    status: Number.isInteger(status) && status >= 100 && status <= 599 ? status : null,
+    requestedModel: publicMachineIdentifier(value?.requestedModel, 256),
+    reportedModel: publicMachineIdentifier(value?.reportedModel, 256),
+    finishReason: publicFinishReason(value?.finishReason),
+  };
+}
+
+function sanitizePublicGenerationAttempts(values = []) {
+  return (Array.isArray(values) ? values : []).slice(0, 8).map((value) => ({
+    attempt: publicMachineIdentifier(value?.attempt, 64),
+    publicAttemptKind: publicMachineIdentifier(value?.publicAttemptKind, 64),
+    requestModel: publicMachineIdentifier(value?.requestModel, 256),
+    responseModel: publicMachineIdentifier(value?.responseModel, 256),
+    systemFingerprint: publicMachineIdentifier(value?.systemFingerprint, 256),
+    thinkingMode: publicMachineIdentifier(value?.thinkingMode, 64),
+    reasoningEffort: value?.reasoningEffort == null
+      ? null
+      : publicMachineIdentifier(value.reasoningEffort, 64),
+    maxOutputTokens: publicNonNegativeNumber(value?.maxOutputTokens),
+    responseFormat: publicMachineIdentifier(value?.responseFormat, 64),
+    finishReason: publicFinishReason(value?.finishReason),
+    contentChars: publicNonNegativeNumber(value?.contentChars) || 0,
+    reasoningContentPresent: value?.reasoningContentPresent === true,
+    reasoningContentChars: publicNonNegativeNumber(value?.reasoningContentChars) || 0,
+    usage: publicNumericRecord(value?.usage),
+    providerFailure: sanitizePublicProviderFailure(value?.providerFailure),
+    streamMetrics: sanitizePublicStreamMetrics(value?.streamMetrics),
+  }));
+}
+
+function sanitizePublicStreamMetrics(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return {
+    schemaVersion: 1,
+    transport: "sse",
+    requestToResponseHeadersMs: publicNonNegativeNumber(value.requestToResponseHeadersMs),
+    requestToFirstByteMs: publicNonNegativeNumber(value.requestToFirstByteMs),
+    requestToFirstEventMs: publicNonNegativeNumber(value.requestToFirstEventMs),
+    requestToFirstContentMs: publicNonNegativeNumber(value.requestToFirstContentMs),
+    requestToCompleteMs: publicNonNegativeNumber(value.requestToCompleteMs),
+    networkChunkCount: publicNonNegativeNumber(value.networkChunkCount) || 0,
+    sseEventCount: publicNonNegativeNumber(value.sseEventCount) || 0,
+    visibleContentChunkCount: publicNonNegativeNumber(value.visibleContentChunkCount) || 0,
+    responseBytes: publicNonNegativeNumber(value.responseBytes) || 0,
+    visibleContentBytes: publicNonNegativeNumber(value.visibleContentBytes) || 0,
+    finishReason: publicFinishReason(value.finishReason) || null,
+  };
+}
+
+function normalizePublicProviderFailureKind(value) {
+  const kind = String(value || "").trim();
+  return ["access_denied", "timeout", "provider_failure"].includes(kind) ? kind : "";
+}
+
+function publicFinishReason(value) {
+  const reason = String(value || "").trim().toLowerCase();
+  return [
+    "stop",
+    "length",
+    "max_tokens",
+    "token_limit",
+    "content_filter",
+    "tool_calls",
+    "function_call",
+    "timeout",
+    "cancelled",
+    "canceled",
+    "incomplete",
+    "error",
+  ].includes(reason) ? reason : "";
+}
+
+function publicMachineIdentifier(value, maxLength) {
+  const text = String(value || "").trim();
+  if (!text || text.length > maxLength || !/^[A-Za-z0-9][A-Za-z0-9._:/-]*$/u.test(text)) return "";
+  return text;
+}
+
+function publicNonNegativeNumber(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const number = Number(value);
+  return Number.isFinite(number) && number >= 0 ? number : null;
+}
+
+function publicNumericRecord(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return Object.fromEntries(Object.entries(value)
+    .filter(([key, item]) => /^[A-Za-z0-9_]+$/u.test(key) && Number.isFinite(Number(item)))
+    .slice(0, 32)
+    .map(([key, item]) => [key, Number(item)]));
 }
 
 function buildRagDataRevision(data = {}, env = {}, { cacheByIdentity = false } = {}) {

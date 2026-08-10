@@ -371,7 +371,13 @@ export async function callRagModel({
       generationConfig,
     };
   } catch (error) {
-    const warning = `model_call_failed:${error instanceof Error ? error.message : String(error)}`;
+    const providerFailure = summarizeProviderFailure(error, {
+      provider,
+      requestedModel: modelName,
+    });
+    const warning = provider === "relay"
+      ? `model_call_failed:${providerFailure.code}`
+      : `model_call_failed:${error instanceof Error ? error.message : String(error)}`;
     const releaseSafe = isBudgetReservationReleaseSafe(error);
     const failedBudgetStatus = releaseSafe
       ? await releaseBudgetReservation({ preflight: budget, env, fetchImpl }).catch(() => budget.status)
@@ -394,6 +400,17 @@ export async function callRagModel({
       tokenUsage: {},
       ...budgetCostResultFields(budget, releaseSafe ? 0 : budget.reservedAmount),
       budgetStatus: failedBudgetStatus,
+      providerFailure,
+      generationAttempts: [{
+        attempt: "provider_call",
+        requestModel: providerFailure.requestedModel || String(modelName || ""),
+        responseModel: providerFailure.reportedModel || "",
+        finishReason: providerFailure.finishReason || "",
+        contentChars: 0,
+        usage: normalizeUsage(provider, error?.usage || {}),
+        providerFailure,
+        streamMetrics: error?.streamMetrics || null,
+      }],
       generationConfig,
     };
   }
@@ -1762,6 +1779,53 @@ async function callGemini({ prompt, env, modelName, maxTokens, fetchImpl, temper
       ? ["gemini_output_truncated_by_token_limit"]
       : [],
   };
+}
+
+function summarizeProviderFailure(error, { provider = "", requestedModel = "" } = {}) {
+  const message = error instanceof Error ? error.message : String(error || "");
+  const status = Number(error?.status);
+  const upstreamCode = String(error?.code || "model_provider_error").trim().slice(0, 128);
+  const accessDenied = status === 401
+    || status === 403
+    || /(?:无权访问|没有权限|权限不足|拒绝访问|access(?:[_ -]?is)?[_ -]?denied|permission[_ -]?denied|forbidden|unauthori[sz]ed|group[_ -]?access[_ -]?denied|no[_ -]?permission)/iu.test(`${upstreamCode} ${message}`);
+  const timedOut = new Set([408, 504, 524]).has(status)
+    || /(?:超时|timed[ _-]?out|timeout|etimedout|und_err_(?:headers|body)_timeout)/iu.test(`${upstreamCode} ${message}`);
+  const kind = accessDenied ? "access_denied" : timedOut ? "timeout" : "provider_failure";
+  return {
+    schemaVersion: 1,
+    kind,
+    provider: String(error?.provider || provider || "").slice(0, 64),
+    code: kind === "access_denied"
+      ? "model_provider_access_denied"
+      : kind === "timeout"
+        ? "model_provider_timeout"
+        : "model_provider_failure",
+    status: Number.isInteger(status) && status >= 100 && status <= 599 ? status : null,
+    requestedModel: String(
+      error?.requestedModel
+      || error?.submittedModel
+      || requestedModel
+      || "",
+    ).slice(0, 256),
+    reportedModel: String(error?.reportedModel || error?.model || "").slice(0, 256),
+    finishReason: safePublicProviderFinishReason(
+      error?.streamMetrics?.finishReason || error?.finishReason,
+    ),
+  };
+}
+
+function safePublicProviderFinishReason(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (!normalized) return "";
+  return new Set([
+    "stop",
+    "length",
+    "tool_calls",
+    "function_call",
+    "content_filter",
+    "cancelled",
+    "error",
+  ]).has(normalized) ? normalized : "other";
 }
 
 async function postJson(fetchImpl, url, headers, body, { signal } = {}) {

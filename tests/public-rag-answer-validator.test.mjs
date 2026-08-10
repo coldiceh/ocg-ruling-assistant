@@ -986,6 +986,107 @@ test("a complete answer agreeing with string semantic resolution remains a one-c
   assert.equal(result.publicFinalValidation.primary.candidate.shortAnswer, answer.shortAnswer);
 });
 
+test("structured provider access denial overrides a generic legacy warning and never triggers repair", async () => {
+  let calls = 0;
+  const providerFailure = {
+    schemaVersion: 1,
+    kind: "access_denied",
+    provider: "relay",
+    code: "group_access_denied",
+    status: 400,
+    requestedModel: "gpt-5.6-sol",
+  };
+  const result = await runValidatedPublicRagFinal({
+    originalPrompt: "FROZEN_PROVIDER_DENIAL",
+    userQuery: "这个操作可以进行吗？",
+    evidence: {},
+    invoke: async () => {
+      calls += 1;
+      return {
+        answer: makeAnswer("当前资料不足。"),
+        rawText: "",
+        warnings: ["model_call_failed:request rejected"],
+        providerFailure,
+        dryRun: false,
+        tokenUsage: {},
+        estimatedCostCny: 0,
+      };
+    },
+  });
+
+  assert.equal(calls, 1);
+  assert.equal(result.publicFinalValidation.outcome, "primary_failed_safe_fallback");
+  assert.equal(result.publicFinalValidation.repairAttempted, false);
+  assert.equal(result.publicFinalValidation.primary.providerFailureKind, "access_denied");
+  assert.equal(result.providerFailure, providerFailure);
+  assert.equal(result.answer.answerLevel, "needs_more_info");
+  assert.match(result.answer.shortAnswer, /上游服务拒绝.*访问权限/u);
+  assert.doesNotMatch(result.answer.shortAnswer, /not JSON/u);
+  assert.ok(result.answer.riskFlags.includes("model_provider_access_denied"));
+  assert.equal(result.answer.riskFlags.includes("model_output_schema_validation_failed"), false);
+  assert.equal(result.answer.riskFlags.includes("public_final_repair_failed"), false);
+});
+
+test("structured provider timeout is preserved when the directed repair call fails", async () => {
+  let calls = 0;
+  const timeoutFailure = {
+    schemaVersion: 1,
+    kind: "timeout",
+    provider: "relay",
+    code: "ETIMEDOUT",
+    status: 504,
+  };
+  const result = await runValidatedPublicRagFinal({
+    originalPrompt: "FROZEN_REPAIR_TIMEOUT",
+    userQuery: "这个效果可以发动吗？如果发动，之后如何处理？",
+    evidence: {},
+    invoke: async () => {
+      calls += 1;
+      if (calls === 1) {
+        const answer = makeAnswer("可以发动。");
+        return { answer, rawText: JSON.stringify(answer), warnings: [], dryRun: false };
+      }
+      return {
+        answer: makeAnswer("当前资料不足。"),
+        rawText: "",
+        warnings: ["model_call_failed:request rejected"],
+        providerFailure: timeoutFailure,
+        dryRun: false,
+      };
+    },
+  });
+
+  assert.equal(calls, 2);
+  assert.equal(result.publicFinalValidation.outcome, "repair_failed_safe_fallback");
+  assert.equal(result.publicFinalValidation.repair.providerFailureKind, "timeout");
+  assert.equal(result.providerFailure, timeoutFailure);
+  assert.equal(result.answer.answerLevel, "needs_more_info");
+  assert.match(result.answer.shortAnswer, /调用超时/u);
+  assert.ok(result.answer.riskFlags.includes("model_provider_call_failed"));
+  assert.ok(result.answer.riskFlags.includes("model_provider_timeout"));
+});
+
+test("legacy provider warnings remain a fallback classifier for old stored results", () => {
+  const validation = validatePublicRagFinalAnswer(makeAnswer("当前资料不足。"), {
+    rawText: "",
+    modelWarnings: ["model_call_failed:HTTP 504"],
+    userQuery: "这个操作可以进行吗？",
+    evidence: {},
+  });
+
+  assert.equal(validation.ok, false);
+  assert.equal(validation.providerFailureKind, "timeout");
+  assert.ok(validation.errors.includes("model provider timed out before returning output"));
+
+  const accessValidation = validatePublicRagFinalAnswer(makeAnswer("当前资料不足。"), {
+    rawText: "",
+    modelWarnings: ["model_call_failed:model_provider_access_denied"],
+    userQuery: "这个操作可以进行吗？",
+    evidence: {},
+  });
+  assert.equal(accessValidation.providerFailureKind, "access_denied");
+});
+
 test("bare temporal follow-up does not manufacture a resolution question", () => {
   const answer = makeAnswer("可以发动。");
   const validation = validatePublicRagFinalAnswer(answer, {
