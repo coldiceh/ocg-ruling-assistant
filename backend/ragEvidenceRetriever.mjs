@@ -12,7 +12,7 @@ import {
 } from "./officialQaMatcher.mjs";
 import { normalizeOfficialResponses } from "./officialResponses.mjs";
 import { isRulebookRecord, retrieveRulebookPassages } from "./rulebookPassageRetriever.mjs";
-import { hasNumberedCardIdentityConflict } from "./numberedCardIdentity.mjs";
+import { extractNumberedCardIdentities, hasNumberedCardIdentityConflict } from "./numberedCardIdentity.mjs";
 import { compileRuleScenario } from "./ruleScenarioCompiler.mjs";
 import { retrieveLiveOfficialQa } from "./liveOfficialQaProvider.mjs";
 import { analyzePrintedTextReferenceScenario } from "./printedTextReferences.mjs";
@@ -264,6 +264,12 @@ export async function retrieveRagEvidence({
     .filter((match) => isOfficialQaRecord(match.record))
     .map((match) => evidenceFromOfficialMatch(match, "official_qa", limits.maxEvidenceTextChars, retrievalWarnings))
     .slice(0, limits.maxOfficialQa);
+  const playerRoleMismatchCount = officialMatches.all.filter(
+    (match) => match.playerRoleCompatibility === "mismatch",
+  ).length;
+  if (playerRoleMismatchCount) {
+    retrievalWarnings.push(`official_qa_player_role_mismatch:${playerRoleMismatchCount}`);
+  }
   const directIds = new Set(officialQaDirectCandidates.map((item) => item.id));
 
   stageStartedAt = Date.now();
@@ -338,10 +344,18 @@ export async function retrieveRagEvidence({
     rankedRecords: rankedFaqRelatedSource,
     resolvedCards: retrievalCards,
   });
+  const officialMatchByRecordKey = new Map(
+    officialMatches.all.map((match) => [stableRecordKey(match.record), match]),
+  );
   if (faqRelatedSource.length > limits.maxRelatedEvidence) retrievalWarnings.push(`faq_related_limited:${faqRelatedSource.length}->${limits.maxRelatedEvidence}`);
   const faqRelated = faqRelatedSource
     .slice(0, limits.maxRelatedEvidence)
-    .map((record) => evidenceFromRecord(record, "faq", limits.maxEvidenceTextChars, retrievalWarnings))
+    .map((record) => {
+      const officialMatch = officialMatchByRecordKey.get(stableRecordKey(record));
+      return officialMatch
+        ? evidenceFromOfficialMatch(officialMatch, "faq", limits.maxEvidenceTextChars, retrievalWarnings)
+        : evidenceFromRecord(record, "faq", limits.maxEvidenceTextChars, retrievalWarnings);
+    })
     .filter((item) => !directIds.has(item.id));
 
   const rawRelatedSource = rankRecordsWithSupplementalQueries({
@@ -985,6 +999,9 @@ function evidenceFromOfficialMatch(match, type, maxTextChars, warnings) {
     distinctiveSemanticHits: match.distinctiveSemanticHits || [],
     effectNumberCompatible: match.effectNumberCompatible !== false,
     sceneQualifiersCompatible: match.sceneQualifiersCompatible !== false,
+    playerRoleCompatibility: match.playerRoleCompatibility || "unknown",
+    playerRoleMismatches: match.playerRoleMismatches || [],
+    playerRoleComparableDimensions: match.playerRoleComparableDimensions || [],
     isDirect: match.matchLevel === "official_qa_exact",
   };
 }
@@ -2295,6 +2312,10 @@ function resolveUnresolvedMentionCards(unresolvedMentions, cardProvider, limits,
   const minConfidence = readPositiveDecimal(limits.localFuzzyMinConfidence, 0.74);
   for (const mention of unresolvedMentions || []) {
     if (result.length >= limits.maxCards) break;
+    // An unresolved explicit No./CNo. identity may have several forms sharing
+    // the same number. A generic local fuzzy match must not pick one of them;
+    // leave the surface unresolved for exact external identity lookup instead.
+    if (extractNumberedCardIdentities(mention?.input).length) continue;
     for (const query of mentionSearchQueries(mention)) {
       const matches = cardProvider.searchCardByName(query, 2);
       if (!matches.length) continue;
@@ -2615,6 +2636,12 @@ function canonicalLookupVerifiesUserSurface(localCard = {}, externalCard = {}) {
 function cardInputNeedsIdentityVerification(card = {}) {
   const inputKey = normalizeCardKey(card.input);
   if (!inputKey || card.resolutionSource === "card_text_reference") return false;
+  // Edit-distance candidates are hypotheses, even when a display alias has
+  // already copied the user's surface. They must never self-verify through
+  // that derived alias or through a confidence threshold.
+  if (card.requiresExternalIdentityVerification === true || card.identityMatchKind === "edit_distance") {
+    return true;
+  }
   const canonicalKeys = [
     card.name,
     card.cnName,

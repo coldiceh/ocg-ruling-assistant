@@ -292,19 +292,22 @@ function inferContinuousEffectRelation(query, card) {
     const escaped = escapeRegExp(String(name));
     const applies = "(?:效果)?(?:适用中|適用中|正在适用|正在適用|生效中)";
     if (new RegExp("(?:我方|自己|本方).{0,18}(?:控制|操控|场上(?:存在|有)?|場上(?:存在|有)?|发动|發動|使用|持有).{0,18}" + escaped, "su").test(query)
-      || new RegExp("(?:我方|自己|本方)(?:的|场上的|場上的)" + escaped, "su").test(query)) {
+      || new RegExp("(?:我方|自己|本方)(?:的|场上的|場上的)" + escaped, "su").test(query)
+      // In ordinary ruling questions, "我方【卡名】效果适用中" identifies
+      // the side controlling the effect carrier.  Treating it as "我方受到
+      // 该效果" reverses relative words such as 对方/相手 in the card text.
+      || new RegExp("(?:我方|自己|本方).{0,12}" + escaped + ".{0,12}" + applies, "su").test(query)) {
       return "self_controls";
     }
     if (new RegExp("(?:对方|對方|对手).{0,18}(?:控制|操控|场上(?:存在|有)?|場上(?:存在|有)?|发动|發動|使用|持有).{0,18}" + escaped, "su").test(query)
-      || new RegExp("(?:对方|對方|对手)(?:的|场上的|場上的)" + escaped, "su").test(query)) {
+      || new RegExp("(?:对方|對方|对手)(?:的|场上的|場上的)" + escaped, "su").test(query)
+      || new RegExp("(?:对方|對方|对手).{0,12}" + escaped + ".{0,12}" + applies, "su").test(query)) {
       return "opponent_controls";
     }
-    if (new RegExp("(?:我方|自己|本方).{0,12}" + escaped + ".{0,12}" + applies, "su").test(query)
-      || new RegExp("(?:我方|自己|本方).{0,12}(?:受到|受|处于|處於).{0,12}" + escaped + ".{0,12}" + applies, "su").test(query)) {
+    if (new RegExp("(?:我方|自己|本方).{0,12}(?:受到|受|处于|處於).{0,12}" + escaped + ".{0,12}" + applies, "su").test(query)) {
       return "self_affected";
     }
-    if (new RegExp("(?:对方|對方|对手).{0,12}" + escaped + ".{0,12}" + applies, "su").test(query)
-      || new RegExp("(?:对方|對方|对手).{0,12}(?:受到|受|处于|處於).{0,12}" + escaped + ".{0,12}" + applies, "su").test(query)) {
+    if (new RegExp("(?:对方|對方|对手).{0,12}(?:受到|受|处于|處於).{0,12}" + escaped + ".{0,12}" + applies, "su").test(query)) {
       return "opponent_affected";
     }
   }

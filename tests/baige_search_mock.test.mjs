@@ -461,6 +461,10 @@ test("player-role binding keeps an opponent-public hand distinct from the actor'
   assert.match(finalPrompt, /自己的手牌有1张以上已经因其他卡的效果公开时，不能发动/u);
   assert.match(finalPrompt, /将手牌全部出示给对手/u);
   assert.match(finalPrompt, /先绑定参与者角色/u);
+  assert.match(finalPrompt, /"schema"\s*:\s*"player-role-bindings\/v1"/u);
+  assert.match(finalPrompt, /"actuallyPublicHandOwners"\s*:\s*\[\s*"opponent"/u);
+  assert.match(finalPrompt, /"requiredHandOwner"\s*:\s*"self"/u);
+  assert.match(finalPrompt, /"requiredHandIsAmongParsedPublicHands"\s*:\s*false/u);
   assert.equal(answer.debug.deterministicDecision, null);
   assert.notEqual(answer.debug.modelUsed, "deterministic-ruling-reasoner");
 });
@@ -507,7 +511,6 @@ test("source-bound local edit matches fail closed when external verification is 
   assert.ok(resolution.resolvedCards
     .filter((card) => expectedIds.has(String(card.id)))
     .every((card) => Number(card.confidence) >= 0.94));
-
   const evidence = await retrieveRagEvidence({
     userQuery: question,
     cardResolution: resolution,
@@ -1001,9 +1004,37 @@ test("numbered card identity keeps No and CNo families distinct", () => {
   assert.equal(hasNumberedCardIdentityConflict("No.104 假面魔蹈士 闪光·杠然", "混沌No.104 假面魔蹈士 黑影"), true);
 });
 
+test("same-number forms require an exact synchronized alias before local resolution", () => {
+  const cards = [{
+    id: "form-a",
+    name: "No.42 星界龙",
+    aliases: ["No.42 星界龙"],
+    effectText: "形态A。",
+  }, {
+    id: "form-b",
+    name: "No.42 アストラル・ドラゴンV",
+    aliases: ["No.42 アストラル・ドラゴンV"],
+    effectText: "形态B。",
+  }];
+
+  const unknownForm = extractRagCards("No.42 星界龙·新式发动效果。", { cards });
+  assert.deepEqual(unknownForm.resolvedCards, []);
+  assert.deepEqual(unknownForm.unresolvedMentions.map((item) => item.input), ["No.42 星界龙·新式"]);
+
+  const knownForms = [
+    ["No.42 星界龙发动效果。", "form-a"],
+    ["No.42 アストラル・ドラゴンV发动效果。", "form-b"],
+  ];
+  for (const [question, expectedId] of knownForms) {
+    const resolution = extractRagCards(question, { cards });
+    assert.deepEqual(resolution.resolvedCards.map((card) => card.id), [expectedId]);
+    assert.deepEqual(resolution.unresolvedMentions, []);
+  }
+});
+
 test("numbered identity anchors localized variants without collapsing a different same-number form", async () => {
   const data = await loadRagData();
-  const question = "场上的No.104 假面魔踏士 闪光·杖然发动效果。混沌No.106 熔岩掌 巨手·红掌也发动效果。";
+  const question = "用我场上的No.104 假面魔蹈士 闪光·杠然为素材超量召唤混沌No.106 熔岩掌 巨手·红掌，106发动除外对方卡组的效果，这时106自己的①效果会连锁这个效果发动吗？";
   const resolution = extractRagCards(question, { cards: data.cards });
 
   assert.ok(resolution.resolvedCards.some((card) => (
@@ -1012,7 +1043,9 @@ test("numbered identity anchors localized variants without collapsing a differen
     && card.numberedIdentityNameMismatch === true
   )));
   assert.ok(!resolution.resolvedCards.some((card) => card.id === "10658" || card.id === "23364"));
-  assert.ok(resolution.unresolvedMentions.some((item) => item.input.includes("No.104")));
+  assert.deepEqual(resolution.unresolvedMentions.map((item) => item.input), [
+    "No.104 假面魔蹈士 闪光·杠然",
+  ]);
 
   clearBaigeSearchCache();
   const calls = [];
@@ -1025,15 +1058,17 @@ test("numbered identity anchors localized variants without collapsing a differen
     fetchImpl: async (url) => {
       const decoded = decodeURIComponent(String(url)).replace(/\+/gu, " ");
       calls.push(decoded);
-      if (/No\.104 闪光 杖然/iu.test(decoded)) return jsonResponse({ result: [numberedRawCards[1]], next: 1 });
+      if (/No\.104 闪光 杠然/iu.test(decoded)) return jsonResponse({ result: [numberedRawCards[1]], next: 1 });
       if (/106/u.test(decoded)) return jsonResponse({ result: [numberedRawCards[2]], next: 1 });
       return jsonResponse({ result: [], next: 0 });
     },
   });
 
-  assert.ok(calls.some((url) => /No\.104 闪光 杖然/iu.test(url)));
+  assert.ok(calls.some((url) => /No\.104 闪光 杠然/iu.test(url)));
   assert.ok(evidence.baigeResolvedCards.some((card) => card.id === "101306042"));
   assert.ok(!evidence.retrievedCards.some((card) => card.id === "10658"));
+  assert.ok(evidence.retrievedCards.some((card) => card.id === "23364"));
+  assert.deepEqual(evidence.cardResolution.unresolvedMentions, []);
 });
 
 test("baige rejects conflicting numbered families and keeps new card ids", async () => {

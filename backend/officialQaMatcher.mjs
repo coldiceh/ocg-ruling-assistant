@@ -90,6 +90,22 @@ const SCENE_QUALIFIER_PHRASES = new Set([
   "summon_response",
 ]);
 
+const PLAYER_ROLE_SCORE_PENALTY = 0.28;
+// Role mismatches are a hard demotion signal, so keep this recognizer
+// deliberately conservative.  Relative English pronouns (especially
+// "your opponent") and quoted card text require a discourse model rather
+// than a regex; leaving them UNKNOWN is safer than reversing a ruling.
+const SELF_PLAYER_ROLE_SOURCE = String.raw`(?:我方|己方|自己|自分|本方|我)`;
+const OPPONENT_PLAYER_ROLE_SOURCE = String.raw`(?:对方|對方|敌方|敵方|对手|對手|相手)`;
+const PLAYER_ACTION_PATTERNS = Object.freeze([
+  ["activate", /发动|發動|発動|\bactivate|activation\b/iu],
+  ["summon", /召唤|召喚|\bsummon/iu],
+  ["discard", /丢弃|捨て|舍弃|捨棄|\bdiscard/iu],
+  ["destroy", /破坏|破壊|\bdestroy/iu],
+  ["banish", /除外|\bbanish/iu],
+  ["target", /作为对象|作為對象|取对象|取對象|対象|\btarget/iu],
+]);
+
 export function normalizeOfficialQaQuery(value) {
   return String(value || "")
     .normalize("NFKC")
@@ -131,6 +147,9 @@ export function searchOfficialQaEvidence({
   const queryConcepts = extractOfficialQaSemanticConcepts(query);
   const resolvedIds = new Set((resolvedCards || []).map((card) => normalizeId(card.id || card.cardId)).filter(Boolean));
   const resolvedNames = new Set((resolvedCards || []).flatMap(cardAliases).map(normalizeOfficialQaQuery).filter(Boolean));
+  const queryPlayerRoleSignature = extractPlayerRoleSignature(query, {
+    cards: resolvedCards,
+  });
 
   const scored = (records || [])
     .filter((record) => ["qa", "card-faq", "official-database"].includes(record.recordType))
@@ -144,6 +163,8 @@ export function searchOfficialQaEvidence({
       queryConcepts,
       resolvedIds,
       resolvedNames,
+      resolvedCards,
+      queryPlayerRoleSignature,
       subsumptionCandidatePoolComplete,
     }))
     .filter((item) => item.score >= 0.2);
@@ -163,6 +184,7 @@ export function searchOfficialQaEvidence({
     questionType: queryType,
     effectPhrases: queryPhrases,
     semanticConcepts: queryConcepts,
+    playerRoleSignature: queryPlayerRoleSignature,
     exact,
     near,
     related,
@@ -207,6 +229,8 @@ function scoreRecord({
   queryConcepts,
   resolvedIds,
   resolvedNames,
+  resolvedCards,
+  queryPlayerRoleSignature,
   subsumptionCandidatePoolComplete,
 }) {
   const {
@@ -221,6 +245,14 @@ function scoreRecord({
     recordQuestionIds,
     recordIdentityText,
   } = officialQaRecordFeatures(record);
+  const evidencePlayerRoleSignature = extractPlayerRoleSignature(
+    recordPlayerRoleContext(record, questionText),
+    { cards: resolvedCards },
+  );
+  const playerRoleComparison = comparePlayerRoleSignatures(
+    queryPlayerRoleSignature,
+    evidencePlayerRoleSignature,
+  );
   const typeCompatible = questionTypeCompatible(queryType, evidenceType);
   const exactNormalized = normalizedQuery.length >= 8 && normalizedRecordQuestion === normalizedQuery;
   const exactSkeleton = normalizedQuerySkeleton.length >= 8
@@ -273,14 +305,17 @@ function scoreRecord({
   // exact match, and any structured card identity present on both sides must
   // agree completely.
   const rawExact = identityCompatibleForExact && exactNormalized;
-  const rawSceneMatch = rawExact && typeCompatible;
+  const rawSceneMatch = rawExact
+    && typeCompatible
+    && playerRoleComparison.compatibility !== "mismatch";
   const structuredSceneMatch = exactQuestionCardIdSet
     && queryType !== "unknown"
     && evidenceType === queryType
     && distinctiveQueryConcepts.length > 0
     && distinctiveSemanticHits.length > 0
     && effectNumberCompatible
-    && sceneQualifiersCompatible;
+    && sceneQualifiersCompatible
+    && playerRoleComparison.compatibility !== "mismatch";
   const lexicalScore = Math.max(similarity, containment, skeletonSimilarity, skeletonContainment);
   let score = Math.max(lexicalScore, semanticScore * 0.72);
   if (typeCompatible && queryType !== "unknown") score += 0.16;
@@ -289,11 +324,17 @@ function scoreRecord({
   if (resolvedIds.size >= 2 && questionCardIdCoverage === 1) score += 0.2;
   if (exactCardIdSet) score += 0.12;
   score += Math.min(0.18, phraseHits.length * 0.06);
+  if (playerRoleComparison.compatibility === "mismatch") {
+    score = Math.max(cardMatch ? 0.2 : 0, score - PLAYER_ROLE_SCORE_PENALTY);
+  }
   score = Math.min(1, Number(score.toFixed(4)));
 
   let matchLevel = "official_related";
-  if (rawExact && typeCompatible) matchLevel = "official_qa_exact";
+  if (rawExact && typeCompatible && playerRoleComparison.compatibility !== "mismatch") {
+    matchLevel = "official_qa_exact";
+  }
   else if (typeCompatible && (score >= 0.68 || (cardMatch && phraseHits.length && score >= 0.56))) matchLevel = "official_qa_near";
+  if (playerRoleComparison.compatibility === "mismatch") matchLevel = "official_related";
   return {
     id: String(record.id || "unknown"),
     record,
@@ -323,6 +364,11 @@ function scoreRecord({
     querySceneQualifiers,
     evidenceSceneQualifiers,
     sceneQualifiersCompatible,
+    playerRoleCompatibility: playerRoleComparison.compatibility,
+    playerRoleMismatches: playerRoleComparison.mismatches,
+    playerRoleComparableDimensions: playerRoleComparison.comparableDimensions,
+    queryPlayerRoleSignature,
+    evidencePlayerRoleSignature,
     rawSceneMatch,
     structuredSceneMatch,
     authoritativeSceneMatch: false,
@@ -343,6 +389,7 @@ function scoreRecord({
       cardNameMatch && "card_name",
       typeCompatible && "question_type",
       phraseHits.length && "effect_phrase",
+      playerRoleComparison.compatibility === "mismatch" && "player_role_mismatch",
     ].filter(Boolean),
     matchedPhrases: phraseHits,
     questionText,
@@ -361,6 +408,8 @@ function scoreRecord({
 function compareOfficialQaMatches(left, right) {
   return Number(right.matchLevel === "official_qa_exact")
       - Number(left.matchLevel === "official_qa_exact")
+    || Number(left.playerRoleCompatibility === "mismatch")
+      - Number(right.playerRoleCompatibility === "mismatch")
     || Number(right.authoritativeSceneMatch) - Number(left.authoritativeSceneMatch)
     || right.questionCardIdCoverage - left.questionCardIdCoverage
     || right.matchedQuestionCardIds.length - left.matchedQuestionCardIds.length
@@ -376,8 +425,13 @@ function compareOfficialQaMatches(left, right) {
 }
 
 function markAuthoritativeSceneMatches(items) {
-  const structuredMatches = items.filter((item) => item.structuredSceneMatch && item.candidatePoolComplete);
+  const structuredMatches = items.filter((item) => (
+    item.structuredSceneMatch
+    && item.candidatePoolComplete
+    && item.playerRoleCompatibility !== "mismatch"
+  ));
   for (const item of items) {
+    if (item.playerRoleCompatibility === "mismatch") continue;
     if (item.rawSceneMatch) {
       item.authoritativeSceneMatch = true;
       item.authoritativeSceneMatchReason = "raw_or_normalized_query";
@@ -428,6 +482,171 @@ function questionTypeCompatible(queryType, evidenceType) {
   return legality.has(queryType) && legality.has(evidenceType);
 }
 
+function recordPlayerRoleContext(record = {}, questionText = "") {
+  const explicitScenario = [
+    record.question,
+    record.rawQuestion,
+    record.rawDetailedQuestion,
+    record.scenario,
+  ].map((value) => String(value || "").trim()).filter(Boolean);
+  if (explicitScenario.length) return [...new Set(explicitScenario)].join("\n");
+  // Do not infer the source scenario from an answer or quoted card text.  The
+  // relative 自分/相手 inside those passages is scoped to the quoted card's
+  // controller and cannot safely be compared with the user's player roles.
+  return String(questionText || "");
+}
+
+function extractPlayerRoleSignature(text, { cards = [] } = {}) {
+  const source = String(text || "");
+  const actionActors = extractActionActors(source);
+  const cardControllers = extractCardControllers(source, cards);
+
+  return {
+    actionActors,
+    cardControllers,
+  };
+}
+
+function extractActionActors(text) {
+  const result = new Map(PLAYER_ACTION_PATTERNS.map(([action]) => [action, new Set()]));
+  for (const clause of splitPlayerRoleClauses(text)) {
+    const roles = explicitPlayerRoles(clause);
+    if (roles.length !== 1) continue;
+    for (const [action, pattern] of PLAYER_ACTION_PATTERNS) {
+      if (pattern.test(clause)) result.get(action).add(roles[0]);
+    }
+  }
+  return Object.fromEntries(
+    [...result.entries()]
+      .filter(([, players]) => players.size)
+      .map(([action, players]) => [action, [...players].sort()]),
+  );
+}
+
+function extractCardControllers(text, cards = []) {
+  const bindings = [];
+  for (const card of cards || []) {
+    const players = new Set();
+    for (const token of playerRoleCardTokens(card)) {
+      const escapedToken = escapeRegExp(token);
+      for (const [role, roleSource] of [
+        ["self", SELF_PLAYER_ROLE_SOURCE],
+        ["opponent", OPPONENT_PLAYER_ROLE_SOURCE],
+      ]) {
+        const patterns = [
+          new RegExp(`${roleSource}.{0,14}(?:场上|場上|フィールド|墓地|手卡|手牌|手札|控制|コントロール)(?:的|の)?[^，,。.!！?？;；\\n]{0,10}${escapedToken}`, "iu"),
+          new RegExp(`${roleSource}.{0,12}${escapedToken}.{0,18}(?:适用中|適用中|存在|控制|コントロール|发动|發動|発動|activate)`, "iu"),
+          new RegExp(`${roleSource}.{0,12}(?:发动|發動|発動|activate)[^，,。.!！?？;；\\n]{0,12}${escapedToken}`, "iu"),
+          new RegExp(`${escapedToken}.{0,12}(?:由)?${roleSource}.{0,10}(?:控制|コントロール|发动|發動|発動|activate)`, "iu"),
+        ];
+        if (patterns.some((pattern) => pattern.test(text))) players.add(role);
+      }
+    }
+    if (!players.size) continue;
+    bindings.push({
+      cardKey: playerRoleCardKey(card),
+      cardId: normalizeId(card.id || card.cardId),
+      cardName: String(card.name || card.cnName || card.jaName || card.enName || ""),
+      players: [...players].sort(),
+    });
+  }
+  return bindings.sort((left, right) => left.cardKey.localeCompare(right.cardKey));
+}
+
+function comparePlayerRoleSignatures(query = {}, evidence = {}) {
+  const mismatches = [];
+  const comparableDimensions = [];
+  const queryActions = query.actionActors || {};
+  const evidenceActions = evidence.actionActors || {};
+  for (const action of [...new Set([...Object.keys(queryActions), ...Object.keys(evidenceActions)])].sort()) {
+    comparePlayerRoleSets({
+      dimension: "action_actor",
+      qualifier: action,
+      queryPlayers: queryActions[action],
+      evidencePlayers: evidenceActions[action],
+      mismatches,
+      comparableDimensions,
+    });
+  }
+  const queryControllers = new Map((query.cardControllers || []).map((item) => [item.cardKey, item]));
+  const evidenceControllers = new Map((evidence.cardControllers || []).map((item) => [item.cardKey, item]));
+  for (const [cardKey, queryBinding] of queryControllers) {
+    const evidenceBinding = evidenceControllers.get(cardKey);
+    if (!evidenceBinding) continue;
+    comparePlayerRoleSets({
+      dimension: "card_controller",
+      qualifier: cardKey,
+      cardId: queryBinding.cardId || evidenceBinding.cardId || "",
+      cardName: queryBinding.cardName || evidenceBinding.cardName || "",
+      queryPlayers: queryBinding.players,
+      evidencePlayers: evidenceBinding.players,
+      mismatches,
+      comparableDimensions,
+    });
+  }
+
+  return {
+    compatibility: mismatches.length ? "mismatch" : comparableDimensions.length ? "compatible" : "unknown",
+    mismatches,
+    comparableDimensions: [...new Set(comparableDimensions)],
+  };
+}
+
+function comparePlayerRoleSets({
+  dimension,
+  qualifier = "",
+  cardId = "",
+  cardName = "",
+  queryPlayers = [],
+  evidencePlayers = [],
+  mismatches,
+  comparableDimensions,
+}) {
+  const querySet = new Set(queryPlayers || []);
+  const evidenceSet = new Set(evidencePlayers || []);
+  if (!querySet.size || !evidenceSet.size) return;
+  const key = [dimension, qualifier].filter(Boolean).join(":");
+  comparableDimensions.push(key);
+  if ([...querySet].some((player) => evidenceSet.has(player))) return;
+  mismatches.push({
+    dimension,
+    ...(qualifier ? { qualifier } : {}),
+    ...(cardId ? { cardId } : {}),
+    ...(cardName ? { cardName } : {}),
+    queryPlayers: [...querySet].sort(),
+    evidencePlayers: [...evidenceSet].sort(),
+  });
+}
+
+function splitPlayerRoleClauses(value) {
+  return String(value || "").split(/[，,。.!！?？;；\n]+/u).map((item) => item.trim()).filter(Boolean);
+}
+
+function explicitPlayerRoles(value) {
+  return [
+    new RegExp(SELF_PLAYER_ROLE_SOURCE, "iu").test(value) ? "self" : "",
+    new RegExp(OPPONENT_PLAYER_ROLE_SOURCE, "iu").test(value) ? "opponent" : "",
+  ].filter(Boolean);
+}
+
+function playerRoleCardTokens(card = {}) {
+  return [...new Set([
+    card.input,
+    card.matchedQuery,
+    card.name,
+    card.cnName,
+    card.jaName,
+    card.enName,
+    ...(card.aliases || []),
+    normalizeId(card.id || card.cardId) ? `<<${normalizeId(card.id || card.cardId)}>>` : "",
+  ].map((item) => String(item || "").trim()).filter((item) => item.length >= 2))];
+}
+
+function playerRoleCardKey(card = {}) {
+  return normalizeId(card.id || card.cardId)
+    || normalizeOfficialQaQuery(card.name || card.cnName || card.jaName || card.enName);
+}
+
 function recordQuestionText(record = {}) {
   if (record.question) return String(record.question);
   const text = String(record.text || "");
@@ -445,7 +664,10 @@ function recordText(record = {}) {
 function promoteUniqueExactCardSet(items, queryType, resolvedIds) {
   if (resolvedIds.size < 2 || queryType === "unknown") return;
   const candidates = items.filter((item) => {
-    if (!item.exactCardIdSet || !item.typeCompatible || item.questionType !== queryType) return false;
+    if (item.playerRoleCompatibility === "mismatch"
+        || !item.exactCardIdSet
+        || !item.typeCompatible
+        || item.questionType !== queryType) return false;
     const uniqueLiveIntersection = item.record?.retrievalContext?.uniqueExactCardIntersection === true
       && Number(item.record?.retrievalContext?.candidatePoolSize) === 1;
     return uniqueLiveIntersection || item.lexicalScore >= 0.45;
@@ -461,6 +683,8 @@ function promoteUniqueExactCardSet(items, queryType, resolvedIds) {
 function promoteUniqueQuestionCardMatch(items, resolvedIds, queryType) {
   if (resolvedIds.size < 2 || queryType === "unknown") return;
   const subsumptionCandidates = items.filter((item) => (
+    item.playerRoleCompatibility !== "mismatch"
+    &&
     item.subsumptionCandidatePoolComplete
     && item.typeCompatible
     && item.questionType === queryType
@@ -500,6 +724,8 @@ function promoteUniqueQuestionCardMatch(items, resolvedIds, queryType) {
     }
   }
   const candidates = items.filter((item) => (
+    item.playerRoleCompatibility !== "mismatch"
+    &&
     item.typeCompatible
     && item.questionType === queryType
     && item.questionCardIdCoverage === 1
@@ -517,7 +743,10 @@ function promoteUniqueQuestionCardMatch(items, resolvedIds, queryType) {
 
 function promoteUniqueSemanticMatch(items, resolvedIds, queryType) {
   const [top, second] = items;
-  if (!top || !top.typeCompatible || top.matchLevel === "official_qa_exact") return;
+  if (!top
+      || !top.typeCompatible
+      || top.matchLevel === "official_qa_exact"
+      || top.playerRoleCompatibility === "mismatch") return;
   const generalSemanticSignature = top.semanticHits.length >= 3
     && top.semanticQueryCoverage >= 0.8
     && top.semanticScore >= 0.72;
@@ -654,6 +883,10 @@ function bigrams(value) {
   const result = new Set();
   for (let index = 0; index < value.length - 1; index += 1) result.add(value.slice(index, index + 2));
   return result;
+}
+
+function escapeRegExp(value) {
+  return String(value || "").replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 }
 
 function buildEntityResolution(resolved, unresolved, resolvedByOfficialQaMatch) {
