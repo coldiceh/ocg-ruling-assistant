@@ -159,6 +159,73 @@ test("near official case is conditional, never official confirmed", () => {
   assert.equal(route.answer.confirmationLevel, "conditional_official_case");
 });
 
+test("an otherwise similar official Q&A with the opposite activation actor stays related", () => {
+  const matches = searchOfficialQaEvidence({
+    question: "我方可以发动『测试响应卡』的效果吗？",
+    records: [qa({
+      question: "对方可以发动『测试响应卡』的效果吗？",
+      answer: "可以发动。",
+      cardIds: ["91"],
+      cards: ["测试响应卡"],
+    })],
+    resolvedCards: [{ id: "91", name: "测试响应卡" }],
+  });
+
+  assert.equal(matches.exact.length, 0);
+  assert.equal(matches.near.length, 0);
+  assert.equal(matches.all[0]?.matchLevel, "official_related");
+  assert.equal(matches.all[0]?.playerRoleCompatibility, "mismatch");
+  assert.ok(matches.all[0]?.playerRoleMismatches.some((item) => (
+    item.dimension === "action_actor" && item.qualifier === "activate"
+  )));
+  assert.equal(matches.all[0]?.authoritativeSceneMatch, false);
+});
+
+test("an otherwise similar official Q&A with the opposite card controller stays related", () => {
+  const resolvedCards = [
+    { id: "92", name: "测试持续卡" },
+    { id: "93", name: "测试动作卡" },
+  ];
+  const matches = searchOfficialQaEvidence({
+    question: "我方场上的『测试持续卡』适用中，『测试动作卡』可以发动吗？",
+    records: [qa({
+      question: "对方场上的『测试持续卡』适用中，『测试动作卡』可以发动吗？",
+      answer: "不能发动。",
+      cardIds: ["92", "93"],
+      cards: ["测试持续卡", "测试动作卡"],
+    })],
+    resolvedCards,
+  });
+
+  assert.equal(matches.exact.length, 0);
+  assert.equal(matches.all[0]?.matchLevel, "official_related");
+  assert.equal(matches.all[0]?.playerRoleCompatibility, "mismatch");
+  assert.ok(matches.all[0]?.playerRoleMismatches.some((item) => (
+    item.dimension === "card_controller" && item.cardId === "92"
+  )));
+});
+
+test("relative roles found only in an answer or quoted card text cannot hard-demote a Q&A", () => {
+  const matches = searchOfficialQaEvidence({
+    question: "『测试手续卡』可以发动吗？",
+    records: [{
+      id: "qa-relative-role-answer-only",
+      recordType: "qa",
+      title: "『测试手续卡』的发动手续",
+      text: [
+        "『测试手续卡』的发动手续",
+        "参考卡文写有『对方必须公开手牌』，回答中也可能写有『自己确认对方手牌』。",
+      ].join("\n"),
+      cardIds: ["94"],
+      cards: ["测试手续卡"],
+    }],
+    resolvedCards: [{ id: "94", name: "测试手续卡" }],
+  });
+
+  assert.notEqual(matches.all[0]?.playerRoleCompatibility, "mismatch");
+  assert.deepEqual(matches.all[0]?.playerRoleMismatches, []);
+});
+
 test("related official evidence produces a conditional route rather than unable", () => {
   const answer = routeAnswer({
     conditionalAnswer: { answerType: "needs_clarification", verdict: "insufficient_for_single_verdict", shortAnswer: "如果对象仍合法则处理；否则不适用。" },

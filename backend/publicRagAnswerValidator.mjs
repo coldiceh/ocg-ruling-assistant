@@ -29,6 +29,7 @@ export function validatePublicRagFinalAnswer(answer = {}, {
 } = {}) {
   const errors = [];
   const validationDiagnostics = {};
+  const diagnosticWarnings = [];
   const warnings = Array.isArray(modelWarnings) ? modelWarnings.map(String) : [];
   const providerFailureKind = classifyModelProviderFailure(providerFailure, warnings);
   const shortAnswer = String(answer?.shortAnswer || "").trim();
@@ -83,14 +84,19 @@ export function validatePublicRagFinalAnswer(answer = {}, {
     errors,
     diagnostics: validationDiagnostics,
   });
-  validateOperationLegalityContract({ answer, shortAnswer, evidence, errors });
+  // Operation-legality packets and prose self-consistency checks are
+  // heuristic diagnostics, not proofs.  They may locate a suspicious answer
+  // for later review, but must not trigger a paid repair or hide an otherwise
+  // valid model answer.  Only strict shape/citation checks, authoritative
+  // direct evidence and trusted semantic/formal proofs remain blocking.
+  validateOperationLegalityContract({ answer, shortAnswer, evidence, errors: diagnosticWarnings });
   validateTrustedSemanticContract({ answer, shortAnswer, evidence, errors });
-  validateFormalUnknownContract({ combined, evidence, errors });
+  validateFormalUnknownContract({ combined, evidence, errors: diagnosticWarnings });
   validateAnswerInternalConsistency({
     shortAnswer,
     reasoningText,
     compareReasoning: !authoritativeOfficialDirect,
-    errors,
+    errors: diagnosticWarnings,
   });
   validateQuestionCoverage({ userQuery, shortAnswer, errors });
 
@@ -100,6 +106,7 @@ export function validatePublicRagFinalAnswer(answer = {}, {
     // Keep the semantic/coverage failures visible even when a malformed raw
     // payload also produces several field-level contract errors.
     errors: unique(errors).slice(0, 24),
+    diagnosticWarnings: unique(diagnosticWarnings).slice(0, 24),
     checks: {
       strictJson: !hasStrictModelContractFailure(warnings),
       officialDirect: Boolean(resolveAuthoritativeOfficialDirectCandidate(
@@ -579,6 +586,12 @@ function aggregateValidatedAttempts({
     warnings: unique([
       ...(primary.warnings || []),
       ...(repair?.warnings || []),
+      ...((primaryValidation?.diagnosticWarnings || []).length
+        ? ["public_final_nonblocking_semantic_diagnostic"]
+        : []),
+      ...((repairValidation?.diagnosticWarnings || []).length
+        ? ["public_final_repair_nonblocking_semantic_diagnostic"]
+        : []),
       ...(!primaryValidation?.ok ? ["public_final_validation_failed"] : []),
       ...(repairAttempted ? ["public_final_directed_repair_attempted"] : []),
       ...(outcome === "repair_valid" ? ["public_final_directed_repair_succeeded"] : []),
@@ -595,6 +608,7 @@ function aggregateValidatedAttempts({
         ok: primaryValidation?.ok === true,
         providerFailureKind: primaryValidation?.providerFailureKind || null,
         errors: primaryValidation?.errors || [],
+        diagnosticWarnings: primaryValidation?.diagnosticWarnings || [],
         checks: primaryValidation?.checks || {},
         candidate: summarizeValidationCandidate(primary?.answer),
         latencyMs: primaryLatencyMs,
@@ -603,6 +617,7 @@ function aggregateValidatedAttempts({
         ok: repairValidation?.ok === true,
         providerFailureKind: repairValidation?.providerFailureKind || null,
         errors: repairValidation?.errors || [],
+        diagnosticWarnings: repairValidation?.diagnosticWarnings || [],
         checks: repairValidation?.checks || {},
         candidate: summarizeValidationCandidate(repair?.answer),
         latencyMs: repairLatencyMs,
@@ -983,8 +998,13 @@ function validateAnswerInternalConsistency({
     errors.push("shortAnswer activation conclusion conflicts with reasoning");
   }
 
-  const headlineOperations = resolutionOperationClaims(shortAnswer);
-  const reasoningOperations = resolutionOperationClaims(reasoningText);
+  // Keep mutually exclusive conditions separate while comparing the headline
+  // with its explanation.  Collapsing `if A, perform X; if B, do not perform
+  // X` into one global X claim manufactures a conflict even when both sections
+  // describe the same two branches.  Same-condition contradictions are still
+  // rejected below by hasResolutionOperationSelfConflict().
+  const headlineOperations = resolutionOperationClaims(shortAnswer, { branchScoped: true });
+  const reasoningOperations = resolutionOperationClaims(reasoningText, { branchScoped: true });
   if (hasResolutionOperationSelfConflict(shortAnswer)) {
     errors.push("shortAnswer contains conflicting resolution conclusions for the same operation");
   }
@@ -1033,7 +1053,69 @@ function hasExplicitAlternativeBranches(value) {
   const text = String(value || "");
   const hasCondition = /(?:如果|若|满足|滿足|不满足|不滿足|条件|條件|场合|場合|if\b|when\b|unless\b)/iu.test(text);
   const hasAlternative = /(?:否则|否則|反之|不满足|不滿足|另一(?:种|種|个|個)?(?:情况|情況|场合|場合)|otherwise\b|else\b)/iu.test(text);
-  return hasCondition && hasAlternative;
+  if (hasCondition && hasAlternative) return true;
+
+  // Models often render a complete case split as two independent conditional
+  // clauses (`若 A，则可以……；若 B，则不能……`) without an explicit “否则”.
+  // Treat that as branching only when the condition signatures are genuinely
+  // different.  Repeating the same condition with opposite conclusions must
+  // remain a self-conflict.
+  return conditionalActivationBranchSignatures(text).size > 1;
+}
+
+function conditionalActivationBranchSignatures(value) {
+  const signatures = new Set();
+  for (const clause of String(value || "")
+    .split(/[；;。.!！?？\n]+/u)
+    .map((item) => item.trim())
+    .filter(Boolean)) {
+    if (!(NEGATIVE_ACTIVATION.test(clause) || POSITIVE_ACTIVATION.test(clause))) continue;
+    const signature = activationConditionSignature(clause);
+    if (signature) signatures.add(signature);
+  }
+  return signatures;
+}
+
+function activationConditionSignature(value) {
+  const text = String(value || "");
+  const activationIndex = firstPatternIndex(text, NEGATIVE_ACTIVATION, POSITIVE_ACTIVATION);
+  if (activationIndex < 0) return "";
+
+  const before = text.slice(0, activationIndex);
+  const prefixMarker = [...before.matchAll(
+    /(?:^|[，,]\s*)(如果|若|当|當|只有|仅当|僅當|只要|前提是|条件是|條件是|if|when|unless|provided)(?=\s|\p{L}|\p{N})/giu,
+  )].at(-1);
+  let condition = prefixMarker
+    ? before.slice((prefixMarker.index || 0) + prefixMarker[0].length - prefixMarker[1].length)
+    : "";
+
+  // “可以发动，但前提是……” states the branch condition after the verdict.
+  if (!condition) {
+    const after = text.slice(activationIndex);
+    const suffixMarker = after.match(/(?:但|但是|不过|不過)?\s*(前提是|条件是|條件是|只有|仅当|僅當|只要)\s*/iu);
+    if (suffixMarker) {
+      const remainder = after.slice((suffixMarker.index || 0) + suffixMarker[0].length);
+      const nextBranch = remainder.search(/[，,；;。.!！?？\n]\s*(?:如果|若|当|當|否则|否則|反之|otherwise\b|else\b)/iu);
+      condition = nextBranch >= 0 ? remainder.slice(0, nextBranch) : remainder;
+    }
+  }
+  if (!condition) return "";
+
+  return condition
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(/^(?:如果|若|当|當|只有|仅当|僅當|只要|前提是|条件是|條件是|if|when|unless|provided)\s*/iu, "")
+    .replace(/(?:则|則|就|那么|那麼)\s*$/iu, "")
+    .replace(/(?:可以|能够|能|不能|不可以|不可|无法|無法)(?:再|直接|连锁|連鎖)?(?:发动|發動|発動|连锁|連鎖)?\s*$/iu, "")
+    .replace(/[\s　‘’“”"'「」『』《》【】()（），,。.;；:：]/gu, "")
+    .slice(0, 128);
+}
+
+function firstPatternIndex(value, ...patterns) {
+  return patterns.reduce((result, pattern) => {
+    const index = String(value || "").search(new RegExp(pattern.source, pattern.flags.replace("g", "")));
+    return index < 0 ? result : result < 0 ? index : Math.min(result, index);
+  }, -1);
 }
 
 function explicitActivationPolarity(value) {
@@ -1068,6 +1150,13 @@ function resolutionOperationClaims(value, { branchScoped = false } = {}) {
     for (const match of text.matchAll(matcher)) {
       const clause = surroundingResolutionClause(text, match.index || 0);
       const localIndex = Math.max(0, (match.index || 0) - clause.start);
+      if (kind === "destroy" && isDestructionReplacementReference(
+        clause.text,
+        localIndex,
+        match[0]?.length || 0,
+      )) {
+        continue;
+      }
       const quotedOutcome = quotedEffectTextResolutionOutcome(
         text,
         match.index || 0,
@@ -1199,7 +1288,7 @@ function hasResolutionOperationSelfConflict(value) {
 
 function resolutionBranchScope(clause = {}, operationIndex = 0) {
   const text = String(clause.text || "");
-  const branchMarker = /(?:但是|但|不过|不過|然而|只是|ただし|なお|一方|如果|若(?=.{0,24}(?:时|時|则|則|，|,))|当(?=.{0,24}(?:时|则|，|,))|當(?=.{0,24}(?:時|則|，|,))|\b(?:but|however|except|if|when)\b)/giu;
+  const branchMarker = /(?:但是|但|不过|不過|然而|只是|ただし|なお|一方|否则|否則|反之|如果|若(?=.{0,24}(?:时|時|则|則|，|,))|当(?=.{0,24}(?:时|则|，|,))|當(?=.{0,24}(?:時|則|，|,))|\b(?:but|however|except|otherwise|else|if|when)\b)/giu;
   const boundaries = [0, ...[...text.matchAll(branchMarker)].map((match) => match.index || 0)]
     .filter((value, index, values) => index === 0 || value !== values[index - 1])
     .sort((left, right) => left - right);
@@ -1221,7 +1310,7 @@ function resolutionBranchSegmentScope(segment, inheritedScope = "default") {
   if (/(?:同一|相同|同样|同樣)条件|同じ条件|same\s+conditions?/iu.test(text)) return "default";
 
   const explicitCondition = /(?:如果|若(?=.{0,24}(?:时|時|则|則|，|,|不能|可以))|(?<!不)当(?=.{0,24}(?:时|则|，|,))|當(?=.{0,24}(?:時|則|，|,))|只有|仅当|僅當|在.{0,20}(?:时|時)|场合|場合|情况下|情況下|条件|條件|のみ|場合|if\b|when\b|unless\b|provided\b)/iu.test(text);
-  const exceptionConnector = /^(?:\s|[，,])*(?:但|但是|不过|不過|然而|只是|ただし|なお|一方|except\b|however\b|but\b)/iu.test(text);
+  const exceptionConnector = /^(?:\s|[，,])*(?:但|但是|不过|不過|然而|只是|ただし|なお|一方|否则|否則|反之|except\b|however\b|but\b|otherwise\b|else\b)/iu.test(text);
   const restrictedSubject = /(?:(?:受|受到|被|适用|適用|具有|带有|帶有|处于|處於).{0,40}(?:限制|制限|效果|効果|状态|狀態|影响|影響)|(?:限制|制限|效果|効果).{0,24}(?:适用|適用|受到|受け)).{0,24}(?:卡|怪兽|怪獸|对象|對象|素材|手续|手續|場合|场合|ため|ので)/iu.test(text);
   if (explicitCondition || restrictedSubject) {
     return `condition_${resolutionConditionSignature(text)}`;
@@ -1379,10 +1468,9 @@ function isPositiveResolutionText(value) {
 }
 
 // UNKNOWN is deliberately symmetric: it proves neither permission nor
-// prohibition.  If the public model nevertheless emits a definite conclusion,
-// reject that attempt before it can be displayed.  The later formal answer
-// gate still renders one line per query; this check preserves the diagnostic
-// polarity of the rejected model attempt through a directed repair/fallback.
+// prohibition.  A model may still reach a definite conclusion from card text
+// or other evidence, so UNKNOWN can only be recorded as a diagnostic; it must
+// never veto that conclusion or trigger another paid call.
 function validateFormalUnknownContract({ combined, evidence, errors }) {
   const formalEvidence = Array.isArray(evidence?.formalEngineProofs)
     ? evidence.formalEngineProofs
@@ -1390,7 +1478,7 @@ function validateFormalUnknownContract({ combined, evidence, errors }) {
   if (!formalEvidence.some((item) => item?.verdict === "UNKNOWN")) return;
   const polarity = definiteConclusionPolarity(combined);
   if (polarity !== "neutral") {
-    errors.push(`formal UNKNOWN blocked model ${polarity} claim`);
+    errors.push(`formal UNKNOWN did not constrain model ${polarity} claim`);
   }
 }
 
@@ -1536,6 +1624,18 @@ function normalizedFallback({
 
 function isModelOutputFailureWarning(value) {
   return /(?:model_json_parse_failed|deepseek_empty_content|model_output_not_json)/u.test(String(value));
+}
+
+function isDestructionReplacementReference(clauseText, operationIndex, operationLength) {
+  const text = String(clauseText || "");
+  const before = text.slice(Math.max(0, operationIndex - 32), operationIndex);
+  const after = text.slice(operationIndex + Math.max(1, operationLength), operationIndex + Math.max(1, operationLength) + 24);
+  // In “cannot apply X to replace this destruction, so the card is actually
+  // destroyed”, the first occurrence names the replacement event; it does not
+  // assert that no destruction occurs.  The later occurrence describes the
+  // real operation and remains available to the consistency checker.
+  return /(?:代替|替代|替换|替換)(?:这次|這次|此次|该次|該次|其|一次)?(?:的)?\s*$/u.test(before)
+    || /^(?:的|之)?(?:代替|替代|替换|替換)(?:处理|處理|效果|适用|適用|手续|手續)?/u.test(after);
 }
 
 function classifyModelProviderFailure(providerFailure, warnings = []) {

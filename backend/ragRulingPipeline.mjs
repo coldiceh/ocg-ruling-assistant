@@ -18,6 +18,7 @@ import {
 import { analyzeEffectStateTransition } from "./effectStateReasoner.mjs";
 import { hasNumberedCardIdentityConflict } from "./numberedCardIdentity.mjs";
 import { runValidatedPublicRagFinal } from "./publicRagAnswerValidator.mjs";
+import { compileRuleScenario } from "./ruleScenarioCompiler.mjs";
 import {
   createLegacyLuaUnknownPacket,
   validateLegacyLuaSemanticPacket,
@@ -194,6 +195,10 @@ export async function answerRagRulingQuestion({
     ...(retrievedEvidence.userProvidedCardTexts || []),
   ], query);
   const cardSemanticFacts = buildCardSemanticFacts(reasoningCardTexts);
+  const playerRoleBindings = buildPlayerRoleBindings({
+    userQuery: query,
+    cardTexts: reasoningCardTexts,
+  });
   const corroboratingEvidence = dedupeEvidenceRefs([
     ...(retrievedEvidence.officialQaDirectCandidates || []),
     ...(retrievedEvidence.provisionalOfficialResponses || []),
@@ -266,6 +271,7 @@ export async function answerRagRulingQuestion({
     // They give the final model a lossless description of card-text lifecycles,
     // while the prompt still requires verification against the raw card text.
     cardSemanticFacts,
+    playerRoleBindings,
     legacyLuaSemanticPacket,
     formalEngineProofs: [],
     formalEngineStatus: summarizeFormalShadow(formalShadow),
@@ -988,6 +994,60 @@ function userProvidedCards(items) {
     official: false,
     aliases: (item.cards || []).filter(Boolean),
   })).filter((card) => card.name && card.effectText);
+}
+
+export function buildPlayerRoleBindings({ userQuery = "", cardTexts = [] } = {}) {
+  let scenario;
+  try {
+    scenario = compileRuleScenario({ userQuery, cardTexts });
+  } catch {
+    return {
+      schema: "player-role-bindings/v1",
+      status: "unavailable",
+      authority: "parser_candidate_only",
+      handVisibility: [],
+      activationProcedures: [],
+      comparisons: [],
+    };
+  }
+
+  const handVisibility = (scenario.handVisibilityFacts?.sources || [])
+    .filter((source) => (source.affectedSides || []).length > 0)
+    .map((source) => ({
+      sourceEvidenceId: String(source.id || ""),
+      sourceTitle: String(source.title || ""),
+      effectCarrierRelation: source.relation || "unknown",
+      printedAffectedRelation: source.revealedHandSide || "unknown",
+      actuallyPublicHandOwners: uniqueStrings(source.affectedSides || []),
+    }));
+  const activationProcedures = (scenario.revealActivationOperations || []).map((operation) => ({
+    operationId: String(operation.id || ""),
+    sourceEvidenceId: String(operation.cardId || operation.card?.id || ""),
+    sourceTitle: String(operation.cardTitle || operation.card?.title || ""),
+    actor: operation.actor || "unknown",
+    handOwnerRequiredByProcedure: operation.displayedHandSide || operation.actor || "unknown",
+    viewer: operation.viewerSide || "unknown",
+    procedure: "reveal_own_hand_at_activation",
+  }));
+  const publicHandOwners = new Set(handVisibility.flatMap((item) => item.actuallyPublicHandOwners));
+  const comparisons = activationProcedures
+    .filter((operation) => ["self", "opponent"].includes(operation.handOwnerRequiredByProcedure))
+    .map((operation) => ({
+      operationId: operation.operationId,
+      requiredHandOwner: operation.handOwnerRequiredByProcedure,
+      parsedPublicHandOwners: [...publicHandOwners],
+      requiredHandIsAmongParsedPublicHands: publicHandOwners.has(operation.handOwnerRequiredByProcedure),
+      scope: "only_explicitly_parsed_continuous_effects",
+    }));
+
+  return {
+    schema: "player-role-bindings/v1",
+    status: handVisibility.length || activationProcedures.length ? "parsed" : "not_applicable",
+    authority: "parser_candidate_only",
+    handVisibility,
+    activationProcedures,
+    comparisons,
+  };
 }
 
 function publicRiskFlagsForModelWarning(value) {

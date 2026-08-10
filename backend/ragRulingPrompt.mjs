@@ -73,6 +73,7 @@ export function buildRagRulingPromptBundle({
     constraintAudit: summarizeConstraintAudit(evidence.operationLegality),
     semanticStateTransition: summarizeSemanticStateTransition(evidence.semanticStateTransition),
     cardSemanticFacts: summarizeCardSemanticFacts(evidence.cardSemanticFacts),
+    playerRoleBindings: summarizePlayerRoleBindings(evidence.playerRoleBindings),
     formalEngineStatus: evidence.formalEngineStatus || { mode: "off", status: "disabled" },
     legacyLuaSemanticPacket: summarizeLegacyLuaSemanticPacket(
       evidence.legacyLuaSemanticPacket,
@@ -148,7 +149,8 @@ export function buildRagRulingPromptBundle({
     "legacyLuaSemanticPacket.activationLegalityChecks 是旧脚本在发动检查阶段实际执行的通用候选条件。必须对题设状态枚举能通过 predicateApi 的候选；若 requiredMinimum 无法达到，则该效果不能发动，不得误解为可以发动后空处理。候选卡的具体合法性仍必须用卡文或规则资料复核。",
     "selectorSummary 是 Lua 筛选器自动生成的有界布尔摘要；FILTER_ARGUMENT_n 依次绑定 filterArgumentExpressions[n-1]。先按题设的响应效果种类代入分支，再依据双方区域、filterExpression 与 predicateApi 计算候选，不能把另一分支的卡混入数量。",
     "分析任何操作时使用同一套通用执行顺序：从卡文和题面建立带来源的初始状态；分别检查手续或发动前提；执行手续、cost 与每个效果步骤并记录实际移动及归因；每次状态变化后重算持续效果；在检查点收集诱发候选并保留对方响应分支。若手续或 cost 请求一次移动，但离场替代等卡片效果改变了最终移动，后续诱发条件必须按实际移动及最终归因判断，不能只沿用原手续或 cost 的名义。禁止根据卡名、FAQ 编号、题面暗示答案或历史错题模板补造缺失事实。",
-    "先绑定参与者角色：逐项写清每张卡的控制者、每个动作的执行者、‘自己/对方’分别指谁、被公开或被影响的是哪一方的手卡或场。相似 Q&A 若交换了控制者、动作主体或受影响玩家，只能作为相关资料，不能直接照搬结论。",
+    "替代处理发生时必须同时记录原操作的指代对象和替代操作实际影响的卡。卡文要求破坏／移动『那张卡』『那些卡』或对象卡时，替代效果改为破坏／移动另一张卡，并不自动代表原指代对象的操作成功；后续『然后』『若成功』『破坏了的卡』等条件仍须按原文的指代范围判断，除非官方资料明确把替代结果计入。也不要把『某个替代效果不能再次适用』误解为『最终没有发生破坏』，这两个命题必须分开判断。",
+    "先绑定参与者角色：逐项写清每张卡的控制者、每个动作的执行者、‘自己/对方’分别指谁、被公开或被影响的是哪一方的手卡或场。相似 Q&A 若交换了控制者、动作主体或受影响玩家，只能作为相关资料，不能直接照搬结论。证据的 playerRoleCompatibility 为 mismatch 时，必须逐项读取 playerRoleMismatches，把它当作角色相反的对照资料，禁止采用其结论作为当前场景结论。",
     "必须把发动合法性与效果处理分开：先以发动时状态检查全部必需对象、可执行后续召唤/处理及隐藏区域要求；发动合法后再逐步处理。若处理中条件变化导致后续步骤不能进行，要明确处理在哪一步结束，不得把处理时失败倒推成不能发动。",
     "卡文或官方资料明确列举适用类型时，默认按封闭集合解释；不得把未列举的仪式、融合、同调、超量、连接、解放、素材、cost、召唤手续等不同操作自行归为同类。只有另有原文明确扩张集合时才能扩张。",
     "效果要求在特殊召唤后继续进行融合、同调、超量、连接或其他召唤时，发动前先检查额外卡组是否至少存在一条在发动时可行的后续召唤路径；处理中再按实际新状态重算等级、属性、种族、区域与持续效果。若处理时已无可行路径，应说明前段已完成、后段不进行。",
@@ -456,6 +458,9 @@ function limitEvidence(items = [], limit, textLimit, label, warnings) {
       authoritativeSceneMatch: item.authoritativeSceneMatch === true,
       authoritativeSceneMatchReason: item.authoritativeSceneMatchReason || "",
       questionType: item.questionType || "unknown",
+      playerRoleCompatibility: item.playerRoleCompatibility || "unknown",
+      playerRoleMismatches: item.playerRoleMismatches || [],
+      playerRoleComparableDimensions: item.playerRoleComparableDimensions || [],
       subsumptionCandidatePoolComplete: item.subsumptionCandidatePoolComplete === true,
       semanticSubsumptionCertified: item.semanticSubsumptionCertified === true,
       semanticSubsumptionScoreMargin: Number(item.semanticSubsumptionScoreMargin || 0),
@@ -561,6 +566,7 @@ function buildCompactRagPrompt({ payload, maxPromptChars }) {
       traceLimit: maxChars >= 12000 ? 8 : maxChars >= 4000 ? 5 : 2,
     }),
     cardSemanticFacts: (payload.cardSemanticFacts || []).slice(0, maxChars >= 12000 ? 12 : 5),
+    playerRoleBindings: payload.playerRoleBindings,
     formalEngineStatus: payload.formalEngineStatus,
     legacyLuaSemanticPacket: compactLegacyLuaSemanticPacket(
       payload.legacyLuaSemanticPacket,
@@ -581,7 +587,8 @@ function buildCompactRagPrompt({ payload, maxPromptChars }) {
     "legacyLuaSemanticPacket.activationLegalityChecks 是旧脚本在发动检查阶段实际执行的通用候选条件。必须对题设状态枚举能通过 predicateApi 的候选；若 requiredMinimum 无法达到，则该效果不能发动，不得误解为可以发动后空处理。候选卡的具体合法性仍必须用卡文或规则资料复核。",
     "selectorSummary 是 Lua 筛选器生成的有界布尔摘要；FILTER_ARGUMENT_n 对应 filterArgumentExpressions[n-1]。先按响应效果种类代入分支，再根据区域、filterExpression 与 predicateApi 计算候选。",
     "按通用状态执行顺序判断手续或发动前提、手续或cost、每步状态更新、持续效果重算、逐项处理与诱发检查点；严格区分区域、移动归因、对象资格与效果抗性。手续或cost请求的移动若被离场替代等卡片效果改变，后续诱发按实际移动和最终归因判断；同一步同时移动按原子批次处理。禁止按卡名或历史题模板补造事实。",
-    "先绑定玩家角色：区分每张卡的控制者、动作执行者、受影响玩家与手牌所属者。交换了自己/对方或控制者的相似FAQ不能直接套用结论。",
+    "替代处理必须分别绑定原操作对象与替代操作实际影响的卡。要求破坏／移动『那张卡』『那些卡』或对象卡的步骤被替代后，不能仅因另一张卡实际被破坏／移动就认定原步骤成功；后续『然后／若成功』按卡文指代范围继续判断，除非官方资料明确另有规定。『替代效果不能适用』与『最终未发生破坏』也是两个不同命题。",
+    "先绑定玩家角色：区分每张卡的控制者、动作执行者、受影响玩家与手牌所属者。交换了自己/对方或控制者的相似FAQ不能直接套用结论；playerRoleCompatibility=mismatch 的证据必须按 playerRoleMismatches 作为角色相反的对照资料处理。",
     "发动合法性与效果处理必须分开。先按发动时状态检查必需对象和至少一条可行后续路径；支付cost后逐步更新状态并重算持续效果。处理中后续步骤变得不可行时，明确处理在哪一步结束，不得倒推为不能发动。",
     "卡文或官方资料明确列举类型时按封闭集合解释，不得把未列举的仪式、融合、同调、超量、连接、解放、素材、cost或召唤手续自行归入同类。",
     "formalEngineProofs 中 trusted=true 的 TRUE/FALSE 是逐查询强约束；UNKNOWN 不是 FALSE，不能据此回答不能。",
@@ -600,6 +607,7 @@ function buildCompactRagPrompt({ payload, maxPromptChars }) {
   const evidenceIds = bucketOrder.flatMap((bucket) => evidence[bucket].map((item) => ({ id: item.id, type: item.type, title: item.title })));
   prompt = render({
     userQuery: String(payload.userQuery || "").slice(0, 160),
+    playerRoleBindings: compactPlayerRoleBindings(payload.playerRoleBindings, 3),
     resolvedCards: (payload.resolvedCards || []).slice(0, 4).map((card) => ({
       id: card.id,
       name: card.name,
@@ -632,6 +640,7 @@ function buildCompactRagPrompt({ payload, maxPromptChars }) {
       : []),
     JSON.stringify({
       userQuery: String(payload.userQuery || "").slice(0, 80),
+      playerRoleBindings: compactPlayerRoleBindings(payload.playerRoleBindings, 2),
       resolvedCards: (payload.resolvedCards || []).slice(0, 2).map((card) => ({
         id: card.id,
         name: card.name,
@@ -753,6 +762,57 @@ function summarizeCardSemanticFacts(facts = {}) {
       sourceEvidenceIds: fact.sourceEvidenceIds || [],
       authority: "normalizer_candidate_only",
     }));
+}
+
+function summarizePlayerRoleBindings(bindings = {}) {
+  if (!bindings || typeof bindings !== "object") {
+    return {
+      schema: "player-role-bindings/v1",
+      status: "unavailable",
+      authority: "parser_candidate_only",
+      handVisibility: [],
+      activationProcedures: [],
+      comparisons: [],
+    };
+  }
+  return {
+    schema: String(bindings.schema || "player-role-bindings/v1"),
+    status: String(bindings.status || "unavailable"),
+    authority: "parser_candidate_only",
+    handVisibility: (bindings.handVisibility || []).slice(0, 8).map((item) => ({
+      sourceEvidenceId: String(item?.sourceEvidenceId || ""),
+      sourceTitle: String(item?.sourceTitle || ""),
+      effectCarrierRelation: String(item?.effectCarrierRelation || "unknown"),
+      printedAffectedRelation: String(item?.printedAffectedRelation || "unknown"),
+      actuallyPublicHandOwners: (item?.actuallyPublicHandOwners || []).slice(0, 2),
+    })),
+    activationProcedures: (bindings.activationProcedures || []).slice(0, 8).map((item) => ({
+      operationId: String(item?.operationId || ""),
+      sourceEvidenceId: String(item?.sourceEvidenceId || ""),
+      sourceTitle: String(item?.sourceTitle || ""),
+      actor: String(item?.actor || "unknown"),
+      handOwnerRequiredByProcedure: String(item?.handOwnerRequiredByProcedure || "unknown"),
+      viewer: String(item?.viewer || "unknown"),
+      procedure: String(item?.procedure || ""),
+    })),
+    comparisons: (bindings.comparisons || []).slice(0, 8).map((item) => ({
+      operationId: String(item?.operationId || ""),
+      requiredHandOwner: String(item?.requiredHandOwner || "unknown"),
+      parsedPublicHandOwners: (item?.parsedPublicHandOwners || []).slice(0, 2),
+      requiredHandIsAmongParsedPublicHands: item?.requiredHandIsAmongParsedPublicHands === true,
+      scope: String(item?.scope || ""),
+    })),
+  };
+}
+
+function compactPlayerRoleBindings(bindings = {}, limit = 3) {
+  const normalized = summarizePlayerRoleBindings(bindings);
+  return {
+    ...normalized,
+    handVisibility: normalized.handVisibility.slice(0, limit),
+    activationProcedures: normalized.activationProcedures.slice(0, limit),
+    comparisons: normalized.comparisons.slice(0, limit),
+  };
 }
 
 function summarizeLegacyLuaSemanticPacket(packet) {

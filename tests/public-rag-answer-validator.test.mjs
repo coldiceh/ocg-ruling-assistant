@@ -7,16 +7,17 @@ import {
   validatePublicRagFinalAnswer,
 } from "../backend/publicRagAnswerValidator.mjs";
 
-test("validator rejects a conclusion that reverses a grounded illegal operation without card-name rules", () => {
+test("grounded operation disagreement is diagnostic rather than a second-rule-engine veto", () => {
   const evidence = operationEvidence("必须完成的返回处理没有可适用卡，因此这个效果不能发动。");
-  const validation = validatePublicRagFinalAnswer(makeAnswer("可以发动并正常完成处理。"), {
-    rawText: "{}",
+  const answer = makeAnswer("可以发动并正常完成处理。");
+  const validation = validatePublicRagFinalAnswer(answer, {
+    rawText: JSON.stringify(answer),
     userQuery: "这个效果可以发动吗？",
     evidence,
   });
 
-  assert.equal(validation.ok, false);
-  assert.ok(validation.errors.some((item) => /grounded illegal activation/u.test(item)));
+  assert.equal(validation.ok, true, JSON.stringify(validation.errors));
+  assert.ok(validation.diagnosticWarnings.some((item) => /grounded illegal activation/u.test(item)));
 });
 
 test("validator rejects an incomplete answer when the question asks activation and later resolution", () => {
@@ -174,10 +175,10 @@ test("an official-positive headline cannot hide a contradictory negative activat
   });
 
   assert.equal(validation.ok, false);
-  assert.ok(validation.errors.includes("shortAnswer contains conflicting activation conclusions for the same subject"));
+  assert.ok(validation.diagnosticWarnings.includes("shortAnswer contains conflicting activation conclusions for the same subject"));
 });
 
-test("an ungrounded headline cannot contain opposite activation conclusions for the same subject", () => {
+test("an ungrounded contradictory headline is surfaced as a nonblocking diagnostic", () => {
   const answer = makeAnswer("可以发动，但不能发动。");
   const validation = validatePublicRagFinalAnswer(answer, {
     rawText: JSON.stringify(answer),
@@ -185,8 +186,8 @@ test("an ungrounded headline cannot contain opposite activation conclusions for 
     evidence: {},
   });
 
-  assert.equal(validation.ok, false);
-  assert.ok(validation.errors.includes("shortAnswer contains conflicting activation conclusions for the same subject"));
+  assert.equal(validation.ok, true, JSON.stringify(validation.errors));
+  assert.ok(validation.diagnosticWarnings.includes("shortAnswer contains conflicting activation conclusions for the same subject"));
 });
 
 test("different subjects and explicit alternative branches may have opposite activation results", () => {
@@ -205,6 +206,38 @@ test("different subjects and explicit alternative branches may have opposite act
     evidence: {},
   });
   assert.equal(branchValidation.ok, true, JSON.stringify(branchValidation.errors));
+});
+
+test("two distinct conditional clauses do not require an explicit otherwise marker", () => {
+  const answer = {
+    ...makeAnswer(
+      "若甲区域存在合法候选，则可以发动并进行特殊召唤；若双方对应区域都不存在合法候选，则不能发动，也不进行特殊召唤。",
+    ),
+    reasoning: [
+      "若甲区域存在合法候选，则发动手续成立，并进行特殊召唤。",
+      "若双方对应区域都不存在合法候选，则发动手续不成立，不进行特殊召唤。",
+    ],
+  };
+  const validation = validatePublicRagFinalAnswer(answer, {
+    rawText: JSON.stringify(answer),
+    userQuery: "双方对应区域都不存在合法候选时，这个效果能否发动？",
+    evidence: {},
+  });
+
+  assert.equal(validation.ok, true, JSON.stringify(validation.errors));
+});
+
+test("a postposed prerequisite and a different negative condition are separate branches", () => {
+  const answer = makeAnswer(
+    "可以发动，但前提是另一方区域至少存在1个合法候选；若双方区域都不存在合法候选，则不能发动。",
+  );
+  const validation = validatePublicRagFinalAnswer(answer, {
+    rawText: JSON.stringify(answer),
+    userQuery: "双方区域都不存在合法候选时能否发动？",
+    evidence: {},
+  });
+
+  assert.equal(validation.ok, true, JSON.stringify(validation.errors));
 });
 
 test("validator rejects a performed fusion that contradicts an authoritative direct no-processing result", () => {
@@ -442,7 +475,7 @@ test("a standalone positive 可 form is recognized as a performed operation", ()
   assert.equal(validation.ok, true, JSON.stringify(validation.errors));
 });
 
-test("opposite claims for the same Summon operation remain a conflict across discourse pivots", () => {
+test("opposite Summon claims across discourse pivots remain visible as diagnostics", () => {
   for (const shortAnswer of [
     "不能特殊召唤，也能特殊召唤。",
     "不能特殊召唤，却可以特殊召唤。",
@@ -454,10 +487,10 @@ test("opposite claims for the same Summon operation remain a conflict across dis
       userQuery: "能否特殊召唤？",
       evidence: {},
     });
-    assert.equal(validation.ok, false, shortAnswer);
+    assert.equal(validation.ok, true, shortAnswer);
     assert.ok(
-      validation.errors.includes("shortAnswer contains conflicting resolution conclusions for the same operation"),
-      `${shortAnswer}: ${JSON.stringify(validation.errors)}`,
+      validation.diagnosticWarnings.includes("shortAnswer contains conflicting resolution conclusions for the same operation"),
+      `${shortAnswer}: ${JSON.stringify(validation.diagnosticWarnings)}`,
     );
   }
 });
@@ -727,10 +760,10 @@ test("a wrong public headline cannot be rescued by correct reasoning", () => {
 
   assert.equal(validation.ok, false);
   assert.ok(validation.errors.includes("final resolution contradicts the trusted semantic state transition"));
-  assert.ok(validation.errors.includes("shortAnswer resolution conclusion conflicts with reasoning"));
+  assert.ok(validation.diagnosticWarnings.includes("shortAnswer resolution conclusion conflicts with reasoning"));
 });
 
-test("shortAnswer and reasoning resolution conflict is rejected without relying on card-specific evidence", () => {
+test("shortAnswer and reasoning resolution conflict is diagnostic without trusted evidence", () => {
   const answer = {
     ...makeAnswer("可以发动，处理时正常进行融合召唤。"),
     reasoning: ["发动手续满足。", "处理时素材不再合法，因此不进行融合召唤。"],
@@ -741,8 +774,8 @@ test("shortAnswer and reasoning resolution conflict is rejected without relying 
     evidence: {},
   });
 
-  assert.equal(validation.ok, false);
-  assert.ok(validation.errors.includes("shortAnswer resolution conclusion conflicts with reasoning"));
+  assert.equal(validation.ok, true, JSON.stringify(validation.errors));
+  assert.ok(validation.diagnosticWarnings.includes("shortAnswer resolution conclusion conflicts with reasoning"));
 });
 
 test("aligned headline and reasoning may explain a pre-cost possibility before the final no-processing result", () => {
@@ -779,6 +812,25 @@ test("a positive continuous-effect operation does not reverse a later negative s
   assert.equal(validation.ok, true, JSON.stringify(validation.errors));
 });
 
+test("replacement applicability is not mistaken for the outcome of the replaced destruction", () => {
+  const answer = {
+    ...makeAnswer(
+      "不能再适用降低攻击力来代替这次破坏。替代处理中被破坏的是另一张卡，原效果指定的对象没有被破坏，因此不能特殊召唤。",
+    ),
+    reasoning: [
+      "同一次破坏已经适用过替代处理，不能再适用降低攻击力来代替这次破坏。",
+      "替代效果不能适用不等于场上没有卡被破坏，但另一张卡被破坏也不代表原对象破坏成功，所以后续不能特殊召唤。",
+    ],
+  };
+  const validation = validatePublicRagFinalAnswer(answer, {
+    rawText: JSON.stringify(answer),
+    userQuery: "破坏替代还能否适用，实际是否破坏，以及之后能否特殊召唤？",
+    evidence: {},
+  });
+
+  assert.equal(validation.ok, true, JSON.stringify(validation.errors));
+});
+
 test("different chain links and a continuous modifier do not create a global resolution conflict", () => {
   const answer = {
     ...makeAnswer("C1可以发动。C2处理后，C1被无效，不进行这个连锁项的效果处理。"),
@@ -796,7 +848,7 @@ test("different chain links and a continuous modifier do not create a global res
   assert.equal(validation.ok, true, JSON.stringify(validation.errors));
 });
 
-test("opposite results bound to the same chain link and operation still conflict", () => {
+test("opposite results bound to one chain link remain a diagnostic", () => {
   const answer = {
     ...makeAnswer("C1可以发动，但C1不进行效果处理。"),
     reasoning: ["C2处理结束。", "轮到C1时，C1正常进行效果处理。"],
@@ -807,11 +859,11 @@ test("opposite results bound to the same chain link and operation still conflict
     evidence: {},
   });
 
-  assert.equal(validation.ok, false);
-  assert.ok(validation.errors.includes("shortAnswer resolution conclusion conflicts with reasoning"));
+  assert.equal(validation.ok, true, JSON.stringify(validation.errors));
+  assert.ok(validation.diagnosticWarnings.includes("shortAnswer resolution conclusion conflicts with reasoning"));
 });
 
-test("one headline cannot state opposite outcomes for the same chain operation", () => {
+test("opposite outcomes in one headline remain a diagnostic", () => {
   const answer = makeAnswer("C1可以发动。C1不进行效果处理，但C1正常进行效果处理。");
   const validation = validatePublicRagFinalAnswer(answer, {
     rawText: JSON.stringify(answer),
@@ -819,8 +871,8 @@ test("one headline cannot state opposite outcomes for the same chain operation",
     evidence: {},
   });
 
-  assert.equal(validation.ok, false);
-  assert.ok(validation.errors.includes("shortAnswer contains conflicting resolution conclusions for the same operation"));
+  assert.equal(validation.ok, true, JSON.stringify(validation.errors));
+  assert.ok(validation.diagnosticWarnings.includes("shortAnswer contains conflicting resolution conclusions for the same operation"));
 });
 
 test("a qualified exception branch may have a different result for the same operation", () => {
@@ -860,7 +912,7 @@ test("synonymous attributive restriction wording is a separate branch", () => {
   assert.equal(validation.ok, true, JSON.stringify(validation.errors));
 });
 
-test("opposite outcomes explicitly under the same condition remain a conflict", () => {
+test("opposite outcomes under the same condition remain a diagnostic", () => {
   const answer = makeAnswer("通常可以特殊召唤；但在同一条件下不能特殊召唤。");
   const validation = validatePublicRagFinalAnswer(answer, {
     rawText: JSON.stringify(answer),
@@ -868,11 +920,11 @@ test("opposite outcomes explicitly under the same condition remain a conflict", 
     evidence: {},
   });
 
-  assert.equal(validation.ok, false);
-  assert.ok(validation.errors.includes("shortAnswer contains conflicting resolution conclusions for the same operation"));
+  assert.equal(validation.ok, true, JSON.stringify(validation.errors));
+  assert.ok(validation.diagnosticWarnings.includes("shortAnswer contains conflicting resolution conclusions for the same operation"));
 });
 
-test("opposite outcomes inside one restricted branch remain a conflict", () => {
+test("opposite outcomes inside one restricted branch remain a diagnostic", () => {
   const answer = makeAnswer(
     "可以特殊召唤；但受到限制效果影响的怪兽不能特殊召唤，但又可以特殊召唤。",
   );
@@ -882,8 +934,8 @@ test("opposite outcomes inside one restricted branch remain a conflict", () => {
     evidence: {},
   });
 
-  assert.equal(validation.ok, false);
-  assert.ok(validation.errors.includes("shortAnswer contains conflicting resolution conclusions for the same operation"));
+  assert.equal(validation.ok, true, JSON.stringify(validation.errors));
+  assert.ok(validation.diagnosticWarnings.includes("shortAnswer contains conflicting resolution conclusions for the same operation"));
 });
 
 test("a same-sentence conditional exception is not merged into the default branch", () => {
@@ -897,7 +949,7 @@ test("a same-sentence conditional exception is not merged into the default branc
   assert.equal(validation.ok, true, JSON.stringify(validation.errors));
 });
 
-test("the same repeated condition across sentences retains one branch scope", () => {
+test("the same repeated condition across sentences retains one diagnostic scope", () => {
   const answer = makeAnswer("当A适用时不能特殊召唤。当A适用时又可以特殊召唤。");
   const validation = validatePublicRagFinalAnswer(answer, {
     rawText: JSON.stringify(answer),
@@ -905,8 +957,8 @@ test("the same repeated condition across sentences retains one branch scope", ()
     evidence: {},
   });
 
-  assert.equal(validation.ok, false);
-  assert.ok(validation.errors.includes("shortAnswer contains conflicting resolution conclusions for the same operation"));
+  assert.equal(validation.ok, true, JSON.stringify(validation.errors));
+  assert.ok(validation.diagnosticWarnings.includes("shortAnswer contains conflicting resolution conclusions for the same operation"));
 });
 
 test("material classification is not mistaken for performing a Fusion Summon", () => {
@@ -935,7 +987,7 @@ test("extended material-role wording is not mistaken for a Fusion Summon operati
   assert.equal(validation.ok, true, JSON.stringify(validation.errors));
 });
 
-test("a monster object after Fusion Summon remains an operation claim", () => {
+test("a monster object after Fusion Summon remains an operation diagnostic", () => {
   const answer = makeAnswer("不能融合召唤怪兽，但在同一条件下又可以融合召唤怪兽。");
   const validation = validatePublicRagFinalAnswer(answer, {
     rawText: JSON.stringify(answer),
@@ -943,8 +995,8 @@ test("a monster object after Fusion Summon remains an operation claim", () => {
     evidence: {},
   });
 
-  assert.equal(validation.ok, false);
-  assert.ok(validation.errors.includes("shortAnswer contains conflicting resolution conclusions for the same operation"));
+  assert.equal(validation.ok, true, JSON.stringify(validation.errors));
+  assert.ok(validation.diagnosticWarnings.includes("shortAnswer contains conflicting resolution conclusions for the same operation"));
 });
 
 test("Japanese Fusion Summon material wording is a role rather than an operation", () => {
@@ -1112,7 +1164,7 @@ test("temporal follow-up with a nearby processing result still requires resoluti
   assert.ok(validation.errors.includes("shortAnswer omits the requested post-activation resolution result"));
 });
 
-test("formal UNKNOWN rejects definite model claims and preserves their polarity for the later gate", async () => {
+test("formal UNKNOWN does not veto a claim grounded by other evidence", async () => {
   const evidence = {
     formalEngineProofs: [{
       id: "formal-unknown-1",
@@ -1128,8 +1180,8 @@ test("formal UNKNOWN rejects definite model claims and preserves their polarity 
     evidence,
   });
 
-  assert.equal(validation.ok, false);
-  assert.ok(validation.errors.includes("formal UNKNOWN blocked model positive claim"));
+  assert.equal(validation.ok, true, JSON.stringify(validation.errors));
+  assert.ok(validation.diagnosticWarnings.includes("formal UNKNOWN did not constrain model positive claim"));
 
   const result = await runValidatedPublicRagFinal({
     originalPrompt: "FROZEN_FORMAL_UNKNOWN",
@@ -1142,9 +1194,10 @@ test("formal UNKNOWN rejects definite model claims and preserves their polarity 
       dryRun: false,
     }),
   });
-  assert.equal(result.publicFinalValidation.outcome, "primary_failed_safe_fallback");
+  assert.equal(result.publicFinalValidation.outcome, "primary_valid");
   assert.equal(result.publicFinalValidation.callCount, 1);
-  assert.ok(result.answer.riskFlags.includes("formal_engine_unknown_blocked_model_positive"));
+  assert.equal(result.answer.shortAnswer, invalid.shortAnswer);
+  assert.ok(result.warnings.includes("public_final_nonblocking_semantic_diagnostic"));
 });
 
 test("directed repair keeps the original frozen prompt and exposes only validation errors plus prior output", () => {
@@ -1303,7 +1356,7 @@ test("raw enum values cannot be repaired by permissive answer normalization", ()
   assert.ok(validation.errors.includes("raw confidenceSelfEstimate is invalid"));
 });
 
-test("a failed directed repair is not retried and safely degrades", async () => {
+test("heuristic operation disagreement does not trigger a directed repair", async () => {
   let calls = 0;
   const invalid = makeAnswer("可以发动。"), evidence = operationEvidence("不能发动，因为必做处理没有可适用卡。");
   const result = await runValidatedPublicRagFinal({
@@ -1323,10 +1376,10 @@ test("a failed directed repair is not retried and safely degrades", async () => 
     },
   });
 
-  assert.equal(calls, 2);
-  assert.equal(result.publicFinalValidation.outcome, "repair_failed_safe_fallback");
-  assert.match(result.answer.shortAnswer, /不能发动/u);
-  assert.ok(result.warnings.includes("public_final_directed_repair_failed"));
+  assert.equal(calls, 1);
+  assert.equal(result.publicFinalValidation.outcome, "primary_valid");
+  assert.match(result.answer.shortAnswer, /可以发动/u);
+  assert.ok(result.warnings.includes("public_final_nonblocking_semantic_diagnostic"));
 });
 
 function makeAnswer(shortAnswer, usedEvidence = []) {

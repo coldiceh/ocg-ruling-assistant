@@ -145,6 +145,89 @@ test("normalized lingering restriction facts reach both final prompts without ca
   assert.match(bundle.recoveryPrompt, /条件后来恢复不会自动重启/u);
 });
 
+test("full and compact ruling prompts keep replacement results bound to the original operation subject", () => {
+  const bundle = buildRagRulingPromptBundle({
+    userQuery: "某效果要求破坏对象卡，替代处理改为破坏另一张卡后，后续处理是否进行？",
+    cardResolution: { resolvedCards: [], unresolvedMentions: [], ambiguousMentions: [] },
+    evidence: {
+      cardTexts: [],
+      officialQaDirectCandidates: [],
+      officialQaRelated: [],
+      faqRelated: [],
+      rawRelatedEvidence: [],
+      retrievalWarnings: [],
+    },
+    env: { RAG_RECOVERY_PROMPT_CHARS: "12000" },
+  });
+
+  assert.match(bundle.prompt, /原操作的指代对象/u);
+  assert.match(bundle.prompt, /替代操作实际影响的卡/u);
+  assert.match(bundle.prompt, /并不自动代表原指代对象的操作成功/u);
+  assert.match(bundle.recoveryPrompt, /原操作对象/u);
+  assert.match(bundle.recoveryPrompt, /替代操作实际影响的卡/u);
+  assert.match(bundle.recoveryPrompt, /不能仅因另一张卡/u);
+});
+
+test("full, recovery, and minimal ruling prompts retain structured player-role bindings", () => {
+  const playerRoleBindings = {
+    schema: "player-role-bindings/v1",
+    status: "parsed",
+    authority: "parser_candidate_only",
+    handVisibility: [{
+      sourceEvidenceId: "card-text-eye",
+      sourceTitle: "持续公开效果",
+      effectCarrierRelation: "self_controls",
+      printedAffectedRelation: "opponent",
+      actuallyPublicHandOwners: ["opponent"],
+    }],
+    activationProcedures: [{
+      operationId: "reveal-own-hand-activation:card-text-designator",
+      sourceEvidenceId: "card-text-designator",
+      sourceTitle: "展示自己手牌的发动手续",
+      actor: "self",
+      handOwnerRequiredByProcedure: "self",
+      viewer: "opponent",
+      procedure: "reveal_own_hand_at_activation",
+    }],
+    comparisons: [{
+      operationId: "reveal-own-hand-activation:card-text-designator",
+      requiredHandOwner: "self",
+      parsedPublicHandOwners: ["opponent"],
+      requiredHandIsAmongParsedPublicHands: false,
+      scope: "only_explicitly_parsed_continuous_effects",
+    }],
+  };
+  const base = {
+    userQuery: "我方持续卡适用中，我方能否发动需要展示自己手牌的卡？",
+    cardResolution: { resolvedCards: [], unresolvedMentions: [], ambiguousMentions: [] },
+    evidence: {
+      cardTexts: [],
+      officialQaDirectCandidates: [],
+      officialQaRelated: [],
+      faqRelated: [],
+      rawRelatedEvidence: [],
+      retrievalWarnings: [],
+      playerRoleBindings,
+    },
+  };
+
+  const full = buildRagRulingPromptBundle({
+    ...base,
+    env: { RAG_MAX_PROMPT_CHARS: "60000", RAG_RECOVERY_PROMPT_CHARS: "12000" },
+  });
+  assert.match(full.prompt, /"playerRoleBindings"/u);
+  assert.match(full.prompt, /"requiredHandIsAmongParsedPublicHands": false/u);
+  assert.match(full.recoveryPrompt, /"playerRoleBindings"/u);
+  assert.match(full.recoveryPrompt, /"actuallyPublicHandOwners":\["opponent"\]/u);
+
+  const minimal = buildRagRulingPromptBundle({
+    ...base,
+    env: { RAG_MAX_PROMPT_CHARS: "2200", RAG_RECOVERY_PROMPT_CHARS: "2200" },
+  });
+  assert.match(minimal.prompt, /"playerRoleBindings"/u);
+  assert.match(minimal.prompt, /"requiredHandOwner":"self"/u);
+});
+
 test("user-provided card text reaches the final model as raw evidence without a local verdict", async () => {
   let finalPrompt = "";
   await answerRagRulingQuestion({

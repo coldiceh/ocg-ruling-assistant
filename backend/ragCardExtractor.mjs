@@ -85,6 +85,7 @@ export function extractRagCards(userQuery, { cards = [], maxCards = 6, modelCard
   const ambiguousMentions = [];
   const seenCards = new Set();
   const seenMentionKeys = new Set();
+  const numberedMentionKeysRequiringExternalVerification = new Set();
 
   for (const identity of extractNumberedCardIdentities(query)) {
     const input = `${identity.family === "cno" ? "CNo." : "No."}${identity.number}`;
@@ -101,11 +102,25 @@ export function extractRagCards(userQuery, { cards = [], maxCards = 6, modelCard
       !detailedSeeds.length
       || detailedSeeds.some((seed) => numberedMentionCompatibleWithCard(seed.input, identity, candidate.card))
     ));
+    const exactCompatible = candidates.filter((candidate) => detailedSeeds.some((seed) => (
+      numberedMentionExactlyMatchesCard(seed.input, identity, candidate.card)
+    )));
+    // Several cards may legitimately share one Number identity. When the
+    // detailed surface is not an exact synchronized alias, edit similarity is
+    // insufficient to select a form; defer that surface to external lookup.
+    const resolutionCandidates = detailedSeeds.length && candidates.length > 1
+      ? exactCompatible
+      : compatible;
+    if (detailedSeeds.length && candidates.length > 1 && exactCompatible.length === 0) {
+      for (const seed of detailedSeeds) {
+        numberedMentionKeysRequiringExternalVerification.add(normalizeCardKey(seed.input));
+      }
+    }
 
-    if (compatible.length === 1) {
-      const detailedSeed = detailedSeeds.find((seed) => numberedMentionCompatibleWithCard(seed.input, identity, compatible[0].card));
+    if (resolutionCandidates.length === 1) {
+      const detailedSeed = detailedSeeds.find((seed) => numberedMentionCompatibleWithCard(seed.input, identity, resolutionCandidates[0].card));
       const resolvedInput = detailedSeed?.input || input;
-      addResolved(resolved, seenCards, compatible[0], resolvedInput, detailedSeed ? 0.97 : 0.99);
+      addResolved(resolved, seenCards, resolutionCandidates[0], resolvedInput, detailedSeed ? 0.97 : 0.99);
       seenMentionKeys.add(inputKey);
       if (detailedSeed) seenMentionKeys.add(normalizeCardKey(detailedSeed.input));
     } else if (bareIdentityPresent && candidates.length === 1) {
@@ -135,8 +150,8 @@ export function extractRagCards(userQuery, { cards = [], maxCards = 6, modelCard
     } else if (bareIdentityPresent && candidates.length > 1) {
       ambiguousMentions.push(buildAmbiguousMention(input, candidates));
       seenMentionKeys.add(inputKey);
-    } else if (detailedSeeds.length && compatible.length > 1) {
-      ambiguousMentions.push(buildAmbiguousMention(detailedSeeds[0].input, compatible));
+    } else if (detailedSeeds.length && resolutionCandidates.length > 1) {
+      ambiguousMentions.push(buildAmbiguousMention(detailedSeeds[0].input, resolutionCandidates));
       seenMentionKeys.add(normalizeCardKey(detailedSeeds[0].input));
     } else if (bareIdentityPresent && candidates.length === 0) {
       unresolvedMentions.push({
@@ -154,10 +169,16 @@ export function extractRagCards(userQuery, { cards = [], maxCards = 6, modelCard
     if (!mentionKey || seenMentionKeys.has(mentionKey)) continue;
     seenMentionKeys.add(mentionKey);
     const candidates = aliasIndex.get(mentionKey) || [];
-    const singleEditCandidate = candidates.length || seed.deferToNestedKnownSpan
+    const requiresExternalNumberedIdentityVerification = numberedMentionKeysRequiringExternalVerification.has(mentionKey);
+    const singleEditCandidate = candidates.length
+      || seed.deferToNestedKnownSpan
+      || requiresExternalNumberedIdentityVerification
       ? null
       : findUniqueSingleEditCandidate(aliasIndex, mention) || findUniqueNearEditCandidate(aliasIndex, mention);
-    const distinctiveFragmentCandidate = candidates.length || singleEditCandidate || seed.deferToNestedKnownSpan
+    const distinctiveFragmentCandidate = candidates.length
+      || singleEditCandidate
+      || seed.deferToNestedKnownSpan
+      || requiresExternalNumberedIdentityVerification
       ? null
       : findUniqueDistinctiveFragmentCandidate(cards, mention);
     if (candidates.length === 1) {
@@ -165,7 +186,7 @@ export function extractRagCards(userQuery, { cards = [], maxCards = 6, modelCard
     } else if (candidates.length > 1) {
       ambiguousMentions.push(buildAmbiguousMention(mention, candidates));
     } else if (singleEditCandidate) {
-      addResolved(
+      addEditDistanceResolved(
         resolved,
         seenCards,
         singleEditCandidate,
@@ -193,7 +214,7 @@ export function extractRagCards(userQuery, { cards = [], maxCards = 6, modelCard
     } else if (candidates.length > 1) {
       ambiguousMentions.push(buildAmbiguousMention(mention, candidates));
     } else if (singleEditCandidate) {
-      addResolved(
+      addEditDistanceResolved(
         resolved,
         seenCards,
         singleEditCandidate,
@@ -660,13 +681,17 @@ function cleanUnquotedMention(value) {
     .replace(/^[,，。；;、：:\s]+|[,，。；;、：:\s]+$/gu, "")
     .trim();
   text = trimGameplaySuffix(text);
-  const leadingNoise = /^(?:了|双方|雙方|我方|对方|對方|自己|自分|它的|他的|她的|其|那只|那張|那张|这只|這隻|这張|这张|只有|一只|一張|一张|怪兽|怪獸|的时候|時候|此时|此時|那之后|那之後|之后|之後|随后|隨後|接着|接著|接下来|接下來|其后|其後|此后|此後|然后|然後|如果|假设|假設|此卡|这张卡|這張卡|这个|這個|那个|那個|手卡|墓地|除外|场上|場上|场上的|場上的|选择|選擇|适用|適用|发动|發動|要将|要將|将|將|把|想要|作为|作為|被破坏|被破壞|替代|代替|降低|提升|攻击力|攻擊力|守备力|守備力|可以|能否|是否|能|吗|嗎|的)+/u;
+  const leadingNoise = /^(?:了|双方|雙方|我方|对方|對方|自己|自分|它的|他的|她的|其|那只|那張|那张|这只|這隻|这張|这张|只有|一只|一張|一张|怪兽|怪獸|的时候|時候|此时|此時|这时|這時|那之后|那之後|之后|之後|随后|隨後|接着|接著|接下来|接下來|其后|其後|此后|此後|然后|然後|如果|假设|假設|此卡|这张卡|這張卡|这个|這個|那个|那個|手卡|墓地|除外|场上|場上|场上的|場上的|选择|選擇|适用|適用|发动|發動|要将|要將|将|將|把|想要|作为|作為|被破坏|被破壞|替代|代替|降低|提升|攻击力|攻擊力|守备力|守備力|可以|能否|是否|能|吗|嗎|的)+/u;
   const trailingNoise = /(?:的)?(?:效果|效应|效應|破坏|破壞|被破坏|被破壞|特殊召唤|特殊召喚|能|可以|吗|嗎|的时候|時候|此时|此時|选择|選擇|适用|適用|发动|發動|降低.*|提升.*|作为.*|作為.*)$/u;
   let previous = "";
   while (text && text !== previous) {
     previous = text;
     text = text.replace(leadingNoise, "").replace(trailingNoise, "").trim();
   }
+  // A bare number after an explicit numbered-card mention is normally an
+  // anaphora (for example, "106 itself"), not another card name. Explicit
+  // No./CNo./Number surfaces are handled by the numbered-card parser first.
+  if (/^\d{1,4}(?:(?:自己|自身|本身)(?:的.*)?)?$/u.test(text)) return "";
   return text.length >= 2 && text.length <= 30 ? text : "";
 }
 
@@ -811,6 +836,7 @@ function collectNearEditCandidates(aliasIndex, mention, { allowContextualTwoEdit
       if (distance > maximumDistance) continue;
       for (const candidate of aliasIndex.get(aliasKey) || []) {
         if (hasNumberedCardIdentityConflict(mention, candidate.matchedAlias)) continue;
+        if (!approximateCandidateCompatibleWithNumberedMention(mention, candidate)) continue;
         const identity = cardIdentity(candidate.card);
         const previous = matchedCards.get(identity);
         if (identity && (!previous || distance < previous.nearEditDistance)) {
@@ -851,6 +877,7 @@ function collectSingleEditCandidates(aliasIndex, keysByLength, mention, mentionK
       for (const candidate of aliasIndex.get(aliasKey) || []) {
         if (candidateFilter && !candidateFilter(candidate)) continue;
         if (hasNumberedCardIdentityConflict(mention, candidate.matchedAlias)) continue;
+        if (!approximateCandidateCompatibleWithNumberedMention(mention, candidate)) continue;
         const identity = cardIdentity(candidate.card);
         if (!identity) continue;
         const previous = matchedCards.get(identity);
@@ -926,6 +953,24 @@ function numberedMentionCompatibleWithCard(mention, identity, card) {
     .map((alias) => numberedMentionRemainder(alias, identity))
     .filter(Boolean)
     .some((candidateRemainder) => compatibleNumberedNameRemainders(remainder, candidateRemainder));
+}
+
+function numberedMentionExactlyMatchesCard(mention, identity, card) {
+  const mentionKey = normalizeCardKey(mention);
+  if (!mentionKey) return false;
+  return uniqueCardAliases(card).some((alias) => (
+    extractNumberedCardIdentities(alias).some((candidate) => sameNumberedIdentity(candidate, identity))
+    && normalizeCardKey(alias) === mentionKey
+  ));
+}
+
+function approximateCandidateCompatibleWithNumberedMention(mention, candidate) {
+  const identities = extractNumberedCardIdentities(mention);
+  if (!identities.length) return true;
+  return identities.every((identity) => (
+    !numberedMentionRemainder(mention, identity)
+    || numberedMentionCompatibleWithCard(mention, identity, candidate?.card || candidate)
+  ));
 }
 
 function compatibleNumberedNameRemainders(mention, candidate) {
@@ -1191,7 +1236,13 @@ function applyContextualNearEditResolution({
     const identities = new Set(linked.map((candidate) => cardIdentity(candidate.card)).filter(Boolean));
     if (identities.size !== 1) continue;
     const selected = linked.find((candidate) => cardIdentity(candidate.card) === identities.values().next().value);
-    addResolved(resolved, seenCards, selected, mention.input, confidenceForNearEditMention(mention, selected.nearEditDistance));
+    addEditDistanceResolved(
+      resolved,
+      seenCards,
+      selected,
+      mention.input,
+      confidenceForNearEditMention(mention, selected.nearEditDistance),
+    );
     resolvedMentionKeys.add(normalizeCardKey(mention.input));
   }
   if (!resolvedMentionKeys.size) return;
@@ -1448,7 +1499,15 @@ function scoreMentionedAction(afterMention, effectText) {
   return { score: 0, strongSignals: 0 };
 }
 
-function addResolved(resolved, seenCards, candidate, input, confidence, resolutionSource = "query") {
+function addResolved(
+  resolved,
+  seenCards,
+  candidate,
+  input,
+  confidence,
+  resolutionSource = "query",
+  resolutionMetadata = {},
+) {
   const card = candidate.card || candidate;
   const key = cardIdentity(card);
   if (!key || seenCards.has(key)) return null;
@@ -1458,6 +1517,7 @@ function addResolved(resolved, seenCards, candidate, input, confidence, resoluti
   const level = normalizedCardNumber(card.level);
   const rank = normalizedCardNumber(card.rank);
   const link = normalizedCardNumber(card.link ?? card.linkRating);
+  const { includeInputAlias = true, ...publicResolutionMetadata } = resolutionMetadata || {};
   const resolvedCard = {
     input: String(input || candidate.matchedAlias || card.name || ""),
     id: String(card.id || card.cardId || ""),
@@ -1494,12 +1554,33 @@ function addResolved(resolved, seenCards, candidate, input, confidence, resoluti
     ...(card.formalContentSha256 ? { formalContentSha256: String(card.formalContentSha256) } : {}),
     ...(Array.isArray(card.formalEffects) ? { formalEffects: structuredClone(card.formalEffects) } : {}),
     ...(card.formal && typeof card.formal === "object" ? { formal: structuredClone(card.formal) } : {}),
-    aliases: resolvedCardAliases(card, input),
+    aliases: resolvedCardAliases(card, input, { includeInputAlias }),
     confidence,
     resolutionSource,
+    ...publicResolutionMetadata,
   };
   resolved.push(resolvedCard);
   return resolvedCard;
+}
+
+function addEditDistanceResolved(resolved, seenCards, candidate, input, confidence) {
+  if (!extractNumberedCardIdentities(input).length) {
+    return addResolved(resolved, seenCards, candidate, input, confidence);
+  }
+  return addResolved(
+    resolved,
+    seenCards,
+    candidate,
+    input,
+    confidence,
+    "query",
+    {
+      includeInputAlias: false,
+      identityMatchKind: "edit_distance",
+      nearEditDistance: Number(candidate?.nearEditDistance || 1),
+      requiresExternalIdentityVerification: true,
+    },
+  );
 }
 
 function normalizedCardNumber(value) {
@@ -1508,8 +1589,9 @@ function normalizedCardNumber(value) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function resolvedCardAliases(card, input) {
+function resolvedCardAliases(card, input, { includeInputAlias = true } = {}) {
   const aliases = cardAliases(card);
+  if (!includeInputAlias) return aliases;
   const mention = String(input || "").trim();
   const identities = extractNumberedCardIdentities(mention);
   if (!mention || identities.length !== 1) return aliases;

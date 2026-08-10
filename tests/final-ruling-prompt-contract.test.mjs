@@ -46,3 +46,13 @@ test("final ruling prompt separates question verdict polarity from proposition t
   assert.match(prompt, /`CONDITIONAL` verdict 必须由明确分支中的决定性命题支撑/u);
   assert.match(prompt, /只能是 `TRUE` 或 `FALSE`，不能用 `UNKNOWN` 或 `CONDITIONAL`/u);
 });
+
+test("final ruling prompt keeps replacement results bound to the original operation subject", async () => {
+  const prompt = await readFile(promptUrl, "utf8");
+
+  assert.match(prompt, /原操作的指代对象/u);
+  assert.match(prompt, /替代操作实际影响的卡/u);
+  assert.match(prompt, /并不自动代表原指代对象的步骤成功/u);
+  assert.match(prompt, /某个替代效果不能适用/u);
+  assert.match(prompt, /最终没有发生破坏/u);
+});
