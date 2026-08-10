@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { requestOcgEngineSimulation } from "./ocgEngineClient.mjs";
 import { autoEngineSimulationEnabled, buildBestEffortEngineScenario } from "./ocgScenarioPlanner.mjs";
 import { runFormalEngineShadow } from "./formalEngineShadow.mjs";
@@ -14,12 +15,15 @@ import {
   buildRagRulingPromptBundle,
   RAG_ANSWER_LEVELS,
 } from "./ragRulingPrompt.mjs";
+import { analyzeEffectStateTransition } from "./effectStateReasoner.mjs";
 import { hasNumberedCardIdentityConflict } from "./numberedCardIdentity.mjs";
 import { runValidatedPublicRagFinal } from "./publicRagAnswerValidator.mjs";
 import {
   createLegacyLuaUnknownPacket,
   validateLegacyLuaSemanticPacket,
 } from "./legacyLuaSemanticPacket.mjs";
+
+const defaultSnapshotRevisionCache = new WeakMap();
 
 export async function answerRagRulingQuestion({
   question,
@@ -63,6 +67,9 @@ export async function answerRagRulingQuestion({
   const data = await Promise.resolve(!usesCompleteDefaultSnapshot
     ? { cards: cards || [], records: records || [], qaRecords: qaRecords || [] }
     : loadRagData(dataDir));
+  const dataRevision = buildRagDataRevision(data, env, {
+    cacheByIdentity: usesCompleteDefaultSnapshot,
+  });
   timingsMs.dataLoad = elapsedMs(dataStartedAt);
 
   const preflightStartedAt = Date.now();
@@ -79,6 +86,7 @@ export async function answerRagRulingQuestion({
   const [cardNameModel, ruleQueryModel] = await Promise.all([
     callCardNameExtractionModel({
       userQuery: query,
+      dataRevision,
       env,
       modelInvoker: cardModelInvoker,
       fetchImpl,
@@ -88,6 +96,7 @@ export async function answerRagRulingQuestion({
     }),
     callRuleQueryExtractionModel({
       userQuery: query,
+      dataRevision,
       env,
       modelInvoker: ruleModelInvoker,
       fetchImpl,
@@ -198,14 +207,39 @@ export async function answerRagRulingQuestion({
     env,
   });
   const locallyGroundedEvidence = attachRulebookGrounding(retrievedEvidence, localRulebookGrounding);
-  // Legacy semantic executors are deliberately excluded from the public
-  // answer path.  They may remain as offline experiments, but their partial
-  // state cannot become a final answer or a hard constraint for the model.
-  const localSemanticStateTransition = null;
+  // The local executor is an evidence-discovery aid only.  It records movement
+  // provenance and timing checkpoints that are easy to miss in prose (for
+  // example, a summon procedure requesting a banish while a leave-field card
+  // effect supplies the final banish cause).  It never signs the public ruling:
+  // the final model must verify every claim against the raw card text and the
+  // retrieved official material below.
+  const localSemanticStateTransition = analyzeEffectStateTransition({
+    userQuery: query,
+    cardTexts: reasoningCardTexts,
+    corroboratingEvidence,
+    operationLegality: locallyGroundedEvidence.operationLegality,
+    resolvedCards: effectiveCardResolution.resolvedCards || [],
+  });
   const semanticAuthorityAssessment = null;
-  const semanticStateTransition = null;
+  // The local executor is deliberately demoted before it enters the evidence
+  // packet. Some analyzers can produce a complete/authoritative result for
+  // their own closed-world contract, but the public assistant still requires
+  // the final model to judge the whole user question. Keeping the trajectory
+  // while clearing authority lets it improve discovery without turning it into
+  // a hidden validator or a second final-ruling engine.
+  const semanticStateTransition = localSemanticStateTransition
+    ? {
+        ...localSemanticStateTransition,
+        authoritative: false,
+        authorityReason: "diagnostic_only_requires_final_model",
+        authorityReasons: [...new Set([
+          ...(localSemanticStateTransition.authorityReasons || []),
+          "diagnostic_only_requires_final_model",
+        ])],
+      }
+    : null;
   const localDecisionComplete = false;
-  timingsMs.semanticStateExecution = 0;
+  timingsMs.semanticStateExecution = elapsedMs(localReasoningStartedAt);
   timingsMs.localReasoning = elapsedMs(localReasoningStartedAt);
 
   const rulebookStartedAt = Date.now();
@@ -243,6 +277,8 @@ export async function answerRagRulingQuestion({
     evidence,
     env,
   });
+  const evidenceFingerprint = sha256Json(evidence);
+  const finalPromptSha256 = sha256Text(promptBundle.prompt);
   const displayCards = dedupeCards([
     ...(effectiveCardResolution.resolvedCards || []),
     ...userProvidedCards(evidence.userProvidedCardTexts || []),
@@ -339,12 +375,14 @@ export async function answerRagRulingQuestion({
       cardNameModelUsed: cardNameModel.modelUsed,
       cardNameProviderUsed: cardNameModel.providerUsed,
       cardNameModelDryRun: cardNameModel.dryRun,
+      cardNameModelTokenUsage: cardNameModel.tokenUsage || {},
       cardNameModelCostCny: cardNameModel.estimatedCostCny || 0,
       cardNameWarnings: cardNameModel.warnings || [],
       modelRuleSearchQueries: ruleQueryModel.queries || [],
       ruleQueryModelUsed: ruleQueryModel.modelUsed,
       ruleQueryProviderUsed: ruleQueryModel.providerUsed,
       ruleQueryModelDryRun: ruleQueryModel.dryRun,
+      ruleQueryModelTokenUsage: ruleQueryModel.tokenUsage || {},
       ruleQueryModelCostCny: ruleQueryModel.estimatedCostCny || 0,
       ruleQueryWarnings: ruleQueryModel.warnings || [],
       rulebookGroundingModelUsed: rulebookGrounding.modelUsed,
@@ -353,6 +391,28 @@ export async function answerRagRulingQuestion({
       rulebookGroundingWarnings: rulebookGrounding.warnings || [],
       rulebookGroundingTokenUsage: rulebookGrounding.tokenUsage || {},
       rulebookGroundingCostCny: rulebookGrounding.estimatedCostCny || 0,
+      extractionCacheHits: {
+        cardNameModel: cardNameModel.cacheHit === true,
+        ruleQueryModel: ruleQueryModel.cacheHit === true,
+        rulebookGroundingModel: rulebookGrounding.cacheHit === true,
+      },
+      extractionSingleflightHits: {
+        cardNameModel: cardNameModel.singleflightHit === true,
+        ruleQueryModel: ruleQueryModel.singleflightHit === true,
+        rulebookGroundingModel: rulebookGrounding.singleflightHit === true,
+      },
+      auxiliaryCacheHit: cardNameModel.cacheHit === true
+        || ruleQueryModel.cacheHit === true
+        || rulebookGrounding.cacheHit === true,
+      auxiliaryTokenUsage: sumUsageTelemetry([
+        cardNameModel.tokenUsage,
+        ruleQueryModel.tokenUsage,
+        rulebookGrounding.tokenUsage,
+      ]),
+      auxiliaryEstimatedCostCny:
+        (cardNameModel.estimatedCostCny || 0)
+        + (ruleQueryModel.estimatedCostCny || 0)
+        + (rulebookGrounding.estimatedCostCny || 0),
       retrievalWarnings: [...new Set([...(evidence.retrievalWarnings || []), ...(promptBundle.warnings || [])])],
       baigeSearchCount: evidence.debug?.baigeSearchCount || 0,
       baigeCacheHitCount: evidence.debug?.baigeCacheHitCount || 0,
@@ -361,6 +421,8 @@ export async function answerRagRulingQuestion({
       providerUsed: modelResult.providerUsed || modelResult.provider,
       modelUsed: modelResult.modelUsed,
       modelName: modelResult.modelName,
+      requestedModel: String(modelResult.generationConfig?.requestModel || modelResult.modelName || "") || null,
+      returnedModel: firstReturnedModel(modelResult.generationAttempts),
       dryRun: modelResult.dryRun,
       tokenUsage: modelResult.tokenUsage || {},
       estimatedCostCny:
@@ -368,11 +430,15 @@ export async function answerRagRulingQuestion({
         + (ruleQueryModel.estimatedCostCny || 0)
         + (rulebookGrounding.estimatedCostCny || 0)
         + (modelResult.estimatedCostCny || 0),
+      estimatedCostUsd: modelResult.estimatedCostUsd || 0,
       budgetStatus: modelResult.budgetStatus || null,
       generationConfig: modelResult.generationConfig || null,
       generationAttempts: modelResult.generationAttempts || [],
       publicFinalValidation: modelResult.publicFinalValidation || null,
       promptChars: promptBundle.promptChars,
+      dataRevision,
+      evidenceFingerprint,
+      finalPromptSha256,
       promptTruncated: promptBundle.promptTruncated,
       semanticStateTransition,
       semanticStateTransitionDiagnostic: semanticStateTransition
@@ -904,4 +970,65 @@ function userProvidedCards(items) {
     official: false,
     aliases: (item.cards || []).filter(Boolean),
   })).filter((card) => card.name && card.effectText);
+}
+
+function buildRagDataRevision(data = {}, env = {}, { cacheByIdentity = false } = {}) {
+  if (cacheByIdentity && data && typeof data === "object") {
+    const cached = defaultSnapshotRevisionCache.get(data);
+    if (cached) return cached;
+  }
+  const revision = sha256Json({
+    configuredRevision: String(env.RAG_DATA_REVISION || ""),
+    cards: data.cards || [],
+    records: data.records || [],
+    qaRecords: data.qaRecords || [],
+  });
+  // loadRagData returns one immutable in-process snapshot. Reusing its digest
+  // avoids serializing the full corpus for every question; injected data stays
+  // uncached so in-place test/development edits still invalidate immediately.
+  if (cacheByIdentity && data && typeof data === "object") {
+    defaultSnapshotRevisionCache.set(data, revision);
+  }
+  return revision;
+}
+
+function sha256Json(value) {
+  return sha256Text(stableDiagnosticJson(value));
+}
+
+function sha256Text(value) {
+  return createHash("sha256").update(String(value || ""), "utf8").digest("hex");
+}
+
+function stableDiagnosticJson(value, seen = new WeakSet()) {
+  if (value === undefined) return '"[undefined]"';
+  if (value === null || typeof value !== "object") return JSON.stringify(value);
+  if (seen.has(value)) return '"[circular]"';
+  seen.add(value);
+  const serialized = Array.isArray(value)
+    ? `[${value.map((item) => stableDiagnosticJson(item, seen)).join(",")}]`
+    : `{${Object.keys(value).sort().map((key) => (
+        `${JSON.stringify(key)}:${stableDiagnosticJson(value[key], seen)}`
+      )).join(",")}}`;
+  seen.delete(value);
+  return serialized;
+}
+
+function sumUsageTelemetry(items = []) {
+  const total = {};
+  for (const item of items || []) {
+    for (const [key, value] of Object.entries(item || {})) {
+      const number = Number(value);
+      if (!Number.isFinite(number)) continue;
+      total[key] = (total[key] || 0) + number;
+    }
+  }
+  return total;
+}
+
+function firstReturnedModel(attempts = []) {
+  const model = (attempts || [])
+    .map((attempt) => String(attempt?.responseModel || "").trim())
+    .find(Boolean);
+  return model || null;
 }

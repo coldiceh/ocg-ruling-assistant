@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   callRagModel,
   createPublicAnswerModelEnv,
+  getRagBudgetStatus,
   resolveRagProvider,
 } from "../backend/ragModelClient.mjs";
 import {
@@ -12,6 +13,7 @@ import {
 } from "../backend/publicRulingModelConfig.mjs";
 
 const RELAY_PROFILE_ID = "relay-gpt-5.6-luna-low";
+const DEFAULT_RELAY_PROFILE_ID = "relay-gpt-5.6-sol-low";
 
 test("public Luna relay profile requires both a key and an HTTPS endpoint", () => {
   const unavailable = getPublicRulingModelCapabilities({
@@ -55,7 +57,7 @@ test("public Luna relay profile requires both a key and an HTTPS endpoint", () =
     RELAY_BASE_URL: "https://relay.example.test/v1",
     DEEPSEEK_API_KEY: "deepseek-key",
   });
-  assert.equal(configured.defaultRulingModelProfile, RELAY_PROFILE_ID);
+  assert.equal(configured.defaultRulingModelProfile, DEFAULT_RELAY_PROFILE_ID);
   assert.deepEqual(configured.rulingModelProfiles.map((profile) => ({
     id: profile.id,
     available: profile.available,
@@ -188,7 +190,12 @@ test("relay final ruling uses one SSE Chat Completions request with the relay-on
           finish_reason: "stop",
           delta: { content: JSON.stringify(modelJson("Relay JSON OK")) },
         }],
-        usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 },
+        usage: {
+          prompt_tokens: 100,
+          completion_tokens: 50,
+          total_tokens: 150,
+          prompt_tokens_details: { cached_tokens: 100 },
+        },
       });
     },
   });
@@ -217,8 +224,59 @@ test("relay final ruling uses one SSE Chat Completions request with the relay-on
   assert.equal(result.generationAttempts[0].usage.prompt_tokens, 100);
   assert.equal(result.generationAttempts[0].usage.completion_tokens, 50);
   assert.equal(result.budgetStatus.bucket.id, "final_ruling:relay");
-  assert.equal(result.estimatedCostCny, 0.25);
+  assert.equal(result.costCurrency, "USD");
+  assert.equal(result.estimatedCostCny, 0);
+  assert.equal(result.estimatedCostUsd, 0.002);
+  assert.equal(result.budgetStatus.spentTodayCny, 0);
+  assert.equal(result.budgetStatus.bucket.currency, "USD");
+  assert.equal(result.budgetStatus.bucket.spentTodayUsd, 0.002);
+  assert.equal(result.budgetStatus.bucket.dailyBudgetUsd, 10);
   assert.ok(result.warnings.includes("third_party_relay_model_identity_unverified"));
+});
+
+test("relay normalizes Responses-style usage without discounting public all-uncached pricing", async () => {
+  const result = await callRagModel({
+    prompt: "Responses usage normalization",
+    env: {
+      MODEL_PROVIDER: "relay",
+      RELAY_API_KEY: "relay-issued-key",
+      RELAY_BASE_URL: "https://relay.example.test/v1",
+      RAG_MODEL: "gpt-5.6-sol",
+      RELAY_MAX_COMPLETION_TOKENS: "128",
+      API_BUDGET_TIMEZONE: "UTC",
+    },
+    now: new Date("2042-01-01T00:00:00.000Z"),
+    fetchImpl: async () => relaySseResponse({
+      id: "relay-responses-usage",
+      model: "gpt-5.6-sol",
+      choices: [{
+        index: 0,
+        finish_reason: "stop",
+        delta: { content: JSON.stringify(modelJson("Responses usage OK")) },
+      }],
+      usage: {
+        input_tokens: 200,
+        output_tokens: 80,
+        total_tokens: 280,
+        input_tokens_details: { cached_tokens: 50 },
+        output_tokens_details: { reasoning_tokens: 30 },
+      },
+    }),
+  });
+
+  assert.deepEqual(result.tokenUsage, {
+    prompt_tokens: 200,
+    completion_tokens: 80,
+    total_tokens: 280,
+    reasoning_tokens: 30,
+    prompt_cache_hit_tokens: 50,
+    prompt_cache_miss_tokens: 150,
+    cache_write_tokens: 0,
+  });
+  assert.equal(result.generationAttempts[0].requestModel, "gpt-5.6-sol");
+  assert.equal(result.generationAttempts[0].responseModel, "gpt-5.6-sol");
+  assert.equal(result.generationAttempts[0].usage.prompt_tokens, 200);
+  assert.equal(result.estimatedCostUsd, 0.0034);
 });
 
 test("public relay keeps the returned-model mismatch warning with an SSE response", async () => {
@@ -283,10 +341,140 @@ test("relay default estimate allows multiple calls without exhausting the daily 
   const second = await callRagModel({ prompt: "第二次", env, now, fetchImpl });
 
   assert.equal(fetchCount, 2);
-  assert.equal(first.estimatedCostCny, 0.5);
+  assert.equal(first.estimatedCostCny, 0);
+  assert.equal(first.estimatedCostUsd, 0.00035);
   assert.equal(first.budgetStatus.bucket.id, "final_ruling:relay");
-  assert.equal(second.estimatedCostCny, 0.5);
+  assert.equal(second.estimatedCostCny, 0);
+  assert.equal(second.estimatedCostUsd, 0.00035);
+  assert.equal(second.budgetStatus.spentTodayCny, 0);
+  assert.equal(second.budgetStatus.bucket.spentTodayUsd, 0.0007);
   assert.notEqual(second.answer.answerLevel, "budget_limited");
+});
+
+test("relay keeps a conservative USD reservation when usage is omitted", async () => {
+  const result = await callRagModel({
+    prompt: "x",
+    env: {
+      MODEL_PROVIDER: "relay",
+      RELAY_API_KEY: "relay-issued-key",
+      RELAY_BASE_URL: "https://relay.example.test/v1",
+      RAG_MODEL: "gpt-5.6-sol",
+      RELAY_MAX_COMPLETION_TOKENS: "64",
+      API_BUDGET_TIMEZONE: "UTC",
+    },
+    now: new Date("2040-01-02T00:00:00.000Z"),
+    fetchImpl: async () => relaySseResponse({
+      model: "gpt-5.6-sol",
+      choices: [{
+        index: 0,
+        finish_reason: "stop",
+        delta: { content: JSON.stringify(modelJson("Usage omitted")) },
+      }],
+    }),
+  });
+
+  assert.equal(result.estimatedCostCny, 0);
+  assert.equal(result.estimatedCostUsd, 0.001925);
+  assert.equal(result.budgetStatus.bucket.spentTodayUsd, 0.001925);
+});
+
+test("relay retains its full USD reservation when usage has only a total without input/output", async () => {
+  const result = await callRagModel({
+    prompt: "x",
+    env: {
+      MODEL_PROVIDER: "relay",
+      RELAY_API_KEY: "relay-issued-key",
+      RELAY_BASE_URL: "https://relay.example.test/v1",
+      RAG_MODEL: "gpt-5.6-sol",
+      RELAY_MAX_COMPLETION_TOKENS: "64",
+      API_BUDGET_TIMEZONE: "UTC",
+    },
+    now: new Date("2040-01-06T01:00:00.000Z"),
+    fetchImpl: async () => relaySseResponse({
+      model: "gpt-5.6-sol",
+      choices: [{
+        index: 0,
+        finish_reason: "stop",
+        delta: { content: JSON.stringify(modelJson("Usage has total only")) },
+      }],
+      usage: { total_tokens: 1 },
+    }),
+  });
+
+  assert.equal(result.estimatedCostCny, 0);
+  assert.equal(result.estimatedCostUsd, 0.001925);
+  assert.equal(result.budgetStatus.bucket.spentTodayUsd, 0.001925);
+  assert.ok(result.warnings.includes("provider_usage_incomplete_reservation_retained"));
+});
+
+test("public ChatGPT USD pool is hard-capped at ten dollars independently of CNY", async () => {
+  let fetchCount = 0;
+  const env = {
+    MODEL_PROVIDER: "relay",
+    RELAY_API_KEY: "relay-issued-key",
+    RELAY_BASE_URL: "https://relay.example.test/v1",
+    RAG_MODEL: "gpt-5.6-sol",
+    RELAY_MAX_COMPLETION_TOKENS: "400000",
+    API_CHATGPT_DAILY_BUDGET_USD: "100",
+    API_DAILY_BUDGET_CNY: "0.000001",
+    API_BUDGET_TIMEZONE: "UTC",
+  };
+  const now = new Date("2040-01-03T00:00:00.000Z");
+  const result = await callRagModel({
+    prompt: "must be blocked before transport",
+    env,
+    now,
+    fetchImpl: async () => {
+      fetchCount += 1;
+      return relaySseResponse({});
+    },
+  });
+  const status = await getRagBudgetStatus({ env, now });
+  const chatGpt = status.buckets.find((bucket) => bucket.id === "final_ruling:relay");
+
+  assert.equal(fetchCount, 0);
+  assert.equal(result.answer.answerLevel, "budget_limited");
+  assert.equal(result.estimatedCostCny, 0);
+  assert.equal(result.estimatedCostUsd > 10, true);
+  assert.equal(chatGpt.dailyBudgetUsd, 10);
+  assert.equal(status.dailyBudgetCny, 0.000001);
+  assert.equal(status.spentTodayCny, 0);
+});
+
+test("relay failure paths retain or release only the USD reservation", async () => {
+  const baseEnv = {
+    MODEL_PROVIDER: "relay",
+    RELAY_API_KEY: "relay-issued-key",
+    RELAY_BASE_URL: "https://relay.example.test/v1",
+    RAG_MODEL: "gpt-5.6-sol",
+    RELAY_MAX_COMPLETION_TOKENS: "64",
+    API_DAILY_BUDGET_CNY: "10",
+    API_BUDGET_TIMEZONE: "UTC",
+  };
+  const ambiguous = await callRagModel({
+    prompt: "ambiguous dispatch",
+    env: baseEnv,
+    now: new Date("2040-01-04T00:00:00.000Z"),
+    fetchImpl: async () => {
+      throw new TypeError("network outcome unknown");
+    },
+  });
+  const rejected = await callRagModel({
+    prompt: "explicit rejection",
+    env: baseEnv,
+    now: new Date("2040-01-05T00:00:00.000Z"),
+    fetchImpl: async () => jsonResponse({ error: "bad request" }, 400),
+  });
+
+  assert.equal(ambiguous.estimatedCostCny, 0);
+  assert.equal(ambiguous.estimatedCostUsd > 0, true);
+  assert.equal(ambiguous.budgetStatus.spentTodayCny, 0);
+  assert.equal(ambiguous.budgetStatus.bucket.spentTodayUsd, ambiguous.estimatedCostUsd);
+  assert.ok(ambiguous.warnings.includes("budget_reservation_retained_after_ambiguous_remote_failure"));
+  assert.equal(rejected.estimatedCostCny, 0);
+  assert.equal(rejected.estimatedCostUsd, 0);
+  assert.equal(rejected.budgetStatus.spentTodayCny, 0);
+  assert.equal(rejected.budgetStatus.bucket.spentTodayUsd, 0);
 });
 
 test("relay rejects an insecure endpoint before fetch and never falls back to an OpenAI key", async () => {

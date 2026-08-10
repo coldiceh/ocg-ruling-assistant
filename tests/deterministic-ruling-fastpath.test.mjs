@@ -80,11 +80,13 @@ test("a complete scene still runs both evidence extractors and exactly one final
   assert.equal(finalModelCalls, 1);
   assert.match(answer.shortAnswer, /^可以发动/u);
   assert.equal(answer.debug.deterministicDecision, null);
-  assert.equal(answer.debug.semanticStateTransition, null);
+  assert.equal(answer.debug.semanticStateTransition?.authoritative, false);
   assert.equal(answer.debug.semanticStateTransitionDiagnostic, null);
   assert.equal(answer.usedEvidence.some((item) => item.type === "semantic_state_transition"), false);
-  assert.match(finalPrompt, /"semanticStateTransition": \{\s*"status": "not_applicable",\s*"complete": false\s*\}/u);
-  assert.doesNotMatch(finalPrompt, /"activation":|"resolution":|"structuredTrace": \[[^\]]/u);
+  assert.match(finalPrompt, /"semanticStateTransition": \{/u);
+  assert.match(finalPrompt, /"status": "resolved"/u);
+  assert.match(finalPrompt, /"canDecideFinalRuling": false/u);
+  assert.doesNotMatch(finalPrompt, /"stateSnapshot"/u);
   assert.doesNotMatch(finalPrompt, /trusted-semantic-state-executor|trusted_local_semantic_execution|final_model_skipped/u);
 });
 
@@ -123,7 +125,7 @@ test("an unresolved card cannot revive a local fast path and still reaches the f
   assert.ok(finalModelCalls >= 1, "an unresolved card must still reach the final judge");
   assert.ok(answer.debug.unresolvedMentions.some((mention) => mention.input === "尚未收录的测试龙"));
   assert.equal(answer.debug.deterministicDecision, null);
-  assert.equal(answer.debug.semanticStateTransition, null);
+  assert.equal(answer.debug.semanticStateTransition?.authoritative, false);
   assert.equal(answer.debug.semanticStateTransitionDiagnostic, null);
   assert.match(finalPrompt, /尚未收录的测试龙/u);
   assert.notEqual(answer.debug.modelUsed, "trusted-semantic-state-executor");

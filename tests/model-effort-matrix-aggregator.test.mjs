@@ -126,7 +126,7 @@ test("keeps semantic review, auto assertion and hard validation as separate metr
     costsPerCorrectAnswer: { USD: 0.0004 },
     sourceFields: ["official_standard_api_list_price"],
     verification: ["official_list_rate_estimate"],
-    pricingVersions: ["openai-gpt-5.6-standard-2026-07-09"],
+    pricingVersions: ["openai-gpt-5.6-standard-2026-08-10"],
     relayCreditTotal: null,
   });
 
@@ -147,7 +147,7 @@ test("keeps semantic review, auto assertion and hard validation as separate metr
   assert.equal(report.dashboard.perRequestAllocation, null);
   assert.equal(report.dashboard.batches[0].perRequestAllocation, null);
   assert.equal(report.pricingAssumptions.officialListPrice.currency, "USD");
-  assert.equal(report.pricingAssumptions.officialListPrice.pricingVersion, "openai-gpt-5.6-standard-2026-07-09");
+  assert.equal(report.pricingAssumptions.officialListPrice.pricingVersion, "openai-gpt-5.6-standard-2026-08-10");
   assert.match(report.metricDefinitions.cost, /final-ruling model calls only/u);
   assert.match(report.metricDefinitions.costPerCorrectAnswer, /semantically correct count/u);
   assert.equal(report.autoAssertionAccuracy.humanTruth, false);
@@ -335,7 +335,7 @@ test("summarizes DeepSeek upstream, truncation and invalid-format failures anony
   assert.doesNotMatch(markdown, /secret-upstream|secret-truncated|secret-format|Q1|Validator|assertion/u);
 });
 
-test("official cost uses the same prompt and completion token aliases as the displayed usage", () => {
+test("official benchmark cost uses displayed token aliases and bills all input as uncached", () => {
   const run = fixtureRun({
     model: "relay-gpt-5.6-sol",
     effort: "low",
@@ -385,12 +385,12 @@ test("official cost uses the same prompt and completion token aliases as the dis
     coverageByCurrency: {
       USD: { reportedCaseCount: 1, plannedCaseCount: 1, complete: true },
     },
-    totals: { USD: 0.062 },
-    averagesPerReportedCase: { USD: 0.062 },
-    costsPerCorrectAnswer: { USD: 0.062 },
+    totals: { USD: 0.08 },
+    averagesPerReportedCase: { USD: 0.08 },
+    costsPerCorrectAnswer: { USD: 0.08 },
     sourceFields: ["official_standard_api_list_price"],
     verification: ["official_list_rate_estimate"],
-    pricingVersions: ["openai-gpt-5.6-standard-2026-07-09"],
+    pricingVersions: ["openai-gpt-5.6-standard-2026-08-10"],
     relayCreditTotal: null,
   });
 });

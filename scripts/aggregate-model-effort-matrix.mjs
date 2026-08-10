@@ -1419,6 +1419,7 @@ function extractEstimatedCosts(result, model, relayCreditToCny) {
         ? result.reasoningMode
         : "standard",
       pricing: OFFICIAL_MODEL_PRICING,
+      inputBillingBasis: "all_uncached",
     });
     if (Number.isFinite(estimate.totalCostUsd)) {
       return [{
@@ -1441,6 +1442,7 @@ function extractEstimatedCosts(result, model, relayCreditToCny) {
         ? result.reasoningMode
         : "standard",
       pricing: OFFICIAL_DEEPSEEK_PRICING,
+      inputBillingBasis: "all_uncached",
     });
     if (Number.isFinite(estimate.totalCostUsd)) {
       return [{

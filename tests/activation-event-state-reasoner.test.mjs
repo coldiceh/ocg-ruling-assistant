@@ -191,7 +191,8 @@ test("an exact official QA focuses the final model on the complete authoritative
   assert.match(answer.shortAnswer, /(?:不能|できません)/u);
   assert.match(answer.shortAnswer, /(?:魔法与陷阱|魔法・罠カード)/u);
   assert.equal(answer.debug.deterministicDecision, null);
-  assert.equal(answer.debug.semanticStateTransition, null);
+  assert.equal(answer.debug.semanticStateTransition?.authoritative, false);
+  assert.equal(answer.debug.semanticStateTransition?.authorityReason, "diagnostic_only_requires_final_model");
   assert.equal(answer.debug.modelUsed, "mock-rag");
   assert.deepEqual(answer.debug.unresolvedMentions, []);
   assert.ok(answer.debug.retrievalCounts.officialQaDirectCandidates > 0);

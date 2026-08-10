@@ -1650,6 +1650,7 @@ export function createAdminModelLabService({
         ),
         usdToCnyRate: serverPricingProfile.usdToCnyRate,
         exchangeRateVersion: serverPricingProfile.exchangeRateVersion,
+        inputBillingBasis: "all_uncached",
       });
       if (!Number.isFinite(cost.totalCostCny)) return false;
       if (budgetDailyLimitBypassed) return true;
@@ -2759,6 +2760,7 @@ export function createAdminModelLabService({
       usdToCnyRate: pricingProfile.usdToCnyRate,
       exchangeRateVersion: pricingProfile.exchangeRateVersion,
       pricingMultiplier: pricingProfile.relayPricingMultiplier,
+      inputBillingBasis: "all_uncached",
     });
     if (
       correctedCost.upperBoundApplied !== true
@@ -4037,6 +4039,7 @@ function buildFinalAttemptAudit({
         model: response?.model || profile.model,
         usage: response?.usage || {},
         reasoningMode: profile.reasoningMode || "standard",
+        inputBillingBasis: "all_uncached",
         usdToCnyRate: pricingProfile.usdToCnyRate,
         exchangeRateVersion: pricingProfile.exchangeRateVersion,
       })
@@ -4050,6 +4053,7 @@ function buildFinalAttemptAudit({
           ),
           usdToCnyRate: pricingProfile.usdToCnyRate,
           exchangeRateVersion: pricingProfile.exchangeRateVersion,
+          inputBillingBasis: "all_uncached",
         })
       : profile.provider === "relay"
         ? estimateRelayModelCost({
@@ -4061,6 +4065,7 @@ function buildFinalAttemptAudit({
             usdToCnyRate: pricingProfile.usdToCnyRate,
             exchangeRateVersion: pricingProfile.exchangeRateVersion,
             pricingMultiplier: pricingProfile.relayPricingMultiplier,
+            inputBillingBasis: "all_uncached",
           })
         : unavailablePreparationProviderCost({
             provider: profile.provider,
@@ -4285,6 +4290,7 @@ function buildAdminModelLabMetering({
         ),
         usdToCnyRate: pricingProfile.usdToCnyRate,
         exchangeRateVersion: pricingProfile.exchangeRateVersion,
+        inputBillingBasis: "all_uncached",
       })
     : unavailablePreparationProviderCost({
         provider: preparationProfile.provider,
@@ -4716,6 +4722,7 @@ function requiredFinalReservationCny({
         usdToCnyRate: pricingProfile?.usdToCnyRate,
         exchangeRateVersion: pricingProfile?.exchangeRateVersion,
         pricingMultiplier: pricingProfile?.relayPricingMultiplier,
+        inputBillingBasis: "all_uncached",
       })
     : estimateDeepSeekModelCost({
         model: profile.requestedModel || profile.model,
@@ -4726,6 +4733,7 @@ function requiredFinalReservationCny({
         ),
         usdToCnyRate: pricingProfile?.usdToCnyRate,
         exchangeRateVersion: pricingProfile?.exchangeRateVersion,
+        inputBillingBasis: "all_uncached",
       });
   if (!Number.isFinite(cost.totalCostCny) || cost.totalCostCny < 0) {
     throw serviceError(
@@ -4754,6 +4762,7 @@ function requiredDeepSeekReservationCny({
     pricingProfile,
     usdToCnyRate,
     exchangeRateVersion,
+    inputBillingBasis: "all_uncached",
   });
   if (!Number.isFinite(cost.totalCostCny) || cost.totalCostCny < 0) {
     throw serviceError(

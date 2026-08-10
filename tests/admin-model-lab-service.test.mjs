@@ -2737,9 +2737,9 @@ test("server-versioned DeepSeek pricing produces complete two-stage totals and i
   assert.equal(preparationCost.totalCostCny, 0.00004);
   assert.equal(preparationCost.totalCostUsd, 0.000005);
   assert.equal(completed.result.metering.totals.cost.complete, true);
-  assert.equal(completed.result.metering.totals.cost.totalCostUsd, 0.00978);
-  assert.equal(completed.result.metering.totals.cost.totalCostCny, 0.07824);
-  assert.equal(completed.result.metrics.estimatedCostUsd, 0.00978);
+  assert.equal(completed.result.metering.totals.cost.totalCostUsd, 0.008005);
+  assert.equal(completed.result.metering.totals.cost.totalCostCny, 0.06404);
+  assert.equal(completed.result.metrics.estimatedCostUsd, 0.008005);
 });
 
 test("missing DeepSeek usage remains null and makes aggregate token totals explicitly incomplete", async () => {

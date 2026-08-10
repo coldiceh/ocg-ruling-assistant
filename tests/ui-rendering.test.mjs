@@ -157,12 +157,12 @@ test("ui_has_single_query_button", async () => {
   assert.match(html, /id="pipelineStageList"/u);
   assert.match(html, /id="pipelineElapsedText"/u);
   assert.match(html, /id="rulingModelSelect"[^>]+disabled/u);
-  assert.match(html, /value="relay-gpt-5\.6-luna-low" selected>GPT-5\.6 Luna · 思考 low</u);
+  assert.match(html, /value="relay-gpt-5\.6-sol-low" selected>GPT-5\.6 Sol · 思考 low</u);
   assert.doesNotMatch(html, /第三方中转/u);
   assert.doesNotMatch(html, /value="glm-5\.2-high"/u);
   assert.doesNotMatch(html, /value="kimi-[^"]+"/u);
   assert.doesNotMatch(html, /value="relay-gpt-5\.6-sol-high"/u);
-  assert.match(html, /id="rulingModelStatus">匿名 10 题评测：10\/10，平均 34\.6 秒；推荐。/u);
+  assert.match(html, /id="rulingModelStatus">当前默认。旧匿名 10 题小样本：10\/10，平均 51\.6 秒；仍可能在样本外规则问题中出错。/u);
   assert.match(html, /id="rulingModelLatency"[^>]+aria-live="polite"/u);
   assert.match(app, /最近 \$\{latency\.sampleCount\} 次成功回答/u);
   assert.doesNotMatch(html, /id="flashModelButton"|id="proModelButton"|>Pro</u);
@@ -224,8 +224,9 @@ test("public ruling model selector uses the allowlisted backend profiles without
   const normalizeCapabilities = new Function(
     `${definitions}\n${functions}\nreturn normalizeRulingModelCapabilities;`,
   )();
+  assert.match(definitions, /const DEFAULT_RULING_MODEL_PROFILE = "relay-gpt-5\.6-sol-low"/u);
   const capabilities = normalizeCapabilities({
-    defaultRulingModelProfile: "relay-gpt-5.6-luna-low",
+    defaultRulingModelProfile: "relay-gpt-5.6-sol-low",
     rulingModelProfiles: [
       { id: "relay-gpt-5.6-luna-low", available: true, label: "OpenAI official" },
       { id: "relay-gpt-5.6-sol-low", available: true, label: "OpenAI official" },
@@ -239,7 +240,7 @@ test("public ruling model selector uses the allowlisted backend profiles without
     ],
   });
 
-  assert.equal(capabilities.defaultProfile, "relay-gpt-5.6-luna-low");
+  assert.equal(capabilities.defaultProfile, "relay-gpt-5.6-sol-low");
   assert.deepEqual(capabilities.profiles.map((profile) => ({
     id: profile.id,
     label: profile.label,
@@ -253,15 +254,15 @@ test("public ruling model selector uses the allowlisted backend profiles without
     { id: "deepseek-v4-flash-high", label: "DeepSeek V4 Flash · 思考 high（实验性）", provider: "deepseek", available: true },
     { id: "deepseek-v4-flash-max", label: "DeepSeek V4 Flash · 思考 max（实验性）", provider: "deepseek", available: true },
   ]);
-  assert.equal(capabilities.profiles[0].benchmarkSummary, "匿名 10 题评测：10/10，平均 34.6 秒；推荐。");
-  assert.equal(capabilities.profiles[1].benchmarkSummary, "匿名 10 题评测：10/10，平均 51.6 秒。");
+  assert.equal(capabilities.profiles[0].benchmarkSummary, "旧匿名 10 题小样本：10/10，平均 34.6 秒；之后出现样本外错误，不再作为推荐依据。");
+  assert.equal(capabilities.profiles[1].benchmarkSummary, "当前默认。旧匿名 10 题小样本：10/10，平均 51.6 秒；仍可能在样本外规则问题中出错。");
   assert.equal(capabilities.profiles[2].benchmarkSummary, "匿名 10 题评测：5/10，另有 4 题部分正确；平均 12.4 秒，仅供实验。");
   for (const profile of capabilities.profiles) {
     assert.equal(profile.answerLatency.profileId, profile.id);
     assert.equal(profile.answerLatency.status, "unavailable");
   }
   const partialAvailability = normalizeCapabilities({
-    defaultRulingModelProfile: "relay-gpt-5.6-luna-low",
+    defaultRulingModelProfile: "relay-gpt-5.6-sol-low",
     rulingModelProfiles: [
       { id: "glm-5.2-high", available: false },
       { id: "deepseek-v4-flash-high", available: true },
@@ -288,6 +289,8 @@ test("public ruling model selector uses the allowlisted backend profiles without
     /invalid default ruling model profile/u,
   );
   assert.match(app, /setRulingModelCapabilitiesUnavailable\("模型能力接口不可用/u);
+  assert.doesNotMatch(app, /默认 GPT-5\.6 Luna low|平均 34\.6 秒；推荐/u);
+  assert.match(app, /默认 GPT-5\.6 Sol low/u);
   assert.match(app, /系统不会自动改用其他模型/u);
   assert.match(app, /selectedRulingModelProfile = DEFAULT_RULING_MODEL_PROFILE/u);
   assert.match(app, /if \(value === "relay"\) return "ChatGPT"/u);
@@ -502,6 +505,22 @@ test("readme_keeps_only_requested_future_plans", async () => {
   assert.match(readme, /\[日本語\]\(README\.ja\.md\)/u);
   assert.match(english, /## How it works/u);
   assert.match(japanese, /## 仕組み/u);
+  assert.match(readme, /旧的 10 题小样本.*Luna low/u);
+  assert.match(readme, /样本外规则问题中出现错误/u);
+  assert.match(readme, /当前公开版本优先使用 \*\*Sol low\*\*/u);
+  assert.match(readme, /仍可能答错新的复杂规则问题/u);
+  assert.match(readme, /Luna \| low \| 10\/10[\s\S]*120,457 \/ 18,133 \/ 2,014 \/ 138,590[\s\S]*USD 0\.045851/u);
+  assert.match(readme, /Terra \| low \| 10\/10[\s\S]*120,457 \/ 21,090 \/ 3,307 \/ 141,547[\s\S]*USD 0\.493994/u);
+  assert.match(readme, /全部输入 Token 当作未缓存输入/u);
+  assert.doesNotMatch(readme, /因此当前公开版本使用它/u);
+  assert.match(english, /old, small 10-case sample/u);
+  assert.match(english, /failed an out-of-sample ruling question/u);
+  assert.match(english, /current public default prioritizes \*\*Sol low\*\*/u);
+  assert.match(english, /every input token as uncached/u);
+  assert.match(japanese, /以前の小規模な 10 問サンプル/u);
+  assert.match(japanese, /サンプル外のルール問題で誤答/u);
+  assert.match(japanese, /現在のデフォルトは \*\*Sol low\*\*/u);
+  assert.match(japanese, /すべての入力 Token をキャッシュなし/u);
   assert.doesNotMatch(english, /Lua|Fluorohydride\/ygopro-core/u);
   assert.doesNotMatch(japanese, /Lua|Fluorohydride\/ygopro-core/u);
   for (const localizedReadme of [readme, english, japanese]) {
@@ -523,7 +542,7 @@ test("ui_hides_engine_details_by_default", async () => {
     readFile(new URL("../src/app.js", import.meta.url), "utf8"),
   ]);
   assert.match(html, /裁定流程/u);
-  assert.match(html, /今日额度/u);
+  assert.match(html, /今日 API 额度（分币种）/u);
   assert.match(html, /id="budgetBucketList"/u);
   assert.match(html, /id="budgetResetButton"[^>]+hidden/u);
   const publicBudget = sourceBetween(html, '<section class="budget-panel"', '<section class="admin-lab"');
@@ -535,7 +554,7 @@ test("ui_hides_engine_details_by_default", async () => {
   assert.match(html, /id="themeToggle"/u);
   assert.match(html, /class="page-background"/u);
   assert.doesNotMatch(html, /ANALYSIS CORE|TOKEN|provider debug/u);
-  assert.match(html, /GPT-5\.6 Luna/u);
+  assert.match(html, /GPT-5\.6 Sol/u);
   assert.doesNotMatch(html, /AI裁定分析|RAG 裁定分析|RAG 分析/u);
   assert.doesNotMatch(html, /后端模式|公开资料检索|卡片文本分析/u);
   assert.doesNotMatch(html, /terminal-theme|OCG RULING TERMINAL/u);
@@ -547,6 +566,9 @@ test("ui_hides_engine_details_by_default", async () => {
   assert.match(app, /storageWarning/u);
   assert.match(app, /bucket\?\.id !== "final_ruling:glm"/u);
   assert.match(app, /label: "ChatGPT 最终裁定"/u);
+  assert.match(app, /spentTodayUsd/u);
+  assert.match(app, /dailyBudgetUsd/u);
+  assert.match(app, /\$\$\{formatUsd\(spent\)\}/u);
   assert.match(app, /!adminUiEnabled \|\| !resetEnabled/u);
   assert.match(app, /rulebook/u);
   assert.match(app, /publicRiskLines/u);

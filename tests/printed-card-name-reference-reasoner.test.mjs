@@ -198,7 +198,8 @@ test("the public RAG path keeps printed-reference execution offline and delegate
   assert.equal(finalModelCalls, 1);
   assert.match(answer.shortAnswer, /^不能仅凭复制/u);
   assert.equal(answer.debug.deterministicDecision, null);
-  assert.equal(answer.debug.semanticStateTransition, null);
+  assert.equal(answer.debug.semanticStateTransition?.authoritative, false);
+  assert.equal(answer.debug.semanticStateTransition?.authorityReason, "diagnostic_only_requires_final_model");
   assert.equal(answer.debug.modelUsed, "mock-rag");
   assert.match(finalPrompt, /卡面原本的效果文本|复制/u);
   assert.deepEqual(new Set(answer.resolvedCards.map((card) => card.id)), new Set(["13077", "19842", "19892"]));

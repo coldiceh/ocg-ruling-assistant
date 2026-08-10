@@ -4,7 +4,7 @@
 // Keeping an empty offline index prevents the browser fallback from silently
 // treating a handful of historical examples as authoritative card knowledge.
 const baseCardIndex = [];
-const DEFAULT_RULING_MODEL_PROFILE = "relay-gpt-5.6-luna-low";
+const DEFAULT_RULING_MODEL_PROFILE = "relay-gpt-5.6-sol-low";
 const PUBLIC_RULING_MODEL_PROFILE_ORDER = Object.freeze([
   "relay-gpt-5.6-luna-low",
   "relay-gpt-5.6-sol-low",
@@ -22,7 +22,7 @@ const PUBLIC_RULING_MODEL_PROFILES = Object.freeze({
     reasoningEffort: "low",
     thirdParty: true,
     modelIdentityVerified: false,
-    benchmarkSummary: "匿名 10 题评测：10/10，平均 34.6 秒；推荐。",
+    benchmarkSummary: "旧匿名 10 题小样本：10/10，平均 34.6 秒；之后出现样本外错误，不再作为推荐依据。",
   }),
   "relay-gpt-5.6-sol-low": Object.freeze({
     id: "relay-gpt-5.6-sol-low",
@@ -32,7 +32,7 @@ const PUBLIC_RULING_MODEL_PROFILES = Object.freeze({
     reasoningEffort: "low",
     thirdParty: true,
     modelIdentityVerified: false,
-    benchmarkSummary: "匿名 10 题评测：10/10，平均 51.6 秒。",
+    benchmarkSummary: "当前默认。旧匿名 10 题小样本：10/10，平均 51.6 秒；仍可能在样本外规则问题中出错。",
   }),
   "deepseek-v4-flash-standard": Object.freeze({
     id: "deepseek-v4-flash-standard",
@@ -307,7 +307,7 @@ async function loadAppConfig() {
 
 async function loadBackendModelInfo() {
   if (!appConfig.answerApiUrl) {
-    setRulingModelCapabilitiesUnavailable("未配置模型能力接口；默认 GPT-5.6 Luna low 尚未确认可用。");
+    setRulingModelCapabilitiesUnavailable("未配置模型能力接口；默认 GPT-5.6 Sol low 尚未确认可用。");
     return;
   }
   try {
@@ -328,7 +328,7 @@ async function loadBackendModelInfo() {
     appConfig.modelLabel = "后端自动选择";
     appConfig.engineEnabled = false;
     appConfig.rulingVersionIds = ["latest"];
-    setRulingModelCapabilitiesUnavailable("模型能力接口不可用；默认 GPT-5.6 Luna low 尚未确认可用。");
+    setRulingModelCapabilitiesUnavailable("模型能力接口不可用；默认 GPT-5.6 Sol low 尚未确认可用。");
     syncRulingVersionButtons();
   }
 }
@@ -1071,7 +1071,12 @@ function ragBudgetLines(status) {
   if (!status) return [];
   const lines = [];
   if (typeof status.estimatedThisCallCny === "number") {
-    lines.push(`预算估算：本次 ${status.estimatedThisCallCny} 元，今日已用 ${status.spentTodayCny ?? 0}/${status.dailyBudgetCny ?? "?"} 元。`);
+    lines.push(`人民币预算：本次 ${status.estimatedThisCallCny} 元，今日已用 ${status.spentTodayCny ?? 0}/${status.dailyBudgetCny ?? "?"} 元。`);
+  }
+  const usdBucket = [status.bucket, ...(status.buckets || [])]
+    .find((bucket) => bucket?.currency === "USD" && typeof bucket?.estimatedThisCallUsd === "number");
+  if (usdBucket) {
+    lines.push(`ChatGPT 预算：本次 $${formatUsd(usdBucket.estimatedThisCallUsd)}，今日已用 $${formatUsd(usdBucket.spentTodayUsd ?? 0)}/$${formatUsd(usdBucket.dailyBudgetUsd ?? 10)}。`);
   }
   if (status.budgetStorage && status.budgetStorage !== "redis") {
     lines.push("预算提示：未配置持久预算存储时，Vercel 上这是 per-instance 软限制。");
@@ -1130,7 +1135,7 @@ function renderBudgetStatus(status, message = "") {
   const limit = Number(status?.dailyBudgetCny);
   ui.budgetSpentText.textContent = storageMissing
     ? "未持久化"
-    : Number.isFinite(spent) ? `${formatCny(spent)} 元` : "未读取";
+    : Number.isFinite(spent) ? `人民币 ${formatCny(spent)} 元` : "未读取";
   ui.budgetLimitText.textContent = Number.isFinite(limit) && limit > 0 ? ` / ${formatCny(limit)} 元` : "";
   const storage = status?.budgetStorage ? `存储：${status.budgetStorage}` : "";
   const mode = status?.budgetMode ? `模式：${status.budgetMode}` : "";
@@ -1155,11 +1160,22 @@ function renderBudgetBuckets(buckets = []) {
     const label = document.createElement("span");
     label.textContent = String(bucket?.label || [bucket?.provider, bucket?.stage].filter(Boolean).join(" · ") || "模型用量");
     const value = document.createElement("strong");
-    const spent = bucket?.spentTodayCny === null ? Number.NaN : Number(bucket?.spentTodayCny);
-    const limit = bucket?.dailyBudgetCny === null ? Number.NaN : Number(bucket?.dailyBudgetCny);
-    const spentText = Number.isFinite(spent) ? `${formatCny(spent)} 元` : "未读取";
+    const currency = bucket?.currency === "USD" ? "USD" : "CNY";
+    const rawSpent = currency === "USD"
+      ? (bucket?.spentTodayUsd ?? bucket?.spentToday)
+      : (bucket?.spentTodayCny ?? bucket?.spentToday);
+    const rawLimit = currency === "USD"
+      ? (bucket?.dailyBudgetUsd ?? bucket?.dailyBudget)
+      : (bucket?.dailyBudgetCny ?? bucket?.dailyBudget);
+    const spent = rawSpent === null ? Number.NaN : Number(rawSpent);
+    const limit = rawLimit === null ? Number.NaN : Number(rawLimit);
+    const spentText = Number.isFinite(spent)
+      ? currency === "USD" ? `$${formatUsd(spent)}` : `${formatCny(spent)} 元`
+      : "未读取";
     value.textContent = Number.isFinite(limit) && limit > 0
-      ? `${spentText} / ${formatCny(limit)} 元`
+      ? currency === "USD"
+        ? `${spentText} / $${formatUsd(limit)}`
+        : `${spentText} / ${formatCny(limit)} 元`
       : `${spentText}（计入总额度）`;
     row.append(label, value);
     ui.budgetBucketList.appendChild(row);
@@ -1178,6 +1194,10 @@ function formatCny(value) {
   if (number === 0) return "0";
   if (number < 0.0001) return number.toExponential(2);
   return number.toFixed(6).replace(/0+$/u, "").replace(/\.$/u, "");
+}
+
+function formatUsd(value) {
+  return formatCny(value);
 }
 
 function renderFastJudgeAnswer(answer) {

@@ -277,7 +277,10 @@ test("final reasoner receives the Albaz evidence without a local answer override
   assert.ok(!answer.riskFlags.includes("provisional_official_response"));
   assert.ok(!answer.riskFlags.includes("semantic_state_transition_applied"));
   assert.equal(answer.riskFlags.includes("answer_constrained_by_provisional_official_response"), false);
-  assert.equal(answer.debug.semanticStateTransition, null);
+  assert.equal(answer.debug.semanticStateTransition?.authoritative, false);
+  assert.equal(answer.debug.semanticStateTransition?.complete, false);
+  assert.equal(answer.debug.semanticStateTransition?.originalStatus, "resolved");
+  assert.match(answer.debug.semanticStateTransition?.shortAnswer || "", /可以发动/u);
   assert.equal(answer.usedEvidence[0].type, "official_response_screenshot");
 });
 
@@ -2973,6 +2976,408 @@ test("pipeline cost summary includes both auxiliary extractors on the caller's b
   assert.equal(status.spentTodayCny, 0.004);
 });
 
+test("public pipeline caches only identical-query extraction work and still invokes the final model every time", async () => {
+  const now = new Date("2033-04-05T06:07:08.000Z");
+  const env = {
+    MODEL_PROVIDER: "deepseek",
+    RAG_MODEL_PROVIDER: "deepseek",
+    RAG_CARD_MODEL_PROVIDER: "deepseek",
+    RAG_RULE_MODEL_PROVIDER: "deepseek",
+    RAG_RULEBOOK_MODEL_PROVIDER: "mock",
+    RAG_LIVE_OFFICIAL_QA_ENABLED: "false",
+    DEEPSEEK_API_KEY: "test-deepseek-key",
+    API_DAILY_BUDGET_CNY: "10",
+    API_BUDGET_TIMEZONE: "UTC",
+  };
+  await resetRagBudget({ env, now });
+
+  let extractionCallCount = 0;
+  let finalCallCount = 0;
+  const fetchImpl = async (_url, options = {}) => {
+    const body = JSON.parse(options.body || "{}");
+    const prompt = String(body.messages?.[0]?.content || "");
+    const isCardExtraction = prompt.includes("提取所有可能的卡名候选");
+    const isRuleExtraction = prompt.includes("提取用于检索规则资料");
+    if (isCardExtraction || isRuleExtraction) extractionCallCount += 1;
+    const content = isCardExtraction
+      ? JSON.stringify({ cardNames: [] })
+      : JSON.stringify({ ruleQueries: [] });
+    return jsonResponse({
+      choices: [{ finish_reason: "stop", message: { content } }],
+      usage: { prompt_tokens: 10, completion_tokens: 2 },
+    });
+  };
+  const modelInvoker = async () => {
+    finalCallCount += 1;
+    return JSON.stringify(modelJson("需要结合完整局面判断。"));
+  };
+  const question = "匿名前置缓存回归场景-20330405：「测试龙」当前处理应如何继续？";
+  const invoke = (currentQuestion, currentCards = cards) => answerRagRulingQuestion({
+    question: currentQuestion,
+    cards: currentCards,
+    records: [],
+    qaRecords: [],
+    env,
+    now,
+    fetchImpl,
+    modelInvoker,
+  });
+
+  const first = await invoke(question);
+  assert.deepEqual(first.debug.extractionCacheHits, {
+    cardNameModel: false,
+    ruleQueryModel: false,
+    rulebookGroundingModel: false,
+  });
+  assert.equal(extractionCallCount, 2);
+  assert.equal(finalCallCount, 1);
+  assert.equal(first.debug.auxiliaryTokenUsage.prompt_tokens, 20);
+  assert.equal(first.debug.auxiliaryTokenUsage.completion_tokens, 4);
+  assert.equal(first.debug.auxiliaryEstimatedCostCny > 0, true);
+  assert.match(first.debug.dataRevision, /^[a-f0-9]{64}$/u);
+  assert.match(first.debug.evidenceFingerprint, /^[a-f0-9]{64}$/u);
+  assert.match(first.debug.finalPromptSha256, /^[a-f0-9]{64}$/u);
+  assert.equal(first.debug.requestedModel, "deepseek-v4-pro");
+  assert.equal(first.debug.returnedModel, null);
+  const budgetAfterFirst = await getRagBudgetStatus({ env, now });
+
+  const second = await invoke(question);
+  assert.deepEqual(second.debug.extractionCacheHits, {
+    cardNameModel: true,
+    ruleQueryModel: true,
+    rulebookGroundingModel: false,
+  });
+  assert.equal(extractionCallCount, 2);
+  assert.equal(finalCallCount, 2);
+  assert.deepEqual(second.debug.cardNameModelTokenUsage, {});
+  assert.deepEqual(second.debug.ruleQueryModelTokenUsage, {});
+  assert.deepEqual(second.debug.auxiliaryTokenUsage, {});
+  assert.equal(second.debug.auxiliaryEstimatedCostCny, 0);
+  assert.equal(second.debug.estimatedCostCny, 0);
+  assert.equal(second.debug.auxiliaryCacheHit, true);
+  const budgetAfterSecond = await getRagBudgetStatus({ env, now });
+  assert.equal(budgetAfterSecond.spentTodayCny, budgetAfterFirst.spentTodayCny);
+  assert.equal(
+    budgetAfterSecond.buckets.find((bucket) => bucket.id === "evidence_preparation:deepseek").spentTodayCny,
+    budgetAfterFirst.buckets.find((bucket) => bucket.id === "evidence_preparation:deepseek").spentTodayCny,
+  );
+
+  const changedData = await invoke(question, [
+    ...cards,
+    { id: "data-revision-card", name: "数据版本龙", aliases: ["数据版本龙"], effectText: "同步后新增的文本。" },
+  ]);
+  assert.deepEqual(changedData.debug.extractionCacheHits, {
+    cardNameModel: false,
+    ruleQueryModel: false,
+    rulebookGroundingModel: false,
+  });
+  assert.equal(extractionCallCount, 4);
+  assert.notEqual(changedData.debug.dataRevision, first.debug.dataRevision);
+
+  const changed = await invoke(`${question} 补充一个条件。`);
+  assert.deepEqual(changed.debug.extractionCacheHits, {
+    cardNameModel: false,
+    ruleQueryModel: false,
+    rulebookGroundingModel: false,
+  });
+  assert.equal(extractionCallCount, 6);
+  assert.equal(finalCallCount, 4);
+});
+
+test("identical signal-free auxiliary requests use bounded singleflight without duplicating usage or spend", async () => {
+  const env = {
+    MODEL_PROVIDER: "deepseek",
+    RAG_CARD_MODEL_PROVIDER: "deepseek",
+    DEEPSEEK_API_KEY: "test-deepseek-key",
+    API_DAILY_BUDGET_CNY: "10",
+    API_BUDGET_TIMEZONE: "UTC",
+  };
+  const now = new Date("2033-04-06T06:07:08.000Z");
+  await resetRagBudget({ env, now });
+  let fetchCount = 0;
+  let releaseFetch;
+  const gate = new Promise((resolve) => { releaseFetch = resolve; });
+  const fetchImpl = async () => {
+    fetchCount += 1;
+    await gate;
+    return jsonResponse({
+      choices: [{ finish_reason: "stop", message: { content: JSON.stringify({ cardNames: [] }) } }],
+      usage: { prompt_tokens: 40, completion_tokens: 5, total_tokens: 45 },
+    });
+  };
+  const input = {
+    userQuery: "singleflight-card-extraction-20330406",
+    dataRevision: "revision-a",
+    env,
+    now,
+    fetchImpl,
+  };
+  const firstPromise = callCardNameExtractionModel(input);
+  const secondPromise = callCardNameExtractionModel(input);
+  releaseFetch();
+  const [first, second] = await Promise.all([firstPromise, secondPromise]);
+
+  assert.equal(fetchCount, 1);
+  assert.equal(first.cacheHit, false);
+  assert.equal(first.singleflightHit, false);
+  assert.equal(first.tokenUsage.prompt_tokens, 40);
+  assert.equal(first.estimatedCostCny > 0, true);
+  assert.equal(second.cacheHit, false);
+  assert.equal(second.singleflightHit, true);
+  assert.deepEqual(second.tokenUsage, {});
+  assert.equal(second.estimatedCostCny, 0);
+  assert.equal(second.budgetStatus.estimatedThisCallCny, 0);
+  assert.equal(second.budgetStatus.bucket.estimatedThisCallCny, 0);
+});
+
+test("auxiliary extraction caches only complete valid JSON, including explicit empty arrays", async () => {
+  const env = {
+    MODEL_PROVIDER: "deepseek",
+    RAG_CARD_MODEL_PROVIDER: "deepseek",
+    RAG_RULE_MODEL_PROVIDER: "deepseek",
+    DEEPSEEK_API_KEY: "test-deepseek-key",
+    API_DAILY_BUDGET_CNY: "10",
+    API_BUDGET_TIMEZONE: "UTC",
+  };
+  const now = new Date("2033-04-08T06:07:08.000Z");
+  await resetRagBudget({ env, now });
+  const variants = [
+    {
+      label: "empty-content",
+      content: "",
+      finishReason: "stop",
+      cacheable: false,
+      warningReason: "empty_content",
+    },
+    {
+      label: "invalid-json",
+      content: "{not valid JSON",
+      finishReason: "stop",
+      cacheable: false,
+      warningReason: "invalid_json",
+    },
+    {
+      label: "truncated-valid-prefix",
+      contentFor: (field) => JSON.stringify({ [field]: [] }),
+      finishReason: "length",
+      cacheable: false,
+      warningReason: "truncated",
+    },
+    {
+      label: "explicit-empty-array",
+      contentFor: (field) => JSON.stringify({ [field]: [] }),
+      finishReason: "stop",
+      cacheable: true,
+      warningReason: null,
+    },
+  ];
+  const extractors = [
+    {
+      label: "card",
+      field: "cardNames",
+      invoke: callCardNameExtractionModel,
+      resultField: "candidates",
+      warningPrefix: "card_name_model_not_cached:",
+    },
+    {
+      label: "rule",
+      field: "ruleQueries",
+      invoke: callRuleQueryExtractionModel,
+      resultField: "queries",
+      warningPrefix: "rule_query_model_not_cached:",
+    },
+  ];
+
+  for (const extractor of extractors) {
+    for (const variant of variants) {
+      let fetchCount = 0;
+      const fetchImpl = async () => {
+        fetchCount += 1;
+        const content = variant.contentFor
+          ? variant.contentFor(extractor.field)
+          : variant.content;
+        return jsonResponse({
+          choices: [{
+            finish_reason: variant.finishReason,
+            message: { content },
+          }],
+          usage: { prompt_tokens: 20, completion_tokens: 2, total_tokens: 22 },
+        });
+      };
+      const input = {
+        userQuery: `aux-cache-${extractor.label}-${variant.label}-20330408`,
+        dataRevision: "revision-cache-validity",
+        env,
+        now,
+        fetchImpl,
+      };
+      const first = await extractor.invoke(input);
+      const second = await extractor.invoke(input);
+
+      assert.deepEqual(first[extractor.resultField], [], `${extractor.label}/${variant.label} first result`);
+      assert.deepEqual(second[extractor.resultField], [], `${extractor.label}/${variant.label} second result`);
+      assert.equal(first.cacheHit, false, `${extractor.label}/${variant.label} first cache flag`);
+      assert.equal(
+        fetchCount,
+        variant.cacheable ? 1 : 2,
+        `${extractor.label}/${variant.label} fetch count`,
+      );
+      assert.equal(
+        second.cacheHit,
+        variant.cacheable,
+        `${extractor.label}/${variant.label} second cache flag`,
+      );
+      if (variant.warningReason) {
+        assert.ok(
+          first.warnings.includes(`${extractor.warningPrefix}${variant.warningReason}`),
+          `${extractor.label}/${variant.label} warning`,
+        );
+      }
+    }
+  }
+});
+
+test("singleflight isolates caller aborts while charging one surviving shared request only once", async () => {
+  const env = {
+    MODEL_PROVIDER: "deepseek",
+    RAG_CARD_MODEL_PROVIDER: "deepseek",
+    DEEPSEEK_API_KEY: "test-deepseek-key",
+    API_DAILY_BUDGET_CNY: "10",
+    API_BUDGET_TIMEZONE: "UTC",
+    DEEPSEEK_INPUT_CNY_PER_MTOK: "1",
+    DEEPSEEK_OUTPUT_CNY_PER_MTOK: "2",
+  };
+  const expectedSingleCharge = estimateDeepSeekCostCny({
+    prompt_tokens: 40,
+    completion_tokens: 5,
+    total_tokens: 45,
+  }, env);
+
+  const runCase = async ({ label, abortLeader }) => {
+    const now = new Date(abortLeader
+      ? "2033-04-09T06:07:08.000Z"
+      : "2033-04-10T06:07:08.000Z");
+    await resetRagBudget({ env, now });
+    let fetchCount = 0;
+    let releaseFetch;
+    const gate = new Promise((resolve) => { releaseFetch = resolve; });
+    const fetchImpl = async () => {
+      fetchCount += 1;
+      await gate;
+      return jsonResponse({
+        choices: [{ finish_reason: "stop", message: { content: JSON.stringify({ cardNames: [] }) } }],
+        usage: { prompt_tokens: 40, completion_tokens: 5, total_tokens: 45 },
+      });
+    };
+    const controller = new AbortController();
+    const baseInput = {
+      userQuery: `singleflight-abort-${label}-20330409`,
+      dataRevision: "revision-signal-safe",
+      env,
+      now,
+      fetchImpl,
+    };
+    const leader = callCardNameExtractionModel({
+      ...baseInput,
+      ...(abortLeader ? { signal: controller.signal } : {}),
+    });
+    const follower = callCardNameExtractionModel({
+      ...baseInput,
+      ...(!abortLeader ? { signal: controller.signal } : {}),
+    });
+    controller.abort(`${label}_cancelled`);
+    releaseFetch();
+    const [leaderOutcome, followerOutcome] = await Promise.allSettled([leader, follower]);
+    const aborted = abortLeader ? leaderOutcome : followerOutcome;
+    const surviving = abortLeader ? followerOutcome : leaderOutcome;
+    const status = await getRagBudgetStatus({ env, now });
+
+    assert.equal(aborted.status, "rejected", `${label} aborted caller`);
+    assert.equal(aborted.reason?.name, "AbortError", `${label} abort error type`);
+    assert.equal(surviving.status, "fulfilled", `${label} surviving caller`);
+    assert.deepEqual(surviving.value.candidates, [], `${label} surviving result`);
+    assert.equal(fetchCount, 1, `${label} remote request count`);
+    assert.equal(status.spentTodayCny, expectedSingleCharge, `${label} charged once`);
+    if (abortLeader) {
+      assert.equal(surviving.value.singleflightHit, true, `${label} follower reuse`);
+      assert.equal(surviving.value.estimatedCostCny, 0, `${label} follower current-call cost`);
+    } else {
+      assert.equal(surviving.value.singleflightHit, false, `${label} leader owns request`);
+      assert.equal(surviving.value.estimatedCostCny, expectedSingleCharge, `${label} leader cost`);
+    }
+  };
+
+  await runCase({ label: "leader", abortLeader: true });
+  await runCase({ label: "follower", abortLeader: false });
+});
+
+test("rulebook preparation cache hashes evidence content and revision while cache hits report zero current usage", async () => {
+  const env = {
+    MODEL_PROVIDER: "deepseek",
+    RAG_RULEBOOK_MODEL_PROVIDER: "deepseek",
+    RAG_RULEBOOK_FOCUSED_REPAIR_ENABLED: "false",
+    DEEPSEEK_API_KEY: "test-deepseek-key",
+    API_DAILY_BUDGET_CNY: "10",
+    API_BUDGET_TIMEZONE: "UTC",
+  };
+  const now = new Date("2033-04-07T06:07:08.000Z");
+  await resetRagBudget({ env, now });
+  let fetchCount = 0;
+  const passage = {
+    id: "rulebook-cache-content-20330407",
+    type: "rulebook",
+    title: "缓存内容测试",
+    text: "正在处理的卡不能返回手卡。",
+    sourceUrl: "https://example.test/rulebook-cache",
+  };
+  const fetchImpl = async () => {
+    fetchCount += 1;
+    return jsonResponse({
+      choices: [{
+        finish_reason: "stop",
+        message: { content: JSON.stringify({
+          operationChecks: [{
+            operationId: "return-active-card",
+            action: "返回手卡",
+            status: "illegal",
+            conclusion: "不能返回。",
+            citations: [{ id: passage.id, quote: "正在处理的卡不能返回手卡。" }],
+          }],
+        }) },
+      }],
+      usage: { input_tokens: 120, output_tokens: 30, total_tokens: 150 },
+    });
+  };
+  const invoke = (ruleEvidence, dataRevision) => callRulebookGroundingModel({
+    userQuery: "rulebook cache content scenario 20330407",
+    ruleEvidence,
+    dataRevision,
+    env,
+    now,
+    fetchImpl,
+  });
+
+  const first = await invoke([passage], "revision-a");
+  const budgetAfterFirst = await getRagBudgetStatus({ env, now });
+  const second = await invoke([passage], "revision-a");
+  const budgetAfterSecond = await getRagBudgetStatus({ env, now });
+  const changedText = await invoke([{ ...passage, text: `${passage.text} 同步修订。` }], "revision-a");
+  const changedRevision = await invoke([passage], "revision-b");
+
+  assert.equal(fetchCount, 3);
+  assert.equal(first.cacheHit, false);
+  assert.equal(first.tokenUsage.prompt_tokens, 120);
+  assert.equal(second.cacheHit, true);
+  assert.deepEqual(second.tokenUsage, {});
+  assert.equal(second.estimatedCostCny, 0);
+  assert.equal(second.budgetStatus.estimatedThisCallCny, 0);
+  assert.equal(budgetAfterSecond.spentTodayCny, budgetAfterFirst.spentTodayCny);
+  assert.equal(changedText.cacheHit, false);
+  assert.equal(changedRevision.cacheHit, false);
+  assert.notEqual(first.cacheMetadata.keySha256, changedText.cacheMetadata.keySha256);
+  assert.notEqual(first.cacheMetadata.keySha256, changedRevision.cacheMetadata.keySha256);
+});
+
 test("rulebook response parsing failure retains the cost of the completed remote call", async () => {
   const now = new Date("2026-08-01T02:00:00.000Z");
   const env = {
@@ -3064,7 +3469,7 @@ test("auxiliary model dry-runs skip injected invokers and forward signals when e
   assert.ok(receivedSignals.every((value) => value === controller.signal));
 });
 
-test("usage_cost_estimation_deepseek", () => {
+test("public DeepSeek budget also treats cached input as uncached", () => {
   const cost = estimateDeepSeekCostCny({
     prompt_tokens: 1000,
     completion_tokens: 500,
@@ -3076,7 +3481,7 @@ test("usage_cost_estimation_deepseek", () => {
     DEEPSEEK_OUTPUT_CNY_PER_MTOK: "2",
     DEEPSEEK_CACHE_HIT_INPUT_CNY_PER_MTOK: "0.02",
   });
-  assert.equal(cost, 0.001804);
+  assert.equal(cost, 0.002);
 });
 
 test("usage_cost_estimation_uses_flash_prices", () => {
@@ -3203,7 +3608,7 @@ test("daily budget meters evidence, GLM final, and DeepSeek final in independent
     { id: "evidence_preparation:deepseek", spent: 0.002, limit: 0.01, remaining: 0.008 },
     { id: "final_ruling:glm", spent: 0.022, limit: 0.03, remaining: 0.008 },
     { id: "final_ruling:deepseek", spent: 0.002, limit: 0.01, remaining: 0.008 },
-    { id: "final_ruling:relay", spent: 0, limit: null, remaining: null },
+    { id: "final_ruling:relay", spent: null, limit: null, remaining: null },
   ]);
 });
 
@@ -3282,17 +3687,174 @@ test("budget_status_uses_kv_rest_aliases_for_persistent_storage", async () => {
   assert.equal(status.budgetStorage, "redis");
   status = await resetRagBudget({ env, fetchImpl: redis.fetchImpl, now: new Date("2026-07-09T00:00:00Z") });
   assert.equal(status.buckets.length, 4);
-  const resetCommands = redis.commands.filter((command) => command[0] === "SET");
-  assert.deepEqual(resetCommands.map((command) => command[1]).sort(), [
-    "rag-api-budget:2026-07-09",
-    "rag-api-budget:v2:2026-07-09:evidence_preparation:deepseek",
-    "rag-api-budget:v2:2026-07-09:final_ruling:deepseek",
-    "rag-api-budget:v2:2026-07-09:final_ruling:glm",
-    "rag-api-budget:v2:2026-07-09:final_ruling:relay",
+  const resetCommands = redis.commands.filter((command) => command[0] === "EVAL" && command[6] === "reset");
+  assert.deepEqual(resetCommands.map((command) => command[3]).sort(), [
+    "rag-api-budget:v3:2026-07-09:cny-total",
+    "rag-api-budget:v3:2026-07-09:evidence_preparation:deepseek:cny",
+    "rag-api-budget:v3:2026-07-09:final_ruling:deepseek:cny",
+    "rag-api-budget:v3:2026-07-09:final_ruling:glm:cny",
+    "rag-api-budget:v3:2026-07-09:final_ruling:relay:usd",
   ]);
-  assert.ok(resetCommands.every((command) => (
-    command[2] === "0" && command[3] === "EX" && command[4] === "172800"
-  )));
+  assert.ok(resetCommands.every((command) => command[2] === "3" && command[8] === "172800"));
+});
+
+test("budget_status_accepts_the_named_Upstash_budget_integration_aliases", async () => {
+  const env = {
+    VERCEL: "1",
+    API_DAILY_BUDGET_CNY: "10",
+    API_BUDGET_TIMEZONE: "UTC",
+    UPSTASH_BUDGET_KV_REST_API_URL: "https://budget-kv.example.test",
+    UPSTASH_BUDGET_KV_REST_API_TOKEN: "budget-kv-token",
+  };
+  const redis = createRedisFetch({
+    url: "https://budget-kv.example.test",
+    token: "budget-kv-token",
+  });
+  const status = await getRagBudgetStatus({
+    env,
+    fetchImpl: redis.fetchImpl,
+    now: new Date("2026-07-10T00:00:00Z"),
+  });
+
+  assert.equal(status.budgetStorage, "redis");
+  assert.equal(status.budgetPersistent, true);
+});
+
+test("budget storage fails closed instead of mixing a URL and token from different aliases", async () => {
+  let fetchCount = 0;
+  const status = await getRagBudgetStatus({
+    env: {
+      VERCEL: "1",
+      API_DAILY_BUDGET_CNY: "10",
+      API_BUDGET_TIMEZONE: "UTC",
+      KV_REST_API_URL: "https://kv.example.test",
+      UPSTASH_REDIS_REST_TOKEN: "token-from-another-alias",
+    },
+    fetchImpl: async () => {
+      fetchCount += 1;
+      throw new Error("mixed credentials must not be used");
+    },
+    now: new Date("2026-07-10T00:00:00Z"),
+  });
+
+  assert.equal(fetchCount, 0);
+  assert.equal(status.budgetStorage, "unconfigured");
+  assert.equal(status.budgetPersistent, false);
+  assert.equal(status.spentTodayCny, null);
+});
+
+test("budget storage fails closed when two complete aliases point at different databases", async () => {
+  let fetchCount = 0;
+  const result = await callRagModel({
+    prompt: "conflicting redis aliases must block before model transport",
+    env: {
+      VERCEL: "1",
+      MODEL_PROVIDER: "deepseek",
+      DEEPSEEK_API_KEY: "test-deepseek-key",
+      API_DAILY_BUDGET_CNY: "10",
+      KV_REST_API_URL: "https://kv-a.example.test",
+      KV_REST_API_TOKEN: "kv-a-token",
+      UPSTASH_REDIS_REST_URL: "https://kv-b.example.test",
+      UPSTASH_REDIS_REST_TOKEN: "kv-b-token",
+    },
+    fetchImpl: async () => {
+      fetchCount += 1;
+      throw new Error("conflicting aliases must not be used");
+    },
+  });
+
+  assert.equal(fetchCount, 0);
+  assert.equal(result.answer.answerLevel, "budget_limited");
+  assert.ok(result.warnings.includes("redis_alias_pairs_conflict"));
+});
+
+test("v3 currency ledgers conservatively migrate same-day legacy spend without treating CNY as USD", async () => {
+  const env = {
+    API_DAILY_BUDGET_CNY: "10",
+    API_BUDGET_TIMEZONE: "UTC",
+    KV_REST_API_URL: "https://kv.example.test",
+    KV_REST_API_TOKEN: "kv-token",
+  };
+  const redis = createRedisFetch();
+  redis.store.set("rag-api-budget:2026-07-11", "4.001324");
+  redis.store.set("rag-api-budget:v2:2026-07-11:final_ruling:relay", "4");
+  const status = await getRagBudgetStatus({
+    env,
+    fetchImpl: redis.fetchImpl,
+    now: new Date("2026-07-11T00:00:00Z"),
+  });
+  const relay = status.buckets.find((bucket) => bucket.id === "final_ruling:relay");
+
+  assert.equal(status.spentTodayCny, 4.001324);
+  assert.equal(relay.spentTodayUsd, 10);
+  assert.equal(relay.dailyBudgetUsd, 10);
+  assert.equal(relay.remainingTodayUsd, 0);
+  assert.equal(redis.store.get("rag-api-budget:v3:2026-07-11:cny-total"), "4.001324");
+  assert.equal(redis.store.get("rag-api-budget:v3:2026-07-11:final_ruling:relay:usd"), "10");
+
+  const blocked = await callRagModel({
+    prompt: "same-day migrated relay spend must remain blocked",
+    env: {
+      ...env,
+      MODEL_PROVIDER: "relay",
+      RELAY_API_KEY: "relay-key",
+      RELAY_BASE_URL: "https://relay.example.test/v1",
+      RAG_MODEL: "gpt-5.6-sol",
+    },
+    fetchImpl: redis.fetchImpl,
+    now: new Date("2026-07-11T00:00:00Z"),
+  });
+  assert.equal(blocked.answer.answerLevel, "budget_limited");
+});
+
+test("v3 budget reconciliation imports legacy writes that arrive after the first migration read", async () => {
+  const date = "2033-04-11";
+  const env = {
+    API_DAILY_BUDGET_CNY: "10",
+    API_BUDGET_TIMEZONE: "UTC",
+    KV_REST_API_URL: "https://kv.example.test",
+    KV_REST_API_TOKEN: "kv-token",
+  };
+  const now = new Date(`${date}T06:07:08.000Z`);
+  const redis = createRedisFetch();
+  const legacyTotalKey = `rag-api-budget:${date}`;
+  const legacyEvidenceKey = `rag-api-budget:v2:${date}:evidence_preparation:deepseek`;
+  const legacyRelayKey = `rag-api-budget:v2:${date}:final_ruling:relay`;
+  redis.store.set(legacyTotalKey, "2");
+  redis.store.set(legacyEvidenceKey, "0.25");
+
+  const first = await getRagBudgetStatus({ env, fetchImpl: redis.fetchImpl, now });
+  assert.equal(first.spentTodayCny, 2);
+  assert.equal(
+    first.buckets.find((bucket) => bucket.id === "evidence_preparation:deepseek").spentTodayCny,
+    0.25,
+  );
+  assert.equal(
+    first.buckets.find((bucket) => bucket.id === "final_ruling:relay").spentTodayUsd,
+    0,
+  );
+
+  // Simulate an old rolling-deployment instance writing v1/v2 after a newer
+  // instance has already reconciled this day once.
+  redis.store.set(legacyTotalKey, "3.5");
+  redis.store.set(legacyEvidenceKey, "0.75");
+  redis.store.set(legacyRelayKey, "0.01");
+  const second = await getRagBudgetStatus({ env, fetchImpl: redis.fetchImpl, now });
+
+  assert.equal(second.spentTodayCny, 3.5);
+  assert.equal(
+    second.buckets.find((bucket) => bucket.id === "evidence_preparation:deepseek").spentTodayCny,
+    0.75,
+  );
+  assert.equal(
+    second.buckets.find((bucket) => bucket.id === "final_ruling:relay").spentTodayUsd,
+    10,
+  );
+  assert.equal(redis.store.get(`rag-api-budget:v3:${date}:cny-total`), "3.5");
+  assert.equal(
+    redis.store.get(`rag-api-budget:v3:${date}:evidence_preparation:deepseek:cny`),
+    "0.75",
+  );
 });
 
 test("budget_status_requires_persistent_storage_on_vercel", async () => {
@@ -3969,18 +4531,41 @@ function modelJson(shortAnswer) {
   };
 }
 
-function createRedisFetch() {
+function createRedisFetch({ url: expectedUrl = "https://kv.example.test", token: expectedToken = "kv-token" } = {}) {
   const store = new Map();
   const commands = [];
   return {
     commands,
+    store,
     fetchImpl: async (url, options = {}) => {
-      assert.equal(url, "https://kv.example.test");
-      assert.match(String(options.headers?.authorization || ""), /Bearer kv-token/u);
+      assert.equal(url, expectedUrl);
+      assert.equal(String(options.headers?.authorization || ""), `Bearer ${expectedToken}`);
       const command = JSON.parse(options.body || "[]");
       commands.push(command);
       const [op, key, value] = command;
       if (op === "GET") return jsonResponse({ result: store.get(key) || null });
+      if (op === "EVAL") {
+        const keyCount = Number(command[2] || 0);
+        assert.equal(keyCount, 3);
+        const currentKey = command[3];
+        const legacyKey = command[4];
+        const watermarkKey = command[5];
+        const mode = command[6];
+        const cap = Number(command[7] || 0);
+        let current = Math.max(0, Number(store.get(currentKey) || 0));
+        const legacy = Math.max(0, Number(store.get(legacyKey) || 0));
+        const watermark = Math.max(0, Number(store.get(watermarkKey) || 0));
+        if (mode === "reset") {
+          current = 0;
+        } else if (mode === "relay_cap") {
+          if (legacy > watermark && legacy > 0) current = Math.max(current, cap);
+        } else {
+          current += Math.max(0, legacy - watermark);
+        }
+        store.set(currentKey, String(current));
+        store.set(watermarkKey, String(Math.max(watermark, legacy)));
+        return jsonResponse({ result: String(current) });
+      }
       if (op === "SET") {
         store.set(key, value);
         return jsonResponse({ result: "OK" });

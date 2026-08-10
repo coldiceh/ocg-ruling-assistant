@@ -494,6 +494,7 @@ function estimatePlannedFinalCost({
       },
       usdToCnyRate: exchange,
       exchangeRateVersion: "matrix-budget-factor-v1",
+      inputBillingBasis: "all_uncached",
     });
     if (!Number.isFinite(cost.totalCostCny)) {
       throw new Error(`Default pilot pricing could not estimate ${configuration.model}`);

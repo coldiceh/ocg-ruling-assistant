@@ -62,7 +62,9 @@ export function normalizeOpenAIResponsesUsage(usage = {}) {
     inputTokens,
     nonNegativeInteger(
       inputDetails.cached_tokens
+        ?? inputDetails.cache_read_input_tokens
         ?? usage.cached_input_tokens
+        ?? usage.cache_read_input_tokens
         ?? usage.prompt_cache_hit_tokens
         ?? usage.cachedInputTokens
         ?? 0,
@@ -73,7 +75,9 @@ export function normalizeOpenAIResponsesUsage(usage = {}) {
     inputTokens - cachedInputTokens,
     nonNegativeInteger(
       inputDetails.cache_write_tokens
+        ?? inputDetails.cache_write_input_tokens
         ?? usage.cache_write_tokens
+        ?? usage.cache_write_input_tokens
         ?? usage.cacheWriteTokens
         ?? 0,
       "cache_write_tokens",
@@ -127,11 +131,13 @@ export function estimateOpenAIModelCost({
   usdToCnyRate = null,
   exchangeRateVersion = null,
   pricing = DEFAULT_PRICING,
+  inputBillingBasis = "reported_cache",
 } = {}) {
   if (!["standard", "pro"].includes(reasoningMode)) {
     throw new RangeError(`Unsupported reasoning mode for pricing: ${reasoningMode}`);
   }
   const canonicalModel = resolvePricedModelId(model, pricing);
+  const billingBasis = normalizeInputBillingBasis(inputBillingBasis);
   const rates = pricing.models[canonicalModel];
   const normalizedUsage = normalizeOpenAIResponsesUsage(usage);
   const isLongContext = normalizedUsage.inputTokens > rates.longContext.thresholdInputTokensExclusive;
@@ -139,15 +145,17 @@ export function estimateOpenAIModelCost({
   const outputMultiplier = isLongContext ? rates.longContext.outputMultiplier : 1;
 
   const inputCostUsd = tokenCost(
-    normalizedUsage.uncachedInputTokens,
+    billingBasis === "all_uncached"
+      ? normalizedUsage.inputTokens
+      : normalizedUsage.uncachedInputTokens,
     rates.inputUsdPerMillion * inputMultiplier,
   );
   const cachedInputCostUsd = tokenCost(
-    normalizedUsage.cachedInputTokens,
+    billingBasis === "all_uncached" ? 0 : normalizedUsage.cachedInputTokens,
     rates.cachedInputUsdPerMillion * inputMultiplier,
   );
   const cacheWriteCostUsd = tokenCost(
-    normalizedUsage.cacheWriteTokens,
+    billingBasis === "all_uncached" ? 0 : normalizedUsage.cacheWriteTokens,
     rates.cacheWriteUsdPerMillion * inputMultiplier,
   );
   const outputCostUsd = tokenCost(
@@ -164,6 +172,12 @@ export function estimateOpenAIModelCost({
     model: canonicalModel,
     requestedModel: String(model),
     reasoningMode,
+    inputBillingBasis: billingBasis,
+    billingAssumption: billingBasis === "all_uncached"
+      ? "all_input_uncached"
+      : "provider_reported_cache_tiers",
+    cacheDiscountApplied: billingBasis !== "all_uncached"
+      && normalizedUsage.cachedInputTokens > 0,
     usage: normalizedUsage,
     inputCostUsd,
     cachedInputCostUsd,
@@ -193,8 +207,10 @@ export function estimateDeepSeekModelCost({
   pricingProfile = null,
   usdToCnyRate = null,
   exchangeRateVersion = null,
+  inputBillingBasis = "reported_cache",
 } = {}) {
   const normalizedUsage = normalizeReportedModelUsage(usage);
+  const billingBasis = normalizeInputBillingBasis(inputBillingBasis);
   const profile = normalizeDeepSeekPricingProfile(pricingProfile);
   const exchangeRate = normalizeExchangeRate(usdToCnyRate);
   const common = {
@@ -202,6 +218,12 @@ export function estimateDeepSeekModelCost({
     model: stringOrNull(model),
     requestedModel: stringOrNull(model),
     usage: normalizedUsage,
+    inputBillingBasis: billingBasis,
+    billingAssumption: billingBasis === "all_uncached"
+      ? "all_input_uncached"
+      : "provider_reported_cache_tiers",
+    cacheDiscountApplied: billingBasis !== "all_uncached"
+      && (normalizedUsage?.cachedInputTokens || 0) > 0,
     exchangeRate,
     exchangeRateVersion: exchangeRate === null ? null : stringOrNull(exchangeRateVersion),
     pricingVersion: profile.pricingVersion,
@@ -225,23 +247,29 @@ export function estimateDeepSeekModelCost({
   if (profile.inputCnyPerMillion === null || profile.outputCnyPerMillion === null) {
     return unavailable("versioned_server_pricing_incomplete");
   }
-  if (normalizedUsage.cachedInputTokens > 0 && profile.cachedInputCnyPerMillion === null) {
+  if (billingBasis !== "all_uncached"
+    && normalizedUsage.cachedInputTokens > 0
+    && profile.cachedInputCnyPerMillion === null) {
     return unavailable("cached_input_price_unavailable");
   }
-  if (normalizedUsage.cacheWriteTokens > 0 && profile.cacheWriteInputCnyPerMillion === null) {
+  if (billingBasis !== "all_uncached"
+    && normalizedUsage.cacheWriteTokens > 0
+    && profile.cacheWriteInputCnyPerMillion === null) {
     return unavailable("cache_write_input_price_unavailable");
   }
 
   const inputCostCny = tokenCost(
-    normalizedUsage.uncachedInputTokens,
+    billingBasis === "all_uncached"
+      ? normalizedUsage.inputTokens
+      : normalizedUsage.uncachedInputTokens,
     profile.inputCnyPerMillion,
   );
   const cachedInputCostCny = tokenCost(
-    normalizedUsage.cachedInputTokens,
+    billingBasis === "all_uncached" ? 0 : normalizedUsage.cachedInputTokens,
     profile.cachedInputCnyPerMillion ?? 0,
   );
   const cacheWriteCostCny = tokenCost(
-    normalizedUsage.cacheWriteTokens,
+    billingBasis === "all_uncached" ? 0 : normalizedUsage.cacheWriteTokens,
     profile.cacheWriteInputCnyPerMillion ?? 0,
   );
   const outputCostCny = tokenCost(
@@ -278,8 +306,10 @@ export function estimateRelayModelCost({
   exchangeRateVersion = null,
   pricing = DEFAULT_RELAY_PRICING,
   pricingMultiplier = undefined,
+  inputBillingBasis = "reported_cache",
 } = {}) {
   const normalizedUsage = normalizeReportedModelUsage(usage);
+  const billingBasis = normalizeInputBillingBasis(inputBillingBasis);
   const requestedModel = String(model || "").trim();
   const canonicalModel = requestedModel.replace(/^relay-/u, "");
   const rates = pricing.models?.[canonicalModel];
@@ -290,6 +320,12 @@ export function estimateRelayModelCost({
     model: canonicalModel || null,
     requestedModel: requestedModel || null,
     usage: normalizedUsage,
+    inputBillingBasis: billingBasis,
+    billingAssumption: billingBasis === "all_uncached"
+      ? "all_input_uncached"
+      : "provider_reported_cache_tiers",
+    cacheDiscountApplied: billingBasis !== "all_uncached"
+      && (normalizedUsage?.cachedInputTokens || 0) > 0,
     exchangeRate,
     exchangeRateVersion: exchangeRate === null ? null : stringOrNull(exchangeRateVersion),
     pricingVersion: pricing.pricingVersion,
@@ -312,7 +348,7 @@ export function estimateRelayModelCost({
 
   if (!normalizedUsage) return unavailable("provider_usage_unavailable");
   if (!rates) return unavailable("relay_model_pricing_unavailable");
-  if (normalizedUsage.cacheWriteTokens > 0) {
+  if (billingBasis !== "all_uncached" && normalizedUsage.cacheWriteTokens > 0) {
     return unavailable("relay_cache_write_price_unavailable");
   }
   const inputBreakdownReported = hasAnyOwnField(usage, [
@@ -357,11 +393,13 @@ export function estimateRelayModelCost({
     });
   }
   const inputCostUsd = tokenCost(
-    normalizedUsage.uncachedInputTokens,
+    billingBasis === "all_uncached"
+      ? normalizedUsage.inputTokens
+      : normalizedUsage.uncachedInputTokens,
     rates.inputUsdPerMillion * resolvedPricingMultiplier,
   );
   const cachedInputCostUsd = tokenCost(
-    normalizedUsage.cachedInputTokens,
+    billingBasis === "all_uncached" ? 0 : normalizedUsage.cachedInputTokens,
     rates.cachedInputUsdPerMillion * resolvedPricingMultiplier,
   );
   const cacheWriteCostUsd = 0;
@@ -385,6 +423,14 @@ export function estimateRelayModelCost({
     totalCostUsd,
     totalCostCny: exchangeRate === null ? null : roundMoney(totalCostUsd * exchangeRate),
   });
+}
+
+function normalizeInputBillingBasis(value) {
+  const normalized = String(value || "reported_cache").trim().toLowerCase();
+  if (!new Set(["reported_cache", "all_uncached"]).has(normalized)) {
+    throw new RangeError(`Unsupported input billing basis: ${value}`);
+  }
+  return normalized;
 }
 
 function hasAnyOwnField(value, fields) {

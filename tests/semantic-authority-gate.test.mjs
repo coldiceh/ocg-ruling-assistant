@@ -500,7 +500,8 @@ test("the public pipeline calls the final model when a semantic executor covered
   assert.equal(finalModelCalls, 1);
   assert.equal(answer.debug.deterministicDecision, null);
   assert.notEqual(answer.debug.modelUsed, "trusted-semantic-state-executor");
-  assert.equal(answer.debug.semanticStateTransition, null);
+  assert.equal(answer.debug.semanticStateTransition?.authoritative, false);
+  assert.ok(answer.debug.semanticStateTransition);
   assert.equal(answer.debug.semanticStateTransitionDiagnostic, null);
 });
 
@@ -538,7 +539,8 @@ test("a locally complete executor still cannot skip the final model", async () =
   });
   assert.equal(finalModelCalls, 1);
   assert.equal(answer.debug.deterministicDecision, null);
-  assert.equal(answer.debug.semanticStateTransition, null);
+  assert.equal(answer.debug.semanticStateTransition?.authoritative, false);
+  assert.equal(answer.debug.semanticStateTransition?.complete, true);
   assert.match(answer.shortAnswer, /^不能直接连锁发动/u);
 });
 
@@ -560,7 +562,8 @@ test("a complete production-data question still requires a final-model signature
   });
   assert.equal(finalModelCalls, 1);
   assert.equal(answer.debug.deterministicDecision, null);
-  assert.equal(answer.debug.semanticStateTransition, null);
+  assert.equal(answer.debug.semanticStateTransition?.authoritative, false);
+  assert.ok(answer.debug.semanticStateTransition);
   assert.equal(answer.debug.semanticStateTransitionDiagnostic, null);
   assert.ok(answer.debug.retrievalCounts.officialQaDirectCandidates > 0);
 });
@@ -586,7 +589,7 @@ for (const fixture of [{
   question: "我方场上表侧表示存在「尤贝尔之精灵」和「纳祭魔鬼莲」，对方场上表侧表示存在「尤贝尔」。对方结束阶段发动「尤贝尔」的③效果，我方连锁发动「纳祭魔鬼莲」②效果，把那个效果改为破坏场上1只「尤贝尔」怪兽；对方选择破坏自己的「尤贝尔」。这只「尤贝尔」是否算被自身③效果破坏，之后能否发动④效果？",
   shortAnswer: "不算被自身③效果原本的处理破坏，之后可以发动④效果。",
 }]) {
-  test(`existing complete executor remains offline while the final model signs: ${fixture.id}`, async () => {
+  test(`existing executor remains diagnostic-only while the final model signs: ${fixture.id}`, async () => {
     let finalModelCalls = 0;
     const answer = await answerRagRulingQuestion({
       question: fixture.question,
@@ -601,7 +604,8 @@ for (const fixture of [{
     });
     assert.equal(finalModelCalls, 1, fixture.id);
     assert.equal(answer.debug.deterministicDecision, null, fixture.id);
-    assert.equal(answer.debug.semanticStateTransition, null, fixture.id);
+    assert.equal(answer.debug.semanticStateTransition?.authoritative, false, fixture.id);
+    assert.ok(answer.debug.semanticStateTransition, fixture.id);
     assert.equal(answer.debug.semanticStateTransitionDiagnostic, null, fixture.id);
     assert.equal(answer.shortAnswer, fixture.shortAnswer, fixture.id);
   });

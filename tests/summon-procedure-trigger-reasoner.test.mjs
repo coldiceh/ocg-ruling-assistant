@@ -3,6 +3,7 @@ import test from "node:test";
 
 import { analyzeEffectStateTransition } from "../backend/effectStateReasoner.mjs";
 import { findNormalizedSemantics, normalizeCardText } from "../backend/cardTextNormalizer.mjs";
+import { buildRagRulingPromptBundle } from "../backend/ragRulingPrompt.mjs";
 import { resolveUniqueEntityFragment } from "../backend/scenarioEntityResolver.mjs";
 
 function fixture(names = {
@@ -65,6 +66,30 @@ test("executes the summon procedure, replacement attribution, and public-C1/priv
   );
   assert.match(result.shortAnswer, /先声明.*C1.*对方.*不连锁.*手牌.*C2/u);
   assert.doesNotMatch(result.shortAnswer, /任意.*顺序|自由.*顺序/u);
+});
+
+test("final prompt keeps replacement attribution without serializing full state snapshots", () => {
+  const input = fixture();
+  const transition = analyzeEffectStateTransition(input);
+  const bundle = buildRagRulingPromptBundle({
+    userQuery: input.userQuery,
+    cardResolution: {
+      resolvedCards: input.cardTexts.map((card) => ({
+        id: card.cardIds[0],
+        name: card.name,
+        effectText: card.text,
+      })),
+    },
+    evidence: {
+      cardTexts: input.cardTexts,
+      semanticStateTransition: transition,
+    },
+  });
+
+  assert.match(bundle.prompt, /finalDestinationCauseKind/u);
+  assert.match(bundle.prompt, /card_effect/u);
+  assert.match(bundle.prompt, /实际移动及最终归因/u);
+  assert.doesNotMatch(bundle.prompt, /"stateSnapshot"/u);
 });
 
 test("the same mechanism works after every card name is changed", () => {
