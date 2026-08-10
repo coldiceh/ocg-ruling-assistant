@@ -157,11 +157,12 @@ test("ui_has_single_query_button", async () => {
   assert.match(html, /id="pipelineStageList"/u);
   assert.match(html, /id="pipelineElapsedText"/u);
   assert.match(html, /id="rulingModelSelect"[^>]+disabled/u);
-  assert.match(html, /value="relay-gpt-5\.6-luna-low" selected>GPT-5\.6 Luna · 思考 low（第三方中转）/u);
+  assert.match(html, /value="relay-gpt-5\.6-luna-low" selected>GPT-5\.6 Luna · 思考 low</u);
+  assert.doesNotMatch(html, /第三方中转/u);
   assert.doesNotMatch(html, /value="glm-5\.2-high"/u);
   assert.doesNotMatch(html, /value="kimi-[^"]+"/u);
   assert.doesNotMatch(html, /value="relay-gpt-5\.6-sol-high"/u);
-  assert.match(html, /id="rulingModelStatus">正在确认模型可用性/u);
+  assert.match(html, /id="rulingModelStatus">匿名 10 题评测：10\/10，平均 34\.6 秒；推荐。/u);
   assert.match(html, /id="rulingModelLatency"[^>]+aria-live="polite"/u);
   assert.match(app, /最近 \$\{latency\.sampleCount\} 次成功回答/u);
   assert.doesNotMatch(html, /id="flashModelButton"|id="proModelButton"|>Pro</u);
@@ -170,7 +171,7 @@ test("ui_has_single_query_button", async () => {
   assert.doesNotMatch(app, /modelTier: selectedModelTier/u);
   assert.doesNotMatch(app, /thinkingMode:\s*selected|reasoningEffort:\s*selected/u);
   assert.match(html, /data-ruling-version="latest"[^>]+aria-pressed="true"[^>]*>最新版</u);
-  assert.match(html, /data-ruling-version="previous"[^>]+aria-pressed="false"[^>]+disabled[^>]*>上一版（兼容）</u);
+  assert.doesNotMatch(html, /data-ruling-version="previous"|上一版（兼容）/u);
   assert.match(app, /let selectedRulingVersion = "latest"/u);
   assert.match(app, /rulingVersion: requestedRulingVersion/u);
   assert.match(app, /selectRulingVersion\(button\.dataset\.rulingVersion\)/u);
@@ -227,7 +228,11 @@ test("public ruling model selector uses the allowlisted backend profiles without
     defaultRulingModelProfile: "relay-gpt-5.6-luna-low",
     rulingModelProfiles: [
       { id: "relay-gpt-5.6-luna-low", available: true, label: "OpenAI official" },
+      { id: "relay-gpt-5.6-sol-low", available: true, label: "OpenAI official" },
+      { id: "deepseek-v4-flash-standard", available: true },
+      { id: "deepseek-v4-flash-low", available: true },
       { id: "deepseek-v4-flash-high", available: true, label: "untrusted label" },
+      { id: "deepseek-v4-flash-max", available: true },
       { id: "glm-5.2-high", available: true },
       { id: "relay-gpt-5.6-sol-high", available: true, label: "OpenAI official" },
       { id: "not-allowlisted", available: true },
@@ -235,56 +240,44 @@ test("public ruling model selector uses the allowlisted backend profiles without
   });
 
   assert.equal(capabilities.defaultProfile, "relay-gpt-5.6-luna-low");
-  assert.deepEqual(capabilities.profiles, [
-    {
-      id: "relay-gpt-5.6-luna-low",
-      label: "GPT-5.6 Luna · 思考 low（第三方中转）",
-      provider: "relay",
-      model: "gpt-5.6-luna",
-      reasoningEffort: "low",
-      thirdParty: true,
-      modelIdentityVerified: false,
-      available: true,
-      answerLatency: {
-        profileId: "relay-gpt-5.6-luna-low",
-        status: "unavailable",
-        averageMs: null,
-        sampleCount: 0,
-        windowSize: 20,
-        storage: "unavailable",
-        reason: "",
-      },
-    },
-    {
-      id: "deepseek-v4-flash-high",
-      label: "DeepSeek V4 Flash · 思考 high",
-      provider: "deepseek",
-      available: true,
-      answerLatency: {
-        profileId: "deepseek-v4-flash-high",
-        status: "unavailable",
-        averageMs: null,
-        sampleCount: 0,
-        windowSize: 20,
-        storage: "unavailable",
-        reason: "",
-      },
-    },
+  assert.deepEqual(capabilities.profiles.map((profile) => ({
+    id: profile.id,
+    label: profile.label,
+    provider: profile.provider,
+    available: profile.available,
+  })), [
+    { id: "relay-gpt-5.6-luna-low", label: "GPT-5.6 Luna · 思考 low", provider: "relay", available: true },
+    { id: "relay-gpt-5.6-sol-low", label: "GPT-5.6 Sol · 思考 low", provider: "relay", available: true },
+    { id: "deepseek-v4-flash-standard", label: "DeepSeek V4 Flash · standard（实验性）", provider: "deepseek", available: true },
+    { id: "deepseek-v4-flash-low", label: "DeepSeek V4 Flash · 思考 low（实验性）", provider: "deepseek", available: true },
+    { id: "deepseek-v4-flash-high", label: "DeepSeek V4 Flash · 思考 high（实验性）", provider: "deepseek", available: true },
+    { id: "deepseek-v4-flash-max", label: "DeepSeek V4 Flash · 思考 max（实验性）", provider: "deepseek", available: true },
   ]);
+  assert.equal(capabilities.profiles[0].benchmarkSummary, "匿名 10 题评测：10/10，平均 34.6 秒；推荐。");
+  assert.equal(capabilities.profiles[1].benchmarkSummary, "匿名 10 题评测：10/10，平均 51.6 秒。");
+  assert.equal(capabilities.profiles[2].benchmarkSummary, "匿名 10 题评测：5/10，另有 4 题部分正确；平均 12.4 秒，仅供实验。");
+  for (const profile of capabilities.profiles) {
+    assert.equal(profile.answerLatency.profileId, profile.id);
+    assert.equal(profile.answerLatency.status, "unavailable");
+  }
   const partialAvailability = normalizeCapabilities({
     defaultRulingModelProfile: "relay-gpt-5.6-luna-low",
     rulingModelProfiles: [
       { id: "glm-5.2-high", available: false },
       { id: "deepseek-v4-flash-high", available: true },
       { id: "relay-gpt-5.6-luna-low", available: false },
-      { id: "relay-gpt-5.6-sol-high", available: false },
+      { id: "relay-gpt-5.6-sol-low", available: false },
     ],
   });
   assert.deepEqual(
     partialAvailability.profiles.map((profile) => [profile.id, profile.available]),
     [
       ["relay-gpt-5.6-luna-low", false],
+      ["relay-gpt-5.6-sol-low", false],
+      ["deepseek-v4-flash-standard", false],
+      ["deepseek-v4-flash-low", false],
       ["deepseek-v4-flash-high", true],
+      ["deepseek-v4-flash-max", false],
     ],
   );
   assert.throws(
@@ -297,6 +290,7 @@ test("public ruling model selector uses the allowlisted backend profiles without
   assert.match(app, /setRulingModelCapabilitiesUnavailable\("模型能力接口不可用/u);
   assert.match(app, /系统不会自动改用其他模型/u);
   assert.match(app, /selectedRulingModelProfile = DEFAULT_RULING_MODEL_PROFILE/u);
+  assert.match(app, /if \(value === "relay"\) return "ChatGPT"/u);
 });
 
 test("public ruling model selector renders measured latency and explicit fallback states", async () => {
@@ -486,7 +480,7 @@ test("backend answers bypass persistent browser cache and bust static assets", a
     readFile(new URL("../config.json", import.meta.url), "utf8"),
   ]);
   const config = JSON.parse(configText.replace(/^\uFEFF/u, ""));
-  assert.match(html, /src\/app\.js\?v=20260807-budget-breakdown-1/u);
+  assert.match(html, /src\/app\.js\?v=20260810-public-models-1/u);
   assert.match(html, /src\/styles\.css\?v=20260807-budget-breakdown-1/u);
   assert.match(config.answerApiUrl, /\?client=20260722-answer-version-1$/u);
   assert.match(app, /cache: "no-store"/u);
@@ -502,12 +496,25 @@ test("readme_keeps_only_requested_future_plans", async () => {
   assert.doesNotMatch(readme, /## 技术架构|## 本地运行|## 贡献|## 未来计划/u);
   assert.match(readme, /```mermaid[\s\S]*裁定模型分析/u);
   assert.match(readme, /MODEL_EFFORT_MATRIX:START/u);
-  assert.match(readme, /Fluorohydride\/ygopro-core/u);
+  assert.doesNotMatch(readme, /Lua|Fluorohydride\/ygopro-core/u);
   assert.match(readme, /space\.bilibili\.com\/869711/u);
   assert.match(readme, /\[English\]\(README\.en\.md\)/u);
   assert.match(readme, /\[日本語\]\(README\.ja\.md\)/u);
   assert.match(english, /## How it works/u);
   assert.match(japanese, /## 仕組み/u);
+  assert.doesNotMatch(english, /Lua|Fluorohydride\/ygopro-core/u);
+  assert.doesNotMatch(japanese, /Lua|Fluorohydride\/ygopro-core/u);
+  for (const localizedReadme of [readme, english, japanese]) {
+    const publicMatrix = localizedReadme.match(
+      /<!-- MODEL_EFFORT_MATRIX:START -->([\s\S]*?)<!-- MODEL_EFFORT_MATRIX:END -->/u,
+    )?.[1] || "";
+    assert.ok(publicMatrix);
+    assert.doesNotMatch(
+      publicMatrix,
+      /Validator|Case ID|Full question|完整问题|質問全文|prompt SHA|Q1(?:\D|$)/u,
+    );
+    assert.match(publicMatrix, /Luna[\s\S]*Terra[\s\S]*Sol[\s\S]*DeepSeek/u);
+  }
 });
 
 test("ui_hides_engine_details_by_default", async () => {
@@ -519,6 +526,10 @@ test("ui_hides_engine_details_by_default", async () => {
   assert.match(html, /今日额度/u);
   assert.match(html, /id="budgetBucketList"/u);
   assert.match(html, /id="budgetResetButton"[^>]+hidden/u);
+  const publicBudget = sourceBetween(html, '<section class="budget-panel"', '<section class="admin-lab"');
+  const adminPanel = sourceBetween(html, '<section class="admin-lab"', '<section class="disclaimer-panel"');
+  assert.doesNotMatch(publicBudget, /budgetResetButton|重置额度/u);
+  assert.match(adminPanel, /id="budgetResetButton"[^>]+hidden>重置公开问答额度/u);
   assert.match(html, /免责声明/u);
   assert.match(html, /不是 KONAMI 官方项目/u);
   assert.match(html, /id="themeToggle"/u);
@@ -534,11 +545,13 @@ test("ui_hides_engine_details_by_default", async () => {
   assert.match(app, /JSON\.stringify\(\{ password \}\)/u);
   assert.match(app, /未持久化/u);
   assert.match(app, /storageWarning/u);
+  assert.match(app, /bucket\?\.id !== "final_ruling:glm"/u);
+  assert.match(app, /label: "ChatGPT 最终裁定"/u);
+  assert.match(app, /!adminUiEnabled \|\| !resetEnabled/u);
   assert.match(app, /rulebook/u);
   assert.match(app, /publicRiskLines/u);
-  assert.match(app, /publicLegacyLuaLines/u);
-  assert.match(app, /内核 Lua 语义辅助/u);
-  assert.match(app, /不等于完整场景模拟/u);
+  assert.doesNotMatch(app, /publicLegacyLuaLines|内核 Lua 语义辅助|不等于完整场景模拟/u);
+  assert.doesNotMatch(html, /中国玩家/u);
   assert.match(app, /"trusted_local_semantic_execution"/u);
   assert.match(app, /"semantic_state_transition_applied"/u);
   assert.match(app, /"final_model_skipped"/u);

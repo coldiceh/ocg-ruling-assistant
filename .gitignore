@@ -6,6 +6,7 @@ node_modules/
 .env.*
 !.env.example
 .tmp-*/
+artifacts/
 artifacts/deployed-*/
 artifacts/*-report.json
 artifacts/*-probe.json

@@ -7,7 +7,7 @@ export const DEFAULT_PUBLIC_RELAY_MODEL = "gpt-5.6-luna";
 export const PUBLIC_RULING_MODEL_PROFILES = Object.freeze({
   "relay-gpt-5.6-luna-low": Object.freeze({
     id: "relay-gpt-5.6-luna-low",
-    label: "GPT-5.6 Luna · 思考 low（第三方中转）",
+    label: "GPT-5.6 Luna · 思考 low",
     provider: "relay",
     model: "gpt-5.6-luna",
     thinkingMode: "enabled",
@@ -16,13 +16,48 @@ export const PUBLIC_RULING_MODEL_PROFILES = Object.freeze({
     thirdParty: true,
     modelIdentityVerified: false,
   }),
+  "relay-gpt-5.6-sol-low": Object.freeze({
+    id: "relay-gpt-5.6-sol-low",
+    label: "GPT-5.6 Sol · 思考 low",
+    provider: "relay",
+    model: "gpt-5.6-sol",
+    thinkingMode: "enabled",
+    reasoningEffort: "low",
+    transport: "chat_completions_sse",
+    thirdParty: true,
+    modelIdentityVerified: false,
+  }),
+  "deepseek-v4-flash-standard": Object.freeze({
+    id: "deepseek-v4-flash-standard",
+    label: "DeepSeek V4 Flash · standard（实验性）",
+    provider: "deepseek",
+    model: "deepseek-v4-flash",
+    thinkingMode: "disabled",
+    reasoningEffort: null,
+  }),
+  "deepseek-v4-flash-low": Object.freeze({
+    id: "deepseek-v4-flash-low",
+    label: "DeepSeek V4 Flash · 思考 low（实验性）",
+    provider: "deepseek",
+    model: "deepseek-v4-flash",
+    thinkingMode: "enabled",
+    reasoningEffort: "low",
+  }),
   "deepseek-v4-flash-high": Object.freeze({
     id: "deepseek-v4-flash-high",
-    label: "DeepSeek V4 Flash · 思考 high",
+    label: "DeepSeek V4 Flash · 思考 high（实验性）",
     provider: "deepseek",
     model: "deepseek-v4-flash",
     thinkingMode: "enabled",
     reasoningEffort: "high",
+  }),
+  "deepseek-v4-flash-max": Object.freeze({
+    id: "deepseek-v4-flash-max",
+    label: "DeepSeek V4 Flash · 思考 max（实验性）",
+    provider: "deepseek",
+    model: "deepseek-v4-flash",
+    thinkingMode: "enabled",
+    reasoningEffort: "max",
   }),
 });
 

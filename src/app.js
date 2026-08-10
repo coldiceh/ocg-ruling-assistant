@@ -7,22 +7,56 @@ const baseCardIndex = [];
 const DEFAULT_RULING_MODEL_PROFILE = "relay-gpt-5.6-luna-low";
 const PUBLIC_RULING_MODEL_PROFILE_ORDER = Object.freeze([
   "relay-gpt-5.6-luna-low",
+  "relay-gpt-5.6-sol-low",
+  "deepseek-v4-flash-standard",
+  "deepseek-v4-flash-low",
   "deepseek-v4-flash-high",
+  "deepseek-v4-flash-max",
 ]);
 const PUBLIC_RULING_MODEL_PROFILES = Object.freeze({
   "relay-gpt-5.6-luna-low": Object.freeze({
     id: "relay-gpt-5.6-luna-low",
-    label: "GPT-5.6 Luna · 思考 low（第三方中转）",
+    label: "GPT-5.6 Luna · 思考 low",
     provider: "relay",
     model: "gpt-5.6-luna",
     reasoningEffort: "low",
     thirdParty: true,
     modelIdentityVerified: false,
+    benchmarkSummary: "匿名 10 题评测：10/10，平均 34.6 秒；推荐。",
+  }),
+  "relay-gpt-5.6-sol-low": Object.freeze({
+    id: "relay-gpt-5.6-sol-low",
+    label: "GPT-5.6 Sol · 思考 low",
+    provider: "relay",
+    model: "gpt-5.6-sol",
+    reasoningEffort: "low",
+    thirdParty: true,
+    modelIdentityVerified: false,
+    benchmarkSummary: "匿名 10 题评测：10/10，平均 51.6 秒。",
+  }),
+  "deepseek-v4-flash-standard": Object.freeze({
+    id: "deepseek-v4-flash-standard",
+    label: "DeepSeek V4 Flash · standard（实验性）",
+    provider: "deepseek",
+    benchmarkSummary: "匿名 10 题评测：5/10，另有 4 题部分正确；平均 12.4 秒，仅供实验。",
+  }),
+  "deepseek-v4-flash-low": Object.freeze({
+    id: "deepseek-v4-flash-low",
+    label: "DeepSeek V4 Flash · 思考 low（实验性）",
+    provider: "deepseek",
+    benchmarkSummary: "尚未完成匿名评测，仅供实验。",
   }),
   "deepseek-v4-flash-high": Object.freeze({
     id: "deepseek-v4-flash-high",
-    label: "DeepSeek V4 Flash · 思考 high",
+    label: "DeepSeek V4 Flash · 思考 high（实验性）",
     provider: "deepseek",
+    benchmarkSummary: "匿名 10 题评测：1/10；9 次上游失败，仅供实验。",
+  }),
+  "deepseek-v4-flash-max": Object.freeze({
+    id: "deepseek-v4-flash-max",
+    label: "DeepSeek V4 Flash · 思考 max（实验性）",
+    provider: "deepseek",
+    benchmarkSummary: "尚未完成匿名评测，仅供实验。",
   }),
 });
 
@@ -396,12 +430,13 @@ function updateRulingModelSelectionStatus(message = "") {
   if (!ui.rulingModelStatus) return;
   const selected = (appConfig.rulingModelProfiles || [])
     .find((profile) => profile.id === selectedRulingModelProfile);
-  const status = message || (selected?.available === false
+  const isUnavailable = selected?.available === false;
+  const status = message || (isUnavailable
     ? `${selected.label} 当前不可用；请选择可用模型，系统不会自动改用其他模型。`
-    : "");
+    : selected?.benchmarkSummary || "");
   ui.rulingModelStatus.textContent = status;
   ui.rulingModelStatus.hidden = !status;
-  ui.rulingModelSelect?.setAttribute("aria-invalid", String(Boolean(status)));
+  ui.rulingModelSelect?.setAttribute("aria-invalid", String(Boolean(message) || isUnavailable));
   renderSelectedRulingModelLatency(selected);
 }
 
@@ -940,7 +975,6 @@ function renderRagAnswer(answer) {
   renderList(ui.stepsList, answer.reasoning || []);
   renderList(ui.questionsList, [
     ...publicFormalQueryLines(answer.formalQueryResults || []),
-    ...publicLegacyLuaLines(answer.legacyLua || null),
     ...(answer.missingInfo || []),
     ...publicRiskLines(answer.riskFlags || []),
     ...(debugUiEnabled ? ragBudgetLines(answer.debug?.budgetStatus) : []),
@@ -953,28 +987,6 @@ function renderRagAnswer(answer) {
   })));
   renderParserDebug(answer.debug || null);
   renderFeedbackPanel(answer);
-}
-
-function publicLegacyLuaLines(summary) {
-  if (!summary || summary.requested !== true) return [];
-  if (summary.status === "analyzed") {
-    const predicates = (Array.isArray(summary.predicateApis)
-      ? summary.predicateApis
-      : []).slice(0, 4).join("、");
-    const details = [
-      `读取 ${Number(summary.resourceCount || 0)} 份锁定 Lua`,
-      `发现 ${Number(summary.effectCandidateCount || 0)} 个效果候选`,
-      `${Number(summary.activationLegalityCheckCount || 0)} 项发动合法性检查`,
-      predicates ? `检查 ${predicates}` : "",
-    ].filter(Boolean).join("；");
-    return [`内核 Lua 语义辅助：${details}（非官方辅助证据，不等于完整场景模拟）。`];
-  }
-  const reasons = (Array.isArray(summary.unknownReasonCodes)
-    ? summary.unknownReasonCodes
-    : []).slice(0, 3).join("、");
-  return [
-    `内核 Lua 语义辅助：本次未取得可用效果候选${reasons ? `（${reasons}）` : ""}。`,
-  ];
 }
 
 function ragEvidenceLabel(type) {
@@ -1132,7 +1144,12 @@ function renderBudgetStatus(status, message = "") {
 function renderBudgetBuckets(buckets = []) {
   if (!ui.budgetBucketList) return;
   ui.budgetBucketList.replaceChildren();
-  for (const bucket of Array.isArray(buckets) ? buckets : []) {
+  const publicBuckets = (Array.isArray(buckets) ? buckets : [])
+    .filter((bucket) => bucket?.id !== "final_ruling:glm")
+    .map((bucket) => bucket?.id === "final_ruling:relay"
+      ? { ...bucket, label: "ChatGPT 最终裁定" }
+      : bucket);
+  for (const bucket of publicBuckets) {
     const row = document.createElement("div");
     row.className = "budget-bucket";
     const label = document.createElement("span");
@@ -1152,7 +1169,7 @@ function renderBudgetBuckets(buckets = []) {
 
 function updateBudgetResetVisibility(resetEnabled) {
   if (!ui.budgetResetButton) return;
-  ui.budgetResetButton.hidden = !resetEnabled;
+  ui.budgetResetButton.hidden = !adminUiEnabled || !resetEnabled;
 }
 
 function formatCny(value) {
@@ -4100,7 +4117,7 @@ function modelProviderLabel(provider) {
   if (value === "glm") return "智谱 GLM";
   if (value === "gemini") return "Gemini";
   if (value === "openai") return "OpenAI";
-  if (value === "relay") return "第三方中转（身份未验证）";
+  if (value === "relay") return "ChatGPT";
   if (value === "ollama") return "Ollama";
   if (value === "mock") return "RAG Mock";
   if (value === "auto") return "自动";
