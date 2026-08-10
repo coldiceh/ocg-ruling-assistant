@@ -3,15 +3,19 @@ import { pathToFileURL } from "node:url";
 
 import {
   ADMIN_RUN_CLEANUP_CONFIRMATION,
+  ADMIN_RUN_HISTORY_BACKFILL_CONFIRMATION,
   ADMIN_RUN_WRITES_DISABLED_CONFIRMATION,
   DEFAULT_ADMIN_RUN_CLEANUP_LIMITS,
   executeAdminRunCleanup,
+  executeAdminRunHistoryBackfill,
   planAdminRunCleanup,
+  planAdminRunHistoryBackfill,
 } from "../backend/adminRunRedisCleanup.mjs";
 
 export function parseAdminRunCleanupArguments(argv = []) {
   const options = {
     olderThanDays: null,
+    backfillHistory: false,
     execute: false,
     confirmation: "",
     writesDisabledConfirmation: "",
@@ -36,6 +40,8 @@ export function parseAdminRunCleanupArguments(argv = []) {
       options.limits.maxScanKeys = requiredInteger(argv, ++index, argument);
     } else if (argument === "--timeout-ms") {
       options.timeoutMs = requiredInteger(argv, ++index, argument);
+    } else if (argument === "--backfill-history") {
+      options.backfillHistory = true;
     } else if (argument === "--execute") {
       options.execute = true;
     } else if (argument === "--confirm") {
@@ -64,6 +70,8 @@ export async function runAdminRunCleanupCli(
     stdout = process.stdout,
     planCleanup = planAdminRunCleanup,
     executeCleanup = executeAdminRunCleanup,
+    planHistoryBackfill = planAdminRunHistoryBackfill,
+    executeHistoryBackfill = executeAdminRunHistoryBackfill,
   } = {},
 ) {
   const options = parseAdminRunCleanupArguments(argv);
@@ -74,11 +82,17 @@ export async function runAdminRunCleanupCli(
   if (options.olderThanDays === null) {
     throw new TypeError("--older-than-days is required, including for dry-run");
   }
-  if (options.execute && options.confirmation !== ADMIN_RUN_CLEANUP_CONFIRMATION) {
+  const expectedConfirmation = options.backfillHistory
+    ? ADMIN_RUN_HISTORY_BACKFILL_CONFIRMATION
+    : ADMIN_RUN_CLEANUP_CONFIRMATION;
+  const refusalCode = options.backfillHistory
+    ? "admin_run_history_backfill_refused"
+    : "admin_run_cleanup_refused";
+  if (options.execute && options.confirmation !== expectedConfirmation) {
     const error = new Error(
-      `--execute requires --confirm \"${ADMIN_RUN_CLEANUP_CONFIRMATION}\"`,
+      `--execute requires --confirm \"${expectedConfirmation}\"`,
     );
-    error.code = "admin_run_cleanup_refused";
+    error.code = refusalCode;
     throw error;
   }
   if (options.execute
@@ -86,17 +100,19 @@ export async function runAdminRunCleanupCli(
     const error = new Error(
       `--execute requires --confirm-writes-disabled "${ADMIN_RUN_WRITES_DISABLED_CONFIRMATION}"`,
     );
-    error.code = "admin_run_cleanup_refused";
+    error.code = refusalCode;
     throw error;
   }
   if (options.execute && !/^[a-f0-9]{64}$/u.test(options.approvalFingerprint)) {
     const error = new Error(
       "--execute requires the exact 64-character --plan-fingerprint from dry-run",
     );
-    error.code = "admin_run_cleanup_refused";
+    error.code = refusalCode;
     throw error;
   }
-  const plan = await planCleanup({
+  const selectedPlan = options.backfillHistory ? planHistoryBackfill : planCleanup;
+  const selectedExecute = options.backfillHistory ? executeHistoryBackfill : executeCleanup;
+  const plan = await selectedPlan({
     env,
     fetchImpl,
     now,
@@ -105,7 +121,7 @@ export async function runAdminRunCleanupCli(
     limits: options.limits,
   });
   const report = options.execute
-    ? await executeCleanup(plan, {
+    ? await selectedExecute(plan, {
         execute: true,
         confirmation: options.confirmation,
         writesDisabledConfirmation: options.writesDisabledConfirmation,
@@ -119,10 +135,12 @@ export async function runAdminRunCleanupCli(
 
 function helpText() {
   return [
-    "Usage: node scripts/cleanup-upstash-admin-runs.mjs --older-than-days <days> [options]",
+    "Usage: node scripts/cleanup-upstash-admin-runs.mjs --older-than-days <days> [--backfill-history] [options]",
     "",
-    "Default mode is read-only dry-run. It never deletes Admin Lab History,",
-    "query-audit, session, budget, public-latency, or feedback data.",
+    "Default mode is a read-only cleanup dry-run. --backfill-history selects an",
+    "independent questionSummary-only History backfill plan. Neither plan writes.",
+    "Cleanup never deletes Admin Lab History, query-audit, session, budget,",
+    "public-latency, or feedback data. Backfill never deletes Admin Run data.",
     "",
     "Options:",
     "  --older-than-days <n>  Required positive terminal-run age threshold",
@@ -131,17 +149,20 @@ function helpText() {
     `  --max-known-bytes <n>  Hard cap (default ${DEFAULT_ADMIN_RUN_CLEANUP_LIMITS.maxKnownBytes})`,
     `  --max-scan-keys <n>    SCAN safety cap (default ${DEFAULT_ADMIN_RUN_CLEANUP_LIMITS.maxScanKeys})`,
     "  --timeout-ms <n>       Per-request Redis timeout (default 30000; max 30000)",
+    "  --backfill-history     Select independent questionSummary-only History backfill",
     "  --compact              Print compact JSON",
-    "  --execute              Apply the in-process dry-run plan",
-    `  --confirm <phrase>     Exact phrase: ${ADMIN_RUN_CLEANUP_CONFIRMATION}`,
+    "  --execute              Apply the selected in-process dry-run plan",
+    "  --confirm <phrase>     Exact phrase for the selected operation:",
+    `                         cleanup: ${ADMIN_RUN_CLEANUP_CONFIRMATION}`,
+    `                         backfill: ${ADMIN_RUN_HISTORY_BACKFILL_CONFIRMATION}`,
     `  --confirm-writes-disabled <phrase> Exact phrase: ${ADMIN_RUN_WRITES_DISABLED_CONFIRMATION}`,
     "  --plan-fingerprint <h> Exact 64-character fingerprint from the reviewed dry-run",
     "  -h, --help             Show this help",
     "",
-    "Execution is irreversible and must be run while Admin Model Lab creation",
-    "and forking are paused. History keeps only a normalized, maximum-500-char",
-    "questionSummary; full evidence, result, events, timing, replay, and forks",
-    "from a deleted run are not retained.",
+    "Execution must be run while Admin Model Lab creation and forking are paused.",
+    "Cleanup is irreversible. Backfill writes only a normalized, maximum-500-char",
+    "questionSummary record plus its created index; it never copies answers,",
+    "evidence, results, events, timing, replay, reasoning, or forks.",
     "",
   ].join("\n");
 }
