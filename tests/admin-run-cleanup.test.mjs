@@ -301,6 +301,7 @@ test("CLI is dry-run by default and requires an explicit age threshold plus exac
     writesDisabledConfirmation: "",
     approvalFingerprint: "",
     compact: false,
+    timeoutMs: 30_000,
     limits: {
       maxRuns: 25,
       maxKeys: 250,
@@ -311,6 +312,15 @@ test("CLI is dry-run by default and requires an explicit age threshold plus exac
   assert.equal(
     parseAdminRunCleanupArguments(["--", "--older-than-days", "30"]).olderThanDays,
     30,
+  );
+  assert.equal(
+    parseAdminRunCleanupArguments([
+      "--older-than-days",
+      "30",
+      "--timeout-ms",
+      "12345",
+    ]).timeoutMs,
+    12_345,
   );
   await assert.rejects(
     runAdminRunCleanupCli([], { stdout: { write() {} } }),
