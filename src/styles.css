@@ -542,12 +542,6 @@ button:focus-visible {
   font-weight: 800;
 }
 
-#budgetSpentText {
-  color: var(--accent);
-  font-size: 20px;
-}
-
-#budgetLimitText,
 #budgetHint {
   color: var(--muted);
 }
