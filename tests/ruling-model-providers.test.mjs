@@ -530,6 +530,106 @@ test("relay adapter streams Chat Completions by default and discards reasoning d
   assert.equal(clockValues.length, 0);
 });
 
+test("relay stream treats error null as a normal completion field", async () => {
+  const structured = JSON.stringify(makeStructuredResult());
+  const provider = new CompatibleEvidencePreparationProvider({
+    providerId: "relay",
+    apiKey: "relay-server-secret",
+    baseUrl: "https://relay.example/v1",
+    fetchImpl: async () => sseResponse([
+      `data: ${JSON.stringify({
+        id: "relay-error-null",
+        model: "gpt-5.6-sol",
+        error: null,
+        choices: [{ index: 0, delta: { content: structured }, finish_reason: "stop" }],
+      })}\n\n`,
+      "data: [DONE]\n\n",
+    ]),
+  });
+
+  const response = await provider.create({
+    model: "relay-gpt-5.6-sol",
+    reasoningEffort: "low",
+    reasoningMode: "pro",
+    input: "匿名问题与冻结证据",
+    instructions: "只输出 JSON。",
+    metadata: { runId: "run-relay-error-null", promptVersion: "openai-ruling-v1" },
+  });
+
+  assert.equal(response.output_text, structured);
+  assert.equal(response.finish_reason, "stop");
+});
+
+test("relay marks code, status or message pre-generation SSE access denial as safe to release", async () => {
+  const frames = [
+    'data: {"code":"group_access_denied","message":"request rejected"}\n\n',
+    'data: {"status":403,"message":"request rejected"}\n\n',
+    'event: error\ndata: {"message":"permission denied"}\n\n',
+  ];
+  for (const [index, frame] of frames.entries()) {
+    const provider = new CompatibleEvidencePreparationProvider({
+      providerId: "relay",
+      apiKey: "relay-server-secret",
+      baseUrl: "https://relay.example/v1",
+      fetchImpl: async () => sseResponse([frame]),
+    });
+
+    await assert.rejects(
+      provider.create({
+        model: "relay-gpt-5.6-sol",
+        reasoningEffort: "low",
+        reasoningMode: "pro",
+        input: "匿名问题与冻结证据",
+        instructions: "只输出 JSON。",
+        metadata: { runId: `run-relay-access-denied-${index}`, promptVersion: "openai-ruling-v1" },
+      }),
+      (error) => {
+        assert.equal(error.code, "relay_stream_access_denied");
+        assert.equal(error.outcomeKnown, true);
+        assert.equal(error.budgetReservationMayExist, false);
+        assert.doesNotMatch(error.message, /group_access_denied|request rejected|permission denied/u);
+        return true;
+      },
+    );
+  }
+});
+
+test("relay retains a reservation when access denial follows a completion frame", async () => {
+  const secretFinishReason = "internal-route-finish-reason";
+  const provider = new CompatibleEvidencePreparationProvider({
+    providerId: "relay",
+    apiKey: "relay-server-secret",
+    baseUrl: "https://relay.example/v1",
+    fetchImpl: async () => sseResponse([
+      `data: ${JSON.stringify({
+        id: "relay-late-access-denial",
+        model: "gpt-5.6-sol",
+        choices: [{ index: 0, delta: { content: "{" }, finish_reason: secretFinishReason }],
+      })}\n\n`,
+      'event: error\ndata: {"error":{"message":"permission denied"}}\n\n',
+    ]),
+  });
+
+  await assert.rejects(
+    provider.create({
+      model: "relay-gpt-5.6-sol",
+      reasoningEffort: "low",
+      reasoningMode: "pro",
+      input: "匿名问题与冻结证据",
+      instructions: "只输出 JSON。",
+      metadata: { runId: "run-relay-late-access-denied", promptVersion: "openai-ruling-v1" },
+    }),
+    (error) => {
+      assert.equal(error.code, "relay_stream_access_denied");
+      assert.equal(error.outcomeKnown, false);
+      assert.equal(error.budgetReservationMayExist, true);
+      assert.equal(error.streamMetrics.finishReason, "other");
+      assert.doesNotMatch(JSON.stringify(error.streamMetrics), new RegExp(secretFinishReason, "u"));
+      return true;
+    },
+  );
+});
+
 test("relay accepts a complete DONE stream without a nonstandard finish_reason", async () => {
   const structured = JSON.stringify(makeStructuredResult());
   const provider = new CompatibleEvidencePreparationProvider({
@@ -681,6 +781,66 @@ test("relay classifies the admin synchronous outer deadline as a stream timeout"
   );
 });
 
+test("relay classifies transport timeout codes without requiring an abort signal", async () => {
+  for (const code of ["ETIMEDOUT", "UND_ERR_HEADERS_TIMEOUT", "UND_ERR_BODY_TIMEOUT"]) {
+    const provider = new CompatibleEvidencePreparationProvider({
+      providerId: "relay",
+      apiKey: "relay-server-secret",
+      baseUrl: "https://relay.example/v1",
+      fetchImpl: async () => {
+        const error = new Error("request failed");
+        error.code = code;
+        throw error;
+      },
+    });
+
+    await assert.rejects(
+      provider.create({
+        model: "relay-gpt-5.6-sol",
+        reasoningEffort: "medium",
+        reasoningMode: "pro",
+        input: "匿名问题与冻结证据",
+        instructions: "只输出 JSON。",
+        metadata: { runId: `run-relay-${code}`, promptVersion: "openai-ruling-v1" },
+      }),
+      (error) => {
+        assert.equal(error.code, "relay_stream_timeout");
+        assert.equal(error.outcomeKnown, false);
+        assert.equal(error.budgetReservationMayExist, true);
+        return true;
+      },
+    );
+  }
+});
+
+test("relay classifies HTTP 408, 504 and 524 as timeout while retaining reservations", async () => {
+  for (const status of [408, 504, 524]) {
+    const provider = new CompatibleEvidencePreparationProvider({
+      providerId: "relay",
+      apiKey: "relay-server-secret",
+      baseUrl: "https://relay.example/v1",
+      fetchImpl: async () => jsonResponse({ error: { message: "request failed" } }, status),
+    });
+
+    await assert.rejects(
+      provider.create({
+        model: "relay-gpt-5.6-sol",
+        reasoningEffort: "medium",
+        reasoningMode: "pro",
+        input: "匿名问题与冻结证据",
+        instructions: "只输出 JSON。",
+        metadata: { runId: `run-relay-http-${status}`, promptVersion: "openai-ruling-v1" },
+      }),
+      (error) => {
+        assert.equal(error.code, "relay_http_timeout");
+        assert.equal(error.outcomeKnown, false);
+        assert.equal(error.budgetReservationMayExist, true);
+        return true;
+      },
+    );
+  }
+});
+
 test("relay rejects a stream deadline that leaves no room below the admin outer guard", async () => {
   let transportCalls = 0;
   const provider = new CompatibleEvidencePreparationProvider({
@@ -819,7 +979,7 @@ test("relay non-JSON HTTP errors persist only a bounded redacted summary", async
       metadata: { runId: "run-relay-html", promptVersion: "openai-ruling-v1" },
     }),
     (error) => {
-      assert.equal(error.code, "upstream_non_json_error");
+      assert.equal(error.code, "relay_http_timeout");
       assert.equal(error.status, 524);
       assert.equal(error.outcomeKnown, false);
       assert.ok(error.message.length <= 1_000);

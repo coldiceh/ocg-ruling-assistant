@@ -234,6 +234,233 @@ test("relay final ruling uses one SSE Chat Completions request with the relay-on
   assert.ok(result.warnings.includes("third_party_relay_model_identity_unverified"));
 });
 
+test("relay HTTP access denial is retained as a structured provider failure", async () => {
+  const result = await callRagModel({
+    prompt: "access denial must not become not JSON",
+    env: {
+      MODEL_PROVIDER: "relay",
+      RELAY_API_KEY: "relay-issued-key",
+      RELAY_BASE_URL: "https://relay.example.test/v1",
+      RAG_MODEL: "gpt-5.6-sol",
+      API_BUDGET_TIMEZONE: "UTC",
+    },
+    now: new Date("2043-01-01T00:00:00.000Z"),
+    fetchImpl: async () => jsonResponse({
+      error: { message: "无权访问 internal group", code: "group_access_denied" },
+    }, 403),
+  });
+
+  assert.equal(result.rawText, "");
+  assert.equal(result.providerFailure.kind, "access_denied");
+  assert.equal(result.providerFailure.status, 403);
+  assert.equal(result.providerFailure.code, "model_provider_access_denied");
+  assert.equal(result.providerFailure.requestedModel, "gpt-5.6-sol");
+  assert.equal(result.generationAttempts[0].providerFailure.kind, "access_denied");
+  assert.equal(result.estimatedCostUsd, 0);
+  assert.doesNotMatch(JSON.stringify(result), /internal group|group_access_denied/u);
+});
+
+test("relay rejects an embedded SSE error instead of returning empty assistant content", async () => {
+  const result = await callRagModel({
+    prompt: "embedded error must fail closed",
+    env: {
+      MODEL_PROVIDER: "relay",
+      RELAY_API_KEY: "relay-issued-key",
+      RELAY_BASE_URL: "https://relay.example.test/v1",
+      RAG_MODEL: "gpt-5.6-sol",
+      API_BUDGET_TIMEZONE: "UTC",
+    },
+    now: new Date("2043-01-02T00:00:00.000Z"),
+    fetchImpl: async () => new Response(
+      'event: error\ndata: {"error":{"message":"permission denied"}}\n\ndata: [DONE]\n\n',
+      { status: 200, headers: { "content-type": "text/event-stream" } },
+    ),
+  });
+
+  assert.equal(result.rawText, "");
+  assert.equal(result.providerFailure.kind, "access_denied");
+  assert.equal(result.providerFailure.code, "model_provider_access_denied");
+  assert.equal(result.estimatedCostUsd, 0);
+  assert.equal(result.budgetStatus.bucket.spentTodayUsd, 0);
+  assert.equal(result.warnings.includes("model_call_failed:model_provider_access_denied"), true);
+  assert.doesNotMatch(JSON.stringify(result), /permission denied/u);
+});
+
+test("relay rejects unknown SSE events that never contain a completion payload", async () => {
+  const result = await callRagModel({
+    prompt: "unknown events must not become an empty completion",
+    env: {
+      MODEL_PROVIDER: "relay",
+      RELAY_API_KEY: "relay-issued-key",
+      RELAY_BASE_URL: "https://relay.example.test/v1",
+      RAG_MODEL: "gpt-5.6-sol",
+      API_BUDGET_TIMEZONE: "UTC",
+    },
+    now: new Date("2043-01-03T00:00:00.000Z"),
+    fetchImpl: async () => new Response(
+      'data: {"type":"response.created","response":{"id":"r1"}}\n\ndata: [DONE]\n\n',
+      { status: 200, headers: { "content-type": "text/event-stream" } },
+    ),
+  });
+
+  assert.equal(result.rawText, "");
+  assert.equal(result.providerFailure.kind, "provider_failure");
+  assert.equal(result.providerFailure.code, "model_provider_failure");
+});
+
+test("relay accepts ordinary SSE completion frames that include error null", async () => {
+  const result = await callRagModel({
+    prompt: "error null compatibility",
+    env: {
+      MODEL_PROVIDER: "relay",
+      RELAY_API_KEY: "relay-issued-key",
+      RELAY_BASE_URL: "https://relay.example.test/v1",
+      RAG_MODEL: "gpt-5.6-sol",
+      API_BUDGET_TIMEZONE: "UTC",
+    },
+    now: new Date("2043-01-05T00:00:00.000Z"),
+    fetchImpl: async () => relaySseResponse({
+      id: "error-null-frame",
+      model: "gpt-5.6-sol",
+      error: null,
+      choices: [{
+        index: 0,
+        finish_reason: "stop",
+        delta: { content: JSON.stringify(modelJson("error null OK")) },
+      }],
+      usage: { prompt_tokens: 20, completion_tokens: 10, total_tokens: 30 },
+    }),
+  });
+
+  assert.equal(result.answer.shortAnswer, "error null OK");
+  assert.equal(result.providerFailure, undefined);
+});
+
+test("relay classifies code-only pre-generation SSE access denial and releases its budget", async () => {
+  const result = await callRagModel({
+    prompt: "code-only access denial",
+    env: {
+      MODEL_PROVIDER: "relay",
+      RELAY_API_KEY: "relay-issued-key",
+      RELAY_BASE_URL: "https://relay.example.test/v1",
+      RAG_MODEL: "gpt-5.6-sol",
+      RELAY_MAX_COMPLETION_TOKENS: "64",
+      API_BUDGET_TIMEZONE: "UTC",
+    },
+    now: new Date("2043-01-06T00:00:00.000Z"),
+    fetchImpl: async () => new Response(
+      'data: {"message":"request rejected","code":"group_access_denied"}\n\n',
+      { status: 200, headers: { "content-type": "text/event-stream" } },
+    ),
+  });
+
+  assert.equal(result.providerFailure.kind, "access_denied");
+  assert.equal(result.providerFailure.code, "model_provider_access_denied");
+  assert.equal(result.estimatedCostUsd, 0);
+  assert.equal(result.budgetStatus.bucket.spentTodayUsd, 0);
+  assert.doesNotMatch(JSON.stringify(result), /group_access_denied|request rejected/u);
+});
+
+test("relay retains budget after completion begins even if a later SSE frame denies access", async () => {
+  const secretFinishReason = "internal-route-finish-reason";
+  const result = await callRagModel({
+    prompt: "late access denial",
+    env: {
+      MODEL_PROVIDER: "relay",
+      RELAY_API_KEY: "relay-issued-key",
+      RELAY_BASE_URL: "https://relay.example.test/v1",
+      RAG_MODEL: "gpt-5.6-sol",
+      RELAY_MAX_COMPLETION_TOKENS: "64",
+      API_BUDGET_TIMEZONE: "UTC",
+    },
+    now: new Date("2043-01-07T00:00:00.000Z"),
+    fetchImpl: async () => new Response([
+      `data: ${JSON.stringify({
+        model: "gpt-5.6-sol",
+        choices: [{ index: 0, finish_reason: secretFinishReason, delta: { content: "{" } }],
+      })}\n\n`,
+      'event: error\ndata: {"error":{"message":"permission denied"}}\n\n',
+    ].join(""), {
+      status: 200,
+      headers: { "content-type": "text/event-stream" },
+    }),
+  });
+
+  assert.equal(result.providerFailure.kind, "access_denied");
+  assert.equal(result.providerFailure.finishReason, "other");
+  assert.equal(result.estimatedCostUsd > 0, true);
+  assert.equal(result.budgetStatus.bucket.spentTodayUsd, result.estimatedCostUsd);
+  assert.ok(result.warnings.includes("budget_reservation_retained_after_ambiguous_remote_failure"));
+  assert.doesNotMatch(JSON.stringify(result), new RegExp(secretFinishReason, "u"));
+});
+
+test("relay classifies HTTP timeout statuses and transport timeout codes without releasing budget", async () => {
+  const baseEnv = {
+    MODEL_PROVIDER: "relay",
+    RELAY_API_KEY: "relay-issued-key",
+    RELAY_BASE_URL: "https://relay.example.test/v1",
+    RAG_MODEL: "gpt-5.6-sol",
+    RELAY_MAX_COMPLETION_TOKENS: "64",
+    API_BUDGET_TIMEZONE: "UTC",
+  };
+  for (const [index, status] of [408, 504, 524].entries()) {
+    const result = await callRagModel({
+      prompt: `HTTP ${status}`,
+      env: baseEnv,
+      now: new Date(`2043-02-0${index + 1}T00:00:00.000Z`),
+      fetchImpl: async () => jsonResponse({ error: { message: "request failed" } }, status),
+    });
+    assert.equal(result.providerFailure.kind, "timeout");
+    assert.equal(result.providerFailure.code, "model_provider_timeout");
+    assert.equal(result.estimatedCostUsd > 0, true);
+    assert.equal(result.budgetStatus.bucket.spentTodayUsd, result.estimatedCostUsd);
+  }
+
+  for (const [index, errorCode] of ["ETIMEDOUT", "UND_ERR_HEADERS_TIMEOUT", "UND_ERR_BODY_TIMEOUT"].entries()) {
+    const result = await callRagModel({
+      prompt: errorCode,
+      env: baseEnv,
+      now: new Date(`2043-03-0${index + 1}T00:00:00.000Z`),
+      fetchImpl: async () => {
+        const error = new Error("request failed");
+        error.code = errorCode;
+        throw error;
+      },
+    });
+    assert.equal(result.providerFailure.kind, "timeout");
+    assert.equal(result.providerFailure.code, "model_provider_timeout");
+    assert.equal(result.estimatedCostUsd > 0, true);
+    assert.equal(result.budgetStatus.bucket.spentTodayUsd, result.estimatedCostUsd);
+  }
+});
+
+test("relay accepts a single SSE Chat Completions message frame", async () => {
+  const result = await callRagModel({
+    prompt: "single frame compatibility",
+    env: {
+      MODEL_PROVIDER: "relay",
+      RELAY_API_KEY: "relay-issued-key",
+      RELAY_BASE_URL: "https://relay.example.test/v1",
+      RAG_MODEL: "gpt-5.6-sol",
+      API_BUDGET_TIMEZONE: "UTC",
+    },
+    now: new Date("2043-01-04T00:00:00.000Z"),
+    fetchImpl: async () => relaySseResponse({
+      id: "single-message-frame",
+      model: "gpt-5.6-sol",
+      choices: [{
+        index: 0,
+        finish_reason: "stop",
+        message: { role: "assistant", content: JSON.stringify(modelJson("single frame OK")) },
+      }],
+      usage: { prompt_tokens: 20, completion_tokens: 10, total_tokens: 30 },
+    }),
+  });
+
+  assert.equal(result.answer.shortAnswer, "single frame OK");
+  assert.equal(result.generationAttempts[0].responseModel, "gpt-5.6-sol");
+});
+
 test("relay normalizes Responses-style usage without discounting public all-uncached pricing", async () => {
   const result = await callRagModel({
     prompt: "Responses usage normalization",
@@ -508,7 +735,9 @@ test("relay rejects an insecure endpoint before fetch and never falls back to an
   assert.equal(fetchCount, 0);
   assert.equal(result.providerUsed, "relay");
   assert.equal(result.answer.answerLevel, "needs_more_info");
-  assert.ok(result.warnings.some((warning) => /RELAY_BASE_URL must use HTTPS/u.test(warning)));
+  assert.equal(result.providerFailure.code, "model_provider_failure");
+  assert.ok(result.warnings.includes("model_call_failed:model_provider_failure"));
+  assert.doesNotMatch(JSON.stringify(result), /RELAY_BASE_URL must use HTTPS/u);
 });
 
 function modelJson(shortAnswer) {

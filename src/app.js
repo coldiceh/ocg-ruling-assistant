@@ -945,6 +945,25 @@ function renderBackendVersionError(error, requestedRulingVersion) {
   renderSources([]);
 }
 
+function providerFailurePresentation(flags = []) {
+  const values = new Set((Array.isArray(flags) ? flags : []).map(String));
+  if (!values.has("model_provider_call_failed")
+      && !values.has("model_provider_access_denied")
+      && !values.has("model_provider_timeout")) {
+    return null;
+  }
+  return {
+    confidence: "暂不可用",
+    className: "is-risky",
+    title: "模型服务暂不可用",
+    basis: values.has("model_provider_access_denied")
+      ? "所选模型当前无访问权限"
+      : values.has("model_provider_timeout")
+        ? "模型服务调用超时"
+        : "模型服务调用失败",
+  };
+}
+
 function renderRagAnswer(answer) {
   ui.resultGrid.hidden = false;
   renderCards(answer?.resolvedCards || []);
@@ -958,12 +977,13 @@ function renderRagAnswer(answer) {
     needs_more_info: { confidence: "需要补充", className: "is-risky", title: "需要补充信息", basis: "当前检索资料不足" },
     budget_limited: { confidence: "预算限制", className: "is-risky", title: "今日预算已用完", basis: "API 预算守卫" },
   };
-  const state = labels[answer.answerLevel] || labels.needs_more_info;
+  const providerFailureState = providerFailurePresentation(answer?.riskFlags);
+  const state = providerFailureState || labels[answer.answerLevel] || labels.needs_more_info;
   const providerLabel = modelProviderLabel(answer.debug?.providerUsed);
   const modelLabel = answer.debug?.modelUsed || answer.debug?.modelName || "";
   updateModelStatus(debugUiEnabled
     ? (answer.debug?.dryRun ? "RAG MOCK" : [providerLabel, modelLabel].filter(Boolean).join(" · ") || "RAG")
-    : "分析完成");
+    : (providerFailureState ? "模型服务暂不可用" : "分析完成"));
   ui.verdictBlock.className = `result-block verdict-block ${state.className}`;
   ui.confidenceText.textContent = state.confidence;
   ui.verdictTitle.textContent = state.title;
@@ -1060,7 +1080,11 @@ function publicRiskLines(flags) {
     "baige_fetch_failed:",
     "baige_http_",
   ];
-  return [...new Set(flags || [])]
+  const values = [...new Set(flags || [])];
+  const hasSpecificProviderFailure = values.includes("model_provider_access_denied")
+    || values.includes("model_provider_timeout");
+  return values
+    .filter((flag) => !(hasSpecificProviderFailure && flag === "model_provider_call_failed"))
     .filter((flag) => !hiddenExact.has(String(flag)))
     .filter((flag) => !hiddenPrefixes.some((prefix) => String(flag).startsWith(prefix)))
     .map(formatRiskFlag)
@@ -4527,6 +4551,9 @@ function formatRiskFlag(flag) {
     model_reasoning_missing: "模型没有返回可核对的理由，请结合资料来源复核结论。",
     model_reasoning_recovered_from_short_answer: "模型未分离结论与理由，系统已保留可识别的解释。",
     model_output_not_json: "模型没有按预期格式返回。",
+    model_provider_call_failed: "模型服务暂不可用，模型没有生成裁定。",
+    model_provider_access_denied: "所选裁定模型当前无访问权限，请切换模型或稍后重试。",
+    model_provider_timeout: "模型服务调用超时，模型没有生成裁定，请稍后重试。",
     no_card_text: "没有拿到全部关键卡片的效果文本。",
     ambiguous_card_name: "部分卡名存在歧义，需要复核。",
     condition_branch_requires_state: "缺少条件分支状态",

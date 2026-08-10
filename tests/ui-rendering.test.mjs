@@ -1610,6 +1610,54 @@ test("rag UI presents every formal query without turning UNKNOWN into a negative
   assert.match(app, /formal_engine_unknown: "形式规则内核本次未签发确定性证明；这不等于“不能”。"/u);
 });
 
+test("rag UI presents provider failures as model service unavailable in Chinese", async () => {
+  const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
+  const presentationSource = sourceBetween(
+    app,
+    "function providerFailurePresentation",
+    "function renderRagAnswer",
+  );
+  const presentation = new Function(
+    `${presentationSource}; return providerFailurePresentation;`,
+  )();
+  const formatSource = sourceBetween(
+    app,
+    "function formatRiskFlag",
+    "function formatProvisionalVerdict",
+  );
+  const format = new Function(`${formatSource}; return formatRiskFlag;`)();
+  const riskSource = sourceBetween(app, "function publicRiskLines", "function ragBudgetLines");
+  const riskLines = new Function(
+    "formatRiskFlag",
+    `${riskSource}; return publicRiskLines;`,
+  )(format);
+
+  assert.equal(presentation([]), null);
+  assert.deepEqual(presentation(["model_provider_access_denied"]), {
+    confidence: "暂不可用",
+    className: "is-risky",
+    title: "模型服务暂不可用",
+    basis: "所选模型当前无访问权限",
+  });
+  assert.equal(
+    presentation(["model_provider_timeout"]).basis,
+    "模型服务调用超时",
+  );
+  assert.equal(
+    presentation(["model_provider_call_failed"]).basis,
+    "模型服务调用失败",
+  );
+  assert.deepEqual(riskLines([
+    "model_provider_call_failed",
+    "model_provider_access_denied",
+  ]), ["所选裁定模型当前无访问权限，请切换模型或稍后重试。"]);
+  assert.equal(
+    format("model_provider_timeout"),
+    "模型服务调用超时，模型没有生成裁定，请稍后重试。",
+  );
+  assert.match(app, /providerFailureState \? "模型服务暂不可用" : "分析完成"/u);
+});
+
 function sourceBetween(source, startMarker, endMarker) {
   const start = source.indexOf(startMarker);
   const end = source.indexOf(endMarker, start + startMarker.length);

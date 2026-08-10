@@ -22,6 +22,7 @@ const POSITIVE_RESOLUTION_OUTCOME = /(?:^|[；;。.!！?？\n，,])[^；;。.!�
 export function validatePublicRagFinalAnswer(answer = {}, {
   rawText = "",
   modelWarnings = [],
+  providerFailure = null,
   userQuery = "",
   evidence = {},
   authoritativeOfficialDirect = false,
@@ -29,6 +30,7 @@ export function validatePublicRagFinalAnswer(answer = {}, {
   const errors = [];
   const validationDiagnostics = {};
   const warnings = Array.isArray(modelWarnings) ? modelWarnings.map(String) : [];
+  const providerFailureKind = classifyModelProviderFailure(providerFailure, warnings);
   const shortAnswer = String(answer?.shortAnswer || "").trim();
   const reasoning = Array.isArray(answer?.reasoning)
     ? answer.reasoning.map((item) => String(item || "").trim()).filter(Boolean)
@@ -48,7 +50,13 @@ export function validatePublicRagFinalAnswer(answer = {}, {
   for (const field of ["usedCards", "usedEvidence", "missingInfo", "riskFlags"]) {
     if (!Array.isArray(answer?.[field])) errors.push(`${field} must be an array`);
   }
-  if (!String(rawText || "").trim() && warnings.some(isModelOutputFailureWarning)) {
+  if (!String(rawText || "").trim() && providerFailureKind) {
+    errors.push(providerFailureKind === "access_denied"
+      ? "model provider access denied before returning output"
+      : providerFailureKind === "timeout"
+        ? "model provider timed out before returning output"
+        : "model provider call failed before returning output");
+  } else if (!String(rawText || "").trim() && warnings.some(isModelOutputFailureWarning)) {
     errors.push("model output is empty");
   }
   if (hasStrictModelContractFailure(warnings)) {
@@ -88,6 +96,7 @@ export function validatePublicRagFinalAnswer(answer = {}, {
 
   return {
     ok: errors.length === 0,
+    providerFailureKind,
     // Keep the semantic/coverage failures visible even when a malformed raw
     // payload also produces several field-level contract errors.
     errors: unique(errors).slice(0, 24),
@@ -137,8 +146,14 @@ export function buildSafePublicRagFallback({
   validationErrors = [],
   authoritativeOfficialDirect = false,
   resolvedCards = [],
+  repairAttempted = false,
+  providerFailureKind = "",
 } = {}) {
-  const validationFlags = validationRiskFlags(validationErrors);
+  const normalizedProviderFailureKind = normalizeProviderFailureKind(providerFailureKind);
+  const validationFlags = unique([
+    ...validationRiskFlags(validationErrors),
+    ...providerFailureRiskFlags(normalizedProviderFailureKind),
+  ]);
   const direct = resolveAuthoritativeOfficialDirectCandidate(
     evidence,
     authoritativeOfficialDirect,
@@ -214,6 +229,38 @@ export function buildSafePublicRagFallback({
     });
   }
 
+  const providerFailureFlag = normalizedProviderFailureKind
+    ? providerFailureRiskFlags(normalizedProviderFailureKind).at(-1)
+    : validationFlags.find((flag) => (
+        flag === "model_provider_access_denied"
+        || flag === "model_provider_timeout"
+        || flag === "model_provider_call_failed"
+      ));
+  if (providerFailureFlag) {
+    const accessDenied = providerFailureFlag === "model_provider_access_denied";
+    const timedOut = providerFailureFlag === "model_provider_timeout";
+    return normalizedFallback({
+      answerLevel: "needs_more_info",
+      shortAnswer: accessDenied
+        ? "所选裁定模型暂不可用：上游服务拒绝了该模型的访问权限，模型没有生成答案。请切换模型或稍后重试。"
+        : timedOut
+          ? "所选裁定模型本次调用超时，模型没有生成答案。请稍后重试。"
+          : "所选裁定模型本次调用失败，模型没有生成答案。请切换模型或稍后重试。",
+      reasoning: [
+        accessDenied
+          ? "失败发生在模型开始生成裁定之前，不属于模型输出格式错误。"
+          : "上游模型服务没有返回可供裁定系统验证的正文。",
+        "系统保留了已经冻结的卡片文本和检索资料，但不会据此猜测最终结论。",
+      ],
+      riskFlags: [
+        "public_final_model_validation_failed",
+        ...(repairAttempted ? ["public_final_repair_failed"] : []),
+        ...validationFlags,
+      ],
+      validationErrors,
+    });
+  }
+
   if (validationFlags.includes("model_output_schema_validation_failed") && allEvidence(evidence).length > 0) {
     return normalizedFallback({
       answerLevel: "low_confidence_analysis",
@@ -222,7 +269,11 @@ export function buildSafePublicRagFallback({
         "系统保留了已经冻结的卡片文本和检索资料，但拒绝采用不满足结构契约的模型输出。",
         "本次没有从证据整理结果直接猜测最终裁定；请重试最终生成。",
       ],
-      riskFlags: ["public_final_model_validation_failed", "public_final_repair_failed", ...validationFlags],
+      riskFlags: [
+        "public_final_model_validation_failed",
+        ...(repairAttempted ? ["public_final_repair_failed"] : []),
+        ...validationFlags,
+      ],
       validationErrors,
     });
   }
@@ -235,7 +286,11 @@ export function buildSafePublicRagFallback({
       "单次定向修复仍未形成可验证答案，因此安全降级而不猜测结论。",
     ],
     missingInfo: ["请重试，或补充能够直接覆盖该场景的卡片文本、规则资料或官方 Q&A。"],
-    riskFlags: ["public_final_model_validation_failed", "public_final_repair_failed", ...validationFlags],
+    riskFlags: [
+      "public_final_model_validation_failed",
+      ...(repairAttempted ? ["public_final_repair_failed"] : []),
+      ...validationFlags,
+    ],
     validationErrors,
   });
 }
@@ -256,6 +311,7 @@ export async function runValidatedPublicRagFinal({
   const primaryValidation = validatePublicRagFinalAnswer(primary?.answer, {
     rawText: primary?.rawText,
     modelWarnings: primary?.warnings,
+    providerFailure: primary?.providerFailure,
     userQuery,
     evidence,
     authoritativeOfficialDirect,
@@ -275,6 +331,8 @@ export async function runValidatedPublicRagFinal({
           validationErrors: primaryValidation.errors,
           authoritativeOfficialDirect,
           resolvedCards,
+          repairAttempted: false,
+          providerFailureKind: primaryValidation.providerFailureKind,
         });
     return aggregateValidatedAttempts({
       primary,
@@ -299,6 +357,7 @@ export async function runValidatedPublicRagFinal({
   const repairValidation = validatePublicRagFinalAnswer(repair?.answer, {
     rawText: repair?.rawText,
     modelWarnings: repair?.warnings,
+    providerFailure: repair?.providerFailure,
     userQuery,
     evidence,
     authoritativeOfficialDirect,
@@ -311,6 +370,9 @@ export async function runValidatedPublicRagFinal({
         validationErrors: [...primaryValidation.errors, ...repairValidation.errors],
         authoritativeOfficialDirect,
         resolvedCards,
+        repairAttempted: true,
+        providerFailureKind: repairValidation.providerFailureKind
+          || primaryValidation.providerFailureKind,
       });
   return aggregateValidatedAttempts({
     primary,
@@ -470,6 +532,7 @@ function mayAttemptDirectedRepair(result = {}) {
   if (result?.dryRun === true) return false;
   if (!String(result?.rawText || "").trim() && !result?.answer) return false;
   const warnings = result?.warnings || [];
+  if (classifyModelProviderFailure(result?.providerFailure, warnings)) return false;
   return !warnings.some((warning) => /(?:model_call_failed|api_daily_budget_exceeded|deepseek_compact_recovery_failed)/u.test(String(warning)));
 }
 
@@ -505,12 +568,14 @@ function aggregateValidatedAttempts({
     return nested.map((attempt) => ({ ...attempt, publicAttemptKind: kind }));
   });
   const repairAttempted = Boolean(repair);
+  const providerFailure = repair?.providerFailure || primary?.providerFailure || null;
   return {
     ...selected,
     answer,
     tokenUsage,
     estimatedCostCny,
     generationAttempts,
+    providerFailure,
     warnings: unique([
       ...(primary.warnings || []),
       ...(repair?.warnings || []),
@@ -528,6 +593,7 @@ function aggregateValidatedAttempts({
       maxRepairAttempts: 1,
       primary: {
         ok: primaryValidation?.ok === true,
+        providerFailureKind: primaryValidation?.providerFailureKind || null,
         errors: primaryValidation?.errors || [],
         checks: primaryValidation?.checks || {},
         candidate: summarizeValidationCandidate(primary?.answer),
@@ -535,6 +601,7 @@ function aggregateValidatedAttempts({
       },
       repair: repairAttempted ? {
         ok: repairValidation?.ok === true,
+        providerFailureKind: repairValidation?.providerFailureKind || null,
         errors: repairValidation?.errors || [],
         checks: repairValidation?.checks || {},
         candidate: summarizeValidationCandidate(repair?.answer),
@@ -1468,7 +1535,36 @@ function normalizedFallback({
 }
 
 function isModelOutputFailureWarning(value) {
-  return /(?:model_call_failed|model_json_parse_failed|deepseek_empty_content|model_output_not_json)/u.test(String(value));
+  return /(?:model_json_parse_failed|deepseek_empty_content|model_output_not_json)/u.test(String(value));
+}
+
+function classifyModelProviderFailure(providerFailure, warnings = []) {
+  const structuredKind = normalizeProviderFailureKind(providerFailure?.kind);
+  if (structuredKind) return structuredKind;
+  const failures = warnings
+    .map(String)
+    .filter((warning) => /^model_call_failed:/u.test(warning));
+  if (!failures.length) return "";
+  const text = failures.join("\n");
+  if (/(?:无权访问|没有权限|权限不足|拒绝访问|access denied|permission denied|forbidden|unauthori[sz]ed|model_provider_access_denied|\bHTTP\s*(?:401|403)\b)/iu.test(text)) {
+    return "access_denied";
+  }
+  if (/(?:超时|timed out|timeout|ETIMEDOUT|UND_ERR_[A-Z_]*TIMEOUT|model_provider_timeout|\bHTTP\s*(?:408|504|524)\b)/iu.test(text)) return "timeout";
+  return "provider_failure";
+}
+
+function normalizeProviderFailureKind(value) {
+  const kind = String(value || "").trim();
+  return ["access_denied", "timeout", "provider_failure"].includes(kind) ? kind : "";
+}
+
+function providerFailureRiskFlags(kind) {
+  if (!kind) return [];
+  return [
+    "model_provider_call_failed",
+    ...(kind === "access_denied" ? ["model_provider_access_denied"] : []),
+    ...(kind === "timeout" ? ["model_provider_timeout"] : []),
+  ];
 }
 
 function compactErrors(errors = []) {
@@ -1485,6 +1581,9 @@ function validationRiskFlags(errors = []) {
     /authoritative official direct answer|material condition from the authoritative official direct/iu.test(text)
       ? "official_direct_evidence_enforced"
       : "",
+    /model provider access denied/iu.test(text) ? "model_provider_access_denied" : "",
+    /model provider timed out/iu.test(text) ? "model_provider_timeout" : "",
+    /model provider call failed/iu.test(text) ? "model_provider_call_failed" : "",
     /strict JSON contract|model output is empty/iu.test(text) ? "model_output_schema_validation_failed" : "",
     /post-activation resolution/iu.test(text) ? "model_answer_incomplete" : "",
     formalUnknownPolarity ? `formal_engine_unknown_blocked_model_${formalUnknownPolarity}` : "",

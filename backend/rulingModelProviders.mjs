@@ -16,6 +16,18 @@ const DEFAULT_GLM_BASE_URL = "https://open.bigmodel.cn/api/paas/v4";
 const DEFAULT_KIMI_BASE_URL = "https://api.moonshot.cn/v1";
 const MODEL_RULING_FORMAT_NAME = "model_ruling_result";
 const EVIDENCE_PREPARATION_PROVIDER_IDS = new Set(["deepseek", "glm", "kimi"]);
+const RELAY_TIMEOUT_HTTP_STATUSES = new Set([408, 504, 524]);
+const RELAY_SAFE_FINISH_REASONS = new Set([
+  "stop",
+  "length",
+  "tool_calls",
+  "function_call",
+  "content_filter",
+  "cancelled",
+  "error",
+]);
+const RELAY_ACCESS_DENIED_PATTERN = /(?:无权访问|没有权限|权限不足|拒绝访问|access(?:[_ -]?is)?[_ -]?denied|permission[_ -]?denied|forbidden|unauthori[sz]ed|group[_ -]?access[_ -]?denied|no[_ -]?permission)/iu;
+const RELAY_TIMEOUT_PATTERN = /(?:超时|timed[ _-]?out|timeout|etimedout|und_err_(?:headers|body)_timeout)/iu;
 const MODEL_RULING_JSON_SHAPE_EXAMPLE = Object.freeze({
   schemaVersion: "1.0",
   verdicts: [{
@@ -593,13 +605,26 @@ export async function requestRelayChatCompletionSse({
     if (!response.ok) {
       const payload = await readResponsePayload(response);
       const outcomeKnown = isProvableHttpRejection(response.status);
+      const failureKind = classifyRelayUpstreamFailure({
+        status: response.status,
+        code: payload?.error?.code || payload?.error?.type,
+        message: typeof payload?.error === "string"
+          ? payload.error
+          : payload?.error?.message,
+      });
       throw new RulingModelProviderError(
-        payload?.error?.message || `relay Chat Completions API returned HTTP ${response.status}`,
+        safeRelayFailureMessage(failureKind, { status: response.status, transport: "HTTP" }),
         {
-          code: payload?.error?.code || "relay_http_error",
+          code: failureKind === "access_denied"
+            ? "relay_http_access_denied"
+            : failureKind === "timeout"
+              ? "relay_http_timeout"
+              : "relay_http_error",
           provider: "relay",
           status: response.status,
           responseBody: payload,
+          requestedModel: String(requestBody.model || "") || null,
+          submittedModel: String(requestBody.model || "") || null,
           outcomeKnown,
           budgetReservationMayExist: !outcomeKnown,
           streamMetrics: makeRelayStreamMetrics({
@@ -634,8 +659,9 @@ export async function requestRelayChatCompletionSse({
     });
   } catch (cause) {
     if (cause instanceof RulingModelProviderError) throw cause;
-    const timedOut = controller.signal.aborted
-      && isTimeoutAbortReason(controller.signal.reason);
+    const timedOut = (controller.signal.aborted
+      && isTimeoutAbortReason(controller.signal.reason))
+      || isTimeoutAbortReason(cause);
     throw new RulingModelProviderError(
       timedOut
         ? "relay stream timed out after submission"
@@ -1196,6 +1222,7 @@ async function readRelayChatCompletionSse(response, {
     networkChunks: 0,
     chunks: 0,
     contentChunks: 0,
+    completionChunks: 0,
     done: false,
     finishReason: null,
     id: null,
@@ -1222,13 +1249,18 @@ async function readRelayChatCompletionSse(response, {
     visibleContentBytes: state.contentBytes,
     finishReason: state.finishReason,
   });
-  const protocolError = (message, code = "relay_stream_protocol_error", cause) => (
+  const streamError = (message, {
+    code = "relay_stream_protocol_error",
+    cause,
+    outcomeKnown = false,
+    budgetReservationMayExist = true,
+  } = {}) => (
     new RulingModelProviderError(message, {
       code,
       provider: "relay",
       status: response?.status ?? 200,
-      outcomeKnown: false,
-      budgetReservationMayExist: true,
+      outcomeKnown,
+      budgetReservationMayExist,
       usage: state.usage,
       model: state.model,
       reportedModel: state.model,
@@ -1237,11 +1269,15 @@ async function readRelayChatCompletionSse(response, {
       cause,
     })
   );
+  const protocolError = (message, code = "relay_stream_protocol_error", cause) => (
+    streamError(message, { code, cause })
+  );
   const processFrame = (rawFrame) => {
     const frame = String(rawFrame || "");
     if (!frame.trim()) return;
     if (state.done) throw protocolError("relay stream contained data after [DONE]");
     const dataLines = [];
+    let eventName = "";
     for (const line of frame.split(/\r?\n/u)) {
       if (!line || line.startsWith(":")) continue;
       const separator = line.indexOf(":");
@@ -1249,6 +1285,7 @@ async function readRelayChatCompletionSse(response, {
       const rawValue = separator === -1 ? "" : line.slice(separator + 1);
       const value = rawValue.startsWith(" ") ? rawValue.slice(1) : rawValue;
       if (field === "data") dataLines.push(value);
+      else if (field === "event") eventName = value.trim().toLowerCase();
       else if (!new Set(["event", "id", "retry"]).has(field)) {
         throw protocolError(`relay stream used unsupported SSE field ${field || "missing"}`);
       }
@@ -1266,6 +1303,26 @@ async function readRelayChatCompletionSse(response, {
       throw protocolError("relay stream contained malformed JSON", "relay_stream_json_invalid", cause);
     }
     if (!isPlainObject(chunk)) throw protocolError("relay stream chunk must be a JSON object");
+    const embeddedError = relayStreamEmbeddedError(chunk, eventName);
+    if (embeddedError) {
+      const generatedBeforeRejection = state.completionChunks > 0
+        || state.contentBytes > 0
+        || state.usage !== null
+        || relayChunkContainsCompletionOrUsage(chunk);
+      const releaseSafe = embeddedError.kind === "access_denied" && !generatedBeforeRejection;
+      throw streamError(
+        safeRelayFailureMessage(embeddedError.kind, { transport: "stream" }),
+        {
+          code: embeddedError.kind === "access_denied"
+            ? "relay_stream_access_denied"
+            : embeddedError.kind === "timeout"
+              ? "relay_stream_timeout"
+              : "relay_stream_upstream_error",
+          outcomeKnown: releaseSafe,
+          budgetReservationMayExist: !releaseSafe,
+        },
+      );
+    }
     state.chunks += 1;
     if (state.requestToFirstEventMs === null) {
       state.requestToFirstEventMs = elapsedMonotonicMs(clock, requestStartedAt);
@@ -1299,10 +1356,18 @@ async function readRelayChatCompletionSse(response, {
           protocolError,
         );
       }
-      if (choice.delta === undefined || choice.delta === null) continue;
-      if (!isPlainObject(choice.delta)) throw protocolError("relay stream delta must be an object");
+      const completion = choice.delta !== undefined && choice.delta !== null
+        ? choice.delta
+        : choice.message;
+      if (completion === undefined || completion === null) continue;
+      if (!isPlainObject(completion)) {
+        throw protocolError(choice.delta !== undefined
+          ? "relay stream delta must be an object"
+          : "relay stream message must be an object");
+      }
+      state.completionChunks += 1;
       for (const reasoningField of ["reasoning_content", "reasoning"]) {
-        const reasoning = choice.delta[reasoningField];
+        const reasoning = completion[reasoningField];
         if (reasoning !== undefined && reasoning !== null && typeof reasoning !== "string") {
           throw protocolError(`relay stream ${reasoningField} must be text when present`);
         }
@@ -1310,12 +1375,12 @@ async function readRelayChatCompletionSse(response, {
         // never copied into the response, logs or persisted run data.
       }
       if (
-        (Array.isArray(choice.delta.tool_calls) && choice.delta.tool_calls.length)
-        || choice.delta.function_call
+        (Array.isArray(completion.tool_calls) && completion.tool_calls.length)
+        || completion.function_call
       ) {
         throw protocolError("relay final-ruling stream must not contain tool calls");
       }
-      const content = choice.delta.content;
+      const content = completion.content;
       if (content === undefined || content === null || content === "") continue;
       if (typeof content !== "string") throw protocolError("relay stream content must be text");
       const contentBytes = encoder.encode(content).byteLength;
@@ -1368,7 +1433,8 @@ async function readRelayChatCompletionSse(response, {
     processBufferedFrames({ flush: true });
   } catch (cause) {
     if (cause instanceof RulingModelProviderError) throw cause;
-    const timedOut = signal?.aborted && isTimeoutAbortReason(signal.reason);
+    const timedOut = (signal?.aborted && isTimeoutAbortReason(signal.reason))
+      || isTimeoutAbortReason(cause);
     throw protocolError(
       timedOut
         ? "relay stream timed out after submission"
@@ -1389,6 +1455,18 @@ async function readRelayChatCompletionSse(response, {
   if (!state.chunks) {
     throw protocolError("relay stream completed without any JSON chunk", "relay_stream_empty");
   }
+  if (!state.completionChunks) {
+    throw protocolError(
+      "relay stream completed without a supported completion payload",
+      "relay_stream_completion_missing",
+    );
+  }
+  if (!state.content.trim()) {
+    throw protocolError(
+      "relay stream completed without visible assistant content",
+      "relay_stream_empty_content",
+    );
+  }
   state.requestToCompleteMs = elapsedMonotonicMs(clock, requestStartedAt);
   return {
     ...(state.id ? { id: state.id } : {}),
@@ -1396,7 +1474,7 @@ async function readRelayChatCompletionSse(response, {
     choices: [{
       index: 0,
       message: { role: "assistant", content: state.content },
-      finish_reason: state.finishReason,
+      finish_reason: safeRelayFinishReason(state.finishReason),
     }],
     usage: state.usage,
     stream_metrics: metrics(),
@@ -1412,7 +1490,8 @@ function isTimeoutAbortReason(reason) {
   const code = String(reason?.code || "").trim().toLowerCase();
   const message = String(reason?.message || reason || "");
   return code === "final_ruling_provider_timeout"
-    || /(?:timed out|timeout|exceeded\s+\d+ms)/iu.test(message);
+    || RELAY_TIMEOUT_PATTERN.test(code)
+    || /(?:timed out|timeout|exceeded\s+\d+ms|etimedout|und_err_(?:headers|body)_timeout)/iu.test(message);
 }
 
 function readMonotonicClock(clock) {
@@ -1457,9 +1536,7 @@ function copySafeRelayStreamMetrics(value) {
     const candidate = value[field];
     return Number.isSafeInteger(candidate) && candidate >= 0 ? candidate : 0;
   };
-  const finishReason = typeof value.finishReason === "string" && value.finishReason.trim()
-    ? value.finishReason.trim().slice(0, 128)
-    : null;
+  const finishReason = safeRelayFinishReason(value.finishReason);
   return {
     schemaVersion: 1,
     transport: "sse",
@@ -1491,6 +1568,70 @@ function optionalBoundedString(value, field, maximumLength) {
     throw new TypeError(`${field} must be non-empty text within ${maximumLength} characters`);
   }
   return value.trim();
+}
+
+function relayStreamEmbeddedError(chunk, eventName = "") {
+  const type = String(chunk?.type || "").trim().toLowerCase();
+  const explicitError = chunk?.error !== undefined && chunk?.error !== null;
+  const source = chunk?.error ?? chunk?.response?.error ?? chunk;
+  const message = typeof source === "string"
+    ? source
+    : String(source?.message || source?.code || type || eventName || "unknown upstream error");
+  const code = typeof source === "object" && source !== null
+    ? String(source.code || source.type || chunk?.code || "")
+    : String(chunk?.code || "");
+  const statusCandidate = typeof source === "object" && source !== null
+    ? source.status ?? source.status_code ?? chunk?.status
+    : chunk?.status;
+  const status = Number(statusCandidate);
+  const kind = classifyRelayUpstreamFailure({
+    status: Number.isInteger(status) ? status : null,
+    code,
+    message,
+  });
+  const errorLike = eventName === "error"
+    || type === "error"
+    || type === "response.failed"
+    || explicitError
+    || kind !== "provider_failure";
+  if (!errorLike) return null;
+  return {
+    kind,
+  };
+}
+
+function relayChunkContainsCompletionOrUsage(chunk) {
+  if (chunk?.usage !== undefined && chunk?.usage !== null) return true;
+  return (Array.isArray(chunk?.choices) ? chunk.choices : []).some((choice) => (
+    choice?.delta !== undefined && choice?.delta !== null
+  ) || (
+    choice?.message !== undefined && choice?.message !== null
+  ));
+}
+
+function classifyRelayUpstreamFailure({ status, code, message } = {}) {
+  const numericStatus = Number(status);
+  const searchable = `${String(code || "")} ${String(message || "")}`;
+  if (numericStatus === 401 || numericStatus === 403 || RELAY_ACCESS_DENIED_PATTERN.test(searchable)) {
+    return "access_denied";
+  }
+  if (RELAY_TIMEOUT_HTTP_STATUSES.has(numericStatus) || RELAY_TIMEOUT_PATTERN.test(searchable)) {
+    return "timeout";
+  }
+  return "provider_failure";
+}
+
+function safeRelayFailureMessage(kind, { status, transport = "stream" } = {}) {
+  const suffix = Number.isInteger(Number(status)) ? ` (HTTP ${Number(status)})` : "";
+  if (kind === "access_denied") return `relay upstream denied model access${suffix}`;
+  if (kind === "timeout") return `relay upstream timed out during ${transport}${suffix}`;
+  return `relay upstream rejected the ${transport} request${suffix}`;
+}
+
+function safeRelayFinishReason(value) {
+  const normalized = typeof value === "string" ? value.trim().toLowerCase() : "";
+  if (!normalized) return null;
+  return RELAY_SAFE_FINISH_REASONS.has(normalized) ? normalized : "other";
 }
 
 function sanitizeRelayStreamUsage(value, protocolError) {
