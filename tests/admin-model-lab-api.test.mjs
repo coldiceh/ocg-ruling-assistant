@@ -379,14 +379,55 @@ test("preflight reflects only an exact allowed origin and never uses wildcard CO
   assert.equal(rejected.headers["access-control-allow-origin"], undefined);
 });
 
-async function createHarness({ service, login = false } = {}) {
+test("maintenance mode keeps reads available and rejects every authenticated write", async () => {
+  let createCalls = 0;
+  const { handler, cookie, csrfToken } = await createHarness({
+    login: true,
+    writesDisabledByMaintenance: true,
+    service: {
+      capabilities: async () => ({ readable: true }),
+      createRun: async () => {
+        createCalls += 1;
+        return { runId: "must-not-exist" };
+      },
+    },
+  });
+  const readable = createResponse();
+  await handler(request({
+    method: "GET",
+    url: "/api/admin-model-lab?action=capabilities",
+    headers: { cookie },
+  }), readable);
+  assert.equal(readable.statusCode, 200);
+  assert.equal(readable.headers["x-admin-model-lab-write-state"], "maintenance-disabled");
+
+  const blocked = createResponse();
+  await handler(request({
+    method: "POST",
+    headers: { cookie, "x-csrf-token": csrfToken },
+    body: { action: "create", question: "must not be persisted" },
+  }), blocked);
+  assert.equal(blocked.statusCode, 503);
+  assert.equal(blocked.payload.error, "admin_model_lab_maintenance");
+  assert.equal(createCalls, 0);
+});
+
+async function createHarness({
+  service,
+  login = false,
+  writesDisabledByMaintenance = false,
+} = {}) {
   const env = {
     ADMIN_ALLOWED_ORIGIN: ADMIN_ORIGIN,
     ADMIN_SESSION_PASSWORD: "admin-password",
   };
   const store = createMemoryAdminSessionStore();
   const manager = createAdminSessionManager({ env, store });
-  const handler = createAdminModelLabHandler({ manager, service });
+  const handler = createAdminModelLabHandler({
+    manager,
+    service,
+    writesDisabledByMaintenance,
+  });
   if (!login) return { manager, handler, cookie: "", csrfToken: "" };
 
   const result = await manager.login({
