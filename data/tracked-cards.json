@@ -44,7 +44,17 @@
     {
       "lookupName": "Albion the Branded Dragon",
       "language": "en",
-      "aliases": ["神炎龙 赫界龙", "神炎龙", "赫界龙"]
+      "aliases": []
+    },
+    {
+      "lookupName": "Lubellion the Searing Dragon",
+      "language": "en",
+      "aliases": ["神炎龙 卢绯里昂", "神炎龙 卢贝里昂", "神炎龙", "卢绯里昂", "卢贝里昂"]
+    },
+    {
+      "lookupName": "Guiding Quem, the Virtuous",
+      "language": "en",
+      "aliases": ["引导之圣女 奎姆", "引导的圣女 奎姆", "引导之圣女奎姆", "奎姆", "导圣"]
     },
     {
       "lookupName": "Blue-Eyes Tyrant Dragon",

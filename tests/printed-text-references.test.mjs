@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { normalizeCardText } from "../backend/cardTextNormalizer.mjs";
+import {
+  CARD_TEXT_IR_VERSION,
+  normalizeCardText,
+} from "../backend/cardTextNormalizer.mjs";
 import {
   analyzeDeterministicOperationLegality,
   OPERATION_PREMISE_SCHEMA_VERSION,
@@ -56,7 +59,7 @@ test("card text IR keeps immutable printed name references", () => {
     effectText: copiedSource.text,
   });
   assert.deepEqual(normalized.printedNameReferences, ["目标场地"]);
-  assert.equal(normalized.version, "1.4");
+  assert.equal(normalized.version, CARD_TEXT_IR_VERSION);
 });
 
 test("copied effects do not become the receiver's printed name references", () => {

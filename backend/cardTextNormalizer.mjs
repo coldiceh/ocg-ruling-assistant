@@ -1,7 +1,7 @@
 import { splitCardTextSections, tagEffectText } from "./cardTextSections.mjs";
 import { extractPrintedNameReferences } from "./printedTextReferences.mjs";
 
-export const CARD_TEXT_IR_VERSION = "1.4";
+export const CARD_TEXT_IR_VERSION = "1.5";
 
 const ACTIVATION_MARKER = /(?:可以发动|才能发动|可发动|発動できる|発動する|you can activate|can be activated)/iu;
 const CONTINUOUS_MARKER = /(?:只要|期间|持续|繼續|一直|限り|公開し続け|し続ける|must keep|while .*face-up|as long as)/iu;
@@ -340,14 +340,7 @@ function parseContinuousSemantics(text) {
       text: value,
     });
   }
-  if (/(?:不受.{0,24}效果影响|効果を受けない|unaffected by)/iu.test(value)) {
-    semantics.push({
-      type: "effect_immunity",
-      affected: "source",
-      duration: "continuous",
-      text: value,
-    });
-  }
+  semantics.push(...extractEffectProtectionSemantics(value));
   if (PER_PLAYER_SAME_RACE_LIMIT.test(value)) {
     semantics.push({
       type: "field_count_limit",
@@ -412,6 +405,87 @@ function parseContinuousSemantics(text) {
     });
   }
   return semantics;
+}
+
+export function extractEffectProtectionSemantics(text) {
+  const output = [];
+  for (const clause of String(text || "").split(/[。；;\n]+/u).map(cleanText).filter(Boolean)) {
+    const unaffected = /(?:不受[^。；;]{0,56}(?:效果|効果)(?:的)?影响|(?:効果|effects?)[^。；;]{0,40}(?:を受けない|unaffected by)|unaffected by[^.;]{0,56}(?:effects?|cards?))/iu.test(clause);
+    const cannotBeDestroyed = /(?:不会|不會|不能|不可)[^。；;]{0,16}被[^。；;]{0,48}(?:效果|効果)[^。；;]{0,12}(?:破坏|破壞)|(?:効果|effects?)[^。；;]{0,48}(?:では破壊されない|cannot be destroyed)/iu.test(clause);
+    if (!unaffected && !cannotBeDestroyed) continue;
+    const effectSourceDescriptor = extractProtectionEffectSourceDescriptor(clause, {
+      unaffected,
+      cannotBeDestroyed,
+    });
+    output.push({
+      type: "effect_immunity",
+      affected: classifyProtectionRecipient(clause),
+      duration: "continuous",
+      protection: unaffected ? "unaffected" : "cannot_be_destroyed",
+      effectSourceTypes: extractEffectSourceTypes(effectSourceDescriptor),
+      effectSourceController: classifyEffectSourceController(effectSourceDescriptor),
+      effectClassificationBasis: "effect_source_identity",
+      conditionText: clause,
+      text: clause,
+    });
+  }
+  return output;
+}
+
+function extractProtectionEffectSourceDescriptor(clause, { unaffected, cannotBeDestroyed }) {
+  const value = String(clause || "");
+  if (unaffected) {
+    const chinese = value.match(/不受([^。；;]{0,64}?)(?:的)?(?:效果|効果)(?:的)?影响/iu);
+    if (chinese?.[1]) return chinese[1];
+    const japanese = value.match(/([^。；;]{1,64}?)(?:の)?効果を受けない/iu);
+    if (japanese?.[1]) return japanese[1];
+    const english = value.match(/unaffected by\s+([^.;]{1,64}?effects?)/iu);
+    if (english?.[1]) return english[1];
+  }
+  if (cannotBeDestroyed) {
+    const chinese = value.match(/被([^。；;]{0,64}?)(?:的)?(?:效果|効果)[^。；;]{0,12}(?:破坏|破壞)/iu);
+    if (chinese?.[1]) return chinese[1];
+    const english = value.match(/cannot be destroyed by\s+([^.;]{1,64}?effects?)/iu);
+    if (english?.[1]) return english[1];
+  }
+  return value;
+}
+
+function classifyProtectionRecipient(text) {
+  const value = String(text || "");
+  if (/(?:装备|裝備|装備)[^。；;]{0,16}(?:怪兽|怪獸|モンスター)|(?:怪兽|怪獸|モンスター)[^。；;]{0,16}(?:装备|裝備|装備)|equipped monster|monster equipped/iu.test(value)) {
+    return "equipped_monster";
+  }
+  if (/(?:自己|自分|your)(?:的)?[^。；;]{0,20}(?:场上|場上|フィールド|field)[^。；;]{0,24}(?:怪兽|怪獸|モンスター|monsters?)/iu.test(value)) {
+    return "controller_monsters";
+  }
+  if (/(?:对方|對方|对手|相手|opponent)(?:的)?[^。；;]{0,20}(?:场上|場上|フィールド|field)[^。；;]{0,24}(?:怪兽|怪獸|モンスター|monsters?)/iu.test(value)) {
+    return "opponent_monsters";
+  }
+  return "source";
+}
+
+function extractEffectSourceTypes(text) {
+  const value = String(text || "");
+  const types = [];
+  if (/(?:魔法卡?|魔法カード|Spell(?: Card)?s?)/iu.test(value)) types.push("spell");
+  if (/(?:陷阱卡?|罠カード|Trap(?: Card)?s?)/iu.test(value)) types.push("trap");
+  if (/(?:怪兽|怪獸|モンスター|monster)/iu.test(value)) types.push("monster");
+  if (!types.length && /(?:其他|其它|别的|別の|other)?(?:卡片?|カード|cards?)|(?:任何|任意|所有|全て|all)|(?:对方|對方|对手|相手|opponent)(?:所)?(?:发动|發動|発動|activate)?/iu.test(value)) {
+    types.push("all");
+  }
+  return unique(types);
+}
+
+function classifyEffectSourceController(text) {
+  const value = String(text || "");
+  if (/(?:对方|對方|对手|相手|opponent)/iu.test(value)) {
+    return "opponent_of_recipient_controller";
+  }
+  if (/(?:自己|自分|your)/iu.test(value)) {
+    return "same_as_recipient_controller";
+  }
+  return "any";
 }
 
 function parseResolutionSteps(text) {

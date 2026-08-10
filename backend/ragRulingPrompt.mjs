@@ -73,6 +73,8 @@ export function buildRagRulingPromptBundle({
     constraintAudit: summarizeConstraintAudit(evidence.operationLegality),
     semanticStateTransition: summarizeSemanticStateTransition(evidence.semanticStateTransition),
     cardSemanticFacts: summarizeCardSemanticFacts(evidence.cardSemanticFacts),
+    summonLegalityContext: summarizeSummonLegalityContext(evidence.summonLegalityContext),
+    effectApplicabilityContext: summarizeEffectApplicabilityContext(evidence.effectApplicabilityContext),
     playerRoleBindings: summarizePlayerRoleBindings(evidence.playerRoleBindings),
     formalEngineStatus: evidence.formalEngineStatus || { mode: "off", status: "disabled" },
     legacyLuaSemanticPacket: summarizeLegacyLuaSemanticPacket(
@@ -141,7 +143,10 @@ export function buildRagRulingPromptBundle({
     "ruleSearchQueries 是后端为检索规则资料生成的查询词，只能作为检索线索；最终理由必须基于 evidence 中真实存在的资料、卡片文本和题目事实。",
     "resolvedCards 是本地资料或百鸽已经匹配成功的卡片；其中已有 cardType、attribute 或效果文本时，不得再把该卡写成‘未识别’或‘属性未确定’。只有 unresolvedMentions 中仍存在的项目才算未解析。",
     "operationChecks、constraintAudit 和 semanticStateTransition 即使存在也只是旧的证据整理诊断，不是裁定证明或强约束；最终结论必须由你重新阅读原始卡文、官方 Q&A、FAQ 与规则资料后独立得出。",
+    "题面把同一诱发窗口中的多个公开区域诱发效果拟排为 C1/C2 时，必须以开始组成这组连锁之前的状态，分别检查每个效果的发动条件、发动区域与合法对象。不得用先排入连锁的另一效果所支付的 cost，事后使尚未取得发动资格的公开诱发效果成为后续连锁块。不要把这条规则误套到同一个效果自身按卡文先支付 cost、再选择对象的场景。",
     "cardSemanticFacts 是卡文范式化器从已解析卡文抽取的候选操作，不是裁定证明；必须对照原始卡文复核。若候选为 create_lingering_restriction 且 expiration.mode=irreversible_on_first_condition_failure、reactivates=false，它表示已处理效果创建的限制实例在 activeWhile 首次不成立时永久终止，之后条件再次成立也不会自行恢复，只有重新适用原效果才能创建新实例。",
+    "summonLegalityContext 是后端从题面、已解析卡片属性和原始卡文整理出的同调召唤检查清单，不是裁定证明或隐藏 verdict。逐项对照 resolvedCards 与 card_text 复核素材式、等级合计、素材区域、手牌素材权限和自肃；每份手牌素材权限只属于其 sourceCardId，且仅在该卡从要求区域实际作为素材时提供自己的 maximum 容量。若 context.status=complete、missingFacts 为空且原始卡文支持全部字段，不得仅因没有官方 direct Q&A 或 validator 模板就声称等级/属性未知或资料不足，应独立给出 rule_analysis；任何 failed 检查仍须以原卡文确认后再采用。",
+    "effectApplicabilityContext 是效果适用性依赖清单，不是裁定证明或隐藏 verdict。必须同时保留效果来源的原始卡片类型与当前角色（例如陷阱作为装备卡），并严格按 dependencyGraph 顺序判断：先只用接受者原本独立存在的抗性检查来源效果能否影响接受者；只有来源效果能适用时，才建立其赋予的抗性；最后再检查外来效果。禁止用刚被赋予的抗性反向证明其来源效果可以适用，type overlap 仅是待复核候选。",
     ...printedTextReferenceInstructionsFor(payload),
     "formalEngineProofs 来自版本协商、能力检查、完整执行检查和独立证明校验后的声明式规则内核。trusted=true 且 verdict=TRUE/FALSE 的逐查询结论是强约束，模型只能解释，不能翻转；verdict=UNKNOWN 只表示未获证明，绝不等于 FALSE，也不能单独支持‘不能’。",
     "legacyLuaSemanticPacket 是从锁定旧版 Lua 脚本静态编译出的非权威语义提示，只用于发现应检查的发动条件、移动能力、cost 与处理操作。它的正式 verdict 永远是 UNKNOWN；candidateVerdict 只描述旧脚本在完整输入下的候选行为，不能直接支持任何裁定、不能覆盖题面/卡文/官方资料，UNKNOWN 也绝不等于不能。",
@@ -350,7 +355,11 @@ function summarizeCards(cards, limit) {
     race: card.race ?? "",
     atk: card.atk ?? null,
     def: card.def ?? null,
-    level: card.level ?? card.rank ?? card.link ?? null,
+    level: card.level ?? null,
+    rank: card.rank ?? null,
+    link: card.link ?? null,
+    properties: card.properties || [],
+    monsterProperties: card.monsterProperties || [],
     source: card.source || "",
     effectText: card.effectText || card.text || "",
   }));
@@ -543,6 +552,13 @@ function buildCompactRagPrompt({ payload, maxPromptChars }) {
       cardType: card.cardType,
       attribute: card.attribute,
       race: card.race,
+      atk: card.atk,
+      def: card.def,
+      level: card.level,
+      rank: card.rank,
+      link: card.link,
+      properties: card.properties,
+      monsterProperties: card.monsterProperties,
       source: card.source,
       effectText: truncatePromptText(
         card.effectText,
@@ -566,6 +582,15 @@ function buildCompactRagPrompt({ payload, maxPromptChars }) {
       traceLimit: maxChars >= 12000 ? 8 : maxChars >= 4000 ? 5 : 2,
     }),
     cardSemanticFacts: (payload.cardSemanticFacts || []).slice(0, maxChars >= 12000 ? 12 : 5),
+    summonLegalityContext: compactSummonLegalityContext(payload.summonLegalityContext, {
+      materialLimit: maxChars >= 12000 ? 10 : 6,
+      permissionLimit: maxChars >= 12000 ? 8 : 4,
+      sourceTextLimit: maxChars >= 12000 ? 500 : 220,
+    }),
+    effectApplicabilityContext: compactEffectApplicabilityContext(payload.effectApplicabilityContext, {
+      relationshipLimit: maxChars >= 12000 ? 6 : 3,
+      sourceTextLimit: maxChars >= 12000 ? 500 : 220,
+    }),
     playerRoleBindings: payload.playerRoleBindings,
     formalEngineStatus: payload.formalEngineStatus,
     legacyLuaSemanticPacket: compactLegacyLuaSemanticPacket(
@@ -580,7 +605,10 @@ function buildCompactRagPrompt({ payload, maxPromptChars }) {
     "你是游戏王 OCG 规则分析助手。只依据所给证据回答，不得编造规则或来源。",
     "官方直接 Q&A 才能支持 official_confirmed；相关 Q&A、FAQ、规则书和卡文只能支持 rule_analysis 或 low_confidence_analysis。",
     "operationChecks、constraintAudit 与 semanticStateTransition 是便宜模型/旧诊断整理出的待核对假设；只能帮助定位证据，不能替代最终推理。unknown 或未核对限制不能支持肯定或否定结论。",
+    "同一诱发窗口拟组成多个公开区域诱发 C1/C2 时，先在组链前状态分别检查每个效果的条件、区域与对象；一个连锁块支付的 cost 不能让另一个原本不合法的公开诱发事后取得组链资格。单一效果自身支付 cost 后再选对象须按该效果另行判断。",
     "cardSemanticFacts 是卡文范式化候选而非证明。create_lingering_restriction 的 irreversible_on_first_condition_failure/ reactivates=false 表示期限条件首次失效后该效果实例永久结束，条件后来恢复不会自动重启。必须对照原卡文复核。",
+    "summonLegalityContext 是同调素材检查清单而非 verdict；必须用 resolvedCards 与原卡文复核。完整且 missingFacts 为空时，不得仅因没有 direct Q&A 声称卡片等级、性质或素材权限未知；各手牌素材权限只给其来源素材卡提供一份独立容量。",
+    "effectApplicabilityContext 是非权威依赖清单：保留来源原始卡种与当前角色；先以接受者原有抗性判断来源效果适用性，来源适用后才建立赋予抗性，再判断外来效果。禁止赋予抗性反向自举来源适用性，重叠类型仍须核对原卡文与条件。",
     ...printedTextReferenceInstructionsFor(context),
     "legacyLuaSemanticPacket 只是锁定旧脚本的非权威语义提示。只能据此发现要检查的条件和操作；正式 verdict 永远 UNKNOWN，candidateVerdict 不能直接支持结论、不能覆盖卡文或官方资料。",
     "使用 Lua 候选前先以 resourceId 绑定 resources；预计算 sourceDocumentId 的 cid-<卡片CID>/passcode-<脚本密码> 只可用于 resolvedCards 中 CID 相同的卡片，禁止跨卡套用。",
@@ -613,6 +641,14 @@ function buildCompactRagPrompt({ payload, maxPromptChars }) {
       name: card.name,
       cardType: card.cardType,
       attribute: card.attribute,
+      race: card.race,
+      atk: card.atk,
+      def: card.def,
+      level: card.level,
+      rank: card.rank,
+      link: card.link,
+      properties: card.properties,
+      monsterProperties: card.monsterProperties,
       effectText: truncatePromptText(card.effectText, 240),
     })),
     operationChecks: (payload.operationChecks || []).slice(0, 2).map((check) => ({ status: check.status, conclusion: String(check.conclusion || "").slice(0, 100) })),
@@ -622,6 +658,15 @@ function buildCompactRagPrompt({ payload, maxPromptChars }) {
       traceLimit: 3,
     }),
     cardSemanticFacts: (payload.cardSemanticFacts || []).slice(0, 3),
+    summonLegalityContext: compactSummonLegalityContext(payload.summonLegalityContext, {
+      materialLimit: 6,
+      permissionLimit: 4,
+      sourceTextLimit: 160,
+    }),
+    effectApplicabilityContext: compactEffectApplicabilityContext(payload.effectApplicabilityContext, {
+      relationshipLimit: 3,
+      sourceTextLimit: 160,
+    }),
     formalEngineStatus: payload.formalEngineStatus,
     legacyLuaSemanticPacket: compactLegacyLuaSemanticPacket(
       payload.legacyLuaSemanticPacket,
@@ -644,6 +689,16 @@ function buildCompactRagPrompt({ payload, maxPromptChars }) {
       resolvedCards: (payload.resolvedCards || []).slice(0, 2).map((card) => ({
         id: card.id,
         name: card.name,
+        cardType: card.cardType,
+        attribute: card.attribute,
+        race: card.race,
+        atk: card.atk,
+        def: card.def,
+        level: card.level,
+        rank: card.rank,
+        link: card.link,
+        properties: card.properties,
+        monsterProperties: card.monsterProperties,
         effectText: truncatePromptText(card.effectText, 80),
       })),
       semanticStateTransition: compactSemanticStateTransition(payload.semanticStateTransition, {
@@ -651,6 +706,15 @@ function buildCompactRagPrompt({ payload, maxPromptChars }) {
         traceLimit: 1,
       }),
       cardSemanticFacts: (payload.cardSemanticFacts || []).slice(0, 1),
+      summonLegalityContext: compactSummonLegalityContext(payload.summonLegalityContext, {
+        materialLimit: 4,
+        permissionLimit: 3,
+        sourceTextLimit: 80,
+      }),
+      effectApplicabilityContext: compactEffectApplicabilityContext(payload.effectApplicabilityContext, {
+        relationshipLimit: 2,
+        sourceTextLimit: 80,
+      }),
       formalEngineStatus: payload.formalEngineStatus,
       legacyLuaSemanticPacket: compactLegacyLuaSemanticPacket(
         payload.legacyLuaSemanticPacket,
@@ -762,6 +826,119 @@ function summarizeCardSemanticFacts(facts = {}) {
       sourceEvidenceIds: fact.sourceEvidenceIds || [],
       authority: "normalizer_candidate_only",
     }));
+}
+
+function summarizeSummonLegalityContext(context = null) {
+  return compactSummonLegalityContext(context, {
+    materialLimit: 12,
+    permissionLimit: 12,
+    sourceTextLimit: 1200,
+  });
+}
+
+function compactSummonLegalityContext(context = null, {
+  materialLimit = 8,
+  permissionLimit = 6,
+  sourceTextLimit = 320,
+} = {}) {
+  if (!context || typeof context !== "object") return null;
+  const target = context.target && typeof context.target === "object"
+    ? {
+        ...context.target,
+        printedRequirement: context.target.printedRequirement
+          ? {
+              ...context.target.printedRequirement,
+              sourceText: String(context.target.printedRequirement.sourceText || "").slice(0, sourceTextLimit),
+              slots: (context.target.printedRequirement.slots || []).slice(0, 6).map((slot) => ({
+                ...slot,
+                sourceText: String(slot?.sourceText || "").slice(0, sourceTextLimit),
+              })),
+            }
+          : null,
+      }
+    : null;
+  return {
+    schema: String(context.schema || "summon-legality-context/v1"),
+    status: String(context.status || "partial"),
+    authority: "normalizer_candidate_only",
+    questionScope: String(context.questionScope || ""),
+    mustVerifyAgainstRawCardText: true,
+    ...(context.reason ? { reason: String(context.reason) } : {}),
+    ...(target ? { target } : {}),
+    proposedMaterialSetExplicit: context.proposedMaterialSetExplicit === true,
+    materials: (context.materials || []).slice(0, materialLimit),
+    alternateZonePermissions: (context.alternateZonePermissions || [])
+      .slice(0, permissionLimit)
+      .map((permission) => ({
+        ...permission,
+        sourceText: String(permission?.sourceText || "").slice(0, sourceTextLimit),
+      })),
+    activeAlternateZonePermissions: (context.activeAlternateZonePermissions || []).slice(0, permissionLimit),
+    restrictionAssessment: context.restrictionAssessment || null,
+    checks: (context.checks || []).slice(0, 12),
+    missingFacts: (context.missingFacts || []).slice(0, 12),
+  };
+}
+
+function summarizeEffectApplicabilityContext(context = null) {
+  return compactEffectApplicabilityContext(context, {
+    relationshipLimit: 8,
+    sourceTextLimit: 1200,
+  });
+}
+
+function compactEffectApplicabilityContext(context = null, {
+  relationshipLimit = 4,
+  sourceTextLimit = 320,
+} = {}) {
+  if (!context || typeof context !== "object") return null;
+  return {
+    schema: String(context.schema || "effect-applicability-context/v1"),
+    status: String(context.status || "partial"),
+    authority: "normalizer_candidate_only",
+    questionScope: String(context.questionScope || "effect_applicability_dependency"),
+    canDecideFinalRuling: false,
+    mustVerifyAgainstRawCardText: true,
+    outcome: "not_evaluated",
+    relationships: (context.relationships || []).slice(0, relationshipLimit).map((relationship) => ({
+      ...relationship,
+      sourceEffect: relationship?.sourceEffect
+        ? {
+            ...relationship.sourceEffect,
+            sourceText: String(relationship.sourceEffect.sourceText || "").slice(0, sourceTextLimit),
+          }
+        : null,
+      grantedProperty: relationship?.grantedProperty
+        ? {
+            ...relationship.grantedProperty,
+            sourceText: String(relationship.grantedProperty.sourceText || "").slice(0, sourceTextLimit),
+          }
+        : null,
+      recipient: relationship?.recipient
+        ? {
+            ...relationship.recipient,
+            existingProtections: (relationship.recipient.existingProtections || []).slice(0, 6).map((protection) => ({
+              ...protection,
+              conditionText: String(protection?.conditionText || "").slice(0, sourceTextLimit),
+              sourceText: String(protection?.sourceText || "").slice(0, sourceTextLimit),
+            })),
+            sourceEffectBlockerCandidates: (relationship.recipient.sourceEffectBlockerCandidates || []).slice(0, 6),
+          }
+        : null,
+      dependencyGraph: relationship?.dependencyGraph
+        ? {
+            ...relationship.dependencyGraph,
+            nodes: (relationship.dependencyGraph.nodes || []).slice(0, 8),
+            edges: (relationship.dependencyGraph.edges || []).slice(0, 8),
+            evaluationOrder: (relationship.dependencyGraph.evaluationOrder || []).slice(0, 8),
+            forbiddenEdges: (relationship.dependencyGraph.forbiddenEdges || []).slice(0, 4),
+          }
+        : null,
+      missingFacts: (relationship?.missingFacts || []).slice(0, 8),
+    })),
+    safeguards: context.safeguards || {},
+    missingFacts: (context.missingFacts || []).slice(0, 12),
+  };
 }
 
 function summarizePlayerRoleBindings(bindings = {}) {

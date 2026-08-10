@@ -1262,6 +1262,10 @@ svg {
   border-left-color: var(--accent);
 }
 
+.verdict-block.is-caution {
+  border-left-color: var(--warn);
+}
+
 .verdict-block.is-risky {
   border-left-color: var(--bad);
 }

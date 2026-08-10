@@ -1896,9 +1896,9 @@ function compareRelatedFaqCandidates(left, right) {
   return Number(right.direct) - Number(left.direct)
     || Number(right.authority === "official") - Number(left.authority === "official")
     || Number(right.current) - Number(left.current)
+    || left.bestCollectionRank - right.bestCollectionRank
     || numberOrNegativeInfinity(right.relevanceScore)
       - numberOrNegativeInfinity(left.relevanceScore)
-    || left.bestCollectionRank - right.bestCollectionRank
     || left.evidenceIds[0].localeCompare(right.evidenceIds[0], "en")
     || left.substanceHash.localeCompare(right.substanceHash, "en");
 }

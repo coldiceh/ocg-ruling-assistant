@@ -7,6 +7,7 @@ import {
   normalizeCard,
   normalizeQa,
   parseManifestPayload,
+  quarantineConflictingTrackedAliases,
   rankCardQaIds,
   selectQaIdsForSync,
 } from "../scripts/sync-ygoresources.mjs";
@@ -156,6 +157,28 @@ test("card normalization persists structured monster metadata without a card-spe
   assert.equal(levelRecord.attack, 3000);
   assert.equal(levelRecord.defense, 600);
   assert.equal(rankRecord.rank, 8);
+});
+
+test("tracked aliases that uniquely belong to another canonical card are quarantined", () => {
+  const warnings = [];
+  const entries = [
+    {
+      tracked: { lookupName: "Card A", aliases: ["神炎龙"] },
+      payload: { cardData: { en: { name: "Card A" }, cn: { name: "烙印龙 阿尔比昂" } } },
+      record: { id: "a", aliases: ["Card A", "烙印龙 阿尔比昂", "神炎龙"] },
+    },
+    {
+      tracked: { lookupName: "Card B", aliases: [] },
+      payload: { cardData: { en: { name: "Card B" }, cn: { name: "神炎龙 卢绯里昂" } } },
+      record: { id: "b", aliases: ["Card B", "神炎龙 卢绯里昂"] },
+    },
+  ];
+
+  quarantineConflictingTrackedAliases(entries, (warning) => warnings.push(warning));
+
+  assert.equal(entries[0].record.aliases.includes("神炎龙"), false);
+  assert.equal(entries[1].record.aliases.includes("神炎龙 卢绯里昂"), true);
+  assert.match(warnings[0], /card a.*canonical card b/u);
 });
 
 test("cumulative ruling merge keeps healthy old QA and lets new records override the same ID", () => {

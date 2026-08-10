@@ -66,3 +66,15 @@ test("Perfect Toon World keeps a stable alias for its current English database n
   assert.equal(card.lookupName, "Toon World the Perfect World");
   assert.ok(card.aliases.includes("Perfect Toon World"));
 });
+
+test("tracked localized aliases stay bound to the intended canonical card", async () => {
+  const tracked = JSON.parse(await readFile(new URL("../data/tracked-cards.json", import.meta.url), "utf8"));
+  const albion = tracked.cards.find((item) => item.lookupName === "Albion the Branded Dragon");
+  const lubellion = tracked.cards.find((item) => item.lookupName === "Lubellion the Searing Dragon");
+  const quem = tracked.cards.find((item) => item.lookupName === "Guiding Quem, the Virtuous");
+
+  assert.equal(albion.aliases.includes("神炎龙"), false);
+  assert.ok(lubellion.aliases.includes("神炎龙"));
+  assert.ok(quem.aliases.includes("导圣"));
+  assert.ok(quem.aliases.includes("引导之圣女 奎姆"));
+});

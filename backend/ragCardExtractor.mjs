@@ -294,6 +294,10 @@ export function extractRagCards(userQuery, { cards = [], maxCards = 6, modelCard
 
   const visibleResolved = resolved.slice(0, cardLimit);
   const omittedResolved = resolved.slice(cardLimit);
+  const filteredUnresolvedMentions = suppressResolvedGameplayClauseMentions(
+    unresolvedMentions,
+    visibleResolved,
+  );
   const cardLimitMentions = omittedResolved.map((card) => ({
     input: card.input || card.name,
     reason: "resolved_card_limit_exceeded",
@@ -304,7 +308,7 @@ export function extractRagCards(userQuery, { cards = [], maxCards = 6, modelCard
 
   return {
     resolvedCards: visibleResolved,
-    unresolvedMentions: dedupeMentionObjects(unresolvedMentions),
+    unresolvedMentions: dedupeMentionObjects(filteredUnresolvedMentions),
     ambiguousMentions: dedupeBy(ambiguousMentions, (item) => normalizeCardKey(item.input)),
     omittedResolvedCards: cardLimitMentions,
     userProvidedCardTexts,
@@ -318,17 +322,23 @@ export function buildAliasIndex(cards = []) {
   if (cached) return cached;
 
   const index = new Map();
+  const canonicalPrefixIndex = buildCanonicalPrefixIndex(sourceCards);
   const numberedIdentityIndex = new Map();
   const shortMentionIndex = new Map();
   const distinctiveFragmentIndex = new Map();
   for (const card of sourceCards) {
     const aliases = cardAliases(card);
+    const canonicalAliasKeys = new Set(canonicalCardAliases(card).map(normalizeCardKey));
     const seenNumberedKeys = new Set();
     const seenShortKeys = new Set();
     for (const alias of aliases) {
       const key = normalizeCardKey(alias);
       if (!key) continue;
-      const item = { card, matchedAlias: alias };
+      const item = {
+        card,
+        matchedAlias: alias,
+        matchedAliasKind: canonicalAliasKeys.has(key) ? "canonical_name" : "supplemental_alias",
+      };
       const existing = index.get(key) || [];
       existing.push(item);
       index.set(key, existing);
@@ -358,13 +368,49 @@ export function buildAliasIndex(cards = []) {
     }
   }
   for (const [key, candidates] of index.entries()) {
-    index.set(key, dedupeBy(candidates, (candidate) => cardIdentity(candidate.card)));
+    const deduped = dedupeBy(candidates, (candidate) => cardIdentity(candidate.card));
+    const exactCanonical = deduped.filter((candidate) => candidate.matchedAliasKind === "canonical_name");
+    if (exactCanonical.length) {
+      index.set(key, exactCanonical);
+      continue;
+    }
+    const canonicalPrefixCandidates = canonicalPrefixIndex.get(key) || [];
+    const supplementalBelongsToPrefixCard = deduped.some((candidate) => (
+      canonicalPrefixCandidates.some((prefixCandidate) => (
+        cardIdentity(prefixCandidate.card) === cardIdentity(candidate.card)
+      ))
+    ));
+    // A canonical database name is stronger than a manually supplied alias.
+    // If that alias points elsewhere while the same surface is a unique
+    // canonical-name prefix, prefer the canonical identity. Multiple canonical
+    // prefix owners stay ambiguous and therefore fail closed.
+    index.set(
+      key,
+      canonicalPrefixCandidates.length && !supplementalBelongsToPrefixCard
+        ? canonicalPrefixCandidates
+        : deduped,
+    );
   }
   for (const [key, candidates] of numberedIdentityIndex.entries()) {
     numberedIdentityIndex.set(key, dedupeBy(candidates, (candidate) => cardIdentity(candidate.card)));
   }
   for (const [key, candidates] of shortMentionIndex.entries()) {
-    shortMentionIndex.set(key, dedupeBy(candidates, (candidate) => cardIdentity(candidate.card)));
+    const deduped = dedupeBy(candidates, (candidate) => cardIdentity(candidate.card));
+    const exactCanonical = deduped.filter((candidate) => candidate.matchedAliasKind === "canonical_name");
+    const canonicalPrefixCandidates = canonicalPrefixIndex.get(key) || [];
+    const supplementalBelongsToPrefixCard = deduped.some((candidate) => (
+      canonicalPrefixCandidates.some((prefixCandidate) => (
+        cardIdentity(prefixCandidate.card) === cardIdentity(candidate.card)
+      ))
+    ));
+    shortMentionIndex.set(
+      key,
+      exactCanonical.length
+        ? exactCanonical
+        : canonicalPrefixCandidates.length && !supplementalBelongsToPrefixCard
+          ? canonicalPrefixCandidates
+          : deduped,
+    );
   }
   for (const [key, candidates] of distinctiveFragmentIndex.entries()) {
     distinctiveFragmentIndex.set(key, dedupeBy(candidates, (candidate) => cardIdentity(candidate.card)));
@@ -379,6 +425,74 @@ export function buildAliasIndex(cards = []) {
   aliasKeysByLengthCache.set(index, keysByLength);
   supplementalCardIndexesCache.set(sourceCards, { numberedIdentityIndex, shortMentionIndex, distinctiveFragmentIndex });
   return index;
+}
+
+function buildCanonicalPrefixIndex(cards = []) {
+  const index = new Map();
+  for (const card of cards || []) {
+    for (const alias of canonicalCardAliases(card)) {
+      const key = normalizeCardKey(alias);
+      if (key.length < 4) continue;
+      for (let length = 3; length < key.length; length += 1) {
+        const prefix = key.slice(0, length);
+        const candidates = index.get(prefix) || [];
+        candidates.push({
+          card,
+          matchedAlias: prefix,
+          matchedAliasKind: "canonical_name_prefix",
+        });
+        index.set(prefix, candidates);
+      }
+    }
+  }
+  for (const [prefix, candidates] of index.entries()) {
+    index.set(prefix, dedupeBy(candidates, (candidate) => cardIdentity(candidate.card)));
+  }
+  return index;
+}
+
+function canonicalCardAliases(card = {}) {
+  return dedupeBy([
+    card.name,
+    card.cnName,
+    card.jaName,
+    card.enName,
+  ].filter(Boolean), normalizeCardKey);
+}
+
+function suppressResolvedGameplayClauseMentions(mentions = [], resolvedCards = []) {
+  const resolvedAliasKeys = dedupeBy(
+    (resolvedCards || []).flatMap(cardAliases).map(normalizeCardKey).filter((key) => key.length >= 2),
+    (key) => key,
+  ).sort((left, right) => right.length - left.length);
+  if (!resolvedAliasKeys.length) return mentions;
+
+  return (mentions || []).filter((mention) => {
+    if (mention?.source !== "unquoted_heuristic") return true;
+    const mentionKey = normalizeCardKey(mention?.input);
+    if (!mentionKey) return false;
+    let remainder = mentionKey;
+    let matchedAliasCount = 0;
+    for (const aliasKey of resolvedAliasKeys) {
+      if (!remainder.includes(aliasKey)) continue;
+      remainder = remainder.split(aliasKey).join("");
+      matchedAliasCount += 1;
+    }
+    if (matchedAliasCount > 0 && isOnlyGameplayClauseRemainder(remainder)) return false;
+
+    const negativePrefixRemainder = mentionKey.replace(/^(?:没有|不存在|并无|无|只有)/u, "");
+    if (negativePrefixRemainder.length >= 4 && resolvedAliasKeys.some((aliasKey) => (
+      aliasKey.startsWith(negativePrefixRemainder)
+    ))) return false;
+    return true;
+  });
+}
+
+function isOnlyGameplayClauseRemainder(value) {
+  let text = String(value || "");
+  const gameplayToken = /^(?:(?:c|cl|chain)\d+|cost|支付|舍弃|丢弃|送下去|送去墓地|送墓|进入墓地|墓地|苏生|特殊召唤|召唤|发动|效果|对象|选择|处理|连锁|此时|之后|然后|能否|能不能|是否|可以|把|将|的|了|去|下|来|怪兽|卡片|作为|成为|产生|出现|合法)+$/iu;
+  if (!text) return true;
+  return gameplayToken.test(text);
 }
 
 function collectQueryAliasEntries(aliasIndex, normalizedQuery, queryNumberedIdentityKeys) {

@@ -20,7 +20,7 @@ test("grounded operation disagreement is diagnostic rather than a second-rule-en
   assert.ok(validation.diagnosticWarnings.some((item) => /grounded illegal activation/u.test(item)));
 });
 
-test("validator rejects an incomplete answer when the question asks activation and later resolution", () => {
+test("malformed raw output remains blocking while question coverage stays diagnostic", () => {
   const validation = validatePublicRagFinalAnswer(makeAnswer("可以发动。"), {
     rawText: "{}",
     userQuery: "这个效果可以发动吗？如果发动，之后效果如何处理？",
@@ -28,7 +28,8 @@ test("validator rejects an incomplete answer when the question asks activation a
   });
 
   assert.equal(validation.ok, false);
-  assert.ok(validation.errors.some((item) => /post-activation resolution/u.test(item)));
+  assert.ok(validation.errors.some((item) => /missing required field/u.test(item)));
+  assert.ok(validation.diagnosticWarnings.some((item) => /post-activation resolution/u.test(item)));
 });
 
 test("validator rejects JSON that only becomes complete after permissive normalization", () => {
@@ -728,7 +729,7 @@ test("validator rejects trusted semantic activation and resolution reversals", (
 
   assert.equal(validation.ok, false);
   assert.ok(validation.errors.some((item) => /trusted semantic activation/u.test(item)));
-  assert.ok(validation.errors.some((item) => /requested post-activation resolution/u.test(item)));
+  assert.ok(validation.diagnosticWarnings.some((item) => /requested post-activation resolution/u.test(item)));
 });
 
 test("validator reads string semantic resolution and rejects the opposite processing result", () => {
@@ -1096,7 +1097,7 @@ test("structured provider timeout is preserved when the directed repair call fai
       calls += 1;
       if (calls === 1) {
         const answer = makeAnswer("可以发动。");
-        return { answer, rawText: JSON.stringify(answer), warnings: [], dryRun: false };
+        return { answer, rawText: "not JSON", warnings: [], dryRun: false };
       }
       return {
         answer: makeAnswer("当前资料不足。"),
@@ -1151,7 +1152,7 @@ test("bare temporal follow-up does not manufacture a resolution question", () =>
   assert.equal(validation.checks.multiPartQuestion, false);
 });
 
-test("temporal follow-up with a nearby processing result still requires resolution", () => {
+test("temporal follow-up coverage is diagnostic and does not reject a usable answer", () => {
   const answer = makeAnswer("可以发动。");
   const validation = validatePublicRagFinalAnswer(answer, {
     rawText: JSON.stringify(answer),
@@ -1159,9 +1160,10 @@ test("temporal follow-up with a nearby processing result still requires resoluti
     evidence: {},
   });
 
-  assert.equal(validation.ok, false);
+  assert.equal(validation.ok, true);
   assert.equal(validation.checks.multiPartQuestion, true);
-  assert.ok(validation.errors.includes("shortAnswer omits the requested post-activation resolution result"));
+  assert.ok(validation.diagnosticWarnings.includes("shortAnswer omits the requested post-activation resolution result"));
+  assert.equal(validation.errors.includes("shortAnswer omits the requested post-activation resolution result"), false);
 });
 
 test("formal UNKNOWN does not veto a claim grounded by other evidence", async () => {
@@ -1231,10 +1233,10 @@ test("safe fallback uses a grounded blocker and never guesses a conflicting conc
   assert.ok(fallback.usedEvidence.some((item) => item.id === "rule-neutral-1"));
 });
 
-test("public final gate performs exactly one directed repair on the same frozen prompt", async () => {
+test("public final gate reserves directed repair for an unparseable primary output", async () => {
   const prompts = [];
   const outputs = [
-    makeAnswer("可以发动。"),
+    makeAnswer("可以发动；处理时不进行后续特殊召唤。"),
     makeAnswer("可以发动；处理时不进行后续特殊召唤。"),
   ];
   const result = await runValidatedPublicRagFinal({
@@ -1246,7 +1248,7 @@ test("public final gate performs exactly one directed repair on the same frozen 
       const answer = outputs[prompts.length - 1];
       return {
         answer,
-        rawText: JSON.stringify(answer),
+        rawText: prompts.length === 1 ? "not JSON" : JSON.stringify(answer),
         warnings: [],
         dryRun: false,
         tokenUsage: { inputTokens: 10, outputTokens: 5 },

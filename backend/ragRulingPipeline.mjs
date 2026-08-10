@@ -23,6 +23,8 @@ import {
   createLegacyLuaUnknownPacket,
   validateLegacyLuaSemanticPacket,
 } from "./legacyLuaSemanticPacket.mjs";
+import { buildSummonLegalityContext } from "./summonLegalityContext.mjs";
+import { buildEffectApplicabilityContext } from "./effectApplicabilityContext.mjs";
 
 const defaultSnapshotRevisionCache = new WeakMap();
 
@@ -195,6 +197,16 @@ export async function answerRagRulingQuestion({
     ...(retrievedEvidence.userProvidedCardTexts || []),
   ], query);
   const cardSemanticFacts = buildCardSemanticFacts(reasoningCardTexts);
+  const summonLegalityContext = buildSummonLegalityContext({
+    userQuery: query,
+    resolvedCards: effectiveCardResolution.resolvedCards || [],
+    cardTexts: reasoningCardTexts,
+  });
+  const effectApplicabilityContext = buildEffectApplicabilityContext({
+    userQuery: query,
+    resolvedCards: effectiveCardResolution.resolvedCards || [],
+    cardTexts: reasoningCardTexts,
+  });
   const playerRoleBindings = buildPlayerRoleBindings({
     userQuery: query,
     cardTexts: reasoningCardTexts,
@@ -271,6 +283,8 @@ export async function answerRagRulingQuestion({
     // They give the final model a lossless description of card-text lifecycles,
     // while the prompt still requires verification against the raw card text.
     cardSemanticFacts,
+    summonLegalityContext,
+    effectApplicabilityContext,
     playerRoleBindings,
     legacyLuaSemanticPacket,
     formalEngineProofs: [],

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-08-10T08:08:09.655Z",
+  "generatedAt": "2026-08-10T19:02:08.917Z",
   "records": [
     {
       "id": "21385",
@@ -6987,13 +6987,10 @@
       "aliases": [
         "烙印龙 阿尔比昂",
         "烙印竜アルビオン",
-        "Albion the Branded Dragon",
-        "神炎龙 赫界龙",
-        "神炎龙",
-        "赫界龙"
+        "Albion the Branded Dragon"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/15994",
-      "updatedAt": "2026-08-10T08:06:01.121Z"
+      "updatedAt": "2026-08-10T19:02:07.631Z"
     },
     {
       "id": "18498",
@@ -48555,7 +48552,7 @@
         "混沌极龙"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12487",
-      "updatedAt": "2026-08-10T08:06:02.575Z"
+      "updatedAt": "2026-08-10T19:02:07.126Z"
     },
     {
       "id": "16809",
@@ -48948,7 +48945,7 @@
         "暴君龙"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/16842",
-      "updatedAt": "2026-08-10T08:06:02.590Z"
+      "updatedAt": "2026-08-10T19:02:08.124Z"
     },
     {
       "id": "4386",
@@ -51960,7 +51957,7 @@
         "Branded Fusion"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/17066",
-      "updatedAt": "2026-08-10T08:06:02.704Z"
+      "updatedAt": "2026-08-10T19:02:07.627Z"
     },
     {
       "id": "18201",
@@ -119413,7 +119410,7 @@
         "脆刃"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/14877",
-      "updatedAt": "2026-08-10T08:06:05.072Z"
+      "updatedAt": "2026-08-10T19:02:07.127Z"
     },
     {
       "id": "7323",
@@ -150528,7 +150525,7 @@
         "落胤"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/15245",
-      "updatedAt": "2026-08-10T08:06:06.131Z"
+      "updatedAt": "2026-08-10T19:02:07.384Z"
     },
     {
       "id": "18472",
@@ -198334,10 +198331,15 @@
       "aliases": [
         "引导之圣女 库妸㽗",
         "導きの聖女クエム",
-        "Guiding Quem, the Virtuous"
+        "Guiding Quem, the Virtuous",
+        "引导之圣女 奎姆",
+        "引导的圣女 奎姆",
+        "引导之圣女奎姆",
+        "奎姆",
+        "导圣"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/18474",
-      "updatedAt": "2026-08-10T08:06:07.755Z"
+      "updatedAt": "2026-08-10T19:02:07.873Z"
     },
     {
       "id": "21481",
@@ -212571,7 +212573,7 @@
         "IP加速"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/14676",
-      "updatedAt": "2026-08-10T08:06:08.235Z"
+      "updatedAt": "2026-08-10T19:02:06.869Z"
     },
     {
       "id": "14285",
@@ -249979,10 +249981,14 @@
       "aliases": [
         "神炎龙 卢绯里昂",
         "神炎竜ルベリオン",
-        "Lubellion the Searing Dragon"
+        "Lubellion the Searing Dragon",
+        "神炎龙 卢贝里昂",
+        "神炎龙",
+        "卢绯里昂",
+        "卢贝里昂"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/17070",
-      "updatedAt": "2026-08-10T08:06:09.455Z"
+      "updatedAt": "2026-08-10T19:02:07.876Z"
     },
     {
       "id": "21625",
@@ -277770,7 +277776,7 @@
         "御巫"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/18017",
-      "updatedAt": "2026-08-10T08:06:10.386Z"
+      "updatedAt": "2026-08-10T19:02:07.384Z"
     },
     {
       "id": "4717",
@@ -359543,7 +359549,7 @@
         "S:P小夜"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/19188",
-      "updatedAt": "2026-08-10T08:06:13.213Z"
+      "updatedAt": "2026-08-10T19:02:06.883Z"
     },
     {
       "id": "13717",
@@ -409224,7 +409230,7 @@
         "三战"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/15296",
-      "updatedAt": "2026-08-10T08:06:14.961Z"
+      "updatedAt": "2026-08-10T19:02:06.368Z"
     },
     {
       "id": "11099",
@@ -427211,7 +427217,7 @@
         "Perfect Toon World"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23161",
-      "updatedAt": "2026-08-10T08:06:15.610Z"
+      "updatedAt": "2026-08-10T19:02:08.123Z"
     },
     {
       "id": "9296",
