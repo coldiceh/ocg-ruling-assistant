@@ -21,7 +21,11 @@ test("public Luna relay profile requires both a key and an HTTPS endpoint", () =
     unavailable.rulingModelProfiles.map((profile) => [profile.id, profile.available]),
     [
       [RELAY_PROFILE_ID, false],
+      ["relay-gpt-5.6-sol-low", false],
+      ["deepseek-v4-flash-standard", false],
+      ["deepseek-v4-flash-low", false],
       ["deepseek-v4-flash-high", false],
+      ["deepseek-v4-flash-max", false],
     ],
   );
   assert.equal(publicRulingModelProfileAvailable(RELAY_PROFILE_ID, {
@@ -56,28 +60,57 @@ test("public Luna relay profile requires both a key and an HTTPS endpoint", () =
     id: profile.id,
     available: profile.available,
     model: profile.model,
+    thinkingMode: profile.thinkingMode,
     reasoningEffort: profile.reasoningEffort,
     transport: profile.transport,
-    thirdParty: profile.thirdParty === true,
-    modelIdentityVerified: profile.modelIdentityVerified !== false,
   })), [
     {
       id: RELAY_PROFILE_ID,
       available: true,
       model: "gpt-5.6-luna",
+      thinkingMode: "enabled",
       reasoningEffort: "low",
       transport: "chat_completions_sse",
-      thirdParty: true,
-      modelIdentityVerified: false,
+    },
+    {
+      id: "relay-gpt-5.6-sol-low",
+      available: true,
+      model: "gpt-5.6-sol",
+      thinkingMode: "enabled",
+      reasoningEffort: "low",
+      transport: "chat_completions_sse",
+    },
+    {
+      id: "deepseek-v4-flash-standard",
+      available: true,
+      model: "deepseek-v4-flash",
+      thinkingMode: "disabled",
+      reasoningEffort: null,
+      transport: "chat_completions",
+    },
+    {
+      id: "deepseek-v4-flash-low",
+      available: true,
+      model: "deepseek-v4-flash",
+      thinkingMode: "enabled",
+      reasoningEffort: "low",
+      transport: "chat_completions",
     },
     {
       id: "deepseek-v4-flash-high",
       available: true,
       model: "deepseek-v4-flash",
+      thinkingMode: "enabled",
       reasoningEffort: "high",
       transport: "chat_completions",
-      thirdParty: false,
-      modelIdentityVerified: true,
+    },
+    {
+      id: "deepseek-v4-flash-max",
+      available: true,
+      model: "deepseek-v4-flash",
+      thinkingMode: "enabled",
+      reasoningEffort: "max",
+      transport: "chat_completions",
     },
   ]);
   assert.doesNotMatch(JSON.stringify(configured), /relay-issued-key|relay\.example/u);
@@ -119,6 +152,14 @@ test("public answer environment retains relay secrets only for the relay profile
   }, "deepseek-v4-flash-high");
   assert.equal(nonRelayEnv.RELAY_API_KEY, undefined);
   assert.equal(nonRelayEnv.RELAY_BASE_URL, undefined);
+
+  const standardEnv = createPublicAnswerModelEnv({ DEEPSEEK_API_KEY: "deepseek-key" }, "deepseek-v4-flash-standard");
+  assert.equal(standardEnv.RAG_THINKING_MODE, "disabled");
+  assert.equal(standardEnv.RAG_REASONING_EFFORT, null);
+
+  const lowEnv = createPublicAnswerModelEnv({ DEEPSEEK_API_KEY: "deepseek-key" }, "deepseek-v4-flash-low");
+  assert.equal(lowEnv.RAG_THINKING_MODE, "enabled");
+  assert.equal(lowEnv.RAG_REASONING_EFFORT, "low");
 });
 
 test("relay final ruling uses one SSE Chat Completions request with the relay-only contract", async () => {

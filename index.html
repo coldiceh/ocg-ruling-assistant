@@ -39,15 +39,14 @@
             <label class="model-tier-label" for="rulingModelSelect">
               <span>裁定模型</span>
               <select id="rulingModelSelect" aria-describedby="rulingModelStatus rulingModelLatency" disabled>
-                <option value="relay-gpt-5.6-luna-low" selected>GPT-5.6 Luna · 思考 low（第三方中转）</option>
+                <option value="relay-gpt-5.6-luna-low" selected>GPT-5.6 Luna · 思考 low</option>
               </select>
-              <small id="rulingModelStatus">正在确认模型可用性</small>
+              <small id="rulingModelStatus">匿名 10 题评测：10/10，平均 34.6 秒；推荐。</small>
               <small id="rulingModelLatency" class="model-latency" aria-live="polite">正在读取平均出答案时间</small>
             </label>
             <div class="answer-version-selector" role="group" aria-label="回答版本">
               <span>回答版本</span>
               <button class="answer-version-button is-active" type="button" data-ruling-version="latest" aria-pressed="true">最新版</button>
-              <button class="answer-version-button" type="button" data-ruling-version="previous" aria-pressed="false" aria-disabled="true" disabled title="当前后端暂未提供上一版兼容实现">上一版（兼容）</button>
             </div>
             <div class="model-strip" aria-live="polite">
               <span>裁定流程</span>
@@ -147,7 +146,6 @@
             </div>
             <p id="budgetHint">统计后端今日累计模型用量。</p>
             <div class="budget-buckets" id="budgetBucketList" aria-label="分模型今日用量"></div>
-            <button class="text-button" id="budgetResetButton" type="button" hidden>重置额度</button>
           </section>
 
           <section class="admin-lab" id="adminLabPanel" aria-labelledby="adminLabTitle" hidden>
@@ -186,6 +184,7 @@
                 <div class="admin-budget-pools" id="adminBudgetPools">
                   <p>登录后读取各模型预算池。</p>
                 </div>
+                <button class="text-button" id="budgetResetButton" type="button" hidden>重置公开问答额度</button>
               </section>
 
               <section class="admin-lab-section" aria-labelledby="adminExperimentTitle">
@@ -373,6 +372,6 @@
       </main>
     </div>
 
-    <script src="src/app.js?v=20260807-budget-breakdown-1"></script>
+    <script src="src/app.js?v=20260810-public-models-1"></script>
   </body>
 </html>

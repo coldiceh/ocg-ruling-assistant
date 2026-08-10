@@ -25,7 +25,7 @@ const DEFAULT_DAILY_BUDGET_CNY = 10;
 const DEFAULT_RELAY_ESTIMATED_CNY_PER_CALL = 0.5;
 const DEFAULT_BUDGET_TIMEZONE = "Asia/Shanghai";
 const DEEPSEEK_THINKING_MODES = new Set(["enabled", "disabled"]);
-const DEEPSEEK_REASONING_EFFORTS = new Set(["high", "max"]);
+const DEEPSEEK_REASONING_EFFORTS = new Set(["low", "high", "max"]);
 const RELAY_REASONING_EFFORTS = new Set(["none", "low", "medium", "high", "xhigh", "max"]);
 const PUBLIC_BUDGET_BUCKETS = Object.freeze([
   Object.freeze({ id: "evidence_preparation:deepseek", stage: "evidence_preparation", provider: "deepseek", label: "DeepSeek 资料准备" }),

@@ -26,6 +26,10 @@ const OFFICIAL_DEEPSEEK_PRICING = getDeepSeekModelPricingConfig();
 const DEFAULT_RELAY_CREDIT_TO_CNY = 1;
 const DEFAULT_MARKDOWN_LOCALE = "zh";
 const SUPPORTED_MARKDOWN_LOCALES = new Set(["zh", "en", "ja"]);
+const PUBLIC_CURRENCY_CONVERSIONS = Object.freeze({
+  zh: Object.freeze({ rate: 6.8, symbol: "CN¥", digits: 2, approximate: "约" }),
+  ja: Object.freeze({ rate: 158.4, symbol: "¥", digits: 0, approximate: "約" }),
+});
 const DIRECT_RELAY_RUNNERS = new Set([
   "local-relay-effort-experiment/v1",
   "local-relay-effort-experiment/v2",
@@ -47,8 +51,8 @@ const MARKDOWN_TEXT = Object.freeze({
     evidenceConsistency: "证据一致性",
     passed: "通过",
     failed: "失败",
-    accuracyDefinition: "用户答案正确率只来自与原始输出哈希严格绑定的逐题语义复核；自动关键词断言和结构 Validator 不参与正确率。",
-    costDefinition: "费用按模型官方标准 API 单价和接口返回 Token 估算，不采用第三方中转倍率或余额扣款；它不是实际账单。只有语义复核完整时才计算每答对一题的费用。",
+    accuracyDefinition: "严格正确率只来自与原始输出哈希绑定的人工或 Codex 语义复核；复核未覆盖全部计划样本时不发布正确率。",
+    costDefinition: "费用按模型官方标准 API 单价和接口返回 Token 估算，不采用实际供应商的倍率、余额或账单。人民币约值按 2026-08 的 1 USD ≈ CN¥6.8 换算，仅便于阅读；实际费用以 USD 理论单价与 Token 计量为准。",
     error: "错误",
     warning: "警告",
     testContent: "测试内容",
@@ -56,10 +60,12 @@ const MARKDOWN_TEXT = Object.freeze({
     caseId: "Case ID",
     fullQuestion: "完整问题",
     requestedModel: "请求模型",
+    reasoningMode: "推理模式",
     returnedModel: "实际返回模型",
     effort: "推理强度",
     evidenceVariant: "证据方案",
-    semanticAccuracy: "用户答案正确率",
+    semanticAccuracy: "严格正确率",
+    partiallyCorrect: "部分正确",
     reviewCoverage: "复核覆盖率",
     autoAssertionRate: "Auto 断言通过率",
     hardValidationRate: "Hard Validator 通过率",
@@ -70,6 +76,10 @@ const MARKDOWN_TEXT = Object.freeze({
     reasoningTokens: "推理 Token",
     totalTokens: "总 Token",
     cost: "费用（总计 / 平均每题 / 每答对一题）",
+    aggregateTokens: "聚合 Token（输入 / 输出 / 推理 / 总计）",
+    officialCost: "官方理论费用（USD / 约人民币）",
+    metered: "有计量",
+    failures: "失败类型汇总",
     dashboardTitle: "看板实际批次增量",
     dashboardNote: "以下数值只是批次级观测，不推导、不分摊为单次请求费用。",
     batch: "批次",
@@ -91,7 +101,14 @@ const MARKDOWN_TEXT = Object.freeze({
       unreviewed: "未复核",
       not_planned: "未测试",
     }),
-    failureKinds: Object.freeze({ timeout: "超时", empty_response: "空响应" }),
+    failureKinds: Object.freeze({
+      timeout: "超时",
+      empty_response: "空响应",
+      upstream_failure: "上游失败",
+      truncated: "输出截断",
+      invalid_format: "格式无效",
+      other_failure: "其他失败",
+    }),
     variants: Object.freeze({ full: "完整资料", card_text_only: "仅卡文", card_text_plus_lua: "卡文＋Lua", without_lua: "不含 Lua" }),
   }),
   en: Object.freeze({
@@ -99,8 +116,8 @@ const MARKDOWN_TEXT = Object.freeze({
     evidenceConsistency: "Evidence consistency",
     passed: "passed",
     failed: "failed",
-    accuracyDefinition: "User-answer accuracy comes only from case-by-case semantic reviews bound to the original-output hash. Keyword assertions and structural validators do not contribute to accuracy.",
-    costDefinition: "Cost is estimated from official standard API list prices and provider-reported tokens, not relay multipliers or balance deductions. It is not an invoice. Cost per correct answer requires complete semantic review.",
+    accuracyDefinition: "Strict accuracy comes only from human or Codex semantic reviews bound to the original-output hash. Accuracy is withheld until every planned sample has a determinate review.",
+    costDefinition: "Cost is estimated in USD from official standard API list prices and provider-reported tokens. Actual provider billing, multipliers, and account balances are not used.",
     error: "Error",
     warning: "Warning",
     testContent: "Test cases",
@@ -108,10 +125,12 @@ const MARKDOWN_TEXT = Object.freeze({
     caseId: "Case ID",
     fullQuestion: "Full question",
     requestedModel: "Requested model",
+    reasoningMode: "Reasoning mode",
     returnedModel: "Returned model",
     effort: "Reasoning effort",
     evidenceVariant: "Evidence variant",
-    semanticAccuracy: "User-answer accuracy",
+    semanticAccuracy: "Strict accuracy",
+    partiallyCorrect: "Partially correct",
     reviewCoverage: "Review coverage",
     autoAssertionRate: "Auto assertion pass rate",
     hardValidationRate: "Hard Validator pass rate",
@@ -122,6 +141,10 @@ const MARKDOWN_TEXT = Object.freeze({
     reasoningTokens: "Reasoning tokens",
     totalTokens: "Total tokens",
     cost: "Cost (total / per case / per correct answer)",
+    aggregateTokens: "Aggregate tokens (input / output / reasoning / total)",
+    officialCost: "Official theoretical cost",
+    metered: "metered",
+    failures: "Failures by type",
     dashboardTitle: "Observed dashboard batch delta",
     dashboardNote: "These are batch-level observations only and are not inferred or allocated to individual requests.",
     batch: "Batch",
@@ -143,7 +166,14 @@ const MARKDOWN_TEXT = Object.freeze({
       unreviewed: "Unreviewed",
       not_planned: "Not tested",
     }),
-    failureKinds: Object.freeze({ timeout: "Timed out", empty_response: "Empty response" }),
+    failureKinds: Object.freeze({
+      timeout: "Timed out",
+      empty_response: "Empty response",
+      upstream_failure: "Upstream failure",
+      truncated: "Truncated",
+      invalid_format: "Invalid format",
+      other_failure: "Other failure",
+    }),
     variants: Object.freeze({ full: "Full evidence", card_text_only: "Card text only", card_text_plus_lua: "Card text + Lua", without_lua: "Without Lua" }),
   }),
   ja: Object.freeze({
@@ -151,8 +181,8 @@ const MARKDOWN_TEXT = Object.freeze({
     evidenceConsistency: "証拠の一貫性",
     passed: "合格",
     failed: "不合格",
-    accuracyDefinition: "ユーザー回答の正答率は、元出力のハッシュに厳密に紐付けた問題別の意味レビューだけから算出します。キーワード判定と構造 Validator は正答率に含めません。",
-    costDefinition: "費用は公式の標準 API 価格と返却 Token から推定し、中継業者の倍率や残高控除は使いません。実際の請求額ではありません。正答1件あたりの費用は意味レビューが完全な場合だけ算出します。",
+    accuracyDefinition: "厳密な正答率は、元出力のハッシュに紐付けた人間または Codex の意味レビューだけから算出します。全予定サンプルのレビューが確定するまで正答率は公開しません。",
+    costDefinition: "費用は公式の標準 API 価格と返却 Token から推定し、実際のサービス提供者の倍率、残高、請求額は使用しません。円換算は 2026-08 時点の 1 USD ≈ ¥158.4 による読みやすさのための概算で、実際の費用は USD 建ての理論単価と Token 使用量を基準とします。",
     error: "エラー",
     warning: "警告",
     testContent: "テスト内容",
@@ -160,10 +190,12 @@ const MARKDOWN_TEXT = Object.freeze({
     caseId: "Case ID",
     fullQuestion: "質問全文",
     requestedModel: "リクエストモデル",
+    reasoningMode: "推論モード",
     returnedModel: "応答モデル",
     effort: "推論強度",
     evidenceVariant: "証拠構成",
-    semanticAccuracy: "ユーザー回答正答率",
+    semanticAccuracy: "厳密な正答率",
+    partiallyCorrect: "一部正解",
     reviewCoverage: "レビュー網羅率",
     autoAssertionRate: "Auto 判定合格率",
     hardValidationRate: "Hard Validator 合格率",
@@ -174,6 +206,10 @@ const MARKDOWN_TEXT = Object.freeze({
     reasoningTokens: "推論 Token",
     totalTokens: "合計 Token",
     cost: "費用（合計 / 1問平均 / 正答1件あたり）",
+    aggregateTokens: "集計 Token（入力 / 出力 / 推論 / 合計）",
+    officialCost: "公式理論費用（USD / 円換算）",
+    metered: "計量",
+    failures: "失敗種別集計",
     dashboardTitle: "ダッシュボードで観測したバッチ増分",
     dashboardNote: "以下はバッチ単位の観測値であり、個別リクエストへの推定・按分は行いません。",
     batch: "バッチ",
@@ -195,7 +231,14 @@ const MARKDOWN_TEXT = Object.freeze({
       unreviewed: "未レビュー",
       not_planned: "未実施",
     }),
-    failureKinds: Object.freeze({ timeout: "タイムアウト", empty_response: "空の応答" }),
+    failureKinds: Object.freeze({
+      timeout: "タイムアウト",
+      empty_response: "空の応答",
+      upstream_failure: "上流エラー",
+      truncated: "出力打ち切り",
+      invalid_format: "形式不正",
+      other_failure: "その他の失敗",
+    }),
     variants: Object.freeze({ full: "完全な証拠", card_text_only: "カードテキストのみ", card_text_plus_lua: "カードテキスト＋Lua", without_lua: "Lua なし" }),
   }),
 });
@@ -358,7 +401,7 @@ export function aggregateModelEffortMatrix({
         pricingVersion: OFFICIAL_MODEL_PRICING.pricingVersion,
         effectiveDate: OFFICIAL_MODEL_PRICING.effectiveDate,
         sources: OFFICIAL_MODEL_PRICING.sources,
-        disclaimer: "Official list-price estimate only; third-party relay billing may differ.",
+        disclaimer: "Official list-price estimate only; actual provider billing may differ.",
       },
       officialDeepSeekListPrice: {
         status: "estimated",
@@ -389,84 +432,44 @@ export function renderModelEffortMatrixMarkdown(report, { locale = DEFAULT_MARKD
     text.accuracyDefinition,
     text.costDefinition,
   ];
-  if (report.evidenceConsistency.errors.length) {
-    lines.push("", ...report.evidenceConsistency.errors.map((error) => `- ${text.error}: ${escapeMarkdown(error)}`));
-  }
-  if (report.evidenceConsistency.warnings.length) {
-    lines.push("", ...report.evidenceConsistency.warnings.map((warning) => `- ${text.warning}: ${escapeMarkdown(warning)}`));
-  }
-  if (report.semanticReview?.diagnostics?.length) {
-    lines.push("", ...report.semanticReview.diagnostics.map((diagnostic) => (
-      `- ${text.warning}: ${escapeMarkdown(diagnostic)}`
-    )));
-  }
-  const caseCatalog = normalizeCaseCatalog(report.caseCatalog, report.caseIds);
-  const caseHeaders = caseCatalog.map((item) => escapeMarkdown(item.label));
-  if (caseCatalog.some((item) => item.question)) {
-    lines.push(
-      "",
-      `## ${text.testContent}`,
-      "",
-      `| ${text.number} | ${text.caseId} | ${text.fullQuestion} |`,
-      "| --- | --- | --- |",
-      ...caseCatalog.map((item) => (
-        `| ${escapeMarkdown(item.label)} | ${escapeMarkdown(item.caseId)} | ${escapeMarkdown(item.question || "—")} |`
-      )),
-    );
-  }
+  // Markdown is the public report surface. Keep it configuration-level and
+  // anonymous even when the in-memory/JSON report contains private case data.
+  // Evidence diagnostics can contain case IDs, so they deliberately stay out
+  // of the default Markdown rendering as well.
+  const publicConfigurations = report.configurations.filter((item) => (
+    isPublicEvidenceVariant(item.evidenceVariant)
+  ));
+  const showReasoningMode = publicConfigurations.some((item) => item.reasoningMode);
   const headers = [
       text.requestedModel,
-      text.returnedModel,
+      ...(showReasoningMode ? [text.reasoningMode] : []),
       text.effort,
       text.evidenceVariant,
-      ...caseHeaders,
       text.semanticAccuracy,
-      text.reviewCoverage,
+      text.partiallyCorrect,
       text.totalLatency,
-      text.firstContentLatency,
-      text.inputTokens,
-      text.outputTokens,
-      text.reasoningTokens,
-      text.totalTokens,
-      text.cost,
+      text.aggregateTokens,
+      text.officialCost,
+      text.failures,
   ];
   lines.push(
     "",
     headers.map((value) => `| ${value} `).join("") + "|",
     headers.map(() => "| --- ").join("") + "|",
   );
-  for (const configuration of report.configurations) {
-    const casesById = new Map(configuration.cases.map((item) => [item.caseId, item]));
+  for (const configuration of publicConfigurations) {
     lines.push([
-      configuration.model,
-      formatReturnedModel(configuration, text),
+      formatPublicModelName(configuration.model),
+      ...(showReasoningMode ? [configuration.reasoningMode || "—"] : []),
       configuration.effort,
       formatEvidenceVariant(configuration.evidenceVariant, text),
-      ...report.caseIds.map((caseId) => formatSemanticReview(casesById.get(caseId), text)),
       formatSemanticAccuracy(configuration.semanticAccuracy),
-      formatRatio(configuration.reviewCoverage),
+      String(configuration.semanticReview?.counts?.partially_correct || 0),
       formatLatency(configuration.latency.totalMs),
-      formatLatency(configuration.latency.firstContentMs),
-      formatTokenMetric(configuration.tokens.input),
-      formatTokenMetric(configuration.tokens.output),
-      formatTokenMetric(configuration.tokens.reasoning),
-      formatTokenMetric(configuration.tokens.total),
-      formatEstimatedCost(configuration.estimatedCost, text),
+      formatAggregateTokens(configuration.tokens),
+      formatOfficialEstimatedCost(configuration.estimatedCost, text, locale),
+      formatFailureCounts(configuration.failureCounts, text),
     ].map((value) => `| ${escapeMarkdown(value)} `).join("") + "|");
-  }
-  if (report.dashboard) {
-    lines.push(
-      "",
-      `## ${text.dashboardTitle}`,
-      "",
-      text.dashboardNote,
-      "",
-      `| ${text.batch} | ${text.requests} | ${text.start} | ${text.end} | ${text.delta} | ${text.unit} | ${text.source} |`,
-      "| --- | ---: | ---: | ---: | ---: | --- | --- |",
-    );
-    for (const batch of report.dashboard.batches) {
-      lines.push(`| ${escapeMarkdown(batch.label)} | ${nullable(batch.requestCount)} | ${nullable(batch.before)} | ${nullable(batch.after)} | ${nullable(batch.delta)} | ${escapeMarkdown(batch.unit || "")} | ${escapeMarkdown(batch.source || "")} |`);
-    }
   }
   return `${lines.join("\n")}\n`;
 }
@@ -505,6 +508,7 @@ function normalizeRunPair(run, runIndex, relayCreditToCny) {
         key: result.key,
         caseId: result.caseId,
         model: result.model,
+        reasoningMode: result.reasoningMode,
         effort: result.effort,
         evidenceVariant: result.evidenceVariant,
       }));
@@ -527,6 +531,11 @@ function normalizeRunPair(run, runIndex, relayCreditToCny) {
     const descriptor = {
       caseId: requiredText(plan.caseId, `plan[${planIndex}].caseId`),
       model: requiredText(plan.model || checkpoint.model, `plan[${planIndex}] model`),
+      reasoningMode: normalizeRunReasoningMode(
+        plan.reasoningMode ?? checkpoint.reasoningMode,
+        directRelayContract,
+        `plan[${planIndex}] reasoningMode`,
+      ),
       effort: requiredText(plan.effort, `plan[${planIndex}] effort`).toLowerCase(),
       evidenceVariant: String(plan.evidenceVariant || checkpoint.evidenceVariant || "full"),
     };
@@ -546,6 +555,8 @@ function normalizeRunPair(run, runIndex, relayCreditToCny) {
       const expectedKey = directRelayResultKey(
         descriptor.caseId,
         descriptor.model,
+        directRelayContract.provider,
+        descriptor.reasoningMode,
         descriptor.effort,
         descriptor.evidenceVariant,
       );
@@ -574,6 +585,8 @@ function normalizeRunPair(run, runIndex, relayCreditToCny) {
       directRelayContract.efforts.map((effort) => directRelayResultKey(
         caseId,
         directRelayContract.model,
+        directRelayContract.provider,
+        directRelayContract.reasoningMode,
         effort,
         directRelayContract.evidenceVariant,
       ))
@@ -598,6 +611,11 @@ function normalizeRunPair(run, runIndex, relayCreditToCny) {
     const descriptor = {
       caseId: requiredText(result.caseId, `result[${resultIndex}].caseId`),
       model: requiredText(result.model || checkpoint.model, `result[${resultIndex}] model`),
+      reasoningMode: normalizeRunReasoningMode(
+        result.reasoningMode ?? checkpoint.reasoningMode,
+        directRelayContract,
+        `result[${resultIndex}] reasoningMode`,
+      ),
       effort: requiredText(result.effort, `result[${resultIndex}] effort`).toLowerCase(),
       evidenceVariant: result.evidenceVariant || checkpoint.evidenceVariant || "full",
     };
@@ -610,6 +628,8 @@ function normalizeRunPair(run, runIndex, relayCreditToCny) {
       const expectedKey = directRelayResultKey(
         descriptor.caseId,
         descriptor.model,
+        directRelayContract.provider,
+        descriptor.reasoningMode,
         descriptor.effort,
         descriptor.evidenceVariant,
       );
@@ -636,6 +656,11 @@ function normalizeRunPair(run, runIndex, relayCreditToCny) {
     const identity = recordIdentity({
       caseId: requiredText(score.caseId, `score[${scoreIndex}].caseId`),
       model: requiredText(score.requestedModel || score.model, `score[${scoreIndex}] model`),
+      reasoningMode: normalizeRunReasoningMode(
+        score.reasoningMode ?? checkpoint.reasoningMode,
+        directRelayContract,
+        `score[${scoreIndex}] reasoningMode`,
+      ),
       effort: requiredText(score.reasoningEffort || score.effort, `score[${scoreIndex}] effort`).toLowerCase(),
       evidenceVariant: score.evidenceVariant || checkpoint.evidenceVariant || "full",
     });
@@ -704,6 +729,7 @@ function normalizeRunPair(run, runIndex, relayCreditToCny) {
         ? checkpointReturnedModel
         : (checkpointReturnedModel || scoredReturnedModel),
       durationMs: firstFinite(result?.durationMs, result?.sseTiming?.requestToCompleteMs),
+      finishReason: optionalText(result?.finishReason || result?.finish_reason),
       firstContentMs: firstFinite(
         result?.sseTiming?.requestToFirstContentMs,
         result?.streamMetrics?.requestToFirstContentMs,
@@ -769,6 +795,14 @@ function assertScoreSourceBindingMatchesResult(binding, result, identity) {
 function normalizeSemanticReviews(values, records) {
   if (!Array.isArray(values)) throw new TypeError("semanticReviews must be an array");
   const recordsByIdentity = new Map(records.map((record) => [record.identity, record]));
+  const recordsByLegacyReviewIdentity = new Map();
+  for (const record of records) {
+    const legacyIdentity = legacyReviewIdentity(record);
+    if (!recordsByLegacyReviewIdentity.has(legacyIdentity)) {
+      recordsByLegacyReviewIdentity.set(legacyIdentity, []);
+    }
+    recordsByLegacyReviewIdentity.get(legacyIdentity).push(record);
+  }
   const reviewByLevel = new Map();
   let suppliedReviewCount = 0;
   for (const [documentIndex, entry] of values.entries()) {
@@ -790,11 +824,29 @@ function normalizeSemanticReviews(values, records) {
       const descriptor = {
         caseId: requiredText(review.caseId, `${label}.caseId`),
         model: requiredText(review.requestedModel, `${label}.requestedModel`),
+        reasoningMode: normalizeOptionalReasoningMode(
+          review.reasoningMode,
+          `${label}.reasoningMode`,
+        ),
         effort: requiredText(review.reasoningEffort, `${label}.reasoningEffort`).toLowerCase(),
         evidenceVariant: requiredText(review.evidenceVariant, `${label}.evidenceVariant`),
       };
-      const identity = recordIdentity(descriptor);
-      const record = recordsByIdentity.get(identity);
+      let identity;
+      let record;
+      if (descriptor.reasoningMode) {
+        identity = recordIdentity(descriptor);
+        record = recordsByIdentity.get(identity);
+      } else {
+        const legacyIdentity = legacyReviewIdentity(descriptor);
+        const candidates = recordsByLegacyReviewIdentity.get(legacyIdentity) || [];
+        if (candidates.length > 1) {
+          throw new Error(
+            `ambiguous semantic review without reasoningMode: ${legacyIdentity}`,
+          );
+        }
+        record = candidates[0] || null;
+        identity = record?.identity || legacyIdentity;
+      }
       if (!record) throw new Error(`orphan semantic review: ${identity}`);
       const binding = {
         resultKey: requiredText(review.resultKey, `${label}.resultKey`),
@@ -815,6 +867,7 @@ function normalizeSemanticReviews(values, records) {
       const normalized = {
         caseId: descriptor.caseId,
         requestedModel: descriptor.model,
+        reasoningMode: record.reasoningMode,
         reasoningEffort: descriptor.effort,
         evidenceVariant: descriptor.evidenceVariant,
         resultKey: binding.resultKey,
@@ -887,6 +940,7 @@ function semanticReviewFingerprint(review) {
   return JSON.stringify({
     caseId: review.caseId,
     requestedModel: review.requestedModel,
+    reasoningMode: review.reasoningMode,
     reasoningEffort: review.reasoningEffort,
     evidenceVariant: review.evidenceVariant,
     resultKey: review.resultKey,
@@ -953,7 +1007,7 @@ function dedupeRecords(records) {
     const comparableKeys = [
       "bundleSha256", "snapshotSha256", "finalInputSha256", "rawStatus", "failureKind", "scoreStatus",
       "returnedModel", "checkpointReturnedModel", "scoredReturnedModel",
-      "durationMs", "firstContentMs",
+      "durationMs", "firstContentMs", "finishReason",
     ];
     if (comparableKeys.some((key) => existing[key] !== record[key])
       || JSON.stringify(existing.usage) !== JSON.stringify(record.usage)
@@ -969,13 +1023,14 @@ function dedupeRecords(records) {
 function groupRecords(records) {
   const groups = new Map();
   for (const record of records) {
-    const key = `${record.model}::${record.effort}::${record.evidenceVariant}`;
+    const key = configurationIdentity(record);
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(record);
   }
   return [...groups.entries()].map(([key, items]) => ({
     key,
     model: items[0].model,
+    reasoningMode: items[0].reasoningMode,
     effort: items[0].effort,
     evidenceVariant: items[0].evidenceVariant,
     plannedCaseIds: items.map((item) => item.caseId),
@@ -1207,6 +1262,7 @@ function summarizeConfiguration(group, caseIds) {
     observedReturnedModels,
     missingReturnedModelCount,
     effort: group.effort,
+    reasoningMode: group.reasoningMode,
     evidenceVariant: group.evidenceVariant,
     plannedCaseIds,
     cases,
@@ -1234,6 +1290,7 @@ function summarizeConfiguration(group, caseIds) {
       semanticTruth: false,
     },
     hardValidationRate: ratio(hardValidationCounts.PASS, planned),
+    failureCounts: summarizeFailureCounts(plannedCases),
     latency: {
       totalMs: numericSummary(plannedCases.map((item) => item.durationMs)),
       firstContentMs: numericSummary(plannedCases.map((item) => item.firstContentMs)),
@@ -1574,13 +1631,39 @@ function ratio(numerator, denominator) {
   return { numerator, denominator, rate: denominator ? round(numerator / denominator) : null };
 }
 
-function recordIdentity({ caseId, model, effort, evidenceVariant }) {
-  return [caseId, model, effort, evidenceVariant || "full"].map((value) => String(value || "")).join("::");
+function recordIdentity({ caseId, model, reasoningMode, effort, evidenceVariant }) {
+  return [
+    caseId,
+    model,
+    ...(reasoningMode ? [reasoningMode] : []),
+    effort,
+    evidenceVariant || "full",
+  ].map((value) => String(value || "")).join("::");
+}
+
+function legacyReviewIdentity({ caseId, model, effort, evidenceVariant }) {
+  return [caseId, model, effort, evidenceVariant || "full"]
+    .map((value) => String(value || ""))
+    .join("::");
+}
+
+function configurationIdentity({ model, reasoningMode, effort, evidenceVariant }) {
+  return [
+    model,
+    ...(reasoningMode ? [reasoningMode] : []),
+    effort,
+    evidenceVariant || "full",
+  ].map((value) => String(value || "")).join("::");
 }
 
 function compareConfigurations(left, right) {
   const model = left.model.localeCompare(right.model, "en");
   if (model) return model;
+  const mode = String(left.reasoningMode || "").localeCompare(
+    String(right.reasoningMode || ""),
+    "en",
+  );
+  if (mode) return mode;
   const leftEffort = EFFORT_ORDER.get(left.effort) ?? Number.MAX_SAFE_INTEGER;
   const rightEffort = EFFORT_ORDER.get(right.effort) ?? Number.MAX_SAFE_INTEGER;
   if (leftEffort !== rightEffort) return leftEffort - rightEffort;
@@ -1609,9 +1692,32 @@ function formatSemanticReview(value, text) {
 
 function classifyResultFailure(result) {
   const code = optionalText(result?.error?.code);
-  if (code === "relay_stream_timeout") return "timeout";
+  const finishReason = optionalText(result?.finishReason || result?.finish_reason)?.toLowerCase();
+  const status = optionalText(result?.status)?.toLowerCase();
+  if (code === "relay_stream_timeout" || /timeout/u.test(code || "")) return "timeout";
   if (code === "relay_empty_final_ruling") return "empty_response";
+  if (code === "frozen_deepseek_upstream_failed") return "upstream_failure";
+  if (finishReason === "length") return "truncated";
+  if (status === "completed_invalid") return "invalid_format";
+  if (status?.startsWith("error_")) return "other_failure";
   return null;
+}
+
+function summarizeFailureCounts(cases) {
+  const counts = {
+    timeout: 0,
+    empty_response: 0,
+    upstream_failure: 0,
+    truncated: 0,
+    invalid_format: 0,
+    other_failure: 0,
+  };
+  for (const item of cases) {
+    if (item.failureKind && Object.prototype.hasOwnProperty.call(counts, item.failureKind)) {
+      counts[item.failureKind] += 1;
+    }
+  }
+  return counts;
 }
 
 function formatSemanticAccuracy(value) {
@@ -1663,6 +1769,44 @@ function formatLatency(value) {
 
 function formatTokenMetric(value) {
   return value.sum === null ? "—" : `${formatInteger(value.sum)} (${value.reportedCount})`;
+}
+
+function isPublicEvidenceVariant(value) {
+  return !String(value || "full").toLowerCase().includes("lua");
+}
+
+function formatPublicModelName(value) {
+  return String(value || "").replace(/^relay-/u, "");
+}
+
+function formatAggregateTokens(tokens) {
+  return [tokens?.input, tokens?.output, tokens?.reasoning, tokens?.total]
+    .map((value) => value?.sum === null || value?.sum === undefined ? "—" : formatInteger(value.sum))
+    .join(" / ");
+}
+
+function formatOfficialEstimatedCost(value, text, locale) {
+  if (!value || !value.verification?.includes("official_list_rate_estimate")) return "—";
+  const total = Object.entries(value.totals)
+    .map(([currency, amount]) => formatPublicCurrencyAmount(currency, amount, locale))
+    .join(" + ");
+  if (value.complete) return total;
+  return `${total} (${value.reportedCaseCount}/${value.plannedCaseCount} ${text.metered})`;
+}
+
+function formatPublicCurrencyAmount(currency, amount, locale) {
+  const usd = `${currency} ${round(amount, 6)}`;
+  const conversion = PUBLIC_CURRENCY_CONVERSIONS[String(locale || DEFAULT_MARKDOWN_LOCALE).toLowerCase()];
+  if (currency !== "USD" || !conversion) return usd;
+  const converted = (Number(amount) * conversion.rate).toFixed(conversion.digits);
+  return `${usd}<br>${conversion.approximate} ${conversion.symbol}${converted}`;
+}
+
+function formatFailureCounts(value, text) {
+  const entries = Object.entries(value || {})
+    .filter(([, count]) => Number(count) > 0)
+    .map(([kind, count]) => `${text.failureKinds[kind] || kind}: ${count}`);
+  return entries.length ? entries.join(", ") : "—";
 }
 
 function formatEstimatedCost(value, text) {
@@ -1745,6 +1889,25 @@ function optionalText(value) {
   return normalized || null;
 }
 
+function normalizeOptionalReasoningMode(value, label = "reasoningMode") {
+  const normalized = optionalText(value)?.toLowerCase() || null;
+  if (normalized && !new Set(["standard", "pro"]).has(normalized)) {
+    throw new Error(`${label} is unsupported: ${normalized}`);
+  }
+  return normalized;
+}
+
+function normalizeRunReasoningMode(value, directRelayContract, label) {
+  // Older GPT relay checkpoints recorded a provider response mode per result
+  // without declaring it as part of the frozen experiment configuration.
+  // Preserve their historical identity/key contract; DeepSeek checkpoints
+  // explicitly declare the mode and therefore continue to bind it strictly.
+  if (directRelayContract?.provider === "relay" && !directRelayContract.reasoningMode) {
+    return null;
+  }
+  return normalizeOptionalReasoningMode(value, label);
+}
+
 function isDirectRelayCheckpoint(checkpoint) {
   return DIRECT_RELAY_RUNNERS.has(optionalText(checkpoint?.runner));
 }
@@ -1755,6 +1918,17 @@ function validateDirectRelayCheckpointContract(checkpoint, runIndex) {
     throw new Error(`${prefix} schemaVersion must be 1`);
   }
   const model = requiredText(checkpoint.model, `${prefix} model`);
+  const provider = optionalText(checkpoint.provider)?.toLowerCase() || "relay";
+  if (!new Set(["relay", "deepseek"]).has(provider)) {
+    throw new Error(`${prefix} provider is unsupported: ${provider}`);
+  }
+  const reasoningMode = normalizeOptionalReasoningMode(
+    checkpoint.reasoningMode,
+    `${prefix} reasoningMode`,
+  );
+  if (provider === "deepseek" && !reasoningMode) {
+    throw new Error(`${prefix} reasoningMode is required for DeepSeek`);
+  }
   const evidenceVariant = requiredText(
     checkpoint.evidenceVariant,
     `${prefix} evidenceVariant`,
@@ -1771,7 +1945,9 @@ function validateDirectRelayCheckpointContract(checkpoint, runIndex) {
   if (checkpoint.concurrency !== 1) throw new Error(`${prefix} concurrency must be 1`);
   if (checkpoint.retries !== 0) throw new Error(`${prefix} retries must be 0`);
   return {
+    provider,
     model,
+    reasoningMode,
     evidenceVariant,
     caseIds,
     caseIdSet: new Set(caseIds),
@@ -1798,6 +1974,9 @@ function assertDirectRelayDescriptorMatchesCheckpoint(descriptor, contract, labe
   if (descriptor.evidenceVariant !== contract.evidenceVariant) {
     throw new Error(`Direct Relay ${label} evidenceVariant must match checkpoint.evidenceVariant`);
   }
+  if (descriptor.reasoningMode !== contract.reasoningMode) {
+    throw new Error(`Direct Relay ${label} reasoningMode must match checkpoint.reasoningMode`);
+  }
   if (!contract.caseIdSet.has(descriptor.caseId)) {
     throw new Error(`Direct Relay ${label} caseId is not declared by checkpoint.caseIds`);
   }
@@ -1806,8 +1985,10 @@ function assertDirectRelayDescriptorMatchesCheckpoint(descriptor, contract, labe
   }
 }
 
-function directRelayResultKey(caseId, model, effort, evidenceVariant) {
-  const base = `${caseId}::${model}::${effort}`;
+function directRelayResultKey(caseId, model, provider, reasoningMode, effort, evidenceVariant) {
+  const base = provider === "deepseek"
+    ? `${caseId}::${model}::${reasoningMode}::${effort}`
+    : `${caseId}::${model}::${effort}`;
   return evidenceVariant === "full" ? base : `${base}::${evidenceVariant}`;
 }
 

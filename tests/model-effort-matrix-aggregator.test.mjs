@@ -106,6 +106,14 @@ test("keeps semantic review, auto assertion and hard validation as separate metr
   assert.deepEqual(sol.tokens.output, { reportedCount: 4, average: 2.5, median: 2.5, sum: 10 });
   assert.deepEqual(sol.tokens.reasoning, { reportedCount: 4, average: 1.5, median: 1.5, sum: 6 });
   assert.deepEqual(sol.tokens.total, { reportedCount: 4, average: 27.5, median: 27.5, sum: 110 });
+  assert.deepEqual(sol.failureCounts, {
+    timeout: 0,
+    empty_response: 0,
+    upstream_failure: 0,
+    truncated: 0,
+    invalid_format: 0,
+    other_failure: 0,
+  });
   assert.deepEqual(sol.estimatedCost, {
     reportedCaseCount: 4,
     plannedCaseCount: 4,
@@ -144,20 +152,19 @@ test("keeps semantic review, auto assertion and hard validation as separate metr
   assert.match(report.metricDefinitions.costPerCorrectAnswer, /semantically correct count/u);
   assert.equal(report.autoAssertionAccuracy.humanTruth, false);
   const markdown = renderModelEffortMatrixMarkdown(report);
-  assert.match(markdown, /relay-gpt-5\.6-sol/u);
-  assert.match(markdown, /## 测试内容/u);
-  assert.match(markdown, /\| 请求模型 \| 实际返回模型 \| 推理强度 \| 证据方案 \|/u);
-  assert.match(markdown, /用户答案正确率 \| 复核覆盖率 \| 平均 \/ 中位总耗时/u);
-  assert.doesNotMatch(markdown, /Auto 断言通过率|Hard Validator 通过率/u);
-  assert.match(markdown, /\| relay-gpt-5\.6-sol \| gpt-5\.6-sol \| low \| 完整资料 \|/u);
-  assert.match(markdown, /\| Q1 \| case-a \| 完整测试问题 1 \|/u);
-  assert.match(markdown, /\| 人工: 正确 \| 人工: 正确 \| 人工: 部分正确 \| 人工: 错误 \|/u);
+  assert.match(markdown, /gpt-5\.6-sol/u);
+  assert.doesNotMatch(markdown, /relay-gpt/u);
+  assert.match(markdown, /\| 请求模型 \| 推理强度 \| 证据方案 \| 严格正确率 \| 部分正确 \|/u);
+  assert.match(markdown, /聚合 Token（输入 \/ 输出 \/ 推理 \/ 总计） \| 官方理论费用（USD \/ 约人民币） \| 失败类型汇总/u);
+  assert.doesNotMatch(markdown, /Auto|Validator|复核覆盖率|实际返回模型/u);
+  assert.match(markdown, /\| gpt-5\.6-sol \| low \| 完整资料 \|/u);
+  assert.doesNotMatch(markdown, /Q[1-9][0-9]*|case-[a-d]|完整测试问题|人工:|Codex:/u);
   assert.match(markdown, /2\/4 \(50\.0%\)/u);
   assert.match(markdown, /2\.5 \/ 2\.5 s/u);
-  assert.match(markdown, /100 \(4\)/u);
-  assert.match(markdown, /USD 0\.0008 \/ 0\.0002 \/ 0\.0004 \(4\/4\)/u);
-  assert.match(markdown, /看板实际批次增量/u);
-  assert.match(markdown, /不推导、不分摊为单次请求费用/u);
+  assert.match(markdown, /100 \/ 10 \/ 6 \/ 110/u);
+  assert.match(markdown, /USD 0\.0008<br>约 CN¥0\.01/u);
+  assert.match(markdown, /2026-08.*1 USD ≈ CN¥6\.8/u);
+  assert.doesNotMatch(markdown, /看板实际批次增量|relay pilot|manual screenshot|第三方中转/u);
 });
 
 test("marks transport timeout and empty response separately from a wrong ruling", () => {
@@ -195,12 +202,137 @@ test("marks transport timeout and empty response separately from a wrong ruling"
 
   assert.equal(report.configurations[0].cases[0].failureKind, "empty_response");
   assert.equal(report.configurations[0].cases[1].failureKind, "timeout");
+  assert.deepEqual(report.configurations[0].failureCounts, {
+    timeout: 1,
+    empty_response: 1,
+    upstream_failure: 0,
+    truncated: 0,
+    invalid_format: 0,
+    other_failure: 0,
+  });
   const zh = renderModelEffortMatrixMarkdown(report, { locale: "zh" });
-  assert.match(zh, /Codex: 错误 \(空响应, 788\.3 s\)/u);
-  assert.match(zh, /Codex: 错误 \(超时, 900\.0 s\)/u);
+  assert.match(zh, /超时: 1, 空响应: 1/u);
+  assert.doesNotMatch(zh, /case-a|case-b|Codex:/u);
   const en = renderModelEffortMatrixMarkdown(report, { locale: "en" });
-  assert.match(en, /Codex: Incorrect \(Empty response, 788\.3 s\)/u);
-  assert.match(en, /Codex: Incorrect \(Timed out, 900\.0 s\)/u);
+  assert.match(en, /Timed out: 1, Empty response: 1/u);
+  assert.doesNotMatch(en, /case-a|case-b|Codex:/u);
+});
+
+test("keeps DeepSeek reasoning modes distinct while accepting legacy GPT reviews without a mode", () => {
+  const standard = fixtureRun({
+    provider: "deepseek",
+    model: "deepseek-v4-flash",
+    reasoningMode: "standard",
+    effort: "low",
+    caseIds: ["private-case"],
+  });
+  const pro = fixtureRun({
+    provider: "deepseek",
+    model: "deepseek-v4-flash",
+    reasoningMode: "pro",
+    effort: "low",
+    caseIds: ["private-case"],
+  });
+  const deepseekReview = fixtureSemanticReview([standard, pro], {
+    kind: "codex",
+    ratings: {
+      "private-case::deepseek-v4-flash::standard::low::full": "correct",
+      "private-case::deepseek-v4-flash::pro::low::full": "incorrect",
+    },
+  });
+  const report = aggregateModelEffortMatrix({
+    runs: [standard, pro],
+    semanticReviews: [deepseekReview],
+    expectedCaseCount: 1,
+  });
+
+  assert.equal(report.configurations.length, 2);
+  assert.deepEqual(
+    report.configurations.map((item) => [item.reasoningMode, item.semanticAccuracy.numerator]),
+    [["pro", 0], ["standard", 1]],
+  );
+  assert.match(standard.checkpoint.plan[0].key, /::standard::low$/u);
+  assert.match(pro.checkpoint.plan[0].key, /::pro::low$/u);
+  const markdown = renderModelEffortMatrixMarkdown(report, { locale: "en" });
+  assert.match(markdown, /\| Requested model \| Reasoning mode \| Reasoning effort \|/u);
+  assert.match(markdown, /\| deepseek-v4-flash \| standard \| low \|/u);
+  assert.match(markdown, /\| deepseek-v4-flash \| pro \| low \|/u);
+  assert.doesNotMatch(markdown, /private-case|Q1|Codex:/u);
+
+  const ambiguousReview = structuredClone(deepseekReview);
+  for (const review of ambiguousReview.reviews) delete review.reasoningMode;
+  assert.throws(
+    () => aggregateModelEffortMatrix({
+      runs: [standard, pro],
+      semanticReviews: [ambiguousReview],
+      expectedCaseCount: 1,
+    }),
+    /ambiguous semantic review without reasoningMode/u,
+  );
+
+  const gpt = fixtureRun({
+    model: "relay-gpt-5.6-sol",
+    reasoningMode: "pro",
+    effort: "low",
+    caseIds: ["legacy-private-case"],
+  });
+  const legacyReview = fixtureSemanticReview([gpt]);
+  delete legacyReview.reviews[0].reasoningMode;
+  const legacyReport = aggregateModelEffortMatrix({
+    runs: [gpt],
+    semanticReviews: [legacyReview],
+    expectedCaseCount: 1,
+  });
+  assert.equal(legacyReport.publishable, true);
+  assert.equal(legacyReport.configurations[0].reasoningMode, "pro");
+});
+
+test("summarizes DeepSeek upstream, truncation and invalid-format failures anonymously", () => {
+  const run = fixtureRun({
+    provider: "deepseek",
+    model: "deepseek-v4-pro",
+    reasoningMode: "pro",
+    effort: "high",
+    caseIds: ["secret-upstream", "secret-truncated", "secret-format"],
+    scores: ["INCONCLUSIVE", "INCONCLUSIVE", "INCONCLUSIVE"],
+  });
+  const [upstream, truncated, invalidFormat] = run.checkpoint.results;
+  upstream.status = "error_rejected";
+  upstream.error = { code: "frozen_deepseek_upstream_failed" };
+  upstream.rawOutput = null;
+  delete upstream.usage;
+  truncated.status = "completed_invalid";
+  truncated.finishReason = "length";
+  invalidFormat.status = "completed_invalid";
+  invalidFormat.finishReason = "stop";
+  for (let index = 0; index < run.scored.results.length; index += 1) {
+    run.scored.results[index].sourceBinding = createExperimentResultBinding(
+      run.checkpoint.results[index],
+    );
+  }
+  const report = aggregateModelEffortMatrix({
+    runs: [run],
+    semanticReviews: [fixtureSemanticReview([run], {
+      ratings: {
+        "secret-upstream": "incorrect",
+        "secret-truncated": "incorrect",
+        "secret-format": "correct",
+      },
+    })],
+    expectedCaseCount: 3,
+  });
+  assert.deepEqual(report.configurations[0].failureCounts, {
+    timeout: 0,
+    empty_response: 0,
+    upstream_failure: 1,
+    truncated: 1,
+    invalid_format: 1,
+    other_failure: 0,
+  });
+  const markdown = renderModelEffortMatrixMarkdown(report, { locale: "en" });
+  assert.match(markdown, /Upstream failure: 1, Truncated: 1, Invalid format: 1/u);
+  assert.match(markdown, /\(2\/3 metered\)/u);
+  assert.doesNotMatch(markdown, /secret-upstream|secret-truncated|secret-format|Q1|Validator|assertion/u);
 });
 
 test("official cost uses the same prompt and completion token aliases as the displayed usage", () => {
@@ -335,23 +467,25 @@ test("different evidence variants may use distinct input hashes and planned case
   assert.equal(withoutLuaSummary.estimatedCost.plannedCaseCount, 2);
 
   const zh = renderModelEffortMatrixMarkdown(report, { locale: "zh" });
-  assert.match(zh, /\| 请求模型 \| 实际返回模型 \| 推理强度 \| 证据方案 \|/u);
+  assert.match(zh, /\| 请求模型 \| 推理强度 \| 证据方案 \|/u);
   assert.match(zh, /\| 仅卡文 \|/u);
-  assert.match(zh, /\| 不含 Lua \| Codex: 正确 \| Codex: 错误 \| 未测试 \| 未测试 \|/u);
+  assert.doesNotMatch(zh, /Lua|case-a|case-b|Q1|Codex:/u);
 
   const en = renderModelEffortMatrixMarkdown(report, { locale: "en" });
   assert.match(en, /^# Model and reasoning-effort evaluation matrix/mu);
-  assert.match(en, /\| Requested model \| Returned model \| Reasoning effort \| Evidence variant \|/u);
-  assert.match(en, /\| relay-gpt-5\.6-sol \| gpt-5\.6-sol \| low \| Full evidence \|/u);
+  assert.match(en, /\| Requested model \| Reasoning effort \| Evidence variant \|/u);
+  assert.match(en, /\| gpt-5\.6-sol \| low \| Full evidence \|/u);
   assert.match(en, /\| Card text only \|/u);
-  assert.match(en, /\| Without Lua \| Codex: Correct \| Codex: Incorrect \| Not tested \| Not tested \|/u);
+  assert.doesNotMatch(en, /Lua|case-a|case-b|Q1|Codex:|CN¥|¥/u);
 
   const ja = renderModelEffortMatrixMarkdown(report, { locale: "ja" });
   assert.match(ja, /^# モデル・推論強度評価マトリクス/mu);
-  assert.match(ja, /\| リクエストモデル \| 応答モデル \| 推論強度 \| 証拠構成 \|/u);
-  assert.match(ja, /\| relay-gpt-5\.6-sol \| gpt-5\.6-sol \| low \| 完全な証拠 \|/u);
+  assert.match(ja, /\| リクエストモデル \| 推論強度 \| 証拠構成 \|/u);
+  assert.match(ja, /\| gpt-5\.6-sol \| low \| 完全な証拠 \|/u);
   assert.match(ja, /\| カードテキストのみ \|/u);
-  assert.match(ja, /\| Lua なし \| Codex: 正解 \| Codex: 不正解 \| 未実施 \| 未実施 \|/u);
+  assert.match(ja, /USD 0\.0008<br>約 ¥0/u);
+  assert.match(ja, /2026-08.*1 USD ≈ ¥158\.4/u);
+  assert.doesNotMatch(ja, /Lua|case-a|case-b|Q1|Codex:/u);
   assert.throws(
     () => renderModelEffortMatrixMarkdown(report, { locale: "fr" }),
     /unsupported Markdown locale/u,
@@ -379,7 +513,8 @@ test("missing semantic reviews produce diagnostics and can never publish auto as
   assert.equal(summary.autoAssertionAccuracy.humanTruth, false);
   assert.equal(summary.estimatedCost.costsPerCorrectAnswer, null);
   assert.match(report.semanticReview.diagnostics.join("\n"), /4 planned result\(s\) have no semantic review/u);
-  assert.match(renderModelEffortMatrixMarkdown(report), /未复核/u);
+  assert.match(renderModelEffortMatrixMarkdown(report), /0\/4 \(n\/a; 0\/4\)/u);
+  assert.doesNotMatch(renderModelEffortMatrixMarkdown(report), /未复核|case-a|Q1/u);
 });
 
 test("semantic reviews bind to the exact result and human review takes precedence over Codex", () => {
@@ -629,6 +764,18 @@ test("Direct Relay checkpoints satisfy the minimal deterministic schema contract
     semanticReviews: [fixtureSemanticReview([v2])],
     expectedCaseCount: 4,
   }).publishable, true);
+
+  const legacyGptMode = fixtureRun({ model: "relay-gpt-5.6-sol", effort: "low" });
+  for (const result of legacyGptMode.checkpoint.results) result.reasoningMode = "pro";
+  for (const score of legacyGptMode.scored.results) score.reasoningMode = "pro";
+  const legacyGptModeReview = fixtureSemanticReview([legacyGptMode]);
+  for (const review of legacyGptModeReview.reviews) delete review.reasoningMode;
+  const legacyGptModeReport = aggregateModelEffortMatrix({
+    runs: [legacyGptMode],
+    semanticReviews: [legacyGptModeReview],
+    expectedCaseCount: 4,
+  });
+  assert.equal(legacyGptModeReport.configurations[0].reasoningMode, null);
 });
 
 test("Direct Relay v2 publication requires every checkpoint to share a non-empty bundle hash", () => {
@@ -773,7 +920,7 @@ test("legacy returned-model gaps and aliases are warnings rather than publicatio
   });
   assert.equal(missingReport.publishable, true);
   assert.match(missingReport.evidenceConsistency.warnings.join("\n"), /returnedModel was unavailable/u);
-  assert.match(renderModelEffortMatrixMarkdown(missingReport), /未返回/u);
+  assert.doesNotMatch(renderModelEffortMatrixMarkdown(missingReport), /未返回|returnedModel/u);
 
   const alias = fixtureRun({ model: "legacy-model", effort: "medium" });
   alias.checkpoint.runner = "legacy-offline-experiment/v1";
@@ -830,7 +977,8 @@ test("Direct Relay rejects non-terminal results but accepts terminal transport e
     "error_outcome_unknown",
   ]);
   assert.match(report.evidenceConsistency.warnings.join("\n"), /returnedModel was not returned/u);
-  assert.match(renderModelEffortMatrixMarkdown(report), /\| relay-gpt-5\.6-sol \| 未返回 \|/u);
+  assert.match(renderModelEffortMatrixMarkdown(report), /其他失败: 4/u);
+  assert.doesNotMatch(renderModelEffortMatrixMarkdown(report), /未返回|case-a|Q1/u);
 });
 
 test("strict aggregation rejects crossed keys, duplicate plans, missing or orphan records, and invalid scored success", () => {
@@ -1191,9 +1339,8 @@ test("mixed-currency cost coverage is calculated independently per currency", ()
   assert.deepEqual(cost.averagesPerReportedCase, { CNY: 0.025, USD: 0.15 });
   assert.deepEqual(cost.costsPerCorrectAnswer, { CNY: 0.025 });
   const markdown = renderModelEffortMatrixMarkdown(report, { locale: "en" });
-  assert.match(markdown, /CNY 0\.1 \/ 0\.025 \/ 0\.025 \[4\/4\]/u);
-  assert.match(markdown, /USD 0\.3 \/ 0\.15 \/ — \[2\/4\]/u);
-  assert.match(markdown, /per-currency coverage/u);
+  assert.match(markdown, /\| — \| — \|$/mu);
+  assert.doesNotMatch(markdown, /CNY|per-currency coverage|0\.025|0\.15/u);
 });
 
 test("file loader and CLI parser accept repeated checkpoint/scored pairs without network access", async () => {
@@ -1286,27 +1433,31 @@ test("file loader and CLI parser accept repeated checkpoint/scored pairs without
   assert.ok(writes.some((item) => (
     item.pathname.endsWith("matrix.md")
       && /モデル・推論強度評価マトリクス/u.test(item.content)
-      && /\| リクエストモデル \| 応答モデル \| 推論強度 \| 証拠構成 \|/u.test(item.content)
-      && /\| 人間: 正解 \|/u.test(item.content)
-      && /\| Codex: 正解 \|/u.test(item.content)
+      && /\| リクエストモデル \| 推論強度 \| 証拠構成 \|/u.test(item.content)
+      && !/case-a|Q1|人間:|Codex:/u.test(item.content)
   )));
 });
 
 function fixtureRun({
   model,
   effort,
+  provider = null,
+  reasoningMode = null,
   evidenceVariant = "full",
   scores = ["PASS", "PASS", "PASS", "PASS"],
   caseIds = CASE_IDS,
   estimatedCostCny = [],
 } = {}) {
   const resultKey = (caseId) => {
-    const base = `${caseId}::${model}::${effort}`;
+    const base = provider === "deepseek"
+      ? `${caseId}::${model}::${reasoningMode}::${effort}`
+      : `${caseId}::${model}::${effort}`;
     return evidenceVariant === "full" ? base : `${base}::${evidenceVariant}`;
   };
   const plan = caseIds.map((caseId) => ({
     caseId,
     effort,
+    ...(reasoningMode ? { reasoningMode } : {}),
     evidenceVariant,
     key: resultKey(caseId),
     finalInputSha256: evidenceVariant === "full"
@@ -1316,8 +1467,10 @@ function fixtureRun({
   const results = caseIds.map((caseId, index) => ({
     key: resultKey(caseId),
     caseId,
+    ...(provider ? { provider } : {}),
     model,
     effort,
+    ...(reasoningMode ? { reasoningMode } : {}),
     evidenceVariant,
     status: scores[index] === "INCONCLUSIVE" ? "completed_invalid" : "completed_valid",
     requestId: index === 0 ? null : `request-${caseId}-${model}-${effort}-${evidenceVariant}`,
@@ -1355,6 +1508,7 @@ function fixtureRun({
     requestedModel: model,
     returnedModel: model.replace(/^relay-/u, ""),
     reasoningEffort: effort,
+    ...(reasoningMode ? { reasoningMode } : {}),
     evidenceVariant,
     status: scores[index],
     sourceBinding: createExperimentResultBinding(results[index]),
@@ -1368,7 +1522,9 @@ function fixtureRun({
       status: "completed",
       bundleSha256: "bundle-shared",
       model,
+      ...(provider ? { provider } : {}),
       efforts: [effort],
+      ...(reasoningMode ? { reasoningMode } : {}),
       caseIds: [...caseIds],
       evidenceVariant,
       concurrency: 1,
@@ -1398,13 +1554,21 @@ function fixtureSemanticReview(runs, {
       const score = run.scored.results.find((item) => (
         item.caseId === result.caseId
         && item.requestedModel === result.model
+        && (item.reasoningMode || null) === (result.reasoningMode || null)
         && item.reasoningEffort === result.effort
         && item.evidenceVariant === result.evidenceVariant
       ));
-      const identity = [result.caseId, result.model, result.effort, result.evidenceVariant].join("::");
+      const identity = [
+        result.caseId,
+        result.model,
+        ...(result.reasoningMode ? [result.reasoningMode] : []),
+        result.effort,
+        result.evidenceVariant,
+      ].join("::");
       reviews.push({
         caseId: result.caseId,
         requestedModel: result.model,
+        ...(result.reasoningMode ? { reasoningMode: result.reasoningMode } : {}),
         reasoningEffort: result.effort,
         evidenceVariant: result.evidenceVariant,
         ...score.sourceBinding,

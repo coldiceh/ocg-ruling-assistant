@@ -80,7 +80,11 @@ test("api_answer defaults to Luna low and keeps DeepSeek as an optional fallback
       available: profile.available,
     })), [
       { id: "relay-gpt-5.6-luna-low", available: true },
+      { id: "relay-gpt-5.6-sol-low", available: true },
+      { id: "deepseek-v4-flash-standard", available: true },
+      { id: "deepseek-v4-flash-low", available: true },
       { id: "deepseek-v4-flash-high", available: true },
+      { id: "deepseek-v4-flash-max", available: true },
     ]);
     const relay = info.payload.rulingModelProfiles[0];
     assert.equal(relay.provider, "relay");
@@ -96,7 +100,11 @@ test("api_answer defaults to Luna low and keeps DeepSeek as an optional fallback
       averageMs: profile.answerLatency?.averageMs ?? null,
     })), [
       { id: "relay-gpt-5.6-luna-low", status: "unavailable", averageMs: null },
+      { id: "relay-gpt-5.6-sol-low", status: "unavailable", averageMs: null },
+      { id: "deepseek-v4-flash-standard", status: "unavailable", averageMs: null },
+      { id: "deepseek-v4-flash-low", status: "unavailable", averageMs: null },
       { id: "deepseek-v4-flash-high", status: "unavailable", averageMs: null },
+      { id: "deepseek-v4-flash-max", status: "unavailable", averageMs: null },
     ]);
 
     assert.equal(info.payload.rulingModelProfiles.some((profile) => profile.provider === "glm"), false);
@@ -181,7 +189,11 @@ test("api_answer GET returns real rolling latency for each available profile", a
     assert.equal(response.statusCode, 200);
     assert.deepEqual(requestedProfiles, [
       "relay-gpt-5.6-luna-low",
+      "relay-gpt-5.6-sol-low",
+      "deepseek-v4-flash-standard",
+      "deepseek-v4-flash-low",
       "deepseek-v4-flash-high",
+      "deepseek-v4-flash-max",
     ]);
     assert.equal(response.payload.answerLatency.storage, "redis");
     assert.deepEqual(response.payload.rulingModelProfiles.map((profile) => ({
@@ -191,7 +203,11 @@ test("api_answer GET returns real rolling latency for each available profile", a
       sampleCount: profile.answerLatency?.sampleCount || 0,
     })), [
       { id: "relay-gpt-5.6-luna-low", status: "available", averageMs: 30000, sampleCount: 1 },
+      { id: "relay-gpt-5.6-sol-low", status: "available", averageMs: 30000, sampleCount: 1 },
+      { id: "deepseek-v4-flash-standard", status: "available", averageMs: 30000, sampleCount: 1 },
+      { id: "deepseek-v4-flash-low", status: "available", averageMs: 30000, sampleCount: 1 },
       { id: "deepseek-v4-flash-high", status: "available", averageMs: 30000, sampleCount: 1 },
+      { id: "deepseek-v4-flash-max", status: "available", averageMs: 30000, sampleCount: 1 },
     ]);
   } finally {
     globalThis.fetch = originalFetch;

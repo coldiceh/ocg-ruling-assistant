@@ -2408,6 +2408,66 @@ test("deepseek_flash_non-thinking_mode uses a smaller answer budget and no reaso
   assert.equal(result.generationAttempts[0].usage.reasoning_tokens, 0);
 });
 
+test("deepseek flash thinking mode passes through the supported low effort", async () => {
+  const result = await callRagModel({
+    prompt: "输出 JSON",
+    thinkingMode: "enabled",
+    reasoningEffort: "low",
+    env: {
+      MODEL_PROVIDER: "deepseek",
+      RAG_MODEL_TIER: "flash",
+      DEEPSEEK_API_KEY: "test-deepseek-key",
+      DEEPSEEK_FLASH_MODEL: "deepseek-v4-flash",
+      API_DAILY_BUDGET_CNY: "10",
+    },
+    fetchImpl: async (_url, options) => {
+      const body = JSON.parse(options.body);
+      assert.deepEqual(body.thinking, { type: "enabled" });
+      assert.equal(body.reasoning_effort, "low");
+      return jsonResponse({
+        model: "deepseek-v4-flash",
+        choices: [{
+          message: { content: JSON.stringify(modelJson("Flash low OK")) },
+          finish_reason: "stop",
+        }],
+        usage: { prompt_tokens: 20, completion_tokens: 30, total_tokens: 50 },
+      });
+    },
+  });
+  assert.equal(result.generationConfig.thinkingMode, "enabled");
+  assert.equal(result.generationConfig.reasoningEffort, "low");
+});
+
+test("deepseek flash low fails closed when the upstream rejects it without changing effort", async () => {
+  const calls = [];
+  const result = await callRagModel({
+    prompt: "输出 JSON",
+    thinkingMode: "enabled",
+    reasoningEffort: "low",
+    env: {
+      MODEL_PROVIDER: "deepseek",
+      RAG_MODEL_TIER: "flash",
+      DEEPSEEK_API_KEY: "test-deepseek-key",
+      DEEPSEEK_FLASH_MODEL: "deepseek-v4-flash",
+      API_DAILY_BUDGET_CNY: "10",
+    },
+    fetchImpl: async (_url, options) => {
+      calls.push(JSON.parse(options.body));
+      return jsonResponse({ error: { message: "low effort rejected" } }, false, 400);
+    },
+  });
+
+  assert.equal(calls.length, 1);
+  assert.deepEqual(calls[0].thinking, { type: "enabled" });
+  assert.equal(calls[0].reasoning_effort, "low");
+  assert.equal(result.providerUsed, "deepseek");
+  assert.equal(result.dryRun, false);
+  assert.equal(result.answer.answerLevel, "needs_more_info");
+  assert.ok(result.answer.riskFlags.includes("model_call_failed"));
+  assert.ok(result.warnings.includes("model_call_failed:deepseek 400"));
+  assert.equal(result.generationConfig.reasoningEffort, "low");
+});
+
 test("deepseek thinking mode accepts max effort and records reasoning usage without exposing content", async () => {
   const result = await callRagModel({
     prompt: "输出 JSON",
