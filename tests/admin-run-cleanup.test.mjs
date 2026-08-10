@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   ADMIN_RUN_CLEANUP_CONFIRMATION,
+  ADMIN_RUN_WRITES_DISABLED_CONFIRMATION,
   executeAdminRunCleanup,
   planAdminRunCleanup,
 } from "../backend/adminRunRedisCleanup.mjs";
@@ -19,7 +20,7 @@ const NOW = new Date("2026-08-06T12:00:00.000Z");
 const OLD = "2026-06-01T00:00:00.000Z";
 const RECENT = "2026-08-06T11:30:00.000Z";
 
-test("cleanup dry-run performs zero writes, retains only fingerprints, and isolates namespaces", async () => {
+test("cleanup dry-run performs zero writes, exposes aggregates only, and isolates namespaces", async () => {
   const redis = createRedisFixture();
   seedRun(redis.run, { runId: "old/run", question: "不得输出的完整问题" });
   seedHistory(redis.history, "old/run", "不得输出的问题摘要");
@@ -33,12 +34,13 @@ test("cleanup dry-run performs zero writes, retains only fingerprints, and isola
   assert.equal(report.mode, "dry_run");
   assert.equal(report.canExecute, true, JSON.stringify(report));
   assert.match(report.planFingerprint, /^[a-f0-9]{64}$/u);
-  assert.equal(report.candidates.length, 1);
-  assert.equal(report.candidates[0].keyCount, 3);
+  assert.equal(report.totals.runCount, 1);
+  assert.equal(report.totals.keyCount, 3);
   assert.equal(report.historyRetentionNotice.includes("500"), true);
   assert.equal(redis.commands.some((item) => item.command[0] === "EVAL"), false);
   const serialized = JSON.stringify(report);
   assert.doesNotMatch(serialized, /不得输出的完整问题|old\/run|run-redis|history-redis|run-token|history-token/u);
+  assert.doesNotMatch(serialized, /runFingerprint|keyFingerprints/u);
   assert.deepEqual(report.namespaceIsolation, {
     adminRunOnly: true,
     historyReadOnly: true,
@@ -46,6 +48,7 @@ test("cleanup dry-run performs zero writes, retains only fingerprints, and isola
     sessionTouched: false,
     budgetTouched: false,
     latencyTouched: false,
+    feedbackTouched: false,
   });
   const touchedKeys = redis.commands.flatMap((entry) => entry.command.slice(1).map(String));
   assert.equal(touchedKeys.some((value) => /rag-query-audit|admin-final-budget|ocg-admin|answer-latency/u.test(value)), false);
@@ -73,9 +76,9 @@ test("cleanup candidate selection fails closed for nonterminal, recent, active-l
   redis.run.strings.set(runKeys("invalid").state, "{bad-json");
 
   const report = await planFixture(redis, { olderThanDays: 7 });
-  const reasons = new Set(report.skipped.flatMap((item) => item.reasons));
+  const reasons = new Set(Object.keys(report.skipped.reasonCounts));
 
-  assert.equal(report.candidates.length, 0);
+  assert.equal(report.totals.runCount, 0);
   assert.equal(report.canExecute, false);
   assert.equal(reasons.has("run_not_terminal"), true);
   assert.equal(reasons.has("run_not_older_than_threshold"), true);
@@ -84,15 +87,13 @@ test("cleanup candidate selection fails closed for nonterminal, recent, active-l
   assert.equal(reasons.has("run_state_invalid"), true);
 });
 
-test("a retained fork protects its source full snapshot while the old source state and events can be deleted", async () => {
+test("referenced snapshots are reclaimed only on a later plan after the fork is deleted", async () => {
   const redis = createRedisFixture();
   const source = seedRun(redis.run, { runId: "old-source", question: "source question" });
   seedHistory(redis.history, "old-source", "source question");
   const fork = seedRun(redis.run, {
     runId: "new-fork",
     question: "source question",
-    endedAt: RECENT,
-    updatedAt: RECENT,
     snapshotRecord: {
       recordType: "admin_evidence_snapshot_reference",
       schemaVersion: 1,
@@ -107,22 +108,38 @@ test("a retained fork protects its source full snapshot while the old source sta
 
   const plan = await planFixture(redis, { olderThanDays: 7 });
   assert.equal(plan.canExecute, true);
-  assert.equal(plan.candidates.length, 1);
-  assert.equal(plan.candidates[0].protectedSnapshotKeyCount, 1);
-  assert.equal(plan.candidates[0].keyCount, 2);
+  assert.equal(plan.totals.runCount, 1);
+  assert.equal(plan.totals.protectedSnapshotKeyCount, 1);
+  assert.equal(plan.totals.keyCount, 3);
+  assert.equal(plan.skipped.reasonCounts.snapshot_referenced_by_existing_run, 1);
 
   const result = await executeAdminRunCleanup(plan, {
     execute: true,
     confirmation: ADMIN_RUN_CLEANUP_CONFIRMATION,
+    writesDisabledConfirmation: ADMIN_RUN_WRITES_DISABLED_CONFIRMATION,
     approvalFingerprint: plan.planFingerprint,
     fetchImpl: redis.fetchImpl,
   });
 
   assert.equal(result.deletedRunCount, 1);
-  assert.equal(redis.run.strings.has(runKeys("old-source", source.snapshotId).state), false);
-  assert.equal(redis.run.lists.has(runKeys("old-source", source.snapshotId).events), false);
+  assert.deepEqual(Object.keys(result).sort(), [
+    "confirmationAccepted",
+    "deletedKeyCount",
+    "deletedRunCount",
+    "executedAt",
+    "historyRetentionNotice",
+    "mode",
+    "questionsExposed",
+    "schemaVersion",
+    "writeQuiescence",
+    "writesDisabledConfirmationAccepted",
+  ]);
+  assert.equal(redis.run.strings.has(runKeys("old-source", source.snapshotId).state), true);
+  assert.equal(redis.run.lists.has(runKeys("old-source", source.snapshotId).events), true);
   assert.equal(redis.run.strings.has(runKeys("old-source", source.snapshotId).snapshot), true);
-  assert.equal(redis.run.strings.has(runKeys("new-fork", fork.snapshotId).snapshot), true);
+  assert.equal(redis.run.strings.has(runKeys("new-fork", fork.snapshotId).state), false);
+  assert.equal(redis.run.lists.has(runKeys("new-fork", fork.snapshotId).events), false);
+  assert.equal(redis.run.strings.has(runKeys("new-fork", fork.snapshotId).snapshot), false);
   assert.equal(redis.history.strings.has(historyKey("old-source")), true);
   assert.deepEqual(
     [...new Set(redis.commands
@@ -130,11 +147,23 @@ test("a retained fork protects its source full snapshot while the old source sta
       .map((entry) => entry.command[0]))],
     ["GET"],
   );
-  const appliedEval = redis.commands.find((entry) => entry.command[0] === "EVAL");
-  assert.ok(appliedEval);
-  assert.equal(appliedEval.command.slice(3, 5).every((key) => (
-    String(key).startsWith(`${RUN_PREFIX}:{old-source}:`)
-  )), true);
+  const secondPlan = await planFixture(redis, { olderThanDays: 7 });
+  assert.equal(secondPlan.canExecute, true);
+  assert.equal(secondPlan.totals.runCount, 1);
+  assert.equal(secondPlan.totals.keyCount, 3);
+  assert.equal(secondPlan.totals.protectedSnapshotKeyCount, 0);
+  await executeAdminRunCleanup(secondPlan, {
+    execute: true,
+    confirmation: ADMIN_RUN_CLEANUP_CONFIRMATION,
+    writesDisabledConfirmation: ADMIN_RUN_WRITES_DISABLED_CONFIRMATION,
+    approvalFingerprint: secondPlan.planFingerprint,
+    fetchImpl: redis.fetchImpl,
+  });
+  assert.equal(redis.run.strings.has(runKeys("old-source", source.snapshotId).state), false);
+  assert.equal(redis.run.lists.has(runKeys("old-source", source.snapshotId).events), false);
+  assert.equal(redis.run.strings.has(runKeys("old-source", source.snapshotId).snapshot), false);
+  assert.equal(redis.history.strings.has(historyKey("old-source")), true);
+  assert.equal(redis.history.strings.has(historyKey("new-fork")), true);
 });
 
 test("execution requires the exact confirmation and CAS refuses a changed state without deleting the group", async () => {
@@ -151,6 +180,16 @@ test("execution requires the exact confirmation and CAS refuses a changed state 
     executeAdminRunCleanup(plan, {
       execute: true,
       confirmation: ADMIN_RUN_CLEANUP_CONFIRMATION,
+      approvalFingerprint: plan.planFingerprint,
+      fetchImpl: redis.fetchImpl,
+    }),
+    { code: "admin_run_cleanup_refused" },
+  );
+  await assert.rejects(
+    executeAdminRunCleanup(plan, {
+      execute: true,
+      confirmation: ADMIN_RUN_CLEANUP_CONFIRMATION,
+      writesDisabledConfirmation: ADMIN_RUN_WRITES_DISABLED_CONFIRMATION,
       fetchImpl: redis.fetchImpl,
     }),
     { code: "admin_run_cleanup_refused" },
@@ -165,6 +204,7 @@ test("execution requires the exact confirmation and CAS refuses a changed state 
     executeAdminRunCleanup(plan, {
       execute: true,
       confirmation: ADMIN_RUN_CLEANUP_CONFIRMATION,
+      writesDisabledConfirmation: ADMIN_RUN_WRITES_DISABLED_CONFIRMATION,
       approvalFingerprint: plan.planFingerprint,
       fetchImpl: redis.fetchImpl,
     }),
@@ -185,6 +225,7 @@ test("execution binds approval to the reviewed plan and stops if the run namespa
     executeAdminRunCleanup(plan, {
       execute: true,
       confirmation: ADMIN_RUN_CLEANUP_CONFIRMATION,
+      writesDisabledConfirmation: ADMIN_RUN_WRITES_DISABLED_CONFIRMATION,
       approvalFingerprint: "f".repeat(64),
       fetchImpl: redis.fetchImpl,
     }),
@@ -196,6 +237,7 @@ test("execution binds approval to the reviewed plan and stops if the run namespa
     executeAdminRunCleanup(plan, {
       execute: true,
       confirmation: ADMIN_RUN_CLEANUP_CONFIRMATION,
+      writesDisabledConfirmation: ADMIN_RUN_WRITES_DISABLED_CONFIRMATION,
       approvalFingerprint: plan.planFingerprint,
       fetchImpl: redis.fetchImpl,
     }),
@@ -240,7 +282,7 @@ test("legacy History records qualify, while unknown Admin Run keys block the who
   seedHistory(legacy.history, "legacy-history", "legacy summary", { legacy: true });
   const legacyPlan = await planFixture(legacy, { olderThanDays: 7 });
   assert.equal(legacyPlan.canExecute, true);
-  assert.equal(legacyPlan.candidates[0].historyRecordKind, "legacy");
+  assert.equal(legacyPlan.candidateSummary.historyRecordKindCounts.legacy, 1);
 
   const unknown = createRedisFixture();
   seedRun(unknown.run, { runId: "known-run" });
@@ -256,6 +298,7 @@ test("CLI is dry-run by default and requires an explicit age threshold plus exac
     olderThanDays: 30,
     execute: false,
     confirmation: "",
+    writesDisabledConfirmation: "",
     approvalFingerprint: "",
     compact: false,
     limits: {
@@ -286,6 +329,20 @@ test("CLI is dry-run by default and requires an explicit age threshold plus exac
   assert.equal(output, '{"mode":"dry_run"}\n');
   await assert.rejects(
     runAdminRunCleanupCli(["--older-than-days", "30", "--execute", "--confirm", "wrong"], {
+      stdout: { write() {} },
+    }),
+    { code: "admin_run_cleanup_refused" },
+  );
+  await assert.rejects(
+    runAdminRunCleanupCli([
+      "--older-than-days",
+      "30",
+      "--execute",
+      "--confirm",
+      ADMIN_RUN_CLEANUP_CONFIRMATION,
+      "--confirm-writes-disabled",
+      "wrong",
+    ], {
       stdout: { write() {} },
     }),
     { code: "admin_run_cleanup_refused" },

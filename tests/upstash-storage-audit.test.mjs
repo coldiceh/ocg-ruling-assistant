@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import {
+  AUDITED_STORAGE_NAMESPACES,
   auditConfiguredUpstashStorage,
   auditRedisTarget,
   configuredAuditTargets,
@@ -19,8 +20,10 @@ test("Upstash maintenance workflow defaults to read-only and gates execute with 
   assert.match(workflow, /secrets\.UPSTASH_REDIS_REST_TOKEN/u);
   assert.match(workflow, /test "\$MAINTENANCE_CONFIRMED" = "true"/u);
   assert.match(workflow, /DELETE TERMINAL ADMIN RUN DATA DURING MAINTENANCE/u);
+  assert.match(workflow, /ADMIN MODEL LAB WRITES ARE DISABLED/u);
   assert.match(workflow, /\^\[a-f0-9\]\{64\}\$/u);
   assert.match(workflow, /--plan-fingerprint "\$APPROVED_PLAN_FINGERPRINT"/u);
+  assert.match(workflow, /--confirm-writes-disabled "\$WRITES_DISABLED_CONFIRMATION"/u);
   assert.match(workflow, /--execute/u);
   assert.equal((workflow.match(/--execute/gu) || []).length, 1);
   assert.match(workflow, /Admin Model Lab create\/fork traffic is disabled/u);
@@ -33,7 +36,7 @@ const AUDIT_ENV = Object.freeze({
   UPSTASH_REDIS_REST_TOKEN: "never-print-this-token",
 });
 
-test("Upstash audit uses metadata-only commands and redacts keys, endpoint, and credentials", async () => {
+test("Upstash audit uploads only fixed-namespace aggregates and redacts key identity", async () => {
   const keys = [
     "admin-runs:v1:{run-one}:state",
     "admin-runs:v1:{run-one}:events",
@@ -62,11 +65,11 @@ test("Upstash audit uses metadata-only commands and redacts keys, endpoint, and 
     fetchImpl: mock.fetchImpl,
     now: "2026-08-06T00:00:00.000Z",
   });
-  assert.equal(report.auditMode, "read_only_metadata");
+  assert.equal(report.auditMode, "read_only_aggregate");
   assert.equal(report.valuesRead, false);
   assert.equal(report.totals.keyCount, 4);
   assert.equal(report.totals.knownBytes, 5_019_456);
-  const namespaces = report.targets[0].namespaces;
+  const namespaces = report.namespaces;
   assert.equal(
     namespaces.find((item) => item.namespace === "admin_runs.snapshot")?.knownBytes,
     5_000_000,
@@ -80,6 +83,19 @@ test("Upstash audit uses metadata-only commands and redacts keys, endpoint, and 
   assert.equal(serialized.includes(AUDIT_ENV.UPSTASH_REDIS_REST_TOKEN), false);
   assert.equal(serialized.includes(AUDIT_ENV.UPSTASH_REDIS_REST_URL), false);
   assert.equal(keys.some((key) => serialized.includes(key)), false);
+  assert.equal(/keyFingerprint|largestKeys|measurement|"type"/u.test(serialized), false);
+  assert.equal(
+    namespaces.every((item) => AUDITED_STORAGE_NAMESPACES.includes(item.namespace)),
+    true,
+  );
+  assert.deepEqual(Object.keys(namespaces[0]).sort(), [
+    "keyCount",
+    "knownBytes",
+    "measuredKeyCount",
+    "namespace",
+    "ttlCounts",
+    "unmeasuredKeyCount",
+  ]);
 });
 
 test("Upstash audit falls back to STRLEN only for strings when MEMORY USAGE is unavailable", async () => {
@@ -101,12 +117,28 @@ test("Upstash audit falls back to STRLEN only for strings when MEMORY USAGE is u
     maxKeys: 100,
   });
 
-  assert.equal(report.memoryUsageSupported, false);
   assert.equal(report.totals.keyCount, 2);
   assert.equal(report.totals.knownBytes, 900_000);
+  assert.equal(report.totals.measuredKeyCount, 1);
   assert.equal(report.totals.unmeasuredKeyCount, 1);
+  assert.deepEqual(report.totals.ttlCounts, {
+    expiring: 0,
+    persistent: 2,
+    missingOrUnknown: 0,
+  });
   assert.equal(mock.commands.filter((command) => command[0] === "STRLEN").length, 1);
   assert.equal(mock.commands.some((command) => command[0] === "GET"), false);
+});
+
+test("Upstash audit rejects non-allowlisted namespace descriptors", async () => {
+  await assert.rejects(
+    auditRedisTarget({
+      connection: { url: "https://redis.invalid", token: "token" },
+      descriptors: [{ namespace: "future_raw_namespace", pattern: "future:*" }],
+      fetchImpl: async () => { throw new Error("must not be called"); },
+    }),
+    /namespace is not allowlisted/u,
+  );
 });
 
 test("Upstash audit aborts at its key safety limit without issuing writes", async () => {

@@ -8,7 +8,8 @@ Admin Model Lab 使用两套相互独立的数据：
   `admin-lab-records:v1`。
 
 清理工具只会读取 History，并且只会删除 Admin Run 前缀下经过验证的精确键。
-它不会删除或修改 History、问题审计、会话、预算账本或公开回答耗时数据。
+它不会删除或修改 History、问题审计、会话、预算账本、公开回答耗时或反馈
+数据。
 
 ## 保留和丢失的内容
 
@@ -41,7 +42,7 @@ pnpm run cleanup:upstash-admin-runs --older-than-days 14
 
 默认模式只会发出 `SCAN`、`TYPE`、`GET`、`MEMORY USAGE` 和必要时的
 `STRLEN`。输出不包含 Redis URL、token、原始 key、runId、问题文本、state
-或 Snapshot 值；只显示不可逆指纹、计数、已知字节数、保护关系和跳过原因。
+或 Snapshot 值；只显示聚合计数、已知字节数、保护关系和跳过原因统计。
 输出中的 `planFingerprint` 是本次候选集合、精确键集合、state/History 版本和
 整个 Admin Run 命名空间键集合的 SHA-256 审批指纹，不包含原始值。执行时
 必须逐字复制这个指纹；计划发生任何变化都会拒绝删除。
@@ -73,12 +74,20 @@ fail-closed，阻止整份计划执行。
 ## fork 引用保护
 
 fork 的 Snapshot 键可能只是对源 Run 完整 Snapshot 的轻量引用。工具会扫描
-全部 Admin Run Snapshot 键并构建引用图。只要某个不在删除计划中的 Run 仍
-引用一个完整 Snapshot，该完整 Snapshot 及引用链就不会被删除；源 Run 的
-state/events 可以删除，但受保护 Snapshot 会暂时留下。
+全部 Admin Run Snapshot 键并构建引用图。只要任何 Run（包括本轮候选）仍
+引用一个完整 Snapshot，该目标 Snapshot 的源 Run 会整组延后，state/events
+也会保留，作为“已终止且早于阈值”的可验证证据。先执行计划删除引用方；下一次
+重新生成计划，确认引用已经消失后，才能删除源 Run 的 state/events/Snapshot。
+这样即使不同 Redis slot 之间无法原子删除，也不会先删目标而留下悬空引用。
 
-当前数据模型没有跨 Redis hash slot 的反向引用计数或全局删除锁。因此执行
-期间必须暂停 Admin Model Lab 的新建和 fork，避免 dry-run 后出现新引用。
+旧版本若已经留下只有 Snapshot、没有 state 的孤立记录，工具无法再证明源 Run
+的终止状态和时间，因此会 fail-closed 并报告 `state_key_missing`，不会只凭
+Snapshot 时间或 History 摘要猜测删除。
+
+当前数据模型没有跨 Redis hash slot 的反向引用计数或可由本工具原子验证的全局
+写锁。因此执行期间必须暂停 Admin Model Lab 的新建、fork、执行和取消操作。
+执行器会在每次删除前后重新核对整个 key 集合和所有 Snapshot 原始记录的摘要，
+但这不能替代停写；报告中的 `writeQuiescence.verifiedLock` 会明确保持 `false`。
 
 ## 不可逆执行
 
@@ -91,17 +100,19 @@ state/events 可以删除，但受保护 Snapshot 会暂时留下。
 pnpm run cleanup:upstash-admin-runs --older-than-days 14 `
   --execute `
   --plan-fingerprint "<上一次 dry-run 输出的 planFingerprint>" `
-  --confirm "DELETE TERMINAL ADMIN RUN DATA DURING MAINTENANCE"
+  --confirm "DELETE TERMINAL ADMIN RUN DATA DURING MAINTENANCE" `
+  --confirm-writes-disabled "ADMIN MODEL LAB WRITES ARE DISABLED"
 ```
 
 执行器会在每个 Run 删除前：
 
 1. 再次读取并逐字节比较 History record；
-2. 确认整个 Admin Run 命名空间键集合仍与已审批计划一致；
+2. 确认整个 Admin Run 命名空间键集合和完整 Snapshot 引用图仍与已审批计划一致；
 3. 通过同一 Redis Cluster slot 的 Lua 事务，逐字节 CAS 当前 state；
 4. 确认计划中的每一个精确键仍存在；
 5. 只删除该事务显式列出的 state、events 和未受保护 Snapshot；
-6. 校验实际删除键数，并再次确认 state 已消失且 History record 原样保留。
+6. 校验实际删除键数，确认 state 已消失且 History record 原样保留；
+7. 删除后再次核对命名空间和 Snapshot 图，发现任何并发写入立即停止后续 Run。
 
 任一 Run 在计划后发生变化、History 消失或精确键缺失时，工具立即停止，不会
 对该 Run 做部分删除。不同 Run 无法跨 slot 组成一个原子事务，因此先前已经

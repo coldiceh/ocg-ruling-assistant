@@ -27,6 +27,11 @@ on:
         required: false
         type: string
         default: ""
+      writes_disabled_confirmation:
+        description: Execute only - type ADMIN MODEL LAB WRITES ARE DISABLED after verifying the deployed API is stopped
+        required: false
+        type: string
+        default: ""
       maintenance_confirmed:
         description: Confirm Admin Model Lab create/fork traffic is disabled
         required: true
@@ -51,6 +56,7 @@ jobs:
       OLDER_THAN_DAYS: ${{ inputs.older_than_days }}
       APPROVED_PLAN_FINGERPRINT: ${{ inputs.plan_fingerprint }}
       EXECUTION_CONFIRMATION: ${{ inputs.confirmation_phrase }}
+      WRITES_DISABLED_CONFIRMATION: ${{ inputs.writes_disabled_confirmation }}
       MAINTENANCE_CONFIRMED: ${{ inputs.maintenance_confirmed }}
 
     steps:
@@ -86,11 +92,13 @@ jobs:
             execute)
               test "$MAINTENANCE_CONFIRMED" = "true" || { echo "Admin maintenance was not confirmed" >&2; exit 1; }
               test "$EXECUTION_CONFIRMATION" = "DELETE TERMINAL ADMIN RUN DATA DURING MAINTENANCE" || { echo "Exact cleanup confirmation phrase is required" >&2; exit 1; }
+              test "$WRITES_DISABLED_CONFIRMATION" = "ADMIN MODEL LAB WRITES ARE DISABLED" || { echo "Exact writes-disabled confirmation phrase is required" >&2; exit 1; }
               [[ "$APPROVED_PLAN_FINGERPRINT" =~ ^[a-f0-9]{64}$ ]] || { echo "Exact 64-character plan fingerprint is required" >&2; exit 1; }
               node scripts/cleanup-upstash-admin-runs.mjs \
                 --older-than-days "$OLDER_THAN_DAYS" \
                 --execute \
                 --confirm "$EXECUTION_CONFIRMATION" \
+                --confirm-writes-disabled "$WRITES_DISABLED_CONFIRMATION" \
                 --plan-fingerprint "$APPROVED_PLAN_FINGERPRINT" \
                 > artifacts/upstash-admin-run-cleanup-execution.json
               ;;
