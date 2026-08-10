@@ -63,14 +63,16 @@ pnpm run audit:upstash-storage
 - `STRLEN`（仅在 `MEMORY USAGE` 不可用时估算字符串值长度）
 
 它不会调用 `GET`、`LRANGE`、`SET`、`DEL`、`EXPIRE` 或任何其他写命令，
-也没有迁移或清理功能。输出只包含 namespace 汇总、TTL 计数、已知字节数和
-不可逆的 key SHA-256 短指纹；不会输出 Redis URL、token、原始 key 或值。
+也没有迁移或清理功能。输出只包含固定白名单 namespace 的 key 数、TTL
+计数、已知字节数，以及已测量/未测量 key 数；不会输出 Redis URL、token、
+原始 key、key 指纹、最大键列表或值，也不会按 Redis endpoint 分组披露键分布。
 
 `knownBytes` 的含义取决于 Redis 能力：
 
 - 支持 `MEMORY USAGE` 时，是包含 Redis 对象开销的近似内存占用；
-- 不支持时，仅字符串键可由 `STRLEN` 统计，列表、哈希和有序集合会计入
-  `unmeasuredKeyCount`，不会被假装成 0 字节。
+- 不支持时，仅字符串键可由 `STRLEN` 统计；此时 `knownBytes` 是保守下界，
+  列表、哈希或有序集合会明确计入 `unmeasuredKeyCount`，不会静默假装成
+  0 字节，也不会为了补足统计而读取其值。
 
 脚本识别当前配置中的共享 Redis、Admin Run、Admin Lab History 和公开回答
 延迟的独立 REST endpoint，并按实际环境变量前缀扫描。最多审计 20,000 个

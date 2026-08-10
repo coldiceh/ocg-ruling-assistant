@@ -1,10 +1,23 @@
-import { createHash } from "node:crypto";
 import { pathToFileURL } from "node:url";
 
 const DEFAULT_SCAN_COUNT = 200;
 const DEFAULT_MAX_KEYS = 20_000;
 const MAX_SCAN_ITERATIONS = 100_000;
-const TOP_KEY_COUNT = 20;
+
+export const AUDITED_STORAGE_NAMESPACES = Object.freeze([
+  "admin_final_budget",
+  "admin_lab_history",
+  "admin_lab_history_legacy",
+  "admin_runs",
+  "admin_runs.events",
+  "admin_runs.snapshot",
+  "admin_runs.state",
+  "admin_session",
+  "public_answer_latency",
+  "public_budget",
+  "query_audit",
+]);
+const AUDITED_STORAGE_NAMESPACE_SET = new Set(AUDITED_STORAGE_NAMESPACES);
 
 export const READ_ONLY_REDIS_COMMANDS = Object.freeze([
   "SCAN",
@@ -43,14 +56,12 @@ export async function auditConfiguredUpstashStorage({
     }));
   }
   return Object.freeze({
-    schemaVersion: 1,
-    auditMode: "read_only_metadata",
-    commandsAllowed: READ_ONLY_REDIS_COMMANDS,
+    schemaVersion: 2,
+    auditMode: "read_only_aggregate",
     valuesRead: false,
     secretsIncluded: false,
     auditedAt: validDate(now).toISOString(),
-    targetCount: reports.length,
-    targets: reports,
+    namespaces: mergeNamespaceSummaries(reports),
     totals: sumReports(reports),
   });
 }
@@ -95,7 +106,6 @@ export async function auditRedisTarget({
       ["PTTL", key],
     ));
     let bytes = null;
-    let measurement = "unavailable";
     if (memoryUsageSupported) {
       try {
         const measured = await redisReadCommand(
@@ -104,7 +114,6 @@ export async function auditRedisTarget({
           ["MEMORY", "USAGE", key, "SAMPLES", "5"],
         );
         bytes = nonNegativeIntegerOrNull(measured);
-        measurement = bytes === null ? "unavailable" : "memory_usage";
       } catch {
         memoryUsageSupported = false;
       }
@@ -115,31 +124,14 @@ export async function auditRedisTarget({
         fetchImpl,
         ["STRLEN", key],
       ));
-      measurement = bytes === null ? "unavailable" : "string_length";
     }
-    entries.push({
-      namespace: classifyKey(descriptor, key),
-      keyFingerprint: fingerprint(key),
-      type,
-      pttlMs,
-      bytes,
-      measurement,
-    });
+    entries.push({ namespace: classifyKey(descriptor, key), pttlMs, bytes });
   }
-  entries.sort((left, right) => (
-    numberOrNegativeOne(right.bytes) - numberOrNegativeOne(left.bytes)
-    || left.keyFingerprint.localeCompare(right.keyFingerprint, "en")
-  ));
   const namespaces = summarizeNamespaces(entries);
   return Object.freeze({
     targetId: String(targetId),
-    endpointDisclosed: false,
-    credentialDisclosed: false,
-    namespaceCount: namespaces.length,
     namespaces,
     totals: summarizeEntries(entries),
-    largestKeys: entries.slice(0, TOP_KEY_COUNT),
-    memoryUsageSupported,
   });
 }
 
@@ -253,6 +245,9 @@ function normalizeDescriptor(value) {
   const namespace = String(value.namespace || "").trim();
   const pattern = String(value.pattern || "").trim();
   if (!namespace || !pattern) throw new TypeError("invalid audit descriptor");
+  if (!AUDITED_STORAGE_NAMESPACE_SET.has(namespace)) {
+    throw new TypeError("audit descriptor namespace is not allowlisted");
+  }
   return { ...value, namespace, pattern };
 }
 
@@ -309,10 +304,13 @@ async function redisReadCommand(connection, fetchImpl, command) {
 }
 
 function classifyKey(descriptor, key) {
-  if (typeof descriptor.classify === "function") {
-    return descriptor.classify(key, descriptor.namespace);
+  const namespace = typeof descriptor.classify === "function"
+    ? descriptor.classify(key, descriptor.namespace)
+    : descriptor.namespace;
+  if (!AUDITED_STORAGE_NAMESPACE_SET.has(namespace)) {
+    throw new TypeError("audit key classification produced a non-allowlisted namespace");
   }
-  return descriptor.namespace;
+  return namespace;
 }
 
 function classifyAdminRunKey(key, fallback) {
@@ -340,9 +338,13 @@ function summarizeEntries(entries) {
     knownBytes: known.reduce((total, entry) => total + entry.bytes, 0),
     measuredKeyCount: known.length,
     unmeasuredKeyCount: entries.length - known.length,
-    expiringKeyCount: entries.filter((entry) => entry.pttlMs > 0).length,
-    persistentKeyCount: entries.filter((entry) => entry.pttlMs === -1).length,
-    missingOrUnknownTtlKeyCount: entries.filter((entry) => ![-1].includes(entry.pttlMs) && entry.pttlMs <= 0).length,
+    ttlCounts: {
+      expiring: entries.filter((entry) => entry.pttlMs > 0).length,
+      persistent: entries.filter((entry) => entry.pttlMs === -1).length,
+      missingOrUnknown: entries.filter(
+        (entry) => entry.pttlMs !== -1 && entry.pttlMs <= 0,
+      ).length,
+    },
   };
 }
 
@@ -352,19 +354,46 @@ function sumReports(reports) {
     knownBytes: total.knownBytes + report.totals.knownBytes,
     measuredKeyCount: total.measuredKeyCount + report.totals.measuredKeyCount,
     unmeasuredKeyCount: total.unmeasuredKeyCount + report.totals.unmeasuredKeyCount,
-    expiringKeyCount: total.expiringKeyCount + report.totals.expiringKeyCount,
-    persistentKeyCount: total.persistentKeyCount + report.totals.persistentKeyCount,
-    missingOrUnknownTtlKeyCount:
-      total.missingOrUnknownTtlKeyCount + report.totals.missingOrUnknownTtlKeyCount,
+    ttlCounts: {
+      expiring: total.ttlCounts.expiring + report.totals.ttlCounts.expiring,
+      persistent: total.ttlCounts.persistent + report.totals.ttlCounts.persistent,
+      missingOrUnknown:
+        total.ttlCounts.missingOrUnknown + report.totals.ttlCounts.missingOrUnknown,
+    },
   }), {
     keyCount: 0,
     knownBytes: 0,
     measuredKeyCount: 0,
     unmeasuredKeyCount: 0,
-    expiringKeyCount: 0,
-    persistentKeyCount: 0,
-    missingOrUnknownTtlKeyCount: 0,
+    ttlCounts: { expiring: 0, persistent: 0, missingOrUnknown: 0 },
   });
+}
+
+function mergeNamespaceSummaries(reports) {
+  const grouped = new Map();
+  for (const report of reports) {
+    for (const item of report.namespaces) {
+      const current = grouped.get(item.namespace) || {
+        namespace: item.namespace,
+        keyCount: 0,
+        knownBytes: 0,
+        measuredKeyCount: 0,
+        unmeasuredKeyCount: 0,
+        ttlCounts: { expiring: 0, persistent: 0, missingOrUnknown: 0 },
+      };
+      current.keyCount += item.keyCount;
+      current.knownBytes += item.knownBytes;
+      current.measuredKeyCount += item.measuredKeyCount;
+      current.unmeasuredKeyCount += item.unmeasuredKeyCount;
+      current.ttlCounts.expiring += item.ttlCounts.expiring;
+      current.ttlCounts.persistent += item.ttlCounts.persistent;
+      current.ttlCounts.missingOrUnknown += item.ttlCounts.missingOrUnknown;
+      grouped.set(item.namespace, current);
+    }
+  }
+  return [...grouped.values()].sort(
+    (left, right) => left.namespace.localeCompare(right.namespace, "en"),
+  );
 }
 
 function normalizePttl(value) {
@@ -375,10 +404,6 @@ function normalizePttl(value) {
 function nonNegativeIntegerOrNull(value) {
   const number = Number(value);
   return Number.isSafeInteger(number) && number >= 0 ? number : null;
-}
-
-function numberOrNegativeOne(value) {
-  return value === null ? -1 : value;
 }
 
 function positiveInteger(value, name) {
@@ -399,10 +424,6 @@ function escapeRedisGlob(value) {
   return String(value).replace(/([*?\[\]\\])/gu, "\\$1");
 }
 
-function fingerprint(value) {
-  return createHash("sha256").update(String(value)).digest("hex").slice(0, 20);
-}
-
 function validDate(value) {
   const date = value instanceof Date ? value : new Date(value);
   if (!Number.isFinite(date.getTime())) throw new TypeError("now must be a valid date");
@@ -421,7 +442,7 @@ async function main() {
       "Usage: pnpm run audit:upstash-storage",
       "",
       "Performs a read-only metadata audit. It never reads Redis values and",
-      "never issues mutation commands. Output contains key fingerprints only.",
+      "never issues mutation commands. Output contains fixed-namespace aggregates only.",
       "",
     ].join("\n"));
     return;

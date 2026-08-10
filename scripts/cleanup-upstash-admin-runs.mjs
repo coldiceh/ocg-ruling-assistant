@@ -3,6 +3,7 @@ import { pathToFileURL } from "node:url";
 
 import {
   ADMIN_RUN_CLEANUP_CONFIRMATION,
+  ADMIN_RUN_WRITES_DISABLED_CONFIRMATION,
   DEFAULT_ADMIN_RUN_CLEANUP_LIMITS,
   executeAdminRunCleanup,
   planAdminRunCleanup,
@@ -13,6 +14,7 @@ export function parseAdminRunCleanupArguments(argv = []) {
     olderThanDays: null,
     execute: false,
     confirmation: "",
+    writesDisabledConfirmation: "",
     approvalFingerprint: "",
     compact: false,
     limits: { ...DEFAULT_ADMIN_RUN_CLEANUP_LIMITS },
@@ -35,6 +37,8 @@ export function parseAdminRunCleanupArguments(argv = []) {
       options.execute = true;
     } else if (argument === "--confirm") {
       options.confirmation = requiredText(argv, ++index, argument);
+    } else if (argument === "--confirm-writes-disabled") {
+      options.writesDisabledConfirmation = requiredText(argv, ++index, argument);
     } else if (argument === "--plan-fingerprint") {
       options.approvalFingerprint = requiredText(argv, ++index, argument);
     } else if (argument === "--compact") {
@@ -74,6 +78,14 @@ export async function runAdminRunCleanupCli(
     error.code = "admin_run_cleanup_refused";
     throw error;
   }
+  if (options.execute
+    && options.writesDisabledConfirmation !== ADMIN_RUN_WRITES_DISABLED_CONFIRMATION) {
+    const error = new Error(
+      `--execute requires --confirm-writes-disabled "${ADMIN_RUN_WRITES_DISABLED_CONFIRMATION}"`,
+    );
+    error.code = "admin_run_cleanup_refused";
+    throw error;
+  }
   if (options.execute && !/^[a-f0-9]{64}$/u.test(options.approvalFingerprint)) {
     const error = new Error(
       "--execute requires the exact 64-character --plan-fingerprint from dry-run",
@@ -92,6 +104,7 @@ export async function runAdminRunCleanupCli(
     ? await executeCleanup(plan, {
         execute: true,
         confirmation: options.confirmation,
+        writesDisabledConfirmation: options.writesDisabledConfirmation,
         approvalFingerprint: options.approvalFingerprint,
         fetchImpl,
       })
@@ -105,7 +118,7 @@ function helpText() {
     "Usage: node scripts/cleanup-upstash-admin-runs.mjs --older-than-days <days> [options]",
     "",
     "Default mode is read-only dry-run. It never deletes Admin Lab History,",
-    "query-audit, session, budget, or public-latency keys.",
+    "query-audit, session, budget, public-latency, or feedback data.",
     "",
     "Options:",
     "  --older-than-days <n>  Required positive terminal-run age threshold",
@@ -116,6 +129,7 @@ function helpText() {
     "  --compact              Print compact JSON",
     "  --execute              Apply the in-process dry-run plan",
     `  --confirm <phrase>     Exact phrase: ${ADMIN_RUN_CLEANUP_CONFIRMATION}`,
+    `  --confirm-writes-disabled <phrase> Exact phrase: ${ADMIN_RUN_WRITES_DISABLED_CONFIRMATION}`,
     "  --plan-fingerprint <h> Exact 64-character fingerprint from the reviewed dry-run",
     "  -h, --help             Show this help",
     "",

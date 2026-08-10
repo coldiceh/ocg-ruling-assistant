@@ -16,6 +16,8 @@ const PLAN_INTERNALS = new WeakMap();
 
 export const ADMIN_RUN_CLEANUP_CONFIRMATION =
   "DELETE TERMINAL ADMIN RUN DATA DURING MAINTENANCE";
+export const ADMIN_RUN_WRITES_DISABLED_CONFIRMATION =
+  "ADMIN MODEL LAB WRITES ARE DISABLED";
 
 export const DEFAULT_ADMIN_RUN_CLEANUP_LIMITS = Object.freeze({
   maxRuns: DEFAULT_MAX_RUNS,
@@ -112,6 +114,7 @@ export async function planAdminRunCleanup(options = {}) {
   }
 
   const allSnapshotRecords = new Map();
+  const snapshotRawByKey = new Map();
   const globalBlockReasons = [];
   if (ignoredKeys.length) globalBlockReasons.push("unknown_admin_run_key");
   for (const group of groups.values()) {
@@ -156,6 +159,7 @@ export async function planAdminRunCleanup(options = {}) {
       }
       const record = { ...parsed.value, key: snapshotKey.key, sourceRunId: group.runId };
       allSnapshotRecords.set(snapshotKey.key, record);
+      snapshotRawByKey.set(snapshotKey.key, String(raw));
     }
   }
 
@@ -201,7 +205,7 @@ export async function planAdminRunCleanup(options = {}) {
   const protectedSnapshotKeys = new Set();
   if (!globalBlockReasons.length) {
     for (const record of allSnapshotRecords.values()) {
-      if (record.kind !== "reference" || preliminaryCandidates.has(record.sourceRunId)) continue;
+      if (record.kind !== "reference") continue;
       const resolved = protectReferenceChain(record, {
         records: allSnapshotRecords,
         runPrefix,
@@ -211,11 +215,24 @@ export async function planAdminRunCleanup(options = {}) {
     }
   }
 
+  const deletionCandidates = new Set();
+  for (const runId of preliminaryCandidates) {
+    const group = groups.get(runId);
+    if (group.snapshots.some((snapshot) => protectedSnapshotKeys.has(snapshot.key))) {
+      group.reasons.push("snapshot_referenced_by_existing_run");
+      continue;
+    }
+    deletionCandidates.add(runId);
+  }
+
   const candidateInternals = [];
-  const candidateReports = [];
   let knownBytes = 0;
   let unmeasuredKeyCount = 0;
-  for (const runId of preliminaryCandidates) {
+  const terminalStatusCounts = Object.fromEntries(
+    [...TERMINAL_STATUSES].map((status) => [status, 0]),
+  );
+  const historyRecordKindCounts = { current: 0, legacy: 0 };
+  for (const runId of deletionCandidates) {
     const group = groups.get(runId);
     const keys = [group.state.key, group.events.key];
     for (const snapshot of group.snapshots) {
@@ -237,19 +254,8 @@ export async function planAdminRunCleanup(options = {}) {
       keys,
     };
     candidateInternals.push(internal);
-    candidateReports.push({
-      runFingerprint: fingerprint(runId),
-      status: group.runState.status,
-      endedAt: group.runState.endedAt.toISOString(),
-      keyCount: keys.length,
-      knownBytes: measurements.reduce((sum, item) => sum + (item.bytes || 0), 0),
-      unmeasuredKeyCount: measurements.filter((item) => item.bytes === null).length,
-      protectedSnapshotKeyCount: group.snapshots.filter(
-        (item) => protectedSnapshotKeys.has(item.key),
-      ).length,
-      keyFingerprints: keys.map(fingerprint),
-      historyRecordKind: group.history.kind,
-    });
+    terminalStatusCounts[group.runState.status] += 1;
+    historyRecordKindCounts[group.history.kind] += 1;
   }
 
   const totals = {
@@ -257,6 +263,7 @@ export async function planAdminRunCleanup(options = {}) {
     keyCount: candidateInternals.reduce((sum, item) => sum + item.keys.length, 0),
     knownBytes,
     unmeasuredKeyCount,
+    protectedSnapshotKeyCount: protectedSnapshotKeys.size,
   };
   if (totals.runCount > limits.maxRuns) globalBlockReasons.push("max_runs_exceeded");
   if (totals.keyCount > limits.maxKeys) globalBlockReasons.push("max_keys_exceeded");
@@ -265,6 +272,7 @@ export async function planAdminRunCleanup(options = {}) {
   }
   const uniqueGlobalBlocks = [...new Set(globalBlockReasons)].sort();
   const namespaceKeyDigest = digestJson(discoveredKeys);
+  const snapshotGraphDigest = digestSnapshotGraph(snapshotRawByKey);
   const planFingerprint = digestJson({
     schemaVersion: 1,
     olderThanDays,
@@ -274,6 +282,7 @@ export async function planAdminRunCleanup(options = {}) {
     historyPrefix,
     limits,
     namespaceKeyDigest,
+    snapshotGraphDigest,
     candidates: candidateInternals.map((candidate) => ({
       runId: candidate.runId,
       expectedStateRaw: candidate.expectedStateRaw,
@@ -293,6 +302,17 @@ export async function planAdminRunCleanup(options = {}) {
     cutoffBefore: cutoff.toISOString(),
     planFingerprint,
     confirmationRequired: ADMIN_RUN_CLEANUP_CONFIRMATION,
+    writesDisabledConfirmationRequired: ADMIN_RUN_WRITES_DISABLED_CONFIRMATION,
+    writeQuiescence: {
+      verifiedLock: false,
+      mode: "operator_attested_external_stop",
+      limitation:
+        "Redis Cluster slots prevent this tool from atomically locking every Admin Run writer.",
+      failClosedChecks: [
+        "all snapshot reference targets are deferred to a later cleanup plan",
+        "the namespace key set and complete snapshot graph are revalidated around every delete",
+      ],
+    },
     historyRetentionNotice:
       "Admin Lab History retains only a whitespace-normalized questionSummary of at most 500 characters.",
     namespaceIsolation: {
@@ -302,6 +322,7 @@ export async function planAdminRunCleanup(options = {}) {
       sessionTouched: false,
       budgetTouched: false,
       latencyTouched: false,
+      feedbackTouched: false,
     },
     limits,
     scanned: {
@@ -314,14 +335,11 @@ export async function planAdminRunCleanup(options = {}) {
     canExecute: uniqueGlobalBlocks.length === 0 && candidateInternals.length > 0,
     blockReasons: uniqueGlobalBlocks,
     totals,
-    candidates: candidateReports,
-    skipped: [...groups.values()]
-      .filter((group) => !preliminaryCandidates.has(group.runId))
-      .map((group) => ({
-        runFingerprint: fingerprint(group.runId),
-        reasons: [...new Set(group.reasons)].sort(),
-      }))
-      .sort((left, right) => left.runFingerprint.localeCompare(right.runFingerprint, "en")),
+    candidateSummary: {
+      terminalStatusCounts,
+      historyRecordKindCounts,
+    },
+    skipped: summarizeSkippedGroups(groups, deletionCandidates),
   });
   PLAN_INTERNALS.set(report, {
     runConnection,
@@ -330,7 +348,10 @@ export async function planAdminRunCleanup(options = {}) {
     historyPrefix,
     timeoutMs,
     maxScanKeys: limits.maxScanKeys,
+    namespaceKeys: discoveredKeys,
     namespaceKeyDigest,
+    snapshotRawEntries: [...snapshotRawByKey.entries()],
+    snapshotGraphDigest,
     candidates: candidateInternals,
   });
   return report;
@@ -344,12 +365,16 @@ export async function planAdminRunCleanup(options = {}) {
 export async function executeAdminRunCleanup(plan, {
   execute = false,
   confirmation = "",
+  writesDisabledConfirmation = "",
   approvalFingerprint = "",
   fetchImpl = globalThis.fetch,
 } = {}) {
   if (execute !== true) throw cleanupRefused("--execute is required");
   if (confirmation !== ADMIN_RUN_CLEANUP_CONFIRMATION) {
     throw cleanupRefused("the exact cleanup confirmation phrase is required");
+  }
+  if (writesDisabledConfirmation !== ADMIN_RUN_WRITES_DISABLED_CONFIRMATION) {
+    throw cleanupRefused("the exact writes-disabled confirmation phrase is required");
   }
   const internal = PLAN_INTERNALS.get(plan);
   if (!internal) throw cleanupRefused("cleanup plan is not an executable in-process dry-run plan");
@@ -377,16 +402,23 @@ export async function executeAdminRunCleanup(plan, {
     "admin run cleanup history",
     new Set(["GET"]),
   );
-  const currentNamespaceKeys = await scanKeys(
-    runRedis,
-    `${escapeRedisGlob(internal.runPrefix)}:*`,
-    internal.maxScanKeys,
-  );
-  if (digestJson(currentNamespaceKeys) !== internal.namespaceKeyDigest) {
-    throw cleanupConflict("admin_run_namespace_changed");
-  }
+  let expectedNamespaceKeys = [...internal.namespaceKeys];
+  let expectedSnapshotRaw = new Map(internal.snapshotRawEntries);
+  await assertNamespaceAndSnapshotGraphUnchanged(runRedis, {
+    runPrefix: internal.runPrefix,
+    maxScanKeys: internal.maxScanKeys,
+    expectedNamespaceKeys,
+    expectedSnapshotRaw,
+  });
   const deleted = [];
   for (const candidate of internal.candidates) {
+    await assertNamespaceAndSnapshotGraphUnchanged(runRedis, {
+      runPrefix: internal.runPrefix,
+      maxScanKeys: internal.maxScanKeys,
+      expectedNamespaceKeys,
+      expectedSnapshotRaw,
+    });
+    assertCandidateDeletionScope(candidate, internal.runPrefix);
     const historyRaw = await historyRedis(["GET", candidate.historyKey]);
     if (String(historyRaw ?? "") !== candidate.expectedHistoryRaw) {
       throw cleanupConflict("history_record_changed");
@@ -415,21 +447,30 @@ export async function executeAdminRunCleanup(plan, {
     if (String(preservedHistory ?? "") !== candidate.expectedHistoryRaw) {
       throw cleanupConflict("history_record_not_preserved");
     }
-    deleted.push({
-      runFingerprint: fingerprint(candidate.runId),
-      keyCount: candidate.keys.length,
+    const deletedKeys = new Set(candidate.keys);
+    expectedNamespaceKeys = expectedNamespaceKeys.filter((key) => !deletedKeys.has(key));
+    expectedSnapshotRaw = new Map(
+      [...expectedSnapshotRaw].filter(([key]) => !deletedKeys.has(key)),
+    );
+    await assertNamespaceAndSnapshotGraphUnchanged(runRedis, {
+      runPrefix: internal.runPrefix,
+      maxScanKeys: internal.maxScanKeys,
+      expectedNamespaceKeys,
+      expectedSnapshotRaw,
     });
+    deleted.push(candidate.keys.length);
   }
   return deepFreeze({
     schemaVersion: 1,
     mode: "executed",
     executedAt: new Date().toISOString(),
     confirmationAccepted: true,
+    writesDisabledConfirmationAccepted: true,
+    writeQuiescence: plan.writeQuiescence,
     questionsExposed: false,
     historyRetentionNotice: plan.historyRetentionNotice,
     deletedRunCount: deleted.length,
-    deletedKeyCount: deleted.reduce((sum, item) => sum + item.keyCount, 0),
-    deleted,
+    deletedKeyCount: deleted.reduce((sum, keyCount) => sum + keyCount, 0),
   });
 }
 
@@ -562,6 +603,35 @@ async function scanKeys(redis, pattern, maxKeys) {
   return [...found].sort((left, right) => left.localeCompare(right, "en"));
 }
 
+async function assertNamespaceAndSnapshotGraphUnchanged(redis, {
+  runPrefix,
+  maxScanKeys,
+  expectedNamespaceKeys,
+  expectedSnapshotRaw,
+}) {
+  const currentKeys = await scanKeys(
+    redis,
+    `${escapeRedisGlob(runPrefix)}:*`,
+    maxScanKeys,
+  );
+  if (digestJson(currentKeys) !== digestJson(expectedNamespaceKeys)) {
+    throw cleanupConflict("admin_run_namespace_changed");
+  }
+  const currentSnapshotRaw = new Map();
+  for (const key of currentKeys) {
+    const parsed = parseAdminRunKey(key, runPrefix);
+    if (parsed?.kind !== "snapshot") continue;
+    const raw = await redis(["GET", key]);
+    if (raw === null || raw === undefined) {
+      throw cleanupConflict("snapshot_graph_changed");
+    }
+    currentSnapshotRaw.set(key, String(raw));
+  }
+  if (digestSnapshotGraph(currentSnapshotRaw) !== digestSnapshotGraph(expectedSnapshotRaw)) {
+    throw cleanupConflict("snapshot_graph_changed");
+  }
+}
+
 function parseAdminRunKey(key, prefix) {
   const match = new RegExp(
     `^${escapeRegExp(prefix)}:\\{([^{}]+)\\}:(state|events|snapshot:(.+))$`,
@@ -586,6 +656,42 @@ function parseAdminRunKey(key, prefix) {
   }
   if (!snapshotId || encodeURIComponent(snapshotId) !== match[3]) return null;
   return { key: String(key), kind: "snapshot", runId, snapshotId };
+}
+
+function assertCandidateDeletionScope(candidate, runPrefix) {
+  if (!candidate || !validRunId(candidate.runId)
+    || !Array.isArray(candidate.keys) || candidate.keys.length < 2
+    || new Set(candidate.keys).size !== candidate.keys.length) {
+    throw cleanupRefused("cleanup candidate has an invalid deletion scope");
+  }
+  const parsed = candidate.keys.map((key) => parseAdminRunKey(key, runPrefix));
+  if (parsed.some((item) => !item || item.runId !== candidate.runId)) {
+    throw cleanupRefused("cleanup candidate escaped the Admin Run namespace");
+  }
+  const stateCount = parsed.filter((item) => item.kind === "state").length;
+  const eventsCount = parsed.filter((item) => item.kind === "events").length;
+  if (parsed[0]?.kind !== "state" || stateCount !== 1 || eventsCount !== 1
+    || parsed.some((item) => !["state", "events", "snapshot"].includes(item.kind))) {
+    throw cleanupRefused("cleanup candidate is not an exact state/events/snapshot set");
+  }
+}
+
+function summarizeSkippedGroups(groups, preliminaryCandidates) {
+  const skipped = [...groups.values()].filter(
+    (group) => !preliminaryCandidates.has(group.runId),
+  );
+  const reasonCounts = {};
+  for (const group of skipped) {
+    for (const reason of new Set(group.reasons)) {
+      reasonCounts[reason] = (reasonCounts[reason] || 0) + 1;
+    }
+  }
+  return {
+    runCount: skipped.length,
+    reasonCounts: Object.fromEntries(
+      Object.entries(reasonCounts).sort(([left], [right]) => left.localeCompare(right, "en")),
+    ),
+  };
 }
 
 function parseRunState(raw, expectedRunId, now) {
@@ -806,12 +912,14 @@ function assertSameRedisSlot(keys) {
   if (slots.size !== 1 || slots.has("")) throw cleanupRefused("delete keys are not in one Redis slot");
 }
 
-function fingerprint(value) {
-  return createHash("sha256").update(String(value)).digest("hex").slice(0, 16);
-}
-
 function digestJson(value) {
   return createHash("sha256").update(JSON.stringify(value)).digest("hex");
+}
+
+function digestSnapshotGraph(rawByKey) {
+  return digestJson(
+    [...rawByKey.entries()].sort(([left], [right]) => left.localeCompare(right, "en")),
+  );
 }
 
 function escapeRedisGlob(value) {
