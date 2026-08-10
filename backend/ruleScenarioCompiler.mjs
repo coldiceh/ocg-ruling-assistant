@@ -92,13 +92,16 @@ export function compileRuleScenario({
       item.revealActivationProcedures.length > 0
       && item.names.some((name) => nameMentioned(query, name))
     ));
-  const selfHandExplicitlyPublic = /(?:我方|自己|本方)(?:的)?(?:手牌|手卡).{0,20}(?:已经|已|持续|全部)?(?:公开|展示)/su.test(query);
-  const opponentHandExplicitlyPublic = /(?:对方|對方|对手|相手)(?:的)?(?:手牌|手卡|手札).{0,20}(?:已经|已|持续|全部)?(?:公开|公開|展示)/su.test(query);
+  const selfHandExplicitlyPublic = /(?:我方|自己|本方|我)(?:的)?(?:手牌|手卡|手札).{0,20}(?:已经|已|持续|全部)?(?:公开|公開|展示)/su.test(query);
+  const opponentHandExplicitlyPublic = /(?:对方|對方|对手|对面|相手)(?:的)?(?:手牌|手卡|手札).{0,20}(?:已经|已|持续|全部)?(?:公开|公開|展示)/su.test(query);
   const handVisibilityFacts = inferHandVisibilityFacts(query, continuousHandRevealCards);
   if (selfHandExplicitlyPublic) handVisibilityFacts.selfHandPublic = true;
   if (opponentHandExplicitlyPublic) handVisibilityFacts.opponentHandPublic = true;
   const selfHandContinuouslyPublic = selfHandExplicitlyPublic || handVisibilityFacts.selfHandPublic;
   const opponentHandContinuouslyPublic = opponentHandExplicitlyPublic || handVisibilityFacts.opponentHandPublic;
+  const simultaneousContinuouslyPublicHandTriggers = (
+    selfHandContinuouslyPublic || opponentHandContinuouslyPublic
+  ) && asksPublicHandTriggerChainOrdering(query);
   const revealActivationOperations = buildRevealActivationOperations(query, revealOwnHandActivationCards);
   const blockedRevealActivationOperations = revealActivationOperations
     .filter((operation) => (
@@ -159,6 +162,7 @@ export function compileRuleScenario({
     noOtherSpellTraps,
     selfHandContinuouslyPublic,
     opponentHandContinuouslyPublic,
+    simultaneousContinuouslyPublicHandTriggers,
     revealOwnHandActivationRequired,
     publicHandRevealProcedureBlocked: blockedRevealActivationOperations.length > 0,
     handVisibilityFacts,
@@ -299,9 +303,9 @@ function inferContinuousEffectRelation(query, card) {
       || new RegExp("(?:我方|自己|本方).{0,12}" + escaped + ".{0,12}" + applies, "su").test(query)) {
       return "self_controls";
     }
-    if (new RegExp("(?:对方|對方|对手).{0,18}(?:控制|操控|场上(?:存在|有)?|場上(?:存在|有)?|发动|發動|使用|持有).{0,18}" + escaped, "su").test(query)
-      || new RegExp("(?:对方|對方|对手)(?:的|场上的|場上的)" + escaped, "su").test(query)
-      || new RegExp("(?:对方|對方|对手).{0,12}" + escaped + ".{0,12}" + applies, "su").test(query)) {
+    if (new RegExp("(?:对方|對方|对手|对面).{0,18}(?:控制|操控|场上(?:存在|有)?|場上(?:存在|有)?|发动|發動|使用|持有).{0,18}" + escaped, "su").test(query)
+      || new RegExp("(?:对方|對方|对手|对面)(?:的|场上的|場上的)" + escaped, "su").test(query)
+      || new RegExp("(?:对方|對方|对手|对面).{0,12}" + escaped + ".{0,12}" + applies, "su").test(query)) {
       return "opponent_controls";
     }
     if (new RegExp("(?:我方|自己|本方).{0,12}(?:受到|受|处于|處於).{0,12}" + escaped + ".{0,12}" + applies, "su").test(query)) {
@@ -312,6 +316,47 @@ function inferContinuousEffectRelation(query, card) {
     }
   }
   return "";
+}
+
+function asksPublicHandTriggerChainOrdering(query) {
+  const text = String(query || "");
+  if (!/(?:手牌|手卡|手札|\bhand\b)/iu.test(text)) return false;
+  const chainLinkNumbers = new Set([
+    ...[...text.normalize("NFKC").matchAll(/[cＣ]\s*([1-9]\d*)/giu)].map((match) => Number(match[1])),
+    ...[...text.matchAll(/(?:连锁|連鎖|チェーン)\s*([1-9]\d*)/gu)].map((match) => Number(match[1])),
+  ].filter(Number.isFinite));
+  if (!chainLinkNumbers.has(1) || !chainLinkNumbers.has(2)) return false;
+  // The hand being public is relevant only if at least one of the proposed
+  // chain links is explicitly an effect from that hand. Without this binding,
+  // an unrelated revealed hand would promote the public-hand FAQ for any two
+  // field/graveyard triggers mentioned elsewhere in the same question.
+  const chainLink = "(?:[cＣ]\\s*[12]|(?:连锁|連鎖|チェーン)\\s*[12])";
+  const handZone = "(?:手牌|手卡|手札|\\bhand\\b)";
+  const sameClause = "[^，,。；;！？!?\\r\\n]{0,32}";
+  const linkedHandEffect = new RegExp(
+    "(?:" + chainLink + ")" + sameClause + handZone
+      + "|" + handZone + sameClause + "(?:" + chainLink + ")",
+    "isu",
+  ).test(text);
+  // Players often use "检索" as shorthand for adding a named card from the
+  // Deck to the hand, then repeat that same name when assigning C1/C2. Bind the
+  // two occurrences by their quoted identity rather than treating any search
+  // elsewhere in the question as proof that a chain-link effect is in hand.
+  const searchedCardBecomesChainLink = [...text.matchAll(
+    /(?:检索|檢索|加入(?:手牌|手卡|手札)|加到(?:手牌|手卡|手札))\s*[《「『]([^》」』]{2,48})[》」』]/gu,
+  )].some((match) => {
+    const escapedName = escapeRegExp(String(match[1] || "").trim());
+    if (!escapedName) return false;
+    const laterText = text.slice(Number(match.index || 0) + match[0].length);
+    return new RegExp(
+      "(?:" + chainLink + ").{0,48}[《「『]" + escapedName + "[》」』]"
+        + "|[《「『]" + escapedName + "[》」』].{0,48}(?:" + chainLink + ")",
+      "isu",
+    ).test(laterText);
+  });
+  if (!linkedHandEffect && !searchedCardBecomesChainLink) return false;
+  return /(?:是否|能否|可否|能不能|可不可以|可以|如何|怎么|怎样|順序|顺序|排列|组成|組成|どちら|できますか|can\s+(?:i|we)|order)/iu.test(text)
+    && /(?:诱发|誘発|被破坏|被破壊|特殊召唤|特殊召喚|场合.{0,16}发动|場合.{0,16}発動|trigger)/isu.test(text);
 }
 
 function escapeRegExp(value) {

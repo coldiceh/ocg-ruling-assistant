@@ -420,6 +420,68 @@ test("ordinary C1/C2 resolution and target loss do not imply simultaneous trigge
   ));
 });
 
+test("a continuously public hand plus C1 C2 trigger ordering retrieves the public-hand official rule", async () => {
+  const data = await loadRagData();
+  const resolvedCards = ["23162", "11763", "19398", "19397"]
+    .map((id) => data.cards.find((card) => card.id === id))
+    .filter(Boolean)
+    .map((card) => ({ ...card, input: card.name, confidence: 1 }));
+  const question = [
+    "对面场上有《看透心灵之眼》导致我手牌公开，",
+    "我发动《炎王的孤岛》炸《炎王神兽 麒麟》检索《圣炎王 大鹏不死鸟》的情况。",
+    "我是否可以 C1 发动《圣炎王 大鹏不死鸟》起跳，C2 发动《炎王神兽 麒麟》的被破坏效果？",
+  ].join("");
+  const evidence = await retrieveRagEvidence({
+    userQuery: question,
+    cardResolution: {
+      resolvedCards,
+      unresolvedMentions: [],
+      ambiguousMentions: [],
+      userProvidedCardTexts: [],
+    },
+    cards: data.cards,
+    records: data.records,
+    qaRecords: data.qaRecords,
+    enableLiveOfficialQa: false,
+  });
+
+  assert.ok(evidence.ruleSearchQueries.some(
+    (item) => item.source === "public_hand_trigger_order_rule_search_query",
+  ));
+  const ruling = evidence.officialQaRelated.find((item) => item.id === "ygoresources-qa-23948");
+  assert.ok(ruling, "expected the official public-hand trigger ordering ruling");
+  assert.equal(ruling.retrievalSignals?.mechanismAnalogue, "public_hand_trigger_order");
+});
+
+test("an unrelated public hand does not promote the public-hand ordering FAQ for field and grave triggers", async () => {
+  const data = await loadRagData();
+  const question = [
+    "对方的手牌因永续效果而全部公开。",
+    "我方场上的怪兽和墓地的怪兽效果在同一时点满足条件。",
+    "是否可以C1发动场上怪兽的诱发效果，C2发动墓地怪兽的诱发效果？",
+  ].join("");
+  const evidence = await retrieveRagEvidence({
+    userQuery: question,
+    cardResolution: {
+      resolvedCards: [],
+      unresolvedMentions: [],
+      ambiguousMentions: [],
+      userProvidedCardTexts: [],
+    },
+    cards: data.cards,
+    records: data.records,
+    qaRecords: data.qaRecords,
+    enableLiveOfficialQa: false,
+  });
+
+  assert.ok(!evidence.ruleSearchQueries.some(
+    (item) => item.source === "public_hand_trigger_order_rule_search_query",
+  ));
+  assert.ok(!evidence.officialQaRelated.some(
+    (item) => item.retrievalSignals?.mechanismAnalogue === "public_hand_trigger_order",
+  ));
+});
+
 test("inline_card_references_link_the_stardust_official_qa", async () => {
   const data = await loadRagData();
   const resolvedCards = ["4678", "16386", "7734"]
