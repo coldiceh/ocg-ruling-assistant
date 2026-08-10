@@ -21,6 +21,29 @@ export const ADMIN_LAB_HUMAN_RATINGS = Object.freeze([
 
 const HUMAN_RATING_SET = new Set(ADMIN_LAB_HUMAN_RATINGS);
 
+/**
+ * Builds the deliberately minimal History record used by storage maintenance
+ * when an old Admin Run predates normal History registration.  Keeping this
+ * constructor here makes the maintenance path share the production
+ * whitespace and length contract without accepting any result/evidence fields.
+ */
+export function createQuestionOnlyAdminLabHistoryRecord({
+  runId,
+  createdAt,
+  question,
+} = {}) {
+  return normalizeRunRecord({
+    runId,
+    createdAt,
+    questionSummary: normalizeAdminLabQuestionSummary(question),
+    modelConfig: {},
+  }, { now: () => new Date(0) });
+}
+
+export function normalizeAdminLabQuestionSummary(value) {
+  return summarizeQuestion(value);
+}
+
 const REGISTER_RUN_SCRIPT = `
 -- admin-lab-record-register-v1
 local existingRaw = redis.call("GET", KEYS[1])

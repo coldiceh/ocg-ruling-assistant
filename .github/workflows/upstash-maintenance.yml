@@ -12,8 +12,10 @@ on:
           - audit
           - plan
           - execute
+          - backfill-plan
+          - backfill-execute
       older_than_days:
-        description: Terminal Admin Run age threshold for plan/execute
+        description: Terminal Admin Run age threshold for cleanup or backfill plan/execute
         required: true
         type: string
         default: "30"
@@ -33,12 +35,12 @@ on:
         type: string
         default: "134217728"
       plan_fingerprint:
-        description: Execute only - exact 64-character fingerprint from a reviewed plan
+        description: Execute only - exact 64-character fingerprint from the matching reviewed plan
         required: false
         type: string
         default: ""
       confirmation_phrase:
-        description: Execute only - type DELETE TERMINAL ADMIN RUN DATA DURING MAINTENANCE
+        description: Execute only - exact cleanup or questionSummary backfill confirmation phrase
         required: false
         type: string
         default: ""
@@ -128,13 +130,39 @@ jobs:
                 --plan-fingerprint "$APPROVED_PLAN_FINGERPRINT" \
                 > artifacts/upstash-admin-run-cleanup-execution.json
               ;;
+            backfill-plan)
+              node scripts/cleanup-upstash-admin-runs.mjs \
+                --backfill-history \
+                --older-than-days "$OLDER_THAN_DAYS" \
+                --max-runs "$MAX_RUNS" \
+                --max-keys "$MAX_KEYS" \
+                --max-known-bytes "$MAX_KNOWN_BYTES" \
+                > artifacts/upstash-admin-run-history-backfill-plan.json
+              ;;
+            backfill-execute)
+              test "$MAINTENANCE_CONFIRMED" = "true" || { echo "Admin maintenance was not confirmed" >&2; exit 1; }
+              test "$EXECUTION_CONFIRMATION" = "BACKFILL ADMIN RUN QUESTION SUMMARIES TO HISTORY" || { echo "Exact History backfill confirmation phrase is required" >&2; exit 1; }
+              test "$WRITES_DISABLED_CONFIRMATION" = "ADMIN MODEL LAB WRITES ARE DISABLED" || { echo "Exact writes-disabled confirmation phrase is required" >&2; exit 1; }
+              [[ "$APPROVED_PLAN_FINGERPRINT" =~ ^[a-f0-9]{64}$ ]] || { echo "Exact 64-character backfill plan fingerprint is required" >&2; exit 1; }
+              node scripts/cleanup-upstash-admin-runs.mjs \
+                --backfill-history \
+                --older-than-days "$OLDER_THAN_DAYS" \
+                --max-runs "$MAX_RUNS" \
+                --max-keys "$MAX_KEYS" \
+                --max-known-bytes "$MAX_KNOWN_BYTES" \
+                --execute \
+                --confirm "$EXECUTION_CONFIRMATION" \
+                --confirm-writes-disabled "$WRITES_DISABLED_CONFIRMATION" \
+                --plan-fingerprint "$APPROVED_PLAN_FINGERPRINT" \
+                > artifacts/upstash-admin-run-history-backfill-execution.json
+              ;;
             *)
               echo "Unsupported maintenance mode" >&2
               exit 1
               ;;
           esac
 
-      - name: Upload sanitized audit or cleanup report
+      - name: Upload sanitized audit, cleanup, or History backfill report
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -143,5 +171,7 @@ jobs:
             artifacts/upstash-storage-audit.json
             artifacts/upstash-admin-run-cleanup-plan.json
             artifacts/upstash-admin-run-cleanup-execution.json
+            artifacts/upstash-admin-run-history-backfill-plan.json
+            artifacts/upstash-admin-run-history-backfill-execution.json
           if-no-files-found: warn
           retention-days: 7
