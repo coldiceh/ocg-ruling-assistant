@@ -42,11 +42,16 @@ let defaultHandler;
 export function createAdminModelLabHandler(options = {}) {
   const manager = options.manager || createAdminSessionManager(options);
   const service = options.service || Object.freeze({});
+  const writesDisabledByMaintenance = options.writesDisabledByMaintenance === true;
 
   return async function adminModelLabHandler(request, response) {
     const method = String(request?.method || "").toUpperCase();
     const origin = manager.checkOrigin(request);
     setCors(response, origin.ok ? origin.origin : "");
+    response.setHeader(
+      "x-admin-model-lab-write-state",
+      writesDisabledByMaintenance ? "maintenance-disabled" : "enabled",
+    );
 
     if (method === "OPTIONS") {
       if (!origin.ok) return sendAuthorizationFailure(response, origin);
@@ -83,6 +88,9 @@ export function createAdminModelLabHandler(options = {}) {
       const allowedActions = method === "GET" ? GET_ACTIONS : POST_ACTIONS;
       if (!allowedActions.has(action)) {
         throw exposedError(400, "admin_model_lab_action_invalid");
+      }
+      if (method === "POST" && writesDisabledByMaintenance) {
+        throw exposedError(503, "admin_model_lab_maintenance");
       }
 
       const context = {
@@ -145,7 +153,12 @@ export function createProductionAdminModelLabHandler(options = {}) {
   return createAdminModelLabHandler({
     manager,
     service,
+    writesDisabledByMaintenance: readBooleanFlag(env.ADMIN_MODEL_LAB_MAINTENANCE_DISABLED),
   });
+}
+
+function readBooleanFlag(value) {
+  return ["1", "true", "yes", "on"].includes(String(value || "").trim().toLowerCase());
 }
 
 async function dispatchJsonAction({ service, context }) {

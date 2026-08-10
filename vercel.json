@@ -3,7 +3,8 @@
   "env": {
     "RELAY_STREAM_TIMEOUT_MS": "270000",
     "ADMIN_MODEL_LAB_SYNC_FINAL_TIMEOUT_MS": "290000",
-    "ADMIN_MODEL_LAB_BYPASS_DAILY_BUDGET": "true"
+    "ADMIN_MODEL_LAB_BYPASS_DAILY_BUDGET": "true",
+    "ADMIN_MODEL_LAB_MAINTENANCE_DISABLED": "true"
   },
   "functions": {
     "api/answer.js": {
