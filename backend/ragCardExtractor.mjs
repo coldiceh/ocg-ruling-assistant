@@ -29,7 +29,6 @@ const QUOTED_MENTION_PATTERNS = Object.freeze([
   /"([^"\r\n]{2,80})"/gu,
   /'([^'\r\n]{2,80})'/gu,
 ]);
-
 const EFFECT_LINE_PATTERN = /^(?:效果\s*[：:]|[①②③④⑤⑥⑦⑧⑨⑩]\s*[：:]?|\(?[1-9]\d{0,1}\)?\s*[：:.．])/u;
 const CARD_TEXT_BOUNDARY_PATTERN = /^(?:问题|问|Q|Ｑ|场景|请问|此时|那么|如果|假设)\s*[：:]/iu;
 const NON_CARD_HEADING_NAMES = new Set(["效果", "问题", "问", "q", "场景", "请问", "补充", "答案"]);
@@ -57,13 +56,13 @@ export function extractRagCards(userQuery, { cards = [], maxCards = 6, modelCard
         return key.length >= 2 && normalizedQuery.includes(key);
       })
     ));
-  const exactMentionSeeds = [
+  let exactMentionSeeds = [
     ...buildModelMentionSeeds(modelMentions),
     ...extractNumberedCardMentionCandidates(query).map((input) => ({ input, reason: "numbered_card_not_found", source: "numbered_card_identity" })),
     ...extractQuotedMentions(query).map((input) => ({ input, reason: "quoted_mention_not_found", source: "quoted_mention" })),
     ...userProvidedCardTexts.map((item) => ({ input: item.name, reason: "user_provided_text_name_not_found", source: "user_provided_text" })),
   ];
-  const unquotedMentionSeeds = extractUnquotedCardMentionCandidates(cardNameScanQuery)
+  let unquotedMentionSeeds = extractUnquotedCardMentionCandidates(cardNameScanQuery)
     .map((input) => ({ input, reason: "unquoted_candidate_not_found", source: "unquoted_heuristic" }));
   const distinctiveMentionSeeds = extractContextualDistinctiveMentionCandidates(cardNameScanQuery)
     .filter((input) => findUniqueDistinctiveFragmentCandidate(cards, input))
@@ -73,6 +72,14 @@ export function extractRagCards(userQuery, { cards = [], maxCards = 6, modelCard
       source: "contextual_distinctive_fragment",
     }));
   exactMentionSeeds.push(...distinctiveMentionSeeds);
+  const queryAliasEntries = collectQueryAliasEntries(aliasIndex, normalizedQuery, queryNumberedIdentityKeys);
+  const exactSpanSelection = buildExactMentionSpanSelection(
+    cardNameScanQuery,
+    queryAliasEntries,
+    exactMentionSeeds,
+  );
+  exactMentionSeeds = markAndFilterMentionSeeds(exactMentionSeeds, exactSpanSelection);
+  unquotedMentionSeeds = markAndFilterMentionSeeds(unquotedMentionSeeds, exactSpanSelection);
   const resolved = [];
   const unresolvedMentions = [];
   const ambiguousMentions = [];
@@ -147,10 +154,10 @@ export function extractRagCards(userQuery, { cards = [], maxCards = 6, modelCard
     if (!mentionKey || seenMentionKeys.has(mentionKey)) continue;
     seenMentionKeys.add(mentionKey);
     const candidates = aliasIndex.get(mentionKey) || [];
-    const singleEditCandidate = candidates.length
+    const singleEditCandidate = candidates.length || seed.deferToNestedKnownSpan
       ? null
       : findUniqueSingleEditCandidate(aliasIndex, mention) || findUniqueNearEditCandidate(aliasIndex, mention);
-    const distinctiveFragmentCandidate = candidates.length || singleEditCandidate
+    const distinctiveFragmentCandidate = candidates.length || singleEditCandidate || seed.deferToNestedKnownSpan
       ? null
       : findUniqueDistinctiveFragmentCandidate(cards, mention);
     if (candidates.length === 1) {
@@ -178,7 +185,7 @@ export function extractRagCards(userQuery, { cards = [], maxCards = 6, modelCard
     if (!mentionKey || seenMentionKeys.has(mentionKey)) continue;
     seenMentionKeys.add(mentionKey);
     const candidates = aliasIndex.get(mentionKey) || [];
-    const singleEditCandidate = candidates.length
+    const singleEditCandidate = candidates.length || seed.deferToNestedKnownSpan
       ? null
       : findUniqueSingleEditCandidate(aliasIndex, mention) || findUniqueNearEditCandidate(aliasIndex, mention);
     if (candidates.length === 1) {
@@ -199,13 +206,12 @@ export function extractRagCards(userQuery, { cards = [], maxCards = 6, modelCard
   }
 
   const aliasHits = [];
-  for (const [aliasKey, candidates] of aliasIndex.entries()) {
+  for (const [aliasKey, candidates] of queryAliasEntries) {
     // Two-character aliases are too ambiguous for passive substring scanning
     // (for example, the card "融合" inside the gameplay term "融合怪").
     // Explicit model/quoted/unquoted candidates above can still resolve them.
-    if (aliasKey.length < 3 || !normalizedQuery.includes(aliasKey)) continue;
-    const aliasNumberedIdentities = extractNumberedCardIdentities(aliasKey);
-    if (aliasNumberedIdentities.length && !aliasNumberedIdentities.some((identity) => queryNumberedIdentityKeys.has(numberedIdentityKey(identity)))) continue;
+    if (aliasKey.length < 3) continue;
+    if (exactSpanSelection.hasOccurrences(aliasKey) && !exactSpanSelection.hasSelectedOccurrence(aliasKey)) continue;
     const bestAlias = candidates[0]?.matchedAlias || "";
     if (!bestAlias || !buildMentionContexts(cardNameScanQuery, bestAlias, resolved).length) continue;
     aliasHits.push({ aliasKey, candidates, score: aliasKey.length + bestAlias.length / 100 });
@@ -217,7 +223,15 @@ export function extractRagCards(userQuery, { cards = [], maxCards = 6, modelCard
       numberedAliasCompatibleWithExplicitMentions(query, candidate, exactMentionSeeds)
     ));
     if (eligibleCandidates.length === 1) {
-      addResolved(resolved, seenCards, eligibleCandidates[0], eligibleCandidates[0].matchedAlias, confidenceForAlias(hit.aliasKey));
+      const matchedAlias = eligibleCandidates[0].matchedAlias;
+      // `aliasHits` is collected before any of those hits are resolved.  A
+      // shorter exact card name can therefore be present only as a substring
+      // of a longer card name in the same source span (for example, X inside
+      // XG).  Re-check the occurrence after longer hits have been added.  A
+      // genuinely independent occurrence of the short name still has its own
+      // context and remains eligible.
+      if (!buildMentionContexts(cardNameScanQuery, matchedAlias, resolved).length) continue;
+      addResolved(resolved, seenCards, eligibleCandidates[0], matchedAlias, confidenceForAlias(hit.aliasKey));
       continue;
     }
     const unresolved = eligibleCandidates.filter((candidate) => !seenCards.has(cardIdentity(candidate.card)));
@@ -344,6 +358,168 @@ export function buildAliasIndex(cards = []) {
   aliasKeysByLengthCache.set(index, keysByLength);
   supplementalCardIndexesCache.set(sourceCards, { numberedIdentityIndex, shortMentionIndex, distinctiveFragmentIndex });
   return index;
+}
+
+function collectQueryAliasEntries(aliasIndex, normalizedQuery, queryNumberedIdentityKeys) {
+  const entries = [];
+  for (const [aliasKey, candidates] of aliasIndex.entries()) {
+    if (!aliasKey || !normalizedQuery.includes(aliasKey)) continue;
+    const aliasNumberedIdentities = extractNumberedCardIdentities(aliasKey);
+    if (aliasNumberedIdentities.length && !aliasNumberedIdentities.some((identity) => (
+      queryNumberedIdentityKeys.has(numberedIdentityKey(identity))
+    ))) continue;
+    entries.push([aliasKey, candidates]);
+  }
+  return entries;
+}
+
+function buildExactMentionSpanSelection(query, queryAliasEntries, mentionSeeds) {
+  const text = String(query || "").normalize("NFKC");
+  const lowerText = text.toLowerCase();
+  const stableAliasKeys = new Set((queryAliasEntries || [])
+    .filter(([, candidates]) => (candidates || []).some((candidate) => cardIdentity(candidate.card)))
+    .map(([aliasKey]) => aliasKey));
+  const surfacesByKey = new Map();
+  const addSurface = (value, stable) => {
+    const surface = String(value || "").trim();
+    const surfaceKey = exactSurfaceKey(surface);
+    if (!surfaceKey) return;
+    const existing = surfacesByKey.get(surfaceKey);
+    if (existing) existing.stable ||= stable;
+    else surfacesByKey.set(surfaceKey, { surface, stable });
+  };
+  for (const [, candidates] of queryAliasEntries || []) {
+    for (const candidate of candidates || []) addSurface(candidate.matchedAlias, true);
+  }
+  for (const seed of mentionSeeds || []) {
+    addSurface(seed.input, stableAliasKeys.has(normalizeCardKey(seed.input)));
+  }
+  const spansByRange = new Map();
+
+  for (const { surface, stable } of surfacesByKey.values()) {
+    const needle = String(surface || "").normalize("NFKC");
+    const lowerNeedle = needle.toLowerCase();
+    const mentionKey = normalizeCardKey(surface);
+    if (!lowerNeedle || !mentionKey) continue;
+
+    let cursor = 0;
+    while (cursor <= lowerText.length - lowerNeedle.length) {
+      const start = lowerText.indexOf(lowerNeedle, cursor);
+      if (start < 0) break;
+      const end = start + lowerNeedle.length;
+      cursor = start + 1;
+      const rangeKey = `${start}:${end}`;
+      const span = spansByRange.get(rangeKey) || {
+        start,
+        end,
+        mentionKeys: new Set(),
+        stableMentionKeys: new Set(),
+        surfaces: new Set(),
+      };
+      span.mentionKeys.add(mentionKey);
+      if (stable) span.stableMentionKeys.add(mentionKey);
+      span.surfaces.add(needle);
+      spansByRange.set(rangeKey, span);
+    }
+  }
+
+  const ranked = [...spansByRange.values()]
+    .filter((span) => span.stableMentionKeys.size > 0)
+    .sort((left, right) => (
+      (right.end - right.start) - (left.end - left.start)
+      || left.start - right.start
+      || left.end - right.end
+    ));
+  const selected = [];
+  for (const span of ranked) {
+    if (selected.some((accepted) => spansOverlap(span, accepted))) continue;
+    selected.push(span);
+  }
+  selected.sort((left, right) => left.start - right.start || right.end - left.end);
+
+  const allByMentionKey = indexMentionSpansByKey(spansByRange.values());
+  const selectedByMentionKey = indexMentionSpansByKey(selected);
+  return {
+    occurrences(value) {
+      return allByMentionKey.get(normalizeCardKey(value)) || [];
+    },
+    selectedOccurrences(value) {
+      return selectedByMentionKey.get(normalizeCardKey(value)) || [];
+    },
+    hasOccurrences(value) {
+      return (allByMentionKey.get(normalizeCardKey(value)) || []).length > 0;
+    },
+    hasSelectedOccurrence(value) {
+      return (selectedByMentionKey.get(normalizeCardKey(value)) || []).length > 0;
+    },
+    isStableMention(value) {
+      return stableAliasKeys.has(normalizeCardKey(value));
+    },
+    hasNestedSelectedKnownSpan(value) {
+      const occurrences = allByMentionKey.get(normalizeCardKey(value)) || [];
+      return occurrences.some((occurrence) => selected.some((accepted) => (
+        accepted.start >= occurrence.start
+        && accepted.end <= occurrence.end
+        && (accepted.start !== occurrence.start || accepted.end !== occurrence.end)
+      )));
+    },
+    shouldDeferToNestedKnownSpan(value) {
+      const occurrences = allByMentionKey.get(normalizeCardKey(value)) || [];
+      return occurrences.some((occurrence) => selected.some((accepted) => {
+        if (
+          accepted.start < occurrence.start
+          || accepted.end > occurrence.end
+          || (accepted.start === occurrence.start && accepted.end === occurrence.end)
+        ) return false;
+        const before = text.slice(occurrence.start, accepted.start).trim();
+        const after = text.slice(accepted.end, occurrence.end).trim();
+        return !before && /^(?:(?:的|の)\s*)?(?:[①②③④⑤⑥⑦⑧⑨⑩1-9]\s*)?(?:效果|效应|效應|効果|effect)$/iu.test(after);
+      }));
+    },
+  };
+}
+
+function markAndFilterMentionSeeds(seeds, exactSpanSelection) {
+  return (seeds || []).map((seed) => {
+    const queryExactSpans = exactSpanSelection.occurrences(seed.input);
+    const selectedQueryExactSpans = exactSpanSelection.selectedOccurrences(seed.input);
+    return {
+      ...seed,
+      queryExactSpans: queryExactSpans.map(toPublicMentionSpan),
+      selectedQueryExactSpans: selectedQueryExactSpans.map(toPublicMentionSpan),
+      exactSpanStableCandidate: exactSpanSelection.isStableMention(seed.input),
+      hasNestedSelectedKnownSpan: exactSpanSelection.hasNestedSelectedKnownSpan(seed.input),
+      deferToNestedKnownSpan: exactSpanSelection.shouldDeferToNestedKnownSpan(seed.input),
+    };
+  }).filter((seed) => (
+    !seed.exactSpanStableCandidate
+    || !seed.queryExactSpans.length
+    || seed.selectedQueryExactSpans.length > 0
+  ));
+}
+
+function exactSurfaceKey(value) {
+  return String(value || "").normalize("NFKC").toLowerCase();
+}
+
+function spansOverlap(left, right) {
+  return left.start < right.end && right.start < left.end;
+}
+
+function indexMentionSpansByKey(spans) {
+  const result = new Map();
+  for (const span of spans || []) {
+    for (const mentionKey of span.mentionKeys || []) {
+      const items = result.get(mentionKey) || [];
+      items.push(span);
+      result.set(mentionKey, items);
+    }
+  }
+  return result;
+}
+
+function toPublicMentionSpan(span) {
+  return { start: span.start, end: span.end };
 }
 
 function applyContextualExtraDeckMaterialResolution({ query, cards, resolved, seenCards, unresolvedMentions }) {
@@ -1166,19 +1342,6 @@ function buildMentionContexts(query, mention, resolvedCards) {
 }
 
 function occurrenceInsideLongerMention(text, index, end, needle, resolvedCards) {
-  const mentionKey = normalizeCardKey(needle);
-  const quotePairs = [
-    ["「", "」"], ["『", "』"], ["《", "》"], ["【", "】"], ["[", "]"], ["（", "）"], ["(", ")"], ["“", "”"],
-  ];
-  for (const [openToken, closeToken] of quotePairs) {
-    const open = text.lastIndexOf(openToken, index);
-    const close = text.indexOf(closeToken, end);
-    if (open < 0 || close < end) continue;
-    const between = text.slice(open + openToken.length, close);
-    const betweenKey = normalizeCardKey(between);
-    if (betweenKey !== mentionKey && betweenKey.includes(mentionKey)) return true;
-  }
-
   const lowerText = text.toLowerCase();
   for (const card of resolvedCards || []) {
     for (const alias of uniqueCardAliases(card)) {

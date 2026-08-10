@@ -6,7 +6,11 @@ import {
   analyzeDeterministicOperationLegality,
   OPERATION_PREMISE_SCHEMA_VERSION,
 } from "../backend/operationLegalityAnalyzer.mjs";
-import { analyzePrintedTextReferenceScenario } from "../backend/printedTextReferences.mjs";
+import {
+  analyzePrintedTextReferenceScenario,
+  extractPrintedReferenceRequirement,
+} from "../backend/printedTextReferences.mjs";
+import { buildRagRulingPromptBundle } from "../backend/ragRulingPrompt.mjs";
 import { retrieveRulebookPassages } from "../backend/rulebookPassageRetriever.mjs";
 
 const copyMonster = {
@@ -64,6 +68,80 @@ test("copied effects do not become the receiver's printed name references", () =
   assert.equal(scenario.copyReceivers.length, 1);
   assert.equal(scenario.receiversWithPrintedReference.length, 0);
   assert.equal(scenario.activationBlocked, true);
+});
+
+test("printed-name requirements are parsed from equivalent Chinese, Japanese, and English card text", () => {
+  for (const [text, expected] of [
+    ["效果文本里写有「匿名基准卡」的怪兽。", "匿名基准卡"],
+    ["「匿名基準カード」のカード名が記されたモンスター。", "匿名基準カード"],
+    ["A monster whose card text mentions \"Anonymous Reference\".", "Anonymous Reference"],
+  ]) {
+    assert.equal(extractPrintedReferenceRequirement(text), expected, text);
+  }
+});
+
+test("printed-text prompt guidance is injected only for a typed operation-subject condition", () => {
+  const receiver = {
+    id: "abstract-receiver",
+    name: "匿名接收者",
+    cardType: "monster",
+    effectText: "①：以1只怪兽为对象可以发动。这张卡获得那只怪兽的原本卡名和效果。",
+  };
+  const source = {
+    id: "abstract-source",
+    name: "匿名来源",
+    cardType: "monster",
+    effectText: "自己的原始卡文中记述了「匿名基准卡」的卡名。",
+  };
+  const activationCard = {
+    id: "abstract-activation-card",
+    name: "匿名发动卡",
+    cardType: "spell",
+    effectText: "有「匿名基准卡」卡名记述的怪兽存在的场合才能发动。",
+  };
+  const evidenceFor = (cards) => ({
+    cardTexts: cards.map((card) => ({
+      id: `card-text-${card.id}`,
+      type: "card_text",
+      cardIds: [card.id],
+      title: card.name,
+      text: card.effectText,
+    })),
+    officialQaDirectCandidates: [],
+    officialQaRelated: [],
+    faqRelated: [],
+    rawRelatedEvidence: [],
+    retrievalWarnings: [],
+  });
+
+  const typed = buildRagRulingPromptBundle({
+    userQuery: "匿名接收者复制匿名来源后，能否发动匿名发动卡？",
+    cardResolution: {
+      resolvedCards: [receiver, source, activationCard],
+      unresolvedMentions: [],
+      ambiguousMentions: [],
+    },
+    evidence: evidenceFor([receiver, source, activationCard]),
+    env: { RAG_RECOVERY_PROMPT_CHARS: "12000" },
+  });
+  for (const prompt of [typed.prompt, typed.recoveryPrompt]) {
+    assert.match(prompt, /只检查候选卡自身原始规范 effectText/u);
+    assert.match(prompt, /operation_subject_card_text/u);
+    assert.match(prompt, /abstract-activation-card/u);
+    assert.match(prompt, /card-text-abstract-activation-card/u);
+  }
+
+  const unrelated = buildRagRulingPromptBundle({
+    userQuery: "匿名接收者在主要阶段能否发动抽卡效果？",
+    cardResolution: {
+      resolvedCards: [receiver],
+      unresolvedMentions: [],
+      ambiguousMentions: [],
+    },
+    evidence: evidenceFor([receiver]),
+  });
+  assert.doesNotMatch(unrelated.prompt, /只检查候选卡自身原始规范 effectText/u);
+  assert.doesNotMatch(unrelated.recoveryPrompt, /运行时状态与其不可变的卡片定义分开/u);
 });
 
 test("generic rule query retrieves the printed-text definition passage", () => {

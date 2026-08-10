@@ -54,6 +54,197 @@ test("passive alias scanning does not extract short card names from inside longe
   assert.ok(!resolution.resolvedCards.some((card) => String(card.id) === "4030"));
 });
 
+test("all exact mention sources share longest non-overlapping query spans", () => {
+  const cards = [{
+    id: "span-long",
+    name: "匿名破坏龙G",
+    aliases: ["匿名破坏龙G"],
+  }, {
+    id: "span-short",
+    name: "匿名破坏龙",
+    aliases: ["匿名破坏龙"],
+  }, {
+    id: "span-other",
+    name: "匿名场地",
+    aliases: ["匿名场地"],
+  }];
+
+  const covered = extractRagCards(
+    "发动「匿名破坏龙G」的效果。",
+    {
+      cards,
+      maxCards: 8,
+      // Deliberately put the covered short candidate first: model seed order
+      // must not bypass the same span disambiguation used by alias scanning.
+      modelCardNameCandidates: ["匿名破坏龙", "匿名破坏龙G"],
+    },
+  );
+  assert.deepEqual(
+    new Set(covered.resolvedCards.map((card) => String(card.id))),
+    new Set(["span-long"]),
+  );
+
+  const unquotedCovered = extractRagCards(
+    "匿名破坏龙G的效果适用中。",
+    {
+      cards,
+      maxCards: 8,
+      modelCardNameCandidates: ["匿名破坏龙", "匿名破坏龙G"],
+    },
+  );
+  assert.deepEqual(
+    new Set(unquotedCovered.resolvedCards.map((card) => String(card.id))),
+    new Set(["span-long"]),
+  );
+
+  const independent = extractRagCards(
+    "「匿名破坏龙G」处理后，匿名破坏龙发动「匿名场地」的效果。",
+    {
+      cards,
+      maxCards: 8,
+      modelCardNameCandidates: ["匿名破坏龙", "匿名破坏龙G", "匿名场地"],
+    },
+  );
+  assert.deepEqual(
+    new Set(independent.resolvedCards.map((card) => String(card.id))),
+    new Set(["span-long", "span-short", "span-other"]),
+  );
+});
+
+test("an unknown longer seed cannot suppress a nested exact known card name", () => {
+  const cards = [{
+    id: "known-card",
+    name: "匿名真实长卡名",
+    aliases: ["匿名真实长卡名"],
+  }];
+  const unknownLongMention = "匿名真实长卡名的效果";
+  const resolution = extractRagCards(
+    `发动「${unknownLongMention}」时如何处理？`,
+    {
+      cards,
+      maxCards: 8,
+      modelCardNameCandidates: [unknownLongMention],
+    },
+  );
+
+  assert.deepEqual(
+    new Set(resolution.resolvedCards.map((card) => String(card.id))),
+    new Set(["known-card"]),
+  );
+  assert.ok(
+    resolution.unresolvedMentions.some((mention) => mention.input === unknownLongMention),
+    JSON.stringify(resolution),
+  );
+});
+
+test("the copied-name ruling keeps the judged card definition FAQ and suppresses an overlapping short card name", async () => {
+  const data = await loadRagData();
+  const question = "覇王眷竜スターヴ・ヴェノム复制破壊竜ガンドラG后，是否算「光の黄金櫃」卡名记述、能否发动仲間の絆？";
+  const cardResolution = extractRagCards(question, { cards: data.cards, maxCards: 6 });
+  const queryIds = new Set(cardResolution.resolvedCards
+    .filter((card) => card.resolutionSource !== "card_text_reference")
+    .map((card) => String(card.id)));
+
+  assert.ok(queryIds.has("19842"), JSON.stringify(cardResolution.resolvedCards));
+  assert.ok(!queryIds.has("6076"), JSON.stringify(cardResolution.resolvedCards));
+
+  const evidence = await retrieveRagEvidence({
+    userQuery: question,
+    cardResolution,
+    cards: data.cards,
+    records: data.records,
+    qaRecords: data.qaRecords,
+    env: { RAG_LIVE_OFFICIAL_QA: "false" },
+    fetchImpl: async () => {
+      throw new Error("network fallback should not run");
+    },
+  });
+  assert.ok(evidence.faqRelated.some((item) => item.id === "card-faq-19894-1"));
+  assert.equal(
+    evidence.faqRelated.find((item) => item.id === "card-faq-19894-1")
+      ?.retrievalSignals?.operationSubjectDefinitionFaq,
+    true,
+  );
+});
+
+test("operation-subject FAQ priority and overlapping-name suppression are identity based", async () => {
+  const cards = [{
+    id: "900001",
+    name: "匿名复制体",
+    aliases: ["匿名复制体"],
+    effectText: "这张卡获得对象怪兽原本的卡名和效果。",
+  }, {
+    id: "900002",
+    name: "匿名破坏龙G",
+    aliases: ["匿名破坏龙G"],
+    effectText: "此卡的文本记载有“匿名场地”。",
+  }, {
+    id: "900003",
+    name: "匿名破坏龙",
+    aliases: ["匿名破坏龙"],
+    effectText: "与本题无关的短名称卡。",
+  }, {
+    id: "900004",
+    name: "匿名场地",
+    aliases: ["匿名场地"],
+    effectText: "场地效果。",
+  }, {
+    id: "900005",
+    name: "匿名羁绊",
+    aliases: ["匿名羁绊"],
+    effectText: "自己场上有匿名场地及记载该卡名的怪兽时可以发动。",
+  }];
+  const question = "匿名复制体复制匿名破坏龙G后，是否算“匿名场地”卡名记述，能否发动匿名羁绊？";
+  const cardResolution = extractRagCards(question, { cards, maxCards: 8 });
+  const queryIds = new Set(cardResolution.resolvedCards.map((card) => String(card.id)));
+  assert.ok(queryIds.has("900002"));
+  assert.ok(!queryIds.has("900003"));
+
+  const records = [{
+    id: "card-faq-activation-card-1",
+    recordType: "card-faq",
+    title: "匿名羁绊 FAQ 1",
+    cards: ["匿名羁绊"],
+    cardIds: ["900005"],
+    text: "“记载有匿名场地卡名的怪兽”是指，卡片文本中作为特定卡名记载了匿名场地的怪兽。",
+  }, ...["900001", "900002", "900004"].map((cardId, index) => ({
+    id: `card-faq-distractor-${index + 1}`,
+    recordType: "card-faq",
+    title: `相似定义 FAQ ${index + 1}`,
+    cards: [cards.find((card) => card.id === cardId).name],
+    cardIds: [cardId],
+    text: "相似规则是指其他操作的卡片文本定义，与被判断发动的卡不同。",
+  }))];
+  const evidence = await retrieveRagEvidence({
+    userQuery: question,
+    cardResolution,
+    cards,
+    records,
+    qaRecords: [],
+    env: {
+      RAG_LIVE_OFFICIAL_QA: "false",
+      RAG_MAX_RELATED_EVIDENCE: "1",
+    },
+    fetchImpl: async () => {
+      throw new Error("network fallback should not run");
+    },
+  });
+
+  assert.deepEqual(evidence.faqRelated.map((item) => item.id), ["card-faq-activation-card-1"]);
+  assert.equal(evidence.faqRelated[0].retrievalSignals.operationSubjectDefinitionFaq, true);
+
+  const independent = extractRagCards(
+    "匿名破坏龙G处理后，另一张匿名破坏龙发动效果。",
+    { cards, maxCards: 8 },
+  );
+  assert.deepEqual(
+    new Set(independent.resolvedCards
+      .filter((card) => card.resolutionSource !== "card_text_reference")
+      .map((card) => String(card.id))),
+    new Set(["900002", "900003"]),
+  );
+});
+
 test("equivalent short and full questions retrieve the same governing FAQ without a network fallback", async () => {
   const data = await loadRagData();
   const results = [];

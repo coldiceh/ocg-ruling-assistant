@@ -324,7 +324,7 @@ export async function retrieveRagEvidence({
     retrievalWarnings.push(`provisional_official_responses_retrieved:${provisionalOfficialResponses.length}`);
   }
 
-  const faqRelatedSource = rankRecordsWithSupplementalQueries({
+  const rankedFaqRelatedSource = rankRecordsWithSupplementalQueries({
     userQuery,
     records: scopedRecordBuckets.faq,
     resolvedCards: retrievalCards,
@@ -332,6 +332,11 @@ export async function retrieveRagEvidence({
     deterministicRuleQueries,
     supplementalRuleQueries: effectiveSupplementalRuleQueries,
     allowNoCardMatch: retrievalCards.length === 0 && normalizedRuleQueries.length > 0,
+  });
+  const faqRelatedSource = prioritizeOperationSubjectDefinitionFaqs({
+    userQuery,
+    rankedRecords: rankedFaqRelatedSource,
+    resolvedCards: retrievalCards,
   });
   if (faqRelatedSource.length > limits.maxRelatedEvidence) retrievalWarnings.push(`faq_related_limited:${faqRelatedSource.length}->${limits.maxRelatedEvidence}`);
   const faqRelated = faqRelatedSource
@@ -1142,6 +1147,404 @@ function rankRecordsWithSupplementalQueries({
     allowNoCardMatch,
   });
   return dedupeBy([...deterministic, ...supplemental], stableRecordKey);
+}
+
+function prioritizeOperationSubjectDefinitionFaqs({
+  userQuery,
+  rankedRecords = [],
+  resolvedCards = [],
+} = {}) {
+  const subject = findOperationQuestionSubject(userQuery, resolvedCards);
+  if (!subject) return rankedRecords;
+
+  const candidates = (rankedRecords || [])
+    .map((record, originalIndex) => {
+      if (!recordMatchesStableCardIdentity(record, subject.identity)) return null;
+      const overlap = definitionFaqSemanticOverlap({
+        record,
+        userQuery,
+        subjectCard: subject.card,
+        operationPredicate: subject.predicate,
+      });
+      return overlap
+        ? { record, originalIndex, ...overlap }
+        : null;
+    })
+    .filter(Boolean)
+    .sort((left, right) => right.overlapScore - left.overlapScore
+      || left.originalIndex - right.originalIndex)
+    // A card can have many explanatory FAQs.  Bringing all of them forward
+    // merely replaces one recall problem with unrelated same-card noise.
+    .slice(0, 2);
+
+  if (!candidates.length) return rankedRecords;
+  const promotedKeys = new Set(candidates.map((item) => stableRecordKey(item.record)));
+  const promoted = candidates.map(({ record, overlapKeys }) => ({
+    ...record,
+    retrievalSignals: {
+      ...(record.retrievalSignals || {}),
+      operationSubjectDefinitionFaq: true,
+      operationSubjectDefinitionOverlap: overlapKeys,
+    },
+  }));
+  return dedupeBy([
+    ...promoted,
+    ...(rankedRecords || []).filter((record) => !promotedKeys.has(stableRecordKey(record))),
+  ], stableRecordKey);
+}
+
+export function findOperationQuestionSubject(userQuery, resolvedCards = []) {
+  const text = String(userQuery || "").normalize("NFKC");
+  if (!text) return null;
+  const lowerText = text.toLowerCase();
+  const identities = buildStableResolvedCardIdentities(resolvedCards);
+  const aliasesByKey = new Map();
+  for (const identity of identities) {
+    for (const alias of identity.aliases) {
+      const key = normalizeCardKey(alias);
+      if (!key) continue;
+      const owners = aliasesByKey.get(key) || new Set();
+      owners.add(identity.key);
+      aliasesByKey.set(key, owners);
+    }
+  }
+  const allAliases = identities.flatMap((identity) => identity.aliases
+    .filter((alias) => aliasesByKey.get(normalizeCardKey(alias))?.size === 1)
+    .map((alias) => ({ identity, card: identity.card, alias })));
+  const candidates = [];
+
+  for (const { identity, card, alias } of allAliases) {
+    const lowerAlias = alias.toLowerCase();
+    let cursor = 0;
+    while (cursor <= lowerText.length - lowerAlias.length) {
+      const index = lowerText.indexOf(lowerAlias, cursor);
+      if (index < 0) break;
+      const end = index + alias.length;
+      cursor = Math.max(end, index + 1);
+      if (!hasExactAliasBoundaries(text, index, end, alias)) continue;
+      if (allAliases.some((other) => (
+        other.identity.key !== identity.key
+        && other.alias.length > alias.length
+        && occurrenceContainedByAlias(lowerText, index, end, other.alias.toLowerCase())
+      ))) continue;
+      const before = text.slice(Math.max(0, index - 80), index);
+      const after = text.slice(end, Math.min(text.length, end + 80));
+      const focus = operationSubjectMentionFocus(before, after);
+      if (
+        focus?.coreferential === true
+        && focus.explicitTopic !== true
+        && !coreferenceScopeHasSingleCardIdentity({
+          text,
+          mentionStart: index,
+          mentionEnd: end,
+          identity,
+          allAliases,
+        })
+      ) continue;
+      if (focus) candidates.push({ identity, card, ...focus, index });
+    }
+  }
+
+  if (!candidates.length) return null;
+  const bestScore = Math.max(...candidates.map((item) => item.score));
+  const bestByIdentity = new Map();
+  for (const candidate of candidates.filter((item) => item.score === bestScore)) {
+    const existing = bestByIdentity.get(candidate.identity.key);
+    if (!existing || candidate.index > existing.index) {
+      bestByIdentity.set(candidate.identity.key, candidate);
+    }
+  }
+  // Two genuinely interrogated cards means there is no single operation
+  // subject.  Failing closed is safer than arbitrarily promoting one FAQ.
+  return bestByIdentity.size === 1 ? [...bestByIdentity.values()][0] : null;
+}
+
+function buildStableResolvedCardIdentities(resolvedCards = []) {
+  const identities = [];
+  const seen = new Set();
+  for (const card of resolvedCards || []) {
+    const id = normalizeId(card.id || card.cardId);
+    const aliases = [...new Set([
+      card.name,
+      card.cnName,
+      card.jaName,
+      card.jpName,
+      card.enName,
+      ...(card.aliases || []),
+    ].map((value) => String(value || "").normalize("NFKC").trim()).filter(Boolean))];
+    const aliasKeys = [...new Set(aliases.map(normalizeCardKey).filter(Boolean))];
+    const key = id ? `id:${id}` : aliasKeys.length ? `names:${aliasKeys.slice().sort().join("|")}` : "";
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    identities.push({ key, id, aliases, aliasKeys: new Set(aliasKeys), card });
+  }
+  return identities;
+}
+
+function hasExactAliasBoundaries(text, start, end, alias) {
+  const first = alias[0] || "";
+  const last = alias[alias.length - 1] || "";
+  const before = start > 0 ? text[start - 1] : "";
+  const after = end < text.length ? text[end] : "";
+  if (/[A-Za-z0-9]/u.test(first) && /[A-Za-z0-9]/u.test(before)) return false;
+  if (/[A-Za-z0-9]/u.test(last) && /[A-Za-z0-9]/u.test(after)) return false;
+  return true;
+}
+
+function occurrenceContainedByAlias(lowerText, mentionStart, mentionEnd, lowerAlias) {
+  let cursor = Math.max(0, mentionStart - lowerAlias.length);
+  while (cursor <= mentionStart) {
+    const aliasStart = lowerText.indexOf(lowerAlias, cursor);
+    if (aliasStart < 0 || aliasStart > mentionStart) return false;
+    const aliasEnd = aliasStart + lowerAlias.length;
+    if (aliasStart <= mentionStart && aliasEnd >= mentionEnd) return true;
+    cursor = aliasStart + 1;
+  }
+  return false;
+}
+
+function operationSubjectMentionFocus(before, after) {
+  const beforeText = String(before || "").replace(/[\s「『《【（("']+$/gu, "");
+  const afterText = String(after || "")
+    .replace(/^[\s」』》】）)"]+/gu, "")
+    .replace(/^'(?!s\b)/iu, "");
+  const chineseAfter = afterText.match(/^(?:的)?(?:[①-⑩]\s*)?(?:效果)?\s*(?:能否|是否(?:可以|能)?|能不能|可否|可不可以)\s*(?:连锁|連鎖)?\s*(发动|發動|适用|適用|使用)(?:\s*(?:吗|嗎|么|麼|？|\?|$))/iu)
+    || afterText.match(/^(?:的)?(?:[①-⑩]\s*)?(?:效果)?\s*(?:可以|能)\s*(?:连锁|連鎖)?\s*(发动|發動|适用|適用|使用)\s*(?:吗|嗎|么|麼|？|\?)/iu);
+  if (chineseAfter) return { score: 12, predicate: normalizeOperationPredicate(chineseAfter[1]) };
+
+  const japaneseAfter = afterText.match(/^(?:の)?(?:は|を|が)?\s*(?:チェーンして\s*)?(?:(?:[①-⑩]\s*)?効果を\s*)?(発動|適用|使用)(?:する(?:事|こと)が)?(?:できますか|できる(?:のでしょう)?か|は可能ですか)/iu)
+    || afterText.match(/^(?:の)?(?:は|を|が)?\s*(?:チェーンして\s*)?(発動|適用|使用)(?:は|が)?可能ですか/iu);
+  if (japaneseAfter) return { score: 12, predicate: normalizeOperationPredicate(japaneseAfter[1]) };
+
+  const englishAfter = afterText.match(/^(?:'s\s+(?:effect\s+)?)?(?:be\s+)?(activated|used|applied)\b/iu);
+  if (/(?:^|[.!?;。！？]\s*|,\s*(?:and\s+)?)(?:can|may)\s*$/iu.test(beforeText) && englishAfter) {
+    return { score: 12, predicate: normalizeOperationPredicate(englishAfter[1]) };
+  }
+
+  const chineseBefore = beforeText.match(/(?:能否|是否(?:可以|能)?|能不能|可否|可不可以)\s*(发动|發動|适用|適用|使用)\s*$/iu)
+    || (/^(?:的)?(?:[①-⑩]\s*)?(?:效果)?\s*(?:吗|嗎|么|麼|？|\?)/iu.test(afterText)
+      ? beforeText.match(/(?:可以|能)\s*(发动|發動|适用|適用|使用)\s*$/iu)
+      : null);
+  if (chineseBefore && /^(?:的)?(?:[①-⑩]\s*)?(?:效果)?\s*(?:吗|嗎|么|麼|？|\?|$)/iu.test(afterText)) {
+    return { score: 11, predicate: normalizeOperationPredicate(chineseBefore[1]) };
+  }
+
+  const englishBefore = beforeText.match(/(?:^|[.!?;。！？]\s*|,\s*(?:and\s+)?)can\s+(?:(?:i|you|we|they|a\s+player|the\s+player|your\s+opponent|the\s+opponent)\s+)?(activate|use|apply)\s*$/iu);
+  if (englishBefore) return { score: 11, predicate: normalizeOperationPredicate(englishBefore[1]) };
+  const englishPossibleBefore = beforeText.match(/(?:^|[.!?;。！？]\s*|,\s*(?:and\s+)?)is\s+it\s+possible\s+to\s+(activate|use|apply)\s*$/iu);
+  if (englishPossibleBefore) return { score: 11, predicate: normalizeOperationPredicate(englishPossibleBefore[1]) };
+
+  const explicitChineseTopic = /(?:关于|關於|至于|至於|对于|對於)\s*$/iu.test(beforeText);
+  const chineseCoreference = afterText.match(
+    /^(?:来说|來說|而言|的话|的話)?\s*[，,、:：]?\s*(?:(?:在|于|於)?[^，,。！？!?]{0,24}?(?:场合|場合|情况下|情況下|时候|時候|时点|時點|时|時)\s*[，,]?\s*)?(?:它|其|该卡|該卡|此卡|这张卡|這張卡)(?:的)?\s*(?:[①-⑩]\s*)?(?:效果)?\s*(?:能否|是否(?:可以|能)?|能不能|可否|可不可以|可以|能)\s*(?:连锁|連鎖)?\s*(发动|發動|适用|適用|使用)(?:\s*(?:吗|嗎|么|麼|？|\?|$))/iu,
+  );
+  if (chineseCoreference) {
+    return {
+      score: 10,
+      predicate: normalizeOperationPredicate(chineseCoreference[1]),
+      coreferential: true,
+      explicitTopic: explicitChineseTopic,
+    };
+  }
+
+  const japaneseCoreference = afterText.match(
+    /^(?:(について|に関して|に關して|の場合))?\s*[、,，]?\s*(?:(?:この|その)場合(?:に)?\s*[、,，]?\s*)?(?:そのカード|このカード|それ|その)(?:の)?\s*(?:[①-⑩]\s*)?(?:効果|効果を)\s*(?:チェーンして\s*)?(発動|適用|使用)(?:する(?:事|こと)が)?(?:できますか|できる(?:のでしょう)?か|は可能ですか)/iu,
+  );
+  if (japaneseCoreference) {
+    return {
+      score: 10,
+      predicate: normalizeOperationPredicate(japaneseCoreference[2]),
+      coreferential: true,
+      explicitTopic: Boolean(japaneseCoreference[1]),
+    };
+  }
+
+  const explicitEnglishTopic = /(?:regarding|concerning|about|as\s+for)\s*$/iu.test(beforeText);
+  const englishCoreferencePassive = afterText.match(
+    /^[,;:\s]*(?:(?:in|under|during|at)\b[^,.;!?]{0,32}[,;:\s]+)?(?:can|may)\s+(?:its|that\s+card(?:'s|’s)|this\s+card(?:'s|’s))\s+(?:[①-⑩]\s*)?effect\s+be\s+(activated|used|applied)\b/iu,
+  );
+  if (englishCoreferencePassive) {
+    return {
+      score: 10,
+      predicate: normalizeOperationPredicate(englishCoreferencePassive[1]),
+      coreferential: true,
+      explicitTopic: explicitEnglishTopic,
+    };
+  }
+  const englishCoreferenceActive = afterText.match(
+    /^[,;:\s]*(?:(?:in|under|during|at)\b[^,.;!?]{0,32}[,;:\s]+)?(?:can|may)\s+(?:(?:i|you|we|they|a\s+player|the\s+player)\s+)?(activate|use|apply)\s+(?:its|that\s+card(?:'s|’s)|this\s+card(?:'s|’s))\s+(?:[①-⑩]\s*)?effect\b/iu,
+  );
+  if (englishCoreferenceActive) {
+    return {
+      score: 10,
+      predicate: normalizeOperationPredicate(englishCoreferenceActive[1]),
+      coreferential: true,
+      explicitTopic: explicitEnglishTopic,
+    };
+  }
+  return null;
+}
+
+function coreferenceScopeHasSingleCardIdentity({
+  text,
+  mentionStart,
+  mentionEnd,
+  identity,
+  allAliases = [],
+} = {}) {
+  const source = String(text || "");
+  let scopeStart = 0;
+  for (let index = mentionStart - 1; index >= 0; index -= 1) {
+    if (!/[\u3002！？!?;\n\r]/u.test(source[index])) continue;
+    scopeStart = index + 1;
+    break;
+  }
+  let scopeEnd = source.length;
+  for (let index = mentionEnd; index < source.length; index += 1) {
+    if (!/[\u3002！？!?;\n\r]/u.test(source[index])) continue;
+    scopeEnd = index;
+    break;
+  }
+  const scope = source.slice(scopeStart, scopeEnd).toLowerCase();
+  const identityKeys = new Set();
+  for (const candidate of allAliases || []) {
+    const alias = String(candidate.alias || "").toLowerCase();
+    if (!alias || !scope.includes(alias)) continue;
+    let cursor = 0;
+    while (cursor <= scope.length - alias.length) {
+      const start = scope.indexOf(alias, cursor);
+      if (start < 0) break;
+      const end = start + alias.length;
+      cursor = Math.max(end, start + 1);
+      if (!hasExactAliasBoundaries(scope, start, end, alias)) continue;
+      if (allAliases.some((other) => (
+        other.identity.key !== candidate.identity.key
+        && other.alias.length > candidate.alias.length
+        && occurrenceContainedByAlias(scope, start, end, String(other.alias || "").toLowerCase())
+      ))) continue;
+      identityKeys.add(candidate.identity.key);
+      break;
+    }
+  }
+  return identityKeys.size === 1 && identityKeys.has(identity.key);
+}
+
+function normalizeOperationPredicate(value) {
+  const text = String(value || "").toLowerCase();
+  if (/(?:适用|適用|apply|applied)/iu.test(text)) return "apply";
+  if (/(?:使用|use|used)/iu.test(text)) return "use";
+  return "activate";
+}
+
+function recordMatchesStableCardIdentity(record = {}, identity = {}) {
+  const subjectId = normalizeId(identity.id);
+  const recordIds = new Set((record.cardIds || []).map(normalizeId).filter(Boolean));
+  if (subjectId && recordIds.has(subjectId)) return true;
+  // IDs are the strongest identity.  If both sides supply one and disagree,
+  // do not override that contradiction with a coincidental surface name.
+  if (subjectId && recordIds.size) return false;
+  const recordNameKeys = new Set([
+    record.cardName,
+    ...(record.cards || []),
+    ...(record.cardNames || []),
+  ].map(normalizeCardKey).filter(Boolean));
+  return [...(identity.aliasKeys || [])].some((key) => recordNameKeys.has(key));
+}
+
+function definitionFaqSemanticOverlap({
+  record,
+  userQuery,
+  subjectCard,
+  operationPredicate,
+} = {}) {
+  if (record?.recordType !== "card-faq") return null;
+  const recordText = [record.title, record.question, record.text, record.answer, record.conclusion]
+    .filter(Boolean)
+    .join("\n");
+  const definitionText = extractDefinitionStyleText(recordText);
+  if (!definitionText) return null;
+
+  const queryKeys = extractDefinitionSemanticKeys(userQuery);
+  const subjectKeys = extractDefinitionSemanticKeys([
+    subjectCard?.effectText,
+    subjectCard?.text,
+    subjectCard?.pendulumEffect,
+  ].filter(Boolean).join("\n"));
+  const recordKeys = extractDefinitionSemanticKeys(definitionText);
+  const directQueryOverlap = [...queryKeys].filter((key) => recordKeys.has(key));
+  const highSpecificitySubjectOverlap = [...subjectKeys].filter((key) => (
+    isHighSpecificityDefinitionRelation(key) && recordKeys.has(key)
+  ));
+  const overlapKeys = [...new Set([
+    ...directQueryOverlap,
+    ...highSpecificitySubjectOverlap,
+  ])];
+  const predicateMatches = definitionTextMatchesPredicate(definitionText, operationPredicate);
+  // A shared operation verb alone (for example, both definitions mentioning
+  // "activate") is not a mechanism match.  It may rank an already-relevant
+  // definition, but it must never make an unrelated same-card FAQ eligible.
+  if (!overlapKeys.length) return null;
+  return {
+    overlapScore: overlapKeys.reduce((sum, key) => sum + definitionSemanticKeyWeight(key), 0)
+      + Number(predicateMatches),
+    overlapKeys: [...new Set([
+      ...overlapKeys,
+      ...(predicateMatches ? [`operation:${operationPredicate}`] : []),
+    ])].slice(0, 8),
+  };
+}
+
+function isHighSpecificityDefinitionRelation(key) {
+  return key === "card_name_reference" || key === "printed_text";
+}
+
+function extractDefinitionStyleText(value) {
+  const marker = /(?:とは|指的是|是指|意味着|意味する|means?\b|refers?\s+to|カードテキスト|卡片文本|卡面文本|效果文本|カード名が記された|卡名.{0,12}(?:记载|记述|記載|記述))/iu;
+  return String(value || "")
+    .split(/(?:\r?\n|(?<=[。！？!?])\s*|(?<=\.)\s+)/u)
+    .map((part) => part.trim())
+    .filter((part) => part && marker.test(part))
+    .join("\n");
+}
+
+function definitionSemanticKeyWeight(key) {
+  if (key === "card_name_reference") return 4;
+  if (key === "printed_text") return 3;
+  if (key === "copy_or_gain" || key === "special_summon") return 2;
+  return 1;
+}
+
+function definitionTextMatchesPredicate(text, predicate) {
+  if (predicate === "apply") return /(?:適用|适用|appl(?:y|ied|ication))/iu.test(text);
+  if (predicate === "use") return /(?:使用|\buse[ds]?\b|usable)/iu.test(text);
+  return /(?:発動|发动|發動|activat)/iu.test(text);
+}
+
+function extractDefinitionSemanticKeys(value) {
+  const text = String(value || "");
+  const definitions = [
+    ["card_name_reference", /(?:カード名が記され|カード名.{0,16}(?:記載|記述)|卡名.{0,16}(?:记载|记述|記載|記述)|(?:记载|记述|記載|記述)有?.{0,24}卡名|(?:card\s+)?name.{0,24}(?:mentioned|written|listed))/iu],
+    ["printed_text", /(?:カードテキスト|卡片文本|卡面文本|效果文本|printed\s+(?:card\s+)?text|text\s+(?:box|mentions?))/iu],
+    ["copy_or_gain", /(?:コピー|複製|获得|獲得|得到|复制|拷贝|\b(?:copy|copied|gain|gained)\b)/iu],
+    ["special_summon", /(?:特殊召喚|特殊召唤|special\s+summon)/iu],
+    ["summon", /(?:召喚|召唤|summon)/iu],
+    ["target", /(?:対象|对象|對象|target)/iu],
+    ["cost", /(?:コスト|代价|支付|支払|\bcost\b)/iu],
+    ["chain", /(?:チェーン|连锁|連鎖|\bchain\b)/iu],
+    ["destroy", /(?:破壊|破坏|毀坏|destroy)/iu],
+    ["return_hand", /(?:手札.{0,12}戻|回到手牌|返回手牌|return.{0,16}hand)/iu],
+    ["return_deck", /(?:デッキ.{0,12}戻|回到卡组|返回牌組|return.{0,16}deck)/iu],
+    ["level_rank_link", /(?:レベル|ランク|リンク|等级|阶级|连接|\b(?:level|rank|link)\b)/iu],
+    ["attribute_race_type", /(?:属性|種族|种族|類別|类别|\b(?:attribute|race)\b|card\s+type)/iu],
+    ["once_per_turn", /(?:1ターンに1度|一回合一次|每回合一次|once\s+per\s+turn)/iu],
+  ];
+  const keys = new Set(definitions.filter(([, pattern]) => pattern.test(text)).map(([key]) => key));
+  for (const concept of extractOfficialQaSemanticConcepts(text)) {
+    if (!["activation", "resolution", "effect", "monster_effect"].includes(concept)) {
+      keys.add(`concept:${concept}`);
+    }
+  }
+  return keys;
 }
 
 function retrieveGlobalMechanismOfficialQaAnalogues({
