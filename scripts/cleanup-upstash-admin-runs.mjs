@@ -17,6 +17,7 @@ export function parseAdminRunCleanupArguments(argv = []) {
     writesDisabledConfirmation: "",
     approvalFingerprint: "",
     compact: false,
+    timeoutMs: 30_000,
     limits: { ...DEFAULT_ADMIN_RUN_CLEANUP_LIMITS },
   };
   for (let index = 0; index < argv.length; index += 1) {
@@ -33,6 +34,8 @@ export function parseAdminRunCleanupArguments(argv = []) {
       options.limits.maxKnownBytes = requiredInteger(argv, ++index, argument);
     } else if (argument === "--max-scan-keys") {
       options.limits.maxScanKeys = requiredInteger(argv, ++index, argument);
+    } else if (argument === "--timeout-ms") {
+      options.timeoutMs = requiredInteger(argv, ++index, argument);
     } else if (argument === "--execute") {
       options.execute = true;
     } else if (argument === "--confirm") {
@@ -98,6 +101,7 @@ export async function runAdminRunCleanupCli(
     fetchImpl,
     now,
     olderThanDays: options.olderThanDays,
+    timeoutMs: options.timeoutMs,
     limits: options.limits,
   });
   const report = options.execute
@@ -126,6 +130,7 @@ function helpText() {
     `  --max-keys <n>         Hard cap (default ${DEFAULT_ADMIN_RUN_CLEANUP_LIMITS.maxKeys})`,
     `  --max-known-bytes <n>  Hard cap (default ${DEFAULT_ADMIN_RUN_CLEANUP_LIMITS.maxKnownBytes})`,
     `  --max-scan-keys <n>    SCAN safety cap (default ${DEFAULT_ADMIN_RUN_CLEANUP_LIMITS.maxScanKeys})`,
+    "  --timeout-ms <n>       Per-request Redis timeout (default 30000; max 30000)",
     "  --compact              Print compact JSON",
     "  --execute              Apply the in-process dry-run plan",
     `  --confirm <phrase>     Exact phrase: ${ADMIN_RUN_CLEANUP_CONFIRMATION}`,
