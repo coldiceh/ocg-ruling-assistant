@@ -363,7 +363,10 @@ test("final reasoner receives the Albaz evidence without a local answer override
   assert.equal(answer.riskFlags.includes("answer_constrained_by_provisional_official_response"), false);
   assert.equal(answer.debug.semanticStateTransition?.authoritative, false);
   assert.equal(answer.debug.semanticStateTransition?.complete, false);
-  assert.equal(answer.debug.semanticStateTransition?.originalStatus, "resolved");
+  assert.equal(
+    answer.debug.semanticStateTransition?.authorityReason,
+    "diagnostic_only_requires_final_model",
+  );
   assert.match(answer.debug.semanticStateTransition?.shortAnswer || "", /可以发动/u);
   assert.equal(answer.usedEvidence[0].type, "official_response_screenshot");
 });

@@ -127,15 +127,27 @@ export function normalizeEvidenceQuestionText(value) {
 
 export function classifyMultiEntityDecisionScope(value) {
   const text = String(value || "").normalize("NFKC");
-  const multiBranch = /(?:两|兩|二|三|四|数|數|多)(?:只|张|張|个|個)?(?:怪兽|怪獸|卡片?|モンスター|カード).{0,36}(?:分别|分別|各自|逐一)/iu.test(text)
+  const decisionQuestionCount = splitDecisionQuestionSentences(text)
+    .filter((question) => isDecisionQuestionSentence(question))
+    .length;
+  const explicitLabelCount = (text.match(/(?:^|\n)\s*(?:\([A-ZＡ-Ｚ]\)|（[A-ZＡ-Ｚ]）)/gu) || []).length;
+  const hierarchicalFollowUp = /(?:如果|若|假如|倘若|if).{0,120}(?:之后|以后|随后|那么|则|then|after(?:wards)?)/isu.test(text)
+    && decisionQuestionCount >= 2;
+  const multiEntity = /(?:两|兩|二|三|四|数|數|多)(?:只|张|張|个|個)?(?:怪兽|怪獸|卡片?|モンスター|カード).{0,36}(?:分别|分別|各自|逐一)/iu.test(text)
     || /(?:分别|分別|逐一)(?:用|以|让|讓|由)?[^，,。.!！?？;；\n]{0,48}(?:怪兽|怪獸|卡片?|モンスター|カード)/iu.test(text)
     || /(?:怪兽|怪獸|卡片?|モンスター|カード).{0,36}各自(?:能否|是否|可以|怎样|怎樣|如何|どう|でき)/iu.test(text)
     || /(?:それぞれ|各々)(?:の)?[^、。\n]{0,36}(?:モンスター|カード).{0,36}(?:どう|でき|場合)/iu.test(text)
     || /(?:each of (?:these|the)|the following|these)\s+(?:cards?|monsters?).{0,48}(?:can|whether|what happens|respectively)|(?:cards?|monsters?).{0,48}\brespectively\b/iu.test(text);
+  const multiDecision = explicitLabelCount >= 2
+    || decisionQuestionCount >= 2
+    || hierarchicalFollowUp;
+  const multiBranch = multiEntity || multiDecision;
   return {
     schema: "multi-entity-decision-scope/v1",
     multiBranch,
-    requiresPerEntityCoverage: multiBranch,
+    multiDecision,
+    multiEntity,
+    requiresPerEntityCoverage: multiEntity,
   };
 }
 
@@ -451,6 +463,18 @@ function splitApplicabilityClauses(text) {
     clauses.push({ text: value, offset: match.index });
   }
   return clauses;
+}
+
+function splitDecisionQuestionSentences(text) {
+  return [...String(text || "").matchAll(/[^?？]*(?:[?？]|$)/gu)]
+    .map((match) => match[0].trim())
+    .filter((value) => value.length >= 4 && /[?？]$/u.test(value));
+}
+
+function isDecisionQuestionSentence(text) {
+  if (isLegalityQuestionClause(text)) return true;
+  return /(?:可以|能).{0,48}(?:发动|發動|召唤|召喚|特殊召唤|特殊召喚|适用|適用|处理|處理)(?:哪些|什么|什麼|何种|何種|吗|嗎)/iu.test(text)
+    || /(?:连锁|連鎖|处理|處理|结算|結算|チェーン|処理).{0,32}(?:如何|怎么|怎麼|怎样|怎樣|どのよう|どう|how|what happens)/iu.test(text);
 }
 
 function detectFactScope(text) {
