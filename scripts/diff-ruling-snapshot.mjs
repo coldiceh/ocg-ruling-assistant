@@ -1,16 +1,24 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { diffRulingSnapshot, normalizeEvidenceRecord } from "../backend/rulingDiffState.mjs";
+import {
+  diffRulingSnapshot,
+  mergeRulingDetailsWithQaIndex,
+  normalizeEvidenceRecord,
+} from "../backend/rulingDiffState.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const dataDir = join(root, "data");
 const meta = await readJson(join(dataDir, "snapshot-meta.json"), {});
 const rulings = await readJson(join(dataDir, "rulings.json"), { records: [] });
+const qaIndex = await readJson(join(dataDir, "qa-index.json"), { records: [] });
 const rules = await readJson(join(dataDir, "ocg-rule-corpus.json"), { records: [] });
 const previous = await readJson(join(dataDir, "evidence-index.json"), { records: [] });
 const now = new Date().toISOString();
-const raw = [...(rulings.records || []), ...(rules.records || []).filter((item) => item.recordType === "rule-doc")];
+const raw = [
+  ...mergeRulingDetailsWithQaIndex(rulings.records || [], qaIndex.records || []),
+  ...(rules.records || []).filter((item) => item.recordType === "rule-doc"),
+];
 const current = raw.map((item) => normalizeEvidenceRecord({
   ...item,
   stableId: item.id,

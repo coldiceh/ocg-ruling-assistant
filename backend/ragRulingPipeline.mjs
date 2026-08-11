@@ -244,17 +244,9 @@ export async function answerRagRulingQuestion({
   // the final model to judge the whole user question. Keeping the trajectory
   // while clearing authority lets it improve discovery without turning it into
   // a hidden validator or a second final-ruling engine.
-  const semanticStateTransition = localSemanticStateTransition
-    ? {
-        ...localSemanticStateTransition,
-        authoritative: false,
-        authorityReason: "diagnostic_only_requires_final_model",
-        authorityReasons: [...new Set([
-          ...(localSemanticStateTransition.authorityReasons || []),
-          "diagnostic_only_requires_final_model",
-        ])],
-      }
-    : null;
+  const semanticStateTransition = demoteSemanticTransitionForFinalModel(
+    localSemanticStateTransition,
+  );
   const localDecisionComplete = false;
   timingsMs.semanticStateExecution = elapsedMs(localReasoningStartedAt);
   timingsMs.localReasoning = elapsedMs(localReasoningStartedAt);
@@ -1190,6 +1182,25 @@ function publicNumericRecord(value) {
     .filter(([key, item]) => /^[A-Za-z0-9_]+$/u.test(key) && Number.isFinite(Number(item)))
     .slice(0, 32)
     .map(([key, item]) => [key, Number(item)]));
+}
+
+function demoteSemanticTransitionForFinalModel(state) {
+  if (!state || typeof state !== "object") return null;
+  return {
+    ...state,
+    // Keep the reasoner's pre-boundary result stable for diagnostics even when
+    // a different analyzer supplied the winning transition.  Individual
+    // reasoners may already have demoted themselves, so never overwrite a more
+    // specific original value.
+    originalStatus: state.originalStatus || state.status,
+    originalComplete: state.originalComplete ?? state.complete,
+    authoritative: false,
+    authorityReason: "diagnostic_only_requires_final_model",
+    authorityReasons: [...new Set([
+      ...(state.authorityReasons || []),
+      "diagnostic_only_requires_final_model",
+    ])],
+  };
 }
 
 function buildRagDataRevision(data = {}, env = {}, { cacheByIdentity = false } = {}) {

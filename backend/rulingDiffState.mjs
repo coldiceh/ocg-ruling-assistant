@@ -10,6 +10,30 @@ export function stableEvidenceId(record = {}) {
   return String(record.stableId || record.id || record.evidenceId || "").trim();
 }
 
+export function mergeRulingDetailsWithQaIndex(rulings = [], qaIndex = []) {
+  const merged = [];
+  const seen = new Set();
+  for (const record of Array.isArray(rulings) ? rulings : []) {
+    const key = stableEvidenceId(record);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    merged.push(record);
+  }
+  // The detailed ruling snapshot is intentionally bounded.  Retain compact QA
+  // records outside the current refresh window so the version diff does not
+  // misreport ordinary rotation as source removal.  Card FAQ and card text are
+  // rebuilt authoritatively in the detailed snapshot and therefore do not use
+  // this fallback.
+  for (const record of Array.isArray(qaIndex) ? qaIndex : []) {
+    if (!["qa", "official-database"].includes(String(record?.recordType || ""))) continue;
+    const key = stableEvidenceId(record);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    merged.push(record);
+  }
+  return merged;
+}
+
 export function normalizeEvidenceRecord(record = {}, options = {}) {
   const stableId = stableEvidenceId(record);
   const textHash = record.textHash || evidenceTextHash(record);
@@ -23,8 +47,11 @@ export function normalizeEvidenceRecord(record = {}, options = {}) {
     sourceTier: String(record.sourceTier || inferSourceTier(record)),
     status,
     cardIds: unique(record.cardIds || (record.cardId ? [record.cardId] : [])),
+    questionCardIds: unique(record.questionCardIds || []),
     cardNames: unique(record.cardNames || record.cards || []),
     question: String(record.question || ""),
+    rawQuestion: String(record.rawQuestion || ""),
+    rawDetailedQuestion: String(record.rawDetailedQuestion || record.detailedQuestion || ""),
     answer: String(record.answer || record.conclusion || ""),
     text: String(record.text || [record.question, record.conclusion || record.answer].filter(Boolean).join("\n")),
     keywords: unique(record.keywords || []),
@@ -113,7 +140,25 @@ export function diffRulingSnapshot({ previousEvidence = [], currentEvidence = []
 }
 
 export function canonicalEvidenceText(record = {}) {
-  return [record.recordType, record.question, record.answer || record.conclusion, record.text]
+  const recordType = normalizeRecordType(record.recordType);
+  const question = record.question;
+  const rawQuestion = record.rawQuestion;
+  const detailedQuestion = record.rawDetailedQuestion || record.detailedQuestion;
+  const answer = record.answer || record.conclusion || record.officialAnswer;
+  const hasStructuredQa = recordType === "qa"
+    && Boolean(question || detailedQuestion)
+    && Boolean(answer);
+  return [
+    recordType,
+    question,
+    rawQuestion,
+    detailedQuestion,
+    answer,
+    // Rich and compact snapshots derive different search blobs from the same
+    // structured QA. Hash the authoritative fields in that case; retain text
+    // only as the compatibility source for legacy/unstructured evidence.
+    hasStructuredQa ? "" : record.text,
+  ]
     .map((value) => String(value || "").normalize("NFKC").replace(/\s+/gu, " ").trim())
     .filter(Boolean)
     .join("\n");

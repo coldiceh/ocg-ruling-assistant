@@ -16,6 +16,7 @@ const baseUrl = process.env.YGORESOURCES_BASE_URL || "https://db.ygoresources.co
 const maxRecentQa = Number(process.env.MAX_RECENT_QA || 120);
 const maxCardQaPerCard = Number(process.env.MAX_CARD_QA_PER_CARD || 80);
 const maxQaTotal = Number(process.env.MAX_QA_TOTAL || 3000);
+const maxQaIndexBytes = Number(process.env.MAX_QA_INDEX_BYTES || 90 * 1024 * 1024);
 const maxCards = Number(process.env.MAX_CARDS || 0);
 const fetchConcurrency = Number(process.env.FETCH_CONCURRENCY || 8);
 const fetchRetryCount = Math.max(1, Number(process.env.FETCH_RETRY_COUNT || 3));
@@ -43,6 +44,7 @@ async function main() {
   const previousMeta = await readJsonFile(join(dataDir, "snapshot-meta.json"), {});
   const previousCards = await readJsonFile(join(dataDir, "cards.json"), { records: [] });
   const previousRulings = await readJsonFile(join(dataDir, "rulings.json"), { records: [] });
+  const previousQaIndex = await readJsonFile(join(dataDir, "qa-index.json"), { records: [] });
   const previousQaDiscovery = await readJsonFile(join(dataDir, "qa-discovery-index.json"), { records: [] });
 
   const trackedCards = tracked.cards || [];
@@ -66,11 +68,18 @@ async function main() {
     currentQaDiscovery,
     { authoritative: cardSnapshotAuthoritative },
   );
+  const indexedQaIds = new Set((previousQaIndex.records || [])
+    .filter(isYgoresourcesQaRecord)
+    .map(qaSourceId)
+    .filter(Boolean));
+  const unindexedQaIds = collectDiscoveredQaIds(qaDiscoveryRecords)
+    .filter((qaId) => !indexedQaIds.has(qaId));
   const manifest = await loadManifest(previousMeta.sourceRevision);
   let cards = cardPayloads.map(({ record }) => record);
   const rulingSync = await loadRulings(cards, cardPayloads, manifest.changedQaIds, {
     qaDiscoveryRecords,
     detailCursor: previousMeta.qaDetailCursor,
+    unindexedQaIds,
   });
   let rulings = rulingSync.records;
   if (!cardSnapshotAuthoritative) {
@@ -107,7 +116,11 @@ async function main() {
   }
   rulings = rulingQuarantine.records;
   const cardAliasIndex = buildCardAliasIndex(cards);
-  const qaIndex = buildQaIndex(rulings, cards);
+  const qaIndex = mergeQaIndexCumulatively(
+    previousQaIndex.records || [],
+    buildQaIndex(rulings, cards),
+    { removedQaIds: rulingSync.removedQaIds },
+  );
 
   const generatedAt = new Date().toISOString();
   const sourceFreshness = sourceSyncWarnings.length ? "stale" : "fresh";
@@ -157,11 +170,14 @@ async function main() {
     generatedAt,
     records: cardAliasIndex,
   });
-  await writeJson(join(dataDir, "qa-index.json"), {
+  const qaIndexBytes = await writeJson(join(dataDir, "qa-index.json"), {
     schemaVersion: 1,
     generatedAt,
     records: qaIndex,
   });
+  if (Number.isFinite(maxQaIndexBytes) && maxQaIndexBytes > 0 && qaIndexBytes > maxQaIndexBytes) {
+    throw new Error(`QA index size ${qaIndexBytes} exceeds deployment guard ${maxQaIndexBytes}`);
+  }
   const discoveredQaIds = collectDiscoveredQaIds(qaDiscoveryRecords);
   await writeJson(join(dataDir, "qa-discovery-index.json"), {
     schemaVersion: 1,
@@ -230,6 +246,8 @@ async function main() {
     rulingCount: rulings.length,
     cardAliasCount: cardAliasIndex.length,
     qaIndexCount: qaIndex.length,
+    qaIndexBytes,
+    maxQaIndexBytes,
     syncAllReleasedCards,
     syncOnlyReleasedCards,
     maxCards,
@@ -339,6 +357,7 @@ async function loadCards(cards, nameIndexes, monsterPropertyMetadata = []) {
 async function loadRulings(cards, cardPayloads, changedQaIds = [], {
   qaDiscoveryRecords = [],
   detailCursor = 0,
+  unindexedQaIds = [],
 } = {}) {
   const records = [];
   const removedQaIds = [];
@@ -356,6 +375,7 @@ async function loadRulings(cards, cardPayloads, changedQaIds = [], {
   const selection = selectQaIdsForSync({
     changedQaIds,
     recentQaIds,
+    priorityQaIds: unindexedQaIds,
     cardQaIds: rankCardQaIds(cardPayloads, maxCardQaPerCard),
     coverageQaIds: buildFairQaCoverageOrder(qaDiscoveryRecords),
     cursor: detailCursor,
@@ -367,6 +387,7 @@ async function loadRulings(cards, cardPayloads, changedQaIds = [], {
     truncatedCount: selection.truncatedCount,
     changedSelectedCount: selection.changedSelectedCount,
     recentSelectedCount: selection.recentSelectedCount,
+    prioritySelectedCount: selection.prioritySelectedCount,
     hotSelectedCount: selection.hotSelectedCount,
     coverageSelectedCount: selection.coverageSelectedCount,
     detailCursor: selection.cursor,
@@ -544,6 +565,7 @@ export function buildFairQaCoverageOrder(discoveryRecords = []) {
 export function selectQaIdsForSync({
   changedQaIds = [],
   recentQaIds = [],
+  priorityQaIds = [],
   cardQaIds = [],
   coverageQaIds = cardQaIds,
   cursor = 0,
@@ -551,11 +573,12 @@ export function selectQaIdsForSync({
 } = {}) {
   const changed = uniqueIds(changedQaIds);
   const recent = uniqueIds(recentQaIds);
+  const priority = uniqueIds(priorityQaIds);
   const hot = uniqueIds(cardQaIds);
   const coverage = uniqueIds(coverageQaIds);
-  const discovered = uniqueIds([...changed, ...recent, ...hot, ...coverage]);
+  const discovered = uniqueIds([...changed, ...recent, ...priority, ...hot, ...coverage]);
   const safeLimit = Number.isFinite(Number(limit)) && Number(limit) >= 0 ? Math.floor(Number(limit)) : discovered.length;
-  const ids = uniqueIds([...changed, ...recent]).slice(0, safeLimit);
+  const ids = uniqueIds([...changed, ...recent, ...priority]).slice(0, safeLimit);
   const selected = new Set(ids);
   const safeCursor = normalizeCircularCursor(cursor, coverage.length);
   let nextCursor = safeCursor;
@@ -597,6 +620,7 @@ export function selectQaIdsForSync({
     truncatedCount: Math.max(0, discovered.length - ids.length),
     changedSelectedCount: changed.filter((id) => selected.has(id)).length,
     recentSelectedCount: recent.filter((id) => selected.has(id)).length,
+    prioritySelectedCount: priority.filter((id) => selected.has(id)).length,
     hotSelectedCount,
     coverageSelectedCount,
     cursor: safeCursor,
@@ -1041,10 +1065,11 @@ async function readJsonFile(path, fallback) {
 async function writeJson(path, value) {
   await mkdir(dirname(path), { recursive: true });
   const content = `${JSON.stringify(value, null, 2)}\n`;
+  const byteLength = Buffer.byteLength(content, "utf8");
   for (let attempt = 1; attempt <= 5; attempt += 1) {
     try {
       await writeFile(path, content, "utf8");
-      return;
+      return byteLength;
     } catch (error) {
       if (attempt === 5 || !["EPERM", "EBUSY", "UNKNOWN"].includes(error?.code)) throw error;
       await new Promise((resolve) => setTimeout(resolve, attempt * 400));
@@ -1106,6 +1131,47 @@ export function retainBoundedQaDetails(records = [], {
     if (!isYgoresourcesQaRecord(record)) return true;
     return retainedSourceIds.has(qaSourceId(record));
   });
+}
+
+/**
+ * Keep the lightweight QA search corpus independently of the bounded detail
+ * snapshot.  A normal detail rotation must not make an otherwise-current QA
+ * disappear from retrieval merely because its full record was not selected
+ * during this run.
+ *
+ * Non-QA records (card FAQ, database records, and official responses) are
+ * rebuilt from the current authoritative card/ruling snapshot.  Only QA
+ * records survive from the previous lightweight index, and an upstream
+ * removal signal is the only reason an untouched QA is discarded.
+ */
+export function mergeQaIndexCumulatively(previous = [], current = [], {
+  removedQaIds = [],
+} = {}) {
+  const removed = new Set(uniqueIds(removedQaIds));
+  const merged = new Map();
+
+  for (const record of previous || []) {
+    if (String(record?.recordType || "") !== "qa") continue;
+    if (isYgoresourcesQaRecord(record) && removed.has(qaSourceId(record))) continue;
+    const key = qaIndexRecordKey(record);
+    if (key) merged.set(key, record);
+  }
+
+  for (const record of current || []) {
+    if (isYgoresourcesQaRecord(record) && removed.has(qaSourceId(record))) continue;
+    const key = qaIndexRecordKey(record);
+    if (key) merged.set(key, record);
+  }
+
+  return [...merged.values()];
+}
+
+function qaIndexRecordKey(record = {}) {
+  return String(record?.id || record?.stableId || "").trim()
+    || [record?.recordType, record?.sourceName, record?.sourceId]
+      .map((value) => String(value || "").trim())
+      .filter(Boolean)
+      .join(":");
 }
 
 function isYgoresourcesQaRecord(record = {}) {

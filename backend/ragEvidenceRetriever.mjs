@@ -267,11 +267,10 @@ export async function retrieveRagEvidence({
   // hydrated record still passes through the normal exact/applicability gates.
   const lexicalCandidateQaIds = rankRecordsWithSupplementalQueries({
     userQuery,
-    // Use the rich ruling records for lexical discovery when available.  The
-    // compact QA index intentionally drops some source fields and can rank a
-    // broad official heading differently even though the full synchronized
-    // record is already bundled in the same snapshot.
-    records: scopedRecordBuckets.rawRelated.filter(isOfficialQaRecord),
+    // Scoped and mechanism retrieval must use the same canonical QA pool.
+    // Letting QA records re-enter through the generic related bucket bypasses
+    // the applicability and multi-card-scene filters below.
+    records: scopedRecordBuckets.qa,
     resolvedCards: retrievalCards,
     mentionQueries,
     deterministicRuleQueries,
@@ -626,13 +625,28 @@ function evidenceRecordBuckets(data) {
   const cached = evidenceRecordBucketsCache.get(data);
   if (cached) return cached;
   const all = [...data.records, ...data.qaRecords];
+  // Rich ruling records and the cumulative compact index can contain the same
+  // official item. Prefer the rich record, but retain compact long-tail QA
+  // outside the current detail-refresh window. Every official path consumes
+  // this one canonical pool.
+  const canonicalOfficial = dedupeBy(
+    all.filter((record) => (
+      ["qa", "card-faq", "official-database"].includes(record.recordType)
+      && !["removed", "superseded", "conflict", "parse_failed"].includes(record.status)
+    )),
+    stableRecordKey,
+  );
   const buckets = {
     all,
-    officialQa: data.qaRecords.filter((record) => ["qa", "card-faq", "official-database"].includes(record.recordType)),
-    qa: data.qaRecords.filter((record) => record.recordType === "qa"),
+    officialQa: canonicalOfficial.filter(isOfficialQaRecord),
+    qa: canonicalOfficial.filter(isOfficialQaRecord),
     provisionalOfficialResponses: all.filter(isProvisionalOfficialResponseRecord),
-    faq: all.filter((record) => record.recordType === "card-faq"),
-    rawRelated: all.filter((record) => !["card-faq", "card-text"].includes(record.recordType) && !isRulebookRecord(record) && !isProvisionalOfficialResponseRecord(record)),
+    faq: canonicalOfficial.filter((record) => record.recordType === "card-faq"),
+    rawRelated: all.filter((record) => (
+      !["qa", "official-database", "card-faq", "card-text"].includes(record.recordType)
+      && !isRulebookRecord(record)
+      && !isProvisionalOfficialResponseRecord(record)
+    )),
   };
   evidenceRecordBucketsCache.set(data, buckets);
   return buckets;
@@ -868,6 +882,8 @@ function recordIdentityIndex(records) {
       ...(record.cards || []).map((name) => "name:" + normalizeCardKey(name)).filter((key) => key !== "name:"),
       ...extractInlineCardIds([
         record.question,
+        record.rawQuestion,
+        record.rawDetailedQuestion,
         record.title,
         record.text,
         record.answer,
@@ -906,7 +922,13 @@ function normalizeRecord(record = {}) {
   const id = String(record.id || record.evidenceId || record.stableId || record.sourceId || "");
   const answer = record.answer || record.conclusion || "";
   const structuredQaText = record.question && answer
-    ? [record.question, answer].filter(Boolean).join("\n").trim()
+    ? [
+        record.question,
+        record.rawDetailedQuestion && record.rawDetailedQuestion !== record.question
+          ? record.rawDetailedQuestion
+          : "",
+        answer,
+      ].filter(Boolean).join("\n").trim()
     : "";
   const text = structuredQaText || String(record.text || record.officialText || record.question || answer || record.title || "").trim();
   const cardIds = [...new Set([
@@ -916,7 +938,12 @@ function normalizeRecord(record = {}) {
   ].map((item) => String(item || "")).filter(Boolean))];
   const questionCardIds = [...new Set([
     ...(record.questionCardIds || []),
-    ...extractInlineCardIds([record.question, record.title].filter(Boolean).join("\n")),
+    ...extractInlineCardIds([
+      record.question,
+      record.rawQuestion,
+      record.rawDetailedQuestion,
+      record.title,
+    ].filter(Boolean).join("\n")),
   ].map((item) => String(item || "")).filter(Boolean))];
   const cards = [record.cardName, ...(record.cards || []), ...(record.cardNames || [])].filter(Boolean);
   return {
@@ -1156,8 +1183,7 @@ function officialQaNumericId(record = {}) {
 }
 
 function isUsefulOfficialRelatedMatch(match = {}) {
-  return match.cardMatch === true
-    || match.matchLevel === "official_qa_exact"
+  return match.matchLevel === "official_qa_exact"
     || (match.matchLevel === "official_qa_near" && Number(match.score || 0) >= 0.68)
     || Number(match.score || 0) >= 0.78;
 }
@@ -1811,7 +1837,11 @@ function isIncidentalMultiCardExampleRecord(record = {}, resolvedCardCount = 0) 
 }
 
 function principalQuestionCardIds(record = {}) {
-  const explicitQuestion = String(record.question || "").trim();
+  const explicitQuestion = [...new Set([
+    record.question,
+    record.rawQuestion,
+    record.rawDetailedQuestion,
+  ].map((value) => String(value || "").trim()).filter(Boolean))].join("\n");
   let questionText = explicitQuestion;
   if (!questionText) {
     const text = String(record.text || "");
@@ -1836,7 +1866,7 @@ function isCurrentOfficialQaRecord(record) {
 }
 
 function isSimultaneousTriggerOrderOfficialQa(record) {
-  const text = [record?.question, record?.answer, record?.title, record?.text]
+  const text = [record?.question, record?.rawDetailedQuestion, record?.answer, record?.title, record?.text]
     .filter(Boolean)
     .join("\n");
   return /同じタイミング.{0,80}(?:効果|カード).{0,80}複数/su.test(text)
@@ -1846,7 +1876,7 @@ function isSimultaneousTriggerOrderOfficialQa(record) {
 }
 
 function isPublicHandTriggerOrderOfficialQa(record) {
-  const text = [record?.question, record?.answer, record?.title, record?.text]
+  const text = [record?.question, record?.rawDetailedQuestion, record?.answer, record?.title, record?.text]
     .filter(Boolean)
     .join("\n");
   const hasPublicHandContext = /(?:手札|手牌|手卡|\bhand\b)/iu.test(text)
