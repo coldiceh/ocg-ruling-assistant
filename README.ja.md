@@ -1,10 +1,10 @@
-# 遊戯王 OCG 裁定アシスタント
+# 遊戯王OCG AI裁定
 
 [中文](README.md) | [English](README.en.md) | [日本語](README.ja.md)
 
 [オンライン版を使う](https://coldiceh.github.io/ocg-ruling-assistant/) · [問題を報告する](https://github.com/coldiceh/ocg-ruling-assistant/issues)
 
-遊戯王 OCG プレイヤー向けの裁定分析アシスタントです。カードテキスト、公開されているルール資料、公式 Q&A を組み合わせ、結論・理由・参照元を整理します。
+遊戯王OCG AI裁定は、OCG プレイヤー向けの裁定分析ツールです。カードテキスト、公開されているルール資料、公式 Q&A を組み合わせ、結論・理由・参照元を整理します。
 
 KONAMI の公式プロジェクトではなく、公式大会におけるジャッジの判断に代わるものでもありません。
 

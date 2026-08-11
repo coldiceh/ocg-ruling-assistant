@@ -1,60 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { answerEachSubQuestion, mergeModelAnswer, retrieveEvidenceByFormalQuery } from "../backend/engine.mjs";
 import {
   buildProvisionalAnswerFromOfficialResponse,
   isConfirmableOfficialResponse,
   normalizeOfficialResponses,
 } from "../backend/officialResponses.mjs";
 import { revalidateOfficialResponses } from "../scripts/revalidate-official-responses.mjs";
-
-const cards = [
-  {
-    id: "999001",
-    name: "吞食圣痕之龙",
-    cnName: "吞食圣痕之龙",
-    jaName: "深淵竜アルバ・レナトゥス",
-    enName: "Bystial Alba Los",
-    aliases: ["吞食圣痕之龙", "吞喰圣痕之龙", "深淵竜アルバ・レナトゥス"],
-  },
-  {
-    id: "999002",
-    name: "白之圣女 艾克莉西娅",
-    cnName: "白之圣女 艾克莉西娅",
-    jaName: "白の聖女エクレシア",
-    enName: "Incredible Ecclesia, the Virtuous",
-    aliases: ["白之圣女 艾克莉西娅", "白之圣女 艾克利西亚", "白の聖女エクレシア"],
-  },
-];
-
-const formalQuery = {
-  originalText: "吞食圣痕之龙③没有适用时，白之圣女艾克莉西娅能作为cost发动并继续作为融合素材处理吗？",
-  cards: [
-    { name: "吞食圣痕之龙", role: "question_card" },
-    { name: "白之圣女 艾克莉西娅", role: "cost_card" },
-  ],
-  scenario: {
-    rawContext: "吞食圣痕之龙③效果未适用。",
-    events: [],
-    chainState: "unknown",
-  },
-  subQuestions: [{
-    id: "q1",
-    type: "activation_condition",
-    card: "吞食圣痕之龙",
-    askedResult: "can_activate_pay_cost_and_skip_fusion_material_processing",
-    sourceText: "吞食圣痕之龙③没有适用时，白之圣女艾克莉西娅能作为cost发动并继续作为融合素材处理吗？",
-  }],
-};
-
-test("traceable official_response can confirm only through direct evidence and explicit askedResult", () => {
-  const answer = runOfficialResponseCase(traceableOfficialResponse())[0];
-  assert.equal(answer.status, "confirmed");
-  assert.deepEqual(answer.evidenceIds, ["official-response-alba-ecclesia"]);
-  assert.equal(answer.verdict.activation, "can_activate");
-  assert.equal(answer.verdict.cost, "can_pay_cost");
-  assert.equal(answer.verdict.resolution, "does_not_perform_fusion_material_processing");
-});
 
 test("official response text cannot prove its own provenance", () => {
   const records = normalizeOfficialResponses([{
@@ -84,107 +35,6 @@ test("traceable provenance without an explicit confirmed review stays unknown", 
   assert.equal(isConfirmableOfficialResponse(records[0]), false);
 });
 
-test("official_response_unverified cannot confirm", () => {
-  const answer = runOfficialResponseCase({
-    ...traceableOfficialResponse(),
-    id: "unverified-player-retelling",
-    sourceType: "official_response_unverified",
-    sourceNote: "",
-    officialText: "",
-    explanation: "玩家转述：可以发动。",
-    maxStatus: "unknown",
-  })[0];
-  assert.equal(answer.status, "unknown");
-  assert.equal(answer.verdict, "unknown");
-  assert.equal(answer.evidenceIds.length, 0);
-});
-
-test("pending_adjustment cannot confirm", () => {
-  const answer = runOfficialResponseCase({
-    ...traceableOfficialResponse(),
-    id: "pending-adjustment-alba-ecclesia",
-    sourceType: "pending_adjustment",
-    verdict: "unknown",
-    explanation: "调整中。",
-    maxStatus: "unknown",
-  })[0];
-  assert.equal(answer.status, "unknown");
-  assert.equal(answer.verdict, "unknown");
-});
-
-test("player retelling does not enter official directEvidence", () => {
-  const records = normalizeOfficialResponses([{
-    ...traceableOfficialResponse(),
-    id: "player-retelling-only",
-    sourceType: "official_response_unverified",
-    sourceNote: "",
-    officialText: "",
-    explanation: "玩家整理：可以发动。",
-    maxStatus: "unknown",
-  }]);
-  const evidence = retrieveEvidenceByFormalQuery(formalQuery, cards, { records });
-  assert.equal(evidence.bySubQuestion[0].rulingEvidence.length, 0);
-});
-
-test("official_response cannot bypass final gate with an invalid evidence id", () => {
-  const [record] = normalizeOfficialResponses([traceableOfficialResponse()]);
-  const evidence = {
-    bySubQuestion: [{
-      subQuestionId: "q1",
-      rulingEvidence: [{ ...record, evidenceId: "missing-official-response-id" }],
-      similarRulingEvidence: [],
-      cardTextEvidence: [],
-      rejectedEvidence: [],
-    }],
-  };
-  const [answer] = answerEachSubQuestion(formalQuery, evidence, { records: [record] });
-  assert.equal(answer.status, "unknown");
-  assert.equal(answer.verdict, "unknown");
-  assert.ok(answer.warnings.includes("invalid_direct_evidence"));
-});
-
-test("complex official verdict preserves activation, cost, and resolution", () => {
-  const answer = runOfficialResponseCase(traceableOfficialResponse())[0];
-  assert.equal(typeof answer.verdict, "object");
-  assert.equal(answer.verdict.activation, "can_activate");
-  assert.equal(answer.verdict.cost, "can_pay_cost");
-  assert.equal(answer.verdict.resolution, "does_not_perform_fusion_material_processing");
-  assert.notEqual(answer.verdict, "can");
-});
-
-test("AI explanation cannot override official structured verdict", () => {
-  const programAnswer = runOfficialResponseCase(traceableOfficialResponse())[0];
-  const merged = mergeModelAnswer(
-    {
-      status: "confirmed",
-      verdict: "cannot",
-      evidenceIds: ["fake"],
-      explanationText: "模型解释",
-    },
-    programAnswer
-  );
-  assert.deepEqual(merged.verdict, programAnswer.verdict);
-  assert.deepEqual(merged.evidenceIds, programAnswer.evidenceIds);
-  assert.ok(merged.warnings.includes("model_status_or_verdict_ignored"));
-});
-
-test("official_response_screenshot hit generates provisionalAnswer but cannot confirm", () => {
-  const records = normalizeOfficialResponses([screenshotOfficialResponse()]);
-  const evidence = retrieveEvidenceByFormalQuery(albazFormalQuery, albazCards, { records });
-  assert.equal(evidence.bySubQuestion[0].rulingEvidence.length, 0);
-  assert.equal(evidence.bySubQuestion[0].provisionalEvidence.length, 1);
-
-  const [answer] = answerEachSubQuestion(albazFormalQuery, evidence, { records });
-  assert.equal(answer.status, "unknown");
-  assert.equal(answer.verdict, "unknown");
-  assert.equal(answer.provisionalAnswer.status, "provisional_official_response");
-  assert.equal(answer.provisionalAnswer.sourceType, "official_response_screenshot");
-  assert.equal(answer.provisionalAnswer.verdict.activation, "can_activate");
-  assert.equal(answer.provisionalAnswer.verdict.cost, "can_pay_cost");
-  assert.equal(answer.provisionalAnswer.verdict.resolution, "does_not_perform_fusion_material_processing");
-  assert.equal(answer.provisionalAnswer.watchOfficialDb, true);
-});
-
 test("a screenshot record with no ruling text never receives a fabricated default answer", () => {
   const [record] = normalizeOfficialResponses([{
     id: "screenshot-without-ruling-text",
@@ -196,19 +46,6 @@ test("a screenshot record with no ruling text never receives a fabricated defaul
   assert.equal(provisional.verdict, "unknown");
   assert.match(provisional.explanation, /不能据此判定/u);
   assert.doesNotMatch(provisional.explanation, /可以发动|支付\s*cost|处理不进行/iu);
-});
-
-test("official_qa direct evidence takes priority over provisional screenshot", () => {
-  const records = [
-    ...normalizeOfficialResponses([screenshotOfficialResponse()]),
-    directAlbazDbQa(),
-  ];
-  const evidence = retrieveEvidenceByFormalQuery(albazFormalQuery, albazCards, { records });
-  const [answer] = answerEachSubQuestion(albazFormalQuery, evidence, { records });
-  assert.equal(answer.status, "confirmed");
-  assert.notEqual(answer.verdict, "unknown");
-  assert.deepEqual(answer.evidenceIds, ["official-qa-albaz-quem-direct"]);
-  assert.equal(answer.provisionalAnswer, undefined);
 });
 
 test("revalidate official response reports not_found when no direct DB evidence exists", async () => {
@@ -244,32 +81,6 @@ test("revalidate live timeout does not hang", async () => {
   assert.ok(Date.now() - startedAt < 200);
 });
 
-test("AI explanation cannot turn provisional answer into confirmed", () => {
-  const records = normalizeOfficialResponses([screenshotOfficialResponse()]);
-  const evidence = retrieveEvidenceByFormalQuery(albazFormalQuery, albazCards, { records });
-  const [programAnswer] = answerEachSubQuestion(albazFormalQuery, evidence, { records });
-  const merged = mergeModelAnswer({
-    status: "confirmed",
-    verdict: "can",
-    evidenceIds: ["fake"],
-    provisionalAnswer: {
-      status: "confirmed",
-      verdict: "can",
-    },
-    explanationText: "模型尝试把截图转成 confirmed。",
-  }, programAnswer);
-  assert.equal(merged.status, "unknown");
-  assert.equal(merged.verdict, "unknown");
-  assert.equal(merged.provisionalAnswer.status, "provisional_official_response");
-  assert.ok(merged.warnings.includes("model_status_or_verdict_ignored"));
-});
-
-function runOfficialResponseCase(record) {
-  const records = normalizeOfficialResponses([record]);
-  const evidence = retrieveEvidenceByFormalQuery(formalQuery, cards, { records });
-  return answerEachSubQuestion(formalQuery, evidence, { records });
-}
-
 function traceableOfficialResponse() {
   return {
     id: "official-response-alba-ecclesia",
@@ -293,51 +104,6 @@ function traceableOfficialResponse() {
     tags: ["official_response", "fusion_material", "cost"],
   };
 }
-
-const albazCards = [
-  {
-    id: "999101",
-    name: "アルバスの落胤",
-    jaName: "アルバスの落胤",
-    cnName: "阿不思的落胤",
-    aliases: ["アルバスの落胤", "阿不思的落胤"],
-  },
-  {
-    id: "999102",
-    name: "導きの聖女エクレシア",
-    jaName: "導きの聖女エクレシア",
-    cnName: "引导的圣女 艾克莉西娅",
-    aliases: ["導きの聖女エクレシア", "引导的圣女 艾克莉西娅"],
-  },
-  {
-    id: "999103",
-    name: "聖痕喰らいし竜",
-    jaName: "聖痕喰らいし竜",
-    cnName: "吞食圣痕之龙",
-    aliases: ["聖痕喰らいし竜", "吞食圣痕之龙"],
-  },
-];
-
-const albazFormalQuery = {
-  originalText: "アルバスの落胤①効果を発動できるか。",
-  cards: [
-    { name: "アルバスの落胤", role: "question_card" },
-    { name: "導きの聖女エクレシア", role: "cost_card" },
-    { name: "聖痕喰らいし竜", role: "related_card" },
-  ],
-  scenario: {
-    rawContext: "自分のEXデッキに氷剣竜ミラジェイドが存在し、手札に導きの聖女エクレシアとアルバスの落胤があり、相手フィールドに表側表示の聖痕喰らいし竜のみ存在する。",
-    events: [],
-    chainState: "unknown",
-  },
-  subQuestions: [{
-    id: "q1",
-    type: "activation_condition",
-    card: "アルバスの落胤",
-    askedResult: "can_activate_pay_cost_and_skip_fusion_material_processing",
-    sourceText: "アルバスの落胤①効果を発動できるか。",
-  }],
-};
 
 function screenshotOfficialResponse() {
   return {

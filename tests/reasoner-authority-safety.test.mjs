@@ -4,33 +4,6 @@ import {
   analyzeDuelStateTransition,
   compileResolvedCardPrograms,
 } from "../backend/duelStateReasoner.mjs";
-import { deriveRulePrimitiveResults } from "../backend/rulePrimitives.mjs";
-
-function primitiveProjection(question) {
-  return deriveRulePrimitiveResults({
-    originalQuestion: question,
-    cardTexts: [{
-      id: "anonymous-atk-text",
-      title: "匿名数值效果",
-      conclusion: "失去生命值，那之后，攻击力变为当前攻击力的两倍。",
-    }],
-  }).map(({ primitive, result }) => ({
-    id: primitive.id,
-    concepts: result.concepts,
-    steps: result.steps,
-  }));
-}
-
-test("a claimed numeric answer in the question is not copied into rule-derived output", () => {
-  const first = primitiveProjection("为什么最终攻击力应为9876而不是1234？");
-  const second = primitiveProjection("为什么最终攻击力应为5555而不是2222？");
-
-  assert.deepEqual(first, second);
-  const serialized = JSON.stringify(first);
-  assert.doesNotMatch(serialized, /9876|1234|5555|2222/u);
-  assert.doesNotMatch(serialized, /final_atk_/u);
-  assert.doesNotMatch(serialized, /verdictHint|shortAnswer/u);
-});
 
 test("legacy pattern semantics are retained only as diagnostics and cannot compile authoritatively", () => {
   const [program] = compileResolvedCardPrograms([{

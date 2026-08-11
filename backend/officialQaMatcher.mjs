@@ -1,5 +1,6 @@
 import { hasNumberedCardIdentityConflict } from "./numberedCardIdentity.mjs";
 import {
+  compareEvidenceScenarioPremises,
   classifyEvidenceQuestionTypes,
   classifyMultiEntityDecisionScope,
 } from "./evidenceQuestionTypeClassifier.mjs";
@@ -200,7 +201,7 @@ export function searchOfficialQaEvidence({
   promoteUniqueQuestionCardMatch(scored, resolvedIds, queryType);
   scored.sort(compareOfficialQaMatches);
   promoteUniqueSemanticMatch(scored, resolvedIds, queryType);
-  const ranked = scored.slice(0, Math.max(limit, 1));
+  const ranked = retainMultiBranchCoverage(scored, Math.max(limit, 1), resolvedIds);
 
   const exact = ranked.filter((item) => item.matchLevel === "official_qa_exact");
   const near = ranked.filter((item) => item.matchLevel === "official_qa_near");
@@ -279,6 +280,10 @@ function scoreRecord({
     { cards: resolvedCards },
   );
   const evidenceMultiBranchQuery = classifyMultiEntityDecisionScope(questionText).multiBranch;
+  const scenarioPremiseComparison = compareEvidenceScenarioPremises(query, questionText);
+  const scenarioPremiseAuthorityCompatible = scenarioPremiseComparison.compatibility === "compatible";
+  const scenarioPremiseRawExactCompatible = scenarioPremiseAuthorityCompatible
+    || scenarioPremiseComparison.compatibility === "unknown";
   const playerRoleComparison = comparePlayerRoleSignatures(
     queryPlayerRoleSignature,
     evidencePlayerRoleSignature,
@@ -339,6 +344,7 @@ function scoreRecord({
     && branchMatchedCardIds.length > 0
     && typeCompatible
     && playerRoleComparison.compatibility !== "mismatch"
+    && scenarioPremiseComparison.compatibility !== "mismatch"
     && (phraseHits.length > 0 || semanticHits.length >= 2);
   const identityCompatibleForExact = !resolvedIds.size
     || (recordIds.size ? cardIdCoverage === 1 : cardNameMatch);
@@ -350,7 +356,8 @@ function scoreRecord({
   const rawExact = identityCompatibleForExact && exactNormalized;
   const rawSceneMatch = rawExact
     && typeCompatible
-    && playerRoleComparison.compatibility !== "mismatch";
+    && playerRoleComparison.compatibility !== "mismatch"
+    && scenarioPremiseRawExactCompatible;
   const structuredSceneMatch = exactQuestionCardIdSet
     && queryType !== "unknown"
     && evidenceType === queryType
@@ -358,7 +365,8 @@ function scoreRecord({
     && distinctiveSemanticHits.length > 0
     && effectNumberCompatible
     && sceneQualifiersCompatible
-    && playerRoleComparison.compatibility !== "mismatch";
+    && playerRoleComparison.compatibility !== "mismatch"
+    && scenarioPremiseAuthorityCompatible;
   const lexicalScore = Math.max(similarity, containment, skeletonSimilarity, skeletonContainment);
   let score = Math.max(lexicalScore, semanticScore * 0.72);
   if (typeCompatible && queryType !== "unknown") score += 0.16;
@@ -374,12 +382,15 @@ function scoreRecord({
   score = Math.min(1, Number(score.toFixed(4)));
 
   let matchLevel = "official_related";
-  if (rawExact && typeCompatible && !branchRelevant && playerRoleComparison.compatibility !== "mismatch") {
+  if (rawSceneMatch && !branchRelevant) {
     matchLevel = "official_qa_exact";
   }
   else if (typeCompatible && (score >= 0.68 || (cardMatch && phraseHits.length && score >= 0.56))) matchLevel = "official_qa_near";
   if (branchRelevant && matchLevel === "official_related") matchLevel = "official_qa_near";
   if (playerRoleComparison.compatibility === "mismatch") matchLevel = "official_related";
+  if (scenarioPremiseComparison.compatibility === "mismatch") matchLevel = "official_related";
+  if (!["compatible", "unknown"].includes(scenarioPremiseComparison.compatibility)
+      && matchLevel === "official_qa_exact") matchLevel = "official_related";
   return {
     id: String(record.id || "unknown"),
     record,
@@ -416,6 +427,16 @@ function scoreRecord({
     playerRoleCompatibility: playerRoleComparison.compatibility,
     playerRoleMismatches: playerRoleComparison.mismatches,
     playerRoleComparableDimensions: playerRoleComparison.comparableDimensions,
+    scenarioPremiseCompatibility: scenarioPremiseComparison.compatibility,
+    scenarioPremiseConflicts: scenarioPremiseComparison.conflicts,
+    queryScenarioPremises: scenarioPremiseComparison.queryPremises,
+    evidenceScenarioPremises: scenarioPremiseComparison.evidencePremises,
+    queryOnlyScenarioPremises: scenarioPremiseComparison.queryOnlyPremises,
+    evidenceOnlyScenarioPremises: scenarioPremiseComparison.evidenceOnlyPremises,
+    queryApplicabilityFrame: scenarioPremiseComparison.queryFrame,
+    evidenceApplicabilityFrame: scenarioPremiseComparison.evidenceFrame,
+    requestedTargetCoverage: scenarioPremiseComparison.targetCoverage,
+    scenarioFactCoverage: scenarioPremiseComparison.factCoverage,
     queryPlayerRoleSignature,
     evidencePlayerRoleSignature,
     rawSceneMatch,
@@ -440,6 +461,9 @@ function scoreRecord({
       phraseHits.length && "effect_phrase",
       branchRelevant && "multi_branch_related_evidence",
       playerRoleComparison.compatibility === "mismatch" && "player_role_mismatch",
+      scenarioPremiseComparison.compatibility === "mismatch" && "scenario_premise_mismatch",
+      scenarioPremiseComparison.compatibility === "partial" && "scenario_premise_partial",
+      scenarioPremiseComparison.compatibility === "conditional" && "scenario_premise_conditional",
     ].filter(Boolean),
     matchedPhrases: phraseHits,
     questionText,
@@ -460,6 +484,8 @@ function compareOfficialQaMatches(left, right) {
       - Number(left.matchLevel === "official_qa_exact")
     || Number(left.playerRoleCompatibility === "mismatch")
       - Number(right.playerRoleCompatibility === "mismatch")
+    || scenarioPremiseCompatibilityRank(right.scenarioPremiseCompatibility)
+      - scenarioPremiseCompatibilityRank(left.scenarioPremiseCompatibility)
     || Number(right.authoritativeSceneMatch) - Number(left.authoritativeSceneMatch)
     || right.questionCardIdCoverage - left.questionCardIdCoverage
     || right.matchedQuestionCardIds.length - left.matchedQuestionCardIds.length
@@ -480,15 +506,19 @@ function markAuthoritativeSceneMatches(items) {
     item.structuredSceneMatch
     && item.candidatePoolComplete
     && item.playerRoleCompatibility !== "mismatch"
+    && item.scenarioPremiseCompatibility === "compatible"
   ));
   for (const item of items) {
-    if (item.playerRoleCompatibility === "mismatch" || item.branchRelevant) continue;
+    if (item.playerRoleCompatibility === "mismatch"
+        || !["compatible", "unknown"].includes(item.scenarioPremiseCompatibility)
+        || item.branchRelevant) continue;
     if (item.rawSceneMatch) {
       item.authoritativeSceneMatch = true;
       item.authoritativeSceneMatchReason = "raw_or_normalized_query";
       continue;
     }
-    if (item.structuredSceneMatch && item.candidatePoolComplete && structuredMatches.length === 1) {
+    if (item.scenarioPremiseCompatibility === "compatible"
+        && item.structuredSceneMatch && item.candidatePoolComplete && structuredMatches.length === 1) {
       item.authoritativeSceneMatch = true;
       item.authoritativeSceneMatchReason = "unique_structured_scene";
     }
@@ -531,6 +561,33 @@ function questionTypeCompatible(queryType, evidenceType) {
   if (activation.has(queryType) && activation.has(evidenceType)) return true;
   const legality = new Set(["action_legality", "can_activate", "target_legality", "timing_window"]);
   return legality.has(queryType) && legality.has(evidenceType);
+}
+
+function retainMultiBranchCoverage(items, limit, resolvedIds) {
+  const head = items.slice(0, limit);
+  if ((resolvedIds || new Set()).size < 2) return head;
+
+  const represented = new Set(
+    head.filter((item) => item.branchRelevant)
+      .flatMap((item) => item.branchMatchedCardIds || []),
+  );
+  const additions = [];
+  const addedItems = new Set();
+  for (const item of items.slice(limit)) {
+    if (!item.branchRelevant) continue;
+    const uncovered = (item.branchMatchedCardIds || []).filter((id) => !represented.has(id));
+    if (!uncovered.length || addedItems.has(item)) continue;
+    additions.push(item);
+    addedItems.add(item);
+    uncovered.forEach((id) => represented.add(id));
+    if (represented.size >= resolvedIds.size || additions.length >= limit) break;
+  }
+  if (!additions.length) return head;
+
+  // Keep the matcher bounded.  Branch representatives remain supporting
+  // evidence only; replacing the weakest tail cannot promote their authority
+  // level and lets the retriever reserve them explicitly per branch later.
+  return [...head.slice(0, Math.max(0, limit - additions.length)), ...additions];
 }
 
 function recordPlayerRoleContext(record = {}, questionText = "") {
@@ -716,6 +773,7 @@ function promoteUniqueExactCardSet(items, queryType, resolvedIds) {
   if (resolvedIds.size < 2 || queryType === "unknown") return;
   const candidates = items.filter((item) => {
     if (item.playerRoleCompatibility === "mismatch"
+        || item.scenarioPremiseCompatibility !== "compatible"
         || item.branchRelevant
         || !item.exactCardIdSet
         || !item.typeCompatible
@@ -738,6 +796,7 @@ function promoteUniqueQuestionCardMatch(items, resolvedIds, queryType) {
   if (resolvedIds.size < 2 || queryType === "unknown") return;
   const subsumptionCandidates = items.filter((item) => (
     item.playerRoleCompatibility !== "mismatch"
+    && item.scenarioPremiseCompatibility === "compatible"
     && !item.branchRelevant
     &&
     item.subsumptionCandidatePoolComplete
@@ -780,6 +839,7 @@ function promoteUniqueQuestionCardMatch(items, resolvedIds, queryType) {
   }
   const candidates = items.filter((item) => (
     item.playerRoleCompatibility !== "mismatch"
+    && item.scenarioPremiseCompatibility === "compatible"
     && !item.branchRelevant
     &&
     item.typeCompatible
@@ -803,7 +863,8 @@ function promoteUniqueSemanticMatch(items, resolvedIds, queryType) {
       || !top.typeCompatible
       || top.branchRelevant
       || top.matchLevel === "official_qa_exact"
-      || top.playerRoleCompatibility === "mismatch") return;
+      || top.playerRoleCompatibility === "mismatch"
+      || top.scenarioPremiseCompatibility !== "compatible") return;
   const generalSemanticSignature = top.semanticHits.length >= 3
     && top.semanticQueryCoverage >= 0.8
     && top.semanticScore >= 0.72;
@@ -816,7 +877,28 @@ function promoteUniqueSemanticMatch(items, resolvedIds, queryType) {
   if ((!generalSemanticSignature && !uniqueResolvedCardOperation) || top.score < 0.78) return;
   if (resolvedIds.size && !top.identityCompatibleForExact) return;
   const margin = top.score - Number(second?.score || 0);
+  const semanticSubsumptionCandidateCount = items.filter((item) => (
+    item.playerRoleCompatibility !== "mismatch"
+    && item.scenarioPremiseCompatibility === "compatible"
+    && !item.branchRelevant
+    && item.subsumptionCandidatePoolComplete
+    && resolvedIds.size >= 1
+    && queryType !== "unknown"
+    && item.questionType === queryType
+    && item.questionCardIdCoverage === 1
+    && item.matchedQuestionCardIds.length === resolvedIds.size
+    && (resolvedIds.size === 1 || item.questionCardIdCount === item.matchedQuestionCardIds.length)
+    && item.effectNumberCompatible
+    && item.sceneQualifiersCompatible
+    && item.distinctiveQueryConcepts.length >= 3
+    && item.distinctiveSemanticHits.length >= 3
+    && item.distinctiveSemanticQueryCoverage >= 0.9
+    && item.semanticQueryCoverage >= 0.9
+    && item.semanticScore >= 0.72
+    && item.score >= 0.85
+  )).length;
   const semanticQuestionSubsumption = Boolean(second)
+    && semanticSubsumptionCandidateCount === 1
     && top.subsumptionCandidatePoolComplete
     && resolvedIds.size >= 1
     && queryType !== "unknown"
@@ -940,6 +1022,10 @@ function bigrams(value) {
   const result = new Set();
   for (let index = 0; index < value.length - 1; index += 1) result.add(value.slice(index, index + 2));
   return result;
+}
+
+function scenarioPremiseCompatibilityRank(value) {
+  return ({ compatible: 4, conditional: 3, partial: 2, unknown: 1, mismatch: 0 })[value] ?? 0;
 }
 
 function escapeRegExp(value) {

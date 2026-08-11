@@ -14,7 +14,6 @@ import {
   buildFinalRulingInput,
   buildFinalRulingModelEvidencePacket,
 } from "../backend/adminModelLabService.mjs";
-import { FrozenDeepseekExperimentBridgeClient } from "../backend/frozenDeepseekExperimentBridge.mjs";
 import { CompatibleEvidencePreparationProvider } from "../backend/rulingModelProviders.mjs";
 
 const DEFAULT_MODEL = "relay-gpt-5.6-sol";
@@ -44,8 +43,6 @@ export function parseLocalRelayExperimentArgs(argv) {
       "--model": "model",
       "--effort": "effort",
       "--reasoning-mode": "reasoningMode",
-      "--bridge-url": "bridgeUrl",
-      "--bridge-origin": "bridgeOrigin",
       "--evidence-variant": "evidenceVariant",
       "--case": "caseId",
       "--output": "output",
@@ -127,19 +124,7 @@ export function normalizeLocalRelayExperimentOptions(
   const baseUrlName = providerId === "deepseek" ? "DEEPSEEK_BASE_URL" : "RELAY_BASE_URL";
   const apiKey = String(env[credentialName] || "").trim();
   const baseUrl = String(env[baseUrlName] || "").trim();
-  const bridgeUrl = String(options.bridgeUrl || "").trim();
-  const bridgeOrigin = String(options.bridgeOrigin || env.ADMIN_MODEL_LAB_ORIGIN || "").trim();
-  const bridgePassword = String(env.ADMIN_MODEL_LAB_PASSWORD || "").trim();
-  if (bridgeUrl && providerId !== "deepseek") {
-    throw new TypeError("--bridge-url is restricted to DeepSeek experiments");
-  }
-  if (requireCredentials && bridgeUrl && !bridgePassword) {
-    throw new TypeError("ADMIN_MODEL_LAB_PASSWORD is required with --bridge-url");
-  }
-  if (requireCredentials && bridgeUrl && !bridgeOrigin) {
-    throw new TypeError("--bridge-origin or ADMIN_MODEL_LAB_ORIGIN is required with --bridge-url");
-  }
-  if (requireCredentials && !bridgeUrl && !apiKey) throw new TypeError(`${credentialName} is required`);
+  if (requireCredentials && !apiKey) throw new TypeError(`${credentialName} is required`);
   if (requireCredentials && providerId === "relay" && !baseUrl) {
     throw new TypeError("RELAY_BASE_URL is required");
   }
@@ -157,9 +142,6 @@ export function normalizeLocalRelayExperimentOptions(
     recoverRunningAsOutcomeUnknown: options.recoverRunningAsOutcomeUnknown === true,
     apiKey,
     baseUrl,
-    bridgeUrl,
-    bridgeOrigin,
-    bridgePassword,
   });
 }
 
@@ -244,14 +226,6 @@ export async function runLocalRelayEffortExperiment({
     if (provider) return provider;
     if (providerFactory) {
       provider = providerFactory({ resolved, env });
-      return provider;
-    }
-    if (resolved.bridgeUrl) {
-      provider = new FrozenDeepseekExperimentBridgeClient({
-        bridgeUrl: resolved.bridgeUrl,
-        password: resolved.bridgePassword,
-        origin: resolved.bridgeOrigin,
-      });
       return provider;
     }
     const credentialName = resolved.providerId === "deepseek" ? "DEEPSEEK_API_KEY" : "RELAY_API_KEY";
@@ -651,9 +625,6 @@ Options:
           <deepseek-v4-flash|deepseek-v4-pro>
   --effort <none|low|medium|high|xhigh|max>  Repeat to select efforts (default: all six)
   --reasoning-mode <standard|pro>              Relay requires pro; DeepSeek requires an explicit effort
-  --bridge-url <https://host/api/admin-frozen-deepseek>
-                                               Use the authenticated Vercel DeepSeek bridge
-  --bridge-origin <https://allowed-origin>     Exact Origin sent to the bridge
   --evidence-variant <full|card_text_only|card_text_plus_lua|without_lua>
                                               Evidence ablation (default: full)
   --case <case-id>                            Repeat to select cases (default: all)

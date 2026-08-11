@@ -792,24 +792,38 @@ function buildFaqRecords(cardPayloads) {
 }
 
 export function normalizeQa(payload, id, cards) {
-  const questionSelection = selectUsableLocalizedRulingText(
+  const headingSelection = selectUsableLocalizedRulingText(
     payload?.qaData,
-    ["question", "q", "title"],
+    ["title"],
+  );
+  const detailedQuestionSelection = selectUsableLocalizedRulingText(
+    payload?.qaData,
+    ["question", "q"],
   );
   const answerSelection = selectUsableLocalizedRulingText(
     payload?.qaData,
     ["answer", "a", "content"],
   );
-  const fallbackQuestion = firstText(payload, ["question", "q", "title"]);
+  const fallbackHeading = firstText(payload, ["title"]);
+  const fallbackDetailedQuestion = firstText(payload, ["question", "q"]);
   const fallbackAnswer = firstText(payload, ["answer", "a", "content"]);
-  const question = questionSelection?.text || fallbackQuestion;
+  const rawDetailedQuestion = detailedQuestionSelection?.text
+    || fallbackDetailedQuestion
+    || headingSelection?.text
+    || fallbackHeading;
+  const rawQuestion = headingSelection?.text || fallbackHeading || rawDetailedQuestion;
+  const question = rawQuestion;
   const answer = answerSelection?.text || fallbackAnswer;
-  if (!question || !answer) {
+  if (!rawDetailedQuestion || !answer) {
     addParseWarning(`Q&A ${id} skipped: question or answer not found`);
     return null;
   }
 
-  const text = `${question}\n${answer}`;
+  const text = [
+    question,
+    rawDetailedQuestion !== question ? rawDetailedQuestion : "",
+    answer,
+  ].filter(Boolean).join("\n");
   const involvedCards = detectCards(text, cards);
   const sourceCardIds = uniqueIds(Array.isArray(payload?.cards) ? payload.cards : []);
   const title = truncate(question.replace(/\s+/g, " "), 90);
@@ -818,6 +832,8 @@ export function normalizeQa(payload, id, cards) {
     recordType: "qa",
     title,
     question,
+    rawQuestion,
+    rawDetailedQuestion,
     status: "confirmed",
     cards: involvedCards.map((card) => card.name),
     cardIds: uniqueIds([...sourceCardIds, ...involvedCards.map((card) => card.id)]),
@@ -834,7 +850,8 @@ export function normalizeQa(payload, id, cards) {
     sourceId: String(id),
     sourceName: "YGOResources DB",
     sourceUrl: `${baseUrl}/data/qa/${id}`,
-    questionLocale: questionSelection?.locale || "unknown",
+    questionLocale: headingSelection?.locale || detailedQuestionSelection?.locale || "unknown",
+    detailedQuestionLocale: detailedQuestionSelection?.locale || headingSelection?.locale || "unknown",
     answerLocale: answerSelection?.locale || "unknown",
     updatedAt: new Date().toISOString(),
   };

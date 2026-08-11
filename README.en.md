@@ -1,10 +1,10 @@
-# Yu-Gi-Oh! OCG Ruling Assistant
+# Yu-Gi-Oh! OCG AI Rulings
 
 [中文](README.md) | [English](README.en.md) | [日本語](README.ja.md)
 
 [Use online](https://coldiceh.github.io/ocg-ruling-assistant/) · [Report an issue](https://github.com/coldiceh/ocg-ruling-assistant/issues)
 
-This is a ruling analysis assistant for Yu-Gi-Oh! OCG players. It combines card text, publicly available rule materials, and official Q&A to organize a conclusion, its reasoning, and supporting sources.
+Yu-Gi-Oh! OCG AI Rulings is built for OCG players. It combines card text, publicly available rule materials, and official Q&A to organize a conclusion, its reasoning, and supporting sources.
 
 It is not an official KONAMI project and does not replace an event judge.
 

@@ -211,16 +211,23 @@ test("public legacy and fastjudge modes are rejected before any admin OpenAI cal
 });
 
 test("local Node public entry point applies the same public model boundary", async () => {
-  const source = await readFile(new URL("../backend/server.mjs", import.meta.url), "utf8");
-  assert.match(source, /createPublicAnswerModelEnv\(process\.env, profile\.id\)/u);
+  const [serverSource, serviceSource] = await Promise.all([
+    readFile(new URL("../backend/server.mjs", import.meta.url), "utf8"),
+    readFile(new URL("../backend/publicAnswerService.mjs", import.meta.url), "utf8"),
+  ]);
+  assert.match(serverSource, /answerPublicRulingQuestion\(\{/u);
+  assert.match(serverSource, /parsePublicAnswerPayload\(body\)/u);
+  assert.match(serverSource, /maxBytes:\s*PUBLIC_ANSWER_REQUEST_BODY_LIMIT_BYTES/u);
+  assert.match(serviceSource, /createPublicAnswerModelEnv\(env, profile\.id\)/u);
   assert.match(
-    source,
-    /resolvePublicRulingModelProfile\(\s*payload\.rulingModelProfile\s*\|\|\s*process\.env\.PUBLIC_RULING_MODEL_PROFILE,?\s*\)/u,
+    serviceSource,
+    /resolvePublicRulingModelProfile\(\s*normalizedPayload\.rulingModelProfile\s*\|\|\s*env\.PUBLIC_RULING_MODEL_PROFILE,?\s*\)/u,
   );
-  assert.match(source, /if \(mode !== "rag"\)[\s\S]*?unsupported_answer_mode/u);
-  assert.match(source, /answerRagRulingQuestionForVersion\(\{[\s\S]*?env:\s*publicEnv,/u);
-  assert.doesNotMatch(source, /payload\.(?:thinkingMode|reasoningEffort|modelTier)/u);
-  assert.doesNotMatch(source, /answerQuestion\(payload|answerRulingQuestionFast/u);
+  assert.match(serviceSource, /if \(mode !== "rag"\)[\s\S]*?unsupported_answer_mode/u);
+  assert.match(serviceSource, /answerRagRulingQuestionForVersion\(\{[\s\S]*?env:\s*publicEnv,/u);
+  assert.doesNotMatch(serviceSource, /normalizedPayload\.(?:thinkingMode|reasoningEffort|modelTier)/u);
+  assert.doesNotMatch(`${serverSource}\n${serviceSource}`, /answerQuestion\(payload|answerRulingQuestionFast/u);
+  assert.doesNotMatch(serverSource, /request\.method === "POST" && request\.url === "\/api\/engine"/u);
 });
 
 function createJsonResponse() {

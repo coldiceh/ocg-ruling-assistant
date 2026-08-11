@@ -1174,7 +1174,7 @@ test("albaz_activation_rechecks_continuous_effects_after_paying_cost", async () 
     new Set(["15239", "15245", "17069", "22090"]),
   );
   assert.match(finalPrompt, /发动合法性与效果处理必须分开/u);
-  assert.match(finalPrompt, /支付cost后逐步更新状态/u);
+  assert.match(finalPrompt, /支付\s*cost\s*后逐步更新状态/u);
 });
 
 test("numbered card identity keeps No and CNo families distinct", () => {

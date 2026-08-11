@@ -801,7 +801,7 @@ async function requestBackendAnswer(text, requestedRulingVersion) {
 
 function normalizeRulingVersion(value) {
   const version = String(value || "").trim().toLowerCase();
-  return version === "latest" || version === "previous" ? version : "";
+  return version === "latest" ? version : "";
 }
 
 function createRulingVersionError({
@@ -904,8 +904,7 @@ function renderAnswerVersion(answer) {
     ui.answerVersionText.textContent = "";
     return;
   }
-  const label = effectiveVersion === "previous" ? "上一版（兼容）" : "最新版";
-  ui.answerVersionText.textContent = `本次回答：${label}`;
+  ui.answerVersionText.textContent = "本次回答：最新版";
   ui.answerVersionText.hidden = false;
 }
 
@@ -922,13 +921,11 @@ function renderBackendVersionError(error, requestedRulingVersion) {
   ui.confidenceText.textContent = "版本不可用";
   ui.verdictTitle.textContent = "无法确认回答版本";
   ui.rulingBasisText.textContent = "版本协议校验失败";
-  const requestedLabel = requestedRulingVersion === "previous" ? "上一版（兼容）" : "最新版";
   const effectiveVersion = normalizeRulingVersion(error?.effectiveVersion);
-  const effectiveLabel = effectiveVersion === "previous" ? "上一版（兼容）" : "最新版";
   ui.answerVersionText.classList.add("is-error");
   ui.answerVersionText.hidden = false;
   ui.answerVersionText.textContent = effectiveVersion
-    ? `版本不可用：请求${requestedLabel}，后端返回${effectiveLabel}`
+    ? "版本不可用：后端没有返回当前最新版"
     : "版本未确认 / 不可用";
   ui.verdictBody.textContent = effectiveVersion
     ? "后端返回的实际版本与本次请求不一致，已拒绝展示该回答。"
@@ -1348,12 +1345,12 @@ function syncRulingVersionButtons(isPending = false) {
     const disabled = Boolean(isPending) || !supported;
     button.disabled = disabled;
     button.setAttribute("aria-disabled", String(disabled));
-    button.title = supported ? "" : "当前后端暂未提供上一版兼容实现";
+    button.title = supported ? "" : "当前后端不支持该回答版本";
   }
 }
 
 function isRulingVersionSupported(version) {
-  return version === "latest" || appConfig.rulingVersionIds.includes(version);
+  return version === "latest" && appConfig.rulingVersionIds.includes(version);
 }
 function resetAnalysis() {
   setQueryPending(false);
@@ -4988,7 +4985,6 @@ function buildFeedbackIssueUrl(answer) {
   const rulingVersion = normalizeRulingVersion(
     answer?.effectiveRulingVersion || answer?.rulingVersion,
   );
-  const rulingVersionLabel = rulingVersion === "previous" ? "上一版（兼容）" : "最新版";
   const modelLabel = feedbackModelLabel(answer);
   const body = [
     "## 原问题",
@@ -5002,7 +4998,7 @@ function buildFeedbackIssueUrl(answer) {
     modelLabel,
     "",
     "## 回答版本",
-    rulingVersion ? rulingVersionLabel : "版本未确认",
+    rulingVersion ? "最新版" : "版本未确认",
     "",
     "## 反馈内容",
     "请说明错误之处，并尽量附上官方 Q&A、规则书或其他可核对来源。",
@@ -5094,7 +5090,7 @@ async function init() {
 }
 
 function selectRulingVersion(version) {
-  const nextVersion = version === "previous" ? "previous" : "latest";
+  const nextVersion = normalizeRulingVersion(version);
   if (!isRulingVersionSupported(nextVersion)) return;
   if (nextVersion === selectedRulingVersion) return;
   selectedRulingVersion = nextVersion;

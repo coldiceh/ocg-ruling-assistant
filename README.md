@@ -1,10 +1,10 @@
-# 游戏王 OCG 裁定助手 / Yu-Gi-Oh! OCG Ruling Assistant
+# 游戏王 OCG AI裁定 / Yu-Gi-Oh! OCG AI Rulings
 
 [中文](README.md) | [English](README.en.md) | [日本語](README.ja.md)
 
 [在线使用](https://coldiceh.github.io/ocg-ruling-assistant/) · [问题反馈](https://github.com/coldiceh/ocg-ruling-assistant/issues)
 
-这是一个面向游戏王 OCG 玩家的裁定分析助手。它会结合卡片文本、公开规则资料和官方 Q&A，整理出结论、理由和参考来源。
+游戏王 OCG AI裁定面向所有 OCG 玩家，结合卡片文本、公开规则资料和官方 Q&A，整理结论、理由和参考来源。
 
 它不是 KONAMI 官方项目，也不替代正式比赛的现场裁判。
 

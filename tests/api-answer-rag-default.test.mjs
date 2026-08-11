@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import handler from "../api/answer.js";
-import { PREVIOUS_RULING_WARNING } from "../backend/rulingVersionRegistry.mjs";
+import {
+  PUBLIC_ANSWER_QUESTION_LIMIT_CHARACTERS,
+  PUBLIC_ANSWER_REQUEST_BODY_LIMIT_BYTES,
+} from "../backend/publicAnswerService.mjs";
 
 test("api_answer_defaults_to_rag_baseline", async () => {
   const previousProvider = process.env.MODEL_PROVIDER;
@@ -36,13 +39,6 @@ test("api_answer_reports_engine_availability_from_backend_configuration", async 
     assert.equal(disabled.payload.defaultRulingVersion, "latest");
     assert.deepEqual(disabled.payload.rulingVersions, [
       { id: "latest", label: "最新版", revision: null, legacyCompatibility: false },
-      {
-        id: "previous",
-        label: "上一版（兼容）",
-        revision: "4de792b8a",
-        legacyCompatibility: true,
-        warning: PREVIOUS_RULING_WARNING,
-      },
     ]);
 
     process.env.OCG_ENGINE_URL = "https://engine.example.test";
@@ -271,7 +267,7 @@ test("api_answer sends a successful answer before best-effort latency storage fi
     const response = createJsonResponse();
     const handlerPromise = handler({
       method: "POST",
-      body: { question: "", rulingModelProfile: "deepseek-v4-flash-high" },
+      body: { question: "测试延迟记录。", rulingModelProfile: "deepseek-v4-flash-high" },
     }, response).finally(() => {
       handlerSettled = true;
     });
@@ -324,21 +320,17 @@ test("api_answer never records latency for a failed public request", async () =>
   }
 });
 
-test("api_answer_dispatches_previous_and_rejects_invalid_ruling_versions", async () => {
+test("api_answer rejects removed and invalid ruling versions", async () => {
   const previousProvider = process.env.MODEL_PROVIDER;
   process.env.MODEL_PROVIDER = "mock";
   try {
     const previous = createJsonResponse();
     await handler({
       method: "POST",
-      body: { question: "", rulingVersion: "previous" },
+      body: { question: "测试旧版本。", rulingVersion: "previous" },
     }, previous);
-    assert.equal(previous.statusCode, 200);
-    assert.equal(previous.payload.requestedRulingVersion, "previous");
-    assert.equal(previous.payload.effectiveRulingVersion, "previous");
-    assert.equal(previous.payload.rulingVersion, "previous");
-    assert.equal(previous.payload.legacyCompatibility, true);
-    assert.deepEqual(previous.payload.versionWarnings, [PREVIOUS_RULING_WARNING]);
+    assert.equal(previous.statusCode, 400);
+    assert.equal(previous.payload.code, "invalid_ruling_version");
 
     const invalid = createJsonResponse();
     await handler({
@@ -357,10 +349,38 @@ test("legacy answer modes are no longer exposed by the public API", async () => 
   const response = createJsonResponse();
   await handler({
     method: "POST",
-    body: { question: "", mode: "legacy", rulingVersion: "previous" },
+    body: { question: "测试旧模式。", mode: "legacy", rulingVersion: "previous" },
   }, response);
   assert.equal(response.statusCode, 400);
   assert.equal(response.payload.code, "unsupported_answer_mode");
+});
+
+test("api_answer rejects empty and malformed JSON bodies with 400", async () => {
+  for (const body of [undefined, "", "{not-json", {}, { question: "   " }]) {
+    const response = createJsonResponse();
+    await handler({ method: "POST", body }, response);
+    assert.equal(response.statusCode, 400, JSON.stringify(body));
+    assert.match(response.payload.code, /^(?:empty_request_body|invalid_json|invalid_question)$/u);
+  }
+});
+
+test("api_answer applies the same byte and question limits to parsed Vercel bodies", async () => {
+  const oversizedByHeader = createJsonResponse();
+  await handler({
+    method: "POST",
+    headers: { "content-length": String(PUBLIC_ANSWER_REQUEST_BODY_LIMIT_BYTES + 1) },
+    body: { question: "问题" },
+  }, oversizedByHeader);
+  assert.equal(oversizedByHeader.statusCode, 413);
+  assert.equal(oversizedByHeader.payload.code, "request_body_too_large");
+
+  const oversizedQuestion = createJsonResponse();
+  await handler({
+    method: "POST",
+    body: { question: "问".repeat(PUBLIC_ANSWER_QUESTION_LIMIT_CHARACTERS + 1) },
+  }, oversizedQuestion);
+  assert.equal(oversizedQuestion.statusCode, 413);
+  assert.equal(oversizedQuestion.payload.code, "question_too_long");
 });
 
 function createJsonResponse() {
