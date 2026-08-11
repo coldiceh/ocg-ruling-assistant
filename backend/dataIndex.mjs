@@ -26,15 +26,34 @@ export function buildQaIndex(rulings, cards) {
     .filter((record) => ["qa", "card-faq", "official-database", "official-response"].includes(record.recordType))
     .map((record) => ({
       id: record.id,
+      stableId: record.stableId,
       recordType: record.recordType,
       title: record.title || "",
+      question: record.question || "",
+      rawQuestion: record.rawQuestion || "",
+      rawDetailedQuestion: record.rawDetailedQuestion || "",
       cards: record.cards || [],
       cardIds: [...new Set([
         ...(record.cardIds || []),
         ...(record.cards || []).map((name) => aliasToId.get(normalizeIndexKey(name))).filter(Boolean),
       ].map(String))],
+      questionCardIds: (record.questionCardIds || []).map(String),
       keywords: record.keywords || [],
-      text: `${record.question || ""} ${record.title || ""} ${record.conclusion || ""}`.trim(),
+      text: [
+        record.question,
+        record.rawDetailedQuestion && record.rawDetailedQuestion !== record.question
+          ? record.rawDetailedQuestion
+          : "",
+        record.title,
+        record.answer || record.conclusion,
+      ].filter(Boolean).join("\n").trim(),
+      sourceId: record.sourceId,
+      sourceRecordId: record.sourceRecordId,
+      sourceName: record.sourceName,
+      sourceUrl: record.sourceUrl,
+      questionLocale: record.questionLocale,
+      detailedQuestionLocale: record.detailedQuestionLocale,
+      answerLocale: record.answerLocale,
     }));
 }
 

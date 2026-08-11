@@ -328,7 +328,7 @@ export async function runLocalStack({ env = process.env } = {}) {
       name: "ruling frontend",
       child: frontend,
       timeoutMs: readPositiveInteger(env.LOCAL_FRONTEND_STARTUP_TIMEOUT_MS, 10_000),
-      probe: () => probeExpectedText(`${settings.frontendUrl}/`, "游戏王OCG规则助手"),
+      probe: () => probeExpectedText(`${settings.frontendUrl}/`, "游戏王 OCG AI裁定"),
     });
   } catch (error) {
     for (const child of children.values()) child.kill("SIGTERM");

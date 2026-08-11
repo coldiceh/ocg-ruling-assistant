@@ -4,7 +4,6 @@ import { fileURLToPath } from "node:url";
 
 const repositoryRoot = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const productionRoots = ["backend", "api", "src"];
-const rulingVersionRegistryPath = resolve(repositoryRoot, "backend", "rulingVersionRegistry.mjs");
 const excludedDirectories = new Set([
   "data",
   "fixtures",
@@ -105,30 +104,16 @@ const benchmarkIdentityTokens = [
   "24006",
 ];
 
-const FROZEN_VERSION_IDENTITY_CHECKS = new Set([
-  "scenario-specific-symbolic-entity",
-  "scenario-specific-readable-ruling",
-  "card-name-triggered-fixed-answer",
-  "constructed-c1-c2-damage-scenario",
-  "card-name-answer-validator-table",
-]);
-
 const productionFiles = [];
-const frozenPreviousFiles = new Set();
 for (const root of productionRoots) {
   await collectProductionFiles(resolve(repositoryRoot, root), productionFiles);
 }
-await collectActivePreviousVersionFiles(productionFiles, frozenPreviousFiles);
 
 const failures = [];
 for (const file of productionFiles) {
   const source = await readFile(file, "utf8");
   const displayPath = relative(repositoryRoot, file).replaceAll("\\", "/");
   for (const check of forbidden) {
-    // The selectable previous implementation is an immutable compatibility
-    // snapshot. Audit it for concrete scenario/card identities, but do not
-    // require it to adopt the latest pipeline architecture.
-    if (frozenPreviousFiles.has(file) && !FROZEN_VERSION_IDENTITY_CHECKS.has(check.id)) continue;
     if (check.pattern.test(source)) failures.push(`${displayPath}: ${check.id}`);
   }
   for (const token of benchmarkIdentityTokens) {
@@ -136,16 +121,16 @@ for (const file of productionFiles) {
       failures.push(`${displayPath}: benchmark-identity-branch (${token})`);
     }
   }
-  if (!frozenPreviousFiles.has(file) && displayPath === "backend/fastJudgeEngine.mjs") {
+  if (displayPath === "backend/fastJudgeEngine.mjs") {
     auditFastJudgeAuthority(source, displayPath, failures);
   }
-  if (!frozenPreviousFiles.has(file) && displayPath !== "backend/rulingBlockers.mjs" && /\bevaluateRulingBlockers\b/u.test(source)) {
+  if (displayPath !== "backend/rulingBlockers.mjs" && /\bevaluateRulingBlockers\b/u.test(source)) {
     failures.push(`${displayPath}: legacy-ruling-blocker-reentered-production`);
   }
-  if (!frozenPreviousFiles.has(file) && ["backend/damageStepBlockers.mjs", "backend/timingMissBlockers.mjs"].includes(displayPath)) {
+  if (["backend/damageStepBlockers.mjs", "backend/timingMissBlockers.mjs"].includes(displayPath)) {
     if (/structuredProof\s*===\s*true/u.test(source)) failures.push(`${displayPath}: caller-self-attested-structured-proof`);
   }
-  if (!frozenPreviousFiles.has(file) && displayPath === "backend/ragRulingPipeline.mjs") {
+  if (displayPath === "backend/ragRulingPipeline.mjs") {
     if (/needs_more_info_(?:upgraded|downgraded)|low_confidence_upgraded/u.test(source)) {
       failures.push(`${displayPath}: evidence-presence-strengthens-model-authority`);
     }
@@ -158,7 +143,7 @@ for (const file of productionFiles) {
       failures.push(`${displayPath}: default-formal-draft-invoker-missing`);
     }
   }
-  if (!frozenPreviousFiles.has(file) && displayPath === "backend/formalEngineShadow.mjs") {
+  if (displayPath === "backend/formalEngineShadow.mjs") {
     if (!/VALIDATED_FORMAL_EVIDENCE\.has\s*\(/u.test(source)) {
       failures.push(`${displayPath}: formal-evidence-origin-not-branded`);
     }
@@ -185,7 +170,7 @@ for (const file of productionFiles) {
       failures.push(`${displayPath}: formal-dry-run-paid-call-guard-missing`);
     }
   }
-  if (!frozenPreviousFiles.has(file) && displayPath === "backend/formalScenarioDraftModel.mjs") {
+  if (displayPath === "backend/formalScenarioDraftModel.mjs") {
     for (const token of benchmarkIdentityTokens) {
       if (source.includes(token)) failures.push(`${displayPath}: formal-draft-benchmark-identity (${token})`);
     }
@@ -204,7 +189,7 @@ for (const file of productionFiles) {
       failures.push(`${displayPath}: formal-draft-imports-answer-or-fixture-data`);
     }
   }
-  if (!frozenPreviousFiles.has(file) && displayPath === "backend/formalScenarioPlanner.mjs") {
+  if (displayPath === "backend/formalScenarioPlanner.mjs") {
     for (const symbol of [
       "assertCardMentionBinding",
       "FORMAL_CARD_MENTION_MISMATCH",
@@ -214,7 +199,7 @@ for (const file of productionFiles) {
       if (!source.includes(symbol)) failures.push(`${displayPath}: formal-entity-binding-guard-missing (${symbol})`);
     }
   }
-  if (!frozenPreviousFiles.has(file) && displayPath === "backend/officialResponses.mjs") {
+  if (displayPath === "backend/officialResponses.mjs") {
     const traceabilityStart = source.indexOf("export function hasTraceableOfficialResponseSource");
     const nextFunction = traceabilityStart >= 0 ? source.indexOf("export function", traceabilityStart + 10) : -1;
     const traceabilityBody = traceabilityStart >= 0
@@ -243,19 +228,6 @@ async function collectProductionFiles(directory, output) {
       continue;
     }
     if (entry.isFile() && executableExtensions.has(extname(entry.name))) output.push(absolutePath);
-  }
-}
-
-async function collectActivePreviousVersionFiles(output, frozenFiles) {
-  const registrySource = await readFile(rulingVersionRegistryPath, "utf8");
-  const revision = registrySource.match(/PREVIOUS_RULING_REVISION\s*=\s*["']([^"']+)["']/u)?.[1];
-  if (!revision) throw new Error("Unable to resolve the active previous ruling revision");
-  const activePreviousRoot = resolve(repositoryRoot, "backend", "versions", revision);
-  const files = [];
-  await collectProductionFiles(activePreviousRoot, files);
-  for (const file of files) {
-    output.push(file);
-    frozenFiles.add(file);
   }
 }
 

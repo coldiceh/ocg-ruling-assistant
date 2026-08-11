@@ -8,7 +8,7 @@
 
 ## 1. 本轮边界
 
-本轮是在现有规则助手中增加隔离的管理模型实验室，不重写公开问答流程，不接入另一个“游戏王模拟器”项目，也不把 OpenAI 自动设为公开默认模型。
+本轮是在现有 AI裁定项目中增加隔离的管理模型实验室，不重写公开问答流程，不接入另一个“游戏王模拟器”项目，也不把 OpenAI 自动设为公开默认模型。
 
 产品的长期目标已进一步澄清为：
 
@@ -85,7 +85,7 @@
 8. DeepSeek/Gemini 最终生成。
 9. 多个确定性后处理器可能覆盖模型结论。
 
-DeepSeek 与 Gemini 共用 RAG 资料和提示词构造。现有 `backend/openai.mjs` 属于另一条旧调用链，不是当前公开 RAG 的 OpenAI Provider。
+在该审计基线中，DeepSeek 与 Gemini 共用 RAG 资料和提示词构造；当时的 `backend/openai.mjs` 属于另一条旧调用链。该文件已在后续生产可达性清理中删除，不能作为当前架构或 Provider 配置的依据。
 
 ### 3.6 Token、费用和耗时
 
@@ -117,11 +117,11 @@ DeepSeek 与 Gemini 共用 RAG 资料和提示词构造。现有 `backend/openai
 
 另有未跟踪的诊断目录和运行报告。它们不是本轮代码的一部分，不能被批量暂存。
 
-必须保留：
+当时要求在后续改动中逐项复核：
 
 - `backend/cardTextSections.mjs` 的编号效果分段修正；
 - `backend/cardTextNormalizer.mjs` 及其测试；
-- `backend/proofCore.mjs` 及其测试；
+- `backend/proofCore.mjs` 是当时尚未接入生产链的原型；后续可达性审计已将它及对应旧测试删除；
 - 已有检索修复。
 
 ## 4. 已由线上响应或日志确认的事实

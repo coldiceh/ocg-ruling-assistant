@@ -66,7 +66,7 @@ createServer(async (request, response) => {
     response.end("Not found");
   }
 }).listen(port, "127.0.0.1", () => {
-  console.log(`OCG ruling assistant: http://127.0.0.1:${port}/`);
+  console.log(`Yu-Gi-Oh! OCG AI Rulings: http://127.0.0.1:${port}/`);
 });
 
 function normalizeLocalBackendUrl(value) {

@@ -124,6 +124,9 @@ test("confirmed answer exposes evidence ids in ordinary summary", () => {
 
 test("pipeline_debug_hidden_by_default", async () => {
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  assert.match(html, /<title>游戏王 OCG AI裁定<\/title>/u);
+  assert.match(html, /property="og:title" content="游戏王 OCG AI裁定"/u);
+  assert.doesNotMatch(html, /规则助手|Ruling Assistant/u);
   assert.match(html, /<details[^>]+parser-debug/u);
   assert.match(html, /id="parserDebugPanel" hidden/u);
   assert.match(html, /id="pipelineDebugToggle" hidden/u);
@@ -183,8 +186,8 @@ test("ui_has_single_query_button", async () => {
   assert.match(app, /selectRulingVersion\(button\.dataset\.rulingVersion\)/u);
   assert.match(html, /id="answerVersionText" hidden/u);
   assert.match(app, /effectiveRulingVersion \|\| answer\?\.rulingVersion/u);
-  assert.match(app, /本次回答：\$\{label\}/u);
-  assert.doesNotMatch(app, /请求版本：\$\{label\}/u);
+  assert.match(app, /本次回答：最新版/u);
+  assert.doesNotMatch(app, /上一版（兼容）|data-ruling-version="previous"/u);
   assert.match(app, /ruling_version_unconfirmed/u);
   assert.match(app, /ruling_version_mismatch/u);
   assert.match(app, /ruling_version_response_invalid/u);
@@ -436,38 +439,34 @@ test("versioned backend answers require a matching server confirmation", async (
     requestBody = JSON.parse(options.body);
     return {
       ok: true,
-      json: async () => ({ rulingVersion: "previous", shortAnswer: "已确认" }),
+      json: async () => ({ rulingVersion: "latest", shortAnswer: "已确认" }),
     };
   });
-  const confirmed = await confirmedRequest("问题", "previous");
+  const confirmed = await confirmedRequest("问题", "latest");
   assert.deepEqual(requestBody, {
     question: "问题",
     mode: "rag",
     rulingModelProfile: "deepseek-v4-flash-high",
-    rulingVersion: "previous",
+    rulingVersion: "latest",
   });
-  assert.equal(confirmed.effectiveRulingVersion, "previous");
+  assert.equal(confirmed.effectiveRulingVersion, "latest");
 
   const missingConfirmationRequest = buildRequest(async () => ({
     ok: true,
     json: async () => ({ shortAnswer: "旧后端未回显版本" }),
   }));
-  await assert.rejects(
-    missingConfirmationRequest("问题", "previous"),
-    (error) => error?.code === "ruling_version_unconfirmed",
-  );
   const compatibleLatest = await missingConfirmationRequest("问题", "latest");
   assert.equal(compatibleLatest.effectiveRulingVersion, "latest");
   assert.equal(compatibleLatest.rulingVersionCompatibility, "legacy_unversioned_latest");
   assert.equal(compatibleLatest.shortAnswer, "旧后端未回显版本");
 
-  const mismatchedRequest = buildRequest(async () => ({
+  const removedVersionResponse = buildRequest(async () => ({
     ok: true,
-    json: async () => ({ rulingVersion: "latest", shortAnswer: "错误版本" }),
+    json: async () => ({ rulingVersion: "previous", shortAnswer: "已删除版本" }),
   }));
   await assert.rejects(
-    mismatchedRequest("问题", "previous"),
-    (error) => error?.code === "ruling_version_mismatch",
+    removedVersionResponse("问题", "latest"),
+    (error) => error?.code === "ruling_version_response_invalid",
   );
 });
 
@@ -509,6 +508,10 @@ test("readme_keeps_only_requested_future_plans", async () => {
   assert.match(readme, /space\.bilibili\.com\/869711/u);
   assert.match(readme, /\[English\]\(README\.en\.md\)/u);
   assert.match(readme, /\[日本語\]\(README\.ja\.md\)/u);
+  assert.match(readme, /^# 游戏王 OCG AI裁定 \/ Yu-Gi-Oh! OCG AI Rulings/mu);
+  assert.match(english, /^# Yu-Gi-Oh! OCG AI Rulings/mu);
+  assert.match(japanese, /^# 遊戯王OCG AI裁定/mu);
+  assert.doesNotMatch(`${readme}\n${english}\n${japanese}`, /规则助手|Ruling Assistant|裁定アシスタント/u);
   assert.match(english, /## How it works/u);
   assert.match(japanese, /## 仕組み/u);
   assert.match(readme, /旧的 10 题小样本.*Luna low/u);

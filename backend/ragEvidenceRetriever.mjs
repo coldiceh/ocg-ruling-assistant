@@ -254,10 +254,36 @@ export async function retrieveRagEvidence({
     env.RAG_LIVE_QA_DISCOVERY_MAX_CANDIDATES,
     Math.max(liveQaEvidenceLimit, 48),
   );
-  const localCandidateQaIds = localOfficialMatches.all
+  const semanticCandidateQaIds = localOfficialMatches.all
     .map((match) => officialQaNumericId(match.record))
-    .filter(Boolean)
-    .slice(0, liveQaEvidenceLimit);
+    .filter(Boolean);
+  // A local snapshot can preserve the full Q&A body while losing the short
+  // official heading used by the source page.  This matters most for broad,
+  // card-name-free questions: semantic scene scoring may rank the correct long
+  // conditional record below the live-hydration budget even when ordinary text
+  // retrieval ranks it first.  Feed both independently ranked candidate sets
+  // into the bounded live lookup so the fresh source can restore its heading.
+  // Neither ranking is allowed to certify the record as direct evidence; the
+  // hydrated record still passes through the normal exact/applicability gates.
+  const lexicalCandidateQaIds = rankRecordsWithSupplementalQueries({
+    userQuery,
+    // Use the rich ruling records for lexical discovery when available.  The
+    // compact QA index intentionally drops some source fields and can rank a
+    // broad official heading differently even though the full synchronized
+    // record is already bundled in the same snapshot.
+    records: scopedRecordBuckets.rawRelated.filter(isOfficialQaRecord),
+    resolvedCards: retrievalCards,
+    mentionQueries,
+    deterministicRuleQueries,
+    supplementalRuleQueries: effectiveSupplementalRuleQueries,
+    allowNoCardMatch: retrievalCards.length === 0,
+  }).map((record) => officialQaNumericId(record)).filter(Boolean);
+  const localCandidateQaIds = dedupeBy(
+    retrievalCards.length
+      ? [...semanticCandidateQaIds, ...lexicalCandidateQaIds]
+      : [...lexicalCandidateQaIds, ...semanticCandidateQaIds],
+    (value) => String(value),
+  ).slice(0, liveQaEvidenceLimit);
   let liveOfficialQa = { records: [], cardMetadata: [], warnings: [], debug: {} };
   const liveQaEnabled = !isDisabled(env.RAG_LIVE_OFFICIAL_QA)
     && (!cards && !records && !qaRecords || isEnabled(env.RAG_LIVE_OFFICIAL_QA));
@@ -1050,6 +1076,16 @@ function evidenceFromOfficialMatch(match, type, maxTextChars, warnings) {
     playerRoleCompatibility: match.playerRoleCompatibility || "unknown",
     playerRoleMismatches: match.playerRoleMismatches || [],
     playerRoleComparableDimensions: match.playerRoleComparableDimensions || [],
+    scenarioPremiseCompatibility: match.scenarioPremiseCompatibility || "unknown",
+    scenarioPremiseConflicts: match.scenarioPremiseConflicts || [],
+    queryScenarioPremises: match.queryScenarioPremises || [],
+    evidenceScenarioPremises: match.evidenceScenarioPremises || [],
+    queryOnlyScenarioPremises: match.queryOnlyScenarioPremises || [],
+    evidenceOnlyScenarioPremises: match.evidenceOnlyScenarioPremises || [],
+    queryApplicabilityFrame: match.queryApplicabilityFrame || null,
+    evidenceApplicabilityFrame: match.evidenceApplicabilityFrame || null,
+    requestedTargetCoverage: match.requestedTargetCoverage || null,
+    scenarioFactCoverage: match.scenarioFactCoverage || null,
     isDirect: match.matchLevel === "official_qa_exact",
   };
 }

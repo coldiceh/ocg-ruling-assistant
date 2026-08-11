@@ -1,4 +1,4 @@
-# 本机模拟器接入线上规则助手（临时测试版）
+# 本机模拟器接入线上 AI裁定（临时测试版）
 
 这份说明用于 Windows + Vercel 的临时联调。它使用 Cloudflare Quick Tunnel，
 不会把本机的 `8790` 端口直接开放到公网。Quick Tunnel 地址每次重启都会变化，
@@ -154,7 +154,7 @@ $Result.engineSimulation
 $Result.debug.retrievalCounts
 ```
 
-其中 `legacyLuaEffectCandidates` 大于 0 表示助手已取得至少一个 Lua 语义候选；
+其中 `legacyLuaEffectCandidates` 大于 0 表示 AI裁定服务已取得至少一个 Lua 语义候选；
 完整冻结包只保存在管理实验的 Evidence Snapshot 中，公开接口不会回传整段 Lua/AST。
 
 ## 9. 停止测试

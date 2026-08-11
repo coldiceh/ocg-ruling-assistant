@@ -1,78 +1,67 @@
-# 架构说明
+# 当前架构
 
-## 总体结构
+本文只描述当前生产实现。历史实验、已删除的规则引擎原型和冻结回答版本不属于生产调用链。
+
+## 请求链路
 
 ```mermaid
 flowchart LR
-  A["用户输入场面描述"] --> B["GitHub Pages 前端"]
-  B --> C["Answer API 后端"]
-  C --> D["卡名识别/主题/连锁"]
-  D --> E["静态快照 data/*.json"]
-  D --> F["可选模型回答"]
-  E --> G["证据包与置信度"]
-  F --> G
-  G --> H["结论/步骤/还需确认/出处"]
-  I["GitHub Actions 定时同步"] --> E
-  J["官方数据库与结构化来源"] --> I
+  A["用户问题"] --> B["GitHub Pages 前端"]
+  B --> C["Vercel /api/answer"]
+  C --> D["publicAnswerService"]
+  D --> E["latest RAG pipeline"]
+  E --> F["卡名解析与场面抽取"]
+  E --> G["卡文、官方 Q&A、规则资料检索"]
+  E --> H["可选 Lua / 形式化诊断"]
+  F --> I["Evidence Snapshot"]
+  G --> I
+  H --> I
+  I --> J["最终裁定模型"]
+  J --> K["结构与引用校验"]
+  K --> B
 ```
 
-## 前端
+## 入口与职责
 
-- `index.html`：工具界面。
-- `src/styles.css`：界面样式。
-- `src/app.js`：读取配置、调用后端、后端不可用时做保守检索。
+- `index.html`、`src/app.js`、`src/styles.css`：静态网页与 API 客户端。
+- `api/answer.js`：Vercel 公开回答入口，只负责 HTTP、CORS 和中断传播。
+- `backend/server.mjs`：本地开发服务器；公开回答同样调用共享服务。
+- `backend/publicAnswerService.mjs`：统一 Vercel 与本地入口的请求限制、模型配置、版本选择、审计、耗时记录和错误映射。
+- `backend/rulingVersionRegistry.mjs`：当前只允许 `latest`，并转发到 `backend/ragRulingPipeline.mjs`。
+- `backend/ragRulingPipeline.mjs`：组织卡名抽取、证据检索、提示词、模型调用及最终结果校验。
+- `backend/ragEvidenceRetriever.mjs`、`backend/officialQaMatcher.mjs`：构建并评估证据，区分直接适用、相关但有条件以及前提不匹配的资料。
+- `backend/ragRulingPrompt.mjs`、`backend/ragModelClient.mjs`：构建最终模型输入并调用服务端配置的模型。
 
-页面不需要构建，适合 GitHub Pages。前端会尝试读取：
+浏览器不会接收模型 API Key，也不能通过请求体任意选择未公开的供应商或模型。管理模型实验室使用独立的认证、路由和存储，不进入公开回答入口。
 
-- `config.json`
-- `data/cards-lite.json`
-- `data/snapshot-meta.json`
+## 数据链路
 
-如果没有配置后端，会退回到静态模式，再读取 `data/cards.json` 和 `data/rulings.json` 做有限检索。
-
-## 后端
-
-- `api/answer.js`：Vercel Function 入口。
-- `backend/server.mjs`：本地开发服务，默认 `http://localhost:8787/api/answer`。
-- `backend/engine.mjs`：加载快照、识别卡名、检索证据、生成保守回答。
-- `backend/openai.mjs`：可选模型回答层，支持 Gemini 和 OpenAI；只有设置对应 API key 和模型名时启用。
-
-后端返回统一结构：
-
-```json
-{
-  "mode": "confirmed | inferred | unknown",
-  "verdictTitle": "结论标题",
-  "verdict": "结论正文",
-  "confidence": { "label": "已确认资料", "value": 86, "className": "is-confirmed" },
-  "steps": ["处理步骤"],
-  "needsConfirmation": ["还需确认"],
-  "sources": [{ "label": "来源", "detail": "https://..." }]
-}
+```mermaid
+flowchart LR
+  A["GitHub Actions 定时任务"] --> B["sync-data.mjs"]
+  B --> C["sync-ygoresources.mjs"]
+  B --> D["规则资料同步"]
+  C --> E["data/cards*.json"]
+  C --> F["data/rulings.json"]
+  C --> G["别名与 Q&A 索引"]
+  D --> H["规则语料与证据索引"]
+  E --> I["RAG 检索"]
+  F --> I
+  G --> I
+  H --> I
 ```
 
-## 数据同步
+`backend/dataIndex.mjs` 是同步链路使用的索引构建工具，不是旧回答引擎。同步脚本只标准化外部资料和生成索引，不写入具体题目的裁定答案。
 
-- `scripts/sync-ygoresources.mjs` 负责生成静态快照。
-- `data/tracked-cards.json` 负责声明重点别名和补充卡片；默认同步全已发售卡基础资料。
-- `.github/workflows/sync-data.yml` 定时运行同步。
+## 证据边界
 
-同步脚本不直接写死裁定结论；它只把外部结构化资料标准化为前端可以检索的 JSON。
-`cards-lite.json` 给前端做轻量卡名识别，`cards.json` 和 `rulings.json` 给后端做完整检索。
+- 卡片文本、官方 Q&A、规则资料和社区资料保留各自来源与权威等级。
+- 相似 Q&A 必须核对所问阶段、参与卡片和场景前提；前提不一致时只能作为条件对照。
+- Lua 与形式化内核结果属于辅助诊断；缺失、超时或无法验证时不得伪装成官方真值。
+- 最终结构校验负责 JSON、引用和证据绑定，不应凭启发式规则覆盖模型的实体裁定。
 
-## 置信度
+## 部署
 
-置信度由三类因素共同决定：
-
-- 条目状态：`confirmed`、`provisional`、`needs-source`。
-- 问题完整度：俗称是否能解析到卡片、是否缺完整文本、连锁、表示形式。
-- 快照新鲜度：是否超过 `freshnessDays`。
-
-如果快照过期，即使命中已确认条目也会降级。
-
-## 后续扩展
-
-- 把 Q&A 检索从 JSON 扩展到全文索引或向量索引。
-- 保存裁定变更历史。
-- 为“能否发动”“伤害计算”“代替破坏”等高频问题增加可审计规则模块。
-- 让模型只负责解释证据包和结构化场面，不直接决定“已确认”状态。
+- GitHub Pages 发布静态前端和轻量卡片快照。
+- Vercel 承载公开回答与管理 API。
+- `.github/workflows/sync-data.yml` 定时更新资料；`.github/workflows/deploy-pages.yml` 在发布前执行源码检查和串行测试。

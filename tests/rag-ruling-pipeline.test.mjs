@@ -4337,6 +4337,7 @@ test("compacted_prompt_keeps_each_critical_evidence_bucket", () => {
       rawRelatedEvidence: [{ id: "rule-critical", type: "rulebook", title: "规则书", text: longText("RULE_MARKER") }],
       faqRelated: [{ id: "faq-critical", type: "faq", title: "卡片FAQ", text: longText("FAQ_MARKER") }],
       officialQaRelated: [{ id: "related-critical", type: "related", title: "相似问答", text: longText("RELATED_MARKER") }],
+      formalEngineProofs: [{ id: "formal-critical", type: "formal_engine", title: "形式化证明", text: longText("FORMAL_MARKER") }],
       retrievalWarnings: [],
     },
     env: { RAG_MAX_PROMPT_CHARS: "8000" },
@@ -4349,6 +4350,7 @@ test("compacted_prompt_keeps_each_critical_evidence_bucket", () => {
   assert.match(bundle.prompt, /RULE_MARKER/u);
   assert.match(bundle.prompt, /FAQ_MARKER/u);
   assert.match(bundle.prompt, /RELATED_MARKER/u);
+  assert.match(bundle.prompt, /FORMAL_MARKER/u);
 });
 
 test("unique exact official QA uses a focused complete-answer route", async () => {
@@ -4571,6 +4573,7 @@ test("certified semantic question subsumption allows a long official question to
     questionCardIdCount: 8,
     authoritativeSceneMatch: true,
     authoritativeSceneMatchReason: "unique_semantic_question_subsumption",
+    scenarioPremiseCompatibility: "compatible",
     subsumptionCandidatePoolComplete: true,
     semanticSubsumptionCertified: true,
     semanticSubsumptionScoreMargin: 0.2,

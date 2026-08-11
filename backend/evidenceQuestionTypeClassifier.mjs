@@ -97,6 +97,8 @@ export function classifyEvidenceQuestionTypes(input) {
   addMatches([/(?:ダメージ計算|伤害计算|傷害計算|damage calculation)/iu], timing, "damage_calculation");
 
   addMatches([/(?:墓地|graveyard|\bGY\b)/iu], zones, "graveyard");
+  addMatches([/(?:手卡|手牌|手札|\bhand\b)/iu], zones, "hand");
+  addMatches([/(?:卡组|牌组|卡組|牌組|デッキ|\bdeck\b)/iu], zones, "deck");
   addMatches([/(?:モンスターゾーン|怪兽区|怪獸區|monster zone)/iu], zones, "monster_zone");
   addMatches([/(?:フィールド|场上|場上|field)/iu], zones, "field");
   addMatches([/(?:除外状態|除外状态|除外狀態|banished)/iu], zones, "banished");
@@ -135,6 +137,505 @@ export function classifyMultiEntityDecisionScope(value) {
     multiBranch,
     requiresPerEntityCoverage: multiBranch,
   };
+}
+
+const REQUESTED_TARGET_DEFINITIONS = Object.freeze([
+  Object.freeze({
+    stage: "activation_legality",
+    operation: "activate",
+    patterns: Object.freeze([
+      /(?:能否|是否(?:可以|能)?|可否|能不能|可不可以).{0,14}(?:发动|發動)/iu,
+      /(?:可以|能否|是否(?:可以|能)?|可否|能不能|可不可以).{0,24}(?:直接)?(?:连锁|連鎖)?(?:发动|發動)[^。.!！?？;；\n]{0,72}(?:吗|嗎|么|？|\?)/iu,
+      /(?:发动|發動)(?:这张卡|這張卡|此卡|该卡|該卡|这个效果|這個效果)?(?:吗|嗎|么|能否|是否可以|是否能|可以吗|可以嗎)/iu,
+      /発動(?:する(?:事|こと)は)?(?:できますか|できませんか|できるでしょうか|可能ですか)/iu,
+      /(?:can|could|may|cannot|can't).{0,32}\bactivat(?:e|ed)\b/iu,
+    ]),
+  }),
+  Object.freeze({
+    stage: "resolution_handling",
+    operation: "resolve_effect",
+    patterns: Object.freeze([
+      /(?:处理|處理|结算|結算)(?:时|時|中|过程中|過程中)?(?:如何|怎么|怎麼|怎样|怎樣|是否(?:进行|進行|适用|適用|继续|繼續|生效)|能否(?:进行|進行|适用|適用|继续|繼續))/iu,
+      /(?:如何|怎么|怎麼|怎样|怎樣).{0,16}(?:处理|處理|结算|結算|进行|進行)/iu,
+      /(?:処理|解決)(?:を|は|が|時に|中に).{0,16}(?:行うことはできますか|できますか|できませんか|行いますか|どうな|どのように)/iu,
+      /(?:what happens|how.{0,24}(?:resolve|resolution)|when.{0,24}(?:resolves|resolving))/iu,
+    ]),
+  }),
+]);
+
+const FACT_OPERATION_DEFINITIONS = Object.freeze([
+  Object.freeze({ id: "activate", pattern: /发动|發動|発動|\bactivat(?:e|ed|ing)\b/iu }),
+  Object.freeze({ id: "special_summon", pattern: /特殊召唤|特殊召喚|特殊召喚|special summon/iu }),
+  Object.freeze({ id: "normal_summon", pattern: /通常召唤|通常召喚|normal summon/iu }),
+  Object.freeze({ id: "destroy", pattern: /破坏|破壞|破壊|destroy/iu }),
+  Object.freeze({ id: "banish", pattern: /除外|banish/iu }),
+  Object.freeze({ id: "send_to_graveyard", pattern: /送(?:去|入)?墓地|墓地へ送|send.{0,12}graveyard/iu }),
+  Object.freeze({ id: "add_to_hand", pattern: /加入手(?:卡|牌)|手札に加|add.{0,12}(?:hand)/iu }),
+  Object.freeze({ id: "draw", pattern: /抽(?:卡|牌)|ドロー|\bdraw\b/iu }),
+]);
+
+const FACT_SCOPE_DEFINITIONS = Object.freeze([
+  Object.freeze({ id: "both_players", pattern: /双方|雙方|彼此|お互い|both players|each player|neither player/iu }),
+  Object.freeze({ id: "opponent", pattern: /对方|對方|对手|對手|相手|opponent/iu }),
+  Object.freeze({ id: "self", pattern: /自己|自身|我方|自分|\byou\b|yourself/iu }),
+]);
+
+const ACTIVATION_SOURCE_ZONE_DEFINITIONS = Object.freeze([
+  Object.freeze({
+    id: "hand",
+    patterns: Object.freeze([
+      /(?:这张卡|這張卡|该卡|該卡|此卡)?(?:从|從|自|在)(?:自己|自身|对方|對方|对手|對手)?(?:的)?(?:手卡|手牌).{0,28}(?:发动|發動)/iu,
+      /(?:手札から|手札で).{0,32}発動/iu,
+      /(?:activat(?:e|ed|ing)).{0,24}(?:from|in)(?: the)? hand|(?:from|in)(?: the)? hand.{0,24}activat(?:e|ed|ing)/iu,
+    ]),
+  }),
+  Object.freeze({
+    id: "graveyard",
+    patterns: Object.freeze([
+      /(?:这张卡|這張卡|该卡|該卡|此卡)(?:在|从|從)墓地.{0,28}(?:发动|發動)|(?:从|從|在)墓地.{0,28}(?:发动|發動)/iu,
+      /(?:墓地から|墓地で).{0,32}発動/iu,
+      /(?:activat(?:e|ed|ing)).{0,24}(?:from|in)(?: the)? graveyard|(?:from|in)(?: the)? graveyard.{0,24}activat(?:e|ed|ing)/iu,
+    ]),
+  }),
+  Object.freeze({
+    id: "banished",
+    patterns: Object.freeze([
+      /(?:这张卡|這張卡|该卡|該卡|此卡)(?:在|从|從)?(?:除外状态|除外狀態).{0,28}(?:发动|發動)|(?:在|从|從)(?:除外状态|除外狀態).{0,28}(?:发动|發動)/iu,
+      /(?:除外状態から|除外状態で|除外されている状態で).{0,32}発動/iu,
+      /(?:activat(?:e|ed|ing)).{0,24}(?:while|from|in).{0,8}banished|(?:while|from|in).{0,8}banished.{0,24}activat(?:e|ed|ing)/iu,
+    ]),
+  }),
+  Object.freeze({
+    id: "field",
+    patterns: Object.freeze([
+      /(?:这张卡|這張卡|该卡|該卡|此卡)(?:在|从|從)(?:场上|場上|怪兽区域|怪獸區域).{0,28}(?:发动|發動)/iu,
+      /(?:このカード|そのカード|当該カード).{0,24}(?:フィールド|モンスターゾーン)(?:から|で).{0,24}発動/iu,
+      /(?:this|that) card.{0,24}(?:on|from|in)(?: the)? (?:field|monster zone).{0,24}activat(?:e|ed|ing)|activat(?:e|ed|ing).{0,24}(?:this|that) card.{0,24}(?:on|from|in)(?: the)? (?:field|monster zone)/iu,
+    ]),
+  }),
+]);
+
+/**
+ * Extracts decision-stage and scenario-premise families from a question.
+ *
+ * These are comparison labels only.  They never decide a ruling.  In
+ * particular, a player being prohibited from performing an action is not the
+ * same premise as the relevant candidate set being empty.
+ */
+export function classifyEvidenceScenarioPremises(value) {
+  const text = normalizeEvidenceQuestionText(value);
+  const requestedTargets = extractRequestedTargets(text);
+  const scenarioFacts = dedupeFrames(
+    [...extractScenarioFacts(text), ...extractContextFacts(text)],
+    (fact) => `${fact.operation}:${fact.dimension}:${fact.state}:${fact.scope}`,
+  );
+  const premises = [
+    ...requestedTargets.map((target) => `target:${target.stage}:${target.operation}`),
+    ...scenarioFacts.map((fact) => (
+      `fact:${fact.operation}:${fact.dimension}:${fact.state}:${fact.scope}`
+    )),
+  ];
+  return {
+    schema: "evidence-applicability-frame/v2",
+    requestedTargets,
+    scenarioFacts,
+    premises: [...new Set(premises)],
+    matchedPhrases: [...new Set([
+      ...requestedTargets.map((target) => target.text),
+      ...scenarioFacts.map((fact) => fact.text),
+    ])],
+  };
+}
+
+export function compareEvidenceScenarioPremises(queryValue, evidenceValue) {
+  const query = typeof queryValue === "string"
+    ? classifyEvidenceScenarioPremises(queryValue)
+    : queryValue || classifyEvidenceScenarioPremises("");
+  const evidence = typeof evidenceValue === "string"
+    ? classifyEvidenceScenarioPremises(evidenceValue)
+    : evidenceValue || classifyEvidenceScenarioPremises("");
+  const targetComparison = compareRequestedTargets(
+    query.requestedTargets || [],
+    evidence.requestedTargets || [],
+  );
+  const factComparison = compareScenarioFacts(
+    query.scenarioFacts || [],
+    evidence.scenarioFacts || [],
+  );
+  const conflicts = [...targetComparison.conflicts, ...factComparison.conflicts];
+  const querySet = new Set(query.premises || []);
+  const evidenceSet = new Set(evidence.premises || []);
+  const queryOnlyPremises = [...querySet].filter((premise) => !evidenceSet.has(premise));
+  const evidenceOnlyPremises = [...evidenceSet].filter((premise) => !querySet.has(premise));
+  const hasAnyFrame = querySet.size > 0 || evidenceSet.size > 0;
+  const compatibility = conflicts.length
+    ? "mismatch"
+    : targetComparison.missingQueryTargets.length || factComparison.missingQueryFacts.length
+      ? "partial"
+      : factComparison.extraEvidenceFacts.length
+      ? "conditional"
+      : hasAnyFrame
+        ? "compatible"
+        : "unknown";
+  return {
+    schema: "evidence-applicability-comparison/v2",
+    compatibility,
+    conflicts,
+    queryPremises: [...querySet],
+    evidencePremises: [...evidenceSet],
+    queryOnlyPremises,
+    evidenceOnlyPremises,
+    queryFrame: query,
+    evidenceFrame: evidence,
+    targetCoverage: targetComparison,
+    factCoverage: factComparison,
+  };
+}
+
+function extractRequestedTargets(text) {
+  if (classifyEvidenceQuestionTypes(text).questionTypes.includes("battle_resolution")) return [];
+  const targets = [];
+  for (const definition of REQUESTED_TARGET_DEFINITIONS) {
+    for (const pattern of definition.patterns) {
+      const match = text.match(pattern);
+      if (!match) continue;
+      targets.push({
+        stage: definition.stage,
+        operation: definition.operation,
+        span: [match.index, match.index + match[0].length],
+        text: match[0],
+        confidence: "high",
+      });
+      break;
+    }
+  }
+  for (const clause of splitApplicabilityClauses(text)) {
+    if (!isLegalityQuestionClause(clause.text)) continue;
+    if (targets.some((target) => (
+      target.stage === "resolution_handling"
+      && spansOverlap(target.span, [clause.offset, clause.offset + clause.text.length])
+    ))) continue;
+    if (targets.some((target) => (
+      target.operation === "activate"
+      && spansOverlap(target.span, [clause.offset, clause.offset + clause.text.length])
+    ))) continue;
+    for (const operation of FACT_OPERATION_DEFINITIONS) {
+      if (operation.id === "activate" || !operation.pattern.test(clause.text)) continue;
+      targets.push({
+        stage: "action_legality",
+        operation: operation.id,
+        span: [clause.offset, clause.offset + clause.text.length],
+        text: clause.text,
+        confidence: "high",
+      });
+    }
+  }
+  return dedupeFrames(targets, (target) => `${target.stage}:${target.operation}`);
+}
+
+function extractScenarioFacts(text) {
+  const facts = [];
+  for (const clause of splitApplicabilityClauses(text)) {
+    const scope = detectFactScope(clause.text);
+    const operandAbsence = matchOperandAbsence(clause.text);
+    const zoneCapacity = matchZoneCapacity(clause.text);
+    const costPayability = matchCostPayability(clause.text);
+    const permissionProhibition = matchActorPermissionProhibition(clause.text, {
+      operandAbsence: Boolean(operandAbsence),
+    });
+    if (permissionProhibition) {
+      for (const operation of operationsForScenarioFact(permissionProhibition, {
+        dimension: "actor_permission", clause, fullText: text,
+      })) {
+        facts.push(buildScenarioFact({
+          operation: operation.id,
+          dimension: "actor_permission",
+          state: "prohibited",
+          scope,
+          clause,
+          match: permissionProhibition,
+        }));
+      }
+    }
+    if (operandAbsence) {
+      for (const operation of operationsForScenarioFact(operandAbsence, {
+        dimension: "operand_availability", clause, fullText: text,
+      })) {
+        facts.push(buildScenarioFact({
+          operation: operation.id,
+          dimension: "operand_availability",
+          state: "absent",
+          scope,
+          clause,
+          match: operandAbsence,
+        }));
+      }
+    }
+    if (zoneCapacity) {
+      for (const operation of operationsForScenarioFact(zoneCapacity, {
+        dimension: "zone_capacity", clause, fullText: text,
+      })) {
+        facts.push(buildScenarioFact({
+          operation: operation.id,
+          dimension: "zone_capacity",
+          state: "unavailable",
+          scope,
+          clause,
+          match: zoneCapacity,
+        }));
+      }
+    }
+    if (costPayability) {
+      for (const operation of operationsForScenarioFact(costPayability, {
+        dimension: "cost_payability", clause, fullText: text,
+      })) {
+        facts.push(buildScenarioFact({
+          operation: operation.id,
+          dimension: "cost_payability",
+          state: "unpayable",
+          scope,
+          clause,
+          match: costPayability,
+        }));
+      }
+    }
+  }
+  return dedupeFrames(
+    facts,
+    (fact) => `${fact.operation}:${fact.dimension}:${fact.state}:${fact.scope}`,
+  );
+}
+
+function extractContextFacts(text) {
+  const features = classifyEvidenceQuestionTypes(text);
+  const zoneStates = extractActivationSourceZones(text);
+  return [
+    ...zoneStates.map((state) => ({
+      operation: "question_context",
+      dimension: "zone_context",
+      state,
+      scope: "unspecified",
+      span: [0, text.length],
+      text: state,
+      confidence: "high",
+    })),
+    ...(features.timing || []).map((state) => ({
+      operation: "question_context",
+      dimension: "timing_context",
+      state,
+      scope: "unspecified",
+      span: [0, text.length],
+      text: state,
+      confidence: "high",
+    })),
+  ];
+}
+
+function extractActivationSourceZones(text) {
+  const scenarioText = maskQuotedEffectDescriptions(text);
+  return ACTIVATION_SOURCE_ZONE_DEFINITIONS
+    .filter((definition) => definition.patterns.some((pattern) => pattern.test(scenarioText)))
+    .map((definition) => definition.id);
+}
+
+function maskQuotedEffectDescriptions(text) {
+  return String(text || "").replace(/『[^』]*』/gu, " ");
+}
+
+function splitApplicabilityClauses(text) {
+  const clauses = [];
+  const pattern = /[^，,、。.!！?？;；\n]+[，,、。.!！?？;；\n]?/gu;
+  for (const match of text.matchAll(pattern)) {
+    const value = match[0].trim();
+    if (!value) continue;
+    clauses.push({ text: value, offset: match.index });
+  }
+  return clauses;
+}
+
+function detectFactScope(text) {
+  return FACT_SCOPE_DEFINITIONS.find((definition) => definition.pattern.test(text))?.id || "unspecified";
+}
+
+function matchActorPermissionProhibition(text, { operandAbsence = false } = {}) {
+  if (/(?:不能|无法|無法|できない|cannot).{0,10}(?:特殊召唤|特殊召喚|特殊召喚|special summon).{0,4}(?:的|できない)?(?:怪兽|怪獸|モンスター|cards?).{0,16}(?:不存在|没有|沒有|いない|does not exist)/iu.test(text)) {
+    return null;
+  }
+  if (operandAbsence && /(?:不能|无法|無法|できない|cannot).{0,10}(?:特殊召唤|特殊召喚|特殊召喚|special summon).{0,4}(?:的|できない)?(?:怪兽|怪獸|モンスター|cards?)/iu.test(text)) {
+    return null;
+  }
+  return [
+    /(?:双方|雙方|彼此|自己|自身|我方|对方|對方|对手|對手|玩家).{0,32}(?:不能|不可|不可以|无法|無法|禁止).{0,16}(?:进行|進行)?(?:怪兽|怪獸)?(?:特殊召唤|特殊召喚)/iu,
+    /(?:双方|雙方|彼此|自己|自身|我方|对方|對方|对手|對手|玩家).{0,40}(?:特殊召唤|特殊召喚)(?!的?(?:怪兽|怪獸)).{0,12}(?:不能|不可|不可以|无法|無法|禁止)/iu,
+    /(?:お互い|自分|相手|プレイヤー).{0,40}(?:特殊召喚)(?!できないモンスター).{0,16}(?:できない|行えない|禁止)/iu,
+    /(?:both players?|each player|you|your opponent|a player).{0,40}(?:cannot|can't|may not|is prohibited from).{0,16}special summon/iu,
+    /neither player.{0,24}(?:can|may).{0,12}special summon/iu,
+  ].map((pattern) => text.match(pattern)).find(Boolean) || null;
+}
+
+function matchOperandAbsence(text) {
+  const match = [
+    /(?:没有|沒有|不存在|均无|均無|都没有|都沒有|找不到).{0,72}(?<!不)(?:能够|能|可以|可|适合|適合)(?:被[^，,、。.!！?？;；\n]{0,36})?(?:特殊召唤|特殊召喚).{0,18}(?:的)?(?:怪兽|怪獸|卡片?)/iu,
+    /(?<!不)(?:能够|能|可以|可)(?:被[^，,、。.!！?？;；\n]{0,36})?(?:特殊召唤|特殊召喚).{0,18}(?:的)?(?:怪兽|怪獸|卡片?).{0,32}(?:没有|沒有|不存在|均无|均無|都不存在)/iu,
+    /(?:特殊召喚可能|特殊召喚できる).{0,40}(?:モンスター|カード).{0,24}(?:存在しない|いない)/iu,
+    /(?:no|without any).{0,32}(?:eligible|valid|that can be).{0,24}(?:special summoned|special summon)/iu,
+  ].map((pattern) => text.match(pattern)).find(Boolean) || null;
+  if (!match) return null;
+  const tail = text.slice(match.index + match[0].length, match.index + match[0].length + 12);
+  if (/^(?:的)?(?:区域|區域|ゾーン|zone)/iu.test(tail)) return null;
+  return match;
+}
+
+function matchZoneCapacity(text) {
+  return [
+    /(?:没有|沒有|不存在|无|無).{0,20}(?:可用|空闲|空閒|空置).{0,12}(?:区域|區域|怪兽区|怪獸區)/iu,
+    /(?:使用可能|空いている).{0,16}(?:ゾーン).{0,16}(?:存在しない|ない)/iu,
+    /(?:no|without).{0,16}(?:available|open|free).{0,12}(?:zone|monster zone)/iu,
+  ].map((pattern) => text.match(pattern)).find(Boolean) || null;
+}
+
+function matchCostPayability(text) {
+  return [
+    /(?:没有|沒有|不足|无法|無法|不能).{0,24}(?:支付|払う).{0,16}(?:cost|代价|代價|lp|生命值|基本分)/iu,
+    /(?:cost|代价|代價).{0,16}(?:无法|無法|不能|支付不了|払えない)/iu,
+    /(?:cost|代价|代價).{0,8}(?:无法|無法|不能).{0,8}(?:支付|払|pay)/iu,
+    /(?:cannot|can't|unable to).{0,16}(?:pay|afford).{0,12}(?:the )?cost/iu,
+  ].map((pattern) => text.match(pattern)).find(Boolean) || null;
+}
+
+function buildScenarioFact({ operation, dimension, state, scope, clause, match }) {
+  return {
+    operation,
+    dimension,
+    state,
+    scope,
+    span: [clause.offset + match.index, clause.offset + match.index + match[0].length],
+    text: match[0],
+    confidence: "high",
+  };
+}
+
+function compareRequestedTargets(queryTargets, evidenceTargets) {
+  const evidenceKeys = new Set(evidenceTargets.map(targetKey));
+  const queryKeys = new Set(queryTargets.map(targetKey));
+  const missingQueryTargets = queryTargets.filter((target) => !evidenceKeys.has(targetKey(target)));
+  const extraEvidenceTargets = evidenceTargets.filter((target) => !queryKeys.has(targetKey(target)));
+  const coveredQueryTargetCount = queryTargets.length - missingQueryTargets.length;
+  const conflicts = queryTargets.length && evidenceTargets.length
+    && missingQueryTargets.length && coveredQueryTargetCount === 0
+    ? [{
+      family: "requested_target",
+      reason: "target_not_covered",
+      queryTargets: queryTargets.map(targetKey),
+      evidenceTargets: evidenceTargets.map(targetKey),
+    }]
+    : [];
+  return { missingQueryTargets, extraEvidenceTargets, conflicts };
+}
+
+function operationsForScenarioFact(match, { dimension, clause, fullText }) {
+  const direct = FACT_OPERATION_DEFINITIONS.filter((definition) => definition.pattern.test(match[0]));
+  if (direct.length) return direct;
+  const clauseOperations = FACT_OPERATION_DEFINITIONS.filter(
+    (definition) => definition.pattern.test(clause.text),
+  );
+  if (clauseOperations.length === 1) return clauseOperations;
+  const windowStart = Math.max(0, clause.offset - 24);
+  const windowEnd = Math.min(fullText.length, clause.offset + clause.text.length + 72);
+  const nearby = FACT_OPERATION_DEFINITIONS.filter(
+    (definition) => definition.pattern.test(fullText.slice(windowStart, windowEnd)),
+  );
+  if (dimension === "zone_capacity") {
+    const summon = nearby.filter((operation) => ["special_summon", "normal_summon"].includes(operation.id));
+    if (summon.length === 1) return summon;
+  }
+  if (dimension === "cost_payability") {
+    const activation = nearby.find((operation) => operation.id === "activate");
+    if (activation) return [activation];
+  }
+  return nearby.length === 1 ? nearby : [];
+}
+
+function isLegalityQuestionClause(text) {
+  if (/(?:能否|是否(?:可以|能)?|可否|能不能|できますか|できませんか|可能ですか)/iu.test(text)) {
+    return true;
+  }
+  const englishModal = text.match(/\b(?:can|could|may)\b/iu);
+  if (!englishModal) return false;
+  // In English a modal in the middle of a declarative premise (for example,
+  // "Neither player can Special Summon") describes the scene; it does not ask
+  // whether that action is legal.  Accept an explicit question mark, modal
+  // inversion, or a whether-clause, and otherwise leave the clause as a fact.
+  return /[?？]/u.test(text)
+    || /^\s*(?:can|could|may)\b/iu.test(text)
+    || /\bwhether\b.{0,48}\b(?:can|could|may)\b/iu.test(text);
+}
+
+function spansOverlap(left, right) {
+  return left[0] < right[1] && right[0] < left[1];
+}
+
+function compareScenarioFacts(queryFacts, evidenceFacts) {
+  const matchedEvidence = new Set();
+  const missingQueryFacts = [];
+  const conflicts = [];
+  for (const queryFact of queryFacts) {
+    const exactIndex = evidenceFacts.findIndex((evidenceFact, index) => (
+      !matchedEvidence.has(index) && factsEquivalent(queryFact, evidenceFact)
+    ));
+    if (exactIndex >= 0) {
+      matchedEvidence.add(exactIndex);
+      continue;
+    }
+    const conflictingFacts = evidenceFacts.filter((fact) => (
+      factsShareConflictFamily(queryFact, fact)
+    ));
+    if (conflictingFacts.length) {
+      conflicts.push({
+        family: "scenario_fact",
+        reason: "premise_not_equivalent",
+        queryFact: factKey(queryFact),
+        evidenceFacts: conflictingFacts.map(factKey),
+      });
+      continue;
+    }
+    missingQueryFacts.push(queryFact);
+  }
+  const extraEvidenceFacts = evidenceFacts.filter((_fact, index) => !matchedEvidence.has(index));
+  return { missingQueryFacts, extraEvidenceFacts, conflicts };
+}
+
+function factsEquivalent(left, right) {
+  return left.operation === right.operation
+    && left.dimension === right.dimension
+    && left.state === right.state
+    && left.scope === right.scope;
+}
+
+function factsShareConflictFamily(left, right) {
+  if (left.operation !== right.operation) return false;
+  if (left.dimension === right.dimension) return true;
+  const legalityDimensions = new Set([
+    "actor_permission",
+    "operand_availability",
+    "zone_capacity",
+    "cost_payability",
+  ]);
+  return legalityDimensions.has(left.dimension) && legalityDimensions.has(right.dimension);
+}
+
+function targetKey(target) {
+  return `${target.stage}:${target.operation}`;
+}
+
+function factKey(fact) {
+  return `${fact.operation}:${fact.dimension}:${fact.state}:${fact.scope}`;
+}
+
+function dedupeFrames(items, getKey) {
+  const result = new Map();
+  for (const item of items) if (!result.has(getKey(item))) result.set(getKey(item), item);
+  return [...result.values()];
 }
 
 function detectEvidencePolarity(text) {

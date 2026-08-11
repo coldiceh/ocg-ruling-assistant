@@ -5,7 +5,7 @@ Windows 上进行临时公网联调时，可直接按
 
 ## 三条严格分离的路径
 
-当前规则助手同时保留三条接口，但权威边界不同：
+当前 AI裁定服务同时保留三条接口，但权威边界不同：
 
 1. 旧 `/simulate` 是 YGOPro/native 兼容模拟，只用于轨迹、差分和调试，固定 `canConfirmOfficialRuling=false`。
 2. 正式规则内核只允许通过 `GET /formal/v1/capabilities` 与 `POST /formal/v1/analyze-scenario` 接入；绝不回退 `/simulate` 冒充形式证明。
@@ -42,7 +42,7 @@ RAG_FORMAL_SCENARIO_DRAFT_VERIFIER_VERSION=deployment-specific-verifier-version
 
 ### 当前精确阻塞项（2026-08-04）
 
-相邻引擎现已暴露版本化 Legacy Lua 静态发现端点，并对资源锁、完整脚本集、单脚本大小/SHA-256、版本、能力清单和 Lua API 语义注册表做闭合校验；规则助手会冻结同一份语义包供所有模型对比，并只发送有界的操作/依赖投影。该路径仍是非权威兼容信息，不等于完整声明式规则内核。正式形式裁定路径的客户端、闭合 Schema、planner、默认非权威 draft 生成器、完整性门禁、shadow 管线和 mock contract 已可用；由于生产尚未接入两个独立 verifier，真实数据也尚无不可变 `formalDefinitionId`/snapshot/effect binding，现网正式请求仍会安全返回 `FORMAL_SCENARIO_DRAFT_VERIFIER_IDENTITY_UNCONFIGURED`、`FORMAL_SCENARIO_DRAFT_UNVERIFIED`、`FORMAL_PROOF_VERIFIER_UNAVAILABLE`、`ENGINE_FORMAL_API_UNAVAILABLE`、`FORMAL_DEFINITION_BINDING_MISSING` 或 `CAPABILITY_UNAVAILABLE`。引擎侧还需要：
+相邻引擎现已暴露版本化 Legacy Lua 静态发现端点，并对资源锁、完整脚本集、单脚本大小/SHA-256、版本、能力清单和 Lua API 语义注册表做闭合校验；AI裁定服务会冻结同一份语义包供所有模型对比，并只发送有界的操作/依赖投影。该路径仍是非权威兼容信息，不等于完整声明式规则内核。正式形式裁定路径的客户端、闭合 Schema、planner、默认非权威 draft 生成器、完整性门禁、shadow 管线和 mock contract 已可用；由于生产尚未接入两个独立 verifier，真实数据也尚无不可变 `formalDefinitionId`/snapshot/effect binding，现网正式请求仍会安全返回 `FORMAL_SCENARIO_DRAFT_VERIFIER_IDENTITY_UNCONFIGURED`、`FORMAL_SCENARIO_DRAFT_UNVERIFIED`、`FORMAL_PROOF_VERIFIER_UNAVAILABLE`、`ENGINE_FORMAL_API_UNAVAILABLE`、`FORMAL_DEFINITION_BINDING_MISSING` 或 `CAPABILITY_UNAVAILABLE`。引擎侧还需要：
 
 - 实现上述两个 formal HTTP 端点；
 - 发布与 capability 清单一致的版本号；
@@ -54,7 +54,7 @@ RAG_FORMAL_SCENARIO_DRAFT_VERIFIER_VERSION=deployment-specific-verifier-version
 
 本仓库不会复制这些规则语义，也不会为某道测试题伪造 TRUE。
 
-规则助手可以调用独立项目 [coldiceh/ocg-sim-core](https://github.com/coldiceh/ocg-sim-core)。本机默认使用相邻目录 `游戏王游戏引擎`。旧模拟默认不自动运行；显式设置 `RAG_AUTO_ENGINE_SIMULATION=true` 后，普通问题才会在卡片检索完成后生成一份尽力模拟场景并单独执行。请求显式传入 `engineScenario` 时仍以该场景为准。
+AI裁定服务可以调用独立项目 [coldiceh/ocg-sim-core](https://github.com/coldiceh/ocg-sim-core)。本机默认使用相邻目录 `游戏王游戏引擎`。旧模拟默认不自动运行；显式设置 `RAG_AUTO_ENGINE_SIMULATION=true` 后，普通问题才会在卡片检索完成后生成一份尽力模拟场景并单独执行。请求显式传入 `engineScenario` 时仍以该场景为准。
 
 模拟器核心、ocgcore host、资源快照和卡片脚本均在 `ocg-sim-core` 维护。本仓库只保留 HTTP 客户端、API 适配层和联调启动脚本，不复制模拟器实现。
 
@@ -80,7 +80,7 @@ pnpm dev:with-engine
 ## API
 
 - `GET /api/engine`：返回 sidecar 健康状态、能力和资源锁。
-- `POST /api/engine`：请求体为 `{ "scenario": { ... } }` 或场景本身，直接返回模拟结果。
+- `/api/engine` 只公开 `GET` 健康检查。场景模拟仅由服务端回答管线内部调用，避免外部请求绕过回答预算与输入门禁直接消耗 sidecar。
 - `POST /api/answer`：照常传 `question`；未传 `engineScenario` 时自动尽力编译场景，显式传入时覆盖自动场景。
 - `GET /formal/v1/legacy-lua/capabilities`：协商 Lua 发现能力、版本和只读 API 语义注册表。
 - `POST /formal/v1/legacy-lua/card-identities`：把检索阶段确认的准确卡名绑定到锁定 CDB 中唯一的非零 uint32 passcode；未找到或有歧义时返回非权威未知结果。
@@ -233,13 +233,13 @@ RAG_LEGACY_LUA_MAX_BYTES=196608
 RAG_LEGACY_LUA_MAX_HTTP_RESPONSE_BYTES=2097152
 ```
 
-将 `OCG_ENGINE_TOKEN` 标记为 Sensitive。Vercel 环境变量只会进入新部署，因此保存后必须重新部署。可通过 `https://<规则助手域名>/api/engine` 检查 Vercel 到 sidecar 的健康状态。
+将 `OCG_ENGINE_TOKEN` 标记为 Sensitive。Vercel 环境变量只会进入新部署，因此保存后必须重新部署。可通过 `https://<AI裁定域名>/api/engine` 检查 Vercel 到 sidecar 的健康状态。
 
 旧 `/simulate` 默认关闭。只有需要兼容轨迹或差分调试时才显式设置
 `RAG_AUTO_ENGINE_SIMULATION=true`；它仍然不参与最终裁定。
 
 Legacy Lua 静态发现不依赖 `RAG_AUTO_ENGINE_SIMULATION`。只要配置了
-`OCG_ENGINE_URL`，助手就会在卡片检索得到可信的非零 uint32 passcode 后并行请求该旁路；没有 passcode、脚本缺失、超时、超限、哈希/版本不一致或语义不完整都会降级为 typed `UNKNOWN`，不会把“未知”解释为“不能发动”。
+`OCG_ENGINE_URL`，AI裁定服务就会在卡片检索得到可信的非零 uint32 passcode 后并行请求该旁路；没有 passcode、脚本缺失、超时、超限、哈希/版本不一致或语义不完整都会降级为 typed `UNKNOWN`，不会把“未知”解释为“不能发动”。
 
 ## 能力边界
 

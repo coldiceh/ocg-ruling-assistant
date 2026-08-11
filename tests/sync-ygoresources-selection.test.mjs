@@ -222,6 +222,28 @@ test("QA normalization retains a clean non-Japanese locale when no Japanese text
   assert.equal(record.answerLocale, "en");
 });
 
+test("QA normalization preserves a short official heading separately from its detailed scenario", () => {
+  const record = normalizeQa({
+    cards: [101, 202],
+    qaData: {
+      ja: {
+        title: "一時的に除外されたモンスターのコントロールはどうなりますか?",
+        question: "条件(A)と条件(B)では、戻ったモンスターのコントロールはどうなりますか?",
+        answer: "(A)は維持し、(B)は元に戻ります。",
+      },
+    },
+  }, "77777", []);
+
+  assert.equal(record.question, "一時的に除外されたモンスターのコントロールはどうなりますか?");
+  assert.equal(record.rawQuestion, record.question);
+  assert.equal(
+    record.rawDetailedQuestion,
+    "条件(A)と条件(B)では、戻ったモンスターのコントロールはどうなりますか?",
+  );
+  assert.match(record.rawDetailedQuestion, /条件\(A\)/u);
+  assert.match(record.conclusion, /\(A\)は維持/u);
+});
+
 test("card normalization persists structured monster metadata without a card-specific branch", () => {
   const propertyMetadata = [
     null,

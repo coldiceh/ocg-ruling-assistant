@@ -2,42 +2,25 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   DEFAULT_RULING_VERSION,
-  PREVIOUS_RULING_WARNING,
-  PREVIOUS_RULING_REVISION,
   answerRagRulingQuestionForVersion,
   getRulingVersionCapabilities,
   normalizeRequestedRulingVersion,
   resolveRulingVersionPipeline,
 } from "../backend/rulingVersionRegistry.mjs";
-import { loadRagData as loadPreviousRagData } from "../backend/versions/4de792b8a/ragEvidenceRetriever.mjs";
 
-test("ruling version capabilities expose latest and the frozen previous revision", () => {
-  assert.equal(PREVIOUS_RULING_REVISION, "4de792b8a");
+test("ruling version capabilities expose only latest", () => {
   const capabilities = getRulingVersionCapabilities();
   assert.equal(capabilities.defaultRulingVersion, DEFAULT_RULING_VERSION);
   assert.deepEqual(capabilities.rulingVersions, [
     { id: "latest", label: "最新版", revision: null, legacyCompatibility: false },
-    {
-      id: "previous",
-      label: "上一版（兼容）",
-      revision: PREVIOUS_RULING_REVISION,
-      legacyCompatibility: true,
-      warning: PREVIOUS_RULING_WARNING,
-    },
   ]);
-});
-
-test("frozen previous pipeline resolves its own dependency graph and shared data path", async () => {
-  const data = await loadPreviousRagData();
-  assert.ok(data.cards.length > 0);
-  assert.ok(data.records.length > 0);
 });
 
 test("missing rulingVersion defaults to latest and illegal values are rejected with 400", async () => {
   assert.equal(normalizeRequestedRulingVersion(undefined), "latest");
   assert.equal(normalizeRequestedRulingVersion(null), "latest");
-  assert.equal(normalizeRequestedRulingVersion(" PREVIOUS "), "previous");
-  for (const invalid of ["", "old", "58060bdc6", 42]) {
+  assert.equal(normalizeRequestedRulingVersion(" LATEST "), "latest");
+  for (const invalid of ["", "previous", "old", "58060bdc6", 42]) {
     await assert.rejects(
       Promise.resolve().then(() => normalizeRequestedRulingVersion(invalid)),
       (error) => error?.code === "invalid_ruling_version" && error?.statusCode === 400,
@@ -45,18 +28,12 @@ test("missing rulingVersion defaults to latest and illegal values are rejected w
   }
 });
 
-test("previous pipeline is dynamically loaded once and never aliases latest", async () => {
+test("latest pipeline resolves without a frozen compatibility implementation", async () => {
   const latest = await resolveRulingVersionPipeline("latest");
-  const previousA = await resolveRulingVersionPipeline("previous");
-  const previousB = await resolveRulingVersionPipeline("previous");
   assert.equal(latest.effectiveRulingVersion, "latest");
   assert.equal(latest.legacyCompatibility, false);
   assert.deepEqual(latest.versionWarnings, []);
-  assert.equal(previousA.effectiveRulingVersion, "previous");
-  assert.equal(previousA.legacyCompatibility, true);
-  assert.deepEqual(previousA.versionWarnings, [PREVIOUS_RULING_WARNING]);
-  assert.equal(previousA.answerRagRulingQuestion, previousB.answerRagRulingQuestion);
-  assert.notEqual(previousA.answerRagRulingQuestion, latest.answerRagRulingQuestion);
+  assert.equal(typeof latest.answerRagRulingQuestion, "function");
 });
 
 test("versioned answer dispatch echoes the requested and effective version", async () => {
@@ -69,14 +46,4 @@ test("versioned answer dispatch echoes the requested and effective version", asy
   assert.equal(latest.rulingVersion, "latest");
   assert.equal(latest.legacyCompatibility, false);
   assert.deepEqual(latest.versionWarnings, []);
-
-  const previous = await answerRagRulingQuestionForVersion({
-    question: "",
-    rulingVersion: "previous",
-  });
-  assert.equal(previous.requestedRulingVersion, "previous");
-  assert.equal(previous.effectiveRulingVersion, "previous");
-  assert.equal(previous.rulingVersion, "previous");
-  assert.equal(previous.legacyCompatibility, true);
-  assert.deepEqual(previous.versionWarnings, [PREVIOUS_RULING_WARNING]);
 });

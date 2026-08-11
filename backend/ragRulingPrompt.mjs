@@ -46,6 +46,9 @@ const BATTLE_RESOLUTION_INSTRUCTIONS = Object.freeze([
 const MINIMAL_BATTLE_RESOLUTION_INSTRUCTION =
   "战斗题只按实际适用的检查点判断：伤害步骤开始时→里侧对象在规则规定时点翻开（如适用）→相关持续效果稳定→状态变化时重检攻击许可→仅在战斗继续时伤害计算；发动效果与永续效果分开，多攻击者逐分支回答，部分卡片Q&A不得覆盖整题。";
 
+const SCENARIO_PREMISE_INSTRUCTION =
+  "采用相似 Q&A 前必须核对 scenarioPremiseCompatibility 与 applicability frame。只有 compatible 表示资料完整覆盖本题所问阶段且关键前提等价；partial 表示漏掉本题的一部分目标或前提，conditional 表示来源带有题面未给出的额外限制，mismatch 表示目标或前提不等价。后三者都只能作为有明确边界的对照，禁止直接搬用结论。scenarioFacts 中 actor_permission（玩家是否被禁止操作）、operand_availability（合格对象／候选是否存在）、zone_capacity（区域容量）和 cost_payability（cost 能否支付）是不同事实维度，不能互相替代；还须按卡文区分必做与任意处理，并核对隐藏区域是否非空及内容能否依法验证。";
+
 export function buildRagRulingPrompt({
   userQuery,
   cardResolution = {},
@@ -175,7 +178,8 @@ export function buildRagRulingPromptBundle({
     "分析任何操作时使用同一套通用执行顺序：从卡文和题面建立带来源的初始状态；分别检查手续或发动前提；执行手续、cost 与每个效果步骤并记录实际移动及归因；每次状态变化后重算持续效果；在检查点收集诱发候选并保留对方响应分支。若手续或 cost 请求一次移动，但离场替代等卡片效果改变了最终移动，后续诱发条件必须按实际移动及最终归因判断，不能只沿用原手续或 cost 的名义。禁止根据卡名、FAQ 编号、题面暗示答案或历史错题模板补造缺失事实。",
     "替代处理发生时必须同时记录原操作的指代对象和替代操作实际影响的卡。卡文要求破坏／移动『那张卡』『那些卡』或对象卡时，替代效果改为破坏／移动另一张卡，并不自动代表原指代对象的操作成功；后续『然后』『若成功』『破坏了的卡』等条件仍须按原文的指代范围判断，除非官方资料明确把替代结果计入。也不要把『某个替代效果不能再次适用』误解为『最终没有发生破坏』，这两个命题必须分开判断。",
     "先绑定参与者角色：逐项写清每张卡的控制者、每个动作的执行者、‘自己/对方’分别指谁、被公开或被影响的是哪一方的手卡或场。相似 Q&A 若交换了控制者、动作主体或受影响玩家，只能作为相关资料，不能直接照搬结论。证据的 playerRoleCompatibility 为 mismatch 时，必须逐项读取 playerRoleMismatches，把它当作角色相反的对照资料，禁止采用其结论作为当前场景结论。",
-    "必须把发动合法性与效果处理分开：先以发动时状态检查全部必需对象、可执行后续召唤/处理及隐藏区域要求；发动合法后再逐步处理。若处理中条件变化导致后续步骤不能进行，要明确处理在哪一步结束，不得把处理时失败倒推成不能发动。",
+    SCENARIO_PREMISE_INSTRUCTION,
+    "必须把发动合法性与效果处理分开：先以发动时状态检查卡文明确要求的 cost、对象、发动前提及必做处理。对于写成『可以』的处理分支，不能只凭『任意』或『候选为空』自动推出可发动或不可发动；应结合效果整体结构、隐藏信息规则及同前提证据判断。若处理中条件变化导致后续步骤不能进行，要明确处理在哪一步结束，不得把处理时失败倒推成不能发动。",
     "卡文或官方资料明确列举适用类型时，默认按封闭集合解释；不得把未列举的仪式、融合、同调、超量、连接、解放、素材、cost、召唤手续等不同操作自行归为同类。只有另有原文明确扩张集合时才能扩张。",
     "效果要求在特殊召唤后继续进行融合、同调、超量、连接或其他召唤时，发动前先检查额外卡组是否至少存在一条在发动时可行的后续召唤路径；处理中再按实际新状态重算等级、属性、种族、区域与持续效果。若处理时已无可行路径，应说明前段已完成、后段不进行。",
     "较早步骤已经不合法时，结论应直接说明实际阻断原因，不要继续描述未发生的后续处理，也不要添加与当前场景无关的假设分支。",
@@ -257,6 +261,10 @@ export function selectAuthoritativeOfficialDirectCandidate({
       && candidate?.candidatePoolComplete === true)
     || certifiedQuestionSuperset
     || certifiedQuestionCardSuperset;
+  const scenarioPremiseCompatibility = candidate?.scenarioPremiseCompatibility || "unknown";
+  const scenarioPremiseAuthorityComplete = scenarioPremiseCompatibility === "compatible"
+    || (scenarioPremiseCompatibility === "unknown"
+      && candidate?.authoritativeSceneMatchReason === "raw_or_normalized_query");
   const multiBranchCoverageComplete = decisionScope?.multiBranch !== true
     || (candidate?.questionCardIdCoverage === 1
       && (candidate?.matchedQuestionCardIds || []).length >= 2
@@ -267,6 +275,7 @@ export function selectAuthoritativeOfficialDirectCandidate({
     && candidate?.type === "official_qa"
     && candidate?.authoritativeSceneMatch === true
     && sceneProvenanceComplete
+    && scenarioPremiseAuthorityComplete
     && multiBranchCoverageComplete
     && (exactQuestionCardSet || certifiedQuestionSuperset || certifiedQuestionCardSuperset)
     && completeIdentity
@@ -506,6 +515,16 @@ function limitEvidence(items = [], limit, textLimit, label, warnings) {
       playerRoleCompatibility: item.playerRoleCompatibility || "unknown",
       playerRoleMismatches: item.playerRoleMismatches || [],
       playerRoleComparableDimensions: item.playerRoleComparableDimensions || [],
+      scenarioPremiseCompatibility: item.scenarioPremiseCompatibility || "unknown",
+      scenarioPremiseConflicts: item.scenarioPremiseConflicts || [],
+      queryScenarioPremises: item.queryScenarioPremises || [],
+      evidenceScenarioPremises: item.evidenceScenarioPremises || [],
+      queryOnlyScenarioPremises: item.queryOnlyScenarioPremises || [],
+      evidenceOnlyScenarioPremises: item.evidenceOnlyScenarioPremises || [],
+      queryApplicabilityFrame: item.queryApplicabilityFrame || null,
+      evidenceApplicabilityFrame: item.evidenceApplicabilityFrame || null,
+      requestedTargetCoverage: item.requestedTargetCoverage || null,
+      scenarioFactCoverage: item.scenarioFactCoverage || null,
       subsumptionCandidatePoolComplete: item.subsumptionCandidatePoolComplete === true,
       semanticSubsumptionCertified: item.semanticSubsumptionCertified === true,
       semanticSubsumptionScoreMargin: Number(item.semanticSubsumptionScoreMargin || 0),
@@ -578,6 +597,28 @@ function buildCompactRagPrompt({ payload, maxPromptChars }) {
           : {}),
         ...(Number(item.questionCardIdCount || 0) > 0
           ? { questionCardIdCount: Number(item.questionCardIdCount) }
+          : {}),
+        scenarioPremiseCompatibility: item.scenarioPremiseCompatibility || "unknown",
+        ...((item.scenarioPremiseConflicts || []).length
+          ? { scenarioPremiseConflicts: item.scenarioPremiseConflicts }
+          : {}),
+        ...((item.queryScenarioPremises || []).length
+          ? { queryScenarioPremises: item.queryScenarioPremises }
+          : {}),
+        ...((item.evidenceScenarioPremises || []).length
+          ? { evidenceScenarioPremises: item.evidenceScenarioPremises }
+          : {}),
+        ...(item.queryApplicabilityFrame
+          ? { queryApplicabilityFrame: item.queryApplicabilityFrame }
+          : {}),
+        ...(item.evidenceApplicabilityFrame
+          ? { evidenceApplicabilityFrame: item.evidenceApplicabilityFrame }
+          : {}),
+        ...(item.requestedTargetCoverage
+          ? { requestedTargetCoverage: item.requestedTargetCoverage }
+          : {}),
+        ...(item.scenarioFactCoverage
+          ? { scenarioFactCoverage: item.scenarioFactCoverage }
           : {}),
         text: preserveTextEnds(String(item.text || ""), textLimit),
         sourceUrl: item.sourceUrl || "",
@@ -665,7 +706,8 @@ function buildCompactRagPrompt({ payload, maxPromptChars }) {
     "按通用状态执行顺序判断手续或发动前提、手续或cost、每步状态更新、持续效果重算、逐项处理与诱发检查点；严格区分区域、移动归因、对象资格与效果抗性。手续或cost请求的移动若被离场替代等卡片效果改变，后续诱发按实际移动和最终归因判断；同一步同时移动按原子批次处理。禁止按卡名或历史题模板补造事实。",
     "替代处理必须分别绑定原操作对象与替代操作实际影响的卡。要求破坏／移动『那张卡』『那些卡』或对象卡的步骤被替代后，不能仅因另一张卡实际被破坏／移动就认定原步骤成功；后续『然后／若成功』按卡文指代范围继续判断，除非官方资料明确另有规定。『替代效果不能适用』与『最终未发生破坏』也是两个不同命题。",
     "先绑定玩家角色：区分每张卡的控制者、动作执行者、受影响玩家与手牌所属者。交换了自己/对方或控制者的相似FAQ不能直接套用结论；playerRoleCompatibility=mismatch 的证据必须按 playerRoleMismatches 作为角色相反的对照资料处理。",
-    "发动合法性与效果处理必须分开。先按发动时状态检查必需对象和至少一条可行后续路径；支付cost后逐步更新状态并重算持续效果。处理中后续步骤变得不可行时，明确处理在哪一步结束，不得倒推为不能发动。",
+    SCENARIO_PREMISE_INSTRUCTION,
+    "发动合法性与效果处理必须分开。先按发动时状态检查明确要求的 cost、对象、发动前提与必做处理；任意处理分支是否要求已有可执行路径，必须依卡文结构、隐藏信息规则及同前提证据判断，不能由『任意』或『空候选』单独推出。支付 cost 后逐步更新状态；处理中后续步骤变得不可行时，不得倒推为不能发动。",
     "卡文或官方资料明确列举类型时按封闭集合解释，不得把未列举的仪式、融合、同调、超量、连接、解放、素材、cost或召唤手续自行归入同类。",
     "formalEngineProofs 中 trusted=true 的 TRUE/FALSE 是逐查询强约束；UNKNOWN 不是 FALSE，不能据此回答不能。",
     "resolvedCards 是已匹配卡片，effectText 是其效果依据；不得把已有字段说成未确定。任何非 formal 的状态轨迹都必须由最终模型依据原始文本重新验证。",
@@ -681,6 +723,24 @@ function buildCompactRagPrompt({ payload, maxPromptChars }) {
   if (prompt.length <= maxChars) return prompt;
 
   const evidenceIds = bucketOrder.flatMap((bucket) => evidence[bucket].map((item) => ({ id: item.id, type: item.type, title: item.title })));
+  const officialEvidenceBoundaries = [
+    ...evidence.officialQaDirectCandidates,
+    ...evidence.officialQaRelated,
+  ].map((item) => compactOfficialEvidenceBoundary(item, {
+    textLimit: maxChars >= 12000 ? 260 : 180,
+    factLimit: maxChars >= 12000 ? 8 : 5,
+    premiseLimit: maxChars >= 12000 ? 12 : 8,
+  }));
+  const supportingEvidenceBoundaries = [
+    ["formalEngineProofs", evidence.formalEngineProofs],
+    ["userProvidedCardTexts", evidence.userProvidedCardTexts],
+    ["cardTexts", evidence.cardTexts],
+    ["rawRelatedEvidence", evidence.rawRelatedEvidence],
+    ["faqRelated", evidence.faqRelated],
+  ].flatMap(([bucket, items]) => items.map((item) => compactSupportingEvidenceBoundary(item, {
+    bucket,
+    textLimit: maxChars >= 12000 ? 260 : 180,
+  })));
   prompt = render({
     userQuery: String(payload.userQuery || "").slice(0, 160),
     playerRoleBindings: compactPlayerRoleBindings(payload.playerRoleBindings, 3),
@@ -722,10 +782,34 @@ function buildCompactRagPrompt({ payload, maxPromptChars }) {
     ),
     rulingIntents: payload.rulingIntents || {},
     allowedEvidenceIds: allowedEvidenceIds.slice(0, 10),
-    evidenceIds: evidenceIds.slice(0, 10),
+    officialEvidenceBoundaries,
+    supportingEvidenceBoundaries,
+    evidenceIds: evidenceIds.slice(0, 10).map((item) => ({
+      id: item.id,
+      type: item.type,
+      title: truncatePromptText(item.title, 100),
+    })),
   });
   if (prompt.length <= maxChars) return prompt;
 
+  const minimalOfficialEvidenceBoundaries = officialEvidenceBoundaries.map((item) => ({
+    ...item,
+    title: truncatePromptText(item.title, 60),
+    text: preserveTextEnds(item.text, 240),
+    queryScenarioPremises: (item.queryScenarioPremises || []).slice(0, 5),
+    evidenceScenarioPremises: (item.evidenceScenarioPremises || []).slice(0, 5),
+    queryApplicabilityFrame: compactApplicabilityFrame(item.queryApplicabilityFrame, 3),
+    evidenceApplicabilityFrame: compactApplicabilityFrame(item.evidenceApplicabilityFrame, 3),
+  }));
+  const minimalSupportingEvidenceBoundaries = supportingEvidenceBoundaries.map((item) => ({
+    ...item,
+    title: truncatePromptText(item.title, 60),
+    text: preserveTextEnds(item.text, 120),
+  }));
+  const minimalAllowedEvidenceIds = [...new Set([
+    ...minimalOfficialEvidenceBoundaries.map((item) => String(item.id || "").trim()),
+    ...allowedEvidenceIds,
+  ].filter(Boolean))].slice(0, 10);
   const minimalPrompt = [
     "仅依据上下文输出规定字段的裁定 JSON；不得编造证据。usedEvidence 的 id 必须非空并逐字取自 allowedEvidenceIds；没有引用则为 []。",
     ...(hasPrintedTextReferenceIntent(payload)
@@ -772,13 +856,86 @@ function buildCompactRagPrompt({ payload, maxPromptChars }) {
         { candidateLimit: 1 },
       ),
       rulingIntents: payload.rulingIntents || {},
-      allowedEvidenceIds: allowedEvidenceIds.slice(0, 3),
+      allowedEvidenceIds: minimalAllowedEvidenceIds,
+      officialEvidenceBoundaries: minimalOfficialEvidenceBoundaries,
       evidenceIds: evidenceIds.slice(0, 3).map((item) => item.id),
+      supportingEvidenceBoundaries: minimalSupportingEvidenceBoundaries,
     }),
   ].join("\n");
   return minimalPrompt.length <= maxChars
     ? minimalPrompt
     : minimalPrompt.slice(0, maxChars);
+}
+
+function compactSupportingEvidenceBoundary(item = {}, {
+  bucket = "supportingEvidence",
+  textLimit = 180,
+} = {}) {
+  return {
+    id: item.id,
+    type: item.type,
+    bucket,
+    title: truncatePromptText(item.title, 120),
+    text: preserveTextEnds(
+      String(item.text || item.officialText || item.explanation || item.claimText || ""),
+      textLimit,
+    ),
+  };
+}
+
+function compactOfficialEvidenceBoundary(item = {}, {
+  textLimit = 180,
+  factLimit = 5,
+  premiseLimit = 8,
+} = {}) {
+  const conflicts = (item.scenarioPremiseConflicts || []).slice(0, 4).map((conflict) => ({
+    family: conflict.family || "",
+    reason: conflict.reason || "",
+    ...(conflict.queryFact ? { queryFact: conflict.queryFact } : {}),
+    ...((conflict.evidenceFacts || []).length
+      ? { evidenceFacts: conflict.evidenceFacts.slice(0, factLimit) }
+      : {}),
+    ...((conflict.queryTargets || []).length
+      ? { queryTargets: conflict.queryTargets.slice(0, factLimit) }
+      : {}),
+    ...((conflict.evidenceTargets || []).length
+      ? { evidenceTargets: conflict.evidenceTargets.slice(0, factLimit) }
+      : {}),
+  }));
+  return {
+    id: item.id,
+    type: item.type,
+    title: truncatePromptText(item.title, 120),
+    isDirect: Boolean(item.isDirect),
+    matchLevel: item.matchLevel || "",
+    scenarioPremiseCompatibility: item.scenarioPremiseCompatibility || "unknown",
+    ...(conflicts.length ? { scenarioPremiseConflicts: conflicts } : {}),
+    queryScenarioPremises: (item.queryScenarioPremises || []).slice(0, premiseLimit),
+    evidenceScenarioPremises: (item.evidenceScenarioPremises || []).slice(0, premiseLimit),
+    queryApplicabilityFrame: compactApplicabilityFrame(item.queryApplicabilityFrame, factLimit),
+    evidenceApplicabilityFrame: compactApplicabilityFrame(item.evidenceApplicabilityFrame, factLimit),
+    text: preserveTextEnds(
+      String(item.text || item.officialText || item.explanation || ""),
+      textLimit,
+    ),
+  };
+}
+
+function compactApplicabilityFrame(frame, factLimit = 5) {
+  if (!frame || typeof frame !== "object") return null;
+  return {
+    schema: frame.schema || "evidence-applicability-frame/v2",
+    requestedTargets: (frame.requestedTargets || []).slice(0, 4).map((target) => ({
+      stage: target.stage || "",
+      operation: target.operation || "",
+    })),
+    scenarioFacts: (frame.scenarioFacts || []).slice(0, factLimit).map((fact) => ({
+      operation: fact.operation || "",
+      dimension: fact.dimension || "",
+      state: fact.state || "",
+      scope: fact.scope || "unspecified",
+    })),
+  };
 }
 
 function detectPrintedTextReferenceIntent({

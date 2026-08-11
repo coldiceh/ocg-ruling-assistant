@@ -180,6 +180,7 @@ test("ablation case ids stay out of production answer code", async () => {
   const productionFiles = [
     "../src/app.js",
     "../backend/server.mjs",
+    "../backend/publicAnswerService.mjs",
     "../backend/ragRulingPipeline.mjs",
     "../backend/ragRulingPrompt.mjs",
     "../api/answer.js",

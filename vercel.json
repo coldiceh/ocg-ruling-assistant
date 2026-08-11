@@ -15,9 +15,6 @@
     "api/admin-model-lab.js": {
       "maxDuration": 300,
       "includeFiles": "data/legacy-lua-semantic-cache-v2/**"
-    },
-    "api/admin-frozen-deepseek.js": {
-      "maxDuration": 300
     }
   }
 }
