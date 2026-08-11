@@ -100,6 +100,144 @@ test("local card id and text do not require a Baige request only to fill sourceU
   assert.match(evidence.cardTexts[0].text, /可以发动/u);
 });
 
+test("a rich official QA duplicated in records and qaRecords is canonicalized once outside raw related evidence", async () => {
+  const card = {
+    id: "71001",
+    name: "合成法术机",
+    effectText: "①：满足条件时可以发动。",
+  };
+  const richRecord = {
+    id: "qa-synthetic-duplicate",
+    stableId: "qa-synthetic-duplicate",
+    recordType: "qa",
+    question: "「合成法术机」的效果可以发动吗？",
+    rawDetailedQuestion: "「合成法术机」的效果可以发动吗？",
+    answer: "RICH_RECORD_MARKER：可以发动。",
+    cardIds: [card.id],
+    questionCardIds: [card.id],
+  };
+  const compactRecord = {
+    ...richRecord,
+    rawDetailedQuestion: "",
+    answer: "COMPACT_RECORD_MARKER：可以发动。",
+  };
+
+  const evidence = await retrieveRagEvidence({
+    userQuery: richRecord.question,
+    cardResolution: {
+      resolvedCards: [card],
+      unresolvedMentions: [],
+      ambiguousMentions: [],
+      userProvidedCardTexts: [],
+    },
+    cards: [card],
+    records: [richRecord],
+    qaRecords: [compactRecord],
+  });
+
+  assert.equal(evidence.debug.scopedRecordCounts.officialQa, 1);
+  assert.equal(evidence.debug.scopedRecordCounts.rawRelated, 0);
+  assert.equal(evidence.officialQaDirectCandidates[0]?.id, richRecord.id);
+  assert.match(evidence.officialQaDirectCandidates[0]?.fullText || "", /RICH_RECORD_MARKER/u);
+  assert.doesNotMatch(evidence.officialQaDirectCandidates[0]?.fullText || "", /COMPACT_RECORD_MARKER/u);
+  assert.ok(evidence.rawRelatedEvidence.every((item) => item.id !== richRecord.id));
+});
+
+test("rawDetailedQuestion card ids expose and filter an incidental multi-card QA example", async () => {
+  const cards = [
+    { id: "72001", name: "合成触发甲", effectText: "满足条件时处理。" },
+    { id: "72002", name: "合成触发乙", effectText: "满足条件时处理。" },
+  ];
+  const record = {
+    id: "qa-synthetic-incidental-multi-card",
+    recordType: "qa",
+    title: "多个对象同时出现时的排列",
+    question: "多个对象同时出现时怎样排列？",
+    rawDetailedQuestion: "「<<72001>>」「<<72991>>」「<<72992>>」同时出现时，它们怎样排列？",
+    answer: "按照该合成场景所写的顺序处理。",
+    cardIds: ["72001", "72991", "72992"],
+  };
+  const normalized = normalizeInjectedData({ cards, records: [], qaRecords: [record] });
+
+  assert.deepEqual(normalized.qaRecords[0].questionCardIds, ["72001", "72991", "72992"]);
+
+  const matches = searchOfficialQaEvidence({
+    question: "「合成触发甲」「合成触发乙」同时出现时，它们怎样排列？",
+    records: normalized.qaRecords,
+    resolvedCards: cards,
+  });
+  const candidate = matches.all.find((item) => item.id === record.id);
+  assert.ok(candidate);
+  assert.ok(candidate.score >= 0.68);
+  assert.deepEqual(candidate.matchedQuestionCardIds, ["72001"]);
+  assert.equal(candidate.questionCardIdCount, 3);
+
+  const evidence = await retrieveRagEvidence({
+    userQuery: "「合成触发甲」「合成触发乙」同时出现时，它们怎样排列？",
+    cardResolution: {
+      resolvedCards: cards,
+      unresolvedMentions: [],
+      ambiguousMentions: [],
+      userProvidedCardTexts: [],
+    },
+    cards,
+    records: [],
+    qaRecords: [record],
+  });
+
+  assert.ok(evidence.officialQaDirectCandidates.every((item) => item.id !== record.id));
+  assert.ok(evidence.officialQaRelated.every((item) => item.id !== record.id));
+  assert.ok(evidence.rawRelatedEvidence.every((item) => item.id !== record.id));
+});
+
+test("card FAQs cannot consume the official QA matcher top-N budget", async () => {
+  const card = {
+    id: "73001",
+    name: "合成边界兽",
+    effectText: "①：满足条件时可以发动。",
+  };
+  const question = "「合成边界兽」的效果可以发动吗？";
+  const qaRecord = {
+    id: "qa-synthetic-top-n",
+    recordType: "qa",
+    question,
+    answer: "QA_TOP_N_MARKER：可以发动。",
+    cardIds: [card.id],
+    questionCardIds: [card.id],
+  };
+  const faqRecords = Array.from({ length: 30 }, (_unused, index) => ({
+    id: `card-faq-synthetic-${index}`,
+    recordType: "card-faq",
+    title: question,
+    question,
+    answer: `FAQ_MARKER_${index}`,
+    cardIds: [card.id],
+    questionCardIds: [card.id],
+  }));
+
+  const evidence = await retrieveRagEvidence({
+    userQuery: question,
+    cardResolution: {
+      resolvedCards: [card],
+      unresolvedMentions: [],
+      ambiguousMentions: [],
+      userProvidedCardTexts: [],
+    },
+    cards: [card],
+    records: [],
+    qaRecords: [...faqRecords, qaRecord],
+    maxPerBucket: 1,
+  });
+
+  assert.equal(evidence.debug.scopedRecordCounts.officialQa, 1);
+  assert.equal(evidence.debug.scopedRecordCounts.qa, 1);
+  assert.equal(evidence.debug.scopedRecordCounts.faq, faqRecords.length);
+  assert.equal(evidence.officialQaDirectCandidates[0]?.id, qaRecord.id);
+  assert.match(evidence.officialQaDirectCandidates[0]?.fullText || "", /QA_TOP_N_MARKER/u);
+  assert.equal(evidence.faqRelated.length, 1);
+  assert.ok(evidence.faqRelated.every((item) => item.recordType === "card-faq"));
+});
+
 async function writeJson(path, value) {
   await writeFile(path, `${JSON.stringify(value)}\n`, "utf8");
 }

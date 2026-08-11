@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  extractAnswerText,
   extractOfficialQaAnswer,
   extractRelevantOfficialQaAnswerExcerpt,
 } from "../backend/officialQaAnswerExtractor.mjs";
@@ -59,6 +60,42 @@ test("official extractor removes a repeated truncated title between the question
   });
 
   assert.equal(extracted.answerText, "可以送去墓地并特殊召唤。这次特殊召唤不是融合召唤。");
+});
+
+test("structured conclusion takes priority over a fallback text containing a positive question", () => {
+  const answerText = extractAnswerText({
+    question: "这个效果可以发动吗？",
+    text: "这个效果可以发动吗？",
+    conclusion: "不能发动。",
+  });
+
+  assert.equal(answerText, "不能发动。");
+});
+
+test("legacy combined text removes heading and detailed question before extracting the answer", () => {
+  const answerText = extractAnswerText({
+    title: "发动手续",
+    question: "发动手续",
+    rawQuestion: "发动手续",
+    rawDetailedQuestion: "满足条件时，这个效果可以发动吗？",
+    text: "发动手续\n满足条件时，这个效果可以发动吗？\n不能发动。",
+  });
+
+  assert.equal(answerText, "不能发动。");
+});
+
+test("question-only legacy text does not leak positive wording into an official verdict", () => {
+  const extracted = extractOfficialQaAnswer({
+    id: "qa-question-only",
+    question: "这个效果可以发动吗？",
+    rawDetailedQuestion: "这个效果可以发动吗？",
+    title: "这个效果可以发动吗？",
+    text: "这个效果可以发动吗？",
+  }, { questionType: "can_activate" });
+
+  assert.equal(extracted.answerText, "");
+  assert.equal(extracted.verdict, "unknown");
+  assert.equal(extracted.explicit, false);
 });
 
 test("official answer excerpt removes a dense following-card catalogue but keeps the ruling", () => {

@@ -20,29 +20,58 @@ export function extractOfficialQaAnswer(record = {}, { questionType } = {}) {
 }
 
 export function extractAnswerText(record = {}) {
-  if (record.answer) return clean(record.answer);
-  if (record.officialAnswer) return clean(record.officialAnswer);
-  const text = clean(record.text || record.conclusion || record.officialText || "");
-  if (!text) return "";
-  const question = clean(record.question || "");
-  if (question) {
-    const index = text.indexOf(question);
-    if (index >= 0) return clean(text.slice(index + question.length));
+  for (const structuredAnswer of [record.answer, record.officialAnswer, record.conclusion]) {
+    const value = clean(structuredAnswer);
+    if (value) return value;
   }
+
+  const text = clean(record.text || record.officialText || "");
+  if (!text) return "";
+
+  const withoutKnownQuestionMaterial = stripLeadingQuestionMaterial(text, record);
+  if (withoutKnownQuestionMaterial !== text) {
+    return withoutKnownQuestionMaterial;
+  }
+
   const questionEnd = Math.max(text.lastIndexOf("?"), text.lastIndexOf("？"));
   if (questionEnd >= 0) {
-    const tail = removeRepeatedTitlePrefix(text.slice(questionEnd + 1), record.title);
+    const tail = stripLeadingQuestionMaterial(text.slice(questionEnd + 1), record);
     const marker = findAnswerMarker(tail);
     return clean(marker >= 0 ? tail.slice(marker) : tail);
   }
-  return clean(record.conclusion || text);
+  return text;
 }
 
-function removeRepeatedTitlePrefix(value, title) {
-  const tail = clean(value);
-  const titleText = clean(title);
-  if (!tail || !titleText || !tail.startsWith(titleText)) return tail;
-  return clean(tail.slice(titleText.length));
+function stripLeadingQuestionMaterial(value, record = {}) {
+  let remainder = clean(value);
+  if (!remainder) return "";
+
+  const knownSegments = [...new Set([
+    record.question,
+    record.rawQuestion,
+    record.detailedQuestion,
+    record.rawDetailedQuestion,
+    record.title,
+  ].map(clean).filter(Boolean))]
+    .sort((left, right) => right.length - left.length);
+
+  // A legacy lightweight index may contain several duplicated heading and
+  // detailed-question fields before the answer.  Remove only leading known
+  // segments so matching words that legitimately occur in an answer survive.
+  for (let pass = 0; pass <= knownSegments.length; pass += 1) {
+    const segment = knownSegments.find((candidate) => isLeadingSegment(remainder, candidate));
+    if (!segment) break;
+    remainder = clean(remainder.slice(segment.length).replace(/^[\s:：|\-–—]+/u, ""));
+  }
+
+  return remainder;
+}
+
+function isLeadingSegment(value, segment) {
+  if (!value.startsWith(segment)) return false;
+  if (value.length === segment.length) return true;
+  if (/[?？.!。！…]$/u.test(segment)) return true;
+  return /^[\s:：|\-–—]/u.test(value.slice(segment.length));
 }
 
 /**

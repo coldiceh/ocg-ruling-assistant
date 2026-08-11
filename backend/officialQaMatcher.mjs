@@ -756,7 +756,9 @@ function playerRoleCardKey(card = {}) {
 }
 
 function recordQuestionText(record = {}) {
+  if (record.rawDetailedQuestion) return String(record.rawDetailedQuestion);
   if (record.question) return String(record.question);
+  if (record.rawQuestion) return String(record.rawQuestion);
   const text = String(record.text || "");
   const marker = Math.max(text.indexOf("?"), text.indexOf("？"));
   if (marker >= 0) return text.slice(0, marker + 1).replace(String(record.title || ""), "").trim() || String(record.title || "");
@@ -973,6 +975,7 @@ function officialQaRecordFeatures(record = {}) {
     recordQuestionIds: new Set([
       ...(record.questionCardIds || []),
       ...extractInlineCardIds(record.rawQuestion),
+      ...extractInlineCardIds(record.rawDetailedQuestion),
       ...extractInlineCardIds(questionText),
     ].map(normalizeId).filter(Boolean)),
     recordIdentityText: [record.title, text, ...(record.cards || [])].filter(Boolean).join(" "),

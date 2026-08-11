@@ -9,6 +9,7 @@ import {
   isAuthoritativeQaDetailSnapshot,
   isCompleteCardSnapshotRun,
   mergeCardQaDiscoveryIndex,
+  mergeQaIndexCumulatively,
   mergeRulingsCumulatively,
   normalizeCard,
   normalizeQa,
@@ -53,6 +54,20 @@ test("changed and recent QA IDs cannot be displaced by the all-card cap", () => 
   assert.equal(selected.changedSelectedCount, 1);
   assert.equal(selected.recentSelectedCount, 1);
   assert.equal(selected.truncatedCount, 5);
+});
+
+test("discovered QA missing from the lightweight index is refreshed before ordinary rotation", () => {
+  const selected = selectQaIdsForSync({
+    changedQaIds: [900],
+    recentQaIds: [901],
+    priorityQaIds: [902, 903],
+    cardQaIds: [904, 905],
+    coverageQaIds: [900, 901, 902, 903, 904, 905],
+    limit: 4,
+  });
+
+  assert.deepEqual(selected.ids, ["900", "901", "902", "903"]);
+  assert.equal(selected.prioritySelectedCount, 2);
 });
 
 test("card QA ranking prioritizes interactions referenced by multiple cards", () => {
@@ -182,6 +197,41 @@ test("a clean bounded snapshot prunes only unselected YGOResources QA details", 
     limit: 1,
     authoritative: false,
   }).length, records.length);
+});
+
+test("lightweight QA index survives detail rotation while non-QA records rebuild from the current snapshot", () => {
+  const previous = [
+    { id: "qa-retained", recordType: "qa", sourceId: "81001", sourceName: "YGOResources DB", answer: "Retained answer" },
+    { id: "qa-refreshed", recordType: "qa", sourceId: "81002", sourceName: "YGOResources DB", answer: "Old answer" },
+    { id: "card-faq-stale", recordType: "card-faq", answer: "Stale card FAQ" },
+  ];
+  const current = [
+    { id: "qa-refreshed", recordType: "qa", sourceId: "81002", sourceName: "YGOResources DB", answer: "Fresh answer" },
+    { id: "qa-new", recordType: "qa", sourceId: "81003", sourceName: "YGOResources DB", answer: "New answer" },
+    { id: "card-faq-current", recordType: "card-faq", answer: "Current card FAQ" },
+  ];
+
+  const merged = mergeQaIndexCumulatively(previous, current);
+
+  assert.equal(merged.find((record) => record.id === "qa-retained")?.answer, "Retained answer");
+  assert.equal(merged.find((record) => record.id === "qa-refreshed")?.answer, "Fresh answer");
+  assert.equal(merged.find((record) => record.id === "qa-new")?.answer, "New answer");
+  assert.equal(merged.some((record) => record.id === "card-faq-stale"), false);
+  assert.equal(merged.some((record) => record.id === "card-faq-current"), true);
+});
+
+test("lightweight QA index removes only QA explicitly withdrawn upstream", () => {
+  const previous = [
+    { id: "ygoresources-qa-retired", recordType: "qa", sourceId: "82001", sourceName: "YGOResources DB" },
+    { id: "ygoresources-qa-current", recordType: "qa", sourceId: "82002", sourceName: "YGOResources DB" },
+    { id: "independent-qa", recordType: "qa", sourceId: "82001", sourceName: "Independent Source" },
+  ];
+
+  const merged = mergeQaIndexCumulatively(previous, [], { removedQaIds: ["82001"] });
+
+  assert.equal(merged.some((record) => record.id === "ygoresources-qa-retired"), false);
+  assert.equal(merged.some((record) => record.id === "ygoresources-qa-current"), true);
+  assert.equal(merged.some((record) => record.id === "independent-qa"), true);
 });
 
 test("QA normalization falls back from translation placeholders to the Japanese original per field", () => {

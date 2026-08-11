@@ -24,37 +24,44 @@ export function buildQaIndex(rulings, cards) {
   }
   return (Array.isArray(rulings) ? rulings : [])
     .filter((record) => ["qa", "card-faq", "official-database", "official-response"].includes(record.recordType))
-    .map((record) => ({
-      id: record.id,
-      stableId: record.stableId,
-      recordType: record.recordType,
-      title: record.title || "",
-      question: record.question || "",
-      rawQuestion: record.rawQuestion || "",
-      rawDetailedQuestion: record.rawDetailedQuestion || "",
-      cards: record.cards || [],
-      cardIds: [...new Set([
-        ...(record.cardIds || []),
-        ...(record.cards || []).map((name) => aliasToId.get(normalizeIndexKey(name))).filter(Boolean),
-      ].map(String))],
-      questionCardIds: (record.questionCardIds || []).map(String),
-      keywords: record.keywords || [],
-      text: [
-        record.question,
-        record.rawDetailedQuestion && record.rawDetailedQuestion !== record.question
-          ? record.rawDetailedQuestion
-          : "",
-        record.title,
-        record.answer || record.conclusion,
-      ].filter(Boolean).join("\n").trim(),
-      sourceId: record.sourceId,
-      sourceRecordId: record.sourceRecordId,
-      sourceName: record.sourceName,
-      sourceUrl: record.sourceUrl,
-      questionLocale: record.questionLocale,
-      detailedQuestionLocale: record.detailedQuestionLocale,
-      answerLocale: record.answerLocale,
-    }));
+    .map((record) => {
+      const answer = record.answer || record.officialAnswer || record.conclusion || "";
+      const detailedQuestion = record.detailedQuestion || record.rawDetailedQuestion || "";
+      const preserveStructuredAnswer = ["qa", "official-database", "official-response"]
+        .includes(record.recordType);
+      return {
+        id: record.id,
+        stableId: record.stableId,
+        recordType: record.recordType,
+        title: record.title || "",
+        question: record.question || "",
+        rawQuestion: record.rawQuestion || "",
+        rawDetailedQuestion: record.rawDetailedQuestion || detailedQuestion,
+        ...(preserveStructuredAnswer ? { answer } : {}),
+        cards: record.cards || [],
+        cardIds: [...new Set([
+          ...(record.cardIds || []),
+          ...(record.cards || []).map((name) => aliasToId.get(normalizeIndexKey(name))).filter(Boolean),
+        ].map(String))],
+        questionCardIds: (record.questionCardIds || []).map(String),
+        keywords: record.keywords || [],
+        text: [
+          record.question,
+          detailedQuestion && detailedQuestion !== record.question
+            ? detailedQuestion
+            : "",
+          record.title,
+          answer,
+        ].filter(Boolean).join("\n").trim(),
+        sourceId: record.sourceId,
+        sourceRecordId: record.sourceRecordId,
+        sourceName: record.sourceName,
+        sourceUrl: record.sourceUrl,
+        questionLocale: record.questionLocale,
+        detailedQuestionLocale: record.detailedQuestionLocale,
+        answerLocale: record.answerLocale,
+      };
+    });
 }
 
 export function normalizeIndexKey(value) {

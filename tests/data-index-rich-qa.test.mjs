@@ -21,7 +21,20 @@ test("the QA index preserves heading, detailed scenario, identity and source fie
 
   assert.equal(indexed.question, "Short heading?");
   assert.equal(indexed.rawDetailedQuestion, "A detailed conditional scenario involving Example Card?");
+  assert.equal(indexed.answer, "Condition A has one result; condition B has another.");
   assert.deepEqual(indexed.questionCardIds, ["100"]);
   assert.equal(indexed.sourceId, "900");
   assert.match(indexed.text, /Condition A has one result/u);
+});
+
+test("the QA index keeps a structured official answer separate from positive question wording", () => {
+  const [indexed] = buildQaIndex([{
+    id: "qa-negative-answer",
+    recordType: "qa",
+    title: "Activation question",
+    question: "Can this operation be performed?",
+    officialAnswer: "No, it cannot be performed.",
+  }], []);
+
+  assert.equal(indexed.answer, "No, it cannot be performed.");
 });
