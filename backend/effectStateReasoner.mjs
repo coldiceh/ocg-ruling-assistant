@@ -90,10 +90,15 @@ function semanticCandidateScore(candidate = {}) {
   const covered = claims.filter((claim) => claim?.covered === true).length;
   const uncovered = Array.isArray(coverage.uncoveredClaimIds) ? coverage.uncoveredClaimIds.length : claims.length;
   const ambiguous = Array.isArray(coverage.ambiguousClaimIds) ? coverage.ambiguousClaimIds.length : 0;
-  const executable = candidate.status === "resolved" && candidate.complete === true;
+  // Authority gating may deliberately demote an otherwise completed local
+  // diagnostic. Candidate arbitration compares that pre-boundary execution;
+  // the authority bonus below still requires the current trusted state.
+  const diagnosticStatus = candidate.originalStatus ?? candidate.status;
+  const diagnosticComplete = candidate.originalComplete ?? candidate.complete;
+  const executable = diagnosticStatus === "resolved" && diagnosticComplete === true;
   return (executable && coverage.complete === true ? 10_000 : 0)
     + (executable ? 1_000 : 0)
-    + (executable && candidate.authoritative === true ? 200 : 0)
+    + (candidate.status === "resolved" && candidate.complete === true && candidate.authoritative === true ? 200 : 0)
     + (covered * 20)
     - (uncovered * 10)
     - (ambiguous * 20);

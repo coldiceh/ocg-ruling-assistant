@@ -265,8 +265,9 @@ function scoreRecord({
 }) {
   const {
     questionText,
-    normalizedRecordQuestion,
-    normalizedRecordQuestionSkeleton,
+    scenarioQuestionText,
+    normalizedRecordQuestionVariants,
+    normalizedRecordQuestionSkeletonVariants,
     normalizedRecordText,
     evidenceType,
     evidencePhrases,
@@ -279,8 +280,8 @@ function scoreRecord({
     recordPlayerRoleContext(record, questionText),
     { cards: resolvedCards },
   );
-  const evidenceMultiBranchQuery = classifyMultiEntityDecisionScope(questionText).multiBranch;
-  const scenarioPremiseComparison = compareEvidenceScenarioPremises(query, questionText);
+  const evidenceMultiBranchQuery = classifyMultiEntityDecisionScope(scenarioQuestionText).multiBranch;
+  const scenarioPremiseComparison = compareEvidenceScenarioPremises(query, scenarioQuestionText);
   const scenarioPremiseAuthorityCompatible = scenarioPremiseComparison.compatibility === "compatible";
   const scenarioPremiseRawExactCompatible = scenarioPremiseAuthorityCompatible
     || scenarioPremiseComparison.compatibility === "unknown";
@@ -289,13 +290,22 @@ function scoreRecord({
     evidencePlayerRoleSignature,
   );
   const typeCompatible = questionTypeCompatible(queryType, evidenceType);
-  const exactNormalized = normalizedQuery.length >= 8 && normalizedRecordQuestion === normalizedQuery;
+  const exactNormalized = normalizedQuery.length >= 8
+    && normalizedRecordQuestionVariants.includes(normalizedQuery);
   const exactSkeleton = normalizedQuerySkeleton.length >= 8
-    && normalizedRecordQuestionSkeleton === normalizedQuerySkeleton;
-  const containment = containmentScore(normalizedQuery, normalizedRecordQuestion || normalizedRecordText);
-  const similarity = diceSimilarity(normalizedQuery, normalizedRecordQuestion || normalizedRecordText.slice(0, normalizedQuery.length * 2));
-  const skeletonContainment = containmentScore(normalizedQuerySkeleton, normalizedRecordQuestionSkeleton);
-  const skeletonSimilarity = diceSimilarity(normalizedQuerySkeleton, normalizedRecordQuestionSkeleton);
+    && normalizedRecordQuestionSkeletonVariants.includes(normalizedQuerySkeleton);
+  const containment = Math.max(...normalizedRecordQuestionVariants.map(
+    (surface) => containmentScore(normalizedQuery, surface || normalizedRecordText),
+  ));
+  const similarity = Math.max(...normalizedRecordQuestionVariants.map(
+    (surface) => diceSimilarity(normalizedQuery, surface || normalizedRecordText.slice(0, normalizedQuery.length * 2)),
+  ));
+  const skeletonContainment = Math.max(...normalizedRecordQuestionSkeletonVariants.map(
+    (surface) => containmentScore(normalizedQuerySkeleton, surface),
+  ));
+  const skeletonSimilarity = Math.max(...normalizedRecordQuestionSkeletonVariants.map(
+    (surface) => diceSimilarity(normalizedQuerySkeleton, surface),
+  ));
   const phraseHits = queryPhrases.filter((phrase) => evidencePhrases.includes(phrase));
   const semanticHits = queryConcepts.filter((concept) => evidenceConcepts.includes(concept));
   const semanticScore = setDiceSimilarity(queryConcepts, evidenceConcepts);
@@ -306,7 +316,7 @@ function scoreRecord({
     ? distinctiveSemanticHits.length / distinctiveQueryConcepts.length
     : 0;
   const queryEffectNumbers = extractEffectNumbers(query);
-  const evidenceEffectNumbers = extractEffectNumbers(questionText);
+  const evidenceEffectNumbers = extractEffectNumbers(scenarioQuestionText);
   const effectNumberCompatible = !queryEffectNumbers.length
     || !evidenceEffectNumbers.length
     || queryEffectNumbers.some((number) => evidenceEffectNumbers.includes(number));
@@ -756,13 +766,32 @@ function playerRoleCardKey(card = {}) {
 }
 
 function recordQuestionText(record = {}) {
-  if (record.rawDetailedQuestion) return String(record.rawDetailedQuestion);
   if (record.question) return String(record.question);
   if (record.rawQuestion) return String(record.rawQuestion);
+  if (record.rawDetailedQuestion) return String(record.rawDetailedQuestion);
   const text = String(record.text || "");
   const marker = Math.max(text.indexOf("?"), text.indexOf("？"));
   if (marker >= 0) return text.slice(0, marker + 1).replace(String(record.title || ""), "").trim() || String(record.title || "");
   return String(record.title || "");
+}
+
+function recordQuestionSurfaces(record = {}) {
+  return [...new Set([
+    record.question,
+    record.rawQuestion,
+    record.rawDetailedQuestion,
+    record.title,
+    recordQuestionText(record),
+  ].map((value) => String(value || "").trim()).filter(Boolean))];
+}
+
+function recordScenarioQuestionText(record = {}) {
+  return String(
+    record.rawDetailedQuestion
+      || record.question
+      || record.rawQuestion
+      || recordQuestionText(record),
+  );
 }
 
 function recordText(record = {}) {
@@ -955,16 +984,31 @@ function officialQaRecordFeatures(record = {}) {
     if (cached) return cached;
   }
   const questionText = recordQuestionText(record);
+  const questionSurfaces = recordQuestionSurfaces(record);
+  const scenarioQuestionText = recordScenarioQuestionText(record);
   const text = recordText(record);
+  const normalizedRecordQuestionVariants = questionSurfaces
+    .map(normalizeOfficialQaQuery)
+    .filter(Boolean);
+  const normalizedRecordQuestionSkeletonVariants = questionSurfaces
+    .map(normalizeOfficialQaSkeleton)
+    .filter(Boolean);
   const features = {
     questionText,
-    normalizedRecordQuestion: normalizeOfficialQaQuery(questionText),
-    normalizedRecordQuestionSkeleton: normalizeOfficialQaSkeleton(questionText),
+    scenarioQuestionText,
+    normalizedRecordQuestion: normalizedRecordQuestionVariants[0] || "",
+    normalizedRecordQuestionVariants: normalizedRecordQuestionVariants.length
+      ? normalizedRecordQuestionVariants
+      : [""],
+    normalizedRecordQuestionSkeleton: normalizedRecordQuestionSkeletonVariants[0] || "",
+    normalizedRecordQuestionSkeletonVariants: normalizedRecordQuestionSkeletonVariants.length
+      ? normalizedRecordQuestionSkeletonVariants
+      : [""],
     normalizedRecordText: normalizeOfficialQaQuery(text),
-    evidenceType: classifyOfficialQaQuestionType(questionText || text),
+    evidenceType: classifyOfficialQaQuestionType(scenarioQuestionText || questionText || text),
     evidencePhrases: extractOfficialQaEffectPhrases(text),
     evidenceConcepts: extractOfficialQaSemanticConcepts(
-      [questionText, record.rawDetailedQuestion].filter(Boolean).join("\n") || text,
+      questionSurfaces.join("\n") || text,
     ),
     recordIds: new Set([
       record.cardId,

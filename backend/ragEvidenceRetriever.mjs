@@ -271,14 +271,14 @@ export async function retrieveRagEvidence({
     // Letting QA records re-enter through the generic related bucket bypasses
     // the applicability and multi-card-scene filters below.
     records: scopedRecordBuckets.qa,
-    resolvedCards: retrievalCards,
+    resolvedCards: effectiveQaIdentityCards,
     mentionQueries,
     deterministicRuleQueries,
     supplementalRuleQueries: effectiveSupplementalRuleQueries,
-    allowNoCardMatch: retrievalCards.length === 0,
+    allowNoCardMatch: effectiveQaIdentityCards.length === 0,
   }).map((record) => officialQaNumericId(record)).filter(Boolean);
   const localCandidateQaIds = dedupeBy(
-    retrievalCards.length
+    effectiveQaIdentityCards.length
       ? [...semanticCandidateQaIds, ...lexicalCandidateQaIds]
       : [...lexicalCandidateQaIds, ...semanticCandidateQaIds],
     (value) => String(value),
@@ -289,7 +289,7 @@ export async function retrieveRagEvidence({
   if (
     !localOfficialMatches.exact.length
     && liveQaEnabled
-    && (retrievalCards.length >= 1 || localCandidateQaIds.length)
+    && (effectiveQaIdentityCards.length >= 1 || localCandidateQaIds.length)
   ) {
     liveOfficialQa = await retrieveLiveOfficialQa({
       resolvedCards: effectiveQaIdentityCards,
@@ -327,7 +327,10 @@ export async function retrieveRagEvidence({
     : localOfficialMatches;
   timingsMs.officialQa = Date.now() - stageStartedAt;
   const officialQaDirectCandidates = officialMatches.exact
-    .filter((match) => isOfficialQaRecord(match.record))
+    .filter((match) => (
+      isOfficialQaRecord(match.record)
+      && !hasSevereQuestionIdentityMismatch(match, effectiveQaIdentityCards.length)
+    ))
     .map((match) => evidenceFromOfficialMatch(match, "official_qa", limits.maxEvidenceTextChars, retrievalWarnings))
     .slice(0, limits.maxOfficialQa);
   const playerRoleMismatchCount = officialMatches.all.filter(
@@ -352,13 +355,20 @@ export async function retrieveRagEvidence({
   const usefulScopedOfficialMatches = officialMatches.all.filter((match) => (
       isOfficialQaRecord(match.record)
       && isUsefulOfficialRelatedMatch(match)
-      && !isIncidentalMultiCardExampleMatch(match, retrievalCards.length)
+      && !isIncidentalMultiCardExampleMatch(match, effectiveQaIdentityCards.length)
     ));
   const prioritizedScopedOfficialMatches = reservePerBranchOfficialEvidence(
     usefulScopedOfficialMatches,
     limits.maxRelatedEvidence,
   );
-  const officialQaRelatedSource = dedupeBy([
+  const bestGlobalMechanismOfficialQaSource = bestEvidencePerMechanism(
+    globalMechanismOfficialQaSource,
+  );
+  const combinedOfficialQaRelatedSource = dedupeBy([
+    // Put the single best representative of each detected mechanism first for
+    // stable-id deduplication so its provenance label survives. The reservation
+    // step below moves only a bounded subset into the visible budget.
+    ...bestGlobalMechanismOfficialQaSource,
     // `all` is globally ranked, with complete-scene coverage ahead of partial
     // branches. Reserve at most one best source per uncovered branch inside the
     // final related-evidence budget, then retain the matcher order for every
@@ -368,17 +378,20 @@ export async function retrieveRagEvidence({
     // A card-scoped pass cannot find an official ruling for another card that
     // instantiates the same rule mechanism. Strongly matched global analogues
     // remain useful fallback evidence, but can never become a direct ruling.
-    ...globalMechanismOfficialQaSource,
     ...rankRecordsWithSupplementalQueries({
       userQuery,
       records: scopedRecordBuckets.qa,
-      resolvedCards: retrievalCards,
+      resolvedCards: effectiveQaIdentityCards,
       mentionQueries,
       deterministicRuleQueries,
       supplementalRuleQueries: effectiveSupplementalRuleQueries,
-      allowNoCardMatch: retrievalCards.length === 0 && normalizedRuleQueries.length > 0,
-    }).filter((record) => !isIncidentalMultiCardExampleRecord(record, retrievalCards.length)),
+      allowNoCardMatch: effectiveQaIdentityCards.length === 0 && normalizedRuleQueries.length > 0,
+    }).filter((record) => !isIncidentalMultiCardExampleRecord(record, effectiveQaIdentityCards.length)),
   ], (item) => stableRecordKey(item?.record || item));
+  const officialQaRelatedSource = reserveMechanismEvidence(
+    combinedOfficialQaRelatedSource,
+    limits.maxRelatedEvidence,
+  );
   const officialQaRelated = officialQaRelatedSource
     .map((item) => item.record
       ? evidenceFromOfficialMatch(item, "related", limits.maxEvidenceTextChars, retrievalWarnings)
@@ -1185,7 +1198,57 @@ function officialQaNumericId(record = {}) {
 function isUsefulOfficialRelatedMatch(match = {}) {
   return match.matchLevel === "official_qa_exact"
     || (match.matchLevel === "official_qa_near" && Number(match.score || 0) >= 0.68)
-    || Number(match.score || 0) >= 0.78;
+    || Number(match.score || 0) >= 0.78
+    || (
+      (match.matchedQuestionCardIds || []).length > 0
+      && match.typeCompatible === true
+      && match.playerRoleCompatibility !== "mismatch"
+      && match.scenarioPremiseCompatibility !== "mismatch"
+    );
+}
+
+function bestEvidencePerMechanism(items = []) {
+  const represented = new Set();
+  return (items || []).filter((item) => {
+    const mechanism = String(item?.retrievalSignals?.mechanismAnalogue || "").trim();
+    if (!mechanism || represented.has(mechanism)) return false;
+    represented.add(mechanism);
+    return true;
+  });
+}
+
+function reserveMechanismEvidence(items = [], limit = 1) {
+  const safeLimit = Math.max(1, Math.floor(Number(limit) || 1));
+  const mechanismSlotLimit = Math.max(1, Math.floor(safeLimit / 4));
+  const reserved = [];
+  const representedMechanisms = new Set();
+  for (const item of items || []) {
+    const record = item?.record || item;
+    const mechanism = String(record?.retrievalSignals?.mechanismAnalogue || "").trim();
+    if (!mechanism || representedMechanisms.has(mechanism)) continue;
+    representedMechanisms.add(mechanism);
+    reserved.push(item);
+    if (reserved.length >= mechanismSlotLimit) break;
+  }
+  if (!reserved.length) return items;
+
+  const reservedKeys = new Set(reserved.map((item) => stableRecordKey(item?.record || item)));
+  const remainingMechanisms = [];
+  const ordinary = [];
+  for (const item of items || []) {
+    const key = stableRecordKey(item?.record || item);
+    if (reservedKeys.has(key)) continue;
+    const record = item?.record || item;
+    if (record?.retrievalSignals?.mechanismAnalogue) remainingMechanisms.push(item);
+    else ordinary.push(item);
+  }
+  const ordinarySlots = Math.max(0, safeLimit - reserved.length);
+  return [
+    ...ordinary.slice(0, ordinarySlots),
+    ...reserved,
+    ...ordinary.slice(ordinarySlots),
+    ...remainingMechanisms,
+  ];
 }
 
 function reservePerBranchOfficialEvidence(matches = [], limit = 1) {
@@ -1790,29 +1853,11 @@ function retrieveGlobalMechanismOfficialQaAnalogues({
 }
 
 function isIncidentalMultiCardExampleMatch(match = {}, resolvedCardCount = 0) {
-  const record = match.record || {};
-  const questionCardIdCount = principalQuestionCardIds(record).size;
-  const matchedQuestionCardIdCount = Array.isArray(match.matchedQuestionCardIds)
-    ? match.matchedQuestionCardIds.length
-    : Number(match.matchedQuestionCardIdCount || 0);
-  const questionCoverage = Number(match.questionCardIdCoverage ?? (
-    resolvedCardCount ? matchedQuestionCardIdCount / resolvedCardCount : 0
-  ));
-  const unmatchedQuestionCardIdCount = Math.max(
-    0,
-    questionCardIdCount - matchedQuestionCardIdCount,
-  );
-  const hasSpecificPhraseMatch = (match.matchedBy || []).includes("effect_phrase");
-  const hasSceneMatch = match.matchLevel === "official_qa_exact"
-    || match.rawSceneMatch === true
-    || match.structuredSceneMatch === true
-    || match.authoritativeSceneMatch === true;
-  return resolvedCardCount >= 2
-    && unmatchedQuestionCardIdCount >= 2
-    && matchedQuestionCardIdCount <= 1
-    && questionCoverage <= 0.5
-    && !hasSpecificPhraseMatch
-    && !hasSceneMatch;
+  if (!hasSevereQuestionIdentityMismatch(match, resolvedCardCount)) return false;
+  // A supporting analogy may intentionally use different cards. Permit it
+  // only when the operation signature itself is strong and compatible; raw or
+  // skeleton text similarity cannot override an explicit identity conflict.
+  return !isStrongCompatibleOperationAnalogy(match);
 }
 
 function isIncidentalMultiCardExampleRecord(record = {}, resolvedCardCount = 0) {
@@ -1827,13 +1872,45 @@ function isIncidentalMultiCardExampleRecord(record = {}, resolvedCardCount = 0) 
     questionCardIdCount - matchedQuestionCardIdCount,
   );
   return resolvedCardCount >= 2
-    && unmatchedQuestionCardIdCount >= 2
-    && matchedQuestionCardIdCount <= 1
+    && matchedQuestionCardIdCount >= 1
+    && questionCardIdCount > matchedQuestionCardIdCount
+    && unmatchedQuestionCardIdCount >= 1
     && (matchedQuestionCardIdCount / resolvedCardCount) <= 0.5
-    && !(signals.matchedEffectPhrases || []).length
-    && signals.rulePhraseMatched !== true
-    && signals.fullQueryMatched !== true
     && !signals.mechanismAnalogue;
+}
+
+function hasSevereQuestionIdentityMismatch(match = {}, resolvedCardCount = 0) {
+  const record = match.record || {};
+  const questionCardIdCount = principalQuestionCardIds(record).size;
+  const matchedQuestionCardIdCount = Array.isArray(match.matchedQuestionCardIds)
+    ? match.matchedQuestionCardIds.length
+    : Number(match.matchedQuestionCardIdCount || 0);
+  const unmatchedQuestionCardIdCount = Math.max(
+    0,
+    questionCardIdCount - matchedQuestionCardIdCount,
+  );
+  const questionCoverage = Number(match.questionCardIdCoverage ?? (
+    resolvedCardCount ? matchedQuestionCardIdCount / resolvedCardCount : 0
+  ));
+  return resolvedCardCount >= 2
+    && matchedQuestionCardIdCount >= 1
+    && questionCardIdCount > matchedQuestionCardIdCount
+    && unmatchedQuestionCardIdCount >= 1
+    && questionCoverage <= 0.5;
+}
+
+function isStrongCompatibleOperationAnalogy(match = {}) {
+  const distinctiveHits = Array.isArray(match.distinctiveSemanticHits)
+    ? match.distinctiveSemanticHits.length
+    : 0;
+  return match.typeCompatible === true
+    && match.playerRoleCompatibility !== "mismatch"
+    && match.scenarioPremiseCompatibility !== "mismatch"
+    && match.effectNumberCompatible !== false
+    && match.sceneQualifiersCompatible !== false
+    && distinctiveHits >= 2
+    && Number(match.distinctiveSemanticQueryCoverage || 0) >= 0.66
+    && Number(match.semanticQueryCoverage || 0) >= 0.6;
 }
 
 function principalQuestionCardIds(record = {}) {
@@ -1869,10 +1946,11 @@ function isSimultaneousTriggerOrderOfficialQa(record) {
   const text = [record?.question, record?.rawDetailedQuestion, record?.answer, record?.title, record?.text]
     .filter(Boolean)
     .join("\n");
-  return /同じタイミング.{0,80}(?:効果|カード).{0,80}複数/su.test(text)
-    && /優先度\s*1.{0,80}必ず発動/su.test(text)
-    && /優先度\s*2.{0,120}任意.{0,80}公開/su.test(text)
-    && /ターンを進めているプレイヤー.{0,80}先にチェーン/su.test(text);
+  const sameWindow = /(?:同じタイミング.{0,80}(?:効果|カード).{0,80}複数|同一时点.{0,80}(?:效果|卡).{0,80}(?:多个|复数)|same (?:timing|time|activation window).{0,100}(?:multiple|several).{0,40}(?:effects?|cards?))/isu.test(text);
+  const mandatoryPriority = /(?:優先度|优先级|priority)\s*1.{0,100}(?:必ず発動|必须发动|must (?:be )?activat(?:e|ed))/isu.test(text);
+  const publicOptionalPriority = /(?:優先度|优先级|priority)\s*2.{0,160}(?:任意|optional).{0,100}(?:公開|公开|public|face[ -]?up)/isu.test(text);
+  const turnPlayerFirst = /(?:ターンを進めているプレイヤー|回合玩家|turn player).{0,100}(?:先にチェーン|先组成连锁|first.{0,24}chain|chain.{0,24}first)/isu.test(text);
+  return sameWindow && mandatoryPriority && publicOptionalPriority && turnPlayerFirst;
 }
 
 function isPublicHandTriggerOrderOfficialQa(record) {

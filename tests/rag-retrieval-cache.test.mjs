@@ -143,7 +143,7 @@ test("a rich official QA duplicated in records and qaRecords is canonicalized on
   assert.ok(evidence.rawRelatedEvidence.every((item) => item.id !== richRecord.id));
 });
 
-test("rawDetailedQuestion card ids expose and filter an incidental multi-card QA example", async () => {
+test("rawDetailedQuestion card ids reject a two-card QA whose identity set only partly overlaps", async () => {
   const cards = [
     { id: "72001", name: "合成触发甲", effectText: "满足条件时处理。" },
     { id: "72002", name: "合成触发乙", effectText: "满足条件时处理。" },
@@ -153,13 +153,13 @@ test("rawDetailedQuestion card ids expose and filter an incidental multi-card QA
     recordType: "qa",
     title: "多个对象同时出现时的排列",
     question: "多个对象同时出现时怎样排列？",
-    rawDetailedQuestion: "「<<72001>>」「<<72991>>」「<<72992>>」同时出现时，它们怎样排列？",
+    rawDetailedQuestion: "「<<72001>>」「<<72991>>」同时出现时，它们怎样排列？",
     answer: "按照该合成场景所写的顺序处理。",
-    cardIds: ["72001", "72991", "72992"],
+    cardIds: ["72001", "72991"],
   };
   const normalized = normalizeInjectedData({ cards, records: [], qaRecords: [record] });
 
-  assert.deepEqual(normalized.qaRecords[0].questionCardIds, ["72001", "72991", "72992"]);
+  assert.deepEqual(normalized.qaRecords[0].questionCardIds, ["72001", "72991"]);
 
   const matches = searchOfficialQaEvidence({
     question: "「合成触发甲」「合成触发乙」同时出现时，它们怎样排列？",
@@ -170,7 +170,7 @@ test("rawDetailedQuestion card ids expose and filter an incidental multi-card QA
   assert.ok(candidate);
   assert.ok(candidate.score >= 0.68);
   assert.deepEqual(candidate.matchedQuestionCardIds, ["72001"]);
-  assert.equal(candidate.questionCardIdCount, 3);
+  assert.equal(candidate.questionCardIdCount, 2);
 
   const evidence = await retrieveRagEvidence({
     userQuery: "「合成触发甲」「合成触发乙」同时出现时，它们怎样排列？",
@@ -227,6 +227,7 @@ test("card FAQs cannot consume the official QA matcher top-N budget", async () =
     records: [],
     qaRecords: [...faqRecords, qaRecord],
     maxPerBucket: 1,
+    env: { RAG_MAX_RELATED_EVIDENCE: "1" },
   });
 
   assert.equal(evidence.debug.scopedRecordCounts.officialQa, 1);
