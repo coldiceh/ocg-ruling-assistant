@@ -17,6 +17,7 @@ import { compileRuleScenario } from "./ruleScenarioCompiler.mjs";
 import { retrieveLiveOfficialQa } from "./liveOfficialQaProvider.mjs";
 import { analyzePrintedTextReferenceScenario } from "./printedTextReferences.mjs";
 import { normalizeLegacyLuaPasscode } from "./legacyLuaSemanticPacket.mjs";
+import { projectOfficialQaQuestion } from "./officialQaQuestionProjection.mjs";
 
 const projectRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 const defaultDataDir = join(projectRoot, "data");
@@ -934,6 +935,7 @@ function normalizeCard(card = {}) {
 function normalizeRecord(record = {}) {
   const id = String(record.id || record.evidenceId || record.stableId || record.sourceId || "");
   const answer = record.answer || record.conclusion || "";
+  const questionProjection = projectOfficialQaQuestion(record);
   const structuredQaText = record.question && answer
     ? [
         record.question,
@@ -949,23 +951,17 @@ function normalizeRecord(record = {}) {
     ...(record.cardIds || []),
     ...extractInlineCardIds(text),
   ].map((item) => String(item || "")).filter(Boolean))];
-  const questionCardIds = [...new Set([
-    ...(record.questionCardIds || []),
-    ...extractInlineCardIds([
-      record.question,
-      record.rawQuestion,
-      record.rawDetailedQuestion,
-      record.title,
-    ].filter(Boolean).join("\n")),
-  ].map((item) => String(item || "")).filter(Boolean))];
+  const questionCardIds = [...new Set(questionProjection.principalCardIds
+    .map((item) => String(item || ""))
+    .filter(Boolean))];
   const cards = [record.cardName, ...(record.cards || []), ...(record.cardNames || [])].filter(Boolean);
   return {
     ...record,
     id,
     recordType: record.recordType || inferRecordType(record, id),
     title: record.title || record.question || id,
-    question: record.question || "",
-    answer: record.answer || record.conclusion || "",
+    question: record.question || questionProjection.scenarioText || "",
+    answer: record.answer || record.conclusion || questionProjection.answerText || "",
     text,
     cardIds,
     questionCardIds,
@@ -1244,8 +1240,8 @@ function reserveMechanismEvidence(items = [], limit = 1) {
   }
   const ordinarySlots = Math.max(0, safeLimit - reserved.length);
   return [
-    ...ordinary.slice(0, ordinarySlots),
     ...reserved,
+    ...ordinary.slice(0, ordinarySlots),
     ...ordinary.slice(ordinarySlots),
     ...remainingMechanisms,
   ];
@@ -1900,40 +1896,24 @@ function hasSevereQuestionIdentityMismatch(match = {}, resolvedCardCount = 0) {
 }
 
 function isStrongCompatibleOperationAnalogy(match = {}) {
-  const distinctiveHits = Array.isArray(match.distinctiveSemanticHits)
-    ? match.distinctiveSemanticHits.length
+  const distinctiveHits = Array.isArray(match.distinctiveOperationSemanticHits)
+    ? match.distinctiveOperationSemanticHits.length
     : 0;
   return match.typeCompatible === true
     && match.playerRoleCompatibility !== "mismatch"
     && match.scenarioPremiseCompatibility !== "mismatch"
     && match.effectNumberCompatible !== false
     && match.sceneQualifiersCompatible !== false
+    && (match.matchedQuestionOperationFamilies || []).length >= 1
     && distinctiveHits >= 2
-    && Number(match.distinctiveSemanticQueryCoverage || 0) >= 0.66
-    && Number(match.semanticQueryCoverage || 0) >= 0.6;
+    && Number(match.distinctiveOperationSemanticQueryCoverage || 0) >= 0.66
+    && Number(match.operationSemanticQueryCoverage || 0) >= 0.6;
 }
 
 function principalQuestionCardIds(record = {}) {
-  const explicitQuestion = [...new Set([
-    record.question,
-    record.rawQuestion,
-    record.rawDetailedQuestion,
-  ].map((value) => String(value || "").trim()).filter(Boolean))].join("\n");
-  let questionText = explicitQuestion;
-  if (!questionText) {
-    const text = String(record.text || "");
-    const title = String(record.title || "").trim();
-    // Some compact QA snapshots retain the complete question only at the
-    // beginning of `text`, followed by a repeated truncated title and the
-    // answer.  Bound identity counting to that leading question instead of
-    // treating every card listed later as part of the asked scene.
-    const repeatedTitleIndex = title.length >= 12 ? text.indexOf(title, 1) : -1;
-    if (repeatedTitleIndex > 0) questionText = text.slice(0, repeatedTitleIndex);
-  }
-  return new Set([
-    ...(record.questionCardIds || []),
-    ...extractInlineCardIds(questionText),
-  ].map(normalizeId).filter(Boolean));
+  return new Set(projectOfficialQaQuestion(record).principalCardIds
+    .map(normalizeId)
+    .filter(Boolean));
 }
 
 function isCurrentOfficialQaRecord(record) {
@@ -2000,11 +1980,11 @@ function scoreRecord(record, {
 }) {
   const text = `${record.title || ""}\n${record.text || ""}`;
   const { textKey, normalizedCardIds, normalizedCardNames } = retrievalRecordFeatures(record, text);
-  const questionText = record.question || record.title || "";
-  const questionCardIds = new Set([
-    ...(record.questionCardIds || []),
-    ...extractInlineCardIds(questionText),
-  ].map(normalizeId).filter(Boolean));
+  const questionProjection = projectOfficialQaQuestion(record);
+  const questionText = questionProjection.scenarioText || record.title || "";
+  const questionCardIds = new Set(questionProjection.principalCardIds
+    .map(normalizeId)
+    .filter(Boolean));
   const matchedRecordCardIds = normalizedCardIds.filter((id) => resolvedIds.has(id));
   const matchedQuestionCardIds = [...resolvedIds].filter((id) => questionCardIds.has(id));
   const matchedCardIds = [...new Set([

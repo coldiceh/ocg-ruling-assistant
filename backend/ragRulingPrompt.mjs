@@ -265,7 +265,9 @@ export function selectAuthoritativeOfficialDirectCandidate({
   const scenarioPremiseAuthorityComplete = scenarioPremiseCompatibility === "compatible"
     || (scenarioPremiseCompatibility === "unknown"
       && candidate?.authoritativeSceneMatchReason === "raw_or_normalized_query");
-  const multiBranchCoverageComplete = decisionScope?.multiBranch !== true
+  const requiresPerEntityCoverage = decisionScope?.requiresPerEntityCoverage === true
+    || (decisionScope?.requiresPerEntityCoverage == null && decisionScope?.multiBranch === true);
+  const multiBranchCoverageComplete = !requiresPerEntityCoverage
     || (candidate?.questionCardIdCoverage === 1
       && (candidate?.matchedQuestionCardIds || []).length >= 2
       && candidate?.questionCardIdCount === (candidate?.matchedQuestionCardIds || []).length

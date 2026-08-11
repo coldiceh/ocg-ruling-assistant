@@ -4,6 +4,10 @@ import {
   classifyEvidenceQuestionTypes,
   classifyMultiEntityDecisionScope,
 } from "./evidenceQuestionTypeClassifier.mjs";
+import {
+  extractInlineOfficialCardIds,
+  projectOfficialQaQuestion,
+} from "./officialQaQuestionProjection.mjs";
 
 const officialQaRecordFeatureCache = new WeakMap();
 
@@ -56,6 +60,7 @@ const SEMANTIC_CONCEPTS = [
   ["control_change", /コントロール|控制权|gain.{0,16}control|control of/iu],
   ["temporary_banish", /一時的.{0,16}除外|暂时.{0,16}除外|temporar.{0,24}banish|banish.{0,40}return.{0,20}(?:field|zone)/iu],
   ["negate_activation", /発動.{0,24}無効|发动.{0,24}无效|negate.{0,24}activation/iu],
+  ["negate", /無効|无效|無效|negat/iu],
   ["return_deck", /デッキ.{0,24}戻|卡组.{0,24}(?:回到|返回)|shuffle.{0,30}deck|return.{0,30}deck/iu],
   ["discard", /捨て|丢弃|discard/iu],
   ["first_turn", /先攻.{0,12}(?:1|１)ターン|先攻第一回合|first turn.{0,20}(?:going first|of the duel)?/iu],
@@ -94,6 +99,29 @@ const GENERIC_SEMANTIC_CONCEPTS = new Set([
   "chain",
   "effect",
   "monster_effect",
+]);
+
+const OPERATION_CONCEPT_FAMILIES = new Map([
+  ["negate", "negate"],
+  ["negate_activation", "negate"],
+  ["effect_negation", "negate"],
+  ["special_summon", "special_summon"],
+  ["fusion_summon", "fusion_summon"],
+  ["fusion_material", "fusion_material"],
+  ["material_prohibited", "material_prohibited"],
+  ["send_graveyard", "send_graveyard"],
+  ["tribute_summon", "tribute_summon"],
+  ["control_change", "control_change"],
+  ["temporary_banish", "banish"],
+  ["return_deck", "return_deck"],
+  ["discard", "discard"],
+  ["declare_card_name", "declare_card_name"],
+  ["draw", "draw"],
+  ["banish", "banish"],
+  ["destroy", "destroy"],
+  ["attack", "attack"],
+  ["change_position", "change_position"],
+  ["replacement", "replacement"],
 ]);
 
 const SCENE_QUALIFIER_CONCEPTS = new Set([
@@ -171,6 +199,7 @@ export function searchOfficialQaEvidence({
   const queryType = classifyOfficialQaQuestionType(query);
   const queryPhrases = extractOfficialQaEffectPhrases(query);
   const queryConcepts = extractOfficialQaSemanticConcepts(query);
+  const queryMatchingConcepts = normalizeSemanticConceptsForMatching(queryConcepts);
   const multiBranchQuery = classifyMultiEntityDecisionScope(query).multiBranch;
   const resolvedIds = new Set((resolvedCards || []).map((card) => normalizeId(card.id || card.cardId)).filter(Boolean));
   const resolvedNames = new Set((resolvedCards || []).flatMap(cardAliases).map(normalizeOfficialQaQuery).filter(Boolean));
@@ -212,6 +241,7 @@ export function searchOfficialQaEvidence({
     questionType: queryType,
     effectPhrases: queryPhrases,
     semanticConcepts: queryConcepts,
+    semanticMatchingConcepts: queryMatchingConcepts,
     multiBranchQuery,
     playerRoleSignature: queryPlayerRoleSignature,
     exact,
@@ -267,11 +297,14 @@ function scoreRecord({
     questionText,
     scenarioQuestionText,
     normalizedRecordQuestionVariants,
+    normalizedRecordPrincipalQuestionVariants,
     normalizedRecordQuestionSkeletonVariants,
     normalizedRecordText,
     evidenceType,
     evidencePhrases,
     evidenceConcepts,
+    rulingMechanismConcepts,
+    questionBranches,
     recordIds,
     recordQuestionIds,
     recordIdentityText,
@@ -292,6 +325,8 @@ function scoreRecord({
   const typeCompatible = questionTypeCompatible(queryType, evidenceType);
   const exactNormalized = normalizedQuery.length >= 8
     && normalizedRecordQuestionVariants.includes(normalizedQuery);
+  const exactPrincipalNormalized = normalizedQuery.length >= 8
+    && normalizedRecordPrincipalQuestionVariants.includes(normalizedQuery);
   const exactSkeleton = normalizedQuerySkeleton.length >= 8
     && normalizedRecordQuestionSkeletonVariants.includes(normalizedQuerySkeleton);
   const containment = Math.max(...normalizedRecordQuestionVariants.map(
@@ -307,14 +342,37 @@ function scoreRecord({
     (surface) => diceSimilarity(normalizedQuerySkeleton, surface),
   ));
   const phraseHits = queryPhrases.filter((phrase) => evidencePhrases.includes(phrase));
-  const semanticHits = queryConcepts.filter((concept) => evidenceConcepts.includes(concept));
-  const semanticScore = setDiceSimilarity(queryConcepts, evidenceConcepts);
-  const semanticQueryCoverage = queryConcepts.length ? semanticHits.length / queryConcepts.length : 0;
-  const distinctiveQueryConcepts = queryConcepts.filter((concept) => !GENERIC_SEMANTIC_CONCEPTS.has(concept));
-  const distinctiveSemanticHits = distinctiveQueryConcepts.filter((concept) => evidenceConcepts.includes(concept));
+  const queryMatchingConcepts = normalizeSemanticConceptsForMatching(queryConcepts);
+  const evidenceMatchingConcepts = normalizeSemanticConceptsForMatching(evidenceConcepts);
+  const semanticHits = queryMatchingConcepts.filter((concept) => evidenceMatchingConcepts.includes(concept));
+  const semanticScore = setDiceSimilarity(queryMatchingConcepts, evidenceMatchingConcepts);
+  const semanticQueryCoverage = queryMatchingConcepts.length
+    ? semanticHits.length / queryMatchingConcepts.length
+    : 0;
+  const distinctiveQueryConcepts = queryMatchingConcepts
+    .filter((concept) => !GENERIC_SEMANTIC_CONCEPTS.has(concept));
+  const distinctiveSemanticHits = distinctiveQueryConcepts
+    .filter((concept) => evidenceMatchingConcepts.includes(concept));
   const distinctiveSemanticQueryCoverage = distinctiveQueryConcepts.length
     ? distinctiveSemanticHits.length / distinctiveQueryConcepts.length
     : 0;
+  const queryOperationFamilies = extractOperationFamilies(queryConcepts);
+  const questionOperationFamilies = extractOperationFamilies(evidenceConcepts);
+  const rulingOperationFamilies = extractOperationFamilies(rulingMechanismConcepts);
+  const operationEvidenceFamilies = [...new Set([
+    ...questionOperationFamilies,
+    ...rulingOperationFamilies,
+  ])];
+  const matchedQuestionOperationFamilies = queryOperationFamilies.filter(
+    (family) => questionOperationFamilies.includes(family),
+  );
+  const matchedOperationFamilies = queryOperationFamilies.filter(
+    (family) => operationEvidenceFamilies.includes(family),
+  );
+  const operationSemanticQueryCoverage = queryOperationFamilies.length
+    ? matchedOperationFamilies.length / queryOperationFamilies.length
+    : 0;
+  const distinctiveOperationSemanticQueryCoverage = operationSemanticQueryCoverage;
   const queryEffectNumbers = extractEffectNumbers(query);
   const evidenceEffectNumbers = extractEffectNumbers(scenarioQuestionText);
   const effectNumberCompatible = !queryEffectNumbers.length
@@ -331,6 +389,15 @@ function scoreRecord({
   const exactQuestionCardIdSet = resolvedIds.size > 0
     && recordQuestionIds.size === resolvedIds.size
     && matchedQuestionCardIds.length === resolvedIds.size;
+  const queryIdentityContainedInOneBranch = resolvedIds.size > 0
+    && questionBranches.some((branch) => (
+      [...resolvedIds].every((id) => branch.cardIds.has(id))
+    ));
+  const exactQuestionBranchIdSet = queryIdentityContainedInOneBranch
+    && questionBranches.some((branch) => (
+      branch.cardIds.size === resolvedIds.size
+      && [...resolvedIds].every((id) => branch.cardIds.has(id))
+    ));
   const exactResolvedCardIdSet = resolvedIds.size >= 2
     && recordIds.size === resolvedIds.size
     && matchedCardIds.length === resolvedIds.size;
@@ -341,34 +408,59 @@ function scoreRecord({
     && [...resolvedIds].every((id) => supportingCardIds.has(id));
   const exactCardIdSet = exactResolvedCardIdSet || exactRetrievedCardSubset;
   const cardNameMatch = [...resolvedNames].some((name) => name.length >= 3 && !hasNumberedCardIdentityConflict(name, recordIdentityText) && normalizedRecordText.includes(name));
+  const questionCardNameMatch = [...resolvedNames].some((name) => (
+    name.length >= 3
+    && !hasNumberedCardIdentityConflict(name, questionText)
+    && normalizedRecordPrincipalQuestionVariants.some((surface) => surface.includes(name))
+  ));
   const cardMatch = cardIdMatch || cardNameMatch;
   // Branch scope is established only by identities in the official question.
   // Cards that appear solely in an answer/example remain retrieval signals and
   // must never be treated as a covered decision branch.
-  const branchMatchedCardIds = [...new Set(matchedQuestionCardIds)];
+  const supportingBranch = selectSupportingQuestionBranch({
+    branches: questionBranches,
+    query,
+    queryType,
+    queryConcepts,
+    queryPhrases,
+    resolvedIds,
+    resolvedCards,
+    queryPlayerRoleSignature,
+  });
+  const branchMatchedCardIds = supportingBranch?.matchedCardIds
+    || [...new Set(matchedQuestionCardIds)];
   const partialCardCoverage = resolvedIds.size >= 2
     && branchMatchedCardIds.length > 0
     && branchMatchedCardIds.length < resolvedIds.size;
+  const fullQuestionExact = exactPrincipalNormalized && exactQuestionCardIdSet;
   const branchRelevant = multiBranchQuery
+    && Boolean(supportingBranch)
+    && !fullQuestionExact
     && (!evidenceMultiBranchQuery || partialCardCoverage)
     && branchMatchedCardIds.length > 0
-    && typeCompatible
-    && playerRoleComparison.compatibility !== "mismatch"
-    && scenarioPremiseComparison.compatibility !== "mismatch"
-    && (phraseHits.length > 0 || semanticHits.length >= 2);
+    && supportingBranch.typeCompatible
+    && supportingBranch.playerRoleComparison.compatibility !== "mismatch"
+    && supportingBranch.scenarioPremiseComparison.compatibility !== "mismatch"
+    && (supportingBranch.phraseHits.length > 0 || supportingBranch.semanticHits.length >= 2);
+  const relatedPlayerRoleComparison = branchRelevant
+    ? supportingBranch.playerRoleComparison
+    : playerRoleComparison;
+  const relatedScenarioPremiseComparison = branchRelevant
+    ? supportingBranch.scenarioPremiseComparison
+    : scenarioPremiseComparison;
   const identityCompatibleForExact = !resolvedIds.size
-    || (recordIds.size ? cardIdCoverage === 1 : cardNameMatch);
+    || (recordQuestionIds.size ? questionCardIdCoverage === 1 : questionCardNameMatch);
   // Replacing quoted names with a generic "card" token is useful for ranking
   // differently translated versions of the same question, but it cannot prove
   // that the cards are the same. Only the original wording may establish a raw
   // exact match, and any structured card identity present on both sides must
   // agree completely.
-  const rawExact = identityCompatibleForExact && exactNormalized;
+  const rawExact = identityCompatibleForExact && exactPrincipalNormalized;
   const rawSceneMatch = rawExact
     && typeCompatible
     && playerRoleComparison.compatibility !== "mismatch"
     && scenarioPremiseRawExactCompatible;
-  const structuredSceneMatch = exactQuestionCardIdSet
+  const structuredSceneMatch = exactQuestionBranchIdSet
     && queryType !== "unknown"
     && evidenceType === queryType
     && distinctiveQueryConcepts.length > 0
@@ -386,7 +478,7 @@ function scoreRecord({
   if (exactCardIdSet) score += 0.12;
   score += Math.min(0.18, phraseHits.length * 0.06);
   if (branchRelevant) score += 0.14;
-  if (playerRoleComparison.compatibility === "mismatch") {
+  if (relatedPlayerRoleComparison.compatibility === "mismatch") {
     score = Math.max(cardMatch ? 0.2 : 0, score - PLAYER_ROLE_SCORE_PENALTY);
   }
   score = Math.min(1, Number(score.toFixed(4)));
@@ -397,8 +489,8 @@ function scoreRecord({
   }
   else if (typeCompatible && (score >= 0.68 || (cardMatch && phraseHits.length && score >= 0.56))) matchLevel = "official_qa_near";
   if (branchRelevant && matchLevel === "official_related") matchLevel = "official_qa_near";
-  if (playerRoleComparison.compatibility === "mismatch") matchLevel = "official_related";
-  if (scenarioPremiseComparison.compatibility === "mismatch") matchLevel = "official_related";
+  if (relatedPlayerRoleComparison.compatibility === "mismatch") matchLevel = "official_related";
+  if (relatedScenarioPremiseComparison.compatibility === "mismatch") matchLevel = "official_related";
   if (!["compatible", "unknown"].includes(scenarioPremiseComparison.compatibility)
       && matchLevel === "official_qa_exact") matchLevel = "official_related";
   return {
@@ -419,6 +511,8 @@ function scoreRecord({
     questionCardIdCoverage,
     questionCardIdCount: recordQuestionIds.size,
     exactQuestionCardIdSet,
+    exactQuestionBranchIdSet,
+    queryIdentityContainedInOneBranch,
     exactCardIdSet,
     identityCompatibleForExact,
     lexicalScore,
@@ -428,17 +522,23 @@ function scoreRecord({
     distinctiveQueryConcepts,
     distinctiveSemanticHits,
     distinctiveSemanticQueryCoverage,
+    operationSemanticHits: matchedOperationFamilies,
+    operationSemanticQueryCoverage,
+    distinctiveOperationSemanticHits: matchedOperationFamilies,
+    distinctiveOperationSemanticQueryCoverage,
+    matchedQuestionOperationFamilies,
+    matchedOperationFamilies,
     queryEffectNumbers,
     evidenceEffectNumbers,
     effectNumberCompatible,
     querySceneQualifiers,
     evidenceSceneQualifiers,
     sceneQualifiersCompatible,
-    playerRoleCompatibility: playerRoleComparison.compatibility,
-    playerRoleMismatches: playerRoleComparison.mismatches,
-    playerRoleComparableDimensions: playerRoleComparison.comparableDimensions,
-    scenarioPremiseCompatibility: scenarioPremiseComparison.compatibility,
-    scenarioPremiseConflicts: scenarioPremiseComparison.conflicts,
+    playerRoleCompatibility: relatedPlayerRoleComparison.compatibility,
+    playerRoleMismatches: relatedPlayerRoleComparison.mismatches,
+    playerRoleComparableDimensions: relatedPlayerRoleComparison.comparableDimensions,
+    scenarioPremiseCompatibility: relatedScenarioPremiseComparison.compatibility,
+    scenarioPremiseConflicts: relatedScenarioPremiseComparison.conflicts,
     queryScenarioPremises: scenarioPremiseComparison.queryPremises,
     evidenceScenarioPremises: scenarioPremiseComparison.evidencePremises,
     queryOnlyScenarioPremises: scenarioPremiseComparison.queryOnlyPremises,
@@ -765,35 +865,6 @@ function playerRoleCardKey(card = {}) {
     || normalizeOfficialQaQuery(card.name || card.cnName || card.jaName || card.enName);
 }
 
-function recordQuestionText(record = {}) {
-  if (record.question) return String(record.question);
-  if (record.rawQuestion) return String(record.rawQuestion);
-  if (record.rawDetailedQuestion) return String(record.rawDetailedQuestion);
-  const text = String(record.text || "");
-  const marker = Math.max(text.indexOf("?"), text.indexOf("？"));
-  if (marker >= 0) return text.slice(0, marker + 1).replace(String(record.title || ""), "").trim() || String(record.title || "");
-  return String(record.title || "");
-}
-
-function recordQuestionSurfaces(record = {}) {
-  return [...new Set([
-    record.question,
-    record.rawQuestion,
-    record.rawDetailedQuestion,
-    record.title,
-    recordQuestionText(record),
-  ].map((value) => String(value || "").trim()).filter(Boolean))];
-}
-
-function recordScenarioQuestionText(record = {}) {
-  return String(
-    record.rawDetailedQuestion
-      || record.question
-      || record.rawQuestion
-      || recordQuestionText(record),
-  );
-}
-
 function recordText(record = {}) {
   if (record.text) return String(record.text);
   const answer = record.answer || record.conclusion || "";
@@ -834,6 +905,7 @@ function promoteUniqueQuestionCardMatch(items, resolvedIds, queryType) {
     && item.typeCompatible
     && item.questionType === queryType
     && item.questionCardIdCoverage === 1
+    && item.queryIdentityContainedInOneBranch
     && item.matchedQuestionCardIds.length === resolvedIds.size
     && item.questionCardIdCount === item.matchedQuestionCardIds.length
     && item.effectNumberCompatible
@@ -894,6 +966,7 @@ function promoteUniqueSemanticMatch(items, resolvedIds, queryType) {
       || !top.typeCompatible
       || top.branchRelevant
       || top.matchLevel === "official_qa_exact"
+      || (resolvedIds.size > 0 && !top.queryIdentityContainedInOneBranch)
       || top.playerRoleCompatibility === "mismatch"
       || top.scenarioPremiseCompatibility !== "compatible") return;
   const generalSemanticSignature = top.semanticHits.length >= 3
@@ -917,6 +990,7 @@ function promoteUniqueSemanticMatch(items, resolvedIds, queryType) {
     && queryType !== "unknown"
     && item.questionType === queryType
     && item.questionCardIdCoverage === 1
+    && item.queryIdentityContainedInOneBranch
     && item.matchedQuestionCardIds.length === resolvedIds.size
     && (resolvedIds.size === 1 || item.questionCardIdCount === item.matchedQuestionCardIds.length)
     && item.effectNumberCompatible
@@ -935,6 +1009,7 @@ function promoteUniqueSemanticMatch(items, resolvedIds, queryType) {
     && queryType !== "unknown"
     && top.questionType === queryType
     && top.questionCardIdCoverage === 1
+    && top.queryIdentityContainedInOneBranch
     && top.matchedQuestionCardIds.length === resolvedIds.size
     && (resolvedIds.size === 1 || top.questionCardIdCount === top.matchedQuestionCardIds.length)
     && top.effectNumberCompatible
@@ -983,16 +1058,21 @@ function officialQaRecordFeatures(record = {}) {
     const cached = officialQaRecordFeatureCache.get(record);
     if (cached) return cached;
   }
-  const questionText = recordQuestionText(record);
-  const questionSurfaces = recordQuestionSurfaces(record);
-  const scenarioQuestionText = recordScenarioQuestionText(record);
+  const projection = projectOfficialQaQuestion(record);
+  const questionText = projection.questionText;
+  const questionSurfaces = projection.surfaces;
+  const scenarioQuestionText = projection.scenarioText;
   const text = recordText(record);
   const normalizedRecordQuestionVariants = questionSurfaces
+    .map(normalizeOfficialQaQuery)
+    .filter(Boolean);
+  const normalizedRecordPrincipalQuestionVariants = projection.principalSurfaces
     .map(normalizeOfficialQaQuery)
     .filter(Boolean);
   const normalizedRecordQuestionSkeletonVariants = questionSurfaces
     .map(normalizeOfficialQaSkeleton)
     .filter(Boolean);
+  const questionEvidenceText = questionSurfaces.join("\n");
   const features = {
     questionText,
     scenarioQuestionText,
@@ -1000,16 +1080,30 @@ function officialQaRecordFeatures(record = {}) {
     normalizedRecordQuestionVariants: normalizedRecordQuestionVariants.length
       ? normalizedRecordQuestionVariants
       : [""],
+    normalizedRecordPrincipalQuestionVariants: normalizedRecordPrincipalQuestionVariants.length
+      ? normalizedRecordPrincipalQuestionVariants
+      : [""],
     normalizedRecordQuestionSkeleton: normalizedRecordQuestionSkeletonVariants[0] || "",
     normalizedRecordQuestionSkeletonVariants: normalizedRecordQuestionSkeletonVariants.length
       ? normalizedRecordQuestionSkeletonVariants
       : [""],
     normalizedRecordText: normalizeOfficialQaQuery(text),
-    evidenceType: classifyOfficialQaQuestionType(scenarioQuestionText || questionText || text),
-    evidencePhrases: extractOfficialQaEffectPhrases(text),
-    evidenceConcepts: extractOfficialQaSemanticConcepts(
-      questionSurfaces.join("\n") || text,
-    ),
+    evidenceType: classifyOfficialQaQuestionType(scenarioQuestionText || questionText),
+    evidencePhrases: extractOfficialQaEffectPhrases(questionEvidenceText),
+    evidenceConcepts: extractOfficialQaSemanticConcepts(questionEvidenceText),
+    rulingMechanismConcepts: extractOfficialQaSemanticConcepts([
+      projection.answerText,
+    ].filter(Boolean).join("\n")),
+    questionBranches: projection.branches.map((branch) => ({
+      text: branch,
+      cardIds: new Set([
+        ...extractInlineOfficialCardIds(branch),
+        ...(projection.branches.length === 1 ? projection.principalCardIds : []),
+      ].map(normalizeId).filter(Boolean)),
+      questionType: classifyOfficialQaQuestionType(branch),
+      phrases: extractOfficialQaEffectPhrases(branch),
+      concepts: extractOfficialQaSemanticConcepts(branch),
+    })),
     recordIds: new Set([
       record.cardId,
       ...(record.cardIds || []),
@@ -1017,10 +1111,7 @@ function officialQaRecordFeatures(record = {}) {
       ...extractInlineCardIds(text),
     ].map(normalizeId).filter(Boolean)),
     recordQuestionIds: new Set([
-      ...(record.questionCardIds || []),
-      ...extractInlineCardIds(record.rawQuestion),
-      ...extractInlineCardIds(record.rawDetailedQuestion),
-      ...extractInlineCardIds(questionText),
+      ...projection.principalCardIds,
     ].map(normalizeId).filter(Boolean)),
     recordIdentityText: [record.title, text, ...(record.cards || [])].filter(Boolean).join(" "),
   };
@@ -1069,6 +1160,76 @@ function bigrams(value) {
   const result = new Set();
   for (let index = 0; index < value.length - 1; index += 1) result.add(value.slice(index, index + 2));
   return result;
+}
+
+function selectSupportingQuestionBranch({
+  branches = [],
+  query,
+  queryType,
+  queryConcepts = [],
+  queryPhrases = [],
+  resolvedIds,
+  resolvedCards = [],
+  queryPlayerRoleSignature,
+} = {}) {
+  const queryMatchingConcepts = normalizeSemanticConceptsForMatching(queryConcepts);
+  const candidates = (branches || []).map((branch) => {
+    const matchedCardIds = [...resolvedIds].filter((id) => branch.cardIds.has(id));
+    const unmatchedCardIds = [...branch.cardIds].filter((id) => !resolvedIds.has(id));
+    const typeCompatible = questionTypeCompatible(queryType, branch.questionType);
+    const branchMatchingConcepts = normalizeSemanticConceptsForMatching(branch.concepts);
+    const semanticHits = queryMatchingConcepts
+      .filter((concept) => branchMatchingConcepts.includes(concept));
+    const phraseHits = queryPhrases.filter((phrase) => branch.phrases.includes(phrase));
+    const scenarioPremiseComparison = compareEvidenceScenarioPremises(query, branch.text);
+    const playerRoleComparison = comparePlayerRoleSignatures(
+      queryPlayerRoleSignature,
+      extractPlayerRoleSignature(branch.text, { cards: resolvedCards }),
+    );
+    const identityCoverage = resolvedIds.size ? matchedCardIds.length / resolvedIds.size : 0;
+    const semanticCoverage = queryMatchingConcepts.length
+      ? semanticHits.length / queryMatchingConcepts.length
+      : 0;
+    const score = (matchedCardIds.length * 10)
+      + (identityCoverage * 4)
+      + (semanticHits.length * 2)
+      + semanticCoverage
+      + Number(typeCompatible)
+      + scenarioPremiseCompatibilityRank(scenarioPremiseComparison.compatibility)
+      - Number(playerRoleComparison.compatibility === "mismatch") * 20
+      - Number(scenarioPremiseComparison.compatibility === "mismatch") * 20;
+    return {
+      ...branch,
+      matchedCardIds,
+      unmatchedCardIds,
+      typeCompatible,
+      semanticHits,
+      phraseHits,
+      scenarioPremiseComparison,
+      playerRoleComparison,
+      score,
+    };
+  }).filter((candidate) => (
+    candidate.matchedCardIds.length > 0
+    && candidate.unmatchedCardIds.length === 0
+    && candidate.typeCompatible
+    && candidate.playerRoleComparison.compatibility !== "mismatch"
+    && candidate.scenarioPremiseComparison.compatibility !== "mismatch"
+    && (candidate.phraseHits.length > 0 || candidate.semanticHits.length >= 2)
+  ));
+  return candidates.sort((left, right) => right.score - left.score)[0] || null;
+}
+
+function extractOperationFamilies(concepts = []) {
+  return [...new Set((concepts || [])
+    .map((concept) => OPERATION_CONCEPT_FAMILIES.get(concept))
+    .filter(Boolean))];
+}
+
+function normalizeSemanticConceptsForMatching(concepts = []) {
+  return [...new Set((concepts || []).map(
+    (concept) => OPERATION_CONCEPT_FAMILIES.get(concept) || concept,
+  ))];
 }
 
 function scenarioPremiseCompatibilityRank(value) {
