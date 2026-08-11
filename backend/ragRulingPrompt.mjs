@@ -4,6 +4,10 @@ import {
 } from "./ragEvidenceRetriever.mjs";
 import { extractRelevantOfficialQaAnswerExcerpt } from "./officialQaAnswerExtractor.mjs";
 import { extractPrintedReferenceRequirement } from "./printedTextReferences.mjs";
+import {
+  classifyEvidenceQuestionTypes,
+  classifyMultiEntityDecisionScope,
+} from "./evidenceQuestionTypeClassifier.mjs";
 
 export const RAG_ANSWER_LEVELS = Object.freeze([
   "official_confirmed",
@@ -32,6 +36,15 @@ const PRINTED_TEXT_REFERENCE_INSTRUCTIONS = Object.freeze([
 
 const MINIMAL_PRINTED_TEXT_REFERENCE_INSTRUCTION =
   "『卡名记述』只查候选卡自身原始规范卡文；当前卡名或复制／获得的卡名与效果不会改写原始卡文，也不能用来源卡文替代，缺少候选卡自身卡文时必须保留 UNKNOWN。";
+
+const BATTLE_RESOLUTION_INSTRUCTIONS = Object.freeze([
+  "战斗处理题先识别题面实际涉及的伤害步骤与状态变化，再按适用检查点判断：伤害步骤开始时 → 若战斗对象在规则规定的检查点仍为里侧守备则翻为表侧 → 立即重新适用并稳定相关永续／持续效果 → 若表示形式或攻击许可发生变化则按当前状态重检 → 只有战斗仍能继续时才进入伤害计算。不得把较早检查点已经发动并处理的效果延后到后来发生的翻开或状态变化之后。",
+  "攻击怪兽在伤害计算前改变表示形式时，不能直接沿用攻击宣言时的合法性；必须按变化后的表示形式重新检查能否继续攻击。任何只无效『发动的效果』的文本都不得扩张为无效没有发动的永续／持续效果；每张卡的攻击许可及其来源必须分别依据该卡原文确认。",
+  "题目以『分别／各自／each／それぞれ』询问多个攻击者或多个场景时，必须为每个分支独立给出结论。只覆盖部分题面卡片的官方 Q&A 是高优先级的分支相关证据：仅可用于 matchedQuestionCardIds 所对应的分支，不能据此把整道多分支问题升级为 official_confirmed，也不能把该分支结论复制给其他攻击者。",
+]);
+
+const MINIMAL_BATTLE_RESOLUTION_INSTRUCTION =
+  "战斗题只按实际适用的检查点判断：伤害步骤开始时→里侧对象在规则规定时点翻开（如适用）→相关持续效果稳定→状态变化时重检攻击许可→仅在战斗继续时伤害计算；发动效果与永续效果分开，多攻击者逐分支回答，部分卡片Q&A不得覆盖整题。";
 
 export function buildRagRulingPrompt({
   userQuery,
@@ -63,6 +76,7 @@ export function buildRagRulingPromptBundle({
     resolvedCards: cardResolution.resolvedCards || [],
     evidence,
   });
+  const battleResolutionIntent = detectBattleResolutionIntent(userQuery);
   const payload = {
     userQuery: String(userQuery || ""),
     resolvedCards: summarizeCards(cardResolution.resolvedCards || [], promptLimits.maxCards),
@@ -84,6 +98,9 @@ export function buildRagRulingPromptBundle({
       ...(printedTextReferenceIntent.detected
         ? { printedNameReference: printedTextReferenceIntent }
         : {}),
+      ...(battleResolutionIntent.detected
+        ? { battleResolution: battleResolutionIntent }
+        : {}),
     },
     evidence: {
       ...evidencePayload,
@@ -95,6 +112,7 @@ export function buildRagRulingPromptBundle({
     candidates: rawDirectCandidates,
     cardResolution,
     baigeAmbiguousMentions: evidence.baigeAmbiguousMentions,
+    decisionScope: battleResolutionIntent,
   });
   // The selector above is deliberately strict: it requires one exact official
   // candidate, complete card identities and a certified scene/card-set match.
@@ -148,6 +166,7 @@ export function buildRagRulingPromptBundle({
     "summonLegalityContext 是后端从题面、已解析卡片属性和原始卡文整理出的同调召唤检查清单，不是裁定证明或隐藏 verdict。逐项对照 resolvedCards 与 card_text 复核素材式、等级合计、素材区域、手牌素材权限和自肃；每份手牌素材权限只属于其 sourceCardId，且仅在该卡从要求区域实际作为素材时提供自己的 maximum 容量。若 context.status=complete、missingFacts 为空且原始卡文支持全部字段，不得仅因没有官方 direct Q&A 或 validator 模板就声称等级/属性未知或资料不足，应独立给出 rule_analysis；任何 failed 检查仍须以原卡文确认后再采用。",
     "effectApplicabilityContext 是效果适用性依赖清单，不是裁定证明或隐藏 verdict。必须同时保留效果来源的原始卡片类型与当前角色（例如陷阱作为装备卡），并严格按 dependencyGraph 顺序判断：先只用接受者原本独立存在的抗性检查来源效果能否影响接受者；只有来源效果能适用时，才建立其赋予的抗性；最后再检查外来效果。禁止用刚被赋予的抗性反向证明其来源效果可以适用，type overlap 仅是待复核候选。",
     ...printedTextReferenceInstructionsFor(payload),
+    ...battleResolutionInstructionsFor(payload),
     "formalEngineProofs 来自版本协商、能力检查、完整执行检查和独立证明校验后的声明式规则内核。trusted=true 且 verdict=TRUE/FALSE 的逐查询结论是强约束，模型只能解释，不能翻转；verdict=UNKNOWN 只表示未获证明，绝不等于 FALSE，也不能单独支持‘不能’。",
     "legacyLuaSemanticPacket 是从锁定旧版 Lua 脚本静态编译出的非权威语义提示，只用于发现应检查的发动条件、移动能力、cost 与处理操作。它的正式 verdict 永远是 UNKNOWN；candidateVerdict 只描述旧脚本在完整输入下的候选行为，不能直接支持任何裁定、不能覆盖题面/卡文/官方资料，UNKNOWN 也绝不等于不能。",
     "使用 Lua 候选前先以 resourceId 绑定 resources：预计算 sourceDocumentId 内的 cid-<卡片CID>/passcode-<脚本密码> 只对应 resolvedCards 中 CID 相同的卡片，禁止把一张卡的检查套到另一张卡。",
@@ -209,6 +228,7 @@ export function selectAuthoritativeOfficialDirectCandidate({
   candidates = [],
   cardResolution = {},
   baigeAmbiguousMentions = [],
+  decisionScope = {},
 } = {}) {
   if (candidates.length !== 1) return null;
   const [candidate] = candidates;
@@ -237,11 +257,17 @@ export function selectAuthoritativeOfficialDirectCandidate({
       && candidate?.candidatePoolComplete === true)
     || certifiedQuestionSuperset
     || certifiedQuestionCardSuperset;
+  const multiBranchCoverageComplete = decisionScope?.multiBranch !== true
+    || (candidate?.questionCardIdCoverage === 1
+      && (candidate?.matchedQuestionCardIds || []).length >= 2
+      && candidate?.questionCardIdCount === (candidate?.matchedQuestionCardIds || []).length
+      && !(candidate?.matchedBy || []).includes("multi_branch_related_evidence"));
   return candidate?.isDirect === true
     && candidate?.matchLevel === "official_qa_exact"
     && candidate?.type === "official_qa"
     && candidate?.authoritativeSceneMatch === true
     && sceneProvenanceComplete
+    && multiBranchCoverageComplete
     && (exactQuestionCardSet || certifiedQuestionSuperset || certifiedQuestionCardSuperset)
     && completeIdentity
     && Boolean(candidate?.id)
@@ -467,6 +493,16 @@ function limitEvidence(items = [], limit, textLimit, label, warnings) {
       authoritativeSceneMatch: item.authoritativeSceneMatch === true,
       authoritativeSceneMatchReason: item.authoritativeSceneMatchReason || "",
       questionType: item.questionType || "unknown",
+      ...((item.matchedBy || []).length ? { matchedBy: item.matchedBy } : {}),
+      ...((item.matchedQuestionCardIds || []).length
+        ? { matchedQuestionCardIds: item.matchedQuestionCardIds }
+        : {}),
+      ...(Number(item.questionCardIdCoverage || 0) > 0
+        ? { questionCardIdCoverage: Number(item.questionCardIdCoverage) }
+        : {}),
+      ...(Number(item.questionCardIdCount || 0) > 0
+        ? { questionCardIdCount: Number(item.questionCardIdCount) }
+        : {}),
       playerRoleCompatibility: item.playerRoleCompatibility || "unknown",
       playerRoleMismatches: item.playerRoleMismatches || [],
       playerRoleComparableDimensions: item.playerRoleComparableDimensions || [],
@@ -532,6 +568,17 @@ function buildCompactRagPrompt({ payload, maxPromptChars }) {
         type: item.type,
         title: item.title,
         isDirect: Boolean(item.isDirect),
+        matchLevel: item.matchLevel || "",
+        ...((item.matchedBy || []).length ? { matchedBy: item.matchedBy } : {}),
+        ...((item.matchedQuestionCardIds || []).length
+          ? { matchedQuestionCardIds: item.matchedQuestionCardIds }
+          : {}),
+        ...(Number(item.questionCardIdCoverage || 0) > 0
+          ? { questionCardIdCoverage: Number(item.questionCardIdCoverage) }
+          : {}),
+        ...(Number(item.questionCardIdCount || 0) > 0
+          ? { questionCardIdCount: Number(item.questionCardIdCount) }
+          : {}),
         text: preserveTextEnds(String(item.text || ""), textLimit),
         sourceUrl: item.sourceUrl || "",
       });
@@ -610,6 +657,7 @@ function buildCompactRagPrompt({ payload, maxPromptChars }) {
     "summonLegalityContext 是同调素材检查清单而非 verdict；必须用 resolvedCards 与原卡文复核。完整且 missingFacts 为空时，不得仅因没有 direct Q&A 声称卡片等级、性质或素材权限未知；各手牌素材权限只给其来源素材卡提供一份独立容量。",
     "effectApplicabilityContext 是非权威依赖清单：保留来源原始卡种与当前角色；先以接受者原有抗性判断来源效果适用性，来源适用后才建立赋予抗性，再判断外来效果。禁止赋予抗性反向自举来源适用性，重叠类型仍须核对原卡文与条件。",
     ...printedTextReferenceInstructionsFor(context),
+    ...battleResolutionInstructionsFor(context),
     "legacyLuaSemanticPacket 只是锁定旧脚本的非权威语义提示。只能据此发现要检查的条件和操作；正式 verdict 永远 UNKNOWN，candidateVerdict 不能直接支持结论、不能覆盖卡文或官方资料。",
     "使用 Lua 候选前先以 resourceId 绑定 resources；预计算 sourceDocumentId 的 cid-<卡片CID>/passcode-<脚本密码> 只可用于 resolvedCards 中 CID 相同的卡片，禁止跨卡套用。",
     "legacyLuaSemanticPacket.activationLegalityChecks 是旧脚本在发动检查阶段实际执行的通用候选条件。必须对题设状态枚举能通过 predicateApi 的候选；若 requiredMinimum 无法达到，则该效果不能发动，不得误解为可以发动后空处理。候选卡的具体合法性仍必须用卡文或规则资料复核。",
@@ -682,6 +730,9 @@ function buildCompactRagPrompt({ payload, maxPromptChars }) {
     "仅依据上下文输出规定字段的裁定 JSON；不得编造证据。usedEvidence 的 id 必须非空并逐字取自 allowedEvidenceIds；没有引用则为 []。",
     ...(hasPrintedTextReferenceIntent(payload)
       ? [MINIMAL_PRINTED_TEXT_REFERENCE_INSTRUCTION]
+      : []),
+    ...(hasBattleResolutionIntent(payload)
+      ? [MINIMAL_BATTLE_RESOLUTION_INSTRUCTION]
       : []),
     JSON.stringify({
       userQuery: String(payload.userQuery || "").slice(0, 80),
@@ -808,6 +859,45 @@ function hasPrintedTextReferenceIntent(payload = {}) {
 function printedTextReferenceInstructionsFor(payload = {}) {
   return hasPrintedTextReferenceIntent(payload)
     ? PRINTED_TEXT_REFERENCE_INSTRUCTIONS
+    : [];
+}
+
+function detectBattleResolutionIntent(userQuery = "") {
+  const classification = classifyEvidenceQuestionTypes(userQuery);
+  const decisionScope = classifyMultiEntityDecisionScope(userQuery);
+  const relevantTypes = new Set([
+    "battle_resolution",
+    "face_down_flip_before_damage_calculation",
+    "attack_continuation_after_position_change",
+    "continuous_effect_recheck",
+    "activated_vs_continuous_effect",
+  ]);
+  const questionTypes = (classification.questionTypes || [])
+    .filter((type) => relevantTypes.has(type));
+  return {
+    schema: "battle-resolution-intent/v1",
+    detected: questionTypes.length > 0,
+    questionTypes,
+    timing: (classification.timing || []).filter((value) => (
+      value === "start_of_damage_step"
+      || value === "before_damage_calculation"
+      || value === "damage_calculation"
+      || value === "after_damage_calculation"
+    )),
+    multiBranch: decisionScope.multiBranch,
+    requiresPerEntityCoverage: decisionScope.requiresPerEntityCoverage,
+    authority: "question_type_checklist_only",
+    canDecideFinalRuling: false,
+  };
+}
+
+function hasBattleResolutionIntent(payload = {}) {
+  return payload?.rulingIntents?.battleResolution?.detected === true;
+}
+
+function battleResolutionInstructionsFor(payload = {}) {
+  return hasBattleResolutionIntent(payload)
+    ? BATTLE_RESOLUTION_INSTRUCTIONS
     : [];
 }
 

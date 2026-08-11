@@ -56,3 +56,43 @@ test("negative activation phrases keep cannot polarity", () => {
     assert.equal(result.polarity, "cannot");
   }
 });
+
+test("battle outcome wording detects battle resolution without requiring a fixed phrase order", () => {
+  const result = classifyEvidenceQuestionTypes(
+    "分别用两只怪兽攻击里侧守备表示的怪兽，各自能否由战斗或怪兽效果破坏它？",
+  );
+  assert.ok(result.questionTypes.includes("battle_resolution"));
+  assert.ok(result.questionTypes.includes("face_down_flip_before_damage_calculation"));
+  assert.ok(result.actions.includes("attack"));
+});
+
+test("position changes during battle request an attack-continuation recheck", () => {
+  const result = classifyEvidenceQuestionTypes(
+    "攻击怪兽在伤害计算前变成守备表示后，这次攻击能否继续？",
+  );
+  assert.ok(result.questionTypes.includes("battle_resolution"));
+  assert.ok(result.questionTypes.includes("attack_continuation_after_position_change"));
+  assert.ok(result.timing.includes("before_damage_calculation"));
+});
+
+test("activated-effect negation remains distinct from continuous effects", () => {
+  const result = classifyEvidenceQuestionTypes(
+    "无效守备表示怪兽发动的效果，是否也会使其永续效果无效？",
+  );
+  assert.ok(result.questionTypes.includes("activated_vs_continuous_effect"));
+});
+
+test("battle-phase end timing is not misclassified as damage-step battle resolution", () => {
+  for (const text of [
+    "战斗阶段结束时可以发动这个效果吗？",
+    "Can this effect be activated at the end of the Battle Phase?",
+    "バトルフェイズ終了時にこの効果を発動できますか？",
+  ]) {
+    const result = classifyEvidenceQuestionTypes(text);
+    assert.ok(result.questionTypes.includes("activation_condition"));
+    assert.ok(!result.questionTypes.includes("battle_resolution"));
+  }
+
+  assert.ok(classifyEvidenceQuestionTypes("Will this attack continue after its position changes?")
+    .questionTypes.includes("battle_resolution"));
+});

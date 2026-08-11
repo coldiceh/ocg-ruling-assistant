@@ -319,5 +319,174 @@ test("QA selection prioritizes full intersection and remains bounded", () => {
     { cardId: "3", qaIds: [95, 91, 93] },
   ], 1);
   assert.deepEqual(selected.ids, ["91"]);
-  assert.equal(selected.candidatePoolSize, 2);
+  assert.equal(selected.candidatePoolSize, 6);
+  assert.equal(selected.candidatePoolTruncated, true);
+});
+
+test("an all-card index intersection still leaves discovery room for single-card branches", () => {
+  const selected = selectRelevantQaIds([
+    { cardId: "10", qaIds: [100, 101, 102] },
+    { cardId: "20", qaIds: [100, 201, 202] },
+    { cardId: "30", qaIds: [100, 301, 302] },
+  ], 5);
+
+  assert.deepEqual(selected.ids, ["100", "101", "201", "301", "102"]);
+  assert.equal(selected.strategy, "all_card_intersection_then_bounded_round_robin_union");
+  assert.equal(selected.uniqueExactCardIntersection, true);
+  assert.equal(selected.uniqueExactQaId, "100");
+  assert.equal(selected.candidatePoolSize, 7);
+});
+
+test("a saturated shared-QA prefix cannot consume the per-card discovery reserve", () => {
+  const shared = Array.from({ length: 10 }, (_, index) => 100 + index);
+  const selected = selectRelevantQaIds([
+    { cardId: "10", qaIds: [...shared, 501] },
+    { cardId: "20", qaIds: [...shared, 502] },
+    { cardId: "30", qaIds: [503] },
+    { cardId: "40", qaIds: [504] },
+  ], 5);
+
+  assert.deepEqual(selected.ids, ["100", "501", "502", "503", "504"]);
+  assert.deepEqual(selected.supportingCardIdsByQaId[501], ["10"]);
+  assert.deepEqual(selected.supportingCardIdsByQaId[504], ["40"]);
+});
+
+test("pairwise shared QAs do not suppress bounded single-card branch discovery", () => {
+  const selected = selectRelevantQaIds([
+    { cardId: "10", qaIds: [100, 101, 102] },
+    { cardId: "20", qaIds: [100, 201, 202] },
+    { cardId: "30", qaIds: [301, 302, 303] },
+  ], 5);
+
+  assert.deepEqual(selected.ids, ["100", "101", "201", "301", "102"]);
+  assert.equal(selected.strategy, "shared_coverage_then_bounded_round_robin_union");
+  assert.equal(selected.uniqueExactCardIntersection, false);
+  assert.equal(selected.candidatePoolSize, 8);
+  assert.equal(selected.candidatePoolTruncated, true);
+});
+
+test("a long single-card QA index returns bounded candidates instead of an empty result", () => {
+  const selected = selectRelevantQaIds([
+    { cardId: "10", qaIds: [101, 102, 103, 104, 105] },
+  ], 3);
+
+  assert.deepEqual(selected.ids, ["101", "102", "103"]);
+  assert.equal(selected.strategy, "bounded_single_card_qa_index");
+  assert.equal(selected.candidatePoolSize, 5);
+  assert.equal(selected.candidatePoolTruncated, true);
+  assert.deepEqual(selected.supportingCardIdsByQaId, {
+    101: ["10"],
+    102: ["10"],
+    103: ["10"],
+  });
+});
+
+test("multi-card QA selection falls back to a bounded round-robin union when no QA is shared", () => {
+  const selected = selectRelevantQaIds([
+    { cardId: "10", qaIds: [101, 102, 103] },
+    { cardId: "20", qaIds: [201, 202] },
+    { cardId: "30", qaIds: [301] },
+  ], 5);
+
+  assert.deepEqual(selected.ids, ["101", "201", "301", "102", "202"]);
+  assert.equal(selected.strategy, "bounded_round_robin_card_union");
+  assert.equal(selected.candidatePoolSize, 6);
+  assert.equal(selected.candidatePoolTruncated, true);
+  assert.deepEqual(selected.supportingCardIdsByQaId, {
+    101: ["10"],
+    201: ["20"],
+    301: ["30"],
+    102: ["10"],
+    202: ["20"],
+  });
+});
+
+test("live retrieval fetches the round-robin union candidates for cards without a shared QA", async () => {
+  const cardQaIds = new Map([
+    ["10", [101, 102]],
+    ["20", [201, 202]],
+  ]);
+  const fetchedQaIds = [];
+  const fetchImpl = async (url) => {
+    const value = String(url);
+    if (value.endsWith("/data/meta/mprop")) return jsonResponse(propertyMetadata);
+    const cardMatch = value.match(/\/data\/card\/(\d+)$/u);
+    if (cardMatch) {
+      return jsonResponse({
+        cardData: { en: { cardType: "monster", properties: [4] } },
+        qaIndex: cardQaIds.get(cardMatch[1]),
+      });
+    }
+    const qaMatch = value.match(/\/data\/qa\/(\d+)$/u);
+    if (qaMatch) {
+      fetchedQaIds.push(qaMatch[1]);
+      return jsonResponse({
+        cards: [Number(qaMatch[1]) < 200 ? 10 : 20],
+        qaData: { ja: {
+          question: `候補${qaMatch[1]}の質問`,
+          answer: `候補${qaMatch[1]}の回答`,
+        } },
+      });
+    }
+    throw new Error(`unexpected_url:${url}`);
+  };
+
+  const result = await retrieveLiveOfficialQa({
+    resolvedCards: [
+      { id: "10", name: "カードA" },
+      { id: "20", name: "カードB" },
+    ],
+    fetchImpl,
+    maxCandidates: 3,
+  });
+
+  assert.deepEqual(result.debug.ids, ["101", "201", "102"]);
+  assert.equal(result.debug.strategy, "bounded_round_robin_card_union");
+  assert.deepEqual(fetchedQaIds.sort(), ["101", "102", "201"]);
+  assert.equal(result.records.length, 3);
+  assert.equal(result.records.every((record) => record.retrievalContext.candidatePoolComplete === false), true);
+  assert.equal(result.warnings.includes("live_shared_qa_not_found"), false);
+});
+
+test("live QA detail discovery uses a bounded fetch pool", async () => {
+  let activeQaFetches = 0;
+  let peakQaFetches = 0;
+  const fetchImpl = async (url) => {
+    const value = String(url);
+    if (value.endsWith("/data/meta/mprop")) return jsonResponse(propertyMetadata);
+    const cardMatch = value.match(/\/data\/card\/(\d+)$/u);
+    if (cardMatch) {
+      const base = cardMatch[1] === "10" ? 100 : 200;
+      return jsonResponse({
+        cardData: { en: { cardType: "monster", properties: [4] } },
+        qaIndex: [base + 1, base + 2, base + 3, base + 4],
+      });
+    }
+    const qaMatch = value.match(/\/data\/qa\/(\d+)$/u);
+    if (qaMatch) {
+      activeQaFetches += 1;
+      peakQaFetches = Math.max(peakQaFetches, activeQaFetches);
+      await new Promise((resolve) => setTimeout(resolve, 4));
+      activeQaFetches -= 1;
+      return jsonResponse({
+        cards: [],
+        qaData: { en: {
+          question: `Question ${qaMatch[1]}`,
+          answer: "Apply the printed text.",
+        } },
+      });
+    }
+    throw new Error(`unexpected_url:${url}`);
+  };
+
+  const result = await retrieveLiveOfficialQa({
+    resolvedCards: [{ id: "10", name: "A" }, { id: "20", name: "B" }],
+    fetchImpl,
+    maxCandidates: 8,
+    maxConcurrentQaFetches: 2,
+  });
+
+  assert.equal(result.records.length, 8);
+  assert.ok(peakQaFetches <= 2);
+  assert.equal(result.debug.qaFetchConcurrency, 2);
 });

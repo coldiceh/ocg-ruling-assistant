@@ -29,6 +29,7 @@ export async function retrieveLiveOfficialQa({
   timeoutMs = DEFAULT_TIMEOUT_MS,
   cacheTtlMs = DEFAULT_CACHE_TTL_MS,
   maxCandidates = 8,
+  maxConcurrentQaFetches = 6,
 } = {}) {
   const cards = dedupeCardsById(resolvedCards).slice(0, 6);
   const preferredCandidateQaIds = uniqueNumericIds(candidateQaIds);
@@ -90,7 +91,11 @@ export async function retrieveLiveOfficialQa({
   }
 
   const cardNameById = new Map(cards.map((card) => [String(card.id), displayCardName(card)]));
-  const fetchedRecords = (await Promise.all(qaSelection.ids.map(async (qaId) => {
+  const qaFetchConcurrency = Math.min(
+    qaSelection.ids.length || 1,
+    positiveInteger(maxConcurrentQaFetches, 6),
+  );
+  const fetchedRecords = (await mapWithConcurrency(qaSelection.ids, qaFetchConcurrency, async (qaId) => {
     try {
       const payload = await fetchJsonResilient(fetchImpl, `${baseUrl}/data/qa/${encodeURIComponent(qaId)}`, {
         timeoutMs,
@@ -101,16 +106,26 @@ export async function retrieveLiveOfficialQa({
       warnings.push(`live_qa_fetch_failed:${qaId}:${errorCode(error)}`);
       return null;
     }
-  }))).filter(Boolean);
+  })).filter(Boolean);
   const fetchedRecordIds = new Set(fetchedRecords.map((record) => String(record.sourceId || "")));
   const candidatePoolComplete = allCardIndexesAvailable
     && indexedSelection.candidatePoolSize <= positiveInteger(maxCandidates, 8)
     && indexedSelection.ids.every((id) => fetchedRecordIds.has(String(id)));
+  const intersectionCandidatePoolComplete = allCardIndexesAvailable
+    && Number(indexedSelection.intersectionCandidatePoolSize || 0) > 0
+    && Number(indexedSelection.intersectionCandidatePoolSize || 0) <= positiveInteger(maxCandidates, 8)
+    && (indexedSelection.intersectionQaIds || []).length
+      === Number(indexedSelection.intersectionCandidatePoolSize || 0)
+    && (indexedSelection.intersectionQaIds || []).every((id) => fetchedRecordIds.has(String(id)));
   const records = fetchedRecords.map((record) => ({
     ...record,
     retrievalContext: {
       ...(record.retrievalContext || {}),
-      candidatePoolComplete,
+      candidatePoolComplete: candidatePoolComplete
+        || (record.retrievalContext?.uniqueExactCardIntersection === true
+          && intersectionCandidatePoolComplete),
+      fullDiscoveryCandidatePoolComplete: candidatePoolComplete,
+      intersectionCandidatePoolComplete,
       fetchedCandidateCount: fetchedRecords.length,
       selectedCandidateCount: qaSelection.ids.length,
       allCardIndexesAvailable,
@@ -126,6 +141,7 @@ export async function retrieveLiveOfficialQa({
       fetchedQaCount: records.length,
       cardCount: cards.length,
       availableCardIndexCount: cardPayloads.length,
+      qaFetchConcurrency,
     },
   };
 }
@@ -140,24 +156,17 @@ export function selectRelevantQaIds(cardQaEntries = [], maxCandidates = 8) {
     .filter((entry) => entry.cardId && entry.qaIds.length);
   if (!entries.length) return { ids: [], strategy: "no_card_qa_indexes", candidatePoolSize: 0 };
   if (entries.length === 1) {
-    const ids = entries[0].qaIds;
-    if (ids.length > safeLimit) {
-      return {
-        ids: [],
-        strategy: "single_card_qa_index_too_large",
-        candidatePoolSize: ids.length,
-        uniqueExactCardIntersection: false,
-        uniqueExactQaId: null,
-        resolvedCardIds: [entries[0].cardId],
-        supportingCardIdsByQaId: {},
-      };
-    }
+    const candidateIds = entries[0].qaIds;
+    const ids = candidateIds.slice(0, safeLimit);
     return {
       ids,
       strategy: "bounded_single_card_qa_index",
-      candidatePoolSize: ids.length,
-      uniqueExactCardIntersection: ids.length === 1,
-      uniqueExactQaId: ids.length === 1 ? String(ids[0]) : null,
+      candidatePoolSize: candidateIds.length,
+      candidatePoolTruncated: candidateIds.length > ids.length,
+      intersectionCandidatePoolSize: candidateIds.length,
+      intersectionQaIds: ids,
+      uniqueExactCardIntersection: candidateIds.length === 1,
+      uniqueExactQaId: candidateIds.length === 1 ? String(candidateIds[0]) : null,
       resolvedCardIds: [entries[0].cardId],
       supportingCardIdsByQaId: Object.fromEntries(ids.map((id) => [String(id), [entries[0].cardId]])),
     };
@@ -178,18 +187,66 @@ export function selectRelevantQaIds(cardQaEntries = [], maxCandidates = 8) {
   const allCardMatches = [...counts.entries()]
     .filter(([, count]) => count === entries.length)
     .sort((left, right) => firstSeen.get(left[0]) - firstSeen.get(right[0]));
-  const sharedMatches = (allCardMatches.length ? allCardMatches : [...counts.entries()]
+  // Shared entries are valuable discovery candidates, but card-index overlap
+  // alone does not prove that they answer every branch of the user's question.
+  // Keep a bounded shared head while reserving room for at least one exclusive
+  // candidate per indexed card whenever the budget permits. This prevents a
+  // popular pair (or even an unrelated all-card entry) from crowding out the
+  // decisive single-card Q&A of another branch.
+  const sharedMatches = [...counts.entries()]
     .filter(([, count]) => count >= 2)
-    .sort((left, right) => right[1] - left[1] || firstSeen.get(left[0]) - firstSeen.get(right[0])));
-  const selectedMatches = sharedMatches.slice(0, safeLimit);
+    .sort((left, right) => right[1] - left[1] || firstSeen.get(left[0]) - firstSeen.get(right[0]));
+  const allSharedIds = new Set(sharedMatches.map(([id]) => id));
+  const perCardReserve = Math.min(entries.length, safeLimit);
+  const sharedHeadLimit = sharedMatches.length
+    ? Math.max(1, safeLimit - perCardReserve)
+    : 0;
+  const selectedIds = sharedMatches
+    .slice(0, Math.min(sharedMatches.length, sharedHeadLimit))
+    .map(([id]) => id);
+  const selectedSet = new Set(selectedIds);
+
+  const exclusiveReserve = roundRobinQaIds(
+    entries,
+    Math.min(perCardReserve, safeLimit - selectedIds.length),
+    allSharedIds,
+  );
+  for (const id of exclusiveReserve) {
+    if (selectedIds.length >= safeLimit || selectedSet.has(id)) continue;
+    selectedIds.push(id);
+    selectedSet.add(id);
+  }
+  for (const [id] of sharedMatches) {
+    if (selectedIds.length >= safeLimit) break;
+    if (selectedSet.has(id)) continue;
+    selectedIds.push(id);
+    selectedSet.add(id);
+  }
+  const unionFill = roundRobinQaIds(entries, safeLimit - selectedIds.length, selectedSet);
+  for (const id of unionFill) {
+    if (selectedIds.length >= safeLimit || selectedSet.has(id)) continue;
+    selectedIds.push(id);
+    selectedSet.add(id);
+  }
+  const allCardIdSet = new Set(allCardMatches.map(([id]) => id));
+  const usedBranchUnion = selectedIds.some((id) => !allCardIdSet.has(id));
   return {
-    ids: selectedMatches.map(([id]) => id),
-    strategy: allCardMatches.length ? "all_resolved_card_intersection" : "highest_shared_card_coverage",
-    candidatePoolSize: sharedMatches.length,
+    ids: selectedIds,
+    strategy: allCardMatches.length
+      ? usedBranchUnion
+        ? "all_card_intersection_then_bounded_round_robin_union"
+        : "all_resolved_card_intersection"
+      : sharedMatches.length
+        ? "shared_coverage_then_bounded_round_robin_union"
+        : "bounded_round_robin_card_union",
+    candidatePoolSize: counts.size,
+    candidatePoolTruncated: counts.size > selectedIds.length,
+    intersectionCandidatePoolSize: allCardMatches.length,
+    intersectionQaIds: allCardMatches.map(([id]) => id).filter((id) => selectedSet.has(id)),
     uniqueExactCardIntersection: allCardMatches.length === 1,
     uniqueExactQaId: allCardMatches.length === 1 ? String(allCardMatches[0][0]) : null,
     resolvedCardIds: entries.map((entry) => entry.cardId),
-    supportingCardIdsByQaId: Object.fromEntries(selectedMatches.map(([id]) => [
+    supportingCardIdsByQaId: Object.fromEntries(selectedIds.map((id) => [
       String(id),
       [...(supportingCardIds.get(id) || [])],
     ])),
@@ -226,6 +283,32 @@ export function normalizeCardMetadata(card, payload, propertyMetadata) {
     ...(linkArrows ? { linkArrows } : {}),
     ...(localized?.attribute ? { attribute: localized.attribute } : {}),
   };
+}
+
+function roundRobinQaIds(entries, limit, initiallySeen = new Set()) {
+  const selected = [];
+  const seen = new Set(initiallySeen || []);
+  const states = (entries || []).map((entry) => ({
+    qaIds: entry.qaIds || [],
+    cursor: 0,
+  }));
+  let progressed = true;
+  while (progressed && selected.length < limit) {
+    progressed = false;
+    for (const state of states) {
+      while (state.cursor < state.qaIds.length && seen.has(state.qaIds[state.cursor])) {
+        state.cursor += 1;
+      }
+      const id = state.qaIds[state.cursor];
+      if (!id) continue;
+      state.cursor += 1;
+      seen.add(id);
+      selected.push(id);
+      progressed = true;
+      if (selected.length >= limit) break;
+    }
+  }
+  return selected;
 }
 
 function optionalNumber(value) {
@@ -272,6 +355,7 @@ function normalizeQaRecord(qaId, payload, cardNameById, selection) {
     retrievalContext: {
       strategy: selection.strategy,
       candidatePoolSize: selection.candidatePoolSize,
+      intersectionCandidatePoolSize: selection.intersectionCandidatePoolSize,
       uniqueExactCardIntersection: selection.uniqueExactCardIntersection
         && String(selection.uniqueExactQaId || "") === String(qaId),
       resolvedCardIds: selection.resolvedCardIds,
@@ -340,6 +424,22 @@ async function fetchJsonResilient(fetchImpl, url, options) {
   } catch {
     return fetchJsonCached(fetchImpl, url, options);
   }
+}
+
+async function mapWithConcurrency(items, concurrency, mapper) {
+  const values = Array.from(items || []);
+  if (!values.length) return [];
+  const results = new Array(values.length);
+  let cursor = 0;
+  const workerCount = Math.min(values.length, Math.max(1, Number(concurrency) || 1));
+  await Promise.all(Array.from({ length: workerCount }, async () => {
+    while (cursor < values.length) {
+      const index = cursor;
+      cursor += 1;
+      results[index] = await mapper(values[index], index);
+    }
+  }));
+  return results;
 }
 
 function dedupeCardsById(cards) {

@@ -2,13 +2,20 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  buildCardQaDiscoveryIndex,
+  buildFairQaCoverageOrder,
   classifyRemoteItemFetchFailure,
+  collectDiscoveredQaIds,
+  isAuthoritativeQaDetailSnapshot,
+  isCompleteCardSnapshotRun,
+  mergeCardQaDiscoveryIndex,
   mergeRulingsCumulatively,
   normalizeCard,
   normalizeQa,
   parseManifestPayload,
   quarantineConflictingTrackedAliases,
   rankCardQaIds,
+  retainBoundedQaDetails,
   selectQaIdsForSync,
 } from "../scripts/sync-ygoresources.mjs";
 import { quarantineRulingData } from "../backend/rulingDataQuality.mjs";
@@ -57,6 +64,124 @@ test("card QA ranking prioritizes interactions referenced by multiple cards", ()
   ]);
 
   assert.deepEqual(ranked.slice(0, 2), ["22803", "13330"]);
+});
+
+test("card QA discovery preserves every relation independently of the bounded hot-detail ranking", () => {
+  const discovery = buildCardQaDiscoveryIndex([
+    {
+      record: { id: "300" },
+      payload: { qaIndex: [900, 901, 902, 903, 904] },
+    },
+    {
+      record: { id: "100" },
+      payload: { qaIndex: [{ id: 905 }, { qaId: 906 }, 905] },
+    },
+  ]);
+
+  assert.deepEqual(discovery, [
+    { cardId: "100", qaIds: ["905", "906"] },
+    { cardId: "300", qaIds: ["900", "901", "902", "903", "904"] },
+  ]);
+  assert.deepEqual(collectDiscoveredQaIds(discovery), ["900", "901", "902", "903", "904", "905", "906"]);
+});
+
+test("partial discovery refresh retains untouched cards while an authoritative refresh removes vanished relations", () => {
+  const previous = [
+    { cardId: "100", qaIds: ["900"] },
+    { cardId: "200", qaIds: ["901"] },
+  ];
+  const current = [{ cardId: "200", qaIds: ["902"] }];
+
+  assert.deepEqual(mergeCardQaDiscoveryIndex(previous, current), [
+    { cardId: "100", qaIds: ["900"] },
+    { cardId: "200", qaIds: ["902"] },
+  ]);
+  assert.deepEqual(mergeCardQaDiscoveryIndex(previous, current, { authoritative: true }), current);
+});
+
+test("bounded or warning-bearing sync runs cannot replace complete card or QA snapshots", () => {
+  assert.equal(isCompleteCardSnapshotRun({
+    syncAllReleasedCards: true,
+    maxCards: 100,
+    sourceWarningCount: 0,
+  }), false);
+  assert.equal(isCompleteCardSnapshotRun({
+    syncAllReleasedCards: true,
+    maxCards: 0,
+    sourceWarningCount: 1,
+  }), false);
+  assert.equal(isCompleteCardSnapshotRun({
+    syncAllReleasedCards: true,
+    maxCards: 0,
+    sourceWarningCount: 0,
+  }), true);
+
+  assert.equal(isAuthoritativeQaDetailSnapshot({
+    maxQaTotal: 3000,
+    cardSnapshotAuthoritative: false,
+    sourceWarningCount: 0,
+    detailSnapshotComplete: true,
+  }), false);
+  assert.equal(isAuthoritativeQaDetailSnapshot({
+    maxQaTotal: 3000,
+    cardSnapshotAuthoritative: true,
+    sourceWarningCount: 1,
+    detailSnapshotComplete: true,
+  }), false);
+});
+
+test("fair QA coverage visits one relation per card before deep popular-card tails", () => {
+  const order = buildFairQaCoverageOrder([
+    { cardId: "100", qaIds: ["900", "901", "902"] },
+    { cardId: "200", qaIds: ["903"] },
+    { cardId: "300", qaIds: ["904", "905"] },
+  ]);
+
+  assert.deepEqual(order, ["900", "903", "904", "901", "905", "902"]);
+});
+
+test("bounded QA detail selection rotates through long-tail relations instead of permanently repeating the hot cap", () => {
+  const coverageQaIds = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+  const seen = new Set();
+  let cursor = 0;
+  for (let run = 0; run < 4; run += 1) {
+    const selected = selectQaIdsForSync({
+      cardQaIds: [1, 2, 3],
+      coverageQaIds,
+      cursor,
+      limit: 4,
+    });
+    assert.ok(selected.ids.length <= 4);
+    selected.ids.forEach((id) => seen.add(id));
+    cursor = selected.nextCursor;
+  }
+
+  assert.deepEqual([...seen].sort((left, right) => Number(left) - Number(right)), coverageQaIds.map(String));
+});
+
+test("a clean bounded snapshot prunes only unselected YGOResources QA details", () => {
+  const records = [
+    { id: "card-faq-100-1", recordType: "card-faq" },
+    { id: "ygoresources-qa-900", recordType: "qa", sourceName: "YGOResources DB", sourceId: "900" },
+    { id: "ygoresources-qa-901", recordType: "qa", sourceName: "YGOResources DB", sourceId: "901" },
+    { id: "independent-qa", recordType: "qa", sourceName: "Independent Source" },
+  ];
+
+  const bounded = retainBoundedQaDetails(records, {
+    selectedQaIds: [901],
+    limit: 1,
+    authoritative: true,
+  });
+  assert.deepEqual(bounded.map((record) => record.id), [
+    "card-faq-100-1",
+    "ygoresources-qa-901",
+    "independent-qa",
+  ]);
+  assert.equal(retainBoundedQaDetails(records, {
+    selectedQaIds: [901],
+    limit: 1,
+    authoritative: false,
+  }).length, records.length);
 });
 
 test("QA normalization falls back from translation placeholders to the Japanese original per field", () => {
