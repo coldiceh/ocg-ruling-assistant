@@ -282,6 +282,132 @@ test("baige_unique_ordered_subsequence_accepts_a_two_character_nickname", async 
   assert.equal(result.results[0].providerResultCount, 1);
 });
 
+test("a nameless provider payload cannot certify the search query as an exact primary card name", async () => {
+  clearBaigeSearchCache();
+  const result = await searchCards("样例短名", {
+    fetchImpl: async () => jsonResponse({
+      result: [{ id: 991001, text: { desc: "与检索词无关的效果文本。" } }],
+      next: 0,
+    }),
+  });
+
+  assert.equal(result.results[0].name, result.results[0].id);
+  assert.notEqual(result.results[0].confidenceSource, "unique_exact_primary_name");
+  assert.ok(result.results[0].confidence < 0.72);
+  assert.ok(result.warnings.some((warning) => warning.startsWith("baige_missing_name:")));
+});
+
+test("an external unique primary name resolves a local short-name ambiguity without trusting alias-only collisions", async () => {
+  clearBaigeSearchCache();
+  const userSurface = "测试龙";
+  const canonicalLocalCard = {
+    id: "910",
+    name: "プロトタイプ・テストドラゴン",
+    jaName: "プロトタイプ・テストドラゴン",
+    enName: "Prototype Test Dragon",
+    aliases: ["プロトタイプ・テストドラゴン", "Prototype Test Dragon"],
+    effectText: "场上的特定怪兽的攻击力变成0。",
+    sourceUrl: "https://db.ygoresources.com/data/card/910",
+  };
+  const localFragmentCards = [{
+    id: "911",
+    name: "甲测试龙",
+    aliases: ["甲测试龙"],
+    effectText: "无关候选甲。",
+  }, {
+    id: "912",
+    name: "幻测试龙",
+    aliases: ["幻测试龙"],
+    effectText: "无关候选乙。",
+  }];
+  const question = `「${userSurface}」的效果使攻击力变成0吗？`;
+  const cardResolution = extractRagCards(question, {
+    cards: [canonicalLocalCard, ...localFragmentCards],
+  });
+  assert.deepEqual(cardResolution.resolvedCards, []);
+  assert.ok(cardResolution.ambiguousMentions.some((item) => item.input === userSurface));
+
+  const aliasOnlyCollision = {
+    cid: 913,
+    id: 10000913,
+    cn_name: "测试水精龙",
+    md_name: userSurface,
+    jp_name: "アクア・プロトタイプ",
+    en_name: "Aqua Prototype",
+    text: { desc: "无关候选卡文。" },
+  };
+  const exactPrimaryMatch = {
+    cid: 910,
+    id: 10000910,
+    cn_name: userSurface,
+    md_name: "测试水合龙",
+    jp_name: "プロトタイプ・テストドラゴン",
+    en_name: "Prototype Test Dragon",
+    text: { desc: "场上的特定怪兽的攻击力变成0。" },
+  };
+  const evidence = await retrieveRagEvidence({
+    userQuery: question,
+    cardResolution,
+    cards: [canonicalLocalCard, ...localFragmentCards],
+    records: [],
+    qaRecords: [],
+    fetchImpl: async () => jsonResponse({ result: [aliasOnlyCollision, exactPrimaryMatch], next: 0 }),
+    env: { RAG_LIVE_OFFICIAL_QA: "0" },
+  });
+
+  assert.equal(evidence.retrievedCards.length, 1);
+  assert.equal(evidence.retrievedCards[0].id, "910");
+  assert.equal(evidence.retrievedCards[0].input, userSurface);
+  assert.equal(evidence.retrievedCards[0].externalSurfaceResolution, "unique_exact_primary_name");
+  assert.match(evidence.cardTexts[0].text, /攻击力变成0/u);
+  assert.ok(!evidence.cardResolution.ambiguousMentions.some((item) => item.input === userSurface));
+});
+
+test("a model canonical expansion cannot erase ambiguity in the user's original surface", async () => {
+  clearBaigeSearchCache();
+  const userSurface = "样例龙";
+  const canonicalExpansion = "模型猜测的规范龙";
+  const question = `「${userSurface}」可以发动效果吗？`;
+  const evidence = await retrieveRagEvidence({
+    userQuery: question,
+    cardResolution: {
+      resolvedCards: [],
+      fuzzyCards: [],
+      unresolvedMentions: [],
+      ambiguousMentions: [{
+        input: userSurface,
+        reason: "local_card_identity_ambiguous",
+        searchTexts: [canonicalExpansion],
+      }],
+      userProvidedCardTexts: [],
+    },
+    cards: [],
+    records: [],
+    qaRecords: [],
+    fetchImpl: async (url) => {
+      const decoded = decodeURIComponent(String(url)).replace(/\+/gu, " ");
+      if (!decoded.includes(canonicalExpansion)) return jsonResponse({ result: [], next: 0 });
+      return jsonResponse({
+        result: [{
+          id: 991002,
+          cid: 9912,
+          cn_name: canonicalExpansion,
+          text: { desc: "示例效果。" },
+        }],
+        next: 0,
+      });
+    },
+    env: { RAG_LIVE_OFFICIAL_QA: "0" },
+  });
+
+  assert.equal(evidence.retrievedCards.length, 0);
+  assert.equal(evidence.cardTexts.length, 0);
+  assert.equal(evidence.officialQaDirectCandidates.length, 0);
+  assert.equal(evidence.officialQaRelated.length, 0);
+  assert.equal(evidence.baigeResolvedCards[0].externalSurfaceResolution, "canonical_expansion_exact_primary_name");
+  assert.ok(evidence.cardResolution.ambiguousMentions.some((item) => item.input === userSurface));
+});
+
 test("unquoted_colloquial_activation_subject_resolves_by_surface_before_a_wrong_model_guess", async () => {
   clearBaigeSearchCache();
   const question = "看透心灵之眼的①效果适用的情况下，红指还能发出来吗";

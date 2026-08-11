@@ -5,7 +5,11 @@ import {
   retrieveEvidenceByFormalQuery,
 } from "../backend/engine.mjs";
 import { normalizeFormalRulingQuery } from "../backend/formalQuery.mjs";
-import { searchOfficialQaEvidence } from "../backend/officialQaMatcher.mjs";
+import {
+  classifyOfficialQaQuestionType,
+  extractOfficialQaSemanticConcepts,
+  searchOfficialQaEvidence,
+} from "../backend/officialQaMatcher.mjs";
 
 const detectedCards = [{
   id: "card-a",
@@ -84,6 +88,85 @@ const cases = [
     rejected: [qa.temporary, qa.sendToGy, qa.returnToDeck],
   },
 ];
+
+test("multi-attacker battle questions rank a single-card official QA as branch evidence without making it direct", () => {
+  const question = "我方里侧守备表示的「沉眠兽」被攻击。对方分别用攻击表示的「通常龙」与另一只怪兽攻击，各自能否由战斗或怪兽效果破坏「沉眠兽」？";
+  const records = [{
+    id: "qa-face-down-battle-branch",
+    recordType: "qa",
+    question: "通常怪兽攻击里侧守备表示的「<<100>>」时，伤害计算前翻开，这场战斗如何处理？",
+    conclusion: "攻击怪兽改变表示形式后战斗结束，不进行伤害计算。",
+    cardIds: ["100"],
+  }, {
+    id: "qa-unrelated-battle",
+    recordType: "qa",
+    question: "「<<900>>」进行直接攻击时如何处理？",
+    conclusion: "进行伤害计算。",
+    cardIds: ["900"],
+  }];
+
+  const matches = searchOfficialQaEvidence({
+    question,
+    records,
+    resolvedCards: [
+      { id: "100", name: "沉眠兽" },
+      { id: "200", name: "通常龙" },
+      { id: "300", name: "另一只怪兽" },
+    ],
+  });
+
+  assert.equal(matches.questionType, "battle_resolution");
+  assert.equal(matches.multiBranchQuery, true);
+  assert.equal(matches.all[0]?.id, "qa-face-down-battle-branch");
+  assert.equal(matches.all[0]?.branchRelevant, true);
+  assert.deepEqual(matches.all[0]?.branchMatchedCardIds, ["100"]);
+  assert.ok(matches.all[0]?.matchedBy.includes("multi_branch_related_evidence"));
+  assert.notEqual(matches.all[0]?.matchLevel, "official_qa_exact");
+  assert.equal(matches.all[0]?.authoritativeSceneMatch, false);
+  assert.equal(matches.exact.some((item) => item.id === "qa-face-down-battle-branch"), false);
+});
+
+test("a face-down defense target is not mistaken for a defense-position attacker", () => {
+  const text = "通常怪兽攻击里侧守备表示的怪兽时，这场战斗如何处理？";
+  assert.equal(classifyOfficialQaQuestionType(text), "battle_resolution");
+  const concepts = extractOfficialQaSemanticConcepts(text);
+  assert.ok(concepts.includes("face_down_battle_target"));
+  assert.equal(concepts.includes("defense_position_attack"), false);
+
+  const actualDefenseAttacker = extractOfficialQaSemanticConcepts(
+    "表侧守备表示的怪兽以守备表示的状态攻击时，如何进行伤害计算？",
+  );
+  assert.ok(actualDefenseAttacker.includes("defense_position_attack"));
+});
+
+test("multi-branch scope stays non-direct even when actor card extraction is incomplete", () => {
+  const matches = searchOfficialQaEvidence({
+    question: "分别用以上三只怪兽攻击里侧守备表示的「目标兽」，各自能否由战斗破坏？",
+    records: [{
+      id: "qa-single-branch-with-incomplete-actors",
+      recordType: "qa",
+      question: "通常怪兽攻击里侧守备表示的「<<100>>」时，这场战斗如何处理？",
+      conclusion: "战斗结束。",
+      cardIds: ["100"],
+    }],
+    // Simulate a preceding extractor finding the common target but missing the
+    // three focal attackers. Multi-branch wording must still fail closed.
+    resolvedCards: [{ id: "100", name: "目标兽" }],
+  });
+
+  assert.equal(matches.multiBranchQuery, true);
+  assert.equal(matches.all[0]?.branchRelevant, true);
+  assert.equal(matches.exact.length, 0);
+});
+
+test("each-player wording alone is not treated as a multi-card decision scope", () => {
+  const matches = searchOfficialQaEvidence({
+    question: "Each player can activate one effect during the Battle Phase. What happens after it resolves?",
+    records: [],
+    resolvedCards: [{ id: "100", name: "Card A" }, { id: "200", name: "Card B" }],
+  });
+  assert.equal(matches.multiBranchQuery, false);
+});
 
 for (const evidenceCase of cases) {
   test(evidenceCase.name, () => {

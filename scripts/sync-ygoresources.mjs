@@ -43,6 +43,7 @@ async function main() {
   const previousMeta = await readJsonFile(join(dataDir, "snapshot-meta.json"), {});
   const previousCards = await readJsonFile(join(dataDir, "cards.json"), { records: [] });
   const previousRulings = await readJsonFile(join(dataDir, "rulings.json"), { records: [] });
+  const previousQaDiscovery = await readJsonFile(join(dataDir, "qa-discovery-index.json"), { records: [] });
 
   const trackedCards = tracked.cards || [];
   const languages = new Set([...defaultIndexLanguages, ...trackedCards.map((card) => card.language || "en")]);
@@ -51,17 +52,44 @@ async function main() {
   const monsterPropertyMetadata = await loadMonsterPropertyMetadata();
   const cardPayloads = await loadCards(cardTargets, nameIndexes, monsterPropertyMetadata);
   quarantineConflictingTrackedAliases(cardPayloads);
-  const cardSnapshotAuthoritative = syncAllReleasedCards && sourceSyncWarnings.length === 0;
+  // A MAX_CARDS run is intentionally partial even when the global
+  // SYNC_ALL_RELEASED_CARDS switch remains enabled.  Never let such a bounded
+  // development run replace the complete card-to-QA discovery relation.
+  const cardSnapshotAuthoritative = isCompleteCardSnapshotRun({
+    syncAllReleasedCards,
+    maxCards,
+    sourceWarningCount: sourceSyncWarnings.length,
+  });
+  const currentQaDiscovery = buildCardQaDiscoveryIndex(cardPayloads);
+  const qaDiscoveryRecords = mergeCardQaDiscoveryIndex(
+    previousQaDiscovery.records || [],
+    currentQaDiscovery,
+    { authoritative: cardSnapshotAuthoritative },
+  );
   const manifest = await loadManifest(previousMeta.sourceRevision);
   let cards = cardPayloads.map(({ record }) => record);
-  const rulingSync = await loadRulings(cards, cardPayloads, manifest.changedQaIds);
+  const rulingSync = await loadRulings(cards, cardPayloads, manifest.changedQaIds, {
+    qaDiscoveryRecords,
+    detailCursor: previousMeta.qaDetailCursor,
+  });
   let rulings = rulingSync.records;
-  if (sourceSyncWarnings.length || !syncAllReleasedCards) {
+  if (!cardSnapshotAuthoritative) {
     cards = mergeCardRecords(previousCards.records || [], cards);
   }
   rulings = mergeRulingsCumulatively(previousRulings.records || [], rulings, {
     removedQaIds: rulingSync.removedQaIds,
     authoritativeRecordTypes: cardSnapshotAuthoritative ? ["card-text", "card-faq"] : [],
+  });
+  const qaDetailSnapshotAuthoritative = isAuthoritativeQaDetailSnapshot({
+    maxQaTotal,
+    cardSnapshotAuthoritative,
+    sourceWarningCount: sourceSyncWarnings.length,
+    detailSnapshotComplete: rulingSync.detailSnapshotComplete,
+  });
+  rulings = retainBoundedQaDetails(rulings, {
+    selectedQaIds: rulingSync.selectedQaIds,
+    limit: maxQaTotal,
+    authoritative: qaDetailSnapshotAuthoritative,
   });
   const rulingQuarantine = quarantineRulingData(rulings, previousRulings.records || []);
   for (const issue of rulingQuarantine.issues) {
@@ -134,6 +162,18 @@ async function main() {
     generatedAt,
     records: qaIndex,
   });
+  const discoveredQaIds = collectDiscoveredQaIds(qaDiscoveryRecords);
+  await writeJson(join(dataDir, "qa-discovery-index.json"), {
+    schemaVersion: 1,
+    generatedAt,
+    sourceRevision: observedSourceRevision || manifest.revision || previousMeta.sourceRevision || null,
+    complete: cardSnapshotAuthoritative,
+    cardCount: qaDiscoveryRecords.length,
+    linkedCardCount: qaDiscoveryRecords.filter((record) => record.qaIds.length > 0).length,
+    qaCount: discoveredQaIds.length,
+    relationCount: qaDiscoveryRecords.reduce((sum, record) => sum + record.qaIds.length, 0),
+    records: qaDiscoveryRecords,
+  });
   await writeJson(join(dataDir, "snapshot-meta.json"), {
     schemaVersion: 1,
     status: warnings.length ? "synced-with-warnings" : "synced",
@@ -156,6 +196,10 @@ async function main() {
     newItems: Number(previousMeta.newItems || 0),
     changedItems: Number(previousMeta.changedItems || 0),
     removedItems: Number(previousMeta.removedItems || 0),
+    qaDetailCursor: rulingSync.nextDetailCursor,
+    qaDiscoveryCardCount: qaDiscoveryRecords.length,
+    qaDiscoveryQaCount: discoveredQaIds.length,
+    qaDiscoveryComplete: cardSnapshotAuthoritative,
     sources: [
       {
         id: "official-card-database",
@@ -191,6 +235,11 @@ async function main() {
     maxCards,
     maxQaTotal,
     qaSyncSelection: qaSyncSelectionStats,
+    qaDiscoveryCardCount: qaDiscoveryRecords.length,
+    qaDiscoveryQaCount: discoveredQaIds.length,
+    qaDiscoveryRelationCount: qaDiscoveryRecords.reduce((sum, record) => sum + record.qaIds.length, 0),
+    qaDiscoveryComplete: cardSnapshotAuthoritative,
+    qaDetailSnapshotAuthoritative,
     warnings,
     sourceRetirementWarnings,
     dataQualityWarnings,
@@ -287,7 +336,10 @@ async function loadCards(cards, nameIndexes, monsterPropertyMetadata = []) {
   return dedupeBy(results.filter(Boolean), (entry) => String(entry.record.id || entry.record.name));
 }
 
-async function loadRulings(cards, cardPayloads, changedQaIds = []) {
+async function loadRulings(cards, cardPayloads, changedQaIds = [], {
+  qaDiscoveryRecords = [],
+  detailCursor = 0,
+} = {}) {
   const records = [];
   const removedQaIds = [];
   records.push(...buildCardTextRecords(cardPayloads));
@@ -305,6 +357,8 @@ async function loadRulings(cards, cardPayloads, changedQaIds = []) {
     changedQaIds,
     recentQaIds,
     cardQaIds: rankCardQaIds(cardPayloads, maxCardQaPerCard),
+    coverageQaIds: buildFairQaCoverageOrder(qaDiscoveryRecords),
+    cursor: detailCursor,
     limit: qaLimit,
   });
   qaSyncSelectionStats = {
@@ -313,24 +367,37 @@ async function loadRulings(cards, cardPayloads, changedQaIds = []) {
     truncatedCount: selection.truncatedCount,
     changedSelectedCount: selection.changedSelectedCount,
     recentSelectedCount: selection.recentSelectedCount,
+    hotSelectedCount: selection.hotSelectedCount,
+    coverageSelectedCount: selection.coverageSelectedCount,
+    detailCursor: selection.cursor,
+    nextDetailCursor: selection.nextCursor,
   };
+  let detailSnapshotComplete = true;
   for (const id of selection.ids) {
     try {
       const payload = await fetchJson(`/data/qa/${id}`);
       const record = normalizeQa(payload, id, cards);
       if (record) records.push(record);
+      else detailSnapshotComplete = false;
     } catch (error) {
       const failure = classifyRemoteItemFetchFailure(error);
       if (failure.kind === "removed") {
         removedQaIds.push(String(id));
         addSourceRetirementWarning(`Q&A ${id} was removed upstream (${failure.status})`);
       } else {
+        detailSnapshotComplete = false;
         addSourceWarning(`Q&A ${id} failed: ${formatError(error)}`);
       }
     }
   }
 
-  return { records, removedQaIds };
+  return {
+    records,
+    removedQaIds,
+    selectedQaIds: selection.ids,
+    nextDetailCursor: selection.nextCursor,
+    detailSnapshotComplete,
+  };
 }
 
 export function classifyRemoteItemFetchFailure(error = {}) {
@@ -404,14 +471,125 @@ export function rankCardQaIds(cardPayloads = [], perCardLimit = Infinity) {
   ));
 }
 
-export function selectQaIdsForSync({ changedQaIds = [], recentQaIds = [], cardQaIds = [], limit = Infinity } = {}) {
+export function isCompleteCardSnapshotRun({
+  syncAllReleasedCards = false,
+  maxCards = 0,
+  sourceWarningCount = 0,
+} = {}) {
+  return syncAllReleasedCards === true
+    && Number(maxCards) <= 0
+    && Number(sourceWarningCount) === 0;
+}
+
+export function isAuthoritativeQaDetailSnapshot({
+  maxQaTotal = 0,
+  cardSnapshotAuthoritative = false,
+  sourceWarningCount = 0,
+  detailSnapshotComplete = false,
+} = {}) {
+  return Number(maxQaTotal) > 0
+    && cardSnapshotAuthoritative === true
+    && Number(sourceWarningCount) === 0
+    && detailSnapshotComplete === true;
+}
+
+export function buildCardQaDiscoveryIndex(cardPayloads = []) {
+  const records = [];
+  for (const entry of cardPayloads || []) {
+    const cardId = String(entry?.record?.id || entry?.tracked?.id || "").trim();
+    if (!/^\d+$/u.test(cardId)) continue;
+    records.push({
+      cardId,
+      qaIds: collectQaIds(entry?.payload?.qaIndex || []).sort(compareNumericIds),
+    });
+  }
+  return normalizeCardQaDiscoveryRecords(records);
+}
+
+export function mergeCardQaDiscoveryIndex(previousRecords = [], currentRecords = [], {
+  authoritative = false,
+} = {}) {
+  if (authoritative) return normalizeCardQaDiscoveryRecords(currentRecords);
+  const byCardId = new Map(normalizeCardQaDiscoveryRecords(previousRecords).map((record) => [record.cardId, record]));
+  for (const record of normalizeCardQaDiscoveryRecords(currentRecords)) byCardId.set(record.cardId, record);
+  return [...byCardId.values()].sort((left, right) => compareNumericIds(left.cardId, right.cardId));
+}
+
+export function collectDiscoveredQaIds(discoveryRecords = []) {
+  return uniqueIds((discoveryRecords || []).flatMap((record) => record?.qaIds || [])).sort(compareNumericIds);
+}
+
+export function buildFairQaCoverageOrder(discoveryRecords = []) {
+  const records = normalizeCardQaDiscoveryRecords(discoveryRecords).filter((record) => record.qaIds.length > 0);
+  const ordered = [];
+  const seen = new Set();
+  let active = records.map((record) => ({ qaIds: record.qaIds, depth: 0 }));
+  while (active.length) {
+    const next = [];
+    for (const state of active) {
+      const id = state.qaIds[state.depth];
+      if (id && !seen.has(id)) {
+        seen.add(id);
+        ordered.push(id);
+      }
+      if (state.depth + 1 < state.qaIds.length) {
+        next.push({ qaIds: state.qaIds, depth: state.depth + 1 });
+      }
+    }
+    active = next;
+  }
+  return ordered;
+}
+
+export function selectQaIdsForSync({
+  changedQaIds = [],
+  recentQaIds = [],
+  cardQaIds = [],
+  coverageQaIds = cardQaIds,
+  cursor = 0,
+  limit = Infinity,
+} = {}) {
   const changed = uniqueIds(changedQaIds);
   const recent = uniqueIds(recentQaIds);
-  const card = uniqueIds(cardQaIds);
-  const discovered = uniqueIds([...changed, ...recent, ...card]);
+  const hot = uniqueIds(cardQaIds);
+  const coverage = uniqueIds(coverageQaIds);
+  const discovered = uniqueIds([...changed, ...recent, ...hot, ...coverage]);
   const safeLimit = Number.isFinite(Number(limit)) && Number(limit) >= 0 ? Math.floor(Number(limit)) : discovered.length;
-  const ids = discovered.slice(0, safeLimit);
+  const ids = uniqueIds([...changed, ...recent]).slice(0, safeLimit);
   const selected = new Set(ids);
+  const safeCursor = normalizeCircularCursor(cursor, coverage.length);
+  let nextCursor = safeCursor;
+  let coverageSelectedCount = 0;
+  let hotSelectedCount = 0;
+
+  const available = Math.max(0, safeLimit - ids.length);
+  const minimumCoverageSlots = coverage.length && available
+    ? Math.max(1, Math.floor(available / 2))
+    : 0;
+  if (minimumCoverageSlots) {
+    const result = takeCircularQaIds(coverage, nextCursor, minimumCoverageSlots, selected);
+    ids.push(...result.ids);
+    result.ids.forEach((id) => selected.add(id));
+    coverageSelectedCount += result.ids.length;
+    nextCursor = result.nextCursor;
+  }
+
+  for (const id of hot) {
+    if (ids.length >= safeLimit) break;
+    if (selected.has(id)) continue;
+    ids.push(id);
+    selected.add(id);
+    hotSelectedCount += 1;
+  }
+
+  if (ids.length < safeLimit && coverage.length) {
+    const result = takeCircularQaIds(coverage, nextCursor, safeLimit - ids.length, selected);
+    ids.push(...result.ids);
+    result.ids.forEach((id) => selected.add(id));
+    coverageSelectedCount += result.ids.length;
+    nextCursor = result.nextCursor;
+  }
+
   return {
     ids,
     selectedCount: ids.length,
@@ -419,7 +597,55 @@ export function selectQaIdsForSync({ changedQaIds = [], recentQaIds = [], cardQa
     truncatedCount: Math.max(0, discovered.length - ids.length),
     changedSelectedCount: changed.filter((id) => selected.has(id)).length,
     recentSelectedCount: recent.filter((id) => selected.has(id)).length,
+    hotSelectedCount,
+    coverageSelectedCount,
+    cursor: safeCursor,
+    nextCursor,
   };
+}
+
+function normalizeCardQaDiscoveryRecords(records = []) {
+  const byCardId = new Map();
+  for (const record of records || []) {
+    const cardId = String(record?.cardId || "").trim();
+    if (!/^\d+$/u.test(cardId)) continue;
+    byCardId.set(cardId, {
+      cardId,
+      qaIds: uniqueIds(record?.qaIds || []).sort(compareNumericIds),
+    });
+  }
+  return [...byCardId.values()].sort((left, right) => compareNumericIds(left.cardId, right.cardId));
+}
+
+function takeCircularQaIds(ids, cursor, count, alreadySelected) {
+  if (!ids.length || count <= 0) return { ids: [], nextCursor: normalizeCircularCursor(cursor, ids.length) };
+  const selected = [];
+  let nextCursor = normalizeCircularCursor(cursor, ids.length);
+  let visited = 0;
+  while (visited < ids.length && selected.length < count) {
+    const id = ids[nextCursor];
+    nextCursor = (nextCursor + 1) % ids.length;
+    visited += 1;
+    if (alreadySelected.has(id)) continue;
+    selected.push(id);
+  }
+  return { ids: selected, nextCursor };
+}
+
+function normalizeCircularCursor(value, length) {
+  if (!length) return 0;
+  const numeric = Number(value);
+  const integer = Number.isFinite(numeric) ? Math.floor(numeric) : 0;
+  return ((integer % length) + length) % length;
+}
+
+function compareNumericIds(left, right) {
+  const leftNumber = Number(left);
+  const rightNumber = Number(right);
+  if (Number.isSafeInteger(leftNumber) && Number.isSafeInteger(rightNumber) && leftNumber !== rightNumber) {
+    return leftNumber - rightNumber;
+  }
+  return String(left).localeCompare(String(right));
 }
 
 function resolveCardId(item, indexes) {
@@ -847,6 +1073,34 @@ export function mergeRulingsCumulatively(previous, current, {
     return !removed.has(sourceId);
   });
   return mergeById(retainedPrevious, current);
+}
+
+export function retainBoundedQaDetails(records = [], {
+  selectedQaIds = [],
+  limit = Infinity,
+  authoritative = false,
+} = {}) {
+  const safeLimit = Number.isFinite(Number(limit)) && Number(limit) >= 0
+    ? Math.floor(Number(limit))
+    : Infinity;
+  if (!authoritative || safeLimit === Infinity || safeLimit <= 0) return records;
+  const retainedSourceIds = new Set(uniqueIds(selectedQaIds).slice(0, safeLimit));
+  return (records || []).filter((record) => {
+    if (!isYgoresourcesQaRecord(record)) return true;
+    return retainedSourceIds.has(qaSourceId(record));
+  });
+}
+
+function isYgoresourcesQaRecord(record = {}) {
+  return String(record?.recordType || "") === "qa"
+    && (String(record?.sourceName || "") === "YGOResources DB"
+      || /^ygoresources-qa-\d+$/u.test(String(record?.id || "")));
+}
+
+function qaSourceId(record = {}) {
+  return String(record?.sourceId || "").trim()
+    || String(record?.id || "").match(/^ygoresources-qa-(\d+)$/u)?.[1]
+    || "";
 }
 
 function addSourceWarning(message) { sourceSyncWarnings.push(message); warnings.push(message); }

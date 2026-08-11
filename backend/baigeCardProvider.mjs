@@ -84,17 +84,28 @@ export async function searchBaigeCards(query, {
     .map((card) => normalizeBaigeCard(card, normalizedQuery, warnings))
     .filter((card) => card.name || card.text || card.id)
     .filter((card) => !hasNumberedCardIdentityConflict(normalizedQuery, [card.name, card.cnName, card.jpName, card.enName, ...(card.aliases || [])].filter(Boolean).join(" ")));
+  const exactPrimaryNameMatches = normalizedCards.filter((card) => (
+    providerPrimaryCardNames(card).some((name) => normalizeSearchKey(name) === cacheKey)
+  ));
+  const uniqueExactPrimaryIdentity = exactPrimaryNameMatches.length === 1
+    ? normalizeId(exactPrimaryNameMatches[0].id || exactPrimaryNameMatches[0].cardId)
+      || `name:${normalizeSearchKey(exactPrimaryNameMatches[0].name)}`
+    : "";
   const providerSignals = buildProviderSearchSignals(normalizedCards, normalizedQuery, matchedSearchQuery);
   const results = normalizedCards
     .map((card, index) => {
       const lexicalConfidence = scoreBaigeCard(card, normalizedQuery);
       const providerSignal = providerSignals[index] || {};
       const confidence = Math.max(lexicalConfidence, Number(providerSignal.confidence || 0));
+      const cardIdentity = normalizeId(card.id || card.cardId) || `name:${normalizeSearchKey(card.name)}`;
+      const lexicalConfidenceSource = uniqueExactPrimaryIdentity && cardIdentity === uniqueExactPrimaryIdentity
+        ? "unique_exact_primary_name"
+        : "name_similarity";
       return {
         ...card,
         confidence: Math.round(confidence * 1000) / 1000,
         confidenceSource: lexicalConfidence >= Number(providerSignal.confidence || 0)
-          ? "name_similarity"
+          ? lexicalConfidenceSource
           : providerSignal.source || "provider_search",
         providerResultCount: normalizedCards.length,
         providerRank: index + 1,
@@ -127,10 +138,18 @@ export function clearBaigeSearchCache() {
 export function normalizeBaigeCard(card = {}, query = "", warnings = []) {
   const id = normalizeId(readFirst(card, ["id", "card_id", "cardId", "password", "passcode"]) || card?.data?.id || "");
   const cid = readFirst(card, ["cid", "card_cid", "ygocdb_id"]);
+  const explicitCnPrimaryName = readFirst(card, ["cn_name", "cnName", "sc_name", "zh_name", "name", "title"]);
   const cnName = readFirst(card, ["cn_name", "cnName", "sc_name", "zh_name", "nwbbs_n", "cnocg_n", "md_name", "name", "title"]);
   const jpName = readFirst(card, ["jp_name", "ja_name", "jpName", "jaName", "jp_ruby"]);
   const enName = readFirst(card, ["en_name", "enName", "english_name"]);
-  const name = cnName || readFirst(card, ["name", "title"]) || jpName || enName || String(query || id || cid || "");
+  const providerPrimaryNames = [explicitCnPrimaryName, jpName, enName]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean);
+  // Keep a stable display fallback for malformed provider payloads, but never
+  // synthesize a card identity from the search query itself. Otherwise a
+  // nameless result could appear to prove that the user's wording is an exact
+  // primary card name.
+  const name = providerPrimaryNames[0] || String(id || cid || "");
   const text = extractEffectText(card);
   const type = readFirst(card, ["type", "cardType"]) || card?.text?.types || card?.data?.type || "";
   const attribute = normalizeAttribute(readFirst(card, ["attribute"]) || card?.data?.attribute || "", type);
@@ -142,7 +161,7 @@ export function normalizeBaigeCard(card = {}, query = "", warnings = []) {
   const sourceUrl = id ? `https://ygocdb.com/card/${id}` : "https://ygocdb.com/";
 
   if (!id) warnings.push(`baige_missing_id:${name || query}`);
-  if (!name) warnings.push(`baige_missing_name:${id || query}`);
+  if (!providerPrimaryNames.length) warnings.push(`baige_missing_name:${id || query}`);
   if (!text) warnings.push(`baige_missing_text:${name || id || query}`);
 
   return {
@@ -158,6 +177,7 @@ export function normalizeBaigeCard(card = {}, query = "", warnings = []) {
     jpName,
     jaName: jpName,
     enName,
+    providerPrimaryNames,
     text,
     effectText: text,
     type: String(type || ""),
@@ -167,7 +187,7 @@ export function normalizeBaigeCard(card = {}, query = "", warnings = []) {
     atk: atk === undefined ? null : atk,
     def: def === undefined ? null : def,
     level: level === undefined ? null : level,
-    aliases: [name, cnName, jpName, enName, readFirst(card, ["sc_name", "zh_name", "nwbbs_n", "cnocg_n"]), readFirst(card, ["md_name"])]
+    aliases: [cnName, jpName, enName, readFirst(card, ["sc_name", "zh_name", "nwbbs_n", "cnocg_n"]), readFirst(card, ["md_name"])]
       .map((item) => String(item || "").trim())
       .filter(Boolean)
       .filter((item, index, array) => array.indexOf(item) === index),
@@ -181,11 +201,11 @@ export function normalizeBaigeCard(card = {}, query = "", warnings = []) {
 
 export function scoreBaigeCard(card = {}, query = "") {
   if (/^\s*\d{1,4}\s*$/u.test(String(query || ""))) return 0;
-  const identityText = [card.cnName, card.name, card.jpName, card.jaName, card.enName, ...(card.aliases || [])].filter(Boolean).join(" ");
+  const names = [...providerPrimaryCardNames(card), ...(card.aliases || [])].filter(Boolean);
+  const identityText = names.join(" ");
   if (hasNumberedCardIdentityConflict(query, identityText)) return 0;
   const queryKey = normalizeSearchKey(query);
   if (!queryKey) return 0;
-  const names = [card.cnName, card.name, card.jpName, card.jaName, card.enName, ...(card.aliases || [])].filter(Boolean);
   let score = 0;
   for (const name of names) {
     const key = normalizeSearchKey(name);
@@ -204,6 +224,17 @@ export function scoreBaigeCard(card = {}, query = "") {
   const textKey = normalizeSearchKey(card.text || card.effectText || "");
   if (textKey.includes(queryKey)) score = Math.max(score, 0.38);
   return Math.round(score * 1000) / 1000;
+}
+
+function providerPrimaryCardNames(card = {}) {
+  if (Array.isArray(card.providerPrimaryNames)) {
+    return card.providerPrimaryNames
+      .map((value) => String(value || "").trim())
+      .filter(Boolean);
+  }
+  return [card.cnName, card.jpName, card.jaName, card.enName]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean);
 }
 
 function buildProviderSearchSignals(cards, query, matchedSearchQuery) {
@@ -234,7 +265,7 @@ function buildProviderSearchSignals(cards, query, matchedSearchQuery) {
 }
 
 function bestOrderedSubsequenceScore(card, queryKey) {
-  const names = [card.cnName, card.name, card.jpName, card.jaName, card.enName, ...(card.aliases || [])]
+  const names = [...providerPrimaryCardNames(card), ...(card.aliases || [])]
     .map(normalizeSearchKey)
     .filter(Boolean);
   let best = 0;

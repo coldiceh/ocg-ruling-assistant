@@ -75,6 +75,21 @@ export async function retrieveRagEvidence({
   const providedNameKeys = new Set(providedTexts.map((item) => normalizeCardKey(item.name)).filter(Boolean));
   const unresolvedForBaige = unresolvedResolutionCandidates
     .filter((mention) => !providedNameKeys.has(normalizeCardKey(mention.input)));
+  // A local short-name or locale gap can produce several fragment candidates
+  // even though an external card index has one exact primary-name match. Keep
+  // the local ambiguity fail-closed, but let the identity provider try to
+  // resolve the user surface instead of silently skipping it.
+  const ambiguousForBaige = (cardResolution.ambiguousMentions || [])
+    .filter((mention) => !providedNameKeys.has(normalizeCardKey(mention.input)))
+    .map((mention) => ({
+      ...mention,
+      reason: mention.reason || "local_card_identity_ambiguous",
+      source: mention.source || "local_identity_candidates",
+    }));
+  const externalResolutionCandidates = dedupeMentions([
+    ...unresolvedForBaige,
+    ...ambiguousForBaige,
+  ]);
   const [enrichedLocalCards, baigeResolvedCards] = await Promise.all([
     enrichCardsWithBaige(dedupeCards([...resolvedCards, ...fuzzyCards]), {
       fetchImpl,
@@ -83,7 +98,7 @@ export async function retrieveRagEvidence({
       warnings: retrievalWarnings,
       debug: baigeDebug,
     }),
-    resolveUnresolvedMentionCardsWithBaige(unresolvedForBaige, { fetchImpl, env, limits, warnings: retrievalWarnings, debug: baigeDebug }),
+    resolveUnresolvedMentionCardsWithBaige(externalResolutionCandidates, { fetchImpl, env, limits, warnings: retrievalWarnings, debug: baigeDebug }),
   ]);
   const identityVerificationFailures = enrichedLocalCards
     .filter((card) => card.identityVerificationStatus === "unverified")
@@ -125,6 +140,21 @@ export async function retrieveRagEvidence({
     ...canonicalLocalCandidates.filter((card) => card.identityCanonicalizationConflict !== true),
     ...canonicalBaigeCards,
   ]).slice(0, limits.maxCards);
+  // Resolve identity conflicts before any card text, scoped FAQ or live-QA
+  // lookup is built. A model-supplied canonical expansion may remain useful
+  // debug information, but it must not leak evidence into the prompt while the
+  // user's original surface is still ambiguous.
+  const preEvidenceCardResolution = reconcileRetrievedCardResolution({
+    cardResolution,
+    retrievedCards: retrievalCards,
+    baigeAmbiguousMentions: baigeDebug.ambiguousMentions,
+  });
+  if (preEvidenceCardResolution.resolvedCards.length !== retrievalCards.length) {
+    retrievalWarnings.push(
+      `ambiguous_card_identities_excluded_before_evidence:${retrievalCards.length - preEvidenceCardResolution.resolvedCards.length}`,
+    );
+  }
+  retrievalCards = preEvidenceCardResolution.resolvedCards;
   const qaIdentityCards = retrievalCards.filter((card) => card.resolutionSource !== "card_text_reference");
   if (qaIdentityCards.length !== retrievalCards.length) {
     retrievalWarnings.push(`qa_identity_excludes_card_text_references:${retrievalCards.length - qaIdentityCards.length}`);
@@ -214,10 +244,20 @@ export async function retrieveRagEvidence({
     subsumptionCandidatePoolComplete: subsumptionCandidatePoolComplete === true
       || !(cards || records || qaRecords),
   });
+  const liveQaEvidenceLimit = readPositiveNumber(env.RAG_LIVE_QA_MAX_CANDIDATES, 8);
+  // The final prompt remains tightly bounded, but a multi-card question needs
+  // a wider discovery pass before semantic ranking.  Otherwise a popular card
+  // with a long QA index can crowd out a decisive single-card ruling that is
+  // only a few positions deeper in another card's index.  This is still a
+  // bounded, on-demand lookup; retrieved records are ranked and trimmed below.
+  const liveQaDiscoveryLimit = readPositiveNumber(
+    env.RAG_LIVE_QA_DISCOVERY_MAX_CANDIDATES,
+    Math.max(liveQaEvidenceLimit, 48),
+  );
   const localCandidateQaIds = localOfficialMatches.all
     .map((match) => officialQaNumericId(match.record))
     .filter(Boolean)
-    .slice(0, readPositiveNumber(env.RAG_LIVE_QA_MAX_CANDIDATES, 8));
+    .slice(0, liveQaEvidenceLimit);
   let liveOfficialQa = { records: [], cardMetadata: [], warnings: [], debug: {} };
   const liveQaEnabled = !isDisabled(env.RAG_LIVE_OFFICIAL_QA)
     && (!cards && !records && !qaRecords || isEnabled(env.RAG_LIVE_OFFICIAL_QA));
@@ -233,7 +273,8 @@ export async function retrieveRagEvidence({
       baseUrl: env.YGORESOURCES_BASE_URL || "https://db.ygoresources.com",
       timeoutMs: readPositiveNumber(env.RAG_LIVE_QA_TIMEOUT_MS, 1800),
       cacheTtlMs: readPositiveNumber(env.RAG_LIVE_QA_CACHE_TTL_MS, 10 * 60 * 1000),
-      maxCandidates: readPositiveNumber(env.RAG_LIVE_QA_MAX_CANDIDATES, 8),
+      maxCandidates: liveQaDiscoveryLimit,
+      maxConcurrentQaFetches: readPositiveNumber(env.RAG_LIVE_QA_MAX_CONCURRENCY, 6),
     });
     retrievalWarnings.push(...(liveOfficialQa.warnings || []));
     if (liveOfficialQa.records?.length) retrievalWarnings.push(`live_official_qa_retrieved:${liveOfficialQa.records.length}`);
@@ -283,19 +324,26 @@ export async function retrieveRagEvidence({
   if (globalMechanismOfficialQaSource.length) {
     retrievalWarnings.push(`official_mechanism_analogues_retrieved:${globalMechanismOfficialQaSource.length}`);
   }
-  const officialQaRelatedSource = dedupeBy([
-    // A card-scoped pass cannot find an official ruling for another card that
-    // instantiates the same rule mechanism.  Strongly matched global analogues
-    // are related evidence only; they can never become a direct ruling.
-    ...globalMechanismOfficialQaSource,
-    // `all` is globally ranked. Concatenating the near bucket before the
-    // related bucket used to bury a source with the exact multi-card scene
-    // merely because its wording had a different question type/language.
-    ...officialMatches.all.filter((match) => (
+  const usefulScopedOfficialMatches = officialMatches.all.filter((match) => (
       isOfficialQaRecord(match.record)
       && isUsefulOfficialRelatedMatch(match)
       && !isIncidentalMultiCardExampleMatch(match, retrievalCards.length)
-    )),
+    ));
+  const prioritizedScopedOfficialMatches = reservePerBranchOfficialEvidence(
+    usefulScopedOfficialMatches,
+    limits.maxRelatedEvidence,
+  );
+  const officialQaRelatedSource = dedupeBy([
+    // `all` is globally ranked, with complete-scene coverage ahead of partial
+    // branches. Reserve at most one best source per uncovered branch inside the
+    // final related-evidence budget, then retain the matcher order for every
+    // remaining scoped source. This prevents either many branch matches or many
+    // broad analogues from monopolising the prompt.
+    ...prioritizedScopedOfficialMatches,
+    // A card-scoped pass cannot find an official ruling for another card that
+    // instantiates the same rule mechanism. Strongly matched global analogues
+    // remain useful fallback evidence, but can never become a direct ruling.
+    ...globalMechanismOfficialQaSource,
     ...rankRecordsWithSupplementalQueries({
       userQuery,
       records: scopedRecordBuckets.qa,
@@ -306,13 +354,13 @@ export async function retrieveRagEvidence({
       allowNoCardMatch: retrievalCards.length === 0 && normalizedRuleQueries.length > 0,
     }).filter((record) => !isIncidentalMultiCardExampleRecord(record, retrievalCards.length)),
   ], (item) => stableRecordKey(item?.record || item));
-  if (officialQaRelatedSource.length > limits.maxRelatedEvidence) retrievalWarnings.push(`official_related_limited:${officialQaRelatedSource.length}->${limits.maxRelatedEvidence}`);
   const officialQaRelated = officialQaRelatedSource
-    .slice(0, limits.maxRelatedEvidence)
     .map((item) => item.record
       ? evidenceFromOfficialMatch(item, "related", limits.maxEvidenceTextChars, retrievalWarnings)
       : evidenceFromRecord(item, "related", limits.maxEvidenceTextChars, retrievalWarnings))
-    .filter((item) => !directIds.has(item.id));
+    .filter((item) => !directIds.has(item.id))
+    .slice(0, limits.maxRelatedEvidence);
+  if (officialQaRelatedSource.length > limits.maxRelatedEvidence) retrievalWarnings.push(`official_related_limited:${officialQaRelatedSource.length}->${limits.maxRelatedEvidence}`);
 
   const provisionalOfficialResponseSource = rankRecordsWithSupplementalQueries({
     userQuery,
@@ -1076,6 +1124,32 @@ function isUsefulOfficialRelatedMatch(match = {}) {
     || match.matchLevel === "official_qa_exact"
     || (match.matchLevel === "official_qa_near" && Number(match.score || 0) >= 0.68)
     || Number(match.score || 0) >= 0.78;
+}
+
+function reservePerBranchOfficialEvidence(matches = [], limit = 1) {
+  const safeLimit = Math.max(1, Math.floor(Number(limit) || 1));
+  const branchRepresentatives = [];
+  const representedCardIds = new Set();
+  for (const match of matches || []) {
+    if (match?.branchRelevant !== true) continue;
+    const branchIds = [...new Set([
+      ...(match.branchMatchedCardIds || []),
+      ...(match.matchedQuestionCardIds || []),
+    ].map(normalizeId).filter(Boolean))];
+    if (!branchIds.some((id) => !representedCardIds.has(id))) continue;
+    branchRepresentatives.push(match);
+    branchIds.forEach((id) => representedCardIds.add(id));
+  }
+  if (!branchRepresentatives.length) return matches;
+
+  const representatives = new Set(branchRepresentatives);
+  const remaining = matches.filter((match) => !representatives.has(match));
+  const ordinarySlots = Math.max(0, safeLimit - branchRepresentatives.length);
+  return [
+    ...remaining.slice(0, ordinarySlots),
+    ...branchRepresentatives,
+    ...remaining.slice(ordinarySlots),
+  ];
 }
 
 function isProvisionalOfficialResponseRecord(record = {}) {
@@ -2397,6 +2471,8 @@ async function resolveUnresolvedMentionCardsWithBaige(unresolvedMentions, { fetc
     let bestLowConfidence = null;
     let bestLowConfidenceCandidates = [];
     let bestLowConfidenceQuery = "";
+    let bestAmbiguousSelection = null;
+    let bestAmbiguousQuery = "";
     for (const query of mentionSearchQueries(mention)) {
       const searchResult = await searchBaige(query, { fetchImpl, env, limits, debug });
       warnings.push(...searchResult.warnings);
@@ -2409,27 +2485,28 @@ async function resolveUnresolvedMentionCardsWithBaige(unresolvedMentions, { fetc
       const best = selection.card;
       const confidence = Number(best?.confidence || 0);
       if (best) {
+        const queryMatchesUserSurface = normalizeCardKey(query) === normalizeCardKey(mention.input);
+        const resolutionKind = selection.resolutionKind === "unique_exact_primary_name"
+          && !queryMatchesUserSurface
+          ? "canonical_expansion_exact_primary_name"
+          : selection.resolutionKind || "confidence_margin";
         warnings.push(`baige_match:${query}->${best.name}`);
         return {
           ...toRagCard(best, mention.input, confidence),
           matchedQuery: query,
+          externalSurfaceResolution: resolutionKind,
         };
       }
       if (selection.ambiguous) {
-        debug.ambiguousMentions.push({
-          input: mention.input,
-          reason: "conflicting_baige_card_identity",
-          candidateCards: selection.candidates.slice(0, 3).map((card) => ({
-            id: card.id || card.cardId || "",
-            cid: card.cid ?? null,
-            name: card.name || card.cnName || card.jpName || card.enName || "",
-            source: "baige",
-            confidence: card.confidence || 0,
-            matchedQuery: query,
-          })),
-        });
-        warnings.push(`baige_ambiguous:${mention.input}`);
-        return null;
+        const ambiguousConfidence = Number(selection.candidates[0]?.confidence || 0);
+        if (!bestAmbiguousSelection
+            || ambiguousConfidence > Number(bestAmbiguousSelection.candidates[0]?.confidence || 0)) {
+          bestAmbiguousSelection = selection;
+          bestAmbiguousQuery = query;
+        }
+        // A model-supplied canonical spelling may be less ambiguous than the
+        // user's nickname. Try every bounded search expansion before failing.
+        continue;
       }
       const lowConfidenceBest = candidates[0];
       const lowConfidence = Number(lowConfidenceBest?.confidence || 0);
@@ -2439,7 +2516,21 @@ async function resolveUnresolvedMentionCardsWithBaige(unresolvedMentions, { fetc
         bestLowConfidenceQuery = query;
       }
     }
-    if (bestLowConfidence) {
+    if (bestAmbiguousSelection) {
+      debug.ambiguousMentions.push({
+        input: mention.input,
+        reason: "conflicting_baige_card_identity",
+        candidateCards: bestAmbiguousSelection.candidates.slice(0, 3).map((card) => ({
+          id: card.id || card.cardId || "",
+          cid: card.cid ?? null,
+          name: card.name || card.cnName || card.jpName || card.enName || "",
+          source: "baige",
+          confidence: card.confidence || 0,
+          matchedQuery: bestAmbiguousQuery,
+        })),
+      });
+      warnings.push(`baige_ambiguous:${mention.input}`);
+    } else if (bestLowConfidence) {
       debug.ambiguousMentions.push({
         input: mention.input,
         candidateCards: bestLowConfidenceCandidates.map((card) => ({
@@ -2749,14 +2840,30 @@ function selectUniqueBaigeCandidate(candidates, minConfidence) {
   const uniqueCandidates = [...identities.values()]
     .sort((left, right) => Number(right.confidence || 0) - Number(left.confidence || 0));
   if (uniqueCandidates.length === 1) {
-    return { card: uniqueCandidates[0], ambiguous: false, candidates: uniqueCandidates };
+    return {
+      card: uniqueCandidates[0],
+      ambiguous: false,
+      candidates: uniqueCandidates,
+      resolutionKind: String(uniqueCandidates[0].confidenceSource || "").includes("unique_exact_primary_name")
+        ? "unique_exact_primary_name"
+        : "single_eligible_identity",
+    };
   }
   const best = uniqueCandidates[0];
   const runnerUp = uniqueCandidates[1];
   const margin = Number(best.confidence || 0) - Number(runnerUp.confidence || 0);
   const providerCertifiedUnique = /(?:unique|high_gap)/u.test(String(best.confidenceSource || ""));
   if (margin >= 0.05 || providerCertifiedUnique) {
-    return { card: best, ambiguous: false, candidates: uniqueCandidates };
+    return {
+      card: best,
+      ambiguous: false,
+      candidates: uniqueCandidates,
+      resolutionKind: String(best.confidenceSource || "").includes("unique_exact_primary_name")
+        ? "unique_exact_primary_name"
+        : providerCertifiedUnique
+          ? "provider_certified_unique"
+          : "confidence_margin",
+    };
   }
   return { card: null, ambiguous: true, candidates: uniqueCandidates };
 }
@@ -2992,8 +3099,14 @@ export function reconcileRetrievedCardResolution({
   baigeAmbiguousMentions = [],
 } = {}) {
   const candidates = mergeCardsByStableIdentity(retrievedCards).map(ensureCardMentionAlias);
+  const externallyResolvedSurfaceKeys = new Set(candidates
+    .filter((card) => card.externalSurfaceResolution === "unique_exact_primary_name")
+    .map((card) => normalizeCardKey(card.input))
+    .filter(Boolean));
   const ambiguousMentions = dedupeMentions([
-    ...(cardResolution.ambiguousMentions || []),
+    ...(cardResolution.ambiguousMentions || []).filter((mention) => (
+      !externallyResolvedSurfaceKeys.has(normalizeCardKey(mention.input))
+    )),
     ...(baigeAmbiguousMentions || []),
   ]);
   const ambiguousKeys = new Set(ambiguousMentions.map((item) => normalizeCardKey(item.input)).filter(Boolean));

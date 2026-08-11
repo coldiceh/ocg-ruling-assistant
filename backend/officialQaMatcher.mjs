@@ -1,4 +1,8 @@
 import { hasNumberedCardIdentityConflict } from "./numberedCardIdentity.mjs";
+import {
+  classifyEvidenceQuestionTypes,
+  classifyMultiEntityDecisionScope,
+} from "./evidenceQuestionTypeClassifier.mjs";
 
 const officialQaRecordFeatureCache = new WeakMap();
 
@@ -25,6 +29,13 @@ const EFFECT_PHRASES = [
   ["effect_activation", /效果发动|効果の発動|effect activation/iu],
   ["during_resolution", /效果处理中|処理中|during resolution/iu],
   ["damage_step", /伤害步骤|ダメージステップ|damage step/iu],
+  ["face_down_battle", /(?:里侧|裡側|裏側|face[- ]?down).{0,28}(?:守备|守備|defen[cs]e).{0,48}(?:被攻击|被攻擊|攻击|攻擊|攻撃され|attacked)|(?:攻击|攻擊|攻撃|attack).{0,48}(?:里侧|裡側|裏側|face[- ]?down).{0,28}(?:守备|守備|defen[cs]e)/iu],
+  ["before_damage_calculation", /伤害计算前|傷害計算前|ダメージ計算前|before damage calculation/iu],
+  ["defense_position_attack", /(?:守备表示|守備表示)(?:的|之|の|で|のまま)?[^，,。.!！?？;；\n]{0,36}(?:怪兽|怪獸|モンスター)?[^，,。.!！?？;；\n]{0,20}(?:攻击|攻擊|攻撃)|(?:monster|card).{0,24}(?:in|while in) (?:face-up )?defen[cs]e position.{0,24}(?:attacks?|declare)|attacks?.{0,16}while in (?:face-up )?defen[cs]e position/iu],
+  ["continuous_effect", /永续效果|永續效果|持续效果|持續效果|永続効果|continuous effect/iu],
+  ["activated_effect", /发动的效果|發動的效果|発動した効果|activated effect/iu],
+  ["damage_calculation", /伤害计算|傷害計算|ダメージ計算|damage calculation/iu],
+  ["battle_end", /战斗结束|戰鬥結束|戦闘は終了|攻撃は終了|battle ends?|attack ends?/iu],
   ["miss_timing", /错过时点|タイミングを逃|miss.*timing/iu],
   ["summon_response", /召唤成功时点|召喚成功時|summon response/iu],
 ];
@@ -54,6 +65,15 @@ const SEMANTIC_CONCEPTS = [
   ["destroy", /破壊|破坏|destroy/iu],
   ["battle", /戦闘|战斗|battle/iu],
   ["attack", /攻撃|攻击|attack/iu],
+  ["face_down_battle_target", /(?:里侧|裡側|裏側|face[- ]?down).{0,28}(?:守备|守備|defen[cs]e).{0,48}(?:被攻击|被攻擊|攻击|攻擊|攻撃され|attacked)|(?:攻击|攻擊|攻撃|attack).{0,48}(?:里侧|裡側|裏側|face[- ]?down).{0,28}(?:守备|守備|defen[cs]e)/iu],
+  ["flip_before_damage_calculation", /(?:伤害计算前|傷害計算前|ダメージ計算前|before damage calculation).{0,36}(?:翻开|翻開|反转|反轉|リバース|表侧|表側|flip)|(?:翻开|翻開|反转|反轉|リバース|flip).{0,36}(?:伤害计算前|傷害計算前|ダメージ計算前|before damage calculation)/iu],
+  ["defense_position_attack", /(?:守备表示|守備表示)(?:的|之|の|で|のまま)?[^，,。.!！?？;；\n]{0,36}(?:怪兽|怪獸|モンスター)?[^，,。.!！?？;；\n]{0,20}(?:攻击|攻擊|攻撃)|(?:monster|card).{0,24}(?:in|while in) (?:face-up )?defen[cs]e position.{0,24}(?:attacks?|declare)|attacks?.{0,16}while in (?:face-up )?defen[cs]e position/iu],
+  ["attack_continuation", /(?:攻击|攻擊|攻撃|attack).{0,36}(?:继续|繼續|続行|終了|continue|end)|(?:继续|繼續|続行|continue).{0,24}(?:攻击|攻擊|攻撃|attack)/iu],
+  ["damage_calculation", /伤害计算|傷害計算|ダメージ計算|damage calculation/iu],
+  ["battle_end", /战斗结束|戰鬥結束|戦闘は終了|攻撃は終了|battle ends?|attack ends?/iu],
+  ["continuous_effect", /永续效果|永續效果|持续效果|持續效果|永続効果|continuous effect/iu],
+  ["activated_effect", /发动的效果|發動的效果|発動した効果|activated effect/iu],
+  ["effect_negation", /效果.{0,16}无效|效果.{0,16}無效|効果.{0,16}無効|negat.{0,20}effect/iu],
   ["reveal_show", /見せ|展示|给对方观看|公開|公开|reveal|show.{0,20}(?:hand|card)/iu],
   ["change_position", /表示形式|表示形態|表示状态|战斗表示形式|battle position|change.{0,20}position/iu],
   ["unaffected", /受けない|不受.{0,16}效果|unaffected/iu],
@@ -80,6 +100,8 @@ const SCENE_QUALIFIER_CONCEPTS = new Set([
   "first_turn",
   "temporary_banish",
   "simultaneous_summon",
+  "face_down_battle_target",
+  "defense_position_attack",
 ]);
 
 const SCENE_QUALIFIER_PHRASES = new Set([
@@ -119,6 +141,9 @@ export function normalizeOfficialQaQuery(value) {
 
 export function classifyOfficialQaQuestionType(value) {
   const text = String(value || "");
+  if (classifyEvidenceQuestionTypes(text).questionTypes.includes("battle_resolution")) {
+    return "battle_resolution";
+  }
   return QUESTION_TYPES.find(([, pattern]) => pattern.test(text))?.[0] || "unknown";
 }
 
@@ -145,6 +170,7 @@ export function searchOfficialQaEvidence({
   const queryType = classifyOfficialQaQuestionType(query);
   const queryPhrases = extractOfficialQaEffectPhrases(query);
   const queryConcepts = extractOfficialQaSemanticConcepts(query);
+  const multiBranchQuery = classifyMultiEntityDecisionScope(query).multiBranch;
   const resolvedIds = new Set((resolvedCards || []).map((card) => normalizeId(card.id || card.cardId)).filter(Boolean));
   const resolvedNames = new Set((resolvedCards || []).flatMap(cardAliases).map(normalizeOfficialQaQuery).filter(Boolean));
   const queryPlayerRoleSignature = extractPlayerRoleSignature(query, {
@@ -161,6 +187,7 @@ export function searchOfficialQaEvidence({
       queryType,
       queryPhrases,
       queryConcepts,
+      multiBranchQuery,
       resolvedIds,
       resolvedNames,
       resolvedCards,
@@ -184,6 +211,7 @@ export function searchOfficialQaEvidence({
     questionType: queryType,
     effectPhrases: queryPhrases,
     semanticConcepts: queryConcepts,
+    multiBranchQuery,
     playerRoleSignature: queryPlayerRoleSignature,
     exact,
     near,
@@ -227,6 +255,7 @@ function scoreRecord({
   queryType,
   queryPhrases,
   queryConcepts,
+  multiBranchQuery,
   resolvedIds,
   resolvedNames,
   resolvedCards,
@@ -249,6 +278,7 @@ function scoreRecord({
     recordPlayerRoleContext(record, questionText),
     { cards: resolvedCards },
   );
+  const evidenceMultiBranchQuery = classifyMultiEntityDecisionScope(questionText).multiBranch;
   const playerRoleComparison = comparePlayerRoleSignatures(
     queryPlayerRoleSignature,
     evidencePlayerRoleSignature,
@@ -297,6 +327,19 @@ function scoreRecord({
   const exactCardIdSet = exactResolvedCardIdSet || exactRetrievedCardSubset;
   const cardNameMatch = [...resolvedNames].some((name) => name.length >= 3 && !hasNumberedCardIdentityConflict(name, recordIdentityText) && normalizedRecordText.includes(name));
   const cardMatch = cardIdMatch || cardNameMatch;
+  // Branch scope is established only by identities in the official question.
+  // Cards that appear solely in an answer/example remain retrieval signals and
+  // must never be treated as a covered decision branch.
+  const branchMatchedCardIds = [...new Set(matchedQuestionCardIds)];
+  const partialCardCoverage = resolvedIds.size >= 2
+    && branchMatchedCardIds.length > 0
+    && branchMatchedCardIds.length < resolvedIds.size;
+  const branchRelevant = multiBranchQuery
+    && (!evidenceMultiBranchQuery || partialCardCoverage)
+    && branchMatchedCardIds.length > 0
+    && typeCompatible
+    && playerRoleComparison.compatibility !== "mismatch"
+    && (phraseHits.length > 0 || semanticHits.length >= 2);
   const identityCompatibleForExact = !resolvedIds.size
     || (recordIds.size ? cardIdCoverage === 1 : cardNameMatch);
   // Replacing quoted names with a generic "card" token is useful for ranking
@@ -324,16 +367,18 @@ function scoreRecord({
   if (resolvedIds.size >= 2 && questionCardIdCoverage === 1) score += 0.2;
   if (exactCardIdSet) score += 0.12;
   score += Math.min(0.18, phraseHits.length * 0.06);
+  if (branchRelevant) score += 0.14;
   if (playerRoleComparison.compatibility === "mismatch") {
     score = Math.max(cardMatch ? 0.2 : 0, score - PLAYER_ROLE_SCORE_PENALTY);
   }
   score = Math.min(1, Number(score.toFixed(4)));
 
   let matchLevel = "official_related";
-  if (rawExact && typeCompatible && playerRoleComparison.compatibility !== "mismatch") {
+  if (rawExact && typeCompatible && !branchRelevant && playerRoleComparison.compatibility !== "mismatch") {
     matchLevel = "official_qa_exact";
   }
   else if (typeCompatible && (score >= 0.68 || (cardMatch && phraseHits.length && score >= 0.56))) matchLevel = "official_qa_near";
+  if (branchRelevant && matchLevel === "official_related") matchLevel = "official_qa_near";
   if (playerRoleComparison.compatibility === "mismatch") matchLevel = "official_related";
   return {
     id: String(record.id || "unknown"),
@@ -345,6 +390,10 @@ function scoreRecord({
     cardMatch,
     matchedCardIds,
     matchedQuestionCardIds,
+    branchRelevant,
+    branchMatchedCardIds,
+    multiBranchQuery,
+    evidenceMultiBranchQuery,
     cardIdCoverage,
     questionCardIdCoverage,
     questionCardIdCount: recordQuestionIds.size,
@@ -389,6 +438,7 @@ function scoreRecord({
       cardNameMatch && "card_name",
       typeCompatible && "question_type",
       phraseHits.length && "effect_phrase",
+      branchRelevant && "multi_branch_related_evidence",
       playerRoleComparison.compatibility === "mismatch" && "player_role_mismatch",
     ].filter(Boolean),
     matchedPhrases: phraseHits,
@@ -414,6 +464,7 @@ function compareOfficialQaMatches(left, right) {
     || right.questionCardIdCoverage - left.questionCardIdCoverage
     || right.matchedQuestionCardIds.length - left.matchedQuestionCardIds.length
     || Number(right.exactCardIdSet) - Number(left.exactCardIdSet)
+    || Number(right.branchRelevant) - Number(left.branchRelevant)
     || Number(right.effectNumberCompatible) - Number(left.effectNumberCompatible)
     || Number(right.sceneQualifiersCompatible) - Number(left.sceneQualifiersCompatible)
     || right.distinctiveSemanticQueryCoverage - left.distinctiveSemanticQueryCoverage
@@ -431,7 +482,7 @@ function markAuthoritativeSceneMatches(items) {
     && item.playerRoleCompatibility !== "mismatch"
   ));
   for (const item of items) {
-    if (item.playerRoleCompatibility === "mismatch") continue;
+    if (item.playerRoleCompatibility === "mismatch" || item.branchRelevant) continue;
     if (item.rawSceneMatch) {
       item.authoritativeSceneMatch = true;
       item.authoritativeSceneMatchReason = "raw_or_normalized_query";
@@ -665,11 +716,14 @@ function promoteUniqueExactCardSet(items, queryType, resolvedIds) {
   if (resolvedIds.size < 2 || queryType === "unknown") return;
   const candidates = items.filter((item) => {
     if (item.playerRoleCompatibility === "mismatch"
+        || item.branchRelevant
         || !item.exactCardIdSet
         || !item.typeCompatible
         || item.questionType !== queryType) return false;
-    const uniqueLiveIntersection = item.record?.retrievalContext?.uniqueExactCardIntersection === true
-      && Number(item.record?.retrievalContext?.candidatePoolSize) === 1;
+    const retrievalContext = item.record?.retrievalContext || {};
+    const uniqueLiveIntersection = retrievalContext.uniqueExactCardIntersection === true
+      && Number(retrievalContext.intersectionCandidatePoolSize ?? retrievalContext.candidatePoolSize) === 1
+      && (retrievalContext.intersectionCandidatePoolComplete ?? retrievalContext.candidatePoolComplete) === true;
     return uniqueLiveIntersection || item.lexicalScore >= 0.45;
   });
   if (candidates.length !== 1) return;
@@ -684,6 +738,7 @@ function promoteUniqueQuestionCardMatch(items, resolvedIds, queryType) {
   if (resolvedIds.size < 2 || queryType === "unknown") return;
   const subsumptionCandidates = items.filter((item) => (
     item.playerRoleCompatibility !== "mismatch"
+    && !item.branchRelevant
     &&
     item.subsumptionCandidatePoolComplete
     && item.typeCompatible
@@ -725,6 +780,7 @@ function promoteUniqueQuestionCardMatch(items, resolvedIds, queryType) {
   }
   const candidates = items.filter((item) => (
     item.playerRoleCompatibility !== "mismatch"
+    && !item.branchRelevant
     &&
     item.typeCompatible
     && item.questionType === queryType
@@ -745,6 +801,7 @@ function promoteUniqueSemanticMatch(items, resolvedIds, queryType) {
   const [top, second] = items;
   if (!top
       || !top.typeCompatible
+      || top.branchRelevant
       || top.matchLevel === "official_qa_exact"
       || top.playerRoleCompatibility === "mismatch") return;
   const generalSemanticSignature = top.semanticHits.length >= 3
