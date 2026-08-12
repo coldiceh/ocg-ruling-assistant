@@ -147,15 +147,30 @@ function latencyContext({ profileId, env }) {
   );
   const keyPrefix = String(env.PUBLIC_ANSWER_LATENCY_REDIS_KEY_PREFIX || DEFAULT_KEY_PREFIX).trim()
     || DEFAULT_KEY_PREFIX;
+  const releaseId = latencyReleaseId(env);
   return {
     ok: true,
     profileId: normalizedProfileId,
     storage: "redis",
-    key: `${keyPrefix}:${normalizedProfileId}`,
+    key: [keyPrefix, releaseId, normalizedProfileId].filter(Boolean).join(":"),
     windowSize,
     retentionMs: retentionDays * 86400000,
     retentionSeconds: retentionDays * 86400,
   };
+}
+
+function latencyReleaseId(env = {}) {
+  const candidates = [
+    env.VERCEL_DEPLOYMENT_ID,
+    env.PUBLIC_ANSWER_LATENCY_RELEASE_ID,
+    env.VERCEL_GIT_COMMIT_SHA,
+    env.VERCEL_URL,
+  ];
+  for (const value of candidates) {
+    const id = String(value || "").trim();
+    if (/^[a-z0-9][a-z0-9._-]{0,127}$/iu.test(id)) return id;
+  }
+  return "";
 }
 
 function summarizeSamples({ profileId, values, nowMs, windowSize, retentionMs }) {

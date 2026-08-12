@@ -52,7 +52,7 @@
               <select id="rulingModelSelect" aria-describedby="rulingModelStatus rulingModelLatency" disabled>
                 <option value="relay-gpt-5.6-sol-low" selected>GPT-5.6 Sol · 思考 low</option>
               </select>
-              <small id="rulingModelStatus">当前默认。旧匿名 10 题小样本：10/10，平均 51.6 秒；仍可能在样本外规则问题中出错。</small>
+              <small id="rulingModelStatus" hidden></small>
               <small id="rulingModelLatency" class="model-latency" aria-live="polite">正在读取平均出答案时间</small>
             </label>
             <div class="answer-version-selector" role="group" aria-label="回答版本">

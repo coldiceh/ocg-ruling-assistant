@@ -105,6 +105,72 @@ test("public answer latency reports no samples without inventing an average", as
   });
 });
 
+test("public answer latency starts a fresh rolling window for each deployment", async () => {
+  const commands = [];
+  const env = {
+    ...redisEnv,
+    VERCEL_DEPLOYMENT_ID: "dpl_release_A1",
+    VERCEL_GIT_COMMIT_SHA: "a".repeat(40),
+    PUBLIC_ANSWER_LATENCY_RELEASE_ID: "fixed-release",
+  };
+  const fetchImpl = async (_url, options) => {
+    const command = JSON.parse(options.body);
+    commands.push(command);
+    return jsonResponse([]);
+  };
+
+  await readPublicAnswerLatency({
+    profileId: "relay-gpt-5.6-sol-low",
+    env,
+    fetchImpl,
+    now,
+  });
+  await readPublicAnswerLatency({
+    profileId: "relay-gpt-5.6-sol-low",
+    env: { ...env, VERCEL_DEPLOYMENT_ID: "dpl_release_B2" },
+    fetchImpl,
+    now,
+  });
+
+  assert.equal(commands[0][1], "rag-public-answer-latency:v1:dpl_release_A1:relay-gpt-5.6-sol-low");
+  assert.equal(commands[1][1], "rag-public-answer-latency:v1:dpl_release_B2:relay-gpt-5.6-sol-low");
+});
+
+test("public answer latency falls back to the Git commit when deployment id is unavailable", async () => {
+  let command;
+  await readPublicAnswerLatency({
+    profileId: "relay-gpt-5.6-sol-low",
+    env: { ...redisEnv, VERCEL_GIT_COMMIT_SHA: "B".repeat(40) },
+    fetchImpl: async (_url, options) => {
+      command = JSON.parse(options.body);
+      return jsonResponse([]);
+    },
+    now,
+  });
+
+  assert.equal(
+    command[1],
+    `rag-public-answer-latency:v1:${"B".repeat(40)}:relay-gpt-5.6-sol-low`,
+  );
+});
+
+test("public answer latency keeps the legacy key when no release identity is available", async () => {
+  let recordKey;
+  await recordPublicAnswerLatency({
+    profileId: "relay-gpt-5.6-sol-low",
+    durationMs: 42_000,
+    env: redisEnv,
+    fetchImpl: async (_url, options) => {
+      const command = JSON.parse(options.body);
+      recordKey = command[3];
+      return jsonResponse([`${nowMs}:42000`]);
+    },
+    now,
+  });
+
+  assert.equal(recordKey, "rag-public-answer-latency:v1:relay-gpt-5.6-sol-low");
+});
+
 test("public answer latency storage failures never escape to the answer caller", async () => {
   const fetchImpl = async () => {
     throw new Error("network unavailable");
