@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
-  "status": "synced",
-  "generatedAt": "2026-08-10T19:02:08.917Z",
+  "status": "synced-with-warnings",
+  "generatedAt": "2026-08-12T11:40:56.595Z",
   "freshnessDays": 7,
   "sourceFreshness": "fresh",
   "previousSourceRevision": "32214",
-  "sourceRevision": "32214",
-  "lastSuccessfulSyncAt": "2026-08-10T19:02:08.917Z",
+  "sourceRevision": "32215",
+  "lastSuccessfulSyncAt": "2026-08-12T11:40:56.595Z",
   "lastFailedSyncAt": null,
   "syncFailureCount": 0,
   "aliasWarnings": [],
@@ -17,9 +17,13 @@
   "parseFailedCount": 0,
   "contentQualityWarningCount": 0,
   "dataQualityWarningCount": 0,
-  "newItems": 0,
-  "changedItems": 1,
+  "newItems": 2879,
+  "changedItems": 3040,
   "removedItems": 0,
+  "qaDetailCursor": 0,
+  "qaDiscoveryCardCount": 14258,
+  "qaDiscoveryQaCount": 11553,
+  "qaDiscoveryComplete": true,
   "sources": [
     {
       "id": "official-card-database",
@@ -34,9 +38,15 @@
       "role": "结构化卡片与 Q&A 数据来源，用于生成 GitHub Pages 可读取的静态快照。"
     }
   ],
-  "warnings": [],
+  "warnings": [
+    "Q&A 12400 was removed upstream (404)"
+  ],
   "sourceSyncWarnings": [],
-  "sourceRetirementWarnings": [],
-  "sourceRetirementWarningCount": 0,
-  "changedPaths": []
+  "sourceRetirementWarnings": [
+    "Q&A 12400 was removed upstream (404)"
+  ],
+  "sourceRetirementWarningCount": 1,
+  "changedPaths": [
+    "/data/card/23150"
+  ]
 }

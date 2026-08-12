@@ -2219,6 +2219,10 @@ function reserveOfficialRelatedQuestionProfileCoverage(candidates) {
   const reservedSet = new Set();
   const representedIds = new Set();
   const representedIdentityTypes = new Set();
+  const representedIdentitySets = [];
+  const eligibleIndexes = new Map(
+    eligible.map((candidate, index) => [candidate.substanceHash, index]),
+  );
   const candidateProfiles = (candidate, rank) => (candidate.questionSideProfiles || [])
     .filter((profile) => questionSideProfileEligibilityRank(profile) === rank);
   const take = (candidate, profiles) => {
@@ -2234,6 +2238,40 @@ function reserveOfficialRelatedQuestionProfileCoverage(candidates) {
     }
   };
   const reserveRank = (rank) => {
+    // A question that jointly names A+B carries interaction information that
+    // cannot be reconstructed from two unrelated A-only and B-only examples.
+    // Reserve the best representative for each complete question-side identity
+    // set before the older per-identity and identity+type diversity passes.
+    // Larger sets are considered first; only an actual strict superset may
+    // subsume a subset. This is source-agnostic packet ordering only and cannot
+    // promote related evidence to direct authority.
+    const bestByIdentitySet = new Map();
+    for (const candidate of eligible) {
+      for (const profile of candidateProfiles(candidate, rank)) {
+        const identitySet = questionSideProfileMatchedIdentitySet(profile);
+        if (identitySet.size === 0) continue;
+        const key = [...identitySet].join("\u0000");
+        if (!bestByIdentitySet.has(key)) {
+          bestByIdentitySet.set(key, { candidate, identitySet });
+        }
+      }
+    }
+    const identitySetRepresentatives = [...bestByIdentitySet.entries()]
+      .sort((left, right) => (
+        right[1].identitySet.size - left[1].identitySet.size
+        || (eligibleIndexes.get(left[1].candidate.substanceHash) ?? Number.MAX_SAFE_INTEGER)
+          - (eligibleIndexes.get(right[1].candidate.substanceHash) ?? Number.MAX_SAFE_INTEGER)
+        || left[0].localeCompare(right[0], "en")
+      ));
+    for (const [, { candidate, identitySet }] of identitySetRepresentatives) {
+      const coveredByRetainedSuperset = representedIdentitySets.some((represented) => (
+        sameIdentitySet(identitySet, represented)
+        || isStrictIdentitySubset(identitySet, represented)
+      ));
+      if (coveredByRetainedSuperset) continue;
+      take(candidate, candidateProfiles(candidate, rank));
+      representedIdentitySets.push(identitySet);
+    }
     for (const candidate of eligible) {
       const profiles = candidateProfiles(candidate, rank);
       const ids = profiles
@@ -2261,6 +2299,21 @@ function reserveOfficialRelatedQuestionProfileCoverage(candidates) {
     ...reserved,
     ...remaining.filter((candidate) => !reservedSet.has(candidate.substanceHash)),
   ];
+}
+
+function questionSideProfileMatchedIdentitySet(profile) {
+  return new Set(arrayValue(profile?.matchedQuestionCardIds)
+    .map((value) => String(value || "").trim())
+    .filter(Boolean)
+    .sort((left, right) => left.localeCompare(right, "en")));
+}
+
+function sameIdentitySet(left, right) {
+  return left.size === right.size && [...left].every((id) => right.has(id));
+}
+
+function isStrictIdentitySubset(left, right) {
+  return left.size < right.size && [...left].every((id) => right.has(id));
 }
 
 function compareRelatedFaqCandidates(left, right) {
@@ -2491,6 +2544,7 @@ function createModelPacketSnapshot({
         "criticalMechanismCoverage",
         "pendingSpellTrapMovementRestriction",
         "mechanismOperationRelevance",
+        "officialRelatedQuestionIdentitySetCoverage",
         "officialRelatedQuestionIdentityCoverage",
         "officialRelatedIdentityQuestionTypeCoverage",
         "direct",

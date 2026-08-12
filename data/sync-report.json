@@ -1,22 +1,40 @@
 {
-  "generatedAt": "2026-08-10T19:02:08.917Z",
+  "generatedAt": "2026-08-12T11:40:56.595Z",
   "cardCount": 14342,
-  "rulingCount": 42356,
+  "rulingCount": 42316,
   "cardAliasCount": 35920,
-  "qaIndexCount": 28014,
-  "syncAllReleasedCards": false,
+  "qaIndexCount": 30893,
+  "qaIndexBytes": 38592048,
+  "maxQaIndexBytes": 94371840,
+  "syncAllReleasedCards": true,
   "syncOnlyReleasedCards": true,
   "maxCards": 0,
-  "maxQaTotal": 0,
+  "maxQaTotal": 3000,
   "qaSyncSelection": {
-    "selectedCount": 0,
-    "discoveredCount": 108,
-    "truncatedCount": 108,
+    "selectedCount": 3000,
+    "discoveredCount": 11553,
+    "truncatedCount": 8553,
     "changedSelectedCount": 0,
-    "recentSelectedCount": 0
+    "recentSelectedCount": 120,
+    "prioritySelectedCount": 2880,
+    "hotSelectedCount": 0,
+    "coverageSelectedCount": 0,
+    "detailCursor": 0,
+    "nextDetailCursor": 0
   },
-  "warnings": [],
-  "sourceRetirementWarnings": [],
+  "qaDiscoveryCardCount": 14258,
+  "qaDiscoveryQaCount": 11553,
+  "qaDiscoveryRelationCount": 36009,
+  "qaDiscoveryComplete": true,
+  "qaDetailSnapshotAuthoritative": true,
+  "warnings": [
+    "Q&A 12400 was removed upstream (404)"
+  ],
+  "sourceRetirementWarnings": [
+    "Q&A 12400 was removed upstream (404)"
+  ],
   "dataQualityWarnings": [],
-  "changedPaths": []
+  "changedPaths": [
+    "/data/card/23150"
+  ]
 }

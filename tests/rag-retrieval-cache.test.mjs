@@ -145,6 +145,46 @@ test("a rich official QA duplicated in records and qaRecords is canonicalized on
   assert.ok(evidence.rawRelatedEvidence.every((item) => item.id !== richRecord.id));
 });
 
+test("canonical official QA selection follows content completeness instead of source-array priority", async () => {
+  const card = {
+    id: "71002",
+    name: "合成镜像机",
+    effectText: "①：满足条件时可以发动。",
+  };
+  const incompleteRecord = {
+    id: "qa-synthetic-mirror@abcdef12",
+    stableId: "qa-synthetic-mirror",
+    recordType: "qa",
+    question: "「合成镜像机」的效果可以发动吗？",
+    answer: "",
+    cardIds: [card.id],
+    questionCardIds: [card.id],
+  };
+  const completeRecord = {
+    ...incompleteRecord,
+    id: "qa-synthetic-mirror",
+    rawDetailedQuestion: "「合成镜像机」满足公开的合成条件时，其①效果可以发动吗？",
+    answer: "COMPLETE_QA_MARKER：可以发动。",
+  };
+
+  const evidence = await retrieveRagEvidence({
+    userQuery: completeRecord.question,
+    cardResolution: {
+      resolvedCards: [card],
+      unresolvedMentions: [],
+      ambiguousMentions: [],
+      userProvidedCardTexts: [],
+    },
+    cards: [card],
+    records: [incompleteRecord],
+    qaRecords: [completeRecord],
+  });
+
+  assert.equal(evidence.debug.scopedRecordCounts.officialQa, 1);
+  assert.equal(evidence.officialQaDirectCandidates[0]?.id, completeRecord.id);
+  assert.match(evidence.officialQaDirectCandidates[0]?.fullText || "", /COMPLETE_QA_MARKER/u);
+});
+
 test("rawDetailedQuestion card ids reject a two-card QA whose identity set only partly overlaps", async () => {
   const cards = [
     { id: "72001", name: "合成触发甲", effectText: "满足条件时处理。" },

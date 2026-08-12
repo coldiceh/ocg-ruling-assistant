@@ -814,16 +814,16 @@ function evidenceRecordBuckets(data) {
   const cached = evidenceRecordBucketsCache.get(data);
   if (cached) return cached;
   const all = [...data.records, ...data.qaRecords];
-  // Rich ruling records and the cumulative compact index can contain the same
-  // official item. Prefer the rich record, but retain compact long-tail QA
-  // outside the current detail-refresh window. Every official path consumes
-  // this one canonical pool.
-  const canonicalOfficial = dedupeBy(
+  // Rich ruling records and the cumulative QA index can contain different
+  // snapshots of the same official item. Select the structurally most complete
+  // version instead of relying on which source array happens to come first:
+  // either source can be the fresher one after an incremental synchronization.
+  // Every official path consumes this one canonical pool.
+  const canonicalOfficial = selectBestOfficialRecordVersions(
     all.filter((record) => (
       ["qa", "card-faq", "official-database"].includes(record.recordType)
       && !["removed", "superseded", "conflict", "parse_failed"].includes(record.status)
     )),
-    stableRecordKey,
   );
   const buckets = {
     all,
@@ -839,6 +839,54 @@ function evidenceRecordBuckets(data) {
   };
   evidenceRecordBucketsCache.set(data, buckets);
   return buckets;
+}
+
+function selectBestOfficialRecordVersions(records = []) {
+  const selected = new Map();
+  for (const record of records || []) {
+    const key = stableRecordKey(record);
+    if (!key) continue;
+    const previous = selected.get(key);
+    if (!previous || compareOfficialRecordCompleteness(record, previous) < 0) {
+      selected.set(key, record);
+    }
+  }
+  return [...selected.values()];
+}
+
+function compareOfficialRecordCompleteness(left = {}, right = {}) {
+  const leftQuality = officialRecordCompleteness(left);
+  const rightQuality = officialRecordCompleteness(right);
+  for (let index = 0; index < leftQuality.length; index += 1) {
+    if (leftQuality[index] !== rightQuality[index]) {
+      return rightQuality[index] - leftQuality[index];
+    }
+  }
+  // Equal-quality mirrors retain their original corpus order. The order is
+  // deterministic, and a source label never changes evidence authority.
+  return 0;
+}
+
+function officialRecordCompleteness(record = {}) {
+  const question = String(record.question || "").trim();
+  const detailedQuestion = String(record.rawDetailedQuestion || "").trim();
+  const answer = String(record.answer || record.conclusion || "").trim();
+  const officialText = String(record.officialText || "").trim();
+  const body = String(record.text || "").trim();
+  const questionIds = new Set((record.questionCardIds || []).map(normalizeId).filter(Boolean));
+  const cardIds = new Set((record.cardIds || []).map(normalizeId).filter(Boolean));
+  return [
+    Number(Boolean(question && answer)),
+    Number(Boolean(answer)),
+    Number(Boolean(detailedQuestion)),
+    Number(Boolean(question)),
+    Number(Boolean(record.sourceUrl || record.officialUrl)),
+    questionIds.size,
+    cardIds.size,
+    Math.min(answer.length, 16_000),
+    Math.min(detailedQuestion.length, 16_000),
+    Math.min(Math.max(body.length, officialText.length), 32_000),
+  ];
 }
 
 function scopeRecordBuckets(buckets, resolvedCards) {
@@ -1504,6 +1552,39 @@ function reserveRelatedEvidenceCoverage(items = [], limit = 1) {
     scopedDiversityKeys.add(key);
     scopedDiversityCandidates.push(item);
   };
+  // Preserve the strongest representative of every question-side identity
+  // combination before allocating representatives for the individual cards.
+  // A two-card interaction contains information that neither of its one-card
+  // subsets can replace, even when corpus growth gives those subsets higher
+  // lexical scores. This ordering affects related recall only; it never changes
+  // matchLevel or direct-evidence authority.
+  const bestScopedCandidateByIdentitySet = new Map();
+  for (const item of scopedCandidates) {
+    const identitySet = relatedQuestionIdentitySetKey(item);
+    if (!identitySet) continue;
+    const previous = bestScopedCandidateByIdentitySet.get(identitySet);
+    if (!previous || compareIdentityScopedRelatedEvidence(item, previous) < 0) {
+      bestScopedCandidateByIdentitySet.set(identitySet, item);
+    }
+  }
+  const scopedIdentitySetRepresentatives = [...bestScopedCandidateByIdentitySet.entries()]
+    .sort((left, right) => (
+      relatedIdentitySetSize(right[0]) - relatedIdentitySetSize(left[0])
+      || compareIdentityScopedRelatedEvidence(left[1], right[1])
+      || left[0].localeCompare(right[0])
+    ));
+  for (const [, item] of scopedIdentitySetRepresentatives) {
+    if (scopedDiversityCandidates.length >= scopedSlotLimit) break;
+    const itemIds = relatedMatchedQuestionCardIds(item);
+    const isStrictSubsetOfRetainedSet = scopedDiversityCandidates.some((retained) => (
+      isStrictQuestionIdentitySubset(
+        new Set(itemIds),
+        new Set(relatedMatchedQuestionCardIds(retained)),
+      )
+    ));
+    if (isStrictSubsetOfRetainedSet) continue;
+    addScopedDiversityCandidate(item);
+  }
   // First give each resolved identity represented in the candidate pool one
   // chance. Prefer candidates that introduce the fewest already represented
   // identities, otherwise one multi-label record can consume the opportunity
@@ -1567,23 +1648,56 @@ function reserveRelatedEvidenceCoverage(items = [], limit = 1) {
   const mechanismSlotLimit = scopedCandidates.length
     ? Math.min(
         Math.max(0, safeLimit - reserved.length),
-        Math.max(1, Math.floor(safeLimit / 6)),
+        Math.max(2, Math.floor(safeLimit / 6)),
       )
     : Math.max(0, safeLimit - reserved.length);
   let mechanismSlotsUsed = 0;
-  const mechanismOrder = [...new Set(candidates.flatMap(evidenceMechanismAnalogues))];
+  const mechanismPool = candidates.filter((item) => (
+    !isIdentityScopedRelatedEvidence(item)
+    && evidenceMechanismAnalogues(item).length > 0
+    && !reservedRecordKeys.has(stableRecordKey(item))
+  ));
+  // Preserve the discovery order of independently inferred mechanisms. A
+  // merged candidate may carry weak overlap labels from several passes, but it
+  // may represent only its strongest (primary) mechanism here. Otherwise one
+  // broad record can falsely claim every mechanism slot and displace the actual
+  // representative of an independent rule question.
+  const mechanismOrder = [...new Set(mechanismPool
+    .map(primaryEvidenceMechanismAnalogue)
+    .filter(Boolean))];
+  // Phase one assigns at most one record to each primary mechanism. The fixed
+  // share is unchanged; weak secondary labels remain available to the profile
+  // pass but never count as independent coverage.
   for (const mechanism of mechanismOrder) {
     if (reserved.length >= safeLimit || mechanismSlotsUsed >= mechanismSlotLimit) break;
     if (representedMechanisms.has(mechanism)) continue;
-    const representative = candidates
-      .filter((item) => {
-        const key = stableRecordKey(item?.record || item);
-        return key
-          && !reservedRecordKeys.has(key)
-          && evidenceMechanismAnalogues(item).includes(mechanism);
-      })
+    const representative = mechanismPool
+      .filter((candidate) => (
+        !reservedRecordKeys.has(stableRecordKey(candidate))
+        && primaryEvidenceMechanismAnalogue(candidate) === mechanism
+      ))
       .sort((left, right) => compareMechanismRepresentatives(left, right, mechanism))[0];
-    if (representative && reserve(representative, mechanism)) mechanismSlotsUsed += 1;
+    if (!representative || !reserve(representative, mechanism)) continue;
+    mechanismSlotsUsed += 1;
+  }
+
+  // Phase two spends only the remaining fixed share on non-dominated profile
+  // and question-type diversity. It cannot displace a mechanism representative
+  // selected above and does not increase the final evidence budget.
+  while (reserved.length < safeLimit && mechanismSlotsUsed < mechanismSlotLimit) {
+    const next = mechanismPool
+      .filter((candidate) => !reservedRecordKeys.has(stableRecordKey(candidate)))
+      .map((candidate) => ({
+        candidate,
+        gain: mechanismCandidateCoverageGain(candidate, reserved, representedMechanisms),
+      }))
+      .filter((entry) => entry.gain > 0)
+      .sort((left, right) => (
+        right.gain - left.gain
+        || compareMechanismSlotCandidates(left.candidate, right.candidate)
+      ))[0]?.candidate;
+    if (!next || !reserve(next)) break;
+    mechanismSlotsUsed += 1;
   }
 
   for (const item of items || []) {
@@ -1622,6 +1736,18 @@ function relatedMatchedQuestionCardIds(item = {}) {
   return [...new Set(values.map(normalizeId).filter(Boolean))];
 }
 
+function relatedQuestionIdentitySetKey(item = {}) {
+  return relatedMatchedQuestionCardIds(item).sort().join("|");
+}
+
+function relatedIdentitySetSize(identitySetKey = "") {
+  return String(identitySetKey || "").split("|").filter(Boolean).length;
+}
+
+function isStrictQuestionIdentitySubset(left = new Set(), right = new Set()) {
+  return left.size < right.size && [...left].every((id) => right.has(id));
+}
+
 function compareIdentityScopedRelatedEvidence(left, right) {
   const leftSignals = left?.retrievalSignals || {};
   const rightSignals = right?.retrievalSignals || {};
@@ -1648,7 +1774,13 @@ function compareIdentityScopedRelatedEvidence(left, right) {
 function compareMechanismRepresentatives(left, right, mechanism) {
   const leftMetric = left?.retrievalSignals?.mechanismAnalogueMetrics?.[mechanism] || {};
   const rightMetric = right?.retrievalSignals?.mechanismAnalogueMetrics?.[mechanism] || {};
-  return Number(rightMetric.score || 0) - Number(leftMetric.score || 0)
+  return Number(rightMetric.fullQueryCoverage || 0) - Number(leftMetric.fullQueryCoverage || 0)
+    || Number(rightMetric.fullScore || 0) - Number(leftMetric.fullScore || 0)
+    || Number(rightMetric.fullQuestionCoverage || 0) - Number(leftMetric.fullQuestionCoverage || 0)
+    || Number(rightMetric.coreScore || 0) - Number(leftMetric.coreScore || 0)
+    || Number(rightMetric.coreQueryCoverage || 0) - Number(leftMetric.coreQueryCoverage || 0)
+    || Number(rightMetric.coreQuestionCoverage || 0) - Number(leftMetric.coreQuestionCoverage || 0)
+    || Number(rightMetric.score || 0) - Number(leftMetric.score || 0)
     || Number(rightMetric.queryCoverage || 0) - Number(leftMetric.queryCoverage || 0)
     || Number(rightMetric.questionCoverage || 0) - Number(leftMetric.questionCoverage || 0)
     || Number(right?.retrievalScore || 0) - Number(left?.retrievalScore || 0)
@@ -1703,6 +1835,13 @@ function mergeRelatedRecordMetadata(left = {}, right = {}) {
       mechanismQueryCoverage: Number(primaryMetrics.queryCoverage || 0),
       mechanismQuestionCoverage: Number(primaryMetrics.questionCoverage || 0),
       mechanismSignatureFeatures: primaryMetrics.features || [],
+      mechanismSignatureProfile: primaryMetrics.profile || "",
+      mechanismFullScore: Number(primaryMetrics.fullScore || 0),
+      mechanismFullQueryCoverage: Number(primaryMetrics.fullQueryCoverage || 0),
+      mechanismFullQuestionCoverage: Number(primaryMetrics.fullQuestionCoverage || 0),
+      mechanismCoreScore: Number(primaryMetrics.coreScore || 0),
+      mechanismCoreQueryCoverage: Number(primaryMetrics.coreQueryCoverage || 0),
+      mechanismCoreQuestionCoverage: Number(primaryMetrics.coreQuestionCoverage || 0),
     },
   };
 }
@@ -1725,6 +1864,21 @@ function collectMechanismAnalogueMetrics(item = {}) {
       features: [...new Set(metric.features
         || (mechanism === primary ? signals.mechanismSignatureFeatures : [])
         || [])],
+      profile: String(metric.profile
+        ?? (mechanism === primary ? signals.mechanismSignatureProfile : "")
+        ?? ""),
+      fullScore: Number(metric.fullScore
+        ?? (mechanism === primary ? signals.mechanismFullScore : 0) ?? 0),
+      fullQueryCoverage: Number(metric.fullQueryCoverage
+        ?? (mechanism === primary ? signals.mechanismFullQueryCoverage : 0) ?? 0),
+      fullQuestionCoverage: Number(metric.fullQuestionCoverage
+        ?? (mechanism === primary ? signals.mechanismFullQuestionCoverage : 0) ?? 0),
+      coreScore: Number(metric.coreScore
+        ?? (mechanism === primary ? signals.mechanismCoreScore : 0) ?? 0),
+      coreQueryCoverage: Number(metric.coreQueryCoverage
+        ?? (mechanism === primary ? signals.mechanismCoreQueryCoverage : 0) ?? 0),
+      coreQuestionCoverage: Number(metric.coreQuestionCoverage
+        ?? (mechanism === primary ? signals.mechanismCoreQuestionCoverage : 0) ?? 0),
     };
   }
   return result;
@@ -1735,11 +1889,11 @@ function mergeMechanismAnalogueMetrics(...sources) {
   for (const source of sources) {
     for (const [mechanism, metric] of Object.entries(source || {})) {
       const previous = result[mechanism];
-      if (!previous || Number(metric.score || 0) > Number(previous.score || 0)) {
+      if (!previous || compareMechanismMetricProfiles(metric, previous) < 0) {
         result[mechanism] = { ...metric, features: [...new Set(metric.features || [])] };
         continue;
       }
-      if (Number(metric.score || 0) < Number(previous.score || 0)) continue;
+      if (compareMechanismMetricProfiles(metric, previous) > 0) continue;
       result[mechanism] = {
         ...previous,
         queryCoverage: Math.max(
@@ -1755,6 +1909,65 @@ function mergeMechanismAnalogueMetrics(...sources) {
     }
   }
   return result;
+}
+
+function compareMechanismSlotCandidates(left, right) {
+  const leftMetrics = collectMechanismAnalogueMetrics(left);
+  const rightMetrics = collectMechanismAnalogueMetrics(right);
+  const leftBest = leftMetrics[primaryEvidenceMechanismAnalogue(left)] || {};
+  const rightBest = rightMetrics[primaryEvidenceMechanismAnalogue(right)] || {};
+  return Number(rightBest.score || 0) - Number(leftBest.score || 0)
+    || Number(rightBest.queryCoverage || 0) - Number(leftBest.queryCoverage || 0)
+    || Number(rightBest.questionCoverage || 0) - Number(leftBest.questionCoverage || 0)
+    || Number(right?.retrievalScore || 0) - Number(left?.retrievalScore || 0)
+    || stableRecordKey(left).localeCompare(stableRecordKey(right));
+}
+
+function mechanismCandidateDominates(selected, candidate) {
+  const sharedMechanisms = evidenceMechanismAnalogues(candidate)
+    .filter((mechanism) => evidenceMechanismAnalogues(selected).includes(mechanism));
+  if (!sharedMechanisms.length) return false;
+  const selectedType = relatedQuestionTypeIdentity(selected);
+  const candidateType = relatedQuestionTypeIdentity(candidate);
+  if (selectedType && candidateType && selectedType !== candidateType) return false;
+  const selectedMetrics = collectMechanismAnalogueMetrics(selected);
+  const candidateMetrics = collectMechanismAnalogueMetrics(candidate);
+  return sharedMechanisms.some((mechanism) => {
+    const left = selectedMetrics[mechanism] || {};
+    const right = candidateMetrics[mechanism] || {};
+    return Number(left.fullQueryCoverage || 0) >= Number(right.fullQueryCoverage || 0)
+      && Number(left.fullScore || 0) >= Number(right.fullScore || 0)
+      && Number(left.fullQuestionCoverage || 0) >= Number(right.fullQuestionCoverage || 0);
+  });
+}
+
+function mechanismCandidateCoverageGain(candidate, selected = [], representedMechanisms = new Set()) {
+  const candidateMechanisms = evidenceMechanismAnalogues(candidate);
+  const uncoveredMechanisms = candidateMechanisms.filter(
+    (mechanism) => !representedMechanisms.has(mechanism),
+  ).length;
+  const nonDominatedProfile = selected.some((item) => mechanismCandidateDominates(item, candidate))
+    ? 0
+    : 1;
+  const distinctQuestionType = relatedQuestionTypeIdentity(candidate)
+    && !selected.some((item) => (
+      relatedQuestionTypeIdentity(item) === relatedQuestionTypeIdentity(candidate)
+    ))
+    ? 1
+    : 0;
+  return uncoveredMechanisms * 4 + nonDominatedProfile * 2 + distinctQuestionType;
+}
+
+function compareMechanismMetricProfiles(left = {}, right = {}) {
+  return Number(right.fullQueryCoverage || 0) - Number(left.fullQueryCoverage || 0)
+    || Number(right.fullScore || 0) - Number(left.fullScore || 0)
+    || Number(right.fullQuestionCoverage || 0) - Number(left.fullQuestionCoverage || 0)
+    || Number(right.coreScore || 0) - Number(left.coreScore || 0)
+    || Number(right.coreQueryCoverage || 0) - Number(left.coreQueryCoverage || 0)
+    || Number(right.coreQuestionCoverage || 0) - Number(left.coreQuestionCoverage || 0)
+    || Number(right.score || 0) - Number(left.score || 0)
+    || Number(right.queryCoverage || 0) - Number(left.queryCoverage || 0)
+    || Number(right.questionCoverage || 0) - Number(left.questionCoverage || 0);
 }
 
 function selectPrimaryMechanismAnalogue(metrics = {}) {
@@ -2294,19 +2507,21 @@ function retrieveGlobalMechanismOfficialQaAnalogues({
   // Grouping is derived only from the query text's atomic semantic signature.
   // A caller-supplied label is diagnostic metadata and cannot create a match.
   const candidatesByMechanism = [];
-  for (const { mechanism, signatures: querySignatures } of mechanismQueries) {
+  for (const {
+    mechanism,
+    fullSignatures,
+    coreSignatures,
+  } of mechanismQueries) {
     const candidates = (records || [])
       .filter(isCurrentOfficialQaRecord)
       .map((record) => {
         const questionFeatures = officialQaMechanismFeatures(record);
         const questionSignature = questionFeatures.signature;
-        const analysis = (querySignatures || [])
-          .map((querySignature) => compareRuleMechanismSignatures({
-            querySignature,
-            questionSignature,
-          }))
-          .filter(Boolean)
-          .sort(compareRuleMechanismAnalyses)[0] || null;
+        const analysis = buildRuleMechanismAnalysisProfile({
+          fullSignatures,
+          coreSignatures,
+          questionSignature,
+        });
         if (!analysis) return null;
         const matchedQuestionCardIds = questionFeatures.questionCardIds
           .filter((id) => resolvedIds.has(id));
@@ -2349,11 +2564,25 @@ function retrieveGlobalMechanismOfficialQaAnalogues({
                 queryCoverage: analysis.queryCoverage,
                 questionCoverage: analysis.questionCoverage,
                 features: analysis.matchedFeatures,
+                profile: analysis.profile,
+                fullScore: analysis.fullScore,
+                fullQueryCoverage: analysis.fullQueryCoverage,
+                fullQuestionCoverage: analysis.fullQuestionCoverage,
+                coreScore: analysis.coreScore,
+                coreQueryCoverage: analysis.coreQueryCoverage,
+                coreQuestionCoverage: analysis.coreQuestionCoverage,
               },
             },
             mechanismQueryCoverage: analysis.queryCoverage,
             mechanismQuestionCoverage: analysis.questionCoverage,
             mechanismSignatureFeatures: analysis.matchedFeatures,
+            mechanismSignatureProfile: analysis.profile,
+            mechanismFullScore: analysis.fullScore,
+            mechanismFullQueryCoverage: analysis.fullQueryCoverage,
+            mechanismFullQuestionCoverage: analysis.fullQuestionCoverage,
+            mechanismCoreScore: analysis.coreScore,
+            mechanismCoreQueryCoverage: analysis.coreQueryCoverage,
+            mechanismCoreQuestionCoverage: analysis.coreQuestionCoverage,
             questionSideMatchedOperationFeatures: matchedQuestionSideOperationFeatures,
             questionSideOperationCoverage: Number(questionSideOperationCoverage.toFixed(4)),
             questionType,
@@ -2364,12 +2593,7 @@ function retrieveGlobalMechanismOfficialQaAnalogues({
         };
       })
       .filter(Boolean)
-      .sort((left, right) => (
-        Number(right.retrievalSignals?.mechanismAnalogueScore || 0)
-          - Number(left.retrievalSignals?.mechanismAnalogueScore || 0)
-        || Number(right.retrievalScore || 0) - Number(left.retrievalScore || 0)
-        || String(left.id || "").localeCompare(String(right.id || ""))
-      ));
+      .sort(compareRuleMechanismCandidates);
     if (candidates.length) {
       const selectedCandidates = selectMechanismDiscoveryCandidates(
         candidates,
@@ -2409,6 +2633,35 @@ function selectMechanismDiscoveryCandidates(candidates = [], resolvedIds = new S
     const questionType = mechanismCandidateQuestionType(candidate);
     if (questionType) representedQuestionTypes.add(questionType);
   };
+  // Keep one representative per question-side identity combination while the
+  // discovery pool is still wide. Prefer larger combinations before their
+  // one-card subsets so downstream allocation can preserve interaction-level
+  // evidence instead of seeing only independently popular cards.
+  const bestByQuestionIdentitySet = new Map();
+  for (const candidate of candidates) {
+    const matchedIds = matchedResolvedQuestionCardIds(candidate, resolvedIds).sort();
+    if (!matchedIds.length) continue;
+    const identitySet = matchedIds.join("|");
+    if (!bestByQuestionIdentitySet.has(identitySet)) {
+      bestByQuestionIdentitySet.set(identitySet, candidate);
+    }
+  }
+
+  const retainedDiscoveryIdentitySets = [];
+  for (const [identitySet, candidate] of [...bestByQuestionIdentitySet.entries()]
+    .sort((left, right) => (
+      relatedIdentitySetSize(right[0]) - relatedIdentitySetSize(left[0])
+      || candidates.indexOf(left[1]) - candidates.indexOf(right[1])
+      || left[0].localeCompare(right[0])
+    ))) {
+    if (selected.length >= safeLimit) break;
+    const ids = new Set(identitySet.split("|").filter(Boolean));
+    if (retainedDiscoveryIdentitySets.some((retained) => (
+      isStrictQuestionIdentitySubset(ids, retained)
+    ))) continue;
+    add(candidate);
+    retainedDiscoveryIdentitySets.push(ids);
+  }
   // Preserve the best candidate for each resolved question identity first.
   // This is a discovery pool, so keep additional question-shape variants for
   // those identities before falling back to broad global analogues.
@@ -2613,26 +2866,36 @@ function buildRuleMechanismQueries(items = []) {
     if (!isUsableRuleMechanismSignature(signature)) continue;
     const mechanism = ruleMechanismSignatureIdentity(signature);
     const coreSignature = projectRuleMechanismCoreSignature(signature);
-    const signatures = [signature];
-    if (coreSignature
-        && ruleMechanismSignatureIdentity(coreSignature) !== mechanism) {
-      signatures.push(coreSignature);
-    }
+    const fullSignatures = [signature];
+    const coreSignatures = coreSignature
+        && ruleMechanismSignatureIdentity(coreSignature) !== mechanism
+      ? [coreSignature]
+      : [];
     if (!byMechanism.has(mechanism)) {
-      byMechanism.set(mechanism, { mechanism, signatures, queries: [item] });
+      byMechanism.set(mechanism, {
+        mechanism,
+        fullSignatures,
+        coreSignatures,
+        queries: [item],
+      });
     }
     else {
       const entry = byMechanism.get(mechanism);
       entry.queries.push(item);
-      for (const candidate of signatures) {
-        const identity = ruleMechanismSignatureIdentity(candidate);
-        if (!entry.signatures.some((existing) => ruleMechanismSignatureIdentity(existing) === identity)) {
-          entry.signatures.push(candidate);
-        }
-      }
+      appendUniqueRuleMechanismSignatures(entry.fullSignatures, fullSignatures);
+      appendUniqueRuleMechanismSignatures(entry.coreSignatures, coreSignatures);
     }
   }
   return [...byMechanism.values()];
+}
+
+function appendUniqueRuleMechanismSignatures(target = [], candidates = []) {
+  for (const candidate of candidates || []) {
+    const identity = ruleMechanismSignatureIdentity(candidate);
+    if (!target.some((existing) => ruleMechanismSignatureIdentity(existing) === identity)) {
+      target.push(candidate);
+    }
+  }
 }
 
 function projectRuleMechanismCoreSignature(signature = new Set()) {
@@ -4321,6 +4584,60 @@ async function readJson(path, fallback) {
   } catch {
     return fallback;
   }
+}
+
+function buildRuleMechanismAnalysisProfile({
+  fullSignatures = [],
+  coreSignatures = [],
+  questionSignature = new Set(),
+} = {}) {
+  const best = (signatures) => (signatures || [])
+    .map((querySignature) => compareRuleMechanismSignatures({
+      querySignature,
+      questionSignature,
+    }))
+    .filter(Boolean)
+    .sort(compareRuleMechanismAnalyses)[0] || null;
+  const fullAnalysis = best(fullSignatures);
+  const coreAnalysis = best(coreSignatures);
+  const analysis = [{ profile: "full", analysis: fullAnalysis }, {
+    profile: "core",
+    analysis: coreAnalysis,
+  }]
+    .filter((entry) => Boolean(entry.analysis))
+    .sort((left, right) => compareRuleMechanismAnalyses(left.analysis, right.analysis))[0];
+  if (!analysis) return null;
+  return {
+    ...analysis.analysis,
+    profile: analysis.profile,
+    fullScore: Number(fullAnalysis?.score || 0),
+    fullQueryCoverage: Number(fullAnalysis?.queryCoverage || 0),
+    fullQuestionCoverage: Number(fullAnalysis?.questionCoverage || 0),
+    coreScore: Number(coreAnalysis?.score || 0),
+    coreQueryCoverage: Number(coreAnalysis?.queryCoverage || 0),
+    coreQuestionCoverage: Number(coreAnalysis?.questionCoverage || 0),
+  };
+}
+
+function compareRuleMechanismCandidates(left, right) {
+  const leftSignals = left?.retrievalSignals || {};
+  const rightSignals = right?.retrievalSignals || {};
+  return Number(rightSignals.mechanismFullQueryCoverage || 0)
+      - Number(leftSignals.mechanismFullQueryCoverage || 0)
+    || Number(rightSignals.mechanismFullScore || 0)
+      - Number(leftSignals.mechanismFullScore || 0)
+    || Number(rightSignals.mechanismFullQuestionCoverage || 0)
+      - Number(leftSignals.mechanismFullQuestionCoverage || 0)
+    || Number(rightSignals.mechanismCoreScore || 0)
+      - Number(leftSignals.mechanismCoreScore || 0)
+    || Number(rightSignals.mechanismCoreQueryCoverage || 0)
+      - Number(leftSignals.mechanismCoreQueryCoverage || 0)
+    || Number(rightSignals.mechanismCoreQuestionCoverage || 0)
+      - Number(leftSignals.mechanismCoreQuestionCoverage || 0)
+    || Number(rightSignals.mechanismAnalogueScore || 0)
+      - Number(leftSignals.mechanismAnalogueScore || 0)
+    || Number(right?.retrievalScore || 0) - Number(left?.retrievalScore || 0)
+    || String(left?.id || "").localeCompare(String(right?.id || ""));
 }
 
 function reserveIdentitySourceCoverage(items = [], limit = 1, resolvedCards = []) {
