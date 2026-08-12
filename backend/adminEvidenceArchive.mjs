@@ -28,6 +28,12 @@ export const DEFAULT_ADMIN_DECISION_PACKET_LIMITS = Object.freeze({
 const MAX_ADMIN_EVIDENCE_SELECTION_CONTEXT_ITEMS = 24;
 const MAX_ADMIN_EVIDENCE_SELECTION_CONTEXT_CHARS = 24_000;
 const MAX_ADMIN_EVIDENCE_SELECTION_CONTEXT_BYTES = 32 * 1024;
+const MAX_ADMIN_QUESTION_SIDE_PROFILES = 6;
+const MAX_ADMIN_QUESTION_SIDE_PROFILE_CARD_IDS = 8;
+const MAX_ADMIN_MODEL_QUESTION_SIDE_PROFILES = 2;
+const MAX_ADMIN_MODEL_QUESTION_SIDE_PROFILE_CARD_IDS = 4;
+const MAX_ADMIN_QUESTION_SIDE_PROFILE_ID_BYTES = 96;
+const MAX_ADMIN_QUESTION_SIDE_PROFILE_TYPE_BYTES = 96;
 
 const MIN_ADMIN_DECISION_PACKET_BYTES = 4 * 1024;
 const MIN_CONFLICT_ITEM_BYTES = 768;
@@ -250,6 +256,7 @@ export function createAdminEvidenceArchive({
       });
       const occurrenceId = `occ_${sha256(occurrenceSeed).slice(0, 24)}`;
       const signals = evidenceSignals(item, category);
+      const questionSideProfiles = normalizeQuestionSideProfiles(item);
       occurrences.push({
         occurrenceId,
         collection: collection.name,
@@ -261,6 +268,7 @@ export function createAdminEvidenceArchive({
         substanceHash,
         bodyHash,
         textFieldPaths: substantiveTextFieldPaths(canonicalItem),
+        ...(questionSideProfiles.length > 0 ? { questionSideProfiles } : {}),
         ...signals,
       });
     });
@@ -1341,6 +1349,7 @@ function aggregateDecisionCandidates(archive) {
       bestCollectionRank: occurrence.index,
       bestSourceCollectionPriority: sourceCollectionPriority(occurrence.collection),
       sourceCollections: [],
+      questionSideProfiles: [],
       representativeOccurrence: occurrence,
     };
     if (!candidate.evidenceIds.includes(occurrence.evidenceId)) {
@@ -1353,6 +1362,7 @@ function aggregateDecisionCandidates(archive) {
     if (!candidate.sourceCollections.includes(occurrence.collection)) {
       candidate.sourceCollections.push(occurrence.collection);
     }
+    candidate.questionSideProfiles.push(...arrayValue(occurrence.questionSideProfiles));
     if (categoryPriority(occurrence.category) < categoryPriority(candidate.category)) {
       candidate.category = occurrence.category;
     }
@@ -1403,6 +1413,7 @@ function aggregateDecisionCandidates(archive) {
         occurrenceIds: [...candidate.occurrenceIds].sort(),
         categories: [...candidate.categories].sort(),
         sourceCollections: [...candidate.sourceCollections].sort(),
+        ...questionSideProfileFields(candidate.questionSideProfiles),
       };
     });
   const aggregated = collapseCompatibleDecisionCandidates(rawAggregated, archive);
@@ -1441,6 +1452,169 @@ function aggregateDecisionCandidates(archive) {
     asksActivationLegality:
       archive.metadata?.selectionContext?.asksActivationLegality === true,
   };
+}
+
+function normalizeQuestionSideProfiles(item) {
+  const sources = [
+    { source: "top_level", value: item },
+    ...(isPlainObject(item?.retrievalSignals)
+      ? [{ source: "retrieval_signals", value: item.retrievalSignals }]
+      : []),
+  ];
+  return deduplicateQuestionSideProfiles(
+    sources.map(({ source, value }) => normalizeQuestionSideProfileSource(value, source))
+      .filter(Boolean),
+  );
+}
+
+function normalizeQuestionSideProfileSource(source, profileSource) {
+  const scalar = (fieldName) => shallowScalar(source, fieldName);
+  const boolean = (fieldName) => shallowBoolean(source, fieldName);
+  const ids = (fieldName) => boundedProfileIds(shallowArrayScalars(source, fieldName));
+  const questionType = boundedProfileScalar(
+    scalar("questiontype"),
+    MAX_ADMIN_QUESTION_SIDE_PROFILE_TYPE_BYTES,
+  ).toLowerCase();
+  const matchedQuestionCardIds = ids("matchedquestioncardids");
+  const branchMatchedCardIds = ids("branchmatchedcardids");
+  const supportingQuestionBranchCardIds = ids("supportingquestionbranchcardids");
+  const supportingQuestionBranchUnmatchedCardIds = ids(
+    "supportingquestionbranchunmatchedcardids",
+  );
+  const questionCardIdCoverage = finiteProfileNumber(scalar("questioncardidcoverage"));
+  const explicitQuestionCardIdCount = finiteProfileNumber(scalar("questioncardidcount"));
+  const questionCardIdCount = explicitQuestionCardIdCount === null
+    ? null
+    : Math.max(0, Math.floor(explicitQuestionCardIdCount));
+  const supportingQuestionBranchIndex = finiteProfileNumber(
+    scalar("supportingquestionbranchindex"),
+  );
+  const profile = canonicalizeJson({
+    profileSource,
+    questionType: questionType || "unknown",
+    matchedQuestionCardIds: matchedQuestionCardIds.values,
+    questionCardIdCoverage,
+    questionCardIdCount,
+    typeCompatible: boolean("typecompatible"),
+    branchRelevant: boolean("branchrelevant"),
+    branchMatchedCardIds: branchMatchedCardIds.values,
+    supportingQuestionBranchIndex: supportingQuestionBranchIndex === null
+      ? null
+      : Math.floor(supportingQuestionBranchIndex),
+    supportingQuestionBranchCardIds: supportingQuestionBranchCardIds.values,
+    supportingQuestionBranchUnmatchedCardIds:
+      supportingQuestionBranchUnmatchedCardIds.values,
+    supportingQuestionBranchIdentityComplete: boolean(
+      "supportingquestionbranchidentitycomplete",
+    ),
+    supportingQuestionBranchTypeCompatible: boolean(
+      "supportingquestionbranchtypecompatible",
+    ),
+    playerRoleCompatibility: compatibilityProfileValue(
+      scalar("playerrolecompatibility"),
+    ),
+    scenarioPremiseCompatibility: compatibilityProfileValue(
+      scalar("scenariopremisecompatibility"),
+    ),
+    supportingQuestionBranchPlayerRoleCompatibility: compatibilityProfileValue(
+      scalar("supportingquestionbranchplayerrolecompatibility"),
+    ),
+    supportingQuestionBranchScenarioPremiseCompatibility: compatibilityProfileValue(
+      scalar("supportingquestionbranchscenariopremisecompatibility"),
+    ),
+    profileAudit: {
+      questionTypeAliased: questionType.startsWith("sha256:"),
+      idFields: {
+        matchedQuestionCardIds: matchedQuestionCardIds.audit,
+        branchMatchedCardIds: branchMatchedCardIds.audit,
+        supportingQuestionBranchCardIds: supportingQuestionBranchCardIds.audit,
+        supportingQuestionBranchUnmatchedCardIds:
+          supportingQuestionBranchUnmatchedCardIds.audit,
+      },
+    },
+  });
+  const informative = profile.questionType !== "unknown"
+    || profile.matchedQuestionCardIds.length > 0
+    || profile.questionCardIdCoverage !== null
+    || profile.questionCardIdCount !== null
+    || profile.typeCompatible !== null
+    || profile.branchRelevant !== null
+    || profile.branchMatchedCardIds.length > 0
+    || profile.supportingQuestionBranchIndex !== null
+    || profile.supportingQuestionBranchCardIds.length > 0
+    || profile.supportingQuestionBranchUnmatchedCardIds.length > 0
+    || profile.supportingQuestionBranchIdentityComplete !== null
+    || profile.supportingQuestionBranchTypeCompatible !== null
+    || profile.playerRoleCompatibility !== "unknown"
+    || profile.scenarioPremiseCompatibility !== "unknown"
+    || profile.supportingQuestionBranchPlayerRoleCompatibility !== "unknown"
+    || profile.supportingQuestionBranchScenarioPremiseCompatibility !== "unknown";
+  return informative ? profile : null;
+}
+
+function shallowFieldValue(source, normalizedFieldName) {
+  if (!isPlainObject(source)) return undefined;
+  const key = Object.keys(source).sort().find(
+    (candidate) => normalizeFieldName(candidate) === normalizedFieldName,
+  );
+  return key === undefined ? undefined : source[key];
+}
+
+function shallowScalar(source, fieldName) {
+  const value = shallowFieldValue(source, normalizeFieldName(fieldName));
+  return typeof value === "string" || typeof value === "number" ? String(value) : "";
+}
+
+function shallowBoolean(source, fieldName) {
+  const value = shallowFieldValue(source, normalizeFieldName(fieldName));
+  return typeof value === "boolean" ? value : null;
+}
+
+function shallowArrayScalars(source, fieldName) {
+  const value = shallowFieldValue(source, normalizeFieldName(fieldName));
+  return Array.isArray(value)
+    ? value.filter((item) => ["string", "number"].includes(typeof item)).map(String)
+    : [];
+}
+
+function boundedProfileIds(values) {
+  const originals = [...new Set(values
+    .map((value) => String(value || "").normalize("NFKC").trim())
+    .filter(Boolean))]
+    .sort((left, right) => left.localeCompare(right, "en"));
+  const bounded = [...new Set(originals.map((value) => (
+    boundedProfileScalar(value, MAX_ADMIN_QUESTION_SIDE_PROFILE_ID_BYTES)
+  )))];
+  const valuesRetained = bounded.slice(0, MAX_ADMIN_QUESTION_SIDE_PROFILE_CARD_IDS);
+  const omitted = bounded.slice(MAX_ADMIN_QUESTION_SIDE_PROFILE_CARD_IDS);
+  return {
+    values: valuesRetained,
+    audit: {
+      inputCount: originals.length,
+      retainedCount: valuesRetained.length,
+      omittedCount: omitted.length,
+      aliasedCount: valuesRetained.filter((value) => value.startsWith("sha256:")).length,
+      omittedSha256: omitted.length > 0 ? sha256(canonicalStringify(omitted)) : null,
+    },
+  };
+}
+
+function boundedProfileScalar(value, maxBytes) {
+  const normalized = String(value || "").normalize("NFKC").trim();
+  if (!normalized) return "";
+  if (byteLength(normalized) <= maxBytes) return normalized;
+  return `sha256:${sha256(normalized)}`;
+}
+
+function finiteProfileNumber(value) {
+  if (value === "" || value === null || value === undefined) return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function compatibilityProfileValue(value) {
+  const normalized = boundedProfileScalar(value, 32).toLowerCase();
+  return normalized || "unknown";
 }
 
 function collapseCompatibleDecisionCandidates(candidates, archive) {
@@ -1540,7 +1714,139 @@ function mergeCompatibleDecisionCandidateGroup(group) {
     sourceCollections: [
       ...new Set(group.flatMap((candidate) => candidate.sourceCollections)),
     ].sort(),
+    ...questionSideProfileFields(group.flatMap(
+      (candidate) => candidate.questionSideProfiles || [],
+    )),
   };
+}
+
+function questionSideProfileFields(profiles) {
+  const allProfiles = deduplicateQuestionSideProfiles(profiles);
+  const normalized = allProfiles.slice(0, MAX_ADMIN_QUESTION_SIDE_PROFILES);
+  const omitted = allProfiles.slice(MAX_ADMIN_QUESTION_SIDE_PROFILES);
+  return {
+    questionSideProfiles: normalized,
+    questionSideProfile: normalized[0] || null,
+    questionSideProfileSummary: {
+      totalProfileCount: allProfiles.length,
+      retainedProfileCount: normalized.length,
+      omittedProfileCount: omitted.length,
+      omittedProfilesSha256: omitted.length > 0
+        ? sha256(canonicalStringify(omitted))
+        : null,
+      aliasedIdCount: allProfiles.reduce(
+        (total, profile) => total + questionSideProfileAliasedIdCount(profile),
+        0,
+      ),
+      omittedIdCount: allProfiles.reduce(
+        (total, profile) => total + questionSideProfileOmittedIdCount(profile),
+        0,
+      ),
+    },
+  };
+}
+
+function deduplicateQuestionSideProfiles(profiles) {
+  const byFingerprint = new Map();
+  for (const profile of profiles || []) {
+    if (!isPlainObject(profile)) continue;
+    const normalized = canonicalizeJson(profile);
+    const fingerprint = sha256(canonicalStringify(normalized));
+    if (!byFingerprint.has(fingerprint)) byFingerprint.set(fingerprint, normalized);
+  }
+  return [...byFingerprint.entries()]
+    .sort((left, right) => (
+      compareQuestionSideProfiles(left[1], right[1])
+      || left[0].localeCompare(right[0], "en")
+    ))
+    .map(([, profile]) => profile);
+}
+
+function questionSideProfileAliasedIdCount(profile) {
+  return Object.values(profile?.profileAudit?.idFields || {}).reduce(
+    (total, audit) => total + Number(audit?.aliasedCount || 0),
+    0,
+  );
+}
+
+function questionSideProfileOmittedIdCount(profile) {
+  return Object.values(profile?.profileAudit?.idFields || {}).reduce(
+    (total, audit) => total + Number(audit?.omittedCount || 0),
+    0,
+  );
+}
+
+function compareQuestionSideProfiles(left, right) {
+  return questionSideProfileEligibilityRank(left) - questionSideProfileEligibilityRank(right)
+    || questionSideProfileCompatibilityCount(right)
+      - questionSideProfileCompatibilityCount(left)
+    || questionSideProfileIdentityCount(right) - questionSideProfileIdentityCount(left)
+    || Number(right.branchRelevant === true) - Number(left.branchRelevant === true)
+    || numberOrNegativeInfinity(right.questionCardIdCoverage)
+      - numberOrNegativeInfinity(left.questionCardIdCoverage)
+    || Number(right.typeCompatible === true) - Number(left.typeCompatible === true)
+    || Number(questionSideProfileQuestionType(right) !== "")
+      - Number(questionSideProfileQuestionType(left) !== "")
+    || canonicalStringify(left).localeCompare(canonicalStringify(right), "en");
+}
+
+function questionSideProfileEligibilityRank(profile) {
+  if (questionSideProfileHasMismatch(profile)) return 2;
+  return questionSideProfileHasExplicitCompatibility(profile) ? 0 : 1;
+}
+
+function questionSideProfileHasMismatch(profile) {
+  return profile?.typeCompatible === false
+    || profile?.supportingQuestionBranchTypeCompatible === false
+    || [
+      profile?.playerRoleCompatibility,
+      profile?.scenarioPremiseCompatibility,
+      profile?.supportingQuestionBranchPlayerRoleCompatibility,
+      profile?.supportingQuestionBranchScenarioPremiseCompatibility,
+    ].some((value) => value === "mismatch");
+}
+
+function questionSideProfileHasExplicitCompatibility(profile) {
+  return profile?.typeCompatible === true
+    && profile?.playerRoleCompatibility === "compatible"
+    && profile?.scenarioPremiseCompatibility === "compatible"
+    && profile?.supportingQuestionBranchTypeCompatible !== false;
+}
+
+function questionSideProfileMismatchCount(profile) {
+  return [
+    profile.playerRoleCompatibility,
+    profile.scenarioPremiseCompatibility,
+    profile.supportingQuestionBranchPlayerRoleCompatibility,
+    profile.supportingQuestionBranchScenarioPremiseCompatibility,
+  ].filter((value) => value === "mismatch").length
+    + Number(profile.typeCompatible === false)
+    + Number(profile.supportingQuestionBranchTypeCompatible === false);
+}
+
+function questionSideProfileCompatibilityCount(profile) {
+  return [
+    profile.playerRoleCompatibility,
+    profile.scenarioPremiseCompatibility,
+    profile.supportingQuestionBranchPlayerRoleCompatibility,
+    profile.supportingQuestionBranchScenarioPremiseCompatibility,
+  ].filter((value) => value === "compatible").length
+    + Number(profile.typeCompatible === true)
+    + Number(profile.supportingQuestionBranchTypeCompatible === true)
+    + Number(profile.supportingQuestionBranchIdentityComplete === true);
+}
+
+function questionSideProfileIdentityCount(profile) {
+  return new Set([
+    ...arrayValue(profile.matchedQuestionCardIds),
+    ...arrayValue(profile.branchMatchedCardIds),
+    ...arrayValue(profile.supportingQuestionBranchCardIds),
+  ]).size;
+}
+
+function questionSideProfileQuestionType(profile) {
+  const value = String(profile?.questionType || "").trim().toLowerCase();
+  return value && value !== "unknown" ? value : "";
 }
 
 function compareCompatibleCandidateBodies(left, right) {
@@ -1856,6 +2162,11 @@ function weightedRelatedCandidateOrder(candidates) {
   ]);
   for (const candidate of candidates) groups.get(relatedCandidateGroup(candidate)).push(candidate);
   groups.get("faq").sort(compareRelatedFaqCandidates);
+  const ordinaryOrder = weightedRelatedGroupOrder(groups);
+  return reserveOfficialRelatedQuestionProfileCoverage(ordinaryOrder);
+}
+
+function weightedRelatedGroupOrder(groups) {
   const ordered = [];
   const offsets = new Map([...groups.keys()].map((key) => [key, 0]));
   const take = (key) => {
@@ -1890,6 +2201,66 @@ function weightedRelatedCandidateOrder(candidates) {
     if (!progressed) break;
   }
   return ordered;
+}
+
+function reserveOfficialRelatedQuestionProfileCoverage(candidates) {
+  const reservedPrefixLength = candidates.findIndex((candidate) => (
+    !["direct_or_response", "pending_spell_trap_movement_restriction"]
+      .includes(relatedCandidateGroup(candidate))
+  ));
+  const protectedCount = reservedPrefixLength < 0 ? candidates.length : reservedPrefixLength;
+  const protectedPrefix = candidates.slice(0, protectedCount);
+  const remaining = candidates.slice(protectedCount);
+  const eligible = remaining.filter((candidate) => (
+    candidate.category === ADMIN_EVIDENCE_CATEGORIES.RELATED_QA
+    && candidate.authority === "official"
+  ));
+  const reserved = [];
+  const reservedSet = new Set();
+  const representedIds = new Set();
+  const representedIdentityTypes = new Set();
+  const candidateProfiles = (candidate, rank) => (candidate.questionSideProfiles || [])
+    .filter((profile) => questionSideProfileEligibilityRank(profile) === rank);
+  const take = (candidate, profiles) => {
+    if (reservedSet.has(candidate.substanceHash)) return;
+    reserved.push(candidate);
+    reservedSet.add(candidate.substanceHash);
+    for (const profile of profiles) {
+      const type = questionSideProfileQuestionType(profile);
+      for (const id of arrayValue(profile.matchedQuestionCardIds)) {
+        representedIds.add(id);
+        if (type) representedIdentityTypes.add(`${id}\u0000${type}`);
+      }
+    }
+  };
+  const reserveRank = (rank) => {
+    for (const candidate of eligible) {
+      const profiles = candidateProfiles(candidate, rank);
+      const ids = profiles
+      .flatMap((profile) => arrayValue(profile.matchedQuestionCardIds));
+      if (ids.some((id) => !representedIds.has(id))) take(candidate, profiles);
+    }
+    for (const candidate of eligible) {
+      const profiles = candidateProfiles(candidate, rank);
+      const pairs = profiles.flatMap((profile) => {
+        const type = questionSideProfileQuestionType(profile);
+        return type
+          ? arrayValue(profile.matchedQuestionCardIds).map((id) => `${id}\u0000${type}`)
+          : [];
+      });
+      if (pairs.some((pair) => !representedIdentityTypes.has(pair))) take(candidate, profiles);
+    }
+  };
+  // Compatible profiles own the diversity reserve. UNKNOWN profiles may fill
+  // an identity/type not represented by any compatible profile; mismatch is
+  // never diversity-reserved and remains in its original weighted position.
+  reserveRank(0);
+  reserveRank(1);
+  return [
+    ...protectedPrefix,
+    ...reserved,
+    ...remaining.filter((candidate) => !reservedSet.has(candidate.substanceHash)),
+  ];
 }
 
 function compareRelatedFaqCandidates(left, right) {
@@ -1941,6 +2312,8 @@ function omittedEntry(candidate, reason) {
     operationRelevanceScore: candidate.operationRelevanceScore || 0,
     bestCollectionRank: candidate.bestCollectionRank,
     sourceCollections: candidate.sourceCollections,
+    questionSideProfiles: candidate.questionSideProfiles || [],
+    questionSideProfileSummary: candidate.questionSideProfileSummary,
     priorityRank: categoryPriority(candidate.category),
     reason,
     bodyCharCount: candidate.bodyText.length,
@@ -1961,6 +2334,9 @@ function modelEvidenceItem(candidate, bounded, limits) {
     authority: candidate.authority,
     direct: candidate.direct,
     current: candidate.current,
+    questionSideProfiles: compactModelQuestionSideProfiles(
+      candidate.questionSideProfiles || [],
+    ),
     body: bounded.text,
     bodyExcerpted: bounded.truncated,
   };
@@ -2048,6 +2424,8 @@ function createIncludedManifest(includedSelections) {
     pendingSpellTrapMovementRestrictionScore:
       candidate.pendingSpellTrapMovementRestrictionScore || 0,
     operationRelevanceScore: candidate.operationRelevanceScore || 0,
+    questionSideProfiles: candidate.questionSideProfiles || [],
+    questionSideProfileSummary: candidate.questionSideProfileSummary,
   }));
 }
 
@@ -2082,8 +2460,14 @@ function createModelPacketSnapshot({
   const includedIdExcerptedCount = included.filter(
     (entry) => entry.evidenceIdAliased,
   ).length;
+  const questionSideProfileCompleteness = summarizeQuestionSideProfiles(
+    includedSelections,
+  );
   const packetStructurallyExcerpted = (
     includedIdExcerptedCount > 0
+    || questionSideProfileCompleteness.modelOmittedProfileCount > 0
+    || questionSideProfileCompleteness.modelOmittedIdCount > 0
+    || questionSideProfileCompleteness.idAliasedCount > 0
     || conflictCatalogLimit < archive.conflicts.length
     || conflictCatalogExcerptedCount > 0
   );
@@ -2107,6 +2491,8 @@ function createModelPacketSnapshot({
         "criticalMechanismCoverage",
         "pendingSpellTrapMovementRestriction",
         "mechanismOperationRelevance",
+        "officialRelatedQuestionIdentityCoverage",
+        "officialRelatedIdentityQuestionTypeCoverage",
         "direct",
         "official",
         "current",
@@ -2146,6 +2532,7 @@ function createModelPacketSnapshot({
         0,
       ),
       evidenceIdExcerptedItemCount: includedIdExcerptedCount,
+      questionSideProfileCompleteness,
       includedManifestSha256: sha256(canonicalStringify(includedManifest)),
     },
     conflicts: conflictCatalog,
@@ -2252,6 +2639,86 @@ function createCriticalMechanismCoverage(
     missing: required.filter((mechanism) => !coveredSet.has(mechanism)),
     evidenceByMechanism,
   };
+}
+
+function summarizeQuestionSideProfiles(includedSelections) {
+  const candidates = includedSelections.map(({ candidate }) => candidate);
+  const summaries = candidates.map((candidate) => candidate.questionSideProfileSummary || {});
+  const modelVisibleProfileCount = candidates.reduce(
+    (total, candidate) => total + Math.min(
+      MAX_ADMIN_MODEL_QUESTION_SIDE_PROFILES,
+      arrayValue(candidate.questionSideProfiles).length,
+    ),
+    0,
+  );
+  const modelVisibleIdCount = candidates.reduce((total, candidate) => (
+    total + arrayValue(candidate.questionSideProfiles)
+      .slice(0, MAX_ADMIN_MODEL_QUESTION_SIDE_PROFILES)
+      .reduce((profileTotal, profile) => (
+        profileTotal + Math.min(
+          MAX_ADMIN_MODEL_QUESTION_SIDE_PROFILE_CARD_IDS,
+          arrayValue(profile.matchedQuestionCardIds).length,
+        )
+      ), 0)
+  ), 0);
+  const retainedSidecarIdCount = candidates.reduce((total, candidate) => (
+    total + arrayValue(candidate.questionSideProfiles).reduce(
+      (profileTotal, profile) => (
+        profileTotal + arrayValue(profile.matchedQuestionCardIds).length
+      ),
+      0,
+    )
+  ), 0);
+  const summary = {
+    totalProfileCount: summaries.reduce(
+      (total, item) => total + Number(item.totalProfileCount || 0),
+      0,
+    ),
+    retainedProfileCount: summaries.reduce(
+      (total, item) => total + Number(item.retainedProfileCount || 0),
+      0,
+    ),
+    sidecarOmittedProfileCount: summaries.reduce(
+      (total, item) => total + Number(item.omittedProfileCount || 0),
+      0,
+    ),
+    idAliasedCount: summaries.reduce(
+      (total, item) => total + Number(item.aliasedIdCount || 0),
+      0,
+    ),
+    sidecarOmittedIdCount: summaries.reduce(
+      (total, item) => total + Number(item.omittedIdCount || 0),
+      0,
+    ),
+  };
+  return {
+    ...summary,
+    modelVisibleProfileCount,
+    modelOmittedProfileCount: Math.max(
+      0,
+      summary.totalProfileCount - modelVisibleProfileCount,
+    ),
+    modelVisibleIdCount,
+    modelOmittedIdCount: Math.max(
+      0,
+      summary.sidecarOmittedIdCount
+        + retainedSidecarIdCount
+        - modelVisibleIdCount,
+    ),
+    manifestSha256: sha256(canonicalStringify(summaries)),
+  };
+}
+
+function compactModelQuestionSideProfiles(profiles) {
+  return profiles.slice(0, MAX_ADMIN_MODEL_QUESTION_SIDE_PROFILES).map((profile) => ({
+    questionType: profile.questionType,
+    matchedQuestionCardIds: arrayValue(profile.matchedQuestionCardIds)
+      .slice(0, MAX_ADMIN_MODEL_QUESTION_SIDE_PROFILE_CARD_IDS),
+    branchRelevant: profile.branchRelevant,
+    typeCompatible: profile.typeCompatible,
+    playerRoleCompatibility: profile.playerRoleCompatibility,
+    scenarioPremiseCompatibility: profile.scenarioPremiseCompatibility,
+  }));
 }
 
 function createModelConflictCatalog(conflicts, limits, catalogLimit) {

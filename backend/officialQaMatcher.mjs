@@ -13,7 +13,7 @@ const officialQaRecordFeatureCache = new WeakMap();
 
 const QUESTION_TYPES = [
   ["who_can_activate", /(?:谁(?:可以|能)?.*发动|由谁发动)|誰が.*発動|who (?:can|may) activate|which player.*activate/iu],
-  ["card_activation_vs_effect_activation", /卡的发动.*效果发动|效果发动.*卡的发动|カードの発動.*効果の発動|card activation.*effect activation/iu],
+  ["card_activation_vs_effect_activation", /卡的发动.*效果发动|效果发动.*卡的发动|カード(?:の発動|を発動).*(?:効果の発動|効果が発動)|(?:効果の発動|効果が発動).*カード(?:の発動|を発動)|card activation.*effect activation/iu],
   ["copy_effect_procedure", /复制.*效果|复制.*发动手续|同じ効果.*発動|copy.*effect|copied effect/iu],
   ["declaration_legality", /(?:能否|是否(?:可以|能)?|可不可以|能不能|可以|能).{0,40}(?:宣言|声明)|(?:宣言|声明).{0,50}(?:できますか|できる|可以|能|発動)|(?:can|may).{0,50}\bdeclare\b|\bdeclare\b.{0,50}(?:can|may)/iu],
   ["target_legality", /能否.*(?:取|选择).*对象|不能成为.*对象|対象に.*(?:できます|できません)|can(?:not)? target|legal target/iu],
@@ -30,8 +30,8 @@ const EFFECT_PHRASES = [
   ["after_chain_resolution", /连锁处理后|チェーン処理後|after (?:the )?chain resolves/iu],
   ["copy_effect", /复制效果|同じ効果|copy.*effect/iu],
   ["target", /取对象|选择对象|対象|target/iu],
-  ["card_activation", /卡的发动|カードの発動|card activation/iu],
-  ["effect_activation", /效果发动|効果の発動|effect activation/iu],
+  ["card_activation", /卡的发动|カード(?:の発動|を発動)|card activation/iu],
+  ["effect_activation", /效果发动|効果(?:の発動|が発動)|effect activation/iu],
   ["during_resolution", /效果处理中|処理中|during resolution/iu],
   ["damage_step", /伤害步骤|ダメージステップ|damage step/iu],
   ["face_down_battle", /(?:里侧|裡側|裏側|face[- ]?down).{0,28}(?:守备|守備|defen[cs]e).{0,48}(?:被攻击|被攻擊|攻击|攻擊|攻撃され|attacked)|(?:攻击|攻擊|攻撃|attack).{0,48}(?:里侧|裡側|裏側|face[- ]?down).{0,28}(?:守备|守備|defen[cs]e)/iu],
@@ -126,6 +126,7 @@ const OPERATION_CONCEPT_FAMILIES = new Map([
 
 const SCENE_QUALIFIER_CONCEPTS = new Set([
   "damage_step",
+  "damage_calculation",
   "first_turn",
   "temporary_banish",
   "simultaneous_summon",
@@ -137,6 +138,8 @@ const SCENE_QUALIFIER_PHRASES = new Set([
   "after_chain_resolution",
   "during_resolution",
   "damage_step",
+  "before_damage_calculation",
+  "damage_calculation",
   "miss_timing",
   "summon_response",
 ]);
@@ -170,7 +173,11 @@ export function normalizeOfficialQaQuery(value) {
 
 export function classifyOfficialQaQuestionType(value) {
   const text = String(value || "");
-  if (classifyEvidenceQuestionTypes(text).questionTypes.includes("battle_resolution")) {
+  const sharedTypes = new Set(classifyEvidenceQuestionTypes(text).questionTypes);
+  if (sharedTypes.has("effect_applicability") || sharedTypes.has("resolution_handling")) {
+    return "resolution_result";
+  }
+  if (sharedTypes.has("battle_resolution")) {
     return "battle_resolution";
   }
   return QUESTION_TYPES.find(([, pattern]) => pattern.test(text))?.[0] || "unknown";
@@ -303,7 +310,6 @@ function scoreRecord({
     evidenceType,
     evidencePhrases,
     evidenceConcepts,
-    rulingMechanismConcepts,
     questionBranches,
     recordIds,
     recordQuestionIds,
@@ -358,17 +364,13 @@ function scoreRecord({
     : 0;
   const queryOperationFamilies = extractOperationFamilies(queryConcepts);
   const questionOperationFamilies = extractOperationFamilies(evidenceConcepts);
-  const rulingOperationFamilies = extractOperationFamilies(rulingMechanismConcepts);
-  const operationEvidenceFamilies = [...new Set([
-    ...questionOperationFamilies,
-    ...rulingOperationFamilies,
-  ])];
   const matchedQuestionOperationFamilies = queryOperationFamilies.filter(
     (family) => questionOperationFamilies.includes(family),
   );
-  const matchedOperationFamilies = queryOperationFamilies.filter(
-    (family) => operationEvidenceFamilies.includes(family),
-  );
+  // Candidate eligibility and ranking are question-side only. The official
+  // answer becomes visible after retrieval, but must never create a mechanism
+  // match that the official question itself does not contain.
+  const matchedOperationFamilies = matchedQuestionOperationFamilies;
   const operationSemanticQueryCoverage = queryOperationFamilies.length
     ? matchedOperationFamilies.length / queryOperationFamilies.length
     : 0;
@@ -402,7 +404,8 @@ function scoreRecord({
     && recordIds.size === resolvedIds.size
     && matchedCardIds.length === resolvedIds.size;
   const supportingCardIds = new Set((record?.retrievalContext?.supportingCardIds || []).map(String));
-  const exactRetrievedCardSubset = supportingCardIds.size >= 2
+  const exactRetrievedCardSubset = !isScenarioOfficialQaRecord(record)
+    && supportingCardIds.size >= 2
     && supportingCardIds.size === resolvedIds.size
     && [...supportingCardIds].every((id) => recordIds.has(id) && resolvedIds.has(id))
     && [...resolvedIds].every((id) => supportingCardIds.has(id));
@@ -426,17 +429,15 @@ function scoreRecord({
     resolvedIds,
     resolvedCards,
     queryPlayerRoleSignature,
+    requireFullQueryIdentity: !multiBranchQuery && resolvedIds.size > 1,
   });
   const branchMatchedCardIds = supportingBranch?.matchedCardIds
     || [...new Set(matchedQuestionCardIds)];
-  const partialCardCoverage = resolvedIds.size >= 2
-    && branchMatchedCardIds.length > 0
-    && branchMatchedCardIds.length < resolvedIds.size;
   const fullQuestionExact = exactPrincipalNormalized && exactQuestionCardIdSet;
-  const branchRelevant = multiBranchQuery
+  const evidenceHasMultipleBranches = evidenceMultiBranchQuery || questionBranches.length > 1;
+  const branchRelevant = (multiBranchQuery || evidenceHasMultipleBranches)
     && Boolean(supportingBranch)
     && !fullQuestionExact
-    && (!evidenceMultiBranchQuery || partialCardCoverage)
     && branchMatchedCardIds.length > 0
     && supportingBranch.typeCompatible
     && supportingBranch.playerRoleComparison.compatibility !== "mismatch"
@@ -505,6 +506,23 @@ function scoreRecord({
     matchedQuestionCardIds,
     branchRelevant,
     branchMatchedCardIds,
+    supportingQuestionBranchIndex: supportingBranch?.branchIndex ?? null,
+    supportingQuestionBranchCardIds: supportingBranch
+      ? [...supportingBranch.cardIds]
+      : [],
+    supportingQuestionBranchUnmatchedCardIds: supportingBranch
+      ? [...supportingBranch.unmatchedCardIds]
+      : [],
+    supportingQuestionBranchIdentityComplete: Boolean(
+      supportingBranch
+      && supportingBranch.matchedCardIds.length > 0
+      && supportingBranch.unmatchedCardIds.length === 0
+    ),
+    supportingQuestionBranchTypeCompatible: supportingBranch?.typeCompatible === true,
+    supportingQuestionBranchPlayerRoleCompatibility:
+      supportingBranch?.playerRoleComparison.compatibility || "unknown",
+    supportingQuestionBranchScenarioPremiseCompatibility:
+      supportingBranch?.scenarioPremiseComparison.compatibility || "unknown",
     multiBranchQuery,
     evidenceMultiBranchQuery,
     cardIdCoverage,
@@ -667,7 +685,11 @@ function sameStringSet(left, right) {
 function questionTypeCompatible(queryType, evidenceType) {
   if (queryType === "unknown" || evidenceType === "unknown") return queryType === evidenceType;
   if (queryType === evidenceType) return true;
-  const activation = new Set(["can_activate", "timing_window"]);
+  const activation = new Set([
+    "can_activate",
+    "timing_window",
+    "card_activation_vs_effect_activation",
+  ]);
   if (activation.has(queryType) && activation.has(evidenceType)) return true;
   const legality = new Set(["action_legality", "can_activate", "target_legality", "timing_window"]);
   return legality.has(queryType) && legality.has(evidenceType);
@@ -899,7 +921,6 @@ function promoteUniqueQuestionCardMatch(items, resolvedIds, queryType) {
   const subsumptionCandidates = items.filter((item) => (
     item.playerRoleCompatibility !== "mismatch"
     && item.scenarioPremiseCompatibility === "compatible"
-    && !item.branchRelevant
     &&
     item.subsumptionCandidatePoolComplete
     && item.typeCompatible
@@ -917,7 +938,11 @@ function promoteUniqueQuestionCardMatch(items, resolvedIds, queryType) {
   ));
   if (subsumptionCandidates.length === 1) {
     const [candidate] = subsumptionCandidates;
-    if (candidate.matchLevel !== "official_qa_exact") {
+    // A compound source branch may completely cover the query and therefore
+    // must count as a competing interpretation. It still cannot itself cross
+    // the direct-authority boundary: only an unbranched unique candidate may
+    // be promoted.
+    if (!candidate.branchRelevant && candidate.matchLevel !== "official_qa_exact") {
       candidate.authoritativeSceneMatch = true;
       candidate.authoritativeSceneMatchReason = "unique_question_card_subsumption";
       candidate.questionCardSubsumptionCertified = true;
@@ -943,7 +968,6 @@ function promoteUniqueQuestionCardMatch(items, resolvedIds, queryType) {
   const candidates = items.filter((item) => (
     item.playerRoleCompatibility !== "mismatch"
     && item.scenarioPremiseCompatibility === "compatible"
-    && !item.branchRelevant
     &&
     item.typeCompatible
     && item.questionType === queryType
@@ -954,7 +978,7 @@ function promoteUniqueQuestionCardMatch(items, resolvedIds, queryType) {
   ));
   if (candidates.length !== 1) return;
   const [candidate] = candidates;
-  if (!candidate.authoritativeSceneMatch) return;
+  if (candidate.branchRelevant || !candidate.authoritativeSceneMatch) return;
   candidate.matchLevel = "official_qa_exact";
   candidate.score = Math.max(candidate.score, 0.94);
   candidate.matchedBy = [...new Set([...candidate.matchedBy, "unique_question_card_set"])];
@@ -984,7 +1008,6 @@ function promoteUniqueSemanticMatch(items, resolvedIds, queryType) {
   const semanticSubsumptionCandidateCount = items.filter((item) => (
     item.playerRoleCompatibility !== "mismatch"
     && item.scenarioPremiseCompatibility === "compatible"
-    && !item.branchRelevant
     && item.subsumptionCandidatePoolComplete
     && resolvedIds.size >= 1
     && queryType !== "unknown"
@@ -1062,7 +1085,22 @@ function officialQaRecordFeatures(record = {}) {
   const questionText = projection.questionText;
   const questionSurfaces = projection.surfaces;
   const scenarioQuestionText = projection.scenarioText;
-  const text = recordText(record);
+  const fullText = recordText(record);
+  const scenarioQa = isScenarioOfficialQaRecord(record);
+  const identityText = scenarioQa
+    ? [...new Set([
+        projection.principalText,
+        projection.scenarioText,
+        ...projection.surfaces,
+      ].map((value) => String(value || "").trim()).filter(Boolean))].join("\n")
+    : fullText;
+  const questionNameKey = normalizeOfficialQaQuery(identityText);
+  const questionNames = [record.cardName, ...(record.cards || []), ...(record.cardNames || [])]
+    .map((value) => String(value || "").trim())
+    .filter((value) => {
+      const key = normalizeOfficialQaQuery(value);
+      return key && key.length >= 2 && questionNameKey.includes(key);
+    });
   const normalizedRecordQuestionVariants = questionSurfaces
     .map(normalizeOfficialQaQuery)
     .filter(Boolean);
@@ -1087,14 +1125,12 @@ function officialQaRecordFeatures(record = {}) {
     normalizedRecordQuestionSkeletonVariants: normalizedRecordQuestionSkeletonVariants.length
       ? normalizedRecordQuestionSkeletonVariants
       : [""],
-    normalizedRecordText: normalizeOfficialQaQuery(text),
+    normalizedRecordText: normalizeOfficialQaQuery(identityText),
     evidenceType: classifyOfficialQaQuestionType(scenarioQuestionText || questionText),
     evidencePhrases: extractOfficialQaEffectPhrases(questionEvidenceText),
     evidenceConcepts: extractOfficialQaSemanticConcepts(questionEvidenceText),
-    rulingMechanismConcepts: extractOfficialQaSemanticConcepts([
-      projection.answerText,
-    ].filter(Boolean).join("\n")),
-    questionBranches: projection.branches.map((branch) => ({
+    questionBranches: projection.branches.map((branch, branchIndex) => ({
+      branchIndex,
       text: branch,
       cardIds: new Set([
         ...extractInlineOfficialCardIds(branch),
@@ -1104,16 +1140,19 @@ function officialQaRecordFeatures(record = {}) {
       phrases: extractOfficialQaEffectPhrases(branch),
       concepts: extractOfficialQaSemanticConcepts(branch),
     })),
-    recordIds: new Set([
-      record.cardId,
-      ...(record.cardIds || []),
-      ...(record.cards || []).filter((value) => /^\d+$/u.test(String(value || "").trim())),
-      ...extractInlineCardIds(text),
-    ].map(normalizeId).filter(Boolean)),
+    recordIds: new Set((scenarioQa
+      ? projection.principalCardIds
+      : [
+          record.cardId,
+          ...(record.cardIds || []),
+          ...(record.cards || []).filter((value) => /^\d+$/u.test(String(value || "").trim())),
+          ...extractInlineCardIds(fullText),
+        ]
+    ).map(normalizeId).filter(Boolean)),
     recordQuestionIds: new Set([
       ...projection.principalCardIds,
     ].map(normalizeId).filter(Boolean)),
-    recordIdentityText: [record.title, text, ...(record.cards || [])].filter(Boolean).join(" "),
+    recordIdentityText: [identityText, ...questionNames].filter(Boolean).join(" "),
   };
   if (record && typeof record === "object") officialQaRecordFeatureCache.set(record, features);
   return features;
@@ -1162,6 +1201,10 @@ function bigrams(value) {
   return result;
 }
 
+function isScenarioOfficialQaRecord(record = {}) {
+  return record.recordType === "qa" || record.recordType === "official-database";
+}
+
 function selectSupportingQuestionBranch({
   branches = [],
   query,
@@ -1171,6 +1214,7 @@ function selectSupportingQuestionBranch({
   resolvedIds,
   resolvedCards = [],
   queryPlayerRoleSignature,
+  requireFullQueryIdentity = false,
 } = {}) {
   const queryMatchingConcepts = normalizeSemanticConceptsForMatching(queryConcepts);
   const candidates = (branches || []).map((branch) => {
@@ -1211,13 +1255,25 @@ function selectSupportingQuestionBranch({
     };
   }).filter((candidate) => (
     candidate.matchedCardIds.length > 0
+    && (!requireFullQueryIdentity || candidate.matchedCardIds.length === resolvedIds.size)
     && candidate.unmatchedCardIds.length === 0
     && candidate.typeCompatible
     && candidate.playerRoleComparison.compatibility !== "mismatch"
     && candidate.scenarioPremiseComparison.compatibility !== "mismatch"
     && (candidate.phraseHits.length > 0 || candidate.semanticHits.length >= 2)
   ));
-  return candidates.sort((left, right) => right.score - left.score)[0] || null;
+  const ranked = candidates.sort((left, right) => right.score - left.score);
+  const top = ranked[0] || null;
+  const runnerUp = ranked[1] || null;
+  if (!top || !runnerUp) return top;
+  const topIdentity = [...top.cardIds].sort().join(",");
+  const runnerUpIdentity = [...runnerUp.cardIds].sort().join(",");
+  // If two different official branches are equally supported, choosing the
+  // first one would make source ordering decide applicability. Fail closed and
+  // keep the record only as ordinary related material.
+  if (Math.abs(top.score - runnerUp.score) < 0.001
+      && topIdentity !== runnerUpIdentity) return null;
+  return top;
 }
 
 function extractOperationFamilies(concepts = []) {

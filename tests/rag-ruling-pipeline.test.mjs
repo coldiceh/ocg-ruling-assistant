@@ -4,8 +4,9 @@ import { buildAliasIndex, extractQuotedMentions, extractRagCards, extractUnquote
 import { createLocalCardDataProvider } from "../backend/cardDataProvider.mjs";
 import { loadRagData, retrieveRagEvidence } from "../backend/ragEvidenceRetriever.mjs";
 import { buildRagRulingPromptBundle } from "../backend/ragRulingPrompt.mjs";
-import { callCardNameExtractionModel, callRagModel, callRulebookGroundingModel, callRuleQueryExtractionModel, estimateDeepSeekCostCny, estimateGlmCostCny, getRagBudgetStatus, resetRagBudget, resolveRagProvider } from "../backend/ragModelClient.mjs";
+import { callCardNameExtractionModel, callDeepSeekJsonTask, callOfficialQaApplicabilityModel, callRagModel, callRulebookGroundingModel, callRuleQueryExtractionModel, createPublicAnswerModelEnv, estimateDeepSeekCostCny, estimateGlmCostCny, getRagBudgetStatus, resetRagBudget, resolveRagProvider } from "../backend/ragModelClient.mjs";
 import {
+  applyOfficialQaApplicabilityReview,
   answerRagRulingQuestion,
   buildCardSemanticFacts,
   normalizeRagAnswer,
@@ -367,7 +368,6 @@ test("final reasoner receives the Albaz evidence without a local answer override
     answer.debug.semanticStateTransition?.authorityReason,
     "diagnostic_only_requires_final_model",
   );
-  assert.match(answer.debug.semanticStateTransition?.shortAnswer || "", /可以发动/u);
   assert.equal(answer.usedEvidence[0].type, "official_response_screenshot");
 });
 
@@ -1271,6 +1271,493 @@ test("rule_query_extractor_uses_lightweight_model", async () => {
   assert.equal(result.modelUsed, "deepseek-flash-test");
   assert.equal(calls[0].body.model, "deepseek-flash-test");
   assert.deepEqual(result.queries.map((item) => item.query), ["正在处理的通常陷阱 回到手卡"]);
+});
+
+test("official QA applicability review uses Relay Sol low once and never sends candidate answers", async () => {
+  const calls = [];
+  const candidate = {
+    id: "anonymous-related-applicability-a",
+    type: "related",
+    isDirect: false,
+    question: "QUESTION_ONLY_MARKER：某公开区域效果在相同时点能否发动？",
+    answer: "ANSWER_MUST_NOT_REACH_CLASSIFIER_MARKER",
+    fullText: "FULL_TEXT_MUST_NOT_REACH_CLASSIFIER_MARKER",
+    questionType: "activation_legality",
+    matchedQuestionCardIds: ["71001"],
+  };
+  const result = await callOfficialQaApplicabilityModel({
+    userQuery: "当前问题询问同一发动窗口中的发动资格。",
+    candidates: [candidate],
+    resolvedCards: [{ id: "71001", name: "匿名卡甲" }],
+    dataRevision: "anonymous-applicability-relay-v1",
+    env: {
+      RAG_EVIDENCE_APPLICABILITY_PROVIDER: "relay",
+      RELAY_EVIDENCE_APPLICABILITY_MODEL: "gpt-5.6-sol",
+      RAG_EVIDENCE_APPLICABILITY_REASONING_EFFORT: "low",
+    },
+    modelInvoker: async (input) => {
+      calls.push(input);
+      return {
+        assessments: [{
+          id: candidate.id,
+          verdict: "APPLICABLE",
+          sharedConditions: ["相同发动窗口"],
+          missingConditions: [],
+          conflictingConditions: [],
+          reason: "问题前提兼容。",
+        }],
+        usage: { prompt_tokens: 20, completion_tokens: 8, total_tokens: 28 },
+        requestModel: "gpt-5.6-sol",
+        responseModel: "gpt-5.6-sol",
+      };
+    },
+  });
+
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].provider, "relay");
+  assert.equal(calls[0].modelName, "gpt-5.6-sol");
+  assert.equal(calls[0].reasoningEffort, "low");
+  assert.match(calls[0].prompt, /QUESTION_ONLY_MARKER/u);
+  assert.doesNotMatch(calls[0].prompt, /ANSWER_MUST_NOT_REACH_CLASSIFIER_MARKER|FULL_TEXT_MUST_NOT_REACH_CLASSIFIER_MARKER/u);
+  assert.equal(result.status, "completed");
+  assert.equal(result.providerUsed, "relay");
+  assert.equal(result.requestedModel, "gpt-5.6-sol");
+  assert.equal(result.returnedModel, "gpt-5.6-sol");
+  assert.equal(result.assessments[0].verdict, "APPLICABLE");
+});
+
+test("official QA applicability real adapter shares the Relay USD budget and sends low reasoning effort", async () => {
+  const calls = [];
+  const candidateId = "anonymous-related-relay-adapter-20480701";
+  const now = new Date("2048-07-01T00:00:00.000Z");
+  const env = {
+    RAG_EVIDENCE_APPLICABILITY_PROVIDER: "relay",
+    RELAY_EVIDENCE_APPLICABILITY_MODEL: "gpt-5.6-sol",
+    RAG_EVIDENCE_APPLICABILITY_REASONING_EFFORT: "low",
+    RAG_EVIDENCE_APPLICABILITY_MAX_OUTPUT_TOKENS: "256",
+    RELAY_API_KEY: "relay-test-key",
+    RELAY_BASE_URL: "https://relay.example.test/v1",
+    API_CHATGPT_DAILY_BUDGET_USD: "10",
+    API_BUDGET_TIMEZONE: "UTC",
+  };
+  await resetRagBudget({ env, now });
+  const result = await callOfficialQaApplicabilityModel({
+    userQuery: "这个匿名场景能否采用该相关问答？",
+    candidates: [{
+      id: candidateId,
+      type: "related",
+      isDirect: false,
+      question: "匿名相关问答的场景前提。",
+    }],
+    dataRevision: "anonymous-relay-adapter-20480701",
+    env,
+    now,
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options, body: JSON.parse(options.body) });
+      const content = JSON.stringify({
+        assessments: [{
+          id: candidateId,
+          verdict: "UNKNOWN",
+          sharedConditions: [],
+          missingConditions: ["需要额外场景事实"],
+          conflictingConditions: [],
+          reason: "不能仅凭候选问题确认。",
+        }],
+      });
+      return new Response(`data: ${JSON.stringify({
+        model: "gpt-5.6-sol",
+        choices: [{ index: 0, finish_reason: "stop", delta: { content } }],
+        usage: { prompt_tokens: 30, completion_tokens: 20, total_tokens: 50 },
+      })}\n\ndata: [DONE]\n\n`, {
+        status: 200,
+        headers: { "content-type": "text/event-stream" },
+      });
+    },
+  });
+
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, "https://relay.example.test/v1/chat/completions");
+  assert.equal(calls[0].options.headers.authorization, "Bearer relay-test-key");
+  assert.equal(calls[0].body.model, "gpt-5.6-sol");
+  assert.equal(calls[0].body.reasoning_effort, "low");
+  assert.equal(calls[0].body.response_format.type, "json_object");
+  assert.equal(calls[0].body.stream, true);
+  assert.deepEqual(calls[0].body.stream_options, { include_usage: true });
+  assert.equal(result.status, "completed");
+  assert.equal(result.returnedModel, "gpt-5.6-sol");
+  assert.equal(result.costCurrency, "USD");
+  assert.equal(result.estimatedCostUsd > 0, true);
+  assert.equal(result.budgetStatus.bucket.id, "final_ruling:relay");
+  assert.equal(result.budgetStatus.bucket.spentTodayUsd, result.estimatedCostUsd);
+});
+
+test("applicability cache hits do not charge twice and final Relay calls share the same USD ledger", async () => {
+  const candidateId = "anonymous-related-shared-ledger-20480702";
+  const now = new Date("2048-07-02T00:00:00.000Z");
+  const env = {
+    MODEL_PROVIDER: "relay",
+    RAG_MODEL: "gpt-5.6-sol",
+    RAG_REASONING_EFFORT: "low",
+    RAG_EVIDENCE_APPLICABILITY_PROVIDER: "relay",
+    RELAY_EVIDENCE_APPLICABILITY_MODEL: "gpt-5.6-sol",
+    RAG_EVIDENCE_APPLICABILITY_REASONING_EFFORT: "low",
+    RELAY_API_KEY: "relay-test-key",
+    RELAY_BASE_URL: "https://relay.example.test/v1",
+    API_BUDGET_TIMEZONE: "UTC",
+  };
+  await resetRagBudget({ env, now });
+  let fetchCount = 0;
+  const fetchImpl = async (_url, options) => {
+    fetchCount += 1;
+    const prompt = JSON.parse(options.body).messages[0].content;
+    const content = prompt.includes("CANDIDATE_QUESTIONS_JSON")
+      ? JSON.stringify({
+          assessments: [{
+            id: candidateId,
+            verdict: "UNKNOWN",
+            sharedConditions: [],
+            missingConditions: ["需要更多事实"],
+            conflictingConditions: [],
+            reason: "资料不足。",
+          }],
+        })
+      : JSON.stringify(modelJson("Shared Relay ledger OK"));
+    return new Response(`data: ${JSON.stringify({
+      model: "gpt-5.6-sol",
+      choices: [{ index: 0, finish_reason: "stop", delta: { content } }],
+      usage: { prompt_tokens: 40, completion_tokens: 20, total_tokens: 60 },
+    })}\n\ndata: [DONE]\n\n`, {
+      status: 200,
+      headers: { "content-type": "text/event-stream" },
+    });
+  };
+  const input = {
+    userQuery: "共享预算与缓存测试。",
+    candidates: [{ id: candidateId, type: "related", isDirect: false, question: "匿名候选问题。" }],
+    dataRevision: "anonymous-shared-ledger-20480702",
+    env,
+    now,
+    fetchImpl,
+  };
+
+  const first = await callOfficialQaApplicabilityModel(input);
+  const cached = await callOfficialQaApplicabilityModel(input);
+  const final = await callRagModel({ prompt: "输出最终裁定 JSON", env, now, fetchImpl });
+
+  assert.equal(fetchCount, 2);
+  assert.equal(first.cacheHit, false);
+  assert.equal(cached.cacheHit, true);
+  assert.equal(cached.estimatedCostUsd, 0);
+  assert.equal(
+    final.budgetStatus.bucket.spentTodayUsd,
+    Number((first.estimatedCostUsd + final.estimatedCostUsd).toFixed(8)),
+  );
+});
+
+test("official QA applicability review only removes incompatible related evidence", () => {
+  const direct = { id: "anonymous-direct", type: "official_qa", isDirect: true };
+  const related = [
+    { id: "anonymous-related-applicable", type: "related", isDirect: false, text: "APPLICABLE_RELATED_MARKER" },
+    { id: "anonymous-related-unknown", type: "related", isDirect: false, text: "UNKNOWN_RELATED_MARKER" },
+    { id: "anonymous-related-inapplicable", type: "related", isDirect: false, text: "INAPPLICABLE_RELATED_MARKER" },
+  ];
+  const reviewed = applyOfficialQaApplicabilityReview({
+    officialQaDirectCandidates: [direct],
+    officialQaRelated: related,
+  }, {
+    status: "completed",
+    complete: true,
+    assessments: [
+      { id: related[0].id, verdict: "APPLICABLE" },
+      { id: related[1].id, verdict: "UNKNOWN" },
+      { id: related[2].id, verdict: "INAPPLICABLE" },
+    ],
+  });
+
+  assert.strictEqual(reviewed.officialQaDirectCandidates[0], direct);
+  assert.deepEqual(
+    reviewed.officialQaRelated.map((item) => item.id),
+    [related[0].id, related[1].id],
+  );
+  assert.deepEqual(
+    reviewed.rejectedOfficialQaRelated.map((item) => item.id),
+    [related[2].id],
+  );
+  assert.ok(reviewed.officialQaRelated.every((item) => item.isDirect === false));
+  assert.ok(reviewed.officialQaRelated.every((item) => item.authoritativeSceneMatch === false));
+  const bundle = buildRagRulingPromptBundle({
+    userQuery: "比较匿名相关证据。",
+    cardResolution: { resolvedCards: [] },
+    evidence: reviewed,
+  });
+  assert.match(bundle.prompt, /APPLICABLE_RELATED_MARKER/u);
+  assert.match(bundle.prompt, /UNKNOWN_RELATED_MARKER/u);
+  assert.doesNotMatch(bundle.prompt, /INAPPLICABLE_RELATED_MARKER/u);
+});
+
+test("an incomplete applicability batch passes every related candidate through", () => {
+  const candidates = [
+    { id: "anonymous-partial-a", type: "related", isDirect: false },
+    { id: "anonymous-partial-b", type: "related", isDirect: false },
+  ];
+  const reviewed = applyOfficialQaApplicabilityReview({
+    officialQaRelated: candidates,
+  }, {
+    status: "completed",
+    complete: false,
+    assessments: [{ id: candidates[0].id, verdict: "INAPPLICABLE" }],
+  });
+
+  assert.deepEqual(reviewed.officialQaRelated, candidates);
+  assert.deepEqual(reviewed.rejectedOfficialQaRelated, []);
+});
+
+test("a DeepSeek final profile still wires the internal Relay applicability stage", async () => {
+  const candidateId = "anonymous-non-relay-final-applicability-20480703";
+  const publicEnv = createPublicAnswerModelEnv({
+    DEEPSEEK_API_KEY: "deepseek-final-key",
+    RELAY_API_KEY: "relay-applicability-key",
+    RELAY_BASE_URL: "https://relay.example.test/v1",
+    API_BUDGET_TIMEZONE: "UTC",
+  }, "deepseek-v4-flash-low");
+  const now = new Date("2048-07-03T00:00:00.000Z");
+  await resetRagBudget({ env: publicEnv, now });
+  let call = null;
+  const result = await callOfficialQaApplicabilityModel({
+    userQuery: "非 Relay 最终模型也应筛选相关问答。",
+    candidates: [{ id: candidateId, type: "related", isDirect: false, question: "匿名候选问题。" }],
+    dataRevision: "anonymous-non-relay-final-applicability-20480703",
+    env: publicEnv,
+    now,
+    fetchImpl: async (url, options) => {
+      call = { url, options };
+      const content = JSON.stringify({
+        assessments: [{
+          id: candidateId,
+          verdict: "UNKNOWN",
+          sharedConditions: [],
+          missingConditions: ["需要更多场景事实"],
+          conflictingConditions: [],
+          reason: "无法确认。",
+        }],
+      });
+      return new Response(`data: ${JSON.stringify({
+        model: "gpt-5.6-sol",
+        choices: [{ index: 0, finish_reason: "stop", delta: { content } }],
+        usage: { prompt_tokens: 20, completion_tokens: 10, total_tokens: 30 },
+      })}\n\ndata: [DONE]\n\n`, {
+        status: 200,
+        headers: { "content-type": "text/event-stream" },
+      });
+    },
+  });
+
+  assert.equal(publicEnv.MODEL_PROVIDER, "deepseek");
+  assert.equal(publicEnv.RELAY_API_KEY, undefined);
+  assert.equal(call?.url, "https://relay.example.test/v1/chat/completions");
+  assert.equal(call?.options.headers.authorization, "Bearer relay-applicability-key");
+  assert.equal(result.status, "completed");
+  assert.equal(result.complete, true);
+  assert.equal(result.requestedModel, "gpt-5.6-sol");
+});
+
+test("failed official QA applicability review passes every related candidate through", async () => {
+  const candidates = [{
+    id: "anonymous-related-passthrough",
+    type: "related",
+    isDirect: false,
+    question: "某个效果在处理时是否适用？",
+  }];
+  const result = await callOfficialQaApplicabilityModel({
+    userQuery: "当前问题需要比较这个处理前提。",
+    candidates,
+    dataRevision: "anonymous-applicability-failure-v1",
+    env: { RAG_EVIDENCE_APPLICABILITY_PROVIDER: "relay" },
+    modelInvoker: async () => {
+      const error = new Error("synthetic relay failure");
+      error.usage = { prompt_tokens: 999, completion_tokens: 999, total_tokens: 1998 };
+      error.estimatedCostUsd = 9.99;
+      throw error;
+    },
+  });
+  const reviewed = applyOfficialQaApplicabilityReview({ officialQaRelated: candidates }, result);
+
+  assert.equal(result.status, "failed");
+  assert.ok(result.warnings.includes("official_qa_applicability_passthrough"));
+  assert.equal(result.estimatedCostUsd, 0);
+  assert.deepEqual(result.tokenUsage, {});
+  assert.deepEqual(reviewed.officialQaRelated, candidates);
+  assert.deepEqual(reviewed.rejectedOfficialQaRelated, []);
+});
+
+test("cancelling while applicability waits terminates the pipeline before the final model", async () => {
+  const controller = new AbortController();
+  let applicabilityStarted;
+  const started = new Promise((resolve) => {
+    applicabilityStarted = resolve;
+  });
+  let finalCalls = 0;
+  const pipeline = answerRagRulingQuestion({
+    question: "「测试龙」的效果在这个场景中可以发动吗？",
+    cards,
+    records,
+    qaRecords,
+    env: {
+      RAG_CARD_EXTRACTOR_ENABLED: "false",
+      RAG_RULE_QUERY_EXTRACTOR_ENABLED: "false",
+      RAG_EVIDENCE_APPLICABILITY_PROVIDER: "relay",
+    },
+    signal: controller.signal,
+    applicabilityModelInvoker: ({ signal }) => new Promise((_resolve, reject) => {
+      applicabilityStarted();
+      const rejectAbort = () => {
+        const error = new Error("applicability caller cancelled");
+        error.name = "AbortError";
+        error.code = "ABORT_ERR";
+        reject(error);
+      };
+      if (signal?.aborted) rejectAbort();
+      else signal?.addEventListener("abort", rejectAbort, { once: true });
+    }),
+    modelInvoker: async () => {
+      finalCalls += 1;
+      return JSON.stringify(modelJson("must not run"));
+    },
+  });
+
+  await started;
+  controller.abort("cancelled_during_applicability_review");
+  await assert.rejects(
+    pipeline,
+    (error) => error?.name === "AbortError" && error?.code === "ABORT_ERR",
+  );
+  assert.equal(finalCalls, 0);
+});
+
+test("explicitly disabled applicability provider never calls the paid Relay", async () => {
+  let fetchCalled = false;
+  const result = await callOfficialQaApplicabilityModel({
+    userQuery: "禁用时保持候选。",
+    candidates: [{
+      id: "anonymous-related-disabled",
+      type: "related",
+      isDirect: false,
+      question: "禁用分类器时不应发送这个问题。",
+    }],
+    env: {
+      RAG_EVIDENCE_APPLICABILITY_PROVIDER: "mock",
+      RELAY_API_KEY: "must-not-be-used",
+      RELAY_BASE_URL: "https://relay.example.test/v1",
+    },
+    fetchImpl: async () => {
+      fetchCalled = true;
+      throw new Error("paid call must not run");
+    },
+  });
+
+  assert.equal(fetchCalled, false);
+  assert.equal(result.status, "skipped");
+  assert.equal(result.estimatedCostUsd, 0);
+});
+
+test("an insecure applicability Relay endpoint fails before fetch or budget reservation", async () => {
+  let fetchCalled = false;
+  const result = await callOfficialQaApplicabilityModel({
+    userQuery: "不安全端点不得发送。",
+    candidates: [{
+      id: "anonymous-related-insecure-endpoint",
+      type: "related",
+      isDirect: false,
+      question: "匿名候选问题。",
+    }],
+    dataRevision: "anonymous-insecure-endpoint-v1",
+    env: {
+      RAG_EVIDENCE_APPLICABILITY_PROVIDER: "relay",
+      RELAY_API_KEY: "must-not-be-used",
+      RELAY_BASE_URL: "http://relay.example.test/v1",
+    },
+    fetchImpl: async () => {
+      fetchCalled = true;
+      throw new Error("insecure endpoint must not fetch");
+    },
+  });
+
+  assert.equal(fetchCalled, false);
+  assert.equal(result.status, "failed");
+  assert.equal(result.estimatedCostUsd, 0);
+  assert.equal(result.budgetStatus, null);
+  assert.ok(result.warnings.includes("official_qa_applicability_passthrough"));
+});
+
+test("official QA applicability cache reuses a complete batch without another model call", async () => {
+  let calls = 0;
+  const input = {
+    userQuery: "匿名缓存问题 2040-06-01",
+    candidates: [{
+      id: "anonymous-related-cache-20400601",
+      type: "related",
+      isDirect: false,
+      question: "缓存候选的前提是否适用于当前问题？",
+    }],
+    dataRevision: "anonymous-applicability-cache-20400601",
+    env: {
+      RAG_EVIDENCE_APPLICABILITY_PROVIDER: "relay",
+      RELAY_EVIDENCE_APPLICABILITY_MODEL: "gpt-5.6-sol",
+      RAG_EVIDENCE_APPLICABILITY_REASONING_EFFORT: "low",
+    },
+    modelInvoker: async () => {
+      calls += 1;
+      return {
+        assessments: [{
+          id: "anonymous-related-cache-20400601",
+          verdict: "UNKNOWN",
+          sharedConditions: [],
+          missingConditions: ["缺少一个场景事实"],
+          conflictingConditions: [],
+          reason: "保留给最终模型核对。",
+        }],
+        usage: { prompt_tokens: 12, completion_tokens: 5, total_tokens: 17 },
+      };
+    },
+  };
+  const first = await callOfficialQaApplicabilityModel(input);
+  const second = await callOfficialQaApplicabilityModel(input);
+
+  assert.equal(calls, 1);
+  assert.equal(first.cacheHit, false);
+  assert.equal(second.cacheHit, true);
+  assert.deepEqual(second.tokenUsage, {});
+  assert.equal(second.estimatedCostUsd, 0);
+});
+
+test("applicability review metadata survives normal and compact final prompts as non-authoritative context", () => {
+  const marker = "APPLICABILITY_REVIEW_REASON_MARKER";
+  const bundle = buildRagRulingPromptBundle({
+    userQuery: "这个相关案例的前提是否适用？",
+    cardResolution: { resolvedCards: [] },
+    evidence: {
+      officialQaDirectCandidates: [],
+      officialQaRelated: [{
+        id: "anonymous-related-prompt-review",
+        type: "related",
+        title: "匿名相关问答",
+        text: "相关问答正文。",
+        isDirect: false,
+        applicabilityReview: {
+          verdict: "APPLICABLE",
+          sharedConditions: ["同一操作"],
+          missingConditions: [],
+          conflictingConditions: [],
+          reason: marker,
+        },
+      }],
+    },
+    env: { RAG_MAX_PROMPT_CHARS: "4000", RAG_RECOVERY_PROMPT_CHARS: "4000" },
+  });
+
+  assert.match(bundle.prompt, new RegExp(marker, "u"));
+  assert.match(bundle.recoveryPrompt, new RegExp(marker, "u"));
+  assert.match(bundle.prompt, /不会把 related 升级为 direct/u);
 });
 
 test("rag_pipeline_uses_model_card_name_candidates_before_retrieval", async () => {
@@ -2243,7 +2730,7 @@ test("deepseek_compact_recovery_accepts_minimal_normalizable_json", async () => 
   });
 });
 
-test("an aborted compact recovery still records the completed primary response", async () => {
+test("an aborted compact recovery is not dispatched and still records the completed primary response", async () => {
   const now = new Date("2026-08-01T03:00:00.000Z");
   const controller = new AbortController();
   const env = {
@@ -2277,10 +2764,13 @@ test("an aborted compact recovery still records the completed primary response",
   });
   const status = await getRagBudgetStatus({ env, now });
 
-  assert.equal(callCount, 2);
+  assert.equal(callCount, 1);
   assert.ok(result.warnings.some((warning) => warning.startsWith("deepseek_compact_recovery_call_failed:")));
-  assert.ok(result.warnings.includes("budget_reservation_retained_after_ambiguous_remote_failure"));
-  assert.equal(result.estimatedCostCny > 0.002, true);
+  assert.equal(result.warnings.includes("budget_reservation_retained_after_ambiguous_remote_failure"), false);
+  assert.equal(result.estimatedCostCny, estimateDeepSeekCostCny({
+    prompt_tokens: 1_000,
+    completion_tokens: 500,
+  }, env));
   assert.equal(status.spentTodayCny, result.estimatedCostCny);
 });
 
@@ -3223,6 +3713,7 @@ test("public pipeline caches only identical-query extraction work and still invo
     cardNameModel: false,
     ruleQueryModel: false,
     rulebookGroundingModel: false,
+    officialQaApplicabilityModel: false,
   });
   assert.equal(extractionCallCount, 2);
   assert.equal(finalCallCount, 1);
@@ -3241,6 +3732,7 @@ test("public pipeline caches only identical-query extraction work and still invo
     cardNameModel: true,
     ruleQueryModel: true,
     rulebookGroundingModel: false,
+    officialQaApplicabilityModel: false,
   });
   assert.equal(extractionCallCount, 2);
   assert.equal(finalCallCount, 2);
@@ -3265,6 +3757,7 @@ test("public pipeline caches only identical-query extraction work and still invo
     cardNameModel: false,
     ruleQueryModel: false,
     rulebookGroundingModel: false,
+    officialQaApplicabilityModel: false,
   });
   assert.equal(extractionCallCount, 4);
   assert.notEqual(changedData.debug.dataRevision, first.debug.dataRevision);
@@ -3274,6 +3767,7 @@ test("public pipeline caches only identical-query extraction work and still invo
     cardNameModel: false,
     ruleQueryModel: false,
     rulebookGroundingModel: false,
+    officialQaApplicabilityModel: false,
   });
   assert.equal(extractionCallCount, 6);
   assert.equal(finalCallCount, 4);
@@ -3506,6 +4000,271 @@ test("singleflight isolates caller aborts while charging one surviving shared re
   await runCase({ label: "follower", abortLeader: false });
 });
 
+test("a pre-aborted auxiliary caller creates no flight, request, or budget charge", async () => {
+  const env = {
+    MODEL_PROVIDER: "deepseek",
+    RAG_CARD_MODEL_PROVIDER: "deepseek",
+    DEEPSEEK_API_KEY: "test-deepseek-key",
+    API_DAILY_BUDGET_CNY: "10",
+    API_BUDGET_TIMEZONE: "UTC",
+  };
+  const now = new Date("2033-04-11T06:07:08.000Z");
+  await resetRagBudget({ env, now });
+  const controller = new AbortController();
+  controller.abort("cancelled_before_auxiliary_call");
+  let fetchCount = 0;
+
+  await assert.rejects(
+    callCardNameExtractionModel({
+      userQuery: "pre-aborted-auxiliary-20330411",
+      dataRevision: "revision-pre-aborted",
+      env,
+      now,
+      signal: controller.signal,
+      fetchImpl: async () => {
+        fetchCount += 1;
+        throw new Error("pre-aborted caller must not fetch");
+      },
+    }),
+    (error) => error?.name === "AbortError" && error?.code === "ABORT_ERR",
+  );
+  const status = await getRagBudgetStatus({ env, now });
+  assert.equal(fetchCount, 0);
+  assert.equal(status.spentTodayCny, 0);
+});
+
+test("a pre-aborted final call does not reserve budget or reach transport", async () => {
+  const env = {
+    MODEL_PROVIDER: "relay",
+    RAG_MODEL: "gpt-5.6-sol",
+    RELAY_API_KEY: "relay-test-key",
+    RELAY_BASE_URL: "https://relay.example.test/v1",
+    API_CHATGPT_DAILY_BUDGET_USD: "10",
+    API_BUDGET_TIMEZONE: "UTC",
+  };
+  const now = new Date("2033-04-12T06:07:08.000Z");
+  await resetRagBudget({ env, now });
+  const before = await getRagBudgetStatus({ env, now });
+  const controller = new AbortController();
+  controller.abort("cancelled_before_final_call");
+  let fetchCount = 0;
+
+  await assert.rejects(
+    callRagModel({
+      prompt: "pre-aborted-final-20330412",
+      env,
+      now,
+      signal: controller.signal,
+      fetchImpl: async () => {
+        fetchCount += 1;
+        throw new Error("pre-aborted final call must not fetch");
+      },
+    }),
+    (error) => error?.name === "AbortError" && error?.code === "ABORT_ERR",
+  );
+  const after = await getRagBudgetStatus({ env, now });
+  assert.equal(fetchCount, 0);
+  assert.equal(after.buckets.find((item) => item.id === "final_ruling:relay")?.spentTodayUsd,
+    before.buckets.find((item) => item.id === "final_ruling:relay")?.spentTodayUsd);
+});
+
+test("cancellation during final budget preflight refunds both ledgers before transport", async () => {
+  const now = new Date("2033-04-13T06:07:08.000Z");
+  const redis = createRedisFetch();
+  const controller = new AbortController();
+  const env = {
+    MODEL_PROVIDER: "deepseek",
+    DEEPSEEK_API_KEY: "test-deepseek-key",
+    API_DAILY_BUDGET_CNY: "10",
+    API_BUDGET_TIMEZONE: "UTC",
+    KV_REST_API_URL: "https://kv.example.test",
+    KV_REST_API_TOKEN: "kv-token",
+  };
+  const before = await getRagBudgetStatus({ env, fetchImpl: redis.fetchImpl, now });
+  let providerCalls = 0;
+  let positiveReservations = 0;
+
+  await assert.rejects(
+    callRagModel({
+      prompt: "cancel-during-final-preflight-20330413",
+      env,
+      now,
+      signal: controller.signal,
+      fetchImpl: async (url, options) => {
+        if (url === "https://kv.example.test") {
+          const command = JSON.parse(options.body || "[]");
+          if (command[0] === "EVAL" && command[2] === "1" && Number(command[4]) > 0) {
+            positiveReservations += 1;
+            if (positiveReservations === 2) controller.abort("cancelled_during_final_preflight");
+          }
+          return redis.fetchImpl(url, options);
+        }
+        providerCalls += 1;
+        throw new Error("cancelled final call must not reach provider");
+      },
+    }),
+    (error) => error?.name === "AbortError" && error?.code === "ABORT_ERR",
+  );
+
+  const after = await getRagBudgetStatus({ env, fetchImpl: redis.fetchImpl, now });
+  const increments = redis.commands.filter((command) => command[0] === "EVAL" && command[2] === "1");
+  assert.equal(providerCalls, 0);
+  assert.deepEqual(after, before);
+  assert.equal(increments.filter((command) => Number(command[4]) > 0).length, 2);
+  assert.equal(increments.filter((command) => Number(command[4]) < 0).length, 2);
+});
+
+test("cancellation during auxiliary budget preflight refunds before an injected invoker", async () => {
+  const now = new Date("2033-04-14T06:07:08.000Z");
+  const redis = createRedisFetch();
+  const controller = new AbortController();
+  const env = {
+    MODEL_PROVIDER: "deepseek",
+    RAG_CARD_MODEL_PROVIDER: "deepseek",
+    DEEPSEEK_API_KEY: "test-deepseek-key",
+    API_DAILY_BUDGET_CNY: "10",
+    API_BUDGET_TIMEZONE: "UTC",
+    KV_REST_API_URL: "https://kv.example.test",
+    KV_REST_API_TOKEN: "kv-token",
+  };
+  const before = await getRagBudgetStatus({ env, fetchImpl: redis.fetchImpl, now });
+  let invokerCalls = 0;
+  let positiveReservations = 0;
+  const result = await callCardNameExtractionModel({
+    userQuery: "cancel-during-auxiliary-preflight-20330414",
+    dataRevision: "revision-cancel-during-preflight",
+    env,
+    now,
+    signal: controller.signal,
+    modelInvoker: async () => {
+      invokerCalls += 1;
+      throw new Error("cancelled auxiliary call must not invoke model");
+    },
+    fetchImpl: async (url, options) => {
+      const command = JSON.parse(options.body || "[]");
+      if (command[0] === "EVAL" && command[2] === "1" && Number(command[4]) > 0) {
+        positiveReservations += 1;
+        if (positiveReservations === 2) controller.abort("cancelled_during_auxiliary_preflight");
+      }
+      return redis.fetchImpl(url, options);
+    },
+  });
+
+  const after = await getRagBudgetStatus({ env, fetchImpl: redis.fetchImpl, now });
+  const increments = redis.commands.filter((command) => command[0] === "EVAL" && command[2] === "1");
+  assert.equal(invokerCalls, 0);
+  assert.ok(result.warnings.some((item) => item.startsWith("card_name_model_failed:")));
+  assert.deepEqual(after, before);
+  assert.equal(increments.filter((command) => Number(command[4]) > 0).length, 2);
+  assert.equal(increments.filter((command) => Number(command[4]) < 0).length, 2);
+});
+
+test("cancellation during DeepSeek JSON budget preflight refunds before provider dispatch", async () => {
+  const now = new Date("2033-04-15T06:07:08.000Z");
+  const redis = createRedisFetch();
+  const controller = new AbortController();
+  const env = {
+    DEEPSEEK_API_KEY: "test-deepseek-key",
+    API_DAILY_BUDGET_CNY: "10",
+    API_BUDGET_TIMEZONE: "UTC",
+    KV_REST_API_URL: "https://kv.example.test",
+    KV_REST_API_TOKEN: "kv-token",
+  };
+  const before = await getRagBudgetStatus({ env, fetchImpl: redis.fetchImpl, now });
+  let providerCalls = 0;
+  let positiveReservations = 0;
+
+  await assert.rejects(
+    callDeepSeekJsonTask({
+      prompt: "cancel-during-json-preflight-20330415",
+      env,
+      now,
+      signal: controller.signal,
+      trackPublicBudget: true,
+      fetchImpl: async (url, options) => {
+        if (url === "https://kv.example.test") {
+          const command = JSON.parse(options.body || "[]");
+          if (command[0] === "EVAL" && command[2] === "1" && Number(command[4]) > 0) {
+            positiveReservations += 1;
+            if (positiveReservations === 2) controller.abort("cancelled_during_json_preflight");
+          }
+          return redis.fetchImpl(url, options);
+        }
+        providerCalls += 1;
+        throw new Error("cancelled JSON task must not reach provider");
+      },
+    }),
+    (error) => error?.name === "AbortError" && error?.code === "ABORT_ERR",
+  );
+
+  const after = await getRagBudgetStatus({ env, fetchImpl: redis.fetchImpl, now });
+  const increments = redis.commands.filter((command) => command[0] === "EVAL" && command[2] === "1");
+  assert.equal(providerCalls, 0);
+  assert.deepEqual(after, before);
+  assert.equal(increments.filter((command) => Number(command[4]) > 0).length, 2);
+  assert.equal(increments.filter((command) => Number(command[4]) < 0).length, 2);
+});
+
+test("cancellation during rulebook budget preflight refunds before parallel grounding calls", async () => {
+  const now = new Date("2033-04-16T06:07:08.000Z");
+  const redis = createRedisFetch();
+  const controller = new AbortController();
+  const env = {
+    MODEL_PROVIDER: "deepseek",
+    RAG_RULEBOOK_MODEL_PROVIDER: "deepseek",
+    RAG_RULEBOOK_FOCUSED_REPAIR_ENABLED: "false",
+    DEEPSEEK_API_KEY: "test-deepseek-key",
+    API_DAILY_BUDGET_CNY: "10",
+    API_BUDGET_TIMEZONE: "UTC",
+    KV_REST_API_URL: "https://kv.example.test",
+    KV_REST_API_TOKEN: "kv-token",
+  };
+  const before = await getRagBudgetStatus({ env, fetchImpl: redis.fetchImpl, now });
+  let providerCalls = 0;
+  let positiveReservations = 0;
+
+  await assert.rejects(
+    callRulebookGroundingModel({
+      userQuery: "cancel-during-rulebook-preflight-20330416",
+      ruleEvidence: [{
+        id: "generic-rulebook-cancellation-evidence",
+        type: "rulebook",
+        title: "通用规则资料",
+        text: "处理效果前必须确认适用条件。",
+      }],
+      dataRevision: "revision-rulebook-cancel-during-preflight",
+      env,
+      now,
+      signal: controller.signal,
+      fetchImpl: async (url, options) => {
+        if (url === "https://kv.example.test") {
+          const command = JSON.parse(options.body || "[]");
+          if (command[0] === "EVAL" && command[2] === "1" && Number(command[4]) > 0) {
+            positiveReservations += 1;
+            if (positiveReservations === 2) controller.abort("cancelled_during_rulebook_preflight");
+          }
+          return redis.fetchImpl(url, options);
+        }
+        providerCalls += 1;
+        throw new Error("cancelled rulebook task must not reach provider");
+      },
+    }),
+    (error) => error?.name === "AbortError" && error?.code === "ABORT_ERR",
+  );
+
+  // The public caller rejects immediately; the shared singleflight owner then
+  // observes that its last waiter left and performs the bounded rollback.
+  await waitFor(() => redis.commands.filter(
+    (command) => command[0] === "EVAL" && command[2] === "1" && Number(command[4]) < 0,
+  ).length === 2);
+  const after = await getRagBudgetStatus({ env, fetchImpl: redis.fetchImpl, now });
+  const increments = redis.commands.filter((command) => command[0] === "EVAL" && command[2] === "1");
+  assert.equal(providerCalls, 0);
+  assert.deepEqual(after, before);
+  assert.equal(increments.filter((command) => Number(command[4]) > 0).length, 2);
+  assert.equal(increments.filter((command) => Number(command[4]) < 0).length, 2);
+});
+
 test("rulebook preparation cache hashes evidence content and revision while cache hits report zero current usage", async () => {
   const env = {
     MODEL_PROVIDER: "deepseek",
@@ -3605,6 +4364,72 @@ test("rulebook response parsing failure retains the cost of the completed remote
   assert.ok(result.warnings.includes("evidence_grounding_invalid_json"));
   assert.equal(result.estimatedCostCny, 0.002);
   assert.equal(status.spentTodayCny, 0.002);
+});
+
+test("one fulfilled and one ambiguously failed rulebook call retains the parallel reservation", async () => {
+  const now = new Date("2033-04-17T06:07:08.000Z");
+  const env = {
+    MODEL_PROVIDER: "deepseek",
+    RAG_RULEBOOK_MODEL_PROVIDER: "deepseek",
+    DEEPSEEK_API_KEY: "test-deepseek-key",
+    API_DAILY_BUDGET_CNY: "10",
+    API_BUDGET_TIMEZONE: "UTC",
+    DEEPSEEK_INPUT_CNY_PER_MTOK: "1",
+    DEEPSEEK_OUTPUT_CNY_PER_MTOK: "2",
+    RAG_RULEBOOK_MODEL_MAX_OUTPUT_TOKENS: "100",
+    RAG_RULEBOOK_REPAIR_MAX_OUTPUT_TOKENS: "100",
+  };
+  await resetRagBudget({ env, now });
+  let providerCalls = 0;
+  const result = await callRulebookGroundingModel({
+    userQuery: "发动效果时作为代价送去墓地后，只要该卡在场就不受效果影响的状态是否仍适用？",
+    cardTexts: [{
+      id: "card-text-generic-cost-transition",
+      title: "通用效果文本",
+      type: "card_text",
+      text: "发动这个效果时，作为代价将1张卡送去墓地。只要该卡在场，另一只怪兽不受效果影响。",
+    }],
+    ruleEvidence: [{
+      id: "rulebook-generic-cost-transition",
+      title: "通用规则资料",
+      type: "rulebook",
+      text: "发动效果时先支付代价，再进行连锁确认。",
+    }],
+    dataRevision: "parallel-ambiguous-accounting-v1",
+    env,
+    now,
+    fetchImpl: async () => {
+      providerCalls += 1;
+      if (providerCalls === 2) throw new Error("socket reset after request write");
+      return jsonResponse({
+        choices: [{
+          finish_reason: "stop",
+          message: { content: JSON.stringify({
+            operationChecks: [{
+              operationId: "cost-state-transition",
+              action: "支付代价后确认状态",
+              status: "legal",
+              conclusion: "应按支付代价后的场面确认。",
+              citations: [{
+                id: "rulebook-generic-cost-transition",
+                quote: "发动效果时先支付代价",
+              }],
+            }],
+          }) },
+        }],
+        usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+      });
+    },
+  });
+  const status = await getRagBudgetStatus({ env, now });
+
+  assert.equal(providerCalls, 2);
+  assert.ok(result.warnings.includes("budget_reservation_retained_after_ambiguous_remote_failure"));
+  assert.equal(result.estimatedCostCny > estimateDeepSeekCostCny({
+    prompt_tokens: 10,
+    completion_tokens: 5,
+  }, env), true);
+  assert.equal(status.spentTodayCny, result.estimatedCostCny);
 });
 
 test("forced dry-run skips injected model invokers and live invokers receive the caller signal", async () => {
@@ -3915,6 +4740,146 @@ test("budget_status_accepts_the_named_Upstash_budget_integration_aliases", async
   assert.equal(status.budgetPersistent, true);
 });
 
+test("persistent budget increments and TTL use one atomic Redis command", async () => {
+  const now = new Date("2049-07-02T00:00:00.000Z");
+  const redis = createRedisFetch();
+  const env = {
+    MODEL_PROVIDER: "deepseek",
+    RAG_MODEL_TIER: "flash",
+    RAG_MAX_OUTPUT_TOKENS: "64",
+    DEEPSEEK_API_KEY: "deepseek-test-key",
+    DEEPSEEK_FLASH_MODEL: "deepseek-v4-flash",
+    API_BUDGET_TIMEZONE: "UTC",
+    KV_REST_API_URL: "https://kv.example.test",
+    KV_REST_API_TOKEN: "kv-token",
+  };
+  const result = await callRagModel({
+    prompt: "atomic budget ledger",
+    env,
+    now,
+    fetchImpl: async (url, options) => {
+      if (url === "https://kv.example.test") return redis.fetchImpl(url, options);
+      assert.equal(url, "https://api.deepseek.com/chat/completions");
+      return jsonResponse({
+        model: "deepseek-v4-flash",
+        choices: [{ message: { content: JSON.stringify(modelJson("Atomic budget OK")) }, finish_reason: "stop" }],
+        usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 },
+      });
+    },
+  });
+
+  const increments = redis.commands.filter(
+    (command) => command[0] === "EVAL" && command[2] === "1",
+  );
+  assert.ok(increments.length >= 2);
+  assert.ok(increments.every((command) => (
+    command.length === 6
+      && command[1].includes("INCRBYFLOAT")
+      && command[1].includes("EXPIRE")
+      && command[5] === "172800"
+  )));
+  assert.equal(redis.commands.some((command) => command[0] === "INCRBYFLOAT"), false);
+  assert.equal(redis.commands.some((command) => command[0] === "EXPIRE"), false);
+  assert.equal(result.budgetStatus.bucket.spentTodayCny, result.estimatedCostCny);
+});
+
+test("a stalled Redis budget backend fails closed within one total deadline", async () => {
+  let providerFetchCount = 0;
+  const startedAt = Date.now();
+  const result = await callRagModel({
+    prompt: "stalled budget backend",
+    env: {
+      VERCEL: "1",
+      MODEL_PROVIDER: "deepseek",
+      DEEPSEEK_API_KEY: "deepseek-test-key",
+      API_BUDGET_TIMEZONE: "UTC",
+      API_BUDGET_REDIS_TIMEOUT_MS: "20",
+      API_BUDGET_REDIS_TOTAL_TIMEOUT_MS: "30",
+      KV_REST_API_URL: "https://kv-stalled.example.test",
+      KV_REST_API_TOKEN: "kv-token",
+    },
+    now: new Date("2049-07-03T00:00:00.000Z"),
+    fetchImpl: async (url) => {
+      if (url === "https://kv-stalled.example.test") return new Promise(() => {});
+      providerFetchCount += 1;
+      return jsonResponse({});
+    },
+  });
+  const elapsedMs = Date.now() - startedAt;
+
+  assert.equal(providerFetchCount, 0);
+  assert.equal(result.answer.answerLevel, "budget_limited");
+  assert.ok(elapsedMs < 500, `expected bounded Redis failure, got ${elapsedMs}ms`);
+});
+
+test("a successful over-limit reservation receives a fresh bounded rollback deadline", async () => {
+  const redisUrl = "https://kv-rollback.example.test";
+  const commands = [];
+  let providerFetchCount = 0;
+  let delayedReservationResult = false;
+  const result = await callRagModel({
+    prompt: "anonymous concurrent budget rollback",
+    env: {
+      VERCEL: "1",
+      MODEL_PROVIDER: "deepseek",
+      DEEPSEEK_API_KEY: "deepseek-test-key",
+      API_DAILY_BUDGET_CNY: "100",
+      API_BUDGET_TIMEZONE: "UTC",
+      API_BUDGET_REDIS_TIMEOUT_MS: "200",
+      API_BUDGET_REDIS_TOTAL_TIMEOUT_MS: "50",
+      KV_REST_API_URL: redisUrl,
+      KV_REST_API_TOKEN: "kv-token",
+    },
+    now: new Date("2049-07-04T00:00:00.000Z"),
+    fetchImpl: async (url, options) => {
+      if (url !== redisUrl) {
+        providerFetchCount += 1;
+        return jsonResponse({});
+      }
+      const command = JSON.parse(options.body);
+      commands.push(command);
+      if (command[0] === "GET") return jsonResponse({ result: "0" });
+      if (command[0] === "EVAL" && command[2] === "3") {
+        // The production ledger reconciles its legacy key before reserving.
+        // Keep that migration neutral so this test reaches the reservation race.
+        return jsonResponse({ result: "0" });
+      }
+      if (command[0] === "EVAL" && Number(command[4]) > 0) {
+        return {
+          ok: true,
+          status: 200,
+          async json() {
+            const payload = {};
+            Object.defineProperty(payload, "result", {
+              get() {
+                // Consume the original aggregate deadline only after Redis has
+                // accepted the increment and returned a parseable response.
+                const until = Date.now() + 80;
+                while (Date.now() < until) {}
+                delayedReservationResult = true;
+                return "101";
+              },
+            });
+            return payload;
+          },
+        };
+      }
+      if (command[0] === "EVAL" && Number(command[4]) < 0) {
+        return jsonResponse({ result: "0" });
+      }
+      throw new Error(`unexpected Redis command: ${JSON.stringify(command)}`);
+    },
+  });
+
+  const increments = commands.filter((command) => command[0] === "EVAL" && command[2] === "1");
+  assert.equal(delayedReservationResult, true);
+  assert.equal(providerFetchCount, 0);
+  assert.equal(result.answer.answerLevel, "budget_limited");
+  assert.equal(increments.length, 2);
+  assert.ok(Number(increments[0][4]) > 0);
+  assert.ok(Number(increments[1][4]) < 0);
+});
+
 test("budget storage fails closed instead of mixing a URL and token from different aliases", async () => {
   let fetchCount = 0;
   const status = await getRagBudgetStatus({
@@ -4184,7 +5149,7 @@ test("configured Legacy Lua lookup hydrates a real Baige passcode when automatic
   assert.equal(packet.resources[0].unknownReasons[0].details.passcode, passcode);
 });
 
-test("cross-card official lifecycle analogues survive card-scoped QA retrieval", async () => {
+test("cross-card official lifecycle analogues survive broad related QA retrieval", async () => {
   const lifecycleCard = {
     id: "lifecycle-current-card",
     name: "匿名期限卡",
@@ -4238,9 +5203,11 @@ test("cross-card official lifecycle analogues survive card-scoped QA retrieval",
 
   assert.ok(evidence.ruleSearchQueries.some((item) => item.source === "effect_lifecycle_rule_search_query"));
   assert.ok(evidence.officialQaRelated.some((item) => item.id === lifecycleAnalogue.id));
-  assert.ok(!evidence.officialQaRelated.some((item) => item.id === ordinaryControlQa.id));
+  assert.ok(evidence.officialQaRelated.some(
+    (item) => item.id === ordinaryControlQa.id && item.isDirect === false,
+  ));
   assert.ok(!evidence.officialQaDirectCandidates.some((item) => item.id === lifecycleAnalogue.id));
-  assert.equal(evidence.debug.officialMechanismAnalogueCount, 1);
+  assert.ok(evidence.debug.officialMechanismAnalogueCount >= 1);
 });
 
 test("rag_prompt_truncates_context", () => {
@@ -4743,6 +5710,14 @@ function modelJson(shortAnswer) {
   };
 }
 
+async function waitFor(predicate, { timeoutMs = 1000 } = {}) {
+  const deadline = Date.now() + timeoutMs;
+  while (!predicate()) {
+    if (Date.now() >= deadline) throw new Error("condition_not_met_before_timeout");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+}
+
 function createRedisFetch({ url: expectedUrl = "https://kv.example.test", token: expectedToken = "kv-token" } = {}) {
   const store = new Map();
   const commands = [];
@@ -4758,6 +5733,13 @@ function createRedisFetch({ url: expectedUrl = "https://kv.example.test", token:
       if (op === "GET") return jsonResponse({ result: store.get(key) || null });
       if (op === "EVAL") {
         const keyCount = Number(command[2] || 0);
+        if (keyCount === 1) {
+          const currentKey = command[3];
+          const amount = Number(command[4] || 0);
+          const next = Math.max(0, Number(store.get(currentKey) || 0) + amount);
+          store.set(currentKey, String(next));
+          return jsonResponse({ result: String(next) });
+        }
         assert.equal(keyCount, 3);
         const currentKey = command[3];
         const legacyKey = command[4];

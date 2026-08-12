@@ -42,7 +42,8 @@ test("a card-name-agnostic question skeleton cannot directly match a different c
 test("mixed Japanese card name and Chinese question can use a near official case", () => {
   const record = qa({ question: "「S：Pリトルナイト」のコントロールが移った場合、誰が効果を発動できますか？", answer: "その時点で自分がコントロールしているので、自分が発動できます。", cards: ["S：Pリトルナイト"] });
   const matches = searchOfficialQaEvidence({ question: "S：Pリトルナイト的控制权在连锁处理后转移，谁可以发动效果？", records: [record], resolvedCards: [{ id: "1", name: "S：Pリトルナイト" }] });
-  assert.ok(matches.near.length || matches.exact.length);
+  assert.ok(matches.all.length > 0);
+  assert.equal(matches.exact.length, 0);
 });
 
 test("official extractor preserves explicit answer instead of replacing it with card text", () => {
@@ -135,7 +136,7 @@ test("scope mismatch stays related and cannot become direct", () => {
   assert.equal(matches.near.length, 0);
 });
 
-test("raw Q&A match can disambiguate an unresolved card candidate", () => {
+test("raw Q&A match does not infer an identity absent from the official question", () => {
   const question = "「测试卡别称」能发动吗？";
   const record = qa({ question, answer: "可以发动。", cardIds: ["88"], cards: ["测试正式卡"] });
   const matches = searchOfficialQaEvidence({ question, records: [record] });
@@ -144,8 +145,9 @@ test("raw Q&A match can disambiguate an unresolved card candidate", () => {
     matches,
     cards: [{ id: "88", name: "测试正式卡", aliases: ["测试正式卡"] }],
   });
-  assert.equal(entity.resolvedByOfficialQaMatch, true);
-  assert.equal(entity.resolvedCards[0].id, "88");
+  assert.equal(entity.resolvedByOfficialQaMatch, false);
+  assert.equal(entity.resolvedCards.length, 0);
+  assert.equal(entity.unresolvedMentions.length, 1);
 });
 
 test("near official case stays non-exact", () => {

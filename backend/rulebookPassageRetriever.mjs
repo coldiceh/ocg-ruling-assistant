@@ -1,5 +1,11 @@
 const DEFAULT_MAX_PASSAGES = 16;
 const DEFAULT_MAX_PASSAGE_CHARS = 1400;
+const RULE_RETRIEVAL_CONCEPT_GROUPS = Object.freeze([
+  Object.freeze(["发动合法性", "判断时点", "发动条件"]),
+  Object.freeze(["候选卡", "候选对象", "能适用的卡", "适用对象"]),
+  Object.freeze(["适用顺序", "先后顺序", "处理顺序"]),
+  Object.freeze(["组成连锁", "连锁顺序", "组链顺序"]),
+]);
 
 export function retrieveRulebookPassages({
   records = [],
@@ -10,26 +16,43 @@ export function retrieveRulebookPassages({
 } = {}) {
   const terms = buildWeightedTerms({ userQuery, ruleSearchQueries });
   const anchors = extractQuotedAnchors(userQuery);
+  const reservedQueryGroups = buildReservedRuleQueryGroups(ruleSearchQueries, maxPassages);
   if (!terms.length) return [];
 
   const candidates = [];
+  const reservedCandidates = new Map();
   for (const record of records || []) {
     if (!isRulebookRecord(record)) continue;
     const paragraphs = splitRulebookParagraphs(record.text);
     if (!paragraphs.length) continue;
 
     for (let index = 0; index < paragraphs.length; index += 1) {
-      const score = scoreParagraph(paragraphs[index].text, record.title, terms, anchors);
-      if (score <= 0) continue;
-      const passage = buildPassage(record, paragraphs, index, score, maxPassageChars);
-      if (passage) candidates.push(passage);
+      const paragraph = paragraphs[index].text;
+      const score = scoreParagraph(paragraph, record.title, terms, anchors);
+      if (score > 0) {
+        const passage = buildPassage(record, paragraphs, index, score, maxPassageChars);
+        if (passage) candidates.push(passage);
+      }
+      for (const group of reservedQueryGroups) {
+        const groupScore = scoreParagraph(paragraph, record.title, group.terms, group.anchors);
+        if (groupScore <= 0) continue;
+        const groupPassage = buildPassage(record, paragraphs, index, groupScore, maxPassageChars);
+        const previous = reservedCandidates.get(group.key);
+        if (groupPassage && (!previous || comparePassages(groupPassage, previous) < 0)) {
+          reservedCandidates.set(group.key, groupPassage);
+        }
+      }
     }
   }
 
   const selected = [];
   const seen = new Set();
   const seenContent = new Set();
-  for (const candidate of candidates.sort(comparePassages)) {
+  const orderedCandidates = [
+    ...reservedQueryGroups.map((group) => reservedCandidates.get(group.key)).filter(Boolean),
+    ...candidates.sort(comparePassages),
+  ];
+  for (const candidate of orderedCandidates) {
     if (seen.has(candidate.id)) continue;
     const contentKey = normalizeKey(candidate.text);
     if (contentKey && seenContent.has(contentKey)) continue;
@@ -190,7 +213,6 @@ function buildWeightedTerms({ userQuery, ruleSearchQueries }) {
     const baseWeight = confidence === "high" ? 3 : confidence === "low" ? 1 : 2;
     const weight = baseWeight * ruleQuerySourceMultiplier(query?.source);
     addTerms(weighted, query?.query || query, weight);
-    addTerms(weighted, query?.reason || "", weight * 0.35);
   }
   return [...weighted.entries()]
     .map(([term, weight]) => ({ term, key: normalizeKey(term), weight }))
@@ -199,16 +221,75 @@ function buildWeightedTerms({ userQuery, ruleSearchQueries }) {
     .slice(0, 180);
 }
 
-function addTerms(target, value, baseWeight) {
-  const segments = String(value || "")
+function buildReservedRuleQueryGroups(ruleSearchQueries, maxPassages) {
+  const groups = [];
+  const seen = new Set();
+  for (const query of ruleSearchQueries || []) {
+    const source = String(query?.source || "").trim().toLowerCase();
+    const confidence = String(query?.confidence || "medium").trim().toLowerCase();
+    const text = String(query?.query || query || "").trim();
+    const key = normalizeKey(text);
+    if (confidence !== "high"
+        || !source.endsWith("_rule_search_query")
+        || source.startsWith("model_")
+        || source === "card_text_derived_rule_search_query"
+        || !key
+        || seen.has(key)) continue;
+    const views = [text, buildCoreRuleQueryView(text)].filter(Boolean);
+    for (const view of views) {
+      const viewKey = normalizeKey(view);
+      if (!viewKey || seen.has(viewKey)) continue;
+      seen.add(viewKey);
+      groups.push({
+        key: viewKey,
+        terms: buildWeightedTerms({
+          userQuery: "",
+          ruleSearchQueries: [{ ...query, query: view }],
+        }),
+        anchors: extractQuotedAnchors(view),
+      });
+      if (groups.length >= positiveInteger(maxPassages, DEFAULT_MAX_PASSAGES)) break;
+    }
+    if (groups.length >= positiveInteger(maxPassages, DEFAULT_MAX_PASSAGES)) break;
+  }
+  return groups;
+}
+
+function buildCoreRuleQueryView(value) {
+  const qualifier = /^(?:必发|必發|必须发动|必須発動|必ず発動|公开选发|公開選発|任意|选发|選發|公開|公开|回合玩家|非回合玩家|ターンプレイヤー|对方|對方|相手)$/iu;
+  const concreteChainLink = /^(?:(?:连锁|連鎖|チェーン|chain(?:link)?)?[cCＣ]?)\d+$/iu;
+  const tokens = String(value || "")
     .normalize("NFKC")
+    .split(/\s+/u)
+    .map((item) => item.trim())
+    .filter((item) => item && !qualifier.test(item) && !concreteChainLink.test(item));
+  return tokens.length >= 2 ? tokens.join(" ") : "";
+}
+
+function addTerms(target, value, baseWeight) {
+  const sourceText = String(value || "").normalize("NFKC");
+  const segments = sourceText
     .split(/[\s，,。.!！?？;；、:：()（）\[\]【】「」『』《》/]+/u)
     .map((item) => item.trim())
     .filter((item) => item.length >= 2);
 
+  if (/(?:连锁|連鎖|チェーン|\bchain\b)/iu.test(sourceText)
+      && /(?:处理|處理|结算|結算|解決|resolve)/iu.test(sourceText)) {
+    for (const concept of ["连锁处理", "连锁结算", "结算连锁", "处理连锁"]) {
+      addWeightedTerm(target, concept, baseWeight * 0.7);
+    }
+  }
+
   for (const segment of segments) {
     addWeightedTerm(target, segment, baseWeight);
     const key = normalizeKey(segment);
+    for (const group of RULE_RETRIEVAL_CONCEPT_GROUPS) {
+      const normalizedGroup = group.map(normalizeKey);
+      if (!normalizedGroup.some((concept) => key.includes(concept))) continue;
+      for (const concept of normalizedGroup) {
+        addWeightedTerm(target, concept, baseWeight * 0.55);
+      }
+    }
     if (!/[\u3400-\u9fff]/u.test(key) || key.length <= 6) continue;
     for (let size = 2; size <= Math.min(5, key.length); size += 1) {
       for (let index = 0; index <= key.length - size; index += 1) {
@@ -227,12 +308,17 @@ function addWeightedTerm(target, term, weight) {
 function scoreParagraph(paragraph, title, terms, anchors = []) {
   const paragraphKey = normalizeKey(paragraph);
   const titleKey = normalizeKey(title);
+  const sectionHeading = String(paragraph || "").split(/\r?\n/u)[0]?.trim() || "";
+  const sectionHeadingKey = sectionHeading.length <= 120 && /¶$/u.test(sectionHeading)
+    ? normalizeKey(sectionHeading)
+    : "";
   let score = 0;
   let strongMatches = 0;
   for (const term of terms) {
     if (paragraphKey.includes(term.key)) {
       const lengthBoost = Math.min(3, Math.max(0.5, term.key.length / 4));
       score += term.weight * lengthBoost;
+      if (sectionHeadingKey.includes(term.key)) score += term.weight * lengthBoost * 1.5;
       if (term.key.length >= 4 && term.weight >= 1) strongMatches += 1;
     } else if (titleKey.includes(term.key)) {
       score += term.weight * 0.25;
@@ -276,18 +362,16 @@ function comparePassages(left, right) {
 
 function ruleQuerySourceMultiplier(value) {
   const source = String(value || "").trim().toLowerCase();
-  if ([
-    "compiled_scenario_rule_search_query",
-    "simultaneous_trigger_order_rule_search_query",
-    "public_hand_trigger_order_rule_search_query",
-    "chain_resolution_reverse_rule_search_query",
-    "effect_lifecycle_rule_search_query",
-  ].includes(source)) return 1.75;
+  if (source === "card_text_derived_rule_search_query") return 0.75;
   if (source === "mechanism_rule_search_query") return 1.35;
   if (source === "derived_rule_search_query") return 1.15;
+  // All deterministic, scenario-specific query families receive the same
+  // structural boost. New mechanisms do not need to be added to a whitelist.
+  if (source.endsWith("_rule_search_query")
+      && !source.startsWith("model_")
+      && source !== "card_text_derived_rule_search_query") return 1.75;
   // Printed-card queries remain useful, but a repeated card name or generic
   // effect word must not outweigh a scenario-specific mechanism query.
-  if (source === "card_text_derived_rule_search_query") return 0.75;
   return 1;
 }
 

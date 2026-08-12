@@ -474,12 +474,16 @@ test("a continuously public hand plus C1 C2 trigger ordering retrieves the publi
   assert.ok(evidence.ruleSearchQueries.some(
     (item) => item.source === "public_hand_trigger_order_rule_search_query",
   ));
+  const queryMechanism = evidence.ruleSearchQueries.find(
+    (item) => item.source === "public_hand_trigger_order_rule_search_query",
+  )?.mechanism;
   const ruling = evidence.officialQaRelated.find((item) => item.id === "ygoresources-qa-23948");
   assert.ok(ruling, "expected the official public-hand trigger ordering ruling");
-  assert.equal(ruling.retrievalSignals?.mechanismAnalogue, "public_hand_trigger_order");
+  assert.ok(queryMechanism?.startsWith("semantic:"));
+  assert.ok((ruling.retrievalSignals?.mechanismAnalogues || []).includes(queryMechanism));
 });
 
-test("an unrelated public hand does not promote the public-hand ordering FAQ for field and grave triggers", async () => {
+test("an unrelated public hand does not generate a public-hand trigger-order query", async () => {
   const data = await loadRagData();
   const question = [
     "对方的手牌因永续效果而全部公开。",
@@ -503,9 +507,6 @@ test("an unrelated public hand does not promote the public-hand ordering FAQ for
   assert.ok(!evidence.ruleSearchQueries.some(
     (item) => item.source === "public_hand_trigger_order_rule_search_query",
   ));
-  assert.ok(!evidence.officialQaRelated.some(
-    (item) => item.retrievalSignals?.mechanismAnalogue === "public_hand_trigger_order",
-  ));
 });
 
 test("inline_card_references_link_the_stardust_official_qa", async () => {
@@ -524,6 +525,8 @@ test("inline_card_references_link_the_stardust_official_qa", async () => {
     cards: data.cards,
     records: data.records,
     qaRecords: data.qaRecords,
+    enableLiveOfficialQa: false,
+    env: { RAG_LIVE_OFFICIAL_QA: "false" },
   });
 
   const qa = evidence.officialQaRelated.find((item) => item.id === "ygoresources-qa-11290");
@@ -684,7 +687,11 @@ test("card-text mechanics retrieve mandatory-return constraints without fixing t
     qaRecords: data.qaRecords,
   });
   assert.ok(evidence.ruleSearchQueries.some((item) => /连锁途中.*回到手卡/u.test(item.query)));
-  assert.ok(evidence.ruleSearchQueries.some((item) => /除自身以外没有能适用/u.test(item.query)));
+  assert.ok(evidence.ruleSearchQueries.some((item) => (
+    item.source === "compiled_scenario_rule_search_query"
+      && /没有其他候选.*发动合法性/u.test(item.query)
+  )));
+  assert.ok(evidence.ruleSearchQueries.every((item) => !/不能发动/u.test(item.query)));
   assert.ok(evidence.rulebookCandidates.some((item) => /这种魔法[・·]陷阱卡在连锁途中不能/u.test(item.text)));
   assert.ok(evidence.rulebookCandidates.some((item) => /除自身以外没有能适用的卡时不能发动/u.test(item.text)));
 
@@ -718,7 +725,11 @@ test("replacement card text and player roles retrieve the turn-player-first rule
     records: data.records,
     qaRecords: data.qaRecords,
   });
-  assert.ok(evidence.ruleSearchQueries.some((item) => /回合玩家.*先适用.*非回合玩家/u.test(item.query)));
+  assert.ok(evidence.ruleSearchQueries.some((item) => (
+    item.source === "compiled_scenario_rule_search_query"
+      && /回合玩家.*非回合玩家.*适用顺序/u.test(item.query)
+  )));
+  assert.ok(evidence.ruleSearchQueries.every((item) => !/先适用|不适用/u.test(item.query)));
   assert.ok(evidence.rulebookCandidates.some((item) => /同1时点双方都要适用代替破坏/u.test(item.text)));
 
   const grounding = await callRulebookGroundingModel({

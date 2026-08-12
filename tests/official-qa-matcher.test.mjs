@@ -56,6 +56,21 @@ test("a face-down defense target is not mistaken for a defense-position attacker
   assert.ok(actualDefenseAttacker.includes("defense_position_attack"));
 });
 
+test("shared applicability and resolution phrases map to resolution-result QA", () => {
+  assert.equal(
+    classifyOfficialQaQuestionType("この効果を適用できますか？"),
+    "resolution_result",
+  );
+  assert.equal(
+    classifyOfficialQaQuestionType("效果处理时应当怎么处理？"),
+    "resolution_result",
+  );
+  assert.equal(
+    classifyOfficialQaQuestionType("战斗・效果破坏时可以代替。 この効果を適用できますか？"),
+    "resolution_result",
+  );
+});
+
 test("multi-branch scope stays non-direct even when actor card extraction is incomplete", () => {
   const matches = searchOfficialQaEvidence({
     question: "分别用以上三只怪兽攻击里侧守备表示的「目标兽」，各自能否由战斗破坏？",
