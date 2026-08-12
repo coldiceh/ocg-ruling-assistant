@@ -184,7 +184,7 @@ export function buildRagRulingPromptBundle({
     "效果要求在特殊召唤后继续进行融合、同调、超量、连接或其他召唤时，发动前先检查额外卡组是否至少存在一条在发动时可行的后续召唤路径；处理中再按实际新状态重算等级、属性、种族、区域与持续效果。若处理时已无可行路径，应说明前段已完成、后段不进行。",
     "较早步骤已经不合法时，结论应直接说明实际阻断原因，不要继续描述未发生的后续处理，也不要添加与当前场景无关的假设分支。",
     "相关 Q&A / FAQ 可以作为规则适用案例，但必须比较卡片、效果、时点、位置、素材数量和处理顺序；不是当前原题时不得升级为 official_confirmed。",
-    "officialQaRelated.applicabilityReview 是辅助模型对候选问题前提的非权威筛选记录。APPLICABLE 只表示值得比较，不会把 related 升级为 direct；UNKNOWN 表示未能确定，不能当作支持或反证。你仍须逐项核对原始题面、卡文和 Q&A 内容后独立判断。",
+    "officialQaRelated.applicabilityReview 若存在，只是可选辅助筛选记录；不存在时不得视为资料已核对或资料不足。无论是否存在，最终都必须逐项核对原始题面、卡文和 Q&A；APPLICABLE 不会把 related 升级为 direct，UNKNOWN 也不能支持结论。",
     "rawRelatedEvidence 中 source=rulebook_model_grounding 或 qa_rule_model_grounding 的资料是校验后的逐操作检查，不是官方 direct Q&A；其引文对应的原始证据也会作为独立 evidence 提供。",
     "对每个子问题建立独立的前提清单、操作序列、状态快照和结论；任何前提没有题面 sourceSpan、卡文定义或可验证证据时，必须保留为 UNKNOWN/条件分支，不得用常见场面补齐。",
     "只要有卡片文本 grounding，优先输出 rule_analysis；不要因为没有 template、没有 validator、没有官方 direct Q&A 就输出 needs_more_info。",
@@ -717,7 +717,7 @@ function buildCompactRagPrompt({ payload, maxPromptChars }) {
   const render = (context) => [
     "你是游戏王 OCG 规则分析助手。只依据所给证据回答，不得编造规则或来源。",
     "官方直接 Q&A 才能支持 official_confirmed；相关 Q&A、FAQ、规则书和卡文只能支持 rule_analysis 或 low_confidence_analysis。",
-    "officialQaRelated.applicabilityReview 只是辅助模型的非权威候选筛选：APPLICABLE 不会把 related 升级为 direct，UNKNOWN 也不支持任何结论；最终仍须核对题面与原始证据。",
+    "officialQaRelated.applicabilityReview 若存在，只是可选的非权威筛选；不存在时仍须由你逐项核对题面与原始证据。APPLICABLE 不会把 related 升级为 direct，UNKNOWN 也不支持任何结论。",
     "operationChecks、constraintAudit 与 semanticStateTransition 是便宜模型/旧诊断整理出的待核对假设；只能帮助定位证据，不能替代最终推理。unknown 或未核对限制不能支持肯定或否定结论。",
     "同一诱发窗口拟组成多个公开区域诱发 C1/C2 时，先在组链前状态分别检查每个效果的条件、区域与对象；一个连锁块支付的 cost 不能让另一个原本不合法的公开诱发事后取得组链资格。单一效果自身支付 cost 后再选对象须按该效果另行判断。",
     "cardSemanticFacts 是卡文范式化候选而非证明。create_lingering_restriction 的 irreversible_on_first_condition_failure/ reactivates=false 表示期限条件首次失效后该效果实例永久结束，条件后来恢复不会自动重启。必须对照原卡文复核。",
@@ -838,7 +838,7 @@ function buildCompactRagPrompt({ payload, maxPromptChars }) {
   ].filter(Boolean))].slice(0, 10);
   const minimalPrompt = [
     "仅依据上下文输出规定字段的裁定 JSON；不得编造证据。usedEvidence 的 id 必须非空并逐字取自 allowedEvidenceIds；没有引用则为 []。",
-    "applicabilityReview 是非权威筛选；APPLICABLE 不会把 related 升级为 direct，UNKNOWN 不能支持结论，必须自行核对原始证据。",
+    "applicabilityReview 若存在只是非权威筛选；不存在时也必须自行核对原始证据。APPLICABLE 不会把 related 升级为 direct，UNKNOWN 不能支持结论。",
     ...(hasPrintedTextReferenceIntent(payload)
       ? [MINIMAL_PRINTED_TEXT_REFERENCE_INSTRUCTION]
       : []),
