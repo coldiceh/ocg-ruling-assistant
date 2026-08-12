@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 
 export const RAG_DATA_REVISION_MANIFEST_SCHEMA_VERSION = 1;
 export const RAG_DATA_REVISION_COMPILER_ABI = "rag-data-revision-compiler/v1";
-export const RAG_DATA_REVISION_CANONICALIZATION_ABI = "rag-data-revision-canonical-json/v1";
+export const RAG_DATA_REVISION_CANONICALIZATION_ABI = "rag-data-revision-canonical-json-lf/v2";
 export const RAG_DATA_REVISION_MANIFEST_FILE = "rag-data-revision-manifest.json";
 export const RAG_DATA_REVISION_SOURCE_FILES = Object.freeze([
   "cards.json",
@@ -17,9 +17,15 @@ const SHA256 = /^[a-f0-9]{64}$/u;
 const trustedRevisionBySnapshot = new WeakMap();
 
 export function createRagDataSourceDescriptor(path, rawContent) {
-  const content = Buffer.isBuffer(rawContent)
+  const raw = Buffer.isBuffer(rawContent)
     ? rawContent
     : Buffer.from(String(rawContent ?? ""), "utf8");
+  // Git may materialize the same JSON snapshot with CRLF on Windows and LF on
+  // Linux. Source integrity must follow repository content, not the checkout's
+  // line-ending convention, or a manifest built on one platform cannot be
+  // verified on another. JSON sources are UTF-8 text; normalize only newline
+  // encoding while preserving every other byte-level change.
+  const content = Buffer.from(raw.toString("utf8").replace(/\r\n?/gu, "\n"), "utf8");
   return Object.freeze({
     path: String(path || ""),
     bytes: content.byteLength,

@@ -56,6 +56,34 @@ test("any source byte change invalidates a precompiled RAG revision manifest", (
   assert.ok(validation.reasons.includes("source_descriptors_mismatch"));
 });
 
+test("source descriptors are stable across Windows and Linux line endings", () => {
+  const lf = createRagDataSourceDescriptor("cards.json", "{\n  \"cards\": []\n}\n");
+  const crlf = createRagDataSourceDescriptor("cards.json", "{\r\n  \"cards\": []\r\n}\r\n");
+  const cr = createRagDataSourceDescriptor("cards.json", "{\r  \"cards\": []\r}\r");
+
+  assert.deepEqual(crlf, lf);
+  assert.deepEqual(cr, lf);
+  assert.notDeepEqual(
+    createRagDataSourceDescriptor("cards.json", "{\n  \"cards\": [1]\n}\n"),
+    lf,
+  );
+});
+
+test("the complete source-set manifest is invariant to checkout line endings", () => {
+  const data = fixtureData();
+  const lfSources = fixtureSources(Object.fromEntries(
+    RAG_DATA_REVISION_SOURCE_FILES.map((path) => [path, `${path}\nfixture\n`]),
+  ));
+  const crlfSources = fixtureSources(Object.fromEntries(
+    RAG_DATA_REVISION_SOURCE_FILES.map((path) => [path, `${path}\r\nfixture\r\n`]),
+  ));
+
+  assert.deepEqual(
+    buildRagDataRevisionManifest({ data, sources: crlfSources }),
+    buildRagDataRevisionManifest({ data, sources: lfSources }),
+  );
+});
+
 test("only a trusted default snapshot can use the precompiled revision", () => {
   const data = fixtureData();
   const sources = fixtureSources();

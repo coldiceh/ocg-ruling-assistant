@@ -1,0 +1,10 @@
+# RAG source snapshots are hashed as canonical UTF-8 text. Keep repository
+# checkouts stable while the application also normalizes EOLs defensively.
+/data/cards.json text eol=lf
+/data/rulings.json text eol=lf
+/data/qa-index.json text eol=lf
+/data/evidence-index.json text eol=lf
+/data/ocg-rule-corpus.json text eol=lf
+/data/official-responses.json text eol=lf
+/data/rag-data-revision-manifest.json text eol=lf
+/data/rag-runtime-v1/manifest.json text eol=lf
