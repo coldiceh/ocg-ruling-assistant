@@ -94,9 +94,6 @@ GPT‑5.6 与 DeepSeek 的费用均按各自官方标准 API 理论单价和返�
 - [游戏王 OCG 官方卡片数据库与 Q&A](https://www.db.yugioh-card.com/yugiohdb/)
 - 公开可访问的卡片文本、FAQ、规则书与规则学习资料
 - [罗伽老师整理的游戏王规则内容](https://space.bilibili.com/869711)
-- 用户在问题中提供的完整卡片文本和场面信息
-
-第三方整理、社区资料和用户提供文本不会被标记为 KONAMI 官方直接裁定。
 
 ## 免责声明
 

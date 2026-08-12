@@ -92,9 +92,6 @@ GPT‑5.6 and DeepSeek costs are estimated from returned token usage and each pr
 - [Official Yu-Gi-Oh! OCG Card Database and Q&A](https://www.db.yugioh-card.com/yugiohdb/)
 - Publicly accessible card text, FAQs, rulebooks, and rule-learning materials
 - [Yu-Gi-Oh! rule materials compiled by Luo Jia](https://space.bilibili.com/869711)
-- Complete card text and game-state information supplied by users in their questions
-
-Third-party compilations, community materials, and user-supplied text are not labeled as direct official KONAMI rulings.
 
 ## Disclaimer
 
