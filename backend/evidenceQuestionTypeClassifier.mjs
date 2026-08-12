@@ -474,7 +474,8 @@ function splitDecisionQuestionSentences(text) {
 function isDecisionQuestionSentence(text) {
   if (isLegalityQuestionClause(text)) return true;
   return /(?:可以|能).{0,48}(?:发动|發動|召唤|召喚|特殊召唤|特殊召喚|适用|適用|处理|處理)(?:哪些|什么|什麼|何种|何種|吗|嗎)/iu.test(text)
-    || /(?:连锁|連鎖|处理|處理|结算|結算|チェーン|処理).{0,32}(?:如何|怎么|怎麼|怎样|怎樣|どのよう|どう|how|what happens)/iu.test(text);
+    || /(?:连锁|連鎖|处理|處理|结算|結算|チェーン|処理).{0,32}(?:如何|怎么|怎麼|怎样|怎樣|どのよう|どう|how|what happens)/iu.test(text)
+    || /(?:如何|怎么|怎麼|怎样|怎樣|どのよう|どう|how|what happens).{0,32}(?:组成|組成|构成|構成|形成|处理|處理|结算|結算)?(?:连锁|連鎖|チェーン|chain)/iu.test(text);
 }
 
 function detectFactScope(text) {

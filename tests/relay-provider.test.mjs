@@ -128,7 +128,7 @@ test("server accepts Luna low as the explicit public default", () => {
   assert.equal(capabilities.rulingModelProfiles[0].available, true);
 });
 
-test("public answer environment retains relay secrets only for the relay profile", () => {
+test("public answer environment isolates final Relay secrets while retaining internal applicability transport", () => {
   const relayEnv = createPublicAnswerModelEnv({
     OPENAI_API_KEY: "official-key-must-not-be-used",
     ADMIN_MODEL_LAB_PASSWORD: "admin-secret",
@@ -154,6 +154,11 @@ test("public answer environment retains relay secrets only for the relay profile
   }, "deepseek-v4-flash-high");
   assert.equal(nonRelayEnv.RELAY_API_KEY, undefined);
   assert.equal(nonRelayEnv.RELAY_BASE_URL, undefined);
+  assert.equal(nonRelayEnv.RAG_EVIDENCE_APPLICABILITY_RELAY_API_KEY, "relay-key");
+  assert.equal(
+    nonRelayEnv.RAG_EVIDENCE_APPLICABILITY_RELAY_BASE_URL,
+    "https://relay.example.test/v1",
+  );
 
   const standardEnv = createPublicAnswerModelEnv({ DEEPSEEK_API_KEY: "deepseek-key" }, "deepseek-v4-flash-standard");
   assert.equal(standardEnv.RAG_THINKING_MODE, "disabled");

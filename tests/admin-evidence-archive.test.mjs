@@ -705,6 +705,8 @@ test("decision packet weights related rulings while preserving authoritative mec
       "criticalMechanismCoverage",
       "pendingSpellTrapMovementRestriction",
       "mechanismOperationRelevance",
+      "officialRelatedQuestionIdentityCoverage",
+      "officialRelatedIdentityQuestionTypeCoverage",
       "direct",
       "official",
       "current",
@@ -886,6 +888,293 @@ test("a 16-item packet keeps the self-contained pending spell/trap movement rest
     requiredReview.some((item) => item.evidenceId === "overlapping-exception-passage"),
     false,
   );
+});
+
+test("bounded official-related slots preserve question identity and identity-type diversity", () => {
+  const makeEvidence = ({ id, identity, questionType, score, nested = false }) => ({
+    id,
+    type: "official_qa",
+    sourceType: "official_qa",
+    official: true,
+    question: `匿名问题 ${id}`,
+    answer: `匿名回答 ${id}`,
+    score,
+    ...(nested ? {
+      retrievalSignals: {
+        questionType,
+        matchedQuestionCardIds: [identity],
+        questionCardIdCoverage: 1,
+        questionCardIdCount: 1,
+        typeCompatible: true,
+        playerRoleCompatibility: "compatible",
+        scenarioPremiseCompatibility: "compatible",
+      },
+    } : {
+      questionType,
+      matchedQuestionCardIds: [identity],
+      questionCardIdCoverage: 1,
+      questionCardIdCount: 1,
+      typeCompatible: true,
+      playerRoleCompatibility: "compatible",
+      scenarioPremiseCompatibility: "compatible",
+    }),
+  });
+  const run = ({ ids, names }) => {
+    const evidence = [
+      ...Array.from({ length: 8 }, (_, index) => makeEvidence({
+        id: names[index],
+        identity: ids[0],
+        questionType: "shape_alpha",
+        score: 100 - index,
+      })),
+      makeEvidence({
+        id: names[8],
+        identity: ids[1],
+        questionType: "shape_alpha",
+        score: 2,
+        nested: true,
+      }),
+      makeEvidence({
+        id: names[9],
+        identity: ids[0],
+        questionType: "shape_beta",
+        score: 1,
+      }),
+    ];
+    const archive = createAdminEvidenceArchive({
+      evidenceBuckets: { officialQaRelated: evidence },
+    });
+    const packet = buildAdminEvidenceDecisionPacket({
+      archive,
+      limits: {
+        maxItems: 3,
+        maxTotalBodyChars: 10_000,
+        maxTotalBodyBytes: 20_000,
+        maxBodyCharsPerItem: 2_000,
+      },
+    });
+    return packet.modelPacket.evidenceItems.map((item) => ({
+      identity: item.questionSideProfiles[0]?.matchedQuestionCardIds[0],
+      questionType: item.questionSideProfiles[0]?.questionType,
+    }));
+  };
+  const firstIds = ["identity-a", "identity-b"];
+  const first = run({
+    ids: firstIds,
+    names: Array.from({ length: 10 }, (_, index) => `evidence-${index + 1}`),
+  });
+  assert.equal(first.length, 3);
+  assert.ok(first.some((item) => item.identity === firstIds[1]));
+  assert.ok(first.some((item) => (
+    item.identity === firstIds[0] && item.questionType === "shape_beta"
+  )));
+
+  const renamedIds = ["renamed-a", "renamed-b"];
+  const renamed = run({
+    ids: renamedIds,
+    names: Array.from({ length: 10 }, (_, index) => `renamed-${index + 1}`),
+  });
+  assert.deepEqual(
+    renamed.map((item) => ({
+      identity: item.identity === renamedIds[0] ? "first" : "second",
+      questionType: item.questionType,
+    })),
+    first.map((item) => ({
+      identity: item.identity === firstIds[0] ? "first" : "second",
+      questionType: item.questionType,
+    })),
+  );
+});
+
+test("official related question diversity is source agnostic across related buckets", () => {
+  const profile = (id, questionType) => ({
+    questionType,
+    matchedQuestionCardIds: [id],
+    typeCompatible: true,
+    playerRoleCompatibility: "compatible",
+    scenarioPremiseCompatibility: "compatible",
+  });
+  const item = (id, identity, questionType, score) => ({
+    id,
+    type: "official_qa",
+    sourceType: "official_qa",
+    official: true,
+    question: `Question ${id}`,
+    answer: `Answer ${id}`,
+    score,
+    ...profile(identity, questionType),
+  });
+  const buckets = ["officialQaRelated", "faqRelated", "rawRelatedEvidence"];
+  const signatures = buckets.map((bucket) => {
+    const archive = createAdminEvidenceArchive({
+      evidenceBuckets: {
+        [bucket]: [
+          item("common-a", "identity-a", "shape-a", 100),
+          item("common-b", "identity-a", "shape-a", 99),
+          item("rare-identity", "identity-b", "shape-a", 2),
+          item("rare-type", "identity-a", "shape-b", 1),
+        ],
+      },
+    });
+    return buildAdminEvidenceDecisionPacket({
+      archive,
+      limits: { maxItems: 3, maxTotalBodyChars: 8_000, maxTotalBodyBytes: 20_000 },
+    }).modelPacket.evidenceItems.map((evidence) => ({
+      identity: evidence.questionSideProfiles[0]?.matchedQuestionCardIds[0],
+      type: evidence.questionSideProfiles[0]?.questionType,
+    }));
+  });
+  assert.deepEqual(signatures[1], signatures[0]);
+  assert.deepEqual(signatures[2], signatures[0]);
+  assert.ok(signatures[0].some((entry) => entry.identity === "identity-b"));
+  assert.ok(signatures[0].some((entry) => entry.type === "shape-b"));
+});
+
+test("compatible profiles own diversity slots while mismatch never receives a reserve", () => {
+  const evidence = [
+    {
+      id: "mismatch-first",
+      type: "official_qa",
+      official: true,
+      question: "Mismatch question",
+      answer: "Mismatch answer",
+      score: 100,
+      questionType: "rare-shape",
+      matchedQuestionCardIds: ["rare-identity"],
+      typeCompatible: false,
+      playerRoleCompatibility: "mismatch",
+      scenarioPremiseCompatibility: "compatible",
+    },
+    ...Array.from({ length: 3 }, (_, index) => ({
+      id: `compatible-${index}`,
+      type: "official_qa",
+      official: true,
+      question: `Compatible question ${index}`,
+      answer: `Compatible answer ${index}`,
+      score: 10 - index,
+      questionType: "common-shape",
+      matchedQuestionCardIds: ["common-identity"],
+      typeCompatible: true,
+      playerRoleCompatibility: "compatible",
+      scenarioPremiseCompatibility: "compatible",
+    })),
+    {
+      id: "compatible-rare",
+      type: "official_qa",
+      official: true,
+      question: "Compatible rare question",
+      answer: "Compatible rare answer",
+      score: 1,
+      questionType: "rare-shape",
+      matchedQuestionCardIds: ["rare-identity"],
+      typeCompatible: true,
+      playerRoleCompatibility: "compatible",
+      scenarioPremiseCompatibility: "compatible",
+    },
+  ];
+  const packet = buildAdminEvidenceDecisionPacket({
+    archive: createAdminEvidenceArchive({ evidenceBuckets: { officialQaRelated: evidence } }),
+    limits: { maxItems: 2, maxTotalBodyChars: 8_000, maxTotalBodyBytes: 20_000 },
+  });
+  const included = packet.modelPacket.evidenceItems.map((item) => item.evidenceId);
+  assert.ok(included.includes("compatible-rare"));
+  assert.equal(included.includes("mismatch-first"), false);
+});
+
+test("top-level and retrieval-signal profiles remain independent instead of being merged", () => {
+  const archive = createAdminEvidenceArchive({
+    evidenceBuckets: {
+      officialQaRelated: [{
+        id: "conflicting-profiles",
+        type: "official_qa",
+        official: true,
+        question: "Question",
+        answer: "Answer",
+        questionType: "top-shape",
+        matchedQuestionCardIds: ["top-identity"],
+        typeCompatible: false,
+        playerRoleCompatibility: "mismatch",
+        retrievalSignals: {
+          questionType: "nested-shape",
+          matchedQuestionCardIds: ["nested-identity"],
+          typeCompatible: true,
+          playerRoleCompatibility: "compatible",
+          scenarioPremiseCompatibility: "compatible",
+        },
+      }],
+    },
+  });
+  const profiles = archive.occurrences[0].questionSideProfiles;
+  assert.equal(profiles.length, 2);
+  assert.ok(profiles.some((profile) => (
+    profile.profileSource === "top_level"
+    && profile.questionType === "top-shape"
+    && profile.matchedQuestionCardIds[0] === "top-identity"
+    && profile.typeCompatible === false
+  )));
+  assert.ok(profiles.some((profile) => (
+    profile.profileSource === "retrieval_signals"
+    && profile.questionType === "nested-shape"
+    && profile.matchedQuestionCardIds[0] === "nested-identity"
+    && profile.typeCompatible === true
+  )));
+  assert.equal(profiles.some((profile) => (
+    profile.questionType === "top-shape"
+    && profile.matchedQuestionCardIds.includes("nested-identity")
+  )), false);
+});
+
+test("heavy question profiles stay compact and preserve four bodies inside 28 KiB", () => {
+  const longIds = Array.from({ length: 20 }, (_, index) => (
+    `identity-${index}-${"x".repeat(180)}`
+  ));
+  const archive = createAdminEvidenceArchive({
+    evidenceBuckets: {
+      officialQaRelated: Array.from({ length: 4 }, (_, index) => ({
+        id: `heavy-${index}`,
+        type: "official_qa",
+        official: true,
+        question: `Heavy question ${index}`,
+        answer: `Body ${index} ${"正文".repeat(300)}`,
+        questionType: `shape-${index}`,
+        matchedQuestionCardIds: longIds,
+        typeCompatible: true,
+        playerRoleCompatibility: "compatible",
+        scenarioPremiseCompatibility: "compatible",
+        retrievalSignals: {
+          questionType: `nested-shape-${index}`,
+          matchedQuestionCardIds: longIds.slice().reverse(),
+          typeCompatible: true,
+          playerRoleCompatibility: "compatible",
+          scenarioPremiseCompatibility: "compatible",
+        },
+      })),
+    },
+  });
+  const packet = buildAdminEvidenceDecisionPacket({
+    archive,
+    limits: {
+      maxPacketBytes: 28 * 1024,
+      maxItems: 4,
+      maxTotalBodyChars: 16_000,
+      maxTotalBodyBytes: 20 * 1024,
+    },
+  });
+  assert.equal(packet.modelPacket.evidenceItems.length, 4);
+  assert.equal(packet.modelPacket.evidenceItems.every((item) => item.body.length > 0), true);
+  assert.equal(packet.modelPacket.evidenceItems.every(
+    (item) => item.questionSideProfiles.length <= 2
+      && item.questionSideProfiles.every((profile) => (
+        profile.matchedQuestionCardIds.length <= 4
+        && Object.hasOwn(profile, "profileAudit") === false
+      )),
+  ), true);
+  assert.ok(packet.modelPacket.evidenceSummary
+    .questionSideProfileCompleteness.modelOmittedIdCount > 0);
+  assert.ok(packet.modelPacket.evidenceSummary
+    .questionSideProfileCompleteness.modelOmittedProfileCount >= 0);
+  assert.equal(packet.modelPacket.completeness.packetStructurallyExcerpted, true);
+  assert.ok(Buffer.byteLength(JSON.stringify(packet.modelPacket), "utf8") <= 28 * 1024);
 });
 
 test("mandatory constraints retain activation candidate review for a resolution question", () => {

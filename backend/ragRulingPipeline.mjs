@@ -8,6 +8,7 @@ import { extractRagCards, normalizeCardKey } from "./ragCardExtractor.mjs";
 import { evidenceBucketsToList, loadRagData, retrieveRagEvidence } from "./ragEvidenceRetriever.mjs";
 import {
   callCardNameExtractionModel,
+  callOfficialQaApplicabilityModel,
   callRagModel,
   callRuleQueryExtractionModel,
 } from "./ragModelClient.mjs";
@@ -39,6 +40,7 @@ export async function answerRagRulingQuestion({
   cardModelInvoker,
   ruleModelInvoker,
   rulebookModelInvoker,
+  applicabilityModelInvoker,
   dryRun,
   fetchImpl,
   now,
@@ -133,6 +135,19 @@ export async function answerRagRulingQuestion({
   });
   timingsMs.retrieval = elapsedMs(retrievalStartedAt);
   const effectiveCardResolution = reconcileCardResolution(cardResolution, retrievedEvidence);
+  const officialQaApplicabilityStartedAt = Date.now();
+  const officialQaApplicabilityPromise = callOfficialQaApplicabilityModel({
+    userQuery: query,
+    candidates: retrievedEvidence.officialQaRelated || [],
+    resolvedCards: effectiveCardResolution.resolvedCards || [],
+    dataRevision,
+    env,
+    modelInvoker: applicabilityModelInvoker,
+    fetchImpl,
+    now,
+    dryRun,
+    signal,
+  });
   const explicitEngineScenario = engineScenario !== undefined && engineScenario !== null;
   const enginePlan = explicitEngineScenario
     ? {
@@ -211,19 +226,28 @@ export async function answerRagRulingQuestion({
     userQuery: query,
     cardTexts: reasoningCardTexts,
   });
+  const officialQaApplicability = await officialQaApplicabilityPromise;
+  timingsMs.officialQaApplicability = Number(
+    officialQaApplicability.durationMs
+      ?? elapsedMs(officialQaApplicabilityStartedAt),
+  );
+  const reviewedRetrievedEvidence = applyOfficialQaApplicabilityReview(
+    retrievedEvidence,
+    officialQaApplicability,
+  );
   const corroboratingEvidence = dedupeEvidenceRefs([
-    ...(retrievedEvidence.officialQaDirectCandidates || []),
-    ...(retrievedEvidence.provisionalOfficialResponses || []),
-    ...(retrievedEvidence.officialQaRelated || []),
+    ...(reviewedRetrievedEvidence.officialQaDirectCandidates || []),
+    ...(reviewedRetrievedEvidence.provisionalOfficialResponses || []),
+    ...(reviewedRetrievedEvidence.officialQaRelated || []),
   ]);
   const localReasoningStartedAt = Date.now();
   const localRulebookGrounding = buildLocalRulebookGrounding({
     userQuery: query,
     cardTexts: reasoningCardTexts,
-    evidence: retrievedEvidence,
+    evidence: reviewedRetrievedEvidence,
     env,
   });
-  const locallyGroundedEvidence = attachRulebookGrounding(retrievedEvidence, localRulebookGrounding);
+  const locallyGroundedEvidence = attachRulebookGrounding(reviewedRetrievedEvidence, localRulebookGrounding);
   // The local executor is an evidence-discovery aid only.  It records movement
   // provenance and timing checkpoints that are easy to miss in prose (for
   // example, a summon procedure requesting a banish while a leave-field card
@@ -261,7 +285,7 @@ export async function answerRagRulingQuestion({
     warnings: ["rulebook_grounding_disabled_simple_pipeline"],
   };
   timingsMs.rulebookGrounding = elapsedMs(rulebookStartedAt);
-  const groundedEvidence = attachRulebookGrounding(retrievedEvidence, rulebookGrounding);
+  const groundedEvidence = attachRulebookGrounding(reviewedRetrievedEvidence, rulebookGrounding);
   const formalStartedAt = Date.now();
   const formalShadow = await formalShadowPromise;
   timingsMs.formalEngineAwait = elapsedMs(formalStartedAt);
@@ -410,28 +434,46 @@ export async function answerRagRulingQuestion({
       rulebookGroundingWarnings: rulebookGrounding.warnings || [],
       rulebookGroundingTokenUsage: rulebookGrounding.tokenUsage || {},
       rulebookGroundingCostCny: rulebookGrounding.estimatedCostCny || 0,
+      officialQaApplicabilityStatus: officialQaApplicability.status,
+      officialQaApplicabilityModelUsed: officialQaApplicability.modelUsed,
+      officialQaApplicabilityProviderUsed: officialQaApplicability.providerUsed,
+      officialQaApplicabilityRequestedModel: officialQaApplicability.requestedModel || null,
+      officialQaApplicabilityReturnedModel: officialQaApplicability.returnedModel || null,
+      officialQaApplicabilityWarnings: officialQaApplicability.warnings || [],
+      officialQaApplicabilityTokenUsage: officialQaApplicability.tokenUsage || {},
+      officialQaApplicabilityCostCny: officialQaApplicability.estimatedCostCny || 0,
+      officialQaApplicabilityCostUsd: officialQaApplicability.estimatedCostUsd || 0,
+      officialQaApplicabilityBudgetStatus: officialQaApplicability.budgetStatus || null,
+      officialQaApplicabilityRejectedCount:
+        evidence.rejectedOfficialQaRelated?.length || 0,
       extractionCacheHits: {
         cardNameModel: cardNameModel.cacheHit === true,
         ruleQueryModel: ruleQueryModel.cacheHit === true,
         rulebookGroundingModel: rulebookGrounding.cacheHit === true,
+        officialQaApplicabilityModel: officialQaApplicability.cacheHit === true,
       },
       extractionSingleflightHits: {
         cardNameModel: cardNameModel.singleflightHit === true,
         ruleQueryModel: ruleQueryModel.singleflightHit === true,
         rulebookGroundingModel: rulebookGrounding.singleflightHit === true,
+        officialQaApplicabilityModel: officialQaApplicability.singleflightHit === true,
       },
       auxiliaryCacheHit: cardNameModel.cacheHit === true
         || ruleQueryModel.cacheHit === true
-        || rulebookGrounding.cacheHit === true,
+        || rulebookGrounding.cacheHit === true
+        || officialQaApplicability.cacheHit === true,
       auxiliaryTokenUsage: sumUsageTelemetry([
         cardNameModel.tokenUsage,
         ruleQueryModel.tokenUsage,
         rulebookGrounding.tokenUsage,
+        officialQaApplicability.tokenUsage,
       ]),
       auxiliaryEstimatedCostCny:
         (cardNameModel.estimatedCostCny || 0)
         + (ruleQueryModel.estimatedCostCny || 0)
-        + (rulebookGrounding.estimatedCostCny || 0),
+        + (rulebookGrounding.estimatedCostCny || 0)
+        + (officialQaApplicability.estimatedCostCny || 0),
+      auxiliaryEstimatedCostUsd: officialQaApplicability.estimatedCostUsd || 0,
       retrievalWarnings: [...new Set([...(evidence.retrievalWarnings || []), ...(promptBundle.warnings || [])])],
       baigeSearchCount: evidence.debug?.baigeSearchCount || 0,
       baigeCacheHitCount: evidence.debug?.baigeCacheHitCount || 0,
@@ -448,8 +490,11 @@ export async function answerRagRulingQuestion({
         (cardNameModel.estimatedCostCny || 0)
         + (ruleQueryModel.estimatedCostCny || 0)
         + (rulebookGrounding.estimatedCostCny || 0)
+        + (officialQaApplicability.estimatedCostCny || 0)
         + (modelResult.estimatedCostCny || 0),
-      estimatedCostUsd: modelResult.estimatedCostUsd || 0,
+      estimatedCostUsd:
+        (officialQaApplicability.estimatedCostUsd || 0)
+        + (modelResult.estimatedCostUsd || 0),
       budgetStatus: modelResult.budgetStatus || null,
       generationConfig: modelResult.generationConfig || null,
       generationAttempts: publicGenerationAttempts,
@@ -656,6 +701,53 @@ function attachRulebookGrounding(evidence, groundingResult = {}) {
       ...(operationLegality.hasGroundedChecks ? [`rulebook_grounded_operation_checks:${operationLegality.checks.length}`] : []),
       ...(operationLegality.hasBlockingCheck ? ["operation_legality_blocker_applied"] : []),
     ])],
+  };
+}
+
+export function applyOfficialQaApplicabilityReview(evidence = {}, review = {}) {
+  // A partial batch is not a trustworthy filter: even individually valid
+  // entries may have been produced beside omitted, duplicate, or malformed
+  // assessments. Only a complete one-to-one batch may remove evidence.
+  if (review.status !== "completed" || review.complete !== true) {
+    return {
+      ...evidence,
+      officialQaApplicabilityReview: review,
+      rejectedOfficialQaRelated: [],
+    };
+  }
+  const assessmentById = new Map((review.assessments || []).map(
+    (item) => [String(item.id || ""), item],
+  ));
+  const applicable = [];
+  const unknown = [];
+  const rejected = [];
+  for (const item of evidence.officialQaRelated || []) {
+    const assessment = assessmentById.get(String(item.id)) || {
+      id: String(item.id),
+      verdict: "UNKNOWN",
+      sharedConditions: [],
+      missingConditions: ["model_assessment_missing"],
+      conflictingConditions: [],
+      reason: "",
+    };
+    const reviewed = {
+      ...item,
+      // This metadata never alters direct-authority fields. It is only a
+      // related-evidence selection result for the final model's prompt.
+      applicabilityReview: assessment,
+      isDirect: false,
+      authoritativeSceneMatch: false,
+      authoritativeSceneMatchReason: "",
+    };
+    if (assessment.verdict === "INAPPLICABLE") rejected.push(reviewed);
+    else if (assessment.verdict === "APPLICABLE") applicable.push(reviewed);
+    else unknown.push(reviewed);
+  }
+  return {
+    ...evidence,
+    officialQaRelated: [...applicable, ...unknown],
+    rejectedOfficialQaRelated: rejected,
+    officialQaApplicabilityReview: review,
   };
 }
 

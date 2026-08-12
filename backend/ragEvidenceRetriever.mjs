@@ -29,8 +29,57 @@ const normalizedDataCache = new WeakMap();
 const evidenceRecordBucketsCache = new WeakMap();
 const evidenceListCache = new WeakMap();
 const retrievalRecordFeatureCache = new WeakMap();
+const officialQaMechanismFeatureCache = new WeakMap();
 const recordIdentityIndexCache = new WeakMap();
 const canonicalCardIdentityIndexCache = new WeakMap();
+
+// These are atomic, card-agnostic facts used by every mechanism query. They
+// describe timing, sequence, visibility, zones, actors and activation kinds;
+// no entry names a card, a Q&A, or a finished ruling.
+const RULE_MECHANISM_FEATURE_PATTERNS = Object.freeze([
+  ["timing:same", /(?:同じタイミング|同一时点|同一時點|同一タイミング|same (?:timing|time|activation window)|at the same time)/iu],
+  ["quantity:multiple", /(?:複数|多个|多個|multiple|several)/iu],
+  ["sequence:order", /(?:順番|顺序|順序|優先度|优先级|priority|in what order|which.{0,40}(?:chain|activate))/isu],
+  ["sequence:chain-link-1", /(?:チェーン|连锁|連鎖|\bchain(?:\s+link)?\b|[cＣ])\s*1/iu],
+  ["sequence:chain-link-2", /(?:チェーン|连锁|連鎖|\bchain(?:\s+link)?\b|[cＣ])\s*2/iu],
+  ["sequence:chain-link-3", /(?:チェーン|连锁|連鎖|\bchain(?:\s+link)?\b|[cＣ])\s*3/iu],
+  ["activation:trigger", /(?:誘発|诱发|誘發|trigger)/iu],
+  ["activation:mandatory", /(?:必ず発動|必须发动|必須發動|必发|必發|must (?:be )?activat(?:e|ed))/iu],
+  ["activation:optional", /(?:任意|选发|選發|optional|発動できる|可以发动)/iu],
+  ["activation:card", /(?:カード(?:の発動|を発動)|卡的发动|卡片发动|card activation|(?:spell|trap) card is activated)/iu],
+  ["activation:effect", /(?:効果(?:の発動|が発動)|效果发动|效果發動|effect activation|effect is activated)/iu],
+  ["visibility:public", /(?:(?<!非)公開|(?<!不)公开|已公開|已公开|\brevealed\b|\bpublic\b|face[ -]?up)/iu],
+  ["visibility:private", /(?:非公開|不公开|未公开|private|face[ -]?down|set card)/iu],
+  ["zone:hand", /(?:手札|手牌|手卡|\bhand\b)/iu],
+  ["zone:field", /(?:フィールド|场上|場上|\bfield\b)/iu],
+  ["player:turn", /(?:ターンを進めているプレイヤー|回合玩家|turn player|player whose turn)/iu],
+  ["player:opponent", /(?:相手|对方|對方|opponent)/iu],
+  ["relation:treated-as", /(?:扱い|视为|視為|作为.{0,12}处理|作為.{0,12}處理|treated as)/iu],
+]);
+
+const RULE_MECHANISM_GENERIC_CONCEPTS = new Set([
+  "activation",
+  "resolution",
+  "chain",
+  "effect",
+  "monster_effect",
+]);
+
+const RULE_MECHANISM_CONCEPT_FAMILIES = new Map([
+  ["negate", "operation:negate"],
+  ["negate_activation", "operation:negate"],
+  ["effect_negation", "operation:negate"],
+  ["temporary_banish", "operation:banish"],
+  ["banish", "operation:banish"],
+  ["destroy", "operation:destroy"],
+  ["special_summon", "operation:special-summon"],
+  ["fusion_summon", "operation:fusion-summon"],
+  ["return_deck", "operation:return-deck"],
+  ["send_graveyard", "operation:send-graveyard"],
+  ["discard", "operation:discard"],
+  ["replacement", "operation:replacement"],
+  ["field_presence", "zone:field"],
+]);
 
 export async function retrieveRagEvidence({
   userQuery,
@@ -200,10 +249,10 @@ export async function retrieveRagEvidence({
     limits,
   );
   const deterministicRuleQueryKeys = new Set(
-    deterministicRuleQueries.map((item) => normalizeCardKey(item.query)).filter(Boolean),
+    deterministicRuleQueries.map(ruleSearchQueryIdentity).filter(Boolean),
   );
   const effectiveSupplementalRuleQueries = normalizedRuleQueries.filter(
-    (item) => !deterministicRuleQueryKeys.has(normalizeCardKey(item.query)),
+    (item) => !deterministicRuleQueryKeys.has(ruleSearchQueryIdentity(item)),
   );
   if (normalizedRuleQueries.length) retrievalWarnings.push(`rule_search_queries_used:${normalizedRuleQueries.length}`);
   const mentionQueries = [
@@ -239,7 +288,13 @@ export async function retrieveRagEvidence({
     question: userQuery,
     records: scopedRecordBuckets.officialQa,
     resolvedCards: effectiveQaIdentityCards,
-    limit: Math.max(20, limits.maxOfficialQa * 4),
+    // This is an in-memory discovery pass. Keep a wider scored pool until the
+    // shared related-evidence allocator applies its fixed prompt budget below;
+    // otherwise a decisive identity-linked QA can be lost merely because a
+    // popular card has many higher-ranked but structurally repetitive entries.
+    limit: effectiveQaIdentityCards.length
+      ? Math.max(256, limits.maxRelatedEvidence * 24)
+      : Math.max(20, limits.maxOfficialQa * 4),
     // The scoped bucket comes from the complete local QA snapshot and keeps
     // every record indexed to any resolved query card.
     subsumptionCandidatePoolComplete: subsumptionCandidatePoolComplete === true
@@ -323,7 +378,9 @@ export async function retrieveRagEvidence({
       // discarded in favour of an older English-only snapshot.
       records: dedupeBy([...liveOfficialQa.records, ...scopedRecordBuckets.officialQa], stableRecordKey),
       resolvedCards: effectiveQaIdentityCards,
-      limit: Math.max(20, limits.maxOfficialQa * 4),
+      limit: effectiveQaIdentityCards.length
+        ? Math.max(256, limits.maxRelatedEvidence * 24)
+        : Math.max(20, limits.maxOfficialQa * 4),
     })
     : localOfficialMatches;
   timingsMs.officialQa = Date.now() - stageStartedAt;
@@ -346,6 +403,7 @@ export async function retrieveRagEvidence({
   const globalMechanismOfficialQaSource = retrieveGlobalMechanismOfficialQaAnalogues({
     userQuery,
     records: recordBuckets.qa,
+    resolvedCards: effectiveQaIdentityCards,
     deterministicRuleQueries,
     supplementalRuleQueries: effectiveSupplementalRuleQueries,
     maxResults: limits.maxRelatedEvidence,
@@ -356,26 +414,17 @@ export async function retrieveRagEvidence({
   const usefulScopedOfficialMatches = officialMatches.all.filter((match) => (
       isOfficialQaRecord(match.record)
       && isUsefulOfficialRelatedMatch(match)
-      && !isIncidentalMultiCardExampleMatch(match, effectiveQaIdentityCards.length)
+      && (
+        !isIncidentalMultiCardExampleMatch(match, effectiveQaIdentityCards.length)
+        || isStrongQuestionStructureAnalogy(match)
+      )
     ));
-  const prioritizedScopedOfficialMatches = reservePerBranchOfficialEvidence(
-    usefulScopedOfficialMatches,
-    limits.maxRelatedEvidence,
-  );
-  const bestGlobalMechanismOfficialQaSource = bestEvidencePerMechanism(
-    globalMechanismOfficialQaSource,
-  );
-  const combinedOfficialQaRelatedSource = dedupeBy([
-    // Put the single best representative of each detected mechanism first for
-    // stable-id deduplication so its provenance label survives. The reservation
-    // step below moves only a bounded subset into the visible budget.
-    ...bestGlobalMechanismOfficialQaSource,
-    // `all` is globally ranked, with complete-scene coverage ahead of partial
-    // branches. Reserve at most one best source per uncovered branch inside the
-    // final related-evidence budget, then retain the matcher order for every
-    // remaining scoped source. This prevents either many branch matches or many
-    // broad analogues from monopolising the prompt.
-    ...prioritizedScopedOfficialMatches,
+  const combinedOfficialQaRelatedSource = mergeOfficialRelatedSourceItems([
+    // Global semantic analogues and same-scene branches share one final budget.
+    // Duplicate records are merged so neither mechanism coverage nor branch
+    // applicability metadata is lost.
+    ...globalMechanismOfficialQaSource,
+    ...usefulScopedOfficialMatches,
     // A card-scoped pass cannot find an official ruling for another card that
     // instantiates the same rule mechanism. Strongly matched global analogues
     // remain useful fallback evidence, but can never become a direct ruling.
@@ -388,18 +437,21 @@ export async function retrieveRagEvidence({
       supplementalRuleQueries: effectiveSupplementalRuleQueries,
       allowNoCardMatch: effectiveQaIdentityCards.length === 0 && normalizedRuleQueries.length > 0,
     }).filter((record) => !isIncidentalMultiCardExampleRecord(record, effectiveQaIdentityCards.length)),
-  ], (item) => stableRecordKey(item?.record || item));
-  const officialQaRelatedSource = reserveMechanismEvidence(
-    combinedOfficialQaRelatedSource,
-    limits.maxRelatedEvidence,
-  );
-  const officialQaRelated = officialQaRelatedSource
+  ]);
+  const officialQaRelatedCandidates = combinedOfficialQaRelatedSource
     .map((item) => item.record
       ? evidenceFromOfficialMatch(item, "related", limits.maxEvidenceTextChars, retrievalWarnings)
       : evidenceFromRecord(item, "related", limits.maxEvidenceTextChars, retrievalWarnings))
-    .filter((item) => !directIds.has(item.id))
+    .filter((item) => !directIds.has(item.id));
+  // Remove records already selected as direct evidence before allocating the
+  // bounded related-evidence slots. Otherwise a duplicate direct record can
+  // consume a reserved branch/mechanism slot and disappear only afterwards.
+  const officialQaRelated = reserveRelatedEvidenceCoverage(
+    officialQaRelatedCandidates,
+    limits.maxRelatedEvidence,
+  )
     .slice(0, limits.maxRelatedEvidence);
-  if (officialQaRelatedSource.length > limits.maxRelatedEvidence) retrievalWarnings.push(`official_related_limited:${officialQaRelatedSource.length}->${limits.maxRelatedEvidence}`);
+  if (officialQaRelatedCandidates.length > limits.maxRelatedEvidence) retrievalWarnings.push(`official_related_limited:${officialQaRelatedCandidates.length}->${limits.maxRelatedEvidence}`);
 
   const provisionalOfficialResponseSource = rankRecordsWithSupplementalQueries({
     userQuery,
@@ -891,21 +943,15 @@ function recordIdentityIndex(records) {
   if (cached) return cached;
   const index = new Map();
   for (const record of records || []) {
+    const rankingIdentity = retrievalRankingIdentity(record);
     const keys = new Set([
-      ...(record.cardIds || []).map((id) => "id:" + normalizeId(id)).filter((key) => key !== "id:"),
-      ...(record.cards || []).map((name) => "name:" + normalizeCardKey(name)).filter((key) => key !== "name:"),
-      ...extractInlineCardIds([
-        record.question,
-        record.rawQuestion,
-        record.rawDetailedQuestion,
-        record.title,
-        record.text,
-        record.answer,
-        record.conclusion,
-      ].filter(Boolean).join("\n")).map((id) => "id:" + normalizeId(id)),
+      ...rankingIdentity.cardIds
+        .map((id) => "id:" + normalizeId(id))
+        .filter((key) => key !== "id:"),
+      ...rankingIdentity.cardNames
+        .map((name) => "name:" + normalizeCardKey(name))
+        .filter((key) => key !== "name:"),
     ]);
-    const directId = normalizeId(record.cardId);
-    if (directId) keys.add("id:" + directId);
     for (const key of keys) {
       const matches = index.get(key) || [];
       matches.push(record);
@@ -1077,6 +1123,8 @@ function userProvidedTextEvidence(item, index, maxTextChars, warnings) {
 
 function evidenceFromOfficialMatch(match, type, maxTextChars, warnings) {
   const record = match.record || {};
+  const isDirectEvidence = type === "official_qa"
+    && match.matchLevel === "official_qa_exact";
   const retrievalScore = normalizeEvidenceRelevanceScore(
     match.retrievalScore
       ?? record.retrievalScore
@@ -1087,14 +1135,32 @@ function evidenceFromOfficialMatch(match, type, maxTextChars, warnings) {
     ...evidenceFromRecord(record, type, maxTextChars, warnings),
     score: match.score,
     retrievalScore,
-    matchLevel: match.matchLevel,
+    matchLevel: !isDirectEvidence && match.matchLevel === "official_qa_exact"
+      ? "official_qa_near"
+      : match.matchLevel,
     questionType: match.questionType || "unknown",
+    identityScopedMatch: true,
     matchedBy: match.matchedBy || [],
     matchedQuestionCardIds: match.matchedQuestionCardIds || [],
+    branchRelevant: match.branchRelevant === true,
+    branchMatchedCardIds: match.branchMatchedCardIds || [],
+    supportingQuestionBranchIndex: match.supportingQuestionBranchIndex ?? null,
+    supportingQuestionBranchCardIds: match.supportingQuestionBranchCardIds || [],
+    supportingQuestionBranchUnmatchedCardIds: match.supportingQuestionBranchUnmatchedCardIds || [],
+    supportingQuestionBranchIdentityComplete:
+      match.supportingQuestionBranchIdentityComplete === true,
+    supportingQuestionBranchTypeCompatible:
+      match.supportingQuestionBranchTypeCompatible === true,
+    supportingQuestionBranchPlayerRoleCompatibility:
+      match.supportingQuestionBranchPlayerRoleCompatibility || "unknown",
+    supportingQuestionBranchScenarioPremiseCompatibility:
+      match.supportingQuestionBranchScenarioPremiseCompatibility || "unknown",
     questionCardIdCoverage: Number(match.questionCardIdCoverage || 0),
     questionCardIdCount: Number(match.questionCardIdCount || 0),
-    authoritativeSceneMatch: match.authoritativeSceneMatch === true,
-    authoritativeSceneMatchReason: match.authoritativeSceneMatchReason || "",
+    authoritativeSceneMatch: isDirectEvidence && match.authoritativeSceneMatch === true,
+    authoritativeSceneMatchReason: isDirectEvidence
+      ? match.authoritativeSceneMatchReason || ""
+      : "",
     candidatePoolComplete: match.candidatePoolComplete === true,
     subsumptionCandidatePoolComplete: match.subsumptionCandidatePoolComplete === true,
     semanticSubsumptionCertified: match.semanticSubsumptionCertified === true,
@@ -1122,7 +1188,7 @@ function evidenceFromOfficialMatch(match, type, maxTextChars, warnings) {
     evidenceApplicabilityFrame: match.evidenceApplicabilityFrame || null,
     requestedTargetCoverage: match.requestedTargetCoverage || null,
     scenarioFactCoverage: match.scenarioFactCoverage || null,
-    isDirect: match.matchLevel === "official_qa_exact",
+    isDirect: isDirectEvidence,
   };
 }
 
@@ -1203,74 +1269,289 @@ function isUsefulOfficialRelatedMatch(match = {}) {
     );
 }
 
-function bestEvidencePerMechanism(items = []) {
-  const represented = new Set();
-  return (items || []).filter((item) => {
-    const mechanism = String(item?.retrievalSignals?.mechanismAnalogue || "").trim();
-    if (!mechanism || represented.has(mechanism)) return false;
-    represented.add(mechanism);
-    return true;
-  });
+function evidenceMechanismAnalogues(item = {}) {
+  const record = item?.record || item;
+  const signals = record?.retrievalSignals || {};
+  return [...new Set([
+    ...(Array.isArray(signals.mechanismAnalogues) ? signals.mechanismAnalogues : []),
+    signals.mechanismAnalogue,
+  ].map((value) => String(value || "").trim()).filter(Boolean))];
 }
 
-function reserveMechanismEvidence(items = [], limit = 1) {
+function reserveRelatedEvidenceCoverage(items = [], limit = 1) {
   const safeLimit = Math.max(1, Math.floor(Number(limit) || 1));
-  const mechanismSlotLimit = Math.max(1, Math.floor(safeLimit / 4));
   const reserved = [];
+  const reservedRecordKeys = new Set();
   const representedMechanisms = new Set();
-  for (const item of items || []) {
-    const record = item?.record || item;
-    const mechanism = String(record?.retrievalSignals?.mechanismAnalogue || "").trim();
-    if (!mechanism || representedMechanisms.has(mechanism)) continue;
-    representedMechanisms.add(mechanism);
-    reserved.push(item);
-    if (reserved.length >= mechanismSlotLimit) break;
-  }
-  if (!reserved.length) return items;
 
-  const reservedKeys = new Set(reserved.map((item) => stableRecordKey(item?.record || item)));
-  const remainingMechanisms = [];
-  const ordinary = [];
-  for (const item of items || []) {
+  const reserve = (item) => {
     const key = stableRecordKey(item?.record || item);
-    if (reservedKeys.has(key)) continue;
-    const record = item?.record || item;
-    if (record?.retrievalSignals?.mechanismAnalogue) remainingMechanisms.push(item);
-    else ordinary.push(item);
+    if (!key || reservedRecordKeys.has(key) || reserved.length >= safeLimit) return false;
+    reserved.push(item);
+    reservedRecordKeys.add(key);
+    evidenceMechanismAnalogues(item).forEach((mechanism) => representedMechanisms.add(mechanism));
+    return true;
+  };
+
+  const candidates = items || [];
+  // Identity-scoped matcher results are the closest candidates to the user's
+  // concrete scene. Preserve a small bounded prefix before adding broad
+  // mechanism analogues. This is recall/ranking only: every item remains
+  // related and the final model still decides applicability.
+  const scopedCandidates = candidates
+    .filter(isIdentityScopedRelatedEvidence)
+    .sort(compareIdentityScopedRelatedEvidence);
+  const scopedSlotLimit = scopedCandidates.length
+    ? Math.min(safeLimit, Math.max(1, Math.ceil(safeLimit / 2)))
+    : 0;
+  // Preserve question-type diversity inside the fixed identity-scoped share.
+  // A popular card can have dozens of high-scoring Q&A for the same broad
+  // "can activate" shape; taking only their score prefix can hide a lower-ranked
+  // but structurally different branch such as card activation versus effect
+  // activation. This remains a bounded, source-agnostic allocation and never
+  // changes related evidence into direct evidence.
+  const scopedTypeRepresentatives = [];
+  const representedScopedTypes = new Set();
+  const representedScopedCardIds = new Set();
+  for (const item of scopedCandidates) {
+    const type = relatedQuestionTypeIdentity(item);
+    if (!type || representedScopedTypes.has(type)) continue;
+    representedScopedTypes.add(type);
+    scopedTypeRepresentatives.push(item);
   }
-  const ordinarySlots = Math.max(0, safeLimit - reserved.length);
+  const scopedDiversityCandidates = [];
+  const scopedDiversityKeys = new Set();
+  const addScopedDiversityCandidate = (item) => {
+    const key = stableRecordKey(item?.record || item);
+    if (!key || scopedDiversityKeys.has(key)) return;
+    scopedDiversityKeys.add(key);
+    scopedDiversityCandidates.push(item);
+    relatedMatchedQuestionCardIds(item).forEach((id) => representedScopedCardIds.add(id));
+  };
+  // First give each resolved identity represented in the candidate pool one
+  // chance, then add distinct question shapes. This keeps the same fixed share
+  // while preventing a popular card or a popular `can_activate` shape from
+  // crowding out another card in the user's scene.
+  for (const item of scopedCandidates) {
+    if (scopedDiversityCandidates.length >= scopedSlotLimit) break;
+    const ids = relatedMatchedQuestionCardIds(item);
+    if (!ids.some((id) => !representedScopedCardIds.has(id))) continue;
+    addScopedDiversityCandidate(item);
+  }
+  for (const item of scopedTypeRepresentatives) {
+    if (scopedDiversityCandidates.length >= scopedSlotLimit) break;
+    addScopedDiversityCandidate(item);
+  }
+  for (const item of scopedDiversityCandidates) reserve(item);
+  for (const item of scopedCandidates) {
+    if (reserved.length >= scopedSlotLimit) break;
+    reserve(item);
+  }
+
+  // A broad question may be associated with several mechanism signatures. Do
+  // not let that single record consume every mechanism slot merely because it
+  // carries more labels. When identity-scoped evidence exists, mechanism-only
+  // analogues receive a small bounded share; pure rule queries may use the
+  // whole budget for mechanism diversity.
+  const mechanismSlotLimit = scopedCandidates.length
+    ? Math.min(
+        Math.max(0, safeLimit - reserved.length),
+        Math.max(1, Math.floor(safeLimit / 6)),
+      )
+    : Math.max(0, safeLimit - reserved.length);
+  let mechanismSlotsUsed = 0;
+  const mechanismOrder = [...new Set(candidates.flatMap(evidenceMechanismAnalogues))];
+  for (const mechanism of mechanismOrder) {
+    if (reserved.length >= safeLimit || mechanismSlotsUsed >= mechanismSlotLimit) break;
+    if (representedMechanisms.has(mechanism)) continue;
+    const representative = candidates
+      .filter((item) => {
+        const key = stableRecordKey(item?.record || item);
+        return key
+          && !reservedRecordKeys.has(key)
+          && evidenceMechanismAnalogues(item).includes(mechanism);
+      })
+      .sort((left, right) => compareMechanismRepresentatives(left, right, mechanism))[0];
+    if (representative && reserve(representative)) mechanismSlotsUsed += 1;
+  }
+
+  for (const item of items || []) {
+    if (reserved.length >= safeLimit) break;
+    reserve(item);
+  }
+  const remaining = (items || []).filter(
+    (item) => !reservedRecordKeys.has(stableRecordKey(item?.record || item)),
+  );
   return [
     ...reserved,
-    ...ordinary.slice(0, ordinarySlots),
-    ...ordinary.slice(ordinarySlots),
-    ...remainingMechanisms,
+    ...remaining,
   ];
 }
 
-function reservePerBranchOfficialEvidence(matches = [], limit = 1) {
-  const safeLimit = Math.max(1, Math.floor(Number(limit) || 1));
-  const branchRepresentatives = [];
-  const representedCardIds = new Set();
-  for (const match of matches || []) {
-    if (match?.branchRelevant !== true) continue;
-    const branchIds = [...new Set([
-      ...(match.branchMatchedCardIds || []),
-      ...(match.matchedQuestionCardIds || []),
-    ].map(normalizeId).filter(Boolean))];
-    if (!branchIds.some((id) => !representedCardIds.has(id))) continue;
-    branchRepresentatives.push(match);
-    branchIds.forEach((id) => representedCardIds.add(id));
-  }
-  if (!branchRepresentatives.length) return matches;
+function isIdentityScopedRelatedEvidence(item = {}) {
+  return item.identityScopedMatch === true || item.branchRelevant === true;
+}
 
-  const representatives = new Set(branchRepresentatives);
-  const remaining = matches.filter((match) => !representatives.has(match));
-  const ordinarySlots = Math.max(0, safeLimit - branchRepresentatives.length);
-  return [
-    ...remaining.slice(0, ordinarySlots),
-    ...branchRepresentatives,
-    ...remaining.slice(ordinarySlots),
+function relatedQuestionTypeIdentity(item = {}) {
+  const value = String(
+    item?.questionType
+      || item?.retrievalSignals?.questionType
+      || "",
+  ).trim().toLowerCase();
+  return value && value !== "unknown" ? value : "";
+}
+
+function relatedMatchedQuestionCardIds(item = {}) {
+  const values = [
+    ...(Array.isArray(item?.matchedQuestionCardIds) ? item.matchedQuestionCardIds : []),
+    ...(Array.isArray(item?.retrievalSignals?.matchedQuestionCardIds)
+      ? item.retrievalSignals.matchedQuestionCardIds
+      : []),
   ];
+  return [...new Set(values.map(normalizeId).filter(Boolean))];
+}
+
+function compareIdentityScopedRelatedEvidence(left, right) {
+  const leftSignals = left?.retrievalSignals || {};
+  const rightSignals = right?.retrievalSignals || {};
+  return Number(right?.score || 0) - Number(left?.score || 0)
+    || Number(right?.retrievalScore || 0) - Number(left?.retrievalScore || 0)
+    || Number(right?.branchRelevant === true) - Number(left?.branchRelevant === true)
+    || Number(
+      right?.questionCardIdCoverage ?? rightSignals.questionCardIdCoverage ?? 0,
+    ) - Number(
+      left?.questionCardIdCoverage ?? leftSignals.questionCardIdCoverage ?? 0,
+    )
+    || Number(
+      (right?.matchedQuestionCardIds || []).length
+        || rightSignals.matchedQuestionCardIdCount
+        || 0,
+    ) - Number(
+      (left?.matchedQuestionCardIds || []).length
+        || leftSignals.matchedQuestionCardIdCount
+        || 0,
+    )
+    || stableRecordKey(left?.record || left).localeCompare(stableRecordKey(right?.record || right));
+}
+
+function compareMechanismRepresentatives(left, right, mechanism) {
+  const leftMetric = left?.retrievalSignals?.mechanismAnalogueMetrics?.[mechanism] || {};
+  const rightMetric = right?.retrievalSignals?.mechanismAnalogueMetrics?.[mechanism] || {};
+  return Number(rightMetric.score || 0) - Number(leftMetric.score || 0)
+    || Number(rightMetric.queryCoverage || 0) - Number(leftMetric.queryCoverage || 0)
+    || Number(rightMetric.questionCoverage || 0) - Number(leftMetric.questionCoverage || 0)
+    || Number(right?.retrievalScore || 0) - Number(left?.retrievalScore || 0)
+    || stableRecordKey(left?.record || left).localeCompare(stableRecordKey(right?.record || right));
+}
+
+function mergeOfficialRelatedSourceItems(items = []) {
+  const merged = new Map();
+  for (const item of items || []) {
+    const record = item?.record || item;
+    const key = stableRecordKey(record);
+    const previous = merged.get(key);
+    if (!previous) {
+      merged.set(key, item);
+      continue;
+    }
+    const previousRecord = previous?.record || previous;
+    const mergedRecord = mergeRelatedRecordMetadata(previousRecord, record);
+    const match = previous?.record ? previous : item?.record ? item : null;
+    merged.set(key, match ? { ...match, record: mergedRecord } : mergedRecord);
+  }
+  return [...merged.values()];
+}
+
+function mergeRelatedRecordMetadata(left = {}, right = {}) {
+  const leftSignals = left.retrievalSignals || {};
+  const rightSignals = right.retrievalSignals || {};
+  const mechanismMetrics = mergeMechanismAnalogueMetrics(
+    collectMechanismAnalogueMetrics(left),
+    collectMechanismAnalogueMetrics(right),
+  );
+  const primaryMechanism = selectPrimaryMechanismAnalogue(mechanismMetrics);
+  const primaryMetrics = mechanismMetrics[primaryMechanism] || {};
+  const mechanisms = Object.keys(mechanismMetrics);
+  return {
+    ...left,
+    ...right,
+    retrievalScore: Math.max(
+      Number(left.retrievalScore || 0),
+      Number(right.retrievalScore || 0),
+    ),
+    retrievalSignals: {
+      ...leftSignals,
+      ...rightSignals,
+      mechanismAnalogue: primaryMechanism,
+      mechanismAnalogues: mechanisms,
+      mechanismAnalogueScore: Number(primaryMetrics.score || 0),
+      mechanismAnalogueScores: Object.fromEntries(
+        mechanisms.map((mechanism) => [mechanism, Number(mechanismMetrics[mechanism].score || 0)]),
+      ),
+      mechanismAnalogueMetrics: mechanismMetrics,
+      mechanismQueryCoverage: Number(primaryMetrics.queryCoverage || 0),
+      mechanismQuestionCoverage: Number(primaryMetrics.questionCoverage || 0),
+      mechanismSignatureFeatures: primaryMetrics.features || [],
+    },
+  };
+}
+
+function collectMechanismAnalogueMetrics(item = {}) {
+  const signals = (item?.record || item)?.retrievalSignals || {};
+  const existing = signals.mechanismAnalogueMetrics || {};
+  const scores = signals.mechanismAnalogueScores || {};
+  const primary = String(signals.mechanismAnalogue || "");
+  const result = {};
+  for (const mechanism of evidenceMechanismAnalogues(item)) {
+    const metric = existing[mechanism] || {};
+    result[mechanism] = {
+      score: Number(metric.score ?? scores[mechanism]
+        ?? (mechanism === primary ? signals.mechanismAnalogueScore : 0) ?? 0),
+      queryCoverage: Number(metric.queryCoverage
+        ?? (mechanism === primary ? signals.mechanismQueryCoverage : 0) ?? 0),
+      questionCoverage: Number(metric.questionCoverage
+        ?? (mechanism === primary ? signals.mechanismQuestionCoverage : 0) ?? 0),
+      features: [...new Set(metric.features
+        || (mechanism === primary ? signals.mechanismSignatureFeatures : [])
+        || [])],
+    };
+  }
+  return result;
+}
+
+function mergeMechanismAnalogueMetrics(...sources) {
+  const result = {};
+  for (const source of sources) {
+    for (const [mechanism, metric] of Object.entries(source || {})) {
+      const previous = result[mechanism];
+      if (!previous || Number(metric.score || 0) > Number(previous.score || 0)) {
+        result[mechanism] = { ...metric, features: [...new Set(metric.features || [])] };
+        continue;
+      }
+      if (Number(metric.score || 0) < Number(previous.score || 0)) continue;
+      result[mechanism] = {
+        ...previous,
+        queryCoverage: Math.max(
+          Number(previous.queryCoverage || 0),
+          Number(metric.queryCoverage || 0),
+        ),
+        questionCoverage: Math.max(
+          Number(previous.questionCoverage || 0),
+          Number(metric.questionCoverage || 0),
+        ),
+        features: [...new Set([...(previous.features || []), ...(metric.features || [])])],
+      };
+    }
+  }
+  return result;
+}
+
+function selectPrimaryMechanismAnalogue(metrics = {}) {
+  return Object.entries(metrics)
+    .sort((left, right) => (
+      Number(right[1]?.score || 0) - Number(left[1]?.score || 0)
+      || left[0].localeCompare(right[0])
+    ))[0]?.[0] || "";
 }
 
 function isProvisionalOfficialResponseRecord(record = {}) {
@@ -1760,92 +2041,192 @@ function extractDefinitionSemanticKeys(value) {
 }
 
 function retrieveGlobalMechanismOfficialQaAnalogues({
-  userQuery,
+  userQuery = "",
   records,
+  resolvedCards = [],
   deterministicRuleQueries = [],
   supplementalRuleQueries = [],
   maxResults = 5,
 } = {}) {
+  const perMechanismLimit = 3;
+  // `maxResults` is the final related-evidence budget, not the discovery
+  // budget. Keep a bounded set of alternatives for every inferred mechanism
+  // until all scoped and global candidates reach the common allocator. The
+  // allocator later trims the prompt back to `maxResults`, so this wider local
+  // pool does not increase model context or cost.
   const allQueries = [...deterministicRuleQueries, ...supplementalRuleQueries];
-  const lifecycleQueries = allQueries
-    .filter((item) => item?.source === "effect_lifecycle_rule_search_query");
-  const triggerOrderQueries = allQueries.filter((item) => (
-    item?.source === "simultaneous_trigger_order_rule_search_query"
-  ));
-  const publicHandTriggerOrderQueries = allQueries.filter((item) => (
-    item?.source === "public_hand_trigger_order_rule_search_query"
-  ));
-  const candidates = [];
+  const mechanismQueries = buildRuleMechanismQueries(allQueries);
+  const discoveryPoolLimit = Math.min(
+    96,
+    Math.max(1, mechanismQueries.length) * perMechanismLimit,
+  );
+  const resolvedIds = new Set((resolvedCards || [])
+    .map((card) => normalizeId(card?.id || card?.cardId))
+    .filter(Boolean));
+  const questionSideMechanismSignature = buildRuleMechanismSignature(userQuery);
+  const questionSideOperationFeatures = new Set(
+    [...questionSideMechanismSignature].filter(
+      (feature) => ruleMechanismFeatureDimension(feature) === "operation",
+    ),
+  );
 
-  if (lifecycleQueries.length) {
-    const queryConcepts = new Set(extractOfficialQaSemanticConcepts([
-      userQuery,
-      ...lifecycleQueries.map((item) => item.query),
-    ].join("\n")));
-    if (isEffectLifecycleConceptSet(queryConcepts)) {
-      candidates.push(...(records || [])
-        .filter(isCurrentOfficialQaRecord)
-        .map((record) => {
-          const concepts = new Set(extractOfficialQaSemanticConcepts([
-            record.question,
-            record.answer,
-            record.title,
-            record.text,
-          ].filter(Boolean).join("\n")));
-          const lifecycleScore = effectLifecycleAnalogueScore(concepts);
-          return {
-            ...record,
-            retrievalScore: normalizeEvidenceRelevanceScore(0.72 + lifecycleScore * 0.06),
-            retrievalSignals: {
-              ...(record.retrievalSignals || {}),
-              matchedSemanticConcepts: [...concepts].filter((concept) => queryConcepts.has(concept)),
-              mechanismAnalogue: "bound_effect_lifecycle",
-              mechanismAnalogueScore: lifecycleScore,
+  // Every mechanism follows the same broad signature-overlap path. Candidate
+  // eligibility and ordering come only from the official question/scenario.
+  // Answer wording never controls whether a candidate survives the top-N cut.
+  // Grouping is derived only from the query text's atomic semantic signature.
+  // A caller-supplied label is diagnostic metadata and cannot create a match.
+  const candidatesByMechanism = [];
+  for (const { mechanism, signatures: querySignatures } of mechanismQueries) {
+    const candidates = (records || [])
+      .filter(isCurrentOfficialQaRecord)
+      .map((record) => {
+        const questionFeatures = officialQaMechanismFeatures(record);
+        const questionSignature = questionFeatures.signature;
+        const analysis = (querySignatures || [])
+          .map((querySignature) => compareRuleMechanismSignatures({
+            querySignature,
+            questionSignature,
+          }))
+          .filter(Boolean)
+          .sort(compareRuleMechanismAnalyses)[0] || null;
+        if (!analysis) return null;
+        const matchedQuestionCardIds = questionFeatures.questionCardIds
+          .filter((id) => resolvedIds.has(id));
+        const unmatchedQuestionCardIdCount = Math.max(
+          0,
+          questionFeatures.questionCardIds.length - matchedQuestionCardIds.length,
+        );
+        const severePartialIdentity = resolvedIds.size >= 2
+          && matchedQuestionCardIds.length >= 1
+          && unmatchedQuestionCardIdCount >= 1
+          && (matchedQuestionCardIds.length / resolvedIds.size) <= 0.5;
+        const matchedQuestionSideOperationFeatures = analysis.matchedFeatures.filter(
+          (feature) => questionSideOperationFeatures.has(feature),
+        );
+        const questionSideOperationCoverage = questionSideOperationFeatures.size
+          ? matchedQuestionSideOperationFeatures.length / questionSideOperationFeatures.size
+          : 0;
+        // A global mechanism pass must not reintroduce the same noisy case that
+        // the scoped matcher rejected: one coincidentally shared card inside a
+        // larger foreign scene. Only explicit question-side operation overlap
+        // can justify retaining that partial-identity analogy. Pure global
+        // rules with no shared card identity remain eligible.
+        if (severePartialIdentity && questionSideOperationCoverage < 0.5) return null;
+        const questionType = questionFeatures.questionType;
+        return {
+          ...record,
+          retrievalScore: normalizeEvidenceRelevanceScore(
+            0.68 + Math.min(0.3, analysis.score * 0.035),
+          ),
+          retrievalSignals: {
+            ...(record.retrievalSignals || {}),
+            matchedSemanticConcepts: analysis.matchedFeatures,
+            mechanismAnalogue: mechanism,
+            mechanismAnalogues: [mechanism],
+            mechanismAnalogueScore: analysis.score,
+            mechanismAnalogueScores: { [mechanism]: analysis.score },
+            mechanismAnalogueMetrics: {
+              [mechanism]: {
+                score: analysis.score,
+                queryCoverage: analysis.queryCoverage,
+                questionCoverage: analysis.questionCoverage,
+                features: analysis.matchedFeatures,
+              },
             },
-          };
-        })
-        .filter((record) => isStrongEffectLifecycleAnalogue(record)));
+            mechanismQueryCoverage: analysis.queryCoverage,
+            mechanismQuestionCoverage: analysis.questionCoverage,
+            mechanismSignatureFeatures: analysis.matchedFeatures,
+            questionSideMatchedOperationFeatures: matchedQuestionSideOperationFeatures,
+            questionSideOperationCoverage: Number(questionSideOperationCoverage.toFixed(4)),
+            questionType,
+            matchedQuestionCardIds,
+            matchedQuestionCardIdCount: matchedQuestionCardIds.length,
+            questionCardIdCount: questionFeatures.questionCardIds.length,
+          },
+        };
+      })
+      .filter(Boolean)
+      .sort((left, right) => (
+        Number(right.retrievalSignals?.mechanismAnalogueScore || 0)
+          - Number(left.retrievalSignals?.mechanismAnalogueScore || 0)
+        || Number(right.retrievalScore || 0) - Number(left.retrievalScore || 0)
+        || String(left.id || "").localeCompare(String(right.id || ""))
+      ));
+    if (candidates.length) {
+      const selectedCandidates = selectMechanismDiscoveryCandidates(
+        candidates,
+        resolvedIds,
+        perMechanismLimit,
+      );
+      candidatesByMechanism.push(selectedCandidates);
     }
   }
 
-  if (triggerOrderQueries.length) {
-    candidates.push(...(records || [])
-      .filter(isCurrentOfficialQaRecord)
-      .filter(isSimultaneousTriggerOrderOfficialQa)
-      .map((record) => ({
-        ...record,
-        retrievalScore: 0.99,
-        retrievalSignals: {
-          ...(record.retrievalSignals || {}),
-          mechanismAnalogue: "simultaneous_trigger_order",
-          mechanismAnalogueScore: 5,
-        },
-      })));
+  // Interleave candidate lists so the applicability model sees alternatives
+  // for each query without allowing one broad query to occupy the whole budget.
+  const interleaved = [];
+  for (let index = 0; index < perMechanismLimit; index += 1) {
+    for (const candidates of candidatesByMechanism) {
+      if (candidates[index]) interleaved.push(candidates[index]);
+    }
   }
+  return mergeMechanismAnalogueRecords(interleaved)
+    .slice(0, discoveryPoolLimit);
+}
 
-  if (publicHandTriggerOrderQueries.length) {
-    candidates.push(...(records || [])
-      .filter(isCurrentOfficialQaRecord)
-      .filter(isPublicHandTriggerOrderOfficialQa)
-      .map((record) => ({
-        ...record,
-        retrievalScore: 0.99,
-        retrievalSignals: {
-          ...(record.retrievalSignals || {}),
-          mechanismAnalogue: "public_hand_trigger_order",
-          mechanismAnalogueScore: 6,
-        },
-      })));
+function selectMechanismDiscoveryCandidates(candidates = [], resolvedIds = new Set(), limit = 3) {
+  const safeLimit = Math.max(1, Math.floor(Number(limit) || 1));
+  if (!resolvedIds.size) return candidates.slice(0, safeLimit);
+  const selected = [];
+  const selectedKeys = new Set();
+  const representedQuestionCardIds = new Set();
+  const representedQuestionTypes = new Set();
+  const add = (candidate) => {
+    const key = stableRecordKey(candidate);
+    if (!key || selectedKeys.has(key) || selected.length >= safeLimit) return;
+    selected.push(candidate);
+    selectedKeys.add(key);
+    matchedResolvedQuestionCardIds(candidate, resolvedIds)
+      .forEach((id) => representedQuestionCardIds.add(id));
+    const questionType = mechanismCandidateQuestionType(candidate);
+    if (questionType) representedQuestionTypes.add(questionType);
+  };
+  // Always retain the strongest question-side mechanism match before using the
+  // remaining discovery slots for identity and question-shape diversity. A
+  // cluster of card-specific FAQ must not crowd out the general official rule
+  // that best instantiates the requested mechanism.
+  add(candidates[0]);
+  // Preserve the best candidate for each resolved question identity first.
+  // This is a discovery pool, so keep additional question-shape variants for
+  // those identities before falling back to broad global analogues.
+  for (const candidate of candidates) {
+    const matchedIds = matchedResolvedQuestionCardIds(candidate, resolvedIds);
+    if (!matchedIds.some((id) => !representedQuestionCardIds.has(id))) continue;
+    add(candidate);
   }
+  const identityCandidates = candidates
+    .filter((candidate) => matchedResolvedQuestionCardIds(candidate, resolvedIds).length);
+  for (const candidate of identityCandidates) {
+    const matchedIds = matchedResolvedQuestionCardIds(candidate, resolvedIds);
+    const questionType = mechanismCandidateQuestionType(candidate);
+    if (!matchedIds.length || !questionType || representedQuestionTypes.has(questionType)) continue;
+    add(candidate);
+  }
+  candidates.forEach(add);
+  return selected;
+}
 
-  return dedupeBy(candidates, stableRecordKey)
-    .sort((left, right) => (
-      Number(right.retrievalSignals?.mechanismAnalogueScore || 0)
-        - Number(left.retrievalSignals?.mechanismAnalogueScore || 0)
-      || Number(right.retrievalScore || 0) - Number(left.retrievalScore || 0)
-      || String(left.id || "").localeCompare(String(right.id || ""))
-    ))
-    .slice(0, Math.max(1, maxResults));
+function mechanismCandidateQuestionType(candidate = {}) {
+  const value = String(
+    candidate?.retrievalSignals?.questionType
+      || classifyOfficialQaQuestionType(officialQaMechanismQuestionText(candidate)),
+  ).trim().toLowerCase();
+  return value && value !== "unknown" ? value : "";
+}
+
+function matchedResolvedQuestionCardIds(candidate = {}, resolvedIds = new Set()) {
+  return [...principalQuestionCardIds(candidate)]
+    .filter((id) => resolvedIds.has(id));
 }
 
 function isIncidentalMultiCardExampleMatch(match = {}, resolvedCardCount = 0) {
@@ -1877,17 +2258,32 @@ function isIncidentalMultiCardExampleRecord(record = {}, resolvedCardCount = 0) 
 
 function hasSevereQuestionIdentityMismatch(match = {}, resolvedCardCount = 0) {
   const record = match.record || {};
-  const questionCardIdCount = principalQuestionCardIds(record).size;
-  const matchedQuestionCardIdCount = Array.isArray(match.matchedQuestionCardIds)
-    ? match.matchedQuestionCardIds.length
+  const selectedBranchCardIds = new Set(
+    (match.supportingQuestionBranchCardIds || []).map(normalizeId).filter(Boolean),
+  );
+  const selectedBranchMatchedCardIds = new Set(
+    (match.branchMatchedCardIds || []).map(normalizeId).filter(Boolean),
+  );
+  const useSelectedBranch = match.branchRelevant === true
+    && selectedBranchCardIds.size > 0
+    && selectedBranchMatchedCardIds.size > 0;
+  const questionCardIdCount = useSelectedBranch
+    ? selectedBranchCardIds.size
+    : principalQuestionCardIds(record).size;
+  const matchedQuestionCardIdCount = useSelectedBranch
+    ? selectedBranchMatchedCardIds.size
+    : Array.isArray(match.matchedQuestionCardIds)
+      ? match.matchedQuestionCardIds.length
     : Number(match.matchedQuestionCardIdCount || 0);
   const unmatchedQuestionCardIdCount = Math.max(
     0,
     questionCardIdCount - matchedQuestionCardIdCount,
   );
-  const questionCoverage = Number(match.questionCardIdCoverage ?? (
-    resolvedCardCount ? matchedQuestionCardIdCount / resolvedCardCount : 0
-  ));
+  const questionCoverage = useSelectedBranch
+    ? matchedQuestionCardIdCount / questionCardIdCount
+    : Number(match.questionCardIdCoverage ?? (
+      resolvedCardCount ? matchedQuestionCardIdCount / resolvedCardCount : 0
+    ));
   return resolvedCardCount >= 2
     && matchedQuestionCardIdCount >= 1
     && questionCardIdCount > matchedQuestionCardIdCount
@@ -1910,6 +2306,21 @@ function isStrongCompatibleOperationAnalogy(match = {}) {
     && Number(match.operationSemanticQueryCoverage || 0) >= 0.6;
 }
 
+function isStrongQuestionStructureAnalogy(match = {}) {
+  const matchedOperationFamilies = match.matchedQuestionOperationFamilies || [];
+  return match.typeCompatible === true
+    && match.playerRoleCompatibility !== "mismatch"
+    && match.scenarioPremiseCompatibility !== "mismatch"
+    && match.effectNumberCompatible !== false
+    && match.sceneQualifiersCompatible !== false
+    && (match.matchedQuestionCardIds || []).length >= 1
+    && matchedOperationFamilies.length >= 1
+    && Number(match.operationSemanticQueryCoverage || 0) >= 0.5
+    && Number(match.semanticQueryCoverage || 0) >= 0.75
+    && Number(match.distinctiveSemanticQueryCoverage || 0) >= 0.5
+    && Number(match.score || 0) >= 0.84;
+}
+
 function principalQuestionCardIds(record = {}) {
   return new Set(projectOfficialQaQuestion(record).principalCardIds
     .map(normalizeId)
@@ -1922,46 +2333,227 @@ function isCurrentOfficialQaRecord(record) {
     && record.status !== "superseded";
 }
 
-function isSimultaneousTriggerOrderOfficialQa(record) {
-  const text = [record?.question, record?.rawDetailedQuestion, record?.answer, record?.title, record?.text]
+function officialQaMechanismQuestionText(record = {}) {
+  const projection = projectOfficialQaQuestion(record);
+  return [projection.scenarioText, projection.questionText, record.question, record.title]
     .filter(Boolean)
     .join("\n");
-  const sameWindow = /(?:同じタイミング.{0,80}(?:効果|カード).{0,80}複数|同一时点.{0,80}(?:效果|卡).{0,80}(?:多个|复数)|same (?:timing|time|activation window).{0,100}(?:multiple|several).{0,40}(?:effects?|cards?))/isu.test(text);
-  const mandatoryPriority = /(?:優先度|优先级|priority)\s*1.{0,100}(?:必ず発動|必须发动|must (?:be )?activat(?:e|ed))/isu.test(text);
-  const publicOptionalPriority = /(?:優先度|优先级|priority)\s*2.{0,160}(?:任意|optional).{0,100}(?:公開|公开|public|face[ -]?up)/isu.test(text);
-  const turnPlayerFirst = /(?:ターンを進めているプレイヤー|回合玩家|turn player).{0,100}(?:先にチェーン|先组成连锁|first.{0,24}chain|chain.{0,24}first)/isu.test(text);
-  return sameWindow && mandatoryPriority && publicOptionalPriority && turnPlayerFirst;
 }
 
-function isPublicHandTriggerOrderOfficialQa(record) {
-  const text = [record?.question, record?.rawDetailedQuestion, record?.answer, record?.title, record?.text]
-    .filter(Boolean)
-    .join("\n");
-  const hasPublicHandContext = /(?:手札|手牌|手卡|\bhand\b)/iu.test(text)
-    && /(?:公開|公开|公開されている|revealed|face[ -]?up|public)/iu.test(text);
-  const hasBothChainPositions = /(?:チェーン|连锁|連鎖|\bchain\b)\s*1/iu.test(text)
-    && /(?:チェーン|连锁|連鎖|\bchain\b)\s*2/iu.test(text);
-  const explicitlyOrdersRevealedEffect = /(?:公開されている|已公开|已公開|公开的|公開的|revealed|public).{0,160}(?:効果|效果|effect).{0,80}(?:チェーン|连锁|連鎖|chain)\s*1.{0,200}(?:効果|效果|effect).{0,80}(?:チェーン|连锁|連鎖|chain)\s*2/isu.test(text);
-  return hasPublicHandContext && hasBothChainPositions && explicitlyOrdersRevealedEffect;
+function officialQaMechanismFeatures(record = {}) {
+  if (record && typeof record === "object") {
+    const cached = officialQaMechanismFeatureCache.get(record);
+    if (cached) return cached;
+  }
+  const questionText = officialQaMechanismQuestionText(record);
+  const features = {
+    signature: buildRuleMechanismSignature(questionText),
+    questionType: classifyOfficialQaQuestionType(questionText),
+    questionCardIds: [...principalQuestionCardIds(record)],
+  };
+  if (record && typeof record === "object") {
+    officialQaMechanismFeatureCache.set(record, features);
+  }
+  return features;
 }
 
-function isStrongEffectLifecycleAnalogue(record = {}) {
-  const concepts = new Set(record.retrievalSignals?.matchedSemanticConcepts || []);
-  return isEffectLifecycleConceptSet(concepts);
+function buildRuleMechanismSignature(value) {
+  const text = String(value || "").normalize("NFKC");
+  const features = new Set();
+  for (const [feature, pattern] of RULE_MECHANISM_FEATURE_PATTERNS) {
+    if (pattern.test(text)) features.add(feature);
+  }
+  for (const concept of extractOfficialQaSemanticConcepts(text)) {
+    if (RULE_MECHANISM_GENERIC_CONCEPTS.has(concept)) continue;
+    features.add(
+      RULE_MECHANISM_CONCEPT_FAMILIES.get(concept) || `concept:${concept}`,
+    );
+  }
+  addPredicatePolarityFeatures(text, features);
+  return features;
 }
 
-function isEffectLifecycleConceptSet(concepts) {
-  return concepts.has("control_change")
-    && concepts.has("own_field_duration")
-    && (concepts.has("control_return") || concepts.has("condition_reactivation"));
+function addPredicatePolarityFeatures(text, features) {
+  const clauses = String(text || "").split(/[。！？!?;；\n\r]+/u);
+  for (const clause of clauses) {
+    if (!/(?:扱い|视为|視為|作为.{0,12}处理|作為.{0,12}處理|treated as)/iu.test(clause)) continue;
+    const negative = /(?:扱い(?:に)?(?:は)?ならない|扱わない|不(?:被)?(?:视为|視為|当作|當作|作为.{0,12}处理|作為.{0,12}處理)|(?:not|never)\s+(?:be\s+)?treated as)/iu.test(clause);
+    const interrogative = /(?:是否|能否|可否|吗|嗎|でしょうか|できますか|できるか|whether|\bcan\b|\bmay\b)/iu.test(clause);
+    if (negative) features.add("relation:treated-as:negative");
+    else if (!interrogative) features.add("relation:treated-as:positive");
+  }
 }
 
-function effectLifecycleAnalogueScore(concepts) {
-  if (!isEffectLifecycleConceptSet(concepts)) return 0;
-  return 3
-    + Number(concepts.has("control_return"))
-    + Number(concepts.has("condition_reactivation"))
-    + Number(concepts.has("continuous_applying"));
+function buildRuleMechanismQueries(items = []) {
+  const byMechanism = new Map();
+  for (const item of items || []) {
+    // Reasons are human-facing diagnostics and sometimes explain the expected
+    // outcome. They must never become retrieval features.
+    // `mechanism` is inferred from this exact query before any merge. Reuse it
+    // only as an identity hint; signatures themselves are always rebuilt from
+    // the question-side query text so a caller label cannot create evidence.
+    const signature = buildRuleMechanismSignature(item?.query);
+    if (!isUsableRuleMechanismSignature(signature)) continue;
+    const mechanism = ruleMechanismSignatureIdentity(signature);
+    const coreSignature = projectRuleMechanismCoreSignature(signature);
+    const signatures = [signature];
+    if (coreSignature
+        && ruleMechanismSignatureIdentity(coreSignature) !== mechanism) {
+      signatures.push(coreSignature);
+    }
+    if (!byMechanism.has(mechanism)) {
+      byMechanism.set(mechanism, { mechanism, signatures, queries: [item] });
+    }
+    else {
+      const entry = byMechanism.get(mechanism);
+      entry.queries.push(item);
+      for (const candidate of signatures) {
+        const identity = ruleMechanismSignatureIdentity(candidate);
+        if (!entry.signatures.some((existing) => ruleMechanismSignatureIdentity(existing) === identity)) {
+          entry.signatures.push(candidate);
+        }
+      }
+    }
+  }
+  return [...byMechanism.values()];
+}
+
+function projectRuleMechanismCoreSignature(signature = new Set()) {
+  const preferredDimensions = new Set(["timing", "quantity", "sequence", "operation"]);
+  const core = new Set([...signature].filter(
+    (feature) => preferredDimensions.has(ruleMechanismFeatureDimension(feature)),
+  ));
+  const dimensions = ruleMechanismSignatureDimensions(core);
+  if (dimensions.length < 2 || !isUsableRuleMechanismSignature(core)) return null;
+  return core;
+}
+
+function compareRuleMechanismAnalyses(left, right) {
+  return Number(right?.score || 0) - Number(left?.score || 0)
+    || Number(right?.queryCoverage || 0) - Number(left?.queryCoverage || 0)
+    || Number(right?.matchedFeatures?.length || 0) - Number(left?.matchedFeatures?.length || 0);
+}
+
+function isUsableRuleMechanismSignature(signature = new Set()) {
+  const eligibilityDimensions = ruleMechanismSignatureDimensions(signature)
+    .filter((dimension) => dimension !== "relation");
+  const hasMechanismAnchor = eligibilityDimensions.some((dimension) => (
+    dimension === "operation"
+    || dimension === "activation"
+    || dimension === "sequence"
+    || dimension.startsWith("concept:")
+  ));
+  // This is broad candidate discovery, not a verdict validator. One genuine
+  // question-side mechanism anchor is sufficient; the auxiliary model checks
+  // all material conditions afterwards.
+  return hasMechanismAnchor;
+}
+
+function compareRuleMechanismSignatures({
+  querySignature = new Set(),
+  questionSignature = new Set(),
+} = {}) {
+  if (!isUsableRuleMechanismSignature(querySignature)) return null;
+  const questionMatchedFeatures = [...querySignature].filter(
+    (feature) => questionSignature.has(feature),
+  );
+  const matchedFeatures = questionMatchedFeatures;
+  const queryWeight = ruleMechanismSignatureWeight(querySignature);
+  const questionMatchedWeight = ruleMechanismSignatureWeight(questionMatchedFeatures);
+  const questionCoverage = queryWeight ? questionMatchedWeight / queryWeight : 0;
+  const missingQuestionDimensions = missingRuleMechanismDimensions(
+    querySignature,
+    questionSignature,
+    { exclude: new Set(["relation"]) },
+  );
+  const matchedQuestionDimensions = ruleMechanismSignatureDimensions(
+    new Set(questionMatchedFeatures),
+  ).filter((dimension) => dimension !== "relation");
+  const hasQuestionAnchor = matchedQuestionDimensions.some((dimension) => (
+    dimension === "operation"
+    || dimension === "activation"
+    || dimension === "sequence"
+    || dimension.startsWith("concept:")
+  ));
+  // This stage is candidate discovery, not the applicability judge. Keep a
+  // broad candidate when the source question shares a real mechanism anchor.
+  // Compatibility and polarity are left to the auxiliary applicability model.
+  if (!hasQuestionAnchor) {
+    return null;
+  }
+  return {
+    matchedFeatures,
+    queryCoverage: Number(questionCoverage.toFixed(4)),
+    questionCoverage: Number(questionCoverage.toFixed(4)),
+    matchedQuestionDimensions,
+    missingQuestionDimensions,
+    score: Number((
+      questionCoverage * 6
+      + Math.min(1, questionMatchedWeight / 4)
+      - Math.min(2, missingQuestionDimensions.length * 0.3)
+    ).toFixed(4)),
+  };
+}
+
+function ruleMechanismFeatureDimension(feature) {
+  const value = String(feature || "");
+  if (value.startsWith("concept:")) return value;
+  return value.split(":", 1)[0] || value;
+}
+
+function ruleMechanismSignatureDimensions(signature = []) {
+  return [...new Set([...signature]
+    .map(ruleMechanismFeatureDimension)
+    .filter(Boolean))]
+    .sort();
+}
+
+function missingRuleMechanismDimensions(
+  querySignature,
+  evidenceSignature,
+  { exclude = new Set() } = {},
+) {
+  const queryByDimension = new Map();
+  for (const feature of querySignature || []) {
+    const dimension = ruleMechanismFeatureDimension(feature);
+    if (!dimension || exclude.has(dimension)) continue;
+    const features = queryByDimension.get(dimension) || new Set();
+    features.add(feature);
+    queryByDimension.set(dimension, features);
+  }
+  const evidenceFeatures = new Set(evidenceSignature || []);
+  return [...queryByDimension.entries()]
+    .filter(([, features]) => ![...features].some((feature) => evidenceFeatures.has(feature)))
+    .map(([dimension]) => dimension)
+    .sort();
+}
+
+function ruleMechanismSignatureWeight(signature = []) {
+  return [...signature].reduce(
+    (sum, feature) => sum + ruleMechanismFeatureWeight(feature),
+    0,
+  );
+}
+
+function ruleMechanismFeatureWeight(feature) {
+  const value = String(feature || "");
+  if (value.startsWith("concept:")) return 1.25;
+  if (value.startsWith("operation:")) return 1.5;
+  return 1;
+}
+
+function mergeMechanismAnalogueRecords(records = []) {
+  const merged = new Map();
+  for (const record of records || []) {
+    const key = stableRecordKey(record);
+    const previous = merged.get(key);
+    if (!previous) {
+      merged.set(key, mergeRelatedRecordMetadata({}, record));
+      continue;
+    }
+    merged.set(key, mergeRelatedRecordMetadata(previous, record));
+  }
+  return [...merged.values()];
 }
 
 function scoreRecord(record, {
@@ -1978,8 +2570,12 @@ function scoreRecord(record, {
   queryEffectPhrases,
   querySemanticConcepts,
 }) {
-  const text = `${record.title || ""}\n${record.text || ""}`;
-  const { textKey, normalizedCardIds, normalizedCardNames } = retrievalRecordFeatures(record, text);
+  const rankingIdentity = retrievalRankingIdentity(record);
+  const text = rankingIdentity.text;
+  const { textKey, normalizedCardIds, normalizedCardNames } = retrievalRecordFeatures(
+    record,
+    rankingIdentity,
+  );
   const questionProjection = projectOfficialQaQuestion(record);
   const questionText = questionProjection.scenarioText || record.title || "";
   const questionCardIds = new Set(questionProjection.principalCardIds
@@ -2089,7 +2685,11 @@ function compareRankedRecords(left, right) {
 function questionTypeCompatibleForRanking(queryType, evidenceType) {
   if (queryType === "unknown" || evidenceType === "unknown") return queryType === evidenceType;
   if (queryType === evidenceType) return true;
-  const activation = new Set(["can_activate", "timing_window"]);
+  const activation = new Set([
+    "can_activate",
+    "timing_window",
+    "card_activation_vs_effect_activation",
+  ]);
   if (activation.has(queryType) && activation.has(evidenceType)) return true;
   const legality = new Set(["action_legality", "can_activate", "target_legality", "timing_window"]);
   return legality.has(queryType) && legality.has(evidenceType);
@@ -2111,19 +2711,84 @@ function normalizeEvidenceRelevanceScore(value) {
   return Math.max(0, Math.min(1, Number(number.toFixed(4))));
 }
 
-function retrievalRecordFeatures(record = {}, preparedText) {
+function retrievalRecordFeatures(record = {}, preparedIdentity) {
   if (record && typeof record === "object") {
     const cached = retrievalRecordFeatureCache.get(record);
     if (cached) return cached;
   }
-  const text = preparedText ?? [record.title || "", record.text || ""].join("\n");
+  const identity = preparedIdentity && typeof preparedIdentity === "object"
+    ? preparedIdentity
+    : retrievalRankingIdentity(record);
   const features = {
-    textKey: normalizeCardKey(text),
-    normalizedCardIds: (record.cardIds || []).map(normalizeId).filter(Boolean),
-    normalizedCardNames: (record.cards || []).map(normalizeCardKey).filter(Boolean),
+    textKey: normalizeCardKey(identity.text),
+    normalizedCardIds: identity.cardIds.map(normalizeId).filter(Boolean),
+    normalizedCardNames: identity.cardNames.map(normalizeCardKey).filter(Boolean),
   };
   if (record && typeof record === "object") retrievalRecordFeatureCache.set(record, features);
   return features;
+}
+
+function isScenarioOfficialQaRecord(record = {}) {
+  return record.recordType === "qa" || record.recordType === "official-database";
+}
+
+function retrievalRankingIdentity(record = {}) {
+  if (!isScenarioOfficialQaRecord(record)) {
+    return {
+      text: [record.title || "", record.text || ""].join("\n"),
+      cardIds: [record.cardId, ...(record.cardIds || []), ...extractInlineCardIds([
+        record.question,
+        record.rawQuestion,
+        record.rawDetailedQuestion,
+        record.title,
+        record.text,
+        record.answer,
+        record.conclusion,
+      ].filter(Boolean).join("\n"))].filter(Boolean),
+      cardNames: [record.cardName, ...(record.cards || []), ...(record.cardNames || [])]
+        .filter(Boolean),
+    };
+  }
+
+  const projection = projectOfficialQaQuestion(record);
+  const text = [...new Set([
+    projection.principalText,
+    projection.scenarioText,
+    ...(projection.surfaces || []),
+  ].map((value) => String(value || "").trim()).filter(Boolean))].join("\n");
+  const textKey = normalizeCardKey(text);
+  const cardNames = [record.cardName, ...(record.cards || []), ...(record.cardNames || [])]
+    .map((value) => String(value || "").trim())
+    .filter((value) => {
+      const key = normalizeCardKey(value);
+      return key && key.length >= 2 && textKey.includes(key);
+    });
+  return {
+    text,
+    cardIds: [...new Set((projection.principalCardIds || []).map(normalizeId).filter(Boolean))],
+    cardNames: [...new Set(cardNames)],
+  };
+}
+
+function inferRuleSearchMechanism(item = {}) {
+  const signature = buildRuleMechanismSignature(item?.query);
+  if (!isUsableRuleMechanismSignature(signature)) return "";
+  return ruleMechanismSignatureIdentity(signature);
+}
+
+function ruleMechanismSignatureIdentity(signature = new Set()) {
+  const canonicalFeatures = [...signature]
+    .sort((left, right) => (
+      ruleMechanismFeatureWeight(right) - ruleMechanismFeatureWeight(left)
+      || left.localeCompare(right)
+    ));
+  return `semantic:${canonicalFeatures.join("|")}`;
+}
+
+function ruleSearchQueryIdentity(item = {}) {
+  const queryKey = normalizeCardKey(item?.query);
+  if (!queryKey) return "";
+  return `${queryKey}|${inferRuleSearchMechanism(item)}`;
 }
 
 function normalizeRuleSearchQueries(items, limits = {}) {
@@ -2131,20 +2796,58 @@ function normalizeRuleSearchQueries(items, limits = {}) {
   const source = Array.isArray(items) ? items : [];
   const normalized = source
     .map((item) => typeof item === "string"
-      ? { query: item, reason: "", confidence: "medium", source: "rule_search_query" }
+      ? {
+          query: item,
+          reason: "",
+          confidence: "medium",
+          source: "rule_search_query",
+          declaredMechanism: "",
+        }
       : {
           query: String(item?.query || item?.searchQuery || item?.keyword || item?.topic || "").trim(),
           reason: String(item?.reason || "").trim(),
           confidence: item?.confidence || "medium",
           source: item?.source || "rule_search_query",
+          declaredMechanism: String(item?.declaredMechanism || item?.mechanism || "").trim(),
         })
     .map((item) => ({
       ...item,
       query: item.query.replace(/\s+/gu, " ").slice(0, 120),
       reason: item.reason.replace(/\s+/gu, " ").slice(0, 120),
+      mechanism: inferRuleSearchMechanism(item),
     }))
     .filter((item) => item.query && /[A-Za-z\u3040-\u30ff\u3400-\u9fff0-9]/u.test(item.query));
-  return dedupeBy(normalized, (item) => normalizeCardKey(item.query)).slice(0, max);
+  const groupedByQuery = new Map();
+  for (const item of normalized) {
+    const key = normalizeCardKey(item.query);
+    const group = groupedByQuery.get(key) || [];
+    group.push(item);
+    groupedByQuery.set(key, group);
+  }
+  const deduped = [];
+  for (const group of groupedByQuery.values()) {
+    const withMechanism = dedupeBy(
+      group.filter((item) => item.mechanism),
+      (item) => item.mechanism,
+    );
+    deduped.push(...(withMechanism.length ? withMechanism : group.slice(0, 1)));
+  }
+  if (deduped.length <= max) return deduped;
+
+  const reservedIndexes = new Set();
+  const representedMechanisms = new Set();
+  deduped.forEach((item, index) => {
+    if (!item.mechanism || representedMechanisms.has(item.mechanism)) return;
+    if (reservedIndexes.size >= max) return;
+    representedMechanisms.add(item.mechanism);
+    reservedIndexes.add(index);
+  });
+  for (let index = 0; index < deduped.length && reservedIndexes.size < max; index += 1) {
+    reservedIndexes.add(index);
+  }
+  return [...reservedIndexes]
+    .sort((left, right) => left - right)
+    .map((index) => deduped[index]);
 }
 
 function deriveRuleSearchQueries(userQuery) {
@@ -2194,32 +2897,34 @@ function deriveRuleSearchQueriesFromCardTexts(userQuery, cardTexts = []) {
 function deriveScenarioMechanismRuleQueries(userQuery, cardTexts) {
   const scenario = compileRuleScenario({ userQuery, cardTexts });
   const queries = [];
-  const add = (query, reason) => queries.push({
+  const add = (query, reason, mechanism = "") => queries.push({
     query: expandRetrievalVocabulary(query).slice(0, 120),
     reason,
     confidence: "high",
     source: "compiled_scenario_rule_search_query",
+    mechanism,
   });
   if (scenario.mandatoryFieldSpellTrapReturn && scenario.currentChainSpellTrap) {
     add("魔法陷阱卡 发动中 连锁途中 回到手卡 回到卡组", "卡文包含必做的场上魔法・陷阱返回处理，题目中的当前连锁卡是魔法・陷阱。 ");
     if (scenario.noOtherSpellTraps) {
-      add("发动后的非永续魔法陷阱 除自身以外没有能适用的卡时不能发动", "场景角色表明当前发动卡是唯一可能候选，检索必做处理无可适用卡时的发动限制。 ");
+      add("发动中的非永续魔法陷阱 能否回到手卡或卡组 没有其他候选 发动合法性", "场景角色表明当前发动卡是唯一可能候选，检索必做处理无可适用卡时的发动限制。 ");
     }
   }
   if (scenario.simultaneousDestructionReplacement) {
-    add("同一时点 双方 代替破坏 回合玩家 先适用 非回合玩家 不在场 不适用", "从双方效果载体、同一破坏事件及代替破坏卡文推导适用顺序规则。 ");
-    add("代替破坏 先适用 更新场面 重新检查 效果载体", "检索第一个代替处理改变场面后，第二个代替效果是否仍适用。 ");
+    add("同一时点 双方 代替破坏 回合玩家 非回合玩家 适用顺序", "从双方效果载体、同一破坏事件及代替破坏卡文推导适用顺序规则。 ");
+    add("多个代替破坏 处理改变场面后 是否重新检查效果载体和适用条件", "检索第一个代替处理改变场面后，第二个代替效果是否仍适用。 ");
   }
   if (scenario.simultaneousPublicPrivateTriggers) {
-    add("同一时点发动多个诱发类效果 回合玩家 公开情报 选发 手卡诱发 顺序7 优先权转移 对方", "场景中同时存在公开区域的选发诱发效果与非公开手牌的诱发效果，检索 OCG 组链优先顺序。 ");
-    add("公开区域诱发先组成连锁 对方确认是否连锁 手卡诱发之后连锁发动", "检索公开区域诱发进入连锁后，响应权逐次转移及手牌诱发的发动窗口。 ");
+    add("同一时点发动多个诱发类效果 回合玩家 对方 公开情报 非公开手牌 选发 组成连锁顺序", "场景中同时存在公开区域的选发诱发效果与非公开手牌的诱发效果，检索 OCG 组链优先顺序。 ", "simultaneous_trigger_order");
+    add("公开区域诱发与手牌诱发 同一时点 各自在什么发动窗口组成连锁", "检索公开区域诱发进入连锁时，响应权转移及手牌诱发的发动窗口。 ", "simultaneous_trigger_order");
   }
   if (scenario.simultaneousContinuouslyPublicHandTriggers) {
     queries.push({
-      query: expandRetrievalVocabulary("手札 持続的に公開 誘発効果 チェーン1 チェーン2 任意の順番").slice(0, 120),
+      query: expandRetrievalVocabulary("手札 持続的に公開 誘発効果 チェーン1 チェーン2 順番を選べるか").slice(0, 120),
       reason: "题面说明手牌已持续公开，并询问该手牌效果与同一时点的另一诱发效果能否自行排列连锁。",
       confidence: "high",
       source: "public_hand_trigger_order_rule_search_query",
+      mechanism: "public_hand_trigger_order",
     });
   }
   return queries;
@@ -2228,11 +2933,12 @@ function deriveScenarioMechanismRuleQueries(userQuery, cardTexts) {
 function deriveMechanismRuleQueries(value) {
   const text = String(value || "");
   const queries = [];
-  const add = (query, reason, source = "mechanism_rule_search_query") => queries.push({
+  const add = (query, reason, source = "mechanism_rule_search_query", mechanism = "") => queries.push({
     query: expandRetrievalVocabulary(query).slice(0, 120),
     reason,
     confidence: "high",
     source,
+    mechanism,
   });
   const chainLinkNumbers = new Set([
     ...[...text.normalize("NFKC").matchAll(/[cＣ]\s*([1-9]\d*)/giu)].map((match) => Number(match[1])),
@@ -2253,19 +2959,21 @@ function deriveMechanismRuleQueries(value) {
     && /(?:诱发|誘発|时点|時點|タイミング|错过|錯過|召唤|召喚|反转|反轉)/iu.test(text);
   if (explicitSameTimingTriggers || explicitMandatoryOptionalTriggers || explicitPostChainTriggerOrdering) {
     add(
-      "同一时点 多个诱发效果 必发 公开选发 回合玩家 非回合玩家 组成连锁 顺序",
+      "同一时点 多个诱发效果 必发 公开选发 回合玩家 非回合玩家 如何组成连锁及顺序",
       "题面要求排列同一发动窗口中的多个诱发效果，检索必发、公开选发和双方玩家的组链优先级。",
       "simultaneous_trigger_order_rule_search_query",
+      "simultaneous_trigger_order",
     );
     add(
-      "同じタイミング 発動する効果 複数 優先度1 必ず発動 優先度2 任意 公開 ターンを進めているプレイヤー 先にチェーン",
+      "同じタイミング 発動する効果 複数 必ず発動 任意 公開 ターンプレイヤー チェーンの順番",
       "检索官方数据库中同一时点多个效果按优先度组成连锁的通用 Q&A。",
       "simultaneous_trigger_order_rule_search_query",
+      "simultaneous_trigger_order",
     );
   }
   if (mentionsMultipleChainLinks && /(?:处理|處理|结算|結算|解決|逆序|resolve)/iu.test(text)) {
     add(
-      "连锁 组成后 从最后发动的效果开始 最高连锁逆序结算 连锁2 连锁1",
+      "连锁组成后 多个连锁环节 按什么顺序处理 连锁2 连锁1",
       "题面同时给出多个连锁环节及其处理，检索从最高连锁环节开始逆序结算的基础规则。",
       "chain_resolution_reverse_rule_search_query",
     );
@@ -2278,7 +2986,12 @@ function deriveMechanismRuleQueries(value) {
     add("效果处理时 对象不在原位置 对象丢失 其他处理 后续处理", "检索处理时对象不再存在时各项处理的适用范围。");
   }
   if (/(无效|無效|negate)/iu.test(text) && /(破坏|破壊|destroy)/iu.test(text)) {
-    add("魔法陷阱 卡的发动无效 效果发动无效 场上的卡 破坏", "区分卡的发动与效果发动被无效后的场上状态。");
+    add(
+      "魔法陷阱 卡的发动无效 效果发动无效 场上的卡 破坏",
+      "区分卡的发动与效果发动被无效后的场上状态。",
+      "activation_negation_destruction_rule_search_query",
+      "activation_negation_destruction_location",
+    );
   }
   if (/(?:舍弃|丢弃|捨て|送去墓地|送墓|支付|支払|cost|コスト)/iu.test(text) && /(?:发动|發動|発動)/u.test(text)) {
     add("卡片效果发动 支付cost 顺序 支付后 状态立即变化", "检索发动时支付 cost 的顺序以及支付后卡片位置何时改变。");
@@ -2289,12 +3002,12 @@ function deriveMechanismRuleQueries(value) {
   const earlierChainLinkPaysCost = /(?:[cＣ]\s*1|(?:连锁|連鎖|チェーン)\s*1).{0,80}(?:舍弃|丢弃|捨て|送去墓地|送墓|支付|支払|cost|コスト)|(?:舍弃|丢弃|捨て|送去墓地|送墓|支付|支払|cost|コスト).{0,80}(?:[cＣ]\s*1|(?:连锁|連鎖|チェーン)\s*1)/isu.test(text);
   if (asksLaterChainLinkActivation && earlierChainLinkPaysCost) {
     add(
-      "同一时点 诱发类效果 组成连锁之前 各自满足发动条件 C1支付cost C2不能事后取得发动资格 对象存在",
+      "同一时点 诱发类效果 发动条件在何时判断 C1支付cost后 C2的条件或对象才出现",
       "题面询问 C1 支付 cost 后是否能让同一诱发窗口中的 C2 新取得发动资格；检索组链开始前的发动合法性快照。",
       "pre_chain_trigger_legality_rule_search_query",
     );
     add(
-      "诱发效果 连锁发生之前 满足发动条件 支付cost后才出现对象 不能连锁发动",
+      "诱发效果组成连锁时 支付cost后才出现对象 是否影响后续效果的发动合法性",
       "区分多个公开区域诱发的组链前合法性与单一效果自身支付 cost 后选择对象。",
       "pre_chain_trigger_legality_rule_search_query",
     );
@@ -2302,7 +3015,7 @@ function deriveMechanismRuleQueries(value) {
   if (/(?:代替破坏|破坏.{0,12}代替|破壊.{0,12}代わり|替代破坏)/u.test(text)
       && /(?:同时|同一时点|双方|多个|复数|複数|各自|都要|一起)/u.test(text)) {
     add("同一时点 多个不入连锁效果 适用顺序 回合玩家 非回合玩家", "检索多个不入连锁效果同时适用时的先后顺序。");
-    add("同时适用 多个代替破坏效果 回合玩家先适用 重新判断", "检索双方代替破坏效果竞争时是否依次适用并重新判断场面。");
+    add("同时适用 多个代替破坏效果 双方玩家 适用顺序 场面变化后是否重新判断", "检索双方代替破坏效果竞争时是否依次适用并重新判断场面。");
   }
   if (/(不受.{0,8}效果影响|不受效果|unaffected)/iu.test(text) && /(对象|對象|対象|target)/iu.test(text)) {
     add("不受其他卡的效果影响 可以成为效果对象 对象选择 效果适用", "分别检索对象选择限制与效果抗性。");
@@ -2310,7 +3023,7 @@ function deriveMechanismRuleQueries(value) {
   if (/(魔法|陷阱|罠)/u.test(text) && /(回到手|返回手|放回手|回到卡组|返回卡组|回去|戻)/u.test(text)) {
     add("魔法陷阱卡 发动中 连锁途中 回到手卡 回到卡组", "检索发动中魔法陷阱的位置移动限制。");
     if (/(没有其他|不存在其他|并无其他|无其他|只有.{0,24}(?:1|一)张|除.{0,20}以外没有|no other|none)/iu.test(text)) {
-      add("发动后的非永续魔法陷阱 除自身以外没有能适用的卡时不能发动", "检索唯一候选受位置移动限制时，必做处理是否导致不能发动。");
+      add("发动中的非永续魔法陷阱 能否回到手卡或卡组 无其他候选时的发动合法性", "检索唯一候选受位置移动限制时，必做处理是否导致不能发动。");
     }
   }
   if (/(然后|那之后|之后|之後|并且|並且|再|仍然|尽可能|不能处理)/u.test(text)) {
@@ -2323,16 +3036,18 @@ function deriveMechanismRuleQueries(value) {
   const returnOrReapply = /(?:归还|歸還|回到自己|返回自己|再び自分に戻|恢复适用|恢復適用|重新适用|再次适用|再び適用|return|re-?appl|again)/iu.test(text);
   if (controlChanged && ownFieldDuration && returnOrReapply) {
     queries.push({
-      query: "コントロール 相手に移った 自分フィールドに存在する限り 再び自分に戻った 再び適用",
+      query: "コントロール 相手に移った 自分フィールドに存在する限り 再び自分に戻った 効果は適用されるか",
       reason: "检索已处理效果绑定‘在自己场上存在期间’时，控制权转移及归还后的效果实例生命周期。",
       confidence: "high",
       source: "effect_lifecycle_rule_search_query",
+      mechanism: "bound_effect_lifecycle",
     });
     queries.push({
-      query: "控制权转移 只要在自己场上存在 限制停止 控制权归还 恢复适用",
+      query: "控制权转移 只要在自己场上存在 控制权归还后 效果是否适用",
       reason: "检索持续条件首次不成立及后来再次成立时，既有适用是否重启。",
       confidence: "high",
       source: "effect_lifecycle_rule_search_query",
+      mechanism: "bound_effect_lifecycle",
     });
   }
   const printedReferenceScenario = analyzePrintedTextReferenceScenario({
@@ -2341,9 +3056,9 @@ function deriveMechanismRuleQueries(value) {
   });
   if (printedReferenceScenario.requiredName
       || /(?:有.{0,30}卡名(?:记载|记述)|卡名(?:记载|记述).{0,30}怪兽)/u.test(text)) {
-    add("有「○○」卡名记述 效果文本栏中记述作为卡名存在 字段不满足条件", "检索“有某卡名记述”的定义及其对卡面效果文本栏的要求。");
+    add("有「○○」卡名记述 如何判断 是否要求效果文本栏中存在该卡名", "检索“有某卡名记述”的定义及其对卡面效果文本栏的要求。");
     if (/(?:获得|得到|复制|拷贝|コピー|copy|gain).{0,100}(?:卡名|效果|効果|effect)/isu.test(text)) {
-      add("复制 获得 卡名 效果 不改变自身效果文本栏 卡名记述", "区分当前获得的卡名・效果与卡片自身印刷文本中的卡名记述。");
+      add("复制或获得卡名效果后 是否改变自身效果文本栏中的卡名记述", "区分当前获得的卡名・效果与卡片自身印刷文本中的卡名记述。");
     }
   }
   return dedupeBy(queries, (item) => normalizeCardKey(item.query));
