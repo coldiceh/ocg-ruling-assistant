@@ -81,6 +81,10 @@ test("Vercel runs the revision and runtime verification as its actual build gate
   );
   assert.equal(config.outputDirectory, "public");
   assert.equal(await readFile(new URL("../public/.gitkeep", import.meta.url), "utf8"), "\n");
+  assert.match(
+    String(config.functions?.["api/*.js"]?.excludeFiles || ""),
+    /data\/\{cards,rulings,qa-index,evidence-index,ocg-rule-corpus,official-responses\}\.json/u,
+  );
   for (const route of ["api/answer.js", "api/admin-model-lab.js"]) {
     const excluded = String(config.functions?.[route]?.excludeFiles || "");
     assert.match(excluded, /data\/\{cards,rulings,qa-index,evidence-index,ocg-rule-corpus,official-responses\}\.json/u);

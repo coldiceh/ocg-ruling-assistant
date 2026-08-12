@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import path from "node:path";
 import { test } from "node:test";
@@ -120,12 +120,24 @@ test("relay launcher provisions the same admin session credential used by the we
 
 test("Vercel deployment pins the Relay deadline ladder below the function limit", async () => {
   const config = JSON.parse(await readFile(path.join(root, "vercel.json"), "utf8"));
+  const rawSourceExclusion = "data/{cards,rulings,qa-index,evidence-index,ocg-rule-corpus,official-responses}.json";
   assert.equal(config.buildCommand, "pnpm run check:rag-revision && pnpm run check:rag-runtime");
   assert.equal(config.env.RELAY_STREAM_TIMEOUT_MS, "270000");
   assert.equal(config.env.ADMIN_MODEL_LAB_SYNC_FINAL_TIMEOUT_MS, "290000");
   assert.equal(config.env.RAG_RUNTIME_BUNDLE_REQUIRED, "true");
   assert.equal(config.functions["api/admin-model-lab.js"].maxDuration, 300);
   assert.equal(config.functions["api/answer.js"].maxDuration, 300);
+  assert.equal(config.functions["api/*.js"].excludeFiles, rawSourceExclusion);
+  const apiRoutes = (await readdir(path.join(root, "api")))
+    .filter((name) => name.endsWith(".js"));
+  assert.ok(apiRoutes.length > 0);
+  for (const route of apiRoutes) {
+    const exactConfig = config.functions[`api/${route}`] || {};
+    assert.equal(
+      exactConfig.excludeFiles || config.functions["api/*.js"].excludeFiles,
+      rawSourceExclusion,
+    );
+  }
   for (const route of ["api/answer.js", "api/admin-model-lab.js"]) {
     const included = config.functions[route].includeFiles;
     const excluded = config.functions[route].excludeFiles;
