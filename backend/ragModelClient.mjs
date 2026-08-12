@@ -929,6 +929,16 @@ export async function callOfficialQaApplicabilityModel({
     ...result,
     durationMs: Math.max(0, Date.now() - startedAt),
   });
+  // The final ruling model already receives the raw card text and every
+  // retrieved source, and is required to verify whether each source actually
+  // matches the user's scene.  The auxiliary reviewer remains available for
+  // controlled experiments, but it must be explicitly enabled so a normal
+  // public request never waits for this additional paid model call.
+  if (!isEnabled(env.RAG_EVIDENCE_APPLICABILITY_ENABLED)) {
+    return finish(emptyOfficialQaApplicabilityResult("skipped", [
+      "official_qa_applicability_disabled",
+    ]));
+  }
   const maxCandidates = readPositiveNumber(env.RAG_EVIDENCE_APPLICABILITY_MAX_CANDIDATES, 12);
   const selected = (candidates || [])
     .filter((item) => item && item.isDirect !== true)
@@ -954,9 +964,6 @@ export async function callOfficialQaApplicabilityModel({
   }
   if (dryRun === true || isEnabled(env.RAG_DRY_RUN)) {
     return finish(emptyOfficialQaApplicabilityResult("skipped", ["official_qa_applicability_dry_run_skipped"]));
-  }
-  if (isDisabled(env.RAG_EVIDENCE_APPLICABILITY_ENABLED)) {
-    return finish(emptyOfficialQaApplicabilityResult("skipped", ["official_qa_applicability_disabled"]));
   }
   const requestedProvider = String(
     env.RAG_EVIDENCE_APPLICABILITY_PROVIDER
@@ -1764,10 +1771,10 @@ export function resolveRagProvider(env = {}) {
 export function createPublicAnswerModelEnv(env = {}, profileValue) {
   const source = env && typeof env === "object" ? env : {};
   const result = { ...source };
-  // The related-Q&A reviewer is an internal evidence-preparation stage, not a
-  // selectable final provider. Copy only its minimum Relay transport settings
-  // into a dedicated namespace before non-Relay profiles shed every RELAY_*
-  // variable. This keeps provider isolation without silently disabling review.
+  // The optional related-Q&A reviewer is disabled by default and is not a
+  // selectable final provider. When an experiment explicitly enables it, copy
+  // only its minimum Relay transport settings into a dedicated namespace
+  // before non-Relay profiles shed every RELAY_* variable.
   const applicabilityRelayApiKey = String(
     source.RAG_EVIDENCE_APPLICABILITY_RELAY_API_KEY
       || source.RELAY_API_KEY
@@ -1821,6 +1828,10 @@ export function createPublicAnswerModelEnv(env = {}, profileValue) {
   result.RAG_CARD_MODEL_PROVIDER = mockRequested ? "mock" : "deepseek";
   result.RAG_RULE_MODEL_PROVIDER = mockRequested ? "mock" : "deepseek";
   result.RAG_RULEBOOK_MODEL_PROVIDER = mockRequested ? "mock" : "deepseek";
+  // Public answers deliberately use a single final semantic judge. Keep this
+  // hard-disabled even if an old Vercel environment variable still says true;
+  // controlled/admin experiments call the reviewer with their own environment.
+  result.RAG_EVIDENCE_APPLICABILITY_ENABLED = "false";
   result.DEEPSEEK_CARD_MODEL = String(source.DEEPSEEK_CARD_MODEL || "deepseek-v4-flash");
   result.DEEPSEEK_RULE_MODEL = String(source.DEEPSEEK_RULE_MODEL || result.DEEPSEEK_CARD_MODEL);
   result.DEEPSEEK_RULEBOOK_MODEL = String(source.DEEPSEEK_RULEBOOK_MODEL || result.DEEPSEEK_RULE_MODEL);

@@ -43,10 +43,10 @@ test("high-value local evidence is ranked ahead of weak same-card matches withou
       },
       fetchImpl: createIdentityFixtureFetch(),
     });
-    const officialCandidates = [
-      ...(evidence.officialQaDirectCandidates || []),
-      ...(evidence.officialQaRelated || []),
-      ...(evidence.provisionalOfficialResponses || []),
+    const officialCandidateBuckets = [
+      evidence.officialQaDirectCandidates || [],
+      evidence.officialQaRelated || [],
+      evidence.provisionalOfficialResponses || [],
     ];
     const faqCandidates = evidence.faqRelated || [];
     const rulebookCandidates = evidence.rulebookCandidates || [];
@@ -65,7 +65,9 @@ test("high-value local evidence is ranked ahead of weak same-card matches withou
         ? faqCandidates
         : expectedId.startsWith("ocg-rule:")
           ? rulebookCandidates
-          : officialCandidates;
+          : officialCandidateBuckets.find((items) => (
+              items.some((item) => item.id === expectedId)
+            )) || [];
       const highValueRank = bucket.findIndex((item) => item.id === expectedId);
       const allRank = allCandidates.findIndex((item) => item.id === expectedId);
       const candidate = bucket[highValueRank];

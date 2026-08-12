@@ -1,0 +1,103 @@
+{
+  "schemaVersion": 1,
+  "kind": "rag-runtime-bundle",
+  "compilerAbi": "rag-runtime-bundle-compiler/v3",
+  "runtimeAbi": "rag-runtime-bundle/v3",
+  "canonicalizationAbi": "rag-data-revision-canonical-json/v1",
+  "compression": {
+    "algorithm": "brotli",
+    "quality": 5
+  },
+  "dataRevision": "643a83da0feca6c3a82a2591790cecf0c47474b5876c38e41b06faa6398e69cb",
+  "sourceSetDigest": "4c4fb8be81e102d88b5fbde82c91a6645dec8994474f14a63d5db9c7337abf9e",
+  "sources": [
+    {
+      "path": "cards.json",
+      "bytes": 16613927,
+      "sha256": "ff1d925e19e1febe67c86808a23d2f8db703d0b62cf0659835e08e3ba9f7cf65",
+      "count": 14342
+    },
+    {
+      "path": "rulings.json",
+      "bytes": 52740459,
+      "sha256": "075bf19115ff87d1e44d777c8297e782d53c0387bfb833caf25cea660e724326",
+      "count": 42356
+    },
+    {
+      "path": "qa-index.json",
+      "bytes": 26547831,
+      "sha256": "db4613b339cce45ea478fa37709905b4fd6ad66d1dc265dab72656fa294b79e2",
+      "count": 28014
+    },
+    {
+      "path": "evidence-index.json",
+      "bytes": 81994426,
+      "sha256": "80532f3542af61ff505e5675bfe0bc67f21653ce8fa8a58dd5becc443fc00224",
+      "count": 46783
+    },
+    {
+      "path": "ocg-rule-corpus.json",
+      "bytes": 1369858,
+      "sha256": "c1090151a45e0650652809b2882d24b4d6fa85878ac1740e65a14440cd8a8c85",
+      "count": 39
+    },
+    {
+      "path": "official-responses.json",
+      "bytes": 3152,
+      "sha256": "7a73eaeee538197a4b8f7ba3ddf0f29e7cde1e0d862ccdebf1517f64fdaaa469",
+      "count": 1
+    }
+  ],
+  "counts": {
+    "cards": 14342,
+    "records": 89117,
+    "qaRecords": 28014
+  },
+  "corpora": {
+    "cards": {
+      "key": "cards",
+      "file": "cards.json.br",
+      "encoding": "br",
+      "bytes": 1690223,
+      "sha256": "4f30c037b1131522eaf33ff5d6df774d0edbde6c44b494b79a4a6bb5d42cb050",
+      "canonicalBytes": 14355928,
+      "canonicalSha256": "42c36a756a7ee929540ac7f5a8ad4fa522cb8177873a9509ebf85b723bbb320d",
+      "count": 14342
+    },
+    "records": {
+      "key": "records",
+      "file": "records.json.br",
+      "encoding": "br",
+      "bytes": 12436734,
+      "sha256": "61b5e568c5e6d77a6556c1be39080167e20ba1ec12c64a20bc215b281d4ef170",
+      "canonicalBytes": 183212025,
+      "canonicalSha256": "dbdb66de86e1b7becaee88073e94c9b5849650b1b8ea73075311edd4eca8900f",
+      "count": 89117
+    },
+    "qaRecords": {
+      "key": "qaRecords",
+      "file": "qa-records.json.br",
+      "encoding": "br",
+      "bytes": 2766333,
+      "sha256": "4056846d206c8409207852a9e824222008f86e7722d738d83907e729f71a7c04",
+      "canonicalBytes": 32870457,
+      "canonicalSha256": "985f98cdea9877fbea7bc48be160bd45dfd09c69e704001889b781df9f503faa",
+      "count": 28014
+    }
+  },
+  "artifacts": {
+    "cardAliasIndex": {
+      "key": "cardAliasIndex",
+      "file": "card-alias-index.json.br",
+      "encoding": "br",
+      "schemaVersion": 1,
+      "compilerAbi": "rag-card-alias-runtime-index/v1",
+      "bytes": 1600055,
+      "sha256": "302298c7a2cd1e199bd199973818d55ae6aef22807037cd5d77ab62baf235f14",
+      "canonicalBytes": 16220745,
+      "canonicalSha256": "924646fdcf8b71d1cae14e71c39af8a40d01be3fdf425601dae966a917253aa4",
+      "count": 14342
+    }
+  },
+  "bundleRevision": "0a26b01614960eaa1892062e8538fb81f7cb587ef562088f37c0819eefb522db"
+}

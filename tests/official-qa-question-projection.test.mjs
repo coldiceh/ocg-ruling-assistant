@@ -673,6 +673,214 @@ test("answer polarity cannot change question-side mechanism recall", async () =>
   assert.equal(negative.officialQaDirectCandidates.length, 0);
 });
 
+test("anonymous corpus growth and near-duplicates cannot displace exact mechanism representatives", async () => {
+  const preciseOrdering = {
+    id: "anonymous-precise-ordering",
+    recordType: "qa",
+    question: "When multiple optional trigger effects activate at the same time, in what order do the turn player and opponent build Chain Link 1 and Chain Link 2?",
+    answer: "Apply the simultaneous-trigger ordering procedure.",
+  };
+  const preciseNegation = {
+    id: "anonymous-precise-negation",
+    recordType: "qa",
+    question: "If a card activation is negated and that card is destroyed, is it treated as destroyed on the field?",
+    answer: "Apply the activation-negation location rule.",
+  };
+  const noisyOrdering = Array.from({ length: 18 }, (_, index) => ({
+    id: `anonymous-ordering-noise-${String(index).padStart(2, "0")}`,
+    recordType: "qa",
+    question: "When an optional effect can activate, can it form a Chain?",
+    answer: "Check its activation conditions.",
+  }));
+  const multiLabelNoise = Array.from({ length: 9 }, (_, index) => ({
+    id: `anonymous-multi-label-noise-${String(index).padStart(2, "0")}`,
+    recordType: "qa",
+    question: "When several effects activate, can an activation be negated and a card on the field be destroyed in the same Chain?",
+    answer: "Check each operation separately.",
+  }));
+  const run = async (records) => retrieveRagEvidence({
+    userQuery: "请检索两个匿名规则机制。",
+    cardResolution: {
+      resolvedCards: [],
+      unresolvedMentions: [],
+      ambiguousMentions: [],
+      userProvidedCardTexts: [],
+    },
+    cards: [],
+    records,
+    qaRecords: [],
+    ruleSearchQueries: [{
+      query: "同一时点多个选发诱发效果由回合玩家和对方按顺序组成C1、C2",
+      source: "anonymous-ordering-query",
+    }, {
+      query: "卡的发动被无效并破坏后是否视为在场上被破坏",
+      source: "anonymous-negation-query",
+    }],
+    maxPerBucket: 4,
+    enableLiveOfficialQa: false,
+    env: {
+      RAG_LIVE_OFFICIAL_QA: "false",
+      RAG_MAX_RELATED_EVIDENCE: "4",
+    },
+  });
+
+  const baseline = await run([preciseOrdering, preciseNegation]);
+  const expanded = await run([
+    ...noisyOrdering,
+    ...multiLabelNoise,
+    preciseOrdering,
+    preciseNegation,
+  ]);
+  const selectedIds = (evidence) => new Set(
+    evidence.officialQaRelated.map((item) => item.id),
+  );
+
+  assert.equal(selectedIds(baseline).has(preciseOrdering.id), true);
+  assert.equal(selectedIds(baseline).has(preciseNegation.id), true);
+  assert.equal(selectedIds(expanded).has(preciseOrdering.id), true);
+  assert.equal(selectedIds(expanded).has(preciseNegation.id), true);
+  assert.equal(expanded.officialQaDirectCandidates.length, 0);
+});
+
+test("multi-identity best match leaves the next independent representative available", async () => {
+  const cards = ["7101", "7102"].map((id) => ({
+    id,
+    name: `匿名独立主体${id}`,
+    aliases: [`匿名独立主体${id}`],
+  }));
+  const records = [{
+    id: "anonymous-shared-best",
+    recordType: "qa",
+    question: "「<<7101>>」与「<<7102>>」的效果在同一时点发动时，如何组成连锁？",
+    answer: "按诱发效果顺序组成连锁。",
+    cardIds: ["7101", "7102"],
+  }, {
+    id: "anonymous-independent-first",
+    recordType: "qa",
+    question: "「<<7101>>」的诱发效果在同一时点发动时如何排列？",
+    answer: "按诱发效果顺序组成连锁。",
+    cardIds: ["7101"],
+  }, {
+    id: "anonymous-independent-second",
+    recordType: "qa",
+    question: "「<<7102>>」的诱发效果在同一时点发动时如何排列？",
+    answer: "按诱发效果顺序组成连锁。",
+    cardIds: ["7102"],
+  }];
+  const evidence = await retrieveRagEvidence({
+    userQuery: "两个匿名主体的诱发效果在同一时点发动时如何组成连锁？",
+    cardResolution: {
+      resolvedCards: cards,
+      unresolvedMentions: [],
+      ambiguousMentions: [],
+      userProvidedCardTexts: [],
+    },
+    cards,
+    records,
+    qaRecords: [],
+    ruleSearchQueries: [{
+      query: "同一时点多个诱发效果组成连锁顺序",
+      source: "anonymous-shared-identity-query",
+    }],
+    maxPerBucket: 2,
+    enableLiveOfficialQa: false,
+    env: {
+      RAG_LIVE_OFFICIAL_QA: "false",
+      RAG_MAX_RELATED_EVIDENCE: "2",
+    },
+  });
+
+  const ids = evidence.officialQaRelated.map((item) => item.id);
+  assert.equal(ids.includes("anonymous-shared-best"), true);
+  assert.equal(ids.some((id) => id.startsWith("anonymous-independent-")), true);
+});
+
+test("bounded global mechanism analogues retain a resolved question identity without becoming scoped", async () => {
+  const card = { id: "7301", name: "匿名引用主体", aliases: ["匿名引用主体"] };
+  const identityAnalogue = {
+    id: "anonymous-global-identity-analogue",
+    recordType: "qa",
+    question: "「<<7301>>」的卡的发动被无效并破坏时，是否视为在场上被破坏？",
+    answer: "按发动无效与破坏位置规则处理。",
+    cardIds: ["7301"],
+  };
+  const globalNoise = Array.from({ length: 20 }, (_, index) => ({
+    id: `anonymous-global-negation-noise-${index}`,
+    recordType: "qa",
+    question: "卡的发动被无效并破坏时，是否视为在场上被破坏？",
+    answer: "按发动无效与破坏位置规则处理。",
+  }));
+  const evidence = await retrieveRagEvidence({
+    userQuery: "匿名引用主体参与连锁，请检索发动无效后的破坏位置规则。",
+    cardResolution: {
+      resolvedCards: [card],
+      unresolvedMentions: [],
+      ambiguousMentions: [],
+      userProvidedCardTexts: [],
+    },
+    cards: [card],
+    records: [...globalNoise, identityAnalogue],
+    qaRecords: [],
+    ruleSearchQueries: [{
+      query: "卡的发动被无效并破坏后是否视为在场上被破坏",
+      source: "anonymous-global-identity-query",
+    }],
+    maxPerBucket: 4,
+    enableLiveOfficialQa: false,
+    env: {
+      RAG_LIVE_OFFICIAL_QA: "false",
+      RAG_MAX_RELATED_EVIDENCE: "4",
+    },
+  });
+
+  const retained = evidence.officialQaRelated.find(
+    (item) => item.id === identityAnalogue.id,
+  );
+  assert.ok(retained);
+  assert.equal(retained.isDirect, false);
+  assert.equal(evidence.officialQaRelated.length, 4);
+});
+
+test("foreign question identities cannot consume resolved-identity reserve slots", async () => {
+  const card = { id: "7401", name: "匿名当前主体", aliases: ["匿名当前主体"] };
+  const current = {
+    id: "anonymous-current-identity-analogue",
+    recordType: "qa",
+    question: "「<<7401>>」的卡的发动被无效并破坏时是否视为在场上被破坏？",
+    answer: "按发动无效规则处理。",
+    cardIds: ["7401"],
+  };
+  const foreign = Array.from({ length: 12 }, (_, index) => ({
+    id: `anonymous-foreign-identity-${index}`,
+    recordType: "qa",
+    question: `「<<${7500 + index}>>」的卡的发动被无效并破坏时是否视为在场上被破坏？`,
+    answer: "按发动无效规则处理。",
+    cardIds: [String(7500 + index)],
+  }));
+  const evidence = await retrieveRagEvidence({
+    userQuery: "匿名当前主体参与连锁，请检索发动无效后的破坏位置规则。",
+    cardResolution: {
+      resolvedCards: [card],
+      unresolvedMentions: [],
+      ambiguousMentions: [],
+      userProvidedCardTexts: [],
+    },
+    cards: [card],
+    records: [...foreign, current],
+    qaRecords: [],
+    ruleSearchQueries: [{
+      query: "卡的发动被无效并破坏后是否视为在场上被破坏",
+      source: "anonymous-foreign-identity-query",
+    }],
+    maxPerBucket: 3,
+    enableLiveOfficialQa: false,
+    env: { RAG_LIVE_OFFICIAL_QA: "false", RAG_MAX_RELATED_EVIDENCE: "3" },
+  });
+
+  assert.equal(evidence.officialQaRelated.some((item) => item.id === current.id), true);
+  assert.equal(evidence.officialQaRelated.length, 3);
+});
+
 test("answer-only identities and keywords cannot change final related retrieval", async () => {
   const cards = [{
     id: "6201",

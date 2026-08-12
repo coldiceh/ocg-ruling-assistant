@@ -1291,6 +1291,7 @@ test("official QA applicability review uses Relay Sol low once and never sends c
     resolvedCards: [{ id: "71001", name: "匿名卡甲" }],
     dataRevision: "anonymous-applicability-relay-v1",
     env: {
+      RAG_EVIDENCE_APPLICABILITY_ENABLED: "true",
       RAG_EVIDENCE_APPLICABILITY_PROVIDER: "relay",
       RELAY_EVIDENCE_APPLICABILITY_MODEL: "gpt-5.6-sol",
       RAG_EVIDENCE_APPLICABILITY_REASONING_EFFORT: "low",
@@ -1331,6 +1332,7 @@ test("official QA applicability real adapter shares the Relay USD budget and sen
   const candidateId = "anonymous-related-relay-adapter-20480701";
   const now = new Date("2048-07-01T00:00:00.000Z");
   const env = {
+    RAG_EVIDENCE_APPLICABILITY_ENABLED: "true",
     RAG_EVIDENCE_APPLICABILITY_PROVIDER: "relay",
     RELAY_EVIDENCE_APPLICABILITY_MODEL: "gpt-5.6-sol",
     RAG_EVIDENCE_APPLICABILITY_REASONING_EFFORT: "low",
@@ -1398,6 +1400,7 @@ test("applicability cache hits do not charge twice and final Relay calls share t
     MODEL_PROVIDER: "relay",
     RAG_MODEL: "gpt-5.6-sol",
     RAG_REASONING_EFFORT: "low",
+    RAG_EVIDENCE_APPLICABILITY_ENABLED: "true",
     RAG_EVIDENCE_APPLICABILITY_PROVIDER: "relay",
     RELAY_EVIDENCE_APPLICABILITY_MODEL: "gpt-5.6-sol",
     RAG_EVIDENCE_APPLICABILITY_REASONING_EFFORT: "low",
@@ -1512,13 +1515,14 @@ test("an incomplete applicability batch passes every related candidate through",
   assert.deepEqual(reviewed.rejectedOfficialQaRelated, []);
 });
 
-test("a DeepSeek final profile still wires the internal Relay applicability stage", async () => {
+test("public profiles hard-disable the independent applicability stage even if deployment config is stale", async () => {
   const candidateId = "anonymous-non-relay-final-applicability-20480703";
   const publicEnv = createPublicAnswerModelEnv({
     DEEPSEEK_API_KEY: "deepseek-final-key",
     RELAY_API_KEY: "relay-applicability-key",
     RELAY_BASE_URL: "https://relay.example.test/v1",
     API_BUDGET_TIMEZONE: "UTC",
+    RAG_EVIDENCE_APPLICABILITY_ENABLED: "true",
   }, "deepseek-v4-flash-low");
   const now = new Date("2048-07-03T00:00:00.000Z");
   await resetRagBudget({ env: publicEnv, now });
@@ -1554,11 +1558,21 @@ test("a DeepSeek final profile still wires the internal Relay applicability stag
 
   assert.equal(publicEnv.MODEL_PROVIDER, "deepseek");
   assert.equal(publicEnv.RELAY_API_KEY, undefined);
-  assert.equal(call?.url, "https://relay.example.test/v1/chat/completions");
-  assert.equal(call?.options.headers.authorization, "Bearer relay-applicability-key");
-  assert.equal(result.status, "completed");
-  assert.equal(result.complete, true);
-  assert.equal(result.requestedModel, "gpt-5.6-sol");
+  assert.equal(publicEnv.RAG_EVIDENCE_APPLICABILITY_ENABLED, "false");
+  assert.equal(call, null);
+  assert.equal(result.status, "skipped");
+  assert.equal(result.complete, false);
+  assert.ok(result.warnings.includes("official_qa_applicability_disabled"));
+});
+
+test("public model environment keeps the independent reviewer off unless explicitly enabled", () => {
+  const publicEnv = createPublicAnswerModelEnv({
+    RELAY_API_KEY: "relay-final-key",
+    RELAY_BASE_URL: "https://relay.example.test/v1",
+  }, "relay-gpt-5.6-sol-low");
+
+  assert.equal(publicEnv.MODEL_PROVIDER, "relay");
+  assert.equal(publicEnv.RAG_EVIDENCE_APPLICABILITY_ENABLED, "false");
 });
 
 test("failed official QA applicability review passes every related candidate through", async () => {
@@ -1572,7 +1586,10 @@ test("failed official QA applicability review passes every related candidate thr
     userQuery: "当前问题需要比较这个处理前提。",
     candidates,
     dataRevision: "anonymous-applicability-failure-v1",
-    env: { RAG_EVIDENCE_APPLICABILITY_PROVIDER: "relay" },
+    env: {
+      RAG_EVIDENCE_APPLICABILITY_ENABLED: "true",
+      RAG_EVIDENCE_APPLICABILITY_PROVIDER: "relay",
+    },
     modelInvoker: async () => {
       const error = new Error("synthetic relay failure");
       error.usage = { prompt_tokens: 999, completion_tokens: 999, total_tokens: 1998 };
@@ -1605,6 +1622,7 @@ test("cancelling while applicability waits terminates the pipeline before the fi
     env: {
       RAG_CARD_EXTRACTOR_ENABLED: "false",
       RAG_RULE_QUERY_EXTRACTOR_ENABLED: "false",
+      RAG_EVIDENCE_APPLICABILITY_ENABLED: "true",
       RAG_EVIDENCE_APPLICABILITY_PROVIDER: "relay",
     },
     signal: controller.signal,
@@ -1634,7 +1652,7 @@ test("cancelling while applicability waits terminates the pipeline before the fi
   assert.equal(finalCalls, 0);
 });
 
-test("explicitly disabled applicability provider never calls the paid Relay", async () => {
+test("applicability review is disabled by default even when Relay transport is configured", async () => {
   let fetchCalled = false;
   const result = await callOfficialQaApplicabilityModel({
     userQuery: "禁用时保持候选。",
@@ -1645,7 +1663,7 @@ test("explicitly disabled applicability provider never calls the paid Relay", as
       question: "禁用分类器时不应发送这个问题。",
     }],
     env: {
-      RAG_EVIDENCE_APPLICABILITY_PROVIDER: "mock",
+      RAG_EVIDENCE_APPLICABILITY_PROVIDER: "relay",
       RELAY_API_KEY: "must-not-be-used",
       RELAY_BASE_URL: "https://relay.example.test/v1",
     },
@@ -1657,6 +1675,7 @@ test("explicitly disabled applicability provider never calls the paid Relay", as
 
   assert.equal(fetchCalled, false);
   assert.equal(result.status, "skipped");
+  assert.ok(result.warnings.includes("official_qa_applicability_disabled"));
   assert.equal(result.estimatedCostUsd, 0);
 });
 
@@ -1672,6 +1691,7 @@ test("an insecure applicability Relay endpoint fails before fetch or budget rese
     }],
     dataRevision: "anonymous-insecure-endpoint-v1",
     env: {
+      RAG_EVIDENCE_APPLICABILITY_ENABLED: "true",
       RAG_EVIDENCE_APPLICABILITY_PROVIDER: "relay",
       RELAY_API_KEY: "must-not-be-used",
       RELAY_BASE_URL: "http://relay.example.test/v1",
@@ -1701,6 +1721,7 @@ test("official QA applicability cache reuses a complete batch without another mo
     }],
     dataRevision: "anonymous-applicability-cache-20400601",
     env: {
+      RAG_EVIDENCE_APPLICABILITY_ENABLED: "true",
       RAG_EVIDENCE_APPLICABILITY_PROVIDER: "relay",
       RELAY_EVIDENCE_APPLICABILITY_MODEL: "gpt-5.6-sol",
       RAG_EVIDENCE_APPLICABILITY_REASONING_EFFORT: "low",

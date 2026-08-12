@@ -26,6 +26,7 @@ import {
 } from "./legacyLuaSemanticPacket.mjs";
 import { buildSummonLegalityContext } from "./summonLegalityContext.mjs";
 import { buildEffectApplicabilityContext } from "./effectApplicabilityContext.mjs";
+import { resolveRagDataRevision } from "./ragDataRevisionManifest.mjs";
 
 const defaultSnapshotRevisionCache = new WeakMap();
 
@@ -1300,12 +1301,7 @@ function buildRagDataRevision(data = {}, env = {}, { cacheByIdentity = false } =
     const cached = defaultSnapshotRevisionCache.get(data);
     if (cached) return cached;
   }
-  const revision = sha256Json({
-    configuredRevision: String(env.RAG_DATA_REVISION || ""),
-    cards: data.cards || [],
-    records: data.records || [],
-    qaRecords: data.qaRecords || [],
-  });
+  const revision = resolveRagDataRevision(data, env.RAG_DATA_REVISION);
   // loadRagData returns one immutable in-process snapshot. Reusing its digest
   // avoids serializing the full corpus for every question; injected data stays
   // uncached so in-place test/development edits still invalidate immediately.

@@ -16,7 +16,9 @@ test("concurrent cold loads share one normalized data object", async () => {
   try {
     await Promise.all([
       writeJson(join(dataDir, "cards.json"), { records: [{ id: "1", name: "并发测试卡" }] }),
-      writeJson(join(dataDir, "rulings.json"), { records: [] }),
+      writeJson(join(dataDir, "rulings.json"), {
+        records: [{ id: "rule-1", title: "并发测试规则", text: "并发加载使用的非空证据。" }],
+      }),
       writeJson(join(dataDir, "qa-index.json"), { records: [] }),
       writeJson(join(dataDir, "evidence-index.json"), { records: [] }),
       writeJson(join(dataDir, "ocg-rule-corpus.json"), { records: [] }),

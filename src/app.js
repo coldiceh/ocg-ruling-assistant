@@ -213,15 +213,14 @@ const pendingStages = [
   { id: "extract_card_names", label: "提取卡名", body: "正在识别卡名候选，并准备查询卡片资料。" },
   { id: "retrieve_card_texts", label: "检索卡片文本", body: "正在匹配本地资料、百鸽卡片资料和用户提供文本。" },
   { id: "retrieve_rulings", label: "检索规则资料", body: "正在查找相关 Q&A、FAQ 和规则资料。" },
-  { id: "review_evidence_applicability", label: "核对资料适用性", body: "正在核对候选资料是否直接适用于当前卡片、场面和处理节点。" },
-  { id: "generate_ruling", label: "生成裁定", body: "正在根据检索上下文生成未确认裁定分析。" },
+  { id: "generate_ruling", label: "核对资料并生成裁定", body: "正在核对资料是否适用于当前场面，并生成未确认裁定分析。" },
 ];
 const simulationPendingStage = {
   id: "simulate",
   label: "编译模拟场景",
   body: "正在将已识别的卡片、区域和操作整理为尽力模拟场景。",
 };
-const pendingStageDelays = [0, 700, 1600, 2900, 4500, 34500, 36000];
+const pendingStageDelays = [0, 700, 1600, 2900, 4500, 6000];
 let pendingStageTimers = [];
 let pendingStageIndex = 0;
 let pendingStageTickTimer = 0;
@@ -4704,7 +4703,7 @@ function renderPendingStages(activeIndex, stages = getPendingStages()) {
   renderPendingPipelineTotal();
   if (pendingPipelineStatus !== "running") return;
   const stage = stages[Math.min(activeIndex, stages.length - 1)];
-  ui.verdictTitle.textContent = stage.label === "生成裁定" ? "正在生成裁定" : `正在${stage.label}`;
+  ui.verdictTitle.textContent = stage.id === "generate_ruling" ? "正在核对资料并生成裁定" : `正在${stage.label}`;
   ui.verdictBody.textContent = stage.body;
 }
 
@@ -4779,9 +4778,9 @@ function extractBackendPipelineTimings(answer, stages = getPendingStages()) {
       retrieval.officialQa,
       retrieval.relatedEvidence,
     ),
-    review_evidence_applicability: readFiniteDuration(pipeline.officialQaApplicability),
     simulate: sumFiniteDurations(pipeline.formalEngineAwait, pipeline.engineAwait),
     generate_ruling: sumFiniteDurations(
+      pipeline.officialQaApplicability,
       pipeline.localReasoning,
       pipeline.rulebookGrounding,
       pipeline.finalModel,

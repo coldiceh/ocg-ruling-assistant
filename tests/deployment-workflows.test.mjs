@@ -30,3 +30,37 @@ test("successful data pushes explicitly call the Pages workflow", async () => {
   assert.match(workflow, /^      pages: write\s*$/mu);
   assert.match(workflow, /^      id-token: write\s*$/mu);
 });
+
+test("data sync rebuilds and commits the versioned RAG runtime before snapshot tests", async () => {
+  const workflow = await readWorkflow("sync-data.yml");
+  const evidence = workflow.indexOf("pnpm build:evidence");
+  const revision = workflow.indexOf("pnpm build:rag-revision");
+  const runtime = workflow.indexOf("pnpm build:rag-runtime");
+  const verifyRuntime = workflow.indexOf("pnpm check:rag-runtime");
+  const parity = workflow.indexOf("tests/rag-runtime-parity.test.mjs");
+  const snapshotTests = workflow.indexOf("pnpm test");
+
+  assert.ok(evidence >= 0 && evidence < revision);
+  assert.ok(revision < runtime && runtime < verifyRuntime);
+  assert.ok(verifyRuntime < parity && parity < snapshotTests);
+  assert.match(workflow, /git add data\/\*\.json data\/rag-runtime-v1\/\*\*/u);
+});
+
+test("the ordinary repository check rejects stale revision and runtime artifacts", async () => {
+  const packageJson = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
+  const check = String(packageJson.scripts?.check || "");
+
+  assert.match(check, /pnpm run check:rag-revision/u);
+  assert.match(check, /pnpm run check:rag-runtime/u);
+  assert.ok(check.indexOf("check:rag-revision") < check.indexOf("node --check"));
+  assert.ok(check.indexOf("check:rag-runtime") < check.indexOf("node --check"));
+});
+
+test("Vercel runs the revision and runtime verification as its actual build gate", async () => {
+  const config = JSON.parse(await readFile(new URL("../vercel.json", import.meta.url), "utf8"));
+
+  assert.equal(
+    config.buildCommand,
+    "pnpm run check:rag-revision && pnpm run check:rag-runtime",
+  );
+});

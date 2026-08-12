@@ -375,6 +375,14 @@ function sendAuthorizationFailure(response, result) {
 }
 
 function sendServiceError(response, error) {
+  if (error?.code === "rag_data_unavailable") {
+    response.status(503).json({
+      ok: false,
+      error: "rag_data_unavailable",
+      ...(error.publicMessage ? { message: error.publicMessage } : {}),
+    });
+    return;
+  }
   if (error?.expose === true) {
     response.status(error.status || 400).json({
       ok: false,

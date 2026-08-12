@@ -354,7 +354,6 @@ test("public pipeline timing prefers backend stage measurements and wall-clock t
     { id: "extract_card_names" },
     { id: "retrieve_card_texts" },
     { id: "retrieve_rulings" },
-    { id: "review_evidence_applicability" },
     { id: "simulate" },
     { id: "generate_ruling" },
   ];
@@ -387,9 +386,8 @@ test("public pipeline timing prefers backend stage measurements and wall-clock t
       extract_card_names: 100,
       retrieve_card_texts: 20,
       retrieve_rulings: 121,
-      review_evidence_applicability: 30_000,
       simulate: 5,
-      generate_ruling: 1_010,
+      generate_ruling: 31_010,
     },
     totalMs: 1_200,
     usesServerTiming: true,
@@ -1624,7 +1622,7 @@ test("rag UI presents every formal query without turning UNKNOWN into a negative
   assert.match(app, /formal_engine_unknown: "形式规则内核本次未签发确定性证明；这不等于“不能”。"/u);
 });
 
-test("public pending stages keep evidence review before optional simulation and final generation", async () => {
+test("public pending stages merge evidence review into optional simulation and final generation", async () => {
   const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
   const definitions = sourceBetween(
     app,
@@ -1647,7 +1645,6 @@ test("public pending stages keep evidence review before optional simulation and 
     "extract_card_names",
     "retrieve_card_texts",
     "retrieve_rulings",
-    "review_evidence_applicability",
     "generate_ruling",
   ]);
   const withEngine = inspect(true);
@@ -1656,7 +1653,6 @@ test("public pending stages keep evidence review before optional simulation and 
     "extract_card_names",
     "retrieve_card_texts",
     "retrieve_rulings",
-    "review_evidence_applicability",
     "simulate",
     "generate_ruling",
   ]);

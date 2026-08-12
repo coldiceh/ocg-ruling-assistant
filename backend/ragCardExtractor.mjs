@@ -16,6 +16,31 @@ const supplementalCardIndexesCache = new WeakMap();
 const cardSeriesKeysCache = new WeakMap();
 const DISTINCTIVE_CJK_FRAGMENT_MIN_LENGTH = 4;
 const DISTINCTIVE_FRAGMENT_MAX_LENGTH = 12;
+export const RAG_CARD_ALIAS_RUNTIME_INDEX_SCHEMA_VERSION = 1;
+const RAG_CARD_ALIAS_RUNTIME_INDEX_KIND = "rag-card-alias-runtime-index";
+export const RAG_CARD_ALIAS_RUNTIME_INDEX_ABI = "rag-card-alias-runtime-index/v1";
+const RAG_CARD_ALIAS_RUNTIME_INDEX_FIELDS = Object.freeze([
+  "schemaVersion",
+  "kind",
+  "compilerAbi",
+  "cardCount",
+  "cardIdentities",
+  "primary",
+  "aliasKeysByLength",
+  "numberedIdentityIndex",
+  "shortMentionIndex",
+  "distinctiveFragmentIndex",
+]);
+const RAG_CARD_ALIAS_CANDIDATE_FIELDS = Object.freeze([
+  "cardOrdinal",
+  "matchedAlias",
+  "matchedAliasKind",
+]);
+const RAG_CARD_ALIAS_KINDS = new Set([
+  "canonical_name",
+  "supplemental_alias",
+  "canonical_name_prefix",
+]);
 
 const QUOTED_MENTION_PATTERNS = Object.freeze([
   /「([^」]{2,80})」/gu,
@@ -425,6 +450,173 @@ export function buildAliasIndex(cards = []) {
   aliasKeysByLengthCache.set(index, keysByLength);
   supplementalCardIndexesCache.set(sourceCards, { numberedIdentityIndex, shortMentionIndex, distinctiveFragmentIndex });
   return index;
+}
+
+/**
+ * Serialize the exact indexes produced by buildAliasIndex without embedding
+ * duplicate card records. Entry and candidate order intentionally follows the
+ * runtime Maps: several fail-closed ambiguity paths preserve that order in
+ * their public result, so re-sorting here would not be parity-safe.
+ */
+export function compileRagCardAliasRuntimeIndex(cards = []) {
+  const sourceCards = Array.isArray(cards) ? cards : EMPTY_CARD_LIST;
+  const primary = buildAliasIndex(sourceCards);
+  const supplemental = getSupplementalCardIndexes(sourceCards);
+  const aliasKeysByLength = aliasKeysByLengthCache.get(primary) || buildAliasKeysByLength(primary);
+  const cardOrdinals = new Map();
+  for (let ordinal = 0; ordinal < sourceCards.length; ordinal += 1) {
+    if (!cardOrdinals.has(sourceCards[ordinal])) cardOrdinals.set(sourceCards[ordinal], ordinal);
+  }
+  const serializeCandidates = (candidates) => candidates.map((candidate) => {
+    const cardOrdinal = cardOrdinals.get(candidate.card);
+    if (!Number.isSafeInteger(cardOrdinal)) {
+      throw new TypeError("card alias index candidate is not owned by the supplied cards array");
+    }
+    return {
+      cardOrdinal,
+      matchedAlias: candidate.matchedAlias,
+      matchedAliasKind: candidate.matchedAliasKind,
+    };
+  });
+  const serializeCandidateMap = (index) => [...index.entries()].map(([key, candidates]) => [
+    key,
+    serializeCandidates(candidates),
+  ]);
+
+  return {
+    schemaVersion: RAG_CARD_ALIAS_RUNTIME_INDEX_SCHEMA_VERSION,
+    kind: RAG_CARD_ALIAS_RUNTIME_INDEX_KIND,
+    compilerAbi: RAG_CARD_ALIAS_RUNTIME_INDEX_ABI,
+    cardCount: sourceCards.length,
+    cardIdentities: sourceCards.map(cardIdentity),
+    primary: serializeCandidateMap(primary),
+    aliasKeysByLength: [...aliasKeysByLength.entries()].map(([length, keys]) => [length, [...keys]]),
+    numberedIdentityIndex: serializeCandidateMap(supplemental.numberedIdentityIndex),
+    shortMentionIndex: serializeCandidateMap(supplemental.shortMentionIndex),
+    distinctiveFragmentIndex: serializeCandidateMap(supplemental.distinctiveFragmentIndex),
+  };
+}
+
+/**
+ * Hydrate a precompiled alias index only when the complete snapshot is valid
+ * for this exact ordered card array. Validation builds detached Maps first;
+ * no WeakMap is touched on a rejected snapshot.
+ */
+export function hydrateRagCardAliasRuntimeIndex(cards = [], snapshot) {
+  const sourceCards = Array.isArray(cards) ? cards : EMPTY_CARD_LIST;
+  const decoded = decodeRagCardAliasRuntimeIndex(sourceCards, snapshot);
+  if (!decoded) return false;
+
+  aliasIndexCache.set(sourceCards, decoded.primary);
+  aliasKeysByLengthCache.set(decoded.primary, decoded.aliasKeysByLength);
+  supplementalCardIndexesCache.set(sourceCards, {
+    numberedIdentityIndex: decoded.numberedIdentityIndex,
+    shortMentionIndex: decoded.shortMentionIndex,
+    distinctiveFragmentIndex: decoded.distinctiveFragmentIndex,
+  });
+  return true;
+}
+
+function decodeRagCardAliasRuntimeIndex(cards, snapshot) {
+  if (!isStrictObjectWithFields(snapshot, RAG_CARD_ALIAS_RUNTIME_INDEX_FIELDS)) return null;
+  if (snapshot.schemaVersion !== RAG_CARD_ALIAS_RUNTIME_INDEX_SCHEMA_VERSION
+    || snapshot.kind !== RAG_CARD_ALIAS_RUNTIME_INDEX_KIND
+    || snapshot.compilerAbi !== RAG_CARD_ALIAS_RUNTIME_INDEX_ABI
+    || !Number.isSafeInteger(snapshot.cardCount)
+    || snapshot.cardCount !== cards.length
+    || !Array.isArray(snapshot.cardIdentities)
+    || snapshot.cardIdentities.length !== cards.length) {
+    return null;
+  }
+  for (let ordinal = 0; ordinal < cards.length; ordinal += 1) {
+    if (typeof snapshot.cardIdentities[ordinal] !== "string"
+      || snapshot.cardIdentities[ordinal] !== cardIdentity(cards[ordinal])) {
+      return null;
+    }
+  }
+
+  const primary = decodeCandidateEntryMap(snapshot.primary, cards);
+  const numberedIdentityIndex = decodeCandidateEntryMap(snapshot.numberedIdentityIndex, cards);
+  const shortMentionIndex = decodeCandidateEntryMap(snapshot.shortMentionIndex, cards);
+  const distinctiveFragmentIndex = decodeCandidateEntryMap(snapshot.distinctiveFragmentIndex, cards);
+  if (!primary || !numberedIdentityIndex || !shortMentionIndex || !distinctiveFragmentIndex) return null;
+  const aliasKeysByLength = decodeAliasKeysByLength(snapshot.aliasKeysByLength, primary);
+  if (!aliasKeysByLength) return null;
+  return {
+    primary,
+    aliasKeysByLength,
+    numberedIdentityIndex,
+    shortMentionIndex,
+    distinctiveFragmentIndex,
+  };
+}
+
+function decodeCandidateEntryMap(entries, cards) {
+  if (!Array.isArray(entries)) return null;
+  const result = new Map();
+  for (const entry of entries) {
+    if (!Array.isArray(entry) || entry.length !== 2) return null;
+    const [key, candidates] = entry;
+    if (typeof key !== "string" || !key || result.has(key)
+      || !Array.isArray(candidates) || !candidates.length) {
+      return null;
+    }
+    const decodedCandidates = [];
+    for (const candidate of candidates) {
+      if (!isStrictObjectWithFields(candidate, RAG_CARD_ALIAS_CANDIDATE_FIELDS)
+        || !Number.isSafeInteger(candidate.cardOrdinal)
+        || candidate.cardOrdinal < 0
+        || candidate.cardOrdinal >= cards.length
+        || typeof candidate.matchedAlias !== "string"
+        || !candidate.matchedAlias
+        || typeof candidate.matchedAliasKind !== "string"
+        || !RAG_CARD_ALIAS_KINDS.has(candidate.matchedAliasKind)) {
+        return null;
+      }
+      decodedCandidates.push({
+        card: cards[candidate.cardOrdinal],
+        matchedAlias: candidate.matchedAlias,
+        matchedAliasKind: candidate.matchedAliasKind,
+      });
+    }
+    result.set(key, decodedCandidates);
+  }
+  return result;
+}
+
+function decodeAliasKeysByLength(entries, primary) {
+  if (!Array.isArray(entries)) return null;
+  const result = new Map();
+  const coveredKeys = new Set();
+  for (const entry of entries) {
+    if (!Array.isArray(entry) || entry.length !== 2) return null;
+    const [length, keys] = entry;
+    if (!Number.isSafeInteger(length) || length < 0 || result.has(length)
+      || !Array.isArray(keys) || !keys.length) {
+      return null;
+    }
+    const groupKeys = new Set();
+    for (const key of keys) {
+      if (typeof key !== "string" || key.length !== length || !primary.has(key)
+        || groupKeys.has(key) || coveredKeys.has(key)) {
+        return null;
+      }
+      groupKeys.add(key);
+      coveredKeys.add(key);
+    }
+    result.set(length, [...keys]);
+  }
+  if (coveredKeys.size !== primary.size) return null;
+  return result;
+}
+
+function isStrictObjectWithFields(value, fields) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const prototype = Object.getPrototypeOf(value);
+  if (prototype !== Object.prototype && prototype !== null) return false;
+  const keys = Object.keys(value).sort();
+  const expected = [...fields].sort();
+  return keys.length === expected.length && keys.every((key, index) => key === expected[index]);
 }
 
 function buildCanonicalPrefixIndex(cards = []) {

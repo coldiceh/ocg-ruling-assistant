@@ -18,10 +18,26 @@ import { retrieveLiveOfficialQa } from "./liveOfficialQaProvider.mjs";
 import { analyzePrintedTextReferenceScenario } from "./printedTextReferences.mjs";
 import { normalizeLegacyLuaPasscode } from "./legacyLuaSemanticPacket.mjs";
 import { projectOfficialQaQuestion } from "./officialQaQuestionProjection.mjs";
+import {
+  bindTrustedRagDataRevision,
+  createRagDataSourceDescriptor,
+  RAG_DATA_REVISION_MANIFEST_FILE,
+  validateRagDataRevisionManifest,
+} from "./ragDataRevisionManifest.mjs";
+import { loadRagRuntimeBundle } from "./ragRuntimeBundle.mjs";
+import {
+  isCanonicalNormalizedRagArray,
+  registerCanonicalNormalizedRagData,
+} from "./ragNormalizedDataRegistry.mjs";
+import {
+  isRagRuntimeBundleRequired,
+  RagDataUnavailableError,
+} from "./ragDataAvailability.mjs";
 
 const projectRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 const defaultDataDir = join(projectRoot, "data");
 const dataCache = new Map();
+const rawDataCache = new Map();
 const emptyDataArray = Object.freeze([]);
 const normalizedCardArrayCache = new WeakMap();
 const normalizedRecordArrayCache = new WeakMap();
@@ -462,7 +478,11 @@ export async function retrieveRagEvidence({
     supplementalRuleQueries: effectiveSupplementalRuleQueries,
     allowNoCardMatch: retrievalCards.length === 0,
   });
-  const provisionalOfficialResponses = provisionalOfficialResponseSource
+  const provisionalOfficialResponses = reserveIdentitySourceCoverage(
+    provisionalOfficialResponseSource,
+    limits.maxOfficialQa,
+    retrievalCards,
+  )
     .slice(0, limits.maxOfficialQa)
     .map((record) => evidenceFromRecord(record, "official_response_screenshot", limits.maxEvidenceTextChars, retrievalWarnings));
   if (provisionalOfficialResponses.length) {
@@ -579,25 +599,76 @@ function rulebookSourceIdentity(record = {}) {
     .replace(/@[a-f0-9]{8,}$/iu, "");
 }
 
-export async function loadRagData(dataDir = defaultDataDir) {
-  const key = dataDir;
+export async function loadRagData(dataDir = defaultDataDir, {
+  requireRuntimeBundle = isRagRuntimeBundleRequired(),
+} = {}) {
+  const key = `${requireRuntimeBundle ? "bundle-required" : "raw-fallback-allowed"}:${dataDir}`;
   if (dataCache.has(key)) return await dataCache.get(key);
   const pending = (async () => {
-    const [cardsPayload, rulingsPayload, qaPayload, evidencePayload, rulebookPayload, officialResponsesPayload] = await Promise.all([
-      readJson(join(dataDir, "cards.json"), { records: [] }),
-      readJson(join(dataDir, "rulings.json"), { records: [] }),
-      readJson(join(dataDir, "qa-index.json"), { records: [] }),
-      readJson(join(dataDir, "evidence-index.json"), { records: [] }),
-      readJson(join(dataDir, "ocg-rule-corpus.json"), { records: [] }),
-      readJson(join(dataDir, "official-responses.json"), { records: [] }),
+    const runtimeBundle = await loadRagRuntimeBundle({ dataDir });
+    if (runtimeBundle.ok) return runtimeBundle.data;
+    if (requireRuntimeBundle) {
+      throw unavailableRagDataError({
+        phase: "runtime_bundle",
+        reason: "runtime_bundle_required",
+        bundleReason: runtimeBundle.reason,
+        bundleReasons: runtimeBundle.reasons,
+      });
+    }
+    try {
+      return await loadRawRagData(dataDir);
+    } catch (error) {
+      throw unavailableRagDataError({
+        phase: "runtime_bundle_and_raw_fallback",
+        reason: "no_verified_rag_snapshot_available",
+        bundleReason: runtimeBundle.reason,
+        bundleReasons: runtimeBundle.reasons,
+        rawReason: error?.details?.reason || error?.code || "raw_fallback_failed",
+        rawSource: error?.details?.source || "",
+      }, error);
+    }
+  })();
+  dataCache.set(key, pending);
+  try {
+    const data = await pending;
+    dataCache.set(key, data);
+    return data;
+  } catch (error) {
+    if (dataCache.get(key) === pending) dataCache.delete(key);
+    throw error;
+  }
+}
+
+// This explicit raw-only entry point is used by the synchronization compiler
+// and by the all-or-nothing runtime-bundle fallback. It must never consult a
+// previously generated bundle, otherwise stale artifacts could compile
+// themselves and falsely pass the source-equivalence gate.
+export async function loadRawRagData(dataDir = defaultDataDir) {
+  const key = dataDir;
+  if (rawDataCache.has(key)) return await rawDataCache.get(key);
+  const pending = (async () => {
+    const [cardsSource, rulingsSource, qaSource, evidenceSource, rulebookSource, officialResponsesSource, revisionManifest] = await Promise.all([
+      readRequiredJsonSource(dataDir, "cards.json", ["records", "cards"]),
+      readRequiredJsonSource(dataDir, "rulings.json", ["records"]),
+      readRequiredJsonSource(dataDir, "qa-index.json", ["records"]),
+      readRequiredJsonSource(dataDir, "evidence-index.json", ["records"]),
+      readRequiredJsonSource(dataDir, "ocg-rule-corpus.json", ["records"]),
+      readRequiredJsonSource(dataDir, "official-responses.json", ["records", "officialResponses"]),
+      readJson(join(dataDir, RAG_DATA_REVISION_MANIFEST_FILE), null),
     ]);
+    const cardsPayload = cardsSource.payload;
+    const rulingsPayload = rulingsSource.payload;
+    const qaPayload = qaSource.payload;
+    const evidencePayload = evidenceSource.payload;
+    const rulebookPayload = rulebookSource.payload;
+    const officialResponsesPayload = officialResponsesSource.payload;
     const bundledRulebookRecords = rulebookPayload.records || [];
     const hasBundledRulebook = bundledRulebookRecords.length > 0;
     const evidenceRecords = (evidencePayload.records || []).filter((record) => (
       !hasBundledRulebook
       || (record.sourceId !== "ocg-rule" && !rulebookSourceIdentity(record).startsWith("ocg-rule:"))
     ));
-    return normalizeInjectedData({
+    const data = normalizeInjectedData({
       cards: cardsPayload.records || cardsPayload.cards || [],
       records: [
         ...(rulingsPayload.records || []),
@@ -607,14 +678,40 @@ export async function loadRagData(dataDir = defaultDataDir) {
       ],
       qaRecords: qaPayload.records || [],
     });
+    if (data.cards.length === 0 || data.records.length + data.qaRecords.length === 0) {
+      throw unavailableRagDataError({
+        phase: "raw_fallback",
+        reason: "raw_corpus_empty",
+        cards: data.cards.length,
+        evidenceRecords: data.records.length + data.qaRecords.length,
+      });
+    }
+    const sourceDescriptors = [
+      cardsSource,
+      rulingsSource,
+      qaSource,
+      evidenceSource,
+      rulebookSource,
+      officialResponsesSource,
+    ].map((source) => source.descriptor).filter(Boolean);
+    const manifestValidation = validateRagDataRevisionManifest(revisionManifest, {
+      data,
+      sources: sourceDescriptors,
+      // The manifest digest is generated from this normalized corpus during
+      // synchronization. At runtime the byte-exact source digests bind that
+      // digest without repeating the expensive full canonical serialization.
+      verifyCanonicalCorpus: false,
+    });
+    bindTrustedRagDataRevision(data, manifestValidation);
+    return data;
   })();
-  dataCache.set(key, pending);
+  rawDataCache.set(key, pending);
   try {
     const data = await pending;
-    dataCache.set(key, data);
+    rawDataCache.set(key, data);
     return data;
   } catch (error) {
-    if (dataCache.get(key) === pending) dataCache.delete(key);
+    if (rawDataCache.get(key) === pending) rawDataCache.delete(key);
     throw error;
   }
 }
@@ -645,24 +742,50 @@ export function normalizeInjectedData({ cards = [], records = [], qaRecords = []
   const cached = cachedNormalizedData(sourceCards, sourceRecords, sourceQaRecords);
   if (cached) return cached;
 
-  const normalizedCards = normalizeDataArray(sourceCards, normalizedCardArrayCache, normalizeCard, (card) => card.name);
-  const normalizedRecords = normalizeDataArray(sourceRecords, normalizedRecordArrayCache, normalizeRecord, (record) => record.id && record.text);
-  const normalizedQaRecords = normalizeDataArray(sourceQaRecords, normalizedRecordArrayCache, normalizeRecord, (record) => record.id && record.text);
+  const normalizedCards = normalizeDataArray(
+    sourceCards,
+    normalizedCardArrayCache,
+    normalizeCard,
+    (card) => card.name,
+    "cards",
+  );
+  const normalizedRecords = normalizeDataArray(
+    sourceRecords,
+    normalizedRecordArrayCache,
+    normalizeRecord,
+    (record) => record.id && record.text,
+    "records",
+  );
+  const normalizedQaRecords = normalizeDataArray(
+    sourceQaRecords,
+    normalizedRecordArrayCache,
+    normalizeRecord,
+    (record) => record.id && record.text,
+    "qaRecords",
+  );
   const canonical = cachedNormalizedData(normalizedCards, normalizedRecords, normalizedQaRecords);
   if (canonical) {
     cacheNormalizedData(sourceCards, sourceRecords, sourceQaRecords, canonical);
     return canonical;
   }
 
-  const data = { cards: normalizedCards, records: normalizedRecords, qaRecords: normalizedQaRecords };
+  const data = registerCanonicalNormalizedRagData({
+    cards: normalizedCards,
+    records: normalizedRecords,
+    qaRecords: normalizedQaRecords,
+  });
   cacheNormalizedData(sourceCards, sourceRecords, sourceQaRecords, data);
   cacheNormalizedData(normalizedCards, normalizedRecords, normalizedQaRecords, data);
   return data;
 }
 
-function normalizeDataArray(source, cache, normalizer, predicate) {
+function normalizeDataArray(source, cache, normalizer, predicate, role) {
   const cached = cache.get(source);
   if (cached) return cached;
+  if (isCanonicalNormalizedRagArray(source, role)) {
+    cache.set(source, source);
+    return source;
+  }
   const normalized = source.map(normalizer).filter(predicate);
   cache.set(source, normalized);
   cache.set(normalized, normalized);
@@ -1278,22 +1401,46 @@ function evidenceMechanismAnalogues(item = {}) {
   ].map((value) => String(value || "").trim()).filter(Boolean))];
 }
 
+function primaryEvidenceMechanismAnalogue(item = {}) {
+  const record = item?.record || item;
+  const signals = record?.retrievalSignals || {};
+  const metrics = collectMechanismAnalogueMetrics(record);
+  return selectPrimaryMechanismAnalogue(metrics)
+    || String(signals.mechanismAnalogue || "").trim();
+}
+
 function reserveRelatedEvidenceCoverage(items = [], limit = 1) {
   const safeLimit = Math.max(1, Math.floor(Number(limit) || 1));
   const reserved = [];
   const reservedRecordKeys = new Set();
   const representedMechanisms = new Set();
 
-  const reserve = (item) => {
+  const reserve = (item, representedMechanismOverride = "") => {
     const key = stableRecordKey(item?.record || item);
     if (!key || reservedRecordKeys.has(key) || reserved.length >= safeLimit) return false;
     reserved.push(item);
     reservedRecordKeys.add(key);
-    evidenceMechanismAnalogues(item).forEach((mechanism) => representedMechanisms.add(mechanism));
+    // A merged record may carry several discovery labels. Reserving that one
+    // record must not claim every label's diversity slot; credit only its
+    // strongest mechanism so the others can select independent representatives.
+    const representedMechanism = representedMechanismOverride
+      || primaryEvidenceMechanismAnalogue(item);
+    if (representedMechanism) representedMechanisms.add(representedMechanism);
     return true;
   };
 
   const candidates = items || [];
+  // Mechanism analogues can reference one of the resolved cards without being
+  // identity-scoped matches for the concrete scene. Reserve a bounded share for
+  // those question-side identities, but keep them classified as related global
+  // analogues and do not increase the final evidence budget.
+  const mechanismIdentityCandidates = candidates
+    .filter((item) => (
+      !isIdentityScopedRelatedEvidence(item)
+      && relatedMatchedQuestionCardIds(item).length > 0
+      && evidenceMechanismAnalogues(item).length > 0
+    ))
+    .sort(compareIdentityScopedRelatedEvidence);
   // Identity-scoped matcher results are the closest candidates to the user's
   // concrete scene. Preserve a small bounded prefix before adding broad
   // mechanism analogues. This is recall/ranking only: every item remains
@@ -1301,8 +1448,26 @@ function reserveRelatedEvidenceCoverage(items = [], limit = 1) {
   const scopedCandidates = candidates
     .filter(isIdentityScopedRelatedEvidence)
     .sort(compareIdentityScopedRelatedEvidence);
+  const scopedIdentityCount = new Set(
+    scopedCandidates
+      .filter(isIdentityScopedRelatedEvidence)
+      .flatMap(relatedMatchedQuestionCardIds),
+  ).size;
   const scopedSlotLimit = scopedCandidates.length
-    ? Math.min(safeLimit, Math.max(1, Math.ceil(safeLimit / 2)))
+    ? Math.min(
+        safeLimit,
+        Math.max(
+          1,
+          Math.ceil(safeLimit / 2),
+          scopedIdentityCount,
+        ),
+      )
+    : 0;
+  const mechanismIdentitySlotLimit = mechanismIdentityCandidates.length
+    ? Math.min(
+        Math.max(0, safeLimit - scopedSlotLimit),
+        Math.max(1, Math.floor(safeLimit / 6)),
+      )
     : 0;
   // Preserve question-type diversity inside the fixed identity-scoped share.
   // A popular card can have dozens of high-scoring Q&A for the same broad
@@ -1313,7 +1478,7 @@ function reserveRelatedEvidenceCoverage(items = [], limit = 1) {
   const scopedTypeRepresentatives = [];
   const representedScopedTypes = new Set();
   const representedScopedCardIds = new Set();
-  for (const item of scopedCandidates) {
+  for (const item of scopedCandidates.filter(isIdentityScopedRelatedEvidence)) {
     const type = relatedQuestionTypeIdentity(item);
     if (!type || representedScopedTypes.has(type)) continue;
     representedScopedTypes.add(type);
@@ -1321,31 +1486,77 @@ function reserveRelatedEvidenceCoverage(items = [], limit = 1) {
   }
   const scopedDiversityCandidates = [];
   const scopedDiversityKeys = new Set();
+  const scopedDiversityAssignedIdentities = new Map();
+  const scopedIdentityCandidatesById = new Map();
+  for (const item of scopedCandidates) {
+    for (const id of relatedMatchedQuestionCardIds(item)) {
+      const identityCandidates = scopedIdentityCandidatesById.get(id) || [];
+      identityCandidates.push(item);
+      scopedIdentityCandidatesById.set(id, identityCandidates);
+    }
+  }
+  for (const identityCandidates of scopedIdentityCandidatesById.values()) {
+    identityCandidates.sort(compareIdentityScopedRelatedEvidence);
+  }
   const addScopedDiversityCandidate = (item) => {
     const key = stableRecordKey(item?.record || item);
     if (!key || scopedDiversityKeys.has(key)) return;
     scopedDiversityKeys.add(key);
     scopedDiversityCandidates.push(item);
-    relatedMatchedQuestionCardIds(item).forEach((id) => representedScopedCardIds.add(id));
   };
   // First give each resolved identity represented in the candidate pool one
-  // chance, then add distinct question shapes. This keeps the same fixed share
-  // while preventing a popular card or a popular `can_activate` shape from
-  // crowding out another card in the user's scene.
-  for (const item of scopedCandidates) {
-    if (scopedDiversityCandidates.length >= scopedSlotLimit) break;
-    const ids = relatedMatchedQuestionCardIds(item);
-    if (!ids.some((id) => !representedScopedCardIds.has(id))) continue;
-    addScopedDiversityCandidate(item);
+  // chance. Prefer candidates that introduce the fewest already represented
+  // identities, otherwise one multi-label record can consume the opportunity
+  // for several independent identities at once.
+  while (scopedDiversityCandidates.length < scopedSlotLimit) {
+    const nextEntry = [...scopedIdentityCandidatesById.entries()]
+      .filter(([id]) => !representedScopedCardIds.has(id))
+      .map(([id, identityCandidates]) => [
+        id,
+        identityCandidates.find(
+          (item) => !scopedDiversityKeys.has(stableRecordKey(item?.record || item)),
+        ),
+      ])
+      .filter(([, item]) => Boolean(item))
+      .sort((left, right) => (
+        compareIdentityScopedRelatedEvidence(left[1], right[1])
+        || left[0].localeCompare(right[0])
+      ))[0];
+    if (!nextEntry) break;
+    const [assignedId, next] = nextEntry;
+    addScopedDiversityCandidate(next);
+    representedScopedCardIds.add(assignedId);
+    scopedDiversityAssignedIdentities.set(stableRecordKey(next?.record || next), assignedId);
   }
   for (const item of scopedTypeRepresentatives) {
     if (scopedDiversityCandidates.length >= scopedSlotLimit) break;
     addScopedDiversityCandidate(item);
   }
-  for (const item of scopedDiversityCandidates) reserve(item);
+  // Do not let one selected record mark every identity it happens to mention
+  // as represented. Each diversity slot is assigned to exactly one identity,
+  // just as each mechanism slot below is assigned to exactly one mechanism.
+  for (const item of scopedDiversityCandidates) {
+    const key = stableRecordKey(item?.record || item);
+    if (!key || reservedRecordKeys.has(key) || reserved.length >= safeLimit) continue;
+    reserved.push(item);
+    reservedRecordKeys.add(key);
+    const assignedId = scopedDiversityAssignedIdentities.get(key);
+    if (assignedId) representedScopedCardIds.add(assignedId);
+    const representedMechanism = primaryEvidenceMechanismAnalogue(item);
+    if (representedMechanism) representedMechanisms.add(representedMechanism);
+  }
   for (const item of scopedCandidates) {
     if (reserved.length >= scopedSlotLimit) break;
     reserve(item);
+  }
+
+  const representedMechanismIdentityIds = new Set();
+  for (const item of mechanismIdentityCandidates) {
+    if (representedMechanismIdentityIds.size >= mechanismIdentitySlotLimit) break;
+    const assignedId = relatedMatchedQuestionCardIds(item)
+      .find((id) => !representedMechanismIdentityIds.has(id));
+    if (!assignedId) continue;
+    if (reserve(item)) representedMechanismIdentityIds.add(assignedId);
   }
 
   // A broad question may be associated with several mechanism signatures. Do
@@ -1372,7 +1583,7 @@ function reserveRelatedEvidenceCoverage(items = [], limit = 1) {
           && evidenceMechanismAnalogues(item).includes(mechanism);
       })
       .sort((left, right) => compareMechanismRepresentatives(left, right, mechanism))[0];
-    if (representative && reserve(representative)) mechanismSlotsUsed += 1;
+    if (representative && reserve(representative, mechanism)) mechanismSlotsUsed += 1;
   }
 
   for (const item of items || []) {
@@ -2048,7 +2259,14 @@ function retrieveGlobalMechanismOfficialQaAnalogues({
   supplementalRuleQueries = [],
   maxResults = 5,
 } = {}) {
-  const perMechanismLimit = 3;
+  // Discovery must be wider than the final prompt budget. A fixed top-three
+  // cut is unstable under ordinary corpus growth: a small near-duplicate
+  // cluster can hide the best identity/question-shape representative before
+  // the shared allocator ever sees it.
+  const perMechanismLimit = Math.min(
+    96,
+    Math.max(8, Math.floor(Number(maxResults) || 1) * 3),
+  );
   // `maxResults` is the final related-evidence budget, not the discovery
   // budget. Keep a bounded set of alternatives for every inferred mechanism
   // until all scoped and global candidates reach the common allocator. The
@@ -2057,7 +2275,7 @@ function retrieveGlobalMechanismOfficialQaAnalogues({
   const allQueries = [...deterministicRuleQueries, ...supplementalRuleQueries];
   const mechanismQueries = buildRuleMechanismQueries(allQueries);
   const discoveryPoolLimit = Math.min(
-    96,
+    256,
     Math.max(1, mechanismQueries.length) * perMechanismLimit,
   );
   const resolvedIds = new Set((resolvedCards || [])
@@ -2191,11 +2409,6 @@ function selectMechanismDiscoveryCandidates(candidates = [], resolvedIds = new S
     const questionType = mechanismCandidateQuestionType(candidate);
     if (questionType) representedQuestionTypes.add(questionType);
   };
-  // Always retain the strongest question-side mechanism match before using the
-  // remaining discovery slots for identity and question-shape diversity. A
-  // cluster of card-specific FAQ must not crowd out the general official rule
-  // that best instantiates the requested mechanism.
-  add(candidates[0]);
   // Preserve the best candidate for each resolved question identity first.
   // This is a discovery pool, so keep additional question-shape variants for
   // those identities before falling back to broad global analogues.
@@ -2204,6 +2417,10 @@ function selectMechanismDiscoveryCandidates(candidates = [], resolvedIds = new S
     if (!matchedIds.some((id) => !representedQuestionCardIds.has(id))) continue;
     add(candidate);
   }
+  // Always retain the strongest global question-side mechanism match after
+  // reserving identity representatives. This prevents a general analogue from
+  // taking the only slot before the identity-diversity pass can run.
+  add(candidates[0]);
   const identityCandidates = candidates
     .filter((candidate) => matchedResolvedQuestionCardIds(candidate, resolvedIds).length);
   for (const candidate of identityCandidates) {
@@ -2459,8 +2676,14 @@ function compareRuleMechanismSignatures({
   );
   const matchedFeatures = questionMatchedFeatures;
   const queryWeight = ruleMechanismSignatureWeight(querySignature);
+  const questionWeight = ruleMechanismSignatureWeight(questionSignature);
   const questionMatchedWeight = ruleMechanismSignatureWeight(questionMatchedFeatures);
-  const questionCoverage = queryWeight ? questionMatchedWeight / queryWeight : 0;
+  const queryCoverage = queryWeight ? questionMatchedWeight / queryWeight : 0;
+  // Coverage is directional: the query denominator measures recall of the
+  // requested mechanism, while the source-question denominator measures the
+  // precision of that candidate. Reusing the query denominator for both made
+  // broad weak candidates rank as if they were exact representatives.
+  const questionCoverage = questionWeight ? questionMatchedWeight / questionWeight : 0;
   const missingQuestionDimensions = missingRuleMechanismDimensions(
     querySignature,
     questionSignature,
@@ -2483,12 +2706,13 @@ function compareRuleMechanismSignatures({
   }
   return {
     matchedFeatures,
-    queryCoverage: Number(questionCoverage.toFixed(4)),
+    queryCoverage: Number(queryCoverage.toFixed(4)),
     questionCoverage: Number(questionCoverage.toFixed(4)),
     matchedQuestionDimensions,
     missingQuestionDimensions,
     score: Number((
-      questionCoverage * 6
+      queryCoverage * 4
+      + questionCoverage * 2
       + Math.min(1, questionMatchedWeight / 4)
       - Math.min(2, missingQuestionDimensions.length * 0.3)
     ).toFixed(4)),
@@ -4097,4 +4321,122 @@ async function readJson(path, fallback) {
   } catch {
     return fallback;
   }
+}
+
+function reserveIdentitySourceCoverage(items = [], limit = 1, resolvedCards = []) {
+  const safeLimit = Math.max(1, Math.floor(Number(limit) || 1));
+  const selected = [];
+  const selectedKeys = new Set();
+  const representedIds = new Set();
+  const add = (item, assignedId = "") => {
+    const key = stableRecordKey(item?.record || item);
+    if (!key || selectedKeys.has(key) || selected.length >= safeLimit) return false;
+    selected.push(item);
+    selectedKeys.add(key);
+    if (assignedId) representedIds.add(assignedId);
+    return true;
+  };
+
+  // Reserve records that cover distinct question-side identity combinations
+  // before filling by global rank. This keeps one multi-card interaction from
+  // being reduced to independent same-card tails as synchronized corpora grow.
+  const resolvedIds = new Set((resolvedCards || [])
+    .map((card) => normalizeId(card?.id || card?.cardId))
+    .filter(Boolean));
+  const resolvedNames = new Set((resolvedCards || [])
+    .flatMap((card) => [
+      card?.name,
+      card?.cnName,
+      card?.jaName,
+      card?.enName,
+      ...(card?.aliases || []),
+    ])
+    .map(normalizeCardKey)
+    .filter(Boolean));
+  const bestByIdentityGroup = new Map();
+  for (const item of items || []) {
+    const record = item?.record || item;
+    const ids = [
+      ...evidenceMatchedQuestionCardIds(item),
+      ...(record.cardIds || []),
+    ]
+      .map(normalizeId)
+      .filter((id) => !resolvedIds.size || resolvedIds.has(id))
+      .sort();
+    const names = [record.cardName, ...(record.cards || []), ...(record.cardNames || [])]
+      .map(normalizeCardKey)
+      .filter((name) => name && (!resolvedNames.size || resolvedNames.has(name)))
+      .sort();
+    const identities = [...new Set([
+      ...ids.map((id) => `id:${id}`),
+      ...names.map((name) => `name:${name}`),
+    ])];
+    if (!identities.length) continue;
+    const group = identities.join("|");
+    if (!bestByIdentityGroup.has(group)) bestByIdentityGroup.set(group, item);
+  }
+  const identityGroups = [...bestByIdentityGroup.entries()]
+    .sort((left, right) => {
+      const leftSize = left[0].split("|").length;
+      const rightSize = right[0].split("|").length;
+      return rightSize - leftSize || left[0].localeCompare(right[0]);
+    });
+  for (const [group, item] of identityGroups) {
+    const identities = group.split("|");
+    if (!identities.some((id) => !representedIds.has(id))) continue;
+    if (add(item)) identities.forEach((id) => representedIds.add(id));
+  }
+  for (const item of items || []) add(item);
+  const remaining = (items || []).filter(
+    (item) => !selectedKeys.has(stableRecordKey(item?.record || item)),
+  );
+  return [...selected, ...remaining];
+}
+
+function evidenceMatchedQuestionCardIds(item = {}) {
+  const record = item?.record || item;
+  return [...new Set([
+    ...relatedMatchedQuestionCardIds(item),
+    ...principalQuestionCardIds(record),
+  ].map(normalizeId).filter(Boolean))];
+}
+
+async function readRequiredJsonSource(dataDir, name, arrayKeys) {
+  let raw;
+  try {
+    raw = await readFile(join(dataDir, name));
+  } catch (error) {
+    throw unavailableRagDataError({
+      phase: "raw_fallback",
+      reason: error?.code === "ENOENT" ? "raw_source_missing" : "raw_source_unreadable",
+      source: name,
+    }, error);
+  }
+
+  let payload;
+  try {
+    payload = JSON.parse(raw.toString("utf8"));
+  } catch (error) {
+    throw unavailableRagDataError({
+      phase: "raw_fallback",
+      reason: "raw_source_json_invalid",
+      source: name,
+    }, error);
+  }
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)
+    || !arrayKeys.some((key) => Array.isArray(payload[key]))) {
+    throw unavailableRagDataError({
+      phase: "raw_fallback",
+      reason: "raw_source_shape_invalid",
+      source: name,
+    });
+  }
+  return {
+    payload,
+    descriptor: createRagDataSourceDescriptor(name, raw),
+  };
+}
+
+function unavailableRagDataError(details, cause) {
+  return new RagDataUnavailableError({ details, cause });
 }

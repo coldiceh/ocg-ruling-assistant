@@ -1,20 +1,22 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "pnpm run check:rag-revision && pnpm run check:rag-runtime",
   "env": {
     "RELAY_STREAM_TIMEOUT_MS": "270000",
     "ADMIN_MODEL_LAB_SYNC_FINAL_TIMEOUT_MS": "290000",
     "ADMIN_MODEL_LAB_BYPASS_DAILY_BUDGET": "true",
     "ADMIN_RUN_TTL_SECONDS": "604800",
-    "ADMIN_LAB_RECORD_MAX_ENTRIES": "1000"
+    "ADMIN_LAB_RECORD_MAX_ENTRIES": "1000",
+    "RAG_RUNTIME_BUNDLE_REQUIRED": "true"
   },
   "functions": {
     "api/answer.js": {
       "maxDuration": 300,
-      "includeFiles": "data/legacy-lua-semantic-cache-v2/**"
+      "includeFiles": "{data/legacy-lua-semantic-cache-v2/**,data/rag-data-revision-manifest.json,data/rag-runtime-v1/**}"
     },
     "api/admin-model-lab.js": {
       "maxDuration": 300,
-      "includeFiles": "data/legacy-lua-semantic-cache-v2/**"
+      "includeFiles": "{data/legacy-lua-semantic-cache-v2/**,data/rag-data-revision-manifest.json,data/rag-runtime-v1/**}"
     }
   }
 }

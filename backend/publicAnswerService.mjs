@@ -223,10 +223,15 @@ export async function persistPublicAnswerLatency({ latency, env = process.env } 
 export function publicAnswerHttpError(error) {
   const inferredStatus = error?.code === "request_body_too_large" ? 413 : error?.statusCode;
   const statusCode = [400, 413, 503].includes(inferredStatus) ? inferredStatus : 500;
+  const publicMessage = error?.code === "rag_data_unavailable"
+    && error?.expose === true
+    && String(error?.publicMessage || "").trim()
+    ? String(error.publicMessage).trim()
+    : "";
   return {
     statusCode,
     payload: {
-      error: error instanceof Error ? error.message : String(error),
+      error: publicMessage || (error instanceof Error ? error.message : String(error)),
       code: error?.code || "answer_failed",
     },
   };
