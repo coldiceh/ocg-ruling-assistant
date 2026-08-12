@@ -171,7 +171,8 @@ test("ui_has_single_query_button", async () => {
   assert.doesNotMatch(html, /value="glm-5\.2-high"/u);
   assert.doesNotMatch(html, /value="kimi-[^"]+"/u);
   assert.doesNotMatch(html, /value="relay-gpt-5\.6-sol-high"/u);
-  assert.match(html, /id="rulingModelStatus">当前默认。旧匿名 10 题小样本：10\/10，平均 51\.6 秒；仍可能在样本外规则问题中出错。/u);
+  assert.match(html, /id="rulingModelStatus" hidden><\/small>/u);
+  assert.doesNotMatch(html, /当前默认。旧匿名 10 题小样本/u);
   assert.match(html, /id="rulingModelLatency"[^>]+aria-live="polite"/u);
   assert.match(app, /最近 \$\{latency\.sampleCount\} 次成功回答/u);
   assert.doesNotMatch(html, /id="flashModelButton"|id="proModelButton"|>Pro</u);
@@ -264,7 +265,7 @@ test("public ruling model selector uses the allowlisted backend profiles without
     { id: "deepseek-v4-flash-max", label: "DeepSeek V4 Flash · 思考 max（实验性）", provider: "deepseek", available: true },
   ]);
   assert.equal(capabilities.profiles[0].benchmarkSummary, "旧匿名 10 题小样本：10/10，平均 34.6 秒；之后出现样本外错误，不再作为推荐依据。");
-  assert.equal(capabilities.profiles[1].benchmarkSummary, "当前默认。旧匿名 10 题小样本：10/10，平均 51.6 秒；仍可能在样本外规则问题中出错。");
+  assert.equal(capabilities.profiles[1].benchmarkSummary, undefined);
   assert.equal(capabilities.profiles[2].benchmarkSummary, "匿名 10 题评测：5/10，另有 4 题部分正确；平均 12.4 秒，仅供实验。");
   for (const profile of capabilities.profiles) {
     assert.equal(profile.answerLatency.profileId, profile.id);
@@ -353,6 +354,7 @@ test("public pipeline timing prefers backend stage measurements and wall-clock t
     { id: "extract_card_names" },
     { id: "retrieve_card_texts" },
     { id: "retrieve_rulings" },
+    { id: "review_evidence_applicability" },
     { id: "simulate" },
     { id: "generate_ruling" },
   ];
@@ -362,6 +364,7 @@ test("public pipeline timing prefers backend stage measurements and wall-clock t
         dataLoad: 10,
         deterministicPreflight: 5,
         auxiliaryExtractionModels: 100,
+        officialQaApplicability: 30_000,
         localReasoning: 4,
         rulebookGrounding: 6,
         formalEngineAwait: 2,
@@ -384,6 +387,7 @@ test("public pipeline timing prefers backend stage measurements and wall-clock t
       extract_card_names: 100,
       retrieve_card_texts: 20,
       retrieve_rulings: 121,
+      review_evidence_applicability: 30_000,
       simulate: 5,
       generate_ruling: 1_010,
     },
@@ -1618,6 +1622,46 @@ test("rag UI presents every formal query without turning UNKNOWN into a negative
   assert.match(app, /\.\.\.publicFormalQueryLines\(answer\.formalQueryResults \|\| \[\]\)/u);
   assert.match(app, /type === "formal_engine_proof"\) return "形式规则验证"/u);
   assert.match(app, /formal_engine_unknown: "形式规则内核本次未签发确定性证明；这不等于“不能”。"/u);
+});
+
+test("public pending stages keep evidence review before optional simulation and final generation", async () => {
+  const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
+  const definitions = sourceBetween(
+    app,
+    "const pendingStages =",
+    "let pendingStageTimers =",
+  );
+  const functionSource = sourceBetween(
+    app,
+    "function getPendingStages",
+    "function allCards",
+  );
+  const inspect = new Function(
+    "engineEnabled",
+    `${definitions}\nconst appConfig = { engineEnabled };\n${functionSource}\nreturn { stages: getPendingStages(), delays: pendingStageDelays };`,
+  );
+
+  const withoutEngine = inspect(false);
+  assert.deepEqual(withoutEngine.stages.map((stage) => stage.id), [
+    "understand",
+    "extract_card_names",
+    "retrieve_card_texts",
+    "retrieve_rulings",
+    "review_evidence_applicability",
+    "generate_ruling",
+  ]);
+  const withEngine = inspect(true);
+  assert.deepEqual(withEngine.stages.map((stage) => stage.id), [
+    "understand",
+    "extract_card_names",
+    "retrieve_card_texts",
+    "retrieve_rulings",
+    "review_evidence_applicability",
+    "simulate",
+    "generate_ruling",
+  ]);
+  assert.equal(withEngine.delays.length, withEngine.stages.length);
+  assert.ok(withEngine.delays.every((delay, index) => index === 0 || delay > withEngine.delays[index - 1]));
 });
 
 test("rag UI presents provider failures as model service unavailable in Chinese", async () => {

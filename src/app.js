@@ -32,7 +32,6 @@ const PUBLIC_RULING_MODEL_PROFILES = Object.freeze({
     reasoningEffort: "low",
     thirdParty: true,
     modelIdentityVerified: false,
-    benchmarkSummary: "当前默认。旧匿名 10 题小样本：10/10，平均 51.6 秒；仍可能在样本外规则问题中出错。",
   }),
   "deepseek-v4-flash-standard": Object.freeze({
     id: "deepseek-v4-flash-standard",
@@ -214,6 +213,7 @@ const pendingStages = [
   { id: "extract_card_names", label: "提取卡名", body: "正在识别卡名候选，并准备查询卡片资料。" },
   { id: "retrieve_card_texts", label: "检索卡片文本", body: "正在匹配本地资料、百鸽卡片资料和用户提供文本。" },
   { id: "retrieve_rulings", label: "检索规则资料", body: "正在查找相关 Q&A、FAQ 和规则资料。" },
+  { id: "review_evidence_applicability", label: "核对资料适用性", body: "正在核对候选资料是否直接适用于当前卡片、场面和处理节点。" },
   { id: "generate_ruling", label: "生成裁定", body: "正在根据检索上下文生成未确认裁定分析。" },
 ];
 const simulationPendingStage = {
@@ -221,7 +221,7 @@ const simulationPendingStage = {
   label: "编译模拟场景",
   body: "正在将已识别的卡片、区域和操作整理为尽力模拟场景。",
 };
-const pendingStageDelays = [0, 700, 1600, 2900, 4500, 6200];
+const pendingStageDelays = [0, 700, 1600, 2900, 4500, 34500, 36000];
 let pendingStageTimers = [];
 let pendingStageIndex = 0;
 let pendingStageTickTimer = 0;
@@ -4779,6 +4779,7 @@ function extractBackendPipelineTimings(answer, stages = getPendingStages()) {
       retrieval.officialQa,
       retrieval.relatedEvidence,
     ),
+    review_evidence_applicability: readFiniteDuration(pipeline.officialQaApplicability),
     simulate: sumFiniteDurations(pipeline.formalEngineAwait, pipeline.engineAwait),
     generate_ruling: sumFiniteDurations(
       pipeline.localReasoning,
