@@ -54,6 +54,7 @@ jobs:
         run: node scripts/sync-ocg-rule.mjs
 
       - name: Validate synchronized data
+        id: data_validation
         run: pnpm check:data
 
       - name: Diff ruling snapshot
@@ -66,23 +67,45 @@ jobs:
         run: pnpm build:rag-revision
 
       - name: Build and verify versioned RAG runtime bundle
+        id: runtime_validation
         run: |
           pnpm build:rag-runtime
           pnpm check:rag-runtime
 
       - name: Verify runtime behavior matches the raw snapshot
+        id: runtime_parity
         run: node --test --test-concurrency=1 tests/rag-runtime-parity.test.mjs
 
       - name: Verify source freshness and index ordering
         run: pnpm check:freshness
 
       - name: Check source and generated-file syntax
+        id: source_check
         run: |
           pnpm check
           git diff --check
 
       - name: Test updated snapshot
+        id: snapshot_tests
         run: pnpm test
+
+      - name: Preserve a failed validated snapshot for diagnosis
+        if: >-
+          ${{ always()
+            && steps.data_validation.outcome == 'success'
+            && steps.runtime_validation.outcome == 'success'
+            && steps.runtime_parity.outcome == 'success'
+            && steps.source_check.outcome == 'success'
+            && steps.snapshot_tests.outcome == 'failure' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: failed-synced-rag-data-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            data/*.json
+            data/rag-runtime-v1/**
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 9
 
       - name: Report ruling sync status
         run: pnpm report:rulings
