@@ -46,6 +46,22 @@ test("data sync rebuilds and commits the versioned RAG runtime before snapshot t
   assert.match(workflow, /git add data\/\*\.json data\/rag-runtime-v1\/\*\*/u);
 });
 
+test("a failed but validated synchronized snapshot is retained briefly for diagnosis", async () => {
+  const workflow = await readWorkflow("sync-data.yml");
+  const tests = workflow.indexOf("id: snapshot_tests");
+  const artifact = workflow.indexOf("uses: actions/upload-artifact@v4");
+  const commit = workflow.indexOf("id: commit");
+
+  assert.ok(tests >= 0 && tests < artifact && artifact < commit);
+  assert.match(workflow, /steps\.data_validation\.outcome == 'success'/u);
+  assert.match(workflow, /steps\.runtime_validation\.outcome == 'success'/u);
+  assert.match(workflow, /steps\.runtime_parity\.outcome == 'success'/u);
+  assert.match(workflow, /steps\.source_check\.outcome == 'success'/u);
+  assert.match(workflow, /steps\.snapshot_tests\.outcome == 'failure'/u);
+  assert.match(workflow, /retention-days: 1/u);
+  assert.match(workflow, /data\/\*\.json[\s\S]*data\/rag-runtime-v1\/\*\*/u);
+});
+
 test("the ordinary repository check rejects stale revision and runtime artifacts", async () => {
   const packageJson = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
   const check = String(packageJson.scripts?.check || "");
