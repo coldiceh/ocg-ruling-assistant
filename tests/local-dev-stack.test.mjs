@@ -128,9 +128,21 @@ test("Vercel deployment pins the Relay deadline ladder below the function limit"
   assert.equal(config.functions["api/answer.js"].maxDuration, 300);
   for (const route of ["api/answer.js", "api/admin-model-lab.js"]) {
     const included = config.functions[route].includeFiles;
+    const excluded = config.functions[route].excludeFiles;
     assert.match(included, /data\/rag-data-revision-manifest\.json/u);
     assert.match(included, /data\/rag-runtime-v1\/\*\*/u);
     assert.doesNotMatch(included, /data\/(?:cards|rulings|qa-index|evidence-index|ocg-rule-corpus|official-responses)\.json/u);
+    for (const rawSource of [
+      "cards",
+      "rulings",
+      "qa-index",
+      "evidence-index",
+      "ocg-rule-corpus",
+      "official-responses",
+    ]) {
+      assert.match(excluded, new RegExp(`(?:^|[,{}])${rawSource}(?:[,{}]|\\.json)`, "u"));
+    }
+    assert.doesNotMatch(excluded, /rag-data-revision-manifest|rag-runtime-v1|legacy-lua-semantic-cache-v2/u);
   }
 });
 
