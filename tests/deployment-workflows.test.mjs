@@ -63,6 +63,8 @@ test("Vercel runs the revision and runtime verification as its actual build gate
     config.buildCommand,
     "pnpm run check:rag-revision && pnpm run check:rag-runtime",
   );
+  assert.equal(config.outputDirectory, "public");
+  assert.equal(await readFile(new URL("../public/.gitkeep", import.meta.url), "utf8"), "\n");
 });
 
 test("RAG source snapshots are checked out with stable LF line endings", async () => {
