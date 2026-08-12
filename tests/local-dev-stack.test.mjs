@@ -127,16 +127,11 @@ test("Vercel deployment pins the Relay deadline ladder below the function limit"
   assert.equal(config.env.RAG_RUNTIME_BUNDLE_REQUIRED, "true");
   assert.equal(config.functions["api/admin-model-lab.js"].maxDuration, 300);
   assert.equal(config.functions["api/answer.js"].maxDuration, 300);
-  assert.equal(config.functions["api/*.js"].excludeFiles, rawSourceExclusion);
   const apiRoutes = (await readdir(path.join(root, "api")))
     .filter((name) => name.endsWith(".js"));
   assert.ok(apiRoutes.length > 0);
   for (const route of apiRoutes) {
-    const exactConfig = config.functions[`api/${route}`] || {};
-    assert.equal(
-      exactConfig.excludeFiles || config.functions["api/*.js"].excludeFiles,
-      rawSourceExclusion,
-    );
+    assert.equal(config.functions[`api/${route}`]?.excludeFiles, rawSourceExclusion);
   }
   for (const route of ["api/answer.js", "api/admin-model-lab.js"]) {
     const included = config.functions[route].includeFiles;

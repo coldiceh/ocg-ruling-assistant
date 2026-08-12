@@ -11,7 +11,22 @@
     "RAG_RUNTIME_BUNDLE_REQUIRED": "true"
   },
   "functions": {
-    "api/*.js": {
+    "api/admin-auth.js": {
+      "excludeFiles": "data/{cards,rulings,qa-index,evidence-index,ocg-rule-corpus,official-responses}.json"
+    },
+    "api/admin-queries.js": {
+      "excludeFiles": "data/{cards,rulings,qa-index,evidence-index,ocg-rule-corpus,official-responses}.json"
+    },
+    "api/budget.js": {
+      "excludeFiles": "data/{cards,rulings,qa-index,evidence-index,ocg-rule-corpus,official-responses}.json"
+    },
+    "api/card.js": {
+      "excludeFiles": "data/{cards,rulings,qa-index,evidence-index,ocg-rule-corpus,official-responses}.json"
+    },
+    "api/card-image.js": {
+      "excludeFiles": "data/{cards,rulings,qa-index,evidence-index,ocg-rule-corpus,official-responses}.json"
+    },
+    "api/engine.js": {
       "excludeFiles": "data/{cards,rulings,qa-index,evidence-index,ocg-rule-corpus,official-responses}.json"
     },
     "api/answer.js": {
