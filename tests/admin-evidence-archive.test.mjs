@@ -705,6 +705,7 @@ test("decision packet weights related rulings while preserving authoritative mec
       "criticalMechanismCoverage",
       "pendingSpellTrapMovementRestriction",
       "mechanismOperationRelevance",
+      "officialRelatedQuestionIdentitySetCoverage",
       "officialRelatedQuestionIdentityCoverage",
       "officialRelatedIdentityQuestionTypeCoverage",
       "direct",
@@ -984,6 +985,70 @@ test("bounded official-related slots preserve question identity and identity-typ
       questionType: item.questionType,
     })),
   );
+});
+
+test("bounded official-related slots preserve a joint identity scene over separate single-identity noise", () => {
+  const makeEvidence = ({ id, identities, score }) => ({
+    id,
+    type: "official_qa",
+    sourceType: "official_qa",
+    official: true,
+    question: `Anonymous interaction question ${id}`,
+    answer: `Anonymous interaction answer ${id}`,
+    score,
+    questionType: "interaction_shape",
+    matchedQuestionCardIds: identities,
+    questionCardIdCoverage: identities.length / 3,
+    questionCardIdCount: identities.length,
+    typeCompatible: true,
+    playerRoleCompatibility: "compatible",
+    scenarioPremiseCompatibility: "compatible",
+  });
+  const run = ({ identities, prefix, reverse = false }) => {
+    const singles = identities.slice(0, 2).flatMap((identity, identityIndex) => (
+      Array.from({ length: 8 }, (_, index) => makeEvidence({
+        id: `${prefix}-single-${identityIndex}-${index}`,
+        identities: [identity],
+        score: 100 - identityIndex * 10 - index,
+      }))
+    ));
+    const jointId = `${prefix}-joint`;
+    const joint = makeEvidence({
+      id: jointId,
+      identities: identities.slice(0, 2),
+      score: 1,
+    });
+    const source = reverse ? [joint, ...singles].reverse() : [joint, ...singles];
+    const packet = buildAdminEvidenceDecisionPacket({
+      archive: createAdminEvidenceArchive({
+        evidenceBuckets: { officialQaRelated: source },
+      }),
+      limits: {
+        maxItems: 2,
+        maxTotalBodyChars: 8_000,
+        maxTotalBodyBytes: 20_000,
+      },
+    });
+    return {
+      jointId,
+      included: packet.modelPacket.evidenceItems,
+    };
+  };
+
+  for (const result of [
+    run({ identities: ["identity-a", "identity-b", "identity-c"], prefix: "first" }),
+    run({
+      identities: ["renamed-a", "renamed-b", "renamed-c"],
+      prefix: "renamed",
+      reverse: true,
+    }),
+  ]) {
+    const retained = result.included.find((item) => item.evidenceId === result.jointId);
+    assert.ok(retained, "the joint identity scene must reach the bounded model packet");
+    assert.equal(retained.direct, false);
+    assert.equal(retained.authority, "official");
+    assert.equal(retained.questionSideProfiles[0].matchedQuestionCardIds.length, 2);
+  }
 });
 
 test("official related question diversity is source agnostic across related buckets", () => {
