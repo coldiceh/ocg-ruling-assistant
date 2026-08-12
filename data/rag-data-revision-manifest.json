@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "kind": "rag-data-revision-manifest",
   "compilerAbi": "rag-data-revision-compiler/v1",
-  "canonicalizationAbi": "rag-data-revision-canonical-json/v1",
+  "canonicalizationAbi": "rag-data-revision-canonical-json-lf/v2",
   "revision": "643a83da0feca6c3a82a2591790cecf0c47474b5876c38e41b06faa6398e69cb",
   "canonicalCorpusDigest": "643a83da0feca6c3a82a2591790cecf0c47474b5876c38e41b06faa6398e69cb",
-  "sourceSetDigest": "4c4fb8be81e102d88b5fbde82c91a6645dec8994474f14a63d5db9c7337abf9e",
+  "sourceSetDigest": "abe98255e2780bc5c1279c8f19a0c438b7caa487675dfe226005db9e038b612a",
   "counts": {
     "cards": 14342,
     "records": 89117,
@@ -29,13 +29,13 @@
     },
     {
       "path": "evidence-index.json",
-      "bytes": 81994426,
-      "sha256": "80532f3542af61ff505e5675bfe0bc67f21653ce8fa8a58dd5becc443fc00224"
+      "bytes": 81994425,
+      "sha256": "f57328b439b0239965ea74939aea74f39102c4423e83f907146ac0b9e60a4c88"
     },
     {
       "path": "ocg-rule-corpus.json",
-      "bytes": 1369858,
-      "sha256": "c1090151a45e0650652809b2882d24b4d6fa85878ac1740e65a14440cd8a8c85"
+      "bytes": 1369060,
+      "sha256": "e0ebf9e12f8ea266b2167057402b9d1acb75a3f2a4c0354c471bf08d0d77ad80"
     },
     {
       "path": "official-responses.json",

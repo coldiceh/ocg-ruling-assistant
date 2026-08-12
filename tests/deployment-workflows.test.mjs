@@ -64,3 +64,17 @@ test("Vercel runs the revision and runtime verification as its actual build gate
     "pnpm run check:rag-revision && pnpm run check:rag-runtime",
   );
 });
+
+test("RAG source snapshots are checked out with stable LF line endings", async () => {
+  const attributes = await readFile(new URL("../.gitattributes", import.meta.url), "utf8");
+  for (const path of [
+    "cards.json",
+    "rulings.json",
+    "qa-index.json",
+    "evidence-index.json",
+    "ocg-rule-corpus.json",
+    "official-responses.json",
+  ]) {
+    assert.match(attributes, new RegExp(`^/data/${path.replaceAll(".", "\\.")} text eol=lf$`, "mu"));
+  }
+});
