@@ -5172,8 +5172,10 @@ test("owner cap stops only today's public ChatGPT bucket at the ten-dollar hard 
   });
   assert.equal(providerCalls, 0);
   assert.equal(blocked.answer.answerLevel, "budget_limited");
-  assert.match(blocked.answer.shortAnswer, /每日 10 美元上限/u);
-  assert.match(blocked.answer.shortAnswer, /哔哩哔哩用户「おmaginai」/u);
+  assert.equal(
+    blocked.answer.shortAnswer,
+    "今日公开裁定额度已达到每日 10 美元上限，未调用模型。如需协助重置，作者b站账号「おmaginai」QAQ",
+  );
 });
 
 test("paid loopback private evaluation uses an isolated finite memory budget", async () => {

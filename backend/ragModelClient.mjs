@@ -3076,14 +3076,7 @@ function safeFallbackAnswer(reason, shortAnswer = "当前资料不足，无法�
 }
 
 function publicBudgetExhaustedMessage(bucket) {
-  if (bucket?.id === "final_ruling:relay") {
-    const parsedLimit = Number(bucket.dailyBudgetUsd);
-    const dailyLimitUsd = Number.isFinite(parsedLimit) && parsedLimit > 0
-      ? roundCost(parsedLimit)
-      : DEFAULT_CHATGPT_DAILY_BUDGET_USD;
-    return `今日公开 ChatGPT 额度已达到每日 ${dailyLimitUsd} 美元上限，未调用模型。如需协助重置，请联系哔哩哔哩用户「おmaginai」。`;
-  }
-  return "今日公开模型额度已用完，未调用模型。如需协助重置，请联系哔哩哔哩用户「おmaginai」。";
+  return "今日公开裁定额度已达到每日 10 美元上限，未调用模型。如需协助重置，作者b站账号「おmaginai」QAQ";
 }
 
 function privateEvaluationBudgetExhaustedMessage(bucket) {
