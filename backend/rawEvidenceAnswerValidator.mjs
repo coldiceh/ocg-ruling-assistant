@@ -1,22 +1,3 @@
-const REQUIRED_FIELDS = [
-  "answerLevel",
-  "shortAnswer",
-  "reasoning",
-  "usedCards",
-  "usedEvidence",
-  "missingInfo",
-  "riskFlags",
-  "confidenceSelfEstimate",
-];
-
-const ARRAY_FIELDS = [
-  "reasoning",
-  "usedCards",
-  "usedEvidence",
-  "missingInfo",
-  "riskFlags",
-];
-
 const ANSWER_LEVELS = new Set([
   "official_confirmed",
   "rule_analysis",
@@ -42,6 +23,8 @@ export function validateRawEvidenceFinalAnswer(answer = {}, {
   allowedAnswerLevels = [...ANSWER_LEVELS],
 } = {}) {
   const errors = [];
+  const adaptation = adaptDisplayAnswer(answer, { allowedEvidenceIds, allowedAnswerLevels });
+  const adaptedAnswer = adaptation.answer;
   const providerFailureKind = classifyProviderFailure(providerFailure, modelWarnings);
 
   if (providerFailureKind) {
@@ -56,69 +39,17 @@ export function validateRawEvidenceFinalAnswer(answer = {}, {
     errors.push("model output could not be parsed as the required JSON contract");
   }
 
-  if (!answer || typeof answer !== "object" || Array.isArray(answer)) {
-    errors.push("final answer must be an object");
-    return validationResult(errors, providerFailureKind);
+  if (!adaptedAnswer) {
+    errors.push("final answer has no readable shortAnswer");
+    return validationResult(errors, providerFailureKind, adaptation.diagnosticWarnings, null);
   }
 
-  for (const field of REQUIRED_FIELDS) {
-    if (!Object.hasOwn(answer, field)) errors.push(`final answer is missing required field: ${field}`);
-  }
-  for (const field of ARRAY_FIELDS) {
-    if (Object.hasOwn(answer, field) && !Array.isArray(answer[field])) {
-      errors.push(`${field} must be an array`);
-    }
-  }
-  if (!String(answer.shortAnswer || "").trim()) errors.push("shortAnswer must be non-empty");
-  if (!Array.isArray(answer.reasoning)
-      || !answer.reasoning.length
-      || answer.reasoning.some((item) => typeof item !== "string" || !item.trim())) {
-    errors.push("reasoning must contain only non-empty strings");
-  }
-  const configuredAnswerLevels = new Set(
-    (Array.isArray(allowedAnswerLevels) ? allowedAnswerLevels : [])
-      .map((value) => String(value || "").trim())
-      .filter((value) => ANSWER_LEVELS.has(value)),
+  return validationResult(
+    errors,
+    providerFailureKind,
+    adaptation.diagnosticWarnings,
+    adaptedAnswer,
   );
-  const answerLevel = String(answer.answerLevel || "");
-  if (!ANSWER_LEVELS.has(answerLevel)) errors.push("answerLevel is invalid");
-  else if (!configuredAnswerLevels.has(answerLevel)) {
-    errors.push(`answerLevel is not allowed for this evidence-authority path: ${answerLevel}`);
-  }
-  if (!CONFIDENCE_LEVELS.has(String(answer.confidenceSelfEstimate || ""))) {
-    errors.push("confidenceSelfEstimate is invalid");
-  }
-
-  const availableEvidenceIds = new Set(
-    (Array.isArray(allowedEvidenceIds) ? allowedEvidenceIds : [])
-      .map((id) => String(id || "").trim())
-      .filter(Boolean),
-  );
-  let validEvidenceCitationCount = 0;
-  for (const item of Array.isArray(answer.usedEvidence) ? answer.usedEvidence : []) {
-    if (!item || typeof item !== "object" || Array.isArray(item)) {
-      errors.push("usedEvidence entries must be objects");
-      continue;
-    }
-    const id = String(item.id || "").trim();
-    if (!id) errors.push("usedEvidence contains an empty evidence id");
-    else if (!availableEvidenceIds.has(id)) errors.push(`usedEvidence references unavailable evidence: ${id}`);
-    else validEvidenceCitationCount += 1;
-  }
-  if (["official_confirmed", "rule_analysis", "low_confidence_analysis"].includes(answerLevel)
-    && validEvidenceCitationCount === 0) {
-    errors.push(`${answerLevel} requires at least one valid evidence citation`);
-  }
-
-  // The provider client may parse a fenced or otherwise recoverable JSON
-  // object locally. That is not a second semantic model call and should not
-  // reject an otherwise valid structured answer. An entirely empty payload is
-  // still a transport failure when no parsed answer exists.
-  if (!String(rawText || "").trim() && !String(answer.shortAnswer || "").trim()) {
-    errors.push("model output is empty");
-  }
-
-  return validationResult(errors, providerFailureKind);
 }
 
 /**
@@ -145,7 +76,7 @@ export async function runValidatedRawEvidenceFinal({
   });
 
   const answer = validation.ok
-    ? result.answer
+    ? validation.answer
     : buildNeutralFailureAnswer(validation);
   const outcome = validation.ok
     ? "primary_valid"
@@ -176,13 +107,13 @@ export async function runValidatedRawEvidenceFinal({
         ok: validation.ok,
         providerFailureKind: validation.providerFailureKind || null,
         errors: validation.errors,
-        diagnosticWarnings: [],
+        diagnosticWarnings: validation.diagnosticWarnings,
         checks: {
           outputContract: validation.ok,
           evidenceReferences: !validation.errors.some((error) => error.includes("usedEvidence")),
           officialDirectFallback: false,
         },
-        candidate: summarizeCandidate(result?.answer),
+        candidate: summarizeCandidate(validation.answer || result?.answer),
         latencyMs,
       },
       repair: null,
@@ -191,20 +122,122 @@ export async function runValidatedRawEvidenceFinal({
   };
 }
 
-function validationResult(errors, providerFailureKind) {
+function validationResult(errors, providerFailureKind, diagnosticWarnings = [], answer = null) {
   return {
     ok: errors.length === 0,
     providerFailureKind,
     errors: unique(errors).slice(0, 24),
-    diagnosticWarnings: [],
+    diagnosticWarnings: unique(diagnosticWarnings).slice(0, 24),
+    answer,
   };
 }
 
 function hasUnusableModelOutputWarning(warnings = []) {
   return (Array.isArray(warnings) ? warnings : []).some((warning) => (
-    /^(?:model_json_invalid_schema|model_json_parse_failed(?::|$)|model_natural_language_wrapped$)/u
+    /^(?:model_json_invalid_schema|model_json_parse_failed(?::|$))/u
       .test(String(warning || ""))
   ));
+}
+
+function adaptDisplayAnswer(value, { allowedEvidenceIds = [], allowedAnswerLevels = [] } = {}) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return { answer: null, diagnosticWarnings: [] };
+  }
+  const shortAnswer = typeof value.shortAnswer === "string" ? value.shortAnswer.trim() : "";
+  if (!shortAnswer) return { answer: null, diagnosticWarnings: [] };
+
+  const diagnosticWarnings = [];
+  const reasoning = normalizeStringArray(value.reasoning, "reasoning", diagnosticWarnings);
+  const usedCards = normalizeStringArray(value.usedCards, "usedCards", diagnosticWarnings);
+  const missingInfo = normalizeStringArray(value.missingInfo, "missingInfo", diagnosticWarnings);
+  const riskFlags = normalizeStringArray(value.riskFlags, "riskFlags", diagnosticWarnings);
+  const allowedIds = new Set((Array.isArray(allowedEvidenceIds) ? allowedEvidenceIds : [])
+    .map((item) => String(item || "").trim())
+    .filter(Boolean));
+  const usedEvidence = [];
+  if (!Array.isArray(value.usedEvidence)) {
+    diagnosticWarnings.push("model_output_adapted:missing_or_invalid_usedEvidence");
+  } else {
+    for (const item of value.usedEvidence) {
+      if (!item || typeof item !== "object" || Array.isArray(item)) {
+        diagnosticWarnings.push("model_output_adapted:invalid_citation_dropped");
+        continue;
+      }
+      const id = String(item.id || "").trim();
+      if (!id || !allowedIds.has(id)) {
+        diagnosticWarnings.push("model_output_adapted:unavailable_citation_dropped");
+        continue;
+      }
+      usedEvidence.push({
+        id,
+        type: String(item.type || "related").trim(),
+        title: String(item.title || "").trim(),
+      });
+      if (usedEvidence.length >= 12) break;
+    }
+  }
+
+  const configuredLevels = unique((Array.isArray(allowedAnswerLevels) ? allowedAnswerLevels : [])
+    .map((item) => String(item || "").trim())
+    .filter((item) => ANSWER_LEVELS.has(item)));
+  const requestedLevel = String(value.answerLevel || "").trim();
+  let answerLevel = configuredLevels.includes(requestedLevel)
+    ? requestedLevel
+    : safeFallbackAnswerLevel(requestedLevel);
+  const officialOnlyPath = configuredLevels.includes("official_confirmed")
+    && !configuredLevels.some((level) => [
+      "rule_analysis",
+      "low_confidence_analysis",
+      "needs_more_info",
+    ].includes(level));
+  const hasDirectCitation = officialOnlyPath
+    && usedEvidence.some((item) => allowedIds.has(item.id));
+  if (answerLevel === "official_confirmed" && !hasDirectCitation) {
+    answerLevel = "low_confidence_analysis";
+    diagnosticWarnings.push("model_output_adapted:official_confirmation_missing_direct_citation");
+  }
+  if (answerLevel !== requestedLevel) diagnosticWarnings.push("model_output_adapted:answer_level_normalized");
+
+  const confidence = CONFIDENCE_LEVELS.has(String(value.confidenceSelfEstimate || ""))
+    ? String(value.confidenceSelfEstimate)
+    : "low";
+  if (confidence !== value.confidenceSelfEstimate) {
+    diagnosticWarnings.push("model_output_adapted:confidence_defaulted_low");
+  }
+  return {
+    answer: {
+      answerLevel,
+      shortAnswer,
+      reasoning,
+      usedCards,
+      usedEvidence,
+      missingInfo,
+      riskFlags,
+      confidenceSelfEstimate: confidence,
+    },
+    diagnosticWarnings,
+  };
+}
+
+function normalizeStringArray(value, field, diagnosticWarnings) {
+  if (typeof value === "string") {
+    diagnosticWarnings.push(`model_output_adapted:${field}_string_to_array`);
+    return value.trim() ? [value.trim()] : [];
+  }
+  if (!Array.isArray(value)) {
+    diagnosticWarnings.push(`model_output_adapted:missing_or_invalid_${field}`);
+    return [];
+  }
+  return value.map((item) => String(item || "").trim()).filter(Boolean).slice(0, 12);
+}
+
+function safeFallbackAnswerLevel(requestedLevel) {
+  // Schema adaptation may preserve or lower authority, but must never infer a
+  // stronger authority level merely because it is present in an allowlist.
+  if (requestedLevel === "needs_more_info" || requestedLevel === "budget_limited") {
+    return requestedLevel;
+  }
+  return "low_confidence_analysis";
 }
 
 function buildNeutralFailureAnswer(validation) {

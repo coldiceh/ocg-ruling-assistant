@@ -375,6 +375,61 @@ test("identical auxiliary requests share one flight and then use the bounded cac
   assert.equal(cached.estimatedCostCny, 0);
 });
 
+test("rule-query extraction receives only verified card context and remains a lexical task", async () => {
+  let request;
+  const result = await callRuleQueryExtractionModel({
+    userQuery: "匿名用户题面包含两个处理阶段。",
+    resolvedCards: [{
+      id: "501",
+      name: "匿名已确认卡",
+      aliases: ["匿名已确认别名"],
+      effectText: "发动后，在处理时确认状态并继续剩余处理。",
+    }],
+    dataRevision: "synthetic-verified-context-revision",
+    env: deepSeekEnv(),
+    modelInvoker: async (value) => {
+      request = value;
+      return JSON.stringify({ ruleQueries: [{ query: "处理时 确认状态" }] });
+    },
+  });
+
+  assert.deepEqual(result.queries, [{ query: "处理时 确认状态" }]);
+  assert.equal(request.task, "rule_query_extraction");
+  assert.match(request.prompt, /匿名用户题面包含两个处理阶段/u);
+  assert.match(request.prompt, /匿名已确认卡/u);
+  assert.match(request.prompt, /发动后，在处理时确认状态并继续剩余处理/u);
+  assert.match(request.prompt, /不要回答问题/u);
+  assert.match(request.prompt, /不得把推测结论写进检索词/u);
+});
+
+test("a readable natural-language first response is retained for local display adaptation", async () => {
+  const result = await callRagModel({
+    prompt: "anonymous frozen evidence",
+    env: { MODEL_PROVIDER: "mock" },
+    modelInvoker: async () => "匿名首轮结论。这里包含可读说明。",
+  });
+
+  assert.equal(result.answer.shortAnswer, "匿名首轮结论。这里包含可读说明。");
+  assert.ok(result.warnings.includes("model_natural_language_wrapped"));
+  assert.equal(result.generationAttempts.length, 1);
+});
+
+test("HTML and provider error payloads are never wrapped as natural-language rulings", async () => {
+  for (const payload of [
+    "<!doctype html><html><title>Bad Gateway</title></html>",
+    "503 Service Unavailable",
+    "Provider error: upstream failed",
+  ]) {
+    const result = await callRagModel({
+      prompt: "anonymous frozen evidence",
+      env: { MODEL_PROVIDER: "mock" },
+      modelInvoker: async () => payload,
+    });
+    assert.notEqual(result.answer.shortAnswer, payload);
+    assert.ok(result.warnings.some((warning) => warning.startsWith("model_json_parse_failed:")));
+  }
+});
+
 test("budget reservations settle to actual spend and explicit release refunds the reservation", async () => {
   const env = deepSeekEnv({
     API_DAILY_BUDGET_CNY: "10",

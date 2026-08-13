@@ -43,42 +43,54 @@ test("raw validator checks only transport, schema and frozen evidence ids", asyn
   assert.equal(result.publicFinalValidation.repair, null);
 });
 
-test("wrapped invalid model output and unsent evidence ids fail without semantic repair", async () => {
-  for (const fixture of [
-    { answer: makeAnswer(), warnings: ["model_natural_language_wrapped"] },
-    { answer: makeAnswer({ usedEvidence: [{ id: "not-sent" }] }), warnings: [] },
-    { answer: { shortAnswer: "不完整" }, warnings: [] },
-  ]) {
-    let calls = 0;
-    const result = await runValidatedRawEvidenceFinal({
-      originalPrompt: "anonymous",
-      evidence: { cardTexts: [{ id: "raw-1", text: "原始卡文" }] },
-      allowedEvidenceIds: ["raw-1"],
-      invoke: async () => {
-        calls += 1;
-        return { ...fixture, rawText: JSON.stringify(fixture.answer) };
-      },
-    });
-    assert.equal(calls, 1);
-    assert.equal(result.publicFinalValidation.outcome, "primary_invalid_no_ruling");
-    assert.equal(result.publicFinalValidation.callCount, 1);
-    assert.equal(result.publicFinalValidation.repairAttempted, false);
-    assert.notEqual(result.answer.shortAnswer, fixture.answer.shortAnswer);
-  }
+test("display-shape defects are adapted locally without semantic repair", async () => {
+  let calls = 0;
+  const result = await runValidatedRawEvidenceFinal({
+    originalPrompt: "anonymous",
+    allowedEvidenceIds: ["raw-1"],
+    allowedAnswerLevels: ["rule_analysis", "low_confidence_analysis", "needs_more_info"],
+    invoke: async () => {
+      calls += 1;
+      return {
+        answer: {
+          answerLevel: "official_confirmed",
+          shortAnswer: "保留模型首轮给出的匿名结论。",
+          reasoning: "单个理由字符串。",
+          usedEvidence: [{ id: "compressed-away" }, { id: "raw-1", title: "匿名原始资料" }],
+        },
+        rawText: "",
+        warnings: ["model_natural_language_wrapped"],
+      };
+    },
+  });
+
+  assert.equal(calls, 1);
+  assert.equal(result.publicFinalValidation.outcome, "primary_valid");
+  assert.equal(result.publicFinalValidation.callCount, 1);
+  assert.equal(result.publicFinalValidation.repairAttempted, false);
+  assert.equal(result.answer.shortAnswer, "保留模型首轮给出的匿名结论。");
+  assert.equal(result.answer.answerLevel, "low_confidence_analysis");
+  assert.deepEqual(result.answer.reasoning, ["单个理由字符串。"]);
+  assert.deepEqual(result.answer.usedEvidence.map((item) => item.id), ["raw-1"]);
+  assert.deepEqual(result.answer.usedCards, []);
+  assert.ok(result.publicFinalValidation.primary.diagnosticWarnings.includes(
+    "model_output_adapted:unavailable_citation_dropped",
+  ));
 });
 
-test("schema validator does not accept ids absent from the final prompt", () => {
+test("schema adapter drops ids absent from the final prompt", () => {
   const result = validateRawEvidenceFinalAnswer(makeAnswer({
     usedEvidence: [{ id: "compressed-away" }],
   }), {
     rawText: "{}",
     allowedEvidenceIds: ["raw-1"],
   });
-  assert.equal(result.ok, false);
-  assert.ok(result.errors.some((error) => error.includes("compressed-away")));
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.answer.usedEvidence, []);
+  assert.ok(result.diagnosticWarnings.includes("model_output_adapted:unavailable_citation_dropped"));
 });
 
-test("answer level is constrained by the prompt's evidence-authority path", () => {
+test("non-official answer level is normalized to an allowed ordinary level", () => {
   const ordinary = validateRawEvidenceFinalAnswer(makeAnswer({
     answerLevel: "official_confirmed",
   }), {
@@ -86,8 +98,9 @@ test("answer level is constrained by the prompt's evidence-authority path", () =
     allowedEvidenceIds: ["raw-1"],
     allowedAnswerLevels: ["rule_analysis", "low_confidence_analysis", "needs_more_info", "budget_limited"],
   });
-  assert.equal(ordinary.ok, false);
-  assert.ok(ordinary.errors.some((error) => error.includes("not allowed")));
+  assert.equal(ordinary.ok, true);
+  assert.equal(ordinary.answer.answerLevel, "low_confidence_analysis");
+  assert.ok(ordinary.diagnosticWarnings.includes("model_output_adapted:answer_level_normalized"));
 
   const direct = validateRawEvidenceFinalAnswer(makeAnswer({
     answerLevel: "official_confirmed",
@@ -99,8 +112,8 @@ test("answer level is constrained by the prompt's evidence-authority path", () =
   assert.equal(direct.ok, true);
 });
 
-test("determinate answers require at least one valid frozen evidence citation", () => {
-  for (const answerLevel of ["official_confirmed", "rule_analysis", "low_confidence_analysis"]) {
+test("missing citations preserve readable analysis but never create official authority", () => {
+  for (const answerLevel of ["rule_analysis", "low_confidence_analysis"]) {
     const result = validateRawEvidenceFinalAnswer(makeAnswer({
       answerLevel,
       usedEvidence: [],
@@ -109,9 +122,19 @@ test("determinate answers require at least one valid frozen evidence citation", 
       allowedEvidenceIds: ["raw-1"],
       allowedAnswerLevels: [answerLevel],
     });
-    assert.equal(result.ok, false);
-    assert.ok(result.errors.some((error) => error.includes("valid evidence citation")));
+    assert.equal(result.ok, true);
+    assert.equal(result.answer.shortAnswer, "模型独立给出的匿名结论。");
   }
+  const unsupportedOfficial = validateRawEvidenceFinalAnswer(makeAnswer({
+    answerLevel: "official_confirmed",
+    usedEvidence: [],
+  }), {
+    rawText: "{}",
+    allowedEvidenceIds: ["raw-1"],
+    allowedAnswerLevels: ["official_confirmed"],
+  });
+  assert.equal(unsupportedOfficial.ok, true);
+  assert.equal(unsupportedOfficial.answer.answerLevel, "low_confidence_analysis");
   const needsMoreInfo = validateRawEvidenceFinalAnswer(makeAnswer({
     answerLevel: "needs_more_info",
     usedEvidence: [],
@@ -121,6 +144,21 @@ test("determinate answers require at least one valid frozen evidence citation", 
     allowedAnswerLevels: ["needs_more_info"],
   });
   assert.equal(needsMoreInfo.ok, true);
+});
+
+test("missing or invalid levels cannot be upgraded by an official-only allowlist", () => {
+  for (const answerLevel of [undefined, "invented_level", "rule_analysis"]) {
+    const result = validateRawEvidenceFinalAnswer(makeAnswer({
+      answerLevel,
+      usedEvidence: [{ id: "raw-1" }],
+    }), {
+      rawText: "{}",
+      allowedEvidenceIds: ["raw-1"],
+      allowedAnswerLevels: ["official_confirmed", "budget_limited"],
+    });
+    assert.equal(result.ok, true);
+    assert.equal(result.answer.answerLevel, "low_confidence_analysis");
+  }
 });
 
 test("strict official evidence never bypasses the one final model call", async () => {
@@ -142,8 +180,9 @@ test("strict official evidence never bypasses the one final model call", async (
     },
   });
   assert.equal(calls, 1);
-  assert.equal(result.publicFinalValidation.outcome, "primary_invalid_no_ruling");
+  assert.equal(result.publicFinalValidation.outcome, "primary_valid");
   assert.equal(result.publicFinalValidation.primary.checks.officialDirectFallback, false);
   assert.notEqual(result.answer.answerLevel, "official_confirmed");
+  assert.equal(result.answer.shortAnswer, "格式错误");
   assert.doesNotMatch(result.answer.shortAnswer, /可以处理/u);
 });
