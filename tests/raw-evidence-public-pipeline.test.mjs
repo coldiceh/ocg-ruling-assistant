@@ -29,8 +29,6 @@ function makeAnswer(overrides = {}) {
 
 test("public raw pipeline calls only retrieval helpers and one final model", async () => {
   const calls = { card: 0, rule: 0, final: 0, forbidden: 0 };
-  let cardExtractionCompleted = false;
-  let ruleExtractionPrompt = "";
   const poison = async () => {
     calls.forbidden += 1;
     throw new Error("legacy ruling component must not run");
@@ -44,13 +42,10 @@ test("public raw pipeline calls only retrieval helpers and one final model", asy
     env: { RAG_MODEL_PROVIDER: "mock", RAG_LIVE_OFFICIAL_QA: "false" },
     cardModelInvoker: async () => {
       calls.card += 1;
-      cardExtractionCompleted = true;
       return JSON.stringify({ cardNames: [{ name: "匿名测试卡", originalText: "匿名测试卡" }] });
     },
-    ruleModelInvoker: async ({ prompt }) => {
+    ruleModelInvoker: async () => {
       calls.rule += 1;
-      assert.equal(cardExtractionCompleted, true, "rule extraction must follow card identity resolution");
-      ruleExtractionPrompt = prompt;
       return JSON.stringify({ ruleQueries: [{ query: "主要阶段 发动" }] });
     },
     modelInvoker: async ({ prompt }) => {
@@ -77,56 +72,10 @@ test("public raw pipeline calls only retrieval helpers and one final model", asy
   assert.equal(answer.formalEngine.status, "disabled");
   assert.equal(answer.legacyLua.status, "disabled");
   assert.match(finalPrompt, /匿名测试卡/u);
-  assert.match(ruleExtractionPrompt, /匿名测试卡/u);
-  assert.match(ruleExtractionPrompt, /自己主要阶段可以发动。抽1张卡。/u);
-  assert.match(ruleExtractionPrompt, /不要回答问题|不是裁定模型/u);
-  assert.equal(answer.debug.timingsMs.cardNameExtraction >= 0, true);
-  assert.equal(answer.debug.timingsMs.ruleQueryExtraction >= 0, true);
   assert.doesNotMatch(finalPrompt, /summonLegalityContext|playerRoleBindings|legacyLuaSemanticPacket|operationLegality/u);
 });
 
-test("externally verified identity is available to rule-query extraction", async () => {
-  let ruleExtractionPrompt = "";
-  const answer = await answerRagRulingQuestion({
-    question: "匿名玩家简称如何处理？",
-    cards: [{
-      id: "43210",
-      name: "匿名同步正式名",
-      aliases: ["匿名同步正式名"],
-      effectText: "匿名同步卡片文本。",
-      source: "local_snapshot",
-    }],
-    records: [],
-    qaRecords: [],
-    env: { RAG_MODEL_PROVIDER: "mock", RAG_LIVE_OFFICIAL_QA: "false" },
-    cardModelInvoker: async () => JSON.stringify({
-      cardNames: [{ name: "匿名模型猜测名", originalText: "匿名玩家简称" }],
-    }),
-    ruleModelInvoker: async ({ prompt }) => {
-      ruleExtractionPrompt = prompt;
-      return JSON.stringify({ ruleQueries: [] });
-    },
-    modelInvoker: async () => JSON.stringify(makeAnswer({ usedEvidence: [] })),
-    fetchImpl: async () => new Response(JSON.stringify({ result: [{
-      id: "87654321",
-      cid: "43210",
-      cn_name: "匿名玩家简称",
-      desc: "外部旧文本。",
-    }] }), {
-      status: 200,
-      headers: { "content-type": "application/json" },
-    }),
-  });
-
-  assert.match(ruleExtractionPrompt, /匿名同步正式名/u);
-  assert.match(ruleExtractionPrompt, /匿名同步卡片文本/u);
-  assert.doesNotMatch(ruleExtractionPrompt, /外部旧文本/u);
-  assert.equal(answer.resolvedCards[0].id, "43210");
-  assert.equal(answer.debug.baigeSearchCount, 1);
-  assert.equal(answer.debug.timingsMs.externalIdentityResolution >= 0, true);
-});
-
-test("public raw pipeline keeps readable non-JSON output without another call", async () => {
+test("public raw pipeline never repairs malformed final output with another call", async () => {
   let finalCalls = 0;
   const answer = await answerRagRulingQuestion({
     question: "「匿名测试卡」的①效果如何处理？",
@@ -142,10 +91,9 @@ test("public raw pipeline keeps readable non-JSON output without another call", 
     },
   });
   assert.equal(finalCalls, 1);
-  assert.equal(answer.debug.publicFinalValidation.outcome, "primary_valid");
+  assert.equal(answer.debug.publicFinalValidation.outcome, "primary_invalid_no_ruling");
   assert.equal(answer.debug.publicFinalValidation.callCount, 1);
-  assert.match(answer.shortAnswer, /可以发动/u);
-  assert.equal(answer.answerLevel, "low_confidence_analysis");
+  assert.doesNotMatch(answer.shortAnswer, /可以发动/u);
 });
 
 test("raw public pipeline has a static import boundary from ruling components", async () => {
@@ -224,30 +172,8 @@ test("ordinary public analysis cannot self-promote to official confirmation", as
     ruleModelInvoker: async () => ({ ruleQueries: [] }),
     modelInvoker: async () => JSON.stringify(makeAnswer({ answerLevel: "official_confirmed" })),
   });
-  assert.equal(answer.debug.publicFinalValidation.outcome, "primary_valid");
-  assert.equal(answer.answerLevel, "low_confidence_analysis");
-});
-
-test("public resolved cards expose only the documented display allowlist", async () => {
-  const answer = await answerRagRulingQuestion({
-    question: "「匿名测试卡」的①效果如何处理？",
-    cards: [{
-      ...cards[0],
-      raw: { privateProviderField: "must-not-leak" },
-      privateProviderField: "must-not-leak",
-      imageCandidates: ["https://example.test/anonymous.png"],
-    }],
-    records: [],
-    qaRecords: [],
-    env: { RAG_MODEL_PROVIDER: "mock", RAG_LIVE_OFFICIAL_QA: "false" },
-    cardModelInvoker: async () => ({ cardNames: [] }),
-    ruleModelInvoker: async () => ({ ruleQueries: [] }),
-    modelInvoker: async () => JSON.stringify(makeAnswer()),
-  });
-  assert.equal(answer.resolvedCards.length, 1);
-  assert.equal(Object.hasOwn(answer.resolvedCards[0], "raw"), false);
-  assert.equal(Object.hasOwn(answer.resolvedCards[0], "privateProviderField"), false);
-  assert.deepEqual(answer.resolvedCards[0].imageCandidates, ["https://example.test/anonymous.png"]);
+  assert.equal(answer.debug.publicFinalValidation.outcome, "primary_invalid_no_ruling");
+  assert.equal(answer.answerLevel, "needs_more_info");
 });
 
 test("public output and prompt are invariant to local engine configuration", async () => {

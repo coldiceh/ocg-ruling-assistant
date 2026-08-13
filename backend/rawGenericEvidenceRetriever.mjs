@@ -5,11 +5,6 @@ import {
   normalizeRawGenericInjectedData,
   useRawGenericDataSnapshot,
 } from "./rawGenericDataStore.mjs";
-import { searchCards as searchBaigeCards } from "./baigeCardProvider.mjs";
-import {
-  isRawGenericCorpusBoundCard,
-  rawGenericCorpusCardId,
-} from "./rawGenericCardIdentity.mjs";
 
 const INACTIVE_STATUSES = new Set([
   "removed",
@@ -28,93 +23,6 @@ const corpusIndexCache = new WeakMap();
 const recordFeatureCache = new WeakMap();
 
 /**
- * Finish generic identity resolution before downstream query generation.
- * External lookup is restricted to literal user surfaces left unresolved by
- * the local catalogue; model-proposed names remain unverified hypotheses.
- */
-export async function resolveRawGenericCardIdentities({
-  cardResolution = {},
-  cards = [],
-  env = {},
-  fetchImpl = globalThis.fetch,
-  maxCards = readPositiveNumber(env.RAG_MAX_CARDS, 6),
-} = {}) {
-  const effectiveMaxCards = Math.max(1, Number(maxCards) || 1);
-  const modelIdentityPartition = partitionModelIdentityHypotheses(cardResolution);
-  const identityResolutionInput = {
-    ...cardResolution,
-    resolvedCards: modelIdentityPartition.verifiedCards,
-    unresolvedMentions: cleanMentions([
-      ...(cardResolution.unresolvedMentions || []),
-      ...modelIdentityPartition.hypothesisMentions,
-    ]),
-  };
-  const initiallyResolvedCards = canonicalizeResolvedCards(
-    identityResolutionInput.resolvedCards || [],
-    cards || [],
-  );
-  const providedTexts = normalizeProvidedTexts(
-    cardResolution.userProvidedCardTexts || [],
-    effectiveMaxCards,
-  );
-  const externalIdentity = await resolveExternalCardIdentities({
-    mentions: externalIdentityMentions(identityResolutionInput, providedTexts),
-    canonicalCards: cards || [],
-    fetchImpl,
-    env,
-    maxResolved: Math.max(0, effectiveMaxCards - initiallyResolvedCards.length),
-    maxSearches: readPositiveNumber(env.RAG_BAIGE_MAX_IDENTITY_SEARCHES, effectiveMaxCards),
-    providerResultLimit: effectiveMaxCards,
-  });
-  const resolvedCards = dedupeResolvedCards([
-    ...initiallyResolvedCards,
-    ...externalIdentity.resolvedCards,
-  ]);
-  const externallyResolvedKeys = new Set(externalIdentity.resolvedCards
-    .map((card) => normalizeCardKey(card.input))
-    .filter(Boolean));
-  const externallyAmbiguousKeys = new Set(externalIdentity.ambiguousMentions
-    .map((mention) => normalizeCardKey(mention.input))
-    .filter(Boolean));
-  const unresolvedMentions = cleanMentions(identityResolutionInput.unresolvedMentions)
-    .filter((mention) => !externallyResolvedKeys.has(normalizeCardKey(mention.input)))
-    .filter((mention) => !externallyAmbiguousKeys.has(normalizeCardKey(mention.input)));
-  const ambiguousMentions = cleanMentions([
-    ...externalIdentity.ambiguousMentions,
-    ...cleanMentions(identityResolutionInput.ambiguousMentions)
-      .filter((mention) => !externallyResolvedKeys.has(normalizeCardKey(mention.input))),
-  ]);
-  const warnings = [...externalIdentity.warnings];
-  if (resolvedCards.length > effectiveMaxCards) {
-    warnings.push(`raw_generic_cards_limited:${resolvedCards.length}->${effectiveMaxCards}`);
-  }
-  return {
-    cardResolution: {
-      ...identityResolutionInput,
-      resolvedCards: resolvedCards.slice(0, effectiveMaxCards),
-      unresolvedMentions,
-      ambiguousMentions,
-      omittedResolvedCards: [
-        ...(cardResolution.omittedResolvedCards || []),
-        ...resolvedCards.slice(effectiveMaxCards),
-      ],
-      userProvidedCardTexts: providedTexts,
-      modelCardNameCandidates: Array.isArray(cardResolution.modelCardNameCandidates)
-        ? cardResolution.modelCardNameCandidates
-        : [],
-    },
-    baigeResolvedCards: externalIdentity.resolvedCards,
-    baigeAmbiguousMentions: externalIdentity.ambiguousMentions,
-    warnings: unique(warnings),
-    debug: {
-      baigeSearchCount: externalIdentity.searchCount,
-      baigeCacheHitCount: externalIdentity.cacheHitCount,
-      baigeWarnings: externalIdentity.providerWarnings,
-    },
-  };
-}
-
-/**
  * Retrieve source records using identity and lexical evidence only.
  *
  * This intentionally does not classify the question or interpret any game
@@ -131,7 +39,6 @@ export async function retrieveRawGenericEvidence({
   qaRecords,
   data: suppliedData,
   ruleSearchQueries = [],
-  identityResolution: suppliedIdentityResolution,
   env = {},
   fetchImpl: _fetchImpl = globalThis.fetch,
 } = {}) {
@@ -152,58 +59,62 @@ export async function retrieveRawGenericEvidence({
   const limits = readLimits(env);
   const warnings = [];
   stageStartedAt = Date.now();
-  const identityResolution = suppliedIdentityResolution || await resolveRawGenericCardIdentities({
-    cardResolution,
-    cards: data.cards || [],
-    env,
-    fetchImpl: _fetchImpl,
-    maxCards: limits.maxCards,
-  });
-  warnings.push(...(identityResolution.warnings || []));
+  const resolvedCards = canonicalizeResolvedCards(
+    cardResolution.resolvedCards || [],
+    data.cards || [],
+  );
+  const effectiveResolvedCards = resolvedCards.slice(0, limits.maxCards);
+  const omittedResolvedCards = [
+    ...(cardResolution.omittedResolvedCards || []),
+    ...resolvedCards.slice(limits.maxCards),
+  ];
+  if (resolvedCards.length > limits.maxCards) {
+    warnings.push(`raw_generic_cards_limited:${resolvedCards.length}->${limits.maxCards}`);
+  }
+  const providedTexts = normalizeProvidedTexts(
+    cardResolution.userProvidedCardTexts || [],
+    limits.maxCards,
+  );
   const normalizedQueries = normalizeRuleQueries(
     ruleSearchQueries,
     limits.maxRuleSearchQueries,
   );
-  const effectiveCardResolution = identityResolution.cardResolution;
-  const effectiveResolvedCards = effectiveCardResolution.resolvedCards || [];
-  const providedTexts = effectiveCardResolution.userProvidedCardTexts || [];
+  const effectiveCardResolution = {
+    ...cardResolution,
+    resolvedCards: effectiveResolvedCards,
+    unresolvedMentions: cleanMentions(cardResolution.unresolvedMentions),
+    ambiguousMentions: cleanMentions(cardResolution.ambiguousMentions),
+    omittedResolvedCards,
+    userProvidedCardTexts: providedTexts,
+    modelCardNameCandidates: Array.isArray(cardResolution.modelCardNameCandidates)
+      ? cardResolution.modelCardNameCandidates
+      : [],
+  };
   timingsMs.identity = elapsedMs(stageStartedAt);
 
   stageStartedAt = Date.now();
   const corpusIndex = getCorpusIndex(data);
-  const corpusBoundResolvedCards = effectiveResolvedCards.filter(isRawGenericCorpusBoundCard);
-  const officialQaRecords = recordsForRanking(corpusIndex.officialQa, corpusIndex, corpusBoundResolvedCards);
-  const faqRecords = recordsForRanking(corpusIndex.faq, corpusIndex, corpusBoundResolvedCards);
-  const provisionalRecords = recordsForRanking(corpusIndex.provisional, corpusIndex, corpusBoundResolvedCards);
+  const officialQaRecords = recordsForRanking(corpusIndex.officialQa, corpusIndex, effectiveResolvedCards);
+  const faqRecords = recordsForRanking(corpusIndex.faq, corpusIndex, effectiveResolvedCards);
+  const provisionalRecords = recordsForRanking(corpusIndex.provisional, corpusIndex, effectiveResolvedCards);
   // Community rule documents are intentionally global raw sources. They are
   // few in number and are selected by lexical overlap only; arbitrary related
   // records still require an exact card identity.
   const rawRecords = uniqueRecords([
-    // Every local identity-scoped bucket shares the same fail-closed identity
-    // boundary. An externally supplied card text is useful evidence by itself,
-    // but an unbound external name must never unlock a local record merely by
-    // colliding with one of that record's aliases.
-    ...recordsForRanking(corpusIndex.rawIdentityScoped, corpusIndex, corpusBoundResolvedCards),
+    ...recordsForRanking(corpusIndex.rawIdentityScoped, corpusIndex, effectiveResolvedCards),
     ...corpusIndex.rawGlobal,
   ]);
   timingsMs.buckets = elapsedMs(stageStartedAt);
 
   stageStartedAt = Date.now();
-  const officialRankingContext = buildRankingContext({
-    userQuery,
-    resolvedCards: corpusBoundResolvedCards,
-    ruleSearchQueries: normalizedQueries,
-    maxPassageChars: limits.maxEvidenceTextChars,
-  });
   const rankingContext = buildRankingContext({
     userQuery,
     resolvedCards: effectiveResolvedCards,
     ruleSearchQueries: normalizedQueries,
-    maxPassageChars: limits.maxEvidenceTextChars,
   });
-  const rankedOfficialQa = rankRecords(officialQaRecords, officialRankingContext, corpusIndex);
-  const rankedFaq = rankRecords(faqRecords, officialRankingContext, corpusIndex);
-  const rankedProvisional = rankRecords(provisionalRecords, officialRankingContext, corpusIndex);
+  const rankedOfficialQa = rankRecords(officialQaRecords, rankingContext, corpusIndex);
+  const rankedFaq = rankRecords(faqRecords, rankingContext, corpusIndex);
+  const rankedProvisional = rankRecords(provisionalRecords, rankingContext, corpusIndex);
   const rankedRaw = rankRecords(rawRecords, rankingContext, corpusIndex);
   const directRecord = selectUniqueStrictDirectRecord({
     userQuery,
@@ -250,7 +161,6 @@ export async function retrieveRawGenericEvidence({
       type: evidenceTypeForRawRecord(item.record),
       maxTextChars: limits.maxEvidenceTextChars,
       resolvedCards: effectiveResolvedCards,
-      passageContext: rankingContext,
     }));
   const cardTexts = effectiveResolvedCards
     .map((card) => cardTextEvidence(card, limits.maxCardTextChars, warnings))
@@ -277,15 +187,15 @@ export async function retrieveRawGenericEvidence({
     retrievedCards: effectiveResolvedCards,
     cardResolution: effectiveCardResolution,
     remainingUnresolvedMentions: effectiveCardResolution.unresolvedMentions,
-    baigeResolvedCards: identityResolution.baigeResolvedCards || [],
-    baigeAmbiguousMentions: identityResolution.baigeAmbiguousMentions || [],
+    baigeResolvedCards: [],
+    baigeAmbiguousMentions: [],
     ruleSearchQueries: normalizedQueries,
     retrievalWarnings: warnings,
 
     debug: {
-      baigeSearchCount: identityResolution.debug?.baigeSearchCount || 0,
-      baigeCacheHitCount: identityResolution.debug?.baigeCacheHitCount || 0,
-      baigeWarnings: identityResolution.debug?.baigeWarnings || [],
+      baigeSearchCount: 0,
+      baigeCacheHitCount: 0,
+      baigeWarnings: [],
       timingsMs,
       rawGeneric: true,
       candidateCounts: {
@@ -298,12 +208,12 @@ export async function retrieveRawGenericEvidence({
   };
 }
 
-function buildRankingContext({ userQuery, resolvedCards, ruleSearchQueries, maxPassageChars }) {
+function buildRankingContext({ userQuery, resolvedCards, ruleSearchQueries }) {
   const userTokens = tokenize(userQuery);
   const modelQueries = ruleSearchQueries.map((item) => item.query);
   const modelQueryTokens = modelQueries.map(tokenize);
   const resolved = (resolvedCards || []).map((card) => ({
-    id: rawGenericCorpusCardId(card),
+    id: normalizeId(card.id || card.cardId),
     names: unique([
       card.name,
       card.cnName,
@@ -318,7 +228,6 @@ function buildRankingContext({ userQuery, resolvedCards, ruleSearchQueries, maxP
     modelQueries,
     modelQueryTokens,
     resolved,
-    maxPassageChars: Math.max(1, Number(maxPassageChars) || 1),
   };
 }
 
@@ -379,7 +288,7 @@ function recordsForRanking(bucket, index, resolvedCards) {
   const allowed = new Set(bucket || []);
   const selected = new Set();
   for (const card of resolvedCards || []) {
-    const id = rawGenericCorpusCardId(card);
+    const id = normalizeId(card.id || card.cardId);
     if (id) {
       for (const record of index.identityRecords.get(`id:${id}`) || []) {
         if (allowed.has(record)) selected.add(record);
@@ -424,9 +333,20 @@ function scoreRecord(record, context, index) {
     identityMatchCount += 1;
     if (resolved.id) matchedResolvedIds.push(resolved.id);
   }
-  const lexical = isGlobalRuleDocument(record)
-    ? strongestLexicalDocumentMatch(globalRuleDocumentText(record), context)
-    : lexicalPassageSignals(recordKey, context, recordTokens);
+  const userOverlap = overlapScore(context.userTokens, recordTokens);
+  const modelQueryOverlap = context.modelQueryTokens.reduce(
+    (sum, tokens) => sum + overlapScore(tokens, recordTokens),
+    0,
+  );
+  const literalModelQueryMatches = context.modelQueries.filter((query) => {
+    const key = normalizeCardKey(query);
+    return key.length >= 2 && recordKey.includes(key);
+  }).length;
+  const lexicalScore = roundScore(
+    userOverlap * 4
+    + modelQueryOverlap
+    + literalModelQueryMatches * 0.5,
+  );
   return {
     record,
     statusRank: currentStatusRank(record.status),
@@ -435,8 +355,8 @@ function scoreRecord(record, context, index) {
       ? identityMatchCount / context.resolved.length
       : 0,
     matchedResolvedIds: unique(matchedResolvedIds),
-    lexicalScore: lexical.score,
-    userOverlap: lexical.userOverlap,
+    lexicalScore,
+    userOverlap,
     authorityRank: sourceAuthorityRank(record),
     freshness: freshnessTimestamp(record),
     stableKey: stableRecordKey(record),
@@ -474,7 +394,7 @@ function compareRankedRecords(left, right) {
 function selectUniqueStrictDirectRecord({ userQuery, cardResolution, rankedOfficialQa }) {
   if (!isIdentityComplete(cardResolution)) return null;
   const resolvedIds = unique((cardResolution.resolvedCards || [])
-    .map(rawGenericCorpusCardId)
+    .map((card) => normalizeId(card.id || card.cardId))
     .filter(Boolean))
     .sort();
   if (!resolvedIds.length || resolvedIds.length !== (cardResolution.resolvedCards || []).length) {
@@ -499,19 +419,10 @@ function serializeEvidence(item, {
   maxTextChars,
   direct = false,
   resolvedCards = [],
-  passageContext = null,
 }) {
   const record = item.record || {};
-  const sourceText = isGlobalRuleDocument(record)
-    ? globalRuleDocumentText(record)
-    : fullRecordText(record);
-  const text = isGlobalRuleDocument(record)
-    ? selectLexicalDocumentPassages(sourceText, passageContext, maxTextChars)
-    : truncate(sourceText, maxTextChars);
-  // The prompt builder intentionally prefers `fullText`. For global rule
-  // documents, expose only the bounded passage window so it cannot silently
-  // replace the selected later passage with the beginning of the entire file.
-  const fullText = isGlobalRuleDocument(record) ? text : sourceText;
+  const fullText = fullRecordText(record);
+  const text = truncate(fullText, maxTextChars);
   const questionCardIds = isOfficialQaRecord(record)
     ? [...(item.identity?.ids || strictQuestionCardIds(record))].sort()
     : strictQuestionCardIds(record);
@@ -833,25 +744,6 @@ function strictQuestionCardIds(record, resolveQuestionCardIds = null) {
 }
 
 function recordSearchText(record) {
-  if (isOfficialQaRecord(record)) {
-    // Synchronized keywords/cards may be derived from the complete Q&A,
-    // including its answer. Rebuild relevance exclusively from source fields
-    // that are explicitly on the question side.
-    return [
-      record.question,
-      record.rawQuestion,
-      record.rawDetailedQuestion,
-    ].filter(Boolean).join("\n");
-  }
-  if (isFaqRecord(record)) {
-    // A FAQ is scoped by its owning identity. Its conclusion and derived
-    // keywords are evidence for the final model, never retrieval features.
-    return [
-      record.cardName,
-      ...(record.cards || []),
-      ...(record.cardNames || []),
-    ].filter(Boolean).join("\n");
-  }
   const questionSide = [
     record.title,
     record.question,
@@ -885,138 +777,6 @@ function fullRecordText(record) {
     return unique([question, detailed, answer]).join("\n").trim();
   }
   return String(record.text || record.officialText || question || answer || record.title || "").trim();
-}
-
-function globalRuleDocumentText(record) {
-  // A global rule document has no question/answer split. Only its declared
-  // source body is searchable; answer-like compatibility fields must never
-  // become passage-ranking input.
-  return String(record.text || record.officialText || record.title || "").trim();
-}
-
-function selectLexicalDocumentPassages(value, context, maxChars) {
-  const text = String(value || "").trim();
-  const limit = Math.max(1, Number(maxChars) || 1);
-  if (text.length <= limit) return text;
-
-  const passages = completeDocumentPassages(text, limit);
-  if (!passages.length) return truncate(text, limit);
-  const ranked = passages
-    .map((passage, index) => ({
-      index,
-      score: lexicalPassageScore(passage, context),
-    }))
-    .sort((left, right) => right.score - left.score || left.index - right.index);
-  const fittingAnchor = ranked.find(({ index }) => passages[index].length <= limit);
-  if (!fittingAnchor) return truncate(text, limit);
-
-  const selected = new Set([fittingAnchor.index]);
-  const trySelect = (index) => {
-    if (index < 0 || index >= passages.length || selected.has(index)) return;
-    const candidate = new Set(selected);
-    candidate.add(index);
-    if (renderPassageSelection(passages, candidate).length <= limit) selected.add(index);
-  };
-  const trySelectContext = (anchorIndex, neighborIndex) => {
-    if (neighborIndex < 0 || neighborIndex >= passages.length) return;
-    const neighborHasLexicalMatch = lexicalPassageScore(passages[neighborIndex], context) > 0;
-    const structurallyAttached = (
-      neighborIndex === anchorIndex - 1 && isDocumentHeading(passages[neighborIndex])
-    ) || (
-      neighborIndex === anchorIndex + 1 && isDocumentHeading(passages[anchorIndex])
-    );
-    if (neighborHasLexicalMatch || structurallyAttached) trySelect(neighborIndex);
-  };
-
-  // Preserve immediate source context around the strongest lexical hit. This
-  // commonly retains a section heading and its following explanation without
-  // encoding any rule topic or expected conclusion.
-  trySelectContext(fittingAnchor.index, fittingAnchor.index - 1);
-  trySelectContext(fittingAnchor.index, fittingAnchor.index + 1);
-
-  // If capacity remains, admit other independently matching passages and
-  // their neighbors in deterministic lexical order.
-  for (const candidate of ranked) {
-    if (candidate.score <= 0) break;
-    trySelect(candidate.index);
-    if (!selected.has(candidate.index)) continue;
-    trySelectContext(candidate.index, candidate.index - 1);
-    trySelectContext(candidate.index, candidate.index + 1);
-  }
-  return truncate(renderPassageSelection(passages, selected), limit);
-}
-
-function isDocumentHeading(value) {
-  const text = String(value || "").trim();
-  return /¶\s*$/u.test(text) || /^#{1,6}\s+\S/u.test(text);
-}
-
-function completeDocumentPassages(value, maxChars) {
-  const paragraphs = String(value || "")
-    .split(/(?:\r?\n\s*){2,}/u)
-    .map((item) => item.trim())
-    .filter(Boolean);
-  const passages = [];
-  for (const paragraph of paragraphs) {
-    if (paragraph.length <= maxChars) {
-      passages.push(paragraph);
-      continue;
-    }
-    // Preserve complete sentences when a source paragraph alone exceeds the
-    // configured evidence budget. Only a punctuation-free overlong sentence
-    // reaches the final bounded fallback in selectLexicalDocumentPassages.
-    const sentences = paragraph.match(/[^。！？!?；;\r\n]+(?:[。！？!?；;]+|$)/gu) || [];
-    passages.push(...sentences.map((item) => item.trim()).filter(Boolean));
-  }
-  return passages;
-}
-
-function lexicalPassageScore(passage, context = {}) {
-  return lexicalPassageSignals(passage, context).score;
-}
-
-function lexicalPassageSignals(passage, context = {}, suppliedTokens = null) {
-  const passageTokens = suppliedTokens || new Set(tokenize(passage));
-  const userOverlap = overlapScore(context?.userTokens || [], passageTokens);
-  const modelQueryOverlap = (context?.modelQueryTokens || []).reduce(
-    (sum, tokens) => sum + overlapScore(tokens, passageTokens),
-    0,
-  );
-  const passageKey = normalizeCardKey(passage);
-  const literalQueryMatches = (context?.modelQueries || []).filter((query) => {
-    const queryKey = normalizeCardKey(query);
-    return queryKey.length >= 2 && passageKey.includes(queryKey);
-  }).length;
-  return {
-    score: roundScore(userOverlap * 4 + modelQueryOverlap + literalQueryMatches * 0.5),
-    userOverlap,
-  };
-}
-
-function strongestLexicalDocumentMatch(value, context = {}) {
-  const passages = completeDocumentPassages(value, context.maxPassageChars || 1);
-  let strongest = { score: 0, userOverlap: 0 };
-  for (const passage of passages) {
-    const candidate = lexicalPassageSignals(passage, context);
-    if (candidate.score > strongest.score
-        || (candidate.score === strongest.score && candidate.userOverlap > strongest.userOverlap)) {
-      strongest = candidate;
-    }
-  }
-  return strongest;
-}
-
-function renderPassageSelection(passages, selected) {
-  const omission = "\n\n[… omitted …]\n\n";
-  const indices = [...selected].sort((left, right) => left - right);
-  let rendered = "";
-  let previous = null;
-  for (const index of indices) {
-    if (rendered) rendered += previous === index - 1 ? "\n\n" : omission;
-    rendered += passages[index];
-    previous = index;
-  }
-  return rendered;
 }
 
 function normalizeLiteralQuestion(value) {
@@ -1110,437 +870,17 @@ function normalizeProvidedTexts(items, limit) {
   return result;
 }
 
-function externalIdentityMentions(cardResolution, providedTexts) {
-  const providedKeys = new Set((providedTexts || [])
-    .map((item) => normalizeCardKey(item.name))
-    .filter(Boolean));
-  return cleanMentions([
-    ...(cardResolution.unresolvedMentions || []),
-    ...(cardResolution.ambiguousMentions || []),
-  ]).filter((mention) => !providedKeys.has(normalizeCardKey(mention.input)));
-}
-
-function partitionModelIdentityHypotheses(cardResolution) {
-  const verifiedCards = [];
-  const hypothesisMentions = [];
-  for (const card of cardResolution?.resolvedCards || []) {
-    const isUnverifiedModelExpansion = card?.resolutionSource === "model_surface"
-      && card?.identityMatchKind === "model_exact_canonical";
-    if (!isUnverifiedModelExpansion) {
-      verifiedCards.push(card);
-      continue;
-    }
-    const input = String(card.input || card.matchedQuery || "").trim();
-    if (!input) continue;
-    hypothesisMentions.push({
-      input,
-      source: "model_identity_hypothesis",
-      reason: "model_canonical_expansion_requires_external_verification",
-      candidateCards: [{
-        id: String(card.id || card.cardId || ""),
-        name: String(card.name || card.cnName || card.jaName || card.enName || ""),
-      }],
-    });
-  }
-  return { verifiedCards, hypothesisMentions };
-}
-
-async function resolveExternalCardIdentities({
-  mentions,
-  canonicalCards,
-  fetchImpl,
-  env,
-  maxResolved,
-  maxSearches,
-  providerResultLimit,
-}) {
-  const result = {
-    resolvedCards: [],
-    ambiguousMentions: [],
-    warnings: [],
-    providerWarnings: [],
-    searchCount: 0,
-    cacheHitCount: 0,
-  };
-  if (!Number.isInteger(maxResolved) || maxResolved <= 0 || typeof fetchImpl !== "function") return result;
-
-  const minConfidence = readDecimal(env.RAG_BAIGE_MIN_CONFIDENCE, 0.84, 0, 1);
-  const minMargin = readDecimal(env.RAG_BAIGE_CONFIDENCE_MARGIN, 0.16, 0, 1);
-  const boundedSearches = Math.max(1, Math.min(24, Number(maxSearches) || 1));
-  for (const mention of (mentions || []).slice(0, boundedSearches)) {
-    if (result.resolvedCards.length >= maxResolved) break;
-    const input = String(mention?.input || "").trim();
-    if (!input) continue;
-    // Only the user's literal surface is allowed to initiate identity proof.
-    // Model-proposed canonical expansions remain diagnostic hypotheses and can
-    // never verify themselves by causing a lookup for the proposed answer.
-    const response = await searchBaigeCards(input, {
-      fetchImpl,
-      env,
-      limit: Math.max(3, Number(providerResultLimit) || 1),
-    });
-    result.searchCount += 1;
-    if (response.cacheHit) result.cacheHitCount += 1;
-    result.providerWarnings.push(...(response.warnings || []));
-    result.warnings.push(...(response.warnings || []));
-
-    const selection = selectExternalIdentityCandidate(response.results || [], input, {
-      minConfidence,
-      minMargin,
-    }, canonicalCards);
-    if (!selection.card) {
-      if (selection.candidates.length) {
-        result.ambiguousMentions.push({
-          input,
-          reason: selection.reason,
-          source: "baige_identity_lookup",
-          candidateCards: mergeCandidateSummaries(
-            mention.candidateCards,
-            selection.candidates.slice(0, 3).map(summarizeExternalCandidate),
-          ),
-        });
-        result.warnings.push(`baige_identity_ambiguous:${normalizeCardKey(input)}`);
-      }
-      continue;
-    }
-
-    const externalCard = {
-      ...selection.card,
-      input,
-      matchedQuery: input,
-      resolutionSource: "baige_identity_lookup",
-      externalIdentityComplete: true,
-      externalIdentityResolution: selection.reason,
-      aliases: unique([
-        ...cardNames(selection.card),
-        input,
-      ]),
-    };
-    const canonical = canonicalizeExternalCardIdentity(externalCard, canonicalCards);
-    if (hasLocalAmbiguity(mention)
-        && !canonicalResolvesLocalAmbiguity(canonical, mention)) {
-      result.ambiguousMentions.push({
-        ...mention,
-        input,
-        reason: "external_identity_does_not_resolve_local_ambiguity",
-        source: "baige_identity_lookup",
-        candidateCards: mergeCandidateSummaries(
-          mention.candidateCards,
-          selection.candidates.map(summarizeExternalCandidate),
-        ),
-      });
-      result.warnings.push(`baige_identity_ambiguous:${normalizeCardKey(input)}`);
-      continue;
-    }
-    if (!String(canonical.effectText || canonical.text || "").trim()) {
-      result.ambiguousMentions.push({
-        input,
-        reason: "external_identity_missing_card_text",
-        source: "baige_identity_lookup",
-        candidateCards: [summarizeExternalCandidate(selection.card)],
-      });
-      result.warnings.push(`baige_identity_missing_card_text:${normalizeCardKey(input)}`);
-      continue;
-    }
-    result.resolvedCards.push(canonical);
-    result.warnings.push(`baige_identity_resolved:${normalizeCardKey(input)}`);
-  }
-  result.resolvedCards = dedupeResolvedCards(result.resolvedCards).slice(0, maxResolved);
-  result.ambiguousMentions = cleanMentions(result.ambiguousMentions);
-  result.warnings = unique(result.warnings);
-  result.providerWarnings = unique(result.providerWarnings);
-  return result;
-}
-
-function selectExternalIdentityCandidate(candidates, input, { minConfidence, minMargin }, canonicalCards = []) {
-  const byIdentity = new Map();
-  for (const candidate of candidates || []) {
-    if (!hasStableExternalIdentity(candidate)) continue;
-    const key = externalIdentityKey(candidate);
-    if (!key) continue;
-    const previous = byIdentity.get(key);
-    if (!previous || Number(candidate.confidence || 0) > Number(previous.confidence || 0)) {
-      byIdentity.set(key, candidate);
-    }
-  }
-  const uniqueCandidates = [...byIdentity.values()].sort((left, right) => (
-    Number(right.confidence || 0) - Number(left.confidence || 0)
-      || externalIdentityKey(left).localeCompare(externalIdentityKey(right))
-  ));
-  if (!uniqueCandidates.length) {
-    const incomplete = (candidates || []).filter(Boolean);
-    return {
-      card: null,
-      candidates: incomplete,
-      reason: incomplete.length ? "external_identity_incomplete" : "external_identity_not_found",
-    };
-  }
-
-  const inputKey = normalizeConservativeNameKey(input);
-  const exactPrimary = uniqueCandidates.filter((candidate) => (
-    externalPrimaryNames(candidate).some((name) => normalizeConservativeNameKey(name) === inputKey)
-  ));
-  if (new Set(exactPrimary.map(externalIdentityKey)).size === 1 && exactPrimary.length) {
-    return { card: exactPrimary[0], candidates: uniqueCandidates, reason: "unique_exact_primary_name" };
-  }
-  if (exactPrimary.length > 1) {
-    return { card: null, candidates: exactPrimary, reason: "conflicting_exact_primary_names" };
-  }
-
-  const best = uniqueCandidates[0];
-  const bestConfidence = Number(best.confidence || 0);
-  const stableLocalIdentity = hasUniqueStableLocalIdentityMatch(best, canonicalCards);
-  if (uniqueCandidates.length === 1 && bestConfidence >= minConfidence && stableLocalIdentity) {
-    return { card: best, candidates: uniqueCandidates, reason: "single_high_confidence_identity" };
-  }
-  const runnerUpConfidence = Number(uniqueCandidates[1]?.confidence || 0);
-  if (bestConfidence >= minConfidence
-      && bestConfidence - runnerUpConfidence >= minMargin
-      && stableLocalIdentity) {
-    return { card: best, candidates: uniqueCandidates, reason: "safe_confidence_margin" };
-  }
-  if (bestConfidence >= minConfidence && !stableLocalIdentity) {
-    return {
-      card: null,
-      candidates: uniqueCandidates,
-      reason: "fuzzy_identity_not_corroborated_by_local_catalog",
-    };
-  }
-  return { card: null, candidates: uniqueCandidates, reason: "conflicting_external_identities" };
-}
-
-function hasUniqueStableLocalIdentityMatch(externalCard, canonicalCards) {
-  const result = resolveStableLocalIdentity(externalCard, canonicalCards);
-  return result.status === "matched" && result.namespace !== "name";
-}
-
-function normalizeConservativeNameKey(value) {
-  return String(value || "")
-    .normalize("NFKC")
-    .toLowerCase()
-    .replace(/[雙]/gu, "双")
-    .replace(/[來]/gu, "来")
-    .replace(/[龍]/gu, "龙")
-    .replace(/[薔]/gu, "蔷")
-    .replace(/[蘇]/gu, "苏")
-    .replace(/[場]/gu, "场")
-    .replace(/[發]/gu, "发")
-    .replace(/[動]/gu, "动")
-    .replace(/[體]/gu, "体")
-    .replace(/[從]/gu, "从")
-    .replace(/[對]/gu, "对")
-    .replace(/[選]/gu, "选")
-    .replace(/[闕]/gu, "阙")
-    .replace(/[歩]/gu, "步")
-    .replace(/[義]/gu, "义")
-    .replace(/[賊]/gu, "贼")
-    .replace(/喰/gu, "食")
-    .replace(/導/gu, "导")
-    .replace(/[「」『』《》【】“”"'`]/gu, "")
-    .replace(/[：:・·･．.－—–_\-\s]/gu, "")
-    .replace(/[，,。.!！?？;；、()（）\[\]{}]/gu, "")
-    .trim();
-}
-
-function hasStableExternalIdentity(card) {
-  return Boolean(
-    externalIdentityKey(card)
-      && externalPrimaryNames(card).length,
-  );
-}
-
-function externalIdentityKey(card) {
-  const cid = normalizeId(card?.cid);
-  if (cid) return `cid:${cid}`;
-  const passcode = normalizeId(card?.passcode || card?.password || (
-    card?.source === "baige" || card?.provider === "baige"
-      ? card?.id || card?.cardId
-      : ""
-  ));
-  if (passcode) return `passcode:${passcode}`;
-  const primary = externalPrimaryNames(card)
-    .map(normalizeConservativeNameKey)
-    .filter(Boolean)
-    .sort()[0];
-  return primary ? `name:${primary}` : "";
-}
-
-export function canonicalizeExternalCardIdentity(externalCard, canonicalCards) {
-  const localIdentity = resolveStableLocalIdentity(externalCard, canonicalCards);
-  // A matching name is useful diagnostic information, not a stable namespace.
-  // Only a unique CID or passcode match may authorize access to local corpus
-  // text, FAQ or Q&A records.
-  if (localIdentity.status !== "matched" || localIdentity.namespace === "name") {
-    return externalCard;
-  }
-  const localCard = localIdentity.card;
-  const localCorpusId = normalizeId(localCard.id || localCard.cardId);
-  const externalPasscode = normalizeId(
-    externalCard?.passcode || externalCard?.password || externalCard?.id || externalCard?.cardId,
-  );
-  return {
-    ...externalCard,
-    ...localCard,
-    // Keep the two namespaces explicit after canonicalization: `id/cardId`
-    // address the local CID corpus, while `passcode` remains the printed card
-    // password supplied by Baige (or by the local record when available).
-    id: localCorpusId,
-    cardId: localCorpusId,
-    passcode: localCardPasscode(localCard) || externalPasscode,
-    input: externalCard.input,
-    matchedQuery: externalCard.matchedQuery,
-    resolutionSource: externalCard.resolutionSource,
-    externalIdentityComplete: true,
-    externalIdentityResolution: externalCard.externalIdentityResolution,
-    canonicalLocalIdentity: true,
-    aliases: unique([...cardNames(externalCard), ...cardNames(localCard)]),
-  };
-}
-
-export function resolveStableLocalIdentity(externalCard, canonicalCards) {
-  const externalCid = normalizeId(externalCard?.cid);
-  if (externalCid) {
-    return uniqueLocalIdentityResult(
-      (canonicalCards || []).filter((card) => localCardCid(card) === externalCid),
-      "cid",
-    );
-  }
-
-  const externalPasscode = normalizeId(
-    externalCard?.passcode || externalCard?.password || externalCard?.id || externalCard?.cardId,
-  );
-  if (externalPasscode) {
-    return uniqueLocalIdentityResult(
-      (canonicalCards || []).filter((card) => localCardPasscode(card) === externalPasscode),
-      "passcode",
-    );
-  }
-
-  const externalNames = new Set(externalPrimaryNames(externalCard)
-    .map(normalizeConservativeNameKey)
-    .filter(Boolean));
-  if (!externalNames.size) return { status: "absent", namespace: "name", card: null };
-  return uniqueLocalIdentityResult(
-    (canonicalCards || []).filter((card) => cardNames(card).some((name) => (
-      externalNames.has(normalizeConservativeNameKey(name))
-    ))),
-    "name",
-  );
-}
-
-function uniqueLocalIdentityResult(cards, namespace) {
-  const candidates = uniqueObjects(cards);
-  if (candidates.length === 1) return { status: "matched", namespace, card: candidates[0] };
-  return {
-    status: candidates.length ? "conflict" : "unmatched",
-    namespace,
-    card: null,
-  };
-}
-
-function hasLocalAmbiguity(mention) {
-  return Array.isArray(mention?.candidateCards) && mention.candidateCards.length > 0;
-}
-
-function canonicalResolvesLocalAmbiguity(card, mention) {
-  if (card?.canonicalLocalIdentity !== true) return false;
-  const localId = rawGenericCorpusCardId(card);
-  if (!localId) return false;
-  const allowedIds = new Set((mention.candidateCards || [])
-    .map((candidate) => normalizeId(candidate?.id || candidate?.cardId))
-    .filter(Boolean));
-  return allowedIds.has(localId);
-}
-
-function mergeCandidateSummaries(left, right) {
-  const merged = new Map();
-  for (const candidate of [...(left || []), ...(right || [])]) {
-    const id = String(candidate?.id || candidate?.cardId || "");
-    const name = String(candidate?.name || candidate?.cnName || candidate?.jaName || candidate?.enName || "");
-    const key = `${normalizeId(id)}:${normalizeConservativeNameKey(name)}`;
-    if (key !== ":" && !merged.has(key)) merged.set(key, candidate);
-  }
-  return [...merged.values()].slice(0, 8);
-}
-
-function localCardCid(card) {
-  const explicit = normalizeId(card?.cid);
-  if (explicit) return explicit;
-  const sourceUrlCid = String(card?.sourceUrl || "")
-    .match(/[?&]cid=(\d{1,7})(?:&|$)/u)?.[1];
-  if (sourceUrlCid) return normalizeId(sourceUrlCid);
-  // The normalized synchronized card corpus stores KONAMI database CIDs in
-  // `id`; constrain the fallback to the CID-sized namespace. An eight-digit
-  // Baige password must never match it through this branch.
-  const id = normalizeId(card?.id || card?.cardId);
-  return /^[1-9]\d{2,6}$/u.test(id) ? id : "";
-}
-
-function localCardPasscode(card) {
-  return normalizeId(card?.passcode || card?.password);
-}
-
-function dedupeResolvedCards(cards) {
-  const result = [];
-  const seen = new Set();
-  for (const card of cards || []) {
-    const key = card?.canonicalLocalIdentity === true || card?.source !== "baige"
-      ? `local:${normalizeId(card?.id || card?.cardId) || normalizeCardKey(card?.name)}`
-      : externalIdentityKey(card);
-    if (!key || seen.has(key)) continue;
-    seen.add(key);
-    result.push(card);
-  }
-  return result;
-}
-
-function uniqueObjects(items) {
-  return [...new Set(items)];
-}
-
-function externalPrimaryNames(card) {
-  const explicit = Array.isArray(card?.providerPrimaryNames)
-    ? card.providerPrimaryNames
-    : [card?.cnName, card?.jaName, card?.jpName, card?.enName];
-  return unique(explicit.map((value) => String(value || "").trim()).filter(Boolean));
-}
-
-function summarizeExternalCandidate(card) {
-  return cleanObject({
-    id: String(card?.id || card?.cardId || ""),
-    cid: card?.cid ?? null,
-    name: String(card?.name || card?.cnName || card?.jaName || card?.enName || ""),
-    source: "baige",
-    confidence: finiteOrNull(card?.confidence),
-  });
-}
-
 function cleanMentions(items) {
-  const result = new Map();
+  const seen = new Set();
+  const result = [];
   for (const item of Array.isArray(items) ? items : []) {
     const input = String(item?.input || "").trim();
     const key = normalizeCardKey(input);
-    if (!key) continue;
-    const existing = result.get(key);
-    if (!existing) {
-      result.set(key, item);
-      continue;
-    }
-    const itemHasLocalCandidates = Array.isArray(item?.candidateCards)
-      && item.candidateCards.length > 0;
-    const preferred = itemHasLocalCandidates ? item : existing;
-    const candidateCards = mergeCandidateSummaries(
-      existing.candidateCards,
-      item.candidateCards,
-    );
-    result.set(key, {
-      ...existing,
-      ...preferred,
-      input: String(preferred.input || existing.input || input),
-      ...(candidateCards.length ? { candidateCards } : {}),
-    });
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    result.push(item);
   }
-  return [...result.values()];
+  return result;
 }
 
 function cardNames(card) {
@@ -1724,13 +1064,6 @@ function readLimits(env) {
 function readPositiveNumber(value, fallback) {
   const number = Number(value);
   return Number.isFinite(number) && number > 0 ? Math.floor(number) : fallback;
-}
-
-function readDecimal(value, fallback, minimum, maximum) {
-  const number = Number(value);
-  return Number.isFinite(number) && number >= minimum && number <= maximum
-    ? number
-    : fallback;
 }
 
 function finiteOrNull(value) {
