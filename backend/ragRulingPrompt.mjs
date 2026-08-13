@@ -141,9 +141,14 @@ export function selectAuthoritativeOfficialDirectCandidate({
     && !(cardResolution.ambiguousMentions || []).length
     && !(cardResolution.omittedResolvedCards || []).length
     && !(baigeAmbiguousMentions || []).length;
-  const exactQuestionCardSet = candidate?.questionCardIdCoverage === 1
-    && candidate?.questionCardIdCount > 0
-    && candidate?.questionCardIdCount === (candidate?.matchedQuestionCardIds || []).length;
+  const hasStructuredQuestionIdentity = candidate?.questionCardIdCount > 0;
+  const exactQuestionCardSet = hasStructuredQuestionIdentity
+    ? candidate?.questionCardIdCoverage === 1
+      && candidate?.questionCardIdCount === (candidate?.matchedQuestionCardIds || []).length
+    : candidate?.relatedQuestionCardIdCoverage === 1
+      && candidate?.relatedQuestionCardIdCount > 0
+      && candidate?.relatedQuestionCardIdCount
+        === (candidate?.matchedRelatedQuestionCardIds || []).length;
   // Only a unique record matched from the raw/normalized user question is an
   // official direct answer. Structured-scene and semantic/card-subsumption
   // matches remain useful related evidence, but local heuristics must never

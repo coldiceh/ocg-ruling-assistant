@@ -213,7 +213,8 @@ test("public prompts retain the question and card texts without the summon-legal
     env: { RAG_RECOVERY_PROMPT_CHARS: "12000" },
   });
 
-  for (const prompt of [bundle.prompt, bundle.recoveryPrompt]) {
+  assert.equal(bundle.recoveryPrompt, "");
+  for (const prompt of [bundle.prompt]) {
     assert.match(prompt, /使用上述四张卡同调召唤/u);
     assert.match(prompt, /测试同步终端/u);
     assert.match(prompt, /card-text-target/u);

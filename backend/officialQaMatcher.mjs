@@ -313,7 +313,9 @@ function scoreRecord({
     questionBranches,
     recordIds,
     recordQuestionIds,
+    recordRelatedMetadataIds,
     recordIdentityText,
+    questionIdentityText,
   } = officialQaRecordFeatures(record);
   const evidencePlayerRoleSignature = extractPlayerRoleSignature(
     recordPlayerRoleContext(record, questionText),
@@ -383,11 +385,43 @@ function scoreRecord({
   const querySceneQualifiers = extractSceneQualifiers(queryConcepts, queryPhrases);
   const evidenceSceneQualifiers = extractSceneQualifiers(evidenceConcepts, evidencePhrases);
   const sceneQualifiersCompatible = sameStringSet(querySceneQualifiers, evidenceSceneQualifiers);
-  const matchedCardIds = [...resolvedIds].filter((id) => recordIds.has(id));
+  // Keep direct authority and related discovery on separate identity rails.
+  // Structured question ids (including <<CID>>) may participate in exact-scene
+  // checks. Exact names in the official question and source metadata are useful
+  // only for related recall; neither can promote a record to a direct ruling.
+  const questionAliasCardIds = matchQuestionSideCardAliases(
+    questionIdentityText,
+    resolvedCards,
+  );
+  const relatedQuestionCardIds = new Set([
+    ...recordQuestionIds,
+    ...questionAliasCardIds,
+  ]);
+  const relatedIdentityCardIds = new Set([
+    ...relatedQuestionCardIds,
+    ...recordRelatedMetadataIds,
+  ]);
+  const matchedRecordCardIds = [...resolvedIds].filter((id) => recordIds.has(id));
   const matchedQuestionCardIds = [...resolvedIds].filter((id) => recordQuestionIds.has(id));
+  const matchedRelatedQuestionCardIds = [...resolvedIds]
+    .filter((id) => relatedQuestionCardIds.has(id));
+  const matchedRelatedMetadataCardIds = [...resolvedIds]
+    .filter((id) => recordRelatedMetadataIds.has(id));
+  const matchedRelatedCardIds = [...resolvedIds]
+    .filter((id) => relatedIdentityCardIds.has(id));
+  const matchedCardIds = [...new Set([
+    ...matchedRecordCardIds,
+    ...matchedRelatedCardIds,
+  ])];
   const cardIdMatch = matchedCardIds.length > 0;
   const cardIdCoverage = resolvedIds.size ? matchedCardIds.length / resolvedIds.size : 0;
   const questionCardIdCoverage = resolvedIds.size ? matchedQuestionCardIds.length / resolvedIds.size : 0;
+  const relatedQuestionCardIdCoverage = resolvedIds.size
+    ? matchedRelatedQuestionCardIds.length / resolvedIds.size
+    : 0;
+  const relatedCardIdCoverage = resolvedIds.size
+    ? matchedRelatedCardIds.length / resolvedIds.size
+    : 0;
   const exactQuestionCardIdSet = resolvedIds.size > 0
     && recordQuestionIds.size === resolvedIds.size
     && matchedQuestionCardIds.length === resolvedIds.size;
@@ -420,8 +454,15 @@ function scoreRecord({
   // Branch scope is established only by identities in the official question.
   // Cards that appear solely in an answer/example remain retrieval signals and
   // must never be treated as a covered decision branch.
+  const relatedQuestionBranches = questionBranches.map((branch) => ({
+    ...branch,
+    relatedCardIds: new Set([
+      ...branch.cardIds,
+      ...matchQuestionSideCardAliases(branch.text, resolvedCards),
+    ]),
+  }));
   const supportingBranch = selectSupportingQuestionBranch({
-    branches: questionBranches,
+    branches: relatedQuestionBranches,
     query,
     queryType,
     queryConcepts,
@@ -432,7 +473,7 @@ function scoreRecord({
     requireFullQueryIdentity: !multiBranchQuery && resolvedIds.size > 1,
   });
   const branchMatchedCardIds = supportingBranch?.matchedCardIds
-    || [...new Set(matchedQuestionCardIds)];
+    || [...new Set(matchedRelatedQuestionCardIds)];
   const fullQuestionExact = exactPrincipalNormalized && exactQuestionCardIdSet;
   const evidenceHasMultipleBranches = evidenceMultiBranchQuery || questionBranches.length > 1;
   const branchRelevant = (multiBranchQuery || evidenceHasMultipleBranches)
@@ -450,7 +491,9 @@ function scoreRecord({
     ? supportingBranch.scenarioPremiseComparison
     : scenarioPremiseComparison;
   const identityCompatibleForExact = !resolvedIds.size
-    || (recordQuestionIds.size ? questionCardIdCoverage === 1 : questionCardNameMatch);
+    || (recordQuestionIds.size > 0
+      ? questionCardIdCoverage === 1
+      : relatedQuestionCardIdCoverage === 1);
   // Replacing quoted names with a generic "card" token is useful for ranking
   // differently translated versions of the same question, but it cannot prove
   // that the cards are the same. Only the original wording may establish a raw
@@ -476,6 +519,9 @@ function scoreRecord({
   if (cardMatch) score += 0.17;
   if (resolvedIds.size >= 2 && cardIdCoverage === 1) score += 0.24;
   if (resolvedIds.size >= 2 && questionCardIdCoverage === 1) score += 0.2;
+  if (relatedQuestionCardIdCoverage > questionCardIdCoverage) {
+    score += relatedQuestionCardIdCoverage * 0.12;
+  }
   if (exactCardIdSet) score += 0.12;
   score += Math.min(0.18, phraseHits.length * 0.06);
   if (branchRelevant) score += 0.14;
@@ -504,11 +550,14 @@ function scoreRecord({
     cardMatch,
     matchedCardIds,
     matchedQuestionCardIds,
+    matchedRelatedQuestionCardIds,
+    matchedRelatedMetadataCardIds,
+    matchedRelatedCardIds,
     branchRelevant,
     branchMatchedCardIds,
     supportingQuestionBranchIndex: supportingBranch?.branchIndex ?? null,
     supportingQuestionBranchCardIds: supportingBranch
-      ? [...supportingBranch.cardIds]
+      ? [...(supportingBranch.relatedCardIds || supportingBranch.cardIds)]
       : [],
     supportingQuestionBranchUnmatchedCardIds: supportingBranch
       ? [...supportingBranch.unmatchedCardIds]
@@ -527,7 +576,10 @@ function scoreRecord({
     evidenceMultiBranchQuery,
     cardIdCoverage,
     questionCardIdCoverage,
+    relatedQuestionCardIdCoverage,
+    relatedCardIdCoverage,
     questionCardIdCount: recordQuestionIds.size,
+    relatedQuestionCardIdCount: relatedQuestionCardIds.size,
     exactQuestionCardIdSet,
     exactQuestionBranchIdSet,
     queryIdentityContainedInOneBranch,
@@ -585,6 +637,8 @@ function scoreRecord({
       exactSkeleton && "card_name_agnostic_skeleton",
       cardIdMatch && "card_id",
       cardNameMatch && "card_name",
+      questionAliasCardIds.size && "related_question_exact_alias",
+      matchedRelatedMetadataCardIds.length && "related_source_metadata_card_id",
       typeCompatible && "question_type",
       phraseHits.length && "effect_phrase",
       branchRelevant && "multi_branch_related_evidence",
@@ -617,6 +671,8 @@ function compareOfficialQaMatches(left, right) {
     || Number(right.authoritativeSceneMatch) - Number(left.authoritativeSceneMatch)
     || right.questionCardIdCoverage - left.questionCardIdCoverage
     || right.matchedQuestionCardIds.length - left.matchedQuestionCardIds.length
+    || right.relatedQuestionCardIdCoverage - left.relatedQuestionCardIdCoverage
+    || right.matchedRelatedCardIds.length - left.matchedRelatedCardIds.length
     || Number(right.exactCardIdSet) - Number(left.exactCardIdSet)
     || Number(right.branchRelevant) - Number(left.branchRelevant)
     || Number(right.effectNumberCompatible) - Number(left.effectNumberCompatible)
@@ -1111,6 +1167,11 @@ function officialQaRecordFeatures(record = {}) {
     .map(normalizeOfficialQaSkeleton)
     .filter(Boolean);
   const questionEvidenceText = questionSurfaces.join("\n");
+  const recordRelatedMetadataIds = new Set([
+    record.cardId,
+    ...(record.metadataCardIds || record.cardIds || []),
+    ...(record.cards || []).filter((value) => /^\d+$/u.test(String(value || "").trim())),
+  ].map(normalizeId).filter(Boolean));
   const features = {
     questionText,
     scenarioQuestionText,
@@ -1152,7 +1213,12 @@ function officialQaRecordFeatures(record = {}) {
     recordQuestionIds: new Set([
       ...projection.principalCardIds,
     ].map(normalizeId).filter(Boolean)),
+    // Source-level card metadata is allowed to retrieve a related Q&A even
+    // when a broad official question names no particular card. It is never
+    // folded into recordQuestionIds and therefore cannot grant direct status.
+    recordRelatedMetadataIds,
     recordIdentityText: [identityText, ...questionNames].filter(Boolean).join(" "),
+    questionIdentityText: scenarioQa ? identityText : questionText,
   };
   if (record && typeof record === "object") officialQaRecordFeatureCache.set(record, features);
   return features;
@@ -1218,8 +1284,9 @@ function selectSupportingQuestionBranch({
 } = {}) {
   const queryMatchingConcepts = normalizeSemanticConceptsForMatching(queryConcepts);
   const candidates = (branches || []).map((branch) => {
-    const matchedCardIds = [...resolvedIds].filter((id) => branch.cardIds.has(id));
-    const unmatchedCardIds = [...branch.cardIds].filter((id) => !resolvedIds.has(id));
+    const relatedCardIds = branch.relatedCardIds || branch.cardIds;
+    const matchedCardIds = [...resolvedIds].filter((id) => relatedCardIds.has(id));
+    const unmatchedCardIds = [...relatedCardIds].filter((id) => !resolvedIds.has(id));
     const typeCompatible = questionTypeCompatible(queryType, branch.questionType);
     const branchMatchingConcepts = normalizeSemanticConceptsForMatching(branch.concepts);
     const semanticHits = queryMatchingConcepts
@@ -1244,6 +1311,7 @@ function selectSupportingQuestionBranch({
       - Number(scenarioPremiseComparison.compatibility === "mismatch") * 20;
     return {
       ...branch,
+      relatedCardIds,
       matchedCardIds,
       unmatchedCardIds,
       typeCompatible,
@@ -1313,6 +1381,77 @@ function findCard(id, cards) {
 
 function cardAliases(card = {}) {
   return [card.name, card.cnName, card.jaName, card.enName, ...(card.aliases || [])].filter(Boolean);
+}
+
+/**
+ * Bind only exact aliases that occur in the projected official question.
+ *
+ * The binding is deliberately local to the already resolved query cards. An
+ * alias shared by multiple cards is ambiguous and binds none of them. Longer
+ * overlapping names claim their span before shorter names, so a short card
+ * name embedded in a longer exact card name cannot create a second identity.
+ * The result is a related-retrieval signal only.
+ */
+function matchQuestionSideCardAliases(value, cards = []) {
+  const text = normalizeOfficialQaQuery(value);
+  if (!text) return new Set();
+
+  const ownersByAlias = new Map();
+  for (const card of cards || []) {
+    const id = normalizeId(card.id || card.cardId);
+    if (!id) continue;
+    for (const alias of cardAliases(card)) {
+      const key = normalizeOfficialQaQuery(alias);
+      if (key.length < 2) continue;
+      const owners = ownersByAlias.get(key) || new Set();
+      owners.add(id);
+      ownersByAlias.set(key, owners);
+    }
+  }
+
+  const occurrences = [];
+  for (const [alias, owners] of ownersByAlias) {
+    let offset = 0;
+    while (offset < text.length) {
+      const start = text.indexOf(alias, offset);
+      if (start < 0) break;
+      occurrences.push({
+        start,
+        end: start + alias.length,
+        length: alias.length,
+        owners: new Set(owners),
+      });
+      offset = start + Math.max(1, alias.length);
+    }
+  }
+  occurrences.sort((left, right) => (
+    right.length - left.length
+    || left.start - right.start
+    || left.end - right.end
+  ));
+
+  const selected = [];
+  for (const occurrence of occurrences) {
+    const overlapping = selected.filter((item) => spansOverlap(item, occurrence));
+    if (!overlapping.length) {
+      selected.push(occurrence);
+      continue;
+    }
+    const longest = Math.max(...overlapping.map((item) => item.length));
+    if (longest > occurrence.length) continue;
+    // Equal-length overlapping surfaces disagreeing on identity are ambiguous.
+    for (const item of overlapping) {
+      for (const owner of occurrence.owners) item.owners.add(owner);
+    }
+  }
+
+  return new Set(selected
+    .filter((item) => item.owners.size === 1)
+    .map((item) => [...item.owners][0]));
+}
+
+function spansOverlap(left, right) {
+  return left.start < right.end && right.start < left.end;
 }
 
 function normalizeId(value) {

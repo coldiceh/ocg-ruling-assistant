@@ -1116,8 +1116,13 @@ function normalizeRecord(record = {}) {
       ].filter(Boolean).join("\n").trim()
     : "";
   const text = structuredQaText || String(record.text || record.officialText || record.question || answer || record.title || "").trim();
-  const cardIds = [...new Set([
+  const metadataCardIds = [...new Set([
     record.cardId,
+    ...(record.metadataCardIds || record.cardIds || []),
+    ...(record.cards || []).filter((value) => /^\d+$/u.test(String(value || "").trim())),
+  ].map((item) => String(item || "")).filter(Boolean))];
+  const cardIds = [...new Set([
+    ...metadataCardIds,
     ...(record.cardIds || []),
     ...extractInlineCardIds(text),
   ].map((item) => String(item || "")).filter(Boolean))];
@@ -1134,6 +1139,7 @@ function normalizeRecord(record = {}) {
     answer: record.answer || record.conclusion || questionProjection.answerText || "",
     text,
     cardIds,
+    metadataCardIds,
     questionCardIds,
     cards,
     sourceUrl: evidenceSourceUrl({ ...record, cardIds }),
@@ -1266,6 +1272,9 @@ function evidenceFromOfficialMatch(match, type, maxTextChars, warnings) {
     identityScopedMatch: true,
     matchedBy: match.matchedBy || [],
     matchedQuestionCardIds: match.matchedQuestionCardIds || [],
+    matchedRelatedQuestionCardIds: match.matchedRelatedQuestionCardIds || [],
+    matchedRelatedMetadataCardIds: match.matchedRelatedMetadataCardIds || [],
+    matchedRelatedCardIds: match.matchedRelatedCardIds || [],
     branchRelevant: match.branchRelevant === true,
     branchMatchedCardIds: match.branchMatchedCardIds || [],
     supportingQuestionBranchIndex: match.supportingQuestionBranchIndex ?? null,
@@ -1280,7 +1289,10 @@ function evidenceFromOfficialMatch(match, type, maxTextChars, warnings) {
     supportingQuestionBranchScenarioPremiseCompatibility:
       match.supportingQuestionBranchScenarioPremiseCompatibility || "unknown",
     questionCardIdCoverage: Number(match.questionCardIdCoverage || 0),
+    relatedQuestionCardIdCoverage: Number(match.relatedQuestionCardIdCoverage || 0),
+    relatedCardIdCoverage: Number(match.relatedCardIdCoverage || 0),
     questionCardIdCount: Number(match.questionCardIdCount || 0),
+    relatedQuestionCardIdCount: Number(match.relatedQuestionCardIdCount || 0),
     authoritativeSceneMatch: isDirectEvidence && match.authoritativeSceneMatch === true,
     authoritativeSceneMatchReason: isDirectEvidence
       ? match.authoritativeSceneMatchReason || ""
@@ -1386,7 +1398,10 @@ function isUsefulOfficialRelatedMatch(match = {}) {
     || (match.matchLevel === "official_qa_near" && Number(match.score || 0) >= 0.68)
     || Number(match.score || 0) >= 0.78
     || (
-      (match.matchedQuestionCardIds || []).length > 0
+      (
+        (match.matchedQuestionCardIds || []).length > 0
+        || (match.matchedRelatedCardIds || []).length > 0
+      )
       && match.typeCompatible === true
       && match.playerRoleCompatibility !== "mismatch"
       && match.scenarioPremiseCompatibility !== "mismatch"
@@ -1405,6 +1420,7 @@ function evidenceMechanismAnalogues(item = {}) {
 function relatedMatchedQuestionCardIds(item = {}) {
   const values = [
     ...(Array.isArray(item?.matchedQuestionCardIds) ? item.matchedQuestionCardIds : []),
+    ...(Array.isArray(item?.matchedRelatedCardIds) ? item.matchedRelatedCardIds : []),
     ...(Array.isArray(item?.retrievalSignals?.matchedQuestionCardIds)
       ? item.retrievalSignals.matchedQuestionCardIds
       : []),

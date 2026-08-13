@@ -86,7 +86,8 @@ test("public prompts keep the raw question and card text without the state-trans
     },
   });
 
-  for (const prompt of [bundle.prompt, bundle.recoveryPrompt]) {
+  assert.equal(bundle.recoveryPrompt, "");
+  for (const prompt of [bundle.prompt]) {
     assert.match(prompt, /是否可以将/u);
     assert.match(prompt, /深渊的相剑龙/u);
     assert.match(prompt, /card-text-summoned/u);

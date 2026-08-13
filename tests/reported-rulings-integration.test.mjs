@@ -165,8 +165,9 @@ test("the production pipeline enables the live official QA fallback by default",
   assert.ok(calls.some((href) => /\/data\/card\/(?:13447|14741)$/u.test(href)));
   const directQaRefs = answer.usedEvidence.filter((item) => item.id === "ygoresources-qa-22803");
   assert.equal(directQaRefs.length, 1);
-  assert.equal(directQaRefs[0].type, "official_qa");
+  assert.equal(directQaRefs[0].type, "related");
   assert.match(directQaRefs[0].sourceUrl, /fid=22803/u);
+  assert.notEqual(answer.answerLevel, "official_confirmed");
 });
 
 test("the eight original official-X wordings retrieve their expected official QA generically", async () => {
