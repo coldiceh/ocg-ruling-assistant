@@ -156,6 +156,41 @@ test("baige_search_mock_returns_enigmaster_packbit", async () => {
   assert.ok(result.results[0].raw);
 });
 
+test("baige timeout is bounded and degrades to an empty optional result", async () => {
+  clearBaigeSearchCache();
+  let receivedSignal = null;
+  const result = await searchCards("timeout fixture", {
+    env: { BAIGE_TIMEOUT_MS: "5" },
+    fetchImpl: async (_url, options = {}) => {
+      receivedSignal = options.signal;
+      return await new Promise((resolve, reject) => {
+        options.signal?.addEventListener("abort", () => reject(options.signal.reason), { once: true });
+      });
+    },
+  });
+
+  assert.equal(receivedSignal instanceof AbortSignal, true);
+  assert.equal(receivedSignal.aborted, true);
+  assert.deepEqual(result.results, []);
+  assert.ok(result.warnings.includes("baige_timeout"));
+});
+
+test("baige propagates parent cancellation instead of continuing fail-soft", async () => {
+  clearBaigeSearchCache();
+  const parent = new AbortController();
+  const reason = Object.assign(new Error("caller_disconnected"), { code: "caller_disconnected" });
+  const pending = searchCards("cancel fixture", {
+    env: { BAIGE_TIMEOUT_MS: "6000" },
+    signal: parent.signal,
+    fetchImpl: async (_url, options = {}) => await new Promise((resolve, reject) => {
+      options.signal?.addEventListener("abort", () => reject(options.signal.reason), { once: true });
+    }),
+  });
+  parent.abort(reason);
+
+  await assert.rejects(pending, (error) => error === reason);
+});
+
 test("baige_short_name_can_match_long_card_name", async () => {
   clearBaigeSearchCache();
   const result = await searchCards("谜式密码大师", {

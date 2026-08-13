@@ -107,7 +107,9 @@ export async function retrieveRagEvidence({
   maxPerBucket = 5,
   env = {},
   fetchImpl = globalThis.fetch,
+  signal,
 } = {}) {
+  throwIfAborted(signal);
   if (enableLiveOfficialQa && !isDisabled(env.RAG_LIVE_OFFICIAL_QA)) {
     env = { ...env, RAG_LIVE_OFFICIAL_QA: "true" };
   }
@@ -160,9 +162,18 @@ export async function retrieveRagEvidence({
       limits,
       warnings: retrievalWarnings,
       debug: baigeDebug,
+      signal,
     }),
-    resolveUnresolvedMentionCardsWithBaige(externalResolutionCandidates, { fetchImpl, env, limits, warnings: retrievalWarnings, debug: baigeDebug }),
+    resolveUnresolvedMentionCardsWithBaige(externalResolutionCandidates, {
+      fetchImpl,
+      env,
+      limits,
+      warnings: retrievalWarnings,
+      debug: baigeDebug,
+      signal,
+    }),
   ]);
+  throwIfAborted(signal);
   const identityVerificationFailures = enrichedLocalCards
     .filter((card) => card.identityVerificationStatus === "unverified")
     .map((card) => ({
@@ -369,6 +380,7 @@ export async function retrieveRagEvidence({
       cacheTtlMs: readPositiveNumber(env.RAG_LIVE_QA_CACHE_TTL_MS, 10 * 60 * 1000),
       maxCandidates: liveQaDiscoveryLimit,
       maxConcurrentQaFetches: readPositiveNumber(env.RAG_LIVE_QA_MAX_CONCURRENCY, 6),
+      signal,
     });
     retrievalWarnings.push(...(liveOfficialQa.warnings || []));
     if (liveOfficialQa.records?.length) retrievalWarnings.push(`live_official_qa_retrieved:${liveOfficialQa.records.length}`);
@@ -2382,7 +2394,15 @@ function resolveUnresolvedMentionCards(unresolvedMentions, cardProvider, limits,
   return dedupeCards(result);
 }
 
-async function resolveUnresolvedMentionCardsWithBaige(unresolvedMentions, { fetchImpl, env, limits, warnings, debug }) {
+async function resolveUnresolvedMentionCardsWithBaige(unresolvedMentions, {
+  fetchImpl,
+  env,
+  limits,
+  warnings,
+  debug,
+  signal,
+}) {
+  throwIfAborted(signal);
   const mentions = (unresolvedMentions || []).slice(0, limits.maxCards);
   const minConfidence = readPositiveDecimal(env.RAG_BAIGE_MIN_CONFIDENCE, 0.72);
   const result = await Promise.all(mentions.map(async (mention) => {
@@ -2392,7 +2412,7 @@ async function resolveUnresolvedMentionCardsWithBaige(unresolvedMentions, { fetc
     let bestAmbiguousSelection = null;
     let bestAmbiguousQuery = "";
     for (const query of mentionSearchQueries(mention)) {
-      const searchResult = await searchBaige(query, { fetchImpl, env, limits, debug });
+      const searchResult = await searchBaige(query, { fetchImpl, env, limits, debug, signal });
       warnings.push(...searchResult.warnings);
       const candidates = searchResult.results || [];
       if (!candidates.length) {
@@ -2483,7 +2503,9 @@ async function enrichCardsWithBaige(cards, {
   limits,
   warnings,
   debug,
+  signal,
 }) {
+  throwIfAborted(signal);
   const sourceCards = (cards || []).slice(0, limits.maxCards);
   const result = await Promise.all(sourceCards.map(async (card) => {
     const needsNumberedIdentityEnrichment = card.numberedIdentityNameMismatch === true;
@@ -2499,7 +2521,7 @@ async function enrichCardsWithBaige(cards, {
     if (!nameQuery) {
       return card;
     }
-    const searchResult = await searchBaige(nameQuery, { fetchImpl, env, limits, debug });
+    const searchResult = await searchBaige(nameQuery, { fetchImpl, env, limits, debug, signal });
     warnings.push(...searchResult.warnings);
     const selection = selectUniqueBaigeCandidate(searchResult.results || [], 0.72);
     let best = selection.card;
@@ -2513,6 +2535,7 @@ async function enrichCardsWithBaige(cards, {
         limits,
         warnings,
         debug,
+        signal,
       });
       best = canonicalLookup.card;
       matchedQuery = canonicalLookup.matchedQuery || nameQuery;
@@ -2592,9 +2615,11 @@ async function verifySurfaceIdentityThroughCanonicalBaigeLookup(card, {
   limits,
   warnings,
   debug,
+  signal,
 }) {
+  throwIfAborted(signal);
   for (const query of canonicalIdentityVerificationQueries(card, primaryQuery)) {
-    const searchResult = await searchBaige(query, { fetchImpl, env, limits, debug });
+    const searchResult = await searchBaige(query, { fetchImpl, env, limits, debug, signal });
     warnings.push(...searchResult.warnings);
     const selection = selectUniqueBaigeCandidate(searchResult.results || [], 0.72);
     if (selection.ambiguous) {
@@ -2790,12 +2815,26 @@ function suppressModelExpansionConflicts(localCards, baigeCards, warnings) {
   });
 }
 
-async function searchBaige(query, { fetchImpl, env, limits, debug }) {
-  const result = await searchCards(query, { fetchImpl, env, limit: Math.max(3, limits.maxCards) });
+async function searchBaige(query, { fetchImpl, env, limits, debug, signal }) {
+  const result = await searchCards(query, {
+    fetchImpl,
+    env,
+    limit: Math.max(3, limits.maxCards),
+    signal,
+  });
   debug.searchCount += 1;
   if (result.cacheHit) debug.cacheHitCount += 1;
   debug.warnings.push(...(result.warnings || []));
   return result;
+}
+
+function throwIfAborted(signal) {
+  if (!signal?.aborted) return;
+  if (signal.reason instanceof Error) throw signal.reason;
+  const error = new Error("request_aborted");
+  error.name = "AbortError";
+  error.code = "request_aborted";
+  throw error;
 }
 
 function toRagCard(card, input, confidence) {

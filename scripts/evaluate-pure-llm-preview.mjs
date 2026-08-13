@@ -26,6 +26,7 @@ const DEFAULT_CHECKPOINT_DIRECTORY = resolve(
   "ocg-ruling-assistant-pure-llm-preview-evaluation",
 );
 const PRIVATE_DATASET_FILE = "private-dataset.json";
+const MANUAL_REVIEW_FILE = "manual-review.json";
 const PUBLIC_REPORT_FILE = "public-report.json";
 const GENERATION_DIRECTORY = "generations";
 const JUDGMENT_DIRECTORY = "judgments";
@@ -145,6 +146,15 @@ export async function runPureLlmPreviewEvaluation({
     log(`[${evaluationCase.id}] ${judgment.verdict}`);
   }
 
+  if (options.generateOnly) {
+    const manualReview = await createManualReviewBundleFromCheckpoint({
+      checkpointDirectory,
+      dataset,
+      selectedCases,
+    });
+    await writeJsonAtomically(resolve(checkpointDirectory, MANUAL_REVIEW_FILE), manualReview);
+  }
+
   const report = await createPublicReportFromCheckpoint({
     checkpointDirectory,
     dataset,
@@ -153,6 +163,11 @@ export async function runPureLlmPreviewEvaluation({
   });
   await writeJsonAtomically(reportPath, report);
   log(JSON.stringify(report.summary));
+  if (options.generateOnly && Number(report.summary?.generationFailed || 0) > 0) {
+    throw new Error(
+      `Private candidate generation failed for ${report.summary.generationFailed} of ${report.summary.total} selected cases`,
+    );
+  }
   return report;
 }
 
@@ -358,6 +373,32 @@ export function createPublicReport({
     .filter((value) => value !== null);
   const generationCostUsd = roundMoney(sum(generationCosts));
   const judgmentCostUsd = roundMoney(sum(judgmentCosts));
+  if (mode === "generate_only") {
+    // A generation-only run is scored manually after the encrypted checkpoint
+    // is downloaded. Its public artifact deliberately contains no per-case
+    // rows, verdicts, judge identity or accuracy fields: publishing even
+    // anonymous row-level outcomes would reveal more about the private corpus
+    // than is needed to monitor transport completion, latency and spend.
+    return {
+      schemaVersion: 1,
+      generatedAt,
+      mode,
+      summary: {
+        total,
+        generated,
+        generationFailed: total - generated,
+        latencyMs: {
+          generation: summarizeNumbers(cases.map((item) => item.generationLatencyMs)),
+        },
+        estimatedCostUsd: {
+          pricingBasis: "official_list_rate_all_input_uncached",
+          generation: generationCostUsd,
+          total: generationCostUsd,
+          generationCoverage: ratio(generationCosts.length, generated),
+        },
+      },
+    };
+  }
   return {
     schemaVersion: 1,
     generatedAt,
@@ -368,11 +409,18 @@ export function createPublicReport({
       duplicatesRemoved: dataset.duplicateCount,
       selectedCases: total,
     },
-    judge: {
-      requestedModel: JUDGE_MODEL,
-      reasoningEffort: JUDGE_REASONING_EFFORT,
-      returnedModelMustMatchSol: true,
-    },
+    judge: mode === "generate_only"
+      ? {
+          mode: "human_review",
+          automated: false,
+        }
+      : {
+          mode: "legacy_automated",
+          automated: true,
+          requestedModel: JUDGE_MODEL,
+          reasoningEffort: JUDGE_REASONING_EFFORT,
+          returnedModelMustMatchSol: true,
+        },
     summary: {
       total,
       generated,
@@ -411,6 +459,7 @@ export function parseCliArguments(argv = []) {
     baseUrl: "",
     generateOnly: false,
     judgeOnly: false,
+    autoJudge: false,
     help: false,
     limit: null,
     generationTimeoutMs: DEFAULT_GENERATION_TIMEOUT_MS,
@@ -421,6 +470,7 @@ export function parseCliArguments(argv = []) {
     if (argument === "--help" || argument === "-h") options.help = true;
     else if (argument === "--generate-only") options.generateOnly = true;
     else if (argument === "--judge-only") options.judgeOnly = true;
+    else if (argument === "--auto-judge") options.autoJudge = true;
     else if (argument === "--dataset") {
       options.datasetPath = requiredNextValue(argv, ++index, argument);
       options.datasetExplicit = true;
@@ -440,9 +490,15 @@ export function parseCliArguments(argv = []) {
       throw new TypeError(`Unknown argument: ${argument}`);
     }
   }
-  if (options.generateOnly && options.judgeOnly) {
-    throw new TypeError("--generate-only and --judge-only are mutually exclusive");
+  const explicitModes = [options.generateOnly, options.judgeOnly, options.autoJudge]
+    .filter(Boolean).length;
+  if (explicitModes > 1) {
+    throw new TypeError("--generate-only, --judge-only and --auto-judge are mutually exclusive");
   }
+  // Candidate generation followed by human review is the safe default. The
+  // historical Sol-high grader remains available only as an explicit legacy
+  // compatibility mode or as a separate --judge-only pass.
+  if (!options.help && explicitModes === 0) options.generateOnly = true;
   if (!options.help && !options.judgeOnly && !String(options.baseUrl || "").trim()) {
     throw new TypeError("--base-url is required unless --judge-only is used");
   }
@@ -475,15 +531,14 @@ async function generateCandidate({
 }) {
   const startedAt = Date.now();
   try {
-    const response = await fetchWithTimeout(fetchImpl, endpoint, {
+    const { response, responseText } = await requestBoundedResponseWithTimeout(fetchImpl, endpoint, {
       method: "POST",
       headers: {
         accept: "application/json",
         "content-type": "application/json",
       },
       body: JSON.stringify(buildGenerationRequest(evaluationCase.question)),
-    }, timeoutMs);
-    const responseText = await readBoundedResponseText(response, MAX_HTTP_RESPONSE_BYTES);
+    }, timeoutMs, MAX_HTTP_RESPONSE_BYTES);
     const publicMetrics = extractCandidatePublicMetrics(responseText);
     const base = {
       schemaVersion: 1,
@@ -505,10 +560,9 @@ async function generateCandidate({
         error: `Preview returned HTTP ${response.status}`,
       };
     }
-    // Evaluation judges the actual ruling, not the transport format. Preserve
-    // every bounded HTTP 2xx candidate verbatim so an independent Sol high
-    // grader can assess it even when the public display adapter returned plain
-    // text or a future response shape.
+    // Human review judges the actual ruling, not the transport format. Preserve
+    // every bounded HTTP 2xx candidate verbatim even when the public display
+    // adapter returned plain text or a future response shape.
     return {
       ...base,
       status: "generated",
@@ -583,20 +637,25 @@ async function judgeCandidate({
     completedAt: new Date().toISOString(),
   };
   try {
-    const response = await fetchWithTimeout(fetchImpl, judgeConfiguration.endpoint, {
-      method: "POST",
-      headers: {
-        accept: "text/event-stream, application/json",
-        authorization: `Bearer ${judgeConfiguration.apiKey}`,
-        "content-type": "application/json",
+    const { response, responseText } = await requestBoundedResponseWithTimeout(
+      fetchImpl,
+      judgeConfiguration.endpoint,
+      {
+        method: "POST",
+        headers: {
+          accept: "text/event-stream, application/json",
+          authorization: `Bearer ${judgeConfiguration.apiKey}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(buildJudgeRequest({
+          question: evaluationCase.question,
+          referenceAnswer: evaluationCase.referenceAnswer,
+          candidateResponseText,
+        })),
       },
-      body: JSON.stringify(buildJudgeRequest({
-        question: evaluationCase.question,
-        referenceAnswer: evaluationCase.referenceAnswer,
-        candidateResponseText,
-      })),
-    }, timeoutMs);
-    const responseText = await readBoundedResponseText(response, MAX_HTTP_RESPONSE_BYTES);
+      timeoutMs,
+      MAX_HTTP_RESPONSE_BYTES,
+    );
     if (!response.ok) {
       return notReviewedJudgment(base, startedAt, "judge_http_error", `Judge returned HTTP ${response.status}`);
     }
@@ -723,6 +782,65 @@ async function createPublicReportFromCheckpoint({
   return createPublicReport({ dataset, selectedCases, generations, judgments, mode });
 }
 
+export function createManualReviewBundle({
+  dataset,
+  selectedCases,
+  generations = new Map(),
+  generatedAt = new Date().toISOString(),
+} = {}) {
+  if (!dataset?.datasetDigest) throw new TypeError("Manual review requires a private dataset");
+  const cases = (selectedCases || []).map((item) => {
+    const generation = generations.get(item.id);
+    const generated = generation?.status === "generated";
+    return {
+      id: item.id,
+      question: item.question,
+      referenceAnswer: item.referenceAnswer,
+      generationStatus: generated ? "generated" : "generation_failed",
+      candidateResponseText: generated ? String(generation.candidateResponseText || "") : "",
+      generationLatencyMs: finiteNonNegativeNumber(generation?.latencyMs),
+      generationFailureCode: generated ? null : String(generation?.failureCode || "not_generated"),
+      generationError: generated ? null : String(generation?.error || "").slice(0, 1_000),
+      humanVerdict: "not_reviewed",
+      humanNotes: "",
+    };
+  });
+  return {
+    schemaVersion: 1,
+    private: true,
+    generatedAt,
+    datasetDigest: dataset.datasetDigest,
+    instructions: [
+      "Private human-review worksheet: never publish or upload it as a plaintext public artifact.",
+      "Compare each candidateResponseText with referenceAnswer for the exact question.",
+      "Set humanVerdict to correct, partially_correct, or incorrect and optionally fill humanNotes.",
+    ],
+    summary: {
+      total: cases.length,
+      generated: cases.filter((item) => item.generationStatus === "generated").length,
+      generationFailed: cases.filter((item) => item.generationStatus !== "generated").length,
+    },
+    cases,
+  };
+}
+
+async function createManualReviewBundleFromCheckpoint({
+  checkpointDirectory,
+  dataset,
+  selectedCases,
+}) {
+  const generations = new Map();
+  for (const item of selectedCases) {
+    const generation = await readJsonIfPresent(caseCheckpointPath(
+      checkpointDirectory,
+      GENERATION_DIRECTORY,
+      item.id,
+    ));
+    if (generation) generations.set(item.id, generation);
+  }
+  return createManualReviewBundle({ dataset, selectedCases, generations });
+}
+
 function resolveJudgeConfiguration(env) {
   const apiKey = String(env.RELAY_API_KEY || "").trim();
   if (!apiKey) throw new TypeError("RELAY_API_KEY is required for judging");
@@ -733,19 +851,49 @@ function resolveJudgeConfiguration(env) {
   };
 }
 
-async function fetchWithTimeout(fetchImpl, url, options, timeoutMs) {
+export async function requestBoundedResponseWithTimeout(
+  fetchImpl,
+  url,
+  options,
+  timeoutMs,
+  maxBytes = MAX_HTTP_RESPONSE_BYTES,
+) {
   const controller = new AbortController();
+  const externalSignal = options?.signal;
+  const abortFromExternalSignal = () => {
+    controller.abort(externalSignal?.reason);
+  };
+  if (externalSignal?.aborted) abortFromExternalSignal();
+  else externalSignal?.addEventListener?.("abort", abortFromExternalSignal, { once: true });
+  let rejectOnAbort;
+  const abortFailure = new Promise((_, reject) => {
+    rejectOnAbort = () => reject(
+      controller.signal.reason || new DOMException("Request aborted", "AbortError"),
+    );
+    if (controller.signal.aborted) rejectOnAbort();
+    else controller.signal.addEventListener("abort", rejectOnAbort, { once: true });
+  });
   const timeout = setTimeout(() => {
-    controller.abort(new DOMException("Request timed out", "TimeoutError"));
+    const timeoutError = new DOMException("Request timed out", "TimeoutError");
+    controller.abort(timeoutError);
   }, timeoutMs);
   timeout.unref?.();
   try {
-    return await fetchImpl(url, { ...options, signal: controller.signal });
+    return await Promise.race([
+      (async () => {
+        const response = await fetchImpl(url, { ...options, signal: controller.signal });
+        const responseText = await readBoundedResponseText(response, maxBytes);
+        return { response, responseText };
+      })(),
+      abortFailure,
+    ]);
   } catch (error) {
     if (controller.signal.aborted) throw controller.signal.reason;
     throw error;
   } finally {
     clearTimeout(timeout);
+    controller.signal.removeEventListener("abort", rejectOnAbort);
+    externalSignal?.removeEventListener?.("abort", abortFromExternalSignal);
   }
 }
 
@@ -962,16 +1110,19 @@ Options:
   --checkpoint-dir <path>         Private checkpoint outside this repository
   --report <path>                 Sanitized public report JSON
   --base-url <url>                Preview site root or /api/answer URL
-  --generate-only                 Generate and checkpoint candidates; do not judge
-  --judge-only                    Judge existing generated checkpoints; do not call Preview
+  --generate-only                 Generate candidates and a private manual-review.json (default)
+  --auto-judge                    Legacy: generate and automatically judge with Sol high
+  --judge-only                    Legacy: judge existing generated checkpoints; do not call Preview
   --limit <n>                     Evaluate only the first n unique cases
   --generation-timeout-ms <n>     Per-generation timeout (default: 300000)
   --judge-timeout-ms <n>          Per-judge timeout (default: 300000)
   --help                          Show this help
 
-Judge credentials are read only from RELAY_API_KEY and
-ADMIN_RELAY_BASE_URL or RELAY_BASE_URL. The judge model is fixed to gpt-5.6-sol
-with high reasoning effort. Requests are serial and are never retried automatically.`;
+The private checkpoint and manual-review.json contain questions, reference
+answers and candidates; keep them encrypted and never publish them as plaintext.
+Legacy judge credentials are read only from RELAY_API_KEY and
+ADMIN_RELAY_BASE_URL or RELAY_BASE_URL. Requests are serial and are never
+retried automatically.`;
 }
 
 function isDirectExecution() {

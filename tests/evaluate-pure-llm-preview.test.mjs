@@ -5,6 +5,7 @@ import test from "node:test";
 import {
   buildGenerationRequest,
   buildJudgeRequest,
+  createManualReviewBundle,
   createPublicReport,
   extractCandidatePublicMetrics,
   isSolModelIdentity,
@@ -14,6 +15,7 @@ import {
   parseJudgeContent,
   resolveAnswerEndpoint,
   resolveRelayChatCompletionsEndpoint,
+  requestBoundedResponseWithTimeout,
   runPureLlmPreviewEvaluation,
 } from "../scripts/evaluate-pure-llm-preview.mjs";
 
@@ -151,6 +153,90 @@ test("public report contains only anonymous result metadata", () => {
   assert.equal(serialized.includes(privateCandidate), false);
 });
 
+test("generation-only public report exposes no rows, judge, verdict or accuracy", () => {
+  const dataset = parseDatasetText("私有问题\n私有参考答案");
+  const report = createPublicReport({
+    dataset,
+    selectedCases: dataset.cases,
+    generations: new Map([[
+      "case-001",
+      {
+        status: "generated",
+        latencyMs: 1250,
+        candidateResponseText: "私有候选回答",
+        estimatedCostUsd: 0.0025,
+      },
+    ]]),
+    mode: "generate_only",
+    generatedAt: "2026-08-13T00:00:00.000Z",
+  });
+
+  assert.deepEqual(report, {
+    schemaVersion: 1,
+    generatedAt: "2026-08-13T00:00:00.000Z",
+    mode: "generate_only",
+    summary: {
+      total: 1,
+      generated: 1,
+      generationFailed: 0,
+      latencyMs: {
+        generation: {
+          count: 1,
+          average: 1250,
+          p50: 1250,
+          p95: 1250,
+          min: 1250,
+          max: 1250,
+        },
+      },
+      estimatedCostUsd: {
+        pricingBasis: "official_list_rate_all_input_uncached",
+        generation: 0.0025,
+        total: 0.0025,
+        generationCoverage: 1,
+      },
+    },
+  });
+  const publicText = JSON.stringify(report);
+  assert.doesNotMatch(publicText, /私有问题|私有参考答案|私有候选回答/u);
+  assert.equal(Object.hasOwn(report, "cases"), false);
+  assert.equal(Object.hasOwn(report, "judge"), false);
+  assert.equal(Object.hasOwn(report.summary, "correct"), false);
+  assert.equal(Object.hasOwn(report.summary, "reviewedAccuracy"), false);
+});
+
+test("private manual-review bundle puts question, reference and candidate together for human scoring", () => {
+  const dataset = parseDatasetText("私有问题\n私有裁判答案");
+  const bundle = createManualReviewBundle({
+    dataset,
+    selectedCases: dataset.cases,
+    generations: new Map([[
+      "case-001",
+      {
+        status: "generated",
+        latencyMs: 4321,
+        candidateResponseText: "私有候选回答",
+      },
+    ]]),
+    generatedAt: "2026-08-13T00:00:00.000Z",
+  });
+
+  assert.equal(bundle.private, true);
+  assert.equal(bundle.summary.generated, 1);
+  assert.deepEqual(bundle.cases[0], {
+    id: "case-001",
+    question: "私有问题",
+    referenceAnswer: "私有裁判答案",
+    generationStatus: "generated",
+    candidateResponseText: "私有候选回答",
+    generationLatencyMs: 4321,
+    generationFailureCode: null,
+    generationError: null,
+    humanVerdict: "not_reviewed",
+    humanNotes: "",
+  });
+});
+
 test("candidate public metrics read only cost and usage from the answer debug object", () => {
   assert.deepEqual(extractCandidatePublicMetrics(JSON.stringify({
     shortAnswer: "private answer text",
@@ -181,6 +267,13 @@ test("failed or absent judge results are not reviewed and stay outside the revie
 });
 
 test("CLI modes and HTTP endpoint normalization are explicit", () => {
+  const defaultOptions = parseCliArguments([
+    "--base-url",
+    "https://preview.example.test",
+  ]);
+  assert.equal(defaultOptions.generateOnly, true);
+  assert.equal(defaultOptions.autoJudge, false);
+
   const options = parseCliArguments([
     "--judge-only",
     "--checkpoint-dir",
@@ -194,12 +287,91 @@ test("CLI modes and HTTP endpoint normalization are explicit", () => {
     () => parseCliArguments(["--generate-only", "--judge-only"]),
     /mutually exclusive/u,
   );
+  assert.throws(
+    () => parseCliArguments(["--auto-judge", "--generate-only"]),
+    /mutually exclusive/u,
+  );
   assert.equal(resolveAnswerEndpoint("https://preview.example.test/"), "https://preview.example.test/api/answer");
   assert.equal(
     resolveRelayChatCompletionsEndpoint("https://relay.example.test/v1"),
     "https://relay.example.test/v1/chat/completions",
   );
   assert.throws(() => resolveRelayChatCompletionsEndpoint("http://relay.example.test/v1"), /HTTPS/u);
+});
+
+test("HTTP timeout remains active even when a custom body reader ignores abort", async () => {
+  let requestSignal;
+  const fetchImpl = async (_url, options) => {
+    requestSignal = options.signal;
+    return {
+      status: 200,
+      ok: true,
+      headers: { get() { return null; } },
+      body: {
+        getReader() {
+          return {
+            read() {
+              return new Promise(() => {});
+            },
+            cancel() { return Promise.resolve(); },
+          };
+        },
+      },
+    };
+  };
+
+  await assert.rejects(
+    requestBoundedResponseWithTimeout(
+      fetchImpl,
+      "https://preview.example.test/api/answer",
+      { method: "POST" },
+      20,
+      1024,
+    ),
+    (error) => error?.name === "TimeoutError" && /timed out/iu.test(error.message),
+  );
+  assert.equal(requestSignal.aborted, true);
+});
+
+test("a generation failure is checkpointed and reported before the evaluator exits unsuccessfully", async () => {
+  const privateRoot = new URL(
+    `file:///${tmpdir().replaceAll("\\", "/")}/pure-llm-failed-eval-${Date.now()}/`,
+  );
+  const datasetPath = new URL("dataset.txt", privateRoot);
+  const checkpointDirectory = new URL("checkpoint", privateRoot);
+  const { mkdir, readFile, writeFile, rm } = await import("node:fs/promises");
+  const { fileURLToPath } = await import("node:url");
+  await mkdir(fileURLToPath(privateRoot), { recursive: true });
+  await writeFile(fileURLToPath(datasetPath), "匿名失败问题\n匿名标准答案", "utf8");
+  try {
+    await assert.rejects(
+      runPureLlmPreviewEvaluation({
+        argv: [
+          "--dataset", fileURLToPath(datasetPath),
+          "--checkpoint-dir", fileURLToPath(checkpointDirectory),
+          "--base-url", "https://preview.example.test",
+          "--generate-only",
+        ],
+        fetchImpl: async () => { throw new Error("synthetic transport failure"); },
+        log() {},
+      }),
+      /generation failed for 1 of 1/iu,
+    );
+    const report = JSON.parse(await readFile(
+      fileURLToPath(new URL("public-report.json", `${checkpointDirectory.href}/`)),
+      "utf8",
+    ));
+    const manualReview = JSON.parse(await readFile(
+      fileURLToPath(new URL("manual-review.json", `${checkpointDirectory.href}/`)),
+      "utf8",
+    ));
+    assert.equal(report.summary.generated, 0);
+    assert.equal(report.summary.generationFailed, 1);
+    assert.equal(manualReview.cases[0].generationStatus, "generation_failed");
+    assert.equal(manualReview.cases[0].generationFailureCode, "preview_request_failed");
+  } finally {
+    await rm(fileURLToPath(privateRoot), { recursive: true, force: true });
+  }
 });
 
 test("a bounded HTTP 2xx text candidate is checkpointed and sent to the semantic judge", async () => {
@@ -237,6 +409,7 @@ test("a bounded HTTP 2xx text candidate is checkpointed and sent to the semantic
         "--dataset", fileURLToPath(datasetPath),
         "--checkpoint-dir", fileURLToPath(checkpointDirectory),
         "--base-url", "https://preview.example.test",
+        "--auto-judge",
       ],
       env: {
         RELAY_API_KEY: "test-secret",

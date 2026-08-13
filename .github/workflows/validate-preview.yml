@@ -4,13 +4,24 @@ on:
   pull_request:
     types: [opened, synchronize, reopened, labeled]
   workflow_dispatch:
+    inputs:
+      evaluation_limit:
+        description: Run the one-case pilot first; select 32 only after the pilot succeeds
+        required: true
+        default: "1"
+        type: choice
+        options:
+          - "1"
+          - "32"
 
 permissions:
   contents: read
 
 concurrency:
   group: validate-preview-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  # A paid request may already have reached the relay when cancellation arrives.
+  # Queue another run instead of creating an ambiguous, possibly charged retry.
+  cancel-in-progress: false
 
 jobs:
   validate:
@@ -42,27 +53,43 @@ jobs:
 
   private-evaluation:
     if: >-
-      github.event_name == 'pull_request'
-      && github.event.action == 'labeled'
-      && github.event.label.name == 'private-pure-llm-evaluation'
-      && github.event.pull_request.head.repo.full_name == github.repository
+      (github.event_name == 'pull_request'
+        && github.event.action == 'labeled'
+        && (github.event.label.name == 'private-pure-llm-evaluation-pilot'
+          || github.event.label.name == 'private-pure-llm-evaluation')
+        && github.event.pull_request.head.repo.full_name == github.repository)
+      || github.event_name == 'workflow_dispatch'
     needs: validate
     runs-on: ubuntu-latest
     timeout-minutes: 300
+    concurrency:
+      # All paid private evaluations are globally serial for this repository,
+      # including runs dispatched from different branches or pull requests.
+      group: private-pure-llm-evaluation-${{ github.repository }}
+      cancel-in-progress: false
     env:
       RELAY_API_KEY: ${{ secrets.RELAY_API_KEY }}
       RELAY_BASE_URL: https://api.986310.xyz/v1
       PUBLIC_RULING_MODEL_PROFILE: relay-gpt-5.6-sol-low
+      RELAY_MAX_COMPLETION_TOKENS: "8192"
+      # GitHub's local backend is not constrained by Vercel's 270-second cap.
+      # Keep the inner Relay deadline below the evaluator's full-request limit.
+      # Keep the provider deadline below the 300s end-to-end deadline so the
+      # backend can return a classified failure before the evaluator aborts.
+      RELAY_STREAM_TIMEOUT_MS: "240000"
       API_CHATGPT_DAILY_BUDGET_USD: "10"
       API_DAILY_BUDGET_CNY: "10"
       QUERY_AUDIT_ENABLED: "false"
       HOST: 127.0.0.1
       PORT: "18787"
+      # The pilot label is one case; the full label is 32. workflow_dispatch is
+      # also available once this workflow reaches the repository default branch.
+      EVALUATION_LIMIT: ${{ github.event_name == 'workflow_dispatch' && inputs.evaluation_limit || (github.event.label.name == 'private-pure-llm-evaluation' && '32' || '1') }}
     steps:
       - name: Checkout the exact preview commit
         uses: actions/checkout@v6
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
 
       - name: Setup Node
         uses: actions/setup-node@v6
@@ -98,7 +125,7 @@ jobs:
           echo "Preview backend did not become healthy" >&2
           exit 1
 
-      - name: Generate and judge all private cases serially
+      - name: Generate private candidates serially without a model judge
         id: evaluation
         shell: bash
         run: |
@@ -109,17 +136,18 @@ jobs:
             --checkpoint-dir "$RUNNER_TEMP/pure-llm-private-checkpoint" \
             --report artifacts/pure-llm-private-public-report.json \
             --base-url "http://127.0.0.1:$PORT" \
-            --limit 32 \
-            --generation-timeout-ms 300000 \
-            --judge-timeout-ms 300000
+            --generate-only \
+            --limit "$EVALUATION_LIMIT" \
+            --generation-timeout-ms 300000
           status=$?
           echo "exit_code=$status" >> "$GITHUB_OUTPUT"
           exit 0
 
       - name: Verify the report contains no private text
-        if: always() && hashFiles('artifacts/pure-llm-private-public-report.json') != ''
+        if: always()
         shell: bash
         run: |
+          test -s artifacts/pure-llm-private-public-report.json
           node --input-type=module <<'NODE'
           import { readFile } from "node:fs/promises";
           import { parseDatasetText } from "./scripts/evaluate-pure-llm-preview.mjs";
@@ -131,8 +159,30 @@ jobs:
               throw new Error("Public report contains private evaluation text");
             }
           }
-          if (!Array.isArray(report.cases) || report.cases.some((item) => !/^case-\d{3,}$/.test(item.id))) {
-            throw new Error("Public report case identities are not anonymous");
+          const forbiddenKeys = new Set([
+            "cases", "judge", "judgments", "verdict", "reviewed", "correct",
+            "partiallyCorrect", "incorrect", "judgeFailed", "reviewCoverage",
+            "reviewedAccuracy", "strictOverallAccuracy", "judgment",
+          ]);
+          const visit = (value) => {
+            if (!value || typeof value !== "object") return;
+            for (const [key, item] of Object.entries(value)) {
+              if (forbiddenKeys.has(key)) throw new Error(`Public generation report contains forbidden field: ${key}`);
+              visit(item);
+            }
+          };
+          visit(report);
+          if (report.mode !== "generate_only") {
+            throw new Error("Public report is not generation-only");
+          }
+          if (report.summary?.total !== Number(process.env.EVALUATION_LIMIT)) {
+            throw new Error("Public report selected-case count does not match the requested limit");
+          }
+          if (
+            report.summary?.generated !== Number(process.env.EVALUATION_LIMIT)
+            || report.summary?.generationFailed !== 0
+          ) {
+            throw new Error("Private candidate generation did not complete for every selected case");
           }
           NODE
 
@@ -145,8 +195,15 @@ jobs:
             exit 0
           fi
           archive_key="$(sha256sum "$RUNNER_TEMP/private-dataset.txt" | cut -d ' ' -f 1)"
+          tar_args=(pure-llm-private-checkpoint)
+          # The backend log may contain provider diagnostics and possibly user
+          # material. Include it only inside the encrypted archive so a failed
+          # pilot remains diagnosable without publishing plaintext.
+          if [ -s "$RUNNER_TEMP/private-evaluation-backend.log" ]; then
+            tar_args+=(private-evaluation-backend.log)
+          fi
           tar -C "$RUNNER_TEMP" -czf "$RUNNER_TEMP/pure-llm-private-checkpoint.tar.gz" \
-            pure-llm-private-checkpoint
+            "${tar_args[@]}"
           PRIVATE_ARCHIVE_KEY="$archive_key" openssl enc -aes-256-cbc -salt -pbkdf2 -iter 200000 \
             -in "$RUNNER_TEMP/pure-llm-private-checkpoint.tar.gz" \
             -out artifacts/pure-llm-private-checkpoint.tar.gz.enc \
