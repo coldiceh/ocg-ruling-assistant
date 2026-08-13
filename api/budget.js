@@ -1,5 +1,9 @@
 import { authorizeBudgetResetRequest, budgetResetTokenConfigured } from "../backend/budgetAuth.mjs";
-import { getRagBudgetStatus, resetRagBudget } from "../backend/ragModelClient.mjs";
+import {
+  capPublicChatGptBudget,
+  getRagBudgetStatus,
+  resetRagBudget,
+} from "../backend/ragModelClient.mjs";
 
 const allowedOrigin = process.env.ALLOWED_ORIGIN || "*";
 
@@ -26,6 +30,15 @@ export default async function handler(request, response) {
       const auth = authorizeBudgetResetRequest(request, { env: process.env, body });
       if (!auth.ok) {
         response.status(auth.status).json({ ok: false, error: auth.error, message: auth.message });
+        return;
+      }
+      const action = String(body.action || "reset").trim().toLowerCase();
+      if (action === "cap_public_chatgpt") {
+        response.status(200).json(await capPublicChatGptBudget({ env: process.env }));
+        return;
+      }
+      if (action !== "reset") {
+        response.status(400).json({ ok: false, error: "budget_action_invalid" });
         return;
       }
       response.status(200).json(await resetRagBudget({ env: process.env }));
