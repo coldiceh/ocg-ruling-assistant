@@ -1,4 +1,4 @@
-import { answerRagRulingQuestion as answerLatestRagRulingQuestion } from "./ragRulingPipeline.mjs";
+import { answerRagRulingQuestion as answerLatestRagRulingQuestion } from "./rawEvidenceRagPipeline.mjs";
 
 export const DEFAULT_RULING_VERSION = "latest";
 

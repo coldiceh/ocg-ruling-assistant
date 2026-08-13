@@ -6,7 +6,7 @@ import { checkDataHealth } from "./dataHealth.mjs";
 import {
   getRagBudgetStatus,
   resetRagBudget,
-} from "./ragModelClient.mjs";
+} from "./rawEvidenceModelClient.mjs";
 import { getOcgEngineHealth } from "./ocgEngineClient.mjs";
 import { getFormalEngineCapabilities } from "./formalEngineClient.mjs";
 import { formalShadowEnabled } from "./formalEngineShadow.mjs";
