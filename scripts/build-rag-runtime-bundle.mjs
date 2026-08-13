@@ -1,21 +1,16 @@
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import * as ragEvidenceRetriever from "../backend/ragEvidenceRetriever.mjs";
+import { loadRawGenericSourceData } from "../backend/rawGenericDataStore.mjs";
 import { buildRagRuntimeBundle } from "../backend/ragRuntimeBundleCompiler.mjs";
 
 const projectRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 const dataDir = resolve(readArgument("--data-dir") || join(projectRoot, "data"));
 const outputDir = resolve(readArgument("--output-dir") || join(dataDir, "rag-runtime-v1"));
 
-const rawLoader = ragEvidenceRetriever.loadRawRagData;
-if (typeof rawLoader !== "function") {
-  throw new Error("loadRawRagData integration is required; refusing to compile from a runtime bundle");
-}
-
 const result = await buildRagRuntimeBundle({
   dataDir,
   outputDir,
-  loadNormalizedData: rawLoader,
+  loadNormalizedData: loadRawGenericSourceData,
 });
 
 process.stdout.write(`${JSON.stringify({

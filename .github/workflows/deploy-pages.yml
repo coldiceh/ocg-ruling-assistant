@@ -32,6 +32,22 @@ jobs:
           # GITHUB_SHA. Publishing the requested ref avoids deploying stale data.
           ref: ${{ inputs.checkout_ref || github.sha }}
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify release boundary
+        run: pnpm run check:deploy
+
       - name: Configure Pages
         uses: actions/configure-pages@v6
 

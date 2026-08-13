@@ -5,6 +5,16 @@ import {
   hasNumberedCardIdentityConflict,
 } from "./numberedCardIdentity.mjs";
 import { splitEffectTextBlocks } from "./cardEffectBlocks.mjs";
+import {
+  RAG_CARD_ALIAS_RUNTIME_INDEX_ABI,
+  RAG_CARD_ALIAS_RUNTIME_INDEX_KIND,
+  RAG_CARD_ALIAS_RUNTIME_INDEX_SCHEMA_VERSION,
+} from "./ragCardAliasRuntimeContract.mjs";
+export {
+  RAG_CARD_ALIAS_RUNTIME_INDEX_ABI,
+  RAG_CARD_ALIAS_RUNTIME_INDEX_SCHEMA_VERSION,
+} from "./ragCardAliasRuntimeContract.mjs";
+export { compileRagCardAliasRuntimeIndex } from "./ragCardAliasRuntimeCompiler.mjs";
 
 const EMPTY_CARD_LIST = Object.freeze([]);
 const MIN_SINGLE_EDIT_CARD_KEY_LENGTH = 4;
@@ -16,9 +26,6 @@ const supplementalCardIndexesCache = new WeakMap();
 const cardSeriesKeysCache = new WeakMap();
 const DISTINCTIVE_CJK_FRAGMENT_MIN_LENGTH = 4;
 const DISTINCTIVE_FRAGMENT_MAX_LENGTH = 12;
-export const RAG_CARD_ALIAS_RUNTIME_INDEX_SCHEMA_VERSION = 1;
-const RAG_CARD_ALIAS_RUNTIME_INDEX_KIND = "rag-card-alias-runtime-index";
-export const RAG_CARD_ALIAS_RUNTIME_INDEX_ABI = "rag-card-alias-runtime-index/v1";
 const RAG_CARD_ALIAS_RUNTIME_INDEX_FIELDS = Object.freeze([
   "schemaVersion",
   "kind",
@@ -450,51 +457,6 @@ export function buildAliasIndex(cards = []) {
   aliasKeysByLengthCache.set(index, keysByLength);
   supplementalCardIndexesCache.set(sourceCards, { numberedIdentityIndex, shortMentionIndex, distinctiveFragmentIndex });
   return index;
-}
-
-/**
- * Serialize the exact indexes produced by buildAliasIndex without embedding
- * duplicate card records. Entry and candidate order intentionally follows the
- * runtime Maps: several fail-closed ambiguity paths preserve that order in
- * their public result, so re-sorting here would not be parity-safe.
- */
-export function compileRagCardAliasRuntimeIndex(cards = []) {
-  const sourceCards = Array.isArray(cards) ? cards : EMPTY_CARD_LIST;
-  const primary = buildAliasIndex(sourceCards);
-  const supplemental = getSupplementalCardIndexes(sourceCards);
-  const aliasKeysByLength = aliasKeysByLengthCache.get(primary) || buildAliasKeysByLength(primary);
-  const cardOrdinals = new Map();
-  for (let ordinal = 0; ordinal < sourceCards.length; ordinal += 1) {
-    if (!cardOrdinals.has(sourceCards[ordinal])) cardOrdinals.set(sourceCards[ordinal], ordinal);
-  }
-  const serializeCandidates = (candidates) => candidates.map((candidate) => {
-    const cardOrdinal = cardOrdinals.get(candidate.card);
-    if (!Number.isSafeInteger(cardOrdinal)) {
-      throw new TypeError("card alias index candidate is not owned by the supplied cards array");
-    }
-    return {
-      cardOrdinal,
-      matchedAlias: candidate.matchedAlias,
-      matchedAliasKind: candidate.matchedAliasKind,
-    };
-  });
-  const serializeCandidateMap = (index) => [...index.entries()].map(([key, candidates]) => [
-    key,
-    serializeCandidates(candidates),
-  ]);
-
-  return {
-    schemaVersion: RAG_CARD_ALIAS_RUNTIME_INDEX_SCHEMA_VERSION,
-    kind: RAG_CARD_ALIAS_RUNTIME_INDEX_KIND,
-    compilerAbi: RAG_CARD_ALIAS_RUNTIME_INDEX_ABI,
-    cardCount: sourceCards.length,
-    cardIdentities: sourceCards.map(cardIdentity),
-    primary: serializeCandidateMap(primary),
-    aliasKeysByLength: [...aliasKeysByLength.entries()].map(([length, keys]) => [length, [...keys]]),
-    numberedIdentityIndex: serializeCandidateMap(supplemental.numberedIdentityIndex),
-    shortMentionIndex: serializeCandidateMap(supplemental.shortMentionIndex),
-    distinctiveFragmentIndex: serializeCandidateMap(supplemental.distinctiveFragmentIndex),
-  };
 }
 
 /**

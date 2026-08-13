@@ -1126,6 +1126,13 @@ button:focus-visible {
   min-width: 0;
   max-width: 100%;
   overflow: hidden;
+}
+
+.admin-history-entry {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
   padding: 10px 11px;
   border: 1px solid var(--line);
   border-radius: 3px;
@@ -1136,6 +1143,10 @@ button:focus-visible {
 
 .admin-history-list button:hover {
   border-color: var(--accent);
+}
+
+.admin-history-entry:not(button) {
+  cursor: default;
 }
 
 .admin-history-list strong,
