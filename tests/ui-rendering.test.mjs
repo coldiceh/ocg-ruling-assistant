@@ -561,9 +561,9 @@ test("ui_hides_engine_details_by_default", async () => {
   assert.match(html, /id="budgetCapButton"[^>]+hidden/u);
   const publicBudget = sourceBetween(html, '<section class="budget-panel"', '<section class="admin-lab"');
   const adminPanel = sourceBetween(html, '<section class="admin-lab"', '<section class="disclaimer-panel"');
-  assert.doesNotMatch(publicBudget, /budgetResetButton|budgetCapButton|重置额度|封顶公开/u);
+  assert.doesNotMatch(publicBudget, /budgetResetButton|budgetCapButton|重置额度|封顶至/u);
   assert.match(adminPanel, /id="budgetResetButton"[^>]+hidden>重置公开问答额度/u);
-  assert.match(adminPanel, /id="budgetCapButton"[^>]+hidden>立即停止今日公开 ChatGPT 调用/u);
+  assert.match(adminPanel, /id="budgetCapButton"[^>]+hidden>立即将公开 ChatGPT 今日额度封顶至 10 美元/u);
   assert.match(html, /免责声明/u);
   assert.match(html, /不是 KONAMI 官方项目/u);
   assert.match(html, /id="themeToggle"/u);
