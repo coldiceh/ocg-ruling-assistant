@@ -4077,6 +4077,81 @@ test("cancellation during rulebook budget preflight refunds before parallel grou
   assert.equal(increments.filter((command) => Number(command[4]) < 0).length, 2);
 });
 
+test("owner cap stops only today's public ChatGPT bucket at the ten-dollar hard ceiling", async () => {
+  const now = new Date("2038-02-04T00:00:00.000Z");
+  const env = {
+    API_BUDGET_TIMEZONE: "UTC",
+    API_DAILY_BUDGET_CNY: "10",
+    API_CHATGPT_DAILY_BUDGET_USD: "100",
+  };
+  await resetRagBudget({ env, now });
+
+  const capped = await capPublicChatGptBudget({ env, now });
+  const status = await getRagBudgetStatus({ env, now });
+  const relay = status.buckets.find((bucket) => bucket.id === "final_ruling:relay");
+
+  assert.equal(capped.action, "cap_public_chatgpt");
+  assert.equal(relay.dailyBudgetUsd, 10);
+  assert.equal(relay.spentTodayUsd, 10);
+  assert.equal(relay.remainingTodayUsd, 0);
+  assert.equal(status.spentTodayCny, 0);
+  assert.deepEqual(
+    status.buckets
+      .filter((bucket) => bucket.id !== "final_ruling:relay")
+      .map((bucket) => bucket.spentTodayCny),
+    [0, 0, 0],
+  );
+
+  let providerCalls = 0;
+  const blocked = await callRagModel({
+    prompt: "public calls stop after the owner cap",
+    env: {
+      ...env,
+      MODEL_PROVIDER: "relay",
+      RELAY_API_KEY: "test-key",
+      RELAY_BASE_URL: "https://relay.example.test/v1",
+      RAG_MODEL: "gpt-5.6-sol",
+      RELAY_MAX_COMPLETION_TOKENS: "64",
+    },
+    now,
+    fetchImpl: async () => {
+      providerCalls += 1;
+      throw new Error("capped public call must not reach the provider");
+    },
+  });
+  assert.equal(providerCalls, 0);
+  assert.equal(blocked.answer.answerLevel, "budget_limited");
+  assert.match(blocked.answer.shortAnswer, /每日 10 美元上限/u);
+  assert.match(blocked.answer.shortAnswer, /哔哩哔哩用户「おmaginai」/u);
+});
+
+test("persistent owner cap issues one atomic SET for only the public Relay USD key", async () => {
+  const now = new Date("2038-02-05T00:00:00.000Z");
+  const redis = createRedisFetch();
+  const env = {
+    API_BUDGET_TIMEZONE: "UTC",
+    API_CHATGPT_DAILY_BUDGET_USD: "7.5",
+    KV_REST_API_URL: "https://kv.example.test",
+    KV_REST_API_TOKEN: "kv-token",
+  };
+  redis.store.set("rag-api-budget:v3:2038-02-05:cny-total", "2.5");
+  redis.store.set("admin-final-budget:test-pool", "99");
+
+  const capped = await capPublicChatGptBudget({ env, fetchImpl: redis.fetchImpl, now });
+
+  assert.deepEqual(redis.commands, [[
+    "SET",
+    "rag-api-budget:v3:2038-02-05:final_ruling:relay:usd",
+    "7.5",
+    "EX",
+    "172800",
+  ]]);
+  assert.equal(redis.store.get("rag-api-budget:v3:2038-02-05:cny-total"), "2.5");
+  assert.equal(redis.store.get("admin-final-budget:test-pool"), "99");
+  assert.equal(capped.buckets[0].dailyBudgetUsd, 7.5);
+  assert.equal(capped.buckets[0].spentTodayUsd, 7.5);
+});
+
 test("rulebook preparation cache hashes evidence content and revision while cache hits report zero current usage", async () => {
   const env = {
     MODEL_PROVIDER: "deepseek",
