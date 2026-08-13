@@ -2831,7 +2831,9 @@ test("final validation rejects an audit-only evidence ID omitted from the model 
     text: `只用于扩大审计归档的相关资料 ${index + 1}。`,
   }));
   const service = makeService(fixture);
-  const created = await service.createRun({ body: { question: "匿名问题" } });
+  const created = await service.createRun({
+    body: { question: "匿名问题", finalAttemptPolicy: "repair_once" },
+  });
   const execution = await service.executeRun({ runId: created.runId });
   const decisionPacket = execution.run.evidenceSnapshot.evidence.evidenceDecisionPacket;
   const visibleIds = new Set(decisionPacket.modelPacket.evidenceItems.flatMap(

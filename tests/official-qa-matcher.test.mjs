@@ -204,6 +204,79 @@ test("semantic overlap cannot become direct when the queried card appears only o
   assert.equal(semantic?.semanticSubsumptionCertified, false);
 });
 
+test("exact question aliases support related recall without granting direct authority", () => {
+  const matches = searchOfficialQaEvidence({
+    question: "匿名长名主体的效果适用中，匿名手续卡究竟能否正常发动？",
+    records: [{
+      id: "qa-question-alias-related-only",
+      recordType: "qa",
+      question: "匿名长名主体的效果适用中，匿名手续卡能否发动？",
+      answer: "分别确认发动手续。",
+    }],
+    resolvedCards: [
+      { id: "3151", name: "匿名长名主体", aliases: ["匿名长名主体"] },
+      { id: "3152", name: "匿名手续卡", aliases: ["匿名手续卡"] },
+    ],
+  });
+
+  const candidate = matches.all[0];
+  assert.deepEqual(new Set(candidate?.matchedRelatedQuestionCardIds), new Set(["3151", "3152"]));
+  assert.equal(candidate?.questionCardIdCoverage, 0);
+  assert.equal(candidate?.relatedQuestionCardIdCoverage, 1);
+  assert.ok(candidate?.matchedBy.includes("related_question_exact_alias"));
+  assert.equal(matches.exact.length, 0);
+});
+
+test("question alias binding is ambiguity-safe and prefers the longest overlapping name", () => {
+  const sharedAliasMatches = searchOfficialQaEvidence({
+    question: "当前匿名共享名的效果究竟可以发动吗？",
+    records: [{
+      id: "qa-ambiguous-question-alias",
+      recordType: "qa",
+      question: "匿名共享名的效果可以发动吗？",
+      answer: "分别确认卡片身份。",
+    }],
+    resolvedCards: [
+      { id: "3161", name: "匿名主体甲", aliases: ["匿名共享名"] },
+      { id: "3162", name: "匿名主体乙", aliases: ["匿名共享名"] },
+    ],
+  });
+  assert.deepEqual(sharedAliasMatches.all[0]?.matchedRelatedQuestionCardIds, []);
+
+  const overlappingMatches = searchOfficialQaEvidence({
+    question: "当前匿名龙骑士的效果究竟可以发动吗？",
+    records: [{
+      id: "qa-overlapping-question-alias",
+      recordType: "qa",
+      question: "匿名龙骑士的效果可以发动吗？",
+      answer: "确认完整卡名。",
+    }],
+    resolvedCards: [
+      { id: "3171", name: "匿名龙", aliases: ["匿名龙"] },
+      { id: "3172", name: "匿名龙骑士", aliases: ["匿名龙骑士"] },
+    ],
+  });
+  assert.deepEqual(overlappingMatches.all[0]?.matchedRelatedQuestionCardIds, ["3172"]);
+  assert.equal(overlappingMatches.exact.length, 0);
+});
+
+test("answer-only card names do not create question-side related identity", () => {
+  const matches = searchOfficialQaEvidence({
+    question: "当前手续能否发动？",
+    records: [{
+      id: "qa-answer-name-does-not-bind",
+      recordType: "qa",
+      question: "当前手续能否发动？",
+      answer: "答案举例提到匿名答案卡。",
+    }],
+    resolvedCards: [{ id: "3181", name: "匿名答案卡", aliases: ["匿名答案卡"] }],
+  });
+
+  assert.deepEqual(matches.all[0]?.matchedRelatedQuestionCardIds, []);
+  assert.equal(matches.all[0]?.relatedQuestionCardIdCoverage, 0);
+  assert.equal(matches.exact.length, 0);
+});
+
 test("scene qualifier conflicts prevent semantic question subsumption certification", () => {
   const question = "ダメージステップに、融合召喚の素材にできないモンスターを墓地へ送って「対象機械竜」を特殊召喚できますか？";
   const records = [

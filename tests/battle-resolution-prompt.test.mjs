@@ -60,7 +60,8 @@ test("battle prompts contain the raw question, card texts, and retrieved branch 
     evidence: evidence(),
   });
 
-  for (const prompt of [bundle.prompt, bundle.recoveryPrompt]) {
+  assert.equal(bundle.recoveryPrompt, "");
+  for (const prompt of [bundle.prompt]) {
     assert.match(prompt, /对方分别用以上两只怪兽攻击/u);
     assert.match(prompt, /里侧目标/u);
     assert.match(prompt, /此卡翻开后适用一个永续效果/u);
@@ -83,7 +84,8 @@ test("a size-limited battle prompt keeps source material without adding a battle
     },
   });
 
-  for (const prompt of [bundle.prompt, bundle.recoveryPrompt]) {
+  assert.equal(bundle.recoveryPrompt, "");
+  for (const prompt of [bundle.prompt]) {
     assert.match(prompt, /对方分别用以上两只怪兽攻击/u);
     assert.match(prompt, /里侧目标/u);
     assert.match(prompt, /qa-anonymous-battle-branch/u);
@@ -126,7 +128,8 @@ test("no public prompt receives a battle-checklist instruction", () => {
       cardResolution: { resolvedCards: [], unresolvedMentions: [], ambiguousMentions: [] },
       evidence: evidence(),
     });
-    for (const prompt of [bundle.prompt, bundle.recoveryPrompt]) {
+    assert.equal(bundle.recoveryPrompt, "");
+    for (const prompt of [bundle.prompt]) {
       assert.match(prompt, new RegExp(query.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&"), "u"));
       assert.doesNotMatch(prompt, /状态变化时重检攻击许可|按变化后的表示形式重新检查/u);
       assert.doesNotMatch(prompt, /战斗题只按实际适用的检查点|战斗处理题先识别题面实际涉及/u);

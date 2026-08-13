@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { tmpdir } from "node:os";
 import test from "node:test";
 
 import {
@@ -179,7 +180,9 @@ test("a bounded HTTP 2xx text candidate is checkpointed and sent to the semantic
       headers: { "content-type": "text/event-stream" },
     });
   };
-  const privateRoot = new URL(`file:///${process.env.TEMP.replaceAll("\\", "/")}/pure-llm-eval-${Date.now()}/`);
+  const privateRoot = new URL(
+    `file:///${tmpdir().replaceAll("\\", "/")}/pure-llm-eval-${Date.now()}/`,
+  );
   const datasetPath = new URL("dataset.txt", privateRoot);
   const checkpointDirectory = new URL("checkpoint", privateRoot);
   const { mkdir, writeFile, rm } = await import("node:fs/promises");

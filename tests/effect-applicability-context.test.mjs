@@ -126,7 +126,8 @@ test("full, compact and recovery prompts retain raw card text without dependency
       evidence: { effectApplicabilityContext },
       env: { RAG_MAX_PROMPT_CHARS: String(maxPromptChars), RAG_RECOVERY_PROMPT_CHARS: "4800" },
     });
-    for (const prompt of [bundle.prompt, bundle.recoveryPrompt]) {
+    assert.equal(bundle.recoveryPrompt, "");
+    for (const prompt of [bundle.prompt]) {
       assert.match(prompt, /静默缚带/u);
       assert.match(prompt, /棱镜守卫/u);
       assert.match(prompt, /装备怪兽不受魔法卡效果影响/u);
