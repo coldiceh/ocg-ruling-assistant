@@ -484,6 +484,7 @@ test("HTTP timeout cancels non-terminating JSON, text and SSE stream readers wit
         (error) => error?.name === "TimeoutError" && /timed out/iu.test(error.message),
       );
       assert.equal(requestSignal.aborted, true);
+      await new Promise((resolve) => setImmediate(resolve));
       assert.equal(readerCancelled, true);
       assert.equal(readerReleased, true);
     });
