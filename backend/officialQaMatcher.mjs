@@ -216,16 +216,6 @@ export function searchOfficialQaEvidence({
 
   const scored = (records || [])
     .filter((record) => ["qa", "card-faq", "official-database"].includes(record.recordType))
-    // Source-level card metadata may rank or retrieve an official Q&A only
-    // after the source exposes a bounded question surface.  A legacy blob with
-    // no question/title boundary may be answer text or an example; letting its
-    // metadata admit the record would reinterpret answer-side material as a
-    // question.  Non-scenario supporting records keep their existing full-text
-    // retrieval behaviour.
-    .filter((record) => (
-      !isScenarioOfficialQaRecord(record)
-      || Boolean(projectOfficialQaQuestion(record).questionText)
-    ))
     .map((record) => scoreRecord({
       record,
       query,
@@ -241,7 +231,7 @@ export function searchOfficialQaEvidence({
       queryPlayerRoleSignature,
       subsumptionCandidatePoolComplete,
     }))
-    .filter((item) => item.score >= 0.2);
+    .filter((item) => item && item.score >= 0.2);
   markAuthoritativeSceneMatches(scored);
   promoteUniqueExactCardSet(scored, queryType, resolvedIds);
   promoteUniqueQuestionCardMatch(scored, resolvedIds, queryType);
@@ -327,6 +317,12 @@ function scoreRecord({
     recordIdentityText,
     questionIdentityText,
   } = officialQaRecordFeatures(record);
+  // Source-level card metadata may rank or retrieve an official Q&A only
+  // after the source exposes a bounded question surface. A legacy blob with no
+  // question/title boundary may be answer text or an example; admitting it
+  // would reinterpret answer-side material as a question. This check reuses
+  // the cached projection above instead of parsing the record a second time.
+  if (isScenarioOfficialQaRecord(record) && !questionText) return null;
   const evidencePlayerRoleSignature = extractPlayerRoleSignature(
     recordPlayerRoleContext(record, questionText),
     { cards: resolvedCards },
