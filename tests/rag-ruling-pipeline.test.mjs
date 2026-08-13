@@ -4385,14 +4385,8 @@ test("public JSON providers stop waiting for a stalled response body when the ca
 
     assert.equal(requestSignal?.aborted, true, provider.label);
     if (provider.label === "gemini") {
-      await assert.rejects(outcome, (error) => (
-        error === abortReason
-        || (error?.name === "AbortError" && /(?:gemini body cancelled|all_singleflight_waiters_aborted)/u.test(error.message))
-      ));
-      assert.ok(
-        requestSignal.reason === abortReason
-        || requestSignal.reason === "all_singleflight_waiters_aborted",
-      );
+      await assert.rejects(outcome, (error) => error === abortReason);
+      assert.equal(requestSignal.reason, "all_singleflight_waiters_aborted");
       continue;
     }
     const result = await outcome;
