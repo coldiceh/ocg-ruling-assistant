@@ -147,6 +147,7 @@ export async function answerRagRulingQuestion({
     ruleSearchQueries: ruleQueryModel.queries || [],
     env,
     fetchImpl,
+    signal,
   });
   timingsMs.retrieval = elapsedMs(retrievalStartedAt);
 

@@ -139,6 +139,41 @@ test("partial card-index failure preserves evidence without unconditional exact 
   assert.equal(matches.exact.length, 0);
 });
 
+test("live official QA combines its timeout with the parent request signal", async () => {
+  const parent = new AbortController();
+  const reason = Object.assign(new Error("caller_disconnected"), { code: "caller_disconnected" });
+  let receivedSignal = null;
+  const pending = retrieveLiveOfficialQa({
+    resolvedCards: [{ id: "100", name: "fixture" }],
+    signal: parent.signal,
+    timeoutMs: 60_000,
+    fetchImpl: async (_url, options = {}) => {
+      receivedSignal = options.signal;
+      return await new Promise((resolve, reject) => {
+        options.signal?.addEventListener("abort", () => reject(options.signal.reason), { once: true });
+      });
+    },
+  });
+  parent.abort(reason);
+
+  await assert.rejects(pending, (error) => error === reason);
+  assert.equal(receivedSignal instanceof AbortSignal, true);
+  assert.equal(receivedSignal.aborted, true);
+});
+
+test("live official QA source timeout remains a fail-soft retrieval warning", async () => {
+  const result = await retrieveLiveOfficialQa({
+    resolvedCards: [{ id: "101", name: "fixture" }],
+    timeoutMs: 5,
+    fetchImpl: async (_url, options = {}) => await new Promise((resolve, reject) => {
+      options.signal?.addEventListener("abort", () => reject(options.signal.reason), { once: true });
+    }),
+  });
+
+  assert.deepEqual(result.records, []);
+  assert.ok(result.warnings.some((warning) => warning.includes("live_card_qa_index_failed")));
+});
+
 test("card-set promotion stays conservative when two compatible QAs share the same exact card set", () => {
   const records = ["a", "b"].map((suffix, index) => ({
     id: `qa-${suffix}`,

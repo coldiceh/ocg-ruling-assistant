@@ -30,7 +30,9 @@ export async function retrieveLiveOfficialQa({
   cacheTtlMs = DEFAULT_CACHE_TTL_MS,
   maxCandidates = 8,
   maxConcurrentQaFetches = 6,
+  signal,
 } = {}) {
+  throwIfAborted(signal);
   const cards = dedupeCardsById(resolvedCards).slice(0, 6);
   const preferredCandidateQaIds = uniqueNumericIds(candidateQaIds);
   if ((!cards.length && !preferredCandidateQaIds.length) || typeof fetchImpl !== "function") {
@@ -44,16 +46,19 @@ export async function retrieveLiveOfficialQa({
         const payload = await fetchJsonResilient(fetchImpl, `${baseUrl}/data/card/${encodeURIComponent(card.id)}`, {
           timeoutMs,
           cacheTtlMs,
+          signal,
         });
         return { card, payload };
       } catch (error) {
+        throwIfAborted(signal);
         warnings.push(`live_card_qa_index_failed:${card.id}:${errorCode(error)}`);
         return null;
       }
     })),
     cards.length
-      ? fetchJsonResilient(fetchImpl, `${baseUrl}/data/meta/mprop`, { timeoutMs, cacheTtlMs })
+      ? fetchJsonResilient(fetchImpl, `${baseUrl}/data/meta/mprop`, { timeoutMs, cacheTtlMs, signal })
         .catch((error) => {
+          throwIfAborted(signal);
           warnings.push(`live_monster_property_metadata_failed:${errorCode(error)}`);
           return [];
         })
@@ -100,9 +105,11 @@ export async function retrieveLiveOfficialQa({
       const payload = await fetchJsonResilient(fetchImpl, `${baseUrl}/data/qa/${encodeURIComponent(qaId)}`, {
         timeoutMs,
         cacheTtlMs,
+        signal,
       });
       return normalizeQaRecord(qaId, payload, cardNameById, qaSelection);
     } catch (error) {
+      throwIfAborted(signal);
       warnings.push(`live_qa_fetch_failed:${qaId}:${errorCode(error)}`);
       return null;
     }
@@ -380,7 +387,8 @@ function collectQaIds(value) {
   });
 }
 
-async function fetchJsonCached(fetchImpl, url, { timeoutMs, cacheTtlMs }) {
+async function fetchJsonCached(fetchImpl, url, { timeoutMs, cacheTtlMs, signal }) {
+  throwIfAborted(signal);
   let cache = cacheByFetchImpl.get(fetchImpl);
   if (!cache) {
     cache = new Map();
@@ -389,7 +397,17 @@ async function fetchJsonCached(fetchImpl, url, { timeoutMs, cacheTtlMs }) {
   const cached = cache.get(url);
   if (cached && cached.expiresAt > Date.now()) return cached.value;
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), positiveInteger(timeoutMs, DEFAULT_TIMEOUT_MS));
+  const timeoutError = new Error("live_qa_timeout");
+  timeoutError.name = "TimeoutError";
+  timeoutError.code = "live_qa_timeout";
+  const forwardAbort = () => controller.abort(signal?.reason);
+  if (signal?.aborted) forwardAbort();
+  else signal?.addEventListener?.("abort", forwardAbort, { once: true });
+  const timer = setTimeout(
+    () => controller.abort(timeoutError),
+    positiveInteger(timeoutMs, DEFAULT_TIMEOUT_MS),
+  );
+  timer.unref?.();
   try {
     const response = await fetchImpl(url, {
       headers: { accept: "application/json" },
@@ -401,6 +419,7 @@ async function fetchJsonCached(fetchImpl, url, { timeoutMs, cacheTtlMs }) {
     return value;
   } finally {
     clearTimeout(timer);
+    signal?.removeEventListener?.("abort", forwardAbort);
   }
 }
 
@@ -422,6 +441,7 @@ async function fetchJsonResilient(fetchImpl, url, options) {
   try {
     return await fetchJsonCached(fetchImpl, url, options);
   } catch {
+    throwIfAborted(options?.signal);
     return fetchJsonCached(fetchImpl, url, options);
   }
 }
@@ -467,6 +487,15 @@ function positiveInteger(value, fallback) {
 
 function errorCode(error) {
   return String(error?.name || error?.code || error?.message || "unknown").replace(/\s+/gu, "_").slice(0, 80);
+}
+
+function throwIfAborted(signal) {
+  if (!signal?.aborted) return;
+  if (signal.reason instanceof Error) throw signal.reason;
+  const error = new Error("request_aborted");
+  error.name = "AbortError";
+  error.code = "request_aborted";
+  throw error;
 }
 
 function emptyResult(reason) {

@@ -2,6 +2,7 @@ import { canonicalizeNumberedCardPrefixes, extractNumberedCardIdentities, hasNum
 
 const BAIGE_API_BASE = "https://ygocdb.com/api/v0/";
 const DEFAULT_CACHE_TTL_MS = 86_400_000;
+const DEFAULT_TIMEOUT_MS = 6_000;
 const searchCache = new Map();
 const ATTRIBUTE_NAMES = new Map([
   [1, "地"], [2, "水"], [4, "炎"], [8, "风"], [16, "光"], [32, "暗"], [64, "神"],
@@ -24,9 +25,11 @@ export async function searchBaigeCards(query, {
   env = globalThis.process?.env || {},
   limit = 8,
   now = Date.now(),
+  signal,
 } = {}) {
   const normalizedQuery = String(query || "").trim();
   const warnings = [];
+  throwIfAborted(signal);
   if (!normalizedQuery) return { provider: "baige", query: "", results: [], warnings: ["baige_empty_query"], cacheHit: false };
   if (typeof fetchImpl !== "function") {
     return { provider: "baige", query: normalizedQuery, results: [], warnings: ["baige_fetch_unavailable"], cacheHit: false };
@@ -47,8 +50,13 @@ export async function searchBaigeCards(query, {
 
   let payload = null;
   let matchedSearchQuery = normalizedQuery;
+  const requestAbort = createRequestAbortScope({
+    signal,
+    timeoutMs: readPositiveNumber(env.BAIGE_TIMEOUT_MS, DEFAULT_TIMEOUT_MS),
+  });
   try {
     for (const searchQuery of buildBaigeSearchQueries(normalizedQuery)) {
+      throwIfAborted(requestAbort.signal);
       const url = new URL(BAIGE_API_BASE);
       url.searchParams.set("search", searchQuery);
       const response = await fetchImpl(url.toString(), {
@@ -56,6 +64,7 @@ export async function searchBaigeCards(query, {
           accept: "application/json",
           "user-agent": "ocg-ruling-assistant/0.3",
         },
+        signal: requestAbort.signal,
       });
       if (!response?.ok) {
         warnings.push(`baige_http_${response?.status || "error"}`);
@@ -75,8 +84,16 @@ export async function searchBaigeCards(query, {
       if (payloadCards.length) warnings.push(`baige_numbered_identity_conflict:${searchQuery}`);
     }
   } catch (error) {
-    warnings.push(`baige_fetch_failed:${safeErrorMessage(error)}`);
+    // A disconnected caller is terminal: do not continue into later retrieval
+    // or a paid final-model request. Baige's own deadline and ordinary network
+    // failures are optional-source failures and therefore degrade to local data.
+    if (signal?.aborted) throw abortSignalError(signal);
+    warnings.push(requestAbort.timedOut()
+      ? "baige_timeout"
+      : `baige_fetch_failed:${safeErrorMessage(error)}`);
     return { provider: "baige", query: normalizedQuery, results: [], warnings, cacheHit: false };
+  } finally {
+    requestAbort.cleanup();
   }
 
   const rawCards = collectBaigeCards(payload);
@@ -601,6 +618,38 @@ function bigrams(value) {
 function readPositiveNumber(value, fallback) {
   const number = Number(value);
   return Number.isFinite(number) && number > 0 ? Math.floor(number) : fallback;
+}
+
+function createRequestAbortScope({ signal, timeoutMs }) {
+  const controller = new AbortController();
+  const timeoutError = new Error("baige_timeout");
+  timeoutError.name = "TimeoutError";
+  timeoutError.code = "baige_timeout";
+  const forwardAbort = () => controller.abort(signal?.reason);
+  if (signal?.aborted) forwardAbort();
+  else signal?.addEventListener?.("abort", forwardAbort, { once: true });
+  const timer = setTimeout(() => controller.abort(timeoutError), timeoutMs);
+  timer.unref?.();
+  return {
+    signal: controller.signal,
+    timedOut: () => controller.signal.aborted && controller.signal.reason === timeoutError,
+    cleanup() {
+      clearTimeout(timer);
+      signal?.removeEventListener?.("abort", forwardAbort);
+    },
+  };
+}
+
+function throwIfAborted(signal) {
+  if (signal?.aborted) throw abortSignalError(signal);
+}
+
+function abortSignalError(signal) {
+  if (signal?.reason instanceof Error) return signal.reason;
+  const error = new Error("request_aborted");
+  error.name = "AbortError";
+  error.code = "request_aborted";
+  return error;
 }
 
 function safeErrorMessage(error) {
