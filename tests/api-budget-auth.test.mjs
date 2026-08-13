@@ -6,6 +6,7 @@ test("budget_reset_requires_owner_token", async () => {
   const previousToken = process.env.API_BUDGET_RESET_TOKEN;
   const previousPassword = process.env.API_BUDGET_RESET_PASSWORD;
   const previousBudget = process.env.API_DAILY_BUDGET_CNY;
+  const previousChatGptBudget = process.env.API_CHATGPT_DAILY_BUDGET_USD;
   try {
     delete process.env.API_BUDGET_RESET_TOKEN;
     delete process.env.API_BUDGET_RESET_PASSWORD;
@@ -22,6 +23,21 @@ test("budget_reset_requires_owner_token", async () => {
     assert.equal(response.payload.error, "budget_reset_token_not_configured");
 
     process.env.API_BUDGET_RESET_PASSWORD = "test-only-reset-secret";
+    process.env.API_CHATGPT_DAILY_BUDGET_USD = "100";
+    response = createJsonResponse();
+    await handler({
+      method: "POST",
+      headers: {},
+      body: {
+        action: "cap_public_chatgpt",
+        password: "test-only-reset-secret",
+      },
+    }, response);
+    assert.equal(response.statusCode, 200);
+    const cappedRelay = response.payload.buckets.find((bucket) => bucket.id === "final_ruling:relay");
+    assert.equal(cappedRelay.dailyBudgetUsd, 10);
+    assert.equal(cappedRelay.spentTodayUsd, 10);
+
     response = createJsonResponse();
     await handler({ method: "POST", headers: {}, body: { password: "test-only-reset-secret" } }, response);
     assert.equal(response.statusCode, 200);
@@ -48,6 +64,8 @@ test("budget_reset_requires_owner_token", async () => {
     else process.env.API_BUDGET_RESET_PASSWORD = previousPassword;
     if (previousBudget === undefined) delete process.env.API_DAILY_BUDGET_CNY;
     else process.env.API_DAILY_BUDGET_CNY = previousBudget;
+    if (previousChatGptBudget === undefined) delete process.env.API_CHATGPT_DAILY_BUDGET_USD;
+    else process.env.API_CHATGPT_DAILY_BUDGET_USD = previousChatGptBudget;
   }
 });
 

@@ -205,7 +205,11 @@ export async function callRagModel({
   if (budget.blocked) {
     const blockedEstimate = Number(budget.status?.bucket?.estimatedThisCall ?? 0);
     return {
-      answer: safeFallbackAnswer("api_daily_budget_exceeded", "今日 API 预算已用完，未调用模型。", "budget_limited"),
+      answer: safeFallbackAnswer(
+        "api_daily_budget_exceeded",
+        publicBudgetExhaustedMessage(budget.status?.bucket),
+        "budget_limited",
+      ),
       rawText: "",
       provider,
       providerUsed: provider,
@@ -1983,6 +1987,49 @@ export async function resetRagBudget({
   return getRagBudgetStatus({ env, fetchImpl, now });
 }
 
+/**
+ * Stops further anonymous ChatGPT rulings for the current budget day by
+ * setting only the public Relay USD bucket to its configured hard ceiling.
+ * Admin experiments use a separate ledger and are deliberately untouched.
+ */
+export async function capPublicChatGptBudget({
+  env = globalThis.process?.env || {},
+  fetchImpl = globalThis.fetch,
+  now = new Date(),
+} = {}) {
+  const config = budgetConfig(env);
+  const storage = budgetStorage(env);
+  if (storage === "unconfigured") {
+    return getRagBudgetStatus({ env, fetchImpl, now });
+  }
+  const bucket = PUBLIC_BUDGET_BUCKETS.find((item) => item.id === "final_ruling:relay");
+  const bucketConfig = budgetBucketConfig(env, bucket);
+  const dayKey = budgetBucketDayKey(config.timezone, now, bucket.id);
+  const spent = await setBudgetSpent({
+    storage,
+    dayKey,
+    value: bucketConfig.dailyBudgetAmount,
+    env,
+    fetchImpl,
+    ioDeadline: createBudgetRedisDeadline(env),
+  });
+  return {
+    schemaVersion: 3,
+    action: "cap_public_chatgpt",
+    budgetMode: config.mode,
+    budgetStorage: storage,
+    budgetPersistent: storage === "redis",
+    timezone: config.timezone,
+    dayKey,
+    buckets: [budgetBucketStatusPayload({
+      bucket,
+      bucketConfig,
+      spent,
+      blocked: true,
+    })],
+  };
+}
+
 export function parseRagModelJson(rawText) {
   const text = stripJsonCodeFence(String(rawText || "").trim());
   if (!text) throw new SyntaxError("empty model output");
@@ -2931,6 +2978,17 @@ function safeFallbackAnswer(reason, shortAnswer = "当前资料不足，无法�
     riskFlags: [reason],
     confidenceSelfEstimate: "low",
   });
+}
+
+function publicBudgetExhaustedMessage(bucket) {
+  if (bucket?.id === "final_ruling:relay") {
+    const parsedLimit = Number(bucket.dailyBudgetUsd);
+    const dailyLimitUsd = Number.isFinite(parsedLimit) && parsedLimit > 0
+      ? roundCost(parsedLimit)
+      : DEFAULT_CHATGPT_DAILY_BUDGET_USD;
+    return `今日公开裁定额度已达到每日 ${dailyLimitUsd} 美元上限，未调用模型。如需协助重置，请联系哔哩哔哩用户「おmaginai」。`;
+  }
+  return "今日公开模型额度已用完，未调用模型。如需协助重置，请联系哔哩哔哩用户「おmaginai」。";
 }
 
 async function buildBudgetPreflight({ provider, stage, modelName, prompt, maxTokens, env, fetchImpl, now, trackSpend = true }) {
