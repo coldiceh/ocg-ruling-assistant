@@ -16,6 +16,8 @@ import {
 } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
+import { estimateOpenAIModelCost } from "../backend/modelPricing.mjs";
+
 const SCRIPT_DIRECTORY = dirname(fileURLToPath(import.meta.url));
 const REPOSITORY_ROOT = resolve(SCRIPT_DIRECTORY, "..");
 const DEFAULT_DATASET_PATH = resolve(homedir(), "Desktop", "test.txt");
@@ -338,6 +340,10 @@ export function createPublicReport({
       generationStatus: generated ? "generated" : "generation_failed",
       verdict,
       reviewed: REVIEWED_VERDICTS.has(verdict),
+      generationLatencyMs: finiteNonNegativeNumber(generation?.latencyMs),
+      judgmentLatencyMs: finiteNonNegativeNumber(judgment?.latencyMs),
+      generationEstimatedCostUsd: finiteNonNegativeNumber(generation?.estimatedCostUsd),
+      judgmentEstimatedCostUsd: finiteNonNegativeNumber(judgment?.estimatedCostUsd),
     };
   });
   const total = cases.length;
@@ -346,6 +352,12 @@ export function createPublicReport({
   const partiallyCorrect = cases.filter((item) => item.verdict === "partially_correct").length;
   const incorrect = cases.filter((item) => item.verdict === "incorrect").length;
   const reviewed = correct + partiallyCorrect + incorrect;
+  const generationCosts = cases.map((item) => item.generationEstimatedCostUsd)
+    .filter((value) => value !== null);
+  const judgmentCosts = cases.map((item) => item.judgmentEstimatedCostUsd)
+    .filter((value) => value !== null);
+  const generationCostUsd = roundMoney(sum(generationCosts));
+  const judgmentCostUsd = roundMoney(sum(judgmentCosts));
   return {
     schemaVersion: 1,
     generatedAt,
@@ -373,6 +385,18 @@ export function createPublicReport({
       reviewCoverage: ratio(reviewed, generated),
       reviewedAccuracy: ratio(correct, reviewed),
       strictOverallAccuracy: ratio(correct, total),
+      latencyMs: {
+        generation: summarizeNumbers(cases.map((item) => item.generationLatencyMs)),
+        judgment: summarizeNumbers(cases.map((item) => item.judgmentLatencyMs)),
+      },
+      estimatedCostUsd: {
+        pricingBasis: "official_list_rate_all_input_uncached",
+        generation: generationCostUsd,
+        judgment: judgmentCostUsd,
+        total: roundMoney(generationCostUsd + judgmentCostUsd),
+        generationCoverage: ratio(generationCosts.length, generated),
+        judgmentCoverage: ratio(judgmentCosts.length, reviewed),
+      },
     },
     cases,
   };
@@ -460,6 +484,7 @@ async function generateCandidate({
       body: JSON.stringify(buildGenerationRequest(evaluationCase.question)),
     }, timeoutMs);
     const responseText = await readBoundedResponseText(response, MAX_HTTP_RESPONSE_BYTES);
+    const publicMetrics = extractCandidatePublicMetrics(responseText);
     const base = {
       schemaVersion: 1,
       caseId: evaluationCase.id,
@@ -470,6 +495,7 @@ async function generateCandidate({
       contentType: String(response.headers?.get?.("content-type") || ""),
       candidateResponseText: responseText,
       candidateSha256: sha256(responseText),
+      ...publicMetrics,
     };
     if (!response.ok) {
       return {
@@ -586,6 +612,7 @@ async function judgeCandidate({
       };
     }
     const parsed = parseJudgeContent(completion.content);
+    const usage = sanitizeUsage(completion.usage);
     return {
       ...base,
       status: "reviewed",
@@ -595,7 +622,8 @@ async function judgeCandidate({
       returnedModel: completion.model,
       modelIdentityVerified: true,
       finishReason: completion.finishReason || null,
-      usage: sanitizeUsage(completion.usage),
+      usage,
+      estimatedCostUsd: estimateJudgeCostUsd(usage),
     };
   } catch (error) {
     return notReviewedJudgment(
@@ -812,6 +840,78 @@ function sanitizeUsage(value) {
     if (Number.isFinite(number) && number >= 0) usage[field] = number;
   }
   return Object.keys(usage).length ? usage : null;
+}
+
+export function extractCandidatePublicMetrics(value) {
+  try {
+    const payload = JSON.parse(String(value || ""));
+    const debug = payload?.debug;
+    if (!debug || typeof debug !== "object" || Array.isArray(debug)) return {};
+    const estimatedCostUsd = finiteNonNegativeNumber(debug.estimatedCostUsd);
+    const usage = sanitizeUsage(debug.tokenUsage);
+    return {
+      ...(estimatedCostUsd === null ? {} : { estimatedCostUsd }),
+      ...(usage ? { usage } : {}),
+    };
+  } catch {
+    return {};
+  }
+}
+
+function estimateJudgeCostUsd(usage) {
+  if (!usage) return null;
+  try {
+    return finiteNonNegativeNumber(estimateOpenAIModelCost({
+      model: JUDGE_MODEL,
+      usage,
+      reasoningMode: "standard",
+      inputBillingBasis: "all_uncached",
+    }).totalCostUsd);
+  } catch {
+    return null;
+  }
+}
+
+function summarizeNumbers(values) {
+  const numbers = (values || [])
+    .map(finiteNonNegativeNumber)
+    .filter((value) => value !== null)
+    .sort((left, right) => left - right);
+  if (!numbers.length) {
+    return { count: 0, average: null, p50: null, p95: null, min: null, max: null };
+  }
+  return {
+    count: numbers.length,
+    average: roundMetric(sum(numbers) / numbers.length),
+    p50: roundMetric(percentile(numbers, 0.5)),
+    p95: roundMetric(percentile(numbers, 0.95)),
+    min: roundMetric(numbers[0]),
+    max: roundMetric(numbers.at(-1)),
+  };
+}
+
+function percentile(sorted, quantile) {
+  if (sorted.length === 1) return sorted[0];
+  const index = Math.ceil(sorted.length * quantile) - 1;
+  return sorted[Math.max(0, Math.min(sorted.length - 1, index))];
+}
+
+function finiteNonNegativeNumber(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const number = Number(value);
+  return Number.isFinite(number) && number >= 0 ? number : null;
+}
+
+function sum(values) {
+  return (values || []).reduce((total, value) => total + Number(value || 0), 0);
+}
+
+function roundMetric(value) {
+  return Number(Number(value).toFixed(3));
+}
+
+function roundMoney(value) {
+  return Number(Number(value).toFixed(8));
 }
 
 function safeErrorMessage(error) {
