@@ -9,17 +9,16 @@ import {
 } from "../backend/adminFinalCallBudgetLedger.mjs";
 import {
   createLegacyLuaUnknownPacket,
-  projectLegacyLuaSemanticPacketForModel,
   serializeLegacyLuaSemanticPacket,
   validateLegacyLuaSemanticPacket,
 } from "../backend/legacyLuaSemanticPacket.mjs";
+import { buildLegacyLuaPromptModule } from "../backend/legacyLuaPromptModule.mjs";
 import {
   createAdminRunStore,
   createMemoryAdminRunStorage,
 } from "../backend/adminRunStore.mjs";
-import { MODEL_RULING_COUNTER_CHECK_TYPES } from "../backend/modelRulingSchema.mjs";
 
-test("model-lab freezes one non-authoritative Lua packet and reuses its exact bytes for every fork", async () => {
+test("model-lab collects Lua only for an explicit +lua variant and reuses the frozen packet", async () => {
   let packetCalls = 0;
   const packet = createLegacyLuaUnknownPacket({
     code: "TEST_DISCOVERY_ONLY",
@@ -40,7 +39,7 @@ test("model-lab freezes one non-authoritative Lua packet and reuses its exact by
   });
 
   const created = await fixture.service.createRun({
-    body: finalModelBody("匿名规则问题"),
+      body: finalModelBody("匿名规则问题", "full_plus_lua"),
   });
   const sourceExecution = await fixture.service.executeRun({ runId: created.runId });
   const source = sourceExecution.run;
@@ -60,17 +59,19 @@ test("model-lab freezes one non-authoritative Lua packet and reuses its exact by
     new RegExp(frozenPacket.packetId, "u"),
   );
 
-  const sourceInput = JSON.parse(fixture.providerCalls[0].input.split("\n").at(-1));
-  assert.deepEqual(
-    sourceInput.legacyLuaSemanticPacket,
-    projectLegacyLuaSemanticPacketForModel(frozenPacket),
-  );
-  assert.equal(
-    Object.hasOwn(sourceInput.legacyLuaSemanticPacket, "sourceDocuments"),
-    false,
-  );
-  assert.match(fixture.providerCalls[0].input, /candidateVerdict 不能直接支持结论/u);
-  assert.match(fixture.providerCalls[0].input, /不能加入 evidenceIds/u);
+  const isolatedModule = buildLegacyLuaPromptModule({
+    packet: frozenPacket,
+    resolvedCards: source.evidenceSnapshot.evidence.cardResolution.resolvedCards,
+    enabled: true,
+  });
+  assert.equal(isolatedModule.status, "UNAVAILABLE");
+  assert.equal(isolatedModule.promptAddon, "");
+
+  const sourceInputText = fixture.providerCalls[0].input;
+  const sourceInput = JSON.parse(sourceInputText.split("\n").at(-1));
+  assert.equal(Object.hasOwn(sourceInput, "legacyLuaSemanticPacket"), false);
+  assert.equal(Object.hasOwn(sourceInput, "legacyLuaPromptHints"), false);
+  assert.doesNotMatch(sourceInputText, /legacyLuaSemanticPacket|legacyLuaPromptHints/u);
 
   const fork = await fixture.service.forkRun({
     forkFromRunId: source.runId,
@@ -80,6 +81,7 @@ test("model-lab freezes one non-authoritative Lua packet and reuses its exact by
       model: "deepseek-v4-pro",
       reasoningEffort: "high",
       reasoningMode: "pro",
+      evidenceVariant: "full_plus_lua",
     },
   });
   assert.deepEqual(fork.evidenceSnapshot, source.evidenceSnapshot);
@@ -94,15 +96,15 @@ test("model-lab freezes one non-authoritative Lua packet and reuses its exact by
   assert.equal(fixture.providerCalls.length, 2);
   assert.equal(fixture.providerCalls[0].input, fixture.providerCalls[1].input);
   const forkInput = JSON.parse(fixture.providerCalls[1].input.split("\n").at(-1));
-  assert.deepEqual(
-    forkInput.legacyLuaSemanticPacket,
-    projectLegacyLuaSemanticPacketForModel(frozenPacket),
-  );
+  assert.equal(Object.hasOwn(forkInput, "legacyLuaSemanticPacket"), false);
+  assert.equal(Object.hasOwn(forkInput, "legacyLuaPromptHints"), false);
 });
 
 test("model-lab freezes typed UNKNOWN when Lua collection is unsupported", async () => {
   const fixture = makeService();
-  const created = await fixture.service.createRun({ body: finalModelBody("不支持的 Lua 问题") });
+  const created = await fixture.service.createRun({
+    body: finalModelBody("不支持的 Lua 问题", "full_plus_lua"),
+  });
   const execution = await fixture.service.executeRun({ runId: created.runId });
   const packet = execution.run.evidenceSnapshot.evidence.legacyLuaSemanticPacket;
 
@@ -123,7 +125,9 @@ test("model-lab times out a non-resolving Lua collector as typed UNKNOWN without
       return new Promise(() => {});
     },
   });
-  const created = await fixture.service.createRun({ body: finalModelBody("超时的 Lua 问题") });
+  const created = await fixture.service.createRun({
+    body: finalModelBody("超时的 Lua 问题", "full_plus_lua"),
+  });
   const execution = await fixture.service.executeRun({ runId: created.runId });
   const packet = execution.run.evidenceSnapshot.evidence.legacyLuaSemanticPacket;
 
@@ -148,7 +152,9 @@ test("model-lab rejects an oversized Lua packet before final-input serialization
       });
     },
   });
-  const created = await fixture.service.createRun({ body: finalModelBody("超大 Lua 包问题") });
+  const created = await fixture.service.createRun({
+    body: finalModelBody("超大 Lua 包问题", "full_plus_lua"),
+  });
   const execution = await fixture.service.executeRun({ runId: created.runId });
   const packet = execution.run.evidenceSnapshot.evidence.legacyLuaSemanticPacket;
 
@@ -262,13 +268,14 @@ function makeService({
   return { service, providerCalls };
 }
 
-function finalModelBody(question) {
+function finalModelBody(question, evidenceVariant = "full") {
   return {
     question,
     provider: "deepseek",
     model: "deepseek-v4-flash",
     reasoningEffort: "none",
     reasoningMode: "standard",
+    evidenceVariant,
   };
 }
 
@@ -302,11 +309,7 @@ function structuredRuling() {
       relation: "DIRECTLY_ENTAILS",
       supportedClaimIds: ["claim-1"],
     }],
-    counterChecks: MODEL_RULING_COUNTER_CHECK_TYPES.map((type) => ({
-      type,
-      passed: true,
-      note: "",
-    })),
+    counterChecks: [],
     unresolved: [],
     confidence: {
       level: "HIGH",

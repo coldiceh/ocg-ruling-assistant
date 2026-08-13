@@ -7,6 +7,9 @@ import {
   createAdminModelLabService,
 } from "../../backend/adminModelLabService.mjs";
 import {
+  normalizeAdminEvidenceVariant,
+} from "../../backend/adminEvidenceVariant.mjs";
+import {
   assertAdminEvidenceSnapshot,
   createAdminEvidenceSnapshot,
 } from "../../backend/adminEvidenceSnapshot.mjs";
@@ -19,7 +22,6 @@ import { inspectAdminFinalEvidenceReadiness } from "../../backend/adminFinalEvid
 import { extractRagCards, normalizeCardKey } from "../../backend/ragCardExtractor.mjs";
 import { loadRagData, retrieveRagEvidence } from "../../backend/ragEvidenceRetriever.mjs";
 import {
-  createLegacyLuaUnknownPacket,
   serializeLegacyLuaSemanticPacket,
 } from "../../backend/legacyLuaSemanticPacket.mjs";
 
@@ -100,7 +102,9 @@ export async function runAdminEvidenceSnapshotDryRun({
   legacyLuaMode = null,
   retrievalFetchImpl = null,
   enginePasscodeHydrationEnabled = false,
+  evidenceVariant = "full",
 } = {}) {
+  const normalizedEvidenceVariant = normalizeAdminEvidenceVariant(evidenceVariant);
   const fixture = casesValue
     ? normalizeAdminEvidenceDryRunCases(casesValue)
     : await readAdminEvidenceDryRunCases(casesPath);
@@ -242,16 +246,9 @@ export async function runAdminEvidenceSnapshotDryRun({
         headers: { "content-type": "application/json" },
       });
     },
-    legacyLuaSemanticPacketFactory: async (input) => timed("legacyLuaMs", async () => {
-      if (typeof legacyLuaSemanticPacketFactory === "function") {
-        return legacyLuaSemanticPacketFactory(input);
-      }
-      return createLegacyLuaUnknownPacket({
-        code: "LOCAL_DRY_RUN_LUA_UNAVAILABLE",
-        message: "local dry-run did not contact a live Lua engine",
-        details: { retryable: false },
-      });
-    }),
+    legacyLuaSemanticPacketFactory: typeof legacyLuaSemanticPacketFactory === "function"
+      ? async (input) => timed("legacyLuaMs", () => legacyLuaSemanticPacketFactory(input))
+      : null,
   });
 
   const reports = [];
@@ -267,6 +264,7 @@ export async function runAdminEvidenceSnapshotDryRun({
         source: "local_evidence_snapshot_dry_run",
         provider: "openai",
         finalAttemptPolicy: "single",
+        evidenceVariant: normalizedEvidenceVariant,
       },
     });
     let execution;
@@ -284,7 +282,9 @@ export async function runAdminEvidenceSnapshotDryRun({
     current.totalWallClockMs = performance.now() - caseStarted;
     const run = execution.run;
     const snapshot = assertAdminEvidenceSnapshot(run.evidenceSnapshot);
-    const independentlySerializedInput = buildFinalRulingInput(snapshot);
+    const independentlySerializedInput = buildFinalRulingInput(snapshot, {
+      evidenceVariant: normalizedEvidenceVariant,
+    });
     if (current.finalInput && current.finalInput !== independentlySerializedInput) {
       throw new Error(`captured final input changed after freezing evidence: ${definition.id}`);
     }

@@ -17,7 +17,6 @@ import {
   createMemoryAdminFinalCallBudgetLedger,
 } from "../backend/adminFinalCallBudgetLedger.mjs";
 import { createAdminStageTracker } from "../backend/adminStageTracker.mjs";
-import { MODEL_RULING_COUNTER_CHECK_TYPES } from "../backend/modelRulingSchema.mjs";
 import { CompatibleEvidencePreparationProvider } from "../backend/rulingModelProviders.mjs";
 import { hashAdminFinalInput } from "../backend/adminEvidenceVariant.mjs";
 
@@ -190,10 +189,10 @@ test("createRun returns before preparation; executeRun then preserves all eviden
   });
 
   assert.equal(created.status, ADMIN_RUN_STATUSES.QUEUED);
-  assert.equal(created.executionProfile.finalRuling.finalAttemptPolicy, "repair_once");
+  assert.equal(created.executionProfile.finalRuling.finalAttemptPolicy, "single");
   assert.equal(
     created.evidenceSnapshot.evidence.request.finalAttemptPolicy,
-    "repair_once",
+    "single",
   );
   assert.equal(created.stageTiming, null);
   assert.equal(created.evidenceSnapshot.evidence.preparationStatus, "pending");
@@ -1949,6 +1948,7 @@ test("one directed repair succeeds on the same frozen evidence and accumulates b
       provider: "deepseek",
       model: "deepseek-v4-flash",
       reasoningEffort: "none",
+      finalAttemptPolicy: "repair_once",
     },
   });
   const originalSnapshot = structuredClone(created.evidenceSnapshot);
@@ -2178,7 +2178,12 @@ test("a second invalid completed response fails closed without a third submissio
     },
   });
   const created = await service.createRun({
-    body: { question: "匿名二次失败问题", provider: "glm", model: "glm-5.2" },
+    body: {
+      question: "匿名二次失败问题",
+      provider: "glm",
+      model: "glm-5.2",
+      finalAttemptPolicy: "repair_once",
+    },
   });
   const failed = (await service.executeRun({ runId: created.runId })).run;
 
@@ -2256,7 +2261,12 @@ test("cancelling an in-flight repair aborts it and an unknown outcome is never r
     },
   });
   const created = await service.createRun({
-    body: { question: "匿名取消修复问题", provider: "glm", model: "glm-5.2" },
+    body: {
+      question: "匿名取消修复问题",
+      provider: "glm",
+      model: "glm-5.2",
+      finalAttemptPolicy: "repair_once",
+    },
   });
   const execution = service.executeRun({ runId: created.runId });
   await repairStarted.promise;
@@ -2767,7 +2777,9 @@ test("missing DeepSeek usage remains null and makes aggregate token totals expli
 test("invalid final JSON receives one directed repair and then fails closed", async () => {
   const fixture = makeFixture();
   const service = makeService(fixture);
-  const created = await service.createRun({ body: { question: "匿名问题" } });
+  const created = await service.createRun({
+    body: { question: "匿名问题", finalAttemptPolicy: "repair_once" },
+  });
   await service.executeRun({ runId: created.runId });
   fixture.providerResponse = completedResponse("```json\n{}\n```");
 
@@ -4051,11 +4063,7 @@ function makeStructuredRuling() {
       relation: "DIRECTLY_ENTAILS",
       supportedClaimIds: ["claim-1"],
     }],
-    counterChecks: MODEL_RULING_COUNTER_CHECK_TYPES.map((type) => ({
-      type,
-      passed: true,
-      note: "",
-    })),
+    counterChecks: [],
     unresolved: [],
     confidence: {
       level: "HIGH",

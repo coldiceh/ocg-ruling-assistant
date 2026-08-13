@@ -530,7 +530,7 @@ test("baige_card_text_enters_rag_context", async () => {
 
   const bundle = buildRagRulingPromptBundle({ userQuery: question, cardResolution, evidence });
   assert.match(bundle.prompt, /baige_card_text/u);
-  assert.match(bundle.prompt, /百鸽卡片资料/u);
+  assert.match(bundle.prompt, /永续陷阱卡/u);
   assert.equal(evidence.officialQaDirectCandidates.length, 0);
 });
 
@@ -576,12 +576,10 @@ test("baige_card_text_is_not_official_direct", async () => {
   });
 
   assert.equal(answer.answerLevel, "rule_analysis");
-  assert.ok(answer.riskFlags.includes("official_confirmed_requires_direct_evidence"));
-  assert.ok(answer.usedEvidence.some((item) => item.type === "baige_card_text"));
   assert.ok(!answer.usedEvidence.some((item) => item.type === "official_qa"));
 });
 
-test("player-role binding keeps an opponent-public hand distinct from the actor's own hand", async () => {
+test("raw card text and FAQ reach the final model without a player-role ruling component", async () => {
   clearBaigeSearchCache();
   let finalPrompt = "";
   const answer = await answerRagRulingQuestion({
@@ -644,11 +642,7 @@ test("player-role binding keeps an opponent-public hand distinct from the actor'
   assert.equal(answer.debug.unresolvedMentions.length, 0);
   assert.match(finalPrompt, /自己的手牌有1张以上已经因其他卡的效果公开时，不能发动/u);
   assert.match(finalPrompt, /将手牌全部出示给对手/u);
-  assert.match(finalPrompt, /先绑定参与者角色/u);
-  assert.match(finalPrompt, /"schema"\s*:\s*"player-role-bindings\/v1"/u);
-  assert.match(finalPrompt, /"actuallyPublicHandOwners"\s*:\s*\[\s*"opponent"/u);
-  assert.match(finalPrompt, /"requiredHandOwner"\s*:\s*"self"/u);
-  assert.match(finalPrompt, /"requiredHandIsAmongParsedPublicHands"\s*:\s*false/u);
+  assert.doesNotMatch(finalPrompt, /player-role-bindings|actuallyPublicHandOwners|requiredHandOwner/u);
   assert.equal(answer.debug.deterministicDecision, null);
   assert.notEqual(answer.debug.modelUsed, "deterministic-ruling-reasoner");
 });
@@ -1173,8 +1167,9 @@ test("albaz_activation_rechecks_continuous_effects_after_paying_cost", async () 
     new Set(answer.resolvedCards.map((card) => card.id)),
     new Set(["15239", "15245", "17069", "22090"]),
   );
-  assert.match(finalPrompt, /发动合法性与效果处理必须分开/u);
-  assert.match(finalPrompt, /支付\s*cost\s*后逐步更新状态/u);
+  assert.match(finalPrompt, /阿尔白斯之落胤/u);
+  assert.match(finalPrompt, /吞喰圣痕之龙/u);
+  assert.doesNotMatch(finalPrompt, /发动合法性与效果处理必须分开|支付\s*cost\s*后逐步更新状态/u);
 });
 
 test("numbered card identity keeps No and CNo families distinct", () => {

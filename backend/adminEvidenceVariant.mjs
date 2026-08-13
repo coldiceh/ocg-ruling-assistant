@@ -4,6 +4,7 @@ import { ADMIN_EVIDENCE_CATEGORIES } from "./adminEvidenceArchive.mjs";
 
 export const ADMIN_EVIDENCE_VARIANTS = Object.freeze([
   "full",
+  "full_plus_lua",
   "card_text_only",
   "card_text_plus_lua",
   "without_lua",
@@ -39,12 +40,11 @@ export function normalizeAdminEvidenceVariant(
  * Returns the exact evidence packet that both the final model and semantic
  * validator are allowed to see for a variant.
  *
- * `full` and `without_lua` share the complete decision packet. Lua is a
- * separate packet and is removed by the final-input builder. Both card-text
- * variants rebuild the same minimal packet from complete card-text archive
- * documents when available, with a bounded-packet fallback for historical
- * fixtures. Their only difference is whether the independent Lua packet is
- * present in the final input.
+ * `full`, `full_plus_lua`, and `without_lua` share the complete decision
+ * packet. Both card-text variants rebuild the same minimal packet from
+ * complete card-text archive documents when available, with a bounded-packet
+ * fallback for historical fixtures. Lua is an independent prompt addon; it
+ * never changes this evidence projection.
  */
 export function projectAdminModelEvidencePacket({
   snapshot,
@@ -53,7 +53,7 @@ export function projectAdminModelEvidencePacket({
 } = {}) {
   const variant = normalizeAdminEvidenceVariant(evidenceVariant);
   if (variant !== "card_text_only" && variant !== "card_text_plus_lua") {
-    return modelPacket;
+    return projectFullEvidencePacket(modelPacket);
   }
 
   const archiveItems = completeCardTextItemsFromArchive(snapshot?.evidence?.evidenceArchive);
@@ -68,7 +68,26 @@ export function projectAdminModelEvidencePacket({
 
 export function adminEvidenceVariantIncludesLegacyLua(value) {
   const variant = normalizeAdminEvidenceVariant(value);
-  return variant === "full" || variant === "card_text_plus_lua";
+  return variant === "full_plus_lua" || variant === "card_text_plus_lua";
+}
+
+/**
+ * Keeps the immutable archive packet intact while removing machine-authored
+ * topic instructions from the object shown to the final model. Those fields
+ * were produced by legacy applicability/constraint classifiers; exposing them
+ * would make a supposedly pure-LLM experiment depend on hidden handwritten
+ * rules. Evidence bodies, neutral integrity metadata and omission/conflict
+ * summaries remain unchanged.
+ */
+function projectFullEvidencePacket(modelPacket) {
+  if (!modelPacket || typeof modelPacket !== "object" || Array.isArray(modelPacket)) {
+    return modelPacket;
+  }
+  const {
+    decisionFocus: _decisionFocus,
+    ...modelVisiblePacket
+  } = modelPacket;
+  return cloneJson(modelVisiblePacket);
 }
 
 export function hashAdminFinalInput(input) {

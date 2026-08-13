@@ -109,7 +109,7 @@ const MARKDOWN_TEXT = Object.freeze({
       invalid_format: "格式无效",
       other_failure: "其他失败",
     }),
-    variants: Object.freeze({ full: "完整资料", card_text_only: "仅卡文", card_text_plus_lua: "卡文＋Lua", without_lua: "不含 Lua" }),
+    variants: Object.freeze({ full: "完整资料", full_plus_lua: "完整资料＋Lua 提醒", card_text_only: "仅卡文", card_text_plus_lua: "卡文＋Lua 提醒", without_lua: "完整资料（无 Lua）" }),
   }),
   en: Object.freeze({
     title: "Model and reasoning-effort evaluation matrix",
@@ -174,7 +174,7 @@ const MARKDOWN_TEXT = Object.freeze({
       invalid_format: "Invalid format",
       other_failure: "Other failure",
     }),
-    variants: Object.freeze({ full: "Full evidence", card_text_only: "Card text only", card_text_plus_lua: "Card text + Lua", without_lua: "Without Lua" }),
+    variants: Object.freeze({ full: "Full evidence", full_plus_lua: "Full evidence + Lua hints", card_text_only: "Card text only", card_text_plus_lua: "Card text + Lua hints", without_lua: "Full evidence (no Lua)" }),
   }),
   ja: Object.freeze({
     title: "モデル・推論強度評価マトリクス",
@@ -239,7 +239,7 @@ const MARKDOWN_TEXT = Object.freeze({
       invalid_format: "形式不正",
       other_failure: "その他の失敗",
     }),
-    variants: Object.freeze({ full: "完全な証拠", card_text_only: "カードテキストのみ", card_text_plus_lua: "カードテキスト＋Lua", without_lua: "Lua なし" }),
+    variants: Object.freeze({ full: "完全な証拠", full_plus_lua: "完全な証拠＋Lua ヒント", card_text_only: "カードテキストのみ", card_text_plus_lua: "カードテキスト＋Lua ヒント", without_lua: "完全な証拠（Lua なし）" }),
   }),
 });
 

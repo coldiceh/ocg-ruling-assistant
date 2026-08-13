@@ -1682,7 +1682,7 @@ function usageText() {
     `--source-run-id ID 只复用题面、快照哈希、capabilities 配置身份和 single 策略均严格匹配的源运行。\n` +
     `--cases-file 不可与单题参数或 --source-run-id 同时使用。\n` +
     `--config provider:model:reasoningMode:reasoningEffort[:evidenceVariant] 可重复指定。\n` +
-    `evidenceVariant 严格支持 full、card_text_only、card_text_plus_lua、without_lua；同一模型可重复配置不同变体并共享源快照。\n` +
+    `evidenceVariant 严格支持 full、full_plus_lua、card_text_only、card_text_plus_lua、without_lua；同一模型可重复配置不同变体并共享源快照。\n` +
     `--config-file FILE 读取配置 JSON 数组。\n` +
     `--format json|markdown  --output FILE  --concurrency N（硬上限默认 1）\n` +
     `--max-final-requests N（默认 12）  --max-cost-cny N（默认 10，共享池）\n` +

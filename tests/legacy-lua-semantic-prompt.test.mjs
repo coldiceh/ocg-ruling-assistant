@@ -58,35 +58,24 @@ function legacyPacket() {
   };
 }
 
-test("legacy Lua packet is visible as a non-authoritative operation hint", () => {
+test("the public RAG prompt ignores legacy Lua packets", () => {
   const result = buildRagRulingPromptBundle({
     userQuery: "测试问题",
     evidence: { legacyLuaSemanticPacket: legacyPacket() },
   });
 
-  assert.match(result.prompt, /legacyLuaSemanticPacket/u);
-  assert.match(result.prompt, /RETURN_TO_HAND/u);
-  assert.match(result.prompt, /CARD_CAN_RETURN_TO_HAND/u);
-  assert.match(result.prompt, /正式 verdict 永远是 UNKNOWN/u);
-  assert.match(result.prompt, /candidateVerdict 只描述旧脚本/u);
-  assert.match(result.prompt, /requiredMinimum 无法达到/u);
-  assert.match(result.prompt, /不得误解为可以发动后空处理/u);
-  assert.match(result.prompt, /可引用 evidence id 列表：\(none\)/u);
-  assert.doesNotMatch(
-    result.prompt,
-    new RegExp(`可引用 evidence id 列表：[^\\n]*${identity}`, "u"),
-  );
+  assert.match(result.prompt, /测试问题/u);
+  assert.doesNotMatch(result.prompt, /legacyLuaSemanticPacket|RETURN_TO_HAND|CARD_CAN_RETURN_TO_HAND/u);
+  assert.doesNotMatch(result.recoveryPrompt, /legacyLuaSemanticPacket|RETURN_TO_HAND|CARD_CAN_RETURN_TO_HAND/u);
 });
 
-test("compact recovery prompt retains bounded Lua dependencies outside allowed evidence", () => {
+test("legacy Lua cannot revive the removed public recovery prompt", () => {
   const result = buildRagRulingPromptBundle({
     userQuery: "测试问题",
     evidence: { legacyLuaSemanticPacket: legacyPacket() },
     env: { RAG_RECOVERY_PROMPT_CHARS: "12000" },
   });
 
-  assert.match(result.recoveryPrompt, /legacyLuaSemanticPacket/u);
-  assert.match(result.recoveryPrompt, /RETURN_TO_HAND/u);
-  assert.match(result.recoveryPrompt, /CARD_CAN_RETURN_TO_HAND/u);
-  assert.match(result.recoveryPrompt, /"allowedEvidenceIds":\[\]/u);
+  assert.doesNotMatch(result.recoveryPrompt, /legacyLuaSemanticPacket|RETURN_TO_HAND|CARD_CAN_RETURN_TO_HAND/u);
+  assert.doesNotMatch(result.prompt, /legacyLuaSemanticPacket|RETURN_TO_HAND|CARD_CAN_RETURN_TO_HAND/u);
 });

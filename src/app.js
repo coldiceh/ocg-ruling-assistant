@@ -962,7 +962,9 @@ function publicSystemFailurePresentation(flags = []) {
   const providerFailure = providerFailurePresentation(flags);
   if (providerFailure) return providerFailure;
   const values = new Set((Array.isArray(flags) ? flags : []).map(String));
-  if (!values.has("public_final_model_validation_failed")
+  if (!values.has("model_output_not_displayable")
+      && !values.has("public_final_output_not_displayable")
+      && !values.has("public_final_model_validation_failed")
       && !values.has("model_output_schema_validation_failed")
       && !values.has("public_final_repair_failed")) {
     return null;

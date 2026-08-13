@@ -160,14 +160,12 @@ test("the copied-name ruling keeps the judged card definition FAQ and suppresses
     },
   });
   assert.ok(evidence.faqRelated.some((item) => item.id === "card-faq-19894-1"));
-  assert.equal(
-    evidence.faqRelated.find((item) => item.id === "card-faq-19894-1")
-      ?.retrievalSignals?.operationSubjectDefinitionFaq,
-    true,
-  );
+  assert.ok(!evidence.faqRelated.some(
+    (item) => item.retrievalSignals?.operationSubjectDefinitionFaq,
+  ));
 });
 
-test("operation-subject FAQ priority and overlapping-name suppression are identity based", async () => {
+test("ordinary FAQ ranking and overlapping-name suppression remain identity based", async () => {
   const cards = [{
     id: "900001",
     name: "匿名复制体",
@@ -231,7 +229,7 @@ test("operation-subject FAQ priority and overlapping-name suppression are identi
   });
 
   assert.deepEqual(evidence.faqRelated.map((item) => item.id), ["card-faq-activation-card-1"]);
-  assert.equal(evidence.faqRelated[0].retrievalSignals.operationSubjectDefinitionFaq, true);
+  assert.ok(!evidence.faqRelated[0].retrievalSignals?.operationSubjectDefinitionFaq);
 
   const independent = extractRagCards(
     "匿名破坏龙G处理后，另一张匿名破坏龙发动效果。",

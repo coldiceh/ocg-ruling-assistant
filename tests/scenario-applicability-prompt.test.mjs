@@ -64,7 +64,7 @@ function fixtureEvidence() {
   };
 }
 
-test("full and compact prompts preserve generic applicability dimensions and mismatch boundaries", () => {
+test("public prompt keeps source IDs and text but hides applicability classifications", () => {
   for (const maxPromptChars of ["60000", "8000"]) {
     const bundle = buildRagRulingPromptBundle({
       userQuery: "双方都没有合格候选时，能否发动场景魔法？",
@@ -80,20 +80,17 @@ test("full and compact prompts preserve generic applicability dimensions and mis
       },
     });
 
-    for (const prompt of [bundle.prompt, bundle.recoveryPrompt]) {
-      assert.match(prompt, /scenarioPremiseCompatibility/u);
-      assert.match(prompt, /actor_permission/u);
-      assert.match(prompt, /operand_availability/u);
-      assert.match(prompt, /zone_capacity/u);
-      assert.match(prompt, /cost_payability/u);
-      assert.match(prompt, /premise_not_equivalent/u);
-      assert.match(prompt, /queryApplicabilityFrame/u);
-      assert.match(prompt, /evidenceApplicabilityFrame/u);
-    }
+    assert.equal(bundle.recoveryPrompt, "");
+    assert.doesNotMatch(bundle.prompt, /scenarioPremiseCompatibility/u);
+    assert.doesNotMatch(bundle.prompt, /playerRoleCompatibility/u);
+    assert.doesNotMatch(bundle.prompt, /(?:query|evidence)ApplicabilityFrame/u);
+    assert.doesNotMatch(bundle.prompt, /scenarioPremiseConflicts/u);
+    assert.match(bundle.prompt, /来源题面中的玩家被禁止执行操作/u);
+    assert.match(bundle.prompt, /qa-anonymous-applicability-contrast/u);
   }
 });
 
-test("real-size compact fallback keeps per-source applicability boundaries and ruling text", () => {
+test("real-size compact fallback keeps each source's ruling text without synthetic applicability output", () => {
   const repeated = "用于模拟真实证据体量的无关说明。".repeat(80);
   const evidence = fixtureEvidence();
   evidence.officialQaRelated = [
@@ -154,18 +151,15 @@ test("real-size compact fallback keeps per-source applicability boundaries and r
     },
   });
 
-  for (const prompt of [bundle.prompt, bundle.recoveryPrompt]) {
+  for (const prompt of [bundle.prompt]) {
     assert.ok(prompt.length <= 8000);
-    assert.match(prompt, /officialEvidenceBoundaries/u);
+    assert.doesNotMatch(prompt, /officialEvidenceBoundaries/u);
     assert.match(prompt, /qa-anonymous-boundary-a/u);
     assert.match(prompt, /qa-anonymous-boundary-b/u);
-    assert.match(prompt, /scenarioPremiseCompatibility/u);
-    assert.match(prompt, /scenarioPremiseConflicts/u);
-    assert.match(prompt, /queryApplicabilityFrame/u);
-    assert.match(prompt, /evidenceApplicabilityFrame/u);
-    assert.match(prompt, /actor_permission/u);
-    assert.match(prompt, /operand_availability/u);
-    assert.match(prompt, /target_not_covered/u);
+    assert.doesNotMatch(prompt, /scenarioPremiseCompatibility/u);
+    assert.doesNotMatch(prompt, /playerRoleCompatibility/u);
+    assert.doesNotMatch(prompt, /(?:query|evidence)ApplicabilityFrame/u);
+    assert.doesNotMatch(prompt, /scenarioPremiseConflicts/u);
     assert.match(prompt, /A题面开头/u);
     assert.match(prompt, /A结论末尾/u);
     assert.match(prompt, /B题面开头/u);
@@ -175,11 +169,21 @@ test("real-size compact fallback keeps per-source applicability boundaries and r
     const context = JSON.parse(prompt.slice(contextStart));
     assert.ok(context.allowedEvidenceIds.includes("qa-anonymous-boundary-a"));
     assert.ok(context.allowedEvidenceIds.includes("qa-anonymous-boundary-b"));
-    assert.equal(context.officialEvidenceBoundaries.length, 2);
+    const related = Array.isArray(context.evidence)
+      ? context.evidence.filter((item) => item.bucket === "officialQaRelated")
+      : context.evidence.officialQaRelated;
+    assert.equal(related.length, 2);
+    assert.equal(related[0].id, "qa-anonymous-boundary-a");
+    assert.match(related[0].text, /A题面开头/u);
+    assert.match(related[0].text, /A结论末尾/u);
+    assert.equal(related[1].id, "qa-anonymous-boundary-b");
+    assert.match(related[1].text, /B题面开头/u);
+    assert.match(related[1].text, /B结论末尾/u);
   }
+  assert.equal(bundle.recoveryPrompt, "");
 });
 
-test("the final direct selector independently enforces applicability compatibility", () => {
+test("the final direct selector accepts only a raw exact question, not structured-scene promotion", () => {
   const baseCandidate = {
     id: "qa-anonymous-direct-candidate",
     type: "official_qa",
@@ -206,7 +210,7 @@ test("the final direct selector independently enforces applicability compatibili
   assert.equal(select({
     ...baseCandidate,
     scenarioPremiseCompatibility: "compatible",
-  })?.id, baseCandidate.id);
+  }), null);
 
   for (const compatibility of ["partial", "conditional", "mismatch"]) {
     assert.equal(select({
@@ -217,12 +221,25 @@ test("the final direct selector independently enforces applicability compatibili
 
   assert.equal(select({
     ...baseCandidate,
+    scenarioPremiseCompatibility: "compatible",
+    playerRoleCompatibility: "mismatch",
+  }), null);
+
+  assert.equal(select({
+    ...baseCandidate,
     scenarioPremiseCompatibility: "unknown",
   }), null);
 
   assert.equal(select({
     ...baseCandidate,
     scenarioPremiseCompatibility: "unknown",
+    authoritativeSceneMatchReason: "raw_or_normalized_query",
+  })?.id, baseCandidate.id);
+
+  assert.equal(select({
+    ...baseCandidate,
+    scenarioPremiseCompatibility: "compatible",
+    playerRoleCompatibility: "mismatch",
     authoritativeSceneMatchReason: "raw_or_normalized_query",
   })?.id, baseCandidate.id);
 });

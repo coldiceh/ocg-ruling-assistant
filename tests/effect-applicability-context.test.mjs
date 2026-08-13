@@ -111,7 +111,7 @@ test("does not trigger for an unrelated player or field-count constraint", () =>
   assert.equal(context, null);
 });
 
-test("full, compact and recovery prompts retain the non-authoritative dependency context", () => {
+test("full, compact and recovery prompts retain raw card text without dependency-context rules", () => {
   const userQuery = "『静默缚带』装备给『棱镜守卫』，对手发动『清场术』，守卫会被破坏吗？";
   const resolvedCards = [
     card("recipient", "棱镜守卫", "monster", "此卡不受陷阱卡效果影响。"),
@@ -126,9 +126,15 @@ test("full, compact and recovery prompts retain the non-authoritative dependency
       evidence: { effectApplicabilityContext },
       env: { RAG_MAX_PROMPT_CHARS: String(maxPromptChars), RAG_RECOVERY_PROMPT_CHARS: "4800" },
     });
-    assert.match(bundle.prompt, /effectApplicabilityContext/u);
-    assert.match(bundle.prompt, /granted_property_cannot_bootstrap_source_applicability/u);
-    assert.match(bundle.recoveryPrompt, /effectApplicabilityContext/u);
-    assert.match(bundle.recoveryPrompt, /normalizer_candidate_only/u);
+    for (const prompt of [bundle.prompt, bundle.recoveryPrompt]) {
+      assert.match(prompt, /静默缚带/u);
+      assert.match(prompt, /棱镜守卫/u);
+      assert.match(prompt, /装备怪兽不受魔法卡效果影响/u);
+      assert.match(prompt, /对方场上的怪兽全部破坏/u);
+      assert.doesNotMatch(prompt, /effectApplicabilityContext/u);
+      assert.doesNotMatch(prompt, /granted_property_cannot_bootstrap_source_applicability/u);
+      assert.doesNotMatch(prompt, /normalizer_candidate_only/u);
+      assert.doesNotMatch(prompt, /dependencyGraph/u);
+    }
   }
 });

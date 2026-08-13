@@ -32,7 +32,7 @@ const completeScenarioCards = [{
   effectText: "“测试融合术士”＋融合・同步・超量・连接怪兽",
 }];
 
-test("a complete scene still runs both evidence extractors and exactly one final judge", async () => {
+test("a complete scene reaches exactly one final model with only the question and retrieved evidence", async () => {
   let cardExtractorCalls = 0;
   let ruleExtractorCalls = 0;
   let finalModelCalls = 0;
@@ -78,16 +78,22 @@ test("a complete scene still runs both evidence extractors and exactly one final
   assert.equal(cardExtractorCalls, 1);
   assert.equal(ruleExtractorCalls, 1);
   assert.equal(finalModelCalls, 1);
-  assert.match(answer.shortAnswer, /^可以发动/u);
+  assert.equal(
+    answer.shortAnswer,
+    "可以发动；支付代价后重新检查效果处理，不能使用已不受影响的怪兽作素材时，不进行融合召唤。",
+  );
   assert.equal(answer.debug.deterministicDecision, null);
-  assert.equal(answer.debug.semanticStateTransition?.authoritative, false);
+  assert.equal(answer.debug.semanticStateTransition, null);
   assert.equal(answer.debug.semanticStateTransitionDiagnostic, null);
   assert.equal(answer.usedEvidence.some((item) => item.type === "semantic_state_transition"), false);
-  assert.match(finalPrompt, /"semanticStateTransition": \{/u);
-  assert.match(finalPrompt, /"status": "resolved"/u);
-  assert.match(finalPrompt, /"canDecideFinalRuling": false/u);
-  assert.doesNotMatch(finalPrompt, /"stateSnapshot"/u);
-  assert.doesNotMatch(finalPrompt, /trusted-semantic-state-executor|trusted_local_semantic_execution|final_model_skipped/u);
+  assert.match(finalPrompt, /我方额外卡组有「测试冰剑融合龙」/u);
+  assert.match(finalPrompt, /不可将自己场上其他怪兽作为融合素材/u);
+  assert.match(finalPrompt, /card-text-architecture-(source|protected)/u);
+  assert.match(finalPrompt, /"evidence"/u);
+  assert.doesNotMatch(
+    finalPrompt,
+    /semanticStateTransition|semantic_state_transition|canDecideFinalRuling|stateSnapshot|compiled_[a-z_]+|trusted-semantic-state-executor|trusted_local_semantic_execution|final_model_skipped/u,
+  );
 });
 
 test("an unresolved card cannot revive a local fast path and still reaches the final judge", async () => {
@@ -122,12 +128,19 @@ test("an unresolved card cannot revive a local fast path and still reaches the f
     },
   });
 
-  assert.ok(finalModelCalls >= 1, "an unresolved card must still reach the final judge");
+  assert.equal(finalModelCalls, 1, "an unresolved card must reach the final model exactly once");
+  assert.equal(answer.shortAnswer, "尚未取得这张卡的卡片文本，暂时无法判断能否发动。");
   assert.ok(answer.debug.unresolvedMentions.some((mention) => mention.input === "尚未收录的测试龙"));
   assert.equal(answer.debug.deterministicDecision, null);
-  assert.equal(answer.debug.semanticStateTransition?.authoritative, false);
+  assert.equal(answer.debug.semanticStateTransition, null);
   assert.equal(answer.debug.semanticStateTransitionDiagnostic, null);
   assert.match(finalPrompt, /尚未收录的测试龙/u);
+  assert.match(finalPrompt, /"evidence"/u);
+  assert.match(finalPrompt, /"allowedEvidenceIds"/u);
   assert.notEqual(answer.debug.modelUsed, "trusted-semantic-state-executor");
+  assert.doesNotMatch(
+    finalPrompt,
+    /semanticStateTransition|semantic_state_transition|canDecideFinalRuling|stateSnapshot|compiled_[a-z_]+|trusted-semantic-state-executor|trusted_local_semantic_execution|final_model_skipped/u,
+  );
   assert.doesNotMatch(JSON.stringify(answer.usedEvidence), /semantic|state_transition/u);
 });

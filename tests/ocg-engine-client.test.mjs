@@ -135,7 +135,7 @@ test("engine is not contacted without an executable scenario", async () => {
   assert.equal(called, false);
 });
 
-test("ordinary RAG question automatically submits a best-effort engine scenario", async () => {
+test("ordinary public RAG ignores legacy automatic engine configuration", async () => {
   let submittedScenario = null;
   const result = await answerRagRulingQuestion({
     question: "我方手牌有「模拟测试龙」，我召唤模拟测试龙后发动效果。",
@@ -185,12 +185,9 @@ test("ordinary RAG question automatically submits a best-effort engine scenario"
     },
   });
 
-  assert.equal(submittedScenario.bestEffort, true);
-  assert.ok(submittedScenario.setup.cards.some((card) => card.code === 12345678));
-  assert.equal(result.engine.status, "completed");
-  assert.equal(result.engine.bestEffort, true);
-  assert.equal(result.engine.scenarioSource, "auto_best_effort");
-  assert.equal(result.engineSimulation.canConfirmOfficialRuling, false);
+  assert.equal(submittedScenario, null);
+  assert.equal(result.engine.status, "disabled");
+  assert.equal(result.engineSimulation, null);
 });
 
 test("ordinary RAG question skips simulation when no engine deployment is configured", async () => {
@@ -225,7 +222,7 @@ test("ordinary RAG question skips simulation when no engine deployment is config
   });
 
   assert.equal(engineCalled, false);
-  assert.equal(result.engine.status, "not_requested");
+  assert.equal(result.engine.status, "disabled");
   assert.equal(result.engineSimulation, null);
   assert.equal(result.riskFlags.some((flag) => flag.startsWith("engine_")), false);
 });

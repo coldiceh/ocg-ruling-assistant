@@ -60,10 +60,10 @@ import {
 } from "./ragEvidenceRetriever.mjs";
 import {
   createLegacyLuaUnknownPacket,
-  projectLegacyLuaSemanticPacketForModel,
   serializeLegacyLuaSemanticPacket,
   validateLegacyLuaSemanticPacket,
 } from "./legacyLuaSemanticPacket.mjs";
+import { buildLegacyLuaPromptModule } from "./legacyLuaPromptModule.mjs";
 
 const DEFAULT_PROMPT_VERSION = "openai-ruling-v1";
 const DEFAULT_PROMPT_FILE_URL = new URL("../prompts/openai-ruling-v1.md", import.meta.url);
@@ -99,7 +99,10 @@ export const ADMIN_FINAL_ATTEMPT_POLICIES = Object.freeze([
   "single",
   "repair_once",
 ]);
-const DEFAULT_FINAL_ATTEMPT_POLICY = "repair_once";
+// Every newly-created experiment is single-call by default. Historical runs
+// and explicit admin-only repair experiments can still select repair_once, but
+// a caller that omits the field must never incur a surprise second model call.
+const DEFAULT_FINAL_ATTEMPT_POLICY = "single";
 const PROVIDER_ACCEPTANCE_PERSIST_ATTEMPTS = 3;
 const ADMIN_FORK_ALLOWED_BODY_FIELDS = new Set([
   "forkFromRunId",
@@ -1347,21 +1350,23 @@ export function createAdminModelLabService({
           cardResolution,
         });
       }
-      legacyLuaSemanticPacket = await collectLegacyLuaSemanticPacketForSnapshot({
-        factory: legacyLuaSemanticPacketFactory,
-        timeoutMs: resolvedLegacyLuaSemanticTimeoutMs,
-        maxSerializedBytes: resolvedLegacyLuaSemanticMaxBytes,
-        signal,
-        input: {
-          question,
-          questions,
-          providedFacts: run.executionProfile.providedFacts,
-          cardResolution: jsonSafe(cardResolution),
-          cardTextCandidates: jsonSafe(cardTextCandidates),
-          retrievedCards: jsonSafe(retrievedEvidence?.retrievedCards || []),
-          dataVersions: jsonSafe(resolveServerDataVersions(dataVersions)),
-        },
-      });
+      if (adminEvidenceVariantIncludesLegacyLua(run.executionProfile?.evidenceVariant)) {
+        legacyLuaSemanticPacket = await collectLegacyLuaSemanticPacketForSnapshot({
+          factory: legacyLuaSemanticPacketFactory,
+          timeoutMs: resolvedLegacyLuaSemanticTimeoutMs,
+          maxSerializedBytes: resolvedLegacyLuaSemanticMaxBytes,
+          signal,
+          input: {
+            question,
+            questions,
+            providedFacts: run.executionProfile.providedFacts,
+            cardResolution: jsonSafe(cardResolution),
+            cardTextCandidates: jsonSafe(cardTextCandidates),
+            retrievedCards: jsonSafe(retrievedEvidence?.retrievedCards || []),
+            dataVersions: jsonSafe(resolveServerDataVersions(dataVersions)),
+          },
+        });
+      }
       return retrievedEvidence;
     }, executionToken);
 
@@ -1421,7 +1426,7 @@ export function createAdminModelLabService({
         cardResolution: jsonSafe(cardResolution),
         evidenceArchive,
         evidenceDecisionPacket,
-        legacyLuaSemanticPacket,
+        ...(legacyLuaSemanticPacket ? { legacyLuaSemanticPacket } : {}),
         retrievalMetadata: collectRetrievalMetadata(retrieval),
         unresolved: {
           cardMentions: jsonSafe(cardResolution?.unresolvedMentions || []),
@@ -3629,6 +3634,11 @@ export function buildFinalRulingInput(snapshot, {
   evidenceVariant = DEFAULT_ADMIN_EVIDENCE_VARIANT,
 } = {}) {
   const variant = normalizeAdminEvidenceVariant(evidenceVariant);
+  const baselineVariant = variant === "full_plus_lua"
+    ? "full"
+    : variant === "card_text_plus_lua"
+      ? "card_text_only"
+      : variant;
   const evidence = snapshot?.evidence || {};
   const questions = compactQuestionsForModel(evidence.questions, snapshot?.question);
   const scenarioText = distinctScenarioTextForModel(snapshot?.question, questions);
@@ -3645,24 +3655,19 @@ export function buildFinalRulingInput(snapshot, {
       : [],
   };
   const evidenceDecisionPacket = buildFinalRulingModelEvidencePacket(snapshot, {
-    evidenceVariant: variant,
+    evidenceVariant: baselineVariant,
   });
-  const isCardTextProjection = variant === "card_text_only"
-    || variant === "card_text_plus_lua";
+  const luaPromptModule = buildLegacyLuaPromptModule({
+    packet: evidence.legacyLuaSemanticPacket || null,
+    resolvedCards: evidence.cardResolution?.resolvedCards || [],
+    enabled: adminEvidenceVariantIncludesLegacyLua(variant),
+  });
+  const isCardTextProjection = baselineVariant === "card_text_only";
   const boundedInput = isCardTextProjection
     ? {
         ...identityAndQuestion,
         cardResolution: compactCardResolutionForModel(evidence.cardResolution),
         evidenceDecisionPacket,
-        ...(adminEvidenceVariantIncludesLegacyLua(variant)
-          ? {
-              legacyLuaSemanticPacket: evidence.legacyLuaSemanticPacket
-                ? projectLegacyLuaSemanticPacketForModel(
-                  evidence.legacyLuaSemanticPacket,
-                )
-                : null,
-            }
-          : {}),
       }
     : {
         ...identityAndQuestion,
@@ -3676,23 +3681,14 @@ export function buildFinalRulingInput(snapshot, {
         ),
         completeness: compactCompletenessForModel(evidence.completeness),
         evidenceDecisionPacket,
-        ...(adminEvidenceVariantIncludesLegacyLua(variant)
-          ? {
-              legacyLuaSemanticPacket: evidence.legacyLuaSemanticPacket
-                ? projectLegacyLuaSemanticPacketForModel(
-                  evidence.legacyLuaSemanticPacket,
-                )
-                : null,
-            }
-          : {}),
       };
-  const input = [
-    ...finalRulingInputPreamble(variant, {
-      activationCandidateReviewRequired:
-        requiresActivationCandidateReview(evidenceDecisionPacket),
-    }),
+  const baselineInput = [
+    ...finalRulingInputPreamble(baselineVariant),
     JSON.stringify(boundedInput),
   ].join("\n");
+  const input = luaPromptModule.status === "READY"
+    ? `${baselineInput}\n${luaPromptModule.promptAddon}`
+    : baselineInput;
   const inputBytes = Buffer.byteLength(input, "utf8");
   if (inputBytes > MAX_FINAL_RULING_INPUT_BYTES) {
     throw serviceError(
@@ -3707,10 +3703,7 @@ export function buildFinalRulingModelEvidencePacket(snapshot, {
   evidenceVariant = DEFAULT_ADMIN_EVIDENCE_VARIANT,
 } = {}) {
   const variant = normalizeAdminEvidenceVariant(evidenceVariant);
-  const modelPacket = alignHistoricalActivationReviewFocus(
-    completeFinalRulingModelEvidencePacket(snapshot),
-    snapshot,
-  );
+  const modelPacket = completeFinalRulingModelEvidencePacket(snapshot);
   return projectAdminModelEvidencePacket({
     snapshot,
     modelPacket,
@@ -3732,23 +3725,13 @@ function completeFinalRulingModelEvidencePacket(snapshot) {
   return buildAdminEvidenceDecisionPacket({ archive }).modelPacket;
 }
 
-function finalRulingInputPreamble(variant, {
-  activationCandidateReviewRequired = false,
-} = {}) {
+function finalRulingInputPreamble(variant) {
   if (variant === "full") {
     return [
       "以下是从完整、冻结且通过内容哈希校验的 Evidence Snapshot 生成的有界决策资料包。",
       "完整候选与冲突保存在审计归档；这里只给出确定性选出的正文、有界冲突摘要及遗漏/截断计数。",
       "资料准备模型只提供候选卡名与补充检索词，不是裁定；确定性查询始终优先，但模型补充词仍可能扩展候选集合，所以必须独立核对每条可见证据。",
       "只能引用 evidenceDecisionPacket.evidenceItems 中实际展示正文的 evidenceId；omissionSummary 只有计数与审计哈希，不是证据。",
-      ...(activationCandidateReviewRequired ? [
-        "evidenceDecisionPacket.decisionFocus.mandatoryConstraintReview 是确定性预处理器按题面操作与限制性规则自动生成的必查清单，不是最终裁定。给出发动或处理合法的确定结论前，必须逐项阅读清单所指 evidenceId：分别检查诱发条件与每个必做处理，并只统计在发动时确实能接受该操作的合法候选。若清单项不适用，必须说明题设与该规则条件的具体不匹配；不得只因卡片 FAQ 说明了可连锁时点就跳过必做处理的发动合法性。",
-      ] : []),
-      "legacyLuaSemanticPacket 是旧 Lua 脚本自动提取的非权威语义旁路，只能提示可能需要检查的条件、操作和底层 API 依赖；它不是官方资料，不能加入 evidenceIds，candidateVerdict 不能直接支持结论，verdict=UNKNOWN 也绝不表示不能发动或不能处理。",
-      ...(activationCandidateReviewRequired ? [
-        "使用 Lua 候选前必须先读取候选自身的 sourceBinding，并在 resources 存在时按 resourceId 交叉核对来源；预计算 sourceDocumentId 中的 cid-<卡片CID>/passcode-<脚本密码> 只允许绑定 Evidence Snapshot 内 resolvedCards.cid 相同的已解析卡片，禁止跨卡套用。activationLegalityChecks 的 requiredMinimum 是发动前最低候选数，不满足时不能改写成发动后空处理。",
-        "selectorSummary 是 Lua 筛选器自动生成的有界布尔摘要；FILTER_ARGUMENT_n 依次绑定 filterArgumentExpressions[n-1]。必须先按题设的响应效果种类代入分支，再依据 controllerLocation、opponentLocation、filterExpression 和 predicateApi 逐项计算候选，不能把另一分支的怪兽或魔陷混入数量。",
-      ] : []),
       "不得调用网络搜索，不得引用快照外资料。",
     ];
   }
@@ -3758,20 +3741,7 @@ function finalRulingInputPreamble(variant, {
       "完整候选与冲突保存在审计归档；这里只给出确定性选出的正文、有界冲突摘要及遗漏/截断计数。",
       "资料准备模型只提供候选卡名与补充检索词，不是裁定；确定性查询始终优先，但模型补充词仍可能扩展候选集合，所以必须独立核对每条可见证据。",
       "只能引用 evidenceDecisionPacket.evidenceItems 中实际展示正文的 evidenceId；omissionSummary 只有计数与审计哈希，不是证据。",
-      ...(activationCandidateReviewRequired ? [
-        "evidenceDecisionPacket.decisionFocus.mandatoryConstraintReview 是确定性预处理器按题面操作与限制性规则自动生成的必查清单。给出发动或处理合法的确定结论前，必须逐项核对；不得只因卡片 FAQ 说明了可连锁时点就跳过必做处理的发动合法性。",
-      ] : []),
       "不得调用网络搜索，不得引用快照外资料。",
-    ];
-  }
-  if (variant === "card_text_plus_lua") {
-    return [
-      "以下是从同一份冻结且通过内容哈希校验的 Evidence Snapshot 生成的卡文＋Lua 消融资料包。",
-      "模型只能使用题面、providedFacts、evidenceDecisionPacket.evidenceItems 中完整展示的卡片文本，以及 legacyLuaSemanticPacket；没有向模型提供 Q&A、机制规则或其他相关资料。",
-      "只能引用 evidenceDecisionPacket.evidenceItems 中实际展示正文的 evidenceId；Lua 不是官方资料，不能加入 evidenceIds，也不能直接作为最终裁定。",
-      "legacyLuaSemanticPacket 只用于发现脚本实现要求检查的条件、原子操作和底层 API 依赖；candidateVerdict 不是答案，verdict=UNKNOWN 也绝不表示不能发动或不能处理。",
-      "使用 Lua 候选前必须读取候选的 sourceBinding，并只绑定 Evidence Snapshot 内 resolvedCards.cid 相同的卡片。activationLegalityChecks.requiredMinimum 是发动前最低合法候选数；必须按题设状态和 selectorSummary 逐项计算，不能把无法接受该操作的卡计入。",
-      "不得调用网络搜索，不得引用资料包外内容。",
     ];
   }
   return [
@@ -3780,50 +3750,6 @@ function finalRulingInputPreamble(variant, {
     "只能引用 evidenceDecisionPacket.evidenceItems 中实际展示正文的 evidenceId。",
     "不得调用网络搜索，不得引用资料包外内容。",
   ];
-}
-
-function requiresActivationCandidateReview(evidenceDecisionPacket) {
-  const decisionFocus = evidenceDecisionPacket?.decisionFocus;
-  return decisionFocus?.asksActivationLegality === true
-    || (
-      Array.isArray(decisionFocus?.mandatoryConstraintReview)
-      && decisionFocus.mandatoryConstraintReview.length > 0
-    );
-}
-
-function alignHistoricalActivationReviewFocus(modelPacket, snapshot) {
-  const decisionFocus = modelPacket?.decisionFocus;
-  if (
-    !decisionFocus
-    || typeof decisionFocus !== "object"
-    || Array.isArray(decisionFocus)
-    || typeof decisionFocus.asksActivationLegality === "boolean"
-  ) return modelPacket;
-  const asksActivationLegality = createAdminEvidenceSelectionContext({
-    question: snapshot?.question || "",
-    questions: snapshot?.evidence?.questions || [],
-  }).asksActivationLegality === true;
-  const mandatoryConstraintReview = Array.isArray(
-    decisionFocus.mandatoryConstraintReview,
-  )
-    ? decisionFocus.mandatoryConstraintReview
-    : [];
-  const activationCandidateReviewRequired = asksActivationLegality
-    || mandatoryConstraintReview.length > 0;
-  return {
-    ...modelPacket,
-    decisionFocus: {
-      ...decisionFocus,
-      asksActivationLegality,
-      reviewProtocol: activationCandidateReviewRequired
-        ? (
-            Array.isArray(decisionFocus.reviewProtocol)
-              ? decisionFocus.reviewProtocol
-              : []
-          )
-        : [],
-    },
-  };
 }
 
 function collectRetrievalMetadata(retrieval) {

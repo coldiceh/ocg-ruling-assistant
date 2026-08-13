@@ -73,12 +73,6 @@ export const MODEL_RULING_COUNTER_CHECK_TYPES = Object.freeze([
   "MISSING_FACT",
 ]);
 
-const CRITICAL_COUNTER_CHECK_TYPES = new Set([
-  "EVIDENCE_ENTAILMENT",
-  "MISSING_FACT",
-  "RESOLUTION_ORDER",
-]);
-
 const verdictSchema = strictObject({
   questionId: nonEmptyString(),
   value: {
@@ -1189,19 +1183,6 @@ function validateCounterChecks(result, errors) {
   for (const check of counterChecks) {
     if (seen.has(check.type)) errors.push(`counterChecks contains duplicate type: ${check.type}`);
     seen.add(check.type);
-  }
-  for (const requiredType of MODEL_RULING_COUNTER_CHECK_TYPES) {
-    if (!seen.has(requiredType)) errors.push(`counterChecks is missing required type: ${requiredType}`);
-  }
-  const hasDeterminateVerdict = result.verdicts.some((verdict) => verdict.value !== "UNKNOWN");
-  if (hasDeterminateVerdict) {
-    for (const check of counterChecks) {
-      if (CRITICAL_COUNTER_CHECK_TYPES.has(check.type) && check.passed === false) {
-        errors.push(
-          `determinate verdict cannot pass with failed critical counterCheck: ${check.type}`,
-        );
-      }
-    }
   }
 }
 

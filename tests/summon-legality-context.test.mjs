@@ -194,7 +194,7 @@ test("real five-card acceptance retains formula, two grants, levels, properties,
   assert.equal(check(context, "material_formula_assignment").status, "satisfied");
 });
 
-test("full and recovery prompts preserve the checklist while labeling it non-authoritative", () => {
+test("public prompts retain the question and card texts without the summon-legality checklist", () => {
   const cards = fictionalCards();
   const context = buildSummonLegalityContext({ userQuery: question(), resolvedCards: cards });
   const bundle = buildRagRulingPromptBundle({
@@ -214,9 +214,13 @@ test("full and recovery prompts preserve the checklist while labeling it non-aut
   });
 
   for (const prompt of [bundle.prompt, bundle.recoveryPrompt]) {
-    assert.match(prompt, /summonLegalityContext/u);
-    assert.match(prompt, /normalizer_candidate_only/u);
-    assert.match(prompt, /hand_material_permission_capacity/u);
-    assert.match(prompt, /没有(?:官方)?\s*direct Q&A/u);
+    assert.match(prompt, /使用上述四张卡同调召唤/u);
+    assert.match(prompt, /测试同步终端/u);
+    assert.match(prompt, /card-text-target/u);
+    assert.match(prompt, /1只以上协调＋1只光属性怪兽/u);
+    assert.doesNotMatch(prompt, /summonLegalityContext/u);
+    assert.doesNotMatch(prompt, /normalizer_candidate_only/u);
+    assert.doesNotMatch(prompt, /hand_material_permission_capacity/u);
+    assert.doesNotMatch(prompt, /material_formula_assignment/u);
   }
 });
