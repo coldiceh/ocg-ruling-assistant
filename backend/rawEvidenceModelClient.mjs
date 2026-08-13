@@ -267,6 +267,7 @@ export function callRuleQueryExtractionModel(options = {}) {
 async function callExtraction({
   kind,
   userQuery = "",
+  resolvedCards = [],
   dataRevision = "",
   env = globalThis.process?.env || {},
   modelInvoker,
@@ -294,7 +295,7 @@ async function callExtraction({
   );
   const prompt = kind === "card"
     ? cardExtractionPrompt(userQuery)
-    : ruleQueryExtractionPrompt(userQuery);
+    : ruleQueryExtractionPrompt(userQuery, resolvedCards);
   const empty = ({
     providerUsed = provider,
     modelUsed = modelName,
@@ -744,6 +745,25 @@ function parseFinalResult(raw, {
   try {
     parsed = typeof raw === "string" ? parseJsonObject(raw) : raw;
   } catch (error) {
+    const readable = readableNaturalLanguageAnswer(raw);
+    if (readable) {
+      return baseResult({
+        answerLevel: "",
+        shortAnswer: readable,
+        reasoning: [],
+        usedCards: [],
+        usedEvidence: [],
+        missingInfo: [],
+        riskFlags: [],
+        confidenceSelfEstimate: "low",
+      }, {
+        provider,
+        modelName,
+        rawText: String(raw),
+        warnings: [...warnings, "model_natural_language_wrapped"],
+        budgetStatus,
+      });
+    }
     return baseResult(neutralAnswer(
       "模型输出格式不完整，未生成可展示的裁定。",
       "model_json_parse_failed",
@@ -755,8 +775,8 @@ function parseFinalResult(raw, {
       budgetStatus,
     });
   }
-  const answer = normalizeAnswer(parsed);
-  if (!answer) {
+  const normalized = normalizeAnswer(parsed);
+  if (!normalized) {
     return baseResult(neutralAnswer(
       "模型输出字段不完整，未生成可展示的裁定。",
       "model_json_invalid_schema",
@@ -768,37 +788,67 @@ function parseFinalResult(raw, {
       budgetStatus,
     });
   }
-  return baseResult(answer, {
+  return baseResult(normalized.answer, {
     provider,
     modelName,
-    rawText: JSON.stringify(answer),
-    warnings,
+    rawText: JSON.stringify(normalized.answer),
+    warnings: [...warnings, ...normalized.diagnosticWarnings],
     budgetStatus,
   });
 }
 
+function readableNaturalLanguageAnswer(value) {
+  if (typeof value !== "string") return "";
+  const text = value.trim();
+  if (!text || /^[\[{]/u.test(text)) return "";
+  if (looksLikeProviderErrorPayload(text)) return "";
+  return text.slice(0, 12000);
+}
+
+function looksLikeProviderErrorPayload(value) {
+  const text = String(value || "").trim();
+  if (/^(?:<!doctype\s+html|<html\b|<head\b|<body\b|<\?xml\b)/iu.test(text)
+      || /<title>\s*(?:error|bad gateway|service unavailable|gateway timeout)/iu.test(text)) {
+    return true;
+  }
+  return /^(?:http\s*)?[45]\d\d\b/iu.test(text)
+    || /^(?:error|api\s+error|provider\s+error|upstream\s+error|internal\s+server\s+error|bad\s+gateway|service\s+unavailable|gateway\s+timeout|unauthorized|forbidden|access\s+denied|rate\s+limit(?:ed|\s+exceeded)?)\b\s*[:\-]?/iu.test(text)
+    || /\bcloudflare\s+ray\s+id\b/iu.test(text);
+}
+
 function normalizeAnswer(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  if (!ANSWER_LEVELS.has(String(value.answerLevel || ""))) return null;
-  const shortAnswer = typeof value.shortAnswer === "string"
-    ? value.shortAnswer.trim()
+  const source = value.answer && typeof value.answer === "object" && !Array.isArray(value.answer)
+    ? value.answer
+    : value;
+  const shortAnswer = typeof source.shortAnswer === "string"
+    ? source.shortAnswer.trim()
     : "";
-  const reasoning = (Array.isArray(value.reasoning)
-    ? value.reasoning
-    : typeof value.reasoning === "string"
-      ? [value.reasoning]
+  if (!shortAnswer) return null;
+  const diagnosticWarnings = [];
+  const reasoning = (Array.isArray(source.reasoning)
+    ? source.reasoning
+    : typeof source.reasoning === "string"
+      ? (diagnosticWarnings.push("model_output_adapted:reasoning_string_to_array"), [source.reasoning])
       : [])
     .filter((item) => typeof item === "string")
     .map((item) => item.trim())
     .filter(Boolean)
     .slice(0, 12);
-  if (!shortAnswer || !reasoning.length) return null;
+  for (const field of ["reasoning", "usedCards", "usedEvidence", "missingInfo", "riskFlags"]) {
+    if (!Object.hasOwn(source, field)) diagnosticWarnings.push(`model_output_adapted:missing_${field}`);
+  }
+  const answerLevel = String(source.answerLevel || "").trim();
+  if (!ANSWER_LEVELS.has(answerLevel)) {
+    diagnosticWarnings.push("model_output_adapted:answer_level_unrecognized");
+  }
   return {
-    answerLevel: String(value.answerLevel),
-    shortAnswer,
-    reasoning,
-    usedCards: stringList(value.usedCards, 12),
-    usedEvidence: (Array.isArray(value.usedEvidence) ? value.usedEvidence : [])
+    answer: {
+      answerLevel,
+      shortAnswer,
+      reasoning,
+      usedCards: stringList(source.usedCards, 12),
+      usedEvidence: (Array.isArray(source.usedEvidence) ? source.usedEvidence : [])
       .filter((item) => item && typeof item === "object" && !Array.isArray(item))
       .map((item) => ({
         id: String(item.id || "").trim(),
@@ -806,12 +856,14 @@ function normalizeAnswer(value) {
         title: String(item.title || "").trim(),
       }))
       .filter((item) => item.id)
-      .slice(0, 12),
-    missingInfo: stringList(value.missingInfo, 12),
-    riskFlags: stringList(value.riskFlags, 12),
-    confidenceSelfEstimate: ["low", "medium", "high"].includes(
-      value.confidenceSelfEstimate,
-    ) ? value.confidenceSelfEstimate : "low",
+        .slice(0, 12),
+      missingInfo: stringList(source.missingInfo, 12),
+      riskFlags: stringList(source.riskFlags, 12),
+      confidenceSelfEstimate: ["low", "medium", "high"].includes(
+        source.confidenceSelfEstimate,
+      ) ? source.confidenceSelfEstimate : "low",
+    },
+    diagnosticWarnings: unique(diagnosticWarnings),
   };
 }
 
@@ -907,11 +959,27 @@ function cardExtractionPrompt(userQuery) {
   ].join("\n");
 }
 
-function ruleQueryExtractionPrompt(userQuery) {
+function ruleQueryExtractionPrompt(userQuery, resolvedCards = []) {
+  const verifiedCards = (Array.isArray(resolvedCards) ? resolvedCards : [])
+    .slice(0, 8)
+    .map((card) => ({
+      id: String(card?.id || card?.cardId || "").slice(0, 24),
+      name: String(card?.name || card?.cnName || card?.jaName || card?.enName || "").slice(0, 160),
+      aliases: unique((Array.isArray(card?.aliases) ? card.aliases : [])
+        .map((item) => String(item || "").trim().slice(0, 160))
+        .filter(Boolean))
+        .slice(0, 12),
+      effectText: String(card?.effectText || card?.text || "").slice(0, 2400),
+    }))
+    .filter((card) => card.id || card.name || card.effectText);
   return [
-    "为游戏王 OCG 原始规则资料做词法检索词抽取。不要回答问题，不要判断合法性，不要生成规则。",
-    "输出 JSON：{\"ruleQueries\":[{\"query\":\"题面中可用于检索的短语\"}]}，最多 8 条。只保留题面明示的动作、区域、状态与规则术语。",
-    String(userQuery || "").slice(0, 12000),
+    "为游戏王 OCG 原始规则资料做词法检索词抽取。你不是裁定模型：不要回答问题，不要判断能否发动或如何处理，不要生成、改写或补充任何规则。",
+    "只能从下方用户题面及已确认卡片文本中选取动作、区域、状态、时序和规则术语，组合成最多 8 条短检索短语。不得把推测结论写进检索词。",
+    "输出 JSON：{\"ruleQueries\":[{\"query\":\"用于资料库词法检索的短语\"}]}。",
+    JSON.stringify({
+      userQuery: String(userQuery || "").slice(0, 12000),
+      verifiedCards,
+    }),
   ].join("\n");
 }
 

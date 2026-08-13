@@ -1,4 +1,5 @@
 import { getTrustedRawGenericRecordProvenance } from "./rawGenericDataStore.mjs";
+import { rawGenericCorpusCardId } from "./rawGenericCardIdentity.mjs";
 
 const ANSWER_LEVELS = Object.freeze([
   "official_confirmed",
@@ -327,8 +328,11 @@ function renderRawEvidencePrompt(payload) {
   return [
     "你是游戏王 OCG 规则分析助手。只根据用户题面和下方原始资料回答，不得编造规则、卡文、裁定或来源。",
     "当前是普通分析路径，没有任何经过严格授权、可直接确认本题结论的官方 Q&A。officialQaRelated 中的官方资料（包括被降级的检索候选）都只能按实际覆盖范围辅助分析，不能自动视为本题直接裁定。",
-    "不得因为资料标题、卡名、题面暗示或历史题目猜答案。相似资料必须重新核对其场景是否适用于本题；资料未覆盖的事实保持不确定。",
-    "先直接回答用户提出的每个子问题，再简要说明依据。不要省略题目中的任何分支，也不要添加无关假设。",
+    "不得因为资料标题、卡名、题面暗示或历史题目猜答案。相似 FAQ/Q&A 只能支持其文字实际覆盖的条件与处理，不得把相似场景扩大成对本题其余条件的直接证明；资料未覆盖的事实保持不确定。",
+    "把用户明确提出的每个子问题分别作答，不要省略任何分支。对每个相关子问题分别核对：(1) 发动或适用条件检查时是否合法；(2) 连锁处理或效果处理时是否适用、成功以及处理到哪一步；(3) 剩余处理、后续处理或另开连锁的结果。不得用处理时成功与否反推发动是否合法，也不得因能发动就假定处理一定成功。",
+    "每个结论都要区分依据层级：资料直接覆盖、由已确认卡文与通用规则资料推导、或仍不确定。不要把推导写成官方直接裁定。",
+    "unresolvedMentions 或 ambiguousMentions 只影响确实依赖该身份的子问题；若其他子问题可由已确认卡文或资料独立回答，仍须回答它们。只有全部关键子问题都因缺失信息无法判断时，才整体使用 needs_more_info。",
+    "先直接给出各子问题的结论，再简要说明依据。不要添加题面没有给出的场面、步骤或卡片身份。",
     "本路径不得输出 official_confirmed；只能使用 rule_analysis、low_confidence_analysis 或 needs_more_info。",
     "输出单个 JSON 对象，不要 markdown 或 JSON 外文字。字段必须为 answerLevel、shortAnswer、reasoning、usedCards、usedEvidence、missingInfo、riskFlags、confidenceSelfEstimate。",
     `answerLevel 只能是：${ANSWER_LEVELS.join(", ")}。`,
@@ -342,7 +346,8 @@ function renderRawEvidencePrompt(payload) {
 
 function renderMinimalRawEvidencePrompt(payload) {
   return [
-    "只依据下方用户题面和原始资料回答游戏王 OCG 问题；不得编造。逐项回答。",
+    "只依据下方用户题面和原始资料回答游戏王 OCG 问题；不得编造。逐子问题回答，并分别核对发动是否合法、处理时是否适用或成功、以及剩余后续处理，不能混为同一结论。",
+    "标明结论是资料直证、由卡文和通用规则推导、还是不确定。相似FAQ不得扩大覆盖；一个未解析名称只阻断依赖它的子问题，不能让可独立回答的部分一起拒答。",
     "这是不含严格授权官方直接Q&A的普通分析路径；相关官方资料不自动确认本题结论。不得用official_confirmed，只能用rule_analysis、low_confidence_analysis或needs_more_info。",
     "只输出JSON：answerLevel、shortAnswer、reasoning、usedCards、usedEvidence、missingInfo、riskFlags、confidenceSelfEstimate。usedEvidence id只能取allowedEvidenceIds。",
     JSON.stringify(payload),
@@ -399,7 +404,8 @@ function fitOfficialDirectPrompt({ userQuery, resolvedCards, directEvidence, max
 function renderOfficialDirectPrompt(payload) {
   return [
     "你是游戏王 OCG 官方 Q&A 转述助手。下方唯一 officialQaDirectCandidate 已由上游严格确认与本题场景完全一致。",
-    "以该官方 Q&A 为最高依据完整回答用户的每个子问题；不要加入官方资料没有说明的处理，也不要被其他相似场景改写。",
+    "以该官方 Q&A 为最高依据完整回答用户的每个子问题；分别说明发动或适用是否合法、处理时是否成功、以及资料实际说明的剩余后续处理，不要把这些阶段混为一谈。",
+    "官方资料没有说明的处理必须明确保持不确定，不得自行扩大该 Q&A 的覆盖范围，也不要被其他相似场景改写。",
     "只输出单个 JSON 对象，字段为 answerLevel、shortAnswer、reasoning、usedCards、usedEvidence、missingInfo、riskFlags、confidenceSelfEstimate。answerLevel 使用 official_confirmed。",
     "usedEvidence 只能引用 allowedEvidenceIds 中的 id。不要输出 markdown 或 JSON 外文字。",
     JSON.stringify(payload),
@@ -435,7 +441,7 @@ export function selectStrictOfficialDirectCandidate({
     && !(baigeAmbiguousMentions || []).length;
   if (!completeIdentity) return null;
   const resolvedCardIds = normalizeNumericIdSet(
-    (cardResolution.resolvedCards || []).map((card) => card?.id || card?.cardId),
+    (cardResolution.resolvedCards || []).map(rawGenericCorpusCardId),
   );
   const questionCardIds = normalizeNumericIdSet(candidate?.questionCardIds);
   const exactQuestionCardSet = resolvedCardIds.length > 0
