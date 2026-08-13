@@ -121,7 +121,7 @@ test("relay launcher provisions the same admin session credential used by the we
 test("Vercel deployment pins the Relay deadline ladder below the function limit", async () => {
   const config = JSON.parse(await readFile(path.join(root, "vercel.json"), "utf8"));
   const rawSourceExclusion = "data/{cards,rulings,qa-index,evidence-index,ocg-rule-corpus,official-responses}.json";
-  assert.equal(config.buildCommand, "pnpm run check:deploy");
+  assert.equal(config.buildCommand, "pnpm run check:rag-revision && pnpm run check:rag-runtime");
   assert.equal(config.env.RELAY_STREAM_TIMEOUT_MS, "270000");
   assert.equal(config.env.ADMIN_MODEL_LAB_SYNC_FINAL_TIMEOUT_MS, "290000");
   assert.equal(config.env.RAG_RUNTIME_BUNDLE_REQUIRED, "true");
@@ -151,10 +151,6 @@ test("Vercel deployment pins the Relay deadline ladder below the function limit"
     }
     assert.doesNotMatch(excluded, /rag-data-revision-manifest|rag-runtime-v1|legacy-lua-semantic-cache-v2/u);
   }
-  assert.doesNotMatch(
-    config.functions["api/answer.js"].includeFiles,
-    /legacy-lua-semantic-cache-v2/u,
-  );
 });
 
 test("engine health probe and compatibility check identify a reusable engine", async (t) => {

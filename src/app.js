@@ -3644,44 +3644,30 @@ async function requestAdminQuestionHistory() {
 
 function renderAdminQuestionHistory(entries) {
   clearElement(ui.adminQuestionHistoryList);
-  const storedContentCount = entries.filter((entry) => String(entry?.question || "").trim()).length;
   ui.adminQuestionHistoryStatus.textContent = entries.length
-    ? storedContentCount
-      ? `后台最近保存的 ${entries.length} 条审计记录，其中 ${storedContentCount} 条保留了可载入的问题内容。`
-      : `后台最近保存的 ${entries.length} 条隐私审计记录；问题原文默认不保存。`
+    ? `后台最近保存的 ${entries.length} 条提问（最多 100 条）。`
     : "后台暂时没有已保存的提问。";
   for (const entry of entries) {
     const question = String(entry?.question || "").trim();
+    if (!question) continue;
     const item = document.createElement("li");
-    const content = document.createElement(question ? "button" : "div");
-    content.className = "admin-history-entry";
-    if (question) {
-      content.type = "button";
-      content.title = "载入到新实验";
-    }
-    appendText(content, "strong", question || `匿名问题 · ${shortAuditHash(entry?.questionSha256)}`);
-    appendText(content, "small", [
+    const button = document.createElement("button");
+    button.type = "button";
+    button.title = "载入到新实验";
+    appendText(button, "strong", question);
+    appendText(button, "small", [
       formatAdminDate(entry?.createdAt),
       entry?.mode ? `来源：${String(entry.mode)}` : "",
-      Number.isSafeInteger(entry?.questionCharacters) ? `${entry.questionCharacters} 字符` : "",
-      entry?.languageHint ? `语言线索：${String(entry.languageHint)}` : "",
-      question ? "点击载入" : "未保存原文",
+      "点击载入",
     ].filter(Boolean).join(" · "));
-    if (question) {
-      content.addEventListener("click", () => {
-        ui.adminQuestionInput.value = question;
-        ui.adminQuestionInput.focus();
-        ui.adminQuestionHistoryStatus.textContent = "已载入这条历史提问，可直接开始新实验。";
-      });
-    }
-    item.appendChild(content);
+    button.addEventListener("click", () => {
+      ui.adminQuestionInput.value = question;
+      ui.adminQuestionInput.focus();
+      ui.adminQuestionHistoryStatus.textContent = "已载入这条历史提问，可直接开始新实验。";
+    });
+    item.appendChild(button);
     ui.adminQuestionHistoryList.appendChild(item);
   }
-}
-
-function shortAuditHash(value) {
-  const text = String(value || "").trim().toLowerCase();
-  return /^[a-f0-9]{64}$/u.test(text) ? `SHA-256 ${text.slice(0, 12)}…` : "无内容标识";
 }
 
 async function loadAdminEvaluationCases() {

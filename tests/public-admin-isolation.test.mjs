@@ -225,7 +225,6 @@ test("local Node public entry point applies the same public model boundary", asy
   );
   assert.match(serviceSource, /if \(mode !== "rag"\)[\s\S]*?unsupported_answer_mode/u);
   assert.match(serviceSource, /answerRagRulingQuestionForVersion\(\{[\s\S]*?env:\s*publicEnv,/u);
-  assert.doesNotMatch(serviceSource, /createConfiguredLegacyLuaSemanticPacketFactory|legacyLuaSemanticPacketFactory/u);
   assert.doesNotMatch(serviceSource, /normalizedPayload\.(?:thinkingMode|reasoningEffort|modelTier)/u);
   assert.doesNotMatch(`${serverSource}\n${serviceSource}`, /answerQuestion\(payload|answerRulingQuestionFast/u);
   assert.doesNotMatch(serverSource, /request\.method === "POST" && request\.url === "\/api\/engine"/u);

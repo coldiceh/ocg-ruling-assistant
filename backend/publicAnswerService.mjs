@@ -3,7 +3,7 @@ import {
   getRagBudgetStatus,
   resolveCardExtractionProvider,
   resolveRagProvider,
-} from "./rawEvidenceModelClient.mjs";
+} from "./ragModelClient.mjs";
 import {
   assertPublicRulingModelProfileAvailable,
   getPublicRulingModelCapabilities,
@@ -19,6 +19,9 @@ import {
   answerRagRulingQuestionForVersion,
   getRulingVersionCapabilities,
 } from "./rulingVersionRegistry.mjs";
+import {
+  createConfiguredLegacyLuaSemanticPacketFactory,
+} from "./legacyLuaSemanticProduction.mjs";
 
 export const PUBLIC_ANSWER_REQUEST_BODY_LIMIT_BYTES = 64 * 1024;
 export const PUBLIC_ANSWER_QUESTION_LIMIT_CHARACTERS = 12_000;
@@ -131,7 +134,9 @@ export async function getPublicAnswerModelInfo({ env = process.env } = {}) {
   const ragProvider = resolveRagProvider(publicEnv);
   const cardProvider = resolveCardExtractionProvider(publicEnv);
   const budget = await getRagBudgetStatus({ env: publicEnv }).catch(() => null);
-  const engineEnabled = false;
+  const engineEnabled = !/^(?:0|false|off|disabled|no)$/iu.test(
+    String(publicEnv.RAG_AUTO_ENGINE_SIMULATION ?? "true").trim(),
+  ) && Boolean(String(publicEnv.OCG_ENGINE_URL || "").trim());
   const rulingVersionCapabilities = getRulingVersionCapabilities();
   return {
     ...rulingVersionCapabilities,
@@ -174,6 +179,8 @@ export async function answerPublicRulingQuestion({
   );
   assertPublicRulingModelProfileAvailable(profile, env);
   const publicEnv = createPublicAnswerModelEnv(env, profile.id);
+  const legacyLuaSemanticPacketFactory =
+    createConfiguredLegacyLuaSemanticPacketFactory({ env: publicEnv });
   const auditPromise = appendQueryAudit({
     question: normalizedPayload.question,
     mode,
@@ -186,6 +193,8 @@ export async function answerPublicRulingQuestion({
       rulingVersion: normalizedPayload.rulingVersion,
       question: normalizedPayload.question,
       env: publicEnv,
+      engineScenario: normalizedPayload.engineScenario,
+      legacyLuaSemanticPacketFactory,
       signal,
     });
     await auditPromise;

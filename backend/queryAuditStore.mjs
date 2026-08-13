@@ -8,15 +8,14 @@ const DEFAULT_RETENTION_DAYS = 30;
 const DEFAULT_TIMEOUT_MS = 1800;
 
 export function queryAuditStorageStatus(env = globalThis.process?.env || {}) {
-  const storesContent = shouldStoreQuestionContent(env);
   if (isDisabled(env.QUERY_AUDIT_ENABLED)) {
-    return { enabled: false, storage: "disabled", persistent: false, storesContent };
+    return { enabled: false, storage: "disabled", persistent: false };
   }
   const redis = redisConfig(env);
   if (!redis.url || !redis.token) {
-    return { enabled: false, storage: "unconfigured", persistent: false, storesContent };
+    return { enabled: false, storage: "unconfigured", persistent: false };
   }
-  return { enabled: true, storage: "redis", persistent: true, storesContent };
+  return { enabled: true, storage: "redis", persistent: true };
 }
 
 export async function appendQueryAudit({
@@ -37,21 +36,14 @@ export async function appendQueryAudit({
   }
 
   const createdAt = validDate(now).toISOString();
-  const questionSha256 = sha256(normalizedQuestion);
   const entry = {
-    schemaVersion: 2,
     id: createHash("sha256")
-      .update(createdAt + "\u0000" + String(mode || "rag") + "\u0000" + questionSha256)
+      .update(createdAt + "\u0000" + String(mode || "rag") + "\u0000" + normalizedQuestion)
       .digest("hex")
       .slice(0, 20),
     createdAt,
+    question: normalizedQuestion,
     mode: String(mode || "rag").slice(0, 32),
-    questionSha256,
-    questionCharacters: Array.from(normalizedQuestion).length,
-    questionBytes: Buffer.byteLength(normalizedQuestion, "utf8"),
-    languageHint: detectLanguageHint(normalizedQuestion),
-    contentStored: status.storesContent,
-    ...(status.storesContent ? { question: normalizedQuestion } : {}),
   };
   const key = String(env.QUERY_AUDIT_REDIS_KEY || DEFAULT_KEY).trim() || DEFAULT_KEY;
   const maxEntries = boundedInteger(env.QUERY_AUDIT_MAX_ENTRIES, DEFAULT_MAX_ENTRIES, 10, MAX_ENTRIES);
@@ -125,62 +117,16 @@ function parseEntry(value) {
     const parsed = JSON.parse(String(value || ""));
     const question = String(parsed?.question || "").trim();
     const createdAt = String(parsed?.createdAt || "").trim();
-    const questionSha256 = normalizeSha256(parsed?.questionSha256)
-      || (question ? sha256(question) : "");
-    if (!createdAt || !questionSha256) return null;
-    const questionCharacters = nonNegativeInteger(
-      parsed?.questionCharacters,
-      question ? Array.from(question).length : null,
-    );
-    const questionBytes = nonNegativeInteger(
-      parsed?.questionBytes,
-      question ? Buffer.byteLength(question, "utf8") : null,
-    );
-    if (questionCharacters === null || questionBytes === null) return null;
+    if (!question || !createdAt) return null;
     return {
       id: String(parsed.id || ""),
       createdAt,
+      question,
       mode: String(parsed.mode || "rag"),
-      questionSha256,
-      questionCharacters,
-      questionBytes,
-      languageHint: normalizeLanguageHint(parsed?.languageHint)
-        || detectLanguageHint(question),
-      contentStored: Boolean(question),
-      ...(question ? { question } : {}),
     };
   } catch {
     return null;
   }
-}
-
-function sha256(value) {
-  return createHash("sha256").update(String(value || ""), "utf8").digest("hex");
-}
-
-function normalizeSha256(value) {
-  const text = String(value || "").trim().toLowerCase();
-  return /^[a-f0-9]{64}$/u.test(text) ? text : "";
-}
-
-function nonNegativeInteger(value, fallback = null) {
-  const number = Number(value);
-  if (!Number.isSafeInteger(number) || number < 0) return fallback;
-  return number;
-}
-
-function detectLanguageHint(value) {
-  const text = String(value || "");
-  if (!text) return "unknown";
-  if (/\p{Script=Hiragana}|\p{Script=Katakana}/u.test(text)) return "ja";
-  if (/\p{Script=Han}/u.test(text)) return "cjk";
-  if (/\p{Script=Latin}/u.test(text)) return "latin";
-  return "other";
-}
-
-function normalizeLanguageHint(value) {
-  const text = String(value || "").trim().toLowerCase();
-  return /^(?:ja|cjk|latin|other|unknown)$/u.test(text) ? text : "";
 }
 
 function validDate(value) {
@@ -196,10 +142,6 @@ function boundedInteger(value, fallback, min, max) {
 
 function isDisabled(value) {
   return /^(?:0|false|off|no)$/iu.test(String(value || "").trim());
-}
-
-function shouldStoreQuestionContent(env = {}) {
-  return /^(?:1|true|on|yes)$/iu.test(String(env.QUERY_AUDIT_STORE_CONTENT || "").trim());
 }
 
 function withTimeout(promise, timeoutMs, label) {
