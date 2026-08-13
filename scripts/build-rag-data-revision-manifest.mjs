@@ -1,7 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { loadRawGenericSourceData } from "../backend/rawGenericDataStore.mjs";
+import { loadRawRagData } from "../backend/ragEvidenceRetriever.mjs";
 import {
   buildRagDataRevisionManifest,
   createRagDataSourceDescriptor,
@@ -23,7 +23,7 @@ const sources = rawSources.map(({ path, content }) => createRagDataSourceDescrip
 // A revision manifest is the trust root for the precompiled runtime bundle.
 // Always derive it from the synchronized source files; otherwise a stale but
 // still-valid bundle could certify itself after those source files changed.
-const data = await loadRawGenericSourceData(dataDir);
+const data = await loadRawRagData(dataDir);
 const manifest = buildRagDataRevisionManifest({ data, sources });
 const validation = validateRagDataRevisionManifest(manifest, {
   data,

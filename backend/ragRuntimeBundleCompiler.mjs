@@ -8,10 +8,10 @@ import {
   RAG_DATA_REVISION_CANONICALIZATION_ABI,
   RAG_DATA_REVISION_SOURCE_FILES,
 } from "./ragDataRevisionManifest.mjs";
-import { compileRagCardAliasRuntimeIndex } from "./ragCardAliasRuntimeCompiler.mjs";
+import { compileRagCardAliasRuntimeIndex } from "./ragCardExtractor.mjs";
 import {
   canonicalJsonBytes,
-  loadRawGenericRuntimeBundle,
+  loadRagRuntimeBundle,
   RAG_RUNTIME_BUNDLE_ABI,
   RAG_RUNTIME_BUNDLE_COMPILER_ABI,
   RAG_RUNTIME_BUNDLE_DIRECTORY,
@@ -21,13 +21,13 @@ import {
   RAG_RUNTIME_CORPORA,
   recomputeBundleRevision,
   sha256,
-} from "./rawGenericRuntimeBundle.mjs";
+} from "./ragRuntimeBundle.mjs";
 
 const compressBrotli = promisify(brotliCompress);
 const DEFAULT_BROTLI_QUALITY = 5;
 
 /**
- * Compile the exact normalized snapshot produced by the injected raw-source loader.
+ * Compile the exact normalized snapshot produced by the legacy raw loader.
  * The loader is injectable so the production integration can call an explicit
  * raw-only entry point and avoid ever compiling a stale runtime bundle.
  */
@@ -159,11 +159,7 @@ export async function checkRagRuntimeBundle({
     data: expectedData,
     sources: rawSources.map(({ descriptor }) => descriptor),
   });
-  const loaded = await loadRawGenericRuntimeBundle({
-    dataDir,
-    bundleDir: resolvedBundleDir,
-    sourceRevisionManifest,
-  });
+  const loaded = await loadRagRuntimeBundle({ dataDir, bundleDir: resolvedBundleDir, sourceRevisionManifest });
   if (!loaded.ok) return loaded;
 
   const mismatches = [];

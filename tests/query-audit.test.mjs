@@ -16,7 +16,7 @@ const redisEnv = {
   UPSTASH_REDIS_REST_TOKEN: "test-token",
 };
 
-test("query audit stores only non-content metadata by default", async () => {
+test("query_audit_persists_only_question_metadata_with_retention", async () => {
   const commands = [];
   const fetchImpl = async (_url, options) => {
     const command = JSON.parse(options.body);
@@ -33,29 +33,10 @@ test("query audit stores only non-content metadata by default", async () => {
   });
 
   assert.equal(result.stored, true);
-  assert.equal(result.storesContent, false);
-  assert.equal(result.entry.question, undefined);
   assert.deepEqual(commands.map((command) => command[0]), ["LPUSH", "LTRIM", "EXPIRE"]);
-  assert.doesNotMatch(commands[0][2], /无限泡影/u);
   const stored = JSON.parse(commands[0][2]);
-  assert.deepEqual(Object.keys(stored).sort(), [
-    "contentStored",
-    "createdAt",
-    "id",
-    "languageHint",
-    "mode",
-    "questionBytes",
-    "questionCharacters",
-    "questionSha256",
-    "schemaVersion",
-  ]);
-  assert.equal(stored.question, undefined);
-  assert.match(stored.questionSha256, /^[a-f0-9]{64}$/u);
-  assert.equal(stored.questionCharacters, 12);
-  assert.equal(stored.questionBytes, 36);
-  assert.equal(stored.languageHint, "cjk");
-  assert.equal(stored.contentStored, false);
-  assert.equal(stored.schemaVersion, 2);
+  assert.deepEqual(Object.keys(stored).sort(), ["createdAt", "id", "mode", "question"]);
+  assert.equal(stored.question, "「无限泡影」可以发动吗？");
   assert.equal(stored.createdAt, "2026-07-16T02:03:04.000Z");
   assert.equal(stored.mode, "rag");
   assert.ok(!("ip" in stored));
@@ -63,47 +44,15 @@ test("query audit stores only non-content metadata by default", async () => {
   assert.equal(commands[2][2], String(30 * 86400));
 });
 
-test("query audit stores full content only after explicit opt-in", async () => {
-  const commands = [];
-  const result = await appendQueryAudit({
-    question: "保留这条问题",
-    env: {
-      ...redisEnv,
-      QUERY_AUDIT_STORE_CONTENT: "true",
-    },
-    fetchImpl: async (_url, options) => {
-      commands.push(JSON.parse(options.body));
-      return jsonResponse(1);
-    },
-  });
-
-  const stored = JSON.parse(commands[0][2]);
-  assert.equal(result.storesContent, true);
-  assert.equal(stored.contentStored, true);
-  assert.equal(stored.question, "保留这条问题");
-});
-
-test("query audit list reads legacy content entries and current metadata entries", async () => {
+test("query_audit_list_parses_entries", async () => {
   assert.equal(queryAuditStorageStatus({}).persistent, false);
-  assert.equal(queryAuditStorageStatus({}).storesContent, false);
 
-  const legacyEntry = {
+  const entries = [{
     id: "entry-1",
     createdAt: "2026-07-16T02:03:04.000Z",
     question: "测试问题",
     mode: "rag",
-  };
-  const metadataEntry = {
-    schemaVersion: 2,
-    id: "entry-2",
-    createdAt: "2026-07-16T03:04:05.000Z",
-    mode: "rag",
-    questionSha256: "a".repeat(64),
-    questionCharacters: 27,
-    questionBytes: 61,
-    languageHint: "cjk",
-    contentStored: false,
-  };
+  }];
   const commands = [];
   const result = await listQueryAudits({
     limit: 12,
@@ -111,27 +60,12 @@ test("query audit list reads legacy content entries and current metadata entries
     fetchImpl: async (_url, options) => {
       const command = JSON.parse(options.body);
       commands.push(command);
-      return jsonResponse([legacyEntry, metadataEntry].map((entry) => JSON.stringify(entry)));
+      return jsonResponse(entries.map((entry) => JSON.stringify(entry)));
     },
   });
 
   assert.deepEqual(commands[0], ["LRANGE", "rag-query-audit:v1", "0", "11"]);
-  assert.equal(result.entries.length, 2);
-  assert.equal(result.entries[0].question, "测试问题");
-  assert.equal(result.entries[0].contentStored, true);
-  assert.match(result.entries[0].questionSha256, /^[a-f0-9]{64}$/u);
-  assert.equal(result.entries[0].questionCharacters, 4);
-  assert.equal(result.entries[0].questionBytes, 12);
-  assert.deepEqual(result.entries[1], {
-    id: "entry-2",
-    createdAt: "2026-07-16T03:04:05.000Z",
-    mode: "rag",
-    questionSha256: "a".repeat(64),
-    questionCharacters: 27,
-    questionBytes: 61,
-    languageHint: "cjk",
-    contentStored: false,
-  });
+  assert.deepEqual(result.entries, entries);
 });
 
 test("query audit retention and listing are capped at 100 questions", async () => {

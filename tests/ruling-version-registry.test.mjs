@@ -7,7 +7,6 @@ import {
   normalizeRequestedRulingVersion,
   resolveRulingVersionPipeline,
 } from "../backend/rulingVersionRegistry.mjs";
-import { answerRagRulingQuestion as answerRawEvidenceRagQuestion } from "../backend/rawEvidenceRagPipeline.mjs";
 
 test("ruling version capabilities expose only latest", () => {
   const capabilities = getRulingVersionCapabilities();
@@ -35,7 +34,6 @@ test("latest pipeline resolves without a frozen compatibility implementation", a
   assert.equal(latest.legacyCompatibility, false);
   assert.deepEqual(latest.versionWarnings, []);
   assert.equal(typeof latest.answerRagRulingQuestion, "function");
-  assert.equal(latest.answerRagRulingQuestion, answerRawEvidenceRagQuestion);
 });
 
 test("versioned answer dispatch echoes the requested and effective version", async () => {

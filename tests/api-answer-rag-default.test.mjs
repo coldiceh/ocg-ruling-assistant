@@ -27,7 +27,7 @@ test("api_answer_defaults_to_rag_baseline", async () => {
   }
 });
 
-test("api_answer reports the public raw-evidence path with engine disabled", async () => {
+test("api_answer_reports_engine_availability_from_backend_configuration", async () => {
   const previousUrl = process.env.OCG_ENGINE_URL;
   const previousAuto = process.env.RAG_AUTO_ENGINE_SIMULATION;
   try {
@@ -44,7 +44,7 @@ test("api_answer reports the public raw-evidence path with engine disabled", asy
     process.env.OCG_ENGINE_URL = "https://engine.example.test";
     const enabled = createJsonResponse();
     await handler({ method: "GET" }, enabled);
-    assert.equal(enabled.payload.engineEnabled, false);
+    assert.equal(enabled.payload.engineEnabled, true);
 
     process.env.RAG_AUTO_ENGINE_SIMULATION = "false";
     const optedOut = createJsonResponse();

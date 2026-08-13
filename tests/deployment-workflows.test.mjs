@@ -16,17 +16,6 @@ test("pages workflow is reusable and can publish an explicit ref", async () => {
   assert.match(workflow, /^  id-token: write\s*$/mu);
 });
 
-test("pages verifies the same release boundary before copying static files", async () => {
-  const workflow = await readWorkflow("deploy-pages.yml");
-  const setupNode = workflow.indexOf("uses: actions/setup-node@v6");
-  const install = workflow.indexOf("pnpm install --frozen-lockfile");
-  const verify = workflow.indexOf("pnpm run check:deploy");
-  const build = workflow.indexOf("mkdir -p _site/data");
-
-  assert.ok(setupNode >= 0 && setupNode < install);
-  assert.ok(install < verify && verify < build);
-});
-
 test("successful data pushes explicitly call the Pages workflow", async () => {
   const workflow = await readWorkflow("sync-data.yml");
 
@@ -79,23 +68,17 @@ test("the ordinary repository check rejects stale revision and runtime artifacts
 
   assert.match(check, /pnpm run check:rag-revision/u);
   assert.match(check, /pnpm run check:rag-runtime/u);
-  assert.equal(packageJson.scripts?.precheck, "pnpm run check:raw-evidence");
   assert.ok(check.indexOf("check:rag-revision") < check.indexOf("node --check"));
   assert.ok(check.indexOf("check:rag-runtime") < check.indexOf("node --check"));
 });
 
 test("Vercel runs the revision and runtime verification as its actual build gate", async () => {
   const config = JSON.parse(await readFile(new URL("../vercel.json", import.meta.url), "utf8"));
-  const packageJson = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
 
-  assert.equal(config.buildCommand, "pnpm run check:deploy");
-  assert.match(String(packageJson.scripts?.["check:deploy"] || ""), /check:raw-evidence/u);
-  assert.match(String(packageJson.scripts?.["check:deploy"] || ""), /check:rag-revision/u);
-  assert.match(String(packageJson.scripts?.["check:deploy"] || ""), /check:rag-runtime/u);
-  assert.match(String(packageJson.scripts?.["check:deploy"] || ""), /public-latest-import-closure/u);
-  assert.match(String(packageJson.scripts?.["check:deploy"] || ""), /node --check src\/app\.js/u);
-  assert.match(String(packageJson.scripts?.["check:deploy"] || ""), /query-audit\.test\.mjs/u);
-  assert.match(String(packageJson.scripts?.["check:deploy"] || ""), /ui-rendering\.test\.mjs/u);
+  assert.equal(
+    config.buildCommand,
+    "pnpm run check:rag-revision && pnpm run check:rag-runtime",
+  );
   assert.equal(config.outputDirectory, "public");
   assert.equal(await readFile(new URL("../public/.gitkeep", import.meta.url), "utf8"), "\n");
   for (const route of ["api/answer.js", "api/admin-model-lab.js"]) {
@@ -103,10 +86,6 @@ test("Vercel runs the revision and runtime verification as its actual build gate
     assert.match(excluded, /data\/\{cards,rulings,qa-index,evidence-index,ocg-rule-corpus,official-responses\}\.json/u);
     assert.doesNotMatch(excluded, /rag-data-revision-manifest|rag-runtime-v1|legacy-lua-semantic-cache-v2/u);
   }
-  assert.doesNotMatch(
-    String(config.functions?.["api/answer.js"]?.includeFiles || ""),
-    /legacy-lua-semantic-cache-v2/u,
-  );
 });
 
 test("RAG source snapshots are checked out with stable LF line endings", async () => {

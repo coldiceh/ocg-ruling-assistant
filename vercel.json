@@ -1,6 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "pnpm run check:deploy",
+  "buildCommand": "pnpm run check:rag-revision && pnpm run check:rag-runtime",
   "outputDirectory": "public",
   "env": {
     "RELAY_STREAM_TIMEOUT_MS": "270000",
@@ -31,7 +31,7 @@
     },
     "api/answer.js": {
       "maxDuration": 300,
-      "includeFiles": "{data/rag-data-revision-manifest.json,data/rag-runtime-v1/**}",
+      "includeFiles": "{data/legacy-lua-semantic-cache-v2/**,data/rag-data-revision-manifest.json,data/rag-runtime-v1/**}",
       "excludeFiles": "data/{cards,rulings,qa-index,evidence-index,ocg-rule-corpus,official-responses}.json"
     },
     "api/admin-model-lab.js": {

@@ -490,8 +490,8 @@ test("backend answers bypass persistent browser cache and bust static assets", a
     readFile(new URL("../config.json", import.meta.url), "utf8"),
   ]);
   const config = JSON.parse(configText.replace(/^\uFEFF/u, ""));
-  assert.match(html, /src\/app\.js\?v=20260813-raw-evidence-1/u);
-  assert.match(html, /src\/styles\.css\?v=20260813-raw-evidence-1/u);
+  assert.match(html, /src\/app\.js\?v=20260810-budget-summary-1/u);
+  assert.match(html, /src\/styles\.css\?v=20260810-budget-summary-1/u);
   assert.match(config.answerApiUrl, /\?client=20260722-answer-version-1$/u);
   assert.match(app, /cache: "no-store"/u);
   assert.doesNotMatch(app, /backendAnswerCacheTtlMs|buildBackendCacheKey|readCachedBackendAnswer|writeCachedBackendAnswer|ocg-ruling-answer:v/u);
@@ -676,9 +676,7 @@ test("admin_model_lab_is_hidden_and_requires_a_real_session", async () => {
   assert.match(css, /\.admin-history-list button\s*\{[^}]*max-width:\s*100%[^}]*overflow:\s*hidden/u);
   assert.match(html, /id="adminComparisonTitle">同一冻结证据模型对比/u);
   assert.match(html, /不会重新检索资料/u);
-  assert.match(html, /默认只保存哈希、长度与语言线索，不保存问题原文/u);
-  assert.match(app, /问题原文默认不保存/u);
-  assert.match(app, /shortAuditHash\(entry\?\.questionSha256\)/u);
+  assert.match(html, /最多 100 条；不等同于上方的模型实验历史/u);
   assert.match(app, /getAdminEndpointUrl\("\/api\/admin-queries"\)/u);
   assert.match(app, /url\.searchParams\.set\("limit", "100"\)/u);
   assert.match(app, /sessionStorage\.setItem\(adminCurrentRunStorageKey, id\)/u);

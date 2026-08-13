@@ -1,5 +1,5 @@
 import { authorizeBudgetResetRequest, budgetResetTokenConfigured } from "../backend/budgetAuth.mjs";
-import { getRagBudgetStatus, resetRagBudget } from "../backend/rawEvidenceModelClient.mjs";
+import { getRagBudgetStatus, resetRagBudget } from "../backend/ragModelClient.mjs";
 
 const allowedOrigin = process.env.ALLOWED_ORIGIN || "*";
 
