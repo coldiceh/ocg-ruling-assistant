@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import test from "node:test";
 
 import {
+  assessCandidateTransportValidity,
   buildGenerationRequest,
   buildJudgeRequest,
   createManualReviewBundle,
@@ -251,6 +252,68 @@ test("candidate public metrics read only cost and usage from the answer debug ob
   assert.deepEqual(extractCandidatePublicMetrics("plain text"), {});
 });
 
+test("candidate transport validity excludes only structured technical fallbacks", () => {
+  const technicalFallbacks = [
+    {
+      answerLevel: "needs_more_info",
+      shortAnswer: "技术性占位文本",
+      riskFlags: ["model_provider_timeout", "model_provider_call_failed"],
+      debug: {
+        providerFailure: { kind: "timeout" },
+        publicFinalValidation: {
+          outcome: "primary_invalid_no_ruling",
+          primary: { ok: false },
+        },
+      },
+    },
+    {
+      answerLevel: "budget_limited",
+      shortAnswer: "技术性占位文本",
+      riskFlags: ["api_daily_budget_exceeded"],
+      debug: { dryRun: true },
+    },
+  ];
+  for (const payload of technicalFallbacks) {
+    assert.equal(assessCandidateTransportValidity(JSON.stringify(payload)).valid, false);
+  }
+
+  const ordinaryCandidate = {
+    answerLevel: "rule_analysis",
+    // Words that resemble technical failures are ordinary opaque ruling text;
+    // transport validity must never classify natural-language semantics.
+    shortAnswer: "题目原文提到 timeout、错误与预算，但这里仍是候选回答。",
+    reasoning: ["不能根据回答正文中的关键词判定传输失败。"],
+    riskFlags: [],
+    debug: {
+      dryRun: false,
+      providerFailure: null,
+      publicFinalValidation: {
+        outcome: "primary_valid",
+        primary: { ok: true },
+      },
+    },
+  };
+  assert.deepEqual(assessCandidateTransportValidity(JSON.stringify(ordinaryCandidate)), {
+    valid: true,
+    failureCode: null,
+  });
+  // Model-controlled semantic fields are opaque to the transport evaluator.
+  // Only server-owned debug metadata may exclude a candidate from human review.
+  assert.deepEqual(assessCandidateTransportValidity(JSON.stringify({
+    answerLevel: "budget_limited",
+    riskFlags: ["model_provider_timeout", "model_output_not_displayable"],
+    status: "timed_out",
+    error: { code: "upstream_unavailable" },
+  })), {
+    valid: true,
+    failureCode: null,
+  });
+  assert.deepEqual(assessCandidateTransportValidity("timeout 是这份候选回答正文的一部分。"), {
+    valid: true,
+    failureCode: null,
+  });
+});
+
 test("failed or absent judge results are not reviewed and stay outside the reviewed denominator", () => {
   const dataset = parseDatasetText("问题甲\n答案甲\n\n问题乙\n答案乙");
   const generations = new Map(dataset.cases.map((item) => [item.id, { status: "generated" }]));
@@ -283,6 +346,13 @@ test("CLI modes and HTTP endpoint normalization are explicit", () => {
   ]);
   assert.equal(options.judgeOnly, true);
   assert.equal(options.limit, 4);
+  const exactDatasetOptions = parseCliArguments([
+    "--base-url",
+    "https://preview.example.test",
+    "--require-case-count",
+    "32",
+  ]);
+  assert.equal(exactDatasetOptions.requiredCaseCount, 32);
   assert.throws(
     () => parseCliArguments(["--generate-only", "--judge-only"]),
     /mutually exclusive/u,
@@ -299,23 +369,64 @@ test("CLI modes and HTTP endpoint normalization are explicit", () => {
   assert.throws(() => resolveRelayChatCompletionsEndpoint("http://relay.example.test/v1"), /HTTPS/u);
 });
 
-test("HTTP timeout remains active even when a custom body reader ignores abort", async () => {
+test("required unique-case count stops before generation without leaking private text", async () => {
+  const privateQuestion = "不得出现在数量错误中的私有问题";
+  const privateReference = "不得出现在数量错误中的私有答案";
+  const privateRoot = new URL(
+    `file:///${tmpdir().replaceAll("\\", "/")}/pure-llm-case-count-${Date.now()}/`,
+  );
+  const datasetPath = new URL("dataset.txt", privateRoot);
+  const checkpointDirectory = new URL("checkpoint", privateRoot);
+  const { mkdir, writeFile, rm } = await import("node:fs/promises");
+  const { fileURLToPath } = await import("node:url");
+  await mkdir(fileURLToPath(privateRoot), { recursive: true });
+  await writeFile(
+    fileURLToPath(datasetPath),
+    `${privateQuestion}\n${privateReference}`,
+    "utf8",
+  );
+  let fetchCalls = 0;
+  try {
+    let failure;
+    try {
+      await runPureLlmPreviewEvaluation({
+        argv: [
+          "--dataset", fileURLToPath(datasetPath),
+          "--checkpoint-dir", fileURLToPath(checkpointDirectory),
+          "--base-url", "https://preview.example.test",
+          "--generate-only",
+          "--require-case-count", "32",
+        ],
+        fetchImpl: async () => {
+          fetchCalls += 1;
+          throw new Error("generation must not start");
+        },
+        log() {},
+      });
+    } catch (error) {
+      failure = error;
+    }
+    assert.ok(failure instanceof Error);
+    assert.match(failure.message, /expected 32, received 1/u);
+    assert.doesNotMatch(failure.message, new RegExp(privateQuestion, "u"));
+    assert.doesNotMatch(failure.message, new RegExp(privateReference, "u"));
+    assert.equal(fetchCalls, 0);
+  } finally {
+    await rm(fileURLToPath(privateRoot), { recursive: true, force: true });
+  }
+});
+
+test("HTTP timeout remains active when response.text ignores abort", async () => {
   let requestSignal;
   const fetchImpl = async (_url, options) => {
     requestSignal = options.signal;
     return {
       status: 200,
       ok: true,
-      headers: { get() { return null; } },
-      body: {
-        getReader() {
-          return {
-            read() {
-              return new Promise(() => {});
-            },
-            cancel() { return Promise.resolve(); },
-          };
-        },
+      headers: { get() { return "text/plain"; } },
+      body: null,
+      text() {
+        return new Promise(() => {});
       },
     };
   };
@@ -331,6 +442,52 @@ test("HTTP timeout remains active even when a custom body reader ignores abort",
     (error) => error?.name === "TimeoutError" && /timed out/iu.test(error.message),
   );
   assert.equal(requestSignal.aborted, true);
+});
+
+test("HTTP timeout cancels non-terminating JSON, text and SSE stream readers without awaiting cancel", async (t) => {
+  for (const contentType of ["application/json", "text/plain", "text/event-stream"]) {
+    await t.test(contentType, async () => {
+      let requestSignal;
+      let readerCancelled = false;
+      let readerReleased = false;
+      const fetchImpl = async (_url, options) => {
+        requestSignal = options.signal;
+        return {
+          status: 200,
+          ok: true,
+          headers: { get(name) { return name === "content-type" ? contentType : null; } },
+          body: {
+            getReader() {
+              return {
+                read() {
+                  return new Promise(() => {});
+                },
+                cancel() {
+                  readerCancelled = true;
+                  return new Promise(() => {});
+                },
+                releaseLock() { readerReleased = true; },
+              };
+            },
+          },
+        };
+      };
+
+      await assert.rejects(
+        requestBoundedResponseWithTimeout(
+          fetchImpl,
+          "https://preview.example.test/api/answer",
+          { method: "POST" },
+          20,
+          1024,
+        ),
+        (error) => error?.name === "TimeoutError" && /timed out/iu.test(error.message),
+      );
+      assert.equal(requestSignal.aborted, true);
+      assert.equal(readerCancelled, true);
+      assert.equal(readerReleased, true);
+    });
+  }
 });
 
 test("a generation failure is checkpointed and reported before the evaluator exits unsuccessfully", async () => {
@@ -369,6 +526,69 @@ test("a generation failure is checkpointed and reported before the evaluator exi
     assert.equal(report.summary.generationFailed, 1);
     assert.equal(manualReview.cases[0].generationStatus, "generation_failed");
     assert.equal(manualReview.cases[0].generationFailureCode, "preview_request_failed");
+  } finally {
+    await rm(fileURLToPath(privateRoot), { recursive: true, force: true });
+  }
+});
+
+test("an HTTP 200 structured technical fallback is checkpointed as generation failure", async () => {
+  const privateRoot = new URL(
+    `file:///${tmpdir().replaceAll("\\", "/")}/pure-llm-technical-fallback-${Date.now()}/`,
+  );
+  const datasetPath = new URL("dataset.txt", privateRoot);
+  const checkpointDirectory = new URL("checkpoint", privateRoot);
+  const { mkdir, readFile, writeFile, rm } = await import("node:fs/promises");
+  const { fileURLToPath } = await import("node:url");
+  await mkdir(fileURLToPath(privateRoot), { recursive: true });
+  await writeFile(fileURLToPath(datasetPath), "匿名失败问题\n匿名标准答案", "utf8");
+  try {
+    await assert.rejects(
+      runPureLlmPreviewEvaluation({
+        argv: [
+          "--dataset", fileURLToPath(datasetPath),
+          "--checkpoint-dir", fileURLToPath(checkpointDirectory),
+          "--base-url", "https://preview.example.test",
+          "--generate-only",
+        ],
+        fetchImpl: async () => new Response(JSON.stringify({
+          answerLevel: "needs_more_info",
+          shortAnswer: "模型服务超时，请重试。",
+          riskFlags: ["model_output_not_displayable", "model_provider_timeout"],
+          debug: {
+            providerFailure: { kind: "timeout" },
+            publicFinalValidation: {
+              outcome: "primary_invalid_no_ruling",
+              primary: { ok: false },
+            },
+          },
+        }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+        log() {},
+      }),
+      /generation failed for 1 of 1/iu,
+    );
+    const report = JSON.parse(await readFile(
+      fileURLToPath(new URL("public-report.json", `${checkpointDirectory.href}/`)),
+      "utf8",
+    ));
+    const manualReview = JSON.parse(await readFile(
+      fileURLToPath(new URL("manual-review.json", `${checkpointDirectory.href}/`)),
+      "utf8",
+    ));
+    const generationCheckpoint = JSON.parse(await readFile(
+      fileURLToPath(new URL("generations/case-001.json", `${checkpointDirectory.href}/`)),
+      "utf8",
+    ));
+    assert.equal(report.summary.generated, 0);
+    assert.equal(report.summary.generationFailed, 1);
+    assert.equal(manualReview.cases[0].generationStatus, "generation_failed");
+    assert.equal(manualReview.cases[0].generationFailureCode, "preview_model_provider_failure");
+    assert.equal(manualReview.cases[0].candidateResponseText, "");
+    assert.equal(generationCheckpoint.candidateResponseText, "");
+    assert.notEqual(generationCheckpoint.candidateSha256, "");
+    assert.doesNotMatch(JSON.stringify(generationCheckpoint), /模型服务超时，请重试/u);
   } finally {
     await rm(fileURLToPath(privateRoot), { recursive: true, force: true });
   }

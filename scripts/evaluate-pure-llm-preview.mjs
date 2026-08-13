@@ -80,6 +80,14 @@ export async function runPureLlmPreviewEvaluation({
     datasetExplicit: options.datasetExplicit,
     judgeOnly: options.judgeOnly,
   });
+  if (
+    options.requiredCaseCount !== null
+    && dataset.uniqueCaseCount !== options.requiredCaseCount
+  ) {
+    throw new Error(
+      `Private evaluation dataset unique-case count mismatch: expected ${options.requiredCaseCount}, received ${dataset.uniqueCaseCount}`,
+    );
+  }
   if (storedDataset) assertSameDataset(storedDataset, dataset);
   else await writeJsonAtomically(privateDatasetPath, dataset);
 
@@ -462,6 +470,7 @@ export function parseCliArguments(argv = []) {
     autoJudge: false,
     help: false,
     limit: null,
+    requiredCaseCount: null,
     generationTimeoutMs: DEFAULT_GENERATION_TIMEOUT_MS,
     judgeTimeoutMs: DEFAULT_JUDGE_TIMEOUT_MS,
   };
@@ -482,6 +491,8 @@ export function parseCliArguments(argv = []) {
       options.baseUrl = requiredNextValue(argv, ++index, argument);
     } else if (argument === "--limit") {
       options.limit = positiveInteger(requiredNextValue(argv, ++index, argument), argument);
+    } else if (argument === "--require-case-count") {
+      options.requiredCaseCount = positiveInteger(requiredNextValue(argv, ++index, argument), argument);
     } else if (argument === "--generation-timeout-ms") {
       options.generationTimeoutMs = positiveInteger(requiredNextValue(argv, ++index, argument), argument);
     } else if (argument === "--judge-timeout-ms") {
@@ -548,7 +559,6 @@ async function generateCandidate({
       latencyMs: Date.now() - startedAt,
       httpStatus: Number(response.status) || null,
       contentType: String(response.headers?.get?.("content-type") || ""),
-      candidateResponseText: responseText,
       candidateSha256: sha256(responseText),
       ...publicMetrics,
     };
@@ -558,17 +568,32 @@ async function generateCandidate({
         status: "generation_failed",
         failureCode: "preview_http_error",
         error: `Preview returned HTTP ${response.status}`,
+        candidateResponseText: "",
+      };
+    }
+    const transportValidity = assessCandidateTransportValidity(responseText);
+    if (!transportValidity.valid) {
+      return {
+        ...base,
+        status: "generation_failed",
+        failureCode: transportValidity.failureCode,
+        error: "Preview returned a structured technical fallback instead of a model candidate",
+        candidateResponseText: "",
       };
     }
     // Human review judges the actual ruling, not the transport format. Preserve
     // every bounded HTTP 2xx candidate verbatim even when the public display
-    // adapter returned plain text or a future response shape.
+    // adapter returned plain text or a future response shape. The check above
+    // only excludes explicit machine-readable transport/system failures; it
+    // never inspects ruling wording, card names, question types, or conclusions.
     return {
       ...base,
       status: "generated",
+      candidateResponseText: responseText,
       responseFormat: parsesAsJson(responseText) ? "json" : "text",
     };
   } catch (error) {
+    const timedOut = error?.name === "TimeoutError";
     return {
       schemaVersion: 1,
       caseId: evaluationCase.id,
@@ -576,12 +601,58 @@ async function generateCandidate({
       completedAt: new Date().toISOString(),
       latencyMs: Date.now() - startedAt,
       status: "generation_failed",
-      failureCode: error?.name === "TimeoutError" ? "preview_timeout" : "preview_request_failed",
-      error: safeErrorMessage(error),
+      failureCode: timedOut ? "preview_timeout" : "preview_request_failed",
+      error: timedOut ? "Preview request timed out" : "Preview request failed",
       candidateResponseText: "",
       candidateSha256: sha256(""),
     };
   }
+}
+
+/**
+ * Distinguish an actual candidate from a successful HTTP response carrying a
+ * machine-readable technical fallback. This is deliberately a transport-only
+ * check: natural-language answer text is opaque and no ruling semantics are
+ * evaluated here.
+ */
+export function assessCandidateTransportValidity(value) {
+  let payload;
+  try {
+    payload = JSON.parse(String(value || ""));
+  } catch {
+    // Plain text is a valid candidate format and must be left to human review.
+    return { valid: true, failureCode: null };
+  }
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    return { valid: true, failureCode: null };
+  }
+
+  const debug = isRecord(payload.debug) ? payload.debug : {};
+  if (debug.dryRun === true) {
+    return { valid: false, failureCode: "preview_dry_run_response" };
+  }
+  if (isRecord(debug.providerFailure) && String(debug.providerFailure.kind || "").trim()) {
+    return { valid: false, failureCode: "preview_model_provider_failure" };
+  }
+
+  const finalValidation = isRecord(debug.publicFinalValidation)
+    ? debug.publicFinalValidation
+    : {};
+  const primaryValidation = isRecord(finalValidation.primary)
+    ? finalValidation.primary
+    : {};
+  if (
+    finalValidation.outcome === "primary_invalid_no_ruling"
+    || primaryValidation.ok === false
+  ) {
+    return { valid: false, failureCode: "preview_model_output_unusable" };
+  }
+
+  return { valid: true, failureCode: null };
+}
+
+function isRecord(value) {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
 export async function judgeCandidateWithSolHigh({
@@ -882,7 +953,9 @@ export async function requestBoundedResponseWithTimeout(
     return await Promise.race([
       (async () => {
         const response = await fetchImpl(url, { ...options, signal: controller.signal });
-        const responseText = await readBoundedResponseText(response, maxBytes);
+        const responseText = await readBoundedResponseText(response, maxBytes, {
+          signal: controller.signal,
+        });
         return { response, responseText };
       })(),
       abortFailure,
@@ -897,30 +970,60 @@ export async function requestBoundedResponseWithTimeout(
   }
 }
 
-async function readBoundedResponseText(response, maxBytes) {
+async function readBoundedResponseText(response, maxBytes, { signal } = {}) {
   const declared = Number(response?.headers?.get?.("content-length"));
   if (Number.isFinite(declared) && declared > maxBytes) {
     throw new RangeError(`HTTP response exceeds ${maxBytes} bytes`);
   }
   if (!response?.body?.getReader) {
-    const text = await response.text();
+    const text = await awaitOperationOrAbort(() => response.text(), signal);
     if (Buffer.byteLength(text, "utf8") > maxBytes) throw new RangeError(`HTTP response exceeds ${maxBytes} bytes`);
     return text;
   }
   const reader = response.body.getReader();
   const chunks = [];
   let bytes = 0;
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    bytes += value.byteLength;
-    if (bytes > maxBytes) {
-      await reader.cancel().catch(() => null);
-      throw new RangeError(`HTTP response exceeds ${maxBytes} bytes`);
+  try {
+    while (true) {
+      const { done, value } = await awaitOperationOrAbort(() => reader.read(), signal);
+      if (done) break;
+      bytes += value.byteLength;
+      if (bytes > maxBytes) throw new RangeError(`HTTP response exceeds ${maxBytes} bytes`);
+      chunks.push(Buffer.from(value));
     }
-    chunks.push(Buffer.from(value));
+    return Buffer.concat(chunks).toString("utf8");
+  } finally {
+    cancelReaderWithoutWaiting(reader, signal?.reason);
+    try {
+      reader.releaseLock?.();
+    } catch {
+      // Best-effort response-body cleanup only.
+    }
   }
-  return Buffer.concat(chunks).toString("utf8");
+}
+
+function awaitOperationOrAbort(operation, signal) {
+  if (!signal || typeof signal.addEventListener !== "function") {
+    return Promise.resolve().then(operation);
+  }
+  if (signal.aborted) return Promise.reject(signal.reason || new DOMException("Request aborted", "AbortError"));
+  let onAbort;
+  const aborted = new Promise((_, reject) => {
+    onAbort = () => reject(signal.reason || new DOMException("Request aborted", "AbortError"));
+    signal.addEventListener("abort", onAbort, { once: true });
+    if (signal.aborted) onAbort();
+  });
+  return Promise.race([Promise.resolve().then(operation), aborted]).finally(() => {
+    signal.removeEventListener?.("abort", onAbort);
+  });
+}
+
+function cancelReaderWithoutWaiting(reader, reason) {
+  try {
+    Promise.resolve(reader?.cancel?.(reason)).catch(() => {});
+  } catch {
+    // Best-effort response-body cleanup only.
+  }
 }
 
 async function writeJsonAtomically(path, value) {
@@ -1114,6 +1217,7 @@ Options:
   --auto-judge                    Legacy: generate and automatically judge with Sol high
   --judge-only                    Legacy: judge existing generated checkpoints; do not call Preview
   --limit <n>                     Evaluate only the first n unique cases
+  --require-case-count <n>        Stop before generation unless the private dataset has exactly n unique cases
   --generation-timeout-ms <n>     Per-generation timeout (default: 300000)
   --judge-timeout-ms <n>          Per-judge timeout (default: 300000)
   --help                          Show this help

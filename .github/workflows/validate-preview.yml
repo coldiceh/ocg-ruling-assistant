@@ -53,12 +53,16 @@ jobs:
 
   private-evaluation:
     if: >-
-      (github.event_name == 'pull_request'
-        && github.event.action == 'labeled'
-        && (github.event.label.name == 'private-pure-llm-evaluation-pilot'
-          || github.event.label.name == 'private-pure-llm-evaluation')
-        && github.event.pull_request.head.repo.full_name == github.repository)
-      || github.event_name == 'workflow_dispatch'
+      github.actor == github.repository_owner
+      && github.triggering_actor == github.repository_owner
+      && ((github.event_name == 'pull_request'
+          && github.event.action == 'labeled'
+          && github.event.pull_request.user.login == github.repository_owner
+          && (github.event.label.name == 'private-pure-llm-evaluation-pilot'
+            || github.event.label.name == 'private-pure-llm-retrieval-pilot'
+            || github.event.label.name == 'private-pure-llm-evaluation')
+          && github.event.pull_request.head.repo.full_name == github.repository)
+        || github.event_name == 'workflow_dispatch')
     needs: validate
     runs-on: ubuntu-latest
     timeout-minutes: 300
@@ -68,7 +72,6 @@ jobs:
       group: private-pure-llm-evaluation-${{ github.repository }}
       cancel-in-progress: false
     env:
-      RELAY_API_KEY: ${{ secrets.RELAY_API_KEY }}
       RELAY_BASE_URL: https://api.986310.xyz/v1
       PUBLIC_RULING_MODEL_PROFILE: relay-gpt-5.6-sol-low
       RELAY_MAX_COMPLETION_TOKENS: "8192"
@@ -82,6 +85,9 @@ jobs:
       QUERY_AUDIT_ENABLED: "false"
       HOST: 127.0.0.1
       PORT: "18787"
+      # This label exercises the complete retrieval and prompt-building path
+      # with the built-in dry-run response. It must never receive a paid key.
+      RETRIEVAL_ONLY_PILOT: ${{ github.event_name == 'pull_request' && github.event.label.name == 'private-pure-llm-retrieval-pilot' && 'true' || 'false' }}
       # The pilot label is one case; the full label is 32. workflow_dispatch is
       # also available once this workflow reaches the repository default branch.
       EVALUATION_LIMIT: ${{ github.event_name == 'workflow_dispatch' && inputs.evaluation_limit || (github.event.label.name == 'private-pure-llm-evaluation' && '32' || '1') }}
@@ -102,18 +108,55 @@ jobs:
           PRIVATE_DATASET_BASE64: ${{ secrets.PURE_LLM_EVALUATION_DATASET_BASE64 }}
         run: |
           set -euo pipefail
-          if [ -z "$RELAY_API_KEY" ] || [ -z "$PRIVATE_DATASET_BASE64" ]; then
-            echo "Required private evaluation secrets are not configured" >&2
+          if [ -z "$PRIVATE_DATASET_BASE64" ]; then
+            echo "The private evaluation dataset is not configured" >&2
             exit 1
           fi
           umask 077
           printf '%s' "$PRIVATE_DATASET_BASE64" | base64 --decode > "$RUNNER_TEMP/private-dataset.txt"
           test -s "$RUNNER_TEMP/private-dataset.txt"
 
-      - name: Start the preview branch backend
+      - name: Start the retrieval-only preview backend without a paid key
+        if: env.RETRIEVAL_ONLY_PILOT == 'true'
         shell: bash
+        env:
+          RAG_DRY_RUN: "true"
+          MODEL_PROVIDER: mock
+          PRIVATE_EVALUATION_DIAGNOSTICS: "true"
         run: |
           set -euo pipefail
+          if [ -n "${RELAY_API_KEY:-}" ] || [ -n "${DEEPSEEK_API_KEY:-}" ]; then
+            echo "Retrieval-only pilot unexpectedly received a paid provider key" >&2
+            exit 1
+          fi
+          node backend/server.mjs > "$RUNNER_TEMP/private-evaluation-backend.log" 2>&1 &
+          echo "$!" > "$RUNNER_TEMP/private-evaluation-backend.pid"
+          for _ in $(seq 1 120); do
+            if curl --fail --silent --show-error "http://127.0.0.1:$PORT/health" > /dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Preview backend did not become healthy" >&2
+          exit 1
+
+      - name: Start the paid preview branch backend
+        if: env.RETRIEVAL_ONLY_PILOT != 'true'
+        shell: bash
+        env:
+          RELAY_API_KEY: ${{ secrets.RELAY_API_KEY }}
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          PRIVATE_EVALUATION_MODE: "true"
+          PRIVATE_EVALUATION_DIAGNOSTICS: "true"
+          PRIVATE_EVALUATION_BUDGET_USD: "40"
+          PRIVATE_EVALUATION_AUXILIARY_BUDGET_CNY: "10"
+          PRIVATE_EVALUATION_RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}-${{ github.sha }}
+        run: |
+          set -euo pipefail
+          if [ -z "$RELAY_API_KEY" ] || [ -z "$DEEPSEEK_API_KEY" ]; then
+            echo "The Relay and DeepSeek keys for paid private evaluation must both be configured" >&2
+            exit 1
+          fi
           node backend/server.mjs > "$RUNNER_TEMP/private-evaluation-backend.log" 2>&1 &
           echo "$!" > "$RUNNER_TEMP/private-evaluation-backend.pid"
           for _ in $(seq 1 120); do
@@ -131,6 +174,10 @@ jobs:
         run: |
           set +e
           mkdir -p artifacts
+          case_count_args=()
+          if [ "$EVALUATION_LIMIT" = "32" ]; then
+            case_count_args+=(--require-case-count 32)
+          fi
           node scripts/evaluate-pure-llm-preview.mjs \
             --dataset "$RUNNER_TEMP/private-dataset.txt" \
             --checkpoint-dir "$RUNNER_TEMP/pure-llm-private-checkpoint" \
@@ -138,12 +185,56 @@ jobs:
             --base-url "http://127.0.0.1:$PORT" \
             --generate-only \
             --limit "$EVALUATION_LIMIT" \
+            "${case_count_args[@]}" \
             --generation-timeout-ms 300000
           status=$?
           echo "exit_code=$status" >> "$GITHUB_OUTPUT"
           exit 0
 
+      - name: Verify the retrieval-only pilot reached prompt construction without Relay dispatch
+        if: always() && env.RETRIEVAL_ONLY_PILOT == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import { readFile } from "node:fs/promises";
+          const log = await readFile(`${process.env.RUNNER_TEMP}/private-evaluation-backend.log`, "utf8");
+          const events = log.split(/\r?\n/u).flatMap((line) => {
+            const jsonStart = line.indexOf("{");
+            if (jsonStart < 0) return [];
+            try {
+              const value = JSON.parse(line.slice(jsonStart));
+              return value && typeof value === "object" ? [value] : [];
+            } catch {
+              return [];
+            }
+          });
+          if (events.some((event) => event.event === "relay_dispatch")) {
+            throw new Error("Retrieval-only pilot crossed the paid Relay dispatch boundary");
+          }
+          const byTrace = new Map();
+          for (const event of events) {
+            if (event.kind !== "private_evaluation_stage" || !event.traceId) continue;
+            const trace = byTrace.get(event.traceId) || [];
+            trace.push(event);
+            byTrace.set(event.traceId, trace);
+          }
+          const completedOneTrace = [...byTrace.values()].some((trace) => {
+            const ended = new Set(trace
+              .filter((event) => event.event === "end")
+              .map((event) => event.stage));
+            return ended.has("retrieval")
+              && ended.has("prompt_build")
+              && ended.has("total")
+              && !trace.some((event) => event.event === "fail");
+          });
+          if (!completedOneTrace) {
+            throw new Error("No single retrieval-only trace completed retrieval, prompt construction and total");
+          }
+          NODE
+
       - name: Verify the report contains no private text
+        id: public_report_privacy
         if: always()
         shell: bash
         run: |
@@ -172,29 +263,74 @@ jobs:
             }
           };
           visit(report);
+          const assertExactKeys = (value, allowed, label) => {
+            const actual = Object.keys(value || {}).sort();
+            const expected = [...allowed].sort();
+            if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+              throw new Error(`${label} fields are not the approved anonymous aggregate schema`);
+            }
+          };
+          assertExactKeys(report,
+            ["schemaVersion", "generatedAt", "mode", "summary"], "report");
+          assertExactKeys(report.summary,
+            ["total", "generated", "generationFailed", "latencyMs", "estimatedCostUsd"], "summary");
+          assertExactKeys(report.summary.latencyMs, ["generation"], "latency summary");
+          assertExactKeys(report.summary.latencyMs.generation,
+            ["count", "average", "p50", "p95", "min", "max"], "generation latency summary");
+          assertExactKeys(report.summary.estimatedCostUsd,
+            ["pricingBasis", "generation", "total", "generationCoverage"], "cost summary");
           if (report.mode !== "generate_only") {
             throw new Error("Public report is not generation-only");
           }
           if (report.summary?.total !== Number(process.env.EVALUATION_LIMIT)) {
             throw new Error("Public report selected-case count does not match the requested limit");
           }
-          if (
-            report.summary?.generated !== Number(process.env.EVALUATION_LIMIT)
-            || report.summary?.generationFailed !== 0
-          ) {
-            throw new Error("Private candidate generation did not complete for every selected case");
+          const retrievalOnly = process.env.RETRIEVAL_ONLY_PILOT === "true";
+          const expectedGenerated = retrievalOnly ? 0 : Number(process.env.EVALUATION_LIMIT);
+          const expectedFailed = retrievalOnly ? Number(process.env.EVALUATION_LIMIT) : 0;
+          if (report.summary?.generated !== expectedGenerated
+            || report.summary?.generationFailed !== expectedFailed) {
+            throw new Error("Private evaluation completion counts do not match the selected mode");
+          }
+          NODE
+
+      - name: Verify retrieval-only failures contain no candidate text
+        if: always() && env.RETRIEVAL_ONLY_PILOT == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import { readdir, readFile } from "node:fs/promises";
+          const directory = `${process.env.RUNNER_TEMP}/pure-llm-private-checkpoint/generations`;
+          const files = (await readdir(directory)).filter((name) => name.endsWith(".json"));
+          if (files.length !== Number(process.env.EVALUATION_LIMIT)) {
+            throw new Error("Retrieval-only checkpoint count does not match the requested limit");
+          }
+          for (const file of files) {
+            const record = JSON.parse(await readFile(`${directory}/${file}`, "utf8"));
+            if (record.status !== "generation_failed"
+              || record.failureCode !== "preview_dry_run_response"
+              || record.candidateResponseText !== "") {
+              throw new Error("Retrieval-only checkpoint was not a redacted expected dry-run failure");
+            }
           }
           NODE
 
       - name: Encrypt the private diagnostic checkpoint
+        id: private_archive
         if: always()
         shell: bash
+        env:
+          PRIVATE_ARCHIVE_KEY: ${{ secrets.PURE_LLM_EVALUATION_ARCHIVE_KEY }}
         run: |
           set -euo pipefail
           if [ ! -d "$RUNNER_TEMP/pure-llm-private-checkpoint" ]; then
             exit 0
           fi
-          archive_key="$(sha256sum "$RUNNER_TEMP/private-dataset.txt" | cut -d ' ' -f 1)"
+          if [ "${#PRIVATE_ARCHIVE_KEY}" -lt 32 ]; then
+            echo "The private evaluation archive key is missing or too short" >&2
+            exit 1
+          fi
           tar_args=(pure-llm-private-checkpoint)
           # The backend log may contain provider diagnostics and possibly user
           # material. Include it only inside the encrypted archive so a failed
@@ -204,15 +340,23 @@ jobs:
           fi
           tar -C "$RUNNER_TEMP" -czf "$RUNNER_TEMP/pure-llm-private-checkpoint.tar.gz" \
             "${tar_args[@]}"
-          PRIVATE_ARCHIVE_KEY="$archive_key" openssl enc -aes-256-cbc -salt -pbkdf2 -iter 200000 \
+          openssl enc -aes-256-cbc -salt -pbkdf2 -iter 200000 \
             -in "$RUNNER_TEMP/pure-llm-private-checkpoint.tar.gz" \
             -out artifacts/pure-llm-private-checkpoint.tar.gz.enc \
             -pass env:PRIVATE_ARCHIVE_KEY
-          unset archive_key
           rm -f "$RUNNER_TEMP/pure-llm-private-checkpoint.tar.gz"
+          verification_archive="$RUNNER_TEMP/pure-llm-private-checkpoint.verify.tar.gz"
+          trap 'rm -f "$verification_archive"' EXIT
+          openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 \
+            -in artifacts/pure-llm-private-checkpoint.tar.gz.enc \
+            -out "$verification_archive" \
+            -pass env:PRIVATE_ARCHIVE_KEY
+          tar -tzf "$verification_archive" > /dev/null
+          rm -f "$verification_archive"
+          trap - EXIT
 
       - name: Upload the anonymous aggregate report
-        if: always()
+        if: always() && steps.public_report_privacy.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: pure-llm-private-public-report
@@ -221,27 +365,49 @@ jobs:
           retention-days: 1
 
       - name: Upload the encrypted diagnostic checkpoint
-        if: always()
+        if: always() && steps.private_archive.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: pure-llm-private-encrypted-diagnostics
           path: artifacts/pure-llm-private-checkpoint.tar.gz.enc
-          if-no-files-found: warn
+          if-no-files-found: error
           retention-days: 1
 
       - name: Stop the preview branch backend and scrub plaintext
         if: always()
         shell: bash
         run: |
+          archive_missing=0
+          if [ ! -s artifacts/pure-llm-private-checkpoint.tar.gz.enc ]; then
+            echo "Encrypted private diagnostic archive is missing or empty" >&2
+            archive_missing=1
+          fi
           if [ -s "$RUNNER_TEMP/private-evaluation-backend.pid" ]; then
-            kill "$(cat "$RUNNER_TEMP/private-evaluation-backend.pid")" 2>/dev/null || true
+            backend_pid="$(cat "$RUNNER_TEMP/private-evaluation-backend.pid")"
+            kill "$backend_pid" 2>/dev/null || true
+            for _ in $(seq 1 50); do
+              if ! kill -0 "$backend_pid" 2>/dev/null; then
+                break
+              fi
+              sleep 0.1
+            done
+            if kill -0 "$backend_pid" 2>/dev/null; then
+              kill -KILL "$backend_pid" 2>/dev/null || true
+            fi
           fi
           rm -rf \
             "$RUNNER_TEMP/private-dataset.txt" \
             "$RUNNER_TEMP/pure-llm-private-checkpoint" \
             "$RUNNER_TEMP/private-evaluation-backend.log" \
             "$RUNNER_TEMP/private-evaluation-backend.pid"
+          exit "$archive_missing"
 
       - name: Enforce evaluation completion
-        if: steps.evaluation.outputs.exit_code != '0'
+        if: env.RETRIEVAL_ONLY_PILOT != 'true' && steps.evaluation.outputs.exit_code != '0'
         run: exit "${{ steps.evaluation.outputs.exit_code }}"
+
+      - name: Enforce the expected retrieval-only evaluator outcome
+        if: env.RETRIEVAL_ONLY_PILOT == 'true' && steps.evaluation.outputs.exit_code == '0'
+        run: |
+          echo "Retrieval-only dry-run unexpectedly produced a scoreable candidate" >&2
+          exit 1

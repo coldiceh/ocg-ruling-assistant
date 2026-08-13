@@ -4,7 +4,7 @@ import { buildAliasIndex, extractQuotedMentions, extractRagCards, extractUnquote
 import { createLocalCardDataProvider } from "../backend/cardDataProvider.mjs";
 import { loadRagData, retrieveRagEvidence } from "../backend/ragEvidenceRetriever.mjs";
 import { buildRagRulingPromptBundle } from "../backend/ragRulingPrompt.mjs";
-import { callCardNameExtractionModel, callDeepSeekJsonTask, callOfficialQaApplicabilityModel, callRagModel, callRulebookGroundingModel, callRuleQueryExtractionModel, createPublicAnswerModelEnv, estimateDeepSeekCostCny, estimateGlmCostCny, getRagBudgetStatus, resetRagBudget, resolveRagProvider } from "../backend/ragModelClient.mjs";
+import { callCardNameExtractionModel, callDeepSeekJsonTask, callOfficialQaApplicabilityModel, callRagModel, callRulebookGroundingModel, callRuleQueryExtractionModel, capPublicChatGptBudget, createPublicAnswerModelEnv, estimateDeepSeekCostCny, estimateGlmCostCny, getRagBudgetStatus, resetRagBudget, resolveRagProvider } from "../backend/ragModelClient.mjs";
 import {
   answerRagRulingQuestion,
 } from "../backend/ragRulingPipeline.mjs";
@@ -2486,9 +2486,16 @@ test("an aborted compact recovery is not dispatched and still records the comple
       callCount += 1;
       assert.equal(options.signal, controller.signal);
       if (callCount === 1) {
-        controller.abort(new DOMException("client disconnected", "AbortError"));
+        const message = {};
+        Object.defineProperty(message, "content", {
+          enumerable: true,
+          get() {
+            controller.abort(new DOMException("client disconnected", "AbortError"));
+            return "";
+          },
+        });
         return jsonResponse({
-          choices: [{ message: { content: "" }, finish_reason: "length" }],
+          choices: [{ message, finish_reason: "length" }],
           usage: { prompt_tokens: 1_000, completion_tokens: 500 },
         });
       }
@@ -3277,6 +3284,104 @@ test("public extraction helpers record their paid usage in the shared budget", a
   assert.equal(cardResult.estimatedCostCny, 0.002);
   assert.equal(ruleResult.estimatedCostCny, 0.002);
   assert.equal(status.spentTodayCny, 0.004);
+});
+
+test("private DeepSeek extractors share a run-scoped auxiliary budget without touching Redis or public ledgers", async () => {
+  const now = new Date("2038-02-04T06:00:00.000Z");
+  const redis = createRedisFetch();
+  const env = {
+    MODEL_PROVIDER: "relay",
+    RAG_CARD_MODEL_PROVIDER: "deepseek",
+    RAG_RULE_MODEL_PROVIDER: "deepseek",
+    DEEPSEEK_API_KEY: "test-deepseek-key",
+    PRIVATE_EVALUATION_MODE: "true",
+    PRIVATE_EVALUATION_DIAGNOSTICS: "true",
+    PRIVATE_EVALUATION_RUN_ID: "1234567890-1-abcdef1234567893",
+    PRIVATE_EVALUATION_AUXILIARY_BUDGET_CNY: "0.001",
+    HOST: "127.0.0.1",
+    API_DAILY_BUDGET_CNY: "10",
+    API_BUDGET_TIMEZONE: "UTC",
+    DEEPSEEK_INPUT_CNY_PER_MTOK: "0",
+    DEEPSEEK_OUTPUT_CNY_PER_MTOK: "1",
+    RAG_CARD_MODEL_MAX_OUTPUT_TOKENS: "600",
+    RAG_RULE_MODEL_MAX_OUTPUT_TOKENS: "600",
+    KV_REST_API_URL: "https://kv.example.test",
+    KV_REST_API_TOKEN: "kv-token",
+  };
+  let providerCalls = 0;
+  const fetchImpl = async (url) => {
+    assert.notEqual(url, env.KV_REST_API_URL, "private auxiliary budget must never contact Redis");
+    providerCalls += 1;
+    return jsonResponse({
+      choices: [{ finish_reason: "stop", message: { content: JSON.stringify({ cardNames: [] }) } }],
+    });
+  };
+
+  const cardResult = await callCardNameExtractionModel({
+    userQuery: "private auxiliary first reservation-20380204",
+    env,
+    fetchImpl,
+    now,
+  });
+  const ruleResult = await callRuleQueryExtractionModel({
+    userQuery: "private auxiliary cumulative limit-20380204",
+    env,
+    fetchImpl,
+    now,
+  });
+
+  assert.equal(providerCalls, 1);
+  assert.equal(redis.commands.length, 0);
+  assert.equal(cardResult.budgetStatus.privateEvaluation, true);
+  assert.equal(cardResult.budgetStatus.privateEvaluationRunId, env.PRIVATE_EVALUATION_RUN_ID);
+  assert.equal(cardResult.budgetStatus.budgetStorage, "private_evaluation_memory");
+  assert.equal(cardResult.budgetStatus.bucket.id, "evidence_preparation:deepseek");
+  assert.equal(cardResult.budgetStatus.bucket.dailyBudgetCny, 0.001);
+  assert.equal(cardResult.budgetStatus.spentTodayCny, 0.0006);
+  assert.equal(ruleResult.budgetStatus.privateEvaluation, true);
+  assert.equal(ruleResult.budgetStatus.limitEnforced, true);
+  assert.ok(ruleResult.warnings.includes("api_daily_budget_exceeded_rule_query_model_skipped"));
+  const publicStatus = await getRagBudgetStatus({ env: { API_BUDGET_TIMEZONE: "UTC" }, now });
+  assert.equal(publicStatus.spentTodayCny, 0);
+  assert.equal(publicStatus.buckets.find((bucket) => bucket.id === "evidence_preparation:deepseek").spentTodayCny, 0);
+});
+
+test("private DeepSeek auxiliary isolation requires every server-owned gate", async () => {
+  const now = new Date("2038-02-04T07:00:00.000Z");
+  const base = {
+    MODEL_PROVIDER: "relay",
+    RAG_CARD_MODEL_PROVIDER: "deepseek",
+    DEEPSEEK_API_KEY: "test-deepseek-key",
+    PRIVATE_EVALUATION_MODE: "true",
+    PRIVATE_EVALUATION_DIAGNOSTICS: "true",
+    PRIVATE_EVALUATION_RUN_ID: "1234567890-1-abcdef1234567894",
+    PRIVATE_EVALUATION_AUXILIARY_BUDGET_CNY: "10",
+    HOST: "127.0.0.1",
+    API_DAILY_BUDGET_CNY: "0.000001",
+    API_BUDGET_TIMEZONE: "UTC",
+  };
+  for (const variant of [
+    { PRIVATE_EVALUATION_MODE: "false" },
+    { PRIVATE_EVALUATION_DIAGNOSTICS: "false" },
+    { PRIVATE_EVALUATION_RUN_ID: "short" },
+    { HOST: "0.0.0.0" },
+    { VERCEL: "1" },
+  ]) {
+    const env = { ...base, ...variant };
+    let providerCalls = 0;
+    const result = await callCardNameExtractionModel({
+      userQuery: `private auxiliary gate rejection ${JSON.stringify(variant)}`,
+      env,
+      now,
+      fetchImpl: async () => {
+        providerCalls += 1;
+        throw new Error("provider must not be called");
+      },
+    });
+    assert.equal(providerCalls, 0);
+    assert.notEqual(result.budgetStatus?.privateEvaluation, true);
+    assert.ok(result.warnings.includes("api_daily_budget_exceeded_card_name_model_skipped"));
+  }
 });
 
 test("pipeline cost summary includes both auxiliary extractors on the caller's budget day", async () => {
@@ -4196,6 +4301,189 @@ test("auxiliary model dry-runs skip injected invokers and forward signals when e
   assert.ok(receivedSignals.every((value) => value === controller.signal));
 });
 
+test("public JSON providers stop waiting for a stalled response body when the caller aborts", async () => {
+  const providers = [
+    {
+      label: "deepseek",
+      call: ({ controller, fetchImpl }) => callRagModel({
+        prompt: "stalled-deepseek-body",
+        env: {
+          MODEL_PROVIDER: "deepseek",
+          DEEPSEEK_API_KEY: "test-deepseek-key",
+          API_DAILY_BUDGET_CNY: "10",
+        },
+        signal: controller.signal,
+        fetchImpl,
+      }),
+      readWarnings: (result) => result.warnings,
+      directSignal: true,
+    },
+    {
+      label: "glm",
+      call: ({ controller, fetchImpl }) => callRagModel({
+        prompt: "stalled-glm-body",
+        env: {
+          MODEL_PROVIDER: "glm",
+          GLM_API_KEY: "test-glm-key",
+          API_DAILY_BUDGET_CNY: "10",
+        },
+        signal: controller.signal,
+        fetchImpl,
+      }),
+      readWarnings: (result) => result.warnings,
+      directSignal: true,
+    },
+    {
+      label: "gemini",
+      call: ({ controller, fetchImpl }) => callCardNameExtractionModel({
+        userQuery: "stalled-gemini-body",
+        dataRevision: "stalled-gemini-body-v1",
+        env: {
+          MODEL_PROVIDER: "gemini",
+          RAG_CARD_MODEL_PROVIDER: "gemini",
+          GEMINI_API_KEY: "test-gemini-key",
+          RAG_CARD_MODEL_TIMEOUT_MS: "5000",
+          API_DAILY_BUDGET_CNY: "10",
+        },
+        signal: controller.signal,
+        fetchImpl,
+      }),
+      readWarnings: (result) => result.warnings,
+    },
+  ];
+
+  for (const provider of providers) {
+    const controller = new AbortController();
+    let bodyStarted = false;
+    let requestSignal = null;
+    const pending = provider.call({
+      controller,
+      fetchImpl: async (_url, options) => {
+        requestSignal = options.signal;
+        assert.equal(typeof requestSignal?.addEventListener, "function", provider.label);
+        if (provider.directSignal) assert.equal(requestSignal, controller.signal, provider.label);
+        return {
+          ok: true,
+          status: 200,
+          json: async () => {
+            bodyStarted = true;
+            return new Promise(() => {});
+          },
+        };
+      },
+    });
+    await waitFor(() => bodyStarted);
+    const abortReason = new DOMException(`${provider.label} body cancelled`, "AbortError");
+    controller.abort(abortReason);
+    const outcome = Promise.race([
+      pending,
+      new Promise((_, reject) => setTimeout(
+        () => reject(new Error(`${provider.label}_body_abort_did_not_settle`)),
+        250,
+      )),
+    ]);
+
+    assert.equal(requestSignal?.aborted, true, provider.label);
+    if (provider.label === "gemini") {
+      await assert.rejects(outcome, (error) => error === abortReason);
+      assert.equal(requestSignal.reason, abortReason);
+      continue;
+    }
+    const result = await outcome;
+    assert.ok(
+      provider.readWarnings(result).some((warning) => (
+        warning.startsWith("model_call_failed:")
+        || warning.startsWith("card_name_model_failed:")
+      )),
+      provider.label,
+    );
+  }
+});
+
+test("lightweight auxiliary timeout aborts both transport and a stalled JSON body", async () => {
+  const runCase = async ({ label, bodyStalls }) => {
+    let requestSignal = null;
+    let bodyStarted = false;
+    const result = await callCardNameExtractionModel({
+      userQuery: `auxiliary-timeout-${label}-20400101`,
+      dataRevision: `auxiliary-timeout-${label}`,
+      env: {
+        MODEL_PROVIDER: "deepseek",
+        RAG_CARD_MODEL_PROVIDER: "deepseek",
+        DEEPSEEK_API_KEY: "test-deepseek-key",
+        RAG_CARD_MODEL_TIMEOUT_MS: "5",
+        API_DAILY_BUDGET_CNY: "10",
+      },
+      fetchImpl: async (_url, options) => {
+        requestSignal = options.signal;
+        if (!bodyStalls) return new Promise(() => {});
+        return {
+          ok: true,
+          status: 200,
+          json: async () => {
+            bodyStarted = true;
+            return new Promise(() => {});
+          },
+        };
+      },
+    });
+
+    assert.equal(requestSignal?.aborted, true, label);
+    assert.equal(requestSignal?.reason?.message, "card_name_model_timeout", label);
+    assert.equal(bodyStarted, bodyStalls, label);
+    assert.ok(result.warnings.includes("card_name_model_failed:card_name_model_timeout"), label);
+    assert.ok(result.warnings.includes("budget_reservation_retained_after_ambiguous_remote_failure"), label);
+  };
+
+  await runCase({ label: "transport", bodyStalls: false });
+  await runCase({ label: "body", bodyStalls: true });
+});
+
+test("parallel rulebook timeouts abort each provider request independently", async () => {
+  const signals = [];
+  const result = await callRulebookGroundingModel({
+    userQuery: "发动时支付代价后，对象离开墓地且场上的持续效果不再适用，后续特殊召唤处理应如何继续？",
+    cardTexts: [{
+      id: "generic-card-text-rulebook-timeout",
+      type: "card_text",
+      title: "匿名效果卡",
+      text: "舍弃1张卡可以发动。以墓地1只怪兽为对象，将其特殊召唤。只要此卡存在场上，该怪兽不受其他效果影响。",
+    }],
+    ruleEvidence: [{
+      id: "generic-state-transition-timeout",
+      type: "rulebook",
+      title: "通用规则",
+      text: "发动时先支付代价并选择对象；处理时再确认对象是否仍在该区域。",
+    }],
+    dataRevision: "parallel-rulebook-timeout-v1",
+    env: {
+      MODEL_PROVIDER: "deepseek",
+      RAG_RULEBOOK_MODEL_PROVIDER: "deepseek",
+      DEEPSEEK_API_KEY: "test-deepseek-key",
+      RAG_RULEBOOK_MODEL_TIMEOUT_MS: "5",
+      RAG_RULEBOOK_REPAIR_TIMEOUT_MS: "8",
+      API_DAILY_BUDGET_CNY: "10",
+    },
+    fetchImpl: async (_url, options) => {
+      signals.push(options.signal);
+      return new Promise(() => {});
+    },
+  });
+
+  assert.equal(signals.length, 2);
+  assert.notEqual(signals[0], signals[1]);
+  assert.ok(signals.every((signal) => signal.aborted));
+  assert.deepEqual(
+    new Set(signals.map((signal) => signal.reason?.message)),
+    new Set([
+      "rulebook_grounding_model_timeout",
+      "rulebook_grounding_focused_repair_timeout",
+    ]),
+  );
+  assert.ok(result.warnings.some((warning) => warning.includes("rulebook_grounding_primary_failed")));
+  assert.ok(result.warnings.some((warning) => warning.includes("rulebook_grounding_focused_repair_failed")));
+});
+
 test("public DeepSeek budget also treats cached input as uncached", () => {
   const cost = estimateDeepSeekCostCny({
     prompt_tokens: 1000,
@@ -4420,9 +4708,14 @@ test("budget_status_uses_kv_rest_aliases_for_persistent_storage", async () => {
     "rag-api-budget:v3:2026-07-09:evidence_preparation:deepseek:cny",
     "rag-api-budget:v3:2026-07-09:final_ruling:deepseek:cny",
     "rag-api-budget:v3:2026-07-09:final_ruling:glm:cny",
-    "rag-api-budget:v3:2026-07-09:final_ruling:relay:usd",
   ]);
   assert.ok(resetCommands.every((command) => command[2] === "3" && command[8] === "172800"));
+  const relayReset = redis.commands.find((command) => command[0] === "EVAL"
+    && command[2] === "4"
+    && command[3] === "rag-api-budget:v3:2026-07-09:final_ruling:relay:usd");
+  assert.ok(relayReset);
+  assert.equal(relayReset[6], "rag-api-budget:v3:2026-07-09:final_ruling:relay:manually-closed");
+  assert.equal(relayReset[7], "172800");
 });
 
 test("budget_status_accepts_the_named_Upstash_budget_integration_aliases", async () => {
@@ -4831,6 +5124,412 @@ test("configuring an engine does not change public card identity or trigger pass
   assert.equal(configured.evidence.retrievedCards.length, 1);
   assert.equal(configured.evidence.retrievedCards[0].id, cid);
   assert.equal(configured.evidence.retrievedCards[0].passcode, "");
+});
+
+test("owner cap stops only today's public ChatGPT bucket at the ten-dollar hard ceiling", async () => {
+  const now = new Date("2038-02-04T00:00:00.000Z");
+  const env = {
+    API_BUDGET_TIMEZONE: "UTC",
+    API_DAILY_BUDGET_CNY: "10",
+    API_CHATGPT_DAILY_BUDGET_USD: "100",
+  };
+  await resetRagBudget({ env, now });
+
+  const capped = await capPublicChatGptBudget({ env, now });
+  const status = await getRagBudgetStatus({ env, now });
+  const relay = status.buckets.find((bucket) => bucket.id === "final_ruling:relay");
+
+  assert.equal(capped.action, "cap_public_chatgpt");
+  assert.equal(relay.dailyBudgetUsd, 10);
+  assert.equal(relay.spentTodayUsd, 10);
+  assert.equal(relay.remainingTodayUsd, 0);
+  assert.equal(relay.manuallyClosed, true);
+  assert.equal(relay.limitEnforced, true);
+  assert.equal(status.spentTodayCny, 0);
+  assert.deepEqual(
+    status.buckets
+      .filter((bucket) => bucket.id !== "final_ruling:relay")
+      .map((bucket) => bucket.spentTodayCny),
+    [0, 0, 0],
+  );
+
+  let providerCalls = 0;
+  const blocked = await callRagModel({
+    prompt: "public calls stop after the owner cap",
+    env: {
+      ...env,
+      MODEL_PROVIDER: "relay",
+      RELAY_API_KEY: "test-key",
+      RELAY_BASE_URL: "https://relay.example.test/v1",
+      RAG_MODEL: "gpt-5.6-sol",
+      RELAY_MAX_COMPLETION_TOKENS: "64",
+    },
+    now,
+    fetchImpl: async () => {
+      providerCalls += 1;
+      return relaySseResponse({});
+    },
+  });
+  assert.equal(providerCalls, 0);
+  assert.equal(blocked.answer.answerLevel, "budget_limited");
+  assert.match(blocked.answer.shortAnswer, /每日 10 美元上限/u);
+  assert.match(blocked.answer.shortAnswer, /哔哩哔哩用户「おmaginai」/u);
+});
+
+test("paid loopback private evaluation uses an isolated finite memory budget", async () => {
+  const now = new Date("2038-02-04T04:00:00.000Z");
+  const runId = "1234567890-1-abcdef1234567890";
+  const publicEnv = {
+    API_BUDGET_TIMEZONE: "UTC",
+    API_CHATGPT_DAILY_BUDGET_USD: "10",
+  };
+  await resetRagBudget({ env: publicEnv, now });
+  await capPublicChatGptBudget({ env: publicEnv, now });
+  let providerCalls = 0;
+  const result = await callRagModel({
+    prompt: "isolated private evaluation budget",
+    env: {
+      ...publicEnv,
+      MODEL_PROVIDER: "relay",
+      RELAY_API_KEY: "test-key",
+      RELAY_BASE_URL: "https://relay.example.test/v1",
+      RAG_MODEL: "gpt-5.6-sol",
+      RELAY_MAX_COMPLETION_TOKENS: "64",
+      PRIVATE_EVALUATION_MODE: "true",
+      PRIVATE_EVALUATION_DIAGNOSTICS: "true",
+      PRIVATE_EVALUATION_RUN_ID: runId,
+      PRIVATE_EVALUATION_BUDGET_USD: "0.01",
+      HOST: "127.0.0.1",
+    },
+    now,
+    fetchImpl: async () => {
+      providerCalls += 1;
+      const content = JSON.stringify(modelJson("private evaluation completed"));
+      return new Response(`data: ${JSON.stringify({
+        model: "gpt-5.6-sol",
+        choices: [{ index: 0, finish_reason: "stop", delta: { content } }],
+        usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+      })}\n\ndata: [DONE]\n\n`, {
+        status: 200,
+        headers: { "content-type": "text/event-stream" },
+      });
+    },
+  });
+  const publicStatus = await getRagBudgetStatus({ env: publicEnv, now });
+  const publicRelay = publicStatus.buckets.find((bucket) => bucket.id === "final_ruling:relay");
+
+  assert.equal(providerCalls, 1);
+  assert.equal(result.answer.shortAnswer, "private evaluation completed");
+  assert.equal(result.budgetStatus.privateEvaluation, true);
+  assert.equal(result.budgetStatus.privateEvaluationRunId, runId);
+  assert.equal(result.budgetStatus.budgetStorage, "private_evaluation_memory");
+  assert.equal(result.budgetStatus.bucket.dailyBudgetUsd, 0.01);
+  assert.ok(result.warnings.includes("private_evaluation_budget_isolated"));
+  assert.equal(publicRelay.spentTodayUsd, 10);
+  assert.equal(publicRelay.manuallyClosed, true);
+});
+
+test("private evaluation budget gate fails closed to the public ledger unless every server-owned condition matches", async () => {
+  const now = new Date("2038-02-04T05:00:00.000Z");
+  const base = {
+    MODEL_PROVIDER: "relay",
+    RELAY_API_KEY: "test-key",
+    RELAY_BASE_URL: "https://relay.example.test/v1",
+    RAG_MODEL: "gpt-5.6-sol",
+    RELAY_MAX_COMPLETION_TOKENS: "64",
+    API_BUDGET_TIMEZONE: "UTC",
+    API_CHATGPT_DAILY_BUDGET_USD: "10",
+    PRIVATE_EVALUATION_MODE: "true",
+    PRIVATE_EVALUATION_DIAGNOSTICS: "true",
+    PRIVATE_EVALUATION_RUN_ID: "1234567890-1-abcdef1234567890",
+    PRIVATE_EVALUATION_BUDGET_USD: "40",
+    HOST: "127.0.0.1",
+  };
+  const variants = [
+    { PRIVATE_EVALUATION_MODE: "false" },
+    { PRIVATE_EVALUATION_DIAGNOSTICS: "false" },
+    { PRIVATE_EVALUATION_RUN_ID: "short" },
+    { HOST: "0.0.0.0" },
+    { VERCEL: "1" },
+  ];
+
+  for (const variant of variants) {
+    const env = { ...base, ...variant };
+    await resetRagBudget({ env, now });
+    await capPublicChatGptBudget({ env, now });
+    let providerCalls = 0;
+    const result = await callRagModel({
+      prompt: `reject private budget gate ${JSON.stringify(variant)}`,
+      env,
+      now,
+      fetchImpl: async () => {
+        providerCalls += 1;
+        throw new Error("provider must not be called");
+      },
+    });
+    assert.equal(providerCalls, 0);
+    assert.equal(result.answer.answerLevel, "budget_limited");
+    assert.notEqual(result.budgetStatus.privateEvaluation, true);
+  }
+});
+
+test("private evaluation budget clamps oversized configuration and enforces one shared run ledger", async () => {
+  let providerCalls = 0;
+  const env = {
+    MODEL_PROVIDER: "relay",
+    RELAY_API_KEY: "test-key",
+    RELAY_BASE_URL: "https://relay.example.test/v1",
+    RAG_MODEL: "gpt-5.6-sol",
+    RELAY_MAX_COMPLETION_TOKENS: "64",
+    PRIVATE_EVALUATION_MODE: "true",
+    PRIVATE_EVALUATION_DIAGNOSTICS: "true",
+    PRIVATE_EVALUATION_RUN_ID: "1234567890-1-abcdef1234567891",
+    PRIVATE_EVALUATION_BUDGET_USD: "9999",
+    HOST: "127.0.0.1",
+  };
+  const fetchImpl = async () => {
+    providerCalls += 1;
+    const content = JSON.stringify(modelJson("clamped private budget"));
+    return new Response(`data: ${JSON.stringify({
+      model: "gpt-5.6-sol",
+      choices: [{ index: 0, finish_reason: "stop", delta: { content } }],
+      usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+    })}\n\ndata: [DONE]\n\n`, {
+      status: 200,
+      headers: { "content-type": "text/event-stream" },
+    });
+  };
+  const first = await callRagModel({ prompt: "first private call", env, fetchImpl });
+  const blocked = await callRagModel({
+    prompt: "second private call",
+    env: { ...env, PRIVATE_EVALUATION_BUDGET_USD: "0.000001" },
+    fetchImpl,
+  });
+
+  assert.equal(providerCalls, 1);
+  assert.equal(first.budgetStatus.bucket.dailyBudgetUsd, 50);
+  assert.equal(first.budgetStatus.bucket.spentTodayUsd, first.estimatedCostUsd);
+  assert.equal(blocked.answer.answerLevel, "budget_limited");
+  assert.match(blocked.answer.shortAnswer, /私有评测额度.*0\.000001 美元硬上限/u);
+  assert.equal(blocked.budgetStatus.privateEvaluation, true);
+  assert.equal(blocked.budgetStatus.bucket.dailyBudgetUsd, 0.000001);
+});
+
+test("a definitely rejected private request releases its isolated reservation", async () => {
+  const env = {
+    MODEL_PROVIDER: "relay",
+    RELAY_API_KEY: "test-key",
+    RELAY_BASE_URL: "https://relay.example.test/v1",
+    RAG_MODEL: "gpt-5.6-sol",
+    RELAY_MAX_COMPLETION_TOKENS: "64",
+    PRIVATE_EVALUATION_MODE: "true",
+    PRIVATE_EVALUATION_DIAGNOSTICS: "true",
+    PRIVATE_EVALUATION_RUN_ID: "1234567890-1-abcdef1234567892",
+    // Sol's conservative reservation includes the full 64-token output
+    // envelope and is slightly above $0.001 at the checked-in price table.
+    PRIVATE_EVALUATION_BUDGET_USD: "0.01",
+    HOST: "127.0.0.1",
+  };
+  let calls = 0;
+  const first = await callRagModel({
+    prompt: "release private reservation",
+    env,
+    fetchImpl: async () => {
+      calls += 1;
+      return new Response(JSON.stringify({ error: { message: "bad request" } }), {
+        status: 400,
+        headers: { "content-type": "application/json" },
+      });
+    },
+  });
+  const second = await callRagModel({
+    prompt: "reuse released private reservation",
+    env,
+    fetchImpl: async () => {
+      calls += 1;
+      const content = JSON.stringify(modelJson("reservation was released"));
+      return new Response(`data: ${JSON.stringify({
+        model: "gpt-5.6-sol",
+        choices: [{ index: 0, finish_reason: "stop", delta: { content } }],
+        usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+      })}\n\ndata: [DONE]\n\n`, {
+        status: 200,
+        headers: { "content-type": "text/event-stream" },
+      });
+    },
+  });
+
+  assert.equal(calls, 2);
+  assert.equal(first.answer.answerLevel, "needs_more_info");
+  assert.equal(first.budgetStatus.bucket.spentTodayUsd, 0);
+  assert.equal(second.answer.shortAnswer, "reservation was released");
+  assert.equal(second.budgetStatus.privateEvaluation, true);
+});
+
+test("persistent owner cap atomically closes only the public Relay USD bucket", async () => {
+  const now = new Date("2038-02-05T00:00:00.000Z");
+  const redis = createRedisFetch();
+  const env = {
+    API_BUDGET_TIMEZONE: "UTC",
+    API_CHATGPT_DAILY_BUDGET_USD: "7.5",
+    KV_REST_API_URL: "https://kv.example.test",
+    KV_REST_API_TOKEN: "kv-token",
+  };
+  redis.store.set("rag-api-budget:v3:2038-02-05:cny-total", "2.5");
+  redis.store.set("admin-final-budget:test-pool", "99");
+  redis.store.set("rag-api-budget:v3:2038-02-05:final_ruling:relay:usd", "8.25");
+
+  const capped = await capPublicChatGptBudget({ env, fetchImpl: redis.fetchImpl, now });
+
+  assert.equal(redis.commands.length, 7);
+  assert.deepEqual(redis.commands[0].slice(0, 1), ["EVAL"]);
+  assert.match(String(redis.commands[0][1]), /math\.max\(current, limit\).*KEYS\[2\]/su);
+  assert.deepEqual(redis.commands[0].slice(2), [
+    "2",
+    "rag-api-budget:v3:2038-02-05:final_ruling:relay:usd",
+    "rag-api-budget:v3:2038-02-05:final_ruling:relay:manually-closed",
+    "7.5",
+    "172800",
+  ]);
+  assert.equal(redis.store.get("rag-api-budget:v3:2038-02-05:cny-total"), "2.5");
+  assert.equal(redis.store.get("admin-final-budget:test-pool"), "99");
+  const relay = capped.buckets.find((bucket) => bucket.id === "final_ruling:relay");
+  assert.equal(relay.dailyBudgetUsd, 7.5);
+  assert.equal(relay.spentTodayUsd, 8.25);
+  assert.equal(relay.manuallyClosed, true);
+  assert.equal(capped.buckets.length, 4);
+});
+
+test("persistent reset clears the Relay ledger and owner-close marker in one atomic command", async () => {
+  const now = new Date("2038-02-05T12:00:00.000Z");
+  const redis = createRedisFetch();
+  const env = {
+    API_BUDGET_TIMEZONE: "UTC",
+    API_CHATGPT_DAILY_BUDGET_USD: "10",
+    KV_REST_API_URL: "https://kv.example.test",
+    KV_REST_API_TOKEN: "kv-token",
+  };
+  const bucketKey = "rag-api-budget:v3:2038-02-05:final_ruling:relay:usd";
+  const legacyKey = "rag-api-budget:v2:2038-02-05:final_ruling:relay";
+  const watermarkKey = `${bucketKey}:legacy-watermark`;
+  const closeKey = "rag-api-budget:v3:2038-02-05:final_ruling:relay:manually-closed";
+  redis.store.set(bucketKey, "10");
+  redis.store.set(legacyKey, "3");
+  redis.store.set(watermarkKey, "1");
+  redis.store.set(closeKey, "1");
+
+  await resetRagBudget({ env, fetchImpl: redis.fetchImpl, now });
+
+  const relayReset = redis.commands.find((command) => command[0] === "EVAL"
+    && command[2] === "4"
+    && command[3] === bucketKey);
+  assert.ok(relayReset);
+  assert.deepEqual(relayReset.slice(2), [
+    "4",
+    bucketKey,
+    legacyKey,
+    watermarkKey,
+    closeKey,
+    "172800",
+  ]);
+  assert.equal(redis.commands.some((command) => command[0] === "DEL" && command[1] === closeKey), false);
+  assert.equal(redis.store.get(bucketKey), "0");
+  assert.equal(redis.store.get(watermarkKey), "3");
+  assert.equal(redis.store.has(closeKey), false);
+});
+
+test("an owner close between preflight reads and atomic reserve neither dispatches nor refunds an unmade reservation", async () => {
+  const now = new Date("2038-02-05T18:00:00.000Z");
+  const redis = createRedisFetch();
+  const env = {
+    MODEL_PROVIDER: "relay",
+    RELAY_API_KEY: "test-key",
+    RELAY_BASE_URL: "https://relay.example.test/v1",
+    RAG_MODEL: "gpt-5.6-sol",
+    RELAY_MAX_COMPLETION_TOKENS: "64",
+    API_BUDGET_TIMEZONE: "UTC",
+    API_CHATGPT_DAILY_BUDGET_USD: "10",
+    KV_REST_API_URL: "https://kv.example.test",
+    KV_REST_API_TOKEN: "kv-token",
+  };
+  const bucketKey = "rag-api-budget:v3:2038-02-05:final_ruling:relay:usd";
+  const closeKey = "rag-api-budget:v3:2038-02-05:final_ruling:relay:manually-closed";
+  redis.store.set(bucketKey, "0.1");
+  let providerCalls = 0;
+  let injectedClose = false;
+  const fetchImpl = async (url, options = {}) => {
+    if (url !== env.KV_REST_API_URL) {
+      providerCalls += 1;
+      throw new Error("provider must not be called after an owner close");
+    }
+    const command = JSON.parse(options.body || "[]");
+    if (!injectedClose && command[0] === "GET" && command[1] === closeKey) {
+      injectedClose = true;
+      const response = jsonResponse({ result: null });
+      redis.store.set(closeKey, "1");
+      redis.store.set(bucketKey, "11");
+      return response;
+    }
+    return redis.fetchImpl(url, options);
+  };
+
+  const blocked = await callRagModel({ prompt: "atomic close race", env, fetchImpl, now });
+
+  assert.equal(injectedClose, true);
+  assert.equal(providerCalls, 0);
+  assert.equal(blocked.answer.answerLevel, "budget_limited");
+  assert.equal(blocked.budgetStatus.bucket.manuallyClosed, true);
+  assert.equal(redis.store.get(bucketKey), "11");
+  assert.ok(redis.commands.some((command) => command[0] === "EVAL"
+    && command[2] === "2"
+    && String(command[1]).includes("return {'closed'")));
+});
+
+test("an in-flight public settlement cannot reopen an owner-closed ChatGPT day", async () => {
+  const now = new Date("2038-02-06T00:00:00.000Z");
+  const redis = createRedisFetch();
+  const env = {
+    API_BUDGET_TIMEZONE: "UTC",
+    API_CHATGPT_DAILY_BUDGET_USD: "10",
+    KV_REST_API_URL: "https://kv.example.test",
+    KV_REST_API_TOKEN: "kv-token",
+  };
+  const bucketKey = "rag-api-budget:v3:2038-02-06:final_ruling:relay:usd";
+  const closeKey = "rag-api-budget:v3:2038-02-06:final_ruling:relay:manually-closed";
+  // Simulate a request that reserved before the owner closed the public pool,
+  // then settled cheaply and refunded part of its reservation afterwards.
+  redis.store.set(bucketKey, "0.2");
+  await capPublicChatGptBudget({ env, fetchImpl: redis.fetchImpl, now });
+  redis.store.set(bucketKey, "9.85");
+  assert.equal(redis.store.get(closeKey), "1");
+
+  let providerCalls = 0;
+  const blocked = await callRagModel({
+    prompt: "anonymous request after an in-flight settlement",
+    env: {
+      ...env,
+      MODEL_PROVIDER: "relay",
+      RELAY_API_KEY: "test-key",
+      RELAY_BASE_URL: "https://relay.example.test/v1",
+      RAG_MODEL: "gpt-5.6-sol",
+      RELAY_MAX_COMPLETION_TOKENS: "64",
+    },
+    now,
+    fetchImpl: async (url, options) => {
+      if (url === env.KV_REST_API_URL) return redis.fetchImpl(url, options);
+      providerCalls += 1;
+      throw new Error("provider must not be called after an owner close");
+    },
+  });
+  assert.equal(providerCalls, 0);
+  assert.equal(blocked.answer.answerLevel, "budget_limited");
+  assert.equal(blocked.budgetStatus.bucket.limitEnforced, true);
+
+  const reset = await resetRagBudget({ env, fetchImpl: redis.fetchImpl, now });
+  const resetRelay = reset.buckets.find((bucket) => bucket.id === "final_ruling:relay");
+  assert.equal(redis.store.has(closeKey), false);
+  assert.equal(resetRelay.manuallyClosed, undefined);
+  assert.equal(resetRelay.spentTodayUsd, 0);
 });
 
 test("public retrieval does not synthesize cross-card mechanism analogues", async () => {
@@ -5451,6 +6150,36 @@ function createRedisFetch({ url: expectedUrl = "https://kv.example.test", token:
           store.set(currentKey, String(next));
           return jsonResponse({ result: String(next) });
         }
+        if (keyCount === 2) {
+          const currentKey = command[3];
+          const closedKey = command[4];
+          if (String(command[1]).includes("return {'closed'")) {
+            const current = Number(store.get(currentKey) || 0);
+            if (store.get(closedKey) === "1") {
+              return jsonResponse({ result: ["closed", String(current)] });
+            }
+            const next = Math.max(0, current + Number(command[5] || 0));
+            store.set(currentKey, String(next));
+            return jsonResponse({ result: ["reserved", String(next)] });
+          }
+          const limit = Number(command[5] || 0);
+          const next = Math.max(Number(store.get(currentKey) || 0), limit);
+          store.set(currentKey, String(next));
+          store.set(closedKey, "1");
+          return jsonResponse({ result: String(next) });
+        }
+        if (keyCount === 4) {
+          const currentKey = command[3];
+          const legacyKey = command[4];
+          const watermarkKey = command[5];
+          const closedKey = command[6];
+          const legacy = Math.max(0, Number(store.get(legacyKey) || 0));
+          const watermark = Math.max(0, Number(store.get(watermarkKey) || 0));
+          store.set(currentKey, "0");
+          store.set(watermarkKey, String(Math.max(watermark, legacy)));
+          store.delete(closedKey);
+          return jsonResponse({ result: ["reset", "0"] });
+        }
         assert.equal(keyCount, 3);
         const currentKey = command[3];
         const legacyKey = command[4];
@@ -5474,6 +6203,10 @@ function createRedisFetch({ url: expectedUrl = "https://kv.example.test", token:
       if (op === "SET") {
         store.set(key, value);
         return jsonResponse({ result: "OK" });
+      }
+      if (op === "DEL") {
+        const removed = store.delete(key);
+        return jsonResponse({ result: removed ? 1 : 0 });
       }
       if (op === "INCRBYFLOAT") {
         const next = Number(store.get(key) || 0) + Number(value || 0);
