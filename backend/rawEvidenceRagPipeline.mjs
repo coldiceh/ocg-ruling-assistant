@@ -5,10 +5,7 @@ import {
   normalizeRawGenericInjectedData,
 } from "./rawGenericDataStore.mjs";
 import { resolveRawGenericCards } from "./rawGenericCardResolver.mjs";
-import {
-  resolveRawGenericCardIdentities,
-  retrieveRawGenericEvidence,
-} from "./rawGenericEvidenceRetriever.mjs";
+import { retrieveRawGenericEvidence } from "./rawGenericEvidenceRetriever.mjs";
 import {
   callCardNameExtractionModel,
   callRagModel,
@@ -76,18 +73,28 @@ export async function answerRagRulingQuestion({
   timingsMs.deterministicPreflight = elapsedMs(preflightStartedAt);
 
   const auxiliaryStartedAt = Date.now();
-  const cardExtractionStartedAt = Date.now();
-  const cardNameModel = await callCardNameExtractionModel({
-    userQuery: query,
-    dataRevision,
-    env,
-    modelInvoker: cardModelInvoker,
-    fetchImpl,
-    dryRun,
-    now,
-    signal,
-  });
-  timingsMs.cardNameExtraction = elapsedMs(cardExtractionStartedAt);
+  const [cardNameModel, ruleQueryModel] = await Promise.all([
+    callCardNameExtractionModel({
+      userQuery: query,
+      dataRevision,
+      env,
+      modelInvoker: cardModelInvoker,
+      fetchImpl,
+      dryRun,
+      now,
+      signal,
+    }),
+    callRuleQueryExtractionModel({
+      userQuery: query,
+      dataRevision,
+      env,
+      modelInvoker: ruleModelInvoker,
+      fetchImpl,
+      dryRun,
+      now,
+      signal,
+    }),
+  ]);
   const cardResolution = (cardNameModel.candidates || []).length
     ? resolveRawGenericCards({
         userQuery: query,
@@ -96,42 +103,12 @@ export async function answerRagRulingQuestion({
         modelCardNameCandidates: cardNameModel.candidates,
       })
     : localCardResolution;
-
-  const externalIdentityStartedAt = Date.now();
-  const identityResolution = await resolveRawGenericCardIdentities({
-    cardResolution,
-    cards: data.cards || [],
-    env,
-    fetchImpl,
-    maxCards,
-  });
-  const effectiveIdentityResolution = identityResolution.cardResolution;
-  timingsMs.externalIdentityResolution = elapsedMs(externalIdentityStartedAt);
-
-  // Rule-query extraction deliberately runs after local and external identity
-  // resolution. It may
-  // use only the question and verified catalogue text to produce lexical
-  // searches; it never decides the ruling or supplies final-answer evidence.
-  const ruleExtractionStartedAt = Date.now();
-  const ruleQueryModel = await callRuleQueryExtractionModel({
-    userQuery: query,
-    resolvedCards: effectiveIdentityResolution.resolvedCards || [],
-    dataRevision,
-    env,
-    modelInvoker: ruleModelInvoker,
-    fetchImpl,
-    dryRun,
-    now,
-    signal,
-  });
-  timingsMs.ruleQueryExtraction = elapsedMs(ruleExtractionStartedAt);
   timingsMs.auxiliaryExtractionModels = elapsedMs(auxiliaryStartedAt);
 
   const retrievalStartedAt = Date.now();
   const evidence = await retrieveRawGenericEvidence({
     userQuery: query,
-    cardResolution: effectiveIdentityResolution,
-    identityResolution,
+    cardResolution,
     dataDir,
     data,
     ruleSearchQueries: ruleQueryModel.queries || [],
@@ -187,7 +164,7 @@ export async function answerRagRulingQuestion({
   const displayCards = dedupeCards([
     ...(effectiveCardResolution.resolvedCards || []),
     ...userProvidedCards(evidence.userProvidedCardTexts || []),
-  ]).map(toPublicResolvedCard);
+  ]);
   const auxiliaryUsage = sumUsage([
     cardNameModel.tokenUsage,
     ruleQueryModel.tokenUsage,
@@ -420,45 +397,6 @@ function dedupeCards(cards = []) {
     if (key && !result.has(key)) result.set(key, card);
   }
   return [...result.values()];
-}
-
-function toPublicResolvedCard(card = {}) {
-  return Object.fromEntries(Object.entries({
-    id: String(card.id || card.cardId || ""),
-    cardId: String(card.cardId || card.id || ""),
-    passcode: String(card.passcode || card.password || ""),
-    cid: card.cid === undefined || card.cid === null ? "" : String(card.cid),
-    name: String(card.name || card.cnName || card.jaName || card.enName || ""),
-    cnName: String(card.cnName || ""),
-    jaName: String(card.jaName || card.jpName || ""),
-    jpName: String(card.jpName || card.jaName || ""),
-    enName: String(card.enName || ""),
-    aliases: cleanStringArray(card.aliases),
-    cardType: String(card.cardType || card.type || ""),
-    type: String(card.type || card.cardType || ""),
-    effectText: String(card.effectText || card.text || ""),
-    attribute: card.attribute ?? "",
-    race: card.race ?? "",
-    atk: finiteOrNull(card.atk),
-    def: finiteOrNull(card.def),
-    level: finiteOrNull(card.level),
-    rank: finiteOrNull(card.rank),
-    link: finiteOrNull(card.link),
-    properties: cleanStringArray(card.properties),
-    monsterProperties: cleanStringArray(card.monsterProperties),
-    source: String(card.source || ""),
-    sourceLabel: String(card.sourceLabel || ""),
-    sourceUrl: String(card.sourceUrl || ""),
-    official: card.official === true,
-    imageUrl: String(card.imageUrl || ""),
-    imageCandidates: cleanStringArray(card.imageCandidates),
-  }).filter(([, value]) => value !== "" && value !== null && value !== undefined));
-}
-
-function finiteOrNull(value) {
-  if (value === "" || value === null || value === undefined) return null;
-  const number = Number(value);
-  return Number.isFinite(number) ? number : null;
 }
 
 function sumUsage(items = []) {

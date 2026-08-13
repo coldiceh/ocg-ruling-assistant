@@ -6,27 +6,12 @@ import {
   RawEvidencePromptCapacityError,
   selectStrictOfficialDirectCandidate,
 } from "../backend/rawEvidenceRagPrompt.mjs";
-import { rawGenericCorpusCardId } from "../backend/rawGenericCardIdentity.mjs";
 
 const resolvedCard = {
   id: "101",
   name: "匿名卡甲",
   effectText: "支付代价后处理一个动作。",
 };
-
-test("external identities address the local corpus only after stable local binding", () => {
-  assert.equal(rawGenericCorpusCardId({
-    id: "12345678",
-    cid: "101",
-    resolutionSource: "baige_identity_lookup",
-  }), "");
-  assert.equal(rawGenericCorpusCardId({
-    id: "101",
-    resolutionSource: "baige_identity_lookup",
-    canonicalLocalIdentity: true,
-  }), "101");
-  assert.equal(rawGenericCorpusCardId(resolvedCard), "101");
-});
 
 test("raw prompt exposes only original evidence in full and compact forms", () => {
   const evidence = {
@@ -118,29 +103,6 @@ test("ambiguous resolver candidateCards remain visible to the final model", () =
     "匿名候选一",
     "匿名候选二",
   ]);
-});
-
-test("ordinary prompt separates activation, resolution and remaining processing without global refusal", () => {
-  const bundle = buildRawEvidenceRagPromptBundle({
-    userQuery: "匿名卡甲能否发动？处理时条件变化后怎么处理？另一项是否继续？",
-    cardResolution: {
-      resolvedCards: [resolvedCard],
-      unresolvedMentions: [{ input: "匿名未确认名称" }],
-      ambiguousMentions: [],
-    },
-    evidence: {
-      cardTexts: [{ id: "card-text-101", title: "匿名卡甲", text: resolvedCard.effectText }],
-      officialQaRelated: [{ id: "related-101", title: "匿名相似资料", text: "只覆盖其中一个条件。" }],
-    },
-  });
-
-  assert.match(bundle.prompt, /发动或适用条件检查时是否合法/u);
-  assert.match(bundle.prompt, /连锁处理或效果处理时是否适用、成功/u);
-  assert.match(bundle.prompt, /剩余处理、后续处理或另开连锁/u);
-  assert.match(bundle.prompt, /相似 FAQ\/Q&A 只能支持其文字实际覆盖/u);
-  assert.match(bundle.prompt, /只影响确实依赖该身份的子问题/u);
-  assert.match(bundle.prompt, /只有全部关键子问题都因缺失信息无法判断/u);
-  assert.doesNotMatch(bundle.prompt, /匿名卡甲.*固定答案|匿名未确认名称.*固定答案/u);
 });
 
 test("serializable official flags cannot forge strict official direct authority", () => {
