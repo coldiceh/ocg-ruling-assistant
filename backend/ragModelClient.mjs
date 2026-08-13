@@ -9,6 +9,12 @@ import {
 } from "./publicRulingModelConfig.mjs";
 import { requestRelayChatCompletionSse } from "./rulingModelProviders.mjs";
 import { estimateOpenAIModelCost } from "./modelPricing.mjs";
+import {
+  classifyPrivateEvaluationFailure,
+  emitPrivateEvaluationDiagnostic,
+  isPrivateEvaluationTimeout,
+  privateEvaluationFailureChain,
+} from "./privateEvaluationDiagnostics.mjs";
 
 const DEFAULT_DEEPSEEK_BASE_URL = "https://api.deepseek.com";
 const DEFAULT_DEEPSEEK_MODEL = "deepseek-v4-flash";
@@ -20,6 +26,10 @@ const DEFAULT_RAG_RECOVERY_MAX_OUTPUT_TOKENS = 4096;
 const DEFAULT_LIGHTWEIGHT_EXTRACTION_TIMEOUT_MS = 4500;
 const DEFAULT_DAILY_BUDGET_CNY = 10;
 const DEFAULT_CHATGPT_DAILY_BUDGET_USD = 10;
+const DEFAULT_PRIVATE_EVALUATION_BUDGET_USD = 40;
+const MAX_PRIVATE_EVALUATION_BUDGET_USD = 50;
+const DEFAULT_PRIVATE_EVALUATION_AUXILIARY_BUDGET_CNY = 10;
+const MAX_PRIVATE_EVALUATION_AUXILIARY_BUDGET_CNY = 20;
 const DEFAULT_BUDGET_TIMEZONE = "Asia/Shanghai";
 const BUDGET_LEDGER_TTL_SECONDS = 172800;
 const LEGACY_BUDGET_RECONCILE_LUA = [
@@ -46,6 +56,31 @@ const BUDGET_INCREMENT_LUA = [
   "if next < 0 then next = 0; redis.call('SET', KEYS[1], '0') end",
   "redis.call('EXPIRE', KEYS[1], tonumber(ARGV[2]) or 172800)",
   "return tostring(next)",
+].join("\n");
+const PUBLIC_CHATGPT_CLOSE_LUA = [
+  "local current = math.max(0, tonumber(redis.call('GET', KEYS[1]) or '0'))",
+  "local limit = math.max(0, tonumber(ARGV[1]) or 0)",
+  "local next = math.max(current, limit)",
+  "redis.call('SET', KEYS[1], tostring(next), 'EX', ARGV[2])",
+  "redis.call('SET', KEYS[2], '1', 'EX', ARGV[2])",
+  "return tostring(next)",
+].join("\n");
+const PUBLIC_CHATGPT_RESET_LUA = [
+  "local legacy = math.max(0, tonumber(redis.call('GET', KEYS[2]) or '0'))",
+  "local watermark = math.max(0, tonumber(redis.call('GET', KEYS[3]) or '0'))",
+  "local ttl = tonumber(ARGV[1]) or 172800",
+  "redis.call('SET', KEYS[1], '0', 'EX', ttl)",
+  "redis.call('SET', KEYS[3], tostring(math.max(watermark, legacy)), 'EX', ttl)",
+  "redis.call('DEL', KEYS[4])",
+  "return {'reset', '0'}",
+].join("\n");
+const BUDGET_RESERVE_UNLESS_CLOSED_LUA = [
+  "local current = tonumber(redis.call('GET', KEYS[1]) or '0')",
+  "if redis.call('GET', KEYS[2]) == '1' then return {'closed', tostring(current)} end",
+  "local next = current + tonumber(ARGV[1])",
+  "if next < 0 then next = 0 end",
+  "redis.call('SET', KEYS[1], tostring(next), 'EX', ARGV[2])",
+  "return {'reserved', tostring(next)}",
 ].join("\n");
 const DEEPSEEK_THINKING_MODES = new Set(["enabled", "disabled"]);
 const DEEPSEEK_REASONING_EFFORTS = new Set(["low", "high", "max"]);
@@ -84,6 +119,7 @@ const PRIORITY_GENERIC_NO_APPLICABLE_CARD_PATTERN = /(?:(?:除(?:了)?自身以�
 const PRIORITY_TARGET_RESTRICTION_PATTERN = /(?:不能|不可|不得|无法|不可以|cannot|can't|対象にできません).{0,28}(?:作为|成为|选为|選択|取为|取作|対象|target).{0,16}(?:对象|對象|対象|target)|(?:不能|不可|不得|无法|不可以|cannot|can't).{0,20}(?:取|选择|選択).{0,12}(?:对象|對象|対象|target)/iu;
 const PRIORITY_SIMULTANEOUS_REPLACEMENT_PATTERN = /同\s*1?\s*时点.{0,24}双方.{0,30}(?:代替破坏|破坏.{0,12}代替).{0,60}回合玩家.{0,18}先适用.{0,100}非回合玩家.{0,60}(?:不在场上存在|已经不在场上).{0,30}不适用/su;
 const memoryBudget = new Map();
+const privateEvaluationBudgetLedger = new Map();
 const cardNameExtractionCache = new Map();
 const ruleQueryExtractionCache = new Map();
 const rulebookGroundingCache = new Map();
@@ -106,6 +142,7 @@ export async function callRagModel({
   thinkingMode,
   reasoningEffort,
   signal,
+  privateEvaluationDiagnostics,
 } = {}) {
   // Cancellation is a terminal request outcome, not a model failure. Check it
   // before budget preflight so an already-disconnected caller can neither
@@ -205,7 +242,13 @@ export async function callRagModel({
   if (budget.blocked) {
     const blockedEstimate = Number(budget.status?.bucket?.estimatedThisCall ?? 0);
     return {
-      answer: safeFallbackAnswer("api_daily_budget_exceeded", "今日 API 预算已用完，未调用模型。", "budget_limited"),
+      answer: safeFallbackAnswer(
+        "api_daily_budget_exceeded",
+        budget.status?.privateEvaluation
+          ? privateEvaluationBudgetExhaustedMessage(budget.status?.bucket)
+          : publicBudgetExhaustedMessage(budget.status?.bucket),
+        "budget_limited",
+      ),
       rawText: "",
       provider,
       providerUsed: provider,
@@ -237,8 +280,18 @@ export async function callRagModel({
     };
   }
 
+  let relayStartedAt = null;
+  let relayCompleted = false;
   try {
     let retainFullReservation = false;
+    if (provider === "relay") {
+      relayStartedAt = Date.now();
+      emitPrivateEvaluationDiagnostic(privateEvaluationDiagnostics, {
+        stage: "relay",
+        event: "relay_dispatch",
+      });
+    }
+    const providerStartedAt = relayStartedAt || Date.now();
     let response = provider === "gemini"
       ? await callGemini({ prompt, env, modelName, maxTokens, fetchImpl, signal })
       : provider === "glm"
@@ -273,6 +326,14 @@ export async function callRagModel({
           requireJson: true,
           signal,
         });
+    if (provider === "relay") {
+      relayCompleted = true;
+      emitPrivateEvaluationDiagnostic(privateEvaluationDiagnostics, {
+        stage: "relay",
+        event: "relay_complete",
+        durationMs: Date.now() - providerStartedAt,
+      });
+    }
     const compactRecoveryAssessment = provider === "deepseek"
       ? assessDeepSeekPrimaryForCompactRecovery(response)
       : { retry: false, warning: "" };
@@ -387,6 +448,14 @@ export async function callRagModel({
       generationConfig,
     };
   } catch (error) {
+    if (provider === "relay" && !relayCompleted) {
+      emitPrivateEvaluationDiagnostic(privateEvaluationDiagnostics, {
+        stage: "relay",
+        event: "relay_fail",
+        durationMs: relayStartedAt === null ? undefined : Date.now() - relayStartedAt,
+        failureKind: classifyPrivateEvaluationFailure(error),
+      });
+    }
     const providerFailure = summarizeProviderFailure(error, {
       provider,
       requestedModel: modelName,
@@ -662,7 +731,11 @@ export async function callCardNameExtractionModel({
       fetchImpl,
       now,
       signal: sharedSignal,
-      invoke: () => withTimeout(
+      invoke: () => runAbortableProviderOperation({
+        signal: sharedSignal,
+        timeoutMs,
+        timeoutMessage: "card_name_model_timeout",
+      }, (requestSignal) => (
         provider === "gemini"
           ? callGemini({
             prompt,
@@ -672,7 +745,7 @@ export async function callCardNameExtractionModel({
             fetchImpl,
             temperature: readNumber(env.RAG_CARD_MODEL_TEMPERATURE, 0),
             maxTokensEnvName: "GEMINI_CARD_MODEL_MAX_OUTPUT_TOKENS",
-            signal: sharedSignal,
+            signal: requestSignal,
           })
           : callDeepSeek({
             prompt,
@@ -682,11 +755,9 @@ export async function callCardNameExtractionModel({
             fetchImpl,
             temperature: readNumber(env.RAG_CARD_MODEL_TEMPERATURE, 0),
             thinkingMode: "disabled",
-            signal: sharedSignal,
-          }),
-        timeoutMs,
-        "card_name_model_timeout",
-      ),
+            signal: requestSignal,
+          })
+      )),
     });
     if (execution.blocked) {
       return {
@@ -837,7 +908,11 @@ export async function callRuleQueryExtractionModel({
       fetchImpl,
       now,
       signal: sharedSignal,
-      invoke: () => withTimeout(
+      invoke: () => runAbortableProviderOperation({
+        signal: sharedSignal,
+        timeoutMs,
+        timeoutMessage: "rule_query_model_timeout",
+      }, (requestSignal) => (
         provider === "gemini"
           ? callGemini({
             prompt,
@@ -847,7 +922,7 @@ export async function callRuleQueryExtractionModel({
             fetchImpl,
             temperature: readNumber(env.RAG_RULE_MODEL_TEMPERATURE, readNumber(env.RAG_CARD_MODEL_TEMPERATURE, 0)),
             maxTokensEnvName: "GEMINI_RULE_MODEL_MAX_OUTPUT_TOKENS",
-            signal: sharedSignal,
+            signal: requestSignal,
           })
           : callDeepSeek({
             prompt,
@@ -857,11 +932,9 @@ export async function callRuleQueryExtractionModel({
             fetchImpl,
             temperature: readNumber(env.RAG_RULE_MODEL_TEMPERATURE, readNumber(env.RAG_CARD_MODEL_TEMPERATURE, 0)),
             thinkingMode: "disabled",
-            signal: sharedSignal,
-          }),
-        timeoutMs,
-        "rule_query_model_timeout",
-      ),
+            signal: requestSignal,
+          })
+      )),
     });
     if (execution.blocked) {
       return {
@@ -1580,39 +1653,47 @@ export async function callRulebookGroundingModel({
       const spendWarnings = [];
       try {
     const timeoutMs = readPositiveNumber(env.RAG_RULEBOOK_MODEL_TIMEOUT_MS, 10000);
-    const invokeGrounding = (modelPrompt, outputTokens) => {
-      throwIfAbortedBeforeProviderDispatch(sharedSignal);
-      return provider === "gemini"
-        ? callGemini({
-        prompt: modelPrompt,
-        env,
-        modelName,
-        maxTokens: outputTokens,
-        fetchImpl,
-        temperature: 0,
-        maxTokensEnvName: "GEMINI_RULEBOOK_MODEL_MAX_OUTPUT_TOKENS",
+    const invokeGrounding = (modelPrompt, outputTokens, requestTimeoutMs, timeoutMessage) => (
+      runAbortableProviderOperation({
         signal: sharedSignal,
+        timeoutMs: requestTimeoutMs,
+        timeoutMessage,
+      }, (requestSignal) => {
+        throwIfAbortedBeforeProviderDispatch(requestSignal);
+        return provider === "gemini"
+          ? callGemini({
+            prompt: modelPrompt,
+            env,
+            modelName,
+            maxTokens: outputTokens,
+            fetchImpl,
+            temperature: 0,
+            maxTokensEnvName: "GEMINI_RULEBOOK_MODEL_MAX_OUTPUT_TOKENS",
+            signal: requestSignal,
+          })
+          : callDeepSeek({
+            prompt: modelPrompt,
+            env,
+            modelName,
+            maxTokens: outputTokens,
+            fetchImpl,
+            temperature: 0,
+            thinkingMode: "disabled",
+            signal: requestSignal,
+          });
       })
-        : callDeepSeek({
-        prompt: modelPrompt,
-        env,
-        modelName,
-        maxTokens: outputTokens,
-        fetchImpl,
-        temperature: 0,
-        thinkingMode: "disabled",
-          signal: sharedSignal,
-        });
-    };
-    const primaryTask = withTimeout(
-      invokeGrounding(prompt, maxTokens),
+    );
+    const primaryTask = invokeGrounding(
+      prompt,
+      maxTokens,
       timeoutMs,
       "rulebook_grounding_model_timeout",
     );
     const repairTimeoutMs = readPositiveNumber(env.RAG_RULEBOOK_REPAIR_TIMEOUT_MS, 10000);
     const focusedTask = focusedReviewEnabled
-      ? withTimeout(
-        invokeGrounding(repairPrompt, repairMaxTokens),
+      ? invokeGrounding(
+        repairPrompt,
+        repairMaxTokens,
         repairTimeoutMs,
         "rulebook_grounding_focused_repair_timeout",
       )
@@ -1936,8 +2017,9 @@ export async function getRagBudgetStatus({
       })),
     };
   }
-  const [spent, ...bucketSpent] = await Promise.all([
+  const [spent, manualChatGptClose, ...bucketSpent] = await Promise.all([
     readBudgetSpent({ storage, dayKey, env, fetchImpl, ioDeadline }),
+    readPublicChatGptClosed({ storage, timezone: config.timezone, now, env, fetchImpl, ioDeadline }),
     ...PUBLIC_BUDGET_BUCKETS.map((bucket) => readBudgetSpent({
       storage,
       dayKey: budgetBucketDayKey(config.timezone, now, bucket.id),
@@ -1953,6 +2035,8 @@ export async function getRagBudgetStatus({
       bucket,
       bucketConfig: budgetBucketConfig(env, bucket),
       spent: bucketSpent[index],
+      blocked: bucket.id === "final_ruling:relay" && manualChatGptClose,
+      manuallyClosed: bucket.id === "final_ruling:relay" && manualChatGptClose,
     })),
   };
 }
@@ -1969,9 +2053,12 @@ export async function resetRagBudget({
   if (storage === "unconfigured") {
     return getRagBudgetStatus({ env, fetchImpl, now });
   }
+  const relayBucket = PUBLIC_BUDGET_BUCKETS.find((bucket) => bucket.id === "final_ruling:relay");
   await Promise.all([
     setBudgetSpent({ storage, dayKey, value: 0, env, fetchImpl, ioDeadline }),
-    ...PUBLIC_BUDGET_BUCKETS.map((bucket) => setBudgetSpent({
+    ...PUBLIC_BUDGET_BUCKETS
+      .filter((bucket) => bucket.id !== relayBucket.id)
+      .map((bucket) => setBudgetSpent({
       storage,
       dayKey: budgetBucketDayKey(config.timezone, now, bucket.id),
       value: 0,
@@ -1979,8 +2066,54 @@ export async function resetRagBudget({
       fetchImpl,
       ioDeadline,
     })),
+    resetPublicChatGptBudget({
+      storage,
+      bucketDayKey: budgetBucketDayKey(config.timezone, now, relayBucket.id),
+      timezone: config.timezone,
+      now,
+      env,
+      fetchImpl,
+      ioDeadline,
+    }),
   ]);
   return getRagBudgetStatus({ env, fetchImpl, now });
+}
+
+/**
+ * Stops further anonymous ChatGPT rulings for the current budget day by
+ * setting only the public Relay USD bucket to its configured hard ceiling.
+ * Admin experiments use a separate ledger and are deliberately untouched.
+ */
+export async function capPublicChatGptBudget({
+  env = globalThis.process?.env || {},
+  fetchImpl = globalThis.fetch,
+  now = new Date(),
+} = {}) {
+  const config = budgetConfig(env);
+  const storage = budgetStorage(env);
+  if (storage === "unconfigured") {
+    return {
+      ...await getRagBudgetStatus({ env, fetchImpl, now }),
+      action: "cap_public_chatgpt",
+    };
+  }
+  const bucket = PUBLIC_BUDGET_BUCKETS.find((item) => item.id === "final_ruling:relay");
+  const bucketConfig = budgetBucketConfig(env, bucket);
+  const dayKey = budgetBucketDayKey(config.timezone, now, bucket.id);
+  await closePublicChatGptBudget({
+    storage,
+    bucketDayKey: dayKey,
+    timezone: config.timezone,
+    now,
+    limit: bucketConfig.dailyBudgetAmount,
+    env,
+    fetchImpl,
+    ioDeadline: createBudgetRedisDeadline(env),
+  });
+  return {
+    ...await getRagBudgetStatus({ env, fetchImpl, now }),
+    action: "cap_public_chatgpt",
+  };
 }
 
 export function parseRagModelJson(rawText) {
@@ -2050,7 +2183,7 @@ async function callDeepSeek({
     warnings.push("deepseek_response_format_fallback");
   }
   assertProviderHttpResponse(response, "deepseek");
-  const payload = await response.json();
+  const payload = await readProviderJson(response, { signal });
   const choice = payload?.choices?.[0] || {};
   const message = choice.message || {};
   const rawText = extractChatMessageText(message.content);
@@ -2117,7 +2250,7 @@ async function callGlm({
     "content-type": "application/json",
   }, body, { signal });
   assertProviderHttpResponse(response, "glm");
-  const payload = await response.json();
+  const payload = await readProviderJson(response, { signal });
   const choice = payload?.choices?.[0] || {};
   const message = choice.message || {};
   const rawText = extractChatMessageText(message.content);
@@ -2313,7 +2446,7 @@ async function callGemini({ prompt, env, modelName, maxTokens, fetchImpl, temper
   };
   const response = await postJson(fetchImpl, endpoint, { "content-type": "application/json" }, body, { signal });
   assertProviderHttpResponse(response, "gemini");
-  const payload = await response.json();
+  const payload = await readProviderJson(response, { signal });
   const finishReason = String(payload?.candidates?.[0]?.finishReason || "");
   return {
     rawText: (payload?.candidates?.[0]?.content?.parts || []).map((part) => part.text || "").join("\n"),
@@ -2328,12 +2461,13 @@ async function callGemini({ prompt, env, modelName, maxTokens, fetchImpl, temper
 function summarizeProviderFailure(error, { provider = "", requestedModel = "" } = {}) {
   const message = error instanceof Error ? error.message : String(error || "");
   const status = Number(error?.status);
+  const failureChain = privateEvaluationFailureChain(error);
   const upstreamCode = String(error?.code || "model_provider_error").trim().slice(0, 128);
-  const accessDenied = status === 401
-    || status === 403
-    || /(?:无权访问|没有权限|权限不足|拒绝访问|access(?:[_ -]?is)?[_ -]?denied|permission[_ -]?denied|forbidden|unauthori[sz]ed|group[_ -]?access[_ -]?denied|no[_ -]?permission)/iu.test(`${upstreamCode} ${message}`);
+  const failureText = failureChain.map((item) => `${item?.code || ""} ${item?.message || ""}`).join("\n");
+  const accessDenied = failureChain.some((item) => [401, 403].includes(Number(item?.status)))
+    || /(?:无权访问|没有权限|权限不足|拒绝访问|access(?:[_ -]?is)?[_ -]?denied|permission[_ -]?denied|forbidden|unauthori[sz]ed|group[_ -]?access[_ -]?denied|no[_ -]?permission)/iu.test(failureText || `${upstreamCode} ${message}`);
   const timedOut = new Set([408, 504, 524]).has(status)
-    || /(?:超时|timed[ _-]?out|timeout|etimedout|und_err_(?:headers|body)_timeout)/iu.test(`${upstreamCode} ${message}`);
+    || isPrivateEvaluationTimeout(error);
   const kind = accessDenied ? "access_denied" : timedOut ? "timeout" : "provider_failure";
   return {
     schemaVersion: 1,
@@ -2374,15 +2508,23 @@ function safePublicProviderFinishReason(value) {
 
 async function postJson(fetchImpl, url, headers, body, { signal } = {}) {
   try {
-    return await fetchImpl(url, {
+    return await awaitProviderOperationOrAbort(() => fetchImpl(url, {
       method: "POST",
       headers,
       body: JSON.stringify(body),
       ...(signal === undefined ? {} : { signal }),
-    });
+    }), signal);
   } catch (cause) {
+    if (signal?.aborted && signal.reason === cause) throw cause;
     throw markBudgetReservationOutcome(cause, { mayExist: true });
   }
+}
+
+async function readProviderJson(response, { signal } = {}) {
+  if (typeof response?.json !== "function") {
+    throw new TypeError("model provider response does not expose a JSON body");
+  }
+  return awaitProviderOperationOrAbort(() => response.json(), signal);
 }
 
 function assertProviderHttpResponse(response, provider) {
@@ -2933,7 +3075,38 @@ function safeFallbackAnswer(reason, shortAnswer = "当前资料不足，无法�
   });
 }
 
+function publicBudgetExhaustedMessage(bucket) {
+  if (bucket?.id === "final_ruling:relay") {
+    const parsedLimit = Number(bucket.dailyBudgetUsd);
+    const dailyLimitUsd = Number.isFinite(parsedLimit) && parsedLimit > 0
+      ? roundCost(parsedLimit)
+      : DEFAULT_CHATGPT_DAILY_BUDGET_USD;
+    return `今日公开 ChatGPT 额度已达到每日 ${dailyLimitUsd} 美元上限，未调用模型。如需协助重置，请联系哔哩哔哩用户「おmaginai」。`;
+  }
+  return "今日公开模型额度已用完，未调用模型。如需协助重置，请联系哔哩哔哩用户「おmaginai」。";
+}
+
+function privateEvaluationBudgetExhaustedMessage(bucket) {
+  const parsedLimit = Number(bucket?.dailyBudgetUsd);
+  const limit = Number.isFinite(parsedLimit) && parsedLimit > 0
+    ? roundCost(parsedLimit)
+    : DEFAULT_PRIVATE_EVALUATION_BUDGET_USD;
+  return `本次私有评测额度已达到 ${limit} 美元硬上限，未调用模型。`;
+}
+
 async function buildBudgetPreflight({ provider, stage, modelName, prompt, maxTokens, env, fetchImpl, now, trackSpend = true }) {
+  const privateEvaluationBudget = resolvePrivateEvaluationBudget({ provider, stage, env });
+  if (privateEvaluationBudget) {
+    return buildPrivateEvaluationBudgetPreflight({
+      provider,
+      modelName,
+      prompt,
+      maxTokens,
+      env,
+      trackSpend,
+      privateEvaluationBudget,
+    });
+  }
   const config = budgetConfig(env);
   const bucket = resolveBudgetBucket(stage, provider, env);
   const bucketConfig = budgetBucketConfig(env, bucket);
@@ -2944,6 +3117,7 @@ async function buildBudgetPreflight({ provider, stage, modelName, prompt, maxTok
   const ioDeadline = createBudgetRedisDeadline(env);
   const warnings = budgetStorageWarnings(storage, env);
   const estimated = estimatePreflightCostAmount(provider, prompt, maxTokens, env, modelName);
+  let publicChatGptClosed = false;
   const emptyResult = ({ blocked, spent, bucketSpent }) => ({
     config,
     bucketConfig,
@@ -2969,6 +3143,7 @@ async function buildBudgetPreflight({ provider, stage, modelName, prompt, maxTok
       bucket,
       bucketConfig,
       bucketSpent,
+      manuallyClosed: publicChatGptClosed,
     }),
   });
 
@@ -2986,9 +3161,19 @@ async function buildBudgetPreflight({ provider, stage, modelName, prompt, maxTok
   let reservedAmountCny = 0;
   let bucketReservedAmount = 0;
   try {
-    [spent, bucketSpent] = await Promise.all([
+    [spent, bucketSpent, publicChatGptClosed] = await Promise.all([
       readBudgetSpent({ storage, dayKey, env, fetchImpl, ioDeadline }),
       readBudgetSpent({ storage, dayKey: bucketDayKey, env, fetchImpl, ioDeadline }),
+      bucket.id === "final_ruling:relay"
+        ? readPublicChatGptClosed({
+          storage,
+          timezone: config.timezone,
+          now,
+          env,
+          fetchImpl,
+          ioDeadline,
+        })
+        : false,
     ]);
   } catch (error) {
     warnings.push(`budget_storage_unavailable:${safeErrorMessage(error)}`);
@@ -2998,9 +3183,19 @@ async function buildBudgetPreflight({ provider, stage, modelName, prompt, maxTok
     } else {
       storage = "memory";
       warnings.push("redis_budget_unavailable_using_memory_soft_limit");
-      [spent, bucketSpent] = await Promise.all([
+      [spent, bucketSpent, publicChatGptClosed] = await Promise.all([
         readBudgetSpent({ storage, dayKey, env, fetchImpl, ioDeadline }),
         readBudgetSpent({ storage, dayKey: bucketDayKey, env, fetchImpl, ioDeadline }),
+        bucket.id === "final_ruling:relay"
+          ? readPublicChatGptClosed({
+            storage,
+            timezone: config.timezone,
+            now,
+            env,
+            fetchImpl,
+            ioDeadline,
+          })
+          : false,
       ]);
     }
   }
@@ -3011,7 +3206,7 @@ async function buildBudgetPreflight({ provider, stage, modelName, prompt, maxTok
   const bucketLimitExceeded = bucketConfig.dailyBudgetAmount !== null
     && bucketConfig.dailyBudgetAmount > 0
     && bucketSpent + estimated > bucketConfig.dailyBudgetAmount;
-  if (!blocked && (totalLimitExceeded || bucketLimitExceeded)) blocked = true;
+  if (!blocked && (publicChatGptClosed || totalLimitExceeded || bucketLimitExceeded)) blocked = true;
 
   if (!blocked && appliesToGlobalCnyBudget && estimated > 0) {
     spent = await addBudgetSpent({ storage, dayKey, amount: estimated, env, fetchImpl, ioDeadline });
@@ -3043,9 +3238,37 @@ async function buildBudgetPreflight({ provider, stage, modelName, prompt, maxTok
 
   if (!blocked && estimated > 0) {
     try {
-      bucketSpent = await addBudgetSpent({ storage, dayKey: bucketDayKey, amount: estimated, env, fetchImpl, ioDeadline });
-      bucketReservedAmount = estimated;
-      if (bucketConfig.dailyBudgetAmount !== null
+      const reservation = bucket.id === "final_ruling:relay"
+        ? await reservePublicChatGptBudget({
+          storage,
+          bucketDayKey,
+          timezone: config.timezone,
+          now,
+          amount: estimated,
+          env,
+          fetchImpl,
+          ioDeadline,
+        })
+        : {
+          spent: await addBudgetSpent({
+            storage,
+            dayKey: bucketDayKey,
+            amount: estimated,
+            env,
+            fetchImpl,
+            ioDeadline,
+          }),
+          closed: false,
+        };
+      bucketSpent = reservation.spent;
+      if (reservation.closed) {
+        blocked = true;
+        publicChatGptClosed = true;
+      } else {
+        bucketReservedAmount = estimated;
+      }
+      if (!reservation.closed
+          && bucketConfig.dailyBudgetAmount !== null
           && bucketConfig.dailyBudgetAmount > 0
           && bucketSpent > bucketConfig.dailyBudgetAmount) {
         const rollbackDeadline = createBudgetRedisDeadline(env);
@@ -3120,7 +3343,117 @@ async function buildBudgetPreflight({ provider, stage, modelName, prompt, maxTok
       bucket,
       bucketConfig,
       bucketSpent,
+      manuallyClosed: publicChatGptClosed,
     }),
+  };
+}
+
+function resolvePrivateEvaluationBudget({ provider, stage, env = {} }) {
+  if (!isEnabled(env.PRIVATE_EVALUATION_MODE)
+      || !isEnabled(env.PRIVATE_EVALUATION_DIAGNOSTICS)
+      || isEnabled(env.VERCEL)
+      || !isLoopbackPrivateEvaluationHost(env.HOST)) {
+    return null;
+  }
+  const runId = String(env.PRIVATE_EVALUATION_RUN_ID || "").trim();
+  if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{15,127}$/u.test(runId)) return null;
+  const normalizedProvider = String(provider || "").trim().toLowerCase();
+  const normalizedStage = String(stage || "").trim().toLowerCase();
+  const relayFinal = normalizedProvider === "relay" && normalizedStage === "final_ruling";
+  const deepSeekAuxiliary = normalizedProvider === "deepseek"
+    && normalizedStage === "evidence_preparation";
+  if (!relayFinal && !deepSeekAuxiliary) return null;
+  const envName = relayFinal
+    ? "PRIVATE_EVALUATION_BUDGET_USD"
+    : "PRIVATE_EVALUATION_AUXILIARY_BUDGET_CNY";
+  const configured = Number(env[envName]);
+  const defaultLimit = relayFinal
+    ? DEFAULT_PRIVATE_EVALUATION_BUDGET_USD
+    : DEFAULT_PRIVATE_EVALUATION_AUXILIARY_BUDGET_CNY;
+  const absoluteLimit = relayFinal
+    ? MAX_PRIVATE_EVALUATION_BUDGET_USD
+    : MAX_PRIVATE_EVALUATION_AUXILIARY_BUDGET_CNY;
+  const limit = Number.isFinite(configured) && configured > 0
+    ? Math.min(configured, absoluteLimit)
+    : defaultLimit;
+  const bucketId = relayFinal ? "final_ruling:relay" : "evidence_preparation:deepseek";
+  const currency = relayFinal ? "USD" : "CNY";
+  return Object.freeze({
+    runId,
+    limit: roundCost(limit),
+    envName,
+    currency,
+    stage: normalizedStage,
+    bucketId,
+    dayKey: `private-evaluation-budget:v1:${runId}:${currency.toLowerCase()}-total`,
+    bucketDayKey: `private-evaluation-budget:v1:${runId}:${bucketId}:${currency.toLowerCase()}`,
+  });
+}
+
+function isLoopbackPrivateEvaluationHost(host) {
+  return String(host || "").trim() === "127.0.0.1";
+}
+
+async function buildPrivateEvaluationBudgetPreflight({
+  provider,
+  modelName,
+  prompt,
+  maxTokens,
+  env,
+  trackSpend,
+  privateEvaluationBudget,
+}) {
+  const config = budgetConfig(env);
+  const bucket = resolveBudgetBucket(privateEvaluationBudget.stage, provider, env);
+  const currency = privateEvaluationBudget.currency;
+  const bucketConfig = {
+    envName: privateEvaluationBudget.envName,
+    currency,
+    dailyBudgetAmount: privateEvaluationBudget.limit,
+    dailyBudgetCny: currency === "CNY" ? privateEvaluationBudget.limit : null,
+    dailyBudgetUsd: currency === "USD" ? privateEvaluationBudget.limit : null,
+  };
+  const estimated = estimatePreflightCostAmount(provider, prompt, maxTokens, env, modelName);
+  const current = Math.max(0, Number(privateEvaluationBudgetLedger.get(privateEvaluationBudget.bucketDayKey) || 0));
+  const blocked = trackSpend
+    && estimated > 0
+    && current + estimated > privateEvaluationBudget.limit;
+  const next = trackSpend && !blocked && estimated > 0
+    ? roundCost(current + estimated)
+    : current;
+  if (next !== current) {
+    privateEvaluationBudgetLedger.set(privateEvaluationBudget.bucketDayKey, next);
+    if (currency === "CNY") privateEvaluationBudgetLedger.set(privateEvaluationBudget.dayKey, next);
+  }
+  const status = budgetStatusPayload({
+    config,
+    storage: "private_evaluation_memory",
+    dayKey: privateEvaluationBudget.dayKey,
+    spent: 0,
+    estimated,
+    blocked,
+    bucket,
+    bucketConfig,
+    bucketSpent: next,
+  });
+  status.privateEvaluation = true;
+  status.privateEvaluationRunId = privateEvaluationBudget.runId;
+  return {
+    config,
+    bucketConfig,
+    bucket,
+    storage: "private_evaluation_memory",
+    dayKey: privateEvaluationBudget.dayKey,
+    bucketDayKey: privateEvaluationBudget.bucketDayKey,
+    blocked,
+    reservedAmount: blocked ? 0 : estimated,
+    reservedAmountCny: currency === "CNY" && !blocked ? estimated : 0,
+    reservedAmountUsd: currency === "USD" && !blocked ? estimated : 0,
+    bucketReservedAmount: blocked ? 0 : estimated,
+    bucketReservedAmountCny: currency === "CNY" && !blocked ? estimated : 0,
+    bucketReservedAmountUsd: currency === "USD" && !blocked ? estimated : 0,
+    warnings: ["private_evaluation_budget_isolated"],
+    status,
   };
 }
 
@@ -3367,6 +3700,9 @@ function budgetStorage(env) {
 }
 
 async function readBudgetSpent({ storage, dayKey, env, fetchImpl, ioDeadline }) {
+  if (storage === "private_evaluation_memory") {
+    return Number(privateEvaluationBudgetLedger.get(dayKey) || 0);
+  }
   if (storage === "redis" && typeof fetchImpl === "function") {
     if (legacyBudgetMigration(dayKey)) {
       return reconcileLegacyBudgetSpent({ dayKey, env, fetchImpl, ioDeadline });
@@ -3452,8 +3788,16 @@ async function addBudgetSpent({ storage, dayKey, amount, env, fetchImpl, ioDeadl
     ], ioDeadline);
     return Number(result || 0) || 0;
   }
-  const next = Math.max(0, Number(memoryBudget.get(dayKey) || 0) + amount);
-  memoryBudget.set(dayKey, next);
+  const ledger = storage === "private_evaluation_memory"
+    ? privateEvaluationBudgetLedger
+    : memoryBudget;
+  const next = Math.max(0, Number(ledger.get(dayKey) || 0) + amount);
+  ledger.set(dayKey, next);
+  if (storage === "private_evaluation_memory"
+      && dayKey.includes(":evidence_preparation:deepseek:cny")) {
+    const totalKey = dayKey.replace(":evidence_preparation:deepseek:cny", ":cny-total");
+    ledger.set(totalKey, next);
+  }
   return next;
 }
 
@@ -3472,6 +3816,119 @@ async function setBudgetSpent({ storage, dayKey, value, env, fetchImpl, ioDeadli
   }
   memoryBudget.set(dayKey, next);
   return next;
+}
+
+async function readPublicChatGptClosed({ storage, timezone, now, env, fetchImpl, ioDeadline }) {
+  const key = publicChatGptClosedDayKey(timezone, now);
+  if (storage === "redis" && typeof fetchImpl === "function") {
+    return String(await redisCommand(env, fetchImpl, ["GET", key], ioDeadline) || "") === "1";
+  }
+  return memoryBudget.get(key) === 1;
+}
+
+async function closePublicChatGptBudget({
+  storage,
+  bucketDayKey,
+  timezone,
+  now,
+  limit,
+  env,
+  fetchImpl,
+  ioDeadline,
+}) {
+  const closeKey = publicChatGptClosedDayKey(timezone, now);
+  if (storage === "redis" && typeof fetchImpl === "function") {
+    const result = await redisCommand(env, fetchImpl, [
+      "EVAL",
+      PUBLIC_CHATGPT_CLOSE_LUA,
+      "2",
+      bucketDayKey,
+      closeKey,
+      String(limit),
+      String(BUDGET_LEDGER_TTL_SECONDS),
+    ], ioDeadline);
+    return Number(result || 0) || 0;
+  }
+  const next = Math.max(
+    Math.max(0, Number(memoryBudget.get(bucketDayKey) || 0)),
+    Math.max(0, Number(limit || 0)),
+  );
+  memoryBudget.set(bucketDayKey, next);
+  memoryBudget.set(closeKey, 1);
+  return next;
+}
+
+async function resetPublicChatGptBudget({
+  storage,
+  bucketDayKey,
+  timezone,
+  now,
+  env,
+  fetchImpl,
+  ioDeadline,
+}) {
+  const closeKey = publicChatGptClosedDayKey(timezone, now);
+  const migration = legacyBudgetMigration(bucketDayKey);
+  if (storage === "redis" && typeof fetchImpl === "function") {
+    if (!migration) throw new TypeError("public ChatGPT budget migration metadata is missing");
+    await redisCommand(env, fetchImpl, [
+      "EVAL",
+      PUBLIC_CHATGPT_RESET_LUA,
+      "4",
+      bucketDayKey,
+      migration.legacyKey,
+      legacyBudgetWatermarkKey(bucketDayKey),
+      closeKey,
+      String(BUDGET_LEDGER_TTL_SECONDS),
+    ], ioDeadline);
+    return 0;
+  }
+  if (migration) reconcileLegacyMemoryBudget(bucketDayKey, migration, { reset: true });
+  else memoryBudget.set(bucketDayKey, 0);
+  memoryBudget.delete(closeKey);
+  return 0;
+}
+
+async function reservePublicChatGptBudget({
+  storage,
+  bucketDayKey,
+  timezone,
+  now,
+  amount,
+  env,
+  fetchImpl,
+  ioDeadline,
+}) {
+  const closeKey = publicChatGptClosedDayKey(timezone, now);
+  if (storage === "redis" && typeof fetchImpl === "function") {
+    const result = await redisCommand(env, fetchImpl, [
+      "EVAL",
+      BUDGET_RESERVE_UNLESS_CLOSED_LUA,
+      "2",
+      bucketDayKey,
+      closeKey,
+      String(amount),
+      String(BUDGET_LEDGER_TTL_SECONDS),
+    ], ioDeadline);
+    return {
+      closed: result?.[0] === "closed",
+      spent: Number(result?.[1] || 0) || 0,
+    };
+  }
+  if (memoryBudget.get(closeKey) === 1) {
+    return { closed: true, spent: Number(memoryBudget.get(bucketDayKey) || 0) };
+  }
+  return {
+    closed: false,
+    spent: await addBudgetSpent({
+      storage,
+      dayKey: bucketDayKey,
+      amount,
+      env,
+      fetchImpl,
+      ioDeadline,
+    }),
+  };
 }
 
 function createBudgetRedisDeadline(env = {}) {
@@ -3556,7 +4013,7 @@ function budgetStorageWarnings(storage, env = {}) {
   return [];
 }
 
-function budgetStatusPayload({ config, storage, dayKey, spent, estimated, blocked, bucket = null, bucketConfig = null, bucketSpent = null }) {
+function budgetStatusPayload({ config, storage, dayKey, spent, estimated, blocked, bucket = null, bucketConfig = null, bucketSpent = null, manuallyClosed = false }) {
   const globalEstimatedCny = bucketConfig?.currency === "USD" ? 0 : estimated;
   const status = {
     schemaVersion: 3,
@@ -3581,6 +4038,7 @@ function budgetStatusPayload({ config, storage, dayKey, spent, estimated, blocke
       spent: bucketSpent,
       estimated,
       blocked,
+      manuallyClosed,
     });
   }
   if (storage === "unconfigured") {
@@ -3591,7 +4049,7 @@ function budgetStatusPayload({ config, storage, dayKey, spent, estimated, blocke
   return status;
 }
 
-function budgetBucketStatusPayload({ bucket, bucketConfig, spent, estimated = 0, blocked = false }) {
+function budgetBucketStatusPayload({ bucket, bucketConfig, spent, estimated = 0, blocked = false, manuallyClosed = false }) {
   const currency = bucketConfig?.currency || bucket?.currency || "CNY";
   const limit = bucketConfig?.dailyBudgetAmount ?? null;
   const roundedSpent = spent === null ? null : roundCost(spent);
@@ -3618,6 +4076,7 @@ function budgetBucketStatusPayload({ bucket, bucketConfig, spent, estimated = 0,
     remainingTodayUsd: currency === "USD" ? remaining : null,
     estimatedThisCallUsd: currency === "USD" ? roundedEstimated : null,
     limitEnforced: blocked,
+    ...(manuallyClosed ? { manuallyClosed: true } : {}),
   };
   return status;
 }
@@ -4874,6 +5333,69 @@ function withTimeout(promise, timeoutMs, message) {
   });
 }
 
+async function runAbortableProviderOperation({ signal, timeoutMs, timeoutMessage }, operation) {
+  if (typeof operation !== "function") {
+    throw new TypeError("abortable provider operation must be a function");
+  }
+  const scope = createProviderAbortScope({ signal, timeoutMs, timeoutMessage });
+  try {
+    return await awaitProviderOperationOrAbort(() => operation(scope.signal), scope.signal);
+  } finally {
+    scope.cleanup();
+  }
+}
+
+function createProviderAbortScope({ signal, timeoutMs, timeoutMessage }) {
+  const controller = new AbortController();
+  const abortFromParent = () => {
+    if (!controller.signal.aborted) controller.abort(signal?.reason || "request_aborted");
+  };
+  if (signal?.aborted) abortFromParent();
+  else signal?.addEventListener?.("abort", abortFromParent, { once: true });
+  const timer = Number.isFinite(timeoutMs) && timeoutMs > 0
+    ? setTimeout(() => {
+        if (!controller.signal.aborted) {
+          controller.abort(providerTimeoutError(timeoutMessage));
+        }
+      }, timeoutMs)
+    : null;
+  return {
+    signal: controller.signal,
+    cleanup() {
+      if (timer !== null) clearTimeout(timer);
+      signal?.removeEventListener?.("abort", abortFromParent);
+    },
+  };
+}
+
+function awaitProviderOperationOrAbort(operation, signal) {
+  if (typeof operation !== "function") {
+    return Promise.reject(new TypeError("abortable provider operation must be a function"));
+  }
+  if (!signal || typeof signal.addEventListener !== "function") {
+    return Promise.resolve().then(operation);
+  }
+  if (signal.aborted) return Promise.reject(abortSignalError(signal));
+
+  let onAbort;
+  const abortPromise = new Promise((resolve, reject) => {
+    onAbort = () => reject(abortSignalError(signal));
+    signal.addEventListener("abort", onAbort, { once: true });
+    if (signal.aborted) onAbort();
+  });
+  const operationPromise = Promise.resolve().then(operation);
+  return Promise.race([operationPromise, abortPromise]).finally(() => {
+    signal.removeEventListener?.("abort", onAbort);
+  });
+}
+
+function providerTimeoutError(message) {
+  const error = new Error(String(message || "model_provider_timeout"));
+  error.name = "TimeoutError";
+  error.code = "MODEL_PROVIDER_TIMEOUT";
+  return error;
+}
+
 function extractionCacheKey({ kind, provider, modelName, dataRevision = "", input = {} }) {
   return sha256Hex(stableJson({
     schemaVersion: 2,
@@ -5017,6 +5539,13 @@ function waitForSharedFlight(flight, signal) {
 }
 
 function abortSignalError(signal) {
+  if (signal?.reason instanceof Error) {
+    const error = signal.reason;
+    if (error.name === "TimeoutError" || error.code === "MODEL_PROVIDER_TIMEOUT") {
+      return markBudgetReservationOutcome(error, { mayExist: true });
+    }
+    return error;
+  }
   const error = new Error(String(signal?.reason || "request_aborted"));
   error.name = "AbortError";
   error.code = "ABORT_ERR";
@@ -5126,6 +5655,10 @@ function budgetBucketDayKey(timezone, now, bucketId) {
   const bucket = PUBLIC_BUDGET_BUCKETS.find((item) => item.id === bucketId);
   const currency = bucket?.currency || "CNY";
   return `rag-api-budget:v3:${budgetDate(timezone, now)}:${bucketId}:${currency.toLowerCase()}`;
+}
+
+function publicChatGptClosedDayKey(timezone, now) {
+  return `rag-api-budget:v3:${budgetDate(timezone, now)}:final_ruling:relay:manually-closed`;
 }
 
 function budgetDate(timezone, now) {

@@ -491,7 +491,7 @@ export class CompatibleEvidencePreparationProvider {
         cause,
       });
     }
-    const payload = await readResponsePayload(response);
+    const payload = await readResponsePayload(response, { signal });
     if (!response.ok) {
       const outcomeKnown = isProvableHttpRejection(response.status);
       throw new RulingModelProviderError(
@@ -603,7 +603,7 @@ export async function requestRelayChatCompletionSse({
     });
     requestToResponseHeadersMs = elapsedMonotonicMs(clock, requestStartedAt);
     if (!response.ok) {
-      const payload = await readResponsePayload(response);
+      const payload = await readResponsePayload(response, { signal: controller.signal });
       const outcomeKnown = isProvableHttpRejection(response.status);
       const failureKind = classifyRelayUpstreamFailure({
         status: response.status,
@@ -929,7 +929,7 @@ export class OpenAIResponsesProvider {
       });
     }
 
-    const payload = await readResponsePayload(response);
+    const payload = await readResponsePayload(response, { signal });
     if (!response.ok) {
       const upstreamCode = payload?.error?.code || payload?.error?.type;
       const outcomeKnown = isProvableHttpRejection(response.status);
@@ -1171,17 +1171,18 @@ function normalizeRelayStreamEndpoint(endpoint) {
   return parsed.toString();
 }
 
-async function readResponsePayload(response) {
+async function readResponsePayload(response, { signal } = {}) {
   const contentType = String(response?.headers?.get?.("content-type") || "");
   if (contentType.includes("application/json") && typeof response.json === "function") {
     try {
-      return await response.json();
-    } catch {
+      return await awaitOperationOrAbort(() => response.json(), signal);
+    } catch (cause) {
+      if (signal?.aborted) throw cause;
       return {};
     }
   }
   if (typeof response?.text === "function" || response?.body?.getReader) {
-    const text = await readBoundedResponseText(response, 64 * 1024);
+    const text = await readBoundedResponseText(response, 64 * 1024, { signal });
     if (!text) return {};
     try {
       return JSON.parse(text);
@@ -1195,6 +1196,48 @@ async function readResponsePayload(response) {
     }
   }
   return {};
+}
+
+function awaitOperationOrAbort(operation, signal) {
+  if (typeof operation !== "function") {
+    return Promise.reject(new TypeError("abortable operation must be a function"));
+  }
+  if (!signal || typeof signal.addEventListener !== "function") {
+    return Promise.resolve().then(operation);
+  }
+  if (signal.aborted) return Promise.reject(abortReasonError(signal));
+
+  let onAbort;
+  const abortPromise = new Promise((resolve, reject) => {
+    onAbort = () => reject(abortReasonError(signal));
+    signal.addEventListener("abort", onAbort, { once: true });
+    // Close the check/listener race for non-standard AbortSignal implementations.
+    if (signal.aborted) onAbort();
+  });
+  const operationPromise = Promise.resolve().then(operation);
+  return Promise.race([operationPromise, abortPromise]).finally(() => {
+    signal.removeEventListener?.("abort", onAbort);
+  });
+}
+
+function abortReasonError(signal) {
+  if (signal?.reason instanceof Error) return signal.reason;
+  const reason = signal?.reason;
+  const error = new Error(reason === undefined || reason === null || reason === ""
+    ? "relay operation aborted"
+    : String(reason));
+  error.name = "AbortError";
+  if (reason !== undefined) error.cause = reason;
+  return error;
+}
+
+function cancelReaderWithoutWaiting(reader, reason) {
+  try {
+    const cancellation = reader?.cancel?.(reason);
+    Promise.resolve(cancellation).catch(() => {});
+  } catch {
+    // Best-effort cleanup only. Cancellation must never extend the deadline.
+  }
 }
 
 async function readRelayChatCompletionSse(response, {
@@ -1413,7 +1456,7 @@ async function readRelayChatCompletionSse(response, {
   };
   try {
     while (true) {
-      const { done, value } = await reader.read();
+      const { done, value } = await awaitOperationOrAbort(() => reader.read(), signal);
       if (done) break;
       if (!(value instanceof Uint8Array)) {
         throw protocolError("relay stream yielded a non-byte chunk");
@@ -1432,6 +1475,7 @@ async function readRelayChatCompletionSse(response, {
     buffer += decoder.decode();
     processBufferedFrames({ flush: true });
   } catch (cause) {
+    cancelReaderWithoutWaiting(reader, cause);
     if (cause instanceof RulingModelProviderError) throw cause;
     const timedOut = (signal?.aborted && isTimeoutAbortReason(signal.reason))
       || isTimeoutAbortReason(cause);
@@ -1680,10 +1724,12 @@ function isPlainObject(value) {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
-async function readBoundedResponseText(response, maxBytes) {
+async function readBoundedResponseText(response, maxBytes, { signal } = {}) {
   const reader = response?.body?.getReader?.();
   if (!reader || typeof reader.read !== "function") {
-    const text = typeof response?.text === "function" ? await response.text() : "";
+    const text = typeof response?.text === "function"
+      ? await awaitOperationOrAbort(() => response.text(), signal)
+      : "";
     return new TextDecoder().decode(new TextEncoder().encode(String(text || "")).slice(0, maxBytes));
   }
   const decoder = new TextDecoder("utf-8", { fatal: false });
@@ -1691,7 +1737,7 @@ async function readBoundedResponseText(response, maxBytes) {
   let bytes = 0;
   try {
     while (bytes < maxBytes) {
-      const { done, value } = await reader.read();
+      const { done, value } = await awaitOperationOrAbort(() => reader.read(), signal);
       if (done) break;
       if (!(value instanceof Uint8Array)) break;
       const remaining = maxBytes - bytes;
@@ -1702,11 +1748,7 @@ async function readBoundedResponseText(response, maxBytes) {
     }
     chunks.push(decoder.decode());
   } finally {
-    try {
-      await reader.cancel?.();
-    } catch {
-      // Best-effort truncation cleanup only.
-    }
+    cancelReaderWithoutWaiting(reader, signal?.reason);
     try {
       reader.releaseLock?.();
     } catch {

@@ -108,6 +108,7 @@ const ui = {
   budgetPanel: document.querySelector("#budgetPanel"),
   budgetHint: document.querySelector("#budgetHint"),
   budgetBucketList: document.querySelector("#budgetBucketList"),
+  budgetCapButton: document.querySelector("#budgetCapButton"),
   budgetResetButton: document.querySelector("#budgetResetButton"),
   adminLabPanel: document.querySelector("#adminLabPanel"),
   adminLabWorkspace: document.querySelector("#adminLabWorkspace"),
@@ -1171,6 +1172,35 @@ async function resetBudgetStatus() {
   }
 }
 
+async function capPublicChatGptBudgetStatus() {
+  if (!appConfig.budgetApiUrl || !ui.budgetCapButton) return;
+  const password = window.prompt("请输入额度管理密码");
+  if (!password) return;
+  ui.budgetCapButton.disabled = true;
+  if (ui.budgetHint) ui.budgetHint.textContent = "正在停止今日公开 ChatGPT 调用...";
+  try {
+    const response = await fetch(appConfig.budgetApiUrl, {
+      method: "POST",
+      cache: "no-store",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action: "cap_public_chatgpt", password }),
+    });
+    if (response.status === 401 || response.status === 403) {
+      throw new Error("owner authorization failed");
+    }
+    if (!response.ok) throw new Error(`budget cap ${response.status}`);
+    const status = await response.json();
+    const relayBucket = (status?.buckets || []).find((bucket) => bucket?.id === "final_ruling:relay");
+    const limit = Number(relayBucket?.dailyBudgetUsd ?? relayBucket?.dailyBudget);
+    const limitText = Number.isFinite(limit) && limit > 0 ? `（今日上限 $${formatUsd(limit)}）` : "";
+    renderBudgetStatus(status, `已停止今日公开 ChatGPT 调用${limitText}；不会影响管理员实验额度。`);
+  } catch {
+    renderBudgetStatus(null, "封顶失败：没有权限或后端暂时不可用。");
+  } finally {
+    ui.budgetCapButton.disabled = false;
+  }
+}
+
 function renderBudgetStatus(status, message = "") {
   if (!ui.budgetPanel) return;
   const storage = status?.budgetStorage ? `存储：${status.budgetStorage}` : "";
@@ -1220,8 +1250,9 @@ function renderBudgetBuckets(buckets = []) {
 }
 
 function updateBudgetResetVisibility(resetEnabled) {
-  if (!ui.budgetResetButton) return;
-  ui.budgetResetButton.hidden = !adminUiEnabled || !resetEnabled;
+  const hidden = !adminUiEnabled || !resetEnabled;
+  if (ui.budgetResetButton) ui.budgetResetButton.hidden = hidden;
+  if (ui.budgetCapButton) ui.budgetCapButton.hidden = hidden;
 }
 
 function formatCny(value) {
@@ -5067,6 +5098,7 @@ async function init() {
     selectRulingModelProfile(ui.rulingModelSelect.value);
   });
   ui.budgetResetButton?.addEventListener("click", () => resetBudgetStatus());
+  ui.budgetCapButton?.addEventListener("click", () => capPublicChatGptBudgetStatus());
   ui.adminLoginForm?.addEventListener("submit", handleAdminLogin);
   ui.adminLogoutButton?.addEventListener("click", handleAdminLogout);
   ui.adminCopyPublicQuestionButton?.addEventListener("click", () => {

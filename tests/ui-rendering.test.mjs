@@ -558,10 +558,12 @@ test("ui_hides_engine_details_by_default", async () => {
   assert.doesNotMatch(html, /budgetSpentText|budgetLimitText/u);
   assert.doesNotMatch(app, /budgetSpentText|budgetLimitText/u);
   assert.match(html, /id="budgetResetButton"[^>]+hidden/u);
+  assert.match(html, /id="budgetCapButton"[^>]+hidden/u);
   const publicBudget = sourceBetween(html, '<section class="budget-panel"', '<section class="admin-lab"');
   const adminPanel = sourceBetween(html, '<section class="admin-lab"', '<section class="disclaimer-panel"');
-  assert.doesNotMatch(publicBudget, /budgetResetButton|重置额度/u);
+  assert.doesNotMatch(publicBudget, /budgetResetButton|budgetCapButton|重置额度|封顶公开/u);
   assert.match(adminPanel, /id="budgetResetButton"[^>]+hidden>重置公开问答额度/u);
+  assert.match(adminPanel, /id="budgetCapButton"[^>]+hidden>立即停止今日公开 ChatGPT 调用/u);
   assert.match(html, /免责声明/u);
   assert.match(html, /不是 KONAMI 官方项目/u);
   assert.match(html, /id="themeToggle"/u);
@@ -575,6 +577,8 @@ test("ui_hides_engine_details_by_default", async () => {
   assert.match(app, /params\.get\("debug"\) === "1"/u);
   assert.match(app, /prompt\("请输入重置额度密码"\)/u);
   assert.match(app, /JSON\.stringify\(\{ password \}\)/u);
+  assert.match(app, /JSON\.stringify\(\{ action: "cap_public_chatgpt", password \}\)/u);
+  assert.match(app, /不会影响管理员实验额度/u);
   assert.match(app, /storageWarning/u);
   assert.match(app, /bucket\?\.id !== "final_ruling:glm"/u);
   assert.match(app, /label: "ChatGPT 最终裁定"/u);

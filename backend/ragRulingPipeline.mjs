@@ -13,6 +13,10 @@ import { buildRagRulingPromptBundle } from "./ragRulingPrompt.mjs";
 import { hasNumberedCardIdentityConflict } from "./numberedCardIdentity.mjs";
 import { runValidatedPublicRagFinal } from "./publicRagAnswerValidator.mjs";
 import { resolveRagDataRevision } from "./ragDataRevisionManifest.mjs";
+import {
+  beginPrivateEvaluationStage,
+  createPrivateEvaluationDiagnostics,
+} from "./privateEvaluationDiagnostics.mjs";
 
 const defaultSnapshotRevisionCache = new WeakMap();
 
@@ -59,7 +63,27 @@ const DISABLED_AUXILIARY_STAGE = Object.freeze({
   singleflightHit: false,
 });
 
-export async function answerRagRulingQuestion({
+export async function answerRagRulingQuestion(options = {}) {
+  const diagnostics = createPrivateEvaluationDiagnostics({
+    env: options.env || globalThis.process?.env || {},
+    traceId: options.privateEvaluationTraceId,
+    write: options.privateEvaluationDiagnosticWrite,
+  });
+  const totalStage = beginPrivateEvaluationStage(diagnostics, "total");
+  try {
+    const answer = await answerRagRulingQuestionInternal({
+      ...options,
+      privateEvaluationDiagnostics: diagnostics,
+    });
+    totalStage.end();
+    return answer;
+  } catch (error) {
+    totalStage.fail(error);
+    throw error;
+  }
+}
+
+async function answerRagRulingQuestionInternal({
   question,
   userQuery,
   dataDir,
@@ -76,79 +100,107 @@ export async function answerRagRulingQuestion({
   thinkingMode,
   reasoningEffort,
   signal,
+  privateEvaluationDiagnostics,
 } = {}) {
   const pipelineStartedAt = Date.now();
   const timingsMs = {};
   const query = String(question || userQuery || "").trim();
   if (!query) return buildEmptyQuestionAnswer();
 
-  const extractionStartedAt = Date.now();
   const dataStartedAt = Date.now();
+  const dataStage = beginPrivateEvaluationStage(privateEvaluationDiagnostics, "data_load");
   const usesCompleteDefaultSnapshot = !(cards || records || qaRecords);
-  const data = await Promise.resolve(!usesCompleteDefaultSnapshot
-    ? { cards: cards || [], records: records || [], qaRecords: qaRecords || [] }
-    : loadRagData(dataDir));
-  const dataRevision = buildRagDataRevision(data, env, {
-    cacheByIdentity: usesCompleteDefaultSnapshot,
-  });
+  let data;
+  let dataRevision;
+  try {
+    data = await Promise.resolve(!usesCompleteDefaultSnapshot
+      ? { cards: cards || [], records: records || [], qaRecords: qaRecords || [] }
+      : loadRagData(dataDir));
+    dataRevision = buildRagDataRevision(data, env, {
+      cacheByIdentity: usesCompleteDefaultSnapshot,
+    });
+    dataStage.end();
+  } catch (error) {
+    dataStage.fail(error);
+    throw error;
+  }
   timingsMs.dataLoad = elapsedMs(dataStartedAt);
 
+  const extractionStartedAt = Date.now();
+  const extractionStage = beginPrivateEvaluationStage(privateEvaluationDiagnostics, "extraction");
   const preflightStartedAt = Date.now();
-  const maxCards = readNumber(env.RAG_MAX_CARDS, 6);
-  const localCardResolution = extractRagCards(query, {
-    cards: data.cards || [],
-    maxCards,
-  });
-  timingsMs.deterministicPreflight = elapsedMs(preflightStartedAt);
+  let cardNameModel;
+  let ruleQueryModel;
+  let cardResolution;
+  try {
+    const maxCards = readNumber(env.RAG_MAX_CARDS, 6);
+    const localCardResolution = extractRagCards(query, {
+      cards: data.cards || [],
+      maxCards,
+    });
+    timingsMs.deterministicPreflight = elapsedMs(preflightStartedAt);
 
-  const auxiliaryExtractionStartedAt = Date.now();
-  const [cardNameModel, ruleQueryModel] = await Promise.all([
-    callCardNameExtractionModel({
-      userQuery: query,
-      dataRevision,
-      env,
-      modelInvoker: cardModelInvoker,
-      fetchImpl,
-      dryRun,
-      now,
-      signal,
-    }),
-    callRuleQueryExtractionModel({
-      userQuery: query,
-      dataRevision,
-      env,
-      modelInvoker: ruleModelInvoker,
-      fetchImpl,
-      dryRun,
-      now,
-      signal,
-    }),
-  ]);
-  const cardResolution = (cardNameModel.candidates || []).length
-    ? extractRagCards(query, {
+    const auxiliaryExtractionStartedAt = Date.now();
+    [cardNameModel, ruleQueryModel] = await Promise.all([
+      callCardNameExtractionModel({
+        userQuery: query,
+        dataRevision,
+        env,
+        modelInvoker: cardModelInvoker,
+        fetchImpl,
+        dryRun,
+        now,
+        signal,
+      }),
+      callRuleQueryExtractionModel({
+        userQuery: query,
+        dataRevision,
+        env,
+        modelInvoker: ruleModelInvoker,
+        fetchImpl,
+        dryRun,
+        now,
+        signal,
+      }),
+    ]);
+    cardResolution = (cardNameModel.candidates || []).length
+      ? extractRagCards(query, {
         cards: data.cards || [],
         maxCards,
         modelCardNameCandidates: cardNameModel.candidates,
       })
-    : localCardResolution;
-  timingsMs.auxiliaryExtractionModels = elapsedMs(auxiliaryExtractionStartedAt);
+      : localCardResolution;
+    timingsMs.auxiliaryExtractionModels = elapsedMs(auxiliaryExtractionStartedAt);
+    extractionStage.end();
+  } catch (error) {
+    extractionStage.fail(error);
+    throw error;
+  }
   timingsMs.dataAndQueryExtraction = elapsedMs(extractionStartedAt);
 
   const retrievalStartedAt = Date.now();
-  const retrievedEvidence = await retrieveRagEvidence({
-    userQuery: query,
-    cardResolution,
-    dataDir,
-    cards: data.cards,
-    records: data.records,
-    qaRecords: data.qaRecords,
-    enableLiveOfficialQa: true,
-    subsumptionCandidatePoolComplete: usesCompleteDefaultSnapshot,
-    ruleSearchQueries: ruleQueryModel.queries || [],
-    env,
-    fetchImpl,
-    signal,
-  });
+  const retrievalStage = beginPrivateEvaluationStage(privateEvaluationDiagnostics, "retrieval");
+  let retrievedEvidence;
+  try {
+    retrievedEvidence = await retrieveRagEvidence({
+      userQuery: query,
+      cardResolution,
+      dataDir,
+      cards: data.cards,
+      records: data.records,
+      qaRecords: data.qaRecords,
+      enableLiveOfficialQa: true,
+      subsumptionCandidatePoolComplete: usesCompleteDefaultSnapshot,
+      ruleSearchQueries: ruleQueryModel.queries || [],
+      env,
+      fetchImpl,
+      signal,
+    });
+    retrievalStage.end();
+  } catch (error) {
+    retrievalStage.fail(error);
+    throw error;
+  }
   timingsMs.retrieval = elapsedMs(retrievalStartedAt);
 
   const effectiveCardResolution = reconcileCardResolution(cardResolution, retrievedEvidence);
@@ -159,18 +211,29 @@ export async function answerRagRulingQuestion({
   // rule component, semantic executor, duel engine, formal engine or Lua
   // analysis may filter, strengthen or replace them before the final model.
   const evidence = retrievedEvidence;
-  const promptBundle = buildRagRulingPromptBundle({
-    userQuery: query,
-    cardResolution: effectiveCardResolution,
-    evidence,
-    env,
-  });
-  const evidenceFingerprint = sha256Json(evidence);
-  const finalPromptSha256 = sha256Text(promptBundle.prompt);
-  const displayCards = dedupeCards([
-    ...(effectiveCardResolution.resolvedCards || []),
-    ...userProvidedCards(evidence.userProvidedCardTexts || []),
-  ]);
+  const promptStage = beginPrivateEvaluationStage(privateEvaluationDiagnostics, "prompt_build");
+  let promptBundle;
+  let evidenceFingerprint;
+  let finalPromptSha256;
+  let displayCards;
+  try {
+    promptBundle = buildRagRulingPromptBundle({
+      userQuery: query,
+      cardResolution: effectiveCardResolution,
+      evidence,
+      env,
+    });
+    evidenceFingerprint = sha256Json(evidence);
+    finalPromptSha256 = sha256Text(promptBundle.prompt);
+    displayCards = dedupeCards([
+      ...(effectiveCardResolution.resolvedCards || []),
+      ...userProvidedCards(evidence.userProvidedCardTexts || []),
+    ]);
+    promptStage.end();
+  } catch (error) {
+    promptStage.fail(error);
+    throw error;
+  }
 
   const finalModelStartedAt = Date.now();
   const modelResult = await runValidatedPublicRagFinal({
@@ -197,6 +260,7 @@ export async function answerRagRulingQuestion({
       thinkingMode,
       reasoningEffort,
       signal,
+      privateEvaluationDiagnostics,
     }),
   });
   timingsMs.finalModel = elapsedMs(finalModelStartedAt);

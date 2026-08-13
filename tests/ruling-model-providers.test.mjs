@@ -141,6 +141,52 @@ test("OpenAI transport failures explicitly report an unknown submit outcome", as
   );
 });
 
+test("OpenAI response JSON parsing stops promptly when the caller aborts", async () => {
+  const controller = new AbortController();
+  const abortReason = Object.assign(new Error("OpenAI response body deadline exceeded"), {
+    code: "test_openai_response_body_timeout",
+  });
+  let markJsonStarted;
+  const jsonStarted = new Promise((resolve) => { markJsonStarted = resolve; });
+  const provider = new OpenAIResponsesProvider({
+    apiKey: "server-secret",
+    fetchImpl: async () => ({
+      ok: true,
+      status: 200,
+      headers: { get: () => "application/json" },
+      json() {
+        markJsonStarted();
+        return new Promise(() => {});
+      },
+    }),
+  });
+  const pending = provider.create({
+    model: "gpt-5.6-luna",
+    input: "x",
+    metadata: { runId: "run-json-abort", promptVersion: "v1" },
+    signal: controller.signal,
+  });
+  await jsonStarted;
+  controller.abort(abortReason);
+  let watchdogTimer;
+  const watchdog = new Promise((resolve, reject) => {
+    watchdogTimer = setTimeout(
+      () => reject(new Error("OpenAI response JSON abort did not settle")),
+      500,
+    );
+    watchdogTimer.unref?.();
+  });
+
+  try {
+    await assert.rejects(
+      Promise.race([pending, watchdog]),
+      (error) => error === abortReason,
+    );
+  } finally {
+    clearTimeout(watchdogTimer);
+  }
+});
+
 test("ambiguous HTTP failures are outcome-unknown while provable 4xx rejection is known", async () => {
   for (const status of [408, 429, 500, 503]) {
     const provider = new OpenAIResponsesProvider({
@@ -780,6 +826,191 @@ test("relay classifies the admin synchronous outer deadline as a stream timeout"
   );
 });
 
+test("relay stream abort race settles when reader and cancellation ignore the signal", async () => {
+  const controller = new AbortController();
+  const timeout = new Error("final ruling provider exceeded 25ms");
+  timeout.code = "final_ruling_provider_timeout";
+  let readCalls = 0;
+  let cancelCalls = 0;
+  let releaseCalls = 0;
+  const provider = new CompatibleEvidencePreparationProvider({
+    providerId: "relay",
+    apiKey: "relay-server-secret",
+    baseUrl: "https://relay.example/v1",
+    fetchImpl: async () => ({
+      ok: true,
+      status: 200,
+      headers: { get: () => "text/event-stream" },
+      body: {
+        getReader() {
+          return {
+            read() {
+              readCalls += 1;
+              return new Promise(() => {});
+            },
+            cancel() {
+              cancelCalls += 1;
+              return new Promise(() => {});
+            },
+            releaseLock() {
+              releaseCalls += 1;
+            },
+          };
+        },
+      },
+    }),
+  });
+  const abortTimer = setTimeout(() => controller.abort(timeout), 25);
+  const watchdog = new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("relay stream abort race did not settle")), 500);
+    timer.unref?.();
+  });
+
+  await assert.rejects(
+    Promise.race([
+      provider.create({
+        model: "relay-gpt-5.6-sol",
+        reasoningEffort: "medium",
+        reasoningMode: "pro",
+        input: "匿名问题与冻结证据",
+        instructions: "只输出 JSON。",
+        metadata: { runId: "run-relay-stuck-reader", promptVersion: "openai-ruling-v1" },
+        signal: controller.signal,
+      }),
+      watchdog,
+    ]),
+    (error) => {
+      assert.equal(error.code, "relay_stream_timeout");
+      assert.equal(error.outcomeKnown, false);
+      assert.equal(error.budgetReservationMayExist, true);
+      return true;
+    },
+  );
+  clearTimeout(abortTimer);
+  assert.equal(readCalls, 1);
+  assert.equal(cancelCalls, 1);
+  assert.equal(releaseCalls, 1);
+});
+
+test("relay stream abort race classifies a non-timeout parent cancellation as interrupted", async () => {
+  const controller = new AbortController();
+  let cancelCalls = 0;
+  const provider = new CompatibleEvidencePreparationProvider({
+    providerId: "relay",
+    apiKey: "relay-server-secret",
+    baseUrl: "https://relay.example/v1",
+    fetchImpl: async () => ({
+      ok: true,
+      status: 200,
+      headers: { get: () => "text/event-stream" },
+      body: {
+        getReader() {
+          return {
+            read: () => new Promise(() => {}),
+            cancel() {
+              cancelCalls += 1;
+              return new Promise(() => {});
+            },
+            releaseLock() {},
+          };
+        },
+      },
+    }),
+  });
+  const abortTimer = setTimeout(
+    () => controller.abort(new DOMException("client disconnected", "AbortError")),
+    25,
+  );
+  const watchdog = new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("relay stream cancellation did not settle")), 500);
+    timer.unref?.();
+  });
+
+  await assert.rejects(
+    Promise.race([
+      provider.create({
+        model: "relay-gpt-5.6-sol",
+        reasoningEffort: "medium",
+        reasoningMode: "pro",
+        input: "匿名问题与冻结证据",
+        instructions: "只输出 JSON。",
+        metadata: { runId: "run-relay-stuck-reader-abort", promptVersion: "openai-ruling-v1" },
+        signal: controller.signal,
+      }),
+      watchdog,
+    ]),
+    (error) => {
+      assert.equal(error.code, "relay_stream_interrupted");
+      assert.equal(error.outcomeKnown, false);
+      assert.equal(error.budgetReservationMayExist, true);
+      return true;
+    },
+  );
+  clearTimeout(abortTimer);
+  assert.equal(cancelCalls, 1);
+});
+
+test("relay total signal also bounds a non-2xx response body that ignores abort", async () => {
+  const controller = new AbortController();
+  const timeout = new Error("final ruling provider exceeded 25ms");
+  timeout.code = "final_ruling_provider_timeout";
+  let cancelCalls = 0;
+  let releaseCalls = 0;
+  const provider = new CompatibleEvidencePreparationProvider({
+    providerId: "relay",
+    apiKey: "relay-server-secret",
+    baseUrl: "https://relay.example/v1",
+    fetchImpl: async () => ({
+      ok: false,
+      status: 504,
+      headers: { get: () => "text/html" },
+      body: {
+        getReader() {
+          return {
+            read: () => new Promise(() => {}),
+            cancel() {
+              cancelCalls += 1;
+              return new Promise(() => {});
+            },
+            releaseLock() {
+              releaseCalls += 1;
+            },
+          };
+        },
+      },
+    }),
+  });
+  const abortTimer = setTimeout(() => controller.abort(timeout), 25);
+  const watchdog = new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("relay error-body abort race did not settle")), 500);
+    timer.unref?.();
+  });
+
+  await assert.rejects(
+    Promise.race([
+      provider.create({
+        model: "relay-gpt-5.6-sol",
+        reasoningEffort: "medium",
+        reasoningMode: "pro",
+        input: "匿名问题与冻结证据",
+        instructions: "只输出 JSON。",
+        metadata: { runId: "run-relay-stuck-error-body", promptVersion: "openai-ruling-v1" },
+        signal: controller.signal,
+      }),
+      watchdog,
+    ]),
+    (error) => {
+      assert.equal(error.code, "relay_stream_timeout");
+      assert.equal(error.outcomeKnown, false);
+      assert.equal(error.budgetReservationMayExist, true);
+      return true;
+    },
+  );
+  clearTimeout(abortTimer);
+  assert.equal(cancelCalls, 1);
+  assert.equal(releaseCalls, 1);
+});
+
 test("relay classifies transport timeout codes without requiring an abort signal", async () => {
   for (const code of ["ETIMEDOUT", "UND_ERR_HEADERS_TIMEOUT", "UND_ERR_BODY_TIMEOUT"]) {
     const provider = new CompatibleEvidencePreparationProvider({
@@ -1075,6 +1306,56 @@ test("compatible transport distinguishes provable 4xx rejection from potentially
     (error) => error.status === 400 && error.outcomeKnown === true,
   );
   assert.equal(rejectedFinalCalls, 1);
+});
+
+test("compatible response JSON parsing stops promptly when the caller aborts", async () => {
+  const controller = new AbortController();
+  const abortReason = Object.assign(new Error("compatible response body deadline exceeded"), {
+    code: "test_compatible_response_body_timeout",
+  });
+  let markJsonStarted;
+  const jsonStarted = new Promise((resolve) => { markJsonStarted = resolve; });
+  const provider = new CompatibleEvidencePreparationProvider({
+    providerId: "deepseek",
+    apiKey: "deepseek-server-secret",
+    fetchImpl: async () => ({
+      ok: true,
+      status: 200,
+      headers: { get: () => "application/json" },
+      json() {
+        markJsonStarted();
+        return new Promise(() => {});
+      },
+    }),
+  });
+  const pending = provider.create({
+    model: "deepseek-v4-flash",
+    reasoningEffort: "none",
+    reasoningMode: "standard",
+    input: "匿名问题与冻结证据",
+    instructions: "只输出 JSON。",
+    metadata: { runId: "run-compatible-json-abort", promptVersion: "openai-ruling-v1" },
+    signal: controller.signal,
+  });
+  await jsonStarted;
+  controller.abort(abortReason);
+  let watchdogTimer;
+  const watchdog = new Promise((resolve, reject) => {
+    watchdogTimer = setTimeout(
+      () => reject(new Error("compatible response JSON abort did not settle")),
+      500,
+    );
+    watchdogTimer.unref?.();
+  });
+
+  try {
+    await assert.rejects(
+      Promise.race([pending, watchdog]),
+      (error) => error === abortReason,
+    );
+  } finally {
+    clearTimeout(watchdogTimer);
+  }
 });
 
 test("Kimi K2.6 supports optional thinking while K3 uses its always-on reasoning effort", async () => {
