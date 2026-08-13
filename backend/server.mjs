@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { authorizeBudgetResetRequest, budgetResetTokenConfigured } from "./budgetAuth.mjs";
 import { checkDataHealth } from "./dataHealth.mjs";
 import {
+  capPublicChatGptBudget,
   getRagBudgetStatus,
   resetRagBudget,
 } from "./ragModelClient.mjs";
@@ -87,6 +88,15 @@ const server = createServer(async (request, response) => {
     const auth = authorizeBudgetResetRequest(request, { env: process.env, body });
     if (!auth.ok) {
       sendJson(response, auth.status, { ok: false, error: auth.error, message: auth.message });
+      return;
+    }
+    const action = String(body.action || "reset").trim().toLowerCase();
+    if (action === "cap_public_chatgpt") {
+      sendJson(response, 200, await capPublicChatGptBudget({ env: process.env }));
+      return;
+    }
+    if (action !== "reset") {
+      sendJson(response, 400, { ok: false, error: "budget_action_invalid" });
       return;
     }
     sendJson(response, 200, await resetRagBudget({ env: process.env }));
