@@ -157,7 +157,7 @@ test("missing the field-empty fact fails closed instead of assuming hand activat
   assert.equal(result.reason, "activating_player_field_empty_state_unknown");
 });
 
-test("an exact official QA focuses the final model on the complete authoritative answer", async () => {
+test("a matching official QA reaches the final model without heuristic direct promotion", async () => {
   let finalModelCalls = 0;
   let finalPrompt = "";
   const answer = await answerRagRulingQuestion({
@@ -191,12 +191,13 @@ test("an exact official QA focuses the final model on the complete authoritative
   assert.match(answer.shortAnswer, /(?:不能|できません)/u);
   assert.match(answer.shortAnswer, /(?:魔法与陷阱|魔法・罠カード)/u);
   assert.equal(answer.debug.deterministicDecision, null);
-  assert.equal(answer.debug.semanticStateTransition?.authoritative, false);
-  assert.equal(answer.debug.semanticStateTransition?.authorityReason, "diagnostic_only_requires_final_model");
+  assert.equal(answer.debug.semanticStateTransition, null);
   assert.equal(answer.debug.modelUsed, "mock-rag");
   assert.deepEqual(answer.debug.unresolvedMentions, []);
   assert.ok(answer.debug.retrievalCounts.officialQaDirectCandidates > 0);
-  assert.match(finalPrompt, /officialQaDirectCandidate/u);
-  assert.match(finalPrompt, /最高且唯一的裁定依据/u);
+  assert.match(finalPrompt, /ygoresources-qa-24365/u);
+  assert.match(finalPrompt, /相手が魔法・罠カードを手札からフィールドに置いて発動した状況/u);
+  assert.doesNotMatch(finalPrompt, /唯一の? officialQaDirectCandidate|唯一的 officialQaDirectCandidate/u);
+  assert.match(finalPrompt, /"type": "related"/u);
   assert.equal(answer.riskFlags.includes("official_direct_corroborates_trusted_semantic_execution"), false);
 });

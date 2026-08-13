@@ -625,7 +625,7 @@ Options:
           <deepseek-v4-flash|deepseek-v4-pro>
   --effort <none|low|medium|high|xhigh|max>  Repeat to select efforts (default: all six)
   --reasoning-mode <standard|pro>              Relay requires pro; DeepSeek requires an explicit effort
-  --evidence-variant <full|card_text_only|card_text_plus_lua|without_lua>
+  --evidence-variant <full|full_plus_lua|card_text_only|card_text_plus_lua|without_lua>
                                               Evidence ablation (default: full)
   --case <case-id>                            Repeat to select cases (default: all)
   --recover-running-as-outcome-unknown        Seal interrupted submissions without retrying (resume only)

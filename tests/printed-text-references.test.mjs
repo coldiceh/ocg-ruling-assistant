@@ -83,7 +83,7 @@ test("printed-name requirements are parsed from equivalent Chinese, Japanese, an
   }
 });
 
-test("printed-text prompt guidance is injected only for a typed operation-subject condition", () => {
+test("public prompts expose the original printed texts without injecting a printed-text decision rule", () => {
   const receiver = {
     id: "abstract-receiver",
     name: "匿名接收者",
@@ -127,12 +127,15 @@ test("printed-text prompt guidance is injected only for a typed operation-subjec
     evidence: evidenceFor([receiver, source, activationCard]),
     env: { RAG_RECOVERY_PROMPT_CHARS: "12000" },
   });
-  for (const prompt of [typed.prompt, typed.recoveryPrompt]) {
-    assert.match(prompt, /只检查候选卡自身原始规范 effectText/u);
-    assert.match(prompt, /operation_subject_card_text/u);
-    assert.match(prompt, /abstract-activation-card/u);
-    assert.match(prompt, /card-text-abstract-activation-card/u);
-  }
+  assert.match(typed.prompt, /匿名接收者复制匿名来源后/u);
+  assert.match(typed.prompt, /abstract-activation-card/u);
+  assert.match(typed.prompt, /card-text-abstract-activation-card/u);
+  assert.match(typed.prompt, /有「匿名基准卡」卡名记述的怪兽存在的场合才能发动/u);
+  assert.doesNotMatch(typed.prompt, /只检查候选卡自身原始规范 effectText/u);
+  assert.doesNotMatch(typed.prompt, /operation_subject_card_text/u);
+  assert.doesNotMatch(typed.prompt, /运行时状态与其不可变的卡片定义分开/u);
+  assert.doesNotMatch(typed.prompt, /printedNameReferences/u);
+  assert.equal(typed.recoveryPrompt, "");
 
   const unrelated = buildRagRulingPromptBundle({
     userQuery: "匿名接收者在主要阶段能否发动抽卡效果？",
@@ -143,8 +146,12 @@ test("printed-text prompt guidance is injected only for a typed operation-subjec
     },
     evidence: evidenceFor([receiver]),
   });
+  assert.match(unrelated.prompt, /匿名接收者在主要阶段/u);
+  assert.match(unrelated.prompt, /这张卡获得那只怪兽的原本卡名和效果/u);
   assert.doesNotMatch(unrelated.prompt, /只检查候选卡自身原始规范 effectText/u);
-  assert.doesNotMatch(unrelated.recoveryPrompt, /运行时状态与其不可变的卡片定义分开/u);
+  assert.doesNotMatch(unrelated.prompt, /运行时状态与其不可变的卡片定义分开/u);
+  assert.doesNotMatch(unrelated.prompt, /operation_subject_card_text/u);
+  assert.equal(unrelated.recoveryPrompt, "");
 });
 
 test("generic rule query retrieves the printed-text definition passage", () => {

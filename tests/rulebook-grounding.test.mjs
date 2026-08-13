@@ -67,7 +67,7 @@ test("actual_simultaneous_replacement_rule_is_retrieved_from_card_resistance", a
   assert.ok(relevant.sourceUrl);
 });
 
-test("deterministic rule queries keep the first eight ranking slots ahead of model supplements", async () => {
+test("the local generic rule query stays ahead of model supplements", async () => {
   const evidence = await retrieveRagEvidence({
     userQuery: [
       "连锁处理中对象离场并除外，效果无效并破坏。",
@@ -94,13 +94,11 @@ test("deterministic rule queries keep the first eight ranking slots ahead of mod
   });
 
   assert.equal(evidence.ruleSearchQueries.length, 16);
+  assert.equal(evidence.ruleSearchQueries[0]?.source, "derived_rule_search_query");
+  assert.notEqual(evidence.ruleSearchQueries[0]?.reason, "deepseek_preparation");
   assert.ok(
-    evidence.ruleSearchQueries.slice(0, 8).every((item) => item.source !== "rule_search_query"),
-    "the first eight ranking queries must all come from deterministic local derivation",
-  );
-  assert.ok(
-    evidence.ruleSearchQueries.slice(0, 8).every((item) => item.reason !== "deepseek_preparation"),
-    "model supplements must not displace the deterministic ranking window",
+    evidence.ruleSearchQueries.slice(1).every((item) => item.reason === "deepseek_preparation"),
+    "model supplements may broaden retrieval only after the local generic query",
   );
 });
 
@@ -177,54 +175,6 @@ test("model supplemental queries cannot reorder the deterministic evidence prefi
 
   assert.equal(deterministic.rawRelatedEvidence[0].id, "deterministic-evidence");
   assert.equal(supplemented.rawRelatedEvidence[0].id, "deterministic-evidence");
-});
-
-test("actual_return_constraints_are_prioritized_for_operation_grounding", async () => {
-  const data = await loadRagData();
-  const resolvedCards = ["13631", "22130"]
-    .map((id) => data.cards.find((card) => card.id === id))
-    .filter(Boolean);
-  const question = "对方场上有「绚岚之达维」，我方以达维为对象发动「无限泡影」，这个时候场上没有其他魔陷，对方能不能发动「天雷之双风神」的效果？";
-  const evidence = await retrieveRagEvidence({
-    userQuery: question,
-    cardResolution: {
-      resolvedCards,
-      unresolvedMentions: [],
-      ambiguousMentions: [],
-      userProvidedCardTexts: [],
-    },
-    cards: data.cards,
-    records: data.records,
-    qaRecords: data.qaRecords,
-  });
-  let prompt = "";
-  const grounding = await callRulebookGroundingModel({
-    userQuery: question,
-    cardTexts: evidence.cardTexts,
-    ruleEvidence: evidence.rulebookCandidates,
-    qaEvidence: [...evidence.officialQaDirectCandidates, ...evidence.officialQaRelated, ...evidence.faqRelated],
-    modelInvoker: async (request) => {
-      prompt = request.prompt;
-      return JSON.stringify({ constraintReviews: [], operationChecks: [], overallConclusion: "证据待核对。" });
-    },
-  });
-
-  const priorities = grounding.operationLegality.priorityConstraintEvidence;
-  assert.ok(priorities.some((item) => /这种魔法·陷阱卡在连锁途中不能从场上回到手卡·卡组/u.test(item.text)), "expected the activated Spell/Trap return restriction");
-  assert.ok(priorities.some((item) => /除自身以外没有能适用的卡时不能发动/u.test(item.text)), "expected the no-applicable-card activation restriction");
-  assert.equal(
-    evidence.officialQaRelated.some((item) => item.id === "ygoresources-qa-24174"),
-    false,
-    "a long multi-card example that merely mentions one resolved card must not enter an unrelated activation case",
-  );
-  assert.equal(
-    evidence.rawRelatedEvidence.some((item) => item.id === "ygoresources-qa-24174"),
-    false,
-    "the same incidental example must not re-enter through the raw-related bucket",
-  );
-  assert.ok(priorities.length <= 5);
-  assert.match(prompt, /priorityConstraintCandidates/u);
-  assert.match(prompt, /只说明诱发条件或可连锁时点的一般卡片 FAQ/u);
 });
 
 test("unrelated_restrictive_examples_are_not_promoted_to_mandatory_constraints", () => {
@@ -349,164 +299,6 @@ test("rulebook_passage_keeps_a_contiguous_simultaneous_trigger_order_list_whole"
   assert.match(relevant.text, /回合玩家的必发的诱发即时类效果/u);
   assert.match(relevant.text, /非回合玩家的必发的诱发即时类效果/u);
   assert.match(relevant.text, /这组连锁最后发动效果的玩家把优先权转移给对方/u);
-});
-
-test("a post-chain trigger scenario retrieves both ordering and reverse-resolution rules", async () => {
-  const data = await loadRagData();
-  const resolvedCards = ["11629", "21944", "7898"]
-    .map((id) => data.cards.find((card) => card.id === id))
-    .filter(Boolean)
-    .map((card) => ({ ...card, input: card.name, confidence: 1 }));
-  const question = "加速同步士C1发动加速同调，对方C2把纠罪巧恐怖变成表侧。逆序处理完毕后另开连锁：纠罪巧恐怖与同调召唤的黑蔷薇龙应当如何组成C1、C2并结算？";
-  const evidence = await retrieveRagEvidence({
-    userQuery: question,
-    cardResolution: {
-      resolvedCards,
-      unresolvedMentions: [],
-      ambiguousMentions: [],
-      userProvidedCardTexts: [],
-    },
-    cards: data.cards,
-    records: data.records,
-    qaRecords: data.qaRecords,
-    enableLiveOfficialQa: false,
-  });
-
-  assert.ok(evidence.ruleSearchQueries.some(
-    (item) => item.source === "simultaneous_trigger_order_rule_search_query",
-  ));
-  assert.ok(evidence.ruleSearchQueries.some(
-    (item) => item.source === "chain_resolution_reverse_rule_search_query",
-  ));
-  assert.doesNotMatch(
-    evidence.ruleSearchQueries
-      .filter((item) => item.source === "compiled_scenario_rule_search_query")
-      .map((item) => item.query)
-      .join("\n"),
-    /手卡诱发|手牌诱发|顺序7/u,
-  );
-  assert.ok(evidence.officialQaRelated.some((item) => item.id === "ygoresources-qa-24174"));
-  assert.ok(evidence.rulebookCandidates.some(
-    (item) => /同一时点满足多个诱发类效果的发动条件/u.test(item.text),
-  ));
-  assert.ok(evidence.rulebookCandidates.some(
-    (item) => /从最后发动的效果开始/u.test(item.text),
-  ));
-});
-
-test("a C1 cost cannot create C2 eligibility without retrieving the pre-chain trigger snapshot rule", async () => {
-  const data = await loadRagData();
-  const question = "开始组成诱发连锁前墓地没有合法对象。公开区域诱发A排C1，支付cost把对象送墓后，公开区域诱发B能不能C2发动？";
-  const evidence = await retrieveRagEvidence({
-    userQuery: question,
-    cardResolution: {
-      resolvedCards: [],
-      unresolvedMentions: [],
-      ambiguousMentions: [],
-      userProvidedCardTexts: [],
-    },
-    cards: data.cards,
-    records: data.records,
-    qaRecords: data.qaRecords,
-    enableLiveOfficialQa: false,
-  });
-
-  assert.ok(evidence.ruleSearchQueries.some(
-    (item) => item.source === "pre_chain_trigger_legality_rule_search_query",
-  ));
-  assert.ok(evidence.rulebookCandidates.some((item) => (
-    item.sourceRecordId === "ocg-rule:c03/诱发类效果"
-      && /连锁发生之前就满足发动条件/u.test(item.text)
-  )));
-});
-
-test("ordinary C1/C2 resolution and target loss do not imply simultaneous trigger ordering", async () => {
-  const question = [
-    "双方主要阶段，对方以场上的怪兽为对象发动效果，我方连锁该怪兽的效果。",
-    "处理时C2令对象离场，C1对象丢失，后续处理是否继续？",
-  ].join("");
-  const evidence = await retrieveRagEvidence({
-    userQuery: question,
-    cardResolution: {
-      resolvedCards: [],
-      unresolvedMentions: [],
-      ambiguousMentions: [],
-      userProvidedCardTexts: [],
-    },
-    cards: [],
-    records: [],
-    qaRecords: [],
-  });
-
-  assert.equal(evidence.ruleSearchQueries.some(
-    (item) => item.source === "simultaneous_trigger_order_rule_search_query",
-  ), false);
-  assert.ok(evidence.ruleSearchQueries.some(
-    (item) => item.source === "chain_resolution_reverse_rule_search_query",
-  ));
-});
-
-test("a continuously public hand plus C1 C2 trigger ordering retrieves the public-hand official rule", async () => {
-  const data = await loadRagData();
-  const resolvedCards = ["23162", "11763", "19398", "19397"]
-    .map((id) => data.cards.find((card) => card.id === id))
-    .filter(Boolean)
-    .map((card) => ({ ...card, input: card.name, confidence: 1 }));
-  const question = [
-    "对面场上有《看透心灵之眼》导致我手牌公开，",
-    "我发动《炎王的孤岛》炸《炎王神兽 麒麟》检索《圣炎王 大鹏不死鸟》的情况。",
-    "我是否可以 C1 发动《圣炎王 大鹏不死鸟》起跳，C2 发动《炎王神兽 麒麟》的被破坏效果？",
-  ].join("");
-  const evidence = await retrieveRagEvidence({
-    userQuery: question,
-    cardResolution: {
-      resolvedCards,
-      unresolvedMentions: [],
-      ambiguousMentions: [],
-      userProvidedCardTexts: [],
-    },
-    cards: data.cards,
-    records: data.records,
-    qaRecords: data.qaRecords,
-    enableLiveOfficialQa: false,
-  });
-
-  assert.ok(evidence.ruleSearchQueries.some(
-    (item) => item.source === "public_hand_trigger_order_rule_search_query",
-  ));
-  const queryMechanism = evidence.ruleSearchQueries.find(
-    (item) => item.source === "public_hand_trigger_order_rule_search_query",
-  )?.mechanism;
-  const ruling = evidence.officialQaRelated.find((item) => item.id === "ygoresources-qa-23948");
-  assert.ok(ruling, "expected the official public-hand trigger ordering ruling");
-  assert.ok(queryMechanism?.startsWith("semantic:"));
-  assert.ok((ruling.retrievalSignals?.mechanismAnalogues || []).includes(queryMechanism));
-});
-
-test("an unrelated public hand does not generate a public-hand trigger-order query", async () => {
-  const data = await loadRagData();
-  const question = [
-    "对方的手牌因永续效果而全部公开。",
-    "我方场上的怪兽和墓地的怪兽效果在同一时点满足条件。",
-    "是否可以C1发动场上怪兽的诱发效果，C2发动墓地怪兽的诱发效果？",
-  ].join("");
-  const evidence = await retrieveRagEvidence({
-    userQuery: question,
-    cardResolution: {
-      resolvedCards: [],
-      unresolvedMentions: [],
-      ambiguousMentions: [],
-      userProvidedCardTexts: [],
-    },
-    cards: data.cards,
-    records: data.records,
-    qaRecords: data.qaRecords,
-    enableLiveOfficialQa: false,
-  });
-
-  assert.ok(!evidence.ruleSearchQueries.some(
-    (item) => item.source === "public_hand_trigger_order_rule_search_query",
-  ));
 });
 
 test("inline_card_references_link_the_stardust_official_qa", async () => {
@@ -671,79 +463,6 @@ test("generic legal check cannot turn a restrictive candidate into a fixed block
   assert.equal(result.hasUnresolvedConstraints, true);
   assert.match(result.shortAnswer, /不能确认/u);
   assert.ok(result.warnings.includes("operation_candidate_derived_from_combined_constraint_evidence"));
-});
-
-test("card-text mechanics retrieve mandatory-return constraints without fixing the answer", async () => {
-  const data = await loadRagData();
-  const question = "双方后场只有刚发动的「无限泡影」；对方场上有风属性怪兽，我方能否发动「天雷之双风神 息那」①效果？";
-  const resolvedCards = data.cards
-    .filter((card) => ["无限泡影", "天雷之双风神 息那"].includes(card.name))
-    .map((card) => ({ ...card, input: card.name, confidence: 1 }));
-  const evidence = await retrieveRagEvidence({
-    userQuery: question,
-    cardResolution: { resolvedCards, unresolvedMentions: [], ambiguousMentions: [], userProvidedCardTexts: [] },
-    cards: data.cards,
-    records: data.records,
-    qaRecords: data.qaRecords,
-  });
-  assert.ok(evidence.ruleSearchQueries.some((item) => /连锁途中.*回到手卡/u.test(item.query)));
-  assert.ok(evidence.ruleSearchQueries.some((item) => (
-    item.source === "compiled_scenario_rule_search_query"
-      && /没有其他候选.*发动合法性/u.test(item.query)
-  )));
-  assert.ok(evidence.ruleSearchQueries.every((item) => !/不能发动/u.test(item.query)));
-  assert.ok(evidence.rulebookCandidates.some((item) => /这种魔法[・·]陷阱卡在连锁途中不能/u.test(item.text)));
-  assert.ok(evidence.rulebookCandidates.some((item) => /除自身以外没有能适用的卡时不能发动/u.test(item.text)));
-
-  const grounding = await callRulebookGroundingModel({
-    userQuery: question,
-    cardTexts: evidence.cardTexts,
-    ruleEvidence: evidence.rulebookCandidates,
-    qaEvidence: [],
-    modelInvoker: async () => JSON.stringify({ operationChecks: [], constraintReviews: [] }),
-  });
-  assert.equal(grounding.operationLegality.hasBlockingCheck, false);
-  assert.equal(grounding.operationLegality.hasUnresolvedConstraints, true);
-  assert.match(grounding.operationLegality.shortAnswer, /不能确认/u);
-});
-
-test("replacement card text and player roles retrieve the turn-player-first rule without answer keywords", async () => {
-  const data = await loadRagData();
-  const replacementCard = {
-    id: "synthetic-replacement-card",
-    name: "测试代破兽",
-    cnName: "测试代破兽",
-    aliases: ["测试代破兽"],
-    cardType: "monster",
-    effectText: "这张卡被战斗破坏的场合，可以作为代替把自己场上其他1只怪兽破坏。",
-  };
-  const question = "轮到我，我方「测试代破兽」攻击对方「测试代破兽」，两只在这次战斗都要被破坏；我方另有1只怪兽，两边各自的效果怎么处理？";
-  const evidence = await retrieveRagEvidence({
-    userQuery: question,
-    cardResolution: { resolvedCards: [{ ...replacementCard, input: replacementCard.name }], unresolvedMentions: [], ambiguousMentions: [], userProvidedCardTexts: [] },
-    cards: [...data.cards, replacementCard],
-    records: data.records,
-    qaRecords: data.qaRecords,
-  });
-  assert.ok(evidence.ruleSearchQueries.some((item) => (
-    item.source === "compiled_scenario_rule_search_query"
-      && /回合玩家.*非回合玩家.*适用顺序/u.test(item.query)
-  )));
-  assert.ok(evidence.ruleSearchQueries.every((item) => !/先适用|不适用/u.test(item.query)));
-  assert.ok(evidence.rulebookCandidates.some((item) => /同1时点双方都要适用代替破坏/u.test(item.text)));
-
-  const grounding = await callRulebookGroundingModel({
-    userQuery: question,
-    cardTexts: evidence.cardTexts,
-    ruleEvidence: evidence.rulebookCandidates,
-    qaEvidence: [],
-    modelInvoker: async () => JSON.stringify({ operationChecks: [], constraintReviews: [] }),
-  });
-  const check = grounding.operationLegality.checks.find((item) => item.operationId === "simultaneous-destruction-replacement-order");
-  assert.ok(check);
-  assert.equal(check.status, "unknown");
-  assert.match(check.conclusion, /先适用回合玩家.*重新检查非回合玩家/u);
-  assert.equal(grounding.operationLegality.hasUnresolvedConstraints, true);
 });
 
 test("mandatory-return template remains an unknown candidate without typed premises", () => {

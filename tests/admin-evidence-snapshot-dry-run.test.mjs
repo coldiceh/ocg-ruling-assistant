@@ -97,7 +97,7 @@ test("four local cases freeze snapshots, never leak goldens, and never use a pai
     assert.equal(report.visibleEvidence.length, report.evidenceCounts.visiblePacketItems);
     assert.match(report.finalInput.sha256, /^[a-f0-9]{64}$/u);
     assert.equal(report.lua.verdict, "UNKNOWN");
-    assert.ok(report.lua.serializedBytes > 0);
+    assert.equal(report.lua.serializedBytes, 0);
     assert.equal(report.transport.realProviderCalls, 0);
     assert.equal(report.transport.externalFetchAllowedCount, 0);
     assert.equal(
@@ -139,27 +139,11 @@ test("four local cases freeze snapshots, never leak goldens, and never use a pai
     assert.ok(Number.isFinite(report.timingsMs.localPaidGateValidation));
   }
 
-  const doubleTempest = result.reports.find(
-    (item) => item.id === "double-tempest-impermanence",
-  );
-  assert.ok(doubleTempest);
-  assert.equal(
-    doubleTempest.visibleEvidence.some((item) => (
-      item.evidenceIds.includes("ocg-rule:c02/卡片·效果的发动#p208-212")
-    )),
-    true,
-    "the decisive pending Spell/Trap return rule must be visible before a paid call",
-  );
-
-  const unchained = result.reports.find(
-    (item) => item.id === "unchained-replacement",
-  );
-  assert.ok(unchained);
-  for (const evidenceId of ["ygoresources-qa-24336", "card-faq-23172-1"]) {
+  for (const report of result.reports) {
     assert.equal(
-      unchained.visibleEvidence.some((item) => item.evidenceIds.includes(evidenceId)),
+      report.visibleEvidence.some((item) => item.category === "parsed_card_text"),
       true,
-      `${evidenceId} must be visible before a paid call`,
+      `${report.id} must retain ordinary resolved card-text evidence`,
     );
   }
 
@@ -177,6 +161,7 @@ test("four local cases freeze snapshots, never leak goldens, and never use a pai
 test("CLI enables local Lua only through an explicit loopback engine URL", async () => {
   const parsed = parseAdminEvidenceDryRunArguments([
     "--engine-url", "http://127.0.0.1:8790",
+    "--evidence-variant", "full_plus_lua",
     "--case", "anonymous-case",
     "--compact",
   ]);
@@ -204,6 +189,7 @@ test("CLI enables local Lua only through an explicit loopback engine URL", async
   };
   const result = await runAdminEvidenceDryRunCli([
     "--engine-url", "http://localhost:8790",
+    "--evidence-variant", "full_plus_lua",
     "--case", "anonymous-case",
     "--compact",
   ], {
@@ -231,12 +217,13 @@ test("CLI enables local Lua only through an explicit loopback engine URL", async
     "PRECOMPUTED_STATIC_WITH_LOCAL_FALLBACK",
   );
   assert.equal(dryRunOptions.enginePasscodeHydrationEnabled, true);
+  assert.equal(dryRunOptions.evidenceVariant, "full_plus_lua");
   assert.equal(dryRunOptions.retrievalFetchImpl, null);
   assert.equal(JSON.parse(output).realProviderTransportCalls, 0);
   assert.equal(output.includes("local-engine-token"), false);
 });
 
-test("CLI uses bundled precomputed Lua without requiring a live local engine", async () => {
+test("CLI uses bundled precomputed Lua without requiring a live local engine only for +lua", async () => {
   const cases = {
     schemaVersion: 1,
     cases: [{
@@ -251,7 +238,10 @@ test("CLI uses bundled precomputed Lua without requiring a live local engine", a
   });
   let factoryOptions = null;
   let dryRunOptions = null;
-  await runAdminEvidenceDryRunCli(["--compact"], {
+  await runAdminEvidenceDryRunCli([
+    "--compact",
+    "--evidence-variant", "card_text_plus_lua",
+  ], {
     readCases: async () => cases,
     createLegacyLuaFactory(options) {
       factoryOptions = options;
@@ -268,6 +258,31 @@ test("CLI uses bundled precomputed Lua without requiring a live local engine", a
   assert.equal(dryRunOptions.legacyLuaSemanticPacketFactory, staticFactory);
   assert.equal(dryRunOptions.legacyLuaMode, "PRECOMPUTED_STATIC");
   assert.equal(dryRunOptions.enginePasscodeHydrationEnabled, false);
+  assert.equal(dryRunOptions.evidenceVariant, "card_text_plus_lua");
+});
+
+test("CLI leaves the Lua factory disabled for the default pure-LLM dry run", async () => {
+  let factoryCalls = 0;
+  let dryRunOptions = null;
+  await runAdminEvidenceDryRunCli(["--compact"], {
+    readCases: async () => ({
+      schemaVersion: 1,
+      cases: [{ id: "pure-llm", question: "匿名问题", candidateCards: ["匿名卡"] }],
+    }),
+    createLegacyLuaFactory() {
+      factoryCalls += 1;
+      return async () => createLegacyLuaUnknownPacket({ code: "UNEXPECTED" });
+    },
+    async runDryRun(options) {
+      dryRunOptions = options;
+      return { mode: "LOCAL_ONLY_ZERO_COST" };
+    },
+    stdout: { write() {} },
+  });
+  assert.equal(factoryCalls, 0);
+  assert.equal(dryRunOptions.legacyLuaSemanticPacketFactory, null);
+  assert.equal(dryRunOptions.legacyLuaMode, "DISABLED");
+  assert.equal(dryRunOptions.evidenceVariant, "full");
 });
 
 test("CLI accepts repeated raw cases fixtures and a bundle output", async () => {
@@ -510,6 +525,7 @@ test("an injected local Lua packet remains UNKNOWN and cannot enable paid transp
       message: "local engine test packet",
     }),
     enginePasscodeHydrationEnabled: true,
+    evidenceVariant: "full_plus_lua",
   });
   assert.equal(result.legacyLuaMode, "INJECTED_LOCAL_ENGINE");
   assert.equal(result.enginePasscodeHydrationEnabled, true);
@@ -519,7 +535,7 @@ test("an injected local Lua packet remains UNKNOWN and cannot enable paid transp
   assert.equal(result.reports[0].transport.realProviderCalls, 0);
 });
 
-test("passcode hydration is absent by default and enabled only for explicit local-engine mode", async () => {
+test("public evidence retrieval is independent of local-engine passcode hydration", async () => {
   const fixture = await readAdminEvidenceDryRunCases(casesUrl);
   const oneCase = {
     schemaVersion: fixture.schemaVersion,
@@ -539,6 +555,9 @@ test("passcode hydration is absent by default and enabled only for explicit loca
   const defaultResult = await run(false);
   const localEngineResult = await run(true);
 
+  // The dry-run harness may carry the local-engine setting for the isolated
+  // Lua experiment, but the production retriever no longer reads it when
+  // choosing or enriching public card identities.
   assert.deepEqual(observed, [null, "http://127.0.0.1"]);
   assert.equal(defaultResult.enginePasscodeHydrationEnabled, false);
   assert.equal(localEngineResult.enginePasscodeHydrationEnabled, true);

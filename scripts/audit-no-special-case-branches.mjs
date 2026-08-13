@@ -136,13 +136,32 @@ for (const file of productionFiles) {
     if (/needs_more_info_(?:upgraded|downgraded)|low_confidence_upgraded/u.test(source)) {
       failures.push(`${displayPath}: evidence-presence-strengthens-model-authority`);
     }
-    const defaultDraftChecks = [
-      /createDefaultFormalScenarioDraftInvoker/u,
-      /createDefaultFormalScenarioDraftInvoker\s*\(\s*\{/u,
-      /scenarioDraftInvoker:\s*effectiveFormalScenarioDraftInvoker/u,
+    const forbiddenPublicRulingComponents = [
+      "callOfficialQaApplicabilityModel",
+      "requestOcgEngineSimulation",
+      "runFormalEngineShadow",
+      "createDefaultFormalScenarioDraftInvoker",
+      "analyzeEffectStateTransition",
+      "compileRuleScenario",
+      "buildSummonLegalityContext",
+      "buildEffectApplicabilityContext",
+      "legacyLuaSemanticPacketFactory",
     ];
-    if (defaultDraftChecks.some((pattern) => !pattern.test(source))) {
-      failures.push(`${displayPath}: default-formal-draft-invoker-missing`);
+    for (const symbol of forbiddenPublicRulingComponents) {
+      const importOrCall = new RegExp(`(?:import[\\s\\S]{0,240}\\b${symbol}\\b|\\b${symbol}\\s*\\()`, "u");
+      if (importOrCall.test(source)) {
+        failures.push(`${displayPath}: pure-llm-public-path-imports-ruling-component (${symbol})`);
+      }
+    }
+    for (const required of [
+      "retrieveRagEvidence",
+      "buildRagRulingPromptBundle",
+      "runValidatedPublicRagFinal",
+      'recoveryPrompt: ""',
+    ]) {
+      if (!source.includes(required)) {
+        failures.push(`${displayPath}: pure-llm-public-path-contract-missing (${required})`);
+      }
     }
   }
   if (displayPath === "backend/formalEngineShadow.mjs") {

@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       confirm_paid_run:
-        description: Confirm exactly four paid Sol low calls
+        description: Confirm four Sol low generations plus four independent Sol high judgments
         required: true
         type: boolean
         default: false
@@ -48,6 +48,7 @@ jobs:
           node scripts/admin-evidence-snapshot-dry-run.mjs \
             --cases tests/fixtures/lua-return-to-hand-ablation-cases.json \
             --allow-community-card-network \
+            --evidence-variant full_plus_lua \
             --bundle-output artifacts/lua-ablation-source-bundle.json \
             --compact > artifacts/lua-ablation-evidence-preflight.json
 
@@ -80,7 +81,7 @@ jobs:
           }
           NODE
 
-      - name: Run exactly four Sol low final-ruling calls sequentially
+      - name: Generate and checkpoint exactly four Sol low candidates sequentially
         shell: bash
         env:
           RELAY_API_KEY: ${{ secrets.RELAY_API_KEY }}
@@ -109,29 +110,53 @@ jobs:
             --evidence-variant card_text_plus_lua \
             --output artifacts/lua-ablation-card-text-plus-lua-checkpoint.json
 
-      - name: Run non-authoritative offline assertions after paid calls
+      - name: Seal all candidates before opening private reference answers
         shell: bash
         run: |
           set -euo pipefail
           for variant in card-text-only card-text-plus-lua
           do
-            node scripts/score-admin-model-experiment.mjs \
-              --report "artifacts/lua-ablation-${variant}-checkpoint.json" \
-              --assertions tests/fixtures/lua-return-to-hand-ablation-goldens.json \
-              --output "artifacts/lua-ablation-${variant}-scored.json"
+            test -s "artifacts/lua-ablation-${variant}-checkpoint.json"
           done
+          node --input-type=module <<'NODE'
+          import { readFile } from "node:fs/promises";
+          for (const variant of ["card-text-only", "card-text-plus-lua"]) {
+            const checkpoint = await readFile(`artifacts/lua-ablation-${variant}-checkpoint.json`, "utf8");
+            for (const canary of [
+              "LUA_ABLATION_GOLD_ONLY_CANARY_A",
+              "LUA_ABLATION_GOLD_ONLY_CANARY_B",
+            ]) {
+              if (checkpoint.includes(canary)) throw new Error(`golden leaked into candidate checkpoint: ${variant}`);
+            }
+          }
+          NODE
 
-      - name: Upload source, preflight, and results
+      - name: Judge the sealed candidates independently with Sol high
+        shell: bash
+        env:
+          RELAY_API_KEY: ${{ secrets.RELAY_API_KEY }}
+          RELAY_BASE_URL: https://api.986310.xyz/v1
+        run: |
+          set -euo pipefail
+          test -n "$RELAY_API_KEY" || {
+            echo "RELAY_API_KEY secret is not configured" >&2
+            exit 1
+          }
+          node scripts/judge-lua-ablation.mjs \
+            --cases tests/fixtures/lua-return-to-hand-ablation-cases.json \
+            --bundle artifacts/lua-ablation-source-bundle.json \
+            --checkpoint card_text_only=artifacts/lua-ablation-card-text-only-checkpoint.json \
+            --checkpoint card_text_plus_lua=artifacts/lua-ablation-card-text-plus-lua-checkpoint.json \
+            --references tests/fixtures/lua-return-to-hand-ablation-goldens.json \
+            --private-output artifacts/lua-ablation-private-judgments.json \
+            --public-output artifacts/lua-ablation-public-summary.json \
+            --judge-timeout-ms 300000
+
+      - name: Upload only the anonymous public aggregate
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: direct-relay-sol-true-lua-ablation-${{ github.run_id }}
-          path: |
-            artifacts/lua-ablation-source-bundle.json
-            artifacts/lua-ablation-evidence-preflight.json
-            artifacts/lua-ablation-card-text-only-checkpoint.json
-            artifacts/lua-ablation-card-text-plus-lua-checkpoint.json
-            artifacts/lua-ablation-card-text-only-scored.json
-            artifacts/lua-ablation-card-text-plus-lua-scored.json
+          path: artifacts/lua-ablation-public-summary.json
           if-no-files-found: warn
           retention-days: 14

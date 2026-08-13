@@ -6,7 +6,8 @@
 
 冻结快照保留完整 Evidence Archive；最终模型接收的是从 Archive 确定性生成的
 Evidence Packet schema v2，默认最多 28 KiB / 16 项。Legacy Lua 的完整审计包也
-保存在快照中，模型只接收最多 8 KiB、正式 `verdict` 始终为 `UNKNOWN` 的投影。
+保存在快照中，但默认不进入最终输入；只有管理员选择 `*_plus_lua` 实验变体且完整
+Lua 包可安全投影时，才追加最多 8 KiB 的中性核对提示。提示不包含裁定或候选结论。
 整个最终裁定输入另有 48 KiB UTF-8 硬上限。若复用的历史快照带有旧版大 Packet，
 后端会校验并保留原快照，再从完整 Archive 按当前策略重投影，不会修改历史快照。
 
@@ -56,11 +57,13 @@ CLI 可以用重复的 `--config provider:model:reasoningMode:reasoningEffort` �
 配置可以追加第五段通用 Evidence 变体：
 `provider:model:reasoningMode:reasoningEffort:evidenceVariant`。严格支持：
 
-- `full`：完整决策资料包及 Lua 语义旁路；
+- `full`：完整决策资料包，不含 Lua；
+- `full_plus_lua`：与 `full` 完全相同的资料包，再追加独立 Lua 核对提示；
 - `card_text_only`：只保留题面、提供事实和完整准确卡文；
-- `without_lua`：保留完整检索证据，但移除 Lua 语义旁路。
+- `card_text_plus_lua`：与 `card_text_only` 完全相同的资料包，再追加独立 Lua 核对提示；
+- `without_lua`：旧实验配置的兼容名称；与当前 `full` 一样不含 Lua。
 
-同一模型可以分别配置三种变体；它们 fork 同一冻结 Snapshot，并在报告中记录变体和
+同一模型可以分别配置五种变体；它们 fork 同一冻结 Snapshot，并在报告中记录变体和
 最终模型输入 SHA-256。标准答案只在调用完成后评分，不进入任何变体的模型输入。
 
 创建新源运行时使用去重后配置列表的第一项；未传 `--config` 时只运行

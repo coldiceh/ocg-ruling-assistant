@@ -10,7 +10,9 @@ import {
   assertAdminEvidenceSnapshot,
 } from "../backend/adminEvidenceSnapshot.mjs";
 import {
+  adminEvidenceVariantIncludesLegacyLua,
   hashAdminFinalInput,
+  normalizeAdminEvidenceVariant,
 } from "../backend/adminEvidenceVariant.mjs";
 import {
   createConfiguredLegacyLuaSemanticPacketFactory,
@@ -40,6 +42,7 @@ export function parseAdminEvidenceDryRunArguments(argv = []) {
     allowCommunityCardNetwork: false,
     engineUrl: null,
     bundleOutput: null,
+    evidenceVariant: "full",
   };
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
@@ -50,6 +53,9 @@ export function parseAdminEvidenceDryRunArguments(argv = []) {
     else if (argument === "--allow-community-card-network") result.allowCommunityCardNetwork = true;
     else if (argument === "--engine-url") result.engineUrl = requiredNext(argv, ++index, argument);
     else if (argument === "--bundle-output") result.bundleOutput = requiredNext(argv, ++index, argument);
+    else if (argument === "--evidence-variant") {
+      result.evidenceVariant = normalizeAdminEvidenceVariant(requiredNext(argv, ++index, argument));
+    }
     else if (argument === "--help" || argument === "-h") result.help = true;
     else throw new TypeError(`unsupported argument: ${argument}`);
   }
@@ -94,6 +100,9 @@ export async function runAdminEvidenceDryRunCli(
       "                    OCG_ENGINE_TOKEN is read only for this local engine",
       "  --bundle-output <path>",
       "                    Write a validated frozen-source bundle for the local Relay runner",
+      "  --evidence-variant <name>",
+      "                    Select the frozen admin evidence projection; Lua is collected only",
+      "                    for full_plus_lua or card_text_plus_lua (default: full)",
       "  -h, --help        Show this help",
       "",
     ].join("\n"));
@@ -122,11 +131,17 @@ export async function runAdminEvidenceDryRunCli(
   const localEngineUrl = options.engineUrl
     ? normalizeLocalDryRunEngineUrl(options.engineUrl)
     : null;
-  const legacyLuaSemanticPacketFactory = createLegacyLuaFactory({
-    engineUrl: localEngineUrl,
-    engineToken,
-    fetchImpl,
-  });
+  const luaEnabled = adminEvidenceVariantIncludesLegacyLua(options.evidenceVariant);
+  if (localEngineUrl && !luaEnabled) {
+    throw new TypeError("--engine-url requires a +lua evidence variant");
+  }
+  const legacyLuaSemanticPacketFactory = luaEnabled
+    ? createLegacyLuaFactory({
+        engineUrl: localEngineUrl,
+        engineToken,
+        fetchImpl,
+      })
+    : null;
   const artifacts = [];
   const report = await runDryRun({
     cases: selected,
@@ -135,10 +150,13 @@ export async function runAdminEvidenceDryRunCli(
       ? createAllowlistedCommunityCardFetch({ fetchImpl })
       : null,
     legacyLuaSemanticPacketFactory,
-    legacyLuaMode: localEngineUrl
-      ? "PRECOMPUTED_STATIC_WITH_LOCAL_FALLBACK"
-      : "PRECOMPUTED_STATIC",
+    legacyLuaMode: luaEnabled
+      ? (localEngineUrl
+          ? "PRECOMPUTED_STATIC_WITH_LOCAL_FALLBACK"
+          : "PRECOMPUTED_STATIC")
+      : "DISABLED",
     enginePasscodeHydrationEnabled: localEngineUrl !== null,
+    evidenceVariant: options.evidenceVariant,
     async onCaseArtifacts(value) {
       artifacts.push(value);
     },

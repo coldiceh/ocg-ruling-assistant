@@ -459,7 +459,7 @@ test("ambiguous and low-confidence card identities cannot authorize a semantic v
   assert.equal(lowConfidence.identityBinding.bindings[0].proofKind, "untrusted");
 });
 
-test("the public pipeline calls the final model when a semantic executor covered only the first question", async () => {
+test("the public pipeline sends the complete question and raw evidence to exactly one final model", async () => {
   const cards = [{
     id: "trap-1",
     name: "测试均衡陷阱",
@@ -474,6 +474,7 @@ test("the public pipeline calls the final model when a semantic executor covered
     effectText: "①：此卡通常召唤的情况下，对方发动手牌・墓地・除外状态的卡的效果时可以发动。那个效果无效并破坏。",
   }];
   let finalModelCalls = 0;
+  let finalPrompt = "";
   const answer = await answerRagRulingQuestion({
     question: "对方场上存在通常召唤的「测试区域监察者」。自己场上没有卡，自己在战斗阶段结束时从手牌发动「测试均衡陷阱」。对方可以直接连锁发动「测试区域监察者」的①效果吗？另外，本回合还可以通常召唤吗？",
     cards,
@@ -482,8 +483,9 @@ test("the public pipeline calls the final model when a semantic executor covered
     cardModelInvoker: async () => JSON.stringify({ cardNames: [] }),
     ruleModelInvoker: async () => JSON.stringify({ ruleQueries: [] }),
     rulebookModelInvoker: async () => JSON.stringify({ operationChecks: [], constraintReviews: [] }),
-    modelInvoker: async () => {
+    modelInvoker: async ({ prompt }) => {
       finalModelCalls += 1;
+      finalPrompt = prompt;
       return publicFinalPayload(
         "不能直接连锁发动「测试区域监察者」的①效果；题面没有施加通常召唤限制，本回合仍可以通常召唤。",
         cards.map((card) => card.name),
@@ -498,14 +500,25 @@ test("the public pipeline calls the final model when a semantic executor covered
     dryRun: false,
   });
   assert.equal(finalModelCalls, 1);
+  assert.equal(
+    answer.shortAnswer,
+    "不能直接连锁发动「测试区域监察者」的①效果；题面没有施加通常召唤限制，本回合仍可以通常召唤。",
+  );
   assert.equal(answer.debug.deterministicDecision, null);
   assert.notEqual(answer.debug.modelUsed, "trusted-semantic-state-executor");
-  assert.equal(answer.debug.semanticStateTransition?.authoritative, false);
-  assert.ok(answer.debug.semanticStateTransition);
+  assert.equal(answer.debug.semanticStateTransition, null);
   assert.equal(answer.debug.semanticStateTransitionDiagnostic, null);
+  assert.match(finalPrompt, /另外，本回合还可以通常召唤吗/u);
+  assert.match(finalPrompt, /对方发动手牌・墓地・除外状态的卡的效果时/u);
+  assert.match(finalPrompt, /card-text-(trap-1|responder-1)/u);
+  assert.match(finalPrompt, /"evidence"/u);
+  assert.doesNotMatch(
+    finalPrompt,
+    /semanticStateTransition|semantic_state_transition|canDecideFinalRuling|compiled_[a-z_]+|trusted_local_semantic_execution|final_model_skipped/u,
+  );
 });
 
-test("a locally complete executor still cannot skip the final model", async () => {
+test("a scene formerly handled locally is still signed only by the final model", async () => {
   const cards = [{
     id: "trap-coverage",
     name: "覆盖均衡陷阱",
@@ -520,6 +533,7 @@ test("a locally complete executor still cannot skip the final model", async () =
     effectText: "①：此卡通常召唤的情况下，对方发动手牌・墓地・除外状态的卡的效果时可以发动。那个效果无效并破坏。",
   }];
   let finalModelCalls = 0;
+  let finalPrompt = "";
   const answer = await answerRagRulingQuestion({
     question: "对方场上存在通常召唤的「覆盖区域监察者」。自己场上没有卡，自己在战斗阶段结束时从手牌发动「覆盖均衡陷阱」。对方可以直接连锁发动「覆盖区域监察者」的①效果吗？",
     cards,
@@ -529,8 +543,9 @@ test("a locally complete executor still cannot skip the final model", async () =
     dryRun: false,
     cardModelInvoker: async () => JSON.stringify({ cardNames: [] }),
     ruleModelInvoker: async () => JSON.stringify({ ruleQueries: [] }),
-    modelInvoker: async () => {
+    modelInvoker: async ({ prompt }) => {
       finalModelCalls += 1;
+      finalPrompt = prompt;
       return publicFinalPayload(
         "不能直接连锁发动「覆盖区域监察者」的①效果。",
         cards.map((card) => card.name),
@@ -539,74 +554,15 @@ test("a locally complete executor still cannot skip the final model", async () =
   });
   assert.equal(finalModelCalls, 1);
   assert.equal(answer.debug.deterministicDecision, null);
-  assert.equal(answer.debug.semanticStateTransition?.authoritative, false);
-  assert.equal(answer.debug.semanticStateTransition?.complete, true);
-  assert.match(answer.shortAnswer, /^不能直接连锁发动/u);
-});
-
-test("a complete production-data question still requires a final-model signature", async () => {
-  let finalModelCalls = 0;
-  const answer = await answerRagRulingQuestion({
-    question: "对方场上通常召唤的「天下独步的大义贼（天下独歩の大義賊）」存在。自己场上没有卡，在战斗阶段结束时从手牌发动「颉颃胜负」。对方可以直接连锁发动「天下独步的大义贼（天下独歩の大義賊）」的①效果吗？",
-    env: { MODEL_PROVIDER: "mock", RAG_MODEL_PROVIDER: "mock", RAG_DRY_RUN: "0", OCG_ENGINE_ENABLED: "0" },
-    dryRun: false,
-    cardModelInvoker: async () => JSON.stringify({ cardNames: [] }),
-    ruleModelInvoker: async () => JSON.stringify({ ruleQueries: [] }),
-    modelInvoker: async () => {
-      finalModelCalls += 1;
-      return publicFinalPayload(
-        "不能直接连锁发动「天下独步的大义贼」的①效果。",
-        ["天下独步的大义贼", "颉颃胜负"],
-      );
-    },
-  });
-  assert.equal(finalModelCalls, 1);
-  assert.equal(answer.debug.deterministicDecision, null);
-  assert.equal(answer.debug.semanticStateTransition?.authoritative, false);
-  assert.ok(answer.debug.semanticStateTransition);
+  assert.equal(answer.debug.semanticStateTransition, null);
   assert.equal(answer.debug.semanticStateTransitionDiagnostic, null);
-  assert.ok(answer.debug.retrievalCounts.officialQaDirectCandidates > 0);
+  assert.equal(answer.shortAnswer, "不能直接连锁发动「覆盖区域监察者」的①效果。");
+  assert.match(finalPrompt, /战斗阶段结束时从手牌发动「覆盖均衡陷阱」/u);
+  assert.match(finalPrompt, /那个效果无效并破坏/u);
+  assert.match(finalPrompt, /card-text-(trap-coverage|responder-coverage)/u);
+  assert.match(finalPrompt, /"evidence"/u);
+  assert.doesNotMatch(
+    finalPrompt,
+    /semanticStateTransition|semantic_state_transition|canDecideFinalRuling|compiled_[a-z_]+|trusted_local_semantic_execution|final_model_skipped/u,
+  );
 });
-
-for (const fixture of [{
-  id: "albaz",
-  question: "我方额外卡组只有「冰剑龙 幻冰龙」，手牌只有「教导的圣女 艾克莉西亚」和「阿不思的落胤」。对方场上只有表侧表示的「吞食圣痕之龙」，双方墓地都没有卡。我方召唤「阿不思的落胤」时，可以将「教导的圣女 艾克莉西亚」作为COST丢弃来发动①效果吗？如果可以，效果如何处理？",
-  shortAnswer: "可以发动；支付 COST 后「吞食圣痕之龙」不受这次效果影响，效果处理时不进行融合召唤。",
-}, {
-  id: "historical-albaz",
-  question: "我方的额外卡组有「冰剑龙 幻冰龙」，手牌只有「教导的圣女 艾克莉西娅」和「阿不思的落胤」各1张。\n\n对方场上存在的卡只有表侧表示的「吞食圣痕之龙」1只，双方墓地没有卡。\n\n我方召唤「阿不思的落胤」时，可以将「教导的圣女 艾克莉西娅」作为Cost丢弃送去墓地，来发动「阿不思的落胤」的『①』效果吗",
-  shortAnswer: "可以发动；支付 Cost 后「吞食圣痕之龙」不受这次效果影响，效果处理时不进行融合召唤。",
-}, {
-  id: "silver",
-  question: "「月光银狗」的①效果适用后，以该效果特殊召唤的怪兽控制权转移给对方，之后又回到自己场上的场合，『自己不是「月光」怪兽不能从额外卡组特殊召唤』如何适用？",
-  shortAnswer: "控制权变更后限制立即不再适用，之后控制权归还也不会恢复适用。",
-}, {
-  id: "printed-reference",
-  question: "自己场上有「霸王眷龙 凶饿猛毒」与「光之黄金柜」。该「霸王眷龙 凶饿猛毒」复制了「破坏龙 钢多拉G」的原本卡名和效果。此时它是否成为效果文本框内记载有「光之黄金柜」卡名的怪兽，并可据此发动要求该记载的卡？",
-  shortAnswer: "不能仅凭复制满足卡面记载条件，复制不会改写卡面原本印刷文本，因此不能据此发动。",
-}, {
-  id: "rewrite-attribution",
-  question: "我方场上表侧表示存在「尤贝尔之精灵」和「纳祭魔鬼莲」，对方场上表侧表示存在「尤贝尔」。对方结束阶段发动「尤贝尔」的③效果，我方连锁发动「纳祭魔鬼莲」②效果，把那个效果改为破坏场上1只「尤贝尔」怪兽；对方选择破坏自己的「尤贝尔」。这只「尤贝尔」是否算被自身③效果破坏，之后能否发动④效果？",
-  shortAnswer: "不算被自身③效果原本的处理破坏，之后可以发动④效果。",
-}]) {
-  test(`existing executor remains diagnostic-only while the final model signs: ${fixture.id}`, async () => {
-    let finalModelCalls = 0;
-    const answer = await answerRagRulingQuestion({
-      question: fixture.question,
-      env: { MODEL_PROVIDER: "mock", RAG_MODEL_PROVIDER: "mock", RAG_DRY_RUN: "0", OCG_ENGINE_ENABLED: "0" },
-      dryRun: false,
-      cardModelInvoker: async () => JSON.stringify({ cardNames: [] }),
-      ruleModelInvoker: async () => JSON.stringify({ ruleQueries: [] }),
-      modelInvoker: async () => {
-        finalModelCalls += 1;
-        return publicFinalPayload(fixture.shortAnswer);
-      },
-    });
-    assert.equal(finalModelCalls, 1, fixture.id);
-    assert.equal(answer.debug.deterministicDecision, null, fixture.id);
-    assert.equal(answer.debug.semanticStateTransition?.authoritative, false, fixture.id);
-    assert.ok(answer.debug.semanticStateTransition, fixture.id);
-    assert.equal(answer.debug.semanticStateTransitionDiagnostic, null, fixture.id);
-    assert.equal(answer.shortAnswer, fixture.shortAnswer, fixture.id);
-  });
-}

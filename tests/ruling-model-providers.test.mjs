@@ -7,7 +7,6 @@ import {
   createEvidencePreparationProviderRegistry,
   extractOpenAIResponseOutputText,
 } from "../backend/rulingModelProviders.mjs";
-import { MODEL_RULING_COUNTER_CHECK_TYPES } from "../backend/modelRulingSchema.mjs";
 
 test("OpenAI create uses background, store=false, strict schema and allowlisted selection", async () => {
   const calls = [];
@@ -1236,7 +1235,7 @@ function makeStructuredResult() {
       relation: "DIRECTLY_ENTAILS",
       supportedClaimIds: ["c1"],
     }],
-    counterChecks: MODEL_RULING_COUNTER_CHECK_TYPES.map((type) => ({ type, passed: true, note: "" })),
+    counterChecks: [],
     unresolved: [],
     confidence: { level: "HIGH", reasons: ["直接官方资料"] },
   };

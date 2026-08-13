@@ -699,7 +699,7 @@ const finalReasonerEvidenceSpecs = {
   },
 };
 
-test("five reported state-transition cases reach the validated final model with complete card and rule evidence", async () => {
+test("five reported cases reach exactly one final model with complete raw card and rule evidence", async () => {
   assert.equal(fiveCaseCorpus.cases.length, 5);
   const data = await loadRagData();
   const cardsById = new Map(data.cards.map((card) => [String(card.id || card.cardId), card]));
@@ -723,6 +723,10 @@ test("five reported state-transition cases reach the validated final model with 
     ];
     let finalModelCalls = 0;
     const marker = `FINAL_MODEL_GENERATED:${corpusCase.id}`;
+    const modelShortAnswer = `【${marker}】${[
+      corpusCase.expectedAnswer,
+      ...(corpusCase.expectedAnswerKeyPoints || []),
+    ].filter(Boolean).join("；")} `;
     const answer = await answerRagRulingQuestion({
       question: corpusCase.question,
       cards,
@@ -751,10 +755,7 @@ test("five reported state-transition cases reach the validated final model with 
         for (const snippet of spec.promptSnippets) assert.ok(prompt.includes(snippet), `${corpusCase.id} prompt missing: ${snippet}`);
         return JSON.stringify({
           answerLevel: "rule_analysis",
-          shortAnswer: `【${marker}】${[
-            corpusCase.expectedAnswer,
-            ...(corpusCase.expectedAnswerKeyPoints || []),
-          ].filter(Boolean).join("；")} `,
+          shortAnswer: modelShortAnswer,
           reasoning: corpusCase.expectedAnswerKeyPoints || [],
           usedCards: cards.map((card) => card.name),
           usedEvidence: spec.evidenceIds.map((id) => ({ id, type: "faq", title: id })),
@@ -765,28 +766,30 @@ test("five reported state-transition cases reach the validated final model with 
       },
     });
 
-    assert.ok(
-      finalModelCalls >= 1 && finalModelCalls <= 2,
-      `${corpusCase.id} used ${finalModelCalls} final-model generations; expected the initial generation and at most one validator retry`,
+    assert.equal(
+      finalModelCalls,
+      1,
+      `${corpusCase.id} must use exactly one final-model generation`,
     );
-    const finalMarker = new RegExp(escapeRegExp(marker), "u");
-    if (!finalMarker.test(answer.shortAnswer)) {
-      const riskFlags = new Set(answer.riskFlags || []);
-      assert.ok(
-        riskFlags.has("trusted_semantic_fallback_applied"),
-        `${corpusCase.id} discarded the generated answer without an auditable trusted-semantic fallback`,
-      );
-      assert.ok(
-        riskFlags.has("public_final_safe_fallback_applied"),
-        `${corpusCase.id} discarded the generated answer without the fail-closed public validator path`,
-      );
-      for (const fragment of corpusCase.mustInclude || []) {
-        assert.ok(answer.shortAnswer.includes(fragment), `${corpusCase.id} safe fallback missing: ${fragment}`);
-      }
-    }
+    assert.equal(answer.shortAnswer, modelShortAnswer.trim(), `${corpusCase.id} must preserve the final model answer`);
+    assert.equal(answer.debug.publicFinalValidation?.callCount, 1, corpusCase.id);
+    assert.equal(answer.debug.publicFinalValidation?.repairAttempted, false, corpusCase.id);
+    assert.equal(answer.debug.publicFinalValidation?.outcome, "primary_valid", corpusCase.id);
+    assert.equal(answer.debug.semanticStateTransition, null, corpusCase.id);
+    assert.equal(answer.debug.semanticStateTransitionDiagnostic, null, corpusCase.id);
+    assert.equal(answer.debug.deterministicDecision, null, corpusCase.id);
+    assert.equal(
+      (answer.debug.generationAttempts || []).filter((attempt) => attempt.publicAttemptKind === "repair").length,
+      0,
+      corpusCase.id,
+    );
+    assert.equal(
+      (answer.riskFlags || []).some((flag) => /fallback|repair/u.test(flag)),
+      false,
+      corpusCase.id,
+    );
     const resolvedIds = new Set(answer.resolvedCards.map((card) => String(card.id)));
     assert.ok(corpusCase.expectedCardIds.every((id) => resolvedIds.has(String(id))));
-    assert.equal(answer.debug.deterministicDecision, null);
   }
 });
 

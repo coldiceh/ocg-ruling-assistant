@@ -61,28 +61,6 @@ function makeDraftBindingCard({
   };
 }
 
-function asModelScenarioDraft(materializedDraft) {
-  const candidate = structuredClone(materializedDraft);
-  const sourceText = String(materializedDraft.question?.text || "");
-  for (const collectionName of ["cardInstances", "stateFacts", "eventHistory", "intents", "queries", "assumptions"]) {
-    for (const item of candidate[collectionName] || []) {
-      const { start, text } = item.sourceSpan;
-      item.sourceQuote = text;
-      const starts = [];
-      let offset = 0;
-      while (offset <= sourceText.length - text.length) {
-        const index = sourceText.indexOf(text, offset);
-        if (index < 0) break;
-        starts.push(index);
-        offset = index + 1;
-      }
-      if (starts.length > 1) item.sourceOccurrence = starts.indexOf(start);
-      delete item.sourceSpan;
-    }
-  }
-  return candidate;
-}
-
 function formalEndpointMock(verdicts, events) {
   let capabilities;
   return async (url, options = {}) => {
@@ -104,119 +82,73 @@ function formalEndpointMock(verdicts, events) {
   };
 }
 
-async function answerWithFormal(verdicts, {
-  draft = input.draft,
-  modelShortAnswer = "可以将「混沌の黒魔術師」除外并特殊召唤「滅びの黒魔術師」；之后可以发动「深淵の相剣龍」的①效果。",
-  modelReasoning = ["最终模型根据冻结的题面、卡文和检索资料独立签发两问结论。"],
-  qaRecords = [],
-  formalFetchImpl,
-} = {}) {
-  const events = [];
-  let finalPrompt = "";
+test("public answer path ignores formal configuration and invokers", async () => {
+  let finalModelCalls = 0;
+  let formalTransportCalls = 0;
+  let draftInvokerCalls = 0;
+  let draftVerifierCalls = 0;
+  let proofVerifierCalls = 0;
+
   const answer = await answerRagRulingQuestion({
     question: input.question,
     cards,
     records: [],
-    qaRecords,
+    qaRecords: [],
     env: {
       RAG_FORMAL_ENGINE_MODE: "formal-shadow",
       ...mockDraftVerifierEnv,
-      RAG_AUTO_ENGINE_SIMULATION: "false",
+      RAG_AUTO_ENGINE_SIMULATION: "true",
+      RAG_CARD_EXTRACTOR_ENABLED: "false",
+      RAG_RULE_QUERY_EXTRACTOR_ENABLED: "false",
+      RAG_RULEBOOK_GROUNDING_ENABLED: "false",
       OCG_ENGINE_URL: "http://formal.test",
     },
-    formalScenarioDraft: draft,
-    formalFetchImpl: formalFetchImpl || formalEndpointMock(verdicts, events),
-    formalProofVerifier: mockPublicProofVerifier,
-    formalScenarioDraftVerifier: mockScenarioDraftCompletenessVerifier,
     fetchImpl: async () => new Response(JSON.stringify({ ok: false }), { status: 404 }),
-    modelInvoker: async ({ prompt }) => {
-      events.push("final-model");
-      finalPrompt = prompt;
+    formalScenarioDraft: input.draft,
+    formalFetchImpl: async () => {
+      formalTransportCalls += 1;
+      throw new Error("public path must not call formal transport");
+    },
+    formalScenarioDraftInvoker: async () => {
+      draftInvokerCalls += 1;
+      return { scenarioDraft: input.draft };
+    },
+    formalScenarioDraftVerifier: () => {
+      draftVerifierCalls += 1;
+      return { valid: true };
+    },
+    formalProofVerifier: () => {
+      proofVerifierCalls += 1;
+      return { verified: true };
+    },
+    modelInvoker: async () => {
+      finalModelCalls += 1;
       return JSON.stringify({
         answerLevel: "rule_analysis",
-        shortAnswer: modelShortAnswer,
-        reasoning: modelReasoning,
+        shortAnswer: "最终模型根据检索证据独立回答。",
+        reasoning: ["公开链路只使用原始检索证据和一次最终模型调用。"],
         usedCards: Object.values(names),
         usedEvidence: [],
         missingInfo: [],
         riskFlags: [],
-        confidenceSelfEstimate: "high",
+        confidenceSelfEstimate: "medium",
       });
     },
   });
-  return { answer, events, finalPrompt };
-}
 
-function exactOfficialQa(answer) {
-  return {
-    id: "ygoresources-qa-formal-gate",
-    recordType: "qa",
-    question: input.question,
-    answer,
-    text: `${input.question}\n${answer}`,
-    cardIds: cards.map((card) => card.id),
-    questionCardIds: cards.map((card) => card.id),
-    sourceType: "official_qa",
-    evidenceStatus: "current",
-    sourceUrl: "https://example.test/official/formal-gate",
-  };
-}
-
-test("verified formal claims remain diagnostics while the final model signs both answers", async () => {
-  const { answer, events } = await answerWithFormal({
-    "q1-summon-procedure": "TRUE",
-    "q2-hand-trigger": "TRUE",
+  assert.equal(finalModelCalls, 1);
+  assert.equal(formalTransportCalls, 0);
+  assert.equal(draftInvokerCalls, 0);
+  assert.equal(draftVerifierCalls, 0);
+  assert.equal(proofVerifierCalls, 0);
+  assert.deepEqual(answer.formalEngine, {
+    mode: "off",
+    enabled: false,
+    requested: false,
+    status: "disabled",
   });
-  assert.deepEqual(events, ["formal-capabilities", "formal-analysis", "final-model"], JSON.stringify(answer.formalEngine));
-  assert.equal(answer.shortAnswer, "可以将「混沌の黒魔術師」除外并特殊召唤「滅びの黒魔術師」；之后可以发动「深淵の相剣龍」的①效果。");
-  assert.equal(answer.debug.modelUsed, "mock-rag");
-  assert.equal(answer.debug.deterministicDecision, null);
-  assert.deepEqual(answer.formalEngine.queryResults.map((item) => item.verdict), ["TRUE", "TRUE"]);
-  assert.equal(answer.formalEngine.queryResults.every((item) => item.certificateVerified), true);
-  assert.deepEqual(answer.formalEngine.draftVerification, {
-    valid: true,
-    code: null,
-    verifierId: "mock-scenario-draft-completeness-verifier",
-    verifierVersion: "mock-scenario-draft-completeness/v1",
-    expectedVerifierId: "mock-scenario-draft-completeness-verifier",
-    expectedVerifierVersion: "mock-scenario-draft-completeness/v1",
-  });
-});
-
-test("formal UNKNOWN remains diagnostic and does not rewrite the final model answer", async () => {
-  const { answer } = await answerWithFormal({
-    "q1-summon-procedure": "TRUE",
-    "q2-hand-trigger": "UNKNOWN",
-  });
-  assert.equal(answer.formalEngine.queryResults[1].verdict, "UNKNOWN");
-  assert.match(answer.shortAnswer, /之后可以发动「深淵の相剣龍」/u);
   assert.deepEqual(answer.formalQueryResults, []);
-  assert.equal(answer.riskFlags.some((item) => item.startsWith("formal_engine_unknown_blocked_model_")), false);
-});
-
-test("formal UNKNOWN cannot block a definite answer signed by the final model", async () => {
-  const { answer } = await answerWithFormal({
-    "q1-summon-procedure": "UNKNOWN",
-    "q2-hand-trigger": "UNKNOWN",
-  });
-  assert.match(answer.shortAnswer, /可以将.*特殊召唤/u);
-  assert.match(answer.shortAnswer, /之后可以发动/u);
-  assert.equal(answer.formalEngine.queryResults.every((item) => item.verdict === "UNKNOWN"), true);
-  assert.deepEqual(answer.formalQueryResults, []);
-  assert.equal(answer.riskFlags.some((item) => item.startsWith("formal_engine_unknown_blocked_model_")), false);
-  assert.equal(answer.confidenceSelfEstimate, "high");
-});
-
-test("UNKNOWN diagnostics do not redact internally consistent final-model reasoning", async () => {
-  const { answer } = await answerWithFormal({
-    "q1-summon-procedure": "UNKNOWN",
-    "q2-hand-trigger": "UNKNOWN",
-  }, {
-    modelShortAnswer: "可以将「混沌の黒魔術師」除外并特殊召唤「滅びの黒魔術師」；之后可以发动「深淵の相剣龍」的①效果。",
-    modelReasoning: ["最终模型判断两项都可以进行。"],
-  });
-  assert.match(answer.reasoning.join("\n"), /最终模型判断两项都可以进行/u);
-  assert.equal(answer.riskFlags.includes("formal_engine_unknown_blocked_model_positive"), false);
+  assert.match(answer.shortAnswer, /最终模型/u);
 });
 
 test("caller-authored formal evidence cannot inject authority or diagnostics", async () => {
@@ -252,67 +184,6 @@ test("caller-authored formal evidence cannot inject authority or diagnostics", a
   assert.equal(answer.formalQueryResults, undefined);
   assert.equal(answer.riskFlags.includes("formal_engine_evidence_rejected_unverified_origin"), true);
   assert.equal(answer.riskFlags.some((item) => item.includes("blocked_model")), false);
-});
-
-test("formal transport errors preserve the final-model answer and expose only code and stage", async () => {
-  const secretMessage = "private endpoint message and internal details";
-  const { answer } = await answerWithFormal({}, {
-    formalFetchImpl: async () => {
-      throw new Error(secretMessage);
-    },
-  });
-
-  assert.match(answer.shortAnswer, /可以将.*特殊召唤/u);
-  assert.equal(answer.reasoning.some((item) => /未签发确定性证明/u.test(item)), false);
-  assert.deepEqual(Object.keys(answer.formalEngine.error).sort(), ["code", "stage"]);
-  assert.doesNotMatch(JSON.stringify({
-    formalEngine: answer.formalEngine,
-    formalQueryResults: answer.formalQueryResults,
-  }), new RegExp(secretMessage, "u"));
-});
-
-test("ABSTRACT_ASSUMPTIONS results remain diagnostic and never become public authority", async () => {
-  const draft = structuredClone(input.draft);
-  draft.mode = "ABSTRACT_ASSUMPTIONS";
-  draft.assumptions = [{
-    assumptionId: "assume-spell-effect-used",
-    type: "ASSUME_STATE_FACT",
-    assumesFactId: "spell-effect-used-this-turn",
-    sourceSpan: structuredClone(draft.stateFacts[0].sourceSpan),
-  }];
-  const { answer } = await answerWithFormal({
-    "q1-summon-procedure": "TRUE",
-    "q2-hand-trigger": "TRUE",
-  }, { draft });
-
-  assert.equal(answer.formalEngine.queryResults.every((item) => item.verdict === "UNKNOWN"), true);
-  assert.deepEqual(answer.formalQueryResults, []);
-  assert.match(answer.shortAnswer, /可以将.*特殊召唤/u);
-  assert.doesNotMatch(answer.shortAnswer, /形式证明已通过校验|未签发确定性证明/u);
-  assert.equal(answer.answerLevel, "rule_analysis");
-  assert.equal(answer.riskFlags.some((item) => item.startsWith("formal_engine_unknown:")), false);
-});
-
-test("formal shadow disabled leaves the public answer path available", async () => {
-  const answer = await answerRagRulingQuestion({
-    question: "「测试卡」可以发动吗？",
-    cards: [{ id: "test", name: "测试卡", aliases: ["测试卡"], effectText: "主要阶段可以发动。" }],
-    records: [],
-    qaRecords: [],
-    env: { RAG_FORMAL_ENGINE_MODE: "off", RAG_AUTO_ENGINE_SIMULATION: "false" },
-    modelInvoker: async () => JSON.stringify({
-      answerLevel: "rule_analysis",
-      shortAnswer: "根据现有卡片文本继续分析。",
-      reasoning: ["读取卡片文本。", "未使用形式内核。"],
-      usedCards: ["测试卡"],
-      usedEvidence: [],
-      missingInfo: [],
-      riskFlags: [],
-      confidenceSelfEstimate: "medium",
-    }),
-  });
-  assert.equal(answer.formalEngine.status, "disabled");
-  assert.match(answer.shortAnswer, /继续分析/u);
 });
 
 test("default draft extractor emits only a source-bound unverified candidate", async () => {
@@ -527,234 +398,131 @@ test("default draft extractor without a server-side key fails closed before invo
   assert.equal(calls, 0);
 });
 
-test("production default draft path probes capabilities before spending a model call and requires completeness verification", async () => {
+test("missing proof verifier fails before capabilities or paid draft extraction", async () => {
+  let capabilityCalls = 0;
+  let draftCalls = 0;
+  const shadow = await runFormalEngineShadow({
+    userQuery: input.question,
+    resolvedCards: input.resolvedCards,
+    env: {
+      RAG_FORMAL_ENGINE_MODE: "formal-shadow",
+      ...mockDraftVerifierEnv,
+      OCG_ENGINE_URL: "http://formal.test",
+    },
+    fetchImpl: async () => {
+      capabilityCalls += 1;
+      throw new Error("proof preflight must run before capabilities");
+    },
+    scenarioDraftInvoker: async () => {
+      draftCalls += 1;
+      return { scenarioDraft: input.draft };
+    },
+    scenarioDraftVerifier: mockScenarioDraftCompletenessVerifier,
+  });
+
+  assert.equal(capabilityCalls, 0);
+  assert.equal(draftCalls, 0);
+  assert.equal(shadow.status, "unknown");
+  assert.equal(shadow.stage, "proof-verification");
+  assert.equal(shadow.error.code, "FORMAL_PROOF_VERIFIER_UNAVAILABLE");
+});
+
+test("unavailable capability endpoint prevents paid scenario-draft extraction", async () => {
+  let capabilityCalls = 0;
+  let draftCalls = 0;
+  const shadow = await runFormalEngineShadow({
+    userQuery: input.question,
+    resolvedCards: input.resolvedCards,
+    env: {
+      RAG_FORMAL_ENGINE_MODE: "formal-shadow",
+      ...mockDraftVerifierEnv,
+      OCG_ENGINE_URL: "http://formal.test",
+    },
+    fetchImpl: async () => {
+      capabilityCalls += 1;
+      return new Response(JSON.stringify({ ok: false }), { status: 404 });
+    },
+    scenarioDraftInvoker: async () => {
+      draftCalls += 1;
+      return { scenarioDraft: input.draft };
+    },
+    scenarioDraftVerifier: mockScenarioDraftCompletenessVerifier,
+    proofVerifier: mockPublicProofVerifier,
+  });
+
+  assert.equal(capabilityCalls, 1);
+  assert.equal(draftCalls, 0);
+  assert.equal(shadow.status, "unknown");
+  assert.equal(shadow.stage, "capabilities");
+  assert.equal(shadow.error.code, "ENGINE_FORMAL_API_UNAVAILABLE");
+  assert.deepEqual(shadow.evidence, []);
+});
+
+test("successful shadow runs capability, draft, draft verification, analysis, and proof verification in order", async () => {
   const events = [];
   let capabilities;
-  const formalFetchImpl = async (url, options = {}) => {
+  const fetchImpl = async (url, options = {}) => {
     const pathname = new URL(String(url)).pathname;
     if (pathname === "/formal/v1/capabilities") {
-      events.push("formal-capabilities");
+      events.push("capability");
       capabilities = makeCapabilities(plannedScenario.requiredCapabilities);
       return new Response(JSON.stringify(capabilities), { status: 200 });
     }
     if (pathname === "/formal/v1/analyze-scenario") {
-      events.push("formal-analysis");
+      events.push("analysis");
       const scenario = JSON.parse(options.body).scenario;
-      return new Response(JSON.stringify({
-        ok: true,
-        result: makeFormalResult(scenario, capabilities, {
-          "q1-summon-procedure": "TRUE",
-          "q2-hand-trigger": "TRUE",
-        }),
-      }), { status: 200 });
+      const result = makeFormalResult(scenario, capabilities, {
+        "q1-summon-procedure": "TRUE",
+        "q2-hand-trigger": "TRUE",
+      });
+      return new Response(JSON.stringify({ ok: true, result }), { status: 200 });
     }
     throw new Error(`unexpected formal URL: ${url}`);
   };
-  const fetchImpl = async (url) => {
-    if (String(url).includes("/chat/completions")) {
-      events.push("draft-model");
-      return new Response(JSON.stringify({
-        choices: [{
-          finish_reason: "stop",
-          message: { content: JSON.stringify({ scenarioDraft: asModelScenarioDraft(input.draft) }) },
-        }],
-        usage: {},
-      }), { status: 200 });
-    }
-    return new Response(JSON.stringify({ ok: false }), { status: 404 });
-  };
-  const answer = await answerRagRulingQuestion({
-    question: input.question,
-    cards,
-    records: [],
-    qaRecords: [],
+  const shadow = await runFormalEngineShadow({
+    userQuery: input.question,
+    resolvedCards: input.resolvedCards,
     env: {
       RAG_FORMAL_ENGINE_MODE: "formal-shadow",
       ...mockDraftVerifierEnv,
-      RAG_AUTO_ENGINE_SIMULATION: "false",
-      RAG_CARD_EXTRACTOR_ENABLED: "false",
-      RAG_RULE_QUERY_EXTRACTOR_ENABLED: "false",
-      RAG_RULEBOOK_GROUNDING_ENABLED: "false",
-      DEEPSEEK_API_KEY: "draft-test-key",
       OCG_ENGINE_URL: "http://formal.test",
     },
     fetchImpl,
-    formalFetchImpl,
-    formalProofVerifier: mockPublicProofVerifier,
-    formalScenarioDraftVerifier: mockScenarioDraftCompletenessVerifier,
-    modelInvoker: async () => {
-      events.push("final-model");
-      return JSON.stringify({
-        answerLevel: "rule_analysis",
-        shortAnswer: "模型结论等待形式门禁。",
-        reasoning: ["测试默认草案接线。"],
-        usedCards: Object.values(names),
-        usedEvidence: [],
-        missingInfo: [],
-        riskFlags: [],
-        confidenceSelfEstimate: "medium",
-      });
+    scenarioDraftInvoker: async () => {
+      events.push("draft");
+      return { scenarioDraft: input.draft };
+    },
+    scenarioDraftVerifier: (payload) => {
+      events.push("draft-verify");
+      return mockScenarioDraftCompletenessVerifier(payload);
+    },
+    proofVerifier: (payload) => {
+      events.push(`proof-verify:${payload.queryResult.queryId}`);
+      return mockPublicProofVerifier(payload);
     },
   });
 
-  assert.deepEqual(
-    events,
-    ["formal-capabilities", "draft-model", "formal-analysis", "final-model"],
-    JSON.stringify({ formalEngine: answer.formalEngine, unresolvedMentions: answer.debug?.unresolvedMentions }),
+  assert.deepEqual(events, [
+    "capability",
+    "draft",
+    "draft-verify",
+    "analysis",
+    "proof-verify:q1-summon-procedure",
+    "proof-verify:q2-hand-trigger",
+  ]);
+  assert.equal(shadow.status, "completed");
+  assert.equal(shadow.stage, "analysis");
+  assert.equal(shadow.draftVerification.valid, true);
+  assert.equal(shadow.analysis.formalResult.queryResults.length, 2);
+  assert.equal(
+    shadow.analysis.formalResult.queryResults.every(
+      (item) => item.certificateVerification?.valid === true,
+    ),
+    true,
   );
-  assert.equal(answer.formalEngine.draftVerification.valid, true);
-  assert.deepEqual(answer.formalEngine.queryResults.map((item) => item.verdict), ["TRUE", "TRUE"]);
-});
-
-test("a model-extracted draft without an independent completeness verifier stays UNKNOWN", async () => {
-  const events = [];
-  const formalFetchImpl = async (url) => {
-    const pathname = new URL(String(url)).pathname;
-    if (pathname === "/formal/v1/capabilities") {
-      events.push("formal-capabilities");
-      return new Response(JSON.stringify(makeCapabilities(plannedScenario.requiredCapabilities)), { status: 200 });
-    }
-    events.push("unexpected-formal-analysis");
-    throw new Error("unverified draft must not reach analysis");
-  };
-  const answer = await answerRagRulingQuestion({
-    question: input.question,
-    cards,
-    records: [],
-    qaRecords: [],
-    env: {
-      RAG_FORMAL_ENGINE_MODE: "formal-shadow",
-      ...mockDraftVerifierEnv,
-      RAG_AUTO_ENGINE_SIMULATION: "false",
-      RAG_CARD_EXTRACTOR_ENABLED: "false",
-      RAG_RULE_QUERY_EXTRACTOR_ENABLED: "false",
-      RAG_RULEBOOK_GROUNDING_ENABLED: "false",
-      DEEPSEEK_API_KEY: "draft-test-key",
-      OCG_ENGINE_URL: "http://formal.test",
-    },
-    fetchImpl: async (url) => {
-      if (String(url).includes("/chat/completions")) {
-        events.push("draft-model");
-        return new Response(JSON.stringify({
-          choices: [{ message: { content: JSON.stringify({ scenarioDraft: asModelScenarioDraft(input.draft) }) }, finish_reason: "stop" }],
-          usage: {},
-        }), { status: 200 });
-      }
-      return new Response(JSON.stringify({ ok: false }), { status: 404 });
-    },
-    formalFetchImpl,
-    modelInvoker: async () => {
-      events.push("final-model");
-      return JSON.stringify({
-        answerLevel: "rule_analysis",
-        shortAnswer: "继续使用非形式资料分析。",
-        reasoning: ["草案尚未通过完整性验证。"],
-        usedCards: Object.values(names),
-        usedEvidence: [],
-        missingInfo: [],
-        riskFlags: [],
-        confidenceSelfEstimate: "medium",
-      });
-    },
-  });
-
-  assert.deepEqual(events, ["final-model"]);
-  assert.equal(answer.formalEngine.status, "unknown");
-  assert.equal(answer.formalEngine.stage, "draft-verification");
-  assert.equal(answer.formalEngine.error.code, "FORMAL_SCENARIO_DRAFT_UNVERIFIED");
-  assert.equal(answer.formalEngine.draftVerification.valid, false);
-  assert.match(answer.shortAnswer, /继续使用非形式资料分析/u);
-});
-
-test("an unavailable formal capability endpoint prevents any paid draft-model call", async () => {
-  let draftCalls = 0;
-  const answer = await answerRagRulingQuestion({
-    question: input.question,
-    cards,
-    records: [],
-    qaRecords: [],
-    env: {
-      RAG_FORMAL_ENGINE_MODE: "formal-shadow",
-      ...mockDraftVerifierEnv,
-      RAG_AUTO_ENGINE_SIMULATION: "false",
-      RAG_CARD_EXTRACTOR_ENABLED: "false",
-      RAG_RULE_QUERY_EXTRACTOR_ENABLED: "false",
-      RAG_RULEBOOK_GROUNDING_ENABLED: "false",
-      DEEPSEEK_API_KEY: "must-not-be-used",
-      OCG_ENGINE_URL: "http://formal.test",
-    },
-    fetchImpl: async (url) => {
-      if (String(url).includes("/chat/completions")) draftCalls += 1;
-      return new Response(JSON.stringify({ ok: false }), { status: 404 });
-    },
-    formalFetchImpl: async () => new Response(JSON.stringify({ ok: false }), { status: 404 }),
-    formalProofVerifier: mockPublicProofVerifier,
-    formalScenarioDraftVerifier: mockScenarioDraftCompletenessVerifier,
-    modelInvoker: async () => JSON.stringify({
-      answerLevel: "rule_analysis",
-      shortAnswer: "继续使用现有资料。",
-      reasoning: ["正式内核当前不可用。"],
-      usedCards: Object.values(names),
-      usedEvidence: [],
-      missingInfo: [],
-      riskFlags: [],
-      confidenceSelfEstimate: "medium",
-    }),
-  });
-
-  assert.equal(draftCalls, 0);
-  assert.equal(answer.formalEngine.stage, "capabilities");
-  assert.equal(answer.formalEngine.error.code, "ENGINE_FORMAL_API_UNAVAILABLE");
-});
-
-test("a non-resolving scenario-draft invoker times out as UNKNOWN and the final model still answers", async () => {
-  const events = [];
-  let draftSignal;
-  const answer = await answerRagRulingQuestion({
-    question: input.question,
-    cards,
-    records: [],
-    qaRecords: [],
-    env: {
-      RAG_FORMAL_ENGINE_MODE: "formal-shadow",
-      ...mockDraftVerifierEnv,
-      RAG_AUTO_ENGINE_SIMULATION: "false",
-      RAG_CARD_EXTRACTOR_ENABLED: "false",
-      RAG_RULE_QUERY_EXTRACTOR_ENABLED: "false",
-      RAG_RULEBOOK_GROUNDING_ENABLED: "false",
-      OCG_ENGINE_URL: "http://formal.test",
-    },
-    formalFetchImpl: formalEndpointMock({}, events),
-    formalScenarioDraftTimeoutMs: 15,
-    formalScenarioDraftInvoker: ({ signal }) => {
-      events.push("draft-invoker");
-      draftSignal = signal;
-      return new Promise(() => {});
-    },
-    formalScenarioDraftVerifier: mockScenarioDraftCompletenessVerifier,
-    formalProofVerifier: mockPublicProofVerifier,
-    fetchImpl: async () => new Response(JSON.stringify({ ok: false }), { status: 404 }),
-    modelInvoker: async () => {
-      events.push("final-model");
-      return JSON.stringify({
-        answerLevel: "rule_analysis",
-        shortAnswer: "形式草案超时后仍继续非形式分析。",
-        reasoning: ["形式分支的超时不会阻断最终回答。"],
-        usedCards: Object.values(names),
-        usedEvidence: [],
-        missingInfo: [],
-        riskFlags: [],
-        confidenceSelfEstimate: "medium",
-      });
-    },
-  });
-
-  assert.deepEqual(events, ["formal-capabilities", "draft-invoker", "final-model"]);
-  assert.equal(draftSignal.aborted, true);
-  assert.equal(answer.formalEngine.status, "unknown");
-  assert.equal(answer.formalEngine.stage, "draft");
-  assert.equal(answer.formalEngine.error.code, "FORMAL_SCENARIO_DRAFT_TIMEOUT");
-  assert.match(answer.shortAnswer, /仍继续非形式分析/u);
+  assert.equal(shadow.evidence.length, 2);
+  assert.equal(shadow.evidence.every((item) => item.trusted === true), true);
+  assert.equal(shadow.evidence.every((item) => item.proof?.verified === true), true);
 });
 
 test("caller cancellation aborts a non-resolving scenario-draft invoker as typed UNKNOWN", async () => {
@@ -787,88 +555,6 @@ test("caller cancellation aborts a non-resolving scenario-draft invoker as typed
   assert.equal(shadow.status, "unknown");
   assert.equal(shadow.stage, "draft");
   assert.equal(shadow.error.code, "FORMAL_SCENARIO_DRAFT_ABORTED");
-});
-
-test("missing proof verification fails before capabilities or paid draft extraction", async () => {
-  let modelCalls = 0;
-  let formalCalls = 0;
-  const answer = await answerRagRulingQuestion({
-    question: input.question,
-    cards,
-    records: [],
-    qaRecords: [],
-    env: {
-      RAG_FORMAL_ENGINE_MODE: "formal-shadow",
-      ...mockDraftVerifierEnv,
-      RAG_AUTO_ENGINE_SIMULATION: "false",
-      RAG_CARD_EXTRACTOR_ENABLED: "false",
-      RAG_RULE_QUERY_EXTRACTOR_ENABLED: "false",
-      RAG_RULEBOOK_GROUNDING_ENABLED: "false",
-      DEEPSEEK_API_KEY: "must-not-be-used",
-      OCG_ENGINE_URL: "http://formal.test",
-    },
-    fetchImpl: async (url) => {
-      if (String(url).includes("/chat/completions")) modelCalls += 1;
-      return new Response(JSON.stringify({ ok: false }), { status: 404 });
-    },
-    formalFetchImpl: async () => { formalCalls += 1; throw new Error("must not call the engine"); },
-    formalScenarioDraftVerifier: mockScenarioDraftCompletenessVerifier,
-    modelInvoker: async () => JSON.stringify({
-      answerLevel: "rule_analysis",
-      shortAnswer: "继续使用非形式资料。",
-      reasoning: ["正式证明验证器尚未配置。"],
-      usedCards: Object.values(names),
-      usedEvidence: [],
-      missingInfo: [],
-      riskFlags: [],
-      confidenceSelfEstimate: "medium",
-    }),
-  });
-
-  assert.equal(modelCalls, 0);
-  assert.equal(formalCalls, 0);
-  assert.equal(answer.formalEngine.stage, "proof-verification");
-  assert.equal(answer.formalEngine.error.code, "FORMAL_PROOF_VERIFIER_UNAVAILABLE");
-});
-
-test("dry-run never calls formal capabilities or the paid draft extractor", async () => {
-  let modelCalls = 0;
-  let formalCalls = 0;
-  let draftInvokerCalls = 0;
-  const answer = await answerRagRulingQuestion({
-    question: input.question,
-    cards,
-    records: [],
-    qaRecords: [],
-    dryRun: true,
-    env: {
-      RAG_FORMAL_ENGINE_MODE: "formal-shadow",
-      ...mockDraftVerifierEnv,
-      RAG_AUTO_ENGINE_SIMULATION: "false",
-      RAG_CARD_EXTRACTOR_ENABLED: "false",
-      RAG_RULE_QUERY_EXTRACTOR_ENABLED: "false",
-      RAG_RULEBOOK_GROUNDING_ENABLED: "false",
-      DEEPSEEK_API_KEY: "must-not-be-used",
-      OCG_ENGINE_URL: "http://formal.test",
-    },
-    fetchImpl: async (url) => {
-      if (String(url).includes("/chat/completions")) modelCalls += 1;
-      return new Response(JSON.stringify({ ok: false }), { status: 404 });
-    },
-    formalFetchImpl: async () => { formalCalls += 1; throw new Error("dry-run must not call the engine"); },
-    formalScenarioDraftInvoker: async () => {
-      draftInvokerCalls += 1;
-      return { scenarioDraft: asModelScenarioDraft(input.draft) };
-    },
-    formalScenarioDraftVerifier: mockScenarioDraftCompletenessVerifier,
-    formalProofVerifier: mockPublicProofVerifier,
-  });
-
-  assert.equal(modelCalls, 0);
-  assert.equal(formalCalls, 0);
-  assert.equal(draftInvokerCalls, 0);
-  assert.equal(answer.formalEngine.stage, "draft");
-  assert.equal(answer.formalEngine.error.code, "FORMAL_SCENARIO_DRAFT_DRY_RUN");
 });
 
 test("scenario-draft verification rejects a caller mutation after hashes are bound", async () => {

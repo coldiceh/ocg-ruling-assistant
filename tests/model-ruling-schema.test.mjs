@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  MODEL_RULING_COUNTER_CHECK_TYPES,
   MODEL_RULING_RESULT_JSON_SCHEMA,
   parseAndValidateModelRulingResult,
   validateModelRulingResult,
@@ -81,20 +80,24 @@ test("every determinate question requires a decisive claim backed by visible evi
   assert.ok(unrelatedValidation.errors.includes("claim references unknown questionId: q2"));
 });
 
-test("failed evidence, missing-fact, or resolution-order counter-check blocks determinate verdicts", () => {
-  for (const type of ["EVIDENCE_ENTAILMENT", "MISSING_FACT", "RESOLUTION_ORDER"]) {
-    const result = makeResult();
-    result.counterChecks.find((item) => item.type === type).passed = false;
-    result.counterChecks.find((item) => item.type === type).note = "关键检查未通过。";
-    const validation = validateModelRulingResult(result, {
-      evidenceSnapshot: makeSnapshot(),
-      expectedQuestionIds: ["q1"],
-    });
-    assert.equal(validation.ok, false);
-    assert.ok(validation.errors.includes(
-      `determinate verdict cannot pass with failed critical counterCheck: ${type}`,
-    ));
-  }
+test("counter-checks are optional and a relevant failed self-check is advisory", () => {
+  const withoutChecks = makeResult();
+  assert.equal(validateModelRulingResult(withoutChecks, {
+    evidenceSnapshot: makeSnapshot(),
+    expectedQuestionIds: ["q1"],
+  }).ok, true);
+
+  const relevantSubset = makeResult();
+  relevantSubset.counterChecks = [{
+    type: "EVIDENCE_ENTAILMENT",
+    passed: false,
+    note: "模型记录了一个与当前问题相关、仍需人工复核的事项。",
+  }];
+  const validation = validateModelRulingResult(relevantSubset, {
+    evidenceSnapshot: makeSnapshot(),
+    expectedQuestionIds: ["q1"],
+  });
+  assert.equal(validation.ok, true, validation.errors?.join("\n"));
 });
 
 test("TRUE activation verdict is not inverted by a later negative resolution clause", () => {
@@ -871,14 +874,33 @@ test("timeline rejects duplicate order and mutually-exclusive operation classifi
   assert.ok(validation.errors.some((error) => error.includes("order must be unique")));
 });
 
-test("all fixed counter-checks are required exactly once", () => {
-  const result = makeResult();
-  result.counterChecks.pop();
-  const validation = validateModelRulingResult(result, {
+test("counter-checks reject duplicate and unsupported types without requiring a fixed list", () => {
+  const duplicate = makeResult();
+  duplicate.counterChecks = [
+    { type: "MISSING_FACT", passed: true, note: "" },
+    { type: "MISSING_FACT", passed: false, note: "重复项。" },
+  ];
+  const duplicateValidation = validateModelRulingResult(duplicate, {
     evidenceSnapshot: makeSnapshot(),
   });
-  assert.equal(validation.ok, false);
-  assert.ok(validation.errors.some((error) => error.includes("counterChecks is missing required type")));
+  assert.equal(duplicateValidation.ok, false);
+  assert.ok(duplicateValidation.errors.some(
+    (error) => error.includes("counterChecks contains duplicate type: MISSING_FACT"),
+  ));
+
+  const unsupported = makeResult();
+  unsupported.counterChecks = [{
+    type: "UNSUPPORTED_TOPIC_CLASSIFIER",
+    passed: true,
+    note: "",
+  }];
+  const unsupportedValidation = validateModelRulingResult(unsupported, {
+    evidenceSnapshot: makeSnapshot(),
+  });
+  assert.equal(unsupportedValidation.ok, false);
+  assert.ok(unsupportedValidation.errors.some(
+    (error) => error.includes("counterChecks[0].type"),
+  ));
 });
 
 test("parser accepts JSON only and never repairs Markdown or loose output", () => {
@@ -1102,11 +1124,7 @@ function makeResult() {
         supportedClaimIds: ["claim-1"],
       },
     ],
-    counterChecks: MODEL_RULING_COUNTER_CHECK_TYPES.map((type) => ({
-      type,
-      passed: true,
-      note: "",
-    })),
+    counterChecks: [],
     unresolved: [],
     confidence: {
       level: "HIGH",

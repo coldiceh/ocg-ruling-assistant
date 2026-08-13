@@ -68,7 +68,7 @@ test("executes the summon procedure, replacement attribution, and public-C1/priv
   assert.doesNotMatch(result.shortAnswer, /任意.*顺序|自由.*顺序/u);
 });
 
-test("final prompt keeps replacement attribution without serializing full state snapshots", () => {
+test("public prompts keep the raw question and card text without the state-transition component", () => {
   const input = fixture();
   const transition = analyzeEffectStateTransition(input);
   const bundle = buildRagRulingPromptBundle({
@@ -86,10 +86,16 @@ test("final prompt keeps replacement attribution without serializing full state 
     },
   });
 
-  assert.match(bundle.prompt, /finalDestinationCauseKind/u);
-  assert.match(bundle.prompt, /card_effect/u);
-  assert.match(bundle.prompt, /实际移动及最终归因/u);
-  assert.doesNotMatch(bundle.prompt, /"stateSnapshot"/u);
+  for (const prompt of [bundle.prompt, bundle.recoveryPrompt]) {
+    assert.match(prompt, /是否可以将/u);
+    assert.match(prompt, /深渊的相剑龙/u);
+    assert.match(prompt, /card-text-summoned/u);
+    assert.match(prompt, /仅可通过融合召唤及以下方法特殊召唤/u);
+    assert.doesNotMatch(prompt, /semanticStateTransition/u);
+    assert.doesNotMatch(prompt, /finalDestinationCauseKind/u);
+    assert.doesNotMatch(prompt, /实际移动及最终归因/u);
+    assert.doesNotMatch(prompt, /"stateSnapshot"/u);
+  }
 });
 
 test("the same mechanism works after every card name is changed", () => {

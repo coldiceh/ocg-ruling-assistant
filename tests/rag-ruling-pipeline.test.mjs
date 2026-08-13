@@ -6,16 +6,9 @@ import { loadRagData, retrieveRagEvidence } from "../backend/ragEvidenceRetrieve
 import { buildRagRulingPromptBundle } from "../backend/ragRulingPrompt.mjs";
 import { callCardNameExtractionModel, callDeepSeekJsonTask, callOfficialQaApplicabilityModel, callRagModel, callRulebookGroundingModel, callRuleQueryExtractionModel, createPublicAnswerModelEnv, estimateDeepSeekCostCny, estimateGlmCostCny, getRagBudgetStatus, resetRagBudget, resolveRagProvider } from "../backend/ragModelClient.mjs";
 import {
-  applyOfficialQaApplicabilityReview,
   answerRagRulingQuestion,
-  buildCardSemanticFacts,
-  normalizeRagAnswer,
 } from "../backend/ragRulingPipeline.mjs";
 import { analyzeEffectStateTransition } from "../backend/effectStateReasoner.mjs";
-import {
-  collectEffectiveLegacyLuaPasscodes,
-  createDefaultLegacyLuaSemanticPacketFactory,
-} from "../backend/legacyLuaSemanticPacketFactory.mjs";
 
 const cards = [
   {
@@ -85,150 +78,6 @@ const qaRecords = [
   },
 ];
 
-test("normalized lingering restriction facts reach both final prompts without card-name branches", () => {
-  const genericCard = {
-    id: "generic-duration-card",
-    name: "匿名期限效果卡",
-    cardType: "monster",
-    effectText: "①：可以发动。将1只怪兽特殊召唤。只要这个效果特殊召唤的怪兽以表侧表示存在于自己场上，自己从额外牌组仅可特殊召唤“测试”怪兽。",
-  };
-  const facts = buildCardSemanticFacts([genericCard]);
-  const lingering = facts.find((fact) => fact.operation?.type === "create_lingering_restriction");
-  assert.ok(lingering);
-  assert.equal(lingering.operation.expiration.mode, "irreversible_on_first_condition_failure");
-  assert.equal(lingering.operation.expiration.reactivates, false);
-
-  const dedupedFacts = buildCardSemanticFacts([
-    genericCard,
-    {
-      name: genericCard.name,
-      cardType: genericCard.cardType,
-      effectText: genericCard.effectText,
-      sourceEvidenceIds: ["user-card-text-anonymous-lifecycle"],
-    },
-  ]);
-  const dedupedLingering = dedupedFacts.filter(
-    (fact) => fact.operation?.type === "create_lingering_restriction",
-  );
-  assert.equal(dedupedLingering.length, 1);
-  assert.deepEqual(
-    dedupedLingering[0].sourceEvidenceIds,
-    ["user-card-text-anonymous-lifecycle"],
-  );
-
-  const userOnlyFact = buildCardSemanticFacts([{
-    name: genericCard.name,
-    cardType: genericCard.cardType,
-    effectText: genericCard.effectText,
-    sourceEvidenceIds: ["user-card-text-only"],
-  }]).find((fact) => fact.operation?.type === "create_lingering_restriction");
-  assert.ok(userOnlyFact);
-  assert.equal(userOnlyFact.cardId, "");
-  assert.deepEqual(userOnlyFact.sourceEvidenceIds, ["user-card-text-only"]);
-
-  const bundle = buildRagRulingPromptBundle({
-    userQuery: "控制权改变后，已经适用的期限效果是否会自动恢复？",
-    cardResolution: { resolvedCards: [genericCard], unresolvedMentions: [], ambiguousMentions: [] },
-    evidence: {
-      cardTexts: [{ id: "card-text-generic-duration-card", type: "card_text", title: "匿名卡文", text: genericCard.effectText }],
-      officialQaDirectCandidates: [],
-      officialQaRelated: [],
-      faqRelated: [],
-      rawRelatedEvidence: [],
-      retrievalWarnings: [],
-      cardSemanticFacts: facts,
-    },
-    env: { RAG_RECOVERY_PROMPT_CHARS: "12000" },
-  });
-  assert.match(bundle.prompt, /irreversible_on_first_condition_failure/u);
-  assert.match(bundle.prompt, /reactivates/u);
-  assert.match(bundle.recoveryPrompt, /irreversible_on_first_condition_failure/u);
-  assert.match(bundle.recoveryPrompt, /条件后来恢复不会自动重启/u);
-});
-
-test("full and compact ruling prompts keep replacement results bound to the original operation subject", () => {
-  const bundle = buildRagRulingPromptBundle({
-    userQuery: "某效果要求破坏对象卡，替代处理改为破坏另一张卡后，后续处理是否进行？",
-    cardResolution: { resolvedCards: [], unresolvedMentions: [], ambiguousMentions: [] },
-    evidence: {
-      cardTexts: [],
-      officialQaDirectCandidates: [],
-      officialQaRelated: [],
-      faqRelated: [],
-      rawRelatedEvidence: [],
-      retrievalWarnings: [],
-    },
-    env: { RAG_RECOVERY_PROMPT_CHARS: "12000" },
-  });
-
-  assert.match(bundle.prompt, /原操作的指代对象/u);
-  assert.match(bundle.prompt, /替代操作实际影响的卡/u);
-  assert.match(bundle.prompt, /并不自动代表原指代对象的操作成功/u);
-  assert.match(bundle.recoveryPrompt, /原操作对象/u);
-  assert.match(bundle.recoveryPrompt, /替代操作实际影响的卡/u);
-  assert.match(bundle.recoveryPrompt, /不能仅因另一张卡/u);
-});
-
-test("full, recovery, and minimal ruling prompts retain structured player-role bindings", () => {
-  const playerRoleBindings = {
-    schema: "player-role-bindings/v1",
-    status: "parsed",
-    authority: "parser_candidate_only",
-    handVisibility: [{
-      sourceEvidenceId: "card-text-eye",
-      sourceTitle: "持续公开效果",
-      effectCarrierRelation: "self_controls",
-      printedAffectedRelation: "opponent",
-      actuallyPublicHandOwners: ["opponent"],
-    }],
-    activationProcedures: [{
-      operationId: "reveal-own-hand-activation:card-text-designator",
-      sourceEvidenceId: "card-text-designator",
-      sourceTitle: "展示自己手牌的发动手续",
-      actor: "self",
-      handOwnerRequiredByProcedure: "self",
-      viewer: "opponent",
-      procedure: "reveal_own_hand_at_activation",
-    }],
-    comparisons: [{
-      operationId: "reveal-own-hand-activation:card-text-designator",
-      requiredHandOwner: "self",
-      parsedPublicHandOwners: ["opponent"],
-      requiredHandIsAmongParsedPublicHands: false,
-      scope: "only_explicitly_parsed_continuous_effects",
-    }],
-  };
-  const base = {
-    userQuery: "我方持续卡适用中，我方能否发动需要展示自己手牌的卡？",
-    cardResolution: { resolvedCards: [], unresolvedMentions: [], ambiguousMentions: [] },
-    evidence: {
-      cardTexts: [],
-      officialQaDirectCandidates: [],
-      officialQaRelated: [],
-      faqRelated: [],
-      rawRelatedEvidence: [],
-      retrievalWarnings: [],
-      playerRoleBindings,
-    },
-  };
-
-  const full = buildRagRulingPromptBundle({
-    ...base,
-    env: { RAG_MAX_PROMPT_CHARS: "60000", RAG_RECOVERY_PROMPT_CHARS: "12000" },
-  });
-  assert.match(full.prompt, /"playerRoleBindings"/u);
-  assert.match(full.prompt, /"requiredHandIsAmongParsedPublicHands": false/u);
-  assert.match(full.recoveryPrompt, /"playerRoleBindings"/u);
-  assert.match(full.recoveryPrompt, /"actuallyPublicHandOwners":\["opponent"\]/u);
-
-  const minimal = buildRagRulingPromptBundle({
-    ...base,
-    env: { RAG_MAX_PROMPT_CHARS: "2200", RAG_RECOVERY_PROMPT_CHARS: "2200" },
-  });
-  assert.match(minimal.prompt, /"playerRoleBindings"/u);
-  assert.match(minimal.prompt, /"requiredHandOwner":"self"/u);
-});
-
 test("user-provided card text reaches the final model as raw evidence without a local verdict", async () => {
   let finalPrompt = "";
   await answerRagRulingQuestion({
@@ -260,9 +109,8 @@ test("user-provided card text reaches the final model as raw evidence without a 
   });
   assert.match(finalPrompt, /user-card-text-/u);
   assert.match(finalPrompt, /只要这个效果特殊召唤的怪兽/u);
-  assert.match(finalPrompt, /"type": "create_lingering_restriction"/u);
-  assert.match(finalPrompt, /"mode": "irreversible_on_first_condition_failure"/u);
-  assert.match(finalPrompt, /"reactivates": false/u);
+  assert.doesNotMatch(finalPrompt, /create_lingering_restriction/u);
+  assert.doesNotMatch(finalPrompt, /irreversible_on_first_condition_failure/u);
 });
 
 test("rag_pipeline_returns_answer_with_mock_model", async () => {
@@ -362,12 +210,7 @@ test("final reasoner receives the Albaz evidence without a local answer override
   assert.ok(!answer.riskFlags.includes("provisional_official_response"));
   assert.ok(!answer.riskFlags.includes("semantic_state_transition_applied"));
   assert.equal(answer.riskFlags.includes("answer_constrained_by_provisional_official_response"), false);
-  assert.equal(answer.debug.semanticStateTransition?.authoritative, false);
-  assert.equal(answer.debug.semanticStateTransition?.complete, false);
-  assert.equal(
-    answer.debug.semanticStateTransition?.authorityReason,
-    "diagnostic_only_requires_final_model",
-  );
+  assert.equal(answer.debug.semanticStateTransition, null);
   assert.equal(answer.usedEvidence[0].type, "official_response_screenshot");
 });
 
@@ -550,10 +393,10 @@ test("extracts_user_provided_card_text_block", () => {
     },
   });
   assert.match(bundle.prompt, /userProvidedCardTexts/u);
-  assert.match(bundle.prompt, /不是官方 direct evidence/u);
+  assert.match(bundle.prompt, /不得把.*user_provided_text.*称为官方直接 Q&A/u);
 });
 
-test("rag prompts require activation conclusions to include downstream resolution", () => {
+test("rag prompts require the model to answer every user subquestion", () => {
   const bundle = buildRagRulingPromptBundle({
     userQuery: "这个效果可以发动吗，后续怎么处理？",
     cardResolution: { resolvedCards: cards },
@@ -566,9 +409,9 @@ test("rag prompts require activation conclusions to include downstream resolutio
       retrievalWarnings: [],
     },
   });
-  assert.match(bundle.prompt, /必须同时写明发动结论与最终处理结果/u);
-  assert.match(bundle.prompt, /不得只写“可以发动”/u);
-  assert.match(bundle.recoveryPrompt, /必须同时写明发动结论与最终处理结果/u);
+  assert.match(bundle.prompt, /逐个子问题给出直接结论/u);
+  assert.match(bundle.prompt, /不要漏答/u);
+  assert.equal(bundle.recoveryPrompt, "");
 });
 
 test("quoted_mentions_all_preserved", () => {
@@ -1140,8 +983,8 @@ test("unresolved_new_card_with_text_can_be_analyzed", async () => {
     }),
   });
   assert.equal(answer.answerLevel, "rule_analysis");
-  assert.ok(answer.usedEvidence.some((item) => item.type === "user_provided_text"));
-  assert.ok(answer.riskFlags.includes("user_provided_text_not_official"));
+  assert.match(answer.shortAnswer, /用户提供文本/u);
+  assert.deepEqual(answer.usedEvidence, []);
   assert.equal(answer.debug.retrievalCounts.userProvidedCardTexts, 1);
   assert.equal(answer.debug.unresolvedMentions[0].input, "未发售测试龙");
 });
@@ -1164,9 +1007,11 @@ test("user_provided_text_not_official_confirmed", async () => {
     }),
   });
   assert.notEqual(answer.answerLevel, "official_confirmed");
-  assert.ok(answer.riskFlags.includes("official_confirmed_requires_direct_evidence"));
-  assert.ok(answer.riskFlags.includes("user_provided_text_not_official"));
-  assert.ok(answer.usedEvidence.some((item) => item.type === "user_provided_text"));
+  assert.deepEqual(answer.usedEvidence, []);
+  assert.ok(
+    answer.debug.publicFinalValidation.primary.diagnosticWarnings
+      .includes("official_confirmation_without_direct_citation_downgraded"),
+  );
 });
 
 test("rag_does_not_require_database_match_when_user_text_present", async () => {
@@ -1457,64 +1302,6 @@ test("applicability cache hits do not charge twice and final Relay calls share t
   );
 });
 
-test("official QA applicability review only removes incompatible related evidence", () => {
-  const direct = { id: "anonymous-direct", type: "official_qa", isDirect: true };
-  const related = [
-    { id: "anonymous-related-applicable", type: "related", isDirect: false, text: "APPLICABLE_RELATED_MARKER" },
-    { id: "anonymous-related-unknown", type: "related", isDirect: false, text: "UNKNOWN_RELATED_MARKER" },
-    { id: "anonymous-related-inapplicable", type: "related", isDirect: false, text: "INAPPLICABLE_RELATED_MARKER" },
-  ];
-  const reviewed = applyOfficialQaApplicabilityReview({
-    officialQaDirectCandidates: [direct],
-    officialQaRelated: related,
-  }, {
-    status: "completed",
-    complete: true,
-    assessments: [
-      { id: related[0].id, verdict: "APPLICABLE" },
-      { id: related[1].id, verdict: "UNKNOWN" },
-      { id: related[2].id, verdict: "INAPPLICABLE" },
-    ],
-  });
-
-  assert.strictEqual(reviewed.officialQaDirectCandidates[0], direct);
-  assert.deepEqual(
-    reviewed.officialQaRelated.map((item) => item.id),
-    [related[0].id, related[1].id],
-  );
-  assert.deepEqual(
-    reviewed.rejectedOfficialQaRelated.map((item) => item.id),
-    [related[2].id],
-  );
-  assert.ok(reviewed.officialQaRelated.every((item) => item.isDirect === false));
-  assert.ok(reviewed.officialQaRelated.every((item) => item.authoritativeSceneMatch === false));
-  const bundle = buildRagRulingPromptBundle({
-    userQuery: "比较匿名相关证据。",
-    cardResolution: { resolvedCards: [] },
-    evidence: reviewed,
-  });
-  assert.match(bundle.prompt, /APPLICABLE_RELATED_MARKER/u);
-  assert.match(bundle.prompt, /UNKNOWN_RELATED_MARKER/u);
-  assert.doesNotMatch(bundle.prompt, /INAPPLICABLE_RELATED_MARKER/u);
-});
-
-test("an incomplete applicability batch passes every related candidate through", () => {
-  const candidates = [
-    { id: "anonymous-partial-a", type: "related", isDirect: false },
-    { id: "anonymous-partial-b", type: "related", isDirect: false },
-  ];
-  const reviewed = applyOfficialQaApplicabilityReview({
-    officialQaRelated: candidates,
-  }, {
-    status: "completed",
-    complete: false,
-    assessments: [{ id: candidates[0].id, verdict: "INAPPLICABLE" }],
-  });
-
-  assert.deepEqual(reviewed.officialQaRelated, candidates);
-  assert.deepEqual(reviewed.rejectedOfficialQaRelated, []);
-});
-
 test("public profiles hard-disable the independent applicability stage even if deployment config is stale", async () => {
   const candidateId = "anonymous-non-relay-final-applicability-20480703";
   const publicEnv = createPublicAnswerModelEnv({
@@ -1597,59 +1384,10 @@ test("failed official QA applicability review passes every related candidate thr
       throw error;
     },
   });
-  const reviewed = applyOfficialQaApplicabilityReview({ officialQaRelated: candidates }, result);
-
   assert.equal(result.status, "failed");
   assert.ok(result.warnings.includes("official_qa_applicability_passthrough"));
   assert.equal(result.estimatedCostUsd, 0);
   assert.deepEqual(result.tokenUsage, {});
-  assert.deepEqual(reviewed.officialQaRelated, candidates);
-  assert.deepEqual(reviewed.rejectedOfficialQaRelated, []);
-});
-
-test("cancelling while applicability waits terminates the pipeline before the final model", async () => {
-  const controller = new AbortController();
-  let applicabilityStarted;
-  const started = new Promise((resolve) => {
-    applicabilityStarted = resolve;
-  });
-  let finalCalls = 0;
-  const pipeline = answerRagRulingQuestion({
-    question: "「测试龙」的效果在这个场景中可以发动吗？",
-    cards,
-    records,
-    qaRecords,
-    env: {
-      RAG_CARD_EXTRACTOR_ENABLED: "false",
-      RAG_RULE_QUERY_EXTRACTOR_ENABLED: "false",
-      RAG_EVIDENCE_APPLICABILITY_ENABLED: "true",
-      RAG_EVIDENCE_APPLICABILITY_PROVIDER: "relay",
-    },
-    signal: controller.signal,
-    applicabilityModelInvoker: ({ signal }) => new Promise((_resolve, reject) => {
-      applicabilityStarted();
-      const rejectAbort = () => {
-        const error = new Error("applicability caller cancelled");
-        error.name = "AbortError";
-        error.code = "ABORT_ERR";
-        reject(error);
-      };
-      if (signal?.aborted) rejectAbort();
-      else signal?.addEventListener("abort", rejectAbort, { once: true });
-    }),
-    modelInvoker: async () => {
-      finalCalls += 1;
-      return JSON.stringify(modelJson("must not run"));
-    },
-  });
-
-  await started;
-  controller.abort("cancelled_during_applicability_review");
-  await assert.rejects(
-    pipeline,
-    (error) => error?.name === "AbortError" && error?.code === "ABORT_ERR",
-  );
-  assert.equal(finalCalls, 0);
 });
 
 test("applicability review is disabled by default even when Relay transport is configured", async () => {
@@ -1749,36 +1487,6 @@ test("official QA applicability cache reuses a complete batch without another mo
   assert.equal(second.cacheHit, true);
   assert.deepEqual(second.tokenUsage, {});
   assert.equal(second.estimatedCostUsd, 0);
-});
-
-test("applicability review metadata survives normal and compact final prompts as non-authoritative context", () => {
-  const marker = "APPLICABILITY_REVIEW_REASON_MARKER";
-  const bundle = buildRagRulingPromptBundle({
-    userQuery: "这个相关案例的前提是否适用？",
-    cardResolution: { resolvedCards: [] },
-    evidence: {
-      officialQaDirectCandidates: [],
-      officialQaRelated: [{
-        id: "anonymous-related-prompt-review",
-        type: "related",
-        title: "匿名相关问答",
-        text: "相关问答正文。",
-        isDirect: false,
-        applicabilityReview: {
-          verdict: "APPLICABLE",
-          sharedConditions: ["同一操作"],
-          missingConditions: [],
-          conflictingConditions: [],
-          reason: marker,
-        },
-      }],
-    },
-    env: { RAG_MAX_PROMPT_CHARS: "4000", RAG_RECOVERY_PROMPT_CHARS: "4000" },
-  });
-
-  assert.match(bundle.prompt, new RegExp(marker, "u"));
-  assert.match(bundle.recoveryPrompt, new RegExp(marker, "u"));
-  assert.match(bundle.prompt, /不会把 related 升级为 direct/u);
 });
 
 test("rag_pipeline_uses_model_card_name_candidates_before_retrieval", async () => {
@@ -2008,8 +1716,7 @@ test("raw restrictive evidence remains visible when the preparation model is emp
   });
 
   assert.match(finalPrompt, /発動中の通常魔法・通常罠カードはその処理で手札に戻せません/u);
-  assert.match(finalPrompt, /"hasBlockingCheck": false/u);
-  assert.match(finalPrompt, /"hasUnresolvedConstraints": false/u);
+  assert.doesNotMatch(finalPrompt, /hasBlockingCheck|hasUnresolvedConstraints/u);
   assert.match(answer.shortAnswer, /不能发动/u);
   assert.ok(!answer.riskFlags.includes("operation_legality_blocker_applied"));
 });
@@ -2111,7 +1818,7 @@ test("focused preparation fallback still leaves the final verdict to the final r
   assert.deepEqual(tasks, []);
   assert.match(answer.shortAnswer, /不能发动/u);
   assert.doesNotMatch(answer.shortAnswer, /^可以发动/u);
-  assert.ok(answer.debug.rulebookGroundingWarnings.includes("rulebook_grounding_disabled_simple_pipeline"));
+  assert.ok(answer.debug.rulebookGroundingWarnings.includes("pure_llm_pipeline"));
   assert.ok(!answer.riskFlags.includes("operation_legality_blocker_applied"));
   assert.ok(!answer.riskFlags.includes("model_answer_overridden_by_operation_legality"));
 });
@@ -2261,7 +1968,7 @@ test("empty final-model output degrades safely instead of using a prepared answe
   });
 
   assert.doesNotMatch(answer.shortAnswer, /可以发动/u);
-  assert.match(answer.shortAnswer, /资料不足|没有可用的模型 JSON/u);
+  assert.match(answer.shortAnswer, /没有返回可展示的完整答案/u);
   assert.ok(!answer.riskFlags.includes("final_model_failed_using_grounded_operation_analysis"));
 });
 
@@ -2380,7 +2087,7 @@ test("card text cannot override a model's explicit needs-more-info result", asyn
   assert.equal(answer.answerLevel, "needs_more_info");
   assert.match(answer.shortAnswer, /资料不足/u);
   assert.ok(!answer.riskFlags.includes("needs_more_info_upgraded_to_rule_analysis_with_card_text"));
-  assert.ok(answer.usedEvidence.some((item) => item.type === "card_text"));
+  assert.deepEqual(answer.usedEvidence, []);
 });
 
 test("rag_preserves_card_dossier_data", async () => {
@@ -2432,7 +2139,7 @@ test("partial related evidence cannot override a model's explicit needs-more-inf
   assert.ok(!answer.riskFlags.includes("needs_more_info_downgraded_to_low_confidence_with_evidence"));
 });
 
-test("no_evidence_still_needs_more_info", async () => {
+test("no evidence does not let local code replace the model's ruling", async () => {
   const answer = await answerRagRulingQuestion({
     question: "完全没有资料的问题如何处理？",
     cards: [],
@@ -2449,8 +2156,8 @@ test("no_evidence_still_needs_more_info", async () => {
       confidenceSelfEstimate: "medium",
     }),
   });
-  assert.equal(answer.answerLevel, "needs_more_info");
-  assert.ok(answer.riskFlags.includes("no_retrieved_evidence"));
+  assert.equal(answer.answerLevel, "rule_analysis");
+  assert.equal(answer.shortAnswer, "模型试图无资料分析。");
 });
 
 test("rag_pipeline_distinguishes_related_from_official", async () => {
@@ -2471,11 +2178,14 @@ test("rag_pipeline_distinguishes_related_from_official", async () => {
     }),
   });
   assert.notEqual(answer.answerLevel, "official_confirmed");
-  assert.ok(answer.riskFlags.includes("official_confirmed_requires_direct_evidence"));
+  assert.ok(
+    answer.debug.publicFinalValidation.primary.diagnosticWarnings
+      .includes("official_confirmation_without_direct_citation_downgraded"),
+  );
   assert.equal(answer.usedEvidence[0].type, "related");
 });
 
-test("model_json_parse_failure_degrades_safely", async () => {
+test("non-JSON model text remains visible as low-confidence output without a repair call", async () => {
   const answer = await answerRagRulingQuestion({
     question: "「测试龙」可以发动①效果吗？",
     cards,
@@ -2484,8 +2194,10 @@ test("model_json_parse_failure_degrades_safely", async () => {
     modelInvoker: async () => "not JSON",
   });
   assert.equal(answer.answerLevel, "low_confidence_analysis");
-  assert.match(answer.shortAnswer, /not JSON/u);
-  assert.ok(answer.riskFlags.some((item) => item.startsWith("model_json_parse_failed")));
+  assert.equal(answer.shortAnswer, "not JSON");
+  assert.ok(answer.riskFlags.includes("model_json_parse_failed"));
+  assert.ok(answer.riskFlags.includes("model_output_not_json"));
+  assert.equal(answer.debug.publicFinalValidation.callCount, 1);
 });
 
 test("model_natural_language_output_is_wrapped_as_low_confidence", async () => {
@@ -3607,32 +3319,6 @@ test("pipeline cost summary includes both auxiliary extractors on the caller's b
   assert.equal(result.debug.ruleQueryModelCostCny, 0.002);
   assert.equal(result.debug.estimatedCostCny, 0.004);
   assert.equal(status.spentTodayCny, 0.004);
-});
-
-test("public answer risk flags hide relay group names and request ids on provider denial", () => {
-  const answer = normalizeRagAnswer({
-    answerLevel: "needs_more_info",
-    shortAnswer: "模型服务不可用。",
-    reasoning: ["没有生成答案。"],
-    usedEvidence: [],
-    missingInfo: [],
-    riskFlags: [],
-    confidenceSelfEstimate: "low",
-  }, {
-    evidence: {},
-    cardResolution: {},
-    modelWarnings: [
-      "model_call_failed:request rejected",
-    ],
-    providerFailure: {
-      kind: "access_denied",
-      code: "private routing group (request id: sensitive-internal-id)",
-    },
-  });
-
-  assert.ok(answer.riskFlags.includes("model_provider_call_failed"));
-  assert.ok(answer.riskFlags.includes("model_provider_access_denied"));
-  assert.doesNotMatch(answer.riskFlags.join("\n"), /private routing group|sensitive-internal-id/u);
 });
 
 test("complete public pipeline response removes relay group names and request ids", async () => {
@@ -5086,9 +4772,8 @@ test("card_text_derived_rule_queries_enter_rulebook_retrieval", async () => {
   assert.ok(evidence.rulebookCandidates.some((item) => /発動中の通常魔法/u.test(item.text)));
 });
 
-test("configured Legacy Lua lookup hydrates a real Baige passcode when automatic simulation is disabled", async () => {
+test("configuring an engine does not change public card identity or trigger passcode hydration", async () => {
   const cid = "24680";
-  const passcode = "01234567";
   const genericCard = {
     id: cid,
     cardId: cid,
@@ -5101,76 +4786,54 @@ test("configured Legacy Lua lookup hydrates a real Baige passcode when automatic
     effectText: "①：自己主要阶段可以发动。抽1张卡。",
     aliases: ["通用桥接测试卡"],
   };
-  let baigeRequests = 0;
-  const baigeQueries = [];
-
-  const evidence = await retrieveRagEvidence({
-    userQuery: "通用桥接测试卡的效果如何处理？",
-    cardResolution: {
-      resolvedCards: [genericCard],
-      unresolvedMentions: [],
-      ambiguousMentions: [],
-      userProvidedCardTexts: [],
-    },
-    cards: [genericCard],
-    records: [],
-    qaRecords: [],
-    env: {
-      OCG_ENGINE_URL: "https://engine.example.test",
-      RAG_AUTO_ENGINE_SIMULATION: "false",
-      RAG_LIVE_OFFICIAL_QA: "false",
-    },
-    fetchImpl: async (url) => {
-      baigeRequests += 1;
-      baigeQueries.push(new URL(url).searchParams.get("search"));
-      return jsonResponse({
-        result: [{
-          id: passcode,
-          cid,
-          cn_name: genericCard.name,
-          desc: genericCard.effectText,
-          type: "monster",
-        }],
-      });
-    },
-  });
-
-  assert.equal(baigeRequests, 1);
-  assert.deepEqual(baigeQueries, [cid]);
-  assert.equal(evidence.retrievedCards.length, 1);
-  assert.equal(evidence.retrievedCards[0].id, cid);
-  assert.equal(evidence.retrievedCards[0].passcode, passcode);
-  assert.notEqual(evidence.retrievedCards[0].passcode, cid);
-  assert.deepEqual(collectEffectiveLegacyLuaPasscodes({
-    retrievedCards: evidence.retrievedCards,
-    cardResolution: { resolvedCards: [genericCard] },
-  }), [passcode]);
-
-  const sourceLookups = [];
-  const packetFactory = createDefaultLegacyLuaSemanticPacketFactory({
-    env: {
-      OCG_ENGINE_URL: "https://engine.example.test",
-      RAG_AUTO_ENGINE_SIMULATION: "false",
-    },
-    facadeFactory: () => ({
-      async resolveLegacyLuaSource(value) {
-        sourceLookups.push(value);
-        const error = new Error("locked script was not found");
-        error.code = "LOCKED_SCRIPT_NOT_FOUND";
-        throw error;
+  async function retrieveWithEnv(env) {
+    const baigeQueries = [];
+    const evidence = await retrieveRagEvidence({
+      userQuery: "通用桥接测试卡的效果如何处理？",
+      cardResolution: {
+        resolvedCards: [genericCard],
+        unresolvedMentions: [],
+        ambiguousMentions: [],
+        userProvidedCardTexts: [],
       },
-    }),
+      cards: [genericCard],
+      records: [],
+      qaRecords: [],
+      env,
+      fetchImpl: async (url) => {
+        baigeQueries.push(new URL(url).searchParams.get("search"));
+        return jsonResponse({ result: [] });
+      },
+    });
+    return { evidence, baigeQueries };
+  }
+
+  const plain = await retrieveWithEnv({ RAG_LIVE_OFFICIAL_QA: "false" });
+  const configured = await retrieveWithEnv({
+    OCG_ENGINE_URL: "https://engine.example.test",
+    RAG_AUTO_ENGINE_SIMULATION: "false",
+    RAG_LIVE_OFFICIAL_QA: "false",
   });
-  const packet = await packetFactory({ retrievedCards: evidence.retrievedCards });
-  assert.deepEqual(sourceLookups, [passcode]);
-  assert.equal(packet.resources.length, 1);
-  assert.equal(packet.resources[0].status, "TYPED_UNKNOWN");
-  assert.equal(packet.resources[0].resourceBinding.locator, `legacy-lua-passcode:${passcode}`);
-  assert.equal(packet.resources[0].unknownReasons[0].code, "LOCKED_SCRIPT_NOT_FOUND");
-  assert.equal(packet.resources[0].unknownReasons[0].details.passcode, passcode);
+  assert.deepEqual(plain.baigeQueries, []);
+  assert.deepEqual(configured.baigeQueries, []);
+
+  const publicIdentity = ({ id, cardId, passcode, name, effectText }) => ({
+    id,
+    cardId,
+    passcode,
+    name,
+    effectText,
+  });
+  assert.deepEqual(
+    configured.evidence.retrievedCards.map(publicIdentity),
+    plain.evidence.retrievedCards.map(publicIdentity),
+  );
+  assert.equal(configured.evidence.retrievedCards.length, 1);
+  assert.equal(configured.evidence.retrievedCards[0].id, cid);
+  assert.equal(configured.evidence.retrievedCards[0].passcode, "");
 });
 
-test("cross-card official lifecycle analogues survive broad related QA retrieval", async () => {
+test("public retrieval does not synthesize cross-card mechanism analogues", async () => {
   const lifecycleCard = {
     id: "lifecycle-current-card",
     name: "匿名期限卡",
@@ -5222,13 +4885,13 @@ test("cross-card official lifecycle analogues survive broad related QA retrieval
     env: { RAG_LIVE_OFFICIAL_QA: "false" },
   });
 
-  assert.ok(evidence.ruleSearchQueries.some((item) => item.source === "effect_lifecycle_rule_search_query"));
-  assert.ok(evidence.officialQaRelated.some((item) => item.id === lifecycleAnalogue.id));
-  assert.ok(evidence.officialQaRelated.some(
-    (item) => item.id === ordinaryControlQa.id && item.isDirect === false,
-  ));
+  assert.ok(evidence.ruleSearchQueries.every((item) => (
+    !String(item.source || "").includes("effect_lifecycle")
+    && !String(item.source || "").includes("compiled_scenario")
+  )));
+  assert.ok(!evidence.officialQaRelated.some((item) => item.id === lifecycleAnalogue.id));
   assert.ok(!evidence.officialQaDirectCandidates.some((item) => item.id === lifecycleAnalogue.id));
-  assert.ok(evidence.debug.officialMechanismAnalogueCount >= 1);
+  assert.equal(evidence.debug.officialMechanismAnalogueCount, 0);
 });
 
 test("rag_prompt_truncates_context", () => {
@@ -5254,10 +4917,10 @@ test("rag_prompt_truncates_context", () => {
   assert.doesNotMatch(bundle.prompt, /上下文因 RAG_MAX_PROMPT_CHARS 限制被截断/u);
   assert.match(bundle.prompt, /allowedEvidenceIds/u);
   assert.match(bundle.prompt, /card-text-long/u);
-  assert.match(bundle.prompt, /usedEvidence.{0,80}id 必须非空/su);
+  assert.match(bundle.prompt, /usedEvidence 的 id 只能来自 allowedEvidenceIds/u);
 });
 
-test("compact recovery prompt retains card effect text and semantic state transition", () => {
+test("public prompt retains card text, excludes semantic state output, and has no recovery prompt", () => {
   const bundle = buildRagRulingPromptBundle({
     userQuery: "这个效果可以发动吗，后续如何处理？",
     cardResolution: {
@@ -5299,18 +4962,11 @@ test("compact recovery prompt retains card effect text and semantic state transi
     env: { RAG_RECOVERY_PROMPT_CHARS: "12000" },
   });
 
-  assert.match(bundle.recoveryPrompt, /EFFECT_TEXT_RECOVERY_MARKER/u);
-  assert.match(bundle.recoveryPrompt, /SEMANTIC_STATE_RECOVERY_MARKER/u);
-  assert.match(bundle.recoveryPrompt, /"attribute":"WIND"/u);
-  assert.match(bundle.recoveryPrompt, /"race":"Dragon"/u);
-  assert.match(bundle.recoveryPrompt, /"atk":2500/u);
-  assert.match(bundle.recoveryPrompt, /"def":2000/u);
-  assert.match(bundle.recoveryPrompt, /"level":8/u);
-  assert.match(bundle.recoveryPrompt, /"rank":null/u);
-  assert.match(bundle.recoveryPrompt, /"link":null/u);
-  assert.match(bundle.recoveryPrompt, /shortAnswer 不超过300字/u);
-  assert.match(bundle.recoveryPrompt, /reasoning 为2至5条/u);
-  assert.match(bundle.recoveryPrompt, /usedEvidence.{0,80}id 必须非空/su);
+  assert.match(bundle.prompt, /EFFECT_TEXT_RECOVERY_MARKER/u);
+  assert.equal(bundle.recoveryPrompt, "");
+  assert.doesNotMatch(bundle.recoveryPrompt, /SEMANTIC_STATE_RECOVERY_MARKER/u);
+  assert.doesNotMatch(bundle.recoveryPrompt, /semanticStateTransition/u);
+  assert.match(bundle.prompt, /usedEvidence.*allowedEvidenceIds/u);
 });
 
 test("compacted_prompt_keeps_each_critical_evidence_bucket", () => {
@@ -5328,7 +4984,6 @@ test("compacted_prompt_keeps_each_critical_evidence_bucket", () => {
       rawRelatedEvidence: [{ id: "rule-critical", type: "rulebook", title: "规则书", text: longText("RULE_MARKER") }],
       faqRelated: [{ id: "faq-critical", type: "faq", title: "卡片FAQ", text: longText("FAQ_MARKER") }],
       officialQaRelated: [{ id: "related-critical", type: "related", title: "相似问答", text: longText("RELATED_MARKER") }],
-      formalEngineProofs: [{ id: "formal-critical", type: "formal_engine", title: "形式化证明", text: longText("FORMAL_MARKER") }],
       retrievalWarnings: [],
     },
     env: { RAG_MAX_PROMPT_CHARS: "8000" },
@@ -5341,7 +4996,6 @@ test("compacted_prompt_keeps_each_critical_evidence_bucket", () => {
   assert.match(bundle.prompt, /RULE_MARKER/u);
   assert.match(bundle.prompt, /FAQ_MARKER/u);
   assert.match(bundle.prompt, /RELATED_MARKER/u);
-  assert.match(bundle.prompt, /FORMAL_MARKER/u);
 });
 
 test("unique exact official QA uses a focused complete-answer route", async () => {
@@ -5449,9 +5103,8 @@ test("unique exact official QA uses a focused complete-answer route", async () =
       });
     },
   });
-  assert.match(contradicted.shortAnswer, /可以宣言并发动/u);
-  assert.doesNotMatch(contradicted.shortAnswer, /不能发动|<<91001>>/u);
-  assert.ok(contradicted.riskFlags.includes("authoritative_official_direct_fallback_applied"));
+  assert.equal(contradicted.shortAnswer, "不能发动。");
+  assert.ok(!contradicted.riskFlags.includes("authoritative_official_direct_fallback_applied"));
 });
 
 test("focused official QA prompt preserves the full-source tail without invalid JSON slicing", () => {
@@ -5544,13 +5197,13 @@ test("focused official QA prompt keeps the ruling but omits a dense placeholder 
   assert.match(bundle.prompt, /対象が存在しない場合/u);
   assert.doesNotMatch(bundle.prompt, /<<94000>>/u);
   assert.doesNotMatch(bundle.prompt, /ENUMERATION_END/u);
-  assert.match(bundle.prompt, /reasoning、usedCards、missingInfo、riskFlags必须是字符串数组/u);
-  assert.match(bundle.prompt, /usedEvidence必须是对象数组/u);
+  assert.match(bundle.prompt, /reasoning、usedCards、missingInfo、riskFlags 必须是字符串数组/u);
+  assert.match(bundle.prompt, /usedEvidence 必须是对象数组/u);
   const payload = JSON.parse(bundle.prompt.split("\n").at(-1));
   assert.doesNotMatch(payload.officialQaDirectCandidate.text, /<<94000>>/u);
 });
 
-test("certified semantic question subsumption allows a long official question to cover its shorter scene", () => {
+test("semantic or card-set subsumption remains related evidence instead of an official direct route", () => {
   const candidate = {
     id: "qa-semantic-superset",
     type: "official_qa",
@@ -5586,8 +5239,16 @@ test("certified semantic question subsumption allows a long official question to
 
   const directEnv = { RAG_OFFICIAL_DIRECT_FOCUSED_PROMPT: "true" };
   const accepted = buildRagRulingPromptBundle({ userQuery: "能用不能作为融合素材的怪兽进行这次特殊召唤吗？", cardResolution, evidence, env: directEnv });
-  assert.ok(accepted.warnings.includes("official_direct_focused_prompt"));
-  assert.match(accepted.prompt, /这个特殊召唤不是融合召唤/u);
+  assert.equal(accepted.warnings.includes("official_direct_focused_prompt"), false);
+  assert.ok(accepted.warnings.includes("official_direct_candidates_downgraded_to_related:1"));
+  const acceptedPayload = JSON.parse(accepted.prompt.split("本次用户问题、卡片原文与检索资料如下：\n").at(-1));
+  assert.deepEqual(acceptedPayload.evidence.officialQaDirectCandidates, []);
+  assert.equal(acceptedPayload.evidence.officialQaRelated.length, 1);
+  assert.equal(acceptedPayload.evidence.officialQaRelated[0].id, candidate.id);
+  assert.equal(acceptedPayload.evidence.officialQaRelated[0].type, "related");
+  assert.equal(acceptedPayload.evidence.officialQaRelated[0].isDirect, false);
+  assert.equal(acceptedPayload.evidence.officialQaRelated[0].matchLevel, "official_qa_near");
+  assert.ok(acceptedPayload.allowedEvidenceIds.includes(candidate.id));
 
   const rejected = buildRagRulingPromptBundle({
     userQuery: "能用不能作为融合素材的怪兽进行这次特殊召唤吗？",
@@ -5631,7 +5292,36 @@ test("certified semantic question subsumption allows a long official question to
     },
     env: directEnv,
   });
-  assert.ok(multiCardAccepted.warnings.includes("official_direct_focused_prompt"));
+  assert.equal(multiCardAccepted.warnings.includes("official_direct_focused_prompt"), false);
+
+  const duplicateRelated = buildRagRulingPromptBundle({
+    userQuery: "两张题面卡共同形成的场景如何处理？",
+    cardResolution: {
+      resolvedCards: [{ id: "7403", name: "目标卡" }, { id: "7404", name: "发动卡" }],
+      unresolvedMentions: [],
+      ambiguousMentions: [],
+    },
+    evidence: {
+      ...evidence,
+      officialQaDirectCandidates: [{
+        ...candidate,
+        matchedQuestionCardIds: ["7403", "7404"],
+        questionCardIdCount: 2,
+        authoritativeSceneMatchReason: "unique_question_card_subsumption",
+        semanticSubsumptionCertified: false,
+        questionCardSubsumptionCertified: true,
+      }],
+      officialQaRelated: [{
+        ...candidate,
+        type: "related",
+        isDirect: false,
+        matchLevel: "official_qa_near",
+      }],
+    },
+    env: directEnv,
+  });
+  const duplicatePayload = JSON.parse(duplicateRelated.prompt.split("本次用户问题、卡片原文与检索资料如下：\n").at(-1));
+  assert.equal(duplicatePayload.evidence.officialQaRelated.filter((item) => item.id === candidate.id).length, 1);
 
   const extraUnboundCardRejected = buildRagRulingPromptBundle({
     userQuery: "两张题面卡共同形成的场景如何处理？",

@@ -10,6 +10,7 @@ import { createAdminEvidenceSnapshot } from "../backend/adminEvidenceSnapshot.mj
 import {
   createConfiguredLegacyLuaSemanticPacketFactory,
 } from "../backend/legacyLuaSemanticProduction.mjs";
+import { buildLegacyLuaPromptModule } from "../backend/legacyLuaPromptModule.mjs";
 import {
   assertLuaAblationPreflight,
   normalizeLuaAblationPreflightOptions,
@@ -58,6 +59,24 @@ test("Lua ablation preflight accepts the bundled Twin Tempests legality check", 
       name: "天雷之双风神 息那",
     }],
   });
+  const resolvedCard = {
+    cid: "22130",
+    passcode: "12197223",
+    name: "天雷之双风神 息那",
+  };
+  const luaModule = buildLegacyLuaPromptModule({
+    packet: legacyLuaSemanticPacket,
+    resolvedCards: [resolvedCard],
+    enabled: true,
+  });
+  assert.equal(luaModule.status, "READY");
+  assert.equal(luaModule.audit.reasonCategory, "AVAILABLE_PARTIAL_COVERAGE");
+  assert.deepEqual(luaModule.modelPayload.coverage, {
+    complete: false,
+    knownEffectCount: 1,
+    unknownEffectCount: 1,
+    negativeInferenceAllowed: false,
+  });
   const archive = createAdminEvidenceArchive({
     evidenceBuckets: {
       cardTexts: [{
@@ -73,11 +92,7 @@ test("Lua ablation preflight accepts the bundled Twin Tempests legality check", 
       questions: [{ questionId: "q1", text: "匿名发动合法性问题" }],
       providedFacts: ["匿名场面事实"],
       cardResolution: {
-        resolvedCards: [{
-          cid: "22130",
-          passcode: "12197223",
-          name: "天雷之双风神 息那",
-        }],
+        resolvedCards: [resolvedCard],
       },
       unresolved: {},
       retrievalWarnings: [],
@@ -115,6 +130,34 @@ test("Lua ablation preflight accepts the bundled Twin Tempests legality check", 
   assert.equal(result.ok, true);
   assert.equal(result.selectorApi, "Duel.IsExistingMatchingCard");
   assert.ok(result.cardTextCount > 0);
+
+  assert.throws(
+    () => assertLuaAblationPreflight({
+      bundle,
+      caseId: "anonymous-return-to-hand",
+      cid: "22131",
+      passcode: "12197223",
+      atomicOperation: "RETURN_TO_HAND",
+      predicateApi: "Card.IsAbleToHand",
+      selectorApi: "Duel.IsExistingMatchingCard",
+      requiredMinimum: 1,
+    }),
+    /not uniquely bound to resolved card CID 22131 and passcode 12197223/u,
+  );
+
+  assert.throws(
+    () => assertLuaAblationPreflight({
+      bundle,
+      caseId: "anonymous-return-to-hand",
+      cid: "22130",
+      passcode: "12197224",
+      atomicOperation: "RETURN_TO_HAND",
+      predicateApi: "Card.IsAbleToHand",
+      selectorApi: "Duel.IsExistingMatchingCard",
+      requiredMinimum: 1,
+    }),
+    /not uniquely bound to resolved card CID 22130 and passcode 12197224/u,
+  );
 });
 
 test("Lua ablation preflight CLI parsing is strict and generic", () => {

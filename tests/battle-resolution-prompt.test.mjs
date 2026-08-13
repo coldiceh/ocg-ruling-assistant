@@ -53,7 +53,7 @@ function evidence() {
   };
 }
 
-test("battle prompts retain the ordered checkpoints and branch-only evidence scope", () => {
+test("battle prompts contain the raw question, card texts, and retrieved branch evidence only", () => {
   const bundle = buildRagRulingPromptBundle({
     userQuery,
     cardResolution,
@@ -61,18 +61,18 @@ test("battle prompts retain the ordered checkpoints and branch-only evidence sco
   });
 
   for (const prompt of [bundle.prompt, bundle.recoveryPrompt]) {
-    assert.match(prompt, /伤害步骤开始时/u);
-    assert.match(prompt, /里侧/u);
-    assert.match(prompt, /(?:如适用|若战斗对象)/u);
-    assert.match(prompt, /永续.*效果/u);
-    assert.match(prompt, /(?:状态变化时重检攻击许可|按变化后的表示形式重新检查)/u);
-    assert.match(prompt, /不能.*整道多分支问题.*official_confirmed/u);
-    assert.match(prompt, /multi_branch_related_evidence/u);
-    assert.match(prompt, /matchedQuestionCardIds/u);
+    assert.match(prompt, /对方分别用以上两只怪兽攻击/u);
+    assert.match(prompt, /里侧目标/u);
+    assert.match(prompt, /此卡翻开后适用一个永续效果/u);
+    assert.match(prompt, /qa-anonymous-battle-branch/u);
+    assert.match(prompt, /伤害计算前将里侧守备目标翻开/u);
+    assert.doesNotMatch(prompt, /状态变化时重检攻击许可|按变化后的表示形式重新检查/u);
+    assert.doesNotMatch(prompt, /战斗题只按实际适用的检查点|战斗处理题先识别题面实际涉及/u);
+    assert.doesNotMatch(prompt, /不能.*整道多分支问题.*official_confirmed/u);
   }
 });
 
-test("a size-limited battle prompt keeps the same non-authoritative checklist", () => {
+test("a size-limited battle prompt keeps source material without adding a battle checklist", () => {
   const bundle = buildRagRulingPromptBundle({
     userQuery,
     cardResolution,
@@ -83,11 +83,13 @@ test("a size-limited battle prompt keeps the same non-authoritative checklist", 
     },
   });
 
-  assert.ok(bundle.warnings.includes("rag_prompt_compacted_to_max_chars"));
   for (const prompt of [bundle.prompt, bundle.recoveryPrompt]) {
-    assert.match(prompt, /伤害步骤开始时/u);
-    assert.match(prompt, /(?:如适用|若.*里侧守备)/u);
-    assert.match(prompt, /multi_branch_related_evidence/u);
+    assert.match(prompt, /对方分别用以上两只怪兽攻击/u);
+    assert.match(prompt, /里侧目标/u);
+    assert.match(prompt, /qa-anonymous-battle-branch/u);
+    assert.match(prompt, /伤害计算前将里侧守备目标翻开/u);
+    assert.doesNotMatch(prompt, /状态变化时重检攻击许可|按变化后的表示形式重新检查/u);
+    assert.doesNotMatch(prompt, /战斗题只按实际适用的检查点|战斗处理题先识别题面实际涉及/u);
   }
 });
 
@@ -114,7 +116,7 @@ test("a partial single-card QA cannot enter the focused direct route for a multi
   assert.equal(selected, null);
 });
 
-test("unrelated non-battle prompts do not pay the battle-checklist token cost", () => {
+test("no public prompt receives a battle-checklist instruction", () => {
   for (const query of [
     "这个效果能否在主要阶段发动？",
     "战斗阶段结束时可以发动这个效果吗？",
@@ -124,6 +126,10 @@ test("unrelated non-battle prompts do not pay the battle-checklist token cost", 
       cardResolution: { resolvedCards: [], unresolvedMentions: [], ambiguousMentions: [] },
       evidence: evidence(),
     });
-    assert.doesNotMatch(bundle.prompt, /战斗题只按实际适用的检查点|战斗处理题先识别题面实际涉及/u);
+    for (const prompt of [bundle.prompt, bundle.recoveryPrompt]) {
+      assert.match(prompt, new RegExp(query.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&"), "u"));
+      assert.doesNotMatch(prompt, /状态变化时重检攻击许可|按变化后的表示形式重新检查/u);
+      assert.doesNotMatch(prompt, /战斗题只按实际适用的检查点|战斗处理题先识别题面实际涉及/u);
+    }
   }
 });

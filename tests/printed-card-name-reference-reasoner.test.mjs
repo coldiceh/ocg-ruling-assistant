@@ -163,7 +163,7 @@ test("analyzeEffectStateTransition routes the real question to the printed-refer
   assert.equal(result.condition, "not_satisfied");
 });
 
-test("the public RAG path keeps printed-reference execution offline and delegates to the final model", async () => {
+test("the public RAG path gives raw card evidence to exactly one final model without printed-reference output", async () => {
   let finalModelCalls = 0;
   let finalPrompt = "";
   const answer = await answerRagRulingQuestion({
@@ -196,12 +196,22 @@ test("the public RAG path keeps printed-reference execution offline and delegate
     },
   });
   assert.equal(finalModelCalls, 1);
-  assert.match(answer.shortAnswer, /^不能仅凭复制/u);
+  assert.equal(
+    answer.shortAnswer,
+    "不能仅凭复制的卡名和效果满足条件；判断的是该卡卡面原本的效果文本，复制不会改写卡面印刷文本，因此不能据此发动。",
+  );
   assert.equal(answer.debug.deterministicDecision, null);
-  assert.equal(answer.debug.semanticStateTransition?.authoritative, false);
-  assert.equal(answer.debug.semanticStateTransition?.authorityReason, "diagnostic_only_requires_final_model");
+  assert.equal(answer.debug.semanticStateTransition, null);
+  assert.equal(answer.debug.semanticStateTransitionDiagnostic, null);
   assert.equal(answer.debug.modelUsed, "mock-rag");
-  assert.match(finalPrompt, /卡面原本的效果文本|复制/u);
+  assert.match(finalPrompt, /自己场上有「霸王眷龙 凶饿猛毒」与「光之黄金柜」/u);
+  assert.match(finalPrompt, /此卡直至结束阶段为止，获得与该怪兽原本卡名・效果相同/u);
+  assert.match(finalPrompt, /card-text-13077/u);
+  assert.match(finalPrompt, /"evidence"/u);
+  assert.doesNotMatch(
+    finalPrompt,
+    /semanticStateTransition|semantic_state_transition|canDecideFinalRuling|printed_card_name_reference_after_runtime_copy|copiedTextCountsAsReceiverPrintedReference|runtimeAcquisition|immutablePrintedDefinitions/u,
+  );
   assert.deepEqual(new Set(answer.resolvedCards.map((card) => card.id)), new Set(["13077", "19842", "19892"]));
 });
 

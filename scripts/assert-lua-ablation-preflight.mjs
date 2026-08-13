@@ -5,7 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { buildFinalRulingInput } from "../backend/adminModelLabService.mjs";
-import { projectLegacyLuaSemanticPacketForModel } from "../backend/legacyLuaSemanticPacket.mjs";
+import { buildLegacyLuaPromptModule } from "../backend/legacyLuaPromptModule.mjs";
 import { normalizeSnapshotBundle } from "./local-relay-effort-experiment.mjs";
 
 export function parseLuaAblationPreflightArgs(argv = []) {
@@ -77,44 +77,79 @@ export function assertLuaAblationPreflight({
   const resolvedCards = Array.isArray(snapshot?.evidence?.cardResolution?.resolvedCards)
     ? snapshot.evidence.cardResolution.resolvedCards
     : [];
-  if (!resolvedCards.some((card) => String(card?.cid ?? card?.id ?? "") === cid)) {
-    throw new Error(`${caseId} is not bound to resolved card CID ${cid}`);
+  const expectedCid = normalizePositiveDecimal(cid, null);
+  const expectedPasscode = normalizePositiveDecimal(passcode, 0xffff_ffffn);
+  if (!expectedCid || !expectedPasscode) {
+    throw new Error(`${caseId} requires a valid positive CID and passcode`);
+  }
+  const matchingResolvedCards = resolvedCards
+    .map(resolvedCardIdentity)
+    .filter((identity) => identity?.cid === expectedCid);
+  if (
+    matchingResolvedCards.length !== 1
+    || matchingResolvedCards[0].passcode !== expectedPasscode
+  ) {
+    throw new Error(
+      `${caseId} is not uniquely bound to resolved card CID ${expectedCid} and passcode ${expectedPasscode}`,
+    );
   }
 
-  const rawPacket = snapshot?.evidence?.legacyLuaSemanticPacket;
-  if (!rawPacket) throw new Error(`${caseId} has no legacy Lua semantic packet`);
-  const modelPacket = projectLegacyLuaSemanticPacketForModel(rawPacket);
-  const sourceMarker = `cid-${cid}:passcode-${passcode}`;
-  const matchingCandidates = (Array.isArray(modelPacket?.effectCandidates)
-    ? modelPacket.effectCandidates
-    : []).filter((candidate) => (
-    String(candidate?.sourceBinding?.sourceDocumentId || "").includes(sourceMarker)
-  ));
-  if (matchingCandidates.length === 0) {
-    throw new Error(`${caseId} Lua packet has no candidate bound to ${sourceMarker}`);
+  const rawPacket = snapshot?.evidence?.legacyLuaSemanticPacket || null;
+  const moduleResult = buildLegacyLuaPromptModule({
+    packet: rawPacket,
+    resolvedCards,
+    enabled: true,
+  });
+  if (moduleResult.status !== "READY") {
+    throw new Error(
+      `${caseId} Lua prompt module is not READY (${moduleResult.audit.reasonCategory})`,
+    );
   }
-  const matchingChecks = matchingCandidates.flatMap((candidate) => (
-    Array.isArray(candidate?.activationLegalityChecks)
-      ? candidate.activationLegalityChecks.map((check) => ({ candidate, check }))
+  const matchingCards = (Array.isArray(moduleResult.modelPayload?.cards)
+    ? moduleResult.modelPayload.cards
+    : []).filter((card) => String(card?.cardRef?.cid || "") === expectedCid);
+  if (matchingCards.length !== 1) {
+    throw new Error(`${caseId} Lua prompt has no unique card binding for CID ${expectedCid}`);
+  }
+  const matchingChecks = (Array.isArray(matchingCards[0]?.effects)
+    ? matchingCards[0].effects
+    : []).flatMap((effect) => (
+    Array.isArray(effect?.activationChecks)
+      ? effect.activationChecks.map((check) => ({ effect, check }))
       : []
   )).filter(({ check }) => (
     check?.atomicOperation === atomicOperation
     && check?.predicateApi === predicateApi
-    && check?.requiredMinimum === requiredMinimum
-    && check?.selectorSummary?.selectorApi === selectorApi
+    && check?.minimumCount === requiredMinimum
+    && check?.selector?.selectorApi === selectorApi
   ));
   if (matchingChecks.length === 0) {
     throw new Error(
-      `${caseId} Lua packet lacks ${atomicOperation}/${predicateApi}/${selectorApi}/requiredMinimum=${requiredMinimum}`,
+      `${caseId} Lua prompt lacks ${atomicOperation}/${predicateApi}/${selectorApi}/minimumCount=${requiredMinimum}`,
     );
   }
 
+  const baselineInput = buildFinalRulingInput(snapshot, {
+    evidenceVariant: "card_text_only",
+  });
   const finalInput = buildFinalRulingInput(snapshot, {
     evidenceVariant: "card_text_plus_lua",
   });
-  const payload = JSON.parse(finalInput.split("\n").at(-1));
-  if (!payload.legacyLuaSemanticPacket) {
-    throw new Error("card_text_plus_lua did not expose the verified Lua model packet");
+  if (finalInput !== `${baselineInput}\n${moduleResult.promptAddon}`) {
+    throw new Error("card_text_plus_lua changed more than the isolated Lua prompt addon");
+  }
+  if (countOccurrences(finalInput, "legacyLuaPromptHints:") !== 1) {
+    throw new Error("card_text_plus_lua must append exactly one Lua prompt addon");
+  }
+  if (/legacyLuaSemanticPacket/u.test(finalInput)) {
+    throw new Error("card_text_plus_lua leaked the legacy semantic packet envelope");
+  }
+  const baselinePayload = JSON.parse(baselineInput.split("\n").at(-1));
+  const payload = JSON.parse(finalInput.split("\n").find((line) => (
+    line.startsWith("{\"schemaVersion\":2,\"evidenceSnapshot\"")
+  )));
+  if (JSON.stringify(payload) !== JSON.stringify(baselinePayload)) {
+    throw new Error("Lua and baseline variants do not share the same frozen evidence payload");
   }
   const evidenceItems = payload?.evidenceDecisionPacket?.evidenceItems;
   if (!Array.isArray(evidenceItems) || evidenceItems.length === 0) {
@@ -125,20 +160,64 @@ export function assertLuaAblationPreflight({
     throw new Error(`card_text_plus_lua leaked non-card-text evidence category ${nonCardText.category}`);
   }
 
-  const [{ candidate, check }] = matchingChecks;
+  const [{ check }] = matchingChecks;
   return Object.freeze({
     ok: true,
     caseId,
     snapshotId: snapshot.snapshotId,
-    cid,
-    passcode,
-    sourceDocumentId: candidate.sourceBinding.sourceDocumentId,
+    cid: expectedCid,
+    passcode: expectedPasscode,
+    luaPromptModuleVersion: moduleResult.audit.moduleVersion,
+    luaPromptPayloadSha256: moduleResult.audit.payloadSha256,
     atomicOperation: check.atomicOperation,
     predicateApi: check.predicateApi,
-    requiredMinimum: check.requiredMinimum,
-    selectorApi: check?.selectorSummary?.selectorApi || null,
+    requiredMinimum: check.minimumCount,
+    selectorApi: check?.selector?.selectorApi || null,
     cardTextCount: evidenceItems.length,
   });
+}
+
+function countOccurrences(value, needle) {
+  return String(value).split(needle).length - 1;
+}
+
+function resolvedCardIdentity(card) {
+  if (!card || typeof card !== "object" || Array.isArray(card)) return null;
+  const sourceCid = String(card.sourceUrl || card.ygoResourcesUrl || "")
+    .match(/\/data\/card\/([1-9]\d{0,9})(?:$|[/?#])/u)?.[1];
+  const cids = uniquePositiveDecimals([
+    card.cid,
+    sourceCid,
+    card.id,
+    card.cardId,
+    card.raw?.cid,
+  ], null);
+  const passcodes = uniquePositiveDecimals([
+    card.passcode,
+    card.password,
+    card.raw?.passcode,
+    card.raw?.password,
+  ], 0xffff_ffffn);
+  if (cids.length !== 1 || passcodes.length !== 1) return null;
+  return { cid: cids[0], passcode: passcodes[0] };
+}
+
+function uniquePositiveDecimals(values, maximum) {
+  return [...new Set(values
+    .map((value) => normalizePositiveDecimal(value, maximum))
+    .filter(Boolean))];
+}
+
+function normalizePositiveDecimal(value, maximum) {
+  const text = typeof value === "number" && Number.isSafeInteger(value)
+    ? String(value)
+    : typeof value === "string"
+      ? value.trim()
+      : "";
+  if (!/^\d+$/u.test(text)) return null;
+  const numeric = BigInt(text);
+  if (numeric <= 0n || (maximum !== null && numeric > maximum)) return null;
+  return numeric.toString(10);
 }
 
 export async function runLuaAblationPreflightCli(

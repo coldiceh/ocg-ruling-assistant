@@ -107,18 +107,33 @@ test("generic output separates replaced activation cost from the simultaneous ma
   );
 });
 
-test("full and recovery prompts require the same generic state-execution procedure", () => {
+test("public prompts keep raw card evidence without a handwritten state-execution procedure", () => {
+  const card = {
+    id: "anonymous-fusion-spell",
+    name: "匿名融合术",
+    effectText: "舍弃1张手牌发动。将自己场上的怪兽作为融合素材进行融合召唤。",
+  };
   const bundle = buildRagRulingPromptBundle({
     userQuery: "这个效果能否发动，代价与同批素材分别去哪里？",
-    cardResolution: { resolvedCards: [] },
-    evidence: {},
+    cardResolution: { resolvedCards: [card] },
+    evidence: {
+      cardTexts: [{
+        id: "card-text-anonymous-fusion-spell",
+        type: "card_text",
+        title: "匿名融合术 的卡片文本",
+        cards: [card.name],
+        text: card.effectText,
+      }],
+    },
   });
 
   for (const prompt of [bundle.prompt, bundle.recoveryPrompt]) {
-    assert.match(prompt, /通用(?:状态)?执行顺序/u);
-    assert.match(prompt, /手续或cost|执行手续、cost/u);
-    assert.match(prompt, /持续效果重算|重算持续效果/u);
-    assert.match(prompt, /诱发检查点|收集诱发候选/u);
-    assert.match(prompt, /移动归因|实际移动及归因/u);
+    assert.match(prompt, /代价与同批素材分别去哪里/u);
+    assert.match(prompt, /card-text-anonymous-fusion-spell/u);
+    assert.match(prompt, /舍弃1张手牌发动/u);
+    assert.doesNotMatch(prompt, /通用(?:状态)?执行顺序/u);
+    assert.doesNotMatch(prompt, /持续效果重算|重算持续效果/u);
+    assert.doesNotMatch(prompt, /诱发检查点|收集诱发候选/u);
+    assert.doesNotMatch(prompt, /移动归因|实际移动及归因/u);
   }
 });
