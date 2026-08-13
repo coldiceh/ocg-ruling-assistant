@@ -36,7 +36,8 @@ test("private pure LLM evaluation is explicitly triggered, serial and generation
   assert.match(workflow, /if \[ "\$EVALUATION_LIMIT" = "32" \]; then/u);
   assert.match(workflow, /case_count_args\+=\(--require-case-count 32\)/u);
   assert.match(workflow, /"\$\{case_count_args\[@\]\}"/u);
-  assert.match(workflow, /--generation-timeout-ms 300000/u);
+  assert.match(workflow, /--generation-timeout-ms 330000/u);
+  assert.doesNotMatch(workflow, /--generation-timeout-ms 600000/u);
   assert.match(workflow, /evaluate-pure-llm-preview\.mjs/u);
   assert.doesNotMatch(workflow, /--auto-judge|--judge-only|--judge-timeout-ms/u);
   assert.doesNotMatch(workflow, /Generate and judge|Judge the|Sol high/iu);
@@ -69,6 +70,12 @@ test("retrieval-only pilot completes prompt construction without receiving or di
   assert.match(workflow, /--limit "\$EVALUATION_LIMIT"/u);
   assert.match(workflow, /preview_dry_run_response/u);
   assert.match(workflow, /record\.candidateResponseText !== ""/u);
+  assert.match(workflow, /Print anonymous pilot stage diagnostics/u);
+  assert.match(workflow, /if: always\(\) && env\.EVALUATION_LIMIT == '1'/u);
+  assert.match(workflow, /projectPrivateEvaluationStageLog/u);
+  assert.match(workflow, /private_evaluation_stage_summary/u);
+  assert.match(workflow, /scripts\/lib\/private-evaluation-stage-log\.mjs/u);
+  assert.doesNotMatch(workflow, /cat [^\r\n]*private-evaluation-backend\.log/u);
 });
 
 test("private generation runs on an isolated loopback budget ledger, never the production public ledger", async () => {

@@ -76,9 +76,9 @@ jobs:
       PUBLIC_RULING_MODEL_PROFILE: relay-gpt-5.6-sol-low
       RELAY_MAX_COMPLETION_TOKENS: "8192"
       # GitHub's local backend is not constrained by Vercel's 270-second cap.
-      # Keep the inner Relay deadline below the evaluator's full-request limit.
-      # Keep the provider deadline below the 300s end-to-end deadline so the
-      # backend can return a classified failure before the evaluator aborts.
+      # The Relay deadline is an absolute provider-request limit. The evaluator
+      # includes cold data loading, extraction, retrieval and response cleanup,
+      # so it keeps a small outer margin without allowing a ten-minute request.
       RELAY_STREAM_TIMEOUT_MS: "240000"
       API_CHATGPT_DAILY_BUDGET_USD: "10"
       API_DAILY_BUDGET_CNY: "10"
@@ -186,10 +186,33 @@ jobs:
             --generate-only \
             --limit "$EVALUATION_LIMIT" \
             "${case_count_args[@]}" \
-            --generation-timeout-ms 300000
+            --generation-timeout-ms 330000
           status=$?
           echo "exit_code=$status" >> "$GITHUB_OUTPUT"
           exit 0
+
+      - name: Print anonymous pilot stage diagnostics
+        if: always() && env.EVALUATION_LIMIT == '1'
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFile } from "node:fs/promises";
+          import { projectPrivateEvaluationStageLog } from "./scripts/lib/private-evaluation-stage-log.mjs";
+          let source = "";
+          try {
+            source = await readFile(`${process.env.RUNNER_TEMP}/private-evaluation-backend.log`, "utf8");
+          } catch {
+            console.log(JSON.stringify({ kind: "private_evaluation_stage_summary", eventCount: 0 }));
+            process.exit(0);
+          }
+
+          const events = projectPrivateEvaluationStageLog(source);
+          console.log(JSON.stringify({
+            kind: "private_evaluation_stage_summary",
+            eventCount: events.length,
+          }));
+          for (const event of events) console.log(JSON.stringify(event));
+          NODE
 
       - name: Verify the retrieval-only pilot reached prompt construction without Relay dispatch
         if: always() && env.RETRIEVAL_ONLY_PILOT == 'true'
