@@ -6,6 +6,7 @@ import {
   buildGenerationRequest,
   buildJudgeRequest,
   createPublicReport,
+  extractCandidatePublicMetrics,
   isSolModelIdentity,
   parseChatCompletionSse,
   parseCliArguments,
@@ -100,11 +101,21 @@ test("public report contains only anonymous result metadata", () => {
   const dataset = parseDatasetText(`${privateQuestion}\n${privateReference}`);
   const generations = new Map([[
     "case-001",
-    { status: "generated", latencyMs: 120, candidateResponseText: privateCandidate },
+    {
+      status: "generated",
+      latencyMs: 120,
+      candidateResponseText: privateCandidate,
+      estimatedCostUsd: 0.002,
+    },
   ]]);
   const judgments = new Map([[
     "case-001",
-    { verdict: "correct", latencyMs: 30, reason: privateReference },
+    {
+      verdict: "correct",
+      latencyMs: 30,
+      reason: privateReference,
+      estimatedCostUsd: 0.001,
+    },
   ]]);
   const report = createPublicReport({
     dataset,
@@ -118,9 +129,40 @@ test("public report contains only anonymous result metadata", () => {
   assert.equal(report.summary.correct, 1);
   assert.equal(report.summary.reviewedAccuracy, 1);
   assert.equal(report.summary.strictOverallAccuracy, 1);
+  assert.deepEqual(report.summary.latencyMs.generation, {
+    count: 1,
+    average: 120,
+    p50: 120,
+    p95: 120,
+    min: 120,
+    max: 120,
+  });
+  assert.equal(report.summary.latencyMs.judgment.average, 30);
+  assert.deepEqual(report.summary.estimatedCostUsd, {
+    pricingBasis: "official_list_rate_all_input_uncached",
+    generation: 0.002,
+    judgment: 0.001,
+    total: 0.003,
+    generationCoverage: 1,
+    judgmentCoverage: 1,
+  });
   assert.equal(serialized.includes(privateQuestion), false);
   assert.equal(serialized.includes(privateReference), false);
   assert.equal(serialized.includes(privateCandidate), false);
+});
+
+test("candidate public metrics read only cost and usage from the answer debug object", () => {
+  assert.deepEqual(extractCandidatePublicMetrics(JSON.stringify({
+    shortAnswer: "private answer text",
+    debug: {
+      estimatedCostUsd: 0.0123,
+      tokenUsage: { prompt_tokens: 100, completion_tokens: 25, secret: "ignored" },
+    },
+  })), {
+    estimatedCostUsd: 0.0123,
+    usage: { prompt_tokens: 100, completion_tokens: 25 },
+  });
+  assert.deepEqual(extractCandidatePublicMetrics("plain text"), {});
 });
 
 test("failed or absent judge results are not reviewed and stay outside the reviewed denominator", () => {

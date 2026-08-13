@@ -2,6 +2,7 @@ name: Validate preview changes
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, labeled]
   workflow_dispatch:
 
 permissions:
@@ -38,3 +39,152 @@ jobs:
         run: >-
           node --test --test-force-exit --test-concurrency=1
           --test-isolation=none --test-reporter=dot
+
+  private-evaluation:
+    if: >-
+      github.event_name == 'pull_request'
+      && github.event.action == 'labeled'
+      && github.event.label.name == 'private-pure-llm-evaluation'
+      && github.event.pull_request.head.repo.full_name == github.repository
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    env:
+      RELAY_API_KEY: ${{ secrets.RELAY_API_KEY }}
+      RELAY_BASE_URL: https://api.986310.xyz/v1
+      PUBLIC_RULING_MODEL_PROFILE: relay-gpt-5.6-sol-low
+      API_CHATGPT_DAILY_BUDGET_USD: "10"
+      API_DAILY_BUDGET_CNY: "10"
+      QUERY_AUDIT_ENABLED: "false"
+      HOST: 127.0.0.1
+      PORT: "18787"
+    steps:
+      - name: Checkout the exact preview commit
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+
+      - name: Materialize the private dataset without logging it
+        shell: bash
+        env:
+          PRIVATE_DATASET_BASE64: ${{ secrets.PURE_LLM_EVALUATION_DATASET_BASE64 }}
+        run: |
+          set -euo pipefail
+          if [ -z "$RELAY_API_KEY" ] || [ -z "$PRIVATE_DATASET_BASE64" ]; then
+            echo "Required private evaluation secrets are not configured" >&2
+            exit 1
+          fi
+          umask 077
+          printf '%s' "$PRIVATE_DATASET_BASE64" | base64 --decode > "$RUNNER_TEMP/private-dataset.txt"
+          test -s "$RUNNER_TEMP/private-dataset.txt"
+
+      - name: Start the preview branch backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          node backend/server.mjs > "$RUNNER_TEMP/private-evaluation-backend.log" 2>&1 &
+          echo "$!" > "$RUNNER_TEMP/private-evaluation-backend.pid"
+          for _ in $(seq 1 120); do
+            if curl --fail --silent --show-error "http://127.0.0.1:$PORT/health" > /dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Preview backend did not become healthy" >&2
+          exit 1
+
+      - name: Generate and judge all private cases serially
+        id: evaluation
+        shell: bash
+        run: |
+          set +e
+          mkdir -p artifacts
+          node scripts/evaluate-pure-llm-preview.mjs \
+            --dataset "$RUNNER_TEMP/private-dataset.txt" \
+            --checkpoint-dir "$RUNNER_TEMP/pure-llm-private-checkpoint" \
+            --report artifacts/pure-llm-private-public-report.json \
+            --base-url "http://127.0.0.1:$PORT" \
+            --limit 32 \
+            --generation-timeout-ms 300000 \
+            --judge-timeout-ms 300000
+          status=$?
+          echo "exit_code=$status" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Verify the report contains no private text
+        if: always() && hashFiles('artifacts/pure-llm-private-public-report.json') != ''
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFile } from "node:fs/promises";
+          import { parseDatasetText } from "./scripts/evaluate-pure-llm-preview.mjs";
+          const dataset = parseDatasetText(await readFile(`${process.env.RUNNER_TEMP}/private-dataset.txt`, "utf8"));
+          const reportText = await readFile("artifacts/pure-llm-private-public-report.json", "utf8");
+          const report = JSON.parse(reportText);
+          for (const item of dataset.cases) {
+            if (reportText.includes(item.question) || reportText.includes(item.referenceAnswer)) {
+              throw new Error("Public report contains private evaluation text");
+            }
+          }
+          if (!Array.isArray(report.cases) || report.cases.some((item) => !/^case-\d{3,}$/.test(item.id))) {
+            throw new Error("Public report case identities are not anonymous");
+          }
+          NODE
+
+      - name: Encrypt the private diagnostic checkpoint
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ ! -d "$RUNNER_TEMP/pure-llm-private-checkpoint" ]; then
+            exit 0
+          fi
+          archive_key="$(sha256sum "$RUNNER_TEMP/private-dataset.txt" | cut -d ' ' -f 1)"
+          tar -C "$RUNNER_TEMP" -czf "$RUNNER_TEMP/pure-llm-private-checkpoint.tar.gz" \
+            pure-llm-private-checkpoint
+          PRIVATE_ARCHIVE_KEY="$archive_key" openssl enc -aes-256-cbc -salt -pbkdf2 -iter 200000 \
+            -in "$RUNNER_TEMP/pure-llm-private-checkpoint.tar.gz" \
+            -out artifacts/pure-llm-private-checkpoint.tar.gz.enc \
+            -pass env:PRIVATE_ARCHIVE_KEY
+          unset archive_key
+          rm -f "$RUNNER_TEMP/pure-llm-private-checkpoint.tar.gz"
+
+      - name: Upload the anonymous aggregate report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pure-llm-private-public-report
+          path: artifacts/pure-llm-private-public-report.json
+          if-no-files-found: warn
+          retention-days: 1
+
+      - name: Upload the encrypted diagnostic checkpoint
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pure-llm-private-encrypted-diagnostics
+          path: artifacts/pure-llm-private-checkpoint.tar.gz.enc
+          if-no-files-found: warn
+          retention-days: 1
+
+      - name: Stop the preview branch backend and scrub plaintext
+        if: always()
+        shell: bash
+        run: |
+          if [ -s "$RUNNER_TEMP/private-evaluation-backend.pid" ]; then
+            kill "$(cat "$RUNNER_TEMP/private-evaluation-backend.pid")" 2>/dev/null || true
+          fi
+          rm -rf \
+            "$RUNNER_TEMP/private-dataset.txt" \
+            "$RUNNER_TEMP/pure-llm-private-checkpoint" \
+            "$RUNNER_TEMP/private-evaluation-backend.log" \
+            "$RUNNER_TEMP/private-evaluation-backend.pid"
+
+      - name: Enforce evaluation completion
+        if: steps.evaluation.outputs.exit_code != '0'
+        run: exit "${{ steps.evaluation.outputs.exit_code }}"
