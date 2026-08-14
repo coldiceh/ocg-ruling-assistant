@@ -397,6 +397,8 @@ async function answerRagRulingQuestionInternal({
       evidenceFingerprint,
       finalPromptSha256,
       promptTruncated: promptBundle.promptTruncated,
+      selectedEvidenceDiagnostics: promptBundle.evidenceSelectionDiagnostics || [],
+      ruleQueryPlanDiagnostics: promptBundle.ruleQueryPlanDiagnostics || [],
       semanticStateTransition: null,
       semanticStateTransitionDiagnostic: null,
       deterministicDecision: null,

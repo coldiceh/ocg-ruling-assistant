@@ -51,11 +51,12 @@ const GENERAL_INSTRUCTIONS = Object.freeze([
   "相关资料不是本题原题时，必须比较它与题面的卡片、条件、位置、时点、对象、玩家和处理过程；只采用可迁移的部分，不得直接复制其结论或把它伪装成官方直接裁定。",
   "retrievalContext.relatedOnly=true 的资料（包括跨卡机制资料）始终只是相关证据；即使来源为官方，也不得据此提升为 official direct 或 official_confirmed。",
   "先建立事件时间线，并为每个实际相关步骤建立统一状态检查表：发动快照（发动/适用条件、cost、对象、区域、表示形式、当时作为何种卡处理）、处理快照（逆序处理到该连锁项时的当前区域、类型、属性/等级与正在适用的效果）以及处理后快照。引用相关 Q&A 前必须核对它描述的是同一阶段与事件节点，不得把相邻但不同的时点互换。",
-  "若同一效果在发动时要求存在可执行的后续选择，而处理途中状态又会改变，必须分别说明发动时的合法选项与处理时最终能执行的选项。连续处理按卡文分句逐步执行：完成前一步后先更新区域/类型变化和当前状态，再检查下一步；不得用尚未发生的后续状态倒推或省略发动条件，也不得在没有卡文或资料依据时因后一步失败而撤销已经完成的前一步。",
-  "核对实际受影响实体与权限关系：受到影响的是卡、怪兽、玩家、攻击、召唤还是其他处理；允许、追加、禁止、免疫或替代分别授予或约束谁以及哪一种动作。不能仅凭句子的语法宾语推断，不能把只针对一种实体或动作的权限/限制扩张到另一种；资料不足时应明确保留不确定性。",
+  "先核对每个处理的效果来源与效果类型，再核对实际受影响实体：受到影响的是卡、怪兽、玩家、攻击、召唤还是其他处理。不得因为文本提到某实体就偷换效果来源、效果类型或受影响实体。",
+  "若同一效果在发动时要求存在可执行的后续选择，而处理途中状态又会改变，必须分别说明发动时的合法选项与处理时最终能执行的选项。连续处理按卡文分句逐步执行：对每一步记录由哪个效果实际执行、是否完成以及完成后的状态，再检查下一步及其对前一步的依赖；不得仅因最终状态看似相同就认定原效果完成，也不得用尚未发生的后续状态倒推、省略发动条件，或在没有卡文或资料依据时因后一步失败而撤销已经完成的独立步骤。",
+  "核对权限关系：允许、追加、禁止、免疫或替代分别授予或约束谁以及哪一种动作。检查不受影响或免疫时，必须同时核对效果的真实来源、效果类型和受影响实体；无论结果看似有利还是不利都使用同一检查，不得只凭结果倾向决定是否受影响。不能把只针对一种实体或动作的权限/限制扩张到另一种。",
   "遇到次数、攻击次数、追加权限或可再次执行次数，建立显式账本：初始权限、已经使用的次数、本次新增或替换的权限、剩余次数，并逐步核算；不得把已使用的次数重复计入。",
   "如果没有官方直接 Q&A，可以综合卡片原文、FAQ、官方相关 Q&A、用户提供文本和其他资料进行独立规则分析。资料足以推导时输出 rule_analysis，不要仅因没有官方原题就拒绝回答。",
-  "如果决定结论所必需的事实确实缺失或资料相互冲突，明确列出缺失信息或条件分支；不得用常见场面、历史题目或猜测补齐，也不得虚构确定结论。",
+  "如果决定结论所必需的事实确实缺失或资料相互冲突，明确列入 missingInfo 并给出必要的条件分支；不得用常见场面、历史题目或猜测补齐，也不得虚构确定结论。输出前交叉核对 shortAnswer、reasoning、missingInfo 与各子问题结论，消除互相矛盾的前提、步骤和最终结论。",
   "不得根据卡名、题号、题型标签或历史答案套用预设结论。每次都从本次用户问题、原始卡文和本次证据重新推理。",
   "不得把 card_text、baige_card_text、user_provided_text、FAQ、rulebook、related evidence 或 rawRelatedEvidence 称为官方直接 Q&A。",
   "输出必须是单个 JSON 对象，不要 markdown、代码围栏或 JSON 外说明。字段必须包含 answerLevel、shortAnswer、reasoning、usedCards、usedEvidence、missingInfo、riskFlags、confidenceSelfEstimate。",
@@ -113,6 +114,8 @@ export function buildRagRulingPromptBundle({
   };
 
   if (authoritativeDirect) {
+    const allowedEvidenceIds = [String(authoritativeDirect.id)];
+    const ruleQueryPlanDiagnostics = buildRuleQueryPlanDiagnostics(evidence.ruleSearchQueries);
     warnings.push("official_direct_focused_prompt");
     const promptResult = buildOfficialDirectPrompt({
       userQuery: payload.userQuery,
@@ -125,6 +128,12 @@ export function buildRagRulingPromptBundle({
       prompt: promptResult.prompt,
       recoveryPrompt: "",
       modelEvidence: evidencePayload,
+      allowedEvidenceIds,
+      evidenceSelectionDiagnostics: buildEvidenceSelectionDiagnostics(
+        evidencePayload,
+        allowedEvidenceIds,
+      ),
+      ruleQueryPlanDiagnostics,
       warnings,
       promptChars: promptResult.prompt.length,
       promptTruncated: promptResult.truncated,
@@ -137,6 +146,7 @@ export function buildRagRulingPromptBundle({
     warnings.push("rag_prompt_compacted_to_max_chars");
     prompt = buildCompactRagPrompt({ payload, maxPromptChars: limits.maxPromptChars });
   }
+  const allowedEvidenceIds = extractPromptAllowedEvidenceIds(prompt, payload.allowedEvidenceIds);
   return {
     prompt,
     // Compatibility field only. Public generation is deliberately one-call,
@@ -144,11 +154,85 @@ export function buildRagRulingPromptBundle({
     // obscure the exact input used for evaluation.
     recoveryPrompt: "",
     modelEvidence: evidencePayload,
+    allowedEvidenceIds,
+    evidenceSelectionDiagnostics: buildEvidenceSelectionDiagnostics(
+      evidencePayload,
+      allowedEvidenceIds,
+    ),
+    ruleQueryPlanDiagnostics: buildRuleQueryPlanDiagnostics(evidence.ruleSearchQueries),
     warnings,
     promptChars: prompt.length,
     promptTruncated: warnings.some((warning) => warning.includes("truncated") || warning.includes("compacted")),
     authoritativeOfficialDirectId: null,
   };
+}
+
+function extractPromptAllowedEvidenceIds(prompt, fallback = []) {
+  const marker = "本次用户问题、卡片原文与检索资料如下：\n";
+  const source = String(prompt || "");
+  const candidates = [];
+  const markerIndex = source.lastIndexOf(marker);
+  if (markerIndex >= 0) candidates.push(source.slice(markerIndex + marker.length));
+  const finalLine = source.slice(source.lastIndexOf("\n") + 1);
+  if (finalLine) candidates.push(finalLine);
+  for (const candidate of candidates) {
+    try {
+      const parsed = JSON.parse(candidate);
+      if (!Array.isArray(parsed?.allowedEvidenceIds)) continue;
+      return [...new Set(parsed.allowedEvidenceIds
+        .map((id) => String(id || "").trim())
+        .filter(Boolean))];
+    } catch {
+      // Try the next complete JSON envelope. Never infer ids from prompt text.
+    }
+  }
+  return [...new Set((fallback || []).map((id) => String(id || "").trim()).filter(Boolean))];
+}
+
+function buildRuleQueryPlanDiagnostics(ruleSearchQueries = []) {
+  return (Array.isArray(ruleSearchQueries) ? ruleSearchQueries : [])
+    .slice(0, 8)
+    .map((item) => ({
+      subclaim: String(item?.subclaim || "").replace(/\s+/gu, " ").trim().slice(0, 160),
+      checkpoint: String(item?.checkpoint || "").trim(),
+      confidence: String(item?.confidence || "").trim(),
+      source: String(item?.source || "").trim(),
+    }))
+    .filter((item) => item.subclaim || item.checkpoint);
+}
+
+function buildEvidenceSelectionDiagnostics(evidencePayload = {}, allowedEvidenceIds = []) {
+  const allowed = new Set((allowedEvidenceIds || []).map((id) => String(id || "").trim()).filter(Boolean));
+  const seen = new Set();
+  const diagnostics = [];
+  for (const bucket of EVIDENCE_BUCKET_ORDER) {
+    for (const item of evidencePayload?.[bucket] || []) {
+      const id = String(item?.id || "").trim();
+      if (!id || !allowed.has(id) || seen.has(id)) continue;
+      seen.add(id);
+      const retrievalContext = item?.retrievalContext && typeof item.retrievalContext === "object"
+        ? item.retrievalContext
+        : {};
+      diagnostics.push({
+        id,
+        type: String(item?.type || ""),
+        bucket,
+        sourceAuthority: String(item?.sourceAuthority || ""),
+        isDirect: item?.isDirect === true,
+        matchLevel: String(item?.matchLevel || ""),
+        ...(retrievalContext.scope
+          ? { retrievalScope: String(retrievalContext.scope) }
+          : {}),
+        ...(typeof retrievalContext.relatedOnly === "boolean"
+          ? { relatedOnly: retrievalContext.relatedOnly }
+          : {}),
+        ...((item?.matchedBy || []).length
+          ? { matchedBy: item.matchedBy.map((value) => String(value)).slice(0, 8) }
+          : {}),
+      });
+    }
+  }
+  return diagnostics;
 }
 
 export function selectAuthoritativeOfficialDirectCandidate({

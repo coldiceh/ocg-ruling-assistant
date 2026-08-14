@@ -110,6 +110,7 @@ export function extractRagCards(userQuery, { cards = [], maxCards = 6, modelCard
   const ambiguousMentions = [];
   const seenCards = new Set();
   const seenMentionKeys = new Set();
+  const nearEditAmbiguityLockedMentionKeys = new Set();
   const numberedMentionKeysRequiringExternalVerification = new Set();
 
   for (const identity of extractNumberedCardIdentities(query)) {
@@ -195,13 +196,14 @@ export function extractRagCards(userQuery, { cards = [], maxCards = 6, modelCard
     seenMentionKeys.add(mentionKey);
     const candidates = aliasIndex.get(mentionKey) || [];
     const requiresExternalNumberedIdentityVerification = numberedMentionKeysRequiringExternalVerification.has(mentionKey);
-    const singleEditCandidate = candidates.length
+    const nearestEditCandidates = candidates.length
       || seed.deferToNestedKnownSpan
       || requiresExternalNumberedIdentityVerification
-      ? null
-      : findUniqueSingleEditCandidate(aliasIndex, mention) || findUniqueNearEditCandidate(aliasIndex, mention);
+      ? []
+      : collectNearestEditCandidates(aliasIndex, mention);
+    const nearestEditCandidate = nearestEditCandidates.length === 1 ? nearestEditCandidates[0] : null;
     const distinctiveFragmentCandidate = candidates.length
-      || singleEditCandidate
+      || nearestEditCandidate
       || seed.deferToNestedKnownSpan
       || requiresExternalNumberedIdentityVerification
       ? null
@@ -210,17 +212,18 @@ export function extractRagCards(userQuery, { cards = [], maxCards = 6, modelCard
       addResolved(resolved, seenCards, candidates[0], mention, confidenceForMentionSeed(seed, 0.98));
     } else if (candidates.length > 1) {
       ambiguousMentions.push(buildAmbiguousMention(mention, candidates));
-    } else if (singleEditCandidate) {
+    } else if (nearestEditCandidate) {
       addEditDistanceResolved(
         resolved,
         seenCards,
-        singleEditCandidate,
+        nearestEditCandidate,
         mention,
-        confidenceForNearEditMention(seed, singleEditCandidate.nearEditDistance),
+        confidenceForNearEditMention(seed, nearestEditCandidate.nearEditDistance),
       );
     } else if (distinctiveFragmentCandidate) {
       addResolved(resolved, seenCards, distinctiveFragmentCandidate, mention, 0.91);
     } else if (looksLikeCardMention(mention) && !numberedMentionAlreadyResolved(mention, resolved)) {
+      if (nearestEditCandidates.length > 1) nearEditAmbiguityLockedMentionKeys.add(mentionKey);
       if (seed.source !== "contextual_distinctive_fragment") unresolvedMentions.push(buildUnresolvedMention(seed));
     }
   }
@@ -231,22 +234,24 @@ export function extractRagCards(userQuery, { cards = [], maxCards = 6, modelCard
     if (!mentionKey || seenMentionKeys.has(mentionKey)) continue;
     seenMentionKeys.add(mentionKey);
     const candidates = aliasIndex.get(mentionKey) || [];
-    const singleEditCandidate = candidates.length || seed.deferToNestedKnownSpan
-      ? null
-      : findUniqueSingleEditCandidate(aliasIndex, mention) || findUniqueNearEditCandidate(aliasIndex, mention);
+    const nearestEditCandidates = candidates.length || seed.deferToNestedKnownSpan
+      ? []
+      : collectNearestEditCandidates(aliasIndex, mention);
+    const nearestEditCandidate = nearestEditCandidates.length === 1 ? nearestEditCandidates[0] : null;
     if (candidates.length === 1) {
       addResolved(resolved, seenCards, candidates[0], mention, 0.92);
     } else if (candidates.length > 1) {
       ambiguousMentions.push(buildAmbiguousMention(mention, candidates));
-    } else if (singleEditCandidate) {
+    } else if (nearestEditCandidate) {
       addEditDistanceResolved(
         resolved,
         seenCards,
-        singleEditCandidate,
+        nearestEditCandidate,
         mention,
-        confidenceForNearEditMention(seed, singleEditCandidate.nearEditDistance),
+        confidenceForNearEditMention(seed, nearestEditCandidate.nearEditDistance),
       );
     } else if (looksLikeCardMention(mention) && !numberedMentionAlreadyResolved(mention, resolved)) {
+      if (nearestEditCandidates.length > 1) nearEditAmbiguityLockedMentionKeys.add(mentionKey);
       unresolvedMentions.push(buildUnresolvedMention(seed));
     }
   }
@@ -307,6 +312,7 @@ export function extractRagCards(userQuery, { cards = [], maxCards = 6, modelCard
     seenCards,
     unresolvedMentions,
     ambiguousMentions,
+    ambiguityLockedMentionKeys: nearEditAmbiguityLockedMentionKeys,
   });
 
   applyReferencedCardTextResolution({
@@ -703,6 +709,7 @@ function collectQueryAliasEntries(aliasIndex, normalizedQuery, queryNumberedIden
 function buildExactMentionSpanSelection(query, queryAliasEntries, mentionSeeds) {
   const text = String(query || "").normalize("NFKC");
   const lowerText = text.toLowerCase();
+  const normalizedSpanProjection = buildNormalizedSpanProjection(text);
   const stableAliasKeys = new Set((queryAliasEntries || [])
     .filter(([, candidates]) => (candidates || []).some((candidate) => cardIdentity(candidate.card)))
     .map(([aliasKey]) => aliasKey));
@@ -729,12 +736,7 @@ function buildExactMentionSpanSelection(query, queryAliasEntries, mentionSeeds) 
     const mentionKey = normalizeCardKey(surface);
     if (!lowerNeedle || !mentionKey) continue;
 
-    let cursor = 0;
-    while (cursor <= lowerText.length - lowerNeedle.length) {
-      const start = lowerText.indexOf(lowerNeedle, cursor);
-      if (start < 0) break;
-      const end = start + lowerNeedle.length;
-      cursor = start + 1;
+    const addSpan = (start, end) => {
       const rangeKey = `${start}:${end}`;
       const span = spansByRange.get(rangeKey) || {
         start,
@@ -747,6 +749,26 @@ function buildExactMentionSpanSelection(query, queryAliasEntries, mentionSeeds) 
       if (stable) span.stableMentionKeys.add(mentionKey);
       span.surfaces.add(needle);
       spansByRange.set(rangeKey, span);
+    };
+
+    let cursor = 0;
+    while (cursor <= lowerText.length - lowerNeedle.length) {
+      const start = lowerText.indexOf(lowerNeedle, cursor);
+      if (start < 0) break;
+      const end = start + lowerNeedle.length;
+      cursor = start + 1;
+      addSpan(start, end);
+    }
+
+    // Stable local aliases may differ from the player's spelling only by the
+    // same normalization already used by the alias index (for example a
+    // missing middle dot or whitespace). Project those verified normalized
+    // occurrences back to real query offsets so every mention source still
+    // participates in one longest-non-overlapping span selection.
+    if (stable) {
+      for (const span of normalizedSpanProjection.spans(surface)) {
+        addSpan(span.start, span.end);
+      }
     }
   }
 
@@ -1106,6 +1128,54 @@ function buildModelMentionSeeds(modelMentions) {
     .filter((item) => looksLikeCardMention(item.input));
 }
 
+function buildNormalizedSpanProjection(value) {
+  const source = String(value || "").normalize("NFKC");
+  let normalizedText = "";
+  const sourceRanges = [];
+
+  for (let start = 0; start < source.length;) {
+    const codePoint = source.codePointAt(start);
+    const character = String.fromCodePoint(codePoint);
+    const end = start + character.length;
+    const normalizedCharacter = normalizeCardKey(character);
+    normalizedText += normalizedCharacter;
+    for (let index = 0; index < normalizedCharacter.length; index += 1) {
+      sourceRanges.push({ start, end });
+    }
+    start = end;
+  }
+
+  return {
+    spans(surface) {
+      const needle = normalizeCardKey(surface);
+      if (!needle || !normalizedText || needle.length > normalizedText.length) return [];
+      const result = [];
+      const seen = new Set();
+      let cursor = 0;
+      while (cursor <= normalizedText.length - needle.length) {
+        const normalizedStart = normalizedText.indexOf(needle, cursor);
+        if (normalizedStart < 0) break;
+        const normalizedEnd = normalizedStart + needle.length;
+        cursor = normalizedStart + 1;
+        const firstRange = sourceRanges[normalizedStart];
+        const lastRange = sourceRanges[normalizedEnd - 1];
+        if (!firstRange || !lastRange) continue;
+        const start = firstRange.start;
+        const end = lastRange.end;
+        // Per-character projection is used only to locate a candidate range.
+        // Re-normalize the actual source slice before accepting it so a model
+        // spelling can never manufacture a span that is absent from the query.
+        if (normalizeCardKey(source.slice(start, end)) !== needle) continue;
+        const key = `${start}:${end}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        result.push({ start, end });
+      }
+      return result;
+    },
+  };
+}
+
 function choosePrimaryModelMention(name, originalText) {
   if (!name) return originalText;
   if (!originalText) return name;
@@ -1146,28 +1216,6 @@ function confidenceForNearEditMention(seed, distance) {
   return 0.9;
 }
 
-function findUniqueSingleEditCandidate(aliasIndex, mention) {
-  const mentionKey = normalizeCardKey(mention);
-  if (mentionKey.length < MIN_SINGLE_EDIT_CARD_KEY_LENGTH) return null;
-  const keysByLength = aliasKeysByLengthCache.get(aliasIndex) || buildAliasKeysByLength(aliasIndex);
-
-  const seriesToken = extractMixedScriptSeriesToken(mention);
-  if (seriesToken) {
-    const seriesMatches = collectSingleEditCandidates(aliasIndex, keysByLength, mention, mentionKey, (candidate) => (
-      extractMixedScriptSeriesToken(candidate.matchedAlias) === seriesToken
-    ));
-    if (seriesMatches.size) return seriesMatches.size === 1 ? seriesMatches.values().next().value : null;
-  }
-
-  const matchedCards = collectSingleEditCandidates(aliasIndex, keysByLength, mention, mentionKey);
-  return matchedCards.size === 1 ? matchedCards.values().next().value : null;
-}
-
-function findUniqueNearEditCandidate(aliasIndex, mention) {
-  const matchedCards = collectNearEditCandidates(aliasIndex, mention);
-  return matchedCards.size === 1 ? matchedCards.values().next().value : null;
-}
-
 function collectNearEditCandidates(aliasIndex, mention, { allowContextualTwoEdit = false } = {}) {
   const mentionKey = normalizeCardKey(mention);
   const maximumDistance = mentionKey.length >= 8 || (allowContextualTwoEdit && mentionKey.length >= 5) ? 2 : 1;
@@ -1192,6 +1240,13 @@ function collectNearEditCandidates(aliasIndex, mention, { allowContextualTwoEdit
   return matchedCards;
 }
 
+function collectNearestEditCandidates(aliasIndex, mention, options) {
+  const candidates = [...collectNearEditCandidates(aliasIndex, mention, options).values()];
+  if (candidates.length <= 1) return candidates;
+  const minimumDistance = Math.min(...candidates.map((candidate) => Number(candidate.nearEditDistance)));
+  return candidates.filter((candidate) => Number(candidate.nearEditDistance) === minimumDistance);
+}
+
 function boundedEditDistance(left, right, limit) {
   const a = String(left || "");
   const b = String(right || "");
@@ -1210,26 +1265,6 @@ function boundedEditDistance(left, right, limit) {
     previous = current;
   }
   return previous[b.length];
-}
-
-function collectSingleEditCandidates(aliasIndex, keysByLength, mention, mentionKey, candidateFilter = null) {
-  const matchedCards = new Map();
-
-  for (const length of [mentionKey.length - 1, mentionKey.length, mentionKey.length + 1]) {
-    for (const aliasKey of keysByLength.get(length) || []) {
-      if (!hasSingleEditDistance(mentionKey, aliasKey)) continue;
-      for (const candidate of aliasIndex.get(aliasKey) || []) {
-        if (candidateFilter && !candidateFilter(candidate)) continue;
-        if (hasNumberedCardIdentityConflict(mention, candidate.matchedAlias)) continue;
-        if (!approximateCandidateCompatibleWithNumberedMention(mention, candidate)) continue;
-        const identity = cardIdentity(candidate.card);
-        if (!identity) continue;
-        const previous = matchedCards.get(identity);
-        if (!previous || normalizeCardKey(previous.matchedAlias).length < aliasKey.length) matchedCards.set(identity, candidate);
-      }
-    }
-  }
-  return matchedCards;
 }
 
 function findCardsByNumberedIdentity(cards, identity) {
@@ -1467,16 +1502,6 @@ function normalizeMaxCards(maxCards) {
   return Number.isFinite(parsed) ? Math.max(0, parsed) : 6;
 }
 
-function extractMixedScriptSeriesToken(value) {
-  const text = String(value || "")
-    .normalize("NFKC")
-    .trim()
-    .replace(/^[「『《【\[（(“"']+/u, "");
-  const match = text.match(/^([A-Za-z][A-Za-z0-9_-]{1,11})\s*(?=[\u3040-\u30ff\u3400-\u9fff])/u);
-  if (!match || /^(?:no|cno|sno)$/iu.test(match[1])) return "";
-  return normalizeCardKey(match[1]);
-}
-
 function buildAliasKeysByLength(aliasIndex) {
   const keysByLength = new Map();
   for (const key of aliasIndex.keys()) {
@@ -1535,7 +1560,11 @@ function applyContextualShortMentionResolution({ query, cards, resolved, seenCar
     madeProgress = false;
     for (const mention of pendingMentions) {
       const mentionKey = normalizeCardKey(mention.input);
-      if (!mentionKey || resolvedMentionKeys.has(mentionKey) || mentionKey.length > MAX_CONTEXTUAL_SHORT_MENTION_LENGTH) continue;
+      if (
+        !mentionKey
+        || resolvedMentionKeys.has(mentionKey)
+        || mentionKey.length > MAX_CONTEXTUAL_SHORT_MENTION_LENGTH
+      ) continue;
       const candidates = findContextualShortMentionCandidates(cards, mention.input);
       if (!candidates.length) continue;
 
@@ -1570,10 +1599,12 @@ function applyContextualNearEditResolution({
   seenCards,
   unresolvedMentions,
   ambiguousMentions,
+  ambiguityLockedMentionKeys = new Set(),
 }) {
   if (!resolved.length || !unresolvedMentions.length) return;
   const resolvedMentionKeys = new Set();
   for (const mention of unresolvedMentions) {
+    if (ambiguityLockedMentionKeys.has(normalizeCardKey(mention.input))) continue;
     const candidates = [...collectNearEditCandidates(aliasIndex, mention.input, { allowContextualTwoEdit: true }).values()];
     if (!candidates.length) continue;
     const linked = candidates.filter((candidate) => cardTextLinksToResolvedIdentity(candidate.card, resolved));
@@ -2269,7 +2300,7 @@ function normalizeModelCardNameCandidates(items) {
       source: "model_card_name_extractor",
     }))
     .filter((item) => looksLikeCardMention(item.name))
-    .slice(0, 12), (item) => normalizeCardKey(item.name));
+    .slice(0, 12), (item) => `${normalizeCardKey(item.name)}\u0000${exactSurfaceKey(item.originalText)}`);
 }
 
 function dedupeMentionObjects(items) {

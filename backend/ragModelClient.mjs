@@ -1,7 +1,5 @@
 import { createHash } from "node:crypto";
-import { emptyOperationLegality, validateOperationLegalityModelOutput } from "./operationLegalityAnalyzer.mjs";
 import { RAG_ANSWER_LEVELS } from "./ragRulingPrompt.mjs";
-import { compileRuleScenario } from "./ruleScenarioCompiler.mjs";
 import {
   DEFAULT_PUBLIC_RELAY_BASE_URL,
   DEFAULT_PUBLIC_RELAY_MODEL,
@@ -19,6 +17,7 @@ import {
 const DEFAULT_DEEPSEEK_BASE_URL = "https://api.deepseek.com";
 const DEFAULT_DEEPSEEK_MODEL = "deepseek-v4-flash";
 const DEFAULT_DEEPSEEK_CARD_MODEL = "deepseek-v4-flash";
+const DEFAULT_RELAY_RULE_MODEL = "gpt-5.6-terra";
 const DEFAULT_GLM_BASE_URL = "https://open.bigmodel.cn/api/paas/v4";
 const DEFAULT_GLM_MODEL = "glm-5.2";
 const DEFAULT_JSON_TASK_MAX_OUTPUT_TOKENS = 4000;
@@ -86,11 +85,17 @@ const BUDGET_RESERVE_UNLESS_CLOSED_LUA = [
 const DEEPSEEK_THINKING_MODES = new Set(["enabled", "disabled"]);
 const DEEPSEEK_REASONING_EFFORTS = new Set(["low", "high", "max"]);
 const RELAY_REASONING_EFFORTS = new Set(["none", "low", "medium", "high", "xhigh", "max"]);
+const RELAY_RULE_MODELS = new Set(["gpt-5.6-luna", "gpt-5.6-terra", "gpt-5.6-sol"]);
 const RULE_QUERY_CHECKPOINTS = new Set([
+  "operation_legality",
   "activation_snapshot",
   "resolution_snapshot",
+  "mandatory_step",
+  "step_dependency",
   "affected_entity",
+  "effect_source_type",
   "permission_relation",
+  "usage_limit",
   "zone_type_transition",
   "post_resolution",
 ]);
@@ -100,42 +105,13 @@ const PUBLIC_BUDGET_BUCKETS = Object.freeze([
   Object.freeze({ id: "final_ruling:deepseek", stage: "final_ruling", provider: "deepseek", label: "DeepSeek 最终裁定", currency: "CNY" }),
   Object.freeze({ id: "final_ruling:relay", stage: "final_ruling", provider: "relay", label: "ChatGPT 最终裁定", currency: "USD" }),
 ]);
-const RESTRICTIVE_EVIDENCE_PATTERN = /(?:不能|不可|不得|无法|不可以|不适用|不在场上存在|禁止|不满足|不存在|cannot|can't|must not|may not|not allowed|できません|発動できません)/iu;
-const GROUNDING_MECHANISM_PATTERNS = Object.freeze([
-  ["activation", /发动|發動|発動|activate/iu],
-  ["chain", /连锁|連鎖|チェーン|chain/iu],
-  ["target", /对象|對象|対象|target/iu],
-  ["applicability", /适用|適用|处理|處理|処理|resolve|applicable/iu],
-  ["return", /回到|返回|回去|放回|弹回|彈回|戻|return/iu],
-  ["hand", /手卡|手牌|手札|hand/iu],
-  ["deck", /卡组|牌组|牌組|デッキ|deck/iu],
-  ["spell_trap", /魔法|陷阱|罠|spell|trap/iu],
-  ["field", /场上|場上|フィールド|field/iu],
-  ["destroy", /破坏|破壊|destroy/iu],
-  ["negate", /无效|無效|negate/iu],
-  ["banish", /除外|banish/iu],
-  ["graveyard", /墓地|graveyard|GY/iu],
-  ["summon", /召唤|召喚|summon/iu],
-  ["cost", /cost|代价|代價|支付|舍弃|丢弃|捨て/iu],
-  ["timing", /时点|時点|时机|タイミング|timing/iu],
-  ["attack", /攻击|攻擊|攻撃|attack/iu],
-  ["unaffected", /不受.{0,8}影响|不受.{0,8}影響|受けない|unaffected/iu],
-]);
-const PRIORITY_SCENARIO_ABSENCE_PATTERN = /(?:没有其他|不存在其他|并无其他|无其他|除.{0,12}以外没有|只有.{0,24}(?:1|一)张|only.{0,24}(?:one|1)|no other|none(?:\s+(?:available|applicable))?)/iu;
-const PRIORITY_ACTIVE_SPELL_TRAP_RETURN_PATTERN = /(?:发动|發動|発動|连锁|連鎖|チェーン|chain).{0,80}(?:魔法|陷阱|罠|spell|trap).{0,80}(?:回到|返回|放回|弹回|彈回|戻|return)|(?:魔法|陷阱|罠|spell|trap).{0,80}(?:连锁|連鎖|チェーン|chain).{0,80}(?:回到|返回|放回|弹回|彈回|戻|return)/iu;
-const PRIORITY_NO_APPLICABLE_CARD_PATTERN = /(?:(?:除(?:了)?自身以外|除.{0,20}以外|没有其他|不存在其他|并无其他|无其他|no other|none|ほか|他).{0,180}(?:适用|適用|返回|回到|放回|选择|選択|对象|対象|处理|處理|処理|カード|card).{0,100}(?:(?:不能|不可|不得|无法|不可以|cannot).{0,16}(?:发动|發動|発動|activate)|発動できません|cannot activate))|(?:(?:(?:不能|不可|不得|无法|不可以|cannot).{0,16}(?:发动|發動|発動|activate)|発動できません|cannot activate).{0,100}(?:除自身以外|没有其他|不存在其他|no other|ほか.{0,24}ない))/iu;
-const PRIORITY_GENERIC_NO_APPLICABLE_CARD_PATTERN = /(?:(?:除(?:了)?自身以外|除.{0,20}以外).{0,40}(?:没有|不存在|并无|无).{0,20}(?:适用|適用|处理|處理|选择|選択|返回|回到).{0,20}(?:卡|カード|card).{0,24}(?:不能|不可|不得|无法|不可以|発動できません|cannot).{0,12}(?:发动|發動|発動|activate)?|(?:no other|none).{0,40}(?:applicable|eligible).{0,24}(?:card).{0,24}(?:cannot|can't|may not).{0,12}activate)/iu;
-const PRIORITY_TARGET_RESTRICTION_PATTERN = /(?:不能|不可|不得|无法|不可以|cannot|can't|対象にできません).{0,28}(?:作为|成为|选为|選択|取为|取作|対象|target).{0,16}(?:对象|對象|対象|target)|(?:不能|不可|不得|无法|不可以|cannot|can't).{0,20}(?:取|选择|選択).{0,12}(?:对象|對象|対象|target)/iu;
-const PRIORITY_SIMULTANEOUS_REPLACEMENT_PATTERN = /同\s*1?\s*时点.{0,24}双方.{0,30}(?:代替破坏|破坏.{0,12}代替).{0,60}回合玩家.{0,18}先适用.{0,100}非回合玩家.{0,60}(?:不在场上存在|已经不在场上).{0,30}不适用/su;
 const memoryBudget = new Map();
 const privateEvaluationBudgetLedger = new Map();
 const cardNameExtractionCache = new Map();
 const ruleQueryExtractionCache = new Map();
-const rulebookGroundingCache = new Map();
 const officialQaApplicabilityCache = new Map();
 const cardNameExtractionFlights = new Map();
 const ruleQueryExtractionFlights = new Map();
-const rulebookGroundingFlights = new Map();
 const officialQaApplicabilityFlights = new Map();
 
 export async function callRagModel({
@@ -825,12 +801,19 @@ export async function callRuleQueryExtractionModel({
   const providerResolution = resolveRuleQueryExtractionProvider(env);
   const provider = providerResolution.provider;
   const modelName = modelNameForRuleQueryExtractionProvider(provider, env);
+  const providerEnv = provider === "relay" ? createRuleQueryRelayEnv(env) : env;
+  const relayGeneration = resolveRuleQueryRelayGenerationConfig(provider, env);
+  const reasoningEffort = relayGeneration.reasoningEffort;
+  const providerWarnings = [
+    ...providerResolution.warnings,
+    ...relayGeneration.warnings,
+  ];
   const maxTokens = readNumber(env.RAG_RULE_MODEL_MAX_OUTPUT_TOKENS, 700);
   const prompt = buildRuleQueryExtractionPrompt(userQuery);
 
   if (dryRun === true || isEnabled(env.RAG_DRY_RUN)) {
     return emptyRuleQueryExtractionResult(provider, modelName, true, [
-      ...providerResolution.warnings,
+      ...providerWarnings,
       "rule_query_model_dry_run_skipped",
     ]);
   }
@@ -839,21 +822,31 @@ export async function callRuleQueryExtractionModel({
     try {
       const execution = await runBudgetedAuxiliaryModelCall({
         provider,
+        stage: provider === "relay" ? "final_ruling" : "evidence_preparation",
+        modelName,
         prompt,
         maxTokens,
-        env,
+        env: providerEnv,
         fetchImpl,
         now,
         signal,
         invoke: async () => {
-          const raw = await modelInvoker({ prompt, provider, modelName, maxTokens, task: "rule_query_extraction", signal });
+          const raw = await modelInvoker({
+            prompt,
+            provider,
+            modelName,
+            maxTokens,
+            reasoningEffort,
+            task: "rule_query_extraction",
+            signal,
+          });
           return { rawPayload: raw, rawText: String(raw || ""), usage: raw?.usage || {} };
         },
       });
       if (execution.blocked) {
         return {
           ...emptyRuleQueryExtractionResult(provider, modelName, true, [
-            ...providerResolution.warnings,
+            ...providerWarnings,
             ...execution.warnings,
             "api_daily_budget_exceeded_rule_query_model_skipped",
           ]),
@@ -866,16 +859,22 @@ export async function callRuleQueryExtractionModel({
         rawText: String(raw || ""),
         providerUsed: provider,
         modelUsed: modelName,
+        requestedModel: modelName,
+        returnedModel: null,
+        reasoningEffort,
         dryRun: false,
-        warnings: [...providerResolution.warnings, ...execution.warnings],
+        warnings: [...providerWarnings, ...execution.warnings],
         tokenUsage: execution.usage,
+        costCurrency: execution.costCurrency,
+        estimatedCost: execution.estimatedCost,
         estimatedCostCny: execution.estimatedCostCny,
+        estimatedCostUsd: execution.estimatedCostUsd,
         budgetStatus: execution.budgetStatus,
       };
     } catch (error) {
       return {
         ...emptyRuleQueryExtractionResult(provider, modelName, false, [
-          ...providerResolution.warnings,
+          ...providerWarnings,
           ...(error.budgetWarnings || []),
           `rule_query_model_failed:${safeErrorMessage(error)}`,
         ]),
@@ -884,8 +883,8 @@ export async function callRuleQueryExtractionModel({
     }
   }
 
-  if (provider === "mock" || !hasProviderKey(provider, env) || typeof fetchImpl !== "function") {
-    return emptyRuleQueryExtractionResult("mock", "mock-rule-query-extractor", true, providerResolution.warnings);
+  if (provider === "mock" || !hasProviderKey(provider, providerEnv) || typeof fetchImpl !== "function") {
+    return emptyRuleQueryExtractionResult("mock", "mock-rule-query-extractor", true, providerWarnings);
   }
 
   const cacheKey = extractionCacheKey({
@@ -897,6 +896,7 @@ export async function callRuleQueryExtractionModel({
       prompt,
       maxTokens,
       temperature: readNumber(env.RAG_RULE_MODEL_TEMPERATURE, readNumber(env.RAG_CARD_MODEL_TEMPERATURE, 0)),
+      reasoningEffort,
     },
   });
   return runCachedAuxiliaryCall({
@@ -914,9 +914,11 @@ export async function callRuleQueryExtractionModel({
     );
     const execution = await runBudgetedAuxiliaryModelCall({
       provider,
+      stage: provider === "relay" ? "final_ruling" : "evidence_preparation",
+      modelName,
       prompt,
       maxTokens,
-      env,
+      env: providerEnv,
       fetchImpl,
       now,
       signal: sharedSignal,
@@ -936,22 +938,32 @@ export async function callRuleQueryExtractionModel({
             maxTokensEnvName: "GEMINI_RULE_MODEL_MAX_OUTPUT_TOKENS",
             signal: requestSignal,
           })
-          : callDeepSeek({
-            prompt,
-            env,
-            modelName,
-            maxTokens,
-            fetchImpl,
-            temperature: readNumber(env.RAG_RULE_MODEL_TEMPERATURE, readNumber(env.RAG_CARD_MODEL_TEMPERATURE, 0)),
-            thinkingMode: "disabled",
-            signal: requestSignal,
-          })
+          : provider === "relay"
+            ? callRelay({
+              prompt,
+              env: providerEnv,
+              modelName,
+              maxTokens,
+              fetchImpl,
+              reasoningEffort,
+              signal: requestSignal,
+            })
+            : callDeepSeek({
+              prompt,
+              env: providerEnv,
+              modelName,
+              maxTokens,
+              fetchImpl,
+              temperature: readNumber(env.RAG_RULE_MODEL_TEMPERATURE, readNumber(env.RAG_CARD_MODEL_TEMPERATURE, 0)),
+              thinkingMode: "disabled",
+              signal: requestSignal,
+            })
       )),
     });
     if (execution.blocked) {
       return {
         ...emptyRuleQueryExtractionResult(provider, modelName, true, [
-          ...providerResolution.warnings,
+          ...providerWarnings,
           ...execution.warnings,
           "api_daily_budget_exceeded_rule_query_model_skipped",
         ]),
@@ -965,15 +977,21 @@ export async function callRuleQueryExtractionModel({
       rawText: response.rawText,
       providerUsed: provider,
       modelUsed: modelName,
+      requestedModel: String(response.requestModel || modelName),
+      returnedModel: String(response.responseModel || "") || null,
+      reasoningEffort,
       dryRun: false,
       warnings: [
-        ...providerResolution.warnings,
+        ...providerWarnings,
         ...execution.warnings,
         ...(response.warnings || []),
         ...(parsedExtraction.cacheable ? [] : [`rule_query_model_not_cached:${parsedExtraction.reason}`]),
       ],
       tokenUsage: execution.usage,
+      costCurrency: execution.costCurrency,
+      estimatedCost: execution.estimatedCost,
       estimatedCostCny: execution.estimatedCostCny,
+      estimatedCostUsd: execution.estimatedCostUsd,
       budgetStatus: execution.budgetStatus,
     };
     if (parsedExtraction.cacheable) writeCachedExtraction(ruleQueryExtractionCache, cacheKey, result, env);
@@ -981,7 +999,7 @@ export async function callRuleQueryExtractionModel({
       } catch (error) {
         return {
           ...emptyRuleQueryExtractionResult(provider, modelName, false, [
-            ...providerResolution.warnings,
+            ...providerWarnings,
             ...(error.budgetWarnings || []),
             `rule_query_model_failed:${safeErrorMessage(error)}`,
           ]),
@@ -1410,6 +1428,57 @@ function createOfficialQaApplicabilityRelayEnv(env = {}) {
   };
 }
 
+function createRuleQueryRelayEnv(env = {}) {
+  const apiKey = String(
+    env.RAG_RULE_MODEL_RELAY_API_KEY
+      || env.RELAY_API_KEY
+      || "",
+  ).trim();
+  const baseUrl = String(
+    env.RAG_RULE_MODEL_RELAY_BASE_URL
+      || env.RELAY_BASE_URL
+      || "",
+  ).trim();
+  return {
+    ...env,
+    ...(apiKey ? { RELAY_API_KEY: apiKey } : {}),
+    ...(baseUrl ? { RELAY_BASE_URL: baseUrl } : {}),
+  };
+}
+
+function ruleQueryRelayConfigured(env = {}) {
+  const relayEnv = createRuleQueryRelayEnv(env);
+  const configured = Boolean(
+    String(relayEnv.RELAY_API_KEY || "").trim()
+      && String(relayEnv.RELAY_BASE_URL || "").trim(),
+  );
+  if (!configured) return false;
+  try {
+    relayChatCompletionsUrl(relayEnv.RELAY_BASE_URL);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function resolveRuleQueryRelayGenerationConfig(provider, env = {}) {
+  if (provider !== "relay") return { reasoningEffort: null, warnings: [] };
+  const configured = String(env.RAG_RULE_MODEL_REASONING_EFFORT || "none").trim().toLowerCase();
+  if (RELAY_REASONING_EFFORTS.has(configured)) {
+    return {
+      reasoningEffort: configured,
+      warnings: ["third_party_relay_model_identity_unverified"],
+    };
+  }
+  return {
+    reasoningEffort: "none",
+    warnings: [
+      "third_party_relay_model_identity_unverified",
+      "relay_rule_query_reasoning_effort_invalid_defaulted_none",
+    ],
+  };
+}
+
 function emptyOfficialQaApplicabilityResult(status, warnings = []) {
   return {
     status,
@@ -1449,373 +1518,6 @@ function createApplicabilityAbortScope({ signal, timeoutMs }) {
       if (signal) signal.removeEventListener("abort", abortFromParent);
     },
   };
-}
-
-export async function callRulebookGroundingModel({
-  userQuery,
-  cardTexts = [],
-  ruleEvidence = [],
-  qaEvidence = [],
-  dataRevision = "",
-  env = globalThis.process?.env || {},
-  modelInvoker,
-  fetchImpl = globalThis.fetch,
-  now = new Date(),
-  dryRun = false,
-  signal,
-} = {}) {
-  const maxRulebookCandidates = readPositiveNumber(env.RAG_MAX_RULEBOOK_CANDIDATES, 24);
-  const maxQaCandidates = readPositiveNumber(env.RAG_MAX_QA_GROUNDING_CANDIDATES, 12);
-  const maxCardTextCandidates = readPositiveNumber(env.RAG_MAX_CARDS, 6);
-  const maxPriorityConstraints = readPositiveNumber(env.RAG_MAX_PRIORITY_CONSTRAINTS, 5);
-  const maxFocusedCandidates = readPositiveNumber(env.RAG_MAX_FOCUSED_GROUNDING_CANDIDATES, 28);
-  const selectedQaEvidence = selectGroundingQaEvidence(qaEvidence, maxQaCandidates);
-  const selectedRuleEvidence = dedupeGroundingEvidence(ruleEvidence).slice(0, maxRulebookCandidates);
-  const selectedCardTexts = dedupeGroundingEvidence(cardTexts).slice(0, maxCardTextCandidates);
-  const priorityConstraintEvidence = selectPriorityConstraintEvidence({
-    items: selectedRuleEvidence,
-    userQuery,
-    cardTexts: selectedCardTexts,
-    limit: maxPriorityConstraints,
-  });
-  const candidates = selectGroundingCandidates({
-    priorityConstraintEvidence,
-    selectedQaEvidence,
-    selectedCardTexts,
-    selectedRuleEvidence,
-    maxCandidates: priorityConstraintEvidence.length
-      ? maxFocusedCandidates
-      : maxRulebookCandidates + maxQaCandidates + maxCardTextCandidates,
-  });
-  if (!candidates.length) {
-    return emptyRulebookGroundingResult("none", "none", true, ["grounding_evidence_candidates_missing"]);
-  }
-
-  const providerResolution = resolveRulebookGroundingProvider(env);
-  const provider = providerResolution.provider;
-  const modelName = modelNameForRulebookGroundingProvider(provider, env);
-  const maxTokens = readNumber(env.RAG_RULEBOOK_MODEL_MAX_OUTPUT_TOKENS, 2800);
-  const prompt = buildRulebookGroundingPrompt({
-    userQuery,
-    cardTexts: selectedCardTexts,
-    evidenceCandidates: candidates,
-    priorityConstraintEvidence,
-  });
-  const repairMaxTokens = Math.min(
-    maxTokens,
-    readPositiveNumber(env.RAG_RULEBOOK_REPAIR_MAX_OUTPUT_TOKENS, 2200),
-  );
-  const focusedStateTransitionReview = !priorityConstraintEvidence.length
-    && shouldRunFocusedStateTransitionReview({
-      userQuery,
-      cardTexts: selectedCardTexts,
-      evidenceCandidates: candidates,
-    });
-  const repairPrompt = priorityConstraintEvidence.length
-    ? buildFocusedConstraintRepairPrompt({
-      userQuery,
-      cardTexts: selectedCardTexts,
-      priorityConstraintEvidence,
-    })
-    : focusedStateTransitionReview
-      ? buildFocusedStateTransitionRepairPrompt({
-        userQuery,
-        cardTexts: selectedCardTexts,
-        evidenceCandidates: candidates,
-      })
-      : "";
-  const focusedTaskName = priorityConstraintEvidence.length
-    ? "rulebook_constraint_repair"
-    : "rulebook_state_transition_repair";
-
-  const focusedReviewEnabled = Boolean(repairPrompt) && !isDisabled(env.RAG_RULEBOOK_FOCUSED_REPAIR_ENABLED);
-  if (dryRun === true || isEnabled(env.RAG_DRY_RUN)) {
-    return emptyRulebookGroundingResult(
-      provider,
-      modelName,
-      true,
-      [...providerResolution.warnings, "rulebook_grounding_dry_run_skipped"],
-      priorityConstraintEvidence,
-    );
-  }
-  if (signal?.aborted) throw abortSignalError(signal);
-  if (modelInvoker) {
-    const invokeInjectedGrounding = (input) => Promise.resolve().then(() => {
-      if (signal?.aborted) throw abortSignalError(signal);
-      return modelInvoker(input);
-    });
-    const primaryTask = invokeInjectedGrounding({
-      prompt,
-      provider,
-      modelName,
-      maxTokens,
-      task: "rulebook_grounding",
-      signal,
-    });
-    const focusedTask = focusedReviewEnabled
-      ? invokeInjectedGrounding({
-          prompt: repairPrompt,
-          provider,
-          modelName,
-          maxTokens: repairMaxTokens,
-          task: focusedTaskName,
-          signal,
-        })
-      : null;
-    const [primaryOutcome, focusedOutcome] = await Promise.allSettled([
-      primaryTask,
-      ...(focusedTask ? [focusedTask] : []),
-    ]);
-    const combined = combineRulebookGroundingOutcomes({
-      primaryOutcome,
-      focusedOutcome: focusedTask ? focusedOutcome : null,
-      candidates,
-      priorityConstraintEvidence,
-      userQuery,
-      cardTexts: selectedCardTexts,
-    });
-    if (!combined.operationLegality) {
-      return emptyRulebookGroundingResult(provider, modelName, false, [
-        ...providerResolution.warnings,
-        ...combined.warnings,
-      ], priorityConstraintEvidence);
-    }
-    return {
-      operationLegality: combined.operationLegality,
-      rawText: combined.rawText,
-      providerUsed: provider,
-      modelUsed: modelName,
-      dryRun: false,
-      warnings: [
-        ...providerResolution.warnings,
-        ...combined.warnings,
-        ...(combined.operationLegality.warnings || []),
-      ],
-      tokenUsage: {},
-      estimatedCostCny: 0,
-      budgetStatus: null,
-    };
-  }
-  if (provider === "mock" || !hasProviderKey(provider, env) || typeof fetchImpl !== "function") {
-    return emptyRulebookGroundingResult(
-      "mock",
-      "mock-rulebook-grounding",
-      true,
-      providerResolution.warnings,
-      priorityConstraintEvidence,
-    );
-  }
-
-  const cacheKey = extractionCacheKey({
-    kind: "rulebook-grounding-v10",
-    provider,
-    modelName,
-    dataRevision,
-    input: {
-      prompt,
-      repairPrompt,
-      maxTokens,
-      repairMaxTokens,
-      focusedReviewEnabled,
-    },
-  });
-  return runCachedAuxiliaryCall({
-    cache: rulebookGroundingCache,
-    flights: rulebookGroundingFlights,
-    cacheKey,
-    cacheWarning: "rulebook_grounding_model_cache_hit",
-    env,
-    signal,
-    work: async (sharedSignal) => {
-      if (sharedSignal?.aborted) throw abortSignalError(sharedSignal);
-      const budget = await buildBudgetPreflight({
-    provider,
-    stage: "evidence_preparation",
-    prompt: repairPrompt ? prompt + "\n" + repairPrompt : prompt,
-    maxTokens: maxTokens + (repairPrompt ? repairMaxTokens : 0),
-    env,
-    fetchImpl,
-    now,
-    trackSpend: true,
-  });
-      if (sharedSignal?.aborted) {
-        await throwIfAbortedAfterBudgetPreflight({
-          signal: sharedSignal,
-          budget,
-          env,
-          fetchImpl,
-        });
-      }
-      if (budget.blocked) {
-        return {
-          ...emptyRulebookGroundingResult(provider, modelName, true, [
-            ...providerResolution.warnings,
-            ...budget.warnings,
-            "api_daily_budget_exceeded_rulebook_grounding_skipped",
-          ], priorityConstraintEvidence),
-          budgetStatus: budget.status,
-        };
-      }
-
-      let remoteCallCompleted = false;
-      let allFailedCallsWereReleaseSafe = false;
-      let budgetStatus = budget.status;
-      let tokenUsage = {};
-      let actualCost = 0;
-      const spendWarnings = [];
-      try {
-    const timeoutMs = readPositiveNumber(env.RAG_RULEBOOK_MODEL_TIMEOUT_MS, 10000);
-    const invokeGrounding = (modelPrompt, outputTokens, requestTimeoutMs, timeoutMessage) => (
-      runAbortableProviderOperation({
-        signal: sharedSignal,
-        timeoutMs: requestTimeoutMs,
-        timeoutMessage,
-      }, (requestSignal) => {
-        throwIfAbortedBeforeProviderDispatch(requestSignal);
-        return provider === "gemini"
-          ? callGemini({
-            prompt: modelPrompt,
-            env,
-            modelName,
-            maxTokens: outputTokens,
-            fetchImpl,
-            temperature: 0,
-            maxTokensEnvName: "GEMINI_RULEBOOK_MODEL_MAX_OUTPUT_TOKENS",
-            signal: requestSignal,
-          })
-          : callDeepSeek({
-            prompt: modelPrompt,
-            env,
-            modelName,
-            maxTokens: outputTokens,
-            fetchImpl,
-            temperature: 0,
-            thinkingMode: "disabled",
-            signal: requestSignal,
-          });
-      })
-    );
-    const primaryTask = invokeGrounding(
-      prompt,
-      maxTokens,
-      timeoutMs,
-      "rulebook_grounding_model_timeout",
-    );
-    const repairTimeoutMs = readPositiveNumber(env.RAG_RULEBOOK_REPAIR_TIMEOUT_MS, 10000);
-    const focusedTask = focusedReviewEnabled
-      ? invokeGrounding(
-        repairPrompt,
-        repairMaxTokens,
-        repairTimeoutMs,
-        "rulebook_grounding_focused_repair_timeout",
-      )
-      : null;
-    const [primaryOutcome, focusedOutcome] = await Promise.allSettled([
-      primaryTask,
-      ...(focusedTask ? [focusedTask] : []),
-    ]);
-    const responses = [primaryOutcome, focusedOutcome]
-      .filter((outcome) => outcome?.status === "fulfilled")
-      .map((outcome) => outcome.value);
-    remoteCallCompleted = responses.length > 0;
-    const attemptedOutcomes = [primaryOutcome, focusedOutcome].filter(Boolean);
-    allFailedCallsWereReleaseSafe = !remoteCallCompleted
-      && attemptedOutcomes.length > 0
-      && attemptedOutcomes.every((outcome) => (
-        outcome.status === "rejected"
-        && isBudgetReservationReleaseSafe(outcome.reason)
-    ));
-    const ambiguousFailedCall = attemptedOutcomes.some((outcome) => (
-      outcome.status === "rejected"
-      && !isBudgetReservationReleaseSafe(outcome.reason)
-    ));
-    tokenUsage = sumTokenUsage(responses.map((item) => normalizeUsage(provider, item.usage)));
-    const usageComplete = responses.length > 0
-      && responses.every((item) => assessUsageCompleteness(provider, item.usage).complete);
-    const measuredCost = estimateActualCostAmount(provider, tokenUsage, env);
-    actualCost = usageComplete && !ambiguousFailedCall
-      ? measuredCost
-      : roundCost(budget.reservedAmount || 0);
-    if (!usageComplete) spendWarnings.push("provider_usage_incomplete_reservation_retained");
-    if (ambiguousFailedCall) {
-      spendWarnings.push("budget_reservation_retained_after_ambiguous_remote_failure");
-    }
-    if (remoteCallCompleted) {
-      try {
-        budgetStatus = await recordBudgetSpend({ preflight: budget, actualCostCny: actualCost, env, fetchImpl });
-      } catch (error) {
-        spendWarnings.push("budget_spend_record_failed:" + safeErrorMessage(error));
-        budgetStatus = { ...budget.status, budgetStorage: "unavailable" };
-      }
-    }
-    const combined = combineRulebookGroundingOutcomes({
-      primaryOutcome,
-      focusedOutcome: focusedTask ? focusedOutcome : null,
-      candidates,
-      priorityConstraintEvidence,
-      userQuery,
-      cardTexts: selectedCardTexts,
-      readRaw: (response) => response?.rawText,
-    });
-    if (!combined.operationLegality) {
-      const message = combined.warnings.join(";") || "rulebook_grounding_model_failed";
-      throw new Error(message);
-    }
-    const rawText = combined.rawText;
-    const operationLegality = combined.operationLegality;
-    const result = {
-      operationLegality,
-      rawText,
-      providerUsed: provider,
-      modelUsed: modelName,
-      dryRun: false,
-      warnings: [
-        ...providerResolution.warnings,
-        ...budget.warnings,
-        ...spendWarnings,
-        ...combined.warnings,
-        ...responses.flatMap((item) => item.warnings || []),
-        ...(operationLegality.warnings || []),
-      ],
-      tokenUsage,
-      estimatedCostCny: actualCost,
-      budgetStatus,
-    };
-    const responseCacheable = rulebookResponsesAreCacheable(attemptedOutcomes);
-    if (responseCacheable
-        && operationLegality.hasGroundedChecks
-        && !operationLegality.hasUnresolvedConstraints) {
-      writeCachedExtraction(rulebookGroundingCache, cacheKey, result, env);
-    } else {
-      result.warnings = [...new Set([
-        ...result.warnings,
-        responseCacheable
-          ? "rulebook_grounding_unresolved_not_cached"
-          : "rulebook_grounding_response_invalid_not_cached",
-      ])];
-    }
-        return result;
-      } catch (error) {
-        const failedBudgetStatus = allFailedCallsWereReleaseSafe
-          ? await releaseBudgetReservation({ preflight: budget, env, fetchImpl }).catch(() => budget.status)
-          : budgetStatus;
-        return {
-          ...emptyRulebookGroundingResult(provider, modelName, false, [
-            ...providerResolution.warnings,
-            ...budget.warnings,
-            ...spendWarnings,
-            ...(!remoteCallCompleted && !allFailedCallsWereReleaseSafe
-              ? ["budget_reservation_retained_after_ambiguous_remote_failure"]
-              : []),
-            `rulebook_grounding_model_failed:${safeErrorMessage(error)}`,
-          ], priorityConstraintEvidence),
-          tokenUsage,
-          estimatedCostCny: actualCost,
-          budgetStatus: failedBudgetStatus,
-        };
-      }
-    },
-  });
 }
 
 export function resolveRagProvider(env = {}) {
@@ -1858,7 +1560,8 @@ export function resolveRagProvider(env = {}) {
  *
  * The explicit mock mode is retained for offline tests. Every other public
  * configuration is resolved from the server-owned public profile allowlist;
- * evidence preparation remains pinned to DeepSeek Flash while the selected
+ * card-name extraction remains pinned to DeepSeek Flash, rule-query extraction
+ * uses a separately configured Relay Terra none call, and the selected
  * allowlisted provider performs the final ruling.
  */
 export function createPublicAnswerModelEnv(env = {}, profileValue) {
@@ -1883,6 +1586,16 @@ export function createPublicAnswerModelEnv(env = {}, profileValue) {
       || source.RELAY_EVIDENCE_APPLICABILITY_MODEL
       || "",
   ).trim();
+  const ruleQueryRelayApiKey = String(
+    source.RAG_RULE_MODEL_RELAY_API_KEY
+      || source.RELAY_API_KEY
+      || "",
+  ).trim();
+  const ruleQueryRelayBaseUrl = String(
+    source.RAG_RULE_MODEL_RELAY_BASE_URL
+      || source.RELAY_BASE_URL
+      || "",
+  ).trim();
   for (const key of Object.keys(result)) {
     if (/^(?:OPENAI_|ADMIN_|GLM_|KIMI_)/iu.test(key)) delete result[key];
   }
@@ -1904,6 +1617,12 @@ export function createPublicAnswerModelEnv(env = {}, profileValue) {
   if (applicabilityRelayModel) {
     result.RAG_EVIDENCE_APPLICABILITY_MODEL = applicabilityRelayModel;
   }
+  if (ruleQueryRelayApiKey) {
+    result.RAG_RULE_MODEL_RELAY_API_KEY = ruleQueryRelayApiKey;
+  }
+  if (ruleQueryRelayBaseUrl) {
+    result.RAG_RULE_MODEL_RELAY_BASE_URL = ruleQueryRelayBaseUrl;
+  }
   const mockRequested = [
     source.RAG_MODEL_PROVIDER,
     source.MODEL_PROVIDER,
@@ -1915,19 +1634,19 @@ export function createPublicAnswerModelEnv(env = {}, profileValue) {
   result.RAG_THINKING_MODE = profile.thinkingMode;
   result.RAG_REASONING_EFFORT = profile.reasoningEffort;
   result.PUBLIC_RULING_MODEL_PROFILE = profile.id;
-  // The tier flag is consumed by DeepSeek evidence-preparation pricing; every
-  // public DeepSeek stage is Flash.
+  // The tier flag is consumed by DeepSeek card-extraction pricing; that public
+  // DeepSeek stage remains Flash.
   result.RAG_MODEL_TIER = "flash";
   result.RAG_CARD_MODEL_PROVIDER = mockRequested ? "mock" : "deepseek";
-  result.RAG_RULE_MODEL_PROVIDER = mockRequested ? "mock" : "deepseek";
-  result.RAG_RULEBOOK_MODEL_PROVIDER = mockRequested ? "mock" : "deepseek";
+  result.RAG_RULE_MODEL_PROVIDER = mockRequested ? "mock" : "relay";
   // Public answers deliberately use a single final semantic judge. Keep this
   // hard-disabled even if an old Vercel environment variable still says true;
   // controlled/admin experiments call the reviewer with their own environment.
   result.RAG_EVIDENCE_APPLICABILITY_ENABLED = "false";
   result.DEEPSEEK_CARD_MODEL = String(source.DEEPSEEK_CARD_MODEL || "deepseek-v4-flash");
+  result.RELAY_RULE_MODEL = DEFAULT_RELAY_RULE_MODEL;
+  result.RAG_RULE_MODEL_REASONING_EFFORT = "none";
   result.DEEPSEEK_RULE_MODEL = String(source.DEEPSEEK_RULE_MODEL || result.DEEPSEEK_CARD_MODEL);
-  result.DEEPSEEK_RULEBOOK_MODEL = String(source.DEEPSEEK_RULEBOOK_MODEL || result.DEEPSEEK_RULE_MODEL);
   return result;
 }
 
@@ -1964,36 +1683,33 @@ export function resolveRuleQueryExtractionProvider(env = {}) {
     if (!env.DEEPSEEK_API_KEY) warnings.push("deepseek_api_key_missing_rule_query_model_disabled");
     return { provider: env.DEEPSEEK_API_KEY ? "deepseek" : "mock", requested, warnings };
   }
+  if (requested === "relay") {
+    const relayEnv = createRuleQueryRelayEnv(env);
+    let configured = Boolean(
+      String(relayEnv.RELAY_API_KEY || "").trim()
+        && String(relayEnv.RELAY_BASE_URL || "").trim(),
+    );
+    if (configured) {
+      try {
+        relayChatCompletionsUrl(relayEnv.RELAY_BASE_URL);
+      } catch {
+        configured = false;
+        warnings.push("relay_configuration_invalid_rule_query_model_disabled");
+      }
+    } else {
+      warnings.push("relay_configuration_missing_rule_query_model_disabled");
+    }
+    return { provider: configured ? "relay" : "mock", requested, warnings };
+  }
   if (requested === "gemini") {
     if (!env.GEMINI_API_KEY) warnings.push("gemini_api_key_missing_rule_query_model_disabled");
     return { provider: env.GEMINI_API_KEY ? "gemini" : "mock", requested, warnings };
   }
   if (requested !== "auto") warnings.push(`unsupported_rule_query_model_provider:${requested}`);
   if (env.DEEPSEEK_API_KEY) return { provider: "deepseek", requested, warnings };
+  if (ruleQueryRelayConfigured(env)) return { provider: "relay", requested, warnings };
   if (env.GEMINI_API_KEY) return { provider: "gemini", requested, warnings };
   warnings.push("no_model_api_key_rule_query_model_disabled");
-  return { provider: "mock", requested, warnings };
-}
-
-export function resolveRulebookGroundingProvider(env = {}) {
-  if (isDisabled(env.RAG_RULEBOOK_GROUNDING_ENABLED)) {
-    return { provider: "mock", requested: "disabled", warnings: ["rulebook_grounding_model_disabled"] };
-  }
-  const requested = String(env.RAG_RULEBOOK_MODEL_PROVIDER || env.RAG_RULE_MODEL_PROVIDER || env.RAG_MODEL_PROVIDER || env.MODEL_PROVIDER || "auto").trim().toLowerCase() || "auto";
-  const warnings = [];
-  if (requested === "mock") return { provider: "mock", requested, warnings };
-  if (requested === "deepseek") {
-    if (!env.DEEPSEEK_API_KEY) warnings.push("deepseek_api_key_missing_rulebook_grounding_model_disabled");
-    return { provider: env.DEEPSEEK_API_KEY ? "deepseek" : "mock", requested, warnings };
-  }
-  if (requested === "gemini") {
-    if (!env.GEMINI_API_KEY) warnings.push("gemini_api_key_missing_rulebook_grounding_model_disabled");
-    return { provider: env.GEMINI_API_KEY ? "gemini" : "mock", requested, warnings };
-  }
-  if (requested !== "auto") warnings.push(`unsupported_rulebook_grounding_model_provider:${requested}`);
-  if (env.DEEPSEEK_API_KEY) return { provider: "deepseek", requested, warnings };
-  if (env.GEMINI_API_KEY) return { provider: "gemini", requested, warnings };
-  warnings.push("no_model_api_key_rulebook_grounding_model_disabled");
   return { provider: "mock", requested, warnings };
 }
 
@@ -4361,12 +4077,13 @@ function buildRuleQueryExtractionPrompt(userQuery) {
     "你只负责从玩家的游戏王 OCG 裁定问题中提取用于检索规则资料、FAQ 或官方相似 Q&A 的查询词，不要回答裁定。",
     "查询词应围绕规则机制、处理时点、连锁窗口、对象要求、当前位置、表侧/里侧、效果处理、伤害步骤等，不要只输出卡名。",
     "先把问题拆成彼此独立、尚待证实的规则子命题；每条 ruleQueries 只能对应一个子命题，不得把结论写进子命题或查询词。",
-    "每项必须包含 subclaim、checkpoint、query、reason、confidence。checkpoint 从 activation_snapshot、resolution_snapshot、affected_entity、permission_relation、zone_type_transition、post_resolution 中选择最贴切的一项。",
-    "至少分别检查：正在尝试的操作、发动快照、处理快照、实际受影响的实体、权限与限制针对谁、处理前后区域/卡片种类/状态，以及次数或上限是否已消耗；只输出本题实际相关的子命题。",
-    "如果问题同时问‘能否发动’和‘处理是否成功’，必须拆成不同子命题，分别检索发动条件与结算适用性。连续处理还要把前一步完成后的状态与下一步能否执行拆开。",
+    "忠实保留玩家明确给出的事件、区域、表示形式、顺序和状态，不得把一个动作改写成另一个动作，也不得补造题面没有出现的破坏、送去墓地、除外、返回、发动或处理结果。",
+    "每项必须包含 subclaim、checkpoint、query、reason、confidence。checkpoint 从 operation_legality、activation_snapshot、resolution_snapshot、mandatory_step、step_dependency、affected_entity、effect_source_type、permission_relation、usage_limit、zone_type_transition、post_resolution 中选择最贴切的一项。",
+    "先在内部识别题面实际发生或尝试的动作，再直接生成 ruleQueries；只为本题相关的维度拆分子命题：操作或发动是否合法、每个必须执行的处理步骤、前后步骤依赖与无法完成时的部分处理、实际受影响的实体、效果来源与效果类型、权限或限制针对谁、次数或尝试上限，以及发动前、处理时、处理后的状态快照。不要输出额外的 actions 字段；没有出现或不影响结论的维度不得为了凑数生成查询。",
+    "如果问题同时问‘能否发动’和‘处理是否成功’，必须拆成不同子命题，分别检索发动条件与结算适用性。连续处理还要分别检索每一步是否实际完成、由哪个效果完成，以及下一步是否依赖该完成事实；不能只因最终状态看起来相同就合并步骤。",
     "玩家俗称、缩写或自然语言必须改写为正式卡文或规则术语。每个 query 自身应在 120 字符内尽量同时包含精简的中文、日文和英文等价术语，以“ | ”分隔；不要只翻译卡名，也不要保留未解释的玩家俗称。",
     "次数问题必须包含已使用次数、总上限或剩余次数等正式关键词；区域或双重卡片种类问题必须包含移动瞬间的区域与当时作为何种卡处理。",
-    "输出 3 到 6 条高价值查询词即可；不知道就输出空数组。",
+    "输出 1 到 6 条高价值查询词即可；简单问题可以只有 1 条，不得为了达到条数加入无关机制；不知道就输出空数组。",
     "输出必须是单个 JSON 对象，不要 markdown，不要解释。",
     "JSON 只包含 ruleQueries 数组；每项包含 subclaim、checkpoint、query、reason、confidence。",
     "示例结构如下，示例不是本题答案：",
@@ -4374,318 +4091,6 @@ function buildRuleQueryExtractionPrompt(userQuery) {
     "玩家问题：",
     String(userQuery || ""),
   ].join("\n");
-}
-
-function buildRulebookGroundingPrompt({
-  userQuery,
-  cardTexts = [],
-  evidenceCandidates = [],
-  priorityConstraintEvidence = [],
-}) {
-  const example = {
-    constraintReviews: [{
-      evidenceId: "restrictive-evidence-id",
-      operationId: "operation-1",
-      action: "玩家试图执行的操作",
-      relevance: "applies",
-      consequence: "blocks",
-      conclusion: "该限制规则适用于当前事实，因此操作不能进行。",
-      quote: "必须从候选原文逐字复制的连续片段",
-      application: "逐项说明题目事实为何满足这条限制规则。",
-    }],
-    operationChecks: [{
-      operationId: "operation-1",
-      step: 1,
-      action: "玩家试图执行的操作",
-      legalityQuestion: "该操作在当前时点是否合法",
-      status: "conditional",
-      conclusion: "只有满足规则书引文所述条件时才合法。",
-      reasoning: ["把题目事实与引文条件逐项比较。"],
-      citations: [{ id: "evidence-id", quote: "必须从候选原文逐字复制的连续片段", application: "该引文如何约束当前操作。" }],
-      missingFacts: [],
-    }],
-    overallConclusion: "基于逐步检查得到的结论。",
-  };
-  const priorityIds = new Set((priorityConstraintEvidence || []).map((item) => String(item?.id || "")));
-  const payload = {
-    userQuery: String(userQuery || ""),
-    priorityConstraintCandidates: (priorityConstraintEvidence || []).slice(0, 8).map((item) => ({
-      id: item.id,
-      title: item.title,
-      text: String(item.text || "").slice(0, 2800),
-      sourceUrl: item.sourceUrl || "",
-    })),
-    cardTexts: (cardTexts || []).slice(0, 8).map((item) => ({
-      id: item.id,
-      title: item.title,
-      cards: item.cards || [],
-      source: item.source || item.type || "",
-      cardType: item.cardType || "",
-      attribute: item.attribute ?? "",
-      race: item.race ?? "",
-      text: String(item.text || "").slice(0, 3000),
-    })),
-    evidenceCandidates: (evidenceCandidates || []).filter((item) => !priorityIds.has(String(item?.id || ""))).slice(0, 32).map((item) => ({
-      id: item.id,
-      type: item.type || item.recordType || "related",
-      title: item.title,
-      text: String(item.text || "").slice(0, 2200),
-      sourceUrl: item.sourceUrl || "",
-      isDirect: item.isDirect === true,
-    })),
-  };
-  return [
-    "你是游戏王 OCG 证据判读器，不负责直接润色最终回答。",
-    "先结合玩家问题与卡片文本，按实际发生顺序抽取每一步需要验证的操作，包括：发动条件、支付 cost、选择对象、连锁窗口、效果处理、位置变化、次数限制和后续处理。",
-    "必须建立状态时间线：先判断能否发动，再立即支付 cost；cost 造成的送墓、除外、解放或其他位置变化在支付后立刻成立。进入连锁处理前，必须按支付后的场面重新判断永续效果、抗性及区域条件。不得把支付 cost 前的手牌状态沿用到效果处理时。",
-    "cost 支付后新开始适用的抗性可能改变效果处理，但不能在没有规则或卡文依据时倒推成原本的发动不合法；发动合法性与处理时能否实际完成必须分别给出结论。",
-    "priorityConstraintCandidates 是后端按题目操作与限制性措辞筛出的潜在阻断规则，已附规则原文。它们不代表必然适用，但每一条都必须先审查，不能跳过。",
-    "对 priorityConstraintCandidates 中每个 id 都输出一个 constraintReviews 项：relevance 只能是 applies、not_applicable、uncertain；consequence 只能是 blocks、limits、none、uncertain。quote 必须逐字来自该 priorityConstraintCandidates 项的 text，application 必须比较题目事实与规则条件。",
-    "如果限制规则适用且会阻止操作，constraintReviews 写 applies + blocks，并在 operationChecks 中把相应步骤判为 illegal。若判定不适用，必须明确说明规则条件与题目事实的差异，不能只写结论。",
-    "若题目明确没有其他可适用卡，而必做处理不能适用于当前正在发动或处理中的卡，应把是否存在可完成的必做处理作为发动合法性的一步；限制规则命中时直接判 illegal，不能只核对一般诱发窗口。",
-    "每个关键步骤先列清题目事实，再选择真正覆盖该步骤的候选证据。卡片文本可以证明该卡写明的发动条件、cost、对象和处理；通用规则结论必须由规则书或适用场景一致的 Q&A / FAQ 支持。",
-    "每一步都要分别检查‘能否发动’‘能否选择为对象’‘效果是否适用’‘处理后状态’；这四类问题不能互相替代。",
-    "区域条件必须逐字核对并严格区分手牌、场上、墓地、除外和额外牌组；在所检查步骤中某卡仍只在手牌时，不得把它视为在场上或墓地来满足持续条件、抗性或发动条件；若前一步 cost 已使其离开手牌，必须使用更新后的区域。",
-    "‘不受其他卡的效果影响’只约束效果是否适用，本身不等于‘不能成为效果对象’；‘不能成为对象’必须有独立的对象限制或玩家限制证据，反过来也一样。",
-    "同一场景同时存在对象保护与效果抗性时，要分别列出证据，并明确最终阻止操作的是哪一项；不得把抗性误写成不能取对象的理由。",
-    "涉及‘将发动无效并破坏’时，必须依据候选证据区分被无效的是魔法・陷阱卡的卡的发动，还是已在场卡片的效果发动，并据此判断是否属于破坏场上的卡。",
-    "多个不入连锁效果或代替处理在同一时点适用时，必须检索其适用顺序；每适用一个效果后都要更新场面，再判断后续效果是否仍能适用，不能假定双方效果同时成功。",
-    "当发动条件要求“有「X」卡名记述”的卡时，只检查候选卡自身卡面／数据库 effect text 栏中的印刷文字。临时获得、复制或适用另一张卡的卡名与效果，不会改写该卡自身的印刷文本引用，不能因此满足该条件。",
-    "不得仅因发动效果的卡或效果对象在连锁处理中离开原位置，就把整条已经合法发动的效果判为不处理。必须分别检查发动是否已成立、每项处理依赖的卡或位置、前一项不能处理时后一项是否继续，并为规则结论引用证据。",
-    "对象在处理时不再存在，不代表不依赖该对象的其他处理自动消失；但也不能反过来假定所有后续处理必然继续。要依据效果连接词、规则书和 Q&A 逐项判断。",
-    "如果较早步骤已被证据判为 illegal，后续处理应标记为未发生或不再需要判断；不得假设该操作已经成功后继续推演。",
-    "然后只使用 evidenceCandidates 中提供的卡片文本、规则书、官方 Q&A 或卡片 FAQ 原文，逐步判断该操作是 legal、illegal、conditional 还是 unknown。",
-    "官方 Q&A / FAQ 可以作为规则适用案例，但必须逐项比较涉及的卡片、效果、时点、位置、素材数量和处理顺序；场景不同的相似案例不能直接套用。",
-    "只说明诱发条件或可连锁时点的一般卡片 FAQ，不能单独证明整个发动合法。回答 legal 前还必须核对所有必做处理是否存在可适用对象或卡、是否受位置和连锁规则限制，以及 priorityConstraintCandidates 是否阻断。",
-    "更具体地约束当前处理的规则，不得被只说明一般发动窗口的 FAQ 覆盖；两者看似冲突时必须分别说明各自证明了什么。",
-    "isDirect=false 的 Q&A / FAQ 不是当前问题的官方直接裁定，只能支持规则分析；不得因此宣称 official_confirmed。",
-    "不要依靠记忆补写规则，不要把卡片文本误当规则证据，不要因为候选标题看起来相关就直接下结论。",
-    "每个 legal、illegal 或 conditional 判定都必须至少提供一个 citations 项；id 必须来自 evidenceCandidates，quote 必须逐字复制该候选中的一段连续原文。",
-    "如果候选证据没有覆盖该操作，status 必须是 unknown，citations 留空，并在 missingFacts 说明缺什么；不得猜测。",
-    "必须区分‘能否发动’、‘能否成为对象/可适用卡’与‘已经发动后的效果如何处理’，不要用后续处理规则倒推出错误的发动合法性。",
-    "如果一条候选原文同时明确点名题目中的多张卡并描述同一操作，应把它视为比泛化规则更直接的场景证据，优先逐字引用并按其完整结论处理。",
-    "对于包含多个连续处理的效果，必须依次检查取对象、移除素材、位置移动及后续特殊召唤等全部步骤；overallConclusion 必须覆盖完整处理，不能只回答第一步。",
-    "对题目中的每一个关键操作都要单独生成 operationChecks 项；不能只检查最后一步。",
-    "输出必须是单个 JSON 对象，不要 markdown，不要 JSON 外文字。",
-    "JSON 只包含 constraintReviews、operationChecks 和 overallConclusion。",
-    "示例结构如下，示例不是本题答案：",
-    JSON.stringify(example, null, 2),
-    "本次输入：",
-    JSON.stringify(payload, null, 2),
-  ].join("\n");
-}
-
-function buildFocusedConstraintRepairPrompt({
-  userQuery,
-  cardTexts = [],
-  priorityConstraintEvidence = [],
-}) {
-  const payload = {
-    userQuery: String(userQuery || ""),
-    cardTexts: (cardTexts || []).slice(0, 4).map((item) => ({
-      id: item.id,
-      title: item.title,
-      cardType: item.cardType || "",
-      attribute: item.attribute || "",
-      text: String(item.text || "").slice(0, 1800),
-    })),
-    priorityConstraintCandidates: (priorityConstraintEvidence || []).slice(0, 5).map((item) => ({
-      id: item.id,
-      title: item.title,
-      text: String(item.text || "").slice(0, 2200),
-      sourceUrl: item.sourceUrl || "",
-    })),
-  };
-  return [
-    "你正在修复一次未完成的游戏王 OCG 限制规则核对。只处理本次输入中的 priorityConstraintCandidates，不要讨论无关规则。",
-    "对每个 priorityConstraintCandidates 的 id 必须输出一个 constraintReviews 项，不能遗漏。",
-    "逐项比较玩家明确给出的场面事实、卡片文本和限制规则。只说明诱发条件或可连锁时点的一般卡片 FAQ，不能覆盖更具体的限制规则。",
-    "若规则适用并阻止某一步，写 relevance=applies、consequence=blocks；后端会据此生成阻断步骤。",
-    "若规则条件与题目事实不一致，写 relevance=not_applicable、consequence=none，并明确差异。证据仍不足才允许 uncertain。",
-    "每项 application 只写一个完整句子，说明题目事实如何满足或不满足规则条件；quote 从对应候选 text 复制最短的连续原文。",
-    "operationChecks 固定输出空数组，避免重复主分析；输出单个 JSON 对象，只包含 constraintReviews、operationChecks、overallConclusion，枚举值必须使用英文。",
-    "本次聚焦输入：",
-    JSON.stringify(payload, null, 2),
-  ].join("\n");
-}
-
-function shouldRunFocusedStateTransitionReview({
-  userQuery,
-  cardTexts = [],
-} = {}) {
-  const scenarioText = [
-    String(userQuery || ""),
-    ...(cardTexts || []).map((item) => [item.title, item.cardType, item.text].filter(Boolean).join("\n")),
-  ].filter(Boolean).join("\n");
-  const hasActivation = /(?:发动|發動|発動|activate)/iu.test(scenarioText);
-  const hasCostMove = /(?:cost|代价|代價|支付|舍弃|丢弃|捨て|送去墓地|送墓|解放)/iu.test(scenarioText);
-  const hasConditionalContinuousEffect = /(?:只要|存在.{0,24}(?:场上|墓地|除外)|不受.{0,12}效果影响|受けない|unaffected)/iu.test(scenarioText);
-  const costStateTransition = hasActivation && hasCostMove && hasConditionalContinuousEffect;
-  const simultaneousReplacement = compileRuleScenario({ userQuery, cardTexts }).simultaneousDestructionReplacement;
-  return costStateTransition || simultaneousReplacement;
-}
-
-function buildFocusedStateTransitionRepairPrompt({
-  userQuery,
-  cardTexts = [],
-  evidenceCandidates = [],
-}) {
-  const payload = {
-    userQuery: String(userQuery || ""),
-    cardTexts: (cardTexts || []).slice(0, 8).map((item) => ({
-      id: item.id,
-      title: item.title,
-      cards: item.cards || [],
-      cardType: item.cardType || "",
-      attribute: item.attribute ?? "",
-      text: String(item.text || "").slice(0, 3000),
-    })),
-    evidenceCandidates: (evidenceCandidates || []).slice(0, 20).map((item) => ({
-      id: item.id,
-      type: item.type || item.recordType || "related",
-      title: item.title,
-      text: String(item.text || "").slice(0, 2200),
-      sourceUrl: item.sourceUrl || "",
-    })),
-  };
-  return [
-    "你正在聚焦复核一次游戏王 OCG 状态转换或多个不入连锁效果的适用顺序。不要泛泛重述卡文。",
-    "按真实时间线分别生成 operationChecks：发动条件；立即支付 cost 后的位置变化；按新场面重新适用永续效果和抗性；效果处理的每一步与最终状态。",
-    "支付 cost 后才开始适用的抗性可以阻止效果处理，但不能倒推成原本不能发动。必须分别回答‘能否发动并支付 cost’和‘处理时实际进行什么’。",
-    "若同一时点有多个代替破坏或其他不入连锁效果，先依据证据决定适用顺序；每适用一个后更新场面，再判断后一个是否仍能适用。",
-    "每个 legal、illegal 或 conditional 检查都必须引用本次输入中的证据 id，并逐字复制 quote。证据没有覆盖的步骤标记 unknown，不能凭记忆补规则。",
-    "constraintReviews 固定输出空数组。输出单个 JSON 对象，只包含 constraintReviews、operationChecks、overallConclusion。overallConclusion 必须同时覆盖发动合法性和处理结果。",
-    "本次状态转换输入：",
-    JSON.stringify(payload, null, 2),
-  ].join("\n");
-}
-function mergeRulebookGroundingOutputs(primaryRaw, repairRaw) {
-  let primary = {};
-  let repair = {};
-  try {
-    primary = parseRagModelJson(primaryRaw);
-  } catch {
-    primary = {};
-  }
-  try {
-    repair = parseRagModelJson(repairRaw);
-  } catch {
-    return String(primaryRaw || "");
-  }
-
-  const constraintReviews = mergeGroundingItems(
-    Array.isArray(primary.constraintReviews) ? primary.constraintReviews : [],
-    Array.isArray(repair.constraintReviews) ? repair.constraintReviews : [],
-    (item) => item?.evidenceId || item?.id,
-  );
-  const operationChecks = mergeGroundingItems(
-    Array.isArray(primary.operationChecks) ? primary.operationChecks : Array.isArray(primary.operations) ? primary.operations : [],
-    Array.isArray(repair.operationChecks) ? repair.operationChecks : Array.isArray(repair.operations) ? repair.operations : [],
-    (item) => item?.operationId || item?.id,
-  );
-  return JSON.stringify({
-    ...primary,
-    ...repair,
-    constraintReviews,
-    operationChecks,
-    overallConclusion: String(repair.overallConclusion || primary.overallConclusion || "").trim(),
-  });
-}
-
-function combineRulebookGroundingOutcomes({
-  primaryOutcome,
-  focusedOutcome,
-  candidates = [],
-  priorityConstraintEvidence = [],
-  userQuery = "",
-  cardTexts = [],
-  readRaw = (value) => value,
-} = {}) {
-  const warnings = [];
-  let rawText = "";
-  let operationLegality = null;
-
-  if (primaryOutcome?.status === "fulfilled") {
-    rawText = String(readRaw(primaryOutcome.value) || "");
-    operationLegality = validateOperationLegalityModelOutput(rawText, candidates, {
-      requiredConstraintEvidence: priorityConstraintEvidence,
-      userQuery,
-      cardTexts,
-    });
-  } else if (primaryOutcome?.status === "rejected") {
-    warnings.push("rulebook_grounding_primary_failed:" + safeErrorMessage(primaryOutcome.reason));
-  }
-
-  if (focusedOutcome?.status === "fulfilled") {
-    const focusedRaw = String(readRaw(focusedOutcome.value) || "");
-    if (operationLegality) {
-      const mergedRaw = mergeRulebookGroundingOutputs(rawText, focusedRaw);
-      const repaired = validateOperationLegalityModelOutput(mergedRaw, candidates, {
-        requiredConstraintEvidence: priorityConstraintEvidence,
-        userQuery,
-        cardTexts,
-      });
-      if (isBetterOperationLegality(repaired, operationLegality)) {
-        rawText = mergedRaw;
-        operationLegality = repaired;
-        warnings.push("rulebook_grounding_focused_repair_applied");
-      } else {
-        warnings.push("rulebook_grounding_focused_repair_no_improvement");
-      }
-    } else {
-      rawText = focusedRaw;
-      operationLegality = validateOperationLegalityModelOutput(rawText, candidates, {
-        requiredConstraintEvidence: priorityConstraintEvidence,
-        userQuery,
-        cardTexts,
-      });
-      warnings.push("rulebook_grounding_focused_fallback_applied");
-    }
-  } else if (focusedOutcome?.status === "rejected") {
-    warnings.push("rulebook_grounding_focused_repair_failed:" + safeErrorMessage(focusedOutcome.reason));
-  }
-
-  return { rawText, operationLegality, warnings };
-}
-function mergeGroundingItems(primary = [], repair = [], getKey) {
-  const result = [];
-  const indexByKey = new Map();
-  for (const item of [...primary, ...repair]) {
-    const key = String(getKey(item) || "").normalize("NFKC").trim();
-    if (!key) {
-      result.push(item);
-      continue;
-    }
-    if (indexByKey.has(key)) {
-      result[indexByKey.get(key)] = item;
-      continue;
-    }
-    indexByKey.set(key, result.length);
-    result.push(item);
-  }
-  return result;
-}
-
-
-function isBetterOperationLegality(candidate, current) {
-  return operationLegalityScore(candidate) > operationLegalityScore(current);
-}
-
-function operationLegalityScore(value = {}) {
-  const unresolved = Array.isArray(value.unresolvedConstraintEvidence)
-    ? value.unresolvedConstraintEvidence.length
-    : 0;
-  const groundedChecks = Array.isArray(value.checks)
-    ? value.checks.filter((item) => Array.isArray(item.citations) && item.citations.length > 0).length
-    : 0;
-  const resolvedReviews = Array.isArray(value.constraintReviews)
-    ? value.constraintReviews.filter((item) => item.grounded && item.relevance !== "uncertain" && item.consequence !== "uncertain").length
-    : 0;
-  return (value.hasBlockingCheck ? 10000 : 0)
-    + resolvedReviews * 200
-    + groundedChecks * 30
-    + (value.hasGroundedChecks ? 20 : 0)
-    - unresolved * 500;
 }
 
 function sumTokenUsage(items = []) {
@@ -4742,32 +4147,6 @@ function isTruncatedProviderResponse(response = {}) {
   const finishReason = String(response?.finishReason || "").trim().toLowerCase();
   return ["length", "max_tokens", "max_token", "max_output_tokens"].includes(finishReason)
     || (response?.warnings || []).some((warning) => /truncated|token_limit|max_tokens/iu.test(String(warning || "")));
-}
-
-function rulebookResponsesAreCacheable(outcomes = []) {
-  const attempted = (outcomes || []).filter(Boolean);
-  if (!attempted.length || attempted.some((outcome) => outcome.status !== "fulfilled")) return false;
-  return attempted.every((outcome) => {
-    const response = outcome.value || {};
-    if (isTruncatedProviderResponse(response)) return false;
-    let parsed;
-    try {
-      parsed = parseStrictJsonObject(response.rawText);
-    } catch {
-      return false;
-    }
-    const operationField = Object.hasOwn(parsed, "operationChecks")
-      ? parsed.operationChecks
-      : Object.hasOwn(parsed, "operations")
-        ? parsed.operations
-        : undefined;
-    const reviewField = Object.hasOwn(parsed, "constraintReviews")
-      ? parsed.constraintReviews
-      : undefined;
-    return (Array.isArray(operationField) || Array.isArray(reviewField))
-      && (operationField === undefined || Array.isArray(operationField))
-      && (reviewField === undefined || Array.isArray(reviewField));
-  });
 }
 
 function normalizeCardNameCandidates(rawText) {
@@ -4884,26 +4263,6 @@ function emptyRuleQueryExtractionResult(providerUsed, modelUsed, dryRun, warning
   };
 }
 
-function emptyRulebookGroundingResult(
-  providerUsed,
-  modelUsed,
-  dryRun,
-  warnings = [],
-  requiredConstraintEvidence = [],
-) {
-  return {
-    operationLegality: emptyOperationLegality(warnings, requiredConstraintEvidence),
-    rawText: "",
-    providerUsed,
-    modelUsed,
-    dryRun,
-    warnings: [...new Set(warnings)],
-    tokenUsage: {},
-    estimatedCostCny: 0,
-    budgetStatus: null,
-  };
-}
-
 function resolveReasoningGenerationConfig({ provider = "deepseek", modelName, thinkingMode, reasoningEffort, env = {} } = {}) {
   const warnings = [];
   const providerPrefix = String(provider || "deepseek").trim().toUpperCase();
@@ -4995,226 +4354,6 @@ function resolveRagMaxOutputTokens(env = {}, { provider = "", thinkingMode = "" 
   return readPositiveNumber(env.RAG_PRO_MAX_OUTPUT_TOKENS, 8000);
 }
 
-function dedupeGroundingEvidence(items = []) {
-  const result = [];
-  const seen = new Set();
-  for (const item of items) {
-    const id = String(item?.id || "").trim();
-    if (!id || !item?.text || seen.has(id)) continue;
-    seen.add(id);
-    result.push(item);
-  }
-  return result;
-}
-
-export function selectPriorityConstraintEvidence({ items = [], userQuery = "", cardTexts = [], limit = 5 } = {}) {
-  const userText = String(userQuery || "");
-  const cardText = (cardTexts || [])
-    .map((item) => [item.title, item.cardType, item.text].filter(Boolean).join("\n"))
-    .join("\n");
-  const scenarioText = [userText, cardText].filter(Boolean).join("\n");
-  const scenarioConcepts = extractGroundingMechanisms(scenarioText);
-  const userConcepts = extractGroundingMechanisms(userText);
-  const ruleScenario = compileRuleScenario({ userQuery, cardTexts });
-  if (scenarioConcepts.size < 2
-      && !ruleScenario.simultaneousDestructionReplacement
-      && !(ruleScenario.mandatoryFieldSpellTrapReturn && ruleScenario.currentChainSpellTrap)) return [];
-
-  const ranked = dedupeGroundingEvidence(items)
-    .filter((item) => RESTRICTIVE_EVIDENCE_PATTERN.test(String(item.text || "")))
-    .map((item, index) => {
-      const matches = splitRestrictiveEvidenceSegments(item.text)
-        .map((text) => classifyPriorityConstraintSegment({
-          text,
-          userText,
-          scenarioConcepts,
-          userConcepts,
-          ruleScenario,
-        }))
-        .filter(Boolean)
-        .sort((left, right) => right.score - left.score);
-      const best = matches[0];
-      if (!best) return null;
-      return {
-        item: {
-          ...item,
-          text: best.text,
-          priorityConstraintSignature: best.signature,
-        },
-        score: best.score + Math.min(20, Number(item.score) || 0) - index * 0.01,
-      };
-    })
-    .filter(Boolean)
-    .sort((left, right) => right.score - left.score);
-  const selected = [];
-  const seenSignatures = new Set();
-  for (const entry of ranked) {
-    const signature = String(entry.item.priorityConstraintSignature || entry.item.id);
-    if (seenSignatures.has(signature)) continue;
-    seenSignatures.add(signature);
-    selected.push(entry.item);
-    if (selected.length >= Math.max(0, Number(limit) || 0)) break;
-  }
-  return selected;
-}
-
-function splitRestrictiveEvidenceSegments(value) {
-  const text = String(value || "").replace(/\r\n?/gu, "\n").trim();
-  if (!text) return [];
-  const paragraphs = text.split(/\n\s*\n+/gu).map((item) => item.trim()).filter(Boolean);
-  return paragraphs.filter((item) => RESTRICTIVE_EVIDENCE_PATTERN.test(item));
-}
-
-function classifyPriorityConstraintSegment({
-  text,
-  userText,
-  scenarioConcepts,
-  userConcepts,
-  ruleScenario,
-}) {
-  const evidenceConcepts = extractGroundingMechanisms(text);
-  const sharedConcepts = [...scenarioConcepts].filter((concept) => evidenceConcepts.has(concept));
-  const scenarioHasReturnOperation = ["return", "spell_trap", "hand", "activation"]
-    .every((concept) => scenarioConcepts.has(concept));
-  const evidenceHasActiveReturnRule = PRIORITY_ACTIVE_SPELL_TRAP_RETURN_PATTERN.test(text)
-    && evidenceConcepts.has("return")
-    && evidenceConcepts.has("spell_trap")
-    && (evidenceConcepts.has("hand") || evidenceConcepts.has("deck"))
-    && (evidenceConcepts.has("chain") || evidenceConcepts.has("activation"));
-  const scenarioHasNoAlternative = PRIORITY_SCENARIO_ABSENCE_PATTERN.test(userText);
-  const evidenceHasNoApplicableCardRule = PRIORITY_NO_APPLICABLE_CARD_PATTERN.test(text);
-  if (ruleScenario?.simultaneousDestructionReplacement && PRIORITY_SIMULTANEOUS_REPLACEMENT_PATTERN.test(text)) {
-    return {
-      text,
-      signature: "simultaneous_destruction_replacement_turn_player_first",
-      score: 280 + sharedConcepts.length * 10,
-    };
-  }
-  if (scenarioHasReturnOperation
-      && (scenarioHasNoAlternative || ruleScenario?.noOtherSpellTraps)
-      && evidenceHasActiveReturnRule
-      && evidenceHasNoApplicableCardRule) {
-    return {
-      text,
-      signature: "mandatory_active_spell_trap_return_without_alternative",
-      score: 240 + sharedConcepts.length * 10,
-    };
-  }
-  if (scenarioHasReturnOperation && evidenceHasActiveReturnRule) {
-    const genericRuleBonus = /这种魔法[・·]?陷阱卡.{0,40}连锁途中不能从场上回到手卡[・·]?卡组/u.test(text) ? 80 : 0;
-    return {
-      text,
-      signature: "active_spell_trap_return",
-      score: 180 + genericRuleBonus + sharedConcepts.length * 10,
-    };
-  }
-
-  const scenarioHasConstrainedCardOperation = scenarioConcepts.has("spell_trap")
-    && scenarioConcepts.has("activation")
-    && ["return", "target", "destroy", "banish", "deck", "graveyard"]
-      .some((concept) => scenarioConcepts.has(concept));
-  if (scenarioHasConstrainedCardOperation
-      && (scenarioHasNoAlternative || ruleScenario?.noOtherSpellTraps)
-      && evidenceHasNoApplicableCardRule) {
-    const genericRuleBonus = PRIORITY_GENERIC_NO_APPLICABLE_CARD_PATTERN.test(text)
-      ? 120
-      : 0;
-    return {
-      text,
-      signature: "no_applicable_card_for_mandatory_operation",
-      score: 160 + genericRuleBonus + sharedConcepts.length * 10,
-    };
-  }
-
-  if (userConcepts.has("target")
-      && evidenceConcepts.has("target")
-      && PRIORITY_TARGET_RESTRICTION_PATTERN.test(text)) {
-    return {
-      text,
-      signature: "targeting_restriction",
-      score: 140 + sharedConcepts.length * 10,
-    };
-  }
-
-  return null;
-}
-
-function extractGroundingMechanisms(value) {
-  const text = String(value || "");
-  return new Set(GROUNDING_MECHANISM_PATTERNS
-    .filter(([, pattern]) => pattern.test(text))
-    .map(([name]) => name));
-}
-
-function selectGroundingQaEvidence(items = [], maxCandidates = 10) {
-  const available = dedupeGroundingEvidence(Array.isArray(items) ? items : []);
-  const limit = Math.max(0, Number(maxCandidates) || 0);
-  if (!limit) return [];
-
-  const direct = available.filter(isDirectGroundingQa);
-  const faq = available.filter((item) => !isDirectGroundingQa(item) && isFaqGroundingEvidence(item));
-  const related = available.filter((item) => !isDirectGroundingQa(item) && !isFaqGroundingEvidence(item));
-  const selectedDirect = direct.slice(0, limit);
-  return dedupeGroundingEvidence([
-    ...selectedDirect,
-    ...interleaveGroundingEvidence([faq, related], limit - selectedDirect.length),
-  ]).slice(0, limit);
-}
-
-function interleaveGroundingEvidence(buckets = [], maxItems = Number.POSITIVE_INFINITY) {
-  const normalizedBuckets = (Array.isArray(buckets) ? buckets : [])
-    .map((bucket) => dedupeGroundingEvidence(Array.isArray(bucket) ? bucket : []));
-  const limit = Number.isFinite(maxItems) ? Math.max(0, Number(maxItems) || 0) : Number.POSITIVE_INFINITY;
-  const result = [];
-  const seen = new Set();
-  let index = 0;
-
-  while (result.length < limit && normalizedBuckets.some((bucket) => index < bucket.length)) {
-    for (const bucket of normalizedBuckets) {
-      const item = bucket[index];
-      if (!item) continue;
-      const id = String(item.id || "").trim();
-      if (!id || seen.has(id)) continue;
-      seen.add(id);
-      result.push(item);
-      if (result.length >= limit) break;
-    }
-    index += 1;
-  }
-  return result;
-}
-
-function selectGroundingCandidates({
-  priorityConstraintEvidence = [],
-  selectedQaEvidence = [],
-  selectedCardTexts = [],
-  selectedRuleEvidence = [],
-  maxCandidates = Number.POSITIVE_INFINITY,
-} = {}) {
-  const priorities = dedupeGroundingEvidence(priorityConstraintEvidence);
-  const directQa = dedupeGroundingEvidence(selectedQaEvidence.filter(isDirectGroundingQa));
-  const cardTexts = dedupeGroundingEvidence(selectedCardTexts);
-  const mandatory = dedupeGroundingEvidence([...priorities, ...directQa, ...cardTexts]);
-  const mandatoryIds = new Set(mandatory.map((item) => String(item.id)));
-  const remainingLimit = Number.isFinite(maxCandidates)
-    ? Math.max(0, Number(maxCandidates) - mandatory.length)
-    : Number.POSITIVE_INFINITY;
-  const remainder = interleaveGroundingEvidence([
-    selectedQaEvidence.filter((item) => !isDirectGroundingQa(item) && isFaqGroundingEvidence(item)),
-    selectedRuleEvidence.filter((item) => !mandatoryIds.has(String(item.id))),
-    selectedQaEvidence.filter((item) => !isDirectGroundingQa(item) && !isFaqGroundingEvidence(item)),
-  ], remainingLimit);
-  return dedupeGroundingEvidence([...mandatory, ...remainder]).slice(0, maxCandidates);
-}
-
-function isDirectGroundingQa(item = {}) {
-  return item.isDirect === true || item.type === "official_qa";
-}
-
-function isFaqGroundingEvidence(item = {}) {
-  return item.type === "faq" || item.recordType === "card-faq" || String(item.id || "").startsWith("card-faq-");
-}
-
 function modelNameForProvider(provider, env) {
   if (provider === "glm") {
     return String(env.GLM_MODEL || env.RAG_MODEL || DEFAULT_GLM_MODEL);
@@ -5264,14 +4403,12 @@ function modelNameForCardExtractionProvider(provider, env) {
 
 function modelNameForRuleQueryExtractionProvider(provider, env) {
   if (provider === "deepseek") return String(env.DEEPSEEK_RULE_MODEL || env.RAG_RULE_MODEL || env.DEEPSEEK_CARD_MODEL || env.RAG_CARD_MODEL || DEFAULT_DEEPSEEK_CARD_MODEL);
+  if (provider === "relay") {
+    const requested = String(env.RELAY_RULE_MODEL || DEFAULT_RELAY_RULE_MODEL).trim().toLowerCase();
+    return RELAY_RULE_MODELS.has(requested) ? requested : DEFAULT_RELAY_RULE_MODEL;
+  }
   if (provider === "gemini") return String(env.GEMINI_RULE_MODEL || env.GEMINI_CARD_MODEL || env.GEMINI_CARD_RESOLUTION_MODEL || env.RAG_RULE_MODEL || env.RAG_CARD_MODEL || "gemini-1.5-flash");
   return "mock-rule-query-extractor";
-}
-
-function modelNameForRulebookGroundingProvider(provider, env) {
-  if (provider === "deepseek") return String(env.DEEPSEEK_RULEBOOK_MODEL || env.DEEPSEEK_RULE_MODEL || env.DEEPSEEK_CARD_MODEL || env.RAG_RULE_MODEL || env.RAG_CARD_MODEL || DEFAULT_DEEPSEEK_CARD_MODEL);
-  if (provider === "gemini") return String(env.GEMINI_RULEBOOK_MODEL || env.GEMINI_RULE_MODEL || env.GEMINI_CARD_MODEL || env.RAG_RULE_MODEL || env.RAG_CARD_MODEL || "gemini-1.5-flash");
-  return "mock-rulebook-grounding";
 }
 
 function hasProviderKey(provider, env) {
