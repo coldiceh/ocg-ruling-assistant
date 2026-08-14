@@ -1,6 +1,10 @@
 name: Validate preview changes
 
 on:
+  push:
+    tags:
+      - "private-eval-pilot-*"
+      - "private-eval-full-*"
   pull_request:
     types: [opened, synchronize, reopened, labeled]
   workflow_dispatch:
@@ -83,9 +87,15 @@ jobs:
             || github.event.label.name == 'private-pure-llm-retrieval-pilot'
             || github.event.label.name == 'private-pure-llm-evaluation')
           && github.event.pull_request.head.repo.full_name == github.repository)
-        || github.event_name == 'workflow_dispatch')
+        || github.event_name == 'workflow_dispatch'
+        || (github.event_name == 'push'
+          && github.ref_type == 'tag'
+          && (startsWith(github.ref_name, 'private-eval-pilot-')
+            || startsWith(github.ref_name, 'private-eval-full-'))))
     needs: validate
     runs-on: ubuntu-latest
+    outputs:
+      archive_created: ${{ steps.private_archive.outputs.created }}
     # Even 32 consecutive 90-second fail-fast cases fit inside this job cap.
     # A workflow-level fault therefore cannot remain alive for several hours.
     timeout-minutes: 75
@@ -111,9 +121,17 @@ jobs:
       # This label exercises the complete retrieval and prompt-building path
       # with the built-in dry-run response. It must never receive a paid key.
       RETRIEVAL_ONLY_PILOT: ${{ github.event_name == 'pull_request' && github.event.label.name == 'private-pure-llm-retrieval-pilot' && 'true' || 'false' }}
+      TAG_TRIGGERED_PRIVATE_EVALUATION: ${{ github.event_name == 'push' && github.ref_type == 'tag' && 'true' || 'false' }}
       # The pilot label is one case; the full label is 32. workflow_dispatch is
       # also available once this workflow reaches the repository default branch.
-      EVALUATION_LIMIT: ${{ github.event_name == 'workflow_dispatch' && inputs.evaluation_limit || (github.event.label.name == 'private-pure-llm-evaluation' && '32' || '1') }}
+      # Owner-pushed evaluation tags provide a Git-only trigger when the GitHub
+      # web/API session is unavailable; pilot and full tags can target the same
+      # immutable preview commit.
+      EVALUATION_LIMIT: >-
+        ${{ github.event_name == 'workflow_dispatch' && inputs.evaluation_limit
+          || (github.event_name == 'push' && startsWith(github.ref_name, 'private-eval-full-') && '32')
+          || (github.event.label.name == 'private-pure-llm-evaluation' && '32')
+          || '1' }}
     steps:
       - name: Checkout the exact preview commit
         uses: actions/checkout@v6
@@ -125,6 +143,16 @@ jobs:
         with:
           node-version: "24"
 
+      - name: Verify the owner evaluation tag targets the trusted preview branch
+        if: env.TAG_TRIGGERED_PRIVATE_EVALUATION == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --depth=1 origin \
+            refs/heads/codex/pure-llm-preview-v1:refs/remotes/origin/codex/pure-llm-preview-v1
+          test "$(git rev-parse "$GITHUB_SHA^{commit}")" = \
+            "$(git rev-parse refs/remotes/origin/codex/pure-llm-preview-v1)"
+
       - name: Preflight private archive encryption
         if: env.RETRIEVAL_ONLY_PILOT != 'true'
         shell: bash
@@ -132,6 +160,13 @@ jobs:
           PRIVATE_ARCHIVE_KEY: ${{ secrets.PURE_LLM_EVALUATION_ARCHIVE_KEY }}
         run: |
           set -euo pipefail
+          if [ "$TAG_TRIGGERED_PRIVATE_EVALUATION" = "true" ]; then
+            test -s .github/private-evaluation-recipient.pem
+            recipient_sha256="$(sha256sum .github/private-evaluation-recipient.pem | awk '{print $1}')"
+            test "$recipient_sha256" = "749295ac7c83b5c765722975c4a6985dedcfcd9dc02eeab3e01dd648ff8a4b3e"
+            openssl pkey -pubin -in .github/private-evaluation-recipient.pem -noout
+            exit 0
+          fi
           if [ "${#PRIVATE_ARCHIVE_KEY}" -lt 32 ]; then
             echo "The private evaluation archive key is missing or too short" >&2
             exit 1
@@ -391,19 +426,22 @@ jobs:
           if [ ! -d "$checkpoint" ]; then
             exit 0
           fi
-          if [ "${#PRIVATE_ARCHIVE_KEY}" -lt 32 ]; then
-            echo "The private evaluation archive key is missing or too short" >&2
-            exit 1
-          fi
           if [ "${{ steps.evaluation.outputs.exit_code }}" = "0" ]; then
             test -s "$checkpoint/manual-review.json"
           fi
           mkdir -p artifacts
           plaintext_archive="$RUNNER_TEMP/pure-llm-private-checkpoint.tar.gz"
           verification_archive="$RUNNER_TEMP/pure-llm-private-checkpoint.verify.tar.gz"
+          random_password_file="$RUNNER_TEMP/pure-llm-private-checkpoint.password"
+          key_envelope_file="$RUNNER_TEMP/pure-llm-private-checkpoint.key-envelope"
           encrypted_archive="artifacts/pure-llm-private-checkpoint.tar.gz.enc"
+          wrapped_key_envelope="artifacts/pure-llm-private-checkpoint.key-envelope.rsa-oaep"
           cleanup_plaintext_archives() {
-            rm -f -- "$plaintext_archive" "$verification_archive"
+            rm -f -- \
+              "$plaintext_archive" \
+              "$verification_archive" \
+              "$random_password_file" \
+              "$key_envelope_file"
           }
           trap cleanup_plaintext_archives EXIT
           tar_args=(pure-llm-private-checkpoint)
@@ -413,16 +451,52 @@ jobs:
             tar_args+=(private-evaluation-backend.log)
           fi
           tar -C "$RUNNER_TEMP" -czf "$plaintext_archive" "${tar_args[@]}"
-          openssl enc -aes-256-cbc -salt -pbkdf2 -iter 200000 -md sha256 \
-            -in "$plaintext_archive" \
-            -out "$encrypted_archive" \
-            -pass env:PRIVATE_ARCHIVE_KEY
+          if [ "$TAG_TRIGGERED_PRIVATE_EVALUATION" = "true" ]; then
+            openssl rand -hex 32 > "$random_password_file"
+            chmod 600 "$random_password_file"
+            openssl enc -aes-256-cbc -salt -pbkdf2 -iter 200000 -md sha256 \
+              -in "$plaintext_archive" \
+              -out "$encrypted_archive" \
+              -pass file:"$random_password_file"
+            openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -md sha256 \
+              -in "$encrypted_archive" \
+              -out "$verification_archive" \
+              -pass file:"$random_password_file"
+            tar -tzf "$verification_archive" > /dev/null
+            cipher_sha256="$(sha256sum "$encrypted_archive" | awk '{print $1}')"
+            {
+              printf 'schema_version=1\n'
+              printf 'password=%s\n' "$(tr -d '\r\n' < "$random_password_file")"
+              printf 'cipher_sha256=%s\n' "$cipher_sha256"
+              printf 'source_sha=%s\n' "$GITHUB_SHA"
+            } > "$key_envelope_file"
+            chmod 600 "$key_envelope_file"
+            openssl pkeyutl -encrypt \
+              -pubin \
+              -inkey .github/private-evaluation-recipient.pem \
+              -pkeyopt rsa_padding_mode:oaep \
+              -pkeyopt rsa_oaep_md:sha256 \
+              -pkeyopt rsa_mgf1_md:sha256 \
+              -in "$key_envelope_file" \
+              -out "$wrapped_key_envelope"
+            chmod 600 "$wrapped_key_envelope"
+            test -s "$wrapped_key_envelope"
+          else
+            if [ "${#PRIVATE_ARCHIVE_KEY}" -lt 32 ]; then
+              echo "The private evaluation archive key is missing or too short" >&2
+              exit 1
+            fi
+            openssl enc -aes-256-cbc -salt -pbkdf2 -iter 200000 -md sha256 \
+              -in "$plaintext_archive" \
+              -out "$encrypted_archive" \
+              -pass env:PRIVATE_ARCHIVE_KEY
+            openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -md sha256 \
+              -in "$encrypted_archive" \
+              -out "$verification_archive" \
+              -pass env:PRIVATE_ARCHIVE_KEY
+            tar -tzf "$verification_archive" > /dev/null
+          fi
           chmod 600 "$encrypted_archive"
-          openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -md sha256 \
-            -in "$encrypted_archive" \
-            -out "$verification_archive" \
-            -pass env:PRIVATE_ARCHIVE_KEY
-          tar -tzf "$verification_archive" > /dev/null
           test -s "$encrypted_archive"
           cleanup_plaintext_archives
           trap - EXIT
@@ -440,12 +514,29 @@ jobs:
       - name: Upload the encrypted private manual-review archive
         if: >-
           always()
+          && env.TAG_TRIGGERED_PRIVATE_EVALUATION != 'true'
           && steps.private_archive.outcome == 'success'
           && steps.private_archive.outputs.created == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: pure-llm-private-manual-review-encrypted
           path: artifacts/pure-llm-private-checkpoint.tar.gz.enc
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
+
+      - name: Upload the RSA-wrapped private manual-review archive
+        if: >-
+          always()
+          && env.TAG_TRIGGERED_PRIVATE_EVALUATION == 'true'
+          && steps.private_archive.outcome == 'success'
+          && steps.private_archive.outputs.created == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: pure-llm-private-manual-review-encrypted
+          path: |
+            artifacts/pure-llm-private-checkpoint.tar.gz.enc
+            artifacts/pure-llm-private-checkpoint.key-envelope.rsa-oaep
           if-no-files-found: error
           retention-days: 7
           compression-level: 0
@@ -492,7 +583,11 @@ jobs:
             "$RUNNER_TEMP/private-evaluation-backend.pid" \
             "$RUNNER_TEMP/pure-llm-private-checkpoint.tar.gz" \
             "$RUNNER_TEMP/pure-llm-private-checkpoint.verify.tar.gz"
-          rm -f -- artifacts/pure-llm-private-checkpoint.tar.gz.enc
+          rm -f -- \
+            "$RUNNER_TEMP/pure-llm-private-checkpoint.password" \
+            "$RUNNER_TEMP/pure-llm-private-checkpoint.key-envelope" \
+            artifacts/pure-llm-private-checkpoint.tar.gz.enc \
+            artifacts/pure-llm-private-checkpoint.key-envelope.rsa-oaep
           for private_path in \
             "$RUNNER_TEMP/private-dataset.txt" \
             "$RUNNER_TEMP/pure-llm-private-checkpoint" \
@@ -500,7 +595,10 @@ jobs:
             "$RUNNER_TEMP/private-evaluation-backend.pid" \
             "$RUNNER_TEMP/pure-llm-private-checkpoint.tar.gz" \
             "$RUNNER_TEMP/pure-llm-private-checkpoint.verify.tar.gz" \
-            "artifacts/pure-llm-private-checkpoint.tar.gz.enc"; do
+            "$RUNNER_TEMP/pure-llm-private-checkpoint.password" \
+            "$RUNNER_TEMP/pure-llm-private-checkpoint.key-envelope" \
+            "artifacts/pure-llm-private-checkpoint.tar.gz.enc" \
+            "artifacts/pure-llm-private-checkpoint.key-envelope.rsa-oaep"; do
             if [ -e "$private_path" ]; then
               echo "Failed to scrub private evaluation plaintext" >&2
               cleanup_status=1
@@ -517,3 +615,74 @@ jobs:
         run: |
           echo "Retrieval-only dry-run unexpectedly produced a scoreable candidate" >&2
           exit 1
+
+  publish-encrypted-private-evaluation:
+    if: >-
+      always()
+      && github.event_name == 'push'
+      && github.ref_type == 'tag'
+      && github.actor == github.repository_owner
+      && github.triggering_actor == github.repository_owner
+      && needs.private-evaluation.outputs.archive_created == 'true'
+    needs: private-evaluation
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    env:
+      EVALUATION_LIMIT: >-
+        ${{ startsWith(github.ref_name, 'private-eval-full-') && '32' || '1' }}
+    steps:
+      - name: Checkout the encrypted-results branch only
+        uses: actions/checkout@v6
+        with:
+          ref: private-evaluation-results
+          path: private-evaluation-results
+
+      - name: Download the encrypted owner-review archive
+        uses: actions/download-artifact@v4
+        with:
+          name: pure-llm-private-manual-review-encrypted
+          path: ${{ runner.temp }}/private-evaluation-encrypted
+
+      - name: Verify and publish the encrypted owner-review bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          encrypted_dir="$RUNNER_TEMP/private-evaluation-encrypted"
+          ciphertext="$encrypted_dir/pure-llm-private-checkpoint.tar.gz.enc"
+          wrapped_envelope="$encrypted_dir/pure-llm-private-checkpoint.key-envelope.rsa-oaep"
+          test -s "$ciphertext"
+          test -s "$wrapped_envelope"
+          test "$(find "$encrypted_dir" -type f | wc -l)" -eq 2
+
+          results_repo="private-evaluation-results"
+          run_relative="runs/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          run_dir="$results_repo/$run_relative"
+          test ! -e "$run_dir"
+          mkdir -p "$run_dir"
+          cp "$ciphertext" "$run_dir/"
+          cp "$wrapped_envelope" "$run_dir/"
+          cipher_sha256="$(sha256sum "$ciphertext" | awk '{print $1}')"
+          envelope_sha256="$(sha256sum "$wrapped_envelope" | awk '{print $1}')"
+          printf '%s\n' \
+            'schema_version=1' \
+            'archive_cipher=aes-256-cbc-pbkdf2-sha256-iter200000' \
+            'key_envelope=rsa-oaep-sha256-mgf1-sha256' \
+            "source_sha=$GITHUB_SHA" \
+            "evaluation_limit=$EVALUATION_LIMIT" \
+            "run_id=$GITHUB_RUN_ID" \
+            "run_attempt=$GITHUB_RUN_ATTEMPT" \
+            "cipher_sha256=$cipher_sha256" \
+            "key_envelope_sha256=$envelope_sha256" \
+            > "$run_dir/metadata.txt"
+
+          git -C "$results_repo" config user.name github-actions[bot]
+          git -C "$results_repo" config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git -C "$results_repo" add -- \
+            "$run_relative/pure-llm-private-checkpoint.tar.gz.enc" \
+            "$run_relative/pure-llm-private-checkpoint.key-envelope.rsa-oaep" \
+            "$run_relative/metadata.txt"
+          git -C "$results_repo" diff --cached --check
+          git -C "$results_repo" commit -m "Store encrypted private evaluation ${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          git -C "$results_repo" push origin HEAD:refs/heads/private-evaluation-results

@@ -17,11 +17,15 @@ test("private pure LLM evaluation is explicitly triggered, serial and generation
   assert.match(workflow, /github\.event\.label\.name == 'private-pure-llm-evaluation'/u);
   assert.match(workflow, /github\.event\.pull_request\.head\.repo\.full_name == github\.repository/u);
   assert.match(workflow, /github\.event_name == 'workflow_dispatch'/u);
+  assert.match(workflow, /private-eval-pilot-\*/u);
+  assert.match(workflow, /private-eval-full-\*/u);
+  assert.match(workflow, /github\.event_name == 'push'[\s\S]*github\.ref_type == 'tag'/u);
+  assert.match(workflow, /startsWith\(github\.ref_name, 'private-eval-full-'\) && '32'/u);
   assert.match(workflow, /github\.actor == github\.repository_owner/u);
   assert.match(workflow, /github\.triggering_actor == github\.repository_owner/u);
   assert.match(workflow, /github\.event\.pull_request\.user\.login == github\.repository_owner/u);
   assert.match(workflow, /evaluation_limit:[\s\S]*type: choice[\s\S]*- "1"[\s\S]*- "32"/u);
-  assert.match(workflow, /github\.event\.label\.name == 'private-pure-llm-evaluation' && '32' \|\| '1'/u);
+  assert.match(workflow, /github\.event\.label\.name == 'private-pure-llm-evaluation' && '32'/u);
   assert.match(workflow, /needs: validate/u);
   assert.match(workflow, /timeout-minutes: 75/u);
   assert.doesNotMatch(workflow, /timeout-minutes: 300/u);
@@ -39,6 +43,8 @@ test("private pure LLM evaluation is explicitly triggered, serial and generation
   assert.match(archivePreflightStep, /if: env\.RETRIEVAL_ONLY_PILOT != 'true'/u);
   assert.match(archivePreflightStep, /PRIVATE_ARCHIVE_KEY: \$\{\{ secrets\.PURE_LLM_EVALUATION_ARCHIVE_KEY \}\}/u);
   assert.match(archivePreflightStep, /\$\{#PRIVATE_ARCHIVE_KEY\}.*-lt 32/u);
+  assert.match(archivePreflightStep, /749295ac7c83b5c765722975c4a6985dedcfcd9dc02eeab3e01dd648ff8a4b3e/u);
+  assert.match(archivePreflightStep, /openssl pkey -pubin -in \.github\/private-evaluation-recipient\.pem -noout/u);
   assert.ok(
     workflow.indexOf("Preflight private archive encryption")
       < workflow.indexOf("Start the paid preview branch backend"),
@@ -56,6 +62,19 @@ test("private pure LLM evaluation is explicitly triggered, serial and generation
   assert.doesNotMatch(workflow, /Generate and judge|Judge the|Sol high/iu);
   assert.doesNotMatch(workflow, /for\s+attempt|--retries|strategy:[\s\S]*matrix:/iu);
   assert.doesNotMatch(workflow, /UPSTASH|legacy.?lua|formal.?engine/iu);
+});
+
+test("owner tag evaluation is pinned to the trusted preview branch", async () => {
+  const workflow = await readFile(workflowUrl, "utf8");
+  const trustStep = workflow.match(
+    /- name: Verify the owner evaluation tag targets the trusted preview branch[\s\S]*?(?=\n\s+- name:)/u,
+  )?.[0] || "";
+
+  assert.match(trustStep, /if: env\.TAG_TRIGGERED_PRIVATE_EVALUATION == 'true'/u);
+  assert.match(trustStep, /refs\/heads\/codex\/pure-llm-preview-v1:refs\/remotes\/origin\/codex\/pure-llm-preview-v1/u);
+  assert.match(trustStep, /git fetch --no-tags --depth=1/u);
+  assert.match(trustStep, /git rev-parse refs\/remotes\/origin\/codex\/pure-llm-preview-v1/u);
+  assert.match(trustStep, /\$GITHUB_SHA\^\{commit\}/u);
 });
 
 test("retrieval-only pilot completes prompt construction without receiving or dispatching a paid key", async () => {
@@ -160,25 +179,30 @@ test("private questions, references and candidates are retained only in a verifi
   assert.match(workflow, /openssl enc -aes-256-cbc -salt -pbkdf2 -iter 200000 -md sha256/u);
   assert.match(workflow, /openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -md sha256/u);
   assert.match(workflow, /tar -tzf "\$verification_archive" > \/dev\/null/u);
+  assert.match(workflow, /openssl rand -hex 32/u);
+  assert.match(workflow, /openssl enc -d -aes-256-cbc[\s\S]*-pass file:"\$random_password_file"/u);
+  assert.match(workflow, /cipher_sha256=.*sha256sum "\$encrypted_archive"/u);
+  assert.match(workflow, /printf 'cipher_sha256=%s\\n' "\$cipher_sha256"/u);
+  assert.match(workflow, /openssl pkeyutl -encrypt[\s\S]*rsa_padding_mode:oaep[\s\S]*rsa_oaep_md:sha256[\s\S]*rsa_mgf1_md:sha256/u);
   assert.match(workflow, /cleanup_plaintext_archives[\s\S]*trap - EXIT/u);
-  const uploadPaths = [...workflow.matchAll(/^\s+path:\s+([^\r\n]+)$/gmu)]
-    .map((match) => match[1].trim());
-  assert.deepEqual(uploadPaths, [
-    "artifacts/pure-llm-private-public-report.json",
-    "artifacts/pure-llm-private-checkpoint.tar.gz.enc",
-  ]);
-  assert.equal(uploadPaths.some((path) => (
-    /(?:private-dataset|private-checkpoint|backend\.log)/u.test(path)
-      && !path.endsWith(".enc")
-  )), false);
   const encryptedUploadStep = workflow.match(
     /- name: Upload the encrypted private manual-review archive[\s\S]*?(?=\n\s+- name:)/u,
   )?.[0] || "";
+  assert.match(encryptedUploadStep, /TAG_TRIGGERED_PRIVATE_EVALUATION != 'true'/u);
+  assert.match(encryptedUploadStep, /path: artifacts\/pure-llm-private-checkpoint\.tar\.gz\.enc/u);
+  assert.doesNotMatch(encryptedUploadStep, /path:.*\*/u);
   assert.match(encryptedUploadStep, /steps\.private_archive\.outcome == 'success'/u);
   assert.match(encryptedUploadStep, /steps\.private_archive\.outputs\.created == 'true'/u);
   assert.match(encryptedUploadStep, /if-no-files-found: error/u);
   assert.match(encryptedUploadStep, /retention-days: 7/u);
   assert.match(encryptedUploadStep, /compression-level: 0/u);
+  const rsaUploadStep = workflow.match(
+    /- name: Upload the RSA-wrapped private manual-review archive[\s\S]*?(?=\n\s+- name:)/u,
+  )?.[0] || "";
+  assert.match(rsaUploadStep, /TAG_TRIGGERED_PRIVATE_EVALUATION == 'true'/u);
+  assert.match(rsaUploadStep, /artifacts\/pure-llm-private-checkpoint\.tar\.gz\.enc/u);
+  assert.match(rsaUploadStep, /artifacts\/pure-llm-private-checkpoint\.key-envelope\.rsa-oaep/u);
+  assert.doesNotMatch(rsaUploadStep, /path:.*\*/u);
   assert.match(workflow, /rm -rf[\s\S]*private-dataset\.txt[\s\S]*pure-llm-private-checkpoint/u);
   assert.doesNotMatch(workflow, /cat "?\$RUNNER_TEMP\/private-dataset/u);
 
@@ -206,13 +230,39 @@ test("private questions, references and candidates are retained only in a verifi
   assert.match(cleanupStep, /if kill -0 "\$backend_pid"[\s\S]*kill -KILL "\$backend_pid"/u);
   assert.match(cleanupStep, /kill -KILL[\s\S]*for _ in \$\(seq 1 20\); do[\s\S]*kill -0 "\$backend_pid"/u);
   assert.match(cleanupStep, /still running after SIGKILL[\s\S]*cleanup_status=1/u);
-  assert.match(cleanupStep, /rm -f -- artifacts\/pure-llm-private-checkpoint\.tar\.gz\.enc/u);
+  assert.match(cleanupStep, /rm -f --[\s\S]*artifacts\/pure-llm-private-checkpoint\.tar\.gz\.enc/u);
   assert.match(cleanupStep, /for private_path in[\s\S]*private-dataset\.txt[\s\S]*pure-llm-private-checkpoint[\s\S]*private-evaluation-backend\.log/u);
   assert.match(cleanupStep, /artifacts\/pure-llm-private-checkpoint\.tar\.gz\.enc/u);
+  assert.match(cleanupStep, /pure-llm-private-checkpoint\.key-envelope\.rsa-oaep/u);
   assert.match(cleanupStep, /if \[ -e "\$private_path" \]; then[\s\S]*cleanup_status=1/u);
   assert.match(cleanupStep, /exit "\$cleanup_status"/u);
   assert.ok(
-    workflow.indexOf("Upload the encrypted private manual-review archive")
+    workflow.indexOf("Upload the RSA-wrapped private manual-review archive")
       < workflow.indexOf("Stop the preview branch backend and scrub plaintext"),
   );
+});
+
+test("only the ciphertext-only publishing job receives repository write permission", async () => {
+  const workflow = await readFile(workflowUrl, "utf8");
+  const privateJob = workflow.match(
+    /\n  private-evaluation:[\s\S]*?(?=\n  publish-encrypted-private-evaluation:)/u,
+  )?.[0] || "";
+  const publisherJob = workflow.match(
+    /\n  publish-encrypted-private-evaluation:[\s\S]*$/u,
+  )?.[0] || "";
+
+  assert.doesNotMatch(privateJob, /permissions:[\s\S]{0,80}contents: write/u);
+  assert.match(publisherJob, /permissions:[\s\S]{0,80}contents: write/u);
+  assert.doesNotMatch(publisherJob, /secrets\.|RELAY_API_KEY|DEEPSEEK_API_KEY|PRIVATE_DATASET/u);
+  assert.match(publisherJob, /ref: private-evaluation-results/u);
+  assert.match(privateJob, /outputs:[\s\S]{0,100}archive_created: \$\{\{ steps\.private_archive\.outputs\.created \}\}/u);
+  assert.match(publisherJob, /needs\.private-evaluation\.outputs\.archive_created == 'true'/u);
+  assert.match(publisherJob, /run_relative="runs\/\$\{GITHUB_RUN_ID\}-\$\{GITHUB_RUN_ATTEMPT\}"/u);
+  assert.match(publisherJob, /test "\$\(find "\$encrypted_dir" -type f \| wc -l\)" -eq 2/u);
+  assert.match(publisherJob, /cipher_sha256=.*sha256sum/u);
+  assert.match(publisherJob, /key_envelope_sha256=/u);
+  assert.doesNotMatch(publisherJob, /pure-llm-private-public-report|private-evaluation-public/u);
+  assert.match(publisherJob, /git -C "\$results_repo" add --/u);
+  assert.doesNotMatch(publisherJob, /git (?:-C [^\n]+ )?add (?:\.|-A)/u);
+  assert.doesNotMatch(publisherJob, /git [^\n]*push [^\n]*(?:--force|-f\b)/u);
 });

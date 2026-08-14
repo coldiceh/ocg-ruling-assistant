@@ -8,3 +8,4 @@
 /data/official-responses.json text eol=lf
 /data/rag-data-revision-manifest.json text eol=lf
 /data/rag-runtime-v1/manifest.json text eol=lf
+/.github/private-evaluation-recipient.pem text eol=lf
