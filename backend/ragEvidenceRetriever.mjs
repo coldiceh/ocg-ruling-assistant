@@ -444,7 +444,10 @@ export async function retrieveRagEvidence({
       supplementalRuleQueries: effectiveSupplementalRuleQueries,
       allowNoCardMatch: effectiveQaIdentityCards.length === 0 && normalizedRuleQueries.length > 0,
     }).filter((record) => !isIncidentalMultiCardExampleRecord(record, effectiveQaIdentityCards.length)),
-  ]);
+  ]).filter((item) => (
+    !effectiveQaIdentityCards.length
+    || recordSharesResolvedIdentity(item?.record || item, effectiveQaIdentityCards)
+  ));
   // Card-scoped lookup is the highest-signal path, but a general OCG mechanism
   // is often documented on a different card. Search the complete official QA
   // pool with the same rule-query plan and keep a small, bounded related-only

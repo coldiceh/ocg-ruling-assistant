@@ -174,11 +174,18 @@ export function normalizeOfficialQaQuery(value) {
 export function classifyOfficialQaQuestionType(value) {
   const text = String(value || "");
   const sharedTypes = new Set(classifyEvidenceQuestionTypes(text).questionTypes);
-  if (sharedTypes.has("effect_applicability") || sharedTypes.has("resolution_handling")) {
+  // An explicit applicability question remains a resolution-result question,
+  // even if its premise mentions battle. Generic "how is this battle handled"
+  // wording, however, must keep the more specific battle category instead of
+  // being swallowed by the broad resolution-handling vocabulary.
+  if (sharedTypes.has("effect_applicability")) {
     return "resolution_result";
   }
   if (sharedTypes.has("battle_resolution")) {
     return "battle_resolution";
+  }
+  if (sharedTypes.has("resolution_handling")) {
+    return "resolution_result";
   }
   return QUESTION_TYPES.find(([, pattern]) => pattern.test(text))?.[0] || "unknown";
 }
