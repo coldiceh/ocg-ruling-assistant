@@ -55,6 +55,7 @@ test("private pure LLM evaluation is explicitly triggered, serial and generation
   assert.match(workflow, /case_count_args\+=\(--require-case-count 32\)/u);
   assert.match(workflow, /exclude_case_args\+=\(--exclude-case case-025\)/u);
   assert.match(workflow, /SELECTED_EVALUATION_COUNT=\$selected_case_count/u);
+  assert.match(workflow, /SELECTED_EVALUATION_COUNT:[\s\S]*private-eval-full-[^\r\n]*&& '31' \|\| '1'/u);
   assert.match(workflow, /"\$\{exclude_case_args\[@\]\}"/u);
   assert.match(workflow, /"\$\{case_count_args\[@\]\}"/u);
   assert.match(workflow, /--generation-timeout-ms 90000/u);

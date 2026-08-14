@@ -639,6 +639,8 @@ jobs:
     env:
       EVALUATION_LIMIT: >-
         ${{ startsWith(github.ref_name, 'private-eval-full-') && '32' || '1' }}
+      SELECTED_EVALUATION_COUNT: >-
+        ${{ startsWith(github.ref_name, 'private-eval-full-') && '31' || '1' }}
     steps:
       - name: Checkout the encrypted-results branch only
         uses: actions/checkout@v6
