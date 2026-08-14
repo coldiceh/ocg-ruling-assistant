@@ -347,6 +347,15 @@ test("CLI modes and HTTP endpoint normalization are explicit", () => {
   ]);
   assert.equal(options.judgeOnly, true);
   assert.equal(options.limit, 4);
+  const exclusionOptions = parseCliArguments([
+    "--base-url",
+    "https://preview.example.test",
+    "--exclude-case",
+    "case-025",
+    "--exclude-case",
+    "case-031",
+  ]);
+  assert.deepEqual(exclusionOptions.excludedCaseIds, ["case-025", "case-031"]);
   const exactDatasetOptions = parseCliArguments([
     "--base-url",
     "https://preview.example.test",
@@ -354,6 +363,10 @@ test("CLI modes and HTTP endpoint normalization are explicit", () => {
     "32",
   ]);
   assert.equal(exactDatasetOptions.requiredCaseCount, 32);
+  assert.throws(
+    () => parseCliArguments(["--base-url", "https://preview.example.test", "--exclude-case", "not-a-case"]),
+    /case-NNN/u,
+  );
   assert.throws(
     () => parseCliArguments(["--generate-only", "--judge-only"]),
     /mutually exclusive/u,

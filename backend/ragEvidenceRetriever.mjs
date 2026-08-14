@@ -103,6 +103,7 @@ export async function retrieveRagEvidence({
   records,
   qaRecords,
   ruleSearchQueries = [],
+  ruleSearchQueryProvider,
   enableLiveOfficialQa = false,
   subsumptionCandidatePoolComplete = false,
   maxPerBucket = 5,
@@ -126,7 +127,7 @@ export async function retrieveRagEvidence({
   const cardProvider = createLocalCardDataProvider(data);
   const resolvedCards = cardResolution.resolvedCards || [];
   const providedTexts = normalizeUserProvidedCardTexts(cardResolution.userProvidedCardTexts || [], limits);
-  const supplementalRuleQueries = normalizeRuleSearchQueries(ruleSearchQueries, limits);
+  let supplementalRuleQueries = normalizeRuleSearchQueries(ruleSearchQueries, limits);
   let deterministicRuleQueries = normalizeRuleSearchQueries(
     deriveRuleSearchQueries(userQuery),
     limits,
@@ -263,6 +264,17 @@ export async function retrieveRagEvidence({
     .filter(Boolean)
     .map((card) => cardTextEvidence(card, limits.maxCardTextChars, retrievalWarnings));
   const userProvidedCardTextEvidence = dedupeEvidence(providedTexts.map((item, index) => userProvidedTextEvidence(item, index, limits.maxCardTextChars, retrievalWarnings)));
+  if (typeof ruleSearchQueryProvider === "function") {
+    const providedRuleQueries = await ruleSearchQueryProvider({
+      resolvedCards: retrievalCards,
+      userProvidedCardTexts: providedTexts,
+    });
+    throwIfAborted(signal);
+    supplementalRuleQueries = normalizeRuleSearchQueries([
+      ...supplementalRuleQueries,
+      ...(Array.isArray(providedRuleQueries) ? providedRuleQueries : []),
+    ], limits);
+  }
   deterministicRuleQueries = mergeRuleSearchQueries(
     deterministicRuleQueries,
     deriveRuleSearchQueriesFromCardTexts(userQuery, cardTexts),
@@ -1873,9 +1885,10 @@ function rankRecordsWithSupplementalQueries({
     // record that passes the strict official-mechanism gate. This remains at
     // most four candidates per query while allowing a strict fourth-or-later
     // record to survive noisy higher-ranked candidates.
-    const strictHead = independentlyRanked
-      .filter(({ record }) => isUsefulCrossCardOfficialRelatedRecord(record))
-      .slice(0, 1);
+    const strictHeadCandidate = independentlyRanked.find(
+      ({ record }) => isStrictSupplementalOfficialMechanismMatch(record, query),
+    );
+    const strictHead = strictHeadCandidate ? [strictHeadCandidate] : [];
     const boundedCandidates = dedupeBy([
       ...strictHead,
       ...independentlyRanked.slice(0, 3),
@@ -1886,7 +1899,7 @@ function rankRecordsWithSupplementalQueries({
       // heads are merged, aggregate scores can no longer prove which query a
       // candidate actually matched.
       const strictQueryMatch = queryIdentity
-        && isUsefulCrossCardOfficialRelatedRecord(record);
+        && isStrictSupplementalOfficialMechanismMatch(record, query);
       return {
         ...record,
         retrievalSignals: {
@@ -2425,6 +2438,8 @@ function normalizeRuleSearchQueries(items, limits = {}) {
   const normalized = source
     .map((item) => typeof item === "string"
       ? {
+          subclaim: "",
+          checkpoint: "",
           query: item,
           reason: "",
           confidence: "medium",
@@ -2432,6 +2447,8 @@ function normalizeRuleSearchQueries(items, limits = {}) {
           declaredMechanism: "",
         }
       : {
+          subclaim: String(item?.subclaim || item?.factToVerify || item?.ruleQuestion || "").trim(),
+          checkpoint: String(item?.checkpoint || item?.stage || "").trim(),
           query: String(item?.query || item?.searchQuery || item?.keyword || item?.topic || "").trim(),
           reason: String(item?.reason || "").trim(),
           confidence: item?.confidence || "medium",
@@ -2440,6 +2457,8 @@ function normalizeRuleSearchQueries(items, limits = {}) {
         })
     .map((item) => ({
       ...item,
+      subclaim: item.subclaim.replace(/\s+/gu, " ").slice(0, 160),
+      checkpoint: item.checkpoint.replace(/\s+/gu, " ").toLowerCase().slice(0, 64),
       query: item.query.replace(/\s+/gu, " ").slice(0, 120),
       reason: item.reason.replace(/\s+/gu, " ").slice(0, 120),
       mechanism: inferRuleSearchMechanism(item),
@@ -2501,6 +2520,28 @@ function isUsefulCrossCardOfficialRelatedRecord(record = {}) {
     && strongMatches >= 1
     && Number(signals.strongMechanismQueryCoverage || 0) >= 0.5
     && (strongMatches >= 2 || contextMatches >= 1);
+}
+
+function isStrictSupplementalOfficialMechanismMatch(record = {}, query = {}) {
+  if (!isOfficialQaOrFaqRecord(record)) return false;
+  const signals = record.retrievalSignals || {};
+  // User-question compatibility is still mandatory, but mechanism coverage
+  // must be recomputed against this one supplemental query. The ordinary
+  // ranked record carries the best aggregate match across the user question
+  // and every supplied query; using that aggregate here can neither prove
+  // which query matched nor safely scan past a noisy lexical head.
+  if (signals.typeCompatible !== true) return false;
+  const queryText = typeof query === "string" ? query : query?.query;
+  const querySignature = buildRuleMechanismSignature(queryText);
+  if (!isUsableRuleMechanismSignature(querySignature)) return false;
+  const evidenceSignature = retrievalQuestionFeatures(record).evidenceMechanismSignature;
+  const mechanismMatch = bestRuleMechanismMatch([querySignature], evidenceSignature);
+  return mechanismMatch.matchedStrongFeatures.length >= 1
+    && Number(mechanismMatch.strongQueryCoverage || 0) >= 0.5
+    && (
+      mechanismMatch.matchedStrongFeatures.length >= 2
+      || mechanismMatch.matchedContextFeatures.length >= 1
+    );
 }
 
 function recordSharesResolvedIdentity(record = {}, resolvedCards = []) {

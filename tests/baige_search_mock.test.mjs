@@ -380,12 +380,17 @@ test("an external unique primary name resolves a local short-name ambiguity with
     en_name: "Prototype Test Dragon",
     text: { desc: "场上的特定怪兽的攻击力变成0。" },
   };
+  let ruleQueryContext;
   const evidence = await retrieveRagEvidence({
     userQuery: question,
     cardResolution,
     cards: [canonicalLocalCard, ...localFragmentCards],
     records: [],
     qaRecords: [],
+    ruleSearchQueryProvider: async (context) => {
+      ruleQueryContext = context;
+      return [];
+    },
     fetchImpl: async () => jsonResponse({ result: [aliasOnlyCollision, exactPrimaryMatch], next: 0 }),
     env: { RAG_LIVE_OFFICIAL_QA: "0" },
   });
@@ -395,6 +400,8 @@ test("an external unique primary name resolves a local short-name ambiguity with
   assert.equal(evidence.retrievedCards[0].input, userSurface);
   assert.equal(evidence.retrievedCards[0].externalSurfaceResolution, "unique_exact_primary_name");
   assert.match(evidence.cardTexts[0].text, /攻击力变成0/u);
+  assert.equal(ruleQueryContext.resolvedCards[0].name, userSurface);
+  assert.match(ruleQueryContext.resolvedCards[0].effectText, /攻击力变成0/u);
   assert.ok(!evidence.cardResolution.ambiguousMentions.some((item) => item.input === userSurface));
 });
 

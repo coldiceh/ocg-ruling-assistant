@@ -79,8 +79,10 @@ test("prompt preserves provenance and presents official QA as structured fields"
   assert.match(bundle.prompt, /处理快照/u);
   assert.match(bundle.prompt, /处理后快照/u);
   assert.match(bundle.prompt, /发动时的合法选项与处理时最终能执行的选项/u);
-  assert.match(bundle.prompt, /实际受影响实体与权限关系/u);
-  assert.match(bundle.prompt, /区域\/类型变化/u);
+  assert.match(bundle.prompt, /效果来源与效果类型/u);
+  assert.match(bundle.prompt, /实际受影响实体/u);
+  assert.match(bundle.prompt, /核对权限关系/u);
+  assert.match(bundle.prompt, /当前区域、类型/u);
   assert.match(bundle.prompt, /不得用尚未发生的后续状态倒推/u);
   assert.match(bundle.prompt, /显式账本/u);
 });

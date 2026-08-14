@@ -1216,7 +1216,10 @@ function confidenceForNearEditMention(seed, distance) {
   return 0.9;
 }
 
-function collectNearEditCandidates(aliasIndex, mention, { allowContextualTwoEdit = false } = {}) {
+function collectNearEditCandidates(aliasIndex, mention, {
+  allowContextualTwoEdit = false,
+  candidateFilter = null,
+} = {}) {
   const mentionKey = normalizeCardKey(mention);
   const maximumDistance = mentionKey.length >= 8 || (allowContextualTwoEdit && mentionKey.length >= 5) ? 2 : 1;
   if (mentionKey.length < 3) return new Map();
@@ -1227,6 +1230,7 @@ function collectNearEditCandidates(aliasIndex, mention, { allowContextualTwoEdit
       const distance = boundedEditDistance(mentionKey, aliasKey, maximumDistance);
       if (distance > maximumDistance) continue;
       for (const candidate of aliasIndex.get(aliasKey) || []) {
+        if (candidateFilter && !candidateFilter(candidate)) continue;
         if (hasNumberedCardIdentityConflict(mention, candidate.matchedAlias)) continue;
         if (!approximateCandidateCompatibleWithNumberedMention(mention, candidate)) continue;
         const identity = cardIdentity(candidate.card);
@@ -1241,7 +1245,21 @@ function collectNearEditCandidates(aliasIndex, mention, { allowContextualTwoEdit
 }
 
 function collectNearestEditCandidates(aliasIndex, mention, options) {
-  const candidates = [...collectNearEditCandidates(aliasIndex, mention, options).values()];
+  const seriesToken = extractMixedScriptSeriesToken(mention);
+  const seriesCandidates = seriesToken
+    ? [...collectNearEditCandidates(aliasIndex, mention, {
+      ...options,
+      candidateFilter: (candidate) => extractMixedScriptSeriesToken(candidate.matchedAlias) === seriesToken,
+    }).values()]
+    : [];
+  // An explicitly written Latin series prefix is an exact lexical constraint,
+  // not a fuzzy tie-breaker.  Apply it before edit-distance ranking so a typo in
+  // the localized suffix cannot jump to an equally-near card from another
+  // series.  With no such constraint (or no matching series candidate), retain
+  // the ordinary global nearest-distance behaviour.
+  const candidates = seriesCandidates.length
+    ? seriesCandidates
+    : [...collectNearEditCandidates(aliasIndex, mention, options).values()];
   if (candidates.length <= 1) return candidates;
   const minimumDistance = Math.min(...candidates.map((candidate) => Number(candidate.nearEditDistance)));
   return candidates.filter((candidate) => Number(candidate.nearEditDistance) === minimumDistance);
@@ -1500,6 +1518,16 @@ function findUniqueDistinctiveFragmentCandidate(cards, mention) {
 function normalizeMaxCards(maxCards) {
   const parsed = Number.parseInt(maxCards, 10);
   return Number.isFinite(parsed) ? Math.max(0, parsed) : 6;
+}
+
+function extractMixedScriptSeriesToken(value) {
+  const text = String(value || "")
+    .normalize("NFKC")
+    .trim()
+    .replace(/^[「『《【\[\uff08(\u201c"']+/u, "");
+  const match = text.match(/^([A-Za-z][A-Za-z0-9_-]{1,11})\s*(?=[\u3040-\u30ff\u3400-\u9fff])/u);
+  if (!match || /^(?:no|cno|sno)$/iu.test(match[1])) return "";
+  return normalizeCardKey(match[1]);
 }
 
 function buildAliasKeysByLength(aliasIndex) {
