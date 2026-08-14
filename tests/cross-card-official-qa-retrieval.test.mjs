@@ -308,6 +308,61 @@ test("independent supplemental queries preserve distinct strict mechanisms over 
   )));
 });
 
+test("query-independent record features preserve repeated retrieval output", async () => {
+  const current = syntheticCard("56001", "虚构缓存锚点", "这张卡的处理会改变当前状态。");
+  const qaRecords = [
+    {
+      id: "qa-fictional-cache-replacement",
+      recordType: "qa",
+      question: "怪兽的破坏被代替而没有被破坏时，能否进行特殊召唤？",
+      rawDetailedQuestion: "「<<56101>>」的破坏被代替而没有被破坏时，能否进行特殊召唤？",
+      answer: "第一种机制的官方资料。",
+      cardIds: ["56101"],
+    },
+    {
+      id: "qa-fictional-cache-movement",
+      recordType: "qa",
+      question: "卡组中的卡被除外后，能否进行返回卡组的操作？",
+      rawDetailedQuestion: "「<<56201>>」是卡组中的卡，被除外后能否进行返回卡组的操作？",
+      answer: "第二种机制的官方资料。",
+      cardIds: ["56201"],
+    },
+  ];
+  const options = {
+    userQuery: "「虚构缓存锚点」涉及两个待核对操作：破坏被代替后能否进行特殊召唤，以及卡组中的卡被除外后能否进行返回卡组的操作？",
+    cardResolution: {
+      resolvedCards: [current],
+      unresolvedMentions: [],
+      ambiguousMentions: [],
+      userProvidedCardTexts: [],
+    },
+    cards: [current],
+    records: [],
+    qaRecords,
+    ruleSearchQueries: [
+      { query: "破坏代替 没有被破坏 特殊召唤 能否进行" },
+      { query: "卡组中的卡 除外 返回卡组 能否进行" },
+    ],
+    enableLiveOfficialQa: false,
+    env: { RAG_LIVE_OFFICIAL_QA: "false", RAG_MAX_RELATED_EVIDENCE: "2" },
+  };
+
+  const first = await retrieveRagEvidence(options);
+  const second = await retrieveRagEvidence(options);
+  const comparable = (evidence) => evidence.officialQaRelated.map((item) => ({
+    id: item.id,
+    type: item.type,
+    recordType: item.recordType,
+    retrievalScore: item.retrievalScore,
+    retrievalSignals: item.retrievalSignals,
+    retrievalContext: item.retrievalContext,
+    isDirect: item.isDirect,
+  }));
+
+  assert.equal(first.officialQaRelated.length, 2);
+  assert.deepEqual(comparable(second), comparable(first));
+});
+
 test("retriever provenance survives the real prompt boundary without promoting community QA", async () => {
   const current = syntheticCard("61001", "匿名对象乙", "这张卡的效果处理后进行一次操作。");
   const communityQa = {

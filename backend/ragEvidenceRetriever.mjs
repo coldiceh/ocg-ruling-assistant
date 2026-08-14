@@ -43,6 +43,7 @@ const normalizedDataCache = new WeakMap();
 const evidenceRecordBucketsCache = new WeakMap();
 const evidenceListCache = new WeakMap();
 const retrievalRecordFeatureCache = new WeakMap();
+const retrievalQuestionFeatureCache = new WeakMap();
 const recordIdentityIndexCache = new WeakMap();
 const canonicalCardIdentityIndexCache = new WeakMap();
 
@@ -2075,17 +2076,22 @@ function scoreRecord(record, {
   querySemanticConcepts,
   queryMechanismSignatures = [],
 }) {
-  const rankingIdentity = retrievalRankingIdentity(record);
+  const questionFeatures = retrievalQuestionFeatures(record);
+  const {
+    rankingIdentity,
+    questionText,
+    questionCardIds,
+    evidenceEffectNumbers,
+    evidenceQuestionType,
+    evidenceEffectPhrases,
+    evidenceSemanticConcepts,
+    evidenceMechanismSignature,
+  } = questionFeatures;
   const text = rankingIdentity.text;
   const { textKey, normalizedCardIds, normalizedCardNames } = retrievalRecordFeatures(
     record,
     rankingIdentity,
   );
-  const questionProjection = projectOfficialQaQuestion(record);
-  const questionText = questionProjection.scenarioText || record.title || "";
-  const questionCardIds = new Set(questionProjection.principalCardIds
-    .map(normalizeId)
-    .filter(Boolean));
   const matchedRecordCardIds = normalizedCardIds.filter((id) => resolvedIds.has(id));
   const matchedQuestionCardIds = [...resolvedIds].filter((id) => questionCardIds.has(id));
   const matchedCardIds = [...new Set([
@@ -2125,22 +2131,18 @@ function scoreRecord(record, {
   }
   const fullQueryMatched = queryKey.length >= 8 && textKey.includes(queryKey.slice(0, Math.min(queryKey.length, 80)));
   if (fullQueryMatched) score += 5;
-  const evidenceEffectNumbers = extractEffectNumbers(questionText || text);
   const effectNumberCompatible = !queryEffectNumbers.length
     || !evidenceEffectNumbers.length
     || queryEffectNumbers.some((number) => evidenceEffectNumbers.includes(number));
-  const evidenceQuestionType = classifyOfficialQaQuestionType(questionText || text);
   const typeCompatible = questionTypeCompatibleForRanking(queryQuestionType, evidenceQuestionType);
-  const evidenceEffectPhrases = extractOfficialQaEffectPhrases(questionText || text);
   const matchedEffectPhrases = queryEffectPhrases.filter((phrase) => evidenceEffectPhrases.includes(phrase));
-  const evidenceSemanticConcepts = extractOfficialQaSemanticConcepts(questionText || text);
   const matchedSemanticConcepts = querySemanticConcepts.filter((concept) => evidenceSemanticConcepts.includes(concept));
   const semanticQueryCoverage = querySemanticConcepts.length
     ? matchedSemanticConcepts.length / querySemanticConcepts.length
     : 0;
   const mechanismMatch = bestRuleMechanismMatch(
     queryMechanismSignatures,
-    buildRuleMechanismSignature(questionText || text),
+    evidenceMechanismSignature,
   );
   // Lexical overlap is normally required, but it cannot be the sole gateway
   // for multilingual official Q&A. Admit only a strict semantic alternative:
@@ -2257,11 +2259,39 @@ function retrievalRecordFeatures(record = {}, preparedIdentity) {
   return features;
 }
 
+function retrievalQuestionFeatures(record = {}) {
+  const cacheable = record && typeof record === "object";
+  if (cacheable) {
+    const cached = retrievalQuestionFeatureCache.get(record);
+    if (cached) return cached;
+  }
+
+  const questionProjection = projectOfficialQaQuestion(record);
+  const rankingIdentity = retrievalRankingIdentity(record, questionProjection);
+  const questionText = questionProjection.scenarioText || record.title || "";
+  const evidenceText = questionText || rankingIdentity.text;
+  const features = {
+    rankingIdentity,
+    questionProjection,
+    questionText,
+    questionCardIds: new Set(questionProjection.principalCardIds
+      .map(normalizeId)
+      .filter(Boolean)),
+    evidenceEffectNumbers: extractEffectNumbers(evidenceText),
+    evidenceQuestionType: classifyOfficialQaQuestionType(evidenceText),
+    evidenceEffectPhrases: extractOfficialQaEffectPhrases(evidenceText),
+    evidenceSemanticConcepts: extractOfficialQaSemanticConcepts(evidenceText),
+    evidenceMechanismSignature: buildRuleMechanismSignature(evidenceText),
+  };
+  if (cacheable) retrievalQuestionFeatureCache.set(record, features);
+  return features;
+}
+
 function isScenarioOfficialQaRecord(record = {}) {
   return record.recordType === "qa" || record.recordType === "official-database";
 }
 
-function retrievalRankingIdentity(record = {}) {
+function retrievalRankingIdentity(record = {}, preparedProjection) {
   if (!isScenarioOfficialQaRecord(record)) {
     return {
       text: [record.title || "", record.text || ""].join("\n"),
@@ -2279,7 +2309,9 @@ function retrievalRankingIdentity(record = {}) {
     };
   }
 
-  const projection = projectOfficialQaQuestion(record);
+  const projection = preparedProjection && typeof preparedProjection === "object"
+    ? preparedProjection
+    : projectOfficialQaQuestion(record);
   const text = [...new Set([
     projection.principalText,
     projection.scenarioText,
