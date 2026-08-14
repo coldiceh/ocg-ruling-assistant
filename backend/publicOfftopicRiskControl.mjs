@@ -147,8 +147,8 @@ export function buildPublicOfftopicRiskControlAnswer({
 } = {}) {
   const minutes = Math.max(1, boundedInteger(status.remainingMinutes, 1, 1, 60));
   const shortAnswer = triggered
-    ? `检测到非游戏王规则裁定相关问题，系统自动关闭 ${minutes} 分钟。如需提前解除，请联系作者 B 站账号「おmaginai」。`
-    : `因为有人询问了非游戏王规则裁定相关问题，风控已启动；请在 ${minutes} 分钟后再提交问题。如需提前解除，请联系作者 B 站账号「おmaginai」。`;
+    ? `检测到非游戏王规则裁定相关问题，系统自动关闭 ${minutes} 分钟。如需提前解除，请联系作者b站「おmaginai」。`
+    : `因为有人询问了非游戏王规则裁定相关问题，风控已启动；请在 ${minutes} 分钟后再提交问题。如需提前解除，请联系作者b站「おmaginai」。`;
   return {
     answerLevel: "risk_control",
     shortAnswer,
