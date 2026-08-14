@@ -1107,7 +1107,15 @@ test("rule_query_extractor_uses_lightweight_model", async () => {
     fetchImpl: async (url, options) => {
       calls.push({ url, options, body: JSON.parse(options.body) });
       return jsonResponse({
-        choices: [{ message: { content: JSON.stringify({ ruleQueries: [{ query: "正在处理的通常陷阱 回到手卡", reason: "检索处理后区域", confidence: "high" }] }) } }],
+        choices: [{ message: { content: JSON.stringify({
+          ruleQueries: [{
+            subclaim: "确认效果处理时该卡的区域和卡片种类",
+            checkpoint: "resolution_snapshot",
+            query: "处理中的陷阱 当前区域 | 処理中の罠 現在の領域 | resolving trap current zone",
+            reason: "检索处理快照中的区域与类型",
+            confidence: "high",
+          }],
+        }) } }],
         usage: { prompt_tokens: 25, completion_tokens: 8 },
       });
     },
@@ -1115,7 +1123,14 @@ test("rule_query_extractor_uses_lightweight_model", async () => {
   assert.equal(result.providerUsed, "deepseek");
   assert.equal(result.modelUsed, "deepseek-flash-test");
   assert.equal(calls[0].body.model, "deepseek-flash-test");
-  assert.deepEqual(result.queries.map((item) => item.query), ["正在处理的通常陷阱 回到手卡"]);
+  assert.deepEqual(result.queries.map((item) => item.query), ["处理中的陷阱 当前区域 | 処理中の罠 現在の領域 | resolving trap current zone"]);
+  assert.equal(result.queries[0].subclaim, "确认效果处理时该卡的区域和卡片种类");
+  assert.equal(result.queries[0].checkpoint, "resolution_snapshot");
+  const requestPrompt = calls[0].body.messages.map((item) => item.content).join("\n");
+  assert.match(requestPrompt, /彼此独立、尚待证实的规则子命题/u);
+  assert.match(requestPrompt, /subclaim、checkpoint、query、reason、confidence/u);
+  assert.match(requestPrompt, /中文、日文和英文等价术语/u);
+  assert.match(requestPrompt, /不要保留未解释的玩家俗称/u);
 });
 
 test("official QA applicability review uses Relay Sol low once and never sends candidate answers", async () => {
@@ -5174,7 +5189,7 @@ test("owner cap stops only today's public ChatGPT bucket at the ten-dollar hard 
   assert.equal(blocked.answer.answerLevel, "budget_limited");
   assert.equal(
     blocked.answer.shortAnswer,
-    "今日公开裁定额度已达到每日 10 美元上限，未调用模型。如需协助重置，作者b站账号「おmaginai」QAQ",
+    "今日公开裁定额度已达到每日 10 美元上限，未调用模型。如需协助重置，请联系作者b站「おmaginai」。",
   );
 });
 

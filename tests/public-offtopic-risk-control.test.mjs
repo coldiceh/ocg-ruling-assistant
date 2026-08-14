@@ -168,9 +168,16 @@ test("public answer helper distinguishes the triggering request from later block
     status: { active: true, remainingMinutes: 4 },
   });
 
-  assert.match(triggering.shortAnswer, /自动关闭 12 分钟/u);
-  assert.match(blocked.shortAnswer, /4 分钟后再提交问题/u);
-  assert.match(triggering.shortAnswer, /おmaginai/u);
+  assert.equal(
+    triggering.shortAnswer,
+    "检测到非游戏王规则裁定相关问题，系统自动关闭 12 分钟。如需提前解除，请联系作者b站「おmaginai」。",
+  );
+  assert.equal(
+    blocked.shortAnswer,
+    "因为有人询问了非游戏王规则裁定相关问题，风控已启动；请在 4 分钟后再提交问题。如需提前解除，请联系作者b站「おmaginai」。",
+  );
+  assert.doesNotMatch(triggering.shortAnswer, /\*\*/u);
+  assert.doesNotMatch(blocked.shortAnswer, /\*\*/u);
   assert.equal(triggering.answerLevel, "risk_control");
   assert.deepEqual(triggering.riskFlags, ["public_offtopic_risk_control"]);
   assert.equal(triggering.usedCards.length, 0);

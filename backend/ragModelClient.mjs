@@ -85,6 +85,14 @@ const BUDGET_RESERVE_UNLESS_CLOSED_LUA = [
 const DEEPSEEK_THINKING_MODES = new Set(["enabled", "disabled"]);
 const DEEPSEEK_REASONING_EFFORTS = new Set(["low", "high", "max"]);
 const RELAY_REASONING_EFFORTS = new Set(["none", "low", "medium", "high", "xhigh", "max"]);
+const RULE_QUERY_CHECKPOINTS = new Set([
+  "activation_snapshot",
+  "resolution_snapshot",
+  "affected_entity",
+  "permission_relation",
+  "zone_type_transition",
+  "post_resolution",
+]);
 const PUBLIC_BUDGET_BUCKETS = Object.freeze([
   Object.freeze({ id: "evidence_preparation:deepseek", stage: "evidence_preparation", provider: "deepseek", label: "DeepSeek 资料准备", currency: "CNY" }),
   Object.freeze({ id: "final_ruling:glm", stage: "final_ruling", provider: "glm", label: "GLM 最终裁定", currency: "CNY" }),
@@ -880,7 +888,7 @@ export async function callRuleQueryExtractionModel({
   }
 
   const cacheKey = extractionCacheKey({
-    kind: "rule-v2",
+    kind: "rule-v3",
     provider,
     modelName,
     dataRevision,
@@ -3076,7 +3084,7 @@ function safeFallbackAnswer(reason, shortAnswer = "当前资料不足，无法�
 }
 
 function publicBudgetExhaustedMessage(bucket) {
-  return "今日公开裁定额度已达到每日 10 美元上限，未调用模型。如需协助重置，作者b站账号「おmaginai」QAQ";
+  return "今日公开裁定额度已达到每日 10 美元上限，未调用模型。如需协助重置，请联系作者b站「おmaginai」。";
 }
 
 function privateEvaluationBudgetExhaustedMessage(bucket) {
@@ -4329,19 +4337,34 @@ function buildCardNameExtractionPrompt(userQuery) {
 function buildRuleQueryExtractionPrompt(userQuery) {
   const example = {
     ruleQueries: [
-      { query: "伤害步骤结束时 送去墓地 发动位置", reason: "判断时点和卡片当前位置", confidence: "medium" },
-      { query: "连锁处理中 对象离场 效果处理", reason: "判断处理时对象状态", confidence: "medium" },
+      {
+        subclaim: "确认发动时与处理时读取的是哪一个状态快照",
+        checkpoint: "activation_snapshot",
+        query: "发动时状态 处理时状态 | 発動時 処理時 状態 | activation snapshot resolution snapshot",
+        reason: "分别检索发动资格与结算时状态",
+        confidence: "medium",
+      },
+      {
+        subclaim: "确认区域或卡片种类改变后适用哪项移动规则",
+        checkpoint: "zone_type_transition",
+        query: "区域 卡片种类 移动替代 | 領域 カード種類 移動 代わり | zone card type movement replacement",
+        reason: "检索移动瞬间的区域、类型和替代处理",
+        confidence: "medium",
+      },
     ],
   };
   return [
     "你只负责从玩家的游戏王 OCG 裁定问题中提取用于检索规则资料、FAQ 或官方相似 Q&A 的查询词，不要回答裁定。",
     "查询词应围绕规则机制、处理时点、连锁窗口、对象要求、当前位置、表侧/里侧、效果处理、伤害步骤等，不要只输出卡名。",
-    "先在内部拆出：正在尝试的操作、发动时点、处理时点、实际受影响的实体、处理前后区域或状态，以及次数/上限是否已消耗；再据此生成查询词。",
-    "如果问题同时问‘能否发动’和‘处理是否成功’，必须生成能分别检索发动条件与结算适用性的查询词。次数问题必须包含已使用次数、总上限或剩余次数等关键词。",
-    "如果问题涉及俗称或自然语言，请改写为可检索的规则词组；可以混合中文、日文或英文关键词。",
+    "先把问题拆成彼此独立、尚待证实的规则子命题；每条 ruleQueries 只能对应一个子命题，不得把结论写进子命题或查询词。",
+    "每项必须包含 subclaim、checkpoint、query、reason、confidence。checkpoint 从 activation_snapshot、resolution_snapshot、affected_entity、permission_relation、zone_type_transition、post_resolution 中选择最贴切的一项。",
+    "至少分别检查：正在尝试的操作、发动快照、处理快照、实际受影响的实体、权限与限制针对谁、处理前后区域/卡片种类/状态，以及次数或上限是否已消耗；只输出本题实际相关的子命题。",
+    "如果问题同时问‘能否发动’和‘处理是否成功’，必须拆成不同子命题，分别检索发动条件与结算适用性。连续处理还要把前一步完成后的状态与下一步能否执行拆开。",
+    "玩家俗称、缩写或自然语言必须改写为正式卡文或规则术语。每个 query 自身应在 120 字符内尽量同时包含精简的中文、日文和英文等价术语，以“ | ”分隔；不要只翻译卡名，也不要保留未解释的玩家俗称。",
+    "次数问题必须包含已使用次数、总上限或剩余次数等正式关键词；区域或双重卡片种类问题必须包含移动瞬间的区域与当时作为何种卡处理。",
     "输出 3 到 8 条高价值查询词即可；不知道就输出空数组。",
     "输出必须是单个 JSON 对象，不要 markdown，不要解释。",
-    "JSON 只包含 ruleQueries 数组；每项包含 query、reason、confidence。",
+    "JSON 只包含 ruleQueries 数组；每项包含 subclaim、checkpoint、query、reason、confidence。",
     "示例结构如下，示例不是本题答案：",
     JSON.stringify(example),
     "玩家问题：",
@@ -4798,13 +4821,17 @@ function normalizeRuleSearchQueries(rawText) {
           : [];
   const candidates = source
     .map((item) => typeof item === "string"
-      ? { query: item, reason: "", confidence: "medium" }
+      ? { subclaim: "", checkpoint: "", query: item, reason: "", confidence: "medium" }
       : {
+          subclaim: item?.subclaim || item?.factToVerify || item?.ruleQuestion || "",
+          checkpoint: item?.checkpoint || item?.stage || "",
           query: item?.query || item?.searchQuery || item?.keyword || item?.topic || "",
           reason: item?.reason || item?.why || item?.purpose || "",
           confidence: item?.confidence || item?.confidenceSelfEstimate || "medium",
         })
     .map((item) => ({
+      subclaim: nonEmpty(item.subclaim).replace(/\s+/gu, " ").slice(0, 160),
+      checkpoint: normalizeRuleQueryCheckpoint(item.checkpoint),
       query: nonEmpty(item.query).replace(/\s+/gu, " ").slice(0, 120),
       reason: nonEmpty(item.reason).replace(/\s+/gu, " ").slice(0, 120),
       confidence: ["low", "medium", "high"].includes(String(item.confidence || "").toLowerCase())
@@ -4824,6 +4851,11 @@ function normalizeRuleSearchQueries(rawText) {
     if (result.length >= 8) break;
   }
   return result;
+}
+
+function normalizeRuleQueryCheckpoint(value) {
+  const checkpoint = nonEmpty(value).trim().toLowerCase();
+  return RULE_QUERY_CHECKPOINTS.has(checkpoint) ? checkpoint : "";
 }
 
 function emptyCardNameExtractionResult(providerUsed, modelUsed, dryRun, warnings = []) {

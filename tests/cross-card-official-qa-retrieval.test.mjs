@@ -109,6 +109,56 @@ test("generic activation and resolution words cannot authorize an unrelated cros
   assert.ok(evidence.officialQaDirectCandidates.every((item) => item.id !== unrelated.id));
 });
 
+test("a strict mechanism match survives an incidental multi-card identity mismatch only as related evidence", async () => {
+  const first = syntheticCard("51501", "虚构构件甲", "这张卡将被破坏时，可以适用代替处理。");
+  const second = syntheticCard("51502", "虚构构件乙", "处理后可以特殊召唤一只怪兽。");
+  const mechanismAnalogue = {
+    id: "qa-fictional-mechanism-analogue",
+    recordType: "qa",
+    question: "「<<51501>>」将被破坏时，由「<<51999>>」代替破坏而没有被破坏，之后能否特殊召唤？",
+    rawDetailedQuestion: "「<<51501>>」将被破坏时，由「<<51999>>」代替破坏而没有被破坏，之后能否特殊召唤？",
+    answer: "官方资料正文。",
+    cardIds: ["51501", "51999"],
+  };
+  const genericDecoy = {
+    id: "qa-fictional-generic-decoy",
+    recordType: "qa",
+    question: "「<<51501>>」与「<<51998>>」的效果发动并处理后，能否发动另一个效果？",
+    rawDetailedQuestion: "「<<51501>>」与「<<51998>>」的效果发动并处理后，能否发动另一个效果？",
+    answer: "只包含泛化的发动与处理用语。",
+    cardIds: ["51501", "51998"],
+  };
+  const evidence = await retrieveRagEvidence({
+    userQuery: "「虚构构件甲」将被破坏时由「虚构构件乙」代替破坏，之后能否特殊召唤？",
+    cardResolution: {
+      resolvedCards: [first, second],
+      unresolvedMentions: [],
+      ambiguousMentions: [],
+      userProvidedCardTexts: [],
+    },
+    cards: [first, second],
+    records: [],
+    qaRecords: [genericDecoy, mechanismAnalogue],
+    ruleSearchQueries: [{
+      query: "破坏代替 没有被破坏 特殊召唤 发动条件",
+      reason: "检索相同操作关系",
+    }],
+    enableLiveOfficialQa: false,
+    env: { RAG_LIVE_OFFICIAL_QA: "false", RAG_MAX_RELATED_EVIDENCE: "4" },
+  });
+
+  const related = evidence.officialQaRelated.find(
+    (item) => item.id === mechanismAnalogue.id,
+  );
+  assert.ok(related);
+  assert.equal(related.type, "related");
+  assert.equal(related.isDirect, false);
+  assert.ok(evidence.officialQaDirectCandidates.every(
+    (item) => item.id !== mechanismAnalogue.id,
+  ));
+  assert.ok(evidence.officialQaRelated.every((item) => item.id !== genericDecoy.id));
+});
+
 test("strict mechanism overlap can retrieve a multilingual official cross-card QA", async () => {
   const current = syntheticCard("53001", "匿名耐性怪兽乙", "这张卡不受其他卡的效果影响。");
   const multilingualMechanism = {
@@ -141,6 +191,121 @@ test("strict mechanism overlap can retrieve a multilingual official cross-card Q
   assert.ok(related);
   assert.equal(related.isDirect, false);
   assert.equal(related.retrievalContext.relatedOnly, true);
+});
+
+test("strict official card FAQs fill unused scoped related-evidence slots without becoming direct", async () => {
+  const current = syntheticCard(
+    "54001",
+    "虚构基准构件",
+    "这张卡将被破坏时，可以适用代替处理，之后可以特殊召唤。",
+  );
+  const scopedTail = {
+    id: "qa-fictional-scoped-tail",
+    recordType: "qa",
+    question: "「<<54001>>」召唤时能否抽一张卡？",
+    rawDetailedQuestion: "「<<54001>>」召唤时能否抽一张卡？",
+    answer: "与提问机制不同的同卡资料。",
+    cardIds: ["54001"],
+  };
+  const crossCardFaqs = Array.from({ length: 4 }, (_unused, index) => {
+    const question = `某怪兽将被破坏时适用代替处理而没有被破坏，之后能否特殊召唤？资料 ${index}`;
+    return {
+      id: `card-faq-fictional-cross-${index}`,
+      recordType: "card-faq",
+      title: question,
+      text: question,
+      question,
+      answer: "官方卡片 FAQ 正文。",
+      cardIds: [String(54101 + index)],
+    };
+  });
+  const evidence = await retrieveRagEvidence({
+    userQuery: "「虚构基准构件」将被破坏时适用代替处理而没有被破坏，之后能否特殊召唤？",
+    cardResolution: {
+      resolvedCards: [current],
+      unresolvedMentions: [],
+      ambiguousMentions: [],
+      userProvidedCardTexts: [],
+    },
+    cards: [current],
+    records: [],
+    qaRecords: [scopedTail, ...crossCardFaqs],
+    ruleSearchQueries: [{
+      query: "破坏代替 没有被破坏 特殊召唤 发动条件",
+      reason: "检索相同操作关系",
+    }],
+    enableLiveOfficialQa: false,
+    env: { RAG_LIVE_OFFICIAL_QA: "false", RAG_MAX_RELATED_EVIDENCE: "4" },
+  });
+
+  assert.equal(evidence.officialQaRelated.length, 4);
+  const crossCardRelated = evidence.officialQaRelated.filter(
+    (item) => item.retrievalContext.scope === "cross_card_official_mechanism",
+  );
+  assert.ok(crossCardRelated.length >= 3);
+  assert.ok(crossCardRelated.some((item) => item.recordType === "card-faq"));
+  assert.ok(crossCardRelated.every((item) => (
+    item.type === "related"
+    && item.isDirect === false
+    && item.retrievalContext.relatedOnly === true
+  )));
+  assert.ok(evidence.officialQaDirectCandidates.every(
+    (item) => !crossCardFaqs.some((faq) => faq.id === item.id),
+  ));
+});
+
+test("independent supplemental queries preserve distinct strict mechanisms over generic decoys", async () => {
+  const current = syntheticCard("55001", "虚构查询锚点", "这张卡的处理会改变当前状态。");
+  const replacement = {
+    id: "qa-fictional-replacement-head",
+    recordType: "qa",
+    question: "怪兽的破坏被代替而没有被破坏时，能否进行特殊召唤？",
+    rawDetailedQuestion: "「<<55101>>」的破坏被代替而没有被破坏时，能否进行特殊召唤？",
+    answer: "第一种机制的官方资料。",
+    cardIds: ["55101"],
+  };
+  const movement = {
+    id: "qa-fictional-movement-head",
+    recordType: "qa",
+    question: "卡组中的卡被除外后，能否进行返回卡组的操作？",
+    rawDetailedQuestion: "「<<55201>>」是卡组中的卡，被除外后能否进行返回卡组的操作？",
+    answer: "第二种机制的官方资料。",
+    cardIds: ["55201"],
+  };
+  const genericDecoys = Array.from({ length: 8 }, (_unused, index) => ({
+    id: `qa-fictional-supplemental-decoy-${index}`,
+    recordType: "qa",
+    question: `某效果发动并处理后，能否发动另一个效果？资料 ${index}`,
+    rawDetailedQuestion: `「<<553${index + 10}>>」的效果发动并处理后，能否发动另一个效果？`,
+    answer: "只包含泛化的发动与处理用语。",
+    cardIds: [`553${index + 10}`],
+  }));
+  const evidence = await retrieveRagEvidence({
+    userQuery: "「虚构查询锚点」涉及两个待核对操作：破坏被代替后能否进行特殊召唤，以及卡组中的卡被除外后能否进行返回卡组的操作？",
+    cardResolution: {
+      resolvedCards: [current],
+      unresolvedMentions: [],
+      ambiguousMentions: [],
+      userProvidedCardTexts: [],
+    },
+    cards: [current],
+    records: [],
+    qaRecords: [...genericDecoys, replacement, movement],
+    ruleSearchQueries: [
+      { query: "破坏代替 没有被破坏 特殊召唤 能否进行" },
+      { query: "卡组中的卡 除外 返回卡组 能否进行" },
+    ],
+    enableLiveOfficialQa: false,
+    env: { RAG_LIVE_OFFICIAL_QA: "false", RAG_MAX_RELATED_EVIDENCE: "2" },
+  });
+
+  const relatedIds = new Set(evidence.officialQaRelated.map((item) => item.id));
+  assert.ok(relatedIds.has(replacement.id));
+  assert.ok(relatedIds.has(movement.id));
+  assert.ok(genericDecoys.every((item) => !relatedIds.has(item.id)));
+  assert.ok(evidence.officialQaRelated.every((item) => (
+    item.isDirect === false && item.retrievalContext.relatedOnly === true
+  )));
 });
 
 test("retriever provenance survives the real prompt boundary without promoting community QA", async () => {

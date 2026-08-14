@@ -75,8 +75,13 @@ test("prompt preserves provenance and presents official QA as structured fields"
   assert.equal(community.source, "ocg-rule");
   assert.equal(community.sourceAuthority, "community_reference");
   assert.match(bundle.prompt, /事件时间线/u);
+  assert.match(bundle.prompt, /发动快照/u);
+  assert.match(bundle.prompt, /处理快照/u);
+  assert.match(bundle.prompt, /处理后快照/u);
   assert.match(bundle.prompt, /发动时的合法选项与处理时最终能执行的选项/u);
-  assert.match(bundle.prompt, /实际作用的实体或动作/u);
+  assert.match(bundle.prompt, /实际受影响实体与权限关系/u);
+  assert.match(bundle.prompt, /区域\/类型变化/u);
+  assert.match(bundle.prompt, /不得用尚未发生的后续状态倒推/u);
   assert.match(bundle.prompt, /显式账本/u);
 });
 

@@ -454,13 +454,18 @@ export async function retrieveRagEvidence({
   // pool with the same rule-query plan and keep a small, bounded related-only
   // reserve. This never upgrades an analogy to a direct ruling and never uses
   // the answer text to resolve card identity.
+  const crossCardOfficialPool = dedupeBy([
+    ...recordBuckets.officialQa,
+    ...recordBuckets.faq,
+  ], stableRecordKey);
+  const crossCardOfficialCandidateLimit = Math.max(16, limits.maxRelatedEvidence * 4);
   const crossCardOfficialQaSource = effectiveQaIdentityCards.length
-      && recordBuckets.officialQa.some(
+      && crossCardOfficialPool.some(
         (record) => !recordSharesResolvedIdentity(record, effectiveQaIdentityCards),
       )
-    ? rankRecordsWithSupplementalQueries({
+    ? reserveSupplementalQueryCoverage(rankRecordsWithSupplementalQueries({
         userQuery,
-        records: recordBuckets.officialQa,
+        records: crossCardOfficialPool,
         resolvedCards: [],
         mentionQueries: [],
         deterministicRuleQueries,
@@ -468,8 +473,8 @@ export async function retrieveRagEvidence({
         allowNoCardMatch: true,
       })
         .filter((record) => !recordSharesResolvedIdentity(record, effectiveQaIdentityCards))
-        .filter(isUsefulCrossCardOfficialQaRecord)
-        .slice(0, Math.max(16, limits.maxRelatedEvidence * 4))
+        .filter(isUsefulCrossCardOfficialRelatedRecord), crossCardOfficialCandidateLimit)
+        .slice(0, crossCardOfficialCandidateLimit)
     : [];
   const scopedOfficialQaRelatedCandidates = scopedOfficialQaRelatedSource
     .map((item) => item.record
@@ -1446,6 +1451,11 @@ function isOfficialQaRecord(record = {}) {
     && evidenceProvenance(record).official;
 }
 
+function isOfficialQaOrFaqRecord(record = {}) {
+  return ["qa", "official-database", "card-faq"].includes(record.recordType)
+    && evidenceProvenance(record).official;
+}
+
 function isAuthoritativeQaOrFaqRecord(record = {}) {
   return evidenceProvenance(record).official;
 }
@@ -1577,6 +1587,10 @@ function mergeOfficialRelatedSourceItems(items = []) {
 function mergeRelatedRecordMetadata(left = {}, right = {}) {
   const leftSignals = left.retrievalSignals || {};
   const rightSignals = right.retrievalSignals || {};
+  const supplementalQueryRanks = [
+    Number(leftSignals.supplementalRuleQueryBestRank || 0),
+    Number(rightSignals.supplementalRuleQueryBestRank || 0),
+  ].filter((value) => value > 0);
   const mechanismMetrics = mergeMechanismAnalogueMetrics(
     collectMechanismAnalogueMetrics(left),
     collectMechanismAnalogueMetrics(right),
@@ -1594,6 +1608,17 @@ function mergeRelatedRecordMetadata(left = {}, right = {}) {
     retrievalSignals: {
       ...leftSignals,
       ...rightSignals,
+      supplementalRuleQueryBestRank: supplementalQueryRanks.length
+        ? Math.min(...supplementalQueryRanks)
+        : undefined,
+      supplementalRuleQueryKeys: [...new Set([
+        ...(leftSignals.supplementalRuleQueryKeys || []),
+        ...(rightSignals.supplementalRuleQueryKeys || []),
+      ])],
+      supplementalRuleQueryMechanisms: [...new Set([
+        ...(leftSignals.supplementalRuleQueryMechanisms || []),
+        ...(rightSignals.supplementalRuleQueryMechanisms || []),
+      ])],
       mechanismAnalogue: primaryMechanism,
       mechanismAnalogues: mechanisms,
       mechanismAnalogueScore: Number(primaryMetrics.score || 0),
@@ -1781,13 +1806,31 @@ function rankRecordsWithSupplementalQueries({
     allowNoCardMatch,
   });
   if (!supplementalRuleQueries.length) return deterministic;
-  const supplemental = rankRecords({
-    userQuery,
-    records,
-    resolvedCards,
-    mentionQueries,
-    ruleSearchQueries: supplementalRuleQueries,
-    allowNoCardMatch,
+  // Rank each supplemental query independently. Combining every generated
+  // query into one term bag lets a dense candidate from one mechanism absorb
+  // the scores of unrelated queries and crowd their best candidates out. Keep
+  // a small head from every query, then deduplicate and globally rank the
+  // bounded union below. The downstream applicability gate still decides
+  // whether any cross-card item is usable.
+  const supplemental = supplementalRuleQueries.flatMap((query) => {
+    const queryIdentity = ruleSearchQueryIdentity(query);
+    const queryMechanism = inferRuleSearchMechanism(query);
+    return rankRecords({
+      userQuery,
+      records,
+      resolvedCards,
+      mentionQueries,
+      ruleSearchQueries: [query],
+      allowNoCardMatch,
+    }).slice(0, 3).map((record, index) => ({
+      ...record,
+      retrievalSignals: {
+        ...(record.retrievalSignals || {}),
+        supplementalRuleQueryBestRank: index + 1,
+        supplementalRuleQueryKeys: queryIdentity ? [queryIdentity] : [],
+        supplementalRuleQueryMechanisms: queryMechanism ? [queryMechanism] : [],
+      },
+    }));
   });
   const merged = new Map();
   for (const record of [...deterministic, ...supplemental]) {
@@ -1828,8 +1871,12 @@ function isIncidentalMultiCardExampleMatch(match = {}, resolvedCardCount = 0) {
 }
 
 function isIncidentalMultiCardExampleRecord(record = {}, resolvedCardCount = 0) {
-  if (record.recordType !== "qa") return false;
+  if (!["qa", "official-database", "card-faq"].includes(record.recordType)) return false;
   const signals = record.retrievalSignals || {};
+  // This helper only filters related-evidence discovery paths. A strict,
+  // official mechanism match may survive an identity mismatch as an analogy,
+  // but it is never promoted to a direct ruling.
+  if (isUsefulCrossCardOfficialRelatedRecord(record)) return false;
   const questionCardIdCount = principalQuestionCardIds(record).size;
   const matchedQuestionCardIdCount = Number(
     signals.matchedQuestionCardIdCount || 0,
@@ -2101,7 +2148,7 @@ function scoreRecord(record, {
   // least two distinctive mechanism features with strong query coverage.
   // This broadens candidate discovery only; cross-card evidence remains
   // related-only and passes the stricter applicability gate below.
-  const strictOfficialMechanismMatch = isOfficialQaRecord(record)
+  const strictOfficialMechanismMatch = isOfficialQaOrFaqRecord(record)
     && typeCompatible === true
     && mechanismMatch.matchedStrongFeatures.length >= 2
     && Number(mechanismMatch.strongQueryCoverage || 0) >= 0.66;
@@ -2342,8 +2389,8 @@ function deriveRuleSearchQueries(userQuery) {
   }] : [];
 }
 
-function isUsefulCrossCardOfficialQaRecord(record = {}) {
-  if (!isOfficialQaRecord(record)) return false;
+function isUsefulCrossCardOfficialRelatedRecord(record = {}) {
+  if (!isOfficialQaOrFaqRecord(record)) return false;
   const signals = record.retrievalSignals || {};
   const strongMatches = Array.isArray(signals.matchedStrongMechanismFeatures)
     ? signals.matchedStrongMechanismFeatures.length
@@ -3491,6 +3538,37 @@ function reserveIdentitySourceCoverage(items = [], limit = 1, resolvedCards = []
   return [...selected, ...remaining];
 }
 
+function reserveSupplementalQueryCoverage(items = [], limit = 1) {
+  const safeLimit = Math.max(1, Math.floor(Number(limit) || 1));
+  const selected = [];
+  const selectedKeys = new Set();
+  const representedQueries = new Set();
+  const add = (item) => {
+    const key = stableRecordKey(item?.record || item);
+    if (!key || selectedKeys.has(key) || selected.length >= safeLimit) return false;
+    selected.push(item);
+    selectedKeys.add(key);
+    return true;
+  };
+
+  // Input order is the global relevance order. Reserve the first usable head
+  // for every independently ranked supplemental query before filling from that
+  // same global order, so one dense mechanism cannot consume the whole bounded
+  // cross-card reserve.
+  for (const item of items || []) {
+    const signals = (item?.record || item)?.retrievalSignals || {};
+    const queryKeys = [...new Set(signals.supplementalRuleQueryKeys || [])]
+      .filter(Boolean);
+    if (!queryKeys.some((key) => !representedQueries.has(key))) continue;
+    if (add(item)) queryKeys.forEach((key) => representedQueries.add(key));
+  }
+  for (const item of items || []) add(item);
+  const remaining = (items || []).filter(
+    (item) => !selectedKeys.has(stableRecordKey(item?.record || item)),
+  );
+  return [...selected, ...remaining];
+}
+
 function allocateOfficialRelatedEvidence({
   scopedCandidates = [],
   crossCardCandidates = [],
@@ -3501,9 +3579,19 @@ function allocateOfficialRelatedEvidence({
   const scoped = reserveIdentitySourceCoverage(scopedCandidates, safeLimit, resolvedCards)
     .slice(0, safeLimit);
   const scopedKeys = new Set(scoped.map(stableRecordKey));
-  const crossCard = dedupeEvidence(crossCardCandidates)
-    .filter((item) => !scopedKeys.has(stableRecordKey(item)));
+  const crossCard = reserveSupplementalQueryCoverage(
+    dedupeEvidence(crossCardCandidates)
+      .filter((item) => !scopedKeys.has(stableRecordKey(item))),
+    safeLimit,
+  );
   if (!crossCard.length) return scoped;
+
+  // The reserve cap below only applies when scoped evidence already fills the
+  // prompt budget. If it does not, every remaining slot may be filled by a
+  // cross-card record that already passed the strict official-mechanism gate.
+  if (scoped.length < safeLimit) {
+    return dedupeEvidence([...scoped, ...crossCard]).slice(0, safeLimit);
+  }
 
   const maxCrossCard = Math.min(crossCard.length, safeLimit, Math.max(1, Math.floor(safeLimit / 6)));
   if (safeLimit === 1) {
