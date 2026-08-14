@@ -263,22 +263,33 @@ function buildOfficialDirectPrompt({
   ];
   const compactCards = cards.slice(0, 6).map((card) => ({ id: card.id, name: card.name }));
   const compactQuery = preserveTextEnds(userQuery, 500);
-  const fixed = render(compactInstructions, compactQuery, compactCards, "");
-  prompt = render(
+  const renderCompact = (text) => render(
     compactInstructions,
     compactQuery,
     compactCards,
-    preserveTextEnds(sourceText, Math.max(80, maxChars - fixed.length - 8)),
+    text,
   );
+  prompt = renderCompact(fitEvidenceTextToRenderedPrompt({
+    sourceText,
+    maxChars,
+    renderWithText: renderCompact,
+    minimumChars: 80,
+  }));
   if (prompt.length > maxChars) {
     const minimal = ["完整转述给定唯一官方 Q&A；输出规定 JSON 并引用其 official_qa id。", arrayFields];
-    const minimalFixed = render(minimal, preserveTextEnds(userQuery, 120), [], "");
-    prompt = render(
+    const minimalQuery = preserveTextEnds(userQuery, 120);
+    const renderMinimal = (text) => render(
       minimal,
-      preserveTextEnds(userQuery, 120),
+      minimalQuery,
       [],
-      preserveTextEnds(sourceText, Math.max(40, maxChars - minimalFixed.length - 8)),
+      text,
     );
+    prompt = renderMinimal(fitEvidenceTextToRenderedPrompt({
+      sourceText,
+      maxChars,
+      renderWithText: renderMinimal,
+      minimumChars: 40,
+    }));
   }
   if (prompt.length > maxChars) {
     prompt = render(
@@ -293,6 +304,39 @@ function buildOfficialDirectPrompt({
     truncated: true,
     exceedsConfiguredLimit: prompt.length > configuredMaxChars,
   };
+}
+
+function fitEvidenceTextToRenderedPrompt({
+  sourceText,
+  maxChars,
+  renderWithText,
+  minimumChars = 1,
+} = {}) {
+  const source = String(sourceText || "");
+  if (!source) return "";
+  const limit = Math.max(1, Number(maxChars) || 1);
+  if (renderWithText(source).length <= limit) return source;
+
+  // The excerpt is serialized twice in the compatibility envelope and JSON
+  // escaping is content-dependent. Binary-search the actual rendered length
+  // instead of estimating with a fixed divisor.
+  let lower = 1;
+  let upper = source.length;
+  let best = "";
+  while (lower <= upper) {
+    const middle = Math.floor((lower + upper) / 2);
+    const candidate = preserveTextEnds(source, middle);
+    if (renderWithText(candidate).length <= limit) {
+      best = candidate;
+      lower = middle + 1;
+    } else {
+      upper = middle - 1;
+    }
+  }
+  return best || preserveTextEnds(source, Math.min(
+    source.length,
+    Math.max(1, Number(minimumChars) || 1),
+  ));
 }
 
 function prepareEvidenceForPrompt(
@@ -671,7 +715,10 @@ function buildCompactRagPrompt({ payload, maxPromptChars }) {
     })),
     unresolvedMentions: [],
     ambiguousMentions: [],
-    evidence: evidenceSummaries.slice(0, 1).map((item) => ({
+    // The selector places the reserved cross-card official mechanism, FAQ and
+    // scoped official QA first. Keep that minimum trio in the final envelope;
+    // retaining one arbitrary item would erase distinct evidence roles.
+    evidence: evidenceSummaries.slice(0, 3).map((item) => ({
       bucket: item.bucket,
       id: item.id,
       type: item.type,
@@ -683,7 +730,7 @@ function buildCompactRagPrompt({ payload, maxPromptChars }) {
       retrievalContext: item.retrievalContext || {},
       ...compactEvidenceTextFields(item, 40, focusCardIds),
     })),
-    allowedEvidenceIds: evidenceSummaries.slice(0, 1)
+    allowedEvidenceIds: evidenceSummaries.slice(0, 3)
       .map((item) => item.id)
       .filter(Boolean),
   };

@@ -446,6 +446,7 @@ export async function retrieveRagEvidence({
     }).filter((record) => !isIncidentalMultiCardExampleRecord(record, effectiveQaIdentityCards.length)),
   ]).filter((item) => (
     !effectiveQaIdentityCards.length
+    || relatedMatchedQuestionCardIds(item).length > 0
     || recordSharesResolvedIdentity(item?.record || item, effectiveQaIdentityCards)
   ));
   // Card-scoped lookup is the highest-signal path, but a general OCG mechanism
@@ -1541,6 +1542,12 @@ function evidenceMechanismAnalogues(item = {}) {
 function relatedMatchedQuestionCardIds(item = {}) {
   const values = [
     ...(Array.isArray(item?.matchedQuestionCardIds) ? item.matchedQuestionCardIds : []),
+    ...(Array.isArray(item?.matchedRelatedQuestionCardIds)
+      ? item.matchedRelatedQuestionCardIds
+      : []),
+    ...(Array.isArray(item?.matchedRelatedMetadataCardIds)
+      ? item.matchedRelatedMetadataCardIds
+      : []),
     ...(Array.isArray(item?.matchedRelatedCardIds) ? item.matchedRelatedCardIds : []),
     ...(Array.isArray(item?.retrievalSignals?.matchedQuestionCardIds)
       ? item.retrievalSignals.matchedQuestionCardIds

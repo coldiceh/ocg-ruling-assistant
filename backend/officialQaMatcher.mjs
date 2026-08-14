@@ -176,15 +176,20 @@ export function classifyOfficialQaQuestionType(value) {
   const sharedTypes = new Set(classifyEvidenceQuestionTypes(text).questionTypes);
   // An explicit applicability question remains a resolution-result question,
   // even if its premise mentions battle. Generic "how is this battle handled"
-  // wording, however, must keep the more specific battle category instead of
-  // being swallowed by the broad resolution-handling vocabulary.
+  // wording keeps the more specific battle category. A question that asks both
+  // whether an effect can be activated and what happens afterwards keeps its
+  // activation type so an added resolution sub-question cannot make otherwise
+  // identical official candidates appear incompatible.
   if (sharedTypes.has("effect_applicability")) {
     return "resolution_result";
   }
   if (sharedTypes.has("battle_resolution")) {
     return "battle_resolution";
   }
-  if (sharedTypes.has("resolution_handling")) {
+  if (
+    sharedTypes.has("resolution_handling")
+    && !sharedTypes.has("activation_condition")
+  ) {
     return "resolution_result";
   }
   return QUESTION_TYPES.find(([, pattern]) => pattern.test(text))?.[0] || "unknown";
