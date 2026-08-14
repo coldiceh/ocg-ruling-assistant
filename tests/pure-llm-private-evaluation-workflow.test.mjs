@@ -23,11 +23,13 @@ test("private pure LLM evaluation is explicitly triggered, serial and generation
   assert.match(workflow, /evaluation_limit:[\s\S]*type: choice[\s\S]*- "1"[\s\S]*- "32"/u);
   assert.match(workflow, /github\.event\.label\.name == 'private-pure-llm-evaluation' && '32' \|\| '1'/u);
   assert.match(workflow, /needs: validate/u);
+  assert.match(workflow, /timeout-minutes: 75/u);
+  assert.doesNotMatch(workflow, /timeout-minutes: 300/u);
   assert.match(workflow, /group: private-pure-llm-evaluation-\$\{\{ github\.repository \}\}/u);
   assert.match(workflow, /cancel-in-progress: false/u);
   assert.match(workflow, /PUBLIC_RULING_MODEL_PROFILE: relay-gpt-5\.6-sol-low/u);
   assert.match(workflow, /RELAY_MAX_COMPLETION_TOKENS: "8192"/u);
-  assert.match(workflow, /RELAY_STREAM_TIMEOUT_MS: "240000"/u);
+  assert.match(workflow, /RELAY_STREAM_TIMEOUT_MS: "60000"/u);
   assert.doesNotMatch(workflow, /RELAY_LOCAL_STREAM_TIMEOUT_MAX_MS/u);
   assert.match(workflow, /secrets\.RELAY_API_KEY/u);
   assert.match(workflow, /secrets\.PURE_LLM_EVALUATION_DATASET_BASE64/u);
@@ -36,8 +38,9 @@ test("private pure LLM evaluation is explicitly triggered, serial and generation
   assert.match(workflow, /if \[ "\$EVALUATION_LIMIT" = "32" \]; then/u);
   assert.match(workflow, /case_count_args\+=\(--require-case-count 32\)/u);
   assert.match(workflow, /"\$\{case_count_args\[@\]\}"/u);
-  assert.match(workflow, /--generation-timeout-ms 330000/u);
-  assert.doesNotMatch(workflow, /--generation-timeout-ms 600000/u);
+  assert.match(workflow, /--generation-timeout-ms 90000/u);
+  assert.doesNotMatch(workflow, /RELAY_STREAM_TIMEOUT_MS: "(?:240000|270000)"/u);
+  assert.doesNotMatch(workflow, /--generation-timeout-ms (?:300000|330000|600000)/u);
   assert.match(workflow, /evaluate-pure-llm-preview\.mjs/u);
   assert.doesNotMatch(workflow, /--auto-judge|--judge-only|--judge-timeout-ms/u);
   assert.doesNotMatch(workflow, /Generate and judge|Judge the|Sol high/iu);

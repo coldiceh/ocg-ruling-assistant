@@ -65,7 +65,9 @@ jobs:
         || github.event_name == 'workflow_dispatch')
     needs: validate
     runs-on: ubuntu-latest
-    timeout-minutes: 300
+    # Even 32 consecutive 90-second fail-fast cases fit inside this job cap.
+    # A workflow-level fault therefore cannot remain alive for several hours.
+    timeout-minutes: 75
     concurrency:
       # All paid private evaluations are globally serial for this repository,
       # including runs dispatched from different branches or pull requests.
@@ -75,11 +77,11 @@ jobs:
       RELAY_BASE_URL: https://api.986310.xyz/v1
       PUBLIC_RULING_MODEL_PROFILE: relay-gpt-5.6-sol-low
       RELAY_MAX_COMPLETION_TOKENS: "8192"
-      # GitHub's local backend is not constrained by Vercel's 270-second cap.
-      # The Relay deadline is an absolute provider-request limit. The evaluator
-      # includes cold data loading, extraction, retrieval and response cleanup,
-      # so it keeps a small outer margin without allowing a ten-minute request.
-      RELAY_STREAM_TIMEOUT_MS: "240000"
+      # A healthy Sol-low response normally completes well before this absolute
+      # provider deadline. A stalled stream is aborted instead of occupying the
+      # workflow for several minutes. The evaluator keeps a separate 30-second
+      # margin for extraction, retrieval and HTTP cleanup.
+      RELAY_STREAM_TIMEOUT_MS: "60000"
       API_CHATGPT_DAILY_BUDGET_USD: "10"
       API_DAILY_BUDGET_CNY: "10"
       QUERY_AUDIT_ENABLED: "false"
@@ -186,7 +188,7 @@ jobs:
             --generate-only \
             --limit "$EVALUATION_LIMIT" \
             "${case_count_args[@]}" \
-            --generation-timeout-ms 330000
+            --generation-timeout-ms 90000
           status=$?
           echo "exit_code=$status" >> "$GITHUB_OUTPUT"
           exit 0
