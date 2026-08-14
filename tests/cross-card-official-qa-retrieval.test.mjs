@@ -63,7 +63,14 @@ test("a cross-card official mechanism QA is retained as related-only evidence", 
   });
 
   const related = evidence.officialQaRelated.find((item) => item.id === crossCardMechanism.id);
-  assert.ok(related, "the complete official QA pool should supply a matching cross-card mechanism");
+  assert.ok(
+    related,
+    `the complete official QA pool should supply a matching cross-card mechanism: ${JSON.stringify({
+      relatedIds: evidence.officialQaRelated.map((item) => item.id),
+      warnings: evidence.retrievalWarnings,
+      debug: evidence.debug,
+    })}`,
+  );
   assert.equal(related.official, true);
   assert.equal(related.type, "related");
   assert.equal(related.isDirect, false);
@@ -100,6 +107,40 @@ test("generic activation and resolution words cannot authorize an unrelated cros
 
   assert.ok(evidence.officialQaRelated.every((item) => item.id !== unrelated.id));
   assert.ok(evidence.officialQaDirectCandidates.every((item) => item.id !== unrelated.id));
+});
+
+test("strict mechanism overlap can retrieve a multilingual official cross-card QA", async () => {
+  const current = syntheticCard("53001", "匿名耐性怪兽乙", "这张卡不受其他卡的效果影响。");
+  const multilingualMechanism = {
+    id: "qa-cross-card-multilingual-mechanism",
+    recordType: "qa",
+    question: "他のカードの効果を受けない攻撃モンスターの攻撃を無効にする効果は発動できますか？",
+    rawDetailedQuestion: "「<<53002>>」が攻撃する時、その攻撃を無効にする効果を発動できますか？",
+    answer: "公式回答本文。",
+    cardIds: ["53002"],
+  };
+  const evidence = await retrieveRagEvidence({
+    userQuery: "不受其他卡效果影响的「匿名耐性怪兽乙」攻击时，能否发动使攻击无效的效果？",
+    cardResolution: {
+      resolvedCards: [current],
+      unresolvedMentions: [],
+      ambiguousMentions: [],
+      userProvidedCardTexts: [],
+    },
+    cards: [current],
+    records: [],
+    qaRecords: [multilingualMechanism],
+    ruleSearchQueries: [{ query: "不受效果影响 攻击无效 发动条件" }],
+    enableLiveOfficialQa: false,
+    env: { RAG_LIVE_OFFICIAL_QA: "false", RAG_MAX_RELATED_EVIDENCE: "6" },
+  });
+
+  const related = evidence.officialQaRelated.find(
+    (item) => item.id === multilingualMechanism.id,
+  );
+  assert.ok(related);
+  assert.equal(related.isDirect, false);
+  assert.equal(related.retrievalContext.relatedOnly, true);
 });
 
 test("retriever provenance survives the real prompt boundary without promoting community QA", async () => {

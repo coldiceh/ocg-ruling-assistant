@@ -451,7 +451,9 @@ export async function retrieveRagEvidence({
   // reserve. This never upgrades an analogy to a direct ruling and never uses
   // the answer text to resolve card identity.
   const crossCardOfficialQaSource = effectiveQaIdentityCards.length
-      && scopedRecordBuckets.officialQa.length < recordBuckets.officialQa.length
+      && recordBuckets.officialQa.some(
+        (record) => !recordSharesResolvedIdentity(record, effectiveQaIdentityCards),
+      )
     ? rankRecordsWithSupplementalQueries({
         userQuery,
         records: recordBuckets.officialQa,
@@ -2066,9 +2068,6 @@ function scoreRecord(record, {
   }
   const fullQueryMatched = queryKey.length >= 8 && textKey.includes(queryKey.slice(0, Math.min(queryKey.length, 80)));
   if (fullQueryMatched) score += 5;
-  if (!cardScore && !phraseMatched && !fullQueryMatched && lexicalHits.size < 3) {
-    return emptyRecordScore();
-  }
   const evidenceEffectNumbers = extractEffectNumbers(questionText || text);
   const effectNumberCompatible = !queryEffectNumbers.length
     || !evidenceEffectNumbers.length
@@ -2086,6 +2085,25 @@ function scoreRecord(record, {
     queryMechanismSignatures,
     buildRuleMechanismSignature(questionText || text),
   );
+  // Lexical overlap is normally required, but it cannot be the sole gateway
+  // for multilingual official Q&A. Admit only a strict semantic alternative:
+  // the item must still be official, question-type compatible, and share at
+  // least two distinctive mechanism features with strong query coverage.
+  // This broadens candidate discovery only; cross-card evidence remains
+  // related-only and passes the stricter applicability gate below.
+  const strictOfficialMechanismMatch = isOfficialQaRecord(record)
+    && typeCompatible === true
+    && mechanismMatch.matchedStrongFeatures.length >= 2
+    && Number(mechanismMatch.strongQueryCoverage || 0) >= 0.66;
+  if (
+    !cardScore
+    && !phraseMatched
+    && !fullQueryMatched
+    && lexicalHits.size < 3
+    && !strictOfficialMechanismMatch
+  ) {
+    return emptyRecordScore();
+  }
   score += questionCardIdCoverage * 5;
   score += matchedQuestionCardIds.length * 1.5;
   if (effectNumberCompatible && queryEffectNumbers.length && evidenceEffectNumbers.length) score += 2;
