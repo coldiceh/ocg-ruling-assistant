@@ -30,12 +30,30 @@ const EVIDENCE_BUCKET_ORDER = Object.freeze([
   "rawRelatedEvidence",
 ]);
 
+const CARD_TEXT_BUCKETS = Object.freeze([
+  "cardTexts",
+  "userProvidedCardTexts",
+]);
+
+const OFFICIAL_REFERENCE_BUCKETS = Object.freeze([
+  "officialQaDirectCandidates",
+  "faqRelated",
+  "officialQaRelated",
+  "provisionalOfficialResponses",
+]);
+
 const GENERAL_INSTRUCTIONS = Object.freeze([
   "你是游戏王 OCG 规则分析助手。只依据用户原始问题、已解析卡片的原始卡文和所给检索资料回答，不得编造规则、卡文、资料或来源。",
   "先完整阅读用户问题，识别其中每一个子问题；逐个子问题给出直接结论，并说明结论所依据的题面事实、卡片原文和资料。不要漏答，也不要自行补造题面没有给出的状态。",
   "resolvedCards 是已经匹配成功的卡片；其中的 effectText 是原始卡文依据。只有 unresolvedMentions 或 ambiguousMentions 中仍存在的项目才算没有确定。",
   "严格区分证据层级：只有确实对应本题完整场景的 officialQaDirectCandidates 可以支持 official_confirmed；officialQaRelated、faqRelated、provisionalOfficialResponses、卡文和 rawRelatedEvidence 都只能作为相关资料或推导依据。",
+  "每条资料中的 official、recordType、source、sourceTier 和 sourceAuthority 表示来源层级，不表示它必然适用于本题。official=true 只说明资料来自官方数据库或官方来源；仍须核对其问题场景后才能采用。community_reference（包括 ocg-rule 等社区整理）只能作为辅助；与适用于本题的官方 Q&A/FAQ 冲突时，以官方资料为准。",
   "相关资料不是本题原题时，必须比较它与题面的卡片、条件、位置、时点、对象、玩家和处理过程；只采用可迁移的部分，不得直接复制其结论或把它伪装成官方直接裁定。",
+  "retrievalContext.relatedOnly=true 的资料（包括跨卡机制资料）始终只是相关证据；即使来源为官方，也不得据此提升为 official direct 或 official_confirmed。",
+  "先建立事件时间线，再分别判断发动/适用条件、cost 与对象选择、连锁建立、效果处理、处理后的状态。引用相关 Q&A 前必须核对它描述的是同一阶段与事件节点（例如处理前、处理中、处理后或阶段结束时），不得把相邻但不同的时点互换。",
+  "若同一效果在发动时要求存在可执行的后续选择，而处理途中状态又会改变，必须分别说明发动时的合法选项与处理时最终能执行的选项；不得用处理后的状态倒推或省略发动条件。",
+  "核对效果实际作用的实体或动作：受到影响的是卡、怪兽、玩家、攻击、召唤还是其他处理，不能仅凭句子的语法宾语推断。若资料没有支持这种作用对象判断，应明确保留不确定性。",
+  "遇到次数、攻击次数、追加权限或可再次执行次数，建立显式账本：初始权限、已经使用的次数、本次新增或替换的权限、剩余次数，并逐步核算；不得把已使用的次数重复计入。",
   "如果没有官方直接 Q&A，可以综合卡片原文、FAQ、官方相关 Q&A、用户提供文本和其他资料进行独立规则分析。资料足以推导时输出 rule_analysis，不要仅因没有官方原题就拒绝回答。",
   "如果决定结论所必需的事实确实缺失或资料相互冲突，明确列出缺失信息或条件分支；不得用常见场面、历史题目或猜测补齐，也不得虚构确定结论。",
   "不得根据卡名、题号、题型标签或历史答案套用预设结论。每次都从本次用户问题、原始卡文和本次证据重新推理。",
@@ -76,8 +94,12 @@ export function buildRagRulingPromptBundle({
     cardResolution,
     baigeAmbiguousMentions: evidence.baigeAmbiguousMentions,
   });
+  const focusCardIds = (cardResolution.resolvedCards || [])
+    .map((card) => String(card?.id || card?.cardId || "").trim())
+    .filter(Boolean);
   const evidencePayload = prepareEvidenceForPrompt(evidence, limits, warnings, {
     authoritativeDirectId: authoritativeDirect?.id || null,
+    focusCardIds,
   });
   const payload = {
     userQuery: String(userQuery || ""),
@@ -136,6 +158,7 @@ export function selectAuthoritativeOfficialDirectCandidate({
 } = {}) {
   if (candidates.length !== 1) return null;
   const [candidate] = candidates;
+  if (candidate?.retrievalContext?.relatedOnly === true) return null;
   if ((candidate?.matchedBy || []).includes("multi_branch_related_evidence")) return null;
   const completeIdentity = !(cardResolution.unresolvedMentions || []).length
     && !(cardResolution.ambiguousMentions || []).length
@@ -201,6 +224,18 @@ function buildOfficialDirectPrompt({
   ];
   const cards = resolvedCards.map((card) => ({ id: card.id, name: card.name, aliases: card.aliases || [] }));
   const sourceText = extractRelevantOfficialQaAnswerExcerpt(directQa);
+  const directSourceMetadata = promptSourceMetadata(directQa, "official_direct");
+  const directFocusCardIds = cards.map((card) => String(card.id || "").trim()).filter(Boolean);
+  const directQuestion = preserveEvidenceText(
+    directQa.question || directQa.rawQuestion || "",
+    Math.min(1200, Math.max(120, Math.floor(maxChars * 0.15))),
+    directFocusCardIds,
+  );
+  const directDetailedScene = preserveEvidenceText(
+    directQa.rawDetailedQuestion || directQa.detailedQuestion || "",
+    Math.min(1800, Math.max(160, Math.floor(maxChars * 0.2))),
+    directFocusCardIds,
+  );
   const render = (lines, query, identities, text) => [
     ...lines,
     JSON.stringify({
@@ -210,6 +245,10 @@ function buildOfficialDirectPrompt({
         id: directQa.id,
         type: "official_qa",
         title: directQa.title || "",
+        ...directSourceMetadata,
+        question: directQuestion,
+        detailedScene: directDetailedScene,
+        answer: text,
         text,
         sourceUrl: directQa.sourceUrl || "",
       },
@@ -260,7 +299,7 @@ function prepareEvidenceForPrompt(
   evidence,
   limits,
   warnings,
-  { authoritativeDirectId = null } = {},
+  { authoritativeDirectId = null, focusCardIds = [] } = {},
 ) {
   const directCandidates = Array.isArray(evidence.officialQaDirectCandidates)
     ? evidence.officialQaDirectCandidates
@@ -277,13 +316,13 @@ function prepareEvidenceForPrompt(
     ...(Array.isArray(evidence.officialQaRelated) ? evidence.officialQaRelated : []),
   ]);
   return {
-    officialQaDirectCandidates: limitEvidence(focusedDirectCandidates, limits.maxOfficialQa, limits.maxEvidenceTextChars, "official_direct", warnings),
-    officialQaRelated: limitEvidence(relatedCandidates, limits.maxRelatedEvidence, limits.maxEvidenceTextChars, "official_related", warnings),
-    provisionalOfficialResponses: limitEvidence(evidence.provisionalOfficialResponses, limits.maxOfficialQa, limits.maxEvidenceTextChars, "official_response", warnings),
-    faqRelated: limitEvidence(evidence.faqRelated, limits.maxRelatedEvidence, limits.maxEvidenceTextChars, "faq", warnings),
-    cardTexts: limitEvidence(evidence.cardTexts, limits.maxCards, limits.maxCardTextChars, "card_text", warnings),
-    userProvidedCardTexts: limitEvidence(evidence.userProvidedCardTexts, limits.maxCards, limits.maxCardTextChars, "user_text", warnings),
-    rawRelatedEvidence: limitEvidence(evidence.rawRelatedEvidence, limits.maxRelatedEvidence, limits.maxEvidenceTextChars, "raw_related", warnings),
+    officialQaDirectCandidates: limitEvidence(focusedDirectCandidates, limits.maxOfficialQa, limits.maxEvidenceTextChars, "official_direct", warnings, focusCardIds),
+    officialQaRelated: limitEvidence(relatedCandidates, limits.maxRelatedEvidence, limits.maxEvidenceTextChars, "official_related", warnings, focusCardIds),
+    provisionalOfficialResponses: limitEvidence(evidence.provisionalOfficialResponses, limits.maxOfficialQa, limits.maxEvidenceTextChars, "official_response", warnings, focusCardIds),
+    faqRelated: limitEvidence(evidence.faqRelated, limits.maxRelatedEvidence, limits.maxEvidenceTextChars, "faq", warnings, focusCardIds),
+    cardTexts: limitEvidence(evidence.cardTexts, limits.maxCards, limits.maxCardTextChars, "card_text", warnings, focusCardIds),
+    userProvidedCardTexts: limitEvidence(evidence.userProvidedCardTexts, limits.maxCards, limits.maxCardTextChars, "user_text", warnings, focusCardIds),
+    rawRelatedEvidence: limitEvidence(evidence.rawRelatedEvidence, limits.maxRelatedEvidence, limits.maxEvidenceTextChars, "raw_related", warnings, focusCardIds),
   };
 }
 
@@ -315,21 +354,30 @@ function dedupePromptEvidence(items = []) {
   });
 }
 
-function limitEvidence(items = [], limit, textLimit, label, warnings) {
+function limitEvidence(items = [], limit, textLimit, label, warnings, focusCardIds = []) {
   const source = Array.isArray(items) ? items : [];
   if (source.length > limit) warnings.push(`${label}_evidence_limited:${source.length}->${limit}`);
   return source.slice(0, limit).map((item) => {
-    const text = String(item.fullText || item.text || item.officialText || item.answer || "");
-    if (text.length > textLimit) warnings.push(`${label}_text_truncated:${item.id}`);
-    return {
+    const sourceText = String(item.fullText || item.text || item.officialText || item.answer || "");
+    const sourceMetadata = promptSourceMetadata(item, label);
+    const structuredQa = buildStructuredOfficialQa(item, {
+      textLimit,
+      focusCardIds,
+      label,
+      warnings,
+    });
+    if (!structuredQa && sourceText.length > textLimit) {
+      warnings.push(`${label}_text_truncated:${item.id}`);
+    }
+    const result = {
       id: item.id,
       type: item.type,
       title: item.title,
-      text: preserveTextEnds(text, textLimit),
+      ...sourceMetadata,
       sourceUrl: item.sourceUrl || "",
-      source: item.source || "",
       isDirect: item.isDirect === true,
       matchLevel: item.matchLevel || "",
+      retrievalContext: item.retrievalContext || {},
       cards: item.cards || [],
       cardIds: item.cardIds || [],
       ...((item.matchedBy || []).length ? { matchedBy: item.matchedBy } : {}),
@@ -337,7 +385,208 @@ function limitEvidence(items = [], limit, textLimit, label, warnings) {
         ? { matchedQuestionCardIds: item.matchedQuestionCardIds }
         : {}),
     };
+    if (structuredQa) Object.assign(result, structuredQa);
+    else result.text = preserveEvidenceText(sourceText, textLimit, focusCardIds);
+    return result;
   });
+}
+
+function promptSourceMetadata(item = {}, label = "") {
+  const recordType = String(item.recordType || inferPromptRecordType(item, label));
+  const source = String(item.source || item.sourceName || item.sourceType || "");
+  const declaredSourceAuthority = String(item.sourceAuthority || "").trim();
+  const official = typeof item.official === "boolean"
+    ? item.official
+    : ["official_database", "official_reference"].includes(declaredSourceAuthority)
+      ? true
+      : declaredSourceAuthority
+        ? false
+        : isOfficialPromptEvidence(recordType, label);
+  const sourceTier = String(item.sourceTier || inferPromptSourceTier({
+    item,
+    label,
+    recordType,
+    source,
+    official,
+  }));
+  const sourceAuthority = declaredSourceAuthority || inferPromptSourceAuthority({
+    item,
+    label,
+    recordType,
+    source,
+    sourceTier,
+    official,
+  });
+  return {
+    official,
+    recordType,
+    source,
+    sourceTier,
+    sourceAuthority,
+  };
+}
+
+function inferPromptRecordType(item = {}, label = "") {
+  if (["official_direct", "official_related", "official_response"].includes(label)) return "qa";
+  if (label === "faq") return "card-faq";
+  if (label === "card_text") return "card-text";
+  if (label === "user_text") return "user-provided-card-text";
+  if (String(item.type || "") === "rulebook") return "rule-doc";
+  return String(item.type || "related");
+}
+
+function isOfficialPromptEvidence(recordType, label) {
+  return ["qa", "card-faq", "official-database"].includes(recordType)
+    || ["official_direct", "official_related", "official_response", "faq"].includes(label);
+}
+
+function inferPromptSourceTier({ label, recordType, source, official }) {
+  if (["qa", "card-faq", "official-database"].includes(recordType)) return "S0_OFFICIAL_DB_MIRROR";
+  if (label === "official_response" && official) return "S0_OFFICIAL_RESPONSE";
+  if (recordType === "card-text" || label === "card_text") return "S1_CARD_TEXT";
+  if (label === "user_text") return "USER_PROVIDED";
+  if (recordType === "rule-doc" || /ocg[-_ ]?rule/iu.test(source)) return "S2_COMMUNITY_REFERENCE";
+  if (official) return "S0_OFFICIAL_REFERENCE";
+  return "S3_OTHER_REFERENCE";
+}
+
+function inferPromptSourceAuthority({ label, recordType, source, sourceTier, official }) {
+  if (["qa", "card-faq", "official-database"].includes(recordType)
+    || sourceTier === "S0_OFFICIAL_DB_MIRROR") {
+    return "official_database";
+  }
+  if (label === "official_response" || /^S0_OFFICIAL/u.test(sourceTier) || official) {
+    return "official_reference";
+  }
+  if (recordType === "card-text" || label === "card_text") return "card_text_mirror";
+  if (label === "user_text" || recordType === "user-provided-card-text") return "user_provided_text";
+  if (recordType === "rule-doc" || /ocg[-_ ]?rule|community|社区|社群/iu.test(`${source} ${sourceTier}`)) {
+    return "community_reference";
+  }
+  return "other_reference";
+}
+
+function buildStructuredOfficialQa(item = {}, {
+  textLimit,
+  focusCardIds,
+  label,
+  warnings,
+} = {}) {
+  const recordType = String(item.recordType || inferPromptRecordType(item, label));
+  if (!["qa", "card-faq", "official-database"].includes(recordType)
+    && !["official_direct", "official_related", "official_response", "faq"].includes(label)) {
+    return null;
+  }
+  const question = String(item.question || item.rawQuestion || "").trim();
+  const detailedScene = String(
+    item.rawDetailedQuestion
+      || item.detailedQuestion
+      || (item.scenario && item.scenario !== question ? item.scenario : "")
+      || "",
+  ).trim();
+  const answer = String(item.answer || item.officialAnswer || item.conclusion || "").trim();
+  const fields = [
+    { key: "question", value: question, weight: 0.28 },
+    { key: "detailedScene", value: detailedScene, weight: 0.32 },
+    { key: "answer", value: answer, weight: 0.4 },
+  ].filter((field) => field.value);
+  if (!fields.length) return null;
+
+  const budgets = allocateStructuredTextBudgets(fields, textLimit);
+  const result = {};
+  let truncated = false;
+  fields.forEach((field, index) => {
+    const budget = budgets[index];
+    if (field.value.length > budget) truncated = true;
+    result[field.key] = preserveEvidenceText(field.value, budget, focusCardIds);
+  });
+  if (!answer) {
+    const fallbackText = String(item.fullText || item.text || item.officialText || "");
+    if (fallbackText) {
+      const fallbackLimit = Math.max(1, Math.floor(Number(textLimit) * 0.4));
+      if (fallbackText.length > fallbackLimit) truncated = true;
+      result.text = preserveEvidenceText(fallbackText, fallbackLimit, focusCardIds);
+    }
+  }
+  if (truncated) warnings.push(`${label}_text_truncated:${item.id}`);
+  return result;
+}
+
+function allocateStructuredTextBudgets(fields, textLimit) {
+  const available = Math.max(fields.length, Number(textLimit) || fields.length);
+  const weightTotal = fields.reduce((sum, field) => sum + field.weight, 0) || fields.length;
+  let remaining = available;
+  return fields.map((field, index) => {
+    if (index === fields.length - 1) return Math.max(1, remaining);
+    const laterFields = fields.length - index - 1;
+    const share = Math.max(1, Math.floor(available * (field.weight / weightTotal)));
+    const budget = Math.min(share, Math.max(1, remaining - laterFields));
+    remaining -= budget;
+    return budget;
+  });
+}
+
+function preserveEvidenceText(value, limit, focusCardIds = []) {
+  const text = String(value || "");
+  const max = Math.max(1, Number(limit) || 1);
+  if (text.length <= max) return text;
+  const matches = findFocusMatches(text, focusCardIds)
+    .slice(0, Math.max(1, Math.min(4, Math.floor(max / 24))));
+  if (!matches.length) return preserveTextEnds(text, max);
+
+  // Secondary/minimal prompt compression can assign fewer than 48 characters
+  // to one structured QA field. In that case, keeping the matching identity is
+  // more useful than reverting to an ends-only excerpt that silently drops it.
+  if (max < 24) return sliceAroundMatch(text, matches[0], max).slice(0, max);
+
+  const separator = "\n…\n";
+  const separatorCost = separator.length * (matches.length + 1);
+  const available = max - separatorCost;
+  if (available < matches.length + 2) return preserveTextEnds(text, max);
+  const headLength = Math.max(1, Math.floor(available * 0.25));
+  const tailLength = Math.max(1, Math.floor(available * 0.2));
+  const focusTotal = Math.max(matches.length, available - headLength - tailLength);
+  let remainingFocus = focusTotal;
+  const focusSegments = matches.map((match, index) => {
+    const remainingMatches = matches.length - index;
+    const length = Math.max(1, Math.floor(remainingFocus / remainingMatches));
+    remainingFocus -= length;
+    return sliceAroundMatch(text, match, length);
+  });
+  return [
+    text.slice(0, headLength),
+    ...focusSegments,
+    text.slice(-tailLength),
+  ].join(separator);
+}
+
+function findFocusMatches(text, focusCardIds = []) {
+  const matches = [];
+  const seenPositions = new Set();
+  for (const rawId of focusCardIds) {
+    const id = String(rawId || "").trim();
+    if (!id) continue;
+    const placeholder = `<<${id}>>`;
+    let position = text.indexOf(placeholder);
+    let length = placeholder.length;
+    if (position < 0) {
+      position = text.indexOf(id);
+      length = id.length;
+    }
+    if (position < 0 || seenPositions.has(position)) continue;
+    seenPositions.add(position);
+    matches.push({ position, length });
+  }
+  return matches.sort((left, right) => left.position - right.position);
+}
+
+function sliceAroundMatch(text, match, limit) {
+  const length = Math.max(match.length, Number(limit) || match.length);
+  const before = Math.max(0, Math.floor((length - match.length) / 2));
+  let start = Math.max(0, match.position - before);
+  let end = Math.min(text.length, start + length);
+  start = Math.max(0, end - length);
+  return text.slice(start, end);
 }
 
 function buildCompactRagPrompt({ payload, maxPromptChars }) {
@@ -345,25 +594,15 @@ function buildCompactRagPrompt({ payload, maxPromptChars }) {
   const evidenceLimit = maxChars >= 12000 ? 24 : maxChars >= 4000 ? 14 : 7;
   const textLimit = maxChars >= 12000 ? 900 : maxChars >= 4000 ? 360 : 140;
   const compactEvidence = Object.fromEntries(EVIDENCE_BUCKET_ORDER.map((bucket) => [bucket, []]));
-  let count = 0;
-  for (let index = 0; count < evidenceLimit; index += 1) {
-    let added = false;
-    for (const bucket of EVIDENCE_BUCKET_ORDER) {
-      const item = payload.evidence?.[bucket]?.[index];
-      if (!item || count >= evidenceLimit) continue;
-      compactEvidence[bucket].push({
-        id: item.id,
-        type: item.type,
-        title: item.title,
-        text: preserveTextEnds(item.text, textLimit),
-        sourceUrl: item.sourceUrl || "",
-        isDirect: item.isDirect === true,
-        matchLevel: item.matchLevel || "",
-      });
-      count += 1;
-      added = true;
-    }
-    if (!added) break;
+  const focusCardIds = (payload.resolvedCards || [])
+    .map((card) => String(card?.id || "").trim())
+    .filter(Boolean);
+  const prioritizedEntries = selectCompactEvidenceEntries(payload.evidence || {}, {
+    resolvedCards: payload.resolvedCards || [],
+    limit: evidenceLimit,
+  });
+  for (const { bucket, item } of prioritizedEntries) {
+    compactEvidence[bucket].push(compactPromptEvidenceItem(item, textLimit, focusCardIds));
   }
   const compactPayload = {
     userQuery: preserveTextEnds(payload.userQuery, maxChars >= 4000 ? 1600 : 500),
@@ -381,15 +620,23 @@ function buildCompactRagPrompt({ payload, maxPromptChars }) {
   let prompt = renderGeneralPrompt(compactPayload);
   if (prompt.length <= maxChars) return prompt;
 
-  const evidenceSummaries = EVIDENCE_BUCKET_ORDER.flatMap((bucket) =>
-    compactEvidence[bucket].map((item) => ({
+  const evidenceSummaries = selectCompactEvidenceEntries(compactEvidence, {
+    resolvedCards: payload.resolvedCards || [],
+    limit: 8,
+  }).map(({ bucket, item }) => ({
       bucket,
       id: item.id,
       type: item.type,
       title: preserveTextEnds(item.title, 80),
-      text: preserveTextEnds(item.text, 100),
-    }))
-  ).slice(0, 8);
+      official: item.official === true,
+      recordType: item.recordType || "",
+      source: item.source || "",
+      sourceTier: item.sourceTier || "",
+      sourceAuthority: item.sourceAuthority || "other_reference",
+      isDirect: item.isDirect === true,
+      retrievalContext: item.retrievalContext || {},
+      ...compactEvidenceTextFields(item, 100, focusCardIds),
+    }));
   const minimalPayload = {
     userQuery: preserveTextEnds(payload.userQuery, 260),
     resolvedCards: (payload.resolvedCards || []).slice(0, 3).map((card) => ({
@@ -427,7 +674,12 @@ function buildCompactRagPrompt({ payload, maxPromptChars }) {
       id: item.id,
       type: item.type,
       title: preserveTextEnds(item.title, 30),
-      text: preserveTextEnds(item.text, 40),
+      official: item.official === true,
+      recordType: item.recordType || "",
+      sourceAuthority: item.sourceAuthority || "other_reference",
+      isDirect: item.isDirect === true,
+      retrievalContext: item.retrievalContext || {},
+      ...compactEvidenceTextFields(item, 40, focusCardIds),
     })),
     allowedEvidenceIds: evidenceSummaries.slice(0, 1)
       .map((item) => item.id)
@@ -437,6 +689,197 @@ function buildCompactRagPrompt({ payload, maxPromptChars }) {
     "仅依据下列完整 JSON 回答并输出规定 JSON；不得编造。",
     JSON.stringify(smallestPayload),
   ].join("\n");
+}
+
+function compactEvidencePriorityEntries(evidence = {}, { resolvedCards = [] } = {}) {
+  const cardTextEntries = dedupeCompactCardTextEntries(
+    interleavePromptBuckets(evidence, CARD_TEXT_BUCKETS),
+    resolvedCards,
+  );
+  const officialEntries = interleavePromptBuckets(evidence, OFFICIAL_REFERENCE_BUCKETS);
+  const rawEntries = (evidence.rawRelatedEvidence || []).map((item) => ({
+    bucket: "rawRelatedEvidence",
+    item,
+  }));
+  const officialRawEntries = rawEntries.filter(({ item }) => (
+    item?.sourceAuthority === "official_database" || item?.sourceAuthority === "official_reference"
+  ));
+  const nonCommunityRawEntries = rawEntries.filter(({ item }) => (
+    item?.sourceAuthority !== "official_database"
+    && item?.sourceAuthority !== "official_reference"
+    && item?.sourceAuthority !== "community_reference"
+  ));
+  const communityEntries = rawEntries.filter(({ item }) => item?.sourceAuthority === "community_reference");
+  return [
+    ...cardTextEntries,
+    ...officialEntries,
+    ...officialRawEntries,
+    ...nonCommunityRawEntries,
+    ...communityEntries,
+  ];
+}
+
+function selectCompactEvidenceEntries(evidence = {}, {
+  resolvedCards = [],
+  limit = 1,
+} = {}) {
+  const safeLimit = Math.max(1, Math.floor(Number(limit) || 1));
+  const candidates = compactEvidencePriorityEntries(evidence, { resolvedCards });
+  const selected = [];
+  const selectedKeys = new Set();
+  const reserveFirst = (predicate) => {
+    if (selected.length >= safeLimit) return;
+    const entry = candidates.find((candidate) => (
+      predicate(candidate) && !selectedKeys.has(compactEvidenceEntryKey(candidate))
+    ));
+    if (!entry) return;
+    selected.push(entry);
+    selectedKeys.add(compactEvidenceEntryKey(entry));
+  };
+
+  // A cross-card official mechanism ruling has already passed the retriever's
+  // strong-mechanism filter. Preserve one explicitly related-only example even
+  // when card text, scoped QA and community buckets are all saturated.
+  reserveFirst(isCrossCardOfficialMechanismEntry);
+  // FAQ and official QA answer different questions. Give each an independent
+  // floor before filling the remaining slots by the normal evidence ordering.
+  reserveFirst(({ bucket }) => bucket === "faqRelated");
+  reserveFirst((entry) => isOfficialQaEntry(entry) && !isCrossCardOfficialMechanismEntry(entry));
+
+  for (const entry of candidates) {
+    if (selected.length >= safeLimit) break;
+    const key = compactEvidenceEntryKey(entry);
+    if (selectedKeys.has(key)) continue;
+    selected.push(entry);
+    selectedKeys.add(key);
+  }
+  return selected;
+}
+
+function isCrossCardOfficialMechanismEntry({ item } = {}) {
+  return item?.retrievalContext?.scope === "cross_card_official_mechanism"
+    && item?.retrievalContext?.relatedOnly === true
+    && item?.isDirect !== true
+    && (item?.sourceAuthority === "official_database" || item?.official === true);
+}
+
+function isOfficialQaEntry({ bucket, item } = {}) {
+  return [
+    "officialQaDirectCandidates",
+    "officialQaRelated",
+    "provisionalOfficialResponses",
+  ].includes(bucket)
+    && (item?.sourceAuthority === "official_database"
+      || item?.sourceAuthority === "official_reference"
+      || item?.official === true);
+}
+
+function compactEvidenceEntryKey({ bucket, item } = {}) {
+  const id = String(item?.id || "").trim();
+  return id ? `id:${id}` : `${String(bucket || "")}:${compactCardTextFingerprint(item)}`;
+}
+
+function dedupeCompactCardTextEntries(entries = [], resolvedCards = []) {
+  const seen = (resolvedCards || [])
+    .map((card) => ({
+      fingerprint: compactCardTextFingerprint({ text: card?.effectText || card?.text || "" }),
+      identities: compactCardIdentityKeys(card),
+    }))
+    .filter((item) => item.fingerprint && item.identities.size);
+  return entries.filter(({ item }) => {
+    const fingerprint = compactCardTextFingerprint(item);
+    if (!fingerprint) return true;
+    const identities = compactCardIdentityKeys(item);
+    const duplicate = identities.size && seen.some((previous) => (
+      previous.fingerprint === fingerprint
+      && setsIntersect(previous.identities, identities)
+    ));
+    if (duplicate) return false;
+    if (identities.size) seen.push({ fingerprint, identities });
+    return true;
+  });
+}
+
+function compactCardIdentityKeys(item = {}) {
+  const ids = [item?.id, item?.cardId, ...(item?.cardIds || [])]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean)
+    .map((value) => `id:${value}`);
+  const names = [
+    item?.name,
+    item?.cnName,
+    item?.jaName,
+    item?.enName,
+    ...(item?.aliases || []),
+    ...(item?.cards || []),
+  ].map((value) => String(value || "")
+    .normalize("NFKC")
+    .toLocaleLowerCase()
+    .replace(/\s+/gu, "")
+    .trim())
+    .filter(Boolean)
+    .map((value) => `name:${value}`);
+  return new Set([...ids, ...names]);
+}
+
+function setsIntersect(left, right) {
+  for (const value of left) if (right.has(value)) return true;
+  return false;
+}
+
+function compactCardTextFingerprint(item = {}) {
+  return String(item?.text || item?.effectText || "")
+    .normalize("NFKC")
+    .replace(/\s+/gu, "")
+    .trim();
+}
+
+function interleavePromptBuckets(evidence, buckets) {
+  const entries = [];
+  for (let index = 0; ; index += 1) {
+    let added = false;
+    for (const bucket of buckets) {
+      const item = evidence?.[bucket]?.[index];
+      if (!item) continue;
+      entries.push({ bucket, item });
+      added = true;
+    }
+    if (!added) return entries;
+  }
+}
+
+function compactPromptEvidenceItem(item = {}, textLimit, focusCardIds) {
+  return {
+    id: item.id,
+    type: item.type,
+    title: item.title,
+    official: item.official === true,
+    recordType: item.recordType || "",
+    source: item.source || "",
+    sourceTier: item.sourceTier || "",
+    sourceAuthority: item.sourceAuthority || "other_reference",
+    retrievalContext: item.retrievalContext || {},
+    ...compactEvidenceTextFields(item, textLimit, focusCardIds),
+    sourceUrl: item.sourceUrl || "",
+    isDirect: item.isDirect === true,
+    matchLevel: item.matchLevel || "",
+  };
+}
+
+function compactEvidenceTextFields(item = {}, textLimit, focusCardIds = []) {
+  const structuredFields = [
+    { key: "question", value: String(item.question || ""), weight: 0.28 },
+    { key: "detailedScene", value: String(item.detailedScene || ""), weight: 0.32 },
+    { key: "answer", value: String(item.answer || ""), weight: 0.4 },
+  ].filter((field) => field.value);
+  if (!structuredFields.length) {
+    return { text: preserveEvidenceText(item.text, textLimit, focusCardIds) };
+  }
+  const budgets = allocateStructuredTextBudgets(structuredFields, textLimit);
+  return Object.fromEntries(structuredFields.map((field, index) => [
+    field.key,
+    preserveEvidenceText(field.value, budgets[index], focusCardIds),
+  ]));
 }
 
 function summarizeCards(cards, limit) {

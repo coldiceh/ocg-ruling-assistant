@@ -1,6 +1,7 @@
 import {
   createPublicAnswerModelEnv,
   getRagBudgetStatus,
+  isServerOwnedPrivateEvaluationEnv,
   resolveCardExtractionProvider,
   resolveRagProvider,
 } from "./ragModelClient.mjs";
@@ -19,6 +20,16 @@ import {
   answerRagRulingQuestionForVersion,
   getRulingVersionCapabilities,
 } from "./rulingVersionRegistry.mjs";
+import {
+  activatePublicOfftopicRiskControl,
+  buildPublicOfftopicRiskControlAnswer,
+  publicOfftopicRiskControlStorageStatus,
+  readPublicOfftopicRiskControl,
+} from "./publicOfftopicRiskControl.mjs";
+import {
+  classifyPublicQueryScope,
+  shouldTriggerPublicQueryRisk,
+} from "./publicQueryScopeClassifier.mjs";
 
 export const PUBLIC_ANSWER_REQUEST_BODY_LIMIT_BYTES = 64 * 1024;
 export const PUBLIC_ANSWER_QUESTION_LIMIT_CHARACTERS = 12_000;
@@ -158,6 +169,11 @@ export async function answerPublicRulingQuestion({
   payload,
   env = process.env,
   signal,
+  appendAudit = appendQueryAudit,
+  readRiskControl = readPublicOfftopicRiskControl,
+  classifyScope = classifyPublicQueryScope,
+  activateRiskControl = activatePublicOfftopicRiskControl,
+  answerRuling = answerRagRulingQuestionForVersion,
 } = {}) {
   const normalizedPayload = parsePublicAnswerPayload(payload);
   const mode = String(normalizedPayload.mode || "rag").toLowerCase();
@@ -168,20 +184,61 @@ export async function answerPublicRulingQuestion({
     );
   }
 
+  // Audit begins before any early return so blocked questions remain visible
+  // to the administrator. The risk-control record itself never stores the
+  // question text.
+  const auditPromise = appendAudit({
+    question: normalizedPayload.question,
+    mode,
+    env,
+  }).catch(() => null);
+
+  if (shouldApplyPublicOfftopicRiskControl(env)) {
+    const storage = publicOfftopicRiskControlStorageStatus(env);
+    if (storage.enabled) {
+      const activeControl = await readRiskControl({ env }).catch(() => null);
+      if (activeControl?.active === true) {
+        await auditPromise;
+        return {
+          answer: buildPublicOfftopicRiskControlAnswer({ status: activeControl }),
+          latency: null,
+        };
+      }
+
+      // A storage outage cannot safely enforce a global lock. Skip the paid
+      // classifier as well as the write and continue the normal ruling path.
+      if (activeControl?.ok === true) {
+        const scopeDecision = await classifyScope({
+          question: normalizedPayload.question,
+          env,
+          signal,
+        }).catch(() => null);
+        if (shouldTriggerPublicQueryRisk(scopeDecision)) {
+          const activated = await activateRiskControl({ env }).catch(() => null);
+          if (activated?.active === true) {
+            await auditPromise;
+            return {
+              answer: buildPublicOfftopicRiskControlAnswer({
+                status: activated,
+                triggered: activated.triggered === true,
+              }),
+              latency: null,
+            };
+          }
+        }
+      }
+    }
+  }
+
   const profile = resolvePublicRulingModelProfile(
     normalizedPayload.rulingModelProfile || env.PUBLIC_RULING_MODEL_PROFILE,
   );
   assertPublicRulingModelProfileAvailable(profile, env);
   const publicEnv = createPublicAnswerModelEnv(env, profile.id);
-  const auditPromise = appendQueryAudit({
-    question: normalizedPayload.question,
-    mode,
-    env: publicEnv,
-  }).catch(() => null);
   const answerStartedAt = Date.now();
 
   try {
-    const answer = await answerRagRulingQuestionForVersion({
+    const answer = await answerRuling({
       rulingVersion: normalizedPayload.rulingVersion,
       question: normalizedPayload.question,
       env: publicEnv,
@@ -199,6 +256,14 @@ export async function answerPublicRulingQuestion({
     await auditPromise;
     throw error;
   }
+}
+
+export function shouldApplyPublicOfftopicRiskControl(env = process.env) {
+  if (isServerOwnedPrivateEvaluationEnv(env)) return false;
+  if (/^(?:1|true|yes|on)$/iu.test(String(env.RAG_DRY_RUN || "").trim())) return false;
+  return !/^(?:0|false|off|no)$/iu.test(
+    String(env.PUBLIC_OFFTOPIC_RISK_CONTROL_ENABLED || "").trim(),
+  );
 }
 
 export async function persistPublicAnswerLatency({ latency, env = process.env } = {}) {

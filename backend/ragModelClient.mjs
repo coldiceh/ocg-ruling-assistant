@@ -3341,15 +3341,20 @@ async function buildBudgetPreflight({ provider, stage, modelName, prompt, maxTok
   };
 }
 
-function resolvePrivateEvaluationBudget({ provider, stage, env = {} }) {
+export function isServerOwnedPrivateEvaluationEnv(env = {}) {
   if (!isEnabled(env.PRIVATE_EVALUATION_MODE)
       || !isEnabled(env.PRIVATE_EVALUATION_DIAGNOSTICS)
       || isEnabled(env.VERCEL)
       || !isLoopbackPrivateEvaluationHost(env.HOST)) {
-    return null;
+    return false;
   }
   const runId = String(env.PRIVATE_EVALUATION_RUN_ID || "").trim();
-  if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{15,127}$/u.test(runId)) return null;
+  return /^[A-Za-z0-9][A-Za-z0-9._:-]{15,127}$/u.test(runId);
+}
+
+function resolvePrivateEvaluationBudget({ provider, stage, env = {} }) {
+  if (!isServerOwnedPrivateEvaluationEnv(env)) return null;
+  const runId = String(env.PRIVATE_EVALUATION_RUN_ID || "").trim();
   const normalizedProvider = String(provider || "").trim().toLowerCase();
   const normalizedStage = String(stage || "").trim().toLowerCase();
   const relayFinal = normalizedProvider === "relay" && normalizedStage === "final_ruling";
@@ -4331,6 +4336,8 @@ function buildRuleQueryExtractionPrompt(userQuery) {
   return [
     "你只负责从玩家的游戏王 OCG 裁定问题中提取用于检索规则资料、FAQ 或官方相似 Q&A 的查询词，不要回答裁定。",
     "查询词应围绕规则机制、处理时点、连锁窗口、对象要求、当前位置、表侧/里侧、效果处理、伤害步骤等，不要只输出卡名。",
+    "先在内部拆出：正在尝试的操作、发动时点、处理时点、实际受影响的实体、处理前后区域或状态，以及次数/上限是否已消耗；再据此生成查询词。",
+    "如果问题同时问‘能否发动’和‘处理是否成功’，必须生成能分别检索发动条件与结算适用性的查询词。次数问题必须包含已使用次数、总上限或剩余次数等关键词。",
     "如果问题涉及俗称或自然语言，请改写为可检索的规则词组；可以混合中文、日文或英文关键词。",
     "输出 3 到 8 条高价值查询词即可；不知道就输出空数组。",
     "输出必须是单个 JSON 对象，不要 markdown，不要解释。",

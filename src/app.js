@@ -118,6 +118,11 @@ const ui = {
   adminLoginStatus: document.querySelector("#adminLoginStatus"),
   adminSessionBadge: document.querySelector("#adminSessionBadge"),
   adminLogoutButton: document.querySelector("#adminLogoutButton"),
+  adminRiskControlStatus: document.querySelector("#adminRiskControlStatus"),
+  adminRiskControlState: document.querySelector("#adminRiskControlState"),
+  adminRiskControlDetails: document.querySelector("#adminRiskControlDetails"),
+  adminRiskControlActionStatus: document.querySelector("#adminRiskControlActionStatus"),
+  adminRiskControlUnlockButton: document.querySelector("#adminRiskControlUnlockButton"),
   adminBudgetPools: document.querySelector("#adminBudgetPools"),
   adminQuestionInput: document.querySelector("#adminQuestionInput"),
   adminCopyPublicQuestionButton: document.querySelector("#adminCopyPublicQuestionButton"),
@@ -192,6 +197,7 @@ let adminSession = {
   expiresAt: "",
 };
 let adminCapabilityState = null;
+let adminRiskControlState = null;
 let adminCurrentRun = null;
 let adminCurrentRunId = "";
 let adminAfterSequence = 0;
@@ -846,7 +852,7 @@ function renderBackendAnswer(answer) {
   lastRenderedBackendAnswer = answer || null;
   renderAnswerVersion(answer);
   renderEngineSimulation(null, null);
-  if (answer?.mode === "rag_baseline") {
+  if (answer?.mode === "rag_baseline" || answer?.answerLevel === "risk_control") {
     renderRagAnswer(answer);
     return;
   }
@@ -992,6 +998,7 @@ function renderRagAnswer(answer) {
     low_confidence_analysis: { confidence: "需要核对", className: "is-caution", title: "条件性规则分析", basis: "已有资料可供分析，但部分条件仍需核对" },
     needs_more_info: { confidence: "需要补充", className: "is-caution", title: "需要补充信息", basis: "缺少作出判断所需的场景或卡片资料" },
     budget_limited: { confidence: "预算限制", className: "is-risky", title: "今日预算已用完", basis: "API 预算守卫" },
+    risk_control: { confidence: "风控提醒", className: "is-caution", title: "公开问答暂时受限", basis: "非规则问题风控" },
   };
   const providerFailureState = providerFailurePresentation(answer?.riskFlags);
   const systemFailureState = publicSystemFailurePresentation(answer?.riskFlags);
@@ -1756,6 +1763,7 @@ function setAdminAuthenticated(authenticated, payload = {}) {
     setAdminLoginStatus(expires ? `登录有效期至 ${expires}` : "管理员登录有效。");
   } else {
     adminCapabilityState = null;
+    clearAdminRiskControlStatus();
     setAdminControlsEnabled(false);
     updateAdminComparisonAvailability();
   }
@@ -1768,10 +1776,200 @@ function setAdminLoginStatus(message, tone = "") {
   ui.adminLoginStatus.classList.toggle("is-good", tone === "good");
 }
 
+function clearAdminRiskControlStatus() {
+  adminRiskControlState = null;
+  if (ui.adminRiskControlStatus) {
+    ui.adminRiskControlStatus.classList.remove("is-active", "is-inactive", "is-error");
+  }
+  if (ui.adminRiskControlState) ui.adminRiskControlState.textContent = "尚未读取";
+  if (ui.adminRiskControlDetails) ui.adminRiskControlDetails.textContent = "登录后读取公开问答风控状态。";
+  setAdminRiskControlActionStatus("");
+  if (ui.adminRiskControlUnlockButton) ui.adminRiskControlUnlockButton.disabled = true;
+}
+
+function setAdminRiskControlActionStatus(message, tone = "") {
+  if (!ui.adminRiskControlActionStatus) return;
+  ui.adminRiskControlActionStatus.textContent = String(message || "");
+  ui.adminRiskControlActionStatus.classList.toggle("is-error", tone === "error");
+  ui.adminRiskControlActionStatus.classList.toggle("is-good", tone === "good");
+}
+
+function renderAdminRiskControlLoading() {
+  if (ui.adminRiskControlStatus) {
+    ui.adminRiskControlStatus.classList.remove("is-active", "is-inactive", "is-error");
+  }
+  if (ui.adminRiskControlState) ui.adminRiskControlState.textContent = "正在读取";
+  if (ui.adminRiskControlDetails) ui.adminRiskControlDetails.textContent = "正在向后端确认公开问答风控状态…";
+  if (ui.adminRiskControlUnlockButton) ui.adminRiskControlUnlockButton.disabled = true;
+}
+
+function renderAdminRiskControlUnavailable(message) {
+  if (ui.adminRiskControlStatus) {
+    ui.adminRiskControlStatus.classList.remove("is-active", "is-inactive");
+    ui.adminRiskControlStatus.classList.add("is-error");
+  }
+  if (ui.adminRiskControlState) ui.adminRiskControlState.textContent = "状态读取失败";
+  if (ui.adminRiskControlDetails) {
+    ui.adminRiskControlDetails.textContent = String(message || "无法确认公开问答风控状态。请勿据此判断风控已经解除。");
+  }
+  if (ui.adminRiskControlUnlockButton) ui.adminRiskControlUnlockButton.disabled = true;
+}
+
+function renderAdminRiskControlStatus(status) {
+  if (!status) {
+    renderAdminRiskControlUnavailable();
+    return;
+  }
+  const failedOpen = status.failOpen === true;
+  const active = status.active === true;
+  if (ui.adminRiskControlStatus) {
+    ui.adminRiskControlStatus.classList.toggle("is-active", active && !failedOpen);
+    ui.adminRiskControlStatus.classList.toggle("is-inactive", !active && !failedOpen);
+    ui.adminRiskControlStatus.classList.toggle("is-error", failedOpen);
+  }
+  if (ui.adminRiskControlState) {
+    ui.adminRiskControlState.textContent = failedOpen
+      ? "状态存储不可用"
+      : (active ? "风控已启用" : "当前未触发风控");
+  }
+  const details = [];
+  if (failedOpen) {
+    details.push("后端当前按故障开放处理，无法确认或解除持久风控状态。");
+  } else if (active) {
+    details.push(status.remainingMinutes > 0
+      ? `预计约 ${status.remainingMinutes} 分钟后自动恢复。`
+      : "预计不足 1 分钟后自动恢复。");
+    const expiresAt = formatAdminDate(status.expiresAt);
+    const activatedAt = formatAdminDate(status.activatedAt);
+    if (activatedAt) details.push(`触发于 ${activatedAt}。`);
+    if (expiresAt) details.push(`到期时间 ${expiresAt}。`);
+  } else {
+    details.push(status.cleared === true
+      ? "后端已确认风控锁被清除，公开问答不再受此锁限制。"
+      : "后端已确认当前没有公开问答风控锁。");
+  }
+  if (status.storage) {
+    details.push(`状态存储：${status.storage}${status.persistent ? "（持久）" : ""}。`);
+  }
+  if (ui.adminRiskControlDetails) ui.adminRiskControlDetails.textContent = details.join(" ");
+  if (ui.adminRiskControlUnlockButton) {
+    ui.adminRiskControlUnlockButton.disabled = !adminSession.authenticated || !active || failedOpen;
+  }
+}
+
+async function loadAdminRiskControlStatus() {
+  if (!adminSession.authenticated) {
+    clearAdminRiskControlStatus();
+    return;
+  }
+  renderAdminRiskControlLoading();
+  setAdminRiskControlActionStatus("正在读取后端状态…");
+  try {
+    const status = await requestAdminRiskControl("GET");
+    if (!adminSession.authenticated) return;
+    adminRiskControlState = status;
+    renderAdminRiskControlStatus(status);
+    setAdminRiskControlActionStatus(
+      status.failOpen ? "状态存储不可用，当前结果不能作为已解除凭据。" : "状态已从后端读取。",
+      status.failOpen ? "error" : "good",
+    );
+  } catch (error) {
+    if (!adminSession.authenticated) return;
+    adminRiskControlState = null;
+    const reason = adminErrorMessage(error, "后端暂时无法读取风控状态。");
+    renderAdminRiskControlUnavailable(`${reason} 当前状态未知，请勿据此判断风控已经解除。`);
+    setAdminRiskControlActionStatus(`读取失败：${reason}`, "error");
+  }
+}
+
+async function unlockAdminRiskControl() {
+  if (!adminSession.authenticated || !ui.adminRiskControlUnlockButton) return;
+  const previousStatus = adminRiskControlState;
+  ui.adminRiskControlUnlockButton.disabled = true;
+  setAdminRiskControlActionStatus("正在请求解除风控…");
+  try {
+    const status = await requestAdminRiskControl("POST");
+    if (!adminSession.authenticated) return;
+    adminRiskControlState = status;
+    renderAdminRiskControlStatus(status);
+    if (status.failOpen) {
+      setAdminRiskControlActionStatus("解除失败：状态存储不可用，后端未确认风控已经解除。", "error");
+    } else if (status.active) {
+      setAdminRiskControlActionStatus("解除失败：后端返回的状态仍为风控中。", "error");
+    } else if (status.cleared) {
+      setAdminRiskControlActionStatus("后端已确认公开问答风控解除。", "good");
+    } else {
+      setAdminRiskControlActionStatus("后端确认当前没有风控锁；本次没有发现需要清除的记录。", "good");
+    }
+  } catch (error) {
+    if (!adminSession.authenticated) return;
+    adminRiskControlState = previousStatus;
+    if (previousStatus) {
+      renderAdminRiskControlStatus(previousStatus);
+    } else {
+      renderAdminRiskControlUnavailable("解除请求失败，当前状态未知。请勿据此判断风控已经解除。");
+    }
+    const reason = adminErrorMessage(error, "后端暂时无法解除风控。");
+    setAdminRiskControlActionStatus(`解除失败：${reason} 当前状态未被标记为已解除。`, "error");
+  } finally {
+    if (ui.adminRiskControlUnlockButton) {
+      ui.adminRiskControlUnlockButton.disabled = !adminSession.authenticated
+        || adminRiskControlState?.active !== true
+        || adminRiskControlState?.failOpen === true;
+    }
+  }
+}
+
+async function requestAdminRiskControl(method = "GET") {
+  const normalizedMethod = method === "POST" ? "POST" : "GET";
+  const headers = { accept: "application/json" };
+  if (normalizedMethod === "POST") {
+    headers["content-type"] = "application/json";
+    headers["x-csrf-token"] = adminSession.csrfToken;
+  }
+  const response = await fetch(getAdminEndpointUrl("/api/admin-risk-control"), {
+    method: normalizedMethod,
+    cache: "no-store",
+    credentials: "include",
+    headers,
+    ...(normalizedMethod === "POST" ? { body: JSON.stringify({ action: "unlock" }) } : {}),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (response.status === 401) {
+    stopFollowingAdminRun();
+    setAdminAuthenticated(false);
+    setAdminLoginStatus("登录已过期，请重新登录。", "error");
+  }
+  if (!response.ok || payload.ok === false) throw createAdminRequestError(response.status, payload);
+  return normalizeAdminRiskControlStatus(payload.status);
+}
+
+function normalizeAdminRiskControlStatus(value) {
+  if (!value || typeof value !== "object" || typeof value.active !== "boolean") {
+    const error = new Error("风控接口没有返回可识别的状态。");
+    error.code = "risk_control_response_invalid";
+    throw error;
+  }
+  const durationMinutes = Number(value.durationMinutes);
+  const remainingMinutes = Number(value.remainingMinutes);
+  return {
+    active: value.active === true,
+    cleared: value.cleared === true,
+    failOpen: value.failOpen === true,
+    storage: String(value.storage || ""),
+    persistent: value.persistent === true,
+    activatedAt: value.activatedAt || null,
+    expiresAt: value.expiresAt || null,
+    durationMinutes: Number.isFinite(durationMinutes) && durationMinutes >= 0 ? Math.round(durationMinutes) : 0,
+    remainingMinutes: Number.isFinite(remainingMinutes) && remainingMinutes >= 0 ? Math.round(remainingMinutes) : 0,
+  };
+}
+
 async function loadAdminLabBootstrap() {
   setAdminLoginStatus("管理员登录有效。", "good");
   await loadAdminCapabilities();
   await Promise.allSettled([
+    loadAdminRiskControlStatus(),
     adminFeatureEnabled("history") ? loadAdminHistory() : showAdminFeatureUnavailable("history"),
     loadAdminQuestionHistory(),
     adminFeatureEnabled("evaluation") ? loadAdminEvaluationCases() : showAdminFeatureUnavailable("evaluation"),
@@ -3876,6 +4074,9 @@ function adminErrorMessage(error, fallback) {
     admin_csrf_invalid: "安全令牌已失效，请重新登录。",
     capability_unavailable: "后端尚未提供这项实验能力。",
     query_audit_storage_unavailable: "后台历史提问存储尚未配置。",
+    offtopic_risk_control_storage_unavailable: "风控状态存储不可用，后端未确认操作完成。",
+    risk_control_action_invalid: "后端拒绝了这项风控操作。",
+    risk_control_response_invalid: "风控接口返回了无法识别的状态。",
   };
   return messages[error?.code] || String(error?.message || fallback || "请求失败。");
 }
@@ -4609,6 +4810,7 @@ function formatRiskFlag(flag) {
     formal_engine_unknown: "形式规则内核本次未签发确定性证明；这不等于“不能”。",
     formal_engine_conditional: "形式规则内核只得到依赖显式假设的条件分析。",
     formal_engine_unverified: "形式规则内核结果尚未通过证明校验，不能作为权威结论。",
+    public_offtopic_risk_control: "公开问答当前处于非规则问题风控状态。",
   };
   const text = labels[flag] || labels[String(flag).split(":")[0]];
   if (text) return text;
@@ -5101,6 +5303,7 @@ async function init() {
   ui.budgetCapButton?.addEventListener("click", () => capPublicChatGptBudgetStatus());
   ui.adminLoginForm?.addEventListener("submit", handleAdminLogin);
   ui.adminLogoutButton?.addEventListener("click", handleAdminLogout);
+  ui.adminRiskControlUnlockButton?.addEventListener("click", unlockAdminRiskControl);
   ui.adminCopyPublicQuestionButton?.addEventListener("click", () => {
     ui.adminQuestionInput.value = ui.questionInput.value;
     ui.adminQuestionInput.focus();

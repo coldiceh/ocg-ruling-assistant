@@ -17,6 +17,9 @@
     "api/admin-queries.js": {
       "excludeFiles": "data/{cards,rulings,qa-index,evidence-index,ocg-rule-corpus,official-responses}.json"
     },
+    "api/admin-risk-control.js": {
+      "excludeFiles": "data/{cards,rulings,qa-index,evidence-index,ocg-rule-corpus,official-responses}.json"
+    },
     "api/budget.js": {
       "excludeFiles": "data/{cards,rulings,qa-index,evidence-index,ocg-rule-corpus,official-responses}.json"
     },

@@ -15,7 +15,7 @@
       property="og:description"
       content="结合卡片文本、公开规则资料与官方 Q&amp;A，分析游戏王 OCG 裁定问题。"
     />
-    <link rel="stylesheet" href="src/styles.css?v=20260810-budget-summary-1" />
+    <link rel="stylesheet" href="src/styles.css?v=20260814-risk-control-1" />
   </head>
   <body class="theme-night">
     <div class="page-background" aria-hidden="true"></div>
@@ -183,6 +183,33 @@
             </form>
 
             <div id="adminLabWorkspace" hidden>
+              <section class="admin-lab-section" aria-labelledby="adminRiskControlTitle">
+                <div class="admin-section-head">
+                  <div>
+                    <h3 id="adminRiskControlTitle">公开问答风控</h3>
+                    <p>查看非规则问题风控是否生效。管理员登录只提供状态管理，不会绕过公开问答风控。</p>
+                  </div>
+                  <button
+                    class="danger-outline-button"
+                    id="adminRiskControlUnlockButton"
+                    type="button"
+                    aria-describedby="adminRiskControlDetails adminRiskControlActionStatus"
+                    disabled
+                  >立即解除风控</button>
+                </div>
+                <div
+                  class="admin-risk-control-status"
+                  id="adminRiskControlStatus"
+                  role="status"
+                  aria-live="polite"
+                  aria-atomic="true"
+                >
+                  <strong id="adminRiskControlState">尚未读取</strong>
+                  <p id="adminRiskControlDetails">登录后读取公开问答风控状态。</p>
+                </div>
+                <p class="admin-status" id="adminRiskControlActionStatus" role="status" aria-live="polite"></p>
+              </section>
+
               <section class="admin-lab-section" aria-labelledby="adminBudgetTitle">
                 <div class="admin-section-head">
                   <div>
@@ -384,6 +411,6 @@
       </main>
     </div>
 
-    <script src="src/app.js?v=20260810-budget-summary-1"></script>
+    <script src="src/app.js?v=20260814-risk-control-1"></script>
   </body>
 </html>

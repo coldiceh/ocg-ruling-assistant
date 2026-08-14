@@ -433,7 +433,7 @@ export async function retrieveRagEvidence({
         || isStrongQuestionStructureAnalogy(match)
       )
     ));
-  const combinedOfficialQaRelatedSource = mergeOfficialRelatedSourceItems([
+  const scopedOfficialQaRelatedSource = mergeOfficialRelatedSourceItems([
     ...usefulScopedOfficialMatches,
     ...rankRecordsWithSupplementalQueries({
       userQuery,
@@ -445,17 +445,55 @@ export async function retrieveRagEvidence({
       allowNoCardMatch: effectiveQaIdentityCards.length === 0 && normalizedRuleQueries.length > 0,
     }).filter((record) => !isIncidentalMultiCardExampleRecord(record, effectiveQaIdentityCards.length)),
   ]);
-  const officialQaRelatedCandidates = combinedOfficialQaRelatedSource
+  // Card-scoped lookup is the highest-signal path, but a general OCG mechanism
+  // is often documented on a different card. Search the complete official QA
+  // pool with the same rule-query plan and keep a small, bounded related-only
+  // reserve. This never upgrades an analogy to a direct ruling and never uses
+  // the answer text to resolve card identity.
+  const crossCardOfficialQaSource = effectiveQaIdentityCards.length
+      && scopedRecordBuckets.officialQa.length < recordBuckets.officialQa.length
+    ? rankRecordsWithSupplementalQueries({
+        userQuery,
+        records: recordBuckets.officialQa,
+        resolvedCards: [],
+        mentionQueries: [],
+        deterministicRuleQueries,
+        supplementalRuleQueries: effectiveSupplementalRuleQueries,
+        allowNoCardMatch: true,
+      })
+        .filter((record) => !recordSharesResolvedIdentity(record, effectiveQaIdentityCards))
+        .filter(isUsefulCrossCardOfficialQaRecord)
+        .slice(0, Math.max(16, limits.maxRelatedEvidence * 4))
+    : [];
+  const scopedOfficialQaRelatedCandidates = scopedOfficialQaRelatedSource
     .map((item) => item.record
       ? evidenceFromOfficialMatch(item, "related", limits.maxEvidenceTextChars, retrievalWarnings)
       : evidenceFromRecord(item, "related", limits.maxEvidenceTextChars, retrievalWarnings))
     .filter((item) => !directIds.has(item.id));
-  const officialQaRelated = reserveIdentitySourceCoverage(
-    officialQaRelatedCandidates,
-    limits.maxRelatedEvidence,
-    effectiveQaIdentityCards,
-  ).slice(0, limits.maxRelatedEvidence);
-  if (officialQaRelatedCandidates.length > limits.maxRelatedEvidence) retrievalWarnings.push(`official_related_limited:${officialQaRelatedCandidates.length}->${limits.maxRelatedEvidence}`);
+  const crossCardOfficialQaRelatedCandidates = crossCardOfficialQaSource
+    .map((record) => evidenceFromRecord({
+      ...record,
+      retrievalContext: {
+        ...(record.retrievalContext || {}),
+        scope: "cross_card_official_mechanism",
+        relatedOnly: true,
+      },
+    }, "related", limits.maxEvidenceTextChars, retrievalWarnings))
+    .filter((item) => !directIds.has(item.id));
+  const officialQaRelated = allocateOfficialRelatedEvidence({
+    scopedCandidates: scopedOfficialQaRelatedCandidates,
+    crossCardCandidates: crossCardOfficialQaRelatedCandidates,
+    limit: limits.maxRelatedEvidence,
+    resolvedCards: effectiveQaIdentityCards,
+  });
+  const officialQaRelatedCandidateCount = dedupeEvidence([
+    ...scopedOfficialQaRelatedCandidates,
+    ...crossCardOfficialQaRelatedCandidates,
+  ]).length;
+  if (crossCardOfficialQaRelatedCandidates.length) {
+    retrievalWarnings.push(`cross_card_official_related_retrieved:${crossCardOfficialQaRelatedCandidates.length}`);
+  }
+  if (officialQaRelatedCandidateCount > limits.maxRelatedEvidence) retrievalWarnings.push(`official_related_limited:${officialQaRelatedCandidateCount}->${limits.maxRelatedEvidence}`);
 
   const provisionalOfficialResponseSource = rankRecordsWithSupplementalQueries({
     userQuery,
@@ -557,7 +595,7 @@ export async function retrieveRagEvidence({
       cardCount: data.cards.length,
       userProvidedCardTextCount: providedTexts.length,
       rulebookCandidateCount: rulebookCandidates.length,
-      officialMechanismAnalogueCount: 0,
+      officialMechanismAnalogueCount: crossCardOfficialQaRelatedCandidates.length,
       scopedRecordCounts: {
         officialQa: scopedRecordBuckets.officialQa.length,
         qa: scopedRecordBuckets.qa.length,
@@ -805,6 +843,7 @@ function evidenceRecordBuckets(data) {
   const canonicalOfficial = selectBestOfficialRecordVersions(
     all.filter((record) => (
       ["qa", "card-faq", "official-database"].includes(record.recordType)
+      && isAuthoritativeQaOrFaqRecord(record)
       && !["removed", "superseded", "conflict", "parse_failed"].includes(record.status)
     )),
   );
@@ -815,7 +854,8 @@ function evidenceRecordBuckets(data) {
     provisionalOfficialResponses: all.filter(isProvisionalOfficialResponseRecord),
     faq: canonicalOfficial.filter((record) => record.recordType === "card-faq"),
     rawRelated: all.filter((record) => (
-      !["qa", "official-database", "card-faq", "card-text"].includes(record.recordType)
+      !isAuthoritativeQaOrFaqRecord(record)
+      && record.recordType !== "card-text"
       && !isRulebookRecord(record)
       && !isProvisionalOfficialResponseRecord(record)
     )),
@@ -1344,6 +1384,7 @@ function evidenceFromRecord(record, type, maxTextChars = 1600, warnings = []) {
   const text = String(record.text || record.answer || record.conclusion || "");
   const truncated = text.length > maxTextChars;
   const retrievalScore = normalizeEvidenceRelevanceScore(record.retrievalScore ?? record.score);
+  const provenance = evidenceProvenance(record);
   if (truncated) warnings.push(`${type}_text_truncated:${record.id || record.evidenceId || record.stableId}`);
   return {
     id: String(record.id || record.evidenceId || record.stableId || ""),
@@ -1361,6 +1402,10 @@ function evidenceFromRecord(record, type, maxTextChars = 1600, warnings = []) {
     fullText: text,
     text: truncated ? `${text.slice(0, Math.max(0, maxTextChars - 1))}…` : text,
     sourceUrl: record.sourceUrl || record.officialUrl || "",
+    source: provenance.source,
+    sourceName: provenance.sourceName,
+    sourceTier: provenance.sourceTier,
+    sourceAuthority: provenance.sourceAuthority,
     sourceType: record.sourceType || "",
     displayStatus: record.displayStatus || "",
     maxStatus: record.maxStatus || "",
@@ -1371,7 +1416,7 @@ function evidenceFromRecord(record, type, maxTextChars = 1600, warnings = []) {
     score: retrievalScore,
     retrievalScore,
     retrievalSignals: record.retrievalSignals || null,
-    official: isAuthoritativeQaOrFaqRecord(record),
+    official: provenance.official,
     isDirect: false,
   };
 }
@@ -1391,12 +1436,71 @@ function evidenceSourceUrl(record = {}) {
 }
 
 function isOfficialQaRecord(record = {}) {
-  return ["qa", "official-database"].includes(record.recordType);
+  return ["qa", "official-database"].includes(record.recordType)
+    && evidenceProvenance(record).official;
 }
 
 function isAuthoritativeQaOrFaqRecord(record = {}) {
-  return ["qa", "card-faq", "official-database"].includes(record.recordType)
-    || /^S0_/u.test(String(record.sourceTier || ""));
+  return evidenceProvenance(record).official;
+}
+
+function evidenceProvenance(record = {}) {
+  const source = String(record.source || record.sourceName || record.sourceType || "").trim();
+  const sourceName = String(record.sourceName || record.source || "").trim();
+  const declaredTier = String(record.sourceTier || "").trim();
+  const declaredAuthority = String(record.sourceAuthority || "").trim();
+  const identity = [
+    source,
+    sourceName,
+    record.sourceType,
+    record.sourceId,
+    record.id,
+    declaredTier,
+    declaredAuthority,
+  ].filter(Boolean).join(" ");
+  const community = declaredAuthority === "community_reference"
+    || /^S2_/u.test(declaredTier)
+    || /(?:^|[^a-z])ocg[-_ ]?rule(?:[^a-z]|$)|community|社区|社群/iu.test(identity)
+    || ["rule-doc", "rule-test"].includes(String(record.recordType || ""));
+  const explicitlyNonOfficial = record.official === false;
+  const officialDatabase = !community
+    && !explicitlyNonOfficial
+    && (
+      declaredAuthority === "official_database"
+      || declaredTier === "S0_OFFICIAL_DB_MIRROR"
+      || ["qa", "card-faq", "official-database"].includes(record.recordType)
+    );
+  const officialReference = !community
+    && !explicitlyNonOfficial
+    && !officialDatabase
+    && (
+      declaredAuthority === "official_reference"
+      || /^S0_OFFICIAL/u.test(declaredTier)
+      || record.official === true
+    );
+  const sourceAuthority = community
+    ? "community_reference"
+    : officialDatabase
+      ? "official_database"
+      : officialReference
+        ? "official_reference"
+        : declaredAuthority || "other_reference";
+  const sourceTier = declaredTier || (
+    sourceAuthority === "community_reference"
+      ? "S2_COMMUNITY_REFERENCE"
+      : sourceAuthority === "official_database"
+        ? "S0_OFFICIAL_DB_MIRROR"
+        : sourceAuthority === "official_reference"
+          ? "S0_OFFICIAL_REFERENCE"
+          : "S3_OTHER_REFERENCE"
+  );
+  return {
+    source,
+    sourceName,
+    sourceTier,
+    sourceAuthority,
+    official: sourceAuthority === "official_database" || sourceAuthority === "official_reference",
+  };
 }
 
 function officialQaNumericId(record = {}) {
@@ -1610,6 +1714,9 @@ function rankRecords({ userQuery, records, resolvedCards, mentionQueries = [], r
   const queryQuestionType = classifyOfficialQaQuestionType(userQuery);
   const queryEffectPhrases = extractOfficialQaEffectPhrases(userQuery);
   const querySemanticConcepts = extractOfficialQaSemanticConcepts(userQuery);
+  const queryMechanismSignatures = [userQuery, ...ruleQueries.map((item) => item.query)]
+    .map(buildRuleMechanismSignature)
+    .filter(isUsableRuleMechanismSignature);
   const contextTerms = buildContextTerms({ userQuery, mentionQueries, ruleQueries, resolvedCards });
   const ranked = (records || [])
     .filter((record) => record.status !== "removed" && record.status !== "superseded")
@@ -1627,6 +1734,7 @@ function rankRecords({ userQuery, records, resolvedCards, mentionQueries = [], r
         queryQuestionType,
         queryEffectPhrases,
         querySemanticConcepts,
+        queryMechanismSignatures,
       });
       return { record, ...scored };
     })
@@ -1669,7 +1777,34 @@ function rankRecordsWithSupplementalQueries({
     ruleSearchQueries: supplementalRuleQueries,
     allowNoCardMatch,
   });
-  return dedupeBy([...deterministic, ...supplemental], stableRecordKey);
+  const merged = new Map();
+  for (const record of [...deterministic, ...supplemental]) {
+    const key = stableRecordKey(record);
+    const previous = merged.get(key);
+    if (!previous) {
+      merged.set(key, record);
+      continue;
+    }
+    const [lower, higher] = compareRetrievedRecords(previous, record) <= 0
+      ? [record, previous]
+      : [previous, record];
+    merged.set(key, mergeRelatedRecordMetadata(lower, higher));
+  }
+  return [...merged.values()].sort(compareRetrievedRecords);
+}
+
+function compareRetrievedRecords(left = {}, right = {}) {
+  const leftSignals = left.retrievalSignals || {};
+  const rightSignals = right.retrievalSignals || {};
+  return Number(rightSignals.questionCardIdCoverage || 0) - Number(leftSignals.questionCardIdCoverage || 0)
+    || Number(rightSignals.matchedQuestionCardIdCount || 0) - Number(leftSignals.matchedQuestionCardIdCount || 0)
+    || Number(rightSignals.strongMechanismQueryCoverage || 0) - Number(leftSignals.strongMechanismQueryCoverage || 0)
+    || (rightSignals.matchedStrongMechanismFeatures || []).length - (leftSignals.matchedStrongMechanismFeatures || []).length
+    || Number(rightSignals.effectNumberCompatible === true) - Number(leftSignals.effectNumberCompatible === true)
+    || Number(rightSignals.typeCompatible === true) - Number(leftSignals.typeCompatible === true)
+    || Number(right.retrievalScore || 0) - Number(left.retrievalScore || 0)
+    || Number(rightSignals.lexicalHitCount || 0) - Number(leftSignals.lexicalHitCount || 0)
+    || stableRecordKey(left).localeCompare(stableRecordKey(right));
 }
 
 function isIncidentalMultiCardExampleMatch(match = {}, resolvedCardCount = 0) {
@@ -1832,6 +1967,40 @@ function ruleMechanismFeatureWeight(feature) {
   return 1;
 }
 
+function isStrongRuleMechanismFeature(feature) {
+  const value = String(feature || "");
+  return value.startsWith("operation:")
+    || value.startsWith("concept:")
+    || value.startsWith("relation:treated-as:");
+}
+
+function bestRuleMechanismMatch(querySignatures = [], evidenceSignature = new Set()) {
+  const candidates = querySignatures.map((signature) => {
+    const matchedFeatures = [...signature].filter((feature) => evidenceSignature.has(feature));
+    const strongQueryFeatures = [...signature].filter(isStrongRuleMechanismFeature);
+    const matchedStrongFeatures = matchedFeatures.filter(isStrongRuleMechanismFeature);
+    const matchedContextFeatures = matchedFeatures.filter((feature) => !isStrongRuleMechanismFeature(feature));
+    return {
+      matchedFeatures,
+      matchedStrongFeatures,
+      matchedContextFeatures,
+      strongQueryCoverage: strongQueryFeatures.length
+        ? matchedStrongFeatures.length / strongQueryFeatures.length
+        : 0,
+    };
+  });
+  return candidates.sort((left, right) => (
+    right.strongQueryCoverage - left.strongQueryCoverage
+    || right.matchedStrongFeatures.length - left.matchedStrongFeatures.length
+    || right.matchedContextFeatures.length - left.matchedContextFeatures.length
+  ))[0] || {
+    matchedFeatures: [],
+    matchedStrongFeatures: [],
+    matchedContextFeatures: [],
+    strongQueryCoverage: 0,
+  };
+}
+
 function scoreRecord(record, {
   queryTerms,
   ruleTerms,
@@ -1845,6 +2014,7 @@ function scoreRecord(record, {
   queryQuestionType,
   queryEffectPhrases,
   querySemanticConcepts,
+  queryMechanismSignatures = [],
 }) {
   const rankingIdentity = retrievalRankingIdentity(record);
   const text = rankingIdentity.text;
@@ -1912,6 +2082,10 @@ function scoreRecord(record, {
   const semanticQueryCoverage = querySemanticConcepts.length
     ? matchedSemanticConcepts.length / querySemanticConcepts.length
     : 0;
+  const mechanismMatch = bestRuleMechanismMatch(
+    queryMechanismSignatures,
+    buildRuleMechanismSignature(questionText || text),
+  );
   score += questionCardIdCoverage * 5;
   score += matchedQuestionCardIds.length * 1.5;
   if (effectNumberCompatible && queryEffectNumbers.length && evidenceEffectNumbers.length) score += 2;
@@ -1936,6 +2110,10 @@ function scoreRecord(record, {
       lexicalHitCount: lexicalHits.size,
       fullQueryMatched,
       rulePhraseMatched: phraseMatched,
+      matchedMechanismFeatures: mechanismMatch.matchedFeatures,
+      matchedStrongMechanismFeatures: mechanismMatch.matchedStrongFeatures,
+      matchedContextMechanismFeatures: mechanismMatch.matchedContextFeatures,
+      strongMechanismQueryCoverage: Number(mechanismMatch.strongQueryCoverage.toFixed(4)),
     },
   };
 }
@@ -2136,6 +2314,41 @@ function deriveRuleSearchQueries(userQuery) {
   }] : [];
 }
 
+function isUsefulCrossCardOfficialQaRecord(record = {}) {
+  if (!isOfficialQaRecord(record)) return false;
+  const signals = record.retrievalSignals || {};
+  const strongMatches = Array.isArray(signals.matchedStrongMechanismFeatures)
+    ? signals.matchedStrongMechanismFeatures.length
+    : 0;
+  const contextMatches = Array.isArray(signals.matchedContextMechanismFeatures)
+    ? signals.matchedContextMechanismFeatures.length
+    : 0;
+  return signals.typeCompatible === true
+    && strongMatches >= 1
+    && Number(signals.strongMechanismQueryCoverage || 0) >= 0.5
+    && (strongMatches >= 2 || contextMatches >= 1);
+}
+
+function recordSharesResolvedIdentity(record = {}, resolvedCards = []) {
+  if (!(resolvedCards || []).length) return false;
+  const identity = retrievalRankingIdentity(record);
+  const resolvedIds = new Set((resolvedCards || [])
+    .map((card) => normalizeId(card?.id || card?.cardId))
+    .filter(Boolean));
+  if (identity.cardIds.some((id) => resolvedIds.has(normalizeId(id)))) return true;
+  const resolvedNames = new Set((resolvedCards || [])
+    .flatMap((card) => [
+      card?.name,
+      card?.cnName,
+      card?.jaName,
+      card?.enName,
+      ...(card?.aliases || []),
+    ])
+    .map(normalizeCardKey)
+    .filter(Boolean));
+  return identity.cardNames.some((name) => resolvedNames.has(normalizeCardKey(name)));
+}
+
 function deriveRuleSearchQueriesFromCardTexts(userQuery, cardTexts = []) {
   const questionContext = buildGenericRuleQuery(userQuery).slice(0, 56);
   const perCardQueries = (cardTexts || []).map((item) => {
@@ -2241,6 +2454,11 @@ function expandRetrievalVocabulary(value) {
   if (/(破坏|破壊|destroy)/iu.test(text)) additions.push("破坏 破壊 destroy");
   if (/(攻击|攻擊|攻撃|attack)/iu.test(text)) additions.push("攻击 攻撃 attack 战斗 バトル");
   if (/(次数|回数|多次|两次|兩次|[一二三四五六七八九十\d]+次|twice)/iu.test(text)) additions.push("次数 回数 多次 twice");
+  if (/(不受.{0,12}(?:效果|効果).{0,6}影响|効果を受けない|unaffected)/iu.test(text)) additions.push("不受效果影响 効果を受けない unaffected by card effects");
+  if (/(攻击|攻擊|攻撃|attack).{0,12}(?:无效|無效|negat)|(?:无效|無效|negat).{0,12}(?:攻击|攻擊|攻撃|attack)/iu.test(text)) additions.push("攻击无效 攻撃を無効 negate the attack");
+  if (/(代替.{0,8}破坏|代替.{0,8}破壊|破壊.{0,8}代わり|replacement)/iu.test(text)) additions.push("代替破坏 破壊の代わり replacement destruction");
+  if (/(伤害步骤结束|傷害步驟結束|ダメージステップ終了|end of (?:the )?damage step)/iu.test(text)) additions.push("伤害步骤结束时 ダメージステップ終了時 end of the damage step");
+  if (/(伤害计算后|傷害計算後|ダメージ計算後|after damage calculation)/iu.test(text)) additions.push("伤害计算后 ダメージ計算後 after damage calculation");
   return [...new Set([text, ...additions].filter(Boolean))].join(" ");
 }
 
@@ -3243,6 +3461,40 @@ function reserveIdentitySourceCoverage(items = [], limit = 1, resolvedCards = []
     (item) => !selectedKeys.has(stableRecordKey(item?.record || item)),
   );
   return [...selected, ...remaining];
+}
+
+function allocateOfficialRelatedEvidence({
+  scopedCandidates = [],
+  crossCardCandidates = [],
+  limit = 1,
+  resolvedCards = [],
+} = {}) {
+  const safeLimit = Math.max(1, Math.floor(Number(limit) || 1));
+  const scoped = reserveIdentitySourceCoverage(scopedCandidates, safeLimit, resolvedCards)
+    .slice(0, safeLimit);
+  const scopedKeys = new Set(scoped.map(stableRecordKey));
+  const crossCard = dedupeEvidence(crossCardCandidates)
+    .filter((item) => !scopedKeys.has(stableRecordKey(item)));
+  if (!crossCard.length) return scoped;
+
+  const maxCrossCard = Math.min(crossCard.length, safeLimit, Math.max(1, Math.floor(safeLimit / 6)));
+  if (safeLimit === 1) {
+    return compareRetrievedRecords(crossCard[0], scoped[0] || {}) < 0
+      ? [crossCard[0]]
+      : scoped;
+  }
+
+  // Cross-card candidates have already passed the strong mechanism gate. Keep
+  // a bounded reserve instead of comparing card-identity coverage with
+  // mechanism coverage: those dimensions are intentionally incomparable, and
+  // identity-first ordering would otherwise make this path unreachable once
+  // the scoped bucket is full.
+  const scopedLimit = Math.max(1, safeLimit - maxCrossCard);
+  return dedupeEvidence([
+    ...scoped.slice(0, scopedLimit),
+    ...crossCard.slice(0, maxCrossCard),
+    ...scoped.slice(scopedLimit),
+  ]).slice(0, safeLimit);
 }
 
 function evidenceMatchedQuestionCardIds(item = {}) {
