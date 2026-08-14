@@ -24,6 +24,7 @@ const DEFAULT_GLM_MODEL = "glm-5.2";
 const DEFAULT_JSON_TASK_MAX_OUTPUT_TOKENS = 4000;
 const DEFAULT_RAG_RECOVERY_MAX_OUTPUT_TOKENS = 4096;
 const DEFAULT_LIGHTWEIGHT_EXTRACTION_TIMEOUT_MS = 4500;
+const DEFAULT_RULE_QUERY_EXTRACTION_TIMEOUT_MS = 7000;
 const DEFAULT_DAILY_BUDGET_CNY = 10;
 const DEFAULT_CHATGPT_DAILY_BUDGET_USD = 10;
 const DEFAULT_PRIVATE_EVALUATION_BUDGET_USD = 40;
@@ -907,7 +908,10 @@ export async function callRuleQueryExtractionModel({
     signal,
     work: async (sharedSignal) => {
       try {
-    const timeoutMs = readPositiveNumber(env.RAG_RULE_MODEL_TIMEOUT_MS, readPositiveNumber(env.RAG_CARD_MODEL_TIMEOUT_MS, DEFAULT_LIGHTWEIGHT_EXTRACTION_TIMEOUT_MS));
+    const timeoutMs = readPositiveNumber(
+      env.RAG_RULE_MODEL_TIMEOUT_MS,
+      readPositiveNumber(env.RAG_CARD_MODEL_TIMEOUT_MS, DEFAULT_RULE_QUERY_EXTRACTION_TIMEOUT_MS),
+    );
     const execution = await runBudgetedAuxiliaryModelCall({
       provider,
       prompt,
@@ -4362,7 +4366,7 @@ function buildRuleQueryExtractionPrompt(userQuery) {
     "如果问题同时问‘能否发动’和‘处理是否成功’，必须拆成不同子命题，分别检索发动条件与结算适用性。连续处理还要把前一步完成后的状态与下一步能否执行拆开。",
     "玩家俗称、缩写或自然语言必须改写为正式卡文或规则术语。每个 query 自身应在 120 字符内尽量同时包含精简的中文、日文和英文等价术语，以“ | ”分隔；不要只翻译卡名，也不要保留未解释的玩家俗称。",
     "次数问题必须包含已使用次数、总上限或剩余次数等正式关键词；区域或双重卡片种类问题必须包含移动瞬间的区域与当时作为何种卡处理。",
-    "输出 3 到 8 条高价值查询词即可；不知道就输出空数组。",
+    "输出 3 到 6 条高价值查询词即可；不知道就输出空数组。",
     "输出必须是单个 JSON 对象，不要 markdown，不要解释。",
     "JSON 只包含 ruleQueries 数组；每项包含 subclaim、checkpoint、query、reason、confidence。",
     "示例结构如下，示例不是本题答案：",
