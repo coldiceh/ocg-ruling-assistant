@@ -6,6 +6,7 @@ const PUBLIC_FILES = [
   "../backend/publicAnswerService.mjs",
   "../backend/ragRulingPipeline.mjs",
   "../backend/ragEvidenceRetriever.mjs",
+  "../backend/ragModelClient.mjs",
   "../backend/ragRulingPrompt.mjs",
   "../backend/publicRagAnswerValidator.mjs",
 ];
@@ -20,7 +21,13 @@ const PROHIBITED_PUBLIC_MODULES = [
   "effectStateReasoner",
   "summonLegalityContext",
   "effectApplicabilityContext",
+  "operationLegalityAnalyzer",
   "ruleScenarioCompiler",
+];
+
+const PROHIBITED_PUBLIC_SYMBOLS = [
+  "callRulebookGroundingModel",
+  "selectPriorityConstraintEvidence",
 ];
 
 test("the public pure-LLM path has no engine, Lua, formal, or handwritten reasoner dependency", async () => {
@@ -33,6 +40,13 @@ test("the public pure-LLM path has no engine, Lua, formal, or handwritten reason
       combined,
       new RegExp(`from\\s+["'][^"']*${moduleName}[^"']*["']`, "u"),
       `public path must not import ${moduleName}`,
+    );
+  }
+  for (const symbol of PROHIBITED_PUBLIC_SYMBOLS) {
+    assert.equal(
+      combined.includes(symbol),
+      false,
+      `public path must not contain ${symbol}`,
     );
   }
 });

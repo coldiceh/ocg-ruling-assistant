@@ -111,6 +111,231 @@ test("all exact mention sources share longest non-overlapping query spans", () =
   );
 });
 
+test("an exact full normalized model surface survives similar cards and suppresses overlapping short aliases", () => {
+  const cards = [{
+    id: "model-full",
+    name: "匿名星辉・力量",
+    aliases: ["匿名星辉・力量"],
+  }, {
+    id: "overlapping-short",
+    name: "力量",
+    aliases: ["力量"],
+  }, {
+    id: "near-neighbour",
+    name: "匿名星辉力场",
+    aliases: ["匿名星辉力场"],
+  }];
+  const resolution = extractRagCards("发动「匿名星辉力量」的效果。", {
+    cards,
+    maxCards: 8,
+    modelCardNameCandidates: [{
+      name: "匿名星辉・力量",
+      // The preparation model normalized the separator instead of copying the
+      // user's spelling. The identity is still grounded only because the
+      // corresponding normalized span exists in the question.
+      originalText: "匿名星辉・力量",
+      confidence: "high",
+    }, {
+      name: "力量",
+      originalText: "力量",
+      confidence: "medium",
+    }],
+  });
+
+  assert.deepEqual(resolution.resolvedCards.map((card) => card.id), ["model-full"]);
+  assert.equal(resolution.resolvedCards.some((card) => card.id === "overlapping-short"), false);
+  assert.equal(resolution.resolvedCards.some((card) => card.id === "near-neighbour"), false);
+
+  const ungrounded = extractRagCards("这里只出现别的表述。", {
+    cards,
+    maxCards: 8,
+    modelCardNameCandidates: [{
+      name: "匿名星辉・力量",
+      originalText: "匿名星辉・力量",
+      confidence: "high",
+    }],
+  });
+  assert.equal(ungrounded.resolvedCards.some((card) => card.id === "model-full"), false);
+
+  const externalSeed = extractRagCards("发动「星辉」的效果。", {
+    cards: [],
+    maxCards: 8,
+    modelCardNameCandidates: [{
+      name: "匿名星辉・力量",
+      originalText: "星辉",
+      confidence: "high",
+    }],
+  }).unresolvedMentions.find((mention) => mention.input === "星辉");
+  assert.ok(externalSeed?.searchTexts.includes("匿名星辉・力量"));
+});
+
+test("ambiguous fuzzy model surfaces remain unresolved even when later context favours one neighbour", () => {
+  const cards = [{
+    id: "context-card",
+    name: "匿名关联场地",
+    aliases: ["匿名关联场地"],
+  }, {
+    id: "fuzzy-a",
+    name: "匿名测试神龙",
+    aliases: ["匿名测试神龙"],
+    effectText: "只在匿名关联场地存在时适用。",
+  }, {
+    id: "fuzzy-b",
+    name: "匿名测试魔龙",
+    aliases: ["匿名测试魔龙"],
+    effectText: "与场地无关。",
+  }];
+  const surface = "匿名测试巨龙";
+  const resolution = extractRagCards(
+    `「匿名关联场地」存在时，「${surface}」能否发动？`,
+    {
+      cards,
+      maxCards: 8,
+      modelCardNameCandidates: [{ name: surface, originalText: surface, confidence: "high" }],
+    },
+  );
+
+  assert.equal(resolution.resolvedCards.some((card) => /^fuzzy-/u.test(card.id)), false);
+  assert.ok(resolution.unresolvedMentions.some((mention) => mention.input === surface));
+});
+
+test("a unique nearest edit wins over farther candidates while tied nearest edits remain unresolved", () => {
+  const surface = "匿名长名测试龙甲";
+  const cards = [{
+    id: "nearest-one-edit",
+    name: "匿名长名测试龙乙",
+    aliases: ["匿名长名测试龙乙"],
+  }, {
+    id: "farther-two-edit",
+    name: "匿名长名校试龙乙",
+    aliases: ["匿名长名校试龙乙"],
+  }];
+  const resolution = extractRagCards(`「${surface}」可以发动吗？`, {
+    cards,
+    maxCards: 8,
+    modelCardNameCandidates: [{ name: surface, originalText: surface, confidence: "high" }],
+  });
+
+  assert.deepEqual(resolution.resolvedCards.map((card) => card.id), ["nearest-one-edit"]);
+  assert.equal(resolution.unresolvedMentions.some((mention) => mention.input === surface), false);
+
+  const tiedSurface = "匿名长名测试龙丙";
+  const tied = extractRagCards(`「${tiedSurface}」可以发动吗？`, {
+    cards: [{
+      id: "tie-a",
+      name: "匿名长名测试龙甲",
+      aliases: ["匿名长名测试龙甲"],
+    }, {
+      id: "tie-b",
+      name: "匿名长名测试龙乙",
+      aliases: ["匿名长名测试龙乙"],
+    }],
+    maxCards: 8,
+    modelCardNameCandidates: [{ name: tiedSurface, originalText: tiedSurface, confidence: "high" }],
+  });
+  assert.equal(tied.resolvedCards.some((card) => /^tie-/u.test(card.id)), false);
+  assert.ok(tied.unresolvedMentions.some((mention) => mention.input === tiedSurface));
+});
+
+test("fuzzy neighbours do not veto a stronger exact contextual short-name resolution", () => {
+  const shortName = "小水龙";
+  const cards = [{
+    id: "series-context",
+    name: "匿名系・关联场地",
+    aliases: ["匿名系・关联场地"],
+    effectText: "匿名系怪兽适用的场地。",
+  }, {
+    id: "contextual-short-target",
+    name: "匿名系・小水龙",
+    aliases: ["匿名系・小水龙"],
+    effectText: "这张卡可以特殊召唤。",
+  }, {
+    id: "unrelated-near-a",
+    name: "小火龙",
+    aliases: ["小火龙"],
+  }, {
+    id: "unrelated-near-b",
+    name: "小风龙",
+    aliases: ["小风龙"],
+  }];
+  const resolution = extractRagCards(
+    `「匿名系・关联场地」存在时，「${shortName}」可以特殊召唤吗？`,
+    {
+      cards,
+      maxCards: 8,
+      modelCardNameCandidates: [{ name: shortName, originalText: shortName, confidence: "high" }],
+    },
+  );
+
+  assert.ok(resolution.resolvedCards.some((card) => card.id === "contextual-short-target"));
+  assert.equal(resolution.resolvedCards.some((card) => /^unrelated-near-/u.test(card.id)), false);
+  assert.equal(resolution.unresolvedMentions.some((mention) => mention.input === shortName), false);
+});
+
+test("an external exact expansion maps back to the local identity and unlocks its FAQ", async () => {
+  const userSurface = "匿名外查简称";
+  const canonicalName = "匿名规范外查龙";
+  const localCard = {
+    id: "981234",
+    cid: 981234,
+    name: canonicalName,
+    aliases: [canonicalName],
+    effectText: "这张卡可以发动。",
+    sourceUrl: "https://db.ygoresources.com/data/card/981234",
+  };
+  const question = `「${userSurface}」可以发动吗？`;
+  const cardResolution = extractRagCards(question, {
+    cards: [localCard],
+    maxCards: 8,
+    modelCardNameCandidates: [{ name: canonicalName, originalText: userSurface, confidence: "high" }],
+  });
+  assert.ok(cardResolution.unresolvedMentions.some((mention) => (
+    mention.input === userSurface && mention.searchTexts.includes(canonicalName)
+  )));
+
+  const evidence = await retrieveRagEvidence({
+    userQuery: question,
+    cardResolution,
+    cards: [localCard],
+    records: [],
+    qaRecords: [{
+      id: "card-faq-anonymous-external-1",
+      recordType: "card-faq",
+      cardIds: [localCard.id],
+      cards: [canonicalName],
+      title: "匿名外查 FAQ",
+      text: "这张卡的发动条件说明。",
+    }],
+    fetchImpl: async (url) => {
+      const decoded = decodeURIComponent(String(url)).replace(/\+/gu, " ");
+      if (!decoded.includes(canonicalName)) {
+        return { ok: true, status: 200, json: async () => ({ result: [], next: 0 }) };
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          result: [{
+            cid: Number(localCard.id),
+            id: 87654321,
+            cn_name: canonicalName,
+            text: { desc: "这张卡可以发动。" },
+          }],
+          next: 0,
+        }),
+      };
+    },
+    env: {
+      RAG_LIVE_OFFICIAL_QA: "false",
+      RAG_LOCAL_FUZZY_MIN_CONFIDENCE: "1.01",
+    },
+  });
+
+  assert.ok(evidence.retrievedCards.some((card) => card.id === localCard.id));
+  assert.ok(evidence.faqRelated.some((item) => item.id === "card-faq-anonymous-external-1"));
+  assert.equal(evidence.cardResolution.unresolvedMentions.some((mention) => mention.input === userSurface), false);
+});
+
 test("an unknown longer seed cannot suppress a nested exact known card name", () => {
   const cards = [{
     id: "known-card",

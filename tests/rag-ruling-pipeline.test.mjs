@@ -4,7 +4,7 @@ import { buildAliasIndex, extractQuotedMentions, extractRagCards, extractUnquote
 import { createLocalCardDataProvider } from "../backend/cardDataProvider.mjs";
 import { loadRagData, retrieveRagEvidence } from "../backend/ragEvidenceRetriever.mjs";
 import { buildRagRulingPromptBundle } from "../backend/ragRulingPrompt.mjs";
-import { callCardNameExtractionModel, callDeepSeekJsonTask, callOfficialQaApplicabilityModel, callRagModel, callRulebookGroundingModel, callRuleQueryExtractionModel, capPublicChatGptBudget, createPublicAnswerModelEnv, estimateDeepSeekCostCny, estimateGlmCostCny, getRagBudgetStatus, resetRagBudget, resolveRagProvider } from "../backend/ragModelClient.mjs";
+import { callCardNameExtractionModel, callDeepSeekJsonTask, callOfficialQaApplicabilityModel, callRagModel, callRuleQueryExtractionModel, capPublicChatGptBudget, createPublicAnswerModelEnv, estimateDeepSeekCostCny, estimateGlmCostCny, getRagBudgetStatus, resetRagBudget, resolveRagProvider } from "../backend/ragModelClient.mjs";
 import {
   answerRagRulingQuestion,
 } from "../backend/ragRulingPipeline.mjs";
@@ -1114,6 +1114,12 @@ test("rule_query_extractor_uses_lightweight_model", async () => {
             query: "处理中的陷阱 当前区域 | 処理中の罠 現在の領域 | resolving trap current zone",
             reason: "检索处理快照中的区域与类型",
             confidence: "high",
+          }, {
+            subclaim: "确认后一处理是否依赖前一处理实际完成",
+            checkpoint: "step_dependency",
+            query: "连续处理 前一步完成 后一步依赖 | 連続処理 前段完了 後段依存 | sequential resolution prior step dependency",
+            reason: "检索连续处理的依赖关系",
+            confidence: "medium",
           }],
         }) } }],
         usage: { prompt_tokens: 25, completion_tokens: 8 },
@@ -1123,14 +1129,85 @@ test("rule_query_extractor_uses_lightweight_model", async () => {
   assert.equal(result.providerUsed, "deepseek");
   assert.equal(result.modelUsed, "deepseek-flash-test");
   assert.equal(calls[0].body.model, "deepseek-flash-test");
-  assert.deepEqual(result.queries.map((item) => item.query), ["处理中的陷阱 当前区域 | 処理中の罠 現在の領域 | resolving trap current zone"]);
+  assert.deepEqual(result.queries.map((item) => item.query), [
+    "处理中的陷阱 当前区域 | 処理中の罠 現在の領域 | resolving trap current zone",
+    "连续处理 前一步完成 后一步依赖 | 連続処理 前段完了 後段依存 | sequential resolution prior step dependency",
+  ]);
   assert.equal(result.queries[0].subclaim, "确认效果处理时该卡的区域和卡片种类");
   assert.equal(result.queries[0].checkpoint, "resolution_snapshot");
+  assert.equal(result.queries[1].checkpoint, "step_dependency");
   const requestPrompt = calls[0].body.messages.map((item) => item.content).join("\n");
   assert.match(requestPrompt, /彼此独立、尚待证实的规则子命题/u);
   assert.match(requestPrompt, /subclaim、checkpoint、query、reason、confidence/u);
+  assert.match(requestPrompt, /忠实保留玩家明确给出的事件、区域、表示形式、顺序和状态/u);
+  assert.match(requestPrompt, /不得把一个动作改写成另一个动作/u);
+  assert.match(requestPrompt, /前后步骤依赖与无法完成时的部分处理/u);
+  assert.match(requestPrompt, /效果来源与效果类型/u);
+  assert.match(requestPrompt, /发动前、处理时、处理后的状态快照/u);
+  assert.match(requestPrompt, /不得为了达到条数加入无关机制/u);
   assert.match(requestPrompt, /中文、日文和英文等价术语/u);
   assert.match(requestPrompt, /不要保留未解释的玩家俗称/u);
+});
+
+test("rule query extraction can use server-owned Relay Terra none without changing the final model", async () => {
+  const calls = [];
+  const now = new Date("2048-07-11T00:00:00.000Z");
+  const env = {
+    RAG_RULE_MODEL_PROVIDER: "relay",
+    RAG_RULE_MODEL_RELAY_API_KEY: "relay-rule-query-key",
+    RAG_RULE_MODEL_RELAY_BASE_URL: "https://relay.example.test/v1",
+    RELAY_RULE_MODEL: "gpt-5.6-terra",
+    RAG_RULE_MODEL_REASONING_EFFORT: "none",
+    RAG_MODEL: "gpt-5.6-sol",
+    RAG_REASONING_EFFORT: "low",
+    API_CHATGPT_DAILY_BUDGET_USD: "10",
+    API_BUDGET_TIMEZONE: "UTC",
+  };
+  await resetRagBudget({ env, now });
+  const result = await callRuleQueryExtractionModel({
+    userQuery: "匿名连续处理场景需要检索哪条规则？",
+    dataRevision: "relay-terra-rule-query-20480711",
+    env,
+    now,
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options, body: JSON.parse(options.body) });
+      const content = JSON.stringify({
+        ruleQueries: [{
+          subclaim: "确认后一处理是否依赖前一处理实际完成",
+          checkpoint: "step_dependency",
+          query: "连续处理 前一步完成 后一步依赖 | 連続処理 前段完了 後段依存 | sequential resolution prior step dependency",
+          reason: "检索连续处理的依赖关系",
+          confidence: "high",
+        }],
+      });
+      return new Response(`data: ${JSON.stringify({
+        model: "gpt-5.6-terra",
+        choices: [{ index: 0, finish_reason: "stop", delta: { content } }],
+        usage: { prompt_tokens: 40, completion_tokens: 20, total_tokens: 60 },
+      })}\n\ndata: [DONE]\n\n`, {
+        status: 200,
+        headers: { "content-type": "text/event-stream" },
+      });
+    },
+  });
+
+  assert.equal(calls.length, 1);
+  assert.match(calls[0].url, /\/chat\/completions$/u);
+  assert.equal(calls[0].body.model, "gpt-5.6-terra");
+  assert.equal(calls[0].body.reasoning_effort, "none");
+  assert.equal(calls[0].body.max_completion_tokens, 700);
+  assert.deepEqual(calls[0].body.response_format, { type: "json_object" });
+  assert.equal(result.providerUsed, "relay");
+  assert.equal(result.modelUsed, "gpt-5.6-terra");
+  assert.equal(result.requestedModel, "gpt-5.6-terra");
+  assert.equal(result.returnedModel, "gpt-5.6-terra");
+  assert.equal(result.reasoningEffort, "none");
+  assert.equal(result.costCurrency, "USD");
+  assert.ok(result.estimatedCostUsd > 0);
+  assert.equal(result.budgetStatus.bucket.id, "final_ruling:relay");
+  assert.equal(result.queries[0].checkpoint, "step_dependency");
+  assert.equal(env.RAG_MODEL, "gpt-5.6-sol");
+  assert.equal(env.RAG_REASONING_EFFORT, "low");
 });
 
 test("official QA applicability review uses Relay Sol low once and never sends candidate answers", async () => {
@@ -1360,6 +1437,11 @@ test("public profiles hard-disable the independent applicability stage even if d
 
   assert.equal(publicEnv.MODEL_PROVIDER, "deepseek");
   assert.equal(publicEnv.RELAY_API_KEY, undefined);
+  assert.equal(publicEnv.RAG_RULE_MODEL_PROVIDER, "relay");
+  assert.equal(publicEnv.RAG_RULE_MODEL_RELAY_API_KEY, "relay-applicability-key");
+  assert.equal(publicEnv.RAG_RULE_MODEL_RELAY_BASE_URL, "https://relay.example.test/v1");
+  assert.equal(publicEnv.RELAY_RULE_MODEL, "gpt-5.6-terra");
+  assert.equal(publicEnv.RAG_RULE_MODEL_REASONING_EFFORT, "none");
   assert.equal(publicEnv.RAG_EVIDENCE_APPLICABILITY_ENABLED, "false");
   assert.equal(call, null);
   assert.equal(result.status, "skipped");
@@ -1374,6 +1456,12 @@ test("public model environment keeps the independent reviewer off unless explici
   }, "relay-gpt-5.6-sol-low");
 
   assert.equal(publicEnv.MODEL_PROVIDER, "relay");
+  assert.equal(publicEnv.RAG_MODEL, "gpt-5.6-sol");
+  assert.equal(publicEnv.RAG_REASONING_EFFORT, "low");
+  assert.equal(publicEnv.RAG_CARD_MODEL_PROVIDER, "deepseek");
+  assert.equal(publicEnv.RAG_RULE_MODEL_PROVIDER, "relay");
+  assert.equal(publicEnv.RELAY_RULE_MODEL, "gpt-5.6-terra");
+  assert.equal(publicEnv.RAG_RULE_MODEL_REASONING_EFFORT, "none");
   assert.equal(publicEnv.RAG_EVIDENCE_APPLICABILITY_ENABLED, "false");
 });
 
@@ -1534,7 +1622,13 @@ test("rag_pipeline_uses_model_rule_queries_for_related_rules", async () => {
     }],
     qaRecords: [],
     ruleModelInvoker: async () => JSON.stringify({
-      ruleQueries: [{ query: "正在处理的通常陷阱 回到手卡", reason: "检索规则资料", confidence: "high" }],
+      ruleQueries: [{
+        subclaim: "确认处理中的陷阱是否仍可作为场上的卡返回",
+        checkpoint: "resolution_snapshot",
+        query: "正在处理的通常陷阱 回到手卡",
+        reason: "检索规则资料",
+        confidence: "high",
+      }],
     }),
     modelInvoker: async () => JSON.stringify({
       answerLevel: "low_confidence_analysis",
@@ -1550,6 +1644,15 @@ test("rag_pipeline_uses_model_rule_queries_for_related_rules", async () => {
   assert.ok(answer.debug.modelRuleSearchQueries.some((item) => item.query.includes("通常陷阱")));
   assert.equal(answer.debug.retrievalCounts.rawRelatedEvidence > 0, true);
   assert.ok(answer.usedEvidence.some((item) => item.id === "rule-activated-trap-location"));
+  assert.ok(answer.debug.selectedEvidenceDiagnostics.some(
+    (item) => item.id === "rule-activated-trap-location",
+  ));
+  assert.deepEqual(answer.debug.ruleQueryPlanDiagnostics, [{
+    subclaim: "确认处理中的陷阱是否仍可作为场上的卡返回",
+    checkpoint: "resolution_snapshot",
+    confidence: "high",
+    source: "rule_search_query",
+  }]);
 });
 
 function thunderImpermanenceCards() {
@@ -1836,104 +1939,6 @@ test("focused preparation fallback still leaves the final verdict to the final r
   assert.ok(answer.debug.rulebookGroundingWarnings.includes("pure_llm_pipeline"));
   assert.ok(!answer.riskFlags.includes("operation_legality_blocker_applied"));
   assert.ok(!answer.riskFlags.includes("model_answer_overridden_by_operation_legality"));
-});
-
-test("rulebook_grounding_rejects_unknown_ids_and_non_verbatim_quotes", async () => {
-  const passage = {
-    id: "ocg-rule:test#p4-6",
-    type: "rulebook",
-    title: "测试规则 · 段落 4-6",
-    text: "正在处理的卡不能返回手卡。",
-    sourceUrl: "https://example.test/rule",
-  };
-  const result = await callRulebookGroundingModel({
-    userQuery: "这张卡能返回手卡吗？",
-    ruleEvidence: [passage],
-    modelInvoker: async () => JSON.stringify({
-      operationChecks: [{
-        operationId: "operation-1",
-        action: "返回手卡",
-        status: "illegal",
-        conclusion: "不能返回。",
-        citations: [
-          { id: "invented-rule-id", quote: "正在处理的卡不能返回手卡。" },
-          { id: passage.id, quote: "模型自行改写、原文不存在的规则。" },
-        ],
-      }],
-    }),
-  });
-  assert.equal(result.operationLegality.hasBlockingCheck, false);
-  assert.equal(result.operationLegality.checks[0].status, "unknown");
-  assert.ok(result.warnings.some((item) => item.includes("unknown_evidence")));
-  assert.ok(result.warnings.some((item) => item.includes("quote_mismatch")));
-});
-
-test("rulebook_grounding_accepts_verbatim_passage_citation", async () => {
-  const passage = {
-    id: "ocg-rule:test#p4-6",
-    type: "rulebook",
-    title: "测试规则 · 段落 4-6",
-    text: "正在处理的卡不能返回手卡。",
-    sourceUrl: "https://example.test/rule",
-  };
-  const result = await callRulebookGroundingModel({
-    userQuery: "这张卡能返回手卡吗？",
-    ruleEvidence: [passage],
-    modelInvoker: async () => JSON.stringify({
-      operationChecks: [{
-        operationId: "operation-1",
-        action: "返回手卡",
-        status: "illegal",
-        conclusion: "不能返回。",
-        citations: [{ id: passage.id, quote: "正在处理的卡不能返回手卡。" }],
-      }],
-    }),
-  });
-  assert.equal(result.operationLegality.hasBlockingCheck, true);
-  assert.equal(result.operationLegality.matchedRuleEvidence[0].id, passage.id);
-});
-
-test("qa_evidence_can_ground_operation_checks_without_rulebook", async () => {
-  const faq = {
-    id: "card-faq-10820-1",
-    type: "faq",
-    recordType: "card-faq",
-    title: "超量叠光延迟 FAQ 1",
-    text: "『那只怪兽的X素材全部取除』不是对怪兽适用的效果。即使是不受魔法效果影响的超量怪兽，其X素材也会全部取除。",
-    sourceUrl: "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=4&cid=10820&request_locale=ja",
-  };
-  let capturedPrompt = "";
-  const result = await callRulebookGroundingModel({
-    userQuery: "不受其他卡效果影响的怪兽能否成为超量叠光延迟的对象？",
-    ruleEvidence: [],
-    qaEvidence: [faq],
-    modelInvoker: async ({ prompt }) => {
-      capturedPrompt = prompt;
-      return JSON.stringify({
-        operationChecks: [{
-          operationId: "remove-xyz-materials",
-          action: "超量叠光延迟移除目标怪兽的全部X素材",
-          status: "legal",
-          conclusion: "可以正常移除X素材；该处理不属于对怪兽适用的效果。",
-          citations: [{
-            id: faq.id,
-            quote: "不是对怪兽适用的效果",
-            application: "怪兽的效果抗性不阻止移除其X素材。",
-          }],
-        }],
-        overallConclusion: "可以发动并正常移除素材，再按失去抗性后的状态继续处理。",
-      });
-    },
-  });
-
-  assert.match(capturedPrompt, /evidenceCandidates/u);
-  assert.match(capturedPrompt, /官方 Q&A 或卡片 FAQ/u);
-  assert.match(capturedPrompt, /不受其他卡的效果影响.*不等于.*不能成为效果对象/u);
-  assert.match(capturedPrompt, /卡的发动.*已在场卡片的效果发动/u);
-  assert.equal(result.operationLegality.hasGroundedChecks, true);
-  assert.equal(result.operationLegality.hasBlockingCheck, false);
-  assert.equal(result.operationLegality.matchedRuleEvidence[0].id, faq.id);
-  assert.equal(result.operationLegality.evidence[0].type, "operation_check");
 });
 
 test("empty final-model output degrades safely instead of using a prepared answer", async () => {
@@ -4032,233 +4037,6 @@ test("cancellation during DeepSeek JSON budget preflight refunds before provider
   assert.equal(increments.filter((command) => Number(command[4]) < 0).length, 2);
 });
 
-test("cancellation during rulebook budget preflight refunds before parallel grounding calls", async () => {
-  const now = new Date("2033-04-16T06:07:08.000Z");
-  const redis = createRedisFetch();
-  const controller = new AbortController();
-  const env = {
-    MODEL_PROVIDER: "deepseek",
-    RAG_RULEBOOK_MODEL_PROVIDER: "deepseek",
-    RAG_RULEBOOK_FOCUSED_REPAIR_ENABLED: "false",
-    DEEPSEEK_API_KEY: "test-deepseek-key",
-    API_DAILY_BUDGET_CNY: "10",
-    API_BUDGET_TIMEZONE: "UTC",
-    KV_REST_API_URL: "https://kv.example.test",
-    KV_REST_API_TOKEN: "kv-token",
-  };
-  const before = await getRagBudgetStatus({ env, fetchImpl: redis.fetchImpl, now });
-  let providerCalls = 0;
-  let positiveReservations = 0;
-
-  await assert.rejects(
-    callRulebookGroundingModel({
-      userQuery: "cancel-during-rulebook-preflight-20330416",
-      ruleEvidence: [{
-        id: "generic-rulebook-cancellation-evidence",
-        type: "rulebook",
-        title: "通用规则资料",
-        text: "处理效果前必须确认适用条件。",
-      }],
-      dataRevision: "revision-rulebook-cancel-during-preflight",
-      env,
-      now,
-      signal: controller.signal,
-      fetchImpl: async (url, options) => {
-        if (url === "https://kv.example.test") {
-          const command = JSON.parse(options.body || "[]");
-          if (command[0] === "EVAL" && command[2] === "1" && Number(command[4]) > 0) {
-            positiveReservations += 1;
-            if (positiveReservations === 2) controller.abort("cancelled_during_rulebook_preflight");
-          }
-          return redis.fetchImpl(url, options);
-        }
-        providerCalls += 1;
-        throw new Error("cancelled rulebook task must not reach provider");
-      },
-    }),
-    (error) => error?.name === "AbortError" && error?.code === "ABORT_ERR",
-  );
-
-  // The public caller rejects immediately; the shared singleflight owner then
-  // observes that its last waiter left and performs the bounded rollback.
-  await waitFor(() => redis.commands.filter(
-    (command) => command[0] === "EVAL" && command[2] === "1" && Number(command[4]) < 0,
-  ).length === 2);
-  const after = await getRagBudgetStatus({ env, fetchImpl: redis.fetchImpl, now });
-  const increments = redis.commands.filter((command) => command[0] === "EVAL" && command[2] === "1");
-  assert.equal(providerCalls, 0);
-  assert.deepEqual(after, before);
-  assert.equal(increments.filter((command) => Number(command[4]) > 0).length, 2);
-  assert.equal(increments.filter((command) => Number(command[4]) < 0).length, 2);
-});
-
-test("rulebook preparation cache hashes evidence content and revision while cache hits report zero current usage", async () => {
-  const env = {
-    MODEL_PROVIDER: "deepseek",
-    RAG_RULEBOOK_MODEL_PROVIDER: "deepseek",
-    RAG_RULEBOOK_FOCUSED_REPAIR_ENABLED: "false",
-    DEEPSEEK_API_KEY: "test-deepseek-key",
-    API_DAILY_BUDGET_CNY: "10",
-    API_BUDGET_TIMEZONE: "UTC",
-  };
-  const now = new Date("2033-04-07T06:07:08.000Z");
-  await resetRagBudget({ env, now });
-  let fetchCount = 0;
-  const passage = {
-    id: "rulebook-cache-content-20330407",
-    type: "rulebook",
-    title: "缓存内容测试",
-    text: "正在处理的卡不能返回手卡。",
-    sourceUrl: "https://example.test/rulebook-cache",
-  };
-  const fetchImpl = async () => {
-    fetchCount += 1;
-    return jsonResponse({
-      choices: [{
-        finish_reason: "stop",
-        message: { content: JSON.stringify({
-          operationChecks: [{
-            operationId: "return-active-card",
-            action: "返回手卡",
-            status: "illegal",
-            conclusion: "不能返回。",
-            citations: [{ id: passage.id, quote: "正在处理的卡不能返回手卡。" }],
-          }],
-        }) },
-      }],
-      usage: { input_tokens: 120, output_tokens: 30, total_tokens: 150 },
-    });
-  };
-  const invoke = (ruleEvidence, dataRevision) => callRulebookGroundingModel({
-    userQuery: "rulebook cache content scenario 20330407",
-    ruleEvidence,
-    dataRevision,
-    env,
-    now,
-    fetchImpl,
-  });
-
-  const first = await invoke([passage], "revision-a");
-  const budgetAfterFirst = await getRagBudgetStatus({ env, now });
-  const second = await invoke([passage], "revision-a");
-  const budgetAfterSecond = await getRagBudgetStatus({ env, now });
-  const changedText = await invoke([{ ...passage, text: `${passage.text} 同步修订。` }], "revision-a");
-  const changedRevision = await invoke([passage], "revision-b");
-
-  assert.equal(fetchCount, 3);
-  assert.equal(first.cacheHit, false);
-  assert.equal(first.tokenUsage.prompt_tokens, 120);
-  assert.equal(second.cacheHit, true);
-  assert.deepEqual(second.tokenUsage, {});
-  assert.equal(second.estimatedCostCny, 0);
-  assert.equal(second.budgetStatus.estimatedThisCallCny, 0);
-  assert.equal(budgetAfterSecond.spentTodayCny, budgetAfterFirst.spentTodayCny);
-  assert.equal(changedText.cacheHit, false);
-  assert.equal(changedRevision.cacheHit, false);
-  assert.notEqual(first.cacheMetadata.keySha256, changedText.cacheMetadata.keySha256);
-  assert.notEqual(first.cacheMetadata.keySha256, changedRevision.cacheMetadata.keySha256);
-});
-
-test("rulebook response parsing failure retains the cost of the completed remote call", async () => {
-  const now = new Date("2026-08-01T02:00:00.000Z");
-  const env = {
-    MODEL_PROVIDER: "deepseek",
-    RAG_RULEBOOK_MODEL_PROVIDER: "deepseek",
-    DEEPSEEK_API_KEY: "test-deepseek-key",
-    API_DAILY_BUDGET_CNY: "10",
-    API_BUDGET_TIMEZONE: "UTC",
-    DEEPSEEK_INPUT_CNY_PER_MTOK: "1",
-    DEEPSEEK_OUTPUT_CNY_PER_MTOK: "2",
-    RAG_RULEBOOK_FOCUSED_REPAIR_ENABLED: "false",
-  };
-  await resetRagBudget({ env, now });
-  const result = await callRulebookGroundingModel({
-    userQuery: "远端返回后解析失败的预算回归-20260801",
-    ruleEvidence: [{
-      id: "budget-rulebook-invalid-json-20260801",
-      title: "通用规则资料",
-      text: "效果发动后，按照连锁顺序处理。",
-    }],
-    env,
-    now,
-    fetchImpl: async () => jsonResponse({
-      choices: [{ finish_reason: "stop", message: { content: "not-json" } }],
-      usage: { prompt_tokens: 1_000, completion_tokens: 500 },
-    }),
-  });
-  const status = await getRagBudgetStatus({ env, now });
-
-  assert.ok(result.warnings.includes("evidence_grounding_invalid_json"));
-  assert.equal(result.estimatedCostCny, 0.002);
-  assert.equal(status.spentTodayCny, 0.002);
-});
-
-test("one fulfilled and one ambiguously failed rulebook call retains the parallel reservation", async () => {
-  const now = new Date("2033-04-17T06:07:08.000Z");
-  const env = {
-    MODEL_PROVIDER: "deepseek",
-    RAG_RULEBOOK_MODEL_PROVIDER: "deepseek",
-    DEEPSEEK_API_KEY: "test-deepseek-key",
-    API_DAILY_BUDGET_CNY: "10",
-    API_BUDGET_TIMEZONE: "UTC",
-    DEEPSEEK_INPUT_CNY_PER_MTOK: "1",
-    DEEPSEEK_OUTPUT_CNY_PER_MTOK: "2",
-    RAG_RULEBOOK_MODEL_MAX_OUTPUT_TOKENS: "100",
-    RAG_RULEBOOK_REPAIR_MAX_OUTPUT_TOKENS: "100",
-  };
-  await resetRagBudget({ env, now });
-  let providerCalls = 0;
-  const result = await callRulebookGroundingModel({
-    userQuery: "发动效果时作为代价送去墓地后，只要该卡在场就不受效果影响的状态是否仍适用？",
-    cardTexts: [{
-      id: "card-text-generic-cost-transition",
-      title: "通用效果文本",
-      type: "card_text",
-      text: "发动这个效果时，作为代价将1张卡送去墓地。只要该卡在场，另一只怪兽不受效果影响。",
-    }],
-    ruleEvidence: [{
-      id: "rulebook-generic-cost-transition",
-      title: "通用规则资料",
-      type: "rulebook",
-      text: "发动效果时先支付代价，再进行连锁确认。",
-    }],
-    dataRevision: "parallel-ambiguous-accounting-v1",
-    env,
-    now,
-    fetchImpl: async () => {
-      providerCalls += 1;
-      if (providerCalls === 2) throw new Error("socket reset after request write");
-      return jsonResponse({
-        choices: [{
-          finish_reason: "stop",
-          message: { content: JSON.stringify({
-            operationChecks: [{
-              operationId: "cost-state-transition",
-              action: "支付代价后确认状态",
-              status: "legal",
-              conclusion: "应按支付代价后的场面确认。",
-              citations: [{
-                id: "rulebook-generic-cost-transition",
-                quote: "发动效果时先支付代价",
-              }],
-            }],
-          }) },
-        }],
-        usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
-      });
-    },
-  });
-  const status = await getRagBudgetStatus({ env, now });
-
-  assert.equal(providerCalls, 2);
-  assert.ok(result.warnings.includes("budget_reservation_retained_after_ambiguous_remote_failure"));
-  assert.equal(result.estimatedCostCny > estimateDeepSeekCostCny({
-    prompt_tokens: 10,
-    completion_tokens: 5,
-  }, env), true);
-  assert.equal(status.spentTodayCny, result.estimatedCostCny);
-});
-
 test("forced dry-run skips injected model invokers and live invokers receive the caller signal", async () => {
   let dryRunCalls = 0;
   const dryRunResult = await callRagModel({
@@ -4288,7 +4066,6 @@ test("forced dry-run skips injected model invokers and live invokers receive the
 });
 
 test("auxiliary model dry-runs skip injected invokers and forward signals when enabled", async () => {
-  const ruleEvidence = [{ id: "aux-signal-rule", title: "规则资料", text: "效果按照连锁顺序处理。" }];
   let dryRunCalls = 0;
   const neverInvoke = async () => {
     dryRunCalls += 1;
@@ -4297,7 +4074,6 @@ test("auxiliary model dry-runs skip injected invokers and forward signals when e
   await Promise.all([
     callCardNameExtractionModel({ userQuery: "辅助卡名 dry-run", dryRun: true, modelInvoker: neverInvoke, env: { MODEL_PROVIDER: "mock" } }),
     callRuleQueryExtractionModel({ userQuery: "辅助规则 dry-run", dryRun: true, modelInvoker: neverInvoke, env: { MODEL_PROVIDER: "mock" } }),
-    callRulebookGroundingModel({ userQuery: "辅助规则书 dry-run", ruleEvidence, dryRun: true, modelInvoker: neverInvoke, env: { MODEL_PROVIDER: "mock" } }),
   ]);
   assert.equal(dryRunCalls, 0);
 
@@ -4307,12 +4083,11 @@ test("auxiliary model dry-runs skip injected invokers and forward signals when e
     receivedSignals.push(request.signal);
     if (request.task === "card_name_extraction") return JSON.stringify({ cardNames: [] });
     if (request.task === "rule_query_extraction") return JSON.stringify({ ruleQueries: [] });
-    return JSON.stringify({ operationChecks: [], constraintReviews: [] });
+    throw new Error(`unexpected auxiliary task: ${request.task}`);
   };
   await callCardNameExtractionModel({ userQuery: "辅助卡名 signal", signal: controller.signal, modelInvoker: captureSignal, env: { MODEL_PROVIDER: "mock" } });
   await callRuleQueryExtractionModel({ userQuery: "辅助规则 signal", signal: controller.signal, modelInvoker: captureSignal, env: { MODEL_PROVIDER: "mock" } });
-  await callRulebookGroundingModel({ userQuery: "辅助规则书 signal", ruleEvidence, signal: controller.signal, modelInvoker: captureSignal, env: { MODEL_PROVIDER: "mock", RAG_RULEBOOK_FOCUSED_REPAIR_ENABLED: "false" } });
-  assert.equal(receivedSignals.length, 3);
+  assert.equal(receivedSignals.length, 2);
   assert.ok(receivedSignals.every((value) => value === controller.signal));
 });
 
@@ -4452,51 +4227,6 @@ test("lightweight auxiliary timeout aborts both transport and a stalled JSON bod
 
   await runCase({ label: "transport", bodyStalls: false });
   await runCase({ label: "body", bodyStalls: true });
-});
-
-test("parallel rulebook timeouts abort each provider request independently", async () => {
-  const signals = [];
-  const result = await callRulebookGroundingModel({
-    userQuery: "发动时支付代价后，对象离开墓地且场上的持续效果不再适用，后续特殊召唤处理应如何继续？",
-    cardTexts: [{
-      id: "generic-card-text-rulebook-timeout",
-      type: "card_text",
-      title: "匿名效果卡",
-      text: "舍弃1张卡可以发动。以墓地1只怪兽为对象，将其特殊召唤。只要此卡存在场上，该怪兽不受其他效果影响。",
-    }],
-    ruleEvidence: [{
-      id: "generic-state-transition-timeout",
-      type: "rulebook",
-      title: "通用规则",
-      text: "发动时先支付代价并选择对象；处理时再确认对象是否仍在该区域。",
-    }],
-    dataRevision: "parallel-rulebook-timeout-v1",
-    env: {
-      MODEL_PROVIDER: "deepseek",
-      RAG_RULEBOOK_MODEL_PROVIDER: "deepseek",
-      DEEPSEEK_API_KEY: "test-deepseek-key",
-      RAG_RULEBOOK_MODEL_TIMEOUT_MS: "5",
-      RAG_RULEBOOK_REPAIR_TIMEOUT_MS: "8",
-      API_DAILY_BUDGET_CNY: "10",
-    },
-    fetchImpl: async (_url, options) => {
-      signals.push(options.signal);
-      return new Promise(() => {});
-    },
-  });
-
-  assert.equal(signals.length, 2);
-  assert.notEqual(signals[0], signals[1]);
-  assert.ok(signals.every((signal) => signal.aborted));
-  assert.deepEqual(
-    new Set(signals.map((signal) => signal.reason?.message)),
-    new Set([
-      "rulebook_grounding_model_timeout",
-      "rulebook_grounding_focused_repair_timeout",
-    ]),
-  );
-  assert.ok(result.warnings.some((warning) => warning.includes("rulebook_grounding_primary_failed")));
-  assert.ok(result.warnings.some((warning) => warning.includes("rulebook_grounding_focused_repair_failed")));
 });
 
 test("public DeepSeek budget also treats cached input as uncached", () => {
@@ -5642,6 +5372,8 @@ test("rag_prompt_truncates_context", () => {
   assert.match(bundle.prompt, /allowedEvidenceIds/u);
   assert.match(bundle.prompt, /card-text-long/u);
   assert.match(bundle.prompt, /usedEvidence 的 id 只能来自 allowedEvidenceIds/u);
+  assert.deepEqual(bundle.allowedEvidenceIds, ["card-text-long"]);
+  assert.deepEqual(bundle.evidenceSelectionDiagnostics.map((item) => item.id), ["card-text-long"]);
 });
 
 test("public prompt retains card text, excludes semantic state output, and has no recovery prompt", () => {
@@ -5691,6 +5423,63 @@ test("public prompt retains card text, excludes semantic state output, and has n
   assert.doesNotMatch(bundle.recoveryPrompt, /SEMANTIC_STATE_RECOVERY_MARKER/u);
   assert.doesNotMatch(bundle.recoveryPrompt, /semanticStateTransition/u);
   assert.match(bundle.prompt, /usedEvidence.*allowedEvidenceIds/u);
+  assert.match(bundle.prompt, /效果来源与效果类型/u);
+  assert.match(bundle.prompt, /实际受影响实体/u);
+  assert.match(bundle.prompt, /无论结果看似有利还是不利都使用同一检查/u);
+  assert.match(bundle.prompt, /发动快照/u);
+  assert.match(bundle.prompt, /处理快照/u);
+  assert.match(bundle.prompt, /处理后快照/u);
+  assert.match(bundle.prompt, /由哪个效果实际执行、是否完成/u);
+  assert.match(bundle.prompt, /消除互相矛盾的前提、步骤和最终结论/u);
+});
+
+test("prompt bundle exposes evidence selection metadata without duplicating evidence text", () => {
+  const bundle = buildRagRulingPromptBundle({
+    userQuery: "匿名问题只用于构造提示。",
+    cardResolution: { resolvedCards: [] },
+    evidence: {
+      cardTexts: [{
+        id: "card-text-diagnostic",
+        type: "card_text",
+        title: "DIAGNOSTIC_TITLE_MUST_NOT_BE_COPIED",
+        text: "DIAGNOSTIC_BODY_MUST_NOT_BE_COPIED",
+        sourceAuthority: "official_database",
+        retrievalContext: { scope: "resolved_card", relatedOnly: false },
+      }],
+      officialQaDirectCandidates: [],
+      officialQaRelated: [],
+      faqRelated: [],
+      rawRelatedEvidence: [],
+      ruleSearchQueries: [{
+        subclaim: "确认处理时实际受影响的实体",
+        checkpoint: "affected_entity",
+        query: "RAW_QUERY_MUST_NOT_BE_COPIED",
+        confidence: "high",
+        source: "model_rule_query_extractor",
+      }],
+    },
+  });
+
+  assert.deepEqual(bundle.allowedEvidenceIds, ["card-text-diagnostic"]);
+  assert.deepEqual(bundle.evidenceSelectionDiagnostics, [{
+    id: "card-text-diagnostic",
+    type: "card_text",
+    bucket: "cardTexts",
+    sourceAuthority: "official_database",
+    isDirect: false,
+    matchLevel: "",
+    retrievalScope: "resolved_card",
+    relatedOnly: false,
+  }]);
+  assert.doesNotMatch(JSON.stringify(bundle.evidenceSelectionDiagnostics), /DIAGNOSTIC_(?:TITLE|BODY)_MUST_NOT_BE_COPIED/u);
+  assert.doesNotMatch(JSON.stringify(bundle.evidenceSelectionDiagnostics), /匿名问题只用于构造提示/u);
+  assert.deepEqual(bundle.ruleQueryPlanDiagnostics, [{
+    subclaim: "确认处理时实际受影响的实体",
+    checkpoint: "affected_entity",
+    confidence: "high",
+    source: "model_rule_query_extractor",
+  }]);
+  assert.doesNotMatch(JSON.stringify(bundle.ruleQueryPlanDiagnostics), /RAW_QUERY_MUST_NOT_BE_COPIED/u);
 });
 
 test("compacted_prompt_keeps_each_critical_evidence_bucket", () => {
@@ -5870,6 +5659,11 @@ test("focused official QA prompt preserves the full-source tail without invalid 
   assert.equal(bundle.promptTruncated, true);
   assert.match(bundle.prompt, /TAIL_MARKER/u);
   assert.doesNotThrow(() => JSON.parse(bundle.prompt.split("\n").at(-1)));
+  assert.deepEqual(bundle.allowedEvidenceIds, ["ygoresources-qa-long-tail"]);
+  assert.deepEqual(
+    bundle.evidenceSelectionDiagnostics.map((item) => item.id),
+    ["ygoresources-qa-long-tail"],
+  );
 });
 
 test("focused official QA prompt keeps the ruling but omits a dense placeholder catalogue", () => {
