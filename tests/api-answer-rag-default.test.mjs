@@ -1,10 +1,46 @@
 import assert from "node:assert/strict";
+import { EventEmitter } from "node:events";
 import test from "node:test";
 import handler from "../api/answer.js";
 import {
+  createPublicAnswerAbortContext,
   PUBLIC_ANSWER_QUESTION_LIMIT_CHARACTERS,
   PUBLIC_ANSWER_REQUEST_BODY_LIMIT_BYTES,
 } from "../backend/publicAnswerService.mjs";
+
+test("Node request body completion cannot abort an in-progress answer", () => {
+  const request = new EventEmitter();
+  const bodyStreamController = new AbortController();
+  bodyStreamController.abort(new Error("normal request body stream completed"));
+  request.signal = bodyStreamController.signal;
+  const response = new EventEmitter();
+  response.writableEnded = false;
+  response.finished = false;
+
+  const context = createPublicAnswerAbortContext(request, response);
+  assert.equal(context.signal.aborted, false);
+
+  request.emit("aborted");
+  assert.equal(context.signal.aborted, true);
+  context.cleanup();
+});
+
+test("Fetch request cancellation and premature Node response close still abort work", () => {
+  const fetchController = new AbortController();
+  const fetchContext = createPublicAnswerAbortContext({ signal: fetchController.signal }, {});
+  assert.equal(fetchContext.signal, fetchController.signal);
+  fetchController.abort("fetch caller disconnected");
+  assert.equal(fetchContext.signal.aborted, true);
+
+  const request = new EventEmitter();
+  const response = new EventEmitter();
+  response.writableEnded = false;
+  response.finished = false;
+  const nodeContext = createPublicAnswerAbortContext(request, response);
+  response.emit("close");
+  assert.equal(nodeContext.signal.aborted, true);
+  nodeContext.cleanup();
+});
 
 test("api_answer_defaults_to_rag_baseline", async () => {
   const previousProvider = process.env.MODEL_PROVIDER;
