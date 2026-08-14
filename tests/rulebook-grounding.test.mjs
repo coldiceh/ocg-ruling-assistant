@@ -301,32 +301,66 @@ test("rulebook_passage_keeps_a_contiguous_simultaneous_trigger_order_list_whole"
   assert.match(relevant.text, /这组连锁最后发动效果的玩家把优先权转移给对方/u);
 });
 
-test("inline_card_references_link_the_stardust_official_qa", async () => {
-  const data = await loadRagData();
-  const resolvedCards = ["4678", "16386", "7734"]
-    .map((id) => data.cards.find((card) => card.id === id))
-    .filter(Boolean);
+test("inline question card ids make an injected official QA retrievable", async () => {
+  const resolvedCards = [{
+    id: "91001",
+    name: "合成展开魔法",
+    effectText: "进行一个合成处理。",
+  }, {
+    id: "91002",
+    name: "合成无效者",
+    effectText: "使卡的发动无效。",
+  }, {
+    id: "91003",
+    name: "合成保护龙",
+    effectText: "要破坏场上的卡的效果发动时可以发动。",
+  }];
+  const targetQa = {
+    id: "qa-inline-card-reference",
+    recordType: "qa",
+    title: "合成卡的发动被无效时的处理",
+    question: "卡的发动被无效时，保护效果可以发动吗？",
+    rawDetailedQuestion: "「<<91001>>」发动后，「<<91002>>」使其发动无效时，能否连锁「<<91003>>」？",
+    answer: "INLINE_REFERENCE_MARKER：根据该合成场景的条件判断。",
+    // The referenced responder intentionally exists only in the inline markers.
+    // Normalization must supplement this incomplete source metadata.
+    cardIds: ["91001", "91002"],
+  };
+  const decoyQa = {
+    id: "qa-inline-card-reference-decoy",
+    recordType: "qa",
+    title: targetQa.title,
+    question: targetQa.question,
+    rawDetailedQuestion: "「<<91001>>」发动后，「<<91002>>」使其发动无效时，能否连锁「<<91999>>」？",
+    answer: "DECOY_INLINE_REFERENCE_MARKER",
+    cardIds: ["91001", "91002", "91999"],
+  };
   const evidence = await retrieveRagEvidence({
-    userQuery: "我方C1发动「神鹰羽毛扫」，对手C2连锁「鲜花之女男爵」的无效并破坏效果，我方是否可以C3发动「星尘龙」？",
+    userQuery: "我方发动「合成展开魔法」，对手连锁「合成无效者」使其发动无效时，我方能否连锁「合成保护龙」？",
     cardResolution: {
       resolvedCards,
       unresolvedMentions: [],
       ambiguousMentions: [],
       userProvidedCardTexts: [],
     },
-    cards: data.cards,
-    records: data.records,
-    qaRecords: data.qaRecords,
+    cards: resolvedCards,
+    records: [],
+    qaRecords: [targetQa, decoyQa],
     enableLiveOfficialQa: false,
     env: { RAG_LIVE_OFFICIAL_QA: "false" },
   });
 
-  const qa = evidence.officialQaRelated.find((item) => item.id === "ygoresources-qa-11290");
-  assert.ok(qa, "expected the official Stardust activation-negation analogy to be retrieved");
-  assert.ok(qa.cardIds.includes("7734"), "expected <<7734>> to be indexed as a referenced card");
-  assert.match(
-    qa.text,
-    /(?:not treated as being on the field|フィールドで破壊された扱いにはなりません|不视为在场上破坏)/iu,
+  const candidates = [
+    ...(evidence.officialQaDirectCandidates || []),
+    ...(evidence.officialQaRelated || []),
+  ];
+  const qa = candidates.find((item) => item.id === targetQa.id);
+  assert.ok(qa, "expected the QA whose inline identity set covers every resolved card");
+  assert.ok(qa.cardIds.includes("91003"), "expected <<91003>> to supplement incomplete source metadata");
+  assert.match(qa.fullText || qa.text || "", /INLINE_REFERENCE_MARKER/u);
+  assert.ok(
+    (evidence.officialQaDirectCandidates || []).every((item) => item.id !== decoyQa.id),
+    "an identity-mismatched lexical decoy may remain related but must not become a direct hit",
   );
 });
 

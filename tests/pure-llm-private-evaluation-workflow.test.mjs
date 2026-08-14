@@ -33,6 +33,16 @@ test("private pure LLM evaluation is explicitly triggered, serial and generation
   assert.doesNotMatch(workflow, /RELAY_LOCAL_STREAM_TIMEOUT_MAX_MS/u);
   assert.match(workflow, /secrets\.RELAY_API_KEY/u);
   assert.match(workflow, /secrets\.PURE_LLM_EVALUATION_DATASET_BASE64/u);
+  const archivePreflightStep = workflow.match(
+    /- name: Preflight private archive encryption[\s\S]*?(?=\n\s+- name:)/u,
+  )?.[0] || "";
+  assert.match(archivePreflightStep, /if: env\.RETRIEVAL_ONLY_PILOT != 'true'/u);
+  assert.match(archivePreflightStep, /PRIVATE_ARCHIVE_KEY: \$\{\{ secrets\.PURE_LLM_EVALUATION_ARCHIVE_KEY \}\}/u);
+  assert.match(archivePreflightStep, /\$\{#PRIVATE_ARCHIVE_KEY\}.*-lt 32/u);
+  assert.ok(
+    workflow.indexOf("Preflight private archive encryption")
+      < workflow.indexOf("Start the paid preview branch backend"),
+  );
   assert.match(workflow, /--generate-only/u);
   assert.match(workflow, /--limit "\$EVALUATION_LIMIT"/u);
   assert.match(workflow, /if \[ "\$EVALUATION_LIMIT" = "32" \]; then/u);
@@ -134,50 +144,75 @@ test("public artifact has only aggregate completion, latency and cost metadata",
   assert.match(publicUploadStep, /if: always\(\) && steps\.public_report_privacy\.outcome == 'success'/u);
 });
 
-test("private questions, references and candidates are encrypted before upload", async () => {
+test("private questions, references and candidates are retained only in a verified encrypted owner-review archive", async () => {
   const workflow = await readFile(workflowUrl, "utf8");
 
-  assert.match(workflow, /umask 077/u);
   assert.match(workflow, /base64 --decode > "\$RUNNER_TEMP\/private-dataset\.txt"/u);
   assert.match(workflow, /parseDatasetText/u);
   assert.match(workflow, /reportText\.includes\(item\.question\)/u);
   assert.match(workflow, /reportText\.includes\(item\.referenceAnswer\)/u);
-  assert.match(workflow, /openssl enc -aes-256-cbc -salt -pbkdf2 -iter 200000/u);
-  assert.match(workflow, /- name: Encrypt the private diagnostic checkpoint[\s\S]*id: private_archive/u);
-  assert.match(workflow, /verification_archive="\$RUNNER_TEMP\/pure-llm-private-checkpoint\.verify\.tar\.gz"/u);
-  assert.match(workflow, /trap 'rm -f "\$verification_archive"' EXIT/u);
-  assert.match(workflow, /openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000[\s\S]*-in artifacts\/pure-llm-private-checkpoint\.tar\.gz\.enc[\s\S]*-out "\$verification_archive"/u);
-  assert.match(workflow, /tar -tzf "\$verification_archive" > \/dev\/null/u);
-  assert.match(workflow, /rm -f "\$verification_archive"[\s\S]*trap - EXIT/u);
   assert.match(workflow, /PRIVATE_ARCHIVE_KEY: \$\{\{ secrets\.PURE_LLM_EVALUATION_ARCHIVE_KEY \}\}/u);
-  assert.match(workflow, /\$\{#PRIVATE_ARCHIVE_KEY\}.*-lt 32/u);
-  assert.doesNotMatch(workflow, /archive_key="\$\(sha256sum/u);
-  assert.match(workflow, /pure-llm-private-checkpoint\.tar\.gz\.enc/u);
-  assert.match(workflow, /tar_args\+?=\(private-evaluation-backend\.log\)/u);
+  const encryptionStep = workflow.match(
+    /- name: Encrypt the private manual-review checkpoint[\s\S]*?(?=\n\s+- name:)/u,
+  )?.[0] || "";
+  assert.match(encryptionStep, /\$\{#PRIVATE_ARCHIVE_KEY\}.*-lt 32/u);
+  assert.match(workflow, /test -s "\$checkpoint\/manual-review\.json"/u);
+  assert.match(workflow, /openssl enc -aes-256-cbc -salt -pbkdf2 -iter 200000 -md sha256/u);
+  assert.match(workflow, /openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -md sha256/u);
+  assert.match(workflow, /tar -tzf "\$verification_archive" > \/dev\/null/u);
+  assert.match(workflow, /cleanup_plaintext_archives[\s\S]*trap - EXIT/u);
   const uploadPaths = [...workflow.matchAll(/^\s+path:\s+([^\r\n]+)$/gmu)]
     .map((match) => match[1].trim());
-  assert.ok(uploadPaths.includes("artifacts/pure-llm-private-public-report.json"));
-  assert.ok(uploadPaths.includes("artifacts/pure-llm-private-checkpoint.tar.gz.enc"));
+  assert.deepEqual(uploadPaths, [
+    "artifacts/pure-llm-private-public-report.json",
+    "artifacts/pure-llm-private-checkpoint.tar.gz.enc",
+  ]);
   assert.equal(uploadPaths.some((path) => (
-    path.includes("pure-llm-private-checkpoint") && !path.endsWith(".enc")
+    /(?:private-dataset|private-checkpoint|backend\.log)/u.test(path)
+      && !path.endsWith(".enc")
   )), false);
+  const encryptedUploadStep = workflow.match(
+    /- name: Upload the encrypted private manual-review archive[\s\S]*?(?=\n\s+- name:)/u,
+  )?.[0] || "";
+  assert.match(encryptedUploadStep, /steps\.private_archive\.outcome == 'success'/u);
+  assert.match(encryptedUploadStep, /steps\.private_archive\.outputs\.created == 'true'/u);
+  assert.match(encryptedUploadStep, /if-no-files-found: error/u);
+  assert.match(encryptedUploadStep, /retention-days: 7/u);
+  assert.match(encryptedUploadStep, /compression-level: 0/u);
   assert.match(workflow, /rm -rf[\s\S]*private-dataset\.txt[\s\S]*pure-llm-private-checkpoint/u);
   assert.doesNotMatch(workflow, /cat "?\$RUNNER_TEMP\/private-dataset/u);
 
-  const encryptedUploadStep = workflow.match(
-    /- name: Upload the encrypted diagnostic checkpoint[\s\S]*?(?=\n\s+- name:)/u,
-  )?.[0] || "";
-  assert.match(encryptedUploadStep, /if: always\(\) && steps\.private_archive\.outcome == 'success'/u);
-  assert.match(encryptedUploadStep, /path: artifacts\/pure-llm-private-checkpoint\.tar\.gz\.enc/u);
-  assert.match(encryptedUploadStep, /if-no-files-found: error/u);
+  for (const stepName of [
+    "Materialize the private dataset without logging it",
+    "Start the retrieval-only preview backend without a paid key",
+    "Start the paid preview branch backend",
+    "Generate private candidates serially without a model judge",
+    "Encrypt the private manual-review checkpoint",
+  ]) {
+    const step = workflow.match(
+      new RegExp(`- name: ${stepName}[\\s\\S]*?(?=\\n\\s+- name:)`, "u"),
+    )?.[0] || "";
+    assert.match(step, /umask 077/u, `${stepName} must set its own private umask`);
+  }
 
   const cleanupStep = workflow.match(
     /- name: Stop the preview branch backend and scrub plaintext[\s\S]*?(?=\n\s+- name:)/u,
   )?.[0] || "";
-  assert.match(cleanupStep, /if \[ ! -s artifacts\/pure-llm-private-checkpoint\.tar\.gz\.enc \]; then/u);
-  assert.match(cleanupStep, /archive_missing=1/u);
+  assert.match(cleanupStep, /if: always\(\)/u);
+  assert.match(cleanupStep, /set \+e/u);
+  assert.match(cleanupStep, /cleanup_status=0/u);
   assert.match(cleanupStep, /kill "\$backend_pid" 2>\/dev\/null \|\| true/u);
   assert.match(cleanupStep, /for _ in \$\(seq 1 50\); do[\s\S]*kill -0 "\$backend_pid"[\s\S]*sleep 0\.1/u);
   assert.match(cleanupStep, /if kill -0 "\$backend_pid"[\s\S]*kill -KILL "\$backend_pid"/u);
-  assert.match(cleanupStep, /kill -KILL[\s\S]*rm -rf[\s\S]*exit "\$archive_missing"/u);
+  assert.match(cleanupStep, /kill -KILL[\s\S]*for _ in \$\(seq 1 20\); do[\s\S]*kill -0 "\$backend_pid"/u);
+  assert.match(cleanupStep, /still running after SIGKILL[\s\S]*cleanup_status=1/u);
+  assert.match(cleanupStep, /rm -f -- artifacts\/pure-llm-private-checkpoint\.tar\.gz\.enc/u);
+  assert.match(cleanupStep, /for private_path in[\s\S]*private-dataset\.txt[\s\S]*pure-llm-private-checkpoint[\s\S]*private-evaluation-backend\.log/u);
+  assert.match(cleanupStep, /artifacts\/pure-llm-private-checkpoint\.tar\.gz\.enc/u);
+  assert.match(cleanupStep, /if \[ -e "\$private_path" \]; then[\s\S]*cleanup_status=1/u);
+  assert.match(cleanupStep, /exit "\$cleanup_status"/u);
+  assert.ok(
+    workflow.indexOf("Upload the encrypted private manual-review archive")
+      < workflow.indexOf("Stop the preview branch backend and scrub plaintext"),
+  );
 });

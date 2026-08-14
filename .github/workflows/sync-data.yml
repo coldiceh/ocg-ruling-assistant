@@ -23,6 +23,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
         with:
+          # workflow_dispatch lets the caller choose a ref, but synchronization
+          # must always build on the repository's reviewed main history.
+          ref: refs/heads/main
           fetch-depth: 0
 
       - name: Setup pnpm
@@ -113,6 +116,13 @@ jobs:
       - name: Commit snapshot changes
         id: commit
         run: |
+          git fetch --no-tags origin refs/heads/main
+          remote_main="$(git rev-parse FETCH_HEAD)"
+          checked_out_main="$(git rev-parse HEAD)"
+          if [ "$checked_out_main" != "$remote_main" ]; then
+            echo "main advanced while synchronization was running; refusing a stale or non-main push" >&2
+            exit 1
+          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add data/*.json data/rag-runtime-v1/**
@@ -121,7 +131,11 @@ jobs:
             echo "data_changed=false" >> "$GITHUB_OUTPUT"
           else
             git commit -m "chore(data): sync ruling snapshot"
-            git push origin HEAD:main
+            if ! git merge-base --is-ancestor "$remote_main" HEAD; then
+              echo "Generated snapshot escaped the fetched main history" >&2
+              exit 1
+            fi
+            git push origin HEAD:refs/heads/main
             # Set the output only after the push succeeds. A failed push must not
             # publish a snapshot that is absent from main.
             echo "data_changed=true" >> "$GITHUB_OUTPUT"

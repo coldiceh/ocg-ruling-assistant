@@ -22,7 +22,16 @@ test("successful data pushes explicitly call the Pages workflow", async () => {
   assert.match(workflow, /^permissions: \{\}\s*$/mu);
   assert.match(workflow, /^      contents: write\s*$/mu);
   assert.match(workflow, /^      data_changed: \$\{\{ steps\.commit\.outputs\.data_changed \}\}\s*$/mu);
-  assert.match(workflow, /git push origin HEAD:main[\s\S]*echo "data_changed=true" >> "\$GITHUB_OUTPUT"/u);
+  const checkoutStep = workflow.match(
+    /- name: Checkout[\s\S]*?(?=\n\s+- name:)/u,
+  )?.[0] || "";
+  assert.match(checkoutStep, /ref: refs\/heads\/main/u);
+  assert.match(workflow, /git fetch --no-tags origin refs\/heads\/main/u);
+  assert.match(workflow, /checked_out_main="\$\(git rev-parse HEAD\)"/u);
+  assert.match(workflow, /if \[ "\$checked_out_main" != "\$remote_main" \]; then/u);
+  assert.match(workflow, /git merge-base --is-ancestor "\$remote_main" HEAD/u);
+  assert.match(workflow, /git push origin HEAD:refs\/heads\/main[\s\S]*echo "data_changed=true" >> "\$GITHUB_OUTPUT"/u);
+  assert.doesNotMatch(workflow, /git push origin HEAD:main(?:\s|$)/u);
   assert.match(workflow, /echo "data_changed=false" >> "\$GITHUB_OUTPUT"/u);
   assert.match(workflow, /^    if: needs\.sync\.outputs\.data_changed == 'true'\s*$/mu);
   assert.match(workflow, /^    uses: \.\/\.github\/workflows\/deploy-pages\.yml\s*$/mu);

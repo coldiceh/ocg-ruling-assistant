@@ -104,6 +104,18 @@ jobs:
         with:
           node-version: "24"
 
+      - name: Preflight private archive encryption
+        if: env.RETRIEVAL_ONLY_PILOT != 'true'
+        shell: bash
+        env:
+          PRIVATE_ARCHIVE_KEY: ${{ secrets.PURE_LLM_EVALUATION_ARCHIVE_KEY }}
+        run: |
+          set -euo pipefail
+          if [ "${#PRIVATE_ARCHIVE_KEY}" -lt 32 ]; then
+            echo "The private evaluation archive key is missing or too short" >&2
+            exit 1
+          fi
+
       - name: Materialize the private dataset without logging it
         shell: bash
         env:
@@ -127,6 +139,7 @@ jobs:
           PRIVATE_EVALUATION_DIAGNOSTICS: "true"
         run: |
           set -euo pipefail
+          umask 077
           if [ -n "${RELAY_API_KEY:-}" ] || [ -n "${DEEPSEEK_API_KEY:-}" ]; then
             echo "Retrieval-only pilot unexpectedly received a paid provider key" >&2
             exit 1
@@ -155,6 +168,7 @@ jobs:
           PRIVATE_EVALUATION_RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}-${{ github.sha }}
         run: |
           set -euo pipefail
+          umask 077
           if [ -z "$RELAY_API_KEY" ] || [ -z "$DEEPSEEK_API_KEY" ]; then
             echo "The Relay and DeepSeek keys for paid private evaluation must both be configured" >&2
             exit 1
@@ -175,6 +189,7 @@ jobs:
         shell: bash
         run: |
           set +e
+          umask 077
           mkdir -p artifacts
           case_count_args=()
           if [ "$EVALUATION_LIMIT" = "32" ]; then
@@ -341,44 +356,56 @@ jobs:
           }
           NODE
 
-      - name: Encrypt the private diagnostic checkpoint
+      - name: Encrypt the private manual-review checkpoint
         id: private_archive
-        if: always()
+        if: always() && env.RETRIEVAL_ONLY_PILOT != 'true'
         shell: bash
         env:
           PRIVATE_ARCHIVE_KEY: ${{ secrets.PURE_LLM_EVALUATION_ARCHIVE_KEY }}
         run: |
           set -euo pipefail
-          if [ ! -d "$RUNNER_TEMP/pure-llm-private-checkpoint" ]; then
+          umask 077
+          echo "created=false" >> "$GITHUB_OUTPUT"
+          checkpoint="$RUNNER_TEMP/pure-llm-private-checkpoint"
+          if [ ! -d "$checkpoint" ]; then
             exit 0
           fi
           if [ "${#PRIVATE_ARCHIVE_KEY}" -lt 32 ]; then
             echo "The private evaluation archive key is missing or too short" >&2
             exit 1
           fi
+          if [ "${{ steps.evaluation.outputs.exit_code }}" = "0" ]; then
+            test -s "$checkpoint/manual-review.json"
+          fi
+          mkdir -p artifacts
+          plaintext_archive="$RUNNER_TEMP/pure-llm-private-checkpoint.tar.gz"
+          verification_archive="$RUNNER_TEMP/pure-llm-private-checkpoint.verify.tar.gz"
+          encrypted_archive="artifacts/pure-llm-private-checkpoint.tar.gz.enc"
+          cleanup_plaintext_archives() {
+            rm -f -- "$plaintext_archive" "$verification_archive"
+          }
+          trap cleanup_plaintext_archives EXIT
           tar_args=(pure-llm-private-checkpoint)
-          # The backend log may contain provider diagnostics and possibly user
-          # material. Include it only inside the encrypted archive so a failed
-          # pilot remains diagnosable without publishing plaintext.
+          # Provider diagnostics may contain user material. They are retained
+          # only inside the encrypted owner-review archive.
           if [ -s "$RUNNER_TEMP/private-evaluation-backend.log" ]; then
             tar_args+=(private-evaluation-backend.log)
           fi
-          tar -C "$RUNNER_TEMP" -czf "$RUNNER_TEMP/pure-llm-private-checkpoint.tar.gz" \
-            "${tar_args[@]}"
-          openssl enc -aes-256-cbc -salt -pbkdf2 -iter 200000 \
-            -in "$RUNNER_TEMP/pure-llm-private-checkpoint.tar.gz" \
-            -out artifacts/pure-llm-private-checkpoint.tar.gz.enc \
+          tar -C "$RUNNER_TEMP" -czf "$plaintext_archive" "${tar_args[@]}"
+          openssl enc -aes-256-cbc -salt -pbkdf2 -iter 200000 -md sha256 \
+            -in "$plaintext_archive" \
+            -out "$encrypted_archive" \
             -pass env:PRIVATE_ARCHIVE_KEY
-          rm -f "$RUNNER_TEMP/pure-llm-private-checkpoint.tar.gz"
-          verification_archive="$RUNNER_TEMP/pure-llm-private-checkpoint.verify.tar.gz"
-          trap 'rm -f "$verification_archive"' EXIT
-          openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 \
-            -in artifacts/pure-llm-private-checkpoint.tar.gz.enc \
+          chmod 600 "$encrypted_archive"
+          openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -md sha256 \
+            -in "$encrypted_archive" \
             -out "$verification_archive" \
             -pass env:PRIVATE_ARCHIVE_KEY
           tar -tzf "$verification_archive" > /dev/null
-          rm -f "$verification_archive"
+          test -s "$encrypted_archive"
+          cleanup_plaintext_archives
           trap - EXIT
+          echo "created=true" >> "$GITHUB_OUTPUT"
 
       - name: Upload the anonymous aggregate report
         if: always() && steps.public_report_privacy.outcome == 'success'
@@ -389,43 +416,76 @@ jobs:
           if-no-files-found: warn
           retention-days: 1
 
-      - name: Upload the encrypted diagnostic checkpoint
-        if: always() && steps.private_archive.outcome == 'success'
+      - name: Upload the encrypted private manual-review archive
+        if: >-
+          always()
+          && steps.private_archive.outcome == 'success'
+          && steps.private_archive.outputs.created == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: pure-llm-private-encrypted-diagnostics
+          name: pure-llm-private-manual-review-encrypted
           path: artifacts/pure-llm-private-checkpoint.tar.gz.enc
           if-no-files-found: error
-          retention-days: 1
+          retention-days: 7
+          compression-level: 0
 
       - name: Stop the preview branch backend and scrub plaintext
         if: always()
         shell: bash
         run: |
-          archive_missing=0
-          if [ ! -s artifacts/pure-llm-private-checkpoint.tar.gz.enc ]; then
-            echo "Encrypted private diagnostic archive is missing or empty" >&2
-            archive_missing=1
-          fi
+          set +e
+          umask 077
+          cleanup_status=0
           if [ -s "$RUNNER_TEMP/private-evaluation-backend.pid" ]; then
             backend_pid="$(cat "$RUNNER_TEMP/private-evaluation-backend.pid")"
-            kill "$backend_pid" 2>/dev/null || true
-            for _ in $(seq 1 50); do
-              if ! kill -0 "$backend_pid" 2>/dev/null; then
-                break
+            if [[ "$backend_pid" =~ ^[1-9][0-9]*$ ]]; then
+              kill "$backend_pid" 2>/dev/null || true
+              for _ in $(seq 1 50); do
+                if ! kill -0 "$backend_pid" 2>/dev/null; then
+                  break
+                fi
+                sleep 0.1
+              done
+              if kill -0 "$backend_pid" 2>/dev/null; then
+                kill -KILL "$backend_pid" 2>/dev/null || true
+                for _ in $(seq 1 20); do
+                  if ! kill -0 "$backend_pid" 2>/dev/null; then
+                    break
+                  fi
+                  sleep 0.1
+                done
               fi
-              sleep 0.1
-            done
-            if kill -0 "$backend_pid" 2>/dev/null; then
-              kill -KILL "$backend_pid" 2>/dev/null || true
+              if kill -0 "$backend_pid" 2>/dev/null; then
+                echo "Preview backend process $backend_pid is still running after SIGKILL" >&2
+                cleanup_status=1
+              fi
+            else
+              echo "Preview backend PID file is invalid" >&2
+              cleanup_status=1
             fi
           fi
           rm -rf \
             "$RUNNER_TEMP/private-dataset.txt" \
             "$RUNNER_TEMP/pure-llm-private-checkpoint" \
             "$RUNNER_TEMP/private-evaluation-backend.log" \
-            "$RUNNER_TEMP/private-evaluation-backend.pid"
-          exit "$archive_missing"
+            "$RUNNER_TEMP/private-evaluation-backend.pid" \
+            "$RUNNER_TEMP/pure-llm-private-checkpoint.tar.gz" \
+            "$RUNNER_TEMP/pure-llm-private-checkpoint.verify.tar.gz"
+          rm -f -- artifacts/pure-llm-private-checkpoint.tar.gz.enc
+          for private_path in \
+            "$RUNNER_TEMP/private-dataset.txt" \
+            "$RUNNER_TEMP/pure-llm-private-checkpoint" \
+            "$RUNNER_TEMP/private-evaluation-backend.log" \
+            "$RUNNER_TEMP/private-evaluation-backend.pid" \
+            "$RUNNER_TEMP/pure-llm-private-checkpoint.tar.gz" \
+            "$RUNNER_TEMP/pure-llm-private-checkpoint.verify.tar.gz" \
+            "artifacts/pure-llm-private-checkpoint.tar.gz.enc"; do
+            if [ -e "$private_path" ]; then
+              echo "Failed to scrub private evaluation plaintext" >&2
+              cleanup_status=1
+            fi
+          done
+          exit "$cleanup_status"
 
       - name: Enforce evaluation completion
         if: env.RETRIEVAL_ONLY_PILOT != 'true' && steps.evaluation.outputs.exit_code != '0'
