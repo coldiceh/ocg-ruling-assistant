@@ -5534,7 +5534,7 @@ test("an in-flight public settlement cannot reopen an owner-closed ChatGPT day",
   assert.equal(resetRelay.spentTodayUsd, 0);
 });
 
-test("public retrieval does not synthesize cross-card mechanism analogues", async () => {
+test("public retrieval keeps a strong cross-card mechanism analogue related-only", async () => {
   const lifecycleCard = {
     id: "lifecycle-current-card",
     name: "匿名期限卡",
@@ -5590,9 +5590,17 @@ test("public retrieval does not synthesize cross-card mechanism analogues", asyn
     !String(item.source || "").includes("effect_lifecycle")
     && !String(item.source || "").includes("compiled_scenario")
   )));
-  assert.ok(!evidence.officialQaRelated.some((item) => item.id === lifecycleAnalogue.id));
+  const related = evidence.officialQaRelated.find((item) => item.id === lifecycleAnalogue.id);
+  assert.ok(related);
+  assert.equal(related.official, true);
+  assert.equal(related.type, "related");
+  assert.equal(related.isDirect, false);
+  assert.equal(related.retrievalContext.scope, "cross_card_official_mechanism");
+  assert.equal(related.retrievalContext.relatedOnly, true);
+  assert.ok(!evidence.officialQaRelated.some((item) => item.id === ordinaryControlQa.id));
   assert.ok(!evidence.officialQaDirectCandidates.some((item) => item.id === lifecycleAnalogue.id));
-  assert.equal(evidence.debug.officialMechanismAnalogueCount, 0);
+  assert.ok(!evidence.officialQaDirectCandidates.some((item) => item.id === ordinaryControlQa.id));
+  assert.equal(evidence.debug.officialMechanismAnalogueCount, 1);
 });
 
 test("rag_prompt_truncates_context", () => {
@@ -5809,7 +5817,7 @@ test("unique exact official QA uses a focused complete-answer route", async () =
 });
 
 test("focused official QA prompt preserves the full-source tail without invalid JSON slicing", () => {
-  const sourceText = `问题？回答开头。${"中间内容".repeat(800)}（TAIL_MARKER：本回合不能再次宣言同名卡。）`;
+  const sourceText = `问题？回答开头。${'中间内容 "引用" \\ 路径\n'.repeat(400)}（TAIL_MARKER：本回合不能再次宣言同名卡。）`;
   const bundle = buildRagRulingPromptBundle({
     userQuery: "可以发动这个效果吗？",
     cardResolution: {
