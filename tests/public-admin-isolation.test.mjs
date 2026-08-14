@@ -224,7 +224,11 @@ test("local Node public entry point applies the same public model boundary", asy
     /resolvePublicRulingModelProfile\(\s*normalizedPayload\.rulingModelProfile\s*\|\|\s*env\.PUBLIC_RULING_MODEL_PROFILE,?\s*\)/u,
   );
   assert.match(serviceSource, /if \(mode !== "rag"\)[\s\S]*?unsupported_answer_mode/u);
-  assert.match(serviceSource, /answerRagRulingQuestionForVersion\(\{[\s\S]*?env:\s*publicEnv,/u);
+  assert.match(
+    serviceSource,
+    /answerRuling\s*=\s*answerRagRulingQuestionForVersion/u,
+  );
+  assert.match(serviceSource, /answerRuling\(\{[\s\S]*?env:\s*publicEnv,/u);
   assert.doesNotMatch(serviceSource, /normalizedPayload\.(?:thinkingMode|reasoningEffort|modelTier)/u);
   assert.doesNotMatch(`${serverSource}\n${serviceSource}`, /answerQuestion\(payload|answerRulingQuestionFast/u);
   assert.doesNotMatch(serverSource, /request\.method === "POST" && request\.url === "\/api\/engine"/u);

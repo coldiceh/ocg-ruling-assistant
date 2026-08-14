@@ -4331,7 +4331,7 @@ test("owner cap stops only today's public ChatGPT bucket at the ten-dollar hard 
   assert.equal(providerCalls, 0);
   assert.equal(blocked.answer.answerLevel, "budget_limited");
   assert.match(blocked.answer.shortAnswer, /每日 10 美元上限/u);
-  assert.match(blocked.answer.shortAnswer, /哔哩哔哩用户「おmaginai」/u);
+  assert.match(blocked.answer.shortAnswer, /作者b站「おmaginai」/u);
 });
 
 test("persistent owner cap issues one atomic SET for only the public Relay USD key", async () => {

@@ -5,6 +5,7 @@ node_modules/
 .env
 .env.*
 !.env.example
+.private-evaluation-keys/
 .tmp-*/
 artifacts/
 artifacts/deployed-*/
