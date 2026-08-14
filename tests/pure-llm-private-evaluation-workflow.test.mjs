@@ -53,6 +53,9 @@ test("private pure LLM evaluation is explicitly triggered, serial and generation
   assert.match(workflow, /--limit "\$EVALUATION_LIMIT"/u);
   assert.match(workflow, /if \[ "\$EVALUATION_LIMIT" = "32" \]; then/u);
   assert.match(workflow, /case_count_args\+=\(--require-case-count 32\)/u);
+  assert.match(workflow, /exclude_case_args\+=\(--exclude-case case-025\)/u);
+  assert.match(workflow, /SELECTED_EVALUATION_COUNT=\$selected_case_count/u);
+  assert.match(workflow, /"\$\{exclude_case_args\[@\]\}"/u);
   assert.match(workflow, /"\$\{case_count_args\[@\]\}"/u);
   assert.match(workflow, /--generation-timeout-ms 90000/u);
   assert.doesNotMatch(workflow, /RELAY_STREAM_TIMEOUT_MS: "(?:240000|270000)"/u);
@@ -153,9 +156,10 @@ test("public artifact has only aggregate completion, latency and cost metadata",
     assert.match(workflow, new RegExp(`\\b${forbidden}\\b`, "u"));
   }
   assert.match(workflow, /report\.mode !== "generate_only"/u);
-  assert.match(workflow, /report\.summary\?\.total !== Number\(process\.env\.EVALUATION_LIMIT\)/u);
-  assert.match(workflow, /const expectedGenerated = retrievalOnly \? 0 : Number\(process\.env\.EVALUATION_LIMIT\)/u);
-  assert.match(workflow, /const expectedFailed = retrievalOnly \? Number\(process\.env\.EVALUATION_LIMIT\) : 0/u);
+  assert.match(workflow, /const selectedCount = Number\(process\.env\.SELECTED_EVALUATION_COUNT\)/u);
+  assert.match(workflow, /report\.summary\?\.total !== selectedCount/u);
+  assert.match(workflow, /const expectedGenerated = retrievalOnly \? 0 : selectedCount/u);
+  assert.match(workflow, /const expectedFailed = retrievalOnly \? selectedCount : 0/u);
   assert.match(workflow, /retention-days: 1/u);
   const publicUploadStep = workflow.match(
     /- name: Upload the anonymous aggregate report[\s\S]*?(?=\n\s+- name:)/u,

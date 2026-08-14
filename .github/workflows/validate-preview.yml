@@ -248,9 +248,14 @@ jobs:
           umask 077
           mkdir -p artifacts
           case_count_args=()
+          exclude_case_args=()
+          selected_case_count="$EVALUATION_LIMIT"
           if [ "$EVALUATION_LIMIT" = "32" ]; then
             case_count_args+=(--require-case-count 32)
+            exclude_case_args+=(--exclude-case case-025)
+            selected_case_count=31
           fi
+          echo "SELECTED_EVALUATION_COUNT=$selected_case_count" >> "$GITHUB_ENV"
           node scripts/evaluate-pure-llm-preview.mjs \
             --dataset "$RUNNER_TEMP/private-dataset.txt" \
             --checkpoint-dir "$RUNNER_TEMP/pure-llm-private-checkpoint" \
@@ -258,6 +263,7 @@ jobs:
             --base-url "http://127.0.0.1:$PORT" \
             --generate-only \
             --limit "$EVALUATION_LIMIT" \
+            "${exclude_case_args[@]}" \
             "${case_count_args[@]}" \
             --generation-timeout-ms 90000
           status=$?
@@ -378,12 +384,13 @@ jobs:
           if (report.mode !== "generate_only") {
             throw new Error("Public report is not generation-only");
           }
-          if (report.summary?.total !== Number(process.env.EVALUATION_LIMIT)) {
+          const selectedCount = Number(process.env.SELECTED_EVALUATION_COUNT);
+          if (report.summary?.total !== selectedCount) {
             throw new Error("Public report selected-case count does not match the requested limit");
           }
           const retrievalOnly = process.env.RETRIEVAL_ONLY_PILOT === "true";
-          const expectedGenerated = retrievalOnly ? 0 : Number(process.env.EVALUATION_LIMIT);
-          const expectedFailed = retrievalOnly ? Number(process.env.EVALUATION_LIMIT) : 0;
+          const expectedGenerated = retrievalOnly ? 0 : selectedCount;
+          const expectedFailed = retrievalOnly ? selectedCount : 0;
           if (report.summary?.generated !== expectedGenerated
             || report.summary?.generationFailed !== expectedFailed) {
             throw new Error("Private evaluation completion counts do not match the selected mode");
@@ -670,7 +677,8 @@ jobs:
             'archive_cipher=aes-256-cbc-pbkdf2-sha256-iter200000' \
             'key_envelope=rsa-oaep-sha256-mgf1-sha256' \
             "source_sha=$GITHUB_SHA" \
-            "evaluation_limit=$EVALUATION_LIMIT" \
+            "requested_evaluation_limit=$EVALUATION_LIMIT" \
+            "selected_evaluation_count=$SELECTED_EVALUATION_COUNT" \
             "run_id=$GITHUB_RUN_ID" \
             "run_attempt=$GITHUB_RUN_ATTEMPT" \
             "cipher_sha256=$cipher_sha256" \

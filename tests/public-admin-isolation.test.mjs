@@ -98,7 +98,7 @@ test("public answer payload cannot select an admin-only provider or depend on Op
   }
 });
 
-test("public model environment pins the selected final profile and keeps preparation on DeepSeek", () => {
+test("public model environment isolates DeepSeek card extraction, Terra rule queries, and the selected final profile", () => {
   const publicEnv = createPublicAnswerModelEnv({
     MODEL_PROVIDER: "openai",
     RAG_MODEL_PROVIDER: "gemini",
@@ -124,8 +124,12 @@ test("public model environment pins the selected final profile and keeps prepara
   assert.equal(publicEnv.RAG_THINKING_MODE, "enabled");
   assert.equal(publicEnv.RAG_REASONING_EFFORT, "low");
   assert.equal(publicEnv.RAG_CARD_MODEL_PROVIDER, "deepseek");
-  assert.equal(publicEnv.RAG_RULE_MODEL_PROVIDER, "deepseek");
-  assert.equal(publicEnv.RAG_RULEBOOK_MODEL_PROVIDER, "deepseek");
+  assert.equal(publicEnv.RAG_RULE_MODEL_PROVIDER, "relay");
+  assert.equal(publicEnv.RAG_RULE_MODEL_RELAY_API_KEY, "public-relay-key");
+  assert.equal(publicEnv.RAG_RULE_MODEL_RELAY_BASE_URL, "https://relay.example.test/v1");
+  assert.equal(publicEnv.RELAY_RULE_MODEL, "gpt-5.6-terra");
+  assert.equal(publicEnv.RAG_RULE_MODEL_REASONING_EFFORT, "none");
+  assert.equal(publicEnv.RAG_RULEBOOK_MODEL_PROVIDER, undefined);
   assert.equal(Object.keys(publicEnv).some((key) => /^(?:OPENAI_|ADMIN_|KIMI_)/iu.test(key)), false);
   assert.equal(publicEnv.ADMIN_MODEL_LAB_BYPASS_DAILY_BUDGET, undefined);
   assert.equal(publicEnv.GLM_API_KEY, undefined);

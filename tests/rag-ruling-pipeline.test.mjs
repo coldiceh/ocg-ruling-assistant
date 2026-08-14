@@ -1097,6 +1097,11 @@ test("rule_query_extractor_uses_lightweight_model", async () => {
   const calls = [];
   const result = await callRuleQueryExtractionModel({
     userQuery: "场上只有正在处理的陷阱时，返回魔法陷阱的效果能否处理？",
+    resolvedCards: [{
+      name: "匿名响应者",
+      cardType: "效果怪兽",
+      effectText: "ANONYMOUS_COMPLETE_EFFECT_TEXT：特殊召唤。那之后，进行后续处理。",
+    }],
     env: {
       MODEL_PROVIDER: "deepseek",
       DEEPSEEK_API_KEY: "test-deepseek-key",
@@ -1147,6 +1152,10 @@ test("rule_query_extractor_uses_lightweight_model", async () => {
   assert.match(requestPrompt, /不得为了达到条数加入无关机制/u);
   assert.match(requestPrompt, /中文、日文和英文等价术语/u);
   assert.match(requestPrompt, /不要保留未解释的玩家俗称/u);
+  assert.match(requestPrompt, /匿名响应者/u);
+  assert.match(requestPrompt, /效果怪兽/u);
+  assert.match(requestPrompt, /ANONYMOUS_COMPLETE_EFFECT_TEXT/u);
+  assert.equal(calls.length, 1);
 });
 
 test("rule query extraction can use server-owned Relay Terra none without changing the final model", async () => {
@@ -1651,8 +1660,52 @@ test("rag_pipeline_uses_model_rule_queries_for_related_rules", async () => {
     subclaim: "确认处理中的陷阱是否仍可作为场上的卡返回",
     checkpoint: "resolution_snapshot",
     confidence: "high",
-    source: "rule_search_query",
+    source: "model_rule_query_extractor",
   }]);
+});
+
+test("rag pipeline resolves cards before building rule queries from their full text", async () => {
+  let cardExtractionFinished = false;
+  let rulePrompt = "";
+  await answerRagRulingQuestion({
+    question: "测式龙的①效果可以发动吗？",
+    cards,
+    records: [],
+    qaRecords: [],
+    cardModelInvoker: async () => {
+      cardExtractionFinished = true;
+      return JSON.stringify({
+        cardNames: [{ name: "测试龙", originalText: "测式龙", confidence: "high" }],
+      });
+    },
+    ruleModelInvoker: async ({ prompt }) => {
+      assert.equal(cardExtractionFinished, true);
+      rulePrompt = prompt;
+      return JSON.stringify({ ruleQueries: [] });
+    },
+    modelInvoker: async () => JSON.stringify(modelJson("根据完整卡文回答。")),
+  });
+
+  assert.match(rulePrompt, /测试龙/u);
+  assert.match(rulePrompt, /①：自己主要阶段可以发动。抽1张卡。/u);
+});
+
+test("rag pipeline gives user-provided new-card text to the rule-query model", async () => {
+  let rulePrompt = "";
+  await answerRagRulingQuestion({
+    question: "「匿名新卡」\n卡片文本：USER_PROVIDED_COMPLETE_TEXT：进行一项处理。\n这个效果如何处理？",
+    cards: [],
+    records: [],
+    qaRecords: [],
+    ruleModelInvoker: async ({ prompt }) => {
+      rulePrompt = prompt;
+      return JSON.stringify({ ruleQueries: [] });
+    },
+    modelInvoker: async () => JSON.stringify(modelJson("根据用户提供的完整卡文回答。")),
+  });
+
+  assert.match(rulePrompt, /匿名新卡/u);
+  assert.match(rulePrompt, /USER_PROVIDED_COMPLETE_TEXT/u);
 });
 
 function thunderImpermanenceCards() {

@@ -141,28 +141,16 @@ async function answerRagRulingQuestionInternal({
     timingsMs.deterministicPreflight = elapsedMs(preflightStartedAt);
 
     const auxiliaryExtractionStartedAt = Date.now();
-    [cardNameModel, ruleQueryModel] = await Promise.all([
-      callCardNameExtractionModel({
-        userQuery: query,
-        dataRevision,
-        env,
-        modelInvoker: cardModelInvoker,
-        fetchImpl,
-        dryRun,
-        now,
-        signal,
-      }),
-      callRuleQueryExtractionModel({
-        userQuery: query,
-        dataRevision,
-        env,
-        modelInvoker: ruleModelInvoker,
-        fetchImpl,
-        dryRun,
-        now,
-        signal,
-      }),
-    ]);
+    cardNameModel = await callCardNameExtractionModel({
+      userQuery: query,
+      dataRevision,
+      env,
+      modelInvoker: cardModelInvoker,
+      fetchImpl,
+      dryRun,
+      now,
+      signal,
+    });
     cardResolution = (cardNameModel.candidates || []).length
       ? extractRagCards(query, {
         cards: data.cards || [],
@@ -191,7 +179,24 @@ async function answerRagRulingQuestionInternal({
       qaRecords: data.qaRecords,
       enableLiveOfficialQa: true,
       subsumptionCandidatePoolComplete: usesCompleteDefaultSnapshot,
-      ruleSearchQueries: ruleQueryModel.queries || [],
+      ruleSearchQueryProvider: async ({ resolvedCards, userProvidedCardTexts }) => {
+        const ruleQueryStartedAt = Date.now();
+        ruleQueryModel = await callRuleQueryExtractionModel({
+          userQuery: query,
+          resolvedCards,
+          userProvidedCardTexts,
+          dataRevision,
+          env,
+          modelInvoker: ruleModelInvoker,
+          fetchImpl,
+          dryRun,
+          now,
+          signal,
+        });
+        timingsMs.ruleQueryExtraction = elapsedMs(ruleQueryStartedAt);
+        timingsMs.auxiliaryExtractionModels += timingsMs.ruleQueryExtraction;
+        return ruleQueryModel.queries || [];
+      },
       env,
       fetchImpl,
       signal,
