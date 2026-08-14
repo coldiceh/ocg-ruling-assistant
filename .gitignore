@@ -14,3 +14,4 @@ artifacts/*-local.json
 *.log
 *.zip
 preview.png
+.private-evaluation-keys/
