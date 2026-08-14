@@ -228,7 +228,15 @@ export function publicAnswerHttpError(error) {
 }
 
 export function createPublicAnswerAbortContext(request, response) {
-  if (request?.signal && typeof request.signal.aborted === "boolean") {
+  // Fetch/WHATWG requests own a connection-lifetime AbortSignal. Node's
+  // IncomingMessage gained a different `signal` property in Node 24.16: it is
+  // tied to the readable request stream and can abort after a normal POST body
+  // has been consumed, while the server is still computing its response. A
+  // Node-style request is therefore tracked with its established aborted/
+  // response-close events below instead of feature-detecting `.signal` alone.
+  const nodeStyleRequest = typeof request?.once === "function"
+    && typeof request?.off === "function";
+  if (!nodeStyleRequest && request?.signal && typeof request.signal.aborted === "boolean") {
     return { signal: request.signal, cleanup() {} };
   }
   const controller = new AbortController();
