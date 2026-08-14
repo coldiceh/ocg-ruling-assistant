@@ -49,6 +49,7 @@ export function classifyEvidenceQuestionTypes(input) {
 
   addMatches([
     /(?:效果处理|效果處理|处理时|處理時|处理后|處理後|结算|結算|解決時|when resolving|when this effect resolves|effect resolution)/iu,
+    /(?:(?:处理|處理|结算|結算)(?:结果|結果)?(?:会|會|将会|將會)?(?:怎样|怎樣|如何|怎么|怎麼)|(?:怎样|怎樣|如何|怎么|怎麼)(?:处理|處理|结算|結算))/iu,
   ], questionTypes, "resolution_handling");
 
   addMatches([

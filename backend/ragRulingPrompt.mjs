@@ -441,27 +441,29 @@ function isOfficialPromptEvidence(recordType, label) {
 }
 
 function inferPromptSourceTier({ label, recordType, source, official }) {
-  if (["qa", "card-faq", "official-database"].includes(recordType)) return "S0_OFFICIAL_DB_MIRROR";
-  if (label === "official_response" && official) return "S0_OFFICIAL_RESPONSE";
   if (recordType === "card-text" || label === "card_text") return "S1_CARD_TEXT";
   if (label === "user_text") return "USER_PROVIDED";
-  if (recordType === "rule-doc" || /ocg[-_ ]?rule/iu.test(source)) return "S2_COMMUNITY_REFERENCE";
+  if (recordType === "rule-doc" || /ocg[-_ ]?rule|community|社区|社群/iu.test(source)) return "S2_COMMUNITY_REFERENCE";
+  if (!official) return "S3_OTHER_REFERENCE";
+  if (["qa", "card-faq", "official-database"].includes(recordType)) return "S0_OFFICIAL_DB_MIRROR";
+  if (label === "official_response") return "S0_OFFICIAL_RESPONSE";
   if (official) return "S0_OFFICIAL_REFERENCE";
   return "S3_OTHER_REFERENCE";
 }
 
 function inferPromptSourceAuthority({ label, recordType, source, sourceTier, official }) {
+  if (recordType === "card-text" || label === "card_text") return "card_text_mirror";
+  if (label === "user_text" || recordType === "user-provided-card-text") return "user_provided_text";
+  if (recordType === "rule-doc" || /ocg[-_ ]?rule|community|社区|社群/iu.test(`${source} ${sourceTier}`)) {
+    return "community_reference";
+  }
+  if (!official) return "other_reference";
   if (["qa", "card-faq", "official-database"].includes(recordType)
     || sourceTier === "S0_OFFICIAL_DB_MIRROR") {
     return "official_database";
   }
   if (label === "official_response" || /^S0_OFFICIAL/u.test(sourceTier) || official) {
     return "official_reference";
-  }
-  if (recordType === "card-text" || label === "card_text") return "card_text_mirror";
-  if (label === "user_text" || recordType === "user-provided-card-text") return "user_provided_text";
-  if (recordType === "rule-doc" || /ocg[-_ ]?rule|community|社区|社群/iu.test(`${source} ${sourceTier}`)) {
-    return "community_reference";
   }
   return "other_reference";
 }

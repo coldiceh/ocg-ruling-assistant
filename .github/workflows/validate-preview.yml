@@ -47,9 +47,25 @@ jobs:
         run: pnpm run check
 
       - name: Run the complete test suite serially
-        run: >-
-          node --test --test-force-exit --test-concurrency=1
-          --test-isolation=none --test-reporter=dot
+        shell: bash
+        run: |
+          set +e
+          node --test --test-force-exit --test-concurrency=1 \
+            --test-isolation=none --test-reporter=spec \
+            2>&1 | tee "$RUNNER_TEMP/complete-tests.log"
+          test_status="${PIPESTATUS[0]}"
+          set -e
+          if [ "$test_status" -ne 0 ]; then
+            # Public tests contain no private evaluation text. Mirror a bounded
+            # tail into a check annotation so a public CI failure can be
+            # diagnosed through the checks API without a GitHub web login.
+            failure_tail="$(tail -c 12000 "$RUNNER_TEMP/complete-tests.log")"
+            failure_tail="${failure_tail//'%'/'%25'}"
+            failure_tail="${failure_tail//$'\r'/'%0D'}"
+            failure_tail="${failure_tail//$'\n'/'%0A'}"
+            echo "::error title=Complete serial test suite failed::$failure_tail"
+            exit "$test_status"
+          fi
 
   private-evaluation:
     if: >-

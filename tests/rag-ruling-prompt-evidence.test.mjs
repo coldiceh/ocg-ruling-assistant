@@ -80,6 +80,34 @@ test("prompt preserves provenance and presents official QA as structured fields"
   assert.match(bundle.prompt, /显式账本/u);
 });
 
+test("an explicitly non-official QA-shaped record cannot become official through fallback metadata", () => {
+  const bundle = buildRagRulingPromptBundle({
+    userQuery: "匿名问题如何处理？",
+    cardResolution: { resolvedCards: [], unresolvedMentions: [], ambiguousMentions: [] },
+    evidence: {
+      officialQaDirectCandidates: [],
+      officialQaRelated: [],
+      faqRelated: [],
+      cardTexts: [],
+      userProvidedCardTexts: [],
+      rawRelatedEvidence: [{
+        id: "community-qa-without-tier",
+        recordType: "qa",
+        official: false,
+        source: "community-mirror",
+        question: "社区整理的问题",
+        answer: "社区整理的回答",
+      }],
+    },
+  });
+
+  const payload = parsePromptPayload(bundle.prompt);
+  const item = payload.evidence.rawRelatedEvidence[0];
+  assert.equal(item.official, false);
+  assert.equal(item.sourceTier, "S2_COMMUNITY_REFERENCE");
+  assert.equal(item.sourceAuthority, "community_reference");
+});
+
 test("long official QA keeps the resolved-card context window instead of only its ends", () => {
   const answer = [
     "ANSWER_HEAD",

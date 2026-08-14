@@ -53,6 +53,18 @@ test("Chinese effect-applicability banish phrase detects temporary banish and ap
   assert.ok(result.actions.includes("apply"));
 });
 
+test("Chinese resolution-outcome variants detect resolution handling", () => {
+  for (const text of [
+    "处理会怎样？",
+    "处理结果会如何？",
+    "结算会怎么进行？",
+    "之后怎样处理？",
+  ]) {
+    const result = classifyEvidenceQuestionTypes(text);
+    assert.ok(result.questionTypes.includes("resolution_handling"), text);
+  }
+});
+
 test("negative activation phrases keep cannot polarity", () => {
   for (const text of ["発動できません", "cannot be activated", "不能发动"]) {
     const result = classifyEvidenceQuestionTypes(text);
