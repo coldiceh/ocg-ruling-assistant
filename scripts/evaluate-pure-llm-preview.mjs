@@ -32,7 +32,7 @@ const GENERATION_DIRECTORY = "generations";
 const JUDGMENT_DIRECTORY = "judgments";
 const JUDGE_MODEL = "gpt-5.6-sol";
 const JUDGE_REASONING_EFFORT = "high";
-const DEFAULT_GENERATION_TIMEOUT_MS = 300_000;
+const DEFAULT_GENERATION_TIMEOUT_MS = 90_000;
 const DEFAULT_JUDGE_TIMEOUT_MS = 300_000;
 const MAX_HTTP_RESPONSE_BYTES = 16 * 1024 * 1024;
 const VERDICTS = new Set([
@@ -1218,7 +1218,7 @@ Options:
   --judge-only                    Legacy: judge existing generated checkpoints; do not call Preview
   --limit <n>                     Evaluate only the first n unique cases
   --require-case-count <n>        Stop before generation unless the private dataset has exactly n unique cases
-  --generation-timeout-ms <n>     Per-generation timeout (default: 300000)
+  --generation-timeout-ms <n>     Per-generation timeout (default: 90000)
   --judge-timeout-ms <n>          Per-judge timeout (default: 300000)
   --help                          Show this help
 

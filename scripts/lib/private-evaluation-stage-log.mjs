@@ -24,6 +24,8 @@ const ALLOWED_FAILURE_KINDS = new Set([
   "unexpected",
 ]);
 
+const ALLOWED_TRACE_IDS = /^(?:case-\d{3}|private-[a-z0-9-]{6,48})$/u;
+
 /**
  * Project a backend log into an anonymous, fixed-schema stage timeline.
  * Raw lines, trace IDs, unknown fields and parse failures are never returned.
@@ -40,7 +42,11 @@ export function projectPrivateEvaluationStageLog(source) {
       continue;
     }
     if (value?.schemaVersion !== 1 || value?.kind !== "private_evaluation_stage") continue;
-    if (!/^case-\d{3}$/u.test(String(value.traceId || ""))) continue;
+    // HTTP callers deliberately do not send evaluator case IDs to the public
+    // answer route. The backend therefore creates an opaque `private-*` ID.
+    // Accept both internal forms for record integrity, then drop the ID from
+    // the public projection below so neither form can leave the job log.
+    if (!ALLOWED_TRACE_IDS.test(String(value.traceId || ""))) continue;
     if (!ALLOWED_STAGES.has(value.stage) || !ALLOWED_EVENTS.has(value.event)) continue;
     const event = {
       schemaVersion: 1,
