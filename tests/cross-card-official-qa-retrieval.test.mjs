@@ -79,7 +79,7 @@ test("a cross-card official mechanism QA is retained as related-only evidence", 
   assert.ok(evidence.officialQaDirectCandidates.every((item) => item.id !== crossCardMechanism.id));
 });
 
-test("generic activation and resolution words cannot authorize an unrelated cross-card QA", async () => {
+test("generic activation and resolution overlap remains related-only and cannot authorize a cross-card QA", async () => {
   const current = syntheticCard("51001", "匿名对象甲", "这张卡不受其他卡的效果影响。");
   const unrelated = {
     id: "qa-cross-card-generic-only",
@@ -105,7 +105,11 @@ test("generic activation and resolution words cannot authorize an unrelated cros
     env: { RAG_LIVE_OFFICIAL_QA: "false", RAG_MAX_RELATED_EVIDENCE: "6" },
   });
 
-  assert.ok(evidence.officialQaRelated.every((item) => item.id !== unrelated.id));
+  const related = evidence.officialQaRelated.find((item) => item.id === unrelated.id);
+  assert.ok(related);
+  assert.equal(related.type, "related");
+  assert.equal(related.isDirect, false);
+  assert.equal(related.retrievalContext.relatedOnly, true);
   assert.ok(evidence.officialQaDirectCandidates.every((item) => item.id !== unrelated.id));
 });
 
@@ -156,7 +160,13 @@ test("a strict mechanism match survives an incidental multi-card identity mismat
   assert.ok(evidence.officialQaDirectCandidates.every(
     (item) => item.id !== mechanismAnalogue.id,
   ));
-  assert.ok(evidence.officialQaRelated.every((item) => item.id !== genericDecoy.id));
+  const genericRelated = evidence.officialQaRelated.find((item) => item.id === genericDecoy.id);
+  assert.ok(genericRelated);
+  assert.equal(genericRelated.isDirect, false);
+  assert.ok(
+    evidence.officialQaRelated.indexOf(related)
+      < evidence.officialQaRelated.indexOf(genericRelated),
+  );
 });
 
 test("strict mechanism overlap can retrieve a multilingual official cross-card QA", async () => {
