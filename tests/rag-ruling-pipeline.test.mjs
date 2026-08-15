@@ -5379,7 +5379,7 @@ test("an in-flight public settlement cannot reopen an owner-closed ChatGPT day",
   assert.equal(resetRelay.spentTodayUsd, 0);
 });
 
-test("public retrieval keeps cross-card official candidates related-only without handwritten deletion", async () => {
+test("public retrieval keeps a retrievable cross-card official candidate related-only", async () => {
   const lifecycleCard = {
     id: "lifecycle-current-card",
     name: "匿名期限卡",
@@ -5442,14 +5442,12 @@ test("public retrieval keeps cross-card official candidates related-only without
   assert.equal(related.isDirect, false);
   assert.equal(related.retrievalContext.scope, "cross_card_official_mechanism");
   assert.equal(related.retrievalContext.relatedOnly, true);
-  const ordinary = evidence.officialQaRelated.find((item) => item.id === ordinaryControlQa.id);
-  assert.ok(ordinary);
-  assert.equal(ordinary.type, "related");
-  assert.equal(ordinary.isDirect, false);
-  assert.equal(ordinary.retrievalContext.relatedOnly, true);
+  // A record with no lexical or model-query overlap is outside the retrieved
+  // pool; this is not a player-role, question-type or premise hard deletion.
+  assert.ok(!evidence.officialQaRelated.some((item) => item.id === ordinaryControlQa.id));
   assert.ok(!evidence.officialQaDirectCandidates.some((item) => item.id === lifecycleAnalogue.id));
   assert.ok(!evidence.officialQaDirectCandidates.some((item) => item.id === ordinaryControlQa.id));
-  assert.equal(evidence.debug.officialMechanismAnalogueCount, 2);
+  assert.equal(evidence.debug.officialMechanismAnalogueCount, 1);
 });
 
 test("rule model candidate assessments only reorder official questions and never delete them", async () => {
@@ -5591,8 +5589,9 @@ test("general prompt applies one reference budget and omits resolved-card text d
     },
   });
 
-  assert.equal(bundle.allowedEvidenceIds.length, 5);
-  assert.ok(!bundle.allowedEvidenceIds.includes("card-text-100"));
+  assert.equal(bundle.allowedEvidenceIds.length, 6);
+  assert.ok(bundle.allowedEvidenceIds.includes("card-text-100"));
+  assert.equal(bundle.prompt.split(cards[0].effectText).length - 1, 1);
   assert.ok(bundle.allowedEvidenceIds.some((id) => id.startsWith("faq-budget-")));
   assert.ok(bundle.allowedEvidenceIds.some((id) => id.startsWith("qa-budget-")));
   assert.ok(bundle.allowedEvidenceIds.some((id) => id.startsWith("cross-budget-")));
