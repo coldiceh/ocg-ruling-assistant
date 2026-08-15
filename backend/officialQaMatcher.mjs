@@ -62,7 +62,7 @@ const SEMANTIC_CONCEPTS = [
   ["negate_activation", /発動.{0,24}無効|发动.{0,24}无效|negate.{0,24}activation/iu],
   ["negate", /無効|无效|無效|negat/iu],
   ["return_hand", /(?:手札|ハンド)(?:へ|に)戻|(?:回到|返回|放回|弹回|彈回)[^，,。.!！?？;；\n]{0,12}(?:手札|手牌|手卡)|return(?:ed|ing)?[^.。;；\n]{0,30}\bto (?:the )?hand\b|put[^.。;；\n]{0,30}\b(?:back )?into (?:the )?hand\b/iu],
-  ["return_deck", /デッキ.{0,24}戻|卡组.{0,24}(?:回到|返回)|shuffle.{0,30}deck|return.{0,30}deck/iu],
+  ["return_deck", /デッキ(?:へ|に)戻|(?:回到|返回|放回|洗回)[^，,。.!！?？;；\n]{0,12}(?:卡组|卡組|牌组|牌組)|return(?:ed|ing)?[^.。;；\n]{0,30}\bto (?:the )?deck\b|(?:put|shuffle)[^.。;；\n]{0,30}\b(?:back )?into (?:the )?deck\b/iu],
   ["discard", /捨て|丢弃|discard/iu],
   ["first_turn", /先攻.{0,12}(?:1|１)ターン|先攻第一回合|first turn.{0,20}(?:going first|of the duel)?/iu],
   ["simultaneous_summon", /同時.{0,16}特殊召喚|同时.{0,16}特殊召唤|simultaneous.{0,20}special summon/iu],

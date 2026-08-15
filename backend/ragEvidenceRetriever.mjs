@@ -3857,7 +3857,7 @@ function reserveRankedHeadAndSupplementalCoverage(items = [], limit = 1, {
   // question-only candidates that the model judged materially relevant with a
   // compatible premise. Neither path changes evidence authority.
   const head = orderedItems[0];
-  if (safeLimit === 1) return orderedItems;
+  if (safeLimit === 1) return [head];
   const assessed = orderedItems.filter(hasEligibleModelCandidateAssessment);
   const queryReserved = reserveSupplementalQueryCoverage(
     orderedItems,

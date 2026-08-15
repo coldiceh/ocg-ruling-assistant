@@ -79,13 +79,18 @@ const qaRecords = [
   },
 ];
 
-test("return-to-hand semantics require a destination rather than a hand-source mention", () => {
+test("return semantics use the destination rather than a hand or deck source mention", () => {
   assert.ok(extractOfficialQaSemanticConcepts("将场上的卡返回手牌").includes("return_hand"));
   assert.ok(extractOfficialQaSemanticConcepts("フィールドのカードを手札に戻す").includes("return_hand"));
   assert.ok(extractOfficialQaSemanticConcepts("return that card to the hand").includes("return_hand"));
   assert.ok(!extractOfficialQaSemanticConcepts("将手牌中的卡返回卡组").includes("return_hand"));
   assert.ok(!extractOfficialQaSemanticConcepts("手札のカードをデッキに戻す").includes("return_hand"));
   assert.ok(extractOfficialQaSemanticConcepts("手札のカードをデッキに戻す").includes("return_deck"));
+  assert.ok(extractOfficialQaSemanticConcepts("将手牌中的卡返回卡组").includes("return_deck"));
+  assert.ok(extractOfficialQaSemanticConcepts("return that card to the Deck").includes("return_deck"));
+  assert.ok(!extractOfficialQaSemanticConcepts("将卡组中的卡返回手牌").includes("return_deck"));
+  assert.ok(!extractOfficialQaSemanticConcepts("デッキのカードを手札に戻す").includes("return_deck"));
+  assert.ok(!extractOfficialQaSemanticConcepts("return a card from the Deck to the hand").includes("return_deck"));
 });
 
 test("user-provided card text reaches the final model as raw evidence without a local verdict", async () => {
