@@ -179,12 +179,17 @@ async function answerRagRulingQuestionInternal({
       qaRecords: data.qaRecords,
       enableLiveOfficialQa: true,
       subsumptionCandidatePoolComplete: usesCompleteDefaultSnapshot,
-      ruleSearchQueryProvider: async ({ resolvedCards, userProvidedCardTexts }) => {
+      ruleSearchQueryProvider: async ({
+        resolvedCards,
+        userProvidedCardTexts,
+        candidateQuestions,
+      }) => {
         const ruleQueryStartedAt = Date.now();
         ruleQueryModel = await callRuleQueryExtractionModel({
           userQuery: query,
           resolvedCards,
           userProvidedCardTexts,
+          candidateQuestions,
           dataRevision,
           env,
           modelInvoker: ruleModelInvoker,
@@ -195,7 +200,10 @@ async function answerRagRulingQuestionInternal({
         });
         timingsMs.ruleQueryExtraction = elapsedMs(ruleQueryStartedAt);
         timingsMs.auxiliaryExtractionModels += timingsMs.ruleQueryExtraction;
-        return ruleQueryModel.queries || [];
+        return {
+          queries: ruleQueryModel.queries || [],
+          candidateAssessments: ruleQueryModel.candidateAssessments || [],
+        };
       },
       env,
       fetchImpl,
@@ -334,6 +342,7 @@ async function answerRagRulingQuestionInternal({
       cardNameModelCostCny: cardNameModel.estimatedCostCny || 0,
       cardNameWarnings: cardNameModel.warnings || [],
       modelRuleSearchQueries: ruleQueryModel.queries || [],
+      modelRuleCandidateAssessments: ruleQueryModel.candidateAssessments || [],
       ruleQueryModelUsed: ruleQueryModel.modelUsed,
       ruleQueryProviderUsed: ruleQueryModel.providerUsed,
       ruleQueryModelDryRun: ruleQueryModel.dryRun,

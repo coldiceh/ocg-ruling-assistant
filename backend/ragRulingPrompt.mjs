@@ -86,9 +86,10 @@ export function buildRagRulingPromptBundle({
     maxCards: readNumber(env.RAG_MAX_CARDS, 6),
     maxOfficialQa: readNumber(env.RAG_MAX_OFFICIAL_QA, 7),
     maxRelatedEvidence: readNumber(env.RAG_MAX_RELATED_EVIDENCE, 14),
+    maxReferenceItems: readNumber(env.RAG_MAX_PROMPT_REFERENCE_ITEMS, 12),
     maxCardTextChars: readNumber(env.RAG_MAX_CARD_TEXT_CHARS, 3200),
     maxEvidenceTextChars: readNumber(env.RAG_MAX_EVIDENCE_TEXT_CHARS, 2800),
-    maxPromptChars: readNumber(env.RAG_MAX_PROMPT_CHARS, 60000),
+    maxPromptChars: readNumber(env.RAG_MAX_PROMPT_CHARS, 36000),
   };
   const authoritativeDirect = selectAuthoritativeOfficialDirectCandidate({
     candidates: evidence.officialQaDirectCandidates || [],
@@ -443,15 +444,59 @@ function prepareEvidenceForPrompt(
     ...downgradedDirectCandidates,
     ...(Array.isArray(evidence.officialQaRelated) ? evidence.officialQaRelated : []),
   ]);
-  return {
+  const prepared = {
     officialQaDirectCandidates: limitEvidence(focusedDirectCandidates, limits.maxOfficialQa, limits.maxEvidenceTextChars, "official_direct", warnings, focusCardIds),
     officialQaRelated: limitEvidence(relatedCandidates, limits.maxRelatedEvidence, limits.maxEvidenceTextChars, "official_related", warnings, focusCardIds),
     provisionalOfficialResponses: limitEvidence(evidence.provisionalOfficialResponses, limits.maxOfficialQa, limits.maxEvidenceTextChars, "official_response", warnings, focusCardIds),
     faqRelated: limitEvidence(evidence.faqRelated, limits.maxRelatedEvidence, limits.maxEvidenceTextChars, "faq", warnings, focusCardIds),
-    cardTexts: limitEvidence(evidence.cardTexts, limits.maxCards, limits.maxCardTextChars, "card_text", warnings, focusCardIds),
+    // Resolved cards already carry the same complete effect text in the prompt.
+    // Retain only additional card-text evidence whose identity is not already
+    // represented there, avoiding a large duplicate copy for every card.
+    cardTexts: limitEvidence(
+      (evidence.cardTexts || []).filter((item) => !evidenceSharesFocusCard(item, focusCardIds)),
+      limits.maxCards,
+      limits.maxCardTextChars,
+      "card_text",
+      warnings,
+      focusCardIds,
+    ),
     userProvidedCardTexts: limitEvidence(evidence.userProvidedCardTexts, limits.maxCards, limits.maxCardTextChars, "user_text", warnings, focusCardIds),
     rawRelatedEvidence: limitEvidence(evidence.rawRelatedEvidence, limits.maxRelatedEvidence, limits.maxEvidenceTextChars, "raw_related", warnings, focusCardIds),
   };
+  if (authoritativeDirectId) return prepared;
+  return limitPreparedReferenceEvidence(prepared, limits.maxReferenceItems, warnings);
+}
+
+function evidenceSharesFocusCard(item = {}, focusCardIds = []) {
+  if (!focusCardIds.length) return false;
+  const focus = new Set(focusCardIds.map(String));
+  return (item.cardIds || []).map(String).some((id) => focus.has(id));
+}
+
+function limitPreparedReferenceEvidence(prepared = {}, limit = 12, warnings = []) {
+  const safeLimit = Math.max(1, Math.floor(Number(limit) || 12));
+  const referenceOnly = {
+    ...prepared,
+    cardTexts: [],
+    userProvidedCardTexts: [],
+  };
+  const selected = selectCompactEvidenceEntries(referenceOnly, { limit: safeLimit });
+  const result = {
+    ...prepared,
+    ...Object.fromEntries(
+      OFFICIAL_REFERENCE_BUCKETS.concat("rawRelatedEvidence")
+        .map((bucket) => [bucket, []]),
+    ),
+  };
+  let before = 0;
+  for (const bucket of OFFICIAL_REFERENCE_BUCKETS.concat("rawRelatedEvidence")) {
+    before += (prepared[bucket] || []).length;
+  }
+  for (const { bucket, item } of selected) result[bucket].push(item);
+  if (before > selected.length) {
+    warnings.push(`prompt_reference_items_limited:${before}->${selected.length}`);
+  }
+  return result;
 }
 
 function downgradeOfficialDirectToRelated(item = {}) {
@@ -870,9 +915,9 @@ function selectCompactEvidenceEntries(evidence = {}, {
     selectedKeys.add(compactEvidenceEntryKey(entry));
   };
 
-  // A cross-card official mechanism ruling has already passed the retriever's
-  // strong-mechanism filter. Preserve one explicitly related-only example even
-  // when card text, scoped QA and community buckets are all saturated.
+  // Preserve one explicitly related-only cross-card official candidate when
+  // available. It remains an analogy whose premises the final model must
+  // compare; this reservation does not grant it direct-ruling authority.
   reserveFirst(isCrossCardOfficialMechanismEntry);
   // FAQ and official QA answer different questions. Give each an independent
   // floor before filling the remaining slots by the normal evidence ordering.

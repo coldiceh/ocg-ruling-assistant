@@ -1102,6 +1102,12 @@ test("rule_query_extractor_uses_lightweight_model", async () => {
       cardType: "效果怪兽",
       effectText: "ANONYMOUS_COMPLETE_EFFECT_TEXT：特殊召唤。那之后，进行后续处理。",
     }],
+    candidateQuestions: [{
+      id: "qa-question-only-candidate",
+      question: "QUESTION_ONLY_CANDIDATE_MARKER：连续处理的前一步没有完成时，后一步如何处理？",
+      answer: "CANDIDATE_ANSWER_MUST_NOT_REACH_QUERY_MODEL",
+      fullText: "CANDIDATE_FULL_TEXT_MUST_NOT_REACH_QUERY_MODEL",
+    }],
     env: {
       MODEL_PROVIDER: "deepseek",
       DEEPSEEK_API_KEY: "test-deepseek-key",
@@ -1124,7 +1130,13 @@ test("rule_query_extractor_uses_lightweight_model", async () => {
             checkpoint: "step_dependency",
             query: "连续处理 前一步完成 后一步依赖 | 連続処理 前段完了 後段依存 | sequential resolution prior step dependency",
             reason: "检索连续处理的依赖关系",
-            confidence: "medium",
+           confidence: "medium",
+          }],
+          candidateAssessments: [{
+            id: "qa-question-only-candidate",
+            relevance: "high",
+            premise: "partial",
+            difference: "候选问题没有给出本题的完整场面。",
           }],
         }) } }],
         usage: { prompt_tokens: 25, completion_tokens: 8 },
@@ -1155,6 +1167,15 @@ test("rule_query_extractor_uses_lightweight_model", async () => {
   assert.match(requestPrompt, /匿名响应者/u);
   assert.match(requestPrompt, /效果怪兽/u);
   assert.match(requestPrompt, /ANONYMOUS_COMPLETE_EFFECT_TEXT/u);
+  assert.match(requestPrompt, /QUESTION_ONLY_CANDIDATE_MARKER/u);
+  assert.doesNotMatch(requestPrompt, /CANDIDATE_(?:ANSWER|FULL_TEXT)_MUST_NOT_REACH_QUERY_MODEL/u);
+  assert.deepEqual(result.candidateAssessments, [{
+    id: "qa-question-only-candidate",
+    relevance: "high",
+    premise: "partial",
+    difference: "候选问题没有给出本题的完整场面。",
+    source: "model_rule_query_soft_ranker",
+  }]);
   assert.equal(calls.length, 1);
 });
 
@@ -1449,8 +1470,8 @@ test("public profiles hard-disable the independent applicability stage even if d
   assert.equal(publicEnv.RAG_RULE_MODEL_PROVIDER, "relay");
   assert.equal(publicEnv.RAG_RULE_MODEL_RELAY_API_KEY, "relay-applicability-key");
   assert.equal(publicEnv.RAG_RULE_MODEL_RELAY_BASE_URL, "https://relay.example.test/v1");
-  assert.equal(publicEnv.RELAY_RULE_MODEL, "gpt-5.6-terra");
-  assert.equal(publicEnv.RAG_RULE_MODEL_REASONING_EFFORT, "none");
+  assert.equal(publicEnv.RELAY_RULE_MODEL, "gpt-5.6-luna");
+  assert.equal(publicEnv.RAG_RULE_MODEL_REASONING_EFFORT, "low");
   assert.equal(publicEnv.RAG_EVIDENCE_APPLICABILITY_ENABLED, "false");
   assert.equal(call, null);
   assert.equal(result.status, "skipped");
@@ -1469,8 +1490,8 @@ test("public model environment keeps the independent reviewer off unless explici
   assert.equal(publicEnv.RAG_REASONING_EFFORT, "low");
   assert.equal(publicEnv.RAG_CARD_MODEL_PROVIDER, "deepseek");
   assert.equal(publicEnv.RAG_RULE_MODEL_PROVIDER, "relay");
-  assert.equal(publicEnv.RELAY_RULE_MODEL, "gpt-5.6-terra");
-  assert.equal(publicEnv.RAG_RULE_MODEL_REASONING_EFFORT, "none");
+  assert.equal(publicEnv.RELAY_RULE_MODEL, "gpt-5.6-luna");
+  assert.equal(publicEnv.RAG_RULE_MODEL_REASONING_EFFORT, "low");
   assert.equal(publicEnv.RAG_EVIDENCE_APPLICABILITY_ENABLED, "false");
 });
 
@@ -4282,6 +4303,32 @@ test("lightweight auxiliary timeout aborts both transport and a stalled JSON bod
   await runCase({ label: "body", bodyStalls: true });
 });
 
+test("rule planning has its own timeout instead of inheriting the card extractor deadline", async () => {
+  let requestSignal = null;
+  const startedAt = Date.now();
+  const result = await callRuleQueryExtractionModel({
+    userQuery: "rule-timeout-independent-20400102",
+    dataRevision: "rule-timeout-independent-20400102",
+    env: {
+      RAG_RULE_MODEL_PROVIDER: "relay",
+      RAG_RULE_MODEL_RELAY_API_KEY: "relay-rule-key",
+      RAG_RULE_MODEL_RELAY_BASE_URL: "https://relay.example.test/v1",
+      RAG_CARD_MODEL_TIMEOUT_MS: "1",
+      RAG_RULE_MODEL_TIMEOUT_MS: "25",
+      API_CHATGPT_DAILY_BUDGET_USD: "10",
+    },
+    fetchImpl: async (_url, options) => {
+      requestSignal = options.signal;
+      return new Promise(() => {});
+    },
+  });
+
+  assert.equal(requestSignal?.aborted, true);
+  assert.equal(requestSignal?.reason?.message, "rule_query_model_timeout");
+  assert.ok(Date.now() - startedAt >= 10);
+  assert.ok(result.warnings.includes("rule_query_model_failed:rule_query_model_timeout"));
+});
+
 test("public DeepSeek budget also treats cached input as uncached", () => {
   const cost = estimateDeepSeekCostCny({
     prompt_tokens: 1000,
@@ -5332,7 +5379,7 @@ test("an in-flight public settlement cannot reopen an owner-closed ChatGPT day",
   assert.equal(resetRelay.spentTodayUsd, 0);
 });
 
-test("public retrieval keeps a strong cross-card mechanism analogue related-only", async () => {
+test("public retrieval keeps cross-card official candidates related-only without handwritten deletion", async () => {
   const lifecycleCard = {
     id: "lifecycle-current-card",
     name: "匿名期限卡",
@@ -5395,10 +5442,86 @@ test("public retrieval keeps a strong cross-card mechanism analogue related-only
   assert.equal(related.isDirect, false);
   assert.equal(related.retrievalContext.scope, "cross_card_official_mechanism");
   assert.equal(related.retrievalContext.relatedOnly, true);
-  assert.ok(!evidence.officialQaRelated.some((item) => item.id === ordinaryControlQa.id));
+  const ordinary = evidence.officialQaRelated.find((item) => item.id === ordinaryControlQa.id);
+  assert.ok(ordinary);
+  assert.equal(ordinary.type, "related");
+  assert.equal(ordinary.isDirect, false);
+  assert.equal(ordinary.retrievalContext.relatedOnly, true);
   assert.ok(!evidence.officialQaDirectCandidates.some((item) => item.id === lifecycleAnalogue.id));
   assert.ok(!evidence.officialQaDirectCandidates.some((item) => item.id === ordinaryControlQa.id));
-  assert.equal(evidence.debug.officialMechanismAnalogueCount, 1);
+  assert.equal(evidence.debug.officialMechanismAnalogueCount, 2);
+});
+
+test("rule model candidate assessments only reorder official questions and never delete them", async () => {
+  const focusCard = {
+    id: "soft-rank-card",
+    name: "匿名阶段卡",
+    cnName: "匿名阶段卡",
+    effectText: "①：可以发动。进行第一步。那之后，进行第二步。",
+    aliases: ["匿名阶段卡"],
+  };
+  const qaA = {
+    id: "qa-soft-rank-a",
+    recordType: "qa",
+    question: "匿名阶段卡被破坏时是否可以发动效果？",
+    answer: "SOFT_RANK_ANSWER_A_MUST_NOT_REACH_QUERY_MODEL",
+    text: "匿名阶段卡被破坏时是否可以发动效果？ 可以。",
+    cardIds: [focusCard.id],
+    cards: [focusCard.name],
+  };
+  const qaB = {
+    id: "qa-soft-rank-b",
+    recordType: "qa",
+    question: "匿名阶段卡的效果分两步处理时，第一步无法处理的场合，第二步如何处理？",
+    answer: "SOFT_RANK_ANSWER_B_MUST_NOT_REACH_QUERY_MODEL",
+    text: "匿名阶段卡的效果分两步处理时，第一步无法处理的场合，第二步不处理。",
+    cardIds: [focusCard.id],
+    cards: [focusCard.name],
+  };
+  let candidatesSeen = [];
+  const evidence = await retrieveRagEvidence({
+    userQuery: "匿名阶段卡在连续处理时应该怎样判断每一步？",
+    cardResolution: {
+      resolvedCards: [focusCard],
+      unresolvedMentions: [],
+      ambiguousMentions: [],
+      userProvidedCardTexts: [],
+    },
+    cards: [focusCard],
+    records: [],
+    qaRecords: [qaA, qaB],
+    ruleSearchQueryProvider: async ({ candidateQuestions }) => {
+      candidatesSeen = candidateQuestions;
+      return {
+        queries: [],
+        candidateAssessments: [{
+          id: qaB.id,
+          relevance: "high",
+          premise: "same",
+          difference: "前提相同。",
+        }, {
+          id: qaA.id,
+          relevance: "low",
+          premise: "different",
+          difference: "候选讨论破坏，不是连续处理。",
+        }],
+      };
+    },
+    env: { RAG_LIVE_OFFICIAL_QA: "false" },
+  });
+
+  assert.ok(candidatesSeen.some((item) => item.id === qaA.id));
+  assert.ok(candidatesSeen.some((item) => item.id === qaB.id));
+  assert.doesNotMatch(JSON.stringify(candidatesSeen), /SOFT_RANK_ANSWER/u);
+  const relatedIds = evidence.officialQaRelated.map((item) => item.id);
+  assert.ok(relatedIds.includes(qaA.id));
+  assert.ok(relatedIds.includes(qaB.id));
+  assert.ok(relatedIds.indexOf(qaB.id) < relatedIds.indexOf(qaA.id));
+  assert.equal(
+    evidence.officialQaRelated.find((item) => item.id === qaB.id)
+      ?.retrievalContext?.modelCandidateAssessment?.premise,
+    "same",
+  );
 });
 
 test("rag_prompt_truncates_context", () => {
@@ -5427,6 +5550,53 @@ test("rag_prompt_truncates_context", () => {
   assert.match(bundle.prompt, /usedEvidence 的 id 只能来自 allowedEvidenceIds/u);
   assert.deepEqual(bundle.allowedEvidenceIds, ["card-text-long"]);
   assert.deepEqual(bundle.evidenceSelectionDiagnostics.map((item) => item.id), ["card-text-long"]);
+});
+
+test("general prompt applies one reference budget and omits resolved-card text duplicates", () => {
+  const makeEvidence = (prefix, count, extras = {}) => Array.from({ length: count }, (_, index) => ({
+    id: `${prefix}-${index + 1}`,
+    type: prefix,
+    title: `${prefix} ${index + 1}`,
+    text: `${prefix} evidence ${index + 1}`,
+    ...extras,
+  }));
+  const bundle = buildRagRulingPromptBundle({
+    userQuery: "测试统一证据预算",
+    cardResolution: { resolvedCards: cards },
+    evidence: {
+      cardTexts: [{
+        id: "card-text-100",
+        type: "card_text",
+        title: "测试龙 的卡片文本",
+        text: cards[0].effectText,
+        cardIds: [cards[0].id],
+      }],
+      officialQaDirectCandidates: [],
+      faqRelated: makeEvidence("faq-budget", 8, { recordType: "card-faq", official: true }),
+      officialQaRelated: [
+        ...makeEvidence("qa-budget", 7, { recordType: "qa", official: true }),
+        ...makeEvidence("cross-budget", 1, {
+          recordType: "qa",
+          official: true,
+          retrievalContext: { scope: "cross_card_official_mechanism", relatedOnly: true },
+        }),
+      ],
+      provisionalOfficialResponses: [],
+      rawRelatedEvidence: makeEvidence("rule-budget", 8, { type: "rulebook" }),
+      retrievalWarnings: [],
+    },
+    env: {
+      RAG_MAX_PROMPT_REFERENCE_ITEMS: "5",
+      RAG_MAX_PROMPT_CHARS: "60000",
+    },
+  });
+
+  assert.equal(bundle.allowedEvidenceIds.length, 5);
+  assert.ok(!bundle.allowedEvidenceIds.includes("card-text-100"));
+  assert.ok(bundle.allowedEvidenceIds.some((id) => id.startsWith("faq-budget-")));
+  assert.ok(bundle.allowedEvidenceIds.some((id) => id.startsWith("qa-budget-")));
+  assert.ok(bundle.allowedEvidenceIds.some((id) => id.startsWith("cross-budget-")));
+  assert.ok(bundle.warnings.includes("prompt_reference_items_limited:24->5"));
 });
 
 test("public prompt retains card text, excludes semantic state output, and has no recovery prompt", () => {

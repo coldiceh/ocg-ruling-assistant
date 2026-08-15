@@ -25,6 +25,7 @@ test("private pure LLM evaluation is explicitly triggered, serial and generation
   assert.match(workflow, /github\.triggering_actor == github\.repository_owner/u);
   assert.match(workflow, /github\.event\.pull_request\.user\.login == github\.repository_owner/u);
   assert.match(workflow, /evaluation_limit:[\s\S]*type: choice[\s\S]*- "1"[\s\S]*- "32"/u);
+  assert.match(workflow, /evaluation_case_ids:[\s\S]*comma-separated anonymous case IDs[\s\S]*type: string/u);
   assert.match(workflow, /github\.event\.label\.name == 'private-pure-llm-evaluation' && '32'/u);
   assert.match(workflow, /needs: validate/u);
   assert.match(workflow, /timeout-minutes: 75/u);
@@ -54,8 +55,13 @@ test("private pure LLM evaluation is explicitly triggered, serial and generation
   assert.match(workflow, /if \[ "\$EVALUATION_LIMIT" = "32" \]; then/u);
   assert.match(workflow, /case_count_args\+=\(--require-case-count 32\)/u);
   assert.match(workflow, /exclude_case_args\+=\(--exclude-case case-025\)/u);
+  assert.match(workflow, /EVALUATION_CASE_IDS:[\s\S]*inputs\.evaluation_case_ids/u);
+  assert.match(workflow, /IFS=',' read -ra requested_case_ids/u);
+  assert.match(workflow, /include_case_args\+=\(--include-case "\$case_id"\)/u);
+  assert.match(workflow, /"\$\{include_case_args\[@\]\}"/u);
   assert.match(workflow, /SELECTED_EVALUATION_COUNT=\$selected_case_count/u);
-  assert.match(workflow, /SELECTED_EVALUATION_COUNT:[\s\S]*private-eval-full-[^\r\n]*&& '31' \|\| '1'/u);
+  assert.match(workflow, /selected_case_count=\$selected_case_count/u);
+  assert.match(workflow, /generation_failed=\$generation_failed/u);
   assert.match(workflow, /"\$\{exclude_case_args\[@\]\}"/u);
   assert.match(workflow, /"\$\{case_count_args\[@\]\}"/u);
   assert.match(workflow, /--generation-timeout-ms 90000/u);
@@ -66,6 +72,17 @@ test("private pure LLM evaluation is explicitly triggered, serial and generation
   assert.doesNotMatch(workflow, /Generate and judge|Judge the|Sol high/iu);
   assert.doesNotMatch(workflow, /for\s+attempt|--retries|strategy:[\s\S]*matrix:/iu);
   assert.doesNotMatch(workflow, /UPSTASH|legacy.?lua|formal.?engine/iu);
+  assert.match(workflow, /name: Enforce evaluator process completion[\s\S]*steps\.evaluation\.outputs\.exit_code != '0'/u);
+  assert.match(workflow, /name: Enforce complete paid generation after private archive and cleanup[\s\S]*steps\.evaluation\.outputs\.generation_failed != '0'/u);
+  assert.ok(
+    workflow.indexOf("Upload the encrypted private manual-review archive")
+      < workflow.indexOf("Enforce complete paid generation after private archive and cleanup"),
+  );
+  assert.ok(
+    workflow.indexOf("Scrub private plaintext and stop the backend")
+      < workflow.indexOf("Enforce complete paid generation after private archive and cleanup"),
+  );
+  assert.doesNotMatch(workflow, /Retrieval-only dry-run unexpectedly produced a scoreable candidate/u);
 });
 
 test("owner tag evaluation is pinned to the trusted preview branch", async () => {
@@ -159,8 +176,8 @@ test("public artifact has only aggregate completion, latency and cost metadata",
   assert.match(workflow, /report\.mode !== "generate_only"/u);
   assert.match(workflow, /const selectedCount = Number\(process\.env\.SELECTED_EVALUATION_COUNT\)/u);
   assert.match(workflow, /report\.summary\?\.total !== selectedCount/u);
-  assert.match(workflow, /const expectedGenerated = retrievalOnly \? 0 : selectedCount/u);
-  assert.match(workflow, /const expectedFailed = retrievalOnly \? selectedCount : 0/u);
+  assert.match(workflow, /generated \+ generationFailed !== selectedCount/u);
+  assert.match(workflow, /retrievalOnly && \(generated !== 0 \|\| generationFailed !== selectedCount\)/u);
   assert.match(workflow, /retention-days: 1/u);
   const publicUploadStep = workflow.match(
     /- name: Upload the anonymous aggregate report[\s\S]*?(?=\n\s+- name:)/u,
@@ -262,6 +279,9 @@ test("only the ciphertext-only publishing job receives repository write permissi
   assert.match(publisherJob, /ref: private-evaluation-results/u);
   assert.match(privateJob, /outputs:[\s\S]{0,100}archive_created: \$\{\{ steps\.private_archive\.outputs\.created \}\}/u);
   assert.match(publisherJob, /needs\.private-evaluation\.outputs\.archive_created == 'true'/u);
+  assert.match(privateJob, /selected_case_count: \$\{\{ steps\.evaluation\.outputs\.selected_case_count \}\}/u);
+  assert.match(publisherJob, /SELECTED_EVALUATION_COUNT: \$\{\{ needs\.private-evaluation\.outputs\.selected_case_count \}\}/u);
+  assert.doesNotMatch(publisherJob, /SELECTED_EVALUATION_COUNT:[\s\S]{0,100}private-eval-full-/u);
   assert.match(publisherJob, /run_relative="runs\/\$\{GITHUB_RUN_ID\}-\$\{GITHUB_RUN_ATTEMPT\}"/u);
   assert.match(publisherJob, /test "\$\(find "\$encrypted_dir" -type f \| wc -l\)" -eq 2/u);
   assert.match(publisherJob, /cipher_sha256=.*sha256sum/u);

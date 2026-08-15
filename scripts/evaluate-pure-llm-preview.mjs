@@ -91,13 +91,22 @@ export async function runPureLlmPreviewEvaluation({
   if (storedDataset) assertSameDataset(storedDataset, dataset);
   else await writeJsonAtomically(privateDatasetPath, dataset);
 
+  const includedCaseIds = new Set(options.includedCaseIds);
   const excludedCaseIds = new Set(options.excludedCaseIds);
+  for (const caseId of includedCaseIds) {
+    if (!dataset.cases.some((item) => item.id === caseId)) {
+      throw new Error(`Unknown included evaluation case: ${caseId}`);
+    }
+  }
   for (const caseId of excludedCaseIds) {
     if (!dataset.cases.some((item) => item.id === caseId)) {
       throw new Error(`Unknown excluded evaluation case: ${caseId}`);
     }
   }
-  const eligibleCases = dataset.cases.filter((item) => !excludedCaseIds.has(item.id));
+  const includedCases = includedCaseIds.size > 0
+    ? dataset.cases.filter((item) => includedCaseIds.has(item.id))
+    : dataset.cases;
+  const eligibleCases = includedCases.filter((item) => !excludedCaseIds.has(item.id));
   const selectedCases = eligibleCases.slice(0, options.limit ?? eligibleCases.length);
   if (!selectedCases.length) throw new Error("The selected evaluation set is empty");
 
@@ -178,11 +187,6 @@ export async function runPureLlmPreviewEvaluation({
   });
   await writeJsonAtomically(reportPath, report);
   log(JSON.stringify(report.summary));
-  if (options.generateOnly && Number(report.summary?.generationFailed || 0) > 0) {
-    throw new Error(
-      `Private candidate generation failed for ${report.summary.generationFailed} of ${report.summary.total} selected cases`,
-    );
-  }
   return report;
 }
 
@@ -477,6 +481,7 @@ export function parseCliArguments(argv = []) {
     autoJudge: false,
     help: false,
     limit: null,
+    includedCaseIds: [],
     excludedCaseIds: [],
     requiredCaseCount: null,
     generationTimeoutMs: DEFAULT_GENERATION_TIMEOUT_MS,
@@ -499,6 +504,8 @@ export function parseCliArguments(argv = []) {
       options.baseUrl = requiredNextValue(argv, ++index, argument);
     } else if (argument === "--limit") {
       options.limit = positiveInteger(requiredNextValue(argv, ++index, argument), argument);
+    } else if (argument === "--include-case") {
+      options.includedCaseIds.push(evaluationCaseId(requiredNextValue(argv, ++index, argument), argument));
     } else if (argument === "--exclude-case") {
       options.excludedCaseIds.push(evaluationCaseId(requiredNextValue(argv, ++index, argument), argument));
     } else if (argument === "--require-case-count") {
@@ -1233,6 +1240,7 @@ Options:
   --auto-judge                    Legacy: generate and automatically judge with Sol high
   --judge-only                    Legacy: judge existing generated checkpoints; do not call Preview
   --limit <n>                     Evaluate only the first n unique cases
+  --include-case <case-NNN>       Include one anonymous case id (repeatable; applied before exclusions and limit)
   --exclude-case <case-NNN>       Exclude one anonymous case id (repeatable)
   --require-case-count <n>        Stop before generation unless the private dataset has exactly n unique cases
   --generation-timeout-ms <n>     Per-generation timeout (default: 90000)

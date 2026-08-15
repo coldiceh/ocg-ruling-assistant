@@ -264,12 +264,51 @@ export async function retrieveRagEvidence({
     .filter(Boolean)
     .map((card) => cardTextEvidence(card, limits.maxCardTextChars, retrievalWarnings));
   const userProvidedCardTextEvidence = dedupeEvidence(providedTexts.map((item, index) => userProvidedTextEvidence(item, index, limits.maxCardTextChars, retrievalWarnings)));
+  // Build a broad, question-only candidate set before asking the auxiliary
+  // model for query expansions. The model may softly rank these questions and
+  // explain premise differences, but it never receives their answers and its
+  // output is never an authority or a hard deletion gate.
+  const localOfficialMatches = searchOfficialQaEvidence({
+    question: userQuery,
+    records: scopedRecordBuckets.officialQa,
+    resolvedCards: effectiveQaIdentityCards,
+    limit: effectiveQaIdentityCards.length
+      ? Math.max(256, limits.maxRelatedEvidence * 24)
+      : Math.max(20, limits.maxOfficialQa * 4),
+    subsumptionCandidatePoolComplete: subsumptionCandidatePoolComplete === true
+      || !(cards || records || qaRecords),
+  });
+  const initialCrossCardOfficialQuestions = rankRecords({
+    userQuery,
+    records: dedupeBy([
+      ...recordBuckets.officialQa,
+      ...recordBuckets.faq,
+    ], stableRecordKey),
+    resolvedCards: [],
+    mentionQueries: [],
+    ruleSearchQueries: deterministicRuleQueries,
+    allowNoCardMatch: true,
+  }).slice(0, 16);
+  const ruleQueryCandidateQuestions = buildRuleQueryCandidateQuestions({
+    scopedMatches: localOfficialMatches.all,
+    crossCardRecords: initialCrossCardOfficialQuestions,
+    limit: 64,
+  });
+  let modelCandidateAssessments = [];
   if (typeof ruleSearchQueryProvider === "function") {
-    const providedRuleQueries = await ruleSearchQueryProvider({
+    const providedRulePlan = await ruleSearchQueryProvider({
       resolvedCards: retrievalCards,
       userProvidedCardTexts: providedTexts,
+      candidateQuestions: ruleQueryCandidateQuestions,
     });
     throwIfAborted(signal);
+    const providedRuleQueries = Array.isArray(providedRulePlan)
+      ? providedRulePlan
+      : providedRulePlan?.queries;
+    modelCandidateAssessments = normalizeModelCandidateAssessments(
+      Array.isArray(providedRulePlan) ? [] : providedRulePlan?.candidateAssessments,
+      ruleQueryCandidateQuestions,
+    );
     supplementalRuleQueries = normalizeRuleSearchQueries([
       ...supplementalRuleQueries,
       ...(Array.isArray(providedRuleQueries) ? providedRuleQueries : []),
@@ -324,22 +363,6 @@ export async function retrieveRagEvidence({
   if (rulebookCandidates.length) retrievalWarnings.push(`rulebook_passages_retrieved:${rulebookCandidates.length}`);
 
   stageStartedAt = Date.now();
-  const localOfficialMatches = searchOfficialQaEvidence({
-    question: userQuery,
-    records: scopedRecordBuckets.officialQa,
-    resolvedCards: effectiveQaIdentityCards,
-    // This is an in-memory discovery pass. Keep a wider scored pool until the
-    // shared related-evidence allocator applies its fixed prompt budget below;
-    // otherwise a decisive identity-linked QA can be lost merely because a
-    // popular card has many higher-ranked but structurally repetitive entries.
-    limit: effectiveQaIdentityCards.length
-      ? Math.max(256, limits.maxRelatedEvidence * 24)
-      : Math.max(20, limits.maxOfficialQa * 4),
-    // The scoped bucket comes from the complete local QA snapshot and keeps
-    // every record indexed to any resolved query card.
-    subsumptionCandidatePoolComplete: subsumptionCandidatePoolComplete === true
-      || !(cards || records || qaRecords),
-  });
   const liveQaEvidenceLimit = readPositiveNumber(env.RAG_LIVE_QA_MAX_CANDIDATES, 8);
   // The final prompt remains tightly bounded, but a multi-card question needs
   // a wider discovery pass before semantic ranking.  Otherwise a popular card
@@ -411,7 +434,10 @@ export async function retrieveRagEvidence({
       retrievalWarnings,
     );
   }
-  const officialMatches = liveOfficialQa.records?.length
+  const modelAssessmentById = new Map(
+    modelCandidateAssessments.map((item) => [item.id, item]),
+  );
+  const unrankedOfficialMatches = liveOfficialQa.records?.length
     ? searchOfficialQaEvidence({
       question: userQuery,
       // Prefer the freshly hydrated locale over a stale/local record with the
@@ -422,8 +448,12 @@ export async function retrieveRagEvidence({
       limit: effectiveQaIdentityCards.length
         ? Math.max(256, limits.maxRelatedEvidence * 24)
         : Math.max(20, limits.maxOfficialQa * 4),
-    })
+      })
     : localOfficialMatches;
+  const officialMatches = applyModelAssessmentsToOfficialMatches(
+    unrankedOfficialMatches,
+    modelAssessmentById,
+  );
   timingsMs.officialQa = Date.now() - stageStartedAt;
   const officialQaDirectCandidates = officialMatches.exact
     .filter((match) => (
@@ -441,25 +471,23 @@ export async function retrieveRagEvidence({
   const directIds = new Set(officialQaDirectCandidates.map((item) => item.id));
 
   stageStartedAt = Date.now();
+  // Related evidence remains broad. Handwritten question-type, player-role or
+  // scenario classifiers may contribute diagnostic scores, but must not erase
+  // an official candidate before the final model can compare its premises.
   const usefulScopedOfficialMatches = officialMatches.all.filter((match) => (
-      isOfficialQaRecord(match.record)
-      && isUsefulOfficialRelatedMatch(match)
-      && (
-        !isIncidentalMultiCardExampleMatch(match, effectiveQaIdentityCards.length)
-        || isStrongQuestionStructureAnalogy(match)
-      )
-    ));
+    isOfficialQaRecord(match.record)
+  ));
   const scopedOfficialQaRelatedSource = mergeOfficialRelatedSourceItems([
     ...usefulScopedOfficialMatches,
     ...rankRecordsWithSupplementalQueries({
       userQuery,
-      records: scopedRecordBuckets.qa,
+      records: applyModelAssessmentsToRecords(scopedRecordBuckets.qa, modelAssessmentById),
       resolvedCards: effectiveQaIdentityCards,
       mentionQueries,
       deterministicRuleQueries,
       supplementalRuleQueries: effectiveSupplementalRuleQueries,
       allowNoCardMatch: effectiveQaIdentityCards.length === 0 && normalizedRuleQueries.length > 0,
-    }).filter((record) => !isIncidentalMultiCardExampleRecord(record, effectiveQaIdentityCards.length)),
+    }),
   ]).filter((item) => (
     !effectiveQaIdentityCards.length
     || relatedMatchedQuestionCardIds(item).length > 0
@@ -470,10 +498,10 @@ export async function retrieveRagEvidence({
   // pool with the same rule-query plan and keep a small, bounded related-only
   // reserve. This never upgrades an analogy to a direct ruling and never uses
   // the answer text to resolve card identity.
-  const crossCardOfficialPool = dedupeBy([
+  const crossCardOfficialPool = applyModelAssessmentsToRecords(dedupeBy([
     ...recordBuckets.officialQa,
     ...recordBuckets.faq,
-  ], stableRecordKey);
+  ], stableRecordKey), modelAssessmentById);
   const eligibleCrossCardOfficialPool = effectiveQaIdentityCards.length
     ? crossCardOfficialPool.filter(
       (record) => !recordSharesResolvedIdentity(record, effectiveQaIdentityCards),
@@ -493,11 +521,7 @@ export async function retrieveRagEvidence({
         supplementalRuleQueries: effectiveSupplementalRuleQueries,
         allowNoCardMatch: true,
       })
-        .filter((record) => !recordSharesResolvedIdentity(record, effectiveQaIdentityCards))
-        .filter((record) => (
-          supplementalQueryKeysForItem(record, { strictOnly: true }).length > 0
-          || isUsefulCrossCardOfficialRelatedRecord(record)
-        )), crossCardOfficialCandidateLimit, {
+        .filter((record) => !recordSharesResolvedIdentity(record, effectiveQaIdentityCards)), crossCardOfficialCandidateLimit, {
           queryKeys: effectiveSupplementalRuleQueryKeys,
           strictOnly: true,
         })
@@ -556,7 +580,7 @@ export async function retrieveRagEvidence({
 
   const rankedFaqRelatedSource = rankRecordsWithSupplementalQueries({
     userQuery,
-    records: scopedRecordBuckets.faq,
+    records: applyModelAssessmentsToRecords(scopedRecordBuckets.faq, modelAssessmentById),
     resolvedCards: retrievalCards,
     mentionQueries,
     deterministicRuleQueries,
@@ -587,13 +611,13 @@ export async function retrieveRagEvidence({
 
   const rawRelatedSource = rankRecordsWithSupplementalQueries({
     userQuery,
-    records: scopedRecordBuckets.rawRelated,
+    records: applyModelAssessmentsToRecords(scopedRecordBuckets.rawRelated, modelAssessmentById),
     resolvedCards: retrievalCards,
     mentionQueries,
     deterministicRuleQueries,
     supplementalRuleQueries: effectiveSupplementalRuleQueries,
     allowNoCardMatch: retrievalCards.length === 0,
-  }).filter((record) => !isIncidentalMultiCardExampleRecord(record, retrievalCards.length));
+  });
   if (rawRelatedSource.length > limits.maxRelatedEvidence) retrievalWarnings.push(`raw_related_limited:${rawRelatedSource.length}->${limits.maxRelatedEvidence}`);
   const rawRelatedEvidence = rawRelatedSource
     .slice(0, limits.maxRelatedEvidence)
@@ -1560,21 +1584,6 @@ function officialQaNumericId(record = {}) {
   return String(record.stableId || record.id || "").match(/(?:ygoresources-qa-|official-qa-)(\d+)$/u)?.[1] || "";
 }
 
-function isUsefulOfficialRelatedMatch(match = {}) {
-  return match.matchLevel === "official_qa_exact"
-    || (match.matchLevel === "official_qa_near" && Number(match.score || 0) >= 0.68)
-    || Number(match.score || 0) >= 0.78
-    || (
-      (
-        (match.matchedQuestionCardIds || []).length > 0
-        || (match.matchedRelatedCardIds || []).length > 0
-      )
-      && match.typeCompatible === true
-      && match.playerRoleCompatibility !== "mismatch"
-      && match.scenarioPremiseCompatibility !== "mismatch"
-    );
-}
-
 function evidenceMechanismAnalogues(item = {}) {
   const record = item?.record || item;
   const signals = record?.retrievalSignals || {};
@@ -1839,7 +1848,10 @@ function rankRecords({ userQuery, records, resolvedCards, mentionQueries = [], r
       return {
         ...contextual,
         retrievalScore: item.relevanceScore,
-        retrievalSignals: item.signals,
+        retrievalSignals: {
+          ...(contextual.retrievalSignals || {}),
+          ...item.signals,
+        },
       };
     });
   return dedupeBy(ranked, stableRecordKey);
@@ -1932,7 +1944,9 @@ function rankRecordsWithSupplementalQueries({
 function compareRetrievedRecords(left = {}, right = {}) {
   const leftSignals = left.retrievalSignals || {};
   const rightSignals = right.retrievalSignals || {};
-  return Number(rightSignals.questionCardIdCoverage || 0) - Number(leftSignals.questionCardIdCoverage || 0)
+  return modelAssessmentRank(rightSignals.modelCandidateAssessment)
+      - modelAssessmentRank(leftSignals.modelCandidateAssessment)
+    || Number(rightSignals.questionCardIdCoverage || 0) - Number(leftSignals.questionCardIdCoverage || 0)
     || Number(rightSignals.matchedQuestionCardIdCount || 0) - Number(leftSignals.matchedQuestionCardIdCount || 0)
     || Number(rightSignals.strongMechanismQueryCoverage || 0) - Number(leftSignals.strongMechanismQueryCoverage || 0)
     || (rightSignals.matchedStrongMechanismFeatures || []).length - (leftSignals.matchedStrongMechanismFeatures || []).length
@@ -1943,35 +1957,67 @@ function compareRetrievedRecords(left = {}, right = {}) {
     || stableRecordKey(left).localeCompare(stableRecordKey(right));
 }
 
-function isIncidentalMultiCardExampleMatch(match = {}, resolvedCardCount = 0) {
-  if (!hasSevereQuestionIdentityMismatch(match, resolvedCardCount)) return false;
-  // A supporting analogy may intentionally use different cards. Permit it
-  // only when the operation signature itself is strong and compatible; raw or
-  // skeleton text similarity cannot override an explicit identity conflict.
-  return !isStrongCompatibleOperationAnalogy(match);
+function modelAssessmentRank(assessment = null) {
+  if (!assessment || typeof assessment !== "object") return 0;
+  const premise = String(assessment.premise || "unknown");
+  if (premise === "different") return -20;
+  const premiseScore = premise === "same" ? 20 : premise === "partial" ? 10 : 0;
+  const relevance = String(assessment.relevance || "low");
+  const relevanceScore = relevance === "high" ? 3 : relevance === "medium" ? 2 : 1;
+  return premiseScore + relevanceScore;
 }
 
-function isIncidentalMultiCardExampleRecord(record = {}, resolvedCardCount = 0) {
-  if (!["qa", "official-database", "card-faq"].includes(record.recordType)) return false;
-  const signals = record.retrievalSignals || {};
-  // This helper only filters related-evidence discovery paths. A strict,
-  // official mechanism match may survive an identity mismatch as an analogy,
-  // but it is never promoted to a direct ruling.
-  if (isUsefulCrossCardOfficialRelatedRecord(record)) return false;
-  const questionCardIdCount = principalQuestionCardIds(record).size;
-  const matchedQuestionCardIdCount = Number(
-    signals.matchedQuestionCardIdCount || 0,
-  );
-  const unmatchedQuestionCardIdCount = Math.max(
-    0,
-    questionCardIdCount - matchedQuestionCardIdCount,
-  );
-  return resolvedCardCount >= 2
-    && matchedQuestionCardIdCount >= 1
-    && questionCardIdCount > matchedQuestionCardIdCount
-    && unmatchedQuestionCardIdCount >= 1
-    && (matchedQuestionCardIdCount / resolvedCardCount) <= 0.5
-    && !signals.mechanismAnalogue;
+function attachModelCandidateAssessment(record = {}, assessment = null) {
+  if (!assessment) return record;
+  return {
+    ...record,
+    retrievalContext: {
+      ...(record.retrievalContext || {}),
+      modelCandidateAssessment: {
+        relevance: assessment.relevance,
+        premise: assessment.premise,
+        difference: assessment.difference || "",
+        source: assessment.source || "model_rule_query_soft_ranker",
+      },
+    },
+    retrievalSignals: {
+      ...(record.retrievalSignals || {}),
+      modelCandidateAssessment: assessment,
+    },
+  };
+}
+
+function applyModelAssessmentsToRecords(records = [], assessmentById = new Map()) {
+  if (!assessmentById.size) return records;
+  return (records || []).map((record) => attachModelCandidateAssessment(
+    record,
+    assessmentById.get(stableRecordKey(record)),
+  ));
+}
+
+function applyModelAssessmentsToOfficialMatches(matches = {}, assessmentById = new Map()) {
+  if (!assessmentById.size) return matches;
+  const rank = (items = []) => items
+    .map((match, index) => {
+      const assessment = assessmentById.get(stableRecordKey(match?.record || match));
+      return {
+        match: assessment ? {
+          ...match,
+          modelCandidateAssessment: assessment,
+          record: attachModelCandidateAssessment(match.record, assessment),
+        } : match,
+        index,
+        score: modelAssessmentRank(assessment),
+      };
+    })
+    .sort((left, right) => right.score - left.score || left.index - right.index)
+    .map((item) => item.match);
+  return {
+    ...matches,
+    all: rank(matches.all),
+    exact: rank(matches.exact),
+    near: rank(matches.near),
+  };
 }
 
 function hasSevereQuestionIdentityMismatch(match = {}, resolvedCardCount = 0) {
@@ -2007,36 +2053,6 @@ function hasSevereQuestionIdentityMismatch(match = {}, resolvedCardCount = 0) {
     && questionCardIdCount > matchedQuestionCardIdCount
     && unmatchedQuestionCardIdCount >= 1
     && questionCoverage <= 0.5;
-}
-
-function isStrongCompatibleOperationAnalogy(match = {}) {
-  const distinctiveHits = Array.isArray(match.distinctiveOperationSemanticHits)
-    ? match.distinctiveOperationSemanticHits.length
-    : 0;
-  return match.typeCompatible === true
-    && match.playerRoleCompatibility !== "mismatch"
-    && match.scenarioPremiseCompatibility !== "mismatch"
-    && match.effectNumberCompatible !== false
-    && match.sceneQualifiersCompatible !== false
-    && (match.matchedQuestionOperationFamilies || []).length >= 1
-    && distinctiveHits >= 2
-    && Number(match.distinctiveOperationSemanticQueryCoverage || 0) >= 0.66
-    && Number(match.operationSemanticQueryCoverage || 0) >= 0.6;
-}
-
-function isStrongQuestionStructureAnalogy(match = {}) {
-  const matchedOperationFamilies = match.matchedQuestionOperationFamilies || [];
-  return match.typeCompatible === true
-    && match.playerRoleCompatibility !== "mismatch"
-    && match.scenarioPremiseCompatibility !== "mismatch"
-    && match.effectNumberCompatible !== false
-    && match.sceneQualifiersCompatible !== false
-    && (match.matchedQuestionCardIds || []).length >= 1
-    && matchedOperationFamilies.length >= 1
-    && Number(match.operationSemanticQueryCoverage || 0) >= 0.5
-    && Number(match.semanticQueryCoverage || 0) >= 0.75
-    && Number(match.distinctiveSemanticQueryCoverage || 0) >= 0.5
-    && Number(match.score || 0) >= 0.84;
 }
 
 function principalQuestionCardIds(record = {}) {
@@ -2507,19 +2523,64 @@ function deriveRuleSearchQueries(userQuery) {
   }] : [];
 }
 
-function isUsefulCrossCardOfficialRelatedRecord(record = {}) {
-  if (!isOfficialQaOrFaqRecord(record)) return false;
-  const signals = record.retrievalSignals || {};
-  const strongMatches = Array.isArray(signals.matchedStrongMechanismFeatures)
-    ? signals.matchedStrongMechanismFeatures.length
-    : 0;
-  const contextMatches = Array.isArray(signals.matchedContextMechanismFeatures)
-    ? signals.matchedContextMechanismFeatures.length
-    : 0;
-  return signals.typeCompatible === true
-    && strongMatches >= 1
-    && Number(signals.strongMechanismQueryCoverage || 0) >= 0.5
-    && (strongMatches >= 2 || contextMatches >= 1);
+function buildRuleQueryCandidateQuestions({
+  scopedMatches = [],
+  crossCardRecords = [],
+  limit = 64,
+} = {}) {
+  const safeLimit = Math.max(1, Math.floor(Number(limit) || 64));
+  const candidates = [
+    ...(scopedMatches || []).slice(0, Math.max(1, safeLimit - 16)).map((match) => ({
+      ...(match.record || {}),
+      questionType: match.questionType || match.record?.questionType || "unknown",
+    })),
+    ...(crossCardRecords || []).slice(0, 16),
+  ];
+  const seen = new Set();
+  const result = [];
+  for (const candidate of candidates) {
+    const id = stableRecordKey(candidate);
+    const question = String(
+      candidate.rawDetailedQuestion
+        || candidate.rawQuestion
+        || candidate.question
+        || candidate.title
+        || "",
+    ).replace(/\s+/gu, " ").trim();
+    if (!id || !question || seen.has(id)) continue;
+    seen.add(id);
+    result.push({
+      id,
+      question: question.slice(0, 520),
+      questionType: String(candidate.questionType || "unknown").slice(0, 80),
+    });
+    if (result.length >= safeLimit) break;
+  }
+  return result;
+}
+
+function normalizeModelCandidateAssessments(assessments = [], candidateQuestions = []) {
+  const allowedIds = new Set((candidateQuestions || []).map((item) => String(item.id || "")));
+  const seen = new Set();
+  const result = [];
+  for (const assessment of Array.isArray(assessments) ? assessments : []) {
+    const id = String(assessment?.id || "").trim();
+    const relevance = String(assessment?.relevance || "").trim().toLowerCase();
+    const premise = String(assessment?.premise || "").trim().toLowerCase();
+    if (!allowedIds.has(id) || seen.has(id)) continue;
+    if (!["high", "medium", "low"].includes(relevance)) continue;
+    if (!["same", "partial", "different", "unknown"].includes(premise)) continue;
+    seen.add(id);
+    result.push({
+      id,
+      relevance,
+      premise,
+      difference: String(assessment?.difference || "").replace(/\s+/gu, " ").trim().slice(0, 240),
+      source: "model_rule_query_soft_ranker",
+    });
+    if (result.length >= 12) break;
+  }
+  return result;
 }
 
 function isStrictSupplementalOfficialMechanismMatch(record = {}, query = {}) {
@@ -3807,15 +3868,17 @@ function allocateOfficialRelatedEvidence({
     }).slice(0, safeLimit);
   }
 
-  // When scoped evidence already fills the prompt, preserve the historical
-  // bounded cross-card reserve and always leave at least one scoped slot. If
-  // scoped evidence is sparse, cross-card items may only fill unused slots.
+  // A mechanism ruling is often documented on another card. Reserve up to half
+  // of the related budget for cross-card candidates instead of allowing a
+  // popular resolved card's incidental FAQ list to consume nearly every slot.
+  // This is only evidence allocation: all items remain related-only and the
+  // final model must compare their premises.
   const maxCrossCard = scoped.length < safeLimit
     ? Math.min(crossCard.length, safeLimit - scoped.length)
     : Math.min(
       crossCard.length,
       Math.max(0, safeLimit - 1),
-      Math.max(1, Math.floor(safeLimit / 6)),
+      Math.max(2, Math.ceil(safeLimit / 2)),
     );
   const scopedLimit = Math.min(scoped.length, safeLimit - maxCrossCard);
   const prioritizedScoped = reserveRankedHeadAndSupplementalCoverage(

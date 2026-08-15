@@ -17,6 +17,11 @@ on:
         options:
           - "1"
           - "32"
+      evaluation_case_ids:
+        description: Optional comma-separated anonymous case IDs (for example case-028,case-032)
+        required: false
+        default: ""
+        type: string
 
 permissions:
   contents: read
@@ -96,6 +101,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       archive_created: ${{ steps.private_archive.outputs.created }}
+      selected_case_count: ${{ steps.evaluation.outputs.selected_case_count }}
     # Even 32 consecutive 90-second fail-fast cases fit inside this job cap.
     # A workflow-level fault therefore cannot remain alive for several hours.
     timeout-minutes: 75
@@ -132,6 +138,8 @@ jobs:
           || (github.event_name == 'push' && startsWith(github.ref_name, 'private-eval-full-') && '32')
           || (github.event.label.name == 'private-pure-llm-evaluation' && '32')
           || '1' }}
+      EVALUATION_CASE_IDS: >-
+        ${{ github.event_name == 'workflow_dispatch' && inputs.evaluation_case_ids || '' }}
     steps:
       - name: Checkout the exact preview commit
         uses: actions/checkout@v6
@@ -248,25 +256,58 @@ jobs:
           umask 077
           mkdir -p artifacts
           case_count_args=()
+          include_case_args=()
           exclude_case_args=()
-          selected_case_count="$EVALUATION_LIMIT"
           if [ "$EVALUATION_LIMIT" = "32" ]; then
             case_count_args+=(--require-case-count 32)
             exclude_case_args+=(--exclude-case case-025)
-            selected_case_count=31
           fi
-          echo "SELECTED_EVALUATION_COUNT=$selected_case_count" >> "$GITHUB_ENV"
+          if [ -n "${EVALUATION_CASE_IDS//[[:space:]]/}" ]; then
+            IFS=',' read -ra requested_case_ids <<< "$EVALUATION_CASE_IDS"
+            for raw_case_id in "${requested_case_ids[@]}"; do
+              case_id="${raw_case_id//[[:space:]]/}"
+              if [ -n "$case_id" ]; then
+                include_case_args+=(--include-case "$case_id")
+              fi
+            done
+          fi
           node scripts/evaluate-pure-llm-preview.mjs \
             --dataset "$RUNNER_TEMP/private-dataset.txt" \
             --checkpoint-dir "$RUNNER_TEMP/pure-llm-private-checkpoint" \
             --report artifacts/pure-llm-private-public-report.json \
             --base-url "http://127.0.0.1:$PORT" \
             --generate-only \
+            "${include_case_args[@]}" \
             --limit "$EVALUATION_LIMIT" \
             "${exclude_case_args[@]}" \
             "${case_count_args[@]}" \
             --generation-timeout-ms 90000
           status=$?
+          if [ -s artifacts/pure-llm-private-public-report.json ]; then
+            selected_case_count="$(node --input-type=module <<'NODE'
+          import { readFile } from "node:fs/promises";
+          const report = JSON.parse(await readFile("artifacts/pure-llm-private-public-report.json", "utf8"));
+          const selectedCount = Number(report.summary?.total);
+          if (!Number.isSafeInteger(selectedCount) || selectedCount < 0) {
+            throw new Error("Private evaluation report contains an invalid selected-case count");
+          }
+          process.stdout.write(String(selectedCount));
+          NODE
+            )"
+            echo "SELECTED_EVALUATION_COUNT=$selected_case_count" >> "$GITHUB_ENV"
+            echo "selected_case_count=$selected_case_count" >> "$GITHUB_OUTPUT"
+            generation_failed="$(node --input-type=module <<'NODE'
+          import { readFile } from "node:fs/promises";
+          const report = JSON.parse(await readFile("artifacts/pure-llm-private-public-report.json", "utf8"));
+          const failed = Number(report.summary?.generationFailed);
+          if (!Number.isSafeInteger(failed) || failed < 0) {
+            throw new Error("Private evaluation report contains an invalid generation-failure count");
+          }
+          process.stdout.write(String(failed));
+          NODE
+            )"
+            echo "generation_failed=$generation_failed" >> "$GITHUB_OUTPUT"
+          fi
           echo "exit_code=$status" >> "$GITHUB_OUTPUT"
           exit 0
 
@@ -385,15 +426,20 @@ jobs:
             throw new Error("Public report is not generation-only");
           }
           const selectedCount = Number(process.env.SELECTED_EVALUATION_COUNT);
-          if (report.summary?.total !== selectedCount) {
-            throw new Error("Public report selected-case count does not match the requested limit");
+          if (!Number.isSafeInteger(selectedCount) || selectedCount < 0
+            || report.summary?.total !== selectedCount) {
+            throw new Error("Public report selected-case count does not match the actual selection");
           }
           const retrievalOnly = process.env.RETRIEVAL_ONLY_PILOT === "true";
-          const expectedGenerated = retrievalOnly ? 0 : selectedCount;
-          const expectedFailed = retrievalOnly ? selectedCount : 0;
-          if (report.summary?.generated !== expectedGenerated
-            || report.summary?.generationFailed !== expectedFailed) {
+          const generated = Number(report.summary?.generated);
+          const generationFailed = Number(report.summary?.generationFailed);
+          if (!Number.isSafeInteger(generated) || generated < 0
+            || !Number.isSafeInteger(generationFailed) || generationFailed < 0
+            || generated + generationFailed !== selectedCount) {
             throw new Error("Private evaluation completion counts do not match the selected mode");
+          }
+          if (retrievalOnly && (generated !== 0 || generationFailed !== selectedCount)) {
+            throw new Error("Retrieval-only completion counts do not match the expected safe failure mode");
           }
           NODE
 
@@ -406,8 +452,8 @@ jobs:
           import { readdir, readFile } from "node:fs/promises";
           const directory = `${process.env.RUNNER_TEMP}/pure-llm-private-checkpoint/generations`;
           const files = (await readdir(directory)).filter((name) => name.endsWith(".json"));
-          if (files.length !== Number(process.env.EVALUATION_LIMIT)) {
-            throw new Error("Retrieval-only checkpoint count does not match the requested limit");
+          if (files.length !== Number(process.env.SELECTED_EVALUATION_COUNT)) {
+            throw new Error("Retrieval-only checkpoint count does not match the actual selection");
           }
           for (const file of files) {
             const record = JSON.parse(await readFile(`${directory}/${file}`, "utf8"));
@@ -613,14 +659,17 @@ jobs:
           done
           exit "$cleanup_status"
 
-      - name: Enforce evaluation completion
-        if: env.RETRIEVAL_ONLY_PILOT != 'true' && steps.evaluation.outputs.exit_code != '0'
+      - name: Enforce evaluator process completion
+        if: steps.evaluation.outputs.exit_code != '0'
         run: exit "${{ steps.evaluation.outputs.exit_code }}"
 
-      - name: Enforce the expected retrieval-only evaluator outcome
-        if: env.RETRIEVAL_ONLY_PILOT == 'true' && steps.evaluation.outputs.exit_code == '0'
+      - name: Enforce complete paid generation after private archive and cleanup
+        if: >-
+          env.RETRIEVAL_ONLY_PILOT != 'true'
+          && steps.evaluation.outputs.exit_code == '0'
+          && steps.evaluation.outputs.generation_failed != '0'
         run: |
-          echo "Retrieval-only dry-run unexpectedly produced a scoreable candidate" >&2
+          echo "${{ steps.evaluation.outputs.generation_failed }} paid evaluation case(s) failed to generate; the encrypted review archive was preserved." >&2
           exit 1
 
   publish-encrypted-private-evaluation:
@@ -639,8 +688,7 @@ jobs:
     env:
       EVALUATION_LIMIT: >-
         ${{ startsWith(github.ref_name, 'private-eval-full-') && '32' || '1' }}
-      SELECTED_EVALUATION_COUNT: >-
-        ${{ startsWith(github.ref_name, 'private-eval-full-') && '31' || '1' }}
+      SELECTED_EVALUATION_COUNT: ${{ needs.private-evaluation.outputs.selected_case_count }}
     steps:
       - name: Checkout the encrypted-results branch only
         uses: actions/checkout@v6

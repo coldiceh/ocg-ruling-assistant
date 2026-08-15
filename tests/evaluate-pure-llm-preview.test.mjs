@@ -347,15 +347,18 @@ test("CLI modes and HTTP endpoint normalization are explicit", () => {
   ]);
   assert.equal(options.judgeOnly, true);
   assert.equal(options.limit, 4);
-  const exclusionOptions = parseCliArguments([
+  const selectionOptions = parseCliArguments([
     "--base-url",
     "https://preview.example.test",
+    "--include-case",
+    "case-028",
+    "--include-case",
+    "case-032",
     "--exclude-case",
-    "case-025",
-    "--exclude-case",
-    "case-031",
+    "case-028",
   ]);
-  assert.deepEqual(exclusionOptions.excludedCaseIds, ["case-025", "case-031"]);
+  assert.deepEqual(selectionOptions.includedCaseIds, ["case-028", "case-032"]);
+  assert.deepEqual(selectionOptions.excludedCaseIds, ["case-028"]);
   const exactDatasetOptions = parseCliArguments([
     "--base-url",
     "https://preview.example.test",
@@ -365,6 +368,10 @@ test("CLI modes and HTTP endpoint normalization are explicit", () => {
   assert.equal(exactDatasetOptions.requiredCaseCount, 32);
   assert.throws(
     () => parseCliArguments(["--base-url", "https://preview.example.test", "--exclude-case", "not-a-case"]),
+    /case-NNN/u,
+  );
+  assert.throws(
+    () => parseCliArguments(["--base-url", "https://preview.example.test", "--include-case", "case-28"]),
     /case-NNN/u,
   );
   assert.throws(
@@ -381,6 +388,94 @@ test("CLI modes and HTTP endpoint normalization are explicit", () => {
     "https://relay.example.test/v1/chat/completions",
   );
   assert.throws(() => resolveRelayChatCompletionsEndpoint("http://relay.example.test/v1"), /HTTPS/u);
+});
+
+test("include selection is applied before exclusions and the final limit", async () => {
+  const privateRoot = new URL(
+    `file:///${tmpdir().replaceAll("\\", "/")}/pure-llm-included-eval-${Date.now()}/`,
+  );
+  const datasetPath = new URL("dataset.txt", privateRoot);
+  const checkpointDirectory = new URL("checkpoint", privateRoot);
+  const { mkdir, readFile, writeFile, rm } = await import("node:fs/promises");
+  const { fileURLToPath } = await import("node:url");
+  await mkdir(fileURLToPath(privateRoot), { recursive: true });
+  await writeFile(fileURLToPath(datasetPath), [
+    "问题一\n答案一",
+    "问题二\n答案二",
+    "问题三\n答案三",
+    "问题四\n答案四",
+  ].join("\n\n"), "utf8");
+  const requests = [];
+  try {
+    const report = await runPureLlmPreviewEvaluation({
+      argv: [
+        "--dataset", fileURLToPath(datasetPath),
+        "--checkpoint-dir", fileURLToPath(checkpointDirectory),
+        "--base-url", "https://preview.example.test",
+        "--generate-only",
+        "--include-case", "case-003",
+        "--include-case", "case-004",
+        "--exclude-case", "case-003",
+        "--limit", "1",
+      ],
+      fetchImpl: async (_url, options) => {
+        requests.push(JSON.parse(options.body));
+        return new Response("候选回答", {
+          status: 200,
+          headers: { "content-type": "text/plain" },
+        });
+      },
+      log() {},
+    });
+    const manualReview = JSON.parse(await readFile(
+      fileURLToPath(new URL("manual-review.json", `${checkpointDirectory.href}/`)),
+      "utf8",
+    ));
+    assert.deepEqual(requests, [{ question: "问题四" }]);
+    assert.equal(report.summary.total, 1);
+    assert.deepEqual(manualReview.cases.map((item) => item.id), ["case-004"]);
+  } finally {
+    await rm(fileURLToPath(privateRoot), { recursive: true, force: true });
+  }
+});
+
+test("unknown or fully excluded include selections stop before generation", async () => {
+  const privateRoot = new URL(
+    `file:///${tmpdir().replaceAll("\\", "/")}/pure-llm-invalid-included-eval-${Date.now()}/`,
+  );
+  const datasetPath = new URL("dataset.txt", privateRoot);
+  const checkpointDirectory = new URL("checkpoint", privateRoot);
+  const { mkdir, writeFile, rm } = await import("node:fs/promises");
+  const { fileURLToPath } = await import("node:url");
+  await mkdir(fileURLToPath(privateRoot), { recursive: true });
+  await writeFile(fileURLToPath(datasetPath), "问题一\n答案一", "utf8");
+  try {
+    await assert.rejects(runPureLlmPreviewEvaluation({
+      argv: [
+        "--dataset", fileURLToPath(datasetPath),
+        "--checkpoint-dir", fileURLToPath(checkpointDirectory),
+        "--base-url", "https://preview.example.test",
+        "--generate-only",
+        "--include-case", "case-002",
+      ],
+      fetchImpl: async () => { throw new Error("must not generate"); },
+      log() {},
+    }), /Unknown included evaluation case/u);
+    await assert.rejects(runPureLlmPreviewEvaluation({
+      argv: [
+        "--dataset", fileURLToPath(datasetPath),
+        "--checkpoint-dir", fileURLToPath(checkpointDirectory),
+        "--base-url", "https://preview.example.test",
+        "--generate-only",
+        "--include-case", "case-001",
+        "--exclude-case", "case-001",
+      ],
+      fetchImpl: async () => { throw new Error("must not generate"); },
+      log() {},
+    }), /selected evaluation set is empty/u);
+  } finally {
+    await rm(fileURLToPath(privateRoot), { recursive: true, force: true });
+  }
 });
 
 test("required unique-case count stops before generation without leaking private text", async () => {
@@ -505,7 +600,7 @@ test("HTTP timeout cancels non-terminating JSON, text and SSE stream readers wit
   }
 });
 
-test("a generation failure is checkpointed and reported before the evaluator exits unsuccessfully", async () => {
+test("a generation failure is checkpointed and reported without failing generate-only evaluation", async () => {
   const privateRoot = new URL(
     `file:///${tmpdir().replaceAll("\\", "/")}/pure-llm-failed-eval-${Date.now()}/`,
   );
@@ -516,19 +611,16 @@ test("a generation failure is checkpointed and reported before the evaluator exi
   await mkdir(fileURLToPath(privateRoot), { recursive: true });
   await writeFile(fileURLToPath(datasetPath), "匿名失败问题\n匿名标准答案", "utf8");
   try {
-    await assert.rejects(
-      runPureLlmPreviewEvaluation({
-        argv: [
-          "--dataset", fileURLToPath(datasetPath),
-          "--checkpoint-dir", fileURLToPath(checkpointDirectory),
-          "--base-url", "https://preview.example.test",
-          "--generate-only",
-        ],
-        fetchImpl: async () => { throw new Error("synthetic transport failure"); },
-        log() {},
-      }),
-      /generation failed for 1 of 1/iu,
-    );
+    const completedReport = await runPureLlmPreviewEvaluation({
+      argv: [
+        "--dataset", fileURLToPath(datasetPath),
+        "--checkpoint-dir", fileURLToPath(checkpointDirectory),
+        "--base-url", "https://preview.example.test",
+        "--generate-only",
+      ],
+      fetchImpl: async () => { throw new Error("synthetic transport failure"); },
+      log() {},
+    });
     const report = JSON.parse(await readFile(
       fileURLToPath(new URL("public-report.json", `${checkpointDirectory.href}/`)),
       "utf8",
@@ -539,6 +631,7 @@ test("a generation failure is checkpointed and reported before the evaluator exi
     ));
     assert.equal(report.summary.generated, 0);
     assert.equal(report.summary.generationFailed, 1);
+    assert.deepEqual(completedReport.summary, report.summary);
     assert.equal(manualReview.cases[0].generationStatus, "generation_failed");
     assert.equal(manualReview.cases[0].generationFailureCode, "preview_request_failed");
   } finally {
@@ -546,7 +639,48 @@ test("a generation failure is checkpointed and reported before the evaluator exi
   }
 });
 
-test("an HTTP 200 structured technical fallback is checkpointed as generation failure", async () => {
+test("a generate-only run completes when only some provider calls fail", async () => {
+  const privateRoot = new URL(
+    `file:///${tmpdir().replaceAll("\\", "/")}/pure-llm-partial-eval-${Date.now()}/`,
+  );
+  const datasetPath = new URL("dataset.txt", privateRoot);
+  const checkpointDirectory = new URL("checkpoint", privateRoot);
+  const { mkdir, writeFile, rm } = await import("node:fs/promises");
+  const { fileURLToPath } = await import("node:url");
+  await mkdir(fileURLToPath(privateRoot), { recursive: true });
+  await writeFile(
+    fileURLToPath(datasetPath),
+    "成功问题\n成功答案\n\n失败问题\n失败答案",
+    "utf8",
+  );
+  let requestCount = 0;
+  try {
+    const report = await runPureLlmPreviewEvaluation({
+      argv: [
+        "--dataset", fileURLToPath(datasetPath),
+        "--checkpoint-dir", fileURLToPath(checkpointDirectory),
+        "--base-url", "https://preview.example.test",
+        "--generate-only",
+      ],
+      fetchImpl: async () => {
+        requestCount += 1;
+        if (requestCount === 2) throw new Error("synthetic second-call failure");
+        return new Response("候选回答", {
+          status: 200,
+          headers: { "content-type": "text/plain" },
+        });
+      },
+      log() {},
+    });
+    assert.equal(report.summary.total, 2);
+    assert.equal(report.summary.generated, 1);
+    assert.equal(report.summary.generationFailed, 1);
+  } finally {
+    await rm(fileURLToPath(privateRoot), { recursive: true, force: true });
+  }
+});
+
+test("an HTTP 200 structured technical fallback completes as a recorded generation failure", async () => {
   const privateRoot = new URL(
     `file:///${tmpdir().replaceAll("\\", "/")}/pure-llm-technical-fallback-${Date.now()}/`,
   );
@@ -557,33 +691,30 @@ test("an HTTP 200 structured technical fallback is checkpointed as generation fa
   await mkdir(fileURLToPath(privateRoot), { recursive: true });
   await writeFile(fileURLToPath(datasetPath), "匿名失败问题\n匿名标准答案", "utf8");
   try {
-    await assert.rejects(
-      runPureLlmPreviewEvaluation({
-        argv: [
-          "--dataset", fileURLToPath(datasetPath),
-          "--checkpoint-dir", fileURLToPath(checkpointDirectory),
-          "--base-url", "https://preview.example.test",
-          "--generate-only",
-        ],
-        fetchImpl: async () => new Response(JSON.stringify({
-          answerLevel: "needs_more_info",
-          shortAnswer: "模型服务超时，请重试。",
-          riskFlags: ["model_output_not_displayable", "model_provider_timeout"],
-          debug: {
-            providerFailure: { kind: "timeout" },
-            publicFinalValidation: {
-              outcome: "primary_invalid_no_ruling",
-              primary: { ok: false },
-            },
+    await runPureLlmPreviewEvaluation({
+      argv: [
+        "--dataset", fileURLToPath(datasetPath),
+        "--checkpoint-dir", fileURLToPath(checkpointDirectory),
+        "--base-url", "https://preview.example.test",
+        "--generate-only",
+      ],
+      fetchImpl: async () => new Response(JSON.stringify({
+        answerLevel: "needs_more_info",
+        shortAnswer: "模型服务超时，请重试。",
+        riskFlags: ["model_output_not_displayable", "model_provider_timeout"],
+        debug: {
+          providerFailure: { kind: "timeout" },
+          publicFinalValidation: {
+            outcome: "primary_invalid_no_ruling",
+            primary: { ok: false },
           },
-        }), {
-          status: 200,
-          headers: { "content-type": "application/json" },
-        }),
-        log() {},
+        },
+      }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
       }),
-      /generation failed for 1 of 1/iu,
-    );
+      log() {},
+    });
     const report = JSON.parse(await readFile(
       fileURLToPath(new URL("public-report.json", `${checkpointDirectory.href}/`)),
       "utf8",
