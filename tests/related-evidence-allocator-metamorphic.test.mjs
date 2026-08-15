@@ -205,9 +205,9 @@ function assertBoundedMechanismCoverage(evidence) {
   // The allocator cannot infer that one synthetic answer is "decisive":
   // answer text is deliberately excluded from retrieval ranking.  Its actual
   // contract is to retain at least one independently ranked same-card source
-  // while reserving a bounded slot for a strict cross-card mechanism source.
+  // while reserving bounded slots for cross-card mechanism sources.
   assert.ok(scopedRelated.some((item) => scopedIds.has(item.id)));
-  assert.ok(crossCardRelated.length <= 1);
+  assert.ok(crossCardRelated.length <= 2);
   assert.ok(crossCardRelated.some((item) => expectedIds.has(item.id)));
   assert.ok(crossCardRelated.every((item) => item.retrievalContext.relatedOnly === true));
   assert.ok(evidence.officialQaRelated.every((item) => item.isDirect === false));
@@ -294,7 +294,9 @@ test("a strict supplemental candidate survives a bounded head of non-strict reco
   assert.equal(retained.retrievalSignals?.strictSupplementalRuleQueryKeys?.length, 1);
   assert.equal(retained.retrievalContext.relatedOnly, true);
   assert.equal(retained.isDirect, false);
-  assert.ok(lexicalHeads.every((item) => (
-    !evidence.officialQaRelated.some((evidenceItem) => evidenceItem.id === item.id)
-  )));
+  // Non-strict candidates may remain as related-only context; handwritten
+  // mechanism gates must not delete them or grant them direct authority.
+  assert.ok(evidence.officialQaRelated
+    .filter((item) => lexicalHeads.some((head) => head.id === item.id))
+    .every((item) => item.retrievalContext.relatedOnly === true && item.isDirect === false));
 });

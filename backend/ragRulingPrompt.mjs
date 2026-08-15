@@ -449,17 +449,17 @@ function prepareEvidenceForPrompt(
     officialQaRelated: limitEvidence(relatedCandidates, limits.maxRelatedEvidence, limits.maxEvidenceTextChars, "official_related", warnings, focusCardIds),
     provisionalOfficialResponses: limitEvidence(evidence.provisionalOfficialResponses, limits.maxOfficialQa, limits.maxEvidenceTextChars, "official_response", warnings, focusCardIds),
     faqRelated: limitEvidence(evidence.faqRelated, limits.maxRelatedEvidence, limits.maxEvidenceTextChars, "faq", warnings, focusCardIds),
-    // Resolved cards already carry the same complete effect text in the prompt.
-    // Retain only additional card-text evidence whose identity is not already
-    // represented there, avoiding a large duplicate copy for every card.
-    cardTexts: limitEvidence(
-      (evidence.cardTexts || []).filter((item) => !evidenceSharesFocusCard(item, focusCardIds)),
+    // Resolved cards already carry the complete effect text. Keep the evidence
+    // identity so the final model can cite it, but omit only the duplicate text
+    // body for cards already represented in resolvedCards.
+    cardTexts: omitRepeatedResolvedCardText(limitEvidence(
+      evidence.cardTexts,
       limits.maxCards,
       limits.maxCardTextChars,
       "card_text",
       warnings,
       focusCardIds,
-    ),
+    ), focusCardIds),
     userProvidedCardTexts: limitEvidence(evidence.userProvidedCardTexts, limits.maxCards, limits.maxCardTextChars, "user_text", warnings, focusCardIds),
     rawRelatedEvidence: limitEvidence(evidence.rawRelatedEvidence, limits.maxRelatedEvidence, limits.maxEvidenceTextChars, "raw_related", warnings, focusCardIds),
   };
@@ -471,6 +471,19 @@ function evidenceSharesFocusCard(item = {}, focusCardIds = []) {
   if (!focusCardIds.length) return false;
   const focus = new Set(focusCardIds.map(String));
   return (item.cardIds || []).map(String).some((id) => focus.has(id));
+}
+
+function omitRepeatedResolvedCardText(items = [], focusCardIds = []) {
+  return (items || []).map((item) => evidenceSharesFocusCard(item, focusCardIds)
+    ? {
+        ...item,
+        text: "",
+        retrievalContext: {
+          ...(item.retrievalContext || {}),
+          textProvidedBy: "resolvedCards",
+        },
+      }
+    : item);
 }
 
 function limitPreparedReferenceEvidence(prepared = {}, limit = 12, warnings = []) {
@@ -923,6 +936,7 @@ function selectCompactEvidenceEntries(evidence = {}, {
   // floor before filling the remaining slots by the normal evidence ordering.
   reserveFirst(({ bucket }) => bucket === "faqRelated");
   reserveFirst((entry) => isOfficialQaEntry(entry) && !isCrossCardOfficialMechanismEntry(entry));
+  reserveFirst(({ bucket }) => bucket === "rawRelatedEvidence");
 
   for (const entry of candidates) {
     if (selected.length >= safeLimit) break;
