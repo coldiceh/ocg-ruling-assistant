@@ -203,7 +203,7 @@ test("strict mechanism overlap can retrieve a multilingual official cross-card Q
   assert.equal(related.retrievalContext.relatedOnly, true);
 });
 
-test("strict official card FAQs fill unused scoped related-evidence slots without becoming direct", async () => {
+test("strict official card FAQs use the bounded cross-card reserve without becoming direct", async () => {
   const current = syntheticCard(
     "54001",
     "虚构基准构件",
@@ -248,11 +248,11 @@ test("strict official card FAQs fill unused scoped related-evidence slots withou
     env: { RAG_LIVE_OFFICIAL_QA: "false", RAG_MAX_RELATED_EVIDENCE: "4" },
   });
 
-  assert.equal(evidence.officialQaRelated.length, 4);
+  assert.equal(evidence.officialQaRelated.length, 3);
   const crossCardRelated = evidence.officialQaRelated.filter(
     (item) => item.retrievalContext.scope === "cross_card_official_mechanism",
   );
-  assert.ok(crossCardRelated.length >= 3);
+  assert.equal(crossCardRelated.length, 2);
   assert.ok(crossCardRelated.some((item) => item.recordType === "card-faq"));
   assert.ok(crossCardRelated.every((item) => (
     item.type === "related"
