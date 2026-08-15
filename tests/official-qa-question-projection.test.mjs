@@ -74,7 +74,7 @@ test("one compatible branch of a compound QA remains related without becoming di
   assert.equal(matches.exact.length, 0);
 });
 
-test("card-text-derived operations cannot reintroduce a foreign multi-card scene", async () => {
+test("a foreign multi-card scene may remain visible only as non-direct evidence", async () => {
   const cards = [
     {
       id: "7201",
@@ -124,13 +124,15 @@ test("card-text-derived operations cannot reintroduce a foreign multi-card scene
   });
 
   assert.equal(
-    evidence.officialQaRelated.some((item) => item.id === records[0].id),
+    evidence.officialQaDirectCandidates.some((item) => item.id === records[0].id),
     false,
   );
-  assert.equal(
-    evidence.rawRelatedEvidence.some((item) => item.id === records[0].id),
-    false,
-  );
+  const retained = [
+    ...evidence.officialQaRelated,
+    ...evidence.rawRelatedEvidence,
+  ].filter((item) => item.id === records[0].id);
+  assert.ok(retained.length >= 1);
+  assert.ok(retained.every((item) => item.isDirect === false));
 });
 
 test("non-QA related records retain full-text lexical retrieval", async () => {

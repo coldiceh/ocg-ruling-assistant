@@ -3847,8 +3847,18 @@ function allocateOfficialRelatedEvidence({
   supplementalRuleQueryKeys = [],
 } = {}) {
   const safeLimit = Math.max(1, Math.floor(Number(limit) || 1));
+  const rankRelatedCandidates = (items = []) => (items || [])
+    .map((item, index) => ({ item, index }))
+    .sort((left, right) => (
+      modelAssessmentRank(right.item?.retrievalSignals?.modelCandidateAssessment)
+        - modelAssessmentRank(left.item?.retrievalSignals?.modelCandidateAssessment)
+      || Number(right.item?.branchRelevant === true) - Number(left.item?.branchRelevant === true)
+      || Number(right.item?.retrievalScore || 0) - Number(left.item?.retrievalScore || 0)
+      || left.index - right.index
+    ))
+    .map(({ item }) => item);
   const scoped = reserveIdentitySourceCoverage(
-    dedupeEvidence(scopedCandidates),
+    rankRelatedCandidates(dedupeEvidence(scopedCandidates)),
     safeLimit,
     resolvedCards,
   );
@@ -3868,17 +3878,17 @@ function allocateOfficialRelatedEvidence({
     }).slice(0, safeLimit);
   }
 
-  // A mechanism ruling is often documented on another card. Reserve up to half
-  // of the related budget for cross-card candidates instead of allowing a
-  // popular resolved card's incidental FAQ list to consume nearly every slot.
-  // This is only evidence allocation: all items remain related-only and the
-  // final model must compare their premises.
+  // A mechanism ruling is often documented on another card, but analogies must
+  // not crowd the same-card sources out of the bounded prompt. Keep at most two
+  // cross-card candidates; this is allocation only, never an authority upgrade
+  // or a hard applicability decision.
+  const crossCardReserve = Math.min(2, Math.max(0, safeLimit - 1));
   const maxCrossCard = scoped.length < safeLimit
-    ? Math.min(crossCard.length, safeLimit - scoped.length)
+    ? Math.min(crossCard.length, safeLimit - scoped.length, crossCardReserve)
     : Math.min(
       crossCard.length,
       Math.max(0, safeLimit - 1),
-      Math.max(2, Math.ceil(safeLimit / 2)),
+      crossCardReserve,
     );
   const scopedLimit = Math.min(scoped.length, safeLimit - maxCrossCard);
   const prioritizedScoped = reserveRankedHeadAndSupplementalCoverage(

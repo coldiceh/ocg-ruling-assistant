@@ -185,7 +185,7 @@ test("canonical official QA selection follows content completeness instead of so
   assert.match(evidence.officialQaDirectCandidates[0]?.fullText || "", /COMPLETE_QA_MARKER/u);
 });
 
-test("rawDetailedQuestion card ids reject a two-card QA whose identity set only partly overlaps", async () => {
+test("rawDetailedQuestion partial identity overlap cannot promote a two-card QA to direct evidence", async () => {
   const cards = [
     { id: "72001", name: "合成触发甲", effectText: "满足条件时处理。" },
     { id: "72002", name: "合成触发乙", effectText: "满足条件时处理。" },
@@ -228,8 +228,10 @@ test("rawDetailedQuestion card ids reject a two-card QA whose identity set only 
   });
 
   assert.ok(evidence.officialQaDirectCandidates.every((item) => item.id !== record.id));
-  assert.ok(evidence.officialQaRelated.every((item) => item.id !== record.id));
-  assert.ok(evidence.rawRelatedEvidence.every((item) => item.id !== record.id));
+  const related = evidence.officialQaRelated.find((item) => item.id === record.id);
+  assert.ok(related);
+  assert.equal(related.isDirect, false);
+  assert.equal(related.questionCardIdCoverage, 0.5);
 });
 
 test("card FAQs cannot consume the official QA matcher top-N budget", async () => {
