@@ -5542,6 +5542,55 @@ test("deterministic retrieval bridges multilingual return-to-hand terminology wh
   assert.equal(related.retrievalContext.relatedOnly, true);
 });
 
+test("deterministic card-text queries retain independent official mechanism branches", async () => {
+  const focusCard = {
+    id: "multi-branch-focus-card",
+    name: "匿名双分支卡",
+    cnName: "匿名双分支卡",
+    effectText: "①：以场上1张魔法・陷阱卡为对象才能发动。那张卡回到手牌。那之后，从手牌特殊召唤1只怪兽。",
+    aliases: ["匿名双分支卡"],
+  };
+  const returnHandQa = {
+    id: "qa-independent-return-hand",
+    recordType: "qa",
+    question: "通常陷阱卡发动中，将场上的魔法・陷阱卡回到手牌的效果如何处理？",
+    answer: "按照发动中卡片的状态处理。",
+    text: "通常陷阱卡发动中，将场上的魔法・陷阱卡回到手牌的效果如何处理？ 按照发动中卡片的状态处理。",
+    cardIds: ["reference-return-hand"],
+  };
+  const specialSummonQa = {
+    id: "qa-independent-special-summon",
+    recordType: "qa",
+    question: "从手牌特殊召唤怪兽后，那之后的后续处理如何进行？",
+    answer: "确认特殊召唤是否成功后再进行后续处理。",
+    text: "从手牌特殊召唤怪兽后，那之后的后续处理如何进行？ 确认特殊召唤是否成功后再进行后续处理。",
+    cardIds: ["reference-special-summon"],
+  };
+
+  const evidence = await retrieveRagEvidence({
+    userQuery: "匿名双分支卡的效果怎样处理？",
+    cardResolution: {
+      resolvedCards: [focusCard],
+      unresolvedMentions: [],
+      ambiguousMentions: [],
+      userProvidedCardTexts: [],
+    },
+    cards: [focusCard],
+    records: [],
+    qaRecords: [returnHandQa, specialSummonQa],
+    ruleSearchQueryProvider: async () => ({ queries: [], candidateAssessments: [] }),
+    env: { RAG_LIVE_OFFICIAL_QA: "false" },
+  });
+
+  const relatedIds = new Set(evidence.officialQaRelated.map((item) => item.id));
+  assert.equal(relatedIds.has(returnHandQa.id), true);
+  assert.equal(relatedIds.has(specialSummonQa.id), true);
+  assert.ok(evidence.debug.candidateStages.initialCrossCardQuestionIds.length >= 2);
+  assert.ok(evidence.debug.candidateStages.allocatedCrossCardIds.includes(returnHandQa.id));
+  assert.ok(evidence.debug.candidateStages.allocatedCrossCardIds.includes(specialSummonQa.id));
+  assert.doesNotMatch(JSON.stringify(evidence.debug.candidateStages), /按照发动中|确认特殊召唤/u);
+});
+
 test("rule model candidate assessments only reorder official questions and never delete them", async () => {
   const focusCard = {
     id: "soft-rank-card",
@@ -5855,6 +5904,157 @@ test("general prompt applies one reference budget and omits resolved-card text d
   assert.ok(bundle.allowedEvidenceIds.some((id) => id.startsWith("qa-budget-")));
   assert.ok(bundle.allowedEvidenceIds.some((id) => id.startsWith("cross-budget-")));
   assert.ok(bundle.warnings.includes("prompt_reference_items_limited:24->5"));
+});
+
+test("general prompt preserves distinct cross-card query branches and internal decision checks", () => {
+  const crossCardEvidence = Array.from({ length: 4 }, (_, index) => ({
+    id: `cross-branch-${index + 1}`,
+    type: "related",
+    recordType: "qa",
+    title: `cross branch ${index + 1}`,
+    text: `official mechanism branch ${index + 1}`,
+    official: true,
+    sourceAuthority: "official_database",
+    retrievalContext: {
+      scope: "cross_card_official_mechanism",
+      relatedOnly: true,
+    },
+    retrievalSignals: {
+      strictRuleQueryKeys: [`branch-${index + 1}`],
+      ruleQueryMechanisms: [`mechanism-${index + 1}`],
+    },
+  }));
+  const bundle = buildRagRulingPromptBundle({
+    userQuery: "测试多分支证据选择",
+    cardResolution: { resolvedCards: cards },
+    evidence: {
+      cardTexts: [],
+      officialQaDirectCandidates: [],
+      faqRelated: [{
+        id: "faq-role",
+        type: "faq",
+        recordType: "card-faq",
+        title: "FAQ role",
+        text: "FAQ role evidence",
+        official: true,
+      }],
+      officialQaRelated: [{
+        id: "same-card-role",
+        type: "related",
+        recordType: "qa",
+        title: "same card role",
+        text: "same card official evidence",
+        official: true,
+      }, ...crossCardEvidence],
+      provisionalOfficialResponses: [],
+      rawRelatedEvidence: [{
+        id: "rule-role",
+        type: "rulebook",
+        recordType: "rule-doc",
+        title: "rule role",
+        text: "rule material",
+      }],
+      ruleSearchQueries: [
+        ...Array.from({ length: 8 }, (_, index) => ({
+          query: `deterministic query ${index + 1}`,
+          source: "derived_rule_search_query",
+        })), {
+        subclaim: "核对发动时的合法选项",
+        checkpoint: "activation_snapshot",
+        query: "发动时 合法选项",
+        source: "model_rule_query",
+      }],
+    },
+    env: {
+      RAG_MAX_PROMPT_REFERENCE_ITEMS: "7",
+      RAG_MAX_PROMPT_CHARS: "60000",
+    },
+  });
+
+  assert.equal(bundle.allowedEvidenceIds.length, 7);
+  for (const item of crossCardEvidence) assert.ok(bundle.allowedEvidenceIds.includes(item.id));
+  assert.ok(bundle.allowedEvidenceIds.includes("faq-role"));
+  assert.ok(bundle.allowedEvidenceIds.includes("same-card-role"));
+  assert.ok(bundle.allowedEvidenceIds.includes("rule-role"));
+  assert.match(bundle.prompt, /decisionChecklist/u);
+  assert.match(bundle.prompt, /activation_legality_before_resolution/u);
+  assert.match(bundle.prompt, /decisionPlan/u);
+  assert.match(bundle.prompt, /核对发动时的合法选项/u);
+  assert.doesNotMatch(bundle.prompt, /strictRuleQueryKeys|mechanism-1/u);
+});
+
+test("prompt does not reserve extra cross-card slots from non-strict mechanism labels", () => {
+  const weakCrossCardEvidence = Array.from({ length: 3 }, (_, index) => ({
+    id: `weak-cross-${index + 1}`,
+    type: "related",
+    recordType: "qa",
+    title: `weak cross ${index + 1}`,
+    text: `lexical-only cross-card candidate ${index + 1}`,
+    official: true,
+    sourceAuthority: "official_database",
+    retrievalContext: {
+      scope: "cross_card_official_mechanism",
+      relatedOnly: true,
+    },
+    retrievalSignals: {
+      ruleQueryMechanisms: [`weak-mechanism-${index + 1}`],
+    },
+  }));
+  const strictCrossCardEvidence = {
+    id: "strict-cross",
+    type: "related",
+    recordType: "qa",
+    title: "strict cross",
+    text: "strict per-query official mechanism",
+    official: true,
+    sourceAuthority: "official_database",
+    retrievalContext: {
+      scope: "cross_card_official_mechanism",
+      relatedOnly: true,
+    },
+    retrievalSignals: {
+      strictRuleQueryKeys: ["strict-branch"],
+      ruleQueryMechanisms: ["strict-mechanism"],
+    },
+  };
+  const bundle = buildRagRulingPromptBundle({
+    userQuery: "测试严格跨卡保留",
+    cardResolution: { resolvedCards: cards },
+    evidence: {
+      cardTexts: [],
+      officialQaDirectCandidates: [],
+      faqRelated: [{
+        id: "strict-floor-faq",
+        type: "faq",
+        recordType: "card-faq",
+        text: "faq floor",
+        official: true,
+      }],
+      officialQaRelated: [{
+        id: "strict-floor-same-card",
+        type: "related",
+        recordType: "qa",
+        text: "same card floor",
+        official: true,
+      }, ...weakCrossCardEvidence, strictCrossCardEvidence],
+      provisionalOfficialResponses: [],
+      rawRelatedEvidence: [{
+        id: "strict-floor-rule",
+        type: "rulebook",
+        recordType: "rule-doc",
+        text: "rule floor",
+      }],
+    },
+    env: {
+      RAG_MAX_PROMPT_REFERENCE_ITEMS: "7",
+      RAG_MAX_PROMPT_CHARS: "60000",
+    },
+  });
+
+  assert.ok(bundle.allowedEvidenceIds.includes(strictCrossCardEvidence.id));
+  for (const item of weakCrossCardEvidence) {
+    assert.equal(bundle.allowedEvidenceIds.includes(item.id), false);
+  }
 });
 
 test("public prompt retains card text, excludes semantic state output, and has no recovery prompt", () => {

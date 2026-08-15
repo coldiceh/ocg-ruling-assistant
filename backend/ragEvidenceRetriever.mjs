@@ -265,6 +265,15 @@ export async function retrieveRagEvidence({
     .filter(Boolean)
     .map((card) => cardTextEvidence(card, limits.maxCardTextChars, retrievalWarnings));
   const userProvidedCardTextEvidence = dedupeEvidence(providedTexts.map((item, index) => userProvidedTextEvidence(item, index, limits.maxCardTextChars, retrievalWarnings)));
+  // Card text is already available before the auxiliary query planner runs.
+  // Fold its deterministic operation clauses into the first discovery pass so
+  // the question-only candidate set covers mandatory branches even when the
+  // player's wording mentions only the card name or the final yes/no question.
+  deterministicRuleQueries = mergeRuleSearchQueries(
+    deterministicRuleQueries,
+    deriveRuleSearchQueriesFromCardTexts(userQuery, cardTexts),
+    limits,
+  );
   // Build a broad, question-only candidate set before asking the auxiliary
   // model for query expansions. The model may softly rank these questions and
   // explain premise differences, but it never receives their answers and its
@@ -279,6 +288,9 @@ export async function retrieveRagEvidence({
     subsumptionCandidatePoolComplete: subsumptionCandidatePoolComplete === true
       || !(cards || records || qaRecords),
   });
+  // The pre-planner pass only needs a small question-only sample. Keep this as
+  // one aggregate scan; independent branch heads are built after the planner,
+  // where they can use both deterministic and model-supplied queries.
   const initialCrossCardOfficialQuestions = rankRecords({
     userQuery,
     records: dedupeBy([
@@ -320,11 +332,6 @@ export async function retrieveRagEvidence({
       ...(Array.isArray(providedRuleQueries) ? providedRuleQueries : []),
     ], limits);
   }
-  deterministicRuleQueries = mergeRuleSearchQueries(
-    deterministicRuleQueries,
-    deriveRuleSearchQueriesFromCardTexts(userQuery, cardTexts),
-    limits,
-  );
   const normalizedRuleQueries = appendSupplementalRuleSearchQueries(
     deterministicRuleQueries,
     supplementalRuleQueries,
@@ -336,7 +343,7 @@ export async function retrieveRagEvidence({
   const effectiveSupplementalRuleQueries = normalizedRuleQueries.filter(
     (item) => !deterministicRuleQueryKeys.has(ruleSearchQueryIdentity(item)),
   );
-  const effectiveSupplementalRuleQueryKeys = effectiveSupplementalRuleQueries
+  const independentRuleQueryKeys = normalizedRuleQueries
     .map(ruleSearchQueryIdentity)
     .filter(Boolean);
   if (normalizedRuleQueries.length) retrievalWarnings.push(`rule_search_queries_used:${normalizedRuleQueries.length}`);
@@ -400,6 +407,7 @@ export async function retrieveRagEvidence({
     mentionQueries,
     deterministicRuleQueries,
     supplementalRuleQueries: effectiveSupplementalRuleQueries,
+    independentQueryLimit: 4,
     allowNoCardMatch: effectiveQaIdentityCards.length === 0,
   }).map((record) => officialQaNumericId(record)).filter(Boolean);
   const localCandidateQaIds = dedupeBy(
@@ -492,6 +500,7 @@ export async function retrieveRagEvidence({
       mentionQueries,
       deterministicRuleQueries,
       supplementalRuleQueries: effectiveSupplementalRuleQueries,
+      independentQueryLimit: 4,
       allowNoCardMatch: effectiveQaIdentityCards.length === 0 && normalizedRuleQueries.length > 0,
     }),
   ]).filter((item) => (
@@ -528,23 +537,24 @@ export async function retrieveRagEvidence({
         mentionQueries: [],
         deterministicRuleQueries,
         supplementalRuleQueries: effectiveSupplementalRuleQueries,
+        independentQueryLimit: 4,
         allowNoCardMatch: true,
       })
         .filter((record) => !recordSharesResolvedIdentity(record, effectiveQaIdentityCards)), crossCardOfficialCandidateLimit, {
-          queryKeys: effectiveSupplementalRuleQueryKeys,
+          queryKeys: independentRuleQueryKeys,
           strictOnly: true,
         })
         .slice(0, crossCardOfficialCandidateLimit)
     : [];
-  // The query model sees question text only, so an affirmative soft assessment
-  // is safe to preserve as a related-evidence candidate even when a later
-  // supplemental lexical head does not retain that record. Applicability and
-  // authority are still decided downstream; this only prevents accidental
-  // candidate loss inside the bounded discovery pass.
+  // Merge model-assessed and independently ranked candidates, but keep the
+  // evidence-derived comparator authoritative. The question-only model may
+  // break a genuine tie; it cannot jump ahead of stronger mechanism evidence.
   const crossCardOfficialQaSource = dedupeBy([
-    ...modelAssessedCrossCardCandidates,
     ...lexicallyRankedCrossCardCandidates,
-  ], stableRecordKey).slice(0, crossCardOfficialCandidateLimit);
+    ...modelAssessedCrossCardCandidates,
+  ], stableRecordKey)
+    .sort(compareRetrievedRecords)
+    .slice(0, crossCardOfficialCandidateLimit);
   const scopedOfficialQaRelatedCandidates = scopedOfficialQaRelatedSource
     .map((item) => item.record
       ? evidenceFromOfficialMatch(item, "related", limits.maxEvidenceTextChars, retrievalWarnings)
@@ -565,7 +575,7 @@ export async function retrieveRagEvidence({
     crossCardCandidates: crossCardOfficialQaRelatedCandidates,
     limit: limits.maxRelatedEvidence,
     resolvedCards: effectiveQaIdentityCards,
-    supplementalRuleQueryKeys: effectiveSupplementalRuleQueryKeys,
+    supplementalRuleQueryKeys: independentRuleQueryKeys,
   });
   const officialQaRelatedCandidateCount = dedupeEvidence([
     ...scopedOfficialQaRelatedCandidates,
@@ -603,13 +613,14 @@ export async function retrieveRagEvidence({
     mentionQueries,
     deterministicRuleQueries,
     supplementalRuleQueries: effectiveSupplementalRuleQueries,
+    independentQueryLimit: 4,
     allowNoCardMatch: retrievalCards.length === 0 && normalizedRuleQueries.length > 0,
   });
   const faqRelatedSource = reserveRankedHeadAndSupplementalCoverage(
     rankedFaqRelatedSource,
     limits.maxRelatedEvidence,
     {
-      queryKeys: effectiveSupplementalRuleQueryKeys,
+      queryKeys: independentRuleQueryKeys,
       strictOnly: true,
     },
   );
@@ -696,6 +707,20 @@ export async function retrieveRagEvidence({
       ruleSearchQueries: normalizedRuleQueries,
       deterministicRuleSearchQueryCount: deterministicRuleQueries.length,
       supplementalRuleSearchQueryCount: effectiveSupplementalRuleQueries.length,
+      candidateStages: {
+        initialCrossCardQuestionIds: diagnosticCandidateIds(initialCrossCardOfficialQuestions),
+        rulePlannerCandidateIds: diagnosticCandidateIds(ruleQueryCandidateQuestions),
+        crossCardRankedPoolIds: diagnosticCandidateIds(crossCardOfficialQaSource),
+        crossCardEvidenceCandidateIds: diagnosticCandidateIds(crossCardOfficialQaRelatedCandidates),
+        allocatedOfficialRelatedIds: diagnosticCandidateIds(officialQaRelated),
+        allocatedCrossCardIds: diagnosticCandidateIds(
+          officialQaRelated.filter((item) => (
+            item?.retrievalContext?.scope === "cross_card_official_mechanism"
+          )),
+        ),
+        notAllocatedCrossCardIds: diagnosticCandidateIds(crossCardOfficialQaRelatedCandidates)
+          .filter((id) => !new Set(diagnosticCandidateIds(officialQaRelated)).has(id)),
+      },
       baigeSearchCount: baigeDebug.searchCount,
       baigeCacheHitCount: baigeDebug.cacheHitCount,
       baigeWarnings: baigeDebug.warnings,
@@ -1663,6 +1688,10 @@ function mergeSupplementalRuleQueryRanks(...rankMaps) {
 function mergeRelatedRecordMetadata(left = {}, right = {}) {
   const leftSignals = left.retrievalSignals || {};
   const rightSignals = right.retrievalSignals || {};
+  const independentQueryRanks = [
+    Number(leftSignals.ruleQueryBestRank || 0),
+    Number(rightSignals.ruleQueryBestRank || 0),
+  ].filter((value) => value > 0);
   const supplementalQueryRanks = [
     Number(leftSignals.supplementalRuleQueryBestRank || 0),
     Number(rightSignals.supplementalRuleQueryBestRank || 0),
@@ -1684,6 +1713,25 @@ function mergeRelatedRecordMetadata(left = {}, right = {}) {
     retrievalSignals: {
       ...leftSignals,
       ...rightSignals,
+      ruleQueryBestRank: independentQueryRanks.length
+        ? Math.min(...independentQueryRanks)
+        : undefined,
+      ruleQueryKeys: [...new Set([
+        ...(leftSignals.ruleQueryKeys || []),
+        ...(rightSignals.ruleQueryKeys || []),
+      ])],
+      strictRuleQueryKeys: [...new Set([
+        ...(leftSignals.strictRuleQueryKeys || []),
+        ...(rightSignals.strictRuleQueryKeys || []),
+      ])],
+      ruleQueryRanks: mergeSupplementalRuleQueryRanks(
+        leftSignals.ruleQueryRanks,
+        rightSignals.ruleQueryRanks,
+      ),
+      ruleQueryMechanisms: [...new Set([
+        ...(leftSignals.ruleQueryMechanisms || []),
+        ...(rightSignals.ruleQueryMechanisms || []),
+      ])],
       supplementalRuleQueryBestRank: supplementalQueryRanks.length
         ? Math.min(...supplementalQueryRanks)
         : undefined,
@@ -1882,6 +1930,7 @@ function rankRecordsWithSupplementalQueries({
   mentionQueries = [],
   deterministicRuleQueries = [],
   supplementalRuleQueries = [],
+  independentQueryLimit = 0,
   allowNoCardMatch = false,
 }) {
   const deterministic = rankRecords({
@@ -1892,16 +1941,22 @@ function rankRecordsWithSupplementalQueries({
     ruleSearchQueries: deterministicRuleQueries,
     allowNoCardMatch,
   });
-  if (!supplementalRuleQueries.length) return deterministic;
-  // Rank each supplemental query independently. Combining every generated
-  // query into one term bag lets a dense candidate from one mechanism absorb
-  // the scores of unrelated queries and crowd their best candidates out. Keep
-  // a small head from every query, then deduplicate and globally rank the
-  // bounded union below. The downstream applicability gate still decides
-  // whether any cross-card item is usable.
-  const supplemental = supplementalRuleQueries.flatMap((query) => {
+  const supplementalKeys = new Set(
+    (supplementalRuleQueries || []).map(ruleSearchQueryIdentity).filter(Boolean),
+  );
+  const independentQueries = selectIndependentRuleQueries({
+    deterministicRuleQueries,
+    supplementalRuleQueries,
+    limit: independentQueryLimit,
+  });
+  if (!independentQueries.length) return deterministic;
+  // Independently rank only a small mechanism-diverse query set. This preserves
+  // branch coverage without multiplying a large official corpus by the full
+  // 16-query planner limit. Other callers retain the one-pass aggregate rank.
+  const independent = independentQueries.flatMap((query) => {
     const queryIdentity = ruleSearchQueryIdentity(query);
     const queryMechanism = inferRuleSearchMechanism(query);
+    const isSupplemental = supplementalKeys.has(queryIdentity);
     const supplementalUserQuery = [query?.subclaim, query?.query, query?.reason]
       .filter(Boolean)
       .join(" ");
@@ -1938,17 +1993,26 @@ function rankRecordsWithSupplementalQueries({
         ...record,
         retrievalSignals: {
           ...(record.retrievalSignals || {}),
+          ruleQueryBestRank: index + 1,
+          ruleQueryKeys: queryIdentity ? [queryIdentity] : [],
+          strictRuleQueryKeys: strictQueryMatch ? [queryIdentity] : [],
+          ruleQueryRanks: queryIdentity ? { [queryIdentity]: index + 1 } : {},
+          ruleQueryMechanisms: queryMechanism ? [queryMechanism] : [],
+          // Preserve the existing supplemental-only diagnostics for callers
+          // that distinguish model expansions from deterministic query heads.
+          ...(isSupplemental ? {
           supplementalRuleQueryBestRank: index + 1,
           supplementalRuleQueryKeys: queryIdentity ? [queryIdentity] : [],
           strictSupplementalRuleQueryKeys: strictQueryMatch ? [queryIdentity] : [],
           supplementalRuleQueryRanks: queryIdentity ? { [queryIdentity]: index + 1 } : {},
           supplementalRuleQueryMechanisms: queryMechanism ? [queryMechanism] : [],
+          } : {}),
         },
       };
     });
   });
   const merged = new Map();
-  for (const record of [...deterministic, ...supplemental]) {
+  for (const record of [...deterministic, ...independent]) {
     const key = stableRecordKey(record);
     const previous = merged.get(key);
     if (!previous) {
@@ -1963,12 +2027,42 @@ function rankRecordsWithSupplementalQueries({
   return [...merged.values()].sort(compareRetrievedRecords);
 }
 
+function selectIndependentRuleQueries({
+  deterministicRuleQueries = [],
+  supplementalRuleQueries = [],
+  limit = 0,
+} = {}) {
+  const safeLimit = Math.max(0, Math.min(4, Math.floor(Number(limit) || 0)));
+  if (!safeLimit) return [];
+  // Model queries are generated for explicit unresolved subclaims, so consider
+  // them first; deterministic queries provide the timeout-safe fallback.
+  const candidates = dedupeBy([
+    ...(supplementalRuleQueries || []),
+    ...(deterministicRuleQueries || []),
+  ], ruleSearchQueryIdentity).filter((query) => ruleSearchQueryIdentity(query));
+  const selected = [];
+  const selectedKeys = new Set();
+  const representedMechanisms = new Set();
+  const add = (query) => {
+    const key = ruleSearchQueryIdentity(query);
+    if (!key || selectedKeys.has(key) || selected.length >= safeLimit) return false;
+    selected.push(query);
+    selectedKeys.add(key);
+    return true;
+  };
+  for (const query of candidates) {
+    const mechanism = inferRuleSearchMechanism(query);
+    if (!mechanism || representedMechanisms.has(mechanism)) continue;
+    if (add(query)) representedMechanisms.add(mechanism);
+  }
+  for (const query of candidates) add(query);
+  return selected;
+}
+
 function compareRetrievedRecords(left = {}, right = {}) {
   const leftSignals = left.retrievalSignals || {};
   const rightSignals = right.retrievalSignals || {};
-  return modelAssessmentRank(rightSignals.modelCandidateAssessment)
-      - modelAssessmentRank(leftSignals.modelCandidateAssessment)
-    || Number(rightSignals.questionCardIdCoverage || 0) - Number(leftSignals.questionCardIdCoverage || 0)
+  return Number(rightSignals.questionCardIdCoverage || 0) - Number(leftSignals.questionCardIdCoverage || 0)
     || Number(rightSignals.matchedQuestionCardIdCount || 0) - Number(leftSignals.matchedQuestionCardIdCount || 0)
     || Number(rightSignals.strongMechanismQueryCoverage || 0) - Number(leftSignals.strongMechanismQueryCoverage || 0)
     || (rightSignals.matchedStrongMechanismFeatures || []).length - (leftSignals.matchedStrongMechanismFeatures || []).length
@@ -1976,17 +2070,28 @@ function compareRetrievedRecords(left = {}, right = {}) {
     || Number(rightSignals.typeCompatible === true) - Number(leftSignals.typeCompatible === true)
     || Number(right.retrievalScore || 0) - Number(left.retrievalScore || 0)
     || Number(rightSignals.lexicalHitCount || 0) - Number(leftSignals.lexicalHitCount || 0)
+    // The model sees only candidate questions. Its assessment can resolve a
+    // tie, but it must never override stronger mechanism or lexical evidence.
+    || modelAssessmentRank(rightSignals.modelCandidateAssessment)
+      - modelAssessmentRank(leftSignals.modelCandidateAssessment)
     || stableRecordKey(left).localeCompare(stableRecordKey(right));
 }
 
 function modelAssessmentRank(assessment = null) {
   if (!assessment || typeof assessment !== "object") return 0;
   const premise = String(assessment.premise || "unknown");
-  if (premise === "different") return -20;
-  const premiseScore = premise === "same" ? 20 : premise === "partial" ? 10 : 0;
   const relevance = String(assessment.relevance || "low");
-  const relevanceScore = relevance === "high" ? 3 : relevance === "medium" ? 2 : 1;
-  return premiseScore + relevanceScore;
+  if (premise === "different") return -3;
+  if (premise === "unknown") return 0;
+  if (premise === "partial") {
+    // A low-confidence partial analogy is not evidence that it outranks an
+    // unassessed candidate; keep it neutral instead of awarding a bonus.
+    return relevance === "high" ? 3 : relevance === "medium" ? 2 : 0;
+  }
+  if (premise === "same") {
+    return relevance === "high" ? 6 : relevance === "medium" ? 5 : 1;
+  }
+  return 0;
 }
 
 function hasEligibleModelCandidateAssessment(item = {}) {
@@ -2030,26 +2135,22 @@ function applyModelAssessmentsToRecords(records = [], assessmentById = new Map()
 
 function applyModelAssessmentsToOfficialMatches(matches = {}, assessmentById = new Map()) {
   if (!assessmentById.size) return matches;
-  const rank = (items = []) => items
-    .map((match, index) => {
+  const annotate = (items = []) => items
+    .map((match) => {
       const assessment = assessmentById.get(stableRecordKey(match?.record || match));
-      return {
-        match: assessment ? {
+      return assessment ? {
           ...match,
           modelCandidateAssessment: assessment,
           record: attachModelCandidateAssessment(match.record, assessment),
-        } : match,
-        index,
-        score: modelAssessmentRank(assessment),
-      };
-    })
-    .sort((left, right) => right.score - left.score || left.index - right.index)
-    .map((item) => item.match);
+        } : match;
+    });
   return {
     ...matches,
-    all: rank(matches.all),
-    exact: rank(matches.exact),
-    near: rank(matches.near),
+    // Preserve the matcher's evidence-derived order. The assessment is attached
+    // for later tie-breaking and diagnostics only.
+    all: annotate(matches.all),
+    exact: annotate(matches.exact),
+    near: annotate(matches.near),
   };
 }
 
@@ -2590,6 +2691,12 @@ function buildRuleQueryCandidateQuestions({
     if (result.length >= safeLimit) break;
   }
   return result;
+}
+
+function diagnosticCandidateIds(items = []) {
+  return [...new Set((items || [])
+    .map((item) => stableRecordKey(item?.record || item))
+    .filter(Boolean))];
 }
 
 function normalizeModelCandidateAssessments(assessments = [], candidateQuestions = []) {
@@ -3775,14 +3882,25 @@ function supplementalQueryKeysForItem(item, { strictOnly = false } = {}) {
   const record = item?.record || item;
   const signals = record?.retrievalSignals || {};
   const values = strictOnly
-    ? signals.strictSupplementalRuleQueryKeys
-    : signals.supplementalRuleQueryKeys;
+    ? [
+        ...(signals.strictRuleQueryKeys || []),
+        ...(signals.strictSupplementalRuleQueryKeys || []),
+      ]
+    : [
+        ...(signals.ruleQueryKeys || []),
+        ...(signals.supplementalRuleQueryKeys || []),
+      ];
   return [...new Set(Array.isArray(values) ? values : [])].filter(Boolean);
 }
 
 function supplementalQueryRankForItem(item, queryKey) {
   const record = item?.record || item;
-  const rank = Number(record?.retrievalSignals?.supplementalRuleQueryRanks?.[queryKey] || 0);
+  const signals = record?.retrievalSignals || {};
+  const rank = Number(
+    signals.ruleQueryRanks?.[queryKey]
+      || signals.supplementalRuleQueryRanks?.[queryKey]
+      || 0,
+  );
   return rank > 0 ? rank : Number.POSITIVE_INFINITY;
 }
 
@@ -3852,13 +3970,11 @@ function reserveRankedHeadAndSupplementalCoverage(items = [], limit = 1, {
   );
   if (orderedItems.length <= 1) return orderedItems;
 
-  // Always preserve the independently ranked head. Use the remaining bounded
-  // slots to alternate between strict supplemental-query coverage and
-  // question-only candidates that the model judged materially relevant with a
-  // compatible premise. Neither path changes evidence authority.
+  // Always preserve the independently ranked head, then cover strict query
+  // branches. Model assessments have already been applied only as a final
+  // tie-breaker in the evidence-derived order above.
   const head = orderedItems[0];
   if (safeLimit === 1) return [head];
-  const assessed = orderedItems.filter(hasEligibleModelCandidateAssessment);
   const queryReserved = reserveSupplementalQueryCoverage(
     orderedItems,
     safeLimit,
@@ -3870,25 +3986,12 @@ function reserveRankedHeadAndSupplementalCoverage(items = [], limit = 1, {
   );
   const selected = [head];
   const selectedKeys = new Set([stableRecordKey(head?.record || head)]);
-  const queues = [queryReserved, assessed];
-  const headHasAssessment = hasEligibleModelCandidateAssessment(head);
-  const headHasStrictQueryCoverage = supplementalQueryKeysForItem(head, { strictOnly }).length > 0;
-  let turn = headHasStrictQueryCoverage && !headHasAssessment ? 1 : 0;
-  while (selected.length < safeLimit) {
-    let added = false;
-    for (let offset = 0; offset < queues.length; offset += 1) {
-      const queueIndex = (turn + offset) % queues.length;
-      const candidate = queues[queueIndex].find(
-        (item) => !selectedKeys.has(stableRecordKey(item?.record || item)),
-      );
-      if (!candidate) continue;
-      selected.push(candidate);
-      selectedKeys.add(stableRecordKey(candidate?.record || candidate));
-      turn = (queueIndex + 1) % queues.length;
-      added = true;
-      break;
-    }
-    if (!added) break;
+  for (const candidate of queryReserved) {
+    if (selected.length >= safeLimit) break;
+    const key = stableRecordKey(candidate?.record || candidate);
+    if (!key || selectedKeys.has(key)) continue;
+    selected.push(candidate);
+    selectedKeys.add(key);
   }
   return dedupeBy([
     ...selected,
@@ -3906,13 +4009,20 @@ function allocateOfficialRelatedEvidence({
   const safeLimit = Math.max(1, Math.floor(Number(limit) || 1));
   const rankRelatedCandidates = (items = []) => (items || [])
     .map((item, index) => ({ item, index }))
-    .sort((left, right) => (
-      modelAssessmentRank(right.item?.retrievalSignals?.modelCandidateAssessment)
-        - modelAssessmentRank(left.item?.retrievalSignals?.modelCandidateAssessment)
-      || Number(right.item?.branchRelevant === true) - Number(left.item?.branchRelevant === true)
-      || Number(right.item?.retrievalScore || 0) - Number(left.item?.retrievalScore || 0)
-      || left.index - right.index
-    ))
+    .sort((left, right) => {
+      const leftSignals = left.item?.retrievalSignals || {};
+      const rightSignals = right.item?.retrievalSignals || {};
+      return Number(right.item?.branchRelevant === true) - Number(left.item?.branchRelevant === true)
+        || Number(rightSignals.strongMechanismQueryCoverage || 0)
+          - Number(leftSignals.strongMechanismQueryCoverage || 0)
+        || (rightSignals.matchedStrongMechanismFeatures || []).length
+          - (leftSignals.matchedStrongMechanismFeatures || []).length
+        || Number(right.item?.retrievalScore || 0) - Number(left.item?.retrievalScore || 0)
+        || Number(rightSignals.lexicalHitCount || 0) - Number(leftSignals.lexicalHitCount || 0)
+        || modelAssessmentRank(rightSignals.modelCandidateAssessment)
+          - modelAssessmentRank(leftSignals.modelCandidateAssessment)
+        || left.index - right.index;
+    })
     .map(({ item }) => item);
   const scoped = reserveIdentitySourceCoverage(
     rankRelatedCandidates(dedupeEvidence(scopedCandidates)),
