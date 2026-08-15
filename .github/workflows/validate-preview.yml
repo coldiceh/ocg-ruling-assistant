@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - "private-eval-pilot-*"
+      - "private-eval-targeted-*"
       - "private-eval-full-*"
   pull_request:
     types: [opened, synchronize, reopened, labeled]
@@ -96,6 +97,7 @@ jobs:
         || (github.event_name == 'push'
           && github.ref_type == 'tag'
           && (startsWith(github.ref_name, 'private-eval-pilot-')
+            || startsWith(github.ref_name, 'private-eval-targeted-')
             || startsWith(github.ref_name, 'private-eval-full-'))))
     needs: validate
     runs-on: ubuntu-latest
@@ -135,11 +137,15 @@ jobs:
       # immutable preview commit.
       EVALUATION_LIMIT: >-
         ${{ github.event_name == 'workflow_dispatch' && inputs.evaluation_limit
+          || (github.event_name == 'push' && startsWith(github.ref_name, 'private-eval-targeted-') && '32')
           || (github.event_name == 'push' && startsWith(github.ref_name, 'private-eval-full-') && '32')
           || (github.event.label.name == 'private-pure-llm-evaluation' && '32')
           || '1' }}
       EVALUATION_CASE_IDS: >-
-        ${{ github.event_name == 'workflow_dispatch' && inputs.evaluation_case_ids || '' }}
+        ${{ github.event_name == 'workflow_dispatch' && inputs.evaluation_case_ids
+          || (github.event_name == 'push' && startsWith(github.ref_name, 'private-eval-targeted-')
+            && 'case-004,case-007,case-018,case-019,case-023,case-027,case-028,case-032')
+          || '' }}
     steps:
       - name: Checkout the exact preview commit
         uses: actions/checkout@v6
@@ -687,7 +693,7 @@ jobs:
       contents: write
     env:
       EVALUATION_LIMIT: >-
-        ${{ startsWith(github.ref_name, 'private-eval-full-') && '32' || '1' }}
+        ${{ (startsWith(github.ref_name, 'private-eval-targeted-') || startsWith(github.ref_name, 'private-eval-full-')) && '32' || '1' }}
       SELECTED_EVALUATION_COUNT: ${{ needs.private-evaluation.outputs.selected_case_count }}
     steps:
       - name: Checkout the encrypted-results branch only

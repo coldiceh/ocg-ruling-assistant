@@ -18,9 +18,11 @@ test("private pure LLM evaluation is explicitly triggered, serial and generation
   assert.match(workflow, /github\.event\.pull_request\.head\.repo\.full_name == github\.repository/u);
   assert.match(workflow, /github\.event_name == 'workflow_dispatch'/u);
   assert.match(workflow, /private-eval-pilot-\*/u);
+  assert.match(workflow, /private-eval-targeted-\*/u);
   assert.match(workflow, /private-eval-full-\*/u);
   assert.match(workflow, /github\.event_name == 'push'[\s\S]*github\.ref_type == 'tag'/u);
   assert.match(workflow, /startsWith\(github\.ref_name, 'private-eval-full-'\) && '32'/u);
+  assert.match(workflow, /startsWith\(github\.ref_name, 'private-eval-targeted-'\) && '32'/u);
   assert.match(workflow, /github\.actor == github\.repository_owner/u);
   assert.match(workflow, /github\.triggering_actor == github\.repository_owner/u);
   assert.match(workflow, /github\.event\.pull_request\.user\.login == github\.repository_owner/u);
@@ -56,6 +58,7 @@ test("private pure LLM evaluation is explicitly triggered, serial and generation
   assert.match(workflow, /case_count_args\+=\(--require-case-count 32\)/u);
   assert.match(workflow, /exclude_case_args\+=\(--exclude-case case-025\)/u);
   assert.match(workflow, /EVALUATION_CASE_IDS:[\s\S]*inputs\.evaluation_case_ids/u);
+  assert.match(workflow, /private-eval-targeted-[\s\S]*case-004,case-007,case-018,case-019,case-023,case-027,case-028,case-032/u);
   assert.match(workflow, /IFS=',' read -ra requested_case_ids/u);
   assert.match(workflow, /include_case_args\+=\(--include-case "\$case_id"\)/u);
   assert.match(workflow, /"\$\{include_case_args\[@\]\}"/u);
