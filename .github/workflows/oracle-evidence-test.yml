@@ -1,0 +1,277 @@
+name: Oracle evidence Sol-low test
+
+on:
+  push:
+    tags:
+      - "oracle-evidence-sol-low-*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: oracle-evidence-sol-low-${{ github.repository }}
+  # A request may already have reached the third-party Relay when cancellation
+  # arrives. Queue later tags instead of risking an ambiguous paid duplicate.
+  cancel-in-progress: false
+
+jobs:
+  oracle-evidence:
+    if: >-
+      github.actor == github.repository_owner
+      && github.triggering_actor == github.repository_owner
+      && github.ref_type == 'tag'
+      && github.run_attempt == 1
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout the tagged preview commit
+        uses: actions/checkout@v6
+
+      - name: Verify the tag targets the trusted preview branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --depth=1 origin \
+            refs/heads/codex/pure-llm-preview-v1:refs/remotes/origin/codex/pure-llm-preview-v1
+          test "$(git rev-parse "$GITHUB_SHA^{commit}")" = \
+            "$(git rev-parse refs/remotes/origin/codex/pure-llm-preview-v1^{commit})"
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+
+      - name: Verify the isolated Oracle request contracts
+        run: node --test --test-concurrency=1 tests/oracle-evidence-test.test.mjs
+
+      - name: Preflight private-result encryption before any paid call
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s .github/private-evaluation-recipient.pem
+          recipient_sha256="$(sha256sum .github/private-evaluation-recipient.pem | awk '{print $1}')"
+          test "$recipient_sha256" = "749295ac7c83b5c765722975c4a6985dedcfcd9dc02eeab3e01dd648ff8a4b3e"
+          openssl pkey -pubin -in .github/private-evaluation-recipient.pem -noout
+
+      - name: Materialize the private evaluation dataset without logging it
+        shell: bash
+        env:
+          PRIVATE_DATASET_BASE64: ${{ secrets.PURE_LLM_EVALUATION_DATASET_BASE64 }}
+        run: |
+          set -euo pipefail
+          umask 077
+          if [ -z "$PRIVATE_DATASET_BASE64" ]; then
+            echo "The private Oracle dataset is not configured" >&2
+            exit 1
+          fi
+          printf '%s' "$PRIVATE_DATASET_BASE64" \
+            | base64 --decode > "$RUNNER_TEMP/oracle-evidence-private-dataset.txt"
+          test -s "$RUNNER_TEMP/oracle-evidence-private-dataset.txt"
+
+      - name: Generate four Oracle candidates serially
+        id: evaluation
+        shell: bash
+        env:
+          RELAY_API_KEY: ${{ secrets.RELAY_API_KEY }}
+          RELAY_BASE_URL: https://api.986310.xyz/v1
+          RELAY_STREAM_TIMEOUT_MS: "90000"
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$RELAY_API_KEY" || {
+            echo "The Relay key for the private Oracle test is not configured" >&2
+            exit 1
+          }
+          mkdir -p artifacts
+          set +e
+          node scripts/run-oracle-evidence-test.mjs \
+            --dataset "$RUNNER_TEMP/oracle-evidence-private-dataset.txt" \
+            --checkpoint-dir "$RUNNER_TEMP/oracle-evidence-checkpoint" \
+            --report artifacts/oracle-evidence-public-report.json \
+            > "$RUNNER_TEMP/oracle-evidence-runner.log" 2>&1
+          status=$?
+          set -e
+          echo "exit_code=$status" >> "$GITHUB_OUTPUT"
+          if [ "$status" -ne 0 ]; then
+            echo "::error title=Oracle evidence test failed::Private diagnostics were withheld from logs and will be preserved only if encryption succeeds."
+          fi
+          exit 0
+
+      - name: Verify the public report is anonymous aggregate data only
+        id: public_report_privacy
+        if: always() && steps.evaluation.outputs.exit_code == '0'
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s artifacts/oracle-evidence-public-report.json
+          node --input-type=module <<'NODE'
+          import { readFile } from "node:fs/promises";
+          import { parseDatasetText } from "./scripts/evaluate-pure-llm-preview.mjs";
+
+          const dataset = parseDatasetText(await readFile(
+            `${process.env.RUNNER_TEMP}/oracle-evidence-private-dataset.txt`,
+            "utf8",
+          ));
+          const reportText = await readFile("artifacts/oracle-evidence-public-report.json", "utf8");
+          const report = JSON.parse(reportText);
+          for (const item of dataset.cases) {
+            if (reportText.includes(item.question) || reportText.includes(item.referenceAnswer)) {
+              throw new Error("Oracle public report contains private evaluation text");
+            }
+          }
+          const forbiddenKeys = new Set([
+            "cases", "caseId", "question", "referenceAnswer", "candidateResponseText",
+            "oracleInput", "messages", "cardTexts", "verifiedMaterials", "evidenceIds",
+          ]);
+          const visit = (value) => {
+            if (!value || typeof value !== "object") return;
+            for (const [key, item] of Object.entries(value)) {
+              if (forbiddenKeys.has(key)) {
+                throw new Error(`Oracle public report contains forbidden field: ${key}`);
+              }
+              visit(item);
+            }
+          };
+          visit(report);
+          if (report.mode !== "generate_only"
+              || report.summary?.total !== 4
+              || Number(report.summary?.generated || 0)
+                + Number(report.summary?.generationFailed || 0) !== 4) {
+            throw new Error("Oracle public report does not describe exactly four generation attempts");
+          }
+          NODE
+
+      - name: Encrypt the private Oracle checkpoint
+        id: private_archive
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          echo "created=false" >> "$GITHUB_OUTPUT"
+          checkpoint="$RUNNER_TEMP/oracle-evidence-checkpoint"
+          test -d "$checkpoint"
+          mkdir -p artifacts
+          plaintext_archive="$RUNNER_TEMP/oracle-evidence-checkpoint.tar.gz"
+          verification_archive="$RUNNER_TEMP/oracle-evidence-checkpoint.verify.tar.gz"
+          random_password_file="$RUNNER_TEMP/oracle-evidence-checkpoint.password"
+          key_envelope_file="$RUNNER_TEMP/oracle-evidence-checkpoint.key-envelope"
+          encrypted_archive="artifacts/oracle-evidence-checkpoint.tar.gz.enc"
+          wrapped_key_envelope="artifacts/oracle-evidence-checkpoint.key-envelope.rsa-oaep"
+          cleanup_plaintext_archives() {
+            rm -f -- \
+              "$plaintext_archive" \
+              "$verification_archive" \
+              "$random_password_file" \
+              "$key_envelope_file"
+          }
+          trap cleanup_plaintext_archives EXIT
+          tar_args=(oracle-evidence-checkpoint)
+          if [ -s "$RUNNER_TEMP/oracle-evidence-runner.log" ]; then
+            tar_args+=(oracle-evidence-runner.log)
+          fi
+          tar -C "$RUNNER_TEMP" -czf "$plaintext_archive" "${tar_args[@]}"
+          openssl rand -hex 32 > "$random_password_file"
+          chmod 600 "$random_password_file"
+          openssl enc -aes-256-cbc -salt -pbkdf2 -iter 200000 -md sha256 \
+            -in "$plaintext_archive" \
+            -out "$encrypted_archive" \
+            -pass file:"$random_password_file"
+          openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -md sha256 \
+            -in "$encrypted_archive" \
+            -out "$verification_archive" \
+            -pass file:"$random_password_file"
+          tar -tzf "$verification_archive" > /dev/null
+          cipher_sha256="$(sha256sum "$encrypted_archive" | awk '{print $1}')"
+          {
+            printf 'schema_version=1\n'
+            printf 'password=%s\n' "$(tr -d '\r\n' < "$random_password_file")"
+            printf 'cipher_sha256=%s\n' "$cipher_sha256"
+            printf 'source_sha=%s\n' "$GITHUB_SHA"
+            printf 'requested_model=gpt-5.6-sol\n'
+            printf 'reasoning_effort=low\n'
+            printf 'selected_case_count=4\n'
+          } > "$key_envelope_file"
+          chmod 600 "$key_envelope_file"
+          openssl pkeyutl -encrypt \
+            -pubin \
+            -inkey .github/private-evaluation-recipient.pem \
+            -pkeyopt rsa_padding_mode:oaep \
+            -pkeyopt rsa_oaep_md:sha256 \
+            -pkeyopt rsa_mgf1_md:sha256 \
+            -in "$key_envelope_file" \
+            -out "$wrapped_key_envelope"
+          chmod 600 "$encrypted_archive" "$wrapped_key_envelope"
+          test -s "$encrypted_archive"
+          test -s "$wrapped_key_envelope"
+          cleanup_plaintext_archives
+          trap - EXIT
+          echo "created=true" >> "$GITHUB_OUTPUT"
+
+      - name: Upload the anonymous Oracle aggregate
+        if: always() && steps.public_report_privacy.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: oracle-evidence-public-report-${{ github.run_id }}
+          path: artifacts/oracle-evidence-public-report.json
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload the encrypted private Oracle checkpoint
+        if: >-
+          always()
+          && steps.private_archive.outcome == 'success'
+          && steps.private_archive.outputs.created == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: oracle-evidence-private-encrypted-${{ github.run_id }}
+          path: |
+            artifacts/oracle-evidence-checkpoint.tar.gz.enc
+            artifacts/oracle-evidence-checkpoint.key-envelope.rsa-oaep
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
+
+      - name: Scrub all private Oracle plaintext
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          cleanup_status=0
+          rm -rf -- \
+            "$RUNNER_TEMP/oracle-evidence-private-dataset.txt" \
+            "$RUNNER_TEMP/oracle-evidence-checkpoint" \
+            "$RUNNER_TEMP/oracle-evidence-runner.log"
+          rm -f -- \
+            "$RUNNER_TEMP/oracle-evidence-checkpoint.tar.gz" \
+            "$RUNNER_TEMP/oracle-evidence-checkpoint.verify.tar.gz" \
+            "$RUNNER_TEMP/oracle-evidence-checkpoint.password" \
+            "$RUNNER_TEMP/oracle-evidence-checkpoint.key-envelope" \
+            artifacts/oracle-evidence-public-report.json \
+            artifacts/oracle-evidence-checkpoint.tar.gz.enc \
+            artifacts/oracle-evidence-checkpoint.key-envelope.rsa-oaep
+          for private_path in \
+            "$RUNNER_TEMP/oracle-evidence-private-dataset.txt" \
+            "$RUNNER_TEMP/oracle-evidence-checkpoint" \
+            "$RUNNER_TEMP/oracle-evidence-runner.log" \
+            "$RUNNER_TEMP/oracle-evidence-checkpoint.tar.gz" \
+            "$RUNNER_TEMP/oracle-evidence-checkpoint.verify.tar.gz" \
+            "$RUNNER_TEMP/oracle-evidence-checkpoint.password" \
+            "$RUNNER_TEMP/oracle-evidence-checkpoint.key-envelope" \
+            "artifacts/oracle-evidence-public-report.json" \
+            "artifacts/oracle-evidence-checkpoint.tar.gz.enc" \
+            "artifacts/oracle-evidence-checkpoint.key-envelope.rsa-oaep"; do
+            if [ -e "$private_path" ]; then
+              cleanup_status=1
+            fi
+          done
+          if [ "$cleanup_status" -ne 0 ]; then
+            echo "Private Oracle plaintext cleanup failed" >&2
+          fi
+          exit "$cleanup_status"
+
+      - name: Enforce Oracle runner completion after archive and cleanup
+        if: always() && steps.evaluation.outputs.exit_code != '0'
+        run: |
+          echo "The Oracle evidence runner failed; no private diagnostic text was printed." >&2
+          exit 1
