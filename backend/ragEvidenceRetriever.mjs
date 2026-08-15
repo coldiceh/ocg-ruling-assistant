@@ -288,11 +288,16 @@ export async function retrieveRagEvidence({
     mentionQueries: [],
     ruleSearchQueries: deterministicRuleQueries,
     allowNoCardMatch: true,
-  }).slice(0, 16);
+  })
+    .filter((record) => (
+      !effectiveQaIdentityCards.length
+      || !recordSharesResolvedIdentity(record, effectiveQaIdentityCards)
+    ))
+    .slice(0, 4);
   const ruleQueryCandidateQuestions = buildRuleQueryCandidateQuestions({
     scopedMatches: localOfficialMatches.all,
     crossCardRecords: initialCrossCardOfficialQuestions,
-    limit: 64,
+    limit: 12,
   });
   let modelCandidateAssessments = [];
   if (typeof ruleSearchQueryProvider === "function") {
@@ -2526,15 +2531,17 @@ function deriveRuleSearchQueries(userQuery) {
 function buildRuleQueryCandidateQuestions({
   scopedMatches = [],
   crossCardRecords = [],
-  limit = 64,
+  limit = 12,
 } = {}) {
-  const safeLimit = Math.max(1, Math.floor(Number(limit) || 64));
+  const safeLimit = Math.max(1, Math.min(12, Math.floor(Number(limit) || 12)));
+  const scopedCandidates = (scopedMatches || []).slice(0, Math.min(8, safeLimit)).map((match) => ({
+    ...(match.record || {}),
+    questionType: match.questionType || match.record?.questionType || "unknown",
+  }));
+  const crossCardLimit = Math.min(4, Math.max(0, safeLimit - scopedCandidates.length));
   const candidates = [
-    ...(scopedMatches || []).slice(0, Math.max(1, safeLimit - 16)).map((match) => ({
-      ...(match.record || {}),
-      questionType: match.questionType || match.record?.questionType || "unknown",
-    })),
-    ...(crossCardRecords || []).slice(0, 16),
+    ...scopedCandidates,
+    ...(crossCardRecords || []).slice(0, crossCardLimit),
   ];
   const seen = new Set();
   const result = [];
@@ -2551,7 +2558,7 @@ function buildRuleQueryCandidateQuestions({
     seen.add(id);
     result.push({
       id,
-      question: question.slice(0, 520),
+      question: question.slice(0, 280),
       questionType: String(candidate.questionType || "unknown").slice(0, 80),
     });
     if (result.length >= safeLimit) break;
@@ -3866,10 +3873,11 @@ function allocateOfficialRelatedEvidence({
   const crossCard = dedupeEvidence(crossCardCandidates)
     .filter((item) => !scopedKeys.has(stableRecordKey(item)));
   if (!scoped.length) {
-    return reserveSupplementalQueryCoverage(crossCard, safeLimit, {
+    const crossCardOnlyLimit = Math.min(2, safeLimit);
+    return reserveSupplementalQueryCoverage(crossCard, crossCardOnlyLimit, {
       queryKeys: supplementalRuleQueryKeys,
       strictOnly: true,
-    }).slice(0, safeLimit);
+    }).slice(0, crossCardOnlyLimit);
   }
   if (!crossCard.length) {
     return reserveRankedHeadAndSupplementalCoverage(scoped, safeLimit, {

@@ -115,6 +115,8 @@ jobs:
     env:
       RELAY_BASE_URL: https://api.986310.xyz/v1
       PUBLIC_RULING_MODEL_PROFILE: relay-gpt-5.6-sol-low
+      RELAY_RULE_MODEL: gpt-5.6-sol
+      RAG_RULE_MODEL_REASONING_EFFORT: low
       RELAY_MAX_COMPLETION_TOKENS: "8192"
       # A healthy Sol-low response normally completes well before this absolute
       # provider deadline. A stalled stream is aborted instead of occupying the

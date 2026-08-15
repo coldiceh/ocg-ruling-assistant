@@ -1179,7 +1179,7 @@ test("rule_query_extractor_uses_lightweight_model", async () => {
   assert.equal(calls.length, 1);
 });
 
-test("rule query extraction can use server-owned Relay Terra none without changing the final model", async () => {
+test("rule query extraction defaults the independent Relay planner to low and a compact output", async () => {
   const calls = [];
   const now = new Date("2048-07-11T00:00:00.000Z");
   const env = {
@@ -1187,7 +1187,6 @@ test("rule query extraction can use server-owned Relay Terra none without changi
     RAG_RULE_MODEL_RELAY_API_KEY: "relay-rule-query-key",
     RAG_RULE_MODEL_RELAY_BASE_URL: "https://relay.example.test/v1",
     RELAY_RULE_MODEL: "gpt-5.6-terra",
-    RAG_RULE_MODEL_REASONING_EFFORT: "none",
     RAG_MODEL: "gpt-5.6-sol",
     RAG_REASONING_EFFORT: "low",
     API_CHATGPT_DAILY_BUDGET_USD: "10",
@@ -1224,20 +1223,55 @@ test("rule query extraction can use server-owned Relay Terra none without changi
   assert.equal(calls.length, 1);
   assert.match(calls[0].url, /\/chat\/completions$/u);
   assert.equal(calls[0].body.model, "gpt-5.6-terra");
-  assert.equal(calls[0].body.reasoning_effort, "none");
-  assert.equal(calls[0].body.max_completion_tokens, 700);
+  assert.equal(calls[0].body.reasoning_effort, "low");
+  assert.equal(calls[0].body.max_completion_tokens, 450);
   assert.deepEqual(calls[0].body.response_format, { type: "json_object" });
   assert.equal(result.providerUsed, "relay");
   assert.equal(result.modelUsed, "gpt-5.6-terra");
   assert.equal(result.requestedModel, "gpt-5.6-terra");
   assert.equal(result.returnedModel, "gpt-5.6-terra");
-  assert.equal(result.reasoningEffort, "none");
+  assert.equal(result.reasoningEffort, "low");
   assert.equal(result.costCurrency, "USD");
   assert.ok(result.estimatedCostUsd > 0);
   assert.equal(result.budgetStatus.bucket.id, "final_ruling:relay");
   assert.equal(result.queries[0].checkpoint, "step_dependency");
   assert.equal(env.RAG_MODEL, "gpt-5.6-sol");
   assert.equal(env.RAG_REASONING_EFFORT, "low");
+});
+
+test("rule query extraction applies its 20-second default provider deadline", async () => {
+  const originalSetTimeout = globalThis.setTimeout;
+  let observedDefaultTimeout = false;
+  globalThis.setTimeout = (callback, delay, ...args) => {
+    if (delay === 20_000) {
+      observedDefaultTimeout = true;
+      return originalSetTimeout(callback, 0, ...args);
+    }
+    return originalSetTimeout(callback, delay, ...args);
+  };
+
+  try {
+    const result = await callRuleQueryExtractionModel({
+      userQuery: "匿名默认超时场景需要检索哪条规则？",
+      dataRevision: "rule-default-timeout-20480712",
+      env: {
+        RAG_RULE_MODEL_PROVIDER: "relay",
+        RAG_RULE_MODEL_RELAY_API_KEY: "relay-rule-key",
+        RAG_RULE_MODEL_RELAY_BASE_URL: "https://relay.example.test/v1",
+        API_CHATGPT_DAILY_BUDGET_USD: "10",
+        API_BUDGET_TIMEZONE: "UTC",
+      },
+      now: new Date("2048-07-12T00:00:00.000Z"),
+      fetchImpl: async (_url, options) => new Promise((_resolve, reject) => {
+        options.signal.addEventListener("abort", () => reject(options.signal.reason), { once: true });
+      }),
+    });
+
+    assert.equal(observedDefaultTimeout, true);
+    assert.ok(result.warnings.includes("rule_query_model_failed:rule_query_model_timeout"));
+  } finally {
+    globalThis.setTimeout = originalSetTimeout;
+  }
 });
 
 test("official QA applicability review uses Relay Sol low once and never sends candidate answers", async () => {
@@ -1470,7 +1504,7 @@ test("public profiles hard-disable the independent applicability stage even if d
   assert.equal(publicEnv.RAG_RULE_MODEL_PROVIDER, "relay");
   assert.equal(publicEnv.RAG_RULE_MODEL_RELAY_API_KEY, "relay-applicability-key");
   assert.equal(publicEnv.RAG_RULE_MODEL_RELAY_BASE_URL, "https://relay.example.test/v1");
-  assert.equal(publicEnv.RELAY_RULE_MODEL, "gpt-5.6-luna");
+  assert.equal(publicEnv.RELAY_RULE_MODEL, "gpt-5.6-sol");
   assert.equal(publicEnv.RAG_RULE_MODEL_REASONING_EFFORT, "low");
   assert.equal(publicEnv.RAG_EVIDENCE_APPLICABILITY_ENABLED, "false");
   assert.equal(call, null);
@@ -1490,7 +1524,7 @@ test("public model environment keeps the independent reviewer off unless explici
   assert.equal(publicEnv.RAG_REASONING_EFFORT, "low");
   assert.equal(publicEnv.RAG_CARD_MODEL_PROVIDER, "deepseek");
   assert.equal(publicEnv.RAG_RULE_MODEL_PROVIDER, "relay");
-  assert.equal(publicEnv.RELAY_RULE_MODEL, "gpt-5.6-luna");
+  assert.equal(publicEnv.RELAY_RULE_MODEL, "gpt-5.6-sol");
   assert.equal(publicEnv.RAG_RULE_MODEL_REASONING_EFFORT, "low");
   assert.equal(publicEnv.RAG_EVIDENCE_APPLICABILITY_ENABLED, "false");
 });
