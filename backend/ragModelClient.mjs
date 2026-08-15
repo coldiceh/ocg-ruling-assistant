@@ -17,13 +17,13 @@ import {
 const DEFAULT_DEEPSEEK_BASE_URL = "https://api.deepseek.com";
 const DEFAULT_DEEPSEEK_MODEL = "deepseek-v4-flash";
 const DEFAULT_DEEPSEEK_CARD_MODEL = "deepseek-v4-flash";
-const DEFAULT_RELAY_RULE_MODEL = "gpt-5.6-luna";
+const DEFAULT_RELAY_RULE_MODEL = "gpt-5.6-sol";
 const DEFAULT_GLM_BASE_URL = "https://open.bigmodel.cn/api/paas/v4";
 const DEFAULT_GLM_MODEL = "glm-5.2";
 const DEFAULT_JSON_TASK_MAX_OUTPUT_TOKENS = 4000;
 const DEFAULT_RAG_RECOVERY_MAX_OUTPUT_TOKENS = 4096;
 const DEFAULT_LIGHTWEIGHT_EXTRACTION_TIMEOUT_MS = 4500;
-const DEFAULT_RULE_QUERY_EXTRACTION_TIMEOUT_MS = 12000;
+const DEFAULT_RULE_QUERY_EXTRACTION_TIMEOUT_MS = 20000;
 const DEFAULT_DAILY_BUDGET_CNY = 10;
 const DEFAULT_CHATGPT_DAILY_BUDGET_USD = 10;
 const DEFAULT_PRIVATE_EVALUATION_BUDGET_USD = 40;
@@ -811,7 +811,7 @@ export async function callRuleQueryExtractionModel({
     ...providerResolution.warnings,
     ...relayGeneration.warnings,
   ];
-  const maxTokens = readNumber(env.RAG_RULE_MODEL_MAX_OUTPUT_TOKENS, 700);
+  const maxTokens = readNumber(env.RAG_RULE_MODEL_MAX_OUTPUT_TOKENS, 450);
   const normalizedCandidateQuestions = normalizeRuleQueryCandidateQuestions(candidateQuestions);
   const prompt = buildRuleQueryExtractionPrompt(
     userQuery,
@@ -901,7 +901,7 @@ export async function callRuleQueryExtractionModel({
   }
 
   const cacheKey = extractionCacheKey({
-    kind: "rule-v4",
+    kind: "rule-v5",
     provider,
     modelName,
     dataRevision,
@@ -4125,8 +4125,8 @@ function buildRuleQueryExtractionPrompt(
     "如果问题同时问‘能否发动’和‘处理是否成功’，必须拆成不同子命题，分别检索发动条件与结算适用性。连续处理还要分别检索每一步是否实际完成、由哪个效果完成，以及下一步是否依赖该完成事实；不能只因最终状态看起来相同就合并步骤。",
     "玩家俗称、缩写或自然语言必须改写为正式卡文或规则术语。每个 query 自身应在 120 字符内尽量同时包含精简的中文、日文和英文等价术语，以“ | ”分隔；不要只翻译卡名，也不要保留未解释的玩家俗称。",
     "次数问题必须包含已使用次数、总上限或剩余次数等正式关键词；区域或双重卡片种类问题必须包含移动瞬间的区域与当时作为何种卡处理。",
-    "输出 1 到 6 条高价值查询词即可；简单问题可以只有 1 条，不得为了达到条数加入无关机制；不知道就输出空数组。",
-    "候选官方资料只提供问题部分，不包含答案。可以对其中最多12条真正相关的候选给出软排序：relevance 为 high、medium 或 low，premise 为 same、partial、different 或 unknown，并用 difference 简述关键前提差异。未列出的候选一律视为 unknown；不得据此删除资料。",
+    "输出 1 到 4 条高价值查询词即可；简单问题可以只有 1 条，不得为了达到条数加入无关机制；不知道就输出空数组。",
+    "候选官方资料只提供问题部分，不包含答案。可以对其中最多8条真正相关的候选给出软排序：relevance 为 high、medium 或 low，premise 为 same、partial、different 或 unknown，并用 difference 简述关键前提差异。未列出的候选一律视为 unknown；不得据此删除资料。",
     "不得输出裁定结论，不得猜测候选资料的答案，也不得把卡名、题号或特定题型写成固定规则。",
     "输出必须是单个 JSON 对象，不要 markdown，不要解释。",
     "JSON 只包含 ruleQueries 和 candidateAssessments 两个数组；ruleQueries 每项包含 subclaim、checkpoint、query、reason、confidence；candidateAssessments 每项包含 id、relevance、premise、difference。",
@@ -4151,7 +4151,7 @@ function normalizeRuleQueryCandidateQuestions(candidates = []) {
         || candidate?.rawDetailedQuestion
         || candidate?.rawQuestion
         || candidate?.title,
-    ).replace(/\s+/gu, " ").slice(0, 520);
+    ).replace(/\s+/gu, " ").slice(0, 280);
     if (!id || !question || seen.has(id)) continue;
     seen.add(id);
     result.push({
@@ -4159,7 +4159,7 @@ function normalizeRuleQueryCandidateQuestions(candidates = []) {
       question,
       questionType: nonEmpty(candidate?.questionType || "unknown").slice(0, 80),
     });
-    if (result.length >= 64) break;
+    if (result.length >= 12) break;
   }
   return result;
 }
@@ -4190,7 +4190,7 @@ function normalizeRuleQueryCandidateAssessments(rawText, candidates = []) {
       difference: nonEmpty(item?.difference).replace(/\s+/gu, " ").slice(0, 240),
       source: "model_rule_query_soft_ranker",
     });
-    if (result.length >= 12) break;
+    if (result.length >= 8) break;
   }
   return result;
 }
@@ -4341,7 +4341,7 @@ function normalizeRuleSearchQueries(rawText) {
     if (seen.has(key)) continue;
     seen.add(key);
     result.push(candidate);
-    if (result.length >= 8) break;
+    if (result.length >= 4) break;
   }
   return result;
 }

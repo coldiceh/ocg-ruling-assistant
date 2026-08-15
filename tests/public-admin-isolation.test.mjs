@@ -98,7 +98,7 @@ test("public answer payload cannot select an admin-only provider or depend on Op
   }
 });
 
-test("public model environment isolates DeepSeek card extraction, Luna rule planning, and the selected final profile", () => {
+test("public model environment isolates DeepSeek card extraction and Relay Sol planning/final generation", () => {
   const publicEnv = createPublicAnswerModelEnv({
     MODEL_PROVIDER: "openai",
     RAG_MODEL_PROVIDER: "gemini",
@@ -127,7 +127,7 @@ test("public model environment isolates DeepSeek card extraction, Luna rule plan
   assert.equal(publicEnv.RAG_RULE_MODEL_PROVIDER, "relay");
   assert.equal(publicEnv.RAG_RULE_MODEL_RELAY_API_KEY, "public-relay-key");
   assert.equal(publicEnv.RAG_RULE_MODEL_RELAY_BASE_URL, "https://relay.example.test/v1");
-  assert.equal(publicEnv.RELAY_RULE_MODEL, "gpt-5.6-luna");
+  assert.equal(publicEnv.RELAY_RULE_MODEL, "gpt-5.6-sol");
   assert.equal(publicEnv.RAG_RULE_MODEL_REASONING_EFFORT, "low");
   assert.equal(publicEnv.RAG_RULEBOOK_MODEL_PROVIDER, undefined);
   assert.equal(Object.keys(publicEnv).some((key) => /^(?:OPENAI_|ADMIN_|KIMI_)/iu.test(key)), false);
