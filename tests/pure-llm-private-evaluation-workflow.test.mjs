@@ -56,7 +56,7 @@ test("private pure LLM evaluation is explicitly triggered, serial and generation
   assert.match(workflow, /--limit "\$EVALUATION_LIMIT"/u);
   assert.match(workflow, /if \[ "\$EVALUATION_LIMIT" = "32" \]; then/u);
   assert.match(workflow, /case_count_args\+=\(--require-case-count 32\)/u);
-  assert.match(workflow, /exclude_case_args\+=\(--exclude-case case-025\)/u);
+  assert.doesNotMatch(workflow, /--exclude-case case-025/u);
   assert.match(workflow, /EVALUATION_CASE_IDS:[\s\S]*inputs\.evaluation_case_ids/u);
   assert.match(workflow, /private-eval-targeted-[\s\S]*case-004,case-007,case-018,case-019,case-023,case-027,case-028,case-032/u);
   assert.match(workflow, /IFS=',' read -ra requested_case_ids/u);
@@ -65,7 +65,6 @@ test("private pure LLM evaluation is explicitly triggered, serial and generation
   assert.match(workflow, /SELECTED_EVALUATION_COUNT=\$selected_case_count/u);
   assert.match(workflow, /selected_case_count=\$selected_case_count/u);
   assert.match(workflow, /generation_failed=\$generation_failed/u);
-  assert.match(workflow, /"\$\{exclude_case_args\[@\]\}"/u);
   assert.match(workflow, /"\$\{case_count_args\[@\]\}"/u);
   assert.match(workflow, /--generation-timeout-ms 90000/u);
   assert.doesNotMatch(workflow, /RELAY_STREAM_TIMEOUT_MS: "(?:240000|270000)"/u);

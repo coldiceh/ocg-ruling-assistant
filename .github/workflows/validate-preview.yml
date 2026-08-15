@@ -265,10 +265,8 @@ jobs:
           mkdir -p artifacts
           case_count_args=()
           include_case_args=()
-          exclude_case_args=()
           if [ "$EVALUATION_LIMIT" = "32" ]; then
             case_count_args+=(--require-case-count 32)
-            exclude_case_args+=(--exclude-case case-025)
           fi
           if [ -n "${EVALUATION_CASE_IDS//[[:space:]]/}" ]; then
             IFS=',' read -ra requested_case_ids <<< "$EVALUATION_CASE_IDS"
@@ -287,7 +285,6 @@ jobs:
             --generate-only \
             "${include_case_args[@]}" \
             --limit "$EVALUATION_LIMIT" \
-            "${exclude_case_args[@]}" \
             "${case_count_args[@]}" \
             --generation-timeout-ms 90000
           status=$?
