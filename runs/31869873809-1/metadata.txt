@@ -1,0 +1,10 @@
+schema_version=1
+archive_cipher=aes-256-cbc-pbkdf2-sha256-iter200000
+key_envelope=rsa-oaep-sha256-mgf1-sha256
+source_sha=33519c96e5c3d08dd0131ad5841c076eac2ea72e
+requested_evaluation_limit=32
+selected_evaluation_count=8
+run_id=31869873809
+run_attempt=1
+cipher_sha256=5fc98495c9c1a67650fa96fba5ba15bd16da2ae73acc5429e62affcff3dd6356
+key_envelope_sha256=c897a9203d2e82543bf21fa03cd8f12cffad5fc02776f7374a3065b8edc0b0b0
