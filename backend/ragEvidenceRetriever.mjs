@@ -1933,12 +1933,16 @@ function rankRecordsWithSupplementalQueries({
   independentQueryLimit = 0,
   allowNoCardMatch = false,
 }) {
+  const aggregateRuleQueries = normalizeRuleSearchQueries([
+    ...(deterministicRuleQueries || []),
+    ...(supplementalRuleQueries || []),
+  ], { maxRuleSearchQueries: 16 });
   const deterministic = rankRecords({
     userQuery,
     records,
     resolvedCards,
     mentionQueries,
-    ruleSearchQueries: deterministicRuleQueries,
+    ruleSearchQueries: aggregateRuleQueries,
     allowNoCardMatch,
   });
   const supplementalKeys = new Set(
