@@ -8,6 +8,7 @@ import {
   callCardNameExtractionModel,
   callRagModel,
   callRuleQueryExtractionModel,
+  isServerOwnedPrivateEvaluationEnv,
 } from "./ragModelClient.mjs";
 import { buildRagRulingPromptBundle } from "./ragRulingPrompt.mjs";
 import { hasNumberedCardIdentityConflict } from "./numberedCardIdentity.mjs";
@@ -413,6 +414,10 @@ async function answerRagRulingQuestionInternal({
       promptTruncated: promptBundle.promptTruncated,
       selectedEvidenceDiagnostics: promptBundle.evidenceSelectionDiagnostics || [],
       ruleQueryPlanDiagnostics: promptBundle.ruleQueryPlanDiagnostics || [],
+      ...(privateEvaluationDiagnostics?.enabled === true
+        && isServerOwnedPrivateEvaluationEnv(env) ? {
+        retrievalCandidateStages: evidence.debug?.candidateStages || {},
+      } : {}),
       semanticStateTransition: null,
       semanticStateTransitionDiagnostic: null,
       deterministicDecision: null,

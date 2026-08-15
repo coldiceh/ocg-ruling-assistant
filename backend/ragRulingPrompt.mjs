@@ -45,10 +45,10 @@ const OFFICIAL_REFERENCE_BUCKETS = Object.freeze([
 const PROMPT_SELECTION_METADATA = Symbol("promptSelectionMetadata");
 
 const GENERIC_DECISION_CHECKLIST = Object.freeze([
-  "activation_legality_before_resolution",
-  "ordered_resolution_steps_and_dependencies",
-  "effect_source_and_affected_entity",
-  "permissions_limits_and_remaining_attempts",
+  "activation_snapshot_legality_and_all_available_options",
+  "resolution_snapshot_all_choice_directions_and_state_changes",
+  "ordered_resolution_steps_dependencies_and_post_state",
+  "effect_source_affected_entity_permissions_limits_and_remaining_attempts",
 ]);
 
 const GENERAL_INSTRUCTIONS = Object.freeze([
@@ -61,7 +61,7 @@ const GENERAL_INSTRUCTIONS = Object.freeze([
   "retrievalContext.relatedOnly=true 的资料（包括跨卡机制资料）始终只是相关证据；即使来源为官方，也不得据此提升为 official direct 或 official_confirmed。",
   "先建立事件时间线，并为每个实际相关步骤建立统一状态检查表：发动快照（发动/适用条件、cost、对象、区域、表示形式、当时作为何种卡处理）、处理快照（逆序处理到该连锁项时的当前区域、类型、属性/等级与正在适用的效果）以及处理后快照。引用相关 Q&A 前必须核对它描述的是同一阶段与事件节点，不得把相邻但不同的时点互换。",
   "先核对每个处理的效果来源与效果类型，再核对实际受影响实体：受到影响的是卡、怪兽、玩家、攻击、召唤还是其他处理。不得因为文本提到某实体就偷换效果来源、效果类型或受影响实体。",
-  "若同一效果在发动时要求存在可执行的后续选择，而处理途中状态又会改变，必须分别说明发动时的合法选项与处理时最终能执行的选项。连续处理按卡文分句逐步执行：对每一步记录由哪个效果实际执行、是否完成以及完成后的状态，再检查下一步及其对前一步的依赖；不得仅因最终状态看似相同就认定原效果完成，也不得用尚未发生的后续状态倒推、省略发动条件，或在没有卡文或资料依据时因后一步失败而撤销已经完成的独立步骤。",
+  "若同一效果在发动时要求存在可执行的后续选择，而处理途中状态又会改变，必须分别枚举发动时的全部合法选项与处理时最终能执行的全部选项。文本允许在多个实体、数值或方向之间选择时，必须逐一核对每个选择方向，不得只举一个可行例子。连续处理按卡文分句逐步执行：对每一步记录由哪个效果实际执行、是否完成以及完成后的状态，再检查下一步及其对前一步的依赖；不得仅因最终状态看似相同就认定原效果完成，也不得用尚未发生的后续状态倒推、省略发动条件，或在没有卡文或资料依据时因后一步失败而撤销已经完成的独立步骤。",
   "核对权限关系：允许、追加、禁止、免疫或替代分别授予或约束谁以及哪一种动作。检查不受影响或免疫时，必须同时核对效果的真实来源、效果类型和受影响实体；无论结果看似有利还是不利都使用同一检查，不得只凭结果倾向决定是否受影响。不能把只针对一种实体或动作的权限/限制扩张到另一种。",
   "遇到次数、攻击次数、追加权限或可再次执行次数，建立显式账本：初始权限、已经使用的次数、本次新增或替换的权限、剩余次数，并逐步核算；不得把已使用的次数重复计入。同一种动作同时受多个‘可以／再一次／最多N次’许可约束时，先依据原文和相关资料判断它们是分别设定上限、覆盖或明确追加；没有明确依据不得默认把许可次数相加。",
   "如果没有官方直接 Q&A，可以综合卡片原文、FAQ、官方相关 Q&A、用户提供文本和其他资料进行独立规则分析。资料足以推导时输出 rule_analysis，不要仅因没有官方原题就拒绝回答。",
@@ -611,12 +611,20 @@ function limitEvidence(items = [], limit, textLimit, label, warnings, focusCardI
           ...(retrievalSignals.strictSupplementalRuleQueryKeys || []),
         ],
       ),
+      strictSupplementalQueryKeys: normalizePromptSelectionValues(
+        retrievalSignals.strictSupplementalRuleQueryKeys || [],
+      ),
       mechanisms: normalizePromptSelectionValues(
         [
           ...(retrievalSignals.ruleQueryMechanisms || []),
           ...(retrievalSignals.supplementalRuleQueryMechanisms || []),
         ],
       ),
+      modelPremise: String(
+        retrievalSignals.modelCandidateAssessment?.premise
+          || item?.retrievalContext?.modelCandidateAssessment?.premise
+          || "",
+      ).trim(),
     };
     return result;
   });
@@ -1072,15 +1080,12 @@ function isRuleMaterialEntry({ bucket, item } = {}) {
 
 function crossCardEvidenceDiversityKeys({ item } = {}) {
   const metadata = item?.[PROMPT_SELECTION_METADATA] || {};
-  const strictQueryKeys = metadata.strictQueryKeys || [];
+  const strictQueryKeys = metadata.strictSupplementalQueryKeys || [];
   // The first cross-card entry is a bounded fallback. Additional reserved
   // slots require a strict per-query match; a lexical head's inferred
   // mechanism alone must not promote a weak analogy into the final prompt.
-  if (!strictQueryKeys.length) return [];
-  return [...new Set([
-    ...strictQueryKeys.map((value) => `query:${value}`),
-    ...(metadata.mechanisms || []).map((value) => `mechanism:${value}`),
-  ])];
+  if (!strictQueryKeys.length || metadata.modelPremise === "different") return [];
+  return [...new Set(strictQueryKeys.map((value) => `query:${value}`))];
 }
 
 function compactEvidenceEntryKey({ bucket, item } = {}) {
@@ -1175,7 +1180,9 @@ function compactPromptEvidenceItem(item = {}, textLimit, focusCardIds) {
   };
   result[PROMPT_SELECTION_METADATA] = item?.[PROMPT_SELECTION_METADATA] || {
     strictQueryKeys: [],
+    strictSupplementalQueryKeys: [],
     mechanisms: [],
+    modelPremise: "",
   };
   return result;
 }
