@@ -1171,6 +1171,8 @@ test("rule_query_extractor_uses_lightweight_model", async () => {
   assert.match(requestPrompt, /前后步骤依赖与无法完成时的部分处理/u);
   assert.match(requestPrompt, /效果来源与效果类型/u);
   assert.match(requestPrompt, /发动前、处理时、处理后的状态快照/u);
+  assert.match(requestPrompt, /每个强制步骤与分支生成独立查询/u);
+  assert.match(requestPrompt, /不能只检索最初的触发条件/u);
   assert.match(requestPrompt, /不得为了达到条数加入无关机制/u);
   assert.match(requestPrompt, /中文、日文和英文等价术语/u);
   assert.match(requestPrompt, /不要保留未解释的玩家俗称/u);
@@ -5759,8 +5761,10 @@ test("cross-card allocation balances a model-assessed premise with strict supple
   );
   const crossCardRelatedIds = crossCardRelated.map((item) => item.id);
   assert.ok(crossCardRelatedIds.includes(samePremise.id));
+  assert.ok(crossCardRelatedIds.includes(partialPremise.id));
   assert.ok(crossCardRelatedIds.includes(negateDistractor.id));
-  assert.equal(crossCardRelated.length <= 2, true);
+  assert.ok(crossCardRelatedIds.includes(summonDistractor.id));
+  assert.equal(crossCardRelated.length, 4);
   for (const item of crossCardRelated) {
     assert.equal(item.type, "related");
     assert.equal(item.isDirect, false);
@@ -5902,6 +5906,7 @@ test("public prompt retains card text, excludes semantic state output, and has n
   assert.match(bundle.prompt, /处理快照/u);
   assert.match(bundle.prompt, /处理后快照/u);
   assert.match(bundle.prompt, /由哪个效果实际执行、是否完成/u);
+  assert.match(bundle.prompt, /没有明确依据不得默认把许可次数相加/u);
   assert.match(bundle.prompt, /消除互相矛盾的前提、步骤和最终结论/u);
 });
 

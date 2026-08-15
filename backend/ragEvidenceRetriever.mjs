@@ -3923,7 +3923,7 @@ function allocateOfficialRelatedEvidence({
   const crossCard = dedupeEvidence(crossCardCandidates)
     .filter((item) => !scopedKeys.has(stableRecordKey(item)));
   if (!scoped.length) {
-    const crossCardOnlyLimit = Math.min(2, safeLimit);
+    const crossCardOnlyLimit = Math.min(4, safeLimit);
     return reserveRankedHeadAndSupplementalCoverage(crossCard, crossCardOnlyLimit, {
       queryKeys: supplementalRuleQueryKeys,
       strictOnly: true,
@@ -3937,10 +3937,10 @@ function allocateOfficialRelatedEvidence({
   }
 
   // A mechanism ruling is often documented on another card, but analogies must
-  // not crowd the same-card sources out of the bounded prompt. Keep at most two
-  // cross-card candidates; this is allocation only, never an authority upgrade
-  // or a hard applicability decision.
-  const crossCardReserve = Math.min(2, Math.max(0, safeLimit - 1));
+  // not crowd the same-card sources out of the bounded prompt. Keep at most four
+  // cross-card candidates so independent mechanism branches can survive; this
+  // is allocation only, never an authority upgrade or applicability decision.
+  const crossCardReserve = Math.min(4, Math.max(0, safeLimit - 1));
   const maxCrossCard = scoped.length < safeLimit
     ? Math.min(crossCard.length, safeLimit - scoped.length, crossCardReserve)
     : Math.min(
