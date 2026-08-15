@@ -42,6 +42,15 @@ const OFFICIAL_REFERENCE_BUCKETS = Object.freeze([
   "provisionalOfficialResponses",
 ]);
 
+const PROMPT_SELECTION_METADATA = Symbol("promptSelectionMetadata");
+
+const GENERIC_DECISION_CHECKLIST = Object.freeze([
+  "activation_legality_before_resolution",
+  "ordered_resolution_steps_and_dependencies",
+  "effect_source_and_affected_entity",
+  "permissions_limits_and_remaining_attempts",
+]);
+
 const GENERAL_INSTRUCTIONS = Object.freeze([
   "你是游戏王 OCG 规则分析助手。只依据用户原始问题、已解析卡片的原始卡文和所给检索资料回答，不得编造规则、卡文、资料或来源。",
   "先完整阅读用户问题，识别其中每一个子问题；逐个子问题给出直接结论，并说明结论所依据的题面事实、卡片原文和资料。不要漏答，也不要自行补造题面没有给出的状态。",
@@ -57,6 +66,7 @@ const GENERAL_INSTRUCTIONS = Object.freeze([
   "遇到次数、攻击次数、追加权限或可再次执行次数，建立显式账本：初始权限、已经使用的次数、本次新增或替换的权限、剩余次数，并逐步核算；不得把已使用的次数重复计入。同一种动作同时受多个‘可以／再一次／最多N次’许可约束时，先依据原文和相关资料判断它们是分别设定上限、覆盖或明确追加；没有明确依据不得默认把许可次数相加。",
   "如果没有官方直接 Q&A，可以综合卡片原文、FAQ、官方相关 Q&A、用户提供文本和其他资料进行独立规则分析。资料足以推导时输出 rule_analysis，不要仅因没有官方原题就拒绝回答。",
   "如果决定结论所必需的事实确实缺失或资料相互冲突，明确列入 missingInfo 并给出必要的条件分支；不得用常见场面、历史题目或猜测补齐，也不得虚构确定结论。输出前交叉核对 shortAnswer、reasoning、missingInfo 与各子问题结论，消除互相矛盾的前提、步骤和最终结论。",
+  "decisionChecklist 是所有问题共用的内部自检维度，decisionPlan 是查询模型从本题生成的补充核对计划；两者都不是规则证据或预设答案。作答前仅在内部检查适用项，确认每个 subclaim/checkpoint 已由题面、卡文或所给资料处理；不要输出该检查过程，也不要因此编造缺失结论。",
   "不得根据卡名、题号、题型标签或历史答案套用预设结论。每次都从本次用户问题、原始卡文和本次证据重新推理。",
   "不得把 card_text、baige_card_text、user_provided_text、FAQ、rulebook、related evidence 或 rawRelatedEvidence 称为官方直接 Q&A。",
   "输出必须是单个 JSON 对象，不要 markdown、代码围栏或 JSON 外说明。字段必须包含 answerLevel、shortAnswer、reasoning、usedCards、usedEvidence、missingInfo、riskFlags、confidenceSelfEstimate。",
@@ -103,11 +113,17 @@ export function buildRagRulingPromptBundle({
     authoritativeDirectId: authoritativeDirect?.id || null,
     focusCardIds,
   });
+  const ruleQueryPlanDiagnostics = buildRuleQueryPlanDiagnostics(evidence.ruleSearchQueries);
   const payload = {
     userQuery: String(userQuery || ""),
     resolvedCards: summarizeCards(cardResolution.resolvedCards || [], limits.maxCards),
     unresolvedMentions: cardResolution.unresolvedMentions || [],
     ambiguousMentions: cardResolution.ambiguousMentions || [],
+    decisionChecklist: [...GENERIC_DECISION_CHECKLIST],
+    decisionPlan: ruleQueryPlanDiagnostics.map(({ subclaim, checkpoint }) => ({
+      subclaim,
+      checkpoint,
+    })),
     evidence: evidencePayload,
     allowedEvidenceIds: evidenceBucketsToList(evidencePayload)
       .map((item) => String(item?.id || "").trim())
@@ -116,11 +132,12 @@ export function buildRagRulingPromptBundle({
 
   if (authoritativeDirect) {
     const allowedEvidenceIds = [String(authoritativeDirect.id)];
-    const ruleQueryPlanDiagnostics = buildRuleQueryPlanDiagnostics(evidence.ruleSearchQueries);
     warnings.push("official_direct_focused_prompt");
     const promptResult = buildOfficialDirectPrompt({
       userQuery: payload.userQuery,
       resolvedCards: payload.resolvedCards,
+      decisionChecklist: payload.decisionChecklist,
+      decisionPlan: payload.decisionPlan,
       directQa: authoritativeDirect,
       maxPromptChars: limits.maxPromptChars,
     });
@@ -160,7 +177,7 @@ export function buildRagRulingPromptBundle({
       evidencePayload,
       allowedEvidenceIds,
     ),
-    ruleQueryPlanDiagnostics: buildRuleQueryPlanDiagnostics(evidence.ruleSearchQueries),
+    ruleQueryPlanDiagnostics,
     warnings,
     promptChars: prompt.length,
     promptTruncated: warnings.some((warning) => warning.includes("truncated") || warning.includes("compacted")),
@@ -191,8 +208,7 @@ function extractPromptAllowedEvidenceIds(prompt, fallback = []) {
 }
 
 function buildRuleQueryPlanDiagnostics(ruleSearchQueries = []) {
-  return (Array.isArray(ruleSearchQueries) ? ruleSearchQueries : [])
-    .slice(0, 8)
+  const normalized = (Array.isArray(ruleSearchQueries) ? ruleSearchQueries : [])
     .map((item) => ({
       subclaim: String(item?.subclaim || "").replace(/\s+/gu, " ").trim().slice(0, 160),
       checkpoint: String(item?.checkpoint || "").trim(),
@@ -200,6 +216,13 @@ function buildRuleQueryPlanDiagnostics(ruleSearchQueries = []) {
       source: String(item?.source || "").trim(),
     }))
     .filter((item) => item.subclaim || item.checkpoint);
+  const seen = new Set();
+  return normalized.filter((item) => {
+    const key = `${item.checkpoint}\u0000${item.subclaim}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }).slice(0, 8);
 }
 
 function buildEvidenceSelectionDiagnostics(evidencePayload = {}, allowedEvidenceIds = []) {
@@ -290,6 +313,8 @@ function renderGeneralPrompt(payload) {
 function buildOfficialDirectPrompt({
   userQuery,
   resolvedCards = [],
+  decisionChecklist = GENERIC_DECISION_CHECKLIST,
+  decisionPlan = [],
   directQa = {},
   maxPromptChars,
 } = {}) {
@@ -302,6 +327,7 @@ function buildOfficialDirectPrompt({
   const instructions = [
     "你是游戏王 OCG 官方 Q&A 转述助手。检索器已经严格确认下面唯一的 officialQaDirectCandidate 对应用户完整问题。",
     "以该官方 Q&A 为裁定依据，完整回答用户的全部子问题；保留其中所有实质条件、例外、后续处理、次数和限制，不得添加原文没有说明的处理。",
+    "decisionChecklist 和 decisionPlan 都不是证据；输出前仅在内部确认适用项均已由该官方 Q&A 处理，不要展示检查过程。",
     "resolvedCards 仅用于理解卡片身份和还原资料中的卡名占位符。",
     `answerLevel 必须为 official_confirmed；usedEvidence 必须包含 id=${String(directQa.id || "")}、type=official_qa。`,
     arrayFields,
@@ -326,6 +352,8 @@ function buildOfficialDirectPrompt({
     JSON.stringify({
       userQuery: query,
       resolvedCards: identities,
+      decisionChecklist,
+      decisionPlan,
       officialQaDirectCandidate: {
         id: directQa.id,
         type: "official_qa",
@@ -573,8 +601,31 @@ function limitEvidence(items = [], limit, textLimit, label, warnings, focusCardI
     };
     if (structuredQa) Object.assign(result, structuredQa);
     else result.text = preserveEvidenceText(sourceText, textLimit, focusCardIds);
+    const retrievalSignals = item?.retrievalSignals && typeof item.retrievalSignals === "object"
+      ? item.retrievalSignals
+      : {};
+    result[PROMPT_SELECTION_METADATA] = {
+      strictQueryKeys: normalizePromptSelectionValues(
+        [
+          ...(retrievalSignals.strictRuleQueryKeys || []),
+          ...(retrievalSignals.strictSupplementalRuleQueryKeys || []),
+        ],
+      ),
+      mechanisms: normalizePromptSelectionValues(
+        [
+          ...(retrievalSignals.ruleQueryMechanisms || []),
+          ...(retrievalSignals.supplementalRuleQueryMechanisms || []),
+        ],
+      ),
+    };
     return result;
   });
+}
+
+function normalizePromptSelectionValues(values = []) {
+  return [...new Set((Array.isArray(values) ? values : [])
+    .map((value) => String(value || "").trim())
+    .filter(Boolean))].slice(0, 8);
 }
 
 function promptSourceMetadata(item = {}, label = "") {
@@ -800,6 +851,8 @@ function buildCompactRagPrompt({ payload, maxPromptChars }) {
     })),
     unresolvedMentions: (payload.unresolvedMentions || []).slice(0, 8),
     ambiguousMentions: (payload.ambiguousMentions || []).slice(0, 8),
+    decisionChecklist: (payload.decisionChecklist || []).slice(0, 4),
+    decisionPlan: (payload.decisionPlan || []).slice(0, 8),
     evidence: compactEvidence,
     allowedEvidenceIds: EVIDENCE_BUCKET_ORDER
       .flatMap((bucket) => compactEvidence[bucket].map((item) => String(item.id || "").trim()))
@@ -834,11 +887,13 @@ function buildCompactRagPrompt({ payload, maxPromptChars }) {
     })),
     unresolvedMentions: (payload.unresolvedMentions || []).slice(0, 3),
     ambiguousMentions: (payload.ambiguousMentions || []).slice(0, 3),
+    decisionChecklist: (payload.decisionChecklist || []).slice(0, 4),
+    decisionPlan: (payload.decisionPlan || []).slice(0, 4),
     evidence: evidenceSummaries,
     allowedEvidenceIds: evidenceSummaries.map((item) => item.id).filter(Boolean),
   };
   prompt = [
-    "仅依据用户问题、卡片原文和所给资料，逐个子问题推理并输出规定 JSON；不得编造。只有完整对应本题的 official direct Q&A 才可标为 official_confirmed，相关资料与卡文只能支持分析。",
+    "仅依据用户问题、卡片原文和所给资料，逐个子问题推理并输出规定 JSON；不得编造。先在内部逐项核对 decisionChecklist 和 decisionPlan，但不得把它们当证据或输出检查过程。只有完整对应本题的 official direct Q&A 才可标为 official_confirmed，相关资料与卡文只能支持分析。",
     "字段：answerLevel、shortAnswer、reasoning、usedCards、usedEvidence、missingInfo、riskFlags、confidenceSelfEstimate。usedEvidence 的 id 只能来自 allowedEvidenceIds。",
     JSON.stringify(minimalPayload),
   ].join("\n");
@@ -857,10 +912,12 @@ function buildCompactRagPrompt({ payload, maxPromptChars }) {
     })),
     unresolvedMentions: [],
     ambiguousMentions: [],
-    // The selector places the reserved cross-card official mechanism, FAQ and
-    // scoped official QA first. Keep that minimum trio in the final envelope;
-    // retaining one arbitrary item would erase distinct evidence roles.
-    evidence: evidenceSummaries.slice(0, 3).map((item) => ({
+    decisionChecklist: (payload.decisionChecklist || []).slice(0, 4),
+    decisionPlan: (payload.decisionPlan || []).slice(0, 2),
+    // The selector places the reserved cross-card official mechanism, FAQ,
+    // scoped official QA and rule material first. Keep those four distinct
+    // evidence roles even in the smallest complete JSON envelope.
+    evidence: evidenceSummaries.slice(0, 4).map((item) => ({
       bucket: item.bucket,
       id: item.id,
       type: item.type,
@@ -872,12 +929,12 @@ function buildCompactRagPrompt({ payload, maxPromptChars }) {
       retrievalContext: item.retrievalContext || {},
       ...compactEvidenceTextFields(item, 40, focusCardIds),
     })),
-    allowedEvidenceIds: evidenceSummaries.slice(0, 3)
+    allowedEvidenceIds: evidenceSummaries.slice(0, 4)
       .map((item) => item.id)
       .filter(Boolean),
   };
   return [
-    "仅依据下列完整 JSON 回答并输出规定 JSON；不得编造。",
+    "仅依据下列完整 JSON 回答并输出规定 JSON；先在内部逐项核对 decisionPlan，不得把它当证据或展示检查过程；不得编造。",
     JSON.stringify(smallestPayload),
   ].join("\n");
 }
@@ -918,32 +975,64 @@ function selectCompactEvidenceEntries(evidence = {}, {
   const candidates = compactEvidencePriorityEntries(evidence, { resolvedCards });
   const selected = [];
   const selectedKeys = new Set();
+  const reserveEntry = (entry) => {
+    if (!entry || selected.length >= safeLimit) return false;
+    const key = compactEvidenceEntryKey(entry);
+    if (selectedKeys.has(key)) return false;
+    selected.push(entry);
+    selectedKeys.add(key);
+    return true;
+  };
   const reserveFirst = (predicate) => {
-    if (selected.length >= safeLimit) return;
+    if (selected.length >= safeLimit) return null;
     const entry = candidates.find((candidate) => (
       predicate(candidate) && !selectedKeys.has(compactEvidenceEntryKey(candidate))
     ));
-    if (!entry) return;
-    selected.push(entry);
-    selectedKeys.add(compactEvidenceEntryKey(entry));
+    return reserveEntry(entry) ? entry : null;
   };
 
-  // Preserve one explicitly related-only cross-card official candidate when
-  // available. It remains an analogy whose premises the final model must
-  // compare; this reservation does not grant it direct-ruling authority.
-  reserveFirst(isCrossCardOfficialMechanismEntry);
-  // FAQ and official QA answer different questions. Give each an independent
-  // floor before filling the remaining slots by the normal evidence ordering.
+  const crossCardEntries = candidates.filter(isCrossCardOfficialMechanismEntry);
+  const seenCrossCardDiversity = new Set();
+  let selectedCrossCardCount = 0;
+  const reserveCrossCard = (entry) => {
+    if (selectedCrossCardCount >= 4 || !reserveEntry(entry)) return false;
+    selectedCrossCardCount += 1;
+    for (const key of crossCardEvidenceDiversityKeys(entry)) {
+      seenCrossCardDiversity.add(key);
+    }
+    return true;
+  };
+
+  // Keep one cross-card official mechanism near the front so even a compacted
+  // prompt retains the mechanism path. It remains related-only evidence.
+  const firstCrossCard = crossCardEntries.find(
+    (entry) => crossCardEvidenceDiversityKeys(entry).length,
+  ) || crossCardEntries[0];
+  reserveCrossCard(firstCrossCard);
+
+  // Preserve the other independent evidence roles before spending more of the
+  // fixed reference-item budget on cross-card analogies.
   reserveFirst(({ bucket }) => bucket === "faqRelated");
-  reserveFirst((entry) => isOfficialQaEntry(entry) && !isCrossCardOfficialMechanismEntry(entry));
-  reserveFirst(({ bucket }) => bucket === "rawRelatedEvidence");
+  reserveFirst(isSameCardOfficialQaEntry);
+  reserveFirst(isRuleMaterialEntry) || reserveFirst(({ bucket }) => bucket === "rawRelatedEvidence");
+
+  // A multi-step question can generate several strict rule queries. Preserve
+  // up to four cross-card official QAs only when each adds a previously unseen
+  // strict-query or mechanism signature; do not enlarge the total prompt cap.
+  for (const entry of crossCardEntries) {
+    if (selected.length >= safeLimit || selectedCrossCardCount >= 4) break;
+    const diversityKeys = crossCardEvidenceDiversityKeys(entry);
+    if (!diversityKeys.length) continue;
+    if (diversityKeys.every((key) => seenCrossCardDiversity.has(key))) continue;
+    reserveCrossCard(entry);
+  }
 
   for (const entry of candidates) {
     if (selected.length >= safeLimit) break;
+    if (isCrossCardOfficialMechanismEntry(entry)) continue;
     const key = compactEvidenceEntryKey(entry);
     if (selectedKeys.has(key)) continue;
-    selected.push(entry);
-    selectedKeys.add(key);
+    reserveEntry(entry);
   }
   return selected;
 }
@@ -964,6 +1053,34 @@ function isOfficialQaEntry({ bucket, item } = {}) {
     && (item?.sourceAuthority === "official_database"
       || item?.sourceAuthority === "official_reference"
       || item?.official === true);
+}
+
+function isSameCardOfficialQaEntry(entry = {}) {
+  return ["officialQaDirectCandidates", "officialQaRelated"].includes(entry?.bucket)
+    && isOfficialQaEntry(entry)
+    && !isCrossCardOfficialMechanismEntry(entry);
+}
+
+function isRuleMaterialEntry({ bucket, item } = {}) {
+  return bucket === "rawRelatedEvidence"
+    && (
+      item?.type === "rulebook"
+      || item?.recordType === "rule-doc"
+      || item?.sourceAuthority === "community_reference"
+    );
+}
+
+function crossCardEvidenceDiversityKeys({ item } = {}) {
+  const metadata = item?.[PROMPT_SELECTION_METADATA] || {};
+  const strictQueryKeys = metadata.strictQueryKeys || [];
+  // The first cross-card entry is a bounded fallback. Additional reserved
+  // slots require a strict per-query match; a lexical head's inferred
+  // mechanism alone must not promote a weak analogy into the final prompt.
+  if (!strictQueryKeys.length) return [];
+  return [...new Set([
+    ...strictQueryKeys.map((value) => `query:${value}`),
+    ...(metadata.mechanisms || []).map((value) => `mechanism:${value}`),
+  ])];
 }
 
 function compactEvidenceEntryKey({ bucket, item } = {}) {
@@ -1041,7 +1158,7 @@ function interleavePromptBuckets(evidence, buckets) {
 }
 
 function compactPromptEvidenceItem(item = {}, textLimit, focusCardIds) {
-  return {
+  const result = {
     id: item.id,
     type: item.type,
     title: item.title,
@@ -1056,6 +1173,11 @@ function compactPromptEvidenceItem(item = {}, textLimit, focusCardIds) {
     isDirect: item.isDirect === true,
     matchLevel: item.matchLevel || "",
   };
+  result[PROMPT_SELECTION_METADATA] = item?.[PROMPT_SELECTION_METADATA] || {
+    strictQueryKeys: [],
+    mechanisms: [],
+  };
+  return result;
 }
 
 function compactEvidenceTextFields(item = {}, textLimit, focusCardIds = []) {
