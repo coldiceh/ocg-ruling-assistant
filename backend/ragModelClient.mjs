@@ -4123,6 +4123,7 @@ function buildRuleQueryExtractionPrompt(
     "每项必须包含 subclaim、checkpoint、query、reason、confidence。checkpoint 从 operation_legality、activation_snapshot、resolution_snapshot、mandatory_step、step_dependency、affected_entity、effect_source_type、permission_relation、usage_limit、zone_type_transition、post_resolution 中选择最贴切的一项。",
     "先在内部识别题面实际发生或尝试的动作，再直接生成 ruleQueries；只为本题相关的维度拆分子命题：操作或发动是否合法、每个必须执行的处理步骤、前后步骤依赖与无法完成时的部分处理、实际受影响的实体、效果来源与效果类型、权限或限制针对谁、次数或尝试上限，以及发动前、处理时、处理后的状态快照。不要输出额外的 actions 字段；没有出现或不影响结论的维度不得为了凑数生成查询。",
     "如果问题同时问‘能否发动’和‘处理是否成功’，必须拆成不同子命题，分别检索发动条件与结算适用性。连续处理还要分别检索每一步是否实际完成、由哪个效果完成，以及下一步是否依赖该完成事实；不能只因最终状态看起来相同就合并步骤。",
+    "如果卡文允许在多个实体、数值或方向之间选择，必须覆盖每个选择方向：至少分别生成 activation_snapshot 或 operation_legality（发动时是否存在任一合法选项）与 resolution_snapshot（处理时状态改变后各方向仍可执行什么）的子命题；不得只为一个可行例子生成查询。",
     "逐张阅读已识别卡片的效果文本。卡文含有‘然后／那之后／根据……适用’等强制后续处理时，即使玩家只问能否发动，也必须为会影响发动合法性或处理结果的每个强制步骤与分支生成独立查询；不能只检索最初的触发条件。",
     "玩家俗称、缩写或自然语言必须改写为正式卡文或规则术语。每个 query 自身应在 120 字符内尽量同时包含精简的中文、日文和英文等价术语，以“ | ”分隔；不要只翻译卡名，也不要保留未解释的玩家俗称。",
     "次数问题必须包含已使用次数、总上限或剩余次数等正式关键词；区域或双重卡片种类问题必须包含移动瞬间的区域与当时作为何种卡处理。",

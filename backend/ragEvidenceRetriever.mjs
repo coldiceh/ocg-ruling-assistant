@@ -264,6 +264,12 @@ export async function retrieveRagEvidence({
     ))
     .filter(Boolean)
     .map((card) => cardTextEvidence(card, limits.maxCardTextChars, retrievalWarnings));
+  const primaryRuleQueryCardTexts = cardTexts.filter(
+    (item) => item.resolutionSource !== "card_text_reference",
+  );
+  const referenceRuleQueryCardTexts = cardTexts.filter(
+    (item) => item.resolutionSource === "card_text_reference",
+  );
   const userProvidedCardTextEvidence = dedupeEvidence(providedTexts.map((item, index) => userProvidedTextEvidence(item, index, limits.maxCardTextChars, retrievalWarnings)));
   // Card text is already available before the auxiliary query planner runs.
   // Fold its deterministic operation clauses into the first discovery pass so
@@ -271,7 +277,14 @@ export async function retrieveRagEvidence({
   // player's wording mentions only the card name or the final yes/no question.
   deterministicRuleQueries = mergeRuleSearchQueries(
     deterministicRuleQueries,
-    deriveRuleSearchQueriesFromCardTexts(userQuery, cardTexts),
+    [
+      ...deriveRuleSearchQueriesFromCardTexts(userQuery, primaryRuleQueryCardTexts),
+      ...deriveRuleSearchQueriesFromCardTexts(userQuery, referenceRuleQueryCardTexts, {
+        perCardLimit: 2,
+        totalLimit: 4,
+        source: "card_text_reference_derived_rule_search_query",
+      }),
+    ],
     limits,
   );
   // Build a broad, question-only candidate set before asking the auxiliary
@@ -343,7 +356,7 @@ export async function retrieveRagEvidence({
   const effectiveSupplementalRuleQueries = normalizedRuleQueries.filter(
     (item) => !deterministicRuleQueryKeys.has(ruleSearchQueryIdentity(item)),
   );
-  const independentRuleQueryKeys = normalizedRuleQueries
+  const independentRuleQueryKeys = effectiveSupplementalRuleQueries
     .map(ruleSearchQueryIdentity)
     .filter(Boolean);
   if (normalizedRuleQueries.length) retrievalWarnings.push(`rule_search_queries_used:${normalizedRuleQueries.length}`);
@@ -1350,6 +1363,7 @@ function cardTextEvidence(card, maxTextChars, warnings) {
     text: truncated ? `${text.slice(0, Math.max(0, maxTextChars - 1))}…` : text,
     sourceUrl: card.sourceUrl || "",
     source: isBaige ? "baige" : card.source || "",
+    resolutionSource: card.resolutionSource || "",
     cardType: card.cardType || card.type || "",
     attribute: card.attribute ?? "",
     race: card.race ?? "",
@@ -1933,10 +1947,16 @@ function rankRecordsWithSupplementalQueries({
   independentQueryLimit = 0,
   allowNoCardMatch = false,
 }) {
-  const aggregateRuleQueries = normalizeRuleSearchQueries([
-    ...(deterministicRuleQueries || []),
-    ...(supplementalRuleQueries || []),
-  ], { maxRuleSearchQueries: 16 });
+  // Deterministic queries provide one broad fallback rank. Model-supplied
+  // subclaims are ranked independently below, so they do not receive the same
+  // signal twice or force broad card-text clauses into reserved branch slots.
+  const aggregateRuleQueries = normalizeRuleSearchQueries(
+    [
+      ...(deterministicRuleQueries || []),
+      ...(independentQueryLimit > 0 ? [] : (supplementalRuleQueries || [])),
+    ],
+    { maxRuleSearchQueries: 16 },
+  );
   const deterministic = rankRecords({
     userQuery,
     records,
@@ -1961,7 +1981,7 @@ function rankRecordsWithSupplementalQueries({
     const queryIdentity = ruleSearchQueryIdentity(query);
     const queryMechanism = inferRuleSearchMechanism(query);
     const isSupplemental = supplementalKeys.has(queryIdentity);
-    const supplementalUserQuery = [query?.subclaim, query?.query, query?.reason]
+    const supplementalUserQuery = [query?.subclaim, query?.reason]
       .filter(Boolean)
       .join(" ");
     const independentlyRanked = rankRecords({
@@ -1973,14 +1993,14 @@ function rankRecordsWithSupplementalQueries({
       allowNoCardMatch,
     }).map((record, index) => ({ record, index }));
     // Keep a small lexical head, but independently scan the already-ranked
-    // in-memory result for the first two records that pass the strict official-
+    // in-memory result for the first four records that pass the strict official-
     // mechanism gate. A useful analogue can be the second strict candidate,
     // while a four-record union remains small and deterministic.
     const strictHeadCandidates = [];
     for (const candidate of independentlyRanked) {
       if (!isStrictSupplementalOfficialMechanismMatch(candidate.record, query)) continue;
       strictHeadCandidates.push(candidate);
-      if (strictHeadCandidates.length >= 2) break;
+      if (strictHeadCandidates.length >= 4) break;
     }
     const boundedCandidates = dedupeBy([
       ...strictHeadCandidates,
@@ -2038,12 +2058,18 @@ function selectIndependentRuleQueries({
 } = {}) {
   const safeLimit = Math.max(0, Math.min(4, Math.floor(Number(limit) || 0)));
   if (!safeLimit) return [];
-  // Model queries are generated for explicit unresolved subclaims, so consider
-  // them first; deterministic queries provide the timeout-safe fallback.
-  const candidates = dedupeBy([
-    ...(supplementalRuleQueries || []),
-    ...(deterministicRuleQueries || []),
-  ], ruleSearchQueryIdentity).filter((query) => ruleSearchQueryIdentity(query));
+  // Prefer model-generated unresolved subclaims. When that stage times out or
+  // returns no plan, keep a bounded deterministic branch fallback so one card-
+  // text operation cannot hide every other branch. Deterministic branches do
+  // not receive supplemental keys and therefore cannot consume the prompt's
+  // additional reserved cross-card slots.
+  const branchQueries = (supplementalRuleQueries || []).length
+    ? supplementalRuleQueries
+    : deterministicRuleQueries;
+  const candidates = dedupeBy(
+    branchQueries || [],
+    ruleSearchQueryIdentity,
+  ).filter((query) => ruleSearchQueryIdentity(query));
   const selected = [];
   const selectedKeys = new Set();
   const representedMechanisms = new Set();
@@ -2765,31 +2791,101 @@ function recordSharesResolvedIdentity(record = {}, resolvedCards = []) {
   return identity.cardNames.some((name) => resolvedNames.has(normalizeCardKey(name)));
 }
 
-function deriveRuleSearchQueriesFromCardTexts(userQuery, cardTexts = []) {
+function deriveRuleSearchQueriesFromCardTexts(userQuery, cardTexts = [], {
+  perCardLimit = 4,
+  totalLimit = 12,
+  source = "card_text_derived_rule_search_query",
+} = {}) {
   const questionContext = buildGenericRuleQuery(userQuery).slice(0, 56);
   const perCardQueries = (cardTexts || []).map((item) => {
     const cardLabel = [...(item.cards || []), item.cardType].filter(Boolean).join(" ");
-    return splitCardTextClauses(item.text)
-      .filter((clause) => clause.length >= 4 && containsOperationLanguage(clause))
+    return selectRuleSearchCardTextClauses(item.text, perCardLimit, userQuery)
       .map((clause) => ({
         query: expandRetrievalVocabulary(`${questionContext} ${cardLabel} ${clause}`).slice(0, 120),
         reason: `根据${(item.cards || [item.title || "卡片"]).join("、")}的处理句检索对应规则。`,
         confidence: "medium",
-        source: "card_text_derived_rule_search_query",
+        source,
       }))
-      .filter((entry) => entry.query)
-      .slice(0, 4);
+      .filter((entry) => entry.query);
   });
-  const interleaved = roundRobin(perCardQueries, 12);
-  return dedupeBy(interleaved, (item) => normalizeCardKey(item.query)).slice(0, 12);
+  const safeTotalLimit = Math.max(1, Math.floor(Number(totalLimit) || 1));
+  const interleaved = roundRobin(perCardQueries, safeTotalLimit);
+  return dedupeBy(interleaved, (item) => normalizeCardKey(item.query)).slice(0, safeTotalLimit);
 }
 
-function splitCardTextClauses(value) {
+function selectRuleSearchCardTextClauses(value, limit = 4, userQuery = "") {
+  const safeLimit = Math.max(1, Math.floor(Number(limit) || 1));
+  const clauses = splitCardTextClauseEntries(value)
+    .filter(({ text }) => text.length >= 4 && containsOperationLanguage(text));
+  if (clauses.length <= safeLimit) return clauses.map(({ text }) => text);
+
+  const selected = [];
+  const selectedIndexes = new Set();
+  const representedFeatures = new Set();
+  const questionTerms = new Set(tokenize(userQuery));
+  const questionMechanisms = buildRuleMechanismSignature(userQuery);
+  const add = (entry) => {
+    if (!entry || selectedIndexes.has(entry.index) || selected.length >= safeLimit) return;
+    selected.push(entry);
+    selectedIndexes.add(entry.index);
+    for (const feature of buildRuleMechanismSignature(entry.text)) representedFeatures.add(feature);
+  };
+
+  // Keep the first operative clause for its activation/sequence context, then
+  // preserve the explicit bullet branches that best match the user's wording,
+  // even when they occur late in a long card text. Remaining slots maximize
+  // mechanism diversity rather than source order.
+  add(clauses[0]);
+  const rankedBulletClauses = clauses
+    .filter(({ marker }) => marker === "●")
+    .map((entry) => ({
+      entry,
+      lexicalOverlap: tokenize(entry.text)
+        .filter((term) => questionTerms.has(term)).length,
+      mechanismOverlap: [...buildRuleMechanismSignature(entry.text)]
+        .filter((feature) => questionMechanisms.has(feature)).length,
+    }))
+    .sort((left, right) => (
+      right.lexicalOverlap - left.lexicalOverlap
+      || right.mechanismOverlap - left.mechanismOverlap
+      || left.entry.index - right.entry.index
+    ));
+  for (const { entry } of rankedBulletClauses) add(entry);
+  while (selected.length < safeLimit) {
+    const candidates = clauses
+      .filter((entry) => !selectedIndexes.has(entry.index))
+      .map((entry) => {
+        const features = buildRuleMechanismSignature(entry.text);
+        const novelFeatureCount = [...features]
+          .filter((feature) => !representedFeatures.has(feature)).length;
+        return { entry, novelFeatureCount };
+      })
+      .sort((left, right) => (
+        right.novelFeatureCount - left.novelFeatureCount
+        || left.entry.index - right.entry.index
+      ));
+    if (!candidates.length) break;
+    add(candidates[0].entry);
+  }
+  return selected
+    .sort((left, right) => left.index - right.index)
+    .map(({ text }) => text);
+}
+
+function splitCardTextClauseEntries(value) {
   return String(value || "")
     .replace(/(?=[①②③④⑤⑥⑦⑧⑨●])/gu, "\n")
     .split(/[。；;\n]+/u)
-    .map((item) => item.replace(/^[①②③④⑤⑥⑦⑧⑨\d●]+[：:.、]?/u, "").trim())
-    .filter(Boolean);
+    .map((item, index) => {
+      const raw = item.trim();
+      const marker = raw.match(/^([①②③④⑤⑥⑦⑧⑨●]|\d+)[：:.、]?/u)?.[1] || "";
+      return {
+        index,
+        marker,
+        text: raw.replace(/^[①②③④⑤⑥⑦⑧⑨\d●]+[：:.、]?/u, "").trim(),
+      };
+    })
+    .filter(({ text }) => text);
 }
 
 function roundRobin(groups, limit) {

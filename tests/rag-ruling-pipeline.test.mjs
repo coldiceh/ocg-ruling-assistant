@@ -5542,7 +5542,7 @@ test("deterministic retrieval bridges multilingual return-to-hand terminology wh
   assert.equal(related.retrievalContext.relatedOnly, true);
 });
 
-test("deterministic card-text queries retain independent official mechanism branches", async () => {
+test("deterministic card-text branches remain searchable without forcing reserved cross-card slots", async () => {
   const focusCard = {
     id: "multi-branch-focus-card",
     name: "匿名双分支卡",
@@ -5585,9 +5585,67 @@ test("deterministic card-text queries retain independent official mechanism bran
   const relatedIds = new Set(evidence.officialQaRelated.map((item) => item.id));
   assert.equal(relatedIds.has(returnHandQa.id), true);
   assert.equal(relatedIds.has(specialSummonQa.id), true);
+  assert.ok(evidence.ruleSearchQueries.some(({ query }) => /特殊召唤/u.test(query)));
   assert.ok(Array.isArray(evidence.debug.candidateStages.initialCrossCardQuestionIds));
   assert.ok(Array.isArray(evidence.debug.candidateStages.allocatedCrossCardIds));
   assert.doesNotMatch(JSON.stringify(evidence.debug.candidateStages), /按照发动中|确认特殊召唤/u);
+});
+
+test("card-text query selection keeps late bullet branches while bounding reference-card query noise", async () => {
+  const focusCard = {
+    id: "late-branch-focus-card",
+    name: "匿名多段卡",
+    cnName: "匿名多段卡",
+    effectText: "①：可以发动。抽1张卡。②：可以发动。从手牌特殊召唤1只怪兽。③：可以发动。破坏场上1张卡。④：可以发动。将墓地1张卡除外。●怪兽：那些怪兽回到手牌。●墓地：将墓地的卡除外。●卡组：从卡组把卡送去墓地。●除外状态：将除外状态的卡回到卡组。●魔法・陷阱：那些魔法・陷阱卡全部回到手牌。",
+    aliases: ["匿名多段卡"],
+  };
+  const referenceCard = {
+    id: "reference-only-card",
+    name: "匿名引用卡",
+    cnName: "匿名引用卡",
+    effectText: "①：将墓地1张卡除外并抽1张卡。",
+    aliases: ["匿名引用卡"],
+    resolutionSource: "card_text_reference",
+  };
+  const decisiveQa = {
+    id: "qa-late-bullet-return-hand",
+    recordType: "qa",
+    question: "通常陷阱卡发动中，适用将场上魔法・陷阱卡全部回到手牌的处理时，该卡能回到手牌吗？",
+    answer: "应按发动中卡片在连锁处理中的状态判断。",
+    text: "通常陷阱卡发动中，适用将场上魔法・陷阱卡全部回到手牌的处理时，应按发动中卡片在连锁处理中的状态判断。",
+    cardIds: ["late-branch-reference"],
+  };
+  const referenceNoiseQa = {
+    id: "qa-reference-only-noise",
+    recordType: "qa",
+    question: "墓地的卡除外并抽卡时如何处理？",
+    answer: "处理除外与抽卡。",
+    text: "墓地的卡除外并抽卡时如何处理？处理除外与抽卡。",
+    cardIds: [referenceCard.id],
+  };
+
+  const evidence = await retrieveRagEvidence({
+    userQuery: "匿名多段卡响应通常陷阱时，最后的魔法陷阱分支能否让正在发动的卡回到手牌？",
+    cardResolution: {
+      resolvedCards: [focusCard, referenceCard],
+      unresolvedMentions: [],
+      ambiguousMentions: [],
+      userProvidedCardTexts: [],
+    },
+    cards: [focusCard, referenceCard],
+    records: [],
+    qaRecords: [referenceNoiseQa, decisiveQa],
+    ruleSearchQueryProvider: async () => ({ queries: [], candidateAssessments: [] }),
+    env: { RAG_LIVE_OFFICIAL_QA: "false" },
+  });
+
+  assert.ok(evidence.ruleSearchQueries.some(({ query }) => /魔法.*陷阱.*手牌/u.test(query)));
+  const referenceQueries = evidence.ruleSearchQueries.filter(
+    ({ source }) => source === "card_text_reference_derived_rule_search_query",
+  );
+  assert.ok(referenceQueries.some(({ query }) => /墓地.*除外.*抽/u.test(query)));
+  assert.ok(referenceQueries.length <= 4);
+  assert.ok(evidence.officialQaRelated.some((item) => item.id === decisiveQa.id));
 });
 
 test("rule model candidate assessments only reorder official questions and never delete them", async () => {
@@ -5919,8 +5977,8 @@ test("general prompt preserves distinct cross-card query branches and internal d
       relatedOnly: true,
     },
     retrievalSignals: {
-      strictRuleQueryKeys: [`branch-${index + 1}`],
-      ruleQueryMechanisms: [`mechanism-${index + 1}`],
+      strictSupplementalRuleQueryKeys: [`branch-${index + 1}`],
+      supplementalRuleQueryMechanisms: [`mechanism-${index + 1}`],
     },
   }));
   const bundle = buildRagRulingPromptBundle({
@@ -5976,10 +6034,11 @@ test("general prompt preserves distinct cross-card query branches and internal d
   assert.ok(bundle.allowedEvidenceIds.includes("same-card-role"));
   assert.ok(bundle.allowedEvidenceIds.includes("rule-role"));
   assert.match(bundle.prompt, /decisionChecklist/u);
-  assert.match(bundle.prompt, /activation_legality_before_resolution/u);
+  assert.match(bundle.prompt, /activation_snapshot_legality_and_all_available_options/u);
+  assert.match(bundle.prompt, /resolution_snapshot_all_choice_directions_and_state_changes/u);
   assert.match(bundle.prompt, /decisionPlan/u);
   assert.match(bundle.prompt, /核对发动时的合法选项/u);
-  assert.doesNotMatch(bundle.prompt, /strictRuleQueryKeys|mechanism-1/u);
+  assert.doesNotMatch(bundle.prompt, /strictSupplementalRuleQueryKeys|mechanism-1/u);
 });
 
 test("prompt does not reserve extra cross-card slots from non-strict mechanism labels", () => {
@@ -6012,8 +6071,8 @@ test("prompt does not reserve extra cross-card slots from non-strict mechanism l
       relatedOnly: true,
     },
     retrievalSignals: {
-      strictRuleQueryKeys: ["strict-branch"],
-      ruleQueryMechanisms: ["strict-mechanism"],
+      strictSupplementalRuleQueryKeys: ["strict-branch"],
+      supplementalRuleQueryMechanisms: ["strict-mechanism"],
     },
   };
   const bundle = buildRagRulingPromptBundle({
@@ -6052,6 +6111,68 @@ test("prompt does not reserve extra cross-card slots from non-strict mechanism l
 
   assert.ok(bundle.allowedEvidenceIds.includes(strictCrossCardEvidence.id));
   for (const item of weakCrossCardEvidence) {
+    assert.equal(bundle.allowedEvidenceIds.includes(item.id), false);
+  }
+});
+
+test("prompt does not reserve a strict cross-card analogy with a different premise", () => {
+  const differentPremise = Array.from({ length: 3 }, (_, index) => ({
+    id: `different-premise-${index + 1}`,
+    type: "related",
+    recordType: "qa",
+    title: `different premise ${index + 1}`,
+    text: `different event-node analogy ${index + 1}`,
+    official: true,
+    sourceAuthority: "official_database",
+    retrievalContext: {
+      scope: "cross_card_official_mechanism",
+      relatedOnly: true,
+      modelCandidateAssessment: { relevance: "high", premise: "different" },
+    },
+    retrievalSignals: {
+      strictSupplementalRuleQueryKeys: [`different-${index + 1}`],
+      supplementalRuleQueryMechanisms: [`different-mechanism-${index + 1}`],
+      modelCandidateAssessment: { relevance: "high", premise: "different" },
+    },
+  }));
+  const samePremise = {
+    id: "same-premise-cross",
+    type: "related",
+    recordType: "qa",
+    title: "same premise",
+    text: "same event-node mechanism",
+    official: true,
+    sourceAuthority: "official_database",
+    retrievalContext: {
+      scope: "cross_card_official_mechanism",
+      relatedOnly: true,
+      modelCandidateAssessment: { relevance: "high", premise: "same" },
+    },
+    retrievalSignals: {
+      strictSupplementalRuleQueryKeys: ["same-premise"],
+      supplementalRuleQueryMechanisms: ["same-mechanism"],
+      modelCandidateAssessment: { relevance: "high", premise: "same" },
+    },
+  };
+  const bundle = buildRagRulingPromptBundle({
+    userQuery: "测试事件节点前提过滤",
+    cardResolution: { resolvedCards: cards },
+    evidence: {
+      cardTexts: [],
+      officialQaDirectCandidates: [],
+      faqRelated: [{ id: "premise-faq", type: "faq", text: "general boundary", official: true }],
+      officialQaRelated: [differentPremise[0], samePremise, ...differentPremise.slice(1)],
+      provisionalOfficialResponses: [],
+      rawRelatedEvidence: [{ id: "premise-rule", type: "rulebook", text: "general rule" }],
+    },
+    env: {
+      RAG_MAX_PROMPT_REFERENCE_ITEMS: "4",
+      RAG_MAX_PROMPT_CHARS: "60000",
+    },
+  });
+
+  assert.ok(bundle.allowedEvidenceIds.includes(samePremise.id));
+  for (const item of differentPremise) {
     assert.equal(bundle.allowedEvidenceIds.includes(item.id), false);
   }
 });
@@ -6603,6 +6724,7 @@ test("secrets_not_returned_in_debug", async () => {
     }),
   });
   assert.doesNotMatch(JSON.stringify(answer.debug), /secret-key-that-must-not-leak/u);
+  assert.equal(Object.hasOwn(answer.debug, "retrievalCandidateStages"), false);
   assert.equal(answer.debug.providerUsed, "deepseek");
   assert.equal(answer.debug.dryRun, false);
 });
