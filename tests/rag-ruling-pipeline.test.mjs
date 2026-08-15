@@ -9,6 +9,7 @@ import {
   answerRagRulingQuestion,
 } from "../backend/ragRulingPipeline.mjs";
 import { analyzeEffectStateTransition } from "../backend/effectStateReasoner.mjs";
+import { extractOfficialQaSemanticConcepts } from "../backend/officialQaMatcher.mjs";
 
 const cards = [
   {
@@ -77,6 +78,15 @@ const qaRecords = [
     cardIds: ["100"],
   },
 ];
+
+test("return-to-hand semantics require a destination rather than a hand-source mention", () => {
+  assert.ok(extractOfficialQaSemanticConcepts("将场上的卡返回手牌").includes("return_hand"));
+  assert.ok(extractOfficialQaSemanticConcepts("フィールドのカードを手札に戻す").includes("return_hand"));
+  assert.ok(extractOfficialQaSemanticConcepts("return that card to the hand").includes("return_hand"));
+  assert.ok(!extractOfficialQaSemanticConcepts("将手牌中的卡返回卡组").includes("return_hand"));
+  assert.ok(!extractOfficialQaSemanticConcepts("手札のカードをデッキに戻す").includes("return_hand"));
+  assert.ok(extractOfficialQaSemanticConcepts("手札のカードをデッキに戻す").includes("return_deck"));
+});
 
 test("user-provided card text reaches the final model as raw evidence without a local verdict", async () => {
   let finalPrompt = "";
@@ -1239,11 +1249,11 @@ test("rule query extraction defaults the independent Relay planner to low and a 
   assert.equal(env.RAG_REASONING_EFFORT, "low");
 });
 
-test("rule query extraction applies its 20-second default provider deadline", async () => {
+test("rule query extraction applies its 25-second default provider deadline", async () => {
   const originalSetTimeout = globalThis.setTimeout;
   let observedDefaultTimeout = false;
   globalThis.setTimeout = (callback, delay, ...args) => {
-    if (delay === 20_000) {
+    if (delay === 25_000) {
       observedDefaultTimeout = true;
       return originalSetTimeout(callback, 0, ...args);
     }
@@ -5484,6 +5494,47 @@ test("public retrieval keeps a retrievable cross-card official candidate related
   assert.equal(evidence.debug.officialMechanismAnalogueCount, 1);
 });
 
+test("deterministic retrieval bridges multilingual return-to-hand terminology when rule planning is empty", async () => {
+  const focusCard = {
+    id: "return-hand-focus-card",
+    name: "匿名回收卡",
+    cnName: "匿名回收卡",
+    effectText: "①：对方把陷阱卡发动时可以发动。将场上的魔法・陷阱卡全部放回手牌。",
+    aliases: ["匿名回收卡"],
+  };
+  const officialAnalogue = {
+    id: "qa-return-hand-multilingual-analogue",
+    recordType: "qa",
+    title: "発動中の通常罠カードを手札に戻す処理",
+    question: "通常罠カードの発動にチェーンして、フィールドの魔法・罠カードを手札に戻す効果を発動できますか？",
+    answer: "発動中の通常罠カードはその処理で手札に戻せません。",
+    text: "通常罠カードの発動にチェーンして、フィールドの魔法・罠カードを手札に戻す効果を発動できますか？ 発動中の通常罠カードはその処理で手札に戻せません。",
+    cardIds: ["return-hand-reference-card"],
+    cards: ["匿名参照卡"],
+  };
+
+  const evidence = await retrieveRagEvidence({
+    userQuery: "对方发动通常陷阱时，我方能否连锁匿名回收卡，把场上的魔法陷阱放回手牌？",
+    cardResolution: {
+      resolvedCards: [focusCard],
+      unresolvedMentions: [],
+      ambiguousMentions: [],
+      userProvidedCardTexts: [],
+    },
+    cards: [focusCard],
+    records: [],
+    qaRecords: [officialAnalogue],
+    ruleSearchQueryProvider: async () => ({ queries: [], candidateAssessments: [] }),
+    env: { RAG_LIVE_OFFICIAL_QA: "false" },
+  });
+
+  const related = evidence.officialQaRelated.find((item) => item.id === officialAnalogue.id);
+  assert.ok(related);
+  assert.equal(related.type, "related");
+  assert.equal(related.isDirect, false);
+  assert.equal(related.retrievalContext.relatedOnly, true);
+});
+
 test("rule model candidate assessments only reorder official questions and never delete them", async () => {
   const focusCard = {
     id: "soft-rank-card",
@@ -5554,6 +5605,171 @@ test("rule model candidate assessments only reorder official questions and never
       ?.retrievalContext?.modelCandidateAssessment?.premise,
     "same",
   );
+});
+
+test("question-only planning exposes up to four bounded cross-card candidates", async () => {
+  const focusCard = {
+    id: "candidate-pool-focus-card",
+    name: "匿名候选卡",
+    cnName: "匿名候选卡",
+    effectText: "①：以场上1张卡为对象才能发动。处理该对象。",
+    aliases: ["匿名候选卡"],
+  };
+  const scopedQa = {
+    id: "qa-candidate-pool-scoped",
+    recordType: "qa",
+    question: "匿名候选卡被破坏时可以发动吗？",
+    answer: "可以发动。",
+    text: "匿名候选卡被破坏时可以发动吗？ 可以发动。",
+    cardIds: [focusCard.id],
+    cards: [focusCard.name],
+  };
+  const crossCardQa = Array.from({ length: 4 }, (_, index) => ({
+    id: `qa-candidate-pool-cross-${index + 1}`,
+    recordType: "qa",
+    question: `另一个效果处理时对象离开场上的场合，后续处理如何进行？（资料${index + 1}）`,
+    answer: `参照处理说明${index + 1}。`,
+    text: `另一个效果处理时对象离开场上的场合，后续处理如何进行？ 参照处理说明${index + 1}。`,
+    cardIds: [`candidate-pool-reference-${index + 1}`],
+    cards: [`匿名参照卡${index + 1}`],
+  }));
+  let candidatesSeen = [];
+
+  await retrieveRagEvidence({
+    userQuery: "匿名候选卡处理时对象离开场上的场合，后续处理如何进行？",
+    cardResolution: {
+      resolvedCards: [focusCard],
+      unresolvedMentions: [],
+      ambiguousMentions: [],
+      userProvidedCardTexts: [],
+    },
+    cards: [focusCard],
+    records: [],
+    qaRecords: [scopedQa, ...crossCardQa],
+    ruleSearchQueryProvider: async ({ candidateQuestions }) => {
+      candidatesSeen = candidateQuestions;
+      return { queries: [], candidateAssessments: [] };
+    },
+    env: { RAG_LIVE_OFFICIAL_QA: "false" },
+  });
+
+  const crossIdsSeen = new Set(candidatesSeen.map((item) => item.id));
+  assert.ok(candidatesSeen.some((item) => item.id === scopedQa.id));
+  assert.equal(crossCardQa.every((item) => crossIdsSeen.has(item.id)), true);
+  assert.equal(candidatesSeen.length <= 12, true);
+  assert.equal(candidatesSeen.every((item) => item.question.length <= 280), true);
+});
+
+test("cross-card allocation balances a model-assessed premise with strict supplemental-query coverage", async () => {
+  const focusCard = {
+    id: "assessed-focus-card",
+    name: "匿名处理卡",
+    cnName: "匿名处理卡",
+    effectText: "①：以场上1张卡为对象才能发动。进行第一步，那之后进行第二步。",
+    aliases: ["匿名处理卡"],
+  };
+  const samePremise = {
+    id: "qa-assessed-same-premise",
+    recordType: "qa",
+    question: "另一个效果发动后，处理时场上的对象离开，后续处理是否继续？",
+    answer: "按照该效果的处理顺序处理。",
+    text: "另一个效果发动后，处理时场上的对象离开，后续处理是否继续？ 按照该效果的处理顺序处理。",
+    cardIds: ["reference-card-a"],
+    cards: ["匿名参照卡A"],
+  };
+  const partialPremise = {
+    id: "qa-assessed-partial-premise",
+    recordType: "qa",
+    question: "另一个效果处理时对象不在场上的场合，之后的处理是否适用？",
+    answer: "根据各段处理之间的关系判断。",
+    text: "另一个效果处理时对象不在场上的场合，之后的处理是否适用？ 根据各段处理之间的关系判断。",
+    cardIds: ["reference-card-b"],
+    cards: ["匿名参照卡B"],
+  };
+  const negateDistractor = {
+    id: "qa-supplemental-negate-distractor",
+    recordType: "qa",
+    question: "卡的发动被无效后，可以破坏对方场上的卡吗？",
+    answer: "可以破坏。",
+    text: "卡的发动被无效后，可以破坏对方场上的卡吗？ 可以破坏。",
+    cardIds: ["reference-card-c"],
+    cards: ["匿名参照卡C"],
+  };
+  const summonDistractor = {
+    id: "qa-supplemental-summon-distractor",
+    recordType: "qa",
+    question: "从手牌特殊召唤怪兽后，对方场上的卡如何处理？",
+    answer: "特殊召唤后进行后续处理。",
+    text: "从手牌特殊召唤怪兽后，对方场上的卡如何处理？ 特殊召唤后进行后续处理。",
+    cardIds: ["reference-card-d"],
+    cards: ["匿名参照卡D"],
+  };
+  let candidatesSeen = [];
+
+  const evidence = await retrieveRagEvidence({
+    userQuery: "匿名处理卡发动效果后，处理时场上的对象离开，后续处理是否继续？",
+    cardResolution: {
+      resolvedCards: [focusCard],
+      unresolvedMentions: [],
+      ambiguousMentions: [],
+      userProvidedCardTexts: [],
+    },
+    cards: [focusCard],
+    records: [],
+    qaRecords: [samePremise, partialPremise, negateDistractor, summonDistractor],
+    ruleSearchQueryProvider: async ({ candidateQuestions }) => {
+      candidatesSeen = candidateQuestions;
+      return {
+        queries: [{
+          subclaim: "无效发动后的处理",
+          checkpoint: "negated-activation",
+          query: "卡的发动被无效 破坏 对方场上",
+          reason: "检索无效发动后的处理。",
+          confidence: "medium",
+        }, {
+          subclaim: "从手牌特殊召唤后的处理",
+          checkpoint: "special-summon-from-hand",
+          query: "从手牌特殊召唤 对方场上",
+          reason: "检索特殊召唤后的处理。",
+          confidence: "medium",
+        }],
+        candidateAssessments: [{
+          id: samePremise.id,
+          relevance: "high",
+          premise: "same",
+          difference: "关键处理前提相同。",
+        }, {
+          id: partialPremise.id,
+          relevance: "medium",
+          premise: "partial",
+          difference: "对象状态前提部分相同。",
+        }],
+      };
+    },
+    env: {
+      RAG_LIVE_OFFICIAL_QA: "false",
+      RAG_MAX_RELATED_EVIDENCE: "6",
+    },
+  });
+
+  assert.ok(candidatesSeen.some((item) => item.id === samePremise.id));
+  assert.ok(candidatesSeen.some((item) => item.id === partialPremise.id));
+  const crossCardRelated = evidence.officialQaRelated.filter(
+    (item) => item.retrievalContext?.scope === "cross_card_official_mechanism",
+  );
+  const crossCardRelatedIds = crossCardRelated.map((item) => item.id);
+  assert.ok(crossCardRelatedIds.includes(samePremise.id));
+  assert.ok(crossCardRelatedIds.includes(negateDistractor.id));
+  assert.equal(crossCardRelated.length <= 2, true);
+  for (const item of crossCardRelated) {
+    assert.equal(item.type, "related");
+    assert.equal(item.isDirect, false);
+    assert.equal(item.retrievalContext.relatedOnly, true);
+    assert.equal(item.official, true);
+  }
+  assert.ok(!evidence.officialQaDirectCandidates.some(
+    (item) => [samePremise.id, partialPremise.id].includes(item.id),
+  ));
 });
 
 test("rag_prompt_truncates_context", () => {
