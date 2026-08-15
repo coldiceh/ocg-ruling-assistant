@@ -88,6 +88,7 @@ const RULE_MECHANISM_CONCEPT_FAMILIES = new Map([
   ["destroy", "operation:destroy"],
   ["special_summon", "operation:special-summon"],
   ["fusion_summon", "operation:fusion-summon"],
+  ["return_hand", "operation:return-hand"],
   ["return_deck", "operation:return-deck"],
   ["send_graveyard", "operation:send-graveyard"],
   ["discard", "operation:discard"],
@@ -513,7 +514,10 @@ export async function retrieveRagEvidence({
     )
     : [];
   const crossCardOfficialCandidateLimit = Math.max(16, limits.maxRelatedEvidence * 4);
-  const crossCardOfficialQaSource = eligibleCrossCardOfficialPool.length
+  const modelAssessedCrossCardCandidates = eligibleCrossCardOfficialPool
+    .filter(hasEligibleModelCandidateAssessment)
+    .sort(compareRetrievedRecords);
+  const lexicallyRankedCrossCardCandidates = eligibleCrossCardOfficialPool.length
     ? reserveSupplementalQueryCoverage(rankRecordsWithSupplementalQueries({
         userQuery,
         // Remove same-card records before the independently ranked query heads
@@ -532,6 +536,15 @@ export async function retrieveRagEvidence({
         })
         .slice(0, crossCardOfficialCandidateLimit)
     : [];
+  // The query model sees question text only, so an affirmative soft assessment
+  // is safe to preserve as a related-evidence candidate even when a later
+  // supplemental lexical head does not retain that record. Applicability and
+  // authority are still decided downstream; this only prevents accidental
+  // candidate loss inside the bounded discovery pass.
+  const crossCardOfficialQaSource = dedupeBy([
+    ...modelAssessedCrossCardCandidates,
+    ...lexicallyRankedCrossCardCandidates,
+  ], stableRecordKey).slice(0, crossCardOfficialCandidateLimit);
   const scopedOfficialQaRelatedCandidates = scopedOfficialQaRelatedSource
     .map((item) => item.record
       ? evidenceFromOfficialMatch(item, "related", limits.maxEvidenceTextChars, retrievalWarnings)
@@ -1889,27 +1902,31 @@ function rankRecordsWithSupplementalQueries({
   const supplemental = supplementalRuleQueries.flatMap((query) => {
     const queryIdentity = ruleSearchQueryIdentity(query);
     const queryMechanism = inferRuleSearchMechanism(query);
+    const supplementalUserQuery = [query?.subclaim, query?.query, query?.reason]
+      .filter(Boolean)
+      .join(" ");
     const independentlyRanked = rankRecords({
-      userQuery,
+      userQuery: supplementalUserQuery || userQuery,
       records,
       resolvedCards,
       mentionQueries,
       ruleSearchQueries: [query],
       allowNoCardMatch,
     }).map((record, index) => ({ record, index }));
-    // Keep the ordinary bounded lexical head for non-official sources, but
-    // independently scan the already-ranked in-memory result for the first
-    // record that passes the strict official-mechanism gate. This remains at
-    // most four candidates per query while allowing a strict fourth-or-later
-    // record to survive noisy higher-ranked candidates.
-    const strictHeadCandidate = independentlyRanked.find(
-      ({ record }) => isStrictSupplementalOfficialMechanismMatch(record, query),
-    );
-    const strictHead = strictHeadCandidate ? [strictHeadCandidate] : [];
+    // Keep a small lexical head, but independently scan the already-ranked
+    // in-memory result for the first two records that pass the strict official-
+    // mechanism gate. A useful analogue can be the second strict candidate,
+    // while a four-record union remains small and deterministic.
+    const strictHeadCandidates = [];
+    for (const candidate of independentlyRanked) {
+      if (!isStrictSupplementalOfficialMechanismMatch(candidate.record, query)) continue;
+      strictHeadCandidates.push(candidate);
+      if (strictHeadCandidates.length >= 2) break;
+    }
     const boundedCandidates = dedupeBy([
-      ...strictHead,
-      ...independentlyRanked.slice(0, 3),
-    ], ({ record }) => stableRecordKey(record));
+      ...strictHeadCandidates,
+      ...independentlyRanked.slice(0, 4),
+    ], ({ record }) => stableRecordKey(record)).slice(0, 4);
     return boundedCandidates.map(({ record, index }) => {
       // Evaluate the strict gate while this record still carries the signals
       // from exactly one supplemental query. After records from several query
@@ -1970,6 +1987,17 @@ function modelAssessmentRank(assessment = null) {
   const relevance = String(assessment.relevance || "low");
   const relevanceScore = relevance === "high" ? 3 : relevance === "medium" ? 2 : 1;
   return premiseScore + relevanceScore;
+}
+
+function hasEligibleModelCandidateAssessment(item = {}) {
+  const record = item?.record || item;
+  const assessment = record?.retrievalSignals?.modelCandidateAssessment
+    || record?.retrievalContext?.modelCandidateAssessment
+    || item?.modelCandidateAssessment;
+  if (!assessment || typeof assessment !== "object") return false;
+  return assessment.source === "model_rule_query_soft_ranker"
+    && ["high", "medium"].includes(String(assessment.relevance || ""))
+    && ["same", "partial"].includes(String(assessment.premise || ""));
 }
 
 function attachModelCandidateAssessment(record = {}, assessment = null) {
@@ -2246,13 +2274,11 @@ function scoreRecord(record, {
     evidenceMechanismSignature,
   );
   // Lexical overlap is normally required, but it cannot be the sole gateway
-  // for multilingual official Q&A. Admit only a strict semantic alternative:
-  // the item must still be official, question-type compatible, and share at
+  // for multilingual official Q&A. Admit an official record that shares at
   // least two distinctive mechanism features with strong query coverage.
-  // This broadens candidate discovery only; cross-card evidence remains
-  // related-only and passes the stricter applicability gate below.
+  // Handwritten question-type classification may still affect ranking, but it
+  // is not a deletion gate. Cross-card evidence remains related-only below.
   const strictOfficialMechanismMatch = isOfficialQaOrFaqRecord(record)
-    && typeCompatible === true
     && mechanismMatch.matchedStrongFeatures.length >= 2
     && Number(mechanismMatch.strongQueryCoverage || 0) >= 0.66;
   if (
@@ -2592,13 +2618,9 @@ function normalizeModelCandidateAssessments(assessments = [], candidateQuestions
 
 function isStrictSupplementalOfficialMechanismMatch(record = {}, query = {}) {
   if (!isOfficialQaOrFaqRecord(record)) return false;
-  const signals = record.retrievalSignals || {};
-  // User-question compatibility is still mandatory, but mechanism coverage
-  // must be recomputed against this one supplemental query. The ordinary
-  // ranked record carries the best aggregate match across the user question
-  // and every supplied query; using that aggregate here can neither prove
-  // which query matched nor safely scan past a noisy lexical head.
-  if (signals.typeCompatible !== true) return false;
+  // Mechanism coverage is recomputed against this one supplemental query. The
+  // ordinary ranked record carries aggregate signals, and a handwritten
+  // question-type label is intentionally not a hard deletion gate here.
   const queryText = typeof query === "string" ? query : query?.query;
   const querySignature = buildRuleMechanismSignature(queryText);
   if (!isUsableRuleMechanismSignature(querySignature)) return false;
@@ -2732,6 +2754,9 @@ function expandRetrievalVocabulary(value) {
   if (/(处理|處理|适用|適用|解決|resolve)/iu.test(text)) additions.push("处理 適用 解決 resolve");
   if (/(手卡|手牌|手札|hand)/iu.test(text)) additions.push("手卡 手牌 手札 hand");
   if (/(回到|返回|回去|放回|弹回|彈回|戻|return)/iu.test(text)) additions.push("回到 返回 回去 戻 return");
+  if (/(?:手札|ハンド)(?:へ|に)戻|(?:回到|返回|放回|弹回|彈回)[^，,。.!！?？;；\n]{0,12}(?:手札|手牌|手卡)|return(?:ed|ing)?[^.。;；\n]{0,30}\bto (?:the )?hand\b|put[^.。;；\n]{0,30}\b(?:back )?into (?:the )?hand\b/iu.test(text)) {
+    additions.push("放回手牌 手札に戻す return to hand");
+  }
   if (/(墓地|送墓|graveyard)/iu.test(text)) additions.push("墓地 送去墓地 graveyard");
   if (/(除外|banish)/iu.test(text)) additions.push("除外 banish");
   if (/(破坏|破壊|destroy)/iu.test(text)) additions.push("破坏 破壊 destroy");
@@ -3825,23 +3850,48 @@ function reserveRankedHeadAndSupplementalCoverage(items = [], limit = 1, {
     items || [],
     (item) => stableRecordKey(item?.record || item),
   );
-  if (orderedItems.length <= 1 || safeLimit === 1) return orderedItems;
+  if (orderedItems.length <= 1) return orderedItems;
 
-  // Supplemental queries may broaden a scoped bucket, but they must not evict
-  // its best independently ranked same-card item. Reserve that head first and
-  // use only the remaining bounded slots for query diversity.
+  // Always preserve the independently ranked head. Use the remaining bounded
+  // slots to alternate between strict supplemental-query coverage and
+  // question-only candidates that the model judged materially relevant with a
+  // compatible premise. Neither path changes evidence authority.
+  const head = orderedItems[0];
+  if (safeLimit === 1) return orderedItems;
+  const assessed = orderedItems.filter(hasEligibleModelCandidateAssessment);
   const queryReserved = reserveSupplementalQueryCoverage(
     orderedItems,
-    safeLimit - 1,
+    safeLimit,
     {
       queryKeys,
       strictOnly,
       fillRemaining: false,
     },
   );
+  const selected = [head];
+  const selectedKeys = new Set([stableRecordKey(head?.record || head)]);
+  const queues = [queryReserved, assessed];
+  const headHasAssessment = hasEligibleModelCandidateAssessment(head);
+  const headHasStrictQueryCoverage = supplementalQueryKeysForItem(head, { strictOnly }).length > 0;
+  let turn = headHasStrictQueryCoverage && !headHasAssessment ? 1 : 0;
+  while (selected.length < safeLimit) {
+    let added = false;
+    for (let offset = 0; offset < queues.length; offset += 1) {
+      const queueIndex = (turn + offset) % queues.length;
+      const candidate = queues[queueIndex].find(
+        (item) => !selectedKeys.has(stableRecordKey(item?.record || item)),
+      );
+      if (!candidate) continue;
+      selected.push(candidate);
+      selectedKeys.add(stableRecordKey(candidate?.record || candidate));
+      turn = (queueIndex + 1) % queues.length;
+      added = true;
+      break;
+    }
+    if (!added) break;
+  }
   return dedupeBy([
-    orderedItems[0],
-    ...queryReserved,
+    ...selected,
     ...orderedItems,
   ], (item) => stableRecordKey(item?.record || item));
 }
@@ -3874,7 +3924,7 @@ function allocateOfficialRelatedEvidence({
     .filter((item) => !scopedKeys.has(stableRecordKey(item)));
   if (!scoped.length) {
     const crossCardOnlyLimit = Math.min(2, safeLimit);
-    return reserveSupplementalQueryCoverage(crossCard, crossCardOnlyLimit, {
+    return reserveRankedHeadAndSupplementalCoverage(crossCard, crossCardOnlyLimit, {
       queryKeys: supplementalRuleQueryKeys,
       strictOnly: true,
     }).slice(0, crossCardOnlyLimit);
@@ -3917,7 +3967,7 @@ function allocateOfficialRelatedEvidence({
     (key) => !representedQueryKeys.has(key),
   );
   const prioritizedCrossCard = uncoveredQueryKeys.length
-    ? reserveSupplementalQueryCoverage(crossCard, maxCrossCard, {
+    ? reserveRankedHeadAndSupplementalCoverage(crossCard, maxCrossCard, {
       queryKeys: uncoveredQueryKeys,
       strictOnly: true,
     })

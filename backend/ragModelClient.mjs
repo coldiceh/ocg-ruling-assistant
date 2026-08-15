@@ -23,7 +23,7 @@ const DEFAULT_GLM_MODEL = "glm-5.2";
 const DEFAULT_JSON_TASK_MAX_OUTPUT_TOKENS = 4000;
 const DEFAULT_RAG_RECOVERY_MAX_OUTPUT_TOKENS = 4096;
 const DEFAULT_LIGHTWEIGHT_EXTRACTION_TIMEOUT_MS = 4500;
-const DEFAULT_RULE_QUERY_EXTRACTION_TIMEOUT_MS = 20000;
+const DEFAULT_RULE_QUERY_EXTRACTION_TIMEOUT_MS = 25000;
 const DEFAULT_DAILY_BUDGET_CNY = 10;
 const DEFAULT_CHATGPT_DAILY_BUDGET_USD = 10;
 const DEFAULT_PRIVATE_EVALUATION_BUDGET_USD = 40;
@@ -901,7 +901,7 @@ export async function callRuleQueryExtractionModel({
   }
 
   const cacheKey = extractionCacheKey({
-    kind: "rule-v5",
+    kind: "rule-v6",
     provider,
     modelName,
     dataRevision,
@@ -4199,7 +4199,7 @@ function ruleQueryCardContext(cards = [], userProvidedCardTexts = []) {
   return [...(cards || []), ...(userProvidedCardTexts || [])].slice(0, 12).map((card) => ({
     name: nonEmpty(card?.name || card?.cnName || card?.jaName || card?.enName || card?.cards?.[0]).slice(0, 120),
     cardType: nonEmpty(card?.cardType || card?.type || card?.typeName).slice(0, 120),
-    effectText: nonEmpty(card?.effectText || card?.text),
+    effectText: nonEmpty(card?.effectText || card?.text).slice(0, 900),
   })).filter((card) => card.name || card.effectText);
 }
 
