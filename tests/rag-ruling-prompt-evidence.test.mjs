@@ -78,7 +78,7 @@ test("prompt preserves provenance and presents official QA as structured fields"
   assert.match(bundle.prompt, /发动快照/u);
   assert.match(bundle.prompt, /处理快照/u);
   assert.match(bundle.prompt, /处理后快照/u);
-  assert.match(bundle.prompt, /发动时的合法选项与处理时最终能执行的选项/u);
+  assert.match(bundle.prompt, /分别枚举发动时的全部合法选项与处理时最终能执行的全部选项/u);
   assert.match(bundle.prompt, /效果来源与效果类型/u);
   assert.match(bundle.prompt, /实际受影响实体/u);
   assert.match(bundle.prompt, /核对权限关系/u);
