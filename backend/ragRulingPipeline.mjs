@@ -107,6 +107,7 @@ async function answerRagRulingQuestionInternal({
   officialQaExactCandidatePoolComplete = false,
   officialQaExactOnly = false,
   officialQaExactAlreadyChecked = false,
+  onOfficialQaExactTiming,
 } = {}) {
   const pipelineStartedAt = Date.now();
   const timingsMs = {};
@@ -146,6 +147,9 @@ async function answerRagRulingQuestionInternal({
       signal,
     });
     timingsMs.officialQaExact = elapsedMs(exactStartedAt);
+    if (typeof onOfficialQaExactTiming === "function") {
+      onOfficialQaExactTiming(timingsMs.officialQaExact);
+    }
     if (exactMatch.status === "matched") {
       timingsMs.total = elapsedMs(pipelineStartedAt);
       return buildOfficialQaExactDirectAnswer(exactMatch, timingsMs, dataRevision);
@@ -167,7 +171,7 @@ async function answerRagRulingQuestionInternal({
     });
     timingsMs.deterministicPreflight = elapsedMs(preflightStartedAt);
 
-    const auxiliaryExtractionStartedAt = Date.now();
+    const cardNameExtractionStartedAt = Date.now();
     cardNameModel = await callCardNameExtractionModel({
       userQuery: query,
       dataRevision,
@@ -185,7 +189,10 @@ async function answerRagRulingQuestionInternal({
         modelCardNameCandidates: cardNameModel.candidates,
       })
       : localCardResolution;
-    timingsMs.auxiliaryExtractionModels = elapsedMs(auxiliaryExtractionStartedAt);
+    timingsMs.cardNameExtraction = elapsedMs(cardNameExtractionStartedAt);
+    // Compatibility aggregate for older diagnostics. This is not a UI stage:
+    // card-name extraction and rule-query extraction are measured separately.
+    timingsMs.auxiliaryExtractionModels = timingsMs.cardNameExtraction;
     extractionStage.end();
   } catch (error) {
     extractionStage.fail(error);
@@ -226,7 +233,8 @@ async function answerRagRulingQuestionInternal({
           signal,
         });
         timingsMs.ruleQueryExtraction = elapsedMs(ruleQueryStartedAt);
-        timingsMs.auxiliaryExtractionModels += timingsMs.ruleQueryExtraction;
+        timingsMs.auxiliaryExtractionModels =
+          (timingsMs.cardNameExtraction || 0) + timingsMs.ruleQueryExtraction;
         return {
           queries: ruleQueryModel.queries || [],
           candidateAssessments: ruleQueryModel.candidateAssessments || [],
@@ -242,6 +250,10 @@ async function answerRagRulingQuestionInternal({
     throw error;
   }
   timingsMs.retrieval = elapsedMs(retrievalStartedAt);
+  timingsMs.cardTextRetrieval = readTimingMs(retrievedEvidence, "cardResolution");
+  timingsMs.rulebookRetrieval = readTimingMs(retrievedEvidence, "rulebook");
+  timingsMs.officialQaRetrieval = readTimingMs(retrievedEvidence, "officialQa");
+  timingsMs.relatedEvidenceRetrieval = readTimingMs(retrievedEvidence, "relatedEvidence");
 
   const effectiveCardResolution = reconcileCardResolution(cardResolution, retrievedEvidence);
 
@@ -251,6 +263,7 @@ async function answerRagRulingQuestionInternal({
   // rule component, semantic executor, duel engine, formal engine or Lua
   // analysis may filter, strengthen or replace them before the final model.
   const evidence = retrievedEvidence;
+  const promptStartedAt = Date.now();
   const promptStage = beginPrivateEvaluationStage(privateEvaluationDiagnostics, "prompt_build");
   let promptBundle;
   let evidenceFingerprint;
@@ -274,6 +287,7 @@ async function answerRagRulingQuestionInternal({
     promptStage.fail(error);
     throw error;
   }
+  timingsMs.promptBuild = elapsedMs(promptStartedAt);
 
   const finalModelStartedAt = Date.now();
   const modelResult = await runValidatedPublicRagFinal({
@@ -303,7 +317,8 @@ async function answerRagRulingQuestionInternal({
       privateEvaluationDiagnostics,
     }),
   });
-  timingsMs.finalModel = elapsedMs(finalModelStartedAt);
+  timingsMs.finalModelAndValidation = elapsedMs(finalModelStartedAt);
+  timingsMs.finalModel = timingsMs.finalModelAndValidation;
   timingsMs.total = elapsedMs(pipelineStartedAt);
 
   const publicProviderFailure = sanitizePublicProviderFailure(modelResult.providerFailure);
@@ -585,6 +600,11 @@ function readNumber(value, fallback) {
 
 function elapsedMs(startedAt) {
   return Math.max(0, Date.now() - Number(startedAt || Date.now()));
+}
+
+function readTimingMs(evidence, key) {
+  const value = Number(evidence?.debug?.timingsMs?.[key]);
+  return Number.isFinite(value) && value >= 0 ? value : 0;
 }
 
 function dedupeCards(cards) {

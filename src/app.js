@@ -216,26 +216,24 @@ let selectedRulingModelProfile = DEFAULT_RULING_MODEL_PROFILE;
 let rulingModelCapabilitiesAvailable = false;
 let selectedRulingVersion = "latest";
 const pendingStages = [
-  { id: "understand", label: "理解问题", body: "正在读取问题中的卡片、场面、连锁和时点。" },
-  { id: "extract_card_names", label: "提取卡名", body: "正在识别卡名候选，并准备查询卡片资料。" },
-  { id: "retrieve_card_texts", label: "检索卡片文本", body: "正在匹配本地资料、百鸽卡片资料和用户提供文本。" },
-  { id: "retrieve_rulings", label: "检索规则资料", body: "正在查找相关 Q&A、FAQ 和规则资料。" },
-  { id: "generate_ruling", label: "核对资料并生成裁定", body: "正在核对资料是否适用于当前场面，并生成未确认裁定分析。" },
+  { id: "data_load", timingKey: "dataLoad", label: "载入资料" },
+  { id: "official_qa_exact", timingKey: "officialQaExact", label: "精确官方 Q&A 检查" },
+  { id: "deterministic_preflight", timingKey: "deterministicPreflight", label: "确定性预检" },
+  { id: "extract_card_names", timingKey: "cardNameExtraction", label: "提取卡名" },
+  { id: "retrieve_card_texts", timingKey: "cardTextRetrieval", label: "检索卡片文本" },
+  { id: "extract_rule_queries", timingKey: "ruleQueryExtraction", label: "提取规则检索词" },
+  { id: "retrieve_rulebook", timingKey: "rulebookRetrieval", label: "检索规则书" },
+  { id: "retrieve_official_qa", timingKey: "officialQaRetrieval", label: "检索官方 Q&A" },
+  { id: "retrieve_related_evidence", timingKey: "relatedEvidenceRetrieval", label: "检索相关证据" },
+  { id: "build_prompt", timingKey: "promptBuild", label: "构建裁定上下文" },
+  { id: "generate_ruling", timingKey: "finalModelAndValidation", label: "最终模型与校验" },
 ];
-const simulationPendingStage = {
-  id: "simulate",
-  label: "编译模拟场景",
-  body: "正在将已识别的卡片、区域和操作整理为尽力模拟场景。",
-};
-const pendingStageDelays = [0, 700, 1600, 2900, 4500, 6000];
-let pendingStageTimers = [];
-let pendingStageIndex = 0;
-let pendingStageTickTimer = 0;
-let pendingStageEnteredAt = [];
-let pendingStageDurationsMs = [];
+let pendingElapsedTimer = 0;
+let pendingStageDurationsMs = {};
 let pendingPipelineStartedAt = null;
 let pendingPipelineTotalMs = null;
 let pendingPipelineStatus = "idle";
+let pendingPipelineUsesServerTiming = false;
 
 function normalizeText(value) {
   return String(value || "")
@@ -246,12 +244,7 @@ function normalizeText(value) {
 }
 
 function getPendingStages() {
-  if (!appConfig.engineEnabled) return pendingStages;
-  return [
-    ...pendingStages.slice(0, -1),
-    simulationPendingStage,
-    pendingStages[pendingStages.length - 1],
-  ];
+  return pendingStages;
 }
 
 function allCards() {
@@ -835,7 +828,7 @@ function renderPending() {
   ui.confidenceText.textContent = "分析中";
   ui.verdictTitle.textContent = "正在分析";
   ui.rulingBasisText.textContent = "";
-  ui.verdictBody.textContent = getPendingStages()[0].body;
+  ui.verdictBody.textContent = "请求处理中；完成前仅显示浏览器总等待时间。";
   ui.stepsTitle.textContent = "裁定流程";
   ui.stepsList.hidden = true;
   renderSubAnswers([]);
@@ -4851,95 +4844,63 @@ function renderList(container, items) {
 
 function startPendingStages() {
   clearPendingStages(false);
-  const stages = getPendingStages();
-  pendingStageIndex = 0;
-  pendingStageEnteredAt = stages.map(() => null);
-  pendingStageDurationsMs = stages.map(() => null);
+  pendingStageDurationsMs = {};
   pendingPipelineStartedAt = readMonotonicNow();
   pendingPipelineTotalMs = null;
   pendingPipelineStatus = "running";
-  pendingStageEnteredAt[0] = pendingPipelineStartedAt;
+  pendingPipelineUsesServerTiming = false;
   if (ui.pipelineTimingPanel) ui.pipelineTimingPanel.hidden = false;
-  renderPendingStages(0, stages);
-  pendingStageDelays.slice(0, stages.length).forEach((delay, index) => {
-    if (index === 0) return;
-    const timer = setTimeout(() => {
-      const now = readMonotonicNow();
-      const previousIndex = pendingStageIndex;
-      if (
-        previousIndex < index
-        && pendingStageEnteredAt[previousIndex] !== null
-        && pendingStageDurationsMs[previousIndex] === null
-      ) {
-        pendingStageDurationsMs[previousIndex] = Math.max(
-          0,
-          now - pendingStageEnteredAt[previousIndex],
-        );
-      }
-      pendingStageIndex = index;
-      if (pendingStageEnteredAt[index] === null) pendingStageEnteredAt[index] = now;
-      renderPendingStages(index, stages);
-    }, delay);
-    pendingStageTimers.push(timer);
-  });
-  pendingStageTickTimer = window.setInterval(() => {
-    renderPendingStages(pendingStageIndex, stages);
+  if (ui.pipelineStageList) {
+    clearElement(ui.pipelineStageList);
+    ui.pipelineStageList.hidden = true;
+  }
+  if (ui.pipelineElapsedText) ui.pipelineElapsedText.title = "浏览器总等待时间。";
+  renderPendingPipelineTotal();
+  pendingElapsedTimer = window.setInterval(() => {
+    renderPendingPipelineTotal();
   }, 250);
 }
 
 function clearPendingStages(clearClass = true) {
-  for (const timer of pendingStageTimers) clearTimeout(timer);
-  pendingStageTimers = [];
-  if (pendingStageTickTimer) window.clearInterval(pendingStageTickTimer);
-  pendingStageTickTimer = 0;
+  if (pendingElapsedTimer) window.clearInterval(pendingElapsedTimer);
+  pendingElapsedTimer = 0;
   if (clearClass) {
     pendingPipelineStartedAt = null;
     pendingPipelineTotalMs = null;
     pendingPipelineStatus = "idle";
-    pendingStageEnteredAt = [];
-    pendingStageDurationsMs = [];
+    pendingPipelineUsesServerTiming = false;
+    pendingStageDurationsMs = {};
     if (ui.pipelineTimingPanel) ui.pipelineTimingPanel.hidden = true;
-    if (ui.pipelineStageList) clearElement(ui.pipelineStageList);
+    if (ui.pipelineStageList) {
+      clearElement(ui.pipelineStageList);
+      ui.pipelineStageList.hidden = true;
+    }
     if (ui.pipelineElapsedText) ui.pipelineElapsedText.textContent = "";
   }
 }
 
-function renderPendingStages(activeIndex, stages = getPendingStages()) {
+function renderPendingStages(stages = getPendingStages()) {
   if (!ui.pipelineStageList) return;
   clearElement(ui.pipelineStageList);
-  stages.forEach((stage, index) => {
+  const measuredStages = stages.filter((stage) => (
+    Object.hasOwn(pendingStageDurationsMs, stage.id)
+  ));
+  ui.pipelineStageList.hidden = pendingPipelineStatus === "running" || measuredStages.length === 0;
+  measuredStages.forEach((stage) => {
     const item = document.createElement("li");
-    item.className = pendingPipelineStatus === "failed" && index === activeIndex
-      ? "progress-step is-failed"
-      : index < activeIndex ? "progress-step is-done"
-      : index === activeIndex && pendingPipelineStatus === "running" ? "progress-step is-current"
-        : "progress-step is-waiting";
+    item.className = "progress-step is-done";
     const marker = document.createElement("span");
     marker.className = "progress-step-marker";
-    marker.textContent = pendingPipelineStatus === "failed" && index === activeIndex
-      ? "!"
-      : index < activeIndex ? "✓"
-      : index === activeIndex && pendingPipelineStatus === "running" ? "•" : "·";
+    marker.textContent = "✓";
     const label = document.createElement("span");
     label.textContent = stage.label;
     const time = document.createElement("span");
     time.className = "progress-step-time";
-    const durationMs = index < activeIndex
-      ? pendingStageDurationsMs[index]
-      : index === activeIndex && pendingStageEnteredAt[index] !== null
-        ? Math.max(0, readMonotonicNow() - pendingStageEnteredAt[index])
-        : null;
-    time.textContent = durationMs === null
-      ? ""
-      : formatPendingStageDuration(durationMs);
+    time.textContent = formatPendingStageDuration(pendingStageDurationsMs[stage.id]);
     item.append(marker, label, time);
     ui.pipelineStageList.appendChild(item);
   });
   renderPendingPipelineTotal();
-  if (pendingPipelineStatus !== "running") return;
-  const stage = stages[Math.min(activeIndex, stages.length - 1)];
-  ui.verdictTitle.textContent = stage.id === "generate_ruling" ? "正在核对资料并生成裁定" : `正在${stage.label}`;
-  ui.verdictBody.textContent = stage.body;
 }
 
 function completePendingStages(answer) {
@@ -4951,40 +4912,36 @@ function completePendingStages(answer) {
   const backend = extractBackendPipelineTimings(answer, stages);
   clearPendingStages(false);
   pendingPipelineStatus = "completed";
+  pendingPipelineUsesServerTiming = backend.usesServerTiming;
   pendingPipelineTotalMs = backend.totalMs ?? clientTotalMs ?? 0;
-  pendingStageDurationsMs = stages.map((stage, index) => (
-    backend.stageDurationsMs[stage.id]
-    ?? pendingStageDurationsMs[index]
-    ?? (pendingStageEnteredAt[index] === null ? 0 : Math.max(0, completedAt - pendingStageEnteredAt[index]))
-  ));
-  pendingStageEnteredAt = stages.map(() => null);
-  pendingStageIndex = stages.length;
+  pendingStageDurationsMs = backend.stageDurationsMs;
   if (ui.pipelineTimingPanel) ui.pipelineTimingPanel.hidden = false;
   if (ui.pipelineElapsedText) {
     ui.pipelineElapsedText.title = backend.usesServerTiming
       ? "总计采用后端实测墙钟耗时；部分阶段可能并行。"
       : "后端未返回总耗时，当前采用浏览器单调计时。";
   }
-  renderPendingStages(stages.length, stages);
+  renderPendingStages(stages);
 }
 
 function failPendingStages() {
-  const stages = getPendingStages();
   const now = readMonotonicNow();
   clearPendingStages(false);
   if (pendingPipelineStartedAt === null) {
     clearPendingStages();
     return;
   }
-  const activeStartedAt = pendingStageEnteredAt[pendingStageIndex];
-  if (activeStartedAt !== null && pendingStageDurationsMs[pendingStageIndex] === null) {
-    pendingStageDurationsMs[pendingStageIndex] = Math.max(0, now - activeStartedAt);
-  }
   pendingPipelineTotalMs = Math.max(0, now - pendingPipelineStartedAt);
   pendingPipelineStatus = "failed";
+  pendingPipelineUsesServerTiming = false;
+  pendingStageDurationsMs = {};
   if (ui.pipelineTimingPanel) ui.pipelineTimingPanel.hidden = false;
   if (ui.pipelineElapsedText) ui.pipelineElapsedText.title = "请求失败前的浏览器单调计时。";
-  renderPendingStages(pendingStageIndex, stages);
+  if (ui.pipelineStageList) {
+    clearElement(ui.pipelineStageList);
+    ui.pipelineStageList.hidden = true;
+  }
+  renderPendingPipelineTotal();
 }
 
 function renderPendingPipelineTotal() {
@@ -4993,37 +4950,20 @@ function renderPendingPipelineTotal() {
     ? null
     : Math.max(0, readMonotonicNow() - pendingPipelineStartedAt);
   const durationMs = pendingPipelineTotalMs ?? runningMs;
+  const prefix = pendingPipelineStatus === "completed" && pendingPipelineUsesServerTiming
+    ? "后端实测："
+    : pendingPipelineStatus === "running" ? "浏览器等待：" : "";
   ui.pipelineElapsedText.textContent = durationMs === null
     ? ""
-    : `总计 ${formatPendingStageDuration(durationMs)}`;
+    : `${prefix}总计 ${formatPendingStageDuration(durationMs)}`;
 }
 
 function extractBackendPipelineTimings(answer, stages = getPendingStages()) {
   const pipeline = answer?.debug?.timingsMs || answer?.timingsMs || {};
-  const retrieval = answer?.debug?.retrievalStageTimingsMs
-    || answer?.retrievalStageTimingsMs
-    || {};
-  const stageDurationsMs = {
-    understand: sumFiniteDurations(pipeline.dataLoad, pipeline.deterministicPreflight),
-    extract_card_names: readFiniteDuration(pipeline.auxiliaryExtractionModels),
-    retrieve_card_texts: readFiniteDuration(retrieval.cardResolution),
-    retrieve_rulings: sumFiniteDurations(
-      retrieval.data,
-      retrieval.rulebook,
-      retrieval.officialQa,
-      retrieval.relatedEvidence,
-    ),
-    simulate: sumFiniteDurations(pipeline.formalEngineAwait, pipeline.engineAwait),
-    generate_ruling: sumFiniteDurations(
-      pipeline.officialQaApplicability,
-      pipeline.localReasoning,
-      pipeline.rulebookGrounding,
-      pipeline.finalModel,
-    ),
-  };
-  const knownStageIds = new Set(stages.map((stage) => stage.id));
-  for (const key of Object.keys(stageDurationsMs)) {
-    if (!knownStageIds.has(key) || stageDurationsMs[key] === null) delete stageDurationsMs[key];
+  const stageDurationsMs = {};
+  for (const stage of stages) {
+    const duration = readFiniteDuration(pipeline[stage.timingKey]);
+    if (duration !== null) stageDurationsMs[stage.id] = duration;
   }
   const totalMs = readFiniteDuration(pipeline.total);
   return {
@@ -5037,11 +4977,6 @@ function readFiniteDuration(value) {
   if (value === null || value === undefined || value === "") return null;
   const duration = Number(value);
   return Number.isFinite(duration) && duration >= 0 ? duration : null;
-}
-
-function sumFiniteDurations(...values) {
-  const durations = values.map(readFiniteDuration).filter((value) => value !== null);
-  return durations.length ? durations.reduce((sum, value) => sum + value, 0) : null;
 }
 
 function readMonotonicNow() {
