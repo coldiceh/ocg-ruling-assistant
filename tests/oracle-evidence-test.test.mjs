@@ -91,6 +91,8 @@ test("Oracle model input contains only the question, card text and verified evid
   ).content);
   assert.equal(body.model, "gpt-5.6-sol");
   assert.equal(body.reasoning_effort, "low");
+  assert.match(modelVisible, /按卡文顺序分别核对发动时与每个处理步骤当时的合法性/u);
+  assert.match(modelVisible, /明确该步不能执行时前序结果是否保留，以及处理在何处结束/u);
   assert.match(modelVisible, /QUESTION-VISIBLE/u);
   assert.match(modelVisible, /COMPLETE-CARD-TEXT-VISIBLE/u);
   assert.equal(visibleEnvelope.cardTexts[0].attribute, "wind");
