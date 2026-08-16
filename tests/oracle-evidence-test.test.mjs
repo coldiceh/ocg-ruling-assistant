@@ -20,7 +20,8 @@ test("Oracle workflow is isolated from the production backend and public budget"
   assert.match(workflow, /oracle-evidence-sol-low-\*/u);
   assert.match(workflow, /scripts\/run-oracle-evidence-test\.mjs/u);
   assert.match(workflow, /RELAY_API_KEY/u);
-  assert.match(workflow, /reasoning_effort=low/u);
+  assert.match(workflow, /reasoning_effort=%s/u);
+  assert.match(workflow, /workflow_dispatch:[\s\S]*reasoning_effort:[\s\S]*case_ids:/u);
   assert.match(workflow, /rsa_padding_mode:oaep/u);
   assert.doesNotMatch(workflow, /backend\/server\.mjs/u);
   assert.doesNotMatch(workflow, /DEEPSEEK_API_KEY|UPSTASH|API_CHATGPT_DAILY_BUDGET/u);
@@ -70,6 +71,33 @@ test("Oracle model input contains only the question, card text and verified evid
   assert.doesNotMatch(modelVisible, new RegExp(expectedAnswer, "u"));
   assert.doesNotMatch(modelVisible, new RegExp(previousCandidate, "u"));
   assert.doesNotMatch(modelVisible, new RegExp(caseId, "u"));
+});
+
+test("Oracle diagnostic can scope cases and increase reasoning without changing evidence", async () => {
+  const checkpointDirectory = await mkdtemp(join(tmpdir(), "oracle-evidence-medium-scope-"));
+  try {
+    const fixture = makeOracleFixture();
+    const requestBodies = [];
+    const result = await runOracleCases({
+      ...fixture,
+      checkpointDirectory,
+      caseIds: ["case-004", "case-027", "case-028"],
+      reasoningEffort: "medium",
+      log: () => {},
+      requestImpl: async (body) => {
+        requestBodies.push(body);
+        return {
+          model: "gpt-5.6-sol",
+          choices: [{ message: { content: "candidate" }, finish_reason: "stop" }],
+        };
+      },
+    });
+    assert.deepEqual([...result.generations.keys()], ["case-004", "case-027", "case-028"]);
+    assert.equal(requestBodies.length, 3);
+    assert.equal(requestBodies.every((body) => body.reasoning_effort === "medium"), true);
+  } finally {
+    await rm(checkpointDirectory, { recursive: true, force: true });
+  }
 });
 
 test("Oracle cases execute strictly serially and exactly once per case", async () => {

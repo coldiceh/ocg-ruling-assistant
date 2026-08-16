@@ -15,7 +15,7 @@ const repositoryRoot = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const DEFAULT_CARDS_PATH = resolve(repositoryRoot, "data/cards.json");
 const DEFAULT_QA_PATH = resolve(repositoryRoot, "data/qa-index.json");
 const MODEL = "gpt-5.6-sol";
-const REASONING_EFFORT = "low";
+const DEFAULT_REASONING_EFFORT = "low";
 const MAX_COMPLETION_TOKENS = 4_096;
 
 // This is an isolated diagnostic fixture. It is never imported by backend/, api/
@@ -70,7 +70,12 @@ const SYSTEM_PROMPT = [
   "资料不足时请明确说明，不得虚构官方裁定，也不要输出隐藏思维链。",
 ].join("\n");
 
-export function buildOracleRequestBody({ question, cardTexts, officialEvidence } = {}) {
+export function buildOracleRequestBody({
+  question,
+  cardTexts,
+  officialEvidence,
+  reasoningEffort = DEFAULT_REASONING_EFFORT,
+} = {}) {
   const normalizedQuestion = String(question || "").trim();
   if (!normalizedQuestion) throw new TypeError("Oracle case requires a question");
   if (!Array.isArray(cardTexts) || !cardTexts.length) {
@@ -90,7 +95,7 @@ export function buildOracleRequestBody({ question, cardTexts, officialEvidence }
       { role: "system", content: SYSTEM_PROMPT },
       { role: "user", content: JSON.stringify(envelope, null, 2) },
     ],
-    reasoning_effort: REASONING_EFFORT,
+    reasoning_effort: validateReasoningEffort(reasoningEffort),
     max_completion_tokens: MAX_COMPLETION_TOKENS,
   };
 }
@@ -101,6 +106,8 @@ export async function runOracleCases({
   qaRecords,
   checkpointDirectory,
   requestImpl,
+  caseIds = Object.keys(ORACLE_CASE_SPECS),
+  reasoningEffort = DEFAULT_REASONING_EFFORT,
   now = () => new Date(),
   log = console.log,
 } = {}) {
@@ -110,7 +117,9 @@ export async function runOracleCases({
   if (typeof requestImpl !== "function") throw new TypeError("Oracle run requires requestImpl");
   const cardById = indexRecords(cardRecords, "card");
   const qaById = indexRecords(qaRecords, "evidence");
-  const selectedCases = Object.keys(ORACLE_CASE_SPECS).map((caseId) => {
+  const selectedCaseIds = validateCaseIds(caseIds);
+  const normalizedReasoningEffort = validateReasoningEffort(reasoningEffort);
+  const selectedCases = selectedCaseIds.map((caseId) => {
     const item = dataset.cases.find((candidate) => candidate.id === caseId);
     if (!item) throw new TypeError(`Private dataset is missing ${caseId}`);
     return item;
@@ -140,6 +149,7 @@ export async function runOracleCases({
       question: item.question,
       cardTexts,
       officialEvidence,
+      reasoningEffort: normalizedReasoningEffort,
     });
     const checkpointPath = resolve(generationDirectory, `${item.id}.json`);
     await assertCheckpointAbsent(checkpointPath);
@@ -153,7 +163,7 @@ export async function runOracleCases({
       submittedAt,
       promptSha256,
       requestedModel: MODEL,
-      reasoningEffort: REASONING_EFFORT,
+      reasoningEffort: normalizedReasoningEffort,
       requestCount: 1,
     });
     const startedAt = Date.now();
@@ -179,7 +189,7 @@ export async function runOracleCases({
         candidateResponseText,
         requestedModel: MODEL,
         returnedModel: returnedModel || null,
-        reasoningEffort: REASONING_EFFORT,
+        reasoningEffort: normalizedReasoningEffort,
         finishReason: response?.choices?.[0]?.finish_reason || null,
         usage: response?.usage || null,
         streamMetrics: response?.stream_metrics || null,
@@ -203,7 +213,7 @@ export async function runOracleCases({
         promptSha256,
         candidateResponseText: "",
         requestedModel: MODEL,
-        reasoningEffort: REASONING_EFFORT,
+        reasoningEffort: normalizedReasoningEffort,
         failureCode: String(error?.code || "oracle_request_failed"),
         error: String(error?.message || error).slice(0, 1_000),
         requestCount: 1,
@@ -245,6 +255,8 @@ export async function runOracleCli(argv = process.argv.slice(2), {
     cardRecords: cardsPayload.records,
     qaRecords: qaPayload.records,
     checkpointDirectory: options.checkpointDirectory,
+    caseIds: options.caseIds,
+    reasoningEffort: options.reasoningEffort,
     requestImpl: (body) => requestTransport({
       endpoint,
       apiKey,
@@ -285,11 +297,13 @@ function parseCliArguments(argv) {
     reportPath: "",
     cardsPath: DEFAULT_CARDS_PATH,
     qaPath: DEFAULT_QA_PATH,
+    caseIds: [],
+    reasoningEffort: DEFAULT_REASONING_EFFORT,
   };
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
     const value = argv[index + 1];
-    if (["--dataset", "--checkpoint-dir", "--report", "--cards", "--qa"].includes(argument)) {
+    if (["--dataset", "--checkpoint-dir", "--report", "--cards", "--qa", "--include-case", "--reasoning-effort"].includes(argument)) {
       if (!value || value.startsWith("--")) throw new TypeError(`${argument} requires a value`);
       index += 1;
       if (argument === "--dataset") options.datasetPath = resolve(value);
@@ -297,6 +311,8 @@ function parseCliArguments(argv) {
       else if (argument === "--report") options.reportPath = resolve(value);
       else if (argument === "--cards") options.cardsPath = resolve(value);
       else if (argument === "--qa") options.qaPath = resolve(value);
+      else if (argument === "--include-case") options.caseIds.push(value);
+      else if (argument === "--reasoning-effort") options.reasoningEffort = validateReasoningEffort(value);
     } else {
       throw new TypeError(`Unknown Oracle option: ${argument}`);
     }
@@ -308,7 +324,30 @@ function parseCliArguments(argv) {
   ]) {
     if (!value) throw new TypeError(`${name} is required`);
   }
+  if (!options.caseIds.length) options.caseIds = Object.keys(ORACLE_CASE_SPECS);
+  options.caseIds = validateCaseIds(options.caseIds);
   return options;
+}
+
+function validateCaseIds(caseIds) {
+  if (!Array.isArray(caseIds) || !caseIds.length) {
+    throw new TypeError("Oracle test requires at least one case ID");
+  }
+  const normalized = [...new Set(caseIds.map((item) => String(item || "").trim()))];
+  for (const caseId of normalized) {
+    if (!Object.hasOwn(ORACLE_CASE_SPECS, caseId)) {
+      throw new TypeError(`Unknown Oracle case ID: ${caseId}`);
+    }
+  }
+  return normalized;
+}
+
+function validateReasoningEffort(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (!["low", "medium", "high"].includes(normalized)) {
+    throw new TypeError(`Unsupported Oracle reasoning effort: ${value}`);
+  }
+  return normalized;
 }
 
 function projectCardText(record) {

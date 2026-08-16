@@ -1,6 +1,21 @@
-name: Oracle evidence Sol-low test
+name: Oracle evidence Sol diagnostic
 
 on:
+  workflow_dispatch:
+    inputs:
+      reasoning_effort:
+        description: Sol reasoning effort for the isolated Oracle diagnostic
+        required: true
+        default: medium
+        type: choice
+        options:
+          - medium
+          - high
+      case_ids:
+        description: Comma-separated Oracle case IDs
+        required: true
+        default: case-004,case-027,case-028
+        type: string
   push:
     tags:
       - "oracle-evidence-sol-low-*"
@@ -19,8 +34,8 @@ jobs:
     if: >-
       github.actor == github.repository_owner
       && github.triggering_actor == github.repository_owner
-      && github.ref_type == 'tag'
       && github.run_attempt == 1
+      && (github.event_name == 'workflow_dispatch' || github.ref_type == 'tag')
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -28,6 +43,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Verify the tag targets the trusted preview branch
+        if: github.event_name == 'push'
         shell: bash
         run: |
           set -euo pipefail
@@ -68,7 +84,7 @@ jobs:
             | base64 --decode > "$RUNNER_TEMP/oracle-evidence-private-dataset.txt"
           test -s "$RUNNER_TEMP/oracle-evidence-private-dataset.txt"
 
-      - name: Generate four Oracle candidates serially
+      - name: Generate selected Oracle candidates serially
         id: evaluation
         shell: bash
         env:
@@ -83,11 +99,22 @@ jobs:
             exit 1
           }
           mkdir -p artifacts
+          case_args=()
+          case_ids="${{ github.event_name == 'workflow_dispatch' && inputs.case_ids || 'case-004,case-018,case-027,case-028' }}"
+          IFS=',' read -ra requested_case_ids <<< "$case_ids"
+          for raw_case_id in "${requested_case_ids[@]}"; do
+            case_id="${raw_case_id//[[:space:]]/}"
+            if [ -n "$case_id" ]; then
+              case_args+=(--include-case "$case_id")
+            fi
+          done
           set +e
           node scripts/run-oracle-evidence-test.mjs \
             --dataset "$RUNNER_TEMP/oracle-evidence-private-dataset.txt" \
             --checkpoint-dir "$RUNNER_TEMP/oracle-evidence-checkpoint" \
             --report artifacts/oracle-evidence-public-report.json \
+            --reasoning-effort "${{ github.event_name == 'workflow_dispatch' && inputs.reasoning_effort || 'low' }}" \
+            "${case_args[@]}" \
             > "$RUNNER_TEMP/oracle-evidence-runner.log" 2>&1
           status=$?
           set -e
@@ -133,13 +160,17 @@ jobs:
             }
           };
           visit(report);
+          const expectedTotal = String(process.env.EXPECTED_CASE_IDS || "")
+            .split(",").map((item) => item.trim()).filter(Boolean).length;
           if (report.mode !== "generate_only"
-              || report.summary?.total !== 4
+              || report.summary?.total !== expectedTotal
               || Number(report.summary?.generated || 0)
-                + Number(report.summary?.generationFailed || 0) !== 4) {
-            throw new Error("Oracle public report does not describe exactly four generation attempts");
+                + Number(report.summary?.generationFailed || 0) !== expectedTotal) {
+            throw new Error("Oracle public report does not describe the selected generation attempts");
           }
           NODE
+        env:
+          EXPECTED_CASE_IDS: ${{ github.event_name == 'workflow_dispatch' && inputs.case_ids || 'case-004,case-018,case-027,case-028' }}
 
       - name: Encrypt the private Oracle checkpoint
         id: private_archive
@@ -189,8 +220,8 @@ jobs:
             printf 'cipher_sha256=%s\n' "$cipher_sha256"
             printf 'source_sha=%s\n' "$GITHUB_SHA"
             printf 'requested_model=gpt-5.6-sol\n'
-            printf 'reasoning_effort=low\n'
-            printf 'selected_case_count=4\n'
+            printf 'reasoning_effort=%s\n' "${{ github.event_name == 'workflow_dispatch' && inputs.reasoning_effort || 'low' }}"
+            printf 'selected_case_count=%s\n' "$(printf '%s' "${{ github.event_name == 'workflow_dispatch' && inputs.case_ids || 'case-004,case-018,case-027,case-028' }}" | awk -F, '{print NF}')"
           } > "$key_envelope_file"
           chmod 600 "$key_envelope_file"
           openssl pkeyutl -encrypt \
