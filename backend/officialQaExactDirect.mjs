@@ -60,14 +60,14 @@ export function canonicalizeOfficialQaExactQuestion(question, cards = []) {
   const mentionedCardIds = new Set();
   const ambiguousCardSurfaces = [];
 
-  const identitiesBySurface = new Map([
-    ...aliases.unique.map((item) => [item.surface, item]),
-    ...aliases.ambiguous.map((item) => [item.surface, item]),
-  ]);
-  canonical = replaceQuotedCardIdentities(canonical, identitiesBySurface, {
-    mentionedCardIds,
-    ambiguousCardSurfaces,
-  });
+  for (const item of aliases.ambiguous) {
+    if (canonical.includes(item.surface)) ambiguousCardSurfaces.push(item.surface);
+  }
+  for (const item of aliases.unique) {
+    if (!canonical.includes(item.surface)) continue;
+    canonical = canonical.split(item.surface).join(`<<${item.cardId}>>`);
+    mentionedCardIds.add(item.cardId);
+  }
 
   const normalized = normalizeOfficialQaExactText(canonical);
   return {
@@ -77,26 +77,6 @@ export function canonicalizeOfficialQaExactQuestion(question, cards = []) {
     mentionedCardIds: [...mentionedCardIds],
     ambiguousCardSurfaces,
   };
-}
-
-function replaceQuotedCardIdentities(value, identitiesBySurface, {
-  mentionedCardIds,
-  ambiguousCardSurfaces,
-} = {}) {
-  return String(value || "").replace(
-    /「([^」]+)」|"([^"]+)"|“([^”]+)”|【([^】]+)】|〔([^〕]+)〕|［([^］]+)］/gu,
-    (quoted, ...captures) => {
-      const surface = captures.slice(0, 6).find((item) => typeof item === "string")?.trim() || "";
-      const identity = identitiesBySurface.get(surface);
-      if (!identity) return quoted;
-      if (!identity.cardId) {
-        ambiguousCardSurfaces.push(surface);
-        return quoted;
-      }
-      mentionedCardIds.add(identity.cardId);
-      return quoted.replace(surface, "<<" + identity.cardId + ">>");
-    },
-  );
 }
 
 export async function retrieveExactOfficialQaDirect({
@@ -402,7 +382,7 @@ function officialQuestionSurfaces(record) {
   });
 }
 
-export function officialAnswerText(record) {
+function officialAnswerText(record) {
   return String(
     record.rawAnswer
     || record.answer
@@ -412,7 +392,7 @@ export function officialAnswerText(record) {
   ).trim();
 }
 
-export function completeOfficialQuestionText(record) {
+function completeOfficialQuestionText(record) {
   const projection = projectOfficialQaQuestion(record);
   return [
     record.rawDetailedQuestion,
@@ -437,7 +417,7 @@ function officialQaSourceUrl(record, qaId) {
   return `https://www.db.yugioh-card.com/yugiohdb/faq_search.action?fid=${encodeURIComponent(qaId)}&ope=5&request_locale=ja`;
 }
 
-export function materializeOfficialJapaneseText(value, cards) {
+function materializeOfficialJapaneseText(value, cards) {
   const byId = new Map((cards || []).map((card) => [
     String(card.id || card.cardId || ""),
     String(card.jaName || card.jpName || card.name || card.cnName || card.enName || ""),

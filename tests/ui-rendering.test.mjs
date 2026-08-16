@@ -149,8 +149,8 @@ test("ui_has_single_query_button", async () => {
   assert.match(app, /user_provided_text/u);
   assert.match(app, /用户提供文本/u);
   assert.match(app, /pendingStages/u);
-  assert.match(app, /检索官方 Q&A/u);
-  assert.match(app, /pendingElapsedTimer/u);
+  assert.match(app, /检索规则资料/u);
+  assert.match(app, /pendingStageTickTimer/u);
   assert.match(app, /formatPendingStageDuration/u);
   assert.match(app, /progress-step-time/u);
   assert.match(app, /readMonotonicNow/u);
@@ -350,51 +350,44 @@ test("public pipeline timing prefers backend stage measurements and wall-clock t
     `${app.slice(start, end)}; return extractBackendPipelineTimings;`,
   )();
   const stages = [
-    { id: "data_load", timingKey: "dataLoad" },
-    { id: "official_qa_exact", timingKey: "officialQaExact" },
-    { id: "deterministic_preflight", timingKey: "deterministicPreflight" },
-    { id: "extract_card_names", timingKey: "cardNameExtraction" },
-    { id: "retrieve_card_texts", timingKey: "cardTextRetrieval" },
-    { id: "extract_rule_queries", timingKey: "ruleQueryExtraction" },
-    { id: "retrieve_rulebook", timingKey: "rulebookRetrieval" },
-    { id: "retrieve_official_qa", timingKey: "officialQaRetrieval" },
-    { id: "retrieve_related_evidence", timingKey: "relatedEvidenceRetrieval" },
-    { id: "build_prompt", timingKey: "promptBuild" },
-    { id: "generate_ruling", timingKey: "finalModelAndValidation" },
+    { id: "understand" },
+    { id: "extract_card_names" },
+    { id: "retrieve_card_texts" },
+    { id: "retrieve_rulings" },
+    { id: "simulate" },
+    { id: "generate_ruling" },
   ];
   const result = extractTimings({
     debug: {
       timingsMs: {
         dataLoad: 10,
-        officialQaExact: 2,
         deterministicPreflight: 5,
-        cardNameExtraction: 60,
-        ruleQueryExtraction: 40,
         auxiliaryExtractionModels: 100,
-        cardTextRetrieval: 20,
-        officialQaRetrieval: 40,
-        rulebookRetrieval: 30,
-        relatedEvidenceRetrieval: 50,
-        promptBuild: 8,
-        finalModelAndValidation: 1_000,
+        officialQaApplicability: 30_000,
+        localReasoning: 4,
+        rulebookGrounding: 6,
+        formalEngineAwait: 2,
         finalModel: 1_000,
+        engineAwait: 3,
         total: 1_200,
+      },
+      retrievalStageTimingsMs: {
+        data: 1,
+        cardResolution: 20,
+        rulebook: 30,
+        officialQa: 40,
+        relatedEvidence: 50,
       },
     },
   }, stages);
   assert.deepEqual(result, {
     stageDurationsMs: {
-      data_load: 10,
-      official_qa_exact: 2,
-      deterministic_preflight: 5,
-      extract_card_names: 60,
+      understand: 15,
+      extract_card_names: 100,
       retrieve_card_texts: 20,
-      extract_rule_queries: 40,
-      retrieve_rulebook: 30,
-      retrieve_official_qa: 40,
-      retrieve_related_evidence: 50,
-      build_prompt: 8,
-      generate_ruling: 1_000,
+      retrieve_rulings: 121,
+      simulate: 5,
+      generate_ruling: 31_010,
     },
     totalMs: 1_200,
     usesServerTiming: true,
@@ -1585,7 +1578,7 @@ test("rag_displays_simulator_output_as_a_separate_result", async () => {
   assert.match(app, /选择是否连锁/u);
   assert.match(app, /answer\?\.engineSimulation/u);
   assert.match(app, /info\?\.engineEnabled === true/u);
-  assert.match(app, /function getPendingStages\(\) \{\s*return pendingStages;\s*\}/u);
+  assert.match(app, /if \(!appConfig\.engineEnabled\) return pendingStages/u);
   assert.match(app, /status !== "completed" \|\| !simulation/u);
 });
 
@@ -1633,12 +1626,12 @@ test("rag UI presents every formal query without turning UNKNOWN into a negative
   assert.match(app, /formal_engine_unknown: "形式规则内核本次未签发确定性证明；这不等于“不能”。"/u);
 });
 
-test("public pending timing has no fixed stage animation and exposes measured backend stages only", async () => {
+test("public pending stages merge evidence review into optional simulation and final generation", async () => {
   const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
   const definitions = sourceBetween(
     app,
     "const pendingStages =",
-    "let pendingElapsedTimer =",
+    "let pendingStageTimers =",
   );
   const functionSource = sourceBetween(
     app,
@@ -1646,37 +1639,29 @@ test("public pending timing has no fixed stage animation and exposes measured ba
     "function allCards",
   );
   const inspect = new Function(
-    `${definitions}\n${functionSource}\nreturn { stages: getPendingStages() };`,
+    "engineEnabled",
+    `${definitions}\nconst appConfig = { engineEnabled };\n${functionSource}\nreturn { stages: getPendingStages(), delays: pendingStageDelays };`,
   );
 
-  const result = inspect();
-  assert.deepEqual(result.stages.map((stage) => stage.id), [
-    "data_load",
-    "official_qa_exact",
-    "deterministic_preflight",
+  const withoutEngine = inspect(false);
+  assert.deepEqual(withoutEngine.stages.map((stage) => stage.id), [
+    "understand",
     "extract_card_names",
     "retrieve_card_texts",
-    "extract_rule_queries",
-    "retrieve_rulebook",
-    "retrieve_official_qa",
-    "retrieve_related_evidence",
-    "build_prompt",
+    "retrieve_rulings",
     "generate_ruling",
   ]);
-  const runtimeSource = sourceBetween(app, "function startPendingStages", "function completePendingStages");
-  assert.doesNotMatch(app, /pendingStageDelays/u);
-  assert.doesNotMatch(runtimeSource, /setTimeout/u);
-  assert.doesNotMatch(app, /\[0,\s*700,\s*1600,\s*2900,\s*4500,\s*6000\]/u);
-  assert.match(app, /请求处理中；完成前仅显示浏览器总等待时间/u);
-  assert.match(app, /后端实测：/u);
-});
-
-test("semantic official Q&A uses the cross-language label and visibly preserves its Q&A ID", async () => {
-  const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
-  const renderSource = sourceBetween(app, "function renderRagAnswer", "function ragEvidenceLabel");
-  assert.match(renderSource, /official_qa_semantic_direct/u);
-  assert.match(renderSource, /官方 Q&A 对应（跨语言）/u);
-  assert.match(renderSource, /官方 Q&A ID：\$\{String\(answer\?\.officialQaId/u);
+  const withEngine = inspect(true);
+  assert.deepEqual(withEngine.stages.map((stage) => stage.id), [
+    "understand",
+    "extract_card_names",
+    "retrieve_card_texts",
+    "retrieve_rulings",
+    "simulate",
+    "generate_ruling",
+  ]);
+  assert.equal(withEngine.delays.length, withEngine.stages.length);
+  assert.ok(withEngine.delays.every((delay, index) => index === 0 || delay > withEngine.delays[index - 1]));
 });
 
 test("rag UI presents provider failures as model service unavailable in Chinese", async () => {
