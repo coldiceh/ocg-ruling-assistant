@@ -177,7 +177,6 @@ export async function answerPublicRulingQuestion({
   answerOfficialExact = answerExactOfficialQaQuestionForVersion,
   answerRuling = answerRagRulingQuestionForVersion,
 } = {}) {
-  const backendStartedAt = Date.now();
   const normalizedPayload = parsePublicAnswerPayload(payload);
   const mode = String(normalizedPayload.mode || "rag").toLowerCase();
   if (mode !== "rag") {
@@ -196,25 +195,15 @@ export async function answerPublicRulingQuestion({
     env,
   }).catch(() => null);
 
-  let officialQaExactMs = null;
   const exactAnswer = await answerOfficialExact({
     rulingVersion: normalizedPayload.rulingVersion,
     question: normalizedPayload.question,
     env,
     signal,
-    onOfficialQaExactTiming: (durationMs) => {
-      if (Number.isFinite(durationMs) && durationMs >= 0) officialQaExactMs = durationMs;
-    },
   });
   if (exactAnswer) {
     await auditPromise;
-    return {
-      answer: withPublicBackendTimings(exactAnswer, {
-        officialQaExactMs,
-        totalMs: Math.max(0, Date.now() - backendStartedAt),
-      }),
-      latency: null,
-    };
+    return { answer: exactAnswer, latency: null };
   }
 
   if (shouldApplyPublicOfftopicRiskControl(env)) {
@@ -272,10 +261,7 @@ export async function answerPublicRulingQuestion({
     });
     await auditPromise;
     return {
-      answer: withPublicBackendTimings(answer, {
-        officialQaExactMs,
-        totalMs: Math.max(0, Date.now() - backendStartedAt),
-      }),
+      answer,
       latency: {
         profileId: profile.id,
         durationMs: Math.max(0, Date.now() - answerStartedAt),
@@ -285,24 +271,6 @@ export async function answerPublicRulingQuestion({
     await auditPromise;
     throw error;
   }
-}
-
-function withPublicBackendTimings(answer, { officialQaExactMs, totalMs } = {}) {
-  if (!answer || typeof answer !== "object") return answer;
-  const timingsMs = {
-    ...(answer.debug?.timingsMs || answer.timingsMs || {}),
-    ...(Number.isFinite(officialQaExactMs) && officialQaExactMs >= 0
-      ? { officialQaExact: officialQaExactMs }
-      : {}),
-    ...(Number.isFinite(totalMs) && totalMs >= 0 ? { total: totalMs } : {}),
-  };
-  return {
-    ...answer,
-    debug: {
-      ...(answer.debug || {}),
-      timingsMs,
-    },
-  };
 }
 
 export function shouldApplyPublicOfftopicRiskControl(env = process.env) {
