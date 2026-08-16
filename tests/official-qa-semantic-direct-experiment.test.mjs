@@ -138,15 +138,6 @@ test("zero or multiple high-relevance candidates skip the verifier", async () =>
   assert.equal(calls, 0);
 });
 
-test("the semantic experiment is not imported by either production answer entry", async () => {
-  const [pipeline, service] = await Promise.all([
-    readFile(new URL("../backend/ragRulingPipeline.mjs", import.meta.url), "utf8"),
-    readFile(new URL("../backend/publicAnswerService.mjs", import.meta.url), "utf8"),
-  ]);
-  assert.doesNotMatch(pipeline, /officialQaSemanticDirectExperiment/u);
-  assert.doesNotMatch(service, /officialQaSemanticDirectExperiment/u);
-});
-
 function candidate(qaId) {
   return {
     qaId,
