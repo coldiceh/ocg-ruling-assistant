@@ -6,6 +6,7 @@ import {
 } from "./ragEvidenceRetriever.mjs";
 import {
   callCardNameExtractionModel,
+  callOfficialQaSemanticEquivalenceModel,
   callRagModel,
   callRuleQueryExtractionModel,
   isServerOwnedPrivateEvaluationEnv,
@@ -14,6 +15,10 @@ import { buildRagRulingPromptBundle } from "./ragRulingPrompt.mjs";
 import { hasNumberedCardIdentityConflict } from "./numberedCardIdentity.mjs";
 import { runValidatedPublicRagFinal } from "./publicRagAnswerValidator.mjs";
 import { retrieveExactOfficialQaDirect } from "./officialQaExactDirect.mjs";
+import {
+  createOfficialQaSemanticEquivalenceVerifier,
+  runOfficialQaSemanticDirectExperiment,
+} from "./officialQaSemanticDirectExperiment.mjs";
 import { resolveRagDataRevision } from "./ragDataRevisionManifest.mjs";
 import {
   beginPrivateEvaluationStage,
@@ -95,6 +100,7 @@ async function answerRagRulingQuestionInternal({
   modelInvoker,
   cardModelInvoker,
   ruleModelInvoker,
+  semanticModelInvoker,
   dryRun,
   fetchImpl,
   now,
@@ -199,6 +205,48 @@ async function answerRagRulingQuestionInternal({
     throw error;
   }
   timingsMs.dataAndQueryExtraction = elapsedMs(extractionStartedAt);
+
+  if (shouldEnableOfficialQaSemanticDirect(env)) {
+    const semanticStartedAt = Date.now();
+    let semanticModelResult = null;
+    const semanticResult = await runOfficialQaSemanticDirectExperiment({
+      userQuestion: query,
+      records: data.qaRecords || [],
+      resolvedCards: cardResolution.resolvedCards || [],
+      verifier: createOfficialQaSemanticEquivalenceVerifier({
+        model: "gpt-5.6-sol",
+        reasoningEffort: "low",
+        invoke: async ({ prompt }) => {
+          semanticModelResult = await callOfficialQaSemanticEquivalenceModel({
+            prompt,
+            env,
+            modelInvoker: semanticModelInvoker,
+            fetchImpl,
+            now,
+            dryRun,
+            signal,
+          });
+          if (semanticModelResult.status !== "completed" || !semanticModelResult.rawText) {
+            throw new Error(semanticModelResult.warnings?.[0] || "semantic equivalence model unavailable");
+          }
+          return semanticModelResult.rawText;
+        },
+      }),
+    });
+    timingsMs.officialQaSemantic = elapsedMs(semanticStartedAt);
+    if (semanticResult.status === "matched") {
+      timingsMs.finalModelAndValidation = timingsMs.officialQaSemantic;
+      timingsMs.finalModel = timingsMs.finalModelAndValidation;
+      timingsMs.total = elapsedMs(pipelineStartedAt);
+      return buildOfficialQaSemanticDirectAnswer({
+        match: semanticResult,
+        modelResult: semanticModelResult,
+        resolvedCards: cardResolution.resolvedCards || [],
+        timingsMs,
+        dataRevision,
+      });
+    }
+  }
 
   const retrievalStartedAt = Date.now();
   const retrievalStage = beginPrivateEvaluationStage(privateEvaluationDiagnostics, "retrieval");
@@ -591,6 +639,68 @@ function buildOfficialQaExactDirectAnswer(match, timingsMs, dataRevision) {
       semanticStateTransitionDiagnostic: null,
     },
   };
+}
+
+function buildOfficialQaSemanticDirectAnswer({
+  match,
+  modelResult,
+  resolvedCards,
+  timingsMs,
+  dataRevision,
+}) {
+  return {
+    mode: "rag_baseline",
+    answerLevel: "official_confirmed",
+    shortAnswer: match.officialAnswerJapanese,
+    reasoning: ["以下内容为当前官方数据库的完整日文回答；模型仅验证问题语义等价，未读取或改写官方答案。"],
+    usedEvidence: [{
+      id: match.recordId,
+      type: "official_qa",
+      title: `官方 Q&A ${match.qaId}`,
+      sourceUrl: match.sourceUrl,
+    }],
+    resolvedCards,
+    missingInfo: [],
+    riskFlags: [],
+    confidenceSelfEstimate: "high",
+    officialQuestionJapanese: match.officialQuestionJapanese,
+    officialAnswerJapanese: match.officialAnswerJapanese,
+    officialQaId: match.qaId,
+    formalQueryResults: [],
+    engine: { ...DISABLED_ENGINE },
+    engineSimulation: null,
+    formalEngine: { ...DISABLED_FORMAL_ENGINE },
+    legacyLua: { ...DISABLED_LEGACY_LUA },
+    debug: {
+      mode: "official_qa_semantic_direct",
+      route: "official_qa_semantic_direct",
+      experimental: true,
+      providerUsed: modelResult?.providerUsed || "relay",
+      modelUsed: modelResult?.modelUsed || "gpt-5.6-sol",
+      reasoningEffort: "low",
+      dryRun: false,
+      tokenUsage: modelResult?.tokenUsage || {},
+      estimatedCostCny: 0,
+      estimatedCostUsd: Number(modelResult?.estimatedCostUsd || 0),
+      budgetStatus: modelResult?.budgetStatus || null,
+      retrievalCounts: { officialQaDirectCandidates: 1 },
+      candidateQaIds: match.candidateQaIds,
+      semanticEquivalence: match.verification,
+      modelCalls: 1,
+      dataRevision,
+      timingsMs,
+      semanticStateTransition: null,
+      semanticStateTransitionDiagnostic: null,
+    },
+  };
+}
+
+export function shouldEnableOfficialQaSemanticDirect(env = globalThis.process?.env || {}) {
+  if (String(env.VERCEL_ENV || "").trim().toLowerCase() === "production") return false;
+  if (/^(?:1|true|yes|on)$/iu.test(String(env.OFFICIAL_QA_SEMANTIC_DIRECT_ENABLED || "").trim())) {
+    return true;
+  }
+  return String(env.VERCEL_ENV || "").trim().toLowerCase() === "preview";
 }
 
 function readNumber(value, fallback) {

@@ -1450,6 +1450,113 @@ function createOfficialQaApplicabilityRelayEnv(env = {}) {
   };
 }
 
+export async function callOfficialQaSemanticEquivalenceModel({
+  prompt,
+  env = globalThis.process?.env || {},
+  modelInvoker,
+  fetchImpl = globalThis.fetch,
+  now = new Date(),
+  dryRun = false,
+  signal,
+} = {}) {
+  const modelName = String(env.OFFICIAL_QA_SEMANTIC_DIRECT_MODEL || "gpt-5.6-sol").trim()
+    || "gpt-5.6-sol";
+  const reasoningEffort = "low";
+  const maxTokens = readPositiveNumber(env.OFFICIAL_QA_SEMANTIC_DIRECT_MAX_OUTPUT_TOKENS, 900);
+  const skipped = (reason) => ({
+    status: "skipped",
+    rawText: "",
+    providerUsed: "none",
+    modelUsed: "none",
+    reasoningEffort,
+    tokenUsage: {},
+    estimatedCostUsd: 0,
+    budgetStatus: null,
+    warnings: [reason],
+  });
+  if (dryRun === true || isEnabled(env.RAG_DRY_RUN)) {
+    return skipped("official_qa_semantic_direct_dry_run_skipped");
+  }
+  const relayEnv = createOfficialQaApplicabilityRelayEnv(env);
+  if (!modelInvoker && !String(relayEnv.RELAY_API_KEY || "").trim()) {
+    return skipped("relay_api_key_missing_official_qa_semantic_direct_skipped");
+  }
+  if (!modelInvoker && typeof fetchImpl !== "function") {
+    return skipped("relay_fetch_missing_official_qa_semantic_direct_skipped");
+  }
+  const timeoutMs = readPositiveNumber(env.OFFICIAL_QA_SEMANTIC_DIRECT_TIMEOUT_MS, 30000);
+  const timeout = createApplicabilityAbortScope({ signal, timeoutMs });
+  try {
+    const execution = modelInvoker
+      ? await Promise.resolve(modelInvoker({
+          prompt,
+          provider: "relay",
+          modelName,
+          maxTokens,
+          reasoningEffort,
+          task: "official_qa_semantic_equivalence",
+          signal: timeout.signal,
+        })).then((value) => ({
+          blocked: false,
+          value: { rawText: String(value?.rawText ?? value?.content ?? value ?? "") },
+          usage: value?.usage && typeof value.usage === "object" ? normalizeUsage("relay", value.usage) : {},
+          estimatedCostUsd: 0,
+          budgetStatus: null,
+          warnings: [],
+        }))
+      : await runBudgetedAuxiliaryModelCall({
+          provider: "relay",
+          stage: "final_ruling",
+          modelName,
+          prompt,
+          maxTokens,
+          env: relayEnv,
+          fetchImpl,
+          now,
+          signal: timeout.signal,
+          invoke: () => callRelay({
+            prompt,
+            env: relayEnv,
+            modelName,
+            maxTokens,
+            fetchImpl,
+            reasoningEffort,
+            signal: timeout.signal,
+          }),
+        });
+    if (execution.blocked) {
+      return {
+        ...skipped("api_daily_budget_exceeded_official_qa_semantic_direct_skipped"),
+        providerUsed: "relay",
+        modelUsed: modelName,
+        budgetStatus: execution.budgetStatus || null,
+        warnings: [...(execution.warnings || []), "api_daily_budget_exceeded_official_qa_semantic_direct_skipped"],
+      };
+    }
+    return {
+      status: "completed",
+      rawText: String(execution.value?.rawText || ""),
+      providerUsed: "relay",
+      modelUsed: modelName,
+      reasoningEffort,
+      tokenUsage: execution.usage || {},
+      estimatedCostUsd: Number(execution.estimatedCostUsd || 0),
+      budgetStatus: execution.budgetStatus || null,
+      warnings: [...new Set([...(execution.warnings || []), ...(execution.value?.warnings || [])])],
+    };
+  } catch (error) {
+    if (signal?.aborted) throw abortSignalError(signal);
+    return {
+      ...skipped(`official_qa_semantic_direct_model_failed:${safeErrorMessage(error)}`),
+      status: "failed",
+      providerUsed: "relay",
+      modelUsed: modelName,
+    };
+  } finally {
+    timeout.cleanup();
+  }
+}
+
 function createRuleQueryRelayEnv(env = {}) {
   const apiKey = String(
     env.RAG_RULE_MODEL_RELAY_API_KEY
