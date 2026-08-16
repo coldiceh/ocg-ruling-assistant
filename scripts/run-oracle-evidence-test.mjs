@@ -18,6 +18,15 @@ const MODEL = "gpt-5.6-sol";
 const DEFAULT_REASONING_EFFORT = "low";
 const MAX_COMPLETION_TOKENS = 4_096;
 
+export const ORACLE_REASONING_EFFORTS = Object.freeze([
+  "none",
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+]);
+
 // This is an isolated diagnostic fixture. It is never imported by backend/, api/
 // or src/, and it contains no expected answer or per-case reasoning recipe.
 export const ORACLE_CASE_SPECS = Object.freeze({
@@ -344,7 +353,7 @@ function validateCaseIds(caseIds) {
 
 function validateReasoningEffort(value) {
   const normalized = String(value || "").trim().toLowerCase();
-  if (!["low", "medium", "high"].includes(normalized)) {
+  if (!ORACLE_REASONING_EFFORTS.includes(normalized)) {
     throw new TypeError(`Unsupported Oracle reasoning effort: ${value}`);
   }
   return normalized;

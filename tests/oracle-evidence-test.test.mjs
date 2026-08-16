@@ -7,6 +7,7 @@ import test from "node:test";
 import {
   buildOracleRequestBody,
   ORACLE_CASE_SPECS,
+  ORACLE_REASONING_EFFORTS,
   runOracleCases,
 } from "../scripts/run-oracle-evidence-test.mjs";
 
@@ -22,9 +23,37 @@ test("Oracle workflow is isolated from the production backend and public budget"
   assert.match(workflow, /RELAY_API_KEY/u);
   assert.match(workflow, /reasoning_effort=%s/u);
   assert.match(workflow, /workflow_dispatch:[\s\S]*reasoning_effort:[\s\S]*case_ids:/u);
+  for (const effort of ORACLE_REASONING_EFFORTS) {
+    assert.match(workflow, new RegExp(`\\n\\s+- ${effort}\\n`, "u"));
+  }
   assert.match(workflow, /rsa_padding_mode:oaep/u);
   assert.doesNotMatch(workflow, /backend\/server\.mjs/u);
   assert.doesNotMatch(workflow, /DEEPSEEK_API_KEY|UPSTASH|API_CHATGPT_DAILY_BUDGET/u);
+});
+
+test("Oracle diagnostic accepts every Sol reasoning effort without changing its contract", () => {
+  for (const reasoningEffort of ORACLE_REASONING_EFFORTS) {
+    const body = buildOracleRequestBody({
+      question: "QUESTION-VISIBLE",
+      cardTexts: [{
+        id: "100",
+        name: "CARD-NAME-VISIBLE",
+        effectText: "COMPLETE-CARD-TEXT-VISIBLE",
+        sourceUrl: "https://example.test/card/100",
+      }],
+      officialEvidence: [{
+        id: "official-qa-visible",
+        title: "OFFICIAL-QA-TITLE-VISIBLE",
+        answer: "OFFICIAL-QA-ANSWER-VISIBLE",
+        sourceUrl: "https://example.test/qa/1",
+        authority: "KONAMI official card database",
+      }],
+      reasoningEffort,
+    });
+    assert.equal(body.reasoning_effort, reasoningEffort);
+    assert.equal(body.model, "gpt-5.6-sol");
+    assert.equal(body.max_completion_tokens, 4_096);
+  }
 });
 
 test("Oracle model input contains only the question, card text and verified evidence", () => {

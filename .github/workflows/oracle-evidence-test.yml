@@ -9,8 +9,12 @@ on:
         default: medium
         type: choice
         options:
+          - none
+          - low
           - medium
           - high
+          - xhigh
+          - max
       case_ids:
         description: Comma-separated Oracle case IDs
         required: true
