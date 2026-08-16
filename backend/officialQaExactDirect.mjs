@@ -60,14 +60,14 @@ export function canonicalizeOfficialQaExactQuestion(question, cards = []) {
   const mentionedCardIds = new Set();
   const ambiguousCardSurfaces = [];
 
-  for (const item of aliases.ambiguous) {
-    if (canonical.includes(item.surface)) ambiguousCardSurfaces.push(item.surface);
-  }
-  for (const item of aliases.unique) {
-    if (!canonical.includes(item.surface)) continue;
-    canonical = canonical.split(item.surface).join(`<<${item.cardId}>>`);
-    mentionedCardIds.add(item.cardId);
-  }
+  const identitiesBySurface = new Map([
+    ...aliases.unique.map((item) => [item.surface, item]),
+    ...aliases.ambiguous.map((item) => [item.surface, item]),
+  ]);
+  canonical = replaceQuotedCardIdentities(canonical, identitiesBySurface, {
+    mentionedCardIds,
+    ambiguousCardSurfaces,
+  });
 
   const normalized = normalizeOfficialQaExactText(canonical);
   return {
@@ -77,6 +77,26 @@ export function canonicalizeOfficialQaExactQuestion(question, cards = []) {
     mentionedCardIds: [...mentionedCardIds],
     ambiguousCardSurfaces,
   };
+}
+
+function replaceQuotedCardIdentities(value, identitiesBySurface, {
+  mentionedCardIds,
+  ambiguousCardSurfaces,
+} = {}) {
+  return String(value || "").replace(
+    /「([^」]+)」|"([^"]+)"|“([^”]+)”|【([^】]+)】|〔([^〕]+)〕|［([^］]+)］/gu,
+    (quoted, ...captures) => {
+      const surface = captures.slice(0, 6).find((item) => typeof item === "string")?.trim() || "";
+      const identity = identitiesBySurface.get(surface);
+      if (!identity) return quoted;
+      if (!identity.cardId) {
+        ambiguousCardSurfaces.push(surface);
+        return quoted;
+      }
+      mentionedCardIds.add(identity.cardId);
+      return quoted.replace(surface, "<<" + identity.cardId + ">>");
+    },
+  );
 }
 
 export async function retrieveExactOfficialQaDirect({
