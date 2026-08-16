@@ -47,6 +47,25 @@ for (const item of fixture.positiveCases) {
   });
 }
 
+test("an unquoted rules word that is also a card name cannot pollute exact card identity", async () => {
+  const item = fixture.positiveCases.find((entry) => entry.qaId === "10072");
+  const result = await retrieveExactOfficialQaDirect({
+    question: item.question,
+    cards: [
+      ...fixture.cards,
+      { id: "5362", name: "無効", jaName: "無効", aliases: ["無効"] },
+    ],
+    qaRecords: fixture.records,
+    qaDiscovery: fixture.discovery,
+    fetchImpl: neverFetch,
+  });
+
+  assert.equal(result.route, "official_qa_exact_direct");
+  assert.equal(result.qaId, "10072");
+  assert.equal(result.modelCalls, 0);
+  assert.deepEqual(result.mentionedCardIds.sort(), ["4758", "4956"]);
+});
+
 test("HTML, Unicode width, punctuation and whitespace variants retain the same exact identity", async () => {
   const base = fixture.positiveCases.find((item) => item.qaId === "22804").question;
   const variant = `  ${base
