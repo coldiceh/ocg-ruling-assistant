@@ -382,7 +382,7 @@ function officialQuestionSurfaces(record) {
   });
 }
 
-function officialAnswerText(record) {
+export function officialAnswerText(record) {
   return String(
     record.rawAnswer
     || record.answer
@@ -392,7 +392,7 @@ function officialAnswerText(record) {
   ).trim();
 }
 
-function completeOfficialQuestionText(record) {
+export function completeOfficialQuestionText(record) {
   const projection = projectOfficialQaQuestion(record);
   return [
     record.rawDetailedQuestion,
@@ -417,7 +417,7 @@ function officialQaSourceUrl(record, qaId) {
   return `https://www.db.yugioh-card.com/yugiohdb/faq_search.action?fid=${encodeURIComponent(qaId)}&ope=5&request_locale=ja`;
 }
 
-function materializeOfficialJapaneseText(value, cards) {
+export function materializeOfficialJapaneseText(value, cards) {
   const byId = new Map((cards || []).map((card) => [
     String(card.id || card.cardId || ""),
     String(card.jaName || card.jpName || card.name || card.cnName || card.enName || ""),

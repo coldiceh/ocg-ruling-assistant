@@ -76,7 +76,10 @@ test("uncertain classification and storage failure both fail open to the normal 
         classifications += 1;
         return { scope: "uncertain", confidence: "low" };
       },
-      answerOfficialExact: async () => null,
+      answerOfficialExact: async (options) => {
+        options.onOfficialQaExactTiming(12);
+        return null;
+      },
       activateRiskControl: async () => assert.fail("an uncertain decision must not lock"),
       answerRuling: async (options) => {
         assert.equal(options.officialQaExactAlreadyChecked, true);
@@ -89,6 +92,8 @@ test("uncertain classification and storage failure both fail open to the normal 
     assert.equal(generations, 1);
     assert.equal(classifications, scenario === "uncertain" ? 1 : 0);
     assert.ok(Number.isFinite(result.latency.durationMs));
+    assert.equal(result.answer.debug.timingsMs.officialQaExact, 12);
+    assert.ok(Number.isFinite(result.answer.debug.timingsMs.total));
   }
 });
 
@@ -103,13 +108,19 @@ test("an exact official Q&A bypasses risk classification and ruling generation",
     payload: { question: "公式データベースの質問原文" },
     env: PUBLIC_ENV,
     appendAudit: async () => null,
-    answerOfficialExact: async () => exact,
+    answerOfficialExact: async (options) => {
+      options.onOfficialQaExactTiming(7);
+      return exact;
+    },
     readRiskControl: async () => assert.fail("exact official Q&A must bypass the risk lock"),
     classifyScope: async () => assert.fail("exact official Q&A must bypass classification"),
     answerRuling: async () => assert.fail("exact official Q&A must bypass ruling generation"),
   });
 
-  assert.equal(result.answer, exact);
+  assert.equal(result.answer.shortAnswer, exact.shortAnswer);
+  assert.equal(result.answer.debug.route, exact.debug.route);
+  assert.equal(result.answer.debug.timingsMs.officialQaExact, 7);
+  assert.ok(Number.isFinite(result.answer.debug.timingsMs.total));
   assert.equal(result.latency, null);
 });
 
