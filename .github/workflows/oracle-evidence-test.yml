@@ -64,10 +64,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test -s .github/private-evaluation-recipient.pem
-          recipient_sha256="$(sha256sum .github/private-evaluation-recipient.pem | awk '{print $1}')"
-          test "$recipient_sha256" = "749295ac7c83b5c765722975c4a6985dedcfcd9dc02eeab3e01dd648ff8a4b3e"
-          openssl pkey -pubin -in .github/private-evaluation-recipient.pem -noout
+          test -s .github/oracle-evidence-preview-recipient.pem
+          recipient_sha256="$(sha256sum .github/oracle-evidence-preview-recipient.pem | awk '{print $1}')"
+          test "$recipient_sha256" = "21ceca2d8ece8babf59a712223141196482f4d5a4755b57ac757afd60eb4fd1a"
+          openssl pkey -pubin -in .github/oracle-evidence-preview-recipient.pem -noout
 
       - name: Materialize the private evaluation dataset without logging it
         shell: bash
@@ -226,7 +226,7 @@ jobs:
           chmod 600 "$key_envelope_file"
           openssl pkeyutl -encrypt \
             -pubin \
-            -inkey .github/private-evaluation-recipient.pem \
+            -inkey .github/oracle-evidence-preview-recipient.pem \
             -pkeyopt rsa_padding_mode:oaep \
             -pkeyopt rsa_oaep_md:sha256 \
             -pkeyopt rsa_mgf1_md:sha256 \
