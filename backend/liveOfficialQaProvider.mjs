@@ -330,6 +330,7 @@ function normalizeQaRecord(qaId, payload, cardNameById, selection) {
   const cardIds = uniqueNumericIds(payload?.cards);
   const rawQuestion = localized.title || localized.question;
   const rawDetailedQuestion = localized.question || localized.title;
+  const rawAnswer = localized.answer;
   const replaceCards = (value) => String(value || "").replace(/<<\s*(\d{1,10})\s*>>/gu, (_match, id) => (
     cardNameById.has(String(id)) ? cardNameById.get(String(id)) : `卡片#${id}`
   ));
@@ -350,6 +351,7 @@ function normalizeQaRecord(qaId, payload, cardNameById, selection) {
     question,
     rawQuestion,
     rawDetailedQuestion,
+    rawAnswer,
     answer,
     conclusion: answer,
     text: [question, detailedQuestion !== question ? detailedQuestion : "", answer].filter(Boolean).join("\n"),

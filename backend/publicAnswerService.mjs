@@ -17,6 +17,7 @@ import {
   recordPublicAnswerLatency,
 } from "./publicAnswerLatencyStore.mjs";
 import {
+  answerExactOfficialQaQuestionForVersion,
   answerRagRulingQuestionForVersion,
   getRulingVersionCapabilities,
 } from "./rulingVersionRegistry.mjs";
@@ -173,6 +174,7 @@ export async function answerPublicRulingQuestion({
   readRiskControl = readPublicOfftopicRiskControl,
   classifyScope = classifyPublicQueryScope,
   activateRiskControl = activatePublicOfftopicRiskControl,
+  answerOfficialExact = answerExactOfficialQaQuestionForVersion,
   answerRuling = answerRagRulingQuestionForVersion,
 } = {}) {
   const normalizedPayload = parsePublicAnswerPayload(payload);
@@ -193,6 +195,17 @@ export async function answerPublicRulingQuestion({
     env,
   }).catch(() => null);
 
+  const exactAnswer = await answerOfficialExact({
+    rulingVersion: normalizedPayload.rulingVersion,
+    question: normalizedPayload.question,
+    env,
+    signal,
+  });
+  if (exactAnswer) {
+    await auditPromise;
+    return { answer: exactAnswer, latency: null };
+  }
+
   if (shouldApplyPublicOfftopicRiskControl(env)) {
     const storage = publicOfftopicRiskControlStorageStatus(env);
     if (storage.enabled) {
@@ -200,7 +213,7 @@ export async function answerPublicRulingQuestion({
       if (activeControl?.active === true) {
         await auditPromise;
         return {
-          answer: buildPublicOfftopicRiskControlAnswer({ status: activeControl }),
+          answer: buildPublicOfftopicRiskControlAnswer({ status: activeControl, env }),
           latency: null,
         };
       }
@@ -221,6 +234,7 @@ export async function answerPublicRulingQuestion({
               answer: buildPublicOfftopicRiskControlAnswer({
                 status: activated,
                 triggered: activated.triggered === true,
+                env,
               }),
               latency: null,
             };
@@ -243,6 +257,7 @@ export async function answerPublicRulingQuestion({
       question: normalizedPayload.question,
       env: publicEnv,
       signal,
+      officialQaExactAlreadyChecked: true,
     });
     await auditPromise;
     return {
@@ -283,11 +298,20 @@ export function publicAnswerHttpError(error) {
     && String(error?.publicMessage || "").trim()
     ? String(error.publicMessage).trim()
     : "";
+  const officialQaBodyDetails = error?.code === "OFFICIAL_QA_BODY_UNAVAILABLE"
+    ? {
+        qaId: String(error?.details?.qaId || ""),
+        sourceRevision: String(error?.details?.sourceRevision || ""),
+        questionHash: String(error?.details?.questionHash || ""),
+        failureReason: String(error?.details?.failureReason || "official_qa_body_unavailable"),
+      }
+    : null;
   return {
     statusCode,
     payload: {
       error: publicMessage || (error instanceof Error ? error.message : String(error)),
       code: error?.code || "answer_failed",
+      ...(officialQaBodyDetails ? { details: officialQaBodyDetails } : {}),
     },
   };
 }

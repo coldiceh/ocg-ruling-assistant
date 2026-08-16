@@ -20,6 +20,10 @@ import {
   PUBLIC_ANSWER_REQUEST_BODY_LIMIT_BYTES,
   publicAnswerHttpError,
 } from "./publicAnswerService.mjs";
+import {
+  classifyPublicRequestChannel,
+  presentPublicAnswer,
+} from "./publicAnswerPresentation.mjs";
 import { readRequestBody as readBody } from "./requestBodyReader.mjs";
 
 const port = Number(process.env.PORT || 8787);
@@ -110,13 +114,17 @@ const server = createServer(async (request, response) => {
       const body = await readBody(request, {
         maxBytes: PUBLIC_ANSWER_REQUEST_BODY_LIMIT_BYTES,
       });
+      const requestChannel = classifyPublicRequestChannel(body);
       const payload = parsePublicAnswerPayload(body);
       const result = await answerPublicRulingQuestion({
         payload,
         env: process.env,
         signal: requestAbort.signal,
       });
-      sendJson(response, 200, result.answer);
+      sendJson(response, 200, presentPublicAnswer(result.answer, {
+        channel: requestChannel,
+        env: process.env,
+      }));
       // sendJson ends the HTTP response before this best-effort persistence.
       // Redis failure therefore cannot delay or replace a successful answer.
       await persistPublicAnswerLatency({
