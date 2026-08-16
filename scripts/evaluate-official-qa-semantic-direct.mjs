@@ -10,9 +10,10 @@ import { requestRelayChatCompletionSse } from "../backend/rulingModelProviders.m
 
 const projectRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 const fixturePath = join(projectRoot, "tests", "fixtures", "official-qa-semantic-direct-experiment.json");
-const outputPath = join(projectRoot, "artifacts", "official-qa-semantic-direct", "latest.json");
+const outputPath = resolveOutputPath(process.argv);
 const fixture = JSON.parse(await readFile(fixturePath, "utf8"));
 const live = process.argv.includes("--live");
+const negativeRepeatCount = parseNonNegativeIntegerArgument(process.argv, "--repeat-negatives", 0);
 const cardsById = new Map(fixture.cards.map((card) => [card.id, card]));
 const usageTotals = {};
 
@@ -22,8 +23,16 @@ const verifier = createOfficialQaSemanticEquivalenceVerifier({
   invoke: live ? invokeSolLow : mockVerifier,
 });
 
+const evaluationCases = [
+  ...fixture.cases.map((item) => ({ ...item, repetition: 0 })),
+  ...Array.from({ length: negativeRepeatCount }, (_, index) =>
+    fixture.cases
+      .filter((item) => !item.expectedEquivalent)
+      .map((item) => ({ ...item, repetition: index + 1 }))),
+].flat();
+
 const results = [];
-for (const item of fixture.cases) {
+for (const item of evaluationCases) {
   const startedAt = Date.now();
   const result = await runOfficialQaSemanticDirectExperiment({
     userQuestion: item.question,
@@ -33,7 +42,9 @@ for (const item of fixture.cases) {
   });
   const predictedEquivalent = result.route === "official_qa_semantic_direct";
   results.push({
-    caseId: item.id,
+    caseId: item.repetition ? `${item.id}-repeat-${item.repetition}` : item.id,
+    sourceCaseId: item.id,
+    repetition: item.repetition,
     qaId: item.qaId,
     kind: item.kind,
     expectedEquivalent: item.expectedEquivalent,
@@ -56,6 +67,8 @@ const report = {
   mode: live ? "sol_low_live" : "fixture_mock",
   model: live ? "gpt-5.6-sol" : "mock",
   reasoningEffort: live ? "low" : null,
+  baseCaseTotal: fixture.cases.length,
+  negativeRepeatCount,
   total: results.length,
   correct: results.filter((item) => item.correct).length,
   positiveAccepted: positives.filter((item) => item.predictedEquivalent).length,
@@ -136,4 +149,22 @@ function addUsage(usage) {
   for (const [key, value] of Object.entries(usage || {})) {
     if (Number.isFinite(Number(value))) usageTotals[key] = Number(usageTotals[key] || 0) + Number(value);
   }
+}
+
+function parseNonNegativeIntegerArgument(argv, name, fallback) {
+  const index = argv.indexOf(name);
+  if (index < 0) return fallback;
+  const value = Number(argv[index + 1]);
+  if (!Number.isInteger(value) || value < 0 || value > 10) {
+    throw new Error(`${name} must be an integer between 0 and 10`);
+  }
+  return value;
+}
+
+function resolveOutputPath(argv) {
+  const index = argv.indexOf("--output");
+  if (index < 0) return join(projectRoot, "artifacts", "official-qa-semantic-direct", "latest.json");
+  const value = String(argv[index + 1] || "").trim();
+  if (!value) throw new Error("--output requires a path");
+  return join(projectRoot, value);
 }

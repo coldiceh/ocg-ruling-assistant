@@ -1,0 +1,80 @@
+name: Official QA semantic direct experiment
+
+on:
+  push:
+    tags:
+      - "semantic-direct-sol-low-*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: official-qa-semantic-direct-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  live-semantic-direct:
+    if: github.actor == github.repository_owner
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout the tagged preview commit
+        uses: actions/checkout@v6
+
+      - name: Verify tag targets the trusted preview branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --depth=1 origin \
+            refs/heads/codex/pure-llm-preview-v1:refs/remotes/origin/codex/pure-llm-preview-v1
+          test "$(git rev-parse "$GITHUB_SHA^{commit}")" = \
+            "$(git rev-parse refs/remotes/origin/codex/pure-llm-preview-v1)"
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+
+      - name: Run the retrieval-only regression first
+        run: node --test --test-concurrency=1 tests/official-qa-semantic-direct-experiment.test.mjs
+
+      - name: Run 15 live cases and repeat all negative cases once
+        env:
+          RELAY_API_KEY: ${{ secrets.RELAY_API_KEY }}
+          RELAY_BASE_URL: https://api.986310.xyz/v1
+          RELAY_STREAM_TIMEOUT_MS: "60000"
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$RELAY_API_KEY"
+          node scripts/evaluate-official-qa-semantic-direct.mjs \
+            --live \
+            --repeat-negatives 1 \
+            --output artifacts/official-qa-semantic-direct/sol-low-live.json
+
+      - name: Enforce zero false positives
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module -e '
+            import { readFile } from "node:fs/promises";
+            const report = JSON.parse(await readFile(
+              "artifacts/official-qa-semantic-direct/sol-low-live.json",
+              "utf8",
+            ));
+            if (report.baseCaseTotal !== 15 || report.negativeRepeatCount !== 1) {
+              throw new Error("semantic-direct case count mismatch");
+            }
+            if (report.falsePositives !== 0) {
+              throw new Error(`semantic-direct false positives: ${report.falsePositives}`);
+            }
+          '
+
+      - name: Upload public experiment report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: official-qa-semantic-direct-sol-low-${{ github.run_id }}
+          path: artifacts/official-qa-semantic-direct/sol-low-live.json
+          if-no-files-found: error
+          retention-days: 14
