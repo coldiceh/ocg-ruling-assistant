@@ -342,6 +342,7 @@ test("pipeline exact hit bypasses card extraction, rule query, validator and fin
 
   assert.equal(modelCalls, 0);
   assert.equal(answer.debug.route, "official_qa_exact_direct");
+  assert.equal(answer.debug.modelCalls, 0);
   assert.equal(answer.debug.providerUsed, "none");
   assert.equal(answer.debug.modelUsed, "none");
   assert.equal(answer.officialQaId, "10072");

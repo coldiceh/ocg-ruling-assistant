@@ -6,6 +6,7 @@ import {
 } from "./ragEvidenceRetriever.mjs";
 import {
   callCardNameExtractionModel,
+  callOfficialQaSemanticEquivalenceModel,
   callRagModel,
   callRuleQueryExtractionModel,
   isServerOwnedPrivateEvaluationEnv,
@@ -14,6 +15,10 @@ import { buildRagRulingPromptBundle } from "./ragRulingPrompt.mjs";
 import { hasNumberedCardIdentityConflict } from "./numberedCardIdentity.mjs";
 import { runValidatedPublicRagFinal } from "./publicRagAnswerValidator.mjs";
 import { retrieveExactOfficialQaDirect } from "./officialQaExactDirect.mjs";
+import {
+  createOfficialQaSemanticEquivalenceVerifier,
+  runOfficialQaSemanticDirectExperiment,
+} from "./officialQaSemanticDirectExperiment.mjs";
 import { resolveRagDataRevision } from "./ragDataRevisionManifest.mjs";
 import {
   beginPrivateEvaluationStage,
@@ -95,6 +100,7 @@ async function answerRagRulingQuestionInternal({
   modelInvoker,
   cardModelInvoker,
   ruleModelInvoker,
+  semanticModelInvoker,
   dryRun,
   fetchImpl,
   now,
@@ -107,6 +113,7 @@ async function answerRagRulingQuestionInternal({
   officialQaExactCandidatePoolComplete = false,
   officialQaExactOnly = false,
   officialQaExactAlreadyChecked = false,
+  onOfficialQaExactTiming,
 } = {}) {
   const pipelineStartedAt = Date.now();
   const timingsMs = {};
@@ -146,6 +153,9 @@ async function answerRagRulingQuestionInternal({
       signal,
     });
     timingsMs.officialQaExact = elapsedMs(exactStartedAt);
+    if (typeof onOfficialQaExactTiming === "function") {
+      onOfficialQaExactTiming(timingsMs.officialQaExact);
+    }
     if (exactMatch.status === "matched") {
       timingsMs.total = elapsedMs(pipelineStartedAt);
       return buildOfficialQaExactDirectAnswer(exactMatch, timingsMs, dataRevision);
@@ -167,7 +177,7 @@ async function answerRagRulingQuestionInternal({
     });
     timingsMs.deterministicPreflight = elapsedMs(preflightStartedAt);
 
-    const auxiliaryExtractionStartedAt = Date.now();
+    const cardNameExtractionStartedAt = Date.now();
     cardNameModel = await callCardNameExtractionModel({
       userQuery: query,
       dataRevision,
@@ -185,13 +195,69 @@ async function answerRagRulingQuestionInternal({
         modelCardNameCandidates: cardNameModel.candidates,
       })
       : localCardResolution;
-    timingsMs.auxiliaryExtractionModels = elapsedMs(auxiliaryExtractionStartedAt);
+    timingsMs.cardNameExtraction = elapsedMs(cardNameExtractionStartedAt);
+    // Compatibility aggregate for older diagnostics. This is not a UI stage:
+    // card-name extraction and rule-query extraction are measured separately.
+    timingsMs.auxiliaryExtractionModels = timingsMs.cardNameExtraction;
     extractionStage.end();
   } catch (error) {
     extractionStage.fail(error);
     throw error;
   }
   timingsMs.dataAndQueryExtraction = elapsedMs(extractionStartedAt);
+
+  let officialQaSemanticFallbackReason = "";
+  if (shouldEnableOfficialQaSemanticDirect(env)) {
+    const semanticStartedAt = Date.now();
+    let semanticModelResult = null;
+    try {
+      const semanticResult = await runOfficialQaSemanticDirectExperiment({
+        userQuestion: query,
+        records: data.qaRecords || [],
+        resolvedCards: cardResolution.resolvedCards || [],
+        cards: data.cards || [],
+        verifier: createOfficialQaSemanticEquivalenceVerifier({
+          model: "gpt-5.6-sol",
+          reasoningEffort: "low",
+          invoke: async ({ prompt }) => {
+            semanticModelResult = await callOfficialQaSemanticEquivalenceModel({
+              prompt,
+              env,
+              modelInvoker: semanticModelInvoker,
+              fetchImpl,
+              now,
+              dryRun,
+              signal,
+            });
+            if (semanticModelResult.status !== "completed" || !semanticModelResult.rawText) {
+              throw new Error(semanticModelResult.warnings?.[0] || "semantic equivalence model unavailable");
+            }
+            return semanticModelResult.rawText;
+          },
+        }),
+      });
+      officialQaSemanticFallbackReason = String(semanticResult.reason || "");
+      if (semanticResult.status === "matched") {
+        timingsMs.officialQaSemantic = elapsedMs(semanticStartedAt);
+        timingsMs.finalModelAndValidation = timingsMs.officialQaSemantic;
+        timingsMs.finalModel = timingsMs.finalModelAndValidation;
+        timingsMs.total = elapsedMs(pipelineStartedAt);
+        return buildOfficialQaSemanticDirectAnswer({
+          match: semanticResult,
+          modelResult: semanticModelResult,
+          resolvedCards: cardResolution.resolvedCards || [],
+          timingsMs,
+          dataRevision,
+        });
+      }
+    } catch (error) {
+      // Semantic direct is an optional fail-closed shortcut. Any unexpected
+      // failure must leave the ordinary ruling path available.
+      officialQaSemanticFallbackReason = `semantic_direct_failed:${String(error?.code || error?.name || "error")}`;
+    } finally {
+      timingsMs.officialQaSemantic ??= elapsedMs(semanticStartedAt);
+    }
+  }
 
   const retrievalStartedAt = Date.now();
   const retrievalStage = beginPrivateEvaluationStage(privateEvaluationDiagnostics, "retrieval");
@@ -226,7 +292,8 @@ async function answerRagRulingQuestionInternal({
           signal,
         });
         timingsMs.ruleQueryExtraction = elapsedMs(ruleQueryStartedAt);
-        timingsMs.auxiliaryExtractionModels += timingsMs.ruleQueryExtraction;
+        timingsMs.auxiliaryExtractionModels =
+          (timingsMs.cardNameExtraction || 0) + timingsMs.ruleQueryExtraction;
         return {
           queries: ruleQueryModel.queries || [],
           candidateAssessments: ruleQueryModel.candidateAssessments || [],
@@ -242,6 +309,10 @@ async function answerRagRulingQuestionInternal({
     throw error;
   }
   timingsMs.retrieval = elapsedMs(retrievalStartedAt);
+  timingsMs.cardTextRetrieval = readTimingMs(retrievedEvidence, "cardResolution");
+  timingsMs.rulebookRetrieval = readTimingMs(retrievedEvidence, "rulebook");
+  timingsMs.officialQaRetrieval = readTimingMs(retrievedEvidence, "officialQa");
+  timingsMs.relatedEvidenceRetrieval = readTimingMs(retrievedEvidence, "relatedEvidence");
 
   const effectiveCardResolution = reconcileCardResolution(cardResolution, retrievedEvidence);
 
@@ -251,6 +322,7 @@ async function answerRagRulingQuestionInternal({
   // rule component, semantic executor, duel engine, formal engine or Lua
   // analysis may filter, strengthen or replace them before the final model.
   const evidence = retrievedEvidence;
+  const promptStartedAt = Date.now();
   const promptStage = beginPrivateEvaluationStage(privateEvaluationDiagnostics, "prompt_build");
   let promptBundle;
   let evidenceFingerprint;
@@ -274,6 +346,7 @@ async function answerRagRulingQuestionInternal({
     promptStage.fail(error);
     throw error;
   }
+  timingsMs.promptBuild = elapsedMs(promptStartedAt);
 
   const finalModelStartedAt = Date.now();
   const modelResult = await runValidatedPublicRagFinal({
@@ -303,7 +376,8 @@ async function answerRagRulingQuestionInternal({
       privateEvaluationDiagnostics,
     }),
   });
-  timingsMs.finalModel = elapsedMs(finalModelStartedAt);
+  timingsMs.finalModelAndValidation = elapsedMs(finalModelStartedAt);
+  timingsMs.finalModel = timingsMs.finalModelAndValidation;
   timingsMs.total = elapsedMs(pipelineStartedAt);
 
   const publicProviderFailure = sanitizePublicProviderFailure(modelResult.providerFailure);
@@ -340,6 +414,10 @@ async function answerRagRulingQuestionInternal({
     legacyLua: { ...DISABLED_LEGACY_LUA },
     debug: {
       mode: "rag_baseline",
+      route: "ordinary_rag",
+      ...(officialQaSemanticFallbackReason
+        ? { officialQaSemanticFallbackReason }
+        : {}),
       engineStatus: "disabled",
       engineTraceSha256: null,
       retrievalCounts: {
@@ -559,6 +637,7 @@ function buildOfficialQaExactDirectAnswer(match, timingsMs, dataRevision) {
     debug: {
       mode: "official_qa_exact_direct",
       route: "official_qa_exact_direct",
+      modelCalls: 0,
       providerUsed: "none",
       modelUsed: "none",
       dryRun: true,
@@ -578,6 +657,69 @@ function buildOfficialQaExactDirectAnswer(match, timingsMs, dataRevision) {
   };
 }
 
+function buildOfficialQaSemanticDirectAnswer({
+  match,
+  modelResult,
+  resolvedCards,
+  timingsMs,
+  dataRevision,
+}) {
+  return {
+    mode: "rag_baseline",
+    answerLevel: "official_confirmed",
+    shortAnswer: match.officialAnswerJapanese,
+    reasoning: ["以下内容为当前官方数据库的完整日文回答；模型仅验证问题语义等价，未读取或改写官方答案。"],
+    usedEvidence: [{
+      id: match.recordId,
+      type: "official_qa",
+      title: `官方 Q&A ${match.qaId}`,
+      sourceUrl: match.sourceUrl,
+    }],
+    resolvedCards,
+    missingInfo: [],
+    riskFlags: [],
+    confidenceSelfEstimate: "high",
+    officialQuestionJapanese: match.officialQuestionJapanese,
+    officialAnswerJapanese: match.officialAnswerJapanese,
+    officialQaId: match.qaId,
+    formalQueryResults: [],
+    engine: { ...DISABLED_ENGINE },
+    engineSimulation: null,
+    formalEngine: { ...DISABLED_FORMAL_ENGINE },
+    legacyLua: { ...DISABLED_LEGACY_LUA },
+    debug: {
+      mode: "official_qa_semantic_direct",
+      route: "official_qa_semantic_direct",
+      experimental: true,
+      providerUsed: modelResult?.providerUsed || "relay",
+      modelUsed: modelResult?.modelUsed || "gpt-5.6-sol",
+      reasoningEffort: "low",
+      dryRun: false,
+      tokenUsage: modelResult?.tokenUsage || {},
+      estimatedCostCny: 0,
+      estimatedCostUsd: Number(modelResult?.estimatedCostUsd || 0),
+      budgetStatus: modelResult?.budgetStatus || null,
+      retrievalCounts: { officialQaDirectCandidates: 1 },
+      candidateQaIds: match.candidateQaIds,
+      semanticEquivalence: match.verification,
+      modelCalls: 1,
+      dataRevision,
+      timingsMs,
+      semanticStateTransition: null,
+      semanticStateTransitionDiagnostic: null,
+    },
+  };
+}
+
+export function shouldEnableOfficialQaSemanticDirect(env = globalThis.process?.env || {}) {
+  const explicit = String(env.OFFICIAL_QA_SEMANTIC_DIRECT_ENABLED || "").trim();
+  if (/^(?:0|false|no|off)$/iu.test(explicit)) return false;
+  if (/^(?:1|true|yes|on)$/iu.test(explicit)) return true;
+  return ["preview", "production"].includes(
+    String(env.VERCEL_ENV || "").trim().toLowerCase(),
+  );
+}
+
 function readNumber(value, fallback) {
   const number = Number(value);
   return Number.isFinite(number) && number > 0 ? number : fallback;
@@ -585,6 +727,11 @@ function readNumber(value, fallback) {
 
 function elapsedMs(startedAt) {
   return Math.max(0, Date.now() - Number(startedAt || Date.now()));
+}
+
+function readTimingMs(evidence, key) {
+  const value = Number(evidence?.debug?.timingsMs?.[key]);
+  return Number.isFinite(value) && value >= 0 ? value : 0;
 }
 
 function dedupeCards(cards) {

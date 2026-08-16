@@ -1,0 +1,90 @@
+{
+  "schemaVersion": 1,
+  "description": "Isolated evaluation data only; Chinese queries are test cases, not a retrieval or translation index.",
+  "cards": [
+    { "id": "12950", "name": "灰流丽", "jaName": "灰流うらら", "aliases": ["灰流丽", "灰流うらら"] },
+    { "id": "13354", "name": "轮回的珀耳修斯", "jaName": "輪廻のパーシアス", "aliases": ["轮回的珀耳修斯", "轮回的帕西亚斯", "輪廻のパーシアス"] },
+    { "id": "12517", "name": "方界兽 刀刃加鲁迪亚", "jaName": "方界獣ブレード・ガルーディア", "aliases": ["方界兽 刀刃加鲁迪亚", "方界獣ブレード・ガルーディア"] },
+    { "id": "6279", "name": "凤翼的爆风", "jaName": "鳳翼の爆風", "aliases": ["凤翼的爆风", "鳳翼の爆風"] },
+    { "id": "12528", "name": "方界合神", "jaName": "方界合神", "aliases": ["方界合神"] },
+    { "id": "4956", "name": "停战协定", "jaName": "停戦協定", "aliases": ["停战协定", "停戦協定"] },
+    { "id": "4758", "name": "人造人-念力震慑者", "jaName": "人造人間－サイコ・ショッカー", "aliases": ["人造人-念力震慑者", "人造人间-精神震撼者", "人造人間－サイコ・ショッカー"] },
+    { "id": "13469", "name": "究极变异态·昆虫女王", "jaName": "究極変異態・インセクト女王", "aliases": ["究极变异态·昆虫女王", "究極変異態・インセクト女王"] },
+    { "id": "11257", "name": "神影依·米德拉什", "jaName": "エルシャドール・ミドラーシュ", "aliases": ["神影依·米德拉什", "神影依 米德拉什", "エルシャドール・ミドラーシュ"] },
+    { "id": "10006", "name": "侵略魔人·俄菲翁", "jaName": "ヴェルズ・オピオン", "aliases": ["侵略魔人·俄菲翁", "侵略魔人 俄菲翁", "ヴェルズ・オピオン"] },
+    { "id": "14741", "name": "原始生命态 尼比鲁", "jaName": "原始生命態ニビル", "aliases": ["原始生命态 尼比鲁", "原始生命态尼比鲁", "原始生命態ニビル"] }
+  ],
+  "records": [
+    {
+      "id": "ygoresources-qa-12336",
+      "sourceId": "12336",
+      "recordType": "qa",
+      "status": "current",
+      "cardIds": ["12950", "13354"],
+      "rawDetailedQuestion": "手札の「灰流うらら」を捨てて、効果を発動しました。\n\nその発動にチェーンして、自分が「輪廻のパーシアス」の『①：モンスターの効果・魔法・罠カードが発動した時、手札のカウンター罠カード１枚を相手に見せ、手札を１枚捨て、１０００LPを払って発動できる。その発動を無効にし、そのカードを持ち主のデッキに戻す。その後、デッキ・EXデッキから「パーシアス」モンスター１体を選んで特殊召喚できる』効果を発動した場合、処理はどうなりますか？",
+      "answer": "「灰流うらら」の効果の発動は無効になりますが、『そのカードを持ち主のデッキに戻す』処理は行われません。\n\n「灰流うらら」の効果は、手札で発動できるモンスター効果ですが、効果を発動した「灰流うらら」自身はコストとして手札から捨てられており、処理時には、発動したところである手札には存在しなくなっています。\n\nこの場合、『その発動を無効にし』の処理は適用されますが、『そのカードを持ち主のデッキに戻す』処理は適用されず、『その後、デッキ・EXデッキから「パーシアス」モンスター１体を選んで特殊召喚できる』処理も適用されません。",
+      "sourceUrl": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?fid=12336&ope=5&request_locale=ja"
+    },
+    {
+      "id": "ygoresources-qa-12403",
+      "sourceId": "12403",
+      "recordType": "qa",
+      "status": "current",
+      "cardIds": ["6279", "12517", "12528"],
+      "rawDetailedQuestion": "自分のモンスターゾーンに表側表示で存在する「方界獣ブレード・ガルーディア」が、相手の発動した「鳳翼の爆風」の効果によって、自分のデッキに戻った場合、「方界合神」の『②：表側表示の「方界」モンスターが、戦闘で破壊された場合、またはフィールドから離れた場合、墓地のこのカードを除外して発動できる。手札・デッキからレベル４以下の「方界」モンスター１体を召喚条件を無視して特殊召喚する。この効果で特殊召喚されたモンスターは、このターン戦闘・効果では破壊されない』効果を発動する事はできますか？",
+      "answer": "自分のモンスターゾーンに表側表示で存在する「方界」と名のついたモンスターが「鳳翼の爆風」の効果で自分のデッキに戻った場合でも、墓地の「方界合神」の効果を発動する事はできます。\n\nその場合、特殊召喚するモンスターとして、そのデッキに戻った「方界」と名のついたモンスターを選ぶ事もできます。",
+      "sourceUrl": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?fid=12403&ope=5&request_locale=ja"
+    },
+    {
+      "id": "ygoresources-qa-10072",
+      "sourceId": "10072",
+      "recordType": "qa",
+      "status": "current",
+      "cardIds": ["4758", "4956"],
+      "rawDetailedQuestion": "「停戦協定」の『フィールド上に裏側守備表示で存在するモンスターを全て表側守備表示にする』効果処理によって裏側守備表示の「人造人間－サイコ・ショッカー」が表側表示になった場合、「停戦協定」の『フィールド上の効果モンスターの数×５００ポイントダメージを相手ライフに与える』効果が適用される事になりますが、「人造人間－サイコ・ショッカー」の『①：このカードがモンスターゾーンに存在する限り、お互いにフィールドの罠カードの効果を発動できず、フィールドの罠カードの効果は無効化される』効果によって無効になりますか？",
+      "answer": "質問の状況のように、既に効果処理が行われている「停戦協定」の効果を、その「停戦協定」の効果によって表側表示になった「人造人間－サイコ・ショッカー」の効果で無効にする事はできません。\n\n「人造人間－サイコ・ショッカー」の効果は「停戦協定」の効果処理の完了後に適用される事になります。",
+      "sourceUrl": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?fid=10072&ope=5&request_locale=ja"
+    },
+    {
+      "id": "ygoresources-qa-21547",
+      "sourceId": "21547",
+      "recordType": "qa",
+      "status": "current",
+      "cardIds": ["13469"],
+      "rawDetailedQuestion": "相手のモンスターゾーンに４体の「羊トークン」が存在し、自分のモンスターゾーンには「究極変異態・インセクト女王」と、３体の「インセクトモンスタートークン」が存在しています。\n\nこの状況で、「究極変異態・インセクト女王」が１度目の攻撃を行ったダメージステップ終了時に、『②：このカードが攻撃したダメージステップ終了時、自分フィールドのモンスター１体をリリースして発動できる。このカードは相手モンスターに続けて攻撃できる』モンスター効果を発動し、２度目の攻撃を行いました。\n\nこの場合、その２度目の攻撃を行ったダメージステップ終了時に、再び『②：このカードが攻撃したダメージステップ終了時、自分フィールドのモンスター１体をリリースして発動できる。このカードは相手モンスターに続けて攻撃できる』モンスター効果を発動する事はできますか？",
+      "answer": "質問の状況のように、「究極変異態・インセクト女王」が自身のモンスター効果によって続けての攻撃を行ったダメージステップ終了時でも、その効果を発動するためのコストとなる他のモンスターが自分のモンスターゾーンに存在し、攻撃対象となるモンスターが相手のモンスターゾーンに存在しているのであれば、再び、『このカードは相手モンスターに続けて攻撃できる』モンスター効果を発動する事ができます。",
+      "sourceUrl": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?fid=21547&ope=5&request_locale=ja"
+    },
+    {
+      "id": "ygoresources-qa-22804",
+      "sourceId": "22804",
+      "recordType": "qa",
+      "status": "current",
+      "cardIds": ["10006", "11257", "14741"],
+      "rawDetailedQuestion": "以下の効果が適用されている状況で、「原始生命態ニビル」の『①：相手が５体以上のモンスターを召喚・特殊召喚した自分・相手ターンのメインフェイズに発動できる。自分・相手フィールドの表側表示モンスターを可能な限りリリースし、このカードを手札から特殊召喚する。その後、相手フィールドに「原始生命態トークン」１体を特殊召喚する』効果を発動できますか？\n\n（A）「エルシャドール・ミドラーシュ」の『②：このカードがモンスターゾーンに存在する限り、その間はお互いに１ターンに１度しかモンスターを特殊召喚できない』効果\n\n（B）「ヴェルズ・オピオン」の『①：X素材を持っているこのカードがモンスターゾーンに存在する限り、お互いにレベル５以上のモンスターを特殊召喚できない』効果",
+      "answer": "どちらの場合も発動できません。\n（「原始生命態ニビル」の効果は、レベル５以上のモンスターを特殊召喚する効果であり、「原始生命態ニビル」自身の特殊召喚と、「原始生命態トークン」の特殊召喚の２回の特殊召喚を行う効果であるためです。）\n\nなお、「原始生命態ニビル」の効果が発動した同一チェーン上で他の効果が発動したことで、「エルシャドール・ミドラーシュ」や「ヴェルズ・オピオン」を特殊召喚し、それぞれの永続効果が適用された場合、それらはリリースされますので、その後の特殊召喚処理はテキスト通りに行われます。",
+      "sourceUrl": "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?fid=22804&ope=5&request_locale=ja"
+    }
+  ],
+  "cases": [
+    { "id": "12336-faithful", "qaId": "12336", "kind": "faithful_translation", "expectedEquivalent": true, "resolvedCardIds": ["12950", "13354"], "question": "将手牌中的灰流丽丢弃并发动效果。连锁该发动，我发动轮回的珀耳修斯①效果，使其发动无效并将那张卡返回持有者卡组，之后可从卡组或额外卡组特殊召唤珀耳修斯怪兽。这个连锁如何处理？" },
+    { "id": "12336-colloquial", "qaId": "12336", "kind": "colloquial", "expectedEquivalent": true, "resolvedCardIds": ["12950", "13354"], "question": "手里的灰流丽丢掉发效果，我连锁轮回的帕西亚斯①。灰流会被无效并洗回去吗，后面还能不能拉帕西亚斯？" },
+    { "id": "12336-negative-timing", "qaId": "12336", "kind": "negative_timing", "expectedEquivalent": false, "resolvedCardIds": ["12950", "13354"], "question": "灰流丽的效果已经处理完毕后，我再发动轮回的珀耳修斯①，灰流丽会回到卡组并特殊召唤珀耳修斯怪兽吗？" },
+
+    { "id": "12403-faithful", "qaId": "12403", "kind": "faithful_translation", "expectedEquivalent": true, "resolvedCardIds": ["6279", "12517", "12528"], "question": "自己怪兽区域表侧的方界兽 刀刃加鲁迪亚被对方凤翼的爆风效果返回自己卡组时，可以发动墓地中方界合神的②效果吗？" },
+    { "id": "12403-colloquial", "qaId": "12403", "kind": "colloquial", "expectedEquivalent": true, "resolvedCardIds": ["6279", "12517", "12528"], "question": "对面用凤翼把我场上的刀刃加鲁迪亚吹回卡组，墓地的方界合神②还能开吗？" },
+    { "id": "12403-negative-zone", "qaId": "12403", "kind": "negative_zone", "expectedEquivalent": false, "resolvedCardIds": ["6279", "12517", "12528"], "question": "墓地里的方界兽 刀刃加鲁迪亚被凤翼的爆风返回卡组时，可以发动墓地中方界合神的②效果吗？" },
+
+    { "id": "10072-faithful", "qaId": "10072", "kind": "faithful_translation", "expectedEquivalent": true, "resolvedCardIds": ["4758", "4956"], "question": "停战协定处理时把里侧守备的人造人-念力震慑者变成表侧，随后要造成场上效果怪兽数量×500伤害。该伤害会被此时表侧的人造人①无效吗？" },
+    { "id": "10072-colloquial", "qaId": "10072", "kind": "colloquial", "expectedEquivalent": true, "resolvedCardIds": ["4758", "4956"], "question": "停战协定翻开盖着的人造人后，停战后半段的烧血会不会被刚翻开的人造人无效？" },
+    { "id": "10072-negative-player", "qaId": "10072", "kind": "negative_player", "expectedEquivalent": false, "resolvedCardIds": ["4758", "4956"], "question": "停战协定翻开我方里侧的人造人后，停战协定将按效果怪兽数量×500给我方造成伤害，这个伤害会被人造人①无效吗？" },
+
+    { "id": "21547-faithful", "qaId": "21547", "kind": "faithful_translation", "expectedEquivalent": true, "resolvedCardIds": ["13469"], "question": "对方场上有4只羊衍生物，自己场上有究极变异态·昆虫女王和3只昆虫怪兽衍生物。女王第一次攻击后的伤害步骤结束时发动②并解放1只怪兽，进行了第二次攻击。第二次攻击的伤害步骤结束时还能再次发动②吗？" },
+    { "id": "21547-colloquial", "qaId": "21547", "kind": "colloquial", "expectedEquivalent": true, "expectedCandidate": false, "resolvedCardIds": ["13469"], "question": "对面4只羊，我这边昆虫女王加3只token。女王打完开②解放一只再打，第二次打完还能继续开②吗？" },
+    { "id": "21547-negative-effect-number", "qaId": "21547", "kind": "negative_effect_number", "expectedEquivalent": false, "resolvedCardIds": ["13469"], "question": "究极变异态·昆虫女王用②进行了第二次攻击后，第二次攻击的伤害步骤结束时能再次发动③效果特殊召唤昆虫怪兽衍生物吗？" },
+
+    { "id": "22804-faithful", "qaId": "22804", "kind": "faithful_translation", "expectedEquivalent": true, "resolvedCardIds": ["10006", "11257", "14741"], "question": "神影依·米德拉什限制双方一回合只能特殊召唤一次，或持有X素材的侵略魔人·俄菲翁限制双方不能特殊召唤5星以上怪兽时，可以发动原始生命态 尼比鲁①吗？" },
+    { "id": "22804-colloquial", "qaId": "22804", "kind": "colloquial", "expectedEquivalent": true, "resolvedCardIds": ["10006", "11257", "14741"], "question": "场上有米德拉什，或者有素材的俄菲翁时，手里的尼比鲁①还能发动吗？" },
+    { "id": "22804-negative-operation", "qaId": "22804", "kind": "negative_asked_operation", "expectedEquivalent": false, "expectedCandidate": false, "resolvedCardIds": ["10006", "11257", "14741"], "question": "原始生命态 尼比鲁①已经发动，同一连锁上又特殊召唤了神影依·米德拉什。处理时能否解放米德拉什并继续特殊召唤尼比鲁和衍生物？" }
+  ]
+}
