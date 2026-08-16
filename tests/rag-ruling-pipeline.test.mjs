@@ -149,6 +149,28 @@ test("rag_pipeline_returns_answer_with_mock_model", async () => {
   assert.equal(answer.answerLevel, "rule_analysis");
   assert.match(answer.shortAnswer, /未确认分析/u);
   assert.equal(answer.debug.dryRun, false);
+  const timings = answer.debug.timingsMs;
+  for (const key of [
+    "dataLoad",
+    "officialQaExact",
+    "deterministicPreflight",
+    "cardNameExtraction",
+    "ruleQueryExtraction",
+    "cardTextRetrieval",
+    "officialQaRetrieval",
+    "rulebookRetrieval",
+    "relatedEvidenceRetrieval",
+    "promptBuild",
+    "finalModelAndValidation",
+    "total",
+  ]) {
+    assert.ok(Number.isFinite(timings[key]), `missing measured timing: ${key}`);
+    assert.ok(timings[key] >= 0, `invalid measured timing: ${key}`);
+  }
+  assert.equal(
+    timings.auxiliaryExtractionModels,
+    timings.cardNameExtraction + timings.ruleQueryExtraction,
+  );
 });
 
 test("final reasoner receives the Albaz evidence without a local answer override", async () => {
