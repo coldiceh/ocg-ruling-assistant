@@ -137,6 +137,7 @@ test("Vercel deployment pins the Relay deadline ladder below the function limit"
     const included = config.functions[route].includeFiles;
     const excluded = config.functions[route].excludeFiles;
     assert.match(included, /data\/rag-data-revision-manifest\.json/u);
+    assert.match(included, /data\/qa-discovery-index\.json/u);
     assert.match(included, /data\/rag-runtime-v1\/\*\*/u);
     assert.doesNotMatch(included, /data\/(?:cards|rulings|qa-index|evidence-index|ocg-rule-corpus|official-responses)\.json/u);
     for (const rawSource of [

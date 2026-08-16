@@ -61,3 +61,23 @@ export async function answerRagRulingQuestionForVersion({
     versionWarnings: [...resolved.versionWarnings],
   };
 }
+
+export async function answerExactOfficialQaQuestionForVersion({
+  rulingVersion,
+  ...options
+} = {}) {
+  const resolved = await resolveRulingVersionPipeline(rulingVersion);
+  const answer = await resolved.answerRagRulingQuestion({
+    ...options,
+    officialQaExactOnly: true,
+  });
+  if (!answer) return null;
+  return {
+    ...answer,
+    requestedRulingVersion: resolved.requestedRulingVersion,
+    effectiveRulingVersion: resolved.effectiveRulingVersion,
+    rulingVersion: resolved.effectiveRulingVersion,
+    legacyCompatibility: resolved.legacyCompatibility,
+    versionWarnings: [...resolved.versionWarnings],
+  };
+}

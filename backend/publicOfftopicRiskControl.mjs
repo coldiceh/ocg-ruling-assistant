@@ -1,4 +1,5 @@
 import { randomInt as cryptoRandomInt } from "node:crypto";
+import { formatAuthorContactSentence } from "./publicAnswerPresentation.mjs";
 
 const DEFAULT_REDIS_KEY_PREFIX = "rag-public-offtopic-risk-control:v1";
 const DEFAULT_MIN_DURATION_MINUTES = 5;
@@ -144,11 +145,13 @@ export const unlockPublicOfftopicRiskControl = clearPublicOfftopicRiskControl;
 export function buildPublicOfftopicRiskControlAnswer({
   status = {},
   triggered = status.triggered === true,
+  env = globalThis.process?.env || {},
 } = {}) {
   const minutes = Math.max(1, boundedInteger(status.remainingMinutes, 1, 1, 60));
+  const contact = formatAuthorContactSentence("如需提前解除，请联系作者", env);
   const shortAnswer = triggered
-    ? `检测到非游戏王规则裁定相关问题，系统自动关闭 ${minutes} 分钟。如需提前解除，请联系作者b站「おmaginai」。`
-    : `因为有人询问了非游戏王规则裁定相关问题，风控已启动；请在 ${minutes} 分钟后再提交问题。如需提前解除，请联系作者b站「おmaginai」。`;
+    ? `检测到非游戏王规则／裁定相关问题，系统自动关闭 ${minutes} 分钟。${contact}`
+    : `因有人提交非游戏王规则／裁定相关问题，系统暂时停止回答，预计还需 ${minutes} 分钟。${contact}`;
   return {
     answerLevel: "risk_control",
     shortAnswer,

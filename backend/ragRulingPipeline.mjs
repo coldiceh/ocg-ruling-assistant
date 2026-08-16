@@ -13,6 +13,7 @@ import {
 import { buildRagRulingPromptBundle } from "./ragRulingPrompt.mjs";
 import { hasNumberedCardIdentityConflict } from "./numberedCardIdentity.mjs";
 import { runValidatedPublicRagFinal } from "./publicRagAnswerValidator.mjs";
+import { retrieveExactOfficialQaDirect } from "./officialQaExactDirect.mjs";
 import { resolveRagDataRevision } from "./ragDataRevisionManifest.mjs";
 import {
   beginPrivateEvaluationStage,
@@ -102,6 +103,10 @@ async function answerRagRulingQuestionInternal({
   reasoningEffort,
   signal,
   privateEvaluationDiagnostics,
+  officialQaDiscovery,
+  officialQaExactCandidatePoolComplete = false,
+  officialQaExactOnly = false,
+  officialQaExactAlreadyChecked = false,
 } = {}) {
   const pipelineStartedAt = Date.now();
   const timingsMs = {};
@@ -126,6 +131,27 @@ async function answerRagRulingQuestionInternal({
     throw error;
   }
   timingsMs.dataLoad = elapsedMs(dataStartedAt);
+
+  if (!officialQaExactAlreadyChecked) {
+    const exactStartedAt = Date.now();
+    const exactMatch = await retrieveExactOfficialQaDirect({
+      question: query,
+      cards: data.cards || [],
+      qaRecords: data.qaRecords || [],
+      qaDiscovery: officialQaDiscovery,
+      dataDir,
+      candidatePoolComplete: officialQaExactCandidatePoolComplete,
+      fetchImpl,
+      env,
+      signal,
+    });
+    timingsMs.officialQaExact = elapsedMs(exactStartedAt);
+    if (exactMatch.status === "matched") {
+      timingsMs.total = elapsedMs(pipelineStartedAt);
+      return buildOfficialQaExactDirectAnswer(exactMatch, timingsMs, dataRevision);
+    }
+  }
+  if (officialQaExactOnly) return null;
 
   const extractionStartedAt = Date.now();
   const extractionStage = beginPrivateEvaluationStage(privateEvaluationDiagnostics, "extraction");
@@ -500,6 +526,52 @@ function buildEmptyQuestionAnswer() {
       estimatedCostCny: 0,
       estimatedCostUsd: 0,
       budgetStatus: null,
+      semanticStateTransition: null,
+      semanticStateTransitionDiagnostic: null,
+    },
+  };
+}
+
+function buildOfficialQaExactDirectAnswer(match, timingsMs, dataRevision) {
+  return {
+    mode: "rag_baseline",
+    answerLevel: "official_confirmed",
+    shortAnswer: match.officialAnswerJapanese,
+    reasoning: ["以下内容为当前官方数据库的完整日文回答，未经裁定模型改写。"],
+    usedEvidence: [{
+      id: match.recordId,
+      type: "official_qa",
+      title: match.title,
+      sourceUrl: match.sourceUrl,
+    }],
+    resolvedCards: match.resolvedCards || [],
+    missingInfo: [],
+    riskFlags: [],
+    confidenceSelfEstimate: "high",
+    officialQuestionJapanese: match.officialQuestionJapanese,
+    officialAnswerJapanese: match.officialAnswerJapanese,
+    officialQaId: match.qaId,
+    formalQueryResults: [],
+    engine: { ...DISABLED_ENGINE },
+    engineSimulation: null,
+    formalEngine: { ...DISABLED_FORMAL_ENGINE },
+    legacyLua: { ...DISABLED_LEGACY_LUA },
+    debug: {
+      mode: "official_qa_exact_direct",
+      route: "official_qa_exact_direct",
+      providerUsed: "none",
+      modelUsed: "none",
+      dryRun: true,
+      tokenUsage: {},
+      estimatedCostCny: 0,
+      estimatedCostUsd: 0,
+      budgetStatus: null,
+      retrievalCounts: { officialQaDirectCandidates: 1 },
+      candidatePoolComplete: match.candidatePoolComplete,
+      candidateQaIds: match.candidateQaIds,
+      queryHash: match.queryHash,
+      dataRevision,
+      timingsMs,
       semanticStateTransition: null,
       semanticStateTransitionDiagnostic: null,
     },

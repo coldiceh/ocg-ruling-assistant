@@ -24,13 +24,14 @@ test("an existing off-topic lock is returned before classification or ruling gen
       remainingMinutes: 9,
     }),
     classifyScope: async () => assert.fail("an active lock must skip classification"),
+    answerOfficialExact: async () => null,
     answerRuling: async () => assert.fail("an active lock must skip the ruling model"),
   });
 
   assert.deepEqual(calls, [["audit", "这张卡的效果能发动吗？"]]);
   assert.equal(result.latency, null);
   assert.equal(result.answer.answerLevel, "risk_control");
-  assert.match(result.answer.shortAnswer, /9 分钟后再提交问题/u);
+  assert.match(result.answer.shortAnswer, /预计还需 9 分钟/u);
 });
 
 test("one high-confidence out-of-scope request activates the global lock", async () => {
@@ -41,6 +42,7 @@ test("one high-confidence out-of-scope request activates the global lock", async
     appendAudit: async () => calls.push("audit"),
     readRiskControl: async () => ({ ok: true, active: false }),
     classifyScope: async () => ({ scope: "out_of_scope", confidence: "high" }),
+    answerOfficialExact: async () => null,
     activateRiskControl: async () => {
       calls.push("activate");
       return {
@@ -74,8 +76,10 @@ test("uncertain classification and storage failure both fail open to the normal 
         classifications += 1;
         return { scope: "uncertain", confidence: "low" };
       },
+      answerOfficialExact: async () => null,
       activateRiskControl: async () => assert.fail("an uncertain decision must not lock"),
-      answerRuling: async () => {
+      answerRuling: async (options) => {
+        assert.equal(options.officialQaExactAlreadyChecked, true);
         generations += 1;
         return { answerLevel: "rule_analysis", shortAnswer: "正常回答" };
       },
@@ -86,6 +90,27 @@ test("uncertain classification and storage failure both fail open to the normal 
     assert.equal(classifications, scenario === "uncertain" ? 1 : 0);
     assert.ok(Number.isFinite(result.latency.durationMs));
   }
+});
+
+test("an exact official Q&A bypasses risk classification and ruling generation", async () => {
+  const exact = {
+    mode: "rag_baseline",
+    answerLevel: "official_confirmed",
+    shortAnswer: "公式回答",
+    debug: { route: "official_qa_exact_direct", providerUsed: "none", modelUsed: "none" },
+  };
+  const result = await answerPublicRulingQuestion({
+    payload: { question: "公式データベースの質問原文" },
+    env: PUBLIC_ENV,
+    appendAudit: async () => null,
+    answerOfficialExact: async () => exact,
+    readRiskControl: async () => assert.fail("exact official Q&A must bypass the risk lock"),
+    classifyScope: async () => assert.fail("exact official Q&A must bypass classification"),
+    answerRuling: async () => assert.fail("exact official Q&A must bypass ruling generation"),
+  });
+
+  assert.equal(result.answer, exact);
+  assert.equal(result.latency, null);
 });
 
 test("dry-run and server-owned private evaluation paths bypass public risk control", () => {

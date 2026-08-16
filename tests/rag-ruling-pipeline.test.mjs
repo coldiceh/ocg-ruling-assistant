@@ -5070,7 +5070,7 @@ test("owner cap stops only today's public ChatGPT bucket at the ten-dollar hard 
   assert.equal(blocked.answer.answerLevel, "budget_limited");
   assert.equal(
     blocked.answer.shortAnswer,
-    "今日公开裁定额度已达到每日 10 美元上限，未调用模型。如需协助重置，请联系作者b站「おmaginai」。",
+    "今日公开裁定额度已达到每日 10 美元上限，未调用模型。如需协助重置，请联系作者：B站 おmaginai，或 QQ 1195362230。",
   );
 });
 

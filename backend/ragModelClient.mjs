@@ -7,6 +7,7 @@ import {
 } from "./publicRulingModelConfig.mjs";
 import { requestRelayChatCompletionSse } from "./rulingModelProviders.mjs";
 import { estimateOpenAIModelCost } from "./modelPricing.mjs";
+import { formatAuthorContactSentence } from "./publicAnswerPresentation.mjs";
 import {
   classifyPrivateEvaluationFailure,
   emitPrivateEvaluationDiagnostic,
@@ -231,7 +232,7 @@ export async function callRagModel({
         "api_daily_budget_exceeded",
         budget.status?.privateEvaluation
           ? privateEvaluationBudgetExhaustedMessage(budget.status?.bucket)
-          : publicBudgetExhaustedMessage(budget.status?.bucket),
+          : publicBudgetExhaustedMessage(budget.status?.bucket, env),
         "budget_limited",
       ),
       rawText: "",
@@ -2834,8 +2835,8 @@ function safeFallbackAnswer(reason, shortAnswer = "当前资料不足，无法�
   });
 }
 
-function publicBudgetExhaustedMessage(bucket) {
-  return "今日公开裁定额度已达到每日 10 美元上限，未调用模型。如需协助重置，请联系作者b站「おmaginai」。";
+function publicBudgetExhaustedMessage(bucket, env) {
+  return `今日公开裁定额度已达到每日 10 美元上限，未调用模型。${formatAuthorContactSentence("如需协助重置，请联系作者", env)}`;
 }
 
 function privateEvaluationBudgetExhaustedMessage(bucket) {

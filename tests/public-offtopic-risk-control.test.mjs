@@ -170,11 +170,11 @@ test("public answer helper distinguishes the triggering request from later block
 
   assert.equal(
     triggering.shortAnswer,
-    "检测到非游戏王规则裁定相关问题，系统自动关闭 12 分钟。如需提前解除，请联系作者b站「おmaginai」。",
+    "检测到非游戏王规则／裁定相关问题，系统自动关闭 12 分钟。如需提前解除，请联系作者：B站 おmaginai，或 QQ 1195362230。",
   );
   assert.equal(
     blocked.shortAnswer,
-    "因为有人询问了非游戏王规则裁定相关问题，风控已启动；请在 4 分钟后再提交问题。如需提前解除，请联系作者b站「おmaginai」。",
+    "因有人提交非游戏王规则／裁定相关问题，系统暂时停止回答，预计还需 4 分钟。如需提前解除，请联系作者：B站 おmaginai，或 QQ 1195362230。",
   );
   assert.doesNotMatch(triggering.shortAnswer, /\*\*/u);
   assert.doesNotMatch(blocked.shortAnswer, /\*\*/u);

@@ -7,6 +7,10 @@ import {
   persistPublicAnswerLatency,
   publicAnswerHttpError,
 } from "../backend/publicAnswerService.mjs";
+import {
+  classifyPublicRequestChannel,
+  presentPublicAnswer,
+} from "../backend/publicAnswerPresentation.mjs";
 
 const allowedOrigin = process.env.ALLOWED_ORIGIN || "*";
 
@@ -30,6 +34,7 @@ export default async function handler(request, response) {
 
   const requestAbort = createPublicAnswerAbortContext(request, response);
   try {
+    const requestChannel = classifyPublicRequestChannel(request.body);
     const payload = parsePublicAnswerPayload(request.body, {
       declaredBytes: declaredRequestBodyBytes(request),
     });
@@ -38,7 +43,10 @@ export default async function handler(request, response) {
       env: process.env,
       signal: requestAbort.signal,
     });
-    response.status(200).json(result.answer);
+    response.status(200).json(presentPublicAnswer(result.answer, {
+      channel: requestChannel,
+      env: process.env,
+    }));
     // The answer is already on the wire. This best-effort write cannot replace
     // or delay the successful response observed by the client.
     await persistPublicAnswerLatency({
