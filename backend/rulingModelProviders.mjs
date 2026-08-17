@@ -280,7 +280,9 @@ export class CompatibleEvidencePreparationProvider {
       signal,
     });
     const text = extractChatCompletionText(payload);
-    const result = parseStrictJsonObject(text, this.providerId);
+    const result = parseStrictJsonObject(text, this.providerId, {
+      usage: payload?.usage || null,
+    });
     return {
       provider: this.providerId,
       model: selection.model,
@@ -1039,26 +1041,62 @@ function extractCompatibleContentPartText(part) {
   return "";
 }
 
-function parseStrictJsonObject(text, providerId) {
+function parseStrictJsonObject(text, providerId, { usage = null } = {}) {
+  const normalizedText = String(text || "").trim();
+  if (!normalizedText) {
+    throw confirmedPreparationContentError({
+      providerId,
+      contentFailureKind: "empty",
+      code: `${providerId}_empty_content`,
+      message: `${providerId} preparation response was empty`,
+      usage,
+    });
+  }
   let parsed;
   try {
-    parsed = JSON.parse(String(text || ""));
+    parsed = JSON.parse(normalizedText);
   } catch (cause) {
-    throw new RulingModelProviderError(`${providerId} preparation response was not valid JSON`, {
+    throw confirmedPreparationContentError({
+      providerId,
+      contentFailureKind: "invalid_json",
       code: `${providerId}_invalid_json`,
-      provider: providerId,
-      outcomeKnown: true,
+      message: `${providerId} preparation response was not valid JSON`,
+      usage,
       cause,
     });
   }
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw new RulingModelProviderError(`${providerId} preparation response must be a JSON object`, {
+    throw confirmedPreparationContentError({
+      providerId,
+      contentFailureKind: "invalid_json",
       code: `${providerId}_invalid_json_shape`,
-      provider: providerId,
-      outcomeKnown: true,
+      message: `${providerId} preparation response must be a JSON object`,
+      usage,
     });
   }
   return parsed;
+}
+
+function confirmedPreparationContentError({
+  providerId,
+  contentFailureKind,
+  code,
+  message,
+  usage,
+  cause,
+}) {
+  return Object.assign(new RulingModelProviderError(message, {
+    code,
+    provider: providerId,
+    status: 200,
+    outcomeKnown: true,
+    budgetReservationMayExist: true,
+    usage,
+    cause,
+  }), {
+    confirmedContentFailure: true,
+    contentFailureKind,
+  });
 }
 
 function normalizeDeepSeekInput(input) {

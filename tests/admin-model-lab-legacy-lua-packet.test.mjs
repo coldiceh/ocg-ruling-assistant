@@ -188,17 +188,42 @@ function makeService({
       timezone: "UTC",
       pools: {
         deepseek: { dailyBudgetCny: 1_000, reservationCny: 10 },
+        relay_sol: { dailyBudgetCny: 1_000, reservationCny: 10 },
       },
     }),
     env: {
       ADMIN_MODEL_LAB_ENABLED: "true",
       DEEPSEEK_API_KEY: "server-only-test-key",
+      RELAY_API_KEY: "server-only-relay-test-key",
+      ADMIN_MODEL_LAB_USD_TO_CNY_RATE: "7.5",
+      ADMIN_MODEL_LAB_EXCHANGE_RATE_VERSION: "test-rate-v1",
+      RELAY_PRICING_MULTIPLIER: "0.27",
       ADMIN_MODEL_LAB_DEEPSEEK_PRICING_VERSION: "test-deepseek-v4",
       ADMIN_MODEL_LAB_DEEPSEEK_PRICING_EFFECTIVE_DATE: "2026-08-06",
       ADMIN_MODEL_LAB_DEEPSEEK_FLASH_INPUT_CNY_PER_MTOK: "1",
       ADMIN_MODEL_LAB_DEEPSEEK_FLASH_OUTPUT_CNY_PER_MTOK: "2",
       ADMIN_MODEL_LAB_DEEPSEEK_PRO_INPUT_CNY_PER_MTOK: "3",
       ADMIN_MODEL_LAB_DEEPSEEK_PRO_OUTPUT_CNY_PER_MTOK: "6",
+    },
+    preparationProviders: {
+      relay: {
+        providerId: "relay",
+        async prepareEvidence() {
+          return {
+            provider: "relay",
+            model: "gpt-5.6-sol",
+            canMakeFinalRuling: false,
+            canDecideEscalation: false,
+            result: {
+              cardNameCandidates: [],
+              ruleSearchQueries: [],
+              unresolvedNotes: [],
+              conflicts: [],
+            },
+            usage: { prompt_tokens: 20, completion_tokens: 10, total_tokens: 30 },
+          };
+        },
+      },
     },
     finalRulingProviders: {
       deepseek: {

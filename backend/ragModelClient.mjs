@@ -2609,36 +2609,6 @@ function parseStrictJsonObject(rawText) {
   return parsed;
 }
 
-function classifyDeepSeekJsonTaskContentFailure(rawText, error) {
-  const normalized = stripJsonCodeFence(String(rawText || "").trim());
-  if (!normalized) return "empty";
-  return error instanceof SyntaxError ? "invalid_json" : null;
-}
-
-function deepSeekJsonTaskContentError({ contentFailureKind, response, usage }) {
-  const error = new Error(
-    contentFailureKind === "empty"
-      ? "DeepSeek JSON task returned empty content"
-      : "DeepSeek JSON task returned invalid JSON",
-  );
-  error.name = "DeepSeekJsonTaskContentError";
-  error.code = contentFailureKind === "empty"
-    ? "deepseek_json_task_empty_content"
-    : "deepseek_json_task_invalid_json";
-  error.provider = "deepseek";
-  error.status = 200;
-  error.outcomeKnown = true;
-  error.budgetReservationMayExist = true;
-  error.budgetReservationReleaseSafe = false;
-  error.confirmedContentFailure = true;
-  error.contentFailureKind = contentFailureKind;
-  error.usage = usage && typeof usage === "object" ? { ...usage } : null;
-  error.model = String(response?.responseModel || response?.requestModel || "").trim() || null;
-  error.requestId = String(response?.requestId || "").trim() || null;
-  error.finishReason = String(response?.finishReason || "").trim() || null;
-  return error;
-}
-
 function normalizeStrictRagJsonOutput(rawText) {
   let parsed;
   try {

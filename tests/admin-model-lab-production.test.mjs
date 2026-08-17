@@ -592,6 +592,8 @@ test("composition uses Relay Sol low for preparation and keeps DeepSeek final ru
       KIMI_API_KEY: "server-kimi-secret",
       RELAY_API_KEY: "server-relay-secret",
       RELAY_BASE_URL: "https://relay.example/v1",
+      ADMIN_MODEL_LAB_USD_TO_CNY_RATE: "7.5",
+      ADMIN_MODEL_LAB_EXCHANGE_RATE_VERSION: "test-budget-factor-v1",
       ADMIN_FINAL_BUDGET_DEEPSEEK_DAILY_CNY: "10",
       ADMIN_FINAL_BUDGET_DEEPSEEK_RESERVATION_CNY: "2",
       ADMIN_FINAL_BUDGET_GLM_DAILY_CNY: "10",
@@ -637,7 +639,7 @@ test("composition uses Relay Sol low for preparation and keeps DeepSeek final ru
         preparationReasoningMode: "standard",
       },
     }),
-    (error) => error?.code === "preparation_provider_unavailable",
+    (error) => error?.code === "model_stage_not_allowed",
   );
   assert.equal(JSON.stringify(capabilities).includes("server-glm-secret"), false);
   assert.equal(JSON.stringify(capabilities).includes("server-kimi-secret"), false);
