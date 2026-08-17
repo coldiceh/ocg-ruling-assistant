@@ -3,9 +3,9 @@ import {
   FORMAL_SCENARIO_PROHIBITED_DERIVED_FIELDS,
   FORMAL_SOURCE_SPAN_ENCODING,
 } from "./formalEngineSchemas.mjs";
-import { callDeepSeekJsonTask } from "./ragModelClient.mjs";
+import { callRelayJsonTask } from "./ragModelClient.mjs";
 
-const DEFAULT_MODEL = "deepseek-v4-flash";
+const DEFAULT_MODEL = "gpt-5.6-sol";
 const DEFAULT_MAX_OUTPUT_TOKENS = 3200;
 const SOURCE_BOUND_COLLECTIONS = Object.freeze([
   "cardInstances",
@@ -24,7 +24,7 @@ const SOURCE_BOUND_COLLECTIONS = Object.freeze([
 export function createDefaultFormalScenarioDraftInvoker({
   env = globalThis.process?.env || {},
   fetchImpl = globalThis.fetch,
-  jsonTaskInvoker = callDeepSeekJsonTask,
+  jsonTaskInvoker = callRelayJsonTask,
   signal: factorySignal,
 } = {}) {
   return async function invokeFormalScenarioDraft({
@@ -36,7 +36,9 @@ export function createDefaultFormalScenarioDraftInvoker({
   } = {}) {
     const question = String(userQuery || "").trim();
     if (!question) throw formalDraftError("FORMAL_SCENARIO_DRAFT_UNAVAILABLE", "formal draft requires a non-empty question");
-    if (!String(env.DEEPSEEK_API_KEY || "").trim()) {
+    const relayEnv = formalDraftRelayEnv(env);
+    if (!String(relayEnv.RELAY_API_KEY || "").trim()
+        || !String(relayEnv.RELAY_BASE_URL || "").trim()) {
       throw formalDraftError("FORMAL_SCENARIO_DRAFT_UNAVAILABLE", "formal draft extraction model is not configured");
     }
 
@@ -57,7 +59,7 @@ export function createDefaultFormalScenarioDraftInvoker({
         prompt,
         modelName: formalDraftModelName(env),
         maxTokens: positiveInteger(env.RAG_FORMAL_SCENARIO_DRAFT_MAX_OUTPUT_TOKENS, DEFAULT_MAX_OUTPUT_TOKENS),
-        env,
+        env: relayEnv,
         fetchImpl,
         temperature: 0,
         thinkingMode: formalDraftThinkingMode(env),
@@ -325,11 +327,27 @@ function findCardResolutionBlocker(cardResolution) {
 function formalDraftModelName(env) {
   return String(
     env.RAG_FORMAL_SCENARIO_DRAFT_MODEL
-      || env.DEEPSEEK_FLASH_MODEL
-      || env.DEEPSEEK_CARD_MODEL
-      || env.RAG_CARD_MODEL
+      || env.RELAY_FORMAL_SCENARIO_DRAFT_MODEL
       || DEFAULT_MODEL,
   ).trim() || DEFAULT_MODEL;
+}
+
+function formalDraftRelayEnv(env = {}) {
+  const apiKey = String(
+    env.RAG_FORMAL_SCENARIO_DRAFT_RELAY_API_KEY
+      || env.RELAY_API_KEY
+      || "",
+  ).trim();
+  const baseUrl = String(
+    env.RAG_FORMAL_SCENARIO_DRAFT_RELAY_BASE_URL
+      || env.RELAY_BASE_URL
+      || "",
+  ).trim();
+  return {
+    ...env,
+    ...(apiKey ? { RELAY_API_KEY: apiKey } : {}),
+    ...(baseUrl ? { RELAY_BASE_URL: baseUrl } : {}),
+  };
 }
 
 function formalDraftThinkingMode(env) {
@@ -338,8 +356,8 @@ function formalDraftThinkingMode(env) {
 }
 
 function formalDraftReasoningEffort(env) {
-  const value = String(env.RAG_FORMAL_SCENARIO_DRAFT_REASONING_EFFORT || "high").trim().toLowerCase();
-  return new Set(["low", "high", "max"]).has(value) ? value : "high";
+  const value = String(env.RAG_FORMAL_SCENARIO_DRAFT_REASONING_EFFORT || "low").trim().toLowerCase();
+  return new Set(["low", "high", "max"]).has(value) ? value : "low";
 }
 
 function formalDraftAbortSignal(env, ...callerSignals) {

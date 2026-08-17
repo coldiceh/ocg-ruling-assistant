@@ -24,10 +24,8 @@ import {
   createAdminRunStore,
   createMemoryAdminRunStorage,
 } from "./adminRunStore.mjs";
-import { callDeepSeekJsonTask } from "./ragModelClient.mjs";
 import {
   CompatibleEvidencePreparationProvider,
-  ExistingDeepSeekProvider,
   OpenAIResponsesProvider,
 } from "./rulingModelProviders.mjs";
 
@@ -94,7 +92,6 @@ function createAdminModelLabComposedService({
   runStorage,
   runStore,
   recordStore,
-  deepSeekProvider,
   glmProvider,
   kimiProvider,
   relayProvider,
@@ -103,7 +100,6 @@ function createAdminModelLabComposedService({
   legacyLuaSemanticPacketFactory,
   finalCallBudgetLedger,
   baseService,
-  callDeepSeekJsonTaskImpl = callDeepSeekJsonTask,
   evaluationLoader = loadAdminLabEvaluationCorpus,
   requirePersistentStores,
 } = {}) {
@@ -162,17 +158,6 @@ function createAdminModelLabComposedService({
     if (requirePersistentStores && resolvedFinalCallBudgetLedger) {
       assertPersistentDependency(resolvedFinalCallBudgetLedger, "final-call budget ledger");
     }
-    const resolvedDeepSeekProvider = deepSeekProvider || new ExistingDeepSeekProvider({
-      env,
-      invoke: createDeepSeekEvidencePreparationInvoke({
-        env: {
-          ...env,
-          DEEPSEEK_API_KEY: requiredServerSecret(env.DEEPSEEK_API_KEY, "DEEPSEEK_API_KEY"),
-        },
-        fetchImpl,
-        callDeepSeekJsonTaskImpl,
-      }),
-    });
     const resolvedDeepSeekFinalProvider = hasServerSecret(env.DEEPSEEK_API_KEY)
       ? new CompatibleEvidencePreparationProvider({
           providerId: "deepseek",
@@ -229,13 +214,23 @@ function createAdminModelLabComposedService({
       legacyLuaSemanticPacketFactory === undefined
         ? createConfiguredLegacyLuaSemanticPacketFactory({ env, fetchImpl })
         : legacyLuaSemanticPacketFactory;
+    const suppliedPreparationProviders = Object.fromEntries(
+      Object.entries(
+        preparationProviders && typeof preparationProviders === "object"
+          ? preparationProviders
+          : {},
+      ).filter(([declaredId, provider]) => (
+        String(declaredId || "").trim().toLowerCase() !== "deepseek"
+        && String(provider?.providerId || declaredId || "").trim().toLowerCase() !== "deepseek"
+      )),
+    );
     resolvedBaseService = createAdminModelLabService({
       runStore: resolvedRunStore,
       finalCallBudgetLedger: resolvedFinalCallBudgetLedger,
-      deepSeekProvider: resolvedDeepSeekProvider,
       preparationProviders: {
-        ...(preparationProviders && typeof preparationProviders === "object"
-          ? preparationProviders
+        ...suppliedPreparationProviders,
+        ...(typeof resolvedRelayProvider?.prepareEvidence === "function"
+          ? { relay: resolvedRelayProvider }
           : {}),
       },
       openAIProvider: resolvedOpenAIProvider,
@@ -732,44 +727,13 @@ function createAdminModelLabComposedService({
  * JSON task. Neither field can be overridden by an admin HTTP request.
  */
 export function createDeepSeekEvidencePreparationInvoke({
-  env = globalThis.process?.env || {},
-  fetchImpl = globalThis.fetch,
-  callDeepSeekJsonTaskImpl = callDeepSeekJsonTask,
 } = {}) {
-  if (typeof fetchImpl !== "function") throw productionUnavailable("server fetch is unavailable");
-  if (typeof callDeepSeekJsonTaskImpl !== "function") {
-    throw new TypeError("callDeepSeekJsonTaskImpl must be a function");
-  }
-  return async function invokeEvidencePreparation(request = {}) {
-    if (request.provider !== "deepseek") {
-      throw providerBoundaryError("DeepSeek preparation provider mismatch");
-    }
-    if (request.purpose !== ADMIN_MODEL_LAB_STAGES.EVIDENCE_PREPARATION) {
-      throw providerBoundaryError("DeepSeek is restricted to evidence preparation");
-    }
-    if (
-      request.canMakeFinalRuling !== false
-      || request.canDecideEscalation !== false
-    ) {
-      throw providerBoundaryError("DeepSeek capability boundary was not explicitly disabled");
-    }
-    return callDeepSeekJsonTaskImpl({
-      prompt: String(request.prompt || ""),
-      modelName: String(request.modelName || ""),
-      maxTokens: request.maxTokens,
-      env,
-      fetchImpl,
-      temperature: 0,
-      thinkingMode: request.thinkingMode,
-      reasoningEffort: request.reasoningEffort,
-      signal: request.signal,
-      // Evidence preparation may encounter DeepSeek-compatible gateways that
-      // reject JSON Output with an explicit HTTP 400. Reuse the JSON client's
-      // one-shot fallback, which removes only response_format. The client does
-      // not retry rate limits, server failures, transport errors, or final
-      // ruling calls through this evidence-only bridge.
-      allowResponseFormatFallback: true,
-    });
+  return async function disabledDeepSeekEvidencePreparation() {
+    const error = providerBoundaryError(
+      "DeepSeek evidence preparation is disabled; configure Relay Sol low instead",
+    );
+    error.code = "deepseek_evidence_preparation_disabled";
+    throw error;
   };
 }
 

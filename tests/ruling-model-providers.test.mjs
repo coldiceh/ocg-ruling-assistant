@@ -1408,9 +1408,11 @@ test("Kimi K2.6 supports optional thinking while K3 uses its always-on reasoning
 
 test("preparation registry rejects final or arbitrary providers and dispatches only known adapters", () => {
   const glm = { providerId: "glm", async prepareEvidence() {} };
-  const registry = createEvidencePreparationProviderRegistry({ providers: { glm } });
+  const relay = { providerId: "relay", async prepareEvidence() {} };
+  const registry = createEvidencePreparationProviderRegistry({ providers: { glm, relay } });
   assert.equal(registry.get("glm"), glm);
-  assert.deepEqual(registry.listProviderIds(), ["glm"]);
+  assert.equal(registry.get("relay"), relay);
+  assert.deepEqual(registry.listProviderIds(), ["glm", "relay"]);
   assert.throws(
     () => createEvidencePreparationProviderRegistry({
       providers: { openai: { providerId: "openai", async prepareEvidence() {} } },

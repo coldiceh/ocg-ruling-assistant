@@ -1,4 +1,4 @@
-export const PUBLIC_RULING_PROVIDER = "deepseek";
+export const PUBLIC_RULING_PROVIDER = "relay";
 export const FINAL_RULING_PROVIDER = "openai";
 
 export const ADMIN_MODEL_LAB_STAGES = Object.freeze({
@@ -92,7 +92,6 @@ const CAPABILITY_TABLE = {
     defaultReasoningMode: "standard",
     preferredComparisonReasoningEffort: "low",
     thinkingControl: "optional",
-    allowEvidencePreparation: true,
   }),
   "deepseek-v4-pro": domesticFinalCapability({
     providerId: "deepseek",
@@ -144,7 +143,10 @@ export const DEFAULT_ADMIN_MODEL_LAB_CONFIG = deepFreeze({
   openAiEnabled: false,
   publicRulingProvider: PUBLIC_RULING_PROVIDER,
   finalRulingProvider: FINAL_RULING_PROVIDER,
-  preparationProvider: "deepseek",
+  preparationProvider: "relay",
+  defaultPreparationModel: "relay-gpt-5.6-sol",
+  defaultPreparationReasoningEffort: "low",
+  defaultPreparationReasoningMode: "pro",
   defaultFinalModel: "gpt-5.6-terra",
   defaultReasoningEffort: "low",
   defaultReasoningMode: "standard",
@@ -297,7 +299,16 @@ export function getAdminModelProviderCapabilities({
         providerId: "deepseek",
         role: "experimental_final_ruling",
         available: deepSeekAvailable,
-        models: models.filter((entry) => entry.providerId === "deepseek"),
+        // DeepSeek remains selectable for experimental final rulings, while
+        // evidence preparation is exposed only through the Relay provider.
+        models: models
+          .filter((entry) => entry.providerId === "deepseek")
+          .map((entry) => ({
+            ...entry,
+            allowedStages: entry.allowedStages.filter((stage) => (
+              stage !== ADMIN_MODEL_LAB_STAGES.EVIDENCE_PREPARATION
+            )),
+          })),
       },
       {
         providerId: "glm",
@@ -434,16 +445,20 @@ function domesticFinalCapability({
 }
 
 function relayCapability(modelId, canonicalModelId, details) {
+  const canPrepareEvidence = canonicalModelId === "gpt-5.6-sol";
   return {
     providerId: "relay",
     modelId,
     canonicalModelId,
     displayName: `第三方中转 · ${details.displayName}`,
     alias: true,
-    allowedStages: [ADMIN_MODEL_LAB_STAGES.EXPERIMENTAL_FINAL_RULING],
+    allowedStages: [
+      ...(canPrepareEvidence ? [ADMIN_MODEL_LAB_STAGES.EVIDENCE_PREPARATION] : []),
+      ADMIN_MODEL_LAB_STAGES.EXPERIMENTAL_FINAL_RULING,
+    ],
     supportedReasoningEfforts: [...OPENAI_REASONING_EFFORTS],
     supportedReasoningModes: ["pro"],
-    defaultReasoningEffort: "high",
+    defaultReasoningEffort: canPrepareEvidence ? "low" : "high",
     defaultReasoningMode: "pro",
     thinkingControl: "always_on",
     supportsStructuredOutputs: false,
