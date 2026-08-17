@@ -2,6 +2,8 @@ name: Validate preview changes
 
 on:
   push:
+    branches:
+      - "codex/**"
     tags:
       - "private-eval-pilot-*"
       - "private-eval-targeted-*"
