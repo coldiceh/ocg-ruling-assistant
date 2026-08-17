@@ -24,6 +24,12 @@ import {
   classifyPublicRequestChannel,
   presentPublicAnswer,
 } from "./publicAnswerPresentation.mjs";
+import {
+  beginPublicAnswerEventStream,
+  createPublicAnswerProgress,
+  sendPublicAnswerEvent,
+  wantsPublicAnswerProgress,
+} from "./publicAnswerProgress.mjs";
 import { readRequestBody as readBody } from "./requestBodyReader.mjs";
 
 const port = Number(process.env.PORT || 8787);
@@ -74,7 +80,7 @@ const server = createServer(async (request, response) => {
     return;
   }
 
-  if (request.method === "GET" && request.url === "/api/answer") {
+  if (request.method === "GET" && pathname === "/api/answer") {
     sendJson(response, 200, await getPublicAnswerModelInfo({ env: process.env }));
     return;
   }
@@ -108,7 +114,7 @@ const server = createServer(async (request, response) => {
     return;
   }
 
-  if (request.method === "POST" && request.url === "/api/answer") {
+  if (request.method === "POST" && pathname === "/api/answer") {
     const requestAbort = createPublicAnswerAbortContext(request, response);
     try {
       const body = await readBody(request, {
@@ -116,6 +122,15 @@ const server = createServer(async (request, response) => {
       });
       const requestChannel = classifyPublicRequestChannel(body);
       const payload = parsePublicAnswerPayload(body);
+      if (wantsPublicAnswerProgress(request, requestChannel)) {
+        await answerWithProgressStream({
+          response,
+          requestAbort,
+          requestChannel,
+          payload,
+        });
+        return;
+      }
       const result = await answerPublicRulingQuestion({
         payload,
         env: process.env,
@@ -143,6 +158,56 @@ const server = createServer(async (request, response) => {
 
   sendJson(response, 404, { error: "Not found" });
 });
+
+async function answerWithProgressStream({
+  response,
+  requestAbort,
+  requestChannel,
+  payload,
+}) {
+  beginPublicAnswerEventStream(response);
+  const progress = createPublicAnswerProgress({
+    emit: (type, data) => sendPublicAnswerEvent(response, type, data),
+  });
+  progress.start();
+  const tickTimer = setInterval(() => progress.tick(), 1_000);
+  tickTimer.unref?.();
+  try {
+    const result = await answerPublicRulingQuestion({
+      payload,
+      env: process.env,
+      signal: requestAbort.signal,
+      progress,
+    });
+    const measuredProgress = progress.complete();
+    const answer = presentPublicAnswer(result.answer, {
+      channel: requestChannel,
+      env: process.env,
+    });
+    sendPublicAnswerEvent(response, "answer", { answer, progress: measuredProgress });
+    sendPublicAnswerEvent(response, "end", measuredProgress);
+    response.end();
+    await persistPublicAnswerLatency({
+      latency: result.latency,
+      env: process.env,
+    }).catch(() => null);
+  } catch (error) {
+    if (requestAbort.signal.aborted) return;
+    const activeStageId = progress.activeStageId;
+    const measuredProgress = progress.fail();
+    const httpError = publicAnswerHttpError(error);
+    sendPublicAnswerEvent(response, "error", {
+      ...httpError.payload,
+      statusCode: httpError.statusCode,
+      stageId: activeStageId,
+      serverElapsedMs: measuredProgress.totalMs,
+    });
+    sendPublicAnswerEvent(response, "end", measuredProgress);
+    response.end();
+  } finally {
+    clearInterval(tickTimer);
+  }
+}
 
 server.listen(port, host, () => {
   console.log(`OCG ruling backend listening on http://${host}:${port}`);

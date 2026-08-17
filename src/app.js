@@ -185,6 +185,7 @@ let sourceMeta = null;
 let sourceLoadError = "";
 let analysisRequestId = 0;
 let analysisTimer = 0;
+let activeAnalysisAbortController = null;
 const cardDetailsCache = new Map();
 let visibleCards = [];
 let selectedCardIndex = 0;
@@ -222,19 +223,13 @@ const pendingStages = [
   { id: "retrieve_rulings", label: "检索规则资料", body: "正在查找相关 Q&A、FAQ 和规则资料。" },
   { id: "generate_ruling", label: "核对资料并生成裁定", body: "正在核对资料是否适用于当前场面，并生成未确认裁定分析。" },
 ];
-const simulationPendingStage = {
-  id: "simulate",
-  label: "编译模拟场景",
-  body: "正在将已识别的卡片、区域和操作整理为尽力模拟场景。",
-};
-const pendingStageDelays = [0, 700, 1600, 2900, 4500, 6000];
-let pendingStageTimers = [];
-let pendingStageIndex = 0;
-let pendingStageTickTimer = 0;
-let pendingStageEnteredAt = [];
-let pendingStageDurationsMs = [];
+let pendingStageIndex = -1;
+let pendingBrowserElapsedTimer = 0;
+let pendingStageStates = [];
 let pendingPipelineStartedAt = null;
 let pendingPipelineTotalMs = null;
+let pendingPipelineServerElapsedMs = null;
+let pendingPipelineUsesServerTiming = false;
 let pendingPipelineStatus = "idle";
 
 function normalizeText(value) {
@@ -246,12 +241,7 @@ function normalizeText(value) {
 }
 
 function getPendingStages() {
-  if (!appConfig.engineEnabled) return pendingStages;
-  return [
-    ...pendingStages.slice(0, -1),
-    simulationPendingStage,
-    pendingStages[pendingStages.length - 1],
-  ];
+  return pendingStages;
 }
 
 function allCards() {
@@ -695,6 +685,7 @@ function getDetectedCards(text) {
 
 async function analyzeQuestion() {
   const text = ui.questionInput.value.trim();
+  cancelActiveAnalysisRequest();
   const requestId = ++analysisRequestId;
   if (!text) {
     resetAnalysis();
@@ -703,10 +694,15 @@ async function analyzeQuestion() {
 
   if (appConfig.answerApiUrl) {
     const requestedRulingVersion = selectedRulingVersion;
+    const abortController = new AbortController();
+    activeAnalysisAbortController = abortController;
     setQueryPending(true);
     renderPending();
     try {
-      const answer = await requestBackendAnswer(text, requestedRulingVersion);
+      const answer = await requestBackendAnswer(text, requestedRulingVersion, {
+        signal: abortController.signal,
+        requestId,
+      });
       if (requestId !== analysisRequestId) return;
       renderBackendAnswer(answer);
       return;
@@ -716,6 +712,9 @@ async function analyzeQuestion() {
       renderBackendVersionError(error, requestedRulingVersion);
       return;
     } finally {
+      if (activeAnalysisAbortController === abortController) {
+        activeAnalysisAbortController = null;
+      }
       if (requestId === analysisRequestId) setQueryPending(false);
     }
   }
@@ -723,14 +722,21 @@ async function analyzeQuestion() {
   renderBackendUnavailable(getDetectedCards(text));
 }
 
-async function requestBackendAnswer(text, requestedRulingVersion) {
+async function requestBackendAnswer(text, requestedRulingVersion, {
+  signal,
+  requestId = null,
+} = {}) {
   const backendMode = "rag";
   let response;
   try {
-    response = await fetch(appConfig.answerApiUrl, {
+    response = await fetch(buildPublicAnswerProgressUrl(appConfig.answerApiUrl), {
       method: "POST",
       cache: "no-store",
-      headers: { "content-type": "application/json" },
+      signal,
+      headers: {
+        accept: "text/event-stream",
+        "content-type": "application/json",
+      },
       body: JSON.stringify({
         question: text,
         mode: backendMode,
@@ -752,7 +758,15 @@ async function requestBackendAnswer(text, requestedRulingVersion) {
       status: response.status,
     });
   }
-  const answer = await response.json();
+  const contentType = String(response.headers?.get?.("content-type") || "").toLowerCase();
+  if (!contentType.includes("text/event-stream")) {
+    throw createRulingVersionError({
+      code: "ruling_progress_stream_unavailable",
+      requestedVersion: requestedRulingVersion,
+      status: response.status,
+    });
+  }
+  const answer = await readPublicAnswerProgressStream(response, requestedRulingVersion, { requestId });
   const rawEffectiveVersion = String(answer?.effectiveRulingVersion || "").trim();
   const rawRulingVersion = String(answer?.rulingVersion || "").trim();
   const reportedEffectiveVersion = normalizeRulingVersion(answer?.effectiveRulingVersion);
@@ -803,6 +817,169 @@ async function requestBackendAnswer(text, requestedRulingVersion) {
     effectiveRulingVersion,
     rulingVersionCompatibility,
   };
+}
+
+function buildPublicAnswerProgressUrl(value) {
+  const input = String(value || "");
+  const hashAt = input.indexOf("#");
+  const base = hashAt === -1 ? input : input.slice(0, hashAt);
+  const hash = hashAt === -1 ? "" : input.slice(hashAt);
+  const separator = base.includes("?") ? "&" : "?";
+  return `${base}${separator}progress=1${hash}`;
+}
+
+async function readPublicAnswerProgressStream(response, requestedRulingVersion, {
+  requestId = null,
+} = {}) {
+  if (!response.body || typeof response.body.getReader !== "function") {
+    throw createRulingVersionError({
+      code: "ruling_progress_stream_unavailable",
+      requestedVersion: requestedRulingVersion,
+      status: response.status,
+    });
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let answer = null;
+  let receivedEnd = false;
+  let protocolSucceeded = false;
+  try {
+    while (!receivedEnd) {
+      const { done, value } = await reader.read();
+      buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
+      const blocks = buffer.split(/\r?\n\r?\n/u);
+      buffer = blocks.pop() || "";
+      if (done && buffer.trim()) {
+        blocks.push(buffer);
+        buffer = "";
+      }
+      for (const block of blocks) {
+        const event = parsePublicAnswerSseBlock(block);
+        if (!event) continue;
+        if (receivedEnd) {
+          throw createRulingVersionError({
+            code: "ruling_progress_event_after_end",
+            requestedVersion: requestedRulingVersion,
+            status: response.status,
+          });
+        }
+        if (event.invalid) {
+          throw createRulingVersionError({
+            code: "ruling_progress_event_invalid",
+            requestedVersion: requestedRulingVersion,
+            status: response.status,
+          });
+        }
+        if (event.type === "answer") {
+          if (answer) {
+            throw createRulingVersionError({
+              code: "ruling_progress_answer_duplicate",
+              requestedVersion: requestedRulingVersion,
+              status: response.status,
+            });
+          }
+          const candidate = publicAnswerFromSseEvent(event);
+          if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) {
+            throw createRulingVersionError({
+              code: "ruling_progress_answer_invalid",
+              requestedVersion: requestedRulingVersion,
+              status: response.status,
+            });
+          }
+          answer = candidate;
+          continue;
+        }
+        if (event.type === "error") {
+          const payload = event.data || {};
+          const error = createRulingVersionError({
+            code: String(payload.code || payload.error || "ruling_progress_stream_failed"),
+            requestedVersion: requestedRulingVersion,
+            status: response.status,
+          });
+          error.message = String(payload.message || payload.error || error.code);
+          if (requestId === null || requestId === analysisRequestId) {
+            applyPendingStageProgressEvent(event);
+          }
+          throw error;
+        }
+        if (event.type === "end" && !answer) {
+          throw createRulingVersionError({
+            code: "ruling_progress_end_before_answer",
+            requestedVersion: requestedRulingVersion,
+            status: response.status,
+          });
+        }
+        if (requestId === null || requestId === analysisRequestId) {
+          applyPendingStageProgressEvent(event);
+        }
+        if (event.type === "end") receivedEnd = true;
+      }
+      if (done) break;
+    }
+
+    if (!receivedEnd) {
+      throw createRulingVersionError({
+        code: "ruling_progress_end_missing",
+        requestedVersion: requestedRulingVersion,
+        status: response.status,
+      });
+    }
+    if (!answer) {
+      throw createRulingVersionError({
+        code: "ruling_progress_answer_missing",
+        requestedVersion: requestedRulingVersion,
+        status: response.status,
+      });
+    }
+    protocolSucceeded = true;
+    return answer;
+  } finally {
+    if (!protocolSucceeded) {
+      try {
+        await reader.cancel();
+      } catch {
+        // Closing a damaged stream is best effort; the original protocol error wins.
+      }
+    }
+    try {
+      reader.releaseLock();
+    } catch {
+      // The stream may already have released its reader after an upstream failure.
+    }
+  }
+}
+
+function parsePublicAnswerSseBlock(block) {
+  let type = "message";
+  const dataLines = [];
+  for (const line of String(block || "").split(/\r?\n/u)) {
+    if (!line || line.startsWith(":")) continue;
+    if (line.startsWith("event:")) type = line.slice(6).trim();
+    else if (line.startsWith("data:")) dataLines.push(line.slice(5).trimStart());
+  }
+  if (!type && !dataLines.length) return null;
+  const rawData = dataLines.join("\n");
+  let data = {};
+  if (rawData) {
+    try {
+      data = JSON.parse(rawData);
+    } catch {
+      return { type, data: null, invalid: true };
+    }
+  }
+  return {
+    type: String(data?.type || type || "message"),
+    data,
+  };
+}
+
+function publicAnswerFromSseEvent(event) {
+  const payload = event?.data;
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return null;
+  if (!payload.answer || typeof payload.answer !== "object" || Array.isArray(payload.answer)) return null;
+  return payload.answer;
 }
 
 function normalizeRulingVersion(value) {
@@ -1391,7 +1568,15 @@ function syncRulingVersionButtons(isPending = false) {
 function isRulingVersionSupported(version) {
   return version === "latest" && appConfig.rulingVersionIds.includes(version);
 }
+
+function cancelActiveAnalysisRequest() {
+  if (!activeAnalysisAbortController) return;
+  activeAnalysisAbortController.abort();
+  activeAnalysisAbortController = null;
+}
+
 function resetAnalysis() {
+  cancelActiveAnalysisRequest();
   setQueryPending(false);
   clearPendingStages();
   lastRenderedBackendAnswer = null;
@@ -4852,92 +5037,145 @@ function renderList(container, items) {
 function startPendingStages() {
   clearPendingStages(false);
   const stages = getPendingStages();
-  pendingStageIndex = 0;
-  pendingStageEnteredAt = stages.map(() => null);
-  pendingStageDurationsMs = stages.map(() => null);
+  pendingStageIndex = -1;
+  pendingStageStates = stages.map(() => ({
+    status: "waiting",
+    durationMs: null,
+    activeElapsedMs: null,
+  }));
   pendingPipelineStartedAt = readMonotonicNow();
   pendingPipelineTotalMs = null;
+  pendingPipelineServerElapsedMs = null;
+  pendingPipelineUsesServerTiming = false;
   pendingPipelineStatus = "running";
-  pendingStageEnteredAt[0] = pendingPipelineStartedAt;
   if (ui.pipelineTimingPanel) ui.pipelineTimingPanel.hidden = false;
-  renderPendingStages(0, stages);
-  pendingStageDelays.slice(0, stages.length).forEach((delay, index) => {
-    if (index === 0) return;
-    const timer = setTimeout(() => {
-      const now = readMonotonicNow();
-      const previousIndex = pendingStageIndex;
-      if (
-        previousIndex < index
-        && pendingStageEnteredAt[previousIndex] !== null
-        && pendingStageDurationsMs[previousIndex] === null
-      ) {
-        pendingStageDurationsMs[previousIndex] = Math.max(
-          0,
-          now - pendingStageEnteredAt[previousIndex],
-        );
-      }
-      pendingStageIndex = index;
-      if (pendingStageEnteredAt[index] === null) pendingStageEnteredAt[index] = now;
-      renderPendingStages(index, stages);
-    }, delay);
-    pendingStageTimers.push(timer);
-  });
-  pendingStageTickTimer = window.setInterval(() => {
-    renderPendingStages(pendingStageIndex, stages);
+  renderPendingStages(stages);
+  pendingBrowserElapsedTimer = window.setInterval(() => {
+    renderPendingPipelineTotal();
   }, 250);
 }
 
 function clearPendingStages(clearClass = true) {
-  for (const timer of pendingStageTimers) clearTimeout(timer);
-  pendingStageTimers = [];
-  if (pendingStageTickTimer) window.clearInterval(pendingStageTickTimer);
-  pendingStageTickTimer = 0;
+  if (pendingBrowserElapsedTimer) window.clearInterval(pendingBrowserElapsedTimer);
+  pendingBrowserElapsedTimer = 0;
   if (clearClass) {
+    pendingStageIndex = -1;
     pendingPipelineStartedAt = null;
     pendingPipelineTotalMs = null;
+    pendingPipelineServerElapsedMs = null;
+    pendingPipelineUsesServerTiming = false;
     pendingPipelineStatus = "idle";
-    pendingStageEnteredAt = [];
-    pendingStageDurationsMs = [];
+    pendingStageStates = [];
     if (ui.pipelineTimingPanel) ui.pipelineTimingPanel.hidden = true;
     if (ui.pipelineStageList) clearElement(ui.pipelineStageList);
     if (ui.pipelineElapsedText) ui.pipelineElapsedText.textContent = "";
   }
 }
 
-function renderPendingStages(activeIndex, stages = getPendingStages()) {
+function applyPendingStageProgressEvent(event) {
+  const type = String(event?.type || "");
+  const payload = event?.data && typeof event.data === "object" ? event.data : {};
+  const serverElapsedMs = readFiniteDuration(payload.serverElapsedMs);
+  if (serverElapsedMs !== null) {
+    pendingPipelineServerElapsedMs = Math.max(pendingPipelineServerElapsedMs || 0, serverElapsedMs);
+    pendingPipelineUsesServerTiming = true;
+  }
+  if (type === "end") {
+    const totalMs = readFiniteDuration(payload.totalMs) ?? serverElapsedMs;
+    if (totalMs !== null) {
+      pendingPipelineServerElapsedMs = totalMs;
+      pendingPipelineUsesServerTiming = true;
+    }
+    return;
+  }
+
+  const stages = getPendingStages();
+  const stageIndex = stages.findIndex((stage) => stage.id === String(payload.stageId || ""));
+  if (stageIndex === -1 || !pendingStageStates[stageIndex]) return;
+  const state = pendingStageStates[stageIndex];
+  if (type === "stage_start") {
+    for (let index = 0; index < pendingStageStates.length; index += 1) {
+      if (index !== stageIndex && pendingStageStates[index].status === "running") {
+        pendingStageStates[index].status = "waiting";
+        pendingStageStates[index].activeElapsedMs = null;
+      }
+    }
+    pendingStageIndex = stageIndex;
+    state.status = "running";
+    state.activeElapsedMs = readFiniteDuration(payload.activeStageElapsedMs) ?? 0;
+  } else if (type === "tick") {
+    if (state.status !== "done") {
+      pendingStageIndex = stageIndex;
+      state.status = "running";
+      state.activeElapsedMs = readFiniteDuration(payload.activeStageElapsedMs);
+    }
+  } else if (type === "stage_end") {
+    state.status = payload.status === "failed" ? "failed" : "done";
+    state.durationMs = readFiniteDuration(payload.durationMs)
+      ?? readFiniteDuration(payload.activeStageElapsedMs);
+    state.activeElapsedMs = null;
+  } else if (type === "error") {
+    pendingStageIndex = stageIndex;
+    state.status = "failed";
+    state.activeElapsedMs = readFiniteDuration(payload.activeStageElapsedMs)
+      ?? state.activeElapsedMs;
+  } else {
+    return;
+  }
+  renderPendingStages(stages);
+}
+
+function renderPendingStages(stages = getPendingStages()) {
   if (!ui.pipelineStageList) return;
   clearElement(ui.pipelineStageList);
   stages.forEach((stage, index) => {
+    const state = pendingStageStates[index] || {
+      status: "waiting",
+      durationMs: null,
+      activeElapsedMs: null,
+    };
     const item = document.createElement("li");
-    item.className = pendingPipelineStatus === "failed" && index === activeIndex
+    item.className = state.status === "failed"
       ? "progress-step is-failed"
-      : index < activeIndex ? "progress-step is-done"
-      : index === activeIndex && pendingPipelineStatus === "running" ? "progress-step is-current"
-        : "progress-step is-waiting";
+      : state.status === "done"
+        ? "progress-step is-done"
+        : state.status === "skipped"
+          ? "progress-step is-waiting"
+        : state.status === "running"
+          ? "progress-step is-current"
+          : "progress-step is-waiting";
     const marker = document.createElement("span");
     marker.className = "progress-step-marker";
-    marker.textContent = pendingPipelineStatus === "failed" && index === activeIndex
+    marker.textContent = state.status === "failed"
       ? "!"
-      : index < activeIndex ? "✓"
-      : index === activeIndex && pendingPipelineStatus === "running" ? "•" : "·";
+      : state.status === "done"
+        ? "✓"
+        : state.status === "skipped"
+          ? "—"
+        : state.status === "running" ? "•" : "·";
     const label = document.createElement("span");
     label.textContent = stage.label;
     const time = document.createElement("span");
     time.className = "progress-step-time";
-    const durationMs = index < activeIndex
-      ? pendingStageDurationsMs[index]
-      : index === activeIndex && pendingStageEnteredAt[index] !== null
-        ? Math.max(0, readMonotonicNow() - pendingStageEnteredAt[index])
-        : null;
-    time.textContent = durationMs === null
-      ? ""
-      : formatPendingStageDuration(durationMs);
+    const durationMs = ["done", "failed"].includes(state.status)
+      ? state.durationMs ?? state.activeElapsedMs
+      : state.activeElapsedMs;
+    time.textContent = state.status === "skipped"
+      ? "未执行"
+      : durationMs === null
+        ? ""
+        : formatPendingStageDuration(durationMs);
     item.append(marker, label, time);
     ui.pipelineStageList.appendChild(item);
   });
   renderPendingPipelineTotal();
   if (pendingPipelineStatus !== "running") return;
-  const stage = stages[Math.min(activeIndex, stages.length - 1)];
+  const stage = pendingStageIndex >= 0 ? stages[pendingStageIndex] : null;
+  if (!stage) {
+    ui.verdictTitle.textContent = "正在等待后端开始处理";
+    ui.verdictBody.textContent = "阶段将在后端实际开始时显示，不再由浏览器定时器预估。";
+    return;
+  }
   ui.verdictTitle.textContent = stage.id === "generate_ruling" ? "正在核对资料并生成裁定" : `正在${stage.label}`;
   ui.verdictBody.textContent = stage.body;
 }
@@ -4948,24 +5186,24 @@ function completePendingStages(answer) {
   const clientTotalMs = pendingPipelineStartedAt === null
     ? null
     : Math.max(0, completedAt - pendingPipelineStartedAt);
-  const backend = extractBackendPipelineTimings(answer, stages);
+  const backendTotalMs = pendingPipelineServerElapsedMs
+    ?? readFiniteDuration(answer?.debug?.timingsMs?.total)
+    ?? readFiniteDuration(answer?.timingsMs?.total);
   clearPendingStages(false);
   pendingPipelineStatus = "completed";
-  pendingPipelineTotalMs = backend.totalMs ?? clientTotalMs ?? 0;
-  pendingStageDurationsMs = stages.map((stage, index) => (
-    backend.stageDurationsMs[stage.id]
-    ?? pendingStageDurationsMs[index]
-    ?? (pendingStageEnteredAt[index] === null ? 0 : Math.max(0, completedAt - pendingStageEnteredAt[index]))
-  ));
-  pendingStageEnteredAt = stages.map(() => null);
-  pendingStageIndex = stages.length;
+  pendingPipelineTotalMs = backendTotalMs ?? clientTotalMs ?? 0;
+  pendingPipelineUsesServerTiming = backendTotalMs !== null || pendingPipelineUsesServerTiming;
+  for (const state of pendingStageStates) {
+    if (state.status === "waiting") state.status = "skipped";
+  }
+  pendingStageIndex = -1;
   if (ui.pipelineTimingPanel) ui.pipelineTimingPanel.hidden = false;
   if (ui.pipelineElapsedText) {
-    ui.pipelineElapsedText.title = backend.usesServerTiming
-      ? "总计采用后端实测墙钟耗时；部分阶段可能并行。"
+    ui.pipelineElapsedText.title = pendingPipelineUsesServerTiming
+      ? "后端实测墙钟耗时；各阶段由后端实际开始和结束事件记录。"
       : "后端未返回总耗时，当前采用浏览器单调计时。";
   }
-  renderPendingStages(stages.length, stages);
+  renderPendingStages(stages);
 }
 
 function failPendingStages() {
@@ -4976,15 +5214,21 @@ function failPendingStages() {
     clearPendingStages();
     return;
   }
-  const activeStartedAt = pendingStageEnteredAt[pendingStageIndex];
-  if (activeStartedAt !== null && pendingStageDurationsMs[pendingStageIndex] === null) {
-    pendingStageDurationsMs[pendingStageIndex] = Math.max(0, now - activeStartedAt);
+  if (pendingStageIndex >= 0 && pendingStageStates[pendingStageIndex]?.status === "running") {
+    pendingStageStates[pendingStageIndex].status = "failed";
   }
-  pendingPipelineTotalMs = Math.max(0, now - pendingPipelineStartedAt);
+  pendingPipelineTotalMs = pendingPipelineServerElapsedMs
+    ?? Math.max(0, now - pendingPipelineStartedAt);
+  pendingPipelineUsesServerTiming = pendingPipelineServerElapsedMs !== null
+    || pendingPipelineUsesServerTiming;
   pendingPipelineStatus = "failed";
   if (ui.pipelineTimingPanel) ui.pipelineTimingPanel.hidden = false;
-  if (ui.pipelineElapsedText) ui.pipelineElapsedText.title = "请求失败前的浏览器单调计时。";
-  renderPendingStages(pendingStageIndex, stages);
+  if (ui.pipelineElapsedText) {
+    ui.pipelineElapsedText.title = pendingPipelineUsesServerTiming
+      ? "请求失败前的后端实测墙钟耗时。"
+      : "请求失败前的浏览器单调计时。";
+  }
+  renderPendingStages(stages);
 }
 
 function renderPendingPipelineTotal() {
@@ -4993,55 +5237,21 @@ function renderPendingPipelineTotal() {
     ? null
     : Math.max(0, readMonotonicNow() - pendingPipelineStartedAt);
   const durationMs = pendingPipelineTotalMs ?? runningMs;
-  ui.pipelineElapsedText.textContent = durationMs === null
-    ? ""
-    : `总计 ${formatPendingStageDuration(durationMs)}`;
-}
-
-function extractBackendPipelineTimings(answer, stages = getPendingStages()) {
-  const pipeline = answer?.debug?.timingsMs || answer?.timingsMs || {};
-  const retrieval = answer?.debug?.retrievalStageTimingsMs
-    || answer?.retrievalStageTimingsMs
-    || {};
-  const stageDurationsMs = {
-    understand: sumFiniteDurations(pipeline.dataLoad, pipeline.deterministicPreflight),
-    extract_card_names: readFiniteDuration(pipeline.auxiliaryExtractionModels),
-    retrieve_card_texts: readFiniteDuration(retrieval.cardResolution),
-    retrieve_rulings: sumFiniteDurations(
-      retrieval.data,
-      retrieval.rulebook,
-      retrieval.officialQa,
-      retrieval.relatedEvidence,
-    ),
-    simulate: sumFiniteDurations(pipeline.formalEngineAwait, pipeline.engineAwait),
-    generate_ruling: sumFiniteDurations(
-      pipeline.officialQaApplicability,
-      pipeline.localReasoning,
-      pipeline.rulebookGrounding,
-      pipeline.finalModel,
-    ),
-  };
-  const knownStageIds = new Set(stages.map((stage) => stage.id));
-  for (const key of Object.keys(stageDurationsMs)) {
-    if (!knownStageIds.has(key) || stageDurationsMs[key] === null) delete stageDurationsMs[key];
+  if (durationMs === null) {
+    ui.pipelineElapsedText.textContent = "";
+  } else if (pendingPipelineStatus === "running") {
+    ui.pipelineElapsedText.textContent = `浏览器已等待 ${formatPendingStageDuration(durationMs)}`;
+  } else if (pendingPipelineUsesServerTiming) {
+    ui.pipelineElapsedText.textContent = `后端实测 · 总计 ${formatPendingStageDuration(durationMs)}`;
+  } else {
+    ui.pipelineElapsedText.textContent = `浏览器计时 · 总计 ${formatPendingStageDuration(durationMs)}`;
   }
-  const totalMs = readFiniteDuration(pipeline.total);
-  return {
-    stageDurationsMs,
-    totalMs,
-    usesServerTiming: totalMs !== null || Object.keys(stageDurationsMs).length > 0,
-  };
 }
 
 function readFiniteDuration(value) {
   if (value === null || value === undefined || value === "") return null;
   const duration = Number(value);
   return Number.isFinite(duration) && duration >= 0 ? duration : null;
-}
-
-function sumFiniteDurations(...values) {
-  const durations = values.map(readFiniteDuration).filter((value) => value !== null);
-  return durations.length ? durations.reduce((sum, value) => sum + value, 0) : null;
 }
 
 function readMonotonicNow() {
