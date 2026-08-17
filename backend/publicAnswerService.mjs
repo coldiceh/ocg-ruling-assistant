@@ -156,7 +156,7 @@ export async function getPublicAnswerModelInfo({ env = process.env } = {}) {
     requestedProvider: ragProvider.requested,
     models: rulingModelProfiles.map((profile) => profile.model),
     cardNameProvider: cardProvider.provider,
-    cardNameModels: [publicEnv.DEEPSEEK_CARD_MODEL || "deepseek-v4-flash"],
+    cardNameModels: [publicEnv.RELAY_CARD_MODEL || "gpt-5.6-sol"],
     modelTiers: [],
     budget,
     engineEnabled: false,

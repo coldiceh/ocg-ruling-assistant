@@ -13,10 +13,13 @@ import {
   resolveAdminModelSelection,
 } from "../backend/adminModelLabConfig.mjs";
 
-test("public provider remains fixed to DeepSeek while GPT-5.6 owns final rulings", () => {
-  assert.equal(PUBLIC_RULING_PROVIDER, "deepseek");
+test("public final-provider identity stays unchanged while preparation defaults to Relay", () => {
+  assert.equal(PUBLIC_RULING_PROVIDER, "relay");
   assert.equal(FINAL_RULING_PROVIDER, "openai");
-  assert.equal(DEFAULT_ADMIN_MODEL_LAB_CONFIG.publicRulingProvider, "deepseek");
+  assert.equal(DEFAULT_ADMIN_MODEL_LAB_CONFIG.publicRulingProvider, "relay");
+  assert.equal(DEFAULT_ADMIN_MODEL_LAB_CONFIG.preparationProvider, "relay");
+  assert.equal(DEFAULT_ADMIN_MODEL_LAB_CONFIG.defaultPreparationModel, "relay-gpt-5.6-sol");
+  assert.equal(DEFAULT_ADMIN_MODEL_LAB_CONFIG.defaultPreparationReasoningEffort, "low");
   assert.equal(DEFAULT_ADMIN_MODEL_LAB_CONFIG.finalRulingProvider, "openai");
 });
 
@@ -78,7 +81,7 @@ test("arbitrary models and unsupported provider/model/stage combinations are rej
   );
 });
 
-test("DeepSeek Flash prepares evidence and domestic models expose only experimental final judgment", () => {
+test("DeepSeek final-ruling metadata remains available while Relay replaces evidence preparation", () => {
   const selection = resolveAdminModelSelection({
     provider: "deepseek",
     model: "deepseek-v4-flash",
@@ -126,7 +129,9 @@ test("availability is computed server-side without exposing secrets", () => {
     },
   });
   assert.equal(capabilities.providers.find((provider) => provider.providerId === "openai").available, true);
-  assert.equal(capabilities.providers.find((provider) => provider.providerId === "deepseek").available, true);
+  const deepSeek = capabilities.providers.find((provider) => provider.providerId === "deepseek");
+  assert.equal(deepSeek.available, true);
+  assert.equal(deepSeek.models.some((model) => model.allowedStages.includes("evidence_preparation")), false);
   assert.equal(capabilities.providers.find((provider) => provider.providerId === "glm").available, false);
   assert.equal(capabilities.providers.find((provider) => provider.providerId === "kimi").available, false);
   assert.equal(JSON.stringify(capabilities).includes("secret"), false);
@@ -213,6 +218,16 @@ test("GLM and Kimi availability uses server keys and never returns them", () => 
 });
 
 test("third-party relay exposes distinct experimental Sol Terra and Luna aliases", () => {
+  const preparation = resolveAdminModelSelection({
+    provider: "relay",
+    model: "relay-gpt-5.6-sol",
+    reasoningEffort: "low",
+    reasoningMode: "pro",
+    stage: ADMIN_MODEL_LAB_STAGES.EVIDENCE_PREPARATION,
+  });
+  assert.equal(preparation.model, "gpt-5.6-sol");
+  assert.equal(preparation.reasoningEffort, "low");
+
   const selection = resolveAdminModelSelection({
     provider: "relay",
     model: "relay-gpt-5.6-terra",

@@ -173,16 +173,14 @@ export function createAdminModelLabService({
 } = {}) {
   assertRunStore(runStore);
   if (finalCallBudgetLedger !== null) assertFinalCallBudgetLedger(finalCallBudgetLedger);
+  if (deepSeekProvider !== null && deepSeekProvider !== undefined) {
+    throw new TypeError("DeepSeek evidence preparation is disabled; configure Relay Sol low instead");
+  }
   const config = readAdminModelLabConfig(env);
   const preparationProviderRegistry = createEvidencePreparationProviderRegistry({
-    providers: {
-      ...(preparationProviders && typeof preparationProviders === "object"
-        ? preparationProviders
-        : {}),
-      ...(deepSeekProvider && typeof deepSeekProvider.prepareEvidence === "function"
-        ? { deepseek: deepSeekProvider }
-        : {}),
-    },
+    providers: preparationProviders && typeof preparationProviders === "object"
+      ? preparationProviders
+      : {},
   });
   const finalRulingProviderRegistry = createFinalRulingProviderRegistry({
     providers: {
@@ -240,8 +238,8 @@ export function createAdminModelLabService({
     );
     return immutableJson({
       architecture: {
-        preparationProvider: preparationProviderRegistry.has("deepseek")
-          ? "deepseek"
+        preparationProvider: preparationProviderRegistry.has("relay")
+          ? "relay"
           : preparationProviderRegistry.listProviderIds()[0] || null,
         preparationProviders: preparationProviderRegistry.listProviderIds(),
         preparationCanMakeFinalRuling: false,
@@ -402,7 +400,8 @@ export function createAdminModelLabService({
     const evidenceVariant = resolveEvidenceVariant(body.evidenceVariant);
     const promptVersion = nonEmptyString(body.promptVersion, DEFAULT_PROMPT_VERSION);
     const { selection: finalSelection, profile: finalRulingProfile } = resolveFinalRulingProfile(body);
-    const preparationModel = String(body.preparationModel || "deepseek-v4-flash").trim();
+    const defaultPreparationModel = config.defaultPreparationModel;
+    const preparationModel = String(body.preparationModel || defaultPreparationModel).trim();
     const preparationCapability = getRulingModelCapabilityTable()[preparationModel];
     const preparationProvider = String(
       body.preparationProvider || preparationCapability?.providerId || "",
@@ -418,6 +417,12 @@ export function createAdminModelLabService({
         || "standard",
       stage: ADMIN_MODEL_LAB_STAGES.EVIDENCE_PREPARATION,
     });
+    if (!preparationProviderRegistry.has(preparationSelection.provider)) {
+      throw serviceError(
+        `${preparationSelection.provider} evidence-preparation provider is not configured`,
+        "preparation_provider_unavailable",
+      );
+    }
     const instructions = await resolveInstructions(body, promptLoader);
     const executionProfile = {
       status: "planned",
@@ -1243,6 +1248,8 @@ export function createAdminModelLabService({
     const question = run.evidenceSnapshot.question;
     const questions = run.evidenceSnapshot.evidence.questions;
     const preparationModel = run.executionProfile.preparation.model;
+    const preparationRequestedModel = run.executionProfile.preparation.requestedModel
+      || preparationModel;
     const preparationProvider = run.executionProfile.preparation.provider;
     const preparationReasoningEffort = run.executionProfile.preparation.reasoningEffort;
     const preparationReasoningMode = run.executionProfile.preparation.reasoningMode;
@@ -1288,6 +1295,7 @@ export function createAdminModelLabService({
         questions,
         preparationProvider,
         preparationModel,
+        preparationRequestedModel,
         preparationReasoningEffort,
         preparationReasoningMode,
         preparationMaxOutputTokens,
@@ -1448,6 +1456,7 @@ export function createAdminModelLabService({
     questions,
     preparationProvider,
     preparationModel,
+    preparationRequestedModel,
     preparationReasoningEffort,
     preparationReasoningMode,
     preparationMaxOutputTokens,
@@ -1498,16 +1507,12 @@ export function createAdminModelLabService({
             provider: preparationProvider,
             model: preparationModel,
             reservedAt,
-            requiredReservationCny: requiredDeepSeekReservationCny({
+            requiredReservationCny: requiredPreparationReservationCny({
+              provider: preparationProvider,
               model: preparationModel,
               inputTokenUpperBound: utf8TokenUpperBound(attempt.input),
               maxOutputTokens: preparationMaxOutputTokens,
-              pricingProfile: deepSeekPricingForModel(
-                serverPricingProfile.deepSeek,
-                preparationModel,
-              ),
-              usdToCnyRate: serverPricingProfile.usdToCnyRate,
-              exchangeRateVersion: serverPricingProfile.exchangeRateVersion,
+              pricingProfile: serverPricingProfile,
             }),
           });
         }
@@ -1533,7 +1538,7 @@ export function createAdminModelLabService({
         let prepared;
         try {
           prepared = await provider.prepareEvidence({
-            model: preparationModel,
+            model: preparationRequestedModel,
             reasoningEffort: attemptIndex === 0 ? preparationReasoningEffort : "none",
             reasoningMode: attemptIndex === 0 ? preparationReasoningMode : "standard",
             maxOutputTokens: preparationMaxOutputTokens,
@@ -1646,16 +1651,11 @@ export function createAdminModelLabService({
     }) {
       const normalizedUsage = normalizeReportedModelUsage(reportedUsage);
       if (!normalizedUsage) return false;
-      const cost = estimateDeepSeekModelCost({
+      const cost = estimatePreparationModelCost({
+        provider: attemptProvider,
         model,
         usage: reportedUsage,
-        pricingProfile: deepSeekPricingForModel(
-          serverPricingProfile.deepSeek,
-          model,
-        ),
-        usdToCnyRate: serverPricingProfile.usdToCnyRate,
-        exchangeRateVersion: serverPricingProfile.exchangeRateVersion,
-        inputBillingBasis: "all_uncached",
+        pricingProfile: serverPricingProfile,
       });
       if (!Number.isFinite(cost.totalCostCny)) return false;
       if (budgetDailyLimitBypassed) return true;
@@ -3516,10 +3516,10 @@ function normalizeCardNameCandidates(value) {
 function normalizeRuleQueries(value) {
   if (!Array.isArray(value)) return [];
   return value.map((item) => {
-    if (typeof item === "string") return { query: item.trim(), reason: "deepseek_preparation" };
+    if (typeof item === "string") return { query: item.trim(), reason: "model_preparation" };
     return {
       query: String(item?.query || "").trim(),
-      reason: String(item?.reason || "deepseek_preparation"),
+      reason: String(item?.reason || "model_preparation"),
     };
   }).filter((item) => item.query);
 }
@@ -4206,23 +4206,18 @@ function buildAdminModelLabMetering({
         model: preparationProfile.model,
         usage: preparationUsage,
       })
-    : preparationProfile.provider === "deepseek"
-    ? estimateDeepSeekModelCost({
-        model: preparationProfile.model,
-        usage: preparationUsage,
-        pricingProfile: deepSeekPricingForModel(
-          pricingProfile.deepSeek,
-          preparationProfile.model,
-        ),
-        usdToCnyRate: pricingProfile.usdToCnyRate,
-        exchangeRateVersion: pricingProfile.exchangeRateVersion,
-        inputBillingBasis: "all_uncached",
-      })
-    : unavailablePreparationProviderCost({
-        provider: preparationProfile.provider,
-        model: preparationProfile.model,
-        usage: preparationUsage,
-      });
+    : new Set(["deepseek", "relay"]).has(preparationProfile.provider)
+      ? estimatePreparationModelCost({
+          provider: preparationProfile.provider,
+          model: preparationProfile.model,
+          usage: preparationUsage,
+          pricingProfile,
+        })
+      : unavailablePreparationProviderCost({
+          provider: preparationProfile.provider,
+          model: preparationProfile.model,
+          usage: preparationUsage,
+        });
   const stages = {
     evidencePreparation: {
       stageId: ADMIN_MODEL_LAB_STAGES.EVIDENCE_PREPARATION,
@@ -4670,15 +4665,15 @@ function requiredFinalReservationCny({
   return cost.totalCostCny;
 }
 
-function requiredDeepSeekReservationCny({
+function requiredPreparationReservationCny({
+  provider,
   model,
   inputTokenUpperBound,
   maxOutputTokens,
   pricingProfile,
-  usdToCnyRate,
-  exchangeRateVersion,
 }) {
-  const cost = estimateDeepSeekModelCost({
+  const cost = estimatePreparationModelCost({
+    provider,
     model,
     usage: {
       prompt_tokens: inputTokenUpperBound,
@@ -4686,17 +4681,43 @@ function requiredDeepSeekReservationCny({
       total_tokens: inputTokenUpperBound + maxOutputTokens,
     },
     pricingProfile,
-    usdToCnyRate,
-    exchangeRateVersion,
-    inputBillingBasis: "all_uncached",
   });
   if (!Number.isFinite(cost.totalCostCny) || cost.totalCostCny < 0) {
     throw serviceError(
-      "DeepSeek evidence-preparation worst-case cost cannot be priced; provider submission was not attempted",
-      "deepseek_budget_pricing_unavailable",
+      `${provider} evidence-preparation worst-case cost cannot be priced; provider submission was not attempted`,
+      `${provider}_budget_pricing_unavailable`,
     );
   }
   return cost.totalCostCny;
+}
+
+function estimatePreparationModelCost({
+  provider,
+  model,
+  usage,
+  pricingProfile,
+}) {
+  if (provider === "relay") {
+    return estimateRelayModelCost({
+      model,
+      usage,
+      usdToCnyRate: pricingProfile?.usdToCnyRate,
+      exchangeRateVersion: pricingProfile?.exchangeRateVersion,
+      pricingMultiplier: pricingProfile?.relayPricingMultiplier,
+      inputBillingBasis: "all_uncached",
+    });
+  }
+  if (provider === "deepseek") {
+    return estimateDeepSeekModelCost({
+      model,
+      usage,
+      pricingProfile: deepSeekPricingForModel(pricingProfile?.deepSeek, model),
+      usdToCnyRate: pricingProfile?.usdToCnyRate,
+      exchangeRateVersion: pricingProfile?.exchangeRateVersion,
+      inputBillingBasis: "all_uncached",
+    });
+  }
+  return unavailablePreparationProviderCost({ provider, model, usage });
 }
 
 function utf8TokenUpperBound(value, framingAllowanceBytes = 4_096) {

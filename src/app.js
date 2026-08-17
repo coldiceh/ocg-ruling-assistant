@@ -2357,8 +2357,8 @@ function renderAdminCapabilities(capabilities) {
     "没有可用资料服务",
   );
   const preferredPreparationProvider = capabilities.preparationProviders.some(
-    (item) => item.id === "deepseek",
-  ) ? "deepseek" : capabilities.preparationProviders[0]?.id;
+    (item) => item.id === "relay",
+  ) ? "relay" : capabilities.preparationProviders[0]?.id;
   if (preferredPreparationProvider) {
     ui.adminPreparationProviderSelect.value = preferredPreparationProvider;
   }

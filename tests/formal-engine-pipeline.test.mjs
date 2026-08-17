@@ -232,7 +232,7 @@ test("default draft extractor emits only a source-bound unverified candidate", a
     requiredCapabilities: [],
   };
   const invoke = createDefaultFormalScenarioDraftInvoker({
-    env: { DEEPSEEK_API_KEY: "test-key" },
+    env: { RELAY_API_KEY: "test-key", RELAY_BASE_URL: "https://relay.example/v1" },
     fetchImpl: async () => { throw new Error("network must be replaced by the task invoker"); },
     jsonTaskInvoker: async (request) => {
       calls.push(request);
@@ -263,6 +263,8 @@ test("default draft extractor emits only a source-bound unverified candidate", a
   assert.equal(result.scenarioDraft.cardInstances[0].sourceSpan.text, "「怪兽甲」");
   assert.equal(Object.hasOwn(result.scenarioDraft, "rawText"), false);
   assert.equal(calls.length, 1);
+  assert.equal(calls[0].modelName, "gpt-5.6-sol");
+  assert.equal(calls[0].reasoningEffort, "low");
   assert.equal(calls[0].trackPublicBudget, true);
   assert.equal(calls[0].signal.aborted, false);
   controller.abort("request-cancelled");
@@ -273,6 +275,51 @@ test("default draft extractor emits only a source-bound unverified candidate", a
   for (const field of ["banishedByCardEffect", "summonLegal", "triggerActivates", "verdict", "proofCertificate"]) {
     assert.match(calls[0].prompt, new RegExp(field, "u"));
   }
+});
+
+test("formal draft uses its dedicated Relay transport after public final-provider isolation", async () => {
+  const calls = [];
+  const invoke = createDefaultFormalScenarioDraftInvoker({
+    env: {
+      RAG_FORMAL_SCENARIO_DRAFT_RELAY_API_KEY: "dedicated-relay-key",
+      RAG_FORMAL_SCENARIO_DRAFT_RELAY_BASE_URL: "https://relay.example/v1",
+    },
+    jsonTaskInvoker: async (request) => {
+      calls.push(request);
+      return {
+        scenarioDraft: {
+          turn: { activePlayer: "SELF", phase: "MAIN1" },
+          cardInstances: [],
+          stateFacts: [],
+          eventHistory: [],
+          intents: [],
+          queries: [],
+          assumptions: [],
+          missingStateFacts: [],
+          requiredCapabilities: [],
+          branchPolicy: { preserveUnspecifiedResponses: true },
+        },
+      };
+    },
+  });
+
+  await invoke({
+    userQuery: "「测试卡」的规则如何处理？",
+    resolvedCards: [{
+      cardId: "test-card",
+      name: "测试卡",
+      effectText: "测试用印刷文本。",
+      formalDefinitionId: "definition:test-card",
+      formalDefinitionSnapshotId: "snapshot:v1",
+      formalDefinitionContentSha256: "c".repeat(64),
+      formalEffects: [],
+    }],
+    cardResolution: { resolvedCards: [], unresolvedMentions: [], ambiguousMentions: [] },
+  });
+
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].env.RELAY_API_KEY, "dedicated-relay-key");
+  assert.equal(calls[0].env.RELAY_BASE_URL, "https://relay.example/v1");
 });
 
 test("source-quote binding rejects an ambiguous occurrence instead of guessing", () => {
@@ -369,7 +416,7 @@ test("default draft extractor rejects invalid formal bindings before any model c
     await t.test(fixtureCase.name, async () => {
       let calls = 0;
       const invoke = createDefaultFormalScenarioDraftInvoker({
-        env: { DEEPSEEK_API_KEY: "test-key" },
+        env: { RELAY_API_KEY: "test-key", RELAY_BASE_URL: "https://relay.example/v1" },
         jsonTaskInvoker: async () => { calls += 1; return {}; },
       });
       await assert.rejects(

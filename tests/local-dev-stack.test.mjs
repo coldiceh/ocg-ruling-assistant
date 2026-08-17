@@ -96,7 +96,7 @@ test("relay launcher provisions the same admin session credential used by the we
   assert.doesNotMatch(launcher, /\$env:ADMIN_PASSWORD\s*=/u);
   assert.match(launcher, /\$env:ADMIN_MODEL_LAB_ENABLED = "true"/u);
   assert.match(launcher, /Read-Host -Prompt "输入朋友提供的中转 Base URL/u);
-  assert.match(launcher, /Read-Host -Prompt "粘贴 DeepSeek API key[^\r\n]+" -AsSecureString/u);
+  assert.doesNotMatch(launcher, /Read-Host -Prompt "粘贴 DeepSeek API key/u);
   assert.match(launcher, /Remove-Item Env:DEEPSEEK_API_KEY -ErrorAction SilentlyContinue/u);
   for (const model of ["SOL", "TERRA", "LUNA"]) {
     assert.match(

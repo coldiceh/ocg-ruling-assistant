@@ -217,8 +217,8 @@ test("matrix creates one Flash source, forks frozen evidence, skips unavailable 
     model: "deepseek-v4-flash",
     reasoningMode: "standard",
     reasoningEffort: "none",
-    preparationProvider: "deepseek",
-    preparationModel: "deepseek-v4-flash",
+    preparationProvider: "relay",
+    preparationModel: "relay-gpt-5.6-sol",
     finalAttemptPolicy: "single",
   });
   const forks = fixture.calls.filter((call) => call.action === "fork");
@@ -544,7 +544,7 @@ test("Sol-only default enforces request cost and concurrency guards before paid 
   const create = allowed.calls.find((call) => call.action === "create");
   assert.equal(create.body.provider, "relay");
   assert.equal(create.body.model, "relay-gpt-5.6-sol");
-  assert.equal(create.body.preparationProvider, "deepseek");
+  assert.equal(create.body.preparationProvider, "relay");
   assert.equal(create.body.finalAttemptPolicy, "single");
   assert.equal(report.guard.plannedFinalRequests, 1);
   assert.equal(report.guard.costEstimateMode, "relay_screenshot_token_envelope");
@@ -1037,7 +1037,7 @@ function createCapabilityResponse({ finalCallBudget, capabilityMode }) {
         modelId: `relay-gpt-5.6-${name}`,
         budgetPool: `relay_${name}`,
         modes: ["pro"],
-        efforts: ["high"],
+        efforts: name === "sol" ? ["low", "high"] : ["high"],
       })),
     },
   ];

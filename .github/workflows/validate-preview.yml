@@ -212,7 +212,7 @@ jobs:
         run: |
           set -euo pipefail
           umask 077
-          if [ -n "${RELAY_API_KEY:-}" ] || [ -n "${DEEPSEEK_API_KEY:-}" ]; then
+          if [ -n "${RELAY_API_KEY:-}" ]; then
             echo "Retrieval-only pilot unexpectedly received a paid provider key" >&2
             exit 1
           fi
@@ -232,7 +232,6 @@ jobs:
         shell: bash
         env:
           RELAY_API_KEY: ${{ secrets.RELAY_API_KEY }}
-          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
           PRIVATE_EVALUATION_MODE: "true"
           PRIVATE_EVALUATION_DIAGNOSTICS: "true"
           PRIVATE_EVALUATION_BUDGET_USD: "40"
@@ -241,8 +240,8 @@ jobs:
         run: |
           set -euo pipefail
           umask 077
-          if [ -z "$RELAY_API_KEY" ] || [ -z "$DEEPSEEK_API_KEY" ]; then
-            echo "The Relay and DeepSeek keys for paid private evaluation must both be configured" >&2
+          if [ -z "$RELAY_API_KEY" ]; then
+            echo "The Relay key for paid private evaluation must be configured" >&2
             exit 1
           fi
           node backend/server.mjs > "$RUNNER_TEMP/private-evaluation-backend.log" 2>&1 &

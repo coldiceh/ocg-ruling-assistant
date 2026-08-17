@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex,nofollow" />
+    <title>裁定流程真实计时测试</title>
+    <link rel="stylesheet" href="timing-test.css?v=20260817-2" />
+  </head>
+  <body>
+    <main class="timing-shell">
+      <header class="page-header">
+        <div>
+          <p class="eyebrow">Preview diagnostics</p>
+          <h1>裁定流程真实计时测试</h1>
+          <p class="intro">
+            本页只展示当前部署后端实际发送的阶段事件和耗时，不模拟阶段，也不会自动重试请求。
+          </p>
+        </div>
+        <a class="back-link" href="/">返回裁定页面</a>
+      </header>
+
+      <section class="panel" aria-labelledby="questionTitle">
+        <div class="panel-heading">
+          <div>
+            <h2 id="questionTitle">测试问题</h2>
+            <p id="endpointText">后端：当前页面同源 /api/answer</p>
+          </div>
+          <span class="status-badge" id="requestStatus" aria-live="polite">准备就绪</span>
+        </div>
+
+        <label class="field-label" for="questionInput">游戏王规则或裁定问题</label>
+        <textarea
+          id="questionInput"
+          rows="8"
+          spellcheck="false"
+          placeholder="粘贴要测试的裁定问题……"
+        ></textarea>
+
+        <div class="request-meta">
+          <span>模型配置：<strong id="modelProfileText">读取中</strong></span>
+          <span>裁定版本：<strong>latest</strong></span>
+        </div>
+
+        <div class="actions">
+          <button class="primary-button" id="startButton" type="button">开始测试</button>
+          <button class="secondary-button" id="cancelButton" type="button" disabled>取消当前请求</button>
+        </div>
+        <p class="error-message" id="errorText" role="alert" hidden></p>
+      </section>
+
+      <section class="panel" aria-labelledby="summaryTitle">
+        <div class="panel-heading">
+          <div>
+            <h2 id="summaryTitle">总计</h2>
+            <p>浏览器计时用于观察网络等待；阶段与后端总计只采用服务端事件。</p>
+          </div>
+        </div>
+        <dl class="metric-grid">
+          <div class="metric-card">
+            <dt>浏览器总等待</dt>
+            <dd id="browserTotalText">—</dd>
+          </div>
+          <div class="metric-card">
+            <dt>后端总计</dt>
+            <dd id="backendTotalText">—</dd>
+          </div>
+          <div class="metric-card">
+            <dt>浏览器－后端</dt>
+            <dd id="timingDifferenceText">—</dd>
+          </div>
+          <div class="metric-card">
+            <dt>首个事件到达</dt>
+            <dd id="firstEventText">—</dd>
+          </div>
+        </dl>
+      </section>
+
+      <section class="panel" aria-labelledby="stagesTitle">
+        <div class="panel-heading">
+          <div>
+            <h2 id="stagesTitle">后端阶段</h2>
+            <p>开始时间、运行中耗时和最终耗时都来自 SSE 服务端字段。</p>
+          </div>
+        </div>
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">阶段</th>
+                <th scope="col">状态</th>
+                <th scope="col">后端开始于</th>
+                <th scope="col">后端耗时</th>
+              </tr>
+            </thead>
+            <tbody id="stageTableBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel" id="answerPanel" aria-labelledby="answerTitle" hidden>
+        <div class="panel-heading">
+          <div>
+            <h2 id="answerTitle">返回结果</h2>
+            <p>这里只展示路由和简短答案，便于确认计时对应的是哪次回答。</p>
+          </div>
+          <span class="route-badge" id="routeText">—</span>
+        </div>
+        <pre class="answer-text" id="shortAnswerText"></pre>
+      </section>
+
+      <details class="panel raw-events-panel">
+        <summary>查看原始 SSE 事件</summary>
+        <p>每行包含浏览器收到事件的相对时间、事件名称及服务端原始数据。</p>
+        <pre id="rawEventLog">尚未发起请求。</pre>
+      </details>
+    </main>
+
+    <script type="module" src="timing-test.js?v=20260817-2"></script>
+  </body>
+</html>

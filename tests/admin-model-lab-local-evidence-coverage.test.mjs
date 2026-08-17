@@ -41,10 +41,11 @@ test("local Evidence Snapshot covers every expected card without network or mode
       ADMIN_MODEL_LAB_LIVE_OFFICIAL_QA: "false",
       RAG_LIVE_OFFICIAL_QA: "false",
     },
-    deepSeekProvider: {
+    preparationProviders: { relay: {
+      providerId: "relay",
       async prepareEvidence() {
         return {
-          provider: "deepseek",
+          provider: "relay",
           model: "deterministic-empty-fixture",
           result: {
             cardNameCandidates: [],
@@ -58,7 +59,7 @@ test("local Evidence Snapshot covers every expected card without network or mode
           },
         };
       },
-    },
+    } },
     openAIProvider: {
       async create(request) {
         openAIRequests.push(request);

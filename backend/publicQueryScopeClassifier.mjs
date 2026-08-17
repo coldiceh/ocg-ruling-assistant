@@ -1,11 +1,11 @@
 import {
-  callDeepSeekJsonTask,
+  callRelayJsonTask,
   isServerOwnedPrivateEvaluationEnv,
 } from "./ragModelClient.mjs";
 
-const DEFAULT_MODEL = "deepseek-v4-flash";
-const DEFAULT_TIMEOUT_MS = 4_500;
-const DEFAULT_MAX_OUTPUT_TOKENS = 96;
+const DEFAULT_MODEL = "gpt-5.6-sol";
+const DEFAULT_TIMEOUT_MS = 12_000;
+const DEFAULT_MAX_OUTPUT_TOKENS = 256;
 
 export function publicQueryScopeClassifierStatus(env = globalThis.process?.env || {}) {
   if (isDisabled(env.PUBLIC_QUERY_SCOPE_CLASSIFIER_ENABLED)) {
@@ -14,8 +14,9 @@ export function publicQueryScopeClassifierStatus(env = globalThis.process?.env |
   if (isEnabled(env.RAG_DRY_RUN) || isServerOwnedPrivateEvaluationEnv(env)) {
     return { enabled: false, reason: "private_or_dry_run" };
   }
-  if (!String(env.DEEPSEEK_API_KEY || "").trim()) {
-    return { enabled: false, reason: "deepseek_not_configured" };
+  if (!String(env.RELAY_API_KEY || "").trim()
+      || !String(env.RELAY_BASE_URL || "").trim()) {
+    return { enabled: false, reason: "relay_not_configured" };
   }
   return {
     enabled: true,
@@ -30,7 +31,7 @@ export async function classifyPublicQueryScope({
   fetchImpl = globalThis.fetch,
   signal,
   now = new Date(),
-  invoke = callDeepSeekJsonTask,
+  invoke = callRelayJsonTask,
 } = {}) {
   const status = publicQueryScopeClassifierStatus(env);
   const normalizedQuestion = String(question || "").trim();
@@ -42,7 +43,7 @@ export async function classifyPublicQueryScope({
     env.PUBLIC_QUERY_SCOPE_TIMEOUT_MS,
     DEFAULT_TIMEOUT_MS,
     500,
-    10_000,
+    30_000,
   );
   const timeout = createAbortTimeout({ signal, timeoutMs });
   try {
@@ -57,17 +58,15 @@ export async function classifyPublicQueryScope({
       ),
       env,
       fetchImpl,
-      temperature: 0,
-      thinkingMode: "disabled",
+      reasoningEffort: "low",
       signal: timeout.signal,
-      trackPublicBudget: true,
-      allowResponseFormatFallback: false,
       now,
     });
     return normalizeScopeDecision(payload, {
       model: classifierModel(env),
       usage: payload?.usage || {},
-      estimatedCostCny: Number(payload?.estimatedCostCny || 0),
+      estimatedCostCny: 0,
+      estimatedCostUsd: Number(payload?.estimatedCostUsd || 0),
     });
   } catch (error) {
     if (signal?.aborted) throw error;
@@ -130,16 +129,17 @@ function uncertainDecision(reasonCode) {
     model: null,
     usage: {},
     estimatedCostCny: 0,
+    estimatedCostUsd: 0,
   };
 }
 
 function classifierModel(env = {}) {
-  return String(
+  const requested = String(
     env.PUBLIC_QUERY_SCOPE_MODEL
-      || env.DEEPSEEK_CARD_MODEL
-      || env.DEEPSEEK_MODEL
+      || env.RELAY_QUERY_SCOPE_MODEL
       || DEFAULT_MODEL,
-  ).trim() || DEFAULT_MODEL;
+  ).trim().toLowerCase();
+  return requested === DEFAULT_MODEL ? requested : DEFAULT_MODEL;
 }
 
 function classifierFailureCode(error) {

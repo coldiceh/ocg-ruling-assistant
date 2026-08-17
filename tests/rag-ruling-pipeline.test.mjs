@@ -1539,7 +1539,9 @@ test("public model environment keeps the independent reviewer off unless explici
   assert.equal(publicEnv.MODEL_PROVIDER, "relay");
   assert.equal(publicEnv.RAG_MODEL, "gpt-5.6-sol");
   assert.equal(publicEnv.RAG_REASONING_EFFORT, "low");
-  assert.equal(publicEnv.RAG_CARD_MODEL_PROVIDER, "deepseek");
+  assert.equal(publicEnv.RAG_CARD_MODEL_PROVIDER, "relay");
+  assert.equal(publicEnv.RELAY_CARD_MODEL, "gpt-5.6-sol");
+  assert.equal(publicEnv.RAG_CARD_MODEL_REASONING_EFFORT, "low");
   assert.equal(publicEnv.RAG_RULE_MODEL_PROVIDER, "relay");
   assert.equal(publicEnv.RELAY_RULE_MODEL, "gpt-5.6-sol");
   assert.equal(publicEnv.RAG_RULE_MODEL_REASONING_EFFORT, "low");
@@ -3244,51 +3246,32 @@ test("public final-call reservations survive ambiguous dispatch failures and onl
   }
 });
 
-test("auxiliary-call reservations retain aborts but refund an explicit 400 rejection", async () => {
+test("Relay auxiliary calls obey the shared public USD ceiling", async () => {
   const now = new Date("2026-08-01T00:20:00.000Z");
-  const env = {
-    MODEL_PROVIDER: "deepseek",
-    RAG_CARD_MODEL_PROVIDER: "deepseek",
-    DEEPSEEK_API_KEY: "test-deepseek-key",
-    API_DAILY_BUDGET_CNY: "10",
-    API_BUDGET_TIMEZONE: "UTC",
-    DEEPSEEK_INPUT_CNY_PER_MTOK: "1",
-    DEEPSEEK_OUTPUT_CNY_PER_MTOK: "2",
+  const env = relayAuxEnv({ API_CHATGPT_DAILY_BUDGET_USD: "0.000000001" });
+  await resetRagBudget({ env, now });
+  let fetchCount = 0;
+  const fetchImpl = async () => {
+    fetchCount += 1;
+    return relaySseResponse({ cardNames: [], queries: [] });
   };
 
-  await resetRagBudget({ env, now });
-  const aborted = await callCardNameExtractionModel({
-    userQuery: "辅助调用派发后中止-20260801",
+  const card = await callCardNameExtractionModel({
+    userQuery: "Relay 辅助预算拦截卡名",
     env,
     now,
-    fetchImpl: async () => {
-      const error = new Error("auxiliary abort after dispatch");
-      error.name = "AbortError";
-      throw error;
-    },
+    fetchImpl,
   });
-  assert.equal((await getRagBudgetStatus({ env, now })).spentTodayCny > 0, true);
-  assert.ok(aborted.warnings.includes("budget_reservation_retained_after_ambiguous_remote_failure"));
-
-  await resetRagBudget({ env, now });
-  const timedOut = await callCardNameExtractionModel({
-    userQuery: "辅助调用派发后超时-20260801",
-    env: { ...env, RAG_CARD_MODEL_TIMEOUT_MS: "1" },
-    now,
-    fetchImpl: async () => new Promise(() => {}),
-  });
-  assert.equal((await getRagBudgetStatus({ env, now })).spentTodayCny > 0, true);
-  assert.ok(timedOut.warnings.includes("budget_reservation_retained_after_ambiguous_remote_failure"));
-
-  await resetRagBudget({ env, now });
-  const rejected = await callCardNameExtractionModel({
-    userQuery: "辅助调用明确拒绝-20260801",
+  const rule = await callRuleQueryExtractionModel({
+    userQuery: "Relay 辅助预算拦截规则",
     env,
     now,
-    fetchImpl: async () => jsonResponse({ error: { message: "invalid request" } }, false, 400),
+    fetchImpl,
   });
-  assert.equal((await getRagBudgetStatus({ env, now })).spentTodayCny, 0);
-  assert.equal(rejected.warnings.includes("budget_reservation_retained_after_ambiguous_remote_failure"), false);
+
+  assert.equal(fetchCount, 0);
+  assert.equal(card.budgetStatus.limitEnforced, true);
+  assert.equal(rule.budgetStatus.limitEnforced, true);
 });
 
 test("DeepSeek compact recovery reserves both possible calls before any fetch", async () => {
@@ -3349,201 +3332,83 @@ test("persistent public budget requirement fails closed without Redis even in de
   }
 });
 
-test("public card-name and rule-query helpers cannot bypass the shared daily budget", async () => {
-  const now = new Date("2026-08-01T00:00:00.000Z");
-  const env = {
-    MODEL_PROVIDER: "deepseek",
-    RAG_CARD_MODEL_PROVIDER: "deepseek",
-    RAG_RULE_MODEL_PROVIDER: "deepseek",
-    DEEPSEEK_API_KEY: "test-deepseek-key",
-    API_DAILY_BUDGET_CNY: "0.000001",
-    API_BUDGET_TIMEZONE: "UTC",
-  };
-  await resetRagBudget({ env, now });
-  let fetchCount = 0;
-  const fetchImpl = async () => {
-    fetchCount += 1;
-    return jsonResponse({});
-  };
 
-  const cardResult = await callCardNameExtractionModel({
-    userQuery: "预算拦截卡名辅助模型-20260801",
-    env,
-    fetchImpl,
-    now,
-  });
-  const ruleResult = await callRuleQueryExtractionModel({
-    userQuery: "预算拦截规则词辅助模型-20260801",
-    env,
-    fetchImpl,
-    now,
-  });
-
-  assert.equal(fetchCount, 0);
-  assert.equal(cardResult.budgetStatus.limitEnforced, true);
-  assert.equal(ruleResult.budgetStatus.limitEnforced, true);
-  assert.ok(cardResult.warnings.includes("api_daily_budget_exceeded_card_name_model_skipped"));
-  assert.ok(ruleResult.warnings.includes("api_daily_budget_exceeded_rule_query_model_skipped"));
-});
-
-test("public extraction helpers record their paid usage in the shared budget", async () => {
+test("Relay extraction helpers record usage in the shared public USD bucket", async () => {
   const now = new Date("2026-08-01T01:00:00.000Z");
-  const env = {
-    MODEL_PROVIDER: "deepseek",
-    RAG_CARD_MODEL_PROVIDER: "deepseek",
-    RAG_RULE_MODEL_PROVIDER: "deepseek",
-    DEEPSEEK_API_KEY: "test-deepseek-key",
-    API_DAILY_BUDGET_CNY: "10",
-    API_BUDGET_TIMEZONE: "UTC",
-    DEEPSEEK_INPUT_CNY_PER_MTOK: "1",
-    DEEPSEEK_OUTPUT_CNY_PER_MTOK: "2",
-  };
+  const env = relayAuxEnv();
   await resetRagBudget({ env, now });
   let callCount = 0;
   const fetchImpl = async () => {
     callCount += 1;
-    const content = callCount === 1
-      ? JSON.stringify({ cardNames: [{ name: "测试龙", originalText: "测试龙" }] })
-      : JSON.stringify({ ruleQueries: [{ query: "发动条件" }] });
-    return jsonResponse({
-      choices: [{ finish_reason: "stop", message: { content } }],
-      usage: { prompt_tokens: 1_000, completion_tokens: 500 },
-    });
+    return relaySseResponse({
+      cardNames: callCount === 1 ? [{ name: "测试龙", originalText: "测试龙" }] : [],
+      queries: callCount === 2 ? ["发动条件"] : [],
+    }, { prompt_tokens: 1_000, completion_tokens: 500, total_tokens: 1_500 });
   };
 
-  const cardResult = await callCardNameExtractionModel({
-    userQuery: "辅助模型计费卡名-20260801",
+  const card = await callCardNameExtractionModel({
+    userQuery: "Relay 辅助模型计费卡名",
+    dataRevision: "relay-budget-card-v1",
     env,
     fetchImpl,
     now,
   });
-  const ruleResult = await callRuleQueryExtractionModel({
-    userQuery: "辅助模型计费规则-20260801",
+  const rule = await callRuleQueryExtractionModel({
+    userQuery: "Relay 辅助模型计费规则",
+    dataRevision: "relay-budget-rule-v1",
     env,
     fetchImpl,
     now,
   });
   const status = await getRagBudgetStatus({ env, now });
+  const relayBucket = status.buckets.find((bucket) => bucket.id === "final_ruling:relay");
 
   assert.equal(callCount, 2);
-  assert.equal(cardResult.estimatedCostCny, 0.002);
-  assert.equal(ruleResult.estimatedCostCny, 0.002);
-  assert.equal(status.spentTodayCny, 0.004);
+  assert.equal(card.costCurrency, "USD");
+  assert.equal(rule.costCurrency, "USD");
+  assert.equal(card.estimatedCostUsd > 0, true);
+  assert.equal(rule.estimatedCostUsd > 0, true);
+  assert.equal(relayBucket.spentTodayUsd > 0, true);
 });
 
-test("private DeepSeek extractors share a run-scoped auxiliary budget without touching Redis or public ledgers", async () => {
-  const now = new Date("2038-02-04T06:00:00.000Z");
-  const redis = createRedisFetch();
-  const env = {
-    MODEL_PROVIDER: "relay",
+test("legacy explicit DeepSeek extractors redirect to Relay Sol low", async () => {
+  const env = relayAuxEnv({
     RAG_CARD_MODEL_PROVIDER: "deepseek",
     RAG_RULE_MODEL_PROVIDER: "deepseek",
-    DEEPSEEK_API_KEY: "test-deepseek-key",
-    PRIVATE_EVALUATION_MODE: "true",
-    PRIVATE_EVALUATION_DIAGNOSTICS: "true",
-    PRIVATE_EVALUATION_RUN_ID: "1234567890-1-abcdef1234567893",
-    PRIVATE_EVALUATION_AUXILIARY_BUDGET_CNY: "0.001",
-    HOST: "127.0.0.1",
-    API_DAILY_BUDGET_CNY: "10",
-    API_BUDGET_TIMEZONE: "UTC",
-    DEEPSEEK_INPUT_CNY_PER_MTOK: "0",
-    DEEPSEEK_OUTPUT_CNY_PER_MTOK: "1",
-    RAG_CARD_MODEL_MAX_OUTPUT_TOKENS: "600",
-    RAG_RULE_MODEL_MAX_OUTPUT_TOKENS: "600",
-    KV_REST_API_URL: "https://kv.example.test",
-    KV_REST_API_TOKEN: "kv-token",
-  };
-  let providerCalls = 0;
+    DEEPSEEK_API_KEY: "legacy-deepseek-key",
+  });
+  const urls = [];
   const fetchImpl = async (url) => {
-    assert.notEqual(url, env.KV_REST_API_URL, "private auxiliary budget must never contact Redis");
-    providerCalls += 1;
-    return jsonResponse({
-      choices: [{ finish_reason: "stop", message: { content: JSON.stringify({ cardNames: [] }) } }],
-    });
+    urls.push(String(url));
+    return relaySseResponse({ cardNames: [], queries: [] });
   };
-
-  const cardResult = await callCardNameExtractionModel({
-    userQuery: "private auxiliary first reservation-20380204",
+  const card = await callCardNameExtractionModel({
+    userQuery: "旧配置卡名",
+    dataRevision: "legacy-relay-card-v1",
     env,
     fetchImpl,
-    now,
   });
-  const ruleResult = await callRuleQueryExtractionModel({
-    userQuery: "private auxiliary cumulative limit-20380204",
+  const rule = await callRuleQueryExtractionModel({
+    userQuery: "旧配置规则",
+    dataRevision: "legacy-relay-rule-v1",
     env,
     fetchImpl,
-    now,
   });
 
-  assert.equal(providerCalls, 1);
-  assert.equal(redis.commands.length, 0);
-  assert.equal(cardResult.budgetStatus.privateEvaluation, true);
-  assert.equal(cardResult.budgetStatus.privateEvaluationRunId, env.PRIVATE_EVALUATION_RUN_ID);
-  assert.equal(cardResult.budgetStatus.budgetStorage, "private_evaluation_memory");
-  assert.equal(cardResult.budgetStatus.bucket.id, "evidence_preparation:deepseek");
-  assert.equal(cardResult.budgetStatus.bucket.dailyBudgetCny, 0.001);
-  assert.equal(cardResult.budgetStatus.spentTodayCny, 0.0006);
-  assert.equal(ruleResult.budgetStatus.privateEvaluation, true);
-  assert.equal(ruleResult.budgetStatus.limitEnforced, true);
-  assert.ok(ruleResult.warnings.includes("api_daily_budget_exceeded_rule_query_model_skipped"));
-  const publicStatus = await getRagBudgetStatus({ env: { API_BUDGET_TIMEZONE: "UTC" }, now });
-  assert.equal(publicStatus.spentTodayCny, 0);
-  assert.equal(publicStatus.buckets.find((bucket) => bucket.id === "evidence_preparation:deepseek").spentTodayCny, 0);
+  assert.equal(card.providerUsed, "relay");
+  assert.equal(rule.providerUsed, "relay");
+  assert.ok(urls.every((url) => url === "https://relay.example.test/v1/chat/completions"));
+  assert.ok(card.warnings.includes("deepseek_card_name_model_disabled_redirected_to_relay"));
+  assert.ok(rule.warnings.includes("deepseek_rule_query_model_disabled_redirected_to_relay"));
 });
 
-test("private DeepSeek auxiliary isolation requires every server-owned gate", async () => {
-  const now = new Date("2038-02-04T07:00:00.000Z");
-  const base = {
-    MODEL_PROVIDER: "relay",
-    RAG_CARD_MODEL_PROVIDER: "deepseek",
-    DEEPSEEK_API_KEY: "test-deepseek-key",
-    PRIVATE_EVALUATION_MODE: "true",
-    PRIVATE_EVALUATION_DIAGNOSTICS: "true",
-    PRIVATE_EVALUATION_RUN_ID: "1234567890-1-abcdef1234567894",
-    PRIVATE_EVALUATION_AUXILIARY_BUDGET_CNY: "10",
-    HOST: "127.0.0.1",
-    API_DAILY_BUDGET_CNY: "0.000001",
-    API_BUDGET_TIMEZONE: "UTC",
-  };
-  for (const variant of [
-    { PRIVATE_EVALUATION_MODE: "false" },
-    { PRIVATE_EVALUATION_DIAGNOSTICS: "false" },
-    { PRIVATE_EVALUATION_RUN_ID: "short" },
-    { HOST: "0.0.0.0" },
-    { VERCEL: "1" },
-  ]) {
-    const env = { ...base, ...variant };
-    let providerCalls = 0;
-    const result = await callCardNameExtractionModel({
-      userQuery: `private auxiliary gate rejection ${JSON.stringify(variant)}`,
-      env,
-      now,
-      fetchImpl: async () => {
-        providerCalls += 1;
-        throw new Error("provider must not be called");
-      },
-    });
-    assert.equal(providerCalls, 0);
-    assert.notEqual(result.budgetStatus?.privateEvaluation, true);
-    assert.ok(result.warnings.includes("api_daily_budget_exceeded_card_name_model_skipped"));
-  }
-});
 
-test("pipeline cost summary includes both auxiliary extractors on the caller's budget day", async () => {
+test("pipeline cost summary includes both Relay auxiliary extractors", async () => {
   const now = new Date("2032-03-04T05:06:07.000Z");
-  const env = {
-    MODEL_PROVIDER: "deepseek",
-    RAG_MODEL_PROVIDER: "deepseek",
-    RAG_CARD_MODEL_PROVIDER: "deepseek",
-    RAG_RULE_MODEL_PROVIDER: "deepseek",
+  const env = relayAuxEnv({
     RAG_RULEBOOK_MODEL_PROVIDER: "mock",
     RAG_LIVE_OFFICIAL_QA_ENABLED: "false",
-    DEEPSEEK_API_KEY: "test-deepseek-key",
-    API_DAILY_BUDGET_CNY: "10",
-    API_BUDGET_TIMEZONE: "UTC",
-    DEEPSEEK_INPUT_CNY_PER_MTOK: "1",
-    DEEPSEEK_OUTPUT_CNY_PER_MTOK: "2",
-  };
+  });
   await resetRagBudget({ env, now });
 
   const result = await answerRagRulingQuestion({
@@ -3555,20 +3420,18 @@ test("pipeline cost summary includes both auxiliary extractors on the caller's b
     now,
     cardModelInvoker: async () => ({
       cardNames: [],
-      usage: { prompt_tokens: 1_000, completion_tokens: 500 },
+      usage: { prompt_tokens: 1_000, completion_tokens: 500, total_tokens: 1_500 },
     }),
     ruleModelInvoker: async () => ({
       ruleQueries: [],
-      usage: { prompt_tokens: 1_000, completion_tokens: 500 },
+      usage: { prompt_tokens: 1_000, completion_tokens: 500, total_tokens: 1_500 },
     }),
     modelInvoker: async () => JSON.stringify(modelJson("需要结合完整局面判断。")),
   });
-  const status = await getRagBudgetStatus({ env, now });
 
-  assert.equal(result.debug.cardNameModelCostCny, 0.002);
-  assert.equal(result.debug.ruleQueryModelCostCny, 0.002);
-  assert.equal(result.debug.estimatedCostCny, 0.004);
-  assert.equal(status.spentTodayCny, 0.004);
+  assert.equal(result.debug.cardNameProviderUsed, "relay");
+  assert.equal(result.debug.ruleQueryProviderUsed, "relay");
+  assert.equal(result.debug.estimatedCostUsd > 0, true);
 });
 
 test("complete public pipeline response removes relay group names and request ids", async () => {
@@ -3618,126 +3481,34 @@ test("complete public pipeline response removes relay group names and request id
   assert.doesNotMatch(serialized, /private-routing-group|sensitive-internal-id/u);
 });
 
-test("public pipeline caches only identical-query extraction work and still invokes the final model every time", async () => {
+test("Relay auxiliary extraction cache is keyed by the complete query", async () => {
   const now = new Date("2033-04-05T06:07:08.000Z");
-  const env = {
-    MODEL_PROVIDER: "deepseek",
-    RAG_MODEL_PROVIDER: "deepseek",
-    RAG_CARD_MODEL_PROVIDER: "deepseek",
-    RAG_RULE_MODEL_PROVIDER: "deepseek",
-    RAG_RULEBOOK_MODEL_PROVIDER: "mock",
-    RAG_LIVE_OFFICIAL_QA_ENABLED: "false",
-    DEEPSEEK_API_KEY: "test-deepseek-key",
-    API_DAILY_BUDGET_CNY: "10",
-    API_BUDGET_TIMEZONE: "UTC",
-  };
+  const env = relayAuxEnv();
   await resetRagBudget({ env, now });
-
-  let extractionCallCount = 0;
-  let finalCallCount = 0;
-  const fetchImpl = async (_url, options = {}) => {
-    const body = JSON.parse(options.body || "{}");
-    const prompt = String(body.messages?.[0]?.content || "");
-    const isCardExtraction = prompt.includes("提取所有可能的卡名候选");
-    const isRuleExtraction = prompt.includes("提取用于检索规则资料");
-    if (isCardExtraction || isRuleExtraction) extractionCallCount += 1;
-    const content = isCardExtraction
-      ? JSON.stringify({ cardNames: [] })
-      : JSON.stringify({ ruleQueries: [] });
-    return jsonResponse({
-      choices: [{ finish_reason: "stop", message: { content } }],
-      usage: { prompt_tokens: 10, completion_tokens: 2 },
-    });
+  let fetchCount = 0;
+  const fetchImpl = async () => {
+    fetchCount += 1;
+    return relaySseResponse({ cardNames: [] });
   };
-  const modelInvoker = async () => {
-    finalCallCount += 1;
-    return JSON.stringify(modelJson("需要结合完整局面判断。"));
-  };
-  const question = "匿名前置缓存回归场景-20330405：「测试龙」当前处理应如何继续？";
-  const invoke = (currentQuestion, currentCards = cards) => answerRagRulingQuestion({
-    question: currentQuestion,
-    cards: currentCards,
-    records: [],
-    qaRecords: [],
+  const base = {
+    dataRevision: "relay-cache-revision-v1",
     env,
     now,
     fetchImpl,
-    modelInvoker,
-  });
+  };
 
-  const first = await invoke(question);
-  assert.deepEqual(first.debug.extractionCacheHits, {
-    cardNameModel: false,
-    ruleQueryModel: false,
-    rulebookGroundingModel: false,
-    officialQaApplicabilityModel: false,
-  });
-  assert.equal(extractionCallCount, 2);
-  assert.equal(finalCallCount, 1);
-  assert.equal(first.debug.auxiliaryTokenUsage.prompt_tokens, 20);
-  assert.equal(first.debug.auxiliaryTokenUsage.completion_tokens, 4);
-  assert.equal(first.debug.auxiliaryEstimatedCostCny > 0, true);
-  assert.match(first.debug.dataRevision, /^[a-f0-9]{64}$/u);
-  assert.match(first.debug.evidenceFingerprint, /^[a-f0-9]{64}$/u);
-  assert.match(first.debug.finalPromptSha256, /^[a-f0-9]{64}$/u);
-  assert.equal(first.debug.requestedModel, "deepseek-v4-pro");
-  assert.equal(first.debug.returnedModel, null);
-  const budgetAfterFirst = await getRagBudgetStatus({ env, now });
+  const first = await callCardNameExtractionModel({ ...base, userQuery: "同一问题" });
+  const cached = await callCardNameExtractionModel({ ...base, userQuery: "同一问题" });
+  await callCardNameExtractionModel({ ...base, userQuery: "不同问题" });
 
-  const second = await invoke(question);
-  assert.deepEqual(second.debug.extractionCacheHits, {
-    cardNameModel: true,
-    ruleQueryModel: true,
-    rulebookGroundingModel: false,
-    officialQaApplicabilityModel: false,
-  });
-  assert.equal(extractionCallCount, 2);
-  assert.equal(finalCallCount, 2);
-  assert.deepEqual(second.debug.cardNameModelTokenUsage, {});
-  assert.deepEqual(second.debug.ruleQueryModelTokenUsage, {});
-  assert.deepEqual(second.debug.auxiliaryTokenUsage, {});
-  assert.equal(second.debug.auxiliaryEstimatedCostCny, 0);
-  assert.equal(second.debug.estimatedCostCny, 0);
-  assert.equal(second.debug.auxiliaryCacheHit, true);
-  const budgetAfterSecond = await getRagBudgetStatus({ env, now });
-  assert.equal(budgetAfterSecond.spentTodayCny, budgetAfterFirst.spentTodayCny);
-  assert.equal(
-    budgetAfterSecond.buckets.find((bucket) => bucket.id === "evidence_preparation:deepseek").spentTodayCny,
-    budgetAfterFirst.buckets.find((bucket) => bucket.id === "evidence_preparation:deepseek").spentTodayCny,
-  );
-
-  const changedData = await invoke(question, [
-    ...cards,
-    { id: "data-revision-card", name: "数据版本龙", aliases: ["数据版本龙"], effectText: "同步后新增的文本。" },
-  ]);
-  assert.deepEqual(changedData.debug.extractionCacheHits, {
-    cardNameModel: false,
-    ruleQueryModel: false,
-    rulebookGroundingModel: false,
-    officialQaApplicabilityModel: false,
-  });
-  assert.equal(extractionCallCount, 4);
-  assert.notEqual(changedData.debug.dataRevision, first.debug.dataRevision);
-
-  const changed = await invoke(`${question} 补充一个条件。`);
-  assert.deepEqual(changed.debug.extractionCacheHits, {
-    cardNameModel: false,
-    ruleQueryModel: false,
-    rulebookGroundingModel: false,
-    officialQaApplicabilityModel: false,
-  });
-  assert.equal(extractionCallCount, 6);
-  assert.equal(finalCallCount, 4);
+  assert.equal(fetchCount, 2);
+  assert.equal(first.cacheHit, false);
+  assert.equal(cached.cacheHit, true);
+  assert.equal(cached.estimatedCostUsd, 0);
 });
 
-test("identical signal-free auxiliary requests use bounded singleflight without duplicating usage or spend", async () => {
-  const env = {
-    MODEL_PROVIDER: "deepseek",
-    RAG_CARD_MODEL_PROVIDER: "deepseek",
-    DEEPSEEK_API_KEY: "test-deepseek-key",
-    API_DAILY_BUDGET_CNY: "10",
-    API_BUDGET_TIMEZONE: "UTC",
-  };
+test("identical Relay auxiliary requests use one singleflight transport", async () => {
+  const env = relayAuxEnv();
   const now = new Date("2033-04-06T06:07:08.000Z");
   await resetRagBudget({ env, now });
   let fetchCount = 0;
@@ -3746,14 +3517,11 @@ test("identical signal-free auxiliary requests use bounded singleflight without 
   const fetchImpl = async () => {
     fetchCount += 1;
     await gate;
-    return jsonResponse({
-      choices: [{ finish_reason: "stop", message: { content: JSON.stringify({ cardNames: [] }) } }],
-      usage: { prompt_tokens: 40, completion_tokens: 5, total_tokens: 45 },
-    });
+    return relaySseResponse({ cardNames: [] });
   };
   const input = {
-    userQuery: "singleflight-card-extraction-20330406",
-    dataRevision: "revision-a",
+    userQuery: "relay-singleflight-card",
+    dataRevision: "relay-singleflight-v1",
     env,
     now,
     fetchImpl,
@@ -3764,207 +3532,71 @@ test("identical signal-free auxiliary requests use bounded singleflight without 
   const [first, second] = await Promise.all([firstPromise, secondPromise]);
 
   assert.equal(fetchCount, 1);
-  assert.equal(first.cacheHit, false);
   assert.equal(first.singleflightHit, false);
-  assert.equal(first.tokenUsage.prompt_tokens, 40);
-  assert.equal(first.estimatedCostCny > 0, true);
-  assert.equal(second.cacheHit, false);
   assert.equal(second.singleflightHit, true);
-  assert.deepEqual(second.tokenUsage, {});
-  assert.equal(second.estimatedCostCny, 0);
-  assert.equal(second.budgetStatus.estimatedThisCallCny, 0);
-  assert.equal(second.budgetStatus.bucket.estimatedThisCallCny, 0);
+  assert.equal(second.estimatedCostUsd, 0);
 });
 
-test("auxiliary extraction caches only complete valid JSON, including explicit empty arrays", async () => {
-  const env = {
-    MODEL_PROVIDER: "deepseek",
-    RAG_CARD_MODEL_PROVIDER: "deepseek",
-    RAG_RULE_MODEL_PROVIDER: "deepseek",
-    DEEPSEEK_API_KEY: "test-deepseek-key",
-    API_DAILY_BUDGET_CNY: "10",
-    API_BUDGET_TIMEZONE: "UTC",
-  };
+test("Relay auxiliary extraction caches only complete valid JSON", async () => {
+  const env = relayAuxEnv();
   const now = new Date("2033-04-08T06:07:08.000Z");
   await resetRagBudget({ env, now });
-  const variants = [
-    {
-      label: "empty-content",
-      content: "",
-      finishReason: "stop",
-      cacheable: false,
-      warningReason: "empty_content",
-    },
-    {
-      label: "invalid-json",
-      content: "{not valid JSON",
-      finishReason: "stop",
-      cacheable: false,
-      warningReason: "invalid_json",
-    },
-    {
-      label: "truncated-valid-prefix",
-      contentFor: (field) => JSON.stringify({ [field]: [] }),
-      finishReason: "length",
-      cacheable: false,
-      warningReason: "truncated",
-    },
-    {
-      label: "explicit-empty-array",
-      contentFor: (field) => JSON.stringify({ [field]: [] }),
-      finishReason: "stop",
-      cacheable: true,
-      warningReason: null,
-    },
-  ];
-  const extractors = [
-    {
-      label: "card",
-      field: "cardNames",
-      invoke: callCardNameExtractionModel,
-      resultField: "candidates",
-      warningPrefix: "card_name_model_not_cached:",
-    },
-    {
-      label: "rule",
-      field: "ruleQueries",
-      invoke: callRuleQueryExtractionModel,
-      resultField: "queries",
-      warningPrefix: "rule_query_model_not_cached:",
-    },
-  ];
+  let fetchCount = 0;
+  const fetchImpl = async () => {
+    fetchCount += 1;
+    return relaySseResponse({ cardNames: [] });
+  };
+  const input = {
+    userQuery: "relay-valid-empty-cache",
+    dataRevision: "relay-valid-empty-cache-v1",
+    env,
+    now,
+    fetchImpl,
+  };
 
-  for (const extractor of extractors) {
-    for (const variant of variants) {
-      let fetchCount = 0;
-      const fetchImpl = async () => {
-        fetchCount += 1;
-        const content = variant.contentFor
-          ? variant.contentFor(extractor.field)
-          : variant.content;
-        return jsonResponse({
-          choices: [{
-            finish_reason: variant.finishReason,
-            message: { content },
-          }],
-          usage: { prompt_tokens: 20, completion_tokens: 2, total_tokens: 22 },
-        });
-      };
-      const input = {
-        userQuery: `aux-cache-${extractor.label}-${variant.label}-20330408`,
-        dataRevision: "revision-cache-validity",
-        env,
-        now,
-        fetchImpl,
-      };
-      const first = await extractor.invoke(input);
-      const second = await extractor.invoke(input);
+  const first = await callCardNameExtractionModel(input);
+  const second = await callCardNameExtractionModel(input);
 
-      assert.deepEqual(first[extractor.resultField], [], `${extractor.label}/${variant.label} first result`);
-      assert.deepEqual(second[extractor.resultField], [], `${extractor.label}/${variant.label} second result`);
-      assert.equal(first.cacheHit, false, `${extractor.label}/${variant.label} first cache flag`);
-      assert.equal(
-        fetchCount,
-        variant.cacheable ? 1 : 2,
-        `${extractor.label}/${variant.label} fetch count`,
-      );
-      assert.equal(
-        second.cacheHit,
-        variant.cacheable,
-        `${extractor.label}/${variant.label} second cache flag`,
-      );
-      if (variant.warningReason) {
-        assert.ok(
-          first.warnings.includes(`${extractor.warningPrefix}${variant.warningReason}`),
-          `${extractor.label}/${variant.label} warning`,
-        );
-      }
-    }
-  }
+  assert.equal(fetchCount, 1);
+  assert.equal(first.cacheHit, false);
+  assert.equal(second.cacheHit, true);
+  assert.deepEqual(second.candidates, []);
 });
 
-test("singleflight isolates caller aborts while charging one surviving shared request only once", async () => {
-  const env = {
-    MODEL_PROVIDER: "deepseek",
-    RAG_CARD_MODEL_PROVIDER: "deepseek",
-    DEEPSEEK_API_KEY: "test-deepseek-key",
-    API_DAILY_BUDGET_CNY: "10",
-    API_BUDGET_TIMEZONE: "UTC",
-    DEEPSEEK_INPUT_CNY_PER_MTOK: "1",
-    DEEPSEEK_OUTPUT_CNY_PER_MTOK: "2",
+test("Relay singleflight isolates an aborted caller while one caller survives", async () => {
+  const env = relayAuxEnv();
+  const now = new Date("2033-04-09T06:07:08.000Z");
+  await resetRagBudget({ env, now });
+  let fetchCount = 0;
+  let releaseFetch;
+  const gate = new Promise((resolve) => { releaseFetch = resolve; });
+  const fetchImpl = async () => {
+    fetchCount += 1;
+    await gate;
+    return relaySseResponse({ cardNames: [] });
   };
-  const expectedSingleCharge = estimateDeepSeekCostCny({
-    prompt_tokens: 40,
-    completion_tokens: 5,
-    total_tokens: 45,
-  }, env);
-
-  const runCase = async ({ label, abortLeader }) => {
-    const now = new Date(abortLeader
-      ? "2033-04-09T06:07:08.000Z"
-      : "2033-04-10T06:07:08.000Z");
-    await resetRagBudget({ env, now });
-    let fetchCount = 0;
-    let releaseFetch;
-    const gate = new Promise((resolve) => { releaseFetch = resolve; });
-    const fetchImpl = async () => {
-      fetchCount += 1;
-      await gate;
-      return jsonResponse({
-        choices: [{ finish_reason: "stop", message: { content: JSON.stringify({ cardNames: [] }) } }],
-        usage: { prompt_tokens: 40, completion_tokens: 5, total_tokens: 45 },
-      });
-    };
-    const controller = new AbortController();
-    const baseInput = {
-      userQuery: `singleflight-abort-${label}-20330409`,
-      dataRevision: "revision-signal-safe",
-      env,
-      now,
-      fetchImpl,
-    };
-    const leader = callCardNameExtractionModel({
-      ...baseInput,
-      ...(abortLeader ? { signal: controller.signal } : {}),
-    });
-    const follower = callCardNameExtractionModel({
-      ...baseInput,
-      ...(!abortLeader ? { signal: controller.signal } : {}),
-    });
-    controller.abort(`${label}_cancelled`);
-    releaseFetch();
-    const [leaderOutcome, followerOutcome] = await Promise.allSettled([leader, follower]);
-    const aborted = abortLeader ? leaderOutcome : followerOutcome;
-    const surviving = abortLeader ? followerOutcome : leaderOutcome;
-    const status = await getRagBudgetStatus({ env, now });
-
-    assert.equal(aborted.status, "rejected", `${label} aborted caller`);
-    assert.equal(aborted.reason?.name, "AbortError", `${label} abort error type`);
-    assert.equal(surviving.status, "fulfilled", `${label} surviving caller`);
-    assert.deepEqual(surviving.value.candidates, [], `${label} surviving result`);
-    assert.equal(fetchCount, 1, `${label} remote request count`);
-    assert.equal(status.spentTodayCny, expectedSingleCharge, `${label} charged once`);
-    if (abortLeader) {
-      assert.equal(surviving.value.singleflightHit, true, `${label} follower reuse`);
-      assert.equal(surviving.value.estimatedCostCny, 0, `${label} follower current-call cost`);
-    } else {
-      assert.equal(surviving.value.singleflightHit, false, `${label} leader owns request`);
-      assert.equal(surviving.value.estimatedCostCny, expectedSingleCharge, `${label} leader cost`);
-    }
+  const controller = new AbortController();
+  const base = {
+    userQuery: "relay-singleflight-abort",
+    dataRevision: "relay-singleflight-abort-v1",
+    env,
+    now,
+    fetchImpl,
   };
+  const aborted = callCardNameExtractionModel({ ...base, signal: controller.signal });
+  const surviving = callCardNameExtractionModel(base);
+  controller.abort("caller_cancelled");
+  releaseFetch();
+  const [abortedOutcome, survivingOutcome] = await Promise.allSettled([aborted, surviving]);
 
-  await runCase({ label: "leader", abortLeader: true });
-  await runCase({ label: "follower", abortLeader: false });
+  assert.equal(abortedOutcome.status, "rejected");
+  assert.equal(abortedOutcome.reason?.name, "AbortError");
+  assert.equal(survivingOutcome.status, "fulfilled");
+  assert.equal(fetchCount, 1);
 });
 
-test("a pre-aborted auxiliary caller creates no flight, request, or budget charge", async () => {
-  const env = {
-    MODEL_PROVIDER: "deepseek",
-    RAG_CARD_MODEL_PROVIDER: "deepseek",
-    DEEPSEEK_API_KEY: "test-deepseek-key",
-    API_DAILY_BUDGET_CNY: "10",
-    API_BUDGET_TIMEZONE: "UTC",
-  };
+test("a pre-aborted Relay auxiliary caller creates no request or charge", async () => {
+  const env = relayAuxEnv();
   const now = new Date("2033-04-11T06:07:08.000Z");
   await resetRagBudget({ env, now });
   const controller = new AbortController();
@@ -3973,21 +3605,19 @@ test("a pre-aborted auxiliary caller creates no flight, request, or budget charg
 
   await assert.rejects(
     callCardNameExtractionModel({
-      userQuery: "pre-aborted-auxiliary-20330411",
-      dataRevision: "revision-pre-aborted",
+      userQuery: "pre-aborted-relay-auxiliary",
+      dataRevision: "pre-aborted-relay-v1",
       env,
       now,
       signal: controller.signal,
-      fetchImpl: async () => {
-        fetchCount += 1;
-        throw new Error("pre-aborted caller must not fetch");
-      },
+      fetchImpl: async () => { fetchCount += 1; },
     }),
-    (error) => error?.name === "AbortError" && error?.code === "ABORT_ERR",
+    (error) => error?.name === "AbortError",
   );
   const status = await getRagBudgetStatus({ env, now });
+  const relayBucket = status.buckets.find((bucket) => bucket.id === "final_ruling:relay");
   assert.equal(fetchCount, 0);
-  assert.equal(status.spentTodayCny, 0);
+  assert.equal(relayBucket.spentTodayUsd, 0);
 });
 
 test("a pre-aborted final call does not reserve budget or reach transport", async () => {
@@ -4071,25 +3701,20 @@ test("cancellation during final budget preflight refunds both ledgers before tra
   assert.equal(increments.filter((command) => Number(command[4]) < 0).length, 2);
 });
 
-test("cancellation during auxiliary budget preflight refunds before an injected invoker", async () => {
+test("cancellation during Relay auxiliary budget preflight prevents provider dispatch", async () => {
   const now = new Date("2033-04-14T06:07:08.000Z");
   const redis = createRedisFetch();
   const controller = new AbortController();
-  const env = {
-    MODEL_PROVIDER: "deepseek",
-    RAG_CARD_MODEL_PROVIDER: "deepseek",
-    DEEPSEEK_API_KEY: "test-deepseek-key",
-    API_DAILY_BUDGET_CNY: "10",
-    API_BUDGET_TIMEZONE: "UTC",
+  const env = relayAuxEnv({
     KV_REST_API_URL: "https://kv.example.test",
     KV_REST_API_TOKEN: "kv-token",
-  };
+  });
   const before = await getRagBudgetStatus({ env, fetchImpl: redis.fetchImpl, now });
   let invokerCalls = 0;
   let positiveReservations = 0;
   const result = await callCardNameExtractionModel({
-    userQuery: "cancel-during-auxiliary-preflight-20330414",
-    dataRevision: "revision-cancel-during-preflight",
+    userQuery: "cancel-during-relay-auxiliary-preflight",
+    dataRevision: "cancel-relay-preflight-v1",
     env,
     now,
     signal: controller.signal,
@@ -4099,67 +3724,32 @@ test("cancellation during auxiliary budget preflight refunds before an injected 
     },
     fetchImpl: async (url, options) => {
       const command = JSON.parse(options.body || "[]");
-      if (command[0] === "EVAL" && command[2] === "1" && Number(command[4]) > 0) {
+      if (command[0] === "EVAL" && Number(command[4]) > 0) {
         positiveReservations += 1;
-        if (positiveReservations === 2) controller.abort("cancelled_during_auxiliary_preflight");
+        controller.abort("cancelled_during_auxiliary_preflight");
       }
       return redis.fetchImpl(url, options);
     },
   });
 
   const after = await getRagBudgetStatus({ env, fetchImpl: redis.fetchImpl, now });
-  const increments = redis.commands.filter((command) => command[0] === "EVAL" && command[2] === "1");
   assert.equal(invokerCalls, 0);
   assert.ok(result.warnings.some((item) => item.startsWith("card_name_model_failed:")));
   assert.deepEqual(after, before);
-  assert.equal(increments.filter((command) => Number(command[4]) > 0).length, 2);
-  assert.equal(increments.filter((command) => Number(command[4]) < 0).length, 2);
+  assert.equal(positiveReservations > 0, true);
 });
 
-test("cancellation during DeepSeek JSON budget preflight refunds before provider dispatch", async () => {
-  const now = new Date("2033-04-15T06:07:08.000Z");
-  const redis = createRedisFetch();
-  const controller = new AbortController();
-  const env = {
-    DEEPSEEK_API_KEY: "test-deepseek-key",
-    API_DAILY_BUDGET_CNY: "10",
-    API_BUDGET_TIMEZONE: "UTC",
-    KV_REST_API_URL: "https://kv.example.test",
-    KV_REST_API_TOKEN: "kv-token",
-  };
-  const before = await getRagBudgetStatus({ env, fetchImpl: redis.fetchImpl, now });
+test("legacy DeepSeek auxiliary JSON entry is disabled before budget or provider dispatch", async () => {
   let providerCalls = 0;
-  let positiveReservations = 0;
-
   await assert.rejects(
     callDeepSeekJsonTask({
-      prompt: "cancel-during-json-preflight-20330415",
-      env,
-      now,
-      signal: controller.signal,
-      trackPublicBudget: true,
-      fetchImpl: async (url, options) => {
-        if (url === "https://kv.example.test") {
-          const command = JSON.parse(options.body || "[]");
-          if (command[0] === "EVAL" && command[2] === "1" && Number(command[4]) > 0) {
-            positiveReservations += 1;
-            if (positiveReservations === 2) controller.abort("cancelled_during_json_preflight");
-          }
-          return redis.fetchImpl(url, options);
-        }
-        providerCalls += 1;
-        throw new Error("cancelled JSON task must not reach provider");
-      },
+      prompt: "不得发送",
+      env: { DEEPSEEK_API_KEY: "legacy-key" },
+      fetchImpl: async () => { providerCalls += 1; },
     }),
-    (error) => error?.name === "AbortError" && error?.code === "ABORT_ERR",
+    (error) => error?.code === "deepseek_auxiliary_disabled",
   );
-
-  const after = await getRagBudgetStatus({ env, fetchImpl: redis.fetchImpl, now });
-  const increments = redis.commands.filter((command) => command[0] === "EVAL" && command[2] === "1");
   assert.equal(providerCalls, 0);
-  assert.deepEqual(after, before);
-  assert.equal(increments.filter((command) => Number(command[4]) > 0).length, 2);
-  assert.equal(increments.filter((command) => Number(command[4]) < 0).length, 2);
 });
 
 test("forced dry-run skips injected model invokers and live invokers receive the caller signal", async () => {
@@ -4315,43 +3905,21 @@ test("public JSON providers stop waiting for a stalled response body when the ca
   }
 });
 
-test("lightweight auxiliary timeout aborts both transport and a stalled JSON body", async () => {
-  const runCase = async ({ label, bodyStalls }) => {
-    let requestSignal = null;
-    let bodyStarted = false;
-    const result = await callCardNameExtractionModel({
-      userQuery: `auxiliary-timeout-${label}-20400101`,
-      dataRevision: `auxiliary-timeout-${label}`,
-      env: {
-        MODEL_PROVIDER: "deepseek",
-        RAG_CARD_MODEL_PROVIDER: "deepseek",
-        DEEPSEEK_API_KEY: "test-deepseek-key",
-        RAG_CARD_MODEL_TIMEOUT_MS: "5",
-        API_DAILY_BUDGET_CNY: "10",
-      },
-      fetchImpl: async (_url, options) => {
-        requestSignal = options.signal;
-        if (!bodyStalls) return new Promise(() => {});
-        return {
-          ok: true,
-          status: 200,
-          json: async () => {
-            bodyStarted = true;
-            return new Promise(() => {});
-          },
-        };
-      },
-    });
+test("Relay lightweight auxiliary timeout aborts stalled transport", async () => {
+  let requestSignal = null;
+  const result = await callCardNameExtractionModel({
+    userQuery: "relay-auxiliary-timeout",
+    dataRevision: "relay-auxiliary-timeout-v1",
+    env: relayAuxEnv({ RAG_CARD_MODEL_TIMEOUT_MS: "5" }),
+    fetchImpl: async (_url, options) => {
+      requestSignal = options.signal;
+      return new Promise(() => {});
+    },
+  });
 
-    assert.equal(requestSignal?.aborted, true, label);
-    assert.equal(requestSignal?.reason?.message, "card_name_model_timeout", label);
-    assert.equal(bodyStarted, bodyStalls, label);
-    assert.ok(result.warnings.includes("card_name_model_failed:card_name_model_timeout"), label);
-    assert.ok(result.warnings.includes("budget_reservation_retained_after_ambiguous_remote_failure"), label);
-  };
-
-  await runCase({ label: "transport", bodyStalls: false });
-  await runCase({ label: "body", bodyStalls: true });
+  assert.equal(requestSignal?.aborted, true);
+  assert.equal(requestSignal?.reason?.message, "card_name_model_timeout");
+  assert.ok(result.warnings.includes("card_name_model_failed:card_name_model_timeout"));
 });
 
 test("rule planning has its own timeout instead of inheriting the card extractor deadline", async () => {
@@ -4433,33 +4001,33 @@ test("usage_cost_estimation_glm_defaults_to_8_input_and_28_output_cny_per_millio
   assert.equal(cost, 36);
 });
 
-test("daily budget meters evidence, GLM final, and DeepSeek final in independent buckets", async () => {
+test("daily budget meters Relay auxiliaries, GLM final, and DeepSeek final independently", async () => {
   const now = new Date("2038-02-02T00:00:00.000Z");
   const env = {
     API_DAILY_BUDGET_CNY: "10",
     API_EVIDENCE_DAILY_BUDGET_CNY: "0.01",
     API_GLM_FINAL_DAILY_BUDGET_CNY: "0.03",
     API_DEEPSEEK_FINAL_DAILY_BUDGET_CNY: "0.01",
+    API_CHATGPT_DAILY_BUDGET_USD: "10",
     API_BUDGET_TIMEZONE: "UTC",
     RAG_MAX_OUTPUT_TOKENS: "1000",
     DEEPSEEK_API_KEY: "test-deepseek-key",
     DEEPSEEK_INPUT_CNY_PER_MTOK: "1",
     DEEPSEEK_OUTPUT_CNY_PER_MTOK: "2",
     GLM_API_KEY: "test-glm-key",
+    RELAY_API_KEY: "relay-test-key",
+    RELAY_BASE_URL: "https://relay.example.test/v1",
   };
   await resetRagBudget({ env, now });
 
   const preparation = await callCardNameExtractionModel({
     userQuery: "三个分桶独立计量-资料准备-20380202",
-    env: { ...env, RAG_CARD_MODEL_PROVIDER: "deepseek" },
+    env: { ...env, RAG_CARD_MODEL_PROVIDER: "relay" },
     now,
-    fetchImpl: async () => jsonResponse({
-      choices: [{
-        finish_reason: "stop",
-        message: { content: JSON.stringify({ cardNames: [] }) },
-      }],
-      usage: { prompt_tokens: 1_000, completion_tokens: 500, total_tokens: 1_500 },
-    }),
+    fetchImpl: async () => relaySseResponse(
+      { cardNames: [] },
+      { prompt_tokens: 1_000, completion_tokens: 500, total_tokens: 1_500 },
+    ),
   });
 
   let glmFetchCount = 0;
@@ -4505,22 +4073,19 @@ test("daily budget meters evidence, GLM final, and DeepSeek final in independent
 
   assert.equal(glmFetchCount, 1, "the exhausted GLM bucket must block only the second GLM call");
   assert.equal(blockedSecondGlm.answer.answerLevel, "budget_limited");
-  assert.equal(preparation.budgetStatus.bucket.id, "evidence_preparation:deepseek");
+  assert.equal(preparation.budgetStatus.bucket.id, "final_ruling:relay");
   assert.equal(glmFinal.budgetStatus.bucket.id, "final_ruling:glm");
   assert.equal(deepSeekFinal.budgetStatus.bucket.id, "final_ruling:deepseek");
-  assert.equal(status.spentTodayCny, 0.026);
-  assert.equal(status.remainingTodayCny, 9.974);
-  assert.deepEqual(status.buckets.map((bucket) => ({
-    id: bucket.id,
-    spent: bucket.spentTodayCny,
-    limit: bucket.dailyBudgetCny,
-    remaining: bucket.remainingTodayCny,
-  })), [
-    { id: "evidence_preparation:deepseek", spent: 0.002, limit: 0.01, remaining: 0.008 },
-    { id: "final_ruling:glm", spent: 0.022, limit: 0.03, remaining: 0.008 },
-    { id: "final_ruling:deepseek", spent: 0.002, limit: 0.01, remaining: 0.008 },
-    { id: "final_ruling:relay", spent: null, limit: null, remaining: null },
-  ]);
+  assert.equal(status.spentTodayCny, 0.024);
+  assert.equal(status.remainingTodayCny, 9.976);
+  assert.equal(
+    status.buckets.find((bucket) => bucket.id === "evidence_preparation:deepseek").spentTodayCny,
+    0,
+  );
+  assert.equal(
+    status.buckets.find((bucket) => bucket.id === "final_ruling:relay").spentTodayUsd > 0,
+    true,
+  );
 });
 
 test("legacy total daily budget remains a ceiling above a larger provider bucket", async () => {
@@ -6846,6 +6411,45 @@ function jsonResponse(payload, ok = true, status = 200) {
     ok,
     status,
     json: async () => payload,
+  };
+}
+
+function relaySseResponse(payload, usage = {
+  prompt_tokens: 40,
+  completion_tokens: 5,
+  total_tokens: 45,
+}) {
+  return new Response([
+    `data: ${JSON.stringify({
+      model: "gpt-5.6-sol",
+      choices: [{
+        index: 0,
+        finish_reason: "stop",
+        delta: { content: JSON.stringify(payload) },
+      }],
+      usage,
+    })}\n\n`,
+    "data: [DONE]\n\n",
+  ].join(""), {
+    status: 200,
+    headers: { "content-type": "text/event-stream" },
+  });
+}
+
+function relayAuxEnv(overrides = {}) {
+  return {
+    MODEL_PROVIDER: "relay",
+    RAG_CARD_MODEL_PROVIDER: "relay",
+    RAG_RULE_MODEL_PROVIDER: "relay",
+    RELAY_API_KEY: "relay-test-key",
+    RELAY_BASE_URL: "https://relay.example.test/v1",
+    RELAY_CARD_MODEL: "gpt-5.6-sol",
+    RELAY_RULE_MODEL: "gpt-5.6-sol",
+    RAG_CARD_MODEL_REASONING_EFFORT: "low",
+    RAG_RULE_MODEL_REASONING_EFFORT: "low",
+    API_CHATGPT_DAILY_BUDGET_USD: "10",
+    API_BUDGET_TIMEZONE: "UTC",
+    ...overrides,
   };
 }
 

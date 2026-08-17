@@ -2366,6 +2366,48 @@ test("evidence preparation is fixed to DeepSeek V4 Flash and client transport fi
   );
 });
 
+test("Relay Sol low preparation receives its requested alias and keeps final providers independent", async () => {
+  const fixture = makeFixture();
+  const preparationCalls = [];
+  const service = makeService(fixture, {
+    ADMIN_MODEL_LAB_USD_TO_CNY_RATE: "7.5",
+    RELAY_PRICING_MULTIPLIER: "0.27",
+  }, {
+    preparationProviders: {
+      relay: {
+        providerId: "relay",
+        async prepareEvidence(request) {
+          preparationCalls.push(request);
+          return {
+            provider: "relay",
+            model: "gpt-5.6-sol",
+            canMakeFinalRuling: false,
+            canDecideEscalation: false,
+            result: {
+              cardNameCandidates: fixture.preparationCardNameCandidates,
+              ruleSearchQueries: [{ query: "匿名规则", reason: "model_preparation" }],
+            },
+            usage: { prompt_tokens: 20, completion_tokens: 10, total_tokens: 30 },
+          };
+        },
+      },
+    },
+  });
+
+  const created = await service.createRun({ body: { question: "匿名问题" } });
+  assert.equal(created.executionProfile.preparation.provider, "relay");
+  assert.equal(created.executionProfile.preparation.requestedModel, "relay-gpt-5.6-sol");
+  assert.equal(created.executionProfile.preparation.model, "gpt-5.6-sol");
+
+  const execution = await service.executeRun({ runId: created.runId });
+  assert.equal(preparationCalls.length, 1);
+  assert.equal(preparationCalls[0].model, "relay-gpt-5.6-sol");
+  assert.equal(preparationCalls[0].reasoningEffort, "low");
+  assert.equal(preparationCalls[0].reasoningMode, "pro");
+  assert.equal(execution.run.evidenceSnapshot.evidence.preparation.provider, "relay");
+  assert.equal(fixture.openAICreateCalls.length, 1);
+});
+
 test("complete deterministic card resolution skips the paid preparation model", async () => {
   const fixture = makeFixture();
   fixture.cardResolution = {
@@ -3662,6 +3704,28 @@ function makeService(fixture, envOverrides = {}, {
     };
   }
   fixture.runStore = runStore;
+  const legacyPreparationFixture = deepSeekProvider || {
+    async prepareEvidence() {
+      fixture.deepSeekPrepareCalls += 1;
+      if (fixture.deepSeekPrepareGate) await fixture.deepSeekPrepareGate;
+      fixture.advance(20);
+      return {
+        provider: "relay",
+        model: "gpt-5.6-sol",
+        canMakeFinalRuling: false,
+        canDecideEscalation: false,
+        result: {
+          cardNameCandidates: fixture.preparationCardNameCandidates,
+          ruleSearchQueries: [
+            { query: "匿名规则", reason: "mechanism" },
+          ],
+          conflicts: ["廉价模型发现候选资料可能冲突"],
+          organizedEvidenceIds: ["evidence-direct"],
+        },
+        usage: fixture.deepSeekUsage,
+      };
+    },
+  };
   return createAdminModelLabService({
     runStore,
     finalCallBudgetLedger,
@@ -3679,33 +3743,13 @@ function makeService(fixture, envOverrides = {}, {
       ADMIN_MODEL_LAB_DEEPSEEK_PRO_OUTPUT_CNY_PER_MTOK: "6",
       ...envOverrides,
     },
-    deepSeekProvider: deepSeekProvider || {
-      async prepareEvidence() {
-        fixture.deepSeekPrepareCalls += 1;
-        if (fixture.deepSeekPrepareGate) await fixture.deepSeekPrepareGate;
-        fixture.advance(20);
-        return {
-          provider: "deepseek",
-          model: "deepseek-v4-flash",
-          canMakeFinalRuling: false,
-          canDecideEscalation: false,
-          result: {
-            cardNameCandidates: fixture.preparationCardNameCandidates,
-            ruleSearchQueries: [
-              { query: "匿名规则", reason: "mechanism" },
-            ],
-            conflicts: ["廉价模型发现候选资料可能冲突"],
-            organizedEvidenceIds: ["evidence-direct"],
-          },
-          usage: fixture.deepSeekUsage,
-        };
+    preparationProviders: {
+      relay: {
+        providerId: "relay",
+        prepareEvidence: (...args) => legacyPreparationFixture.prepareEvidence(...args),
       },
-      async runRuling() {
-        fixture.deepSeekFinalCalls += 1;
-        throw new Error("must never be called");
-      },
+      ...preparationProviders,
     },
-    preparationProviders,
     finalRulingProviders,
     openAIProvider: {
       async create(request) {

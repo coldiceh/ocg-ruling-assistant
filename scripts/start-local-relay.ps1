@@ -16,15 +16,6 @@ if ([string]::IsNullOrWhiteSpace($env:RELAY_BASE_URL)) {
   }
 }
 
-if ([string]::IsNullOrWhiteSpace($env:DEEPSEEK_API_KEY)) {
-  $deepSeekSecret = Read-Host -Prompt "粘贴 DeepSeek API key（用于准备证据，也可手动测试 Flash/Pro；输入不会显示）" -AsSecureString
-  $deepSeekCredential = [System.Management.Automation.PSCredential]::new("deepseek", $deepSeekSecret)
-  $env:DEEPSEEK_API_KEY = $deepSeekCredential.GetNetworkCredential().Password
-  if ([string]::IsNullOrWhiteSpace($env:DEEPSEEK_API_KEY)) {
-    throw "DEEPSEEK_API_KEY 不能为空；管理实验需要先准备冻结证据"
-  }
-}
-
 # Invoking dev:relay explicitly opts this child process into the isolated admin
 # lab. This still does not change PUBLIC_RULING_MODEL_PROFILE.
 $env:ADMIN_MODEL_LAB_ENABLED = "true"

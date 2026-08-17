@@ -113,7 +113,7 @@ test("retrieval-only pilot completes prompt construction without receiving or di
   assert.match(workflow, /MODEL_PROVIDER: mock/u);
   assert.match(workflow, /if \[ -n "\$\{RELAY_API_KEY:-\}" \]/u);
   assert.match(workflow, /Start the paid preview branch backend[\s\S]*if: env\.RETRIEVAL_ONLY_PILOT != 'true'[\s\S]*RELAY_API_KEY: \$\{\{ secrets\.RELAY_API_KEY \}\}/u);
-  assert.match(workflow, /DEEPSEEK_API_KEY: \$\{\{ secrets\.DEEPSEEK_API_KEY \}\}/u);
+  assert.doesNotMatch(workflow, /DEEPSEEK_API_KEY|secrets\.DEEPSEEK_API_KEY/u);
   assert.doesNotMatch(workflow, /^\s{6}RELAY_API_KEY: \$\{\{ secrets\.RELAY_API_KEY \}\}$/mu);
   assert.match(workflow, /event\.kind !== "private_evaluation_stage"/u);
   assert.match(workflow, /const byTrace = new Map\(\)/u);

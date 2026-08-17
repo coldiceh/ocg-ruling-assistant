@@ -146,7 +146,7 @@ export async function runAdminEvidenceSnapshotDryRun({
         const payload = parseJsonObject(request?.input);
         const definition = caseByQuestion.get(String(payload.question || ""));
         return {
-          provider: "deepseek",
+          provider: "relay",
           model: "local-fixture-candidate-extractor",
           result: {
             cardNameCandidates: (definition?.candidateCards || []).map((name) => ({
@@ -220,7 +220,12 @@ export async function runAdminEvidenceSnapshotDryRun({
   const service = createAdminModelLabService({
     runStore,
     finalCallBudgetLedger: dryRunBudgetLedger,
-    deepSeekProvider: offlinePreparationProvider,
+    preparationProviders: {
+      relay: {
+        providerId: "relay",
+        prepareEvidence: (...args) => offlinePreparationProvider.prepareEvidence(...args),
+      },
+    },
     openAIProvider: localPaidBoundaryProvider,
     env: offlineEnv,
     dataDir,

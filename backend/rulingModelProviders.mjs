@@ -15,7 +15,7 @@ const DEFAULT_DEEPSEEK_BASE_URL = "https://api.deepseek.com";
 const DEFAULT_GLM_BASE_URL = "https://open.bigmodel.cn/api/paas/v4";
 const DEFAULT_KIMI_BASE_URL = "https://api.moonshot.cn/v1";
 const MODEL_RULING_FORMAT_NAME = "model_ruling_result";
-const EVIDENCE_PREPARATION_PROVIDER_IDS = new Set(["deepseek", "glm", "kimi"]);
+const EVIDENCE_PREPARATION_PROVIDER_IDS = new Set(["glm", "kimi", "relay"]);
 const RELAY_TIMEOUT_HTTP_STATUSES = new Set([408, 504, 524]);
 const RELAY_SAFE_FINISH_REASONS = new Set([
   "stop",

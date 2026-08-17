@@ -24,10 +24,10 @@ const DEFAULT_BUDGET_USD_TO_CNY = 7.5;
 const RELAY_SCREENSHOT_PRICING = getRelayModelPricingConfig();
 
 export const EVIDENCE_PREPARATION_CONFIGURATION = Object.freeze({
-  provider: "deepseek",
-  model: "deepseek-v4-flash",
-  reasoningMode: "standard",
-  reasoningEffort: "none",
+  provider: "relay",
+  model: "relay-gpt-5.6-sol",
+  reasoningMode: "pro",
+  reasoningEffort: "low",
 });
 
 export const SOURCE_CONFIGURATION = Object.freeze({
