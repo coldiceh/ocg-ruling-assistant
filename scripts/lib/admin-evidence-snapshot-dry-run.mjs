@@ -211,8 +211,8 @@ export async function runAdminEvidenceSnapshotDryRun({
       ...offlineEnv,
       // This ledger gates injected local sentinels only. It has no credentials
       // or transport and cannot authorize a production provider call.
-      ADMIN_FINAL_BUDGET_DEEPSEEK_DAILY_CNY: "100",
-      ADMIN_FINAL_BUDGET_DEEPSEEK_RESERVATION_CNY: "1",
+      ADMIN_FINAL_BUDGET_RELAY_SOL_DAILY_CNY: "100",
+      ADMIN_FINAL_BUDGET_RELAY_SOL_RESERVATION_CNY: "1",
       ADMIN_FINAL_BUDGET_OPENAI_DAILY_CNY: "100",
       ADMIN_FINAL_BUDGET_OPENAI_RESERVATION_CNY: "1",
     },
@@ -590,16 +590,14 @@ function offlineServiceEnvironment({ enginePasscodeHydrationEnabled = false } = 
       ? { OCG_ENGINE_URL: "http://127.0.0.1" }
       : {}),
     OPENAI_API_KEY: "offline-placeholder-never-transported",
-    DEEPSEEK_API_KEY: "offline-placeholder-never-transported",
+    RELAY_API_KEY: "offline-placeholder-never-transported",
+    RELAY_BASE_URL: "https://relay.invalid/v1",
     // Offline sentinels still exercise the same pre-transport cost envelope.
     // Versioned test rates keep that calculation deterministic without making
     // any real provider request.
-    ADMIN_MODEL_LAB_DEEPSEEK_PRICING_VERSION: "offline-test-deepseek-v4",
-    ADMIN_MODEL_LAB_DEEPSEEK_PRICING_EFFECTIVE_DATE: "2026-08-06",
-    ADMIN_MODEL_LAB_DEEPSEEK_FLASH_INPUT_CNY_PER_MTOK: "1",
-    ADMIN_MODEL_LAB_DEEPSEEK_FLASH_OUTPUT_CNY_PER_MTOK: "2",
-    ADMIN_MODEL_LAB_DEEPSEEK_PRO_INPUT_CNY_PER_MTOK: "3",
-    ADMIN_MODEL_LAB_DEEPSEEK_PRO_OUTPUT_CNY_PER_MTOK: "6",
+    ADMIN_MODEL_LAB_USD_TO_CNY_RATE: "7.5",
+    ADMIN_MODEL_LAB_EXCHANGE_RATE_VERSION: "offline-test-rate-v1",
+    RELAY_PRICING_MULTIPLIER: "0.27",
   };
 }
 
