@@ -6,6 +6,9 @@ import {
   callRelayJsonTask,
   callRuleQueryExtractionModel,
   createPublicAnswerModelEnv,
+  resolveCardExtractionProvider,
+  resolveRagProvider,
+  resolveRuleQueryExtractionProvider,
 } from "../backend/ragModelClient.mjs";
 
 const RELAY_ENV = Object.freeze({
@@ -61,7 +64,11 @@ test("Relay JSON tasks never retry or repair malformed JSON", async () => {
         return relaySseRaw("not-json");
       },
     }),
-    (error) => error?.code === "relay_json_task_invalid_json",
+    (error) => {
+      assert.equal(error?.code, "relay_json_task_invalid_json");
+      assert.doesNotMatch(String(error?.message || ""), /DeepSeek/iu);
+      return true;
+    },
   );
   assert.equal(calls, 1);
 });
@@ -193,6 +200,24 @@ test("legacy explicit DeepSeek auxiliary settings fail closed without Relay", as
   assert.equal(rule.providerUsed, "mock");
 });
 
+test("auto auxiliary provider selection ignores a leftover DeepSeek key", () => {
+  const withoutRelay = {
+    DEEPSEEK_API_KEY: "deepseek-final-only-key",
+    RAG_CARD_MODEL_PROVIDER: "auto",
+    RAG_RULE_MODEL_PROVIDER: "auto",
+  };
+  assert.equal(resolveCardExtractionProvider(withoutRelay).provider, "mock");
+  assert.equal(resolveRuleQueryExtractionProvider(withoutRelay).provider, "mock");
+
+  const withRelay = {
+    ...withoutRelay,
+    RELAY_API_KEY: "relay-auxiliary-key",
+    RELAY_BASE_URL: "https://relay.example.test/v1",
+  };
+  assert.equal(resolveCardExtractionProvider(withRelay).provider, "relay");
+  assert.equal(resolveRuleQueryExtractionProvider(withRelay).provider, "relay");
+});
+
 test("a DeepSeek final profile retains dedicated Relay credentials for formal drafts", () => {
   const publicEnv = createPublicAnswerModelEnv({
     RELAY_API_KEY: "relay-test-key",
@@ -201,6 +226,11 @@ test("a DeepSeek final profile retains dedicated Relay credentials for formal dr
   }, "deepseek-v4-flash-low");
 
   assert.equal(publicEnv.RELAY_API_KEY, undefined);
+  assert.equal(publicEnv.DEEPSEEK_API_KEY, "deepseek-final-key");
+  assert.equal(publicEnv.RAG_MODEL_PROVIDER, "deepseek");
+  assert.equal(resolveRagProvider(publicEnv).provider, "deepseek");
+  assert.equal(resolveCardExtractionProvider(publicEnv).provider, "relay");
+  assert.equal(resolveRuleQueryExtractionProvider(publicEnv).provider, "relay");
   assert.equal(publicEnv.RAG_FORMAL_SCENARIO_DRAFT_RELAY_API_KEY, "relay-test-key");
   assert.equal(publicEnv.RAG_FORMAL_SCENARIO_DRAFT_RELAY_BASE_URL, "https://relay.example.test/v1");
 });

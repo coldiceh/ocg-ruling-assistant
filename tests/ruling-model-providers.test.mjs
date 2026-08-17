@@ -250,7 +250,7 @@ test("completed OpenAI output is extracted and validated without loose JSON repa
   assert.equal(validation.ok, true, validation.errors?.join("\n"));
 });
 
-test("existing DeepSeek adapter remains evidence-only while Flash is the fixed preparation model", async () => {
+test("legacy DeepSeek evidence adapter is disabled before transport", async () => {
   const invocations = [];
   const controller = new AbortController();
   const provider = new ExistingDeepSeekProvider({
@@ -259,17 +259,16 @@ test("existing DeepSeek adapter remains evidence-only while Flash is the fixed p
       return { organizedEvidenceIds: ["faq-1"] };
     },
   });
-  const prepared = await provider.prepareEvidence({
-    model: "deepseek-v4-flash",
-    input: { evidence: ["faq-1"] },
-    metadata: { runId: "run-1" },
-    signal: controller.signal,
-  });
-  assert.equal(prepared.canMakeFinalRuling, false);
-  assert.equal(prepared.canDecideEscalation, false);
-  assert.equal(invocations[0].purpose, "evidence_preparation");
-  assert.equal(invocations[0].canMakeFinalRuling, false);
-  assert.equal(invocations[0].signal, controller.signal);
+  await assert.rejects(
+    provider.prepareEvidence({
+      model: "deepseek-v4-flash",
+      input: { evidence: ["faq-1"] },
+      metadata: { runId: "run-1" },
+      signal: controller.signal,
+    }),
+    (error) => error.code === "model_stage_not_allowed",
+  );
+  assert.equal(invocations.length, 0);
   await assert.rejects(
     provider.runRuling({ input: "question" }),
     (error) => error.code === "deepseek_final_ruling_forbidden",

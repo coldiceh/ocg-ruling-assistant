@@ -990,15 +990,18 @@ test("evidence preparation releases only provably unaccepted failures and is nev
       let preparationCalls = 0;
       const providerError = codedError(
         releaseSafe ? "request rejected before acceptance" : "network outcome unknown",
-        releaseSafe ? "deepseek_bad_request" : "deepseek_network_unknown",
+        releaseSafe ? "relay_bad_request" : "relay_network_unknown",
       );
       providerError.budgetReservationMayExist = !releaseSafe;
       const service = makeService(fixture, {}, {
         finalCallBudgetLedger: createRecordingBudgetLedger(budgetCalls),
-        deepSeekProvider: {
-          async prepareEvidence() {
-            preparationCalls += 1;
-            throw providerError;
+        preparationProviders: {
+          relay: {
+            providerId: "relay",
+            async prepareEvidence() {
+              preparationCalls += 1;
+              throw providerError;
+            },
           },
         },
       });
@@ -1027,32 +1030,34 @@ test("confirmed HTTP 200 preparation content failure retries once with independe
   const providerCalls = [];
   const service = makeService(fixture, {}, {
     finalCallBudgetLedger: createRecordingBudgetLedger(budgetCalls),
-    deepSeekProvider: {
-      providerId: "deepseek",
-      async prepareEvidence(request) {
-        providerCalls.push(request);
-        if (providerCalls.length === 1) {
-          throw confirmedPreparationContentError("invalid_json", {
-            prompt_tokens: 11,
-            completion_tokens: 7,
-            total_tokens: 18,
-          });
-        }
-        return {
-          provider: "deepseek",
-          model: "deepseek-v4-flash",
-          result: {
-            cardNameCandidates: fixture.preparationCardNameCandidates,
-            ruleSearchQueries: [{ query: "匿名规则", reason: "mechanism" }],
-            unresolvedNotes: [],
-            conflicts: [],
-          },
-          usage: {
-            prompt_tokens: 20,
-            completion_tokens: 10,
-            total_tokens: 30,
-          },
-        };
+    preparationProviders: {
+      relay: {
+        providerId: "relay",
+        async prepareEvidence(request) {
+          providerCalls.push(request);
+          if (providerCalls.length === 1) {
+            throw confirmedPreparationContentError("invalid_json", {
+              prompt_tokens: 11,
+              completion_tokens: 7,
+              total_tokens: 18,
+            });
+          }
+          return {
+            provider: "relay",
+            model: "gpt-5.6-sol",
+            result: {
+              cardNameCandidates: fixture.preparationCardNameCandidates,
+              ruleSearchQueries: [{ query: "匿名规则", reason: "mechanism" }],
+              unresolvedNotes: [],
+              conflicts: [],
+            },
+            usage: {
+              prompt_tokens: 20,
+              completion_tokens: 10,
+              total_tokens: 30,
+            },
+          };
+        },
       },
     },
   });
@@ -1087,7 +1092,7 @@ test("confirmed HTTP 200 preparation content failure retries once with independe
   assert.equal(preparation.usage.inputTokens, 31);
   assert.equal(preparation.usage.outputTokens, 17);
   assert.equal(preparation.usage.totalTokens, 48);
-  assert.ok(preparation.warnings.includes("deepseek_preparation_invalid_json_retried_once"));
+  assert.ok(preparation.warnings.includes("evidence_preparation_invalid_json_retried_once"));
 
   fixture.providerResponse = completedResponse(makeStructuredRuling());
   const completed = await service.getRun({ runId: created.runId });
@@ -1109,15 +1114,17 @@ test("preparation content recovery is attempted at most once", async () => {
   let providerCalls = 0;
   const service = makeService(fixture, {}, {
     finalCallBudgetLedger: createRecordingBudgetLedger(budgetCalls),
-    deepSeekProvider: {
-      providerId: "deepseek",
-      async prepareEvidence() {
-        providerCalls += 1;
-        throw confirmedPreparationContentError("empty", {
-          prompt_tokens: 5,
-          completion_tokens: 1,
-          total_tokens: 6,
-        });
+    preparationProviders: {
+      relay: {
+        providerId: "relay",
+        async prepareEvidence() {
+          providerCalls += 1;
+          throw confirmedPreparationContentError("empty", {
+            prompt_tokens: 5,
+            completion_tokens: 1,
+            total_tokens: 6,
+          });
+        },
       },
     },
   });
@@ -1125,7 +1132,7 @@ test("preparation content recovery is attempted at most once", async () => {
 
   await assert.rejects(
     service.executeRun({ runId: created.runId }),
-    (error) => error?.code === "deepseek_json_task_empty_content",
+    (error) => error?.code === "relay_evidence_preparation_empty_content",
   );
   const failed = await service.getRun({ runId: created.runId, reconcile: false });
   const preparationBudgetCalls = budgetCalls.filter((entry) => (
@@ -1186,16 +1193,18 @@ test("cancellation after recovery reservation releases it without invoking the r
         return innerLedger.release(input);
       },
     },
-    deepSeekProvider: {
-      providerId: "deepseek",
-      async prepareEvidence() {
-        providerCalls += 1;
-        if (providerCalls > 1) throw new Error("recovery model must not be invoked");
-        throw confirmedPreparationContentError("invalid_json", {
-          prompt_tokens: 5,
-          completion_tokens: 1,
-          total_tokens: 6,
-        });
+    preparationProviders: {
+      relay: {
+        providerId: "relay",
+        async prepareEvidence() {
+          providerCalls += 1;
+          if (providerCalls > 1) throw new Error("recovery model must not be invoked");
+          throw confirmedPreparationContentError("invalid_json", {
+            prompt_tokens: 5,
+            completion_tokens: 1,
+            total_tokens: 6,
+          });
+        },
       },
     },
   });
@@ -1253,19 +1262,23 @@ test("preparation budget settlement fails closed for unconfirmed ledger states",
             return { status: "released" };
           },
         },
-        deepSeekProvider: {
-          providerId: "deepseek",
-          async prepareEvidence() {
-            providerCalls += 1;
-            return {
-              result: {
-                cardNameCandidates: fixture.preparationCardNameCandidates,
-                ruleSearchQueries: [],
-                unresolvedNotes: [],
-                conflicts: [],
-              },
-              usage: { prompt_tokens: 5, completion_tokens: 1, total_tokens: 6 },
-            };
+        preparationProviders: {
+          relay: {
+            providerId: "relay",
+            async prepareEvidence() {
+              providerCalls += 1;
+              return {
+                provider: "relay",
+                model: "gpt-5.6-sol",
+                result: {
+                  cardNameCandidates: fixture.preparationCardNameCandidates,
+                  ruleSearchQueries: [],
+                  unresolvedNotes: [],
+                  conflicts: [],
+                },
+                usage: { prompt_tokens: 5, completion_tokens: 1, total_tokens: 6 },
+              };
+            },
           },
         },
       });
@@ -1897,7 +1910,7 @@ test("a domestic experimental final ruling completes synchronously and is labell
   assert.equal(execution.run.result.finalRuling.conciseAnswer, "可以发动，并完成处理。");
   assert.equal(execution.run.result.metering.stages.finalRuling.cost.model, "deepseek-v4-pro");
   assert.equal(execution.run.result.metering.stages.finalRuling.cost.totalCostCny, 0.0063);
-  assert.equal(execution.run.result.metering.stages.evidencePreparation.cost.model, "deepseek-v4-flash");
+  assert.equal(execution.run.result.metering.stages.evidencePreparation.cost.model, "gpt-5.6-sol");
   assert.equal(domesticCalls.length, 1);
   assert.match(domesticCalls[0].input, /evidence-direct/u);
   assert.equal(fixture.openAICreateCalls.length, 0);
@@ -2328,30 +2341,31 @@ test("polling cannot fail a domestic synchronous result while its executor still
   assert.equal(execution.run.status, ADMIN_RUN_STATUSES.SUCCEEDED);
 });
 
-test("evidence preparation is fixed to DeepSeek V4 Flash and client transport fields are ignored", async () => {
+test("evidence preparation is fixed to Relay Sol low and client transport fields are ignored", async () => {
   const fixture = makeFixture();
   const service = makeService(fixture);
   const created = await service.createRun({
     body: {
       question: "匿名问题",
-      preparationModel: "deepseek-v4-flash",
-      preparationReasoningMode: "standard",
-      preparationReasoningEffort: "none",
+      preparationProvider: "relay",
+      preparationModel: "relay-gpt-5.6-sol",
+      preparationReasoningMode: "pro",
+      preparationReasoningEffort: "low",
       provider: "openai",
       model: "gpt-5.6-terra",
       baseUrl: "https://attacker.invalid/v1",
       apiKey: "frontend-secret",
     },
   });
-  assert.equal(created.executionProfile.preparation.provider, "deepseek");
-  assert.equal(created.executionProfile.preparation.model, "deepseek-v4-flash");
+  assert.equal(created.executionProfile.preparation.provider, "relay");
+  assert.equal(created.executionProfile.preparation.model, "gpt-5.6-sol");
   assert.equal(created.executionProfile.finalRuling.provider, "openai");
   assert.equal(JSON.stringify(created).includes("frontend-secret"), false);
   assert.equal(JSON.stringify(created).includes("attacker.invalid"), false);
 
   const execution = await service.executeRun({ runId: created.runId });
   assert.equal(fixture.deepSeekPrepareCalls, 1);
-  assert.equal(execution.run.evidenceSnapshot.evidence.preparation.provider, "deepseek");
+  assert.equal(execution.run.evidenceSnapshot.evidence.preparation.provider, "relay");
   assert.equal(fixture.openAICreateCalls.length, 1);
 
   await assert.rejects(
@@ -2445,8 +2459,8 @@ test("provided card candidates form a closed scope that ignores preparation nick
       fixture.deepSeekPrepareCalls += 1;
       fixture.advance(20);
       return {
-        provider: "deepseek",
-        model: "deepseek-v4-flash",
+        provider: "relay",
+        model: "gpt-5.6-sol",
         canMakeFinalRuling: false,
         canDecideEscalation: false,
         result: {
@@ -2466,7 +2480,12 @@ test("provided card candidates form a closed scope that ignores preparation nick
     },
   };
   const service = makeService(fixture, {}, {
-    deepSeekProvider: noisyPreparationProvider,
+    preparationProviders: {
+      relay: {
+        providerId: "relay",
+        ...noisyPreparationProvider,
+      },
+    },
   });
   const created = await service.createRun({
     body: {
@@ -2741,57 +2760,56 @@ test("getRun reconciles a completed background response, validates it, and persi
   assert.equal(completed.result.metering.stages.finalRuling.usage.totalTokens, 1500);
   assert.equal(completed.result.metering.totals.usage.totalTokens, 1530);
   assert.equal(completed.result.metering.totals.usage.complete, true);
-  assert.equal(completed.result.metering.stages.evidencePreparation.cost.totalCostCny, 0.00004);
-  assert.equal(completed.result.metering.stages.evidencePreparation.cost.pricingVersion, "test-deepseek-v4");
-  assert.equal(completed.result.metering.totals.cost.totalCostUsd, null);
+  assert.equal(completed.result.metering.stages.evidencePreparation.cost.totalCostCny, 0.0011826);
+  assert.equal(
+    completed.result.metering.stages.evidencePreparation.cost.pricingVersion,
+    "relay-token-group-screenshot-2026-08-07",
+  );
+  assert.equal(completed.result.metering.totals.cost.totalCostUsd, 0.00815768);
   assert.equal(
     completed.result.metering.totals.cost.knownCostUsd,
-    completed.result.cost.totalCostUsd,
+    completed.result.metering.totals.cost.totalCostUsd,
   );
   assert.equal(completed.result.metrics.usage.totalTokens, 1530);
-  assert.equal(completed.result.metrics.estimatedCostUsd, null);
+  assert.equal(completed.result.metrics.estimatedCostUsd, 0.00815768);
   assert.equal(completed.result.latency.finalRulingMs >= 2_500, true);
   assert.equal(completed.stageTiming.status, "COMPLETED");
   assert.equal(completed.stageTiming.stages[4].status, "COMPLETED");
 });
 
-test("server-versioned DeepSeek pricing produces complete two-stage totals and ignores body pricing", async () => {
+test("server-versioned Relay pricing produces complete two-stage totals and ignores body pricing", async () => {
   const fixture = makeFixture();
   const service = makeService(fixture, {
     ADMIN_MODEL_LAB_USD_TO_CNY_RATE: "8",
     ADMIN_MODEL_LAB_EXCHANGE_RATE_VERSION: "server-fx-v1",
-    ADMIN_MODEL_LAB_DEEPSEEK_PRICING_VERSION: "server-deepseek-v1",
-    ADMIN_MODEL_LAB_DEEPSEEK_PRICING_EFFECTIVE_DATE: "2026-07-28",
-    ADMIN_MODEL_LAB_DEEPSEEK_INPUT_CNY_PER_MTOK: "1",
-    ADMIN_MODEL_LAB_DEEPSEEK_OUTPUT_CNY_PER_MTOK: "2",
+    RELAY_PRICING_MULTIPLIER: "0.27",
   });
   const created = await service.createRun({
     body: {
       question: "匿名问题",
       pricing: {
         usdToCnyRate: 999,
-        deepSeek: {
-          pricingVersion: "client-forged",
-          inputCnyPerMillion: 999,
-          outputCnyPerMillion: 999,
-        },
+        exchangeRateVersion: "client-forged",
+        relayPricingMultiplier: 999,
       },
     },
   });
-  assert.equal(created.executionProfile.pricing.deepSeek.pricingVersion, "server-deepseek-v1");
-  assert.equal(created.executionProfile.pricing.deepSeek.inputCnyPerMillion, 1);
+  assert.equal(created.executionProfile.pricing.usdToCnyRate, 8);
+  assert.equal(created.executionProfile.pricing.exchangeRateVersion, "server-fx-v1");
+  assert.equal(created.executionProfile.pricing.relayPricingMultiplier, 0.27);
   await service.executeRun({ runId: created.runId });
   fixture.providerResponse = completedResponse(makeStructuredRuling());
 
   const completed = await service.getRun({ runId: created.runId });
   const preparationCost = completed.result.metering.stages.evidencePreparation.cost;
-  assert.equal(preparationCost.pricingVersion, "server-deepseek-v1");
-  assert.equal(preparationCost.totalCostCny, 0.00004);
-  assert.equal(preparationCost.totalCostUsd, 0.000005);
+  assert.equal(preparationCost.pricingVersion, "relay-token-group-screenshot-2026-08-07");
+  assert.equal(preparationCost.exchangeRateVersion, "server-fx-v1");
+  assert.equal(preparationCost.totalCostCny, 0.00126144);
+  assert.equal(preparationCost.totalCostUsd, 0.00015768);
   assert.equal(completed.result.metering.totals.cost.complete, true);
-  assert.equal(completed.result.metering.totals.cost.totalCostUsd, 0.008005);
-  assert.equal(completed.result.metering.totals.cost.totalCostCny, 0.06404);
-  assert.equal(completed.result.metrics.estimatedCostUsd, 0.008005);
+  assert.equal(completed.result.metering.totals.cost.totalCostUsd, 0.00815768);
+  assert.equal(completed.result.metering.totals.cost.totalCostCny, 0.06526144);
+  assert.equal(completed.result.metrics.estimatedCostUsd, 0.00815768);
 });
 
 test("missing DeepSeek usage remains null and makes aggregate token totals explicitly incomplete", async () => {
@@ -3222,24 +3240,27 @@ test("cancelling evidence preparation aborts the active preparation request", as
   const fixture = makeFixture();
   let preparationSignal = null;
   const service = makeService(fixture, {}, {
-    deepSeekProvider: {
-      providerId: "deepseek",
-      async prepareEvidence({ signal }) {
-        preparationSignal = signal;
-        return new Promise((resolve, reject) => {
-          const abort = () => reject(signal.reason || new Error("aborted"));
-          if (signal.aborted) abort();
-          else signal.addEventListener("abort", abort, { once: true });
-        });
+    preparationProviders: {
+      relay: {
+        providerId: "relay",
+        async prepareEvidence({ signal }) {
+          preparationSignal = signal;
+          return new Promise((resolve, reject) => {
+            const abort = () => reject(signal.reason || new Error("aborted"));
+            if (signal.aborted) abort();
+            else signal.addEventListener("abort", abort, { once: true });
+          });
+        },
       },
     },
   });
   const created = await service.createRun({
     body: {
       question: "匿名资料准备取消问题",
-      preparationModel: "deepseek-v4-flash",
-      preparationReasoningMode: "standard",
-      preparationReasoningEffort: "none",
+      preparationProvider: "relay",
+      preparationModel: "relay-gpt-5.6-sol",
+      preparationReasoningMode: "pro",
+      preparationReasoningEffort: "low",
     },
   });
 
@@ -3662,11 +3683,11 @@ function confirmedPreparationContentError(contentFailureKind, usage) {
     codedError(
       `confirmed preparation ${contentFailureKind}`,
       contentFailureKind === "empty"
-        ? "deepseek_json_task_empty_content"
-        : "deepseek_json_task_invalid_json",
+        ? "relay_evidence_preparation_empty_content"
+        : "relay_evidence_preparation_invalid_json",
     ),
     {
-      provider: "deepseek",
+      provider: "relay",
       status: 200,
       outcomeKnown: true,
       budgetReservationMayExist: true,
@@ -3681,7 +3702,6 @@ function confirmedPreparationContentError(contentFailureKind, usage) {
 function makeService(fixture, envOverrides = {}, {
   storage = createMemoryAdminRunStorage(),
   preparationProviders = {},
-  deepSeekProvider = null,
   finalRulingProviders = {},
   finalCallBudgetLedger = createTestFinalCallBudgetLedger(),
   finalCallBudgetBypassDailyLimit = false,
@@ -3704,7 +3724,7 @@ function makeService(fixture, envOverrides = {}, {
     };
   }
   fixture.runStore = runStore;
-  const legacyPreparationFixture = deepSeekProvider || {
+  const relayPreparationFixture = {
     async prepareEvidence() {
       fixture.deepSeekPrepareCalls += 1;
       if (fixture.deepSeekPrepareGate) await fixture.deepSeekPrepareGate;
@@ -3735,6 +3755,10 @@ function makeService(fixture, envOverrides = {}, {
       ADMIN_OPENAI_ENABLED: "true",
       OPENAI_API_KEY: "server-only-test-key",
       DEEPSEEK_API_KEY: "server-only-test-key",
+      RELAY_API_KEY: "server-only-relay-test-key",
+      ADMIN_MODEL_LAB_USD_TO_CNY_RATE: "7.5",
+      ADMIN_MODEL_LAB_EXCHANGE_RATE_VERSION: "test-rate-v1",
+      RELAY_PRICING_MULTIPLIER: "0.27",
       ADMIN_MODEL_LAB_DEEPSEEK_PRICING_VERSION: "test-deepseek-v4",
       ADMIN_MODEL_LAB_DEEPSEEK_PRICING_EFFECTIVE_DATE: "2027-01-01",
       ADMIN_MODEL_LAB_DEEPSEEK_FLASH_INPUT_CNY_PER_MTOK: "1",
@@ -3746,7 +3770,7 @@ function makeService(fixture, envOverrides = {}, {
     preparationProviders: {
       relay: {
         providerId: "relay",
-        prepareEvidence: (...args) => legacyPreparationFixture.prepareEvidence(...args),
+        prepareEvidence: (...args) => relayPreparationFixture.prepareEvidence(...args),
       },
       ...preparationProviders,
     },

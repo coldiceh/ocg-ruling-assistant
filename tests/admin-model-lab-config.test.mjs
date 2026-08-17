@@ -82,19 +82,26 @@ test("arbitrary models and unsupported provider/model/stage combinations are rej
 });
 
 test("DeepSeek final-ruling metadata remains available while Relay replaces evidence preparation", () => {
+  assert.throws(
+    () => resolveAdminModelSelection({
+      provider: "deepseek",
+      model: "deepseek-v4-flash",
+      reasoningEffort: "none",
+      reasoningMode: "standard",
+      stage: ADMIN_MODEL_LAB_STAGES.EVIDENCE_PREPARATION,
+    }),
+    (error) => error.code === "model_stage_not_allowed",
+  );
   const selection = resolveAdminModelSelection({
     provider: "deepseek",
     model: "deepseek-v4-flash",
     reasoningEffort: "none",
     reasoningMode: "standard",
-    stage: ADMIN_MODEL_LAB_STAGES.EVIDENCE_PREPARATION,
+    stage: ADMIN_MODEL_LAB_STAGES.EXPERIMENTAL_FINAL_RULING,
   });
   assert.equal(selection.capability.canMakeFinalRuling, false);
   assert.equal(selection.capability.canDecideEscalation, false);
-  assert.deepEqual(selection.capability.allowedStages, [
-    "evidence_preparation",
-    "experimental_final_ruling",
-  ]);
+  assert.deepEqual(selection.capability.allowedStages, ["experimental_final_ruling"]);
   assert.equal(selection.capability.canMakeExperimentalRuling, true);
   assert.deepEqual(selection.capability.supportedReasoningEfforts, ["none", "low", "high", "max"]);
   assert.equal(selection.capability.preferredComparisonReasoningEffort, "low");
@@ -114,7 +121,7 @@ test("DeepSeek final-ruling metadata remains available while Relay replaces evid
       model: "deepseek-v4-flash",
       reasoningEffort: "high",
       reasoningMode: "standard",
-      stage: ADMIN_MODEL_LAB_STAGES.EVIDENCE_PREPARATION,
+      stage: ADMIN_MODEL_LAB_STAGES.EXPERIMENTAL_FINAL_RULING,
     }),
     (error) => error.code === "reasoning_effort_requires_thinking",
   );

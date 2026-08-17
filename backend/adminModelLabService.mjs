@@ -1586,7 +1586,6 @@ export function createAdminModelLabService({
 
           const retryConfirmedContentFailure = (
             attemptIndex === 0
-            && preparationProvider === "deepseek"
             && isConfirmedPreparationContentFailure(error)
           );
           if (!retryConfirmedContentFailure) throw error;
@@ -1595,7 +1594,7 @@ export function createAdminModelLabService({
           await runStore.updateStageProgress(runId, tracker.snapshot(), { executionToken });
           const recoveryStop = await preparationStopError();
           if (recoveryStop) throw recoveryStop;
-          warnings.push(`deepseek_preparation_${error.contentFailureKind}_retried_once`);
+          warnings.push(`evidence_preparation_${error.contentFailureKind}_retried_once`);
           continue;
         }
 
