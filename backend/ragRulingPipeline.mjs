@@ -107,6 +107,7 @@ async function answerRagRulingQuestionInternal({
   officialQaExactCandidatePoolComplete = false,
   officialQaExactOnly = false,
   officialQaExactAlreadyChecked = false,
+  progress,
 } = {}) {
   const pipelineStartedAt = Date.now();
   const timingsMs = {};
@@ -153,6 +154,7 @@ async function answerRagRulingQuestionInternal({
   }
   if (officialQaExactOnly) return null;
 
+  progress?.transition?.("extract_card_names");
   const extractionStartedAt = Date.now();
   const extractionStage = beginPrivateEvaluationStage(privateEvaluationDiagnostics, "extraction");
   const preflightStartedAt = Date.now();
@@ -193,6 +195,7 @@ async function answerRagRulingQuestionInternal({
   }
   timingsMs.dataAndQueryExtraction = elapsedMs(extractionStartedAt);
 
+  progress?.transition?.("retrieve_card_texts");
   const retrievalStartedAt = Date.now();
   const retrievalStage = beginPrivateEvaluationStage(privateEvaluationDiagnostics, "retrieval");
   let retrievedEvidence;
@@ -235,6 +238,7 @@ async function answerRagRulingQuestionInternal({
       env,
       fetchImpl,
       signal,
+      onProgressStage: (stageId) => progress?.transition?.(stageId),
     });
     retrievalStage.end();
   } catch (error) {
@@ -251,6 +255,7 @@ async function answerRagRulingQuestionInternal({
   // rule component, semantic executor, duel engine, formal engine or Lua
   // analysis may filter, strengthen or replace them before the final model.
   const evidence = retrievedEvidence;
+  progress?.transition?.("generate_ruling");
   const promptStage = beginPrivateEvaluationStage(privateEvaluationDiagnostics, "prompt_build");
   let promptBundle;
   let evidenceFingerprint;

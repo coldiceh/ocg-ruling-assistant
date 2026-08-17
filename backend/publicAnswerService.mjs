@@ -170,6 +170,7 @@ export async function answerPublicRulingQuestion({
   payload,
   env = process.env,
   signal,
+  progress,
   appendAudit = appendQueryAudit,
   readRiskControl = readPublicOfftopicRiskControl,
   classifyScope = classifyPublicQueryScope,
@@ -177,6 +178,7 @@ export async function answerPublicRulingQuestion({
   answerOfficialExact = answerExactOfficialQaQuestionForVersion,
   answerRuling = answerRagRulingQuestionForVersion,
 } = {}) {
+  progress?.start?.();
   const normalizedPayload = parsePublicAnswerPayload(payload);
   const mode = String(normalizedPayload.mode || "rag").toLowerCase();
   if (mode !== "rag") {
@@ -200,6 +202,7 @@ export async function answerPublicRulingQuestion({
     question: normalizedPayload.question,
     env,
     signal,
+    progress,
   });
   if (exactAnswer) {
     await auditPromise;
@@ -258,6 +261,7 @@ export async function answerPublicRulingQuestion({
       env: publicEnv,
       signal,
       officialQaExactAlreadyChecked: true,
+      progress,
     });
     await auditPromise;
     return {

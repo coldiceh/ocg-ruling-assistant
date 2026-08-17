@@ -111,6 +111,7 @@ export async function retrieveRagEvidence({
   env = {},
   fetchImpl = globalThis.fetch,
   signal,
+  onProgressStage,
 } = {}) {
   throwIfAborted(signal);
   if (enableLiveOfficialQa && !isDisabled(env.RAG_LIVE_OFFICIAL_QA)) {
@@ -271,6 +272,7 @@ export async function retrieveRagEvidence({
     (item) => item.resolutionSource === "card_text_reference",
   );
   const userProvidedCardTextEvidence = dedupeEvidence(providedTexts.map((item, index) => userProvidedTextEvidence(item, index, limits.maxCardTextChars, retrievalWarnings)));
+  onProgressStage?.("retrieve_rulings");
   // Card text is already available before the auxiliary query planner runs.
   // Fold its deterministic operation clauses into the first discovery pass so
   // the question-only candidate set covers mandatory branches even when the

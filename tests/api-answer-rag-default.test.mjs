@@ -63,6 +63,55 @@ test("api_answer_defaults_to_rag_baseline", async () => {
   }
 });
 
+test("web answer streams real backend stages while external API stays JSON", async () => {
+  const restore = captureEnvironment([
+    "MODEL_PROVIDER",
+    "RAG_LIVE_OFFICIAL_QA",
+  ]);
+  process.env.MODEL_PROVIDER = "mock";
+  process.env.RAG_LIVE_OFFICIAL_QA = "false";
+  try {
+    const streamed = createSseResponse();
+    await handler({
+      method: "POST",
+      url: "/api/answer?progress=1",
+      headers: { accept: "text/event-stream" },
+      body: {
+        mode: "rag",
+        question: "伤害步骤结束时可以发动这个效果吗？",
+        rulingModelProfile: "relay-gpt-5.6-sol-low",
+        rulingVersion: "latest",
+      },
+    }, streamed);
+
+    assert.equal(streamed.statusCode, 200);
+    assert.match(streamed.headers["content-type"], /text\/event-stream/u);
+    const events = parseSseEvents(streamed.body);
+    assert.equal(events[0].type, "stage_start");
+    assert.equal(events[0].data.stageId, "understand");
+    assert.ok(events.some((event) => event.type === "answer"));
+    assert.equal(events.at(-1).type, "end");
+    const measured = events.at(-1).data;
+    assert.equal(
+      Object.values(measured.stageDurationsMs).reduce((sum, value) => sum + value, 0),
+      measured.totalMs,
+    );
+
+    const external = createJsonResponse();
+    await handler({
+      method: "POST",
+      url: "/api/answer?progress=1",
+      headers: { accept: "text/event-stream" },
+      body: { question: "伤害步骤结束时可以发动这个效果吗？" },
+    }, external);
+    assert.equal(external.statusCode, 200);
+    assert.equal(external.headers["content-type"], undefined);
+    assert.equal(external.payload.mode, "rag_baseline");
+  } finally {
+    restore();
+  }
+});
+
 test("api_answer keeps the public engine disabled regardless of legacy backend configuration", async () => {
   const previousUrl = process.env.OCG_ENGINE_URL;
   const previousAuto = process.env.RAG_AUTO_ENGINE_SIMULATION;
@@ -439,6 +488,45 @@ function createJsonResponse() {
       return this;
     },
   };
+}
+
+function createSseResponse() {
+  return {
+    statusCode: 0,
+    headers: {},
+    body: "",
+    writableEnded: false,
+    destroyed: false,
+    setHeader(name, value) {
+      this.headers[name.toLowerCase()] = value;
+    },
+    flushHeaders() {},
+    flush() {},
+    write(chunk) {
+      this.body += chunk;
+      return true;
+    },
+    end() {
+      this.writableEnded = true;
+      return this;
+    },
+  };
+}
+
+function parseSseEvents(body) {
+  return String(body || "")
+    .trim()
+    .split(/\r?\n\r?\n/u)
+    .filter(Boolean)
+    .map((block) => {
+      let type = "message";
+      const data = [];
+      for (const line of block.split(/\r?\n/u)) {
+        if (line.startsWith("event:")) type = line.slice(6).trim();
+        if (line.startsWith("data:")) data.push(line.slice(5).trimStart());
+      }
+      return { type, data: JSON.parse(data.join("\n") || "{}") };
+    });
 }
 
 function redisJsonResponse(result) {

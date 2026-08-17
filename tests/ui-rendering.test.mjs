@@ -150,11 +150,14 @@ test("ui_has_single_query_button", async () => {
   assert.match(app, /用户提供文本/u);
   assert.match(app, /pendingStages/u);
   assert.match(app, /检索规则资料/u);
-  assert.match(app, /pendingStageTickTimer/u);
+  assert.match(app, /pendingBrowserElapsedTimer/u);
   assert.match(app, /formatPendingStageDuration/u);
   assert.match(app, /progress-step-time/u);
   assert.match(app, /readMonotonicNow/u);
-  assert.match(app, /extractBackendPipelineTimings/u);
+  assert.match(app, /readPublicAnswerProgressStream/u);
+  assert.match(app, /applyPendingStageProgressEvent/u);
+  assert.match(app, /后端实测/u);
+  assert.doesNotMatch(app, /pendingStageDelays|pendingStageTimers|pendingStageTickTimer/u);
   assert.match(app, /low_confidence_analysis:\s*\{[^}]+className:\s*"is-caution"/u);
   assert.match(app, /needs_more_info:\s*\{[^}]+className:\s*"is-caution"/u);
   assert.match(app, /budget_limited:\s*\{[^}]+className:\s*"is-risky"/u);
@@ -340,63 +343,30 @@ test("public ruling model selector renders measured latency and explicit fallbac
   assert.doesNotMatch(latencyNode.textContent, /\d+ 秒|\d+ 分/u);
 });
 
-test("public pipeline timing prefers backend stage measurements and wall-clock total", async () => {
+test("public pipeline timing is driven by backend SSE events without fixed stage delays", async () => {
   const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
-  const start = app.indexOf("function extractBackendPipelineTimings");
-  const end = app.indexOf("function readMonotonicNow", start);
-  assert.notEqual(start, -1);
-  assert.notEqual(end, -1);
-  const extractTimings = new Function(
-    `${app.slice(start, end)}; return extractBackendPipelineTimings;`,
-  )();
-  const stages = [
-    { id: "understand" },
-    { id: "extract_card_names" },
-    { id: "retrieve_card_texts" },
-    { id: "retrieve_rulings" },
-    { id: "simulate" },
-    { id: "generate_ruling" },
-  ];
-  const result = extractTimings({
-    debug: {
-      timingsMs: {
-        dataLoad: 10,
-        deterministicPreflight: 5,
-        auxiliaryExtractionModels: 100,
-        officialQaApplicability: 30_000,
-        localReasoning: 4,
-        rulebookGrounding: 6,
-        formalEngineAwait: 2,
-        finalModel: 1_000,
-        engineAwait: 3,
-        total: 1_200,
-      },
-      retrievalStageTimingsMs: {
-        data: 1,
-        cardResolution: 20,
-        rulebook: 30,
-        officialQa: 40,
-        relatedEvidence: 50,
-      },
-    },
-  }, stages);
-  assert.deepEqual(result, {
-    stageDurationsMs: {
-      understand: 15,
-      extract_card_names: 100,
-      retrieve_card_texts: 20,
-      retrieve_rulings: 121,
-      simulate: 5,
-      generate_ruling: 31_010,
-    },
-    totalMs: 1_200,
-    usesServerTiming: true,
-  });
-  assert.deepEqual(extractTimings({}, stages), {
-    stageDurationsMs: {},
-    totalMs: null,
-    usesServerTiming: false,
-  });
+  const timingSource = sourceBetween(
+    app,
+    "function startPendingStages",
+    "function renderEngineSimulation",
+  );
+
+  assert.match(app, /progress=1/u);
+  assert.match(app, /accept:\s*"text\/event-stream"/u);
+  assert.match(timingSource, /stage_start|stage_end|activeStageElapsedMs|serverElapsedMs/u);
+  assert.match(timingSource, /后端实测 · 总计/u);
+  assert.match(timingSource, /浏览器已等待/u);
+  assert.match(timingSource, /window\.setInterval\(\(\) => \{\s*renderPendingPipelineTotal\(\)/u);
+  assert.doesNotMatch(timingSource, /setTimeout|pendingStageDelays|pendingStageEnteredAt/u);
+  assert.doesNotMatch(app, /\[0,\s*700,\s*1600,\s*2900,\s*4500,\s*6000\]/u);
+  assert.doesNotMatch(timingSource, /auxiliaryExtractionModels|cardResolution/u);
+  assert.match(
+    timingSource,
+    /const backendTotalMs = pendingPipelineServerElapsedMs\s*\?\?/u,
+  );
+  assert.match(timingSource, /payload\.status === "failed" \? "failed" : "done"/u);
+  assert.match(timingSource, /state\.status === "waiting"\) state\.status = "skipped"/u);
+  assert.match(timingSource, /pendingPipelineTotalMs = pendingPipelineServerElapsedMs\s*\?\?/u);
 });
 
 test("missing answer API fails closed instead of answering from local ruling notes", async () => {
@@ -428,23 +398,84 @@ test("versioned backend answers require a matching server confirmation", async (
   assert.notEqual(requestStart, -1);
   assert.notEqual(renderPendingStart, -1);
   const versionClientSource = app.slice(requestStart, renderPendingStart);
-  const buildRequest = (fetchImpl) => new Function(
+  const buildRequest = (fetchImpl, progressEvents = [], currentRequestId = 0) => new Function(
     "fetch",
-    `const appConfig = { answerApiUrl: "https://example.test/api/answer" };
+    "progressEvents",
+    "analysisRequestId",
+    `const appConfig = { answerApiUrl: "https://example.test/api/answer?client=test" };
      const selectedRulingModelProfile = "deepseek-v4-flash-high";
+     function applyPendingStageProgressEvent(event) { progressEvents.push(event); }
      ${versionClientSource}
      return requestBackendAnswer;`,
-  )(fetchImpl);
+  )(fetchImpl, progressEvents, currentRequestId);
 
-  let requestBody = null;
-  const confirmedRequest = buildRequest(async (_url, options) => {
-    requestBody = JSON.parse(options.body);
+  const streamResponse = (answer, {
+    includeAnswer = true,
+    includeEnd = true,
+    duplicateAnswer = false,
+    malformedAnswer = false,
+    endBeforeAnswer = false,
+    eventAfterEnd = false,
+    byteChunks = false,
+    tracker = null,
+  } = {}) => {
+    const answerEvent = malformedAnswer
+      ? "event: answer\ndata: {not-json}\n\n"
+      : `event: answer\ndata: ${JSON.stringify({ answer })}\n\n`;
+    const events = [
+      "event: stage_start\ndata: {\"stageId\":\"understand\",\"serverElapsedMs\":2}\n\n",
+      "event: tick\ndata: {\"stageId\":\"understand\",\"serverElapsedMs\":5,\"activeStageElapsedMs\":3}\n\n",
+      "event: stage_end\ndata: {\"stageId\":\"understand\",\"serverElapsedMs\":8,\"durationMs\":6}\n\n",
+      includeEnd && endBeforeAnswer ? "event: end\ndata: {\"serverElapsedMs\":9,\"totalMs\":9}\n\n" : "",
+      includeAnswer ? answerEvent : "",
+      includeAnswer && duplicateAnswer ? answerEvent : "",
+      includeEnd && !endBeforeAnswer ? "event: end\ndata: {\"serverElapsedMs\":9,\"totalMs\":9}\n\n" : "",
+      eventAfterEnd ? "event: tick\ndata: {\"stageId\":\"understand\",\"serverElapsedMs\":10,\"activeStageElapsedMs\":10}\n\n" : "",
+    ].join("");
+    const bytes = new TextEncoder().encode(events);
+    const chunks = byteChunks ? Array.from(bytes, (value) => Uint8Array.of(value)) : [bytes];
+    let index = 0;
     return {
       ok: true,
-      json: async () => ({ rulingVersion: "latest", shortAnswer: "已确认" }),
+      status: 200,
+      headers: {
+        get: (name) => String(name).toLowerCase() === "content-type"
+          ? "text/event-stream; charset=utf-8"
+          : null,
+      },
+      body: {
+        getReader: () => ({
+          read: async () => index < chunks.length
+           ? { done: false, value: chunks[index++] }
+            : { done: true, value: undefined },
+          cancel: async () => {
+            if (tracker) tracker.cancelCalls += 1;
+          },
+          releaseLock: () => {},
+        }),
+      },
     };
+  };
+
+  let requestBody = null;
+  let requestedUrl = "";
+  const progressEvents = [];
+  const requestController = new AbortController();
+  const confirmedStreamTracker = { cancelCalls: 0 };
+  const confirmedRequest = buildRequest(async (url, options) => {
+    requestedUrl = url;
+    requestBody = JSON.parse(options.body);
+    assert.equal(options.headers.accept, "text/event-stream");
+    assert.equal(options.signal, requestController.signal);
+    return streamResponse({ rulingVersion: "latest", shortAnswer: "已确认中文" }, {
+      byteChunks: true,
+      tracker: confirmedStreamTracker,
+    });
+  }, progressEvents);
+  const confirmed = await confirmedRequest("问题", "latest", {
+    signal: requestController.signal,
   });
-  const confirmed = await confirmedRequest("问题", "latest");
+  assert.match(requestedUrl, /\?client=test&progress=1$/u);
   assert.deepEqual(requestBody, {
     question: "问题",
     mode: "rag",
@@ -452,24 +483,90 @@ test("versioned backend answers require a matching server confirmation", async (
     rulingVersion: "latest",
   });
   assert.equal(confirmed.effectiveRulingVersion, "latest");
+  assert.equal(confirmed.shortAnswer, "已确认中文");
+  assert.equal(confirmedStreamTracker.cancelCalls, 0, "a valid completed stream must not be cancelled");
+  assert.deepEqual(progressEvents.map((event) => event.type), [
+    "stage_start",
+    "tick",
+    "stage_end",
+    "end",
+  ]);
 
-  const missingConfirmationRequest = buildRequest(async () => ({
-    ok: true,
-    json: async () => ({ shortAnswer: "旧后端未回显版本" }),
+  const missingConfirmationRequest = buildRequest(async () => streamResponse({
+    shortAnswer: "旧后端未回显版本",
   }));
   const compatibleLatest = await missingConfirmationRequest("问题", "latest");
   assert.equal(compatibleLatest.effectiveRulingVersion, "latest");
   assert.equal(compatibleLatest.rulingVersionCompatibility, "legacy_unversioned_latest");
   assert.equal(compatibleLatest.shortAnswer, "旧后端未回显版本");
 
-  const removedVersionResponse = buildRequest(async () => ({
-    ok: true,
-    json: async () => ({ rulingVersion: "previous", shortAnswer: "已删除版本" }),
+  const removedVersionResponse = buildRequest(async () => streamResponse({
+    rulingVersion: "previous",
+    shortAnswer: "已删除版本",
   }));
   await assert.rejects(
     removedVersionResponse("问题", "latest"),
     (error) => error?.code === "ruling_version_response_invalid",
   );
+
+  let missingAnswerCalls = 0;
+  const missingAnswerRequest = buildRequest(async () => {
+    missingAnswerCalls += 1;
+    return streamResponse({}, { includeAnswer: false });
+  });
+  await assert.rejects(
+    missingAnswerRequest("问题", "latest"),
+    (error) => error?.code === "ruling_progress_end_before_answer",
+  );
+  assert.equal(missingAnswerCalls, 1, "a broken stream must not trigger a paid retry");
+
+  let jsonFallbackCalls = 0;
+  const nonStreamRequest = buildRequest(async () => {
+    jsonFallbackCalls += 1;
+    return {
+      ok: true,
+      status: 200,
+      headers: { get: () => "application/json" },
+      json: async () => ({ rulingVersion: "latest" }),
+    };
+  });
+  await assert.rejects(
+    nonStreamRequest("问题", "latest"),
+    (error) => error?.code === "ruling_progress_stream_unavailable",
+  );
+  assert.equal(jsonFallbackCalls, 1, "the browser must not resend a completed paid request");
+
+  for (const [options, expectedCode] of [
+    [{ malformedAnswer: true }, "ruling_progress_event_invalid"],
+    [{ includeEnd: false }, "ruling_progress_end_missing"],
+    [{ duplicateAnswer: true }, "ruling_progress_answer_duplicate"],
+    [{ endBeforeAnswer: true }, "ruling_progress_end_before_answer"],
+    [{ eventAfterEnd: true }, "ruling_progress_event_after_end"],
+  ]) {
+    let calls = 0;
+    const tracker = { cancelCalls: 0 };
+    const invalidStreamRequest = buildRequest(async () => {
+      calls += 1;
+      return streamResponse({ rulingVersion: "latest" }, { ...options, tracker });
+    });
+    await assert.rejects(
+      invalidStreamRequest("问题", "latest"),
+      (error) => error?.code === expectedCode,
+    );
+    assert.equal(calls, 1);
+    assert.equal(tracker.cancelCalls, 1, `${expectedCode} must cancel the damaged stream`);
+  }
+
+  const staleProgressEvents = [];
+  const staleRequest = buildRequest(
+    async () => streamResponse({ rulingVersion: "latest" }),
+    staleProgressEvents,
+    2,
+  );
+  await staleRequest("问题", "latest", { requestId: 1 });
+  assert.deepEqual(staleProgressEvents, [], "late events from an old request must not alter current progress");
+  assert.match(app, /cancelActiveAnalysisRequest\(\)[\s\S]*activeAnalysisAbortController\.abort\(\)/u);
+  assert.match(app, /signal:\s*abortController\.signal/u);
 });
 
 test("feedback_opens_a_prefilled_github_issue", async () => {
@@ -490,7 +587,7 @@ test("backend answers bypass persistent browser cache and bust static assets", a
     readFile(new URL("../config.json", import.meta.url), "utf8"),
   ]);
   const config = JSON.parse(configText.replace(/^\uFEFF/u, ""));
-  assert.match(html, /src\/app\.js\?v=20260814-risk-control-1/u);
+  assert.match(html, /src\/app\.js\?v=20260817-live-stage-timing-1/u);
   assert.match(html, /src\/styles\.css\?v=20260814-risk-control-1/u);
   assert.match(config.answerApiUrl, /\?client=20260722-answer-version-1$/u);
   assert.match(app, /cache: "no-store"/u);
@@ -1578,7 +1675,7 @@ test("rag_displays_simulator_output_as_a_separate_result", async () => {
   assert.match(app, /选择是否连锁/u);
   assert.match(app, /answer\?\.engineSimulation/u);
   assert.match(app, /info\?\.engineEnabled === true/u);
-  assert.match(app, /if \(!appConfig\.engineEnabled\) return pendingStages/u);
+  assert.match(app, /function getPendingStages\(\)\s*\{\s*return pendingStages;/u);
   assert.match(app, /status !== "completed" \|\| !simulation/u);
 });
 
@@ -1626,42 +1723,30 @@ test("rag UI presents every formal query without turning UNKNOWN into a negative
   assert.match(app, /formal_engine_unknown: "形式规则内核本次未签发确定性证明；这不等于“不能”。"/u);
 });
 
-test("public pending stages merge evidence review into optional simulation and final generation", async () => {
+test("public pending stages keep the original five labels without browser-scheduled transitions", async () => {
   const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
   const definitions = sourceBetween(
     app,
     "const pendingStages =",
-    "let pendingStageTimers =",
+    "let pendingStageIndex =",
   );
   const functionSource = sourceBetween(
     app,
     "function getPendingStages",
     "function allCards",
   );
-  const inspect = new Function(
-    "engineEnabled",
-    `${definitions}\nconst appConfig = { engineEnabled };\n${functionSource}\nreturn { stages: getPendingStages(), delays: pendingStageDelays };`,
-  );
+  const stages = new Function(
+    `${definitions}\n${functionSource}\nreturn getPendingStages();`,
+  )();
 
-  const withoutEngine = inspect(false);
-  assert.deepEqual(withoutEngine.stages.map((stage) => stage.id), [
+  assert.deepEqual(stages.map((stage) => stage.id), [
     "understand",
     "extract_card_names",
     "retrieve_card_texts",
     "retrieve_rulings",
     "generate_ruling",
   ]);
-  const withEngine = inspect(true);
-  assert.deepEqual(withEngine.stages.map((stage) => stage.id), [
-    "understand",
-    "extract_card_names",
-    "retrieve_card_texts",
-    "retrieve_rulings",
-    "simulate",
-    "generate_ruling",
-  ]);
-  assert.equal(withEngine.delays.length, withEngine.stages.length);
-  assert.ok(withEngine.delays.every((delay, index) => index === 0 || delay > withEngine.delays[index - 1]));
+  assert.doesNotMatch(app, /pendingStageDelays|simulationPendingStage/u);
 });
 
 test("rag UI presents provider failures as model service unavailable in Chinese", async () => {
