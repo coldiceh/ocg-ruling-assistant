@@ -1082,34 +1082,36 @@ test("rag_pipeline_includes_card_text_when_card_resolved", async () => {
   assert.equal(typeof answer.debug.promptChars, "number");
 });
 
-test("card_name_extractor_uses_dedicated_flash_model", async () => {
+test("card name extractor uses Relay Sol low", async () => {
   const calls = [];
+  const now = new Date("2048-07-10T00:00:00.000Z");
+  const env = relayAuxEnv();
+  await resetRagBudget({ env, now });
   const result = await callCardNameExtractionModel({
     userQuery: "测式龙的①效果可以发动吗？",
-    env: {
-      MODEL_PROVIDER: "deepseek",
-      DEEPSEEK_API_KEY: "test-deepseek-key",
-      DEEPSEEK_FLASH_MODEL: "deepseek-v4-flash-test",
-      DEEPSEEK_CARD_MODEL: "deepseek-flash-test",
-      API_DAILY_BUDGET_CNY: "10",
-    },
+    dataRevision: "relay-sol-low-card-name-20480710",
+    env,
+    now,
     fetchImpl: async (url, options) => {
       calls.push({ url, options, body: JSON.parse(options.body) });
-      return jsonResponse({
-        choices: [{ message: { content: JSON.stringify({ cardNames: [{ name: "测试龙", originalText: "测式龙", confidence: "high" }] }) } }],
-        usage: { prompt_tokens: 30, completion_tokens: 10 },
-      });
+      return relaySseResponse({
+        cardNames: [{ name: "测试龙", originalText: "测式龙", confidence: "high" }],
+      }, { prompt_tokens: 30, completion_tokens: 10, total_tokens: 40 });
     },
   });
-  assert.equal(result.providerUsed, "deepseek");
-  assert.equal(result.modelUsed, "deepseek-flash-test");
-  assert.equal(calls[0].body.model, "deepseek-flash-test");
-  assert.equal(calls[0].body.max_tokens, 800);
+  assert.equal(result.providerUsed, "relay");
+  assert.equal(result.modelUsed, "gpt-5.6-sol");
+  assert.equal(calls[0].body.model, "gpt-5.6-sol");
+  assert.equal(calls[0].body.reasoning_effort, "low");
+  assert.equal(calls[0].body.max_completion_tokens, 800);
   assert.deepEqual(result.candidates.map((item) => item.name), ["测试龙"]);
 });
 
-test("rule_query_extractor_uses_lightweight_model", async () => {
+test("rule query extractor uses Relay Sol low", async () => {
   const calls = [];
+  const now = new Date("2048-07-10T00:01:00.000Z");
+  const env = relayAuxEnv();
+  await resetRagBudget({ env, now });
   const result = await callRuleQueryExtractionModel({
     userQuery: "场上只有正在处理的陷阱时，返回魔法陷阱的效果能否处理？",
     resolvedCards: [{
@@ -1123,44 +1125,38 @@ test("rule_query_extractor_uses_lightweight_model", async () => {
       answer: "CANDIDATE_ANSWER_MUST_NOT_REACH_QUERY_MODEL",
       fullText: "CANDIDATE_FULL_TEXT_MUST_NOT_REACH_QUERY_MODEL",
     }],
-    env: {
-      MODEL_PROVIDER: "deepseek",
-      DEEPSEEK_API_KEY: "test-deepseek-key",
-      DEEPSEEK_FLASH_MODEL: "deepseek-v4-flash-test",
-      DEEPSEEK_CARD_MODEL: "deepseek-flash-test",
-      API_DAILY_BUDGET_CNY: "10",
-    },
+    dataRevision: "relay-sol-low-rule-query-20480710",
+    env,
+    now,
     fetchImpl: async (url, options) => {
       calls.push({ url, options, body: JSON.parse(options.body) });
-      return jsonResponse({
-        choices: [{ message: { content: JSON.stringify({
-          ruleQueries: [{
-            subclaim: "确认效果处理时该卡的区域和卡片种类",
-            checkpoint: "resolution_snapshot",
-            query: "处理中的陷阱 当前区域 | 処理中の罠 現在の領域 | resolving trap current zone",
-            reason: "检索处理快照中的区域与类型",
-            confidence: "high",
-          }, {
-            subclaim: "确认后一处理是否依赖前一处理实际完成",
-            checkpoint: "step_dependency",
-            query: "连续处理 前一步完成 后一步依赖 | 連続処理 前段完了 後段依存 | sequential resolution prior step dependency",
-            reason: "检索连续处理的依赖关系",
-           confidence: "medium",
-          }],
-          candidateAssessments: [{
-            id: "qa-question-only-candidate",
-            relevance: "high",
-            premise: "partial",
-            difference: "候选问题没有给出本题的完整场面。",
-          }],
-        }) } }],
-        usage: { prompt_tokens: 25, completion_tokens: 8 },
-      });
+      return relaySseResponse({
+        ruleQueries: [{
+          subclaim: "确认效果处理时该卡的区域和卡片种类",
+          checkpoint: "resolution_snapshot",
+          query: "处理中的陷阱 当前区域 | 処理中の罠 現在の領域 | resolving trap current zone",
+          reason: "检索处理快照中的区域与类型",
+          confidence: "high",
+        }, {
+          subclaim: "确认后一处理是否依赖前一处理实际完成",
+          checkpoint: "step_dependency",
+          query: "连续处理 前一步完成 后一步依赖 | 連続処理 前段完了 後段依存 | sequential resolution prior step dependency",
+          reason: "检索连续处理的依赖关系",
+          confidence: "medium",
+        }],
+        candidateAssessments: [{
+          id: "qa-question-only-candidate",
+          relevance: "high",
+          premise: "partial",
+          difference: "候选问题没有给出本题的完整场面。",
+        }],
+      }, { prompt_tokens: 25, completion_tokens: 8, total_tokens: 33 });
     },
   });
-  assert.equal(result.providerUsed, "deepseek");
-  assert.equal(result.modelUsed, "deepseek-flash-test");
-  assert.equal(calls[0].body.model, "deepseek-flash-test");
+  assert.equal(result.providerUsed, "relay");
+  assert.equal(result.modelUsed, "gpt-5.6-sol");
+  assert.equal(calls[0].body.model, "gpt-5.6-sol");
+  assert.equal(calls[0].body.reasoning_effort, "low");
   assert.deepEqual(result.queries.map((item) => item.query), [
     "处理中的陷阱 当前区域 | 処理中の罠 現在の領域 | resolving trap current zone",
     "连续处理 前一步完成 后一步依赖 | 連続処理 前段完了 後段依存 | sequential resolution prior step dependency",
@@ -3724,11 +3720,15 @@ test("cancellation during Relay auxiliary budget preflight prevents provider dis
     },
     fetchImpl: async (url, options) => {
       const command = JSON.parse(options.body || "[]");
-      if (command[0] === "EVAL" && Number(command[4]) > 0) {
+      const response = await redis.fetchImpl(url, options);
+      if (command[0] === "EVAL"
+          && command[2] === "2"
+          && String(command[3]).includes(":final_ruling:relay:")
+          && Number(command[5]) > 0) {
         positiveReservations += 1;
         controller.abort("cancelled_during_auxiliary_preflight");
       }
-      return redis.fetchImpl(url, options);
+      return response;
     },
   });
 
@@ -3736,7 +3736,7 @@ test("cancellation during Relay auxiliary budget preflight prevents provider dis
   assert.equal(invokerCalls, 0);
   assert.ok(result.warnings.some((item) => item.startsWith("card_name_model_failed:")));
   assert.deepEqual(after, before);
-  assert.equal(positiveReservations > 0, true);
+  assert.equal(positiveReservations, 1);
 });
 
 test("legacy DeepSeek auxiliary JSON entry is disabled before budget or provider dispatch", async () => {
