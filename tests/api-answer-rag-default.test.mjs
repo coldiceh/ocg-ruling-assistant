@@ -112,6 +112,104 @@ test("web answer streams real backend stages while external API stays JSON", asy
   }
 });
 
+test("Relay rule-query failures are exposed as 503 JSON errors without a final ruling", async () => {
+  const scenarios = [{
+    label: "empty",
+    code: "rule_query_model_empty",
+    message: /证据准备模型未返回有效检索问题/u,
+  }, {
+    label: "timeout",
+    code: "rule_query_model_timeout",
+    message: /证据准备模型超时/u,
+  }, {
+    label: "unavailable",
+    code: "rule_query_model_unavailable",
+    message: /Relay 证据准备模型不可用/u,
+  }];
+  const restore = captureEnvironment(RELAY_FAILURE_ENVIRONMENT_KEYS);
+  const originalFetch = globalThis.fetch;
+  try {
+    Object.assign(process.env, {
+      RELAY_API_KEY: "relay-api-boundary-key",
+      RELAY_BASE_URL: "https://relay.example.test/v1",
+      RAG_LIVE_OFFICIAL_QA: "false",
+      PUBLIC_OFFTOPIC_RISK_CONTROL_ENABLED: "false",
+      API_CHATGPT_DAILY_BUDGET_USD: "10",
+      API_BUDGET_TIMEZONE: "UTC",
+    });
+    delete process.env.MODEL_PROVIDER;
+    delete process.env.RAG_MODEL_PROVIDER;
+    delete process.env.RAG_DRY_RUN;
+
+    for (const scenario of scenarios) {
+      process.env.RAG_RULE_MODEL_RELAY_API_KEY = "relay-rule-boundary-key";
+      process.env.RAG_RULE_MODEL_RELAY_BASE_URL = scenario.label === "unavailable"
+        ? "http://relay.example.test/v1"
+        : "https://relay.example.test/v1";
+      process.env.RAG_RULE_MODEL_TIMEOUT_MS = scenario.label === "timeout" ? "10" : "25000";
+      globalThis.fetch = createRelayBoundaryFetch(scenario.label);
+      const response = createJsonResponse();
+      await handler({
+        method: "POST",
+        body: { question: `Relay JSON ${scenario.label} 边界回归，规则查询失败时如何处理？` },
+      }, response);
+
+      assert.equal(response.statusCode, 503, scenario.label);
+      assert.equal(response.payload.code, scenario.code, scenario.label);
+      assert.match(response.payload.error, scenario.message, scenario.label);
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+    restore();
+  }
+});
+
+test("Relay rule-query failure SSE events preserve the 503 code and Chinese message", async () => {
+  const restore = captureEnvironment(RELAY_FAILURE_ENVIRONMENT_KEYS);
+  const originalFetch = globalThis.fetch;
+  try {
+    Object.assign(process.env, {
+      RELAY_API_KEY: "relay-sse-boundary-key",
+      RELAY_BASE_URL: "https://relay.example.test/v1",
+      RAG_RULE_MODEL_RELAY_API_KEY: "relay-sse-rule-boundary-key",
+      RAG_RULE_MODEL_RELAY_BASE_URL: "https://relay.example.test/v1",
+      RAG_LIVE_OFFICIAL_QA: "false",
+      PUBLIC_OFFTOPIC_RISK_CONTROL_ENABLED: "false",
+      API_CHATGPT_DAILY_BUDGET_USD: "10",
+      API_BUDGET_TIMEZONE: "UTC",
+    });
+    delete process.env.MODEL_PROVIDER;
+    delete process.env.RAG_MODEL_PROVIDER;
+    delete process.env.RAG_DRY_RUN;
+    globalThis.fetch = createRelayBoundaryFetch("empty");
+
+    const response = createSseResponse();
+    await handler({
+      method: "POST",
+      url: "/api/answer?progress=1",
+      headers: { accept: "text/event-stream" },
+      body: {
+        question: "Relay SSE empty 边界回归，规则查询失败时如何处理？",
+        mode: "rag",
+        rulingModelProfile: "relay-gpt-5.6-sol-low",
+        rulingVersion: "latest",
+      },
+    }, response);
+
+    assert.equal(response.statusCode, 200);
+    const events = parseSseEvents(response.body);
+    const error = events.find((event) => event.type === "error");
+    assert.ok(error);
+    assert.equal(error.data.statusCode, 503);
+    assert.equal(error.data.code, "rule_query_model_empty");
+    assert.match(error.data.error, /证据准备模型未返回有效检索问题/u);
+    assert.equal(events.at(-1).type, "end");
+  } finally {
+    globalThis.fetch = originalFetch;
+    restore();
+  }
+});
+
 test("api_answer keeps the public engine disabled regardless of legacy backend configuration", async () => {
   const previousUrl = process.env.OCG_ENGINE_URL;
   const previousAuto = process.env.RAG_AUTO_ENGINE_SIMULATION;
@@ -488,6 +586,59 @@ function createJsonResponse() {
       return this;
     },
   };
+}
+
+const RELAY_FAILURE_ENVIRONMENT_KEYS = [
+  "MODEL_PROVIDER",
+  "RAG_MODEL_PROVIDER",
+  "RAG_DRY_RUN",
+  "RELAY_API_KEY",
+  "RELAY_BASE_URL",
+  "RAG_RULE_MODEL_RELAY_API_KEY",
+  "RAG_RULE_MODEL_RELAY_BASE_URL",
+  "RAG_RULE_MODEL_TIMEOUT_MS",
+  "RAG_LIVE_OFFICIAL_QA",
+  "PUBLIC_OFFTOPIC_RISK_CONTROL_ENABLED",
+  "API_CHATGPT_DAILY_BUDGET_USD",
+  "API_BUDGET_TIMEZONE",
+];
+
+function createRelayBoundaryFetch(mode) {
+  return async (_url, options = {}) => {
+    const request = JSON.parse(String(options.body || "{}"));
+    const prompt = request.messages
+      ?.map((message) => String(message?.content || ""))
+      .join("\n") || "";
+    if (prompt.includes("提取所有可能的卡名候选")) {
+      return relaySseResponse({ cardNames: [] });
+    }
+    if (prompt.includes("提取用于检索规则资料、FAQ 或官方相似 Q&A 的查询词")) {
+      if (mode === "timeout") {
+        return await new Promise((_resolve, reject) => {
+          const rejectWithAbort = () => reject(options.signal?.reason || new Error("aborted"));
+          if (options.signal?.aborted) rejectWithAbort();
+          else options.signal?.addEventListener("abort", rejectWithAbort, { once: true });
+        });
+      }
+      if (mode === "empty") return relaySseResponse({ ruleQueries: [] });
+      throw new Error("unavailable Relay rule query must not make a provider request");
+    }
+    throw new Error("unexpected provider request before Relay rule-query guard");
+  };
+}
+
+function relaySseResponse(payload) {
+  return new Response([
+    `data: ${JSON.stringify({
+      model: "gpt-5.6-sol",
+      choices: [{ index: 0, finish_reason: "stop", delta: { content: JSON.stringify(payload) } }],
+      usage: { prompt_tokens: 8, completion_tokens: 4, total_tokens: 12 },
+    })}\n\n`,
+    "data: [DONE]\n\n",
+  ].join(""), {
+    status: 200,
+    headers: { "content-type": "text/event-stream" },
+  });
 }
 
 function createSseResponse() {

@@ -230,6 +230,7 @@ async function answerRagRulingQuestionInternal({
         });
         timingsMs.ruleQueryExtraction = elapsedMs(ruleQueryStartedAt);
         timingsMs.auxiliaryExtractionModels += timingsMs.ruleQueryExtraction;
+        assertRelayRuleQueryPlanAvailable(ruleQueryModel, { dryRun, env });
         return {
           queries: ruleQueryModel.queries || [],
           candidateAssessments: ruleQueryModel.candidateAssessments || [],
@@ -775,4 +776,27 @@ function firstReturnedModel(attempts = []) {
     .map((attempt) => String(attempt?.responseModel || "").trim())
     .find(Boolean);
   return model || null;
+}
+
+function assertRelayRuleQueryPlanAvailable(result = {}, { dryRun = false, env = {} } = {}) {
+  const forcedDryRun = /^(?:1|true|yes|on)$/iu.test(String(env.RAG_DRY_RUN || "").trim());
+  const relayRequired = result.relayRequired === true || result.providerUsed === "relay";
+  if (dryRun === true || forcedDryRun || !relayRequired) return;
+  if (Array.isArray(result.queries) && result.queries.length > 0) return;
+
+  const warnings = Array.isArray(result.warnings) ? result.warnings.map(String) : [];
+  const timedOut = warnings.some((warning) => /timeout|timed out|超时/iu.test(warning));
+  const unavailable = result.providerUsed !== "relay";
+  const error = new Error(unavailable
+    ? "Relay 证据准备模型不可用，本次未生成裁定，请联系管理员检查配置。"
+    : timedOut
+      ? "证据准备模型超时，本次未生成裁定，请稍后重试。"
+      : "证据准备模型未返回有效检索问题，本次未生成裁定，请稍后重试。");
+  error.code = unavailable
+    ? "rule_query_model_unavailable"
+    : timedOut
+      ? "rule_query_model_timeout"
+      : "rule_query_model_empty";
+  error.statusCode = 503;
+  throw error;
 }

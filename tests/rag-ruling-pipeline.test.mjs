@@ -3,7 +3,10 @@ import test from "node:test";
 import { buildAliasIndex, extractQuotedMentions, extractRagCards, extractUnquotedCardMentionCandidates, extractUserProvidedCardTextBlocks, normalizeCardKey } from "../backend/ragCardExtractor.mjs";
 import { createLocalCardDataProvider } from "../backend/cardDataProvider.mjs";
 import { loadRagData, retrieveRagEvidence } from "../backend/ragEvidenceRetriever.mjs";
-import { buildRagRulingPromptBundle } from "../backend/ragRulingPrompt.mjs";
+import {
+  buildRagRulingPromptBundle,
+  extractPromptAllowedEvidenceIds,
+} from "../backend/ragRulingPrompt.mjs";
 import { callCardNameExtractionModel, callDeepSeekJsonTask, callOfficialQaApplicabilityModel, callRagModel, callRuleQueryExtractionModel, capPublicChatGptBudget, createPublicAnswerModelEnv, estimateDeepSeekCostCny, estimateGlmCostCny, getRagBudgetStatus, resetRagBudget, resolveRagProvider } from "../backend/ragModelClient.mjs";
 import {
   answerRagRulingQuestion,
@@ -226,6 +229,11 @@ test("final reasoner receives the Albaz evidence without a local answer override
   assert.ok(!answer.riskFlags.includes("semantic_state_transition_applied"));
   assert.equal(answer.riskFlags.includes("answer_constrained_by_provisional_official_response"), false);
   assert.equal(answer.debug.semanticStateTransition, null);
+  assert.ok(answer.usedEvidence[0], JSON.stringify({
+    usedEvidence: answer.usedEvidence,
+    selectedEvidenceDiagnostics: answer.debug?.selectedEvidenceDiagnostics,
+    retrievalWarnings: answer.debug?.retrievalWarnings,
+  }));
   assert.equal(answer.usedEvidence[0].type, "official_response_screenshot");
 });
 
@@ -1175,8 +1183,8 @@ test("rule query extractor uses Relay Sol low", async () => {
   assert.match(requestPrompt, /每个强制步骤与分支生成独立查询/u);
   assert.match(requestPrompt, /不能只检索最初的触发条件/u);
   assert.match(requestPrompt, /不得为了达到条数加入无关机制/u);
-  assert.match(requestPrompt, /中文、日文和英文等价术语/u);
-  assert.match(requestPrompt, /不要保留未解释的玩家俗称/u);
+  assert.match(requestPrompt, /中文、日文和英文三个可独立检索的问题式短句/u);
+  assert.match(requestPrompt, /不得使用未展开的缩写、单字母或无法独立理解的代词/u);
   assert.match(requestPrompt, /匿名响应者/u);
   assert.match(requestPrompt, /效果怪兽/u);
   assert.match(requestPrompt, /ANONYMOUS_COMPLETE_EFFECT_TEXT/u);
@@ -1190,6 +1198,48 @@ test("rule query extractor uses Relay Sol low", async () => {
     source: "model_rule_query_soft_ranker",
   }]);
   assert.equal(calls.length, 1);
+});
+
+test("rule query normalization preserves independently bounded pipe and newline language branches", async () => {
+  const calls = [];
+  const now = new Date("2048-07-10T00:02:00.000Z");
+  const env = relayAuxEnv();
+  await resetRagBudget({ env, now });
+  const chinese = `中文完整问题${"甲".repeat(180)}`;
+  const japanese = `日本語の完全な質問${"乙".repeat(180)}`;
+  const english = `Complete English ruling question ${"z".repeat(180)}`;
+  const fourth = `第四语言分支${"丁".repeat(180)}`;
+  const ignored = "第五个分支必须被忽略";
+  const result = await callRuleQueryExtractionModel({
+    userQuery: "请生成多语言检索问题。",
+    dataRevision: "relay-rule-query-branch-normalization-20480710",
+    env,
+    now,
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options, body: JSON.parse(options.body) });
+      return relaySseResponse({
+        ruleQueries: [{
+          subclaim: "确认多语言分支不会互相截断",
+          checkpoint: "operation_legality",
+          query: `${chinese}\n${japanese} ｜ ${english}\n${fourth} | ${ignored}`,
+          reason: "检索同一个未决子问题",
+          confidence: "high",
+        }],
+        candidateAssessments: [],
+      }, { prompt_tokens: 20, completion_tokens: 20, total_tokens: 40 });
+    },
+  });
+
+  const branches = result.queries[0].query.split(" | ");
+  assert.equal(calls.length, 1);
+  assert.equal(branches.length, 4);
+  assert.deepEqual(branches, [
+    chinese.slice(0, 160),
+    japanese.slice(0, 160),
+    english.slice(0, 160),
+    fourth.slice(0, 160),
+  ]);
+  assert.doesNotMatch(result.queries[0].query, /第五个分支/u);
 });
 
 test("rule query extraction defaults the independent Relay planner to low and a compact output", async () => {
@@ -1284,6 +1334,127 @@ test("rule query extraction applies its 25-second default provider deadline", as
     assert.ok(result.warnings.includes("rule_query_model_failed:rule_query_model_timeout"));
   } finally {
     globalThis.setTimeout = originalSetTimeout;
+  }
+});
+
+test("ordinary pipeline stops before final generation when Relay rule preparation is empty or times out", async () => {
+  const scenarios = [{
+    label: "empty",
+    invoke: async () => JSON.stringify({ ruleQueries: [] }),
+    code: "rule_query_model_empty",
+  }, {
+    label: "timeout",
+    invoke: async () => {
+      throw new Error("rule_query_model_timeout");
+    },
+    code: "rule_query_model_timeout",
+  }];
+
+  for (const [index, scenario] of scenarios.entries()) {
+    let finalCalls = 0;
+    await assert.rejects(answerRagRulingQuestion({
+      question: `匿名 Relay ${scenario.label} 场景如何处理？`,
+      cards: [],
+      records: [],
+      qaRecords: [],
+      officialQaExactAlreadyChecked: true,
+      env: relayAuxEnv({
+        MODEL_PROVIDER: "mock",
+        RAG_MODEL_PROVIDER: "mock",
+        RAG_CARD_MODEL_PROVIDER: "mock",
+      }),
+      now: new Date(`2056-01-0${index + 1}T00:00:00.000Z`),
+      ruleModelInvoker: scenario.invoke,
+      modelInvoker: async () => {
+        finalCalls += 1;
+        return JSON.stringify(modelJson("不应生成最终裁定。"));
+      },
+    }), (error) => {
+      assert.equal(error.code, scenario.code);
+      assert.equal(error.statusCode, 503);
+      return true;
+    });
+    assert.equal(finalCalls, 0);
+  }
+});
+
+test("ordinary pipeline fails closed when Relay rule preparation was required but is misconfigured", async () => {
+  const scenarios = [{
+    label: "missing",
+    env: { RAG_RULE_MODEL_PROVIDER: "relay" },
+  }, {
+    label: "invalid-url",
+    env: {
+      RAG_RULE_MODEL_PROVIDER: "relay",
+      RAG_RULE_MODEL_RELAY_API_KEY: "relay-rule-key",
+      RAG_RULE_MODEL_RELAY_BASE_URL: "http://relay.example.test/v1",
+    },
+  }, {
+    label: "deepseek-redirect",
+    env: { RAG_RULE_MODEL_PROVIDER: "deepseek" },
+  }];
+
+  for (const [index, scenario] of scenarios.entries()) {
+    let finalCalls = 0;
+    await assert.rejects(answerRagRulingQuestion({
+      question: `匿名 Relay 配置 ${scenario.label} 场景如何处理？`,
+      cards: [],
+      records: [],
+      qaRecords: [],
+      officialQaExactAlreadyChecked: true,
+      env: {
+        MODEL_PROVIDER: "mock",
+        RAG_MODEL_PROVIDER: "mock",
+        RAG_CARD_MODEL_PROVIDER: "mock",
+        ...scenario.env,
+      },
+      now: new Date(`2056-02-0${index + 1}T00:00:00.000Z`),
+      modelInvoker: async () => {
+        finalCalls += 1;
+        return JSON.stringify(modelJson("不应生成最终裁定。"));
+      },
+    }), (error) => {
+      assert.equal(error.code, "rule_query_model_unavailable");
+      assert.equal(error.statusCode, 503);
+      assert.match(error.message, /Relay 证据准备模型不可用/u);
+      return true;
+    });
+    assert.equal(finalCalls, 0);
+  }
+});
+
+test("Relay rule-query fail-closed guard remains disabled for explicit and environment dry-runs", async () => {
+  const dryRunModes = [{
+    label: "explicit",
+    dryRun: true,
+    env: {},
+  }, {
+    label: "environment",
+    dryRun: false,
+    env: { RAG_DRY_RUN: "true" },
+  }];
+
+  for (const [index, mode] of dryRunModes.entries()) {
+    const answer = await answerRagRulingQuestion({
+      question: `Relay ${mode.label} dry-run should not be blocked.`,
+      cards: [],
+      records: [],
+      qaRecords: [],
+      officialQaExactAlreadyChecked: true,
+      dryRun: mode.dryRun,
+      env: relayAuxEnv({
+        MODEL_PROVIDER: "mock",
+        RAG_MODEL_PROVIDER: "mock",
+        RAG_CARD_MODEL_PROVIDER: "mock",
+        ...mode.env,
+      }),
+      now: new Date(`2056-03-0${index + 1}T00:00:00.000Z`),
+    });
+    assert.equal(answer.debug.dryRun, true, mode.label);
+    assert.ok(
+      answer.debug.ruleQueryWarnings.includes("rule_query_model_dry_run_skipped"),
+      mode.label,
+    );
   }
 });
 
@@ -3419,7 +3590,13 @@ test("pipeline cost summary includes both Relay auxiliary extractors", async () 
       usage: { prompt_tokens: 1_000, completion_tokens: 500, total_tokens: 1_500 },
     }),
     ruleModelInvoker: async () => ({
-      ruleQueries: [],
+      ruleQueries: [{
+        subclaim: "测试龙的效果发动条件",
+        checkpoint: "activation_snapshot",
+        query: "测试龙的效果在当前场面是否满足发动条件？",
+        reason: "验证规则查询模型费用会计。",
+        confidence: "high",
+      }],
       usage: { prompt_tokens: 1_000, completion_tokens: 500, total_tokens: 1_500 },
     }),
     modelInvoker: async () => JSON.stringify(modelJson("需要结合完整局面判断。")),
@@ -5044,6 +5221,13 @@ test("public retrieval keeps a retrievable cross-card official candidate related
     cards: [lifecycleCard],
     records: [],
     qaRecords: [scopedNoise, lifecycleAnalogue, ordinaryControlQa],
+    ruleSearchQueryProvider: async () => ({
+      queries: [{
+        query: lifecycleAnalogue.question,
+        source: "model_rule_query_extractor",
+      }],
+      candidateAssessments: [],
+    }),
     env: { RAG_LIVE_OFFICIAL_QA: "false" },
   });
 
@@ -5066,7 +5250,7 @@ test("public retrieval keeps a retrievable cross-card official candidate related
   assert.equal(evidence.debug.officialMechanismAnalogueCount, 1);
 });
 
-test("deterministic retrieval bridges multilingual return-to-hand terminology when rule planning is empty", async () => {
+test("empty rule planning does not fall back to cross-card official retrieval", async () => {
   const focusCard = {
     id: "return-hand-focus-card",
     name: "匿名回收卡",
@@ -5100,14 +5284,10 @@ test("deterministic retrieval bridges multilingual return-to-hand terminology wh
     env: { RAG_LIVE_OFFICIAL_QA: "false" },
   });
 
-  const related = evidence.officialQaRelated.find((item) => item.id === officialAnalogue.id);
-  assert.ok(related);
-  assert.equal(related.type, "related");
-  assert.equal(related.isDirect, false);
-  assert.equal(related.retrievalContext.relatedOnly, true);
+  assert.equal(evidence.officialQaRelated.some((item) => item.id === officialAnalogue.id), false);
 });
 
-test("deterministic card-text branches remain searchable without forcing reserved cross-card slots", async () => {
+test("deterministic card-text branches remain local and do not authorize cross-card QA", async () => {
   const focusCard = {
     id: "multi-branch-focus-card",
     name: "匿名双分支卡",
@@ -5148,15 +5328,15 @@ test("deterministic card-text branches remain searchable without forcing reserve
   });
 
   const relatedIds = new Set(evidence.officialQaRelated.map((item) => item.id));
-  assert.equal(relatedIds.has(returnHandQa.id), true);
-  assert.equal(relatedIds.has(specialSummonQa.id), true);
+  assert.equal(relatedIds.has(returnHandQa.id), false);
+  assert.equal(relatedIds.has(specialSummonQa.id), false);
   assert.ok(evidence.ruleSearchQueries.some(({ query }) => /特殊召唤/u.test(query)));
   assert.ok(Array.isArray(evidence.debug.candidateStages.initialCrossCardQuestionIds));
   assert.ok(Array.isArray(evidence.debug.candidateStages.allocatedCrossCardIds));
   assert.doesNotMatch(JSON.stringify(evidence.debug.candidateStages), /按照发动中|确认特殊召唤/u);
 });
 
-test("card-text query selection keeps late bullet branches while bounding reference-card query noise", async () => {
+test("card-text query selection keeps late bullet branches local while bounding reference-card query noise", async () => {
   const focusCard = {
     id: "late-branch-focus-card",
     name: "匿名多段卡",
@@ -5210,7 +5390,7 @@ test("card-text query selection keeps late bullet branches while bounding refere
   );
   assert.ok(referenceQueries.some(({ query }) => /墓地.*除外.*抽/u.test(query)));
   assert.ok(referenceQueries.length <= 4);
-  assert.ok(evidence.officialQaRelated.some((item) => item.id === decisiveQa.id));
+  assert.equal(evidence.officialQaRelated.some((item) => item.id === decisiveQa.id), false);
 });
 
 test("rule model candidate assessments only reorder official questions and never delete them", async () => {
@@ -5401,13 +5581,13 @@ test("cross-card allocation balances a model-assessed premise with strict supple
         queries: [{
           subclaim: "无效发动后的处理",
           checkpoint: "negated-activation",
-          query: "卡的发动被无效 破坏 对方场上",
+          query: negateDistractor.question,
           reason: "检索无效发动后的处理。",
           confidence: "medium",
         }, {
           subclaim: "从手牌特殊召唤后的处理",
           checkpoint: "special-summon-from-hand",
-          query: "从手牌特殊召唤 对方场上",
+          query: summonDistractor.question,
           reason: "检索特殊召唤后的处理。",
           confidence: "medium",
         }],
@@ -5480,7 +5660,7 @@ test("rag_prompt_truncates_context", () => {
   assert.deepEqual(bundle.evidenceSelectionDiagnostics.map((item) => item.id), ["card-text-long"]);
 });
 
-test("general prompt applies one reference budget and omits resolved-card text duplicates", () => {
+test("general prompt applies one score-ranked reference budget and omits resolved-card text duplicates", () => {
   const makeEvidence = (prefix, count, extras = {}) => Array.from({ length: count }, (_, index) => ({
     id: `${prefix}-${index + 1}`,
     type: prefix,
@@ -5500,17 +5680,21 @@ test("general prompt applies one reference budget and omits resolved-card text d
         cardIds: [cards[0].id],
       }],
       officialQaDirectCandidates: [],
-      faqRelated: makeEvidence("faq-budget", 8, { recordType: "card-faq", official: true }),
+      faqRelated: makeEvidence("faq-budget", 8, { recordType: "card-faq", official: true })
+        .map((item, index) => ({ ...item, retrievalScore: index === 0 ? 0.9 : 0.09 - index * 0.005 })),
       officialQaRelated: [
-        ...makeEvidence("qa-budget", 7, { recordType: "qa", official: true }),
+        ...makeEvidence("qa-budget", 7, { recordType: "qa", official: true })
+          .map((item, index) => ({ ...item, retrievalScore: index < 2 ? 0.85 - index * 0.05 : 0.08 - index * 0.005 })),
         ...makeEvidence("cross-budget", 1, {
           recordType: "qa",
           official: true,
+          retrievalScore: 0.99,
           retrievalContext: { scope: "cross_card_official_mechanism", relatedOnly: true },
         }),
       ],
       provisionalOfficialResponses: [],
-      rawRelatedEvidence: makeEvidence("rule-budget", 8, { type: "rulebook" }),
+      rawRelatedEvidence: makeEvidence("rule-budget", 8, { type: "rulebook" })
+        .map((item, index) => ({ ...item, retrievalScore: index === 0 ? 0.95 : 0.07 - index * 0.005 })),
       retrievalWarnings: [],
     },
     env: {
@@ -5522,13 +5706,18 @@ test("general prompt applies one reference budget and omits resolved-card text d
   assert.equal(bundle.allowedEvidenceIds.length, 6);
   assert.ok(bundle.allowedEvidenceIds.includes("card-text-100"));
   assert.equal(bundle.prompt.split(cards[0].effectText).length - 1, 1);
-  assert.ok(bundle.allowedEvidenceIds.some((id) => id.startsWith("faq-budget-")));
-  assert.ok(bundle.allowedEvidenceIds.some((id) => id.startsWith("qa-budget-")));
-  assert.ok(bundle.allowedEvidenceIds.some((id) => id.startsWith("cross-budget-")));
+  assert.deepEqual(new Set(bundle.allowedEvidenceIds), new Set([
+    "card-text-100",
+    "cross-budget-1",
+    "rule-budget-1",
+    "faq-budget-1",
+    "qa-budget-1",
+    "qa-budget-2",
+  ]));
   assert.ok(bundle.warnings.includes("prompt_reference_items_limited:24->5"));
 });
 
-test("general prompt preserves distinct cross-card query branches and internal decision checks", () => {
+test("general prompt keeps score-ranked references and hides private query metadata", () => {
   const crossCardEvidence = Array.from({ length: 4 }, (_, index) => ({
     id: `cross-branch-${index + 1}`,
     type: "related",
@@ -5540,11 +5729,16 @@ test("general prompt preserves distinct cross-card query branches and internal d
     retrievalContext: {
       scope: "cross_card_official_mechanism",
       relatedOnly: true,
+      modelCandidateAssessment: {
+        premise: "different",
+        difference: `PRIVATE_QUERY_MODEL_DIFFERENCE_${index + 1}`,
+      },
     },
     retrievalSignals: {
       strictSupplementalRuleQueryKeys: [`branch-${index + 1}`],
       supplementalRuleQueryMechanisms: [`mechanism-${index + 1}`],
     },
+    retrievalScore: 0.7 - index * 0.1,
   }));
   const bundle = buildRagRulingPromptBundle({
     userQuery: "测试多分支证据选择",
@@ -5559,6 +5753,7 @@ test("general prompt preserves distinct cross-card query branches and internal d
         title: "FAQ role",
         text: "FAQ role evidence",
         official: true,
+        retrievalScore: 0.95,
       }],
       officialQaRelated: [{
         id: "same-card-role",
@@ -5567,6 +5762,7 @@ test("general prompt preserves distinct cross-card query branches and internal d
         title: "same card role",
         text: "same card official evidence",
         official: true,
+        retrievalScore: 0.9,
       }, ...crossCardEvidence],
       provisionalOfficialResponses: [],
       rawRelatedEvidence: [{
@@ -5575,6 +5771,7 @@ test("general prompt preserves distinct cross-card query branches and internal d
         recordType: "rule-doc",
         title: "rule role",
         text: "rule material",
+        retrievalScore: 0.85,
       }],
       ruleSearchQueries: [
         ...Array.from({ length: 8 }, (_, index) => ({
@@ -5588,25 +5785,27 @@ test("general prompt preserves distinct cross-card query branches and internal d
       }],
     },
     env: {
-      RAG_MAX_PROMPT_REFERENCE_ITEMS: "7",
+      RAG_MAX_PROMPT_REFERENCE_ITEMS: "4",
       RAG_MAX_PROMPT_CHARS: "60000",
     },
   });
 
-  assert.equal(bundle.allowedEvidenceIds.length, 7);
-  for (const item of crossCardEvidence) assert.ok(bundle.allowedEvidenceIds.includes(item.id));
-  assert.ok(bundle.allowedEvidenceIds.includes("faq-role"));
-  assert.ok(bundle.allowedEvidenceIds.includes("same-card-role"));
-  assert.ok(bundle.allowedEvidenceIds.includes("rule-role"));
+  assert.deepEqual(new Set(bundle.allowedEvidenceIds), new Set([
+    "faq-role",
+    "same-card-role",
+    "rule-role",
+    "cross-branch-1",
+  ]));
   assert.match(bundle.prompt, /decisionChecklist/u);
   assert.match(bundle.prompt, /activation_snapshot_legality_and_all_available_options/u);
   assert.match(bundle.prompt, /resolution_snapshot_all_choice_directions_and_state_changes/u);
   assert.match(bundle.prompt, /decisionPlan/u);
   assert.match(bundle.prompt, /核对发动时的合法选项/u);
   assert.doesNotMatch(bundle.prompt, /strictSupplementalRuleQueryKeys|mechanism-1/u);
+  assert.doesNotMatch(bundle.prompt, /modelCandidateAssessment|PRIVATE_QUERY_MODEL_DIFFERENCE/u);
 });
 
-test("prompt does not reserve extra cross-card slots from non-strict mechanism labels", () => {
+test("private strict labels do not alter score-based reference selection", () => {
   const weakCrossCardEvidence = Array.from({ length: 3 }, (_, index) => ({
     id: `weak-cross-${index + 1}`,
     type: "related",
@@ -5622,6 +5821,7 @@ test("prompt does not reserve extra cross-card slots from non-strict mechanism l
     retrievalSignals: {
       ruleQueryMechanisms: [`weak-mechanism-${index + 1}`],
     },
+    retrievalScore: 0.4 - index * 0.1,
   }));
   const strictCrossCardEvidence = {
     id: "strict-cross",
@@ -5639,48 +5839,66 @@ test("prompt does not reserve extra cross-card slots from non-strict mechanism l
       strictSupplementalRuleQueryKeys: ["strict-branch"],
       supplementalRuleQueryMechanisms: ["strict-mechanism"],
     },
+    retrievalScore: 0.1,
   };
-  const bundle = buildRagRulingPromptBundle({
-    userQuery: "测试严格跨卡保留",
-    cardResolution: { resolvedCards: cards },
-    evidence: {
-      cardTexts: [],
-      officialQaDirectCandidates: [],
-      faqRelated: [{
-        id: "strict-floor-faq",
-        type: "faq",
-        recordType: "card-faq",
-        text: "faq floor",
-        official: true,
-      }],
-      officialQaRelated: [{
-        id: "strict-floor-same-card",
-        type: "related",
-        recordType: "qa",
-        text: "same card floor",
-        official: true,
-      }, ...weakCrossCardEvidence, strictCrossCardEvidence],
-      provisionalOfficialResponses: [],
-      rawRelatedEvidence: [{
-        id: "strict-floor-rule",
-        type: "rulebook",
-        recordType: "rule-doc",
-        text: "rule floor",
-      }],
+  const build = (officialQaRelated) => buildRagRulingPromptBundle({
+      userQuery: "测试私有检索标签不干预证据选择",
+      cardResolution: { resolvedCards: cards },
+      evidence: {
+        cardTexts: [],
+        officialQaDirectCandidates: [],
+        faqRelated: [{
+          id: "strict-floor-faq",
+          type: "faq",
+          recordType: "card-faq",
+          text: "faq floor",
+          official: true,
+          retrievalScore: 0.8,
+        }],
+        officialQaRelated: [{
+          id: "strict-floor-same-card",
+          type: "related",
+          recordType: "qa",
+          text: "same card floor",
+          official: true,
+          retrievalScore: 0.7,
+        }, ...officialQaRelated],
+        provisionalOfficialResponses: [],
+        rawRelatedEvidence: [{
+          id: "strict-floor-rule",
+          type: "rulebook",
+          recordType: "rule-doc",
+          text: "rule floor",
+          retrievalScore: 0.6,
+        }],
+      },
+      env: {
+        RAG_MAX_PROMPT_REFERENCE_ITEMS: "4",
+        RAG_MAX_PROMPT_CHARS: "60000",
+      },
+    });
+  const baseline = build([...weakCrossCardEvidence, strictCrossCardEvidence]);
+  const relabeled = build([
+    ...weakCrossCardEvidence.map((item) => ({
+      ...item,
+      retrievalSignals: {
+        strictSupplementalRuleQueryKeys: [`relabeled-${item.id}`],
+        supplementalRuleQueryMechanisms: [`relabeled-${item.id}`],
+      },
+    })),
+    {
+      ...strictCrossCardEvidence,
+      retrievalSignals: { ruleQueryMechanisms: ["relabeled-as-weak"] },
     },
-    env: {
-      RAG_MAX_PROMPT_REFERENCE_ITEMS: "7",
-      RAG_MAX_PROMPT_CHARS: "60000",
-    },
-  });
+  ]);
 
-  assert.ok(bundle.allowedEvidenceIds.includes(strictCrossCardEvidence.id));
-  for (const item of weakCrossCardEvidence) {
-    assert.equal(bundle.allowedEvidenceIds.includes(item.id), false);
-  }
+  assert.deepEqual(baseline.allowedEvidenceIds, relabeled.allowedEvidenceIds);
+  assert.ok(baseline.allowedEvidenceIds.includes("weak-cross-1"));
+  assert.equal(baseline.allowedEvidenceIds.includes(strictCrossCardEvidence.id), false);
+  assert.doesNotMatch(baseline.prompt, /strictSupplementalRuleQueryKeys|strict-mechanism/u);
 });
 
-test("prompt does not reserve a strict cross-card analogy with a different premise", () => {
+test("model premise labels do not hard-filter evidence before final reasoning", () => {
   const differentPremise = Array.from({ length: 3 }, (_, index) => ({
     id: `different-premise-${index + 1}`,
     type: "related",
@@ -5699,6 +5917,7 @@ test("prompt does not reserve a strict cross-card analogy with a different premi
       supplementalRuleQueryMechanisms: [`different-mechanism-${index + 1}`],
       modelCandidateAssessment: { relevance: "high", premise: "different" },
     },
+    retrievalScore: 0.9 - index * 0.1,
   }));
   const samePremise = {
     id: "same-premise-cross",
@@ -5718,28 +5937,59 @@ test("prompt does not reserve a strict cross-card analogy with a different premi
       supplementalRuleQueryMechanisms: ["same-mechanism"],
       modelCandidateAssessment: { relevance: "high", premise: "same" },
     },
+    retrievalScore: 0.85,
   };
-  const bundle = buildRagRulingPromptBundle({
-    userQuery: "测试事件节点前提过滤",
-    cardResolution: { resolvedCards: cards },
-    evidence: {
-      cardTexts: [],
-      officialQaDirectCandidates: [],
-      faqRelated: [{ id: "premise-faq", type: "faq", text: "general boundary", official: true }],
-      officialQaRelated: [differentPremise[0], samePremise, ...differentPremise.slice(1)],
-      provisionalOfficialResponses: [],
-      rawRelatedEvidence: [{ id: "premise-rule", type: "rulebook", text: "general rule" }],
+  const build = (items) => buildRagRulingPromptBundle({
+      userQuery: "测试事件节点标签不参与硬过滤",
+      cardResolution: { resolvedCards: cards },
+      evidence: {
+        cardTexts: [],
+        officialQaDirectCandidates: [],
+        faqRelated: [{
+          id: "premise-faq",
+          type: "faq",
+          text: "general boundary",
+          official: true,
+          retrievalScore: 0.2,
+        }],
+        officialQaRelated: items,
+        provisionalOfficialResponses: [],
+        rawRelatedEvidence: [{
+          id: "premise-rule",
+          type: "rulebook",
+          text: "general rule",
+          retrievalScore: 0.1,
+        }],
+      },
+      env: {
+        RAG_MAX_PROMPT_REFERENCE_ITEMS: "2",
+        RAG_MAX_PROMPT_CHARS: "60000",
+      },
+    });
+  const baseline = build([differentPremise[0], samePremise, ...differentPremise.slice(1)]);
+  const flipped = build([differentPremise[0], samePremise, ...differentPremise.slice(1)].map((item) => ({
+    ...item,
+    retrievalContext: {
+      ...item.retrievalContext,
+      modelCandidateAssessment: {
+        relevance: "high",
+        premise: item.id === samePremise.id ? "different" : "same",
+      },
     },
-    env: {
-      RAG_MAX_PROMPT_REFERENCE_ITEMS: "4",
-      RAG_MAX_PROMPT_CHARS: "60000",
+    retrievalSignals: {
+      ...item.retrievalSignals,
+      modelCandidateAssessment: {
+        relevance: "high",
+        premise: item.id === samePremise.id ? "different" : "same",
+      },
     },
-  });
+  })));
 
-  assert.ok(bundle.allowedEvidenceIds.includes(samePremise.id));
-  for (const item of differentPremise) {
-    assert.equal(bundle.allowedEvidenceIds.includes(item.id), false);
-  }
+  assert.deepEqual(baseline.allowedEvidenceIds, flipped.allowedEvidenceIds);
+  assert.deepEqual(new Set(baseline.allowedEvidenceIds), new Set([
+    "different-premise-1",
+    samePremise.id,
+  ]));
 });
 
 test("public prompt retains card text, excludes semantic state output, and has no recovery prompt", () => {
@@ -5849,7 +6099,7 @@ test("prompt bundle exposes evidence selection metadata without duplicating evid
   assert.doesNotMatch(JSON.stringify(bundle.ruleQueryPlanDiagnostics), /RAW_QUERY_MUST_NOT_BE_COPIED/u);
 });
 
-test("compacted_prompt_keeps_each_critical_evidence_bucket", () => {
+test("compacted prompt keeps one complete score-ranked evidence envelope with consistent ids", () => {
   const longText = (marker) => `${marker} ${"证据内容".repeat(600)}`;
   const bundle = buildRagRulingPromptBundle({
     userQuery: "需要同时参考官方问答、卡文、规则书和FAQ的复杂问题",
@@ -5861,21 +6111,21 @@ test("compacted_prompt_keeps_each_critical_evidence_bucket", () => {
       ],
       userProvidedCardTexts: [{ id: "user-critical", type: "user_provided_text", title: "用户卡文", text: longText("USER_MARKER") }],
       cardTexts: [{ id: "card-critical", type: "card_text", title: "卡片文本", text: longText("CARD_MARKER") }],
-      rawRelatedEvidence: [{ id: "rule-critical", type: "rulebook", title: "规则书", text: longText("RULE_MARKER") }],
-      faqRelated: [{ id: "faq-critical", type: "faq", title: "卡片FAQ", text: longText("FAQ_MARKER") }],
-      officialQaRelated: [{ id: "related-critical", type: "related", title: "相似问答", text: longText("RELATED_MARKER") }],
+      rawRelatedEvidence: [{ id: "rule-critical", type: "rulebook", title: "规则书", text: longText("RULE_MARKER"), retrievalScore: 0.95 }],
+      faqRelated: [{ id: "faq-critical", type: "faq", title: "卡片FAQ", text: longText("FAQ_MARKER"), retrievalScore: 0.8 }],
+      officialQaRelated: [{ id: "related-critical", type: "related", title: "相似问答", text: longText("RELATED_MARKER"), retrievalScore: 0.9 }],
       retrievalWarnings: [],
     },
     env: { RAG_MAX_PROMPT_CHARS: "8000" },
   });
 
   assert.ok(bundle.warnings.some((warning) => warning.includes("compacted")));
-  assert.match(bundle.prompt, /DIRECT_MARKER/u);
-  assert.match(bundle.prompt, /USER_MARKER/u);
+  assert.ok(bundle.prompt.length <= 8000);
   assert.match(bundle.prompt, /CARD_MARKER/u);
-  assert.match(bundle.prompt, /RULE_MARKER/u);
-  assert.match(bundle.prompt, /FAQ_MARKER/u);
-  assert.match(bundle.prompt, /RELATED_MARKER/u);
+  assert.match(bundle.prompt, /usedEvidence.*allowedEvidenceIds/u);
+  const serializedEvidenceIds = extractPromptAllowedEvidenceIds(bundle.prompt);
+  assert.deepEqual(bundle.allowedEvidenceIds, serializedEvidenceIds);
+  assert.ok(bundle.allowedEvidenceIds.length >= 1);
 });
 
 test("unique exact official QA uses a focused complete-answer route", async () => {
@@ -5925,6 +6175,7 @@ test("unique exact official QA uses a focused complete-answer route", async () =
       DEEPSEEK_FLASH_MODEL: "flash-test",
       RAG_THINKING_MODE: "enabled",
       RAG_OFFICIAL_DIRECT_FOCUSED_PROMPT: "true",
+      RAG_RULE_MODEL_PROVIDER: "mock",
     },
     rulebookModelInvoker: async () => {
       rulebookModelCalled = true;
@@ -6279,6 +6530,8 @@ test("secrets_not_returned_in_debug", async () => {
     qaRecords: [],
     env: {
       MODEL_PROVIDER: "deepseek",
+      RAG_CARD_MODEL_PROVIDER: "mock",
+      RAG_RULE_MODEL_PROVIDER: "mock",
       DEEPSEEK_API_KEY: "secret-key-that-must-not-leak",
       DEEPSEEK_FLASH_MODEL: "deepseek-test",
       API_DAILY_BUDGET_CNY: "10",

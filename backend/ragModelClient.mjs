@@ -14,6 +14,7 @@ import {
   isPrivateEvaluationTimeout,
   privateEvaluationFailureChain,
 } from "./privateEvaluationDiagnostics.mjs";
+import { normalizeRuleSearchQueryText } from "./ruleSearchQueryText.mjs";
 
 const DEFAULT_DEEPSEEK_BASE_URL = "https://api.deepseek.com";
 const DEFAULT_DEEPSEEK_MODEL = "deepseek-v4-flash";
@@ -853,7 +854,7 @@ export async function callRuleQueryExtractionModel({
     return emptyRuleQueryExtractionResult(provider, modelName, true, [
       ...providerWarnings,
       "rule_query_model_dry_run_skipped",
-    ]);
+    ], providerResolution);
   }
 
   if (modelInvoker) {
@@ -887,7 +888,7 @@ export async function callRuleQueryExtractionModel({
             ...providerWarnings,
             ...execution.warnings,
             "api_daily_budget_exceeded_rule_query_model_skipped",
-          ]),
+          ], providerResolution),
           budgetStatus: execution.budgetStatus,
         };
       }
@@ -900,6 +901,8 @@ export async function callRuleQueryExtractionModel({
         ),
         rawText: String(raw || ""),
         providerUsed: provider,
+        requestedProvider: providerResolution.requested,
+        relayRequired: providerResolution.relayRequired === true,
         modelUsed: modelName,
         requestedModel: modelName,
         returnedModel: null,
@@ -919,14 +922,20 @@ export async function callRuleQueryExtractionModel({
           ...providerWarnings,
           ...(error.budgetWarnings || []),
           `rule_query_model_failed:${safeErrorMessage(error)}`,
-        ]),
+        ], providerResolution),
         budgetStatus: error.budgetStatus || null,
       };
     }
   }
 
   if (provider === "mock" || !hasProviderKey(provider, providerEnv) || typeof fetchImpl !== "function") {
-    return emptyRuleQueryExtractionResult("mock", "mock-rule-query-extractor", true, providerWarnings);
+    return emptyRuleQueryExtractionResult(
+      "mock",
+      "mock-rule-query-extractor",
+      true,
+      providerWarnings,
+      providerResolution,
+    );
   }
 
   const cacheKey = extractionCacheKey({
@@ -1001,7 +1010,7 @@ export async function callRuleQueryExtractionModel({
           ...providerWarnings,
           ...execution.warnings,
           "api_daily_budget_exceeded_rule_query_model_skipped",
-        ]),
+        ], providerResolution),
         budgetStatus: execution.budgetStatus,
       };
     }
@@ -1015,6 +1024,8 @@ export async function callRuleQueryExtractionModel({
       ),
       rawText: response.rawText,
       providerUsed: provider,
+      requestedProvider: providerResolution.requested,
+      relayRequired: providerResolution.relayRequired === true,
       modelUsed: modelName,
       requestedModel: String(response.requestModel || modelName),
       returnedModel: String(response.responseModel || "") || null,
@@ -1041,7 +1052,7 @@ export async function callRuleQueryExtractionModel({
             ...providerWarnings,
             ...(error.budgetWarnings || []),
             `rule_query_model_failed:${safeErrorMessage(error)}`,
-          ]),
+          ], providerResolution),
           budgetStatus: error.budgetStatus || null,
         };
       }
@@ -1859,11 +1870,18 @@ export function resolveCardExtractionProvider(env = {}) {
 
 export function resolveRuleQueryExtractionProvider(env = {}) {
   if (isDisabled(env.RAG_RULE_QUERY_EXTRACTOR_ENABLED)) {
-    return { provider: "mock", requested: "disabled", warnings: ["rule_query_model_disabled"] };
+    return {
+      provider: "mock",
+      requested: "disabled",
+      relayRequired: false,
+      warnings: ["rule_query_model_disabled"],
+    };
   }
   const requested = String(env.RAG_RULE_MODEL_PROVIDER || env.RAG_CARD_MODEL_PROVIDER || env.RAG_MODEL_PROVIDER || env.MODEL_PROVIDER || "auto").trim().toLowerCase() || "auto";
   const warnings = [];
-  if (requested === "mock") return { provider: "mock", requested, warnings };
+  if (requested === "mock") {
+    return { provider: "mock", requested, relayRequired: false, warnings };
+  }
   if (requested === "deepseek") {
     const redirected = resolveRuleQueryExtractionProvider({
       ...env,
@@ -1894,17 +1912,31 @@ export function resolveRuleQueryExtractionProvider(env = {}) {
     } else {
       warnings.push("relay_configuration_missing_rule_query_model_disabled");
     }
-    return { provider: configured ? "relay" : "mock", requested, warnings };
+    return {
+      provider: configured ? "relay" : "mock",
+      requested,
+      relayRequired: true,
+      warnings,
+    };
   }
   if (requested === "gemini") {
     if (!env.GEMINI_API_KEY) warnings.push("gemini_api_key_missing_rule_query_model_disabled");
-    return { provider: env.GEMINI_API_KEY ? "gemini" : "mock", requested, warnings };
+    return {
+      provider: env.GEMINI_API_KEY ? "gemini" : "mock",
+      requested,
+      relayRequired: false,
+      warnings,
+    };
   }
   if (requested !== "auto") warnings.push(`unsupported_rule_query_model_provider:${requested}`);
-  if (ruleQueryRelayConfigured(env)) return { provider: "relay", requested, warnings };
-  if (env.GEMINI_API_KEY) return { provider: "gemini", requested, warnings };
+  if (ruleQueryRelayConfigured(env)) {
+    return { provider: "relay", requested, relayRequired: true, warnings };
+  }
+  if (env.GEMINI_API_KEY) {
+    return { provider: "gemini", requested, relayRequired: false, warnings };
+  }
   warnings.push("no_model_api_key_rule_query_model_disabled");
-  return { provider: "mock", requested, warnings };
+  return { provider: "mock", requested, relayRequired: false, warnings };
 }
 
 export function estimateDeepSeekCostCny(usage = {}, env = {}) {
@@ -4258,7 +4290,9 @@ function buildRuleQueryExtractionPrompt(
     "如果问题同时问‘能否发动’和‘处理是否成功’，必须拆成不同子命题，分别检索发动条件与结算适用性。连续处理还要分别检索每一步是否实际完成、由哪个效果完成，以及下一步是否依赖该完成事实；不能只因最终状态看起来相同就合并步骤。",
     "如果卡文允许在多个实体、数值或方向之间选择，必须覆盖每个选择方向：至少分别生成 activation_snapshot 或 operation_legality（发动时是否存在任一合法选项）与 resolution_snapshot（处理时状态改变后各方向仍可执行什么）的子命题；不得只为一个可行例子生成查询。",
     "逐张阅读已识别卡片的效果文本。卡文含有‘然后／那之后／根据……适用’等强制后续处理时，即使玩家只问能否发动，也必须为会影响发动合法性或处理结果的每个强制步骤与分支生成独立查询；不能只检索最初的触发条件。",
-    "玩家俗称、缩写或自然语言必须改写为正式卡文或规则术语。每个 query 自身应在 120 字符内尽量同时包含精简的中文、日文和英文等价术语，以“ | ”分隔；不要只翻译卡名，也不要保留未解释的玩家俗称。",
+    "后续裁定若依赖某个前置动作的规则性质，必须把该动作是否属于卡的发动、是否形成连锁、发生时所在区域、当时作为何种卡片种类处理分别生成独立 ruleQuery；不得把这些前置性质与无效后的去向、处理结果或后续状态合并成同一条查询。只生成实际会影响本题结论的项目，不得为了凑数补造条件。",
+    "玩家俗称、缩写或自然语言必须改写为正式卡文或规则术语。每个 query 尽量同时包含中文、日文和英文三个可独立检索的问题式短句，以“ | ”分隔；每个语言分支各自不超过 160 字符。",
+    "每个语言分支必须独立保留该子命题的实体类别、区域、操作、时点或状态以及所问内容；不得只列零散通用词，不得使用未展开的缩写、单字母或无法独立理解的代词。不要只翻译卡名，不得在查询中填入裁定答案。",
     "次数问题必须包含已使用次数、总上限或剩余次数等正式关键词；区域或双重卡片种类问题必须包含移动瞬间的区域与当时作为何种卡处理。",
     "输出 1 到 4 条高价值查询词即可；简单问题可以只有 1 条，不得为了达到条数加入无关机制；不知道就输出空数组。",
     "候选官方资料只提供问题部分，不包含答案。可以对其中最多8条真正相关的候选给出软排序：relevance 为 high、medium 或 low，premise 为 same、partial、different 或 unknown，并用 difference 简述关键前提差异。未列出的候选一律视为 unknown；不得据此删除资料。",
@@ -4460,7 +4494,7 @@ function normalizeRuleSearchQueries(rawText) {
     .map((item) => ({
       subclaim: nonEmpty(item.subclaim).replace(/\s+/gu, " ").slice(0, 160),
       checkpoint: normalizeRuleQueryCheckpoint(item.checkpoint),
-      query: nonEmpty(item.query).replace(/\s+/gu, " ").slice(0, 120),
+      query: normalizeRuleSearchQueryText(item.query),
       reason: nonEmpty(item.reason).replace(/\s+/gu, " ").slice(0, 120),
       confidence: ["low", "medium", "high"].includes(String(item.confidence || "").toLowerCase())
         ? String(item.confidence).toLowerCase()
@@ -4497,12 +4531,20 @@ function emptyCardNameExtractionResult(providerUsed, modelUsed, dryRun, warnings
   };
 }
 
-function emptyRuleQueryExtractionResult(providerUsed, modelUsed, dryRun, warnings = []) {
+function emptyRuleQueryExtractionResult(
+  providerUsed,
+  modelUsed,
+  dryRun,
+  warnings = [],
+  providerResolution = {},
+) {
   return {
     queries: [],
     candidateAssessments: [],
     rawText: "",
     providerUsed,
+    requestedProvider: String(providerResolution.requested || providerUsed),
+    relayRequired: providerResolution.relayRequired === true,
     modelUsed,
     dryRun,
     warnings,

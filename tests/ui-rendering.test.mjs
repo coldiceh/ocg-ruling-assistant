@@ -418,6 +418,7 @@ test("versioned backend answers require a matching server confirmation", async (
     eventAfterEnd = false,
     byteChunks = false,
     tracker = null,
+    errorPayload = null,
   } = {}) => {
     const answerEvent = malformedAnswer
       ? "event: answer\ndata: {not-json}\n\n"
@@ -426,8 +427,9 @@ test("versioned backend answers require a matching server confirmation", async (
       "event: stage_start\ndata: {\"stageId\":\"understand\",\"serverElapsedMs\":2}\n\n",
       "event: tick\ndata: {\"stageId\":\"understand\",\"serverElapsedMs\":5,\"activeStageElapsedMs\":3}\n\n",
       "event: stage_end\ndata: {\"stageId\":\"understand\",\"serverElapsedMs\":8,\"durationMs\":6}\n\n",
+      errorPayload ? `event: error\ndata: ${JSON.stringify(errorPayload)}\n\n` : "",
       includeEnd && endBeforeAnswer ? "event: end\ndata: {\"serverElapsedMs\":9,\"totalMs\":9}\n\n" : "",
-      includeAnswer ? answerEvent : "",
+      includeAnswer && !errorPayload ? answerEvent : "",
       includeAnswer && duplicateAnswer ? answerEvent : "",
       includeEnd && !endBeforeAnswer ? "event: end\ndata: {\"serverElapsedMs\":9,\"totalMs\":9}\n\n" : "",
       eventAfterEnd ? "event: tick\ndata: {\"stageId\":\"understand\",\"serverElapsedMs\":10,\"activeStageElapsedMs\":10}\n\n" : "",
@@ -536,6 +538,30 @@ test("versioned backend answers require a matching server confirmation", async (
   );
   assert.equal(jsonFallbackCalls, 1, "the browser must not resend a completed paid request");
 
+  let relayFailureCalls = 0;
+  const relayFailureRequest = buildRequest(async () => {
+    relayFailureCalls += 1;
+    return streamResponse({}, {
+      includeAnswer: false,
+      includeEnd: false,
+      errorPayload: {
+        statusCode: 503,
+        code: "rule_query_model_timeout",
+        error: "证据准备模型超时，本次未生成裁定，请稍后重试。",
+      },
+    });
+  });
+  await assert.rejects(
+    relayFailureRequest("问题", "latest"),
+    (error) => {
+      assert.equal(error?.code, "rule_query_model_timeout");
+      assert.equal(error?.status, 503);
+      assert.equal(error?.message, "证据准备模型超时，本次未生成裁定，请稍后重试。");
+      return true;
+    },
+  );
+  assert.equal(relayFailureCalls, 1, "Relay preparation failure must not trigger a retry");
+
   for (const [options, expectedCode] of [
     [{ malformedAnswer: true }, "ruling_progress_event_invalid"],
     [{ includeEnd: false }, "ruling_progress_end_missing"],
@@ -567,6 +593,8 @@ test("versioned backend answers require a matching server confirmation", async (
   assert.deepEqual(staleProgressEvents, [], "late events from an old request must not alter current progress");
   assert.match(app, /cancelActiveAnalysisRequest\(\)[\s\S]*activeAnalysisAbortController\.abort\(\)/u);
   assert.match(app, /signal:\s*abortController\.signal/u);
+  assert.match(app, /系统已在证据准备阶段停止，未调用最终裁定模型/u);
+  assert.match(app, /rule_query_model_empty[\s\S]*rule_query_model_timeout[\s\S]*rule_query_model_unavailable/u);
 });
 
 test("feedback_opens_a_prefilled_github_issue", async () => {

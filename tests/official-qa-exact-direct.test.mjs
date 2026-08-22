@@ -321,7 +321,7 @@ test("two current Q&A IDs with the same question and incompatible answers raise 
   );
 });
 
-test("pipeline exact hit bypasses card extraction, rule query, validator and final model", async () => {
+test("pipeline exact hit bypasses card extraction, rule query, validator and final model even with unusable Relay settings", async () => {
   const item = fixture.positiveCases.find((entry) => entry.qaId === "10072");
   let modelCalls = 0;
   const rejectModelCall = async () => {
@@ -334,6 +334,11 @@ test("pipeline exact hit bypasses card extraction, rule query, validator and fin
     records: [],
     qaRecords: fixture.records,
     officialQaDiscovery: fixture.discovery,
+    env: {
+      RAG_RULE_MODEL_PROVIDER: "relay",
+      RAG_RULE_MODEL_RELAY_API_KEY: "broken-relay-key",
+      RAG_RULE_MODEL_RELAY_BASE_URL: "http://relay.example.test/v1",
+    },
     fetchImpl: neverFetch,
     modelInvoker: rejectModelCall,
     cardModelInvoker: rejectModelCall,

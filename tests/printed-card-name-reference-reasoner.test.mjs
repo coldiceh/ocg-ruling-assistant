@@ -206,7 +206,7 @@ test("the public RAG path gives raw card evidence to exactly one final model wit
   assert.equal(answer.debug.modelUsed, "mock-rag");
   assert.match(finalPrompt, /自己场上有「霸王眷龙 凶饿猛毒」与「光之黄金柜」/u);
   assert.match(finalPrompt, /此卡直至结束阶段为止，获得与该怪兽原本卡名・效果相同/u);
-  assert.match(finalPrompt, /card-text-13077/u);
+  assert.match(finalPrompt, /"id":\s*"13077"/u);
   assert.match(finalPrompt, /"evidence"/u);
   assert.doesNotMatch(
     finalPrompt,
