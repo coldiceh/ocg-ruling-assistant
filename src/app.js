@@ -893,10 +893,13 @@ async function readPublicAnswerProgressStream(response, requestedRulingVersion, 
         }
         if (event.type === "error") {
           const payload = event.data || {};
+          const reportedStatusCode = Number(payload.statusCode);
           const error = createRulingVersionError({
             code: String(payload.code || payload.error || "ruling_progress_stream_failed"),
             requestedVersion: requestedRulingVersion,
-            status: response.status,
+            status: Number.isInteger(reportedStatusCode) && reportedStatusCode >= 400
+              ? reportedStatusCode
+              : response.status,
           });
           error.message = String(payload.message || payload.error || error.code);
           if (requestId === null || requestId === analysisRequestId) {
@@ -1099,6 +1102,27 @@ function renderBackendVersionError(error, requestedRulingVersion) {
   renderEngineSimulation(null, null);
   renderParserDebug(null);
   renderFeedbackPanel(null);
+  const relayPreparationFailure = relayPreparationFailurePresentation(error);
+  if (relayPreparationFailure) {
+    updateModelStatus("证据准备失败");
+    ui.verdictBlock.className = "result-block verdict-block is-risky";
+    ui.confidenceText.textContent = "暂不可用";
+    ui.verdictTitle.textContent = relayPreparationFailure.title;
+    ui.rulingBasisText.textContent = "Relay 证据准备未完成";
+    ui.answerVersionText.classList.add("is-error");
+    ui.answerVersionText.hidden = false;
+    ui.answerVersionText.textContent = "本次未生成裁定";
+    ui.verdictBody.textContent = relayPreparationFailure.message;
+    renderSubAnswers([]);
+    ui.stepsTitle.textContent = "处理结果";
+    ui.stepsList.hidden = false;
+    renderList(ui.stepsList, ["系统已在证据准备阶段停止，未调用最终裁定模型。"]);
+    renderList(ui.questionsList, [
+      error?.status ? `后端返回 HTTP ${error.status}。` : "请稍后重试。",
+    ]);
+    renderSources([]);
+    return;
+  }
   updateModelStatus("版本不可用");
   ui.verdictBlock.className = "result-block verdict-block is-risky";
   ui.confidenceText.textContent = "版本不可用";
@@ -1121,6 +1145,20 @@ function renderBackendVersionError(error, requestedRulingVersion) {
     error?.status ? `后端返回 HTTP ${error.status}。` : "未取得可验证的版本化回答。",
   ]);
   renderSources([]);
+}
+
+function relayPreparationFailurePresentation(error) {
+  const code = String(error?.code || "");
+  const titles = {
+    rule_query_model_empty: "证据准备模型未返回有效结果",
+    rule_query_model_timeout: "证据准备模型超时",
+    rule_query_model_unavailable: "Relay 证据准备模型不可用",
+  };
+  if (!Object.hasOwn(titles, code)) return null;
+  return {
+    title: titles[code],
+    message: String(error?.message || "证据准备失败，本次未生成裁定，请稍后重试。"),
+  };
 }
 
 function providerFailurePresentation(flags = []) {

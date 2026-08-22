@@ -112,6 +112,7 @@ function buildPassage(record, paragraphs, hitIndex, score, maxPassageChars) {
   const sourceId = String(record.id || record.evidenceId || record.stableId || "rulebook");
   const originalStart = paragraphs[start].originalIndex + 1;
   const originalEnd = paragraphs[end].originalIndex + 1;
+  const retrievalScore = normalizeRulebookRelevance(score);
   return {
     id: `${sourceId}#p${originalStart}-${originalEnd}`,
     type: "rulebook",
@@ -120,13 +121,17 @@ function buildPassage(record, paragraphs, hitIndex, score, maxPassageChars) {
     text,
     sourceUrl: record.sourceUrl || record.officialUrl || "",
     source: "rulebook_passage_retriever",
+    sourceName: record.sourceName || record.source || "rulebook_passage_retriever",
+    sourceTier: record.sourceTier || "S2_COMMUNITY_REFERENCE",
+    sourceAuthority: record.sourceAuthority || "community_reference",
     sourceRecordId: sourceId,
     paragraphStart: originalStart,
     paragraphEnd: originalEnd,
     // Keep a bounded score on the evidence object so a long rulebook page
     // cannot dominate a direct scene QA merely by repeating generic terms.
     // `rankingScore` retains the internal ordering signal.
-    score: normalizeRulebookRelevance(score),
+    score: retrievalScore,
+    retrievalScore,
     rankingScore: score,
     cardIds: [],
     cards: [],
@@ -378,7 +383,11 @@ function ruleQuerySourceMultiplier(value) {
 function normalizeRulebookRelevance(score) {
   const number = Number(score);
   if (!Number.isFinite(number) || number <= 0) return 0;
-  return Number((1 - Math.exp(-number / 18)).toFixed(4));
+  // Rulebook passages and QA records feed the same final evidence selector, so
+  // their bounded relevance scores must occupy comparable ranges. A strong
+  // multi-term passage match (roughly 5-8 raw points) should compete with a
+  // moderately related QA, while the minimum accepted match remains low.
+  return Number((1 - Math.exp(-number / 8)).toFixed(4));
 }
 
 function overlaps(left, right) {
