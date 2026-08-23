@@ -1176,20 +1176,18 @@ test("rule query extractor uses Relay Sol low", async () => {
   assert.match(requestPrompt, /彼此独立、尚待证实的规则子命题/u);
   assert.match(requestPrompt, /subclaim、checkpoint、query、reason、confidence/u);
   assert.match(requestPrompt, /忠实保留玩家明确给出的事件、区域、表示形式、顺序和状态/u);
-  assert.match(requestPrompt, /不得把一个动作改写成另一个动作/u);
-  assert.match(requestPrompt, /前后步骤依赖与无法完成时的部分处理/u);
-  assert.match(requestPrompt, /效果来源与效果类型/u);
-  assert.match(requestPrompt, /发动前、处理时、处理后的状态快照/u);
-  assert.match(requestPrompt, /每个强制步骤与分支生成独立查询/u);
-  assert.match(requestPrompt, /不能只检索最初的触发条件/u);
+  assert.match(requestPrompt, /某一步不能执行时前序结果是否保留/u);
+  assert.match(requestPrompt, /多个实体、数值或方向之间选择/u);
+  assert.match(requestPrompt, /然后／那之后／根据……适用/u);
   assert.match(requestPrompt, /不得为了达到条数加入无关机制/u);
-  assert.match(requestPrompt, /中文、日文和英文三个可独立检索的问题式短句/u);
+  assert.match(requestPrompt, /中文、日文和英文三个可独立检索/u);
   assert.match(requestPrompt, /不得使用未展开的缩写、单字母或无法独立理解的代词/u);
   assert.match(requestPrompt, /匿名响应者/u);
   assert.match(requestPrompt, /效果怪兽/u);
   assert.match(requestPrompt, /ANONYMOUS_COMPLETE_EFFECT_TEXT/u);
   assert.match(requestPrompt, /QUESTION_ONLY_CANDIDATE_MARKER/u);
   assert.doesNotMatch(requestPrompt, /CANDIDATE_(?:ANSWER|FULL_TEXT)_MUST_NOT_REACH_QUERY_MODEL/u);
+  assert.match(requestPrompt, /candidateAssessments/u);
   assert.deepEqual(result.candidateAssessments, [{
     id: "qa-question-only-candidate",
     relevance: "high",
@@ -1242,7 +1240,7 @@ test("rule query normalization preserves independently bounded pipe and newline 
   assert.doesNotMatch(result.queries[0].query, /第五个分支/u);
 });
 
-test("rule query extraction defaults the independent Relay planner to low and a compact output", async () => {
+test("rule query extraction defaults the independent Relay planner to low and a correctness-first output budget", async () => {
   const calls = [];
   const now = new Date("2048-07-11T00:00:00.000Z");
   const env = {
@@ -1287,7 +1285,7 @@ test("rule query extraction defaults the independent Relay planner to low and a 
   assert.match(calls[0].url, /\/chat\/completions$/u);
   assert.equal(calls[0].body.model, "gpt-5.6-terra");
   assert.equal(calls[0].body.reasoning_effort, "low");
-  assert.equal(calls[0].body.max_completion_tokens, 450);
+  assert.equal(calls[0].body.max_completion_tokens, 8192);
   assert.deepEqual(calls[0].body.response_format, { type: "json_object" });
   assert.equal(result.providerUsed, "relay");
   assert.equal(result.modelUsed, "gpt-5.6-terra");
@@ -1302,11 +1300,11 @@ test("rule query extraction defaults the independent Relay planner to low and a 
   assert.equal(env.RAG_REASONING_EFFORT, "low");
 });
 
-test("rule query extraction applies its 25-second default provider deadline", async () => {
+test("rule query extraction applies its 120-second default provider deadline", async () => {
   const originalSetTimeout = globalThis.setTimeout;
   let observedDefaultTimeout = false;
   globalThis.setTimeout = (callback, delay, ...args) => {
-    if (delay === 25_000) {
+    if (delay === 120_000) {
       observedDefaultTimeout = true;
       return originalSetTimeout(callback, 0, ...args);
     }
@@ -5391,6 +5389,68 @@ test("card-text query selection keeps late bullet branches local while bounding 
   assert.ok(referenceQueries.some(({ query }) => /墓地.*除外.*抽/u.test(query)));
   assert.ok(referenceQueries.length <= 4);
   assert.equal(evidence.officialQaRelated.some((item) => item.id === decisiveQa.id), false);
+});
+
+test("a saturated deterministic plan still retains all four model subclaims", async () => {
+  const focusCard = {
+    id: "saturated-query-focus-card",
+    name: "匿名多步骤卡",
+    cnName: "匿名多步骤卡",
+    effectText: "①：可以发动。抽1张卡。那之后，从手牌特殊召唤1只怪兽。然后，破坏场上1张卡并将墓地1张卡除外。最后，将场上1张魔法・陷阱卡回到手牌。",
+    aliases: ["匿名多步骤卡"],
+  };
+  const modelQueries = [{
+    subclaim: "发动时是否满足条件",
+    checkpoint: "operation_legality",
+    query: "效果发动时的合法条件 | 効果発動時の適法な条件 | legal conditions when activating an effect",
+    reason: "核对发动资格。",
+    confidence: "high",
+  }, {
+    subclaim: "抽卡后能否继续处理",
+    checkpoint: "step_dependency",
+    query: "抽卡后后续处理能否继续 | ドロー後に後続処理を続けるか | whether later resolution continues after drawing",
+    reason: "核对连续处理。",
+    confidence: "high",
+  }, {
+    subclaim: "特殊召唤失败时保留哪些处理",
+    checkpoint: "mandatory_step",
+    query: "特殊召唤失败时前序处理是否保留 | 特殊召喚できない場合に前の処理を保持するか | whether prior resolution remains when a special summon fails",
+    reason: "核对失败后的处理。",
+    confidence: "high",
+  }, {
+    subclaim: "发动中的卡能否回到手牌",
+    checkpoint: "resolution_snapshot",
+    query: "发动中的魔法陷阱卡能否回到手牌 | 発動中の魔法・罠カードを手札に戻せるか | whether an activated spell or trap can return to the hand",
+    reason: "核对处理时状态。",
+    confidence: "high",
+  }];
+
+  const evidence = await retrieveRagEvidence({
+    userQuery: "匿名多步骤卡的效果从发动到最后一步应如何处理？",
+    cardResolution: {
+      resolvedCards: [focusCard],
+      unresolvedMentions: [],
+      ambiguousMentions: [],
+      userProvidedCardTexts: [],
+    },
+    cards: [focusCard],
+    records: [],
+    qaRecords: [],
+    ruleSearchQueryProvider: async () => ({
+      queries: modelQueries,
+      candidateAssessments: [],
+    }),
+    env: {
+      RAG_LIVE_OFFICIAL_QA: "false",
+      RAG_MAX_RULE_SEARCH_QUERIES: "6",
+    },
+  });
+
+  assert.equal(evidence.ruleSearchQueries.length, 6);
+  assert.equal(evidence.debug.supplementalRuleSearchQueryCount, 4);
+  for (const expected of modelQueries) {
+    assert.ok(evidence.ruleSearchQueries.some((actual) => actual.query === expected.query));
+  }
 });
 
 test("rule model candidate assessments only reorder official questions and never delete them", async () => {

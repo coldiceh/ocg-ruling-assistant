@@ -1932,7 +1932,10 @@ function evidenceTypeForRecord(record = {}, fallback = "related") {
 
 function rankRecords({ userQuery, records, resolvedCards, mentionQueries = [], ruleSearchQueries = [], allowNoCardMatch = false }) {
   const queryTerms = tokenize([userQuery, ...mentionQueries].join(" "));
-  const ruleQueries = normalizeRuleSearchQueries(ruleSearchQueries, { maxRuleSearchQueries: 8 });
+  // Callers already bound the aggregate planner input to sixteen queries. Do
+  // not silently cut its tail in half here: the tail is where independently
+  // generated model subclaims are appended on aggregate-only retrieval paths.
+  const ruleQueries = normalizeRuleSearchQueries(ruleSearchQueries, { maxRuleSearchQueries: 16 });
   const ruleTerms = tokenize(ruleQueries.map((item) => item.query).join(" "));
   const rulePhrases = ruleQueries.map((item) => normalizeCardKey(item.query)).filter(Boolean);
   const queryKey = normalizeCardKey(userQuery);
@@ -3219,13 +3222,21 @@ function appendSupplementalRuleSearchQueries(deterministicQueries, supplementalQ
     supplementalQueries,
     { maxRuleSearchQueries: max },
   );
+  const deterministicKeys = new Set(
+    deterministic.map(ruleSearchQueryIdentity).filter(Boolean),
+  );
+  const independentSupplemental = supplemental.filter((query) => (
+    !deterministicKeys.has(ruleSearchQueryIdentity(query))
+  ));
+  const deterministicCapacity = Math.max(0, max - independentSupplemental.length);
   // Caller/model-generated queries are retained after the local reproducible
-  // query plan. Retrieval ranks these two groups independently and appends the
-  // supplemental results, so model output can broaden but never reorder the
-  // deterministic evidence prefix.
+  // query plan. Reserve their actual capacity before trimming the deterministic
+  // tail; otherwise a full local plan silently discards every model-discovered
+  // subclaim. Retrieval still keeps the deterministic prefix in its original
+  // order, and duplicate supplemental queries do not consume another slot.
   return normalizeRuleSearchQueries([
-    ...deterministic,
-    ...supplemental,
+    ...deterministic.slice(0, deterministicCapacity),
+    ...independentSupplemental,
   ], { maxRuleSearchQueries: max });
 }
 
