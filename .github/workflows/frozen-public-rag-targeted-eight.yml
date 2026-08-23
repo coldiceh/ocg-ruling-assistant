@@ -142,6 +142,7 @@ jobs:
           test -s "$ciphertext_hmac"
           test "$(sed -n 's/^stage=//p' "$metadata")" = "freeze"
           test "$(sed -n 's/^source_sha=//p' "$metadata")" = "$GITHUB_SHA"
+          test "$(sed -n 's/^replay_allowed=//p' "$metadata")" = "true"
           CIPHERTEXT="$ciphertext" HMAC_FILE="$ciphertext_hmac" python - <<'PY'
           import hashlib
           import hmac
@@ -174,8 +175,15 @@ jobs:
           test -s "$binding"
           test "$(sed -n 's/^source_sha=//p' "$binding")" = "$GITHUB_SHA"
           test "$(sed -n 's/^stage=//p' "$binding")" = "freeze"
-          test "$(sed -n 's/^run_id=//p' "$binding")-$(sed -n 's/^run_attempt=//p' "$binding")" = \
-            "$SOURCE_KEY"
+          mapfile -t binding_run_ids < <(sed -n 's/^run_id=//p' "$binding")
+          mapfile -t binding_run_attempts < <(sed -n 's/^run_attempt=//p' "$binding")
+          test "${#binding_run_ids[@]}" -eq 1
+          test "${#binding_run_attempts[@]}" -eq 1
+          [[ "${binding_run_ids[0]}" =~ ^[0-9]+$ ]]
+          [[ "${binding_run_attempts[0]}" =~ ^[0-9]+$ ]]
+          binding_source_key="${binding_run_ids[0]}-${binding_run_attempts[0]}"
+          test "$binding_source_key" = "$SOURCE_KEY"
+          test "$(sed -n 's/^replay_allowed=//p' "$binding")" = "true"
           test "$(sed -n 's/^target_sha256=//p' "$binding")" = \
             "$(sha256sum "$RUNNER_TEMP/frozen-eight-source/snapshot.json" | awk '{print $1}')"
 
@@ -187,6 +195,7 @@ jobs:
           PRIVATE_REQUIREMENTS_BASE64: ${{ secrets.PURE_LLM_EVALUATION_TARGETED_EIGHT_REQUIREMENTS_BASE64 }}
           RELAY_API_KEY: ${{ secrets.RELAY_API_KEY }}
           STAGE: ${{ steps.scope.outputs.stage }}
+          CASE_IDS: ${{ steps.scope.outputs.case_ids }}
         run: |
           set -euo pipefail
           umask 077
@@ -200,56 +209,74 @@ jobs:
           test -d "$RUNNER_TEMP"
           touch "$RUNNER_TEMP/frozen-eight-write-test"
           rm -f -- "$RUNNER_TEMP/frozen-eight-write-test"
-          git ls-remote --exit-code origin refs/heads/private-evaluation-results > /dev/null
           if [ "$STAGE" = "freeze" ]; then
             test -n "$PRIVATE_DATASET_BASE64"
             test -n "$PRIVATE_REQUIREMENTS_BASE64"
-            printf '%s' "$PRIVATE_DATASET_BASE64" | base64 --decode \
-              > "$RUNNER_TEMP/private-dataset.txt"
-            printf '%s' "$PRIVATE_REQUIREMENTS_BASE64" | base64 --decode \
-              > "$RUNNER_TEMP/frozen-eight-requirements.json"
-            test -s "$RUNNER_TEMP/private-dataset.txt"
-            test -s "$RUNNER_TEMP/frozen-eight-requirements.json"
-          fi
-
-      - name: Validate the targeted freeze dataset contract
-        if: steps.scope.outputs.stage == 'freeze'
-        shell: bash
-        run: |
-          set -euo pipefail
-          DATASET="$RUNNER_TEMP/private-dataset.txt" \
-            REQUIREMENTS="$RUNNER_TEMP/frozen-eight-requirements.json" \
-            node --input-type=module <<'NODE'
-          import { createHash } from "node:crypto";
-          import { readFile } from "node:fs/promises";
-          import { parseDatasetText } from "./scripts/evaluate-pure-llm-preview.mjs";
-
-          const parsed = JSON.parse(await readFile(process.env.REQUIREMENTS, "utf8"));
-          const expected = [
-            "case-004", "case-007", "case-018", "case-019",
-            "case-023", "case-027", "case-028", "case-032",
-          ];
-          const actual = Object.keys(parsed?.cases || {}).sort();
-          if (parsed?.schemaVersion !== 1 || JSON.stringify(actual) !== JSON.stringify(expected)) {
-            throw new Error("private evidence requirements do not contain the targeted eight cases");
-          }
-          const dataset = parseDatasetText(await readFile(process.env.DATASET, "utf8"));
-          const cases = new Map(dataset.cases.map((item) => [item.id, item.question]));
-          for (const id of expected) {
-            const question = cases.get(id);
-            const digest = createHash("sha256").update(question || "", "utf8").digest("hex");
-            if (!question || digest !== parsed.cases[id]?.questionSha256) {
-              throw new Error(`${id} does not match the reviewed private evidence requirement`);
+            dataset_candidate="$RUNNER_TEMP/private-dataset.candidate"
+            requirements_candidate="$RUNNER_TEMP/frozen-eight-requirements.candidate"
+            cleanup_candidates() {
+              rm -f -- "$dataset_candidate" "$requirements_candidate"
             }
-          }
+            trap cleanup_candidates EXIT
+            rm -f -- \
+              "$RUNNER_TEMP/private-dataset.txt" \
+              "$RUNNER_TEMP/frozen-eight-requirements.json"
+            printf '%s' "$PRIVATE_DATASET_BASE64" | base64 --decode \
+              > "$dataset_candidate"
+            printf '%s' "$PRIVATE_REQUIREMENTS_BASE64" | base64 --decode \
+              > "$requirements_candidate"
+            test -s "$dataset_candidate"
+            test -s "$requirements_candidate"
+            DATASET="$dataset_candidate" \
+              REQUIREMENTS="$requirements_candidate" \
+              CASE_IDS="$CASE_IDS" \
+              node --input-type=module <<'NODE'
+            import { createHash } from "node:crypto";
+            import { readFile } from "node:fs/promises";
+            import { parseDatasetText } from "./scripts/evaluate-pure-llm-preview.mjs";
+
+            const expected = [
+              "case-004", "case-007", "case-018", "case-019",
+              "case-023", "case-027", "case-028", "case-032",
+            ];
+            const selected = String(process.env.CASE_IDS || "").split(",").filter(Boolean);
+            if (JSON.stringify(selected) !== JSON.stringify(expected)) {
+              throw new Error("freeze selection is not exactly the reviewed targeted eight cases");
+            }
+            const parsed = JSON.parse(await readFile(process.env.REQUIREMENTS, "utf8"));
+            const requirementIds = Object.keys(parsed?.cases || {}).sort();
+            if (parsed?.schemaVersion !== 1
+                || JSON.stringify(requirementIds) !== JSON.stringify(expected)) {
+              throw new Error("private evidence requirements do not contain exactly the targeted eight cases");
+            }
+            const dataset = parseDatasetText(await readFile(process.env.DATASET, "utf8"));
+            const cases = new Map(dataset.cases.map((item) => [item.id, item.question]));
+            const matched = expected.filter((id) => cases.has(id));
+            if (matched.length !== 8) {
+              throw new Error("private dataset does not contain exactly eight reviewed targets");
+            }
+            for (const id of expected) {
+              const question = cases.get(id);
+              const digest = createHash("sha256").update(question || "", "utf8").digest("hex");
+              if (!question || digest !== parsed.cases[id]?.questionSha256) {
+                throw new Error(`${id} does not match the reviewed private evidence requirement`);
+              }
+            }
           NODE
+            chmod 600 "$dataset_candidate" "$requirements_candidate"
+            mv -- "$dataset_candidate" "$RUNNER_TEMP/private-dataset.txt"
+            mv -- "$requirements_candidate" "$RUNNER_TEMP/frozen-eight-requirements.json"
+            trap - EXIT
+          fi
+          test -s "$RUNNER_TEMP/private-dataset.txt" || [ "$STAGE" != "freeze" ]
+          test -s "$RUNNER_TEMP/frozen-eight-requirements.json" || [ "$STAGE" != "freeze" ]
+          git ls-remote --exit-code origin refs/heads/private-evaluation-results > /dev/null
 
       - name: Freeze or replay the selected cases serially
         id: execute
         shell: bash
         env:
           RELAY_API_KEY: ${{ secrets.RELAY_API_KEY }}
-          PRIVATE_DATASET_BASE64: ${{ secrets.PURE_LLM_EVALUATION_DATASET_BASE64 }}
           STAGE: ${{ steps.scope.outputs.stage }}
           CASE_IDS: ${{ steps.scope.outputs.case_ids }}
         run: |
@@ -270,6 +297,7 @@ jobs:
           set +e
           if [ "$STAGE" = "freeze" ]; then
             test -s "$RUNNER_TEMP/private-dataset.txt"
+            test -s "$RUNNER_TEMP/frozen-eight-requirements.json"
             node scripts/frozen-public-rag-final-effort.mjs freeze \
               --dataset "$RUNNER_TEMP/private-dataset.txt" \
               --snapshot "$output_dir/snapshot.json" \
@@ -289,6 +317,10 @@ jobs:
           runner_status=$?
           set -e
           printf '%s\n' "$runner_status" > "$output_dir/exit-code.txt"
+          replay_allowed=false
+          if [ "$STAGE" = "freeze" ] && [ "$runner_status" -eq 0 ]; then
+            replay_allowed=true
+          fi
           target="$output_dir/results.json"
           if [ "$STAGE" = "freeze" ]; then target="$output_dir/snapshot.json"; fi
           if [ -s "$target" ]; then
@@ -300,11 +332,13 @@ jobs:
               "run_id=$GITHUB_RUN_ID" \
               "run_attempt=$GITHUB_RUN_ATTEMPT" \
               "case_ids=$CASE_IDS" \
+              "replay_allowed=$replay_allowed" \
               "target_sha256=$(sha256sum "$target" | awk '{print $1}')" \
               > "$output_dir/binding.txt"
           fi
           echo "exit_code=$runner_status" >> "$GITHUB_OUTPUT"
           echo "selected_count=${#selected[@]}" >> "$GITHUB_OUTPUT"
+          echo "replay_allowed=$replay_allowed" >> "$GITHUB_OUTPUT"
           exit 0
 
       - name: Print private-safe execution metadata
@@ -342,6 +376,7 @@ jobs:
         env:
           PRIVATE_ARCHIVE_KEY: ${{ secrets.PURE_LLM_EVALUATION_ARCHIVE_KEY }}
           STAGE: ${{ steps.scope.outputs.stage }}
+          REPLAY_ALLOWED: ${{ steps.execute.outputs.replay_allowed }}
         run: |
           set -euo pipefail
           umask 077
@@ -386,7 +421,7 @@ jobs:
             -pkeyopt rsa_mgf1_md:sha256 \
             -in "$envelope_plain" -out "$review_envelope"
 
-          if [ "$STAGE" = "freeze" ]; then
+          if [ "$STAGE" = "freeze" ] && [ "$REPLAY_ALLOWED" = "true" ]; then
             test "${#PRIVATE_ARCHIVE_KEY}" -ge 32
             openssl enc -aes-256-cbc -salt -pbkdf2 -iter 200000 -md sha256 \
               -in "$plaintext" -out "$reusable_cipher" -pass env:PRIVATE_ARCHIVE_KEY
@@ -424,6 +459,7 @@ jobs:
           STAGE: ${{ steps.scope.outputs.stage }}
           SOURCE_KEY: ${{ steps.scope.outputs.source_key }}
           CASE_IDS: ${{ steps.scope.outputs.case_ids }}
+          REPLAY_ALLOWED: ${{ steps.execute.outputs.replay_allowed }}
         run: |
           set -euo pipefail
           results_repo="publish-private-results"
@@ -435,7 +471,7 @@ jobs:
           mkdir -p "$destination"
           cp encrypted-output/frozen-public-rag-review.tar.gz.enc "$destination/"
           cp encrypted-output/frozen-public-rag-review.key-envelope.rsa-oaep "$destination/"
-          if [ "$STAGE" = "freeze" ]; then
+          if [ "$STAGE" = "freeze" ] && [ "$REPLAY_ALLOWED" = "true" ]; then
             cp encrypted-output/frozen-public-rag-reusable.tar.gz.enc "$destination/"
             cp encrypted-output/frozen-public-rag-reusable.tar.gz.enc.hmac-sha256 "$destination/"
           fi
@@ -449,11 +485,12 @@ jobs:
             "case_ids=$CASE_IDS" \
             "run_id=$GITHUB_RUN_ID" \
             "run_attempt=$GITHUB_RUN_ATTEMPT" \
+            "replay_allowed=$REPLAY_ALLOWED" \
             "runner_exit_code=${{ steps.execute.outputs.exit_code }}" \
             "review_cipher_sha256=$(sha256sum encrypted-output/frozen-public-rag-review.tar.gz.enc | awk '{print $1}')" \
             "review_envelope_sha256=$(sha256sum encrypted-output/frozen-public-rag-review.key-envelope.rsa-oaep | awk '{print $1}')" \
             > "$destination/metadata.txt"
-          if [ "$STAGE" = "freeze" ]; then
+          if [ "$STAGE" = "freeze" ] && [ "$REPLAY_ALLOWED" = "true" ]; then
             printf 'reusable_cipher_sha256=%s\n' \
               "$(sha256sum encrypted-output/frozen-public-rag-reusable.tar.gz.enc | awk '{print $1}')" \
               >> "$destination/metadata.txt"
@@ -488,7 +525,9 @@ jobs:
             "$RUNNER_TEMP/frozen-eight-source" \
             "$RUNNER_TEMP/frozen-eight-source.tar.gz" \
             "$RUNNER_TEMP/private-dataset.txt" \
+            "$RUNNER_TEMP/private-dataset.candidate" \
             "$RUNNER_TEMP/frozen-eight-requirements.json" \
+            "$RUNNER_TEMP/frozen-eight-requirements.candidate" \
             "$RUNNER_TEMP/frozen-public-rag-private.tar.gz" \
             "$RUNNER_TEMP/frozen-public-rag-review.verify.tar.gz" \
             "$RUNNER_TEMP/frozen-public-rag-reusable.verify.tar.gz" \

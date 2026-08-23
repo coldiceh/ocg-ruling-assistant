@@ -343,6 +343,107 @@ test("source-backed evidence audit rejects a silently shortened card text", () =
   }), /effect text is incomplete/u);
 });
 
+test("freeze preserves a failed evidence-audit base record, continues, and forbids replay", async () => {
+  const temp = await mkdtemp(path.join(os.tmpdir(), "frozen-public-rag-audit-failure-"));
+  const datasetPath = path.join(temp, "private-test.txt");
+  const snapshotPath = path.join(temp, "snapshot.json");
+  const cases = [
+    { id: "case-001", question: "第一个测试问题" },
+    { id: "case-002", question: "第二个测试问题" },
+    { id: "case-003", question: "第三个测试问题" },
+  ];
+  await writeFile(datasetPath, cases.map((item, index) => (
+    `${item.question}\n私有参考答案${index + 1}`
+  )).join("\n\n"), "utf8");
+  const fixtures = new Map(cases.map((item) => [
+    item.question,
+    evidenceFixture(item.question, item.id),
+  ]));
+  const evidenceRequirements = {
+    schemaVersion: 1,
+    cases: Object.fromEntries(cases.map((item) => [
+      item.id,
+      fixtures.get(item.question).evidenceRequirements.cases[item.id],
+    ])),
+  };
+  const prepared = [];
+
+  await assert.rejects(() => freezePublicRagFinalInputs({
+    datasetPath,
+    snapshotPath,
+    caseIds: cases.map((item) => item.id),
+    maxCalls: cases.length,
+    evidenceRequirements,
+    env: TEST_ENV,
+    loadEvidenceData: async () => fixtures.get(cases[0].question).data,
+    answerPublic: async ({ payload, answerRuling }) => ({
+      answer: await answerRuling({ question: payload.question }),
+    }),
+    answerRuling: async ({ question, modelInvoker }) => {
+      prepared.push(question);
+      const fixture = fixtures.get(question);
+      const prompt = question === cases[1].question
+        ? fixture.prompt.replace(fixture.card.effectText, "不完整卡文")
+        : fixture.prompt;
+      await modelInvoker({
+        prompt,
+        provider: "relay",
+        modelName: "gpt-5.6-sol",
+        maxTokens: 32000,
+        reasoningEffort: "low",
+      });
+      return {
+        resolvedCards: [{ id: fixture.card.id }],
+        usedEvidence: [{ id: fixture.qa.id }],
+        debug: {
+          route: "ordinary_rag",
+          dataRevision: "test-data-revision",
+          evidenceFingerprint: sha256("test-evidence"),
+          finalPromptSha256: sha256(prompt),
+          promptTruncated: false,
+        },
+      };
+    },
+    log: () => {},
+  }), (error) => {
+    assert.equal(error.code, "FROZEN_EVIDENCE_AUDIT_FAILED");
+    return true;
+  });
+
+  assert.deepEqual(prepared, cases.map((item) => item.question));
+  const snapshotText = await readFile(snapshotPath, "utf8");
+  assert.doesNotMatch(snapshotText, /私有参考答案/u);
+  const snapshot = JSON.parse(snapshotText);
+  assert.equal(snapshot.status, "failed_evidence_audit");
+  assert.equal(snapshot.finalModelCallCount, 0);
+  assert.deepEqual(snapshot.failedEvidenceAuditCaseIds, ["case-002"]);
+  assert.deepEqual(snapshot.cases.map((item) => item.id), cases.map((item) => item.id));
+  assert.equal(snapshot.cases[0].evidenceAudit.status, "complete");
+  assert.equal(snapshot.cases[1].evidenceAudit.status, "failed_evidence_audit");
+  assert.equal(snapshot.cases[1].question, cases[1].question);
+  assert.equal(snapshot.cases[1].promptUtf8Sha256, sha256(snapshot.cases[1].prompt));
+  assert.match(snapshot.cases[1].evidenceAudit.error.message, /effect text is incomplete/u);
+  assert.match(snapshot.cases[1].evidenceAudit.error.messageSha256, /^[a-f0-9]{64}$/u);
+  assert.equal(snapshot.cases[2].evidenceAudit.status, "complete");
+  assert.equal(Object.hasOwn(snapshot, "bundleInvariantSha256"), false);
+
+  let finalCalls = 0;
+  await assert.rejects(() => runFrozenPublicRagFinalEffort({
+    snapshotPath,
+    outputPath: path.join(temp, "result.json"),
+    effort: "low",
+    caseIds: cases.map((item) => item.id),
+    maxCalls: cases.length,
+    env: TEST_ENV,
+    callModel: async () => {
+      finalCalls += 1;
+      return completedResponse();
+    },
+    log: () => {},
+  }), /snapshot must be a completed frozen public RAG bundle/u);
+  assert.equal(finalCalls, 0);
+});
+
 test("low and medium replay reuse every frozen request field except reasoning effort", async () => {
   const temp = await mkdtemp(path.join(os.tmpdir(), "frozen-public-rag-"));
   const snapshotPath = path.join(temp, "snapshot.json");
@@ -534,5 +635,31 @@ test("targeted-eight workflow keeps private evidence requirements outside the re
   );
   assert.match(workflow, /frozen-public-rag-reusable\.tar\.gz\.enc\.hmac-sha256/u);
   assert.match(workflow, /target_sha256=/u);
+  assert.match(workflow, /mapfile -t binding_run_ids/u);
+  assert.match(workflow, /test "\$\{#binding_run_ids\[@\]\}" -eq 1/u);
+  assert.match(workflow, /binding_source_key="\$\{binding_run_ids\[0\]\}-\$\{binding_run_attempts\[0\]\}"/u);
+  assert.match(workflow, /test "\$binding_source_key" = "\$SOURCE_KEY"/u);
+  assert.match(workflow, /replay_allowed=\$replay_allowed/u);
+  assert.match(workflow, /test "\$\(sed -n 's\/\^replay_allowed=\/\/p' "\$binding"\)" = "true"/u);
+
+  const preflightStart = workflow.indexOf("- name: Preflight private inputs and preservation before paid calls");
+  const executeStart = workflow.indexOf("- name: Freeze or replay the selected cases serially");
+  assert.ok(preflightStart >= 0 && executeStart > preflightStart);
+  const preflight = workflow.slice(preflightStart, executeStart);
+  const executeEnd = workflow.indexOf("- name: Print private-safe execution metadata", executeStart);
+  const execute = workflow.slice(executeStart, executeEnd);
+  assert.match(preflight, /set -euo pipefail/u);
+  assert.match(preflight, /PRIVATE_DATASET_BASE64/u);
+  assert.match(preflight, /base64 --decode/u);
+  assert.match(preflight, /parseDatasetText/u);
+  assert.match(preflight, /freeze selection is not exactly the reviewed targeted eight cases/u);
+  assert.match(preflight, /matched\.length !== 8/u);
+  assert.match(preflight, /mv -- "\$dataset_candidate" "\$RUNNER_TEMP\/private-dataset\.txt"/u);
+  assert.doesNotMatch(execute, /PRIVATE_DATASET_BASE64|base64 --decode/u);
+  assert.match(execute, /--dataset "\$RUNNER_TEMP\/private-dataset\.txt"/u);
+  assert.match(execute, /--requirements "\$RUNNER_TEMP\/frozen-eight-requirements\.json"/u);
+  assert.match(execute, /replay_allowed=false/u);
+  assert.match(execute, /\[ "\$STAGE" = "freeze" \] && \[ "\$runner_status" -eq 0 \]/u);
+  assert.match(workflow, /\[ "\$STAGE" = "freeze" \] && \[ "\$REPLAY_ALLOWED" = "true" \]/u);
   assert.doesNotMatch(workflow, /^ {12}(?:NODE|PY)$/mu);
 });

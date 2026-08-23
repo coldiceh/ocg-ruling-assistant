@@ -144,10 +144,27 @@ export async function freezePublicRagFinalInputs({
       answer: result?.answer,
       transportContract,
     });
-    const evidenceAudit = assertFrozenEvidenceCompleteness({
-      record: baseRecord,
-      requirementContext: requirementContexts.get(item.id),
-    });
+    let evidenceAudit;
+    try {
+      evidenceAudit = assertFrozenEvidenceCompleteness({
+        record: baseRecord,
+        requirementContext: requirementContexts.get(item.id),
+      });
+    } catch (error) {
+      const failedRecord = Object.freeze({
+        ...baseRecord,
+        evidenceAudit: Object.freeze({
+          status: "failed_evidence_audit",
+          error: safeEvidenceAuditError(error),
+        }),
+      });
+      checkpoint.cases.push(failedRecord);
+      checkpoint.failedEvidenceAuditCaseIds ||= [];
+      checkpoint.failedEvidenceAuditCaseIds.push(item.id);
+      await writeJsonAtomic(outputFile, checkpoint);
+      log(`[frozen] ${item.id} failed_evidence_audit`);
+      continue;
+    }
     const record = Object.freeze({
       ...baseRecord,
       evidenceAudit,
@@ -157,15 +174,27 @@ export async function freezePublicRagFinalInputs({
     log(`[frozen] ${item.id} ${record.promptUtf8Sha256.slice(0, 12)} ${record.promptChars} chars`);
   }
 
-  checkpoint.status = "complete";
+  checkpoint.finalModelCallCount = 0;
   checkpoint.completedAt = now().toISOString();
-  checkpoint.bundleInvariantSha256 = sha256(JSON.stringify(
-    checkpoint.cases.map((item) => ({
-      requestInvariantSha256: item.requestInvariantSha256,
-      evidenceAuditSha256: item.evidenceAudit.auditSha256,
-    })),
-  ));
+  if (checkpoint.failedEvidenceAuditCaseIds?.length) {
+    checkpoint.status = "failed_evidence_audit";
+  } else {
+    checkpoint.status = "complete";
+    checkpoint.bundleInvariantSha256 = sha256(JSON.stringify(
+      checkpoint.cases.map((item) => ({
+        requestInvariantSha256: item.requestInvariantSha256,
+        evidenceAuditSha256: item.evidenceAudit.auditSha256,
+      })),
+    ));
+  }
   await writeJsonAtomic(outputFile, checkpoint);
+  if (checkpoint.status === "failed_evidence_audit") {
+    const error = new Error(
+      `frozen evidence audit failed for ${checkpoint.failedEvidenceAuditCaseIds.length} case(s)`,
+    );
+    error.code = "FROZEN_EVIDENCE_AUDIT_FAILED";
+    throw error;
+  }
   return checkpoint;
 }
 
@@ -980,6 +1009,16 @@ function safeError(error) {
     outcomeKnown: error?.outcomeKnown ?? null,
     budgetReservationMayExist: error?.budgetReservationMayExist ?? null,
   };
+}
+
+function safeEvidenceAuditError(error) {
+  const serialized = safeError(error);
+  const originalMessage = serialized.message;
+  return Object.freeze({
+    ...serialized,
+    message: originalMessage.replace(/(omits source line:)[\s\S]*$/u, "$1 [redacted]"),
+    messageSha256: sha256(originalMessage),
+  });
 }
 
 function helpText() {
