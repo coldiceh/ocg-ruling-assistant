@@ -1791,6 +1791,10 @@ function mergeRelatedRecordMetadata(left = {}, right = {}) {
         ...(leftSignals.strictSupplementalRuleQueryKeys || []),
         ...(rightSignals.strictSupplementalRuleQueryKeys || []),
       ])],
+      groundedQuestionBranchRuleQueryKeys: [...new Set([
+        ...(leftSignals.groundedQuestionBranchRuleQueryKeys || []),
+        ...(rightSignals.groundedQuestionBranchRuleQueryKeys || []),
+      ])],
       supplementalRuleQueryRanks: mergeSupplementalRuleQueryRanks(
         leftSignals.supplementalRuleQueryRanks,
         rightSignals.supplementalRuleQueryRanks,
@@ -1799,6 +1803,38 @@ function mergeRelatedRecordMetadata(left = {}, right = {}) {
         Number(leftSignals.questionBranchFourGramHitCount || 0),
         Number(rightSignals.questionBranchFourGramHitCount || 0),
       ),
+      questionBranchThreeGramHitCount: Math.max(
+        Number(leftSignals.questionBranchThreeGramHitCount || 0),
+        Number(rightSignals.questionBranchThreeGramHitCount || 0),
+      ),
+      questionBranchHeadlineAnchored: Boolean(
+        leftSignals.questionBranchHeadlineAnchored
+        || rightSignals.questionBranchHeadlineAnchored,
+      ),
+      questionBranchHeadlineThreeGramHitCount: Math.max(
+        Number(leftSignals.questionBranchHeadlineThreeGramHitCount || 0),
+        Number(rightSignals.questionBranchHeadlineThreeGramHitCount || 0),
+      ),
+      questionBranchHeadlineFourGramHitCount: Math.max(
+        Number(leftSignals.questionBranchHeadlineFourGramHitCount || 0),
+        Number(rightSignals.questionBranchHeadlineFourGramHitCount || 0),
+      ),
+      questionBranchHeadlineCanonicalFourGramHitCount: Math.max(
+        Number(leftSignals.questionBranchHeadlineCanonicalFourGramHitCount || 0),
+        Number(rightSignals.questionBranchHeadlineCanonicalFourGramHitCount || 0),
+      ),
+      questionBranchHeadlineLongestRun: Math.max(
+        Number(leftSignals.questionBranchHeadlineLongestRun || 0),
+        Number(rightSignals.questionBranchHeadlineLongestRun || 0),
+      ),
+      questionBranchHeadlineDistinctiveSemanticHitCount: Math.max(
+        Number(leftSignals.questionBranchHeadlineDistinctiveSemanticHitCount || 0),
+        Number(rightSignals.questionBranchHeadlineDistinctiveSemanticHitCount || 0),
+      ),
+      questionBranchHeadlineEffectPhraseHitCount: Math.max(
+        Number(leftSignals.questionBranchHeadlineEffectPhraseHitCount || 0),
+        Number(rightSignals.questionBranchHeadlineEffectPhraseHitCount || 0),
+      ),
       questionBranchFourGramCoverage: Math.max(
         Number(leftSignals.questionBranchFourGramCoverage || 0),
         Number(rightSignals.questionBranchFourGramCoverage || 0),
@@ -1806,6 +1842,14 @@ function mergeRelatedRecordMetadata(left = {}, right = {}) {
       questionBranchLongestRun: Math.max(
         Number(leftSignals.questionBranchLongestRun || 0),
         Number(rightSignals.questionBranchLongestRun || 0),
+      ),
+      matchedStrongMechanismFeatures: [...new Set([
+        ...(leftSignals.matchedStrongMechanismFeatures || []),
+        ...(rightSignals.matchedStrongMechanismFeatures || []),
+      ])],
+      strongMechanismQueryCoverage: Math.max(
+        Number(leftSignals.strongMechanismQueryCoverage || 0),
+        Number(rightSignals.strongMechanismQueryCoverage || 0),
       ),
       supplementalRuleQueryMechanisms: [...new Set([
         ...(leftSignals.supplementalRuleQueryMechanisms || []),
@@ -2134,13 +2178,20 @@ function rankOfficialQaQuestionBranches({
     // it never reads the answer and every result remains related-only.
     const phraseMatches = rankOfficialQaQuestionTextProfiles({
       question,
+      // The Japanese branch supplies lexical anchors for the Japanese corpus,
+      // while the complete planner item supplies language-independent
+      // mechanism signals.  Both are question-side inputs; official answers
+      // never participate in discovery.
+      contextText: [query.subclaim, query.query]
+        .filter(Boolean)
+        .join(" "),
       profiles: questionProfiles,
       limit: Math.min(4, perQueryLimit),
     });
     const strongQuestionMatches = [
       ...searchResult.exact,
       ...searchResult.near,
-      ...phraseMatches,
+      ...phraseMatches.slice(0, 2),
     ];
     // If the ordinary matcher and the Japanese full-question rescue both find
     // nothing stronger, retain a tiny related-only head from this explicit
@@ -2152,19 +2203,35 @@ function rankOfficialQaQuestionBranches({
           .filter((match) => Number(match.semanticScore || 0) > 0)
           .slice(0, 2);
     const matches = dedupeBy([
+      // Reserve at most two slots inside the existing per-query bound for the
+      // question-only rescue. Otherwise ordinary classifier heads can consume
+      // every slot before these candidates reach the shared comparator.
+      ...phraseMatches.slice(0, 2),
       ...searchResult.exact,
       ...searchResult.near,
-      ...phraseMatches.slice(0, 2),
       ...relatedFallback,
     ], (match) => stableRecordKey(match.record)).slice(0, perQueryLimit * 2);
+    const phraseMatchByRecord = new Map(
+      phraseMatches.map((match) => [stableRecordKey(match.record), match]),
+    );
     matches.forEach((match, index) => {
       const record = match.record || {};
-      const phraseMetrics = match.questionTextMetrics || {};
+      // A record may also appear in the ordinary near/exact head. Keep that
+      // stronger candidate, but do not discard independently measured
+      // question/headline metrics merely because deduplication saw it first.
+      const phraseMatch = phraseMatchByRecord.get(stableRecordKey(record));
+      const phraseMetrics = phraseMatch?.questionTextMetrics
+        || match.questionTextMetrics
+        || {};
+      const questionBranchScore = Math.max(
+        Number(match.score || 0),
+        Number(phraseMatch?.score || 0),
+      );
       const candidate = {
         ...record,
         retrievalScore: Math.max(
           normalizeEvidenceRelevanceScore(record.retrievalScore ?? record.score),
-          normalizeEvidenceRelevanceScore(match.score),
+          normalizeEvidenceRelevanceScore(questionBranchScore),
         ),
         retrievalContext: {
           ...(record.retrievalContext || {}),
@@ -2180,10 +2247,39 @@ function rankOfficialQaQuestionBranches({
           supplementalRuleQueryKeys: [queryKey],
           supplementalRuleQueryRanks: { [queryKey]: index + 1 },
           questionBranchSearch: true,
-          questionBranchSearchScore: Number(match.score || 0),
+          questionBranchSearchScore: questionBranchScore,
           questionBranchFourGramHitCount: Number(phraseMetrics.fourGramHitCount || 0),
+          questionBranchThreeGramHitCount: Number(phraseMetrics.threeGramHitCount || 0),
           questionBranchFourGramCoverage: Number(phraseMetrics.fourGramCoverage || 0),
           questionBranchLongestRun: Number(phraseMetrics.longestRun || 0),
+          questionBranchHeadlineAnchored: phraseMetrics.headlineAnchored === true,
+          questionBranchHeadlineThreeGramHitCount: Number(
+            phraseMetrics.headlineThreeGramHitCount || 0,
+          ),
+          questionBranchHeadlineFourGramHitCount: Number(
+            phraseMetrics.headlineFourGramHitCount || 0,
+          ),
+          questionBranchHeadlineCanonicalFourGramHitCount: Number(
+            phraseMetrics.headlineCanonicalFourGramHitCount || 0,
+          ),
+          questionBranchHeadlineLongestRun: Number(phraseMetrics.headlineLongestRun || 0),
+          questionBranchHeadlineDistinctiveSemanticHitCount: Number(
+            phraseMetrics.headlineDistinctiveSemanticHitCount || 0,
+          ),
+          questionBranchHeadlineEffectPhraseHitCount: Number(
+            phraseMetrics.headlineEffectPhraseHitCount || 0,
+          ),
+          groundedQuestionBranchRuleQueryKeys: phraseMetrics.headlineAnchored === true
+            ? [queryKey]
+            : [],
+          matchedStrongMechanismFeatures: [
+            ...(record.retrievalSignals?.matchedStrongMechanismFeatures || []),
+            ...(phraseMetrics.matchedStrongMechanismFeatures || []),
+          ],
+          strongMechanismQueryCoverage: Math.max(
+            Number(record.retrievalSignals?.strongMechanismQueryCoverage || 0),
+            Number(phraseMetrics.strongMechanismQueryCoverage || 0),
+          ),
         },
       };
       const key = stableRecordKey(candidate);
@@ -2203,22 +2299,59 @@ function rankOfficialQaQuestionBranches({
 
 function prepareOfficialQaQuestionTextProfiles(records = []) {
   return (records || []).map((record) => {
-    const question = projectOfficialQaQuestion(record).scenarioText || record.title || "";
+    const questionProjection = projectOfficialQaQuestion(record);
+    const question = questionProjection.scenarioText || record.title || "";
+    // `title` is the concise official question when the synchronized source
+    // exposes one.  Older compact records may contain only a truncated title;
+    // that is still safe as a positive ranking signal because eligibility is
+    // established by the complete question projection below.  It is never a
+    // deletion gate and no answer text participates.
+    const headline = extractPrincipalQuestionHeadline(questionProjection.scenarioText)
+      || String(
+        record.question
+          || record.rawQuestion
+          || record.title
+          || questionProjection.principalText
+          || "",
+      ).trim();
     const cjkSegments = normalizeCjkQuestionSegments(question);
     return cjkSegments.some((segment) => segment.length >= 4)
-      ? { record, cjkSegments }
+      ? {
+          record,
+          cjkSegments,
+          headlineCjkSegments: normalizeCjkQuestionSegments(headline),
+          headlineCanonicalCjkSegments: normalizeCanonicalCjkQuestionSegments(headline),
+          headlineEffectPhrases: extractOfficialQaEffectPhrases(headline),
+          headlineSemanticConcepts: extractOfficialQaSemanticConcepts(headline),
+          evidenceMechanismSignature: retrievalQuestionFeatures(record).evidenceMechanismSignature,
+        }
       : null;
   }).filter(Boolean);
 }
 
 function rankOfficialQaQuestionTextProfiles({
   question = "",
+  contextText = question,
   profiles = [],
   limit = 6,
 } = {}) {
   const querySegments = normalizeCjkQuestionSegments(question);
   const queryGrams = uniqueCjkNgrams(querySegments, 4);
-  if (queryGrams.length < 8 || countJapaneseKana(question) < 4) return [];
+  const queryThreeGrams = uniqueCjkNgrams(querySegments, 3);
+  const queryCanonicalFourGrams = uniqueCjkNgrams(
+    normalizeCanonicalCjkQuestionSegments(question),
+    4,
+  );
+  const queryMechanismSignature = buildRuleMechanismSignature(contextText);
+  const queryEffectPhrases = extractOfficialQaEffectPhrases(contextText);
+  const queryDistinctiveSemanticConcepts = extractOfficialQaSemanticConcepts(contextText)
+    .filter((concept) => !RULE_MECHANISM_GENERIC_CONCEPTS.has(concept));
+  const hasStrongMechanismAnchor = [...queryMechanismSignature]
+    .some(isStrongRuleMechanismFeature);
+  if (countJapaneseKana(question) < 4) return [];
+  if (queryGrams.length < 8 && (!hasStrongMechanismAnchor || queryThreeGrams.length < 4)) {
+    return [];
+  }
 
   const minimumHits = Math.max(3, Math.ceil(queryGrams.length * 0.12));
   const preliminary = [];
@@ -2229,15 +2362,69 @@ function rankOfficialQaQuestionTextProfiles({
         fourGramHitCount += 1;
       }
     }
-    if (fourGramHitCount < minimumHits) continue;
+    let threeGramHitCount = 0;
+    for (const gram of queryThreeGrams) {
+      if (profile.cjkSegments.some((segment) => segment.includes(gram))) {
+        threeGramHitCount += 1;
+      }
+    }
+    const mechanismMatch = bestRuleMechanismMatch(
+      [queryMechanismSignature],
+      profile.evidenceMechanismSignature,
+    );
+    let headlineThreeGramHitCount = 0;
+    for (const gram of queryThreeGrams) {
+      if (profile.headlineCjkSegments.some((segment) => segment.includes(gram))) {
+        headlineThreeGramHitCount += 1;
+      }
+    }
+    let headlineFourGramHitCount = 0;
+    for (const gram of queryGrams) {
+      if (profile.headlineCjkSegments.some((segment) => segment.includes(gram))) {
+        headlineFourGramHitCount += 1;
+      }
+    }
+    let headlineCanonicalFourGramHitCount = 0;
+    for (const gram of queryCanonicalFourGrams) {
+      if (profile.headlineCanonicalCjkSegments.some((segment) => segment.includes(gram))) {
+        headlineCanonicalFourGramHitCount += 1;
+      }
+    }
+    const headlineEffectPhraseHitCount = queryEffectPhrases
+      .filter((phrase) => profile.headlineEffectPhrases.includes(phrase)).length;
+    const headlineDistinctiveSemanticHitCount = queryDistinctiveSemanticConcepts
+      .filter((concept) => profile.headlineSemanticConcepts.includes(concept)).length;
+    const mechanismAnchoredShortMatch = mechanismMatch.matchedStrongFeatures.length >= 1
+      && Number(mechanismMatch.strongQueryCoverage || 0) >= 0.5
+      && threeGramHitCount >= 2;
+    if (fourGramHitCount < minimumHits && !mechanismAnchoredShortMatch) continue;
     preliminary.push({
       ...profile,
       fourGramHitCount,
-      fourGramCoverage: fourGramHitCount / queryGrams.length,
+      fourGramCoverage: fourGramHitCount / Math.max(1, queryGrams.length),
+      threeGramHitCount,
+      threeGramCoverage: queryThreeGrams.length
+        ? threeGramHitCount / queryThreeGrams.length
+        : 0,
+      mechanismAnchoredShortMatch,
+      matchedStrongMechanismFeatures: mechanismMatch.matchedStrongFeatures,
+      strongMechanismQueryCoverage: Number(mechanismMatch.strongQueryCoverage || 0),
+      headlineThreeGramHitCount,
+      headlineFourGramHitCount,
+      headlineCanonicalFourGramHitCount,
+      headlineEffectPhraseHitCount,
+      headlineDistinctiveSemanticHitCount,
     });
   }
   preliminary.sort((left, right) => (
-    right.fourGramHitCount - left.fourGramHitCount
+    right.headlineDistinctiveSemanticHitCount - left.headlineDistinctiveSemanticHitCount
+      || right.headlineEffectPhraseHitCount - left.headlineEffectPhraseHitCount
+      || right.headlineCanonicalFourGramHitCount - left.headlineCanonicalFourGramHitCount
+      || right.headlineFourGramHitCount - left.headlineFourGramHitCount
+      || right.headlineThreeGramHitCount - left.headlineThreeGramHitCount
+      || Number(right.mechanismAnchoredShortMatch) - Number(left.mechanismAnchoredShortMatch)
+      || right.fourGramHitCount - left.fourGramHitCount
+      || right.threeGramHitCount - left.threeGramHitCount
       || right.fourGramCoverage - left.fourGramCoverage
       || stableRecordKey(left.record).localeCompare(stableRecordKey(right.record))
   ));
@@ -2250,24 +2437,49 @@ function rankOfficialQaQuestionTextProfiles({
     .map((item) => ({
       ...item,
       longestRun: longestCommonCjkRun(querySegments, item.cjkSegments),
+      headlineLongestRun: longestCommonCjkRun(querySegments, item.headlineCjkSegments),
     }))
-    .filter((item) => item.longestRun >= 5)
+    .map((item) => ({
+      ...item,
+      // This bonus distinguishes a question whose concise official headline
+      // itself contains the queried operation from a long scenario where the
+      // same words appear only incidentally inside quoted/background effects.
+      // It can improve ordering only after the complete question qualified.
+      headlineAnchored: item.mechanismAnchoredShortMatch && (
+        (
+          item.headlineThreeGramHitCount >= 2
+          && item.headlineLongestRun >= 4
+        ) || item.headlineCanonicalFourGramHitCount >= 3
+      ),
+    }))
+    .filter((item) => (
+      item.longestRun >= 5
+      || (item.mechanismAnchoredShortMatch && item.longestRun >= 4)
+    ))
     .sort((left, right) => (
-      right.fourGramHitCount - left.fourGramHitCount
+      Number(right.headlineAnchored) - Number(left.headlineAnchored)
+        || right.headlineDistinctiveSemanticHitCount - left.headlineDistinctiveSemanticHitCount
+        || right.headlineEffectPhraseHitCount - left.headlineEffectPhraseHitCount
+        || right.headlineCanonicalFourGramHitCount - left.headlineCanonicalFourGramHitCount
+        || right.headlineFourGramHitCount - left.headlineFourGramHitCount
+        || right.headlineThreeGramHitCount - left.headlineThreeGramHitCount
+        || Number(right.mechanismAnchoredShortMatch) - Number(left.mechanismAnchoredShortMatch)
+        || right.fourGramHitCount - left.fourGramHitCount
+        || right.threeGramHitCount - left.threeGramHitCount
         || right.longestRun - left.longestRun
         || right.fourGramCoverage - left.fourGramCoverage
         || stableRecordKey(left.record).localeCompare(stableRecordKey(right.record))
     ));
-  const best = ranked[0];
-  if (!best) return [];
-  const relativeMinimumHits = Math.max(minimumHits, Math.floor(best.fourGramHitCount * 0.55));
-  const relativeMinimumCoverage = Math.max(0.12, best.fourGramCoverage * 0.55);
-  const relativeMinimumRun = Math.max(5, Math.floor(best.longestRun * 0.4));
+  // Use absolute relevance requirements only.  A relative threshold tied to
+  // the single best question made recall depend on unrelated corpus contents:
+  // one near-verbatim candidate could erase another independently decisive
+  // question from the bounded post-planner pool.
   return ranked
     .filter((item) => (
-      item.fourGramHitCount >= relativeMinimumHits
-      && item.fourGramCoverage >= relativeMinimumCoverage
-      && item.longestRun >= relativeMinimumRun
+      (item.fourGramHitCount >= minimumHits
+        && item.fourGramCoverage >= 0.12
+        && item.longestRun >= 5)
+      || (item.mechanismAnchoredShortMatch && item.longestRun >= 4)
     ))
     .slice(0, Math.max(1, Math.floor(Number(limit) || 6)))
     .map((item) => ({
@@ -2275,12 +2487,25 @@ function rankOfficialQaQuestionTextProfiles({
       score: normalizeEvidenceRelevanceScore(
         0.45
           + item.fourGramCoverage * 0.35
+          + item.threeGramCoverage * 0.1
+          + item.strongMechanismQueryCoverage * 0.1
           + Math.min(1, item.longestRun / 24) * 0.2,
       ),
       questionTextMetrics: {
         fourGramHitCount: item.fourGramHitCount,
         fourGramCoverage: Number(item.fourGramCoverage.toFixed(4)),
+        threeGramHitCount: item.threeGramHitCount,
+        threeGramCoverage: Number(item.threeGramCoverage.toFixed(4)),
         longestRun: item.longestRun,
+        headlineAnchored: item.headlineAnchored,
+        headlineThreeGramHitCount: item.headlineThreeGramHitCount,
+        headlineFourGramHitCount: item.headlineFourGramHitCount,
+        headlineCanonicalFourGramHitCount: item.headlineCanonicalFourGramHitCount,
+        headlineEffectPhraseHitCount: item.headlineEffectPhraseHitCount,
+        headlineDistinctiveSemanticHitCount: item.headlineDistinctiveSemanticHitCount,
+        headlineLongestRun: item.headlineLongestRun,
+        matchedStrongMechanismFeatures: item.matchedStrongMechanismFeatures,
+        strongMechanismQueryCoverage: Number(item.strongMechanismQueryCoverage.toFixed(4)),
       },
     }));
 }
@@ -2290,6 +2515,22 @@ function normalizeCjkQuestionSegments(value) {
     .matchAll(/[\u3040-\u30ff\u3400-\u9fff]+/gu)]
     .map((match) => match[0])
     .filter(Boolean);
+}
+
+function extractPrincipalQuestionHeadline(value) {
+  const paragraphs = String(value || "")
+    .split(/\n+/u)
+    .map((item) => item.replace(/\s+/gu, " ").trim())
+    .filter(Boolean);
+  const questions = paragraphs.filter((item) => /[?？]/u.test(item));
+  return questions.at(-1) || "";
+}
+
+function normalizeCanonicalCjkQuestionSegments(value) {
+  const expanded = String(value || "")
+    .normalize("NFKC")
+    .replace(/P\s*ゾーン/giu, "ペンデュラムゾーン");
+  return normalizeCjkQuestionSegments(expanded);
 }
 
 function uniqueCjkNgrams(segments = [], size = 4) {
@@ -2377,8 +2618,24 @@ function compareRetrievedRecords(left = {}, right = {}) {
   const rightSignals = right.retrievalSignals || {};
   return Number(rightSignals.questionCardIdCoverage || 0) - Number(leftSignals.questionCardIdCoverage || 0)
     || Number(rightSignals.matchedQuestionCardIdCount || 0) - Number(leftSignals.matchedQuestionCardIdCount || 0)
+    || Number(rightSignals.questionBranchHeadlineAnchored === true)
+      - Number(leftSignals.questionBranchHeadlineAnchored === true)
+    || Number(rightSignals.questionBranchHeadlineDistinctiveSemanticHitCount || 0)
+      - Number(leftSignals.questionBranchHeadlineDistinctiveSemanticHitCount || 0)
+    || Number(rightSignals.questionBranchHeadlineEffectPhraseHitCount || 0)
+      - Number(leftSignals.questionBranchHeadlineEffectPhraseHitCount || 0)
+    || Number(rightSignals.questionBranchHeadlineCanonicalFourGramHitCount || 0)
+      - Number(leftSignals.questionBranchHeadlineCanonicalFourGramHitCount || 0)
+    || Number(rightSignals.questionBranchHeadlineFourGramHitCount || 0)
+      - Number(leftSignals.questionBranchHeadlineFourGramHitCount || 0)
+    || Number(rightSignals.questionBranchHeadlineThreeGramHitCount || 0)
+      - Number(leftSignals.questionBranchHeadlineThreeGramHitCount || 0)
+    || Number(rightSignals.questionBranchHeadlineLongestRun || 0)
+      - Number(leftSignals.questionBranchHeadlineLongestRun || 0)
     || Number(rightSignals.questionBranchFourGramHitCount || 0)
       - Number(leftSignals.questionBranchFourGramHitCount || 0)
+    || Number(rightSignals.questionBranchThreeGramHitCount || 0)
+      - Number(leftSignals.questionBranchThreeGramHitCount || 0)
     || Number(rightSignals.questionBranchLongestRun || 0)
       - Number(leftSignals.questionBranchLongestRun || 0)
     || Number(rightSignals.questionBranchFourGramCoverage || 0)
@@ -4286,6 +4543,10 @@ function supplementalQueryKeysForItem(item, { strictOnly = false } = {}) {
     ? [
         ...(signals.strictRuleQueryKeys || []),
         ...(signals.strictSupplementalRuleQueryKeys || []),
+        // A complete official-question match that is both mechanism-anchored
+        // and headline-anchored may represent its planner branch for bounded
+        // coverage. It remains related-only and receives no authority upgrade.
+        ...(signals.groundedQuestionBranchRuleQueryKeys || []),
       ]
     : [
         ...(signals.ruleQueryKeys || []),

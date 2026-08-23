@@ -501,7 +501,7 @@ test("only the emergency compact prompt may abbreviate the question and card tex
   assert.match(payload.resolvedCards[0].effectText, /EMERGENCY_CARD_TAIL$/u);
 });
 
-test("the actual 36k prompt keeps the complete projected tail of the highest-priority official QA", () => {
+test("the actual 36k prompt budgets references before rendering and keeps the top official QA complete", () => {
   const completeAnswer = [
     "TOP_OFFICIAL_ANSWER_HEAD",
     "完整官方说明".repeat(420),
@@ -553,7 +553,9 @@ test("the actual 36k prompt keeps the complete projected tail of the highest-pri
     },
   });
 
-  assert.ok(bundle.warnings.includes("rag_prompt_compacted_to_max_chars"));
+  assert.ok(bundle.warnings.some((warning) => warning.startsWith("prompt_reference_chars_limited:")));
+  assert.ok(!bundle.warnings.includes("rag_prompt_compacted_to_max_chars"));
+  assert.equal(bundle.promptTruncated, false);
   assert.ok(bundle.prompt.length <= 36000);
   const payload = parsePromptPayload(bundle.prompt);
   const evidenceItems = flattenPromptEvidence(payload.evidence);
@@ -1018,4 +1020,102 @@ test("retrieval-only lexical profiles never enter model evidence or the final pr
 
   assert.doesNotMatch(bundle.prompt, new RegExp(secret, "u"));
   assert.doesNotMatch(JSON.stringify(bundle.modelEvidence), new RegExp(secret, "u"));
+});
+
+test("distinct official ids with nearly identical long bodies and opposite conclusions both survive", () => {
+  const sharedBody = `共同条件与处理过程：${"同一场面、同一区域、同一时点。".repeat(240)}`;
+  const first = {
+    id: "opposite-official-a",
+    type: "related",
+    recordType: "qa",
+    official: true,
+    sourceAuthority: "official_database",
+    title: "相似官方问题 A",
+    question: "在所述共同条件下可以进行该处理吗？",
+    answer: `${sharedBody}\n结论：可以进行该处理。`,
+    retrievalScore: 0.99,
+  };
+  const second = {
+    ...first,
+    id: "opposite-official-b",
+    title: "相似官方问题 B",
+    answer: `${sharedBody}\n结论：不可以进行该处理。`,
+    retrievalScore: 0.98,
+  };
+  const bundle = buildRagRulingPromptBundle({
+    userQuery: "请比较两条不同官方资料的适用前提。",
+    cardResolution: { resolvedCards: [], unresolvedMentions: [], ambiguousMentions: [] },
+    evidence: {
+      officialQaDirectCandidates: [],
+      officialQaRelated: [first, second],
+      provisionalOfficialResponses: [],
+      faqRelated: [],
+      cardTexts: [],
+      userProvidedCardTexts: [],
+      rawRelatedEvidence: [],
+    },
+    env: {
+      RAG_MAX_PROMPT_REFERENCE_CHARS: "20000",
+      RAG_MAX_EVIDENCE_TEXT_CHARS: "10000",
+      RAG_MAX_PROMPT_CHARS: "50000",
+    },
+  });
+
+  assert.ok(bundle.allowedEvidenceIds.includes(first.id));
+  assert.ok(bundle.allowedEvidenceIds.includes(second.id));
+  assert.match(bundle.prompt, /结论：可以进行该处理/u);
+  assert.match(bundle.prompt, /结论：不可以进行该处理/u);
+  assert.ok(!bundle.warnings.some((warning) => warning.includes("near_duplicate")));
+});
+
+test("resolved-card text stubs cannot displace one oversized decisive official reference", () => {
+  const resolvedCard = {
+    id: "resolved-card-with-complete-text",
+    name: "已解析匿名卡",
+    effectText: "这是已经存在于 resolvedCards 的完整卡片正文。",
+  };
+  const decisiveId = "oversized-decisive-official-reference";
+  const bundle = buildRagRulingPromptBundle({
+    userQuery: "请依据唯一决定性官方资料分析该场面。",
+    cardResolution: {
+      resolvedCards: [resolvedCard],
+      unresolvedMentions: [],
+      ambiguousMentions: [],
+    },
+    evidence: {
+      officialQaDirectCandidates: [],
+      officialQaRelated: [{
+        id: decisiveId,
+        type: "related",
+        recordType: "qa",
+        official: true,
+        sourceAuthority: "official_database",
+        title: "唯一决定性官方资料",
+        question: "该处理是否可以进行？",
+        answer: `DECISIVE_HEAD ${"完整决定性官方说明。".repeat(1200)} DECISIVE_TAIL`,
+        retrievalScore: 1,
+      }],
+      provisionalOfficialResponses: [],
+      faqRelated: [],
+      cardTexts: [{
+        id: "duplicate-resolved-card-text-stub",
+        type: "card_text",
+        cardIds: [resolvedCard.id],
+        cards: [resolvedCard.name],
+        text: resolvedCard.effectText,
+      }],
+      userProvidedCardTexts: [],
+      rawRelatedEvidence: [],
+    },
+    env: {
+      RAG_MAX_PROMPT_REFERENCE_CHARS: "1000",
+      RAG_MAX_EVIDENCE_TEXT_CHARS: "30000",
+      RAG_MAX_PROMPT_CHARS: "5000",
+    },
+  });
+
+  assert.ok(bundle.allowedEvidenceIds.includes(decisiveId));
+  assert.match(bundle.prompt, new RegExp(decisiveId, "u"));
+  assert.ok(!bundle.allowedEvidenceIds.includes("duplicate-resolved-card-text-stub"));
+  assert.ok(bundle.warnings.some((warning) => warning.startsWith("prompt_reference_chars_limited:")));
 });
