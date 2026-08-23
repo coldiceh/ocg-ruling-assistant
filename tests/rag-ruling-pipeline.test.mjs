@@ -1285,7 +1285,7 @@ test("rule query extraction defaults the independent Relay planner to low and a 
   assert.match(calls[0].url, /\/chat\/completions$/u);
   assert.equal(calls[0].body.model, "gpt-5.6-terra");
   assert.equal(calls[0].body.reasoning_effort, "low");
-  assert.equal(calls[0].body.max_completion_tokens, 8192);
+  assert.equal(calls[0].body.max_completion_tokens, 32000);
   assert.deepEqual(calls[0].body.response_format, { type: "json_object" });
   assert.equal(result.providerUsed, "relay");
   assert.equal(result.modelUsed, "gpt-5.6-terra");
@@ -2521,6 +2521,113 @@ test("model_natural_language_output_is_wrapped_as_low_confidence", async () => {
   assert.equal(result.answer.answerLevel, "low_confidence_analysis");
   assert.ok(result.answer.riskFlags.includes("model_json_parse_failed"));
   assert.ok(result.warnings.includes("model_natural_language_wrapped"));
+});
+
+test("generic final-answer JSON envelopes are mechanically unwrapped without a repair call", async () => {
+  const result = await callRagModel({
+    prompt: "输出 JSON",
+    env: {},
+    modelInvoker: async () => JSON.stringify({
+      arbitraryTransportEnvelope: {
+        payload: [{
+          answerLevel: "rule_analysis",
+          shortAnswer: "连锁按当前状态继续处理。",
+          reasoning: ["先处理连锁2。", "再按处理时状态处理连锁1。"],
+          usedCards: [],
+          usedEvidence: [],
+          missingInfo: [],
+          riskFlags: [],
+          confidenceSelfEstimate: "medium",
+        }],
+      },
+    }),
+  });
+
+  assert.equal(result.answer.answerLevel, "rule_analysis");
+  assert.equal(result.answer.shortAnswer, "连锁按当前状态继续处理。");
+  assert.deepEqual(result.answer.reasoning, ["先处理连锁2。", "再按处理时状态处理连锁1。"]);
+  assert.ok(result.warnings.includes("model_json_structure_normalized"));
+  assert.ok(!result.warnings.includes("model_json_invalid_schema"));
+});
+
+test("generic conclusion aliases remain low-confidence when answerLevel is omitted", async () => {
+  const result = await callRagModel({
+    prompt: "输出 JSON",
+    env: {},
+    modelInvoker: async () => JSON.stringify({
+      output: {
+        conclusion: "模型给出了可展示的裁定结论。",
+        analysis: ["该文本来自同一次模型输出。"],
+      },
+    }),
+  });
+
+  assert.equal(result.answer.answerLevel, "low_confidence_analysis");
+  assert.equal(result.answer.shortAnswer, "模型给出了可展示的裁定结论。");
+  assert.deepEqual(result.answer.reasoning, ["该文本来自同一次模型输出。"]);
+  assert.ok(result.warnings.includes("model_json_structure_normalized"));
+});
+
+test("a single top-level answer array is unwrapped but multiple entries stay fail-closed", async () => {
+  const single = await callRagModel({
+    prompt: "输出 JSON",
+    env: {},
+    modelInvoker: async () => JSON.stringify([{
+      answerLevel: "rule_analysis",
+      shortAnswer: "单一答案可以机械拆包。",
+      reasoning: ["数组中只有一个完整答案对象。"],
+    }]),
+  });
+  assert.equal(single.answer.shortAnswer, "单一答案可以机械拆包。");
+  assert.ok(!single.warnings.includes("model_json_invalid_schema"));
+
+  const multiple = await callRagModel({
+    prompt: "输出 JSON",
+    env: {},
+    modelInvoker: async () => JSON.stringify([
+      { answerLevel: "rule_analysis", shortAnswer: "候选一。", reasoning: ["理由一。"] },
+      { answerLevel: "rule_analysis", shortAnswer: "候选二。", reasoning: ["理由二。"] },
+    ]),
+  });
+  assert.ok(multiple.warnings.includes("model_json_invalid_schema"));
+});
+
+test("a lone nested conclusion without reasoning is not promoted to a ruling", async () => {
+  const result = await callRagModel({
+    prompt: "输出 JSON",
+    env: {},
+    modelInvoker: async () => JSON.stringify({
+      metadata: { conclusion: "这只是元数据摘要。" },
+    }),
+  });
+  assert.ok(result.warnings.includes("model_json_invalid_schema"));
+  assert.doesNotMatch(result.answer.shortAnswer, /元数据摘要/u);
+});
+
+test("ambiguous envelopes and explicit illegal answer levels stay fail-closed", async () => {
+  const ambiguous = await callRagModel({
+    prompt: "输出 JSON",
+    env: {},
+    modelInvoker: async () => JSON.stringify({
+      answer: { conclusion: "候选一。", analysis: ["理由一。"] },
+      result: { conclusion: "候选二。", analysis: ["理由二。"] },
+    }),
+  });
+  assert.ok(ambiguous.warnings.includes("model_json_invalid_schema"));
+
+  const illegal = await callRagModel({
+    prompt: "输出 JSON",
+    env: {},
+    modelInvoker: async () => JSON.stringify({
+      result: {
+        answerLevel: "certain_yes",
+        conclusion: "不得采用这个非法枚举下的结论。",
+        reasoning: ["非法枚举。"],
+      },
+    }),
+  });
+  assert.ok(illegal.warnings.includes("model_json_invalid_schema"));
+  assert.doesNotMatch(illegal.answer.shortAnswer, /不得采用/u);
 });
 
 test("model_truncated_json_output_is_repaired_without_raw_json_answer", async () => {
