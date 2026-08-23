@@ -80,19 +80,22 @@ export function buildRagRulingPromptBundle({
 } = {}) {
   const warnings = [];
   const maxPromptChars = readNumber(env.RAG_MAX_PROMPT_CHARS, 36000);
+  const hasReferenceCharLimit = Object.hasOwn(env, "RAG_MAX_PROMPT_REFERENCE_CHARS")
+    && String(env.RAG_MAX_PROMPT_REFERENCE_CHARS || "").trim() !== "";
   const hasLegacyReferenceItemLimit = Object.hasOwn(env, "RAG_MAX_PROMPT_REFERENCE_ITEMS")
     && String(env.RAG_MAX_PROMPT_REFERENCE_ITEMS || "").trim() !== "";
   const limits = {
     maxCards: readNumber(env.RAG_MAX_CARDS, 6),
     maxOfficialQa: readNumber(env.RAG_MAX_OFFICIAL_QA, 7),
     maxRelatedEvidence: readNumber(env.RAG_MAX_RELATED_EVIDENCE, 14),
-    // Production selection is bounded by the serialized reference envelope,
-    // not by an arbitrary item count.  Preserve the old explicit override for
-    // compatibility with bounded tests and deployments that still set it.
-    maxReferenceChars: readNumber(
-      env.RAG_MAX_PROMPT_REFERENCE_CHARS,
-      Math.max(6000, Math.floor(maxPromptChars * 0.45)),
-    ),
+    // The complete rendered prompt owns the ordinary production budget.  A
+    // separate percentage of that budget can discard whole decisive records
+    // even when the fixed prompt plus those records still fits.  Preserve only
+    // an explicit compatibility override; otherwise the actual prompt fitter
+    // measures the remaining capacity after the fixed envelope is rendered.
+    maxReferenceChars: hasReferenceCharLimit
+      ? readNumber(env.RAG_MAX_PROMPT_REFERENCE_CHARS, Number.POSITIVE_INFINITY)
+      : Number.POSITIVE_INFINITY,
     maxReferenceItems: hasLegacyReferenceItemLimit
       ? readNumber(env.RAG_MAX_PROMPT_REFERENCE_ITEMS, 64)
       : Number.POSITIVE_INFINITY,
@@ -185,7 +188,12 @@ export function buildRagRulingPromptBundle({
     ruleQueryPlanDiagnostics,
     warnings,
     promptChars: prompt.length,
-    promptTruncated: warnings.some((warning) => warning.includes("truncated") || warning.includes("compacted")),
+    // Repacking complete records into a smaller envelope is not itself text
+    // truncation.  Per-record body loss is reported by
+    // appendSerializedEvidenceTruncationWarnings; the frozen audit separately
+    // verifies the complete user question, resolved card texts and required
+    // evidence identities.
+    promptTruncated: warnings.some((warning) => warning.includes("truncated")),
     authoritativeOfficialDirectId: null,
   };
 }
@@ -610,6 +618,10 @@ function prepareEvidenceForPrompt(
     rawRelatedEvidence: projectPromptEvidence(evidence.rawRelatedEvidence, limits.maxEvidenceTextChars, "raw_related", focusCardIds),
   };
   if (authoritativeDirectId) return prepared;
+  if (!Number.isFinite(limits.maxReferenceChars)
+      && !Number.isFinite(limits.maxReferenceItems)) {
+    return prepared;
+  }
   return limitPreparedReferenceEvidence(prepared, {
     maxChars: limits.maxReferenceChars,
     maxItems: limits.maxReferenceItems,

@@ -501,7 +501,7 @@ test("only the emergency compact prompt may abbreviate the question and card tex
   assert.match(payload.resolvedCards[0].effectText, /EMERGENCY_CARD_TAIL$/u);
 });
 
-test("the actual 36k prompt budgets references before rendering and keeps the top official QA complete", () => {
+test("the actual 36k prompt repacks whole references and keeps the top official QA complete", () => {
   const completeAnswer = [
     "TOP_OFFICIAL_ANSWER_HEAD",
     "完整官方说明".repeat(420),
@@ -553,8 +553,8 @@ test("the actual 36k prompt budgets references before rendering and keeps the to
     },
   });
 
-  assert.ok(bundle.warnings.some((warning) => warning.startsWith("prompt_reference_chars_limited:")));
-  assert.ok(!bundle.warnings.includes("rag_prompt_compacted_to_max_chars"));
+  assert.ok(!bundle.warnings.some((warning) => warning.startsWith("prompt_reference_chars_limited:")));
+  assert.ok(bundle.warnings.includes("rag_prompt_compacted_to_max_chars"));
   assert.equal(bundle.promptTruncated, false);
   assert.ok(bundle.prompt.length <= 36000);
   const payload = parsePromptPayload(bundle.prompt);
@@ -571,6 +571,61 @@ test("the actual 36k prompt budgets references before rendering and keeps the to
   const actualIds = [...new Set(evidenceItems.map((item) => String(item.id || "")).filter(Boolean))].sort();
   assert.deepEqual([...payload.allowedEvidenceIds].sort(), actualIds);
   assert.deepEqual([...bundle.allowedEvidenceIds].sort(), actualIds);
+});
+
+test("the default reference budget uses actual rendered capacity instead of a fixed prompt percentage", () => {
+  const firstAnswer = `FIRST_COMPLETE_HEAD ${"完整资料甲".repeat(1800)} FIRST_COMPLETE_TAIL`;
+  const secondAnswer = `SECOND_COMPLETE_HEAD ${"完整资料乙".repeat(1800)} SECOND_COMPLETE_TAIL`;
+  const references = [{
+    id: "actual-capacity-reference-a",
+    type: "related",
+    recordType: "qa",
+    official: true,
+    sourceAuthority: "official_database",
+    title: "匿名完整资料甲",
+    question: "匿名场面中的第一个处理如何进行？",
+    answer: firstAnswer,
+    retrievalScore: 0.99,
+  }, {
+    id: "actual-capacity-reference-b",
+    type: "related",
+    recordType: "qa",
+    official: true,
+    sourceAuthority: "official_database",
+    title: "匿名完整资料乙",
+    question: "匿名场面中的第二个处理如何进行？",
+    answer: secondAnswer,
+    retrievalScore: 0.98,
+  }];
+  const bundle = buildRagRulingPromptBundle({
+    userQuery: "请同时核对匿名场面的两个处理。",
+    cardResolution: {
+      resolvedCards: [{ id: "actual-capacity-card", name: "匿名对象", effectText: "依次进行两个处理。" }],
+      unresolvedMentions: [],
+      ambiguousMentions: [],
+    },
+    evidence: {
+      officialQaDirectCandidates: [],
+      officialQaRelated: references,
+      provisionalOfficialResponses: [],
+      faqRelated: [],
+      cardTexts: [],
+      userProvidedCardTexts: [],
+      rawRelatedEvidence: [],
+    },
+    env: {
+      RAG_MAX_PROMPT_CHARS: "36000",
+      RAG_MAX_EVIDENCE_TEXT_CHARS: "12000",
+    },
+  });
+
+  assert.ok(bundle.prompt.length <= 36000);
+  assert.ok(bundle.allowedEvidenceIds.includes(references[0].id));
+  assert.ok(bundle.allowedEvidenceIds.includes(references[1].id));
+  assert.match(bundle.prompt, /FIRST_COMPLETE_TAIL/u);
+  assert.match(bundle.prompt, /SECOND_COMPLETE_TAIL/u);
+  assert.ok(!bundle.warnings.some((warning) => warning.startsWith("prompt_reference_chars_limited:")));
+  assert.equal(bundle.promptTruncated, false);
 });
 
 test("an official body above the projection limit is restored in full when the 36k prompt can hold it", () => {

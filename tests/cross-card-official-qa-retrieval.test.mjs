@@ -264,6 +264,89 @@ test("strict official card FAQs use the bounded cross-card reserve without becom
   ));
 });
 
+test("card FAQ identity keeps explicit ownership and ignores body or answer mentions", async () => {
+  const current = syntheticCard("54501", "匿名归属目标", "这张卡的处理需要查询 FAQ。");
+  const other = syntheticCard("54502", "匿名正文来源", "这张卡会提及其他卡片。");
+  const ownedFaq = {
+    id: "card-faq-anonymous-owned",
+    recordType: "card-faq",
+    title: "匿名归属目标 FAQ",
+    text: "这份 FAQ 明确属于当前卡片。",
+    answer: "按 FAQ 正文处理。",
+    cardIds: [current.id],
+    cards: [current.name],
+  };
+  const mentionOnlyFaq = {
+    id: "card-faq-anonymous-mention-only",
+    recordType: "card-faq",
+    title: "匿名正文来源 FAQ",
+    text: `正文仅举例提到「${current.name}」与「<<${current.id}>>」。`,
+    answer: `答案再次提到「<<${current.id}>>」，但不改变 FAQ 归属。`,
+    cardIds: [other.id],
+    cards: [other.name],
+  };
+
+  const evidence = await retrieveRagEvidence({
+    userQuery: `「${current.name}」的 FAQ 如何处理？`,
+    cardResolution: {
+      resolvedCards: [current],
+      unresolvedMentions: [],
+      ambiguousMentions: [],
+      userProvidedCardTexts: [],
+    },
+    cards: [current, other],
+    records: [],
+    qaRecords: [ownedFaq, mentionOnlyFaq],
+    enableLiveOfficialQa: false,
+    env: { RAG_LIVE_OFFICIAL_QA: "false", RAG_MAX_RELATED_EVIDENCE: "4" },
+  });
+
+  const faqById = new Map(evidence.faqRelated.map((item) => [item.id, item]));
+  assert.ok(faqById.has(ownedFaq.id));
+  assert.ok(!faqById.has(mentionOnlyFaq.id));
+  assert.deepEqual(faqById.get(ownedFaq.id).cardIds, [current.id]);
+});
+
+test("card FAQ question mentions remain cross-card related-only", async () => {
+  const current = syntheticCard("54601", "匿名问题目标", "这张卡可能涉及破坏代替。");
+  const owner = syntheticCard("54602", "匿名 FAQ 归属", "这张卡拥有对应 FAQ。");
+  const crossCardFaq = {
+    id: "card-faq-anonymous-cross-card",
+    recordType: "card-faq",
+    title: "破坏被代替后的处理",
+    question: `「<<${current.id}>>」将被破坏时适用代替处理而没有被破坏，之后能否特殊召唤？`,
+    rawQuestion: `「<<${current.id}>>」将被破坏时适用代替处理而没有被破坏，之后能否特殊召唤？`,
+    rawDetailedQuestion: `「<<${current.id}>>」将被破坏时适用代替处理而没有被破坏，之后能否特殊召唤？`,
+    answer: `可以参照处理；答案提到「<<${current.id}>>」不改变归属。`,
+    cardIds: [owner.id],
+    cards: [owner.name],
+  };
+
+  const evidence = await retrieveRagEvidence({
+    userQuery: `「${current.name}」将被破坏时适用代替处理而没有被破坏，之后能否特殊召唤？`,
+    cardResolution: {
+      resolvedCards: [current],
+      unresolvedMentions: [],
+      ambiguousMentions: [],
+      userProvidedCardTexts: [],
+    },
+    cards: [current, owner],
+    records: [],
+    qaRecords: [crossCardFaq],
+    ruleSearchQueries: [{ query: "破坏代替 没有被破坏 特殊召唤 发动条件" }],
+    enableLiveOfficialQa: false,
+    env: { RAG_LIVE_OFFICIAL_QA: "false", RAG_MAX_RELATED_EVIDENCE: "4" },
+  });
+
+  assert.ok(!evidence.faqRelated.some((item) => item.id === crossCardFaq.id));
+  const related = evidence.officialQaRelated.find((item) => item.id === crossCardFaq.id);
+  assert.ok(related);
+  assert.deepEqual(related.cardIds, [owner.id]);
+  assert.equal(related.isDirect, false);
+  assert.equal(related.retrievalContext.scope, "cross_card_official_mechanism");
+  assert.equal(related.retrievalContext.relatedOnly, true);
+});
+
 test("independent supplemental queries preserve distinct strict mechanisms over generic decoys", async () => {
   const current = syntheticCard("55001", "虚构查询锚点", "这张卡的处理会改变当前状态。");
   const replacement = {

@@ -1304,6 +1304,7 @@ function normalizeCard(card = {}) {
 
 function normalizeRecord(record = {}) {
   const id = String(record.id || record.evidenceId || record.stableId || record.sourceId || "");
+  const recordType = record.recordType || inferRecordType(record, id);
   const answer = record.answer || record.conclusion || "";
   const questionProjection = projectOfficialQaQuestion(record);
   const structuredQaText = record.question && answer
@@ -1316,24 +1317,21 @@ function normalizeRecord(record = {}) {
       ].filter(Boolean).join("\n").trim()
     : "";
   const text = structuredQaText || String(record.text || record.officialText || record.question || answer || record.title || "").trim();
-  const metadataCardIds = [...new Set([
-    record.cardId,
-    ...(record.metadataCardIds || record.cardIds || []),
-    ...(record.cards || []).filter((value) => /^\d+$/u.test(String(value || "").trim())),
-  ].map((item) => String(item || "")).filter(Boolean))];
+  const metadataCardIds = structuredRecordOwnershipCardIds(record);
   const cardIds = [...new Set([
     ...metadataCardIds,
-    ...(record.cardIds || []),
-    ...extractInlineCardIds(text),
+    ...(recordType === "card-faq" ? [] : extractInlineCardIds(text)),
   ].map((item) => String(item || "")).filter(Boolean))];
-  const questionCardIds = [...new Set(questionProjection.principalCardIds
+  const questionCardIds = [...new Set((recordType === "card-faq"
+    ? metadataCardIds
+    : questionProjection.principalCardIds)
     .map((item) => String(item || ""))
     .filter(Boolean))];
   const cards = [record.cardName, ...(record.cards || []), ...(record.cardNames || [])].filter(Boolean);
   return {
     ...record,
     id,
-    recordType: record.recordType || inferRecordType(record, id),
+    recordType,
     title: record.title || record.question || id,
     question: record.question || questionProjection.scenarioText || "",
     answer: record.answer || record.conclusion || questionProjection.answerText || "",
@@ -1345,6 +1343,35 @@ function normalizeRecord(record = {}) {
     sourceUrl: evidenceSourceUrl({ ...record, cardIds }),
     status: record.status || "current",
   };
+}
+
+function structuredRecordOwnershipCardIds(record = {}) {
+  const declaredIds = Array.isArray(record.metadataCardIds)
+    ? record.metadataCardIds
+    : record.metadataCardIds || record.cardIds;
+  const cardValues = Array.isArray(record.cards) ? record.cards : [];
+  return [...new Set([
+    record.cardId,
+    ...(Array.isArray(declaredIds) ? declaredIds : [declaredIds]),
+    ...cardValues.map((value) => (
+      value && typeof value === "object"
+        ? value.cardId || value.id
+        : /^\d+$/u.test(String(value || "").trim()) ? value : ""
+    )),
+  ].map((item) => String(item || "").trim()).filter(Boolean))];
+}
+
+function structuredRecordOwnershipCardNames(record = {}) {
+  const cardValues = Array.isArray(record.cards) ? record.cards : [];
+  return [...new Set([
+    record.cardName,
+    ...cardValues.flatMap((value) => (
+      value && typeof value === "object"
+        ? [value.name, value.cnName, value.jaName, value.jpName, value.enName]
+        : /^\d+$/u.test(String(value || "").trim()) ? [] : [value]
+    )),
+    ...(Array.isArray(record.cardNames) ? record.cardNames : [record.cardNames]),
+  ].map((item) => String(item || "").trim()).filter(Boolean))];
 }
 
 function inferRecordType(record, id) {
@@ -2766,6 +2793,11 @@ function hasSevereQuestionIdentityMismatch(match = {}, resolvedCardCount = 0) {
 }
 
 function principalQuestionCardIds(record = {}) {
+  if (record.recordType === "card-faq") {
+    return new Set(structuredRecordOwnershipCardIds(record)
+      .map(normalizeId)
+      .filter(Boolean));
+  }
   return new Set(projectOfficialQaQuestion(record).principalCardIds
     .map(normalizeId)
     .filter(Boolean));
@@ -2908,8 +2940,14 @@ function scoreRecord(record, {
   const questionCardIdCoverage = resolvedIds.size
     ? matchedQuestionCardIds.length / resolvedIds.size
     : 0;
-  const cardNameMatch = normalizedCardNames.some((name) => resolvedNames.has(name)) || [...resolvedNames].some((name) => name.length >= 3 && !hasNumberedCardIdentityConflict(name, text) && textKey.includes(name));
-  const unresolvedNameMatch = [...unresolvedNames].some((name) => name.length >= 3 && !hasNumberedCardIdentityConflict(name, text) && textKey.includes(name));
+  const allowUnstructuredCardNameMatch = record.recordType !== "card-faq";
+  const cardNameMatch = normalizedCardNames.some((name) => resolvedNames.has(name))
+    || (
+      allowUnstructuredCardNameMatch
+      && [...resolvedNames].some((name) => name.length >= 3 && !hasNumberedCardIdentityConflict(name, text) && textKey.includes(name))
+    );
+  const unresolvedNameMatch = allowUnstructuredCardNameMatch
+    && [...unresolvedNames].some((name) => name.length >= 3 && !hasNumberedCardIdentityConflict(name, text) && textKey.includes(name));
   const cardScore = cardIdMatch ? 5 : cardNameMatch ? 4 : unresolvedNameMatch ? 2 : 0;
   if (!allowNoCardMatch && resolvedIds.size + resolvedNames.size > 0 && !cardScore) {
     return emptyRecordScore();
@@ -3078,7 +3116,9 @@ function retrievalQuestionFeatures(record = {}) {
     rankingIdentity,
     questionProjection,
     questionText,
-    questionCardIds: new Set(questionProjection.principalCardIds
+    questionCardIds: new Set((record.recordType === "card-faq"
+      ? structuredRecordOwnershipCardIds(record)
+      : questionProjection.principalCardIds)
       .map(normalizeId)
       .filter(Boolean)),
     evidenceEffectNumbers: extractEffectNumbers(evidenceText),
@@ -3096,8 +3136,27 @@ function isScenarioOfficialQaRecord(record = {}) {
 }
 
 function retrievalRankingIdentity(record = {}, preparedProjection) {
-  const hasQuestionBoundIdentity = isScenarioOfficialQaRecord(record)
-    || (record.recordType === "card-faq" && hasOfficialQuestionSurface(record));
+  if (record.recordType === "card-faq") {
+    const projection = preparedProjection && typeof preparedProjection === "object"
+      ? preparedProjection
+      : projectOfficialQaQuestion(record);
+    const text = hasOfficialQuestionSurface(record)
+      ? [...new Set([
+          projection.principalText,
+          projection.scenarioText,
+          ...(projection.surfaces || []),
+        ].map((value) => String(value || "").trim()).filter(Boolean))].join("\n")
+      : [record.title || "", record.text || ""].join("\n");
+    return {
+      text,
+      cardIds: structuredRecordOwnershipCardIds(record),
+      cardNames: structuredRecordOwnershipCardNames(record),
+    };
+  }
+  // card-faq has its own ownership-only branch above.  Do not broaden the
+  // question-bound identity rules of unrelated record types merely because
+  // they happen to expose a question-shaped field.
+  const hasQuestionBoundIdentity = isScenarioOfficialQaRecord(record);
   if (!hasQuestionBoundIdentity) {
     return {
       text: [record.title || "", record.text || ""].join("\n"),
