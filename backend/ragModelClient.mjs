@@ -27,7 +27,7 @@ const DEFAULT_JSON_TASK_MAX_OUTPUT_TOKENS = 4000;
 const DEFAULT_RAG_RECOVERY_MAX_OUTPUT_TOKENS = 4096;
 const DEFAULT_LIGHTWEIGHT_EXTRACTION_TIMEOUT_MS = 12000;
 const DEFAULT_RULE_QUERY_EXTRACTION_TIMEOUT_MS = 120000;
-const DEFAULT_RULE_QUERY_EXTRACTION_MAX_OUTPUT_TOKENS = 8192;
+const DEFAULT_RULE_QUERY_EXTRACTION_MAX_OUTPUT_TOKENS = 32000;
 const DEFAULT_DAILY_BUDGET_CNY = 10;
 const DEFAULT_CHATGPT_DAILY_BUDGET_USD = 10;
 const DEFAULT_PRIVATE_EVALUATION_BUDGET_USD = 40;
@@ -2636,11 +2636,19 @@ function optionalPositiveInteger(value) {
 }
 
 function parseStrictJsonObject(rawText) {
+  const parsed = parseStrictJsonValue(rawText);
+  if (Array.isArray(parsed)) {
+    throw new TypeError("JSON task must return a JSON object");
+  }
+  return parsed;
+}
+
+function parseStrictJsonValue(rawText) {
   const normalized = stripJsonCodeFence(String(rawText || "").trim());
   if (!normalized) throw new SyntaxError("JSON task returned empty content");
   const parsed = JSON.parse(normalized);
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw new TypeError("JSON task must return a JSON object");
+  if (!parsed || typeof parsed !== "object") {
+    throw new TypeError("JSON task must return a JSON object or array");
   }
   return parsed;
 }
@@ -2648,18 +2656,19 @@ function parseStrictJsonObject(rawText) {
 function normalizeStrictRagJsonOutput(rawText) {
   let parsed;
   try {
-    parsed = rawText && typeof rawText === "object" && !Array.isArray(rawText)
+    parsed = rawText && typeof rawText === "object"
       ? rawText
-      : parseStrictJsonObject(rawText);
+      : parseStrictJsonValue(rawText);
   } catch {
     return null;
   }
-  const answer = normalizeRagJsonContractObject(parsed);
+  const answer = findUniqueRagAnswerCandidate(parsed);
   if (!answer) {
     // Preserve the existing conservative reasoning-missing wrapper for local
     // or injected callers, but never coerce an illegal verdict level or a
     // non-string conclusion into a valid semantic header.
-    if (RAG_ANSWER_LEVELS.includes(parsed?.answerLevel)
+    if (!Array.isArray(parsed)
+        && RAG_ANSWER_LEVELS.includes(parsed?.answerLevel)
         && typeof parsed?.shortAnswer === "string"
         && parsed.shortAnswer.trim()) {
       return null;
@@ -2675,6 +2684,65 @@ function normalizeStrictRagJsonOutput(rawText) {
     rawText: JSON.stringify(answer),
     normalized: !jsonValuesEqual(parsed, answer),
   };
+}
+
+function findUniqueRagAnswerCandidate(value, maxDepth = 3) {
+  const matches = [];
+  const visited = new Set();
+  const visit = (candidate, depth) => {
+    if (!candidate || typeof candidate !== "object" || visited.has(candidate)) return;
+    visited.add(candidate);
+    if (!Array.isArray(candidate)) {
+      const normalized = normalizeRagJsonContractObject(candidate)
+        || normalizeCompatibleRagJsonContractObject(candidate);
+      if (normalized) matches.push(normalized);
+    }
+    if (depth >= maxDepth) return;
+    if (Array.isArray(candidate)) {
+      if (candidate.length === 1) visit(candidate[0], depth + 1);
+      return;
+    }
+    for (const nested of Object.values(candidate)) {
+      if (nested && typeof nested === "object") visit(nested, depth + 1);
+    }
+  };
+  visit(value, 0);
+  return matches.length === 1 ? matches[0] : null;
+}
+
+function normalizeCompatibleRagJsonContractObject(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  if (value.answerLevel !== undefined && !RAG_ANSWER_LEVELS.includes(value.answerLevel)) {
+    return null;
+  }
+  const shortAnswer = compatibleRagConclusion(value);
+  if (!shortAnswer) return null;
+  // Alias compatibility is only a wire-format recovery. Requiring an actual
+  // explanation prevents an unrelated nested metadata string such as
+  // `status.answer` or `summary.conclusion` from becoming a ruling.
+  if (!normalizeModelReasoning(value).length) return null;
+  return normalizeModelAnswer({
+    ...value,
+    answerLevel: value.answerLevel || "low_confidence_analysis",
+    shortAnswer,
+  });
+}
+
+function compatibleRagConclusion(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return "";
+  const candidates = [
+    value.shortAnswer,
+    value.short_answer,
+    value.finalAnswer,
+    value.final_answer,
+    value.conclusion,
+    value.verdict,
+    typeof value.answer === "string" ? value.answer : "",
+    typeof value.response === "string" ? value.response : "",
+  ];
+  return candidates
+    .map((item) => typeof item === "string" ? item.trim() : "")
+    .find(Boolean) || "";
 }
 
 function normalizeRagJsonContractObject(value) {
