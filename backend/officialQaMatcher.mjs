@@ -30,7 +30,7 @@ const EFFECT_PHRASES = [
   ["after_chain_resolution", /连锁处理后|チェーン処理後|after (?:the )?chain resolves/iu],
   ["copy_effect", /复制效果|同じ効果|copy.*effect/iu],
   ["target", /取对象|选择对象|対象|target/iu],
-  ["card_activation", /卡的发动|カード(?:の発動|を発動)|card activation/iu],
+  ["card_activation", /卡的发动|カード(?:(?:として)?の発動|を発動)|card activation/iu],
   ["effect_activation", /效果发动|効果(?:の発動|が発動)|effect activation/iu],
   ["during_resolution", /效果处理中|処理中|during resolution/iu],
   ["damage_step", /伤害步骤|ダメージステップ|damage step/iu],

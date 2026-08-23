@@ -1,0 +1,515 @@
+import assert from "node:assert/strict";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import test from "node:test";
+import { createHash } from "node:crypto";
+
+import {
+  assertFrozenEvidenceCompleteness,
+  buildFrozenCaseRecord,
+  freezePublicRagFinalInputs,
+  runFrozenPublicRagFinalEffort,
+} from "../scripts/frozen-public-rag-final-effort.mjs";
+
+const TEST_RELAY_BASE_URL = "https://relay.example/v1";
+const TEST_ENV = Object.freeze({
+  RELAY_API_KEY: "test-relay-key",
+  RELAY_BASE_URL: TEST_RELAY_BASE_URL,
+});
+
+function evidenceFixture(question = "网页问题", caseId = "case-001") {
+  const card = {
+    id: "10001",
+    name: "测试卡",
+    effectText: "完整卡片效果文本。",
+  };
+  const qa = {
+    id: "qa-complete-1",
+    recordType: "qa",
+    question: "完整官方问题",
+    rawDetailedQuestion: "完整官方场景",
+    answer: "完整官方答案",
+    text: "",
+    sourceUrl: "https://db.example/qa/1",
+  };
+  const promptPayload = {
+    userQuery: question,
+    resolvedCards: [{ id: card.id, name: card.name, effectText: card.effectText }],
+    evidence: {
+      officialQaRelated: [{
+        id: qa.id,
+        type: "related",
+        recordType: "qa",
+        question: qa.question,
+        detailedScene: qa.rawDetailedQuestion,
+        answer: qa.answer,
+        sourceUrl: qa.sourceUrl,
+        retrievalContext: { relatedOnly: true },
+      }],
+    },
+    allowedEvidenceIds: [qa.id],
+  };
+  const prompt = [
+    "测试普通裁定提示",
+    "本次用户问题、卡片原文与检索资料如下：",
+    JSON.stringify(promptPayload),
+  ].join("\n");
+  const evidenceRequirements = {
+    schemaVersion: 1,
+    cases: {
+      [caseId]: {
+        questionSha256: sha256(question),
+        expectedRoute: "ordinary_rag",
+        requiredResolvedCardIds: [card.id],
+        requiredEvidenceIds: [qa.id],
+        requiredRelatedOnlyEvidenceIds: [qa.id],
+        forbiddenEvidenceIds: ["qa-forbidden"],
+      },
+    },
+  };
+  const data = { cards: [card], qaRecords: [qa], records: [] };
+  return { card, qa, prompt, evidenceRequirements, data };
+}
+
+function auditedRecord({ id = "case-004", question = "测试问题" } = {}) {
+  const fixture = evidenceFixture(question, id);
+  const base = buildFrozenCaseRecord({
+    item: { id, question, sourceBlocks: [4] },
+    captured: {
+      prompt: fixture.prompt,
+      provider: "relay",
+      modelName: "gpt-5.6-sol",
+      maxTokens: 32000,
+      reasoningEffort: "low",
+    },
+    transportContract: testTransportContract(),
+    answer: {
+      resolvedCards: [{ id: fixture.card.id }],
+      usedEvidence: [{ id: fixture.qa.id }],
+      debug: {
+        route: "ordinary_rag",
+        dataRevision: "test-data-revision",
+        evidenceFingerprint: sha256("test-evidence"),
+        finalPromptSha256: sha256(fixture.prompt),
+        promptTruncated: false,
+      },
+    },
+  });
+  const requirement = {
+    ...fixture.evidenceRequirements.cases[id],
+  };
+  const evidenceAudit = assertFrozenEvidenceCompleteness({
+    record: base,
+    requirementContext: {
+      requirement,
+      cardSources: new Map([[fixture.card.id, fixture.card]]),
+      evidenceSources: new Map([[fixture.qa.id, fixture.qa]]),
+    },
+  });
+  return { ...base, evidenceAudit };
+}
+
+function sha256(value) {
+  return createHash("sha256").update(String(value), "utf8").digest("hex");
+}
+
+function testTransportContract(baseUrl = TEST_RELAY_BASE_URL) {
+  const normalized = String(baseUrl).replace(/\/+$/u, "");
+  const endpoint = normalized.endsWith("/chat/completions")
+    ? normalized
+    : `${normalized}/chat/completions`;
+  return {
+    provider: "relay",
+    transport: "chat_completions_sse",
+    outputMode: "plain_text",
+    relayHost: new URL(baseUrl).host,
+    relayEndpointSha256: sha256(endpoint),
+  };
+}
+
+function completedResponse({
+  effort = "low",
+  rawText = "完整裁定",
+  returnedModel = "gpt-5.6-sol",
+  finishReason = "stop",
+  dryRun = false,
+  riskFlags = [],
+  providerFailure = null,
+  warnings = [],
+} = {}) {
+  return {
+    rawText,
+    answer: { shortAnswer: rawText || "失败提示", riskFlags },
+    generationConfig: {
+      requestModel: "gpt-5.6-sol",
+      reasoningEffort: effort,
+      maxOutputTokens: 32000,
+    },
+    tokenUsage: {},
+    dryRun,
+    providerFailure,
+    warnings,
+    generationAttempts: [{ finishReason, responseModel: returnedModel }],
+  };
+}
+
+async function writeBundle(snapshotPath, record) {
+  const bundle = {
+    schemaVersion: 3,
+    kind: "frozen_public_rag_final_inputs",
+    status: "complete",
+    transportContract: record.transportContract,
+    cases: [record],
+    bundleInvariantSha256: sha256(JSON.stringify([{
+      requestInvariantSha256: record.requestInvariantSha256,
+      evidenceAuditSha256: record.evidenceAudit.auditSha256,
+    }])),
+  };
+  await writeFile(snapshotPath, `${JSON.stringify(bundle)}\n`, "utf8");
+}
+
+test("frozen public RAG record excludes the reference answer and binds the exact prompt", () => {
+  const prompt = "PUBLIC_RAG_PROMPT\nREFERENCE_EVIDENCE_TAIL";
+  const record = buildFrozenCaseRecord({
+    item: {
+      id: "case-004",
+      question: "测试问题",
+      referenceAnswer: "绝不能进入冻结包的标准答案",
+      sourceBlocks: [4],
+    },
+    captured: {
+      prompt,
+      provider: "relay",
+      modelName: "gpt-5.6-sol",
+      maxTokens: 32000,
+      reasoningEffort: "low",
+    },
+    transportContract: testTransportContract(),
+    answer: {
+      resolvedCards: [{ id: "23380" }],
+      usedEvidence: [{ id: "qa-decisive" }],
+      debug: {},
+    },
+  });
+
+  assert.equal(record.prompt, prompt);
+  assert.equal(record.model, "gpt-5.6-sol");
+  assert.equal(record.maxCompletionTokens, 32000);
+  assert.equal(Object.hasOwn(record, "referenceAnswer"), false);
+  assert.doesNotMatch(JSON.stringify(record), /绝不能进入冻结包的标准答案/u);
+});
+
+test("freeze sends the same explicit mode, profile, and ruling version as the web page", async () => {
+  const temp = await mkdtemp(path.join(os.tmpdir(), "frozen-public-rag-freeze-"));
+  const datasetPath = path.join(temp, "private-test.txt");
+  const snapshotPath = path.join(temp, "snapshot.json");
+  const privateReference = "绝不能进入公开问题或冻结 Prompt 的裁判答案";
+  await writeFile(datasetPath, `网页问题\n${privateReference}\n`, "utf8");
+  let observedPayload = null;
+  const fixture = evidenceFixture("网页问题", "case-001");
+  const prompt = fixture.prompt;
+
+  await freezePublicRagFinalInputs({
+    datasetPath,
+    snapshotPath,
+    caseIds: ["case-001"],
+    maxCalls: 1,
+    evidenceRequirements: fixture.evidenceRequirements,
+    env: TEST_ENV,
+    loadEvidenceData: async () => fixture.data,
+    answerPublic: async ({ payload, answerRuling }) => {
+      observedPayload = payload;
+      return { answer: await answerRuling({ question: payload.question }) };
+    },
+    answerRuling: async ({ modelInvoker }) => {
+      await modelInvoker({
+        prompt,
+        provider: "relay",
+        modelName: "gpt-5.6-sol",
+        maxTokens: 32000,
+        reasoningEffort: "low",
+      });
+      return {
+        resolvedCards: [{ id: fixture.card.id }],
+        usedEvidence: [{ id: fixture.qa.id }],
+        debug: {
+          route: "ordinary_rag",
+          dataRevision: "test-data-revision",
+          evidenceFingerprint: sha256("test-evidence"),
+          finalPromptSha256: sha256(prompt),
+          promptTruncated: false,
+        },
+      };
+    },
+    log: () => {},
+  });
+
+  assert.deepEqual(observedPayload, {
+    question: "网页问题",
+    mode: "rag",
+    rulingModelProfile: "relay-gpt-5.6-sol-low",
+    rulingVersion: "latest",
+  });
+  const snapshotText = await readFile(snapshotPath, "utf8");
+  assert.doesNotMatch(snapshotText, new RegExp(privateReference, "u"));
+  const snapshot = JSON.parse(snapshotText);
+  assert.equal(snapshot.cases[0].evidenceAudit.status, "complete");
+  assert.equal(Object.hasOwn(snapshot, "datasetDigest"), false);
+});
+
+test("reference answers cannot change the question-only frozen input digest", async () => {
+  const temp = await mkdtemp(path.join(os.tmpdir(), "frozen-public-rag-reference-"));
+  const fixture = evidenceFixture("同一个网页问题", "case-001");
+  const freeze = async (referenceAnswer, suffix) => {
+    const datasetPath = path.join(temp, `private-${suffix}.txt`);
+    const snapshotPath = path.join(temp, `snapshot-${suffix}.json`);
+    await writeFile(datasetPath, `同一个网页问题\n${referenceAnswer}\n`, "utf8");
+    await freezePublicRagFinalInputs({
+      datasetPath,
+      snapshotPath,
+      caseIds: ["case-001"],
+      maxCalls: 1,
+      evidenceRequirements: fixture.evidenceRequirements,
+      env: TEST_ENV,
+      loadEvidenceData: async () => fixture.data,
+      answerPublic: async ({ payload, answerRuling }) => ({
+        answer: await answerRuling({ question: payload.question }),
+      }),
+      answerRuling: async ({ modelInvoker }) => {
+        await modelInvoker({
+          prompt: fixture.prompt,
+          provider: "relay",
+          modelName: "gpt-5.6-sol",
+          maxTokens: 32000,
+          reasoningEffort: "low",
+        });
+        return {
+          resolvedCards: [{ id: fixture.card.id }],
+          usedEvidence: [{ id: fixture.qa.id }],
+          debug: {
+            route: "ordinary_rag",
+            dataRevision: "test-data-revision",
+            evidenceFingerprint: sha256("test-evidence"),
+            finalPromptSha256: sha256(fixture.prompt),
+            promptTruncated: false,
+          },
+        };
+      },
+      log: () => {},
+    });
+    return JSON.parse(await readFile(snapshotPath, "utf8"));
+  };
+
+  const first = await freeze("第一个标准答案", "a");
+  const second = await freeze("完全不同的第二个标准答案", "b");
+  assert.equal(first.questionDatasetDigest, second.questionDatasetDigest);
+  assert.equal(first.cases[0].promptUtf8Sha256, second.cases[0].promptUtf8Sha256);
+  assert.equal(first.cases[0].evidenceAudit.auditSha256, second.cases[0].evidenceAudit.auditSha256);
+});
+
+test("source-backed evidence audit rejects a silently shortened card text", () => {
+  const fixture = evidenceFixture("测试问题", "case-004");
+  const shortenedPrompt = fixture.prompt.replace(fixture.card.effectText, "不完整卡文");
+  const record = buildFrozenCaseRecord({
+    item: { id: "case-004", question: "测试问题", sourceBlocks: [4] },
+    captured: {
+      prompt: shortenedPrompt,
+      provider: "relay",
+      modelName: "gpt-5.6-sol",
+      maxTokens: 32000,
+      reasoningEffort: "low",
+    },
+    transportContract: testTransportContract(),
+    answer: {
+      resolvedCards: [{ id: fixture.card.id }],
+      usedEvidence: [{ id: fixture.qa.id }],
+      debug: {
+        route: "ordinary_rag",
+        dataRevision: "test-data-revision",
+        evidenceFingerprint: sha256("test-evidence"),
+        finalPromptSha256: sha256(shortenedPrompt),
+        promptTruncated: false,
+      },
+    },
+  });
+  assert.throws(() => assertFrozenEvidenceCompleteness({
+    record,
+    requirementContext: {
+      requirement: fixture.evidenceRequirements.cases["case-004"],
+      cardSources: new Map([[fixture.card.id, fixture.card]]),
+      evidenceSources: new Map([[fixture.qa.id, fixture.qa]]),
+    },
+  }), /effect text is incomplete/u);
+});
+
+test("low and medium replay reuse every frozen request field except reasoning effort", async () => {
+  const temp = await mkdtemp(path.join(os.tmpdir(), "frozen-public-rag-"));
+  const snapshotPath = path.join(temp, "snapshot.json");
+  const record = auditedRecord();
+  const prompt = record.prompt;
+  await writeBundle(snapshotPath, record);
+
+  const observed = [];
+  const callModel = async (request) => {
+    observed.push({
+      prompt: request.prompt,
+      reasoningEffort: request.reasoningEffort,
+      outputMode: request.outputMode,
+      model: request.env.RAG_MODEL,
+      maxOutputTokens: request.env.RAG_MAX_OUTPUT_TOKENS,
+      relayBaseUrl: request.env.RELAY_BASE_URL,
+    });
+    return completedResponse({
+      effort: request.reasoningEffort,
+      rawText: `answer-${request.reasoningEffort}`,
+    });
+  };
+
+  for (const effort of ["low", "medium"]) {
+    await runFrozenPublicRagFinalEffort({
+      snapshotPath,
+      outputPath: path.join(temp, `${effort}.json`),
+      effort,
+      caseIds: ["case-004"],
+      maxCalls: 1,
+      env: TEST_ENV,
+      callModel,
+      log: () => {},
+    });
+  }
+
+  assert.deepEqual(observed, [{
+    prompt,
+    reasoningEffort: "low",
+    outputMode: "plain_text",
+    model: "gpt-5.6-sol",
+    maxOutputTokens: "32000",
+    relayBaseUrl: TEST_RELAY_BASE_URL,
+  }, {
+    prompt,
+    reasoningEffort: "medium",
+    outputMode: "plain_text",
+    model: "gpt-5.6-sol",
+    maxOutputTokens: "32000",
+    relayBaseUrl: TEST_RELAY_BASE_URL,
+  }]);
+  const low = JSON.parse(await readFile(path.join(temp, "low.json"), "utf8"));
+  const medium = JSON.parse(await readFile(path.join(temp, "medium.json"), "utf8"));
+  assert.equal(low.results[0].promptUtf8Sha256, medium.results[0].promptUtf8Sha256);
+  assert.equal(low.results[0].messagesSha256, medium.results[0].messagesSha256);
+  assert.equal(low.results[0].requestInvariantSha256, medium.results[0].requestInvariantSha256);
+  assert.equal(low.scoringAnswerField, "displayedAnswer");
+  assert.equal(low.endToEndWebParity, false);
+});
+
+test("replay fails closed before dispatch when the Relay endpoint differs from the snapshot", async () => {
+  const temp = await mkdtemp(path.join(os.tmpdir(), "frozen-public-rag-endpoint-"));
+  const snapshotPath = path.join(temp, "snapshot.json");
+  const record = auditedRecord();
+  await writeBundle(snapshotPath, record);
+  let calls = 0;
+
+  await assert.rejects(() => runFrozenPublicRagFinalEffort({
+    snapshotPath,
+    outputPath: path.join(temp, "result.json"),
+    effort: "low",
+    caseIds: ["case-004"],
+    maxCalls: 1,
+    env: { RELAY_API_KEY: "test", RELAY_BASE_URL: "https://different.example/v1" },
+    callModel: async () => {
+      calls += 1;
+      return completedResponse();
+    },
+    log: () => {},
+  }), /endpoint or transport differs/u);
+  assert.equal(calls, 0);
+});
+
+test("replay preflights every selected evidence audit before the first final call", async () => {
+  const temp = await mkdtemp(path.join(os.tmpdir(), "frozen-public-rag-preflight-"));
+  const snapshotPath = path.join(temp, "snapshot.json");
+  const first = auditedRecord({ id: "case-004", question: "第一个问题" });
+  const second = auditedRecord({ id: "case-018", question: "第二个问题" });
+  const damagedSecond = {
+    ...second,
+    evidenceAudit: { ...second.evidenceAudit, status: "damaged" },
+  };
+  const records = [first, damagedSecond];
+  await writeFile(snapshotPath, `${JSON.stringify({
+    schemaVersion: 3,
+    kind: "frozen_public_rag_final_inputs",
+    status: "complete",
+    transportContract: first.transportContract,
+    cases: records,
+    bundleInvariantSha256: sha256(JSON.stringify(records.map((record) => ({
+      requestInvariantSha256: record.requestInvariantSha256,
+      evidenceAuditSha256: record.evidenceAudit.auditSha256,
+    })))),
+  })}\n`, "utf8");
+  let calls = 0;
+  await assert.rejects(() => runFrozenPublicRagFinalEffort({
+    snapshotPath,
+    outputPath: path.join(temp, "result.json"),
+    effort: "low",
+    caseIds: ["case-004", "case-018"],
+    maxCalls: 2,
+    env: TEST_ENV,
+    callModel: async () => {
+      calls += 1;
+      return completedResponse();
+    },
+    log: () => {},
+  }), /no completed evidence audit/u);
+  assert.equal(calls, 0);
+});
+
+test("provider failure, empty or truncated output, and returned-model drift are never completed", async (t) => {
+  const failures = [{
+    name: "dry run without dispatch",
+    response: completedResponse({ dryRun: true }),
+  }, {
+    name: "provider failure",
+    response: completedResponse({
+      rawText: "",
+      providerFailure: { code: "relay_stream_timeout" },
+    }),
+  }, {
+    name: "empty output",
+    response: completedResponse({ rawText: "" }),
+  }, {
+    name: "truncated output",
+    response: completedResponse({
+      rawText: "部分正文",
+      finishReason: "length",
+      riskFlags: ["model_output_not_displayable"],
+    }),
+  }, {
+    name: "returned-model drift",
+    response: completedResponse({ returnedModel: "gpt-5.6-terra" }),
+  }];
+
+  for (const [index, failure] of failures.entries()) {
+    await t.test(failure.name, async () => {
+      const temp = await mkdtemp(path.join(os.tmpdir(), `frozen-public-rag-failure-${index}-`));
+      const snapshotPath = path.join(temp, "snapshot.json");
+      const outputPath = path.join(temp, "result.json");
+      const record = auditedRecord();
+      await writeBundle(snapshotPath, record);
+
+      await assert.rejects(() => runFrozenPublicRagFinalEffort({
+        snapshotPath,
+        outputPath,
+        effort: "low",
+        caseIds: ["case-004"],
+        maxCalls: 1,
+        env: TEST_ENV,
+        callModel: async () => failure.response,
+        log: () => {},
+      }));
+      const result = JSON.parse(await readFile(outputPath, "utf8"));
+      assert.equal(result.results[0].status, "failed_non_scorable");
+      assert.notEqual(result.results[0].status, "completed");
+    });
+  }
+});

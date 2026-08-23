@@ -79,14 +79,26 @@ export function buildRagRulingPromptBundle({
   env = {},
 } = {}) {
   const warnings = [];
+  const maxPromptChars = readNumber(env.RAG_MAX_PROMPT_CHARS, 36000);
+  const hasLegacyReferenceItemLimit = Object.hasOwn(env, "RAG_MAX_PROMPT_REFERENCE_ITEMS")
+    && String(env.RAG_MAX_PROMPT_REFERENCE_ITEMS || "").trim() !== "";
   const limits = {
     maxCards: readNumber(env.RAG_MAX_CARDS, 6),
     maxOfficialQa: readNumber(env.RAG_MAX_OFFICIAL_QA, 7),
     maxRelatedEvidence: readNumber(env.RAG_MAX_RELATED_EVIDENCE, 14),
-    maxReferenceItems: readNumber(env.RAG_MAX_PROMPT_REFERENCE_ITEMS, 64),
+    // Production selection is bounded by the serialized reference envelope,
+    // not by an arbitrary item count.  Preserve the old explicit override for
+    // compatibility with bounded tests and deployments that still set it.
+    maxReferenceChars: readNumber(
+      env.RAG_MAX_PROMPT_REFERENCE_CHARS,
+      Math.max(6000, Math.floor(maxPromptChars * 0.45)),
+    ),
+    maxReferenceItems: hasLegacyReferenceItemLimit
+      ? readNumber(env.RAG_MAX_PROMPT_REFERENCE_ITEMS, 64)
+      : Number.POSITIVE_INFINITY,
     maxCardTextChars: readNumber(env.RAG_MAX_CARD_TEXT_CHARS, 3200),
     maxEvidenceTextChars: readNumber(env.RAG_MAX_EVIDENCE_TEXT_CHARS, 2800),
-    maxPromptChars: readNumber(env.RAG_MAX_PROMPT_CHARS, 36000),
+    maxPromptChars,
   };
   const authoritativeDirect = selectAuthoritativeOfficialDirectCandidate({
     candidates: evidence.officialQaDirectCandidates || [],
@@ -598,7 +610,11 @@ function prepareEvidenceForPrompt(
     rawRelatedEvidence: projectPromptEvidence(evidence.rawRelatedEvidence, limits.maxEvidenceTextChars, "raw_related", focusCardIds),
   };
   if (authoritativeDirectId) return prepared;
-  return limitPreparedReferenceEvidence(prepared, limits.maxReferenceItems, warnings);
+  return limitPreparedReferenceEvidence(prepared, {
+    maxChars: limits.maxReferenceChars,
+    maxItems: limits.maxReferenceItems,
+    focusCardIds,
+  }, warnings);
 }
 
 function evidenceSharesFocusCard(item = {}, focusCardIds = []) {
@@ -620,14 +636,48 @@ function omitRepeatedResolvedCardText(items = [], focusCardIds = []) {
     : item);
 }
 
-function limitPreparedReferenceEvidence(prepared = {}, limit = 64, warnings = []) {
-  const safeLimit = Math.max(1, Math.floor(Number(limit) || 64));
+function limitPreparedReferenceEvidence(prepared = {}, {
+  maxChars = 16000,
+  maxItems = Number.POSITIVE_INFINITY,
+  focusCardIds = [],
+} = {}, warnings = []) {
+  const safeCharBudget = Math.max(1, Math.floor(Number(maxChars) || 16000));
+  const requestedItemLimit = Number(maxItems);
+  const safeItemLimit = Number.isFinite(requestedItemLimit)
+    ? Math.max(1, Math.floor(requestedItemLimit || 1))
+    : Number.MAX_SAFE_INTEGER;
   const referenceOnly = {
     ...prepared,
     cardTexts: [],
     userProvidedCardTexts: [],
   };
-  const selected = selectCompactEvidenceEntries(referenceOnly, { limit: safeLimit });
+  // `selectCompactEvidenceEntries` already deduplicates stable evidence
+  // identities. Do not infer equivalence from similar question or answer text:
+  // distinct official records may deliberately document opposite outcomes.
+  const ranked = selectCompactEvidenceEntries(referenceOnly, {
+    limit: Number.POSITIVE_INFINITY,
+  });
+  const selected = [];
+  let usedChars = 2;
+  for (const entry of ranked) {
+    if (selected.length >= safeItemLimit) break;
+    // Charge the same complete body that the ordinary renderer restores, not
+    // the earlier per-item projection. Otherwise a long decisive record looks
+    // artificially cheap during preselection and forces a later prompt compact.
+    const restoredItem = restorePromptEvidenceBody(
+      entry.item,
+      Number.POSITIVE_INFINITY,
+      focusCardIds,
+    );
+    const serializedChars = JSON.stringify({ bucket: entry.bucket, ...restoredItem }).length
+      + (selected.length ? 1 : 0);
+    // Never replace the highest-priority reference with shorter lower-priority
+    // material merely because it exceeds this preselection budget. The total
+    // prompt compact/fitter owns the exceptional single-record case.
+    if (selected.length > 0 && usedChars + serializedChars > safeCharBudget) continue;
+    selected.push(entry);
+    usedChars += serializedChars;
+  }
   const result = {
     ...prepared,
     ...Object.fromEntries(
@@ -640,7 +690,10 @@ function limitPreparedReferenceEvidence(prepared = {}, limit = 64, warnings = []
     before += (prepared[bucket] || []).length;
   }
   for (const { bucket, item } of selected) result[bucket].push(item);
-  if (before > selected.length) {
+  if (ranked.length > selected.length || usedChars > safeCharBudget) {
+    warnings.push(`prompt_reference_chars_limited:${usedChars}/${safeCharBudget}:${ranked.length}->${selected.length}`);
+  }
+  if (Number.isFinite(requestedItemLimit) && ranked.length > safeItemLimit) {
     warnings.push(`prompt_reference_items_limited:${before}->${selected.length}`);
   }
   return result;
@@ -745,6 +798,11 @@ function projectPromptEvidence(items = [], textLimit, label, focusCardIds = []) 
           || item?.retrievalContext?.modelCandidateAssessment?.premise
           || "",
       ).trim(),
+      // Private selection signal only. It is derived entirely from the
+      // official question/headline and the planner query, never the answer,
+      // and the Symbol metadata is stripped from the serialized prompt.
+      questionBranchHeadlineAnchored:
+        retrievalSignals.questionBranchHeadlineAnchored === true,
     };
     return result;
   });
@@ -1367,6 +1425,8 @@ function compareEvidenceSelectionPriority(left = {}, right = {}) {
   const leftMetadata = left?.item?.[PROMPT_SELECTION_METADATA] || {};
   const rightMetadata = right?.item?.[PROMPT_SELECTION_METADATA] || {};
   return evidenceFactLayerRank(right) - evidenceFactLayerRank(left)
+    || Number(rightMetadata.questionBranchHeadlineAnchored === true)
+      - Number(leftMetadata.questionBranchHeadlineAnchored === true)
     || Number(rightMetadata.retrievalScore || 0) - Number(leftMetadata.retrievalScore || 0)
     || evidenceAuthorityRank(right?.item) - evidenceAuthorityRank(left?.item)
     || Number(rightMetadata.projectedBodyChars || 0) - Number(leftMetadata.projectedBodyChars || 0)
@@ -1519,6 +1579,8 @@ function compactPromptEvidenceItem(item = {}, textLimit, focusCardIds) {
     strictSupplementalQueryKeys: previousMetadata.strictSupplementalQueryKeys || [],
     mechanisms: previousMetadata.mechanisms || [],
     modelPremise: previousMetadata.modelPremise || "",
+    questionBranchHeadlineAnchored:
+      previousMetadata.questionBranchHeadlineAnchored === true,
   };
   return result;
 }
