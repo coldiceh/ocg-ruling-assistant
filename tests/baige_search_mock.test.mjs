@@ -446,7 +446,171 @@ test("a model canonical expansion cannot erase ambiguity in the user's original 
   assert.equal(evidence.cardTexts.length, 0);
   assert.equal(evidence.officialQaDirectCandidates.length, 0);
   assert.equal(evidence.officialQaRelated.length, 0);
-  assert.equal(evidence.baigeResolvedCards[0].externalSurfaceResolution, "canonical_expansion_exact_primary_name");
+  assert.equal(evidence.baigeResolvedCards.length, 0);
+  assert.ok(evidence.retrievalWarnings.some((warning) => (
+    warning.startsWith(`baige_unanchored_canonical_expansion:${canonicalExpansion}->`)
+  )));
+  assert.ok(evidence.cardResolution.ambiguousMentions.some((item) => item.input === userSurface));
+});
+
+test("an anchored exact numbered-name expansion suppresses only a low-confidence local fuzzy identity", async () => {
+  clearBaigeSearchCache();
+  const userSurface = "希望皇霍普";
+  const canonicalExpansion = "No.39 希望皇 霍普";
+  const canonicalCard = {
+    id: "9575",
+    name: "No.39 希望皇ホープ",
+    jaName: "No.39 希望皇ホープ",
+    enName: "Number 39: Utopia",
+    aliases: ["No.39 希望皇ホープ", "Number 39: Utopia"],
+    effectText: "去除这张卡的1个超量素材才能发动。那只怪兽的攻击无效。",
+  };
+  const wrongFuzzyCard = {
+    id: "9914",
+    name: "混沌编号39 希望皇霍普雷",
+    jaName: "CNo.39 希望皇ホープレイ",
+    aliases: ["混沌编号39 希望皇霍普雷", "CNo.39 希望皇ホープレイ"],
+    effectText: "生命值1000以下时可以去除超量素材。",
+  };
+  const cardResolution = {
+    resolvedCards: [],
+    unresolvedMentions: [{
+      input: userSurface,
+      reason: "model_candidate_not_found",
+      searchTexts: [canonicalExpansion],
+    }],
+    ambiguousMentions: [],
+    userProvidedCardTexts: [],
+  };
+  const externalCanonicalCard = {
+    cid: 9575,
+    id: 84013237,
+    cn_name: canonicalExpansion,
+    jp_name: "No.39 希望皇ホープ",
+    en_name: "Number 39: Utopia",
+    text: { desc: canonicalCard.effectText },
+  };
+
+  const evidence = await retrieveRagEvidence({
+    userQuery: `我方用${userSurface}无效了自己的攻击。`,
+    cardResolution,
+    cards: [canonicalCard, wrongFuzzyCard],
+    records: [],
+    qaRecords: [],
+    fetchImpl: async (url) => {
+      const decoded = decodeURIComponent(String(url)).replace(/\+/gu, " ");
+      return decoded.includes(canonicalExpansion)
+        ? jsonResponse({ result: [externalCanonicalCard], next: 0 })
+        : jsonResponse({ result: [], next: 0 });
+    },
+    env: { RAG_LIVE_OFFICIAL_QA: "0" },
+  });
+
+  assert.deepEqual(evidence.retrievedCards.map((card) => card.id), ["9575"]);
+  assert.ok(!evidence.retrievedCards.some((card) => card.id === "9914"));
+  assert.match(evidence.cardTexts[0].text, /攻击无效/u);
+  assert.ok(evidence.retrievalWarnings.some((warning) => (
+    warning.startsWith(`model_expansion_conflict_suppressed:${userSurface}:`)
+  )));
+  assert.ok(!evidence.cardResolution.ambiguousMentions.some((item) => item.input === userSurface));
+});
+
+test("an unanchored exact canonical expansion cannot suppress a conflicting local fuzzy identity", async () => {
+  clearBaigeSearchCache();
+  const userSurface = "希望之星";
+  const canonicalExpansion = "No.39 希望皇 霍普";
+  const unrelatedLocalCard = {
+    id: "7100",
+    name: "希望之星龙",
+    aliases: ["希望之星龙"],
+    effectText: "无关的本地候选。",
+  };
+  const canonicalCard = {
+    id: "9575",
+    name: "编号39 希望皇霍普",
+    aliases: ["编号39 希望皇霍普", "No.39 希望皇ホープ"],
+    effectText: "正确卡文。",
+  };
+  const evidence = await retrieveRagEvidence({
+    userQuery: `${userSurface}可以发动吗？`,
+    cardResolution: {
+      resolvedCards: [],
+      unresolvedMentions: [{ input: userSurface, searchTexts: [canonicalExpansion] }],
+      ambiguousMentions: [],
+      userProvidedCardTexts: [],
+    },
+    cards: [canonicalCard, unrelatedLocalCard],
+    records: [],
+    qaRecords: [],
+    fetchImpl: async (url) => {
+      const decoded = decodeURIComponent(String(url)).replace(/\+/gu, " ");
+      return decoded.includes(canonicalExpansion)
+        ? jsonResponse({
+          result: [{
+            cid: 9575,
+            id: 84013237,
+            cn_name: canonicalExpansion,
+            text: { desc: canonicalCard.effectText },
+          }],
+          next: 0,
+        })
+        : jsonResponse({ result: [], next: 0 });
+    },
+    env: { RAG_LIVE_OFFICIAL_QA: "0" },
+  });
+
+  assert.equal(evidence.retrievedCards.length, 0);
+  assert.equal(evidence.cardTexts.length, 0);
+  assert.ok([
+    ...(evidence.cardResolution.ambiguousMentions || []),
+    ...(evidence.cardResolution.unresolvedMentions || []),
+  ].some((item) => item.input === userSurface));
+  assert.ok(!evidence.retrievalWarnings.some((warning) => warning.startsWith("model_expansion_conflict_suppressed:")));
+});
+
+test("a short family nickname cannot certify an exact canonical expansion", async () => {
+  clearBaigeSearchCache();
+  const userSurface = "霍普";
+  const canonicalExpansion = "No.39 希望皇 霍普";
+  const evidence = await retrieveRagEvidence({
+    userQuery: `${userSurface}可以发动效果吗？`,
+    cardResolution: {
+      resolvedCards: [],
+      unresolvedMentions: [],
+      ambiguousMentions: [{
+        input: userSurface,
+        reason: "local_card_identity_ambiguous",
+        searchTexts: [canonicalExpansion],
+      }],
+      userProvidedCardTexts: [],
+    },
+    cards: [{
+      id: "9575",
+      name: "编号39 希望皇霍普",
+      aliases: ["编号39 希望皇霍普", "No.39 希望皇ホープ"],
+      effectText: "正确卡文。",
+    }],
+    records: [],
+    qaRecords: [],
+    fetchImpl: async (url) => {
+      const decoded = decodeURIComponent(String(url)).replace(/\+/gu, " ");
+      return decoded.includes(canonicalExpansion)
+        ? jsonResponse({
+          result: [{
+            cid: 9575,
+            id: 84013237,
+            cn_name: canonicalExpansion,
+            text: { desc: "正确卡文。" },
+          }],
+          next: 0,
+        })
+        : jsonResponse({ result: [], next: 0 });
+    },
+    env: { RAG_LIVE_OFFICIAL_QA: "0" },
+  });
+
+  assert.equal(evidence.retrievedCards.length, 0);
+  assert.equal(evidence.cardTexts.length, 0);
   assert.ok(evidence.cardResolution.ambiguousMentions.some((item) => item.input === userSurface));
 });
 
