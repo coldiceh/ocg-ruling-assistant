@@ -772,9 +772,7 @@ test("five reported cases reach exactly one final model with complete raw card a
       `${corpusCase.id} must use exactly one final-model generation`,
     );
     assert.equal(answer.shortAnswer, modelShortAnswer.trim(), `${corpusCase.id} must preserve the final model answer`);
-    assert.equal(answer.debug.publicFinalValidation?.callCount, 1, corpusCase.id);
-    assert.equal(answer.debug.publicFinalValidation?.repairAttempted, false, corpusCase.id);
-    assert.equal(answer.debug.publicFinalValidation?.outcome, "primary_valid", corpusCase.id);
+    assert.equal(answer.debug.publicFinalValidation, null, corpusCase.id);
     assert.equal(answer.debug.semanticStateTransition, null, corpusCase.id);
     assert.equal(answer.debug.semanticStateTransitionDiagnostic, null, corpusCase.id);
     assert.equal(answer.debug.deterministicDecision, null, corpusCase.id);

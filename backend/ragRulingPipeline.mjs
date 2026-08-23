@@ -331,6 +331,11 @@ async function answerRagRulingQuestionInternal({
         item.id === authoritativeOfficialDirectId && item.type === "official_qa"
       )),
   );
+  const answerLevel = authoritativeOfficialDirectCompleted
+    ? "official_confirmed"
+    : normalized.answerLevel === "official_confirmed"
+      ? "rule_analysis"
+      : normalized.answerLevel;
   const auxiliaryTokenUsage = sumUsageTelemetry([
     cardNameModel.tokenUsage,
     ruleQueryModel.tokenUsage,
@@ -347,9 +352,7 @@ async function answerRagRulingQuestionInternal({
     // Authority is server-owned. A model cannot promote ordinary evidence to
     // an official ruling, while a completed answer from the already-certified
     // unique direct-Q&A route must not be downgraded by the plain-text adapter.
-    answerLevel: authoritativeOfficialDirectCompleted
-      ? "official_confirmed"
-      : normalized.answerLevel,
+    answerLevel,
     shortAnswer: normalized.shortAnswer,
     reasoning: normalized.reasoning,
     usedEvidence: displayedEvidence,
