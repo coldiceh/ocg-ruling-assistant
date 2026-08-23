@@ -53,8 +53,7 @@ test("public RAG does not let the preparation model sign or veto the final answe
 
   assert.equal(preparationCalls, 0);
   assert.equal(finalCalls, 1);
-  assert.equal(answer.debug.publicFinalValidation.outcome, "primary_valid");
-  assert.equal(answer.debug.publicFinalValidation.callCount, 1);
+  assert.equal(answer.debug.publicFinalValidation, null);
   assert.match(answer.shortAnswer, /^可以连锁发动/u);
   assert.equal(prompts.length, 1);
   assert.doesNotMatch(prompts[0], /这是旧准备模型的判断/u);

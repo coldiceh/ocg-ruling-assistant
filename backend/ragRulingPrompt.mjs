@@ -9,17 +9,6 @@ export const RAG_ANSWER_LEVELS = Object.freeze([
   "budget_limited",
 ]);
 
-const RAG_JSON_SHAPE_EXAMPLE = Object.freeze({
-  answerLevel: "rule_analysis",
-  shortAnswer: "根据现有资料可以给出分析，但不是官方直接裁定。",
-  reasoning: ["核对题面和卡片原文。", "说明检索资料如何适用于本题。"],
-  usedCards: ["示例卡名"],
-  usedEvidence: [{ id: "card-text-example", type: "card_text", title: "示例卡名 的卡片文本" }],
-  missingInfo: [],
-  riskFlags: ["no_official_direct_qa"],
-  confidenceSelfEstimate: "medium",
-});
-
 const EVIDENCE_BUCKET_ORDER = Object.freeze([
   "officialQaDirectCandidates",
   "userProvidedCardTexts",
@@ -64,16 +53,14 @@ const GENERAL_INSTRUCTIONS = Object.freeze([
   "若同一效果在发动时要求存在可执行的后续选择，而处理途中状态又会改变，必须分别枚举发动时的全部合法选项与处理时最终能执行的全部选项。文本允许在多个实体、数值或方向之间选择时，必须逐一核对每个选择方向，不得只举一个可行例子。连续处理按卡文分句逐步执行：对每一步记录由哪个效果实际执行、是否完成以及完成后的状态，再检查下一步及其对前一步的依赖；不得仅因最终状态看似相同就认定原效果完成，也不得用尚未发生的后续状态倒推、省略发动条件，或在没有卡文或资料依据时因后一步失败而撤销已经完成的独立步骤。",
   "核对权限关系：允许、追加、禁止、免疫或替代分别授予或约束谁以及哪一种动作。检查不受影响或免疫时，必须同时核对效果的真实来源、效果类型和受影响实体；无论结果看似有利还是不利都使用同一检查，不得只凭结果倾向决定是否受影响。不能把只针对一种实体或动作的权限/限制扩张到另一种。",
   "遇到次数、攻击次数、追加权限或可再次执行次数，建立显式账本：初始权限、已经使用的次数、本次新增或替换的权限、剩余次数，并逐步核算；不得把已使用的次数重复计入。同一种动作同时受多个‘可以／再一次／最多N次’许可约束时，先依据原文和相关资料判断它们是分别设定上限、覆盖或明确追加；没有明确依据不得默认把许可次数相加。",
-  "如果没有官方直接 Q&A，可以综合卡片原文、FAQ、官方相关 Q&A、用户提供文本和其他资料进行独立规则分析。资料足以推导时输出 rule_analysis，不要仅因没有官方原题就拒绝回答。",
-  "如果决定结论所必需的事实确实缺失或资料相互冲突，明确列入 missingInfo 并给出必要的条件分支；不得用常见场面、历史题目或猜测补齐，也不得虚构确定结论。输出前交叉核对 shortAnswer、reasoning、missingInfo 与各子问题结论，消除互相矛盾的前提、步骤和最终结论。",
+  "如果没有官方直接 Q&A，可以综合卡片原文、FAQ、官方相关 Q&A、用户提供文本和其他资料进行独立规则分析。资料足以推导时给出明确规则分析，不要仅因没有官方原题就拒绝回答。",
+  "如果决定结论所必需的事实确实缺失或资料相互冲突，在正文中明确说明缺少什么并给出必要的条件分支；不得用常见场面、历史题目或猜测补齐，也不得虚构确定结论。输出前交叉核对结论、理由、缺失信息与各子问题，消除互相矛盾的前提、步骤和最终结论。",
   "decisionChecklist 是所有问题共用的内部自检维度，decisionPlan 是查询模型从本题生成的补充核对计划；两者都不是规则证据或预设答案。作答前仅在内部检查适用项，确认每个 subclaim/checkpoint 已由题面、卡文或所给资料处理；不要输出该检查过程，也不要因此编造缺失结论。",
   "不得根据卡名、题号、题型标签或历史答案套用预设结论。每次都从本次用户问题、原始卡文和本次证据重新推理。",
   "不得把 card_text、baige_card_text、user_provided_text、FAQ、rulebook、related evidence 或 rawRelatedEvidence 称为官方直接 Q&A。",
-  "输出必须是单个 JSON 对象，不要 markdown、代码围栏或 JSON 外说明。字段必须包含 answerLevel、shortAnswer、reasoning、usedCards、usedEvidence、missingInfo、riskFlags、confidenceSelfEstimate。",
-  "answerLevel 只能是 official_confirmed、rule_analysis、low_confidence_analysis、needs_more_info；budget_limited 仅供后端预算守卫使用，模型不要主动输出。",
-  "shortAnswer 直接回答全部子问题；reasoning 是至少 2 条非空字符串，说明所依据的原文或资料以及它如何适用于题面。",
-  "usedEvidence 只能引用 allowedEvidenceIds 中真实存在的 id，每项包含 id、type、title；没有实际引用时输出 []，不得自造 id。",
-  "不确定之处写入 missingInfo 和 riskFlags；confidenceSelfEstimate 只是模型自评，不改变证据等级。",
+  "直接输出完整中文裁定正文，不要输出 JSON、代码围栏、字段名或程序状态。先明确回答全部子问题，再说明依据和处理过程。",
+  "如需引用资料，只能引用 allowedEvidenceIds 中真实存在的 id 或对应标题；不得自造来源。",
+  "存在不确定或资料不足时，在正文中直接说明具体缺口和条件分支，不要用格式化失败信息代替裁定。",
 ]);
 
 export function buildRagRulingPrompt({
@@ -401,9 +388,6 @@ export function selectAuthoritativeOfficialDirectCandidate({
 function renderGeneralPrompt(payload) {
   return [
     ...GENERAL_INSTRUCTIONS,
-    `允许的 answerLevel：${RAG_ANSWER_LEVELS.join(", ")}。`,
-    "以下 JSON 只展示字段结构，内容不是本题答案：",
-    JSON.stringify(RAG_JSON_SHAPE_EXAMPLE),
     "本次用户问题、卡片原文与检索资料如下：",
     JSON.stringify(payload, null, 2),
   ].join("\n");
@@ -422,15 +406,13 @@ function buildOfficialDirectPrompt({
   // limits, exceeding the configured target is safer than slicing JSON or
   // dropping the official evidence identity.
   const maxChars = Math.max(600, configuredMaxChars);
-  const arrayFields = "reasoning、usedCards、missingInfo、riskFlags 必须是字符串数组；usedEvidence 必须是对象数组，每项含 id、type、title；无内容也输出 []。";
   const instructions = [
     "你是游戏王 OCG 官方 Q&A 转述助手。检索器已经严格确认下面唯一的 officialQaDirectCandidate 对应用户完整问题。",
     "以该官方 Q&A 为裁定依据，完整回答用户的全部子问题；保留其中所有实质条件、例外、后续处理、次数和限制，不得添加原文没有说明的处理。",
     "decisionChecklist 和 decisionPlan 都不是证据；输出前仅在内部确认适用项均已由该官方 Q&A 处理，不要展示检查过程。",
     "resolvedCards 仅用于理解卡片身份和还原资料中的卡名占位符。",
-    `answerLevel 必须为 official_confirmed；usedEvidence 必须包含 id=${String(directQa.id || "")}、type=official_qa。`,
-    arrayFields,
-    "输出单个 JSON 对象，字段为 answerLevel、shortAnswer、reasoning、usedCards、usedEvidence、missingInfo、riskFlags、confidenceSelfEstimate；不要输出 JSON 外内容。",
+    `正文中注明依据的官方 Q&A ID：${String(directQa.id || "")}。`,
+    "直接输出完整中文裁定正文，不要输出 JSON、代码围栏或字段名。",
   ];
   const cards = resolvedCards.map((card) => ({ id: card.id, name: card.name, aliases: card.aliases || [] }));
   const sourceText = extractCompleteOfficialDirectAnswerText(directQa);
@@ -470,8 +452,7 @@ function buildOfficialDirectPrompt({
   if (prompt.length <= maxChars) return { prompt, truncated: false };
   const compactInstructions = [
     "完整转述唯一精确官方 Q&A，回答全部子问题并保留所有条件、例外、后续处理和限制，不得增删结论。",
-    `输出规定字段的单个 JSON；answerLevel=official_confirmed，usedEvidence 必须引用 official_qa:${String(directQa.id || "")}。`,
-    arrayFields,
+    `直接输出完整中文正文，并注明官方 Q&A ID：${String(directQa.id || "")}。`,
   ];
   const compactCards = cards.slice(0, 6).map((card) => ({ id: card.id, name: card.name }));
   const compactQuery = preserveTextEnds(userQuery, 500);
@@ -488,7 +469,7 @@ function buildOfficialDirectPrompt({
     minimumChars: 80,
   }));
   if (prompt.length > maxChars) {
-    const minimal = ["完整转述给定唯一官方 Q&A；输出规定 JSON 并引用其 official_qa id。", arrayFields];
+    const minimal = ["完整转述给定唯一官方 Q&A；直接输出中文正文并注明其官方 Q&A ID。"];
     const minimalQuery = preserveTextEnds(userQuery, 120);
     const renderMinimal = (text) => render(
       minimal,
@@ -505,7 +486,7 @@ function buildOfficialDirectPrompt({
   }
   if (prompt.length > maxChars) {
     prompt = render(
-      ["完整转述唯一官方 Q&A，输出规定 JSON 并引用其 official_qa id。"],
+      ["完整转述唯一官方 Q&A，直接输出中文正文并注明其官方 Q&A ID。"],
       preserveTextEnds(userQuery, 40),
       [],
       preserveTextEnds(sourceText, 40),
@@ -1202,8 +1183,8 @@ function buildCompactPromptVariants(payload = {}) {
       allowedEvidenceIds: [],
     },
     render: (compactPayload) => [
-      "仅依据用户问题、卡片原文和所给资料，逐个子问题推理并输出规定 JSON；不得编造。先在内部逐项核对 decisionChecklist 和 decisionPlan，但不得把它们当证据或输出检查过程。只有完整对应本题的 official direct Q&A 才可标为 official_confirmed，相关资料与卡文只能支持分析。",
-      "字段：answerLevel、shortAnswer、reasoning、usedCards、usedEvidence、missingInfo、riskFlags、confidenceSelfEstimate。usedEvidence 的 id 只能来自 allowedEvidenceIds。",
+      "仅依据用户问题、卡片原文和所给资料，逐个子问题推理；不得编造。先在内部逐项核对 decisionChecklist 和 decisionPlan，但不得把它们当证据或输出检查过程。只有完整对应本题的 official direct Q&A 才能称为官方直接裁定，相关资料与卡文只能支持分析。",
+      "直接输出完整中文裁定正文，不要 JSON、代码围栏或字段名；引用资料时只能使用 allowedEvidenceIds 中真实存在的 id。",
       JSON.stringify(compactPayload),
     ].join("\n"),
   }, {
@@ -1224,7 +1205,7 @@ function buildCompactPromptVariants(payload = {}) {
       allowedEvidenceIds: [],
     },
     render: (smallestPayload) => [
-      "仅依据下列完整 JSON 回答并输出规定 JSON；先在内部逐项核对 decisionPlan，不得把它当证据或展示检查过程；usedEvidence 的 id 只能来自 allowedEvidenceIds；不得编造。",
+      "仅依据下列资料直接输出完整中文裁定正文；不要输出 JSON 或字段名。先在内部逐项核对 decisionPlan，不得把它当证据或展示检查过程；引用资料时只能使用 allowedEvidenceIds 中真实存在的 id；不得编造。",
       JSON.stringify(smallestPayload),
     ].join("\n"),
   }];

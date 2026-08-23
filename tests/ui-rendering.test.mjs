@@ -1832,9 +1832,13 @@ test("rag UI presents provider failures as model service unavailable in Chinese"
   assert.deepEqual(systemPresentation(["model_output_schema_validation_failed"]), {
     confidence: "生成异常",
     className: "is-risky",
-    title: "裁定生成未通过校验",
-    basis: "模型输出无法解析",
+    title: "裁定生成异常",
+    basis: "最终回答未完整生成",
   });
+  assert.equal(
+    systemPresentation(["model_output_not_displayable"]).basis,
+    "模型未返回完整正文",
+  );
   assert.match(app, /providerFailureState\s*\? "模型服务暂不可用"\s*:\s*\(systemFailureState \? "裁定生成异常" : "分析完成"\)/u);
 });
 

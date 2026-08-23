@@ -12,7 +12,6 @@ import {
 } from "./ragModelClient.mjs";
 import { buildRagRulingPromptBundle } from "./ragRulingPrompt.mjs";
 import { hasNumberedCardIdentityConflict } from "./numberedCardIdentity.mjs";
-import { runValidatedPublicRagFinal } from "./publicRagAnswerValidator.mjs";
 import { retrieveExactOfficialQaDirect } from "./officialQaExactDirect.mjs";
 import { resolveRagDataRevision } from "./ragDataRevisionManifest.mjs";
 import {
@@ -282,42 +281,56 @@ async function answerRagRulingQuestionInternal({
   }
 
   const finalModelStartedAt = Date.now();
-  const modelResult = await runValidatedPublicRagFinal({
-    originalPrompt: promptBundle.prompt,
-    // Citation cleanup must use the same downgraded/limited evidence envelope
-    // that the final model actually saw. Looking at the broader retriever
-    // object here could silently restore direct authority to a semantic-near
-    // Q&A that the prompt deliberately classified as related.
-    evidence: promptBundle.modelEvidence,
-    authoritativeOfficialDirect: promptBundle.authoritativeOfficialDirectId || false,
-    invoke: ({ prompt }) => callRagModel({
-      prompt,
-      // Recovery is deliberately disabled on the pure-LLM public path. The
-      // final-answer gate owns one provider invocation and performs local-only
-      // parsing/validation after it.
-      recoveryPrompt: "",
-      evidence,
-      cardResolution: effectiveCardResolution,
-      env,
-      modelInvoker,
-      dryRun,
-      fetchImpl,
-      now,
-      thinkingMode,
-      reasoningEffort,
-      signal,
-      privateEvaluationDiagnostics,
-    }),
+  const modelResult = await callRagModel({
+    prompt: promptBundle.prompt,
+    recoveryPrompt: "",
+    evidence,
+    cardResolution: effectiveCardResolution,
+    env,
+    modelInvoker,
+    dryRun,
+    fetchImpl,
+    now,
+    thinkingMode,
+    reasoningEffort,
+    outputMode: "plain_text",
+    signal,
+    privateEvaluationDiagnostics,
   });
   timingsMs.finalModel = elapsedMs(finalModelStartedAt);
   timingsMs.total = elapsedMs(pipelineStartedAt);
 
   const publicProviderFailure = sanitizePublicProviderFailure(modelResult.providerFailure);
   const publicGenerationAttempts = sanitizePublicGenerationAttempts(modelResult.generationAttempts);
-  // runValidatedPublicRagFinal applies the display-only contract. The public
-  // path preserves that single model's ruling apart from schema cleaning and
-  // dropping references to evidence that was never supplied.
+  // The model's complete plain-text ruling is transported in shortAnswer for
+  // the existing web/API response shape. No JSON schema or ruling validator is
+  // applied to the model-authored text.
   const normalized = modelResult.answer;
+  // This is the evidence envelope actually supplied to the final model. Do
+  // not rebuild display sources from the broader retriever result because it
+  // can contain items the prompt deliberately downgraded or omitted.
+  const displayedEvidence = selectedPromptEvidenceRefs(
+    promptBundle.modelEvidence,
+    promptBundle.allowedEvidenceIds,
+  );
+  const authoritativeOfficialDirectId = String(
+    promptBundle.authoritativeOfficialDirectId || "",
+  ).trim();
+  const authoritativeOfficialDirectCompleted = Boolean(
+    authoritativeOfficialDirectId
+      && normalized.answerLevel === "rule_analysis"
+      && String(normalized.shortAnswer || "").trim()
+      && !publicProviderFailure
+      && !normalized.riskFlags?.includes("model_output_not_displayable")
+      && promptBundle.allowedEvidenceIds?.includes(authoritativeOfficialDirectId)
+      && promptBundle.modelEvidence?.officialQaDirectCandidates?.some((item) => (
+        String(item?.id || "") === authoritativeOfficialDirectId
+          && String(item?.type || "") === "official_qa"
+      ))
+      && displayedEvidence.some((item) => (
+        item.id === authoritativeOfficialDirectId && item.type === "official_qa"
+      )),
+  );
   const auxiliaryTokenUsage = sumUsageTelemetry([
     cardNameModel.tokenUsage,
     ruleQueryModel.tokenUsage,
@@ -331,14 +344,21 @@ async function answerRagRulingQuestionInternal({
 
   return {
     mode: "rag_baseline",
-    answerLevel: normalized.answerLevel,
+    // Authority is server-owned. A model cannot promote ordinary evidence to
+    // an official ruling, while a completed answer from the already-certified
+    // unique direct-Q&A route must not be downgraded by the plain-text adapter.
+    answerLevel: authoritativeOfficialDirectCompleted
+      ? "official_confirmed"
+      : normalized.answerLevel,
     shortAnswer: normalized.shortAnswer,
     reasoning: normalized.reasoning,
-    usedEvidence: normalized.usedEvidence,
+    usedEvidence: displayedEvidence,
     resolvedCards: displayCards,
     missingInfo: normalized.missingInfo,
     riskFlags: normalized.riskFlags,
-    confidenceSelfEstimate: normalized.confidenceSelfEstimate,
+    confidenceSelfEstimate: authoritativeOfficialDirectCompleted
+      ? "high"
+      : normalized.confidenceSelfEstimate,
     formalQueryResults: [],
     engine: { ...DISABLED_ENGINE },
     engineSimulation: null,
@@ -778,11 +798,48 @@ function firstReturnedModel(attempts = []) {
   return model || null;
 }
 
+function selectedPromptEvidenceRefs(evidence = {}, allowedEvidenceIds = []) {
+  const allowed = new Set((allowedEvidenceIds || [])
+    .map((id) => String(id || "").trim())
+    .filter(Boolean));
+  if (!allowed.size) return [];
+  const buckets = [
+    "officialQaDirectCandidates",
+    "officialQaRelated",
+    "faqRelated",
+    "provisionalOfficialResponses",
+    "cardTexts",
+    "userProvidedCardTexts",
+    "rawRelatedEvidence",
+  ];
+  const byId = new Map();
+  for (const bucket of buckets) {
+    for (const item of Array.isArray(evidence?.[bucket]) ? evidence[bucket] : []) {
+      const id = String(item?.id || "").trim();
+      if (!id || !allowed.has(id) || byId.has(id)) continue;
+      byId.set(id, {
+        id,
+        type: String(item?.type || item?.recordType || "related"),
+        title: String(item?.title || id),
+        sourceUrl: String(item?.sourceUrl || item?.url || ""),
+      });
+    }
+  }
+  return [...allowed].map((id) => byId.get(id)).filter(Boolean);
+}
+
 function assertRelayRuleQueryPlanAvailable(result = {}, { dryRun = false, env = {} } = {}) {
   const forcedDryRun = /^(?:1|true|yes|on)$/iu.test(String(env.RAG_DRY_RUN || "").trim());
   const relayRequired = result.relayRequired === true || result.providerUsed === "relay";
   if (dryRun === true || forcedDryRun || !relayRequired) return;
   if (Array.isArray(result.queries) && result.queries.length > 0) return;
+  const hasUsableCandidateAssessment = (Array.isArray(result.candidateAssessments)
+    ? result.candidateAssessments
+    : []).some((item) => (
+    ["high", "medium"].includes(String(item?.relevance || "").toLowerCase())
+      && ["same", "partial"].includes(String(item?.premise || "").toLowerCase())
+  ));
+  if (hasUsableCandidateAssessment) return;
 
   const warnings = Array.isArray(result.warnings) ? result.warnings.map(String) : [];
   const timedOut = warnings.some((warning) => /timeout|timed out|超时/iu.test(warning));
