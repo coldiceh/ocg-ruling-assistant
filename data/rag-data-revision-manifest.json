@@ -3,8 +3,8 @@
   "kind": "rag-data-revision-manifest",
   "compilerAbi": "rag-data-revision-compiler/v1",
   "canonicalizationAbi": "rag-data-revision-canonical-json-lf/v2",
-  "revision": "e5b902f9dc8f59de5e76a6167e85f25e60505d23557b23b6f81f93f1ec7425bc",
-  "canonicalCorpusDigest": "e5b902f9dc8f59de5e76a6167e85f25e60505d23557b23b6f81f93f1ec7425bc",
+  "revision": "68c852a91549b81d7a57ca55ae5a73c07722bdcb35df4f2543e97297c38a179a",
+  "canonicalCorpusDigest": "68c852a91549b81d7a57ca55ae5a73c07722bdcb35df4f2543e97297c38a179a",
   "sourceSetDigest": "ad7a443ff7db61b5af764bfa95cf3a9edb1c2ad6eebccfc41e19201ec566cb3d",
   "counts": {
     "cards": 14342,
