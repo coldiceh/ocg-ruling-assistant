@@ -106,8 +106,8 @@ jobs:
     outputs:
       archive_created: ${{ steps.private_archive.outputs.created }}
       selected_case_count: ${{ steps.evaluation.outputs.selected_case_count }}
-    # Even 32 consecutive 90-second fail-fast cases fit inside this job cap.
-    # A workflow-level fault therefore cannot remain alive for several hours.
+    # Keep a bounded job-level guard even though each request now mirrors the
+    # Production function window. Healthy runs return as soon as they finish.
     timeout-minutes: 75
     concurrency:
       # All paid private evaluations are globally serial for this repository,
@@ -119,12 +119,11 @@ jobs:
       PUBLIC_RULING_MODEL_PROFILE: relay-gpt-5.6-sol-low
       RELAY_RULE_MODEL: gpt-5.6-sol
       RAG_RULE_MODEL_REASONING_EFFORT: low
-      RELAY_MAX_COMPLETION_TOKENS: "8192"
-      # A healthy Sol-low response normally completes well before this absolute
-      # provider deadline. A stalled stream is aborted instead of occupying the
-      # workflow for several minutes. The evaluator keeps a separate 30-second
-      # margin for extraction, retrieval and HTTP cleanup.
-      RELAY_STREAM_TIMEOUT_MS: "60000"
+      # Match the deployed public answer path. The old evaluation-only 8192
+      # token / 60-second limits could reject a candidate that Production would
+      # still be generating, so they were not a valid accuracy gate.
+      RELAY_MAX_COMPLETION_TOKENS: "32000"
+      RELAY_STREAM_TIMEOUT_MS: "270000"
       API_CHATGPT_DAILY_BUDGET_USD: "10"
       API_DAILY_BUDGET_CNY: "10"
       QUERY_AUDIT_ENABLED: "false"
@@ -287,7 +286,7 @@ jobs:
             "${include_case_args[@]}" \
             --limit "$EVALUATION_LIMIT" \
             "${case_count_args[@]}" \
-            --generation-timeout-ms 90000
+            --generation-timeout-ms 300000
           status=$?
           if [ -s artifacts/pure-llm-private-public-report.json ]; then
             selected_case_count="$(node --input-type=module <<'NODE'

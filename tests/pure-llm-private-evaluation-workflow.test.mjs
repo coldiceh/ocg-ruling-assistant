@@ -35,8 +35,8 @@ test("private pure LLM evaluation is explicitly triggered, serial and generation
   assert.match(workflow, /group: private-pure-llm-evaluation-\$\{\{ github\.repository \}\}/u);
   assert.match(workflow, /cancel-in-progress: false/u);
   assert.match(workflow, /PUBLIC_RULING_MODEL_PROFILE: relay-gpt-5\.6-sol-low/u);
-  assert.match(workflow, /RELAY_MAX_COMPLETION_TOKENS: "8192"/u);
-  assert.match(workflow, /RELAY_STREAM_TIMEOUT_MS: "60000"/u);
+  assert.match(workflow, /RELAY_MAX_COMPLETION_TOKENS: "32000"/u);
+  assert.match(workflow, /RELAY_STREAM_TIMEOUT_MS: "270000"/u);
   assert.doesNotMatch(workflow, /RELAY_LOCAL_STREAM_TIMEOUT_MAX_MS/u);
   assert.match(workflow, /secrets\.RELAY_API_KEY/u);
   assert.match(workflow, /secrets\.PURE_LLM_EVALUATION_DATASET_BASE64/u);
@@ -66,9 +66,12 @@ test("private pure LLM evaluation is explicitly triggered, serial and generation
   assert.match(workflow, /selected_case_count=\$selected_case_count/u);
   assert.match(workflow, /generation_failed=\$generation_failed/u);
   assert.match(workflow, /"\$\{case_count_args\[@\]\}"/u);
-  assert.match(workflow, /--generation-timeout-ms 90000/u);
-  assert.doesNotMatch(workflow, /RELAY_STREAM_TIMEOUT_MS: "(?:240000|270000)"/u);
-  assert.doesNotMatch(workflow, /--generation-timeout-ms (?:300000|330000|600000)/u);
+  assert.match(workflow, /--generation-timeout-ms 300000/u);
+  const relayTimeoutMs = Number(workflow.match(/RELAY_STREAM_TIMEOUT_MS: "(\d+)"/u)?.[1]);
+  const generationTimeoutMs = Number(workflow.match(/--generation-timeout-ms (\d+)/u)?.[1]);
+  assert.equal(relayTimeoutMs, 270_000);
+  assert.equal(generationTimeoutMs, 300_000);
+  assert.ok(generationTimeoutMs > relayTimeoutMs);
   assert.match(workflow, /evaluate-pure-llm-preview\.mjs/u);
   assert.doesNotMatch(workflow, /--auto-judge|--judge-only|--judge-timeout-ms/u);
   assert.doesNotMatch(workflow, /Generate and judge|Judge the|Sol high/iu);

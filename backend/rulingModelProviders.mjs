@@ -1531,7 +1531,15 @@ async function readRelayChatCompletionSse(response, {
       // Best-effort cleanup only.
     }
   }
-  if (!state.done) {
+  // Some OpenAI-compatible relays close a healthy HTTP body immediately after
+  // the terminal choice instead of emitting the optional SSE [DONE] sentinel.
+  // An explicit `finish_reason: stop` plus a clean EOF is a complete model
+  // response; timeout/abort, missing finish reason and length truncation still
+  // fail closed below.
+  const cleanEofAfterStop = !state.done
+    && state.finishReason === "stop"
+    && Boolean(state.content.trim());
+  if (!state.done && !cleanEofAfterStop) {
     throw protocolError("relay stream closed without [DONE]", "relay_stream_incomplete");
   }
   if (!state.chunks) {

@@ -336,7 +336,7 @@ test("CLI modes and HTTP endpoint normalization are explicit", () => {
   ]);
   assert.equal(defaultOptions.generateOnly, true);
   assert.equal(defaultOptions.autoJudge, false);
-  assert.equal(defaultOptions.generationTimeoutMs, 90_000);
+  assert.equal(defaultOptions.generationTimeoutMs, 300_000);
 
   const options = parseCliArguments([
     "--judge-only",

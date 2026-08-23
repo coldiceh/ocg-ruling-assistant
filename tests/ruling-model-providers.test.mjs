@@ -711,6 +711,68 @@ test("relay accepts a complete DONE stream without a nonstandard finish_reason",
   assert.deepEqual(response.usage, { total_tokens: 120 });
 });
 
+test("relay accepts clean EOF after an explicit stop choice", async () => {
+  const structured = JSON.stringify(makeStructuredResult());
+  const provider = new CompatibleEvidencePreparationProvider({
+    providerId: "relay",
+    apiKey: "relay-server-secret",
+    baseUrl: "https://relay.example/v1",
+    fetchImpl: async () => sseResponse([
+      `data: ${JSON.stringify({
+        id: "relay-clean-eof-after-stop",
+        model: "gpt-5.6-sol",
+        choices: [{ index: 0, delta: { content: structured }, finish_reason: "stop" }],
+        usage: { prompt_tokens: 100, completion_tokens: 20, total_tokens: 120 },
+      })}\n\n`,
+    ]),
+  });
+
+  const response = await provider.create({
+    model: "relay-gpt-5.6-sol",
+    reasoningEffort: "low",
+    reasoningMode: "pro",
+    input: "匿名问题与冻结证据",
+    instructions: "只输出 JSON。",
+    metadata: { runId: "run-relay-clean-eof", promptVersion: "openai-ruling-v1" },
+  });
+
+  assert.equal(response.output_text, structured);
+  assert.equal(response.finish_reason, "stop");
+  assert.deepEqual(response.usage, {
+    prompt_tokens: 100,
+    completion_tokens: 20,
+    total_tokens: 120,
+  });
+});
+
+test("relay still rejects an interrupted reader after an explicit stop choice", async () => {
+  const structured = JSON.stringify(makeStructuredResult());
+  const provider = new CompatibleEvidencePreparationProvider({
+    providerId: "relay",
+    apiKey: "relay-server-secret",
+    baseUrl: "https://relay.example/v1",
+    fetchImpl: async () => sseResponse([
+      `data: ${JSON.stringify({
+        id: "relay-interrupted-after-stop",
+        model: "gpt-5.6-sol",
+        choices: [{ index: 0, delta: { content: structured }, finish_reason: "stop" }],
+      })}\n\n`,
+    ], { failAfterChunks: true }),
+  });
+
+  await assert.rejects(
+    provider.create({
+      model: "relay-gpt-5.6-sol",
+      reasoningEffort: "low",
+      reasoningMode: "pro",
+      input: "匿名问题与冻结证据",
+      instructions: "只输出 JSON。",
+      metadata: { runId: "run-relay-interrupted-after-stop", promptVersion: "openai-ruling-v1" },
+    }),
+    (error) => error?.code === "relay_stream_interrupted",
+  );
+});
+
 test("relay stream interruption after a valid chunk remains outcome-unknown and non-retryable", async () => {
   const provider = new CompatibleEvidencePreparationProvider({
     providerId: "relay",
