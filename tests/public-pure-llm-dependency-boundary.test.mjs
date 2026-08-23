@@ -58,7 +58,8 @@ test("the public pipeline keeps the established retrieval boundary and disables 
   );
   assert.match(source, /retrieveRagEvidence\s*\(\s*\{/u);
   assert.match(source, /buildRagRulingPromptBundle\s*\(\s*\{/u);
-  assert.match(source, /runValidatedPublicRagFinal\s*\(\s*\{/u);
+  assert.doesNotMatch(source, /runValidatedPublicRagFinal/u);
+  assert.match(source, /outputMode:\s*"plain_text"/u);
   assert.match(source, /recoveryPrompt:\s*""/u);
 });
 

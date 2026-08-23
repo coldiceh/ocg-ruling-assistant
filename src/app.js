@@ -1194,10 +1194,10 @@ function publicSystemFailurePresentation(flags = []) {
   return {
     confidence: "生成异常",
     className: "is-risky",
-    title: "裁定生成未通过校验",
-    basis: values.has("model_output_schema_validation_failed")
-      ? "模型输出无法解析"
-      : "最终回答校验失败",
+    title: "裁定生成异常",
+    basis: values.has("model_output_not_displayable")
+      ? "模型未返回完整正文"
+      : "最终回答未完整生成",
   };
 }
 

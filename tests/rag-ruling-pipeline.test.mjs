@@ -1007,7 +1007,7 @@ test("unresolved_new_card_with_text_can_be_analyzed", async () => {
   });
   assert.equal(answer.answerLevel, "rule_analysis");
   assert.match(answer.shortAnswer, /用户提供文本/u);
-  assert.deepEqual(answer.usedEvidence, []);
+  assert.ok(answer.usedEvidence.some((item) => item.type === "user_provided_text"));
   assert.equal(answer.debug.retrievalCounts.userProvidedCardTexts, 1);
   assert.equal(answer.debug.unresolvedMentions[0].input, "未发售测试龙");
 });
@@ -1030,11 +1030,7 @@ test("user_provided_text_not_official_confirmed", async () => {
     }),
   });
   assert.notEqual(answer.answerLevel, "official_confirmed");
-  assert.deepEqual(answer.usedEvidence, []);
-  assert.ok(
-    answer.debug.publicFinalValidation.primary.diagnosticWarnings
-      .includes("official_confirmation_without_direct_citation_downgraded"),
-  );
+  assert.ok(answer.usedEvidence.every((item) => item.type !== "official_qa"));
 });
 
 test("rag_does_not_require_database_match_when_user_text_present", async () => {
@@ -1052,7 +1048,7 @@ test("rag_does_not_require_database_match_when_user_text_present", async () => {
   assert.ok(!answer.riskFlags.includes("card_name_not_resolved"));
 });
 
-test("rag pipeline preserves low confidence when no effect template proves the answer", async () => {
+test("ordinary final text stays server-classified as rule analysis without an output validator", async () => {
   const answer = await answerRagRulingQuestion({
     question: "「测试龙」可以发动①效果吗？",
     cards,
@@ -1070,7 +1066,7 @@ test("rag pipeline preserves low confidence when no effect template proves the a
     }),
   });
   assert.notEqual(answer.shortAnswer, "insufficient");
-  assert.equal(answer.answerLevel, "low_confidence_analysis");
+  assert.equal(answer.answerLevel, "rule_analysis");
   assert.ok(!answer.riskFlags.includes("low_confidence_upgraded_to_rule_analysis_with_card_text"));
 });
 
@@ -1138,27 +1134,10 @@ test("rule query extractor uses Relay Sol low", async () => {
     now,
     fetchImpl: async (url, options) => {
       calls.push({ url, options, body: JSON.parse(options.body) });
-      return relaySseResponse({
-        ruleQueries: [{
-          subclaim: "确认效果处理时该卡的区域和卡片种类",
-          checkpoint: "resolution_snapshot",
-          query: "处理中的陷阱 当前区域 | 処理中の罠 現在の領域 | resolving trap current zone",
-          reason: "检索处理快照中的区域与类型",
-          confidence: "high",
-        }, {
-          subclaim: "确认后一处理是否依赖前一处理实际完成",
-          checkpoint: "step_dependency",
-          query: "连续处理 前一步完成 后一步依赖 | 連続処理 前段完了 後段依存 | sequential resolution prior step dependency",
-          reason: "检索连续处理的依赖关系",
-          confidence: "medium",
-        }],
-        candidateAssessments: [{
-          id: "qa-question-only-candidate",
-          relevance: "high",
-          premise: "partial",
-          difference: "候选问题没有给出本题的完整场面。",
-        }],
-      }, { prompt_tokens: 25, completion_tokens: 8, total_tokens: 33 });
+      return relaySseRaw([
+        "处理中的陷阱 当前区域 | 処理中の罠 現在の領域 | resolving trap current zone",
+        "连续处理 前一步完成 后一步依赖 | 連続処理 前段完了 後段依存 | sequential resolution prior step dependency",
+      ].join("\n"), { prompt_tokens: 25, completion_tokens: 8, total_tokens: 33 });
     },
   });
   assert.equal(result.providerUsed, "relay");
@@ -1168,13 +1147,13 @@ test("rule query extractor uses Relay Sol low", async () => {
   assert.deepEqual(result.queries.map((item) => item.query), [
     "处理中的陷阱 当前区域 | 処理中の罠 現在の領域 | resolving trap current zone",
     "连续处理 前一步完成 后一步依赖 | 連続処理 前段完了 後段依存 | sequential resolution prior step dependency",
-  ]);
-  assert.equal(result.queries[0].subclaim, "确认效果处理时该卡的区域和卡片种类");
-  assert.equal(result.queries[0].checkpoint, "resolution_snapshot");
-  assert.equal(result.queries[1].checkpoint, "step_dependency");
+  ], JSON.stringify(result));
+  assert.equal(result.queries[0].subclaim, "");
+  assert.equal(result.queries[0].checkpoint, "");
   const requestPrompt = calls[0].body.messages.map((item) => item.content).join("\n");
   assert.match(requestPrompt, /彼此独立、尚待证实的规则子命题/u);
-  assert.match(requestPrompt, /subclaim、checkpoint、query、reason、confidence/u);
+  assert.match(requestPrompt, /输出必须是单个 JSON 对象/u);
+  assert.match(requestPrompt, /ruleQueries 和 candidateAssessments/u);
   assert.match(requestPrompt, /忠实保留玩家明确给出的事件、区域、表示形式、顺序和状态/u);
   assert.match(requestPrompt, /某一步不能执行时前序结果是否保留/u);
   assert.match(requestPrompt, /多个实体、数值或方向之间选择/u);
@@ -1188,14 +1167,147 @@ test("rule query extractor uses Relay Sol low", async () => {
   assert.match(requestPrompt, /QUESTION_ONLY_CANDIDATE_MARKER/u);
   assert.doesNotMatch(requestPrompt, /CANDIDATE_(?:ANSWER|FULL_TEXT)_MUST_NOT_REACH_QUERY_MODEL/u);
   assert.match(requestPrompt, /candidateAssessments/u);
+  assert.deepEqual(result.candidateAssessments, []);
+  assert.deepEqual(calls[0].body.response_format, { type: "json_object" });
+  assert.equal(calls.length, 1);
+});
+
+test("rule query plain-text protocol mechanically cleans lines and keeps fail-closed sentinel empty", async () => {
+  const now = new Date("2048-07-10T00:01:30.000Z");
+  const env = relayAuxEnv();
+  await resetRagBudget({ env, now });
+  const calls = [];
+  const result = await callRuleQueryExtractionModel({
+    userQuery: "匿名连锁处理需要检索什么规则？",
+    dataRevision: "relay-rule-query-plain-lines-20480710",
+    env,
+    now,
+    fetchImpl: async (_url, options) => {
+      calls.push(JSON.parse(options.body));
+      return relaySseRaw([
+        "```",
+        "- 查询：处理时对象控制权改变 原效果如何处理 | 処理時 対象 コントロール変更 | target control changed during resolution",
+        "2. 连锁处理中对象仍须满足什么条件 | チェーン処理中 対象 条件 | target requirements during chain resolution",
+        "```",
+      ].join("\n"));
+    },
+  });
+
+  assert.deepEqual(calls[0].response_format, { type: "json_object" });
+  assert.deepEqual(result.queries.map((item) => item.query), [
+    "处理时对象控制权改变 原效果如何处理 | 処理時 対象 コントロール変更 | target control changed during resolution",
+    "连锁处理中对象仍须满足什么条件 | チェーン処理中 対象 条件 | target requirements during chain resolution",
+  ], JSON.stringify(result));
+  assert.deepEqual(result.candidateAssessments, []);
+
+  const noQuery = await callRuleQueryExtractionModel({
+    userQuery: "无法生成查询的匿名输入",
+    dataRevision: "relay-rule-query-no-query-20480710",
+    env,
+    now,
+    fetchImpl: async () => relaySseRaw("NO_QUERY"),
+  });
+  assert.deepEqual(noQuery.queries, []);
+  assert.ok(noQuery.warnings.includes("rule_query_model_not_cached:no_valid_items"));
+});
+
+test("rule query lenient parsing keeps structured metadata and candidate soft ranking", async () => {
+  const now = new Date("2048-07-10T00:01:45.000Z");
+  const env = relayAuxEnv();
+  await resetRagBudget({ env, now });
+  const result = await callRuleQueryExtractionModel({
+    userQuery: "匿名对象在处理时改变控制权后如何处理？",
+    candidateQuestions: [{
+      id: "candidate-soft-rank",
+      question: "处理时对象的控制权改变时，效果如何处理？",
+    }],
+    dataRevision: "relay-rule-query-lenient-wrapper-20480710",
+    env,
+    now,
+    fetchImpl: async () => relaySseRaw([
+      "以下是检索计划：",
+      JSON.stringify({
+        result: {
+          ruleQueries: [{
+            subclaim: "确认处理时对象改变控制权后的适用性",
+            checkpoint: "resolution_snapshot",
+            query: "处理时 对象 控制权改变 | 処理時 対象 コントロール変更 | target control changes during resolution",
+            reason: "检索处理时快照",
+            confidence: "high",
+          }],
+          candidateAssessments: [{
+            id: "candidate-soft-rank",
+            relevance: "high",
+            premise: "same",
+            difference: "",
+          }],
+        },
+      }),
+    ].join("\n")),
+  });
+
+  assert.equal(result.queries.length, 1);
+  assert.equal(result.queries[0].checkpoint, "resolution_snapshot");
+  assert.equal(result.queries[0].subclaim, "确认处理时对象改变控制权后的适用性");
   assert.deepEqual(result.candidateAssessments, [{
-    id: "qa-question-only-candidate",
+    id: "candidate-soft-rank",
     relevance: "high",
-    premise: "partial",
-    difference: "候选问题没有给出本题的完整场面。",
+    premise: "same",
+    difference: "",
     source: "model_rule_query_soft_ranker",
   }]);
-  assert.equal(calls.length, 1);
+});
+
+test("rule query accepts useful fallback shapes and only tolerates missing finish on a complete SSE", async () => {
+  const now = new Date("2048-07-10T00:01:50.000Z");
+  const env = relayAuxEnv();
+  await resetRagBudget({ env, now });
+  const single = await callRuleQueryExtractionModel({
+    userQuery: "匿名发动时是否必须有合法对象？",
+    dataRevision: "relay-rule-query-single-shape-20480710",
+    env,
+    now,
+    fetchImpl: async () => relaySseRaw(JSON.stringify({
+      query: "发动时 合法对象 | 発動時 適法な対象 | legal target at activation",
+      subclaim: "确认发动时必须存在合法对象",
+      checkpoint: "operation_legality",
+      reason: "检索发动条件",
+      confidence: "high",
+    })),
+  });
+  assert.equal(single.queries[0].checkpoint, "operation_legality");
+
+  const bracketed = await callRuleQueryExtractionModel({
+    userQuery: "匿名方括号查询如何解析？",
+    dataRevision: "relay-rule-query-bracketed-text-20480710",
+    env,
+    now,
+    fetchImpl: async () => relaySseRaw("[发动时] 是否必须存在合法对象 | [発動時] 適法な対象が必要か | [activation] legal target required"),
+  });
+  assert.equal(bracketed.queries.length, 1);
+  assert.match(bracketed.queries[0].query, /^\[发动时\]/u);
+
+  const missingFinish = await callRuleQueryExtractionModel({
+    userQuery: "匿名完整流缺少 finish reason 如何处理？",
+    dataRevision: "relay-rule-query-missing-finish-20480710",
+    env,
+    now,
+    fetchImpl: async () => new Response([
+      `data: ${JSON.stringify({
+        model: "gpt-5.6-sol",
+        choices: [{
+          index: 0,
+          delta: { content: JSON.stringify({ ruleQueries: ["完整 SSE 中的有效查询"] }) },
+        }],
+      })}\n\n`,
+      "data: [DONE]\n\n",
+    ].join(""), {
+      status: 200,
+      headers: { "content-type": "text/event-stream" },
+    }),
+  });
+  assert.deepEqual(missingFinish.queries.map((item) => item.query), ["完整 SSE 中的有效查询"]);
+  assert.ok(missingFinish.warnings.includes("rule_query_missing_finish_reason_accepted"));
 });
 
 test("rule query normalization preserves independently bounded pipe and newline language branches", async () => {
@@ -1341,6 +1453,10 @@ test("ordinary pipeline stops before final generation when Relay rule preparatio
     invoke: async () => JSON.stringify({ ruleQueries: [] }),
     code: "rule_query_model_empty",
   }, {
+    label: "structured-no-query",
+    invoke: async () => JSON.stringify({ ruleQueries: ["NO_QUERY"] }),
+    code: "rule_query_model_empty",
+  }, {
     label: "timeout",
     invoke: async () => {
       throw new Error("rule_query_model_timeout");
@@ -1374,6 +1490,78 @@ test("ordinary pipeline stops before final generation when Relay rule preparatio
     });
     assert.equal(finalCalls, 0);
   }
+});
+
+test("a usable candidate assessment is a valid evidence plan but a negative assessment is not", async () => {
+  const focusCard = {
+    id: "relay-plan-card",
+    name: "匿名阶段卡",
+    cnName: "匿名阶段卡",
+    effectText: "①：可以发动。进行第一步。那之后，进行第二步。",
+    aliases: ["匿名阶段卡"],
+  };
+  const candidateQa = {
+    id: "qa-relay-plan-candidate",
+    recordType: "qa",
+    question: "匿名阶段卡的效果分两步处理时，第一步无法处理的场合，第二步如何处理？",
+    answer: "第一步无法处理的场合，第二步不处理。",
+    text: "匿名阶段卡的效果分两步处理时，第一步无法处理的场合，第二步如何处理？ 第一部无法处理的场合，第二步不处理。",
+    cardIds: [focusCard.id],
+    cards: [focusCard.name],
+  };
+  const base = {
+    question: "「匿名阶段卡」在连续处理时应该怎样判断每一步？",
+    cards: [focusCard],
+    records: [],
+    qaRecords: [candidateQa],
+    officialQaExactAlreadyChecked: true,
+    env: relayAuxEnv({
+      MODEL_PROVIDER: "mock",
+      RAG_MODEL_PROVIDER: "mock",
+      RAG_CARD_MODEL_PROVIDER: "mock",
+    }),
+  };
+
+  let positiveFinalCalls = 0;
+  const positive = await answerRagRulingQuestion({
+    ...base,
+    now: new Date("2056-01-10T00:00:00.000Z"),
+    ruleModelInvoker: async () => JSON.stringify({
+      ruleQueries: [],
+      candidateAssessments: [{
+        id: candidateQa.id,
+        relevance: "high",
+        premise: "same",
+        difference: "",
+      }],
+    }),
+    modelInvoker: async () => {
+      positiveFinalCalls += 1;
+      return "已有候选资料足以进入最终裁定。";
+    },
+  });
+  assert.equal(positiveFinalCalls, 1);
+  assert.equal(positive.debug.modelRuleCandidateAssessments[0].id, candidateQa.id);
+
+  let negativeFinalCalls = 0;
+  await assert.rejects(answerRagRulingQuestion({
+    ...base,
+    now: new Date("2056-01-11T00:00:00.000Z"),
+    ruleModelInvoker: async () => JSON.stringify({
+      ruleQueries: [],
+      candidateAssessments: [{
+        id: candidateQa.id,
+        relevance: "low",
+        premise: "different",
+        difference: "前提不同。",
+      }],
+    }),
+    modelInvoker: async () => {
+      negativeFinalCalls += 1;
+      return "不应生成最终裁定。";
+    },
+  }), (error) => error.code === "rule_query_model_empty" && error.statusCode === 503);
+  assert.equal(negativeFinalCalls, 0);
 });
 
 test("ordinary pipeline fails closed when Relay rule preparation was required but is misconfigured", async () => {
@@ -2280,7 +2468,9 @@ test("empty final-model output degrades safely instead of using a prepared answe
   });
 
   assert.doesNotMatch(answer.shortAnswer, /可以发动/u);
-  assert.match(answer.shortAnswer, /没有返回可展示的完整答案/u);
+  assert.match(answer.shortAnswer, /模型服务未返回正文/u);
+  assert.ok(answer.riskFlags.includes("model_output_not_displayable"));
+  assert.ok(answer.riskFlags.includes("model_plain_text_empty"));
   assert.ok(!answer.riskFlags.includes("final_model_failed_using_grounded_operation_analysis"));
 });
 
@@ -2379,7 +2569,7 @@ test("rulebook_context_snippet_enters_rag_context", async () => {
   assert.match(bundle.prompt, /相同攻击次数的效果不会叠加/u);
 });
 
-test("card text cannot override a model's explicit needs-more-info result", async () => {
+test("card text does not replace the final model's displayed plain text", async () => {
   const answer = await answerRagRulingQuestion({
     question: "「测试龙」在没有官方直接裁定时怎么处理？",
     cards,
@@ -2396,10 +2586,10 @@ test("card text cannot override a model's explicit needs-more-info result", asyn
       confidenceSelfEstimate: "low",
     }),
   });
-  assert.equal(answer.answerLevel, "needs_more_info");
+  assert.equal(answer.answerLevel, "rule_analysis");
   assert.match(answer.shortAnswer, /资料不足/u);
   assert.ok(!answer.riskFlags.includes("needs_more_info_upgraded_to_rule_analysis_with_card_text"));
-  assert.deepEqual(answer.usedEvidence, []);
+  assert.ok(answer.usedEvidence.some((item) => item.type === "card_text"));
 });
 
 test("rag_preserves_card_dossier_data", async () => {
@@ -2430,7 +2620,7 @@ test("rag_pipeline_raw_query_fallback", async () => {
   assert.ok(answer.debug.retrievalWarnings.includes("card_name_not_resolved_raw_query_fallback_used"));
 });
 
-test("partial related evidence cannot override a model's explicit needs-more-info result", async () => {
+test("partial related evidence does not replace the final model's displayed plain text", async () => {
   const answer = await answerRagRulingQuestion({
     question: "对象离场时连锁处理中怎么处理？",
     cards: [],
@@ -2447,7 +2637,7 @@ test("partial related evidence cannot override a model's explicit needs-more-inf
       confidenceSelfEstimate: "low",
     }),
   });
-  assert.equal(answer.answerLevel, "needs_more_info");
+  assert.equal(answer.answerLevel, "rule_analysis");
   assert.ok(!answer.riskFlags.includes("needs_more_info_downgraded_to_low_confidence_with_evidence"));
 });
 
@@ -2489,15 +2679,11 @@ test("rag_pipeline_distinguishes_related_from_official", async () => {
       confidenceSelfEstimate: "high",
     }),
   });
-  assert.notEqual(answer.answerLevel, "official_confirmed");
-  assert.ok(
-    answer.debug.publicFinalValidation.primary.diagnosticWarnings
-      .includes("official_confirmation_without_direct_citation_downgraded"),
-  );
-  assert.equal(answer.usedEvidence[0].type, "related");
+  assert.equal(answer.answerLevel, "rule_analysis");
+  assert.ok(answer.usedEvidence.some((item) => item.type === "related"));
 });
 
-test("non-JSON model text remains visible as low-confidence output without a repair call", async () => {
+test("non-JSON model text is the normal final output without a validator or repair call", async () => {
   const answer = await answerRagRulingQuestion({
     question: "「测试龙」可以发动①效果吗？",
     cards,
@@ -2505,11 +2691,10 @@ test("non-JSON model text remains visible as low-confidence output without a rep
     qaRecords,
     modelInvoker: async () => "not JSON",
   });
-  assert.equal(answer.answerLevel, "low_confidence_analysis");
+  assert.equal(answer.answerLevel, "rule_analysis");
   assert.equal(answer.shortAnswer, "not JSON");
-  assert.ok(answer.riskFlags.includes("model_json_parse_failed"));
-  assert.ok(answer.riskFlags.includes("model_output_not_json"));
-  assert.equal(answer.debug.publicFinalValidation.callCount, 1);
+  assert.deepEqual(answer.riskFlags, []);
+  assert.equal(answer.debug.publicFinalValidation, null);
 });
 
 test("model_natural_language_output_is_wrapped_as_low_confidence", async () => {
@@ -2521,6 +2706,87 @@ test("model_natural_language_output_is_wrapped_as_low_confidence", async () => {
   assert.equal(result.answer.answerLevel, "low_confidence_analysis");
   assert.ok(result.answer.riskFlags.includes("model_json_parse_failed"));
   assert.ok(result.warnings.includes("model_natural_language_wrapped"));
+});
+
+test("plain-text final mode preserves the complete body and omits Relay JSON mode", async () => {
+  const calls = [];
+  const bodyText = `结论：可以继续处理。\n\n${"完整理由。".repeat(120)}`;
+  const now = new Date("2052-01-01T00:00:00.000Z");
+  const env = relayAuxEnv();
+  await resetRagBudget({ env, now });
+  const result = await callRagModel({
+    prompt: "直接输出中文裁定正文",
+    outputMode: "plain_text",
+    env,
+    now,
+    fetchImpl: async (_url, options) => {
+      calls.push(JSON.parse(options.body));
+      return relaySseRaw(bodyText, {
+        prompt_tokens: 20,
+        completion_tokens: 200,
+        total_tokens: 220,
+      });
+    },
+  });
+
+  assert.equal(calls.length, 1);
+  assert.equal(Object.hasOwn(calls[0], "response_format"), false);
+  assert.equal(result.answer.shortAnswer, bodyText);
+  assert.equal(result.answer.shortAnswer.length > 500, true);
+  assert.deepEqual(result.answer.reasoning, []);
+  assert.deepEqual(result.answer.riskFlags, []);
+});
+
+test("plain-text final mode does not display text from an incomplete Relay finish", async () => {
+  const now = new Date("2052-01-02T00:00:00.000Z");
+  const env = relayAuxEnv();
+  await resetRagBudget({ env, now });
+  const result = await callRagModel({
+    prompt: "直接输出中文裁定正文",
+    outputMode: "plain_text",
+    env,
+    now,
+    fetchImpl: async () => new Response([
+      `data: ${JSON.stringify({
+        model: "gpt-5.6-sol",
+        choices: [{ index: 0, finish_reason: "length", delta: { content: "这只是被截断的部分答案" } }],
+        usage: { prompt_tokens: 20, completion_tokens: 20, total_tokens: 40 },
+      })}\n\n`,
+      "data: [DONE]\n\n",
+    ].join(""), {
+      status: 200,
+      headers: { "content-type": "text/event-stream" },
+    }),
+  });
+
+  assert.doesNotMatch(result.answer.shortAnswer, /这只是被截断的部分答案/u);
+  assert.ok(result.warnings.includes("model_plain_text_incomplete:length"));
+});
+
+test("plain-text final mode accepts a complete Relay SSE when finish reason is omitted", async () => {
+  const now = new Date("2052-01-03T00:00:00.000Z");
+  const env = relayAuxEnv();
+  await resetRagBudget({ env, now });
+  const bodyText = "结论：可以处理。完整理由已经返回。";
+  const result = await callRagModel({
+    prompt: "直接输出中文裁定正文",
+    outputMode: "plain_text",
+    env,
+    now,
+    fetchImpl: async () => new Response([
+      `data: ${JSON.stringify({
+        model: "gpt-5.6-sol",
+        choices: [{ index: 0, delta: { content: bodyText } }],
+      })}\n\n`,
+      "data: [DONE]\n\n",
+    ].join(""), {
+      status: 200,
+      headers: { "content-type": "text/event-stream" },
+    }),
+  });
+
+  assert.equal(result.answer.shortAnswer, bodyText);
+  assert.ok(result.warnings.includes("model_plain_text_missing_finish_reason_accepted"));
 });
 
 test("generic final-answer JSON envelopes are mechanically unwrapped without a repair call", async () => {
@@ -5822,7 +6088,7 @@ test("rag_prompt_truncates_context", () => {
   assert.doesNotMatch(bundle.prompt, /上下文因 RAG_MAX_PROMPT_CHARS 限制被截断/u);
   assert.match(bundle.prompt, /allowedEvidenceIds/u);
   assert.match(bundle.prompt, /card-text-long/u);
-  assert.match(bundle.prompt, /usedEvidence 的 id 只能来自 allowedEvidenceIds/u);
+  assert.match(bundle.prompt, /allowedEvidenceIds 中真实存在的 id/u);
   assert.deepEqual(bundle.allowedEvidenceIds, ["card-text-long"]);
   assert.deepEqual(bundle.evidenceSelectionDiagnostics.map((item) => item.id), ["card-text-long"]);
 });
@@ -6205,7 +6471,7 @@ test("public prompt retains card text, excludes semantic state output, and has n
   assert.equal(bundle.recoveryPrompt, "");
   assert.doesNotMatch(bundle.recoveryPrompt, /SEMANTIC_STATE_RECOVERY_MARKER/u);
   assert.doesNotMatch(bundle.recoveryPrompt, /semanticStateTransition/u);
-  assert.match(bundle.prompt, /usedEvidence.*allowedEvidenceIds/u);
+  assert.match(bundle.prompt, /allowedEvidenceIds 中真实存在的 id/u);
   assert.match(bundle.prompt, /效果来源与效果类型/u);
   assert.match(bundle.prompt, /实际受影响实体/u);
   assert.match(bundle.prompt, /无论结果看似有利还是不利都使用同一检查/u);
@@ -6289,7 +6555,7 @@ test("compacted prompt keeps one complete score-ranked evidence envelope with co
   assert.ok(bundle.warnings.some((warning) => warning.includes("compacted")));
   assert.ok(bundle.prompt.length <= 8000);
   assert.match(bundle.prompt, /CARD_MARKER/u);
-  assert.match(bundle.prompt, /usedEvidence.*allowedEvidenceIds/u);
+  assert.match(bundle.prompt, /allowedEvidenceIds 中真实存在的 id/u);
   const serializedEvidenceIds = extractPromptAllowedEvidenceIds(bundle.prompt);
   assert.deepEqual(bundle.allowedEvidenceIds, serializedEvidenceIds);
   assert.ok(bundle.allowedEvidenceIds.length >= 1);
@@ -6403,6 +6669,16 @@ test("unique exact official QA uses a focused complete-answer route", async () =
   });
   assert.equal(contradicted.shortAnswer, "不能发动。");
   assert.ok(!contradicted.riskFlags.includes("authoritative_official_direct_fallback_applied"));
+
+  const incomplete = await answerRagRulingQuestion({
+    question: directQa.question,
+    cards: directCards,
+    records: [],
+    qaRecords: [directQa],
+    modelInvoker: async () => "",
+  });
+  assert.notEqual(incomplete.answerLevel, "official_confirmed");
+  assert.ok(incomplete.riskFlags.includes("model_output_not_displayable"));
 });
 
 test("focused official QA prompt preserves the full-source tail without invalid JSON slicing", () => {
@@ -6500,8 +6776,8 @@ test("focused official QA prompt keeps the ruling but omits a dense placeholder 
   assert.match(bundle.prompt, /対象が存在しない場合/u);
   assert.doesNotMatch(bundle.prompt, /<<94000>>/u);
   assert.doesNotMatch(bundle.prompt, /ENUMERATION_END/u);
-  assert.match(bundle.prompt, /reasoning、usedCards、missingInfo、riskFlags 必须是字符串数组/u);
-  assert.match(bundle.prompt, /usedEvidence 必须是对象数组/u);
+  assert.match(bundle.prompt, /直接输出完整中文裁定正文/u);
+  assert.doesNotMatch(bundle.prompt, /usedEvidence 必须是对象数组/u);
   const payload = JSON.parse(bundle.prompt.split("\n").at(-1));
   assert.doesNotMatch(payload.officialQaDirectCandidate.text, /<<94000>>/u);
 });
@@ -6846,6 +7122,28 @@ function relaySseResponse(payload, usage = {
         index: 0,
         finish_reason: "stop",
         delta: { content: JSON.stringify(payload) },
+      }],
+      usage,
+    })}\n\n`,
+    "data: [DONE]\n\n",
+  ].join(""), {
+    status: 200,
+    headers: { "content-type": "text/event-stream" },
+  });
+}
+
+function relaySseRaw(content, usage = {
+  prompt_tokens: 40,
+  completion_tokens: 5,
+  total_tokens: 45,
+}) {
+  return new Response([
+    `data: ${JSON.stringify({
+      model: "gpt-5.6-sol",
+      choices: [{
+        index: 0,
+        finish_reason: "stop",
+        delta: { content: String(content || "") },
       }],
       usage,
     })}\n\n`,

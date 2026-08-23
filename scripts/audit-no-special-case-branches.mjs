@@ -146,6 +146,7 @@ for (const file of productionFiles) {
       "buildSummonLegalityContext",
       "buildEffectApplicabilityContext",
       "legacyLuaSemanticPacketFactory",
+      "runValidatedPublicRagFinal",
     ];
     for (const symbol of forbiddenPublicRulingComponents) {
       const importOrCall = new RegExp(`(?:import[\\s\\S]{0,240}\\b${symbol}\\b|\\b${symbol}\\s*\\()`, "u");
@@ -156,7 +157,8 @@ for (const file of productionFiles) {
     for (const required of [
       "retrieveRagEvidence",
       "buildRagRulingPromptBundle",
-      "runValidatedPublicRagFinal",
+      "callRagModel",
+      'outputMode: "plain_text"',
       'recoveryPrompt: ""',
     ]) {
       if (!source.includes(required)) {

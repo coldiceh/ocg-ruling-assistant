@@ -130,9 +130,11 @@ export async function callRagModel({
   now = new Date(),
   thinkingMode,
   reasoningEffort,
+  outputMode = "json",
   signal,
   privateEvaluationDiagnostics,
 } = {}) {
+  const plainTextOutput = outputMode === "plain_text";
   // Cancellation is a terminal request outcome, not a model failure. Check it
   // before budget preflight so an already-disconnected caller can neither
   // reserve spend nor submit a provider request.
@@ -149,7 +151,7 @@ export async function callRagModel({
     provider,
     thinkingMode: reasoningGeneration?.thinkingMode,
   });
-  const compactRecoveryMaxTokens = provider === "deepseek" && recoveryPrompt
+  const compactRecoveryMaxTokens = !plainTextOutput && provider === "deepseek" && recoveryPrompt
     ? readPositiveNumber(
         env.RAG_RECOVERY_MAX_OUTPUT_TOKENS,
         DEFAULT_RAG_RECOVERY_MAX_OUTPUT_TOKENS,
@@ -158,6 +160,7 @@ export async function callRagModel({
   const generationConfig = {
     requestModel: modelName,
     maxOutputTokens: maxTokens,
+    outputMode: plainTextOutput ? "plain_text" : "json",
     ...(reasoningGeneration ? {
       thinkingMode: reasoningGeneration.thinkingMode,
       reasoningEffort: reasoningGeneration.reasoningEffort,
@@ -211,7 +214,14 @@ export async function callRagModel({
       reasoningEffort: reasoningGeneration?.reasoningEffort,
       signal,
     });
-    const parsed = parseModelResult(raw, {
+    const parsed = plainTextOutput ? parsePlainTextModelResult(raw, {
+      provider,
+      modelName,
+      dryRun: false,
+      warnings: [...providerResolution.warnings, ...generationWarnings],
+      budgetStatus: budget.status,
+      finishReason: "stop",
+    }) : parseModelResult(raw, {
       provider,
       modelName,
       dryRun: false,
@@ -282,7 +292,15 @@ export async function callRagModel({
     }
     const providerStartedAt = relayStartedAt || Date.now();
     let response = provider === "gemini"
-      ? await callGemini({ prompt, env, modelName, maxTokens, fetchImpl, signal })
+      ? await callGemini({
+        prompt,
+        env,
+        modelName,
+        maxTokens,
+        fetchImpl,
+        requireJson: !plainTextOutput,
+        signal,
+      })
       : provider === "glm"
         ? await callGlm({
           prompt,
@@ -292,6 +310,7 @@ export async function callRagModel({
           fetchImpl,
           thinkingMode: reasoningGeneration.thinkingMode,
           reasoningEffort: reasoningGeneration.reasoningEffort,
+          requireJson: !plainTextOutput,
           signal,
         })
         : provider === "relay"
@@ -302,6 +321,7 @@ export async function callRagModel({
             maxTokens,
             fetchImpl,
             reasoningEffort: reasoningGeneration.reasoningEffort,
+            requireJson: !plainTextOutput,
             signal,
           })
         : await callDeepSeek({
@@ -312,7 +332,7 @@ export async function callRagModel({
           fetchImpl,
           thinkingMode: reasoningGeneration.thinkingMode,
           reasoningEffort: reasoningGeneration.reasoningEffort,
-          requireJson: true,
+          requireJson: !plainTextOutput,
           signal,
         });
     if (provider === "relay") {
@@ -323,7 +343,7 @@ export async function callRagModel({
         durationMs: Date.now() - providerStartedAt,
       });
     }
-    const compactRecoveryAssessment = provider === "deepseek"
+    const compactRecoveryAssessment = !plainTextOutput && provider === "deepseek"
       ? assessDeepSeekPrimaryForCompactRecovery(response)
       : { retry: false, warning: "" };
     if (compactRecoveryAssessment.warning) {
@@ -415,17 +435,26 @@ export async function callRagModel({
         budgetStorage: "unavailable",
       };
     }
-    const parsed = parseModelResult(response.rawText, {
+    const resultWarnings = [
+      ...providerResolution.warnings,
+      ...generationWarnings,
+      ...budget.warnings,
+      ...spendWarnings,
+      ...(response.warnings || []),
+    ];
+    const parsed = plainTextOutput ? parsePlainTextModelResult(response.rawText, {
       provider,
       modelName,
       dryRun: false,
-      warnings: [
-        ...providerResolution.warnings,
-        ...generationWarnings,
-        ...budget.warnings,
-        ...spendWarnings,
-        ...(response.warnings || []),
-      ],
+      warnings: resultWarnings,
+      budgetStatus,
+      finishReason: response.finishReason,
+      acceptMissingFinishReason: response.transport === "chat_completions_sse",
+    }) : parseModelResult(response.rawText, {
+      provider,
+      modelName,
+      dryRun: false,
+      warnings: resultWarnings,
       budgetStatus,
     });
     return {
@@ -457,7 +486,9 @@ export async function callRagModel({
       ? await releaseBudgetReservation({ preflight: budget, env, fetchImpl }).catch(() => budget.status)
       : budget.status;
     return {
-      answer: safeFallbackAnswer("model_call_failed"),
+      answer: plainTextOutput
+        ? plainTextProviderFailureAnswer(providerFailure)
+        : safeFallbackAnswer("model_call_failed"),
       rawText: "",
       provider,
       providerUsed: provider,
@@ -943,7 +974,7 @@ export async function callRuleQueryExtractionModel({
   }
 
   const cacheKey = extractionCacheKey({
-    kind: "rule-v8-accuracy-first",
+    kind: "rule-v9-lenient-json",
     provider,
     modelName,
     dataRevision,
@@ -1039,6 +1070,7 @@ export async function callRuleQueryExtractionModel({
         ...providerWarnings,
         ...execution.warnings,
         ...(response.warnings || []),
+        ...(parsedExtraction.warning ? [parsedExtraction.warning] : []),
         ...(parsedExtraction.cacheable ? [] : [`rule_query_model_not_cached:${parsedExtraction.reason}`]),
       ],
       tokenUsage: execution.usage,
@@ -2189,6 +2221,7 @@ async function callGlm({
   fetchImpl,
   thinkingMode,
   reasoningEffort,
+  requireJson = true,
   signal,
 }) {
   const endpoint = compatibleChatCompletionsUrl(env.GLM_BASE_URL || DEFAULT_GLM_BASE_URL);
@@ -2196,7 +2229,7 @@ async function callGlm({
     model: modelName || DEFAULT_GLM_MODEL,
     messages: [{ role: "user", content: prompt }],
     stream: false,
-    response_format: { type: "json_object" },
+    ...(requireJson ? { response_format: { type: "json_object" } } : {}),
     thinking: { type: thinkingMode === "disabled" ? "disabled" : "enabled" },
   };
   if (thinkingMode !== "disabled" && DEEPSEEK_REASONING_EFFORTS.has(reasoningEffort)) {
@@ -2249,13 +2282,14 @@ async function callRelay({
   maxTokens,
   fetchImpl,
   reasoningEffort,
+  requireJson = true,
   signal,
 }) {
   const endpoint = relayChatCompletionsUrl(env.RELAY_BASE_URL || DEFAULT_PUBLIC_RELAY_BASE_URL);
   const body = {
     model: modelName || DEFAULT_PUBLIC_RELAY_MODEL,
     messages: [{ role: "user", content: prompt }],
-    response_format: { type: "json_object" },
+    ...(requireJson ? { response_format: { type: "json_object" } } : {}),
   };
   if (RELAY_REASONING_EFFORTS.has(reasoningEffort)) {
     body.reasoning_effort = reasoningEffort;
@@ -2295,7 +2329,7 @@ async function callRelay({
     thinkingMode: "not_applicable",
     reasoningEffort: RELAY_REASONING_EFFORTS.has(reasoningEffort) ? reasoningEffort : null,
     maxOutputTokens: Number.isInteger(maxTokens) && maxTokens > 0 ? maxTokens : null,
-    responseFormat: "json_object",
+    responseFormat: requireJson ? "json_object" : "text",
     transport: "chat_completions_sse",
     streamMetrics: payload?.stream_metrics || null,
     usage: payload?.usage || {},
@@ -2391,7 +2425,7 @@ function extractChatMessagePartText(part) {
   return "";
 }
 
-async function callGemini({ prompt, env, modelName, maxTokens, fetchImpl, temperature, maxTokensEnvName = "GEMINI_MAX_OUTPUT_TOKENS", signal }) {
+async function callGemini({ prompt, env, modelName, maxTokens, fetchImpl, temperature, maxTokensEnvName = "GEMINI_MAX_OUTPUT_TOKENS", requireJson = true, signal }) {
   const model = modelName || env.GEMINI_MODEL || "gemini-1.5-flash";
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(env.GEMINI_API_KEY)}`;
   const body = {
@@ -2399,7 +2433,7 @@ async function callGemini({ prompt, env, modelName, maxTokens, fetchImpl, temper
     generationConfig: {
       temperature: temperature ?? readNumber(env.GEMINI_TEMPERATURE, readNumber(env.RAG_MODEL_TEMPERATURE, 0)),
       maxOutputTokens: readNumber(env[maxTokensEnvName], maxTokens),
-      responseMimeType: "application/json",
+      ...(requireJson ? { responseMimeType: "application/json" } : {}),
     },
   };
   const response = await postJson(fetchImpl, endpoint, { "content-type": "application/json" }, body, { signal });
@@ -2520,6 +2554,145 @@ function markBudgetReservationOutcome(value, { mayExist }) {
 function isBudgetReservationReleaseSafe(error) {
   return error?.budgetReservationReleaseSafe === true
     || error?.budgetReservationMayExist === false;
+}
+
+function parsePlainTextModelResult(rawValue, {
+  provider,
+  modelName,
+  dryRun,
+  warnings = [],
+  budgetStatus = null,
+  finishReason = "",
+  acceptMissingFinishReason = false,
+} = {}) {
+  const rawText = typeof rawValue === "string"
+    ? rawValue
+    : typeof rawValue?.rawText === "string"
+      ? rawValue.rawText
+      : rawValue && typeof rawValue === "object"
+        ? JSON.stringify(rawValue)
+        : "";
+  const text = rawText.trim();
+  const normalizedFinishReason = String(finishReason || "").trim().toLowerCase();
+  if (normalizedFinishReason !== "stop" && !(acceptMissingFinishReason && !normalizedFinishReason)) {
+    return {
+      answer: plainTextFailureAnswer(
+        "model_plain_text_incomplete",
+        "模型输出未完整结束，本次未生成裁定，请重试。",
+      ),
+      rawText,
+      provider,
+      providerUsed: provider,
+      modelName,
+      modelUsed: modelName || provider,
+      dryRun,
+      warnings: [
+        ...warnings,
+        `model_plain_text_incomplete:${normalizedFinishReason || "missing_finish_reason"}`,
+      ],
+      budgetStatus,
+    };
+  }
+  if (!text) {
+    return {
+      answer: plainTextFailureAnswer(
+        "model_plain_text_empty",
+        "模型服务未返回正文，本次未生成裁定，请重试。",
+      ),
+      rawText,
+      provider,
+      providerUsed: provider,
+      modelName,
+      modelUsed: modelName || provider,
+      dryRun,
+      warnings: [...warnings, "model_plain_text_empty"],
+      budgetStatus,
+    };
+  }
+  const compatibleContent = decodeOptionalPlainTextContent(rawValue, text);
+  return {
+    answer: {
+      answerLevel: "rule_analysis",
+      shortAnswer: compatibleContent?.shortAnswer || text,
+      reasoning: compatibleContent?.reasoning || [],
+      usedCards: [],
+      usedEvidence: [],
+      missingInfo: compatibleContent?.missingInfo || [],
+      riskFlags: [],
+      confidenceSelfEstimate: "low",
+    },
+    rawText,
+    provider,
+    providerUsed: provider,
+    modelName,
+    modelUsed: modelName || provider,
+    dryRun,
+    warnings: [
+      ...warnings,
+      ...(!normalizedFinishReason && acceptMissingFinishReason
+        ? ["model_plain_text_missing_finish_reason_accepted"]
+        : []),
+    ],
+    budgetStatus,
+  };
+}
+
+function decodeOptionalPlainTextContent(rawValue, text) {
+  let parsed = rawValue && typeof rawValue === "object" ? rawValue : null;
+  if (!parsed) {
+    try {
+      parsed = parseStrictJsonValue(text);
+    } catch {
+      return null;
+    }
+  }
+  const answer = findUniqueRagAnswerCandidate(parsed);
+  if (!answer) return null;
+  // Backward-compatible presentation only. The legacy envelope is never
+  // required, and its authority, evidence ids, confidence and risk flags are
+  // deliberately ignored by the ordinary plain-text route.
+  return {
+    shortAnswer: answer.shortAnswer,
+    reasoning: answer.reasoning,
+    missingInfo: answer.missingInfo,
+  };
+}
+
+function plainTextFailureAnswer(reason, shortAnswer) {
+  return normalizeModelAnswer({
+    answerLevel: "needs_more_info",
+    shortAnswer,
+    reasoning: [],
+    usedCards: [],
+    usedEvidence: [],
+    missingInfo: [],
+    riskFlags: ["model_output_not_displayable", reason],
+    confidenceSelfEstimate: "low",
+  });
+}
+
+function plainTextProviderFailureAnswer(providerFailure = {}) {
+  const kind = String(providerFailure?.kind || "provider_failure");
+  const shortAnswer = kind === "timeout"
+    ? "模型服务本次响应超时，未生成裁定，请稍后重试。"
+    : kind === "access_denied"
+      ? "模型服务拒绝了本次请求，未生成裁定，请联系管理员检查配置。"
+      : "模型服务本次调用失败，未生成裁定，请稍后重试。";
+  return normalizeModelAnswer({
+    answerLevel: "needs_more_info",
+    shortAnswer,
+    reasoning: [],
+    usedCards: [],
+    usedEvidence: [],
+    missingInfo: [],
+    riskFlags: [
+      "model_output_not_displayable",
+      "model_provider_call_failed",
+      ...(kind === "access_denied" ? ["model_provider_access_denied"] : []),
+      ...(kind === "timeout" ? ["model_provider_timeout"] : []),
+    ],
+    confidenceSelfEstimate: "low",
+  });
 }
 
 function parseModelResult(rawText, { provider, modelName, dryRun, warnings = [], budgetStatus = null }) {
@@ -4416,7 +4589,7 @@ function normalizeRuleQueryCandidateAssessments(rawText, candidates = []) {
   const premiseValues = new Set(["same", "partial", "different", "unknown"]);
   const seen = new Set();
   const result = [];
-  for (const item of Array.isArray(parsed?.candidateAssessments) ? parsed.candidateAssessments : []) {
+  for (const item of candidateAssessmentSourceFromParsedValue(parsed)) {
     const id = nonEmpty(item?.id).slice(0, 120);
     const relevance = nonEmpty(item?.relevance).toLowerCase();
     const premise = nonEmpty(item?.premise).toLowerCase();
@@ -4433,6 +4606,15 @@ function normalizeRuleQueryCandidateAssessments(rawText, candidates = []) {
     if (result.length >= 8) break;
   }
   return result;
+}
+
+function candidateAssessmentSourceFromParsedValue(parsed) {
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return [];
+  if (Array.isArray(parsed.candidateAssessments)) return parsed.candidateAssessments;
+  const nested = [parsed.result, parsed.data, parsed.output, parsed.response]
+    .map(candidateAssessmentSourceFromParsedValue)
+    .filter((items) => items.length > 0);
+  return nested.length === 1 ? nested[0] : [];
 }
 
 function ruleQueryCardContext(cards = [], userProvidedCardTexts = []) {
@@ -4461,6 +4643,26 @@ function validateExtractionResponse(response = {}, kind) {
   }
   const rawText = String(response?.rawText || "").trim();
   if (!rawText) return { items: [], cacheable: false, reason: "empty_content" };
+  if (kind === "rule") {
+    const finishReason = String(response?.finishReason || "").trim().toLowerCase();
+    const completeRelayStream = !finishReason && response?.transport === "chat_completions_sse";
+    if (finishReason !== "stop" && !completeRelayStream) {
+      return {
+        items: [],
+        cacheable: false,
+        reason: `incomplete_finish:${finishReason || "missing"}`,
+      };
+    }
+    const items = normalizeRuleSearchQueries(rawText);
+    return items.length > 0
+      ? {
+        items,
+        cacheable: true,
+        reason: "valid",
+        warning: completeRelayStream ? "rule_query_missing_finish_reason_accepted" : "",
+      }
+      : { items: [], cacheable: false, reason: "no_valid_items" };
+  }
   let parsed;
   try {
     parsed = parseStrictJsonObject(rawText);
@@ -4541,17 +4743,21 @@ function normalizeCardNameCandidates(rawText) {
 }
 
 function normalizeRuleSearchQueries(rawText) {
-  let parsed = null;
-  try {
-    parsed = rawText && typeof rawText === "object" ? rawText : parseRagModelJson(rawText);
-  } catch {
-    return [];
+  let source = [];
+  if (rawText && typeof rawText === "object") {
+    source = ruleQuerySourceFromParsedValue(rawText);
+  } else {
+    const text = String(rawText || "").trim();
+    if (!text) return [];
+    try {
+      source = ruleQuerySourceFromParsedValue(parseRagModelJson(text));
+      if (!source.length && !/^[\[{]/u.test(stripJsonCodeFence(text))) {
+        source = parsePlainRuleQueryLines(text);
+      }
+    } catch {
+      source = parsePlainRuleQueryLines(text);
+    }
   }
-  const source = Array.isArray(parsed?.ruleQueries) ? parsed.ruleQueries
-    : Array.isArray(parsed?.queries) ? parsed.queries
-      : Array.isArray(parsed?.ruleSearchQueries) ? parsed.ruleSearchQueries
-        : Array.isArray(parsed?.keywords) ? parsed.keywords
-          : [];
   const candidates = source
     .map((item) => typeof item === "string"
       ? { subclaim: "", checkpoint: "", query: item, reason: "", confidence: "medium" }
@@ -4573,7 +4779,8 @@ function normalizeRuleSearchQueries(rawText) {
       source: "model_rule_query_extractor",
     }))
     .filter((item) => item.query.length >= 2 && /[A-Za-z\u3040-\u30ff\u3400-\u9fff0-9]/u.test(item.query))
-    .filter((item) => !/^[\s\p{P}]+$/u.test(item.query));
+    .filter((item) => !/^[\s\p{P}]+$/u.test(item.query))
+    .filter((item) => !/^NO_QUERY$/iu.test(item.query));
   const seen = new Set();
   const result = [];
   for (const candidate of candidates) {
@@ -4584,6 +4791,42 @@ function normalizeRuleSearchQueries(rawText) {
     if (result.length >= 4) break;
   }
   return result;
+}
+
+function ruleQuerySourceFromParsedValue(parsed) {
+  if (Array.isArray(parsed)) return parsed;
+  if (!parsed || typeof parsed !== "object") return [];
+  const direct = Array.isArray(parsed.ruleQueries) ? parsed.ruleQueries
+    : Array.isArray(parsed.queries) ? parsed.queries
+      : Array.isArray(parsed.ruleSearchQueries) ? parsed.ruleSearchQueries
+        : Array.isArray(parsed.keywords) ? parsed.keywords
+          : null;
+  if (direct) return direct;
+  if (typeof parsed.query === "string"
+      || typeof parsed.searchQuery === "string"
+      || typeof parsed.keyword === "string"
+      || typeof parsed.topic === "string") {
+    return [parsed];
+  }
+  const nested = [parsed.result, parsed.data, parsed.output, parsed.response]
+    .map(ruleQuerySourceFromParsedValue)
+    .filter((items) => items.length > 0);
+  return nested.length === 1 ? nested[0] : [];
+}
+
+function parsePlainRuleQueryLines(rawText) {
+  const text = stripJsonCodeFence(String(rawText || "").trim());
+  if (!text) return [];
+  return text
+    .split(/\r?\n/u)
+    .map((line) => line.trim())
+    .filter((line) => line && !/^```/u.test(line))
+    .map((line) => line
+      .replace(/^\s*(?:[-*•]|\d+[.)、])\s*/u, "")
+      .replace(/^\s*(?:query|查询|查詢|检索(?:问题|問題|词|詞)?)\s*[:：]\s*/iu, "")
+      .trim())
+    .filter((line) => line && !/^NO_QUERY$/iu.test(line))
+    .slice(0, 4);
 }
 
 function normalizeRuleQueryCheckpoint(value) {
