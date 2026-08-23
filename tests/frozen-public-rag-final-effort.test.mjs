@@ -513,3 +513,25 @@ test("provider failure, empty or truncated output, and returned-model drift are 
     });
   }
 });
+
+test("targeted-eight workflow keeps private evidence requirements outside the repository", async () => {
+  const workflow = await readFile(new URL(
+    "../.github/workflows/frozen-public-rag-targeted-eight.yml",
+    import.meta.url,
+  ), "utf8");
+
+  assert.match(
+    workflow,
+    /PURE_LLM_EVALUATION_TARGETED_EIGHT_REQUIREMENTS_BASE64/u,
+  );
+  assert.match(
+    workflow,
+    /--requirements "\$RUNNER_TEMP\/frozen-eight-requirements\.json"/u,
+  );
+  assert.doesNotMatch(
+    workflow,
+    /--requirements\s+\.github\//u,
+  );
+  assert.match(workflow, /frozen-public-rag-reusable\.tar\.gz\.enc\.hmac-sha256/u);
+  assert.match(workflow, /target_sha256=/u);
+});

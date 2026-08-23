@@ -1,0 +1,514 @@
+name: Frozen public RAG targeted eight
+
+on:
+  push:
+    tags:
+      - "private-frozen-eight-freeze-*"
+      - "private-frozen-eight-low-*"
+      - "private-frozen-eight-medium-*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: private-frozen-public-rag-targeted-eight
+  cancel-in-progress: false
+
+jobs:
+  frozen-targeted-eight:
+    if: >-
+      github.actor == github.repository_owner
+      && github.triggering_actor == github.repository_owner
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      RELAY_BASE_URL: https://api.986310.xyz/v1
+      PUBLIC_RULING_MODEL_PROFILE: relay-gpt-5.6-sol-low
+      RELAY_CARD_MODEL: gpt-5.6-sol
+      RAG_CARD_MODEL_REASONING_EFFORT: low
+      RAG_CARD_MODEL_TIMEOUT_MS: "120000"
+      RAG_CARD_MODEL_MAX_OUTPUT_TOKENS: "4096"
+      RELAY_RULE_MODEL: gpt-5.6-sol
+      RAG_RULE_MODEL_REASONING_EFFORT: low
+      RAG_RULE_MODEL_TIMEOUT_MS: "120000"
+      RAG_RULE_MODEL_MAX_OUTPUT_TOKENS: "32000"
+      RELAY_STREAM_TIMEOUT_MS: "270000"
+      PRIVATE_EVALUATION_BUDGET_USD: "10"
+      PRIVATE_EVALUATION_AUXILIARY_BUDGET_CNY: "20"
+      QUERY_AUDIT_ENABLED: "false"
+      RAG_DRY_RUN: "false"
+      HOST: 127.0.0.1
+
+    steps:
+      - name: Checkout the exact tagged preview commit
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Resolve and validate the frozen stage
+        id: scope
+        shell: bash
+        run: |
+          set -euo pipefail
+          ref="$GITHUB_REF_NAME"
+          all_cases="case-004,case-007,case-018,case-019,case-023,case-027,case-028,case-032"
+          if [[ "$ref" == private-frozen-eight-freeze-* ]]; then
+            stage="freeze"
+            source_key=""
+            case_ids="$all_cases"
+          elif [[ "$ref" =~ ^private-frozen-eight-low-([0-9]+)-([0-9]+)$ ]]; then
+            stage="low"
+            source_key="${BASH_REMATCH[1]}-${BASH_REMATCH[2]}"
+            case_ids="$all_cases"
+          elif [[ "$ref" =~ ^private-frozen-eight-medium-([0-9]+)-([0-9]+)-(.+)$ ]]; then
+            stage="medium"
+            source_key="${BASH_REMATCH[1]}-${BASH_REMATCH[2]}"
+            raw_cases="${BASH_REMATCH[3]}"
+            case_ids=""
+            declare -A seen=()
+            IFS='_' read -ra requested <<< "$raw_cases"
+            for case_id in "${requested[@]}"; do
+              case "$case_id" in
+                case-004|case-007|case-018|case-019|case-023|case-027|case-028|case-032) ;;
+                *) echo "Unsupported medium case: $case_id" >&2; exit 1 ;;
+              esac
+              if [ -z "${seen[$case_id]:-}" ]; then
+                seen[$case_id]=1
+                case_ids="${case_ids:+$case_ids,}$case_id"
+              fi
+            done
+            test -n "$case_ids"
+          else
+            echo "Unsupported private frozen tag" >&2
+            exit 1
+          fi
+          printf 'stage=%s\nsource_key=%s\ncase_ids=%s\n' \
+            "$stage" "$source_key" "$case_ids" >> "$GITHUB_OUTPUT"
+
+      - name: Verify the tag targets the reviewed preview branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --depth=1 origin \
+            refs/heads/codex/e338ac5-eval-review:refs/remotes/origin/codex/e338ac5-eval-review
+          test "$(git rev-parse "$GITHUB_SHA^{commit}")" = \
+            "$(git rev-parse refs/remotes/origin/codex/e338ac5-eval-review)"
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Validate the frozen runner and evidence path
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --test --test-force-exit --test-concurrency=1 \
+            tests/frozen-public-rag-final-effort.test.mjs \
+            tests/rag-ruling-prompt-evidence.test.mjs \
+            tests/relay-multilingual-question-retrieval.test.mjs
+
+      - name: Checkout encrypted private results for replay
+        if: steps.scope.outputs.stage != 'freeze'
+        uses: actions/checkout@v6
+        with:
+          ref: private-evaluation-results
+          path: source-private-results
+          persist-credentials: false
+
+      - name: Decrypt the reviewed frozen snapshot for replay
+        if: steps.scope.outputs.stage != 'freeze'
+        shell: bash
+        env:
+          PRIVATE_ARCHIVE_KEY: ${{ secrets.PURE_LLM_EVALUATION_ARCHIVE_KEY }}
+          SOURCE_KEY: ${{ steps.scope.outputs.source_key }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test "${#PRIVATE_ARCHIVE_KEY}" -ge 32
+          source_dir="source-private-results/runs/frozen-eight/$SOURCE_KEY"
+          metadata="$source_dir/metadata.txt"
+          ciphertext="$source_dir/frozen-public-rag-reusable.tar.gz.enc"
+          ciphertext_hmac="$source_dir/frozen-public-rag-reusable.tar.gz.enc.hmac-sha256"
+          test -s "$metadata"
+          test -s "$ciphertext"
+          test -s "$ciphertext_hmac"
+          test "$(sed -n 's/^stage=//p' "$metadata")" = "freeze"
+          test "$(sed -n 's/^source_sha=//p' "$metadata")" = "$GITHUB_SHA"
+          CIPHERTEXT="$ciphertext" HMAC_FILE="$ciphertext_hmac" python - <<'PY'
+          import hashlib
+          import hmac
+          import os
+          from pathlib import Path
+
+          key = os.environ["PRIVATE_ARCHIVE_KEY"].encode("utf-8")
+          ciphertext = Path(os.environ["CIPHERTEXT"]).read_bytes()
+          expected = Path(os.environ["HMAC_FILE"]).read_text("ascii").strip().lower()
+          actual = hmac.new(
+              b"frozen-eight-reusable-hmac-v1\0" + key,
+              ciphertext,
+              hashlib.sha256,
+          ).hexdigest()
+          if not hmac.compare_digest(actual, expected):
+              raise SystemExit("reusable ciphertext HMAC mismatch")
+          PY
+          mkdir -p "$RUNNER_TEMP/frozen-eight-source"
+          openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -md sha256 \
+            -in "$ciphertext" \
+            -out "$RUNNER_TEMP/frozen-eight-source.tar.gz" \
+            -pass env:PRIVATE_ARCHIVE_KEY
+          tar -xzf "$RUNNER_TEMP/frozen-eight-source.tar.gz" \
+            -C "$RUNNER_TEMP/frozen-eight-source"
+          mapfile -t snapshots < <(find "$RUNNER_TEMP/frozen-eight-source" \
+            -type f -name snapshot.json -print)
+          test "${#snapshots[@]}" -eq 1
+          cp "${snapshots[0]}" "$RUNNER_TEMP/frozen-eight-source/snapshot.json"
+          binding="$RUNNER_TEMP/frozen-eight-source/frozen-eight-private-output/binding.txt"
+          test -s "$binding"
+          test "$(sed -n 's/^source_sha=//p' "$binding")" = "$GITHUB_SHA"
+          test "$(sed -n 's/^stage=//p' "$binding")" = "freeze"
+          test "$(sed -n 's/^run_id=//p' "$binding")-$(sed -n 's/^run_attempt=//p' "$binding")" = \
+            "$SOURCE_KEY"
+          test "$(sed -n 's/^target_sha256=//p' "$binding")" = \
+            "$(sha256sum "$RUNNER_TEMP/frozen-eight-source/snapshot.json" | awk '{print $1}')"
+
+      - name: Preflight private inputs and preservation before paid calls
+        shell: bash
+        env:
+          PRIVATE_ARCHIVE_KEY: ${{ secrets.PURE_LLM_EVALUATION_ARCHIVE_KEY }}
+          PRIVATE_DATASET_BASE64: ${{ secrets.PURE_LLM_EVALUATION_DATASET_BASE64 }}
+          PRIVATE_REQUIREMENTS_BASE64: ${{ secrets.PURE_LLM_EVALUATION_TARGETED_EIGHT_REQUIREMENTS_BASE64 }}
+          RELAY_API_KEY: ${{ secrets.RELAY_API_KEY }}
+          STAGE: ${{ steps.scope.outputs.stage }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$RELAY_API_KEY"
+          test "${#PRIVATE_ARCHIVE_KEY}" -ge 32
+          test -s .github/private-evaluation-recipient.pem
+          printf '%s  %s\n' \
+            '749295ac7c83b5c765722975c4a6985dedcfcd9dc02eeab3e01dd648ff8a4b3e' \
+            '.github/private-evaluation-recipient.pem' | sha256sum -c -
+          openssl pkey -pubin -in .github/private-evaluation-recipient.pem -noout
+          test -d "$RUNNER_TEMP"
+          touch "$RUNNER_TEMP/frozen-eight-write-test"
+          rm -f -- "$RUNNER_TEMP/frozen-eight-write-test"
+          git ls-remote --exit-code origin refs/heads/private-evaluation-results > /dev/null
+          if [ "$STAGE" = "freeze" ]; then
+            test -n "$PRIVATE_DATASET_BASE64"
+            test -n "$PRIVATE_REQUIREMENTS_BASE64"
+            printf '%s' "$PRIVATE_DATASET_BASE64" | base64 --decode \
+              > "$RUNNER_TEMP/private-dataset.txt"
+            printf '%s' "$PRIVATE_REQUIREMENTS_BASE64" | base64 --decode \
+              > "$RUNNER_TEMP/frozen-eight-requirements.json"
+            test -s "$RUNNER_TEMP/private-dataset.txt"
+            test -s "$RUNNER_TEMP/frozen-eight-requirements.json"
+            DATASET="$RUNNER_TEMP/private-dataset.txt" \
+              REQUIREMENTS="$RUNNER_TEMP/frozen-eight-requirements.json" \
+              node --input-type=module <<'NODE'
+            import { createHash } from "node:crypto";
+            import { readFile } from "node:fs/promises";
+            import { parseDatasetText } from "./scripts/evaluate-pure-llm-preview.mjs";
+
+            const parsed = JSON.parse(await readFile(process.env.REQUIREMENTS, "utf8"));
+            const expected = [
+              "case-004", "case-007", "case-018", "case-019",
+              "case-023", "case-027", "case-028", "case-032",
+            ];
+            const actual = Object.keys(parsed?.cases || {}).sort();
+            if (parsed?.schemaVersion !== 1 || JSON.stringify(actual) !== JSON.stringify(expected)) {
+              throw new Error("private evidence requirements do not contain the targeted eight cases");
+            }
+            const dataset = parseDatasetText(await readFile(process.env.DATASET, "utf8"));
+            const cases = new Map(dataset.cases.map((item) => [item.id, item.question]));
+            for (const id of expected) {
+              const question = cases.get(id);
+              const digest = createHash("sha256").update(question || "", "utf8").digest("hex");
+              if (!question || digest !== parsed.cases[id]?.questionSha256) {
+                throw new Error(`${id} does not match the reviewed private evidence requirement`);
+              }
+            }
+            NODE
+          fi
+
+      - name: Freeze or replay the selected cases serially
+        id: execute
+        shell: bash
+        env:
+          RELAY_API_KEY: ${{ secrets.RELAY_API_KEY }}
+          PRIVATE_DATASET_BASE64: ${{ secrets.PURE_LLM_EVALUATION_DATASET_BASE64 }}
+          STAGE: ${{ steps.scope.outputs.stage }}
+          CASE_IDS: ${{ steps.scope.outputs.case_ids }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$RELAY_API_KEY"
+          output_dir="$RUNNER_TEMP/frozen-eight-private-output"
+          mkdir -p "$output_dir"
+          printf '%s\n' "$STAGE" > "$output_dir/stage.txt"
+          IFS=',' read -ra selected <<< "$CASE_IDS"
+          case_args=()
+          for case_id in "${selected[@]}"; do
+            test -n "$case_id"
+            case_args+=(--case "$case_id")
+          done
+          test "${#selected[@]}" -ge 1
+
+          set +e
+          if [ "$STAGE" = "freeze" ]; then
+            test -s "$RUNNER_TEMP/private-dataset.txt"
+            node scripts/frozen-public-rag-final-effort.mjs freeze \
+              --dataset "$RUNNER_TEMP/private-dataset.txt" \
+              --snapshot "$output_dir/snapshot.json" \
+              --requirements "$RUNNER_TEMP/frozen-eight-requirements.json" \
+              "${case_args[@]}" \
+              --max-calls "${#selected[@]}" \
+              > "$output_dir/runner.log" 2>&1
+          else
+            node scripts/frozen-public-rag-final-effort.mjs run \
+              --snapshot "$RUNNER_TEMP/frozen-eight-source/snapshot.json" \
+              --output "$output_dir/results.json" \
+              --effort "$STAGE" \
+              "${case_args[@]}" \
+              --max-calls "${#selected[@]}" \
+              > "$output_dir/runner.log" 2>&1
+          fi
+          runner_status=$?
+          set -e
+          printf '%s\n' "$runner_status" > "$output_dir/exit-code.txt"
+          target="$output_dir/results.json"
+          if [ "$STAGE" = "freeze" ]; then target="$output_dir/snapshot.json"; fi
+          if [ -s "$target" ]; then
+            printf '%s\n' \
+              'schema_version=1' \
+              "source_sha=$GITHUB_SHA" \
+              "stage=$STAGE" \
+              "source_key=${{ steps.scope.outputs.source_key }}" \
+              "run_id=$GITHUB_RUN_ID" \
+              "run_attempt=$GITHUB_RUN_ATTEMPT" \
+              "case_ids=$CASE_IDS" \
+              "target_sha256=$(sha256sum "$target" | awk '{print $1}')" \
+              > "$output_dir/binding.txt"
+          fi
+          echo "exit_code=$runner_status" >> "$GITHUB_OUTPUT"
+          echo "selected_count=${#selected[@]}" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Print private-safe execution metadata
+        if: always()
+        shell: bash
+        env:
+          STAGE: ${{ steps.scope.outputs.stage }}
+        run: |
+          set -euo pipefail
+          output_dir="$RUNNER_TEMP/frozen-eight-private-output"
+          target="$output_dir/results.json"
+          if [ "$STAGE" = "freeze" ]; then target="$output_dir/snapshot.json"; fi
+          if [ ! -s "$target" ]; then
+            echo "No private checkpoint was created"
+            exit 0
+          fi
+          TARGET="$target" node --input-type=module <<'NODE'
+          import { readFile } from "node:fs/promises";
+          const payload = JSON.parse(await readFile(process.env.TARGET, "utf8"));
+          const items = Array.isArray(payload.cases) ? payload.cases : payload.results;
+          console.log(JSON.stringify({
+            kind: "frozen_targeted_eight_metadata",
+            status: payload.status || null,
+            itemCount: Array.isArray(items) ? items.length : 0,
+            selectedCount: Array.isArray(payload.selectedCaseIds)
+              ? payload.selectedCaseIds.length
+              : 0,
+          }));
+          NODE
+
+      - name: Encrypt the private checkpoint for review and replay
+        id: encrypt
+        if: always()
+        shell: bash
+        env:
+          PRIVATE_ARCHIVE_KEY: ${{ secrets.PURE_LLM_EVALUATION_ARCHIVE_KEY }}
+          STAGE: ${{ steps.scope.outputs.stage }}
+        run: |
+          set -euo pipefail
+          umask 077
+          output_dir="$RUNNER_TEMP/frozen-eight-private-output"
+          test -d "$output_dir"
+          mkdir -p encrypted-output
+          plaintext="$RUNNER_TEMP/frozen-public-rag-private.tar.gz"
+          review_verify="$RUNNER_TEMP/frozen-public-rag-review.verify.tar.gz"
+          reusable_verify="$RUNNER_TEMP/frozen-public-rag-reusable.verify.tar.gz"
+          password_file="$RUNNER_TEMP/frozen-public-rag-review.password"
+          envelope_plain="$RUNNER_TEMP/frozen-public-rag-review.key-envelope"
+          review_cipher="encrypted-output/frozen-public-rag-review.tar.gz.enc"
+          review_envelope="encrypted-output/frozen-public-rag-review.key-envelope.rsa-oaep"
+          reusable_cipher="encrypted-output/frozen-public-rag-reusable.tar.gz.enc"
+          reusable_hmac="encrypted-output/frozen-public-rag-reusable.tar.gz.enc.hmac-sha256"
+          cleanup() {
+            rm -f -- "$plaintext" "$review_verify" "$reusable_verify" \
+              "$password_file" "$envelope_plain"
+          }
+          trap cleanup EXIT
+          tar -C "$RUNNER_TEMP" -czf "$plaintext" frozen-eight-private-output
+
+          openssl rand -hex 32 > "$password_file"
+          chmod 600 "$password_file"
+          openssl enc -aes-256-cbc -salt -pbkdf2 -iter 200000 -md sha256 \
+            -in "$plaintext" -out "$review_cipher" -pass file:"$password_file"
+          openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -md sha256 \
+            -in "$review_cipher" -out "$review_verify" -pass file:"$password_file"
+          tar -tzf "$review_verify" > /dev/null
+          cipher_sha256="$(sha256sum "$review_cipher" | awk '{print $1}')"
+          {
+            printf 'schema_version=1\n'
+            printf 'password=%s\n' "$(tr -d '\r\n' < "$password_file")"
+            printf 'cipher_sha256=%s\n' "$cipher_sha256"
+            printf 'source_sha=%s\n' "$GITHUB_SHA"
+            printf 'stage=%s\n' "$STAGE"
+          } > "$envelope_plain"
+          openssl pkeyutl -encrypt -pubin \
+            -inkey .github/private-evaluation-recipient.pem \
+            -pkeyopt rsa_padding_mode:oaep \
+            -pkeyopt rsa_oaep_md:sha256 \
+            -pkeyopt rsa_mgf1_md:sha256 \
+            -in "$envelope_plain" -out "$review_envelope"
+
+          if [ "$STAGE" = "freeze" ]; then
+            test "${#PRIVATE_ARCHIVE_KEY}" -ge 32
+            openssl enc -aes-256-cbc -salt -pbkdf2 -iter 200000 -md sha256 \
+              -in "$plaintext" -out "$reusable_cipher" -pass env:PRIVATE_ARCHIVE_KEY
+            openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -md sha256 \
+              -in "$reusable_cipher" -out "$reusable_verify" -pass env:PRIVATE_ARCHIVE_KEY
+            tar -tzf "$reusable_verify" > /dev/null
+            CIPHERTEXT="$reusable_cipher" HMAC_FILE="$reusable_hmac" python - <<'PY'
+            import hashlib
+            import hmac
+            import os
+            from pathlib import Path
+
+            key = os.environ["PRIVATE_ARCHIVE_KEY"].encode("utf-8")
+            ciphertext = Path(os.environ["CIPHERTEXT"]).read_bytes()
+            digest = hmac.new(
+                b"frozen-eight-reusable-hmac-v1\0" + key,
+                ciphertext,
+                hashlib.sha256,
+            ).hexdigest()
+            Path(os.environ["HMAC_FILE"]).write_text(digest + "\n", encoding="ascii")
+            PY
+          fi
+          chmod 600 encrypted-output/*
+          cleanup
+          trap - EXIT
+          echo "created=true" >> "$GITHUB_OUTPUT"
+
+      - name: Preserve encrypted checkpoint as a recoverable artifact
+        if: always() && steps.encrypt.outputs.created == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: frozen-eight-${{ steps.scope.outputs.stage }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: encrypted-output/
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Checkout the encrypted-results branch for publication
+        if: always() && steps.encrypt.outputs.created == 'true'
+        uses: actions/checkout@v6
+        with:
+          ref: private-evaluation-results
+          path: publish-private-results
+
+      - name: Publish only encrypted owner-review files
+        if: always() && steps.encrypt.outputs.created == 'true'
+        shell: bash
+        env:
+          STAGE: ${{ steps.scope.outputs.stage }}
+          SOURCE_KEY: ${{ steps.scope.outputs.source_key }}
+          CASE_IDS: ${{ steps.scope.outputs.case_ids }}
+        run: |
+          set -euo pipefail
+          results_repo="publish-private-results"
+          git -C "$results_repo" pull --rebase origin private-evaluation-results
+          run_key="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          relative="runs/frozen-eight/$run_key"
+          destination="$results_repo/$relative"
+          test ! -e "$destination"
+          mkdir -p "$destination"
+          cp encrypted-output/frozen-public-rag-review.tar.gz.enc "$destination/"
+          cp encrypted-output/frozen-public-rag-review.key-envelope.rsa-oaep "$destination/"
+          if [ "$STAGE" = "freeze" ]; then
+            cp encrypted-output/frozen-public-rag-reusable.tar.gz.enc "$destination/"
+            cp encrypted-output/frozen-public-rag-reusable.tar.gz.enc.hmac-sha256 "$destination/"
+          fi
+          printf '%s\n' \
+            'schema_version=1' \
+            'archive_cipher=aes-256-cbc-pbkdf2-sha256-iter200000' \
+            'key_envelope=rsa-oaep-sha256-mgf1-sha256' \
+            "source_sha=$GITHUB_SHA" \
+            "stage=$STAGE" \
+            "source_key=$SOURCE_KEY" \
+            "case_ids=$CASE_IDS" \
+            "run_id=$GITHUB_RUN_ID" \
+            "run_attempt=$GITHUB_RUN_ATTEMPT" \
+            "runner_exit_code=${{ steps.execute.outputs.exit_code }}" \
+            "review_cipher_sha256=$(sha256sum encrypted-output/frozen-public-rag-review.tar.gz.enc | awk '{print $1}')" \
+            "review_envelope_sha256=$(sha256sum encrypted-output/frozen-public-rag-review.key-envelope.rsa-oaep | awk '{print $1}')" \
+            > "$destination/metadata.txt"
+          if [ "$STAGE" = "freeze" ]; then
+            printf 'reusable_cipher_sha256=%s\n' \
+              "$(sha256sum encrypted-output/frozen-public-rag-reusable.tar.gz.enc | awk '{print $1}')" \
+              >> "$destination/metadata.txt"
+            printf 'reusable_hmac_sha256=%s\n' \
+              "$(sha256sum encrypted-output/frozen-public-rag-reusable.tar.gz.enc.hmac-sha256 | awk '{print $1}')" \
+              >> "$destination/metadata.txt"
+          fi
+          git -C "$results_repo" config user.name github-actions[bot]
+          git -C "$results_repo" config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git -C "$results_repo" add -- "$relative"
+          git -C "$results_repo" diff --cached --check
+          git -C "$results_repo" commit -m "Store encrypted frozen RAG $STAGE $run_key"
+          published=false
+          for attempt in 1 2 3; do
+            if git -C "$results_repo" push origin HEAD:refs/heads/private-evaluation-results; then
+              published=true
+              break
+            fi
+            if [ "$attempt" -lt 3 ]; then
+              git -C "$results_repo" pull --rebase origin private-evaluation-results
+            fi
+          done
+          test "$published" = "true"
+
+      - name: Scrub plaintext private material
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf -- \
+            "$RUNNER_TEMP/frozen-eight-private-output" \
+            "$RUNNER_TEMP/frozen-eight-source" \
+            "$RUNNER_TEMP/frozen-eight-source.tar.gz" \
+            "$RUNNER_TEMP/private-dataset.txt" \
+            "$RUNNER_TEMP/frozen-eight-requirements.json" \
+            "$RUNNER_TEMP/frozen-public-rag-private.tar.gz" \
+            "$RUNNER_TEMP/frozen-public-rag-review.verify.tar.gz" \
+            "$RUNNER_TEMP/frozen-public-rag-reusable.verify.tar.gz" \
+            "$RUNNER_TEMP/frozen-public-rag-review.password" \
+            "$RUNNER_TEMP/frozen-public-rag-review.key-envelope"
+          for path in encrypted-output source-private-results publish-private-results; do
+            if [ -e "$path" ]; then rm -rf -- "$path"; fi
+          done
+
+      - name: Enforce successful execution after encrypted preservation
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${{ steps.encrypt.outcome }}" = "success"
+          test "${{ steps.execute.outputs.exit_code }}" = "0"
