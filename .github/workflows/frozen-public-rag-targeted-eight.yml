@@ -210,33 +210,39 @@ jobs:
               > "$RUNNER_TEMP/frozen-eight-requirements.json"
             test -s "$RUNNER_TEMP/private-dataset.txt"
             test -s "$RUNNER_TEMP/frozen-eight-requirements.json"
-            DATASET="$RUNNER_TEMP/private-dataset.txt" \
-              REQUIREMENTS="$RUNNER_TEMP/frozen-eight-requirements.json" \
-              node --input-type=module <<'NODE'
-            import { createHash } from "node:crypto";
-            import { readFile } from "node:fs/promises";
-            import { parseDatasetText } from "./scripts/evaluate-pure-llm-preview.mjs";
-
-            const parsed = JSON.parse(await readFile(process.env.REQUIREMENTS, "utf8"));
-            const expected = [
-              "case-004", "case-007", "case-018", "case-019",
-              "case-023", "case-027", "case-028", "case-032",
-            ];
-            const actual = Object.keys(parsed?.cases || {}).sort();
-            if (parsed?.schemaVersion !== 1 || JSON.stringify(actual) !== JSON.stringify(expected)) {
-              throw new Error("private evidence requirements do not contain the targeted eight cases");
-            }
-            const dataset = parseDatasetText(await readFile(process.env.DATASET, "utf8"));
-            const cases = new Map(dataset.cases.map((item) => [item.id, item.question]));
-            for (const id of expected) {
-              const question = cases.get(id);
-              const digest = createHash("sha256").update(question || "", "utf8").digest("hex");
-              if (!question || digest !== parsed.cases[id]?.questionSha256) {
-                throw new Error(`${id} does not match the reviewed private evidence requirement`);
-              }
-            }
-            NODE
           fi
+
+      - name: Validate the targeted freeze dataset contract
+        if: steps.scope.outputs.stage == 'freeze'
+        shell: bash
+        run: |
+          set -euo pipefail
+          DATASET="$RUNNER_TEMP/private-dataset.txt" \
+            REQUIREMENTS="$RUNNER_TEMP/frozen-eight-requirements.json" \
+            node --input-type=module <<'NODE'
+          import { createHash } from "node:crypto";
+          import { readFile } from "node:fs/promises";
+          import { parseDatasetText } from "./scripts/evaluate-pure-llm-preview.mjs";
+
+          const parsed = JSON.parse(await readFile(process.env.REQUIREMENTS, "utf8"));
+          const expected = [
+            "case-004", "case-007", "case-018", "case-019",
+            "case-023", "case-027", "case-028", "case-032",
+          ];
+          const actual = Object.keys(parsed?.cases || {}).sort();
+          if (parsed?.schemaVersion !== 1 || JSON.stringify(actual) !== JSON.stringify(expected)) {
+            throw new Error("private evidence requirements do not contain the targeted eight cases");
+          }
+          const dataset = parseDatasetText(await readFile(process.env.DATASET, "utf8"));
+          const cases = new Map(dataset.cases.map((item) => [item.id, item.question]));
+          for (const id of expected) {
+            const question = cases.get(id);
+            const digest = createHash("sha256").update(question || "", "utf8").digest("hex");
+            if (!question || digest !== parsed.cases[id]?.questionSha256) {
+              throw new Error(`${id} does not match the reviewed private evidence requirement`);
+            }
+          }
+          NODE
 
       - name: Freeze or replay the selected cases serially
         id: execute
@@ -387,21 +393,8 @@ jobs:
             openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -md sha256 \
               -in "$reusable_cipher" -out "$reusable_verify" -pass env:PRIVATE_ARCHIVE_KEY
             tar -tzf "$reusable_verify" > /dev/null
-            CIPHERTEXT="$reusable_cipher" HMAC_FILE="$reusable_hmac" python - <<'PY'
-            import hashlib
-            import hmac
-            import os
-            from pathlib import Path
-
-            key = os.environ["PRIVATE_ARCHIVE_KEY"].encode("utf-8")
-            ciphertext = Path(os.environ["CIPHERTEXT"]).read_bytes()
-            digest = hmac.new(
-                b"frozen-eight-reusable-hmac-v1\0" + key,
-                ciphertext,
-                hashlib.sha256,
-            ).hexdigest()
-            Path(os.environ["HMAC_FILE"]).write_text(digest + "\n", encoding="ascii")
-            PY
+            CIPHERTEXT="$reusable_cipher" HMAC_FILE="$reusable_hmac" python -c \
+              'import hashlib,hmac,os,pathlib; key=os.environ["PRIVATE_ARCHIVE_KEY"].encode("utf-8"); ciphertext=pathlib.Path(os.environ["CIPHERTEXT"]).read_bytes(); digest=hmac.new(b"frozen-eight-reusable-hmac-v1\0"+key,ciphertext,hashlib.sha256).hexdigest(); pathlib.Path(os.environ["HMAC_FILE"]).write_text(digest+"\n",encoding="ascii")'
           fi
           chmod 600 encrypted-output/*
           cleanup

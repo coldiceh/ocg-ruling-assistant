@@ -534,4 +534,5 @@ test("targeted-eight workflow keeps private evidence requirements outside the re
   );
   assert.match(workflow, /frozen-public-rag-reusable\.tar\.gz\.enc\.hmac-sha256/u);
   assert.match(workflow, /target_sha256=/u);
+  assert.doesNotMatch(workflow, /^ {12}(?:NODE|PY)$/mu);
 });
