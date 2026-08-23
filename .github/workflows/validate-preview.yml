@@ -25,6 +25,11 @@ on:
         required: false
         default: ""
         type: string
+      rewrap_source_run_id:
+        description: Re-encrypt one completed private-evaluation artifact for owner review without running models
+        required: false
+        default: ""
+        type: string
 
 permissions:
   contents: read
@@ -95,7 +100,8 @@ jobs:
             || github.event.label.name == 'private-pure-llm-retrieval-pilot'
             || github.event.label.name == 'private-pure-llm-evaluation')
           && github.event.pull_request.head.repo.full_name == github.repository)
-        || github.event_name == 'workflow_dispatch'
+        || (github.event_name == 'workflow_dispatch'
+          && inputs.rewrap_source_run_id == '')
         || (github.event_name == 'push'
           && github.ref_type == 'tag'
           && (startsWith(github.ref_name, 'private-eval-pilot-')
@@ -676,6 +682,181 @@ jobs:
         run: |
           echo "${{ steps.evaluation.outputs.generation_failed }} paid evaluation case(s) failed to generate; the encrypted review archive was preserved." >&2
           exit 1
+
+  rewrap-private-evaluation:
+    if: >-
+      github.event_name == 'workflow_dispatch'
+      && inputs.rewrap_source_run_id != ''
+      && github.actor == github.repository_owner
+      && github.triggering_actor == github.repository_owner
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      actions: read
+      contents: read
+    env:
+      SOURCE_RUN_ID: ${{ inputs.rewrap_source_run_id }}
+    steps:
+      - name: Checkout the review encryption key
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Verify the source run identifier
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$SOURCE_RUN_ID" =~ ^[1-9][0-9]*$ ]]
+
+      - name: Download the encrypted source artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: pure-llm-private-manual-review-encrypted
+          path: ${{ runner.temp }}/private-evaluation-source
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.rewrap_source_run_id }}
+
+      - name: Re-encrypt the owner-review archive with the repository public key
+        shell: bash
+        env:
+          PRIVATE_ARCHIVE_KEY: ${{ secrets.PURE_LLM_EVALUATION_ARCHIVE_KEY }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          umask 077
+          if [ "${#PRIVATE_ARCHIVE_KEY}" -lt 32 ]; then
+            echo "The private evaluation archive key is missing or too short" >&2
+            exit 1
+          fi
+          test -s .github/private-evaluation-recipient.pem
+          recipient_sha256="$(sha256sum .github/private-evaluation-recipient.pem | awk '{print $1}')"
+          test "$recipient_sha256" = "749295ac7c83b5c765722975c4a6985dedcfcd9dc02eeab3e01dd648ff8a4b3e"
+          openssl pkey -pubin -in .github/private-evaluation-recipient.pem -noout
+
+          source_dir="$RUNNER_TEMP/private-evaluation-source"
+          source_cipher="$source_dir/pure-llm-private-checkpoint.tar.gz.enc"
+          test -d "$source_dir"
+          mapfile -d '' source_entries < <(find "$source_dir" -mindepth 1 -maxdepth 1 -print0)
+          test "${#source_entries[@]}" -eq 1
+          test "${source_entries[0]}" = "$source_cipher"
+          test -f "$source_cipher"
+          test ! -L "$source_cipher"
+          test -s "$source_cipher"
+
+          run_metadata="$(curl --fail --silent --show-error \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN_ID")"
+          source_sha="$(jq -r '.head_sha // empty' <<< "$run_metadata")"
+          source_conclusion="$(jq -r '.conclusion // empty' <<< "$run_metadata")"
+          source_workflow_path="$(jq -r '.path // empty' <<< "$run_metadata")"
+          [[ "$source_sha" =~ ^[0-9a-f]{40}$ ]]
+          test "$source_conclusion" = "success"
+          test "$source_workflow_path" = ".github/workflows/validate-preview.yml"
+
+          plaintext_archive="$RUNNER_TEMP/private-evaluation-source.tar.gz"
+          verification_archive="$RUNNER_TEMP/private-evaluation-rewrapped.verify.tar.gz"
+          random_password_file="$RUNNER_TEMP/private-evaluation-rewrapped.password"
+          key_envelope_file="$RUNNER_TEMP/private-evaluation-rewrapped.key-envelope"
+          output_dir="$RUNNER_TEMP/private-evaluation-rewrapped"
+          encrypted_archive="$output_dir/pure-llm-private-checkpoint.tar.gz.enc"
+          wrapped_key_envelope="$output_dir/pure-llm-private-checkpoint.key-envelope.rsa-oaep"
+          cleanup_private_files() {
+            rm -f -- \
+              "$plaintext_archive" \
+              "$verification_archive" \
+              "$random_password_file" \
+              "$key_envelope_file"
+          }
+          trap cleanup_private_files EXIT
+          mkdir -p "$output_dir"
+
+          openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -md sha256 \
+            -in "$source_cipher" \
+            -out "$plaintext_archive" \
+            -pass env:PRIVATE_ARCHIVE_KEY
+          tar -tzf "$plaintext_archive" > /dev/null
+
+          openssl rand -hex 32 > "$random_password_file"
+          openssl enc -aes-256-cbc -salt -pbkdf2 -iter 200000 -md sha256 \
+            -in "$plaintext_archive" \
+            -out "$encrypted_archive" \
+            -pass file:"$random_password_file"
+          openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -md sha256 \
+            -in "$encrypted_archive" \
+            -out "$verification_archive" \
+            -pass file:"$random_password_file"
+          cmp --silent "$plaintext_archive" "$verification_archive"
+          tar -tzf "$verification_archive" > /dev/null
+
+          cipher_sha256="$(sha256sum "$encrypted_archive" | awk '{print $1}')"
+          {
+            printf 'schema_version=1\n'
+            printf 'password=%s\n' "$(tr -d '\r\n' < "$random_password_file")"
+            printf 'cipher_sha256=%s\n' "$cipher_sha256"
+            printf 'source_sha=%s\n' "$source_sha"
+            printf 'source_run_id=%s\n' "$SOURCE_RUN_ID"
+          } > "$key_envelope_file"
+          openssl pkeyutl -encrypt \
+            -pubin \
+            -inkey .github/private-evaluation-recipient.pem \
+            -pkeyopt rsa_padding_mode:oaep \
+            -pkeyopt rsa_oaep_md:sha256 \
+            -pkeyopt rsa_mgf1_md:sha256 \
+            -in "$key_envelope_file" \
+            -out "$wrapped_key_envelope"
+          test -s "$encrypted_archive"
+          test -s "$wrapped_key_envelope"
+          test -f "$encrypted_archive"
+          test ! -L "$encrypted_archive"
+          test -f "$wrapped_key_envelope"
+          test ! -L "$wrapped_key_envelope"
+          mapfile -d '' output_entries < <(find "$output_dir" -mindepth 1 -maxdepth 1 -print0)
+          test "${#output_entries[@]}" -eq 2
+          cleanup_private_files
+          trap - EXIT
+
+      - name: Upload the RSA-wrapped owner-review archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: pure-llm-private-manual-review-rewrapped-${{ inputs.rewrap_source_run_id }}
+          path: |
+            ${{ runner.temp }}/private-evaluation-rewrapped/pure-llm-private-checkpoint.tar.gz.enc
+            ${{ runner.temp }}/private-evaluation-rewrapped/pure-llm-private-checkpoint.key-envelope.rsa-oaep
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
+      - name: Scrub rewrap plaintext and ciphertext
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          cleanup_status=0
+          rm -rf -- \
+            "$RUNNER_TEMP/private-evaluation-source" \
+            "$RUNNER_TEMP/private-evaluation-rewrapped"
+          rm -f -- \
+            "$RUNNER_TEMP/private-evaluation-source.tar.gz" \
+            "$RUNNER_TEMP/private-evaluation-rewrapped.verify.tar.gz" \
+            "$RUNNER_TEMP/private-evaluation-rewrapped.password" \
+            "$RUNNER_TEMP/private-evaluation-rewrapped.key-envelope"
+          for private_path in \
+            "$RUNNER_TEMP/private-evaluation-source" \
+            "$RUNNER_TEMP/private-evaluation-rewrapped" \
+            "$RUNNER_TEMP/private-evaluation-source.tar.gz" \
+            "$RUNNER_TEMP/private-evaluation-rewrapped.verify.tar.gz" \
+            "$RUNNER_TEMP/private-evaluation-rewrapped.password" \
+            "$RUNNER_TEMP/private-evaluation-rewrapped.key-envelope"; do
+            if [ -e "$private_path" ]; then
+              echo "Failed to scrub private evaluation rewrap material" >&2
+              cleanup_status=1
+            fi
+          done
+          exit "$cleanup_status"
 
   publish-encrypted-private-evaluation:
     if: >-

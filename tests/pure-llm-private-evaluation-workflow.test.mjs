@@ -272,7 +272,7 @@ test("private questions, references and candidates are retained only in a verifi
 test("only the ciphertext-only publishing job receives repository write permission", async () => {
   const workflow = await readFile(workflowUrl, "utf8");
   const privateJob = workflow.match(
-    /\n  private-evaluation:[\s\S]*?(?=\n  publish-encrypted-private-evaluation:)/u,
+    /\n  private-evaluation:[\s\S]*?(?=\n  (?:rewrap-private-evaluation|publish-encrypted-private-evaluation):)/u,
   )?.[0] || "";
   const publisherJob = workflow.match(
     /\n  publish-encrypted-private-evaluation:[\s\S]*$/u,
@@ -295,4 +295,60 @@ test("only the ciphertext-only publishing job receives repository write permissi
   assert.match(publisherJob, /git -C "\$results_repo" add --/u);
   assert.doesNotMatch(publisherJob, /git (?:-C [^\n]+ )?add (?:\.|-A)/u);
   assert.doesNotMatch(publisherJob, /git [^\n]*push [^\n]*(?:--force|-f\b)/u);
+});
+
+test("owner can rewrap a completed private archive without dispatching any model", async () => {
+  const workflow = await readFile(workflowUrl, "utf8");
+  assert.match(workflow, /rewrap_source_run_id:[\s\S]*required: false[\s\S]*type: string/u);
+  const privateJob = workflow.match(
+    /^  private-evaluation:[\s\S]*?(?=^  rewrap-private-evaluation:)/mu,
+  )?.[0] || "";
+  const rewrapJob = workflow.match(
+    /^  rewrap-private-evaluation:[\s\S]*?(?=^  publish-encrypted-private-evaluation:)/mu,
+  )?.[0] || "";
+  assert.match(privateJob, /github\.event_name == 'workflow_dispatch'[\s\S]*inputs\.rewrap_source_run_id == ''/u);
+  assert.match(rewrapJob, /inputs\.rewrap_source_run_id != ''/u);
+  assert.match(rewrapJob, /github\.actor == github\.repository_owner/u);
+  assert.match(rewrapJob, /github\.triggering_actor == github\.repository_owner/u);
+  assert.match(rewrapJob, /actions: read[\s\S]*contents: read/u);
+  assert.match(rewrapJob, /actions\/checkout@v6[\s\S]*persist-credentials: false/u);
+  assert.match(rewrapJob, /actions\/download-artifact@v4[\s\S]*name: pure-llm-private-manual-review-encrypted/u);
+  assert.match(rewrapJob, /github-token: \$\{\{ github\.token \}\}/u);
+  assert.match(rewrapJob, /repository: \$\{\{ github\.repository \}\}/u);
+  assert.match(rewrapJob, /run-id: \$\{\{ inputs\.rewrap_source_run_id \}\}/u);
+  assert.match(rewrapJob, /\[\[ "\$SOURCE_RUN_ID" =~ \^\[1-9\]\[0-9\]\*\$ \]\]/u);
+  assert.match(rewrapJob, /secrets\.PURE_LLM_EVALUATION_ARCHIVE_KEY/u);
+  assert.match(rewrapJob, /749295ac7c83b5c765722975c4a6985dedcfcd9dc02eeab3e01dd648ff8a4b3e/u);
+  assert.match(rewrapJob, /source_conclusion[\s\S]*test "\$source_conclusion" = "success"/u);
+  assert.match(rewrapJob, /source_workflow_path[\s\S]*test "\$source_workflow_path" = "\.github\/workflows\/validate-preview\.yml"/u);
+  assert.match(rewrapJob, /mapfile -d '' source_entries[\s\S]*test "\$\{#source_entries\[@\]\}" -eq 1/u);
+  assert.match(rewrapJob, /test "\$\{source_entries\[0\]\}" = "\$source_cipher"/u);
+  assert.match(rewrapJob, /test -f "\$source_cipher"[\s\S]*test ! -L "\$source_cipher"/u);
+  assert.match(rewrapJob, /openssl enc -d -aes-256-cbc[\s\S]*-pass env:PRIVATE_ARCHIVE_KEY/u);
+  assert.match(rewrapJob, /-pbkdf2 -iter 200000 -md sha256/u);
+  assert.match(rewrapJob, /cmp --silent "\$plaintext_archive" "\$verification_archive"/u);
+  assert.match(rewrapJob, /tar -tzf "\$verification_archive"/u);
+  assert.match(rewrapJob, /openssl rand -hex 32/u);
+  assert.match(rewrapJob, /openssl pkeyutl -encrypt[\s\S]*rsa_padding_mode:oaep[\s\S]*rsa_oaep_md:sha256[\s\S]*rsa_mgf1_md:sha256/u);
+  assert.match(rewrapJob, /mapfile -d '' output_entries[\s\S]*test "\$\{#output_entries\[@\]\}" -eq 2/u);
+  assert.match(
+    rewrapJob,
+    /path: \|\s+\$\{\{ runner\.temp \}\}\/private-evaluation-rewrapped\/pure-llm-private-checkpoint\.tar\.gz\.enc\s+\$\{\{ runner\.temp \}\}\/private-evaluation-rewrapped\/pure-llm-private-checkpoint\.key-envelope\.rsa-oaep/u,
+  );
+  const cleanupStep = rewrapJob.match(
+    /- name: Scrub rewrap plaintext and ciphertext[\s\S]*$/u,
+  )?.[0] || "";
+  assert.match(cleanupStep, /if: always\(\)/u);
+  assert.match(cleanupStep, /cleanup_status=0/u);
+  assert.match(cleanupStep, /private-evaluation-source/u);
+  assert.match(cleanupStep, /private-evaluation-rewrapped/u);
+  assert.match(cleanupStep, /private-evaluation-source\.tar\.gz/u);
+  assert.match(cleanupStep, /private-evaluation-rewrapped\.password/u);
+  assert.match(cleanupStep, /private-evaluation-rewrapped\.key-envelope/u);
+  assert.match(cleanupStep, /if \[ -e "\$private_path" \]; then[\s\S]*cleanup_status=1/u);
+  assert.match(cleanupStep, /exit "\$cleanup_status"/u);
+  assert.doesNotMatch(
+    rewrapJob,
+    /RELAY_API_KEY|RELAY_BASE_URL|PUBLIC_RULING_MODEL_PROFILE|PURE_LLM_EVALUATION_DATASET_BASE64|Generate private candidates|evaluate-pure-llm-preview|node backend\/server/u,
+  );
 });
