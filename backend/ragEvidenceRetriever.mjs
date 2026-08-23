@@ -199,9 +199,17 @@ export async function retrieveRagEvidence({
     data.cards,
     retrievalWarnings,
   ));
-  const canonicalBaigeCards = canonicalBaigeCandidates.filter(
-    (card) => card.identityCanonicalizationConflict !== true,
-  );
+  const canonicalBaigeCards = canonicalBaigeCandidates.filter((card) => {
+    if (card.identityCanonicalizationConflict === true) return false;
+    if (card.modelExpansionPendingIdentityReconciliation === true
+        && !hasStableLocalIdentityCanonicalization(card)) {
+      retrievalWarnings.push(
+        `baige_model_expansion_stable_identity_unverified:${card.matchedQuery || card.name}->${card.name}`,
+      );
+      return false;
+    }
+    return true;
+  });
   for (const conflict of canonicalBaigeCandidates.filter((card) => card.identityCanonicalizationConflict === true)) {
     baigeDebug.ambiguousMentions.push(identityConflictMention(conflict));
   }
@@ -3788,10 +3796,22 @@ async function resolveUnresolvedMentionCardsWithBaige(unresolvedMentions, {
           : selection.resolutionKind || "confidence_margin";
         const externalExpansionPrimaryNameAnchored = resolutionKind === "canonical_expansion_exact_primary_name"
           && providerPrimaryNameMechanicallyMatchesSurface(best, mention.input);
+        const modelExpansionPendingIdentityReconciliation = resolutionKind === "canonical_expansion_exact_primary_name"
+          && mention.source === "model_card_name_extractor"
+          && mention.reason === "model_candidate_not_found";
         if (resolutionKind === "canonical_expansion_exact_primary_name"
-            && !externalExpansionPrimaryNameAnchored) {
+            && !externalExpansionPrimaryNameAnchored
+            && !modelExpansionPendingIdentityReconciliation) {
           warnings.push(`baige_unanchored_canonical_expansion:${query}->${best.name}`);
           continue;
+        }
+        if (modelExpansionPendingIdentityReconciliation && !externalExpansionPrimaryNameAnchored) {
+          // The provider proves that the expanded canonical name exists, not
+          // that the model mapped the user's surface correctly. Preserve it as
+          // a candidate so canonical CID backfill can unlock local evidence,
+          // while the ordinary reconciliation below still rejects any local
+          // ambiguity or competing identity.
+          warnings.push(`baige_model_expansion_pending_identity_reconciliation:${query}->${best.name}`);
         }
         warnings.push(`baige_match:${query}->${best.name}`);
         return {
@@ -3799,6 +3819,7 @@ async function resolveUnresolvedMentionCardsWithBaige(unresolvedMentions, {
           matchedQuery: query,
           externalSurfaceResolution: resolutionKind,
           externalExpansionPrimaryNameAnchored,
+          modelExpansionPendingIdentityReconciliation,
         };
       }
       if (selection.ambiguous) {
@@ -4185,6 +4206,11 @@ function isAnchoredCanonicalExpansion(card = {}) {
     && Boolean(card.identityCanonicalizationSource)
     && Boolean(cid)
     && normalizeId(card.id || card.cardId) === cid;
+}
+
+function hasStableLocalIdentityCanonicalization(card = {}) {
+  return ["cid", "passcode"].includes(String(card.identityCanonicalizationSource || ""))
+    && Boolean(normalizeId(card.id || card.cardId));
 }
 
 function isLowConfidenceLocalFuzzy(card = {}) {

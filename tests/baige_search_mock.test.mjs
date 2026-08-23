@@ -453,6 +453,52 @@ test("a model canonical expansion cannot erase ambiguity in the user's original 
   assert.ok(evidence.cardResolution.ambiguousMentions.some((item) => item.input === userSurface));
 });
 
+test("an unanchored model expansion requires a stable local identity before evidence", async () => {
+  clearBaigeSearchCache();
+  const userSurface = "匿名外部简称";
+  const canonicalExpansion = "匿名外部规范龙";
+  const evidence = await retrieveRagEvidence({
+    userQuery: `${userSurface}可以发动吗？`,
+    cardResolution: {
+      resolvedCards: [],
+      unresolvedMentions: [{
+        input: userSurface,
+        reason: "model_candidate_not_found",
+        source: "model_card_name_extractor",
+        confidence: "high",
+        searchTexts: [canonicalExpansion],
+      }],
+      ambiguousMentions: [],
+      userProvidedCardTexts: [],
+    },
+    cards: [],
+    records: [],
+    qaRecords: [],
+    fetchImpl: async (url) => {
+      const decoded = decodeURIComponent(String(url)).replace(/\+/gu, " ");
+      return decoded.includes(canonicalExpansion)
+        ? jsonResponse({
+          result: [{
+            cid: 9913,
+            id: 991003,
+            cn_name: canonicalExpansion,
+            text: { desc: "示例效果。" },
+          }],
+          next: 0,
+        })
+        : jsonResponse({ result: [], next: 0 });
+    },
+    env: { RAG_LIVE_OFFICIAL_QA: "0" },
+  });
+
+  assert.equal(evidence.retrievedCards.length, 0);
+  assert.equal(evidence.cardTexts.length, 0);
+  assert.ok(evidence.retrievalWarnings.some((warning) => (
+    warning.startsWith("baige_model_expansion_stable_identity_unverified:")
+  )));
+  assert.ok(evidence.cardResolution.unresolvedMentions.some((item) => item.input === userSurface));
+});
+
 test("an anchored exact numbered-name expansion suppresses only a low-confidence local fuzzy identity", async () => {
   clearBaigeSearchCache();
   const userSurface = "希望皇霍普";
@@ -535,7 +581,13 @@ test("an unanchored exact canonical expansion cannot suppress a conflicting loca
     userQuery: `${userSurface}可以发动吗？`,
     cardResolution: {
       resolvedCards: [],
-      unresolvedMentions: [{ input: userSurface, searchTexts: [canonicalExpansion] }],
+      unresolvedMentions: [{
+        input: userSurface,
+        reason: "model_candidate_not_found",
+        source: "model_card_name_extractor",
+        confidence: "high",
+        searchTexts: [canonicalExpansion],
+      }],
       ambiguousMentions: [],
       userProvidedCardTexts: [],
     },
@@ -556,7 +608,10 @@ test("an unanchored exact canonical expansion cannot suppress a conflicting loca
         })
         : jsonResponse({ result: [], next: 0 });
     },
-    env: { RAG_LIVE_OFFICIAL_QA: "0" },
+    env: {
+      RAG_LIVE_OFFICIAL_QA: "0",
+      RAG_LOCAL_FUZZY_MIN_CONFIDENCE: "0.5",
+    },
   });
 
   assert.equal(evidence.retrievedCards.length, 0);
@@ -566,6 +621,9 @@ test("an unanchored exact canonical expansion cannot suppress a conflicting loca
     ...(evidence.cardResolution.unresolvedMentions || []),
   ].some((item) => item.input === userSurface));
   assert.ok(!evidence.retrievalWarnings.some((warning) => warning.startsWith("model_expansion_conflict_suppressed:")));
+  assert.ok(evidence.retrievalWarnings.some((warning) => (
+    warning.startsWith("baige_model_expansion_pending_identity_reconciliation:")
+  )));
 });
 
 test("a short family nickname cannot certify an exact canonical expansion", async () => {
