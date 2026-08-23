@@ -610,7 +610,13 @@ export async function retrieveRagEvidence({
     limit: limits.maxRelatedEvidence,
     resolvedCards: effectiveQaIdentityCards,
     supplementalRuleQueryKeys: independentRuleQueryKeys,
-  });
+  }).map((item) => ({
+    ...item,
+    retrievalContext: {
+      ...(item.retrievalContext || {}),
+      relatedOnly: true,
+    },
+  }));
   const officialQaRelatedCandidateCount = dedupeEvidence([
     ...scopedOfficialQaRelatedCandidates,
     ...crossCardOfficialQaRelatedCandidates,
@@ -2617,27 +2623,12 @@ function selectIndependentRuleQueries({
   const branchQueries = (supplementalRuleQueries || []).length
     ? supplementalRuleQueries
     : deterministicRuleQueries;
-  const candidates = dedupeBy(
-    branchQueries || [],
-    ruleSearchQueryIdentity,
-  ).filter((query) => ruleSearchQueryIdentity(query));
-  const selected = [];
-  const selectedKeys = new Set();
-  const representedMechanisms = new Set();
-  const add = (query) => {
-    const key = ruleSearchQueryIdentity(query);
-    if (!key || selectedKeys.has(key) || selected.length >= safeLimit) return false;
-    selected.push(query);
-    selectedKeys.add(key);
-    return true;
-  };
-  for (const query of candidates) {
-    const mechanism = inferRuleSearchMechanism(query);
-    if (!mechanism || representedMechanisms.has(mechanism)) continue;
-    if (add(query)) representedMechanisms.add(mechanism);
-  }
-  for (const query of candidates) add(query);
-  return selected;
+  // Keep strict-mechanism ranking and full-question ranking on the same
+  // bounded query plan. Otherwise each path can silently preserve a different
+  // set of four branches and lose a later decision checkpoint.
+  return normalizeRuleSearchQueries(branchQueries, {
+    maxRuleSearchQueries: safeLimit,
+  });
 }
 
 function compareRetrievedRecords(left = {}, right = {}) {
@@ -3267,7 +3258,18 @@ function normalizeRuleSearchQueries(items, limits = {}) {
   if (deduped.length <= max) return deduped;
 
   const reservedIndexes = new Set();
+  const representedCheckpoints = new Set();
+  deduped.forEach((item, index) => {
+    if (!item.checkpoint || representedCheckpoints.has(item.checkpoint)) return;
+    if (reservedIndexes.size >= max) return;
+    representedCheckpoints.add(item.checkpoint);
+    reservedIndexes.add(index);
+  });
   const representedMechanisms = new Set();
+  for (const index of reservedIndexes) {
+    const mechanism = deduped[index]?.mechanism;
+    if (mechanism) representedMechanisms.add(mechanism);
+  }
   deduped.forEach((item, index) => {
     if (!item.mechanism || representedMechanisms.has(item.mechanism)) return;
     if (reservedIndexes.size >= max) return;
@@ -3731,12 +3733,18 @@ function resolveUnresolvedMentionCards(unresolvedMentions, cardProvider, limits,
         warnings.push(`unresolved_mention_fuzzy_low_confidence:${query}->${best.name}:${best.confidence}`);
         continue;
       }
+      const queryMatchesUserSurface = normalizeCardKey(query) === normalizeCardKey(mention.input);
+      if (!queryMatchesUserSurface && !providerPrimaryNameMechanicallyMatchesSurface(best, mention.input)) {
+        warnings.push(`unresolved_mention_fuzzy_unanchored_expansion:${query}->${best.name}`);
+        continue;
+      }
       warnings.push(`unresolved_mention_fuzzy_match:${query}->${best.name}`);
       result.push({
         ...best,
         input: mention.input,
         matchedQuery: query,
         confidence: Math.min(best.confidence, 0.7),
+        retrievalIdentityMatchKind: "local_fuzzy",
       });
       break;
     }
@@ -3778,11 +3786,19 @@ async function resolveUnresolvedMentionCardsWithBaige(unresolvedMentions, {
           && !queryMatchesUserSurface
           ? "canonical_expansion_exact_primary_name"
           : selection.resolutionKind || "confidence_margin";
+        const externalExpansionPrimaryNameAnchored = resolutionKind === "canonical_expansion_exact_primary_name"
+          && providerPrimaryNameMechanicallyMatchesSurface(best, mention.input);
+        if (resolutionKind === "canonical_expansion_exact_primary_name"
+            && !externalExpansionPrimaryNameAnchored) {
+          warnings.push(`baige_unanchored_canonical_expansion:${query}->${best.name}`);
+          continue;
+        }
         warnings.push(`baige_match:${query}->${best.name}`);
         return {
           ...toRagCard(best, mention.input, confidence),
           matchedQuery: query,
           externalSurfaceResolution: resolutionKind,
+          externalExpansionPrimaryNameAnchored,
         };
       }
       if (selection.ambiguous) {
@@ -4144,10 +4160,47 @@ function externalCardIdentityKey(card = {}) {
   return passcode ? `passcode:${passcode}` : cid ? `cid:${cid}` : `name:${normalizeCardKey(card.name)}`;
 }
 
+function providerPrimaryNameMechanicallyMatchesSurface(card = {}, input = "") {
+  const inputKey = normalizeCardKey(input);
+  // Very short nicknames can be shared by an entire card family. They must not
+  // let a model-supplied canonical expansion certify one member of that family.
+  if (inputKey.length < 4) return false;
+  const stripNumberedPrefix = (value) => normalizeCardKey(value)
+    .replace(/^(?:cno|no)\d{1,4}/u, "");
+  return [card.name, card.cnName, card.jaName, card.jpName, card.enName]
+    .filter(Boolean)
+    .some((primaryName) => {
+      if (hasNumberedCardIdentityConflict(input, primaryName)) return false;
+      const primaryKey = normalizeCardKey(primaryName);
+      return primaryKey === inputKey
+        || stripNumberedPrefix(primaryName) === stripNumberedPrefix(input);
+    });
+}
+
+function isAnchoredCanonicalExpansion(card = {}) {
+  const cid = verifiedLocalCardCid(card);
+  return card.externalSurfaceResolution === "canonical_expansion_exact_primary_name"
+    && card.externalExpansionPrimaryNameAnchored === true
+    && card.identityCanonicalizationConflict !== true
+    && Boolean(card.identityCanonicalizationSource)
+    && Boolean(cid)
+    && normalizeId(card.id || card.cardId) === cid;
+}
+
+function isLowConfidenceLocalFuzzy(card = {}) {
+  const confidence = Number(card.confidence);
+  return card.retrievalIdentityMatchKind === "local_fuzzy"
+    && Number.isFinite(confidence)
+    && confidence <= 0.7;
+}
+
 function suppressModelExpansionConflicts(localCards, baigeCards, warnings) {
   const surfaceVerified = (baigeCards || []).filter((card) => (
     Number(card.confidence || 0) >= 0.72
-    && normalizeCardKey(card.matchedQuery) === normalizeCardKey(card.input)
+    && (
+      normalizeCardKey(card.matchedQuery) === normalizeCardKey(card.input)
+      || isAnchoredCanonicalExpansion(card)
+    )
   ));
   if (!surfaceVerified.length) return localCards || [];
   return (localCards || []).filter((localCard) => {
@@ -4155,8 +4208,10 @@ function suppressModelExpansionConflicts(localCards, baigeCards, warnings) {
       normalizeCardKey(verifiedCard.input) === normalizeCardKey(localCard.input)
       && !sameStableCardIdentity(verifiedCard, localCard)
       && (
-        normalizeCardKey(localCard.matchedQuery) !== normalizeCardKey(localCard.input)
-        || Number(verifiedCard.confidence || 0) >= Number(localCard.confidence || 0) + 0.02
+        isAnchoredCanonicalExpansion(verifiedCard)
+          ? isLowConfidenceLocalFuzzy(localCard)
+          : normalizeCardKey(localCard.matchedQuery) !== normalizeCardKey(localCard.input)
+            || Number(verifiedCard.confidence || 0) >= Number(localCard.confidence || 0) + 0.02
       )
     ));
     if (!conflict) return true;

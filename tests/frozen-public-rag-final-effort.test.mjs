@@ -200,6 +200,46 @@ test("frozen public RAG record excludes the reference answer and binds the exact
   assert.doesNotMatch(JSON.stringify(record), /绝不能进入冻结包的标准答案/u);
 });
 
+test("whole-record prompt compaction remains diagnostic when every required body is complete", () => {
+  const fixture = evidenceFixture("网页问题", "case-001");
+  const record = buildFrozenCaseRecord({
+    item: { id: "case-001", question: "网页问题", sourceBlocks: [1] },
+    captured: {
+      prompt: fixture.prompt,
+      provider: "relay",
+      modelName: "gpt-5.6-sol",
+      maxTokens: 32000,
+      reasoningEffort: "low",
+    },
+    transportContract: testTransportContract(),
+    answer: {
+      resolvedCards: [{ id: fixture.card.id }],
+      usedEvidence: [{ id: fixture.qa.id }],
+      debug: {
+        route: "ordinary_rag",
+        dataRevision: "test-data-revision",
+        evidenceFingerprint: sha256("test-evidence"),
+        finalPromptSha256: sha256(fixture.prompt),
+        promptTruncated: false,
+        retrievalWarnings: ["rag_prompt_compacted_to_max_chars"],
+      },
+    },
+  });
+
+  const audit = assertFrozenEvidenceCompleteness({
+    record,
+    requirementContext: {
+      requirement: fixture.evidenceRequirements.cases["case-001"],
+      cardSources: new Map([[fixture.card.id, fixture.card]]),
+      evidenceSources: new Map([[fixture.qa.id, fixture.qa]]),
+    },
+  });
+
+  assert.equal(record.promptCompacted, true);
+  assert.equal(record.promptTruncated, false);
+  assert.equal(audit.status, "complete");
+});
+
 test("freeze sends the same explicit mode, profile, and ruling version as the web page", async () => {
   const temp = await mkdtemp(path.join(os.tmpdir(), "frozen-public-rag-freeze-"));
   const datasetPath = path.join(temp, "private-test.txt");

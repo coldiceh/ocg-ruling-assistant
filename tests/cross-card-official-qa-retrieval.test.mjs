@@ -401,6 +401,106 @@ test("independent supplemental queries preserve distinct strict mechanisms over 
   )));
 });
 
+test("the four-query budget preserves a later distinct checkpoint across both official QA retrieval paths", async () => {
+  const current = syntheticCard("57001", "虚构检查点锚点", "这张卡的发动可能被无效。");
+  const labels = ["甲", "乙", "丙", "丁", "戊"];
+  const plannerQueries = labels.map((label, index) => ({
+    subclaim: `核对印${label}的卡片发动被无效后的去向`,
+    checkpoint: index === 4 ? "resolution_snapshot" : "operation_legality",
+    query: [
+      `印${label}的卡片发动被无效后能否返回手牌`,
+      `印${label}のカードの発動が無効になった後、そのカードを手札に戻せますか？`,
+    ].join(" | "),
+    reason: "检索相同发动无效与返回手牌机制的官方问题",
+    source: "model_rule_query_extractor",
+  }));
+  const qaRecords = labels.map((label, index) => ({
+    id: `qa-fictional-checkpoint-${label}`,
+    recordType: "qa",
+    question: `印${label}のカードの発動が無効になった後、そのカードを手札に戻せますか？`,
+    rawDetailedQuestion: `「<<${57101 + index}>>」は印${label}のカードです。そのカードの発動が無効になった後、そのカードを手札に戻せますか？`,
+    answer: `印${label}に対応する公式資料本文。`,
+    cardIds: [String(57101 + index)],
+  }));
+  const target = qaRecords.at(-1);
+  const evidence = await retrieveRagEvidence({
+    userQuery: "「虚构检查点锚点」的发动被无效后，需要分别核对发动是否合法以及处理时卡片能否返回手牌。",
+    cardResolution: {
+      resolvedCards: [current],
+      unresolvedMentions: [],
+      ambiguousMentions: [],
+      userProvidedCardTexts: [],
+    },
+    cards: [current],
+    records: [],
+    qaRecords,
+    ruleSearchQueries: plannerQueries,
+    enableLiveOfficialQa: false,
+    env: { RAG_LIVE_OFFICIAL_QA: "false", RAG_MAX_RELATED_EVIDENCE: "4" },
+  });
+
+  const normalizedPlannerQueries = evidence.ruleSearchQueries.filter(
+    (item) => item.source === "model_rule_query_extractor",
+  );
+  assert.equal(normalizedPlannerQueries.length, 5);
+  assert.equal(new Set(normalizedPlannerQueries.map((item) => item.mechanism)).size, 1);
+  assert.ok(evidence.debug.candidateStages.ruleQueryQuestionBranchCandidateIds.includes(target.id));
+  assert.ok(evidence.debug.candidateStages.crossCardRankedPoolIds.includes(target.id));
+  assert.ok(evidence.debug.candidateStages.crossCardEvidenceCandidateIds.includes(target.id));
+  assert.ok(evidence.debug.candidateStages.allocatedOfficialRelatedIds.includes(target.id));
+  const related = evidence.officialQaRelated.find((item) => item.id === target.id);
+  assert.ok(related);
+  assert.equal(related.isDirect, false);
+  assert.equal(related.retrievalContext.relatedOnly, true);
+  assert.equal(related.retrievalSignals.questionBranchSearch, true);
+  assert.ok(related.retrievalSignals.strictSupplementalRuleQueryKeys.length > 0);
+});
+
+test("same-card official QA kept outside the direct budget is explicitly related-only", async () => {
+  const current = syntheticCard("58001", "虚构同卡边界", "这张卡的发动可能被无效并改变位置。");
+  const question = "「虚构同卡边界」的发动被无效后，那张卡能否返回手牌？";
+  const qaRecords = ["a", "b"].map((suffix) => ({
+    id: `qa-fictional-same-card-${suffix}`,
+    recordType: "qa",
+    question,
+    rawDetailedQuestion: question,
+    answer: `同卡官方资料 ${suffix}。`,
+    cardIds: [current.id],
+    retrievalContext: {
+      scope: "resolved_card",
+      relatedOnly: false,
+    },
+  }));
+  const evidence = await retrieveRagEvidence({
+    userQuery: question,
+    cardResolution: {
+      resolvedCards: [current],
+      unresolvedMentions: [],
+      ambiguousMentions: [],
+      userProvidedCardTexts: [],
+    },
+    cards: [current],
+    records: [],
+    qaRecords,
+    maxPerBucket: 3,
+    subsumptionCandidatePoolComplete: true,
+    enableLiveOfficialQa: false,
+    env: {
+      RAG_LIVE_OFFICIAL_QA: "false",
+      RAG_MAX_OFFICIAL_QA: "1",
+      RAG_MAX_RELATED_EVIDENCE: "3",
+    },
+  });
+
+  assert.equal(evidence.officialQaDirectCandidates.length, 1);
+  assert.equal(evidence.officialQaRelated.length, 1);
+  assert.equal(evidence.officialQaDirectCandidates[0].retrievalContext.scope, "resolved_card");
+  assert.equal(evidence.officialQaDirectCandidates[0].retrievalContext.relatedOnly, false);
+  assert.equal(evidence.officialQaRelated[0].retrievalContext.scope, "resolved_card");
+  assert.equal(evidence.officialQaRelated[0].retrievalContext.relatedOnly, true);
+  assert.equal(evidence.officialQaRelated[0].isDirect, false);
+});
+
 test("query-independent record features preserve repeated retrieval output", async () => {
   const current = syntheticCard("56001", "虚构缓存锚点", "这张卡的处理会改变当前状态。");
   const qaRecords = [

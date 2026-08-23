@@ -373,6 +373,9 @@ export function buildFrozenCaseRecord({ item, captured, answer, transportContrac
     evidenceFingerprint: String(answer?.debug?.evidenceFingerprint || ""),
     finalPromptSha256: finalPromptSha256 || promptUtf8Sha256,
     promptTruncated: answer?.debug?.promptTruncated === true,
+    promptCompacted: (answer?.debug?.retrievalWarnings || []).some((warning) => (
+      /rag_prompt_compacted/iu.test(String(warning || ""))
+    )),
     resolvedCardIds: (answer?.resolvedCards || [])
       .map((card) => String(card?.id || card?.cardId || "").trim())
       .filter(Boolean),
@@ -410,7 +413,7 @@ export function assertFrozenEvidenceCompleteness({
     throw new Error(`${record.id} question does not match its evidence requirement`);
   }
   if (record.promptTruncated === true) {
-    throw new Error(`${record.id} prompt was truncated or compacted`);
+    throw new Error(`${record.id} prompt was truncated`);
   }
   if (!record.dataRevision || !record.evidenceFingerprint) {
     throw new Error(`${record.id} is missing dataRevision or evidenceFingerprint`);
@@ -477,9 +480,9 @@ export function assertFrozenEvidenceCompleteness({
   const requiredWarningIds = new Set(requirement.requiredEvidenceIds);
   const damagingWarnings = (record.retrievalWarnings || []).filter((warning) => {
     const text = String(warning || "");
-    return /(?:truncated|compacted)/iu.test(text)
+    return /truncated/iu.test(text)
       && ([...requiredWarningIds].some((id) => text.includes(id))
-        || /rag_prompt_compacted|official_direct_prompt_truncated/iu.test(text));
+        || /official_direct_prompt_truncated/iu.test(text));
   });
   if (damagingWarnings.length) {
     throw new Error(`${record.id} required evidence has truncation warnings: ${damagingWarnings.join(", ")}`);
