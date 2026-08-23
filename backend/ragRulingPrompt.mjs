@@ -618,10 +618,10 @@ function prepareEvidenceForPrompt(
     rawRelatedEvidence: projectPromptEvidence(evidence.rawRelatedEvidence, limits.maxEvidenceTextChars, "raw_related", focusCardIds),
   };
   if (authoritativeDirectId) return prepared;
-  if (!Number.isFinite(limits.maxReferenceChars)
-      && !Number.isFinite(limits.maxReferenceItems)) {
-    return prepared;
-  }
+  // Always pass through the identity-level selector so the same record cannot
+  // reach the model twice through both a downgraded direct bucket and an
+  // ordinary related bucket.  Infinite limits disable only the old budget;
+  // they do not disable stable-ID deduplication.
   return limitPreparedReferenceEvidence(prepared, {
     maxChars: limits.maxReferenceChars,
     maxItems: limits.maxReferenceItems,
