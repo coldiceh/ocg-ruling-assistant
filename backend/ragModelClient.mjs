@@ -26,7 +26,8 @@ const DEFAULT_GLM_MODEL = "glm-5.2";
 const DEFAULT_JSON_TASK_MAX_OUTPUT_TOKENS = 4000;
 const DEFAULT_RAG_RECOVERY_MAX_OUTPUT_TOKENS = 4096;
 const DEFAULT_LIGHTWEIGHT_EXTRACTION_TIMEOUT_MS = 12000;
-const DEFAULT_RULE_QUERY_EXTRACTION_TIMEOUT_MS = 25000;
+const DEFAULT_RULE_QUERY_EXTRACTION_TIMEOUT_MS = 120000;
+const DEFAULT_RULE_QUERY_EXTRACTION_MAX_OUTPUT_TOKENS = 8192;
 const DEFAULT_DAILY_BUDGET_CNY = 10;
 const DEFAULT_CHATGPT_DAILY_BUDGET_USD = 10;
 const DEFAULT_PRIVATE_EVALUATION_BUDGET_USD = 40;
@@ -841,7 +842,10 @@ export async function callRuleQueryExtractionModel({
     ...providerResolution.warnings,
     ...relayGeneration.warnings,
   ];
-  const maxTokens = readNumber(env.RAG_RULE_MODEL_MAX_OUTPUT_TOKENS, 450);
+  const maxTokens = readNumber(
+    env.RAG_RULE_MODEL_MAX_OUTPUT_TOKENS,
+    DEFAULT_RULE_QUERY_EXTRACTION_MAX_OUTPUT_TOKENS,
+  );
   const normalizedCandidateQuestions = normalizeRuleQueryCandidateQuestions(candidateQuestions);
   const prompt = buildRuleQueryExtractionPrompt(
     userQuery,
@@ -939,7 +943,7 @@ export async function callRuleQueryExtractionModel({
   }
 
   const cacheKey = extractionCacheKey({
-    kind: "rule-v7",
+    kind: "rule-v8-accuracy-first",
     provider,
     modelName,
     dataRevision,
@@ -4286,17 +4290,16 @@ function buildRuleQueryExtractionPrompt(
     "先把问题拆成彼此独立、尚待证实的规则子命题；每条 ruleQueries 只能对应一个子命题，不得把结论写进子命题或查询词。",
     "忠实保留玩家明确给出的事件、区域、表示形式、顺序和状态，不得把一个动作改写成另一个动作，也不得补造题面没有出现的破坏、送去墓地、除外、返回、发动或处理结果。",
     "每项必须包含 subclaim、checkpoint、query、reason、confidence。checkpoint 从 operation_legality、activation_snapshot、resolution_snapshot、mandatory_step、step_dependency、affected_entity、effect_source_type、permission_relation、usage_limit、zone_type_transition、post_resolution 中选择最贴切的一项。",
-    "先在内部识别题面实际发生或尝试的动作，再直接生成 ruleQueries；只为本题相关的维度拆分子命题：操作或发动是否合法、每个必须执行的处理步骤、前后步骤依赖与无法完成时的部分处理、实际受影响的实体、效果来源与效果类型、权限或限制针对谁、次数或尝试上限，以及发动前、处理时、处理后的状态快照。不要输出额外的 actions 字段；没有出现或不影响结论的维度不得为了凑数生成查询。",
-    "如果问题同时问‘能否发动’和‘处理是否成功’，必须拆成不同子命题，分别检索发动条件与结算适用性。连续处理还要分别检索每一步是否实际完成、由哪个效果完成，以及下一步是否依赖该完成事实；不能只因最终状态看起来相同就合并步骤。",
-    "如果卡文允许在多个实体、数值或方向之间选择，必须覆盖每个选择方向：至少分别生成 activation_snapshot 或 operation_legality（发动时是否存在任一合法选项）与 resolution_snapshot（处理时状态改变后各方向仍可执行什么）的子命题；不得只为一个可行例子生成查询。",
-    "逐张阅读已识别卡片的效果文本。卡文含有‘然后／那之后／根据……适用’等强制后续处理时，即使玩家只问能否发动，也必须为会影响发动合法性或处理结果的每个强制步骤与分支生成独立查询；不能只检索最初的触发条件。",
-    "后续裁定若依赖某个前置动作的规则性质，必须把该动作是否属于卡的发动、是否形成连锁、发生时所在区域、当时作为何种卡片种类处理分别生成独立 ruleQuery；不得把这些前置性质与无效后的去向、处理结果或后续状态合并成同一条查询。只生成实际会影响本题结论的项目，不得为了凑数补造条件。",
-    "玩家俗称、缩写或自然语言必须改写为正式卡文或规则术语。每个 query 尽量同时包含中文、日文和英文三个可独立检索的问题式短句，以“ | ”分隔；每个语言分支各自不超过 160 字符。",
-    "每个语言分支必须独立保留该子命题的实体类别、区域、操作、时点或状态以及所问内容；不得只列零散通用词，不得使用未展开的缩写、单字母或无法独立理解的代词。不要只翻译卡名，不得在查询中填入裁定答案。",
-    "次数问题必须包含已使用次数、总上限或剩余次数等正式关键词；区域或双重卡片种类问题必须包含移动瞬间的区域与当时作为何种卡处理。",
-    "输出 1 到 4 条高价值查询词即可；简单问题可以只有 1 条，不得为了达到条数加入无关机制；不知道就输出空数组。",
-    "候选官方资料只提供问题部分，不包含答案。可以对其中最多8条真正相关的候选给出软排序：relevance 为 high、medium 或 low，premise 为 same、partial、different 或 unknown，并用 difference 简述关键前提差异。未列出的候选一律视为 unknown；不得据此删除资料。",
-    "不得输出裁定结论，不得猜测候选资料的答案，也不得把卡名、题号或特定题型写成固定规则。",
+    "先识别题面实际发生或尝试的动作，只为会影响本题结论的规则维度拆分子命题；不得为了凑数穷举固定检查表。",
+    "如果问题同时问能否发动和处理是否成功，必须分别检索发动条件与结算适用性。连续处理还要分别检索每一步是否实际完成、由哪个效果完成、下一步是否依赖该完成事实，以及某一步不能执行时前序结果是否保留；不能只因最终状态看起来相同就合并步骤。",
+    "如果卡文允许在多个实体、数值或方向之间选择，必须覆盖发动时是否存在任一合法选项，以及处理时状态改变后各方向仍可执行什么；不得只为一个可行例子生成查询。",
+    "逐张阅读已识别卡片的效果文本。卡文含有‘然后／那之后／根据……适用’等后续处理时，即使玩家只问能否发动，也必须覆盖会影响发动合法性或处理结果的必经步骤与分支；不能只检索最初触发条件。",
+    "如果结论依赖某个前置动作的规则性质，只在确实相关时分别保留：该动作是否属于卡或效果的发动、是否形成连锁、发生时所在区域、当时卡片种类、效果来源和实际受影响实体；不得把这些性质与处理结果混成一个查询。",
+    "玩家俗称、缩写或自然语言必须改写为正式卡文或规则术语。每个 query 尽量包含中文、日文和英文三个可独立检索的问题式短句，以“ | ”分隔；每个语言分支各自不超过 160 字符。",
+    "每个语言分支必须独立保留该子命题的实体类别、区域、操作、时点或状态以及所问内容；不得只列零散通用词，不得使用未展开的缩写、单字母或无法独立理解的代词。次数问题还要保留已使用次数、总上限或剩余次数；区域或双重卡片种类问题要保留移动瞬间的区域和当时身份。",
+    "输出 1 到 4 条高价值查询即可；简单问题可以只有 1 条，不得为了达到条数加入无关机制；不知道就输出空数组。",
+    "候选官方资料只提供问题部分，不包含答案。可以对其中最多 8 条真正相关的候选给出软排序：relevance 为 high、medium 或 low，premise 为 same、partial、different 或 unknown，并用 difference 简述关键前提差异。未列出的候选视为 unknown；不得据此删除资料。",
+    "不得输出裁定结论，不得猜测候选资料的答案，也不得把卡名、题号、Q&A ID 或特定题型写成固定规则。",
     "输出必须是单个 JSON 对象，不要 markdown，不要解释。",
     "JSON 只包含 ruleQueries 和 candidateAssessments 两个数组；ruleQueries 每项包含 subclaim、checkpoint、query、reason、confidence；candidateAssessments 每项包含 id、relevance、premise、difference。",
     "示例结构如下，示例不是本题答案：",
@@ -4347,9 +4350,9 @@ function normalizeRuleQueryCandidateAssessments(rawText, candidates = []) {
   const result = [];
   for (const item of Array.isArray(parsed?.candidateAssessments) ? parsed.candidateAssessments : []) {
     const id = nonEmpty(item?.id).slice(0, 120);
-    if (!allowedIds.has(id) || seen.has(id)) continue;
     const relevance = nonEmpty(item?.relevance).toLowerCase();
     const premise = nonEmpty(item?.premise).toLowerCase();
+    if (!allowedIds.has(id) || seen.has(id)) continue;
     if (!relevanceValues.has(relevance) || !premiseValues.has(premise)) continue;
     seen.add(id);
     result.push({
