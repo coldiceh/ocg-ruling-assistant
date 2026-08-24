@@ -200,6 +200,68 @@ test("frozen public RAG record excludes the reference answer and binds the exact
   assert.doesNotMatch(JSON.stringify(record), /绝不能进入冻结包的标准答案/u);
 });
 
+test("frozen record stores only allowlisted retrieval candidate stage ID arrays", () => {
+  const prompt = "PUBLIC_RAG_PROMPT";
+  const record = buildFrozenCaseRecord({
+    item: { id: "case-004", question: "测试问题", sourceBlocks: [4] },
+    captured: {
+      prompt,
+      provider: "relay",
+      modelName: "gpt-5.6-sol",
+      maxTokens: 32000,
+      reasoningEffort: "low",
+    },
+    transportContract: testTransportContract(),
+    answer: {
+      resolvedCards: [{ id: "23380" }],
+      usedEvidence: [{ id: "qa-decisive" }],
+      debug: {
+        retrievalCandidateStages: {
+          initialCrossCardQuestionIds: ["qa-initial", " qa-initial ", "问题正文"],
+          rulePlannerCandidateIds: ["qa.rule:planner", "private query text", 100],
+          ruleQueryQuestionBranchCandidateIds: ["qa@branch#1", { id: "qa-object" }],
+          crossCardRankedPoolIds: ["qa-ranked_2", "https://private.example/question"],
+          crossCardEvidenceCandidateIds: ["qa-evidence-3", "", null],
+          allocatedOfficialRelatedIds: ["qa-official-4", "模型答案"],
+          allocatedCrossCardIds: ["qa-cross-5", "model output answer"],
+          notAllocatedCrossCardIds: ["qa-missed-6", "a".repeat(129)],
+          unknownCandidateIds: ["qa-must-not-be-saved"],
+          question: "private question body",
+          query: "private retrieval query",
+          answer: "private answer body",
+          modelOutput: "private model output",
+        },
+      },
+    },
+  });
+
+  assert.deepEqual(Object.keys(record.retrievalCandidateStages), [
+    "initialCrossCardQuestionIds",
+    "rulePlannerCandidateIds",
+    "ruleQueryQuestionBranchCandidateIds",
+    "crossCardRankedPoolIds",
+    "crossCardEvidenceCandidateIds",
+    "allocatedOfficialRelatedIds",
+    "allocatedCrossCardIds",
+    "notAllocatedCrossCardIds",
+  ]);
+  assert.deepEqual(record.retrievalCandidateStages, {
+    initialCrossCardQuestionIds: ["qa-initial"],
+    rulePlannerCandidateIds: ["qa.rule:planner"],
+    ruleQueryQuestionBranchCandidateIds: ["qa@branch#1"],
+    crossCardRankedPoolIds: ["qa-ranked_2"],
+    crossCardEvidenceCandidateIds: ["qa-evidence-3"],
+    allocatedOfficialRelatedIds: ["qa-official-4"],
+    allocatedCrossCardIds: ["qa-cross-5"],
+    notAllocatedCrossCardIds: ["qa-missed-6"],
+  });
+  const serializedStages = JSON.stringify(record.retrievalCandidateStages);
+  assert.doesNotMatch(
+    serializedStages,
+    /问题正文|private|model output|qa-must-not-be-saved|qa-object/u,
+  );
+});
+
 test("whole-record prompt compaction remains diagnostic when every required body is complete", () => {
   const fixture = evidenceFixture("网页问题", "case-001");
   const record = buildFrozenCaseRecord({

@@ -23,6 +23,17 @@ const FINAL_TRANSPORT = "chat_completions_sse";
 const ALLOWED_EFFORTS = new Set(["low", "medium"]);
 const CAPTURE_SENTINEL = "FROZEN_PUBLIC_RAG_PROMPT_CAPTURED";
 const REPOSITORY_ROOT = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
+const RETRIEVAL_CANDIDATE_STAGE_KEYS = Object.freeze([
+  "initialCrossCardQuestionIds",
+  "rulePlannerCandidateIds",
+  "ruleQueryQuestionBranchCandidateIds",
+  "crossCardRankedPoolIds",
+  "crossCardEvidenceCandidateIds",
+  "allocatedOfficialRelatedIds",
+  "allocatedCrossCardIds",
+  "notAllocatedCrossCardIds",
+]);
+const SAFE_RETRIEVAL_CANDIDATE_ID = /^[A-Za-z0-9][A-Za-z0-9._:@#-]{0,127}$/u;
 
 export function parseFrozenPublicRagArgs(argv = []) {
   const [command, ...rest] = argv;
@@ -422,6 +433,9 @@ export function buildFrozenCaseRecord({ item, captured, answer, transportContrac
       .filter(Boolean),
     selectedEvidenceDiagnostics: answer?.debug?.selectedEvidenceDiagnostics || [],
     retrievalWarnings: answer?.debug?.retrievalWarnings || [],
+    retrievalCandidateStages: sanitizeRetrievalCandidateStages(
+      answer?.debug?.retrievalCandidateStages,
+    ),
     auxiliaryModels: {
       cardName: {
         provider: String(answer?.debug?.cardNameProviderUsed || ""),
@@ -437,6 +451,20 @@ export function buildFrozenCaseRecord({ item, captured, answer, transportContrac
       },
     },
   });
+}
+
+function sanitizeRetrievalCandidateStages(value) {
+  const source = value && typeof value === "object" && !Array.isArray(value)
+    ? value
+    : {};
+  return Object.freeze(Object.fromEntries(RETRIEVAL_CANDIDATE_STAGE_KEYS.map((key) => {
+    const ids = Array.isArray(source[key]) ? source[key] : [];
+    const safeIds = [...new Set(ids
+      .filter((id) => typeof id === "string")
+      .map((id) => id.trim())
+      .filter((id) => SAFE_RETRIEVAL_CANDIDATE_ID.test(id)))];
+    return [key, Object.freeze(safeIds)];
+  })));
 }
 
 export function assertFrozenEvidenceCompleteness({
