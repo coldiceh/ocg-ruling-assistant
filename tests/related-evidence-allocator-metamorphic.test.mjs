@@ -300,3 +300,73 @@ test("a strict supplemental candidate survives a bounded head of non-strict reco
     .filter((item) => lexicalHeads.some((head) => head.id === item.id))
     .every((item) => item.retrievalContext.relatedOnly === true && item.isDirect === false));
 });
+
+test("same-identity scoped evidence retains two distinct strict branches under noise and shuffling", async () => {
+  const anchor = {
+    id: "983000001",
+    name: "匿名同身份分支锚点",
+    aliases: ["匿名同身份分支锚点"],
+    effectText: "这张卡包含多个需要分别核对的处理分支。",
+  };
+  const strictRecords = [{
+    id: "card-faq-anonymous-scoped-branch-a",
+    question: "破坏被代替而没有被破坏时，之后能否特殊召唤？",
+    query: "破坏被代替 没有被破坏 特殊召唤",
+  }, {
+    id: "card-faq-anonymous-scoped-branch-b",
+    question: "卡组中的卡被除外后，之后能否返回卡组？",
+    query: "卡组中的卡 被除外 返回卡组",
+  }].map((item) => ({
+    ...item,
+    recordType: "card-faq",
+    title: item.question,
+    text: item.question,
+    answer: "匿名官方资料正文。",
+    cardIds: [anchor.id],
+    cards: [anchor.name],
+  }));
+  const noise = Array.from({ length: 20 }, (_unused, index) => ({
+    id: `card-faq-anonymous-scoped-noise-${String(index).padStart(2, "0")}`,
+    recordType: "card-faq",
+    title: `效果发动后能否处理？资料 ${index}`,
+    question: `效果发动后能否处理？资料 ${index}`,
+    text: `效果发动后能否处理？资料 ${index}`,
+    answer: "匿名普通资料。",
+    cardIds: [anchor.id],
+    cards: [anchor.name],
+    retrievalScore: 0.99,
+  }));
+  const retrieveBranches = (records) => retrieveRagEvidence({
+    userQuery: `「${anchor.name}」有两个需要分别核对的处理分支。`,
+    cardResolution: {
+      resolvedCards: [anchor],
+      unresolvedMentions: [],
+      ambiguousMentions: [],
+      userProvidedCardTexts: [],
+    },
+    cards: [anchor],
+    records: [],
+    qaRecords: records,
+    ruleSearchQueries: strictRecords.map((item) => ({
+      query: item.query,
+      source: "model_rule_query_extractor",
+    })),
+    enableLiveOfficialQa: false,
+    env: { RAG_LIVE_OFFICIAL_QA: "false", RAG_MAX_RELATED_EVIDENCE: "2" },
+  });
+
+  const baseline = await retrieveBranches([...noise, ...strictRecords]);
+  const shuffled = await retrieveBranches(deterministicShuffle([...noise, ...strictRecords]));
+  const expectedIds = strictRecords.map((item) => item.id).sort();
+  for (const evidence of [baseline, shuffled]) {
+    assert.deepEqual(evidence.officialQaRelated.map((item) => item.id).sort(), expectedIds);
+    assert.ok(evidence.officialQaRelated.every((item) => (
+      item.retrievalContext.relatedOnly === true
+      && item.isDirect === false
+      && (item.retrievalSignals?.strictSupplementalRuleQueryKeys || []).length > 0
+    )));
+    assert.ok(new Set(evidence.officialQaRelated.flatMap((item) => (
+      item.retrievalSignals?.strictSupplementalRuleQueryKeys || []
+    ))).size >= 2);
+  }
+});

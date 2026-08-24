@@ -556,17 +556,39 @@ function buildBaigeSearchQueries(value) {
       ...(discriminatingTail ? prefixes.map((prefix) => `${prefix} ${discriminatingTail}`) : []),
       discriminatingTail,
       ...prefixes,
-    ].filter(Boolean))].slice(0, 10);
+    ].filter(Boolean))].slice(0, 6);
   }
   const compact = canonicalSpelling.replace(/[「」『』《》【】“”"'`：:・·･．.－—–_\-\s，,。.!！?？;；、()（）\[\]{}]/gu, "");
   const tokens = canonicalSpelling
     .split(/\s+/u)
     .map((token) => token.trim())
     .filter((token) => token.length >= 2 && token !== original);
+  // A long extracted mention can retain a small amount of surrounding prose.
+  // Four-character fallbacks are too lossy for that case: they can collapse a
+  // unique long surface into a family-wide prefix. Keep a bounded set of the
+  // longest mechanical windows, preferring suffixes so a little leading
+  // context can be discarded without enumerating any language or card terms.
+  const longWindows = [];
+  if (compact.length >= 8) {
+    const maximumWindow = Math.min(12, compact.length - 1);
+    const minimumWindow = Math.min(maximumWindow, 6);
+    for (let size = maximumWindow; size >= minimumWindow && longWindows.length < 6; size -= 1) {
+      longWindows.push(compact.slice(-size));
+      longWindows.push(compact.slice(0, size));
+    }
+  }
   const longerPrefix = compact.length >= 7 ? compact.slice(0, 4) : "";
   const shortPrefix = compact.length >= 6 ? compact.slice(0, 2) : "";
   const suffix = compact.length >= 7 ? compact.slice(-4) : "";
-  return [...new Set([original, compact, ...tokens, longerPrefix, shortPrefix, suffix].filter(Boolean))].slice(0, 6);
+  return [...new Set([
+    original,
+    compact,
+    ...longWindows,
+    ...tokens,
+    longerPrefix,
+    suffix,
+    shortPrefix,
+  ].filter(Boolean))].slice(0, 6);
 }
 
 function diceCoefficient(left, right) {

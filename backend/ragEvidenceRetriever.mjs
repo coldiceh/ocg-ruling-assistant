@@ -168,6 +168,7 @@ export async function retrieveRagEvidence({
       fetchImpl,
       env,
       limits,
+      canonicalCards: data.cards,
       warnings: retrievalWarnings,
       debug: baigeDebug,
       signal,
@@ -176,6 +177,7 @@ export async function retrieveRagEvidence({
       fetchImpl,
       env,
       limits,
+      canonicalCards: data.cards,
       warnings: retrievalWarnings,
       debug: baigeDebug,
       signal,
@@ -201,11 +203,19 @@ export async function retrieveRagEvidence({
   ));
   const canonicalBaigeCards = canonicalBaigeCandidates.filter((card) => {
     if (card.identityCanonicalizationConflict === true) return false;
-    if (card.modelExpansionPendingIdentityReconciliation === true
-        && !hasStableLocalIdentityCanonicalization(card)) {
+    if (card.modelExpansionPendingIdentityReconciliation !== true) return true;
+    const surfaceCompatible = card.externalSurfaceCompatible === true;
+    const identityUniquelyConverged = card.externalIdentityUniqueConvergence === true;
+    const stableLocalIdentity = hasStableLocalIdentityCanonicalization(card);
+    if (!surfaceCompatible || !identityUniquelyConverged || !stableLocalIdentity) {
       retrievalWarnings.push(
-        `baige_model_expansion_stable_identity_unverified:${card.matchedQuery || card.name}->${card.name}`,
+        `baige_model_expansion_identity_invariant_unverified:${card.matchedQuery || card.name}->${card.name}`,
       );
+      if (!stableLocalIdentity) {
+        retrievalWarnings.push(
+          `baige_model_expansion_stable_identity_unverified:${card.matchedQuery || card.name}->${card.name}`,
+        );
+      }
       return false;
     }
     return true;
@@ -371,6 +381,14 @@ export async function retrieveRagEvidence({
     (item) => !deterministicRuleQueryKeys.has(ruleSearchQueryIdentity(item)),
   );
   const independentRuleQueryKeys = effectiveSupplementalRuleQueries
+    .map(ruleSearchQueryIdentity)
+    .filter(Boolean);
+  const crossCardQuestionBranchQueries = selectIndependentRuleQueries({
+    deterministicRuleQueries,
+    supplementalRuleQueries: effectiveSupplementalRuleQueries,
+    limit: 4,
+  });
+  const crossCardQuestionBranchKeys = crossCardQuestionBranchQueries
     .map(ruleSearchQueryIdentity)
     .filter(Boolean);
   if (normalizedRuleQueries.length) retrievalWarnings.push(`rule_search_queries_used:${normalizedRuleQueries.length}`);
@@ -575,7 +593,11 @@ export async function retrieveRagEvidence({
     : [];
   const questionBranchCrossCardCandidates = rankOfficialQaQuestionBranches({
     records: eligibleCrossCardOfficialPool,
-    ruleSearchQueries: effectiveSupplementalRuleQueries,
+    // Spend the fixed four-branch budget on model subclaims first, then fill
+    // only unused slots with deterministic user/card-text branches. The ranker
+    // projects every candidate to its official question before comparison.
+    ruleSearchQueries: crossCardQuestionBranchQueries,
+    supplementalRuleQueryKeys: independentRuleQueryKeys,
     candidateLimit: crossCardOfficialCandidateLimit,
   });
   const mergedLexicalCrossCardCandidates = mergeOfficialRelatedSourceItems([
@@ -618,7 +640,7 @@ export async function retrieveRagEvidence({
     crossCardCandidates: crossCardOfficialQaRelatedCandidates,
     limit: limits.maxRelatedEvidence,
     resolvedCards: effectiveQaIdentityCards,
-    supplementalRuleQueryKeys: independentRuleQueryKeys,
+    supplementalRuleQueryKeys: crossCardQuestionBranchKeys,
   }).map((item) => ({
     ...item,
     retrievalContext: {
@@ -2199,6 +2221,7 @@ function rankRecordsWithSupplementalQueries({
 function rankOfficialQaQuestionBranches({
   records = [],
   ruleSearchQueries = [],
+  supplementalRuleQueryKeys = [],
   candidateLimit = 16,
 } = {}) {
   if (!(records || []).length) return [];
@@ -2213,6 +2236,7 @@ function rankOfficialQaQuestionBranches({
     queryKey: ruleSearchQueryIdentity(query),
   })).filter(({ question, queryKey }) => question && queryKey);
   if (!queryPlans.length) return [];
+  const supplementalKeys = new Set((supplementalRuleQueryKeys || []).filter(Boolean));
   const safeCandidateLimit = Math.max(1, Math.floor(Number(candidateLimit) || 16));
   const perQueryLimit = Math.max(2, Math.min(6, Math.ceil(safeCandidateLimit / queryPlans.length)));
   const questionProfiles = prepareOfficialQaQuestionTextProfiles(records);
@@ -2298,6 +2322,10 @@ function rankOfficialQaQuestionBranches({
         Number(match.score || 0),
         Number(questionOnlyMatch?.score || 0),
       );
+      const groundedQueryKeys = phraseMetrics.headlineAnchored === true
+        ? [queryKey]
+        : [];
+      const isSupplemental = supplementalKeys.has(queryKey);
       const candidate = {
         ...record,
         retrievalScore: Math.max(
@@ -2313,10 +2341,14 @@ function rankOfficialQaQuestionBranches({
           ...(record.retrievalSignals || {}),
           ruleQueryBestRank: index + 1,
           ruleQueryKeys: [queryKey],
+          strictRuleQueryKeys: groundedQueryKeys,
           ruleQueryRanks: { [queryKey]: index + 1 },
-          supplementalRuleQueryBestRank: index + 1,
-          supplementalRuleQueryKeys: [queryKey],
-          supplementalRuleQueryRanks: { [queryKey]: index + 1 },
+          ...(isSupplemental ? {
+            supplementalRuleQueryBestRank: index + 1,
+            supplementalRuleQueryKeys: [queryKey],
+            strictSupplementalRuleQueryKeys: groundedQueryKeys,
+            supplementalRuleQueryRanks: { [queryKey]: index + 1 },
+          } : {}),
           questionBranchSearch: true,
           questionBranchMultilingualMechanismFallback: Boolean(
             questionOnlyMatch?.multilingualMechanismFallback,
@@ -2343,9 +2375,7 @@ function rankOfficialQaQuestionBranches({
           questionBranchHeadlineEffectPhraseHitCount: Number(
             phraseMetrics.headlineEffectPhraseHitCount || 0,
           ),
-          groundedQuestionBranchRuleQueryKeys: phraseMetrics.headlineAnchored === true
-            ? [queryKey]
-            : [],
+          groundedQuestionBranchRuleQueryKeys: groundedQueryKeys,
           matchedStrongMechanismFeatures: [
             ...(record.retrievalSignals?.matchedStrongMechanismFeatures || []),
             ...(phraseMetrics.matchedStrongMechanismFeatures || []),
@@ -2707,18 +2737,26 @@ function selectIndependentRuleQueries({
 } = {}) {
   const safeLimit = Math.max(0, Math.min(4, Math.floor(Number(limit) || 0)));
   if (!safeLimit) return [];
-  // Prefer model-generated unresolved subclaims. When that stage times out or
-  // returns no plan, keep a bounded deterministic branch fallback so one card-
-  // text operation cannot hide every other branch. Deterministic branches do
-  // not receive supplemental keys and therefore cannot consume the prompt's
-  // additional reserved cross-card slots.
-  const branchQueries = (supplementalRuleQueries || []).length
-    ? supplementalRuleQueries
-    : deterministicRuleQueries;
+  // Prefer model-generated unresolved subclaims, then use deterministic user
+  // and card-text branches to fill only the unused part of the same four-slot
+  // budget. A partial model plan must not disable deterministic discovery, and
+  // adding the fallback must never enlarge the global query or evidence caps.
+  const supplemental = normalizeRuleSearchQueries(supplementalRuleQueries, {
+    maxRuleSearchQueries: safeLimit,
+  });
+  const supplementalKeys = new Set(
+    supplemental.map(ruleSearchQueryIdentity).filter(Boolean),
+  );
+  const deterministic = normalizeRuleSearchQueries(deterministicRuleQueries, {
+    maxRuleSearchQueries: safeLimit,
+  }).filter((query) => !supplementalKeys.has(ruleSearchQueryIdentity(query)));
   // Keep strict-mechanism ranking and full-question ranking on the same
   // bounded query plan. Otherwise each path can silently preserve a different
   // set of four branches and lose a later decision checkpoint.
-  return normalizeRuleSearchQueries(branchQueries, {
+  return normalizeRuleSearchQueries([
+    ...supplemental,
+    ...deterministic,
+  ], {
     maxRuleSearchQueries: safeLimit,
   });
 }
@@ -3848,6 +3886,7 @@ async function resolveUnresolvedMentionCardsWithBaige(unresolvedMentions, {
   fetchImpl,
   env,
   limits,
+  canonicalCards = [],
   warnings,
   debug,
   signal,
@@ -3869,7 +3908,13 @@ async function resolveUnresolvedMentionCardsWithBaige(unresolvedMentions, {
         warnings.push(`baige_no_result:${query}`);
         continue;
       }
-      const selection = selectUniqueBaigeCandidate(candidates, minConfidence);
+      // Canonicalize every eligible external mirror before deciding whether
+      // the user's surface converges to one identity. A model-generated search
+      // expansion is never itself a surface anchor.
+      const selection = selectUniqueBaigeCandidate(candidates, minConfidence, {
+        canonicalCards,
+        surface: mention.input,
+      });
       const best = selection.card;
       const confidence = Number(best?.confidence || 0);
       if (best) {
@@ -3878,8 +3923,9 @@ async function resolveUnresolvedMentionCardsWithBaige(unresolvedMentions, {
           && !queryMatchesUserSurface
           ? "canonical_expansion_exact_primary_name"
           : selection.resolutionKind || "confidence_margin";
+        const externalSurfaceCompatible = selection.surfaceCompatible === true;
         const externalExpansionPrimaryNameAnchored = resolutionKind === "canonical_expansion_exact_primary_name"
-          && providerPrimaryNameMechanicallyMatchesSurface(best, mention.input);
+          && externalSurfaceCompatible;
         const modelExpansionPendingIdentityReconciliation = resolutionKind === "canonical_expansion_exact_primary_name"
           && mention.source === "model_card_name_extractor"
           && mention.reason === "model_candidate_not_found";
@@ -3892,9 +3938,10 @@ async function resolveUnresolvedMentionCardsWithBaige(unresolvedMentions, {
         if (modelExpansionPendingIdentityReconciliation && !externalExpansionPrimaryNameAnchored) {
           // The provider proves that the expanded canonical name exists, not
           // that the model mapped the user's surface correctly. Preserve it as
-          // a candidate so canonical CID backfill can unlock local evidence,
-          // while the ordinary reconciliation below still rejects any local
-          // ambiguity or competing identity.
+          // a candidate for the final admission gate, which still requires
+          // original-surface compatibility, unique external identity
+          // convergence and CID/passcode-backed local canonicalization before
+          // any local evidence can be unlocked.
           warnings.push(`baige_model_expansion_pending_identity_reconciliation:${query}->${best.name}`);
         }
         warnings.push(`baige_match:${query}->${best.name}`);
@@ -3902,9 +3949,21 @@ async function resolveUnresolvedMentionCardsWithBaige(unresolvedMentions, {
           ...toRagCard(best, mention.input, confidence),
           matchedQuery: query,
           externalSurfaceResolution: resolutionKind,
+          externalSurfaceCompatible,
+          externalIdentityUniqueConvergence: selection.canonicalIdentityUniqueConvergence === true,
           externalExpansionPrimaryNameAnchored,
           modelExpansionPendingIdentityReconciliation,
         };
+      }
+      if (selection.incompatibleCandidates?.length) {
+        const isModelExpansion = normalizeCardKey(query) !== normalizeCardKey(mention.input)
+          && mention.source === "model_card_name_extractor"
+          && mention.reason === "model_candidate_not_found";
+        if (isModelExpansion) {
+          warnings.push(`baige_model_expansion_pending_identity_reconciliation:${query}->${selection.incompatibleCandidates[0]?.name || "candidate"}`);
+          warnings.push(`baige_model_expansion_stable_identity_unverified:${query}->${selection.incompatibleCandidates[0]?.name || "candidate"}`);
+        }
+        warnings.push(`baige_unanchored_canonical_expansion:${query}->${selection.incompatibleCandidates[0]?.name || "candidate"}`);
       }
       if (selection.ambiguous) {
         const ambiguousConfidence = Number(selection.candidates[0]?.confidence || 0);
@@ -3972,6 +4031,7 @@ async function enrichCardsWithBaige(cards, {
   fetchImpl,
   env,
   limits,
+  canonicalCards = [],
   warnings,
   debug,
   signal,
@@ -3994,7 +4054,10 @@ async function enrichCardsWithBaige(cards, {
     }
     const searchResult = await searchBaige(nameQuery, { fetchImpl, env, limits, debug, signal });
     warnings.push(...searchResult.warnings);
-    const selection = selectUniqueBaigeCandidate(searchResult.results || [], 0.72);
+    const selection = selectUniqueBaigeCandidate(searchResult.results || [], 0.72, {
+      canonicalCards,
+      surface: card.input || nameQuery,
+    });
     let best = selection.card;
     let matchedQuery = nameQuery;
     let verifiedByCanonicalLookup = false;
@@ -4004,6 +4067,7 @@ async function enrichCardsWithBaige(cards, {
         fetchImpl,
         env,
         limits,
+        canonicalCards,
         warnings,
         debug,
         signal,
@@ -4084,6 +4148,7 @@ async function verifySurfaceIdentityThroughCanonicalBaigeLookup(card, {
   fetchImpl,
   env,
   limits,
+  canonicalCards = [],
   warnings,
   debug,
   signal,
@@ -4092,7 +4157,10 @@ async function verifySurfaceIdentityThroughCanonicalBaigeLookup(card, {
   for (const query of canonicalIdentityVerificationQueries(card, primaryQuery)) {
     const searchResult = await searchBaige(query, { fetchImpl, env, limits, debug, signal });
     warnings.push(...searchResult.warnings);
-    const selection = selectUniqueBaigeCandidate(searchResult.results || [], 0.72);
+    const selection = selectUniqueBaigeCandidate(searchResult.results || [], 0.72, {
+      canonicalCards,
+      surface: card.input || primaryQuery,
+    });
     if (selection.ambiguous) {
       warnings.push(`baige_canonical_identity_ambiguous:${card.input || primaryQuery}:${query}`);
       return {
@@ -4216,69 +4284,185 @@ function boundedIdentityEditDistance(left, right, limit) {
   return previous[right.length];
 }
 
-function selectUniqueBaigeCandidate(candidates, minConfidence) {
+function selectUniqueBaigeCandidate(candidates, minConfidence, {
+  canonicalCards = [],
+  surface = "",
+} = {}) {
   const eligible = (candidates || [])
     .filter((candidate) => Number(candidate?.confidence || 0) >= minConfidence);
   if (!eligible.length) return { card: null, ambiguous: false, candidates: [] };
-  const identities = new Map();
+  // External providers can emit multiple localized mirrors for one card. Form
+  // connected identity groups from every verified CID/passcode token, including
+  // a unique local-card bridge when one mirror carries the CID and another only
+  // carries the engine passcode. Names are fallback identities only when the
+  // provider supplied no strong numeric identity at all.
+  const identityGroups = [];
   for (const candidate of eligible) {
-    const key = externalCardIdentityKey(candidate);
-    if (!identities.has(key)) identities.set(key, candidate);
+    const tokens = new Set(externalCardIdentityTokens(candidate, canonicalCards));
+    const matches = identityGroups.filter((group) => (
+      [...tokens].some((token) => group.tokens.has(token))
+    ));
+    if (!matches.length) {
+      identityGroups.push({ candidates: [candidate], tokens });
+      continue;
+    }
+    const target = matches[0];
+    target.candidates.push(candidate);
+    for (const token of tokens) target.tokens.add(token);
+    for (const merged of matches.slice(1)) {
+      target.candidates.push(...merged.candidates);
+      for (const token of merged.tokens) target.tokens.add(token);
+      identityGroups.splice(identityGroups.indexOf(merged), 1);
+    }
   }
-  const uniqueCandidates = [...identities.values()]
-    .sort((left, right) => Number(right.confidence || 0) - Number(left.confidence || 0));
+  const surfaceKey = normalizeCardKey(surface);
+  const primaryExactGroups = surfaceKey
+    ? identityGroups.filter((group) => group.candidates.some((candidate) => (
+        (candidate.providerPrimaryNames || []).some((primaryName) => (
+          normalizeCardKey(primaryName) === surfaceKey
+        ))
+      )))
+    : [];
+  const compatibleGroups = primaryExactGroups.length
+    ? primaryExactGroups
+    : surface
+      ? identityGroups.filter((group) => group.candidates.some((candidate) => (
+          providerPrimaryNameMechanicallyMatchesSurface(candidate, surface)
+        )))
+      : identityGroups;
+  const representative = (group) => [...group.candidates].sort((left, right) => (
+    Number(right.confidence || 0) - Number(left.confidence || 0)
+    || externalCardIdentityTokens(left).join("|").localeCompare(
+      externalCardIdentityTokens(right).join("|"),
+    )
+    || normalizeCardKey(left.name).localeCompare(normalizeCardKey(right.name))
+  ))[0];
+  const incompatibleCandidates = identityGroups
+    .filter((group) => !compatibleGroups.includes(group))
+    .map(representative);
+  const uniqueCandidates = compatibleGroups
+    .map(representative)
+    .sort((left, right) => (
+      Number(right.confidence || 0) - Number(left.confidence || 0)
+      || externalCardIdentityTokens(left).join("|").localeCompare(
+        externalCardIdentityTokens(right).join("|"),
+      )
+    ));
+  if (!uniqueCandidates.length) {
+    return {
+      card: null,
+      ambiguous: false,
+      candidates: [],
+      incompatibleCandidates,
+    };
+  }
   if (uniqueCandidates.length === 1) {
+    const convergedGroup = compatibleGroups[0];
     return {
       card: uniqueCandidates[0],
       ambiguous: false,
       candidates: uniqueCandidates,
-      resolutionKind: String(uniqueCandidates[0].confidenceSource || "").includes("unique_exact_primary_name")
-        ? "unique_exact_primary_name"
-        : "single_eligible_identity",
+      incompatibleCandidates,
+      surfaceCompatible: true,
+      canonicalIdentityUniqueConvergence: true,
+      resolutionKind: convergedGroup.candidates.length > 1
+        ? "canonical_identity_unique_surface_match"
+        : String(uniqueCandidates[0].confidenceSource || "").includes("unique_exact_primary_name")
+          ? "unique_exact_primary_name"
+          : "single_eligible_identity",
     };
   }
-  const best = uniqueCandidates[0];
-  const runnerUp = uniqueCandidates[1];
-  const margin = Number(best.confidence || 0) - Number(runnerUp.confidence || 0);
-  const providerCertifiedUnique = /(?:unique|high_gap)/u.test(String(best.confidenceSource || ""));
-  if (margin >= 0.05 || providerCertifiedUnique) {
-    return {
-      card: best,
-      ambiguous: false,
-      candidates: uniqueCandidates,
-      resolutionKind: String(best.confidenceSource || "").includes("unique_exact_primary_name")
-        ? "unique_exact_primary_name"
-        : providerCertifiedUnique
-          ? "provider_certified_unique"
-          : "confidence_margin",
-    };
-  }
-  return { card: null, ambiguous: true, candidates: uniqueCandidates };
+  // A score margin is ranking evidence, not identity evidence. If two distinct
+  // canonical identities remain compatible with the user's original surface,
+  // fail closed regardless of provider order or confidence wording.
+  return {
+    card: null,
+    ambiguous: true,
+    candidates: uniqueCandidates,
+    incompatibleCandidates,
+    surfaceCompatible: true,
+    canonicalIdentityUniqueConvergence: false,
+  };
 }
 
-function externalCardIdentityKey(card = {}) {
+function externalCardIdentityTokens(card = {}, canonicalCards = []) {
   const passcode = verifiedEnginePasscode(card)
     || (/^[1-9]\d{4,9}$/u.test(normalizeId(card.id || card.cardId))
       ? normalizeId(card.id || card.cardId)
       : "");
   const cid = verifiedExternalCardCid(card);
-  return passcode ? `passcode:${passcode}` : cid ? `cid:${cid}` : `name:${normalizeCardKey(card.name)}`;
+  const tokens = new Set([
+    cid ? `cid:${cid}` : "",
+    passcode ? `passcode:${passcode}` : "",
+  ].filter(Boolean));
+  if ((canonicalCards || []).length && (cid || passcode)) {
+    const index = canonicalCardIdentityIndex(canonicalCards);
+    const localCandidates = new Set([
+      ...(cid ? index.byCid.get(cid) || [] : []),
+      ...(passcode ? index.byPasscode.get(passcode) || [] : []),
+    ]);
+    if (localCandidates.size === 1) {
+      const local = [...localCandidates][0];
+      const localId = normalizeId(local.id || local.cardId);
+      if (localId) tokens.add(`local:${localId}`);
+    }
+  }
+  if (!tokens.size) {
+    const nameKey = normalizeCardKey(card.name || card.cnName || card.jaName || card.enName);
+    if (nameKey) tokens.add(`name:${nameKey}`);
+  }
+  return [...tokens].sort();
 }
 
 function providerPrimaryNameMechanicallyMatchesSurface(card = {}, input = "") {
   const inputKey = normalizeCardKey(input);
-  // Very short nicknames can be shared by an entire card family. They must not
-  // let a model-supplied canonical expansion certify one member of that family.
-  if (inputKey.length < 4) return false;
+  if (!inputKey) return false;
   const stripNumberedPrefix = (value) => normalizeCardKey(value)
     .replace(/^(?:cno|no)\d{1,4}/u, "");
-  return [card.name, card.cnName, card.jaName, card.jpName, card.enName]
+  return [
+    ...(card.providerPrimaryNames || []),
+    card.name,
+    card.cnName,
+    card.jaName,
+    card.jpName,
+    card.enName,
+    ...(card.aliases || []),
+  ]
     .filter(Boolean)
-    .some((primaryName) => {
-      if (hasNumberedCardIdentityConflict(input, primaryName)) return false;
-      const primaryKey = normalizeCardKey(primaryName);
-      return primaryKey === inputKey
-        || stripNumberedPrefix(primaryName) === stripNumberedPrefix(input);
+    .some((surfaceName) => {
+      if (hasNumberedCardIdentityConflict(input, surfaceName)) return false;
+      const surfaceKey = normalizeCardKey(surfaceName);
+      if (!surfaceKey) return false;
+      if (surfaceKey === inputKey) return true;
+      if (inputKey.length >= 4
+          && stripNumberedPrefix(surfaceName) === stripNumberedPrefix(input)) {
+        return true;
+      }
+      // Permit a long provider surface wrapped in a small amount of extractor
+      // context, but never let a short family fragment certify one card.
+      const shorterLength = Math.min(surfaceKey.length, inputKey.length);
+      const longerLength = Math.max(surfaceKey.length, inputKey.length);
+      if (shorterLength >= 6
+        && shorterLength / longerLength >= 0.6
+        && (surfaceKey.includes(inputKey) || inputKey.includes(surfaceKey))) {
+        return true;
+      }
+      // For long surfaces only, compare equal-length leading/trailing windows.
+      // This admits a little extractor context plus a bounded translation edit
+      // without turning a short family fragment into an identity anchor.
+      const lengthGap = longerLength - shorterLength;
+      if (shorterLength < 8 || lengthGap > 3 || shorterLength / longerLength < 0.75) {
+        return false;
+      }
+      const shorter = surfaceKey.length <= inputKey.length ? surfaceKey : inputKey;
+      const longer = surfaceKey.length > inputKey.length ? surfaceKey : inputKey;
+      const editLimit = Math.min(3, Math.floor(shorterLength / 4));
+      return [...new Set([
+        longer.slice(0, shorterLength),
+        longer.slice(-shorterLength),
+      ])].some((window) => (
+        boundedIdentityEditDistance(shorter, window, editLimit) <= editLimit
+      ));
     });
 }
 
@@ -4535,7 +4719,13 @@ export function reconcileRetrievedCardResolution({
 } = {}) {
   const candidates = mergeCardsByStableIdentity(retrievedCards).map(ensureCardMentionAlias);
   const externallyResolvedSurfaceKeys = new Set(candidates
-    .filter((card) => card.externalSurfaceResolution === "unique_exact_primary_name")
+    .filter((card) => (
+      card.externalSurfaceResolution === "unique_exact_primary_name"
+      || (
+        card.externalSurfaceCompatible === true
+        && card.externalIdentityUniqueConvergence === true
+      )
+    ))
     .map((card) => normalizeCardKey(card.input))
     .filter(Boolean));
   const ambiguousMentions = dedupeMentions([
@@ -4694,19 +4884,22 @@ function reserveIdentitySourceCoverage(items = [], limit = 1, resolvedCards = []
   const safeLimit = Math.max(1, Math.floor(Number(limit) || 1));
   const selected = [];
   const selectedKeys = new Set();
-  const representedIds = new Set();
-  const add = (item, assignedId = "") => {
+  const representedCoverageKeys = new Set();
+  const coverageKeysByRecord = new Map();
+  const add = (item) => {
     const key = stableRecordKey(item?.record || item);
     if (!key || selectedKeys.has(key) || selected.length >= safeLimit) return false;
     selected.push(item);
     selectedKeys.add(key);
-    if (assignedId) representedIds.add(assignedId);
+    for (const coverageKey of coverageKeysByRecord.get(key) || []) {
+      representedCoverageKeys.add(coverageKey);
+    }
     return true;
   };
 
-  // Reserve records that cover distinct question-side identity combinations
-  // before filling by global rank. This keeps one multi-card interaction from
-  // being reduced to independent same-card tails as synchronized corpora grow.
+  // Reserve records by the exact question-side identity combination plus each
+  // strict planner/mechanism branch. Two records about the same card identity
+  // are not interchangeable when they cover different strict branches.
   const resolvedIds = new Set((resolvedCards || [])
     .map((card) => normalizeId(card?.id || card?.cardId))
     .filter(Boolean));
@@ -4715,22 +4908,26 @@ function reserveIdentitySourceCoverage(items = [], limit = 1, resolvedCards = []
       card?.name,
       card?.cnName,
       card?.jaName,
+      card?.jpName,
       card?.enName,
       ...(card?.aliases || []),
     ])
     .map(normalizeCardKey)
     .filter(Boolean));
-  const bestByIdentityGroup = new Map();
-  for (const item of items || []) {
+  const bestByCoverageKey = new Map();
+  (items || []).forEach((item, index) => {
     const record = item?.record || item;
     const ids = [
-      ...evidenceMatchedQuestionCardIds(item),
-      ...(record.cardIds || []),
+      ...(Array.isArray(item?.matchedQuestionCardIds) ? item.matchedQuestionCardIds : []),
+      ...(Array.isArray(item?.retrievalSignals?.matchedQuestionCardIds)
+        ? item.retrievalSignals.matchedQuestionCardIds
+        : []),
+      ...principalQuestionCardIds(record),
     ]
       .map(normalizeId)
       .filter((id) => !resolvedIds.size || resolvedIds.has(id))
       .sort();
-    const names = [record.cardName, ...(record.cards || []), ...(record.cardNames || [])]
+    const names = retrievalRankingIdentity(record).cardNames
       .map(normalizeCardKey)
       .filter((name) => name && (!resolvedNames.size || resolvedNames.has(name)))
       .sort();
@@ -4738,20 +4935,33 @@ function reserveIdentitySourceCoverage(items = [], limit = 1, resolvedCards = []
       ...ids.map((id) => `id:${id}`),
       ...names.map((name) => `name:${name}`),
     ])];
-    if (!identities.length) continue;
-    const group = identities.join("|");
-    if (!bestByIdentityGroup.has(group)) bestByIdentityGroup.set(group, item);
-  }
-  const identityGroups = [...bestByIdentityGroup.entries()]
-    .sort((left, right) => {
-      const leftSize = left[0].split("|").length;
-      const rightSize = right[0].split("|").length;
-      return rightSize - leftSize || left[0].localeCompare(right[0]);
-    });
-  for (const [group, item] of identityGroups) {
-    const identities = group.split("|");
-    if (!identities.some((id) => !representedIds.has(id))) continue;
-    if (add(item)) identities.forEach((id) => representedIds.add(id));
+    if (!identities.length) return;
+    const identityCombination = identities.join("|");
+    const strictQueryKeys = supplementalQueryKeysForItem(item, { strictOnly: true }).sort();
+    const coverageKeys = (strictQueryKeys.length ? strictQueryKeys : ["ordinary"])
+      .map((branchKey) => `${identityCombination}::${branchKey}`);
+    coverageKeysByRecord.set(stableRecordKey(record), coverageKeys);
+    for (const coverageKey of coverageKeys) {
+      if (!bestByCoverageKey.has(coverageKey)) {
+        bestByCoverageKey.set(coverageKey, {
+          item,
+          index,
+          identitySize: identities.length,
+          strict: strictQueryKeys.length > 0,
+        });
+      }
+    }
+  });
+  const coverageEntries = [...bestByCoverageKey.entries()]
+    .sort((left, right) => (
+      Number(right[1].strict) - Number(left[1].strict)
+      || right[1].identitySize - left[1].identitySize
+      || left[1].index - right[1].index
+      || left[0].localeCompare(right[0])
+    ));
+  for (const [coverageKey, { item }] of coverageEntries) {
+    if (representedCoverageKeys.has(coverageKey)) continue;
+    add(item);
   }
   for (const item of items || []) add(item);
   const remaining = (items || []).filter(
@@ -4906,6 +5116,27 @@ export function reserveRankedHeadAndSupplementalCoverage(items = [], limit = 1, 
   ], (item) => stableRecordKey(item?.record || item));
 }
 
+function reserveUncoveredCrossCardBranches(items = [], limit = 1, {
+  queryKeys = [],
+} = {}) {
+  const safeLimit = Math.max(0, Math.floor(Number(limit) || 0));
+  if (!safeLimit) return [];
+  const ordered = dedupeEvidence(items || []);
+  const strict = queryKeys.length
+    ? reserveSupplementalQueryCoverage(ordered, safeLimit, {
+        queryKeys,
+        strictOnly: true,
+        fillRemaining: false,
+      }).slice(0, safeLimit)
+    : [];
+  const strictKeys = new Set(strict.map(stableRecordKey));
+  // After uncovered strict branches, keep at most one ordinary ranked analogue.
+  const analogue = strict.length < safeLimit
+    ? ordered.find((item) => !strictKeys.has(stableRecordKey(item)))
+    : null;
+  return analogue ? [...strict, analogue] : strict;
+}
+
 function allocateOfficialRelatedEvidence({
   scopedCandidates = [],
   crossCardCandidates = [],
@@ -4941,68 +5172,41 @@ function allocateOfficialRelatedEvidence({
     .filter((item) => !scopedKeys.has(stableRecordKey(item)));
   if (!scoped.length) {
     const crossCardOnlyLimit = Math.min(4, safeLimit);
-    return reserveRankedHeadAndSupplementalCoverage(crossCard, crossCardOnlyLimit, {
+    return reserveUncoveredCrossCardBranches(crossCard, crossCardOnlyLimit, {
       queryKeys: supplementalRuleQueryKeys,
-      strictOnly: true,
-      preserveStrictMechanismRepresentative: crossCardOnlyLimit === 4,
-    }).slice(0, crossCardOnlyLimit);
+    });
   }
   if (!crossCard.length) {
-    return reserveRankedHeadAndSupplementalCoverage(scoped, safeLimit, {
-      queryKeys: supplementalRuleQueryKeys,
-      strictOnly: true,
-    }).slice(0, safeLimit);
+    return scoped.slice(0, safeLimit);
   }
 
   // A mechanism ruling is often documented on another card, but analogies must
-  // not crowd the same-card sources out of the bounded prompt. Keep at most four
-  // cross-card candidates; the coverage-first selector above spends those slots
-  // on distinct strict branches before an unmarked ranked head.
-  const crossCardReserve = Math.min(4, Math.max(0, safeLimit - 1));
-  const maxCrossCard = scoped.length < safeLimit
-    ? Math.min(crossCard.length, safeLimit - scoped.length, crossCardReserve)
-    : Math.min(
-      crossCard.length,
-      Math.max(0, safeLimit - 1),
-      crossCardReserve,
+  // not crowd same-card sources out of the bounded prompt. Cross-card slots are
+  // earned by strict branches still uncovered by the retained scoped prefix,
+  // followed by at most one ordinary analogue; they are never padded to four.
+  const maxCrossCard = Math.min(4, Math.max(0, safeLimit - 1));
+  let crossCardCount = Math.min(1, maxCrossCard);
+  let selectedScoped = scoped.slice(0, safeLimit - crossCardCount);
+  let selectedCrossCard = [];
+  for (let attempt = 0; attempt <= maxCrossCard; attempt += 1) {
+    const representedQueryKeys = new Set(selectedScoped.flatMap((item) => (
+      supplementalQueryKeysForItem(item, { strictOnly: true })
+    )));
+    const uncoveredQueryKeys = supplementalRuleQueryKeys.filter(
+      (key) => !representedQueryKeys.has(key),
     );
-  const scopedLimit = Math.min(scoped.length, safeLimit - maxCrossCard);
-  const prioritizedScoped = reserveRankedHeadAndSupplementalCoverage(
-    scoped,
-    Math.max(1, scopedLimit),
-    {
-      queryKeys: supplementalRuleQueryKeys,
-      strictOnly: true,
-    },
-  );
-  const selectedScoped = prioritizedScoped.slice(0, scopedLimit);
-  if (maxCrossCard <= 0) return selectedScoped;
-
-  const representedQueryKeys = new Set(selectedScoped.flatMap((item) => (
-    supplementalQueryKeysForItem(item, { strictOnly: true })
-  )));
-  const uncoveredQueryKeys = supplementalRuleQueryKeys.filter(
-    (key) => !representedQueryKeys.has(key),
-  );
-  const prioritizedCrossCard = uncoveredQueryKeys.length || maxCrossCard === 4
-    ? reserveRankedHeadAndSupplementalCoverage(crossCard, maxCrossCard, {
+    selectedCrossCard = reserveUncoveredCrossCardBranches(crossCard, maxCrossCard, {
       queryKeys: uncoveredQueryKeys,
-      strictOnly: true,
-      preserveStrictMechanismRepresentative: maxCrossCard === 4,
-    })
-    : crossCard;
+    });
+    const nextCrossCardCount = Math.min(maxCrossCard, selectedCrossCard.length);
+    if (nextCrossCardCount === crossCardCount) break;
+    crossCardCount = nextCrossCardCount;
+    selectedScoped = scoped.slice(0, safeLimit - crossCardCount);
+  }
   return dedupeEvidence([
     ...selectedScoped,
-    ...prioritizedCrossCard.slice(0, maxCrossCard),
+    ...selectedCrossCard.slice(0, crossCardCount),
   ]).slice(0, safeLimit);
-}
-
-function evidenceMatchedQuestionCardIds(item = {}) {
-  const record = item?.record || item;
-  return [...new Set([
-    ...relatedMatchedQuestionCardIds(item),
-    ...principalQuestionCardIds(record),
-  ].map(normalizeId).filter(Boolean))];
 }
 
 async function readRequiredJsonSource(dataDir, name, arrayKeys) {

@@ -6122,8 +6122,8 @@ test("cross-card allocation balances a model-assessed premise with strict supple
   ));
 });
 
-test("rag_prompt_truncates_context", () => {
-  const bundle = buildRagRulingPromptBundle({
+test("rag prompt fails closed when its highest-priority complete evidence cannot fit", () => {
+  assert.throws(() => buildRagRulingPromptBundle({
     userQuery: "测试问题",
     cardResolution: { resolvedCards: cards },
     evidence: {
@@ -6138,16 +6138,46 @@ test("rag_prompt_truncates_context", () => {
       RAG_MAX_CARD_TEXT_CHARS: "100",
       RAG_MAX_PROMPT_CHARS: "1400",
     },
+  }), (error) => {
+    assert.equal(error.statusCode, 503);
+    assert.equal(error.code, "evidence_prompt_budget_exceeded");
+    assert.equal(error.details?.reason, "complete_reference_does_not_fit");
+    return true;
   });
-  assert.equal(bundle.prompt.length <= 1400, true);
-  assert.ok(bundle.warnings.some((warning) => warning.includes("compacted")));
-  assert.equal(bundle.promptTruncated, true);
-  assert.doesNotMatch(bundle.prompt, /上下文因 RAG_MAX_PROMPT_CHARS 限制被截断/u);
-  assert.match(bundle.prompt, /allowedEvidenceIds/u);
-  assert.match(bundle.prompt, /card-text-long/u);
-  assert.match(bundle.prompt, /allowedEvidenceIds 中真实存在的 id/u);
-  assert.deepEqual(bundle.allowedEvidenceIds, ["card-text-long"]);
-  assert.deepEqual(bundle.evidenceSelectionDiagnostics.map((item) => item.id), ["card-text-long"]);
+});
+
+test("pipeline never calls the final model when the complete evidence prompt exceeds budget", async () => {
+  const oversizedCard = {
+    id: "anonymous-budget-card",
+    name: "匿名预算卡",
+    aliases: ["匿名预算卡"],
+    effectText: `COMPLETE_EFFECT_HEAD ${"完整卡片正文".repeat(800)} COMPLETE_EFFECT_TAIL`,
+  };
+  let finalModelCalls = 0;
+
+  await assert.rejects(answerRagRulingQuestion({
+    question: "「匿名预算卡」的效果如何处理？",
+    cards: [oversizedCard],
+    records: [],
+    qaRecords: [],
+    env: {
+      RAG_CARD_MODEL_PROVIDER: "mock",
+      RAG_RULE_MODEL_PROVIDER: "mock",
+      RAG_LIVE_OFFICIAL_QA_ENABLED: "false",
+      RAG_MAX_PROMPT_CHARS: "1000",
+    },
+    cardModelInvoker: async () => JSON.stringify({ cardNames: [] }),
+    ruleModelInvoker: async () => JSON.stringify({ ruleQueries: [] }),
+    modelInvoker: async () => {
+      finalModelCalls += 1;
+      return JSON.stringify(modelJson("不应被调用。"));
+    },
+  }), (error) => {
+    assert.equal(error.statusCode, 503);
+    assert.equal(error.code, "evidence_prompt_budget_exceeded");
+    return true;
+  });
+  assert.equal(finalModelCalls, 0);
 });
 
 test("general prompt keeps score-ranked references within one budget and omits resolved-card text duplicates", () => {
@@ -6738,9 +6768,9 @@ test("unique exact official QA uses a focused complete-answer route", async () =
   assert.ok(incomplete.riskFlags.includes("model_output_not_displayable"));
 });
 
-test("focused official QA prompt preserves the full-source tail without invalid JSON slicing", () => {
+test("focused official QA prompt fails closed when its complete envelope cannot fit", () => {
   const sourceText = `问题？回答开头。${'中间内容 "引用" \\ 路径\n'.repeat(400)}（TAIL_MARKER：本回合不能再次宣言同名卡。）`;
-  const bundle = buildRagRulingPromptBundle({
+  assert.throws(() => buildRagRulingPromptBundle({
     userQuery: "可以发动这个效果吗？",
     cardResolution: {
       resolvedCards: [{ id: "92001", name: "长文本测试卡", aliases: ["长文本测试卡"] }],
@@ -6771,20 +6801,59 @@ test("focused official QA prompt preserves the full-source tail without invalid 
       retrievalWarnings: [],
     },
     env: { RAG_MAX_PROMPT_CHARS: "1800", RAG_OFFICIAL_DIRECT_FOCUSED_PROMPT: "true" },
+  }), (error) => {
+    assert.equal(error.statusCode, 503);
+    assert.equal(error.code, "evidence_prompt_budget_exceeded");
+    assert.equal(error.details?.reason, "complete_reference_does_not_fit");
+    return true;
   });
-
-  assert.equal(bundle.prompt.length <= 1800, true);
-  assert.equal(bundle.promptTruncated, true);
-  assert.match(bundle.prompt, /TAIL_MARKER/u);
-  assert.doesNotThrow(() => JSON.parse(bundle.prompt.split("\n").at(-1)));
-  assert.deepEqual(bundle.allowedEvidenceIds, ["ygoresources-qa-long-tail"]);
-  assert.deepEqual(
-    bundle.evidenceSelectionDiagnostics.map((item) => item.id),
-    ["ygoresources-qa-long-tail"],
-  );
 });
 
-test("focused official QA prompt keeps the ruling but omits a dense placeholder catalogue", () => {
+test("focused official QA budget failure occurs before the final model call", async () => {
+  const directCard = {
+    id: "anonymous-focused-budget-card",
+    name: "匿名直达预算卡",
+    aliases: ["匿名直达预算卡"],
+    effectText: "匿名卡片的完整短卡文。",
+  };
+  const directQa = {
+    id: "anonymous-focused-budget-qa",
+    recordType: "qa",
+    question: "可以发动「匿名直达预算卡」的效果吗？",
+    detailedScene: "发动条件均已满足的匿名完整场景。",
+    answer: `COMPLETE_DIRECT_HEAD ${"完整官方回答正文".repeat(800)} COMPLETE_DIRECT_TAIL`,
+    cardIds: [directCard.id],
+    questionCardIds: [directCard.id],
+  };
+  let finalModelCalls = 0;
+
+  await assert.rejects(answerRagRulingQuestion({
+    question: directQa.question,
+    cards: [directCard],
+    records: [],
+    qaRecords: [directQa],
+    officialQaExactAlreadyChecked: true,
+    env: {
+      RAG_CARD_MODEL_PROVIDER: "mock",
+      RAG_RULE_MODEL_PROVIDER: "mock",
+      RAG_LIVE_OFFICIAL_QA_ENABLED: "false",
+      RAG_MAX_PROMPT_CHARS: "1800",
+    },
+    cardModelInvoker: async () => JSON.stringify({ cardNames: [] }),
+    ruleModelInvoker: async () => JSON.stringify({ ruleQueries: [] }),
+    modelInvoker: async () => {
+      finalModelCalls += 1;
+      return JSON.stringify(modelJson("不应被调用。"));
+    },
+  }), (error) => {
+    assert.equal(error.statusCode, 503);
+    assert.equal(error.code, "evidence_prompt_budget_exceeded");
+    return true;
+  });
+  assert.equal(finalModelCalls, 0);
+});
+
+test("focused official QA prompt keeps the complete answer including its catalogue", () => {
   const catalogue = Array.from({ length: 20 }, (_, index) => `「<<${94000 + index}>>」①`).join("\n");
   const sourceText = [
     "この効果を発動できますか？",
@@ -6831,12 +6900,13 @@ test("focused official QA prompt keeps the ruling but omits a dense placeholder 
   assert.ok(bundle.warnings.includes("official_direct_focused_prompt"));
   assert.match(bundle.prompt, /発動できます/u);
   assert.match(bundle.prompt, /対象が存在しない場合/u);
-  assert.doesNotMatch(bundle.prompt, /<<94000>>/u);
-  assert.doesNotMatch(bundle.prompt, /ENUMERATION_END/u);
+  assert.match(bundle.prompt, /<<94000>>/u);
+  assert.match(bundle.prompt, /ENUMERATION_END/u);
   assert.match(bundle.prompt, /直接输出完整中文裁定正文/u);
   assert.doesNotMatch(bundle.prompt, /usedEvidence 必须是对象数组/u);
   const payload = JSON.parse(bundle.prompt.split("\n").at(-1));
-  assert.doesNotMatch(payload.officialQaDirectCandidate.text, /<<94000>>/u);
+  assert.match(payload.officialQaDirectCandidate.answer, /<<94000>>/u);
+  assert.equal(Object.hasOwn(payload.officialQaDirectCandidate, "text"), false);
 });
 
 test("semantic or card-set subsumption remains related evidence instead of an official direct route", () => {
