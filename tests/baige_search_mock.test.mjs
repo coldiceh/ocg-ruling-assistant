@@ -1273,6 +1273,163 @@ test("conflicting external identities fail closed instead of blessing a local ed
   )));
 });
 
+test("long original surfaces recover only after CID and passcode mirrors converge on one local identity", async () => {
+  clearBaigeSearchCache();
+  const canonicalSurface = "匿名样本规范译名长尾飞翼";
+  const translatedSurface = "匿名样本规范异名长末飞翼";
+  const userSurface = `前文${translatedSurface}`;
+  const localCard = {
+    id: "1901",
+    cardId: "1901",
+    passcode: "80190001",
+    name: canonicalSurface,
+    aliases: [canonicalSurface],
+    effectText: "匿名本地完整卡文。",
+  };
+  const calls = [];
+  const evidence = await retrieveRagEvidence({
+    userQuery: `「${userSurface}」如何处理？`,
+    cardResolution: {
+      resolvedCards: [],
+      unresolvedMentions: [],
+      ambiguousMentions: [{ input: userSurface, reason: "local_card_identity_ambiguous" }],
+      userProvidedCardTexts: [],
+    },
+    cards: [localCard],
+    records: [],
+    qaRecords: [],
+    fetchImpl: async (url) => {
+      const query = new URL(String(url)).searchParams.get("search");
+      calls.push(query);
+      if (query !== translatedSurface) return jsonResponse({ result: [], next: 0 });
+      return jsonResponse({
+        result: [{
+          cid: 1901,
+          cn_name: canonicalSurface,
+          text: { desc: "匿名镜像甲。" },
+        }, {
+          id: 80190001,
+          cn_name: canonicalSurface,
+          text: { desc: "匿名镜像乙。" },
+        }],
+        next: 0,
+      });
+    },
+    env: { RAG_LIVE_OFFICIAL_QA: "0", RAG_BAIGE_MIN_CONFIDENCE: "0.4" },
+  });
+
+  assert.ok(calls.includes(translatedSurface));
+  assert.ok(calls.length <= 6);
+  assert.ok(calls.some((query) => String(query).length >= 6));
+  assert.deepEqual(evidence.retrievedCards.map((card) => card.id), [localCard.id]);
+  assert.match(evidence.cardTexts[0].text, /匿名本地完整卡文/u);
+  assert.ok(!evidence.cardResolution.ambiguousMentions.some((item) => item.input === userSurface));
+});
+
+test("two approximate long surfaces on different canonical identities remain unresolved", async () => {
+  clearBaigeSearchCache();
+  const translatedSurface = "匿名样本规范异名长末飞翼";
+  const userSurface = `前文${translatedSurface}`;
+  const candidates = [{
+    cid: 1931,
+    id: 80193001,
+    cn_name: "匿名样本规范译名长尾飞翼",
+  }, {
+    cid: 1932,
+    id: 80193002,
+    cn_name: "匿名样本规范异名长尾翔翼",
+  }];
+  const evidence = await retrieveRagEvidence({
+    userQuery: `「${userSurface}」如何处理？`,
+    cardResolution: {
+      resolvedCards: [],
+      unresolvedMentions: [],
+      ambiguousMentions: [{ input: userSurface, reason: "local_card_identity_ambiguous" }],
+      userProvidedCardTexts: [],
+    },
+    cards: [],
+    records: [],
+    qaRecords: [],
+    fetchImpl: async (url) => (
+      new URL(String(url)).searchParams.get("search") === translatedSurface
+        ? jsonResponse({
+            result: candidates.map((card) => ({
+              ...card,
+              text: { desc: "匿名近似候选卡文。" },
+            })),
+            next: 0,
+          })
+        : jsonResponse({ result: [], next: 0 })
+    ),
+    env: { RAG_LIVE_OFFICIAL_QA: "0", RAG_BAIGE_MIN_CONFIDENCE: "0.4" },
+  });
+
+  assert.deepEqual(evidence.retrievedCards, []);
+  assert.ok(evidence.cardResolution.ambiguousMentions.some((item) => (
+    item.input === userSurface && item.candidateCards.length === 2
+  )));
+});
+
+test("a model expansion cannot pass solely because its real CID maps to local card text or FAQ", async () => {
+  clearBaigeSearchCache();
+  const userSurface = "匿名原始长表面";
+  const modelExpansion = "完全不同规范表面";
+  const localCard = {
+    id: "1921",
+    name: modelExpansion,
+    aliases: [modelExpansion],
+    effectText: "不应由错误扩展解锁的本地卡文。",
+  };
+  const evidence = await retrieveRagEvidence({
+    userQuery: `${userSurface}如何处理？`,
+    cardResolution: {
+      resolvedCards: [],
+      unresolvedMentions: [{
+        input: userSurface,
+        reason: "model_candidate_not_found",
+        source: "model_card_name_extractor",
+        searchTexts: [modelExpansion],
+      }],
+      ambiguousMentions: [],
+      userProvidedCardTexts: [],
+    },
+    cards: [localCard],
+    records: [],
+    qaRecords: [{
+      id: "anonymous-card-faq-1921",
+      recordType: "card-faq",
+      cardIds: [localCard.id],
+      cards: [modelExpansion],
+      title: `${userSurface}如何处理？`,
+      text: "不应由错误扩展解锁的匿名FAQ。",
+    }],
+    fetchImpl: async (url) => {
+      const query = new URL(String(url)).searchParams.get("search");
+      return query === modelExpansion
+        ? jsonResponse({
+            result: [{
+              cid: Number(localCard.id),
+              id: 80192001,
+              cn_name: modelExpansion,
+              text: { desc: "匿名外部卡文。" },
+            }],
+            next: 0,
+          })
+        : jsonResponse({ result: [], next: 0 });
+    },
+    env: { RAG_LIVE_OFFICIAL_QA: "0" },
+  });
+
+  assert.deepEqual(evidence.retrievedCards, []);
+  assert.equal(evidence.cardTexts.length, 0);
+  assert.equal(evidence.officialQaDirectCandidates.length, 0);
+  assert.equal(evidence.officialQaRelated.length, 0);
+  assert.ok(evidence.cardResolution.unresolvedMentions.some((item) => item.input === userSurface));
+  assert.ok(evidence.retrievalWarnings.some((warning) => (
+    warning.startsWith("baige_model_expansion_stable_identity_unverified:")
+  )));
+});
+
 function jsonResponse(payload, ok = true, status = 200) {
   return {
     ok,

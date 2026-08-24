@@ -470,3 +470,24 @@ test("the unified selector contains no role slots, question-type branches, or fi
   assert.doesNotMatch(selector, /question[_ -]?type|题型/iu);
   assert.doesNotMatch(selector, /(?:ygoresources-qa|card-faq)-\d+|case-\d+|Q&A\s*ID/iu);
 });
+
+test("stable retriever ids dedupe across buckets and OR related-only metadata", () => {
+  const complete = provisionalOfficialResponse("anonymous-stable@aaaaaaaa", 0.9, {
+    question: "Complete anonymous question with every premise retained.",
+    answer: "Complete anonymous answer with every condition retained.",
+    text: "",
+  });
+  const related = communityRule("anonymous-stable@bbbbbbbb", 0.1);
+  related.retrievalContext = { scope: "cross_card_official_mechanism", relatedOnly: true };
+  const build = (provisionalOfficialResponses, rawRelatedEvidence) => selectedReferenceEntries(
+    buildSelection({ provisionalOfficialResponses, rawRelatedEvidence }, 12),
+  );
+
+  for (const selected of [build([complete], [related]), build([complete].reverse(), [related].reverse())]) {
+    assert.equal(selected.length, 1);
+    assert.equal(selected[0].item.question, complete.question);
+    assert.equal(selected[0].item.answer, complete.answer);
+    assert.equal(selected[0].item.retrievalContext.relatedOnly, true);
+    assert.equal(selected[0].item.retrievalContext.scope, "cross_card_official_mechanism");
+  }
+});

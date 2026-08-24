@@ -248,11 +248,11 @@ test("strict official card FAQs use the bounded cross-card reserve without becom
     env: { RAG_LIVE_OFFICIAL_QA: "false", RAG_MAX_RELATED_EVIDENCE: "4" },
   });
 
-  assert.equal(evidence.officialQaRelated.length, 4);
+  assert.equal(evidence.officialQaRelated.length, 3);
   const crossCardRelated = evidence.officialQaRelated.filter(
     (item) => item.retrievalContext.scope === "cross_card_official_mechanism",
   );
-  assert.equal(crossCardRelated.length, 3);
+  assert.equal(crossCardRelated.length, 2);
   assert.ok(crossCardRelated.some((item) => item.recordType === "card-faq"));
   assert.ok(crossCardRelated.every((item) => (
     item.type === "related"

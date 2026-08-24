@@ -296,6 +296,61 @@ test("answer text and questionless card FAQ cannot create a cross-card question 
   assert.ok(!ids.includes(questionfulFaqAnswerDecoy.id));
 });
 
+test("a partial Planner plan leaves deterministic question branches to fill the fixed cross-card budget", async () => {
+  const anchor = card("card-992001", "匿名补位锚点");
+  const deterministicQuestion = "被除外的卡返回卡组时，是否作为从除外状态移动处理？";
+  const target = qa(
+    "qa-anonymous-deterministic-fill-target",
+    deterministicQuestion,
+    "card-992002",
+  );
+  const answerOnly = qa(
+    "qa-anonymous-deterministic-answer-decoy",
+    "与当前处理无关的官方问题？",
+    "card-992003",
+    { answer: deterministicQuestion, text: deterministicQuestion },
+  );
+  const questionlessFaq = {
+    id: "card-faq-anonymous-deterministic-questionless-decoy",
+    recordType: "card-faq",
+    title: "匿名资料标题",
+    question: "匿名资料标题",
+    answer: deterministicQuestion,
+    text: deterministicQuestion,
+    cardIds: ["card-992004"],
+    official: true,
+  };
+  const evidence = await retrieveRagEvidence({
+    userQuery: `「${anchor.name}」涉及以下问题：${deterministicQuestion}`,
+    cardResolution: {
+      resolvedCards: [anchor],
+      unresolvedMentions: [],
+      ambiguousMentions: [],
+      userProvidedCardTexts: [],
+    },
+    cards: [anchor],
+    records: [],
+    qaRecords: [answerOnly, questionlessFaq, target],
+    ruleSearchQueries: [{
+      subclaim: "核对另一条尚未覆盖的手牌分支",
+      query: "手札のカードを公開できますか？",
+      source: "model_rule_query_extractor",
+    }],
+    enableLiveOfficialQa: false,
+    env: { RAG_LIVE_OFFICIAL_QA: "false", RAG_MAX_RELATED_EVIDENCE: "4" },
+  });
+
+  const related = evidence.officialQaRelated.find((item) => item.id === target.id);
+  assert.ok(evidence.debug.candidateStages.ruleQueryQuestionBranchCandidateIds.includes(target.id));
+  assert.ok(related);
+  assert.equal(related.retrievalSignals?.questionBranchSearch, true);
+  assert.equal(related.retrievalContext?.relatedOnly, true);
+  assert.equal(related.isDirect, false);
+  assert.ok(!evidence.officialQaRelated.some((item) => (
+    item.id === answerOnly.id || item.id === questionlessFaq.id
+  )));
+});
+
 test("supplemental mechanism retrieval keeps same-identity official QA scoped and related-only", async () => {
   const anchor = card("990001", "匿名同卡锚点");
   const scoped = qa(

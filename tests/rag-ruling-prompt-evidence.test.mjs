@@ -112,21 +112,21 @@ test("prompt preserves provenance and presents official QA as structured fields"
 
   const payload = parsePromptPayload(bundle.prompt);
   const officialQa = payload.evidence.officialQaRelated[0];
-  assert.equal(officialQa.official, true);
   assert.equal(officialQa.recordType, "qa");
-  assert.equal(officialQa.source, "official-database-mirror");
-  assert.equal(officialQa.sourceTier, "S0_OFFICIAL_DB_MIRROR");
   assert.equal(officialQa.sourceAuthority, "official_database");
   assert.equal(officialQa.question, "简短问题标题");
   assert.equal(officialQa.detailedScene, "完整场面说明与事件节点");
   assert.equal(officialQa.answer, "官方回答正文");
   assert.equal(Object.hasOwn(officialQa, "text"), false);
+  assert.equal(Object.hasOwn(officialQa, "official"), false);
+  assert.equal(Object.hasOwn(officialQa, "source"), false);
+  assert.equal(Object.hasOwn(officialQa, "sourceTier"), false);
 
   const community = payload.evidence.rawRelatedEvidence[0];
-  assert.equal(community.official, false);
   assert.equal(community.recordType, "rule-doc");
-  assert.equal(community.source, "ocg-rule");
   assert.equal(community.sourceAuthority, "community_reference");
+  assert.equal(Object.hasOwn(community, "official"), false);
+  assert.equal(Object.hasOwn(community, "source"), false);
   assert.match(bundle.prompt, /事件时间线/u);
   assert.match(bundle.prompt, /发动快照/u);
   assert.match(bundle.prompt, /处理快照/u);
@@ -163,9 +163,9 @@ test("an explicitly non-official QA-shaped record cannot become official through
 
   const payload = parsePromptPayload(bundle.prompt);
   const item = payload.evidence.rawRelatedEvidence[0];
-  assert.equal(item.official, false);
-  assert.equal(item.sourceTier, "S2_COMMUNITY_REFERENCE");
   assert.equal(item.sourceAuthority, "community_reference");
+  assert.equal(Object.hasOwn(item, "official"), false);
+  assert.equal(Object.hasOwn(item, "sourceTier"), false);
 });
 
 test("long official QA keeps the resolved-card context window instead of only its ends", () => {
@@ -386,7 +386,7 @@ test("minimal prompt keeps the highest-ranked official evidence without role slo
   );
 
   const crossCard = evidenceItems.find((item) => item.id === "cross-card-official-anchor");
-  assert.equal(crossCard.isDirect, false);
+  assert.equal(Object.hasOwn(crossCard, "isDirect"), false);
   assert.equal(crossCard.retrievalContext.scope, "cross_card_official_mechanism");
   assert.equal(crossCard.retrievalContext.relatedOnly, true);
   assert.match(JSON.stringify(crossCard), /<<entity-0>>/u);
@@ -468,10 +468,10 @@ test("ordinary compact prompt keeps the complete question and card text while pa
   }
 });
 
-test("only the emergency compact prompt may abbreviate the question and card text", () => {
+test("an undersized fixed envelope fails closed instead of abbreviating question or card text", () => {
   const userQuery = `EMERGENCY_QUERY_HEAD ${"超低预算问题".repeat(420)} EMERGENCY_QUERY_TAIL`;
   const effectText = `EMERGENCY_CARD_HEAD ${"超低预算卡文".repeat(420)} EMERGENCY_CARD_TAIL`;
-  const bundle = buildRagRulingPromptBundle({
+  assert.throws(() => buildRagRulingPromptBundle({
     userQuery,
     cardResolution: {
       resolvedCards: [{ id: "emergency-card", name: "匿名紧急对象", effectText }],
@@ -488,17 +488,12 @@ test("only the emergency compact prompt may abbreviate the question and card tex
       rawRelatedEvidence: [],
     },
     env: { RAG_MAX_PROMPT_CHARS: "1000" },
+  }), (error) => {
+    assert.equal(error.statusCode, 503);
+    assert.equal(error.code, "evidence_prompt_budget_exceeded");
+    assert.equal(error.details?.reason, "fixed_envelope_does_not_fit");
+    return true;
   });
-
-  assert.ok(bundle.warnings.includes("rag_prompt_compacted_to_max_chars"));
-  const payload = parsePromptPayload(bundle.prompt);
-  assert.ok(Array.isArray(payload.evidence));
-  assert.equal(payload.userQuery.length, 80);
-  assert.equal(payload.resolvedCards[0].effectText.length, 60);
-  assert.match(payload.userQuery, /^EMERGENCY_QUERY_HEAD/u);
-  assert.match(payload.userQuery, /EMERGENCY_QUERY_TAIL$/u);
-  assert.match(payload.resolvedCards[0].effectText, /^EMERGENCY_CARD_HEAD/u);
-  assert.match(payload.resolvedCards[0].effectText, /EMERGENCY_CARD_TAIL$/u);
 });
 
 test("the actual 36k prompt repacks whole references and keeps the top official QA complete", () => {
@@ -678,14 +673,15 @@ test("an official body above the projection limit is restored in full when the 3
   const serialized = flattenPromptEvidence(payload.evidence)
     .find((item) => item.id === evidenceId);
   assert.equal(serialized.answer, shortAnswer);
-  assert.equal(serialized.text, completeFullText);
+  assert.equal(serialized.text, bundle.modelEvidence.officialQaRelated[0].text);
+  assert.doesNotMatch(serialized.text, new RegExp(shortAnswer, "u"));
   assert.match(serialized.text, /LONG_DECISIVE_DETAIL/u);
   assert.match(serialized.text, /FULL_TAIL/u);
   assert.equal(bundle.allowedEvidenceIds.includes(evidenceId), true);
   assert.equal(bundle.warnings.some((warning) => warning.endsWith(`:${evidenceId}`)), false);
 });
 
-test("complementary text matching consumes each structured field at most once", () => {
+test("complementary text does not delete structured repeats shorter than sixteen characters", () => {
   const evidenceId = "official-body-pure-structured-repeat";
   const bundle = buildRagRulingPromptBundle({
     userQuery: "请核对这条匿名官方资料。",
@@ -730,8 +726,8 @@ test("complementary text matching consumes each structured field at most once", 
   const projected = bundle.modelEvidence.officialQaRelated[0];
   const serialized = flattenPromptEvidence(parsePromptPayload(bundle.prompt).evidence)
     .find((item) => item.id === evidenceId);
-  assert.equal(Object.hasOwn(projected, "text"), false);
-  assert.equal(Object.hasOwn(serialized, "text"), false);
+  assert.equal(projected.text, "F O O\nB A R");
+  assert.equal(serialized.text, "F O O\nB A R");
   assert.equal(serialized.question, "ＦＯＯ");
   assert.equal(serialized.detailedScene, "ＤＥＴＡＩＬ");
   assert.equal(serialized.answer, "ＢＡＲ");
@@ -816,13 +812,14 @@ test("compact whole-entry packing retains a short answer and its complementary f
   const serialized = flattenPromptEvidence(parsePromptPayload(bundle.prompt).evidence)
     .find((item) => item.id === evidenceId);
   assert.equal(serialized.answer, shortAnswer);
-  assert.equal(serialized.text, completeFullText);
+  assert.equal(serialized.text, bundle.modelEvidence.officialQaRelated[0].text);
+  assert.doesNotMatch(serialized.text, new RegExp(shortAnswer, "u"));
   assert.match(serialized.text, /LONG_DECISIVE_DETAIL/u);
   assert.match(serialized.text, /FULL_TAIL/u);
   assert.equal(bundle.warnings.some((warning) => warning.endsWith(`:${evidenceId}`)), false);
 });
 
-test("compact single-entry fitting counts and warns on a truncated complementary full text", () => {
+test("compact single-entry fitting fails closed instead of slicing or omitting it", () => {
   const evidenceId = "compact-single-complementary-body";
   const shortAnswer = "SHORT_SINGLE_ANSWER";
   const completeFullText = [
@@ -831,7 +828,7 @@ test("compact single-entry fitting counts and warns on a truncated complementary
     "必须参与单条预算计算的完整正文".repeat(520),
     "FULL_TAIL",
   ].join("\n");
-  const bundle = buildRagRulingPromptBundle({
+  assert.throws(() => buildRagRulingPromptBundle({
     userQuery: "请核对这条过长的官方资料。",
     cardResolution: { resolvedCards: [], unresolvedMentions: [], ambiguousMentions: [] },
     evidence: {
@@ -857,21 +854,16 @@ test("compact single-entry fitting counts and warns on a truncated complementary
       RAG_MAX_EVIDENCE_TEXT_CHARS: "2800",
       RAG_MAX_PROMPT_CHARS: "1800",
     },
+  }), (error) => {
+    assert.equal(error.statusCode, 503);
+    assert.equal(error.code, "evidence_prompt_budget_exceeded");
+    assert.equal(error.details?.reason, "complete_reference_does_not_fit");
+    assert.equal(error.details?.evidenceId, evidenceId);
+    return true;
   });
-
-  assert.ok(bundle.warnings.includes("rag_prompt_compacted_to_max_chars"));
-  const payload = parsePromptPayload(bundle.prompt);
-  assert.ok(Array.isArray(payload.evidence));
-  const serialized = flattenPromptEvidence(payload.evidence)
-    .find((item) => item.id === evidenceId);
-  assert.equal(serialized.answer, shortAnswer);
-  assert.ok(serialized.text.length < completeFullText.length);
-  assert.match(serialized.text, /LONG_DECISIVE_DETAIL/u);
-  assert.match(serialized.text, /FULL_TAIL/u);
-  assert.ok(bundle.warnings.includes(`official_related_text_truncated:${evidenceId}`));
 });
 
-test("compact single-entry fitting uses the complete source length beyond the 2800 projection", () => {
+test("an over-budget complete source fails closed at the normal prompt budget", () => {
   const evidenceId = "compact-single-complete-source-budget";
   const shortAnswer = "SHORT_LARGE_SINGLE_ANSWER";
   const completeFullText = [
@@ -882,7 +874,7 @@ test("compact single-entry fitting uses the complete source length beyond the 28
     "LARGE_SINGLE_FULL_TAIL",
   ].join("\n");
   assert.ok(completeFullText.length > 36000);
-  const bundle = buildRagRulingPromptBundle({
+  assert.throws(() => buildRagRulingPromptBundle({
     userQuery: "请在实际提示预算内尽量完整保留这条官方资料。",
     cardResolution: { resolvedCards: [], unresolvedMentions: [], ambiguousMentions: [] },
     evidence: {
@@ -908,21 +900,12 @@ test("compact single-entry fitting uses the complete source length beyond the 28
       RAG_MAX_EVIDENCE_TEXT_CHARS: "2800",
       RAG_MAX_PROMPT_CHARS: "36000",
     },
+  }), (error) => {
+    assert.equal(error.statusCode, 503);
+    assert.equal(error.code, "evidence_prompt_budget_exceeded");
+    assert.equal(error.details?.evidenceId, evidenceId);
+    return true;
   });
-
-  assert.ok(bundle.prompt.length <= 36000);
-  assert.ok(bundle.warnings.includes("rag_prompt_compacted_to_max_chars"));
-  const projected = bundle.modelEvidence.officialQaRelated[0];
-  assert.ok(projected.text.length < 2800);
-  const serialized = flattenPromptEvidence(parsePromptPayload(bundle.prompt).evidence)
-    .find((item) => item.id === evidenceId);
-  assert.equal(serialized.answer, shortAnswer);
-  assert.ok(serialized.text.length > 10000);
-  assert.ok(serialized.text.length < completeFullText.length);
-  assert.match(serialized.text, /LARGE_SINGLE_FULL_HEAD/u);
-  assert.match(serialized.text, /LONG_DECISIVE_DETAIL/u);
-  assert.match(serialized.text, /LARGE_SINGLE_FULL_TAIL/u);
-  assert.ok(bundle.warnings.includes(`official_related_text_truncated:${evidenceId}`));
 });
 
 test("focused official direct prompt retains complementary full text beside a short answer", () => {
@@ -930,6 +913,7 @@ test("focused official direct prompt retains complementary full text beside a sh
   const cardId = "direct-body-card";
   const shortAnswer = "SHORT_DIRECT_ANSWER";
   const directQuestion = "DIRECT_QUESTION?";
+  const directScene = "COMPLETE_DIRECT_DETAILED_SCENE";
   const completeFullText = [
     directQuestion,
     shortAnswer,
@@ -952,6 +936,7 @@ test("focused official direct prompt retains complementary full text beside a sh
         official: true,
         sourceAuthority: "official_database",
         question: directQuestion,
+        detailedScene: directScene,
         answer: shortAnswer,
         fullText: completeFullText,
         isDirect: true,
@@ -974,9 +959,13 @@ test("focused official direct prompt retains complementary full text beside a sh
 
   const payload = parsePromptPayload(bundle.prompt);
   const direct = payload.officialQaDirectCandidate;
+  assert.equal(direct.question, directQuestion);
+  assert.equal(direct.detailedScene, directScene);
   assert.match(direct.answer, /SHORT_DIRECT_ANSWER/u);
   assert.match(direct.answer, /LONG_DECISIVE_DETAIL/u);
   assert.match(direct.answer, /FULL_TAIL/u);
+  assert.equal(Object.hasOwn(direct, "text"), false);
+  assert.equal(direct.answer.match(/SHORT_DIRECT_ANSWER/gu)?.length, 1);
   assert.equal(bundle.authoritativeOfficialDirectId, evidenceId);
   assert.equal(bundle.warnings.includes("official_direct_prompt_truncated"), false);
 });
@@ -1123,7 +1112,7 @@ test("distinct official ids with nearly identical long bodies and opposite concl
   assert.ok(!bundle.warnings.some((warning) => warning.includes("near_duplicate")));
 });
 
-test("resolved-card text stubs cannot displace one oversized decisive official reference", () => {
+test("resolved-card text stubs disappear without displacing a complete reference", () => {
   const resolvedCard = {
     id: "resolved-card-with-complete-text",
     name: "已解析匿名卡",
@@ -1158,6 +1147,12 @@ test("resolved-card text stubs cannot displace one oversized decisive official r
         cardIds: [resolvedCard.id],
         cards: [resolvedCard.name],
         text: resolvedCard.effectText,
+      }, {
+        id: "same-card-complementary-text",
+        type: "card_text",
+        cardIds: [resolvedCard.id],
+        cards: [resolvedCard.name],
+        text: "这是同一匿名卡的不同补充正文，不得因为 ID 相同而删除。",
       }],
       userProvidedCardTexts: [],
       rawRelatedEvidence: [],
@@ -1165,12 +1160,119 @@ test("resolved-card text stubs cannot displace one oversized decisive official r
     env: {
       RAG_MAX_PROMPT_REFERENCE_CHARS: "1000",
       RAG_MAX_EVIDENCE_TEXT_CHARS: "30000",
-      RAG_MAX_PROMPT_CHARS: "5000",
+      RAG_MAX_PROMPT_CHARS: "50000",
     },
   });
 
   assert.ok(bundle.allowedEvidenceIds.includes(decisiveId));
-  assert.match(bundle.prompt, new RegExp(decisiveId, "u"));
+  assert.match(bundle.prompt, /DECISIVE_HEAD/u);
+  assert.match(bundle.prompt, /DECISIVE_TAIL/u);
   assert.ok(!bundle.allowedEvidenceIds.includes("duplicate-resolved-card-text-stub"));
+  assert.ok(bundle.allowedEvidenceIds.includes("same-card-complementary-text"));
+  assert.match(bundle.prompt, /不得因为 ID 相同而删除/u);
   assert.ok(bundle.warnings.some((warning) => warning.startsWith("prompt_reference_chars_limited:")));
+  assert.match(bundle.prompt, new RegExp(resolvedCard.effectText, "u"));
+});
+
+test("ordinary prompt keeps complete structured fields and only unique supplemental text spans", () => {
+  const question = "ＡＢＣＤＥＦＧＨＩＪＫＬＭＮＯＰ";
+  const scene = "完整匿名场景包含发动处理以及处理后的全部状态。";
+  const answer = "完整匿名回答保留所有条件例外以及后续处理。";
+  const uniqueTail = "UNIQUE_SUPPLEMENTAL_TAIL";
+  const repeatedAnswer = `${answer}${answer}`;
+  const bundle = buildRagRulingPromptBundle({
+    userQuery: "匿名原题必须逐字完整保留。",
+    cardResolution: { resolvedCards: [], unresolvedMentions: [], ambiguousMentions: [] },
+    evidence: {
+      officialQaDirectCandidates: [],
+      officialQaRelated: [{
+        id: "anonymous-complete-reference",
+        type: "related",
+        recordType: "qa",
+        official: true,
+        sourceAuthority: "official_database",
+        question,
+        detailedScene: scene,
+        answer,
+        text: `${"ABCDEFGHIJKLMNOP".split("").join(" ")}\n${scene}\n${repeatedAnswer}\n${uniqueTail}`,
+        retrievalScore: 1,
+      }],
+      provisionalOfficialResponses: [],
+      faqRelated: [],
+      cardTexts: [],
+      userProvidedCardTexts: [],
+      rawRelatedEvidence: [],
+    },
+    env: { RAG_MAX_PROMPT_CHARS: "50000", RAG_MAX_EVIDENCE_TEXT_CHARS: "32" },
+  });
+
+  const payload = parsePromptPayload(bundle.prompt);
+  const [item] = flattenPromptEvidence(payload.evidence);
+  assert.equal(item.question, question);
+  assert.equal(item.detailedScene, scene);
+  assert.equal(item.answer, answer);
+  assert.doesNotMatch(item.text, /A B C D E F G H I J K L M N O P/u);
+  assert.doesNotMatch(item.text, new RegExp(scene, "u"));
+  assert.equal(item.text.match(new RegExp(answer, "gu"))?.length, 2);
+  assert.match(item.text, new RegExp(uniqueTail, "u"));
+});
+
+test("ordinary prompt uses compact JSON and keeps diagnostics out of model-visible metadata", () => {
+  const bundle = buildRagRulingPromptBundle({
+    userQuery: "检查普通提示元数据。",
+    cardResolution: { resolvedCards: [], unresolvedMentions: [], ambiguousMentions: [] },
+    evidence: {
+      officialQaDirectCandidates: [],
+      officialQaRelated: [{
+        id: "anonymous-metadata-reference",
+        type: "related",
+        recordType: "qa",
+        title: "必要匿名标题",
+        question: "匿名问题正文完整保留。",
+        answer: "匿名回答正文完整保留。",
+        official: true,
+        source: "diagnostic-source",
+        sourceTier: "S0_TEST",
+        sourceAuthority: "official_database",
+        sourceUrl: "https://example.invalid/diagnostic-only",
+        isDirect: false,
+        matchLevel: "diagnostic-match",
+        matchedBy: ["diagnostic-only"],
+        cards: ["匿名跨卡资料所属卡"],
+        cardIds: ["anonymous-owner-card"],
+        questionCardIds: ["anonymous-question-card"],
+        retrievalContext: { relatedOnly: true },
+        retrievalScore: 1,
+      }],
+      provisionalOfficialResponses: [],
+      faqRelated: [],
+      cardTexts: [],
+      userProvidedCardTexts: [],
+      rawRelatedEvidence: [],
+    },
+  });
+
+  const marker = "本次用户问题、卡片原文与检索资料如下：\n";
+  const serialized = bundle.prompt.slice(bundle.prompt.lastIndexOf(marker) + marker.length);
+  const [visible] = flattenPromptEvidence(JSON.parse(serialized).evidence);
+  assert.equal(serialized.includes("\n"), false);
+  assert.deepEqual(Object.keys(visible).sort(), [
+    "answer",
+    "bucket",
+    "cardIds",
+    "cards",
+    "id",
+    "question",
+    "questionCardIds",
+    "recordType",
+    "retrievalContext",
+    "sourceAuthority",
+    "title",
+  ]);
+  assert.equal(bundle.evidenceSelectionDiagnostics[0].sourceUrl, "https://example.invalid/diagnostic-only");
+  assert.equal(bundle.evidenceSelectionDiagnostics[0].sourceTier, "S0_TEST");
+  assert.deepEqual(bundle.evidenceSelectionDiagnostics[0].matchedBy, ["diagnostic-only"]);
+  assert.deepEqual(visible.cards, ["匿名跨卡资料所属卡"]);
+  assert.deepEqual(visible.cardIds, ["anonymous-owner-card"]);
+  assert.deepEqual(visible.questionCardIds, ["anonymous-question-card"]);
 });
