@@ -5218,22 +5218,6 @@ function reserveUncoveredCrossCardBranches(items = [], limit = 1, {
     : [];
   const selected = [...strict];
   const selectedKeys = new Set(selected.map(stableRecordKey));
-  // After strict query branches are represented, retain at most one bounded
-  // cross-language mechanism companion before ordinary same-language
-  // analogues. It has already passed the question-only mechanism thresholds,
-  // remains related-only, and does not enlarge the evidence budget.
-  const multilingualCompanion = selected.length < safeLimit
-    ? ordered.find((item) => {
-        const key = stableRecordKey(item);
-        const signals = (item?.record || item)?.retrievalSignals || {};
-        return !selectedKeys.has(key)
-          && signals.questionBranchMultilingualMechanismFallback === true;
-      })
-    : null;
-  if (multilingualCompanion) {
-    selected.push(multilingualCompanion);
-    selectedKeys.add(stableRecordKey(multilingualCompanion));
-  }
   // A question-only model assessment is not authority and cannot delete any
   // candidate, but a same/partial-premise assessment is useful bounded ranking
   // evidence. Preserve every such candidate that fits after strict branches so
@@ -5245,9 +5229,16 @@ function reserveUncoveredCrossCardBranches(items = [], limit = 1, {
     selected.push(item);
     selectedKeys.add(key);
   }
-  // Fill only one remaining slot with an unassessed ordinary analogue.
+  // Fill only one remaining slot with an unassessed ordinary analogue. Prefer
+  // a question-only cross-language mechanism match inside that same slot; it
+  // replaces a duplicate ordinary head and never increases the old reserve.
   const analogue = selected.length < safeLimit
-    ? ordered.find((item) => !selectedKeys.has(stableRecordKey(item)))
+    ? ordered.find((item) => {
+        const key = stableRecordKey(item);
+        const signals = (item?.record || item)?.retrievalSignals || {};
+        return !selectedKeys.has(key)
+          && signals.questionBranchMultilingualMechanismFallback === true;
+      }) || ordered.find((item) => !selectedKeys.has(stableRecordKey(item)))
     : null;
   return analogue ? [...selected, analogue] : selected;
 }
