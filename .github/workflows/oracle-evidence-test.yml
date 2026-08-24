@@ -50,7 +50,7 @@ jobs:
           set -euo pipefail
           test -s .github/private-evaluation-recipient.pem
           recipient_sha256="$(sha256sum .github/private-evaluation-recipient.pem | awk '{print $1}')"
-          test "$recipient_sha256" = "749295ac7c83b5c765722975c4a6985dedcfcd9dc02eeab3e01dd648ff8a4b3e"
+          test "$recipient_sha256" = "c035d78431ba6dca2a5a3946a581570247a43cc1ef6f558bcf311b72e90239ec"
           openssl pkey -pubin -in .github/private-evaluation-recipient.pem -noout
 
       - name: Materialize the private evaluation dataset without logging it

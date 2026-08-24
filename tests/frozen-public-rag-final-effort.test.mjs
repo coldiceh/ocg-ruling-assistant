@@ -8,6 +8,7 @@ import { createHash } from "node:crypto";
 import {
   assertFrozenEvidenceCompleteness,
   buildFrozenCaseRecord,
+  buildFrozenPublicDiagnostics,
   freezePublicRagFinalInputs,
   runFrozenPublicRagFinalEffort,
 } from "../scripts/frozen-public-rag-final-effort.mjs";
@@ -271,6 +272,217 @@ test("frozen record stores only allowlisted retrieval candidate stage ID arrays"
   );
 });
 
+test("public freeze diagnostics are exact-key, source-backed, and contain no private bodies", () => {
+  const fixture = evidenceFixture("绝不公开的私密问题", "case-004");
+  const base = auditedRecord({ id: "case-004", question: "绝不公开的私密问题" });
+  const record = {
+    ...base,
+    status: "complete",
+    promptCompacted: true,
+    retrievalCandidateStages: {
+      ...base.retrievalCandidateStages,
+      initialCrossCardQuestionIds: [fixture.qa.id, "not-required-source-id"],
+      allocatedOfficialRelatedIds: [fixture.qa.id],
+    },
+  };
+  const requirement = fixture.evidenceRequirements.cases["case-004"];
+  const diagnostics = buildFrozenPublicDiagnostics({
+    checkpoint: {
+      status: "complete",
+      finalModelCallCount: 0,
+      selectedCaseIds: ["case-004"],
+      cases: [record],
+    },
+    requirementContexts: new Map([["case-004", {
+      requirement,
+      cardSources: new Map([[fixture.card.id, fixture.card]]),
+      evidenceSources: new Map([[fixture.qa.id, fixture.qa]]),
+      sourceEvidenceIds: new Set([fixture.qa.id, "qa-forbidden"]),
+    }]]),
+  });
+
+  assert.deepEqual(Object.keys(diagnostics), [
+    "schemaVersion", "kind", "stage", "status", "failureLayer", "failureCode",
+    "finalModelCallCount", "cases",
+  ]);
+  assert.deepEqual(Object.keys(diagnostics.cases[0]), [
+    "id", "status", "failureLayer", "failureCode", "promptTruncated",
+    "promptCompacted", "finalModelCallCount", "cards", "evidence", "candidateStages",
+  ]);
+  assert.deepEqual(diagnostics.cases[0].cards, {
+    requiredResolvedCardIds: [fixture.card.id],
+    presentResolvedCardIds: [fixture.card.id],
+    missingResolvedCardIds: [],
+  });
+  assert.deepEqual(diagnostics.cases[0].evidence, {
+    requiredEvidenceIds: [fixture.qa.id],
+    presentEvidenceIds: [fixture.qa.id],
+    missingEvidenceIds: [],
+    forbiddenEvidenceIds: ["qa-forbidden"],
+    forbiddenPresentEvidenceIds: [],
+    requiredRelatedOnlyEvidenceIds: [fixture.qa.id],
+    relatedOnlyViolationEvidenceIds: [],
+  });
+  assert.deepEqual(diagnostics.cases[0].candidateStages.initialCrossCardQuestionIds, {
+    count: 1,
+    requiredEvidenceIds: [fixture.qa.id],
+  });
+  assert.equal(diagnostics.cases[0].promptCompacted, true);
+  assert.equal(diagnostics.cases[0].finalModelCallCount, 0);
+  assert.equal(diagnostics.failureLayer, null);
+  assert.equal(diagnostics.failureCode, null);
+  const serialized = JSON.stringify(diagnostics);
+  assert.doesNotMatch(serialized, /绝不公开的私密问题|完整官方问题|完整官方答案|测试普通裁定提示/u);
+  assert.doesNotMatch(serialized, /[a-f0-9]{64}/u);
+});
+
+test("public freeze diagnostics fail closed on a nonzero final-model call count", () => {
+  assert.throws(() => buildFrozenPublicDiagnostics({
+    checkpoint: {
+      status: "running",
+      finalModelCallCount: 1,
+      selectedCaseIds: [],
+      cases: [],
+    },
+    requirementContexts: new Map(),
+  }), (error) => error.code === "FROZEN_FINAL_MODEL_CALL_DETECTED");
+});
+
+test("public freeze diagnostics expose only fixed failure codes", () => {
+  const fixture = evidenceFixture("私密超时问题", "case-004");
+  const diagnostics = buildFrozenPublicDiagnostics({
+    checkpoint: {
+      status: "failed_evidence_preparation",
+      finalModelCallCount: 0,
+      selectedCaseIds: ["case-004"],
+      cases: [{
+        id: "case-004",
+        status: "failed_evidence_preparation",
+        evidencePreparation: {
+          error: { code: "rule_query_model_timeout", message: "private body" },
+        },
+      }],
+    },
+    requirementContexts: new Map([["case-004", {
+      requirement: fixture.evidenceRequirements.cases["case-004"],
+      cardSources: new Map([[fixture.card.id, fixture.card]]),
+      evidenceSources: new Map([[fixture.qa.id, fixture.qa]]),
+      sourceEvidenceIds: new Set([fixture.qa.id]),
+    }]]),
+  });
+  assert.equal(diagnostics.cases[0].failureLayer, "evidence_preparation");
+  assert.equal(diagnostics.cases[0].failureCode, "rule_query_model_timeout");
+  assert.doesNotMatch(JSON.stringify(diagnostics), /private body|私密超时问题/u);
+});
+
+test("freeze runner failures publish one fixed exact-key diagnostic without private details", async () => {
+  const temp = await mkdtemp(path.join(os.tmpdir(), "frozen-public-rag-runner-failures-"));
+  const datasetPath = path.join(temp, "private-test.txt");
+  const requirementsPath = path.join(temp, "private-requirements.json");
+  const privateQuestion = "不得公开的 runner 测试问题";
+  const privateError = "不得公开的 fatal 错误正文";
+  await writeFile(datasetPath, `${privateQuestion}\n不得公开的参考答案\n`, "utf8");
+  await writeFile(requirementsPath, `{ "${privateError}"`, "utf8");
+  const fixture = evidenceFixture(privateQuestion, "case-001");
+  const common = {
+    datasetPath,
+    caseIds: ["case-001"],
+    maxCalls: 1,
+    env: TEST_ENV,
+    log: () => {},
+  };
+  const scenarios = [
+    {
+      name: "requirements",
+      options: { requirementsPath },
+    },
+    {
+      name: "source-mapping",
+      options: {
+        evidenceRequirements: fixture.evidenceRequirements,
+        loadEvidenceData: async () => ({ cards: [], qaRecords: [], records: [] }),
+      },
+    },
+    {
+      name: "capture",
+      options: {
+        evidenceRequirements: fixture.evidenceRequirements,
+        loadEvidenceData: async () => fixture.data,
+        answerPublic: async () => {
+          throw new TypeError(privateError);
+        },
+      },
+    },
+    {
+      name: "build",
+      options: {
+        evidenceRequirements: fixture.evidenceRequirements,
+        loadEvidenceData: async () => fixture.data,
+        answerPublic: async ({ payload, answerRuling }) => ({
+          answer: await answerRuling({ question: payload.question }),
+        }),
+        answerRuling: async ({ modelInvoker }) => {
+          await modelInvoker({
+            prompt: fixture.prompt,
+            provider: privateError,
+            modelName: "gpt-5.6-sol",
+            maxTokens: 32000,
+            reasoningEffort: "low",
+          });
+          return {};
+        },
+      },
+    },
+    {
+      name: "other-program",
+      options: {
+        evidenceRequirements: fixture.evidenceRequirements,
+        loadEvidenceData: async () => {
+          throw new Error(privateError);
+        },
+      },
+    },
+  ];
+
+  for (const scenario of scenarios) {
+    const snapshotPath = path.join(temp, `${scenario.name}-snapshot.json`);
+    const diagnosticsPath = path.join(temp, `${scenario.name}-diagnostics.json`);
+    await assert.rejects(() => freezePublicRagFinalInputs({
+      ...common,
+      ...scenario.options,
+      snapshotPath,
+      diagnosticsPath,
+    }));
+    const diagnostics = JSON.parse(await readFile(diagnosticsPath, "utf8"));
+    assert.deepEqual(Object.keys(diagnostics), [
+      "schemaVersion", "kind", "stage", "status", "failureLayer", "failureCode",
+      "finalModelCallCount", "cases",
+    ], scenario.name);
+    assert.deepEqual(diagnostics, {
+      schemaVersion: 1,
+      kind: "frozen_public_rag_safe_diagnostics",
+      stage: "freeze",
+      status: "failed_freeze_runner",
+      failureLayer: "freeze_runner",
+      failureCode: "freeze_runner_failure",
+      finalModelCallCount: 0,
+      cases: [],
+    }, scenario.name);
+    const serialized = JSON.stringify(diagnostics);
+    assert.doesNotMatch(serialized, new RegExp([
+      privateQuestion,
+      privateError,
+      fixture.card.name,
+      fixture.card.effectText,
+      fixture.qa.question,
+      fixture.qa.answer,
+      fixture.prompt,
+    ].map((value) => value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")).join("|"), "u"));
+    assert.doesNotMatch(serialized, /question|answer|prompt|body|error|sha256|chars|length/iu);
+    assert.doesNotMatch(serialized, /[a-f0-9]{64}/u);
+  }
+});
+
 test("whole-record prompt compaction remains diagnostic when every required body is complete", () => {
   const fixture = evidenceFixture("网页问题", "case-001");
   const record = buildFrozenCaseRecord({
@@ -315,6 +527,7 @@ test("freeze sends the same explicit mode, profile, and ruling version as the we
   const temp = await mkdtemp(path.join(os.tmpdir(), "frozen-public-rag-freeze-"));
   const datasetPath = path.join(temp, "private-test.txt");
   const snapshotPath = path.join(temp, "snapshot.json");
+  const diagnosticsPath = path.join(temp, "diagnostics.json");
   const privateReference = "绝不能进入公开问题或冻结 Prompt 的裁判答案";
   await writeFile(datasetPath, `网页问题\n${privateReference}\n`, "utf8");
   let observedPayload = null;
@@ -324,6 +537,7 @@ test("freeze sends the same explicit mode, profile, and ruling version as the we
   await freezePublicRagFinalInputs({
     datasetPath,
     snapshotPath,
+    diagnosticsPath,
     caseIds: ["case-001"],
     maxCalls: 1,
     evidenceRequirements: fixture.evidenceRequirements,
@@ -458,6 +672,7 @@ test("freeze preserves a failed evidence-audit base record, continues, and forbi
   const temp = await mkdtemp(path.join(os.tmpdir(), "frozen-public-rag-audit-failure-"));
   const datasetPath = path.join(temp, "private-test.txt");
   const snapshotPath = path.join(temp, "snapshot.json");
+  const diagnosticsPath = path.join(temp, "diagnostics.json");
   const cases = [
     { id: "case-001", question: "第一个测试问题" },
     { id: "case-002", question: "第二个测试问题" },
@@ -482,6 +697,7 @@ test("freeze preserves a failed evidence-audit base record, continues, and forbi
   await assert.rejects(() => freezePublicRagFinalInputs({
     datasetPath,
     snapshotPath,
+    diagnosticsPath,
     caseIds: cases.map((item) => item.id),
     maxCalls: cases.length,
     evidenceRequirements,
@@ -537,6 +753,12 @@ test("freeze preserves a failed evidence-audit base record, continues, and forbi
   assert.match(snapshot.cases[1].evidenceAudit.error.messageSha256, /^[a-f0-9]{64}$/u);
   assert.equal(snapshot.cases[2].evidenceAudit.status, "complete");
   assert.equal(Object.hasOwn(snapshot, "bundleInvariantSha256"), false);
+  const diagnostics = JSON.parse(await readFile(diagnosticsPath, "utf8"));
+  assert.equal(diagnostics.status, "failed_evidence_audit");
+  assert.equal(diagnostics.cases[1].failureLayer, "evidence_audit");
+  assert.equal(diagnostics.cases[1].failureCode, "card_text_incomplete");
+  assert.deepEqual(diagnostics.cases[1].cards.missingResolvedCardIds, []);
+  assert.doesNotMatch(JSON.stringify(diagnostics), /第二个测试问题|不完整卡文|effect text/u);
 
   let finalCalls = 0;
   await assert.rejects(() => runFrozenPublicRagFinalEffort({
@@ -669,6 +891,7 @@ test("freeze fails fast on non-domain preparation errors instead of redacting th
   const temp = await mkdtemp(path.join(os.tmpdir(), "frozen-public-rag-programming-failure-"));
   const datasetPath = path.join(temp, "private-test.txt");
   const snapshotPath = path.join(temp, "snapshot.json");
+  const diagnosticsPath = path.join(temp, "diagnostics.json");
   const cases = [
     { id: "case-001", question: "第一个匿名测试问题" },
     { id: "case-002", question: "第二个不应运行的问题" },
@@ -689,6 +912,7 @@ test("freeze fails fast on non-domain preparation errors instead of redacting th
   await assert.rejects(() => freezePublicRagFinalInputs({
     datasetPath,
     snapshotPath,
+    diagnosticsPath,
     caseIds: cases.map((item) => item.id),
     maxCalls: cases.length,
     evidenceRequirements,
@@ -703,10 +927,21 @@ test("freeze fails fast on non-domain preparation errors instead of redacting th
 
   assert.deepEqual(attempted, [cases[0].question]);
   const snapshot = JSON.parse(await readFile(snapshotPath, "utf8"));
-  assert.equal(snapshot.status, "running");
+  assert.equal(snapshot.status, "failed_freeze_runner");
+  assert.equal(snapshot.failureLayer, "freeze_runner");
+  assert.equal(snapshot.failureCode, "freeze_runner_failure");
   assert.equal(snapshot.finalModelCallCount, 0);
   assert.deepEqual(snapshot.cases, []);
   assert.equal(Object.hasOwn(snapshot, "failedEvidencePreparationCaseIds"), false);
+  const diagnostics = JSON.parse(await readFile(diagnosticsPath, "utf8"));
+  assert.equal(diagnostics.status, "failed_freeze_runner");
+  assert.equal(diagnostics.failureLayer, "freeze_runner");
+  assert.equal(diagnostics.failureCode, "freeze_runner_failure");
+  assert.deepEqual(diagnostics.cases, []);
+  assert.doesNotMatch(
+    JSON.stringify(diagnostics),
+    /第一个匿名测试问题|第二个不应运行的问题|programming failure must remain visible/u,
+  );
 });
 
 test("low and medium replay reuse every frozen request field except reasoning effort", async () => {
@@ -901,6 +1136,7 @@ test("targeted-eight workflow keeps private evidence requirements outside the re
   );
   assert.match(workflow, /frozen-public-rag-reusable\.tar\.gz\.enc\.hmac-sha256/u);
   assert.match(workflow, /target_sha256=/u);
+  assert.match(workflow, /github\.run_attempt == 1/u);
   assert.match(workflow, /mapfile -t binding_run_ids/u);
   assert.match(workflow, /test "\$\{#binding_run_ids\[@\]\}" -eq 1/u);
   assert.match(workflow, /binding_source_key="\$\{binding_run_ids\[0\]\}-\$\{binding_run_attempts\[0\]\}"/u);
@@ -921,11 +1157,66 @@ test("targeted-eight workflow keeps private evidence requirements outside the re
   assert.match(preflight, /freeze selection is not exactly the reviewed targeted eight cases/u);
   assert.match(preflight, /matched\.length !== 8/u);
   assert.match(preflight, /mv -- "\$dataset_candidate" "\$RUNNER_TEMP\/private-dataset\.txt"/u);
+  assert.doesNotMatch(preflight, /grep -- '-saltlen'/u);
   assert.doesNotMatch(execute, /PRIVATE_DATASET_BASE64|base64 --decode/u);
   assert.match(execute, /--dataset "\$RUNNER_TEMP\/private-dataset\.txt"/u);
   assert.match(execute, /--requirements "\$RUNNER_TEMP\/frozen-eight-requirements\.json"/u);
+  assert.match(execute, /--diagnostics "\$RUNNER_TEMP\/frozen-public-rag-diagnostics\.json"/u);
   assert.match(execute, /replay_allowed=false/u);
   assert.match(execute, /\[ "\$STAGE" = "freeze" \] && \[ "\$runner_status" -eq 0 \]/u);
   assert.match(workflow, /\[ "\$STAGE" = "freeze" \] && \[ "\$REPLAY_ALLOWED" = "true" \]/u);
+  assert.match(workflow, /name: frozen-eight-freeze-diagnostics-\$\{\{ github\.run_id \}\}-\$\{\{ github\.run_attempt \}\}/u);
+  assert.match(workflow, /path: \$\{\{ runner\.temp \}\}\/frozen-public-rag-diagnostics\.json/u);
+  assert.match(workflow, /cat "\$diagnostics"/u);
+  assert.match(workflow, /> encrypted-output\/metadata\.txt/u);
+  assert.match(workflow, /cp encrypted-output\/metadata\.txt "\$destination\/"/u);
+  assert.match(workflow, /if openssl enc -help 2>&1 \| grep -q -- '-saltlen'; then/u);
+  assert.equal((workflow.match(/"\$\{salt_args\[@\]\}"/gu) || []).length, 5);
+  const publicUploadStart = workflow.indexOf("- name: Publish exact-key public freeze diagnostics");
+  const encryptStart = workflow.indexOf("- name: Encrypt the private checkpoint for review and replay");
+  const publicUpload = workflow.slice(publicUploadStart, encryptStart);
+  assert.doesNotMatch(publicUpload, /runner\.log|snapshot\.json|results\.json/u);
   assert.doesNotMatch(workflow, /^ {12}(?:NODE|PY)$/mu);
+});
+
+test("Windows private-review tools keep the private key non-exportable and validate before decrypting", async () => {
+  const initialize = await readFile(new URL(
+    "../scripts/initialize-private-evaluation-key.ps1",
+    import.meta.url,
+  ), "utf8");
+  const decrypt = await readFile(new URL(
+    "../scripts/decrypt-frozen-public-rag-review.ps1",
+    import.meta.url,
+  ), "utf8");
+
+  assert.match(initialize, /Cert:\\CurrentUser\\My/u);
+  assert.match(initialize, /-KeyLength 3072/u);
+  assert.match(initialize, /-KeyExportPolicy NonExportable/u);
+  assert.match(initialize, /-----BEGIN PUBLIC KEY-----/u);
+  assert.doesNotMatch(initialize, /ExportParameters\(\$true\)|PRIVATE KEY-----/u);
+
+  assert.match(decrypt, /gh run download/u);
+  assert.match(decrypt, /private-evaluation-results/u);
+  assert.match(decrypt, /review_cipher_sha256/u);
+  assert.match(decrypt, /review_envelope_sha256/u);
+  assert.match(decrypt, /RSAEncryptionPadding\]::OaepSHA256/u);
+  assert.match(decrypt, /Rfc2898DeriveBytes/u);
+  assert.match(decrypt, /200000/u);
+  assert.match(decrypt, /CipherMode\]::CBC/u);
+  assert.match(decrypt, /PaddingMode\]::PKCS7/u);
+  assert.match(decrypt, /OutputDirectory must be outside the repository/u);
+  assert.match(decrypt, /Assert-NoReparsePointAncestor -Path \$outputPath/u);
+  assert.match(decrypt, /\.frozen-rag-review-/u);
+  assert.match(decrypt, /Copy-Item -LiteralPath \$entry\.FullName -Destination \$outputStagingPath -Recurse/u);
+  assert.match(decrypt, /Decrypted archive contains an unsafe or unexpected path/u);
+  assert.match(decrypt, /requiredReviewFiles/u);
+  assert.match(decrypt, /catch \{[\s\S]*\$operationFailure = \$_\.Exception[\s\S]*\} finally \{/u);
+  assert.match(decrypt, /finally \{\s*try \{\s*if \(\$outputStagingPath -and \(Test-Path -LiteralPath \$outputStagingPath\)\)/u);
+  assert.match(decrypt, /\$cleanupFailures\.Add\(\$_\.Exception\)\s*\}\s*try \{\s*if \(Test-Path -LiteralPath \$temporaryRoot\)/u);
+  assert.match(decrypt, /Remove-Item -LiteralPath \$outputStagingPath -Recurse -Force -ErrorAction Stop/u);
+  assert.match(decrypt, /Remove-Item -LiteralPath \$temporaryRoot -Recurse -Force -ErrorAction Stop/u);
+  assert.equal((decrypt.match(/\$cleanupFailures\.Add\(\$_\.Exception\)/gu) || []).length, 2);
+  assert.match(decrypt, /throw \$operationFailure/u);
+  assert.match(decrypt, /throw \[System\.AggregateException\]::new\(\$message, \$failures\.ToArray\(\)\)/u);
+  assert.doesNotMatch(decrypt, /Write-Host[^\n]*(?:password|envelope)/iu);
 });

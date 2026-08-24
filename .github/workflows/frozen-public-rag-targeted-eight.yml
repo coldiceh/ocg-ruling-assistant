@@ -19,6 +19,7 @@ jobs:
     if: >-
       github.actor == github.repository_owner
       && github.triggering_actor == github.repository_owner
+      && github.run_attempt == 1
     runs-on: ubuntu-latest
     timeout-minutes: 90
     env:
@@ -161,7 +162,11 @@ jobs:
               raise SystemExit("reusable ciphertext HMAC mismatch")
           PY
           mkdir -p "$RUNNER_TEMP/frozen-eight-source"
-          openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -md sha256 \
+          salt_args=()
+          if openssl enc -help 2>&1 | grep -q -- '-saltlen'; then
+            salt_args=(-saltlen 8)
+          fi
+          openssl enc -d -aes-256-cbc "${salt_args[@]}" -pbkdf2 -iter 200000 -md sha256 \
             -in "$ciphertext" \
             -out "$RUNNER_TEMP/frozen-eight-source.tar.gz" \
             -pass env:PRIVATE_ARCHIVE_KEY
@@ -203,7 +208,7 @@ jobs:
           test "${#PRIVATE_ARCHIVE_KEY}" -ge 32
           test -s .github/private-evaluation-recipient.pem
           printf '%s  %s\n' \
-            '749295ac7c83b5c765722975c4a6985dedcfcd9dc02eeab3e01dd648ff8a4b3e' \
+            'c035d78431ba6dca2a5a3946a581570247a43cc1ef6f558bcf311b72e90239ec' \
             '.github/private-evaluation-recipient.pem' | sha256sum -c -
           openssl pkey -pubin -in .github/private-evaluation-recipient.pem -noout
           test -d "$RUNNER_TEMP"
@@ -302,6 +307,7 @@ jobs:
               --dataset "$RUNNER_TEMP/private-dataset.txt" \
               --snapshot "$output_dir/snapshot.json" \
               --requirements "$RUNNER_TEMP/frozen-eight-requirements.json" \
+              --diagnostics "$RUNNER_TEMP/frozen-public-rag-diagnostics.json" \
               "${case_args[@]}" \
               --max-calls "${#selected[@]}" \
               > "$output_dir/runner.log" 2>&1
@@ -369,6 +375,24 @@ jobs:
           }));
           NODE
 
+      - name: Print exact-key public freeze diagnostics
+        if: always() && steps.scope.outputs.stage == 'freeze'
+        shell: bash
+        run: |
+          set -euo pipefail
+          diagnostics="$RUNNER_TEMP/frozen-public-rag-diagnostics.json"
+          test -s "$diagnostics"
+          cat "$diagnostics"
+
+      - name: Publish exact-key public freeze diagnostics
+        if: always() && steps.scope.outputs.stage == 'freeze'
+        uses: actions/upload-artifact@v4
+        with:
+          name: frozen-eight-freeze-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/frozen-public-rag-diagnostics.json
+          if-no-files-found: error
+          retention-days: 30
+
       - name: Encrypt the private checkpoint for review and replay
         id: encrypt
         if: always()
@@ -377,6 +401,9 @@ jobs:
           PRIVATE_ARCHIVE_KEY: ${{ secrets.PURE_LLM_EVALUATION_ARCHIVE_KEY }}
           STAGE: ${{ steps.scope.outputs.stage }}
           REPLAY_ALLOWED: ${{ steps.execute.outputs.replay_allowed }}
+          SOURCE_KEY: ${{ steps.scope.outputs.source_key }}
+          CASE_IDS: ${{ steps.scope.outputs.case_ids }}
+          RUNNER_EXIT_CODE: ${{ steps.execute.outputs.exit_code }}
         run: |
           set -euo pipefail
           umask 077
@@ -401,9 +428,13 @@ jobs:
 
           openssl rand -hex 32 > "$password_file"
           chmod 600 "$password_file"
-          openssl enc -aes-256-cbc -salt -pbkdf2 -iter 200000 -md sha256 \
+          salt_args=()
+          if openssl enc -help 2>&1 | grep -q -- '-saltlen'; then
+            salt_args=(-saltlen 8)
+          fi
+          openssl enc -aes-256-cbc -salt "${salt_args[@]}" -pbkdf2 -iter 200000 -md sha256 \
             -in "$plaintext" -out "$review_cipher" -pass file:"$password_file"
-          openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -md sha256 \
+          openssl enc -d -aes-256-cbc "${salt_args[@]}" -pbkdf2 -iter 200000 -md sha256 \
             -in "$review_cipher" -out "$review_verify" -pass file:"$password_file"
           tar -tzf "$review_verify" > /dev/null
           cipher_sha256="$(sha256sum "$review_cipher" | awk '{print $1}')"
@@ -423,13 +454,36 @@ jobs:
 
           if [ "$STAGE" = "freeze" ] && [ "$REPLAY_ALLOWED" = "true" ]; then
             test "${#PRIVATE_ARCHIVE_KEY}" -ge 32
-            openssl enc -aes-256-cbc -salt -pbkdf2 -iter 200000 -md sha256 \
+            openssl enc -aes-256-cbc -salt "${salt_args[@]}" -pbkdf2 -iter 200000 -md sha256 \
               -in "$plaintext" -out "$reusable_cipher" -pass env:PRIVATE_ARCHIVE_KEY
-            openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -md sha256 \
+            openssl enc -d -aes-256-cbc "${salt_args[@]}" -pbkdf2 -iter 200000 -md sha256 \
               -in "$reusable_cipher" -out "$reusable_verify" -pass env:PRIVATE_ARCHIVE_KEY
             tar -tzf "$reusable_verify" > /dev/null
             CIPHERTEXT="$reusable_cipher" HMAC_FILE="$reusable_hmac" python -c \
               'import hashlib,hmac,os,pathlib; key=os.environ["PRIVATE_ARCHIVE_KEY"].encode("utf-8"); ciphertext=pathlib.Path(os.environ["CIPHERTEXT"]).read_bytes(); digest=hmac.new(b"frozen-eight-reusable-hmac-v1\0"+key,ciphertext,hashlib.sha256).hexdigest(); pathlib.Path(os.environ["HMAC_FILE"]).write_text(digest+"\n",encoding="ascii")'
+          fi
+          printf '%s\n' \
+            'schema_version=1' \
+            'archive_cipher=aes-256-cbc-pbkdf2-sha256-iter200000-saltlen8' \
+            'key_envelope=rsa-oaep-sha256-mgf1-sha256' \
+            "source_sha=$GITHUB_SHA" \
+            "stage=$STAGE" \
+            "source_key=$SOURCE_KEY" \
+            "case_ids=$CASE_IDS" \
+            "run_id=$GITHUB_RUN_ID" \
+            "run_attempt=$GITHUB_RUN_ATTEMPT" \
+            "replay_allowed=$REPLAY_ALLOWED" \
+            "runner_exit_code=$RUNNER_EXIT_CODE" \
+            "review_cipher_sha256=$(sha256sum "$review_cipher" | awk '{print $1}')" \
+            "review_envelope_sha256=$(sha256sum "$review_envelope" | awk '{print $1}')" \
+            > encrypted-output/metadata.txt
+          if [ "$STAGE" = "freeze" ] && [ "$REPLAY_ALLOWED" = "true" ]; then
+            printf 'reusable_cipher_sha256=%s\n' \
+              "$(sha256sum "$reusable_cipher" | awk '{print $1}')" \
+              >> encrypted-output/metadata.txt
+            printf 'reusable_hmac_sha256=%s\n' \
+              "$(sha256sum "$reusable_hmac" | awk '{print $1}')" \
+              >> encrypted-output/metadata.txt
           fi
           chmod 600 encrypted-output/*
           cleanup
@@ -471,32 +525,10 @@ jobs:
           mkdir -p "$destination"
           cp encrypted-output/frozen-public-rag-review.tar.gz.enc "$destination/"
           cp encrypted-output/frozen-public-rag-review.key-envelope.rsa-oaep "$destination/"
+          cp encrypted-output/metadata.txt "$destination/"
           if [ "$STAGE" = "freeze" ] && [ "$REPLAY_ALLOWED" = "true" ]; then
             cp encrypted-output/frozen-public-rag-reusable.tar.gz.enc "$destination/"
             cp encrypted-output/frozen-public-rag-reusable.tar.gz.enc.hmac-sha256 "$destination/"
-          fi
-          printf '%s\n' \
-            'schema_version=1' \
-            'archive_cipher=aes-256-cbc-pbkdf2-sha256-iter200000' \
-            'key_envelope=rsa-oaep-sha256-mgf1-sha256' \
-            "source_sha=$GITHUB_SHA" \
-            "stage=$STAGE" \
-            "source_key=$SOURCE_KEY" \
-            "case_ids=$CASE_IDS" \
-            "run_id=$GITHUB_RUN_ID" \
-            "run_attempt=$GITHUB_RUN_ATTEMPT" \
-            "replay_allowed=$REPLAY_ALLOWED" \
-            "runner_exit_code=${{ steps.execute.outputs.exit_code }}" \
-            "review_cipher_sha256=$(sha256sum encrypted-output/frozen-public-rag-review.tar.gz.enc | awk '{print $1}')" \
-            "review_envelope_sha256=$(sha256sum encrypted-output/frozen-public-rag-review.key-envelope.rsa-oaep | awk '{print $1}')" \
-            > "$destination/metadata.txt"
-          if [ "$STAGE" = "freeze" ] && [ "$REPLAY_ALLOWED" = "true" ]; then
-            printf 'reusable_cipher_sha256=%s\n' \
-              "$(sha256sum encrypted-output/frozen-public-rag-reusable.tar.gz.enc | awk '{print $1}')" \
-              >> "$destination/metadata.txt"
-            printf 'reusable_hmac_sha256=%s\n' \
-              "$(sha256sum encrypted-output/frozen-public-rag-reusable.tar.gz.enc.hmac-sha256 | awk '{print $1}')" \
-              >> "$destination/metadata.txt"
           fi
           git -C "$results_repo" config user.name github-actions[bot]
           git -C "$results_repo" config user.email 41898282+github-actions[bot]@users.noreply.github.com
@@ -532,7 +564,8 @@ jobs:
             "$RUNNER_TEMP/frozen-public-rag-review.verify.tar.gz" \
             "$RUNNER_TEMP/frozen-public-rag-reusable.verify.tar.gz" \
             "$RUNNER_TEMP/frozen-public-rag-review.password" \
-            "$RUNNER_TEMP/frozen-public-rag-review.key-envelope"
+            "$RUNNER_TEMP/frozen-public-rag-review.key-envelope" \
+            "$RUNNER_TEMP/frozen-public-rag-diagnostics.json"
           for path in encrypted-output source-private-results publish-private-results; do
             if [ -e "$path" ]; then rm -rf -- "$path"; fi
           done

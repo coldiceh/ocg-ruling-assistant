@@ -37,6 +37,17 @@ const RETRIEVAL_CANDIDATE_STAGE_KEYS = Object.freeze([
   "notAllocatedCrossCardIds",
 ]);
 const SAFE_RETRIEVAL_CANDIDATE_ID = /^[A-Za-z0-9][A-Za-z0-9._:@#-]{0,127}$/u;
+const PUBLIC_DIAGNOSTICS_SCHEMA_VERSION = 1;
+const FREEZE_RUNNER_FAILURE_STATUS = "failed_freeze_runner";
+const FREEZE_RUNNER_FAILURE_LAYER = "freeze_runner";
+const FREEZE_RUNNER_FAILURE_CODE = "freeze_runner_failure";
+const PUBLIC_DIAGNOSTIC_STATUSES = new Set([
+  "not_started",
+  "running",
+  "complete",
+  "failed_evidence_preparation",
+  "failed_evidence_audit",
+]);
 
 export function parseFrozenPublicRagArgs(argv = []) {
   const [command, ...rest] = argv;
@@ -58,6 +69,7 @@ export function parseFrozenPublicRagArgs(argv = []) {
       "--effort": "effort",
       "--max-calls": "maxCalls",
       "--requirements": "requirementsPath",
+      "--diagnostics": "diagnosticsPath",
     })[argument];
     if (!field) throw new TypeError(`unknown argument: ${argument}`);
     const value = rest[index + 1];
@@ -72,11 +84,68 @@ export function parseFrozenPublicRagArgs(argv = []) {
 }
 
 export async function freezePublicRagFinalInputs({
+  diagnosticsPath,
+  ...options
+} = {}) {
+  const diagnosticsFile = diagnosticsPath
+    ? path.resolve(requiredText(diagnosticsPath, "diagnosticsPath"))
+    : null;
+  const state = { checkpoint: null, outputFile: null };
+  let diagnosticsClaimed = false;
+  try {
+    if (diagnosticsFile) {
+      await assertOutputDoesNotExist(diagnosticsFile);
+      diagnosticsClaimed = true;
+      await writeFrozenPublicDiagnostics(diagnosticsFile, {
+        status: "running",
+        finalModelCallCount: 0,
+        selectedCaseIds: [],
+        cases: [],
+      }, new Map());
+    }
+    return await freezePublicRagFinalInputsUnchecked({
+      ...options,
+      diagnosticsFile,
+      state,
+    });
+  } catch (error) {
+    if (isCompletedFreezeDomainFailure(state.checkpoint, error)) throw error;
+    const failedCheckpoint = state.checkpoint || {
+      finalModelCallCount: 0,
+      selectedCaseIds: [],
+      cases: [],
+    };
+    failedCheckpoint.status = FREEZE_RUNNER_FAILURE_STATUS;
+    failedCheckpoint.failureLayer = FREEZE_RUNNER_FAILURE_LAYER;
+    failedCheckpoint.failureCode = FREEZE_RUNNER_FAILURE_CODE;
+    if (diagnosticsFile && diagnosticsClaimed) {
+      try {
+        await writeFrozenPublicDiagnostics(diagnosticsFile, failedCheckpoint, new Map());
+      } catch {
+        // Preserve the original freeze failure. The fatal diagnostic is fixed and
+        // contains no exception-derived values, even if publishing it also fails.
+      }
+    }
+    if (state.checkpoint && state.outputFile) {
+      try {
+        await writeJsonAtomic(state.outputFile, failedCheckpoint);
+      } catch {
+        // Preserve the original freeze failure without serializing another error.
+      }
+    }
+    throw error;
+  }
+}
+
+async function freezePublicRagFinalInputsUnchecked({
   datasetPath,
   snapshotPath,
   caseIds = [],
   maxCalls,
   evidenceRequirements,
+  requirementsPath,
+  diagnosticsFile,
+  state,
   env = process.env,
   answerPublic = answerPublicRulingQuestion,
   answerRuling = answerRagRulingQuestionForVersion,
@@ -86,6 +155,7 @@ export async function freezePublicRagFinalInputs({
 } = {}) {
   const datasetFile = path.resolve(requiredText(datasetPath, "datasetPath"));
   const outputFile = path.resolve(requiredText(snapshotPath, "snapshotPath"));
+  state.outputFile = outputFile;
   assertPathOutsideRepository(outputFile, "snapshotPath");
   await assertOutputDoesNotExist(outputFile);
   const dataset = parseDatasetText(await readFile(datasetFile, "utf8"));
@@ -94,8 +164,17 @@ export async function freezePublicRagFinalInputs({
   if (selected.length > callLimit) {
     throw new Error(`selected ${selected.length} cases exceed maxCalls ${callLimit}`);
   }
+  let requirements = evidenceRequirements;
+  if (requirementsPath !== undefined) {
+    if (evidenceRequirements !== undefined) {
+      throw new TypeError("provide evidenceRequirements or requirementsPath, not both");
+    }
+    const requirementsFile = path.resolve(requiredText(requirementsPath, "requirementsPath"));
+    assertPathOutsideRepository(requirementsFile, "requirementsPath");
+    requirements = JSON.parse(await readFile(requirementsFile, "utf8"));
+  }
   const normalizedRequirements = normalizeEvidenceRequirements(
-    evidenceRequirements,
+    requirements,
     selected,
   );
   const evidenceData = await loadEvidenceData();
@@ -128,7 +207,11 @@ export async function freezePublicRagFinalInputs({
     finalModelCallCount: 0,
     cases: [],
   };
+  state.checkpoint = checkpoint;
   await writeJsonAtomic(outputFile, checkpoint);
+  if (diagnosticsFile) {
+    await writeFrozenPublicDiagnostics(diagnosticsFile, checkpoint, requirementContexts);
+  }
 
   for (const item of selected) {
     let captured = null;
@@ -177,6 +260,9 @@ export async function freezePublicRagFinalInputs({
       checkpoint.failedEvidencePreparationCaseIds ||= [];
       checkpoint.failedEvidencePreparationCaseIds.push(item.id);
       await writeJsonAtomic(outputFile, checkpoint);
+      if (diagnosticsFile) {
+        await writeFrozenPublicDiagnostics(diagnosticsFile, checkpoint, requirementContexts);
+      }
       log(`[frozen] ${item.id} failed_evidence_preparation`);
       continue;
     }
@@ -198,6 +284,7 @@ export async function freezePublicRagFinalInputs({
         status: "failed_evidence_audit",
         evidenceAudit: Object.freeze({
           status: "failed_evidence_audit",
+          diagnosticFailureCode: classifyEvidenceAuditFailure(error),
           error: safeEvidenceAuditError(error),
         }),
       });
@@ -205,6 +292,9 @@ export async function freezePublicRagFinalInputs({
       checkpoint.failedEvidenceAuditCaseIds ||= [];
       checkpoint.failedEvidenceAuditCaseIds.push(item.id);
       await writeJsonAtomic(outputFile, checkpoint);
+      if (diagnosticsFile) {
+        await writeFrozenPublicDiagnostics(diagnosticsFile, checkpoint, requirementContexts);
+      }
       log(`[frozen] ${item.id} failed_evidence_audit`);
       continue;
     }
@@ -215,6 +305,9 @@ export async function freezePublicRagFinalInputs({
     });
     checkpoint.cases.push(record);
     await writeJsonAtomic(outputFile, checkpoint);
+    if (diagnosticsFile) {
+      await writeFrozenPublicDiagnostics(diagnosticsFile, checkpoint, requirementContexts);
+    }
     log(`[frozen] ${item.id} ${record.promptUtf8Sha256.slice(0, 12)} ${record.promptChars} chars`);
   }
 
@@ -232,7 +325,11 @@ export async function freezePublicRagFinalInputs({
       })),
     ));
   }
+  assertFreezeFinalModelBoundary(checkpoint);
   await writeJsonAtomic(outputFile, checkpoint);
+  if (diagnosticsFile) {
+    await writeFrozenPublicDiagnostics(diagnosticsFile, checkpoint, requirementContexts);
+  }
   if (checkpoint.status === "failed_evidence_preparation") {
     const error = new Error(
       `frozen evidence preparation failed for ${checkpoint.failedEvidencePreparationCaseIds.length} case(s)`,
@@ -248,6 +345,214 @@ export async function freezePublicRagFinalInputs({
     throw error;
   }
   return checkpoint;
+}
+
+export function buildFrozenPublicDiagnostics({ checkpoint, requirementContexts } = {}) {
+  if (!checkpoint || !(requirementContexts instanceof Map)) {
+    throw new TypeError("public freeze diagnostics require a checkpoint and requirement contexts");
+  }
+  if (checkpoint.status === FREEZE_RUNNER_FAILURE_STATUS) {
+    return buildFreezeRunnerFailureDiagnostics(checkpoint);
+  }
+  assertFreezeFinalModelBoundary(checkpoint);
+  if (!PUBLIC_DIAGNOSTIC_STATUSES.has(checkpoint.status)) {
+    return buildFreezeRunnerFailureDiagnostics(checkpoint);
+  }
+  const records = new Map((Array.isArray(checkpoint.cases) ? checkpoint.cases : [])
+    .map((item) => [normalizeCaseId(item?.id), item]));
+  const selectedCaseIds = (checkpoint.selectedCaseIds || []).map(normalizeCaseId);
+  return Object.freeze({
+    schemaVersion: PUBLIC_DIAGNOSTICS_SCHEMA_VERSION,
+    kind: "frozen_public_rag_safe_diagnostics",
+    stage: "freeze",
+    status: checkpoint.status,
+    failureLayer: null,
+    failureCode: null,
+    finalModelCallCount: 0,
+    cases: selectedCaseIds.map((id) => {
+      const record = records.get(id) || null;
+      const context = requirementContexts.get(id);
+      if (!context) throw new Error(`${id} has no source-backed diagnostics context`);
+      const sourceEvidenceIds = context.sourceEvidenceIds instanceof Set
+        ? context.sourceEvidenceIds
+        : new Set(context.evidenceSources?.keys?.() || []);
+      const sourceCardIds = new Set(context.cardSources?.keys?.() || []);
+      const sourceBacked = (ids) => [...new Set((ids || [])
+        .map((value) => String(value || "").trim())
+        .filter((value) => SAFE_RETRIEVAL_CANDIDATE_ID.test(value))
+        .filter((value) => sourceEvidenceIds.has(value)))].sort();
+      const requiredEvidenceIds = sourceBacked(context.requirement.requiredEvidenceIds);
+      const forbiddenEvidenceIds = sourceBacked(context.requirement.forbiddenEvidenceIds);
+      const promptFacts = parsePublicDiagnosticPromptFacts({
+        record,
+        sourceEvidenceIds,
+        sourceCardIds,
+      });
+      const presentEvidenceIds = sourceBacked(promptFacts.presentEvidenceIds);
+      const visibleEvidenceIds = new Set(sourceBacked(promptFacts.visibleEvidenceIds));
+      const present = new Set(presentEvidenceIds);
+      const requiredResolvedCardIds = [...context.requirement.requiredResolvedCardIds]
+        .filter((value) => sourceCardIds.has(value))
+        .sort();
+      const presentResolvedCardIds = [...promptFacts.presentResolvedCardIds].sort();
+      const presentCards = new Set(presentResolvedCardIds);
+      const requiredRelatedOnlyEvidenceIds = sourceBacked(
+        context.requirement.requiredRelatedOnlyEvidenceIds,
+      );
+      const relatedOnlyViolationEvidenceIds = sourceBacked(
+        promptFacts.relatedOnlyViolationEvidenceIds,
+      ).filter((value) => requiredRelatedOnlyEvidenceIds.includes(value));
+      const caseStatus = PUBLIC_DIAGNOSTIC_STATUSES.has(record?.status)
+        ? record.status
+        : "not_started";
+      const failureLayer = ({
+        failed_evidence_preparation: "evidence_preparation",
+        failed_evidence_audit: "evidence_audit",
+      })[caseStatus] || null;
+      return Object.freeze({
+        id,
+        status: caseStatus,
+        failureLayer,
+        failureCode: diagnosticFailureCode(record, caseStatus),
+        promptTruncated: typeof record?.promptTruncated === "boolean"
+          ? record.promptTruncated
+          : null,
+        promptCompacted: typeof record?.promptCompacted === "boolean"
+          ? record.promptCompacted
+          : null,
+        finalModelCallCount: 0,
+        cards: Object.freeze({
+          requiredResolvedCardIds,
+          presentResolvedCardIds,
+          missingResolvedCardIds: requiredResolvedCardIds
+            .filter((value) => !presentCards.has(value)),
+        }),
+        evidence: Object.freeze({
+          requiredEvidenceIds,
+          presentEvidenceIds,
+          missingEvidenceIds: requiredEvidenceIds.filter((value) => !present.has(value)),
+          forbiddenEvidenceIds,
+          forbiddenPresentEvidenceIds: forbiddenEvidenceIds
+            .filter((value) => visibleEvidenceIds.has(value)),
+          requiredRelatedOnlyEvidenceIds,
+          relatedOnlyViolationEvidenceIds,
+        }),
+        candidateStages: Object.freeze(Object.fromEntries(
+          RETRIEVAL_CANDIDATE_STAGE_KEYS.map((key) => [
+            key,
+            Object.freeze({
+              count: sourceBacked(record?.retrievalCandidateStages?.[key]).length,
+              requiredEvidenceIds: requiredEvidenceIds.filter((value) => (
+                record?.retrievalCandidateStages?.[key]?.includes(value)
+              )),
+            }),
+          ]),
+        )),
+      });
+    }),
+  });
+}
+
+function buildFreezeRunnerFailureDiagnostics(checkpoint) {
+  const finalModelCallCount = Number.isSafeInteger(checkpoint?.finalModelCallCount)
+    && checkpoint.finalModelCallCount >= 0
+    ? checkpoint.finalModelCallCount
+    : 0;
+  return Object.freeze({
+    schemaVersion: PUBLIC_DIAGNOSTICS_SCHEMA_VERSION,
+    kind: "frozen_public_rag_safe_diagnostics",
+    stage: "freeze",
+    status: FREEZE_RUNNER_FAILURE_STATUS,
+    failureLayer: FREEZE_RUNNER_FAILURE_LAYER,
+    failureCode: FREEZE_RUNNER_FAILURE_CODE,
+    finalModelCallCount,
+    cases: Object.freeze([]),
+  });
+}
+
+function parsePublicDiagnosticPromptFacts({ record, sourceEvidenceIds, sourceCardIds } = {}) {
+  const empty = {
+    presentEvidenceIds: [],
+    visibleEvidenceIds: [],
+    presentResolvedCardIds: [],
+    relatedOnlyViolationEvidenceIds: [],
+  };
+  if (!record?.prompt) return empty;
+  try {
+    const payload = parseFrozenPromptPayload(record.prompt);
+    if (!payload) return empty;
+    const evidence = indexUniquePromptItems(serializedPromptEvidence(payload));
+    const allowed = new Set(extractPromptAllowedEvidenceIds(record.prompt));
+    const presentEvidenceIds = [...allowed]
+      .filter((id) => evidence.has(id) && sourceEvidenceIds.has(id));
+    return {
+      presentEvidenceIds,
+      visibleEvidenceIds: [...new Set([...allowed, ...evidence.keys()])]
+        .filter((id) => sourceEvidenceIds.has(id)),
+      presentResolvedCardIds: [...indexUniquePromptItems(payload.resolvedCards || []).keys()]
+        .filter((id) => sourceCardIds.has(id)),
+      relatedOnlyViolationEvidenceIds: presentEvidenceIds.filter((id) => (
+        evidence.get(id)?.retrievalContext?.relatedOnly !== true
+      )),
+    };
+  } catch {
+    return empty;
+  }
+}
+
+function diagnosticFailureCode(record, status) {
+  if (status === "failed_evidence_preparation") {
+    const code = String(record?.evidencePreparation?.error?.code || "");
+    return new Set([
+      "rule_query_model_timeout",
+      "rule_query_model_empty",
+      "rule_query_model_unavailable",
+    ]).has(code) ? code : "evidence_preparation_other";
+  }
+  if (status === "failed_evidence_audit") {
+    return String(record?.evidenceAudit?.diagnosticFailureCode || "evidence_audit_other");
+  }
+  return null;
+}
+
+function classifyEvidenceAuditFailure(error) {
+  const message = String(error?.message || "");
+  const rules = [
+    [/prompt was truncated|truncation warnings/iu, "prompt_truncated"],
+    [/reached .* expected/iu, "route_mismatch"],
+    [/required resolved card .* absent/iu, "required_card_missing"],
+    [/resolved card .* effect text is incomplete|resolved card .* differs/iu, "card_text_incomplete"],
+    [/required evidence .* not model-visible/iu, "required_evidence_missing"],
+    [/evidence .* (?:incomplete|differs|omits source line)/iu, "evidence_body_mismatch"],
+    [/not kept related-only/iu, "related_only_violation"],
+    [/forbidden evidence .* visible/iu, "forbidden_visible"],
+    [/question does not match/iu, "question_mismatch"],
+    [/missing dataRevision or evidenceFingerprint/iu, "evidence_binding_missing"],
+    [/prompt payload is missing|different user question/iu, "prompt_payload_mismatch"],
+  ];
+  return rules.find(([pattern]) => pattern.test(message))?.[1] || "evidence_audit_other";
+}
+
+async function writeFrozenPublicDiagnostics(file, checkpoint, requirementContexts) {
+  await writeJsonAtomic(file, buildFrozenPublicDiagnostics({
+    checkpoint,
+    requirementContexts,
+  }));
+}
+
+function assertFreezeFinalModelBoundary(checkpoint) {
+  if (checkpoint?.finalModelCallCount !== 0) {
+    const error = new Error("freeze final-model call boundary was violated");
+    error.code = "FROZEN_FINAL_MODEL_CALL_DETECTED";
+    throw error;
+  }
+}
+
+function isCompletedFreezeDomainFailure(checkpoint, error) {
+  return (checkpoint?.status === "failed_evidence_preparation"
+      && error?.code === "FROZEN_EVIDENCE_PREPARATION_FAILED")
+    || (checkpoint?.status === "failed_evidence_audit"
+      && error?.code === "FROZEN_EVIDENCE_AUDIT_FAILED");
 }
 
 export async function runFrozenPublicRagFinalEffort({
@@ -636,6 +941,9 @@ function normalizeEvidenceRequirements(value, selectedCases = []) {
 function buildEvidenceRequirementContexts({ selected, requirements, data } = {}) {
   const cards = Array.isArray(data?.cards) ? data.cards : [];
   const qaRecords = Array.isArray(data?.qaRecords) ? data.qaRecords : [];
+  const sourceEvidenceIds = new Set(qaRecords
+    .map((item) => String(item?.id || "").trim())
+    .filter((id) => SAFE_RETRIEVAL_CANDIDATE_ID.test(id)));
   const contexts = new Map();
   for (const item of selected) {
     const requirement = requirements.cases[item.id];
@@ -647,7 +955,12 @@ function buildEvidenceRequirementContexts({ selected, requirements, data } = {})
       id,
       requireUniqueSourceRecord(qaRecords, id, `${item.id} official evidence`),
     ]));
-    contexts.set(item.id, Object.freeze({ requirement, cardSources, evidenceSources }));
+    contexts.set(item.id, Object.freeze({
+      requirement,
+      cardSources,
+      evidenceSources,
+      sourceEvidenceIds,
+    }));
   }
   return contexts;
 }
@@ -1112,7 +1425,7 @@ function isRecoverableEvidencePreparationFailure(error) {
 
 function helpText() {
   return `Usage:
-  node scripts/frozen-public-rag-final-effort.mjs freeze --dataset <test.txt> --snapshot <bundle.json> --requirements <requirements.json> --case case-004 [--case ...] --max-calls <n>
+  node scripts/frozen-public-rag-final-effort.mjs freeze --dataset <test.txt> --snapshot <bundle.json> --requirements <requirements.json> --diagnostics <safe.json> --case case-004 [--case ...] --max-calls <n>
   node scripts/frozen-public-rag-final-effort.mjs run --snapshot <bundle.json> --output <results.json> --effort <low|medium> --case case-004 [--case ...] --max-calls <n>
 
 Freeze executes the current public evidence-preparation path once and captures
@@ -1130,18 +1443,13 @@ async function main(argv = process.argv.slice(2)) {
     return;
   }
   if (options.command === "freeze") {
-    const requirementsPath = path.resolve(requiredText(
-      options.requirementsPath,
-      "requirementsPath",
-    ));
-    assertPathOutsideRepository(requirementsPath, "requirementsPath");
-    const evidenceRequirements = JSON.parse(await readFile(requirementsPath, "utf8"));
     await freezePublicRagFinalInputs({
       datasetPath: options.datasetPath,
       snapshotPath: options.snapshotPath,
       caseIds: options.caseIds,
       maxCalls: options.maxCalls,
-      evidenceRequirements,
+      requirementsPath: options.requirementsPath,
+      diagnosticsPath: options.diagnosticsPath,
     });
     return;
   }

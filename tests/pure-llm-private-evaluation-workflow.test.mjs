@@ -46,7 +46,7 @@ test("private pure LLM evaluation is explicitly triggered, serial and generation
   assert.match(archivePreflightStep, /if: env\.RETRIEVAL_ONLY_PILOT != 'true'/u);
   assert.match(archivePreflightStep, /PRIVATE_ARCHIVE_KEY: \$\{\{ secrets\.PURE_LLM_EVALUATION_ARCHIVE_KEY \}\}/u);
   assert.match(archivePreflightStep, /\$\{#PRIVATE_ARCHIVE_KEY\}.*-lt 32/u);
-  assert.match(archivePreflightStep, /749295ac7c83b5c765722975c4a6985dedcfcd9dc02eeab3e01dd648ff8a4b3e/u);
+  assert.match(archivePreflightStep, /c035d78431ba6dca2a5a3946a581570247a43cc1ef6f558bcf311b72e90239ec/u);
   assert.match(archivePreflightStep, /openssl pkey -pubin -in \.github\/private-evaluation-recipient\.pem -noout/u);
   assert.ok(
     workflow.indexOf("Preflight private archive encryption")
@@ -318,7 +318,7 @@ test("owner can rewrap a completed private archive without dispatching any model
   assert.match(rewrapJob, /run-id: \$\{\{ inputs\.rewrap_source_run_id \}\}/u);
   assert.match(rewrapJob, /\[\[ "\$SOURCE_RUN_ID" =~ \^\[1-9\]\[0-9\]\*\$ \]\]/u);
   assert.match(rewrapJob, /secrets\.PURE_LLM_EVALUATION_ARCHIVE_KEY/u);
-  assert.match(rewrapJob, /749295ac7c83b5c765722975c4a6985dedcfcd9dc02eeab3e01dd648ff8a4b3e/u);
+  assert.match(rewrapJob, /c035d78431ba6dca2a5a3946a581570247a43cc1ef6f558bcf311b72e90239ec/u);
   assert.match(rewrapJob, /source_conclusion[\s\S]*test "\$source_conclusion" = "success"/u);
   assert.match(rewrapJob, /source_workflow_path[\s\S]*test "\$source_workflow_path" = "\.github\/workflows\/validate-preview\.yml"/u);
   assert.match(rewrapJob, /mapfile -d '' source_entries[\s\S]*test "\$\{#source_entries\[@\]\}" -eq 1/u);
