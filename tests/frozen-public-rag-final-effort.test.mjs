@@ -45,7 +45,6 @@ function evidenceFixture(question = "网页问题", caseId = "case-001") {
         question: qa.question,
         detailedScene: qa.rawDetailedQuestion,
         answer: qa.answer,
-        sourceUrl: qa.sourceUrl,
         retrievalContext: { relatedOnly: true },
       }],
     },
@@ -70,7 +69,8 @@ function evidenceFixture(question = "网页问题", caseId = "case-001") {
     },
   };
   const data = { cards: [card], qaRecords: [qa], records: [] };
-  return { card, qa, prompt, evidenceRequirements, data };
+  const selectedEvidenceDiagnostics = [{ id: qa.id, sourceUrl: qa.sourceUrl }];
+  return { card, qa, prompt, evidenceRequirements, data, selectedEvidenceDiagnostics };
 }
 
 function auditedRecord({ id = "case-004", question = "测试问题" } = {}) {
@@ -94,6 +94,7 @@ function auditedRecord({ id = "case-004", question = "测试问题" } = {}) {
         evidenceFingerprint: sha256("test-evidence"),
         finalPromptSha256: sha256(fixture.prompt),
         promptTruncated: false,
+        selectedEvidenceDiagnostics: fixture.selectedEvidenceDiagnostics,
       },
     },
   });
@@ -504,6 +505,7 @@ test("whole-record prompt compaction remains diagnostic when every required body
         evidenceFingerprint: sha256("test-evidence"),
         finalPromptSha256: sha256(fixture.prompt),
         promptTruncated: false,
+        selectedEvidenceDiagnostics: fixture.selectedEvidenceDiagnostics,
         retrievalWarnings: ["rag_prompt_compacted_to_max_chars"],
       },
     },
@@ -521,6 +523,72 @@ test("whole-record prompt compaction remains diagnostic when every required body
   assert.equal(record.promptCompacted, true);
   assert.equal(record.promptTruncated, false);
   assert.equal(audit.status, "complete");
+});
+
+test("sourceUrl audit uses one matching selected evidence diagnostic", async (t) => {
+  const fixture = evidenceFixture("网页问题", "case-001");
+  const buildRecord = (selectedEvidenceDiagnostics) => buildFrozenCaseRecord({
+    item: { id: "case-001", question: "网页问题", sourceBlocks: [1] },
+    captured: {
+      prompt: fixture.prompt,
+      provider: "relay",
+      modelName: "gpt-5.6-sol",
+      maxTokens: 32000,
+      reasoningEffort: "low",
+    },
+    transportContract: testTransportContract(),
+    answer: {
+      resolvedCards: [{ id: fixture.card.id }],
+      usedEvidence: [{ id: fixture.qa.id }],
+      debug: {
+        route: "ordinary_rag",
+        dataRevision: "test-data-revision",
+        evidenceFingerprint: sha256("test-evidence"),
+        finalPromptSha256: sha256(fixture.prompt),
+        promptTruncated: false,
+        selectedEvidenceDiagnostics,
+      },
+    },
+  });
+  const requirementContext = {
+    requirement: fixture.evidenceRequirements.cases["case-001"],
+    cardSources: new Map([[fixture.card.id, fixture.card]]),
+    evidenceSources: new Map([[fixture.qa.id, fixture.qa]]),
+  };
+  const audit = (selectedEvidenceDiagnostics) => assertFrozenEvidenceCompleteness({
+    record: buildRecord(selectedEvidenceDiagnostics),
+    requirementContext,
+  });
+
+  assert.doesNotMatch(fixture.prompt, /sourceUrl/u);
+  await t.test("accepts the correct diagnostic", () => {
+    const result = audit(fixture.selectedEvidenceDiagnostics);
+    assert.deepEqual(result.evidenceSourceUrlSha256, [{
+      id: fixture.qa.id,
+      sha256: sha256(fixture.qa.sourceUrl),
+    }]);
+  });
+  await t.test("rejects a missing diagnostic", () => {
+    assert.throws(() => audit([]), /contains 0 matching records/u);
+  });
+  await t.test("rejects a mismatching diagnostic ID", () => {
+    assert.throws(() => audit([{
+      id: "qa-other",
+      sourceUrl: fixture.qa.sourceUrl,
+    }]), /contains 0 matching records/u);
+  });
+  await t.test("rejects a mismatching diagnostic URL", () => {
+    assert.throws(() => audit([{
+      id: fixture.qa.id,
+      sourceUrl: "https://db.example/qa/other",
+    }]), /sourceUrl differs from qa-index\.json selectedEvidenceDiagnostics/u);
+  });
+  await t.test("rejects duplicate diagnostic IDs", () => {
+    assert.throws(() => audit([
+      ...fixture.selectedEvidenceDiagnostics,
+      ...fixture.selectedEvidenceDiagnostics.map((item) => ({ ...item })),
+    ]), /contains 2 matching records/u);
+  });
 });
 
 test("freeze sends the same explicit mode, profile, and ruling version as the web page", async () => {
@@ -564,6 +632,7 @@ test("freeze sends the same explicit mode, profile, and ruling version as the we
           evidenceFingerprint: sha256("test-evidence"),
           finalPromptSha256: sha256(prompt),
           promptTruncated: false,
+          selectedEvidenceDiagnostics: fixture.selectedEvidenceDiagnostics,
         },
       };
     },
@@ -618,6 +687,7 @@ test("reference answers cannot change the question-only frozen input digest", as
             evidenceFingerprint: sha256("test-evidence"),
             finalPromptSha256: sha256(fixture.prompt),
             promptTruncated: false,
+            selectedEvidenceDiagnostics: fixture.selectedEvidenceDiagnostics,
           },
         };
       },
@@ -655,6 +725,7 @@ test("source-backed evidence audit rejects a silently shortened card text", () =
         evidenceFingerprint: sha256("test-evidence"),
         finalPromptSha256: sha256(shortenedPrompt),
         promptTruncated: false,
+        selectedEvidenceDiagnostics: fixture.selectedEvidenceDiagnostics,
       },
     },
   });
@@ -728,6 +799,7 @@ test("freeze preserves a failed evidence-audit base record, continues, and forbi
           evidenceFingerprint: sha256("test-evidence"),
           finalPromptSha256: sha256(prompt),
           promptTruncated: false,
+          selectedEvidenceDiagnostics: fixture.selectedEvidenceDiagnostics,
         },
       };
     },
@@ -839,6 +911,7 @@ test("freeze records one redacted evidence-preparation failure, continues, and k
           evidenceFingerprint: sha256("test-evidence"),
           finalPromptSha256: sha256(fixture.prompt),
           promptTruncated: false,
+          selectedEvidenceDiagnostics: fixture.selectedEvidenceDiagnostics,
         },
       };
     },

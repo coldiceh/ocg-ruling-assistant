@@ -255,6 +255,64 @@ test("model_card_name_candidates_keep_the_user_surface_as_identity_and_the_expan
   assert.deepEqual(resolution.unresolvedMentions[0].searchTexts, ["幻影英雄三一人"]);
 });
 
+test("unquoted 使用 preserves the full user surface before a wrong shortened model guess", async () => {
+  clearBaigeSearchCache();
+  const fullSurface = "匿名魔导士-匿名魔导";
+  const shortenedGuess = "匿名魔术师";
+  const question = `我方使用${fullSurface}的效果，可以发动吗？`;
+  const wrongLocalCard = {
+    id: "anonymous-shortened-guess",
+    name: shortenedGuess,
+    aliases: [shortenedGuess],
+    effectText: "匿名错误卡文。",
+  };
+  const cardResolution = extractRagCards(question, {
+    cards: [wrongLocalCard],
+    modelCardNameCandidates: [{
+      name: shortenedGuess,
+      originalText: shortenedGuess,
+      confidence: "high",
+    }],
+  });
+
+  assert.ok(cardResolution.unresolvedMentions.some((item) => item.input === fullSurface));
+  assert.ok(!cardResolution.unresolvedMentions.some((item) => item.input.startsWith("使用")));
+  assert.ok(!cardResolution.resolvedCards.some((card) => card.id === wrongLocalCard.id));
+
+  const calls = [];
+  const evidence = await retrieveRagEvidence({
+    userQuery: question,
+    cardResolution,
+    cards: [wrongLocalCard],
+    records: [],
+    qaRecords: [],
+    fetchImpl: async (url) => {
+      const query = new URL(String(url)).searchParams.get("search");
+      calls.push(query);
+      return query === fullSurface
+        ? jsonResponse({
+            result: [{
+              cid: 29001,
+              id: 82900001,
+              cn_name: fullSurface,
+              text: { desc: "匿名完整卡文。" },
+            }],
+            next: 0,
+          })
+        : jsonResponse({ result: [], next: 0 });
+    },
+    env: {
+      RAG_LIVE_OFFICIAL_QA: "0",
+      RAG_LOCAL_FUZZY_MIN_CONFIDENCE: "1.01",
+    },
+  });
+
+  assert.equal(calls[0], fullSurface);
+  assert.ok(!calls.includes(shortenedGuess));
+  assert.ok(evidence.baigeResolvedCards.some((card) => card.name === fullSurface));
+  assert.ok(!evidence.retrievedCards.some((card) => card.id === wrongLocalCard.id));
+});
+
 test("model card-name extraction cannot add a card that has no surface in the user question", async () => {
   const data = await loadRagData();
   const resolution = extractRagCards(

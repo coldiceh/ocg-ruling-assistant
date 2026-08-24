@@ -389,7 +389,101 @@ test("supplemental mechanism retrieval keeps same-identity official QA scoped an
   assert.ok(!evidence.officialQaDirectCandidates.some((item) => item.id === scoped.id));
 });
 
-test("a Chinese-only Planner branch keeps its bounded fallback beside an unrelated Japanese branch", async () => {
+test("scoped allocation canonicalizes aliases and reserves only two multi-card premise variants", async () => {
+  const left = card("990201", "匿名核心甲");
+  const right = card("990202", "匿名核心乙");
+  left.jaName = "匿名コア甲";
+  left.aliases.push(left.jaName);
+  right.jaName = "匿名コア乙";
+  right.aliases.push(right.jaName);
+  const multiPremiseOne = qa(
+    "qa-anonymous-multi-premise-01",
+    "「<<990301>>」の効果適用中に「<<990201>>匿名核心甲」や「<<990202>>匿名核心乙」を発動できますか？",
+    left.id,
+    {
+      cardIds: [left.id, right.id, "990301"],
+      cardNames: [left.name, right.name],
+      questionCardIds: [left.id, right.id, "990301"],
+    },
+  );
+  const multiPremiseTwo = qa(
+    "qa-anonymous-multi-premise-02",
+    "「<<990302>>」の効果適用中に「<<990201>>匿名コア甲」や「<<990202>>匿名コア乙」を発動できますか？",
+    left.id,
+    {
+      cardIds: [left.id, right.id, "990302"],
+      cardNames: [left.jaName, right.jaName],
+      questionCardIds: [left.id, right.id, "990302"],
+    },
+  );
+  const multiPremiseThree = qa(
+    "qa-anonymous-multi-premise-03",
+    "「<<990303>>」の効果適用中に「<<990201>>匿名核心甲」や「<<990202>>匿名コア乙」を発動できますか？",
+    left.id,
+    {
+      cardIds: [left.id, right.id, "990303"],
+      cardNames: [left.name, right.jaName],
+      questionCardIds: [left.id, right.id, "990303"],
+    },
+  );
+  const singleStrictOne = qa(
+    "qa-anonymous-single-strict-one",
+    "「<<990201>>」を墓地から除外できますか？",
+    left.id,
+    { questionCardIds: [left.id] },
+  );
+  const singleStrictTwo = qa(
+    "qa-anonymous-single-strict-two",
+    "「<<990202>>」を持ち主の手札に戻せますか？",
+    right.id,
+    { questionCardIds: [right.id] },
+  );
+  const evidence = await retrieveRagEvidence({
+    userQuery: "匿名核心甲和匿名核心乙在两种不同限制适用中分别能否发动？",
+    cardResolution: {
+      resolvedCards: [left, right],
+      unresolvedMentions: [],
+      ambiguousMentions: [],
+      userProvidedCardTexts: [],
+    },
+    cards: [left, right],
+    records: [],
+    qaRecords: [
+      singleStrictOne,
+      singleStrictTwo,
+      multiPremiseThree,
+      multiPremiseTwo,
+      multiPremiseOne,
+    ],
+    ruleSearchQueries: [{
+      subclaim: "确认墓地卡片能否除外",
+      checkpoint: "affected_entity",
+      query: "墓地からカードを除外できますか？",
+      source: "model_rule_query_extractor",
+    }, {
+      subclaim: "确认场上卡片能否返回手牌",
+      checkpoint: "affected_entity",
+      query: "フィールドのカードを持ち主の手札に戻せますか？",
+      source: "model_rule_query_extractor",
+    }],
+    enableLiveOfficialQa: false,
+    env: { RAG_LIVE_OFFICIAL_QA: "false", RAG_MAX_RELATED_EVIDENCE: "3" },
+  });
+
+  const selectedIds = new Set(evidence.officialQaRelated.map((item) => item.id));
+  assert.ok(selectedIds.has(multiPremiseOne.id));
+  assert.ok(selectedIds.has(multiPremiseTwo.id));
+  assert.ok(!selectedIds.has(multiPremiseThree.id));
+  assert.equal(
+    [...selectedIds].filter((id) => [singleStrictOne.id, singleStrictTwo.id].includes(id)).length,
+    1,
+  );
+  assert.equal(evidence.officialQaRelated.length, 3);
+  assert.ok(evidence.officialQaRelated.every((item) => item.retrievalContext?.relatedOnly === true));
+  assert.ok(evidence.officialQaRelated.every((item) => item.isDirect === false));
+});
+
+test("a Chinese-only Planner branch keeps its bounded fallback when a Chinese phrase head also exists", async () => {
   const anchor = card("card-990101", "匿名跨语言锚点");
   const targetQuestion = "フィールドのカードを持ち主の手札に戻すことができますか？";
   const target = qa(
@@ -408,6 +502,16 @@ test("a Chinese-only Planner branch keeps its bounded fallback beside an unrelat
     "相手がターンを進めている場合の確認事項です。",
     "card-990107",
   );
+  const sameLanguagePhraseHead = qa(
+    "qa-anonymous-a-same-language-phrase-head",
+    "对方场上的卡可以返回持有者手牌吗？",
+    "card-990108",
+  );
+  const secondSameLanguagePhraseHead = qa(
+    "qa-anonymous-b-same-language-phrase-head",
+    "对方场上正在处理的卡能回到持有者手牌吗？",
+    "card-990109",
+  );
   const decoys = [
     qa("qa-anonymous-summon-decoy", "手札のモンスターを特殊召喚できますか？", "card-990104"),
     qa("qa-anonymous-destroy-decoy", "フィールドのカードを破壊できますか？", "card-990105"),
@@ -423,7 +527,14 @@ test("a Chinese-only Planner branch keeps its bounded fallback beside an unrelat
     },
     cards: [anchor],
     records: [],
-    qaRecords: [answerOnly, genericOneFeature, ...decoys, target],
+    qaRecords: [
+      answerOnly,
+      genericOneFeature,
+      sameLanguagePhraseHead,
+      secondSameLanguagePhraseHead,
+      ...decoys,
+      target,
+    ],
     ruleSearchQueries: [{
       subclaim: "确认手牌怪兽的特殊召唤",
       checkpoint: "operation_legality",
@@ -441,6 +552,12 @@ test("a Chinese-only Planner branch keeps its bounded fallback beside an unrelat
 
   const related = evidence.officialQaRelated.find((item) => item.id === target.id);
   assert.ok(evidence.debug.candidateStages.ruleQueryQuestionBranchCandidateIds.includes(target.id));
+  assert.ok(evidence.debug.candidateStages.ruleQueryQuestionBranchCandidateIds.includes(
+    sameLanguagePhraseHead.id,
+  ));
+  assert.ok(evidence.debug.candidateStages.ruleQueryQuestionBranchCandidateIds.includes(
+    secondSameLanguagePhraseHead.id,
+  ));
   assert.ok(related);
   assert.equal(related.isDirect, false);
   assert.equal(related.retrievalContext?.relatedOnly, true);

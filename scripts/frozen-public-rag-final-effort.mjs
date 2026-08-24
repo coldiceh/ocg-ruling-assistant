@@ -821,6 +821,7 @@ export function assertFrozenEvidenceCompleteness({
   }
 
   const evidenceBodySha256 = [];
+  const evidenceSourceUrlSha256 = [];
   for (const [id, source] of evidenceSources) {
     const serialized = evidenceById.get(id);
     if (!serialized || !allowed.has(id)) {
@@ -833,8 +834,12 @@ export function assertFrozenEvidenceCompleteness({
       serialized,
     });
     const expectedSourceUrl = String(source.sourceUrl || source.officialUrl || "");
-    if (expectedSourceUrl && String(serialized.sourceUrl || "") !== expectedSourceUrl) {
-      throw new Error(`${record.id} evidence ${id}.sourceUrl differs from qa-index.json`);
+    if (expectedSourceUrl) {
+      const diagnostic = requireUniqueSelectedEvidenceDiagnostic(record, id);
+      if (String(diagnostic.sourceUrl || "") !== expectedSourceUrl) {
+        throw new Error(`${record.id} evidence ${id}.sourceUrl differs from qa-index.json selectedEvidenceDiagnostics`);
+      }
+      evidenceSourceUrlSha256.push({ id, sha256: sha256(expectedSourceUrl) });
     }
     if (requirement.requiredRelatedOnlyEvidenceIds.includes(id)
         && serialized.retrievalContext?.relatedOnly !== true) {
@@ -864,6 +869,7 @@ export function assertFrozenEvidenceCompleteness({
 
   cardEffectTextSha256.sort(compareAuditIds);
   evidenceBodySha256.sort(compareAuditIds);
+  evidenceSourceUrlSha256.sort(compareAuditIds);
   const auditPayload = {
     status: "complete",
     questionSha256: requirement.questionSha256,
@@ -876,6 +882,7 @@ export function assertFrozenEvidenceCompleteness({
     forbiddenEvidenceIds: [...requirement.forbiddenEvidenceIds],
     cardEffectTextSha256,
     evidenceBodySha256,
+    evidenceSourceUrlSha256,
   };
   return Object.freeze({
     ...auditPayload,
@@ -1008,13 +1015,25 @@ function indexUniquePromptItems(items = [], label = "prompt items") {
   return result;
 }
 
+function requireUniqueSelectedEvidenceDiagnostic(record, id) {
+  const diagnostics = Array.isArray(record?.selectedEvidenceDiagnostics)
+    ? record.selectedEvidenceDiagnostics
+    : [];
+  const matches = diagnostics.filter((item) => String(item?.id || "").trim() === id);
+  if (matches.length !== 1) {
+    throw new Error(
+      `${record.id} evidence ${id}.sourceUrl differs from qa-index.json: selectedEvidenceDiagnostics contains ${matches.length} matching records`,
+    );
+  }
+  return matches[0];
+}
+
 function promptEvidenceAuditBody(item = {}) {
   return {
     question: String(item.question || ""),
     detailedScene: String(item.detailedScene || ""),
     answer: String(item.answer || ""),
     text: String(item.text || ""),
-    sourceUrl: String(item.sourceUrl || ""),
   };
 }
 
@@ -1093,6 +1112,12 @@ function assertStoredEvidenceAudit(item) {
     if (!source || !allowed.has(String(expected.id))
         || sha256(JSON.stringify(promptEvidenceAuditBody(source))) !== expected.sha256) {
       throw new Error(`${item.id} frozen evidence ${expected.id} no longer matches its audit`);
+    }
+  }
+  for (const expected of audit.evidenceSourceUrlSha256 || []) {
+    const diagnostic = requireUniqueSelectedEvidenceDiagnostic(item, String(expected.id));
+    if (sha256(String(diagnostic.sourceUrl || "")) !== expected.sha256) {
+      throw new Error(`${item.id} frozen evidence ${expected.id}.sourceUrl no longer matches its audit`);
     }
   }
   for (const id of audit.requiredRelatedOnlyEvidenceIds || []) {

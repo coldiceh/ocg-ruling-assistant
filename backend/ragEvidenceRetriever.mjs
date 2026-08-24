@@ -2267,18 +2267,26 @@ function rankOfficialQaQuestionBranches({
       profiles: questionProfiles,
       limit: Math.min(4, perQueryLimit),
     });
-    // Full-question retrieval is the higher-precision path. Decide per Planner
-    // branch: a CJK full-question match for one subclaim must not disable the
-    // bounded multilingual fallback for another subclaim.
-    const multilingualMechanismMatches = phraseMatches.length
-      ? []
-      : rankOfficialQaMultilingualMechanismProfiles({
-          contextText: [query.subclaim, query.query]
-            .filter(Boolean)
-            .join(" "),
-          profiles: questionProfiles,
-          limit: Math.min(2, perQueryLimit),
-        });
+    // Full-question retrieval is the higher-precision path, but even a weak
+    // same-language phrase hit must not suppress the bounded cross-language
+    // mechanism head for this same Planner branch. Both paths inspect only the
+    // official question surface, remain related-only and share the existing
+    // fixed candidate budget below.
+    const phraseMatchKeys = new Set(
+      phraseMatches.slice(0, 2).map((match) => stableRecordKey(match.record)),
+    );
+    const multilingualMechanismMatches = rankOfficialQaMultilingualMechanismProfiles({
+      contextText: [query.subclaim, query.query]
+        .filter(Boolean)
+        .join(" "),
+      // Apply the multilingual bound after removing records already supplied
+      // by the phrase head. Otherwise two same-language mechanism matches can
+      // consume both companion slots before a cross-language record is seen.
+      profiles: questionProfiles.filter(
+        (profile) => !phraseMatchKeys.has(stableRecordKey(profile.record)),
+      ),
+      limit: Math.min(2, perQueryLimit),
+    });
     const questionOnlyMatches = dedupeBy([
       ...phraseMatches.slice(0, 2),
       ...multilingualMechanismMatches,
@@ -2764,8 +2772,8 @@ function selectIndependentRuleQueries({
 }
 
 function compareRetrievedRecords(left = {}, right = {}) {
-  const leftSignals = left.retrievalSignals || {};
-  const rightSignals = right.retrievalSignals || {};
+  const leftSignals = comparableRetrievalSignals(left);
+  const rightSignals = comparableRetrievalSignals(right);
   return Number(rightSignals.questionCardIdCoverage || 0) - Number(leftSignals.questionCardIdCoverage || 0)
     || Number(rightSignals.matchedQuestionCardIdCount || 0) - Number(leftSignals.matchedQuestionCardIdCount || 0)
     || Number(rightSignals.questionBranchHeadlineAnchored === true)
@@ -2801,6 +2809,34 @@ function compareRetrievedRecords(left = {}, right = {}) {
     || modelAssessmentRank(rightSignals.modelCandidateAssessment)
       - modelAssessmentRank(leftSignals.modelCandidateAssessment)
     || stableRecordKey(left).localeCompare(stableRecordKey(right));
+}
+
+function comparableRetrievalSignals(item = {}) {
+  const nested = item.retrievalSignals || {};
+  const topLevelMatchedQuestionCardIdCount = Array.isArray(item.matchedQuestionCardIds)
+    ? item.matchedQuestionCardIds.length
+    : 0;
+  const hasTopLevelEffectCompatibility = Object.prototype.hasOwnProperty.call(
+    item,
+    "effectNumberCompatible",
+  );
+  return {
+    ...nested,
+    // Official matcher results carry these values at the top level, whereas
+    // independently ranked records carry them inside retrievalSignals. Merge
+    // both shapes before applying the one canonical comparator.
+    questionCardIdCoverage: Math.max(
+      Number(nested.questionCardIdCoverage || 0),
+      Number(item.questionCardIdCoverage || 0),
+    ),
+    matchedQuestionCardIdCount: Math.max(
+      Number(nested.matchedQuestionCardIdCount || 0),
+      topLevelMatchedQuestionCardIdCount,
+    ),
+    effectNumberCompatible: hasTopLevelEffectCompatibility
+      ? item.effectNumberCompatible !== false
+      : nested.effectNumberCompatible,
+  };
 }
 
 function modelAssessmentRank(assessment = null) {
@@ -4912,46 +4948,85 @@ function reserveIdentitySourceCoverage(items = [], limit = 1, resolvedCards = []
   // Reserve records by the exact question-side identity combination plus each
   // strict planner/mechanism branch. Two records about the same card identity
   // are not interchangeable when they cover different strict branches.
-  const resolvedIds = new Set((resolvedCards || [])
-    .map((card) => normalizeId(card?.id || card?.cardId))
-    .filter(Boolean));
-  const resolvedNames = new Set((resolvedCards || [])
-    .flatMap((card) => [
-      card?.name,
-      card?.cnName,
-      card?.jaName,
-      card?.jpName,
-      card?.enName,
-      ...(card?.aliases || []),
-    ])
-    .map(normalizeCardKey)
-    .filter(Boolean));
+  const resolvedIds = new Set();
+  const identityTokenByResolvedId = new Map();
+  const identityTokensByResolvedName = new Map();
+  (resolvedCards || []).forEach((card, index) => {
+    const id = normalizeId(card?.id || card?.cardId);
+    const names = cardIdentityNames(card).map(normalizeCardKey).filter(Boolean);
+    const fallbackName = names[0] || "";
+    const token = id
+      ? `id:${id}`
+      : fallbackName
+        ? `name:${fallbackName}:${index}`
+        : "";
+    if (!token) return;
+    if (id) {
+      resolvedIds.add(id);
+      identityTokenByResolvedId.set(id, token);
+    }
+    for (const name of names) {
+      const tokens = identityTokensByResolvedName.get(name) || new Set();
+      tokens.add(token);
+      identityTokensByResolvedName.set(name, tokens);
+    }
+  });
+  const hasResolvedIdentity = identityTokenByResolvedId.size > 0
+    || identityTokensByResolvedName.size > 0;
   const bestByCoverageKey = new Map();
+  const ordinaryPremiseVariantsByIdentity = new Map();
   (items || []).forEach((item, index) => {
     const record = item?.record || item;
-    const ids = [
+    const principalIds = [...principalQuestionCardIds(record)]
+      .map(normalizeId)
+      .filter(Boolean);
+    const rawIds = [
       ...(Array.isArray(item?.matchedQuestionCardIds) ? item.matchedQuestionCardIds : []),
       ...(Array.isArray(item?.retrievalSignals?.matchedQuestionCardIds)
         ? item.retrievalSignals.matchedQuestionCardIds
         : []),
-      ...principalQuestionCardIds(record),
+      ...principalIds,
     ]
       .map(normalizeId)
-      .filter((id) => !resolvedIds.size || resolvedIds.has(id))
-      .sort();
-    const names = retrievalRankingIdentity(record).cardNames
-      .map(normalizeCardKey)
-      .filter((name) => name && (!resolvedNames.size || resolvedNames.has(name)))
-      .sort();
-    const identities = [...new Set([
-      ...ids.map((id) => `id:${id}`),
-      ...names.map((name) => `name:${name}`),
-    ])];
+      .filter(Boolean);
+    const identityTokens = new Set();
+    for (const id of rawIds) {
+      const token = identityTokenByResolvedId.get(id);
+      if (token) identityTokens.add(token);
+      else if (!hasResolvedIdentity) identityTokens.add(`id:${id}`);
+    }
+    for (const name of retrievalRankingIdentity(record).cardNames.map(normalizeCardKey).filter(Boolean)) {
+      const resolvedTokens = identityTokensByResolvedName.get(name);
+      if (resolvedTokens?.size === 1) identityTokens.add([...resolvedTokens][0]);
+      else if (!hasResolvedIdentity) identityTokens.add(`name:${name}`);
+    }
+    const identities = [...identityTokens].sort();
     if (!identities.length) return;
     const identityCombination = identities.join("|");
     const strictQueryKeys = supplementalQueryKeysForItem(item, { strictOnly: true }).sort();
-    const coverageKeys = (strictQueryKeys.length ? strictQueryKeys : ["ordinary"])
-      .map((branchKey) => `${identityCombination}::${branchKey}`);
+    let coverageKeys;
+    if (strictQueryKeys.length) {
+      coverageKeys = strictQueryKeys.map((branchKey) => `${identityCombination}::${branchKey}`);
+    } else {
+      // Two official questions can involve the same resolved cards while asking
+      // about different external premises (for example, two different field
+      // restrictions). They are not interchangeable evidence. Distinguish at
+      // most two top-ranked premise variants from the official question-side
+      // IDs only; answer text and broad record metadata never participate.
+      const premiseKey = principalIds
+        .filter((id) => !resolvedIds.has(id))
+        .sort()
+        .join("|") || "none";
+      const premiseVariants = ordinaryPremiseVariantsByIdentity.get(identityCombination)
+        || new Set();
+      if (!premiseVariants.has(premiseKey) && premiseVariants.size < 2) {
+        premiseVariants.add(premiseKey);
+        ordinaryPremiseVariantsByIdentity.set(identityCombination, premiseVariants);
+      }
+      coverageKeys = premiseVariants.has(premiseKey)
+        ? [`${identityCombination}::ordinary-premise:${premiseKey}`]
+        : [];
+    }
     coverageKeysByRecord.set(stableRecordKey(record), coverageKeys);
     for (const coverageKey of coverageKeys) {
       if (!bestByCoverageKey.has(coverageKey)) {
@@ -4966,8 +5041,8 @@ function reserveIdentitySourceCoverage(items = [], limit = 1, resolvedCards = []
   });
   const coverageEntries = [...bestByCoverageKey.entries()]
     .sort((left, right) => (
-      Number(right[1].strict) - Number(left[1].strict)
-      || right[1].identitySize - left[1].identitySize
+      right[1].identitySize - left[1].identitySize
+      || Number(right[1].strict) - Number(left[1].strict)
       || left[1].index - right[1].index
       || left[0].localeCompare(right[0])
     ));
@@ -5169,23 +5244,11 @@ function allocateOfficialRelatedEvidence({
   supplementalRuleQueryKeys = [],
 } = {}) {
   const safeLimit = Math.max(1, Math.floor(Number(limit) || 1));
-  const rankRelatedCandidates = (items = []) => (items || [])
-    .map((item, index) => ({ item, index }))
-    .sort((left, right) => {
-      const leftSignals = left.item?.retrievalSignals || {};
-      const rightSignals = right.item?.retrievalSignals || {};
-      return Number(right.item?.branchRelevant === true) - Number(left.item?.branchRelevant === true)
-        || Number(rightSignals.strongMechanismQueryCoverage || 0)
-          - Number(leftSignals.strongMechanismQueryCoverage || 0)
-        || (rightSignals.matchedStrongMechanismFeatures || []).length
-          - (leftSignals.matchedStrongMechanismFeatures || []).length
-        || Number(right.item?.retrievalScore || 0) - Number(left.item?.retrievalScore || 0)
-        || Number(rightSignals.lexicalHitCount || 0) - Number(leftSignals.lexicalHitCount || 0)
-        || modelAssessmentRank(rightSignals.modelCandidateAssessment)
-          - modelAssessmentRank(leftSignals.modelCandidateAssessment)
-        || left.index - right.index;
-    })
-    .map(({ item }) => item);
+  // Keep one authoritative evidence comparator. In particular, complete
+  // question-card coverage must outrank a wider but partial identity hit;
+  // identity-combination coverage is reserved separately below.
+  const rankRelatedCandidates = (items = []) => [...(items || [])]
+    .sort(compareRetrievedRecords);
   const scoped = reserveIdentitySourceCoverage(
     rankRelatedCandidates(dedupeEvidence(scopedCandidates)),
     safeLimit,
