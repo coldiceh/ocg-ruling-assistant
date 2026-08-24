@@ -4,6 +4,7 @@ import test from "node:test";
 import { extractRagCards } from "../backend/ragCardExtractor.mjs";
 import { loadRagData, retrieveRagEvidence } from "../backend/ragEvidenceRetriever.mjs";
 import { analyzeEffectStateTransition, attachUserQueryToCardTexts } from "../backend/effectStateReasoner.mjs";
+import { buildRagRulingPromptBundle } from "../backend/ragRulingPrompt.mjs";
 
 const shortQuestion = "对方场上有一个b2b，导致我方场上的4+4变成了6+6。这个情况下假如我方额外只有8星同调而没有12星同调的话，可以发动异界共鸣吗";
 const fullQuestion = "对方场上有一个《杀手级调整曲 B2B》，导致我方场上的2只四星怪兽变成了2只六星怪兽，这个情况下假如我方额外只有一只可以同调召唤的8星同调怪兽而没有12星同调怪兽的话，可以发动【异界共鸣-同调融合】吗";
@@ -272,7 +273,7 @@ test("fuzzy neighbours do not veto a stronger exact contextual short-name resolu
   assert.equal(resolution.unresolvedMentions.some((mention) => mention.input === shortName), false);
 });
 
-test("a model expansion cannot unlock a local identity and FAQ from CID alone", async () => {
+test("a model expansion cannot resolve identity or promote a lexically retrieved FAQ from CID alone", async () => {
   const userSurface = "匿名外查简称";
   const canonicalName = "匿名规范外查龙";
   const localCard = {
@@ -333,11 +334,26 @@ test("a model expansion cannot unlock a local identity and FAQ from CID alone", 
 
   assert.deepEqual(evidence.retrievedCards, []);
   assert.equal(evidence.cardTexts.length, 0);
-  assert.equal(evidence.faqRelated.some((item) => item.id === "card-faq-anonymous-external-1"), false);
+  const relatedFaq = evidence.faqRelated.find(
+    (item) => item.id === "card-faq-anonymous-external-1",
+  );
+  assert.ok(relatedFaq);
+  assert.equal(relatedFaq.isDirect, false);
+  assert.ok(!evidence.officialQaDirectCandidates.some((item) => item.id === relatedFaq.id));
   assert.ok(evidence.cardResolution.unresolvedMentions.some((mention) => mention.input === userSurface));
   assert.ok(evidence.retrievalWarnings.some((warning) => (
     warning.startsWith("baige_model_expansion_stable_identity_unverified:")
   )));
+
+  const bundle = buildRagRulingPromptBundle({
+    userQuery: question,
+    cardResolution: evidence.cardResolution,
+    evidence,
+  });
+  const promptFaq = bundle.modelEvidence.faqRelated.find((item) => item.id === relatedFaq.id);
+  assert.ok(promptFaq);
+  assert.equal(promptFaq.isDirect, false);
+  assert.equal(promptFaq.retrievalContext.relatedOnly, true);
 });
 
 test("an unknown longer seed cannot suppress a nested exact known card name", () => {

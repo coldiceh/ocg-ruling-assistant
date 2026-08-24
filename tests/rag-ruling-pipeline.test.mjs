@@ -5725,6 +5725,17 @@ test("deterministic card-text branches recover cross-card QA without direct auth
   const relatedIds = new Set(evidence.officialQaRelated.map((item) => item.id));
   assert.equal(relatedIds.has(returnHandQa.id), true);
   assert.equal(relatedIds.has(specialSummonQa.id), true);
+  const returnHandRelated = evidence.officialQaRelated.find((item) => item.id === returnHandQa.id);
+  const specialSummonRelated = evidence.officialQaRelated.find((item) => item.id === specialSummonQa.id);
+  const returnHandBranchKeys = new Set(
+    returnHandRelated.retrievalSignals?.strictRuleQueryKeys || [],
+  );
+  const specialSummonBranchKeys = new Set(
+    specialSummonRelated.retrievalSignals?.strictRuleQueryKeys || [],
+  );
+  assert.ok(returnHandBranchKeys.size > 0);
+  assert.ok(specialSummonBranchKeys.size > 0);
+  assert.ok([...specialSummonBranchKeys].some((key) => !returnHandBranchKeys.has(key)));
   assert.ok(evidence.officialQaRelated.every((item) => (
     item.isDirect === false && item.retrievalContext.relatedOnly === true
   )));

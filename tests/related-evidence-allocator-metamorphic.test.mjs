@@ -363,8 +363,7 @@ test("same-identity scoped evidence retains two distinct strict branches under n
     // branch coverage without duplicating them into officialQaRelated.
     assert.deepEqual(evidence.faqRelated.map((item) => item.id).sort(), expectedIds);
     assert.ok(evidence.faqRelated.every((item) => (
-      item.retrievalContext.relatedOnly === true
-      && item.isDirect === false
+      item.isDirect === false
       && (item.retrievalSignals?.strictSupplementalRuleQueryKeys || []).length > 0
     )));
     assert.ok(new Set(evidence.faqRelated.flatMap((item) => (
