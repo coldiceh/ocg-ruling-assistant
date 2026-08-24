@@ -518,18 +518,19 @@ export async function retrieveRagEvidence({
   const usefulScopedOfficialMatches = officialMatches.all.filter((match) => (
     isOfficialQaRecord(match.record)
   ));
+  const scopedSupplementalOfficialRecords = rankRecordsWithSupplementalQueries({
+    userQuery,
+    records: applyModelAssessmentsToRecords(scopedRecordBuckets.qa, modelAssessmentById),
+    resolvedCards: effectiveQaIdentityCards,
+    mentionQueries,
+    deterministicRuleQueries,
+    supplementalRuleQueries: effectiveSupplementalRuleQueries,
+    independentQueryLimit: 4,
+    allowNoCardMatch: effectiveQaIdentityCards.length === 0 && normalizedRuleQueries.length > 0,
+  });
   const scopedOfficialQaRelatedSource = mergeOfficialRelatedSourceItems([
     ...usefulScopedOfficialMatches,
-    ...rankRecordsWithSupplementalQueries({
-      userQuery,
-      records: applyModelAssessmentsToRecords(scopedRecordBuckets.qa, modelAssessmentById),
-      resolvedCards: effectiveQaIdentityCards,
-      mentionQueries,
-      deterministicRuleQueries,
-      supplementalRuleQueries: effectiveSupplementalRuleQueries,
-      independentQueryLimit: 4,
-      allowNoCardMatch: effectiveQaIdentityCards.length === 0 && normalizedRuleQueries.length > 0,
-    }),
+    ...scopedSupplementalOfficialRecords,
   ]).filter((item) => (
     !effectiveQaIdentityCards.length
     || relatedMatchedQuestionCardIds(item).length > 0
@@ -759,6 +760,9 @@ export async function retrieveRagEvidence({
         initialCrossCardQuestionIds: diagnosticCandidateIds(initialCrossCardOfficialQuestions),
         rulePlannerCandidateIds: diagnosticCandidateIds(ruleQueryCandidateQuestions),
         ruleQueryQuestionBranchCandidateIds: diagnosticCandidateIds(questionBranchCrossCardCandidates),
+        scopedOfficialMatchIds: diagnosticCandidateIds(usefulScopedOfficialMatches),
+        scopedSupplementalOfficialIds: diagnosticCandidateIds(scopedSupplementalOfficialRecords),
+        scopedOfficialRelatedCandidateIds: diagnosticCandidateIds(scopedOfficialQaRelatedCandidates),
         crossCardRankedPoolIds: diagnosticCandidateIds(crossCardOfficialQaSource),
         crossCardEvidenceCandidateIds: diagnosticCandidateIds(crossCardOfficialQaRelatedCandidates),
         allocatedOfficialRelatedIds: diagnosticCandidateIds(officialQaRelated),
@@ -1840,6 +1844,13 @@ function mergeRelatedRecordMetadata(left = {}, right = {}) {
         leftSignals.supplementalRuleQueryRanks,
         rightSignals.supplementalRuleQueryRanks,
       ),
+      questionBranchSearch: Boolean(
+        leftSignals.questionBranchSearch || rightSignals.questionBranchSearch,
+      ),
+      questionBranchMultilingualMechanismFallback: Boolean(
+        leftSignals.questionBranchMultilingualMechanismFallback
+          || rightSignals.questionBranchMultilingualMechanismFallback,
+      ),
       questionBranchFourGramHitCount: Math.max(
         Number(leftSignals.questionBranchFourGramHitCount || 0),
         Number(rightSignals.questionBranchFourGramHitCount || 0),
@@ -2196,14 +2207,17 @@ function rankOfficialQaQuestionBranches({
   }).slice(0, 4);
   if (!queries.length) return [];
 
+  const queryPlans = queries.map((query) => ({
+    query,
+    question: selectOfficialQaSearchBranch(query.query),
+    queryKey: ruleSearchQueryIdentity(query),
+  })).filter(({ question, queryKey }) => question && queryKey);
+  if (!queryPlans.length) return [];
   const safeCandidateLimit = Math.max(1, Math.floor(Number(candidateLimit) || 16));
-  const perQueryLimit = Math.max(2, Math.min(6, Math.ceil(safeCandidateLimit / queries.length)));
+  const perQueryLimit = Math.max(2, Math.min(6, Math.ceil(safeCandidateLimit / queryPlans.length)));
   const questionProfiles = prepareOfficialQaQuestionTextProfiles(records);
   const merged = new Map();
-  for (const query of queries) {
-    const question = selectOfficialQaSearchBranch(query.query);
-    const queryKey = ruleSearchQueryIdentity(query);
-    if (!question || !queryKey) continue;
+  for (const { query, question, queryKey } of queryPlans) {
     const searchResult = searchOfficialQaEvidence({
       question,
       records,
@@ -2229,10 +2243,26 @@ function rankOfficialQaQuestionBranches({
       profiles: questionProfiles,
       limit: Math.min(4, perQueryLimit),
     });
+    // Full-question retrieval is the higher-precision path. Decide per Planner
+    // branch: a Japanese branch for one subclaim must not disable the bounded
+    // multilingual fallback for another Chinese-only subclaim.
+    const multilingualMechanismMatches = phraseMatches.length
+      ? []
+      : rankOfficialQaMultilingualMechanismProfiles({
+          contextText: [query.subclaim, query.query]
+            .filter(Boolean)
+            .join(" "),
+          profiles: questionProfiles,
+          limit: Math.min(2, perQueryLimit),
+        });
+    const questionOnlyMatches = dedupeBy([
+      ...phraseMatches.slice(0, 2),
+      ...multilingualMechanismMatches,
+    ], (match) => stableRecordKey(match.record));
     const strongQuestionMatches = [
       ...searchResult.exact,
       ...searchResult.near,
-      ...phraseMatches.slice(0, 2),
+      ...questionOnlyMatches,
     ];
     // If the ordinary matcher and the Japanese full-question rescue both find
     // nothing stronger, retain a tiny related-only head from this explicit
@@ -2247,26 +2277,26 @@ function rankOfficialQaQuestionBranches({
       // Reserve at most two slots inside the existing per-query bound for the
       // question-only rescue. Otherwise ordinary classifier heads can consume
       // every slot before these candidates reach the shared comparator.
-      ...phraseMatches.slice(0, 2),
+      ...questionOnlyMatches,
       ...searchResult.exact,
       ...searchResult.near,
       ...relatedFallback,
     ], (match) => stableRecordKey(match.record)).slice(0, perQueryLimit * 2);
-    const phraseMatchByRecord = new Map(
-      phraseMatches.map((match) => [stableRecordKey(match.record), match]),
+    const questionOnlyMatchByRecord = new Map(
+      questionOnlyMatches.map((match) => [stableRecordKey(match.record), match]),
     );
     matches.forEach((match, index) => {
       const record = match.record || {};
       // A record may also appear in the ordinary near/exact head. Keep that
       // stronger candidate, but do not discard independently measured
       // question/headline metrics merely because deduplication saw it first.
-      const phraseMatch = phraseMatchByRecord.get(stableRecordKey(record));
-      const phraseMetrics = phraseMatch?.questionTextMetrics
+      const questionOnlyMatch = questionOnlyMatchByRecord.get(stableRecordKey(record));
+      const phraseMetrics = questionOnlyMatch?.questionTextMetrics
         || match.questionTextMetrics
         || {};
       const questionBranchScore = Math.max(
         Number(match.score || 0),
-        Number(phraseMatch?.score || 0),
+        Number(questionOnlyMatch?.score || 0),
       );
       const candidate = {
         ...record,
@@ -2288,6 +2318,9 @@ function rankOfficialQaQuestionBranches({
           supplementalRuleQueryKeys: [queryKey],
           supplementalRuleQueryRanks: { [queryKey]: index + 1 },
           questionBranchSearch: true,
+          questionBranchMultilingualMechanismFallback: Boolean(
+            questionOnlyMatch?.multilingualMechanismFallback,
+          ),
           questionBranchSearchScore: questionBranchScore,
           questionBranchFourGramHitCount: Number(phraseMetrics.fourGramHitCount || 0),
           questionBranchThreeGramHitCount: Number(phraseMetrics.threeGramHitCount || 0),
@@ -2336,6 +2369,57 @@ function rankOfficialQaQuestionBranches({
     });
   }
   return [...merged.values()].sort(compareRetrievedRecords).slice(0, safeCandidateLimit);
+}
+
+function rankOfficialQaMultilingualMechanismProfiles({
+  contextText = "",
+  profiles = [],
+  limit = 2,
+} = {}) {
+  const queryMechanismSignature = buildRuleMechanismSignature(contextText);
+  if (!isUsableRuleMechanismSignature(queryMechanismSignature)) return [];
+  const strongQueryFeatures = [...queryMechanismSignature].filter(isStrongRuleMechanismFeature);
+  if (!strongQueryFeatures.length) return [];
+
+  return (profiles || []).map((profile) => {
+    const mechanismMatch = bestRuleMechanismMatch(
+      [queryMechanismSignature],
+      profile.evidenceMechanismSignature,
+    );
+    const qualifies = mechanismMatch.matchedStrongFeatures.length >= 1
+      && Number(mechanismMatch.strongQueryCoverage || 0) >= 0.5
+      && (
+        mechanismMatch.matchedStrongFeatures.length >= 2
+        || mechanismMatch.matchedContextFeatures.length >= 1
+      );
+    return qualifies ? { profile, mechanismMatch } : null;
+  }).filter(Boolean)
+    .sort((left, right) => (
+      Number(right.mechanismMatch.strongQueryCoverage || 0)
+        - Number(left.mechanismMatch.strongQueryCoverage || 0)
+      || right.mechanismMatch.matchedStrongFeatures.length
+        - left.mechanismMatch.matchedStrongFeatures.length
+      || right.mechanismMatch.matchedContextFeatures.length
+        - left.mechanismMatch.matchedContextFeatures.length
+      || stableRecordKey(left.profile.record).localeCompare(stableRecordKey(right.profile.record))
+    ))
+    .slice(0, Math.max(1, Math.min(2, Math.floor(Number(limit) || 2))))
+    .map(({ profile, mechanismMatch }) => ({
+      record: profile.record,
+      score: normalizeEvidenceRelevanceScore(
+        0.35
+          + Number(mechanismMatch.strongQueryCoverage || 0) * 0.35
+          + Math.min(2, mechanismMatch.matchedStrongFeatures.length) * 0.1
+          + Math.min(2, mechanismMatch.matchedContextFeatures.length) * 0.05,
+      ),
+      multilingualMechanismFallback: true,
+      questionTextMetrics: {
+        matchedStrongMechanismFeatures: mechanismMatch.matchedStrongFeatures,
+        strongMechanismQueryCoverage: Number(
+          Number(mechanismMatch.strongQueryCoverage || 0).toFixed(4),
+        ),
+      },
+    }));
 }
 
 function prepareOfficialQaQuestionTextProfiles(records = []) {
@@ -4764,6 +4848,7 @@ function reserveSupplementalQueryCoverage(items = [], limit = 1, {
 export function reserveRankedHeadAndSupplementalCoverage(items = [], limit = 1, {
   queryKeys = [],
   strictOnly = false,
+  preserveStrictMechanismRepresentative = false,
 } = {}) {
   const safeLimit = Math.max(1, Math.floor(Number(limit) || 1));
   const orderedItems = dedupeBy(
@@ -4772,22 +4857,49 @@ export function reserveRankedHeadAndSupplementalCoverage(items = [], limit = 1, 
   );
   if (orderedItems.length <= 1) return orderedItems;
 
-  // Cover every available strict query branch first. The independently ranked
-  // head fills a remaining slot, or is naturally retained when it already
-  // represents one of those branches. This avoids spending one of four bounded
-  // slots on an unmarked head while silently dropping the fourth strict branch.
   const head = orderedItems[0];
   if (safeLimit === 1) return [head];
+  // Inside the fixed four-slot cross-card budget, preserve the highest-ranked
+  // strict mechanism result that did not enter through question-branch search.
+  // Question-only candidates can otherwise occupy every slot before the two
+  // retrieval paths are merged. The remaining slots keep the existing bounded
+  // per-query coverage policy.
+  const strictMechanismRepresentative = preserveStrictMechanismRepresentative
+    && safeLimit === 4
+    && strictOnly
+    ? orderedItems.find((item) => {
+        const signals = (item?.record || item)?.retrievalSignals || {};
+        return signals.questionBranchSearch !== true
+          && (signals.strictSupplementalRuleQueryKeys || []).length > 0;
+      })
+    : null;
+  const representativeKey = strictMechanismRepresentative
+    ? stableRecordKey(strictMechanismRepresentative?.record || strictMechanismRepresentative)
+    : "";
+  const representedByStrictMechanism = new Set(
+    strictMechanismRepresentative
+      ? supplementalQueryKeysForItem(strictMechanismRepresentative, { strictOnly: true })
+      : [],
+  );
+  const remainingQueryKeys = (queryKeys || []).filter(
+    (queryKey) => !representedByStrictMechanism.has(queryKey),
+  );
+  const coverageItems = representativeKey
+    ? orderedItems.filter((item) => (
+        stableRecordKey(item?.record || item) !== representativeKey
+      ))
+    : orderedItems;
   const queryReserved = reserveSupplementalQueryCoverage(
-    orderedItems,
-    safeLimit,
+    coverageItems,
+    safeLimit - Number(Boolean(strictMechanismRepresentative)),
     {
-      queryKeys,
+      queryKeys: remainingQueryKeys,
       strictOnly,
       fillRemaining: false,
     },
   );
   return dedupeBy([
+    ...(strictMechanismRepresentative ? [strictMechanismRepresentative] : []),
     ...queryReserved,
     head,
     ...orderedItems,
@@ -4832,6 +4944,7 @@ function allocateOfficialRelatedEvidence({
     return reserveRankedHeadAndSupplementalCoverage(crossCard, crossCardOnlyLimit, {
       queryKeys: supplementalRuleQueryKeys,
       strictOnly: true,
+      preserveStrictMechanismRepresentative: crossCardOnlyLimit === 4,
     }).slice(0, crossCardOnlyLimit);
   }
   if (!crossCard.length) {
@@ -4871,10 +4984,11 @@ function allocateOfficialRelatedEvidence({
   const uncoveredQueryKeys = supplementalRuleQueryKeys.filter(
     (key) => !representedQueryKeys.has(key),
   );
-  const prioritizedCrossCard = uncoveredQueryKeys.length
+  const prioritizedCrossCard = uncoveredQueryKeys.length || maxCrossCard === 4
     ? reserveRankedHeadAndSupplementalCoverage(crossCard, maxCrossCard, {
       queryKeys: uncoveredQueryKeys,
       strictOnly: true,
+      preserveStrictMechanismRepresentative: maxCrossCard === 4,
     })
     : crossCard;
   return dedupeEvidence([

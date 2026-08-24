@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 
-import { loadRagData, retrieveRagEvidence } from "../backend/ragEvidenceRetriever.mjs";
+import {
+  loadRagData,
+  reserveRankedHeadAndSupplementalCoverage,
+  retrieveRagEvidence,
+} from "../backend/ragEvidenceRetriever.mjs";
 import { buildRagRulingPromptBundle } from "../backend/ragRulingPrompt.mjs";
 import {
   normalizeRuleSearchQueryText,
@@ -153,6 +157,7 @@ test("Relay Japanese question branch retrieves a cross-card official QA as relat
   assert.ok(retrieved);
   assert.equal(retrieved.isDirect, false);
   assert.equal(retrieved.retrievalContext?.relatedOnly, true);
+  assert.notEqual(retrieved.retrievalSignals?.questionBranchMultilingualMechanismFallback, true);
   assert.ok(evidence.debug.candidateStages.ruleQueryQuestionBranchCandidateIds.includes(target.id));
 });
 
@@ -289,6 +294,153 @@ test("answer text and questionless card FAQ cannot create a cross-card question 
   assert.ok(!ids.includes(answerOnly.id));
   assert.ok(!ids.includes(questionlessFaq.id));
   assert.ok(!ids.includes(questionfulFaqAnswerDecoy.id));
+});
+
+test("supplemental mechanism retrieval keeps same-identity official QA scoped and related-only", async () => {
+  const anchor = card("990001", "匿名同卡锚点");
+  const scoped = qa(
+    "qa-anonymous-scoped-supplemental",
+    `「<<${anchor.id}>>」がフィールドに存在する場合、そのカードを持ち主の手札に戻すことができますか？`,
+    anchor.id,
+  );
+  const evidence = await retrieveRagEvidence({
+    userQuery: "「匿名同卡锚点」的相关处理是什么？",
+    cardResolution: {
+      resolvedCards: [anchor],
+      unresolvedMentions: [],
+      ambiguousMentions: [],
+      userProvidedCardTexts: [],
+    },
+    cards: [anchor],
+    records: [],
+    qaRecords: [scoped],
+    ruleSearchQueries: [{
+      subclaim: "确认场上的卡能否返回持有者手牌",
+      query: "场上的卡可以返回持有者手牌吗",
+      source: "model_rule_query_extractor",
+    }],
+    enableLiveOfficialQa: false,
+    env: { RAG_LIVE_OFFICIAL_QA: "false", RAG_MAX_RELATED_EVIDENCE: "4" },
+  });
+
+  const related = evidence.officialQaRelated.find((item) => item.id === scoped.id);
+  assert.ok(related);
+  assert.equal(related.isDirect, false);
+  assert.equal(related.retrievalContext?.relatedOnly, true);
+  assert.notEqual(related.retrievalContext?.scope, "cross_card_official_mechanism");
+  assert.ok((related.retrievalSignals?.strictSupplementalRuleQueryKeys || []).length > 0);
+  assert.ok(evidence.debug.candidateStages.scopedOfficialRelatedCandidateIds.includes(scoped.id));
+  assert.ok(!evidence.debug.candidateStages.allocatedCrossCardIds.includes(scoped.id));
+  assert.ok(!evidence.officialQaDirectCandidates.some((item) => item.id === scoped.id));
+});
+
+test("a Chinese-only Planner branch keeps its bounded fallback beside an unrelated Japanese branch", async () => {
+  const anchor = card("card-990101", "匿名跨语言锚点");
+  const targetQuestion = "フィールドのカードを持ち主の手札に戻すことができますか？";
+  const target = qa(
+    "qa-anonymous-multilingual-target",
+    targetQuestion,
+    "card-990102",
+  );
+  const answerOnly = qa(
+    "qa-anonymous-answer-only-decoy",
+    "墓地のカードを除外できますか？",
+    "card-990103",
+    { answer: targetQuestion, text: `墓地のカードを除外できますか？\n${targetQuestion}` },
+  );
+  const genericOneFeature = qa(
+    "qa-anonymous-generic-one-feature",
+    "相手がターンを進めている場合の確認事項です。",
+    "card-990107",
+  );
+  const decoys = [
+    qa("qa-anonymous-summon-decoy", "手札のモンスターを特殊召喚できますか？", "card-990104"),
+    qa("qa-anonymous-destroy-decoy", "フィールドのカードを破壊できますか？", "card-990105"),
+    qa("qa-anonymous-deck-decoy", "墓地のカードをデッキに戻せますか？", "card-990106"),
+  ];
+  const evidence = await retrieveRagEvidence({
+    userQuery: "「匿名跨语言锚点」的相关处理是什么？",
+    cardResolution: {
+      resolvedCards: [anchor],
+      unresolvedMentions: [],
+      ambiguousMentions: [],
+      userProvidedCardTexts: [],
+    },
+    cards: [anchor],
+    records: [],
+    qaRecords: [answerOnly, genericOneFeature, ...decoys, target],
+    ruleSearchQueries: [{
+      subclaim: "确认手牌怪兽的特殊召唤",
+      checkpoint: "operation_legality",
+      query: "手札のモンスターを特殊召喚できますか？",
+      source: "model_rule_query_extractor",
+    }, {
+      subclaim: "确认对方场上的卡能否返回持有者手牌",
+      checkpoint: "affected_entity",
+      query: "对方场上的卡可以返回持有者手牌吗",
+      source: "model_rule_query_extractor",
+    }],
+    enableLiveOfficialQa: false,
+    env: { RAG_LIVE_OFFICIAL_QA: "false", RAG_MAX_RELATED_EVIDENCE: "4" },
+  });
+
+  const related = evidence.officialQaRelated.find((item) => item.id === target.id);
+  assert.ok(evidence.debug.candidateStages.ruleQueryQuestionBranchCandidateIds.includes(target.id));
+  assert.ok(related);
+  assert.equal(related.isDirect, false);
+  assert.equal(related.retrievalContext?.relatedOnly, true);
+  assert.equal(related.retrievalContext?.scope, "cross_card_official_mechanism");
+  assert.equal(related.retrievalSignals?.questionBranchSearch, true);
+  assert.equal(related.retrievalSignals?.questionBranchMultilingualMechanismFallback, true);
+  assert.ok(!evidence.officialQaRelated.some((item) => item.id === answerOnly.id));
+  assert.ok(!evidence.debug.candidateStages.ruleQueryQuestionBranchCandidateIds.includes(
+    genericOneFeature.id,
+  ));
+  assert.ok(!evidence.officialQaRelated.some((item) => item.id === genericOneFeature.id));
+  assert.ok(!evidence.officialQaDirectCandidates.some((item) => item.id === target.id));
+  assert.ok(evidence.officialQaRelated.filter((item) => (
+    item.retrievalContext?.scope === "cross_card_official_mechanism"
+  )).length <= 4);
+});
+
+test("four-slot coverage preserves the highest pure strict mechanism representative", () => {
+  const questionBranch = (index) => ({
+    id: `qa-anonymous-question-branch-${index}`,
+    type: "related",
+    text: `anonymous question branch ${index}`,
+    retrievalSignals: {
+      questionBranchSearch: true,
+      strictSupplementalRuleQueryKeys: [`branch-${index}`],
+    },
+  });
+  const pureStrict = (id, queryKey) => ({
+    id,
+    type: "related",
+    text: `anonymous strict mechanism ${id}`,
+    retrievalSignals: { strictSupplementalRuleQueryKeys: [queryKey] },
+  });
+  const highestPureStrict = pureStrict("qa-anonymous-pure-strict-high", "strict-high");
+  const lowerPureStrict = pureStrict("qa-anonymous-pure-strict-low", "strict-low");
+  const selected = reserveRankedHeadAndSupplementalCoverage([
+    questionBranch(1),
+    highestPureStrict,
+    questionBranch(2),
+    questionBranch(3),
+    questionBranch(4),
+    lowerPureStrict,
+  ], 4, {
+    queryKeys: ["branch-1", "branch-2", "branch-3", "branch-4"],
+    strictOnly: true,
+    preserveStrictMechanismRepresentative: true,
+  }).slice(0, 4);
+
+  assert.equal(selected.length, 4);
+  assert.ok(selected.some((item) => item.id === highestPureStrict.id));
+  assert.ok(!selected.some((item) => item.id === lowerPureStrict.id));
+  assert.equal(selected.filter((item) => (
+    item.retrievalSignals?.questionBranchSearch !== true
+      && (item.retrievalSignals?.strictSupplementalRuleQueryKeys || []).length > 0
+  )).length, 1);
 });
 
 test("current retrieval-only regressions keep canonical card text and decisive official questions visible", async () => {
