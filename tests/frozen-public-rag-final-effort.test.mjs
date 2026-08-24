@@ -220,6 +220,9 @@ test("frozen record stores only allowlisted retrieval candidate stage ID arrays"
           initialCrossCardQuestionIds: ["qa-initial", " qa-initial ", "问题正文"],
           rulePlannerCandidateIds: ["qa.rule:planner", "private query text", 100],
           ruleQueryQuestionBranchCandidateIds: ["qa@branch#1", { id: "qa-object" }],
+          scopedOfficialMatchIds: ["qa-scoped-match-1", "scoped match private body"],
+          scopedSupplementalOfficialIds: ["qa-scoped-plan-1", "scoped query private body"],
+          scopedOfficialRelatedCandidateIds: ["qa-scoped-2", "scoped private body"],
           crossCardRankedPoolIds: ["qa-ranked_2", "https://private.example/question"],
           crossCardEvidenceCandidateIds: ["qa-evidence-3", "", null],
           allocatedOfficialRelatedIds: ["qa-official-4", "模型答案"],
@@ -239,6 +242,9 @@ test("frozen record stores only allowlisted retrieval candidate stage ID arrays"
     "initialCrossCardQuestionIds",
     "rulePlannerCandidateIds",
     "ruleQueryQuestionBranchCandidateIds",
+    "scopedOfficialMatchIds",
+    "scopedSupplementalOfficialIds",
+    "scopedOfficialRelatedCandidateIds",
     "crossCardRankedPoolIds",
     "crossCardEvidenceCandidateIds",
     "allocatedOfficialRelatedIds",
@@ -249,6 +255,9 @@ test("frozen record stores only allowlisted retrieval candidate stage ID arrays"
     initialCrossCardQuestionIds: ["qa-initial"],
     rulePlannerCandidateIds: ["qa.rule:planner"],
     ruleQueryQuestionBranchCandidateIds: ["qa@branch#1"],
+    scopedOfficialMatchIds: ["qa-scoped-match-1"],
+    scopedSupplementalOfficialIds: ["qa-scoped-plan-1"],
+    scopedOfficialRelatedCandidateIds: ["qa-scoped-2"],
     crossCardRankedPoolIds: ["qa-ranked_2"],
     crossCardEvidenceCandidateIds: ["qa-evidence-3"],
     allocatedOfficialRelatedIds: ["qa-official-4"],
@@ -885,6 +894,7 @@ test("targeted-eight workflow keeps private evidence requirements outside the re
     workflow,
     /--requirements "\$RUNNER_TEMP\/frozen-eight-requirements\.json"/u,
   );
+  assert.match(workflow, /RAG_RULE_MODEL_TIMEOUT_MS:\s*"180000"/u);
   assert.doesNotMatch(
     workflow,
     /--requirements\s+\.github\//u,
