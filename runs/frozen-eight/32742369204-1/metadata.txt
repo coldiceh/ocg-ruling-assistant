@@ -1,0 +1,13 @@
+schema_version=1
+archive_cipher=aes-256-cbc-pbkdf2-sha256-iter200000-saltlen8
+key_envelope=rsa-oaep-sha256-mgf1-sha256
+source_sha=ef02d9524b5daf6bc38fa49ff641f357d1290aff
+stage=freeze
+source_key=
+case_ids=case-004,case-007,case-018,case-019,case-023,case-027,case-028,case-032
+run_id=32742369204
+run_attempt=1
+replay_allowed=false
+runner_exit_code=1
+review_cipher_sha256=bc43bd443e01a2d7f226ad5892e7a3d486349424a138212e991091942c944342
+review_envelope_sha256=4b61c12a3bcadb0e4d98ac8b6ae44bb5bbfd9e3ed3325ca82e218b7bf6f9d229
