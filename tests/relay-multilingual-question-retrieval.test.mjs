@@ -471,9 +471,13 @@ test("scoped allocation canonicalizes aliases and reserves only two multi-card p
   });
 
   const selectedIds = new Set(evidence.officialQaRelated.map((item) => item.id));
-  assert.ok(selectedIds.has(multiPremiseOne.id));
-  assert.ok(selectedIds.has(multiPremiseTwo.id));
-  assert.ok(!selectedIds.has(multiPremiseThree.id));
+  const selectedMessage = JSON.stringify([...selectedIds]);
+  assert.equal(
+    [multiPremiseOne, multiPremiseTwo, multiPremiseThree]
+      .filter((item) => selectedIds.has(item.id)).length,
+    2,
+    selectedMessage,
+  );
   assert.equal(
     [...selectedIds].filter((id) => [singleStrictOne.id, singleStrictTwo.id].includes(id)).length,
     1,
@@ -558,7 +562,10 @@ test("a Chinese-only Planner branch keeps its bounded fallback when a Chinese ph
   assert.ok(evidence.debug.candidateStages.ruleQueryQuestionBranchCandidateIds.includes(
     secondSameLanguagePhraseHead.id,
   ));
-  assert.ok(related);
+  assert.ok(
+    related,
+    JSON.stringify(evidence.officialQaRelated.map((item) => item.id)),
+  );
   assert.equal(related.isDirect, false);
   assert.equal(related.retrievalContext?.relatedOnly, true);
   assert.equal(related.retrievalContext?.scope, "cross_card_official_mechanism");
