@@ -510,7 +510,13 @@ test("the public pipeline sends the complete question and raw evidence to exactl
   assert.equal(answer.debug.semanticStateTransitionDiagnostic, null);
   assert.match(finalPrompt, /另外，本回合还可以通常召唤吗/u);
   assert.match(finalPrompt, /对方发动手牌・墓地・除外状态的卡的效果时/u);
-  assert.match(finalPrompt, /card-text-(trap-1|responder-1)/u);
+  for (const card of cards) {
+    assert.ok(
+      finalPrompt.includes(JSON.stringify(card.effectText).slice(1, -1)),
+      `${card.id} complete effectText must remain in resolvedCards`,
+    );
+  }
+  assert.doesNotMatch(finalPrompt, /card-text-(?:trap-1|responder-1)/u);
   assert.match(finalPrompt, /"evidence"/u);
   assert.doesNotMatch(
     finalPrompt,
@@ -559,7 +565,13 @@ test("a scene formerly handled locally is still signed only by the final model",
   assert.equal(answer.shortAnswer, "不能直接连锁发动「覆盖区域监察者」的①效果。");
   assert.match(finalPrompt, /战斗阶段结束时从手牌发动「覆盖均衡陷阱」/u);
   assert.match(finalPrompt, /那个效果无效并破坏/u);
-  assert.match(finalPrompt, /card-text-(trap-coverage|responder-coverage)/u);
+  for (const card of cards) {
+    assert.ok(
+      finalPrompt.includes(JSON.stringify(card.effectText).slice(1, -1)),
+      `${card.id} complete effectText must remain in resolvedCards`,
+    );
+  }
+  assert.doesNotMatch(finalPrompt, /card-text-(?:trap-coverage|responder-coverage)/u);
   assert.match(finalPrompt, /"evidence"/u);
   assert.doesNotMatch(
     finalPrompt,

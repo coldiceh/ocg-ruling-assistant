@@ -272,7 +272,7 @@ test("fuzzy neighbours do not veto a stronger exact contextual short-name resolu
   assert.equal(resolution.unresolvedMentions.some((mention) => mention.input === shortName), false);
 });
 
-test("an external exact expansion maps back to the local identity and unlocks its FAQ", async () => {
+test("a model expansion cannot unlock a local identity and FAQ from CID alone", async () => {
   const userSurface = "匿名外查简称";
   const canonicalName = "匿名规范外查龙";
   const localCard = {
@@ -331,9 +331,13 @@ test("an external exact expansion maps back to the local identity and unlocks it
     },
   });
 
-  assert.ok(evidence.retrievedCards.some((card) => card.id === localCard.id));
-  assert.ok(evidence.faqRelated.some((item) => item.id === "card-faq-anonymous-external-1"));
-  assert.equal(evidence.cardResolution.unresolvedMentions.some((mention) => mention.input === userSurface), false);
+  assert.deepEqual(evidence.retrievedCards, []);
+  assert.equal(evidence.cardTexts.length, 0);
+  assert.equal(evidence.faqRelated.some((item) => item.id === "card-faq-anonymous-external-1"), false);
+  assert.ok(evidence.cardResolution.unresolvedMentions.some((mention) => mention.input === userSurface));
+  assert.ok(evidence.retrievalWarnings.some((warning) => (
+    warning.startsWith("baige_model_expansion_stable_identity_unverified:")
+  )));
 });
 
 test("an unknown longer seed cannot suppress a nested exact known card name", () => {

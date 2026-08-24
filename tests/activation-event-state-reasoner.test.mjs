@@ -198,6 +198,9 @@ test("a matching official QA reaches the final model without heuristic direct pr
   assert.match(finalPrompt, /ygoresources-qa-24365/u);
   assert.match(finalPrompt, /相手が魔法・罠カードを手札からフィールドに置いて発動した状況/u);
   assert.doesNotMatch(finalPrompt, /唯一の? officialQaDirectCandidate|唯一的 officialQaDirectCandidate/u);
-  assert.match(finalPrompt, /"type":\s*"related"/u);
+  assert.match(finalPrompt, /"recordType":"qa"/u);
+  assert.match(finalPrompt, /"sourceAuthority":"official_database"/u);
+  assert.match(finalPrompt, /"relatedOnly":true/u);
+  assert.doesNotMatch(finalPrompt, /"(?:isDirect|matchLevel)"/u);
   assert.equal(answer.riskFlags.includes("official_direct_corroborates_trusted_semantic_execution"), false);
 });

@@ -1086,8 +1086,9 @@ test("rag_pipeline_includes_card_text_when_card_resolved", async () => {
     env: {},
   });
   assert.equal(answer.resolvedCards[0].name, "测试龙");
-  assert.ok(answer.usedEvidence.some((item) => item.id === "card-text-100"));
-  assert.ok(answer.usedEvidence.some((item) => item.sourceUrl === "https://example.test/card/100"));
+  assert.equal(answer.resolvedCards[0].effectText, cards[0].effectText);
+  assert.equal(answer.resolvedCards[0].sourceUrl, "https://example.test/card/100");
+  assert.equal(answer.usedEvidence.some((item) => item.id === "card-text-100"), false);
   assert.equal(answer.debug.retrievalCounts.cardTexts > 0, true);
   assert.equal(typeof answer.debug.promptChars, "number");
 });
@@ -2046,9 +2047,13 @@ test("rag_pipeline_uses_model_card_name_candidates_before_retrieval", async () =
     modelInvoker: async () => JSON.stringify(modelJson("根据测试龙文本可以分析。")),
   });
   assert.ok(answer.resolvedCards.some((card) => card.name === "测试龙"));
+  assert.ok(answer.resolvedCards.some((card) => (
+    card.name === "测试龙" && card.effectText === cards[0].effectText
+  )));
   assert.ok(answer.debug.modelCardNameCandidates.some((item) => item.name === "测试龙"));
   assert.equal(answer.debug.cardNameModelUsed, "mock-card-extractor");
-  assert.ok(answer.usedEvidence.some((item) => item.id === "card-text-100"));
+  assert.equal(answer.debug.retrievalCounts.cardTexts > 0, true);
+  assert.equal(answer.usedEvidence.some((item) => item.id === "card-text-100"), false);
 });
 
 test("rag_pipeline_uses_model_rule_queries_for_related_rules", async () => {
@@ -2595,7 +2600,10 @@ test("card text does not replace the final model's displayed plain text", async 
   assert.equal(answer.answerLevel, "rule_analysis");
   assert.match(answer.shortAnswer, /资料不足/u);
   assert.ok(!answer.riskFlags.includes("needs_more_info_upgraded_to_rule_analysis_with_card_text"));
-  assert.ok(answer.usedEvidence.some((item) => item.type === "card_text"));
+  assert.ok(answer.resolvedCards.some((card) => (
+    card.id === cards[0].id && card.effectText === cards[0].effectText
+  )));
+  assert.equal(answer.usedEvidence.some((item) => item.type === "card_text"), false);
 });
 
 test("rag_preserves_card_dossier_data", async () => {
@@ -5634,7 +5642,7 @@ test("public retrieval keeps a retrievable cross-card official candidate related
   assert.ok(evidence.debug.officialMechanismAnalogueCount <= 2);
 });
 
-test("empty rule planning does not fall back to cross-card official retrieval", async () => {
+test("empty rule planning keeps deterministic cross-card official retrieval related-only", async () => {
   const focusCard = {
     id: "return-hand-focus-card",
     name: "匿名回收卡",
@@ -5668,10 +5676,13 @@ test("empty rule planning does not fall back to cross-card official retrieval", 
     env: { RAG_LIVE_OFFICIAL_QA: "false" },
   });
 
-  assert.equal(evidence.officialQaRelated.some((item) => item.id === officialAnalogue.id), false);
+  const related = evidence.officialQaRelated.find((item) => item.id === officialAnalogue.id);
+  assert.ok(related);
+  assert.equal(related.isDirect, false);
+  assert.equal(related.retrievalContext.relatedOnly, true);
 });
 
-test("deterministic card-text branches remain local and do not authorize cross-card QA", async () => {
+test("deterministic card-text branches recover cross-card QA without direct authority", async () => {
   const focusCard = {
     id: "multi-branch-focus-card",
     name: "匿名双分支卡",
@@ -5712,15 +5723,18 @@ test("deterministic card-text branches remain local and do not authorize cross-c
   });
 
   const relatedIds = new Set(evidence.officialQaRelated.map((item) => item.id));
-  assert.equal(relatedIds.has(returnHandQa.id), false);
-  assert.equal(relatedIds.has(specialSummonQa.id), false);
+  assert.equal(relatedIds.has(returnHandQa.id), true);
+  assert.equal(relatedIds.has(specialSummonQa.id), true);
+  assert.ok(evidence.officialQaRelated.every((item) => (
+    item.isDirect === false && item.retrievalContext.relatedOnly === true
+  )));
   assert.ok(evidence.ruleSearchQueries.some(({ query }) => /特殊召唤/u.test(query)));
   assert.ok(Array.isArray(evidence.debug.candidateStages.initialCrossCardQuestionIds));
   assert.ok(Array.isArray(evidence.debug.candidateStages.allocatedCrossCardIds));
   assert.doesNotMatch(JSON.stringify(evidence.debug.candidateStages), /按照发动中|确认特殊召唤/u);
 });
 
-test("card-text query selection keeps late bullet branches local while bounding reference-card query noise", async () => {
+test("card-text query selection recovers late bullet QA while bounding reference-card query noise", async () => {
   const focusCard = {
     id: "late-branch-focus-card",
     name: "匿名多段卡",
@@ -5774,7 +5788,10 @@ test("card-text query selection keeps late bullet branches local while bounding 
   );
   assert.ok(referenceQueries.some(({ query }) => /墓地.*除外.*抽/u.test(query)));
   assert.ok(referenceQueries.length <= 4);
-  assert.equal(evidence.officialQaRelated.some((item) => item.id === decisiveQa.id), false);
+  const related = evidence.officialQaRelated.find((item) => item.id === decisiveQa.id);
+  assert.ok(related);
+  assert.equal(related.isDirect, false);
+  assert.equal(related.retrievalContext.relatedOnly, true);
 });
 
 test("a saturated deterministic plan still retains all four model subclaims", async () => {
@@ -6223,11 +6240,10 @@ test("general prompt keeps score-ranked references within one budget and omits r
     },
   });
 
-  assert.equal(bundle.allowedEvidenceIds.length, 6);
-  assert.ok(bundle.allowedEvidenceIds.includes("card-text-100"));
+  assert.equal(bundle.allowedEvidenceIds.length, 5);
+  assert.equal(bundle.allowedEvidenceIds.includes("card-text-100"), false);
   assert.equal(bundle.prompt.split(cards[0].effectText).length - 1, 1);
   assert.deepEqual(new Set(bundle.allowedEvidenceIds), new Set([
-    "card-text-100",
     "cross-budget-1",
     "rule-budget-1",
     "faq-budget-1",
@@ -6602,13 +6618,17 @@ test("prompt bundle exposes evidence selection metadata without duplicating evid
     id: "card-text-diagnostic",
     type: "card_text",
     bucket: "cardTexts",
+    title: "DIAGNOSTIC_TITLE_MUST_NOT_BE_COPIED",
+    official: true,
+    source: "",
+    sourceTier: "S1_CARD_TEXT",
     sourceAuthority: "official_database",
+    sourceUrl: "",
     isDirect: false,
     matchLevel: "",
     retrievalScope: "resolved_card",
-    relatedOnly: false,
   }]);
-  assert.doesNotMatch(JSON.stringify(bundle.evidenceSelectionDiagnostics), /DIAGNOSTIC_(?:TITLE|BODY)_MUST_NOT_BE_COPIED/u);
+  assert.doesNotMatch(JSON.stringify(bundle.evidenceSelectionDiagnostics), /DIAGNOSTIC_BODY_MUST_NOT_BE_COPIED/u);
   assert.doesNotMatch(JSON.stringify(bundle.evidenceSelectionDiagnostics), /匿名问题只用于构造提示/u);
   assert.deepEqual(bundle.ruleQueryPlanDiagnostics, [{
     subclaim: "确认处理时实际受影响的实体",
@@ -6951,9 +6971,13 @@ test("semantic or card-set subsumption remains related evidence instead of an of
   assert.deepEqual(acceptedPayload.evidence.officialQaDirectCandidates, []);
   assert.equal(acceptedPayload.evidence.officialQaRelated.length, 1);
   assert.equal(acceptedPayload.evidence.officialQaRelated[0].id, candidate.id);
-  assert.equal(acceptedPayload.evidence.officialQaRelated[0].type, "related");
-  assert.equal(acceptedPayload.evidence.officialQaRelated[0].isDirect, false);
-  assert.equal(acceptedPayload.evidence.officialQaRelated[0].matchLevel, "official_qa_near");
+  assert.equal(acceptedPayload.evidence.officialQaRelated[0].recordType, "qa");
+  assert.equal(acceptedPayload.evidence.officialQaRelated[0].sourceAuthority, "official_database");
+  assert.equal(acceptedPayload.evidence.officialQaRelated[0].retrievalContext.relatedOnly, true);
+  const acceptedDiagnostics = accepted.evidenceSelectionDiagnostics.find((item) => item.id === candidate.id);
+  assert.equal(acceptedDiagnostics.type, "related");
+  assert.equal(acceptedDiagnostics.isDirect, false);
+  assert.equal(acceptedDiagnostics.matchLevel, "official_qa_near");
   assert.ok(acceptedPayload.allowedEvidenceIds.includes(candidate.id));
 
   const rejected = buildRagRulingPromptBundle({
@@ -7460,8 +7484,10 @@ test("final reasoner follows cited multi-card operation order", async () => {
   assert.match(answer.shortAnswer, /不能再特殊召唤/u);
   assert.ok(answer.reasoning.some((item) => /回牌组/u.test(item)));
   assert.ok(!answer.riskFlags.includes("answer_constrained_by_exact_scenario_evidence"));
-  assert.ok(answer.usedEvidence.some((item) => item.id === "card-text-21419"));
-  assert.ok(answer.usedEvidence.some((item) => item.id === "card-text-17762"));
+  assert.ok(answer.resolvedCards.some((card) => card.id === "21419" && card.effectText === mediusText));
+  assert.ok(answer.resolvedCards.some((card) => card.id === "17762" && card.effectText === bystialText));
+  assert.equal(answer.usedEvidence.some((item) => item.id === "card-text-21419"), false);
+  assert.equal(answer.usedEvidence.some((item) => item.id === "card-text-17762"), false);
 });
 
 

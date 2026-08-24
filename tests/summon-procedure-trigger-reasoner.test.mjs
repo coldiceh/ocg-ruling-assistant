@@ -90,7 +90,13 @@ test("public prompts keep the raw question and card text without the state-trans
   for (const prompt of [bundle.prompt]) {
     assert.match(prompt, /是否可以将/u);
     assert.match(prompt, /深渊的相剑龙/u);
-    assert.match(prompt, /card-text-summoned/u);
+    for (const card of input.cardTexts) {
+      assert.ok(
+        prompt.includes(JSON.stringify(card.text).slice(1, -1)),
+        `${card.id} complete text must remain in resolvedCards`,
+      );
+    }
+    assert.doesNotMatch(prompt, /card-text-(?:source|summoned|hand)/u);
     assert.match(prompt, /仅可通过融合召唤及以下方法特殊召唤/u);
     assert.doesNotMatch(prompt, /semanticStateTransition/u);
     assert.doesNotMatch(prompt, /finalDestinationCauseKind/u);

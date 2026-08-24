@@ -88,7 +88,13 @@ test("a complete scene reaches exactly one final model with only the question an
   assert.equal(answer.usedEvidence.some((item) => item.type === "semantic_state_transition"), false);
   assert.match(finalPrompt, /我方额外卡组有「测试冰剑融合龙」/u);
   assert.match(finalPrompt, /不可将自己场上其他怪兽作为融合素材/u);
-  assert.match(finalPrompt, /card-text-architecture-(source|protected)/u);
+  for (const card of completeScenarioCards) {
+    assert.ok(
+      finalPrompt.includes(JSON.stringify(card.effectText).slice(1, -1)),
+      `${card.id} complete effectText must remain in resolvedCards`,
+    );
+  }
+  assert.doesNotMatch(finalPrompt, /card-text-architecture-(source|protected)/u);
   assert.match(finalPrompt, /"evidence"/u);
   assert.doesNotMatch(
     finalPrompt,

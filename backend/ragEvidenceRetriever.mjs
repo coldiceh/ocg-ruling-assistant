@@ -3914,6 +3914,7 @@ async function resolveUnresolvedMentionCardsWithBaige(unresolvedMentions, {
       const selection = selectUniqueBaigeCandidate(candidates, minConfidence, {
         canonicalCards,
         surface: mention.input,
+        query,
       });
       const best = selection.card;
       const confidence = Number(best?.confidence || 0);
@@ -4057,6 +4058,7 @@ async function enrichCardsWithBaige(cards, {
     const selection = selectUniqueBaigeCandidate(searchResult.results || [], 0.72, {
       canonicalCards,
       surface: card.input || nameQuery,
+      query: nameQuery,
     });
     let best = selection.card;
     let matchedQuery = nameQuery;
@@ -4287,6 +4289,7 @@ function boundedIdentityEditDistance(left, right, limit) {
 function selectUniqueBaigeCandidate(candidates, minConfidence, {
   canonicalCards = [],
   surface = "",
+  query = "",
 } = {}) {
   const eligible = (candidates || [])
     .filter((candidate) => Number(candidate?.confidence || 0) >= minConfidence);
@@ -4316,6 +4319,8 @@ function selectUniqueBaigeCandidate(candidates, minConfidence, {
     }
   }
   const surfaceKey = normalizeCardKey(surface);
+  const rawSurfaceQuery = Boolean(surfaceKey)
+    && normalizeCardKey(query) === surfaceKey;
   const primaryExactGroups = surfaceKey
     ? identityGroups.filter((group) => group.candidates.some((candidate) => (
         (candidate.providerPrimaryNames || []).some((primaryName) => (
@@ -4325,6 +4330,11 @@ function selectUniqueBaigeCandidate(candidates, minConfidence, {
     : [];
   const compatibleGroups = primaryExactGroups.length
     ? primaryExactGroups
+    : rawSurfaceQuery
+      // The provider scored the user's original surface itself. Admit that
+      // result only through identity convergence: one canonical group passes,
+      // while two eligible groups remain ambiguous regardless of score order.
+      ? identityGroups
     : surface
       ? identityGroups.filter((group) => group.candidates.some((candidate) => (
           providerPrimaryNameMechanicallyMatchesSurface(candidate, surface)
@@ -5129,12 +5139,24 @@ function reserveUncoveredCrossCardBranches(items = [], limit = 1, {
         fillRemaining: false,
       }).slice(0, safeLimit)
     : [];
-  const strictKeys = new Set(strict.map(stableRecordKey));
-  // After uncovered strict branches, keep at most one ordinary ranked analogue.
-  const analogue = strict.length < safeLimit
-    ? ordered.find((item) => !strictKeys.has(stableRecordKey(item)))
+  const selected = [...strict];
+  const selectedKeys = new Set(selected.map(stableRecordKey));
+  // A question-only model assessment is not authority and cannot delete any
+  // candidate, but a same/partial-premise assessment is useful bounded ranking
+  // evidence. Preserve every such candidate that fits after strict branches so
+  // one ordinary head cannot hide a second independently relevant premise.
+  for (const item of ordered) {
+    if (selected.length >= safeLimit) break;
+    const key = stableRecordKey(item);
+    if (selectedKeys.has(key) || !hasEligibleModelCandidateAssessment(item)) continue;
+    selected.push(item);
+    selectedKeys.add(key);
+  }
+  // Fill only one remaining slot with an unassessed ordinary analogue.
+  const analogue = selected.length < safeLimit
+    ? ordered.find((item) => !selectedKeys.has(stableRecordKey(item)))
     : null;
-  return analogue ? [...strict, analogue] : strict;
+  return analogue ? [...selected, analogue] : selected;
 }
 
 function allocateOfficialRelatedEvidence({

@@ -129,7 +129,13 @@ test("public prompts expose the original printed texts without injecting a print
   });
   assert.match(typed.prompt, /匿名接收者复制匿名来源后/u);
   assert.match(typed.prompt, /abstract-activation-card/u);
-  assert.match(typed.prompt, /card-text-abstract-activation-card/u);
+  for (const card of [receiver, source, activationCard]) {
+    assert.ok(
+      typed.prompt.includes(JSON.stringify(card.effectText).slice(1, -1)),
+      `${card.id} complete effectText must remain in resolvedCards`,
+    );
+  }
+  assert.doesNotMatch(typed.prompt, /card-text-abstract-(?:receiver|source|activation-card)/u);
   assert.match(typed.prompt, /有「匿名基准卡」卡名记述的怪兽存在的场合才能发动/u);
   assert.doesNotMatch(typed.prompt, /只检查候选卡自身原始规范 effectText/u);
   assert.doesNotMatch(typed.prompt, /operation_subject_card_text/u);
