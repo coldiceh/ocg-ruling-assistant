@@ -4761,7 +4761,7 @@ function reserveSupplementalQueryCoverage(items = [], limit = 1, {
   return [...selected, ...remaining];
 }
 
-function reserveRankedHeadAndSupplementalCoverage(items = [], limit = 1, {
+export function reserveRankedHeadAndSupplementalCoverage(items = [], limit = 1, {
   queryKeys = [],
   strictOnly = false,
 } = {}) {
@@ -4772,9 +4772,10 @@ function reserveRankedHeadAndSupplementalCoverage(items = [], limit = 1, {
   );
   if (orderedItems.length <= 1) return orderedItems;
 
-  // Always preserve the independently ranked head, then cover strict query
-  // branches. Model assessments have already been applied only as a final
-  // tie-breaker in the evidence-derived order above.
+  // Cover every available strict query branch first. The independently ranked
+  // head fills a remaining slot, or is naturally retained when it already
+  // represents one of those branches. This avoids spending one of four bounded
+  // slots on an unmarked head while silently dropping the fourth strict branch.
   const head = orderedItems[0];
   if (safeLimit === 1) return [head];
   const queryReserved = reserveSupplementalQueryCoverage(
@@ -4786,17 +4787,9 @@ function reserveRankedHeadAndSupplementalCoverage(items = [], limit = 1, {
       fillRemaining: false,
     },
   );
-  const selected = [head];
-  const selectedKeys = new Set([stableRecordKey(head?.record || head)]);
-  for (const candidate of queryReserved) {
-    if (selected.length >= safeLimit) break;
-    const key = stableRecordKey(candidate?.record || candidate);
-    if (!key || selectedKeys.has(key)) continue;
-    selected.push(candidate);
-    selectedKeys.add(key);
-  }
   return dedupeBy([
-    ...selected,
+    ...queryReserved,
+    head,
     ...orderedItems,
   ], (item) => stableRecordKey(item?.record || item));
 }
@@ -4850,8 +4843,8 @@ function allocateOfficialRelatedEvidence({
 
   // A mechanism ruling is often documented on another card, but analogies must
   // not crowd the same-card sources out of the bounded prompt. Keep at most four
-  // cross-card candidates so independent mechanism branches can survive; this
-  // is allocation only, never an authority upgrade or applicability decision.
+  // cross-card candidates; the coverage-first selector above spends those slots
+  // on distinct strict branches before an unmarked ranked head.
   const crossCardReserve = Math.min(4, Math.max(0, safeLimit - 1));
   const maxCrossCard = scoped.length < safeLimit
     ? Math.min(crossCard.length, safeLimit - scoped.length, crossCardReserve)

@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { buildAliasIndex, extractQuotedMentions, extractRagCards, extractUnquotedCardMentionCandidates, extractUserProvidedCardTextBlocks, normalizeCardKey } from "../backend/ragCardExtractor.mjs";
 import { createLocalCardDataProvider } from "../backend/cardDataProvider.mjs";
-import { loadRagData, retrieveRagEvidence } from "../backend/ragEvidenceRetriever.mjs";
+import {
+  loadRagData,
+  reserveRankedHeadAndSupplementalCoverage,
+  retrieveRagEvidence,
+} from "../backend/ragEvidenceRetriever.mjs";
 import {
   buildRagRulingPromptBundle,
   extractPromptAllowedEvidenceIds,
@@ -5960,6 +5964,50 @@ test("question-only planning exposes up to four bounded cross-card candidates", 
   assert.equal(candidatesSeen.every((item) => item.question.length <= 280), true);
 });
 
+test("bounded cross-card allocation covers strict branches before an unmarked ranked head", () => {
+  const branch = (id, queryKeys = []) => ({
+    id,
+    type: "related",
+    text: `official branch ${id}`,
+    retrievalSignals: {
+      strictSupplementalRuleQueryKeys: queryKeys,
+    },
+  });
+  const queryKeys = ["branch-1", "branch-2", "branch-3", "branch-4"];
+  const head = branch("ranked-head");
+  const candidates = [
+    head,
+    ...queryKeys.map((queryKey, index) => branch(`query-${index + 1}`, [queryKey])),
+  ];
+  const select = (items, keys = queryKeys) => reserveRankedHeadAndSupplementalCoverage(
+    items,
+    4,
+    { queryKeys: keys, strictOnly: true },
+  ).slice(0, 4);
+
+  assert.deepEqual(
+    select(candidates).map((item) => item.id),
+    ["query-1", "query-2", "query-3", "query-4"],
+  );
+  assert.deepEqual(
+    select(candidates.slice(0, 4), queryKeys.slice(0, 3)).map((item) => item.id),
+    ["query-1", "query-2", "query-3", head.id],
+  );
+
+  const headCoveringFirstBranch = branch("ranked-head-covering-first", [queryKeys[0]]);
+  const selectedWithCoveringHead = select([
+    headCoveringFirstBranch,
+    ...queryKeys.slice(1).map((queryKey, index) => branch(`cover-query-${index + 2}`, [queryKey])),
+  ]);
+  assert.equal(new Set(selectedWithCoveringHead.map((item) => item.id)).size, 4);
+  assert.deepEqual(
+    new Set(selectedWithCoveringHead.flatMap((item) => (
+      item.retrievalSignals.strictSupplementalRuleQueryKeys
+    ))),
+    new Set(queryKeys),
+  );
+});
+
 test("cross-card allocation balances a model-assessed premise with strict supplemental-query coverage", async () => {
   const focusCard = {
     id: "assessed-focus-card",
@@ -6102,7 +6150,7 @@ test("rag_prompt_truncates_context", () => {
   assert.deepEqual(bundle.evidenceSelectionDiagnostics.map((item) => item.id), ["card-text-long"]);
 });
 
-test("general prompt applies one score-ranked reference budget and omits resolved-card text duplicates", () => {
+test("general prompt keeps score-ranked references within one budget and omits resolved-card text duplicates", () => {
   const makeEvidence = (prefix, count, extras = {}) => Array.from({ length: count }, (_, index) => ({
     id: `${prefix}-${index + 1}`,
     type: prefix,

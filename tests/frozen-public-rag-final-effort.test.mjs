@@ -484,6 +484,160 @@ test("freeze preserves a failed evidence-audit base record, continues, and forbi
   assert.equal(finalCalls, 0);
 });
 
+test("freeze records one redacted evidence-preparation failure, continues, and keeps final calls at zero", async () => {
+  const temp = await mkdtemp(path.join(os.tmpdir(), "frozen-public-rag-preparation-failure-"));
+  const datasetPath = path.join(temp, "private-test.txt");
+  const snapshotPath = path.join(temp, "snapshot.json");
+  const cases = [
+    { id: "case-001", question: "第一个匿名测试问题" },
+    { id: "case-002", question: "第二个私密超时问题" },
+    { id: "case-003", question: "第三个匿名测试问题" },
+  ];
+  await writeFile(datasetPath, cases.map((item, index) => (
+    `${item.question}\n私有参考答案${index + 1}`
+  )).join("\n\n"), "utf8");
+  const fixtures = new Map(cases.map((item) => [
+    item.question,
+    evidenceFixture(item.question, item.id),
+  ]));
+  const evidenceRequirements = {
+    schemaVersion: 1,
+    cases: Object.fromEntries(cases.map((item) => [
+      item.id,
+      fixtures.get(item.question).evidenceRequirements.cases[item.id],
+    ])),
+  };
+  const prepared = [];
+  let capturePathsReached = 0;
+
+  await assert.rejects(() => freezePublicRagFinalInputs({
+    datasetPath,
+    snapshotPath,
+    caseIds: cases.map((item) => item.id),
+    maxCalls: cases.length,
+    evidenceRequirements,
+    env: TEST_ENV,
+    loadEvidenceData: async () => fixtures.get(cases[0].question).data,
+    answerPublic: async ({ payload, answerRuling }) => ({
+      answer: await answerRuling({ question: payload.question }),
+    }),
+    answerRuling: async ({ question, modelInvoker }) => {
+      prepared.push(question);
+      if (question === cases[1].question) {
+        const error = new Error(`private timeout details: ${question}`);
+        error.code = "rule_query_model_timeout";
+        throw error;
+      }
+      const fixture = fixtures.get(question);
+      capturePathsReached += 1;
+      await modelInvoker({
+        prompt: fixture.prompt,
+        provider: "relay",
+        modelName: "gpt-5.6-sol",
+        maxTokens: 32000,
+        reasoningEffort: "low",
+      });
+      return {
+        resolvedCards: [{ id: fixture.card.id }],
+        usedEvidence: [{ id: fixture.qa.id }],
+        debug: {
+          route: "ordinary_rag",
+          dataRevision: "test-data-revision",
+          evidenceFingerprint: sha256("test-evidence"),
+          finalPromptSha256: sha256(fixture.prompt),
+          promptTruncated: false,
+        },
+      };
+    },
+    log: () => {},
+  }), (error) => {
+    assert.equal(error.code, "FROZEN_EVIDENCE_PREPARATION_FAILED");
+    return true;
+  });
+
+  assert.deepEqual(prepared, cases.map((item) => item.question));
+  assert.equal(capturePathsReached, 2);
+  const snapshotText = await readFile(snapshotPath, "utf8");
+  assert.doesNotMatch(snapshotText, /第二个私密超时问题|private timeout details/u);
+  const snapshot = JSON.parse(snapshotText);
+  assert.equal(snapshot.status, "failed_evidence_preparation");
+  assert.equal(snapshot.finalModelCallCount, 0);
+  assert.deepEqual(snapshot.failedEvidencePreparationCaseIds, ["case-002"]);
+  assert.deepEqual(snapshot.cases.map((item) => item.id), cases.map((item) => item.id));
+  assert.deepEqual(snapshot.cases.map((item) => item.status), [
+    "complete",
+    "failed_evidence_preparation",
+    "complete",
+  ]);
+  const failed = snapshot.cases[1];
+  assert.equal(failed.evidencePreparation.error.code, "rule_query_model_timeout");
+  assert.equal(failed.evidencePreparation.error.message, "evidence preparation failed");
+  assert.match(failed.evidencePreparation.error.messageSha256, /^[a-f0-9]{64}$/u);
+  assert.equal(Object.hasOwn(failed, "question"), false);
+  assert.equal(Object.hasOwn(failed, "prompt"), false);
+  assert.equal(Object.hasOwn(snapshot, "bundleInvariantSha256"), false);
+
+  let finalCalls = 0;
+  await assert.rejects(() => runFrozenPublicRagFinalEffort({
+    snapshotPath,
+    outputPath: path.join(temp, "result.json"),
+    effort: "low",
+    caseIds: cases.map((item) => item.id),
+    maxCalls: cases.length,
+    env: TEST_ENV,
+    callModel: async () => {
+      finalCalls += 1;
+      return completedResponse();
+    },
+    log: () => {},
+  }), /snapshot must be a completed frozen public RAG bundle/u);
+  assert.equal(finalCalls, 0);
+});
+
+test("freeze fails fast on non-domain preparation errors instead of redacting them", async () => {
+  const temp = await mkdtemp(path.join(os.tmpdir(), "frozen-public-rag-programming-failure-"));
+  const datasetPath = path.join(temp, "private-test.txt");
+  const snapshotPath = path.join(temp, "snapshot.json");
+  const cases = [
+    { id: "case-001", question: "第一个匿名测试问题" },
+    { id: "case-002", question: "第二个不应运行的问题" },
+  ];
+  await writeFile(datasetPath, cases.map((item, index) => (
+    `${item.question}\n私有参考答案${index + 1}`
+  )).join("\n\n"), "utf8");
+  const fixture = evidenceFixture(cases[0].question, cases[0].id);
+  const evidenceRequirements = {
+    schemaVersion: 1,
+    cases: Object.fromEntries(cases.map((item) => [
+      item.id,
+      evidenceFixture(item.question, item.id).evidenceRequirements.cases[item.id],
+    ])),
+  };
+  const attempted = [];
+
+  await assert.rejects(() => freezePublicRagFinalInputs({
+    datasetPath,
+    snapshotPath,
+    caseIds: cases.map((item) => item.id),
+    maxCalls: cases.length,
+    evidenceRequirements,
+    env: TEST_ENV,
+    loadEvidenceData: async () => fixture.data,
+    answerPublic: async ({ payload }) => {
+      attempted.push(payload.question);
+      throw new TypeError("programming failure must remain visible");
+    },
+    log: () => {},
+  }), /programming failure must remain visible/u);
+
+  assert.deepEqual(attempted, [cases[0].question]);
+  const snapshot = JSON.parse(await readFile(snapshotPath, "utf8"));
+  assert.equal(snapshot.status, "running");
+  assert.equal(snapshot.finalModelCallCount, 0);
+  assert.deepEqual(snapshot.cases, []);
+  assert.equal(Object.hasOwn(snapshot, "failedEvidencePreparationCaseIds"), false);
+});
+
 test("low and medium replay reuse every frozen request field except reasoning effort", async () => {
   const temp = await mkdtemp(path.join(os.tmpdir(), "frozen-public-rag-"));
   const snapshotPath = path.join(temp, "snapshot.json");

@@ -111,32 +111,60 @@ export async function freezePublicRagFinalInputs({
     endToEndWebParity: false,
     transportContract,
     evidenceRequirementsSha256: sha256(JSON.stringify(normalizedRequirements)),
+    finalModelCallCount: 0,
     cases: [],
   };
   await writeJsonAtomic(outputFile, checkpoint);
 
   for (const item of selected) {
     let captured = null;
-    const result = await answerPublic({
-      payload: {
-        question: item.question,
-        mode: PUBLIC_MODE,
-        rulingModelProfile: PUBLIC_PROFILE,
-        rulingVersion: PUBLIC_RULING_VERSION,
-      },
-      env: privateEnv,
-      appendAudit: async () => null,
-      answerRuling: (options) => answerRuling({
-        ...options,
-        modelInvoker: async (request) => {
-          if (captured) throw new Error(`${item.id} attempted more than one final-model call`);
-          captured = freezeCaptureRequest(request);
-          return CAPTURE_SENTINEL;
+    let result;
+    try {
+      result = await answerPublic({
+        payload: {
+          question: item.question,
+          mode: PUBLIC_MODE,
+          rulingModelProfile: PUBLIC_PROFILE,
+          rulingVersion: PUBLIC_RULING_VERSION,
         },
-      }),
-    });
-    if (!captured) {
-      throw new Error(`${item.id} did not reach the ordinary final-model path`);
+        env: privateEnv,
+        appendAudit: async () => null,
+        answerRuling: (options) => answerRuling({
+          ...options,
+          modelInvoker: async (request) => {
+            if (captured) throw new Error(`${item.id} attempted more than one final-model call`);
+            captured = freezeCaptureRequest(request);
+            return CAPTURE_SENTINEL;
+          },
+        }),
+      });
+      if (!captured) {
+        const error = new Error("ordinary final-model path was not reached");
+        error.code = "FROZEN_FINAL_PATH_NOT_REACHED";
+        throw error;
+      }
+    } catch (error) {
+      // Once the capture invoker is reached, the final request invariants must
+      // remain fail-fast. Only the three public fail-closed rule-query outcomes
+      // are recoverable per-case evidence-preparation failures; programming,
+      // configuration, and route-invariant errors must still stop immediately.
+      if (captured || !isRecoverableEvidencePreparationFailure(error)) throw error;
+      const failedRecord = Object.freeze({
+        id: normalizeCaseId(item?.id),
+        status: "failed_evidence_preparation",
+        questionSha256: sha256(requiredText(item?.question, "case.question")),
+        sourceBlocksSha256: sha256(JSON.stringify(item?.sourceBlocks || [])),
+        evidencePreparation: Object.freeze({
+          status: "failed_evidence_preparation",
+          error: safeEvidencePreparationError(error),
+        }),
+      });
+      checkpoint.cases.push(failedRecord);
+      checkpoint.failedEvidencePreparationCaseIds ||= [];
+      checkpoint.failedEvidencePreparationCaseIds.push(item.id);
+      await writeJsonAtomic(outputFile, checkpoint);
+      log(`[frozen] ${item.id} failed_evidence_preparation`);
+      continue;
     }
     const baseRecord = buildFrozenCaseRecord({
       item,
@@ -153,6 +181,7 @@ export async function freezePublicRagFinalInputs({
     } catch (error) {
       const failedRecord = Object.freeze({
         ...baseRecord,
+        status: "failed_evidence_audit",
         evidenceAudit: Object.freeze({
           status: "failed_evidence_audit",
           error: safeEvidenceAuditError(error),
@@ -167,6 +196,7 @@ export async function freezePublicRagFinalInputs({
     }
     const record = Object.freeze({
       ...baseRecord,
+      status: "complete",
       evidenceAudit,
     });
     checkpoint.cases.push(record);
@@ -174,9 +204,10 @@ export async function freezePublicRagFinalInputs({
     log(`[frozen] ${item.id} ${record.promptUtf8Sha256.slice(0, 12)} ${record.promptChars} chars`);
   }
 
-  checkpoint.finalModelCallCount = 0;
   checkpoint.completedAt = now().toISOString();
-  if (checkpoint.failedEvidenceAuditCaseIds?.length) {
+  if (checkpoint.failedEvidencePreparationCaseIds?.length) {
+    checkpoint.status = "failed_evidence_preparation";
+  } else if (checkpoint.failedEvidenceAuditCaseIds?.length) {
     checkpoint.status = "failed_evidence_audit";
   } else {
     checkpoint.status = "complete";
@@ -188,6 +219,13 @@ export async function freezePublicRagFinalInputs({
     ));
   }
   await writeJsonAtomic(outputFile, checkpoint);
+  if (checkpoint.status === "failed_evidence_preparation") {
+    const error = new Error(
+      `frozen evidence preparation failed for ${checkpoint.failedEvidencePreparationCaseIds.length} case(s)`,
+    );
+    error.code = "FROZEN_EVIDENCE_PREPARATION_FAILED";
+    throw error;
+  }
   if (checkpoint.status === "failed_evidence_audit") {
     const error = new Error(
       `frozen evidence audit failed for ${checkpoint.failedEvidenceAuditCaseIds.length} case(s)`,
@@ -1022,6 +1060,23 @@ function safeEvidenceAuditError(error) {
     message: originalMessage.replace(/(omits source line:)[\s\S]*$/u, "$1 [redacted]"),
     messageSha256: sha256(originalMessage),
   });
+}
+
+function safeEvidencePreparationError(error) {
+  const serialized = safeError(error);
+  return Object.freeze({
+    ...serialized,
+    message: "evidence preparation failed",
+    messageSha256: sha256(serialized.message),
+  });
+}
+
+function isRecoverableEvidencePreparationFailure(error) {
+  return new Set([
+    "rule_query_model_empty",
+    "rule_query_model_timeout",
+    "rule_query_model_unavailable",
+  ]).has(String(error?.code || ""));
 }
 
 function helpText() {
