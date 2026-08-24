@@ -311,6 +311,49 @@ test("duplicate evidence identity keeps the projection with the complete body", 
   assert.equal(Object.hasOwn(selected[0].item, "text"), false);
 });
 
+test("same identity keeps the complete body while OR-merging related-only safety metadata", () => {
+  const sharedId = "shared-direct-and-related-reference";
+  const completeQuestion = "Complete source question with every relevant premise.";
+  const completeAnswer = "Complete source answer with every relevant condition.";
+  const directCopy = officialQa(sharedId, 0.99, {
+    type: "official_qa",
+    question: completeQuestion,
+    answer: completeAnswer,
+    isDirect: true,
+    matchLevel: "official_qa_exact",
+    authoritativeSceneMatch: true,
+    authoritativeSceneMatchReason: "raw_or_normalized_query",
+    questionCardIdCount: 1,
+    questionCardIdCoverage: 1,
+    matchedQuestionCardIds: ["anonymous-card"],
+  });
+  const relatedCopy = officialQa(sharedId, 0.1, {
+    question: "fragment",
+    answer: "fragment",
+    retrievalContext: {
+      scope: "cross_card_official_mechanism",
+      relatedOnly: true,
+    },
+  });
+  const bundle = buildSelection({
+    officialQaDirectCandidates: [directCopy],
+    officialQaRelated: [relatedCopy],
+  }, 1);
+
+  assert.equal(bundle.authoritativeOfficialDirectId, null);
+  const selected = selectedReferenceEntries(bundle);
+  assert.equal(selected.length, 1);
+  assert.equal(selected[0].item.id, sharedId);
+  assert.equal(selected[0].item.question, completeQuestion);
+  assert.equal(selected[0].item.answer, completeAnswer);
+  assert.equal(selected[0].item.isDirect, false);
+  assert.equal(selected[0].item.retrievalContext.relatedOnly, true);
+  assert.equal(
+    selected[0].item.retrievalContext.scope,
+    "cross_card_official_mechanism",
+  );
+});
+
 test("same-bucket duplicate identity prefers a long projected body over a tiny complete fragment in both orders", () => {
   const sharedId = "same-bucket-shared-reference";
   const short = officialQa(sharedId, 0.99, {

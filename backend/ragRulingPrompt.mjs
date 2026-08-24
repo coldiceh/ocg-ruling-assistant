@@ -79,6 +79,7 @@ export function buildRagRulingPromptBundle({
   env = {},
 } = {}) {
   const warnings = [];
+  const promptSafeEvidence = normalizePromptEvidenceSafety(evidence);
   const maxPromptChars = readNumber(env.RAG_MAX_PROMPT_CHARS, 36000);
   const hasReferenceCharLimit = Object.hasOwn(env, "RAG_MAX_PROMPT_REFERENCE_CHARS")
     && String(env.RAG_MAX_PROMPT_REFERENCE_CHARS || "").trim() !== "";
@@ -104,18 +105,18 @@ export function buildRagRulingPromptBundle({
     maxPromptChars,
   };
   const authoritativeDirect = selectAuthoritativeOfficialDirectCandidate({
-    candidates: evidence.officialQaDirectCandidates || [],
+    candidates: promptSafeEvidence.officialQaDirectCandidates || [],
     cardResolution,
-    baigeAmbiguousMentions: evidence.baigeAmbiguousMentions,
+    baigeAmbiguousMentions: promptSafeEvidence.baigeAmbiguousMentions,
   });
   const focusCardIds = (cardResolution.resolvedCards || [])
     .map((card) => String(card?.id || card?.cardId || "").trim())
     .filter(Boolean);
-  const evidencePayload = prepareEvidenceForPrompt(evidence, limits, warnings, {
+  const evidencePayload = prepareEvidenceForPrompt(promptSafeEvidence, limits, warnings, {
     authoritativeDirectId: authoritativeDirect?.id || null,
     focusCardIds,
   });
-  const ruleQueryPlanDiagnostics = buildRuleQueryPlanDiagnostics(evidence.ruleSearchQueries);
+  const ruleQueryPlanDiagnostics = buildRuleQueryPlanDiagnostics(promptSafeEvidence.ruleSearchQueries);
   const payload = {
     userQuery: String(userQuery || ""),
     resolvedCards: summarizeCards(cardResolution.resolvedCards || [], limits.maxCards),
@@ -575,6 +576,56 @@ function mergeComplementaryEvidenceText(primary, supplemental) {
   return `${primaryText}\n${supplementalText}`;
 }
 
+function normalizePromptEvidenceSafety(evidence = {}) {
+  const source = evidence && typeof evidence === "object" ? evidence : {};
+  const relatedByIdentity = new Map();
+  for (const bucket of EVIDENCE_BUCKET_ORDER) {
+    for (const item of Array.isArray(source[bucket]) ? source[bucket] : []) {
+      const id = String(item?.id || "").trim();
+      if (!id) continue;
+      const relatedOnly = promptEvidenceMustRemainRelated(item, bucket);
+      relatedByIdentity.set(id, relatedByIdentity.get(id) === true || relatedOnly);
+    }
+  }
+  return {
+    ...source,
+    ...Object.fromEntries(EVIDENCE_BUCKET_ORDER.map((bucket) => [
+      bucket,
+      (Array.isArray(source[bucket]) ? source[bucket] : []).map((item) => {
+        const id = String(item?.id || "").trim();
+        const relatedOnly = promptEvidenceMustRemainRelated(item, bucket)
+          || (id && relatedByIdentity.get(id) === true);
+        return relatedOnly ? forcePromptEvidenceRelatedOnly(item) : item;
+      }),
+    ])),
+  };
+}
+
+function promptEvidenceMustRemainRelated(item = {}, bucket = "") {
+  const scope = String(item?.retrievalContext?.scope || "");
+  if (item?.retrievalContext?.relatedOnly === true || /cross[_ -]?card/iu.test(scope)) {
+    return true;
+  }
+  if (bucket === "officialQaDirectCandidates") return false;
+  return isOfficialQaOrFaqPromptItem(item);
+}
+
+function forcePromptEvidenceRelatedOnly(item = {}) {
+  const matchLevel = item?.matchLevel === "official_qa_exact"
+    ? "official_qa_near"
+    : item?.matchLevel;
+  return {
+    ...item,
+    type: item?.type === "official_qa" ? "related" : item?.type,
+    isDirect: false,
+    ...(matchLevel ? { matchLevel } : {}),
+    retrievalContext: {
+      ...(item?.retrievalContext || {}),
+      relatedOnly: true,
+    },
+  };
+}
+
 function prepareEvidenceForPrompt(
   evidence,
   limits,
@@ -712,7 +763,7 @@ function limitPreparedReferenceEvidence(prepared = {}, {
 }
 
 function downgradeOfficialDirectToRelated(item = {}) {
-  return {
+  return forcePromptEvidenceRelatedOnly({
     ...item,
     type: "related",
     isDirect: false,
@@ -725,7 +776,7 @@ function downgradeOfficialDirectToRelated(item = {}) {
       "unique_semantic_question_subsumption",
       "unique_question_card_subsumption",
     ].includes(value)),
-  };
+  });
 }
 
 function limitEvidence(items = [], limit, textLimit, label, warnings, focusCardIds = []) {
@@ -1411,16 +1462,42 @@ function selectPreferredEvidenceEntries(entries = [], limit = 1) {
     ? Math.max(1, Math.floor(requestedLimit || 1))
     : Number.MAX_SAFE_INTEGER;
   const preferredByIdentity = new Map();
+  const entriesByIdentity = new Map();
   for (const entry of entries) {
     const key = compactEvidenceEntryKey(entry);
+    const identityEntries = entriesByIdentity.get(key) || [];
+    identityEntries.push(entry);
+    entriesByIdentity.set(key, identityEntries);
     const previous = preferredByIdentity.get(key);
     if (!previous || compareEvidenceProjection(entry, previous) < 0) {
       preferredByIdentity.set(key, entry);
     }
   }
-  return [...preferredByIdentity.values()]
+  return [...preferredByIdentity.entries()]
+    .map(([key, entry]) => mergePromptIdentitySafety(entry, entriesByIdentity.get(key)))
     .sort(compareEvidenceSelectionPriority)
     .slice(0, safeLimit);
+}
+
+function mergePromptIdentitySafety(preferred = {}, identityEntries = []) {
+  const relatedEntries = (identityEntries || []).filter(({ item }) => (
+    item?.retrievalContext?.relatedOnly === true
+  ));
+  if (!relatedEntries.length) return preferred;
+  const crossCardScope = relatedEntries
+    .map(({ item }) => String(item?.retrievalContext?.scope || ""))
+    .find((scope) => /cross[_ -]?card/iu.test(scope));
+  return {
+    ...preferred,
+    item: forcePromptEvidenceRelatedOnly({
+      ...preferred.item,
+      retrievalContext: {
+        ...(preferred.item?.retrievalContext || {}),
+        ...(crossCardScope ? { scope: crossCardScope } : {}),
+        relatedOnly: true,
+      },
+    }),
+  };
 }
 
 function compareEvidenceProjection(left = {}, right = {}) {
@@ -1445,6 +1522,15 @@ function compareEvidenceSelectionPriority(left = {}, right = {}) {
     || Number(rightMetadata.bodyCoverage || 0) - Number(leftMetadata.bodyCoverage || 0)
     || Number(rightMetadata.bodyComplete === true) - Number(leftMetadata.bodyComplete === true)
     || compactEvidenceEntryKey(left).localeCompare(compactEvidenceEntryKey(right));
+}
+
+function isOfficialQaOrFaqPromptItem(item = {}) {
+  return ["qa", "card-faq", "official-database"].includes(String(item?.recordType || ""))
+    && (
+      item?.official === true
+      || ["official_database", "official_reference"].includes(item?.sourceAuthority)
+      || /official|yugioh.*database|konami/iu.test(String(item?.source || ""))
+    );
 }
 
 function evidenceProjectionStableKey({ bucket, item } = {}) {
