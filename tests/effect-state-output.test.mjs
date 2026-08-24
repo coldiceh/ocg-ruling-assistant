@@ -130,7 +130,8 @@ test("public prompts keep raw card evidence without a handwritten state-executio
   assert.equal(bundle.recoveryPrompt, "");
   for (const prompt of [bundle.prompt]) {
     assert.match(prompt, /代价与同批素材分别去哪里/u);
-    assert.match(prompt, /card-text-anonymous-fusion-spell/u);
+    assert.ok(prompt.includes(JSON.stringify(card.effectText).slice(1, -1)));
+    assert.doesNotMatch(prompt, /card-text-anonymous-fusion-spell/u);
     assert.match(prompt, /舍弃1张手牌发动/u);
     assert.doesNotMatch(prompt, /通用(?:状态)?执行顺序/u);
     assert.doesNotMatch(prompt, /持续效果重算|重算持续效果/u);

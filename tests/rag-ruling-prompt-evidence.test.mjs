@@ -278,7 +278,7 @@ test("minimal prompt keeps the highest-ranked official evidence without role slo
   const resolvedCards = Array.from({ length: 6 }, (_unused, index) => ({
     id: `entity-${index}`,
     name: `匿名对象 ${index}`,
-    effectText: `DUPLICATE_EFFECT_${index} ${"卡片原文".repeat(80)}`,
+    effectText: `DUPLICATE_EFFECT_${index} ${"卡片原文".repeat(8)}`,
   }));
   const duplicateCardTexts = resolvedCards.map((card) => ({
     id: `card-text-duplicate-${card.id}`,
@@ -350,9 +350,10 @@ test("minimal prompt keeps the highest-ranked official evidence without role slo
     title: `匿名社区资料 ${index}`,
     text: `COMMUNITY_CROWDING_${index} ${"社区说明".repeat(160)}`,
   }));
+  const userQuery = `需要同时核对多张匿名对象、官方 FAQ 与跨卡机制资料。${"场面描述".repeat(24)}`;
 
   const bundle = buildRagRulingPromptBundle({
-    userQuery: `需要同时核对多张匿名对象、官方 FAQ 与跨卡机制资料。${"场面描述".repeat(180)}`,
+    userQuery,
     cardResolution: {
       resolvedCards,
       unresolvedMentions: [],
@@ -372,6 +373,11 @@ test("minimal prompt keeps the highest-ranked official evidence without role slo
   assert.ok(bundle.warnings.includes("rag_prompt_compacted_to_max_chars"));
   const payload = parsePromptPayload(bundle.prompt);
   assert.ok(Array.isArray(payload.evidence), "the fixture must exercise secondary minimal compression");
+  assert.equal(payload.userQuery, userQuery);
+  assert.deepEqual(
+    payload.resolvedCards.map((card) => card.effectText),
+    resolvedCards.map((card) => card.effectText),
+  );
   const evidenceItems = flattenPromptEvidence(payload.evidence);
   const retainedIds = new Set(evidenceItems.map((item) => item.id));
   assert.ok(

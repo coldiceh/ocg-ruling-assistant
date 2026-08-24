@@ -748,7 +748,19 @@ test("current retrieval-only regressions keep canonical card text and decisive o
       assert.ok(serialized, `${evidenceId} must be serialized in the final prompt`);
       assertCompleteSourceEvidenceBody(evidenceId, source, serialized);
       if (source.sourceUrl) {
-        assert.equal(serialized.sourceUrl, source.sourceUrl, `${evidenceId}.sourceUrl must be source-equal`);
+        assert.equal(
+          Object.hasOwn(serialized, "sourceUrl"),
+          false,
+          `${evidenceId}.sourceUrl must stay out of the model-visible prompt`,
+        );
+        const diagnostic = promptBundle.evidenceSelectionDiagnostics.find(
+          (item) => item.id === evidenceId,
+        );
+        assert.equal(
+          diagnostic?.sourceUrl,
+          source.sourceUrl,
+          `${evidenceId}.sourceUrl must remain source-equal in diagnostics`,
+        );
       }
     }
     for (const snippet of fixture.expectedPromptSnippets || []) {

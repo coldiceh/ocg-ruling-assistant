@@ -716,6 +716,7 @@ test("unquoted_colloquial_activation_subject_resolves_by_surface_before_a_wrong_
   });
 
   assert.equal(evidence.baigeResolvedCards[0].name, "红莲之指名者");
+  assert.ok(evidence.retrievedCards.some((card) => card.name === "红莲之指名者"));
   assert.ok(!evidence.retrievedCards.some((card) => card.name === "红色重启"));
   assert.ok(calls.some((url) => url.includes("红指")));
   assert.ok(!calls.some((url) => url.includes("红色重启")));
@@ -796,6 +797,76 @@ test("baige_card_text_enters_rag_context", async () => {
   assert.match(bundle.prompt, /baige_card_text/u);
   assert.match(bundle.prompt, /永续陷阱卡/u);
   assert.equal(evidence.officialQaDirectCandidates.length, 0);
+});
+
+test("a unique eligible identity from the raw user surface can resolve without an alias containment match", async () => {
+  clearBaigeSearchCache();
+  const userSurface = "匿称";
+  const externalCard = {
+    cid: 1801,
+    id: 88001001,
+    cn_name: "匿名规范匿称长尾",
+    text: { desc: "匿名外部完整卡文。" },
+  };
+  const evidence = await retrieveRagEvidence({
+    userQuery: `「${userSurface}」如何处理？`,
+    cardResolution: {
+      resolvedCards: [],
+      unresolvedMentions: [{ input: userSurface, reason: "quoted_mention_not_found" }],
+      ambiguousMentions: [],
+      userProvidedCardTexts: [],
+    },
+    cards: [],
+    records: [],
+    qaRecords: [],
+    fetchImpl: async () => jsonResponse({ result: [externalCard], next: 0 }),
+    env: { RAG_LIVE_OFFICIAL_QA: "0" },
+  });
+
+  assert.deepEqual(evidence.retrievedCards.map((card) => card.id), [String(externalCard.id)]);
+  assert.equal(evidence.baigeResolvedCards[0].matchedQuery, userSurface);
+  assert.equal(evidence.baigeResolvedCards[0].externalIdentityUniqueConvergence, true);
+  assert.match(evidence.cardTexts[0].text, /匿名外部完整卡文/u);
+});
+
+test("a raw user surface with multiple eligible external identities remains ambiguous", async () => {
+  clearBaigeSearchCache();
+  const userSurface = "匿称";
+  const externalCandidates = [{
+    cid: 1811,
+    id: 88001101,
+    cn_name: "匿名甲匿称长尾",
+  }, {
+    cid: 1812,
+    id: 88001201,
+    cn_name: "匿名乙匿称长尾",
+  }];
+  const evidence = await retrieveRagEvidence({
+    userQuery: `「${userSurface}」如何处理？`,
+    cardResolution: {
+      resolvedCards: [],
+      unresolvedMentions: [{ input: userSurface, reason: "quoted_mention_not_found" }],
+      ambiguousMentions: [],
+      userProvidedCardTexts: [],
+    },
+    cards: [],
+    records: [],
+    qaRecords: [],
+    fetchImpl: async () => jsonResponse({
+      result: externalCandidates.map((card) => ({
+        ...card,
+        text: { desc: "匿名候选卡文。" },
+      })),
+      next: 0,
+    }),
+    env: { RAG_LIVE_OFFICIAL_QA: "0" },
+  });
+
+  assert.deepEqual(evidence.retrievedCards, []);
+  assert.equal(evidence.cardTexts.length, 0);
+  assert.ok(evidence.baigeAmbiguousMentions.some((item) => (
+    item.input === userSurface && item.candidateCards?.length === 2
+  )));
 });
 
 test("baige_low_confidence_single_result_is_not_resolved_card", async () => {

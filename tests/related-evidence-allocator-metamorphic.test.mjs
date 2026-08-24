@@ -359,13 +359,15 @@ test("same-identity scoped evidence retains two distinct strict branches under n
   const shuffled = await retrieveBranches(deterministicShuffle([...noise, ...strictRecords]));
   const expectedIds = strictRecords.map((item) => item.id).sort();
   for (const evidence of [baseline, shuffled]) {
-    assert.deepEqual(evidence.officialQaRelated.map((item) => item.id).sort(), expectedIds);
-    assert.ok(evidence.officialQaRelated.every((item) => (
+    // card-faq records intentionally remain in the FAQ bucket; this verifies
+    // branch coverage without duplicating them into officialQaRelated.
+    assert.deepEqual(evidence.faqRelated.map((item) => item.id).sort(), expectedIds);
+    assert.ok(evidence.faqRelated.every((item) => (
       item.retrievalContext.relatedOnly === true
       && item.isDirect === false
       && (item.retrievalSignals?.strictSupplementalRuleQueryKeys || []).length > 0
     )));
-    assert.ok(new Set(evidence.officialQaRelated.flatMap((item) => (
+    assert.ok(new Set(evidence.faqRelated.flatMap((item) => (
       item.retrievalSignals?.strictSupplementalRuleQueryKeys || []
     ))).size >= 2);
   }
