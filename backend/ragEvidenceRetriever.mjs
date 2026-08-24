@@ -2257,10 +2257,10 @@ function rankOfficialQaQuestionBranches({
     // it never reads the answer and every result remains related-only.
     const phraseMatches = rankOfficialQaQuestionTextProfiles({
       question,
-      // The Japanese branch supplies lexical anchors for the Japanese corpus,
-      // while the complete planner item supplies language-independent
-      // mechanism signals.  Both are question-side inputs; official answers
-      // never participate in discovery.
+      // The complete CJK question branch supplies lexical anchors for the
+      // synchronized corpus, while the complete planner item supplies
+      // language-independent mechanism signals. Both are question-side inputs;
+      // official answers never participate in discovery.
       contextText: [query.subclaim, query.query]
         .filter(Boolean)
         .join(" "),
@@ -2268,8 +2268,8 @@ function rankOfficialQaQuestionBranches({
       limit: Math.min(4, perQueryLimit),
     });
     // Full-question retrieval is the higher-precision path. Decide per Planner
-    // branch: a Japanese branch for one subclaim must not disable the bounded
-    // multilingual fallback for another Chinese-only subclaim.
+    // branch: a CJK full-question match for one subclaim must not disable the
+    // bounded multilingual fallback for another subclaim.
     const multilingualMechanismMatches = phraseMatches.length
       ? []
       : rankOfficialQaMultilingualMechanismProfiles({
@@ -2288,7 +2288,7 @@ function rankOfficialQaQuestionBranches({
       ...searchResult.near,
       ...questionOnlyMatches,
     ];
-    // If the ordinary matcher and the Japanese full-question rescue both find
+    // If the ordinary matcher and the CJK full-question rescue both find
     // nothing stronger, retain a tiny related-only head from this explicit
     // planner query. This keeps broad but potentially useful context visible
     // without adding unrelated tails beside an already decisive candidate.
@@ -2503,7 +2503,13 @@ function rankOfficialQaQuestionTextProfiles({
     .filter((concept) => !RULE_MECHANISM_GENERIC_CONCEPTS.has(concept));
   const hasStrongMechanismAnchor = [...queryMechanismSignature]
     .some(isStrongRuleMechanismFeature);
-  if (countJapaneseKana(question) < 4) return [];
+  // The synchronized corpus is mainly Japanese, but deterministic card-text
+  // branches can be Chinese. Requiring kana here silently discarded those
+  // branches before the existing absolute CJK n-gram and mechanism thresholds
+  // could judge them. Keep the same strict thresholds, but make eligibility
+  // depend on a real CJK question surface instead of one particular language.
+  const cjkQuestionLength = querySegments.reduce((sum, segment) => sum + segment.length, 0);
+  if (cjkQuestionLength < 4) return [];
   if (queryGrams.length < 8 && (!hasStrongMechanismAnchor || queryThreeGrams.length < 4)) {
     return [];
   }
@@ -2724,10 +2730,6 @@ function longestCommonTextRun(left, right) {
     }
   }
   return best;
-}
-
-function countJapaneseKana(value) {
-  return [...String(value || "").matchAll(/[\u3040-\u30ff]/gu)].length;
 }
 
 function selectIndependentRuleQueries({

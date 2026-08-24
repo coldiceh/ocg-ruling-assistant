@@ -1010,8 +1010,11 @@ test("baige_resolved_card_metadata_replaces_the_unresolved_prompt_mention", asyn
   assert.equal(answer.resolvedCards[0].name, "绚岚之达维");
   assert.equal(answer.resolvedCards[0].attribute, "风");
   assert.equal(answer.debug.unresolvedMentions.length, 0);
-  assert.match(finalPrompt, /"attribute": "风"/u);
-  assert.match(finalPrompt, /"unresolvedMentions": \[\]/u);
+  const promptJsonStart = finalPrompt.lastIndexOf("\n{");
+  assert.ok(promptJsonStart >= 0);
+  const promptPayload = JSON.parse(finalPrompt.slice(promptJsonStart + 1));
+  assert.equal(promptPayload.resolvedCards[0].attribute, "风");
+  assert.deepEqual(promptPayload.unresolvedMentions, []);
 });
 
 test("source-bound local edit matches fail closed when external verification is unavailable", async () => {
@@ -1437,7 +1440,9 @@ test("two approximate long surfaces on different canonical identities remain unr
 
   assert.deepEqual(evidence.retrievedCards, []);
   assert.ok(evidence.cardResolution.ambiguousMentions.some((item) => (
-    item.input === userSurface && item.candidateCards.length === 2
+    item.input === userSurface
+      && Array.isArray(item.candidateCards)
+      && item.candidateCards.length === 2
   )));
 });
 
