@@ -231,6 +231,7 @@ test("frozen record stores only allowlisted retrieval candidate stage ID arrays"
           crossCardEvidenceCandidateIds: ["qa-evidence-3", "", null],
           allocatedOfficialRelatedIds: ["qa-official-4", "模型答案"],
           allocatedCrossCardIds: ["qa-cross-5", "model output answer"],
+          notAllocatedScopedIds: ["qa-scoped-missed-6", "scoped answer body"],
           notAllocatedCrossCardIds: ["qa-missed-6", "a".repeat(129)],
           unknownCandidateIds: ["qa-must-not-be-saved"],
           question: "private question body",
@@ -253,6 +254,7 @@ test("frozen record stores only allowlisted retrieval candidate stage ID arrays"
     "crossCardEvidenceCandidateIds",
     "allocatedOfficialRelatedIds",
     "allocatedCrossCardIds",
+    "notAllocatedScopedIds",
     "notAllocatedCrossCardIds",
   ]);
   assert.deepEqual(record.retrievalCandidateStages, {
@@ -266,6 +268,7 @@ test("frozen record stores only allowlisted retrieval candidate stage ID arrays"
     crossCardEvidenceCandidateIds: ["qa-evidence-3"],
     allocatedOfficialRelatedIds: ["qa-official-4"],
     allocatedCrossCardIds: ["qa-cross-5"],
+    notAllocatedScopedIds: ["qa-scoped-missed-6"],
     notAllocatedCrossCardIds: ["qa-missed-6"],
   });
   const serializedStages = JSON.stringify(record.retrievalCandidateStages);
@@ -728,9 +731,11 @@ test("capture saves the exact model-visible evidence prompt without requirements
           ruleQueryWarnings: ["rule-query-review-warning"],
           retrievalCandidateStages: {
             initialCrossCardQuestionIds: ["qa-head-only"],
-            crossCardEvidenceCandidateIds: [fixture.qa.id, "qa-dropped"],
+            scopedOfficialRelatedCandidateIds: [fixture.qa.id, "qa-scoped-dropped"],
+            crossCardEvidenceCandidateIds: ["qa-cross-dropped"],
             allocatedOfficialRelatedIds: [fixture.qa.id],
-            notAllocatedCrossCardIds: ["qa-dropped"],
+            notAllocatedScopedIds: ["qa-scoped-dropped"],
+            notAllocatedCrossCardIds: ["qa-cross-dropped"],
           },
         },
       };
@@ -763,8 +768,9 @@ test("capture saves the exact model-visible evidence prompt without requirements
   assert.deepEqual(
     snapshot.cases[0].manualReviewTrace.candidateJourney.map(({ id, status }) => ({ id, status })),
     [{ id: fixture.qa.id, status: "model_visible" },
-      { id: "qa-dropped", status: "not_allocated_within_related_budget" },
-      { id: "qa-head-only", status: "candidate_only_not_selected" }],
+      { id: "qa-cross-dropped", status: "not_allocated_within_related_budget" },
+      { id: "qa-head-only", status: "candidate_only_not_selected" },
+      { id: "qa-scoped-dropped", status: "not_allocated_within_related_budget" }],
   );
   assert.doesNotMatch(snapshotText, new RegExp(privateReference, "u"));
 });

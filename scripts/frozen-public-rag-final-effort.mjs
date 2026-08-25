@@ -34,6 +34,7 @@ const RETRIEVAL_CANDIDATE_STAGE_KEYS = Object.freeze([
   "crossCardEvidenceCandidateIds",
   "allocatedOfficialRelatedIds",
   "allocatedCrossCardIds",
+  "notAllocatedScopedIds",
   "notAllocatedCrossCardIds",
 ]);
 const SAFE_RETRIEVAL_CANDIDATE_ID = /^[A-Za-z0-9][A-Za-z0-9._:@#-]{0,127}$/u;
@@ -922,7 +923,10 @@ function buildManualEvidenceReviewTrace({ answer = {}, record = {} } = {}) {
   const candidateStages = sanitizeRetrievalCandidateStages(debug.retrievalCandidateStages);
   const visibleIds = new Set((record.allowedEvidenceIds || []).map((id) => String(id || "").trim()));
   const allocatedIds = new Set(candidateStages.allocatedOfficialRelatedIds || []);
-  const notAllocatedCrossCardIds = new Set(candidateStages.notAllocatedCrossCardIds || []);
+  const notAllocatedOfficialRelatedIds = new Set([
+    ...(candidateStages.notAllocatedScopedIds || []),
+    ...(candidateStages.notAllocatedCrossCardIds || []),
+  ]);
   const allCandidateIds = new Set([
     ...visibleIds,
     ...Object.values(candidateStages).flat(),
@@ -931,7 +935,7 @@ function buildManualEvidenceReviewTrace({ answer = {}, record = {} } = {}) {
     const stages = RETRIEVAL_CANDIDATE_STAGE_KEYS.filter((key) => candidateStages[key].includes(id));
     const status = visibleIds.has(id)
       ? "model_visible"
-      : notAllocatedCrossCardIds.has(id)
+      : notAllocatedOfficialRelatedIds.has(id)
         ? "not_allocated_within_related_budget"
         : allocatedIds.has(id)
           ? "removed_during_prompt_packing"
