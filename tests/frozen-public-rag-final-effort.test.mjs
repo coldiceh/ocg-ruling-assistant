@@ -1548,6 +1548,12 @@ test("Windows private-review tools keep the private key non-exportable and valid
 
   assert.match(decrypt, /gh run download/u);
   assert.match(decrypt, /private-evaluation-results/u);
+  assert.match(decrypt, /frozen-eight-\(\?:capture\|freeze\|low\|medium\)/u);
+  assert.match(decrypt, /\^\(capture\|freeze\|low\|medium\)\$/u);
+  assert.match(decrypt, /\^\(capture\|freeze\)\$/u);
+  assert.match(decrypt, /\$metadata\.stage -eq "capture" -and \$metadata\.case_ids -ne ""/u);
+  assert.match(decrypt, /\$metadata\.stage -match '\^\(capture\|freeze\)\$'.*"snapshot\.json"/u);
+  assert.equal((decrypt.match(/-AllowEmptyKeys @\("source_key", "case_ids"\)/gu) || []).length, 2);
   assert.match(decrypt, /review_cipher_sha256/u);
   assert.match(decrypt, /review_envelope_sha256/u);
   assert.match(decrypt, /RSAEncryptionPadding\]::OaepSHA256/u);
