@@ -40,8 +40,13 @@ test("successful data pushes explicitly call the Pages workflow", async () => {
   assert.match(workflow, /^      id-token: write\s*$/mu);
 });
 
-test("data sync rebuilds and commits the versioned RAG runtime before snapshot tests", async () => {
+test("data sync rebuilds and commits the versioned RAG runtime before the complete free test suite", async () => {
   const workflow = await readWorkflow("sync-data.yml");
+  const packageJson = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
+  const freeTestRunner = await readFile(
+    new URL("../scripts/run-free-tests.mjs", import.meta.url),
+    "utf8",
+  );
   const evidence = workflow.indexOf("pnpm build:evidence");
   const revision = workflow.indexOf("pnpm build:rag-revision");
   const runtime = workflow.indexOf("pnpm build:rag-runtime");
@@ -52,6 +57,16 @@ test("data sync rebuilds and commits the versioned RAG runtime before snapshot t
   assert.ok(evidence >= 0 && evidence < revision);
   assert.ok(revision < runtime && runtime < verifyRuntime);
   assert.ok(verifyRuntime < parity && parity < snapshotTests);
+  assert.match(workflow, /run: pnpm test(?:\s|$)/u);
+  assert.doesNotMatch(workflow, /scripts\/run-oracle-evidence-test\.mjs/u);
+  assert.equal(
+    packageJson.scripts?.test,
+    "node scripts/run-free-tests.mjs",
+  );
+  assert.match(freeTestRunner, /path\.resolve\("tests"\)/u);
+  assert.match(freeTestRunner, /entry\.name\.endsWith\("\.test\.mjs"\)/u);
+  assert.match(freeTestRunner, /run\(\{ files, concurrency: 1 \}\)/u);
+  assert.doesNotMatch(freeTestRunner, /run-oracle-evidence-test/u);
   assert.match(workflow, /git add data\/\*\.json data\/rag-runtime-v1\/\*\*/u);
 });
 
