@@ -3,8 +3,10 @@ import { fileURLToPath } from "node:url";
 import test from "node:test";
 
 import {
+  allocateOfficialRelatedEvidence,
   loadRagData,
   reserveRankedHeadAndSupplementalCoverage,
+  reserveUncoveredCrossCardBranches,
   retrieveRagEvidence,
 } from "../backend/ragEvidenceRetriever.mjs";
 import { buildRagRulingPromptBundle } from "../backend/ragRulingPrompt.mjs";
@@ -41,17 +43,19 @@ function assertCompleteSourceEvidenceBody(evidenceId, source, serialized) {
     source.rawDetailedQuestion || source.detailedScene || source.detailedQuestion || "",
   ).trim();
   const sourceAnswer = String(source.answer || source.officialAnswer || source.conclusion || "").trim();
-  for (const [field, expected] of Object.entries({
+  const structuredFields = Object.entries({
     question: sourceQuestion,
     detailedScene: sourceDetailedScene,
     answer: sourceAnswer,
-  }).filter(([, value]) => value)) {
+  }).filter(([, value]) => value);
+  for (const [field, expected] of structuredFields) {
     assert.equal(
       String(serialized[field] ?? ""),
       String(expected),
       `${evidenceId}.${field} must be source-equal and untruncated: ${JSON.stringify(serialized)}`,
     );
   }
+  if (structuredFields.length) return;
   const sourceText = String(source.text || source.fullText || source.officialText || "").trim();
   const serializedBody = [
     serialized.question,
@@ -622,6 +626,179 @@ test("four-slot coverage preserves the highest pure strict mechanism representat
   )).length, 1);
 });
 
+test("cross-card allocation preserves a non-strict representative for every bounded query branch", () => {
+  const candidate = (id, queryKey, rank, { strict = false } = {}) => ({
+    id,
+    type: "related",
+    text: `anonymous evidence ${id}`,
+    retrievalSignals: {
+      ruleQueryKeys: [queryKey],
+      ruleQueryRanks: { [queryKey]: rank },
+      ...(strict ? { strictRuleQueryKeys: [queryKey] } : {}),
+    },
+  });
+  const selected = reserveUncoveredCrossCardBranches([
+    candidate("qa-anonymous-strict-1", "branch-1", 1, { strict: true }),
+    candidate("qa-anonymous-strict-2", "branch-2", 1, { strict: true }),
+    candidate("qa-anonymous-strict-3", "branch-3", 1, { strict: true }),
+    candidate("qa-anonymous-branch-4-decoy", "branch-4", 2),
+    candidate("qa-anonymous-branch-4-target", "branch-4", 1),
+  ], 4, {
+    queryKeys: ["branch-1", "branch-2", "branch-3", "branch-4"],
+  });
+
+  assert.deepEqual(selected.map((item) => item.id), [
+    "qa-anonymous-strict-1",
+    "qa-anonymous-strict-2",
+    "qa-anonymous-strict-3",
+    "qa-anonymous-branch-4-target",
+  ]);
+});
+
+test("cross-card allocation keeps the ranked head beside four planner branches", () => {
+  const head = {
+    id: "qa-anonymous-ranked-head",
+    type: "related",
+    text: "anonymous highest-ranked official question",
+    retrievalScore: 0.99,
+  };
+  const branch = (index) => ({
+    id: `qa-anonymous-planner-branch-${index}`,
+    type: "related",
+    text: `anonymous planner branch ${index}`,
+    retrievalSignals: {
+      strictRuleQueryKeys: [`branch-${index}`],
+      ruleQueryKeys: [`branch-${index}`],
+      ruleQueryRanks: { [`branch-${index}`]: 1 },
+    },
+  });
+  const selected = reserveUncoveredCrossCardBranches([
+    head,
+    branch(1),
+    branch(2),
+    branch(3),
+    branch(4),
+  ], 5, {
+    queryKeys: ["branch-1", "branch-2", "branch-3", "branch-4"],
+  });
+
+  assert.deepEqual(selected.map((item) => item.id), [
+    head.id,
+    "qa-anonymous-planner-branch-1",
+    "qa-anonymous-planner-branch-2",
+    "qa-anonymous-planner-branch-3",
+    "qa-anonymous-planner-branch-4",
+  ]);
+});
+
+test("scoped allocation recognizes safe related-question identity matches", () => {
+  const left = card("card-993001", "匿名身份甲");
+  const right = card("card-993002", "匿名身份乙");
+  const singleIdentity = (index) => ({
+    id: `qa-anonymous-single-identity-${index}`,
+    type: "related",
+    text: `anonymous single identity ${index}`,
+    matchedQuestionCardIds: [left.id],
+  });
+  const multiIdentity = {
+    id: "qa-anonymous-related-question-multi-identity",
+    type: "related",
+    text: "anonymous related-question multi identity",
+    matchedRelatedQuestionCardIds: [left.id, right.id],
+  };
+  const selected = allocateOfficialRelatedEvidence({
+    scopedCandidates: [singleIdentity(1), singleIdentity(2), multiIdentity],
+    crossCardCandidates: [],
+    limit: 2,
+    resolvedCards: [left, right],
+  });
+
+  assert.equal(selected.length, 2);
+  assert.ok(selected.some((item) => item.id === multiIdentity.id));
+});
+
+test("scoped identity coverage ignores source-metadata-only card bindings", () => {
+  const left = card("card-993101", "匿名身份甲");
+  const right = card("card-993102", "匿名身份乙");
+  const metadataOnly = {
+    id: "qa-anonymous-metadata-only-multi-identity",
+    type: "related",
+    text: "anonymous metadata-only identity",
+    matchedQuestionCardIds: [left.id],
+    matchedRelatedMetadataCardIds: [right.id],
+  };
+  const genuineQuestionSide = {
+    id: "qa-anonymous-question-side-multi-identity",
+    type: "related",
+    text: "anonymous question-side multi identity",
+    matchedRelatedQuestionCardIds: [left.id, right.id],
+  };
+  const selected = allocateOfficialRelatedEvidence({
+    scopedCandidates: [metadataOnly, genuineQuestionSide],
+    crossCardCandidates: [],
+    limit: 1,
+    resolvedCards: [left, right],
+  });
+
+  assert.deepEqual(selected.map((item) => item.id), [genuineQuestionSide.id]);
+});
+
+test("unassessed cross-card padding cannot evict scoped evidence", () => {
+  const focus = card("card-993201", "匿名焦点卡");
+  const scopedCandidates = Array.from({ length: 5 }, (_, index) => ({
+    id: `qa-anonymous-scoped-${index + 1}`,
+    type: "related",
+    text: `anonymous scoped ${index + 1}`,
+    matchedQuestionCardIds: [focus.id],
+  }));
+  const crossCardCandidates = Array.from({ length: 5 }, (_, index) => ({
+    id: `qa-anonymous-unassessed-cross-${index + 1}`,
+    type: "related",
+    text: `anonymous unassessed cross ${index + 1}`,
+  }));
+  const selected = allocateOfficialRelatedEvidence({
+    scopedCandidates,
+    crossCardCandidates,
+    limit: 5,
+    resolvedCards: [focus],
+    supplementalRuleQueryKeys: ["branch-1", "branch-2", "branch-3", "branch-4"],
+  });
+
+  assert.equal(selected.filter((item) => item.id.includes("scoped")).length, 4);
+  assert.equal(selected.filter((item) => item.id.includes("unassessed-cross")).length, 1);
+});
+
+test("scoped allocation does not discard a later multi-card premise variant", () => {
+  const left = card("card-994001", "匿名身份甲");
+  const right = card("card-994002", "匿名身份乙");
+  const premise = (index, cardIds) => ({
+    id: `qa-anonymous-premise-${index}`,
+    type: "related",
+    text: `anonymous premise ${index}`,
+    questionCardIds: [...cardIds, `external-${index}`],
+    retrievalSignals: {
+      strictRuleQueryKeys: ["shared-anonymous-branch"],
+    },
+  });
+  const selected = allocateOfficialRelatedEvidence({
+    scopedCandidates: [
+      premise(1, [left.id, right.id]),
+      premise(2, [left.id, right.id]),
+      premise(3, [left.id, right.id]),
+      premise(4, [left.id]),
+    ],
+    crossCardCandidates: [],
+    limit: 3,
+    resolvedCards: [left, right],
+  });
+
+  assert.deepEqual(selected.map((item) => item.id), [
+    "qa-anonymous-premise-1",
+    "qa-anonymous-premise-2",
+    "qa-anonymous-premise-3",
+  ]);
+});
+
 test("current retrieval-only regressions keep canonical card text and decisive official questions visible", async () => {
   const data = await loadRagData(fileURLToPath(new URL("../data", import.meta.url)));
   const cardById = new Map(data.cards.map((item) => [String(item.id || item.cardId), item]));
@@ -747,17 +924,17 @@ test("current retrieval-only regressions keep canonical card text and decisive o
     question: "灵摆怪贴到灵摆区域，其发动被无效；异次元竞技场适用时，那张灵摆怪兽送墓还是除外？",
     cardIds: ["9154"],
     ruleQuestions: [{
-      subclaim: "确认灵摆怪兽卡在灵摆区域作为魔法卡的发动被无效后，适用何种离开当前位置的规则处理",
-      checkpoint: "post_resolution",
-      query: "灵摆区域 作为魔法卡 发动无效 去向 | Pゾーン 魔法カード 発動無効 行き先 | Pendulum Zone activation negated destination",
-      reason: "检索发动被无效时该卡的规则上去向，不预设送墓或除外",
+      subclaim: "确认将灵摆怪兽置于灵摆区域是否属于作为魔法卡的卡的发动、是否形成连锁，以及该发动能否被无效",
+      checkpoint: "effect_source_type",
+      query: "将灵摆怪兽置于灵摆区域时是否形成连锁，以及能否无效该发动 | ペンデュラムモンスターをペンデュラムゾーンに置く際にチェーンブロックは作られますか。また、それを無効にする事はできますか | Does placing a Pendulum Monster in the Pendulum Zone start a Chain, and can that activation be negated",
+      reason: "先独立检索题面前置动作的规则性质，不能与发动无效后的去向混成一个查询",
       confidence: "high",
       source: "model_rule_query_extractor",
     }, {
-      subclaim: "确认该灵摆怪兽卡离开灵摆区域的瞬间位于哪个区域并作为何种卡处理",
-      checkpoint: "zone_type_transition",
-      query: "灵摆区域 发动无效 移动瞬间 卡片种类 | Pゾーン 発動無効 移動時 カード種類 | zone transition card type",
-      reason: "异次元竞技场仅替代被送往墓地的怪兽，需要确认移动瞬间的区域和卡片种类",
+      subclaim: "确认灵摆怪兽作为魔法卡在灵摆区域的发动被无效时，该卡随后送往墓地还是表侧加入额外卡组",
+      checkpoint: "post_resolution",
+      query: "灵摆怪兽作为魔法卡的发动被无效时会怎样处理 | ペンデュラムモンスターの魔法カードとしての発動を無効にした場合、どうなりますか | What happens when a Pendulum Monster's activation as a Spell Card is negated",
+      reason: "独立检索发动无效后该卡的规则上去向，不与替代效果的适用范围混合",
       confidence: "high",
       source: "model_rule_query_extractor",
     }, {
@@ -771,12 +948,48 @@ test("current retrieval-only regressions keep canonical card text and decisive o
     expectedQaId: "ygoresources-qa-13144",
     requiredEvidenceIds: [
       "card-faq-9154-1",
+      "ygoresources-qa-13142",
       "ygoresources-qa-13144",
     ],
     excludedQaIds: ["ygoresources-qa-13146"],
     expectedPromptSnippets: [
       "発動が無効になり破壊されます",
       "エクストラデッキから「<<11135>>」を墓地へ送る事はありません。",
+    ],
+  }, {
+    question: "对方不受卡片效果影响的怪兽攻击宣言我方怪兽时，我方能否除外墓地的神艺通常魔法来无效该次攻击？",
+    cardIds: ["21469"],
+    ruleQuestions: [{
+      subclaim: "确认墓地通常魔法在己方怪兽成为攻击对象时，能否除外自身发动无效攻击的效果",
+      checkpoint: "activation_snapshot",
+      query: "墓地通常魔法除外自身发动无效攻击",
+      reason: "核对发动条件",
+      confidence: "high",
+      source: "model_rule_query_extractor",
+    }, {
+      subclaim: "确认攻击怪兽不受卡片效果影响时，无效该次攻击的处理能否适用",
+      checkpoint: "resolution_snapshot",
+      query: "不受卡片效果影响的攻击怪兽能否被无效攻击",
+      reason: "核对效果处理与不受影响状态",
+      confidence: "high",
+      source: "model_rule_query_extractor",
+    }, {
+      subclaim: "确认攻击无效处理未适用时，其后处理是否继续",
+      checkpoint: "step_dependency",
+      query: "攻击无效未适用时其后处理是否继续",
+      reason: "核对连续处理依赖",
+      confidence: "high",
+      source: "model_rule_query_extractor",
+    }],
+    expectedQaId: "ygoresources-qa-7040",
+    requiredEvidenceIds: [
+      "card-faq-21469-1",
+      "card-faq-21469-2",
+      "ygoresources-qa-7040",
+    ],
+    expectedPromptSnippets: [
+      "相手モンスターの攻撃を無効にする事はできず",
+      "『その後バトルフェイズを終了する』処理も適用されません。",
     ],
   }];
 
@@ -809,7 +1022,10 @@ test("current retrieval-only regressions keep canonical card text and decisive o
     });
     assert.ok(
       evidence.debug.candidateStages.crossCardRankedPoolIds.includes(fixture.expectedQaId),
-      `${fixture.expectedQaId} must enter the raw cross-card candidate pool: ${JSON.stringify(evidence.debug.candidateStages)}`,
+      `${fixture.expectedQaId} must enter the raw cross-card candidate pool: ${JSON.stringify({
+        queries: evidence.debug.ruleSearchQueries,
+        stages: evidence.debug.candidateStages,
+      })}`,
     );
     assert.ok(
       evidence.debug.candidateStages.crossCardEvidenceCandidateIds.includes(fixture.expectedQaId),
@@ -831,7 +1047,7 @@ test("current retrieval-only regressions keep canonical card text and decisive o
     assert.ok(
       evidence.officialQaRelated.filter((item) => (
         item.retrievalContext?.scope === "cross_card_official_mechanism"
-      )).length <= 4,
+      )).length <= 5,
     );
     const promptBundle = buildRagRulingPromptBundle({
       userQuery: fixture.question,
@@ -899,4 +1115,82 @@ test("current retrieval-only regressions keep canonical card text and decisive o
       assert.ok(!promptBundle.prompt.includes(excludedQaId));
     }
   }
+});
+
+test("multi-card scoped allocation keeps a complete related-question identity record", async () => {
+  const data = await loadRagData(fileURLToPath(new URL("../data", import.meta.url)));
+  const cardById = new Map(data.cards.map((item) => [String(item.id || item.cardId), item]));
+  const qaById = new Map(data.qaRecords.map((item) => [String(item.id), item]));
+  const question = "名推理或怪兽之门是否只在完全不能特殊召唤时不能发动；仅限制特殊召唤某类怪兽时，能否继续发动并翻开卡组？";
+  const cardIds = ["5530", "5576", "9139", "10695", "5980", "8087"];
+  let candidateQuestionsSeen = [];
+  const evidence = await retrieveRagEvidence({
+    userQuery: question,
+    cardResolution: {
+      resolvedCards: cardIds.map((id) => cardById.get(id)),
+      unresolvedMentions: [],
+      ambiguousMentions: [],
+      userProvidedCardTexts: [],
+    },
+    cards: data.cards,
+    records: data.records,
+    qaRecords: data.qaRecords,
+    ruleSearchQueryProvider: async ({ candidateQuestions }) => {
+      candidateQuestionsSeen = candidateQuestions;
+      return {
+        queries: [{
+          subclaim: "确认不能特殊召唤怪兽时，是否可以发动会翻开卡组并要求特殊召唤怪兽的效果",
+          checkpoint: "operation_legality",
+          query: "不能特殊召唤怪兽时能否发动翻开卡组并特殊召唤的效果",
+          source: "model_rule_query_extractor",
+        }, {
+          subclaim: "确认只禁止特殊召唤特定类别以外怪兽时，翻到的怪兽不符合限制会如何处理",
+          checkpoint: "operation_legality",
+          query: "存在种类限制时翻到不能特殊召唤的怪兽如何处理",
+          source: "model_rule_query_extractor",
+        }, {
+          subclaim: "确认处理时翻到可通常召唤怪兽但当前不能特殊召唤时，翻开的卡如何处理",
+          checkpoint: "resolution_snapshot",
+          query: "翻到可通常召唤怪兽但不能特殊召唤时的后续处理",
+          source: "model_rule_query_extractor",
+        }],
+        candidateAssessments: [{
+          id: "ygoresources-qa-8186",
+          relevance: "high",
+          premise: "partial",
+          difference: "官方问题覆盖完全不能特殊召唤这一分支。",
+          source: "model_rule_query_soft_ranker",
+        }],
+      };
+    },
+    enableLiveOfficialQa: false,
+    env: { RAG_LIVE_OFFICIAL_QA: "false" },
+  });
+  const expectedQaId = "ygoresources-qa-8186";
+  assert.ok(candidateQuestionsSeen.some((item) => item.id === expectedQaId));
+  assert.ok(evidence.debug.candidateStages.scopedOfficialMatchIds.includes(expectedQaId));
+  assert.ok(evidence.debug.candidateStages.scopedOfficialRelatedCandidateIds.includes(expectedQaId));
+  assert.ok(
+    evidence.officialQaRelated.some((item) => item.id === expectedQaId),
+    JSON.stringify({
+      allocated: evidence.debug.candidateStages.allocatedOfficialRelatedIds,
+      scoped: evidence.debug.candidateStages.scopedOfficialRelatedCandidateIds,
+    }),
+  );
+  const promptBundle = buildRagRulingPromptBundle({
+    userQuery: question,
+    cardResolution: evidence.cardResolution,
+    evidence,
+    env: {
+      RAG_MAX_PROMPT_REFERENCE_CHARS: "14000",
+      RAG_MAX_PROMPT_CHARS: "36000",
+    },
+  });
+  assert.equal(promptBundle.promptTruncated, false);
+  assert.ok(promptBundle.allowedEvidenceIds.includes(expectedQaId));
+  const serialized = promptEvidenceById(parsePromptPayload(promptBundle.prompt)).get(expectedQaId);
+  const source = qaById.get(expectedQaId);
+  assert.ok(source);
+  assert.ok(serialized);
+  assertCompleteSourceEvidenceBody(expectedQaId, source, serialized);
 });

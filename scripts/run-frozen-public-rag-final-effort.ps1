@@ -1,6 +1,6 @@
 param(
   [Parameter(Mandatory = $true)]
-  [ValidateSet("freeze", "run")]
+  [ValidateSet("capture", "freeze", "run")]
   [string] $Mode,
 
   [Parameter(ValueFromRemainingArguments = $true)]
