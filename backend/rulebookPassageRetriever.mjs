@@ -34,7 +34,9 @@ export function retrieveRulebookPassages({
         if (passage) candidates.push(passage);
       }
       for (const group of reservedQueryGroups) {
-        const groupScore = scoreParagraph(paragraph, record.title, group.terms, group.anchors);
+        const groupScore = Math.max(...group.views.map((view) => (
+          scoreParagraph(paragraph, record.title, view.terms, view.anchors)
+        )));
         if (groupScore <= 0) continue;
         const groupPassage = buildPassage(record, paragraphs, index, groupScore, maxPassageChars);
         const previous = reservedCandidates.get(group.key);
@@ -227,8 +229,7 @@ function buildWeightedTerms({ userQuery, ruleSearchQueries }) {
 }
 
 function buildReservedRuleQueryGroups(ruleSearchQueries, maxPassages) {
-  const groups = [];
-  const seen = new Set();
+  const groups = new Map();
   for (const query of ruleSearchQueries || []) {
     const source = String(query?.source || "").trim().toLowerCase();
     const confidence = String(query?.confidence || "medium").trim().toLowerCase();
@@ -239,25 +240,32 @@ function buildReservedRuleQueryGroups(ruleSearchQueries, maxPassages) {
         || source.startsWith("model_")
         || source === "card_text_derived_rule_search_query"
         || !key
-        || seen.has(key)) continue;
-    const views = [text, buildCoreRuleQueryView(text)].filter(Boolean);
-    for (const view of views) {
-      const viewKey = normalizeKey(view);
-      if (!viewKey || seen.has(viewKey)) continue;
-      seen.add(viewKey);
-      groups.push({
-        key: viewKey,
-        terms: buildWeightedTerms({
-          userQuery: "",
-          ruleSearchQueries: [{ ...query, query: view }],
-        }),
-        anchors: extractQuotedAnchors(view),
-      });
-      if (groups.length >= positiveInteger(maxPassages, DEFAULT_MAX_PASSAGES)) break;
-    }
-    if (groups.length >= positiveInteger(maxPassages, DEFAULT_MAX_PASSAGES)) break;
+        || groups.has(key)) continue;
+    const seenViews = new Set();
+    const views = [text, buildCoreRuleQueryView(text)]
+      .filter(Boolean)
+      .map((view) => {
+        const viewKey = normalizeKey(view);
+        if (!viewKey || seenViews.has(viewKey)) return null;
+        seenViews.add(viewKey);
+        return {
+          terms: buildWeightedTerms({
+            userQuery: "",
+            // Source eligibility is checked above. Once eligible, normalized
+            // query views share one reservation without changing the selected
+            // passage's source authority.
+            ruleSearchQueries: [{ query: view, confidence: "high" }],
+          }),
+          anchors: extractQuotedAnchors(view),
+        };
+      })
+      .filter((view) => view && (view.terms.length || view.anchors.length));
+    if (!views.length) continue;
+    groups.set(key, { key, views });
   }
-  return groups;
+  return [...groups.values()]
+    .sort((left, right) => left.key.localeCompare(right.key))
+    .slice(0, positiveInteger(maxPassages, DEFAULT_MAX_PASSAGES));
 }
 
 function buildCoreRuleQueryView(value) {

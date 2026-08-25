@@ -9,6 +9,7 @@ import {
   reserveUncoveredCrossCardBranches,
   retrieveRagEvidence,
 } from "../backend/ragEvidenceRetriever.mjs";
+import { extractRagCards } from "../backend/ragCardExtractor.mjs";
 import { buildRagRulingPromptBundle } from "../backend/ragRulingPrompt.mjs";
 import {
   normalizeRuleSearchQueryText,
@@ -393,7 +394,7 @@ test("supplemental mechanism retrieval keeps same-identity official QA scoped an
   assert.ok(!evidence.officialQaDirectCandidates.some((item) => item.id === scoped.id));
 });
 
-test("scoped allocation canonicalizes aliases and reserves only two multi-card premise variants", async () => {
+test("scoped allocation canonicalizes aliases and preserves every bounded query branch", async () => {
   const left = card("990201", "匿名核心甲");
   const right = card("990202", "匿名核心乙");
   left.jaName = "匿名コア甲";
@@ -743,7 +744,7 @@ test("scoped identity coverage ignores source-metadata-only card bindings", () =
   assert.deepEqual(selected.map((item) => item.id), [genuineQuestionSide.id]);
 });
 
-test("unassessed cross-card padding cannot evict scoped evidence", () => {
+test("unassessed cross-card padding does not consume a fixed reserve beside scoped evidence", () => {
   const focus = card("card-993201", "匿名焦点卡");
   const scopedCandidates = Array.from({ length: 5 }, (_, index) => ({
     id: `qa-anonymous-scoped-${index + 1}`,
@@ -764,8 +765,8 @@ test("unassessed cross-card padding cannot evict scoped evidence", () => {
     supplementalRuleQueryKeys: ["branch-1", "branch-2", "branch-3", "branch-4"],
   });
 
-  assert.equal(selected.filter((item) => item.id.includes("scoped")).length, 2);
-  assert.equal(selected.filter((item) => item.id.includes("unassessed-cross")).length, 3);
+  assert.equal(selected.filter((item) => item.id.includes("scoped")).length, 5);
+  assert.equal(selected.filter((item) => item.id.includes("unassessed-cross")).length, 0);
 });
 
 test("scoped allocation does not discard a later multi-card premise variant", () => {
@@ -1190,6 +1191,53 @@ test("multi-card scoped allocation keeps a complete related-question identity re
   assert.ok(promptBundle.allowedEvidenceIds.includes(expectedQaId));
   const serialized = promptEvidenceById(parsePromptPayload(promptBundle.prompt)).get(expectedQaId);
   const source = qaById.get(expectedQaId);
+  assert.ok(source);
+  assert.ok(serialized);
+  assertCompleteSourceEvidenceBody(expectedQaId, source, serialized);
+});
+
+test("default public retrieval keeps the complete governing official QA visible without truncation", async () => {
+  const data = await loadRagData(fileURLToPath(new URL("../data", import.meta.url)));
+  const qaById = new Map(data.qaRecords.map((item) => [String(item.id), item]));
+  const question = "对方场上表侧表示存在「千查万别」，我方场上表侧表示存在「闪刀姬＝零露」。我方可以发动「闪刀姬＝零露」的②效果吗？效果处理时先做什么；如果最后破坏「千查万别」或破坏其他卡，场上的两只怪兽分别如何处理？";
+  const expectedQaId = "ygoresources-qa-24189";
+  const cardResolution = extractRagCards(question, {
+    cards: data.cards,
+    maxCards: 8,
+  });
+  const resolvedIds = new Set(cardResolution.resolvedCards.map((item) => String(item.id)));
+  assert.ok(resolvedIds.has("13447"));
+  assert.ok(resolvedIds.has("21460"));
+
+  const evidence = await retrieveRagEvidence({
+    userQuery: question,
+    cardResolution,
+    cards: data.cards,
+    records: data.records,
+    qaRecords: data.qaRecords,
+    enableLiveOfficialQa: false,
+    env: { RAG_LIVE_OFFICIAL_QA: "false" },
+  });
+  const stages = evidence.debug.candidateStages;
+  assert.ok(stages.scopedOfficialMatchIds.includes(expectedQaId));
+  assert.ok(stages.scopedOfficialRelatedCandidateIds.includes(expectedQaId));
+  assert.ok(stages.allocatedOfficialRelatedIds.includes(expectedQaId));
+  const related = evidence.officialQaRelated.find((item) => item.id === expectedQaId);
+  assert.ok(related);
+  assert.equal(related.isDirect, false);
+  assert.equal(related.retrievalContext?.relatedOnly, true);
+  assert.ok(!evidence.officialQaDirectCandidates.some((item) => item.id === expectedQaId));
+
+  const promptBundle = buildRagRulingPromptBundle({
+    userQuery: question,
+    cardResolution: evidence.cardResolution,
+    evidence,
+  });
+  assert.equal(promptBundle.promptTruncated, false);
+  assert.ok(promptBundle.allowedEvidenceIds.includes(expectedQaId));
+  assert.ok(promptBundle.modelEvidence.officialQaRelated.some((item) => item.id === expectedQaId));
+  const source = qaById.get(expectedQaId);
+  const serialized = promptEvidenceById(parsePromptPayload(promptBundle.prompt)).get(expectedQaId);
   assert.ok(source);
   assert.ok(serialized);
   assertCompleteSourceEvidenceBody(expectedQaId, source, serialized);

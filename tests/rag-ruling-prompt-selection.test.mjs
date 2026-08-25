@@ -139,6 +139,53 @@ function fixedShuffle(items) {
   return result;
 }
 
+function opaqueRuleId(seed, ordinal) {
+  const value = Math.imul(seed + ordinal + 1, 2654435761) >>> 0;
+  return `anonymous-rule-${value.toString(36)}`;
+}
+
+function rulebookReservationFixture(seed) {
+  const records = [
+    {
+      id: opaqueRuleId(seed, 0),
+      recordType: "rule-doc",
+      title: "Anonymous rule material",
+      text: "SHARED_NOISE_EVIDENCE noisevariantone sharedalpha sharedbeta sharedgamma shareddelta sharedepsilon.",
+      sourceAuthority: "community_reference",
+      sourceTier: "S2_COMMUNITY_REFERENCE",
+    },
+    {
+      id: opaqueRuleId(seed, 1),
+      recordType: "rule-doc",
+      title: "Anonymous rule material",
+      text: "SHARED_NOISE_EVIDENCE noisevarianttwo sharedalpha sharedbeta sharedgamma shareddelta sharedepsilon.",
+      sourceAuthority: "community_reference",
+      sourceTier: "S2_COMMUNITY_REFERENCE",
+    },
+    {
+      id: opaqueRuleId(seed, 2),
+      recordType: "rule-doc",
+      title: "Anonymous rule material",
+      text: "UNIQUE_CHECKPOINT_EVIDENCE uniquecheckpointtoken.",
+      sourceAuthority: "community_reference",
+      sourceTier: "S2_COMMUNITY_REFERENCE",
+    },
+  ];
+  const queries = [
+    {
+      query: "sharedalpha sharedbeta sharedgamma shareddelta sharedepsilon",
+      confidence: "high",
+      source: "deterministic_rule_search_query",
+    },
+    {
+      query: "uniquecheckpointtoken",
+      confidence: "high",
+      source: "supplemental_rule_search_query",
+    },
+  ];
+  return { records, queries };
+}
+
 test("reference selection is invariant under original, reversed, and fixed-shuffled input order", () => {
   const evidence = emptyEvidence({
     officialQaRelated: [
@@ -262,6 +309,87 @@ test("rulebook passage scores share the reference selector relevance scale", () 
   assert.ok(passage.retrievalScore > 0.45);
   assert.equal(passage.sourceAuthority, "community_reference");
   assert.equal(passage.sourceTier, "S2_COMMUNITY_REFERENCE");
+});
+
+test("each high-confidence query reserves one best passage before shared-score noise fills the budget", () => {
+  const { records, queries } = rulebookReservationFixture(17);
+  const globalOnly = retrieveRulebookPassages({
+    records,
+    ruleSearchQueries: queries.map((query) => ({ ...query, confidence: "medium" })),
+    maxPassages: 2,
+  });
+  assert.equal(globalOnly.some((passage) => /UNIQUE_CHECKPOINT_EVIDENCE/u.test(passage.text)), false);
+
+  const selected = retrieveRulebookPassages({
+    records,
+    ruleSearchQueries: queries,
+    maxPassages: 2,
+  });
+  const checkpointPassage = selected.find(
+    (passage) => /UNIQUE_CHECKPOINT_EVIDENCE/u.test(passage.text),
+  );
+  assert.equal(selected.length, 2);
+  assert.ok(checkpointPassage);
+  assert.equal(checkpointPassage.sourceAuthority, "community_reference");
+  assert.equal(checkpointPassage.sourceTier, "S2_COMMUNITY_REFERENCE");
+  assert.equal(checkpointPassage.official, false);
+
+  const cardTextDerivedOnly = retrieveRulebookPassages({
+    records,
+    ruleSearchQueries: queries.map((query, index) => (
+      index === 1 ? { ...query, source: "card_text_derived_rule_search_query" } : query
+    )),
+    maxPassages: 2,
+  });
+  assert.equal(
+    cardTextDerivedOnly.some((passage) => /UNIQUE_CHECKPOINT_EVIDENCE/u.test(passage.text)),
+    false,
+  );
+});
+
+test("reserved checkpoint coverage survives input reordering and opaque record id changes", () => {
+  for (const seed of [41, 907]) {
+    const { records, queries } = rulebookReservationFixture(seed);
+    const variants = [
+      { records, queries },
+      { records: [...records].reverse(), queries: [...queries].reverse() },
+      { records: fixedShuffle(records), queries: fixedShuffle(queries) },
+    ];
+    for (const variant of variants) {
+      const selected = retrieveRulebookPassages({
+        records: variant.records,
+        ruleSearchQueries: variant.queries,
+        maxPassages: 2,
+      });
+      assert.equal(
+        selected.filter((passage) => /UNIQUE_CHECKPOINT_EVIDENCE/u.test(passage.text)).length,
+        1,
+      );
+      assert.equal(
+        selected.some((passage) => /SHARED_NOISE_EVIDENCE/u.test(passage.text)),
+        true,
+      );
+    }
+  }
+});
+
+test("an unmatched high-confidence query does not fabricate a reserved passage", () => {
+  const passages = retrieveRulebookPassages({
+    records: [{
+      id: opaqueRuleId(123, 0),
+      recordType: "rule-doc",
+      title: "Anonymous rule material",
+      text: "ORTHOGONAL_RULE_EVIDENCE unrelatedmaterialtoken.",
+    }],
+    ruleSearchQueries: [{
+      query: "absentcheckpointtoken",
+      confidence: "high",
+      source: "model_rule_query_extractor",
+    }],
+    maxPassages: 2,
+  });
+
+  assert.deepEqual(passages, []);
 });
 
 test("a discarded low-priority long candidate does not emit a truncation warning", () => {

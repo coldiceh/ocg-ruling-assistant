@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { extractRagCards } from "../backend/ragCardExtractor.mjs";
+import { clearBaigeSearchCache } from "../backend/baigeCardProvider.mjs";
+import { extractRagCards, normalizeCardKey } from "../backend/ragCardExtractor.mjs";
 import { loadRagData, retrieveRagEvidence } from "../backend/ragEvidenceRetriever.mjs";
 import { analyzeEffectStateTransition, attachUserQueryToCardTexts } from "../backend/effectStateReasoner.mjs";
 import { buildRagRulingPromptBundle } from "../backend/ragRulingPrompt.mjs";
@@ -488,9 +489,17 @@ test("ordinary FAQ ranking and overlapping-name suppression remain identity base
   );
 });
 
-test("equivalent short and full questions retrieve the same governing FAQ without a network fallback", async () => {
+test("equivalent short and full questions retrieve the same governing FAQ after stable identity verification", async () => {
+  clearBaigeSearchCache();
   const data = await loadRagData();
   const results = [];
+  const expectedFaqIds = new Set([
+    "card-faq-19046-0.5",
+    "card-faq-19046-1",
+    "card-faq-22551-1",
+    "card-faq-22551-2",
+    "card-faq-22551-3",
+  ]);
 
   for (const question of [shortQuestion, fullQuestion]) {
     let fetchCalls = 0;
@@ -502,24 +511,53 @@ test("equivalent short and full questions retrieve the same governing FAQ withou
       records: data.records,
       qaRecords: data.qaRecords,
       env: { RAG_LIVE_OFFICIAL_QA: "false" },
-      fetchImpl: async () => {
+      fetchImpl: async (url) => {
         fetchCalls += 1;
-        throw new Error("network fallback should not run");
+        const query = new URL(String(url)).searchParams.get("search");
+        if (normalizeCardKey(query) !== normalizeCardKey("异界共鸣-同调融合")) {
+          return { ok: true, status: 200, json: async () => ({ result: [], next: 0 }) };
+        }
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            result: [{
+              cid: 19046,
+              id: 19046001,
+              cn_name: "异界共鸣－同步结合",
+              jp_name: "異界共鳴－シンクロ・フュージョン",
+              en_name: "Harmonic Synchro Fusion",
+              text: { desc: "外部身份镜像卡文。" },
+            }],
+            next: 0,
+          }),
+        };
       },
+    });
+    const promptBundle = buildRagRulingPromptBundle({
+      userQuery: question,
+      cardResolution: evidence.cardResolution,
+      evidence,
     });
     results.push({
       ids: evidence.retrievedCards.map((card) => String(card.id)).sort(),
       faqIds: evidence.faqRelated.map((item) => String(item.id)),
+      promptFaqIds: promptBundle.modelEvidence.faqRelated.map((item) => String(item.id)),
+      allowedEvidenceIds: new Set(promptBundle.allowedEvidenceIds),
       fetchCalls,
     });
   }
 
   for (const result of results) {
     assert.deepEqual(result.ids, ["19046", "22551"]);
-    assert.equal(result.fetchCalls, 0);
-    assert.ok(result.faqIds.includes("card-faq-19046-1"));
+    assert.deepEqual(new Set(result.faqIds), expectedFaqIds);
+    assert.deepEqual(new Set(result.promptFaqIds), expectedFaqIds);
+    assert.ok([...expectedFaqIds].every((id) => result.allowedEvidenceIds.has(id)));
     assert.ok(!result.faqIds.some((id) => id.startsWith("card-faq-10340-")));
   }
+  assert.equal(results[0].fetchCalls, 0);
+  assert.ok(results[1].fetchCalls > 0);
+  assert.deepEqual(new Set(results[0].faqIds), new Set(results[1].faqIds));
 });
 
 test("both original B2B phrasings produce the same non-authoritative legacy simulation", async () => {

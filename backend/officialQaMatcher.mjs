@@ -222,7 +222,7 @@ export function searchOfficialQaEvidence({
   const queryConcepts = extractOfficialQaSemanticConcepts(query);
   const queryMatchingConcepts = normalizeSemanticConceptsForMatching(queryConcepts);
   const multiBranchQuery = classifyMultiEntityDecisionScope(query).multiBranch;
-  const resolvedIds = new Set((resolvedCards || []).map((card) => normalizeId(card.id || card.cardId)).filter(Boolean));
+  const resolvedIds = new Set((resolvedCards || []).map((card) => normalizeCardIdentityId(card.id || card.cardId)).filter(Boolean));
   const resolvedNames = new Set((resolvedCards || []).flatMap(cardAliases).map(normalizeOfficialQaQuery).filter(Boolean));
   const queryPlayerRoleSignature = extractPlayerRoleSignature(query, {
     cards: resolvedCards,
@@ -285,7 +285,7 @@ export function resolveEntitiesFromOfficialQaMatch({ resolution = {}, matches, c
   let resolvedByOfficialQaMatch = false;
   const remaining = [];
   for (const mention of unresolved) {
-    const candidate = (mention.candidateCards || []).find((item) => evidenceIds.has(normalizeId(item.cardId || item.id)))
+    const candidate = (mention.candidateCards || []).find((item) => evidenceIds.has(normalizeCardIdentityId(item.cardId || item.id)))
       || (mention.candidateCards || []).find((item) => evidenceText.includes(normalizeOfficialQaQuery(item.name)));
     let selected = candidate && findCard(candidate.cardId || candidate.id, cards);
     if (!selected && top.matchLevel === "official_qa_exact" && evidenceIds.size === 1) selected = findCard([...evidenceIds][0], cards);
@@ -861,7 +861,7 @@ function extractCardControllers(text, cards = []) {
     if (!players.size) continue;
     bindings.push({
       cardKey: playerRoleCardKey(card),
-      cardId: normalizeId(card.id || card.cardId),
+      cardId: normalizeCardIdentityId(card.id || card.cardId),
       cardName: String(card.name || card.cnName || card.jaName || card.enName || ""),
       players: [...players].sort(),
     });
@@ -946,6 +946,7 @@ function explicitPlayerRoles(value) {
 }
 
 function playerRoleCardTokens(card = {}) {
+  const cardId = normalizeCardIdentityId(card.id || card.cardId);
   return [...new Set([
     card.input,
     card.matchedQuery,
@@ -954,12 +955,12 @@ function playerRoleCardTokens(card = {}) {
     card.jaName,
     card.enName,
     ...(card.aliases || []),
-    normalizeId(card.id || card.cardId) ? `<<${normalizeId(card.id || card.cardId)}>>` : "",
+    /^\d+$/u.test(cardId) ? `<<${cardId}>>` : "",
   ].map((item) => String(item || "").trim()).filter((item) => item.length >= 2))];
 }
 
 function playerRoleCardKey(card = {}) {
-  return normalizeId(card.id || card.cardId)
+  return normalizeCardIdentityId(card.id || card.cardId)
     || normalizeOfficialQaQuery(card.name || card.cnName || card.jaName || card.enName);
 }
 
@@ -1191,7 +1192,7 @@ function officialQaRecordFeatures(record = {}) {
     record.cardId,
     ...(record.metadataCardIds || record.cardIds || []),
     ...(record.cards || []).filter((value) => /^\d+$/u.test(String(value || "").trim())),
-  ].map(normalizeId).filter(Boolean));
+  ].map(normalizeCardIdentityId).filter(Boolean));
   const features = {
     questionText,
     scenarioQuestionText,
@@ -1216,7 +1217,7 @@ function officialQaRecordFeatures(record = {}) {
       cardIds: new Set([
         ...extractInlineOfficialCardIds(branch),
         ...(projection.branches.length === 1 ? projection.principalCardIds : []),
-      ].map(normalizeId).filter(Boolean)),
+      ].map(normalizeCardIdentityId).filter(Boolean)),
       questionType: classifyOfficialQaQuestionType(branch),
       phrases: extractOfficialQaEffectPhrases(branch),
       concepts: extractOfficialQaSemanticConcepts(branch),
@@ -1229,10 +1230,10 @@ function officialQaRecordFeatures(record = {}) {
           ...(record.cards || []).filter((value) => /^\d+$/u.test(String(value || "").trim())),
           ...extractInlineCardIds(fullText),
         ]
-    ).map(normalizeId).filter(Boolean)),
+    ).map(normalizeCardIdentityId).filter(Boolean)),
     recordQuestionIds: new Set([
       ...projection.principalCardIds,
-    ].map(normalizeId).filter(Boolean)),
+    ].map(normalizeCardIdentityId).filter(Boolean)),
     // Source-level card metadata is allowed to retrieve a related Q&A even
     // when a broad official question names no particular card. It is never
     // folded into recordQuestionIds and therefore cannot grant direct status.
@@ -1395,8 +1396,8 @@ function buildEntityResolution(resolved, unresolved, resolvedByOfficialQaMatch) 
 }
 
 function findCard(id, cards) {
-  const key = normalizeId(id);
-  return (cards || []).find((card) => normalizeId(card.id || card.cardId) === key) || null;
+  const key = normalizeCardIdentityId(id);
+  return (cards || []).find((card) => normalizeCardIdentityId(card.id || card.cardId) === key) || null;
 }
 
 function cardAliases(card = {}) {
@@ -1418,7 +1419,7 @@ function matchQuestionSideCardAliases(value, cards = []) {
 
   const ownersByAlias = new Map();
   for (const card of cards || []) {
-    const id = normalizeId(card.id || card.cardId);
+    const id = normalizeCardIdentityId(card.id || card.cardId);
     if (!id) continue;
     for (const alias of cardAliases(card)) {
       const key = normalizeOfficialQaQuery(alias);
@@ -1474,10 +1475,12 @@ function spansOverlap(left, right) {
   return left.start < right.end && right.start < left.end;
 }
 
-function normalizeId(value) {
-  return String(value || "").replace(/\D+/gu, "").replace(/^0+(?=\d)/u, "");
+function normalizeCardIdentityId(value) {
+  const text = String(value ?? "").trim();
+  if (!text) return "";
+  return /^\d+$/u.test(text) ? text.replace(/^0+(?=\d)/u, "") : text;
 }
 
 function cardKey(card = {}) {
-  return normalizeId(card.id || card.cardId) || normalizeOfficialQaQuery(card.cnName || card.name || card.jaName || card.enName);
+  return normalizeCardIdentityId(card.id || card.cardId) || normalizeOfficialQaQuery(card.cnName || card.name || card.jaName || card.enName);
 }

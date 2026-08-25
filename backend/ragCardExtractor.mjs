@@ -219,6 +219,7 @@ export function extractRagCards(userQuery, { cards = [], maxCards = 6, modelCard
         nearestEditCandidate,
         mention,
         confidenceForNearEditMention(seed, nearestEditCandidate.nearEditDistance),
+        seed,
       );
     } else if (distinctiveFragmentCandidate) {
       addResolved(resolved, seenCards, distinctiveFragmentCandidate, mention, 0.91);
@@ -249,6 +250,7 @@ export function extractRagCards(userQuery, { cards = [], maxCards = 6, modelCard
         nearestEditCandidate,
         mention,
         confidenceForNearEditMention(seed, nearestEditCandidate.nearEditDistance),
+        seed,
       );
     } else if (looksLikeCardMention(mention) && !numberedMentionAlreadyResolved(mention, resolved)) {
       if (nearestEditCandidates.length > 1) nearEditAmbiguityLockedMentionKeys.add(mentionKey);
@@ -1645,6 +1647,7 @@ function applyContextualNearEditResolution({
       selected,
       mention.input,
       confidenceForNearEditMention(mention, selected.nearEditDistance),
+      mention,
     );
     resolvedMentionKeys.add(normalizeCardKey(mention.input));
   }
@@ -1966,10 +1969,11 @@ function addResolved(
   return resolvedCard;
 }
 
-function addEditDistanceResolved(resolved, seenCards, candidate, input, confidence) {
-  if (!extractNumberedCardIdentities(input).length) {
-    return addResolved(resolved, seenCards, candidate, input, confidence);
-  }
+function addEditDistanceResolved(resolved, seenCards, candidate, input, confidence, mention = {}) {
+  const identityVerificationSearchTexts = dedupeBy(
+    Array.isArray(mention?.searchTexts) ? mention.searchTexts : [],
+    normalizeCardKey,
+  );
   return addResolved(
     resolved,
     seenCards,
@@ -1982,6 +1986,7 @@ function addEditDistanceResolved(resolved, seenCards, candidate, input, confiden
       identityMatchKind: "edit_distance",
       nearEditDistance: Number(candidate?.nearEditDistance || 1),
       requiresExternalIdentityVerification: true,
+      ...(identityVerificationSearchTexts.length ? { identityVerificationSearchTexts } : {}),
     },
   );
 }

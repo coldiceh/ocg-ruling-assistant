@@ -482,6 +482,29 @@ async function answerRagRulingQuestionInternal({
 }
 
 function reconcileCardResolution(cardResolution = {}, evidence = {}) {
+  // Retrieval owns the final identity decision. In particular, an approximate
+  // extraction candidate may be rejected after external verification; merging
+  // the pre-retrieval candidate back here would silently resurrect it.
+  if (evidence.cardResolution && typeof evidence.cardResolution === "object") {
+    const extractedCards = cardResolution.resolvedCards || [];
+    const resolvedCards = (evidence.cardResolution.resolvedCards || []).map((retrievedCard) => {
+      const extractedCard = extractedCards.find((candidate) => sameCanonicalCardId(candidate, retrievedCard));
+      if (!extractedCard) return retrievedCard;
+      return {
+        ...extractedCard,
+        ...retrievedCard,
+        effectText: retrievedCard.effectText || extractedCard.effectText || "",
+        aliases: [...new Set([
+          ...(extractedCard.aliases || []),
+          ...(retrievedCard.aliases || []),
+        ].filter(Boolean))],
+      };
+    });
+    return {
+      ...evidence.cardResolution,
+      resolvedCards,
+    };
+  }
   const resolvedCards = dedupeCards([
     ...(evidence.retrievedCards || []),
     ...(cardResolution.resolvedCards || []),
@@ -799,6 +822,16 @@ function firstReturnedModel(attempts = []) {
     .map((attempt) => String(attempt?.responseModel || "").trim())
     .find(Boolean);
   return model || null;
+}
+
+function sameCanonicalCardId(left = {}, right = {}) {
+  const values = (card) => new Set([
+    card.id,
+    card.cardId,
+    card.cid,
+  ].map((value) => String(value ?? "").trim()).filter(Boolean));
+  const leftIds = values(left);
+  return [...values(right)].some((id) => leftIds.has(id));
 }
 
 function selectedPromptEvidenceRefs(evidence = {}, allowedEvidenceIds = []) {

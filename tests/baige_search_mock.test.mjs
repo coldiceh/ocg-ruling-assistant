@@ -557,7 +557,7 @@ test("an unanchored model expansion requires a stable local identity before evid
   assert.ok(evidence.cardResolution.unresolvedMentions.some((item) => item.input === userSurface));
 });
 
-test("an anchored exact numbered-name expansion suppresses only a low-confidence local fuzzy identity", async () => {
+test("a unique original-surface identity replaces a conflicting local fuzzy identity before model expansion", async () => {
   clearBaigeSearchCache();
   const userSurface = "希望皇霍普";
   const canonicalExpansion = "No.39 希望皇 霍普";
@@ -602,8 +602,14 @@ test("an anchored exact numbered-name expansion suppresses only a low-confidence
     records: [],
     qaRecords: [],
     fetchImpl: async (url) => {
-      const decoded = decodeURIComponent(String(url)).replace(/\+/gu, " ");
-      return decoded.includes(canonicalExpansion)
+      const query = new URL(String(url)).searchParams.get("search");
+      if (query === userSurface) {
+        return jsonResponse({
+          result: [{ ...externalCanonicalCard, cn_name: userSurface }],
+          next: 0,
+        });
+      }
+      return query === canonicalExpansion
         ? jsonResponse({ result: [externalCanonicalCard], next: 0 })
         : jsonResponse({ result: [], next: 0 });
     },
@@ -614,7 +620,7 @@ test("an anchored exact numbered-name expansion suppresses only a low-confidence
   assert.ok(!evidence.retrievedCards.some((card) => card.id === "9914"));
   assert.match(evidence.cardTexts[0].text, /攻击无效/u);
   assert.ok(evidence.retrievalWarnings.some((warning) => (
-    warning.startsWith(`model_expansion_conflict_suppressed:${userSurface}:`)
+    warning.startsWith(`local_approximate_identity_replaced:${userSurface}:`)
   )));
   assert.ok(!evidence.cardResolution.ambiguousMentions.some((item) => item.input === userSurface));
 });
@@ -680,7 +686,7 @@ test("an unanchored exact canonical expansion cannot suppress a conflicting loca
   ].some((item) => item.input === userSurface));
   assert.ok(!evidence.retrievalWarnings.some((warning) => warning.startsWith("model_expansion_conflict_suppressed:")));
   assert.ok(evidence.retrievalWarnings.some((warning) => (
-    warning.startsWith("baige_model_expansion_pending_identity_reconciliation:")
+    warning.startsWith("baige_model_expansion_stable_identity_unverified:")
   )));
 });
 
@@ -1081,10 +1087,16 @@ test("source-bound local edit matches fail closed when external verification is 
   const question = "「教导的圣女 艾克莉西亚」和「闪刀姬＝零露」的效果如何处理？";
   const resolution = extractRagCards(question, { cards: data.cards, maxCards: 8 });
   const expectedIds = new Set(["15239", "21460"]);
+  const editCandidates = resolution.resolvedCards
+    .filter((card) => expectedIds.has(String(card.id)));
 
-  assert.ok(resolution.resolvedCards
-    .filter((card) => expectedIds.has(String(card.id)))
-    .every((card) => Number(card.confidence) >= 0.94));
+  assert.deepEqual(new Set(editCandidates.map((card) => String(card.id))), expectedIds);
+  assert.ok(editCandidates.every((card) => (
+      Number(card.confidence) >= 0.94
+      && card.identityMatchKind === "edit_distance"
+      && card.requiresExternalIdentityVerification === true
+      && !card.aliases.includes(card.input)
+  )));
   const evidence = await retrieveRagEvidence({
     userQuery: question,
     cardResolution: resolution,
@@ -1097,9 +1109,14 @@ test("source-bound local edit matches fail closed when external verification is 
 
   for (const id of expectedIds) {
     const card = evidence.cardResolution.resolvedCards.find((item) => String(item.id) === id);
-    assert.ok(card, `${id} remains an auditable candidate`);
-    assert.equal(card.identityVerificationStatus, "unverified");
+    assert.equal(card, undefined, `${id} is excluded after identity verification fails`);
+    assert.ok(!evidence.retrievedCards.some((item) => String(item.id) === id));
+    assert.ok(!evidence.cardTexts.some((item) => (item.cardIds || []).map(String).includes(id)));
   }
+  assert.ok(evidence.retrievedCards.length > 0);
+  assert.ok(evidence.retrievedCards.every((card) => card.resolutionSource === "card_text_reference"));
+  assert.ok(evidence.cardTexts.length > 0);
+  assert.ok(evidence.cardTexts.every((item) => item.resolutionSource === "card_text_reference"));
   assert.ok(evidence.cardResolution.unresolvedMentions.some(
     (mention) => mention.reason === "external_identity_verification_failed",
   ));
@@ -1139,7 +1156,8 @@ test("an unbound local edit candidate still fails closed when external verificat
     mention.input === userSurface
     && mention.reason === "external_identity_verification_failed"
   )));
-  assert.equal(evidence.retrievedCards[0].identityVerificationStatus, "unverified");
+  assert.deepEqual(evidence.retrievedCards, []);
+  assert.deepEqual(evidence.cardResolution.resolvedCards, []);
 });
 
 test("a canonical-name lookup can verify a translated surface alias without blessing arbitrary edit matches", async () => {
@@ -1253,7 +1271,8 @@ test("a canonical-name lookup fails closed when the provider record does not con
     env: { RAG_LIVE_OFFICIAL_QA: "0" },
   });
 
-  assert.equal(evidence.retrievedCards[0].identityVerificationStatus, "unverified");
+  assert.deepEqual(evidence.retrievedCards, []);
+  assert.deepEqual(evidence.cardResolution.resolvedCards, []);
   assert.ok(evidence.cardResolution.unresolvedMentions.some((mention) => (
     mention.input === userSurface
     && mention.reason === "external_identity_verification_failed"
@@ -1295,7 +1314,8 @@ test("a generated near alias remains unverified when external verification is un
     mention.input === userSurface
     && mention.reason === "external_identity_verification_failed"
   )));
-  assert.equal(evidence.retrievedCards[0].identityVerificationStatus, "unverified");
+  assert.deepEqual(evidence.retrievedCards, []);
+  assert.deepEqual(evidence.cardResolution.resolvedCards, []);
 });
 
 test("external CID identity replaces a same-surface local edit match and freezes the reconciled local card", async () => {
@@ -1564,6 +1584,117 @@ test("a model expansion cannot pass solely because its real CID maps to local ca
   )));
 });
 
+test("a model expansion cannot choose between multiple identities from the original surface", async () => {
+  clearBaigeSearchCache();
+  const userSurface = "匿名原词面飞龙";
+  const modelExpansion = "匿名规范扩展飞龙";
+  const localCard = {
+    id: "1982",
+    name: modelExpansion,
+    aliases: [modelExpansion],
+    effectText: "匿名交集验证后的本地卡文。",
+  };
+  const evidence = await retrieveRagEvidence({
+    userQuery: `${userSurface}如何处理？`,
+    cardResolution: {
+      resolvedCards: [],
+      unresolvedMentions: [{
+        input: userSurface,
+        reason: "model_candidate_not_found",
+        source: "model_card_name_extractor",
+        searchTexts: [modelExpansion],
+      }],
+      ambiguousMentions: [],
+      userProvidedCardTexts: [],
+    },
+    cards: [localCard],
+    records: [],
+    qaRecords: [],
+    fetchImpl: async (url) => {
+      const query = new URL(String(url)).searchParams.get("search");
+      if (query === userSurface) {
+        return jsonResponse({
+          result: [
+            { cid: 1981, id: 80198001, cn_name: userSurface },
+            { cid: 1982, id: 80198002, cn_name: userSurface },
+          ],
+          next: 0,
+        });
+      }
+      if (query === modelExpansion) {
+        return jsonResponse({
+          result: [{
+            cid: 1982,
+            id: 80198002,
+            cn_name: modelExpansion,
+            text: { desc: "匿名外部卡文。" },
+          }],
+          next: 0,
+        });
+      }
+      return jsonResponse({ result: [], next: 0 });
+    },
+    env: { RAG_LIVE_OFFICIAL_QA: "0" },
+  });
+
+  assert.deepEqual(evidence.retrievedCards, []);
+  assert.deepEqual(evidence.cardResolution.resolvedCards, []);
+  assert.ok(evidence.cardResolution.unresolvedMentions.some((item) => item.input === userSurface));
+  assert.ok(evidence.cardResolution.ambiguousMentions.some((item) => (
+    item.input === userSurface && item.candidateCards.length === 2
+  )));
+  assert.ok(evidence.retrievalWarnings.some((warning) => (
+    warning.startsWith(`baige_model_expansion_original_surface_identity_ambiguous:${userSurface}:`)
+  )));
+});
+
+test("a model expansion fails closed when its exact CID is absent from the original-surface CID set", async () => {
+  clearBaigeSearchCache();
+  const userSurface = "匿名原词面守卫";
+  const modelExpansion = "匿名规范扩展守卫";
+  const evidence = await retrieveRagEvidence({
+    userQuery: `${userSurface}如何处理？`,
+    cardResolution: {
+      resolvedCards: [],
+      unresolvedMentions: [{
+        input: userSurface,
+        reason: "model_candidate_not_found",
+        source: "model_card_name_extractor",
+        searchTexts: [modelExpansion],
+      }],
+      ambiguousMentions: [],
+      userProvidedCardTexts: [],
+    },
+    cards: [],
+    records: [],
+    qaRecords: [],
+    fetchImpl: async (url) => {
+      const query = new URL(String(url)).searchParams.get("search");
+      if (query === userSurface) {
+        return jsonResponse({
+          result: [
+            { cid: 1991, id: 80199001, cn_name: userSurface },
+            { cid: "not-a-stable-cid", cn_name: userSurface },
+          ],
+          next: 0,
+        });
+      }
+      if (query === modelExpansion) {
+        return jsonResponse({ result: [{ cid: 1992, id: 80199002, cn_name: modelExpansion }], next: 0 });
+      }
+      return jsonResponse({ result: [], next: 0 });
+    },
+    env: { RAG_LIVE_OFFICIAL_QA: "0" },
+  });
+
+  assert.deepEqual(evidence.retrievedCards, []);
+  assert.deepEqual(evidence.cardResolution.resolvedCards, []);
+  assert.ok(evidence.cardResolution.unresolvedMentions.some((item) => item.input === userSurface));
+  assert.ok(evidence.retrievalWarnings.some((warning) => (
+    warning.startsWith(`baige_model_expansion_cid_intersection_empty:${userSurface}`)
+  )));
+});
+
 function jsonResponse(payload, ok = true, status = 200) {
   return {
     ok,
@@ -1615,7 +1746,24 @@ test("albaz_activation_rechecks_continuous_effects_after_paying_cost", async () 
     cards: data.cards,
     records: data.records,
     qaRecords: data.qaRecords,
-    fetchImpl: async () => jsonResponse({ result: [], next: 0 }),
+    fetchImpl: async (url) => {
+      const query = new URL(String(url)).searchParams.get("search");
+      if (query !== "教导的圣女 艾克莉西亚") {
+        return jsonResponse({ result: [], next: 0 });
+      }
+      return jsonResponse({
+        result: [{
+          cid: 15239,
+          id: 60303688,
+          cn_name: "教导的圣女 艾克莉西亚",
+          sc_name: "教导之圣女 艾克利西亚",
+          jp_name: "教導の聖女エクレシア",
+          en_name: "Dogmatika Ecclesia, the Virtuous",
+          text: { desc: "测试身份夹具；卡片正文仍取自本地稳定 CID 记录。" },
+        }],
+        next: 0,
+      });
+    },
     cardModelInvoker: async () => JSON.stringify({
       cardNames: [
         { name: "冰剑龙 镜翠幻种", originalText: "冰剑龙 幻冰龙", confidence: "high" },

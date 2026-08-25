@@ -6,6 +6,29 @@ import {
   searchOfficialQaEvidence,
 } from "../backend/officialQaMatcher.mjs";
 
+test("opaque card identity ids remain distinct during official QA matching", () => {
+  const matches = searchOfficialQaEvidence({
+    question: "「响应者」连锁「陷阱源」发动效果时，处理如何进行？",
+    records: [{
+      id: "qa-opaque-card-identities",
+      recordType: "qa",
+      question: "「响应者」连锁「陷阱源」发动效果时，处理如何进行？",
+      answer: "按连锁逆序处理。",
+      cardIds: ["responder-1", "trap-1"],
+    }],
+    resolvedCards: [
+      { id: "responder-1", name: "响应者" },
+      { id: "trap-1", name: "陷阱源" },
+    ],
+  });
+
+  assert.equal(matches.all[0]?.resolvedCardIdCount, 2);
+  assert.deepEqual(
+    new Set(matches.all[0]?.matchedRelatedMetadataCardIds),
+    new Set(["responder-1", "trap-1"]),
+  );
+});
+
 test("multi-attacker battle questions rank a single-card official QA as branch evidence without making it direct", () => {
   const question = "我方里侧守备表示的「沉眠兽」被攻击。对方分别用攻击表示的「通常龙」与另一只怪兽攻击，各自能否由战斗或怪兽效果破坏「沉眠兽」？";
   const records = [{
