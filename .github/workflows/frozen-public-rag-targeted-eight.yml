@@ -1,8 +1,10 @@
 name: Frozen public RAG targeted eight
 
 on:
+  workflow_dispatch:
   push:
     tags:
+      - "private-frozen-evidence-capture-*"
       - "private-frozen-eight-freeze-*"
       - "private-frozen-eight-low-*"
       - "private-frozen-eight-medium-*"
@@ -53,7 +55,12 @@ jobs:
           set -euo pipefail
           ref="$GITHUB_REF_NAME"
           all_cases="case-004,case-007,case-018,case-019,case-023,case-027,case-028,case-032"
-          if [[ "$ref" == private-frozen-eight-freeze-* ]]; then
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ] \
+              || [[ "$ref" == private-frozen-evidence-capture-* ]]; then
+            stage="capture"
+            source_key=""
+            case_ids=""
+          elif [[ "$ref" == private-frozen-eight-freeze-* ]]; then
             stage="freeze"
             source_key=""
             case_ids="$all_cases"
@@ -117,7 +124,7 @@ jobs:
             tests/relay-multilingual-question-retrieval.test.mjs
 
       - name: Checkout encrypted private results for replay
-        if: steps.scope.outputs.stage != 'freeze'
+        if: steps.scope.outputs.stage == 'low' || steps.scope.outputs.stage == 'medium'
         uses: actions/checkout@v6
         with:
           ref: private-evaluation-results
@@ -125,7 +132,7 @@ jobs:
           persist-credentials: false
 
       - name: Decrypt the reviewed frozen snapshot for replay
-        if: steps.scope.outputs.stage != 'freeze'
+        if: steps.scope.outputs.stage == 'low' || steps.scope.outputs.stage == 'medium'
         shell: bash
         env:
           PRIVATE_ARCHIVE_KEY: ${{ secrets.PURE_LLM_EVALUATION_ARCHIVE_KEY }}
@@ -214,9 +221,8 @@ jobs:
           test -d "$RUNNER_TEMP"
           touch "$RUNNER_TEMP/frozen-eight-write-test"
           rm -f -- "$RUNNER_TEMP/frozen-eight-write-test"
-          if [ "$STAGE" = "freeze" ]; then
+          if [ "$STAGE" = "freeze" ] || [ "$STAGE" = "capture" ]; then
             test -n "$PRIVATE_DATASET_BASE64"
-            test -n "$PRIVATE_REQUIREMENTS_BASE64"
             dataset_candidate="$RUNNER_TEMP/private-dataset.candidate"
             requirements_candidate="$RUNNER_TEMP/frozen-eight-requirements.candidate"
             cleanup_candidates() {
@@ -228,10 +234,13 @@ jobs:
               "$RUNNER_TEMP/frozen-eight-requirements.json"
             printf '%s' "$PRIVATE_DATASET_BASE64" | base64 --decode \
               > "$dataset_candidate"
-            printf '%s' "$PRIVATE_REQUIREMENTS_BASE64" | base64 --decode \
-              > "$requirements_candidate"
             test -s "$dataset_candidate"
-            test -s "$requirements_candidate"
+            if [ "$STAGE" = "freeze" ]; then
+              test -n "$PRIVATE_REQUIREMENTS_BASE64"
+              printf '%s' "$PRIVATE_REQUIREMENTS_BASE64" | base64 --decode \
+                > "$requirements_candidate"
+              test -s "$requirements_candidate"
+            fi
             DATASET="$dataset_candidate" \
               REQUIREMENTS="$requirements_candidate" \
               CASE_IDS="$CASE_IDS" \
@@ -239,7 +248,18 @@ jobs:
             import { createHash } from "node:crypto";
             import { readFile } from "node:fs/promises";
             import { parseDatasetText } from "./scripts/evaluate-pure-llm-preview.mjs";
+            import { parseQuestionOnlyCaptureDatasetText } from "./scripts/frozen-public-rag-final-effort.mjs";
 
+            const datasetText = await readFile(process.env.DATASET, "utf8");
+            const dataset = process.env.STAGE === "capture"
+              ? parseQuestionOnlyCaptureDatasetText(datasetText)
+              : parseDatasetText(datasetText);
+            if (process.env.STAGE === "capture") {
+              if (dataset.uniqueCaseCount !== 32) {
+                throw new Error("manual evidence capture requires the reviewed 32-case dataset");
+              }
+              process.exit(0);
+            }
             const expected = [
               "case-004", "case-007", "case-018", "case-019",
               "case-023", "case-027", "case-028", "case-032",
@@ -254,7 +274,6 @@ jobs:
                 || JSON.stringify(requirementIds) !== JSON.stringify(expected)) {
               throw new Error("private evidence requirements do not contain exactly the targeted eight cases");
             }
-            const dataset = parseDatasetText(await readFile(process.env.DATASET, "utf8"));
             const cases = new Map(dataset.cases.map((item) => [item.id, item.question]));
             const matched = expected.filter((id) => cases.has(id));
             if (matched.length !== 8) {
@@ -268,12 +287,17 @@ jobs:
               }
             }
           NODE
-            chmod 600 "$dataset_candidate" "$requirements_candidate"
+            chmod 600 "$dataset_candidate"
             mv -- "$dataset_candidate" "$RUNNER_TEMP/private-dataset.txt"
-            mv -- "$requirements_candidate" "$RUNNER_TEMP/frozen-eight-requirements.json"
+            if [ "$STAGE" = "freeze" ]; then
+              chmod 600 "$requirements_candidate"
+              mv -- "$requirements_candidate" "$RUNNER_TEMP/frozen-eight-requirements.json"
+            fi
             trap - EXIT
           fi
-          test -s "$RUNNER_TEMP/private-dataset.txt" || [ "$STAGE" != "freeze" ]
+          if [ "$STAGE" = "freeze" ] || [ "$STAGE" = "capture" ]; then
+            test -s "$RUNNER_TEMP/private-dataset.txt"
+          fi
           test -s "$RUNNER_TEMP/frozen-eight-requirements.json" || [ "$STAGE" != "freeze" ]
           git ls-remote --exit-code origin refs/heads/private-evaluation-results > /dev/null
 
@@ -291,16 +315,24 @@ jobs:
           output_dir="$RUNNER_TEMP/frozen-eight-private-output"
           mkdir -p "$output_dir"
           printf '%s\n' "$STAGE" > "$output_dir/stage.txt"
-          IFS=',' read -ra selected <<< "$CASE_IDS"
+          selected=()
+          if [ -n "$CASE_IDS" ]; then IFS=',' read -ra selected <<< "$CASE_IDS"; fi
           case_args=()
           for case_id in "${selected[@]}"; do
             test -n "$case_id"
             case_args+=(--case "$case_id")
           done
-          test "${#selected[@]}" -ge 1
 
           set +e
-          if [ "$STAGE" = "freeze" ]; then
+          if [ "$STAGE" = "capture" ]; then
+            test -s "$RUNNER_TEMP/private-dataset.txt"
+            node scripts/frozen-public-rag-final-effort.mjs capture \
+              --dataset "$RUNNER_TEMP/private-dataset.txt" \
+              --snapshot "$output_dir/snapshot.json" \
+              --max-calls 32 \
+              > "$output_dir/runner.log" 2>&1
+          elif [ "$STAGE" = "freeze" ]; then
+            test "${#selected[@]}" -ge 1
             test -s "$RUNNER_TEMP/private-dataset.txt"
             test -s "$RUNNER_TEMP/frozen-eight-requirements.json"
             node scripts/frozen-public-rag-final-effort.mjs freeze \
@@ -312,6 +344,7 @@ jobs:
               --max-calls "${#selected[@]}" \
               > "$output_dir/runner.log" 2>&1
           else
+            test "${#selected[@]}" -ge 1
             node scripts/frozen-public-rag-final-effort.mjs run \
               --snapshot "$RUNNER_TEMP/frozen-eight-source/snapshot.json" \
               --output "$output_dir/results.json" \
@@ -328,7 +361,12 @@ jobs:
             replay_allowed=true
           fi
           target="$output_dir/results.json"
-          if [ "$STAGE" = "freeze" ]; then target="$output_dir/snapshot.json"; fi
+          if [ "$STAGE" = "freeze" ] || [ "$STAGE" = "capture" ]; then target="$output_dir/snapshot.json"; fi
+          selected_count="${#selected[@]}"
+          if [ -s "$target" ] && [ "$STAGE" = "capture" ]; then
+            selected_count="$(TARGET="$target" node --input-type=module -e \
+              'import {readFile} from "node:fs/promises"; const value=JSON.parse(await readFile(process.env.TARGET,"utf8")); process.stdout.write(String(value.selectedCaseIds?.length || 0));')"
+          fi
           if [ -s "$target" ]; then
             printf '%s\n' \
               'schema_version=1' \
@@ -343,7 +381,7 @@ jobs:
               > "$output_dir/binding.txt"
           fi
           echo "exit_code=$runner_status" >> "$GITHUB_OUTPUT"
-          echo "selected_count=${#selected[@]}" >> "$GITHUB_OUTPUT"
+          echo "selected_count=$selected_count" >> "$GITHUB_OUTPUT"
           echo "replay_allowed=$replay_allowed" >> "$GITHUB_OUTPUT"
           exit 0
 
@@ -356,7 +394,7 @@ jobs:
           set -euo pipefail
           output_dir="$RUNNER_TEMP/frozen-eight-private-output"
           target="$output_dir/results.json"
-          if [ "$STAGE" = "freeze" ]; then target="$output_dir/snapshot.json"; fi
+          if [ "$STAGE" = "freeze" ] || [ "$STAGE" = "capture" ]; then target="$output_dir/snapshot.json"; fi
           if [ ! -s "$target" ]; then
             echo "No private checkpoint was created"
             exit 0

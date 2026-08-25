@@ -51,8 +51,8 @@ const PUBLIC_DIAGNOSTIC_STATUSES = new Set([
 
 export function parseFrozenPublicRagArgs(argv = []) {
   const [command, ...rest] = argv;
-  if (!new Set(["freeze", "run"]).has(command)) {
-    throw new TypeError("first argument must be freeze or run");
+  if (!new Set(["capture", "freeze", "run"]).has(command)) {
+    throw new TypeError("first argument must be capture, freeze, or run");
   }
   const options = { command, caseIds: [] };
   for (let index = 0; index < rest.length; index += 1) {
@@ -85,8 +85,12 @@ export function parseFrozenPublicRagArgs(argv = []) {
 
 export async function freezePublicRagFinalInputs({
   diagnosticsPath,
+  manualReviewOnly = false,
   ...options
 } = {}) {
+  if (manualReviewOnly && diagnosticsPath) {
+    throw new TypeError("manual evidence capture does not publish automated audit diagnostics");
+  }
   const diagnosticsFile = diagnosticsPath
     ? path.resolve(requiredText(diagnosticsPath, "diagnosticsPath"))
     : null;
@@ -106,6 +110,7 @@ export async function freezePublicRagFinalInputs({
     return await freezePublicRagFinalInputsUnchecked({
       ...options,
       diagnosticsFile,
+      manualReviewOnly,
       state,
     });
   } catch (error) {
@@ -145,6 +150,7 @@ async function freezePublicRagFinalInputsUnchecked({
   evidenceRequirements,
   requirementsPath,
   diagnosticsFile,
+  manualReviewOnly = false,
   state,
   env = process.env,
   answerPublic = answerPublicRulingQuestion,
@@ -158,7 +164,10 @@ async function freezePublicRagFinalInputsUnchecked({
   state.outputFile = outputFile;
   assertPathOutsideRepository(outputFile, "snapshotPath");
   await assertOutputDoesNotExist(outputFile);
-  const dataset = parseDatasetText(await readFile(datasetFile, "utf8"));
+  const datasetText = await readFile(datasetFile, "utf8");
+  const dataset = manualReviewOnly
+    ? parseQuestionOnlyCaptureDatasetText(datasetText)
+    : parseDatasetText(datasetText);
   const selected = selectCases(dataset.cases, caseIds);
   const callLimit = positiveInteger(maxCalls ?? Math.max(caseIds.length, 1), "maxCalls");
   if (selected.length > callLimit) {
@@ -173,22 +182,24 @@ async function freezePublicRagFinalInputsUnchecked({
     assertPathOutsideRepository(requirementsFile, "requirementsPath");
     requirements = JSON.parse(await readFile(requirementsFile, "utf8"));
   }
-  const normalizedRequirements = normalizeEvidenceRequirements(
-    requirements,
-    selected,
-  );
-  const evidenceData = await loadEvidenceData();
-  const requirementContexts = buildEvidenceRequirementContexts({
-    selected,
-    requirements: normalizedRequirements,
-    data: evidenceData,
-  });
+  const normalizedRequirements = manualReviewOnly
+    ? null
+    : normalizeEvidenceRequirements(requirements, selected);
+  const requirementContexts = manualReviewOnly
+    ? new Map()
+    : buildEvidenceRequirementContexts({
+        selected,
+        requirements: normalizedRequirements,
+        data: await loadEvidenceData(),
+      });
   const privateEnv = createPrivateEvaluationEnv(env, "freeze");
   const publicEnv = createPublicAnswerModelEnv(privateEnv, PUBLIC_PROFILE);
   const transportContract = buildTransportContract(publicEnv);
   const checkpoint = {
     schemaVersion: SCHEMA_VERSION,
-    kind: "frozen_public_rag_final_inputs",
+    kind: manualReviewOnly
+      ? "frozen_public_rag_evidence_capture"
+      : "frozen_public_rag_final_inputs",
     status: "running",
     createdAt: now().toISOString(),
     questionDatasetDigest: sha256(JSON.stringify(dataset.cases.map((item) => ({
@@ -200,10 +211,14 @@ async function freezePublicRagFinalInputsUnchecked({
     selectedCaseIds: selected.map((item) => item.id),
     publicProfile: PUBLIC_PROFILE,
     rulingVersion: PUBLIC_RULING_VERSION,
-    experimentScope: "frozen_final_call_only",
+    experimentScope: manualReviewOnly
+      ? "manual_evidence_review_only"
+      : "frozen_final_call_only",
     endToEndWebParity: false,
     transportContract,
-    evidenceRequirementsSha256: sha256(JSON.stringify(normalizedRequirements)),
+    ...(manualReviewOnly ? {} : {
+      evidenceRequirementsSha256: sha256(JSON.stringify(normalizedRequirements)),
+    }),
     finalModelCallCount: 0,
     cases: [],
   };
@@ -236,6 +251,16 @@ async function freezePublicRagFinalInputsUnchecked({
         }),
       });
       if (!captured) {
+        if (manualReviewOnly && isOfficialExactDirectAnswer(result?.answer)) {
+          const directRecord = buildManualOfficialDirectRecord({
+            item,
+            answer: result.answer,
+          });
+          checkpoint.cases.push(directRecord);
+          await writeJsonAtomic(outputFile, checkpoint);
+          log(`[capture] ${item.id} official_qa_exact_direct ${directRecord.directInvariantSha256.slice(0, 12)}`);
+          continue;
+        }
         const error = new Error("ordinary final-model path was not reached");
         error.code = "FROZEN_FINAL_PATH_NOT_REACHED";
         throw error;
@@ -272,6 +297,19 @@ async function freezePublicRagFinalInputsUnchecked({
       answer: result?.answer,
       transportContract,
     });
+    if (manualReviewOnly) {
+      checkpoint.cases.push(Object.freeze({
+        ...baseRecord,
+        status: "captured_for_manual_review",
+        manualReviewTrace: buildManualEvidenceReviewTrace({
+          answer: result?.answer,
+          record: baseRecord,
+        }),
+      }));
+      await writeJsonAtomic(outputFile, checkpoint);
+      log(`[capture] ${item.id} ${baseRecord.promptUtf8Sha256.slice(0, 12)} ${baseRecord.promptChars} chars`);
+      continue;
+    }
     let evidenceAudit;
     try {
       evidenceAudit = assertFrozenEvidenceCompleteness({
@@ -316,6 +354,13 @@ async function freezePublicRagFinalInputsUnchecked({
     checkpoint.status = "failed_evidence_preparation";
   } else if (checkpoint.failedEvidenceAuditCaseIds?.length) {
     checkpoint.status = "failed_evidence_audit";
+  } else if (manualReviewOnly) {
+    checkpoint.status = "complete";
+    checkpoint.bundleInvariantSha256 = sha256(JSON.stringify(
+      checkpoint.cases.map((item) => (
+        item.requestInvariantSha256 || item.directInvariantSha256
+      )),
+    ));
   } else {
     checkpoint.status = "complete";
     checkpoint.bundleInvariantSha256 = sha256(JSON.stringify(
@@ -345,6 +390,103 @@ async function freezePublicRagFinalInputsUnchecked({
     throw error;
   }
   return checkpoint;
+}
+
+export function parseQuestionOnlyCaptureDatasetText(text) {
+  const normalized = String(text || "").replace(/^\uFEFF/u, "").trim();
+  if (!normalized) throw new TypeError("The capture dataset is empty");
+  const blocks = normalized.split(/(?:\r?\n[ \t]*){2,}/u);
+  const unique = [];
+  const byQuestion = new Map();
+  let duplicateCount = 0;
+  blocks.forEach((block, index) => {
+    const lines = block
+      .split(/\r?\n/u)
+      .map((line) => line.trim())
+      .filter(Boolean);
+    if (lines.length < 2) {
+      throw new TypeError(`Capture dataset block ${index + 1} must contain a question and a discarded reference line`);
+    }
+    // The final line is only a structural delimiter inherited from test.txt.
+    // It is deliberately neither stored nor compared, so reference answers
+    // cannot affect capture identities, deduplication, retrieval, or output.
+    const question = lines.slice(0, -1).join("\n").trim();
+    if (!question) throw new TypeError(`Capture dataset block ${index + 1} contains an empty question`);
+    const key = question.normalize("NFKC").replace(/\s+/gu, " ").trim();
+    const existing = byQuestion.get(key);
+    if (existing) {
+      duplicateCount += 1;
+      existing.sourceBlocks.push(index + 1);
+      return;
+    }
+    const item = {
+      id: `case-${String(unique.length + 1).padStart(3, "0")}`,
+      question,
+      sourceBlocks: [index + 1],
+    };
+    byQuestion.set(key, item);
+    unique.push(item);
+  });
+  return Object.freeze({
+    schemaVersion: 1,
+    sourceBlockCount: blocks.length,
+    uniqueCaseCount: unique.length,
+    duplicateCount,
+    questionDatasetDigest: sha256(JSON.stringify(unique.map(({ question }) => ({ question })))),
+    cases: Object.freeze(unique.map((item) => Object.freeze({
+      ...item,
+      sourceBlocks: Object.freeze([...item.sourceBlocks]),
+    }))),
+  });
+}
+
+function isOfficialExactDirectAnswer(answer) {
+  return String(answer?.debug?.route || "") === "official_qa_exact_direct"
+    && Boolean(String(answer?.officialQaId || "").trim())
+    && Boolean(String(answer?.officialQuestionJapanese || "").trim())
+    && Boolean(String(answer?.officialAnswerJapanese || "").trim());
+}
+
+function buildManualOfficialDirectRecord({ item, answer } = {}) {
+  const question = requiredText(item?.question, "case.question");
+  const officialQa = Object.freeze({
+    qaId: requiredText(answer?.officialQaId, "answer.officialQaId"),
+    questionJapanese: requiredText(
+      answer?.officialQuestionJapanese,
+      "answer.officialQuestionJapanese",
+      { trim: false },
+    ),
+    answerJapanese: requiredText(
+      answer?.officialAnswerJapanese,
+      "answer.officialAnswerJapanese",
+      { trim: false },
+    ),
+    evidence: Object.freeze(reviewArray(answer?.usedEvidence).map((item) => Object.freeze({
+      id: reviewText(item?.id, 128),
+      type: reviewText(item?.type, 80),
+      title: reviewText(item?.title, 320),
+      sourceUrl: reviewText(item?.sourceUrl, 1000),
+    })).filter((item) => item.id)),
+  });
+  const invariant = {
+    question,
+    route: "official_qa_exact_direct",
+    officialQa,
+  };
+  return Object.freeze({
+    id: normalizeCaseId(item?.id),
+    status: "captured_official_qa_exact_direct",
+    question,
+    questionSha256: sha256(question),
+    sourceBlocks: Object.freeze([...(item?.sourceBlocks || [])]),
+    route: "official_qa_exact_direct",
+    finalModelCallCount: 0,
+    directOfficialQa: officialQa,
+    directInvariantSha256: sha256(JSON.stringify(invariant)),
+    manualReviewTrace: buildManualEvidenceReviewTrace({ answer, record: {
+      allowedEvidenceIds: officialQa.evidence.map((item) => item.id),
+    } }),
+  });
 }
 
 export function buildFrozenPublicDiagnostics({ checkpoint, requirementContexts } = {}) {
@@ -775,6 +917,114 @@ function sanitizeRetrievalCandidateStages(value) {
   })));
 }
 
+function buildManualEvidenceReviewTrace({ answer = {}, record = {} } = {}) {
+  const debug = answer?.debug && typeof answer.debug === "object" ? answer.debug : {};
+  const candidateStages = sanitizeRetrievalCandidateStages(debug.retrievalCandidateStages);
+  const visibleIds = new Set((record.allowedEvidenceIds || []).map((id) => String(id || "").trim()));
+  const allocatedIds = new Set(candidateStages.allocatedOfficialRelatedIds || []);
+  const notAllocatedCrossCardIds = new Set(candidateStages.notAllocatedCrossCardIds || []);
+  const allCandidateIds = new Set([
+    ...visibleIds,
+    ...Object.values(candidateStages).flat(),
+  ]);
+  const candidateJourney = [...allCandidateIds].sort().map((id) => {
+    const stages = RETRIEVAL_CANDIDATE_STAGE_KEYS.filter((key) => candidateStages[key].includes(id));
+    const status = visibleIds.has(id)
+      ? "model_visible"
+      : notAllocatedCrossCardIds.has(id)
+        ? "not_allocated_within_related_budget"
+        : allocatedIds.has(id)
+          ? "removed_during_prompt_packing"
+          : "candidate_only_not_selected";
+    return Object.freeze({ id, stages: Object.freeze(stages), status });
+  });
+  return Object.freeze({
+    resolvedCards: Object.freeze(reviewArray(answer?.resolvedCards).map(sanitizeReviewCard).filter(Boolean)),
+    unresolvedMentions: Object.freeze(sanitizeReviewMentions(debug.unresolvedMentions)),
+    ambiguousMentions: Object.freeze(sanitizeReviewMentions(debug.ambiguousMentions)),
+    modelCardNameCandidates: Object.freeze(
+      reviewArray(debug.modelCardNameCandidates).map(sanitizeReviewCard).filter(Boolean),
+    ),
+    modelRuleSearchQueries: Object.freeze(
+      reviewArray(debug.modelRuleSearchQueries).map(sanitizeReviewRuleQuery).filter(Boolean),
+    ),
+    modelRuleCandidateAssessments: Object.freeze(
+      reviewArray(debug.modelRuleCandidateAssessments).map(sanitizeReviewCandidateAssessment).filter(Boolean),
+    ),
+    ruleQueryPlanDiagnostics: Object.freeze(
+      reviewArray(debug.ruleQueryPlanDiagnostics).map(sanitizeReviewRuleQuery).filter(Boolean),
+    ),
+    cardNameWarnings: Object.freeze(sanitizeReviewWarnings(debug.cardNameWarnings)),
+    ruleQueryWarnings: Object.freeze(sanitizeReviewWarnings(debug.ruleQueryWarnings)),
+    candidateJourney: Object.freeze(candidateJourney),
+  });
+}
+
+function sanitizeReviewCard(card) {
+  if (!card || typeof card !== "object") return null;
+  const value = {
+    id: reviewText(card.id || card.cardId, 128),
+    cid: reviewText(card.cid, 64),
+    name: reviewText(card.name || card.cnName || card.jaName || card.enName, 180),
+    input: reviewText(card.input, 180),
+    matchedQuery: reviewText(card.matchedQuery, 180),
+    source: reviewText(card.source, 80),
+    identityVerificationStatus: reviewText(card.identityVerificationStatus, 80),
+  };
+  return Object.values(value).some(Boolean) ? Object.freeze(value) : null;
+}
+
+function sanitizeReviewMentions(items = []) {
+  return (Array.isArray(items) ? items : []).map((item) => Object.freeze({
+    input: reviewText(item?.input, 240),
+    reason: reviewText(item?.reason, 160),
+    source: reviewText(item?.source, 120),
+    candidateCards: Object.freeze((Array.isArray(item?.candidateCards) ? item.candidateCards : [])
+      .map(sanitizeReviewCard)
+      .filter(Boolean)
+      .slice(0, 12)),
+  })).filter((item) => item.input || item.reason || item.candidateCards.length);
+}
+
+function sanitizeReviewRuleQuery(item) {
+  if (!item || typeof item !== "object") return null;
+  const value = {
+    subclaim: reviewText(item.subclaim, 320),
+    checkpoint: reviewText(item.checkpoint, 120),
+    query: reviewText(item.query, 720),
+    reason: reviewText(item.reason, 320),
+    confidence: reviewText(item.confidence, 80),
+    source: reviewText(item.source, 120),
+  };
+  return Object.values(value).some(Boolean) ? Object.freeze(value) : null;
+}
+
+function sanitizeReviewCandidateAssessment(item) {
+  if (!item || typeof item !== "object") return null;
+  const value = {
+    id: reviewText(item.id, 128),
+    relevance: reviewText(item.relevance, 80),
+    premise: reviewText(item.premise, 80),
+    difference: reviewText(item.difference, 320),
+    source: reviewText(item.source, 120),
+  };
+  return value.id ? Object.freeze(value) : null;
+}
+
+function sanitizeReviewWarnings(items = []) {
+  return [...new Set((Array.isArray(items) ? items : [])
+    .map((item) => reviewText(item, 320))
+    .filter(Boolean))];
+}
+
+function reviewText(value, maxLength) {
+  return String(value || "").replace(/\s+/gu, " ").trim().slice(0, maxLength);
+}
+
+function reviewArray(value) {
+  return Array.isArray(value) ? value : [];
+}
+
 export function assertFrozenEvidenceCompleteness({
   record,
   requirementContext,
@@ -1053,15 +1303,17 @@ function assertSourceEqualPromptEvidenceBody({
   const sourceAnswer = String(
     sourceRecord.answer || sourceRecord.officialAnswer || sourceRecord.conclusion || "",
   ).trim();
-  for (const [field, expected] of Object.entries({
+  const structuredFields = Object.entries({
     question: sourceQuestion,
     detailedScene: sourceDetailedScene,
     answer: sourceAnswer,
-  }).filter(([, value]) => value)) {
+  }).filter(([, value]) => value);
+  for (const [field, expected] of structuredFields) {
     if (String(serialized[field] ?? "") !== String(expected)) {
       throw new Error(`${caseId} evidence ${evidenceId}.${field} is incomplete or differs from qa-index.json`);
     }
   }
+  if (structuredFields.length) return;
   const sourceText = String(
     sourceRecord.text || sourceRecord.fullText || sourceRecord.officialText || "",
   ).trim();
@@ -1450,10 +1702,13 @@ function isRecoverableEvidencePreparationFailure(error) {
 
 function helpText() {
   return `Usage:
+  node scripts/frozen-public-rag-final-effort.mjs capture --dataset <test.txt> --snapshot <bundle.json> [--case case-004 ...] --max-calls <n>
   node scripts/frozen-public-rag-final-effort.mjs freeze --dataset <test.txt> --snapshot <bundle.json> --requirements <requirements.json> --diagnostics <safe.json> --case case-004 [--case ...] --max-calls <n>
   node scripts/frozen-public-rag-final-effort.mjs run --snapshot <bundle.json> --output <results.json> --effort <low|medium> --case case-004 [--case ...] --max-calls <n>
 
-Freeze executes the current public evidence-preparation path once and captures
+Capture executes the current public evidence-preparation path and saves each
+model-visible prompt for manual review without an automated completeness gate.
+Freeze executes the same path once and captures
 the exact final prompt without calling the final model. It completes only after
 the required cards and official records are source-equal and untruncated in the
 serialized prompt. Run never rebuilds the prompt and performs one zero-retry
@@ -1465,6 +1720,16 @@ async function main(argv = process.argv.slice(2)) {
   const options = parseFrozenPublicRagArgs(argv);
   if (options.help) {
     console.log(helpText());
+    return;
+  }
+  if (options.command === "capture") {
+    await freezePublicRagFinalInputs({
+      datasetPath: options.datasetPath,
+      snapshotPath: options.snapshotPath,
+      caseIds: options.caseIds,
+      maxCalls: options.maxCalls,
+      manualReviewOnly: true,
+    });
     return;
   }
   if (options.command === "freeze") {

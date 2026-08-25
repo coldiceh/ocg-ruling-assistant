@@ -347,6 +347,7 @@ export async function retrieveRagEvidence({
   const ruleQueryCandidateQuestions = buildRuleQueryCandidateQuestions({
     scopedMatches: localOfficialMatches.all,
     crossCardRecords: initialCrossCardOfficialQuestions,
+    resolvedCards: effectiveQaIdentityCards,
     limit: 12,
   });
   let modelCandidateAssessments = [];
@@ -2585,7 +2586,7 @@ function rankOfficialQaQuestionTextProfiles({
       headlineDistinctiveSemanticHitCount,
     });
   }
-  preliminary.sort((left, right) => (
+  const semanticHead = [...preliminary].sort((left, right) => (
     right.headlineDistinctiveSemanticHitCount - left.headlineDistinctiveSemanticHitCount
       || right.headlineEffectPhraseHitCount - left.headlineEffectPhraseHitCount
       || right.headlineCanonicalFourGramHitCount - left.headlineCanonicalFourGramHitCount
@@ -2598,11 +2599,29 @@ function rankOfficialQaQuestionTextProfiles({
       || stableRecordKey(left.record).localeCompare(stableRecordKey(right.record))
   ));
 
+  // Keep one independent whole-question lexical head. Semantic labels are
+  // useful for ranking analogues, but they must not prevent a near-verbatim
+  // official question from ever reaching the more precise longest-run check.
+  // This reserves no extra final evidence slots: the lexical head is merged
+  // back into the existing fixed `limit` below.
+  const lexicalHead = [...preliminary].sort((left, right) => (
+    right.fourGramCoverage - left.fourGramCoverage
+      || right.fourGramHitCount - left.fourGramHitCount
+      || right.threeGramCoverage - left.threeGramCoverage
+      || right.threeGramHitCount - left.threeGramHitCount
+      || right.headlineCanonicalFourGramHitCount - left.headlineCanonicalFourGramHitCount
+      || right.headlineFourGramHitCount - left.headlineFourGramHitCount
+      || stableRecordKey(left.record).localeCompare(stableRecordKey(right.record))
+  ));
+
   // Longest common-substring comparison is more expensive than the initial
   // four-gram scan. It is only a tie-breaker, so calculate it for a generous
   // bounded head rather than multiplying it by the full synchronized corpus.
   const runCandidateLimit = Math.max(64, Math.min(256, Math.floor(Number(limit) || 6) * 32));
-  const ranked = preliminary.slice(0, runCandidateLimit)
+  const enrichedByRecord = new Map(dedupeBy([
+    ...semanticHead.slice(0, runCandidateLimit),
+    ...lexicalHead.slice(0, runCandidateLimit),
+  ], (item) => stableRecordKey(item.record))
     .map((item) => ({
       ...item,
       longestRun: longestCommonCjkRun(querySegments, item.cjkSegments),
@@ -2621,10 +2640,15 @@ function rankOfficialQaQuestionTextProfiles({
         ) || item.headlineCanonicalFourGramHitCount >= 3
       ),
     }))
-    .filter((item) => (
-      item.longestRun >= 5
+    .map((item) => [stableRecordKey(item.record), item]));
+  const isQualified = (item) => (
+    item.longestRun >= 5
       || (item.mechanismAnchoredShortMatch && item.longestRun >= 4)
-    ))
+  );
+  const ranked = semanticHead.slice(0, runCandidateLimit)
+    .map((item) => enrichedByRecord.get(stableRecordKey(item.record)))
+    .filter(Boolean)
+    .filter(isQualified)
     .sort((left, right) => (
       Number(right.headlineAnchored) - Number(left.headlineAnchored)
         || right.headlineDistinctiveSemanticHitCount - left.headlineDistinctiveSemanticHitCount
@@ -2639,11 +2663,27 @@ function rankOfficialQaQuestionTextProfiles({
         || right.fourGramCoverage - left.fourGramCoverage
         || stableRecordKey(left.record).localeCompare(stableRecordKey(right.record))
     ));
+  const lexicalRanked = lexicalHead.slice(0, runCandidateLimit)
+    .map((item) => enrichedByRecord.get(stableRecordKey(item.record)))
+    .filter(Boolean)
+    .filter(isQualified)
+    .sort((left, right) => (
+      right.fourGramCoverage - left.fourGramCoverage
+        || right.longestRun - left.longestRun
+        || right.fourGramHitCount - left.fourGramHitCount
+        || right.threeGramCoverage - left.threeGramCoverage
+        || right.headlineCanonicalFourGramHitCount - left.headlineCanonicalFourGramHitCount
+        || right.headlineLongestRun - left.headlineLongestRun
+        || stableRecordKey(left.record).localeCompare(stableRecordKey(right.record))
+    ));
   // Use absolute relevance requirements only.  A relative threshold tied to
   // the single best question made recall depend on unrelated corpus contents:
   // one near-verbatim candidate could erase another independently decisive
   // question from the bounded post-planner pool.
-  return ranked
+  return dedupeBy([
+    ...lexicalRanked.slice(0, 1),
+    ...ranked,
+  ], (item) => stableRecordKey(item.record))
     .filter((item) => (
       (item.fourGramHitCount >= minimumHits
         && item.fourGramCoverage >= 0.12
@@ -2769,6 +2809,19 @@ function selectIndependentRuleQueries({
   ], {
     maxRuleSearchQueries: safeLimit,
   });
+}
+
+function relatedMatchedQuestionSideCardIds(item = {}) {
+  const values = [
+    ...(Array.isArray(item?.matchedQuestionCardIds) ? item.matchedQuestionCardIds : []),
+    ...(Array.isArray(item?.matchedRelatedQuestionCardIds)
+      ? item.matchedRelatedQuestionCardIds
+      : []),
+    ...(Array.isArray(item?.retrievalSignals?.matchedQuestionCardIds)
+      ? item.retrievalSignals.matchedQuestionCardIds
+      : []),
+  ];
+  return [...new Set(values.map(normalizeId).filter(Boolean))];
 }
 
 function compareRetrievedRecords(left = {}, right = {}) {
@@ -3465,10 +3518,19 @@ function deriveRuleSearchQueries(userQuery) {
 function buildRuleQueryCandidateQuestions({
   scopedMatches = [],
   crossCardRecords = [],
+  resolvedCards = [],
   limit = 12,
 } = {}) {
   const safeLimit = Math.max(1, Math.min(12, Math.floor(Number(limit) || 12)));
-  const scopedCandidates = (scopedMatches || []).slice(0, Math.min(8, safeLimit)).map((match) => ({
+  // Preserve distinct structured question premises before taking the small
+  // question-only sample shown to the query model. A raw top-N prefix can hide
+  // the only candidate that combines several resolved card identities even
+  // though its official question is already in the scoped pool.
+  const scopedCandidates = reserveIdentitySourceCoverage(
+    scopedMatches || [],
+    Math.min(8, safeLimit),
+    resolvedCards,
+  ).slice(0, Math.min(8, safeLimit)).map((match) => ({
     ...(match.record || {}),
     questionType: match.questionType || match.record?.questionType || "unknown",
   }));
@@ -4974,17 +5036,16 @@ function reserveIdentitySourceCoverage(items = [], limit = 1, resolvedCards = []
   const hasResolvedIdentity = identityTokenByResolvedId.size > 0
     || identityTokensByResolvedName.size > 0;
   const bestByCoverageKey = new Map();
-  const ordinaryPremiseVariantsByIdentity = new Map();
   (items || []).forEach((item, index) => {
     const record = item?.record || item;
     const principalIds = [...principalQuestionCardIds(record)]
       .map(normalizeId)
       .filter(Boolean);
     const rawIds = [
-      ...(Array.isArray(item?.matchedQuestionCardIds) ? item.matchedQuestionCardIds : []),
-      ...(Array.isArray(item?.retrievalSignals?.matchedQuestionCardIds)
-        ? item.retrievalSignals.matchedQuestionCardIds
-        : []),
+      // Slot coverage must use question-side identities only. Source metadata
+      // can establish provenance, but it must not make a one-card question look
+      // like a multi-card premise and crowd out a genuine question-side match.
+      ...relatedMatchedQuestionSideCardIds(item),
       ...principalIds,
     ]
       .map(normalizeId)
@@ -5004,29 +5065,20 @@ function reserveIdentitySourceCoverage(items = [], limit = 1, resolvedCards = []
     if (!identities.length) return;
     const identityCombination = identities.join("|");
     const strictQueryKeys = supplementalQueryKeysForItem(item, { strictOnly: true }).sort();
-    let coverageKeys;
-    if (strictQueryKeys.length) {
-      coverageKeys = strictQueryKeys.map((branchKey) => `${identityCombination}::${branchKey}`);
-    } else {
-      // Two official questions can involve the same resolved cards while asking
-      // about different external premises (for example, two different field
-      // restrictions). They are not interchangeable evidence. Distinguish at
-      // most two top-ranked premise variants from the official question-side
-      // IDs only; answer text and broad record metadata never participate.
-      const premiseKey = principalIds
-        .filter((id) => !resolvedIds.has(id))
-        .sort()
-        .join("|") || "none";
-      const premiseVariants = ordinaryPremiseVariantsByIdentity.get(identityCombination)
-        || new Set();
-      if (!premiseVariants.has(premiseKey) && premiseVariants.size < 2) {
-        premiseVariants.add(premiseKey);
-        ordinaryPremiseVariantsByIdentity.set(identityCombination, premiseVariants);
-      }
-      coverageKeys = premiseVariants.has(premiseKey)
-        ? [`${identityCombination}::ordinary-premise:${premiseKey}`]
-        : [];
-    }
+    // Query-branch coverage and question-premise coverage are independent.
+    // A candidate that happens to match a strict planner branch must not lose
+    // its own structured question premise: another record can match the same
+    // branch while asking about a materially different restriction. Preserve
+    // both dimensions inside the existing global evidence limit. Answer text
+    // and broad record metadata never participate.
+    const premiseKey = principalIds
+      .filter((id) => !resolvedIds.has(id))
+      .sort()
+      .join("|") || "none";
+    const coverageKeys = [
+      `${identityCombination}::question-premise:${premiseKey}`,
+      ...strictQueryKeys.map((branchKey) => `${identityCombination}::${branchKey}`),
+    ];
     coverageKeysByRecord.set(stableRecordKey(record), coverageKeys);
     for (const coverageKey of coverageKeys) {
       if (!bestByCoverageKey.has(coverageKey)) {
@@ -5046,6 +5098,19 @@ function reserveIdentitySourceCoverage(items = [], limit = 1, resolvedCards = []
       || left[1].index - right[1].index
       || left[0].localeCompare(right[0])
     ));
+  // When strict planner branches compete with several distinct official
+  // premises inside a very small scoped budget, reserve one best strict
+  // representative first. The remaining slots still follow premise/identity
+  // coverage, so this does not restore the former fixed two-premise ceiling.
+  const strictRepresentative = [...bestByCoverageKey.values()]
+    .filter((entry) => entry.strict)
+    .sort((left, right) => (
+      right.identitySize - left.identitySize
+      || left.index - right.index
+      || stableRecordKey(left.item?.record || left.item)
+        .localeCompare(stableRecordKey(right.item?.record || right.item))
+    ))[0]?.item;
+  if (strictRepresentative) add(strictRepresentative);
   for (const [coverageKey, { item }] of coverageEntries) {
     if (representedCoverageKeys.has(coverageKey)) continue;
     add(item);
@@ -5203,21 +5268,63 @@ export function reserveRankedHeadAndSupplementalCoverage(items = [], limit = 1, 
   ], (item) => stableRecordKey(item?.record || item));
 }
 
-function reserveUncoveredCrossCardBranches(items = [], limit = 1, {
+export function reserveUncoveredCrossCardBranches(items = [], limit = 1, {
   queryKeys = [],
+  fillRemaining = false,
 } = {}) {
   const safeLimit = Math.max(0, Math.floor(Number(limit) || 0));
   if (!safeLimit) return [];
   const ordered = dedupeEvidence(items || []);
-  const strict = queryKeys.length
-    ? reserveSupplementalQueryCoverage(ordered, safeLimit, {
-        queryKeys,
-        strictOnly: true,
-        fillRemaining: false,
-      }).slice(0, safeLimit)
-    : [];
-  const selected = [...strict];
+  // Preserve the authoritative retrieval head before reserving planner-branch
+  // coverage. Planner labels are useful for diversity, but four such labels
+  // must not collectively erase the highest-ranked official question.
+  const head = ordered[0] || null;
+  const selected = head ? [head] : [];
   const selectedKeys = new Set(selected.map(stableRecordKey));
+  const initiallyRepresentedQueryKeys = new Set(selected.flatMap((item) => (
+    supplementalQueryKeysForItem(item, { strictOnly: true })
+  )));
+  const strictQueryKeys = queryKeys.filter((key) => !initiallyRepresentedQueryKeys.has(key));
+  const strict = strictQueryKeys.length && selected.length < safeLimit
+    ? reserveSupplementalQueryCoverage(
+        ordered.filter((item) => !selectedKeys.has(stableRecordKey(item))),
+        safeLimit - selected.length,
+        {
+          queryKeys: strictQueryKeys,
+          strictOnly: true,
+          fillRemaining: false,
+        },
+      ).slice(0, safeLimit - selected.length)
+    : [];
+  for (const item of strict) {
+    if (selected.length >= safeLimit) break;
+    const key = stableRecordKey(item);
+    if (selectedKeys.has(key)) continue;
+    selected.push(item);
+    selectedKeys.add(key);
+  }
+  const representedQueryKeys = new Set(selected.flatMap((item) => (
+    supplementalQueryKeysForItem(item, { strictOnly: false })
+  )));
+  const uncoveredQueryKeys = queryKeys.filter((key) => !representedQueryKeys.has(key));
+  const branchRepresentatives = uncoveredQueryKeys.length && selected.length < safeLimit
+    ? reserveSupplementalQueryCoverage(
+        ordered.filter((item) => !selectedKeys.has(stableRecordKey(item))),
+        safeLimit - selected.length,
+        {
+          queryKeys: uncoveredQueryKeys,
+          strictOnly: false,
+          fillRemaining: false,
+        },
+      )
+    : [];
+  for (const item of branchRepresentatives) {
+    if (selected.length >= safeLimit) break;
+    const key = stableRecordKey(item);
+    if (selectedKeys.has(key)) continue;
+    selected.push(item);
+    selectedKeys.add(key);
+  }
   // A question-only model assessment is not authority and cannot delete any
   // candidate, but a same/partial-premise assessment is useful bounded ranking
   // evidence. Preserve every such candidate that fits after strict branches so
@@ -5229,21 +5336,22 @@ function reserveUncoveredCrossCardBranches(items = [], limit = 1, {
     selected.push(item);
     selectedKeys.add(key);
   }
-  // Fill only one remaining slot with an unassessed ordinary analogue. Prefer
-  // a question-only cross-language mechanism match inside that same slot; it
-  // replaces a duplicate ordinary head and never increases the old reserve.
-  const analogue = selected.length < safeLimit
-    ? ordered.find((item) => {
-        const key = stableRecordKey(item);
-        const signals = (item?.record || item)?.retrievalSignals || {};
-        return !selectedKeys.has(key)
-          && signals.questionBranchMultilingualMechanismFallback === true;
-      }) || ordered.find((item) => !selectedKeys.has(stableRecordKey(item)))
-    : null;
-  return analogue ? [...selected, analogue] : selected;
+  if (fillRemaining) {
+    // When there is no scoped evidence at all, fill the bounded cross-card-only
+    // result in authoritative rank order. In a mixed allocation, unassessed
+    // padding would evict scoped sources without covering another query branch.
+    for (const item of ordered) {
+      if (selected.length >= safeLimit) break;
+      const key = stableRecordKey(item);
+      if (selectedKeys.has(key)) continue;
+      selected.push(item);
+      selectedKeys.add(key);
+    }
+  }
+  return selected;
 }
 
-function allocateOfficialRelatedEvidence({
+export function allocateOfficialRelatedEvidence({
   scopedCandidates = [],
   crossCardCandidates = [],
   limit = 1,
@@ -5265,9 +5373,15 @@ function allocateOfficialRelatedEvidence({
   const crossCard = dedupeEvidence(crossCardCandidates)
     .filter((item) => !scopedKeys.has(stableRecordKey(item)));
   if (!scoped.length) {
-    const crossCardOnlyLimit = Math.min(4, safeLimit);
+    // At most four independent planner branches exist. Keep room for those
+    // branches plus one retrieval-ranked head inside the existing total limit.
+    const crossCardOnlyLimit = Math.min(
+      safeLimit,
+      Math.max(1, Math.min(5, supplementalRuleQueryKeys.length + 1)),
+    );
     return reserveUncoveredCrossCardBranches(crossCard, crossCardOnlyLimit, {
       queryKeys: supplementalRuleQueryKeys,
+      fillRemaining: true,
     });
   }
   if (!crossCard.length) {
@@ -5276,9 +5390,12 @@ function allocateOfficialRelatedEvidence({
 
   // A mechanism ruling is often documented on another card, but analogies must
   // not crowd same-card sources out of the bounded prompt. Cross-card slots are
-  // earned by strict branches still uncovered by the retained scoped prefix,
-  // followed by at most one ordinary analogue; they are never padded to four.
-  const maxCrossCard = Math.min(4, Math.max(0, safeLimit - 1));
+  // bounded to one retrieval-ranked head plus the independently planned query
+  // branches still uncovered by the retained scoped prefix.
+  const maxCrossCard = Math.min(
+    Math.max(0, safeLimit - 1),
+    Math.max(1, Math.min(5, supplementalRuleQueryKeys.length + 1)),
+  );
   let crossCardCount = Math.min(1, maxCrossCard);
   let selectedScoped = scoped.slice(0, safeLimit - crossCardCount);
   let selectedCrossCard = [];

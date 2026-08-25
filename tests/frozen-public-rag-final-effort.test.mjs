@@ -10,6 +10,8 @@ import {
   buildFrozenCaseRecord,
   buildFrozenPublicDiagnostics,
   freezePublicRagFinalInputs,
+  parseQuestionOnlyCaptureDatasetText,
+  parseFrozenPublicRagArgs,
   runFrozenPublicRagFinalEffort,
 } from "../scripts/frozen-public-rag-final-effort.mjs";
 
@@ -649,7 +651,203 @@ test("freeze sends the same explicit mode, profile, and ruling version as the we
   assert.doesNotMatch(snapshotText, new RegExp(privateReference, "u"));
   const snapshot = JSON.parse(snapshotText);
   assert.equal(snapshot.cases[0].evidenceAudit.status, "complete");
+  assert.equal(Object.hasOwn(snapshot.cases[0], "manualReviewTrace"), false);
   assert.equal(Object.hasOwn(snapshot, "datasetDigest"), false);
+});
+
+test("capture saves the exact model-visible evidence prompt without requirements or a final call", async () => {
+  const temp = await mkdtemp(path.join(os.tmpdir(), "frozen-public-rag-capture-"));
+  const datasetPath = path.join(temp, "private-test.txt");
+  const snapshotPath = path.join(temp, "capture.json");
+  const privateReference = "只用于人工评分、不得进入证据包的答案";
+  await writeFile(datasetPath, `网页问题\n${privateReference}\n`, "utf8");
+  const fixture = evidenceFixture("网页问题", "case-001");
+  let evidenceDataLoads = 0;
+
+  await freezePublicRagFinalInputs({
+    datasetPath,
+    snapshotPath,
+    caseIds: ["case-001"],
+    maxCalls: 1,
+    manualReviewOnly: true,
+    env: TEST_ENV,
+    loadEvidenceData: async () => {
+      evidenceDataLoads += 1;
+      throw new Error("manual capture must not load an automated requirement corpus");
+    },
+    answerPublic: async ({ payload, answerRuling }) => ({
+      answer: await answerRuling({ question: payload.question }),
+    }),
+    answerRuling: async ({ modelInvoker }) => {
+      await modelInvoker({
+        prompt: fixture.prompt,
+        provider: "relay",
+        modelName: "gpt-5.6-sol",
+        maxTokens: 32000,
+        reasoningEffort: "low",
+      });
+      return {
+        resolvedCards: [{
+          id: fixture.card.id,
+          name: fixture.card.name,
+          matchedQuery: "测试卡简称",
+          source: "local",
+        }],
+        usedEvidence: [{ id: fixture.qa.id }],
+        debug: {
+          route: "ordinary_rag",
+          dataRevision: "test-data-revision",
+          evidenceFingerprint: sha256("test-evidence"),
+          finalPromptSha256: sha256(fixture.prompt),
+          promptTruncated: false,
+          selectedEvidenceDiagnostics: fixture.selectedEvidenceDiagnostics,
+          unresolvedMentions: [{ input: "未解析卡名", reason: "no_unique_identity" }],
+          ambiguousMentions: [{
+            input: "歧义卡名",
+            reason: "multiple_candidates",
+            candidateCards: [{ id: "20001", name: "候选卡" }],
+          }],
+          modelCardNameCandidates: [{ name: fixture.card.name, source: "relay" }],
+          modelRuleSearchQueries: [{
+            subclaim: "确认处理时对象是否仍合法",
+            checkpoint: "resolution_snapshot",
+            query: "处理时 对象 合法 | 処理時 対象 適法 | target legal during resolution",
+            confidence: "high",
+          }],
+          modelRuleCandidateAssessments: [{
+            id: fixture.qa.id,
+            relevance: "high",
+            premise: "same",
+            difference: "",
+          }],
+          ruleQueryPlanDiagnostics: [{
+            subclaim: "确认处理时对象是否仍合法",
+            checkpoint: "resolution_snapshot",
+          }],
+          cardNameWarnings: ["card-name-review-warning"],
+          ruleQueryWarnings: ["rule-query-review-warning"],
+          retrievalCandidateStages: {
+            initialCrossCardQuestionIds: ["qa-head-only"],
+            crossCardEvidenceCandidateIds: [fixture.qa.id, "qa-dropped"],
+            allocatedOfficialRelatedIds: [fixture.qa.id],
+            notAllocatedCrossCardIds: ["qa-dropped"],
+          },
+        },
+      };
+    },
+    log: () => {},
+  });
+
+  const snapshotText = await readFile(snapshotPath, "utf8");
+  const snapshot = JSON.parse(snapshotText);
+  assert.equal(evidenceDataLoads, 0);
+  assert.equal(snapshot.kind, "frozen_public_rag_evidence_capture");
+  assert.equal(snapshot.status, "complete");
+  assert.equal(snapshot.finalModelCallCount, 0);
+  assert.equal(snapshot.cases[0].status, "captured_for_manual_review");
+  assert.equal(snapshot.cases[0].prompt, fixture.prompt);
+  assert.equal(Object.hasOwn(snapshot, "evidenceRequirementsSha256"), false);
+  assert.equal(Object.hasOwn(snapshot.cases[0], "evidenceAudit"), false);
+  assert.deepEqual(snapshot.cases[0].manualReviewTrace.resolvedCards, [{
+    id: fixture.card.id,
+    cid: "",
+    name: fixture.card.name,
+    input: "",
+    matchedQuery: "测试卡简称",
+    source: "local",
+    identityVerificationStatus: "",
+  }]);
+  assert.equal(snapshot.cases[0].manualReviewTrace.modelRuleSearchQueries.length, 1);
+  assert.equal(snapshot.cases[0].manualReviewTrace.unresolvedMentions[0].input, "未解析卡名");
+  assert.equal(snapshot.cases[0].manualReviewTrace.ambiguousMentions[0].candidateCards[0].id, "20001");
+  assert.deepEqual(
+    snapshot.cases[0].manualReviewTrace.candidateJourney.map(({ id, status }) => ({ id, status })),
+    [{ id: fixture.qa.id, status: "model_visible" },
+      { id: "qa-dropped", status: "not_allocated_within_related_budget" },
+      { id: "qa-head-only", status: "candidate_only_not_selected" }],
+  );
+  assert.doesNotMatch(snapshotText, new RegExp(privateReference, "u"));
+});
+
+test("capture CLI accepts anonymous selections without an evidence-requirements argument", () => {
+  assert.deepEqual(parseFrozenPublicRagArgs([
+    "capture",
+    "--dataset", "private-test.txt",
+    "--snapshot", "capture.json",
+    "--case", "case-004",
+    "--max-calls", "1",
+  ]), {
+    command: "capture",
+    caseIds: ["case-004"],
+    datasetPath: "private-test.txt",
+    snapshotPath: "capture.json",
+    maxCalls: "1",
+  });
+});
+
+test("capture question projection discards and never compares reference answers", () => {
+  const first = parseQuestionOnlyCaptureDatasetText([
+    "同一个问题",
+    "第一个参考答案",
+    "",
+    "同一个问题",
+    "互相冲突的参考答案",
+  ].join("\n"));
+  const second = parseQuestionOnlyCaptureDatasetText([
+    "同一个问题",
+    "完全不同的答案甲",
+    "",
+    "同一个问题",
+    "完全不同的答案乙",
+  ].join("\n"));
+  assert.equal(first.uniqueCaseCount, 1);
+  assert.equal(first.duplicateCount, 1);
+  assert.deepEqual(first.cases, second.cases);
+  assert.equal(first.questionDatasetDigest, second.questionDatasetDigest);
+  const serialized = JSON.stringify(first);
+  assert.doesNotMatch(serialized, /参考答案|冲突|答案甲|答案乙/u);
+});
+
+test("capture records exact official QA direct answers without requiring a final prompt", async () => {
+  const temp = await mkdtemp(path.join(os.tmpdir(), "frozen-public-rag-capture-exact-"));
+  const datasetPath = path.join(temp, "private-test.txt");
+  const snapshotPath = path.join(temp, "capture.json");
+  await writeFile(datasetPath, "官方日文原题\n不会进入捕获结果的参考答案\n", "utf8");
+  let ordinaryCalls = 0;
+
+  await freezePublicRagFinalInputs({
+    datasetPath,
+    snapshotPath,
+    maxCalls: 1,
+    manualReviewOnly: true,
+    env: TEST_ENV,
+    answerPublic: async () => ({
+      answer: {
+        officialQaId: "18702",
+        officialQuestionJapanese: "公式質問の全文",
+        officialAnswerJapanese: "公式回答の全文",
+        usedEvidence: [{ id: "official:18702", type: "official_qa", title: "公式Q&A" }],
+        resolvedCards: [{ id: "123", name: "测试卡" }],
+        debug: { route: "official_qa_exact_direct" },
+      },
+    }),
+    answerRuling: async () => {
+      ordinaryCalls += 1;
+      throw new Error("exact direct capture must not enter the ordinary final path");
+    },
+    log: () => {},
+  });
+
+  const snapshot = JSON.parse(await readFile(snapshotPath, "utf8"));
+  assert.equal(ordinaryCalls, 0);
+  assert.equal(snapshot.status, "complete");
+  assert.equal(snapshot.finalModelCallCount, 0);
+  assert.equal(snapshot.cases[0].status, "captured_official_qa_exact_direct");
+  assert.equal(snapshot.cases[0].route, "official_qa_exact_direct");
+  assert.equal(snapshot.cases[0].directOfficialQa.qaId, "18702");
+  assert.equal(snapshot.cases[0].directOfficialQa.answerJapanese, "公式回答の全文");
+  assert.equal(Object.hasOwn(snapshot.cases[0], "prompt"), false);
+  assert.doesNotMatch(JSON.stringify(snapshot), /不会进入捕获结果的参考答案/u);
 });
 
 test("reference answers cannot change the question-only frozen input digest", async () => {
@@ -737,6 +935,69 @@ test("source-backed evidence audit rejects a silently shortened card text", () =
       evidenceSources: new Map([[fixture.qa.id, fixture.qa]]),
     },
   }), /effect text is incomplete/u);
+});
+
+test("source-backed evidence audit prefers structured fields over derived text", async (t) => {
+  const fixture = evidenceFixture("测试问题", "case-004");
+  const sourceRecord = {
+    ...fixture.qa,
+    text: [
+      `问题：${fixture.qa.question}`,
+      `场景：${fixture.qa.rawDetailedQuestion}`,
+      `答案：${fixture.qa.answer}`,
+    ].join(" / "),
+  };
+  const audit = (mutateEvidence = () => {}) => {
+    const promptLines = fixture.prompt.split("\n");
+    const payload = JSON.parse(promptLines.pop());
+    mutateEvidence(payload.evidence.officialQaRelated[0]);
+    const prompt = [...promptLines, JSON.stringify(payload)].join("\n");
+    const record = buildFrozenCaseRecord({
+      item: { id: "case-004", question: "测试问题", sourceBlocks: [4] },
+      captured: {
+        prompt,
+        provider: "relay",
+        modelName: "gpt-5.6-sol",
+        maxTokens: 32000,
+        reasoningEffort: "low",
+      },
+      transportContract: testTransportContract(),
+      answer: {
+        resolvedCards: [{ id: fixture.card.id }],
+        usedEvidence: [{ id: fixture.qa.id }],
+        debug: {
+          route: "ordinary_rag",
+          dataRevision: "test-data-revision",
+          evidenceFingerprint: sha256("test-evidence"),
+          finalPromptSha256: sha256(prompt),
+          promptTruncated: false,
+          selectedEvidenceDiagnostics: fixture.selectedEvidenceDiagnostics,
+        },
+      },
+    });
+    return assertFrozenEvidenceCompleteness({
+      record,
+      requirementContext: {
+        requirement: fixture.evidenceRequirements.cases["case-004"],
+        cardSources: new Map([[fixture.card.id, fixture.card]]),
+        evidenceSources: new Map([[fixture.qa.id, sourceRecord]]),
+      },
+    });
+  };
+
+  await t.test("accepts a differently formatted derived text representation", () => {
+    assert.equal(audit().status, "complete");
+  });
+  await t.test("rejects an omitted structured field", () => {
+    assert.throws(() => audit((evidence) => {
+      delete evidence.detailedScene;
+    }), /\.detailedScene is incomplete or differs/u);
+  });
+  await t.test("rejects a mutated structured field", () => {
+    assert.throws(() => audit((evidence) => {
+      evidence.answer = "被篡改的官方答案";
+    }), /\.answer is incomplete or differs/u);
+  });
 });
 
 test("freeze preserves a failed evidence-audit base record, continues, and forbids replay", async () => {
@@ -1203,6 +1464,10 @@ test("targeted-eight workflow keeps private evidence requirements outside the re
     /--requirements "\$RUNNER_TEMP\/frozen-eight-requirements\.json"/u,
   );
   assert.match(workflow, /RAG_RULE_MODEL_TIMEOUT_MS:\s*"180000"/u);
+  assert.match(workflow, /workflow_dispatch:/u);
+  assert.match(workflow, /private-frozen-evidence-capture-\*/u);
+  assert.match(workflow, /stage="capture"/u);
+  assert.match(workflow, /parseQuestionOnlyCaptureDatasetText/u);
   assert.doesNotMatch(
     workflow,
     /--requirements\s+\.github\//u,
@@ -1233,6 +1498,14 @@ test("targeted-eight workflow keeps private evidence requirements outside the re
   assert.doesNotMatch(preflight, /grep -- '-saltlen'/u);
   assert.doesNotMatch(execute, /PRIVATE_DATASET_BASE64|base64 --decode/u);
   assert.match(execute, /--dataset "\$RUNNER_TEMP\/private-dataset\.txt"/u);
+  assert.match(
+    execute,
+    /frozen-public-rag-final-effort\.mjs capture[\s\S]*--max-calls 32/u,
+  );
+  assert.equal(
+    (workflow.match(/if: steps\.scope\.outputs\.stage == 'low' \|\| steps\.scope\.outputs\.stage == 'medium'/gu) || []).length,
+    2,
+  );
   assert.match(execute, /--requirements "\$RUNNER_TEMP\/frozen-eight-requirements\.json"/u);
   assert.match(execute, /--diagnostics "\$RUNNER_TEMP\/frozen-public-rag-diagnostics\.json"/u);
   assert.match(execute, /replay_allowed=false/u);
@@ -1261,12 +1534,17 @@ test("Windows private-review tools keep the private key non-exportable and valid
     "../scripts/decrypt-frozen-public-rag-review.ps1",
     import.meta.url,
   ), "utf8");
+  const runner = await readFile(new URL(
+    "../scripts/run-frozen-public-rag-final-effort.ps1",
+    import.meta.url,
+  ), "utf8");
 
   assert.match(initialize, /Cert:\\CurrentUser\\My/u);
   assert.match(initialize, /-KeyLength 3072/u);
   assert.match(initialize, /-KeyExportPolicy NonExportable/u);
   assert.match(initialize, /-----BEGIN PUBLIC KEY-----/u);
   assert.doesNotMatch(initialize, /ExportParameters\(\$true\)|PRIVATE KEY-----/u);
+  assert.match(runner, /ValidateSet\("capture", "freeze", "run"\)/u);
 
   assert.match(decrypt, /gh run download/u);
   assert.match(decrypt, /private-evaluation-results/u);
