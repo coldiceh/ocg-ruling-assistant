@@ -210,7 +210,7 @@ try {
   if ($ArtifactName) {
     $matches = @($artifacts | Where-Object { $_.name -ceq $ArtifactName -and -not $_.expired })
   } else {
-    $pattern = "^frozen-eight-(?:freeze|low|medium)-$RunId-$RunAttempt$"
+    $pattern = "^frozen-eight-(?:capture|freeze|low|medium)-$RunId-$RunAttempt$"
     $matches = @($artifacts | Where-Object { $_.name -match $pattern -and -not $_.expired })
   }
   if ($matches.Count -gt 1) {
@@ -244,15 +244,16 @@ try {
     "schema_version", "archive_cipher", "key_envelope", "source_sha", "stage",
     "source_key", "case_ids", "run_id", "run_attempt", "replay_allowed",
     "runner_exit_code", "review_cipher_sha256", "review_envelope_sha256"
-  ) -OptionalKeys @("reusable_cipher_sha256", "reusable_hmac_sha256") -AllowEmptyKeys @("source_key")
+  ) -OptionalKeys @("reusable_cipher_sha256", "reusable_hmac_sha256") -AllowEmptyKeys @("source_key", "case_ids")
   if ($metadata.schema_version -ne "1" -or
       $metadata.archive_cipher -ne "aes-256-cbc-pbkdf2-sha256-iter200000-saltlen8" -or
       $metadata.key_envelope -ne "rsa-oaep-sha256-mgf1-sha256" -or
       $metadata.source_sha -notmatch '^[a-f0-9]{40,64}$' -or
-      $metadata.stage -notmatch '^(freeze|low|medium)$' -or
-      ($metadata.stage -eq "freeze" -and $metadata.source_key -ne "") -or
-      ($metadata.stage -ne "freeze" -and $metadata.source_key -notmatch '^[1-9][0-9]*-[1-9][0-9]*$') -or
-      $metadata.case_ids -notmatch '^case-[0-9]{3,}(,case-[0-9]{3,})*$' -or
+      $metadata.stage -notmatch '^(capture|freeze|low|medium)$' -or
+      ($metadata.stage -match '^(capture|freeze)$' -and $metadata.source_key -ne "") -or
+      ($metadata.stage -match '^(low|medium)$' -and $metadata.source_key -notmatch '^[1-9][0-9]*-[1-9][0-9]*$') -or
+      ($metadata.stage -eq "capture" -and $metadata.case_ids -ne "") -or
+      ($metadata.stage -ne "capture" -and $metadata.case_ids -notmatch '^case-[0-9]{3,}(,case-[0-9]{3,})*$') -or
       $metadata.run_id -ne ([string]$RunId) -or
       $metadata.run_attempt -ne ([string]$RunAttempt) -or
       $metadata.replay_allowed -notmatch '^(true|false)$' -or
@@ -319,7 +320,7 @@ try {
     throw "Extracted review archive contains a reparse point."
   }
   $requiredReviewFiles = @("stage.txt", "runner.log", "exit-code.txt")
-  $checkpointName = if ($metadata.stage -eq "freeze") { "snapshot.json" } else { "results.json" }
+  $checkpointName = if ($metadata.stage -match '^(capture|freeze)$') { "snapshot.json" } else { "results.json" }
   if ([int]$metadata.runner_exit_code -eq 0) {
     $requiredReviewFiles += @("binding.txt", $checkpointName)
   }
@@ -341,7 +342,7 @@ try {
     $binding = Read-ExactKeyValueFile -Path $bindingPath -RequiredKeys @(
       "schema_version", "source_sha", "stage", "source_key", "run_id",
       "run_attempt", "case_ids", "replay_allowed", "target_sha256"
-    ) -AllowEmptyKeys @("source_key")
+    ) -AllowEmptyKeys @("source_key", "case_ids")
     $checkpointPath = Join-Path $reviewRoot $checkpointName
     if (-not (Test-Path -LiteralPath $checkpointPath -PathType Leaf) -or
         $binding.schema_version -ne "1" -or
