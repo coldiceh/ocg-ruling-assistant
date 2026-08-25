@@ -90,6 +90,8 @@ jobs:
 
       - name: Test updated snapshot
         id: snapshot_tests
+        # The repository test command covers every test under tests/ while
+        # excluding standalone paid experiment CLIs under scripts/.
         run: pnpm test
 
       - name: Preserve a failed validated snapshot for diagnosis

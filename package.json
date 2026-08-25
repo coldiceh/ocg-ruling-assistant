@@ -38,7 +38,7 @@
     "cleanup:upstash-admin-runs": "node scripts/cleanup-upstash-admin-runs.mjs",
     "revalidate:official-responses": "node scripts/revalidate-official-responses.mjs",
     "test:admin": "node --test --test-concurrency=1 tests/admin-session.test.mjs tests/admin-model-lab-config.test.mjs tests/admin-run-foundation.test.mjs tests/admin-run-redis-storage.test.mjs tests/admin-run-cleanup.test.mjs tests/admin-final-call-budget-ledger.test.mjs tests/admin-final-evidence-readiness.test.mjs tests/admin-evidence-archive.test.mjs tests/admin-evidence-priority.test.mjs tests/admin-evidence-variant.test.mjs tests/admin-model-lab-service.test.mjs tests/admin-model-lab-legacy-lua-packet.test.mjs tests/admin-lab-record-store.test.mjs tests/admin-lab-evaluation.test.mjs tests/admin-model-lab-production.test.mjs tests/admin-model-lab-api.test.mjs tests/admin-model-lab-evaluation-corpus.test.mjs tests/admin-model-lab-local-evidence-coverage.test.mjs tests/admin-model-matrix-cli.test.mjs tests/admin-source-snapshot-export.test.mjs tests/local-relay-effort-experiment.test.mjs tests/offline-experiment-scorer.test.mjs tests/admin-evidence-snapshot-dry-run.test.mjs tests/admin-deepseek-ten-case-workflow.test.mjs tests/direct-relay-terra-luna-workflow.test.mjs tests/final-ruling-prompt-contract.test.mjs tests/upstash-storage-audit.test.mjs tests/local-dev-stack.test.mjs tests/model-pricing.test.mjs tests/model-ruling-schema.test.mjs tests/ruling-model-providers.test.mjs tests/relay-provider.test.mjs tests/public-admin-isolation.test.mjs tests/query-audit.test.mjs tests/ui-rendering.test.mjs tests/request-body-reader.test.mjs",
-    "test": "node --test --test-concurrency=1"
+    "test": "node scripts/run-free-tests.mjs"
   },
   "engines": {
     "node": ">=20"
