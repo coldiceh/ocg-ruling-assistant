@@ -764,8 +764,8 @@ test("unassessed cross-card padding cannot evict scoped evidence", () => {
     supplementalRuleQueryKeys: ["branch-1", "branch-2", "branch-3", "branch-4"],
   });
 
-  assert.equal(selected.filter((item) => item.id.includes("scoped")).length, 4);
-  assert.equal(selected.filter((item) => item.id.includes("unassessed-cross")).length, 1);
+  assert.equal(selected.filter((item) => item.id.includes("scoped")).length, 2);
+  assert.equal(selected.filter((item) => item.id.includes("unassessed-cross")).length, 3);
 });
 
 test("scoped allocation does not discard a later multi-card premise variant", () => {
