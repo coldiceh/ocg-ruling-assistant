@@ -5271,6 +5271,7 @@ export function reserveRankedHeadAndSupplementalCoverage(items = [], limit = 1, 
 export function reserveUncoveredCrossCardBranches(items = [], limit = 1, {
   queryKeys = [],
   fillRemaining = false,
+  rankedHeadCount = 1,
 } = {}) {
   const safeLimit = Math.max(0, Math.floor(Number(limit) || 0));
   if (!safeLimit) return [];
@@ -5278,8 +5279,11 @@ export function reserveUncoveredCrossCardBranches(items = [], limit = 1, {
   // Preserve the authoritative retrieval head before reserving planner-branch
   // coverage. Planner labels are useful for diversity, but four such labels
   // must not collectively erase the highest-ranked official question.
-  const head = ordered[0] || null;
-  const selected = head ? [head] : [];
+  const safeRankedHeadCount = Math.min(
+    safeLimit,
+    Math.max(1, Math.floor(Number(rankedHeadCount) || 1)),
+  );
+  const selected = ordered.slice(0, safeRankedHeadCount);
   const selectedKeys = new Set(selected.map(stableRecordKey));
   const initiallyRepresentedQueryKeys = new Set(selected.flatMap((item) => (
     supplementalQueryKeysForItem(item, { strictOnly: true })
@@ -5408,6 +5412,11 @@ export function allocateOfficialRelatedEvidence({
     );
     selectedCrossCard = reserveUncoveredCrossCardBranches(crossCard, maxCrossCard, {
       queryKeys: uncoveredQueryKeys,
+      // Keep a balanced lexical head before branch representatives. This
+      // preserves high-ranked question-side matches whose query labels are
+      // imperfect, while preventing unassessed cross-card padding from taking
+      // the entire mixed scoped/cross-card budget.
+      rankedHeadCount: Math.min(maxCrossCard, Math.ceil(safeLimit / 2)),
     });
     const nextCrossCardCount = Math.min(maxCrossCard, selectedCrossCard.length);
     if (nextCrossCardCount === crossCardCount) break;
