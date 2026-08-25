@@ -174,6 +174,21 @@ test("live official QA source timeout remains a fail-soft retrieval warning", as
   assert.ok(result.warnings.some((warning) => warning.includes("live_card_qa_index_failed")));
 });
 
+test("opaque local card ids never become numeric live official API requests", async () => {
+  const calls = [];
+  const result = await retrieveLiveOfficialQa({
+    resolvedCards: [{ id: "trap-1", name: "陷阱源" }],
+    fetchImpl: async (url) => {
+      calls.push(String(url));
+      throw new Error("opaque ids must not reach the numeric official API");
+    },
+  });
+
+  assert.deepEqual(calls, []);
+  assert.deepEqual(result.records, []);
+  assert.equal(result.debug.strategy, "live_qa_requires_resolved_cards_or_local_candidates");
+});
+
 test("card-set promotion stays conservative when two compatible QAs share the same exact card set", () => {
   const records = ["a", "b"].map((suffix, index) => ({
     id: `qa-${suffix}`,

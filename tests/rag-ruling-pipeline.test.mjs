@@ -636,13 +636,16 @@ test("glyph normalization collisions remain ambiguous instead of selecting a car
   assert.equal(resolution.ambiguousMentions[0]?.candidateCards.length, 2);
 });
 
-test("a unique one-character card-name difference resolves with high confidence", () => {
+test("a unique one-character card-name difference remains an externally verified identity hypothesis", () => {
   const localCards = [{ id: "edit-1", name: "深渊测试魔龙", aliases: ["深渊测试魔龙"] }];
   const resolution = extractRagCards("「深渊测试魔凤」的效果可以发动吗？", { cards: localCards });
   const providerMatch = createLocalCardDataProvider({ cards: localCards }).searchCardByName("深渊测试魔凤", 2)[0];
 
   assert.equal(resolution.resolvedCards[0]?.id, "edit-1");
   assert.ok(resolution.resolvedCards[0]?.confidence >= 0.9);
+  assert.equal(resolution.resolvedCards[0]?.identityMatchKind, "edit_distance");
+  assert.equal(resolution.resolvedCards[0]?.requiresExternalIdentityVerification, true);
+  assert.equal(resolution.resolvedCards[0]?.aliases.includes("深渊测试魔凤"), false);
   assert.equal(providerMatch?.id, "edit-1");
   assert.ok(providerMatch?.confidence >= 0.9);
 });
@@ -2035,7 +2038,7 @@ test("official QA applicability cache reuses a complete batch without another mo
   assert.equal(second.estimatedCostUsd, 0);
 });
 
-test("rag_pipeline_uses_model_card_name_candidates_before_retrieval", async () => {
+test("rag pipeline does not resurrect a model-assisted edit candidate rejected by retrieval", async () => {
   const answer = await answerRagRulingQuestion({
     question: "测式龙的①效果可以发动吗？",
     cards,
@@ -2044,15 +2047,17 @@ test("rag_pipeline_uses_model_card_name_candidates_before_retrieval", async () =
     cardModelInvoker: async () => JSON.stringify({
       cardNames: [{ name: "测试龙", originalText: "测式龙", confidence: "high" }],
     }),
+    fetchImpl: async () => jsonResponse({ result: [], next: 0 }),
+    env: { RAG_LIVE_OFFICIAL_QA: "0" },
     modelInvoker: async () => JSON.stringify(modelJson("根据测试龙文本可以分析。")),
   });
-  assert.ok(answer.resolvedCards.some((card) => card.name === "测试龙"));
-  assert.ok(answer.resolvedCards.some((card) => (
-    card.name === "测试龙" && card.effectText === cards[0].effectText
+  assert.deepEqual(answer.resolvedCards, []);
+  assert.ok(answer.debug.unresolvedMentions.some((item) => (
+    item.input === "测式龙" && item.reason === "external_identity_verification_failed"
   )));
   assert.ok(answer.debug.modelCardNameCandidates.some((item) => item.name === "测试龙"));
   assert.equal(answer.debug.cardNameModelUsed, "mock-card-extractor");
-  assert.equal(answer.debug.retrievalCounts.cardTexts > 0, true);
+  assert.equal(answer.debug.retrievalCounts.cardTexts, 0);
   assert.equal(answer.usedEvidence.some((item) => item.id === "card-text-100"), false);
 });
 
@@ -2102,18 +2107,18 @@ test("rag_pipeline_uses_model_rule_queries_for_related_rules", async () => {
   }]);
 });
 
-test("rag pipeline resolves cards before building rule queries from their full text", async () => {
+test("rag pipeline resolves exact model mentions before building rule queries from their full text", async () => {
   let cardExtractionFinished = false;
   let rulePrompt = "";
   await answerRagRulingQuestion({
-    question: "测式龙的①效果可以发动吗？",
+    question: "测试龙的①效果可以发动吗？",
     cards,
     records: [],
     qaRecords: [],
     cardModelInvoker: async () => {
       cardExtractionFinished = true;
       return JSON.stringify({
-        cardNames: [{ name: "测试龙", originalText: "测式龙", confidence: "high" }],
+        cardNames: [{ name: "测试龙", originalText: "测试龙", confidence: "high" }],
       });
     },
     ruleModelInvoker: async ({ prompt }) => {

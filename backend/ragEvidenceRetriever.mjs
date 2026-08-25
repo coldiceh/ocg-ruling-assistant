@@ -223,8 +223,16 @@ export async function retrieveRagEvidence({
   for (const conflict of canonicalBaigeCandidates.filter((card) => card.identityCanonicalizationConflict === true)) {
     baigeDebug.ambiguousMentions.push(identityConflictMention(conflict));
   }
+  const identityVerifiedLocalCards = enrichedLocalCards.filter((card) => (
+    card.identityVerificationStatus !== "unverified"
+  ));
+  if (identityVerifiedLocalCards.length !== enrichedLocalCards.length) {
+    retrievalWarnings.push(
+      `unverified_local_identities_excluded_before_evidence:${enrichedLocalCards.length - identityVerifiedLocalCards.length}`,
+    );
+  }
   const verifiedLocalCards = suppressModelExpansionConflicts(
-    enrichedLocalCards,
+    identityVerifiedLocalCards,
     canonicalBaigeCards,
     retrievalWarnings,
   );
@@ -518,6 +526,7 @@ export async function retrieveRagEvidence({
   const officialQaDirectCandidates = officialMatches.exact
     .filter((match) => (
       isOfficialQaRecord(match.record)
+      && match.rawSceneMatch === true
       && !hasSevereQuestionIdentityMismatch(match, effectiveQaIdentityCards.length)
     ))
     .map((match) => evidenceFromOfficialMatch(match, "official_qa", limits.maxEvidenceTextChars, retrievalWarnings))
@@ -724,6 +733,7 @@ export async function retrieveRagEvidence({
     .slice(0, limits.maxRelatedEvidence)
     .map((record) => evidenceFromRecord(record, evidenceTypeForRecord(record, "related"), limits.maxEvidenceTextChars, retrievalWarnings))
     .filter((item) => !directIds.has(item.id));
+  const allocatedOfficialRelatedIdSet = new Set(diagnosticCandidateIds(officialQaRelated));
   timingsMs.relatedEvidence = Date.now() - stageStartedAt;
   timingsMs.total = Date.now() - retrievalStartedAt;
 
@@ -794,8 +804,10 @@ export async function retrieveRagEvidence({
             item?.retrievalContext?.scope === "cross_card_official_mechanism"
           )),
         ),
+        notAllocatedScopedIds: diagnosticCandidateIds(scopedOfficialQaRelatedCandidates)
+          .filter((id) => !allocatedOfficialRelatedIdSet.has(id)),
         notAllocatedCrossCardIds: diagnosticCandidateIds(crossCardOfficialQaRelatedCandidates)
-          .filter((id) => !new Set(diagnosticCandidateIds(officialQaRelated)).has(id)),
+          .filter((id) => !allocatedOfficialRelatedIdSet.has(id)),
       },
       baigeSearchCount: baigeDebug.searchCount,
       baigeCacheHitCount: baigeDebug.cacheHitCount,
@@ -1085,8 +1097,8 @@ function officialRecordCompleteness(record = {}) {
   const answer = String(record.answer || record.conclusion || "").trim();
   const officialText = String(record.officialText || "").trim();
   const body = String(record.text || "").trim();
-  const questionIds = new Set((record.questionCardIds || []).map(normalizeId).filter(Boolean));
-  const cardIds = new Set((record.cardIds || []).map(normalizeId).filter(Boolean));
+  const questionIds = new Set((record.questionCardIds || []).map(normalizeCardIdentityId).filter(Boolean));
+  const cardIds = new Set((record.cardIds || []).map(normalizeCardIdentityId).filter(Boolean));
   return [
     Number(Boolean(question && answer)),
     Number(Boolean(answer)),
@@ -1126,7 +1138,7 @@ function cardIdentityKeys(cards) {
   const keys = [];
   const seen = new Set();
   for (const card of cards || []) {
-    const id = normalizeId(card.id || card.cardId);
+    const id = normalizeCardIdentityId(card.id || card.cardId);
     if (id && !seen.has("id:" + id)) {
       seen.add("id:" + id);
       keys.push("id:" + id);
@@ -1157,7 +1169,7 @@ function canonicalCardIdentityIndex(cards) {
   const byPasscode = new Map();
   const byAlias = new Map();
   for (const card of cards || []) {
-    const id = normalizeId(card.id || card.cardId);
+    const id = normalizeCardIdentityId(card.id || card.cardId);
     if (id) byId.set(id, card);
     const cid = verifiedLocalCardCid(card);
     if (cid) addIdentityIndexCandidate(byCid, cid, card);
@@ -1185,7 +1197,7 @@ function addIdentityIndexCandidate(index, key, card) {
 function canonicalizeRetrievedCardIdentity(card, canonicalCards, warnings = []) {
   if (!card || typeof card !== "object") return card;
   const index = canonicalCardIdentityIndex(canonicalCards);
-  const currentId = normalizeId(card.id || card.cardId);
+  const currentId = normalizeCardIdentityId(card.id || card.cardId);
   const strongCandidates = new Set();
   const direct = currentId ? index.byId.get(currentId) : null;
   if (direct) strongCandidates.add(direct);
@@ -1229,7 +1241,7 @@ function canonicalizeRetrievedCardIdentity(card, canonicalCards, warnings = []) 
   }
   if (!canonical) return ensureCardMentionAlias(card);
 
-  const canonicalId = normalizeId(canonical.id || canonical.cardId);
+  const canonicalId = normalizeCardIdentityId(canonical.id || canonical.cardId);
   if (canonicalId && canonicalId !== currentId) {
     warnings.push(`qa_identity_canonicalized:${currentId || cid || passcode || "name"}->${canonicalId}`);
   }
@@ -1311,7 +1323,7 @@ function recordIdentityIndex(records) {
     const rankingIdentity = retrievalRankingIdentity(record);
     const keys = new Set([
       ...rankingIdentity.cardIds
-        .map((id) => "id:" + normalizeId(id))
+        .map((id) => "id:" + normalizeCardIdentityId(id))
         .filter((key) => key !== "id:"),
       ...rankingIdentity.cardNames
         .map((name) => "name:" + normalizeCardKey(name))
@@ -1423,9 +1435,9 @@ function inferRecordType(record, id) {
 }
 
 function findCardRecord(card, cards) {
-  const wantedId = normalizeId(card.id || card.cardId);
+  const wantedId = normalizeCardIdentityId(card.id || card.cardId);
   const wantedNames = new Set([card.name, card.cnName, card.jaName, card.enName, ...(card.aliases || [])].map(normalizeCardKey).filter(Boolean));
-  return cards.find((item) => wantedId && normalizeId(item.id || item.cardId) === wantedId)
+  return cards.find((item) => wantedId && normalizeCardIdentityId(item.id || item.cardId) === wantedId)
     || cards.find((item) => item.aliases.some((alias) => wantedNames.has(normalizeCardKey(alias))))
     || null;
 }
@@ -1639,7 +1651,9 @@ function evidenceFromRecord(record, type, maxTextChars = 1600, warnings = []) {
 }
 
 function evidenceSourceUrl(record = {}) {
-  const cardId = (record.cardIds || []).map(normalizeId).find(Boolean);
+  const cardId = (record.cardIds || [])
+    .map(normalizeCardIdentityId)
+    .find((id) => /^\d+$/u.test(id));
   if (record.recordType === "card-faq" && cardId) {
     return `https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=4&cid=${encodeURIComponent(cardId)}&request_locale=ja`;
   }
@@ -1766,7 +1780,7 @@ function relatedMatchedQuestionCardIds(item = {}) {
       ? item.retrievalSignals.matchedQuestionCardIds
       : []),
   ];
-  return [...new Set(values.map(normalizeId).filter(Boolean))];
+  return [...new Set(values.map(normalizeCardIdentityId).filter(Boolean))];
 }
 
 function mergeOfficialRelatedSourceItems(items = []) {
@@ -2058,7 +2072,7 @@ function rankRecords({ userQuery, records, resolvedCards, mentionQueries = [], r
   const ruleTerms = tokenize(ruleQueries.map((item) => item.query).join(" "));
   const rulePhrases = ruleQueries.map((item) => normalizeCardKey(item.query)).filter(Boolean);
   const queryKey = normalizeCardKey(userQuery);
-  const resolvedIds = new Set((resolvedCards || []).map((card) => normalizeId(card.id || card.cardId)).filter(Boolean));
+  const resolvedIds = new Set((resolvedCards || []).map((card) => normalizeCardIdentityId(card.id || card.cardId)).filter(Boolean));
   const resolvedNames = new Set((resolvedCards || []).flatMap((card) => [card.name, card.cnName, card.jaName, card.enName, ...(card.aliases || [])]).map(normalizeCardKey).filter(Boolean));
   const unresolvedNames = new Set((mentionQueries || []).map(normalizeCardKey).filter(Boolean));
   const queryEffectNumbers = extractEffectNumbers(userQuery);
@@ -2821,7 +2835,7 @@ function relatedMatchedQuestionSideCardIds(item = {}) {
       ? item.retrievalSignals.matchedQuestionCardIds
       : []),
   ];
-  return [...new Set(values.map(normalizeId).filter(Boolean))];
+  return [...new Set(values.map(normalizeCardIdentityId).filter(Boolean))];
 }
 
 function compareRetrievedRecords(left = {}, right = {}) {
@@ -2972,10 +2986,10 @@ function applyModelAssessmentsToOfficialMatches(matches = {}, assessmentById = n
 function hasSevereQuestionIdentityMismatch(match = {}, resolvedCardCount = 0) {
   const record = match.record || {};
   const selectedBranchCardIds = new Set(
-    (match.supportingQuestionBranchCardIds || []).map(normalizeId).filter(Boolean),
+    (match.supportingQuestionBranchCardIds || []).map(normalizeCardIdentityId).filter(Boolean),
   );
   const selectedBranchMatchedCardIds = new Set(
-    (match.branchMatchedCardIds || []).map(normalizeId).filter(Boolean),
+    (match.branchMatchedCardIds || []).map(normalizeCardIdentityId).filter(Boolean),
   );
   const useSelectedBranch = match.branchRelevant === true
     && selectedBranchCardIds.size > 0
@@ -3007,11 +3021,11 @@ function hasSevereQuestionIdentityMismatch(match = {}, resolvedCardCount = 0) {
 function principalQuestionCardIds(record = {}) {
   if (record.recordType === "card-faq") {
     return new Set(structuredRecordOwnershipCardIds(record)
-      .map(normalizeId)
+      .map(normalizeCardIdentityId)
       .filter(Boolean));
   }
   return new Set(projectOfficialQaQuestion(record).principalCardIds
-    .map(normalizeId)
+    .map(normalizeCardIdentityId)
     .filter(Boolean));
 }
 
@@ -3306,7 +3320,7 @@ function retrievalRecordFeatures(record = {}, preparedIdentity) {
     : retrievalRankingIdentity(record);
   const features = {
     textKey: normalizeCardKey(identity.text),
-    normalizedCardIds: identity.cardIds.map(normalizeId).filter(Boolean),
+    normalizedCardIds: identity.cardIds.map(normalizeCardIdentityId).filter(Boolean),
     normalizedCardNames: identity.cardNames.map(normalizeCardKey).filter(Boolean),
   };
   if (record && typeof record === "object") retrievalRecordFeatureCache.set(record, features);
@@ -3331,7 +3345,7 @@ function retrievalQuestionFeatures(record = {}) {
     questionCardIds: new Set((record.recordType === "card-faq"
       ? structuredRecordOwnershipCardIds(record)
       : questionProjection.principalCardIds)
-      .map(normalizeId)
+      .map(normalizeCardIdentityId)
       .filter(Boolean)),
     evidenceEffectNumbers: extractEffectNumbers(evidenceText),
     evidenceQuestionType: classifyOfficialQaQuestionType(evidenceText),
@@ -3403,7 +3417,7 @@ function retrievalRankingIdentity(record = {}, preparedProjection) {
     });
   return {
     text,
-    cardIds: [...new Set((projection.principalCardIds || []).map(normalizeId).filter(Boolean))],
+    cardIds: [...new Set((projection.principalCardIds || []).map(normalizeCardIdentityId).filter(Boolean))],
     cardNames: [...new Set(cardNames)],
   };
 }
@@ -3614,9 +3628,9 @@ function recordSharesResolvedIdentity(record = {}, resolvedCards = []) {
   if (!(resolvedCards || []).length) return false;
   const identity = retrievalRankingIdentity(record);
   const resolvedIds = new Set((resolvedCards || [])
-    .map((card) => normalizeId(card?.id || card?.cardId))
+    .map((card) => normalizeCardIdentityId(card?.id || card?.cardId))
     .filter(Boolean));
-  if (identity.cardIds.some((id) => resolvedIds.has(normalizeId(id)))) return true;
+  if (identity.cardIds.some((id) => resolvedIds.has(normalizeCardIdentityId(id)))) return true;
   const resolvedNames = new Set((resolvedCards || [])
     .flatMap((card) => [
       card?.name,
@@ -3914,8 +3928,10 @@ function tokenize(value) {
   return [...new Set([...base, ...grams])].slice(0, 60);
 }
 
-function normalizeId(value) {
-  return String(value || "").replace(/\D+/gu, "").replace(/^0+(?=\d)/u, "");
+function normalizeCardIdentityId(value) {
+  const text = String(value ?? "").trim();
+  if (!text) return "";
+  return /^\d+$/u.test(text) ? text.replace(/^0+(?=\d)/u, "") : text;
 }
 
 function extractInlineCardIds(value) {
@@ -3995,6 +4011,47 @@ async function resolveUnresolvedMentionCardsWithBaige(unresolvedMentions, {
   const mentions = (unresolvedMentions || []).slice(0, limits.maxCards);
   const minConfidence = readPositiveDecimal(env.RAG_BAIGE_MIN_CONFIDENCE, 0.72);
   const result = await Promise.all(mentions.map(async (mention) => {
+    const modelExpansionQueries = modelIdentityExpansionQueries(mention);
+    if (modelExpansionQueries.length) {
+      const intersection = await resolveModelExpansionByStableCidIntersection({
+        surface: mention.input,
+        expansionQueries: modelExpansionQueries,
+        fetchImpl,
+        env,
+        limits,
+        warnings,
+        debug,
+        signal,
+      });
+      if (!intersection.card) {
+        if (intersection.candidates.length > 1) {
+          debug.ambiguousMentions.push({
+            input: mention.input,
+            reason: "conflicting_model_expansion_cid_intersection",
+            source: "retrieval_identity_reconciliation",
+            candidateCards: intersection.candidates.slice(0, 3).map((card) => ({
+              id: card.id || card.cardId || "",
+              cid: card.cid ?? null,
+              name: card.name || card.cnName || card.jpName || card.enName || "",
+              source: "baige_model_expansion_cid_intersection",
+              confidence: card.confidence || 0,
+            })),
+          });
+        }
+        return null;
+      }
+      warnings.push(`baige_match:${intersection.matchedQuery}->${intersection.card.name}`);
+      return {
+        ...toRagCard(intersection.card, mention.input, Number(intersection.card.confidence || minConfidence)),
+        matchedQuery: intersection.matchedQuery,
+        externalSurfaceResolution: intersection.resolutionKind,
+        externalSurfaceCompatible: true,
+        externalIdentityUniqueConvergence: true,
+        ...(intersection.usedExpansion ? { modelExpansionCidIntersectionVerified: true } : {}),
+        originalSurfaceStableCids: intersection.originalSurfaceCids,
+        modelExpansionExactCids: intersection.expansionCids,
+      };
+    }
     let bestLowConfidence = null;
     let bestLowConfidenceCandidates = [];
     let bestLowConfidenceQuery = "";
@@ -4128,6 +4185,169 @@ function mentionSearchQueries(mention) {
   return dedupeBy(queries, normalizeCardKey).slice(0, 3);
 }
 
+function modelIdentityExpansionQueries(value = {}) {
+  const explicitlyModelDerived = value.reason === "model_candidate_not_found";
+  const supplied = Array.isArray(value.identityVerificationSearchTexts)
+    ? value.identityVerificationSearchTexts
+    : explicitlyModelDerived && Array.isArray(value.searchTexts)
+      ? value.searchTexts
+      : [];
+  const surfaceKey = normalizeCardKey(value.input);
+  return dedupeBy(supplied
+    .map((item) => String(item || "").trim())
+    .filter((item) => item && normalizeCardKey(item) !== surfaceKey), normalizeCardKey)
+    .slice(0, 3);
+}
+
+async function resolveModelExpansionByStableCidIntersection({
+  surface,
+  expansionQueries,
+  fetchImpl,
+  env,
+  limits,
+  warnings,
+  debug,
+  signal,
+}) {
+  const originalSearch = await searchBaige(surface, { fetchImpl, env, limits, debug, signal });
+  warnings.push(...originalSearch.warnings);
+  const originalResults = originalSearch.results || [];
+  const originalEligibleResults = originalResults.filter((candidate) => (
+    Number(candidate?.confidence || 0) >= 0.72
+      && providerPrimaryNameMechanicallyMatchesSurface(candidate, surface)
+  ));
+  const originalCandidatesByCid = stableExternalCidCandidates(originalEligibleResults);
+  const originalSelection = selectUniqueBaigeCandidate(originalResults, 0.72, {
+    surface,
+    query: surface,
+  });
+  const originalSurfaceCids = [...originalCandidatesByCid.keys()].sort();
+  if (originalSelection.card) {
+    return {
+      card: originalSelection.card,
+      matchedQuery: surface,
+      resolutionKind: originalSelection.resolutionKind || "single_eligible_identity",
+      usedExpansion: false,
+      originalSurfaceCids,
+      expansionCids: [],
+      candidates: originalSelection.candidates || [originalSelection.card],
+    };
+  }
+
+  // A canonical/model expansion may confirm or disambiguate identities already
+  // returned for the user's original surface, but it must never create an
+  // identity when that surface produced no stable CID at all.
+  if (!originalCandidatesByCid.size) {
+    warnings.push(`baige_model_expansion_stable_identity_unverified:${surface}->${expansionQueries[0] || "candidate"}`);
+    warnings.push(`baige_model_expansion_original_surface_has_no_stable_identity:${surface}`);
+    return {
+      card: null,
+      matchedQuery: "",
+      resolutionKind: "",
+      usedExpansion: false,
+      originalSurfaceCids,
+      expansionCids: [],
+      candidates: originalSelection.candidates || [],
+    };
+  }
+
+  // A model expansion may confirm one mechanically compatible identity, but it
+  // must not choose between multiple identities returned for the user's own
+  // surface. Otherwise the model-generated name would become the deciding
+  // identity fact and could unlock the wrong card text and card-scoped Q&A.
+  if (originalCandidatesByCid.size > 1) {
+    warnings.push(`baige_model_expansion_stable_identity_unverified:${surface}->${expansionQueries[0] || "candidate"}`);
+    warnings.push(
+      `baige_model_expansion_original_surface_identity_ambiguous:${surface}:${originalSurfaceCids.join(",")}`,
+    );
+    return {
+      card: null,
+      matchedQuery: "",
+      resolutionKind: "",
+      usedExpansion: false,
+      originalSurfaceCids,
+      expansionCids: [],
+      candidates: originalSelection.candidates || originalEligibleResults,
+    };
+  }
+
+  const expansionCandidatesByCid = new Map();
+  const matchedQueryByCid = new Map();
+
+  for (const query of expansionQueries) {
+    const searchResult = await searchBaige(query, { fetchImpl, env, limits, debug, signal });
+    warnings.push(...searchResult.warnings);
+    for (const candidate of searchResult.results || []) {
+      if (!providerPrimaryNameExactlyMatches(candidate, query)) continue;
+      const cid = verifiedExternalCardCid(candidate);
+      if (!cid) continue;
+      const previous = expansionCandidatesByCid.get(cid);
+      if (!previous || Number(candidate.confidence || 0) > Number(previous.confidence || 0)) {
+        expansionCandidatesByCid.set(cid, candidate);
+        matchedQueryByCid.set(cid, query);
+      }
+    }
+  }
+
+  const expansionCids = [...expansionCandidatesByCid.keys()].sort();
+  const intersectingCids = expansionCids.filter((cid) => originalCandidatesByCid.has(cid));
+  if (intersectingCids.length !== 1) {
+    warnings.push(`baige_model_expansion_stable_identity_unverified:${surface}->${expansionQueries[0] || "candidate"}`);
+    warnings.push(
+      intersectingCids.length
+        ? `baige_model_expansion_cid_intersection_ambiguous:${surface}:${intersectingCids.join(",")}`
+        : `baige_model_expansion_cid_intersection_empty:${surface}`,
+    );
+    return {
+      card: null,
+      matchedQuery: "",
+      resolutionKind: "",
+      usedExpansion: true,
+      originalSurfaceCids,
+      expansionCids,
+      candidates: intersectingCids.map((cid) => expansionCandidatesByCid.get(cid)).filter(Boolean),
+    };
+  }
+
+  const cid = intersectingCids[0];
+  warnings.push(`baige_model_expansion_cid_intersection_verified:${surface}:${cid}`);
+  return {
+    card: expansionCandidatesByCid.get(cid),
+    matchedQuery: matchedQueryByCid.get(cid) || expansionQueries[0],
+    resolutionKind: "model_expansion_exact_cid_intersection",
+    usedExpansion: true,
+    originalSurfaceCids,
+    expansionCids,
+    candidates: [expansionCandidatesByCid.get(cid)].filter(Boolean),
+  };
+}
+
+function stableExternalCidCandidates(candidates) {
+  const byCid = new Map();
+  for (const candidate of candidates || []) {
+    const cid = verifiedExternalCardCid(candidate);
+    if (!cid) continue;
+    const previous = byCid.get(cid);
+    if (!previous || Number(candidate.confidence || 0) > Number(previous.confidence || 0)) {
+      byCid.set(cid, candidate);
+    }
+  }
+  return byCid;
+}
+
+function uniqueOriginalSurfaceCidMatchingLocalIdentity(candidates, localCard) {
+  const candidatesByCid = stableExternalCidCandidates(candidates);
+  if (candidatesByCid.size !== 1) return null;
+  const candidate = [...candidatesByCid.values()][0];
+  return sameStableCardIdentity(localCard, candidate) ? candidate : null;
+}
+
+function providerPrimaryNameExactlyMatches(card = {}, query = "") {
+  const queryKey = normalizeCardKey(query);
+  return Boolean(queryKey) && (card.providerPrimaryNames || [])
+    .some((name) => normalizeCardKey(name) === queryKey);
+}
+
 async function enrichCardsWithBaige(cards, {
   fetchImpl,
   env,
@@ -4153,16 +4373,56 @@ async function enrichCardsWithBaige(cards, {
     if (!nameQuery) {
       return card;
     }
-    const searchResult = await searchBaige(nameQuery, { fetchImpl, env, limits, debug, signal });
-    warnings.push(...searchResult.warnings);
-    const selection = selectUniqueBaigeCandidate(searchResult.results || [], 0.72, {
-      canonicalCards,
-      surface: card.input || nameQuery,
-      query: nameQuery,
-    });
-    let best = selection.card;
+    const modelExpansionQueries = needsSurfaceIdentityVerification
+      ? modelIdentityExpansionQueries(card)
+      : [];
+    let selection = { card: null, ambiguous: false, candidates: [] };
+    let best = null;
     let matchedQuery = nameQuery;
+    let externalSurfaceResolution = "";
     let verifiedByCanonicalLookup = false;
+    let verifiedByModelCidIntersection = false;
+    if (modelExpansionQueries.length) {
+      const intersection = await resolveModelExpansionByStableCidIntersection({
+        surface: card.input || nameQuery,
+        expansionQueries: modelExpansionQueries,
+        fetchImpl,
+        env,
+        limits,
+        warnings,
+        debug,
+        signal,
+      });
+      if (!intersection.card) {
+        return { ...card, identityVerificationStatus: "unverified" };
+      }
+      best = intersection.card;
+      matchedQuery = intersection.matchedQuery || modelExpansionQueries[0];
+      externalSurfaceResolution = intersection.resolutionKind;
+      verifiedByModelCidIntersection = intersection.usedExpansion === true;
+    } else {
+      const searchResult = await searchBaige(nameQuery, { fetchImpl, env, limits, debug, signal });
+      warnings.push(...searchResult.warnings);
+      selection = selectUniqueBaigeCandidate(searchResult.results || [], 0.72, {
+        canonicalCards,
+        surface: card.input || nameQuery,
+        query: nameQuery,
+      });
+      best = selection.card;
+      if (!best && !selection.ambiguous && needsSurfaceIdentityVerification) {
+        const stableIdentityMatch = uniqueOriginalSurfaceCidMatchingLocalIdentity(
+          searchResult.results || [],
+          card,
+        );
+        if (stableIdentityMatch) {
+          best = stableIdentityMatch;
+          externalSurfaceResolution = "unique_original_surface_cid_matches_local_identity";
+          warnings.push(
+            `local_approximate_identity_verified_via_original_surface_cid:${card.input}:${verifiedExternalCardCid(best)}`,
+          );
+        }
+      }
+    }
     if (!best && !selection.ambiguous && needsSurfaceIdentityVerification) {
       const canonicalLookup = await verifySurfaceIdentityThroughCanonicalBaigeLookup(card, {
         primaryQuery: nameQuery,
@@ -4217,6 +4477,14 @@ async function enrichCardsWithBaige(cards, {
     const externalCard = {
       ...toRagCard(best, card.input || nameQuery, Number(best.confidence || 0)),
       matchedQuery,
+      ...(externalSurfaceResolution ? {
+        externalSurfaceResolution,
+        externalSurfaceCompatible: true,
+        externalIdentityUniqueConvergence: true,
+      } : {}),
+      ...(verifiedByModelCidIntersection ? {
+        modelExpansionCidIntersectionVerified: true,
+      } : {}),
     };
     if (verifiedByCanonicalLookup) {
       warnings.push(`local_approximate_identity_verified_via_canonical_lookup:${card.input}:${matchedQuery}`);
@@ -4232,6 +4500,9 @@ async function enrichCardsWithBaige(cards, {
         ...externalCard,
         resolutionSource: card.resolutionSource || "external_identity_verification",
         identityVerificationStatus: "verified_external_replacement",
+        identityVerificationSource: verifiedByModelCidIntersection
+          ? "model_expansion_cid_intersection"
+          : card.identityVerificationSource,
         replacedLocalCandidate: summarizeIdentityCandidate(card),
       });
     }
@@ -4240,6 +4511,9 @@ async function enrichCardsWithBaige(cards, {
       identityVerificationStatus: needsSurfaceIdentityVerification
         ? "verified_same_identity"
         : card.identityVerificationStatus,
+      ...(verifiedByModelCidIntersection
+        ? { identityVerificationSource: "model_expansion_cid_intersection" }
+        : {}),
     };
   }));
   return result.filter(Boolean);
@@ -4338,6 +4612,7 @@ function canonicalLookupVerifiesUserSurface(localCard = {}, externalCard = {}) {
 function cardInputNeedsIdentityVerification(card = {}) {
   const inputKey = normalizeCardKey(card.input);
   if (!inputKey || card.resolutionSource === "card_text_reference") return false;
+  if (card.retrievalIdentityMatchKind === "local_fuzzy") return true;
   // Edit-distance candidates are hypotheses, even when a display alias has
   // already copied the user's surface. They must never self-verify through
   // that derived alias or through a confidence threshold.
@@ -4496,9 +4771,10 @@ function selectUniqueBaigeCandidate(candidates, minConfidence, {
 }
 
 function externalCardIdentityTokens(card = {}, canonicalCards = []) {
+  const localIdentityId = normalizeCardIdentityId(card.id || card.cardId);
   const passcode = verifiedEnginePasscode(card)
-    || (/^[1-9]\d{4,9}$/u.test(normalizeId(card.id || card.cardId))
-      ? normalizeId(card.id || card.cardId)
+    || (/^[1-9]\d{4,9}$/u.test(localIdentityId)
+      ? localIdentityId
       : "");
   const cid = verifiedExternalCardCid(card);
   const tokens = new Set([
@@ -4513,7 +4789,7 @@ function externalCardIdentityTokens(card = {}, canonicalCards = []) {
     ]);
     if (localCandidates.size === 1) {
       const local = [...localCandidates][0];
-      const localId = normalizeId(local.id || local.cardId);
+      const localId = normalizeCardIdentityId(local.id || local.cardId);
       if (localId) tokens.add(`local:${localId}`);
     }
   }
@@ -4578,17 +4854,23 @@ function providerPrimaryNameMechanicallyMatchesSurface(card = {}, input = "") {
 
 function isAnchoredCanonicalExpansion(card = {}) {
   const cid = verifiedLocalCardCid(card);
-  return card.externalSurfaceResolution === "canonical_expansion_exact_primary_name"
-    && card.externalExpansionPrimaryNameAnchored === true
+  const surfaceAnchorVerified = (
+    card.externalSurfaceResolution === "canonical_expansion_exact_primary_name"
+      && card.externalExpansionPrimaryNameAnchored === true
+  ) || (
+    card.externalSurfaceResolution === "model_expansion_exact_cid_intersection"
+      && card.modelExpansionCidIntersectionVerified === true
+  );
+  return surfaceAnchorVerified
     && card.identityCanonicalizationConflict !== true
     && Boolean(card.identityCanonicalizationSource)
     && Boolean(cid)
-    && normalizeId(card.id || card.cardId) === cid;
+    && normalizeCardIdentityId(card.id || card.cardId) === cid;
 }
 
 function hasStableLocalIdentityCanonicalization(card = {}) {
   return ["cid", "passcode"].includes(String(card.identityCanonicalizationSource || ""))
-    && Boolean(normalizeId(card.id || card.cardId));
+    && Boolean(normalizeCardIdentityId(card.id || card.cardId));
 }
 
 function isLowConfidenceLocalFuzzy(card = {}) {
@@ -4767,8 +5049,8 @@ function verifiedExternalCardCid(card = {}) {
 }
 
 function sameStableCardIdentity(left = {}, right = {}) {
-  const leftId = normalizeId(left.id || left.cardId);
-  const rightId = normalizeId(right.id || right.cardId);
+  const leftId = normalizeCardIdentityId(left.id || left.cardId);
+  const rightId = normalizeCardIdentityId(right.id || right.cardId);
   if (leftId && rightId && leftId === rightId) return true;
 
   const leftPasscode = verifiedEnginePasscode(left)
@@ -4787,7 +5069,7 @@ function sameStableCardIdentity(left = {}, right = {}) {
 }
 
 function stableCardIdentityKey(card = {}) {
-  const id = normalizeId(card.id || card.cardId);
+  const id = normalizeCardIdentityId(card.id || card.cardId);
   const passcode = verifiedEnginePasscode(card);
   const cid = verifiedExternalCardCid(card) || verifiedLocalCardCid(card);
   return cid ? `cid:${cid}`
@@ -4811,7 +5093,11 @@ function mergeCardsByStableIdentity(cards) {
 
 function ensureCardMentionAlias(card = {}) {
   const input = String(card.input || "").trim();
-  const includeInput = card.identityVerificationStatus !== "unverified";
+  const requiresExternalVerification = card.requiresExternalIdentityVerification === true
+    || card.identityMatchKind === "edit_distance";
+  const verificationComplete = /^verified_/u.test(String(card.identityVerificationStatus || ""));
+  const includeInput = card.identityVerificationStatus !== "unverified"
+    && (!requiresExternalVerification || verificationComplete);
   return {
     ...card,
     aliases: cardIdentityNames(
@@ -4929,7 +5215,7 @@ function normalizeUserProvidedCardTexts(items, limits) {
 }
 
 function dedupeCards(cards) {
-  return dedupeBy((cards || []).filter(Boolean), (card) => normalizeId(card.id || card.cardId) || normalizeCardKey(card.name || card.cnName || card.jaName || card.enName || card.input));
+  return dedupeBy((cards || []).filter(Boolean), stableCardIdentityKey);
 }
 
 function dedupeEvidence(items) {
@@ -5014,7 +5300,7 @@ function reserveIdentitySourceCoverage(items = [], limit = 1, resolvedCards = []
   const identityTokenByResolvedId = new Map();
   const identityTokensByResolvedName = new Map();
   (resolvedCards || []).forEach((card, index) => {
-    const id = normalizeId(card?.id || card?.cardId);
+    const id = normalizeCardIdentityId(card?.id || card?.cardId);
     const names = cardIdentityNames(card).map(normalizeCardKey).filter(Boolean);
     const fallbackName = names[0] || "";
     const token = id
@@ -5039,7 +5325,7 @@ function reserveIdentitySourceCoverage(items = [], limit = 1, resolvedCards = []
   (items || []).forEach((item, index) => {
     const record = item?.record || item;
     const principalIds = [...principalQuestionCardIds(record)]
-      .map(normalizeId)
+      .map(normalizeCardIdentityId)
       .filter(Boolean);
     const rawIds = [
       // Slot coverage must use question-side identities only. Source metadata
@@ -5048,7 +5334,7 @@ function reserveIdentitySourceCoverage(items = [], limit = 1, resolvedCards = []
       ...relatedMatchedQuestionSideCardIds(item),
       ...principalIds,
     ]
-      .map(normalizeId)
+      .map(normalizeCardIdentityId)
       .filter(Boolean);
     const identityTokens = new Set();
     for (const id of rawIds) {
@@ -5363,70 +5649,102 @@ export function allocateOfficialRelatedEvidence({
   supplementalRuleQueryKeys = [],
 } = {}) {
   const safeLimit = Math.max(1, Math.floor(Number(limit) || 1));
-  // Keep one authoritative evidence comparator. In particular, complete
-  // question-card coverage must outrank a wider but partial identity hit;
-  // identity-combination coverage is reserved separately below.
-  const rankRelatedCandidates = (items = []) => [...(items || [])]
-    .sort(compareRetrievedRecords);
-  const scoped = reserveIdentitySourceCoverage(
-    rankRelatedCandidates(dedupeEvidence(scopedCandidates)),
-    safeLimit,
-    resolvedCards,
-  );
+  const rankedScoped = dedupeEvidence(scopedCandidates || []).sort((left, right) => (
+    officialRelatedResolvedQuestionIdentityCount(right, resolvedCards)
+      - officialRelatedResolvedQuestionIdentityCount(left, resolvedCards)
+    || Number(officialRelatedSceneCompatible(right))
+      - Number(officialRelatedSceneCompatible(left))
+    || compareRetrievedRecords(left, right)
+  ));
+  const scoped = reserveIdentitySourceCoverage(rankedScoped, safeLimit, resolvedCards);
   const scopedKeys = new Set(scoped.map(stableRecordKey));
-  const crossCard = dedupeEvidence(crossCardCandidates)
-    .filter((item) => !scopedKeys.has(stableRecordKey(item)));
-  if (!scoped.length) {
-    // At most four independent planner branches exist. Keep room for those
-    // branches plus one retrieval-ranked head inside the existing total limit.
-    const crossCardOnlyLimit = Math.min(
-      safeLimit,
-      Math.max(1, Math.min(5, supplementalRuleQueryKeys.length + 1)),
-    );
-    return reserveUncoveredCrossCardBranches(crossCard, crossCardOnlyLimit, {
-      queryKeys: supplementalRuleQueryKeys,
-      fillRemaining: true,
-    });
-  }
-  if (!crossCard.length) {
-    return scoped.slice(0, safeLimit);
-  }
-
-  // A mechanism ruling is often documented on another card, but analogies must
-  // not crowd same-card sources out of the bounded prompt. Cross-card slots are
-  // bounded to one retrieval-ranked head plus the independently planned query
-  // branches still uncovered by the retained scoped prefix.
-  const maxCrossCard = Math.min(
-    Math.max(0, safeLimit - 1),
-    Math.max(1, Math.min(5, supplementalRuleQueryKeys.length + 1)),
+  const crossCard = dedupeEvidence(crossCardCandidates || [])
+    .filter((item) => !scopedKeys.has(stableRecordKey(item)))
+    .sort(compareRetrievedRecords);
+  const maxCrossCard = Math.min(5, safeLimit);
+  const selected = [];
+  const selectedKeys = new Set();
+  let selectedCrossCardCount = 0;
+  const add = (item, { cross = false } = {}) => {
+    const key = stableRecordKey(item);
+    if (!key || selectedKeys.has(key) || selected.length >= safeLimit) return false;
+    if (cross && selectedCrossCardCount >= maxCrossCard) return false;
+    selected.push(item);
+    selectedKeys.add(key);
+    if (cross) selectedCrossCardCount += 1;
+    return true;
+  };
+  const representedQueryKeys = ({ strictOnly = false } = {}) => new Set(
+    selected.flatMap((item) => strictOnly
+      ? supplementalQueryKeysForItem(item, { strictOnly: true })
+      : [
+          ...supplementalQueryKeysForItem(item, { strictOnly: false }),
+          ...supplementalQueryKeysForItem(item, { strictOnly: true }),
+        ]),
   );
-  let crossCardCount = Math.min(1, maxCrossCard);
-  let selectedScoped = scoped.slice(0, safeLimit - crossCardCount);
-  let selectedCrossCard = [];
-  for (let attempt = 0; attempt <= maxCrossCard; attempt += 1) {
-    const representedQueryKeys = new Set(selectedScoped.flatMap((item) => (
-      supplementalQueryKeysForItem(item, { strictOnly: true })
-    )));
+  const addPerQueryCoverage = (candidates, {
+    cross = false,
+    strictOnly = false,
+  } = {}) => {
+    const remainingSlots = safeLimit - selected.length;
+    const remainingCrossSlots = maxCrossCard - selectedCrossCardCount;
+    const capacity = cross ? Math.min(remainingSlots, remainingCrossSlots) : remainingSlots;
+    if (capacity <= 0) return;
+    const represented = representedQueryKeys({ strictOnly });
     const uncoveredQueryKeys = supplementalRuleQueryKeys.filter(
-      (key) => !representedQueryKeys.has(key),
+      (queryKey) => !represented.has(queryKey),
     );
-    selectedCrossCard = reserveUncoveredCrossCardBranches(crossCard, maxCrossCard, {
-      queryKeys: uncoveredQueryKeys,
-      // Keep a balanced lexical head before branch representatives. This
-      // preserves high-ranked question-side matches whose query labels are
-      // imperfect, while preventing unassessed cross-card padding from taking
-      // the entire mixed scoped/cross-card budget.
-      rankedHeadCount: Math.min(maxCrossCard, Math.ceil(safeLimit / 2)),
-    });
-    const nextCrossCardCount = Math.min(maxCrossCard, selectedCrossCard.length);
-    if (nextCrossCardCount === crossCardCount) break;
-    crossCardCount = nextCrossCardCount;
-    selectedScoped = scoped.slice(0, safeLimit - crossCardCount);
-  }
-  return dedupeEvidence([
-    ...selectedScoped,
-    ...selectedCrossCard.slice(0, crossCardCount),
-  ]).slice(0, safeLimit);
+    if (!uncoveredQueryKeys.length) return;
+    const coverage = reserveSupplementalQueryCoverage(
+      candidates.filter((item) => !selectedKeys.has(stableRecordKey(item))),
+      capacity,
+      {
+        queryKeys: uncoveredQueryKeys,
+        strictOnly,
+        fillRemaining: false,
+      },
+    );
+    for (const item of coverage) add(item, { cross });
+  };
+
+  // Same-card/current-scene evidence is retained first: one ranked head plus
+  // one strict representative for each decision-plan query it can cover.
+  if (scoped.length) add(scoped[0]);
+  addPerQueryCoverage(scoped, { strictOnly: true });
+
+  // Cross-card analogies may enter only for query branches still uncovered by
+  // strict scoped evidence, and retain the historical five-item ceiling.
+  addPerQueryCoverage(crossCard, { cross: true, strictOnly: true });
+
+  // If no strict candidate exists for a branch, retain the best bounded
+  // question-branch candidate without letting it displace strict coverage.
+  addPerQueryCoverage(scoped);
+  addPerQueryCoverage(crossCard, { cross: true });
+
+  // Preserve distinct scoped official-question premises before adding optional
+  // analogy context. Evidence IDs remain the only deduplication boundary.
+  for (const item of scoped) add(item);
+  for (const item of crossCard) add(item, { cross: true });
+  return selected;
+}
+
+function officialRelatedSceneCompatible(item = {}) {
+  return item?.supportingQuestionBranchIdentityComplete === true
+    || item?.supportingQuestionBranchScenarioPremiseCompatibility === "compatible"
+    || item?.scenarioPremiseCompatibility === "compatible";
+}
+
+function officialRelatedResolvedQuestionIdentityCount(item = {}, resolvedCards = []) {
+  const resolvedIds = new Set((resolvedCards || [])
+    .map((card) => normalizeCardIdentityId(card?.id || card?.cardId))
+    .filter(Boolean));
+  const questionIds = new Set([
+    ...relatedMatchedQuestionSideCardIds(item),
+    ...retrievalRankingIdentity(item).cardIds,
+  ].map(normalizeCardIdentityId).filter(Boolean));
+  const matchedCount = [...questionIds].filter((id) => resolvedIds.has(id)).length;
+  if (matchedCount) return matchedCount;
+  return Number(recordSharesResolvedIdentity(item, resolvedCards));
 }
 
 async function readRequiredJsonSource(dataDir, name, arrayKeys) {

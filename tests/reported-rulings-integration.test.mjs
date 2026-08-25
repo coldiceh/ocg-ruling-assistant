@@ -62,7 +62,7 @@ test("card text compilation recognizes destination replacement and spell Fusion 
   assert.equal(fusionEffect?.compileIncompleteReason, undefined);
 });
 
-test("the reported card pairs retrieve their exact official QA through the live fallback", async () => {
+test("the reported card pairs retrieve their official QA as related evidence through the live fallback", async () => {
   const data = await loadRagData();
   const cases = [
     {
@@ -111,15 +111,19 @@ test("the reported card pairs retrieve their exact official QA through the live 
       userQuery: item.query,
       cardResolution,
       cards: data.cards,
-      records: data.records,
-      qaRecords: data.qaRecords,
+      records: [],
+      qaRecords: [],
       enableLiveOfficialQa: true,
       fetchImpl,
     });
-    const direct = evidence.officialQaDirectCandidates[0];
-    assert.equal(direct?.id, "ygoresources-qa-" + item.qaId, JSON.stringify(evidence.debug));
-    assert.match(direct?.sourceUrl || "", new RegExp("fid=" + item.qaId, "u"));
-    assert.match(direct?.text || "", item.answerPattern);
+    const expectedId = "ygoresources-qa-" + item.qaId;
+    const related = evidence.officialQaRelated.find((candidate) => candidate.id === expectedId);
+    assert.ok(related, JSON.stringify(evidence.debug));
+    assert.equal(related.isDirect, false);
+    assert.equal(related.retrievalContext?.relatedOnly, true);
+    assert.match(related.sourceUrl || "", new RegExp("fid=" + item.qaId, "u"));
+    assert.match(related.text || "", item.answerPattern);
+    assert.ok(!evidence.officialQaDirectCandidates.some((candidate) => candidate.id === expectedId));
   }
 });
 

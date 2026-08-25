@@ -7,7 +7,7 @@ import {
   loadRagData,
   retrieveRagEvidence,
 } from "../backend/ragEvidenceRetriever.mjs";
-import { extractRagCards } from "../backend/ragCardExtractor.mjs";
+import { extractRagCards, normalizeCardKey } from "../backend/ragCardExtractor.mjs";
 import {
   buildAdminEvidenceDecisionPacket,
   createAdminEvidenceArchive,
@@ -25,7 +25,7 @@ test("high-value local evidence is ranked ahead of weak same-card matches withou
   for (const evaluationCase of evaluationCorpus.cases) {
     const cardResolution = extractRagCards(evaluationCase.question, {
       cards: data.cards,
-      maxCards: data.cards.length,
+      maxCards: 8,
     });
     const evidence = await retrieveRagEvidence({
       userQuery: evaluationCase.question,
@@ -41,7 +41,7 @@ test("high-value local evidence is ranked ahead of weak same-card matches withou
         RAG_MAX_RELATED_EVIDENCE: "64",
         RAG_MAX_RULEBOOK_CANDIDATES: "64",
       },
-      fetchImpl: createIdentityFixtureFetch(),
+      fetchImpl: createIdentityFixtureFetch(cardResolution.resolvedCards),
     });
     const officialCandidateBuckets = [
       evidence.officialQaDirectCandidates || [],
@@ -99,7 +99,7 @@ test("high-value local evidence is ranked ahead of weak same-card matches withou
         includedManifestEntry,
         `${evaluationCase.id}: ${expectedId} must reach the bounded final-model packet`,
       );
-      if (!expectedId.startsWith("ocg-rule:") && expectedId !== "ygoresources-qa-24189") {
+      if (!expectedId.startsWith("ocg-rule:")) {
         assert.notEqual(
           candidate?.isDirect,
           true,
@@ -135,24 +135,45 @@ test("high-value local evidence is ranked ahead of weak same-card matches withou
   t.diagnostic(JSON.stringify(diagnostics));
 });
 
-function createIdentityFixtureFetch() {
+function createIdentityFixtureFetch(resolvedCards) {
+  const cardsBySearchKey = new Map();
+  for (const card of resolvedCards || []) {
+    for (const name of [
+      card.input,
+      card.name,
+      card.cnName,
+      card.jaName,
+      card.jpName,
+      card.enName,
+      ...(card.aliases || []),
+    ]) {
+      const key = normalizeCardKey(name);
+      if (!key) continue;
+      const matches = cardsBySearchKey.get(key) || [];
+      if (!matches.some((candidate) => String(candidate.id || candidate.cardId) === String(card.id || card.cardId))) {
+        matches.push(card);
+      }
+      cardsBySearchKey.set(key, matches);
+    }
+  }
+
   return async (url) => {
     const parsed = new URL(String(url));
     const search = parsed.searchParams.get("search") || "";
-    if (parsed.hostname === "ygocdb.com" && /(?:教导.*圣女|艾克|莉西亚)/u.test(search)) {
-      return jsonResponse({
-        result: [{
-          cid: 15239,
-          id: 60303688,
-          cn_name: "教导的圣女 艾克莉西亚",
-          sc_name: "教导之圣女 艾克利西亚",
-          jp_name: "教導の聖女エクレシア",
-          en_name: "Dogmatika Ecclesia, the Virtuous",
-          text: { desc: "测试身份夹具；卡片正文仍必须取自本地稳定 CID 记录。" },
-        }],
-        next: 0,
-      });
+    if (parsed.hostname !== "ygocdb.com") {
+      throw new Error(`offline priority test received an unexpected URL: ${parsed}`);
     }
+    const result = (cardsBySearchKey.get(normalizeCardKey(search)) || [])
+      .filter((card) => /^\d+$/u.test(String(card.id || card.cardId || "")))
+      .map((card) => ({
+        cid: Number(card.id || card.cardId),
+        cn_name: card.cnName || card.name || card.input,
+        sc_name: card.input || card.cnName || card.name,
+        jp_name: card.jpName || card.jaName,
+        en_name: card.enName,
+        text: { desc: "测试身份夹具；卡片正文仍必须取自本地稳定 CID 记录。" },
+      }));
+    if (result.length) return jsonResponse({ result, next: 0 });
     throw new Error(`offline priority test received an unexpected URL: ${parsed}`);
   };
 }

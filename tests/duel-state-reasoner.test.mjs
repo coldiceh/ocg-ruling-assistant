@@ -934,6 +934,7 @@ test("both original user phrasings resolve all cards while the final model owns 
 
     let finalPrompt = "";
     let finalModelCalls = 0;
+    const fetchedSearches = [];
     const answer = await answerRagRulingQuestion({
       question,
       cards: data.cards,
@@ -964,13 +965,42 @@ test("both original user phrasings resolve all cards while the final model owns 
           confidenceSelfEstimate: "high",
         });
       },
-      fetchImpl: async () => new Response(JSON.stringify({ result: [], next: 0 }), {
-        status: 200,
-        headers: { "content-type": "application/json" },
-      }),
+      fetchImpl: async (url) => {
+        const parsed = new URL(String(url));
+        const search = parsed.searchParams.get("search") || "";
+        fetchedSearches.push(search);
+        if (parsed.hostname === "ygocdb.com" && /(?:VS\s*狂魔博士|狂恋博士|VS\s*Dr\.?\s*マッドラヴ|Vanquish Soul Dr\.? Mad Love)/iu.test(search)) {
+          return Response.json({
+            result: [{
+              cid: 18730,
+              id: 87654321,
+              cn_name: "对击斗魂 狂恋博士",
+              jp_name: "VS Dr.マッドラヴ",
+              en_name: "Vanquish Soul Dr. Mad Love",
+              text: { desc: "稳定 CID 身份夹具；正文仍由本地同步卡片提供。" },
+            }],
+            next: 0,
+          });
+        }
+        return Response.json({ result: [], next: 0 });
+      },
     });
     const answerIds = new Set(answer.resolvedCards.map((card) => card.id));
-    for (const id of ["13163", "18730", "18732"]) assert.equal(answerIds.has(id), true, id);
+    for (const id of ["13163", "18730", "18732"]) {
+      assert.equal(answerIds.has(id), true, JSON.stringify({
+        missingId: id,
+        resolvedCards: answer.resolvedCards.map((card) => ({
+          id: card.id,
+          input: card.input,
+          resolutionSource: card.resolutionSource,
+          identityVerificationStatus: card.identityVerificationStatus,
+        })),
+        unresolvedMentions: answer.debug.unresolvedMentions,
+        ambiguousMentions: answer.debug.ambiguousMentions,
+        retrievalWarnings: answer.debug.retrievalWarnings,
+        fetchedSearches,
+      }));
+    }
     assert.match(answer.shortAnswer, /可以发动/u);
     assert.match(answer.shortAnswer, /C2/u);
     assert.match(answer.shortAnswer, /被无效/u);

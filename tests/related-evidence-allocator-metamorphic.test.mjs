@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { retrieveRagEvidence } from "../backend/ragEvidenceRetriever.mjs";
+import {
+  allocateOfficialRelatedEvidence,
+  retrieveRagEvidence,
+} from "../backend/ragEvidenceRetriever.mjs";
 
 const syntheticCards = ["甲", "乙", "丙"].map((label, index) => ({
   id: String(980_000_001 + index),
@@ -370,4 +373,149 @@ test("same-identity scoped evidence retains two distinct strict branches under n
       item.retrievalSignals?.strictSupplementalRuleQueryKeys || []
     ))).size >= 2);
   }
+});
+
+function allocatorMetamorphicFixture({
+  idPrefix,
+  cardId,
+  cardName,
+  queryPrefix,
+  reorder = false,
+} = {}) {
+  const mechanisms = {
+    first: `${queryPrefix}-a|semantic:operation:destroy|operation:replacement|operation:special-summon`,
+    second: `${queryPrefix}-b|semantic:operation:banish|operation:return-deck`,
+    third: `${queryPrefix}-c|semantic:operation:negate|operation:send-graveyard`,
+  };
+  const candidate = ({ role, id, queryKey = "", scoped = false, score = 0 }) => ({
+    id: `${idPrefix}-${id}`,
+    role,
+    type: "related",
+    recordType: "qa",
+    question: scoped
+      ? `「<<${cardId}>>」匿名机制问题。`
+      : `「<<${Number(cardId) + 1000 + id.length}>>」匿名类比问题。`,
+    text: `anonymous evidence ${role}`,
+    cardIds: scoped ? [cardId] : [String(Number(cardId) + 1000 + id.length)],
+    questionCardIds: scoped ? [cardId] : [String(Number(cardId) + 1000 + id.length)],
+    retrievalScore: score,
+    retrievalSignals: queryKey ? {
+      ruleQueryKeys: [queryKey],
+      strictRuleQueryKeys: [queryKey],
+      ruleQueryRanks: { [queryKey]: 1 },
+    } : {},
+    retrievalContext: scoped ? {} : { scope: "cross_card_official_mechanism" },
+  });
+  const records = [
+    candidate({ role: "same-scene-first", id: "scoped-a", queryKey: mechanisms.first, scoped: true, score: 0.1 }),
+    candidate({ role: "same-scene-second", id: "scoped-b", queryKey: mechanisms.second, scoped: true, score: 0.2 }),
+    candidate({ role: "third-checkpoint", id: "cross-c", queryKey: mechanisms.third, score: 0.3 }),
+    candidate({ role: "ranked-fallback", id: "scoped-head", scoped: true, score: 0.99 }),
+    candidate({ role: "redundant-analogy", id: "cross-a", queryKey: mechanisms.first, score: 1 }),
+    ...Array.from({ length: 12 }, (_unused, index) => candidate({
+      role: `same-mechanism-noise-${index}`,
+      id: `noise-${index}`,
+      queryKey: mechanisms.first,
+      score: 1 + index,
+    })),
+  ];
+  return {
+    candidates: reorder ? deterministicShuffle(records) : records,
+    resolvedCards: [{ id: cardId, name: cardName, aliases: [cardName] }],
+    queryKeys: Object.values(mechanisms),
+  };
+}
+
+test("anonymous query-key coverage is invariant under candidate reorder, identity rewrite, synonym rewrite, and same-mechanism noise", () => {
+  const variants = [
+    allocatorMetamorphicFixture({
+      idPrefix: "fixture-one",
+      cardId: "984000001",
+      cardName: "匿名锚点甲",
+      queryPrefix: "first wording",
+    }),
+    allocatorMetamorphicFixture({
+      idPrefix: "randomized-fixture-two",
+      cardId: "984009991",
+      cardName: "完全改名后的锚点",
+      queryPrefix: "synonymous rewrite",
+      reorder: true,
+    }),
+  ];
+  const allocations = variants.map((fixture) => allocateOfficialRelatedEvidence({
+    scopedCandidates: fixture.candidates.filter((item) => (
+      item.retrievalContext.scope !== "cross_card_official_mechanism"
+    )),
+    crossCardCandidates: fixture.candidates.filter((item) => (
+      item.retrievalContext.scope === "cross_card_official_mechanism"
+    )),
+    limit: 4,
+    resolvedCards: fixture.resolvedCards,
+    supplementalRuleQueryKeys: fixture.queryKeys,
+  }));
+  const expectedRoles = [
+    "ranked-fallback",
+    "same-scene-first",
+    "same-scene-second",
+    "third-checkpoint",
+  ].sort();
+  for (const allocation of allocations) {
+    assert.deepEqual(allocation.map((item) => item.role).sort(), expectedRoles);
+    assert.ok(!allocation.some((item) => (
+      item.role === "redundant-analogy" || item.role.startsWith("same-mechanism-noise-")
+    )));
+  }
+});
+
+test("same canonical card and query key do not merge distinct official-question premises", () => {
+  const cardId = "984100001";
+  const queryKey = "anonymous branch|semantic:operation:destroy|operation:special-summon";
+  const scopedPremise = (id, role, question, score) => ({
+    id,
+    role,
+    type: "related",
+    recordType: "qa",
+    question: `「<<${cardId}>>」${question}`,
+    text: `anonymous evidence ${role}`,
+    cardIds: [cardId],
+    questionCardIds: [cardId],
+    retrievalScore: score,
+    retrievalSignals: {
+      ruleQueryKeys: [queryKey],
+      strictRuleQueryKeys: [queryKey],
+      ruleQueryRanks: { [queryKey]: 1 },
+    },
+  });
+  const firstPremise = scopedPremise(
+    "anonymous-distinct-premise-a",
+    "premise-a",
+    "被破坏的怪兽仍在场上时，之后能否特殊召唤？",
+    0.9,
+  );
+  const secondPremise = scopedPremise(
+    "anonymous-distinct-premise-b",
+    "premise-b",
+    "破坏已被代替且怪兽没有被破坏时，之后能否特殊召唤？",
+    0.8,
+  );
+  const analogy = {
+    ...scopedPremise(
+      "anonymous-cross-card-padding",
+      "analogy",
+      "其他卡的相似处理。",
+      1,
+    ),
+    cardIds: ["984100999"],
+    questionCardIds: ["984100999"],
+    retrievalContext: { scope: "cross_card_official_mechanism" },
+  };
+  const selected = allocateOfficialRelatedEvidence({
+    scopedCandidates: [secondPremise, firstPremise],
+    crossCardCandidates: [analogy],
+    limit: 2,
+    resolvedCards: [{ id: cardId, name: "匿名前提锚点" }],
+    supplementalRuleQueryKeys: [queryKey],
+  });
+
+  assert.deepEqual(selected.map((item) => item.role).sort(), ["premise-a", "premise-b"]);
 });

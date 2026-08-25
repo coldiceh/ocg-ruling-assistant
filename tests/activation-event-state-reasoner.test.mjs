@@ -157,7 +157,7 @@ test("missing the field-empty fact fails closed instead of assuming hand activat
   assert.equal(result.reason, "activating_player_field_empty_state_unknown");
 });
 
-test("a matching official QA reaches the final model without heuristic direct promotion", async () => {
+test("a matching translated official QA reaches the final model as related-only without heuristic direct promotion", async () => {
   let finalModelCalls = 0;
   let finalPrompt = "";
   const answer = await answerRagRulingQuestion({
@@ -194,7 +194,8 @@ test("a matching official QA reaches the final model without heuristic direct pr
   assert.equal(answer.debug.semanticStateTransition, null);
   assert.equal(answer.debug.modelUsed, "mock-rag");
   assert.deepEqual(answer.debug.unresolvedMentions, []);
-  assert.ok(answer.debug.retrievalCounts.officialQaDirectCandidates > 0);
+  assert.equal(answer.debug.retrievalCounts.officialQaDirectCandidates, 0);
+  assert.ok(answer.debug.retrievalCounts.officialQaRelated > 0);
   assert.match(finalPrompt, /ygoresources-qa-24365/u);
   assert.match(finalPrompt, /相手が魔法・罠カードを手札からフィールドに置いて発動した状況/u);
   assert.doesNotMatch(finalPrompt, /唯一の? officialQaDirectCandidate|唯一的 officialQaDirectCandidate/u);
