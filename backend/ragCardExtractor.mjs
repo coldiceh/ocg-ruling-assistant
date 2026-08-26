@@ -73,6 +73,9 @@ export function extractRagCards(userQuery, { cards = [], maxCards = 6, modelCard
       .filter(Boolean),
   );
   const modelMentions = normalizeModelCardNameCandidates(modelCardNameCandidates)
+    .filter((mention) => [mention.originalText, mention.name].some((surface) => (
+      isPlausibleUnresolvedCardMention(surface, "model_card_name_extractor")
+    )))
     .filter((mention) => (
       !nonCardQuotedMentionKeys.has(normalizeCardKey(mention.name))
       && !nonCardQuotedMentionKeys.has(normalizeCardKey(mention.originalText))
@@ -194,11 +197,13 @@ export function extractRagCards(userQuery, { cards = [], maxCards = 6, modelCard
     const mentionKey = normalizeCardKey(mention);
     if (!mentionKey || seenMentionKeys.has(mentionKey)) continue;
     seenMentionKeys.add(mentionKey);
-    const candidates = aliasIndex.get(mentionKey) || [];
+    const candidates = resolveMentionCandidates(cards, aliasIndex, mention);
+    const allowUnresolvedHypothesis = isPlausibleUnresolvedCardMention(mention, seed.source);
     const requiresExternalNumberedIdentityVerification = numberedMentionKeysRequiringExternalVerification.has(mentionKey);
     const nearestEditCandidates = candidates.length
       || seed.deferToNestedKnownSpan
       || requiresExternalNumberedIdentityVerification
+      || !allowUnresolvedHypothesis
       ? []
       : collectNearestEditCandidates(aliasIndex, mention);
     const nearestEditCandidate = nearestEditCandidates.length === 1 ? nearestEditCandidates[0] : null;
@@ -206,6 +211,7 @@ export function extractRagCards(userQuery, { cards = [], maxCards = 6, modelCard
       || nearestEditCandidate
       || seed.deferToNestedKnownSpan
       || requiresExternalNumberedIdentityVerification
+      || !allowUnresolvedHypothesis
       ? null
       : findUniqueDistinctiveFragmentCandidate(cards, mention);
     if (candidates.length === 1) {
@@ -223,7 +229,7 @@ export function extractRagCards(userQuery, { cards = [], maxCards = 6, modelCard
       );
     } else if (distinctiveFragmentCandidate) {
       addResolved(resolved, seenCards, distinctiveFragmentCandidate, mention, 0.91);
-    } else if (looksLikeCardMention(mention) && !numberedMentionAlreadyResolved(mention, resolved)) {
+    } else if (allowUnresolvedHypothesis && !numberedMentionAlreadyResolved(mention, resolved)) {
       if (nearestEditCandidates.length > 1) nearEditAmbiguityLockedMentionKeys.add(mentionKey);
       if (seed.source !== "contextual_distinctive_fragment") unresolvedMentions.push(buildUnresolvedMention(seed));
     }
@@ -234,8 +240,9 @@ export function extractRagCards(userQuery, { cards = [], maxCards = 6, modelCard
     const mentionKey = normalizeCardKey(mention);
     if (!mentionKey || seenMentionKeys.has(mentionKey)) continue;
     seenMentionKeys.add(mentionKey);
-    const candidates = aliasIndex.get(mentionKey) || [];
-    const nearestEditCandidates = candidates.length || seed.deferToNestedKnownSpan
+    const candidates = resolveMentionCandidates(cards, aliasIndex, mention);
+    const allowUnresolvedHypothesis = isPlausibleUnresolvedCardMention(mention, seed.source);
+    const nearestEditCandidates = candidates.length || seed.deferToNestedKnownSpan || !allowUnresolvedHypothesis
       ? []
       : collectNearestEditCandidates(aliasIndex, mention);
     const nearestEditCandidate = nearestEditCandidates.length === 1 ? nearestEditCandidates[0] : null;
@@ -252,21 +259,22 @@ export function extractRagCards(userQuery, { cards = [], maxCards = 6, modelCard
         confidenceForNearEditMention(seed, nearestEditCandidate.nearEditDistance),
         seed,
       );
-    } else if (looksLikeCardMention(mention) && !numberedMentionAlreadyResolved(mention, resolved)) {
+    } else if (allowUnresolvedHypothesis && !numberedMentionAlreadyResolved(mention, resolved)) {
       if (nearestEditCandidates.length > 1) nearEditAmbiguityLockedMentionKeys.add(mentionKey);
       unresolvedMentions.push(buildUnresolvedMention(seed));
     }
   }
 
   const aliasHits = [];
-  for (const [aliasKey, candidates] of queryAliasEntries) {
+  for (const [aliasKey, primaryCandidates] of queryAliasEntries) {
     // Two-character aliases are too ambiguous for passive substring scanning
     // (for example, the card "融合" inside the gameplay term "融合怪").
     // Explicit model/quoted/unquoted candidates above can still resolve them.
     if (aliasKey.length < 3) continue;
     if (exactSpanSelection.hasOccurrences(aliasKey) && !exactSpanSelection.hasSelectedOccurrence(aliasKey)) continue;
-    const bestAlias = candidates[0]?.matchedAlias || "";
+    const bestAlias = primaryCandidates[0]?.matchedAlias || "";
     if (!bestAlias || !buildMentionContexts(cardNameScanQuery, bestAlias, resolved).length) continue;
+    const candidates = resolveMentionCandidates(cards, aliasIndex, bestAlias);
     aliasHits.push({ aliasKey, candidates, score: aliasKey.length + bestAlias.length / 100 });
   }
   aliasHits.sort((left, right) => right.score - left.score);
@@ -1059,6 +1067,7 @@ function hasSentenceInitialRulingSubjectSignal(value, rawValue = value) {
   // not unknown card names. Check the untrimmed surface too, because the
   // general cleaner intentionally removes words such as "效果" and "怪兽".
   if (/(?:这个|這個|那个|那個|该|該|此)(?:卡|怪兽|怪獸|效果)?$/u.test(rawText)) return false;
+  if (/^(?:正在|正|仍然|仍|已经|已經|尚未)$/u.test(text)) return false;
   if (/^(?:没有|沒有|并无|並無|不存在|不再存在)(?:其他|其它|别的|別的)?/u.test(rawText)) return false;
   if (/^(?:被)?(?:战斗|戰鬥|效果)(?:破坏|破壞|无效|無效|处理|處理)?(?:的情况下|的情況下|的场合|的場合|后|後|时|時|中|下)?$/u.test(text)) return false;
   if (/(?:召唤|召喚|发动|發動|处理|處理|结算|結算|连锁|連鎖|攻击|攻擊|伤害步骤|傷害步驟|伤害阶段|傷害階段|主要阶段|主要階段|战斗阶段|戰鬥階段|回合|状态|狀態|情况下|情況下|场合|場合|期间|期間|时点|時點).*(?:成功|无效|無效|失败|失敗|后|後|前|中|下|时|時|这个|這個|那个|那個|该|該|此)$/u.test(text)) return false;
@@ -1673,6 +1682,25 @@ function findContextualShortMentionCandidates(cards, mention) {
   return getSupplementalCardIndexes(cards).shortMentionIndex.get(mentionKey) || [];
 }
 
+function resolveMentionCandidates(cards, aliasIndex, mention) {
+  const mentionKey = normalizeCardKey(mention);
+  const primary = aliasIndex.get(mentionKey) || [];
+  // Generated short-name prefixes and suffixes are contextual hypotheses, not
+  // exact identities.  They may widen an existing exact alias into an
+  // ambiguity, but they must never create an identity from an otherwise
+  // unknown 2-4 character surface.
+  if (!primary.length || !/^[\u3400-\u9fff]{2,4}$/u.test(mentionKey)) return primary;
+  const hasExactCanonicalName = primary.some((candidate) => (
+    candidate.matchedAliasKind === "canonical_name"
+    && normalizeCardKey(candidate.matchedAlias) === mentionKey
+  ));
+  if (hasExactCanonicalName) return primary;
+  return dedupeBy([
+    ...primary,
+    ...findContextualShortMentionCandidates(cards, mention),
+  ], (candidate) => cardIdentity(candidate.card));
+}
+
 function chooseContextualShortMentionCandidate(query, mention, candidates, resolvedCards) {
   const resolvedSeriesKeys = new Set(resolvedCards.flatMap(cardSeriesKeys));
   if (!resolvedSeriesKeys.size) return null;
@@ -2266,6 +2294,24 @@ function confidenceForAlias(aliasKey) {
 function looksLikeCardMention(value) {
   const text = String(value || "").trim();
   return text.length >= 2 && /[A-Za-z\u3040-\u30ff\u3400-\u9fff0-9]/u.test(text);
+}
+
+function isPlausibleUnresolvedCardMention(value, source = "") {
+  const text = String(value || "").normalize("NFKC").replace(/\s+/gu, " ").trim();
+  if (!looksLikeCardMention(text)) return false;
+  if (source !== "model_card_name_extractor") return true;
+  if (/^(?:(?:c|cl|chain)\s*\d+|连锁\s*\d+|連鎖\s*\d+)$/iu.test(text)) return false;
+  if (looksLikeGenericCardDescription(text)) return false;
+  if (/^(?:正在|正|已经|已經|尚未|没有|沒有|不存在|处理时|處理時|结算时|結算時|发动时|發動時|连锁中|連鎖中).*(?:卡|卡片|怪兽|怪獸|魔法|陷阱|效果|对象|對象)$/u.test(text)) {
+    return false;
+  }
+  if (/(?:系列|字段|主字段|卡片类别|卡片類別|怪兽类别|怪獸類別|魔法陷阱卡类|魔法陷阱卡類)$/u.test(text)) {
+    return false;
+  }
+  const operationCount = (text.match(/发动|發動|处理|處理|结算|結算|选择|選擇|特殊召唤|特殊召喚|破坏|破壞|除外|返回|回到|送去墓地|成为对象|成為對象/gu) || []).length;
+  const clauseLike = /[，,。；;！？!?：:\r\n]/u.test(text) || text.length > 40;
+  if (operationCount >= 2 && clauseLike) return false;
+  return true;
 }
 
 function cardAliases(card = {}) {

@@ -351,9 +351,9 @@ test("a partial Planner plan leaves deterministic question branches to fill the 
   assert.equal(related.retrievalSignals?.questionBranchSearch, true);
   assert.equal(related.retrievalContext?.relatedOnly, true);
   assert.equal(related.isDirect, false);
-  assert.ok(!evidence.officialQaRelated.some((item) => (
-    item.id === answerOnly.id || item.id === questionlessFaq.id
-  )));
+  assert.ok(!evidence.officialQaRelated.some((item) => item.id === answerOnly.id));
+  assert.ok(!evidence.debug.candidateStages.ruleQueryQuestionBranchCandidateIds.includes(questionlessFaq.id));
+  assert.ok(!evidence.officialQaDirectCandidates.some((item) => item.id === questionlessFaq.id));
 });
 
 test("supplemental mechanism retrieval keeps same-identity official QA scoped and related-only", async () => {
@@ -963,6 +963,8 @@ test("current retrieval-only regressions keep canonical card text and decisive o
     ruleQuestions: [{
       subclaim: "确认墓地通常魔法在己方怪兽成为攻击对象时，能否除外自身发动无效攻击的效果",
       checkpoint: "activation_snapshot",
+      officialQuestion: "墓地的通常魔法在自己怪兽成为攻击对象时，能否除外自身发动使攻击无效的效果？ | 自分のモンスターが攻撃対象に選択された時、墓地の通常魔法カードを除外して攻撃を無効にする効果を発動できますか？ | Can a Normal Spell in the GY banish itself to activate an effect that negates an attack when your monster becomes the attack target?",
+      scenarioQuestion: "对方不受卡片效果影响的怪兽攻击宣言我方怪兽时，能否除外墓地的神艺通常魔法发动使该次攻击无效的效果？",
       query: "墓地通常魔法除外自身发动无效攻击",
       reason: "核对发动条件",
       confidence: "high",
@@ -970,6 +972,8 @@ test("current retrieval-only regressions keep canonical card text and decisive o
     }, {
       subclaim: "确认攻击怪兽不受卡片效果影响时，无效该次攻击的处理能否适用",
       checkpoint: "resolution_snapshot",
+      officialQuestion: "攻击怪兽不受卡片效果影响时，使该次攻击无效的处理能否适用？ | 攻撃モンスターがカードの効果を受けない場合、その攻撃を無効にする処理を適用できますか？ | If an attacking monster is unaffected by card effects, can an effect negate that attack?",
+      scenarioQuestion: "除外墓地的神艺通常魔法发动效果后，处理时对方攻击怪兽不受卡片效果影响，使该次攻击无效的处理能否适用？",
       query: "不受卡片效果影响的攻击怪兽能否被无效攻击",
       reason: "核对效果处理与不受影响状态",
       confidence: "high",
@@ -977,6 +981,8 @@ test("current retrieval-only regressions keep canonical card text and decisive o
     }, {
       subclaim: "确认攻击无效处理未适用时，其后处理是否继续",
       checkpoint: "step_dependency",
+      officialQuestion: "使攻击无效的处理未适用时，其后处理是否继续？ | 攻撃を無効にする処理が適用されなかった場合、その後の処理を行いますか？ | If the step that negates an attack is not applied, is the subsequent processing performed?",
+      scenarioQuestion: "神艺通常魔法使攻击无效的处理未适用时，其后写明的处理是否继续？",
       query: "攻击无效未适用时其后处理是否继续",
       reason: "核对连续处理依赖",
       confidence: "high",
