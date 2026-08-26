@@ -174,7 +174,7 @@ async function writeBundle(snapshotPath, record) {
 }
 
 test("frozen public RAG record excludes the reference answer and binds the exact prompt", () => {
-  const prompt = "PUBLIC_RAG_PROMPT\nREFERENCE_EVIDENCE_TAIL";
+  const prompt = "PUBLIC_RAG_PROMPT\nREFERENCE_EVIDENCE_TAIL\n卡😀";
   const record = buildFrozenCaseRecord({
     item: {
       id: "case-004",
@@ -198,10 +198,53 @@ test("frozen public RAG record excludes the reference answer and binds the exact
   });
 
   assert.equal(record.prompt, prompt);
+  assert.equal(record.promptUtf8Bytes, Buffer.byteLength(prompt, "utf8"));
+  assert.ok(record.promptUtf8Bytes > record.promptChars);
   assert.equal(record.model, "gpt-5.6-sol");
   assert.equal(record.maxCompletionTokens, 32000);
   assert.equal(Object.hasOwn(record, "referenceAnswer"), false);
   assert.doesNotMatch(JSON.stringify(record), /绝不能进入冻结包的标准答案/u);
+});
+
+test("frozen record keeps safe non-negative timing metric copies", () => {
+  const timingsMs = {
+    dataLoad: 0,
+    retrieval: 4.5,
+    total: 9,
+    finalModel: -1,
+    ruleQueryExtraction: "8",
+    privateMetric: 7,
+  };
+  const retrievalStageTimingsMs = {
+    data: 0,
+    officialQa: 3,
+    total: 4.25,
+    relatedEvidence: Number.POSITIVE_INFINITY,
+    privateMetric: 6,
+  };
+  const record = buildFrozenCaseRecord({
+    item: { id: "case-004", question: "测试问题", sourceBlocks: [4] },
+    captured: {
+      prompt: "PUBLIC_RAG_PROMPT",
+      provider: "relay",
+      modelName: "gpt-5.6-sol",
+      maxTokens: 32000,
+      reasoningEffort: "low",
+    },
+    transportContract: testTransportContract(),
+    answer: {
+      resolvedCards: [{ id: "23380" }],
+      usedEvidence: [{ id: "qa-decisive" }],
+      debug: { timingsMs, retrievalStageTimingsMs },
+    },
+  });
+
+  timingsMs.total = 99;
+  retrievalStageTimingsMs.total = 88;
+  assert.deepEqual(record.timingsMs, { dataLoad: 0, retrieval: 4.5, total: 9 });
+  assert.deepEqual(record.retrievalStageTimingsMs, { data: 0, officialQa: 3, total: 4.25 });
+  assert.equal(Object.isFrozen(record.timingsMs), true);
+  assert.equal(Object.isFrozen(record.retrievalStageTimingsMs), true);
 });
 
 test("frozen record stores only allowlisted retrieval candidate stage ID arrays", () => {
@@ -703,6 +746,8 @@ test("capture saves the exact model-visible evidence prompt without requirements
           evidenceFingerprint: sha256("test-evidence"),
           finalPromptSha256: sha256(fixture.prompt),
           promptTruncated: false,
+          timingsMs: { dataLoad: 1, retrieval: 2, finalModel: 0, total: 3 },
+          retrievalStageTimingsMs: { data: 1, officialQa: 2, total: 3 },
           selectedEvidenceDiagnostics: fixture.selectedEvidenceDiagnostics,
           unresolvedMentions: [{ input: "未解析卡名", reason: "no_unique_identity" }],
           ambiguousMentions: [{
@@ -731,7 +776,7 @@ test("capture saves the exact model-visible evidence prompt without requirements
           ruleQueryWarnings: ["rule-query-review-warning"],
           retrievalCandidateStages: {
             initialCrossCardQuestionIds: ["qa-head-only"],
-            scopedOfficialRelatedCandidateIds: [fixture.qa.id, "qa-scoped-dropped"],
+            scopedOfficialRelatedCandidateIds: ["qa-scoped-dropped", fixture.qa.id],
             crossCardEvidenceCandidateIds: ["qa-cross-dropped"],
             allocatedOfficialRelatedIds: [fixture.qa.id],
             notAllocatedScopedIds: ["qa-scoped-dropped"],
@@ -751,6 +796,18 @@ test("capture saves the exact model-visible evidence prompt without requirements
   assert.equal(snapshot.finalModelCallCount, 0);
   assert.equal(snapshot.cases[0].status, "captured_for_manual_review");
   assert.equal(snapshot.cases[0].prompt, fixture.prompt);
+  assert.equal(snapshot.cases[0].promptUtf8Bytes, Buffer.byteLength(fixture.prompt, "utf8"));
+  assert.deepEqual(snapshot.cases[0].timingsMs, {
+    dataLoad: 1,
+    retrieval: 2,
+    finalModel: 0,
+    total: 3,
+  });
+  assert.deepEqual(snapshot.cases[0].retrievalStageTimingsMs, {
+    data: 1,
+    officialQa: 2,
+    total: 3,
+  });
   assert.equal(Object.hasOwn(snapshot, "evidenceRequirementsSha256"), false);
   assert.equal(Object.hasOwn(snapshot.cases[0], "evidenceAudit"), false);
   assert.deepEqual(snapshot.cases[0].manualReviewTrace.resolvedCards, [{
@@ -772,6 +829,21 @@ test("capture saves the exact model-visible evidence prompt without requirements
       { id: "qa-head-only", status: "candidate_only_not_selected" },
       { id: "qa-scoped-dropped", status: "not_allocated_within_related_budget" }],
   );
+  const candidateJourneyById = Object.fromEntries(
+    snapshot.cases[0].manualReviewTrace.candidateJourney.map((item) => [item.id, item]),
+  );
+  assert.deepEqual(candidateJourneyById[fixture.qa.id].stages, [
+    "scopedOfficialRelatedCandidateIds",
+    "allocatedOfficialRelatedIds",
+  ]);
+  assert.deepEqual(candidateJourneyById[fixture.qa.id].stageRanks, {
+    scopedOfficialRelatedCandidateIds: 2,
+    allocatedOfficialRelatedIds: 1,
+  });
+  assert.deepEqual(candidateJourneyById["qa-scoped-dropped"].stageRanks, {
+    scopedOfficialRelatedCandidateIds: 1,
+    notAllocatedScopedIds: 1,
+  });
   assert.doesNotMatch(snapshotText, new RegExp(privateReference, "u"));
 });
 

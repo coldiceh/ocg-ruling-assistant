@@ -824,9 +824,10 @@ test("multiple same-definition instances reject an unbound chain source", () => 
   ]);
 });
 
-const originalUserQuestions = [
+const no41RegressionQuestions = [
   "当对手场上的no.41防守表示存在时，我c1发动场上vs狂魔博士的效果，c2手牌龙帝进行替换，连锁处理结算时，c1的博士效果还会生效弹走场上防御力最高的卡吗？",
   "当对手场上的【No.41 泥睡魔兽 睡梦貘】防守表示在场上存在。我方c1发动场上攻击表示的【VS狂魔博士】效果，C2从手牌发动【龙帝】替换效果，连锁逆算处理时，c1的博士效果还会生效弹走场上防御力最高的卡吗？",
+  "当对手场上的【No.41 泥睡魔兽 睡梦貘】防守表示在场上存在。我方c1发动场上攻击表示的【征服斗魂 狂爱博士】效果，C2从手牌发动【征服斗魂 龙帝 瓦利乌斯】替换效果，连锁逆算处理时，c1的博士效果还会生效弹走场上防御力最高的卡吗？",
 ];
 
 test("a bare numbered-card identity resolves only within the exact numbered family", () => {
@@ -876,61 +877,69 @@ test("a numbered subtitle cannot choose arbitrarily when one identity maps to mu
   assert.ok(result.unresolvedMentions.length || result.ambiguousMentions.length);
 });
 
-test("both original user phrasings resolve all cards while the final model owns the verdict", async () => {
+test("the original shorthand and Baige full-name phrasings resolve all cards while the final model owns the verdict", async () => {
   const data = await loadRagData();
-  for (const [questionIndex, question] of originalUserQuestions.entries()) {
+  for (const [questionIndex, question] of no41RegressionQuestions.entries()) {
     const cardResolution = extractRagCards(question, { cards: data.cards, maxCards: 8 });
     const resolvedIds = new Set(cardResolution.resolvedCards.map((card) => card.id));
-    assert.deepEqual(
-      new Set(["13163", "18730", "18732"]),
-      new Set([...resolvedIds].filter((id) => ["13163", "18730", "18732"].includes(id))),
-      JSON.stringify(cardResolution),
-    );
-    assert.equal(cardResolution.unresolvedMentions.length, 0, JSON.stringify(cardResolution.unresolvedMentions));
+    if (questionIndex < 2) {
+      assert.deepEqual(
+        new Set(["13163", "18730", "18732"]),
+        new Set([...resolvedIds].filter((id) => ["13163", "18730", "18732"].includes(id))),
+        JSON.stringify(cardResolution),
+      );
+      assert.equal(cardResolution.unresolvedMentions.length, 0, JSON.stringify(cardResolution.unresolvedMentions));
 
-    const direct = analyzeDuelStateTransition({
-      userQuery: question,
-      resolvedCards: cardResolution.resolvedCards,
-    });
-    assert.equal(direct.status, "resolved", JSON.stringify(direct));
-    assert.equal(direct.activation, "assumed_legal");
-    assert.equal(direct.activationBasis, "declared_legal");
-    assert.equal(direct.resolution, "negated");
-    assert.match(direct.shortAnswer, /按题设已满足展示等发动手续，C1可以发动/u);
-    assert.match(direct.shortAnswer, /C2/u);
-    assert.match(direct.shortAnswer, /被无效/u);
-    assert.match(direct.shortAnswer, /不进行这个连锁项的效果处理/u);
-    assert.doesNotMatch(direct.shortAnswer, /不会把怪兽返回手牌/u);
-    const initialDoctor = direct.program.initialState.cards.find((card) => card.definitionId === "18730");
-    assert.equal(initialDoctor.position, questionIndex === 0 ? "unknown" : "attack");
-    assert.equal(
-      direct.program.preparedChainLinks.find((link) => link.id === "C1").activationSnapshot.sourcePosition,
-      "defense",
-    );
-    assert.equal(
-      direct.program.preparedChainLinks.find((link) => link.id === "C2").activationSnapshot.sourceZone,
-      "hand",
-    );
-    assert.deepEqual(
-      direct.program.stateSnapshots.map((snapshot) => [snapshot.stage, snapshot.chainLink || ""]),
-      [
-        ["before_chain_activation", "C1"],
-        ["after_chain_activation", "C1"],
-        ["before_chain_activation", "C2"],
-        ["after_chain_activation", "C2"],
-        ["before_chain_resolution", ""],
-        ["after_chain_link", "C2"],
-        ["after_chain_link", "C1"],
-      ],
-    );
-    assert.equal(
-      direct.program.finalState.cards.find((card) => card.definitionId === "18730").zone,
-      "hand",
-    );
-    assert.equal(
-      direct.program.finalState.cards.find((card) => card.definitionId === "18732").position,
-      "defense",
-    );
+      const direct = analyzeDuelStateTransition({
+        userQuery: question,
+        resolvedCards: cardResolution.resolvedCards,
+      });
+      assert.equal(direct.status, "resolved", JSON.stringify(direct));
+      assert.equal(direct.activation, "assumed_legal");
+      assert.equal(direct.activationBasis, "declared_legal");
+      assert.equal(direct.resolution, "negated");
+      assert.match(direct.shortAnswer, /按题设已满足展示等发动手续，C1可以发动/u);
+      assert.match(direct.shortAnswer, /C2/u);
+      assert.match(direct.shortAnswer, /被无效/u);
+      assert.match(direct.shortAnswer, /不进行这个连锁项的效果处理/u);
+      assert.doesNotMatch(direct.shortAnswer, /不会把怪兽返回手牌/u);
+      const initialDoctor = direct.program.initialState.cards.find((card) => card.definitionId === "18730");
+      assert.equal(initialDoctor.position, questionIndex === 0 ? "unknown" : "attack");
+      assert.equal(
+        direct.program.preparedChainLinks.find((link) => link.id === "C1").activationSnapshot.sourcePosition,
+        "defense",
+      );
+      assert.equal(
+        direct.program.preparedChainLinks.find((link) => link.id === "C2").activationSnapshot.sourceZone,
+        "hand",
+      );
+      assert.deepEqual(
+        direct.program.stateSnapshots.map((snapshot) => [snapshot.stage, snapshot.chainLink || ""]),
+        [
+          ["before_chain_activation", "C1"],
+          ["after_chain_activation", "C1"],
+          ["before_chain_activation", "C2"],
+          ["after_chain_activation", "C2"],
+          ["before_chain_resolution", ""],
+          ["after_chain_link", "C2"],
+          ["after_chain_link", "C1"],
+        ],
+      );
+      assert.equal(
+        direct.program.finalState.cards.find((card) => card.definitionId === "18730").zone,
+        "hand",
+      );
+      assert.equal(
+        direct.program.finalState.cards.find((card) => card.definitionId === "18732").position,
+        "defense",
+      );
+    } else {
+      assert.deepEqual([...resolvedIds], ["13163"], JSON.stringify(cardResolution));
+      assert.deepEqual(
+        new Set(cardResolution.unresolvedMentions.map((item) => item.input)),
+        new Set(["征服斗魂 狂爱博士", "征服斗魂 龙帝 瓦利乌斯"]),
+      );
+    }
 
     let finalPrompt = "";
     let finalModelCalls = 0;
@@ -969,14 +978,29 @@ test("both original user phrasings resolve all cards while the final model owns 
         const parsed = new URL(String(url));
         const search = parsed.searchParams.get("search") || "";
         fetchedSearches.push(search);
-        if (parsed.hostname === "ygocdb.com" && /(?:VS\s*狂魔博士|狂恋博士|VS\s*Dr\.?\s*マッドラヴ|Vanquish Soul Dr\.? Mad Love)/iu.test(search)) {
+        if (parsed.hostname === "ygocdb.com" && /(?:VS\s*狂魔博士|狂恋博士|征服斗魂\s*狂爱博士|VS\s*Dr\.?\s*マッドラヴ|Vanquish Soul Dr\.? Mad Love)/iu.test(search)) {
           return Response.json({
             result: [{
               cid: 18730,
               id: 87654321,
-              cn_name: "对击斗魂 狂恋博士",
+              cn_name: "征服斗魂 狂爱博士",
+              sc_name: "VS狂魔博士",
               jp_name: "VS Dr.マッドラヴ",
               en_name: "Vanquish Soul Dr. Mad Love",
+              text: { desc: "稳定 CID 身份夹具；正文仍由本地同步卡片提供。" },
+            }],
+            next: 0,
+          });
+        }
+        if (parsed.hostname === "ygocdb.com" && /(?:龙帝\s*瓦利乌斯|龍帝ヴァリウス|Caesar Valius)/iu.test(search)) {
+          return Response.json({
+            result: [{
+              cid: 18732,
+              id: 29280200,
+              cn_name: "征服斗魂 龙帝 瓦利乌斯",
+              sc_name: "龙帝",
+              jp_name: "VS 龍帝ヴァリウス",
+              en_name: "Vanquish Soul Caesar Valius",
               text: { desc: "稳定 CID 身份夹具；正文仍由本地同步卡片提供。" },
             }],
             next: 0,
@@ -1007,7 +1031,7 @@ test("both original user phrasings resolve all cards while the final model owns 
     assert.match(answer.shortAnswer, /不进行这个连锁项的效果处理/u);
     assert.doesNotMatch(answer.shortAnswer, /不会把怪兽返回手牌/u);
     assert.match(finalPrompt, /no\.41/iu);
-    assert.match(finalPrompt, /vs狂魔博士|对击斗魂 狂恋博士/iu);
+    assert.match(finalPrompt, /vs狂魔博士|征服斗魂\s*狂爱博士|对击斗魂\s*狂恋博士/iu);
     assert.equal(finalModelCalls, 1);
     assert.equal(answer.debug.semanticStateTransition, null);
     assert.equal(answer.debug.semanticStateTransitionDiagnostic, null);
@@ -1382,7 +1406,7 @@ function runNo41ColdStart(question) {
     "  modelInvoker: async () => JSON.stringify({ answerLevel: 'rule_analysis', shortAnswer: '按题设已经完成展示等发动手续，C1可以发动。C2处理后，C1效果被无效，不进行这个连锁项的效果处理。', reasoning: ['先处理C2，再按更新后的场面处理C1。'], usedCards: [], usedEvidence: [], missingInfo: [], riskFlags: [], confidenceSelfEstimate: 'high' }),",
     "  fetchImpl: async (url) => {",
     "    const search = new URL(String(url)).searchParams.get('search') || '';",
-    "    const result = /(?:vs.*狂魔博士|VS Dr\\.マッドラヴ|Vanquish Soul Dr\\. Mad Love)/iu.test(search) ? [{ cid: 18730, id: 29280200, cn_name: '征服斗魂 狂爱博士', sc_name: 'VS狂魔博士', jp_name: 'VS Dr.マッドラヴ', en_name: 'Vanquish Soul Dr. Mad Love', text: { desc: '测试身份夹具；正文仍取本地稳定 CID 记录。' } }] : [];",
+    "    const result = /(?:vs.*狂魔博士|征服斗魂.*狂爱博士|对击斗魂.*狂恋博士|VS Dr\\.マッドラヴ|Vanquish Soul Dr\\. Mad Love)/iu.test(search) ? [{ cid: 18730, id: 29280200, cn_name: '征服斗魂 狂爱博士', sc_name: 'VS狂魔博士', jp_name: 'VS Dr.マッドラヴ', en_name: 'Vanquish Soul Dr. Mad Love', text: { desc: '测试身份夹具；正文仍取本地稳定 CID 记录。' } }] : /(?:龙帝.*瓦利乌斯|龍帝ヴァリウス|Caesar Valius)/iu.test(search) ? [{ cid: 18732, id: 29280201, cn_name: '征服斗魂 龙帝 瓦利乌斯', sc_name: '龙帝', jp_name: 'VS 龍帝ヴァリウス', en_name: 'Vanquish Soul Caesar Valius', text: { desc: '测试身份夹具；正文仍取本地稳定 CID 记录。' } }] : [];",
     "    return new Response(JSON.stringify({ result, next: 0 }), { status: 200, headers: { 'content-type': 'application/json' } });",
     "  },",
     "});",
@@ -1407,19 +1431,21 @@ function runNo41ColdStart(question) {
   return JSON.parse(child.stdout.trim().split(/\r?\n/u).at(-1));
 }
 
-test("the original No.41 wording resolves cards in a cold process and delegates the verdict", () => {
-  const result = runNo41ColdStart(originalUserQuestions[0]);
+test("the original shorthand and Baige full-name wordings resolve cards in cold processes and delegate the verdict", () => {
+  for (const question of [no41RegressionQuestions[0], no41RegressionQuestions[2]]) {
+    const result = runNo41ColdStart(question);
 
-  for (const id of ["13163", "18730", "18732"]) assert.equal(result.ids.includes(id), true, id);
-  assert.deepEqual(result.unresolved, []);
-  assert.equal(result.decision, null);
-  assert.notEqual(result.modelUsed, "deterministic-ruling-reasoner");
-  assert.equal(result.transition, null);
-  assert.match(result.shortAnswer, /C1可以发动/u);
-  assert.match(result.shortAnswer, /C2/u);
-  assert.match(result.shortAnswer, /被无效/u);
-  assert.match(result.shortAnswer, /不进行这个连锁项的效果处理/u);
-  assert.doesNotMatch(result.shortAnswer, /不会把怪兽返回手牌/u);
+    for (const id of ["13163", "18730", "18732"]) assert.equal(result.ids.includes(id), true, id);
+    assert.deepEqual(result.unresolved, []);
+    assert.equal(result.decision, null);
+    assert.notEqual(result.modelUsed, "deterministic-ruling-reasoner");
+    assert.equal(result.transition, null);
+    assert.match(result.shortAnswer, /C1可以发动/u);
+    assert.match(result.shortAnswer, /C2/u);
+    assert.match(result.shortAnswer, /被无效/u);
+    assert.match(result.shortAnswer, /不进行这个连锁项的效果处理/u);
+    assert.doesNotMatch(result.shortAnswer, /不会把怪兽返回手牌/u);
+  }
 });
 
 test("generic post-cost simulation keeps its arithmetic trace but is conditional with synthetic materials", () => {

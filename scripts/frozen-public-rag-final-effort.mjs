@@ -37,6 +37,25 @@ const RETRIEVAL_CANDIDATE_STAGE_KEYS = Object.freeze([
   "notAllocatedScopedIds",
   "notAllocatedCrossCardIds",
 ]);
+const PIPELINE_TIMING_KEYS = Object.freeze([
+  "dataLoad",
+  "officialQaExact",
+  "deterministicPreflight",
+  "auxiliaryExtractionModels",
+  "dataAndQueryExtraction",
+  "ruleQueryExtraction",
+  "retrieval",
+  "finalModel",
+  "total",
+]);
+const RETRIEVAL_STAGE_TIMING_KEYS = Object.freeze([
+  "data",
+  "cardResolution",
+  "rulebook",
+  "officialQa",
+  "relatedEvidence",
+  "total",
+]);
 const SAFE_RETRIEVAL_CANDIDATE_ID = /^[A-Za-z0-9][A-Za-z0-9._:@#-]{0,127}$/u;
 const PUBLIC_DIAGNOSTICS_SCHEMA_VERSION = 1;
 const FREEZE_RUNNER_FAILURE_STATUS = "failed_freeze_runner";
@@ -482,6 +501,11 @@ function buildManualOfficialDirectRecord({ item, answer } = {}) {
     sourceBlocks: Object.freeze([...(item?.sourceBlocks || [])]),
     route: "official_qa_exact_direct",
     finalModelCallCount: 0,
+    timingsMs: sanitizeNonNegativeTimings(answer?.debug?.timingsMs, PIPELINE_TIMING_KEYS),
+    retrievalStageTimingsMs: sanitizeNonNegativeTimings(
+      answer?.debug?.retrievalStageTimingsMs,
+      RETRIEVAL_STAGE_TIMING_KEYS,
+    ),
     directOfficialQa: officialQa,
     directInvariantSha256: sha256(JSON.stringify(invariant)),
     manualReviewTrace: buildManualEvidenceReviewTrace({ answer, record: {
@@ -861,6 +885,7 @@ export function buildFrozenCaseRecord({ item, captured, answer, transportContrac
     sourceBlocks: [...(item?.sourceBlocks || [])],
     prompt,
     promptChars: prompt.length,
+    promptUtf8Bytes: Buffer.byteLength(prompt, "utf8"),
     promptUtf8Sha256,
     messagesSha256: sha256(JSON.stringify(messages)),
     requestInvariantSha256: sha256(JSON.stringify(invariant)),
@@ -871,6 +896,11 @@ export function buildFrozenCaseRecord({ item, captured, answer, transportContrac
     route: String(answer?.debug?.route || answer?.debug?.mode || "ordinary_rag"),
     dataRevision: String(answer?.debug?.dataRevision || ""),
     evidenceFingerprint: String(answer?.debug?.evidenceFingerprint || ""),
+    timingsMs: sanitizeNonNegativeTimings(answer?.debug?.timingsMs, PIPELINE_TIMING_KEYS),
+    retrievalStageTimingsMs: sanitizeNonNegativeTimings(
+      answer?.debug?.retrievalStageTimingsMs,
+      RETRIEVAL_STAGE_TIMING_KEYS,
+    ),
     finalPromptSha256: finalPromptSha256 || promptUtf8Sha256,
     promptTruncated: answer?.debug?.promptTruncated === true,
     promptCompacted: (answer?.debug?.retrievalWarnings || []).some((warning) => (
@@ -918,6 +948,18 @@ function sanitizeRetrievalCandidateStages(value) {
   })));
 }
 
+function sanitizeNonNegativeTimings(value, allowedKeys) {
+  const source = value && typeof value === "object" && !Array.isArray(value)
+    ? value
+    : {};
+  return Object.freeze(Object.fromEntries(allowedKeys.flatMap((key) => {
+    const timing = source[key];
+    return typeof timing === "number" && Number.isFinite(timing) && timing >= 0
+      ? [[key, timing]]
+      : [];
+  })));
+}
+
 function buildManualEvidenceReviewTrace({ answer = {}, record = {} } = {}) {
   const debug = answer?.debug && typeof answer.debug === "object" ? answer.debug : {};
   const candidateStages = sanitizeRetrievalCandidateStages(debug.retrievalCandidateStages);
@@ -933,6 +975,10 @@ function buildManualEvidenceReviewTrace({ answer = {}, record = {} } = {}) {
   ]);
   const candidateJourney = [...allCandidateIds].sort().map((id) => {
     const stages = RETRIEVAL_CANDIDATE_STAGE_KEYS.filter((key) => candidateStages[key].includes(id));
+    const stageRanks = Object.freeze(Object.fromEntries(stages.map((key) => [
+      key,
+      candidateStages[key].indexOf(id) + 1,
+    ])));
     const status = visibleIds.has(id)
       ? "model_visible"
       : notAllocatedOfficialRelatedIds.has(id)
@@ -940,7 +986,7 @@ function buildManualEvidenceReviewTrace({ answer = {}, record = {} } = {}) {
         : allocatedIds.has(id)
           ? "removed_during_prompt_packing"
           : "candidate_only_not_selected";
-    return Object.freeze({ id, stages: Object.freeze(stages), status });
+    return Object.freeze({ id, stages: Object.freeze(stages), stageRanks, status });
   });
   return Object.freeze({
     resolvedCards: Object.freeze(reviewArray(answer?.resolvedCards).map(sanitizeReviewCard).filter(Boolean)),

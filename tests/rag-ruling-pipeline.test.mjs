@@ -839,7 +839,7 @@ const contextualSeriesCards = [
     enName: "Vanquish Soul Dr. Mad Love",
     cardType: "monster",
     effectText: "在自己・对手回合中可以发动。将场上的1只守备力最低的怪兽放回手牌。",
-    aliases: ["对击斗魂 狂恋博士", "VS Dr.マッドラヴ", "Vanquish Soul Dr. Mad Love"],
+    aliases: ["对击斗魂 狂恋博士", "征服斗魂 狂爱博士", "VS狂魔博士", "VS Dr.マッドラヴ", "Vanquish Soul Dr. Mad Love"],
   },
   {
     id: "18732",
@@ -849,7 +849,7 @@ const contextualSeriesCards = [
     enName: "Vanquish Soul Caesar Valius",
     cardType: "monster",
     effectText: "以自己场上的龙族以外的1只对击斗魂怪兽为对象可以发动。将该怪兽放回手牌，从手牌将此卡特殊召唤。",
-    aliases: ["对击斗魂 龙帝瓦里乌斯", "VS 龍帝ヴァリウス", "Vanquish Soul Caesar Valius"],
+    aliases: ["对击斗魂 龙帝瓦里乌斯", "征服斗魂 龙帝 瓦利乌斯", "龙帝", "VS 龍帝ヴァリウス", "Vanquish Soul Caesar Valius"],
   },
   {
     id: "18738",
@@ -890,10 +890,19 @@ test("cross-locale series aliases keep one-edit correction inside the named seri
   assert.deepEqual(resolution.unresolvedMentions, []);
 });
 
-test("chain number plus zone and action extracts and contextually resolves an unquoted short card name", () => {
+test("the Baige full series name resolves inside the named series", () => {
+  const resolution = extractRagCards("「征服斗魂 狂爱博士」的效果可以发动吗？", { cards: contextualSeriesCards });
+
+  assert.equal(resolution.resolvedCards[0]?.id, "18730");
+  assert.equal(resolution.resolvedCards.some((card) => card.id === "other-series-doctor"), false);
+  assert.deepEqual(resolution.unresolvedMentions, []);
+});
+
+test("chain number plus zone and action resolves original shorthand and Baige full card names", () => {
   const questions = [
     "当对手场上的no.41防守表示存在时，我c1发动场上vs狂魔博士的效果，c2手牌龙帝进行替换，连锁处理结算时，c1的博士效果还会生效弹走场上防御力最高的卡吗？",
     "当对手场上的【No.41 泥睡魔兽 睡梦貘】防守表示在场上存在。我方c1发动场上攻击表示的【VS狂魔博士】效果，C2从手牌发动【龙帝】替换效果，连锁逆算处理时，c1的博士效果还会生效弹走场上防御力最高的卡吗？",
+    "当对手场上的【No.41 泥睡魔兽 睡梦貘】防守表示在场上存在。我方c1发动场上攻击表示的【征服斗魂 狂爱博士】效果，C2从手牌发动【征服斗魂 龙帝 瓦利乌斯】替换效果，连锁逆算处理时，c1的博士效果还会生效弹走场上防御力最高的卡吗？",
   ];
 
   assert.ok(extractUnquotedCardMentionCandidates(questions[0]).includes("龙帝"));
@@ -903,8 +912,15 @@ test("chain number plus zone and action extracts and contextually resolves an un
     assert.equal(resolvedIds.has("18730"), true);
     assert.equal(resolvedIds.has("18732"), true);
     assert.equal(resolvedIds.has("18738"), false);
-    assert.equal(resolution.unresolvedMentions.some((item) => item.input === "龙帝"), false);
-    assert.equal(resolution.ambiguousMentions.some((item) => item.input === "龙帝"), false);
+    if (question === questions[2]) {
+      for (const fullName of ["征服斗魂 狂爱博士", "征服斗魂 龙帝 瓦利乌斯"]) {
+        assert.equal(resolution.unresolvedMentions.some((item) => item.input === fullName), false);
+        assert.equal(resolution.ambiguousMentions.some((item) => item.input === fullName), false);
+      }
+    } else {
+      assert.equal(resolution.unresolvedMentions.some((item) => item.input === "龙帝"), false);
+      assert.equal(resolution.ambiguousMentions.some((item) => item.input === "龙帝"), false);
+    }
   }
 });
 
