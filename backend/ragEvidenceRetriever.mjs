@@ -615,11 +615,9 @@ export async function retrieveRagEvidence({
     ? crossCardOfficialQuestionPool.filter(
       (record) => !recordSharesResolvedIdentity(record, effectiveQaIdentityCards),
     )
-    // A card-agnostic rules question has no identity anchor by design. Keep the
-    // complete official question pool eligible for the same bounded,
-    // related-only branch retrieval instead of collapsing the pool to empty.
-    // An unresolved or ambiguous card surface is different: broad retrieval
-    // must not let a guessed model expansion unlock card-scoped evidence.
+    // A pure rule question has no identity anchor by design. An unresolved or
+    // ambiguous card surface is different: question-only retrieval must not
+    // expose another card's FAQ through a guessed identity expansion.
     : hasPendingCardIdentity
       ? []
       : crossCardOfficialQuestionPool;
@@ -2343,8 +2341,8 @@ function rankOfficialQaQuestionBranches({
 } = {}) {
   if (!(records || []).length) return [];
   const queries = normalizeRuleSearchQueries(ruleSearchQueries, {
-    maxRuleSearchQueries: 4,
-  }).slice(0, 4);
+    maxRuleSearchQueries: MAX_INDEPENDENT_RULE_QUERY_BRANCHES,
+  }).slice(0, MAX_INDEPENDENT_RULE_QUERY_BRANCHES);
   if (!queries.length) return [];
 
   const queryPlans = queries.map((query) => ({
@@ -2390,7 +2388,7 @@ function rankOfficialQaQuestionBranches({
     // official question surface, remain related-only and share the existing
     // fixed candidate budget below.
     const phraseMatchKeys = new Set(
-      phraseMatches.slice(0, 2).map((match) => stableRecordKey(match.record)),
+      phraseMatches.slice(0, 4).map((match) => stableRecordKey(match.record)),
     );
     const multilingualMechanismMatches = rankOfficialQaMultilingualMechanismProfiles({
       contextText: [query.subclaim, query.scenarioQuestion || query.query]
@@ -2404,10 +2402,12 @@ function rankOfficialQaQuestionBranches({
       ),
       limit: Math.min(2, perQueryLimit),
     });
-    const questionOnlyMatches = dedupeBy([
-      ...phraseMatches.slice(0, 2),
-      ...multilingualMechanismMatches,
-    ], (match) => stableRecordKey(match.record));
+    const questionOnlyMatches = mergeOfficialQaQuestionOnlyMatches({
+      phraseMatches,
+      multilingualMechanismMatches,
+      phraseLimit: 4,
+      multilingualLimit: 2,
+    });
     const strongQuestionMatches = [
       ...searchResult.exact,
       ...searchResult.near,
@@ -2423,9 +2423,9 @@ function rankOfficialQaQuestionBranches({
           .filter((match) => Number(match.semanticScore || 0) > 0)
           .slice(0, 2);
     const matches = dedupeBy([
-      // Reserve at most two slots inside the existing per-query bound for the
-      // question-only rescue. Otherwise ordinary classifier heads can consume
-      // every slot before these candidates reach the shared comparator.
+      // Preserve up to four same-language phrase candidates plus the separately
+      // bounded multilingual mechanism companions. The shared per-query and
+      // final evidence budgets below still cap the resulting candidate set.
       ...questionOnlyMatches,
       ...searchResult.exact,
       ...searchResult.near,
@@ -2524,6 +2524,32 @@ function rankOfficialQaQuestionBranches({
     });
   }
   return [...merged.values()].sort(compareRetrievedRecords).slice(0, safeCandidateLimit);
+}
+
+export function mergeOfficialQaQuestionOnlyMatches({
+  phraseMatches = [],
+  multilingualMechanismMatches = [],
+  phraseLimit = 4,
+  multilingualLimit = 2,
+} = {}) {
+  const safePhraseLimit = Math.max(1, Math.min(4, Math.floor(Number(phraseLimit) || 4)));
+  const safeMultilingualLimit = Math.max(
+    0,
+    Math.min(2, Math.floor(Number(multilingualLimit) || 0)),
+  );
+  const boundedPhraseMatches = dedupeBy(
+    phraseMatches || [],
+    (match) => stableRecordKey(match?.record || match),
+  ).slice(0, safePhraseLimit);
+  const phraseKeys = new Set(
+    boundedPhraseMatches.map((match) => stableRecordKey(match?.record || match)),
+  );
+  const boundedMultilingualMatches = dedupeBy(
+    multilingualMechanismMatches || [],
+    (match) => stableRecordKey(match?.record || match),
+  ).filter((match) => !phraseKeys.has(stableRecordKey(match?.record || match)))
+    .slice(0, safeMultilingualLimit);
+  return [...boundedPhraseMatches, ...boundedMultilingualMatches];
 }
 
 function rankOfficialQaMultilingualMechanismProfiles({
@@ -3845,7 +3871,9 @@ function selectRuleSearchCardTextClauses(value, limit = 4, userQuery = "") {
   const safeLimit = Math.max(1, Math.floor(Number(limit) || 1));
   const clauses = splitCardTextClauseEntries(value)
     .filter(({ text }) => text.length >= 4 && containsOperationLanguage(text));
-  if (clauses.length <= safeLimit) return clauses.map(({ text }) => text);
+  if (clauses.length <= safeLimit) {
+    return clauses.map((entry) => contextualizeBulletRuleSearchClause(entry, clauses));
+  }
 
   const selected = [];
   const selectedIndexes = new Set();
@@ -3897,7 +3925,34 @@ function selectRuleSearchCardTextClauses(value, limit = 4, userQuery = "") {
   }
   return selected
     .sort((left, right) => left.index - right.index)
-    .map(({ text }) => text);
+    .map((entry) => contextualizeBulletRuleSearchClause(entry, clauses));
+}
+
+function contextualizeBulletRuleSearchClause(entry, clauses = []) {
+  if (entry?.marker !== "●") return entry?.text || "";
+  const preceding = [];
+  const entryPosition = clauses.indexOf(entry);
+  for (let index = entryPosition - 1; index >= 0; index -= 1) {
+    const candidate = clauses[index];
+    if (!candidate || candidate.marker === "●") continue;
+    preceding.push(candidate);
+    if (isRuleSearchActivationClause(candidate.text)
+        || /^[①②③④⑤⑥⑦⑧⑨]|^\d+$/u.test(String(candidate.marker || ""))) break;
+  }
+  const activation = preceding.find((candidate) => isRuleSearchActivationClause(candidate.text));
+  const mainOperation = preceding.find((candidate) => (
+    candidate !== activation && containsOperationLanguage(candidate.text)
+  ));
+  return [...new Set([activation, mainOperation]
+    .filter(Boolean)
+    .sort((left, right) => left.index - right.index)
+    .map((candidate) => candidate.text)
+    .concat(entry.text))]
+    .join(" ");
+}
+
+function isRuleSearchActivationClause(value) {
+  return /(?:发动|發動|発動|activation|activat(?:e|ed|ing))/iu.test(String(value || ""));
 }
 
 function splitCardTextClauseEntries(value) {
@@ -5920,12 +5975,12 @@ export function reserveUncoveredCrossCardBranches(items = [], limit = 1, {
   const safeLimit = Math.max(0, Math.floor(Number(limit) || 0));
   if (!safeLimit) return [];
   const ordered = dedupeEvidence(items || []);
-  // Preserve the authoritative retrieval head before reserving planner-branch
-  // coverage. Planner labels are useful for diversity, but four such labels
-  // must not collectively erase the highest-ranked official question.
+  // Preserve the requested retrieval head before reserving planner-branch
+  // coverage. Allocation callers may set this to zero after a scoped head has
+  // already been retained, so an unqualified cross-card head cannot evict it.
   const safeRankedHeadCount = Math.min(
     safeLimit,
-    Math.max(1, Math.floor(Number(rankedHeadCount) || 1)),
+    Math.max(0, Math.floor(Number(rankedHeadCount) || 0)),
   );
   const selected = ordered.slice(0, safeRankedHeadCount);
   const selectedKeys = new Set(selected.map(stableRecordKey));
@@ -5951,9 +6006,10 @@ export function reserveUncoveredCrossCardBranches(items = [], limit = 1, {
     selected.push(item);
     selectedKeys.add(key);
   }
-  const representedQueryKeys = new Set(selected.flatMap((item) => (
-    supplementalQueryKeysForItem(item, { strictOnly: false })
-  )));
+  const representedQueryKeys = new Set(selected.flatMap((item) => ([
+    ...supplementalQueryKeysForItem(item, { strictOnly: false }),
+    ...supplementalQueryKeysForItem(item, { strictOnly: true }),
+  ])));
   const uncoveredQueryKeys = queryKeys.filter((key) => !representedQueryKeys.has(key));
   const branchRepresentatives = uncoveredQueryKeys.length && selected.length < safeLimit
     ? reserveSupplementalQueryCoverage(
@@ -6016,7 +6072,16 @@ export function allocateOfficialRelatedEvidence({
   ));
   const scoped = reserveIdentitySourceCoverage(rankedScoped, safeLimit, resolvedCards);
   const scopedKeys = new Set(scoped.map(stableRecordKey));
-  const crossCard = dedupeEvidence(crossCardCandidates || [])
+  const crossCard = dedupeEvidence((crossCardCandidates || []).map((item) => ({
+    ...item,
+    type: "related",
+    isDirect: false,
+    retrievalContext: {
+      ...(item?.retrievalContext || {}),
+      scope: "cross_card_official_mechanism",
+      relatedOnly: true,
+    },
+  })))
     .filter((item) => !scopedKeys.has(stableRecordKey(item)))
     .sort(compareRetrievedRecords);
   const maxCrossCard = Math.min(5, safeLimit);
@@ -6070,14 +6135,33 @@ export function allocateOfficialRelatedEvidence({
   if (scoped.length) add(scoped[0]);
   addPerQueryCoverage(scoped, { strictOnly: true });
 
-  // Cross-card analogies may enter only for query branches still uncovered by
-  // strict scoped evidence, and retain the historical five-item ceiling.
+  // Give same-card/current-scene evidence the first opportunity to cover a
+  // non-strict branch. A cross-card analogue must not displace a stronger
+  // scoped representative for that same query merely because it was reserved.
+  addPerQueryCoverage(scoped);
+
+  // Cross-card analogies may enter only for branches still uncovered by all
+  // scoped evidence, and retain the historical five-item ceiling.
   addPerQueryCoverage(crossCard, { cross: true, strictOnly: true });
 
-  // If no strict candidate exists for a branch, retain the best bounded
-  // question-branch candidate without letting it displace strict coverage.
-  addPerQueryCoverage(scoped);
-  addPerQueryCoverage(crossCard, { cross: true });
+  // Reconnect the bounded cross-card reserve after the scoped head and strict
+  // branches. Only a real uncovered query branch or a positive same/partial
+  // model assessment may enter before ordinary scoped filling. Passing only
+  // uncovered keys avoids repeating the supplemental coverage already above.
+  const representedAfterStrictBranches = representedQueryKeys();
+  const uncoveredCrossCardQueryKeys = supplementalRuleQueryKeys.filter(
+    (queryKey) => !representedAfterStrictBranches.has(queryKey),
+  );
+  const crossCardReserve = reserveUncoveredCrossCardBranches(
+    crossCard.filter((item) => !selectedKeys.has(stableRecordKey(item))),
+    Math.min(safeLimit - selected.length, maxCrossCard - selectedCrossCardCount),
+    {
+      queryKeys: uncoveredCrossCardQueryKeys,
+      fillRemaining: scoped.length === 0,
+      rankedHeadCount: 0,
+    },
+  );
+  for (const item of crossCardReserve) add(item, { cross: true });
 
   // Preserve distinct scoped official-question premises before adding optional
   // analogy context. Evidence IDs remain the only deduplication boundary.

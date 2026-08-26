@@ -3,7 +3,9 @@ import test from "node:test";
 import { buildAliasIndex, extractQuotedMentions, extractRagCards, extractUnquotedCardMentionCandidates, extractUserProvidedCardTextBlocks, normalizeCardKey } from "../backend/ragCardExtractor.mjs";
 import { createLocalCardDataProvider } from "../backend/cardDataProvider.mjs";
 import {
+  allocateOfficialRelatedEvidence,
   loadRagData,
+  mergeOfficialQaQuestionOnlyMatches,
   reserveRankedHeadAndSupplementalCoverage,
   retrieveRagEvidence,
 } from "../backend/ragEvidenceRetriever.mjs";
@@ -425,6 +427,77 @@ test("extracts_user_provided_card_text_block", () => {
   assert.match(bundle.prompt, /不得把.*user_provided_text.*称为官方直接 Q&A/u);
 });
 
+test("section instructions and chain labels cannot become user-provided card text", () => {
+  const question = [
+    "请逐项判断：",
+    "①：第一种场景能否发动？",
+    "②：第二种场景如何处理？",
+    "请分别判断以下两种“处理时对象已经离开”的情况：",
+    "①：第一种情况。",
+    "C1：",
+    "①：发动某个效果。",
+    "处理步骤：",
+    "①：先进行前序处理。",
+  ].join("\n");
+
+  assert.deepEqual(extractUserProvidedCardTextBlocks(question), []);
+  const resolution = extractRagCards(question, { cards: [] });
+  assert.equal(resolution.userProvidedCardTexts.length, 0);
+  assert.equal(resolution.resolvedCards.some((card) => /^user-card-text-/u.test(card.id)), false);
+});
+
+test("chain labels and numbered player clauses are not unresolved card identities", () => {
+  const resolution = extractRagCards(
+    "请分别判断以下两种“处理时对象已经离开”的情况。「C1」发动后由「C2」连锁。1. 我方先处理，2. 对方随后处理。",
+    { cards: [] },
+  );
+
+  assert.equal(resolution.unresolvedMentions.some((item) => /^(?:C[12]|[12][.．、]?\s*(?:我方|对方))/iu.test(item.input)), false);
+  assert.equal(resolution.unresolvedMentions.some((item) => item.input === "处理时对象已经离开"), false);
+});
+
+test("quoted state and operation labels stay non-card terms while an exact card name remains bound", () => {
+  const cards = [{
+    id: "known-card-in-judgment-frame",
+    name: "匿名裁定魔龙",
+    aliases: ["匿名裁定魔龙"],
+  }];
+  const resolution = extractRagCards([
+    "请判断「匿名裁定魔龙」的情况。",
+    "场上存在处于“不满足某条件”状态的卡。",
+    "能否发动包含“操作甲”“操作乙”处理的效果？",
+    "请分别判断这些效果。",
+  ].join(""), { cards });
+
+  assert.deepEqual(resolution.resolvedCards.map((card) => card.id), [cards[0].id]);
+  assert.deepEqual(resolution.unresolvedMentions, []);
+  assert.deepEqual(resolution.ambiguousMentions, []);
+});
+
+test("literal card-name surface disambiguates punctuation-normalization collisions", () => {
+  const cardsWithCollision = [{
+    id: "monster-surface",
+    name: "匿名魔导",
+    aliases: ["匿名魔导"],
+  }, {
+    id: "spell-surface",
+    name: "匿名・魔・导",
+    aliases: ["匿名・魔・导"],
+  }, {
+    id: "longer-prefix",
+    name: "匿名魔导女孩",
+    aliases: ["匿名魔导女孩"],
+  }];
+
+  const monster = extractRagCards("以「匿名魔导」为对象。", { cards: cardsWithCollision });
+  const spell = extractRagCards("发动「匿名・魔・导」。", { cards: cardsWithCollision });
+
+  assert.deepEqual(monster.resolvedCards.map((card) => card.id), ["monster-surface"]);
+  assert.deepEqual(spell.resolvedCards.map((card) => card.id), ["spell-surface"]);
+  assert.deepEqual(monster.ambiguousMentions, []);
+  assert.deepEqual(spell.ambiguousMentions, []);
+});
+
 test("rag prompts require the model to answer every user subquestion", () => {
   const bundle = buildRagRulingPromptBundle({
     userQuery: "这个效果可以发动吗，后续怎么处理？",
@@ -648,6 +721,37 @@ test("a unique one-character card-name difference remains an externally verified
   assert.equal(resolution.resolvedCards[0]?.aliases.includes("深渊测试魔凤"), false);
   assert.equal(providerMatch?.id, "edit-1");
   assert.ok(providerMatch?.confidence >= 0.9);
+});
+
+test("a unique long canonical name with one arbitrary trailing character still requires external verification", () => {
+  const localCards = [{
+    id: "trailing-edit-1",
+    name: "匿名魔术师－匿名魔术",
+    aliases: ["匿名魔术师－匿名魔术"],
+    effectText: "①：自己主要阶段可以发动。",
+  }];
+  const resolution = extractRagCards("「匿名魔术师－匿名魔术师」的①效果可以发动吗？", { cards: localCards });
+
+  assert.deepEqual(resolution.resolvedCards.map((card) => card.id), ["trailing-edit-1"]);
+  assert.equal(resolution.resolvedCards[0]?.identityMatchKind, "edit_distance");
+  assert.equal(resolution.resolvedCards[0]?.requiresExternalIdentityVerification, true);
+  assert.notEqual(resolution.resolvedCards[0]?.identityVerificationStatus, "verified_local_unique_canonical");
+  assert.equal(resolution.resolvedCards[0]?.aliases.includes("匿名魔术师－匿名魔术师"), false);
+});
+
+test("a long canonical name missing its final character still requires external verification", () => {
+  const localCards = [{
+    id: "trailing-edit-2",
+    name: "匿名魔术师－匿名魔术",
+    aliases: ["匿名魔术师－匿名魔术"],
+    effectText: "①：自己主要阶段可以发动。",
+  }];
+  const resolution = extractRagCards("「匿名魔术师－匿名魔」的①效果可以发动吗？", { cards: localCards });
+
+  assert.deepEqual(resolution.resolvedCards.map((card) => card.id), ["trailing-edit-2"]);
+  assert.equal(resolution.resolvedCards[0]?.identityMatchKind, "edit_distance");
+  assert.equal(resolution.resolvedCards[0]?.requiresExternalIdentityVerification, true);
+  assert.notEqual(resolution.resolvedCards[0]?.identityVerificationStatus, "verified_local_unique_canonical");
 });
 
 test("multiple one-character card-name neighbours remain below automatic resolution confidence", () => {
@@ -1085,6 +1189,16 @@ test("user_provided_text_not_official_confirmed", async () => {
     cards: [],
     records: [],
     qaRecords: [],
+    ruleModelInvoker: async () => JSON.stringify({
+      queries: [{
+        subclaim: "核对用户提供卡文可支持的处理范围",
+        checkpoint: "generic_evidence_lookup",
+        query: "用户提供卡文与官方资料的证据等级",
+        reason: "为最终分析准备通用证据查询。",
+        confidence: "medium",
+      }],
+      candidateAssessments: [],
+    }),
     modelInvoker: async () => JSON.stringify({
       answerLevel: "official_confirmed",
       shortAnswer: "模型错误地声称官方确认。",
@@ -5906,7 +6020,13 @@ test("card-text query selection recovers late bullet QA while bounding reference
     env: { RAG_LIVE_OFFICIAL_QA: "false" },
   });
 
-  assert.ok(evidence.ruleSearchQueries.some(({ query }) => /魔法.*陷阱.*手牌/u.test(query)));
+  const bulletQuery = evidence.ruleSearchQueries.find(({ query, source }) => (
+    source === "card_text_derived_rule_search_query"
+      && /那些魔法.*陷阱.*全部回到手牌/u.test(query)
+  ));
+  assert.ok(bulletQuery);
+  assert.match(bulletQuery.query, /可以发动/u);
+  assert.match(bulletQuery.query, /墓地.*除外.*魔法.*陷阱.*手牌/u);
   const referenceQueries = evidence.ruleSearchQueries.filter(
     ({ source }) => source === "card_text_reference_derived_rule_search_query",
   );
@@ -5916,6 +6036,38 @@ test("card-text query selection recovers late bullet QA while bounding reference
   assert.ok(related);
   assert.equal(related.isDirect, false);
   assert.equal(related.retrievalContext.relatedOnly, true);
+});
+
+test("an unnumbered bullet query does not inherit an earlier effect across the nearest activation boundary", async () => {
+  const focusCard = {
+    id: "unnumbered-bullet-boundary-card",
+    name: "匿名无编号分支卡",
+    cnName: "匿名无编号分支卡",
+    effectText: "可以发动。选场上1只怪兽破坏。自己墓地有卡存在的场合可以发动。将墓地1张卡除外。●魔法・陷阱：那些卡回到手牌。",
+    aliases: ["匿名无编号分支卡"],
+  };
+  const evidence = await retrieveRagEvidence({
+    userQuery: "匿名无编号分支卡的魔法陷阱分支怎样处理？",
+    cardResolution: {
+      resolvedCards: [focusCard],
+      unresolvedMentions: [],
+      ambiguousMentions: [],
+      userProvidedCardTexts: [],
+    },
+    cards: [focusCard],
+    records: [],
+    qaRecords: [],
+    ruleSearchQueryProvider: async () => ({ queries: [], candidateAssessments: [] }),
+    env: { RAG_LIVE_OFFICIAL_QA: "false" },
+  });
+  const bulletQuery = evidence.ruleSearchQueries.find(({ query, source }) => (
+    source === "card_text_derived_rule_search_query" && /那些卡回到手牌/u.test(query)
+  ));
+
+  assert.ok(bulletQuery);
+  assert.match(bulletQuery.query, /自己墓地有卡存在.*可以发动/u);
+  assert.match(bulletQuery.query, /将墓地1张卡除外/u);
+  assert.doesNotMatch(bulletQuery.query, /怪兽破坏/u);
 });
 
 test("a saturated deterministic plan still retains all four model subclaims", async () => {
@@ -5978,6 +6130,101 @@ test("a saturated deterministic plan still retains all four model subclaims", as
   for (const expected of modelQueries) {
     assert.ok(evidence.ruleSearchQueries.some((actual) => actual.query === expected.query));
   }
+});
+
+test("official question branch ranking keeps four planner subclaims plus a deterministic fifth branch", async () => {
+  const focusCard = {
+    id: "five-branch-focus-card",
+    name: "匿名五分支卡",
+    cnName: "匿名五分支卡",
+    effectText: "①：场上的魔法・陷阱卡发动时可以发动。那张卡回到手牌。",
+    aliases: ["匿名五分支卡"],
+  };
+  const plannerQuestions = [
+    "卡的发动被无效时，破坏处理如何进行？",
+    "从手牌特殊召唤失败时，后续处理如何进行？",
+    "墓地的卡被除外时，抽卡处理如何进行？",
+    "攻击被无效时，伤害步骤如何处理？",
+  ];
+  const plannerQa = plannerQuestions.map((question, index) => ({
+    id: `qa-five-branch-planner-${index + 1}`,
+    recordType: "qa",
+    question,
+    answer: `按对应规则处理${index + 1}。`,
+    text: `${question} 按对应规则处理${index + 1}。`,
+    cardIds: [`five-branch-reference-${index + 1}`],
+  }));
+  const deterministicQa = {
+    id: "qa-five-branch-deterministic",
+    recordType: "qa",
+    question: "发动中的魔法・陷阱卡回到手牌时如何处理？",
+    answer: "按处理时状态判断。",
+    text: "发动中的魔法・陷阱卡回到手牌时如何处理？ 按处理时状态判断。",
+    cardIds: ["five-branch-reference-deterministic"],
+  };
+
+  const evidence = await retrieveRagEvidence({
+    userQuery: "匿名五分支卡让发动中的魔法・陷阱卡回到手牌时如何处理？",
+    cardResolution: {
+      resolvedCards: [focusCard],
+      unresolvedMentions: [],
+      ambiguousMentions: [],
+      userProvidedCardTexts: [],
+    },
+    cards: [focusCard],
+    records: [],
+    qaRecords: [...plannerQa, deterministicQa],
+    ruleSearchQueryProvider: async () => ({
+      queries: plannerQuestions.map((query, index) => ({
+        subclaim: `独立核对分支${index + 1}`,
+        checkpoint: `planner-branch-${index + 1}`,
+        query,
+        reason: `核对独立分支${index + 1}。`,
+        confidence: "medium",
+      })),
+      candidateAssessments: [],
+    }),
+    env: { RAG_LIVE_OFFICIAL_QA: "false" },
+  });
+
+  const questionBranchIds = new Set(
+    evidence.debug.candidateStages.ruleQueryQuestionBranchCandidateIds,
+  );
+  assert.equal(plannerQa.every((item) => questionBranchIds.has(item.id)), true);
+  assert.equal(questionBranchIds.has(deterministicQa.id), true);
+});
+
+test("question-only merging retains four phrase candidates and a bounded multilingual companion", () => {
+  const phraseMatches = Array.from({ length: 4 }, (_, index) => ({
+    record: { id: `qa-anonymous-phrase-${index + 1}` },
+    score: 0.9 - index * 0.1,
+  }));
+  const withoutMultilingual = mergeOfficialQaQuestionOnlyMatches({
+    phraseMatches,
+    multilingualMechanismMatches: [],
+    phraseLimit: 4,
+    multilingualLimit: 2,
+  });
+  assert.deepEqual(
+    withoutMultilingual.map((match) => match.record.id),
+    phraseMatches.map((match) => match.record.id),
+  );
+
+  const multilingual = {
+    record: { id: "qa-anonymous-multilingual" },
+    score: 0.85,
+    multilingualMechanismFallback: true,
+  };
+  const shared = mergeOfficialQaQuestionOnlyMatches({
+    phraseMatches,
+    multilingualMechanismMatches: [multilingual],
+    phraseLimit: 4,
+    multilingualLimit: 2,
+  });
+  assert.equal(shared.length, 5);
+  assert.equal(shared.some((match) => match.record.id === phraseMatches[2].record.id), true);
+  assert.equal(shared.some((match) => match.record.id === phraseMatches[3].record.id), true);
+  assert.equal(shared.some((match) => match.record.id === multilingual.record.id), true);
 });
 
 test("rule model candidate assessments only reorder official questions and never delete them", async () => {
@@ -6147,6 +6394,126 @@ test("bounded cross-card allocation covers strict branches before an unmarked ra
     ))),
     new Set(queryKeys),
   );
+});
+
+test("official related allocation reserves only real or positively assessed cross-card branches", () => {
+  const scoped = Array.from({ length: 20 }, (_, index) => ({
+    id: `scoped-generic-${index + 1}`,
+    type: "related",
+    text: `scoped official premise ${index + 1}`,
+    retrievalScore: 1 - index * 0.01,
+  }));
+  const assessment = (relevance, premise) => ({
+    source: "model_rule_query_soft_ranker",
+    relevance,
+    premise,
+  });
+  const cross = [{
+    id: "cross-query-branch",
+    type: "direct",
+    isDirect: true,
+    text: "real planner query branch",
+    retrievalSignals: { ruleQueryKeys: ["generic-branch"] },
+  }, {
+    id: "cross-high-same",
+    text: "positive same premise",
+    retrievalSignals: { modelCandidateAssessment: assessment("high", "same") },
+  }, {
+    id: "cross-medium-partial",
+    text: "positive partial premise",
+    retrievalSignals: { modelCandidateAssessment: assessment("medium", "partial") },
+  }, {
+    id: "cross-low-same",
+    text: "low same premise",
+    retrievalSignals: { modelCandidateAssessment: assessment("low", "same") },
+  }, {
+    id: "cross-high-different",
+    text: "high different premise",
+    retrievalSignals: { modelCandidateAssessment: assessment("high", "different") },
+  }, {
+    id: "cross-medium-unknown",
+    text: "medium unknown premise",
+    retrievalSignals: { modelCandidateAssessment: assessment("medium", "unknown") },
+  }, {
+    id: "cross-unassessed",
+    text: "unassessed cross-card head",
+    retrievalScore: 1,
+  }];
+
+  const selected = allocateOfficialRelatedEvidence({
+    scopedCandidates: scoped,
+    crossCardCandidates: cross,
+    limit: 14,
+    supplementalRuleQueryKeys: ["generic-branch"],
+  });
+  const selectedIds = new Set(selected.map((item) => item.id));
+  const selectedCross = selected.filter((item) => item.id.startsWith("cross-"));
+
+  assert.equal(selected.length, 14);
+  assert.ok(selectedCross.length <= 5);
+  assert.deepEqual(new Set(selectedCross.map((item) => item.id)), new Set([
+    "cross-query-branch",
+    "cross-high-same",
+    "cross-medium-partial",
+  ]));
+  assert.equal(selectedIds.has("cross-low-same"), false);
+  assert.equal(selectedIds.has("cross-high-different"), false);
+  assert.equal(selectedIds.has("cross-medium-unknown"), false);
+  assert.equal(selectedIds.has("cross-unassessed"), false);
+  assert.equal(selectedCross.every((item) => (
+    item.type === "related"
+      && item.isDirect === false
+      && item.retrievalContext?.scope === "cross_card_official_mechanism"
+      && item.retrievalContext?.relatedOnly === true
+  )), true);
+});
+
+test("official related allocation honors an explicit exhaustive limit above the public default", () => {
+  const scoped = Array.from({ length: 32 }, (_, index) => ({
+    id: `scoped-exhaustive-${index + 1}`,
+    type: "related",
+    text: `complete scoped official premise ${index + 1}`,
+    retrievalScore: 1 - index * 0.001,
+  }));
+  const selected = allocateOfficialRelatedEvidence({
+    scopedCandidates: scoped,
+    crossCardCandidates: [],
+    limit: 64,
+  });
+
+  assert.equal(selected.length, scoped.length);
+  assert.deepEqual(new Set(selected.map((item) => item.id)), new Set(scoped.map((item) => item.id)));
+});
+
+test("a scoped non-strict branch outranks a weaker cross-card representative for the same query", () => {
+  const selected = allocateOfficialRelatedEvidence({
+    scopedCandidates: [{
+      id: "scoped-ranked-head",
+      type: "related",
+      text: "ranked same-card premise",
+      retrievalScore: 1,
+    }, {
+      id: "scoped-query-representative",
+      type: "related",
+      text: "same-card query branch",
+      retrievalScore: 0.9,
+      retrievalSignals: { ruleQueryKeys: ["shared-query"] },
+    }],
+    crossCardCandidates: [{
+      id: "cross-query-representative",
+      type: "related",
+      text: "weaker cross-card query branch",
+      retrievalScore: 0.1,
+      retrievalSignals: { ruleQueryKeys: ["shared-query"] },
+    }],
+    limit: 2,
+    supplementalRuleQueryKeys: ["shared-query"],
+  });
+
+  assert.deepEqual(selected.map((item) => item.id), [
+    "scoped-ranked-head",
+    "scoped-query-representative",
+  ]);
 });
 
 test("cross-card allocation balances a model-assessed premise with strict supplemental-query coverage", async () => {
@@ -7558,6 +7925,21 @@ test("final reasoner follows cited multi-card operation order", async () => {
     ],
     records: [],
     qaRecords: [],
+    env: {
+      RAG_MODEL_PROVIDER: "mock",
+      RAG_RULE_MODEL_PROVIDER: "mock",
+      RAG_AUTO_ENGINE_SIMULATION: "false",
+    },
+    ruleModelInvoker: async () => JSON.stringify({
+      queries: [{
+        subclaim: "核对连锁逆序处理与前段处理的适用关系",
+        checkpoint: "generic_evidence_lookup",
+        query: "发动源离开原位置后已发动效果的顺序处理",
+        reason: "为最终分析准备通用证据查询。",
+        confidence: "medium",
+      }],
+      candidateAssessments: [],
+    }),
     rulebookModelInvoker: async () => JSON.stringify({
       operationChecks: [
         {
