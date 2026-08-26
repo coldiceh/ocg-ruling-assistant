@@ -132,6 +132,19 @@ const numberedRawCards = [
   { cid: 10684, id: 55888045, cn_name: "混沌No.106 熔岩掌 巨手·红掌", text: { desc: "新卡文本。" } },
 ];
 
+function successfulRulePlan(query = "核对问题所述处理与官方资料的适用前提") {
+  return JSON.stringify({
+    queries: [{
+      subclaim: "核对当前问题的处理前提",
+      checkpoint: "generic_evidence_lookup",
+      query,
+      reason: "为最终裁定准备相关规则与官方问答。",
+      confidence: "medium",
+    }],
+    candidateAssessments: [],
+  });
+}
+
 test("baige_search_mock_returns_enigmaster_packbit", async () => {
   clearBaigeSearchCache();
   const calls = [];
@@ -1036,6 +1049,7 @@ test("baige_card_text_is_not_official_direct", async () => {
     records: [],
     qaRecords: [],
     fetchImpl: async () => jsonResponse({ result: [packbitRawCard], next: 0 }),
+    ruleModelInvoker: async () => successfulRulePlan("卡片被送去墓地时触发效果的处理"),
     modelInvoker: async () => JSON.stringify({
       answerLevel: "official_confirmed",
       shortAnswer: "模型错误地声称官方确认。",
@@ -1129,6 +1143,7 @@ test("baige_resolved_card_metadata_replaces_the_unresolved_prompt_mention", asyn
     records: [],
     qaRecords: [],
     fetchImpl: async () => jsonResponse({ result: [dalviRawCard], next: 0 }),
+    ruleModelInvoker: async () => successfulRulePlan("卡片资料中的属性字段"),
     rulebookModelInvoker: async () => JSON.stringify({ operationChecks: [], overallConclusion: "卡片资料已找到。" }),
     modelInvoker: async ({ prompt }) => {
       finalPrompt = prompt;
@@ -1232,6 +1247,39 @@ test("an unbound local edit candidate still fails closed when external verificat
   )));
   assert.deepEqual(evidence.retrievedCards, []);
   assert.deepEqual(evidence.cardResolution.resolvedCards, []);
+});
+
+test("a unique arbitrary trailing character cannot locally certify a canonical identity", async () => {
+  clearBaigeSearchCache();
+  const canonicalCard = {
+    id: "trailing-local-identity",
+    name: "匿名魔术师－匿名魔术",
+    aliases: ["匿名魔术师－匿名魔术"],
+    effectText: "①：自己主要阶段可以发动。",
+  };
+  const question = "「匿名魔术师－匿名魔术师」的①效果可以发动吗？";
+  const cardResolution = extractRagCards(question, { cards: [canonicalCard] });
+  let fetchCount = 0;
+  const evidence = await retrieveRagEvidence({
+    userQuery: question,
+    cardResolution,
+    cards: [canonicalCard],
+    records: [],
+    qaRecords: [],
+    fetchImpl: async () => {
+      fetchCount += 1;
+      return jsonResponse({ result: [], next: 0 });
+    },
+    env: { RAG_LIVE_OFFICIAL_QA: "0" },
+  });
+
+  assert.ok(fetchCount > 0);
+  assert.deepEqual(evidence.cardResolution.resolvedCards, []);
+  assert.equal(evidence.cardTexts.length, 0);
+  assert.ok(evidence.cardResolution.unresolvedMentions.some((mention) => (
+    mention.input === "匿名魔术师－匿名魔术师"
+      && mention.reason === "external_identity_verification_failed"
+  )));
 });
 
 test("an unrelated same-CID singleton cannot certify a local fuzzy identity", async () => {
@@ -2059,7 +2107,7 @@ test("albaz_activation_rechecks_continuous_effects_after_paying_cost", async () 
         { name: "吞喰圣痕之龙", originalText: "吞食圣痕之龙", confidence: "high" },
       ],
     }),
-    ruleModelInvoker: async () => JSON.stringify({ queries: [] }),
+    ruleModelInvoker: async () => successfulRulePlan("支付代价后持续效果与融合素材适用关系"),
     rulebookModelInvoker: async ({ prompt, task }) => {
       const marker = task === "rulebook_constraint_repair" ? "本次聚焦输入：\n" : "本次输入：\n";
       const payload = JSON.parse(prompt.slice(prompt.lastIndexOf(marker) + marker.length));

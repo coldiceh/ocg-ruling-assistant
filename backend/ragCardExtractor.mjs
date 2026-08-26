@@ -61,13 +61,13 @@ const NON_CARD_HEADING_NAMES = new Set(["效果", "问题", "问", "q", "场景"
 export function extractRagCards(userQuery, { cards = [], maxCards = 6, modelCardNameCandidates = [] } = {}) {
   const query = String(userQuery || "");
   const cardLimit = normalizeMaxCards(maxCards);
-  const cardNameScanQuery = maskNonCardQuotedExpressions(query);
+  const aliasIndex = buildAliasIndex(cards);
+  const cardNameScanQuery = maskNonCardQuotedExpressions(query, { aliasIndex });
   const normalizedQuery = normalizeCardKey(cardNameScanQuery);
   const queryNumberedIdentityKeys = new Set(extractNumberedCardIdentities(query).map(numberedIdentityKey));
-  const aliasIndex = buildAliasIndex(cards);
   const userProvidedCardTexts = extractUserProvidedCardTextBlocks(query);
   const nonCardQuotedMentionKeys = new Set(
-    collectQuotedMentionEntries(query)
+    collectQuotedMentionEntries(query, { aliasIndex })
       .filter((item) => item.role !== "card")
       .map((item) => normalizeCardKey(item.mention))
       .filter(Boolean),
@@ -87,7 +87,7 @@ export function extractRagCards(userQuery, { cards = [], maxCards = 6, modelCard
   let exactMentionSeeds = [
     ...buildModelMentionSeeds(modelMentions),
     ...extractNumberedCardMentionCandidates(query).map((input) => ({ input, reason: "numbered_card_not_found", source: "numbered_card_identity" })),
-    ...extractQuotedMentions(query).map((input) => ({ input, reason: "quoted_mention_not_found", source: "quoted_mention" })),
+    ...extractQuotedMentions(query, { aliasIndex }).map((input) => ({ input, reason: "quoted_mention_not_found", source: "quoted_mention" })),
     ...userProvidedCardTexts.map((item) => ({ input: item.name, reason: "user_provided_text_name_not_found", source: "user_provided_text" })),
   ];
   let unquotedMentionSeeds = extractUnquotedCardMentionCandidates(cardNameScanQuery)
@@ -859,6 +859,10 @@ function markAndFilterMentionSeeds(seeds, exactSpanSelection) {
 
 function exactSurfaceKey(value) {
   return String(value || "").normalize("NFKC").toLowerCase();
+}
+
+function punctuationInsensitiveSurfaceKey(value) {
+  return exactSurfaceKey(value).replace(/[\s・·･.－—–-]+/gu, "");
 }
 
 function spansOverlap(left, right) {
@@ -1685,6 +1689,25 @@ function findContextualShortMentionCandidates(cards, mention) {
 function resolveMentionCandidates(cards, aliasIndex, mention) {
   const mentionKey = normalizeCardKey(mention);
   const primary = aliasIndex.get(mentionKey) || [];
+  const exactSurface = exactSurfaceKey(mention);
+  const exactSurfaceCandidates = dedupeBy(
+    primary.filter((candidate) => exactSurfaceKey(candidate.matchedAlias) === exactSurface),
+    (candidate) => cardIdentity(candidate.card),
+  );
+  // Normalization intentionally removes punctuation such as middle dots. If
+  // punctuation removal alone creates a collision between complete canonical
+  // names, the literal player surface is stronger.  Do not apply this to
+  // localized glyph normalization or supplemental short aliases: those
+  // collisions remain ambiguous and may still need contextual resolution.
+  const punctuationKey = punctuationInsensitiveSurfaceKey(mention);
+  const punctuationOnlyCanonicalCollision = primary.length > 1
+    && primary.every((candidate) => (
+      candidate.matchedAliasKind === "canonical_name"
+      && punctuationInsensitiveSurfaceKey(candidate.matchedAlias) === punctuationKey
+    ));
+  if (punctuationOnlyCanonicalCollision && exactSurfaceCandidates.length) {
+    return exactSurfaceCandidates;
+  }
   // Generated short-name prefixes and suffixes are contextual hypotheses, not
   // exact identities.  They may widen an existing exact alias into an
   // ambiguity, but they must never create an identity from an otherwise
@@ -2053,7 +2076,7 @@ function applyReferencedCardTextResolution({ query, aliasIndex, resolved, seenCa
       ? blocks.filter((block) => block.kind === "effect")
       : blocks;
     for (const block of effectBlocks) {
-      for (const mention of extractQuotedMentions(block.text)) {
+      for (const mention of extractQuotedMentions(block.text, { aliasIndex })) {
         const candidates = aliasIndex.get(normalizeCardKey(mention)) || [];
         if (candidates.length !== 1) continue;
         addResolved(resolved, seenCards, candidates[0], mention, 0.86, "card_text_reference");
@@ -2063,14 +2086,14 @@ function applyReferencedCardTextResolution({ query, aliasIndex, resolved, seenCa
   }
 }
 
-export function extractQuotedMentions(query) {
+export function extractQuotedMentions(query, { aliasIndex } = {}) {
   return dedupeBy(
-    collectQuotedMentionEntries(query).filter((item) => item.role === "card"),
+    collectQuotedMentionEntries(query, { aliasIndex }).filter((item) => item.role === "card"),
     (item) => normalizeCardKey(item.mention),
   ).map((item) => item.mention);
 }
 
-function collectQuotedMentionEntries(query) {
+function collectQuotedMentionEntries(query, { aliasIndex } = {}) {
   const result = [];
   const text = String(query || "");
   for (const pattern of QUOTED_MENTION_PATTERNS) {
@@ -2084,7 +2107,7 @@ function collectQuotedMentionEntries(query) {
         mention,
         index,
         end,
-        role: classifyQuotedMentionRole(text, mention, index, end),
+        role: classifyQuotedMentionRole(text, mention, index, end, { aliasIndex }),
       });
     }
   }
@@ -2103,9 +2126,14 @@ function collectQuotedMentionEntries(query) {
   return result;
 }
 
-function classifyQuotedMentionRole(text, mention, index, end) {
+function classifyQuotedMentionRole(text, mention, index, end, { aliasIndex } = {}) {
   const prefix = String(text || "").slice(Math.max(0, index - 32), index).normalize("NFKC");
   const suffix = String(text || "").slice(end, end + 48).normalize("NFKC");
+
+  // A literal synchronized card name remains an identity even in prose such
+  // as “judge the situation of X”.  Grammar-based non-card classification is
+  // only a fallback for quoted surfaces that do not exactly name a known card.
+  if (hasExactKnownCardSurface(aliasIndex, mention)) return "card";
 
   // Quotation marks are also used to define the meaning of a term in the
   // question itself. Requiring both a metalinguistic prefix and an
@@ -2113,6 +2141,29 @@ function classifyQuotedMentionRole(text, mention, index, end) {
   // failures without weakening unresolved handling for actual quoted cards.
   if (/(?:本题|本問|本问|问题中|問題中|这里|這裡|此处|此處)(?:所说|所說|所谓|所謂|的)?\s*$/u.test(prefix)
       && /^\s*(?:按|应按|應按|是指|指的是|表示|意味着|意味著|定义为|定義為|理解为|理解為)/u.test(suffix)) {
+    return "metalinguistic_term";
+  }
+  if (/(?:处于|處於|处在|處在)\s*$/u.test(prefix)
+      && /^\s*(?:的)?(?:状态|狀態)/u.test(suffix)) {
+    return "metalinguistic_term";
+  }
+
+  const clauseStart = Math.max(
+    String(text || "").lastIndexOf("。", index - 1),
+    String(text || "").lastIndexOf("！", index - 1),
+    String(text || "").lastIndexOf("？", index - 1),
+    String(text || "").lastIndexOf("\n", index - 1),
+  ) + 1;
+  const followingBoundaries = ["。", "！", "？", "\n"]
+    .map((token) => String(text || "").indexOf(token, end))
+    .filter((position) => position >= 0);
+  const clauseEnd = followingBoundaries.length
+    ? Math.min(...followingBoundaries)
+    : String(text || "").length;
+  const clausePrefix = String(text || "").slice(clauseStart, index).normalize("NFKC");
+  const clauseSuffix = String(text || "").slice(end, clauseEnd).normalize("NFKC");
+  if (/(?:包含|包括|含有|具有).{0,160}$/su.test(clausePrefix)
+      && /(?:处理|處理|処理|操作).{0,16}(?:的)?(?:效果|効果|效应|效應)/su.test(clauseSuffix)) {
     return "metalinguistic_term";
   }
 
@@ -2126,6 +2177,16 @@ function classifyQuotedMentionRole(text, mention, index, end) {
 
   if (looksLikeQuotedEffectClause(mention)) return "effect_clause";
   return "card";
+}
+
+function hasExactKnownCardSurface(aliasIndex, mention) {
+  if (!(aliasIndex instanceof Map)) return false;
+  const key = normalizeCardKey(mention);
+  if (!key) return false;
+  return (aliasIndex.get(key) || []).some((candidate) => (
+    candidate?.matchedAliasKind !== "canonical_name_prefix"
+      && normalizeCardKey(candidate?.matchedAlias) === key
+  ));
 }
 
 function looksLikeQuotedEffectClause(mention) {
@@ -2155,10 +2216,10 @@ function looksLikeQuotedEffectClause(mention) {
     || hasEffectInstructionGrammar;
 }
 
-function maskNonCardQuotedExpressions(query) {
+function maskNonCardQuotedExpressions(query, { aliasIndex } = {}) {
   const text = String(query || "");
   const chars = text.split("");
-  for (const entry of collectQuotedMentionEntries(text)) {
+  for (const entry of collectQuotedMentionEntries(text, { aliasIndex })) {
     if (entry.role === "card") continue;
     for (let index = entry.index; index < entry.end; index += 1) chars[index] = " ";
   }
@@ -2191,7 +2252,7 @@ export function extractUserProvidedCardTextBlocks(query) {
     }
 
     const text = bodyLines.join("\n").trim();
-    if (!text || !looksLikeCardMention(heading.name)) continue;
+    if (!text || !isPlausibleCardTextHeadingName(heading.name)) continue;
     blocks.push({
       name: heading.name,
       text,
@@ -2237,7 +2298,7 @@ function parseBracketHeading(text) {
     const match = text.match(pattern);
     if (!match) continue;
     const name = String(match[1] || "").trim();
-    if (looksLikeCardMention(name)) return { name, rest: String(match[2] || "").trim() };
+    if (isPlausibleCardTextHeadingName(name)) return { name, rest: String(match[2] || "").trim() };
   }
   return null;
 }
@@ -2248,8 +2309,28 @@ function parseColonHeading(text) {
   const name = String(match[1] || "").trim();
   const normalizedName = normalizeCardKey(name);
   if (!normalizedName || NON_CARD_HEADING_NAMES.has(normalizedName)) return null;
-  if (!looksLikeCardMention(name)) return null;
+  if (!isPlausibleCardTextHeadingName(name)) return null;
   return { name, rest: String(match[2] || "").trim() };
+}
+
+function isPlausibleCardTextHeadingName(value) {
+  const text = String(value || "").normalize("NFKC").replace(/\s+/gu, " ").trim();
+  const compact = text.replace(/\s+/gu, "");
+  if (!looksLikeCardMention(text)) return false;
+  if (/^(?:(?:c|cl|chain)\d+|连锁\d+|連鎖\d+)$/iu.test(compact)) return false;
+  // Section labels and instructions can be followed by numbered lines just
+  // like a card text block. Reject their grammar before treating the heading
+  // as an unknown card name; actual unknown cards remain supported.
+  if (/^(?:请|請)?(?:分别|分別|逐项|逐項|依次|各自)?(?:判断|判定|分析|回答|说明|說明|比较|比較)(?:以下|下列|上述)?(?:问题|問題|情况|情況|场景|場景|分支|事项|事項)?$/u.test(compact)) {
+    return false;
+  }
+  if (/^(?:请|請).{0,48}(?:判断|判定|分析|回答|说明|說明|比较|比較).{0,48}(?:问题|問題|情况|情況|场景|場景|分支|事项|事項)$/u.test(compact)) {
+    return false;
+  }
+  if (/^(?:(?:问题|問題|场景|場景|前提|条件|條件|步骤|步驟|处理|處理|结论|結論|答案|裁定|说明|說明|补充|補充|要求|事项|事項)){1,3}(?:[一二三四五六七八九十\d]+)?$/u.test(compact)) {
+    return false;
+  }
+  return true;
 }
 
 function normalizeInlineEffectText(value) {
@@ -2299,8 +2380,10 @@ function looksLikeCardMention(value) {
 function isPlausibleUnresolvedCardMention(value, source = "") {
   const text = String(value || "").normalize("NFKC").replace(/\s+/gu, " ").trim();
   if (!looksLikeCardMention(text)) return false;
-  if (source !== "model_card_name_extractor") return true;
   if (/^(?:(?:c|cl|chain)\s*\d+|连锁\s*\d+|連鎖\s*\d+)$/iu.test(text)) return false;
+  if (/^\d{1,2}\s*[.．、:：]?\s*(?:我方|对方|對方|自己|自分|双方|雙方|玩家)(?=$|的|场上|場上|手牌|手卡|墓地)/u.test(text)) return false;
+  if (/^(?:请|請)(?:分别|分別|逐项|逐項|依次|各自)?(?:判断|判定|分析|回答|说明|說明|比较|比較)(?:这些|這些|以下|下列|上述)?$/u.test(text.replace(/\s+/gu, ""))) return false;
+  if (source !== "model_card_name_extractor") return true;
   if (looksLikeGenericCardDescription(text)) return false;
   if (/^(?:正在|正|已经|已經|尚未|没有|沒有|不存在|处理时|處理時|结算时|結算時|发动时|發動時|连锁中|連鎖中).*(?:卡|卡片|怪兽|怪獸|魔法|陷阱|效果|对象|對象)$/u.test(text)) {
     return false;
